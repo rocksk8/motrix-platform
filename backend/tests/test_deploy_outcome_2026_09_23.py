@@ -167,6 +167,7 @@ _EXITS = [
     ("v28", "script_not_from_package",   "not_applied",        1, "failed"),
     ("l28", "apply_locked",              "not_applied",        1, "failed"),
     ("l28", "apply_locked_stale",        "not_applied",        1, "failed"),
+    ("x28", "unhandled_exception",       "applied_no_restore", 1, "failed"),
     ("p28", "plan_refused",              "not_applied",        1, "failed"),
     ("p28", "plan_failed",               "not_applied",        1, "failed"),
     ("p28", "delete_plan_too_large",     "not_applied",        1, "failed"),
@@ -910,6 +911,7 @@ _ROLLBACK_EXITS = [
     ("rollback_plan_tool_missing",     "not_applied",      "unknown", 1, "failed"),
     ("rollback_locked",                "not_applied",      "unknown", 1, "failed"),
     ("rollback_locked_stale",          "not_applied",      "unknown", 1, "failed"),
+    ("rollback_unhandled_exception",   "restoring",        "down",    1, "failed"),
     ("rollback_copy_failed_root_dirs", "restoring",        "down",    1, "failed"),
     ("rollback_cleanup_failed",        "restoring",        "down",    1, "failed"),
 ]

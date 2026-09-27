@@ -63,7 +63,7 @@ $ErrorActionPreference = "Stop"
 # AH-M2（2026-09-28 A 稽核）：這支腳本的版本。開頭與部署包裡那一份比對，不同就拒絕——
 #   手動執行時跑到安裝目錄裡的**舊**腳本（沒有先把包裡的 backend\tools 複製過來）會讓整套日常更新規則都不生效。
 #   改這支腳本的行為時要改這個值。用常數不用雜湊：演練副本會改路徑與 port，雜湊必然不同。
-$ApplyScriptVersion = "2026-09-28d"
+$ApplyScriptVersion = "2026-09-28e"
 # robocopy 一律 /R:3 /W:5（2026-09-28）：預設 /R:1000000 /W:30 ⇒ 被占用的檔會讓套用卡住數天而不是失敗，
 #   複製失敗的出口（AH-S7 自動寫回快照）永遠走不到。
 
@@ -392,6 +392,15 @@ function Fail-AfterStop($msg, $status) {
 #    —— 這一行讓那個安靜跳過**變成看得見的**。
 # 🔴 而對 `rollback_update.ps1` 它不是保險，是**必要條件**：
 #    rollback 分支**沒有**那段預先複製（§34a），所以舊腳本真的會被跑到。
+# AH-S11（2026-09-28）：沒被接住的例外也要印結果行、寫結果檔、放鎖——否則下一次看到的是殘留鎖，而沒有人知道這一次發生什麼。
+#   Fail 走 exit，不會進這裡；這裡只接「沒有人預料到」的例外。
+trap {
+    Write-Host "`n[FAIL] 未預期的錯誤：$($_.Exception.Message)" -ForegroundColor Red
+    Write-Host ($_.ScriptStackTrace | Out-String)
+    Emit-Result "unhandled_exception" 1
+    exit 1
+}
+
 Write-Host "::PROTOCOL:: v=2"
 Write-Host "======================================"
 Write-Host "  MOTRIX ERP - Apply Update"
@@ -478,7 +487,8 @@ $preHealthy = Test-Ping -Url $PingUrl -TimeoutSec 3
 Info "  套用前伺服器健康狀態：$(if ($preHealthy) { '正常' } else { '無回應（可能已停機，仍會繼續套用）' })"
 
 # --- 備份（不管等一下順不順利，都先留退路）---
-$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+# AH-S10：與結果檔同一個時間戳 ⇒ logs\apply_update_<ts>.result.json 對得到 rollback_snapshots\<ts>\
+$timestamp = $script:RunStamp
 
 $dbBackupDir = Join-Path $BackendDir "db_backups\pre_update_$timestamp"
 New-Item -ItemType Directory -Force -Path $dbBackupDir | Out-Null

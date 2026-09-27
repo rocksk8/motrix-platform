@@ -297,6 +297,15 @@ function Start-InstallService {
 # 🔴 **握手行 —— 對這支腳本它是必要條件不是加分**（理由見上方）。
 # dashboard 收到它才啟用 fail-closed；收不到就退回結束碼判定，
 # 並在畫面上明著標「本次以舊版協定判定」。
+# AH-S11（2026-09-28）：沒被接住的例外也要印結果行、寫結果檔、放鎖——否則下一次看到的是殘留鎖，而沒有人知道這一次發生什麼。
+#   Fail 走 exit，不會進這裡；這裡只接「沒有人預料到」的例外。
+trap {
+    Write-Host "`n[FAIL] 未預期的錯誤：$($_.Exception.Message)" -ForegroundColor Red
+    Write-Host ($_.ScriptStackTrace | Out-String)
+    Emit-Result "rollback_unhandled_exception" 1
+    exit 1
+}
+
 Write-Host "::PROTOCOL:: v=2"
 Write-Host "======================================"
 Write-Host "  MOTRIX ERP - Rollback"

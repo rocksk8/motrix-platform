@@ -435,3 +435,31 @@ def test_lock_is_taken_before_anything_is_touched():
     assert a.index('Enter-InstallLock "apply_update"') > a.index('"script_not_from_package"')
     r = _ps_code("rollback_update.ps1")
     assert r.index('Enter-InstallLock "rollback_update"') < r.index("[1/2]")
+
+
+def test_ahs11_unhandled_exception_still_reports_and_releases_the_lock(tmp_path):
+    """AH-S11：沒被接住的例外 ⇒ 仍印 ::RESULT::、寫結果檔、放鎖（腳本本身的 trap 區塊原樣取出來跑）。"""
+    import re
+    a = (_TOOLS / "apply_update.ps1").read_text(encoding="utf-8-sig")
+    m = re.search(r"^trap \{\n.*?^\}\n", a, re.M | re.S)
+    assert m, "apply_update.ps1 沒有頂層 trap"
+    body = (m.group(0)
+            + "$x = Enter-InstallLock 'apply_update' 'P'\n"
+            + "Write-Host \"locked=[$x] exists=$(Test-Path (Join-Path $BackendDir '.apply.lock'))\"\n"
+            + "throw 'boom'\n")
+    r, backend = _run_ps(tmp_path, body)
+    assert "locked=[] exists=True" in r.stdout, r.stdout + r.stderr
+    line = [l for l in r.stdout.splitlines() if l.startswith("::RESULT::")]
+    assert len(line) == 1 and "status=unhandled_exception" in line[0], r.stdout
+    assert not (backend / ".apply.lock").exists(), "例外之後鎖要被放掉"
+    res = json.loads(next((backend / "logs").glob("*.result.json")).read_text(encoding="utf-8"))
+    assert res["status"] == "unhandled_exception" and res["exit"] == 1
+    assert r.returncode == 1
+    rb = (_TOOLS / "rollback_update.ps1").read_text(encoding="utf-8-sig")
+    assert re.search(r'^trap \{\n.*?Emit-Result "rollback_unhandled_exception" 1', rb, re.M | re.S)
+
+
+def test_ahs10_snapshot_dir_and_result_file_share_the_timestamp():
+    code = _ps_code("apply_update.ps1")
+    assert "$timestamp = $script:RunStamp" in code
+    assert code.index('$script:RunStamp = Get-Date') < code.index("$timestamp = $script:RunStamp")
