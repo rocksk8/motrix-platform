@@ -5,6 +5,7 @@
 ## 0. 結論
 
 - **必修 1（T13-M1）、建議 2**。B 這包之後停止，必修一次列齊於此。
+- 複核 -2（84211947）：**T13-M1 關閉、T13-S1 大致關閉（剩 import 別名）、jv4 成立；必修 0**（§3）。
 
 ## 1. 逐項
 
@@ -33,3 +34,16 @@
 **T13-S2（建議）　④ 的免比範圍**
 - 一個編號的實作題一旦有任何一題在 L1，就不列入對照表（`len(ks) == 1 and None not in ks`），這是對的方向（L1 的編號永遠要比）。
 - 補一句說明到 docstring，避免之後有人把「部分在模組」也收進表。
+
+## 3. 複核（wip/b-t13-guards-2 84211947）（D，2026-09-27 15:09）
+
+| 項目 | D 的驗證 | 結果 |
+|---|---|---|
+| T13-M1 | `owner_map_verdict`：① 表裡的 key 必須在 modules.json 登記（放在任何略過之前）；② 部分模組不在時只比已安裝那部分；③ 只有已搬遷模組一個都沒裝才略過（看 modules.json＋資料夾）。突變 SO2「表裡留一個不存在的 key」⇒ **紅**（上一輪存活）。sparse 拿掉 payroll：spec_coverage **18 過、0 略過** | **關閉** |
+| T13-S1 | 不分大小寫、允許空白；別名常數追到不動點。JX2（`JSON_EXTRACT(`）、JX3（`json_extract (`）⇒ **紅**；JX5「`import SQL_DEAL_TAG`＋`SQL_Y = "x, " + SQL_DEAL_TAG`＋使用」⇒ **紅**；**JX6「`import SQL_DEAL_TAG as _T`＋串接＋使用」⇒ 存活**——`import … as` 的別名沒有追，docstring 的射程也沒列這一種 | 大致關閉（剩 T13-S1b） |
+| 基線 43→44（`modules/case/api/quotations.py`） | 新比對方式抓到的是既有的一處（58830897 的該檔已有 `json_extract(data_json,'$.caseRecord.roles…')` 等多行），不是本包新增的用法 | 成立 |
+| jv4 | M05 不在時改驗「出納入口不見、傳票入口恰好一個、權限仍 cashier」，不整題略過。sparse 拿掉 arap：**3 過、0 略過**；完整樹 3 過 | 成立 |
+
+**T13-S1b（建議）**：`ImportFrom` 的 `asname` 納入別名追蹤（`from x import SQL_DEAL_TAG as _T` ⇒ `_T` 也是含 json_extract 的常數），或把這一種寫進 docstring 的射程。依約定，同類繞過列建議。
+
+- **必修 0 ⇒ B 可以停止。**
