@@ -95,7 +95,10 @@
         </div>
       </div>
 
-      <div class="cr-err" id="cr-error" x-show="errMsg" x-text="errMsg"></div>
+      <div class="cr-err" id="cr-error" x-show="errMsg">
+        <span id="cr-error-text" x-text="errMsg"></span>
+        <button type="button" class="btn btn-ghost" id="cr-retry" x-show="retry && retry.msg === errMsg" :disabled="busy" @click="runRetry()" x-text="retry ? retry.label : ''"></button>
+      </div>
       <div class="cr-note" x-show="listDenied && def === null && record">
         您沒有這個模組的列表權限；以簽核人身分開啟這張單據。
       </div>
@@ -312,13 +315,35 @@
         records: [], listLoading: false, statusFilter: '',
         mode: 'list', record: null, recDef: null, formDef: {}, values: {}, fieldErr: {}, dropped: [],
         refOptions: {}, refState: {}, refQuery: {}, refErr: {}, _refSeq: {}, _refTimers: {}, note: '', busy: false, outputHtml: '', me: {}, _initDone: false, _defCache: {},
+        retry: null,     // 網路失敗時錯誤列上的按鈕：{label, run, msg}（msg≠目前的 errMsg ⇒ 不顯示）
 
         _hdr() {
           var s = {}
           try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
           return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
         },
-        async api(method, url) { return this._json(await fetch(url, { method: method, headers: this._hdr() })) },
+        // 網路層失敗（斷線、連線被拒、讀本文中斷）不丟例外，回 {ok:false, status:'network'}——每個呼叫點原本的錯誤分支
+        // 就會顯示訊息（稽核 D O15-O1：列表、儲存、轉換、核准原本例外沒人接，畫面只看到按鈕恢復；參照欄選項 O15 同一個判準）
+        async _send(url, opts) {
+          try { return await this._json(await fetch(url, opts)) } catch (e) { return { ok: false, status: 'network', data: null } }
+        },
+        async api(method, url) { return this._send(url, { method: method, headers: this._hdr() }) },
+        NET_MSG: '網路連線失敗，請確認連線後按「重試」',
+        // 失敗訊息＋（網路失敗時）錯誤列上的重試。`retry`＝重做的動作；不給＝不提供重試
+        fail(prefix, r, retry, netMsg) {
+          if (r.status !== 'network') { this.errMsg = prefix + '：' + this.detail(r); this.retry = null; return }   // 非網路失敗：行為不變
+          this.errMsg = prefix + '：' + (netMsg || this.NET_MSG)
+          // 綁住這一則訊息：別處改寫 errMsg（例 404）時按鈕自動不顯示，不會留著一個重做別件事的「重試」
+          this.retry = retry ? { label: retry.label, run: retry.run, msg: this.errMsg } : null
+          window.MotrixUI && window.MotrixUI.toast(this.errMsg, { kind: 'error' })
+        },
+        async runRetry() {
+          var r = this.retry
+          if (!r || r.msg !== this.errMsg || this.busy) return
+          this.retry = null
+          this.errMsg = ''
+          await r.run()
+        },
         async _json(r) {
           var text = await r.text()
           var data = null
@@ -326,8 +351,8 @@
           return { ok: r.ok, status: r.status, data: data }
         },
         // 寫入一律走這兩支（method 寫死，送出點一眼看得到）
-        async post(url, body) { return this._json(await fetch(url, { method: 'POST', headers: this._hdr(), body: JSON.stringify(body || {}) })) },
-        async put(url, body) { return this._json(await fetch(url, { method: 'PUT', headers: this._hdr(), body: JSON.stringify(body || {}) })) },
+        async post(url, body) { return this._send(url, { method: 'POST', headers: this._hdr(), body: JSON.stringify(body || {}) }) },
+        async put(url, body) { return this._send(url, { method: 'PUT', headers: this._hdr(), body: JSON.stringify(body || {}) }) },
         base() { return '/api/custom/' + encodeURIComponent(this.key) },
 
         async init() {
@@ -349,7 +374,8 @@
           } else if (m.status === 403) {
             this.listDenied = true
           } else {
-            this.errMsg = m.status === 404 ? '這個自訂模組不存在或尚未發布' : '讀取失敗：' + this.detail(m)
+            if (m.status === 404) this.errMsg = '這個自訂模組不存在或尚未發布'
+            else this.fail('讀取失敗', m, { label: '重新載入', run: function () { location.reload() } })
           }
           var no = q.get('no')
           if (no) await this.openRecord(no)
@@ -377,7 +403,7 @@
             var url = this.base() + '/records' + (this.statusFilter ? '?status=' + encodeURIComponent(this.statusFilter) : '')
             var r = await this.api('GET', url)
             if (r.ok) this.records = r.data || []
-            else this.errMsg = '讀取列表失敗：' + this.detail(r)
+            else this.fail('讀取列表失敗', r, { label: '重試', run: () => this.loadList() })
           } finally { this.listLoading = false }
         },
 
@@ -485,6 +511,13 @@
             var r = isNew
               ? await this.post(this.base() + '/records', { values: this.payload() })
               : await this.put(this.base() + '/records/' + encodeURIComponent(this.record.record_no), { values: this.payload() })
+            if (!r.ok && r.status === 'network') {
+              // 建立：回應在路上掉了的話伺服器可能已經建好 ⇒ 不直接重送（會重複建單），先重新整理列表確認
+              if (isNew) this.fail('建立失敗', r, { label: '重新整理列表', run: () => this.loadList() },
+                                   '網路連線失敗，無法確認是否已建立——請先按「重新整理列表」確認，沒有再重新儲存')
+              else this.fail('儲存失敗', r, { label: '重試', run: () => this.save() })
+              return
+            }
             if (!r.ok) {
               var probs = (r.data && r.data.problems) || []
               var fe = {}
@@ -516,7 +549,11 @@
         async openRecord(no) {
           this.errMsg = ''
           var r = await this.api('GET', this.base() + '/records/' + encodeURIComponent(no))
-          if (!r.ok) { this.errMsg = r.status === 404 ? '找不到單據 ' + no : '讀取單據失敗：' + this.detail(r); return }
+          if (!r.ok) {
+            if (r.status === 404) this.errMsg = '找不到單據 ' + no
+            else this.fail('讀取單據失敗', r, { label: '重試', run: () => this.openRecord(no) })
+            return
+          }
           await this.showRecord(r.data)
         },
         async showRecord(rec) {
@@ -533,8 +570,12 @@
         },
         async loadOutput() {
           var no = this.record.record_no
-          var r = await fetch(this.base() + '/records/' + encodeURIComponent(no) + '/output', { headers: this._hdr() })
-          if (this.record && this.record.record_no === no) this.outputHtml = r.ok ? await r.text() : ''
+          var html = ''
+          try {
+            var r = await fetch(this.base() + '/records/' + encodeURIComponent(no) + '/output', { headers: this._hdr() })
+            html = r.ok ? await r.text() : ''
+          } catch (e) { html = '' }      // 內嵌的輸出預覽讀不到就留白（單據本身已顯示；「輸出」按鈕會另外說明）
+          if (this.record && this.record.record_no === no) this.outputHtml = html
         },
         wfDef() { return this.recDef || this.def || { workflow: { transitions: [], states: [] } } },
         tiers() { return (this.record && this.record.approval && this.record.approval.tiers) || [] },
@@ -572,7 +613,8 @@
             return true
           })
         },
-        async afterAction(r, okMsg) {
+        async afterAction(r, okMsg, retry, failLabel) {
+          if (!r.ok && r.status === 'network') { this.fail(failLabel + '失敗', r, retry); return }
           if (!r.ok) {
             window.MotrixUI && window.MotrixUI.toast((r.data && r.data.detail) || ('失敗（' + r.status + '）'), { kind: 'error' })
             this.errMsg = (r.data && r.data.detail) || ('失敗（' + r.status + '）')
@@ -588,7 +630,7 @@
           this.busy = true; this.errMsg = ''
           try {
             var r = await this.post(this.base() + '/records/' + encodeURIComponent(this.record.record_no) + '/transitions/' + encodeURIComponent(t.key), { note: '' })
-            await this.afterAction(r, t.label + '完成')
+            await this.afterAction(r, t.label + '完成', { label: '重試', run: () => this.doTransition(t) }, t.label)
           } finally { this.busy = false }
         },
         async decide(approve) {
@@ -600,13 +642,18 @@
           this.busy = true; this.errMsg = ''
           try {
             var r = await this.post(this.base() + '/records/' + encodeURIComponent(this.record.record_no) + (approve ? '/approve' : '/reject'), { note: this.note || '' })
-            await this.afterAction(r, approve ? '已核准' : '已退回')
+            await this.afterAction(r, approve ? '已核准' : '已退回', { label: '重試', run: () => this.decide(approve) }, approve ? '核准' : '退回')
           } finally { this.busy = false }
         },
         async openOutput() {
           var w = window.open('', '_blank')
-          var r = await fetch(this.base() + '/records/' + encodeURIComponent(this.record.record_no) + '/output', { headers: this._hdr() })
-          var html = r.ok ? await r.text() : '<p>輸出失敗（' + r.status + '）</p>'
+          var html
+          try {
+            var r = await fetch(this.base() + '/records/' + encodeURIComponent(this.record.record_no) + '/output', { headers: this._hdr() })
+            html = r.ok ? await r.text() : '<p>輸出失敗（' + r.status + '）</p>'
+          } catch (e) {
+            html = '<p>輸出失敗：網路連線失敗，請確認連線後再按一次「輸出」</p>'
+          }
           if (w) { w.document.open(); w.document.write(html); w.document.close() }
         },
         async downloadPdf() {
@@ -614,7 +661,9 @@
           this.busy = true
           try {
             var no = this.record.record_no
-            var r = await fetch(this.base() + '/records/' + encodeURIComponent(no) + '/output?format=pdf', { headers: this._hdr() })
+            var r
+            try { r = await fetch(this.base() + '/records/' + encodeURIComponent(no) + '/output?format=pdf', { headers: this._hdr() }) }
+            catch (e) { window.MotrixUI && window.MotrixUI.toast('PDF 產生失敗：' + this.NET_MSG.replace('按「重試」', '再按一次'), { kind: 'error' }); return }
             if (!r.ok) { window.MotrixUI && window.MotrixUI.toast('PDF 產生失敗（' + r.status + '）', { kind: 'error' }); return }
             var blob = await r.blob()
             var a = document.createElement('a')
