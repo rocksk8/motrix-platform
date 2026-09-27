@@ -345,3 +345,19 @@ def test_slm1_api_refuses_instead_of_showing_empty_values(client, make_user, mon
     r = client.put("/api/settings/storage-locations", headers=h,
                    json={"archive_root": "", "pii_root": "", "delivery_root": ""})
     assert r.status_code == 503 and _stored() == before
+
+
+def test_slm1_a_locked_database_is_unknown_not_unset(client, tmp_path, monkeypatch):
+    """D3-S1：主要情境是「庫被鎖」（sqlite3.OperationalError: database is locked），不是一般例外。"""
+    import sqlite3
+    from helpers import storage_locations as SL
+    root = tmp_path / "root"
+    root.mkdir()
+    _set({"archive_root": str(root)})
+    SL.invalidate()
+
+    def locked(*a, **k):
+        raise sqlite3.OperationalError("database is locked")
+    monkeypatch.setattr(sqlite3, "connect", locked)
+    assert SL.resolve("archive_root") == {"path": "", "source": "unknown"}
+    assert SL.resolve("pii_root") == {"path": "", "source": "unknown"}
