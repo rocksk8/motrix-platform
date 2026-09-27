@@ -2,15 +2,19 @@
 """儲存位置：雲端存檔根目錄、個資資料夾、更新交付資料夾的**唯一**解析處（CORE-SPEC 裁示表「儲存位置可設定」，2026-09-28）。
 
 [單位] helper:storage_locations    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] KINDS, LABELS, PII_DIRNAME, SETTING_KEY, configured, resolve, path, validate, create, status, invalidate, save
+[公開介面] KINDS, LABELS, PII_DIRNAME, SETTING_KEY, Unreadable, configured, resolve, path, validate, create, status, invalidate, save
 [不變式] 讀這三個位置的程式一律經 `resolve`／`path`（守門 tests/platform/test_storage_locations_2026_09_28.py 掃描）。
          有設定 ⇒ 用設定（不存在就回 ""，**不退回自動判斷**：寫到別的地方比寫不進去更糟）；留空 ⇒ 照原本的自動判斷：
            雲端存檔根目錄＝掃磁碟機找「我的雲端硬碟\\系統存檔」（archive._auto_archive_base）
            個資資料夾＝雲端存檔根目錄旁的「系統存檔_個資」
            更新交付資料夾＝未設定（"")
          **本檔永不自動建立資料夾**：只有 `create`（最高管理員在設定頁明確按「建立」）會建，而且只建最後一層。
+[契約題] tests/platform/test_storage_locations_2026_09_28.py
 [注意] 設定存在 system_settings `storage_locations`：{"archive_root": "...", "pii_root": "...", "delivery_root": "..."}，
        空字串＝自動。讀取有 30 秒快取（即時備份每一筆都會讀）；存檔後呼叫 `invalidate()`。
+       **讀不到設定（庫被鎖、損毀）≠ 沒設定**（D 稽核 SL-M1）：不快取；resolve 三個位置都回 ""（source="unknown"），
+       寫入端照「找不到」告警、不寫——不退回自動判斷（使用者設了別處時，自動位置可能是已經不用的舊資料夾）；
+       configured() 丟 Unreadable（設定頁回 503，不讓人看到空值、按儲存把真正的設定蓋掉）。
 """
 import os
 import time
@@ -22,6 +26,10 @@ LABELS = {"archive_root": "雲端存檔根目錄", "pii_root": "個資資料夾"
 PII_DIRNAME = "系統存檔_個資"
 _CACHE_TTL = 30
 _cache = {"value": None, "at": 0.0}
+
+
+class Unreadable(Exception):
+    """讀不到儲存位置設定（與「沒設定」不同）。"""
 
 
 def invalidate():
@@ -37,21 +45,29 @@ def _db_key():
 
 def _read_main_db():
     """一律讀**主庫**（不經 get_db：demo 模式的請求會被導到 demo 庫，而儲存位置是這台機器的設定，與 demo 無關）。
-    讀不到 ⇒ {}（＝全部自動，與沒設定相同；記 WARNING）。"""
+    沒有這一列 ⇒ {}（＝全部自動）；**讀不到 ⇒ None**（未知，D 稽核 SL-M1；記 WARNING）。"""
     import json
     import logging
     import sqlite3
     import db
+    if not os.path.isfile(db.DB_PATH):
+        return {}                                               # 還沒有庫（全新安裝前）＝沒設定；不因讀取而建出空庫
     try:
         conn = sqlite3.connect(db.DB_PATH, timeout=30)
         try:
             row = conn.execute("SELECT value_json FROM system_settings WHERE key=?", (SETTING_KEY,)).fetchone()
         finally:
             conn.close()
-        return json.loads(row[0]) if row else {}
+        val = json.loads(row[0]) if row else {}
+        return val if isinstance(val, dict) else None
+    except sqlite3.OperationalError as e:
+        if "no such table" in str(e):
+            return {}                                           # 庫還沒初始化＝沒設定
+        logging.getLogger(__name__).warning("讀不到儲存位置設定（未知，不退回自動判斷）", exc_info=True)
+        return None
     except Exception:                                           # noqa: BLE001
-        logging.getLogger(__name__).warning("讀不到儲存位置設定，視為全部自動", exc_info=True)
-        return {}
+        logging.getLogger(__name__).warning("讀不到儲存位置設定（未知，不退回自動判斷）", exc_info=True)
+        return None
 
 
 def save(values: dict) -> dict:
@@ -73,16 +89,27 @@ def save(values: dict) -> dict:
     return val
 
 
-def configured() -> dict:
-    """{kind: 設定的路徑（去頭尾空白；沒設＝""）}。快取以「哪一個庫」為鍵：換庫（測試夾具）不會讀到上一個庫的設定。"""
+def _load():
+    """{kind: 路徑} 或 None（讀不到）。只快取讀到的結果：讀不到不快取，下一次再試。"""
     key = _db_key()
     if (_cache["value"] is not None and _cache.get("db") == key
             and time.monotonic() - _cache["at"] < _CACHE_TTL):
         return dict(_cache["value"])
     raw = _read_main_db()
-    val = {k: (str(raw.get(k) or "").strip() if isinstance(raw, dict) else "") for k in KINDS}
+    if raw is None:
+        return None
+    val = {k: str(raw.get(k) or "").strip() for k in KINDS}
     _cache["value"], _cache["at"], _cache["db"] = val, time.monotonic(), key
     return dict(val)
+
+
+def configured() -> dict:
+    """{kind: 設定的路徑（去頭尾空白；沒設＝""）}。快取以「哪一個庫」為鍵：換庫（測試夾具）不會讀到上一個庫的設定。
+    讀不到 ⇒ 丟 Unreadable（不回空值：空值會被當成「全部自動」）。"""
+    val = _load()
+    if val is None:
+        raise Unreadable("讀不到儲存位置設定（資料庫被鎖或無法讀取），請稍後再試")
+    return val
 
 
 def _auto_archive_root() -> str:
@@ -95,7 +122,9 @@ def resolve(kind: str, values: dict = None) -> dict:
     values：用來試算「如果這樣設」的結果（設定頁儲存前的驗證）；None ⇒ 讀目前的設定。"""
     if kind not in KINDS:
         raise ValueError("不認得的儲存位置：%r" % kind)
-    cfg = configured() if values is None else {k: str((values or {}).get(k) or "").strip() for k in KINDS}
+    cfg = _load() if values is None else {k: str((values or {}).get(k) or "").strip() for k in KINDS}
+    if cfg is None:
+        return {"path": "", "source": "unknown"}               # SL-M1：讀不到 ≠ 沒設定，不退回自動判斷
     if cfg[kind]:
         if kind == "archive_root" and values is None and not os.path.isdir(cfg[kind]):
             return {"path": "", "source": "setting"}           # 設了但現在不存在 ⇒ 找不到（告警），不改寫別處
@@ -185,7 +214,10 @@ def create(kind: str, target: str) -> str:
 
 def status() -> dict:
     """設定頁顯示用：{kind: {configured, path, source, exists}}（不做寫入測試：只在儲存時測）。"""
-    cfg = configured()
+    cfg = _load()
+    if cfg is None:
+        return {k: {"label": LABELS[k], "configured": "", "path": "", "source": "unknown", "exists": False}
+                for k in KINDS}
     out = {}
     for k in KINDS:
         r = resolve(k)
