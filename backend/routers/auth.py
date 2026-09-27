@@ -291,10 +291,8 @@ def _version_sort_key(version: str) -> tuple:
     ⚠️ 不可以直接比字串：序號過了 `z` 是 `aa`，而字串比較下 `aa` < `z`。
     ⇒ (日期, 序號長度, 序號)。認不得的格式排最前面（不會被當成最新）。
     """
-    m = _VERSION_RE.match(version or "")
-    if not m:
-        return ("", 0, "")
-    return (m.group(1), len(m.group(2)), m.group(2))
+    from helpers.startup import version_sort_key          # H10：與版本紀錄的安裝基準共用同一支
+    return version_sort_key(version)
 
 
 @router.get("/api/system/version")
@@ -1483,9 +1481,12 @@ def list_users(authorization: str = Header(None)):
         ORDER BY u.id
     """).fetchall()
     conn.close()
+    from helpers.startup import builtin_admin_username
+    builtin = builtin_admin_username()
     result = []
     for r in rows:
         d = dict(r)
+        d["builtinAdmin"]       = d["username"] == builtin   # H10：不可刪除／停用的預設管理員（頁面照這個欄位）
         d["displayName"]        = d.pop("display_name")
         d["createdAt"]          = d.pop("created_at")
         d["modules"]             = json.loads(d["modules"] or "[]")
@@ -1642,7 +1643,8 @@ def delete_user(user_id: int, authorization: str = Header(None)):
     if not row:
         conn.close()
         raise HTTPException(404, "使用者不存在")
-    if row["username"] == "jeff":
+    from helpers.startup import builtin_admin_username   # H10：全新安裝是 admin，既有安裝是 jeff
+    if row["username"] == builtin_admin_username():
         conn.close()
         raise HTTPException(400, "不可刪除超級管理員帳號")
     uname  = row["username"]
@@ -1676,7 +1678,8 @@ def toggle_user_active(user_id: int, authorization: str = Header(None)):
     if not row:
         conn.close()
         raise HTTPException(404, "使用者不存在")
-    if row["username"] == "jeff":
+    from helpers.startup import builtin_admin_username
+    if row["username"] == builtin_admin_username():
         conn.close()
         raise HTTPException(400, "不可停用超級管理員帳號")
     new_active = 0 if row["active"] else 1

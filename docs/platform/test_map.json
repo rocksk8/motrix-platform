@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 702,
+  "tests": 705,
   "unmapped": 8,
   "kinds": {
-   "api": 383,
-   "e2e": 166,
+   "api": 384,
+   "e2e": 167,
    "audit": 93,
-   "unit": 60
+   "unit": 61
   },
   "routes": 575
  },
@@ -9099,6 +9099,27 @@
     ]
    }
   },
+  "backend/tests/platform/test_no_our_company_literals.py": {
+   "kind": "unit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/",
+    "file:backend/conftest.py",
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_our_company_literals.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_our_company_literals.py"
+    ],
+    "path": [
+     "backend/conftest.py",
+     "backend/db.py",
+     "backend/modules/"
+    ]
+   }
+  },
   "backend/tests/platform/test_p9_layout.py": {
    "kind": "api",
    "units": [
@@ -10313,6 +10334,33 @@
    "evidence": {
     "import": [
      "backend/conftest.py"
+    ]
+   }
+  },
+  "backend/tests/test_branding_2026_09_27.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "helper:branding",
+    "helper:company_identity",
+    "helper:settings",
+    "plat:__init__",
+    "plat:paths",
+    "router:auth",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/paths.py",
+     "backend/db.py",
+     "backend/helpers/branding.py",
+     "backend/helpers/company_identity.py",
+     "backend/helpers/settings.py"
+    ],
+    "api": [
+     "backend/routers/auth.py",
+     "backend/routers/system.py"
     ]
    }
   },
@@ -11875,6 +11923,39 @@
    "kind": "unit",
    "units": [],
    "evidence": {}
+  },
+  "backend/tests/test_e2e_branding_2026_09_27.py": {
+   "kind": "e2e",
+   "units": [
+    "helper:branding",
+    "page:index.html",
+    "page:pages/company-profile-settings.html",
+    "page:pages/customers.html",
+    "page:pages/login.html",
+    "router:auth",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/branding.py"
+    ],
+    "api": [
+     "backend/routers/auth.py",
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/index.html",
+     "frontend/pages/company-profile-settings.html",
+     "frontend/pages/customers.html",
+     "frontend/pages/login.html"
+    ],
+    "path": [
+     "frontend/index.html",
+     "frontend/pages/company-profile-settings.html",
+     "frontend/pages/customers.html",
+     "frontend/pages/login.html"
+    ]
+   }
   },
   "backend/tests/test_e2e_case_all_done_inline_2026_09_24.py": {
    "kind": "e2e",
