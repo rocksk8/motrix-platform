@@ -152,6 +152,31 @@
     <div class="log hidden" id="upLog"></div>
   </div>
 
+  <div class="card" style="margin-bottom:16px" id="dlCard">
+    <h2>6. 套用更新（正式機本機；交付資料夾）</h2>
+    <div style="font-size:12px;color:#aaa;margin-bottom:8px">
+      在正式機上使用：偵測交付資料夾的新包 → 按「準備」（複製到安裝目錄外、驗簽章與逐檔雜湊）→ 確認 commit、變更摘要、刪除檔數 →
+      輸入本機最高管理員帳密 → 套用。失敗會自動回到套用前；結果同時寫回交付資料夾。
+    </div>
+    <div class="row"><span>交付資料夾</span><span id="dlRoot" data-testid="dl-root">…</span></div>
+    <div class="row"><span>上一次套用</span><span id="dlLast" data-testid="dl-last">…</span></div>
+    <div class="confirm-box hidden" id="dlNotice" data-testid="dl-notice"></div>
+    <select id="dlPkg" data-testid="dl-pkg"></select>
+    <button class="ghost" id="dlPrepareBtn" data-testid="dl-prepare" onclick="dlPrepare()">準備（驗證）</button>
+    <div class="log hidden" id="dlVerify" data-testid="dl-verify" style="white-space:normal"></div>
+    <div class="confirm-box hidden" id="dlConfirm" data-testid="dl-confirm">
+      <div id="dlConfirmText" data-testid="dl-confirm-text"></div>
+      <input id="dlUser" data-testid="dl-user" placeholder="本機最高管理員帳號" autocomplete="off">
+      <input id="dlPass" data-testid="dl-pass" type="password" placeholder="密碼" autocomplete="off">
+      <input id="dlTotp" data-testid="dl-totp" placeholder="兩步驟驗證碼（有啟用才填）" autocomplete="off">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:6px 0">
+        <input type="checkbox" id="dlAck" data-testid="dl-ack" style="width:auto;margin:0">我已確認上面的版本與變更內容
+      </label>
+      <button class="danger" id="dlApplyBtn" data-testid="dl-apply" onclick="dlApply()">套用</button>
+    </div>
+    <div class="log hidden" id="dlResult" data-testid="dl-result" style="white-space:normal"></div>
+  </div>
+
   <div class="card">
     <h2>歷史紀錄</h2>
     <div id="historyList"></div>
@@ -160,6 +185,82 @@
 <script>
 let pendingDeploy = null;
 let pendingRollback = null;
+
+// ── 6. 套用更新（UPDATE-DELIVERY §3／§4）──────────────────────────────────
+function dlShow(id, text, show) {
+  const el = document.getElementById(id);
+  el.textContent = text || '';
+  el.classList.toggle('hidden', !show);
+}
+function dlDescribe(last) {
+  if (!last) return '（沒有紀錄）';
+  const r = last.result || last;
+  if (!r || !r.status) return last.outcome ? (last.outcome + '：' + (last.problems || []).join('；')) : '（沒有紀錄）';
+  return (last.outcome ? (last.outcome === 'succeeded' ? '成功' : '失敗') + '　' : '') + (r.status || '') +
+    '（' + (r.rolled_back || '') + '，服務 ' + (r.service || '') + '）' + (r.finished_at ? '　' + r.finished_at : '');
+}
+async function dlRefresh() {
+  let d;
+  try { d = await (await fetch('/api/delivery/overview')).json(); } catch (e) { return; }
+  document.getElementById('dlRoot').textContent = d.available ? d.root : '未設定';
+  document.getElementById('dlLast').textContent = dlDescribe(d.last);
+  dlShow('dlNotice', d.available ? '' : d.notice, !d.available);
+  if (d.lock) dlShow('dlNotice', '有套用或回滾正在執行，或有殘留的鎖檔：' + JSON.stringify(d.lock), true);
+  const sel = document.getElementById('dlPkg');
+  sel.innerHTML = '';
+  (d.packages || []).forEach(p => {
+    const o = document.createElement('option');
+    o.value = p.name; o.textContent = p.name + '（' + (p.product || '') + '，' + (p.files || 0) + ' 檔）';
+    sel.appendChild(o);
+  });
+}
+async function dlPrepare() {
+  const name = document.getElementById('dlPkg').value;
+  document.getElementById('dlConfirm').classList.add('hidden');
+  if (!name) { dlShow('dlVerify', '交付資料夾裡沒有可用的包', true); return; }
+  dlShow('dlVerify', '準備中（複製到 staging、驗證）…', true);
+  const res = await fetch('/api/delivery/prepare', { method: 'POST', headers: {'Content-Type': 'application/json'},
+                                                     body: JSON.stringify({ name }) });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) { dlShow('dlVerify', '無法準備：' + (d.detail || res.status), true); return; }
+  if (!d.ok) { dlShow('dlVerify', '驗證沒有通過，不能套用：' + (d.problems || []).join('；'), true); return; }
+  dlShow('dlVerify', '驗證通過。' + ((d.notes || []).length ? '提示：' + d.notes.join('；') : ''), true);
+  const changes = (d.changes || []).map(c => '・' + c.module + ' ' + c.version + '：' + c.content).join('\n');
+  document.getElementById('dlConfirmText').textContent =
+    'commit ' + String(d.commit || '').slice(0, 8) + '（' + (d.product || '') + '，建於 ' + (d.builtAt || '') + '）\n' +
+    '刪除舊程式檔 ' + (d.deleteCount === null || d.deleteCount === undefined ? '（無法試算）' : d.deleteCount) + ' 個、' +
+    '新增 ' + (d.addedCount === null || d.addedCount === undefined ? '（無法試算）' : d.addedCount) + ' 個\n' +
+    '變更摘要：\n' + (changes || '（沒有新的版本紀錄）');
+  document.getElementById('dlConfirmText').style.whiteSpace = 'pre-wrap';
+  document.getElementById('dlConfirm').classList.remove('hidden');
+}
+async function dlApply() {
+  const name = document.getElementById('dlPkg').value;
+  const body = { name, username: document.getElementById('dlUser').value, password: document.getElementById('dlPass').value,
+                 totp: document.getElementById('dlTotp').value, confirm: document.getElementById('dlAck').checked };
+  const btn = document.getElementById('dlApplyBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/delivery/apply', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+    document.getElementById('dlPass').value = '';
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { dlShow('dlResult', '沒有開始套用：' + (d.detail || res.status), true); return; }
+    dlShow('dlResult', '套用中…（最長約 45 分鐘；可以關掉這一頁，重開後會顯示結果）', true);
+    for (;;) {
+      await new Promise(r => setTimeout(r, 2000));
+      const s = await (await fetch('/api/delivery/status')).json();
+      if (s.running) continue;
+      const last = s.last || {};
+      const txt = (last.outcome === 'succeeded' ? '成功：' : '失敗：') + dlDescribe(last) +
+        (s.rolledBackText ? '\n正式機現況：' + s.rolledBackText : '') +
+        ((last.problems || []).length ? '\n' + last.problems.join('\n') : '');
+      document.getElementById('dlResult').setAttribute('data-outcome', last.outcome || 'failed');
+      dlShow('dlResult', txt, true);
+      dlRefresh();
+      break;
+    }
+  } finally { btn.disabled = false; }
+}
 
 async function refreshDevStatus() {
   try {
@@ -340,12 +441,18 @@ async function loadModuleChanges() {
 }
 
 function renderProdStatus(prod) {
+  const dl = prod.delivered || {};
+  // 2026-09-28（UPDATE-DELIVERY §4）：設了交付資料夾 ⇒ 開發機不連正式機，版本讀交付資料夾的結果；健康狀態照實說「未檢查」
   const dot = prod.paused
     ? '<span class="dot" style="background:#F59E0B"></span>部署/回滾進行中，暫停查詢'
-    : (prod.healthy ? '<span class="dot ok"></span>正常' : '<span class="dot bad"></span>無回應');
+    : (prod.healthy === null ? '<span class="dot"></span>未檢查（改讀交付資料夾的結果，不連正式機）'
+      : (prod.healthy ? '<span class="dot ok"></span>正常' : '<span class="dot bad"></span>無回應'));
   document.getElementById('prodHealth').innerHTML = dot;
   const dep = prod.deployed || {};
-  document.getElementById('prodCommit').textContent = dep.commit_short ? (dep.commit_short + ' (' + (dep.applied_at || '') + ')') : '未知';
+  const el = document.getElementById('prodCommit');
+  if (dep.source === 'delivery') el.textContent = String(dep.commit || '').slice(0, 8) + '（交付結果 ' + (dep.finishedAt || '') + '）';
+  else if (dl.configured && !dl.available) el.textContent = '未知：' + (dl.notice || '讀不到交付資料夾的結果');
+  else el.textContent = dep.commit_short ? (dep.commit_short + ' (' + (dep.applied_at || '') + ')') : '未知';
   document.getElementById('prodCheckedAt').textContent = prod.checkedAt || '…';
 }
 
@@ -598,6 +705,7 @@ refreshPackages();
 refreshHistory();
 refreshProducts();
 initUpgrade();
+dlRefresh();
 connectProdWs();
 setInterval(refreshDevStatus, 15000);
 </script>

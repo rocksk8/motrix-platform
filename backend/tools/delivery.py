@@ -11,7 +11,7 @@
 [契約題] tests/platform/test_delivery_2026_09_28.py
 [注意] staging 放在安裝目錄**外**（呼叫端給路徑）。一鍵套用（apply_staged）只做三件事：看鎖、把包裡的 backend\\tools
        複製進安裝目錄（AH-M2）、呼叫 apply_update.ps1；結果一律讀它寫的 result.json（UPDATE-DELIVERY §9.2），
-       判定重用 deploy_dashboard.decide_outcome／parse_result_line（不另寫 ::RESULT:: 解析）。
+       判定重用 deploy_dashboard.decide_outcome／parse_result_line（由儀表板傳入 judge；本檔不 import 儀表板，HC1c）。
        <交付資料夾> 由使用者自建（U-1＝我的雲端硬碟\\MOTRIX-交付），程式**不自動建**：根目錄不存在 ⇒ 拒絕。
 
 交付資料夾結構：
@@ -380,15 +380,6 @@ WRITE_BACK_FIELDS = ("protocol", "status", "rolled_back", "service", "exit", "sc
                      "commit", "started_at", "finished_at")
 
 
-def _dashboard():
-    """判定邏輯的唯一來源：同目錄的 deploy_dashboard（import 沒有啟動副作用）。"""
-    here = os.path.dirname(os.path.abspath(__file__))
-    if here not in sys.path:
-        sys.path.insert(0, here)
-    import deploy_dashboard
-    return deploy_dashboard
-
-
 def read_lock(install_root):
     """鎖檔內容（dict）；沒有鎖 ⇒ None；有鎖但讀不懂 ⇒ {"unreadable": True}。只讀，**不刪**（殘留鎖由人確認後刪）。"""
     p = os.path.join(install_root, LOCK_REL)
@@ -443,8 +434,10 @@ def latest_result(install_root, script="apply_update"):
     return None
 
 
-def apply_staged(staged, install_root, verified, run=None, clock=None):
+def apply_staged(staged, install_root, verified, judge, run=None, clock=None):
     """一鍵套用。verified＝**剛剛**對同一個 staging 跑的 verify_staged 結果（ok 才准）。
+    judge＝(decide_outcome, parse_result_line)：由呼叫端（部署儀表板）傳入它自己的判定函式——判定的唯一來源在儀表板，
+    而儀表板不准被別的程式 import（HC1c：它的路由只能掛在有「只限本機」middleware 的那個 app）。
     ⇒ {started, outcome, result, problems, lock}。outcome：succeeded／failed（fail-closed）；沒開始 ⇒ started False。"""
     import time
     clock = clock or time.time
@@ -461,11 +454,11 @@ def apply_staged(staged, install_root, verified, run=None, clock=None):
     shutil.copytree(tools_src, os.path.join(install_root, "backend", "tools"), dirs_exist_ok=True)   # AH-M2
     started = clock()
     rc, out = (run or _run_powershell)(apply_cmd(install_root, payload))
-    dash = _dashboard()
+    decide, parse = judge
     res = find_result(install_root, "apply_update", since=started - 2)
     problems = []
-    outcome = dash.decide_outcome(rc, out, "deploy")
-    stdout_res = dash.parse_result_line(out)
+    outcome = decide(rc, out, "deploy")
+    stdout_res = parse(out)
     if res is None or "unreadable" in res:
         problems.append("找不到這一次的結果檔（backend\\logs\\apply_update_*.result.json）或讀不懂")
         outcome = "failed"

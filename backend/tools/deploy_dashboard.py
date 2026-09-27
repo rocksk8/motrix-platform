@@ -896,10 +896,37 @@ def dev_status():
     return {"branch": branch, "commit": commit, "dirty": dirty, "upstream": upstream, "aheadOfOrigin": ahead}
 
 
+def _delivered_status() -> dict:
+    """開發機：交付資料夾 results\\ 裡最近一次成功套用的版本（UPDATE-DELIVERY §4；開發機不連正式機）。
+    交付資料夾沒設定、讀不到、或還沒有成功的結果 ⇒ available False＋原因（不猜）。"""
+    import delivery as _dl
+    try:
+        root = _dl.configured_root()
+    except _dl.DeliveryError as e:
+        return {"configured": False, "available": False, "notice": str(e)}
+    try:
+        latest = _dl.latest_prod_commit(root)
+    except (_dl.DeliveryError, OSError) as e:
+        return {"configured": True, "available": False, "notice": "讀不到交付資料夾的結果：%s" % e}
+    if not latest:
+        return {"configured": True, "available": False, "notice": "交付資料夾裡還沒有任何成功套用的結果"}
+    return {"configured": True, "available": True, "commit": latest["commit"], "finishedAt": latest.get("finished_at"),
+            "name": latest["name"]}
+
+
 def _check_prod_status() -> dict:
     """實際打正式機的健康檢查＋版本查詢，REST 端點跟 WebSocket 共用同一份
     邏輯，避免以後改一邊忘了改另一邊（這個專案已經在部署工具腳本本身踩過
-    好幾次這種「兩份副本沒同步」的坑）。"""
+    好幾次這種「兩份副本沒同步」的坑）。
+
+    2026-09-28（UPDATE-DELIVERY §4）：開發機設了更新交付資料夾 ⇒ **不連正式機**，版本改讀交付資料夾的結果
+    （`deployed.source = "delivery"`；`healthy` 是 None＝沒有檢查，畫面照實說）。沒設 ⇒ 照舊連正式機。"""
+    delivered = _delivered_status()
+    if delivered["configured"]:
+        deployed = ({"commit": delivered["commit"], "finishedAt": delivered.get("finishedAt"), "name": delivered.get("name"),
+                     "source": "delivery"} if delivered.get("available") else {})
+        return {"healthy": None, "deployed": deployed, "delivered": delivered,
+                "checkedAt": time.strftime("%Y-%m-%d %H:%M:%S")}
     healthy = False
     try:
         r = requests.get(f"{PROD_BASE_URL}/api/ping", verify=False, timeout=5)
@@ -915,12 +942,202 @@ def _check_prod_status() -> dict:
     except Exception:
         pass
 
-    return {"healthy": healthy, "deployed": deployed, "checkedAt": time.strftime("%Y-%m-%d %H:%M:%S")}
+    return {"healthy": healthy, "deployed": deployed, "delivered": delivered,
+            "checkedAt": time.strftime("%Y-%m-%d %H:%M:%S")}
 
 
 @app.get("/api/prod-status")
 def prod_status():
     return _check_prod_status()
+
+
+# ── 正式機：套用更新（UPDATE-DELIVERY §3／§4；U-1～U-8 使用者 2026-09-28 裁示）────────────────────
+# 儀表板在**正式機本機**執行（只綁 127.0.0.1）。偵測交付資料夾的新包 → 準備（複製到 staging＋驗證＋摘要）→
+# 一次確認（commit／變更摘要／刪除檔數）＋本機 ERP superadmin 帳密 → 套用 → 結果（重開後讀 latest_result）。
+# 判定、鎖、結果檔一律經 delivery.py（不另寫）。
+DELIVERY_INSTALL_ROOT = PROJECT_ROOT
+DELIVERY_STAGING_ROOT = PROJECT_ROOT.parent / "motrix-staging"          # 安裝目錄外
+_delivery_state = {"prepared": {}, "running": False, "last": None}
+_delivery_lock = threading.Lock()
+
+
+def _erp_base_url() -> str:
+    cert = DELIVERY_INSTALL_ROOT / "backend" / "certs" / "cert.pem"
+    return os.environ.get("MOTRIX_DELIVERY_ERP_URL") or ("https" if cert.exists() else "http") + "://127.0.0.1:666"
+
+
+def _verify_superadmin(username: str, password: str, totp: str = "") -> str:
+    """本機 ERP 驗帳密（U-2）：登入成功、而且角色是 superadmin ⇒ 回使用者名稱；否則 ValueError（原因）。密碼不留。"""
+    base = _erp_base_url()
+    try:
+        r = requests.post(base + "/api/auth/login", json={"username": username, "password": password}, verify=False, timeout=15)
+    except requests.RequestException as e:
+        raise ValueError("連不到本機 ERP（%s）：%s" % (base, e))
+    if r.status_code != 200:
+        raise ValueError("帳號或密碼不正確")
+    d = r.json()
+    if d.get("totpRequired"):
+        if not totp:
+            raise ValueError("這個帳號啟用了兩步驟驗證：請輸入驗證碼")
+        r = requests.post(base + "/api/auth/login/totp", json={"challenge_token": d.get("challengeToken"), "code": totp},
+                          verify=False, timeout=15)
+        if r.status_code != 200:
+            raise ValueError("兩步驟驗證碼不正確")
+        d = r.json()
+    token = d.get("token")
+    if not token:
+        raise ValueError("登入沒有拿到工作階段")
+    h = {"Authorization": "Bearer " + token}
+    try:
+        me = requests.get(base + "/api/auth/me", headers=h, verify=False, timeout=15).json()
+    finally:
+        try:
+            requests.post(base + "/api/auth/logout", headers=h, verify=False, timeout=10)
+        except requests.RequestException:
+            pass
+    if me.get("role") != "superadmin":
+        raise ValueError("只有最高管理員可以套用更新")
+    return me.get("username") or username
+
+
+def _delivery_summary(staged: str) -> dict:
+    """確認框用：刪除／新增檔數（包裡的 apply_plan 對本機試算，只讀）＋變更摘要（包裡有、安裝版沒有的版本紀錄）。"""
+    payload = os.path.join(staged, "payload")
+    out = {"deleteCount": None, "addedCount": None, "changes": [], "notes": []}
+    plan_tool = os.path.join(payload, "backend", "tools", "apply_plan.py")
+    tmp = os.path.join(staged, "summary_plan.json")
+    try:
+        r = subprocess.run([sys.executable, plan_tool, "plan", "--root", str(DELIVERY_INSTALL_ROOT), "--pkg", payload,
+                            "--out", tmp, "--max", "1000000"], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=300, creationflags=CREATE_NO_WINDOW)
+        if r.returncode == 0:
+            plan = json.load(open(tmp, encoding="utf-8"))
+            out["deleteCount"], out["addedCount"] = len(plan.get("delete") or []), len(plan.get("added") or [])
+        else:
+            out["notes"].append("刪除計畫試算失敗（exit %s）：%s" % (r.returncode, (r.stdout + r.stderr)[-300:]))
+    except (OSError, ValueError, subprocess.TimeoutExpired) as e:
+        out["notes"].append("刪除計畫試算失敗：%s" % e)
+
+    def entries(path):
+        try:
+            return json.load(open(path, encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return None
+    new = entries(os.path.join(payload, "backend", "version_manifest.json")) or []
+    old = entries(str(DELIVERY_INSTALL_ROOT / "backend" / "version_manifest.json"))
+    if old is None:
+        out["notes"].append("讀不到目前安裝的版本紀錄：變更摘要無法比對")
+    else:
+        have = {(e.get("module"), e.get("version")) for e in old}
+        out["changes"] = [{"module": e.get("module"), "version": e.get("version"), "content": str(e.get("content") or "")[:300]}
+                          for e in new if (e.get("module"), e.get("version")) not in have]
+    return out
+
+
+class DeliveryPrepareBody(BaseModel):
+    name: str
+
+
+class DeliveryApplyBody(BaseModel):
+    name: str
+    username: str
+    password: str
+    totp: str = ""
+    confirm: bool = False
+
+
+@app.get("/api/delivery/overview")
+def delivery_overview():
+    import delivery as _dl
+    base = {"running": _delivery_state["running"], "lock": _dl.read_lock(str(DELIVERY_INSTALL_ROOT)),
+            "last": _delivery_state["last"] or _dl.latest_result(str(DELIVERY_INSTALL_ROOT))}
+    try:
+        root = _dl.configured_root()
+        return dict(base, available=True, root=root, packages=_dl.scan(root)[:10])
+    except _dl.DeliveryError as e:
+        return dict(base, available=False, notice=str(e), packages=[])
+
+
+@app.post("/api/delivery/prepare")
+def delivery_prepare(body: DeliveryPrepareBody):
+    """複製到 staging（安裝目錄外）→ 驗證 → 摘要。驗證沒過 ⇒ ok False＋原因（畫面不提供套用）。"""
+    import delivery as _dl
+    try:
+        root = _dl.configured_root()
+        DELIVERY_STAGING_ROOT.mkdir(parents=True, exist_ok=True)
+        staged = _dl.stage(root, body.name, str(DELIVERY_STAGING_ROOT))
+    except _dl.DeliveryError as e:
+        return JSONResponse(status_code=409, content={"detail": str(e)})
+    verified = _dl.verify_staged(staged, str(DELIVERY_INSTALL_ROOT))
+    summary = _delivery_summary(staged) if verified["ok"] else {}
+    with _delivery_lock:
+        _delivery_state["prepared"][body.name] = {"staged": staged, "verified": verified, "at": time.time()}
+    meta = verified.get("meta") or {}
+    return {"ok": verified["ok"], "problems": verified["problems"], "notes": verified["notes"] + summary.get("notes", []),
+            "commit": meta.get("commit"), "builtAt": meta.get("built_at"), "product": meta.get("product"),
+            "deleteCount": summary.get("deleteCount"), "addedCount": summary.get("addedCount"),
+            "changes": summary.get("changes", [])}
+
+
+def _delivery_run(name: str, staged: str, verified: dict, root: str):
+    import delivery as _dl
+    try:
+        r = _dl.apply_staged(staged, str(DELIVERY_INSTALL_ROOT), verified, (decide_outcome, parse_result_line))
+        rec = {"name": name, "outcome": r["outcome"], "started": r["started"], "problems": r["problems"],
+               "result": r.get("result"), "lock": r.get("lock")}
+        if r["started"] and r.get("result") and "unreadable" not in r["result"]:
+            try:
+                _dl.write_back(root, name, r["result"], r["outcome"])
+            except (_dl.DeliveryError, OSError) as e:
+                rec["problems"] = rec["problems"] + ["結果寫回交付資料夾失敗：%s" % e]
+    except Exception as e:                                          # noqa: BLE001 — 不讓背景執行緒默默死掉
+        rec = {"name": name, "outcome": "failed", "started": False, "problems": ["套用程序本身出錯：%s" % e], "result": None}
+    with _delivery_lock:                        # 先放結果、再清旗標：輪詢不會看到「沒在跑、也沒有結果」的中間態
+        _delivery_state["last"] = rec
+        _delivery_state["running"] = False
+
+
+@app.post("/api/delivery/apply")
+def delivery_apply(body: DeliveryApplyBody):
+    """一次確認（U-3）＋本機 superadmin 帳密（U-2）＋同一時間只准一個。套用前對同一個 staging 再驗一次（中間被換過就擋）。"""
+    import delivery as _dl
+    if not body.confirm:
+        return JSONResponse(status_code=400, content={"detail": "請先勾選確認"})
+    prep = _delivery_state["prepared"].get(body.name)
+    if not prep or not prep["verified"].get("ok"):
+        return JSONResponse(status_code=409, content={"detail": "這個包還沒有準備好（先按「準備」並通過驗證）"})
+    try:
+        who = _verify_superadmin(body.username, body.password, body.totp)
+    except ValueError as e:
+        return JSONResponse(status_code=403, content={"detail": str(e)})
+    again = _dl.verify_staged(prep["staged"], str(DELIVERY_INSTALL_ROOT), run_verify_package=False)
+    if not again["ok"]:
+        return JSONResponse(status_code=409, content={"detail": "準備之後 staging 被改過，已拒絕：" + "；".join(again["problems"])})
+    try:
+        root = _dl.configured_root()
+    except _dl.DeliveryError as e:
+        return JSONResponse(status_code=409, content={"detail": str(e)})
+    with _delivery_lock:
+        if _delivery_state["running"]:
+            return JSONResponse(status_code=409, content={"detail": "另一個套用正在執行"})
+        _delivery_state["running"] = True
+        _delivery_state["last"] = None
+    threading.Thread(target=_delivery_run, args=(body.name, prep["staged"], prep["verified"], root), daemon=True).start()
+    return {"started": True, "by": who}
+
+
+@app.get("/api/delivery/status")
+def delivery_status():
+    import delivery as _dl
+    last = _delivery_state["last"]
+    out = {"running": _delivery_state["running"], "last": last,
+           "latestResult": _dl.latest_result(str(DELIVERY_INSTALL_ROOT))}
+    if last and last.get("result") and "rolled_back" in last["result"]:
+        try:
+            out["rolledBackText"] = describe_rolled_back(last["result"]["rolled_back"], "deploy")
+        except Exception:                                           # noqa: BLE001 — 值域外 ⇒ 不給文字（畫面照列原值）
+            out["rolledBackText"] = None
+    return out
 
 
 # ── 正式機狀態即時推送（WebSocket，2026-09-08 新增）──────────────────────────
