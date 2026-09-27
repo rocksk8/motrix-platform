@@ -7,6 +7,7 @@
 
 - **必修 2、建議 1**。函式本身正確；兩項必修都在「實際跑起來拿到幾個 worker」這一層。
 - 複核 -2（1cb53e52）：**WK-M1、WK-S1 關閉**；新守門在 -3 沒改 run_train 時會先紅（§3）。WK-M2 待 -3。
+- 複核 -3（01e73f10）：**WK-M2 關閉**，-2 的兩項觀察也關閉（§4）⇒ 本包必修全部關閉。
 
 ## 1. 實測
 
@@ -52,3 +53,14 @@
   - 對 main，行為題補得住（WG1 紅是行為題抓到的，不是新守門）。
   - 對 run_train，只有這道結構守門。-3 若照 TR11 現有寫法（位置參數、`picked`）會被抓到；若順手改了寫法就不會。-3 複核時 D 會直接驗 run_train 實際傳出的參數。
 - 觀察 **WK2-O2（等價突變）**：WM2「選到 e2e 一律用 E2E 上限」、WM3「沒設 E2E 也當成明確設定」⇒ 存活。只有在 PARTIAL 小於 E2E 預設（2）時結果才會不同，例如 PARTIAL=1、選到 e2e：應為 1，突變後是 2。要鎖住就補「PARTIAL=1、未設 E2E、選到 e2e ⇒ -n 1」一題。現行上限都 ≥2，列觀察。
+
+## 4. 複核（wip/b-modtest-workers-3 01e73f10，rebase 到第十一班之後）（D，2026-09-27 10:24）
+
+> 只看 WK-M2 與 -2 的兩項觀察。
+
+| 項目 | D 的驗證 | 結果 |
+|---|---|---|
+| 相關題 | test_env_and_load_guards＋test_modtest_batches：67 過 | 成立 |
+| WK-M2：run_train ① 經 `partial_pytest_args` | 突變 W3a「run_train 回舊寫法」⇒ 紅（行為題＋結構守門兩題都紅）。-2 預告的「-3 若沒改會先紅」由 commit 記錄的 rebase 過程印證 | **WK-M2 關閉** |
+| WK2-O1：結構守門的射程 | 新行為題 `test_train_partial_run_actually_passes_n` 攔截 `run_pytest` 跑 run_train。突變 W3b「改用關鍵字參數、自己組參數」（結構守門看不到的寫法）⇒ **紅**；W3c「補完又丟掉」⇒ 紅 | **關閉** |
+| WK2-O2：等價突變 | 新題 `test_partial_one_without_e2e_setting_stays_one`。W3d「選到 e2e 一律用 E2E 上限」⇒ 紅；W3e「沒設 E2E 也當成明確設定」⇒ 紅 | **關閉** |
