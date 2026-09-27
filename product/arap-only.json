@@ -1,0 +1,5 @@
+{
+ "name": "arap-only",
+ "description": "L0／L1 共用核心＋單一 L2 模組 arap（應收應付）",
+ "modules": ["arap"]
+}

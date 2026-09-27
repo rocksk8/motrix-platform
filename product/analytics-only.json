@@ -1,0 +1,5 @@
+{
+ "name": "analytics-only",
+ "description": "L0／L1 共用核心＋單一 L2 模組 analytics（營運分析）",
+ "modules": ["analytics"]
+}

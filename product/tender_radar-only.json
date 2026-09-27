@@ -1,0 +1,5 @@
+{
+ "name": "tender_radar-only",
+ "description": "L0／L1 共用核心＋單一 L2 模組 tender_radar（標案雷達）",
+ "modules": ["tender_radar"]
+}
