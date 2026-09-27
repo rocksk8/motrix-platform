@@ -93,8 +93,21 @@ def _stop(proc):
 def run_migrations(root: str) -> subprocess.CompletedProcess:
     """用**新版**的 db.init_db 補跑基準＋模組表（子行程；不 import main，避免啟動副作用）。"""
     env = {**os.environ, **SAFE_ENV}
-    code = "import db; db.init_db(); db.init_db(db.DEMO_DB_PATH); print('MIGRATE_OK')"
-    return subprocess.run([sys.executable, "-c", code], cwd=os.path.join(root, "backend"),
+    backend = os.path.join(root, "backend")
+    tool = os.path.join(backend, "tools", "migrate_like_startup.py")
+    if os.path.isfile(tool):
+        # 2026-09-28：先照啟動規則載入模組，模組 migration（CORE 1.58）才會跑到；未完成 ⇒ exit 2、不印 MIGRATE_OK
+        code = ("import runpy, sys, db\n"
+                "sys.argv = ['migrate_like_startup', '--db', db.DB_PATH, '--db', db.DEMO_DB_PATH]\n"
+                "try:\n"
+                "    runpy.run_path(%r, run_name='__main__')\n"
+                "except SystemExit as e:\n"
+                "    if e.code == 0:\n"
+                "        print('MIGRATE_OK')\n"
+                "    sys.exit(e.code)\n" % tool)
+    else:
+        code = "import db; db.init_db(); db.init_db(db.DEMO_DB_PATH); print('MIGRATE_OK')"
+    return subprocess.run([sys.executable, "-c", code], cwd=backend,
                           env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
 
@@ -136,10 +149,10 @@ def convert(root: str, backup_dir: str, new_source: str) -> dict:
     rep["package_default_config"] = U.sync_package_default_config(root, new_source)
     mig = run_migrations(root)
     rep["migrate"] = {"returncode": mig.returncode, "ok": "MIGRATE_OK" in mig.stdout,
-                      "stderr_tail": mig.stderr[-2000:]}
+                      "stdout_tail": mig.stdout[-2000:], "stderr_tail": mig.stderr[-2000:]}
     if not rep["migrate"]["ok"]:
         _write_log(backup_dir, "conversion_log.json", rep)
-        raise RuntimeError("migration 失敗：%s" % mig.stderr[-800:])
+        raise RuntimeError("migration 失敗：%s %s" % (mig.stdout[-800:], mig.stderr[-800:]))
     rep["settings_added"] = U.add_missing_settings(os.path.join(root, U.DB_FILES[0]))
     rep["company_profile"] = U.fill_company_profile_blanks(os.path.join(root, U.DB_FILES[0]))
     U.record_post_conversion(root, backup_dir)
