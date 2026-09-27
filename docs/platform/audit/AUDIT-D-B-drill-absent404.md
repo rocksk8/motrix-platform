@@ -6,6 +6,7 @@
 ## 0. 結論
 
 - **通過。必修 0、建議 2、觀察 1**。
+- 複核 -2（8b146db3）：**AB-S1、AB-S2 關閉**；salesorders-page 491f0945 通過；上車順序見 §3。
 
 ## 1. 實測
 
@@ -31,3 +32,15 @@
 
 **觀察**
 - **AB-O1**：`test_smoke_runs_the_absent_plan` 是讀原始碼的字串守門（`"ok": code == expect`）。`smoke()` 的實際行為靠 D7 前哨實跑（B 記錄 49 項全 404），D 另以 sparse 樹獨立驗了 probes（§1）。
+
+## 3. 複核（wip/b-drill-absent404-2 8b146db3）＋ wip/b-m01-salesorders-page 491f0945（D，2026-09-27 11:40）
+
+| 項目 | D 的驗證 | 結果 |
+|---|---|---|
+| tests/platform（8b146db3） | 1251 過、3 skip | 成立 |
+| AB-S1：空宣告判紅 | module.json 在、probes 與 pages 都空 ⇒ `(modules/<key>, None)`（EMPTY_DECL）；只有頁面 ⇒ 照驗頁面。突變 AC1「空宣告不判紅」⇒ 紅 | **關閉** |
+| AB-S2：page 歸屬雙向一致 | 新守門 `test_module_pages_match_units`（modules.json `page:` ＝ module.json `pages`，兩個方向都比），附合成的反向控制。突變 AC2「只比單向」⇒ 紅；AC3「拿掉 subcontract 補的頁」⇒ 紅 | **關閉** |
+| salesorders-page（491f0945，疊在 c-m01-5 上） | case pages 補上 `sales-orders.html`（不帶 menu；該頁是轉址到 case-management 的退役頁），case 1.0.4。case 模組題＋menu／probes 題：27 過 | 成立（輕量） |
+| 兩包的交會 | ① 491f0945＋新守門＋subcontract 修正 ⇒ 守門 2 過；② 反向：case 回到 c-m01-5 的宣告（沒有 sales-orders）⇒ 守門紅，列出 `('case', ['sales-orders.html'], [])` | 成立 |
+
+- **上車順序**：c-m01-5 與 absent404-2 都上車時，**salesorders-page 必須同班**。否則新守門會因 case 紅，這正是它該做的事。

@@ -170,6 +170,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-27 11:40 D：b-drill-absent404-2 8b146db3 **通過**（AB-S1、AB-S2 關閉；1251 過；突變 3/3 紅）；b-m01-salesorders-page 491f0945 **通過**（27 過；新守門在 case 缺 sales-orders 時紅＝反向控制成立）。上車：c-m01-5＋absent404-2 同班 ⇒ salesorders-page 必須同班。
 - 2026-09-27 11:02 D：b-drill-absent404 58f844ac **通過**：豁免隨 modules.json mod: 單位自動失效（M01 合回即納入；忘改 modules.json ⇒ 歸屬守門 3 紅）；core-only sparse 樹 27 個 probes 全 404。建議：空宣告也判紅；modules.json page: 單位 ⊆ module.json pages（contractor-voucher-approval-settings、sales-orders 兩頁目前缺席時不移除也不驗）。
 - 2026-09-27 11:02 D：c-m01-5 a1e0a45b——M4-M1／M2 關閉（SO、網路規劃、請款、出納、報表突變 8/8 紅）；M4-M3：M01 不在時非 e2e 只剩允許 5＋基底 4、e2e 0 紅；**M01 在時 134 檔逐檔通過數與基準完全相同**（e2e 77/78 同，inflight[n2] 負載逾時、單獨重跑過）。**必修 M5-M1**：整檔標記藏 462 題＋10 檔 137 題（主持已接受，子代理修）。
 - 2026-09-27 10:50 D：b-probe-guard-s 04c0e912 **通過**：PT-S1、PT-S2 關閉；15 過、突變 4/4 紅（預設範圍改空、不含 modules、只含一個模組、utf8_env 不清）。
