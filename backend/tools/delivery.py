@@ -2,19 +2,22 @@
 """更新交付：開發機把完整包發布到 <交付資料夾>；正式機偵測、複製到 staging、驗證（UPDATE-DELIVERY.md §2、§3）。
 
 [單位] tool:delivery    [層] 部署工具（開發機與正式機各跑**自己安裝的**這一份）
-[公開介面] keygen, publish, scan, stage, verify_staged, sign, verify_signature, signed_bytes
+[公開介面] keygen, publish, scan, stage, verify_staged, sign, verify_signature, signed_bytes,
+           apply_staged, find_result, latest_result, write_back, read_results, latest_prod_commit
 [不變式] 發布以「整個目錄改名」收尾（incoming\\<包>.partial → packages\\<包>）；正式機只看 packages\\。
          驗證用**正式機已安裝版本**內建的公鑰（`DELIVERY_PUBKEY_PEM`），不用包自己帶的——新包不能替自己背書。
          簽章涵蓋 delivery.json＋package.sha256（`signed_bytes`）⇒ 改任何一個都驗不過。
          staging 逐檔雜湊與清單完全相同（不多不少）才算通過。任何一項判不出來 ⇒ 不通過（不猜）。
 [契約題] tests/platform/test_delivery_2026_09_28.py
-[注意] 不碰正式機的程式與資料：staging 放在安裝目錄**外**（呼叫端給路徑）；本檔不呼叫 apply_update（一鍵套用另做）。
+[注意] staging 放在安裝目錄**外**（呼叫端給路徑）。一鍵套用（apply_staged）只做三件事：看鎖、把包裡的 backend\\tools
+       複製進安裝目錄（AH-M2）、呼叫 apply_update.ps1；結果一律讀它寫的 result.json（UPDATE-DELIVERY §9.2），
+       判定重用 deploy_dashboard.decide_outcome／parse_result_line（不另寫 ::RESULT:: 解析）。
        <交付資料夾> 由使用者自建（U-1＝我的雲端硬碟\\MOTRIX-交付），程式**不自動建**：根目錄不存在 ⇒ 拒絕。
 
 交付資料夾結構：
   <交付資料夾>\\incoming\\<包名>.partial\\   發布中（正式機不看）
   <交付資料夾>\\packages\\<包名>\\           已發布：payload\\（完整包）＋delivery.json＋package.sha256＋package.sha256.sig
-  <交付資料夾>\\results\\<包名>.result.json  正式機寫回的結果（(d) 另做；本檔只讀它來決定能不能清舊包）
+  <交付資料夾>\\results\\<包名>.result.json  正式機寫回的結果（write_back；只帶結果欄位，不帶 log）
 
 子命令（exit：0 通過／1 不通過或拒絕）：
   keygen   --private-out <路徑>                 產生 Ed25519 金鑰：私鑰寫到檔（已存在就拒絕），公鑰印出（貼進 DELIVERY_PUBKEY_PEM）
@@ -360,6 +363,163 @@ def verify_staged(staged, install_root, pubkey_pem=None, run_verify_package=True
             if r.returncode != 0:
                 problems.append("verify_package 不通過（exit %s）：%s" % (r.returncode, (r.stdout + r.stderr)[-600:]))
     return {"ok": not problems, "problems": problems, "notes": notes, "meta": meta}
+
+
+# ── 正式機：一鍵套用 (c) ──────────────────────────────────────────────────────
+
+LOCK_REL = os.path.join("backend", ".apply.lock")
+#: result.json 與 ::RESULT:: 同源的欄位：(result.json 的鍵, deploy_dashboard.parse_result_line 的鍵)
+RESULT_CORE = (("status", "status"), ("rolled_back", "rolledBack"), ("service", "service"), ("exit", "exit"))
+#: 寫回雲端的欄位（白名單：不帶 package 路徑以外的本機資訊、不帶 log）
+WRITE_BACK_FIELDS = ("protocol", "status", "rolled_back", "service", "exit", "script", "script_version", "timestamp",
+                     "commit", "started_at", "finished_at")
+
+
+def _dashboard():
+    """判定邏輯的唯一來源：同目錄的 deploy_dashboard（import 沒有啟動副作用）。"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import deploy_dashboard
+    return deploy_dashboard
+
+
+def read_lock(install_root):
+    """鎖檔內容（dict）；沒有鎖 ⇒ None；有鎖但讀不懂 ⇒ {"unreadable": True}。只讀，**不刪**（殘留鎖由人確認後刪）。"""
+    p = os.path.join(install_root, LOCK_REL)
+    if not os.path.exists(p):
+        return None
+    try:
+        return json.load(open(p, encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return {"unreadable": True}
+
+
+def apply_cmd(install_root, payload):
+    return ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            os.path.join(install_root, "backend", "tools", "apply_update.ps1"), "-PackagePath", payload, "-Yes"]
+
+
+def _run_powershell(cmd, timeout=45 * 60):
+    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+    return r.returncode, r.stdout + r.stderr
+
+
+def find_result(install_root, script="apply_update", since=None):
+    """logs\\<script>_<yyyyMMdd_HHmmss>.result.json 裡最新的那一份（since：只看這個時間之後寫的；epoch 秒）。⇒ dict 或 None。"""
+    logs = os.path.join(install_root, "backend", "logs")
+    rx = re.compile(r"^%s_\d{8}_\d{6}\.result\.json$" % re.escape(script))
+    best = None
+    for n in (os.listdir(logs) if os.path.isdir(logs) else []):
+        full = os.path.join(logs, n)
+        if not rx.match(n) or (since is not None and os.path.getmtime(full) < since):
+            continue
+        if best is None or n > best:
+            best = n
+    if best is None:
+        return None
+    try:
+        return json.load(open(os.path.join(logs, best), encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return {"unreadable": best}
+
+
+def latest_result(install_root, script="apply_update"):
+    """儀表板重開後顯示「上一次套用的結果」（§5-6）：-CheckOnly 的結果不算套用、跳過。"""
+    logs = os.path.join(install_root, "backend", "logs")
+    rx = re.compile(r"^%s_\d{8}_\d{6}\.result\.json$" % re.escape(script))
+    for n in sorted((n for n in (os.listdir(logs) if os.path.isdir(logs) else []) if rx.match(n)), reverse=True):
+        try:
+            r = json.load(open(os.path.join(logs, n), encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return {"unreadable": n}
+        if not str(r.get("status") or "").startswith("checkonly"):
+            return r
+    return None
+
+
+def apply_staged(staged, install_root, verified, run=None, clock=None):
+    """一鍵套用。verified＝**剛剛**對同一個 staging 跑的 verify_staged 結果（ok 才准）。
+    ⇒ {started, outcome, result, problems, lock}。outcome：succeeded／failed（fail-closed）；沒開始 ⇒ started False。"""
+    import time
+    clock = clock or time.time
+    if not (verified or {}).get("ok"):
+        raise DeliveryError("驗證沒有通過，不套用：%s" % "；".join((verified or {}).get("problems") or ["沒有驗證結果"]))
+    lock = read_lock(install_root)
+    if lock is not None:
+        return {"started": False, "outcome": "failed", "result": None, "lock": lock,
+                "problems": ["另一個套用或回滾正在執行，或有殘留的鎖檔（不自動清；確認後由人刪除 backend\\.apply.lock）"]}
+    payload = os.path.join(staged, PAYLOAD)
+    tools_src = os.path.join(payload, "backend", "tools")
+    if not os.path.isdir(tools_src):
+        raise DeliveryError("包裡沒有 backend\\tools：不能先換上新的套用腳本（AH-M2），不套用")
+    shutil.copytree(tools_src, os.path.join(install_root, "backend", "tools"), dirs_exist_ok=True)   # AH-M2
+    started = clock()
+    rc, out = (run or _run_powershell)(apply_cmd(install_root, payload))
+    dash = _dashboard()
+    res = find_result(install_root, "apply_update", since=started - 2)
+    problems = []
+    outcome = dash.decide_outcome(rc, out, "deploy")
+    stdout_res = dash.parse_result_line(out)
+    if res is None or "unreadable" in res:
+        problems.append("找不到這一次的結果檔（backend\\logs\\apply_update_*.result.json）或讀不懂")
+        outcome = "failed"
+    elif stdout_res is not None:
+        mism = [rk for rk, sk in RESULT_CORE if str(res.get(rk)) != str(stdout_res.get(sk))]
+        if mism:
+            problems.append("結果檔與 ::RESULT:: 不一致：%s" % "、".join(mism))
+            outcome = "failed"
+    return {"started": True, "outcome": outcome, "result": res, "problems": problems, "lock": None, "returncode": rc}
+
+
+# ── 結果寫回 (d) ──────────────────────────────────────────────────────────────
+
+def write_back(root, name, result, outcome, host=None):
+    """正式機把結果寫到 <交付資料夾>\\results\\<包名>.result.json（先 .tmp 再改名）。只帶 WRITE_BACK_FIELDS＋name／outcome／host。"""
+    _require_root(root)
+    if not NAME_RE.match(name or ""):
+        raise DeliveryError("包名不合格：%r" % name)
+    if outcome not in ("succeeded", "failed"):
+        raise DeliveryError("outcome 只能是 succeeded／failed：%r" % outcome)
+    rec = {k: (result or {}).get(k) for k in WRITE_BACK_FIELDS}
+    rec.update(name=name, outcome=outcome, host=host or os.environ.get("COMPUTERNAME", ""))
+    d = os.path.join(root, "results")
+    os.makedirs(d, exist_ok=True)
+    final = os.path.join(d, name + ".result.json")
+    tmp = final + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(rec, f, ensure_ascii=False, indent=1, sort_keys=True)
+    os.replace(tmp, final)
+    return final
+
+
+def read_results(root):
+    """開發機：{包名: 結果}（讀不懂的略過並列在 "_unreadable"）。"""
+    _require_root(root)
+    d = os.path.join(root, "results")
+    out, bad = {}, []
+    for n in sorted(os.listdir(d) if os.path.isdir(d) else []):
+        if not n.endswith(".result.json") or not NAME_RE.match(n[:-len(".result.json")]):
+            continue
+        try:
+            out[n[:-len(".result.json")]] = json.load(open(os.path.join(d, n), encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            bad.append(n)
+    if bad:
+        out["_unreadable"] = bad
+    return out
+
+
+def latest_prod_commit(root):
+    """開發機 /api/prod-status 用：最近一次 outcome=succeeded 的 {commit, finished_at, name}；沒有 ⇒ None（不猜）。"""
+    best = None
+    for name, r in read_results(root).items():
+        if name == "_unreadable" or r.get("outcome") != "succeeded" or not r.get("commit"):
+            continue
+        key = (str(r.get("finished_at") or ""), name)
+        if best is None or key > best[0]:
+            best = (key, {"commit": r["commit"], "finished_at": r.get("finished_at"), "name": name})
+    return best[1] if best else None
 
 
 def main(argv=None):
