@@ -181,3 +181,21 @@
 2. AH-M3：三條路演練加第四條——在 execute 前讓一個要刪的檔被占用（開著不放）⇒ `delete_failed`，觀察服務狀態。
 3. 手動回滾之後打 `/api/prod-status`，看 commit（AH-S2）。
 4. `Stop-InstallService`：同機另開一個 `uvicorn main:app --port 8866`，確認不會被停；排程工作 Ready／Running 兩種狀態下各重啟一次。
+
+## 6. 複核：wip/h-apply-platform 7a38fde6（A，2026-09-28 01:28；讀碼＋主持轉述的四條路演練結果）
+
+| 項目 | 修正 | 判定 |
+|---|---|---|
+| AH-M1 | `_fold`＝casefold；`add`、無 baseline 候選、`execute` 都改以 casefold 比對新包清單（apply_plan.py）；題 `test_ahm1_case_only_rename_is_not_deleted` | 成立 |
+| AH-M2 | RUNBOOK §8 手動步驟先 robocopy 包裡的 `backend	ools`，並註明正式機現在那份（c006a2a0）沒有檢查、這一次一定要先做；腳本開頭比對 `$ApplyScriptVersion` 與包裡那份，不同就 `script_not_from_package`（在備份與停服之前）；儀表板集合已登記；有題 | 成立 |
+| AH-M3 | 停服之後的 4 個出口（copy_failed_backend／frontend／root_dirs、delete_failed）改走 `Fail-AfterStop`：先 `Start-InstallService` 再 Fail，訊息附手動回滾指令；有題；主持的第四條演練（刪除失敗）通過 | 成立（殘餘風險見 AH-S7） |
+| AH-S2 | 套用前的 `.deployed_commit.json` 存進快照（`deployed_commit.before.json`），手動回滾時寫回；快照裡沒有就警告 | 成立 |
+
+**AH-S7（建議，新）　停服後失敗時啟動的是套用到一半的程式**：新版的 init_db 會在啟動時對正式庫跑 migration。這時要回到套用前，就得用手動回滾換回 DB 快照，而套用後寫入的資料會丟失。這與修改前迴圈的行為相同，並沒有更差。建議：`copy_failed_*` 改走自動回滾那一段（快照與計畫都已備妥），只有 `delete_failed`（新程式已完整複製）才重新啟動。
+**AH-O7（觀察，新）**：`$ApplyScriptVersion` 是手動維護的常數——改了腳本行為卻忘了改它，版本檢查就會放行不同的腳本。建議加一題：apply_update.ps1 相對上一個版本紀錄有改動時，常數必須不同（或改用「去掉路徑與 port 那兩行後」的雜湊）。
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ AH-M1 關閉（7a38fde6）——casefold 比對＋題 test_ahm1_case_only_rename_is_not_deleted
+- ✅ AH-M2 關閉（7a38fde6）——RUNBOOK §8 先複製 tools＋腳本版本比對 script_not_from_package
+- ✅ AH-M3 關閉（7a38fde6）——停服後失敗先重新啟動服務（Fail-AfterStop），殘餘風險列 AH-S7
