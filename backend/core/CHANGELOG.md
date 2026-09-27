@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.59 — 2026-09-27（暫用，列車取號；a-prod-status-upgrade：IMPROVEMENT-REPORT §6「prod-status 認不得新升級工具」）〔core_bump：暫用 1.57 → 1.59〕
+- L0（新增）：`core.upgrade.write_deployed_marker(root, new_source, now=None)`——轉換完成寫 `backend/.deployed_commit.json`（格式同 apply_update.ps1：commit、commit_short、branch、applied_at、built_at），來源 deploy_manifest.json → backend/.build_commit，都沒有就不寫並回原因
+- L0（行為）：`verify_conversion` 的「設定檔不可改寫」不含部署標記；`rollback` 兩種模式都把部署標記還原成備份的那一份（V9 沒有 ⇒ 刪掉），`verify_rollback` 兩種模式都比對它
+- `tools/platform/upgrade.py convert` 呼叫它、記進 conversion_log.json、沒寫時印警告 ⇒ 轉換後 `/api/system/deployed-version` 與部署儀表板 prod-status 回新版 commit
+
 ## 1.58 — 2026-09-27（B 暫用，列車取號；wip/b-payreq：請款流程，主持裁示模組 migration 順勢補上）
 - L0（新增）：`ModuleSpec.migrations: [(版號, 函式)]`——模組自己的 migration；`core.loader.load_all` 在模組**載入時**交給 `core.migrations.register`（停用／未授權／不在包內 ⇒ 不登記、不建表不加欄；再啟用時 `run_all` 從 `module_schema_versions` 記的版本往後補跑）
 - L0（新增）：`core.loader.check_migrations(items)`——版號不是從 1 起連續或重複、項目不是 (int, 函式) ⇒ ValueError，該模組載入失敗（原因進狀態表）
