@@ -9,7 +9,7 @@
     inventory, load_manifest, logical_digest, manifest_sha256, online_backup, preflight, program_files, quick_check,
     record_post_conversion, replace_program, rollback, rows_added_since, schema_version, settings_changes,
     settings_rows, sha256_file, sync_package_default_config, table_counts, table_digests, verify_backup_restorable,
-    verify_conversion, verify_external, verify_rollback, walk
+    verify_conversion, verify_external, verify_rollback, walk, write_deployed_marker
 [不變式] 安裝根目錄一律由呼叫者給、不猜路徑；資料原地不動；設定只補缺的鍵；任一步驟不過就不往下走
 [契約題] tests/platform/test_core_upgrade.py
 [注意] L0 工具不是業務模組；啟動伺服器、ping、互動確認在 tools/platform/upgrade.py
@@ -85,6 +85,10 @@ CONFIG_FILES = tuple(sorted({
 #   跟著程式走 ⇒ 歸類成程式（classify 的預設）：轉換時隨新版包安裝、兩種回滾都還原成 V9 的那一份。
 #   歸成設定的話轉換後版本端點仍回 V9 的 commit（STATES-DATA-OPS S-CU12）。
 #   `.deployed_commit.json` 是部署工具寫的「這台機器套用過什麼」，仍屬設定。
+#   〔2026-09-27 補〕但轉換本身就是一次「套用」⇒ convert 要寫它（`write_deployed_marker`），否則部署儀表板的
+#   prod-status（讀 `/api/system/deployed-version`）轉換後仍回 V9 的 commit；所以轉換驗證不把它的改變算成「設定被改寫」，
+#   而兩種回滾都要把它還原成備份的那一份（程式回到 V9，標記也要回到 V9）。
+_DEPLOYED_MARKER = _rel(_p.DEPLOYED_COMMIT_FILE)
 CONFIG_DIRS = (_rel(_p.CERTS_DIR),)
 #: 設定類、但部署包也帶一份預設的檔（稽核 X-9b M-4）。`autostart.bat` 裡有這台機器的對外連線總開關
 #: （MOTRIX_TENDER_RADAR／MOTRIX_GEO），被新版包覆蓋 ＝ 在沒有人知道的情況下改變機器設定。
@@ -824,9 +828,10 @@ def verify_conversion(root: str, manifest: dict, warnings: list = None) -> list:
     if unexpected:
         problems.append("出現未宣告的新設定鍵：%s" % sorted(unexpected))
     # 設定檔（含 autostart.bat）：轉換不可以改寫或刪除（稽核 X-9b M-4）
+    # 部署標記除外：轉換本身就要改寫它（write_deployed_marker）
     cfg_changed = sorted(rel for rel, want in manifest["config"].items()
-                         if not os.path.isfile(os.path.join(root, rel))
-                         or sha256_file(os.path.join(root, rel)) != want)
+                         if rel != _DEPLOYED_MARKER and (not os.path.isfile(os.path.join(root, rel))
+                                                         or sha256_file(os.path.join(root, rel)) != want))
     if cfg_changed:
         problems.append("設定檔被改寫或刪除：%s" % cfg_changed)
     if inventory(root, kinds=("data",)) != manifest["data_inventory"]:
@@ -846,6 +851,49 @@ def record_post_conversion(root: str, backup_dir: str) -> dict:
     with open(os.path.join(backup_dir, POST_CONVERT_NAME), "w", encoding="utf-8") as f:
         json.dump(snap, f, ensure_ascii=False, indent=1, sort_keys=True)
     return snap
+
+
+def write_deployed_marker(root: str, new_source: str, now: datetime = None) -> dict:
+    """轉換完成後寫部署標記 `backend/.deployed_commit.json`，格式同 apply_update.ps1 Step 6
+    （commit、commit_short、branch、applied_at、built_at）⇒ `/api/system/deployed-version` 與部署儀表板的
+    prod-status 回新版的 commit（IMPROVEMENT-REPORT §6；原本升級工具不寫，轉換後仍顯示 V9）。
+
+    來源依序：新版包的 `deploy_manifest.json`（打包時寫）→ `backend/.build_commit`（只有 commit）。
+    兩者都沒有 ⇒ **不寫**、回 `{"written": False, "reason": …}`（不猜；呼叫端要讓人看到）。
+    """
+    now = now or datetime.now()
+    rec = None
+    mpath = os.path.join(new_source, "deploy_manifest.json")
+    if os.path.isfile(mpath):
+        with open(mpath, encoding="utf-8-sig") as f:              # PS 5.1 Set-Content -Encoding UTF8 帶 BOM
+            m = json.load(f)
+        if m.get("commit"):
+            rec = {"commit": m["commit"], "commit_short": m.get("commit_short") or m["commit"][:8],
+                   "branch": m.get("branch") or "", "built_at": m.get("built_at") or "", "source": "deploy_manifest.json"}
+    if rec is None:
+        bpath = os.path.join(new_source, _rel(_p.BUILD_COMMIT_FILE))
+        sha = open(bpath, encoding="ascii", errors="replace").read().strip() if os.path.isfile(bpath) else ""
+        if sha:
+            rec = {"commit": sha, "commit_short": sha[:8], "branch": "", "built_at": "", "source": ".build_commit"}
+    if rec is None:
+        return {"written": False, "reason": "新版來源沒有 deploy_manifest.json 也沒有 backend/.build_commit"}
+    source = rec.pop("source")
+    marker = {"commit": rec["commit"], "commit_short": rec["commit_short"], "branch": rec["branch"],
+              "applied_at": now.strftime("%Y-%m-%d %H:%M:%S"), "built_at": rec["built_at"]}
+    dst = os.path.join(root, _DEPLOYED_MARKER)
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    with open(dst, "w", encoding="utf-8") as f:
+        json.dump(marker, f, ensure_ascii=False, indent=2)
+    return {"written": True, "source": source, **marker}
+
+
+def _restore_deployed_marker(root: str, backup_dir: str, manifest: dict) -> None:
+    """回滾：部署標記回到備份的那一份；備份時沒有 ⇒ 刪掉（轉換寫的那一份說的是新版）。"""
+    dst = os.path.join(root, _DEPLOYED_MARKER)
+    if _DEPLOYED_MARKER in manifest["config"]:
+        shutil.copy2(os.path.join(backup_dir, "config", _DEPLOYED_MARKER), dst)
+    elif os.path.exists(dst):
+        os.remove(dst)
 
 
 def changes_since_conversion(backup_dir: str, db_path: str) -> dict:
@@ -935,6 +983,7 @@ def rollback(root: str, backup_dir: str, mode: str, info: dict = None) -> list:
         os.remove(full)
     _prune_empty_dirs(root)
     _restore_tree(root, backup_dir, manifest, "program")
+    _restore_deployed_marker(root, backup_dir, manifest)   # 程式回到 V9 ⇒ 標記也回到 V9（只回程式也一樣）
     if mode == "full":
         for rel, full in walk(root):
             if classify(rel) == "config" and rel not in manifest["config"]:
@@ -964,6 +1013,9 @@ def verify_rollback(root: str, manifest: dict, mode: str, info: dict = None) -> 
     if now_prog != manifest["program"]:
         diff = set(now_prog.items()) ^ set(manifest["program"].items())
         problems.append("程式檔與備份不一致：%s" % sorted({d[0] for d in diff})[:10])
+    mk = os.path.join(root, _DEPLOYED_MARKER)                 # 兩種模式：部署標記要跟程式一起回到備份的那一份
+    if (sha256_file(mk) if os.path.isfile(mk) else None) != manifest["config"].get(_DEPLOYED_MARKER):
+        problems.append("部署標記（%s）沒有回到備份的那一份：版本查詢會回報錯的版本" % _DEPLOYED_MARKER)
     if mode == "full":
         now_cfg = {rel: sha256_file(f) for rel, f in walk(root) if classify(rel) == "config"}
         if now_cfg != manifest["config"]:
