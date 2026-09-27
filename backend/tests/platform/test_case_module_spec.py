@@ -19,6 +19,9 @@ EXPECTED = {
     ("case.access", "case"), ("case.summary", "case"), ("case.locations", "case"), ("case.recognition", "case"),
     ("case.default_terms", "case"), ("case.doc_version", "case"), ("daily.check", "case_deadlines"),
     ("approval.reassign", "quotation"), ("approval.reassign", "completion_note"),
+    # c-approval-l1（2026-09-27）：佇列在 L1，M01 是 queue_items／detail 的提供者
+    ("approval.queue_items", "case"), ("approval.detail", "quotation"), ("approval.detail", "completion_note"),
+    ("approval.detail", "extra_expense"), ("approval.detail", "case_change"),
     ("calendar.writeback", "quotation"), ("calendar.writeback", "case_stage"),
     ("quotation.append_items", "quotations"), ("attachments.for_document", "case"),
 }

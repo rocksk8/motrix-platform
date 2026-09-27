@@ -21,8 +21,10 @@ BACKEND = Path(__file__).resolve().parents[3]   # M01 ④：隨模組搬進 modu
 FOREIGN_TABLES = ("contractor_payment_vouchers", "invoice_vouchers", "payment_requests", "shipping_notes",
                   "vouchers_all", "voucher_lines", "bonus_awards", "bonus_case_awards")
 #: 佇列彙整（L1 routers/approval_queue.py，2026-09-27 自 M01 搬入）與 M01 自己的提供者
-L1_FUNCS = ("get_approval_queue", "get_approval_queue_count", "_queue_provider_items")
-M01_FUNCS = ("reassign_approval", "approval_queue_detail", "approval_queue_items")
+L1_FUNCS = ("get_approval_queue", "get_approval_queue_count", "_queue_provider_items", "reassign_approval",
+            "approval_queue_detail")
+M01_FUNCS = ("approval_queue_items", "detail_quotation", "detail_completion_note", "detail_extra_expense",
+             "detail_case_change")
 
 
 def _funcs(src, names):
@@ -61,9 +63,9 @@ def test_every_reassign_type_has_one_provider(client):
         assert callable(getattr(obj, "load", None)) and callable(getattr(obj, "save", None)), name
 
 
-def test_every_foreign_detail_type_has_one_provider(client):
-    """M01 自己的四種（報價單、完工單、額外支出、已結案變更）在端點內；其他模組的單據各有一個 `approval.detail`。"""
-    want = set()
+def test_every_detail_type_has_one_provider(client):
+    """每種單據各有一個 `approval.detail`（端點在 L1，2026-09-27）：M01 四種（報價單、完工單、額外支出、已結案變更）與其他模組的。"""
+    want = {"quotation", "completion_note", "extra_expense", "case_change"}   # 本檔在 modules/case/tests ⇒ M01 在
     if source_tree.module_installed("modules/supply/"):
         want.add("shipping_note")
     if source_tree.module_installed("modules/subcontract/"):
@@ -271,3 +273,33 @@ def test_case_names_are_filled_only_when_missing(client, monkeypatch):
     assert (got["t1"]["customer"], got["t1"]["projectName"]) == ("甲客戶", "乙專案")
     assert (got["t2"]["customer"], got["t2"]["projectName"]) == ("", "自己的")
     assert (got["t3"]["customer"], got["t3"]["projectName"]) == ("", "")
+
+
+# ── ⑦ 佇列在 L1、M01 是提供者（c-approval-l1，主持裁示 2026-09-27）────────────
+
+def test_m01_quotation_reaches_the_l1_queue_through_its_provider(client, make_user):
+    """M01 的報價單經 `approval.queue_items`（名稱 case，ModuleSpec 宣告）進 L1 佇列與角標。
+    突變：拿掉 ModuleSpec 那一行 ⇒ 本題紅（佇列裡沒有報價單、角標 0）。"""
+    import db
+    from modules.case.api import quotations as q
+    assert registry.providers("approval.queue_items").get("case") is q.approval_queue_items
+    su, sp = make_user("aqp_l1_super", "Conn-Pass-123", role="superadmin")[:2]
+    au, ap = make_user("aqp_l1_appr", "Conn-Pass-123", role="admin")[:2]
+    appr = {"requestedBy": "aqp_l1_sales", "requestedByDisplay": "業務", "requestedAt": "2026-09-27T09:00:00",
+            "currentTier": 0, "tiers": [{"approvers": [{"username": au, "displayName": au, "status": "pending"}]}]}
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at) "
+                     "VALUES ('MQ-AQP-L1','待審核','甲客戶','乙專案',?,'2026-09-27','2026-09-27')",
+                     (json.dumps({"approval": appr}),))
+        conn.commit()
+    finally:
+        conn.close()
+    sh, ah = _login(client, su, sp), _login(client, au, ap)
+    d = client.get("/api/approval-queue", headers=sh).json()
+    got = {it["quoteNo"]: it for g in d["queue"] for it in g["items"]}
+    assert got["MQ-AQP-L1"]["type"] == "quotation" and got["MQ-AQP-L1"]["customer"] == "甲客戶", sorted(got)
+    assert _count(client, ah) == 1
+    r = client.get("/api/approval-queue/detail", params={"type": "quotation", "id": "MQ-AQP-L1"}, headers=ah)
+    assert r.status_code == 200, r.text
+    assert r.json()["case"] == {"quoteNo": "MQ-AQP-L1", "customerName": "甲客戶", "projectName": "乙專案", "dealTag": ""}

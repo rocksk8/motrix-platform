@@ -160,3 +160,220 @@ def get_approval_queue_count(authorization: str = Header(None)):
         conn.close()
     is_sa = u["role"] == "superadmin"
     return {"count": sum(1 for it in items if _counts_for_me(it, my_usernames, u["username"], is_sa))}
+
+
+# ── 詳情（依 type 分流到擁有模組的 `approval.detail`）─────────────────────────
+#
+# 使用者要求（2026-09-14）：「簽核佇列內的送審資料要詳細，例如夾帶檔案，要顯示哪個案件什麼內容，
+# 如果是檔案可顯示預覽，編修後的結果」。清單一次可能上百筆，每筆都去讀明細會讓開啟佇列變慢，
+# 而使用者一次只看一筆 ⇒ 詳情另開這支端點。
+
+def _case_header(conn, quote_no: str) -> dict:
+    """詳情上方的案件抬頭（`case.summary`，L1 以 `SYSTEM` 取——呼叫前已經過每案守門）。M01 不在或查無 ⇒ 只有單號。"""
+    q = _case_names(conn, [quote_no]).get(quote_no)
+    if not q:
+        return {"quoteNo": quote_no, "customerName": "", "projectName": "", "dealTag": ""}
+    return {"quoteNo": q["quote_no"], "customerName": q["customer_name"] or "",
+            "projectName": q["project_name"] or "", "dealTag": q.get("deal_tag") or ""}
+
+
+def _guard_queue_detail(conn, user: dict, quote_no: str, approval_raw=None) -> None:
+    """簽核佇列詳情的存取守門（2026-09-14 自動安全掃描後補上）。
+
+    詳情回傳完整內容（明細、附件路徑、變更 payload、匯款帳戶），而 `id` 是可預測的單號或小整數 ⇒
+    只要求登入就是 IDOR。放行順序（先寬後嚴，因為簽核人往往不是案件的人）：
+    1. **這張單據自己的簽核人**（含代理人）——他本來就該看得到要簽的東西
+    2. 其餘走一般的每案規則 `guard_case_access()`（admin+／該案業務／協作者／案件管理模組、案件本身的簽核人）；
+       看不到與查無同一個 404（c-case404，M01-O1）；M01 不在 ⇒ 404（`case_access` 的 fail-closed）
+    """
+    if approval_raw and is_document_approver(approval_raw, user, conn):
+        return
+    guard_case_access(conn, quote_no, user, allow_module="case_manage", allow_approver=True)
+
+
+def _can_see_queue_money(conn, user: dict, approval_raw=None) -> bool:
+    """能不能看到這筆的金額：`can_see_financial()` 或**本單簽核人**（看不到金額就沒辦法判斷該不該簽）。"""
+    if can_see_financial(user):
+        return True
+    return bool(approval_raw and is_document_approver(approval_raw, user, conn))
+
+
+_MONEY_LABELS = {"金額", "單價", "小計", "總金額", "存簿封面"}
+
+
+def _mask_money(out: dict) -> None:
+    """沒有財務檢視權時，把金額欄位換成說明字串而不是直接拿掉（直接拿掉像「這張單沒有金額」，更容易誤判）。"""
+    out["fields"] = [
+        f if f["label"] not in _MONEY_LABELS
+        else {"label": f["label"], "value": "（無財務檢視權限）"}
+        for f in out.get("fields") or []
+    ]
+    masked_items = []
+    for it in out.get("items") or []:
+        if isinstance(it, dict):
+            it = {k: v for k, v in it.items()
+                  if k not in ("amount", "subtotal", "unitPrice", "unit_cost", "price", "total")}
+        masked_items.append(it)
+    out["items"] = masked_items
+    out["moneyMasked"] = True
+
+
+@router.get("/api/approval-queue/detail")
+def approval_queue_detail(type: str, id: str, authorization: str = Header(None)):
+    """一筆待簽核項目的完整內容：屬於哪個案件、送審了什麼、夾帶哪些檔案、改了什麼。
+
+    內容由擁有模組提供（`approval.detail`，名稱＝type）；這裡做每案權限、案件抬頭與金額遮蔽。
+    真正的動作權限（核准／退回）仍由各自的端點把關。"""
+    user = _require_user(authorization)
+    prov = registry.providers("approval.detail").get(type)
+    if prov is None:
+        raise HTTPException(400, "不支援的類型（或該單據的模組未安裝）：" + str(type))
+    conn = get_db()
+    try:
+        d = prov(conn, id)
+        if not d:
+            raise HTTPException(404, "單據不存在")
+        approval_raw = d.get("approvalRaw")
+        # 申請人本人（提供者明示 `selfViewBy`，目前只有已結案變更）不經每案守門
+        if not (d.get("selfViewBy") and d["selfViewBy"] == user["username"]):
+            _guard_queue_detail(conn, user, d["quoteNo"], approval_raw)
+        out = {"type": type, "id": id, "title": d.get("title") or id,
+               "fields": list(d.get("fields") or []), "items": list(d.get("items") or []),
+               "files": list(d.get("files") or []), "changes": d.get("changes"),
+               "case": _case_header(conn, d["quoteNo"])}
+        # 金額遮蔽：規則與憑證流一致（見 _can_see_queue_money）
+        if not _can_see_queue_money(conn, user, approval_raw):
+            _mask_money(out)
+            # 內嵌影像（dataUrl：存簿封面）一律拿掉——看的是「有沒有內嵌內容」，不只看 id 字串（稽核 D AP-M2）
+            out["files"] = [f for f in out["files"] if not f.get("dataUrl") and f.get("id") != "passbook"]
+        return out
+    finally:
+        conn.close()
+
+
+# ── 轉簽（2026-09-14 使用者要求）────────────────────────────────────────────
+#
+# 「簽核代理人，增加最高權限人可以轉簽簽核佇列的內容，要註明原因跟註記這筆簽核」。
+#
+# 與既有「簽核代理人」（`approval_delegates`）的分工：
+#   - 代理人是**事前、長期**的授權（某人請假期間由某人代簽，範圍是那個人的全部簽核）
+#   - 轉簽是**事後、單筆**的處置（這一張卡住了，改由另一個人簽）
+#
+# **原因是必填**：轉簽等於把一筆待辦從 A 身上拿走塞給 B，沒有理由就是無從追究的
+# 權限變更。原因會寫進單據的 approval.reassignLog、audit_log，並顯示在簽核佇列詳情
+# 與簽核歷史裡。單據的讀寫交給擁有模組（`approval.reassign`，IP-94）。
+
+class ReassignIn(BaseModel):
+    type: str
+    id: str
+    to_username: str
+    reason: str
+    from_username: Optional[str] = None
+
+
+@router.post("/api/approval-queue/reassign")
+def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
+    """把某一筆待簽核轉給別人（限最高管理者）。
+
+    只動**當層尚未簽核**的那個人：已經簽過的不能被換掉（那會讓簽核紀錄失真），
+    後面幾層也不動（那是簽核流程設定的事，不是單筆處置）。沒有 `approval.reassign` 提供者的類型不支援
+    （`extra_expense`：簽核名單在自己的欄位；`case_change`：單層「任一 superadmin」不會卡在特定人身上）。
+    """
+    user = _require_user(authorization, require_superadmin=True)
+    reason = (body.reason or "").strip()
+    if not reason:
+        raise HTTPException(400, "請填寫轉簽原因")
+    store = registry.providers("approval.reassign").get(body.type)
+    if store is None:
+        # 不支援的類型，或擁有該單據的模組沒有安裝（它的單也不會出現在佇列上）
+        raise HTTPException(400, "此類型不支援轉簽（或該單據的模組未安裝）：" + str(body.type))
+    to_username = (body.to_username or "").strip()
+    if not to_username:
+        raise HTTPException(400, "請選擇要轉給誰")
+
+    conn = get_db()
+    try:
+        begin_write(conn)   # lost update：各單據的 data_json／approval_json 在寫鎖內讀、整包寫回
+        target = conn.execute(
+            "SELECT username, display_name FROM users WHERE username=? AND active=1",
+            (to_username,)).fetchone()
+        if not target:
+            raise HTTPException(404, "找不到該使用者或帳號已停用")
+
+        # 🔴 讀不出來要擋（fail-closed），不可以吞成空鏈——那與「沒有設定流程」一模一樣。
+        try:
+            row = store.load(conn, body.id)
+        except ApprovalUnreadable:
+            raise HTTPException(400, "這張單的簽核資料格式不正確，無法轉簽。")
+        if not row:
+            raise HTTPException(404, "單據不存在")
+        if (row["status"] or "") not in ("待審核", "簽核中"):
+            raise HTTPException(409, "只有待審核／簽核中的單據可以轉簽（目前：" + (row["status"] or "") + "）")
+        appr = row["approval"]
+        tiers = active_tiers(appr)
+        if not tiers:
+            raise HTTPException(400, "這張單沒有分層簽核資料，無法轉簽")
+        ct = current_tier_idx(appr)
+        if ct >= len(tiers):
+            raise HTTPException(400, "所有層級都已完成簽核")
+
+        approvers = tiers[ct].get("approvers") or []
+        # 指定 from 就換那個人，否則換「當層第一個還沒簽的人」——後者是實務上的
+        # 「這張卡在誰身上」，也是佇列畫面顯示的那個人。
+        idx = None
+        for i, a in enumerate(approvers):
+            if a.get("status") == "approved":
+                continue
+            if body.from_username and a.get("username") != body.from_username:
+                continue
+            idx = i
+            break
+        if idx is None:
+            raise HTTPException(400, "當層沒有可轉簽的待簽核人員")
+
+        old = approvers[idx]
+        if old.get("username") == to_username:
+            raise HTTPException(400, "轉簽對象與原簽核人相同")
+
+        now = datetime.now().isoformat()
+        actor = user.get("display_name") or user["username"]
+        approvers[idx] = {
+            **old,
+            "username": target["username"],
+            "displayName": target["display_name"] or target["username"],
+            "status": old.get("status") or "pending",
+            # 註記留在這一筆簽核上：簽核佇列詳情與 PDF 都讀得到，不必回頭翻 audit
+            "reassignedFrom": old.get("username"),
+            "reassignedFromDisplay": old.get("displayName") or old.get("username"),
+            "reassignedBy": actor,
+            "reassignedAt": now,
+            "reassignReason": reason,
+        }
+        tiers[ct]["approvers"] = approvers
+        log = appr.get("reassignLog")
+        if not isinstance(log, list):
+            log = []
+        log.append({"at": now, "by": actor, "tier": ct + 1,
+                    "from": old.get("username"), "fromDisplay": old.get("displayName") or old.get("username"),
+                    "to": target["username"], "toDisplay": target["display_name"] or target["username"],
+                    "reason": reason})
+        appr["reassignLog"] = log
+        appr["tiers"] = tiers
+
+        store.save(conn, row, appr, now)
+        conn.commit()
+    finally:
+        conn.close()
+
+    _audit(_tok(authorization), "approval.reassign", body.type, body.id,
+           body.id + "：" + (old.get("displayName") or old.get("username") or "") + " → "
+           + (target["display_name"] or target["username"]),
+           {"from": old.get("username"), "to": to_username, "reason": reason,
+            "tier": ct + 1, "docType": body.type})
+    # 被轉到的人要知道自己多了一張要簽的單，否則這張會靜靜卡在他的佇列裡
+    _notify(to_username, "approval_request", body.id, row["quoteNo"] or body.id,
+            actor + " 將「" + body.id + "」的簽核轉給你（原因：" + reason + "）")
+
+    return {"ok": True, "to": to_username,
+            "toDisplay": target["display_name"] or target["username"],
+            "reason": reason, "tier": ct + 1}

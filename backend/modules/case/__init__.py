@@ -33,6 +33,11 @@ MODULE = ModuleSpec(
         ("daily.check", "case_deadlines"): case_deadlines.run_daily_checks,
         # IP-10：「待我簽核」佇列上 M01 的五種單據（彙整在 L1 routers/approval_queue.py，2026-09-27）
         ("approval.queue_items", "case"): _api_quotations.approval_queue_items,
+        # IP-93：佇列詳情的內容（M01 自己的四種單據；每案權限、抬頭、遮蔽在 L1）
+        ("approval.detail", "quotation"): _api_quotations.detail_quotation,
+        ("approval.detail", "completion_note"): _api_quotations.detail_completion_note,
+        ("approval.detail", "extra_expense"): _api_quotations.detail_extra_expense,
+        ("approval.detail", "case_change"): _api_quotations.detail_case_change,
         # IP-94：轉簽時的簽核鏈讀寫（M01 自己的兩種單據）
         ("approval.reassign", "quotation"): _api_quotations._QuotationReassign,
         ("approval.reassign", "completion_note"): _api_quotations.COMPLETION_NOTE_REASSIGN,

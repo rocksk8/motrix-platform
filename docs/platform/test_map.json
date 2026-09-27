@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 686,
+  "tests": 687,
   "unmapped": 7,
   "kinds": {
    "audit": 89,
-   "api": 374,
+   "api": 375,
    "unit": 57,
    "e2e": 166
   },
@@ -1686,9 +1686,9 @@
    "units": [
     "core:db",
     "dir:backend/modules/case/",
-    "mod:case/api/quotations",
     "plat:__init__",
-    "plat:registry"
+    "plat:registry",
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -1697,7 +1697,7 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py"
+     "backend/routers/approval_queue.py"
     ],
     "module_dir": [
      "backend/modules/case/"
@@ -1714,6 +1714,7 @@
     "dir:backend/modules/case/",
     "dir:backend/modules/subcontract/",
     "dir:backend/modules/supply/",
+    "mod:case/api/__init__",
     "mod:case/api/quotations",
     "plat:__init__",
     "plat:registry",
@@ -1726,10 +1727,11 @@
      "backend/core/registry.py",
      "backend/core/source_tree.py",
      "backend/db.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/approval_queue.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py",
      "backend/routers/approval_queue.py"
     ],
     "path": [
@@ -5495,6 +5497,35 @@
     ]
    }
   },
+  "backend/tests/platform/test_approval_queue_l1.py": {
+   "kind": "api",
+   "units": [
+    "helper:approval_queue",
+    "mod:case/__init__",
+    "page:pages/approval-queue.html",
+    "plat:__init__",
+    "plat:registry",
+    "router:approval_queue"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/helpers/approval_queue.py",
+     "backend/modules/case/__init__.py"
+    ],
+    "api": [
+     "backend/routers/approval_queue.py"
+    ],
+    "page": [
+     "frontend/pages/approval-queue.html"
+    ],
+    "path": [
+     "frontend/pages/approval-queue.html"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_attachments_providers.py": {
    "kind": "api",
    "units": [
@@ -8053,7 +8084,7 @@
    "units": [
     "core:db",
     "file:backend/tests/_requires.py",
-    "mod:case/api/quotations"
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -8061,7 +8092,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py"
+     "backend/routers/approval_queue.py"
     ]
    },
    "login_fixture": true
@@ -8071,7 +8102,7 @@
    "units": [
     "core:db",
     "file:backend/tests/_requires.py",
-    "mod:case/api/quotations",
+    "router:approval_queue",
     "router:auth"
    ],
    "evidence": {
@@ -8080,7 +8111,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/auth.py"
     ]
    }
@@ -8090,7 +8121,7 @@
    "units": [
     "core:db",
     "file:backend/tests/_requires.py",
-    "mod:case/api/quotations"
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -8098,7 +8129,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py"
+     "backend/routers/approval_queue.py"
     ]
    },
    "login_fixture": true
@@ -8108,7 +8139,8 @@
    "units": [
     "core:db",
     "file:backend/tests/_requires.py",
-    "mod:case/api/quotations"
+    "mod:case/api/quotations",
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -8116,7 +8148,8 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py"
     ]
    },
    "login_fixture": true
@@ -8583,7 +8616,8 @@
     "core:db",
     "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
-    "mod:case/quotations"
+    "mod:case/quotations",
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -8593,7 +8627,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py"
+     "backend/routers/approval_queue.py"
     ]
    },
    "login_fixture": true
@@ -8714,7 +8748,8 @@
    "units": [
     "core:db",
     "file:backend/tests/_requires.py",
-    "mod:case/api/quotations"
+    "mod:case/api/quotations",
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -8723,7 +8758,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py"
+     "backend/routers/approval_queue.py"
     ]
    },
    "login_fixture": true
@@ -13319,8 +13354,8 @@
     "core:db",
     "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py",
-    "mod:case/api/quotations",
     "page:pages/approval-queue.html",
+    "router:approval_queue",
     "router:system",
     "router:vouchers"
    ],
@@ -13331,7 +13366,7 @@
      "backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/system.py",
      "backend/routers/vouchers.py"
     ],
@@ -15121,7 +15156,8 @@
     "mod:subcontract/tests/test_dispatch_import_to_quote_persists_2026_09_23",
     "plat:__init__",
     "plat:source_tree",
-    "plat:txn"
+    "plat:txn",
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -15140,7 +15176,8 @@
     "api": [
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/quotations.py",
-     "backend/modules/subcontract/api/vendor_contractors.py"
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/approval_queue.py"
     ],
     "path": [
      "backend/modules/subcontract/"

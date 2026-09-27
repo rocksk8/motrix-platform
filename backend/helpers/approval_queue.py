@@ -1,16 +1,17 @@
 """「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。
 
-佇列（`/api/approval-queue`、`/count`）與轉簽（`/api/approval-queue/reassign`）是 M01 的彙整端點，但單據是各模組的：
+佇列（`/api/approval-queue`、`/count`、`/detail`）與轉簽（`/api/approval-queue/reassign`）是 L1 的彙整端點（`routers/approval_queue.py`；2026-09-27 自 M01 搬入），單據是各模組的（M01 也只是其中一個提供者）：
 - `approval.queue_items`（IP-10）：每個單據模組提供 `fn(conn) -> [item, …]`，只列自己「待審核／簽核中」的單。
-  item 形狀見 `base_item()`；M01 只彙整、過濾可見性、分組。
+  item 形狀見 `base_item()`；L1 只彙整、過濾可見性、分組。
 - `approval.reassign`（新 IP，列車定號）：provider 名稱＝單據類型（`type`），物件有兩個方法——
   `load(conn, doc_no) -> dict | None`：{"docNo", "quoteNo", "status", "approval"}；找不到 ⇒ None；
       簽核資料讀不出來 ⇒ raise `ApprovalUnreadable`（fail-closed：不可以吞成空鏈，那與「沒設定流程」一樣）
   `save(conn, doc, approval, now)`：`doc` 是 `load` 的回傳值；寫回整個 approval。
 - `approval.detail`（新 IP，列車定號）：provider 名稱＝單據類型，`fn(conn, doc_no) -> dict | None`：
-  {"quoteNo", "approvalRaw"（含 approval 的原始 JSON，給 M01 判斷可見性與金額遮蔽）, "title"（可省）, "fields", "items", "files"}；
-  找不到 ⇒ None。每案權限、案件抬頭、金額遮蔽都在 M01（`/api/approval-queue/detail`）。
-  權限、原因必填、換人規則、audit、通知都在 M01；擁有者只負責「讀出簽核鏈、寫回簽核鏈」。
+  {"quoteNo", "approvalRaw"（含 approval 的原始 JSON，給 L1 判斷可見性與金額遮蔽）, "title"（可省）, "fields", "items", "files",
+   "changes"（可省）, "selfViewBy"（可省：申請人本人免每案守門，目前只有 M01 已結案變更）}；
+  找不到 ⇒ None（或擁有模組自己丟 404）。每案權限、案件抬頭（`case.summary`）、金額遮蔽都在 L1（`/api/approval-queue/detail`）。
+  轉簽的權限、原因必填、換人規則、audit、通知都在 L1；擁有者只負責「讀出簽核鏈、寫回簽核鏈」。
   沒有提供者的類型 ⇒ 不給轉簽（佇列回 `reassignTypes`，前端據此顯示按鈕）。
 
 本檔不讀任何模組的表：表名由擁有者傳進 `DataJsonApproval`。
@@ -81,7 +82,7 @@ def tier_fields(approval_json_raw) -> dict:
 
 def base_item(type_: str, doc_no: str, f: dict, **fields) -> dict:
     """佇列項目的共同欄位（沿用報價單的欄位名稱承載各類型資料，前端列表不必分流）；`fields` 覆寫或追加。
-    `customer`／`projectName` 不給 ⇒ 不放進項目，有 `linkedQuoteNo` 時由 M01 彙整端補案件的客戶與名稱
+    `customer`／`projectName` 不給 ⇒ 不放進項目，有 `linkedQuoteNo` 時由 L1 彙整端經 `case.summary` 補案件的客戶與名稱
     （單據模組不讀 M01 的案件表）。"""
     item = {
         "type":               type_,

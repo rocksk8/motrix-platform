@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.50 — 2026-09-27（c-approval-l1，主持裁示；列車取號）〔core_bump：暫用 1.99 → 1.50〕
+- 新增 L1 `routers/approval_queue.py`：「待我簽核」佇列、角標、詳情、轉簽（`/api/approval-queue`、`/count`、`/detail`、`/reassign`）自 M01 搬入，路徑不變、前端不改；單據一律經 `approval.queue_items`／`approval.detail`／`approval.reassign` 供應（M01 只是提供者之一），案件資料經 `case.summary`
+- 頁面 `approval-queue.html`、選單項「簽核佇列」（`core/menu_l1.json`）、前綴 `/api/approval-queue` 歸回 L1
+- `approval.detail` 回傳加可省欄位 `changes`、`selfViewBy`；`helpers/approval_queue.py` 說明改為 L1 彙整
+
 ## 1.49 — 2026-09-26（C，c-case404：M01-O1 看不到＝不存在；疊在 M01 ②）〔core_bump：暫用 1.99 → 1.45〕〔core_bump：暫用 1.45 → 1.49〕
 > 介面只有新增。
 - L1（新增）：`helpers.case_access.case_not_found_message`、`deny_case`、`require_case`、`CASE_DENIAL_AUDIT`——案件逐案拒絕一律 404、訊息與查無相同；audit_log 記真正原因（`case.access_denied`，detail.reason＝denied／not_found；背景執行緒寫，避開呼叫端的寫鎖與 rollback）
