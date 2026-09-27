@@ -121,7 +121,7 @@ def check(open_list: list, register: dict) -> list:
                             "「✅ %s 關閉（<commit>）」，還在修就登記（audit／owner／fix／state）" % (d, f, d))
     for d, e in sorted(register.items()):
         if d not in open_ids:
-            problems.append("%s 登記為未關，但稽核檔已有關閉紀錄（或沒有這個必修）⇒ 從 mustfix_open.json 移除" % d)
+            problems.append("%s 登記過期：登記為未關，但稽核檔已有關閉紀錄（或沒有這個必修）⇒ 從 mustfix_open.json 移除" % d)
             continue
         miss = [k for k in REGISTER_FIELDS if not str((e or {}).get(k) or "").strip()]
         if miss:
