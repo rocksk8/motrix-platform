@@ -76,7 +76,8 @@ SHARED_FILES = ("auth-guard.js", "notif.js", "sidebar.js", "edit-presence.js",
 #: 🔴 2026-09-26（視窗 H，P8 前端）46 -> 48：新增 module-builder.html（模組建構器）與 custom-records.html
 #:    （自訂模組執行頁），兩頁都是 Alpine、有 _initDone 守衛。
 #: 🔴 2026-09-26（主持，列車 train/0926-0415）交會：47（a-mail）＋2（P8 前端）＝49。
-PAGE_POPULATION = 49
+#: 2026-09-28（A，wip/a-storage-settings）49 -> 50：新增 storage-settings.html（儲存位置，Alpine，有 _initDone 守衛）。
+PAGE_POPULATION = 49 + 1
 SHARED_POPULATION = 2
 ALREADY_GUARDED = 2
 

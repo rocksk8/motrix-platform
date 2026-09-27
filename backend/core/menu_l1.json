@@ -163,6 +163,13 @@
   },
   {
    "group": "system",
+   "href": "storage-settings.html",
+   "label": "儲存位置",
+   "order": 47,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
    "href": "google-calendar-settings.html",
    "label": "Google 行事曆設定",
    "order": 50,

@@ -1,5 +1,5 @@
 {
- "core_version": "1.56",
+ "core_version": "1.57",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -667,6 +667,20 @@
    "init_unlock_passwords": "def()",
    "manifest_drift": "def()",
    "run_edge_pdf": "def(cmd)"
+  },
+  "helper:storage_locations": {
+   "KINDS": "const",
+   "LABELS": "const",
+   "PII_DIRNAME": "const",
+   "SETTING_KEY": "const",
+   "configured": "def()",
+   "create": "def(kind, target)",
+   "invalidate": "def()",
+   "path": "def(kind)",
+   "resolve": "def(kind, values=…)",
+   "save": "def(values)",
+   "status": "def()",
+   "validate": "def(values)"
   },
   "helper:system_checks": {
    "REMINDER_FAILURE_KEEP": "const",

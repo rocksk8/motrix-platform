@@ -24,6 +24,7 @@ from datetime import datetime, date, timedelta
 import cloud_storage
 from db import get_db, DB_PATH
 from helpers import _cleanup_sessions, _get_setting, _set_setting
+from helpers import storage_locations as _storage   # 儲存位置的唯一解析處（CORE-SPEC「儲存位置可設定」）
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,14 @@ def _detect_archive_base() -> str:
 
 
 def _archive_base() -> str:
-    """Currently valid cloud archive path, or "" if not found on any drive."""
+    """目前生效的雲端存檔根目錄，找不到 ⇒ ""。一律經 helpers.storage_locations：
+    最高管理員有設定 ⇒ 用設定（不存在就 ""，不退回自動判斷）；留空 ⇒ `_auto_archive_base`（掃磁碟機）。"""
+    return _storage.path("archive_root")
+
+
+def _auto_archive_base() -> str:
+    """自動判斷（設定留空時）：Currently valid cloud archive path, or "" if not found on any drive.
+    只給 helpers.storage_locations 呼叫（守門掃描）。"""
     cached = _archive_base_cache["path"]
     if cached and time.monotonic() - _archive_base_cache["checked_at"] < _ARCHIVE_CACHE_TTL:
         if os.path.isdir(cached):
@@ -1258,7 +1266,7 @@ def _mirror_pdf_archives() -> int:
 # ⚠️ S3 後端：「權限更窄」要靠另一個 bucket／prefix 的存取政策，尚未實作 ⇒ 同樣不上傳並告警。
 # 告警走邊緣觸發（狀態改變才記；`_write_backup_alert` 另有每日每原因一封的上限）。
 # 狀態落點：`system_settings.pii_archive_state`。
-_PII_ARCHIVE_DIRNAME = "系統存檔_個資"
+_PII_ARCHIVE_DIRNAME = _storage.PII_DIRNAME
 _PII_PAYSLIP_SUBDIR = "勞報單存檔"
 _PII_STATE_KEY = "pii_archive_state"
 #: 這幾種狀態代表「勞報單上不了雲」，而原因不在一般備份那一側 ⇒ 要單獨告警
@@ -1266,8 +1274,8 @@ _PII_ALERT_STATES = ("missing", "s3_unsupported")
 
 
 def _pii_archive_root() -> str:
-    base = _archive_base()
-    return os.path.join(os.path.dirname(base), _PII_ARCHIVE_DIRNAME) if base else ""
+    """個資資料夾：經 helpers.storage_locations（有設定用設定；留空＝雲端存檔根目錄旁的 `系統存檔_個資`）。"""
+    return _storage.path("pii_root")
 
 
 def _payslip_archive_source() -> str:
@@ -2355,7 +2363,8 @@ def _check_previous_month_backup() -> bool:
             return False                      # 全新安裝或上個月根本沒在跑：不是缺漏
         _write_backup_alert(
             "上個月（%s）的月備份沒有完成 —— 永久保留層缺這個月。請從上個月最後一份每日快照"
-            "（本機 db_backups 或 系統存檔_個資／每日備份）手動補進 月備份/%s/" % (prev, prev), level="ERROR")
+            "（本機 db_backups 或 個資資料夾 %s 的 每日備份）手動補進 月備份/%s/"
+            % (prev, _storage.path("pii_root") or _PII_ARCHIVE_DIRNAME, prev), level="ERROR")
         return True
     except Exception:
         logger.exception("_check_previous_month_backup failed")
