@@ -1,0 +1,20 @@
+{
+ "db.py": 9,
+ "helpers/system_checks.py": 1,
+ "modules/analytics/api/dashboard.py": 14,
+ "modules/analytics/api/reports.py": 27,
+ "modules/arap/api/cashier.py": 3,
+ "modules/arap/api/invoice_vouchers.py": 1,
+ "modules/arap/api/payment_requests.py": 1,
+ "modules/arap/receivables.py": 7,
+ "modules/case/api/material_orders.py": 1,
+ "modules/case/api/quotations.py": 43,
+ "modules/case/case_deadlines.py": 7,
+ "modules/case/quotations.py": 5,
+ "modules/case/recognition.py": 1,
+ "modules/payroll/api/bonus.py": 6,
+ "modules/payroll/bonus_pdf.py": 1,
+ "modules/subcontract/api/contractor_vouchers.py": 1,
+ "modules/supply/api/shipping_notes.py": 1,
+ "pdf_gen.py": 3
+}
