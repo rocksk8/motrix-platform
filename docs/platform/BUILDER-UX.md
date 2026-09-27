@@ -80,6 +80,8 @@
 3. 預覽模式只由建構器的 iframe 開啟：iframe 加 `sandbox="allow-scripts allow-same-origin"`（**不給** forms、**不給** top-navigation）；直接開 `?preview=1` 也不會有資料外流（本來就不打 API）。
 4. 非預覽模式的行為完全不變：既有 custom-records 的題全過。
 
+**notif.js 的第一道要另開一頁量**（B，2026-09-28）：預覽頁的第三道先把 `window.fetch` 定成不可寫，notif.js 沒讓位時的包裝只會靜默失敗 ⇒ 在預覽頁上量不出來（D 23:52 突變存活）。改以同源空白頁、不裝第三道、只設旗標載入 notif.js，量 `window.fetch` 有沒有被換掉：`test_e2e_notif_preview_stand_down_2026_09_28`（正對照：不設旗標就會被換掉）。
+
 ⚠️ **防線的主次**（主持 2026-09-27）：sandbox 同時給 `allow-scripts` 與 `allow-same-origin` 時，被框的頁可以自行解除 sandbox——這裡框的是我們自己的頁，**真正的防線是第 2 條（預覽模式在程式層面不打 API）**，sandbox 只是第二道，不可以被當成主要防線。
 
 ### 3.4 輸出預覽（A，使用者 8866 試用回饋；wip/a-builder-output）
@@ -96,6 +98,7 @@
 - 前端不准用 CDN。拖曳用原生 HTML5（repo 裡已有 SortableJS 1.15.3，但 e2e 的 `drag_and_drop` 送的是真的 HTML5 事件，`#mb-canvas` 的原生 drop 必須保留；**不引入**新函式庫）。icon 用 inline SVG，不用圖示字型。
 - 不新增 `x-data`＋`x-init` 的頁（`PAGE_POPULATION` 不變）；`_initDone` 守衛保留。
 - 欄位型別、輸出區塊等**只**來自 catalog（既有守門），icon 對照缺漏 ⇒ 通用 icon，不是不顯示。
+- `custom-records.html` **不准** `x-html`（含 `x-bind:innerHTML`、`:innerHTML`）：這一頁畫的全是使用者自訂內容（標籤、說明、選項、紀錄值；預覽時是編到一半的草稿）⇒ 一律 `x-text`。守門 `test_custom_records_no_x_html_2026_09_28`（正對照：在真頁面植入三種寫法各一處要亮並指出行號；反向控制：字面相近的不算）。
 
 ## 5. 相容：保留的鉤子（既有 e2e 照過，不改題）
 
