@@ -121,3 +121,16 @@
 ### 關閉紀錄（標準格式，PLAYBOOK §E-6）
 
 - ✅ AB-M1 關閉（08c5b7f2）——付款日限出納或 admin，改動已付付款日限 admin 並留專用稽核；兩方向有題
+
+## 7. 複核：wip/b-payreq 88e7d1df（A，2026-09-28 03:10；讀碼＋B 列直接題重現 32 passed，拋棄式 worktree，已移除）
+
+| 項目 | 讀碼結果 | 判定 |
+|---|---|---|
+| AB-S7（使用者裁示：主庫決定上下線） | `fail_incomplete_modules(main, demo)`：只有**主庫** `incomplete` 列到的模組 `registry.unload`。只有 demo 未完成 ⇒ 不下線、記 ERROR，寫進 `_DEMO_ABSENT`（限已載入的模組；每次呼叫先清空）。兩個庫都未完成 ⇒ 下線，demo 表不留。`incomplete` 為 None 的庫不算。main.py:578 改成帶兩個參數。demo 明說：auth middleware 在 session 驗證（token 必然非空）與強制改密碼之後，`token.startswith(DEMO_TOKEN_PREFIX)` 才查 `demo_absent_reason(path)`，前綴取該模組 module.json 的 `provides.api_prefixes`（完全相同或其下的路徑）⇒ 404＋原因；正式使用者的請求不經過這一支。題：主庫未完成下線、只有 demo 未完成仍上線且 demo 模式明說、兩個庫都未完成、反向控制（都完成不動、None 不算）、main.py 呼叫位置 | 成立 |
+| AB-S8（使用者裁示：付款日限已核准） | PATCH …/dates：`paidDate` 非空而且狀態不是「已核准」⇒ 409 並說明目前狀態（出納、admin 一樣）；清除不受限（清除已付的仍限 admin，AB-M1）。題 `test_paid_date_only_after_approval_for_cashier_and_admin_alike` | 成立 |
+| AB-S2（使用者裁示：出納欄位） | payables.py 註明出納可見的欄位（依裁示維持），是文件修改 | 成立 |
+
+**AB-O5（觀察）**：demo 缺席只擋 API 前綴，頁面（`/pages/...`）照常可開，頁面上打 API 會拿到 404＋原因。這符合「缺席明說」的做法（P-FE-03 由頁面顯示 API 的說明），記錄備查。
+
+- ✅ AB-S7 關閉（88e7d1df）——主庫決定上下線，只有 demo 未完成時僅在 demo 模式明說缺席
+- ✅ AB-S8 關閉（88e7d1df）——付款日只准已核准後設定，出納與 admin 一樣
