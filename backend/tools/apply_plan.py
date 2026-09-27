@@ -37,6 +37,9 @@ import shutil
 import sys
 from datetime import datetime
 
+#: 頁面目錄：「安裝包／安裝目錄」的相對路徑（不是執行中的原始碼樹，所以不走 core.source_tree；
+#: test_page_paths_centralized 基線登記本檔 1 處，主持裁示 2026-09-28 第十四班）
+PAGES_REL = "frontend/pages"
 #: 刪除只准在這幾個目錄底下（相對安裝根目錄）
 PROGRAM_SCOPES = ("backend/", "frontend/", "tools/", "product/")
 #: 部署工具自己的狀態檔：不列進包清單、不刪
@@ -175,7 +178,7 @@ def make_plan(root, pkg, max_files):
                 kept_modules.append({"key": key, "why": why, "license": reason})
             protected.append("backend/modules/%s/" % key)
             for page in manifest.get("pages") or []:
-                protected_pages.add("frontend/pages/" + str(page).replace("\\", "/").split("/")[-1])
+                protected_pages.add(PAGES_REL + "/" + str(page).replace("\\", "/").split("/")[-1])
     if refuse:
         raise Refuse("以下模組安裝目錄有、授權有，而新包沒有 ⇒ 拒絕套用（完整包要依客戶授權帶齊模組）：%s"
                      % "、".join(refuse))
@@ -203,7 +206,7 @@ def make_plan(root, pkg, max_files):
     if lock is not None:
         for page in lock.get("removed_pages") or []:
             page = str(page).replace("\\", "/")
-            if not page.startswith("frontend/pages/") or ".." in page.split("/"):
+            if not page.startswith(PAGES_REL + "/") or ".." in page.split("/"):
                 raise Refuse("modules.lock.json removed_pages 有不合法的路徑：%r" % page)
             add(page, "lock_removed_page")
 
@@ -283,7 +286,7 @@ def _prune(root, rel_dirs, stop_at):
                 todo.sort(key=lambda d: -d.count("/"))
 
 
-_STOP_AT = ("backend", "frontend", "tools", "product", "backend/modules", "frontend/pages")
+_STOP_AT = ("backend", "frontend", "tools", "product", "backend/modules", PAGES_REL)
 
 
 def _remove_listed(root, rels, u):
