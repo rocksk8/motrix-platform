@@ -978,6 +978,26 @@ def _verify_superadmin(username: str, password: str, totp: str = "") -> str:
     return me.get("username") or username
 
 
+class DeliveryModuleUntrusted(Exception):
+    pass
+
+
+def _trusted_delivery():
+    """取 delivery 模組，而且**必須是已安裝的那一份**（儀表板自己所在的 tools 目錄；稽核 D US2）。
+
+    驗章用的是「執行中那一份」delivery.py 的公鑰（DELIVERY_PUBKEY_PEM）：要是從 staging（新包）或別處 import 到 delivery，
+    等於讓包替自己驗章，整條信任鏈失效——而且不會有任何題紅。⇒ 比對 `__file__` 的 realpath（Windows 不分大小寫），
+    不是 <TOOLS_DIR>/delivery.py ⇒ 丟 DeliveryModuleUntrusted（端點回 409，不驗章、不套用）。"""
+    import delivery as _dl
+    where = os.path.normcase(os.path.realpath(getattr(_dl, "__file__", None) or ""))
+    expect = os.path.normcase(os.path.realpath(str(TOOLS_DIR / "delivery.py")))
+    if where != expect:
+        raise DeliveryModuleUntrusted(
+            "載入的 delivery 模組不是已安裝的那一份（載入的是 %s，應該是 %s）⇒ 拒絕：驗章必須用已安裝版本的公鑰"
+            % (getattr(_dl, "__file__", None), TOOLS_DIR / "delivery.py"))
+    return _dl
+
+
 def _delivery_summary(staged: str) -> dict:
     """確認框用：刪除／新增檔數（包裡的 apply_plan 對本機試算，只讀）＋變更摘要（包裡有、安裝版沒有的版本紀錄）。"""
     payload = os.path.join(staged, "payload")
@@ -1039,7 +1059,10 @@ def delivery_overview():
 @app.post("/api/delivery/prepare")
 def delivery_prepare(body: DeliveryPrepareBody):
     """複製到 staging（安裝目錄外）→ 驗證 → 摘要。驗證沒過 ⇒ ok False＋原因（畫面不提供套用）。"""
-    import delivery as _dl
+    try:
+        _dl = _trusted_delivery()
+    except DeliveryModuleUntrusted as e:
+        return JSONResponse(status_code=409, content={"detail": str(e)})
     try:
         root = _dl.configured_root()
         DELIVERY_STAGING_ROOT.mkdir(parents=True, exist_ok=True)
@@ -1058,8 +1081,8 @@ def delivery_prepare(body: DeliveryPrepareBody):
 
 
 def _delivery_run(name: str, staged: str, verified: dict, root: str):
-    import delivery as _dl
     try:
+        _dl = _trusted_delivery()
         r = _dl.apply_staged(staged, str(DELIVERY_INSTALL_ROOT), verified, (decide_outcome, parse_result_line))
         rec = {"name": name, "outcome": r["outcome"], "started": r["started"], "problems": r["problems"],
                "result": r.get("result"), "lock": r.get("lock")}
@@ -1078,7 +1101,10 @@ def _delivery_run(name: str, staged: str, verified: dict, root: str):
 @app.post("/api/delivery/apply")
 def delivery_apply(body: DeliveryApplyBody):
     """一次確認（U-3）＋本機 superadmin 帳密（U-2）＋同一時間只准一個。套用前對同一個 staging 再驗一次（中間被換過就擋）。"""
-    import delivery as _dl
+    try:
+        _dl = _trusted_delivery()
+    except DeliveryModuleUntrusted as e:
+        return JSONResponse(status_code=409, content={"detail": str(e)})
     if not body.confirm:
         return JSONResponse(status_code=400, content={"detail": "請先勾選確認"})
     prep = _delivery_state["prepared"].get(body.name)
