@@ -76,6 +76,40 @@ def test_output_update_keeps_focus_and_frame_and_only_sends_the_latest(live_serv
 
 
 @pytest.mark.e2e
+def test_output_and_list_instances_coexist_and_update_independently(live_server, make_user, e2e_browser):
+    """建構器同一頁：上方輸出、下方列表兩個實例同時存在，各自 update 只動自己那一個。"""
+    user = make_user(username="bo_e2e4", role="superadmin")
+    page, posts = _harness(e2e_browser, live_server, user)
+    page.evaluate("""([d, k]) => { const host = document.getElementById('host')
+      const a = document.createElement('div'), b = document.createElement('div'); host.appendChild(a); host.appendChild(b)
+      window.__h = MotrixFormPreview.render(a, d, {mode: 'output', key: k})
+      window.__l = MotrixFormPreview.render(b, d, {mode: 'list'}) }""", [_definition(), KEY])
+    _wait_text(page, "範例文字")
+    fr = None
+    page.wait_for_function("() => [...document.querySelectorAll('#host iframe')].length === 2")
+    for _ in range(150):
+        fr = next((f for f in page.frames if "preview=1" in f.url), None)
+        if fr is not None:
+            break
+        page.wait_for_timeout(100)
+    fr.wait_for_function("() => document.querySelectorAll('#cr-list thead th').length >= 1", timeout=15000)
+    heads = fr.evaluate("() => [...document.querySelectorAll('#cr-list thead th')].map(t => t.textContent)")
+    n_posts = len(posts)
+    d2 = _definition()
+    d2["ui"] = {"list": {"columns": ["$recordNo", "item"]}}
+    page.evaluate("d => window.__l.update(d)", d2)
+    fr.wait_for_function("() => document.querySelectorAll('#cr-list thead th').length === 2", timeout=15000)
+    page.wait_for_timeout(300)
+    assert len(posts) == n_posts, "列表的 update 不該讓輸出重打"
+    d3 = _definition()
+    d3["name"] = "只改輸出"
+    page.evaluate("d => window.__h.update(d)", d3)
+    _wait_text(page, "只改輸出")
+    assert fr.evaluate("() => document.querySelectorAll('#cr-list thead th').length") == 2, "輸出的 update 不該動到列表"
+    assert heads and heads != ["編號", "設備"]
+
+
+@pytest.mark.e2e
 def test_output_half_done_shows_placeholder_and_422_keeps_the_last_picture(live_server, make_user, e2e_browser):
     user = make_user(username="bo_e2e3", role="superadmin")
     page, _posts = _harness(e2e_browser, live_server, user)
