@@ -203,3 +203,19 @@ def test_server_errors_are_unchanged_and_offer_no_retry(setup):
     assert page.locator("#cr-retry").is_hidden()
     assert "網路" not in page.text_content("#cr-error-text")
     assert not s["errors"], s["errors"]
+
+
+@pytest.mark.e2e
+def test_server_error_through_fail_offers_no_retry(setup):
+    """反向控制（`fail()` 的非網路分支）：列表回 500（有 HTTP 狀態）⇒ 顯示伺服器的說明，**沒有**〔重試〕。
+    上一題的 409 走 afterAction、不經過 fail()；列表／開單／初始載入的伺服器錯誤走這裡（突變 N3「非網路也給重試」只有這題擋得住）。"""
+    s = setup
+    s["new_record"]()
+    page = s["page_for"](s["user"])
+    page.route(re.compile(r".*/api/custom/%s/records(\?.*)?$" % KEY),
+               lambda r: r.fulfill(status=500, content_type="application/json", body=json.dumps({"detail": "伺服器忙碌（測試）"})))
+    page.goto(_url(s))
+    text, retry = _error(page, "伺服器忙碌（測試）")
+    assert text.startswith("讀取列表失敗：") and "網路" not in text
+    assert retry.is_hidden()
+    assert not s["errors"], s["errors"]
