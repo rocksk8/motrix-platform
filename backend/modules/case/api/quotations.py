@@ -5387,15 +5387,6 @@ def _tagged_file_entries(raw, tag) -> list:
 from helpers.approval_queue import file_entries as _file_entries  # noqa: E402
 
 
-def _case_header(conn, quote_no: str) -> dict:
-    row = conn.execute(
-        "SELECT quote_no, customer_name, project_name, " + SQL_DEAL_TAG + " AS deal_tag "
-        "FROM quotations WHERE quote_no=?", (quote_no,)
-    ).fetchone()
-    if not row:
-        return {"quoteNo": quote_no, "customerName": "", "projectName": "", "dealTag": ""}
-    return {"quoteNo": row["quote_no"], "customerName": row["customer_name"] or "",
-            "projectName": row["project_name"] or "", "dealTag": row["deal_tag"] or ""}
 
 
 # ── 已結案變更申請的可讀摘要（2026-09-14 使用者交辦）────────────────────────
@@ -5602,290 +5593,179 @@ def _summarize_case_change(action_type: str, payload: dict, cr: dict,
                       "說明": "這個變更類型還沒有可讀摘要，請開啟案件頁確認後再核准"}}
 
 
-def _guard_queue_detail(conn, user: dict, quote_no: str, approval_raw=None) -> None:
-    """簽核佇列詳情的存取守門（2026-09-14 自動安全掃描後補上）。
+# ── 佇列詳情：M01 的四種單據（IP-93 `approval.detail` 提供者；2026-09-27 端點搬 L1 routers/approval_queue.py）──
+#
+# 每案權限、案件抬頭、金額遮蔽都在 L1 端點；這裡只讀出內容。找不到 ⇒ 404（訊息同搬遷前）。
+# 回傳 {quoteNo, approvalRaw, title, fields, items, files, changes?, selfViewBy?}：
+# `selfViewBy`＝申請人本人不經每案守門也看得到（已結案變更：單層「任一 superadmin」，沒有簽核鏈可比對）。
 
-    這支端點原本只要求登入——理由是「跟佇列清單一致」。**那個理由站不住腳**：清單
-    只有單號／客戶／金額摘要，詳情卻回傳完整內容（明細、附件路徑、變更 payload、
-    匯款帳戶），而 `id` 是可預測的單號或小整數。這正是同日模組權限稽核花了一整輪
-    收掉的那種 IDOR，不該在新端點上又開一次。
-
-    放行順序（先寬後嚴，因為簽核人往往不是案件的人）：
-    1. **這張單據自己的簽核人**（含代理人）——他本來就該看得到要簽的東西，
-       而他通常既不是該案業務也不在協作者名單裡
-    2. 其餘走一般的每案規則 `_guard_case()`（admin+／該案業務／協作者／案件管理模組），
-       案件本身的簽核人也在裡面（allow_approver）
-    """
-    if approval_raw and _is_case_approver(approval_raw, user, conn):
-        return
-    _guard_case(conn, quote_no, user, allow_module="case_manage", allow_approver=True)
-
-
-def _can_see_queue_money(conn, user: dict, approval_raw=None) -> bool:
-    """能不能看到這筆的金額。
-
-    規則與憑證流一致（見 `routers/contractor_vouchers.py::_guard_voucher`）：
-    `can_see_financial()` 或**本單簽核人**。簽核人例外是必要的——看不到金額就沒辦法
-    判斷該不該簽，擋他等於讓簽核流程停擺。
-    """
-    if can_see_financial(user):
-        return True
-    return bool(approval_raw and _is_case_approver(approval_raw, user, conn))
-
-
-_MONEY_LABELS = {"金額", "單價", "小計", "總金額", "存簿封面"}
-
-
-def _mask_money(out: dict) -> None:
-    """沒有財務檢視權時，把金額欄位換成說明字串而不是直接拿掉。
-
-    直接拿掉會讓畫面看起來像「這張單沒有金額」——那比看不到更容易誤判。
-    """
-    out["fields"] = [
-        f if f["label"] not in _MONEY_LABELS
-        else {"label": f["label"], "value": "（無財務檢視權限）"}
-        for f in out.get("fields") or []
-    ]
-    masked_items = []
-    for it in out.get("items") or []:
-        if isinstance(it, dict):
-            it = {k: v for k, v in it.items()
-                  if k not in ("amount", "subtotal", "unitPrice", "unit_cost", "price", "total")}
-        masked_items.append(it)
-    out["items"] = masked_items
-    out["moneyMasked"] = True
-
-
-@router.get("/api/approval-queue/detail")
-def approval_queue_detail(type: str, id: str, authorization: str = Header(None)):
-    """一筆待簽核項目的完整內容：屬於哪個案件、送審了什麼、夾帶哪些檔案、改了什麼。
-
-    權限比照佇列清單本身（登入即可）——**刻意一致**：看得到清單卻點不開內容，
-    簽核人就得跑去各模組頁面翻，等於這個佇列白做。真正的動作權限（核准/退回）
-    仍由各自的端點把關。
-    """
-    user = _require_user(authorization)
-    conn = get_db()
+def detail_completion_note(conn, doc_no):
+    r = conn.execute("SELECT * FROM completion_notes WHERE note_no=?", (doc_no,)).fetchone()
+    if not r:
+        raise HTTPException(404, "完工單不存在")
     try:
-        out = {"type": type, "id": id, "title": id, "fields": [], "items": [],
-               "files": [], "changes": None, "case": None}
-        approval_raw = None
-
-        if type == "completion_note":
-            r = conn.execute("SELECT * FROM completion_notes WHERE note_no=?", (id,)).fetchone()
-            if not r:
-                raise HTTPException(404, "完工單不存在")
-            approval_raw = r["data_json"]
-            _guard_queue_detail(conn, user, r["quote_no"], approval_raw)
-            out["case"] = _case_header(conn, r["quote_no"])
-            out["title"] = "完工單 " + r["note_no"]
-            out["fields"] = [
-                {"label": "服務地點", "value": r["site_address"] or "—"},
-                {"label": "執行期間", "value": (r["start_date"] or "—") + " ~ " + (r["completion_date"] or "—")},
-                {"label": "負責人", "value": r["site_manager"] or "—"},
-                {"label": "客戶驗收人", "value": r["recipient"] or "—"},
-                {"label": "保固月數", "value": str(r["warranty_months"] or 0)},
-                {"label": "執行說明", "value": r["work_summary"] or "—"},
-                {"label": "測試與檢驗", "value": r["test_result"] or "—"},
-                {"label": "遺留事項", "value": r["pending_items"] or "—"},
-            ]
-            try:
-                out["items"] = json.loads(r["items_json"] or "[]")
-            except Exception:
-                out["items"] = []
-            out["files"] = _file_entries(r["signed_files_json"])
-
-        elif type == "extra_expense":
-            r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (id,)).fetchone()
-            if not r:
-                raise HTTPException(404, "額外支出不存在")
-            approval_raw = r["approval_json"]
-            _guard_queue_detail(conn, user, r["quote_no"], approval_raw)
-            out["case"] = _case_header(conn, r["quote_no"])
-            out["title"] = "額外支出 #" + str(r["id"])
-            out["fields"] = [
-                {"label": "類別", "value": r["category"] or "—"},
-                {"label": "項目", "value": r["description"] or "—"},
-                {"label": "數量", "value": (str(r["qty"]) + " " + (r["unit"] or "")).strip()},
-                {"label": "單價", "value": format(r["unit_cost"] or 0, ",.0f")},
-                {"label": "小計", "value": format(r["total_cost"] or 0, ",.0f")},
-                {"label": "支出日期", "value": r["expense_date"] or "—"},
-                {"label": "單據號碼", "value": r["doc_no"] or "—"},
-                {"label": "支出人", "value": r["payer_name"] or "—"},
-                {"label": "填寫人", "value": r["created_by_name"] or "—"},
-                {"label": "備註", "value": r["note"] or "—"},
-            ]
-            out["files"] = _file_entries(r["files_json"])
-            # 「編修後的結果」：已核准的額外支出要改內容必須走變更申請，
-            # change_json 裡就是改完會變成什麼樣子——簽核人要看的正是這個對照。
-            if (r["change_status"] or "") not in ("", "none"):
-                try:
-                    chg = json.loads(r["change_json"] or "{}")
-                except Exception:
-                    chg = {}
-                if chg:
-                    out["changes"] = {
-                        "label": "變更申請（核准後會套用的內容）",
-                        "before": {"項目": r["description"], "數量": r["qty"],
-                                   "單價": r["unit_cost"], "小計": r["total_cost"],
-                                   "備註": r["note"]},
-                        "after": {"項目": chg.get("description"), "數量": chg.get("qty"),
-                                  "單價": chg.get("unit_cost"), "小計": chg.get("total_cost"),
-                                  "備註": chg.get("note")},
-                        "files": _file_entries(json.dumps(chg.get("files") or [])),
-                    }
-
-        elif type == "case_change":
-            r = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (id,)).fetchone()
-            if not r:
-                raise HTTPException(404, "變更申請不存在")
-            # 已結案案件的變更申請是單層「任一 superadmin 審核」，沒有 tiers 可比對，
-            # 所以只走一般每案規則；申請人本人也看得到自己送出的東西。
-            if (r["requested_by"] or "") != user["username"]:
-                _guard_queue_detail(conn, user, r["quote_no"], None)
-            out["case"] = _case_header(conn, r["quote_no"])
-            out["title"] = "已結案案件變更 #" + str(r["id"])
-            out["fields"] = [
-                {"label": "變更類型", "value": r["action_type"] or "—"},
-                {"label": "摘要", "value": r["summary"] or "—"},
-                {"label": "申請人", "value": r["requested_by_display"] or r["requested_by"] or "—"},
-                {"label": "申請時間", "value": r["requested_at"] or "—"},
-            ]
-            # 半解鎖期間上傳的檔案是「暫存」的——核准後才會真的掛進案件，
-            # 所以簽核人必須在這裡就看得到，不然他是在盲簽。
-            out["files"] = _file_entries(r["staged_files_json"])
-            try:
-                payload = json.loads(r["payload_json"] or "{}")
-            except Exception:
-                payload = {}
-            # 2026-09-14：原本是 `{"after": payload}`——整包 payload_json 丟給前端，
-            # 畫面上直接變成一大段 raw JSON（見 _summarize_case_change() 說明）。
-            _cr_now = {}
-            try:
-                _q = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?",
-                                   (r["quote_no"],)).fetchone()
-                if _q:
-                    _cr_now = (json.loads(_q["data_json"] or "{}") or {}).get("caseRecord") or {}
-            except Exception:
-                _cr_now = {}
-            try:
-                _staged = json.loads(r["staged_files_json"] or "[]")
-            except Exception:
-                _staged = []
-            out["changes"] = _summarize_case_change(
-                r["action_type"] or "", payload, _cr_now, _staged)
-
-        elif type == "quotation":
-            r = conn.execute(
-                "SELECT quote_no, customer_name, project_name, total, quote_date, sales_person, "
-                "data_json, signed_files_json FROM quotations WHERE quote_no=?", (id,)).fetchone()
-            if not r:
-                raise HTTPException(404, "報價單不存在")
-            approval_raw = r["data_json"]
-            _guard_queue_detail(conn, user, r["quote_no"], approval_raw)
-            out["case"] = _case_header(conn, r["quote_no"])
-            out["title"] = "報價單 " + r["quote_no"]
-            try:
-                d = json.loads(r["data_json"] or "{}")
-            except Exception:
-                d = {}
-            out["fields"] = [
-                {"label": "報價日期", "value": r["quote_date"] or "—"},
-                {"label": "業務", "value": r["sales_person"] or "—"},
-                {"label": "總金額", "value": format(r["total"] or 0, ",.0f")},
-                {"label": "付款條件", "value": d.get("paymentTerms") or "—"},
-            ]
-            out["items"] = d.get("items") or []
-            # 🔴 `AT1`：原本只讀 `signed_files_json`——那是**客戶回簽檔**，
-            #    待審核階段必然是空的。送件人上傳的附件在 `caseRecord`
-            #    裡三處，這支端點從來沒讀過：materials[i].files／
-            #    materials[i].invoiceFiles／payment.items[i].invoiceFiles。
-            #    ☠️ 而這不只是送件人看不到自己上傳的東西——**簽核人也看
-            #    不到**，等於在沒看到憑證的情況下按核准，畫面上又沒有任何
-            #    跡象說「有附件但沒顯示」。
-            # ⚠️ 修的是讀取端，不碰任何寫入權限——「已核准的額外支出附件
-            #    已上鎖」那句話在別的端點，這裡完全不會動到。
-            # ⚠️ 檔案不存在時 _file_entries() 本身就不會讓整支端點掛掉
-            #    （json 解析失敗回空清單），同 JV5／SP1 的既有做法。
-            files = list(_file_entries(r["signed_files_json"]))
-            cr = d.get("caseRecord") or {}
-            for i, m in enumerate(cr.get("materials") or [], 1):
-                if not isinstance(m, dict):
-                    continue
-                files += _tagged_file_entries(
-                    json.dumps(m.get("files") or []), "材料 %d" % i)
-                files += _tagged_file_entries(
-                    json.dumps(m.get("invoiceFiles") or []), "材料 %d 發票" % i)
-            pay_items = (cr.get("payment") or {}).get("items") or []
-            for i, p in enumerate(pay_items, 1):
-                if not isinstance(p, dict):
-                    continue
-                files += _tagged_file_entries(
-                    json.dumps(p.get("invoiceFiles") or []), "請款 %d" % i)
-            out["files"] = files
-            # 解鎖編輯後的再簽核：簽核人要知道「這次改了什麼」才簽得下去
-            hist = d.get("editHistory") or []
-            if isinstance(hist, list) and hist:
-                last = hist[-1] if isinstance(hist[-1], dict) else {}
-                out["changes"] = {
-                    "label": "最近一次編修（第 " + str(last.get("rev", "?")) + " 版）",
-                    "after": {"編修人": last.get("byDisplay") or last.get("by"),
-                              "時間": last.get("at"), "類型": last.get("type")},
-                    "before": None,
-                }
-        else:
-            # 其他模組的單據（承攬商匯款申請 M04、開票申請／請款單 M05、出貨單 M03）由擁有模組提供內容
-            # （`approval.detail`，M01-PLAN §3-7）；這裡只做每案權限、案件抬頭與金額遮蔽。
-            from core import registry as _reg
-            prov = _reg.providers("approval.detail").get(type)
-            if prov is None:
-                raise HTTPException(400, "不支援的類型（或該單據的模組未安裝）：" + str(type))
-            d = prov(conn, id)
-            if not d:
-                raise HTTPException(404, "單據不存在")
-            approval_raw = d.get("approvalRaw")
-            _guard_queue_detail(conn, user, d["quoteNo"], approval_raw)
-            out["case"] = _case_header(conn, d["quoteNo"])
-            if d.get("title"):
-                out["title"] = d["title"]
-            out["fields"] = list(d.get("fields") or [])
-            out["items"] = list(d.get("items") or [])
-            out["files"] = list(d.get("files") or [])
-
-        # 金額遮蔽：規則與憑證流一致（見 _can_see_queue_money）
-        if not _can_see_queue_money(conn, user, approval_raw):
-            _mask_money(out)
-            # 內嵌影像（dataUrl：存簿封面）一律拿掉——看的是「有沒有內嵌內容」，不只看 id 字串（稽核 D AP-M2）
-            out["files"] = [f for f in out["files"] if not f.get("dataUrl") and f.get("id") != "passbook"]
-
-        return out
-    finally:
-        conn.close()
+        items = json.loads(r["items_json"] or "[]")
+    except Exception:
+        items = []
+    return {
+        "quoteNo": r["quote_no"], "approvalRaw": r["data_json"], "title": "完工單 " + r["note_no"],
+        "fields": [
+            {"label": "服務地點", "value": r["site_address"] or "—"},
+            {"label": "執行期間", "value": (r["start_date"] or "—") + " ~ " + (r["completion_date"] or "—")},
+            {"label": "負責人", "value": r["site_manager"] or "—"},
+            {"label": "客戶驗收人", "value": r["recipient"] or "—"},
+            {"label": "保固月數", "value": str(r["warranty_months"] or 0)},
+            {"label": "執行說明", "value": r["work_summary"] or "—"},
+            {"label": "測試與檢驗", "value": r["test_result"] or "—"},
+            {"label": "遺留事項", "value": r["pending_items"] or "—"},
+        ],
+        "items": items,
+        "files": _file_entries(r["signed_files_json"]),
+    }
 
 
-# ── 轉簽（2026-09-14 使用者要求）────────────────────────────────────────────
-#
-# 「簽核代理人，增加最高權限人可以轉簽簽核佇列的內容，要註明原因跟註記這筆簽核」。
-#
-# 與既有「簽核代理人」（`approval_delegates`）的分工：
-#   - 代理人是**事前、長期**的授權（某人請假期間由某人代簽，範圍是那個人的全部簽核）
-#   - 轉簽是**事後、單筆**的處置（這一張卡住了，改由另一個人簽）
-# 兩者都需要——只有代理人的話，臨時卡單只能等；只有轉簽的話，請假期間每張都要人工轉。
-#
-# **原因是必填**：轉簽等於把一筆待辦從 A 身上拿走塞給 B，沒有理由就是無從追究的
-# 權限變更。原因會寫進單據的 approval.reassignLog、audit_log，並顯示在簽核佇列詳情
-# 與簽核歷史裡——三個地方都看得到同一句話。
+def detail_extra_expense(conn, doc_no):
+    r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (doc_no,)).fetchone()
+    if not r:
+        raise HTTPException(404, "額外支出不存在")
+    out = {
+        "quoteNo": r["quote_no"], "approvalRaw": r["approval_json"], "title": "額外支出 #" + str(r["id"]),
+        "fields": [
+            {"label": "類別", "value": r["category"] or "—"},
+            {"label": "項目", "value": r["description"] or "—"},
+            {"label": "數量", "value": (str(r["qty"]) + " " + (r["unit"] or "")).strip()},
+            {"label": "單價", "value": format(r["unit_cost"] or 0, ",.0f")},
+            {"label": "小計", "value": format(r["total_cost"] or 0, ",.0f")},
+            {"label": "支出日期", "value": r["expense_date"] or "—"},
+            {"label": "單據號碼", "value": r["doc_no"] or "—"},
+            {"label": "支出人", "value": r["payer_name"] or "—"},
+            {"label": "填寫人", "value": r["created_by_name"] or "—"},
+            {"label": "備註", "value": r["note"] or "—"},
+        ],
+        "items": [],
+        "files": _file_entries(r["files_json"]),
+    }
+    # 「編修後的結果」：已核准的額外支出要改內容必須走變更申請，
+    # change_json 裡就是改完會變成什麼樣子——簽核人要看的正是這個對照。
+    if (r["change_status"] or "") not in ("", "none"):
+        try:
+            chg = json.loads(r["change_json"] or "{}")
+        except Exception:
+            chg = {}
+        if chg:
+            out["changes"] = {
+                "label": "變更申請（核准後會套用的內容）",
+                "before": {"項目": r["description"], "數量": r["qty"],
+                           "單價": r["unit_cost"], "小計": r["total_cost"],
+                           "備註": r["note"]},
+                "after": {"項目": chg.get("description"), "數量": chg.get("qty"),
+                          "單價": chg.get("unit_cost"), "小計": chg.get("total_cost"),
+                          "備註": chg.get("note")},
+                "files": _file_entries(json.dumps(chg.get("files") or [])),
+            }
+    return out
 
-from core import registry as _registry  # noqa: E402
+
+def detail_case_change(conn, doc_no):
+    r = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (doc_no,)).fetchone()
+    if not r:
+        raise HTTPException(404, "變更申請不存在")
+    try:
+        payload = json.loads(r["payload_json"] or "{}")
+    except Exception:
+        payload = {}
+    # 2026-09-14：原本是 `{"after": payload}`——整包 payload_json 丟給前端，
+    # 畫面上直接變成一大段 raw JSON（見 _summarize_case_change() 說明）。
+    _cr_now = {}
+    try:
+        _q = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (r["quote_no"],)).fetchone()
+        if _q:
+            _cr_now = (json.loads(_q["data_json"] or "{}") or {}).get("caseRecord") or {}
+    except Exception:
+        _cr_now = {}
+    try:
+        _staged = json.loads(r["staged_files_json"] or "[]")
+    except Exception:
+        _staged = []
+    return {
+        # 已結案案件的變更申請是單層「任一 superadmin 審核」，沒有 tiers 可比對，
+        # 所以只走一般每案規則；申請人本人也看得到自己送出的東西。
+        "quoteNo": r["quote_no"], "approvalRaw": None, "selfViewBy": r["requested_by"] or "",
+        "title": "已結案案件變更 #" + str(r["id"]),
+        "fields": [
+            {"label": "變更類型", "value": r["action_type"] or "—"},
+            {"label": "摘要", "value": r["summary"] or "—"},
+            {"label": "申請人", "value": r["requested_by_display"] or r["requested_by"] or "—"},
+            {"label": "申請時間", "value": r["requested_at"] or "—"},
+        ],
+        "items": [],
+        # 半解鎖期間上傳的檔案是「暫存」的——核准後才會真的掛進案件，
+        # 所以簽核人必須在這裡就看得到，不然他是在盲簽。
+        "files": _file_entries(r["staged_files_json"]),
+        "changes": _summarize_case_change(r["action_type"] or "", payload, _cr_now, _staged),
+    }
+
+
+def detail_quotation(conn, doc_no):
+    r = conn.execute(
+        "SELECT quote_no, customer_name, project_name, total, quote_date, sales_person, "
+        "data_json, signed_files_json FROM quotations WHERE quote_no=?", (doc_no,)).fetchone()
+    if not r:
+        raise HTTPException(404, "報價單不存在")
+    try:
+        d = json.loads(r["data_json"] or "{}")
+    except Exception:
+        d = {}
+    # 🔴 `AT1`：原本只讀 `signed_files_json`——那是**客戶回簽檔**，
+    #    待審核階段必然是空的。送件人上傳的附件在 `caseRecord`
+    #    裡三處，這支端點從來沒讀過：materials[i].files／
+    #    materials[i].invoiceFiles／payment.items[i].invoiceFiles。
+    #    ☠️ 而這不只是送件人看不到自己上傳的東西——**簽核人也看
+    #    不到**，等於在沒看到憑證的情況下按核准，畫面上又沒有任何
+    #    跡象說「有附件但沒顯示」。
+    # ⚠️ 修的是讀取端，不碰任何寫入權限——「已核准的額外支出附件
+    #    已上鎖」那句話在別的端點，這裡完全不會動到。
+    # ⚠️ 檔案不存在時 _file_entries() 本身就不會讓整支端點掛掉
+    #    （json 解析失敗回空清單），同 JV5／SP1 的既有做法。
+    files = list(_file_entries(r["signed_files_json"]))
+    cr = d.get("caseRecord") or {}
+    for i, m in enumerate(cr.get("materials") or [], 1):
+        if not isinstance(m, dict):
+            continue
+        files += _tagged_file_entries(json.dumps(m.get("files") or []), "材料 %d" % i)
+        files += _tagged_file_entries(json.dumps(m.get("invoiceFiles") or []), "材料 %d 發票" % i)
+    pay_items = (cr.get("payment") or {}).get("items") or []
+    for i, p in enumerate(pay_items, 1):
+        if not isinstance(p, dict):
+            continue
+        files += _tagged_file_entries(json.dumps(p.get("invoiceFiles") or []), "請款 %d" % i)
+    out = {
+        "quoteNo": r["quote_no"], "approvalRaw": r["data_json"], "title": "報價單 " + r["quote_no"],
+        "fields": [
+            {"label": "報價日期", "value": r["quote_date"] or "—"},
+            {"label": "業務", "value": r["sales_person"] or "—"},
+            {"label": "總金額", "value": format(r["total"] or 0, ",.0f")},
+            {"label": "付款條件", "value": d.get("paymentTerms") or "—"},
+        ],
+        "items": d.get("items") or [],
+        "files": files,
+    }
+    # 解鎖編輯後的再簽核：簽核人要知道「這次改了什麼」才簽得下去
+    hist = d.get("editHistory") or []
+    if isinstance(hist, list) and hist:
+        last = hist[-1] if isinstance(hist[-1], dict) else {}
+        out["changes"] = {
+            "label": "最近一次編修（第 " + str(last.get("rev", "?")) + " 版）",
+            "after": {"編修人": last.get("byDisplay") or last.get("by"),
+                      "時間": last.get("at"), "類型": last.get("type")},
+            "before": None,
+        }
+    return out
+
+
+# ── 轉簽：M01 兩種單據的簽核鏈讀寫（IP-94 `approval.reassign` 提供者；端點在 L1 routers/approval_queue.py）──
+
 from helpers.approval_queue import ApprovalUnreadable, DataJsonApproval  # noqa: E402
-
-
-class ReassignIn(BaseModel):
-    type: str
-    id: str
-    to_username: str
-    reason: str
-    from_username: Optional[str] = None
 
 
 class _QuotationReassign:
@@ -5912,125 +5792,9 @@ class _QuotationReassign:
         save_quotation_json(conn, doc["docNo"], data)
 
 
-# 其他單據類型的讀寫由擁有模組提供（M01-PLAN §3-7）：承攬商匯款申請 M04、開票申請／請款單 M05、出貨單 M03、
-# 傳票 M06（`JV35`，approval_json 是欄位）。完工單是 M01 的，簽核鏈在 completion_notes.data_json.$.approval。
 #: `approval.reassign`（completion_note）：簽核鏈在 completion_notes.data_json.$.approval（ModuleSpec 宣告）
 COMPLETION_NOTE_REASSIGN = DataJsonApproval("completion_notes", "note_no")
 
-
-@router.post("/api/approval-queue/reassign")
-def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
-    """把某一筆待簽核轉給別人（限最高管理者）。
-
-    只動**當層尚未簽核**的那個人：已經簽過的不能被換掉（那會讓簽核紀錄失真），
-    後面幾層也不動（那是簽核流程設定的事，不是單筆處置）。
-
-    `extra_expense`／`case_change` 不支援：前者的簽核名單存在自己的欄位、後者是
-    單層「任一 superadmin 皆可」本來就不會卡在特定人身上。要支援得各自處理，
-    等真的有需求再說——**現在硬做只會多兩條沒人走過的路徑**。
-    """
-    user = _require_user(authorization, require_superadmin=True)
-    reason = (body.reason or "").strip()
-    if not reason:
-        raise HTTPException(400, "請填寫轉簽原因")
-    store = _registry.providers("approval.reassign").get(body.type)
-    if store is None:
-        # 不支援的類型，或擁有該單據的模組沒有安裝（它的單也不會出現在佇列上）
-        raise HTTPException(400, "此類型不支援轉簽（或該單據的模組未安裝）：" + str(body.type))
-    to_username = (body.to_username or "").strip()
-    if not to_username:
-        raise HTTPException(400, "請選擇要轉給誰")
-
-    conn = get_db()
-    try:
-        begin_write(conn)   # lost update：各單據的 data_json／approval_json 在寫鎖內讀、整包寫回
-        target = conn.execute(
-            "SELECT username, display_name FROM users WHERE username=? AND active=1",
-            (to_username,)).fetchone()
-        if not target:
-            raise HTTPException(404, "找不到該使用者或帳號已停用")
-
-        # 單據的讀寫交給擁有模組（`approval.reassign`）；🔴 讀不出來要擋（fail-closed），不可以吞成空鏈——
-        # 那與「沒有設定流程」一模一樣。
-        try:
-            row = store.load(conn, body.id)
-        except ApprovalUnreadable:
-            raise HTTPException(400, "這張單的簽核資料格式不正確，無法轉簽。")
-        if not row:
-            raise HTTPException(404, "單據不存在")
-        if (row["status"] or "") not in ("待審核", "簽核中"):
-            raise HTTPException(409, "只有待審核／簽核中的單據可以轉簽（目前：" + (row["status"] or "") + "）")
-        appr = row["approval"]
-        tiers = _active_tiers(appr)
-        if not tiers:
-            raise HTTPException(400, "這張單沒有分層簽核資料，無法轉簽")
-        tiers = _active_tiers(appr)
-        if not tiers:
-            raise HTTPException(400, "這張單沒有分層簽核資料，無法轉簽")
-        ct = _current_tier_idx(appr)
-        if ct >= len(tiers):
-            raise HTTPException(400, "所有層級都已完成簽核")
-
-        approvers = tiers[ct].get("approvers") or []
-        # 指定 from 就換那個人，否則換「當層第一個還沒簽的人」——後者是實務上的
-        # 「這張卡在誰身上」，也是佇列畫面顯示的那個人。
-        idx = None
-        for i, a in enumerate(approvers):
-            if a.get("status") == "approved":
-                continue
-            if body.from_username and a.get("username") != body.from_username:
-                continue
-            idx = i
-            break
-        if idx is None:
-            raise HTTPException(400, "當層沒有可轉簽的待簽核人員")
-
-        old = approvers[idx]
-        if old.get("username") == to_username:
-            raise HTTPException(400, "轉簽對象與原簽核人相同")
-
-        now = datetime.now().isoformat()
-        actor = user.get("display_name") or user["username"]
-        approvers[idx] = {
-            **old,
-            "username": target["username"],
-            "displayName": target["display_name"] or target["username"],
-            "status": old.get("status") or "pending",
-            # 註記留在這一筆簽核上：簽核佇列詳情與 PDF 都讀得到，不必回頭翻 audit
-            "reassignedFrom": old.get("username"),
-            "reassignedFromDisplay": old.get("displayName") or old.get("username"),
-            "reassignedBy": actor,
-            "reassignedAt": now,
-            "reassignReason": reason,
-        }
-        tiers[ct]["approvers"] = approvers
-        log = appr.get("reassignLog")
-        if not isinstance(log, list):
-            log = []
-        log.append({"at": now, "by": actor, "tier": ct + 1,
-                    "from": old.get("username"), "fromDisplay": old.get("displayName") or old.get("username"),
-                    "to": target["username"], "toDisplay": target["display_name"] or target["username"],
-                    "reason": reason})
-        appr["reassignLog"] = log
-        appr["tiers"] = tiers
-
-        store.save(conn, row, appr, now)
-        conn.commit()
-    finally:
-        conn.close()
-
-    _audit(_tok(authorization), "approval.reassign", body.type, body.id,
-           body.id + "：" + (old.get("displayName") or old.get("username") or "") + " → "
-           + (target["display_name"] or target["username"]),
-           {"from": old.get("username"), "to": to_username, "reason": reason,
-            "tier": ct + 1, "docType": body.type})
-    # 被轉到的人要知道自己多了一張要簽的單，否則這張會靜靜卡在他的佇列裡
-    _notify(to_username, "approval_request", body.id, row["quoteNo"] or body.id,
-            actor + " 將「" + body.id + "」的簽核轉給你（原因：" + reason + "）")
-
-    return {"ok": True, "to": to_username,
-            "toDisplay": target["display_name"] or target["username"],
-            "reason": reason, "tier": ct + 1}
 
 
 @router.get("/api/approval-history")

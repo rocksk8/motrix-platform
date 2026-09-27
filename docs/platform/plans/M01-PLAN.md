@@ -10,7 +10,7 @@
 - helper（5）：quotations、quote_terms、recognition、case_deadlines、case_stage_tasks；core：completion_pdf
 - 頁面 8、js 11（case-management-*.js）：留 frontend（模組頁面尚無服務路徑，同 M04／M07）
 - 表 9：quotations、quote_seq、case_stages、case_stage_visits、case_updates、case_action_items、case_change_requests、case_extra_expenses、completion_notes
-- 前綴 8：/api/quotations、/api/sales-orders（b-m08-2 移入）、/api/approval-history、/api/approval-queue、/api/case-batch、/api/case-changes、/api/completion-notes、/api/next-quote-no
+- 前綴 ~~8~~ 7：/api/quotations、/api/sales-orders（b-m08-2 移入）、/api/approval-history、~~/api/approval-queue~~（2026-09-27 歸 L1，§5-5）、/api/case-batch、/api/case-changes、/api/completion-notes、/api/next-quote-no
 
 ## 1. 必做（ROADMAP 已登記）
 
@@ -165,6 +165,19 @@ A 發現：案件端點對「看不到」回 403、對「不存在」回 404 ⇒
 | 交會 | A 的 wip/a-m06 在 `case_access.py` 檔尾新增 `case_documents_readable()`；誰後上車誰解那一處（逐 hunk、解完 ast.parse、重跑 case_access 題＋A 的附件題與 M06 題＋case404 題；rebase 與 push 分開） |
 | 稽核 | 權限類 ⇒ D 完整稽核 |
 
+### 5-5 c-approval-l1（主持裁示 2026-09-27：`/api/approval-queue` 待簽彙整搬進 L1，不列例外；分支 `wip/c-approval-l1`，疊在 c-m01-5 a1e0a45b 上）
+
+| 項 | 內容 |
+|---|---|
+| 搬移 | 佇列、角標、詳情、轉簽四支端點 `modules/case/api/quotations.py` → L1 `backend/routers/approval_queue.py`（main.py 掛載）；路徑不變、前端不改。頁面 `approval-queue.html`、選單項（`core/menu_l1.json`）、前綴 `/api/approval-queue` 歸回 L1（modules.json、`modules/case/module.json`） |
+| M01 變成提供者 | `approval.queue_items`（IP-10）`case`：`approval_queue_items`（報價單、已結案變更、額外支出、完工單、額外支出變更）；`approval.detail`（IP-93）四種：`detail_quotation`／`detail_completion_note`／`detail_extra_expense`／`detail_case_change`；`approval.reassign`（IP-94）不變。一律 ModuleSpec 宣告 |
+| 權限不變 | 詳情守門：本單簽核人，否則 `guard_case_access(allow_module="case_manage", allow_approver=True)`——看不到＝查無同一個 404（c-case404）；M01 不在 ⇒ 非簽核人 404（fail-closed）。已結案變更的申請人本人照看（提供者給 `selfViewBy`）。可見性過濾、金額遮蔽、轉簽權限原樣搬 |
+| 案件資料 | 項目缺的客戶／名稱與詳情抬頭經 `case.summary`（IP-96，L1 以 `SYSTEM`、呼叫前已判完權限）；IP-96 加欄 `deal_tag`。M01 不在 ⇒ 空字串／只有單號 |
+| 角標 | 改由提供者項目計算（同佇列來源）：有簽核層 ⇒ 當層未簽的人含我；沒有簽核層 ⇒ superadmin 且非本人（原 case_change 的 ccr_count 同義）。差異：簽核 JSON 壞掉的報價單原本不計、現在對 superadmin 計 1——與佇列列表／前端 canApprove 一致 |
+| 題 | `tests/platform/test_approval_queue_l1.py`（M01 不在 ⇒ 其他模組照列、角標、詳情抬頭只有單號、非簽核人 404；拿掉 M06 `voucher` 提供者 ⇒ 200；壞提供者只少自己；頁面在 L1）；`modules/case/tests/test_approval_providers.py` ⑦（報價單經提供者進 L1 佇列、角標、詳情抬頭） |
+| 反向控制 | sparse 真刪 M01、真刪 M05（arap；主持裁示：M06 還在 routers/ 無法真刪）⇒ 待簽頁 200。**真刪 M06 待第十二班（a-m06-8）合回、rebase 後補，交 D 前完成** |
+| 突變 | 拿掉 ModuleSpec 的 `("approval.queue_items", "case")` ⇒ ⑦ 紅 |
+| 稽核 | 權限類 ⇒ D 完整稽核 |
 ### 5-5 ④(c) 拿掉 M01 之後 tests/platform 的處置清單（2026-09-27 00:57，wip/c-m01-4；稽核 D 重點）
 
 **A 搬進 modules/case/tests**：`test_approval_providers.py`（整檔都在驗 M01 的佇列／角標／轉簽／詳情彙整）。

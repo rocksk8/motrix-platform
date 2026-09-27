@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.52 — 2026-09-27（第十三班列車取號，原暫用 1.50；c-approval-l1，主持裁示）
+- 新增 L1 `routers/approval_queue.py`：「待我簽核」佇列、角標、詳情、轉簽（`/api/approval-queue`、`/count`、`/detail`、`/reassign`）自 M01 搬入，路徑不變、前端不改；單據一律經 `approval.queue_items`／`approval.detail`／`approval.reassign` 供應（M01 只是提供者之一），案件資料經 `case.summary`
+- 頁面 `approval-queue.html`、選單項「簽核佇列」（`core/menu_l1.json`）、前綴 `/api/approval-queue` 歸回 L1
+- `approval.detail` 回傳加可省欄位 `changes`、`selfViewBy`；`helpers/approval_queue.py` 說明改為 L1 彙整
+
 ## 1.51 — 2026-09-27（A，IP-96 case.summary 的用途範圍；主持裁示對齊 AT6-O1／JV7；第十二班列車取號，原暫用 1.48）
 - L1（新增）：`helpers.case_access.case_summary_scope(user, purpose=None)`（用途 ⇒ "all"／"visible"；權限判斷在 L1）、`SUMMARY_PURPOSE_MODULES`（`voucher_link` ⇒ cashier／finance）、`SUMMARY_LINK_FIELDS`（放寬時只回的摘要欄位）
 

@@ -320,18 +320,18 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 不新增資料表：模組 migration 執行器尚未實作（MODULE-GUIDE §4），V9 基準 v116 凍結。
 ⚠ 投保金額屬薪資等級資訊，端點只給最高管理者；而 `system_settings` 會進一般每日 JSON——資料分類（MODULE-GUIDE §3.2 是否列 F2）待 C 判定，見 RUN-PLAN §6 本項回報。
 
-## IP-10　`approval.queue_items`：「待我簽核」佇列的其他來源（任何模組 → M01 佇列；首個提供方：L1 自訂模組引擎）
+## IP-10　`approval.queue_items`：「待我簽核」佇列的來源（任何模組 → L1 佇列；~~→ M01 佇列~~；首個提供方：L1 自訂模組引擎）
 
 對應 CUSTOMIZATION-SPEC §3.7（P8）、主持 P8 前端缺口 #3（2026-09-26，C）。原本 `routers/quotations.py::get_approval_queue` 逐一寫死各單據表；自訂模組的單據是資料、表是共用的 `custom_records`，不能再寫死一種。
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | L1 `helpers/custom_modules.py::queue_items`（簽核中的自訂模組單據）。**2026-09-26 起（M01-PLAN §3-7）各單據模組提供自己的待簽**：M04 `modules/subcontract/api/contractor_vouchers.py::queue_items`（`contractor_voucher`）、M05 `modules/arap/api/invoice_vouchers.py::queue_items`（`invoice_voucher`）與 `payment_requests.py::queue_items`（`payment_request`）、M03 `modules/supply/api/shipping_notes.py::_queue_items`（`shipping_note`）、M06 `modules/accounting/api/vouchers.py::_queue_items`（`voucher`）、M07 `modules/payroll/bonus_queue.py::queue_items`（`bonus_award`、`bonus_case_award`）。M01 自己的報價單、完工單、額外支出（含變更）、已結案變更仍在 M01 端點內 |
-| 使用方 | M01 `modules/case/api/quotations.py` 的 `GET /api/approval-queue`（列表）與 `GET /api/approval-queue/count`（角標），經 `_queue_provider_items(conn)`（兩支同一份來源） |
+| 提供方 | L1 `helpers/custom_modules.py::queue_items`（簽核中的自訂模組單據）。**2026-09-26 起（M01-PLAN §3-7）各單據模組提供自己的待簽**：M04 `modules/subcontract/api/contractor_vouchers.py::queue_items`（`contractor_voucher`）、M05 `modules/arap/api/invoice_vouchers.py::queue_items`（`invoice_voucher`）與 `payment_requests.py::queue_items`（`payment_request`）、M03 `modules/supply/api/shipping_notes.py::_queue_items`（`shipping_note`）、M06 `modules/accounting/api/vouchers.py::_queue_items`（`voucher`）、M07 `modules/payroll/bonus_queue.py::queue_items`（`bonus_award`、`bonus_case_award`）。~~M01 自己的報價單、完工單、額外支出（含變更）、已結案變更仍在 M01 端點內~~ ⇒ 2026-09-27 起 M01 也是提供者之一：`modules/case/api/quotations.py::approval_queue_items`（名稱 `case`；`quotation`、`case_change`、`extra_expense`、`completion_note`、`extra_expense_change`），ModuleSpec 宣告（主持裁示 2026-09-27，c-approval-l1） |
+| 使用方 | L1 `routers/approval_queue.py` 的 `GET /api/approval-queue`（列表）與 `GET /api/approval-queue/count`（角標），經 `_queue_provider_items(conn)`（兩支同一份來源）；~~M01 `modules/case/api/quotations.py`~~（主持裁示 2026-09-27，c-approval-l1）。路徑不變、前端不改 |
 | 形式 | provider，多個提供者（`core.registry.providers()`；以名稱排序依序取用） |
 | 語法 | 提供：`_registry.provide("approval.queue_items", "custom_modules", queue_items)`<br>取用：`for name, fn in sorted(registry.providers("approval.queue_items").items()): items.extend(fn(conn))` |
-| 回傳 | 項目清單，形狀同佇列的其他類型：`type`（自訂模組＝`custom_record`）、`quoteNo`（單號）、`requestedBy`／`requestedByDisplay`／`requestedAt`、`tiers`／`currentTier`／`tierCount`／`currentApprovers`；自訂模組另帶 `moduleKey`、`moduleName`、`statusLabel`。共同欄位用 L1 `helpers/approval_queue.base_item()`／`tier_fields()` 組。項目沒給 `customer`／`projectName` 而有 `linkedQuoteNo` ⇒ M01 補案件的客戶與名稱（單據模組不讀 M01 的案件表）。**只列還沒簽完的**；誰看得到由使用方的 `_queue_visible_to` 決定（與其他類型同一條規則） |
-| 對方不在時 | 某個單據模組不在 ⇒ 那一類不列（它的單也不存在於這個安裝）；某個提供者丟例外 ⇒ 那一類不列、記 exception，佇列與角標照常 |
+| 回傳 | 項目清單，形狀同佇列的其他類型：`type`（自訂模組＝`custom_record`）、`quoteNo`（單號）、`requestedBy`／`requestedByDisplay`／`requestedAt`、`tiers`／`currentTier`／`tierCount`／`currentApprovers`；自訂模組另帶 `moduleKey`、`moduleName`、`statusLabel`。共同欄位用 L1 `helpers/approval_queue.base_item()`／`tier_fields()` 組。項目沒給 `customer`／`projectName` 而有 `linkedQuoteNo` ⇒ L1 經 `case.summary`（IP-96，`SYSTEM` 身分）補案件的客戶與名稱，M01 不在 ⇒ 空字串（~~M01 補~~）。**只列還沒簽完的**；誰看得到由使用方的 `_queue_visible_to` 決定（與其他類型同一條規則） |
+| 對方不在時 | 某個單據模組不在 ⇒ 那一類不列（它的單也不存在於這個安裝）；某個提供者丟例外 ⇒ 那一類不列、記 exception，佇列與角標照常；M01 不在 ⇒ 佇列照常列其他模組的單（守門 `tests/platform/test_approval_queue_l1.py`） |
 | 契約版本 | 1（2026-09-26，CORE_VERSION 1.10 同一批）。欄位只准加 |
 | 守門 | `backend/tests/test_custom_modules_engine_2026_09_25.py`：①正對照：送審後出現在簽核人的佇列與角標、簽完就消失 ②非簽核人（一般使用者）看不到別人的 ③反向控制：提供者丟例外 ⇒ 佇列 200、內建單據照列。`backend/modules/case/tests/test_approval_providers.py`（M01-PLAN §3-7）：M01 佇列／角標／轉簽不再直讀或直寫各模組的單據表；每種單據類型各有一個提供者；拿掉一個提供者 ⇒ 那一類不列、角標跟著少、不給轉簽。`tools/check_approval_queue_coverage.py`（AS3）改成也認提供者 |
 
@@ -369,32 +369,32 @@ M01-PLAN §3-8 ①「pdf_gen W」：L1 `pdf_gen._record_doc_version` 原本自�
 
 ---
 
-## IP-93　`approval.detail`：簽核佇列詳情的單據內容（各單據模組 → M01 詳情端點）
+## IP-93　`approval.detail`：簽核佇列詳情的單據內容（各單據模組 → L1 詳情端點；~~→ M01~~）
 
 M01-PLAN §3-7（主持裁示 2026-09-26：c-approval-2，排在 M01 本體之前）。原本 `routers/quotations.py::approval_queue_detail` 直讀 `invoice_vouchers`／`payment_requests`／`contractor_payment_vouchers`／`shipping_notes`。**編號暫定（93），列車定號。**
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | 提供者名稱＝單據類型：M04 `contractor_voucher`（`modules/subcontract/api/contractor_vouchers.py::queue_detail`）、M05 `invoice_voucher`（`modules/arap/api/invoice_vouchers.py::queue_detail`）、`payment_request`（`modules/arap/api/payment_requests.py::queue_detail`）、M03 `shipping_note`（`modules/supply/api/shipping_notes.py::_queue_detail`）。付款／開票類共用 L1 `helpers/approval_queue.snapshot_doc_detail(row)`（含存簿圖片只收 `data:image/` 的安全過濾） |
-| 使用方 | M01 `GET /api/approval-queue/detail?type=&id=`：M01 自己的報價單、完工單、額外支出、已結案變更在端點內；其他類型取提供者，再由 M01 做每案權限（`_guard_queue_detail`）、案件抬頭（`_case_header`）、金額遮蔽（`_can_see_queue_money`／`_mask_money`） |
+| 提供方 | 提供者名稱＝單據類型：M04 `contractor_voucher`（`modules/subcontract/api/contractor_vouchers.py::queue_detail`）、M05 `invoice_voucher`（`modules/arap/api/invoice_vouchers.py::queue_detail`）、`payment_request`（`modules/arap/api/payment_requests.py::queue_detail`）、M03 `shipping_note`（`modules/supply/api/shipping_notes.py::_queue_detail`）；M01 `quotation`、`completion_note`、`extra_expense`、`case_change`（`modules/case/api/quotations.py::detail_*`，2026-09-27 起（主持裁示 2026-09-27，c-approval-l1））。付款／開票類共用 L1 `helpers/approval_queue.snapshot_doc_detail(row)`（含存簿圖片只收 `data:image/` 的安全過濾） |
+| 使用方 | L1 `routers/approval_queue.py` 的 `GET /api/approval-queue/detail?type=&id=`：一律取提供者，再由 L1 做每案權限（`_guard_queue_detail`：本單簽核人，否則 `guard_case_access`；看不到＝查無同一個 404）、案件抬頭（`_case_header`，經 `case.summary`；M01 不在 ⇒ 只有單號）、金額遮蔽（`_can_see_queue_money`／`_mask_money`）。~~M01 端點；M01 自己的四種在端點內~~（主持裁示 2026-09-27，c-approval-l1） |
 | 形式 | provider，多個提供者（`core.registry.providers("approval.detail")`，以類型名取一個） |
-| 語法 | `fn(conn, doc_no) -> {"quoteNo", "approvalRaw", "title"（可省）, "fields", "items", "files"} \| None` |
+| 語法 | `fn(conn, doc_no) -> {"quoteNo", "approvalRaw", "title"（可省）, "fields", "items", "files", "changes"（可省）, "selfViewBy"（可省）} \| None`；找不到也可以自己丟 404（M01 保留原訊息）。`selfViewBy`＝申請人本人免每案守門（只有 M01 `case_change`：單層任一 superadmin，沒有簽核鏈可比對）。欄位只准加（2026-09-27 加 changes、selfViewBy） |
 | 對方不在時 | 沒有該類型的提供者 ⇒ 400「不支援的類型（或該單據的模組未安裝）」；提供者回 None ⇒ 404「單據不存在」 |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | `backend/modules/case/tests/test_approval_providers.py`（M01 詳情端點不直讀其他模組的表、每種類型一個提供者、正對照 200＋拿掉 ⇒ 400）；既有 `test_approval_queue_detail_2026_09_14.py`、`test_approval_queue_detail_authz_2026_09_14.py` 行為不變 |
 
 ---
 
-## IP-94　`approval.reassign`：轉簽時讀寫單據的簽核鏈（各單據模組 → M01 轉簽端點）
+## IP-94　`approval.reassign`：轉簽時讀寫單據的簽核鏈（各單據模組 → L1 轉簽端點；~~→ M01~~）
 
 M01-PLAN §3-7（主持裁示 2026-09-26 11:16，RUN-PLAN §5 D1 的 M06 ①）。原本 `routers/quotations.py::reassign_approval` 以 `_REASSIGN_TABLES` 逐表直寫六種單據（含 M06 的 `vouchers_all`）。**編號暫定（94），列車定號。**
 
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | 提供者名稱＝單據類型（佇列的 `type`）：M01 `quotation`（`modules/case/api/quotations.py::_QuotationReassign`，寫回走 `save_quotation_json`）、`completion_note`；M04 `contractor_voucher`；M05 `invoice_voucher`、`payment_request`；M03 `shipping_note`；M06 `voucher`（`modules/accounting/api/vouchers.py::_VoucherReassign`，approval_json 是欄位、作廢不算、讀不出來 fail-closed）。data_json 類共用 L1 `helpers/approval_queue.DataJsonApproval(table, key)`（表名由擁有者傳入） |
-| 使用方 | M01 `POST /api/approval-queue/reassign`（權限、原因必填、換人規則、reassignLog、audit、通知都在 M01）；`GET /api/approval-queue` 回 `reassignTypes`（有提供者的類型），前端 `canReassign()` 據此顯示按鈕 |
+| 使用方 | L1 `routers/approval_queue.py` 的 `POST /api/approval-queue/reassign`（權限、原因必填、換人規則、reassignLog、audit、通知都在 L1；~~M01~~（主持裁示 2026-09-27，c-approval-l1））；`GET /api/approval-queue` 回 `reassignTypes`（有提供者的類型），前端 `canReassign()` 據此顯示按鈕 |
 | 形式 | provider，多個提供者（`core.registry.providers("approval.reassign")`，以類型名取一個） |
-| 語法 | 提供：`("approval.reassign", "<type>"): obj`（ModuleSpec）或 `_registry.provide("approval.reassign", "<type>", obj)`<br>`obj.load(conn, doc_no) -> {"docNo", "quoteNo", "status", "approval"} \| None`（簽核資料讀不出來 ⇒ raise `helpers.approval_queue.ApprovalUnreadable`）；`obj.save(conn, doc, approval, now)`（`doc` 為 `load` 的回傳值；在 M01 的寫鎖內呼叫、M01 commit） |
+| 語法 | 提供：`("approval.reassign", "<type>"): obj`（ModuleSpec）或 `_registry.provide("approval.reassign", "<type>", obj)`<br>`obj.load(conn, doc_no) -> {"docNo", "quoteNo", "status", "approval"} \| None`（簽核資料讀不出來 ⇒ raise `helpers.approval_queue.ApprovalUnreadable`）；`obj.save(conn, doc, approval, now)`（`doc` 為 `load` 的回傳值；在 L1 端點的寫鎖內呼叫、L1 commit；~~M01~~） |
 | 對方不在時 | 沒有該類型的提供者 ⇒ 轉簽 400「此類型不支援轉簽（或該單據的模組未安裝）」，佇列 `reassignTypes` 不含它 ⇒ 前端不顯示按鈕 |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | `backend/modules/case/tests/test_approval_providers.py`（M01 不再直寫各表、每種類型一個提供者、拿掉提供者 ⇒ 400 且 `reassignTypes` 不含、ApprovalUnreadable ⇒ 400）；既有 `test_approval_reassign_history_2026_09_14.py`、`test_jv35_voucher_reassign_2026_09_24.py` 行為不變 |
@@ -463,9 +463,9 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M01 案件：`modules/case/quotations.py::case_summary`（暫以 import 時登記，同 IP-12；M01 本體搬遷時改 `ModuleSpec.providers`，CA-O3） |
-| 使用方 | M01 自己的 IP-12 `summary` 轉呼叫（淘汰中）；其他使用方逐步改用（company_identity、google_calendar、bonus_pdf、vouchers，見 M01-PLAN §2-B 第 2 類） |
+| 使用方 | L1 `routers/approval_queue.py`（佇列項目補客戶名稱、詳情抬頭；`SYSTEM`，呼叫前已做完權限判斷，2026-09-27）；M01 自己的 IP-12 `summary` 轉呼叫（淘汰中）；其他使用方逐步改用（company_identity、google_calendar、bonus_pdf、vouchers，見 M01-PLAN §2-B 第 2 類） |
 | 形式 | provider，單一提供者 |
-| 語法 | 取用：`s = registry.single_provider("case.summary")`；`None` ⇒ M01 不在。`s(conn, user, quote_nos=None) -> [ {quote_no, customer_name, project_name, status, sales_person_id} ]`〔2026-09-26 A 追加（只新增參數，契約版本不變）：`s(conn, user, quote_nos=None, purpose=None)`。`purpose="voucher_link"`（M06 傳票摘要從案件帶入，JV7）＋使用者有傳票權限（cashier／finance，或最高管理者）⇒ **全部案件、只回 `{quote_no, customer_name, project_name}`**（不回地址等個資與其他欄位）；沒有傳票權限 ⇒ 照可見性過濾。**權限判斷在 L1** `helpers.case_access.case_summary_scope`（呼叫端只說用途）；未登錄的用途 ⇒ ValueError。界線（AT6-O1，386cb0e1）：「看不到＝不存在」只保護沒有傳票權限的角色。守門 `backend/tests/platform/test_case_summary_purpose.py`〕 |
+| 語法 | 取用：`s = registry.single_provider("case.summary")`；`None` ⇒ M01 不在。`s(conn, user, quote_nos=None) -> [ {quote_no, customer_name, project_name, status, deal_tag, sales_person_id} ]`（`deal_tag` 2026-09-27 加欄：L1 佇列詳情的案件抬頭）〔2026-09-26 A 追加（只新增參數，契約版本不變）：`s(conn, user, quote_nos=None, purpose=None)`。`purpose="voucher_link"`（M06 傳票摘要從案件帶入，JV7）＋使用者有傳票權限（cashier／finance，或最高管理者）⇒ **全部案件、只回 `{quote_no, customer_name, project_name}`**（不回地址等個資與其他欄位，`purpose` 給定時 wide 分支不加 `deal_tag`）；沒有傳票權限 ⇒ 照可見性過濾。**權限判斷在 L1** `helpers.case_access.case_summary_scope`（呼叫端只說用途）；未登錄的用途 ⇒ ValueError。界線（AT6-O1，386cb0e1）：「看不到＝不存在」只保護沒有傳票權限的角色。守門 `backend/tests/platform/test_case_summary_purpose.py`〕 |
 | 回傳 | `quote_nos` 省略 ⇒ 這個人看得到的全部；給清單 ⇒ 只回其中看得到且存在的。可見性＝row_access `case`／scope="read"。`user=None` ⇒ TypeError；`helpers.case_access.SYSTEM` ⇒ 不過濾，**只准 L1 背景呼叫端**（守門） |
 | 對方不在時 | 呼叫端要能處理「沒有提供者」與「某筆不在回應裡」並明說（不是空白） |
 | 契約版本 | 1（2026-09-26） |

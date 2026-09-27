@@ -383,7 +383,7 @@ def _visible(user, system, row) -> bool:
 
 def case_summary(conn, user, quote_nos=None, *, purpose=None) -> list:
     """`case.summary`（M01 提供；主持裁示 2026-09-26）：案件摘要 `{quote_no, customer_name, project_name, status,
-    sales_person_id}`。`quote_nos` 省略 ⇒ 這個人看得到的全部；給清單 ⇒ 只回其中看得到、而且存在的（其餘不回，
+    sales_person_id, deal_tag}`（deal_tag：2026-09-27 加欄，L1 佇列詳情的案件抬頭；`wide` 分支不回）。`quote_nos` 省略 ⇒ 這個人看得到的全部；給清單 ⇒ 只回其中看得到、而且存在的（其餘不回，
     呼叫端要能處理缺席並明說）。只讀。可見性＝`row_access` 的 `case`／scope="read"（同案件列表、地圖）。
 
     `purpose`（2026-09-26 新增，選填，**只能用關鍵字傳**——稽核 D M06-M3b）：用途。範圍由 L1 `helpers.case_access.case_summary_scope` 決定——
@@ -391,7 +391,7 @@ def case_summary(conn, user, quote_nos=None, *, purpose=None) -> list:
     system = _caller_is_system(user)
     from helpers.case_access import SUMMARY_LINK_FIELDS, case_summary_scope
     wide = not system and case_summary_scope(user, purpose) == "all"
-    cols = "quote_no, customer_name, project_name, status, " + _CASE_VIS_COLS
+    cols = "quote_no, customer_name, project_name, status, " + SQL_DEAL_TAG + " AS deal_tag, " + _CASE_VIS_COLS
     if quote_nos is None:
         rows = conn.execute("SELECT %s FROM quotations ORDER BY id DESC" % cols).fetchall()
     else:
@@ -404,7 +404,7 @@ def case_summary(conn, user, quote_nos=None, *, purpose=None) -> list:
         return [{k: r[k] or "" for k in SUMMARY_LINK_FIELDS} for r in rows]
     return [{"quote_no": r["quote_no"], "customer_name": r["customer_name"] or "",
              "project_name": r["project_name"] or "", "status": r["status"] or "",
-             "sales_person_id": r["sales_person_id"]}
+             "deal_tag": r["deal_tag"] or "", "sales_person_id": r["sales_person_id"]}
             for r in rows if _visible(user, system, r)]
 
 
