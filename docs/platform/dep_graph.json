@@ -563,6 +563,7 @@
    "imports": [
     "core:db",
     "core:pdf_gen",
+    "helper:approval_queue",
     "helper:audit",
     "helper:custom_fields",
     "helper:doc_template",
@@ -3509,115 +3510,115 @@
     },
     {
      "func": "approve_quotation",
-     "line": 4557,
+     "line": 4563,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 4670,
+     "line": 4676,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 4755,
+     "line": 4761,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 4820,
+     "line": 4826,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 4956,
+     "line": 4962,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5038,
+     "line": 5044,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5069,
+     "line": 5075,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5100,
+     "line": 5106,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5141,
+     "line": 5147,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5199,
+     "line": 5205,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5264,
+     "line": 5270,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5305,
+     "line": 5311,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5341,
+     "line": 5347,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 5809,
+     "line": 5815,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 5929,
+     "line": 5935,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 5996,
+     "line": 6002,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6150,
+     "line": 6156,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6164,
+     "line": 6170,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6195,
+     "line": 6201,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -8622,25 +8623,25 @@
    "routes": [
     {
      "func": "get_approval_queue",
-     "line": 155,
+     "line": 160,
      "method": "GET",
      "path": "/api/approval-queue"
     },
     {
      "func": "get_approval_queue_count",
-     "line": 194,
+     "line": 199,
      "method": "GET",
      "path": "/api/approval-queue/count"
     },
     {
      "func": "approval_queue_detail",
-     "line": 298,
+     "line": 303,
      "method": "GET",
      "path": "/api/approval-queue/detail"
     },
     {
      "func": "reassign_approval",
-     "line": 362,
+     "line": 367,
      "method": "POST",
      "path": "/api/approval-queue/reassign"
     }
@@ -9027,6 +9028,7 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:approval_queue",
     "helper:audit",
     "helper:auth",
     "helper:custom_fields",
@@ -10110,6 +10112,7 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:approval_queue",
     "helper:audit",
     "helper:auth",
     "helper:custom_fields",

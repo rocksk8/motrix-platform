@@ -67,6 +67,20 @@ def approval_json_of(data_json, doc_type: str, doc_no) -> "str | None":
     return json.dumps(d.get("approval") or {}, ensure_ascii=False)
 
 
+def approval_raw_of(approval_json, doc_type: str, doc_no) -> "str | None":
+    """欄位版的 `approval_json_of`：簽核鏈存在獨立欄位（`approval_json`／`change_approval_json`，內容就是 approval 物件）。
+    空 ⇒ "{}"（沒有設定流程，照列）；解析不了或不是物件 ⇒ None＋ERROR（寫單號不寫內容），呼叫端跳過那一筆。
+    ⚠ 不可以直接丟給 `tier_fields`：它把壞 JSON 吞成 {} ⇒ 列給每個 superadmin、計角標，核准時才丟例外（稽核 D QJ-M1）。"""
+    try:
+        a = json.loads(approval_json or "{}")
+    except (TypeError, ValueError):
+        a = None
+    if not isinstance(a, dict):
+        logger.error("待簽核佇列：%s %s 的簽核資料讀不出來，這一筆不列", doc_type, doc_no)
+        return None
+    return approval_json or "{}"
+
+
 def current_tier_idx(appr: dict) -> int:
     ct = appr.get("currentTier")
     if ct is None:

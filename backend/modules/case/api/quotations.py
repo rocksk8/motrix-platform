@@ -223,7 +223,7 @@ def _setting_to_active_tiers(setting: dict, conn, requester_username: str = None
 # 待簽項目與 M01 用同一份換算）；這裡保留同名別名。
 from helpers.approval_queue import (  # noqa: E402
     active_tiers as _active_tiers, current_tier_idx as _current_tier_idx, tier_fields as _queue_tier_fields,
-    approval_json_of as _approval_json_of,
+    approval_json_of as _approval_json_of, approval_raw_of as _approval_raw_of,
 )
 
 
@@ -4437,7 +4437,10 @@ def approval_queue_items(conn) -> list:
         ORDER BY e.id DESC
     """).fetchall()
     for r in xe_rows:
-        f = _queue_tier_fields(r["approval_json"])
+        raw = _approval_raw_of(r["approval_json"], "extra_expense", r["id"])   # 壞一筆只跳過那一筆（QJ-M1）
+        if raw is None:
+            continue
+        f = _queue_tier_fields(raw)
         items.append({
             "type":                "extra_expense",
             "quoteNo":             f"{r['quote_no']}-XE{r['id']}",
@@ -4518,7 +4521,10 @@ def approval_queue_items(conn) -> list:
         ORDER BY e.id DESC
     """).fetchall()
     for r in xec_rows:
-        f = _queue_tier_fields(r["change_approval_json"])
+        raw = _approval_raw_of(r["change_approval_json"], "extra_expense_change", r["id"])
+        if raw is None:
+            continue
+        f = _queue_tier_fields(raw)
         try:
             chg = json.loads(r["change_json"] or "{}")
         except Exception:

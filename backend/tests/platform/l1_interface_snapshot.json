@@ -1,5 +1,5 @@
 {
- "core_version": "1.53",
+ "core_version": "1.54",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -142,6 +142,7 @@
    "DataJsonApproval.save": "def(self, conn, doc, approval, now)",
    "active_tiers": "def(appr)",
    "approval_json_of": "def(data_json, doc_type, doc_no)",
+   "approval_raw_of": "def(approval_json, doc_type, doc_no)",
    "base_item": "def(type_, doc_no, f, **fields)",
    "current_tier_idx": "def(appr)",
    "file_entries": "def(raw)",

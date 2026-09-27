@@ -7545,6 +7545,10 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:approval_queue",
+    "helper:custom_modules",
+    "page:pages/approval-queue.html",
     "plat:__init__",
     "plat:registry",
     "plat:source_tree"
@@ -7554,7 +7558,13 @@
      "backend/core/__init__.py",
      "backend/core/registry.py",
      "backend/core/source_tree.py",
-     "backend/db.py"
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/approval_queue.py",
+     "backend/helpers/custom_modules.py"
+    ],
+    "page": [
+     "frontend/pages/approval-queue.html"
     ]
    }
   },
