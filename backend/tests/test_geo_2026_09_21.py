@@ -443,8 +443,34 @@ def _warm_like_background():
     clear_map_response_cache()
 
 
-def _map(client, hdr):
-    r = client.get(MAP_PATH, headers=hdr)
+@pytest.fixture(params=[pytest.param("tenders", marks=needs_tender_radar), "suppliers"])
+def geo_source(request):
+    """點的資料來源（B，2026-09-28）：「一筆失敗不清空整張地圖」「沒有地點要被數出來」是 L1 的規則——
+    `tenders` 驗與標案雷達的整合（模組在才跑），`suppliers` 是 L1 自己的資料來源。"""
+    return request.param
+
+
+def _seed_points(source, rows):
+    """rows：[(代號, 地點或 None, 標案名稱, 機關)]（名稱、機關只給 tenders 用，與原題逐字相同）。tenders：代號＝案號、地點＝location；suppliers：代號＝名稱、地點＝data_json.address（None ⇒ 不填地址）。"""
+    import json
+    import db
+    conn = db.get_db()
+    try:
+        for key, place, name, org in rows:
+            if source == "tenders":
+                conn.execute("INSERT INTO tenders (case_no, name, org, location) VALUES (?,?,?,?)",
+                             (key, name, org, place))
+            else:
+                conn.execute("INSERT INTO suppliers (name, data_json) VALUES (?,?)",
+                             (key, json.dumps({"address": place} if place else {}, ensure_ascii=False)))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _map(client, hdr, source=None):
+    path = MAP_PATH + ("?sources=" + source if source else "")
+    r = client.get(path, headers=hdr)
     assert r.status_code == 200, f"{MAP_PATH} 回 {r.status_code}：{r.text[:300]}"
     body = r.json()
     missing = [k for k in MAP_KEYS if k not in body]
@@ -525,8 +551,7 @@ def test_m3_empty_office_address_is_reported_not_silently_skipped(client, make_u
     )
 
 
-@needs_tender_radar
-def test_m6_tenders_without_location_are_counted_not_dropped(client, make_user):
+def test_m6_tenders_without_location_are_counted_not_dropped(client, make_user, geo_source):
     """🔴🔴 M6：`location` 是 NULL 的標案 —— **不在地圖上，但要被數出來**。
 
     ☠️ **地圖上少幾個點，看起來跟「那些標案不存在」一模一樣，而且沒有人會報修。**
@@ -535,22 +560,12 @@ def test_m6_tenders_without_location_are_counted_not_dropped(client, make_user):
     ⚠️ 而它跟 M13（沒有金鑰）**在畫面上是同一個樣子，處置卻相反** ——
     所以**兩邊都必須有各自的訊號**，不能靠使用者看圖分辨。
     """
-    import db
-    conn = db.get_db()
-    try:
-        conn.execute(
-            "INSERT INTO tenders (case_no, name, org, location) VALUES (?,?,?,?)",
-            ("GEO-001", "有地點的標案", "桃園市政府", "桃園市"))
-        conn.execute(
-            "INSERT INTO tenders (case_no, name, org, location) VALUES (?,?,?,NULL)",
-            ("GEO-002", "沒有地點的標案", "某某機關"))
-        conn.commit()
-    finally:
-        conn.close()
+    _seed_points(geo_source, [("GEO-001", "桃園市", "有地點的標案", "桃園市政府"),
+                              ("GEO-002", None, "沒有地點的標案", "某某機關")])
 
     hdr = _auth(client, make_user)
     _warm_like_background()   # MP8：開地圖只讀快取
-    body = _map(client, hdr)
+    body = _map(client, hdr, geo_source)
     # 📌 更正留著（2026-09-24，`MP8`）：原本只看 `withoutLocation`。MP8 之後開地圖不當場查，
     #    這一題又沒有打開地理查詢（背景預熱查不了）⇒ 這筆機關名稱算「待定位」（pendingGeocode）。
     #    🔑 要守的不變量不變：**不可以靜默消失**——兩個計數都是看得見的訊號，合計至少 1。
@@ -558,7 +573,7 @@ def test_m6_tenders_without_location_are_counted_not_dropped(client, make_user):
         "有標案的 location 是 NULL，而地圖端點回報「沒有地點的有 0 筆」—— "
         "那些標案會從畫面上消失，而消失跟「不存在」長得一模一樣"
     )
-    on_map = {p.get("caseNo") for p in body["points"]}
+    on_map = {p.get("caseNo") or p.get("name") for p in body["points"]}
     assert "GEO-002" not in on_map, "沒有地點的標案不該出現在地圖上"
 
 
@@ -647,24 +662,14 @@ def test_m4_geocode_result_is_cached(client, make_user, monkeypatch):
     )
 
 
-@needs_tender_radar
-def test_m5_one_failure_does_not_empty_the_whole_map(client, make_user, monkeypatch):
+def test_m5_one_failure_does_not_empty_the_whole_map(client, make_user, monkeypatch, geo_source):
     """🔴 M5：**一筆 geocode 失敗 → 其他筆照常顯示。**
 
     ⚠️ 一筆失敗讓整張地圖空白的話，症狀又是「一張乾淨的空地圖」——
     **今天第三個會長成那個樣子的成因。**
     """
-    import db
-    conn = db.get_db()
-    try:
-        for case_no, place in (("GEO-A", "桃園市"), ("GEO-B", "台北市"),
-                               ("GEO-C", "台中市")):
-            conn.execute(
-                "INSERT INTO tenders (case_no, name, org, location) VALUES (?,?,?,?)",
-                (case_no, f"{place}的標案", "某機關", place))
-        conn.commit()
-    finally:
-        conn.close()
+    _seed_points(geo_source, [(k, place, f"{place}的標案", "某機關")
+                              for k, place in (("GEO-A", "桃園市"), ("GEO-B", "台北市"), ("GEO-C", "台中市"))])
     _set_setting("company_profile",
                  {**LEGACY_PROFILE, "address": "台中市西屯區文心路二段201號"})
 
@@ -676,7 +681,7 @@ def test_m5_one_failure_does_not_empty_the_whole_map(client, make_user, monkeypa
     monkeypatch.setattr(_geo(), "geocode", _rec)
     hdr = _auth(client, make_user)
     _warm_like_background()   # MP8：開地圖只讀快取
-    body = _map(client, hdr)
+    body = _map(client, hdr, geo_source)
     assert len(body["points"]) >= 2, (
         f"一筆失敗就只剩 {len(body['points'])} 個點 —— "
         "其他筆不該被一筆失敗拖下水"

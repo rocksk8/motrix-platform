@@ -136,6 +136,28 @@ def tenders(client):
         conn.close()
 
 
+@pytest.fixture(params=[pytest.param("tenders", marks=needs_tender_radar), "suppliers"])
+def points_source(request, client):
+    """兩個有地點的點（台中、高雄）。距離規則是 L1 的，資料來源有兩種（B，2026-09-28）：
+    `tenders`＝驗與標案雷達的整合（模組在才跑）；`suppliers`＝L1 自己的資料來源——
+    沒有標案雷達的安裝包也驗得到「兩個距離並列／null 不是 0／定位不落地」這些 L1 行為。"""
+    import json
+    import db
+    conn = db.get_db()
+    try:
+        for n, loc in (("GEO-T-001", "台中市"), ("GEO-T-002", "高雄市")):
+            if request.param == "tenders":
+                conn.execute("INSERT INTO tenders (case_no, name, org, location, fetched_at) VALUES (?,?,?,?,?)",
+                             (n, "定位測試標案 " + n, "定位測試機關", loc, "2026-09-22T00:00:00"))
+            else:
+                conn.execute("INSERT INTO suppliers (name, data_json) VALUES (?,?)",
+                             ("定位測試供應商 " + n, json.dumps({"address": loc}, ensure_ascii=False)))
+        conn.commit()
+    finally:
+        conn.close()
+    return request.param
+
+
 def _auth(client, make_user):
     username, password = make_user(role="superadmin")
     r = client.post("/api/auth/login",
@@ -164,9 +186,9 @@ def _auth(client, make_user):
 POSITION_HEADER = "X-Map-Position"
 
 
-def _ask(client, hdr, *, position=None, query=None, expect=200):
-    """打一次地圖端點。`position` 走標頭，`query` 是刻意走舊路（G10 用）。"""
-    q = "sources=tenders" + (("&" + query) if query else "")
+def _ask(client, hdr, *, position=None, query=None, expect=200, source="tenders"):
+    """打一次地圖端點。`position` 走標頭，`query` 是刻意走舊路（G10 用）。`source`：點的資料來源（B47）。"""
+    q = "sources=" + source + (("&" + query) if query else "")
     headers = dict(hdr)
     if position is not None:
         headers[POSITION_HEADER] = position
@@ -186,9 +208,8 @@ def _pos(coords, accuracy=42):
 # G1 · 三個參數都給 ⇒ 兩個距離並列
 # ══════════════════════════════════════════════════════════════════════
 
-@needs_tender_radar
 def test_g1_both_distances_are_reported_side_by_side(
-        client, make_user, geo_enabled, office, tenders):
+        client, make_user, geo_enabled, office, points_source):
     """🔴 G1：`lat`＋`lon`＋`accuracy` 都給 ⇒ **每一筆同時有兩個距離**，
     而頂層有 `userAccuracyM`。
 
@@ -198,7 +219,7 @@ def test_g1_both_distances_are_reported_side_by_side(
     **今晚第四次同一件事：一個數字不帶它的誤差，就會被當成事實。**
     """
     hdr = _auth(client, make_user)
-    body = _ask(client, hdr, position=_pos(USER_TAIPEI))
+    body = _ask(client, hdr, source=points_source, position=_pos(USER_TAIPEI))
 
     assert body["points"], "一個點都沒有 —— 這一題的前提不成立"
     assert body.get("userAccuracyM") == 42, (
@@ -303,9 +324,8 @@ def test_g5b_an_accuracy_of_zero_is_rejected_too(
 # G3 · 三個都不給
 # ══════════════════════════════════════════════════════════════════════
 
-@needs_tender_radar
 def test_g3_without_user_coordinates_the_user_distance_is_null_not_zero(
-        client, make_user, geo_enabled, office, tenders):
+        client, make_user, geo_enabled, office, points_source):
     """🔴 G3：三個都不給 ⇒ `distanceFromUserKm` 是 **`null` 不是 `0`**。
 
     ☠️ `0` 的意思是「**你就站在那個標案上**」。
@@ -313,7 +333,7 @@ def test_g3_without_user_coordinates_the_user_distance_is_null_not_zero(
     而這一次它會把使用者送到一個他其實離得很遠的地方。
     """
     hdr = _auth(client, make_user)
-    body = _ask(client, hdr)
+    body = _ask(client, hdr, source=points_source)
 
     assert body["points"], "一個點都沒有 —— 這一題的前提不成立"
     assert body.get("userAccuracyM") is None, (
@@ -338,9 +358,8 @@ def test_g3_without_user_coordinates_the_user_distance_is_null_not_zero(
 # G6 · 兩個錨點互相獨立
 # ══════════════════════════════════════════════════════════════════════
 
-@needs_tender_radar
 def test_g6_a_missing_office_does_not_break_the_user_distance(
-        client, make_user, geo_enabled, no_office, tenders):
+        client, make_user, geo_enabled, no_office, points_source):
     """🔴 G6：辦公室地址沒填 ⇒ `distanceFromOfficeKm` 是 null、
     `officeMissing` 是 true，**而 `distanceFromUserKm` 照樣算得出來**。
 
@@ -349,7 +368,7 @@ def test_g6_a_missing_office_does_not_break_the_user_distance(
     而那是一個**新使用者第一天就會遇到**的狀態。
     """
     hdr = _auth(client, make_user)
-    body = _ask(client, hdr, position=_pos(USER_TAIPEI))
+    body = _ask(client, hdr, source=points_source, position=_pos(USER_TAIPEI))
 
     assert body.get("officeMissing") is True, (
         f"地址沒填，而 `officeMissing` 是 {body.get('officeMissing')!r}"
@@ -370,9 +389,8 @@ def test_g6_a_missing_office_does_not_break_the_user_distance(
 # G7 · 地理查詢關著時
 # ══════════════════════════════════════════════════════════════════════
 
-@needs_tender_radar
 def test_g7_turning_geo_off_is_visibly_different_from_zero_kilometres(
-        client, make_user, office, tenders, monkeypatch):
+        client, make_user, office, points_source, monkeypatch):
     """🔴 G7：`geo_on()` 關著時，`geoEnabled` 是 false，
     **而且要分得出「沒開地理查詢」與「算出來是 0 公里」。**
 
@@ -389,7 +407,7 @@ def test_g7_turning_geo_off_is_visibly_different_from_zero_kilometres(
 
     monkeypatch.setattr(geo, "GEO_ENABLED", False)
     monkeypatch.delenv("MOTRIX_GEO", raising=False)
-    off = _ask(client, hdr, position=_pos(USER_TAIPEI))
+    off = _ask(client, hdr, source=points_source, position=_pos(USER_TAIPEI))
 
     assert off.get("geoEnabled") is False, (
         f"地理查詢關著，而 `geoEnabled` 是 {off.get('geoEnabled')!r}\n"
@@ -405,7 +423,7 @@ def test_g7_turning_geo_off_is_visibly_different_from_zero_kilometres(
 
     # ── 對照組：打開之後，同一個請求要拿得到點與距離 ──
     monkeypatch.setattr(geo, "GEO_ENABLED", True)
-    on = _ask(client, hdr, position=_pos(USER_TAIPEI))
+    on = _ask(client, hdr, source=points_source, position=_pos(USER_TAIPEI))
     assert on.get("geoEnabled") is True
     assert on["points"], (
         "打開地理查詢之後仍然一個點都沒有 —— "
@@ -420,9 +438,8 @@ def test_g7_turning_geo_off_is_visibly_different_from_zero_kilometres(
 # G8 · 反向控制：距離要真的隨座標改變
 # ══════════════════════════════════════════════════════════════════════
 
-@needs_tender_radar
 def test_g8_the_user_distance_actually_follows_the_coordinates(
-        client, make_user, geo_enabled, office, tenders):
+        client, make_user, geo_enabled, office, points_source):
     """🔴🔴 G8 反向控制：**`distanceFromUserKm` 必須真的隨 `lat`/`lon` 改變。**
 
     ☠️ 少了這一題，一個**回傳固定值**的實作會讓 G1 全綠 ——
@@ -435,9 +452,9 @@ def test_g8_the_user_distance_actually_follows_the_coordinates(
     hdr = _auth(client, make_user)
 
     def _by_case(coords):
-        body = _ask(client, hdr, position=_pos(coords))
+        body = _ask(client, hdr, source=points_source, position=_pos(coords))
         assert body["points"], "一個點都沒有 —— 前提不成立"
-        return {p["caseNo"]: p["distanceFromUserKm"] for p in body["points"]}
+        return {(p.get("caseNo") or p["name"]): p["distanceFromUserKm"] for p in body["points"]}
 
     north = _by_case(USER_TAIPEI)
     south = _by_case(USER_KAOHSIUNG)
@@ -456,9 +473,8 @@ def test_g8_the_user_distance_actually_follows_the_coordinates(
 # G9 · 隱私：使用者的位置不可以被存下來
 # ══════════════════════════════════════════════════════════════════════
 
-@needs_tender_radar
 def test_g9_the_users_position_is_never_written_down(
-        client, make_user, geo_enabled, office, tenders, caplog):
+        client, make_user, geo_enabled, office, points_source, caplog):
     """🔴🔴 G9：傳進來的 `lat`/`lon`/`accuracy` **不可以被寫進資料庫或 log**。
 
     ☠️ **那是使用者的位置。** 而 `audit_log` 有 2,254 列、
@@ -474,7 +490,7 @@ def test_g9_the_users_position_is_never_written_down(
     hdr = _auth(client, make_user)
     lat, lon = USER_TAIPEI
     with caplog.at_level(logging.DEBUG):
-        body = _ask(client, hdr, position=_pos((lat, lon)))
+        body = _ask(client, hdr, source=points_source, position=_pos((lat, lon)))
     assert body["points"], "一個點都沒有 —— 前提不成立（請求沒有真的被處理？）"
 
     # 🔴 **第四層：log。** 前三層是「**我們會寫入的地方**」，而這一層不是。
@@ -634,9 +650,8 @@ def test_g10b_even_one_of_them_in_the_query_string_is_refused(
     )
 
 
-@needs_tender_radar
 def test_g11_the_same_values_in_the_header_work_fine(
-        client, make_user, geo_enabled, office, tenders):
+        client, make_user, geo_enabled, office, points_source):
     """🔴🔴 G11 反向控制：**同一組值放在標頭裡要正常運作。**
 
     ☠️ 少了這一半，一個「**兩條路都擋**」的實作會讓 G10 全綠 ——
@@ -649,7 +664,7 @@ def test_g11_the_same_values_in_the_header_work_fine(
     """
     hdr = _auth(client, make_user)
     lat, lon = USER_TAIPEI
-    body = _ask(client, hdr, position=_pos((lat, lon)))
+    body = _ask(client, hdr, source=points_source, position=_pos((lat, lon)))
     assert body.get("userAccuracyM") == 42, (
         f"標頭 `{POSITION_HEADER}` 帶了合法的值，而端點沒有收下："
         f"userAccuracyM={body.get('userAccuracyM')!r}"

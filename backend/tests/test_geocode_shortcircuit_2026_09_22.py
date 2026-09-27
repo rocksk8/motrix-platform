@@ -303,8 +303,8 @@ def test_gc10_fixing_a_typo_in_the_address_retries_immediately(client, monkeypat
 # GC2 / GC6 · 兩條「寫下來」的，而它們不是測試
 # ══════════════════════════════════════════════════════════════════════
 
-@needs_tender_radar
-def test_gc6_the_asymmetry_is_visible_in_the_response(client, make_user,
+@pytest.mark.parametrize("source", [pytest.param("tenders", marks=needs_tender_radar), "suppliers"])
+def test_gc6_the_asymmetry_is_visible_in_the_response(client, make_user, source,
                                                       monkeypatch):
     """🔴 GC6：**不對稱本身是產品問題，而它要看得見。**
 
@@ -327,12 +327,18 @@ def test_gc6_the_asymmetry_is_visible_in_the_response(client, make_user,
     #    🔑 這一題問的是「那個精度有沒有被帶到回應裡」，不是「定位準不準」。
     conn = db.get_db()
     try:
-        conn.execute("DELETE FROM tenders WHERE case_no=?", ("GC6-001",))
-        conn.execute(
-            "INSERT INTO tenders (case_no, name, org, location, fetched_at)"
-            " VALUES (?,?,?,?,?)",
-            ("GC6-001", "GC6 測試標案", "GC6 測試機關",
-             "台中市西屯區", "2026-09-22T00:00:00"))
+        if source == "tenders":
+            conn.execute("DELETE FROM tenders WHERE case_no=?", ("GC6-001",))
+            conn.execute(
+                "INSERT INTO tenders (case_no, name, org, location, fetched_at)"
+                " VALUES (?,?,?,?,?)",
+                ("GC6-001", "GC6 測試標案", "GC6 測試機關",
+                 "台中市西屯區", "2026-09-22T00:00:00"))
+        else:        # L1 自己的資料來源（B，2026-09-28）：精度欄位是 L1 的，不必靠標案雷達
+            import json
+            conn.execute("DELETE FROM suppliers WHERE name=?", ("GC6-001",))
+            conn.execute("INSERT INTO suppliers (name, data_json) VALUES (?,?)",
+                         ("GC6-001", json.dumps({"address": "台中市西屯區"}, ensure_ascii=False)))
         conn.commit()
     finally:
         conn.close()
@@ -351,7 +357,7 @@ def test_gc6_the_asymmetry_is_visible_in_the_response(client, make_user,
                     json={"username": username, "password": password},
                     headers={"X-Forwarded-For": "203.0.113.253"})
     assert r.status_code == 200, r.text
-    r = client.get("/api/map/points",
+    r = client.get("/api/map/points?sources=" + source,
                    headers={"Authorization": f"Bearer {r.json()['token']}"})
     assert r.status_code == 200, r.text
     body = r.json()
