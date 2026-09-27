@@ -540,13 +540,19 @@ def test_ds3_behaviours_that_only_drills_used_to_cover():
     a = _ps_code("apply_update.ps1")
     r = _ps_code("rollback_update.ps1")
     restore = _ps_function(a, "Restore-ProgramAfterCopyFailure")
-    assert 'Join-Path $rollbackDir "root_docs"' in restore, "M3：複製失敗寫回時要還原根目錄文件"
+    assert re.search(r'\$rd = Join-Path \$rollbackDir "root_docs"\s*\n\s*if \(Test-Path \$rd\) \{ Get-ChildItem -Path \$rd -File '
+                     r'\| ForEach-Object \{ Copy-Item \$_\.FullName -Destination \$ProdRoot -Force \} \}', restore), \
+        "M3：複製失敗寫回時要把根目錄文件複製回安裝根目錄（D2-S2：只驗變數指派不算）"
     assert "Copy-Item $demoDbBackupPath $demoDbPath -Force" in a, "M4：自動回滾要還原 demo 庫"
     assert a.index('Join-Path $rollbackDir "deployed_commit.before.json"') < a.index('[2/6]'), \
         "M8：套用前（停服前）把部署紀錄存進快照"
     auto = a[a.index('$script:ProdState = "restoring"', a.index("觸發自動回滾")):]
     assert auto.index('"cleanup-snapshot"') < auto.index('robocopy (Join-Path $rollbackDir "backend")'), \
         "M9：自動回滾先清快照沒有的檔再寫回"
+    # D2-S2：清理失敗要真的由清理結果決定，並在啟動之前擋下（寫死成 false 要紅）
+    assert '$cleanFailed = ($cleanRun.Exit -ne 0 -or ($cleanRun.Text -notmatch "APPLY_SNAPCLEAN_OK"))' in auto
+    i_fail = auto.index('if ($cleanFailed) {')
+    assert '"restore_cleanup_failed"' in auto[i_fail:i_fail + 400] and i_fail < auto.index("Start-InstallService")
     assert 'Copy-Item $deployedBefore (Join-Path $BackendDir ".deployed_commit.json") -Force' in r, \
         "M1：手動回滾還原部署紀錄"
     assert re.search(r'if \(-not \(Test-Path \(Join-Path \$rollbackDir "backend\\\.deployed_files\.json"\)\) '
@@ -627,4 +633,66 @@ def test_do3_real_license_check_with_the_gate_off_treats_everything_as_licensed(
     assert licensing.LICENSE_GATE_ENABLED is False, "這一題的前提改了：授權閘門已開，請改寫成讀測試金鑰"
     with pytest.raises(ap.Refuse):
         ap.make_plan(root, pkg, 200)
+
+
+# ── D 複核 D2-S1：trap 重啟與 plan_refused 分流 ──
+
+@pytest.mark.parametrize("prod,service,expect", [
+    ("applied", "down", True), ("not_applied", "down", True),
+    ("restoring", "down", False), ("applied", "up", False)])
+def test_d2s1_trap_restarts_only_when_it_is_safe(tmp_path, prod, service, expect):
+    a = (_TOOLS / "apply_update.ps1").read_text(encoding="utf-8-sig")
+    m = re.search(r"^trap \{\n.*?^\}\n", a, re.M | re.S)
+    body = ("function Start-InstallService { Write-Host 'START-CALLED' }\n" + m.group(0)
+            + "$script:ProdState = '%s'\n$script:ServiceState = '%s'\nthrow 'boom'\n" % (prod, service))
+    r, _backend = _run_ps(tmp_path, body)
+    assert ("START-CALLED" in r.stdout) is expect, r.stdout + r.stderr
+    assert "status=unhandled_exception" in r.stdout
+
+
+def test_d2s1_refusal_is_reported_as_plan_refused_before_plan_failed():
+    code = _ps_code("apply_update.ps1")
+    i_ref = code.index('if ($planRun.Text -match "APPLY_PLAN_REFUSED") {')
+    assert '"plan_refused"' in code[i_ref:i_ref + 300]
+    assert i_ref < code.index('"plan_failed"')
+    assert '"plan_tool_missing"' in code and code.count('"plan_refused"') == 1
+
+
+# ── D 複核 D2-O1：執行期會寫入的位置不可以被分類成程式檔（否則 cleanup-snapshot 會把它當「快照沒有」刪掉）──
+
+#: core.paths 裡本來就是程式（隨包出貨）的常數
+_PROGRAM_PATHS = {"BACKEND_DIR", "INSTALL_ROOT", "STATIC_DATA_DIR", "FRONTEND_DIR", "FRONTEND_PAGES_DIR",
+                  "VERSION_MANIFEST", "BUILD_COMMIT_FILE"}
+
+
+def _runtime_path_constants():
+    from core import paths as P
+    root = os.path.realpath(P.INSTALL_ROOT)
+    out = {}
+    for name in dir(P):
+        if not name.isupper() or name in _PROGRAM_PATHS:
+            continue
+        v = getattr(P, name)
+        vals = [v] if isinstance(v, str) else [d for _k, d in v.values()] if isinstance(v, dict) else []
+        for i, val in enumerate(vals):
+            if isinstance(val, str) and os.path.isabs(val) and os.path.realpath(val).startswith(root + os.sep):
+                out["%s[%d]" % (name, i)] = os.path.relpath(os.path.realpath(val), root).replace("\\", "/")
+    return out
+
+
+def test_d2o1_runtime_write_locations_are_never_deletable_program_files():
+    consts = _runtime_path_constants()
+    assert len(consts) >= 10, "量法壞了：%r" % consts
+    bad = {}
+    for name, rel in consts.items():
+        base = name.split("[")[0]
+        is_dir = base.endswith(("_DIR", "_ROOT")) or base in ("PDF_ARCHIVES",)
+        probe = rel + "/x.json" if is_dir else rel          # 目錄 ⇒ 驗它底下寫入的檔；檔 ⇒ 驗它本身
+        if ap.deletable(probe, _upgrade):
+            bad[name] = probe
+    assert not bad, bad
+    from core import paths as P
+    cache = os.path.relpath(P.modules_disabled_cache(P.DB_PATH), P.INSTALL_ROOT).replace("\\", "/")
+    assert not ap.deletable(cache, _upgrade)
+    assert ap.deletable("backend/some_new_runtime_dir/x.json", _upgrade), "反向控制：未登記的新位置會被當成程式"
 
