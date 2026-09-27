@@ -238,6 +238,101 @@ def test_provider_lists_approved_unpaid_and_mark_paid_writes_back(client, req):
     assert _q("SELECT paid_date FROM case_extra_expenses WHERE id=?", (req["id"],))[0]["paid_date"] == "2031-03-20"
 
 
+def _peer(client, make_user, req, username, role="sales", cashier=False):
+    """看得到這個案件（被指派）、但不是填寫人的使用者；cashier=True ⇒ 另加出納模組（保留角色預設模組）。"""
+    u, p = make_user(username=username, role=role)
+    if cashier:
+        mods = json.loads(_q("SELECT modules FROM users WHERE username=?", (u,))[0]["modules"] or "[]")
+        _x("UPDATE users SET modules=? WHERE username=?", (json.dumps(sorted(set(mods) | {"cashier"})), u))
+    ids = json.loads(_q("SELECT assigned_user_ids FROM quotations WHERE quote_no=?", (NO,))[0]["assigned_user_ids"] or "[]")
+    _x("UPDATE quotations SET assigned_user_ids=? WHERE quote_no=?", (json.dumps(ids + [_uid(u)]), NO))
+    return _login(client, u, p)
+
+
+def _pending_keys():
+    import db
+    conn = db.get_db()
+    try:
+        return [i["key"] for i in registry.providers("payables.pending")["case"].pending(conn) if i["quoteNo"] == NO]
+    finally:
+        conn.close()
+
+
+def _paid(req):
+    return _q("SELECT paid_date FROM case_extra_expenses WHERE id=?", (req["id"],))[0]["paid_date"] or ""
+
+
+def _acts():
+    return [r["action"] for r in _q("SELECT action FROM audit_log WHERE target_id=? ORDER BY id", (NO,))]
+
+
+def test_requester_cannot_set_or_clear_the_paid_date_but_other_dates_still_work(client, make_user, req):
+    """稽核 A AB-M1：付款日＝出納待付款的判準 ⇒ 填寫人（一般 sales）設／清付款日 ⇒ 403、資料與待付款不變；
+    發票日期、發票號碼照舊本人可登（AC2 不變）。"""
+    _approve(client, req)
+    dates = BASE + "/%d/dates" % req["id"]
+    r = client.patch(dates, json={"paidDate": "2031-03-09"}, headers=req["h"])
+    assert r.status_code == 403 and "出納或管理員" in r.json()["detail"], r.text
+    assert _paid(req) == "" and _pending_keys() == [str(req["id"])]                        # 沒有繞過出納
+    r = client.patch(dates, json={"invoiceDate": "2031-03-08", "invoiceNo": "AB00000001"}, headers=req["h"])
+    assert r.status_code == 200, r.text
+    row = _q("SELECT invoice_date, invoice_no FROM case_extra_expenses WHERE id=?", (req["id"],))[0]
+    assert (row["invoice_date"], row["invoice_no"]) == ("2031-03-08", "AB00000001")
+    _x("UPDATE case_extra_expenses SET paid_date='2031-03-10' WHERE id=?", (req["id"],))      # 出納已付
+    r = client.patch(dates, json={"paidDate": ""}, headers=req["h"])
+    assert r.status_code == 403, r.text
+    assert _paid(req) == "2031-03-10" and _pending_keys() == []                              # 沒有重回待付款
+
+
+def test_cashier_sets_the_paid_date_but_only_admin_changes_or_clears_it_with_its_own_audit(client, make_user, req):
+    """AB-M1 另一方向：出納設 ⇒ 200、從待付款消失；出納改已付的日期 ⇒ 403；admin 清除 ⇒ 200、重回待付款、
+    稽核有專用動作 extra_expense.paid_date_override（只在更正時出現，第一次登錄沒有）。"""
+    _approve(client, req)
+    hc = _peer(client, make_user, req, "pr_cash", cashier=True)
+    dates = BASE + "/%d/dates" % req["id"]
+    r = client.patch(dates, json={"paidDate": "2031-03-12"}, headers=hc)
+    assert r.status_code == 200, r.text
+    assert _paid(req) == "2031-03-12" and _pending_keys() == []
+    assert "extra_expense.paid_date_override" not in _acts()
+    r = client.patch(dates, json={"paidDate": "2031-03-13"}, headers=hc)
+    assert r.status_code == 403 and "只限管理員" in r.json()["detail"], r.text
+    assert _paid(req) == "2031-03-12"
+    ha = _peer(client, make_user, req, "pr_boss", role="admin")
+    r = client.patch(dates, json={"paidDate": ""}, headers=ha)
+    assert r.status_code == 200, r.text
+    assert _paid(req) == "" and _pending_keys() == [str(req["id"])]
+    assert _acts().count("extra_expense.paid_date_override") == 1
+
+
+def test_cashier_who_can_see_the_case_may_add_invoice_after_approval(client, make_user, req):
+    """稽核 A AB-S5：「或出納」那一條放行——看得到案件、不是填寫人、角色一般 sales＋出納模組 ⇒ 補發票 201、發票號碼 200。
+    （同一個人拿掉出納模組就是前面 403 那一題 ⇒ 放行的確實是「出納」這一條。）"""
+    _approve(client, req)
+    hc = _peer(client, make_user, req, "pr_cash2", cashier=True)
+    r = client.post(BASE + "/%d/files" % req["id"], files={"files": _png()}, data={"kind": "invoice"}, headers=hc)
+    assert r.status_code == 201, r.text
+    r = client.patch(BASE + "/%d/dates" % req["id"], json={"invoiceNo": "CS00000001"}, headers=hc)
+    assert r.status_code == 200, r.text
+    assert "extra_expense.invoice_after_approval" in _acts()
+
+
+def test_second_cashier_gets_already_paid_and_does_not_overwrite(client, req):
+    """稽核 A AB-S1：mark_paid 是帶條件的 UPDATE（付款日空白才寫）⇒ 後到的出納拿到「已被登錄」、不蓋掉前者的付款日。"""
+    _approve(client, req)
+    import db
+    prov = registry.providers("payables.pending")["case"]
+    conn = db.get_db()
+    try:
+        prov.mark_paid(conn, str(req["id"]), "2031-04-01", {"username": "cash_a"})
+        conn.commit()
+        with pytest.raises(ValueError, match="已被登錄"):
+            prov.mark_paid(conn, str(req["id"]), "2031-04-02", {"username": "cash_b"})
+        conn.commit()
+    finally:
+        conn.close()
+    assert _paid(req) == "2031-04-01"
+
+
 def _other(client, h, basis):
     r = client.get("/api/reports/expenses-monthly?year=2031&basis=%s" % basis, headers=h)
     assert r.status_code == 200, r.text

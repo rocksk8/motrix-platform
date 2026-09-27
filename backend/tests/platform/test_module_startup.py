@@ -28,6 +28,7 @@ def iso(monkeypatch):
     snap = registry.snapshot()
     registry._reset()
     monkeypatch.setattr(migrations, "_REGISTRY", {})
+    monkeypatch.setattr(migrations, "_INCOMPLETE", {})
     monkeypatch.setattr(lic, "LICENSE_GATE_ENABLED", False)
     yield
     registry.restore(snap)
@@ -129,3 +130,52 @@ def test_unreadable_disabled_list_without_cache_loads_nothing(tmp_path, monkeypa
     monkeypatch.setattr(ms, "READ_TIMEOUT_SECONDS", 0.1)
     states, regs, source = _run(str(bad))
     assert states == {"zz_c": "disabled"} and regs == [] and source == ms.SOURCE_UNREADABLE, (states, regs, source)
+
+
+# ── ④ migration 沒完成的模組：init_db 之後改記 failed、不掛路由（稽核 A AB-S3）──────────────────
+
+def test_main_fails_incomplete_modules_after_init_db_and_before_mounting():
+    src = (BACKEND / "main.py").read_text(encoding="utf-8")
+    lines = {}
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.Call):
+            f = node.func
+            name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
+            if name in ("init_db", "fail_incomplete_modules", "mount_modules"):
+                lines.setdefault(name, []).append(node.lineno)
+    assert len(lines.get("fail_incomplete_modules", [])) == 1, lines
+    assert max(lines["init_db"]) < lines["fail_incomplete_modules"][0] < min(lines["mount_modules"]), lines
+
+
+def test_incomplete_module_is_unloaded_with_the_migration_reason(tmp_path, monkeypatch, iso):
+    import db
+    from helpers import module_startup
+    pkg = tmp_path / "zzstart_inc"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    for n, ret in (("zz_ok", "None"), ("zz_wait", "'zz 表還沒建好'")):
+        d = pkg / n
+        d.mkdir()
+        (d / "module.json").write_text(json.dumps({"key": n, "name": n, "version": "0.0.1", "core": ">=1.0,<2.0"}),
+                                       encoding="utf-8")
+        (d / "__init__.py").write_text("from core.registry import ModuleSpec\n"
+                                       "def v1(conn):\n    return %s\n"
+                                       "MODULE = ModuleSpec(key=%r, migrations=[(1, v1)])\n" % (ret, n), encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setattr(loader, "MODULES_DIR", str(pkg))
+    monkeypatch.setattr(loader, "MODULES_PACKAGE", "zzstart_inc")
+    path = _db_disabling(tmp_path / "m.db", [])
+    registry._reset()
+    module_startup.load_modules_like_startup(path)
+    conn = sqlite3.connect(path)
+    try:
+        db._ensure_module_schema_versions(conn)
+        migrations.run_all(conn)
+    finally:
+        conn.close()
+    out = module_startup.fail_incomplete_modules([path, str(tmp_path / "never.db")])    # 沒跑過的庫 ⇒ None ⇒ 不算
+    assert list(out) == ["zz_wait"] and "zz 表還沒建好" in out["zz_wait"], out
+    assert [m.key for m in registry.loaded()] == ["zz_ok"], "未完成的模組要移出已載入清單（路由不掛、提供者不在）"
+    st = {s["key"]: s for s in registry.module_states()}
+    assert st["zz_wait"]["state"] == "failed" and "zz 表還沒建好" in st["zz_wait"]["reason"]
+    assert st["zz_ok"]["state"] == "loaded"

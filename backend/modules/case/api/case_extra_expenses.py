@@ -378,6 +378,10 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
     兩個日期都不影響金額，只決定報表歸哪個月；已核准的支出正是最常事後才拿到發票、
     才付款的那一批，走變更申請會讓財務補登卡在簽核上（hichan-0a 裁示）。
     權限：填寫人本人、admin+，或出納（付款是出納登的）。
+    **付款日例外**（稽核 A AB-M1，2026-09-28）：IP-100 之後「付款日空白」＝出納待付款的判準，付款日不再只是歸月——
+    本人設或清付款日 ＝ 繞過出納或讓已付的請款重回待付款 ⇒ `paidDate` 只有出納或 admin+ 能設；
+    已有付款日的**清除或改日期**只限 admin+，並寫專用稽核動作 `extra_expense.paid_date_override`。
+    發票日期、發票號碼照舊（本人可登）。
     """
     user = _require_user(authorization)
     body = body or {}
@@ -399,6 +403,16 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
         row = _load(conn, quote_no, exp_id)
         if not (_can_modify(row, user) or user_has_module(user, "cashier")):
             raise HTTPException(403, "只有填寫人本人、管理員或出納可以登錄這筆額外支出的日期")
+        is_admin = user.get("role") in ("superadmin", "admin")
+        old_paid = (_col(row, "paid_date", "") or "")
+        override = False
+        if "paid_date" in changes:
+            if not (is_admin or user_has_module(user, "cashier")):
+                raise HTTPException(403, "付款日只有出納或管理員可以登錄（請款人登錄會繞過出納待付款）")
+            if old_paid and changes["paid_date"] != old_paid:
+                if not is_admin:
+                    raise HTTPException(403, "這筆已登錄付款日 %s，清除或更改只限管理員" % old_paid)
+                override = True
         now = datetime.now().isoformat(timespec="seconds")
         sets = ", ".join("%s=?" % k for k in changes)
         conn.execute("UPDATE case_extra_expenses SET " + sets + ", updated_at=?, updated_by_name=?"
@@ -411,6 +425,9 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
     _audit(_tok(authorization), "extra_expense.dates", "quotation", quote_no,
            "%s 額外支出 #%s 登錄%s" % (quote_no, exp_id, "、".join(
                "%s %s" % (label[k], v or "（清除）") for k, v in changes.items())))
+    if override:                                          # AB-M1：已付的付款日被清除或更改 ⇒ 另一個查得到的動作
+        _audit(_tok(authorization), "extra_expense.paid_date_override", "quotation", quote_no,
+               "%s 額外支出 #%s 付款日 %s → %s（管理員更正）" % (quote_no, exp_id, old_paid, changes["paid_date"] or "（清除，重回待付款）"))
     return {"ok": True, "updatedAt": now,
             **{_DATE_KEYS[k]: v for k, v in changes.items()}}
 
