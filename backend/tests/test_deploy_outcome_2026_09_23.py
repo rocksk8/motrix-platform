@@ -171,6 +171,7 @@ _EXITS = [
     ("p28", "plan_refused",              "not_applied",        1, "failed"),
     ("p28", "plan_failed",               "not_applied",        1, "failed"),
     ("p28", "delete_plan_too_large",     "not_applied",        1, "failed"),
+    ("p28", "plan_tool_missing",         "not_applied",        1, "failed"),
     ("s28", "snapshot_failed_root_dirs", "not_applied",        1, "failed"),
     ("s28", "snapshot_missing_deleted",  "not_applied",        1, "failed"),
     ("c28", "copy_failed_root_dirs",     "applied_no_restore", 1, "failed"),
