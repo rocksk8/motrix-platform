@@ -63,7 +63,7 @@ $ErrorActionPreference = "Stop"
 # AH-M2（2026-09-28 A 稽核）：這支腳本的版本。開頭與部署包裡那一份比對，不同就拒絕——
 #   手動執行時跑到安裝目錄裡的**舊**腳本（沒有先把包裡的 backend\tools 複製過來）會讓整套日常更新規則都不生效。
 #   改這支腳本的行為時要改這個值。用常數不用雜湊：演練副本會改路徑與 port，雜湊必然不同。
-$ApplyScriptVersion = "2026-09-28f"
+$ApplyScriptVersion = "2026-09-28g"
 # robocopy 一律 /R:3 /W:5（2026-09-28）：預設 /R:1000000 /W:30 ⇒ 被占用的檔會讓套用卡住數天而不是失敗，
 #   複製失敗的出口（AH-S7 自動寫回快照）永遠走不到。
 
@@ -662,7 +662,7 @@ print('DRYRUN_OK')
 Info "  刪除計畫..."
 $planTool = Join-Path $PackagePath "backend\tools\apply_plan.py"
 if (-not (Test-Path $planTool)) {
-    Fail "部署包裡沒有 backend\tools\apply_plan.py，無法計算刪除計畫（包太舊或不完整），中止（正式機尚未被觸碰）。" "plan_refused"
+    Fail "部署包裡沒有 backend\tools\apply_plan.py，無法計算刪除計畫（包太舊或不完整），中止（正式機尚未被觸碰）。" "plan_tool_missing"
 }
 $planTmp = Join-Path $env:TEMP "motrix_apply_plan_$timestamp.json"
 $planLog = Join-Path $BackendDir "logs\apply_update_$timestamp.plan.txt"
@@ -672,6 +672,10 @@ if ($planRun.Exit -eq 3) {
     Fail "要刪除的程式檔超過上限 $MaxDeleteFiles（清單見上方與 $planLog）。請人工確認清單無誤後，以 -MaxDeleteFiles <更大的值> 重跑（正式機尚未被觸碰）。" "delete_plan_too_large"
 }
 if ($planRun.Exit -ne 0 -or ($planRun.Text -notmatch "APPLY_PLAN_OK")) {
+    # apply_plan 明確拒絕（授權有而包沒有的模組、lock 不合法、包種類不對）與「算不出來」分開報（2026-09-28 演練）
+    if ($planRun.Text -match "APPLY_PLAN_REFUSED") {
+        Fail "部署包被拒絕套用（原因見上方 APPLY_PLAN_REFUSED 那一行），中止（正式機尚未被觸碰）。" "plan_refused"
+    }
     Fail "刪除計畫無法產生（exit code $($planRun.Exit)，原因見上方），中止（正式機尚未被觸碰）。" "plan_failed"
 }
 $plan = Get-Content $planTmp -Raw -Encoding UTF8 | ConvertFrom-Json

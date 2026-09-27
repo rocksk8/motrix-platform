@@ -223,8 +223,10 @@ powershell -ExecutionPolicy Bypass -File <ROOT>\backend\tools\apply_update.ps1 -
 3. Migration 乾跑：在快照複本上跑新版 `init_db`（主庫＋demo 庫）；失敗 ⇒ 中止，正式機未被觸碰。
 4. **刪除計畫**（`backend\tools\apply_plan.py`，跑新包裡那一份）：列出要刪的舊程式檔，寫進 `backend\logs\apply_update_<時間>.plan.txt`。依據：
    - `backend\.deployed_files.json`（上一次成功套用的程式檔清單）有、新包沒有的檔；
-   - 新包 `modules.lock.json` 的 `excluded` 模組資料夾、`removed_pages` 頁面；
-   - 安裝目錄有 `module.json`、新包沒有的模組資料夾（孤兒模組，載入器會載它）。
+   - 新包 `modules.lock.json` 的 `removed_pages` 頁面；
+   - **模組資料夾不刪**（2026-09-28 使用者裁示，D 稽核 DO3）：安裝目錄有、新包沒有的模組拿授權比對——
+     授權有（授權閘門關閉＝全部有授權）⇒ **拒絕套用**（`plan_refused`，完整包要依客戶授權帶齊模組）；
+     授權沒有 ⇒ 保留資料夾與它的頁面（只停用：載入器依授權不載入，續約立刻恢復）。移除模組是另外的明確動作。
    - 資料、DB、設定、uploads、PDF、`autostart.bat` 一律不列（與轉換共用 `core.upgrade.classify`）。
    - 超過 `-MaxDeleteFiles`（預設 200）⇒ 什麼都不動就中止；讀過清單確認後，用更大的值重跑。
 5. 程式快照：backend（排除資料目錄與個資）、frontend、`tools`、`product`、根目錄文件 → `backend\rollback_snapshots\<時間>\`；刪除計畫存成快照裡的 `apply_plan.json`。每個要刪的檔在快照裡都要找得到，否則中止。
@@ -234,26 +236,31 @@ powershell -ExecutionPolicy Bypass -File <ROOT>\backend\tools\apply_update.ps1 -
 9. 成功 ⇒ 寫 `.deployed_commit.json` 與 `.deployed_files.json`。失敗 ⇒ 自動回滾（下方）。
 
 **沒有 `.deployed_files.json` 的時候**（2026-09-27 轉換的正式機就是：當時的轉換工具還不寫它）：
-第一次日常更新只依 lock 與孤兒模組刪除，其餘「安裝目錄有、新包沒有」的程式檔**只列出不刪**（計畫裡的 `no_baseline_candidates`）。成功後寫下清單，下一次起就有依據。列出的檔請人工看過；確定是舊版殘留的，可以手動刪除。
+第一次日常更新只依 lock 的 removed_pages 刪除，其餘「安裝目錄有、新包沒有」的程式檔**只列出不刪**（計畫裡的 `no_baseline_candidates`）。成功後寫下清單，下一次起就有依據。列出的檔請人工看過；確定是舊版殘留的，可以手動刪除。
 2026-09-28 起 `upgrade.py convert` 轉換完成時就寫這份清單（`conversion_log.json` 的 `apply_baseline`）。
 
-**自動回滾**（健康檢查失敗）：停服（含迴圈）→ 刪掉這次**新增**的程式檔 → 快照寫回（backend、frontend、tools、product、根目錄文件）→ 主庫與 demo 庫還原 → 重新啟動 → 再健康檢查。
+**自動回滾**（健康檢查失敗）：停服（含迴圈）→ 刪掉「安裝目錄有、快照沒有」的程式檔 → 快照寫回（backend、frontend、tools、product、根目錄文件；**不寫回**授權、憑證、autostart.bat、鎖檔、部署紀錄）→ **先另存回滾前的主庫與 demo 庫**（`db_backups\pre_rollback_<時間>`，另存失敗就不覆寫資料庫）→ 主庫與 demo 庫還原 → 重新啟動 → 再健康檢查。
 
 **手動回滾**（套用成功、之後才發現問題）：
 ```
+# 預設：只回程式，資料庫保留（2026-09-28 使用者裁示）
 powershell -ExecutionPolicy Bypass -File <ROOT>\backend\tools\rollback_update.ps1 -SnapshotTimestamp <時間>
+# 連資料庫一起換回快照（套用後寫入的資料會不見；覆寫前先另存回滾前的資料庫）
+powershell -ExecutionPolicy Bypass -File <ROOT>\backend\tools\rollback_update.ps1 -SnapshotTimestamp <時間> -IncludeDatabase -ConfirmDatabaseOverwrite
 ```
-- 步驟與自動回滾相同。快照裡沒有 `apply_plan.json`（2026-09-28 之前的快照）⇒ 新增的檔不會刪，腳本會警告，回滾後請人工核對 `backend\modules` 與 `frontend\pages`。
+- 程式：刪掉「安裝目錄有、快照沒有」的程式檔（回滾到較舊的快照時，之後幾次套用新增的模組也會清掉；D 稽核 DM2）→ 快照寫回（設定檔不寫回）。先乾跑算清單，超過上限就不動（`rollback_cleanup_too_large`）。
+- 資料庫：預設不動（新版 migration 只新增欄位與表，舊版讀得了）。`-IncludeDatabase` 沒有配 `-ConfirmDatabaseOverwrite` ⇒ 拒絕（`rollback_db_not_confirmed`；互動模式要輸入 DB）；另存回滾前的資料庫失敗 ⇒ 不動任何檔、服務重新啟動（`rollback_db_backup_failed`）。
 - 快照當時沒有 `.deployed_files.json` ⇒ 回滾後刪掉現在那份（回到「沒有清單」，下一次只列不刪）。
 - 部署紀錄 `.deployed_commit.json` 還原為套用前那份（快照裡的 `deployed_commit.before.json`；稽核 AH-S2）。
-- ⚠ 會丟掉套用後寫入的資料（DB 整個換回快照）。
+- 回滾到比「有 apply_plan.py 的版本」更舊的快照之後，安裝目錄的工具就是那個舊版；之後再要回滾，跑的是舊版的 rollback_update.ps1（新版腳本搭舊工具會回 `rollback_plan_tool_missing`，什麼都不動）。
 
 **出口狀態**（部署儀表板判定用；全部判為失敗）：
 
 | 狀態 | 正式機現況 | 處置 |
 |---|---|---|
 | `script_not_from_package` | 未被觸碰 | 先把包裡的 `backend\tools` 複製進安裝目錄再執行 |
-| `plan_refused`／`plan_failed`／`delete_plan_too_large` | 未被觸碰 | 看計畫檔；上限不夠就確認後加大重跑 |
+| `plan_refused` | 未被觸碰（包被拒絕：例如授權有的模組包裡沒有） | 看 APPLY_PLAN_REFUSED 那一行；完整包要依客戶授權帶齊模組 |
+| `plan_failed`／`delete_plan_too_large`／`plan_tool_missing` | 未被觸碰 | 看計畫檔；上限不夠就確認後加大重跑；包太舊或不完整就重新建包 |
 | `snapshot_failed_root_dirs`／`snapshot_missing_deleted` | 未被觸碰 | 查磁碟空間與權限後重跑 |
 | `copy_failed_*`，rolled_back=`restored` | 已自動回到套用前、服務正常 | 查複製失敗的原因（被占用的檔、磁碟）後重跑 |
 | `copy_failed_*`，rolled_back=`restored_unhealthy` | 已回到套用前的程式，但健康檢查沒過 | 看 server.log；必要時手動回滾 |
