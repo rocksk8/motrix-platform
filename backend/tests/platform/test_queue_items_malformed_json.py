@@ -32,8 +32,13 @@ def _reads_data_json(fn):
     return "data_json" in src
 
 
+_SEQ = [900000]
+
+
 def _seed(conn, table, token, data_json):
-    """通用種資料：TEXT 欄＝token（*_json 欄＝'{}'）、status＝待審核、data_json＝指定值；數值欄用預設或 0。"""
+    """通用種資料：TEXT 欄＝token（*_json 欄＝'{}'）、status＝待審核、data_json＝指定值；沒有預設的必填數值欄給每列不同的號碼
+    （可能有 UNIQUE，例：承攬商匯款申請的 dispatch_id）。"""
+    _SEQ[0] += 1
     cols = conn.execute("PRAGMA table_info(%s)" % table).fetchall()
     names, vals = [], []
     for c in cols:
@@ -49,7 +54,7 @@ def _seed(conn, table, token, data_json):
         elif "CHAR" in typ or "TEXT" in typ or typ == "":
             v = token
         elif notnull and default is None:
-            v = 0
+            v = _SEQ[0]
         else:
             continue
         names.append(name)
@@ -96,6 +101,7 @@ def test_every_data_json_provider_survives_one_malformed_row(client, caplog):
     problems = []
     for name, fn in sorted(provs.items()):
         conn = db.get_db()
+        conn.execute("PRAGMA foreign_keys=OFF")    # 通用種資料不建上游列（例：承攬商匯款申請的派工單）；整批 rollback，不留資料
         try:
             problems += check_provider(conn, name, fn, caplog)
         finally:
