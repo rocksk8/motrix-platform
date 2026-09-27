@@ -2,6 +2,13 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.60 — 2026-09-27（暫用，列車取號；a-builder-output＋b-builder-dnd-3 合併為同一個次版號：建構器輸出預覽，使用者 8866 試用回饋）〔core_bump：暫用 1.57 → 1.60〕
+- L1（新增）：`helpers.custom_modules.preview_output(body) -> (html, 未完成清單)`——編到一半的草稿照畫：未完成的欄位（沒有 key、公式空白／錯誤、選單沒有選項、型別不認得…）畫成「〈名稱〉尚未完成」；一律走正式匯出的 `render_view`；連一個欄位都畫不出來或版型結構錯 ⇒ `CustomModuleError`（422）
+- L1（行為）：`POST /api/custom-modules/{key}/output/preview` 改用它：半成品不再 500（原本欄位層問題沒擋 ⇒ KeyError）；未完成清單放回應標頭 `X-Motrix-Preview-Incomplete`（JSON）；最外層兜底任何例外 ⇒ 422＋記 log；編號規則未完成不再擋預覽（用樣本編號）
+- 前端：`static/form-preview.js` 加 `render(el, draft, {mode:'output', key})`
+- L1（新增）：自訂模組欄位選填 `help`（文字、最長 `custom_modules.HELP_MAX`＝300 字）；其他型別或過長 ⇒ `fields[i].help` 問題。沒填的定義照舊（只新增）
+- 前端（新增，wip/b-builder-dnd-4：使用者第二輪「同頁直接放」）：`static/custom-layout.js` 加 `editorSections`／`placeField`／`sectionOrder`／`moveGroupTo`（建構器畫布＝表單）；表單欄位外觀抽成 `css/custom-form.css`（執行頁與建構器共用）。後端與草稿 JSON 不動
+
 ## 1.59 — 2026-09-27（暫用，列車取號；a-prod-status-upgrade：IMPROVEMENT-REPORT §6「prod-status 認不得新升級工具」）〔core_bump：暫用 1.57 → 1.59〕
 - L0（新增）：`core.upgrade.write_deployed_marker(root, new_source, now=None)`——轉換完成寫 `backend/.deployed_commit.json`（格式同 apply_update.ps1：commit、commit_short、branch、applied_at、built_at），來源 deploy_manifest.json → backend/.build_commit，都沒有就不寫並回原因
 - L0（行為）：`verify_conversion` 的「設定檔不可改寫」不含部署標記；`rollback` 兩種模式都把部署標記還原成備份的那一份（V9 沒有 ⇒ 刪掉），`verify_rollback` 兩種模式都比對它
