@@ -61,6 +61,9 @@ def test_daily_pruned_at_60_days_weekly_at_90(arch):
     # 本題守日期規則 ⇒ 補「昨天」與「本週」各一份，代表平常的連續狀態（異常那一側見 test_states_data_ops_2026_09_25）。
     _mkdir_with_file(base, "每日備份", (today - timedelta(days=1)).isoformat())
     _mkdir_with_file(base, "週備份", today.strftime("%Y-W%W"))
+    # 2026-09-28（星期一紅、origin 同樣紅）：本週資料夾解析成「本週一」，星期一那天＝今天，被 N-1 當成「今天那一份」排除 ⇒
+    # 最新一份變成 80 天前 ⇒ 誤判時鐘異常而暫停。平常的連續狀態本來就有上週那一份 ⇒ 補上（產品行為不變）。
+    _mkdir_with_file(base, "週備份", (today - timedelta(days=7)).strftime("%Y-W%W"))
 
     ret = arch._backup_retention()
     arch._prune_cloud_backups(daily_keep_days=ret["cloud_daily_keep_days"],

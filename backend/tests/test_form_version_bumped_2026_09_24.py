@@ -51,6 +51,8 @@ LEDGER = {
     "V3.9": "e42e775f9955409b5baff053901aebe715a062b74c8c53ae9a618de2a9f781aa",
     # V3.10（個資蒐集告知，2026-09-26；列車上改號，V3.9 已被 X-VAT 使用）：聯絡人下方加告知區塊（列印告知書、已告知紀錄）。
     "V3.10": "7a6144213a3b04032c3fbf08ffe62a56dccd41bc6a34e39d610f43337a1b77af",
+    # V3.11（H10 品牌設定，第十四班列車補號）：分頁圖示改讀 /api/system/branding/favicon（品牌包漏 bump，列車 --train 抓到）。
+    "V3.11": "3712ad39fdf3c56889a3b5729d477470db4c80c0065644443a1ec44edaff8bf4",
 }
 
 
