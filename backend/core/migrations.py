@@ -2,9 +2,10 @@
 """每模組獨立版本的 migration（CORE-SPEC §6）。
 
 [單位] plat:migrations    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] current_version, register, registered, run_all
-[不變式] 版本從 1 起、連續、不可重複；每支跑完立刻記版本；只准新增（加表、加欄位），不刪欄位、不改名；每支必須冪等
-[契約題] tests/test_definitions_store_2026_09_25.py
+[公開介面] current_version, incomplete, register, registered, run_all
+[不變式] 版本從 1 起、連續、不可重複；每支**回 None** 才記版本（回原因字串＝未完成：不記、ERROR、該模組後面的這次不跑、其他模組照跑、
+         不丟例外）；只准新增（加表、加欄位），不刪欄位、不改名；每支必須冪等
+[契約題] tests/test_definitions_store_2026_09_25.py、tests/platform/test_migration_incomplete.py
 [注意] V9 基準（db._MIGRATIONS v1~v116）凍結不動，新表一律由這裡建；模組沒安裝 ⇒ migration 沒登記 ⇒ 不建它的表
 
 V9 基準（db._MIGRATIONS，v1~v116）凍結不動；
@@ -13,12 +14,22 @@ V9 基準（db._MIGRATIONS，v1~v116）凍結不動；
 - `register(module, version, fn)`：登記一支 migration。版本從 1 起、連續、不可重複。
 - `run_all(conn)`：依模組名排序，逐一把每個模組補跑到最新。每支跑完立刻記版本（中途失敗 ⇒ 停在上一版，
   修好後重跑從失敗那支接著跑；每支必須冪等，比照 V9 規則）。
+- **回傳值慣例**（CORE 1.58，2026-09-28 使用者裁示「該補就補」）：migration 函式回 `None`＝完成 ⇒ 記版號；
+  回**非空字串**＝這次做不了、字串是原因 ⇒ **不記版號**、記 ERROR、該模組後面的版號這次也不跑（不跳號）、其他模組照跑、
+  `run_all` 不丟例外（服務照常起來），下次再從同一版試；回其他值（True、數字…）＝寫錯 ⇒ 同樣不記＋ERROR（不猜）。
+  用回傳值不用例外：migration 檔不准 import 會演進的程式碼（含 core），丟不出 core 定義的例外。
+  回報未完成的函式自己負責不留半套（先檢查、後動手；不 commit 半套）。
+- `incomplete(db_path)`：最近一次對**該庫**跑 `run_all` 時沒完成的，見其 docstring（乾跑工具據此判失敗）。
 - 只准新增（加表、加欄位），不可以刪欄位或改名——回退到舊程式碼時，舊程式碼讀不到的東西它就不讀（§6）。
 - 模組沒安裝 ⇒ 它的 migration 沒登記 ⇒ 不建它的表（CORE-SPEC §6）。`core` 是 L1 自己，永遠登記。
 """
+import logging
+import os
 from datetime import datetime
 
 _REGISTRY = {}          # module -> {version: fn}
+_INCOMPLETE = {}        # 正規化的庫路徑 -> {module: (version, reason)}；主庫、demo 庫各一份，互不覆蓋
+_log = logging.getLogger("motrix.migrations")
 
 
 def register(module: str, version: int, fn) -> None:
@@ -38,7 +49,11 @@ def current_version(conn, module: str) -> int:
 
 
 def run_all(conn) -> dict:
-    """回 `{module: (從, 到)}`（只列有跑的）。版本號不連續 ⇒ ValueError（不猜要跳過哪一支）。"""
+    """回 `{module: (從, 到)}`（只列版號有前進的）。版本號不連續 ⇒ ValueError（不猜要跳過哪一支）。
+    未完成的（見回傳值慣例）不丟例外，記在 `incomplete(該庫路徑)`；每次呼叫先清掉該庫上一次的紀錄。"""
+    key = _conn_path(conn)
+    todo = {}
+    _INCOMPLETE[key] = todo
     ran = {}
     for module in sorted(_REGISTRY):
         per = _REGISTRY[module]
@@ -49,7 +64,13 @@ def run_all(conn) -> dict:
         for v in versions:
             if v <= start:
                 continue
-            per[v](conn)
+            res = per[v](conn)
+            if res is not None:
+                why = res.strip() if isinstance(res, str) and res.strip() else (
+                    "migration 回傳值只能是 None（完成）或原因字串（未完成），收到 %r" % (res,))
+                todo[module] = (v, why)
+                _log.error("模組 migration 未完成：%s v%d（%s），版號不前進，下次啟動再試：%s", module, v, key or "記憶體庫", why)
+                break
             conn.execute(
                 "INSERT INTO module_schema_versions (module, version, applied_at) VALUES (?,?,?) "
                 "ON CONFLICT(module) DO UPDATE SET version=excluded.version, applied_at=excluded.applied_at",
@@ -59,6 +80,34 @@ def run_all(conn) -> dict:
         if end != start:
             ran[module] = (start, end)
     return ran
+
+
+def _norm(path) -> str:
+    return os.path.normcase(os.path.abspath(path)) if path else ""
+
+
+def _conn_path(conn) -> str:
+    """連線的主庫檔路徑（正規化）；記憶體庫／讀不到 ⇒ ""。"""
+    try:
+        for row in conn.execute("PRAGMA database_list").fetchall():
+            if row[1] == "main":
+                return _norm(row[2] or "")
+    except Exception:        # noqa: BLE001 — 只影響未完成紀錄的分組，不擋 migration
+        pass
+    return ""
+
+
+def incomplete(db_path):
+    """🔒 介面（H12 乾跑工具依此判定；改形狀要升主版號）：
+
+    `incomplete(db_path: str) -> dict[str, tuple[int, str]] | None`
+
+    - `dict`：本行程**最近一次**對 `db_path` 那個庫跑 `run_all` 時沒完成的 `{模組: (停在的版號, 原因)}`；
+      空 dict ＝ 那一次全部完成。**非空 ⇒ 乾跑失敗**。
+    - `None`：本行程沒有對這個庫跑過 `run_all`——**不是**「全部完成」，呼叫端不可以當成通過。
+    - 依庫分開記（路徑正規化後比對）：主庫、demo 庫各跑一次，互不覆蓋。回傳複本。"""
+    got = _INCOMPLETE.get(_norm(db_path))
+    return None if got is None else dict(got)
 
 
 # ── core（L1）自己的 migration ───────────────────────────────────────────────
