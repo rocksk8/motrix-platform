@@ -613,8 +613,15 @@
             return true
           })
         },
-        async afterAction(r, okMsg, retry, failLabel) {
-          if (!r.ok && r.status === 'network') { this.fail(failLabel + '失敗', r, retry); return }
+        // 核准／退回／流程轉換不是冪等的：回應在路上掉了的話，伺服器可能已經做完（單據已到下一層）⇒ 網路失敗時不直接重送，
+        // 改成「重新載入單據」，看了目前狀態再決定要不要再做一次（稽核 D NS1；同「建立」的做法）。儲存（PUT）才直接重試。
+        async afterAction(r, okMsg, failLabel) {
+          if (!r.ok && r.status === 'network') {
+            var no = this.record && this.record.record_no
+            this.fail(failLabel + '失敗', r, no ? { label: '重新載入單據', run: () => this.openRecord(no) } : null,
+                      '網路連線失敗，無法確認是否已完成——請先按「重新載入單據」看目前狀態，需要時再做一次')
+            return
+          }
           if (!r.ok) {
             window.MotrixUI && window.MotrixUI.toast((r.data && r.data.detail) || ('失敗（' + r.status + '）'), { kind: 'error' })
             this.errMsg = (r.data && r.data.detail) || ('失敗（' + r.status + '）')
@@ -630,7 +637,7 @@
           this.busy = true; this.errMsg = ''
           try {
             var r = await this.post(this.base() + '/records/' + encodeURIComponent(this.record.record_no) + '/transitions/' + encodeURIComponent(t.key), { note: '' })
-            await this.afterAction(r, t.label + '完成', { label: '重試', run: () => this.doTransition(t) }, t.label)
+            await this.afterAction(r, t.label + '完成', t.label)
           } finally { this.busy = false }
         },
         async decide(approve) {
@@ -642,7 +649,7 @@
           this.busy = true; this.errMsg = ''
           try {
             var r = await this.post(this.base() + '/records/' + encodeURIComponent(this.record.record_no) + (approve ? '/approve' : '/reject'), { note: this.note || '' })
-            await this.afterAction(r, approve ? '已核准' : '已退回', { label: '重試', run: () => this.decide(approve) }, approve ? '核准' : '退回')
+            await this.afterAction(r, approve ? '已核准' : '已退回', approve ? '核准' : '退回')
           } finally { this.busy = false }
         },
         async openOutput() {

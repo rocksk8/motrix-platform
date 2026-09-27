@@ -3,7 +3,8 @@
 
 修正前：這幾支請求有 try/finally（按鈕會恢復），但 fetch reject 沒人接 ⇒ 畫面沒有任何訊息、console 有 pageerror。
 修正：api／post／put 走同一支 `_send`，網路層失敗回 {ok:false, status:'network'}，錯誤列顯示「…失敗：網路連線失敗」
-＋〔重試〕；建立單據例外——回應掉了可能已建好 ⇒ 按鈕是「重新整理列表」，不直接重送（會重複建單）。
+＋〔重試〕（列表、開單、儲存）；不冪等的動作例外——回應掉了可能已經做完 ⇒ 不直接重送：建立單據是「重新整理列表」
+（會重複建單），核准／退回／流程轉換是「重新載入單據」（稽核 D NS1：可能已到下一層）。
 非網路失敗（伺服器回 4xx）行為不變：顯示伺服器的說明、沒有〔重試〕。
 
 route.abort 決定性重現；斷言打在資料庫與錯誤列的 DOM；等待一律等動作的終點（busy 解除、狀態屬性）。
@@ -156,7 +157,8 @@ def test_update_network_failure_retry_saves(setup):
 
 
 @pytest.mark.e2e
-def test_transition_and_approval_network_failure_retry_completes(setup):
+def test_transition_network_failure_offers_reload_not_resend(setup):
+    """流程轉換不冪等（稽核 D NS1）：網路失敗 ⇒ 按鈕是「重新載入單據」、不直接重送；載入後看到還是草稿，再送一次才前進。"""
     s = setup
     no = s["new_record"]()
     page = s["page_for"](s["user"])
@@ -166,24 +168,53 @@ def test_transition_and_approval_network_failure_retry_completes(setup):
     page.route(pat, lambda r: r.abort())
     page.click('[data-transition="submit"]')
     text, retry = _error(page, "送審失敗")
-    assert "網路連線失敗" in text and _status(no) == "draft"
+    assert "無法確認是否已完成" in text and retry.text_content() == "重新載入單據" and _status(no) == "draft"
     page.unroute(pat)
-    retry.click()
+    sent = []
+    page.on("request", lambda r: sent.append(r.url) if r.url.endswith("/transitions/submit") else None)
+    # 終點＝重新載入那一趟 GET 回來（狀態本來就是 draft，等屬性會在按下之前就成立）
+    with page.expect_response(lambda r: r.request.method == "GET" and r.url.endswith("/records/%s" % no)):
+        retry.click()
+    page.wait_for_function("() => document.getElementById('cr-error').style.display === 'none'")
+    page.wait_for_selector('#cr-record[data-status="draft"][data-busy="0"]')
+    assert sent == [], "重新載入不可以順手重送"
+    page.click('[data-transition="submit"]')
     page.wait_for_selector('#cr-record[data-status="pending"][data-busy="0"]')
     assert _status(no) == "pending"
+    assert not s["errors"], s["errors"]
+
+
+@pytest.mark.e2e
+def test_approval_done_but_response_lost_is_not_approved_twice(setup):
+    """核准其實已生效、只是回應在路上掉了（route.fetch 送到伺服器後再 abort）⇒ 畫面說無法確認；
+    按「重新載入單據」看到已完成，核准請求從頭到尾只送出一次（NS1 的真實風險情境）。"""
+    s = setup
+    no = s["new_record"]()
+    page = s["page_for"](s["user"])
+    page.goto(_url(s, no))
+    _idle(page)
+    page.click('[data-transition="submit"]')
+    page.wait_for_selector('#cr-record[data-status="pending"][data-busy="0"]')
 
     mp = s["page_for"](s["mgr"])
     mp.goto(_url(s, no))
     mp.wait_for_selector("#cr-approve")
+    approves = []
+    mp.on("request", lambda r: approves.append(r.url) if r.url.endswith("/approve") else None)
     pat2 = re.compile(r".*/records/%s/approve$" % no)
-    mp.route(pat2, lambda r: r.abort())
+
+    def lose_response(route):
+        route.fetch()          # 伺服器真的收到並做完
+        route.abort()          # 回應在路上掉了
+    mp.route(pat2, lose_response)
     mp.click("#cr-approve")
-    text, retry2 = _error(mp, "核准失敗")
-    assert "網路連線失敗" in text and _status(no) == "pending"
+    text, reload_btn = _error(mp, "核准失敗")
+    assert "無法確認是否已完成" in text and reload_btn.text_content() == "重新載入單據"
+    assert _status(no) == "done", "前提：伺服器其實已核准"
     mp.unroute(pat2)
-    retry2.click()
+    reload_btn.click()
     mp.wait_for_selector('#cr-record[data-status="done"][data-busy="0"]')
-    assert _status(no) == "done"
+    assert len(approves) == 1, approves
     assert not s["errors"], s["errors"]
 
 
