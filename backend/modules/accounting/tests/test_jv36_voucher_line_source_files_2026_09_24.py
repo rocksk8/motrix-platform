@@ -342,3 +342,64 @@ def test_jv36_picking_a_case_lists_the_case_files_and_keeps_existing_amounts(
     assert (line["source_type"], line["source_key"]) == ("case", QUOTE), line
     page.locator('[data-testid="src-files"] [data-testid="src-file"]:has-text("回簽.png")').wait_for(
         state="visible", timeout=10000)
+
+
+# ── O13（主持登記；先當產品競態查）：延後的焦點搬移不可以搶走使用者已經點進去的欄位 ─────────────────────
+#: Alpine 的 $nextTick 走 setTimeout；把頁面上 0 延遲的 setTimeout 延後 400ms ＝ 負載下它晚到的樣子（決定性重現，不靠運氣）
+_SLOW_TICKS = """
+(function () {
+  var real = window.setTimeout
+  window.__slowTicks = false
+  window.setTimeout = function (fn, ms) {
+    var rest = Array.prototype.slice.call(arguments, 2)
+    if (window.__slowTicks && !ms) ms = 400
+    return real.apply(window, [fn, ms].concat(rest))
+  }
+})()
+"""
+
+
+def _slow_page(live_server, client, make_user, seed_extra_expense, e2e_browser, name):
+    _seed(seed_extra_expense)
+    u, p = make_user(username=name, role="superadmin", modules=["cashier"])
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    hdr = {"Authorization": "Bearer " + r.json()["token"]}
+    r = client.post(VOUCHERS, headers=hdr, json={"summary": "JV36", "lines": [
+        {"account_code": "1113", "debit": 0, "credit": 5000}, {"account_code": "6111"}]})
+    vid = r.json()["id"]
+    page = e2e_browser.new_page(viewport={"width": 1280, "height": 900})
+    page.add_init_script(_SLOW_TICKS)
+    token = _login(page, live_server, u, p)["token"]
+    _open_with_case(page, live_server, token, vid)
+    page.evaluate("() => { window.__slowTicks = true }")
+    return page
+
+
+@pytest.mark.e2e
+def test_o13_late_focus_move_does_not_steal_the_field_the_user_moved_to(
+        live_server, client, make_user, seed_extra_expense, e2e_browser):
+    """O13（M01 不在時 jv36 linger 題負載下紅 2/9）：點支出項 ⇒ keepSummaryFocus 用 $nextTick 把焦點搬回摘要；
+    它晚到時，使用者已經點進借方格打字 ⇒ 數字打進摘要、借方留著自動帶入的 5000 ⇒ 換成案件時被清空（原題第 319 行的樣子）。
+    修法：焦點已經離開按下去的那個東西 ⇒ 不搬。突變：拿掉「焦點已移開就不搬」⇒ 本題紅（摘要變 4321、借方清空）。"""
+    page = _slow_page(live_server, client, make_user, seed_extra_expense, e2e_browser, "o13_steal")
+    page.click('[data-testid="summary-panel-expense"]:has-text("吊車運費")')
+    page.locator("input[x-model='l.debit']").nth(1).click()          # 使用者馬上點進借方格
+    page.wait_for_function("() => new Promise(r => window.setTimeout.call(window, () => r(true), 450))")
+    page.keyboard.press("Control+A")
+    page.keyboard.type("4321")
+    assert page.evaluate("() => document.activeElement.getAttribute('x-model')") == "l.debit"
+    page.evaluate("() => { window.__slowTicks = false }")
+    page.click('[data-testid="src-case"]:has-text("%s")' % QUOTE)
+    line = page.evaluate("() => %s.lines[1]" % _D)
+    assert line["source_type"] == "case" and line["debit"] == "4321", line
+
+
+@pytest.mark.e2e
+def test_o13_focus_still_returns_to_the_summary_when_the_user_stays(
+        live_server, client, make_user, seed_extra_expense, e2e_browser):
+    """正對照：點完支出項沒有移開 ⇒ 晚到的 $nextTick 照樣把焦點送回那一行的摘要（2026-09-25 的行為不變）。"""
+    page = _slow_page(live_server, client, make_user, seed_extra_expense, e2e_browser, "o13_stay")
+    page.click('[data-testid="summary-panel-expense"]:has-text("吊車運費")')
+    page.wait_for_function("() => document.activeElement && document.activeElement.getAttribute('x-model') === 'l.summary'",
+                           timeout=5000)
+
