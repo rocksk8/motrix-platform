@@ -7096,6 +7096,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/accounting/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/platform/test_case_stage_connectors.py",
     "mod:case/api/__init__",
     "mod:case/api/quotations",
@@ -7109,6 +7110,7 @@
      "backend/db.py",
      "backend/modules/case/api/__init__.py",
      "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py",
      "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "api": [
@@ -7611,6 +7613,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/accounting/",
+    "dir:backend/modules/case/",
     "dir:tools/platform/",
     "helper:case_access",
     "helper:licensing",
@@ -7636,6 +7639,7 @@
      "backend/helpers/licensing.py",
      "backend/modules/accounting/",
      "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/case/",
      "backend/modules/case/api/quotations.py",
      "tools/platform/"
     ]
