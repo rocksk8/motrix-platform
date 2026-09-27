@@ -200,7 +200,7 @@
 - ✅ AH-M2 關閉（7a38fde6）——RUNBOOK §8 先複製 tools＋腳本版本比對 script_not_from_package
 - ✅ AH-M3 關閉（7a38fde6）——停服後失敗先重新啟動服務（Fail-AfterStop），殘餘風險列 AH-S7
 
-## 7. 複核：wip/h-apply-platform d2fc6395（1ba44ff3＋d2fc6395；A，2026-09-28 02:11；讀碼＋演練證據 D:\MOTRIX-DRILLSpply-run-0928un_P1copy.log、prog_*_P1copy.json）
+## 7. 複核：wip/h-apply-platform d2fc6395（1ba44ff3＋d2fc6395；A，2026-09-28 02:11；讀碼＋演練證據 D:\MOTRIX-DRILLS\apply-run-0928\run_P1copy.log、prog_*_P1copy.json）
 
 | 項目 | 讀碼／證據 | 判定 |
 |---|---|---|
