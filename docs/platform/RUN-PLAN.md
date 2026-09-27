@@ -86,6 +86,7 @@
 
 ## 5. 派工佇列（依序；做完一項就把同一條線的下一項派出去）
 
+  - B｜`wip/b-builder-dnd`（**下一版（不上本次 D7），排在 D7 之後的列車**；使用者裁示：建構器拖曳式、縮圖化——BUILDER-UX.md 主持核准；B 的部分：8 格縮圖導覽（簽核／通知以 data-step-alias 捲到第 4 步區塊）、工具列 icon＋文字、畫布卡片就地編輯＋鍵盤（Alt＋↑／↓、Delete、Enter，aria-live）、右側即時預覽動態載入 A 的 form-preview.js（只 update／setHighlight，不搶焦點）；**等 A 的預覽元件合進來後接好，連同預覽題交 D**）｜66d2af57｜基底 e21b099a；既有 p8 建構器 e2e／p8_gaps／alpine／page_paths 不改題＋新題 test_e2e_builder_dnd：48 過 1 略過；突變 5 項皆紅｜預覽題 test_live_preview_shows_a_new_field：以「form-preview.js 存在與否」為略過條件（獨立訊號），檔案合進來就一定實際執行、不准再略過｜⓪ 自查：中 1 項（#3 新 CSS 色碼 fallback），已修〔20:13 B〕
 | 線 | 負責 | 佇列 |
 |---|---|---|
 | 平台與模組 | A | ① 9c 全量合回 → ② STATES-PLATFORM 4 項 → ③ 獎金三項（IP-7、IP-8）→ ④ 階段 A 剩餘（A8b、A9、A10、A12）→ ⑤ P1 能力目錄＋P3 模組描述＋P6 事件匯流排 → ⑥ 階段 B 搬遷（M12、M10、M02、M04、M05、M06、M07、M03、M08、M01，每個照 PLAYBOOK §B，同時登記進能力目錄） |
