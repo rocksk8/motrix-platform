@@ -38,3 +38,12 @@
 
 - 兩題改驗 DOM：借方格的值、摘要格的值、`document.activeElement`；等終點改成 `__slowPending === 0`（被延後的回呼都執行完），不等固定 450ms。
 - 突變 O13a「拿掉『已移開就不搬』」⇒ 紅；O13b「永遠不搬」⇒ 紅 ⇒ **O13 通過**（上車前 rebase 到 e67879f2，同上）。
+
+## 複核（2026-09-27 14:14）
+
+| 包 | D 的驗證 | 結果 |
+|---|---|---|
+| wip/b-o13-3 1c7f0a64 | `git range-diff c7f02596..ea93e37c e67879f2..1c7f0a64`：兩個 commit 都是「=」（內容相同，只換基底到 e67879f2） | **通過** |
+| wip/b-o14-2 f189103c：O14-M1 | 探針把子行程的 `PYTEST_XDIST_WORKER` 寫出，n1 必須是 `gw0`、n0 必須是空。`utf8_env` 會清掉所有 `PYTEST_XDIST_*`，外層是 worker 時也不會繼承（外層 `-n 2` 實跑 23 過）。突變 W1「拿掉 -n 1」⇒ **n1 紅**（上一輪存活） | **關閉** |
+| O14-S1 | 共用 `child_pytest_deadline`＝上限 − min(20, 上限／4)；題目加驗 50／30／20／8 都 `0 < 期限 < 上限` | **關閉** |
+| O14-S2 | `test_shared_playwright_event_loop` 改用同一個期限 | **關閉** |
