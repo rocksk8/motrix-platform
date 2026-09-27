@@ -22,7 +22,7 @@ from core.txn import begin_write
 from db import get_db
 from helpers import _require_user, _tok, _audit, _notify, active_delegators_for, can_see_financial
 from helpers.approval_queue import ApprovalUnreadable, active_tiers, current_tier_idx
-from helpers.case_access import SYSTEM, guard_case_access, is_document_approver
+from helpers.case_access import SYSTEM, case_module_present, guard_case_access, is_document_approver
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,26 @@ def _queue_visible_to(user: dict, item: dict, delegated_for) -> bool:
             if (ap.get("username") or "") in mine:
                 return True
     return False
+
+
+def _on_chain(conn, user: dict, approval_raw) -> bool:
+    """詳情守門「不看案件就放行」的條件：本單簽核鏈上（任何一層，含代理）或送審人（`is_document_approver`）。
+    佇列（M01 不在時要不要列）與詳情守門共用這一支——「佇列列出這一筆」⇔「詳情會放行」（主持裁示 2026-09-27，AL-O3）。"""
+    return bool(approval_raw) and is_document_approver(approval_raw, user, conn)
+
+
+def _item_approval_raw(item: dict) -> str:
+    """佇列項目 ⇒ 詳情守門看的 approval JSON（項目的 tiers 已由 `tier_fields` 正規化，含 steps 相容）。"""
+    return json.dumps({"tiers": item.get("tiers") or [], "requestedBy": item.get("requestedBy") or ""}, ensure_ascii=False)
+
+
+def _openable(conn, user: dict, items: list) -> list:
+    """只留這個人點得開詳情的項目：M01 不在 ⇒ 掛在案件上（linkedQuoteNo）的單，詳情的每案守門一律拒絕，
+    只有簽核鏈上的人與送審人例外（`_on_chain`）⇒ 佇列同樣只列這些人（不然 superadmin 看得到、點開卻 404）。
+    M01 在 ⇒ 不動（每案守門另有 admin+／業務／案件管理的放行，佇列的可見性規則照舊）。"""
+    if case_module_present():
+        return items
+    return [it for it in items if not it.get("linkedQuoteNo") or _on_chain(conn, user, _item_approval_raw(it))]
 
 
 def _case_names(conn, quote_nos) -> dict:
@@ -121,7 +141,7 @@ def get_approval_queue(authorization: str = Header(None)):
     conn = get_db()
     try:
         my_delegated_for = sorted(active_delegators_for(conn, user["username"]))
-        items = _queue_provider_items(conn)
+        items = _openable(conn, user, _queue_provider_items(conn))
     finally:
         conn.close()
 
@@ -155,7 +175,7 @@ def get_approval_queue_count(authorization: str = Header(None)):
     conn = get_db()
     try:
         my_usernames = {u["username"]} | set(active_delegators_for(conn, u["username"]))
-        items = _queue_provider_items(conn)
+        items = _openable(conn, u, _queue_provider_items(conn))
     finally:
         conn.close()
     is_sa = u["role"] == "superadmin"
@@ -186,7 +206,7 @@ def _guard_queue_detail(conn, user: dict, quote_no: str, approval_raw=None) -> N
     2. 其餘走一般的每案規則 `guard_case_access()`（admin+／該案業務／協作者／案件管理模組、案件本身的簽核人）；
        看不到與查無同一個 404（c-case404，M01-O1）；M01 不在 ⇒ 404（`case_access` 的 fail-closed）
     """
-    if approval_raw and is_document_approver(approval_raw, user, conn):
+    if _on_chain(conn, user, approval_raw):
         return
     guard_case_access(conn, quote_no, user, allow_module="case_manage", allow_approver=True)
 
@@ -218,6 +238,36 @@ def _mask_money(out: dict) -> None:
     out["moneyMasked"] = True
 
 
+#: 詳情「查無」與「看不到」同一句（AL-S1，比照 c-case404：訊息逐字相同、不帶關聯的案件單號；audit 記真正原因）
+DETAIL_DENIAL_AUDIT = "approval.detail_denied"
+
+
+def detail_not_found_message(doc_id) -> str:
+    return "單據 %s 不存在" % doc_id
+
+
+def _deny_detail(user: dict, type_: str, doc_id, reason: str):
+    """記真正原因（not_found／denied）後丟同一個 404。背景寫 audit（同 case_access 的做法：呼叫端之後會關連線）。"""
+    from db import spawn_bg_thread
+
+    def _write(uid, uname, dname):
+        try:
+            c = get_db()
+            try:
+                c.execute("INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail) "
+                          "VALUES (?,?,?,?,?,?,?,?,?)",
+                          (datetime.now().isoformat(), uid, uname, dname, DETAIL_DENIAL_AUDIT, type_, str(doc_id), "",
+                           json.dumps({"reason": reason}, ensure_ascii=False)))
+                c.commit()
+            finally:
+                c.close()
+        except Exception:                                    # noqa: BLE001  記錄失敗不影響回應
+            pass
+    u = user or {}
+    spawn_bg_thread(_write, args=(u.get("id"), u.get("username") or "", u.get("display_name") or ""))
+    raise HTTPException(404, detail_not_found_message(doc_id))
+
+
 @router.get("/api/approval-queue/detail")
 def approval_queue_detail(type: str, id: str, authorization: str = Header(None)):
     """一筆待簽核項目的完整內容：屬於哪個案件、送審了什麼、夾帶哪些檔案、改了什麼。
@@ -230,13 +280,24 @@ def approval_queue_detail(type: str, id: str, authorization: str = Header(None))
         raise HTTPException(400, "不支援的類型（或該單據的模組未安裝）：" + str(type))
     conn = get_db()
     try:
-        d = prov(conn, id)
+        try:
+            d = prov(conn, id)
+        except HTTPException as e:                       # 提供者自己的查無訊息（例：「完工單不存在」）也統一
+            if e.status_code != 404:
+                raise
+            d = None
         if not d:
-            raise HTTPException(404, "單據不存在")
+            _deny_detail(user, type, id, "not_found")
         approval_raw = d.get("approvalRaw")
-        # 申請人本人（提供者明示 `selfViewBy`，目前只有已結案變更）不經每案守門
+        # `selfViewBy`：申請人本人不經每案守門。**只有 M01 的已結案變更（case_change）宣告**——單層「任一 superadmin」、
+        # 沒有簽核鏈可比對，而申請人要看得到自己送出的內容；其他提供者不可以宣告（它會繞過每案守門）。
         if not (d.get("selfViewBy") and d["selfViewBy"] == user["username"]):
-            _guard_queue_detail(conn, user, d["quoteNo"], approval_raw)
+            try:
+                _guard_queue_detail(conn, user, d["quoteNo"], approval_raw)
+            except HTTPException as e:                   # 守門的 404 帶關聯的案件單號（會洩漏掛在哪一案）⇒ 換成同一句
+                if e.status_code != 404:
+                    raise
+                _deny_detail(user, type, id, "denied")   # 案件層的真正原因 case_access 已另記
         out = {"type": type, "id": id, "title": d.get("title") or id,
                "fields": list(d.get("fields") or []), "items": list(d.get("items") or []),
                "files": list(d.get("files") or []), "changes": d.get("changes"),

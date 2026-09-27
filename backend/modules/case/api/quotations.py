@@ -4348,6 +4348,18 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
 # 報價單、已結案變更（case_change）、額外支出、完工單、額外支出變更。項目形狀見 `helpers/approval_queue.py::base_item`。
 # 權限過濾（誰看得到哪一筆）與角標計數都在 L1，這裡只列「待審核／簽核中」的單。
 
+def _approval_json_of(data_json):
+    """data_json ⇒ 其中 approval 的 JSON 字串；壞掉 ⇒ None（當成沒有簽核層）。
+    ⚠ 不在 SQL 用 json_extract：一筆 malformed JSON 會讓整個查詢丟例外 ⇒ M01 的所有待簽一起消失
+    （舊版是整支佇列 500；稽核 D AL-O4 補題時抓到）。逐筆在 Python 解析，壞一筆只影響那一筆。"""
+    try:
+        d = json.loads(data_json or "{}")
+    except (TypeError, ValueError):
+        return None
+    a = d.get("approval") if isinstance(d, dict) else None
+    return json.dumps(a, ensure_ascii=False) if isinstance(a, dict) else None
+
+
 def approval_queue_items(conn) -> list:
     """`approval.queue_items`（M01）：報價單、已結案案件變更、案件額外支出、完工單、額外支出變更。
 
@@ -4357,14 +4369,13 @@ def approval_queue_items(conn) -> list:
     items = []
 
     rows = conn.execute("""
-        SELECT quote_no, customer_name, project_name, total, quote_date, sales_person,
-               json_extract(data_json,'$.approval') as approval_json
+        SELECT quote_no, customer_name, project_name, total, quote_date, sales_person, data_json
         FROM quotations
         WHERE status IN ('待審核','簽核中')
         ORDER BY id DESC
     """).fetchall()
     for r in rows:
-        f = _queue_tier_fields(r["approval_json"])
+        f = _queue_tier_fields(_approval_json_of(r["data_json"]))
         items.append({
             "type":                "quotation",
             "quoteNo":             r["quote_no"],
@@ -4459,13 +4470,13 @@ def approval_queue_items(conn) -> list:
     # 項都 100% 完成，簽核人要先知道自己簽的是不是一張帶缺失的完工單。
     cn_rows = conn.execute("""
         SELECT note_no, quote_no, customer_name, project_name, completion_date, created_at,
-               items_json, json_extract(data_json,'$.approval') as approval_json
+               items_json, data_json
         FROM completion_notes
         WHERE status IN ('待審核','簽核中')
         ORDER BY id DESC
     """).fetchall()
     for r in cn_rows:
-        f = _queue_tier_fields(r["approval_json"])
+        f = _queue_tier_fields(_approval_json_of(r["data_json"]))
         try:
             cn_items = json.loads(r["items_json"] or "[]")
         except Exception:

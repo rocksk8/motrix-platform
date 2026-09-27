@@ -61,9 +61,17 @@ def _subcontract_installed():
     return source_tree.module_installed("modules/subcontract/")
 
 
+def _arap_installed():
+    from core import source_tree
+    return source_tree.module_installed("modules/arap/")
+
+
 #: 派工單兩類由外包工班（M04）的 `attachments.for_document` 提供：模組不在時那兩類本來就不列
 #: （傳票頁另外明說，見 tests/platform/test_attachments_providers.py），驗它們的題跟著略過（PLAYBOOK §B-11）
 _NEEDS_M04 = pytest.mark.skipif(not _subcontract_installed(), reason="外包工班（M04）不在這個安裝包：派工單兩類不提供")
+#: 開票申請（invoice_voucher）屬 M05：不在這個安裝包 ⇒ 案件憑證清單沒有這一類（稽核 D AL-O1）
+_NEEDS_M05 = pytest.mark.skipif(not _arap_installed(),
+                                reason="應收應付（M05）不在這個安裝包：開票申請這一類不提供")
 
 
 def _helpers():
@@ -175,7 +183,8 @@ def _listed(seeded_ignored=None):
 
 @needs_m01
 @pytest.mark.parametrize("source_type", [
-    t if t not in SAME_DOC_NO else pytest.param(t, marks=_NEEDS_M04) for t in NOT_CASE_SCOPED])
+    pytest.param(t, marks=_NEEDS_M04) if t in SAME_DOC_NO
+    else pytest.param(t, marks=_NEEDS_M05) if t == "invoice_voucher" else t for t in NOT_CASE_SCOPED])
 def test_sp1_a_case_scoped_list_includes_the_four_missing_types(
         seeded, source_type):
     """🔴 **選一個案件，那四類憑證要出現在清單裡。**（%s）
