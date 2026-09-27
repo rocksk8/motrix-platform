@@ -481,20 +481,6 @@
    ],
    "tables_w": []
   },
-  "helper:branding": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "helper:settings",
-    "plat:paths"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/branding.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": []
-  },
   "helper:build_info": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -1755,7 +1741,6 @@
     "/api/platform/menu",
     "/api/reads",
     "/api/system/bonus-module-status",
-    "/api/system/branding/logo-dark",
     "/api/system/modules/availability"
    ],
    "api_prefixes": [
@@ -6627,8 +6612,7 @@
     "/api/dashboard/stats",
     "/api/dashboard/stats{}",
     "/api/org/tree",
-    "/api/system/branding",
-    "/api/system/branding/favicon"
+    "/api/system/branding"
    ],
    "api_prefixes": [
     "/api/auth",
@@ -6647,25 +6631,19 @@
    "routers_called": [
     "mod:analytics/api/dashboard",
     "router:auth",
-    "router:org_structure",
-    "router:system"
+    "router:org_structure"
    ],
    "routers_called_effective": [
     "mod:analytics/api/dashboard",
     "router:auth",
-    "router:org_structure",
-    "router:system"
+    "router:org_structure"
    ],
    "tables_r": [],
    "tables_w": []
   },
   "page:pages/account-items.html": {
-   "api_calls": [
-    "/api/system/branding/favicon"
-   ],
-   "api_prefixes": [
-    "/api/system"
-   ],
+   "api_calls": [],
+   "api_prefixes": [],
    "api_unmatched": [],
    "imports": [
     "js:js/account-items.js",
@@ -6675,12 +6653,9 @@
    ],
    "kind": "page",
    "path": "frontend/pages/account-items.html",
-   "routers_called": [
-    "router:system"
-   ],
+   "routers_called": [],
    "routers_called_effective": [
-    "mod:accounting/api/account_items",
-    "router:system"
+    "mod:accounting/api/account_items"
    ],
    "tables_r": [],
    "tables_w": []
@@ -6690,13 +6665,11 @@
     "/api/approval-delegates",
     "/api/approval-delegates/",
     "/api/auth/me",
-    "/api/system/branding/favicon",
     "/api/users/selectable"
    ],
    "api_prefixes": [
     "/api/approval-delegates",
     "/api/auth",
-    "/api/system",
     "/api/users"
    ],
    "api_unmatched": [],
@@ -6709,25 +6682,21 @@
    "path": "frontend/pages/approval-delegates.html",
    "routers_called": [
     "router:approval_delegates",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "routers_called_effective": [
     "router:approval_delegates",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "tables_r": [],
    "tables_w": []
   },
   "page:pages/approval-history.html": {
    "api_calls": [
-    "/api/approval-history",
-    "/api/system/branding/favicon"
+    "/api/approval-history"
    ],
    "api_prefixes": [
-    "/api/approval-history",
-    "/api/system"
+    "/api/approval-history"
    ],
    "api_unmatched": [],
    "imports": [
@@ -6738,12 +6707,10 @@
    "kind": "page",
    "path": "frontend/pages/approval-history.html",
    "routers_called": [
-    "mod:case/api/quotations",
-    "router:system"
+    "mod:case/api/quotations"
    ],
    "routers_called_effective": [
-    "mod:case/api/quotations",
-    "router:system"
+    "mod:case/api/quotations"
    ],
    "tables_r": [],
    "tables_w": []
@@ -6768,7 +6735,6 @@
     "/api/quotations/{}/extra-expenses/{}/reject",
     "/api/quotations/{}/reject-final",
     "/api/shipping-notes",
-    "/api/system/branding/favicon",
     "/api/uploads/",
     "/api/uploads/{}",
     "/api/users",
@@ -6786,7 +6752,6 @@
     "/api/photo-token",
     "/api/quotations",
     "/api/shipping-notes",
-    "/api/system",
     "/api/uploads",
     "/api/users",
     "/api/vouchers"
@@ -6814,7 +6779,6 @@
     "mod:supply/api/shipping_notes",
     "router:approval_queue",
     "router:auth",
-    "router:system",
     "router:uploads"
    ],
    "routers_called_effective": [
@@ -6829,7 +6793,6 @@
     "mod:supply/api/shipping_notes",
     "router:approval_queue",
     "router:auth",
-    "router:system",
     "router:uploads"
    ],
    "tables_r": [],
@@ -6841,13 +6804,11 @@
     "/api/settings/approval-flow",
     "/api/settings/approval-flow-scope",
     "/api/settings/approval-flow/{}",
-    "/api/system/branding/favicon",
     "/api/users"
    ],
    "api_prefixes": [
     "/api/org",
     "/api/settings",
-    "/api/system",
     "/api/users"
    ],
    "api_unmatched": [],
@@ -6874,13 +6835,11 @@
   "page:pages/audit-log.html": {
    "api_calls": [
     "/api/audit-log",
-    "/api/auth/logout",
-    "/api/system/branding/favicon"
+    "/api/auth/logout"
    ],
    "api_prefixes": [
     "/api/audit-log",
-    "/api/auth",
-    "/api/system"
+    "/api/auth"
    ],
    "api_unmatched": [],
    "imports": [
@@ -6902,12 +6861,8 @@
    "tables_w": []
   },
   "page:pages/bonus.html": {
-   "api_calls": [
-    "/api/system/branding/favicon"
-   ],
-   "api_prefixes": [
-    "/api/system"
-   ],
+   "api_calls": [],
+   "api_prefixes": [],
    "api_unmatched": [],
    "imports": [
     "js:js/bonus.js",
@@ -6918,9 +6873,7 @@
    ],
    "kind": "page",
    "path": "frontend/pages/bonus.html",
-   "routers_called": [
-    "router:system"
-   ],
+   "routers_called": [],
    "routers_called_effective": [
     "mod:payroll/api/bonus",
     "router:auth",
@@ -6932,13 +6885,11 @@
   "page:pages/case-management.html": {
    "api_calls": [
     "/api/quotations/",
-    "/api/shipping-notes/",
-    "/api/system/branding/favicon"
+    "/api/shipping-notes/"
    ],
    "api_prefixes": [
     "/api/quotations",
-    "/api/shipping-notes",
-    "/api/system"
+    "/api/shipping-notes"
    ],
    "api_unmatched": [],
    "imports": [
@@ -6971,8 +6922,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
-    "mod:supply/api/shipping_notes",
-    "router:system"
+    "mod:supply/api/shipping_notes"
    ],
    "routers_called_effective": [
     "mod:accounting/api/accounting_export",
@@ -7008,14 +6958,12 @@
     "/api/org/tree",
     "/api/quotations/stage-board",
     "/api/quotations/{}/stages/{}/assignees",
-    "/api/system/branding/favicon",
     "/api/users/selectable"
    ],
    "api_prefixes": [
     "/api/auth",
     "/api/org",
     "/api/quotations",
-    "/api/system",
     "/api/users"
    ],
    "api_unmatched": [],
@@ -7029,25 +6977,19 @@
    "routers_called": [
     "mod:case/api/quotations",
     "router:auth",
-    "router:org_structure",
-    "router:system"
+    "router:org_structure"
    ],
    "routers_called_effective": [
     "mod:case/api/quotations",
     "router:auth",
-    "router:org_structure",
-    "router:system"
+    "router:org_structure"
    ],
    "tables_r": [],
    "tables_w": []
   },
   "page:pages/cashier.html": {
-   "api_calls": [
-    "/api/system/branding/favicon"
-   ],
-   "api_prefixes": [
-    "/api/system"
-   ],
+   "api_calls": [],
+   "api_prefixes": [],
    "api_unmatched": [],
    "imports": [
     "js:js/cashier.js",
@@ -7057,16 +6999,13 @@
    ],
    "kind": "page",
    "path": "frontend/pages/cashier.html",
-   "routers_called": [
-    "router:system"
-   ],
+   "routers_called": [],
    "routers_called_effective": [
     "mod:accounting/api/accounting_export",
     "mod:arap/api/cashier",
     "mod:case/api/quotations",
     "mod:payroll/api/bonus",
-    "mod:subcontract/api/contractor_vouchers",
-    "router:system"
+    "mod:subcontract/api/contractor_vouchers"
    ],
    "tables_r": [],
    "tables_w": []
@@ -7084,7 +7023,6 @@
     "/api/auth/webauthn/credentials/{}",
     "/api/auth/webauthn/register/begin",
     "/api/auth/webauthn/register/complete",
-    "/api/system/branding/favicon",
     "/api/system/webauthn-config-status"
    ],
    "api_prefixes": [
@@ -7114,21 +7052,17 @@
    "api_calls": [
     "/api/legal-params/privacy-notice",
     "/api/settings/backup-retention",
-    "/api/settings/branding",
-    "/api/settings/branding/",
     "/api/settings/cloud-backup-target",
     "/api/settings/company-profile",
     "/api/settings/edge-path",
     "/api/settings/google-quota",
     "/api/settings/pdf-base-path",
     "/api/settings/pii-archive-status",
-    "/api/settings/webauthn-config",
-    "/api/system/branding/favicon"
+    "/api/settings/webauthn-config"
    ],
    "api_prefixes": [
     "/api/legal-params",
-    "/api/settings",
-    "/api/system"
+    "/api/settings"
    ],
    "api_unmatched": [],
    "imports": [
@@ -7157,13 +7091,11 @@
     "/api/completion-notes/{}/export",
     "/api/completion-notes/{}/pdf-download",
     "/api/completion-notes/{}/submit",
-    "/api/quotations/{}",
-    "/api/system/branding/favicon"
+    "/api/quotations/{}"
    ],
    "api_prefixes": [
     "/api/completion-notes",
-    "/api/quotations",
-    "/api/system"
+    "/api/quotations"
    ],
    "api_unmatched": [],
    "imports": [
@@ -7181,8 +7113,7 @@
     "mod:case/api/completion_notes",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
-    "mod:netplan/api",
-    "router:system"
+    "mod:netplan/api"
    ],
    "routers_called_effective": [
     "mod:case/api/case_action_items",
@@ -7190,19 +7121,14 @@
     "mod:case/api/completion_notes",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
-    "mod:netplan/api",
-    "router:system"
+    "mod:netplan/api"
    ],
    "tables_r": [],
    "tables_w": []
   },
   "page:pages/contractor-voucher-approval-settings.html": {
-   "api_calls": [
-    "/api/system/branding/favicon"
-   ],
-   "api_prefixes": [
-    "/api/system"
-   ],
+   "api_calls": [],
+   "api_prefixes": [],
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
@@ -7211,12 +7137,8 @@
    ],
    "kind": "page",
    "path": "frontend/pages/contractor-voucher-approval-settings.html",
-   "routers_called": [
-    "router:system"
-   ],
-   "routers_called_effective": [
-    "router:system"
-   ],
+   "routers_called": [],
+   "routers_called_effective": [],
    "tables_r": [],
    "tables_w": []
   },
@@ -7230,13 +7152,11 @@
     "/api/contractors/{}/active",
     "/api/contractors/{}/id-card",
     "/api/contractors/{}/privacy-notice",
-    "/api/contractors/{}/privacy-notice/ack",
-    "/api/system/branding/favicon"
+    "/api/contractors/{}/privacy-notice/ack"
    ],
    "api_prefixes": [
     "/api/contractor-dispatches",
-    "/api/contractors",
-    "/api/system"
+    "/api/contractors"
    ],
    "api_unmatched": [],
    "imports": [
@@ -7250,25 +7170,21 @@
    "path": "frontend/pages/contractors.html",
    "routers_called": [
     "mod:subcontract/api/contractors",
-    "mod:subcontract/api/vendor_contractors",
-    "router:system"
+    "mod:subcontract/api/vendor_contractors"
    ],
    "routers_called_effective": [
     "mod:subcontract/api/contractors",
-    "mod:subcontract/api/vendor_contractors",
-    "router:system"
+    "mod:subcontract/api/vendor_contractors"
    ],
    "tables_r": [],
    "tables_w": []
   },
   "page:pages/custom-records.html": {
    "api_calls": [
-    "/api/custom/",
-    "/api/system/branding/favicon"
+    "/api/custom/"
    ],
    "api_prefixes": [
-    "/api/custom",
-    "/api/system"
+    "/api/custom"
    ],
    "api_unmatched": [],
    "imports": [
@@ -7281,12 +7197,10 @@
    "kind": "page",
    "path": "frontend/pages/custom-records.html",
    "routers_called": [
-    "router:custom_records",
-    "router:system"
+    "router:custom_records"
    ],
    "routers_called_effective": [
-    "router:custom_records",
-    "router:system"
+    "router:custom_records"
    ],
    "tables_r": [],
    "tables_w": []
@@ -7296,13 +7210,11 @@
     "/api/auth/logout",
     "/api/customers",
     "/api/customers/{}/visits",
-    "/api/system/branding/favicon",
     "/api/users"
    ],
    "api_prefixes": [
     "/api/auth",
     "/api/customers",
-    "/api/system",
     "/api/users"
    ],
    "api_unmatched": [],
@@ -7315,13 +7227,11 @@
    "path": "frontend/pages/customer-log.html",
    "routers_called": [
     "router:auth",
-    "router:customers",
-    "router:system"
+    "router:customers"
    ],
    "routers_called_effective": [
     "router:auth",
-    "router:customers",
-    "router:system"
+    "router:customers"
    ],
    "tables_r": [],
    "tables_w": []
@@ -7335,7 +7245,6 @@
     "/api/customers/{}/privacy-notice",
     "/api/suppliers",
     "/api/suppliers/{}",
-    "/api/system/branding/favicon",
     "/api/users"
    ],
    "api_prefixes": [
@@ -7343,7 +7252,6 @@
     "/api/company",
     "/api/customers",
     "/api/suppliers",
-    "/api/system",
     "/api/users"
    ],
    "api_unmatched": [],
@@ -7361,15 +7269,13 @@
     "mod:supply/api/suppliers",
     "router:auth",
     "router:company_lookup",
-    "router:customers",
-    "router:system"
+    "router:customers"
    ],
    "routers_called_effective": [
     "mod:supply/api/suppliers",
     "router:auth",
     "router:company_lookup",
-    "router:customers",
-    "router:system"
+    "router:customers"
    ],
    "tables_r": [],
    "tables_w": []
@@ -7384,14 +7290,12 @@
     "/api/daily-tasks/{}/history",
     "/api/daily-tasks/{}/history/export",
     "/api/sales-orders",
-    "/api/system/branding/favicon",
     "/api/users"
    ],
    "api_prefixes": [
     "/api/auth",
     "/api/daily-tasks",
     "/api/sales-orders",
-    "/api/system",
     "/api/users"
    ],
    "api_unmatched": [],
@@ -7405,14 +7309,12 @@
    "routers_called": [
     "mod:case/api/quotations",
     "mod:daily_tasks/api",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "routers_called_effective": [
     "mod:case/api/quotations",
     "mod:daily_tasks/api",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "tables_r": [],
    "tables_w": []
@@ -7427,7 +7329,6 @@
     "/api/dev-logs/pending",
     "/api/dev-logs/{}/files/{}",
     "/api/photo-token",
-    "/api/system/branding/favicon",
     "/api/uploads/{}",
     "/api/users"
    ],
@@ -7437,7 +7338,6 @@
     "/api/dev-crm",
     "/api/dev-logs",
     "/api/photo-token",
-    "/api/system",
     "/api/uploads",
     "/api/users"
    ],
@@ -7454,14 +7354,12 @@
     "mod:crm/api",
     "router:auth",
     "router:customers",
-    "router:system",
     "router:uploads"
    ],
    "routers_called_effective": [
     "mod:crm/api",
     "router:auth",
     "router:customers",
-    "router:system",
     "router:uploads"
    ],
    "tables_r": [],
@@ -7470,13 +7368,11 @@
   "page:pages/devices.html": {
    "api_calls": [
     "/api/auth/logout",
-    "/api/devices",
-    "/api/system/branding/favicon"
+    "/api/devices"
    ],
    "api_prefixes": [
     "/api/auth",
-    "/api/devices",
-    "/api/system"
+    "/api/devices"
    ],
    "api_unmatched": [],
    "imports": [
@@ -7488,13 +7384,11 @@
    "path": "frontend/pages/devices.html",
    "routers_called": [
     "mod:analytics/api/dashboard",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "routers_called_effective": [
     "mod:analytics/api/dashboard",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "tables_r": [],
    "tables_w": []
@@ -7502,12 +7396,10 @@
   "page:pages/google-calendar-settings.html": {
    "api_calls": [
     "/api/settings/google-calendar",
-    "/api/settings/google-calendar/test",
-    "/api/system/branding/favicon"
+    "/api/settings/google-calendar/test"
    ],
    "api_prefixes": [
-    "/api/settings",
-    "/api/system"
+    "/api/settings"
    ],
    "api_unmatched": [],
    "imports": [
@@ -7542,16 +7434,14 @@
     "/api/inventory/stock-items/{}/adjust",
     "/api/parts",
     "/api/settings/t100-export-config",
-    "/api/suppliers",
-    "/api/system/branding/favicon"
+    "/api/suppliers"
    ],
    "api_prefixes": [
     "/api/auth",
     "/api/inventory",
     "/api/parts",
     "/api/settings",
-    "/api/suppliers",
-    "/api/system"
+    "/api/suppliers"
    ],
    "api_unmatched": [],
    "imports": [
@@ -7566,28 +7456,24 @@
     "mod:supply/api/inventory",
     "mod:supply/api/suppliers",
     "router:auth",
-    "router:parts",
-    "router:system"
+    "router:parts"
    ],
    "routers_called_effective": [
     "mod:accounting/api/accounting_export",
     "mod:supply/api/inventory",
     "mod:supply/api/suppliers",
     "router:auth",
-    "router:parts",
-    "router:system"
+    "router:parts"
    ],
    "tables_r": [],
    "tables_w": []
   },
   "page:pages/legal-params.html": {
    "api_calls": [
-    "/api/legal-params/tax-rules",
-    "/api/system/branding/favicon"
+    "/api/legal-params/tax-rules"
    ],
    "api_prefixes": [
-    "/api/legal-params",
-    "/api/system"
+    "/api/legal-params"
    ],
    "api_unmatched": [],
    "imports": [
@@ -7598,12 +7484,10 @@
    "kind": "page",
    "path": "frontend/pages/legal-params.html",
    "routers_called": [
-    "router:legal_params",
-    "router:system"
+    "router:legal_params"
    ],
    "routers_called_effective": [
-    "router:legal_params",
-    "router:system"
+    "router:legal_params"
    ],
    "tables_r": [],
    "tables_w": []
@@ -7611,26 +7495,20 @@
   "page:pages/login-qr-approve.html": {
    "api_calls": [
     "/api/auth/login/qr-approve",
-    "/api/auth/login/qr-info",
-    "/api/system/branding",
-    "/api/system/branding/favicon",
-    "/api/system/branding/logo"
+    "/api/auth/login/qr-info"
    ],
    "api_prefixes": [
-    "/api/auth",
-    "/api/system"
+    "/api/auth"
    ],
    "api_unmatched": [],
    "imports": [],
    "kind": "page",
    "path": "frontend/pages/login-qr-approve.html",
    "routers_called": [
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "routers_called_effective": [
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "tables_r": [],
    "tables_w": []
@@ -7644,8 +7522,6 @@
     "/api/auth/webauthn/login/begin",
     "/api/auth/webauthn/login/complete",
     "/api/system/branding",
-    "/api/system/branding/favicon",
-    "/api/system/branding/logo",
     "/api/system/version",
     "/api/system/webauthn-config-status"
    ],
@@ -7672,12 +7548,10 @@
    "api_calls": [
     "/api/mail-types",
     "/api/mail-types/",
-    "/api/system/branding/favicon",
     "/api/users"
    ],
    "api_prefixes": [
     "/api/mail-types",
-    "/api/system",
     "/api/users"
    ],
    "api_unmatched": [],
@@ -7690,25 +7564,21 @@
    "path": "frontend/pages/mail-settings.html",
    "routers_called": [
     "router:auth",
-    "router:mail_settings",
-    "router:system"
+    "router:mail_settings"
    ],
    "routers_called_effective": [
     "router:auth",
-    "router:mail_settings",
-    "router:system"
+    "router:mail_settings"
    ],
    "tables_r": [],
    "tables_w": []
   },
   "page:pages/map.html": {
    "api_calls": [
-    "/api/map/points",
-    "/api/system/branding/favicon"
+    "/api/map/points"
    ],
    "api_prefixes": [
-    "/api/map",
-    "/api/system"
+    "/api/map"
    ],
    "api_unmatched": [],
    "imports": [
@@ -7720,12 +7590,10 @@
    "kind": "page",
    "path": "frontend/pages/map.html",
    "routers_called": [
-    "router:map_points",
-    "router:system"
+    "router:map_points"
    ],
    "routers_called_effective": [
-    "router:map_points",
-    "router:system"
+    "router:map_points"
    ],
    "tables_r": [],
    "tables_w": []
@@ -7740,14 +7608,12 @@
     "/api/definitions/custom_module",
     "/api/definitions/custom_module/",
     "/api/org/tree",
-    "/api/system/branding/favicon",
     "/api/users"
    ],
    "api_prefixes": [
     "/api/custom-modules",
     "/api/definitions",
     "/api/org",
-    "/api/system",
     "/api/users"
    ],
    "api_unmatched": [],
@@ -7764,22 +7630,19 @@
     "router:auth",
     "router:custom_records",
     "router:definitions",
-    "router:org_structure",
-    "router:system"
+    "router:org_structure"
    ],
    "routers_called_effective": [
     "router:auth",
     "router:custom_records",
     "router:definitions",
-    "router:org_structure",
-    "router:system"
+    "router:org_structure"
    ],
    "tables_r": [],
    "tables_w": []
   },
   "page:pages/module-settings.html": {
    "api_calls": [
-    "/api/system/branding/favicon",
     "/api/system/modules",
     "/api/system/modules/"
    ],
@@ -7806,12 +7669,10 @@
   "page:pages/module-versions.html": {
    "api_calls": [
     "/api/module-versions",
-    "/api/module-versions/",
-    "/api/system/branding/favicon"
+    "/api/module-versions/"
    ],
    "api_prefixes": [
-    "/api/module-versions",
-    "/api/system"
+    "/api/module-versions"
    ],
    "api_unmatched": [],
    "imports": [
@@ -7822,12 +7683,10 @@
    "kind": "page",
    "path": "frontend/pages/module-versions.html",
    "routers_called": [
-    "router:module_versions",
-    "router:system"
+    "router:module_versions"
    ],
    "routers_called_effective": [
-    "router:module_versions",
-    "router:system"
+    "router:module_versions"
    ],
    "tables_r": [],
    "tables_w": []
@@ -7841,13 +7700,11 @@
     "/api/network-plans/{}/export/pdf",
     "/api/network-plans/{}/import/excel",
     "/api/network-plans/{}/status",
-    "/api/network-plans/{}/topology-preview",
-    "/api/system/branding/favicon"
+    "/api/network-plans/{}/topology-preview"
    ],
    "api_prefixes": [
     "/api/inventory",
-    "/api/network-plans",
-    "/api/system"
+    "/api/network-plans"
    ],
    "api_unmatched": [],
    "imports": [
@@ -7861,13 +7718,11 @@
    "path": "frontend/pages/network-plan-form.html",
    "routers_called": [
     "mod:netplan/api",
-    "mod:supply/api/inventory",
-    "router:system"
+    "mod:supply/api/inventory"
    ],
    "routers_called_effective": [
     "mod:netplan/api",
-    "mod:supply/api/inventory",
-    "router:system"
+    "mod:supply/api/inventory"
    ],
    "tables_r": [],
    "tables_w": []
@@ -7876,13 +7731,11 @@
    "api_calls": [
     "/api/network-plans",
     "/api/network-plans/{}",
-    "/api/quotations",
-    "/api/system/branding/favicon"
+    "/api/quotations"
    ],
    "api_prefixes": [
     "/api/network-plans",
-    "/api/quotations",
-    "/api/system"
+    "/api/quotations"
    ],
    "api_unmatched": [],
    "imports": [
@@ -7895,13 +7748,11 @@
    "path": "frontend/pages/network-plans.html",
    "routers_called": [
     "mod:case/api/quotations",
-    "mod:netplan/api",
-    "router:system"
+    "mod:netplan/api"
    ],
    "routers_called_effective": [
     "mod:case/api/quotations",
-    "mod:netplan/api",
-    "router:system"
+    "mod:netplan/api"
    ],
    "tables_r": [],
    "tables_w": []
@@ -7911,12 +7762,10 @@
     "/api/settings/email-notify",
     "/api/settings/email-notify/test",
     "/api/settings/monthly-report-recipients",
-    "/api/system/branding/favicon",
     "/api/users/selectable"
    ],
    "api_prefixes": [
     "/api/settings",
-    "/api/system",
     "/api/users"
    ],
    "api_unmatched": [],
@@ -7941,13 +7790,11 @@
   "page:pages/online-stats.html": {
    "api_calls": [
     "/api/online-users",
-    "/api/system/branding/favicon",
     "/api/user-activity",
     "/api/user-activity/trail"
    ],
    "api_prefixes": [
     "/api/online-users",
-    "/api/system",
     "/api/user-activity"
    ],
    "api_unmatched": [],
@@ -7976,7 +7823,6 @@
     "/api/org/divisions",
     "/api/org/divisions/",
     "/api/org/tree",
-    "/api/system/branding/favicon",
     "/api/users",
     "/api/users/",
     "/api/users/selectable"
@@ -7984,7 +7830,6 @@
    "api_prefixes": [
     "/api/auth",
     "/api/org",
-    "/api/system",
     "/api/users"
    ],
    "api_unmatched": [],
@@ -7997,13 +7842,11 @@
    "path": "frontend/pages/org-structure.html",
    "routers_called": [
     "router:auth",
-    "router:org_structure",
-    "router:system"
+    "router:org_structure"
    ],
    "routers_called_effective": [
     "router:auth",
-    "router:org_structure",
-    "router:system"
+    "router:org_structure"
    ],
    "tables_r": [],
    "tables_w": []
@@ -8015,14 +7858,12 @@
     "/api/inventory/parts-summary",
     "/api/parts",
     "/api/parts/categories",
-    "/api/parts/{}",
-    "/api/system/branding/favicon"
+    "/api/parts/{}"
    ],
    "api_prefixes": [
     "/api/auth",
     "/api/inventory",
-    "/api/parts",
-    "/api/system"
+    "/api/parts"
    ],
    "api_unmatched": [],
    "imports": [
@@ -8036,14 +7877,12 @@
    "routers_called": [
     "mod:supply/api/inventory",
     "router:auth",
-    "router:parts",
-    "router:system"
+    "router:parts"
    ],
    "routers_called_effective": [
     "mod:supply/api/inventory",
     "router:auth",
-    "router:parts",
-    "router:system"
+    "router:parts"
    ],
    "tables_r": [],
    "tables_w": []
@@ -8059,13 +7898,11 @@
     "/api/payment-requests/{}/reject",
     "/api/payment-requests/{}/revoke-approval",
     "/api/payment-requests/{}/submit",
-    "/api/quotations/{}",
-    "/api/system/branding/favicon"
+    "/api/quotations/{}"
    ],
    "api_prefixes": [
     "/api/payment-requests",
-    "/api/quotations",
-    "/api/system"
+    "/api/quotations"
    ],
    "api_unmatched": [],
    "imports": [
@@ -8084,8 +7921,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
-    "mod:netplan/api",
-    "router:system"
+    "mod:netplan/api"
    ],
    "routers_called_effective": [
     "mod:arap/api/payment_requests",
@@ -8093,8 +7929,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
-    "mod:netplan/api",
-    "router:system"
+    "mod:netplan/api"
    ],
    "tables_r": [],
    "tables_w": []
@@ -8111,7 +7946,6 @@
     "/api/payslips/{}/export",
     "/api/payslips/{}/pdf-download",
     "/api/settings/company-profile",
-    "/api/system/branding/favicon",
     "/api/tax-rules"
    ],
    "api_prefixes": [
@@ -8119,7 +7953,6 @@
     "/api/next-slip-no",
     "/api/payslips",
     "/api/settings",
-    "/api/system",
     "/api/tax-rules"
    ],
    "api_unmatched": [],
@@ -8152,12 +7985,10 @@
     "/api/payslips/{}/archive/{}",
     "/api/payslips/{}/archive/{}/record",
     "/api/payslips/{}/export",
-    "/api/payslips/{}/pdf-download",
-    "/api/system/branding/favicon"
+    "/api/payslips/{}/pdf-download"
    ],
    "api_prefixes": [
-    "/api/payslips",
-    "/api/system"
+    "/api/payslips"
    ],
    "api_unmatched": [],
    "imports": [
@@ -8168,12 +7999,10 @@
    "kind": "page",
    "path": "frontend/pages/payslips.html",
    "routers_called": [
-    "mod:payroll/api/payslips",
-    "router:system"
+    "mod:payroll/api/payslips"
    ],
    "routers_called_effective": [
-    "mod:payroll/api/payslips",
-    "router:system"
+    "mod:payroll/api/payslips"
    ],
    "tables_r": [],
    "tables_w": []
@@ -8182,13 +8011,11 @@
    "api_calls": [
     "/api/auth/logout",
     "/api/auth/me",
-    "/api/materials-summary",
-    "/api/system/branding/favicon"
+    "/api/materials-summary"
    ],
    "api_prefixes": [
     "/api/auth",
-    "/api/materials-summary",
-    "/api/system"
+    "/api/materials-summary"
    ],
    "api_unmatched": [],
    "imports": [
@@ -8200,13 +8027,11 @@
    "path": "frontend/pages/procurement.html",
    "routers_called": [
     "mod:analytics/api/dashboard",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "routers_called_effective": [
     "mod:analytics/api/dashboard",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "tables_r": [],
    "tables_w": []
@@ -8222,14 +8047,12 @@
     "/api/quotations/{}/reject",
     "/api/quotations/{}/reject-final",
     "/api/quotations/{}/stages",
-    "/api/system/branding/favicon",
     "/api/uploads/{}"
    ],
    "api_prefixes": [
     "/api/auth",
     "/api/photo-token",
     "/api/quotations",
-    "/api/system",
     "/api/uploads"
    ],
    "api_unmatched": [],
@@ -8251,7 +8074,6 @@
     "mod:case/api/quotations",
     "mod:netplan/api",
     "router:auth",
-    "router:system",
     "router:uploads"
    ],
    "routers_called_effective": [
@@ -8261,7 +8083,6 @@
     "mod:case/api/quotations",
     "mod:netplan/api",
     "router:auth",
-    "router:system",
     "router:uploads"
    ],
    "tables_r": [],
@@ -8273,14 +8094,12 @@
     "/api/next-quote-no",
     "/api/quotations",
     "/api/quotations/{}",
-    "/api/quotations/{}/deal-tag",
-    "/api/system/branding/favicon"
+    "/api/quotations/{}/deal-tag"
    ],
    "api_prefixes": [
     "/api/auth",
     "/api/next-quote-no",
-    "/api/quotations",
-    "/api/system"
+    "/api/quotations"
    ],
    "api_unmatched": [],
    "imports": [
@@ -8297,8 +8116,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "routers_called_effective": [
     "mod:case/api/case_action_items",
@@ -8306,8 +8124,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "tables_r": [],
    "tables_w": []
@@ -8325,12 +8142,8 @@
    "tables_w": []
   },
   "page:pages/reports.html": {
-   "api_calls": [
-    "/api/system/branding/favicon"
-   ],
-   "api_prefixes": [
-    "/api/system"
-   ],
+   "api_calls": [],
+   "api_prefixes": [],
    "api_unmatched": [],
    "imports": [
     "js:js/reports.js",
@@ -8341,9 +8154,7 @@
    ],
    "kind": "page",
    "path": "frontend/pages/reports.html",
-   "routers_called": [
-    "router:system"
-   ],
+   "routers_called": [],
    "routers_called_effective": [
     "mod:analytics/api/reports",
     "mod:arap/api/cashier",
@@ -8374,7 +8185,6 @@
   "page:pages/schema-status.html": {
    "api_calls": [
     "/api/auth/logout",
-    "/api/system/branding/favicon",
     "/api/system/schema-status"
    ],
    "api_prefixes": [
@@ -8406,14 +8216,12 @@
     "/api/photo-token",
     "/api/quotations/{}/extra-expenses",
     "/api/quotations/{}/settlement",
-    "/api/system/branding/favicon",
     "/api/uploads/{}"
    ],
    "api_prefixes": [
     "/api/contractor-dispatches",
     "/api/photo-token",
     "/api/quotations",
-    "/api/system",
     "/api/uploads"
    ],
    "api_unmatched": [],
@@ -8429,14 +8237,12 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/quotations",
     "mod:subcontract/api/vendor_contractors",
-    "router:system",
     "router:uploads"
    ],
    "routers_called_effective": [
     "mod:case/api/case_extra_expenses",
     "mod:case/api/quotations",
     "mod:subcontract/api/vendor_contractors",
-    "router:system",
     "router:uploads"
    ],
    "tables_r": [],
@@ -8444,12 +8250,10 @@
   },
   "page:pages/shipping-export-history.html": {
    "api_calls": [
-    "/api/shipping-notes/export-history",
-    "/api/system/branding/favicon"
+    "/api/shipping-notes/export-history"
    ],
    "api_prefixes": [
-    "/api/shipping-notes",
-    "/api/system"
+    "/api/shipping-notes"
    ],
    "api_unmatched": [],
    "imports": [
@@ -8460,12 +8264,10 @@
    "kind": "page",
    "path": "frontend/pages/shipping-export-history.html",
    "routers_called": [
-    "mod:supply/api/shipping_notes",
-    "router:system"
+    "mod:supply/api/shipping_notes"
    ],
    "routers_called_effective": [
-    "mod:supply/api/shipping_notes",
-    "router:system"
+    "mod:supply/api/shipping_notes"
    ],
    "tables_r": [],
    "tables_w": []
@@ -8475,13 +8277,11 @@
     "/api/auth/logout",
     "/api/suppliers",
     "/api/suppliers/{}/visits",
-    "/api/system/branding/favicon",
     "/api/users"
    ],
    "api_prefixes": [
     "/api/auth",
     "/api/suppliers",
-    "/api/system",
     "/api/users"
    ],
    "api_unmatched": [],
@@ -8494,13 +8294,11 @@
    "path": "frontend/pages/supplier-log.html",
    "routers_called": [
     "mod:supply/api/suppliers",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "routers_called_effective": [
     "mod:supply/api/suppliers",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "tables_r": [],
    "tables_w": []
@@ -8513,15 +8311,13 @@
     "/api/customers/{}",
     "/api/suppliers",
     "/api/suppliers/{}",
-    "/api/suppliers/{}/privacy-notice",
-    "/api/system/branding/favicon"
+    "/api/suppliers/{}/privacy-notice"
    ],
    "api_prefixes": [
     "/api/auth",
     "/api/company",
     "/api/customers",
-    "/api/suppliers",
-    "/api/system"
+    "/api/suppliers"
    ],
    "api_unmatched": [],
    "imports": [
@@ -8538,15 +8334,13 @@
     "mod:supply/api/suppliers",
     "router:auth",
     "router:company_lookup",
-    "router:customers",
-    "router:system"
+    "router:customers"
    ],
    "routers_called_effective": [
     "mod:supply/api/suppliers",
     "router:auth",
     "router:company_lookup",
-    "router:customers",
-    "router:system"
+    "router:customers"
    ],
    "tables_r": [],
    "tables_w": []
@@ -8554,7 +8348,6 @@
   "page:pages/tender-radar.html": {
    "api_calls": [
     "/api/map/points",
-    "/api/system/branding/favicon",
     "/api/tender-radar/scan",
     "/api/tender-radar/schedule",
     "/api/tender-radar/status",
@@ -8565,7 +8358,6 @@
    ],
    "api_prefixes": [
     "/api/map",
-    "/api/system",
     "/api/tender-radar"
    ],
    "api_unmatched": [],
@@ -8582,13 +8374,11 @@
    "path": "frontend/pages/tender-radar.html",
    "routers_called": [
     "mod:tender_radar/api",
-    "router:map_points",
-    "router:system"
+    "router:map_points"
    ],
    "routers_called_effective": [
     "mod:tender_radar/api",
-    "router:map_points",
-    "router:system"
+    "router:map_points"
    ],
    "tables_r": [],
    "tables_w": []
@@ -8596,12 +8386,10 @@
   "page:pages/topology-quick.html": {
    "api_calls": [
     "/api/network-plans-quick/pdf",
-    "/api/network-plans-quick/preview",
-    "/api/system/branding/favicon"
+    "/api/network-plans-quick/preview"
    ],
    "api_prefixes": [
-    "/api/network-plans-quick",
-    "/api/system"
+    "/api/network-plans-quick"
    ],
    "api_unmatched": [],
    "imports": [
@@ -8612,12 +8400,10 @@
    "kind": "page",
    "path": "frontend/pages/topology-quick.html",
    "routers_called": [
-    "mod:netplan/api",
-    "router:system"
+    "mod:netplan/api"
    ],
    "routers_called_effective": [
-    "mod:netplan/api",
-    "router:system"
+    "mod:netplan/api"
    ],
    "tables_r": [],
    "tables_w": []
@@ -8633,7 +8419,6 @@
     "/api/settings/custom-roles",
     "/api/settings/custom-roles/",
     "/api/settings/role-labels",
-    "/api/system/branding/favicon",
     "/api/system/case-roles-unmapped",
     "/api/users",
     "/api/users/{}",
@@ -8682,7 +8467,6 @@
    "api_calls": [
     "/api/company/tax/{}",
     "/api/contractor-dispatches",
-    "/api/system/branding/favicon",
     "/api/vendor-contractors",
     "/api/vendor-contractors/{}",
     "/api/vendor-contractors/{}/active",
@@ -8694,7 +8478,6 @@
    "api_prefixes": [
     "/api/company",
     "/api/contractor-dispatches",
-    "/api/system",
     "/api/vendor-contractors"
    ],
    "api_unmatched": [],
@@ -8710,24 +8493,18 @@
    "path": "frontend/pages/vendor-contractors.html",
    "routers_called": [
     "mod:subcontract/api/vendor_contractors",
-    "router:company_lookup",
-    "router:system"
+    "router:company_lookup"
    ],
    "routers_called_effective": [
     "mod:subcontract/api/vendor_contractors",
-    "router:company_lookup",
-    "router:system"
+    "router:company_lookup"
    ],
    "tables_r": [],
    "tables_w": []
   },
   "page:pages/voucher.html": {
-   "api_calls": [
-    "/api/system/branding/favicon"
-   ],
-   "api_prefixes": [
-    "/api/system"
-   ],
+   "api_calls": [],
+   "api_prefixes": [],
    "api_unmatched": [],
    "imports": [
     "js:js/voucher.js",
@@ -8737,9 +8514,7 @@
    ],
    "kind": "page",
    "path": "frontend/pages/voucher.html",
-   "routers_called": [
-    "router:system"
-   ],
+   "routers_called": [],
    "routers_called_effective": [
     "mod:accounting/api/account_items",
     "mod:accounting/api/vouchers",
@@ -8751,13 +8526,11 @@
   "page:pages/warranty.html": {
    "api_calls": [
     "/api/auth/logout",
-    "/api/devices",
-    "/api/system/branding/favicon"
+    "/api/devices"
    ],
    "api_prefixes": [
     "/api/auth",
-    "/api/devices",
-    "/api/system"
+    "/api/devices"
    ],
    "api_unmatched": [],
    "imports": [
@@ -8769,13 +8542,11 @@
    "path": "frontend/pages/warranty.html",
    "routers_called": [
     "mod:analytics/api/dashboard",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "routers_called_effective": [
     "mod:analytics/api/dashboard",
-    "router:auth",
-    "router:system"
+    "router:auth"
    ],
    "tables_r": [],
    "tables_w": []
@@ -8783,14 +8554,12 @@
   "page:pages/work-log.html": {
    "api_calls": [
     "/api/auth/logout",
-    "/api/system/branding/favicon",
     "/api/users/selectable",
     "/api/work-logs",
     "/api/work-logs/{}"
    ],
    "api_prefixes": [
     "/api/auth",
-    "/api/system",
     "/api/users",
     "/api/work-logs"
    ],
@@ -9146,7 +8915,6 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
-    "helper:branding",
     "helper:build_info",
     "helper:company_identity",
     "helper:email_notify",
@@ -9155,14 +8923,12 @@
     "helper:notification_prefs",
     "helper:privacy_notice",
     "helper:settings",
-    "helper:startup",
     "helper:tiered_approval"
    ],
    "imports": [
     "core:db",
     "helper:audit",
     "helper:auth",
-    "helper:branding",
     "helper:build_info",
     "helper:company_identity",
     "helper:email_notify",
@@ -9171,7 +8937,6 @@
     "helper:notification_prefs",
     "helper:privacy_notice",
     "helper:settings",
-    "helper:startup",
     "plat:paths",
     "router:mail_settings"
    ],
@@ -9187,217 +8952,217 @@
     },
     {
      "func": "system_version",
-     "line": 299,
+     "line": 301,
      "method": "GET",
      "path": "/api/system/version"
     },
     {
      "func": "system_branding",
-     "line": 322,
+     "line": 324,
      "method": "GET",
      "path": "/api/system/branding"
     },
     {
      "func": "system_deployed_version",
-     "line": 347,
+     "line": 346,
      "method": "GET",
      "path": "/api/system/deployed-version"
     },
     {
      "func": "build_info_endpoint",
-     "line": 367,
+     "line": 366,
      "method": "GET",
      "path": "/api/build-info"
     },
     {
      "func": "auth_login",
-     "line": 398,
+     "line": 397,
      "method": "POST",
      "path": "/api/auth/login"
     },
     {
      "func": "auth_login_totp",
-     "line": 552,
+     "line": 551,
      "method": "POST",
      "path": "/api/auth/login/totp"
     },
     {
      "func": "login_qr_info",
-     "line": 662,
+     "line": 661,
      "method": "GET",
      "path": "/api/auth/login/qr-info"
     },
     {
      "func": "login_qr_approve",
-     "line": 687,
+     "line": 686,
      "method": "POST",
      "path": "/api/auth/login/qr-approve"
     },
     {
      "func": "login_qr_status",
-     "line": 757,
+     "line": 756,
      "method": "GET",
      "path": "/api/auth/login/qr-status"
     },
     {
      "func": "totp_status",
-     "line": 790,
+     "line": 789,
      "method": "GET",
      "path": "/api/auth/totp/status"
     },
     {
      "func": "totp_setup",
-     "line": 815,
+     "line": 814,
      "method": "POST",
      "path": "/api/auth/totp/setup"
     },
     {
      "func": "totp_enable",
-     "line": 837,
+     "line": 836,
      "method": "POST",
      "path": "/api/auth/totp/enable"
     },
     {
      "func": "totp_regenerate_recovery_codes",
-     "line": 864,
+     "line": 863,
      "method": "POST",
      "path": "/api/auth/totp/recovery-codes/regenerate"
     },
     {
      "func": "totp_disable",
-     "line": 907,
+     "line": 906,
      "method": "POST",
      "path": "/api/auth/totp/disable"
     },
     {
      "func": "webauthn_register_begin",
-     "line": 1034,
+     "line": 1033,
      "method": "POST",
      "path": "/api/auth/webauthn/register/begin"
     },
     {
      "func": "webauthn_register_complete",
-     "line": 1077,
+     "line": 1076,
      "method": "POST",
      "path": "/api/auth/webauthn/register/complete"
     },
     {
      "func": "webauthn_login_begin",
-     "line": 1138,
+     "line": 1137,
      "method": "POST",
      "path": "/api/auth/webauthn/login/begin"
     },
     {
      "func": "webauthn_login_complete",
-     "line": 1205,
+     "line": 1204,
      "method": "POST",
      "path": "/api/auth/webauthn/login/complete"
     },
     {
      "func": "webauthn_credentials_list",
-     "line": 1312,
+     "line": 1311,
      "method": "GET",
      "path": "/api/auth/webauthn/credentials"
     },
     {
      "func": "webauthn_credential_rename",
-     "line": 1339,
+     "line": 1338,
      "method": "PATCH",
      "path": "/api/auth/webauthn/credentials/{cred_id}"
     },
     {
      "func": "webauthn_credential_delete",
-     "line": 1363,
+     "line": 1362,
      "method": "DELETE",
      "path": "/api/auth/webauthn/credentials/{cred_id}"
     },
     {
      "func": "auth_logout",
-     "line": 1383,
+     "line": 1382,
      "method": "POST",
      "path": "/api/auth/logout"
     },
     {
      "func": "auth_me",
-     "line": 1403,
+     "line": 1402,
      "method": "GET",
      "path": "/api/auth/me"
     },
     {
      "func": "change_password",
-     "line": 1429,
+     "line": 1428,
      "method": "PATCH",
      "path": "/api/auth/change-password"
     },
     {
      "func": "list_users",
-     "line": 1470,
+     "line": 1469,
      "method": "GET",
      "path": "/api/users"
     },
     {
      "func": "create_user",
-     "line": 1503,
+     "line": 1499,
      "method": "POST",
      "path": "/api/users"
     },
     {
      "func": "update_user",
-     "line": 1549,
+     "line": 1545,
      "method": "PUT",
      "path": "/api/users/{user_id}"
     },
     {
      "func": "get_user_privacy_ack",
-     "line": 1615,
+     "line": 1611,
      "method": "GET",
      "path": "/api/users/{user_id}/privacy-notice"
     },
     {
      "func": "ack_user_privacy_notice",
-     "line": 1622,
+     "line": 1618,
      "method": "POST",
      "path": "/api/users/{user_id}/privacy-notice/ack"
     },
     {
      "func": "delete_user",
-     "line": 1639,
+     "line": 1635,
      "method": "DELETE",
      "path": "/api/users/{user_id}"
     },
     {
      "func": "toggle_user_active",
-     "line": 1674,
+     "line": 1669,
      "method": "PATCH",
      "path": "/api/users/{user_id}/active"
     },
     {
      "func": "users_selectable",
-     "line": 1698,
+     "line": 1692,
      "method": "GET",
      "path": "/api/users/selectable"
     },
     {
      "func": "verify_unlock",
-     "line": 1711,
+     "line": 1705,
      "method": "POST",
      "path": "/api/auth/verify-unlock"
     },
     {
      "func": "set_unlock_password",
-     "line": 1731,
+     "line": 1725,
      "method": "PATCH",
      "path": "/api/users/{user_id}/unlock-password"
     },
     {
      "func": "verify_daily_task_unlock",
-     "line": 1760,
+     "line": 1754,
      "method": "POST",
      "path": "/api/auth/verify-daily-task-unlock"
     },
     {
      "func": "set_daily_task_password",
-     "line": 1779,
+     "line": 1773,
      "method": "PATCH",
      "path": "/api/users/{user_id}/daily-task-password"
     }
@@ -9430,7 +9195,6 @@
    "tables_w_transitive": [
     "audit_log",
     "login_rate_limit",
-    "module_versions",
     "notifications",
     "sessions",
     "system_settings",
@@ -10266,15 +10030,13 @@
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:settings",
-    "helper:startup",
     "helper:tiered_approval"
    ],
    "imports": [
     "core:db",
     "helper:audit",
     "helper:auth",
-    "helper:email_notify",
-    "helper:startup"
+    "helper:email_notify"
    ],
    "kind": "router",
    "path": "backend/routers/module_versions.py",
@@ -10282,19 +10044,19 @@
    "routes": [
     {
      "func": "list_module_versions",
-     "line": 44,
+     "line": 34,
      "method": "GET",
      "path": "/api/module-versions"
     },
     {
      "func": "create_module_version",
-     "line": 83,
+     "line": 70,
      "method": "POST",
      "path": "/api/module-versions"
     },
     {
      "func": "delete_module_version",
-     "line": 120,
+     "line": 107,
      "method": "DELETE",
      "path": "/api/module-versions/{mvid}"
     }
@@ -10319,12 +10081,9 @@
    ],
    "tables_w_transitive": [
     "audit_log",
-    "login_rate_limit",
     "module_versions",
     "notifications",
-    "sessions",
-    "system_settings",
-    "users"
+    "system_settings"
    ]
   },
   "router:modules": {
@@ -10709,7 +10468,6 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
-    "helper:branding",
     "helper:case_roles",
     "helper:dates",
     "helper:email_notify",
@@ -10735,7 +10493,6 @@
     "core:trail",
     "helper:audit",
     "helper:auth",
-    "helper:branding",
     "helper:case_roles",
     "helper:email_notify",
     "helper:errors",
@@ -10920,273 +10677,249 @@
     },
     {
      "func": "get_company_profile",
-     "line": 1237,
+     "line": 1223,
      "method": "GET",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "set_company_profile",
-     "line": 1338,
+     "line": 1324,
      "method": "PUT",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "get_default_payment_terms",
-     "line": 1448,
+     "line": 1429,
      "method": "GET",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "set_default_payment_terms",
-     "line": 1455,
+     "line": 1436,
      "method": "PUT",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "get_edge_path_setting",
-     "line": 1466,
+     "line": 1447,
      "method": "GET",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "set_edge_path_setting",
-     "line": 1477,
+     "line": 1458,
      "method": "PATCH",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "get_pdf_base_path_setting",
-     "line": 1493,
+     "line": 1474,
      "method": "GET",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "set_pdf_base_path_setting",
-     "line": 1501,
+     "line": 1482,
      "method": "PATCH",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "get_webauthn_config",
-     "line": 1585,
+     "line": 1566,
      "method": "GET",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "set_webauthn_config",
-     "line": 1601,
+     "line": 1582,
      "method": "PATCH",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "get_google_quota_setting",
-     "line": 1671,
+     "line": 1652,
      "method": "GET",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "set_google_quota_setting",
-     "line": 1692,
+     "line": 1673,
      "method": "PUT",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "get_backup_retention_setting",
-     "line": 1752,
+     "line": 1733,
      "method": "GET",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "set_backup_retention_setting",
-     "line": 1759,
+     "line": 1740,
      "method": "PATCH",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "get_quote_terms_defaults",
-     "line": 1868,
+     "line": 1849,
      "method": "GET",
      "path": "/api/settings/quote-terms-defaults"
     },
     {
      "func": "get_quote_terms_presets",
-     "line": 1879,
+     "line": 1860,
      "method": "GET",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "set_quote_terms_presets",
-     "line": 1886,
+     "line": 1867,
      "method": "PUT",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "get_cloud_backup_target_setting",
-     "line": 1964,
+     "line": 1945,
      "method": "GET",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_pii_archive_status",
-     "line": 1971,
+     "line": 1952,
      "method": "GET",
      "path": "/api/settings/pii-archive-status"
     },
     {
      "func": "set_cloud_backup_target_setting",
-     "line": 1983,
+     "line": 1964,
      "method": "PUT",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_email_notify",
-     "line": 2019,
+     "line": 2000,
      "method": "GET",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "set_email_notify",
-     "line": 2032,
+     "line": 2013,
      "method": "PUT",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "get_google_calendar",
-     "line": 2057,
+     "line": 2038,
      "method": "GET",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "set_google_calendar",
-     "line": 2071,
+     "line": 2052,
      "method": "PUT",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "test_google_calendar",
-     "line": 2087,
+     "line": 2068,
      "method": "POST",
      "path": "/api/settings/google-calendar/test"
     },
     {
      "func": "test_email_notify",
-     "line": 2103,
+     "line": 2084,
      "method": "POST",
      "path": "/api/settings/email-notify/test"
     },
     {
      "func": "get_custom_roles",
-     "line": 2131,
+     "line": 2112,
      "method": "GET",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "create_custom_role",
-     "line": 2137,
+     "line": 2118,
      "method": "POST",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "update_custom_role",
-     "line": 2164,
+     "line": 2145,
      "method": "PUT",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "delete_custom_role",
-     "line": 2188,
+     "line": 2169,
      "method": "DELETE",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "get_schema_status",
-     "line": 2212,
+     "line": 2193,
      "method": "GET",
      "path": "/api/system/schema-status"
     },
     {
      "func": "get_role_labels",
-     "line": 2242,
+     "line": 2223,
      "method": "GET",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "put_role_labels",
-     "line": 2257,
+     "line": 2238,
      "method": "PUT",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "get_webauthn_config_status",
-     "line": 2272,
+     "line": 2253,
      "method": "GET",
      "path": "/api/system/webauthn-config-status"
     },
     {
      "func": "list_online_users",
-     "line": 2305,
+     "line": 2286,
      "method": "GET",
      "path": "/api/online-users"
     },
     {
      "func": "user_activity_stats",
-     "line": 2349,
+     "line": 2330,
      "method": "GET",
      "path": "/api/user-activity"
     },
     {
      "func": "user_activity_trail",
-     "line": 2423,
+     "line": 2404,
      "method": "GET",
      "path": "/api/user-activity/trail"
     },
     {
      "func": "edit_presence_heartbeat",
-     "line": 2558,
+     "line": 2539,
      "method": "POST",
      "path": "/api/edit-presence"
     },
     {
      "func": "edit_presence_release",
-     "line": 2589,
+     "line": 2570,
      "method": "DELETE",
      "path": "/api/edit-presence"
     },
     {
      "func": "case_roles_unmapped",
-     "line": 2605,
+     "line": 2586,
      "method": "GET",
      "path": "/api/system/case-roles-unmapped"
     },
     {
      "func": "get_reminder_send_failures",
-     "line": 2646,
+     "line": 2627,
      "method": "GET",
      "path": "/api/settings/reminder-send-failures"
-    },
-    {
-     "func": "get_branding_asset",
-     "line": 2675,
-     "method": "GET",
-     "path": "/api/system/branding/{kind}"
-    },
-    {
-     "func": "get_branding_settings",
-     "line": 2714,
-     "method": "GET",
-     "path": "/api/settings/branding"
-    },
-    {
-     "func": "upload_branding_asset",
-     "line": 2723,
-     "method": "PUT",
-     "path": "/api/settings/branding/{kind}"
-    },
-    {
-     "func": "reset_branding_asset",
-     "line": 2740,
-     "method": "DELETE",
-     "path": "/api/settings/branding/{kind}"
     }
    ],
    "tables_ddl": [],

@@ -110,9 +110,12 @@ def test_favicon_is_reencoded_to_256_square(client, make_user):
     assert out.format == "PNG" and out.size == (256, 256)
 
 
-def test_public_read_needs_no_login_and_unknown_kind_is_404(client):
+def test_public_read_needs_no_login_and_unknown_kind_is_404(client, make_user):
     assert client.get("/api/system/branding/favicon").status_code == 200
-    assert client.get("/api/system/branding/nope").status_code == 404
+    # 只有三種圖檔的路徑是公開的；其他路徑未登入照全站規則 401，登入後查無 404
+    assert client.get("/api/system/branding/nope").status_code == 401
+    hdr = _hdr(client, make_user, "br_nope")
+    assert client.get("/api/system/branding/nope", headers=hdr).status_code == 404
 
 
 # ── 拒收 ────────────────────────────────────────────────────────────────────
