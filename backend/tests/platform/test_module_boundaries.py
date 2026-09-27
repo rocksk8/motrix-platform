@@ -235,12 +235,16 @@ def test_rc_candidate_check_and_exhausted_starts_really_fail(units, groups, base
     """稽核 D M06-S1：「起點耗盡要 fail」要有題走到——monkeypatch 出空的起點集合（真實資料現在起點含 mod: 單位，
     只要還有任一個 L2 模組在，這條分支幾乎走不到，所以仍要用 monkeypatch 逼出這個分支）。
     ① 正對照的判定對空的起點要報問題（不可以放行）；② 起點耗盡時 `_pick_new_cross_edge` 丟的是 **fail**，不是 skip
-    （skip 不會被 pytest.raises(Failed) 接住、題目會變成略過而不是紅 ⇒ 用 BaseException 接住再比類型）。"""
+    （skip 不會被 pytest.raises(Failed) 接住、題目會變成略過而不是紅 ⇒ 用 BaseException 接住再比類型）。
+    〔第十三班列車：起點耗盡現在分兩種——core-only（獨立訊號判定，skip）與掃描壞了（fail）。這題驗的是**後者**，
+    在真的是 core-only 的環境（modules.json 登記的模組全部真的不在）跑這題時，也要把 core_only_verdict monkeypatch
+    成「不是 core-only」，才能單獨驗到「掃描壞了要 fail」這條路，不受真實環境是不是 core-only 影響〕"""
     assert _candidate_problems([], [("M02", "mod:crm/__init__")]) == ["掃不到任何 L2 router（起點候選）"]
     assert _candidate_problems([("M01", "router:x")], [("M01", "router:y")]) != []
     import sys
     monkeypatch.setattr(sys.modules[__name__], "_cross_edge_candidates",
                         lambda _u, _g: ([], [("M02", "mod:crm/__init__")]))
+    monkeypatch.setattr(sys.modules[__name__], "core_only_verdict", lambda: (False, "monkeypatch：假裝不是 core-only"))
     got = None
     try:
         _pick_new_cross_edge(units, groups, baseline)
@@ -248,6 +252,17 @@ def test_rc_candidate_check_and_exhausted_starts_really_fail(units, groups, base
         got = e
     assert type(got) is pytest.fail.Exception, "起點耗盡要 fail（反向控制無法成立），實際：%r" % (got,)
     assert "沒有可用的起點候選" in str(got)
+
+
+def test_rc_exhausted_starts_skip_when_really_core_only(units, groups, baseline, monkeypatch):
+    """反向控制的另一半（第十三班列車）：起點耗盡時，若獨立訊號判定真的是 core-only ⇒ `_pick_new_cross_edge`
+    丟的是 skip，不是 fail——否則 core-only 反向控制（PLAYBOOK §G3）每次都會在這裡誤紅。"""
+    import sys
+    monkeypatch.setattr(sys.modules[__name__], "_cross_edge_candidates",
+                        lambda _u, _g: ([], [("M02", "mod:crm/__init__")]))
+    monkeypatch.setattr(sys.modules[__name__], "core_only_verdict", lambda: (True, "monkeypatch：假裝是 core-only"))
+    with pytest.raises(pytest.skip.Exception):
+        _pick_new_cross_edge(units, groups, baseline)
 
 
 def _pick_new_cross_edge(units, groups, baseline):
