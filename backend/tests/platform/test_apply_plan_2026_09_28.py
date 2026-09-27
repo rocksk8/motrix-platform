@@ -248,13 +248,18 @@ def test_mls_detects_module_startup_by_file(tmp_path):
 
 def test_dry_run_and_convert_both_go_through_migrate_like_startup():
     ps1 = (_TOOLS / "apply_update.ps1").read_text(encoding="utf-8-sig")
-    assert r'backend\tools\migrate_like_startup.py' in ps1
-    assert "--license" in ps1
+    import re
+    code = "\n".join(l for l in ps1.splitlines() if not l.lstrip().startswith("#"))   # 註解同一串字不算
+    assert re.search(r'^\s*\$dryRunTool\s*=\s*Join-Path\s+\$PackagePath\s+"backend\\tools\\migrate_like_startup\.py"',
+                     code, re.M), "乾跑沒有指到新包裡的 migrate_like_startup.py"
+    assert re.search(r'^\s*if\s*\(Test-Path\s+\$dryRunTool\)', code, re.M)
+    assert "'--license'" in code
     up = (Path(__file__).resolve().parents[3] / "tools" / "platform" / "upgrade.py").read_text(encoding="utf-8")
     body = up.split("def run_migrations", 1)[1].split("\ndef ", 1)[0]
-    assert "migrate_like_startup.py" in body and "MIGRATE_OK" in body
-    # 反向控制：成功字樣只在工具 exit 0 時印（不可以無條件印）
-    assert "if e.code == 0" in body and "if e.code == 0" in ps1
+    body = "\n".join(l for l in body.splitlines() if not l.lstrip().startswith("#"))
+    assert 'os.path.join(backend, "tools", "migrate_like_startup.py")' in body and "MIGRATE_OK" in body
+    # 成功字樣只在工具 exit 0 時印（不可以無條件印）
+    assert "if e.code == 0" in body and "if e.code == 0" in code
 
 
 def test_mls_without_module_startup_is_plain_init_db(tmp_path):
