@@ -8,6 +8,7 @@
 📌 2026-09-25：使用者確認正式機＝46dc6ae（2026-09-24 02:46:15 部署）。
 📌 2026-09-25 02:5x：使用者回報已把 20260925_023333_3a66611 更新到正式機 ⇒ 基準改 3a66611。
 📌 2026-09-25 15:3x：使用者回報已部署 20260925_151234_2220aedb ⇒ 基準改 2220aedb。
+📌 2026-09-28：正式機已部署 c006a2a0（主持派工第十四班）⇒ 基準改 c006a2a0。
 """
 import json
 import subprocess
@@ -16,7 +17,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "2220aedb"
+BASELINE = "c006a2a0"
 
 
 def baseline_manifest():
