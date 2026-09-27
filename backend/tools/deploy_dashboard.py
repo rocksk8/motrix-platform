@@ -214,6 +214,7 @@ _STATUS_FAILED = frozenset({
     # 2026-09-28 日常更新（platform 套 platform）新增的出口
     "script_not_from_package",                                  # AH-M2：跑到的不是包裡那份腳本，尚未被觸碰
     "apply_locked", "apply_locked_stale",                       # UPDATE-DELIVERY §9.2：另一個在跑／殘留鎖，尚未被觸碰
+    "unhandled_exception",                                      # AH-S11：沒被接住的例外（rolled_back 看當下狀態）
     "plan_refused", "plan_failed", "delete_plan_too_large",     # 刪除計畫：正式機尚未被觸碰
     "snapshot_failed_root_dirs", "snapshot_missing_deleted",    # 快照：正式機尚未被觸碰
     "copy_failed_root_dirs", "delete_failed",                   # 🔴 半套用、服務已停
@@ -225,6 +226,7 @@ _STATUS_FAILED = frozenset({
     # 2026-09-28 手動回滾補上日常更新的缺口（刪新增檔、tools／product、demo 庫）
     "rollback_plan_tool_missing",                               # 還沒動任何檔
     "rollback_locked", "rollback_locked_stale",                 # UPDATE-DELIVERY §9.2：另一個在跑／殘留鎖，還沒動任何檔
+    "rollback_unhandled_exception",                             # AH-S11
     "rollback_copy_failed_root_dirs", "rollback_cleanup_failed",  # 🔴 還原到一半
 })
 _STATUS_ALL = _STATUS_SUCCEEDED | _STATUS_FAILED
