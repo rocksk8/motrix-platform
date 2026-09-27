@@ -349,3 +349,14 @@ def test_aho7_script_change_requires_a_version_decision():
         "兩種都要把 apply_update.version.json 的 sha256 更新成 %s" % _ps1_digest(raw))
     # 反向控制：換行與 BOM 不影響（git 在 Windows 取出成 CRLF 也一樣），內容差一個字就不同
     assert _ps1_digest(b"\xef\xbb\xbfa\r\nb") == _ps1_digest(b"a\nb") != _ps1_digest(b"a\nc")
+
+
+@pytest.mark.parametrize("name", ("apply_update.ps1", "rollback_update.ps1"))
+def test_every_robocopy_has_a_retry_limit(name):
+    """robocopy 預設 /R:1000000 /W:30：被占用的檔會讓套用／回滾卡住數天而不是失敗（AH-S7 的出口走不到）。"""
+    import re
+    code = _ps_code(name)
+    calls = [l for l in code.splitlines() if re.search(r"(^|[=\s])robocopy\s", l)]
+    assert len(calls) >= 3, "robocopy 一行都沒抓到 ⇒ 量法壞了"
+    bad = [l.strip() for l in calls if not (re.search(r"/R:\d+\b", l) and re.search(r"/W:\d+\b", l))]
+    assert not bad, bad
