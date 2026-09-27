@@ -179,3 +179,75 @@ def test_live_preview_shows_a_new_field(live_server, make_user, new_context):
     frame.locator('.is-preview-hl[data-field="%s"]' % k2).wait_for(state="attached", timeout=15000)
     assert frame.locator(".is-preview-hl").count() == 1
     assert not errors, errors
+
+
+LAYOUT_JS = Path(__file__).resolve().parents[2] / "frontend" / "static" / "custom-layout.js"
+
+
+@pytest.mark.e2e
+def test_formula_readable_swaps_keys_for_labels_and_operators_for_math_signs(new_context):
+    """使用者 2026-09-27：「帶入公式需要註解或是說明這公式是甚麼」⇒ 可讀式子（建構器卡片與執行頁共用 L.formulaReadable）。"""
+    page = new_context().new_page()
+    page.set_content("<html><body></body></html>")
+    page.add_script_tag(path=str(LAYOUT_JS))
+    d = {"fields": [{"key": "qty", "label": "數量", "type": "number"},
+                    {"key": "unit_price", "label": "單價", "type": "number"},
+                    {"key": "note", "type": "text"},
+                    {"key": "amount", "label": "金額", "type": "formula", "formula": "qty*unit_price"}]}
+    got = page.evaluate("""(d) => { const R = (f) => window.MotrixCustomLayout.formulaReadable(d, f); return [
+      R(d.fields[3]),
+      R({key: 'avg', label: '平均', type: 'formula', formula: 'round(qty / unit_price, 2)'}),
+      R({key: 'x', label: '判斷', type: 'formula', formula: 'if(qty >= 10, "qty", note)'}),
+      R({key: 'y', label: 'Y', type: 'formula', formula: 'qty - unknown_key'}),
+      R({key: 'z', label: 'Z', type: 'formula', formula: '   '}),
+      R(d.fields[0]),
+    ] }""", d)
+    assert got == ["金額 ＝ 數量 × 單價",
+                   "平均 ＝ round(數量 ÷ 單價, 2)",
+                   '判斷 ＝ if(數量 ≥ 10, "qty", note)',        # 字串常值原樣；沒標籤的欄位用代號
+                   "Y ＝ 數量 - unknown_key",
+                   "", ""], got
+
+
+def _label(page, i, text):
+    page.click('.mb-fc[data-field-index="%d"]' % i)
+    page.wait_for_selector('.mb-fc[data-field-index="%d"] #mb-f-label' % i)
+    page.fill("#mb-f-label", text)
+
+
+@pytest.mark.e2e
+def test_formula_card_shows_readable_formula_or_plain_error_and_help_lands_in_draft_and_preview(live_server, make_user, new_context):
+    """卡片上看得到「金額 ＝ 數量 × 單價」；公式寫錯 ⇒ 同一處用人話說哪裡錯（沿用公式檢查）；
+    說明（help）存進草稿 DB；預覽（＝執行頁）欄位下方顯示說明與可讀式子。"""
+    page, errors = _open(new_context, live_server, make_user, "dnd_help")
+    for t in ("number", "number", "formula"):
+        page.click('#mb-palette [data-palette-type="%s"]' % t)
+    page.wait_for_selector('.mb-fc[data-field-index="2"]')
+    _label(page, 0, "數量")
+    _label(page, 1, "單價")
+    _label(page, 2, "金額")
+    _saved(page)
+    k0, k1, k2 = _keys()
+    fx = '.mb-fc[data-field-index="2"] [data-fx-readable="%s"]' % k2
+    page.fill("#mb-f-formula", "%s * %s" % (k0, k1))
+    page.wait_for_function("(s) => { const e = document.querySelector(s); return e && e.dataset.fxState === 'ok' && e.textContent.trim() === '金額 ＝ 數量 × 單價' }",
+                           arg=fx, timeout=15000)
+    page.fill("#mb-f-formula", "%s * " % k0)
+    page.wait_for_function("(s) => { const e = document.querySelector(s); return e && e.dataset.fxState === 'bad' && e.textContent.startsWith('公式有誤：') }",
+                           arg=fx, timeout=15000)
+    page.fill("#mb-f-formula", "%s * %s" % (k0, k1))
+    page.wait_for_function("(s) => document.querySelector(s).dataset.fxState === 'ok'", arg=fx, timeout=15000)
+    page.fill("#mb-f-help", "含稅金額，依數量與單價計算")
+    page.wait_for_selector('.mb-fc[data-field-index="2"] [data-field-help="%s"]' % k2)
+    _saved(page)
+    f2 = _draft()["fields"][2]
+    assert f2["help"] == "含稅金額，依數量與單價計算" and f2["formula"] == "%s * %s" % (k0, k1), f2
+    assert "help" not in _draft()["fields"][0]                   # 沒填 ⇒ 不帶鍵（只新增）
+    if PREVIEW_JS.is_file():
+        frame = page.frame_locator("#mb-preview-host iframe")
+        frame.locator('[data-field-help="%s"]:has-text("含稅金額，依數量與單價計算")' % k2).wait_for(state="visible", timeout=15000)
+        assert frame.locator('[data-fx-readable="%s"]' % k2).inner_text().strip() == "金額 ＝ 數量 × 單價"
+    page.fill("#mb-f-help", "")
+    _saved(page)
+    assert "help" not in _draft()["fields"][2]                   # 清空 ⇒ 拿掉鍵
+    assert not errors, errors

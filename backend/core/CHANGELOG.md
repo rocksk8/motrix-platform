@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.57 — 2026-09-27（B 暫用，列車取號；wip/b-builder-dnd：使用者試用意見 ①）
+- L1（新增）：自訂模組欄位選填 `help`（文字、最長 `custom_modules.HELP_MAX`＝300 字）；其他型別或過長 ⇒ `fields[i].help` 問題。沒填的定義照舊（只新增）
+
 ## 1.56 — 2026-09-27（第十三班列車取號，原暫用 1.54；c-approval-l1-4：稽核 D QJ-M1＋孤兒單）
 - L1（新增）：`helpers.approval_queue.approval_raw_of(approval_json, doc_type, doc_no)`——欄位版 `approval_json_of`：解析不了 ⇒ None＋ERROR
 - L1（行為）：M06 傳票（`modules/accounting/api/vouchers._queue_items`）、自訂模組引擎（`helpers/custom_modules.queue_items`，原本 `json.loads` 沒接 ⇒ 壞一筆整類消失）改用它（主持指派）

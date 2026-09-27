@@ -147,6 +147,10 @@ def _validate_numbering(n):
     return out
 
 
+#: 欄位說明（`help`）的長度上限（2026-09-27 新增；CORE 1.57）
+HELP_MAX = 300
+
+
 def _validate_fields(fields):
     out, seen = [], set()
     keys = [f.get("key") for f in fields if isinstance(f, dict)]
@@ -156,6 +160,9 @@ def _validate_fields(fields):
             out.append(_p(p, "欄位必須是物件"))
             continue
         k, t = f.get("key"), f.get("type")
+        # 欄位選填說明（使用者 2026-09-27；只新增、選填）：文字、最長 HELP_MAX 字
+        if "help" in f and f["help"] is not None and (not isinstance(f["help"], str) or len(f["help"]) > HELP_MAX):
+            out.append(_p(p + ".help", "說明必須是文字，最長 %d 字" % HELP_MAX))
         if k in seen:
             out.append(_p(p + ".key", "key 重複：%s" % k))
         seen.add(k)
