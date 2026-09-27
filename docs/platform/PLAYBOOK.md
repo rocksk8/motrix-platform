@@ -201,7 +201,7 @@
 | # | 查什麼 | 怎麼查 | 出處 |
 |---|---|---|---|
 | 1 | 直譯器 | 命令一律 `D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe`；PATH 上的、別的工具的 venv 都不行 | C httpx2 假紅（9/27） |
-| 2 | 資料庫裡的 JSON | 新寫的 SQL 不准 `json_extract(data_json…)`；逐筆 Python 解析（`approval_json_of`），壞的一筆跳過＋ERROR，不可以整類消失 | AL2-M2、c-queue-json |
+| 2 | 資料庫裡的 JSON | 新寫的 SQL 不准 `json_extract(data_json…)`（**含** `SQL_DEAL_TAG` 這類包好的常數——它裡面就有 json_extract）；逐筆 Python 解析（`approval_json_of`），~~壞的一筆跳過＋ERROR~~〔更正 2026-09-27 13:53 D：跳過＋ERROR **只限解析不了的**；data_json 正常、approval 沒有簽核層的是合法的「沒有設定流程」，要照舊列給 superadmin（核准端點的 no-tier 分支就是給它走的），跳過會讓要簽的單消失〕，不可以整類消失 | AL2-M2、c-queue-json、AUDIT-D-C-approval-l1 §3-5 |
 | 3 | 頁面色碼 | 改到的 html／css／js 不准新寫死 `#RRGGBB`，用語意 token | cm12（第十班漏上 origin） |
 | 4 | 模組版號 | 改到 `modules/<key>/` 的程式 ⇒ 同包升該模組版號＋CHANGELOG | 第十一、十二班交互紅 |
 | 5 | 搬家後的舊路徑 | 改到被搬遷的檔 ⇒ grep 舊路徑字串（`routers/quotations`、`helpers/…`）在題目、INTEGRATION-POINTS、基準檔裡是否還有 | 第十二班 KNOWN_STAR_KWARGS、IP 使用方 |
@@ -212,6 +212,8 @@
 | 10 | 守門的方向與範圍 | 下限還是上限、單向還是雙向、掃描範圍是否含 `modules/`；每道守門附正對照＋反向控制 | EM10、SM-M1、AB-S2 |
 | 11 | 版本紀錄 | 當天第一個 commit ⇒ version_manifest 補當天條目 | VR1 跨日 |
 | 12 | 題目讀別的模組檔 | 題目不准 `read_text` 讀別的模組的原始碼、不准在模組層 import 別的模組 | 第十二班 core-only 65 題 |
+| 13 | 列出⇔放行 | 清單的過濾與詳情的守門要用**同一個輸入**判斷（同一支函式、同一個欄位）；一邊看 `linkedQuoteNo`、一邊看 `quoteNo` ⇒ 空值那一格就對不上。一致性題要含「欄位為空」的那一種 | AL2-M1（AUDIT-D-C-approval-l1 §3-3） |
+| 14 | 繞過守門的分支 | 「本人免守門」「簽核人放行」這類分支，兩個方向都要有題：**沒有一般權限的人**是本人 ⇒ 放行；不是本人 ⇒ 與查無同一個 404。用有一般權限的人測，兩個方向都會綠（放行的其實是一般權限） | AL-M1（AUDIT-D-C-approval-l1 §2） |
 
 清單會長大：列車或稽核抓到「讀碼就看得出來」的紅，當輪加一列（寫出處）。
 

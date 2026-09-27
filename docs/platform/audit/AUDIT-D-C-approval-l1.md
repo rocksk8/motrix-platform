@@ -6,6 +6,7 @@
 ## 0. 結論
 
 - **必修 1、建議 1、觀察 4、待驗 1**（真刪 M06，第十二班後由 C 補）。
+- 複核 -2（81972141）：**AL-M1、AL-S1、AL-O1、AL-O4 關閉；新必修 AL2-M1、AL2-M2**（§3）；§1 的「④ 角標」一列有更正（§3-4）。
 
 ## 1. 實測
 
@@ -52,3 +53,64 @@
   - D 查過：repo 裡壞 JSON 的題只有轉簽（`test_unreadable_chain_is_refused` 等）。
   - AQ6 會紅，是因為它連正常的「沒有簽核層」單據也一起排除了，不是壞 JSON。
   - 建議補一題，把舊版會 500 的那條路鎖住。
+
+
+## 3. 複核（wip/c-approval-l1-2 81972141，取代 3897f15b）（D，2026-09-27 13:53）
+
+> 主持指定：AL-M1、AL-S1、佇列⇔詳情一致、④ 壞 JSON 題、M05 兩紅處置；並確認「壞 JSON 列出、當成沒有簽核層」是否等於任一 superadmin 可簽。
+
+### 3-1 結論
+
+- **AL-M1、AL-S1、AL-O1、AL-O4 關閉；新必修 2（AL2-M1、AL2-M2）**。
+
+### 3-2 實測
+
+| 項目 | D 的驗證 | 結果 |
+|---|---|---|
+| 相關題（名稱或內容含 approval-queue 的 30 檔） | 389 過 | 成立 |
+| AL-M1 | B1「不比對本人」（上一輪存活的 AQ3）⇒ **紅**（`test_case_change_detail_outsider_gets_the_not_found_404`）；B2「selfViewBy 不生效」（AQ4）⇒ **紅**（`…_requester_without_case_access_sees_it`） | **關閉** |
+| AL-S1 | B3「守門的 404 照舊帶案件單號」⇒ 紅；B4「提供者自己的 404 訊息不統一」⇒ 紅；B7「audit 原因記錯」⇒ 紅 | **關閉** |
+| AL-O3（佇列⇔詳情，主持裁示） | B5「M01 不在也不過濾」⇒ 紅；B6「M01 在也過濾」⇒ 紅。**但 D 探針找到縫** ⇒ AL2-M1 | 部分 |
+| AL-O4 | B8「壞 JSON 讓 M01 整類炸掉」⇒ 紅（`test_quotation_with_malformed_approval_json_does_not_break_the_queue`）。D 探針：佇列與角標 200，壞 JSON 的單列出並計入；**詳情 500** ⇒ AL2-M2 | 部分 |
+| AL-O1（M05 兩紅） | 真刪 M05（tests/platform＋approval 相關 116 檔）：非 e2e 2192 過、**只剩允許的 5 紅**；e2e 93 過、0 紅 | **關閉** |
+| 真刪 M01（同範圍） | 非 e2e 1497 過、648 略過、**只剩允許的 5 紅**；e2e 36 過、0 紅 | 成立 |
+| 主持的前提：壞 JSON「列出、當成沒有簽核層」＝任一 superadmin 可簽？ | D 探針（M01 在）：壞 JSON 的報價單在佇列列成 `tiers=[]`、`requestedBy=""`，角標算給每一個 superadmin；**但 superadmin 打 `POST /api/quotations/{no}/approve` ⇒ `JSONDecodeError`（500），狀態仍是待審核**。另外四個核准端點（請款單、開票申請、承攬商匯款、出貨單）同樣是 `json.loads(data_json)` 直接解析 ⇒ 一樣會失敗 | **不成立**：壞 JSON 不會被簽掉（fail-closed，只是 500 很難看）。真正走「任一 superadmin 可簽」的是 **data_json 能解析、但 approval 沒有簽核層**——那是合法的「沒有設定流程」路徑 |
+
+### 3-3 發現
+
+**AL2-M1（必修）　M01 不在時，沒掛案件的單「列出⇔放行」不成立**
+- `_openable` 只過濾有 `linkedQuoteNo` 的項目；詳情卻一律以提供者回的 `quoteNo` 做 `guard_case_access`，M01 不在時一律拒絕。
+- D 探針（真刪 M01，81972141）：`quote_no=''` 的待簽請款單，superadmin 與 admin **在佇列看得到、點開詳情 404**。簽核人與送審人一致（200）。
+- C 的 `test_listed_iff_detail_opens` 只用有掛案件的合成單，沒有涵蓋這種單。
+- 修法二擇一（交 C／主持）：
+  - ① 佇列在 M01 不在時，對**所有有詳情提供者的**項目都用 `_on_chain` 過濾（不只看 `linkedQuoteNo`）；
+  - ② 詳情在 `quoteNo` 為空時不做案件守門、改走該單據自己的規則。
+- 補題：逐格一致題加一張 `quote_no` 為空的單。
+- 觀察：M01 在時也有同類情況——掛的案件已經不存在（孤兒單）時，admin 看得到、點開 404。舊版相同，非本包造成。
+
+**AL2-M2（必修）　`case.summary` 加 `deal_tag` 帶進 `json_extract`，一張壞 JSON 的報價單就讓整個查詢丟例外**
+- 3897f15b 把 `SQL_DEAL_TAG`（`COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')`）加進 `case_summary` 的 SELECT；改動前那支查詢不碰 `data_json`。
+- `deal_tag` 欄為空、而 `data_json` 壞掉時，SQLite 丟 `malformed JSON`。
+- D 探針：壞 JSON 報價單的**佇列詳情 500**（traceback：`_case_header` → `_case_names` → `case_summary`）。
+- 波及範圍：
+  - 詳情抬頭；
+  - M10 綁定案件（`_CaseAccess.summary`）；
+  - 佇列中沒自帶客戶名的項目（會讓整支佇列 500）；
+  - a-m06-8 rebase 後的 voucher_link（`quote_nos=None` 一次撈全部），**一張壞單就讓所有人的傳票案件清單 500**。
+- 修法：`deal_tag` 只讀欄位，或逐筆在 Python 解析（與 AL-O4 的 `_approval_json_of` 同一個做法）。
+- 補題：`case_summary` 在含壞 JSON 列時仍回其他列。
+- 這一項讀碼就看得出來：§G5 第 2 列本來就是這一條，D 上一輪沒有對 deal_tag 那一行套用。
+
+### 3-4 更正上一輪的紀錄（保留原句）
+
+- §1 表格「④ 角標」一列原寫：~~「新版列出並對 superadmin 計 1，與佇列一致」~~〔更正：D 上一輪的探針只證明了舊版會 500，新版的輸出沒有實際看，那句是照 C 的申報寫的。C 在 -2 指出 3897f15b 其實是 json_extract 讓 M01 整類消失——C 的指正成立。〈主持人的記憶是負債〉：附和看起來跟查證一樣〕。
+
+### 3-5 給 c-queue-json 的前提（主持要求確認）
+
+- 「跳過＋ERROR」只能套在**解析不了**的單據上。
+- **合法的無簽核層單據**（data_json 正常、approval 沒有 tiers）要照舊列給 superadmin：核准端點的 no-tier 分支就是給它們走的，跳過會讓真正要簽的單從佇列消失。
+- D 審 c-queue-json 時會驗這一條（兩種單各一張，逐格看佇列、角標、核准）。
+
+### 3-6 D 自己的過程問題
+
+- D 同時跑兩個 `mutate.py`（approval-l1-2 與 O13），兩者共用同一個 basetemp ⇒ B3 那一輪被清掉目錄，出現 191 個 errors。已在 approval 那組跑完後單獨重跑 B3 ⇒ 乾淨的紅。之後同一時間只跑一個 `mutate.py`。
