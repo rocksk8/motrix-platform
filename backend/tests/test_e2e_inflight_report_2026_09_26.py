@@ -4,9 +4,6 @@
 - 報告：逾時的失敗 ⇒ 加一段；不是逾時的失敗、通過的題 ⇒ 不加
 突變：拿掉 `rep.sections.append(...)` ⇒ 報告題紅；拿掉 `E2E_CONTEXT_HOOKS.append(_inflight_hook)` ⇒ 記帳題紅（見 commit）。
 """
-from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
-#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
-needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import types
 
 import time
@@ -253,7 +250,7 @@ def _run_probe(tmp_name, xdist, basetemp):
         shutil.rmtree(d, ignore_errors=True)
 
 
-#: O14：子行程改 -n 1（不再需要 M01；見 e67879f2 M6-M1，本題的紅是負載逾時不是 M01 缺席）
+#: 稽核 D M5-M1／M6-M1：兩個參數都不需要 M01（n2/n1 當初列進清單是負載逾時，不是 M01 缺席；真刪樹單跑 20/20 過）；O14：子行程改 -n 1 ⇒ id n2 改 n1
 @pytest.mark.e2e
 @pytest.mark.parametrize("xdist", [False, True], ids=["n0", "n1"])
 def test_rc_teardown_hang_fails_only_that_test(xdist, tmp_path):
