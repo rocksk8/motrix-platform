@@ -396,7 +396,13 @@
           var seq = (this._refSeq[fk] || 0) + 1
           this._refSeq[fk] = seq
           if (!this.refState[fk]) this._setMap('refState', fk, 'loading')
-          var r = await this.api('GET', this.base() + '/ref-options/' + encodeURIComponent(fk) + '?q=' + encodeURIComponent(q || '') + '&limit=50')
+          // O15：請求在網路層失敗（fetch reject／讀本文失敗）也要落到終點狀態；否則這一欄永遠停在 loading、連「重試」都不出現
+          var r
+          try {
+            r = await this.api('GET', this.base() + '/ref-options/' + encodeURIComponent(fk) + '?q=' + encodeURIComponent(q || '') + '&limit=50')
+          } catch (e) {
+            r = { ok: false, status: 'network', data: null }
+          }
           if (this._refSeq[fk] !== seq) return
           if (r.ok) {
             this._setMap('refOptions', fk, Array.isArray(r.data) ? r.data : [])

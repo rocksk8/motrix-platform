@@ -257,6 +257,31 @@ def test_ref_field_falls_back_to_manual_input_only_on_403(live_server, make_user
     assert not errors, errors
 
 
+@pytest.mark.e2e
+def test_ref_field_network_failure_ends_in_error_and_retry_works(live_server, make_user, new_context, client):
+    """O15：ref-options 在網路層失敗（沒有 HTTP 狀態）⇒ 仍要落到 error（下拉＋可重試），不可以永遠停在 loading；
+    重試成功 ⇒ ok。修正前：fetch reject 沒人接，data-ref-state 停在 loading、沒有重試連結、pageerror「Failed to fetch」。"""
+    key = "ref_netfail"
+    admin = make_user(username="p8g_rn_admin", role="superadmin")
+    user = make_user(username="p8g_rn_user", role="viewer", modules=["custom.%s" % key])
+    make_user(username="p8g_rn_bob", role="viewer", modules=[])
+    _publish(client, _h(client, admin), key, _ref_module(key))
+
+    errors = []
+    page = _page(new_context, live_server, user, errors)
+    pat = re.compile(r".*/api/custom/%s/ref-options/who.*" % key)
+    page.route(pat, lambda r: r.abort())
+    page.goto("%s/pages/custom-records.html?key=%s" % (live_server, key))
+    page.click("#cr-new")
+    page.wait_for_selector('[data-ref-field="who"][data-ref-state="error"]')
+    assert page.eval_on_selector("#cr-in-who", "e => e.tagName") == "SELECT"
+    page.unroute(pat)
+    page.click('[data-ref-field="who"] .cr-ferr a')
+    page.wait_for_selector('[data-ref-field="who"][data-ref-state="ok"]')
+    assert "p8g_rn_bob" in page.evaluate(OPTS)
+    assert not errors, errors
+
+
 
 # ── 建構器共用 ─────────────────────────────────────────────────────────────
 
