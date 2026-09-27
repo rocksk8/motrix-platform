@@ -5,6 +5,8 @@
 [公開介面] current_version, incomplete, register, registered, run_all
 [不變式] 版本從 1 起、連續、不可重複；每支**回 None** 才記版本（回原因字串＝未完成：不記、ERROR、該模組後面的這次不跑、其他模組照跑、
          不丟例外）；只准新增（加表、加欄位），不刪欄位、不改名；每支必須冪等
+         core 以外的模組逐支 SAVEPOINT：**丟例外＝未完成**（原因「例外：<型別>: <訊息>」、撤回這一支的寫入、不往上丟，稽核 D PM1）；
+         core 的例外照舊往上丟；模組 migration 不准自己 commit（run_all 負責）
 [契約題] tests/test_definitions_store_2026_09_25.py、tests/platform/test_migration_incomplete.py
 [注意] V9 基準（db._MIGRATIONS v1~v116）凍結不動，新表一律由這裡建；模組沒安裝 ⇒ migration 沒登記 ⇒ 不建它的表
 
@@ -64,7 +66,22 @@ def run_all(conn) -> dict:
         for v in versions:
             if v <= start:
                 continue
-            res = per[v](conn)
+            if module == "core":
+                res = per[v](conn)              # core（L1）不完整就不該起來 ⇒ 例外照舊往上丟
+            else:
+                # 稽核 D PM1：L2 的 migration 在啟動必經路徑上 ⇒ 比照 loader「一個模組壞掉不拖垮整台」。
+                # 逐支 SAVEPOINT：丟例外或回原因 ⇒ 撤回這一支做到一半的寫入（含 DDL），記進 incomplete；
+                # 由 fail_incomplete_modules 讓該模組下線，其他模組與服務照常。migration 不准自己 commit（會讓 savepoint 失效，守門見契約題）。
+                conn.execute("SAVEPOINT motrix_module_migration")
+                try:
+                    res = per[v](conn)
+                except Exception as exc:        # noqa: BLE001 — 任何例外都只算這一個模組未完成
+                    res = "例外：%s: %s" % (type(exc).__name__, exc)
+                if res is None:
+                    conn.execute("RELEASE motrix_module_migration")
+                else:
+                    conn.execute("ROLLBACK TO motrix_module_migration")
+                    conn.execute("RELEASE motrix_module_migration")
             if res is not None:
                 why = res.strip() if isinstance(res, str) and res.strip() else (
                     "migration 回傳值只能是 None（完成）或原因字串（未完成），收到 %r" % (res,))
