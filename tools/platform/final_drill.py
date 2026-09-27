@@ -117,6 +117,38 @@ def smoke_plan(backend_dir: str, registered=None, migrated=None) -> list:
     return plan
 
 
+#: 缺席模組的宣告從哪裡讀：產生安裝包的那棵 repo（包裡已經沒有那個模組的 module.json）
+SOURCE_MODULES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                              "backend", "modules")
+NO_SOURCE_DECL = "不在安裝包，但來源樹也找不到它的 module.json ⇒ 無法驗證缺席時回 404"
+
+
+def absent_probe_plan(backend_dir: str, source_modules=None, registered=None, migrated=None) -> list:
+    """「不在安裝包」（已搬遷、登記了、包裡沒有）的模組 ⇒ 它在來源樹 module.json 宣告的 probes 與頁面，每一項**期望 404**。
+    ⇒ [(名稱, 方法, 路徑, 期望狀態碼)]；來源樹找不到宣告 ⇒ 期望狀態碼放 None（smoke 判不過，NO_SOURCE_DECL）。
+    〔主持裁示（D7 前哨第 8 次觀察）：原本這些模組只列成合法略過，沒有實際打，D7-CHECKLIST §3 要求 probes／removed_pages 回 404〕
+    尚未搬遷（NOT_MIGRATED）的不在這裡：它們以 L1 形式在包內，由共用清單涵蓋。"""
+    registered = registered_module_keys() if registered is None else set(registered)
+    migrated = migrated_module_keys() if migrated is None else set(migrated)
+    source_modules = SOURCE_MODULES if source_modules is None else source_modules
+    mods = os.path.join(backend_dir, "modules")
+    present = {d for d in (os.listdir(mods) if os.path.isdir(mods) else [])
+               if os.path.isfile(os.path.join(mods, d, "module.json"))}
+    plan = []
+    for key in sorted((registered & migrated) - present):
+        decl = os.path.join(source_modules, key, "module.json")
+        if not os.path.isfile(decl):
+            plan.append(("缺席模組 %s" % key, "GET", "modules/%s" % key, None))
+            continue
+        with open(decl, encoding="utf-8") as f:
+            m = json.load(f)
+        for path in (m.get("provides") or {}).get("probes") or []:
+            plan.append(("缺席 %s：%s" % (key, path), "GET", path, 404))
+        for pg in m.get("pages") or []:
+            plan.append(("缺席 %s 頁面 %s" % (key, pg["path"]), "GET", "/pages/" + pg["path"], 404))
+    return plan
+
+
 def sha256(path: str) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -311,6 +343,19 @@ def smoke(install: str) -> dict:
             except Exception as e:                              # noqa: BLE001
                 code = "%s" % type(e).__name__
             out["checks"].append({"name": name, "path": path, "status": code, "ok": code == 200})
+        for name, method, path, expect in absent_probe_plan(os.path.join(install, "backend")):
+            if expect is None:
+                out["checks"].append({"name": name, "path": path, "status": None, "expect": 404, "ok": False,
+                                      "reason": NO_SOURCE_DECL})
+                continue
+            r = urllib.request.Request(base + path, method=method, headers={"Authorization": "Bearer " + token})
+            try:
+                code = urllib.request.urlopen(r, timeout=30).status
+            except urllib.error.HTTPError as e:
+                code = e.code
+            except Exception as e:                              # noqa: BLE001
+                code = "%s" % type(e).__name__
+            out["checks"].append({"name": name, "path": path, "status": code, "expect": expect, "ok": code == expect})
     finally:
         T._stop(proc)
         log.close()
