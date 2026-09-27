@@ -6,6 +6,8 @@
 """
 import types
 
+import time
+
 import pytest
 
 
@@ -175,6 +177,29 @@ def test_plain_one_after():
 """
 
 
+#: 子行程期限＝外層這一題的逐題硬上限（conftest `_e2e_hard_cap_seconds`，預設 120）減去餘裕。
+#: 〔O14（主持登記）：原本寫死 240 秒——外層本身是 e2e 題、120 秒硬上限先到 ⇒ 子行程的逾時永遠輪不到，
+#:   負載下紅成「外層逐題上限」，看不出是子行程慢。期限必須小於外層上限，逾時由本題自己說出原因〕
+#: 餘裕 20 秒：外層這一題除了子行程還有自己的 setup／收尾（tmp_path、刪探針目錄），實測 < 1 秒，留 20 倍。
+_CHILD_MARGIN = 20
+
+
+def _child_deadline():
+    import conftest
+    return max(30.0, conftest._e2e_hard_cap_seconds() - _CHILD_MARGIN)
+
+
+def _probe_env(basetemp):
+    """子 pytest 的環境：不繼承外層這一輪（utf8_env）；**用自己的測試鎖檔**。
+    〔O14 根因（實測）：conftest `_is_heavy_run` 把 -n ≥ 2 當成重的一輪 ⇒ 子 pytest 也去搶全機測試鎖；
+      機器上已有兩套在跑（MOTRIX_PYTEST_SLOTS 預設 2）⇒ 子行程「[測試鎖] … 排隊中，最多再等 89 分鐘」⇒
+      外層 120 秒逐題上限先到。安靜時名額空著所以 20/20 過。外層這一輪已經持有名額，
+      它自己起的子 pytest 不應該再去排——同 test_pytest_guards NG1 的 MOTRIX_PYTEST_LOCK 接縫〕"""
+    from pathlib import Path as _P
+    from tests._subproc import utf8_env
+    return utf8_env(MOTRIX_E2E_TEST_LIMIT="60", MOTRIX_PYTEST_LOCK=str(_P(basetemp).parent / "child-pytest.lock"))
+
+
 def _run_probe(tmp_name, xdist, basetemp):
     """〔主持派工 wip/b-probe-tmp：探針原本寫在 tests/（`here / tmp_name`）⇒ 這一輪被砍掉時殘檔留在受測樹、被別的 worker 收集成紅
       （D 觀察）。改寫到 basetemp 旁的 probe/，子 pytest 經 probe_pytest_args 吃 backend 的 conftest；finally 刪整個目錄〕"""
@@ -183,7 +208,7 @@ def _run_probe(tmp_name, xdist, basetemp):
     import subprocess
     import sys
     from pathlib import Path as _P
-    from tests._subproc import BACKEND_DIR, probe_pytest_args, utf8_env
+    from tests._subproc import BACKEND_DIR, probe_pytest_args
     d = _P(basetemp).parent / "probe"
     d.mkdir(parents=True, exist_ok=True)
     f = d / tmp_name
@@ -192,20 +217,33 @@ def _run_probe(tmp_name, xdist, basetemp):
         cmd = [sys.executable, "-X", "utf8", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--basetemp", str(basetemp),
                *probe_pytest_args(f)]
         if xdist:
-            cmd[6:6] = ["-n", "2"]
-        env = utf8_env(MOTRIX_E2E_TEST_LIMIT="60")          # 子 pytest 不繼承外層這一輪的狀態（xdist 等）
-        r = subprocess.run(cmd, cwd=BACKEND_DIR, capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=240, env=env)
+            # O14：~~-n 2~~ ⇒ -n 1。xdist 的 worker 路徑（workerinput、看門狗在 worker 裡關瀏覽器）用 1 個 worker 就走得到；
+            #   而且三題落在同一個 worker ⇒「卡住之後下一題 e2e 還拿得到瀏覽器」驗的是**同一個 worker 的恢復**
+            #   （-n 2 時下一題可能分到另一個 worker，根本沒經過恢復）；-n 1 也不是「重的一輪」、不去搶全機測試鎖（根因見 _probe_env）
+            cmd[6:6] = ["-n", "1"]
+        env = _probe_env(basetemp)
+        deadline = _child_deadline()
+        t0 = time.monotonic()
+        try:
+            r = subprocess.run(cmd, cwd=BACKEND_DIR, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=deadline, env=env)
+        except subprocess.TimeoutExpired as e:
+            tail = ((e.stdout or "") + (e.stderr or "")) if isinstance(e.stdout, str) else ""
+            pytest.fail("子 pytest（%s）%.0f 秒內沒有結束（期限＝外層逐題上限 %.0f − %d）：看門狗沒有關瀏覽器，或機器負載太重。"
+                        "\n子行程輸出尾段：\n%s" % ("xdist -n 1" if xdist else "單程序", deadline,
+                                                  deadline + _CHILD_MARGIN, _CHILD_MARGIN, tail[-1500:]))
+        print("[O14] 子 pytest %s 耗時 %.1f 秒（期限 %.0f）" % ("n1" if xdist else "n0", time.monotonic() - t0, deadline))
         return r.returncode, r.stdout + r.stderr
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
 
 @pytest.mark.e2e
-@pytest.mark.parametrize("xdist", [False, True], ids=["n0", "n2"])
+@pytest.mark.parametrize("xdist", [False, True], ids=["n0", "n1"])
 def test_rc_teardown_hang_fails_only_that_test(xdist, tmp_path):
     """子行程跑三題：第一題 teardown 卡住 ⇒ 那一題另記一個 error（訊息含原因），三題本體都 passed（第二題是 e2e，要新瀏覽器），
-    行程正常結束（有摘要行）。突變：看門狗不關瀏覽器 ⇒ 子行程卡到 240 秒逾時（TimeoutExpired）⇒ 紅。"""
+    行程正常結束（有摘要行）。突變：看門狗不關瀏覽器 ⇒ 子行程超過期限（外層上限 − 20）⇒ 本題以 pytest.fail 說明 ⇒ 紅。
+    〔O14：id ~~n2~~ ⇒ n1（子行程改 -n 1，理由見 _run_probe）〕"""
     import uuid
     code, out = _run_probe("test_zz_td_probe_%s.py" % uuid.uuid4().hex[:8], xdist, tmp_path / "bt")
     # teardown error 的那一題本體算 passed ⇒ 三題都 passed＋一個 error（實測 -n 0：3 passed, 1 error in 13s）
@@ -282,4 +320,21 @@ def test_soft_ceiling_follows_the_hard_cap(monkeypatch):
     assert cf._e2e_limit_of(_marker_item()) == 30
     monkeypatch.setenv("MOTRIX_E2E_HARD_CAP", "20")
     assert cf._e2e_limit_of(_marker_item()) == 10, "下限 10 秒"
+
+
+def test_o14_child_deadline_stays_below_the_outer_hard_cap(monkeypatch):
+    """O14：子行程期限一定小於外層逐題硬上限（原本 240 > 120 永遠輪不到）；上限改了就跟著改。"""
+    import conftest
+    for cap in ("120", "90", "300"):
+        monkeypatch.setenv("MOTRIX_E2E_HARD_CAP", cap)
+        assert _child_deadline() < conftest._e2e_hard_cap_seconds()
+        assert _child_deadline() == max(30.0, float(cap) - _CHILD_MARGIN)
+
+
+def test_o14_child_pytest_does_not_queue_on_the_machine_lock(tmp_path):
+    """O14 根因：子 pytest 不可以去排全機測試鎖——它的鎖檔在本題的 tmp 底下（外層這一輪已持有名額）。"""
+    import os
+    env = _probe_env(tmp_path / "bt")
+    lock = env.get("MOTRIX_PYTEST_LOCK", "")
+    assert lock and os.path.abspath(lock).startswith(os.path.abspath(str(tmp_path))), lock
 
