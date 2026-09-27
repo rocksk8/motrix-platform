@@ -164,7 +164,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
-- 2026-09-27 15:09 D：b-t13-guards-2 84211947 **必修 0**：T13-M1 關閉（SO2 突變紅；部分模組不在時照比）；T13-S1 JX2／JX3／JX5 紅，剩  別名存活（建議，未寫進射程）；基線 43→44 是新比對抓到既有一處；jv4 在 M05 不在時改驗行為（3 過）。B 可停。
+- 2026-09-27 15:09 D：b-t13-guards-2 84211947 **必修 0**：T13-M1 關閉（SO2 突變紅；部分模組不在時照比）；T13-S1 JX2／JX3／JX5 紅，剩 `import … as` 別名存活（建議，未寫進射程）〔更正：原句的反引號被 shell 吃掉，漏了這幾個字〕；基線 43→44 是新比對抓到既有一處；jv4 在 M05 不在時改驗行為（3 過）。B 可停。
 - 2026-09-27 15:06 D：c-approval-l1-4 e43ac4c8 **必修 0**：QJ-M1 關閉（傳票／自訂模組改回舊寫法、approval_raw_of 吞壞 JSON ⇒ 皆紅）；孤兒單列出⇔放行 8 格一致。真刪 M06：C 的驗證樹（rebase 到 9876b003）沒推也不在本機，D 無法抽驗 ⇒ 待驗，交第十三班列車在其樹上跑 M06 真刪。jv4 移交 b-t13-guards-2。
 - 2026-09-27 14:52 D：b-t13-guards 58830897 **必修 T13-M1**：spec_impl_modules.json 裡一個不存在的模組 key ⇒ test_spec_owner_map_is_fresh 整題略過（突變存活），要改用獨立訊號＋key 必須是登記過的模組。主持重點成立：表少一筆、新編號未入表都紅。①M06-S4、②CR-S1 關閉。③棘輪：小寫新增紅；JSON_EXTRACT 大寫、多空白、別名串常數存活（T13-S1 建議）。38 過。
 - 2026-09-27 14:33 **第十二班列車合回完成**（train/0927-1031，基底 origin/platform b30a7dad → rebase 到 34be096a：帶進的都是文件／稽核檔，程式 0 重疊，不需重跑受影響題）。8 名乘客依序上車：b-modtest-workers-3、b-probe-tmp、b-newctx-rule-3、b-ip15-cost、b-scan-modules-2、c-m01-s2（M01→modules/case）、c-case404、a-m06-8（M06→modules/accounting）。CORE 1.51（core_bump 確認、G1 快照重產）；UNIT-INDEX／dep_graph／test_map 重產。`modtest --train`（e2e `MOTRIX_E2E_MAX_WORKERS=3`）跑兩趟：第一趟抓到 9 題交會紅全部修復（7 題 M01/M06 遷移交會＋VR3 傳票條目撞號＋1 題確認為多視窗負載型偶發非回歸），第二趟全綠作最終確認。core-only 反向控制 65 題已知紅登記（裁示②，a178ace1）、第二趟 ok:true。模組真刪：accounting 乾淨（1 題新紅交 B，34be096a）、case 334 紅確認為既有「M01 ④ 搬移」缺口、非本班回歸，裁示不擋本班（34be096a）。`git push origin HEAD:platform`（fast-forward，9876b003）。已移除 D:\MOTRIX-PLATFORM-TRAIN11（開車前）與 D:\MOTRIX-PLATFORM-A25（合回後）。無殘留背景行程／worktree。
