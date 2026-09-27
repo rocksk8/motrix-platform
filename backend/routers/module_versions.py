@@ -28,6 +28,16 @@ class ModuleVersionBody(BaseModel):
     content: str = ""
 
 
+def _before_install_baseline(row) -> bool:
+    """這一列是不是「安裝基準版本（含）之前的系統紀錄」⇒ 全新安裝不顯示。既有安裝（沒有基準）⇒ 一律 False。"""
+    from helpers.startup import install_baseline_version, version_sort_key
+    baseline = install_baseline_version()
+    if not baseline or (row["updated_by"] or "") != "system":
+        return False
+    key = version_sort_key(row["version"])
+    return bool(key[0]) and key <= version_sort_key(baseline)
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/api/module-versions")
@@ -45,6 +55,9 @@ def list_module_versions(authorization: str = Header(None)):
         "FROM module_versions ORDER BY module, updated_at DESC"
     ).fetchall()
     conn.close()
+    # 2026-09-27 H10（使用者表單裁示）：全新安裝只顯示安裝基準版本**之後**的系統紀錄（之前的是開發歷史，含本公司資料）；
+    # 沒有安裝基準的既有安裝照舊全部顯示。使用者自己新增的紀錄（updated_by 不是 system）一律顯示。已出貨的條目不改寫。
+    rows = [r for r in rows if not _before_install_baseline(r)]
 
     grouped: dict = {}
     for r in rows:

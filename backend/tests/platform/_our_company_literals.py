@@ -4,7 +4,7 @@
 使用者：「已經有潛在客戶，要把原先的 logo、名稱、電話這些都換成客戶的」⇒ 產品碼（backend、frontend、tools，
 不含 tests 與文件）不可以出現本公司的公司名、統編、電話、email／網域、地址、座標、人員姓名。
 客戶看得到的一律改讀 company_profile；少數必須留著的（凍結的 migration、只在本公司安裝才會動作的升級回填、
-安全黑名單、升級演練資料、歷史紀錄）逐筆登記在 `ALLOWED`，而且次數要一致——同一檔多寫一處也會紅。
+安全黑名單、升級演練資料、已出貨的版本紀錄）逐筆登記在 `ALLOWED`，而且次數要一致——同一檔多寫一處也會紅。
 """
 import re
 from pathlib import Path
@@ -44,8 +44,17 @@ CATEGORIES = {
     "本公司安裝的升級回填": "只在統編或公司名對得上本公司時才動作，全新安裝與客戶安裝不會寫入",
     "安全黑名單": "舊弱密碼清單：啟動時掃描並強制改密碼，不會顯示",
     "升級演練資料": "模擬本公司 V9 升級的合成資料（演練工具）",
-    "歷史紀錄待裁示": "已出貨的版本紀錄（只增不改），是否改寫待使用者裁示",
-    "一次性歷史工具": "2026-08 對本公司正式機做過的一次性資料修正腳本，待裁示刪除",
+    "已出貨的版本紀錄": "已出貨的條目不改寫；全新安裝只顯示安裝基準版本之後的紀錄（使用者表單裁示 2026-09-27，"
+                         "判定在 routers/module_versions.py）",
+}
+
+#: 不是文字、不在掃描範圍、但同樣帶本公司字樣的預設圖檔：`frontend/static/logo.png`、`logo-white.png`、
+#: `favicon.png`（圖中有「MOTRIX SYNERGY INTEGRATION」）。**維持現在的圖**（使用者表單裁示 2026-09-27）；
+#: 客戶在「公司資料設定 › 品牌與公司名稱」上傳自己的圖即取代（helpers/branding.py）。
+KEPT_DEFAULT_IMAGES = {
+    "frontend/static/logo.png": "使用者裁示 2026-09-27：維持現在的預設圖",
+    "frontend/static/logo-white.png": "使用者裁示 2026-09-27：維持現在的預設圖",
+    "frontend/static/favicon.png": "使用者裁示 2026-09-27：維持現在的預設圖（已壓成 256×256）",
 }
 
 ALLOWED = {
@@ -65,13 +74,11 @@ ALLOWED = {
     ("tools/platform/upgrade_drill.py", "公司名（允碩）"): (1, "升級演練資料", "DRILL_COMPANY_PROFILE"),
     ("tools/platform/upgrade_drill.py", "統編"): (1, "升級演練資料", "DRILL_COMPANY_PROFILE"),
     ("tools/platform/upgrade_drill.py", "電話"): (1, "升級演練資料", "DRILL_COMPANY_PROFILE"),
-    ("backend/version_manifest.json", "統編"): (1, "歷史紀錄待裁示", "2026-08 demo 帳號條目"),
-    ("backend/version_manifest.json", "電話"): (1, "歷史紀錄待裁示", "2026-08 公司電話更正條目"),
-    ("backend/version_manifest.json", "舊電話"): (2, "歷史紀錄待裁示", "2026-08 公司電話更正條目"),
-    ("backend/version_manifest.json", "人員姓名"): (1, "歷史紀錄待裁示", "案件動態月曆修正條目提及人員姓名"),
-    ("backend/version_manifest.json", "email／網域（miac）"): (1, "歷史紀錄待裁示", "v74 WebAuthn 條目"),
-    ("backend/tools/sync_pending_data_20260817.py", "電話"): (2, "一次性歷史工具", "CORRECT_CONTACT_INFO"),
-    ("backend/tools/sync_pending_data_20260817.py", "email／網域（miac）"): (1, "一次性歷史工具", "CORRECT_CONTACT_INFO"),
+    ("backend/version_manifest.json", "統編"): (1, "已出貨的版本紀錄", "2026-08 demo 帳號條目"),
+    ("backend/version_manifest.json", "電話"): (1, "已出貨的版本紀錄", "2026-08 公司電話更正條目"),
+    ("backend/version_manifest.json", "舊電話"): (2, "已出貨的版本紀錄", "2026-08 公司電話更正條目"),
+    ("backend/version_manifest.json", "人員姓名"): (1, "已出貨的版本紀錄", "案件動態月曆修正條目提及人員姓名"),
+    ("backend/version_manifest.json", "email／網域（miac）"): (1, "已出貨的版本紀錄", "v74 WebAuthn 條目"),
 }
 
 

@@ -390,11 +390,11 @@
                 <div style="width:46px;flex-shrink:0">
                   <label class="status-toggle" :title="row.user.active ? '點擊停用' : '點擊啟用'"
                          @click.prevent="toggleActive(row.user)"
-                         x-show="isSuperAdmin && row.user.username !== 'jeff'">
+                         x-show="isSuperAdmin && !row.user.builtinAdmin">
                     <input type="checkbox" :checked="row.user.active" @change="toggleActive(row.user)">
                     <span class="slider"></span>
                   </label>
-                  <span x-show="!isSuperAdmin || row.user.username === 'jeff'"
+                  <span x-show="!isSuperAdmin || row.user.builtinAdmin"
                         :style="row.user.active ? 'color:var(--success)' : 'color:var(--text-dim)'"
                         style="font-size:12px"
                         x-text="row.user.active ? '啟用' : '停用'"></span>
@@ -415,7 +415,7 @@
                   </button>
                   <button class="btn btn-danger btn-sm"
                           @click="deleteUser(row.user)"
-                          x-show="isSuperAdmin && row.user.username !== 'jeff' && row.user.username !== session.username">
+                          x-show="isSuperAdmin && !row.user.builtinAdmin && row.user.username !== session.username">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                   </button>
                 </div>
@@ -1269,7 +1269,7 @@
       },
 
       async toggleActive(user) {
-        if (!this.isSuperAdmin || user.username === 'jeff') return
+        if (!this.isSuperAdmin || user.builtinAdmin) return
         await fetch(`/api/users/${user.id}/active`, {
           method: 'PATCH', headers: this._headers()
         })
@@ -1278,7 +1278,7 @@
 
       async deleteUser(user) {
         if (!this.isSuperAdmin) return
-        if (user.username === 'jeff') { alert('不可刪除超級管理員帳號'); return }
+        if (user.builtinAdmin) { alert('不可刪除超級管理員帳號'); return }
         if (!confirm(`確定要刪除帳號「${user.username}」？此操作無法復原。`)) return
         const res = await fetch(`/api/users/${user.id}`, {
           method: 'DELETE', headers: this._headers()

@@ -174,7 +174,6 @@ backend/tools/deploy_dashboard.html export-ignore
 backend/tools/deploy_dashboard.py export-ignore
 backend/tools/deploy_dashboard_ctl.pyw export-ignore
 backend/tools/parse_account_items.py export-ignore
-backend/tools/sync_pending_data_20260817.py export-ignore
 
 # ⚠️ 尚未排除（刻意）：
 # · letsencrypt_renew.ps1 —— 保留但要改內容（$Domain 預設值 erp.miactw.com），

@@ -9155,6 +9155,7 @@
     "helper:notification_prefs",
     "helper:privacy_notice",
     "helper:settings",
+    "helper:startup",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -9170,6 +9171,7 @@
     "helper:notification_prefs",
     "helper:privacy_notice",
     "helper:settings",
+    "helper:startup",
     "plat:paths",
     "router:mail_settings"
    ],
@@ -9185,217 +9187,217 @@
     },
     {
      "func": "system_version",
-     "line": 301,
+     "line": 299,
      "method": "GET",
      "path": "/api/system/version"
     },
     {
      "func": "system_branding",
-     "line": 324,
+     "line": 322,
      "method": "GET",
      "path": "/api/system/branding"
     },
     {
      "func": "system_deployed_version",
-     "line": 349,
+     "line": 347,
      "method": "GET",
      "path": "/api/system/deployed-version"
     },
     {
      "func": "build_info_endpoint",
-     "line": 369,
+     "line": 367,
      "method": "GET",
      "path": "/api/build-info"
     },
     {
      "func": "auth_login",
-     "line": 400,
+     "line": 398,
      "method": "POST",
      "path": "/api/auth/login"
     },
     {
      "func": "auth_login_totp",
-     "line": 554,
+     "line": 552,
      "method": "POST",
      "path": "/api/auth/login/totp"
     },
     {
      "func": "login_qr_info",
-     "line": 664,
+     "line": 662,
      "method": "GET",
      "path": "/api/auth/login/qr-info"
     },
     {
      "func": "login_qr_approve",
-     "line": 689,
+     "line": 687,
      "method": "POST",
      "path": "/api/auth/login/qr-approve"
     },
     {
      "func": "login_qr_status",
-     "line": 759,
+     "line": 757,
      "method": "GET",
      "path": "/api/auth/login/qr-status"
     },
     {
      "func": "totp_status",
-     "line": 792,
+     "line": 790,
      "method": "GET",
      "path": "/api/auth/totp/status"
     },
     {
      "func": "totp_setup",
-     "line": 817,
+     "line": 815,
      "method": "POST",
      "path": "/api/auth/totp/setup"
     },
     {
      "func": "totp_enable",
-     "line": 839,
+     "line": 837,
      "method": "POST",
      "path": "/api/auth/totp/enable"
     },
     {
      "func": "totp_regenerate_recovery_codes",
-     "line": 866,
+     "line": 864,
      "method": "POST",
      "path": "/api/auth/totp/recovery-codes/regenerate"
     },
     {
      "func": "totp_disable",
-     "line": 909,
+     "line": 907,
      "method": "POST",
      "path": "/api/auth/totp/disable"
     },
     {
      "func": "webauthn_register_begin",
-     "line": 1036,
+     "line": 1034,
      "method": "POST",
      "path": "/api/auth/webauthn/register/begin"
     },
     {
      "func": "webauthn_register_complete",
-     "line": 1079,
+     "line": 1077,
      "method": "POST",
      "path": "/api/auth/webauthn/register/complete"
     },
     {
      "func": "webauthn_login_begin",
-     "line": 1140,
+     "line": 1138,
      "method": "POST",
      "path": "/api/auth/webauthn/login/begin"
     },
     {
      "func": "webauthn_login_complete",
-     "line": 1207,
+     "line": 1205,
      "method": "POST",
      "path": "/api/auth/webauthn/login/complete"
     },
     {
      "func": "webauthn_credentials_list",
-     "line": 1314,
+     "line": 1312,
      "method": "GET",
      "path": "/api/auth/webauthn/credentials"
     },
     {
      "func": "webauthn_credential_rename",
-     "line": 1341,
+     "line": 1339,
      "method": "PATCH",
      "path": "/api/auth/webauthn/credentials/{cred_id}"
     },
     {
      "func": "webauthn_credential_delete",
-     "line": 1365,
+     "line": 1363,
      "method": "DELETE",
      "path": "/api/auth/webauthn/credentials/{cred_id}"
     },
     {
      "func": "auth_logout",
-     "line": 1385,
+     "line": 1383,
      "method": "POST",
      "path": "/api/auth/logout"
     },
     {
      "func": "auth_me",
-     "line": 1405,
+     "line": 1403,
      "method": "GET",
      "path": "/api/auth/me"
     },
     {
      "func": "change_password",
-     "line": 1431,
+     "line": 1429,
      "method": "PATCH",
      "path": "/api/auth/change-password"
     },
     {
      "func": "list_users",
-     "line": 1472,
+     "line": 1470,
      "method": "GET",
      "path": "/api/users"
     },
     {
      "func": "create_user",
-     "line": 1502,
+     "line": 1503,
      "method": "POST",
      "path": "/api/users"
     },
     {
      "func": "update_user",
-     "line": 1548,
+     "line": 1549,
      "method": "PUT",
      "path": "/api/users/{user_id}"
     },
     {
      "func": "get_user_privacy_ack",
-     "line": 1614,
+     "line": 1615,
      "method": "GET",
      "path": "/api/users/{user_id}/privacy-notice"
     },
     {
      "func": "ack_user_privacy_notice",
-     "line": 1621,
+     "line": 1622,
      "method": "POST",
      "path": "/api/users/{user_id}/privacy-notice/ack"
     },
     {
      "func": "delete_user",
-     "line": 1638,
+     "line": 1639,
      "method": "DELETE",
      "path": "/api/users/{user_id}"
     },
     {
      "func": "toggle_user_active",
-     "line": 1672,
+     "line": 1674,
      "method": "PATCH",
      "path": "/api/users/{user_id}/active"
     },
     {
      "func": "users_selectable",
-     "line": 1695,
+     "line": 1698,
      "method": "GET",
      "path": "/api/users/selectable"
     },
     {
      "func": "verify_unlock",
-     "line": 1708,
+     "line": 1711,
      "method": "POST",
      "path": "/api/auth/verify-unlock"
     },
     {
      "func": "set_unlock_password",
-     "line": 1728,
+     "line": 1731,
      "method": "PATCH",
      "path": "/api/users/{user_id}/unlock-password"
     },
     {
      "func": "verify_daily_task_unlock",
-     "line": 1757,
+     "line": 1760,
      "method": "POST",
      "path": "/api/auth/verify-daily-task-unlock"
     },
     {
      "func": "set_daily_task_password",
-     "line": 1776,
+     "line": 1779,
      "method": "PATCH",
      "path": "/api/users/{user_id}/daily-task-password"
     }
@@ -9428,6 +9430,7 @@
    "tables_w_transitive": [
     "audit_log",
     "login_rate_limit",
+    "module_versions",
     "notifications",
     "sessions",
     "system_settings",
@@ -10263,13 +10266,15 @@
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:settings",
+    "helper:startup",
     "helper:tiered_approval"
    ],
    "imports": [
     "core:db",
     "helper:audit",
     "helper:auth",
-    "helper:email_notify"
+    "helper:email_notify",
+    "helper:startup"
    ],
    "kind": "router",
    "path": "backend/routers/module_versions.py",
@@ -10277,19 +10282,19 @@
    "routes": [
     {
      "func": "list_module_versions",
-     "line": 34,
+     "line": 44,
      "method": "GET",
      "path": "/api/module-versions"
     },
     {
      "func": "create_module_version",
-     "line": 70,
+     "line": 83,
      "method": "POST",
      "path": "/api/module-versions"
     },
     {
      "func": "delete_module_version",
-     "line": 107,
+     "line": 120,
      "method": "DELETE",
      "path": "/api/module-versions/{mvid}"
     }
@@ -10314,9 +10319,12 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "login_rate_limit",
     "module_versions",
     "notifications",
-    "system_settings"
+    "sessions",
+    "system_settings",
+    "users"
    ]
   },
   "router:modules": {
