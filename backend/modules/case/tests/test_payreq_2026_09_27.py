@@ -14,11 +14,11 @@ import json
 
 import pytest
 
-from tests._requires import skip_module_unless
+from tests._requires import requires_module, skip_module_unless
 
 skip_module_unless("case", "本檔全部是 M01 的額外支出／請款")
 
-from core import registry, source_tree  # noqa: E402
+from core import registry  # noqa: E402
 
 NO = "MQ-PR-001"
 BASE = "/api/quotations/%s/extra-expenses" % NO
@@ -104,6 +104,25 @@ def test_after_approval_only_invoice_uploads_and_is_audited(client, req):
     assert "extra_expense.invoice_after_approval" in acts, acts
 
 
+def test_after_approval_a_case_reader_who_is_not_the_requester_cannot_add_invoice(client, make_user, req):
+    """§G5-14 另一個方向：「本人可補」這條分支，用**看得到案件、但不是填寫人、沒有 admin／出納**的人測 ⇒ 403、內容不變、沒有稽核紀錄。
+    （上一題的填寫人也是一般 sales ⇒ 放行的確實是「本人」，不是一般權限。）"""
+    _approve(client, req)
+    u2, p2 = make_user(username="pr_peer", role="sales")
+    _x("UPDATE quotations SET assigned_user_ids=? WHERE quote_no=?", (json.dumps([_uid(req["user"]), _uid(u2)]), NO))
+    h2 = _login(client, u2, p2)
+    assert client.get(BASE, headers=h2).status_code == 200                                  # 看得到案件：擋下的是本人規則，不是案件可見
+    before = _q("SELECT files_json FROM case_extra_expenses WHERE id=?", (req["id"],))[0]["files_json"]
+    r = client.post(BASE + "/%d/files" % req["id"], files={"files": _png()}, data={"kind": "invoice"}, headers=h2)
+    assert r.status_code == 403, r.text
+    r = client.patch(BASE + "/%d/dates" % req["id"], json={"invoiceNo": "ZZ00000000"}, headers=h2)
+    assert r.status_code == 403, r.text
+    row = _q("SELECT files_json, invoice_no FROM case_extra_expenses WHERE id=?", (req["id"],))[0]
+    assert row["files_json"] == before and row["invoice_no"] == ""
+    acts = [r["action"] for r in _q("SELECT action FROM audit_log WHERE target_id=? ORDER BY id", (NO,))]
+    assert "extra_expense.invoice_after_approval" not in acts, acts
+
+
 def test_unknown_kind_rejected_and_legacy_files_without_kind_are_not_backfilled(client, req):
     r = client.post(BASE + "/%d/files" % req["id"], files={"files": _png()}, data={"kind": "receipt"}, headers=req["h"])
     assert r.status_code == 400
@@ -165,9 +184,8 @@ def _other(client, h, basis):
             if d["quoteNo"] == NO]
 
 
+@requires_module("analytics", "月支出報表（M08）")
 def test_monthly_expenses_exclude_draft_and_rejected_in_both_bases_and_cash_uses_paid_date(client, make_user, seed_extra_expense):
-    if not source_tree.module_installed("modules/analytics/"):
-        pytest.skip("月支出報表（M08）不在這個安裝包")
     _case()
     for st, amt in (("草稿", 111), ("已駁回", 222), ("待審核", 333), ("簽核中", 444), ("已核准", 555)):
         seed_extra_expense(NO, total_cost=amt, description=st, expense_date="2031-04-02", status=st)
