@@ -49,3 +49,26 @@ def test_a_clean_run_stays_green(tmp_path):
     r = _run(tmp_path, _CLEAN)
     out = r.stdout + r.stderr
     assert r.returncode == 0 and "多出" not in out, out[-1500:]
+
+
+def test_default_watch_roots_are_tests_and_every_module_tests(monkeypatch):
+    """稽核 D PT-S1：沒有覆寫時，監看範圍＝backend/tests ＋ 每一個 modules/<key>/tests（有的都要在）。
+    改成空、或不含 modules ⇒ 紅。"""
+    import conftest
+    from pathlib import Path
+    monkeypatch.delenv("MOTRIX_PROBE_LEAK_ROOTS", raising=False)
+    roots = {Path(r).resolve() for r in conftest._probe_leak_roots()}
+    backend = Path(BACKEND_DIR).resolve()
+    assert backend / "tests" in roots, roots
+    module_tests = {d.resolve() for d in (backend / "modules").glob("*/tests") if d.is_dir()}
+    assert module_tests, "正對照：repo 裡至少要有一個 modules/<key>/tests"
+    assert module_tests <= roots, "漏看的模組測試目錄：%s" % sorted(map(str, module_tests - roots))
+
+
+def test_utf8_env_drops_the_leak_roots_override(monkeypatch):
+    """稽核 D PT-S2：外層帶著 MOTRIX_PROBE_LEAK_ROOTS ⇒ utf8_env 給子行程的環境裡沒有它；題目明著傳入時照給（反向控制用）。"""
+    from tests._subproc import utf8_env
+    monkeypatch.setenv("MOTRIX_PROBE_LEAK_ROOTS", "C:/somewhere/else")
+    assert "MOTRIX_PROBE_LEAK_ROOTS" not in utf8_env()
+    assert utf8_env(MOTRIX_PROBE_LEAK_ROOTS="x")["MOTRIX_PROBE_LEAK_ROOTS"] == "x"
+

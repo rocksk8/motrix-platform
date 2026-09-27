@@ -61,10 +61,11 @@ def utf8_env(**extra):
     # ① 獨佔旗標：建包在外層設的；子 pytest 繼承了也會當成建包去搶／等獨佔 ⇒ 只在建包時紅（8e96f8b0）
     # ② PYTEST_XDIST_*：在 worker 裡起的子 pytest 以為自己是 worker（a3044dcc：逐題上限誤結束行程）
     # ③ PYTEST_CURRENT_TEST、MOTRIX_E2E_HARDCAP_RUN：外層這一題／這一次執行的識別，子行程不是它
+    # ④ MOTRIX_PROBE_LEAK_ROOTS：探針殘留守門的範圍覆寫（只給反向控制用）；外層若帶著，子 pytest 會只看那個假範圍（稽核 D PT-S2）
     # 🔑 同一類第三次出現時收斂成這一處（2026-09-25）；起子 pytest 的題一律經過這裡（test_subproc_helper 守門）。
     for key in [k for k in env if k.startswith("PYTEST_XDIST_")] + [
             "PYTEST_CURRENT_TEST", "MOTRIX_E2E_HARDCAP_RUN",
-            "MOTRIX_PYTEST_EXCLUSIVE", "MOTRIX_PYTEST_EXCLUSIVE_OWNER"]:
+            "MOTRIX_PYTEST_EXCLUSIVE", "MOTRIX_PYTEST_EXCLUSIVE_OWNER", "MOTRIX_PROBE_LEAK_ROOTS"]:
         env.pop(key, None)
     for key, value in extra.items():
         if value is None:
