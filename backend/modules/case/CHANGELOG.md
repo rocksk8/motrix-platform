@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.4 — 2026-09-27（稽核 D 建議，主持派 B 代改：wip/b-m01-salesorders-page；列車取號）
+- `pages` 補 `sales-orders.html`（已退役、2026-09-13 起是導向案件管理的頁；不帶 menu、不進側欄）：modules.json 把它歸 M01，原本沒列入 pages ⇒ M01 缺席時產品選配不移除它、D7 前哨也不驗它回 404。守門 `tests/platform/test_module_pages_match_units.py`（wip/b-drill-absent404-2）
+
 ## 1.0.3 — 2026-09-26（M01-PLAN §3-8 ④；列車取號）
 - 題：`test_approval_providers.py` 隨模組搬進 `modules/case/tests/`；新增 `test_approval_detail_and_reassign_edges.py`（稽核 D 兩項觀察：詳情遮蔽看 dataUrl、M05 不在時轉簽簽核鏈讀不出來擋下）
 
