@@ -227,10 +227,11 @@ def test_ye1_an_unauthenticated_caller_is_refused(client, method, path, body):
     )
 
 
-@needs_m01
-@pytest.mark.parametrize("method,path,body", HIGH_RISK,
-                         ids=[f"{m} {p.split('/api/')[1][:34]}"
-                              for m, p, _ in HIGH_RISK])
+#: 稽核 D M5-M1：只標需要 M01 的參數（其餘參數在 M01 不在時照常要過）
+@pytest.mark.parametrize("method,path,body", [
+    pytest.param(m, p, b, id=f"{m} {p.split('/api/')[1][:34]}",
+                 marks=[needs_m01] if p.startswith("/api/quotations/") else [])
+    for m, p, b in HIGH_RISK])
 def test_ye1b_a_logged_in_non_superadmin_is_refused(
         client, make_user, method, path, body):
     """🔴🔴 YE1b：**登入了但不是 superadmin ⇒ 403**。

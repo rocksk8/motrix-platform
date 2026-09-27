@@ -199,9 +199,10 @@ def _run_probe(tmp_name, xdist, basetemp):
         f.unlink()
 
 
-@needs_m01
+#: 稽核 D M5-M1：只標需要 M01 的參數（其餘參數在 M01 不在時照常要過）
 @pytest.mark.e2e
-@pytest.mark.parametrize("xdist", [False, True], ids=["n0", "n2"])
+@pytest.mark.parametrize("xdist", [pytest.param(False, id="n0"),
+                                   pytest.param(True, id="n2", marks=[needs_m01])])
 def test_rc_teardown_hang_fails_only_that_test(xdist, tmp_path):
     """子行程跑三題：第一題 teardown 卡住 ⇒ 那一題另記一個 error（訊息含原因），三題本體都 passed（第二題是 e2e，要新瀏覽器），
     行程正常結束（有摘要行）。突變：看門狗不關瀏覽器 ⇒ 子行程卡到 240 秒逾時（TimeoutExpired）⇒ 紅。"""

@@ -76,8 +76,10 @@ def _group_holding(items, label):
 # MN1 / MN4 · 搬過去，而且舊的那邊不可以還在
 # ══════════════════════════════════════════════════════════════════════
 
-@needs_m01
-@pytest.mark.parametrize("label", MOVED)
+#: 稽核 D M5-M1：只標需要 M01 的參數（其餘參數在 M01 不在時照常要過）
+#: 「簽核歷史」「簽核佇列」屬 M01；「簽核代理人」在 M01 不在時照常要在工作群組
+@pytest.mark.parametrize("label", [pytest.param(x, marks=[] if x == "簽核代理人" else [needs_m01])
+                                   for x in MOVED])
 def test_mn1_the_three_items_live_in_the_work_group(sidebar, label):
     """🔴 MN1：三項要在「工作內容」那一組底下（名稱可能已改，見 `MN2`）。
 

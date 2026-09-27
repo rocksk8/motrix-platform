@@ -239,6 +239,10 @@ def blank_profile(monkeypatch):
 #:    ＋ `QL17`（沒快照 ⇒ 即時值＋標示）現在負責它，
 #:    而那兩題的期望值來自**我送進去的輸入**，不是來自輸出。
 QL6_BUILDERS = tuple(b for b in I.BUILDERS if b != "_build_payslip_html")
+#: 稽核 D M5-M1：只標需要 M01 的參數（其餘參數在 M01 不在時照常要過）
+#: `_build_completion_html`（完工單）要 M01；其餘單據的 builder 在 M01 不在時照常要過
+QL6_PARAMS = [pytest.param(b, marks=[needs_m01] if b == "_build_completion_html" else [])
+              for b in QL6_BUILDERS]
 
 
 #: `co-name`／`co-sub` 是**版位**（結構），不是身分（內容）——`WL7` 之後
@@ -248,8 +252,7 @@ QL6_BUILDERS = tuple(b for b in I.BUILDERS if b != "_build_payslip_html")
 LAYOUT_SLOT_MARKERS = ('class="co-name"', 'class="co-sub"')
 
 
-@needs_m01
-@pytest.mark.parametrize("builder", QL6_BUILDERS)
+@pytest.mark.parametrize("builder", QL6_PARAMS)
 def test_ql6_a_blank_profile_prints_no_hardcoded_identity(
         builder, blank_profile):
     """🔴🔴 `QL6`（`WL7` 翻面後的新判準①）：留空 ⇒ **不可以印出任何一句
@@ -269,8 +272,7 @@ def test_ql6_a_blank_profile_prints_no_hardcoded_identity(
     )
 
 
-@needs_m01
-@pytest.mark.parametrize("builder", QL6_BUILDERS)
+@pytest.mark.parametrize("builder", QL6_PARAMS)
 def test_ql6_a_blank_profile_keeps_the_layout_slots(builder, blank_profile):
     """🔴 `QL6`（新判準②）：留空 ⇒ **版面不塌**——`co-name`／`co-sub` 這些
     版位仍然要在，只是內容是空的。
@@ -288,8 +290,7 @@ def test_ql6_a_blank_profile_keeps_the_layout_slots(builder, blank_profile):
         )
 
 
-@needs_m01
-@pytest.mark.parametrize("builder", QL6_BUILDERS)
+@pytest.mark.parametrize("builder", QL6_PARAMS)
 def test_ql6_filled_identity_values_actually_appear(builder, identity):
     """⚙️ **正對照：填了值時，那些值真的印得出來。**
 
