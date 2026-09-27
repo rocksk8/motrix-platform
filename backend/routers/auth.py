@@ -328,8 +328,11 @@ def system_branding(authorization: str = Header(None)):
     值取自公司資料設定（主要據點 ＞ company_profile），沒填就是空字串——前端照空的顯示，不補任何公司的名字。"""
     from helpers.company_identity import location_identity, short_name
     ident = location_identity()
+    from helpers.branding import asset_urls
     out = {"companyName": ident["company_name"], "companyNameEn": ident["company_name_en"],
-           "shortName": short_name(ident["company_name"])}
+           "shortName": short_name(ident["company_name"]),
+           # 2026-09-27 H10：三種品牌圖檔的網址（帶版本；沒上傳 ⇒ v=default，端點回預設靜態檔）
+           "assets": asset_urls()}
     if authorization:
         try:
             _require_user(authorization)

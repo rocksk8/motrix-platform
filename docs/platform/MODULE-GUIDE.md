@@ -110,6 +110,13 @@
 - 禁止用安裝路徑（例如 `\V9.0\`）判斷是不是正式機，一律用明確旗標（守門：V9.0 字樣掃描）。
 - 守門類檢查預設是「記 ERROR 照常寫入」，只有設了明確旗標才會中斷，不可以擋住客戶正常存檔。
 
+### 3.7 品牌與公司資料不寫死（2026-09-27 H10；使用者：「要把原先的 logo、名稱、電話這些都換成客戶的」）
+
+- 公司名稱（中／英）、統編、電話、email、地址一律讀 `company_profile`（單據與報表經 `helpers.company_identity`；頁面經公開的 `GET /api/system/branding`）。
+- LOGO／深色底 LOGO／favicon 一律用 `GET /api/system/branding/<logo|logo-dark|favicon>`（沒上傳 ⇒ 回 `frontend/static` 的預設檔），不直接引用 `static/logo*.png`、`static/favicon.png`。上傳與驗證只經 L1 `helpers.branding`（檔頭判斷 PNG／JPEG／WebP、拒收 SVG、重新編碼去 metadata）。守門：同下一條的掃描（樣式「直接引用預設圖檔」）；e2e `test_e2e_branding_2026_09_27.py` 驗登入頁、上方列、分頁圖示真的換圖。
+- 產品碼（backend、frontend、tools；不含 tests 與 .md）不可以出現本公司的公司名、統編、電話、email／網域、地址、座標、人員姓名與 email。必須留著的（凍結 migration、只在本公司安裝才動作的升級回填、安全黑名單、升級演練資料、已出貨的版本紀錄）逐筆登記在 `tests/platform/_our_company_literals.py` 的 `ALLOWED`，寫次數、類別與理由；頁面不可以登記。守門：`tests/platform/test_no_our_company_literals.py`（正對照：凍結 migration 的統編判準要被掃到；反向控制：合成樹、次數不符、登記頁面、類別不在清單、登記過期都要紅）。
+- 產品名「MOTRIX」不在此限（使用者裁示 2026-09-27：保留）。
+
 ## 4. 資料庫與 migration
 
 - V9 的 migration v1～v116 是凍結的基準，**不可以修改**。

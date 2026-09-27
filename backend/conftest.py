@@ -513,6 +513,11 @@ def client(_app, _template_db, tmp_path, monkeypatch):
     import routers.uploads as uploads_router
     monkeypatch.setattr(uploads_router, "UPLOADS_ROOT", str(tmp_path / "uploads"))
 
+    # 2026-09-27 H10：品牌圖檔（helpers/branding.py）存在 UPLOADS_ROOT/branding/——第四份獨立的 UPLOADS_ROOT，
+    # 不改的話上傳題會把圖寫進真的 uploads/branding/，而那一張會變成開發機的 LOGO。
+    import helpers.branding as branding_helper
+    monkeypatch.setattr(branding_helper, "UPLOADS_ROOT", str(tmp_path / "uploads"))
+
     # photos.py computes its own project-photo storage roots independent of
     # archive.py/uploads_helper above too (used by projects.py's project-log
     # photos and, since 2026-08-26, system.py's work-log photos) — redirect

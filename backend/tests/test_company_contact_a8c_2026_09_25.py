@@ -155,7 +155,11 @@ def test_a8d_branding_is_public_but_tax_id_needs_a_login(client, make_user):
     _set_setting("company_profile", {"name": "範例科技股份有限公司", "tax_id": "12345678"})
     r = client.get("/api/system/branding")
     assert r.status_code == 200
-    assert r.json() == {"companyName": "範例科技股份有限公司", "companyNameEn": "", "shortName": "範例科技"}
+    body = r.json()
+    # H10（2026-09-27）：回應多了 `assets`（品牌圖檔網址，另有 test_branding 驗）；這裡只驗名稱三欄
+    assert {k: body[k] for k in ("companyName", "companyNameEn", "shortName")} == {
+        "companyName": "範例科技股份有限公司", "companyNameEn": "", "shortName": "範例科技"}
+    assert set(body) == {"companyName", "companyNameEn", "shortName", "assets"}      # 未登入不多給（尤其不給統編）
     assert "taxId" not in client.get("/api/system/branding", headers={"Authorization": "Bearer nope"}).json()
     u, p = make_user("a8d_user", "A8d-Pass-123", role="user")[:2]
     tok = client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]
@@ -166,4 +170,6 @@ def test_a8d_branding_is_empty_when_nothing_is_set(client):
     """沒有設定公司資料 ⇒ 空字串，不補任何公司的名字（尤其不是本公司的）。"""
     from helpers.settings import _set_setting
     _set_setting("company_profile", {})
-    assert client.get("/api/system/branding").json() == {"companyName": "", "companyNameEn": "", "shortName": ""}
+    body = client.get("/api/system/branding").json()
+    assert {k: body[k] for k in ("companyName", "companyNameEn", "shortName")} == {
+        "companyName": "", "companyNameEn": "", "shortName": ""}

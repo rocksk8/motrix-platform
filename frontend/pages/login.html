@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>登入 — MOTRIX 專案管理系統</title>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <style>
@@ -192,10 +192,15 @@
 
   <div class="login-wrap">
     <div class="logo-area">
-      <img src="../static/logo.png" alt="MOTRIX"
+      <!-- 2026-09-27 H10：LOGO 與英文公司名取自「公司資料設定」（/api/system/branding）；
+           src 先放不帶版本的端點（JS 還沒跑也看得到），拿到設定後換成帶版本的網址 -->
+      <img src="/api/system/branding/logo" data-brand-logo="logo"
+           :src="(branding.assets && branding.assets.logo) || '/api/system/branding/logo'"
+           :alt="branding.shortName || branding.companyName || 'LOGO'" alt="LOGO"
            onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
       <div class="logo-fallback" style="display:none">MOTRIX</div>
-      <div class="logo-sub">SYNERGY INTEGRATION ERP</div>
+      <div class="logo-sub" data-brand-name-en x-show="branding.companyNameEn"
+           x-text="(branding.companyNameEn || '').toUpperCase()"></div>
     </div>
 
     <div class="card">

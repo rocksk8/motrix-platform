@@ -119,7 +119,9 @@ def init_default_admin() -> None:
                 "INSERT INTO users "
                 "(username, password_hash, display_name, role, email, modules, active, "
                 "created_at, must_change_password) "
-                "VALUES ('jeff', ?, '黃玉龍', 'superadmin', 'jeff@miactw.com', ?, 1, ?, 1)",
+                # 2026-09-27 H10：全新安裝不寫入本公司人員的姓名與 email（產品會安裝在客戶端；
+                # 系統技術類信件寄給超級管理員，寫死的 email 會讓客戶的告警寄到我們這裡）。
+                "VALUES ('jeff', ?, '系統管理員', 'superadmin', '', ?, 1, ?, 1)",
                 (
                     _hash_pw(temp_pw),
                     json.dumps(_SUPERADMIN_MODULES),
@@ -131,16 +133,9 @@ def init_default_admin() -> None:
             logger.warning(
                 "已建立預設 superadmin（jeff）。臨時密碼已寫入 %s — 請立即登入並修改密碼。", path
             )
-        else:
-            conn.execute(
-                "UPDATE users SET display_name='黃玉龍' WHERE username='jeff' "
-                "AND display_name IN ('Jeff 管理員','Jeff','jeff','jeff超級管理員','')"
-            )
-            conn.execute(
-                "UPDATE users SET email='jeff@miactw.com' WHERE username='jeff' "
-                "AND (email='' OR email IS NULL)"
-            )
-            conn.commit()
+        # 2026-09-27 H10：拿掉「已存在的 jeff 每次啟動補回姓名與 email」——那是本公司早期資料的修正，
+        # 我們自己的安裝早已套用（凍結的 db._m008 也做過一次）；留著的話，客戶把管理員 email 清空，
+        # 下一次啟動就會被改成本公司的 email。
     finally:
         conn.close()
 
