@@ -291,16 +291,29 @@ def custom_ref_options(key: str, field: str, q: str = Query(""), limit: int = Qu
 @router.post("/api/custom-modules/{key}/output/preview")
 def preview_custom_output(key: str, payload: dict = Body(...), format: str = Query("html"),
                           authorization: str = Header(None)):
-    """用樣本資料預覽輸出（建構器 ⑤）。body＝整份模組定義（草稿）。"""
+    """用樣本資料預覽輸出（建構器 ⑤；即時預覽 BUILDER-UX §3.4）。body＝整份模組定義（草稿，可以是編到一半的）。
+    只讀：不寫庫、不存檔。未完成的欄位畫成佔位，清單放在回應標頭 `X-Motrix-Preview-Incomplete`（JSON，ASCII 跳脫）。
+    只有連一個欄位都畫不出來、或版型結構錯時才 422；任何半成品都不可以 500。"""
     _require_user(authorization, require_superadmin=True)
     body = payload.get("body")
     if not isinstance(body, dict):
         return JSONResponse(status_code=422, content={"detail": "定義必須是 JSON 物件", "problems": [{"path": "", "message": "定義必須是 JSON 物件"}]})
-    problems = [p for p in CM.validate_module(body, key) if p["path"].startswith(("output", "numbering")) or p["path"] == "fields"]
-    if problems:
-        return JSONResponse(status_code=422, content={"detail": "定義有問題", "problems": problems})
-    html = CM.render_view(body, CM.sample_view(body))
-    if format == "pdf":
-        import pdf_gen
-        return Response(pdf_gen.html_to_pdf_bytes(html), media_type="application/pdf")
-    return HTMLResponse(html)
+    try:
+        html, incomplete = CM.preview_output(body)
+        if format == "pdf":
+            import pdf_gen
+            resp = Response(pdf_gen.html_to_pdf_bytes(html), media_type="application/pdf")
+        else:
+            resp = HTMLResponse(html)
+    except CM.CustomModuleError as e:
+        return JSONResponse(status_code=422, content={"detail": str(e), "problems": e.problems})
+    except Exception as e:                                   # noqa: BLE001 — 預覽是唯讀的輔助：半成品草稿不可以讓它 500
+        # log 與回應都只帶例外型別＋位置（檔:行:函式）：例外訊息可能含草稿內容，stack 不回給前端
+        import logging
+        import traceback
+        where = " < ".join("%s:%d:%s" % (f.filename.replace("\\", "/").rsplit("/", 1)[-1], f.lineno, f.name)
+                           for f in reversed(traceback.extract_tb(e.__traceback__)[-4:]))
+        logging.getLogger(__name__).error("輸出預覽失敗（%s）：%s @ %s", key, type(e).__name__, where)
+        return JSONResponse(status_code=422, content={"detail": "這份草稿暫時無法預覽", "problems": [{"path": "", "message": "無法產生預覽：%s" % type(e).__name__}]})
+    resp.headers["X-Motrix-Preview-Incomplete"] = json.dumps(incomplete[:50])
+    return resp

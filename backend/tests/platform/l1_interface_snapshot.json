@@ -252,6 +252,7 @@
    "next_number": "def(conn, module_key, numbering, day=…)",
    "notify_ref": "def(rec)",
    "permission_of": "def(module_key, body)",
+   "preview_output": "def(body)",
    "published_modules": "def(conn)",
    "queue_items": "def(conn)",
    "rebuild_index": "def(conn)",
