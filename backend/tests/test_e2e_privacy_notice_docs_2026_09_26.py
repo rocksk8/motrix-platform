@@ -16,6 +16,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from helpers import privacy_notice as pn  # noqa: E402
+needs_netplan = requires_module("netplan", '本題打網路規劃（netplan）的端點；netplan 不在時沒有對象（B 2026-09-28 真刪普查）')
 
 ROOT = "Alpine.$data(document.querySelector('[x-data]'))"
 NO_PRINT = "window.print = function () { window.__printed = true }"
@@ -93,6 +94,7 @@ def test_completion_note_recipient_notice(live_server, make_user, new_page, logi
     assert pn.get_ack("completion_contact", f"{no}:陳經理")["byUsername"] == "pnd_cn"
 
 
+@needs_netplan
 @pytest.mark.e2e
 def test_network_plan_form_unsaved_contact_is_refused_then_saved_one_is_recorded(
         live_server, make_user, new_page, login_as, client):
@@ -117,6 +119,7 @@ def test_network_plan_form_unsaved_contact_is_refused_then_saved_one_is_recorded
     assert pn.get_ack("network_plan_contact", f"{pid}:周窗口")["byUsername"] == "pnd_np"
 
 
+@needs_netplan
 @pytest.mark.e2e
 def test_network_plan_create_modal_records_after_create(live_server, make_user, new_page, login_as, client):
     u = make_user(username="pnd_nc", role="superadmin")
