@@ -21,6 +21,12 @@ def test_jv4_the_voucher_entry_sits_right_after_cashier_with_the_same_flag():
     items = declared_items()
     cash = [i for i, it in enumerate(items) if it["href"] == "cashier.html"]
     vouch = [i for i, it in enumerate(items) if it["href"] == "voucher.html"]
+    # 〔C 發現（M05 真刪時紅）：出納入口屬 M05（arap）——M05 不在時改驗「傳票入口照樣在、權限仍是 cashier、沒有出納入口」，
+    #   不整題略過（§G5 #7：驗「另一邊照常」的不可以標 requires_module）〕
+    if not source_tree.module_installed("modules/arap/"):
+        assert cash == [] and len(vouch) == 1, "M05 不在：出納入口應該不見、傳票入口恰好一個：cashier %r、voucher %r" % (cash, vouch)
+        assert items[vouch[0]]["perm"] == ["cashier"], "M05 不在時傳票入口的權限變了：%r" % items[vouch[0]]["perm"]
+        return
     assert len(cash) == 1 and len(vouch) == 1, (
         "選單的出納／傳票入口各應恰好一個：cashier %r、voucher %r" % (cash, vouch))
     assert vouch[0] == cash[0] + 1 and items[vouch[0]]["group"] == items[cash[0]]["group"], (
