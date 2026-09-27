@@ -24,6 +24,9 @@ D_20260928 = {"BP-M1", "B-2a", "B-2b", "M06-M1", "M06-M2", "M06-M3", "AT-M1", "O
 # ── 真實的稽核檔 ─────────────────────────────────────────────────────────────
 
 def test_open_mustfixes_match_the_register():
+    """⚠ 這一題**不依賴** CANON 分支（突變「拿掉標準寫法的判定」它照綠，主持實跑確認）：2026-09-28 補的 13 行都寫在
+    **宣告它的那份檔**，而 D 原本的判準（同檔、ID 後 60 字內同一格有「關閉」、該行無否定字樣）本來就採信它們。
+    標準寫法的專屬判定只在「跨檔」或「同一個 ID 在兩份檔宣告」時才有差別——由合成的 canonical／cross_file 題守。"""
     texts = M.load_texts()
     problems = M.check(M.open_items(texts), M.load_register())
     assert not problems, "\n".join(problems)
