@@ -7,8 +7,8 @@
   "kinds": {
    "api": 383,
    "e2e": 166,
-   "audit": 92,
-   "unit": 61
+   "audit": 93,
+   "unit": 60
   },
   "routes": 571
  },
@@ -8147,9 +8147,7 @@
     "dir:backend/modules/",
     "dir:tools/platform/",
     "file:backend/tests/_subproc.py",
-    "file:backend/tests/test_e2e_hard_cap_2026_09_25.py",
-    "file:tools/platform/modtest.py",
-    "mod:tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26"
+    "file:tools/platform/modtest.py"
    ],
    "evidence": {
     "import": [
@@ -8157,8 +8155,6 @@
     ],
     "path": [
      "backend/modules/",
-     "backend/modules/tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26.py",
-     "backend/tests/test_e2e_hard_cap_2026_09_25.py",
      "tools/platform/",
      "tools/platform/modtest.py"
     ]
@@ -8215,17 +8211,13 @@
     "dir:backend/tests/platform/",
     "dir:backend/tools/",
     "dir:tools/platform/",
-    "file:backend/tests/test_e2e_hard_cap_2026_09_25.py",
     "file:backend/tools/build_deploy_package.ps1",
-    "file:tools/platform/modtest.py",
-    "mod:tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26"
+    "file:tools/platform/modtest.py"
    ],
    "evidence": {
     "path": [
-     "backend/modules/tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26.py",
      "backend/tests/",
      "backend/tests/platform/",
-     "backend/tests/test_e2e_hard_cap_2026_09_25.py",
      "backend/tools/",
      "backend/tools/build_deploy_package.ps1",
      "tools/platform/",
@@ -8878,6 +8870,7 @@
   "backend/tests/platform/test_module_boundaries.py": {
    "kind": "audit",
    "units": [
+    "dir:backend/modules/",
     "dir:backend/routers/",
     "file:backend/tests/platform/__init__.py",
     "file:backend/tests/platform/_boundaries.py",
@@ -8892,6 +8885,7 @@
      "backend/tests/platform/_boundaries.py"
     ],
     "path": [
+     "backend/modules/",
      "backend/routers/"
     ]
    }
@@ -9239,11 +9233,13 @@
    "login_fixture": true
   },
   "backend/tests/platform/test_probe_leak_guard.py": {
-   "kind": "unit",
+   "kind": "audit",
    "units": [
     "dir:backend/modules/",
+    "dir:docs/platform/",
     "file:backend/conftest.py",
-    "file:backend/tests/_subproc.py"
+    "file:backend/tests/_subproc.py",
+    "file:docs/platform/modules.json"
    ],
    "evidence": {
     "import": [
@@ -9251,7 +9247,9 @@
      "backend/tests/_subproc.py"
     ],
     "path": [
-     "backend/modules/"
+     "backend/modules/",
+     "docs/platform/",
+     "docs/platform/modules.json"
     ]
    }
   },
