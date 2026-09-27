@@ -11,7 +11,9 @@
      放開發機標記（`.no_email_send`、`.no_cloud_archive`）；補一份今天的本機快照（開發機的 V9 沒有每日排程，預檢要求今天或昨天有 `.done`）。
   3. 新版程式：`--package`（build_deploy_package.ps1 打出來的部署包）；沒給 ⇒ `git archive <--new-rev>`（報告會註明不是部署包）。
   4. 升級：預檢 → 備份＋試還原 → 轉換 → 驗證（新版啟動 ping）。
-  5. 冒煙：在轉換後的目錄啟動新版，用演練專用的超級管理員登入，逐一打主要頁面與 API（報價、案件、傳票、獎金、出納、報表、模組管理、自訂模組）。
+  5. 冒煙：在轉換後的目錄啟動新版，用演練專用的超級管理員登入，逐一打主要頁面與 API（報價、案件、傳票、獎金、出納、報表、模組管理、自訂模組）；
+     同一個服務上驗**缺席明說**（S-1，`explain_absence`）：availability＝已安裝模組、INTEGRATION-POINTS「對方不在時」的說明、
+     L1 頁面 200、無參數 GET 全掃不回 5xx。
   6. 回滾：用**第一份**備份「完整回滾」→ 與 source-backup 比對邏輯內容 → V9 啟動 ping；再轉換一次 → 「只回程式」→ V9 啟動 ping。
   7. 報告：`--report`（Markdown）；演練安裝目錄預設刪除，`source-backup` 保留到使用者回來（RUN-PLAN §3-7）。
 
@@ -29,6 +31,8 @@ import sqlite3
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import date, datetime
 from pathlib import Path
@@ -155,6 +159,199 @@ def absent_probe_plan(backend_dir: str, source_modules=None, registered=None, mi
         for pg in pages:
             plan.append(("缺席 %s 頁面 %s" % (key, pg["path"]), "GET", "/pages/" + pg["path"], 404))
     return plan
+
+
+# ── 缺席明說（S-1：FINAL-DRILL-REPORT §5、AUDIT-D-D7-drill §4；原本只在臨時腳本 d7-tools\d7_extra.py）──────────────
+# 冒煙那一步的服務上（V9 真實資料轉換後）再驗三件事：①L1 在模組缺席時明說（availability＋INTEGRATION-POINTS「對方不在時」）；
+# ②L1 頁面 200；③無路徑參數的 GET 全掃不回 5xx。
+# 🔴 兩條判準照 D 2b8afa60 審定（第一版 d7_extra 寫錯過、造成假紅，不可以改回去）：
+#   1. availability 只列安裝包內的模組：清單的 key 必須＝已安裝模組、而且都 loaded；**缺席的 key 不在清單裡才對**
+#      （system.py docstring、STATES-PLATFORM P-FE-02；缺席的明說由 P-FE-03 與缺席 404 負責，不是這支端點）。
+#   2. IP-98（應收應付的收入項）只在**現金口徑**（basis=cash）用得到；權責口徑不用 arap（INTEGRATION-POINTS IP-98 原文），
+#      不可以在權責口徑要求「應收應付模組未安裝」。
+
+#: 全掃排除：會連外、長連線、會觸發備份／寄信／封存、或產大檔（與 d7_extra 相同）
+CRAWL_EXCLUDE = ("backup", "cloud", "archive", "mail", "email", "send", "geocod", "/api/map", "stream", "events",
+                 "sse", "restart", "shutdown", "update-check", "deploy", "sync", "download", "/pdf", "excel",
+                 "export", "print", "reminder-run", "run-now", "self-test", "selftest", "diagnos", "cert", "logs/tail",
+                 "nominatim", "weather", "tender")
+_EXPENSES = "/api/reports/expenses-monthly?year=2026&month=2026-09&basis="
+ARAP_ABSENT = "應收應付模組未安裝"
+
+
+def installed_modules(backend_dir: str) -> tuple:
+    """⇒ (模組 key 的集合, 來源)。安裝包有 `modules.lock.json` ⇒ 以它為準（建包時選配的結果）；沒有（git archive 模式）
+    ⇒ 包內有 module.json 的資料夾。這是獨立於被檢查端點的訊號（§G5 #15）：availability 的判準拿它來比，不拿端點自己的回應。"""
+    lock = os.path.join(backend_dir, "modules.lock.json")
+    if os.path.isfile(lock):
+        with open(lock, encoding="utf-8-sig") as f:
+            return set((json.load(f).get("modules") or {})), "modules.lock.json"
+    mods = os.path.join(backend_dir, "modules")
+    return ({d for d in (os.listdir(mods) if os.path.isdir(mods) else [])
+             if os.path.isfile(os.path.join(mods, d, "module.json"))}, "modules/ 資料夾")
+
+
+def explain_plan(present, first_quote=None) -> list:
+    """⇒ [(IP, 說明, 路徑, 期望狀態碼, [回應必須含的字串])]；只列適用於這個選配的條（依 INTEGRATION-POINTS「對方不在時」）。
+    full（全部在）⇒ 空清單。需要單號的條（IP-12、IP-15/18/22）在庫裡沒有報價單時：IP-12 用不存在的單號（案件缺席時
+    查無與缺席同一個 404 說明），IP-15/18/22 不列。"""
+    present = set(present)
+    P = lambda k: k in present  # noqa: E731
+    A = lambda k: k not in present  # noqa: E731
+    out = []
+    if A("payroll"):
+        out.append(("IP-16", "L1 獎金入口：薪資獎金缺席", "/api/system/bonus-module-status", 200,
+                    ['"enabled":false', "薪資獎金模組未安裝"]))
+    if A("case"):
+        out.append(("IP-91", "L1 報價預設條款：案件缺席", "/api/settings/quote-terms-defaults", 404, ["案件模組未安裝"]))
+    if P("arap") and A("subcontract"):
+        out.append(("IP-14", "出納待付：外包工班缺席", "/api/cashier/payable-queue", 404, ["外包工班模組未安裝"]))
+    if P("arap") and A("payroll"):
+        out.append(("IP-8", "出納獎金佇列：薪資獎金缺席", "/api/cashier/bonus-queue", 200,
+                    ['"available":false', "薪資獎金模組未安裝"]))
+    if P("analytics") and A("arap"):
+        out.append(("IP-99", "稅務匯出：應收應付缺席", "/api/reports/tax-export?year=2026", 404, [ARAP_ABSENT]))
+        # 判準 2：只在現金口徑要求（權責口徑不用 arap）
+        out.append(("IP-98", "支出／收入報表（現金口徑）：應收應付缺席", _EXPENSES + "cash", 200, [ARAP_ABSENT]))
+    if P("analytics") and A("case"):
+        out.append(("IP-95", "支出／收入報表（權責口徑）：案件缺席", _EXPENSES + "accrual", 200, ["案件模組未安裝"]))
+    if P("analytics") and P("case") and A("subcontract"):
+        out.append(("IP-1", "支出報表：外包工班缺席", _EXPENSES + "accrual", 200, ["外包工班模組未安裝"]))
+    if P("netplan") and A("case"):
+        out.append(("IP-12", "規劃書依案件查詢：案件缺席",
+                    "/api/quotations/%s/network-plan" % urllib.parse.quote(first_quote or "Q-NONE"), 404, ["案件模組未安裝"]))
+    if P("accounting"):
+        need = [msg for key, msg in (("subcontract", "外包工班模組未安裝"), ("arap", ARAP_ABSENT),
+                                     ("supply", "採購・庫存・出貨模組未安裝")) if A(key)]
+        if need:
+            out.append(("IP-14/99/20", "T100 預覽：來源模組缺席",
+                        "/api/reports/t100-export/preview?start=2026-01-01&end=2026-09-30", 200, need))
+    if P("case") and first_quote:
+        need = [msg for key, msg in (("subcontract", "外包工班模組未安裝"), ("supply", "採購・庫存・出貨模組未安裝"),
+                                     ("accounting", "會計傳票模組未安裝")) if A(key)]
+        if need:
+            out.append(("IP-15/18/22", "案件整包：各段缺席",
+                        "/api/quotations/%s/case-bundle" % urllib.parse.quote(first_quote), 200, need))
+    if P("payroll") and A("accounting"):
+        out.append(("IP-2", "獎金傳票科目：會計缺席", "/api/bonus/cases/voucher-accounts", 200, ["會計模組未安裝"]))
+    return out
+
+
+def ip98_basis_violations(plan) -> list:
+    """判準 2 的守門：要求「應收應付模組未安裝」的 expenses-monthly 條目，口徑必須是 cash ⇒ 違反的條目清單。"""
+    return [row for row in plan if row[2].startswith(_EXPENSES) and ARAP_ABSENT in row[4]
+            and not row[2].endswith("basis=cash")]
+
+
+def availability_verdict(status, body: str, present) -> dict:
+    """判準 1：清單的 key＝已安裝模組、而且都 loaded。缺席的 key **不在**清單裡才對（P-FE-02）。"""
+    present = set(present)
+    out = {"status": status}
+    try:
+        j = json.loads(body)
+    except (TypeError, ValueError):
+        out.update(ok=False, body=str(body)[:300])
+        return out
+    keys = set(j) if isinstance(j, dict) else set()
+    not_loaded = sorted(k for k, v in (j.items() if isinstance(j, dict) else ())
+                        if not isinstance(v, dict) or v.get("state") != "loaded")
+    out["keys_vs_installed"] = {"extra": sorted(keys - present), "missing": sorted(present - keys)}
+    out["not_loaded"] = not_loaded
+    out["ok"] = status == 200 and isinstance(j, dict) and keys == present and not not_loaded
+    return out
+
+
+def absence_verdict(status, body: str, expect, needles) -> dict:
+    """狀態碼等於期望、而且回應含每一句說明（忽略空白：JSON 序列化的 `": "` 與 `":"` 都算）。"""
+    compact = str(body).replace(" ", "")
+    lacking = [n for n in needles if n.replace(" ", "") not in compact]
+    return {"status": status, "expect": expect, "lacking": lacking, "ok": status == expect and not lacking}
+
+
+def _get(base, path, token=None, timeout=30):
+    """⇒ (狀態碼, 本文)；連線失敗 ⇒ (例外名稱, 訊息)（不是 int，判定一律不過）。"""
+    r = urllib.request.Request(base + path, headers={"Authorization": "Bearer " + token} if token else {})
+    try:
+        with urllib.request.urlopen(r, timeout=timeout) as resp:
+            return resp.status, resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+    except Exception as e:                                      # noqa: BLE001
+        return type(e).__name__, str(e)
+
+
+def _first_quote(backend_dir: str):
+    """庫裡最新一張報價單的單號（唯讀連線）；沒有表或沒有資料 ⇒ None。"""
+    db = os.path.join(backend_dir, "motrix_erp.db")
+    if not os.path.isfile(db):
+        return None
+    try:
+        c = sqlite3.connect("file:%s?mode=ro" % Path(db).as_posix(), uri=True)
+    except sqlite3.Error:
+        return None
+    try:
+        row = c.execute("SELECT quote_no FROM quotations WHERE quote_no IS NOT NULL AND quote_no<>'' "
+                        "ORDER BY id DESC LIMIT 1").fetchone()
+    except sqlite3.Error:
+        row = None
+    finally:
+        c.close()
+    return row[0] if row else None
+
+
+def explain_absence(base: str, token: str, backend_dir: str) -> dict:
+    """在跑著的新版上驗缺席明說（S-1）。⇒ {installed, availability, absence, pages, crawl, ok}。"""
+    present, source = installed_modules(backend_dir)
+    first_quote = _first_quote(backend_dir)
+    out = {"installed": sorted(present), "installed_from": source, "first_quote": first_quote}
+    s, b = _get(base, "/api/system/modules/availability", token)
+    out["availability"] = availability_verdict(s, b, present)
+    out["absence"] = []
+    for ip, name, path, expect, needles in explain_plan(present, first_quote):
+        s, b = _get(base, path, token)
+        out["absence"].append({"ip": ip, "name": name, "path": path, **absence_verdict(s, b, expect, needles),
+                               "body": b[:400]})
+    with open(os.path.join(backend_dir, "core", "l1_pages.json"), encoding="utf-8-sig") as f:
+        l1 = json.load(f)
+    out["pages"] = []
+    for p in (l1.get("pages") if isinstance(l1, dict) else l1) or []:
+        pth = p if isinstance(p, str) else (p.get("path") or p.get("page"))
+        if not pth:
+            continue
+        url = pth if pth.startswith("/") else "/pages/" + pth
+        s, _b = _get(base, url)
+        out["pages"].append({"path": url, "status": s, "ok": s == 200})
+    s, b = _get(base, "/openapi.json", token)
+    crawl = {"openapi": s, "checked": 0, "excluded": [], "by_status": {}, "bad": []}
+    if s == 200:
+        for path, ops in sorted(json.loads(b).get("paths", {}).items()):
+            if "get" not in ops or "{" in path:
+                continue
+            if any(x in path.lower() for x in CRAWL_EXCLUDE):
+                crawl["excluded"].append(path)
+                continue
+            s2, b2 = _get(base, path, token, timeout=20)
+            crawl["checked"] += 1
+            crawl["by_status"][str(s2)] = crawl["by_status"].get(str(s2), 0) + 1
+            if not isinstance(s2, int) or s2 >= 500:
+                crawl["bad"].append({"path": path, "status": s2, "body": b2[:300]})
+    crawl["ok"] = s == 200 and crawl["checked"] > 0 and not crawl["bad"]
+    out["crawl"] = crawl
+    out["ok"] = explain_ok(out)
+    return out
+
+
+def explain_ok(out) -> bool:
+    """四項都要有結果而且通過；少了任何一項（沒跑到）⇒ 不過，不是當成沒事。L1 頁面必須至少一頁。"""
+    return (bool((out.get("availability") or {}).get("ok"))
+            and isinstance(out.get("absence"), list) and all(x.get("ok") for x in out["absence"])
+            and bool(out.get("pages")) and all(x.get("ok") for x in out["pages"])
+            and bool((out.get("crawl") or {}).get("ok")))
+
+
+def smoke_verdict(out) -> bool:
+    """冒煙整體：原本的 smoke_ok，**而且**缺席明說通過；沒有 explain（沒跑到）⇒ 不過。"""
+    return smoke_ok(out) and bool((out.get("explain") or {}).get("ok"))
 
 
 def sha256(path: str) -> str:
@@ -364,10 +561,11 @@ def smoke(install: str) -> dict:
             except Exception as e:                              # noqa: BLE001
                 code = "%s" % type(e).__name__
             out["checks"].append({"name": name, "path": path, "status": code, "expect": expect, "ok": code == expect})
+        out["explain"] = explain_absence(base, token, os.path.join(install, "backend"))      # S-1 缺席明說
     finally:
         T._stop(proc)
         log.close()
-    out["ok"] = smoke_ok(out)
+    out["ok"] = smoke_verdict(out)
     return out
 
 
@@ -413,6 +611,34 @@ def cleanup(root: str, ok: bool, keep: bool) -> list:
     return present
 
 
+def explain_report_lines(rep: dict) -> list:
+    """冒煙那一步的缺席明說（S-1）展開成報告段落（上表摘要只留 400 字，會被截掉）。沒跑到 ⇒ 明寫沒跑到。"""
+    smoke_steps = [s for s in rep.get("steps", []) if s.get("name", "").startswith("5 ")]
+    if not smoke_steps:
+        return []
+    ex = smoke_steps[-1].get("explain")
+    lines = ["## 缺席明說（S-1）", ""]
+    if not ex:
+        return lines + ["**沒有結果**（冒煙在缺席明說之前就失敗了）⇒ 本項未驗。", ""]
+    av = ex.get("availability") or {}
+    lines += ["- 已安裝模組（%s）：%s" % (ex.get("installed_from"), ", ".join(ex.get("installed") or []) or "（無）"),
+              "- availability：%s（%s）" % ("✅" if av.get("ok") else "❌",
+                                            json.dumps({k: av.get(k) for k in ("status", "keys_vs_installed", "not_loaded")},
+                                                       ensure_ascii=False)),
+              "- L1 頁面：%d 頁，不過 %d" % (len(ex.get("pages") or []), sum(1 for p in ex.get("pages") or [] if not p.get("ok"))),
+              "- 無參數 GET 全掃：%s" % json.dumps({k: (ex.get("crawl") or {}).get(k) for k in ("checked", "by_status", "bad")},
+                                                   ensure_ascii=False)]
+    rows = ex.get("absence") or []
+    if rows:
+        lines += ["", "| IP | 說明 | 路徑 | 狀態（期望） | 缺少的說明 | 結果 |", "|---|---|---|---|---|---|"]
+        lines += ["| %s | %s | `%s` | %s（%s） | %s | %s |" % (r["ip"], r["name"], r["path"], r["status"], r["expect"],
+                                                          "、".join(r["lacking"]) or "—", "✅" if r["ok"] else "❌")
+                  for r in rows]
+    else:
+        lines += ["- INTEGRATION-POINTS 缺席條目：這個選配沒有適用的條（全部模組都在）"]
+    return lines + [""]
+
+
 def write_report(rep: dict, path: str) -> None:
     lines = ["# D7 最終轉移升級驗證報告", "",
              "> 產生：`tools/platform/final_drill.py`（%s）。來源：`%s`（只讀）；演練目錄：`%s`。" % (rep["at"], rep["v9_dir"], rep["drill_root"]),
@@ -426,6 +652,7 @@ def write_report(rep: dict, path: str) -> None:
         lines.append("| %d | %s | %s | %s | %s |" % (i, s["name"], "✅" if s["ok"] else "❌", s.get("seconds", ""),
                                                   (text[:400] + "…") if len(text) > 400 else text))
     lines += ["", "## 總判定", "", "**%s**" % ("通過" if rep["ok"] else "未通過（見上表 ❌ 的步驟）"), ""]
+    lines += explain_report_lines(rep)
     if rep.get("stopped_at"):
         lines += ["> 在「%s」失敗後停止：後面的步驟沒有意義，而且不應在壞掉的狀態上繼續動作。" % rep["stopped_at"], ""]
     if rep.get("kept_for_diagnosis"):

@@ -356,3 +356,150 @@ def test_an_absent_module_with_an_empty_declaration_is_red(tmp_path):
     rows = {(path, expect) for _n, _m, path, expect in plan}
     assert rows == {("modules/ee", None), ("/pages/ff.html", 404)}, rows
 
+
+# ── S-1 缺席明說（原本只在 d7-tools\d7_extra.py；判準照 D 2b8afa60 審定）────────────────────────────────
+
+def _combos():
+    """代表性的選配：全部在、core-only、每次拿掉一個、只留一個（13 份包的形狀）。"""
+    keys = FD.registered_module_keys()
+    return [set(keys), set()] + [set(keys) - {k} for k in sorted(keys)] + [{k} for k in sorted(keys)]
+
+
+def _tree_combos():
+    """同上，但只取**這棵樹實際有的**模組（modules.json 登記＋資料夾在，§G5 #15 的獨立訊號）。每一條缺席條目都要求
+    「發出說明的一方」在（P(...)），所以讀原始碼與比對路由的題在拿掉模組的樹（core-only、§B-11）上只驗得到在場的，
+    不會因為讀不到別的模組而紅（§G5 #12）。"""
+    here = {k for k in FD.registered_module_keys() if (REPO / "backend" / "modules" / k / "module.json").is_file()}
+    return [c & here for c in _combos()]
+
+
+def test_explain_plan_is_empty_for_full_and_lists_l1_notices_for_core_only():
+    """正對照：core-only ⇒ 至少有 L1 自己的兩條（IP-16 獎金入口、IP-91 報價預設條款）；full ⇒ 空（沒有東西缺席）。"""
+    assert FD.explain_plan(FD.registered_module_keys(), "Q-1") == []
+    ips = {row[0] for row in FD.explain_plan(set(), None)}
+    assert {"IP-16", "IP-91"} <= ips, ips
+
+
+def test_explain_plan_paths_are_real_get_routes(client):
+    """每一條要打的路徑（去掉查詢字串）都是 app 的 GET 路由——打錯字不會在正式演練才發現。"""
+    from tests._routes import all_routes
+    gets = {p for p, methods, _r in all_routes(client.app) if "GET" in methods}
+    paths = {row[2].split("?")[0] for present in _tree_combos() for row in FD.explain_plan(present, "Q-TEST")}
+    assert paths, "一條都沒有 ⇒ 選配組合沒產生任何缺席條目，這一題沒驗到東西"
+    missing = sorted(p for p in paths if not any(_route_matches(g, p) for g in gets))
+    assert not missing, "缺席明說要打的路徑不是 GET 路由：%s" % missing
+
+
+def test_explain_plan_notices_exist_in_the_product_source():
+    """每一句要求的說明都真的寫在產品程式裡（tests 以外）——訊息改字時在這裡紅，不是在演練時假紅。"""
+    src = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in (REPO / "backend").rglob("*.py")
+                    if "tests" not in p.relative_to(REPO / "backend").parts)
+    needles = {n for present in _tree_combos() for row in FD.explain_plan(present, "Q-TEST") for n in row[4]
+               if not n.startswith('"')}                   # '"enabled":false' 這類是 JSON 形狀，不是字面訊息
+    assert needles
+    missing = sorted(n for n in needles if n not in src)
+    assert not missing, "產品程式裡找不到這些說明：%s" % missing
+
+
+def test_ip98_is_only_required_on_the_cash_basis():
+    """判準 2（D 審定）：「應收應付模組未安裝」只在現金口徑要求；analytics 在、arap 缺席 ⇒ 有 basis=cash 那一條。"""
+    for present in _combos():
+        assert FD.ip98_basis_violations(FD.explain_plan(present, "Q-TEST")) == [], present
+    rows = FD.explain_plan({"analytics", "case", "subcontract"}, None)
+    assert any(r[0] == "IP-98" and r[2].endswith("basis=cash") and FD.ARAP_ABSENT in r[4] for r in rows), rows
+
+
+def test_rc_ip98_on_accrual_basis_is_caught():
+    """反向控制：第一版 d7_extra 的寫法（權責口徑要求應收應付的說明）⇒ ip98_basis_violations 抓得到。"""
+    bad = ("IP-98", "x", FD._EXPENSES + "accrual", 200, [FD.ARAP_ABSENT])
+    ok = ("IP-98", "x", FD._EXPENSES + "cash", 200, [FD.ARAP_ABSENT])
+    assert FD.ip98_basis_violations([bad, ok]) == [bad]
+
+
+def _av(**kw):
+    return {k: {"state": v, "label": "", "name": k} for k, v in kw.items()}
+
+
+def test_availability_lists_only_installed_modules():
+    """判準 1（D 審定）：清單＝已安裝模組且都 loaded ⇒ 過；core-only 回空清單 ⇒ 過（缺席的 key 不在清單裡才對）。"""
+    assert FD.availability_verdict(200, json.dumps(_av(aa="loaded", bb="loaded")), {"aa", "bb"})["ok"] is True
+    assert FD.availability_verdict(200, "{}", set())["ok"] is True
+
+
+@pytest.mark.parametrize("status, body, present", [
+    (200, json.dumps(_av(aa="loaded", bb="absent")), {"aa"}),       # 第一版判準要的樣子（提到缺席的 bb）⇒ 其實是錯的
+    (200, json.dumps(_av(aa="loaded")), {"aa", "bb"}),              # 已安裝的 bb 沒列
+    (200, json.dumps(_av(aa="loaded", bb="failed")), {"aa", "bb"}),  # 列了但沒載入
+    (500, json.dumps(_av(aa="loaded")), {"aa"}),
+    (200, "not json", {"aa"}),
+    (200, "[]", set()),
+])
+def test_rc_availability_mismatches_are_red(status, body, present):
+    assert FD.availability_verdict(status, body, present)["ok"] is False
+
+
+def test_absence_verdict_needs_status_and_every_notice():
+    ok = FD.absence_verdict(200, '{"enabled": false, "notice": "薪資獎金模組未安裝：獎金分潤不提供"}', 200,
+                            ['"enabled":false', "薪資獎金模組未安裝"])
+    assert ok["ok"] is True, "JSON 的空白不影響比對"
+    assert FD.absence_verdict(500, "薪資獎金模組未安裝", 200, ["薪資獎金模組未安裝"])["ok"] is False
+    miss = FD.absence_verdict(200, '{"enabled": false}', 200, ['"enabled":false', "薪資獎金模組未安裝"])
+    assert miss["ok"] is False and miss["lacking"] == ["薪資獎金模組未安裝"]
+    assert FD.absence_verdict("URLError", "", 200, [])["ok"] is False, "連線失敗不是 int，不可以過"
+
+
+def test_installed_modules_prefers_the_lock_then_folders(tmp_path):
+    backend = tmp_path / "backend"
+    _mod(backend, "aa", probes=["/api/aa/x"])
+    _mod(backend, "bb", probes=["/api/bb/x"])
+    assert FD.installed_modules(str(backend)) == ({"aa", "bb"}, "modules/ 資料夾")
+    (backend / "modules.lock.json").write_text(json.dumps({"modules": {"aa": {}}}), encoding="utf-8")
+    assert FD.installed_modules(str(backend)) == ({"aa"}, "modules.lock.json")
+
+
+def _explain(**over):
+    ex = {"availability": {"ok": True}, "absence": [{"ok": True}], "pages": [{"ok": True}], "crawl": {"ok": True}}
+    ex.update(over)
+    return ex
+
+
+def test_explain_ok_needs_every_part():
+    assert FD.explain_ok(_explain()) is True
+    assert FD.explain_ok(_explain(absence=[])) is True, "full：沒有缺席條目是合法的"
+
+
+@pytest.mark.parametrize("over", [
+    {"availability": {"ok": False}}, {"availability": None},
+    {"absence": [{"ok": True}, {"ok": False}]}, {"absence": None},
+    {"pages": []}, {"pages": [{"ok": False}]},
+    {"crawl": {"ok": False}}, {"crawl": None},
+])
+def test_rc_explain_part_missing_or_red_fails(over):
+    """反向控制：任何一部分紅、或沒有結果（沒跑到）⇒ 不過；不可以因為少了一項而變綠。"""
+    assert FD.explain_ok(_explain(**over)) is False
+
+
+def test_smoke_verdict_requires_the_explain():
+    base = {"checks": [{"name": "首頁", "path": "/", "status": 200, "ok": True}]}
+    assert FD.smoke_verdict({**base, "explain": {"ok": True}}) is True
+    assert FD.smoke_verdict({**base, "explain": {"ok": False}}) is False
+    assert FD.smoke_verdict(base) is False, "沒跑到缺席明說 ⇒ 冒煙不過"
+
+
+def test_smoke_runs_the_explain():
+    """smoke() 真的呼叫 explain_absence、而且用 smoke_verdict 判 ok——讀碼守門，行為由正式演練實跑驗。"""
+    import inspect
+    src = inspect.getsource(FD.smoke)
+    assert "explain_absence(" in src and 'out["ok"] = smoke_verdict(out)' in src
+
+
+def test_report_says_when_the_explain_did_not_run():
+    rep = {"steps": [{"name": "5 冒煙", "ok": False}]}
+    text = "\n".join(FD.explain_report_lines(rep))
+    assert "未驗" in text
+    rep = {"steps": [{"name": "5 冒煙", "ok": True, "explain": {
+        "installed": ["aa"], "installed_from": "modules.lock.json", "availability": {"ok": True, "status": 200},
+        "pages": [{"ok": True}], "crawl": {"checked": 3, "by_status": {"200": 3}, "bad": []},
+        "absence": [{"ip": "IP-16", "name": "n", "path": "/p", "status": 200, "expect": 200, "lacking": [], "ok": True}]}}]}
+    text = "\n".join(FD.explain_report_lines(rep))
+    assert "IP-16" in text and "modules.lock.json" in text
