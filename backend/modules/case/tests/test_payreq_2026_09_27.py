@@ -93,7 +93,7 @@ def _approve(client, req):
 def test_after_approval_only_invoice_uploads_and_is_audited(client, req):
     _approve(client, req)
     r = client.post(BASE + "/%d/files" % req["id"], files={"files": _png()}, headers=req["h"])
-    assert r.status_code == 409 and "發票可以直接補上傳" in r.json()["detail"], r.text        # 其他類照舊上鎖
+    assert r.status_code == 409 and "發票可由填寫人、管理員或出納補上傳" in r.json()["detail"], r.text        # 其他類照舊上鎖
     r = client.post(BASE + "/%d/files" % req["id"], files={"files": _png()}, data={"kind": "invoice"}, headers=req["h"])
     assert r.status_code == 201, r.text
     files = json.loads(_q("SELECT files_json FROM case_extra_expenses WHERE id=?", (req["id"],))[0]["files_json"])

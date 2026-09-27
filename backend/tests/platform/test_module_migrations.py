@@ -8,6 +8,7 @@
 - 凍住的歷史：`modules/*/migrations/*.py` 不准 import 會演進的程式碼（模組的 api／helpers、L1…），SQL 寫在檔裡。
 """
 import ast
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -195,3 +196,41 @@ def test_module_migrations_do_not_import_evolving_code():
 ])
 def test_import_guard_reverse_control(src, flagged):
     assert bool(migration_import_problems(src)) is flagged
+
+
+# ── 模組 migration 不准自己 commit（稽核 D PM1）────────────────────────────────
+# core.migrations.run_all 對 core 以外逐支包 SAVEPOINT：成功才由它 commit；丟例外或回原因 ⇒ ROLLBACK TO 撤回。
+# migration 自己 commit（或 executescript——它會先隱含 COMMIT）⇒ savepoint 失效，做到一半的東西撤不回。
+
+def migration_commit_problems(src: str) -> list:
+    """原始碼裡會結束交易的呼叫：`.commit()`、`.executescript(`、SQL 字面值裡的 COMMIT／END TRANSACTION。"""
+    out = []
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.Call) and getattr(node.func, "attr", None) in ("commit", "executescript"):
+            out.append(node.func.attr + "()")
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str) and re.search(
+                r"(?i)^\s*(COMMIT|END(\s+TRANSACTION)?)\s*;?\s*$", node.value):
+            out.append("SQL %r" % node.value.strip())
+    return out
+
+
+def test_module_migrations_do_not_commit_themselves():
+    files = _migration_files()
+    from core import source_tree
+    if source_tree.module_installed("modules/case/"):
+        assert any(p.name == "0001_extra_expense_invoice_no.py" for p in files), files   # 正對照：真的掃到了
+    bad = {str(p.relative_to(BACKEND)): migration_commit_problems(p.read_text(encoding="utf-8")) for p in files}
+    bad = {k: v for k, v in bad.items() if v}
+    assert not bad, "模組 migration 不可以自己 commit（run_all 逐支 SAVEPOINT，commit 由它做）：%s" % bad
+
+
+@pytest.mark.parametrize("src,flagged", [
+    ("def up(conn):\n    conn.execute('ALTER TABLE t ADD COLUMN c TEXT')\n    conn.commit()\n", True),
+    ("def up(conn):\n    conn.executescript('CREATE TABLE t (id INTEGER);')\n", True),
+    ("def up(conn):\n    conn.execute('COMMIT')\n", True),
+    ("def up(conn):\n    conn.execute('end transaction;')\n", True),
+    ("def up(conn):\n    conn.execute('ALTER TABLE t ADD COLUMN committed_at TEXT')\n", False),
+    ("def up(conn):\n    return 'x 表還沒建好'\n", False),
+])
+def test_commit_guard_reverse_control(src, flagged):
+    assert bool(migration_commit_problems(src)) is flagged

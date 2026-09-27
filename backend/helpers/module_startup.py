@@ -34,8 +34,9 @@ def load_modules_like_startup(db_path: str = None) -> list:
 
 
 def _incomplete_of(path) -> dict:
+    """`incomplete(path)`；path 沒給 ⇒ {}（呼叫端沒有那個庫）；**有給而查不到紀錄（None）⇒ None**，由呼叫端 fail-closed。"""
     from core import migrations as _migrations
-    return (_migrations.incomplete(path) or {}) if path else {}
+    return _migrations.incomplete(path) if path else {}
 
 
 def fail_incomplete_modules(main_db_path, demo_db_path=None) -> dict:
@@ -45,14 +46,24 @@ def fail_incomplete_modules(main_db_path, demo_db_path=None) -> dict:
       路由不掛、提供者不在，交給模組管理頁與缺席明說——不讓程式去讀還沒加上的欄位而 500。
     - **只有 demo 庫**未完成 ⇒ 不下線（正式使用者照常），記 ERROR；demo 模式的請求打到該模組的 API 前綴時，
       由 `demo_absent_reason` 回明說缺席的原因。
-    - `incomplete` 回 None（沒對那個庫跑過 run_all）⇒ 那個庫不算（不猜）；不是已載入模組的名稱（例：`core`）⇒ 只記 ERROR。
+    - `incomplete` 回 None（對那個庫查不到 run_all 的紀錄：路徑對不上、或根本沒跑）⇒ **fail-closed**（稽核 D PO1）：
+      主庫 ⇒ 所有已載入模組下線；demo 庫 ⇒ demo 模式所有模組明說缺席。與乾跑工具「None＝失敗」同一個方向——
+      「不知道升級有沒有完成」不可以當成「完成」。不是已載入模組的名稱（例：`core`）⇒ 只記 ERROR。
 
     回 `{"offline": {模組: 原因}, "demo_absent": {模組: 原因}}`；每次呼叫重設 demo 缺席表。"""
     loaded = {m.key for m in _registry.loaded()}
     offline, demo = {}, {}
-    for key, (v, why) in sorted(_incomplete_of(main_db_path).items()):
-        offline[key] = "資料庫升級未完成（%s v%d），模組暫不載入：%s" % (key, v, why)
-    for key, (v, why) in sorted(_incomplete_of(demo_db_path).items()):
+    main_inc = _incomplete_of(main_db_path)
+    if main_inc is None:
+        for key in sorted(loaded):
+            offline[key] = "無法確認資料庫升級是否完成（主庫 %s 查不到升級紀錄），模組暫不載入" % main_db_path
+    else:
+        for key, (v, why) in sorted(main_inc.items()):
+            offline[key] = "資料庫升級未完成（%s v%d），模組暫不載入：%s" % (key, v, why)
+    demo_inc = _incomplete_of(demo_db_path)
+    if demo_inc is None:
+        demo_inc = {k: (0, "示範庫 %s 查不到升級紀錄" % demo_db_path) for k in loaded}
+    for key, (v, why) in sorted(demo_inc.items()):
         if key not in offline:
             demo[key] = "示範資料的資料庫升級未完成（%s v%d），示範模式暫不提供這個模組：%s" % (key, v, why)
     for key, reason in offline.items():

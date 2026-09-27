@@ -241,9 +241,66 @@ def test_both_incomplete_goes_offline_and_nothing_is_left_for_demo(tmp_path, mon
     assert _loaded_keys() == ["zz_ok"] and ms.demo_absent_reason("/api/zz-wait/items") is None
 
 
-def test_reverse_control_both_complete_changes_nothing_and_never_run_db_is_not_counted(tmp_path, monkeypatch, iso):
+def test_reverse_control_both_complete_changes_nothing(tmp_path, monkeypatch, iso):
     ms, paths = _inc_setup(tmp_path, monkeypatch, main_ready=True, demo_ready=True)
-    out = ms.fail_incomplete_modules(paths["main"], str(tmp_path / "never.db"))
+    out = ms.fail_incomplete_modules(paths["main"], paths["demo"])
     assert out == {"offline": {}, "demo_absent": {}}
     assert _loaded_keys() == ["zz_ok", "zz_wait"] and ms.demo_absent_reason("/api/zz-wait/items") is None
+    out = ms.fail_incomplete_modules(paths["main"])                 # 沒給 demo 庫 ⇒ 不談 demo
+    assert out == {"offline": {}, "demo_absent": {}}
+
+
+def test_main_db_without_any_record_fails_closed(tmp_path, monkeypatch, iso):
+    """稽核 D PO1：主庫查不到 run_all 的紀錄（路徑對不上、或沒跑）⇒ 不知道升級有沒有完成 ⇒ 所有已載入模組下線（fail-closed）。
+    〔更正（B，2026-09-28）：原本這一格是「沒跑過的庫不算」＝ fail-open，與乾跑工具「None＝失敗」方向相反〕"""
+    ms, paths = _inc_setup(tmp_path, monkeypatch, main_ready=True, demo_ready=True)
+    out = ms.fail_incomplete_modules(str(tmp_path / "never.db"), paths["demo"])
+    assert sorted(out["offline"]) == ["zz_ok", "zz_wait"] and "查不到升級紀錄" in out["offline"]["zz_ok"], out
+    assert _loaded_keys() == []
+
+
+def test_demo_db_without_any_record_makes_every_module_absent_in_demo_only(tmp_path, monkeypatch, iso):
+    ms, paths = _inc_setup(tmp_path, monkeypatch, main_ready=True, demo_ready=True)
+    out = ms.fail_incomplete_modules(paths["main"], str(tmp_path / "never.db"))
+    assert out["offline"] == {} and sorted(out["demo_absent"]) == ["zz_ok", "zz_wait"], out
+    assert _loaded_keys() == ["zz_ok", "zz_wait"], "demo 庫查不到紀錄不可以讓正式使用者的模組下線"
+    assert ms.demo_absent_reason("/api/zz-ok/items") and ms.demo_absent_reason("/api/zz-wait")
+
+
+# ── 稽核 D PS1：main.py 的 demo 缺席接線（middleware 真的呼叫 demo_absent_reason 並回 404）───────────
+# 不依賴任何 L2 模組：造一個假的已載入模組，把 L1 端點 /api/auth/me 當成它的前綴。
+
+def _login_headers(client, username, password):
+    r = client.post("/api/auth/login", json={"username": username, "password": password})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def _demo_headers(client):
+    import db
+    from helpers.auth import _hash_pw
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE users SET password_hash=? WHERE username='demo'", (_hash_pw("Demo-Pass-123"),))
+        conn.commit()
+    finally:
+        conn.close()
+    return _login_headers(client, "demo", "Demo-Pass-123")
+
+
+def test_middleware_answers_demo_requests_for_a_demo_absent_module(client, make_user, monkeypatch):
+    from helpers import module_startup as ms
+    fake = registry.LoadedModule(key="zzdemo", manifest={"provides": {"api_prefixes": ["/api/auth/me"]}},
+                                 spec=registry.ModuleSpec(key="zzdemo"))
+    real_loaded = registry.loaded
+    monkeypatch.setattr(registry, "loaded", lambda: real_loaded() + [fake])
+    why = "示範資料的資料庫升級未完成（zzdemo v1），示範模式暫不提供這個模組：測試"
+    monkeypatch.setattr(ms, "_DEMO_ABSENT", {"zzdemo": why})
+    real = _login_headers(client, *make_user(username="ps1_real", role="admin"))
+    assert client.get("/api/auth/me", headers=real).status_code == 200            # 正式 token 照常
+    demo = _demo_headers(client)
+    r = client.get("/api/auth/me", headers=demo)
+    assert r.status_code == 404 and r.json()["detail"] == why, r.text
+    monkeypatch.setattr(ms, "_DEMO_ABSENT", {})                                    # 反向控制：表清空 ⇒ demo 照常
+    assert client.get("/api/auth/me", headers=demo).status_code == 200
 
