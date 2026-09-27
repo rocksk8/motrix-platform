@@ -132,6 +132,35 @@ def test_unknown_kind_rejected_and_legacy_files_without_kind_are_not_backfilled(
     assert row["files"] == [{"id": "old1", "filename": "舊.pdf"}]                               # 沒有 kind ⇒ 原樣（畫面當其他）
 
 
+def test_case_v1_without_the_table_holds_the_version_and_adds_the_column_later(tmp_path, monkeypatch):
+    """case v1（0001）：表不在 ⇒ 回原因（未完成）、不建表、版號停在 0、incomplete 有它；表建好再跑 ⇒ 補上欄位、記 v1、incomplete 清空。
+    （2026-09-28 使用者裁示「該補就補」：原本什麼都不做卻照樣記 v1 ⇒ 之後永遠不會補。）"""
+    import importlib
+    import sqlite3
+    import db
+    from core import migrations
+    up = importlib.import_module("modules.case.migrations.0001_extra_expense_invoice_no").up
+    monkeypatch.setattr(migrations, "_REGISTRY", {})
+    monkeypatch.setattr(migrations, "_INCOMPLETE", {})
+    migrations.register("case", 1, up)
+    path = tmp_path / "bare.db"
+    conn = sqlite3.connect(str(path))
+    try:
+        db._ensure_module_schema_versions(conn)
+        migrations.run_all(conn)
+        assert not conn.execute("SELECT 1 FROM sqlite_master WHERE name='case_extra_expenses'").fetchall(), "不可以自己建表"
+        assert migrations.current_version(conn, "case") == 0
+        assert migrations.incomplete(str(path))["case"][0] == 1
+        conn.execute("CREATE TABLE case_extra_expenses (id INTEGER PRIMARY KEY, quote_no TEXT)")
+        conn.commit()
+        migrations.run_all(conn)
+        assert "invoice_no" in {r[1] for r in conn.execute("PRAGMA table_info(case_extra_expenses)").fetchall()}
+        assert migrations.current_version(conn, "case") == 1 and migrations.incomplete(str(path)) == {}
+        assert up(conn) is None                                                              # 冪等：欄位已在
+    finally:
+        conn.close()
+
+
 def test_invoice_no_is_optional_capped_and_can_be_added_after_approval(client, req):
     assert "invoice_no" in {r[1] for r in _q("PRAGMA table_info(case_extra_expenses)")}      # case v1 migration 跑過
     _approve(client, req)
@@ -150,6 +179,38 @@ def test_payreq_case_picker_and_mine_only_show_what_the_user_may_see(client, mak
     assert [(e["id"], e["quoteNo"], e["customerName"]) for e in mine] == [(req["id"], NO, "請款客")]
     u2, p2 = make_user(username="pr_other", role="sales")
     assert client.get("/api/extra-expenses/mine", headers=_login(client, u2, p2)).json() == []
+
+
+def test_case_picker_filters_visibility_before_limiting(client, req):
+    """先過濾可見再取前 N 筆：比它新的 501 筆看不到的同名案件，不可以把較舊、看得到的那一筆擠掉（原本先 LIMIT 500 再過濾）。"""
+    import db
+    conn = db.get_db()
+    try:
+        conn.executemany(
+            "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at,"
+            " deal_tag, sales_person, assigned_user_ids) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            [("MQ-PR-N%03d" % i, "已送出", "別人的客", "別人的案", 1, 1, "{}", "2026-06-01T00:00:00", "2026-06-01T00:00:00",
+              "已成案", "", "[]") for i in range(501)])
+        conn.commit()
+    finally:
+        conn.close()
+    cases = client.get("/api/extra-expenses/cases?q=MQ-PR", headers=req["h"]).json()
+    assert [c["quoteNo"] for c in cases] == [NO], [c["quoteNo"] for c in cases][:5]
+
+
+def test_case_picker_treats_like_wildcards_literally(client, req):
+    """`%`、`_` 照字面比對（ESCAPE）：輸入 `%` 只找得到名稱裡真的有 % 的案件，不是「全部」。"""
+    _case("MQ-PR-PCT", assigned=[_uid(req["user"])])
+    _x("UPDATE quotations SET project_name='九折 50% 專案' WHERE quote_no='MQ-PR-PCT'")
+
+    def got(q):
+        r = client.get("/api/extra-expenses/cases", params={"q": q}, headers=req["h"])
+        return sorted(c["quoteNo"] for c in r.json())
+
+    assert got("MQ-PR") == sorted([NO, "MQ-PR-PCT"])                                         # 正對照：兩筆都看得到
+    assert got("%") == ["MQ-PR-PCT"]
+    assert got("_") == []
+    assert got("MQ_PR") == []                                                                  # `_` 不當成任一字元
 
 
 def test_provider_lists_approved_unpaid_and_mark_paid_writes_back(client, req):

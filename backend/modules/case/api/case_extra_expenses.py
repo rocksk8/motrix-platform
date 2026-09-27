@@ -313,23 +313,35 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
 # 不另建資料：請款＝案件額外支出。這兩支只是給請款頁「挑案件」與「我的請款」用的查詢，
 # 可見範圍與額外支出各端點同一支 `case_owner_readable`（看不到的案件不列、也填不了）。
 
+#: 請款頁「挑案件」一次最多列幾筆
+PAYREQ_CASES_MAX = 30
+
+
+def like_literal(s: str) -> str:
+    """把使用者輸入變成 LIKE 的字面值（搭配 `ESCAPE '\\'`）：`\\`、`%`、`_` 前面加 `\\`。"""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @router.get("/api/extra-expenses/cases")
 def payreq_cases(q: str = Query(""), authorization: str = Header(None)):
-    """挑案件：看得到（可以填額外支出）的案件，依單號／客戶／專案搜尋，最多 30 筆。"""
+    """挑案件：看得到（可以填額外支出）的案件，依單號／客戶／專案搜尋，最多 PAYREQ_CASES_MAX 筆。
+
+    先過濾可見、再取前 N 筆（逐列走游標，湊滿就停）——不可以先 LIMIT 再過濾：看得到的案件排在較舊的位置時會整個搜不到。
+    關鍵字照字面比對：`%`、`_`、`\\` 跳脫（ESCAPE），輸入 `%` 不會變成「全部」。"""
     user = _require_user(authorization)
-    kw = "%" + (q or "").strip() + "%"
+    kw = "%" + like_literal((q or "").strip()) + "%"
     conn = get_db()
     try:
         rows = conn.execute(
             "SELECT quote_no, customer_name, project_name FROM quotations"
-            " WHERE quote_no LIKE ? OR customer_name LIKE ? OR project_name LIKE ?"
-            " ORDER BY updated_at DESC LIMIT 500", (kw, kw, kw)).fetchall()
+            " WHERE quote_no LIKE ? ESCAPE '\\' OR customer_name LIKE ? ESCAPE '\\' OR project_name LIKE ? ESCAPE '\\'"
+            " ORDER BY updated_at DESC", (kw, kw, kw))
         out = []
         for r in rows:
             if case_owner_readable(conn, r["quote_no"], user):
                 out.append({"quoteNo": r["quote_no"], "customerName": r["customer_name"] or "",
                             "projectName": r["project_name"] or ""})
-                if len(out) >= 30:
+                if len(out) >= PAYREQ_CASES_MAX:
                     break
         return out
     finally:
@@ -678,6 +690,8 @@ async def upload_extra_expense_files(quote_no: str, exp_id: int,
         row = _load(conn, quote_no, exp_id)
         _guard_files_editable(row, kind)
         after_approval = row["status"] == "已核准"
+        # 「或出納」與 PATCH …/dates 同構：上面 _guard_case 先擋 ⇒ 出納也必須看得到這個案件（純出納＝404）。
+        # 2026-09-28 00:58 使用者裁示維持現狀（CORE-SPEC 請款流程），不另開出納補發票的路。
         if after_approval and not (_can_modify(row, user) or user_has_module(user, "cashier")):
             raise HTTPException(403, "核准後補發票限填寫人本人、管理員或出納")
         new_files = await save_document_files(

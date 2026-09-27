@@ -857,6 +857,7 @@
   },
   "plat:migrations": {
    "current_version": "def(conn, module)",
+   "incomplete": "def(db_path)",
    "register": "def(module, version, fn)",
    "registered": "def()",
    "run_all": "def(conn)"
