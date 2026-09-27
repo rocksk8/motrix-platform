@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## 1.0.7 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
+- 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`payslips.html`、`payslip-form.html`、`bonus.html`
+
 ## 1.0.6 — 2026-09-27（c-approval-l1-4，稽核 D QJ-M1；列車取號）
 - 待簽佇列提供者：簽核 JSON 存在獨立欄位的單（`approval_json`／`change_approval_json`）改經 L1 `approval_raw_of`：解析不了 ⇒ 跳過那一筆＋ERROR（原本 `tier_fields` 把壞 JSON 吞成 {} ⇒ 列給每個 superadmin、計角標，核准時才丟例外；稽核 D QJ-M1）
 

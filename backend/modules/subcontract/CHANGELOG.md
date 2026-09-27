@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.16 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
+- 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`contractors.html`、`vendor-contractors.html`、`contractor-voucher-approval-settings.html`
+
 ## 1.0.15 — 2026-09-27（第十三班列車取號，原暫用 1.0.12；c-queue-json，主持指派）
 - 待簽佇列提供者：簽核 JSON 改用 L1 `helpers.approval_queue.approval_json_of` 在 Python 逐筆解析（原本 SQL `json_extract(data_json,'$.approval')` 遇到一筆 malformed JSON ⇒ 整個查詢丟例外 ⇒ 這一類待簽全部靜默消失）；壞的那一筆跳過並記 ERROR（寫單號、不寫內容）
 

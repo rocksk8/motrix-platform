@@ -1,5 +1,8 @@
 # 網路規劃 更新紀錄
 
+## 1.0.6 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
+- 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`network-plans.html`、`network-plan-form.html`、`topology-quick.html`
+
 ## 1.0.5 — 2026-09-27（C，M01-PLAN §5 ④；列車取號）
 - 頁面（稽核 D M4-M2，M01-PLAN §5 ④）：案件模組（M01）不在 ⇒ 新增規劃書的「綁定案件」停用並明說「案件模組未安裝：無法綁定案件（規劃書本身照常可建立）」，不再是空清單；e2e `tests/test_e2e_pages_without_case_module_2026_09_27.py`（含正對照）
 

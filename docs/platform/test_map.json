@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 705,
+  "tests": 706,
   "unmapped": 8,
   "kinds": {
-   "api": 384,
+   "api": 385,
    "e2e": 167,
    "audit": 93,
    "unit": 61
@@ -14719,6 +14719,27 @@
    "evidence": {
     "path": [
      "MULTIWIN-PROTOCOL.md"
+    ]
+   }
+  },
+  "backend/tests/test_install_defaults_2026_09_27.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "helper:settings",
+    "helper:startup",
+    "router:auth",
+    "router:module_versions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/settings.py",
+     "backend/helpers/startup.py"
+    ],
+    "api": [
+     "backend/routers/auth.py",
+     "backend/routers/module_versions.py"
     ]
    }
   },

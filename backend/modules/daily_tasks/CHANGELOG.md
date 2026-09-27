@@ -1,5 +1,8 @@
 # 每日任務 更新紀錄
 
+## 1.0.5 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
+- 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`daily-tasks.html`
+
 ## 1.0.4 — 2026-09-26（C，M01-PLAN §5 ④ SO；列車取號）
 - 頁面：案件模組（M01）不在 ⇒ `/api/sales-orders` 404 ⇒「關聯案件」選單停用並顯示「案件模組未安裝：無法關聯案件（其他欄位照常可填）」，不再是看起來沒有已成案案件的空清單；e2e `modules/daily_tasks/tests/test_e2e_daily_tasks_without_case_module.py`（攔截 404＋正對照）
 
