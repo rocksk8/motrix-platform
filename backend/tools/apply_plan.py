@@ -58,6 +58,12 @@ def load_classifier(pkg):
     return _upgrade
 
 
+def _fold(rel):
+    """比對「是不是同一個檔」的鍵（AH-M1）：正式機是 Windows、檔案系統不分大小寫 ⇒ 一律 casefold。
+    在分大小寫的檔案系統上會把兩個只差大小寫的檔當成同一個 ⇒ 少刪、不會多刪（保守方向）。"""
+    return rel.casefold()
+
+
 def _in_scope(rel):
     return rel.startswith(PROGRAM_SCOPES) and ".." not in rel.split("/")
 
@@ -98,6 +104,7 @@ def make_plan(root, pkg, max_files):
     root, pkg = os.path.abspath(root), os.path.abspath(pkg)
     new = package_files(pkg, u)
     new_set = set(new)
+    new_fold = {_fold(r) for r in new}      # AH-M1：Windows 不分大小寫，只差大小寫的改名＝同一個檔
     lock_path = os.path.join(pkg, LOCK_REL)
     lock = _read_json(lock_path) if os.path.isfile(lock_path) else None
     if lock is not None and lock.get("kind") != "full_package":
@@ -112,7 +119,7 @@ def make_plan(root, pkg, max_files):
     module_dirs = []
 
     def add(rel, reason):
-        if rel in new_set or rel in delete:
+        if rel in new_set or _fold(rel) in new_fold or rel in delete:
             return
         if not os.path.isfile(os.path.join(root, rel)):
             return
@@ -152,7 +159,7 @@ def make_plan(root, pkg, max_files):
     candidates = []
     if baseline is None:
         for rel, _ in u.walk(root):
-            if _in_scope(rel) and rel not in new_set and rel not in delete and deletable(rel, u):
+            if _in_scope(rel) and _fold(rel) not in new_fold and rel not in delete and deletable(rel, u):
                 candidates.append(rel)
 
     added = [rel for rel in new if not os.path.isfile(os.path.join(root, rel))]
@@ -243,8 +250,8 @@ def _remove_listed(root, rels, u):
 
 def execute(root, pkg, plan):
     u = load_classifier(pkg)
-    new_set = set(plan["package_files"])
-    rels = [d["rel"] for d in plan["delete"] if d["rel"] not in new_set]
+    new_fold = {_fold(r) for r in plan["package_files"]}
+    rels = [d["rel"] for d in plan["delete"] if _fold(d["rel"]) not in new_fold]
     removed, errors = _remove_listed(root, rels, u)
     for rel_dir in plan["module_dirs"]:          # 被移除模組的編譯快取一併清掉（資料檔若有則留著）
         full = os.path.join(root, rel_dir)

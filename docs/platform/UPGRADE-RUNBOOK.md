@@ -202,10 +202,15 @@ python <NEW>\tools\platform\upgrade.py verify --root <ROOT> --backup-dir <BK> --
 
 **跟轉換的差別**：不做完整備份與資料比對；只做 DB 快照＋程式快照，健康檢查失敗自動回滾。
 
-**執行**（在正式機；部署儀表板的「部署」按鈕走同一支腳本）：
+**執行**（在正式機；部署儀表板的「部署」按鈕走同一支腳本，並自動做第 1 步）：
 ```
+# 1. 先把包裡的工具複製進安裝目錄（否則跑到的是安裝目錄裡上一版的腳本，本章的規則一條都不會生效）
+robocopy <解開的完整包>\backend\tools <ROOT>\backend\tools /E
+# 2. 執行
 powershell -ExecutionPolicy Bypass -File <ROOT>\backend\tools\apply_update.ps1 -PackagePath <解開的完整包>
 ```
+- 2026-09-28 起的腳本開頭會比對自己與包裡那份的版本（`$ApplyScriptVersion`），不同就拒絕（`script_not_from_package`，正式機未被觸碰）。⚠ 正式機現在那份（c006a2a0）沒有這個檢查，**這一次一定要先做第 1 步**（稽核 AH-M2）。
+- 停服之後才失敗（`copy_failed_*`、`delete_failed`）⇒ 腳本先把服務重新啟動再結束，訊息附手動回滾指令；磁碟上是套用到一半的程式（稽核 AH-M3）。
 
 **它做什麼（依序）**：
 1. 版本比對、健康檢查記錄。
@@ -235,15 +240,17 @@ powershell -ExecutionPolicy Bypass -File <ROOT>\backend\tools\rollback_update.ps
 ```
 - 步驟與自動回滾相同。快照裡沒有 `apply_plan.json`（2026-09-28 之前的快照）⇒ 新增的檔不會刪，腳本會警告，回滾後請人工核對 `backend\modules` 與 `frontend\pages`。
 - 快照當時沒有 `.deployed_files.json` ⇒ 回滾後刪掉現在那份（回到「沒有清單」，下一次只列不刪）。
+- 部署紀錄 `.deployed_commit.json` 還原為套用前那份（快照裡的 `deployed_commit.before.json`；稽核 AH-S2）。
 - ⚠ 會丟掉套用後寫入的資料（DB 整個換回快照）。
 
 **出口狀態**（部署儀表板判定用；全部判為失敗）：
 
 | 狀態 | 正式機現況 | 處置 |
 |---|---|---|
+| `script_not_from_package` | 未被觸碰 | 先把包裡的 `backend\tools` 複製進安裝目錄再執行 |
 | `plan_refused`／`plan_failed`／`delete_plan_too_large` | 未被觸碰 | 看計畫檔；上限不夠就確認後加大重跑 |
 | `snapshot_failed_root_dirs`／`snapshot_missing_deleted` | 未被觸碰 | 查磁碟空間與權限後重跑 |
-| `copy_failed_root_dirs`／`delete_failed` | 🔴 套用到一半、服務已停 | 用快照手動回滾 |
+| `copy_failed_*`／`delete_failed` | 🔴 套用到一半；腳本已嘗試重新啟動服務 | 用訊息裡的指令手動回滾 |
 | `restore_copy_failed_root_dirs`／`restore_cleanup_failed` | 🔴 自動回滾做到一半 | 人工處理；計畫檔在快照目錄 |
 | `rollback_plan_tool_missing` | 手動回滾未開始 | 從新包補 `backend\tools\apply_plan.py` 後重跑 |
 | `rollback_copy_failed_root_dirs`／`rollback_cleanup_failed` | 🔴 手動回滾做到一半，服務未啟動 | 人工處理 |

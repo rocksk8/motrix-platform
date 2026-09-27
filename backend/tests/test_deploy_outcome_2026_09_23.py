@@ -163,6 +163,17 @@ _EXITS = [
     ("545", "unhealthy_not_rolled_back", "applied",            0, "failed"),
     ("621", "unhealthy_rolled_back",     "restored",           1, "failed"),
     ("646", "success",                   "applied",            0, "succeeded"),
+    # 2026-09-28 日常更新（platform 套 platform）新增的出口；第一欄只是標籤
+    ("v28", "script_not_from_package",   "not_applied",        1, "failed"),
+    ("p28", "plan_refused",              "not_applied",        1, "failed"),
+    ("p28", "plan_failed",               "not_applied",        1, "failed"),
+    ("p28", "delete_plan_too_large",     "not_applied",        1, "failed"),
+    ("s28", "snapshot_failed_root_dirs", "not_applied",        1, "failed"),
+    ("s28", "snapshot_missing_deleted",  "not_applied",        1, "failed"),
+    ("c28", "copy_failed_root_dirs",     "applied_no_restore", 1, "failed"),
+    ("d28", "delete_failed",             "applied_no_restore", 1, "failed"),
+    ("r28", "restore_copy_failed_root_dirs", "restoring",      1, "failed"),
+    ("r28", "restore_cleanup_failed",    "restoring",          1, "failed"),
 ]
 
 
@@ -1005,7 +1016,8 @@ def test_p0_00_the_rollback_status_values_are_one_to_one_with_its_exits():
 #    ⚠️ 兩個前提**都寫成斷言**，不是寫成註解 —— 前提失效時要紅，不是要靜默。
 
 _SERVICE_ASSIGN = _re.compile(r'^(\s*)\$script:ServiceState\s*=\s*"([^"]*)"')
-_EXIT_SITE = _re.compile(r'(?:Fail\s+.*?|Emit-Result\s+)"([a-z_]+)"')
+#: 2026-09-28：停服之後的出口改經 `Fail-AfterStop`（AH-M3：先重新啟動服務再 Fail；service 仍記 down）
+_EXIT_SITE = _re.compile(r'(?:Fail(?:-AfterStop)?\s+.*?|Emit-Result\s+)"([a-z_]+)"')
 
 
 def _service_layout(ps1):
