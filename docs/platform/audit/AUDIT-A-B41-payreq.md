@@ -93,3 +93,31 @@
 1. AB-M1：一般 sales 填寫人，核准後 PATCH `paidDate` ⇒ 目前 200，並從 `/api/cashier/pending-payables` 消失；出納付款後 PATCH `paidDate:""` ⇒ 重新出現。
 2. AB-S1：兩個執行緒同時 `POST …/pay` 同一筆 ⇒ 看 `paid_date` 與稽核筆數。
 3. AB-S3：把 case 0001 暫時改成回原因，啟動後開額外支出頁 ⇒ 看是 500 還是明說。
+
+## 6. 複核：wip/b-payreq 08c5b7f2（A，2026-09-28 01:56；讀碼＋B 列直接題重現：payreq／cashier_pending_payables／module_startup／migration_incomplete 26 passed，自己的拋棄式 worktree，已移除）
+
+| 項目 | 修正 | 判定 |
+|---|---|---|
+| AB-M1 | `paidDate` 只准出納或 admin+ 設（本人 ⇒ 403「付款日只有出納或管理員可以登錄」）；已有付款日的清除或改日期只准 admin+，另寫稽核動作 `extra_expense.paid_date_override`；發票日期、發票號碼照舊。題：`test_requester_cannot_set_or_clear_the_paid_date_but_other_dates_still_work`（一般 sales 的本人 ⇒ 403、待付款不變）、`test_cashier_sets_the_paid_date_but_only_admin_changes_or_clears_it_with_its_own_audit` | 成立 |
+| AB-S1 | `mark_paid` 改成帶條件的 UPDATE（已核准、付款日空白）＋`rowcount==0` 才回頭讀原因；題 `test_second_cashier_gets_already_paid_and_does_not_overwrite` | 成立 |
+| AB-S3 | L1 `helpers.module_startup.fail_incomplete_modules(db_paths)`：任一個庫的 `incomplete` 列了已載入的模組 ⇒ `registry.unload`（移出已載入清單，提供者、路由、排程都取不到；狀態 failed＋原因）；None 的庫不算；`core` 這類非模組名只記 ERROR。main.py:570-573 在 `init_db` 主庫＋demo 庫之後呼叫，`mount_modules` 在 :712 ⇒ 順序正確；:54～:573 之間 main.py 本身沒有讀已載入清單（grep），由 L1 router 在 import 時快取提供者的可能沒有逐檔查（觀察）。題：`test_main_fails_incomplete_modules_after_init_db_and_before_mounting`、`test_incomplete_module_is_unloaded_with_the_migration_reason` | 成立（demo 庫的處置見下方判斷，不擋關閉） |
+| AB-S5 | 題 `test_cashier_who_can_see_the_case_may_add_invoice_after_approval`（看得到案件、不是填寫人的出納 ⇒ 放行） | 成立 |
+
+**S3 的 demo 庫判斷（主持要求列出；A 不改）**
+- 現況：主庫完成、demo 庫未完成 ⇒ 模組**整個下線**，連正式使用者也用不到。
+- 判斷：**不合理，建議改成「主庫決定上下線，demo 庫只影響 demo」**。理由如下：
+  - demo 庫是展示用的隔離資料，它的 schema 落後不影響正式資料的正確性。為了展示資料把正式功能下線，方向相反：正式使用者承擔了只屬於 demo 的故障。
+  - 觸發條件其實不罕見：demo 庫是另一個檔，可能被重建、還原成舊版，或被複製進來，表不在的機率比主庫高。
+- 建議做法：
+  - (a) 只看主庫：`fail_incomplete_modules([DB_PATH])` 決定模組上下線。
+  - (b) demo 庫未完成 ⇒ 記 ERROR，並在模組狀態上加一句 note（模組管理頁看得到），**停用 demo 模式的登入**（或 demo 模式下這個模組回缺席明說），不下線正式模組。
+  - (c) 兩個庫都未完成 ⇒ 照現行下線。
+- 在修正前（現行行為）：因為 demo 庫下線正式模組，屬於「寧可少開、不可多開」的保守方向，**不是安全問題**；所以這一點列為建議（AB-S7），不擋 AB-S3 的關閉。
+
+**AB-S7（建議，新）**：demo 庫未完成不應下線正式模組（見上方判斷）。
+
+**AB-S8（建議，新）**：`paidDate` 目前任何狀態都可以設（出納或 admin）。在**核准之前**先設了付款日的那一筆，核准後不會出現在待付款（判準是付款日空白），出納端也看不到它被付過。建議 `paidDate` 只准在「已核准」時設，或在待付款清單另列「核准前已登錄付款日」的例外。出納與 admin 是受信任的角色，所以不列為必修。
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ AB-M1 關閉（08c5b7f2）——付款日限出納或 admin，改動已付付款日限 admin 並留專用稽核；兩方向有題
