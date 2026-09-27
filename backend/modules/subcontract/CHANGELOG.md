@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.14 — 2026-09-27（第十三班列車取號，原暫用 1.0.13；稽核 D 建議，wip/b-drill-absent404-2）
+- `pages` 補 `contractor-voucher-approval-settings.html`（不帶 menu，不進側欄）：modules.json 把它歸 M04，原本沒列入 pages ⇒ 模組缺席時不會被移除、D7 前哨也不會驗它回 404。守門 `tests/platform/test_module_pages_match_units.py`
+
 ## 1.0.13 — 2026-09-27（第十二班列車取號，原暫用 1.0.12）
 - IP-15 追加成本檢視 `dispatch.cost_for_case`（主持派工，B 實作；M06 傳票摘要改走它）：放行 finance／cashier（＋原本看得到派工的三個模組）；只回金額、日期、案件、廠商名稱、派工描述（scope）、發票號、品項描述＋金額、外包人數與人員金額合計，**不回外包人員姓名、personnel、派工細節**；`dispatch.list_for_case` 不動〔rebase 到第十班 8151bdc6：列車已取 1.0.8～1.0.11 ⇒ 本段暫用 1.0.12；第十二班列車 rebase 到第十一班之後與附件來源說明句撞號，改取 1.0.13〕
 

@@ -123,6 +123,7 @@ def smoke_plan(backend_dir: str, registered=None, migrated=None) -> list:
 SOURCE_MODULES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                               "backend", "modules")
 NO_SOURCE_DECL = "不在安裝包，但來源樹也找不到它的 module.json ⇒ 無法驗證缺席時回 404"
+EMPTY_DECL = "不在安裝包，而它的 module.json 沒有宣告任何 probes 或頁面 ⇒ 缺席時沒有東西可驗（稽核 D 建議：空宣告判紅）"
 
 
 def absent_probe_plan(backend_dir: str, source_modules=None, registered=None, migrated=None) -> list:
@@ -144,9 +145,14 @@ def absent_probe_plan(backend_dir: str, source_modules=None, registered=None, mi
             continue
         with open(decl, encoding="utf-8") as f:
             m = json.load(f)
-        for path in (m.get("provides") or {}).get("probes") or []:
+        probes = (m.get("provides") or {}).get("probes") or []
+        pages = m.get("pages") or []
+        if not probes and not pages:
+            plan.append(("缺席模組 %s（空宣告）" % key, "GET", "modules/%s" % key, None))
+            continue
+        for path in probes:
             plan.append(("缺席 %s：%s" % (key, path), "GET", path, 404))
-        for pg in m.get("pages") or []:
+        for pg in pages:
             plan.append(("缺席 %s 頁面 %s" % (key, pg["path"]), "GET", "/pages/" + pg["path"], 404))
     return plan
 
@@ -348,7 +354,7 @@ def smoke(install: str) -> dict:
         for name, method, path, expect in absent_probe_plan(os.path.join(install, "backend")):
             if expect is None:
                 out["checks"].append({"name": name, "path": path, "status": None, "expect": 404, "ok": False,
-                                      "reason": NO_SOURCE_DECL})
+                                      "reason": EMPTY_DECL if "空宣告" in name else NO_SOURCE_DECL})
                 continue
             r = urllib.request.Request(base + path, method=method, headers={"Authorization": "Bearer " + token})
             try:
