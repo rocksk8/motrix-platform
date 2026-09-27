@@ -9303,12 +9303,16 @@
     "dir:backend/modules/case/",
     "dir:backend/tests/platform/",
     "dir:tools/platform/",
+    "file:backend/tests/_requires.py",
     "mod:accounting/tests/test_e2e_voucher_summary_2026_09_23",
     "mod:accounting/tests/test_e2e_voucher_summary_panel_side_by_side_2026_09_25",
     "mod:accounting/tests/test_jv33_voucher_summary_panel_2026_09_24",
     "mod:accounting/tests/test_jv36_voucher_line_source_files_2026_09_24"
    ],
    "evidence": {
+    "import": [
+     "backend/tests/_requires.py"
+    ],
     "path": [
      "backend/modules/",
      "backend/modules/accounting/tests/test_e2e_voucher_summary_2026_09_23.py",

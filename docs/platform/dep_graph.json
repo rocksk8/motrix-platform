@@ -8202,11 +8202,13 @@
     "/api/extra-expenses/cases",
     "/api/extra-expenses/mine",
     "/api/quotations/",
-    "/api/quotations//"
+    "/api/quotations//",
+    "/api/system/branding/favicon"
    ],
    "api_prefixes": [
     "/api/extra-expenses",
-    "/api/quotations"
+    "/api/quotations",
+    "/api/system"
    ],
    "api_unmatched": [],
    "imports": [
@@ -8221,14 +8223,16 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
-    "mod:netplan/api"
+    "mod:netplan/api",
+    "router:system"
    ],
    "routers_called_effective": [
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
-    "mod:netplan/api"
+    "mod:netplan/api",
+    "router:system"
    ],
    "tables_r": [],
    "tables_w": []
@@ -8607,10 +8611,12 @@
   "page:pages/storage-settings.html": {
    "api_calls": [
     "/api/settings/storage-locations",
-    "/api/settings/storage-locations/create"
+    "/api/settings/storage-locations/create",
+    "/api/system/branding/favicon"
    ],
    "api_prefixes": [
-    "/api/settings"
+    "/api/settings",
+    "/api/system"
    ],
    "api_unmatched": [],
    "imports": [
