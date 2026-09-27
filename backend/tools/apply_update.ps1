@@ -7,8 +7,10 @@
   安全機制：
     - 身分守門：只能在正式機路徑下執行
     - 套用前：版本比對（避免重複/退版套用）+ 健康檢查記錄 + db 快照 + 程式碼快照（回滾用）
-    - 套用中：安全停服（讓既有 autostart crash-restart 迴圈接手重啟，不自己搶 port）+ 只複製，不做 /MIR 鏡像刪除
+    - 套用中：停服（只停這個安裝的 autostart 迴圈與它的 uvicorn）+ 複製，不做 /MIR 鏡像刪除
+      + 依刪除計畫刪掉舊版有、新版沒有的程式檔（backend/tools/apply_plan.py；有上限、先印清單）
       + pip install -r requirements.txt（新版新增的第三方套件一併裝好，避免 import 就炸）
+      + 透過排程工作重新啟動迴圈（新的環境變數與新程式碼一起生效）
     - 套用後：輪詢 /api/ping + 檢查 server.log 有無新錯誤；失敗就自動回滾並重啟
 
   用法：
@@ -49,14 +51,23 @@ param(
     [switch]$Force,
     [switch]$Yes,
     [switch]$CheckOnly,
-    [switch]$SkipAutoRollback
+    [switch]$SkipAutoRollback,
+
+    # 刪除計畫的上限（2026-09-28）：要刪的程式檔超過這個數字 ⇒ 不動任何檔、中止。
+    # 先讀印出的清單（也寫在 backend\logs\apply_update_<時間>.plan.txt），確認後再用更大的值重跑。
+    [int]$MaxDeleteFiles = 200
 )
 
 $ErrorActionPreference = "Stop"
 
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
+$Port = 666
+$AutostartTaskName = "MOTRIX ERP Server Autostart"
 $BackendDir = Join-Path $ProdRoot "backend"
 $FrontendDir = Join-Path $ProdRoot "frontend"
+# 根目錄的程式目錄（2026-09-28）：tools\platform（升級精靈）、product（產品設定檔）。
+# 先前只複製根目錄單檔 ⇒ 這兩個目錄永遠停在轉換當時的版本。
+$RootProgramDirs = @("tools", "product")
 
 # 2026-08-27：憑證存在（見 backend/tools/https_setup.ps1）代表 uvicorn 現在只服務
 # HTTPS，健康檢查要跟著改用 https；自簽憑證沒有受信任的 CA，Invoke-WebRequest
@@ -65,9 +76,9 @@ $FrontendDir = Join-Path $ProdRoot "frontend"
 # -SkipCertificateCheck 參數（那是 PS7+ 才有），改用 ServicePointManager 回呼繞過。
 $UsesHttps = Test-Path (Join-Path $BackendDir "certs\cert.pem")
 if ($UsesHttps) {
-    $PingUrl = "https://127.0.0.1:666/api/ping"
+    $PingUrl = "https://127.0.0.1:$Port/api/ping"
 } else {
-    $PingUrl = "http://127.0.0.1:666/api/ping"
+    $PingUrl = "http://127.0.0.1:$Port/api/ping"
 }
 
 # 2026-09-08 修復（第一輪）：HTTPS 健康檢查曾經用 Invoke-WebRequest +
@@ -158,6 +169,117 @@ function Info($msg)  { Write-Host $msg }
 function Warn($msg)  { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Ok($msg)    { Write-Host "[OK] $msg" -ForegroundColor Green }
 
+# 呼叫 python 並回 @{ Text; Exit }。
+# ⚠️ PS 5.1：原生執行檔往 stderr 印任何東西，在 $ErrorActionPreference = "Stop" 底下會被包成
+#    NativeCommandError 中止整支腳本；輸出是陣列時 -match 回的是元素 ⇒ 一律先合成一個字串（見 Step 1 的註解）。
+function Invoke-Py([string[]]$PyArgs) {
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $out = & python @PyArgs 2>&1
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    return @{ Text = ($out | Out-String); Exit = $code }
+}
+
+# ── 停服／啟動（2026-09-28）─────────────────────────────────────────────
+# 先前：凡是命令列含 `uvicorn main:app` 的行程一律殺掉（同一台機器上別的安裝、開發用的 uvicorn 一起倒），
+#       而 autostart.bat 的 cmd 迴圈不動 ⇒ 5 秒後用**舊的環境變數**把服務拉回來，而那時複製可能還沒做完。
+#       2026-09-27 正式機升級實際踩過這個迴圈（UPGRADE-RUNBOOK §1 ①b）。
+# 現在：只認**這個安裝**的行程：
+#   ① 迴圈：命令列含本安裝 autostart.bat 完整路徑的 cmd.exe；或是聽 $Port 的那個行程往上找到的
+#      cmd.exe（命令列含 autostart.bat）——排程工作用相對路徑啟動時靠這一條
+#   ② 迴圈底下的整棵行程樹（uvicorn.exe → python.exe → spawn 子行程）
+#   ③ 聽 $Port 的行程（只停 python 系列；別的程式佔用只警告）
+#   ④ 命令列是 uvicorn main:app 且帶 --port $Port 的行程，與 parent_pid 指到上面任何一個的 spawn 子行程
+# 迴圈先停，才不會把剛殺掉的 uvicorn 又拉起來。複製完由 Start-InstallService 重新啟動。
+function Stop-InstallService {
+    $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+    $byPid = @{}
+    foreach ($p in $all) { $byPid[[int]$p.ProcessId] = $p }
+    $batFull = (Join-Path $BackendDir "autostart.bat").ToLowerInvariant()
+    $loops = New-Object System.Collections.Generic.List[int]
+    foreach ($p in $all) {
+        if ($p.Name -eq "cmd.exe" -and $p.CommandLine -and $p.CommandLine.ToLowerInvariant().Contains($batFull)) {
+            $loops.Add([int]$p.ProcessId)
+        }
+    }
+    $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+        ForEach-Object { [int]$_.OwningProcess } | Sort-Object -Unique)
+    foreach ($lp in $listeners) {
+        $cur = $byPid[$lp]
+        $hops = 0
+        while ($cur -and $hops -lt 6) {
+            $parent = $byPid[[int]$cur.ParentProcessId]
+            if (-not $parent) { break }
+            if ($parent.Name -eq "cmd.exe" -and $parent.CommandLine -match 'autostart\.bat') {
+                if (-not $loops.Contains([int]$parent.ProcessId)) { $loops.Add([int]$parent.ProcessId) }
+                break
+            }
+            if ($parent.Name -notmatch '^(python|pythonw|uvicorn)(\.exe)?$') { break }
+            $cur = $parent
+            $hops++
+        }
+    }
+    $targets = New-Object System.Collections.Generic.List[int]
+    function Add-Tree([int]$rootPid) {
+        if (-not $targets.Contains($rootPid)) { $targets.Add($rootPid) }
+        foreach ($c in $all) {
+            if ([int]$c.ParentProcessId -eq $rootPid -and [int]$c.ProcessId -ne $rootPid -and -not $targets.Contains([int]$c.ProcessId)) {
+                Add-Tree ([int]$c.ProcessId)
+            }
+        }
+    }
+    foreach ($l in $loops) { Add-Tree $l }
+    foreach ($lp in $listeners) {
+        $proc = $byPid[$lp]
+        if ($proc -and $proc.Name -match '^(python|pythonw|uvicorn)(\.exe)?$') { Add-Tree $lp }
+        elseif ($proc) { Warn "  port $Port 由 $($proc.Name)（PID $lp）佔用，不是 python —— 不停它，請人工確認。" }
+    }
+    $portRe = '--port[= ]+' + $Port + '\b'
+    foreach ($p in $all) {
+        if ($p.CommandLine -and $p.CommandLine -match 'uvicorn' -and $p.CommandLine -match 'main:app' -and $p.CommandLine -match $portRe) {
+            Add-Tree ([int]$p.ProcessId)
+        }
+    }
+    foreach ($p in $all) {
+        if ($p.CommandLine -and $p.CommandLine -match 'spawn_main.*parent_pid=(\d+)' -and $targets.Contains([int]$Matches[1])) {
+            Add-Tree ([int]$p.ProcessId)
+        }
+    }
+    if ($loops.Count -eq 0) { Info "  沒有找到這個安裝的 autostart 迴圈（cmd.exe … autostart.bat）。" }
+    foreach ($t in $targets) {
+        $p = $byPid[$t]
+        $kind = if ($loops.Contains($t)) { "autostart 迴圈" } else { "服務行程" }
+        $cmdShown = if ($p -and $p.CommandLine) { $p.CommandLine } else { "" }
+        if ($cmdShown.Length -gt 160) { $cmdShown = $cmdShown.Substring(0, 160) + "…" }
+        Info "  結束 $kind PID $t（$(if ($p) { $p.Name })）：$cmdShown"
+        Stop-Process -Id $t -Force -ErrorAction SilentlyContinue
+    }
+    return $targets.Count
+}
+
+# 複製完、健康檢查之前啟動。排程工作優先：從遠端工作階段（部署儀表板走 WinRM）直接 Start-Process 的
+# 迴圈是那個工作階段的子行程，工作階段結束時可能被一起結束。
+function Start-InstallService {
+    $task = Get-ScheduledTask -TaskName $AutostartTaskName -ErrorAction SilentlyContinue
+    if ($task -and $task.State -ne "Disabled") {
+        Start-ScheduledTask -TaskName $AutostartTaskName
+        Ok "  已透過排程工作「$AutostartTaskName」重新啟動 autostart 迴圈。"
+        return
+    }
+    $bat = Join-Path $BackendDir "autostart.bat"
+    if (-not (Test-Path $bat)) {
+        Warn "  找不到 $bat，無法啟動服務（健康檢查會失敗並觸發回滾）。"
+        return
+    }
+    Start-Process -FilePath (Join-Path $env:WINDIR "System32\cmd.exe") -ArgumentList "/c `"$bat`"" `
+        -WorkingDirectory $BackendDir -WindowStyle Hidden
+    Warn "  排程工作「$AutostartTaskName」不存在或已停用：改由本腳本直接啟動 autostart.bat。遠端工作階段結束時它可能跟著結束，事後請確認排程工作。"
+}
+
 # 🔑 **握手行**：它說的是「**正在跑的這一份腳本**看得懂 v2 協定」。
 # ⚠️ 對 `apply_update.ps1` 而言它是**多餘的保險**——`_dashboard_remote.ps1:98-104`
 #    會在呼叫之前先把套件裡的 `backend\tools\*` 覆蓋過去，所以跑的一定是新版。
@@ -243,21 +365,29 @@ $dbBackupDir = Join-Path $BackendDir "db_backups\pre_update_$timestamp"
 New-Item -ItemType Directory -Force -Path $dbBackupDir | Out-Null
 $dbPath = Join-Path $BackendDir "motrix_erp.db"
 $dbBackupPath = Join-Path $dbBackupDir "motrix_erp.db"
-if (Test-Path $dbPath) {
+# demo 庫（2026-09-28）：新版啟動時對它一樣跑 init_db（main.py），先前沒有快照、沒有乾跑、回滾也不還原
+# ⇒ 回滾後是「舊程式碼＋新 schema 的 demo 庫」。與主庫同一套處理。
+$demoDbPath = Join-Path $BackendDir "motrix_erp_demo.db"
+$demoDbBackupPath = Join-Path $dbBackupDir "motrix_erp_demo.db"
+if ((Test-Path $dbPath) -or (Test-Path $demoDbPath)) {
     # 用 SQLite Online Backup API（跟 archive.py _snapshot_sqlite() 每日備份一致的做法），
     # 不用陽春 Copy-Item —— db 是 WAL 模式，伺服器這時可能還在跑，單純複製主檔案可能
     # 漏掉尚未 checkpoint 進主檔案、還留在 -wal 的交易，快照不保證一致。backup() 會產生
     # 真正完整、可安全還原的快照。
     $backupPy = Join-Path $env:TEMP "motrix_predeploy_backup_$timestamp.py"
     @"
+import os
 import sqlite3
-src = sqlite3.connect(r'$dbPath')
-dst = sqlite3.connect(r'$dbBackupPath')
-try:
-    src.backup(dst)
-finally:
-    dst.close()
-    src.close()
+for s, d in ((r'$dbPath', r'$dbBackupPath'), (r'$demoDbPath', r'$demoDbBackupPath')):
+    if not os.path.exists(s):
+        continue
+    src = sqlite3.connect(s)
+    dst = sqlite3.connect(d)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
 print('BACKUP_OK')
 "@ | Set-Content -Path $backupPy -Encoding UTF8
     # 2026-09-08 修復：跟 pip install 那個地雷同一類——Windows PowerShell 5.1
@@ -283,7 +413,8 @@ print('BACKUP_OK')
         Write-Host $backupText
         Fail "升級前 db 備份失敗，中止套用（正式庫尚未被觸碰）。" "backup_failed"
     }
-    Ok "  db 快照（SQLite Online Backup API）：$dbBackupPath"
+    if (Test-Path $dbPath) { Ok "  db 快照（SQLite Online Backup API）：$dbBackupPath" } else { Warn "  找不到 motrix_erp.db，略過主庫快照。" }
+    if (Test-Path $demoDbPath) { Ok "  demo 庫快照（SQLite Online Backup API）：$demoDbBackupPath" }
 } else {
     Warn "  找不到 motrix_erp.db，略過 db 快照。"
 }
@@ -294,17 +425,22 @@ print('BACKUP_OK')
 # 不留回滾快照，把「正式庫是第一個試跑新 migration 的地方」的風險
 # 移到這一步先擋下來。
 # ============================================================
-if (Test-Path $dbPath) {
-    Info "  Migration 乾跑驗證..."
+if ((Test-Path $dbPath) -or (Test-Path $demoDbPath)) {
+    Info "  Migration 乾跑驗證（主庫$(if (Test-Path $demoDbPath) { '＋demo 庫' })）..."
     $dryRunDb = Join-Path $env:TEMP "motrix_erp_dryrun_$timestamp.db"
-    Copy-Item (Join-Path $dbBackupDir "motrix_erp.db") $dryRunDb -Force
+    $dryRunDemoDb = Join-Path $env:TEMP "motrix_erp_demo_dryrun_$timestamp.db"
+    $dryRunTargets = @()
+    if (Test-Path $dbBackupPath) { Copy-Item $dbBackupPath $dryRunDb -Force; $dryRunTargets += $dryRunDb }
+    if (Test-Path $demoDbBackupPath) { Copy-Item $demoDbBackupPath $dryRunDemoDb -Force; $dryRunTargets += $dryRunDemoDb }
+    $dryRunList = ($dryRunTargets | ForEach-Object { "r'$_'" }) -join ", "
 
     $dryRunPy = Join-Path $env:TEMP "motrix_dryrun_$timestamp.py"
     @"
 import sys
 sys.path.insert(0, r'$(Join-Path $PackagePath "backend")')
 import db
-db.init_db(r'$dryRunDb')
+for p in ($dryRunList,):
+    db.init_db(p)
 print('DRYRUN_OK')
 "@ | Set-Content -Path $dryRunPy -Encoding UTF8
 
@@ -321,7 +457,8 @@ print('DRYRUN_OK')
     } finally {
         $ErrorActionPreference = $prevEap
     }
-    Remove-Item $dryRunDb, $dryRunPy -Force -ErrorAction SilentlyContinue
+    Remove-Item $dryRunDb, $dryRunDemoDb, $dryRunPy -Force -ErrorAction SilentlyContinue
+    Remove-Item "$dryRunDb-wal", "$dryRunDb-shm", "$dryRunDemoDb-wal", "$dryRunDemoDb-shm" -Force -ErrorAction SilentlyContinue
 
     # 🔴 2026-09-24（正式機套用乙時誤判）：`& python x 2>&1` 在 PS 5.1 下，只要 python 往 stderr
     #    印任何一行（例：db.py 的 logger.warning），輸出就是**陣列**（ErrorRecord ＋ 字串）。
@@ -341,6 +478,34 @@ print('DRYRUN_OK')
     Warn "  找不到正式庫 motrix_erp.db，略過 migration 乾跑驗證（視為全新安裝）。"
 }
 
+# ============================================================
+# 刪除計畫（2026-09-28）—— 舊版有、新版沒有的程式檔
+# ============================================================
+# 🔴 robocopy 只加不刪，而模組載入器看資料夾、不看 lock ⇒ 包裡刪掉、改名或排除的模組資料夾與頁面
+#    會繼續被載入。判定在 backend\tools\apply_plan.py（跑**新包裡**那一份；分類與 V9→新版升級共用
+#    core.upgrade.classify ⇒ 資料、DB、設定、uploads、PDF 一律不列入）。
+# 🔑 在停服之前算好、先印出來、寫進 log；超過 -MaxDeleteFiles ⇒ 什麼都不動就中止。
+Info "  刪除計畫..."
+$planTool = Join-Path $PackagePath "backend\tools\apply_plan.py"
+if (-not (Test-Path $planTool)) {
+    Fail "部署包裡沒有 backend\tools\apply_plan.py，無法計算刪除計畫（包太舊或不完整），中止（正式機尚未被觸碰）。" "plan_refused"
+}
+$planTmp = Join-Path $env:TEMP "motrix_apply_plan_$timestamp.json"
+$planLog = Join-Path $BackendDir "logs\apply_update_$timestamp.plan.txt"
+$planRun = Invoke-Py @($planTool, "plan", "--root", $ProdRoot, "--pkg", $PackagePath, "--out", $planTmp, "--max", "$MaxDeleteFiles", "--log", $planLog)
+Write-Host $planRun.Text
+if ($planRun.Exit -eq 3) {
+    Fail "要刪除的程式檔超過上限 $MaxDeleteFiles（清單見上方與 $planLog）。請人工確認清單無誤後，以 -MaxDeleteFiles <更大的值> 重跑（正式機尚未被觸碰）。" "delete_plan_too_large"
+}
+if ($planRun.Exit -ne 0 -or ($planRun.Text -notmatch "APPLY_PLAN_OK")) {
+    Fail "刪除計畫無法產生（exit code $($planRun.Exit)，原因見上方），中止（正式機尚未被觸碰）。" "plan_failed"
+}
+$plan = Get-Content $planTmp -Raw -Encoding UTF8 | ConvertFrom-Json
+Ok "  刪除計畫：刪 $(@($plan.delete).Count) 檔、新增 $(@($plan.added).Count) 檔（清單已寫入 $planLog）"
+if (-not $plan.baseline_present) {
+    Warn "  沒有上一次套用的檔案清單（backend\.deployed_files.json；V9→新版轉換後的第一次會這樣）：只依 modules.lock 與模組資料夾刪除，其餘 $(@($plan.no_baseline_candidates).Count) 個候選只列出不刪。成功後會寫下清單。"
+}
+
 $rollbackRoot = Join-Path $BackendDir "rollback_snapshots"
 $rollbackDir = Join-Path $rollbackRoot $timestamp
 New-Item -ItemType Directory -Force -Path $rollbackDir | Out-Null
@@ -355,10 +520,26 @@ Info "  建立程式碼回滾快照：$rollbackDir"
 #    管線接到 cmdlet 不會覆蓋它。
 # ⚠️ 這兩條出口的 `rolled_back` 是 `not_applied`（此刻正式機還沒被碰）
 #    ⇒ 與「還原到一半」**不可以共用一個 status**：前者重跑就好，後者要叫人。
-robocopy $BackendDir (Join-Path $rollbackDir "backend") /E /XD db_backups rollback_snapshots logs /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json server.log | Out-Null
+# 2026-09-28：/XD 補上資料目錄（export_archive＝勞報個資、_demo_*＝demo 資料、uploads／報價單PDF 等）——
+#   先前每次套用都把個資複製進 rollback_snapshots。回滾不需要它們：套用本來就不碰資料目錄。
+robocopy $BackendDir (Join-Path $rollbackDir "backend") /E /XD db_backups rollback_snapshots logs uploads 報價單PDF export_archive backup_alerts _demo_* __pycache__ /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json server.log | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "建立程式碼回滾快照失敗（backend，exit code $LASTEXITCODE）——快照不完整就繼續套用的話，出事時沒有東西可以回滾。" "snapshot_failed_backend" }
 robocopy $FrontendDir (Join-Path $rollbackDir "frontend") /E | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "建立程式碼回滾快照失敗（frontend，exit code $LASTEXITCODE）——快照不完整就繼續套用的話，出事時沒有東西可以回滾。" "snapshot_failed_frontend" }
+foreach ($d in $RootProgramDirs) {
+    $src = Join-Path $ProdRoot $d
+    if (-not (Test-Path $src)) { continue }
+    robocopy $src (Join-Path $rollbackDir $d) /E /XD __pycache__ | Out-Null
+    if ($LASTEXITCODE -ge 8) { Fail "建立程式碼回滾快照失敗（$d，exit code $LASTEXITCODE）——快照不完整就繼續套用的話，出事時沒有東西可以回滾。" "snapshot_failed_root_dirs" }
+}
+# 計畫跟著快照走（回滾時用它刪掉這次新增的檔）；每一個要刪的檔在快照裡都要找得到，否則回滾還原不了它。
+$planPath = Join-Path $rollbackDir "apply_plan.json"
+Move-Item $planTmp $planPath -Force
+$snapCheck = Invoke-Py @($planTool, "verify-snapshot", "--plan", $planPath, "--snapshot", $rollbackDir)
+if ($snapCheck.Exit -ne 0 -or ($snapCheck.Text -notmatch "APPLY_SNAPSHOT_OK")) {
+    Write-Host $snapCheck.Text
+    Fail "回滾快照裡缺少要刪除的檔（見上方）——刪了就回滾不回來，中止（正式機尚未被觸碰）。" "snapshot_missing_deleted"
+}
 # 根目錄文件（CHANGELOG.md / MOTRIX-ERP-QUICK.md 等）也要存一份回滾快照——
 # Step 3 會在健康檢查「之前」就先覆蓋這些文件，如果沒有這份快照，健康檢查
 # 失敗回滾程式碼＋db 時，根目錄文件會維持新版內容，變成「文件說已經是新版，
@@ -388,37 +569,24 @@ if (-not $Yes) {
 # ============================================================
 # Step 2: 停止伺服器（讓 autostart 迴圈接手重啟，不自己搶 port）
 # ============================================================
-Info "`n[2/6] 停止伺服器..."
-$conn = Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue
-if ($conn) {
-    $p = $conn.OwningProcess
-    Info "  Kill PID $p (listening on 666)"
-    Stop-Process -Id $p -Force -ErrorAction SilentlyContinue
-} else {
-    Info "  Port 666 目前無人監聽。"
-}
-Get-WmiObject Win32_Process | Where-Object {
-    $_.CommandLine -like "*uvicorn*main:app*" -or $_.CommandLine -like "*spawn_main*parent_pid*"
-} | ForEach-Object {
-    Info "  Kill PID $($_.ProcessId)"
-    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-}
+Info "`n[2/6] 停止伺服器（只停這個安裝的 autostart 迴圈與服務行程）..."
+$stoppedCount = Stop-InstallService
+Info "  結束 $stoppedCount 個行程。"
 
-# 等待 port 666 真正釋放，降低跟 autostart crash-restart 迴圈搶綁定的競態
-# （行程被殺掉到 OS 真的放開 socket 之間有短暫空窗，太快進到下一步常撞到
-#   [Errno 10048] 位址已被使用，迴圈會自行重試到成功，但這段等待可以減少發生機率）
+# 等待 port 真正釋放（行程被殺掉到 OS 真的放開 socket 之間有短暫空窗，
+# 太快重新啟動常撞到 [Errno 10048] 位址已被使用）
 $portFreed = $false
 for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep -Seconds 1
-    $stillListening = Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue
+    $stillListening = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
     if (-not $stillListening) { $portFreed = $true; break }
 }
 if ($portFreed) {
-    Ok "  Port 666 已確認釋放。"
+    Ok "  Port $Port 已確認釋放。"
 } else {
-    Warn "  Port 666 等待 15 秒後仍顯示被佔用，繼續往下走（crash-restart 迴圈本身會自動重試）。"
+    Warn "  Port $Port 等待 15 秒後仍顯示被佔用，繼續往下走（新迴圈啟動時會自動重試綁定）。"
 }
-Ok "  伺服器已停止，等待 autostart crash-restart 迴圈接手（見 §1.1，最長約 5 秒偵測到中止後重啟）。"
+Ok "  伺服器已停止；複製與依賴安裝完成後由本腳本重新啟動迴圈。"
 
 # 🔴 **我們自己停掉了它** ⇒ 從這裡開始 `service=down`，
 # 直到某一次 ping 成功才會變回 `up`。
@@ -427,7 +595,7 @@ Ok "  伺服器已停止，等待 autostart crash-restart 迴圈接手（見 §1
 $script:ServiceState = "down"
 
 # ============================================================
-# Step 3: 複製新程式碼（只加不刪，絕不 /MIR）
+# Step 3: 複製新程式碼（絕不 /MIR；刪除只依停服前印出的刪除計畫）
 # ============================================================
 Info "`n[3/6] 套用新程式碼..."
 
@@ -441,13 +609,41 @@ Info "`n[3/6] 套用新程式碼..."
 #    **真正不可逆的是下一行開始寫入 $BackendDir。**
 $script:ProdState = "applied_no_restore"
 
+# 2026-09-28：/XF 補 autostart.bat —— 它是**這台機器的設定**（對外連線總開關 MOTRIX_TENDER_RADAR／MOTRIX_GEO），
+#   包裡那份是出貨預設值；先前每次套用都被蓋掉（core/upgrade.py 的 PACKAGE_DEFAULT_CONFIG 同一條規則）。
 $rc1 = robocopy (Join-Path $PackagePath "backend") $BackendDir /E `
-    /XD db_backups rollback_snapshots uploads logs 報價單PDF `
-    /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json server.log
+    /XD db_backups rollback_snapshots uploads logs 報價單PDF export_archive backup_alerts _demo_* `
+    /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json .deployed_files.json server.log autostart.bat
 if ($LASTEXITCODE -ge 8) { Fail "robocopy backend/ 失敗（exit code $LASTEXITCODE）。" "copy_failed_backend" }
 
 $rc2 = robocopy (Join-Path $PackagePath "frontend") $FrontendDir /E
 if ($LASTEXITCODE -ge 8) { Fail "robocopy frontend/ 失敗（exit code $LASTEXITCODE）。" "copy_failed_frontend" }
+
+foreach ($d in $RootProgramDirs) {
+    $src = Join-Path $PackagePath $d
+    if (-not (Test-Path $src)) { continue }
+    robocopy $src (Join-Path $ProdRoot $d) /E /XD __pycache__ | Out-Null
+    if ($LASTEXITCODE -ge 8) { Fail "robocopy $d/ 失敗（exit code $LASTEXITCODE）。" "copy_failed_root_dirs" }
+}
+
+# autostart.bat：機器上有 ⇒ 保留；沒有 ⇒ 從包補上；兩邊不同 ⇒ 提示人比對（與 core/upgrade.py sync_package_default_config 同規則）
+$pkgAutostart = Join-Path $PackagePath "backend\autostart.bat"
+$prodAutostart = Join-Path $BackendDir "autostart.bat"
+if (Test-Path $pkgAutostart) {
+    if (-not (Test-Path $prodAutostart)) {
+        Copy-Item $pkgAutostart $prodAutostart
+        Warn "  這台機器沒有 autostart.bat，已從部署包補上出貨預設版本。"
+    } elseif ((Get-FileHash $pkgAutostart).Hash -ne (Get-FileHash $prodAutostart).Hash) {
+        Info "  autostart.bat 保留這台機器的版本（與部署包的預設版本不同；新版若有要加的設定請人工比對）。"
+    }
+}
+
+# 刪除計畫（停服前已印出、已確認快照裡都有）
+$delRun = Invoke-Py @($planTool, "execute", "--root", $ProdRoot, "--pkg", $PackagePath, "--plan", $planPath)
+Write-Host $delRun.Text
+if ($delRun.Exit -ne 0 -or ($delRun.Text -notmatch "APPLY_DELETE_OK")) {
+    Fail "依刪除計畫刪除舊程式檔失敗（見上方）——新程式碼已複製、舊檔可能殘留，需要人工處理；快照：$rollbackDir" "delete_failed"
+}
 
 # 兩個 robocopy 都過了 ⇒ 新程式碼**完整**在正式機磁碟上。
 # ⚠️ 這**不代表它是好的** —— 健康檢查還沒跑。`applied` 講的是磁碟狀態，
@@ -503,6 +699,9 @@ if (Test-Path $reqPath) {
 # 不必要的回滾，事後用同一行 curl.exe 手動重測完全正常）。單次逾時
 # 3→5 秒、迴圈次數 15→20（總等待上限拉寬，多數情況仍會在前幾次就成功
 # 提前跳出，不影響正常部署的速度）。
+Info "`n[4b/6] 重新啟動服務..."
+Start-InstallService
+
 Info "`n[5/6] 等待伺服器恢復並健康檢查..."
 $healthy = $false
 $hcStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -647,14 +846,20 @@ if ($healthy -and -not $logErrors) {
 
     # 先停服務再動檔案（含 db）——新版伺服器這時可能還在跑，直接覆寫 db 檔案
     # 有鎖定/衝突風險；也避免舊版程式碼複製回去的同時新版還在寫入。
-    $conn2 = Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue
-    if ($conn2) { Stop-Process -Id $conn2.OwningProcess -Force -ErrorAction SilentlyContinue }
+    # 2026-09-28：連迴圈一起停（先前只停聽 port 的行程，迴圈 5 秒後用還原到一半的程式碼把它拉起來）。
+    $null = Stop-InstallService
     Start-Sleep -Seconds 2
 
     # 🔴 **危險值在動作之前設**（與 `:420` 同一條紀律）。
     # ☠️ 設在之後的話，下面兩條新出口會報 `applied`
     #    ——語意是「新版**完整**寫進正式機」，**而它正在還原**。
     $script:ProdState = "restoring"
+
+    # 2026-09-28：先刪掉這次**新增**的程式檔（robocopy /E 寫回快照不會刪它們；
+    # 新增的模組資料夾留著 ⇒ 舊版的載入器照樣載它）。被刪的舊檔由下面寫回快照還原。
+    $cleanRun = Invoke-Py @($planTool, "cleanup-added", "--root", $ProdRoot, "--pkg", $PackagePath, "--plan", $planPath)
+    Write-Host $cleanRun.Text
+    $cleanFailed = ($cleanRun.Exit -ne 0 -or ($cleanRun.Text -notmatch "APPLY_CLEANUP_OK"))
 
     # 🔴 還原寫回也要檢查（`RP2`）。
     # ☠️ 先前失敗**不中止**，直接流進下面的健康檢查 —— 而半還原的 backend
@@ -664,6 +869,12 @@ if ($healthy -and -not $logErrors) {
     if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（backend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_backend" }
     robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E | Out-Null
     if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（frontend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_frontend" }
+    foreach ($d in $RootProgramDirs) {
+        $snap = Join-Path $rollbackDir $d
+        if (-not (Test-Path $snap)) { continue }
+        robocopy $snap (Join-Path $ProdRoot $d) /E | Out-Null
+        if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（$d，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_root_dirs" }
+    }
 
     # 根目錄文件（MOTRIX-ERP-QUICK.md / CHANGELOG.md 等）也一併回滾，否則文件
     # 會停留在「已經是新版」的內容，跟被回滾回舊版的實際程式碼對不上（見上方
@@ -691,6 +902,17 @@ if ($healthy -and -not $logErrors) {
     } else {
         Warn "  找不到升級前 db 快照（$dbBackupPath），資料庫維持目前狀態，可能仍是新版 schema，需要人工檢查！"
     }
+    # demo 庫同一套（2026-09-28）：新版啟動時也對它跑了 init_db。
+    if (Test-Path $demoDbBackupPath) {
+        Copy-Item $demoDbBackupPath $demoDbPath -Force
+        Remove-Item "$demoDbPath-wal", "$demoDbPath-shm" -Force -ErrorAction SilentlyContinue
+        Ok "  demo 庫已還原至升級前快照：$demoDbBackupPath"
+    }
+
+    if ($cleanFailed) {
+        Fail "自動回滾：這次新增的程式檔沒有刪乾淨（見上方）——舊程式碼與資料庫已寫回，但新增的檔（可能含新模組資料夾）還在，服務未重新啟動，需要人工處理。清單：$planPath" "restore_cleanup_failed"
+    }
+    Start-InstallService
 
     $rolledBackHealthy = $false
     $rbStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -716,10 +938,10 @@ if ($healthy -and -not $logErrors) {
         # 顯示有 process 正常監聽，代表服務其實還活著，優先懷疑是健康檢查
         # 本身的問題，不要急著當成真的服務中斷處理。
         Write-Host ""
-        Write-Host "  port 666 目前監聽狀態（協助判斷是否為服務真的中斷）：" -ForegroundColor Yellow
-        $conns = Get-NetTCPConnection -LocalPort 666 -ErrorAction SilentlyContinue
+        Write-Host "  port $Port 目前監聽狀態（協助判斷是否為服務真的中斷）：" -ForegroundColor Yellow
+        $conns = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
         if (-not $conns) {
-            Write-Host "    （完全沒有任何連線/監聽在 port 666 上——服務可能真的沒起來）" -ForegroundColor Yellow
+            Write-Host "    （完全沒有任何連線/監聽在 port $Port 上——服務可能真的沒起來）" -ForegroundColor Yellow
         } else {
             foreach ($c in $conns) {
                 $procName = try { (Get-Process -Id $c.OwningProcess -ErrorAction Stop).ProcessName } catch { "(process 已不存在)" }
@@ -756,6 +978,16 @@ $deployed = [ordered]@{
     built_at     = $manifest.built_at
 }
 $deployed | ConvertTo-Json -Depth 6 | Set-Content -Path $deployedMarkerPath -Encoding UTF8
+
+# 這一版的程式檔清單（backend\.deployed_files.json）：下一次套用用它算「舊版有、新版沒有」的檔。
+# 只在成功時寫；回滾時快照裡的舊清單會被寫回。寫失敗不影響這次（服務已健康），但下一次會少一個刪除依據 ⇒ 警告。
+$baseRun = Invoke-Py @($planTool, "baseline", "--root", $ProdRoot, "--plan", $planPath)
+if ($baseRun.Exit -ne 0 -or ($baseRun.Text -notmatch "APPLY_BASELINE_OK")) {
+    Write-Host $baseRun.Text
+    Warn "  寫入 backend\.deployed_files.json 失敗：下一次套用將只能依 modules.lock 刪除，請人工確認。"
+} else {
+    Ok "  已寫入這一版的程式檔清單（backend\.deployed_files.json）。"
+}
 
 Write-Host ""
 Write-Host "======================================" -ForegroundColor Green

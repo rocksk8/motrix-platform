@@ -211,6 +211,11 @@ _STATUS_FAILED = frozenset({
     "checkonly_failed",             # :143
     "unhealthy_not_rolled_back",    # :545  🔴 P0-00 本尊：exit 0 而它是失敗
     "unhealthy_rolled_back",        # :621
+    # 2026-09-28 日常更新（platform 套 platform）新增的出口
+    "plan_refused", "plan_failed", "delete_plan_too_large",     # 刪除計畫：正式機尚未被觸碰
+    "snapshot_failed_root_dirs", "snapshot_missing_deleted",    # 快照：正式機尚未被觸碰
+    "copy_failed_root_dirs", "delete_failed",                   # 🔴 半套用、服務已停
+    "restore_copy_failed_root_dirs", "restore_cleanup_failed",  # 🔴 還原到一半
     # rollback_update.ps1 那一側
     "rollback_not_prod_machine", "rollback_snapshot_missing",
     "rollback_db_snapshot_missing", "rollback_user_cancelled",
