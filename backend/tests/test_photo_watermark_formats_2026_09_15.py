@@ -21,6 +21,8 @@ pytest.importorskip("PIL")
 from PIL import Image, ImageDraw
 
 from photos import _process_project_photo
+from tests._requires import requires_module  # noqa: E402
+needs_crm = requires_module("crm", '本題的資料由 CRM（業務開發記錄 /api/dev-cases）建立；CRM 不在時沒有對象（B 2026-09-28 真刪普查）')
 
 
 def _white_on_transparent_png(w=600, h=200) -> bytes:
@@ -75,6 +77,7 @@ def test_jpeg_source_is_untouched_by_the_png_change():
     assert watermark
 
 
+@needs_crm
 def test_stored_attachment_extension_matches_its_real_content(client, make_user):
     """存下來的檔案，副檔名要跟真實內容一致。
 
