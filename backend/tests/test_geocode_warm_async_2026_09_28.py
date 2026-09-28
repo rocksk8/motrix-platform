@@ -201,6 +201,10 @@ import db
 _tmp = tempfile.mkdtemp()
 db.DB_PATH = os.path.join(_tmp, "t.db")
 db.DEMO_DB_PATH = os.path.join(_tmp, "d.db")
+# 首次安裝帳密檔導到暫存（子行程沒有 conftest 的隔離；不導的話 init_default_admin 會寫進這棵樹，稽核 D AB-S1）
+import helpers.auth as _auth, helpers.startup as _startup
+_auth._CREDENTIALS_FILE = os.path.join(_tmp, "initial_admin_credentials.txt")
+_startup._DEMO_CREDENTIALS_FILE = os.path.join(_tmp, "initial_demo_credentials.txt")
 
 class _Stub(types.ModuleType):
     def __getattr__(self, name):
@@ -229,12 +233,23 @@ os._exit(0)
 ''' % _SLOW
 
 
+def _tree_credentials_state():
+    """AB-S1：子行程不可以動這棵樹的首次安裝帳密檔（開發機自己的那一份）。回 {檔名: mtime 或 None}。"""
+    import os
+    from pathlib import Path
+    backend = Path(__file__).resolve().parents[1]
+    names = (".initial_admin_credentials.txt", ".initial_demo_credentials.txt")
+    return {n: (os.path.getmtime(backend / n) if (backend / n).exists() else None) for n in names}
+
+
 def test_import_main_finishes_while_first_warm_round_is_slow():
     """主持追加：預熱第一輪很慢（睡 60 秒）時，真的 `import main` 仍在 60 秒內完成，而第一輪確實在背景起跑。"""
     from pathlib import Path
     from tests._subproc import run_python
     backend = Path(__file__).resolve().parents[1]
+    before = _tree_credentials_state()
     proc = run_python(["-c", _IMPORT_MAIN_SCRIPT], cwd=backend, timeout=_SLOW * 3)
+    assert _tree_credentials_state() == before, "子行程改動了這棵樹的首次安裝帳密檔（AB-S1）"
     assert proc.returncode == 0, f"子行程失敗（returncode={proc.returncode}）：\n{proc.stderr[-2500:]}"
     vals = dict(l.split("=", 1) for l in proc.stdout.splitlines() if "=" in l and l.split("=", 1)[0].isupper())
     assert "IMPORT_SECONDS" in vals, f"子行程沒有印出耗時：\n{proc.stdout[-1500:]}\n{proc.stderr[-1500:]}"
