@@ -32,7 +32,9 @@ param(
     [switch]$Yes,
     [switch]$SkipAutoRollback,
     [switch]$Rollback,
-    [string]$ModuleKey,
+    # 參數名 -ModuleKey；變數名刻意不同：PS 變數不分大小寫，$script:ModuleKey（結果欄位）就是同一個變數，
+    # 初始化 `$script:ModuleKey = $null` 會把傳入值清掉（B 場次 D 抓到，2026-09-29）
+    [Alias("ModuleKey")][string]$RollbackKey,
     [string]$Backup,
     [switch]$IncludeDatabase,
     [switch]$ConfirmDatabaseOverwrite
@@ -41,7 +43,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # 本腳本的版本（apply_module_update.version.json 登記它與內容雜湊；包的 min_apply_module_script 比的是它）。
-$ApplyModuleScriptVersion = "2026-09-28d"
+$ApplyModuleScriptVersion = "2026-09-28e"
 
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $Port = 666
@@ -552,19 +554,19 @@ Info "身分確認：正式機（$ProdRoot）`n"
 $RollbackUntouchedCodes = $RollbackRefusedCodes + @("backup_corrupt", "no_backup", "backup_not_found")
 if ($Rollback) {
     if ($PackagePath) { Fail "-Rollback 不帶 -PackagePath（回滾用的是安裝目錄裡的備份）。" "bad_args" }
-    if (-not $ModuleKey -or $ModuleKey -notmatch '^[a-z][a-z0-9_]*$') { Fail "-Rollback 需要 -ModuleKey <模組代號>（小寫英數與底線）。" "bad_args" }
+    if (-not $RollbackKey -or $RollbackKey -notmatch '^[a-z][a-z0-9_]*$') { Fail "-Rollback 需要 -ModuleKey <模組代號>（小寫英數與底線）。" "bad_args" }
     if ($Backup -and $Backup -notmatch '^\d{8}_\d{6}(_\d+)?$') { Fail "-Backup 的格式是 yyyyMMdd_HHmmss（備份資料夾名）：$Backup" "bad_args" }
     if ([bool]$IncludeDatabase -ne [bool]$ConfirmDatabaseOverwrite) {
         Fail "要連資料庫一起還原，-IncludeDatabase 與 -ConfirmDatabaseOverwrite 兩個都要給（-Yes 不算數）；只回程式就兩個都不要給。" "bad_args"
     }
-    $script:ModuleKey = $ModuleKey
+    $script:ModuleKey = $RollbackKey
     $script:ResultPackage = $null
-    $lockState = Enter-InstallLock "apply_module_update" ("rollback:" + $ModuleKey)
+    $lockState = Enter-InstallLock "apply_module_update" ("rollback:" + $RollbackKey)
     if ($lockState -eq "locked") { Fail "另一個套用或回滾正在進行（見上方鎖檔內容），這次不動任何東西。" "apply_locked" }
     if ($lockState -eq "stale") { Fail "有殘留的鎖檔（持有者已不在）：確認沒有套用在跑之後，手動刪除 $BackendDir\.apply.lock 再重試。" "apply_locked_stale" }
 
     Info "[1/6] 回滾預檢（只讀）..."
-    $chkArgs = @($StepsTool, "rollback-check", "--root", $ProdRoot, "--key", $ModuleKey)
+    $chkArgs = @($StepsTool, "rollback-check", "--root", $ProdRoot, "--key", $RollbackKey)
     if ($Backup) { $chkArgs += @("--backup", $Backup) }
     $chk = Invoke-Py $chkArgs
     Write-Host $chk.Text
@@ -584,15 +586,15 @@ if ($Rollback) {
         Fail ("備份 $($script:ModStamp) 那次套用新增了 migration（$($migAdded -join '、')），多半已在重啟時跑過；只回程式時舊版程式要跑在新 schema 上，這裡判斷不了 ⇒ 不回滾。" +
               "要回到套用前，加 -IncludeDatabase -ConfirmDatabaseOverwrite 連資料庫一起還原（套用之後寫入的資料會回到快照當時）。沒有動任何東西。") "module_rollback_refused"
     }
-    $dbSnapDir = Join-Path $BackendDir ("db_backups\pre_module_{0}_{1}" -f $ModuleKey, $script:ModStamp)
+    $dbSnapDir = Join-Path $BackendDir ("db_backups\pre_module_{0}_{1}" -f $RollbackKey, $script:ModStamp)
     if ($IncludeDatabase -and -not (Test-Path (Join-Path $dbSnapDir "motrix_erp.db"))) {
         $script:RollbackCode = "db_snapshot_missing"
         Fail "找不到那次套用前的資料庫快照（$dbSnapDir）⇒ 無法連資料庫一起還原；沒有動任何東西。" "module_rollback_refused"
     }
-    Info ("  回滾 $ModuleKey：$($script:FromVersion) → $(if ($script:ToVersion) { $script:ToVersion } else { '（套用前沒有這個模組）' })，備份 $($script:ModStamp)" +
+    Info ("  回滾 $RollbackKey：$($script:FromVersion) → $(if ($script:ToVersion) { $script:ToVersion } else { '（套用前沒有這個模組）' })，備份 $($script:ModStamp)" +
           "$(if ($IncludeDatabase) { '，資料庫還原到 ' + $dbSnapDir } else { '，資料庫保留' })")
     if (-not $Yes) {
-        $ans = Read-Host "確定回滾模組 $ModuleKey 到 $($script:ToVersion)？(y/N)"
+        $ans = Read-Host "確定回滾模組 $RollbackKey 到 $($script:ToVersion)？(y/N)"
         if ($ans -ne "y") { Fail "使用者取消。" "user_cancelled" }
     }
 
@@ -628,21 +630,21 @@ if ($Rollback) {
     Info "[5/6] 重新啟動並健康檢查..."
     $restartAt = Get-Date -Format "yyyy-MM-ddTHH:mm:ss"
     Start-InstallService
-    $back = Test-ModuleHealth $ModuleKey $script:ToVersion $restartAt
+    $back = Test-ModuleHealth $RollbackKey $script:ToVersion $restartAt
     if ($back.Healthy) { $script:ServiceState = "up" }
     $ok = if ($script:ToVersion) { $back.Healthy -and $back.ModuleOk } else { $back.Healthy }
     $script:ProdState = if ($ok -and $dbRestored) { "restored" } else { "restored_unhealthy" }
     Info "[6/6] 結果"
     if ($script:ProdState -eq "restored") {
-        Ok "  已回滾 $ModuleKey 到 $(if ($script:ToVersion) { $script:ToVersion } else { '套用前（沒有這個模組）' })，服務正常。"
+        Ok "  已回滾 $RollbackKey 到 $(if ($script:ToVersion) { $script:ToVersion } else { '套用前（沒有這個模組）' })，服務正常。"
         Emit-Result "module_rollback_ok" 0
         exit 0
     }
-    Fail "已回滾 $ModuleKey 的程式，但$(if (-not $dbRestored) { '資料庫沒有還原（見上方）；' } else { '' })回滾後的健康檢查沒過：$($back.Reason)。需要人工確認。" "module_rollback_unhealthy"
+    Fail "已回滾 $RollbackKey 的程式，但$(if (-not $dbRestored) { '資料庫沒有還原（見上方）；' } else { '' })回滾後的健康檢查沒過：$($back.Reason)。需要人工確認。" "module_rollback_unhealthy"
 }
 
 # ── Step 1：參數與包 ─────────────────────────────────────────────
-if ($ModuleKey -or $Backup -or $IncludeDatabase -or $ConfirmDatabaseOverwrite) {
+if ($RollbackKey -or $Backup -or $IncludeDatabase -or $ConfirmDatabaseOverwrite) {
     Fail "-ModuleKey／-Backup／-IncludeDatabase／-ConfirmDatabaseOverwrite 只用於 -Rollback。" "bad_args"
 }
 if (-not $PackagePath) { Fail "-PackagePath 為必填參數。" "bad_args" }

@@ -106,12 +106,12 @@ def test_rollback_flow_order():
     r = _rollback_flow()
     order = ['Enter-InstallLock "apply_module_update"', '"rollback-check"', '"needs_database"', 'Read-Host',
              "Stop-InstallService", "Invoke-ModuleRollback", "Restore-Databases $dbSnapDir",
-             "Test-ModuleHealth $ModuleKey $script:ToVersion", 'Emit-Result "module_rollback_ok" 0']
+             "Test-ModuleHealth $RollbackKey $script:ToVersion", 'Emit-Result "module_rollback_ok" 0']
     pos = [_idx(r, s) for s in order]
     assert pos == sorted(pos), list(zip(order, pos))
     # 最後一次啟動（正常路徑）在資料庫還原之後、健檢之前（拒絕那一支的重啟在回滾之前，另有題）
     last_start = r.rindex("Start-InstallService")
-    assert pos[order.index("Restore-Databases $dbSnapDir")] < last_start < pos[order.index("Test-ModuleHealth $ModuleKey $script:ToVersion")]
+    assert pos[order.index("Restore-Databases $dbSnapDir")] < last_start < pos[order.index("Test-ModuleHealth $RollbackKey $script:ToVersion")]
 
 
 def test_database_is_kept_unless_both_flags_are_given():
@@ -146,7 +146,7 @@ def test_untouched_refusals_restart_as_is_and_the_rest_disable_the_module():
 
 def test_rollback_only_params_are_refused_on_the_apply_path():
     code = _code(_src(NEW))
-    assert "if ($ModuleKey -or $Backup -or $IncludeDatabase -or $ConfirmDatabaseOverwrite) {" in code
+    assert "if ($RollbackKey -or $Backup -or $IncludeDatabase -or $ConfirmDatabaseOverwrite) {" in code
     p = _code(_fn(_src(NEW), "Invoke-ModuleRollback"))
     assert '"--backup", $script:ModStamp' in p, "回滾模式用預檢選定的那一份（與 rollback-check 同一個 stamp）"
 
@@ -155,3 +155,57 @@ def test_rollback_statuses_are_in_the_dashboard_domain():
     st = set(re.findall(r'"(module_rollback_[a-z_]+)"', _code(_src(NEW))))
     assert st == {"module_rollback_ok", "module_rollback_refused", "module_rollback_unhealthy"}
     assert st <= _dashboard_domain() and st <= _statuses()
+
+
+# ── ③ 實際執行（B 場次 D 抓到：靜態題看不到 PS 變數不分大小寫的遮蔽）───────────────────────
+#
+# `-ModuleKey` 原本綁在 `$ModuleKey`，而腳本初始化 `$script:ModuleKey = $null`（結果欄位）在 script 範圍就是
+# 同一個變數 ⇒ 傳入值被清空 ⇒ 回滾一律 bad_args。這裡把 ps1 複製到暫存安裝目錄（只改寫 $ProdRoot 那一行，
+# 同演練工具）真的跑：參數要能活到回滾那一段（之後因為沒有 module_update 而在唯讀預檢被拒，正式機什麼都沒有）。
+
+import shutil as _shutil
+import subprocess as _subprocess
+from pathlib import Path as _Path
+
+_PS = _shutil.which("powershell.exe") or _shutil.which("powershell")
+_TOOLS = _Path(__file__).resolve().parents[2] / "tools"
+
+
+def _run_ps1(tmp_path, *args):
+    if not _PS:
+        pytest.skip("需要 Windows PowerShell")
+    root = tmp_path / "root"
+    tools = root / "backend" / "tools"
+    tools.mkdir(parents=True)
+    raw = (_TOOLS / NEW).read_bytes()
+    text = raw.decode("utf-8-sig")
+    line = re.search(r'^\$ProdRoot = ".*"\r?$', text, re.M)
+    assert line, "ps1 沒有 `$ProdRoot = \"…\"` 那一行"
+    text = text[:line.start()] + '$ProdRoot = "%s"\r' % str(root) + text[line.end():]
+    (tools / NEW).write_bytes(b"\xef\xbb\xbf" + text.encode("utf-8"))
+    _shutil.copy2(_TOOLS / "module_apply_steps.py", tools / "module_apply_steps.py")
+    # 主控台輸出編碼設成 UTF-8（重導向時預設是系統 codepage ⇒ 中文訊息解不出來）
+    cmd = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; & '%s' %s" % (
+        str(tools / NEW).replace("'", "''"), " ".join("'%s'" % a.replace("'", "''") if not a.startswith("-") else a for a in args))
+    r = _subprocess.run([_PS, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd],
+                        capture_output=True, timeout=120)
+    out = r.stdout.decode("utf-8", "replace")
+    m = re.search(r"^::RESULT:: v=2 status=(\S+)", out, re.M)
+    assert m, out[-1500:]
+    return m.group(1), out
+
+
+def test_executed_module_key_reaches_the_rollback_branch(tmp_path):
+    status, out = _run_ps1(tmp_path, "-Rollback", "-ModuleKey", "zz", "-Yes")
+    assert "需要 -ModuleKey" not in out, "傳入的 -ModuleKey 被清空了（$script:ModuleKey 遮蔽參數）"
+    assert status == "module_rollback_refused", (status, out[-800:])
+
+
+def test_executed_rollback_without_module_key_is_bad_args(tmp_path):
+    status, out = _run_ps1(tmp_path, "-Rollback", "-Yes")
+    assert status == "bad_args" and "需要 -ModuleKey" in out
+
+
+def test_executed_apply_path_refuses_the_rollback_only_parameter(tmp_path):
+    status, out = _run_ps1(tmp_path, "-PackagePath", str(tmp_path / "nope"), "-ModuleKey", "zz", "-Yes")
+    assert status == "bad_args" and "只用於 -Rollback" in out, (status, out[-800:])
