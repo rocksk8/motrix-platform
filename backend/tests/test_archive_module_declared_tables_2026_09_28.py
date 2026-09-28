@@ -45,12 +45,27 @@ def test_only_declared_t1_with_valid_names_are_listed(registry_snapshot, caplog)
            {"name": "quotations", "class": "T1"}])            # 已在寫死清單
     with caplog.at_level(logging.ERROR, logger="archive"):
         tables = archive._daily_backup_tables()
+        archive.backed_up_table_names()
     mine = _mine(tables)
     assert mine == {archive.MODULE_BACKUP_PREFIX + SYN_KEY + "-zz_syn_t1": "SELECT * FROM zz_syn_t1 ORDER BY rowid"}
     assert "zz_syn_t1" in archive.backed_up_table_names()
     assert sum(1 for sql in tables.values() if archive._BACKUP_TABLE_RE.findall(sql) == ["quotations"]) == 1
-    logs = caplog.text
-    assert "bad name; DROP TABLE users" in logs and "'Upper'" in logs and "zz_syn_t2" in logs
+    assert caplog.text == "", "取清單（一輪會呼叫好幾次）不記 log；只有彙總檔固定欄位那一次記（E3-S1）"
+
+
+def test_skipped_t2_goes_into_the_summary_and_is_logged_once_per_round(registry_snapshot, caplog):
+    """E3-S1：宣告 T2 而沒匯出的表寫進彙總檔 `skipped_t2`（產物看得到），ERROR 每輪一次。"""
+    _load([{"name": "zz_syn_t1", "class": "T1"}, {"name": "zz_syn_t2", "class": "T2"},
+           {"name": "bad name", "class": "T1"}])
+    with caplog.at_level(logging.ERROR, logger="archive"):
+        header = archive._daily_backup_summary_header("2026-09-28", "now")
+        archive._daily_backup_tables()
+        archive._daily_backup_tables()
+    assert SYN_KEY + ".zz_syn_t2" in header["skipped_t2"]
+    assert caplog.text.count("zz_syn_t2") == 1 and caplog.text.count("'bad name'") == 1
+    # 反向控制：模組未載入 ⇒ 不在 skipped_t2
+    registry._LOADED.pop(SYN_KEY)
+    assert SYN_KEY + ".zz_syn_t2" not in archive._daily_backup_summary_header()["skipped_t2"]
 
 
 def test_not_loaded_module_is_not_listed_and_export_has_no_error(client, registry_snapshot, tmp_path, monkeypatch):
