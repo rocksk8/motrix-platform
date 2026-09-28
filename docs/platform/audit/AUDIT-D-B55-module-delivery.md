@@ -295,3 +295,34 @@
 - **S4-S1　套用工具版本不要用字串比較**：`_verify_module` 用 `str(have) < str(need)`。現行版本格式 `2026-09-28g` 在字尾是單一字母時可以，到 `…z` 之後（`aa`）就會比錯。訂格式（正規式）＋比較函式，完整包那一側若有同樣的比較一併換
 - **S4-S2　lock 的頁面路徑要驗形狀**：`apply` 對 `lock["pages"]` 的每個 rel 直接 `root / rel` 寫入，`check` 只驗雜湊。lock 在簽章範圍內，所以不是外部攻擊面；但單模組包的承諾是「只動該模組與它宣告的頁面」，建議 preflight 驗每個 rel 符合 `^frontend/pages/[a-z0-9-]+\.html$` 且 resolve 後在 `frontend/pages` 底下（rollback 刪除 `files_after` 的頁面時同一套）
 - **S4-O1（觀察）**：正式機升到新 delivery.py 之前，儀表板的包清單會把模組包列成一般的包（product＝`mod-…`）；按下去會被上述兩道擋下，訊息是「包裡沒有 apply_update.ps1」。建議正式機 Claude 指示裡提一句
+
+## 11. 複核 S3R-M1＋稽核 writeback／S6／S7：wip/b-module-delivery-2 5a0d2bf1（D，2026-09-28）
+
+> 拋棄式 worktree 跑探針（不提交，跑完刪、暫存已清）；writeback 另以暫存目錄實跑 CLI。
+
+- ✅ S3R-M1 關閉（5a0d2bf1）
+- S4-S1（`tool_version_key`，格式不對不猜）、S4-S2（lock 頁面只准 `frontend/pages/<檔名>.html`，check 先驗形狀再驗雜湊）都已採納
+- **新必修 1（W-M1）、建議 2、觀察 1。**
+
+| 探針 | 情境 | 結果 |
+|---|---|---|
+| P8 | zz 中斷（留 in_progress）→ 套 yy | `interrupted_apply_pending`，安裝目錄一檔不動 ✔；回滾 zz 之後 yy 可以套 ✔ |
+| P9 | zz 的 in_progress 紀錄 `apply.json` 壞掉 → 套 yy | **放行**（見 S5-S1） |
+| W1 | 交付資料夾 `writeback --name <yy 的包>`、**不帶 `--since`**，logs 裡只有 9/1 一份 zz 的 success | 寫回「yy 的包 succeeded」，內容是 zz 的 module_key／to_version（見 W-M1） |
+
+**W-M1（必修）　writeback 要把結果綁到這一個包；`--since` 不可以省略**
+- `find_result(since=None)` 拿 logs 裡**最新的任何一份** result.json；writeback 不比對它是不是這個包的結果 ⇒ 這次套用若在寫出結果檔之前就失敗（參數錯、腳本沒跑起來），寫回的是上一次的 success，`outcome_from_result` 照判 succeeded
+- 後果：開發機 `module_overlays`／`latest_prod_commit` 讀的就是這份 ⇒ 開發機以為正式機裝了某模組某版，下一次出貨的基準（`--prod-base`、`--overlay`）就建立在錯的現況上
+- 指示文件（S7 §4）有帶 `--since`，但 CLI 允許省略，而且帶了 `--since` 也只擋「時間之前」，不擋「別的包」
+- 修法：
+  1. `--since` 設為必填
+  2. writeback 讀 `<交付>\packages\<包名>\delivery.json`，比對結果的 kind、（module 包）`module_key`＋`to_version`＋`prod_base_commit`、（完整包）`commit`；任一不符 ⇒ outcome＝failed，並在寫回紀錄帶 `mismatch` 說明
+  3. 找不到結果 ⇒ failed（現在已經是）
+- 題：W1 情境 ⇒ failed；同包、時間之後的 success ⇒ succeeded（正對照）
+
+**建議**
+- **S5-S1　壞掉的套用紀錄要兩邊一致**：`apply_plan.interrupted_module_applies` 把讀不懂的 `apply.json` 當 in_progress（擋下），`module_update.pending_interrupted` 卻因 `_record()` 回 None 而當成沒有（P9 放行）。`apply.json` 是原子寫入，壞掉機率低；但兩個入口對同一個狀態的判斷應該一樣，建議 module_update 也當 in_progress（不猜）
+- **S5-S2　錯誤訊息不要教人繞過指示**：`interrupted_apply_pending` 的訊息寫「先用 module_update.py rollback --key … --backup … 回到套用前」，而 S7 §5 寫「不要直接執行 `module_update.py rollback`（不停服、不重啟）」。正式機 Claude 會讀到錯誤原文。訊息改成「先用套用腳本的回滾模式處理中斷的套用（見正式機指示）」，並在 S7 的狀態表加一列 `interrupted_apply_pending`
+
+**觀察**
+- **S5-O1**：S7 §5 的回滾參數還是「〈A 定稿後填〉」；在 A 的 S5 定稿、填上之前，這份指示不能交給正式機
