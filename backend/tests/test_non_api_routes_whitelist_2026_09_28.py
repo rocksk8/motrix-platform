@@ -20,15 +20,8 @@ ALLOWED = {
         "首頁 index.html（靜態檔），登入導向由前端 auth-guard 處理，不含資料",
     "<mount>":
         "StaticFiles 掛在根目錄：frontend/ 底下的靜態檔（HTML／CSS／JS／圖），不含資料",
-    # ⚠ 既有、未經裁示（E 2026-09-28 盤點時發現，列出待主持裁示，不在本題改行為）：
-    "/openapi.json":
-        "FastAPI 預設的 API 結構描述：不含資料，但公開了全部 /api 路徑與參數形狀；是否關閉待主持裁示（E3-S2 盤點附帶發現）",
-    "/docs":
-        "FastAPI 預設的 Swagger UI：讀 /openapi.json；呼叫任何 /api 仍要 token。是否關閉待主持裁示（同上）",
-    "/docs/oauth2-redirect":
-        "Swagger UI 附帶的 OAuth 轉址頁（靜態），隨 /docs 一起決定是否關閉；本身不含資料（同上）",
-    "/redoc":
-        "FastAPI 預設的 ReDoc：讀 /openapi.json；本身不含資料。是否關閉待主持裁示（同上，隨 /docs 一起決定）",
+    # 2026-09-28 主持裁示：FastAPI 的 /openapi.json、/docs、/docs/oauth2-redirect、/redoc 預設關閉
+    # （main.MOTRIX_API_DOCS，test_api_docs_off_2026_09_28）⇒ 從白名單移除（原四條為 E 盤點時列出待裁示）
 }
 
 

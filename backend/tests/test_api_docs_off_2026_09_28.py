@@ -16,7 +16,8 @@ from fastapi.testclient import TestClient
 DOC_PATHS = ("/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc")
 
 
-def _main():
+def _main(client):
+    """main 由 client fixture 載入（不自己 import main：有副作用）；不取 fixture 單獨跑會 KeyError。"""
     return sys.modules["main"]
 
 
@@ -25,8 +26,8 @@ def test_docs_routes_are_off_by_default(client, path):
     assert client.get(path).status_code == 404, "%s 未登入可讀（應預設關閉）" % path
 
 
-def test_reverse_control_flag_on_registers_all_four():
-    kw = _main()._docs_kwargs({"MOTRIX_API_DOCS": "1"})
+def test_reverse_control_flag_on_registers_all_four(client):
+    kw = _main(client)._docs_kwargs({"MOTRIX_API_DOCS": "1"})
     app = FastAPI(docs_url=kw["docs_url"], redoc_url=kw["redoc_url"], openapi_url=kw["openapi_url"])
     c = TestClient(app)
     for p in DOC_PATHS:
@@ -34,9 +35,9 @@ def test_reverse_control_flag_on_registers_all_four():
 
 
 @pytest.mark.parametrize("value", [None, "", "0", "true", "yes", " 1"])
-def test_only_the_exact_flag_turns_docs_on(value):
+def test_only_the_exact_flag_turns_docs_on(client, value):
     env = {} if value is None else {"MOTRIX_API_DOCS": value}
-    assert _main()._docs_kwargs(env) == {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    assert _main(client)._docs_kwargs(env) == {"docs_url": None, "redoc_url": None, "openapi_url": None}
 
 
 def test_app_schema_is_still_available_in_process(client):
