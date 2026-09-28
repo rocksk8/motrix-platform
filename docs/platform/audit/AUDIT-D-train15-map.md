@@ -233,3 +233,38 @@
 
 - **T15-C1 完成**：列車可以用這份 resolved。version_manifest 與 CORE-SPEC 的合法合併由 B 在 27c4dd22 處理（地圖 28g 合成一筆、決定表三列都留），D 沒有驗那兩個檔的內容
 - B 提的「geo.py:923 Google error_message 也要遮金鑰」：同意列下一輪。error_message 是 Google 回的文字，目前不含金鑰；防的是日後的變化
+
+## 10. 最終審：第十五班部署包 8b04d99d（D，2026-09-28）
+
+**判定：可上正式機。**
+
+- **包**（D:\MOTRIX-DRILLS\t15-package\20260928_142316_8b04d99d）：與上一班同一支腳本逐檔算 git blob，對照 `ls-tree 8b04d99d`
+
+| 項目 | 結果 |
+|---|---|
+| 包內檔數 | 546 |
+| 與 blob 完全相同 | 519 |
+| 只差換行 | 23：全部在 `.gitattributes` 規則內（`eol=crlf`／`text=auto`）。markerclusterer vendor 檔位元組原樣（sha256 e4261b90…，與 npm 相同） |
+| 內容不同 | 1：version_manifest.json，建包投影；423 對 423 筆語意相等 |
+| 建包產生 | 3：deploy_manifest（commit 8b04d99d、built_at 14:23:19）、.build_commit、modules.lock |
+| pyc | 0 |
+| 建包後的改動 | 沒有 |
+
+- **雲端 payload**：546 檔與本機包逐檔 SHA-256 相同；package.sha256 的 SHA-256＝44EF1EE1…60FB，與主持的相同；驗章沿用主持的獨立驗證。私鑰沒有讀
+- **第四輪演練**（D:\MOTRIX-DRILLS\apply-run-t15）：
+  - run_T14：822286ed ⇒ success
+  - run_T15：8b04d99d ⇒ success；刪 0、新增 4；健檢第 1 次就過
+  - pkgs\T15 排除 `__pycache__` 之後，與最終包 546 檔位元組相同（多出的 pyc 是乾跑在包目錄 import 產生的，即 AH-O3）
+  - 安裝目錄 399 個程式檔（扣掉機器自己的 autostart.bat）與最終包相同
+- **「沒有瀏覽器金鑰＋地圖 ID 就不用 Google 內容」**：
+  - 後端唯一的 Google Maps 呼叫是 geo.py 的 Geocoding
+  - 用到 Geocoding 結果的三個入口（/api/map/points、背景預熱、據點存檔）都依 `google_basemap()` 進 `without_google_content()`
+  - Places「附近商家」標著尚未啟用，沒有呼叫點
+  - ⇒ 伺服器金鑰可以保留。唯一例外：它仍會被用來查地址；在非 Google 底圖時那一階會被跳過，Google 座標不會出現在畫面上
+- **登記表**：open 為空；本班 D 的必修（SST-M1、GEO-M1、GB-M1、GB-M2）都已關
+- **觀察**：
+  - AH-O3 仍在：乾跑在包目錄產生的 pyc，會經 Step 3 的 robocopy（沒有 `/XD __pycache__`）進正式機。由同一份原始碼編譯，無害；與「包內無 pyc」的判準精神不一致，列下一輪
+  - GOOGLE-BASEMAP.md §7.1 與 §7.3 不一致（主持已列下一輪）
+- **上線條件**：
+  - 照 RUNBOOK §8：正式機現在是 822286ed，腳本已有版本檢查；包裡的 tools 仍要先複製（儀表板路徑會自動做）
+  - Google 底圖啟用前後照 GOOGLE-BASEMAP §7.2 人工驗收——要真的金鑰，D 沒有驗
