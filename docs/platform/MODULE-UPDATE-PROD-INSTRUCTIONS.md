@@ -1,6 +1,6 @@
 # 給正式機 Claude 的指示範本：套用單模組更新包
 
-> 🔴 **稽核 D S5-O1：B55F-M1 關閉之前，這份範本不可以交給正式機。** §5 的回滾參數已照 A 定稿（1128a3ac）填入；尚待：套用腳本回滾模式收不到 `-ModuleKey` 的缺陷修正（場次 D 2026-09-29 紅）＋場次 D 重跑綠＋D 關閉 B55F-M1。
+> 〔已解除（2026-09-29）：原有「稽核 D S5-O1：B55F-M1 關閉之前不可以交給正式機」警語；§5 回滾參數已照 A 定稿填入、場次 D 在 9bd91371 綠、B55F-M1 由 D 關閉（AUDIT-D-B55 §18）〕
 
 > B55 S7（設計 docs/platform/MODULE-UPDATE-DELIVERY.md §8 的全文版）。每次出單模組包時，主持把 `〈〉` 的欄位填好、
 > 連同包名交給使用者，由使用者貼給正式機的 Claude。**正式機目前沒有本機儀表板**（主持裁示 2026-09-28）⇒ 全程是正式機 Claude
@@ -101,7 +101,7 @@
 | status | 意思 | 下一步 |
 |---|---|---|
 | `module_rollback_ok` | 已回到套用前的版本（或套用前沒有這個模組），服務正常 | 做第 4 節寫回；再跑第 1 節 `list --json` 確認版本 |
-| `module_rollback_refused` | 沒有回滾，一個檔都沒動（停服後才被拒的，服務已照原樣重啟）。`rollback_code`：`needs_database`＝見上（要連資料庫）；`db_snapshot_missing`＝找不到那次套用前的資料庫快照、無法連資料庫還原；`module_changed`／`state_changed`／`base_changed`／`interrupted_not_latest`＝之後又套過別的模組包或完整包、或不是最新一份；`backup_corrupt`／`no_backup`／`backup_not_found`＝備份壞了或不在 | 原文回報，**連同 `rollback_code`**；`backup_corrupt` 照 §3 表 W-O1 那一列（不動 `module_backups`）；`bad_args` 等其他 status 也原文回報 |
+| `module_rollback_refused` | 沒有回滾，一個檔都沒動。依 `rollback_code` 分兩種情況：**（一）停服前就拒絕（服務沒停過）**：`needs_database`＝那次套用新增了 migration，要連資料庫（見上）；`db_snapshot_missing`＝找不到那次套用前的資料庫快照、無法連資料庫還原；`no_backup`／`backup_not_found`／`backup_corrupt`＝回滾預檢時備份不在或壞了。**（二）停服後才被拒（服務已照原樣重新啟動）**：`module_changed`／`state_changed`／`base_changed`／`interrupted_not_latest`＝之後又套過別的模組包或完整包，或要回滾的不是最新一份（§10 拒絕碼）；停服後才發現備份不在或壞了，也歸這一種。第二種若訊息寫「健康檢查沒有回應」＝服務重啟後沒確認到正常 | 原文回報，**連同 `rollback_code`**；`backup_corrupt` 照 §3 表 W-O1 那一列（不動 `module_backups`）；第二種出現「健康檢查沒有回應」⇒ **立刻**回報，用瀏覽器確認系統能不能用；`bad_args` 等其他 status 也原文回報 |
 | `module_rollback_unhealthy` | 程式已回滾，但回滾後的健康檢查沒過（或資料庫沒還原成功） | **立刻**回報使用者；用瀏覽器確認系統能不能用 |
 | `module_restore_failed` | 回滾中途可能半套（`rollback_code`：`restore_mismatch`／`unexpected`）：該模組已被**停用**、其他功能照常 | 立刻回報，連同 `rollback_code`；等開發機指示 |
 
