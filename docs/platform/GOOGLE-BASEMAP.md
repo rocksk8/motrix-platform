@@ -110,5 +110,5 @@ e2e 以攔截回一支假的 `google.maps` 驗「我們呼叫轉接層與畫面�
 | 9 | 故意填錯地圖金鑰 | 畫面顯示「Google 地圖金鑰無法使用…」而不是一片空白 |
 | 10 | Cloud Console → Maps JavaScript API 用量 | 與額度設定頁「地圖載入」的近似次數同一量級（近似，不要求相等） |
 
-### 7.3 待裁示
-- 沒填地圖 ID 時怎麼辦（主持問使用者中；目前轉接層照傳 `mapId`，未寫分支）。
+### 7.3 裁示（2026-09-28 12:30，使用者）
+- 瀏覽器金鑰＋地圖 ID **兩項都填**才切 Google 底圖；缺一項＝OSM、不使用任何 Google 內容（`geo.google_basemap()`）。只做 AdvancedMarkerElement，不做舊 Marker 分支。官方示範用 map ID 只准在測試。

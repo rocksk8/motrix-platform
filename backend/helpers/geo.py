@@ -424,11 +424,12 @@ def google_content_blocked() -> bool:
 def google_basemap() -> bool:
     """地圖底圖是不是 Google。
 
-    第十五班 ②(b)（使用者裁示，CORE-SPEC dee64c54）：**有地圖（瀏覽器）金鑰 ⇒ Google 底圖**
-    （Maps JavaScript API）；沒有 ⇒ OSM＋免費定位。它決定 /api/map/points、背景預熱、據點存檔
+    第十五班 ②(b)（使用者裁示，CORE-SPEC dee64c54）：**地圖（瀏覽器）金鑰＋地圖 ID 兩項都有 ⇒ Google 底圖**
+    （Maps JavaScript API＋AdvancedMarkerElement）；缺一項 ⇒ OSM＋免費定位、不使用任何 Google 內容
+    （使用者裁示 2026-09-28 12:30：不做舊 Marker 分支）。它決定 /api/map/points、背景預熱、據點存檔
     要不要擋 Google 座標（SST §6.2），也決定 map.html 載哪一種地圖（`/api/map/config`）。
     ⚠️ 呼叫一律經模組屬性（`geo.google_basemap()`／模組內裸名），測試 patch 才打得到。"""
-    return bool(google_browser_key())
+    return bool(google_browser_key() and google_map_id())
 
 
 def has_google_coord(address) -> bool:

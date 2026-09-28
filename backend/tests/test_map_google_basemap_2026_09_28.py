@@ -28,10 +28,14 @@ def h(client, make_user, monkeypatch):
     return {"Authorization": "Bearer " + r.json()["token"]}
 
 
-def _set_keys(server=SERVER_KEY, browser=""):
+def _set_keys(server=SERVER_KEY, browser="", map_id=None):
+    """map_id 省略 ⇒ 有瀏覽器金鑰就一併填地圖 ID（兩項都有才切 Google，使用者裁示）。"""
     from helpers.settings import _get_setting, _set_setting
     cur = _get_setting("company_profile", {}) or {}
-    _set_setting("company_profile", {**cur, "google_maps_api_key": server, "google_maps_browser_key": browser})
+    if map_id is None:
+        map_id = "test-map-id" if browser else ""
+    _set_setting("company_profile", {**cur, "google_maps_api_key": server, "google_maps_browser_key": browser,
+                                     "google_maps_map_id": map_id})
 
 
 def _usage(sku):
@@ -50,7 +54,7 @@ def test_browser_key_means_google_basemap_and_only_that_key_is_returned(client, 
     before = _usage(geo.USAGE_SKU_DYNAMIC_MAPS)
     r = client.get("/api/map/config", headers=h)
     assert r.status_code == 200
-    assert r.json() == {"basemap": "google", "browserKey": BROWSER_KEY, "mapId": None}
+    assert r.json() == {"basemap": "google", "browserKey": BROWSER_KEY, "mapId": "test-map-id"}
     assert geo.google_basemap() is True
     assert _usage(geo.USAGE_SKU_DYNAMIC_MAPS) == before + 1, "回 Google 底圖一次要記一次 dynamic-maps（近似）"
 
@@ -139,11 +143,20 @@ def test_only_whitelisted_files_read_the_server_key():
 
 
 def test_map_id_is_returned_when_set(client, h):
-    from helpers.settings import _get_setting, _set_setting
-    _set_keys(browser=BROWSER_KEY)
-    cur = _get_setting("company_profile", {})
-    _set_setting("company_profile", {**cur, "google_maps_map_id": "abc123mapid"})
+    _set_keys(browser=BROWSER_KEY, map_id="abc123mapid")
     assert client.get("/api/map/config", headers=h).json()["mapId"] == "abc123mapid"
+
+
+@pytest.mark.parametrize("browser,map_id", [(BROWSER_KEY, ""), ("", "abc123mapid")])
+def test_only_one_of_key_and_map_id_means_osm_and_no_key_is_returned(client, h, browser, map_id):
+    """使用者裁示：瀏覽器金鑰＋地圖 ID 兩項都填才切 Google；缺一項 ⇒ osm、不回任何金鑰、不記地圖載入。"""
+    _set_keys(browser=browser, map_id=map_id)
+    before = _usage(geo.USAGE_SKU_DYNAMIC_MAPS)
+    r = client.get("/api/map/config", headers=h)
+    assert r.json() == {"basemap": "osm"}
+    assert BROWSER_KEY not in r.text and SERVER_KEY not in r.text
+    assert geo.google_basemap() is False
+    assert _usage(geo.USAGE_SKU_DYNAMIC_MAPS) == before
 
 
 def test_demo_map_id_never_appears_in_product_code():
