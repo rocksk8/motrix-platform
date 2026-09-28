@@ -801,13 +801,19 @@ def partial_max_workers():
     return _env_cap(PARTIAL_ENV, PARTIAL_MAX_WORKERS)
 
 
+#: --json 時提示改印到 stderr：stdout 只留那一份 JSON（第二十班交會紅：列車設了 MOTRIX_E2E_MAX_WORKERS，
+#: 子行程 `modtest --dry-run --json` 把「[modtest] MOTRIX_E2E_MAX_WORKERS=3」印進 stdout ⇒ module_update.ship_tests 解析失敗）
+_SAY_TO_STDERR = False
+
+
 def _say(msg):
     """印中文提示：被別的程式 import 呼叫時，主控台可能是 cp932／cp950（稽核 B-M1 附帶）⇒ 以 utf-8 寫、壞字取代。"""
+    stream = sys.stderr if _SAY_TO_STDERR else sys.stdout
     try:
-        print(msg)
+        print(msg, file=stream)
     except UnicodeEncodeError:
-        sys.stdout.buffer.write((msg + "\n").encode("utf-8", errors="replace"))
-        sys.stdout.flush()
+        stream.buffer.write((msg + "\n").encode("utf-8", errors="replace"))
+        stream.flush()
 
 
 def cap_workers(extra, limit):
@@ -1182,6 +1188,9 @@ def run_full(extra, a):
 
 
 def main(argv=None):
+    # 在任何提示之前定好（下面建 parser 時就會讀環境變數上限並印提示）
+    global _SAY_TO_STDERR
+    _SAY_TO_STDERR = "--json" in (sys.argv[1:] if argv is None else argv)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--base")
