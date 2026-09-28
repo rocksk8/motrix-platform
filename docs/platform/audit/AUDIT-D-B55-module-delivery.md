@@ -183,3 +183,47 @@
 **DB5-S2（建議）　③ 的完全相等比對擋不到拼出來的字串**
 - `"case." + "access"`、f-string 這類會漏過③；而①②只看 registry 名稱，也看不到
 - repo 目前沒有這種寫法。可以在取用函式的引數不是常數時已經判不了的基礎上，再加一題：能力字串的組成片段（第一個 `.` 之前的前綴，例如 `case.`）出現在 BinOp／JoinedStr 裡 ⇒ 判不了。成本低，可以留到下一輪
+
+## 8. 分段稽核 S3：wip/b-module-delivery-2 87a472b1（D，2026-09-28）
+
+> 範圍：0b646a01..87a472b1（單一 commit）。拋棄式 worktree；探針題不提交、跑完即刪；暫存已清。
+
+### 8.0 結論
+
+- **必修 2、建議 2、觀察 2。**
+- 相關題 39 過（delivery、states_file、module_update）。D 補做突變 4 個全紅：基準 commit 不比、同一版不拒絕、「本來沒有」的狀態檔回滾時不刪、狀態檔改回綁排程閘門
+- 主持指定的「套用中途失敗」**不涵蓋**，見 S3-M1；另外，逐位元組還原在「之後有別人寫過這些檔」時會蓋掉別人的內容，見 S3-M2
+
+### 8.1 必修
+
+**S3-M1　套用中途失敗之後，回滾找不到這次的備份，或者回滾到更舊的版本**
+
+- `apply()` 先刪掉整個模組資料夾（:483），再複製新版（:487）、寫 lock、寫三個狀態檔；**`apply.json` 在最後才寫**（:500）
+- `backups()` 只認有 `apply.json` 的備份 ⇒ 中途失敗的這一次，備份資料夾雖然在，回滾卻看不到
+- 探針（在 `shutil.copytree` 模擬磁碟滿）：
+  - P1　第一次套用失敗：模組資料夾**已刪**，`backups()`＝[]，`rollback` 拒絕（「沒有任何套用備份」）⇒ 安裝目錄停在「模組不見了」，而且沒有工具救得回來
+  - P2　v1→v2 套用成功之後，v2→v3 套用中途失敗：`rollback` 用的是**上一次（v1→v2）的備份** ⇒ 模組回到 **1.0.0**（不是失敗前的 1.1.0），三個狀態檔回到 v2 之前。回報成功、雜湊檢查通過（它比對的是那份備份自己的 files_before）＝〈降級之後它還是會動〉
+- ps1（S4）一定會在「套用失敗」時呼叫 rollback，所以 P2 在正式機上會發生，而且不會有人發現
+- 修法（擇一或兩者都做）：
+  - 在動任何檔**之前**先寫 `apply.json`（`status: "in_progress"`、`files_before`、`pages_after`＝包裡 lock 的頁面），全部完成後改成 `complete`；回滾認得 in_progress 的備份，移除的對象以 `files_after`（沒有就用「模組資料夾＋pages_after」）為準
+  - `apply()` 自己包 try/except：任一步失敗 ⇒ 立刻用這次的 bdir 還原（檔案＋lock_before＋state_before），再把原本的例外往外丟
+- 題目：P1、P2 兩種情境各一題（失敗後安裝目錄逐位元組等於套用前）
+
+**S3-M2　逐位元組還原會蓋掉「之後」別人寫入的共用檔**
+
+- 回滾整檔還原 `modules.lock.json`（lock_before）與三個狀態檔（state_before）。這些檔**不是這個模組專用的**：完整包，以及**其他模組**的單模組套用，也會寫它們
+- 探針 P3：套用 zz 之後，模擬裝了完整包 Q（`.deployed_commit.json`、baseline、lock 都改寫）⇒ `rollback zz` **照做**：baseline 回到舊 commit 的內容，而 `.deployed_commit.json` 仍是 Q；lock 整份回到完整包之前 ⇒ 下一次完整包的刪除計畫用錯基準、lock 跟實際安裝的檔對不上
+- 同一類（讀碼推得，沒有另外做探針）：套用 A → 套用 B → 回滾 A ⇒ B 的 lock 條目、baseline 片段、覆蓋紀錄、manifest 條目全被還原成「B 之前」，而 B 的檔還在
+- 修法：套用完成時記下 lock 與三個狀態檔的雜湊（寫進 apply.json）；回滾前比對「現在的雜湊＝當時記的」，**不相等就拒絕整檔還原**，並說明原因（之後有完整包或其他模組套用過；請改用完整包，或先回滾較新的那一次）。另外 `deployed_commit(root) != rec.prod_base_commit` 時直接拒絕
+- 題目：P3（完整包之後回滾 ⇒ 拒絕、安裝目錄不動）、A→B→回滾 A ⇒ 拒絕
+
+### 8.2 建議
+
+- **S3-S1　中途失敗留下的備份資料夾不會被清掉**：`_prune_backups` 只數有 `apply.json` 的備份。S3-M1 修完（先寫 in_progress）之後就會被納入，這一條自然消失；如果選 try/except 的修法，要記得把失敗那一份也納入清理
+- **S3-S2　`list --json`**：主持裁示「正式機可見性靠 ::RESULT::／result.json＋list --json」，但 `list` 目前**沒有 `--json`**（:601），只有純文字輸出。S4 之前補上（每個模組的版本、覆蓋紀錄是否仍有效、備份清單與狀態）
+
+### 8.3 觀察
+
+- **S3-O1**：偏離 U-M4（不搬到 backend/tools）：理由成立。讀碼確認根目錄 `tools/` 隨完整包出貨（`product_select.REQUIRED_PKG_FILES` 要求 `tools/platform/upgrade.py`），正式機本來就有這一份。設計表已用〔更正〕保留原句
+- **S3-O2**：DB5-S1 關閉條件成立：狀態檔改在 `mount_modules()` 之後、只在 pytest 之下不寫，並多記 `schedulers_disabled`（突變 S4 紅）。會 `import main` 的非測試程式有 `tools/platform/startup_writes.py`（在拋棄式複本裡跑，不影響安裝目錄）與建包腳本（開發機），都不會寫到正式機的狀態檔
+- ✅ DB5-S1 關閉（87a472b1）
