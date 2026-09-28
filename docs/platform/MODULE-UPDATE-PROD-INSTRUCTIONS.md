@@ -61,6 +61,7 @@
 |---|---|---|
 | `success` | 已套用，新版本已載入，服務正常 | 做第 4 節寫回 |
 | `module_preflight_failed` 而訊息是「有中斷的套用（備份 …）」 | 上一次套用中途中斷（備份還在）；**所有模組**都不能套，完整包也不行 | 不要自己處理：回報使用者，照 §5 用套用腳本的回滾模式回到套用前（稽核 D S5-S2） |
+| `module_preflight_failed` 而訊息是「有中斷的套用」，照 §5 回滾時又回 `backup_corrupt`（紀錄檔 apply.json 讀不懂） | 套用被擋、回滾也做不了：只能人工處理（稽核 D W-O1） | **回報開發機，由開發機指示人工檢查；正式機 Claude 不可自行刪除或修改任何紀錄檔**（`<ROOT>\module_backups\` 底下的任何檔都不要動） |
 | `module_preflight_failed`、`duplicate_version`、`bad_args`、`package_invalid`、`apply_locked`、`apply_locked_stale` | 沒有套用（正式機沒被碰） | 原文回報；`apply_locked_stale` 要人確認後才可以刪鎖檔 |
 | `backup_failed`、`migration_dryrun_failed`、`module_load_dryrun_failed` | 套用前的檢查擋下，正式機沒被碰 | 原文回報（開發機要修模組） |
 | `module_copy_failed`（rolled_back＝restored） | 換檔中途失敗，已自動還原到套用前 | 原文回報 |
