@@ -28,7 +28,7 @@
 | `core:cloud_storage` | L1 | Pluggable cloud backup storage backend (2026-09-07, architecture map §6.4).（無單位卡） | 9 | 2 | — |
 | `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 71 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
-| `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 10 | 0 | — |
+| `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 11 | 0 | — |
 | `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 19 | 14 | — |
 | `core:photos` | L1 | Photo upload processing: EXIF GPS extraction and watermarking.（無單位卡） | 2 | 2 | — |
 | `core:trail` | L1 | 操作軌跡（`user_request_log`）的共用設定，以及把路徑翻成人話的對照表。（無單位卡） | 23 | 2 | — |

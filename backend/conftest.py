@@ -335,6 +335,9 @@ def _app(tmp_path_factory):
     # test_cloud_archive_policy_2026_09_15.py）。環境變數也一併清掉：它的優先序在
     # 檔案之前，從開發者的 shell 漏進來會讓整批測試莫名其妙地紅。
     _os.environ.pop("MOTRIX_CLOUD_ARCHIVE", None)
+    # 同理（2026-09-28 A46-S1）：開發機可自設 MOTRIX_API_DOCS=1 開文件頁；漏進測試會讓
+    # 「預設關閉」題與非 /api 白名單題紅。main 在 import 時讀它 ⇒ 必須在下面 import main 之前清掉。
+    _os.environ.pop("MOTRIX_API_DOCS", None)
     archive._NO_CLOUD_MARKER_PATH = str(base / "no_cloud_archive_marker")
 
     archive_base = base / "archive_base"

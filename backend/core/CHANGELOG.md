@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.67 — 2026-09-28（E 暫用，列車取號；wip/e-company-gate-impl 第一段：本公司資料設定閘門的正式機段）〔core_bump：暫用 1.66 → 1.65〕〔core_bump：暫用 1.65 → 1.67〕
+## 1.68 — 2026-09-28（E 暫用，列車取號；wip/e-company-gate-impl 第一段：本公司資料設定閘門的正式機段）〔core_bump：暫用 1.66 → 1.65〕〔core_bump：暫用 1.65 → 1.67〕〔core_bump：暫用 1.67 → 1.68〕
 - L1（新增）：`helpers.company_setup`——判定（`status`：確認紀錄＋安裝識別＋必要欄位雜湊＋開發者指紋需簽章確認檔）、`confirm`、`backfill_once`（每庫一次、不丟例外）、`startup_install_check`（識別檔重建且已有紀錄 ⇒ ERROR＋告警）、暫時放行（`grace_state`、`observe`：有效期＝min(until, first_seen＋72h)）、統編檢查碼 `ubn_valid`、`alert`（每日一次）。設計 docs/platform/COMPANY-SETUP-GATE.md
 - L1（新增）：`helpers.company_identity.identity_from_profile(profile, location_id)`（`location_identity` 的純函式版；行為不變）
 - L1（新增）：`core.paths.INSTALL_IDENTITY_FILE`／`COMPANY_CONFIRMATION_FILE`／`COMPANY_SETUP_GRACE_FILE`，並登記進 `core.upgrade.CONFIG_FILES`（CG2-M1）；`verify_package` 拒收、`.gitignore`
@@ -10,6 +10,9 @@
 - 〔第二段〕L1（新增）：`company_setup.gate`（中介層與輸出端共用、行程內快取、不丟例外：判定失敗 ⇒ `GATE_UNDETERMINED`，Q7＝C）、`compile_allowed`／`is_allowed`（白名單以 Starlette `compile_path` 比對 (方法, 路由樣板)）、`reset_cache` 與常數；`main.auth_middleware`：未設定 ⇒ 白名單外 /api 一律 428 `company_setup_required`；判定失敗／暫時放行 ⇒ 放行＋標頭 `X-Motrix-Company-Setup`；`GET /api/settings/company-setup/status`；`PUT /api/settings/company-profile` 帶 `confirmIdentity` 才寫確認紀錄（先驗後寫）；頁面 `company-setup-required.html`、設定頁確認卡、`notif.js` 導頁與橫幅；demo 帳號暫不擋（第三段種虛構示範公司）
 - 〔第三段〕L1（新增）：`company_setup.CompanySetupRequired`（HTTPException 428；`main.py` 專屬 handler 回與中介層同形 JSON）、`require`、demo（`DEMO_INSTALL`／`DEMO_PROFILE`／`DEMO_WATERMARK`／`seed_demo`；`status(demo=)`、`gate(demo=)` demo 與正式分開判定與快取）、`observe_expiry`（簽章檔剩 ≤ 30 天、放行剩 ≤ 6 小時告警）、判定失敗 60 秒快取（`ERROR_CACHE_SECONDS`，CG5-S2）與告警行程內節流；`company_identity.require_for_output(kind, ident)`／`identity_for_output`／`PAYMENT_BANK_FIELDS`／`CODE_BANK_REQUIRED`。**行為變更**：`company_name`／`company_heading`／`contact_line`／`name_pair`／`footer_line` 與 pdf_gen `_identity_head／_identity_foot／_identity_foot_short`、勞報單視圖一進來先問第二道（未設定／判定失敗 ⇒ 428，CG5-M1）；請款單產生另驗匯款三欄（428 `company_bank_required`）；傳票 PDF 與個資告知的公司名改走 company_identity；月報排程被擋 ⇒ 不寄、告警、月份不前進；demo 登入種虛構示範公司、單據加浮水印，中介層不再豁免 demo；`/api/platform/menu` 回 `companySetup`，未設定時只留設定頁入口；已確認後一般存檔改必要欄位 ⇒ 409 `company_setup_reconfirm`（CG5-S1）；`core.upgrade._is_our_install` 只認統編（刪名稱片段，§2-④）
 - 啟動：`main.py` 啟動時做安裝識別檢查＋一次性 backfill（閘門本身尚未擋任何 API；第二段才接中介層）；信件類型 `company_setup_alert`（系統技術，超級管理員）
+
+## 1.67 — 2026-09-28（A 暫用，列車取號；wip/a-api-docs-off：主持裁示）〔core_bump：暫用 1.65 → 1.67〕
+- L0（新增）：`main.API_DOCS_ENV`（"MOTRIX_API_DOCS"）、`main._docs_kwargs(environ)`——API 文件頁（/openapi.json、/docs、/docs/oauth2-redirect、/redoc）預設不註冊，只有旗標恰為 "1" 才開；程式內 `app.openapi()` 不受影響
 
 ## 1.66 — 2026-09-28（E 暫用，列車取號；wip/e-lodging-impl：第十八班全域守門）
 - L1（新增）：`db.demo_module_tables()`——展示重置時，已載入模組 `module.json` 宣告的表依分類處理（T1／T2 清空、T3 保留；規則同每日 JSON 備份），L1 靜態清單不寫 L2 表名；`test_demo_reset` 的分類窮盡題把模組宣告算進去

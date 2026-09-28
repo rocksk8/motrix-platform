@@ -137,3 +137,144 @@
 
 - §6.3-1 拿掉 `-SkipCompanySetupPreflight`（原句以刪除線保留＋更正說明）；§7-⑨ 改為「正式機 ps1 沒有任何略過預檢的參數」的掃描題＋正對照；演練以副本注入。比對條件（skip／bypass＋preflight／company）不會誤中既有的 `-SkipAutoRollback`
 - ✅ CG3-M1 關閉（6387eb87）
+
+---
+
+## 7. 完整稽核實作段①（正式機段）：wip/e-company-gate-impl db551e01（D，2026-09-28）
+
+> 範圍：d6f196d7..db551e01 的產品碼：`helpers/company_setup.py`、`tools/company_setup_cli.py`、`apply_update.ps1`（2026-09-28h）、`main.py` 啟動、`core.paths`／`CONFIG_FILES`／`verify_package`。本段不擋任何 API。
+> 拋棄式 worktree：相關題 49 過（core＋cli＋D 探針）；探針不提交、跑完刪、暫存已清。
+
+### 7.0 結論
+
+- **必修 1（CGI-M1）、建議 3、觀察 1。**
+- 最壞情況的回答：**本段不會造成全公司停擺**。中介層還沒有擋任何 API，任何漏做都只會讓「升級被拒」（服務還沒停），或在套用後檢查失敗時自動回滾（連資料庫快照一起還原）
+- 但有一條正式機實際會走的路（用暫時放行先升級）會卡死 backfill，見 CGI-M1
+
+### 7.1 主持指定
+
+**① 正式機第一次升到含本段版本的完整路徑**
+
+| 情境 | 結果 |
+|---|---|
+| 照順序：ensure-install-id → 開發者簽 `company_confirmation.sig` → 升級 | 預檢通過 → 啟動時 backfill 寫確認紀錄 → 套用後檢查通過 ✔ |
+| 漏了第一、二步，直接升級 | ps1 先建識別檔，預檢得 `developer_identity_unsigned` ⇒ `refused_company_setup`，**停服之前**就中止，正式機沒被動 ✔。但拒絕時**沒有印出安裝識別雜湊**，開發者簽不了（CGI-S1） |
+| 簽章檔是對另一個識別簽的 | `install_mismatch` ⇒ 預檢拒絕 ✔ |
+| 升級後因任何原因未設定（backfill 出錯等） | 套用後 CLI 檢查不過 ⇒ `company_setup_rolled_back`，程式與資料庫快照一起還原 ⇒ `BACKFILL_DONE` 旗標也回到套用前 ✔；`-SkipAutoRollback` 不適用 ✔ |
+| 升級後識別檔被刪 | 啟動重建＋ERROR＋告警 ✔；本段不擋 API ⇒ 不停擺；下一次升級會被預檢拒絕，直到重簽 |
+| **簽章檔還沒到，先用 72h 放行升級** | 預檢因放行而通過 → 啟動 backfill 因為沒有簽章檔回 `skipped`，**卻照樣寫下 `BACKFILL_DONE`** → 之後簽章檔到位也不會再補（見 CGI-M1） |
+
+- 第一步的 CLI 在第一次升級之前**只存在於包裡**（正式機還沒有這支檔）。§6.2 要寫明從 staging 執行：`python <staging>\payload\backend\tools\company_setup_cli.py ensure-install-id --root <ROOT>`；或者直接讓第一次升級被拒，由拒絕訊息帶出雜湊（CGI-S1）
+- 第二步由使用者以交付金鑰簽（Claude 不讀私鑰）
+
+**② backfill_once 在啟動時不丟例外；失敗時的狀態：成立，只有一個缺口。**
+- 整支包在 try/except 裡；出錯回 `"error"`，而且例外發生在寫 `BACKFILL_DONE` 之前 ⇒ **不會**寫旗標，下次啟動會重試 ✔
+- `main._startup_company_setup` 再包一層，閘門的問題不會讓服務起不來 ✔
+- 缺口：`skipped` 也寫旗標（CGI-M1）
+
+**③ ps1 的兩個新呼叫點要逐字複製到 A 的 `apply_module_update.ps1`**
+- `Invoke-CompanySetupCli` 放在 apply_update.ps1「逐字相同的區段」標記（:268）**之後**，也不在 `test_apply_plan` 的 `_SYNCED_FUNCS` 裡 ⇒ 目前沒有守門會要求兩支 ps1 的這個函式相同
+- A 的 DB-S1 逐字比對清單要加入 `Invoke-CompanySetupCli`（CGI-S2）
+- 單模組包不帶 tools ⇒ 模組 ps1 的預檢與套用後檢查應呼叫**已安裝**的 `backend\tools\company_setup_cli.py`（core 沒換，已安裝版即新版），而不是 `$PackagePath\backend\tools\…`
+
+### 7.2 必修
+
+**CGI-M1（必修）　backfill 在 `skipped` 時不可以寫「已完成」**
+- D 探針（`test_company_setup_core` 的 `devco` fixture＋放行檔）：
+  1. 放行中 ⇒ 預檢判定 allows＝True
+  2. 啟動 backfill ⇒ `skipped`，`BACKFILL_DONE={result: skipped}`
+  3. 簽章檔到位（`signed_file_state`＝valid）、放行移除
+  4. 再跑 backfill ⇒ `already_done`
+  5. status ⇒ `configured False / no_record`，allows False
+- 而本段**沒有**寫確認紀錄的入口（設定頁的 confirm API 在之後的段）⇒ 之後每一次升級，預檢都拒絕；唯一出路是一再重建 72h 放行。這正是 §6.5 寫的「開發者正式機 ⇒ 用暫時放行撐到新簽章檔到位」那條路
+- 修法（擇一）：
+  - 只有 `backfilled`，或確認紀錄已存在時，才寫 `BACKFILL_DONE`；`skipped` 不寫（每次啟動多讀幾個設定，成本可忽略）
+  - 或保留旗標，但在 status 端讓「開發者身分＋有效簽章檔＋無紀錄」在啟動時補寫（等於 backfill 可重跑）
+- 題：探針的五步 ⇒ 第 4 步回 `backfilled`、第 5 步 configured
+
+### 7.3 建議
+
+- **CGI-S1　拒絕時要帶出安裝識別雜湊**：`ensure-install-id` 的輸出只在失敗時 `Write-Host`；預檢拒絕的訊息沒有 `install`。開發者要簽檔就需要它 ⇒ 預檢拒絕時印出（並寫進 result.json 的一個欄位），正式機回報就有了。同時在 §6.2 寫明第一次要從 staging 執行 CLI
+- **CGI-S2　逐字比對清單加 `Invoke-CompanySetupCli`**：見 7.1-③
+- **CGI-S3　ps1 的 robocopy 排除清單與 `CONFIG_FILES` 對齊**：:768（程式快照）、:885（複製包）的 `/XF` 明列 `license.key`、`.deployed_commit.json` 等設定檔，新的三個 F3 檔沒有列。現在不會出事（包裡沒有這三檔；快照在 ensure 之後才拍），但 CG2-M1 要的是「升級與回滾不當程式處理」。建議列入 `/XF`，並加一題「ps1 的 `/XF` ⊇ `CONFIG_FILES` 裡位於 backend 的檔」
+
+### 7.4 觀察
+
+- **CGI-O1**：本段上線之後，開發者正式機的**每一次**升級（含急修）都要先有有效簽章檔或放行。§6.2 的兩階段要在本段出貨**之前**完成，否則第一個急修就要走放行（而放行正是 CGI-M1 的路）
+
+## 8. 複核 CGI-M1＋S1／S3：wip/e-company-gate-impl 3a49c1b5（D，2026-09-28）
+
+- ✅ CGI-M1 關閉（3a49c1b5）
+- CGI-S1（預檢輸出帶安裝識別雜湊，拒絕訊息指明交給開發者簽；§6.2 staging）、CGI-S3（`/XF` 補三檔＋兩個初始帳密檔）都已採納；CGI-S2 依主持裁示由 A 的模組 ps1 逐字守門負責
+- **偏離（skipped_fields 照記、waiting_signature 不記）：同意。** E 的理由成立：一律不記，全新安裝在管理員存好欄位後重啟就會被自動確認，跳過了「有人決定過」
+- **但同一個理由在 `waiting_signature` 上沒有守住 ⇒ 新必修 CGI2-M1**
+
+D 探針（拋棄式 worktree，3a49c1b5；題目 54 過，探針不提交、已刪）：
+
+| 探針 | 步驟 | 結果 |
+|---|---|---|
+| 五步（CGI-M1） | 放行中升級 → backfill → 簽章檔到位、放行移除 → 再 backfill → status | `waiting_signature`（不記）→ `backfilled` → configured ✔ |
+| 全新安裝 | 空欄位 backfill → 管理員存好欄位 → 重啟 backfill | `skipped_fields` → `already_done`、`no_record` ✔（E 的反向控制成立） |
+| **複製的開發者庫** | 開發者資料、沒有簽章檔 → backfill → 有人把名稱與統編改成別家、**沒按確認** → 重啟 backfill | `waiting_signature` → **`backfilled`，via `upgrade_backfill`，configured** |
+
+**CGI2-M1（必修）　`waiting_signature` 之後的重試，只能補「開發者身分＋有效簽章檔」這一種情況**
+- 開發者資料的庫出現在沒有簽章檔的安裝，正是閘門要防的情境（§3.1）。它停在 waiting；之後有人改了欄位但沒有按確認，下一次啟動 backfill 就把它當成「既有安裝的合格資料」自動確認 ⇒ 與 E 為全新安裝所擋的是同一件事
+- 修法：上一次結果是 `waiting_signature` 的庫，重試時
+  - 仍是開發者身分，且簽章檔有效 ⇒ `backfilled`
+  - 仍是開發者身分，簽章檔未到 ⇒ 繼續 `waiting_signature`（不記）
+  - **已不是開發者身分** ⇒ 記下做過（例：`skipped_identity_changed`），**不寫確認紀錄** ⇒ 由最高管理員在設定頁確認
+  - 做法：waiting 時也記一筆「狀態」（例如 `BACKFILL_DONE={result: waiting_signature}`，但 backfill 對這個結果值照樣重試），這樣重試時才分得出「上次是 waiting」
+- 題：上表第三列 ⇒ 不自動確認，status `no_record`；五步那一列照舊 configured（正對照）
+
+## 9. 複核 CGI2-M1：wip/e-company-gate-impl 6ee28810（D，2026-09-28）
+
+- ✅ CGI2-M1 關閉（6ee28810）
+- 探針重跑（拋棄式 worktree；題目 56 過，探針不提交、已刪）：
+
+| 探針 | 結果 |
+|---|---|
+| 五步（放行升級 → 簽章檔到位） | `waiting_signature` → `backfilled` → configured ✔ |
+| 複製的開發者庫、改成別家、沒按確認 | `waiting_signature` → `skipped_identity_changed` → status `no_record` → 之後 `already_done` ✔ |
+| 等簽章期間把聯絡欄位清空 | `skipped_fields`、`fields_invalid` ✔ |
+
+---
+
+## 10. 完整稽核實作段②（中介層＋確認＋428）：wip/e-company-gate-impl e71e904d（D，2026-09-28）
+
+> 範圍：段①（6ee28810）之後 E 的改動：`main.py` 中介層與白名單、`company_setup.gate／compile_allowed／is_allowed`、`routers/system.py` 確認與狀態端點、`notif.js` 導頁與橫幅、設定頁與說明頁。只讀碼＋grep。
+
+### 10.0 結論
+
+- **必修 1（CG5-M1）、建議 2。**
+- 白名單偏離（多 `GET /api/settings/branding`、`DELETE /api/settings/branding/{kind}`）：**同意**。兩條都限最高管理員、端點自己驗權限，只動品牌圖、不動確認紀錄與公司資料；設定頁在未設定時本來就要能用它們。不算過寬
+
+### 10.1 主持指定
+
+**① 白名單以外的 /api 真的全擋：成立。**
+- `test_every_other_api_route_is_blocked_when_unconfigured`：走訪路由表，白名單與公開路徑以外的每一條（路徑參數填假值）逐一打，未設定時都必須 428
+- 比對用 Starlette 的 `compile_path`（與路由同一套編譯規則），HEAD 視同 GET；`test_allowlist_is_exact_and_exists` 驗每條存在、方法相符；`test_allowlist_reverse_controls` 驗萬用字元／描述性條目會紅
+- 中介層位置：登入檢查、改密碼閘門之後，`call_next` 之前 ✔；`/api/uploads?pt=` 在登入檢查前放行（CG-O2 已記），不受影響
+
+**② 正式機（已 backfill 為 configured）行為不變：成立。**
+- `gate()` ⇒ `GATE_OK` ⇒ 中介層不擋、不加標頭；`test_reverse_control_configured_has_no_header` 驗「已設定 ⇒ 200 且沒有標頭」
+- 判定有行程內快取（鍵＝三個設定的 updated_at＋三個檔的 mtime＋分鐘），Ed25519 驗章只在快取失效時做，每個請求只多一次讀設定的查詢
+- demo token 段② 視同已設定（段③ 種示範公司後拿掉），正式帳號不受影響
+
+**③ status 例外（Q7＝C）：一般 API 放行＋標頭＋橫幅成立；「輸出拒絕」沒有實作 ⇒ CG5-M1。**
+- 中介層：`gate()` 丟例外 ⇒ `GATE_UNDETERMINED` ⇒ 放行並加 `X-Motrix-Company-Setup: status_error`；告警每日一次；有題 ✔
+- 但 `gate()` 的呼叫點只有 `main._company_setup_gate_kind` 與 `routers/system.company_setup_status`（grep）；沒有任何輸出路徑（報價單等 PDF、財報、自訂模組輸出、排程報表信）呼叫它，也沒有 `company_setup_undetermined` 的回應
+
+### 10.2 必修
+
+**CG5-M1（必修）　判定失敗時，橫幅說「對外文件暫停輸出」，但輸出照常**
+- Q7 裁示 C 的兩半是一起的：放行一般功能（避免停擺）**＋** 含本公司資料的輸出拒絕（保護面不降級）。段② 只做了前一半
+- 結果：status 出錯時，中介層放行所有 API，**包括 PDF／匯出**；而 notif.js 的橫幅與 status 端點的訊息都寫「本公司設定狀態無法判定，對外文件暫停輸出」⇒ 畫面告訴使用者的與系統實際做的不同
+- 修法（擇一）：
+  1. 在本段補上輸出端第二道：共用路徑 `identity_for_output`（§5）遇 `GATE_UNDETERMINED` ⇒ 428 `company_setup_undetermined`；至少報價單 PDF、財報匯出、自訂模組輸出三條路徑，加上排程報表信（不寄＋告警）
+  2. 或者本段先**不**宣稱：橫幅與 status 訊息改成不提「暫停輸出」，並在文件寫明輸出端在段③；等段③ 補上再改回
+- 無論哪一種，都要在正式機升到本段之前完成；題：`status()` 丟例外 ⇒ 報價單 PDF 428 `company_setup_undetermined`（或採 2 時：訊息不含「暫停輸出」）
+
+### 10.3 建議
+
+- **CG5-S1　一般存檔改到必要欄位 ⇒ 全公司立即 428**：`fields_hash` 含名稱、統編、電話、email。最高管理員在設定頁只改了電話、按「儲存」（沒按確認）⇒ 確認紀錄失效 ⇒ 其他人全部 428，直到他按確認。設計如此，但很容易發生。建議設定頁在必要欄位有變動時，把「儲存」換成「儲存並確認」（或存檔前提示「這會暫停其他人的使用，直到確認」）；後端不變
+- **CG5-S2　判定失敗時每個請求都重算**：`gate()` 失敗時清快取，所以 status 出錯期間每個 /api 請求都重跑一次判定並呼叫 `alert()`（有每日節流，但每次都讀寫一次節流設定）。建議失敗結果也快取一分鐘（同鍵）

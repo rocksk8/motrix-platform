@@ -518,7 +518,8 @@ def ensure_drill_admin(install: str) -> None:
 
 def smoke(install: str) -> dict:
     port = UD.free_port()
-    env = {**os.environ, **T.SAFE_ENV}
+    # 演練自己起的服務要開 API 文件（GET 全掃靠 /openapi.json 列路徑）；正式機預設關（main.MOTRIX_API_DOCS）
+    env = {**os.environ, **T.SAFE_ENV, "MOTRIX_API_DOCS": "1"}
     log = open(os.path.join(install, "backend", "logs", "final_drill_smoke.log"), "w", encoding="utf-8")
     proc = subprocess.Popen([sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", str(port)],
                             cwd=os.path.join(install, "backend"), env=env, stdout=log, stderr=subprocess.STDOUT)

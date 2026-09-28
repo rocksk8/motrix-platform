@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 753,
+  "tests": 754,
   "unmapped": 8,
   "kinds": {
-   "api": 405,
+   "api": 406,
    "e2e": 180,
    "audit": 100,
    "unit": 68
@@ -10499,6 +10499,23 @@
      "frontend/static/",
      "frontend/static/notif.js",
      "frontend/static/sidebar.js"
+    ]
+   }
+  },
+  "backend/tests/test_api_docs_off_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "dir:tools/platform/",
+    "file:tools/platform/final_drill.py",
+    "router:auth"
+   ],
+   "evidence": {
+    "api": [
+     "backend/routers/auth.py"
+    ],
+    "path": [
+     "tools/platform/",
+     "tools/platform/final_drill.py"
     ]
    }
   },

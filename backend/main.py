@@ -56,7 +56,23 @@ _module_startup.load_modules_like_startup()
 from core import paths as _paths
 FRONTEND_DIR = _paths.FRONTEND_DIR
 
-app = FastAPI(title="MOTRIX ERP API", version="1.0.0")
+#: 🔴 API 文件頁（/openapi.json、/docs、/docs/oauth2-redirect、/redoc）**預設關閉**（2026-09-28 主持裁示；E 盤點：
+#: 未登入可讀、整份 API 結構外露）。只有明確環境旗標 `MOTRIX_API_DOCS=1` 才開（開發機要看文件時自己設）。
+#: ⚠️ 不可以用安裝路徑猜「這是開發機」（可販售產品：客戶的安裝路徑什麼都有可能）——只認旗標。
+API_DOCS_ENV = "MOTRIX_API_DOCS"
+
+
+def _docs_kwargs(environ=None) -> dict:
+    """FastAPI 的文件路由設定。旗標不是 "1" ⇒ 三個都 None（FastAPI 不註冊這些路由；oauth2-redirect 跟著 docs_url）。"""
+    on = (os.environ if environ is None else environ).get(API_DOCS_ENV) == "1"
+    return {"docs_url": "/docs" if on else None, "redoc_url": "/redoc" if on else None,
+            "openapi_url": "/openapi.json" if on else None}
+
+
+_DOCS = _docs_kwargs()
+# ⚠️ 明列關鍵字，不用 `**`（守門 test_case_summary_purpose：非字面值的 ** 呼叫基線 0）
+app = FastAPI(title="MOTRIX ERP API", version="1.0.0", docs_url=_DOCS["docs_url"],
+              redoc_url=_DOCS["redoc_url"], openapi_url=_DOCS["openapi_url"])
 
 _DEFAULT_CORS_ORIGINS = [
     "http://localhost:666",

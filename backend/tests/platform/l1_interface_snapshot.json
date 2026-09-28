@@ -1,5 +1,5 @@
 {
- "core_version": "1.67",
+ "core_version": "1.68",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -76,6 +76,7 @@
    "main": "def()"
   },
   "core:main": {
+   "API_DOCS_ENV": "const",
    "FRONTEND_DIR": "const",
    "auth_middleware": "async def(request, call_next)",
    "license_gate_middleware": "async def(request, call_next)",
