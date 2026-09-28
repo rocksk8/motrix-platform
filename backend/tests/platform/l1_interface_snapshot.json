@@ -19,6 +19,7 @@
    "bytes_per_audit_row": "def(db_bytes, audit_rows)",
    "cloud_archive_enabled": "def()",
    "merge_general_and_pii": "def(fname, general_rows, pii_rows)",
+   "module_backup_skipped_t2": "def(log=…)",
    "pii_archive_status": "def()",
    "rows_written_since": "def(conn, since_iso)",
    "snapshot_content_ok": "def(counts, summary, db_bytes=…, day=…, ratio_samples=…, ratio_enabled=…, allowance=…)",

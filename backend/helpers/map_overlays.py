@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """L1 地圖覆蓋層（串接點 IP-101 `map.overlay`；docs/platform/LODGING-NEARBY.md §3.6.1，D 稽核 LG-M1／LG2-S1～S3）。
 
-[單位] helper:map_overlays    [層] L1
+[單位] helper:map_overlays    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版；前端契約另見 static/map-overlay.js 檔頭）
 [公開介面] OVERLAY_KEY_RE, SCRIPT_NAME_RE, URL_PREFIX, declared_overlays, script_path
 [不變式] 覆蓋層腳本網址只由 L1 依**已載入**模組 module.json 的 `map_overlays` 宣告組出（同源 `/map-overlays/<模組>/<檔名>`）；
     提供者不回傳任何網址；宣告不合格式、檔案不在模組的 `pages/` 底下 ⇒ 不列、記 ERROR；模組未載入 ⇒ 不列、腳本 404
