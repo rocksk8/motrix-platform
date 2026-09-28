@@ -17,3 +17,5 @@
 
 **觀察**
 - **SW-O1**：腳本版本 aec09a2e 用 `2026-09-28j`，E4 已用 `28i`（段①）⇒ 兩線合流時 `$ApplyScriptVersion` 與 `apply_update.version.json` 會衝突；合流那一班要取一個新值，並重算 version.json 的雜湊（AH-O7）
+
+**SW-O1 補充（2026-09-28，主持）**：E4（wip/e-company-gate-impl 13a2fbfd）也把 apply_update 升到 **2026-09-28j**，與 A49（aec09a2e）的 28j **內容不同、版號相同**。合流那一班：先上車的用 j，後上的改取下一個號（例：A49＝j、E4＝k），並重算 `apply_update.version.json` 的雜湊（AH-O7）；同一個版號絕不可以對應兩份內容（正式機以版號判定「包裡的腳本就是這一版」）

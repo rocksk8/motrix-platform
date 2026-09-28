@@ -317,3 +317,12 @@ D 探針（拋棄式 worktree，3a49c1b5；題目 54 過，探針不提交、已
   - 在套用前預檢（`company_setup_cli preflight`）或正式機回報裡加一項「請款單匯款欄位是否齊全」，只報不擋；或在安裝指示裡請正式機 Claude 以唯讀查詢回報
   - 欄位缺 ⇒ 先請使用者在舊版設定頁補齊，再升級。否則上線當天請款單就印不出來
 - **E4S3-S2　擋保留統編**：`required_problems` 對非 demo 庫拒收 `00000000`（demo 保留值），訊息「這是系統保留的示範統編」；題：正式庫存 `00000000` ⇒ `fields_invalid`、demo 庫照常。§4.1 的錯句用更正保留（已有）
+
+## 12. 抽查 E4S3-S1／S2：wip/e-company-gate-impl 13a2fbfd（D，2026-09-28）
+
+- 兩條建議都已採納，**無新必修**
+- **E4S3-S1**：CLI preflight／status 回 `payment_bank_missing`（主要據點解析後的三欄）；apply_update 在預檢之後、停服之前印 `[WARN]`＋`::NOTE:: company_bank_missing=<欄位>`（齊全 `company_bank=ok`、讀不到 `unknown`），只報不擋；函式不丟例外 ✔
+  - **偏離（不進 `::RESULT::`）：同意。** `::RESULT::` 的欄位順序與值域是儀表板與結果檔的固定契約，結果檔寫入函式又與 rollback 逐字相同；另起一行 `::NOTE::` 不動契約，是對的做法
+  - 代價：寫回開發機的 result.json 不帶這個註記 ⇒ **正式機安裝指示要請正式機 Claude 把 `::NOTE::` 那一行照抄進回報**（下一班指示範本加一句）
+- **E4S3-S2**：非 demo 庫拒收 `00000000`（`RESERVED_DEMO_UBN`；確認回 422、直接寫庫的 status 判 `fields_invalid`）；demo 由 `db.is_demo_mode()` 判定（中介層依 token），CLI 對正式庫預設非 demo ✔
+- 版本撞號見 AUDIT-D-A-switch-warn.md SW-O1（已補）
