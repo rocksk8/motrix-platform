@@ -32,6 +32,7 @@ import sys
 import tarfile
 import tempfile
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -178,6 +179,56 @@ def stop(root, port):
     return r.stdout.strip()
 
 
+def _ubn_ok(s):
+    """統一編號檢查碼（同 helpers.company_setup.ubn_valid；演練工具不匯入安裝目錄的程式）。"""
+    w = (1, 2, 1, 2, 1, 2, 4, 1)
+    total = sum(int(d) * k // 10 + int(d) * k % 10 for d, k in zip(s, w))
+    return total % 5 == 0 or (s[6] == "7" and (total + 1) % 5 == 0)
+
+
+def _api(port, path, data=None, token=None, method=None):
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    body = json.dumps(data).encode("utf-8") if data is not None else None
+    req = urllib.request.Request("http://127.0.0.1:%d%s" % (port, path), data=body, headers=headers,
+                                 method=method or ("POST" if body is not None else "GET"))
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.status, json.loads(r.read().decode("utf-8") or "null")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")[:300]
+
+
+def setup_company(root, port):
+    """本公司資料設定閘門（E4，COMPANY-SETUP-GATE §3.2）走**正式路徑**：新庫的最高管理員（臨時密碼）登入 → 改密碼 →
+    設定頁存檔並「確認本公司資料」（PUT /api/settings/company-profile，confirmIdentity=true）→ status＝configured。
+    公司資料是演練用的虛構資料（不命中開發者指紋 ⇒ 不需要開發者簽章檔）。回 status 回應。"""
+    cred = (Path(root) / "backend" / ".initial_admin_credentials.txt").read_text(encoding="utf-8")
+    user = re.search(r"帳號:\s*(\S+)", cred).group(1)
+    pw = re.search(r"臨時密碼:\s*(\S+)", cred).group(1)
+    s, b = _api(port, "/api/auth/login", {"username": user, "password": pw})
+    if s != 200:
+        raise DrillError("演練管理員登入失敗：%s %s" % (s, b))
+    new_pw = "Drill-%d-Pass!9" % port
+    s, b2 = _api(port, "/api/auth/change-password", {"current_password": pw, "new_password": new_pw},
+                 token=b["token"], method="PATCH")
+    if s != 200:
+        raise DrillError("改密碼失敗：%s %s" % (s, b2))
+    s, b = _api(port, "/api/auth/login", {"username": user, "password": new_pw})
+    token = b["token"] if s == 200 else None
+    tax = next("%08d" % n for n in range(10000000, 10001000) if _ubn_ok("%08d" % n))
+    s, b3 = _api(port, "/api/settings/company-profile",
+                 {"name": "演練測試股份有限公司", "tax_id": tax, "contact_info": "Tel: 04-2345-6789",
+                  "confirmIdentity": True}, token=token, method="PUT")
+    if s != 200:
+        raise DrillError("本公司資料存檔／確認失敗：%s %s" % (s, b3))
+    s, st = _api(port, "/api/settings/company-setup/status", token=token)
+    if s != 200 or not (isinstance(st, dict) and st.get("configured")):
+        raise DrillError("確認後 status 不是 configured：%s %s" % (s, st))
+    return st
+
+
 def seed_backlog(root, n=3):
     """待定位的標案（機關名稱）：背景定位第一輪就會去查（GEO 開、排程開＝正式機條件）。"""
     db = Path(root) / "backend" / "motrix_erp.db"
@@ -302,6 +353,8 @@ def main(argv=None):
         dst, changed = install_ps1(a.ps1, root, a.port)
         report["ps1_rewrite_lines"] = changed
         report["first_start_s"] = round(start(root, a.port), 1)
+        if (root / "backend" / "helpers" / "company_setup.py").is_file():   # 含 E4 的版本：先照正式路徑設定本公司資料
+            report["company_setup"] = setup_company(root, a.port)
         seed_backlog(root)
         stop(root, a.port)
         report["restart_s"] = round(start(root, a.port), 1)       # 帶待辦、排程開、GEO 開的正式機條件
