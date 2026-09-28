@@ -93,3 +93,8 @@
   - `addCircle(center, radius_m, style)`：畫搜尋半徑
   - 另外寫明 `addMarkers` 大量標點時由 L1 群聚（兩種底圖各用既有的群聚），覆蓋層不自己處理
 - **LG2-S3　面板內容也要守 HTML 寫入點**：`panel()` 交出 HTMLElement，而靜態掃描③禁止覆蓋層用 Alpine ⇒ 覆蓋層會用原生 DOM 畫清單，裡面是官方資料的名稱與地址。建議把 custom-records 的 JS 寫入點守門（sink_sites／check）的掃描對象擴大到 `modules/*/pages/*overlay*.js`，白名單預設 0。`popupHtml` 的清洗改成由 L1 收結構化欄位（title、lines[]、links[]）自己組 HTML，比「清洗任意 HTML」可靠
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ LG-M1 關閉（8f342818）——L1 地圖覆蓋層契約（register／mount(api)、兩種底圖由 L1 實作、script_url 由 L1 依宣告組出），含改名內部欄位的反向控制
+- ✅ LG-M2 關閉（8f342818）——Google 中心點的座標與距離一律不寫入（含每日匯出），有反向控制
