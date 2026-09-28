@@ -119,3 +119,54 @@ def test_settings_page_upload_and_reset(live_server, make_user, new_page, login_
     page.wait_for_function("() => (document.querySelector('[data-brand-msg]').textContent || '').includes('SVG')",
                            timeout=20000)
     assert not os.path.isfile(stored)
+
+
+
+#: 初次 GET /api/settings/branding 照常送出（取回的是上傳前的預設狀態），但扣住不交給頁面，直到題目呼叫
+#: window.__releaseFirst()——不靠時間差（同 tests/platform/test_e2e_menu_layout 的 _HOLD_FIRST）。
+#: 產品呼叫 json() 時設 window.__staleRead（＝產品已經在處理這一趟），題目再等兩個 macrotask 讓 then 鏈跑完。
+_HOLD_FIRST_BRANDING = """
+  (function () {
+    var real = window.fetch, n = 0
+    window.fetch = function (url, opt) {
+      if (String(url) === '/api/settings/branding' && !(opt && opt.method) && ++n === 1) {
+        var got = real.apply(this, arguments).then(function (r) {
+          return r.json().then(function (body) { return { ok: r.ok, status: r.status, body: body } })
+        })
+        return new Promise(function (res) {
+          window.__releaseFirst = function () {
+            got.then(function (g) {
+              res({ ok: g.ok, status: g.status, json: function () { window.__staleRead = true; return Promise.resolve(g.body) } })
+            })
+          }
+        })
+      }
+      return real.apply(this, arguments)
+    }
+  })()
+"""
+
+
+def test_initial_load_arriving_after_upload_does_not_revert_the_preview(live_server, make_user, new_page, login_as, tmp_path):
+    """產品競態（2026-09-28 A，test_settings_page_upload_and_reset 約 1/4 偶發紅）：卡片在初次 GET /api/settings/branding
+    回來之前就畫好、可以上傳；上傳的回應先到、初次載入的舊回應後到 ⇒ 舊版會把預覽蓋回預設、「恢復預設」鈕消失。
+    這裡把初次載入扣到上傳完成之後才交給頁面 ⇒ 決定性重現那個順序。"""
+    u = make_user(username="bre_race", role="superadmin")
+    page = new_page()
+    page.add_init_script(_HOLD_FIRST_BRANDING)
+    login_as(page, u)
+    page.goto(live_server + "/pages/company-profile-settings.html")
+    page.locator('[data-brand-slot="logo"]').wait_for(state="visible", timeout=20000)
+    page.wait_for_function("() => typeof window.__releaseFirst === 'function'", timeout=20000)
+    f = tmp_path / "race-logo.png"
+    f.write_bytes(_png(133, 47, (0, 0, 200, 255)))
+    page.set_input_files('input[data-brand-input="logo"]', str(f))
+    page.wait_for_function("() => { const b = %s; return b.brandBusy === '' && !!(b.brand.logo && b.brand.logo.custom) }" % ROOT,
+                           timeout=20000)
+    page.evaluate("window.__releaseFirst()")
+    page.wait_for_function("window.__staleRead === true", timeout=10000)
+    page.evaluate("() => new Promise(r => setTimeout(() => setTimeout(r, 0), 0))")
+    src = page.locator('img[data-brand-preview="logo"]').get_attribute("src") or ""
+    assert not src.endswith("v=default"), "晚到的初次載入把預覽蓋回預設：%s" % src
+    assert _natural(page, 'img[data-brand-preview="logo"]') == [133, 47]
+    assert page.locator('button[data-brand-reset="logo"]').is_visible(), "晚到的初次載入讓「恢復預設」鈕消失"

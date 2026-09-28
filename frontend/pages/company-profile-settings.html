@@ -1002,6 +1002,8 @@
         // H10 品牌圖檔：狀態來自 GET /api/settings/branding；上傳／恢復預設後以回應的 assets 整批換掉
         brandKinds: ['logo', 'logo-dark', 'favicon'],
         brand: {}, brandBusy: '', brandMsg: '', brandIsError: false,
+        // 上傳／恢復預設套用過回應就 +1；初次載入的回應若晚於它抵達（舊狀態）就丟掉，不蓋回預設（2026-09-28 A：e2e 偶發紅的產品競態）
+        brandGen: 0,
 
         get isSuperadmin() { return this.session.role === 'superadmin' },
 
@@ -1054,8 +1056,11 @@
 
         async loadBranding() {
           try {
+            const gen = this.brandGen
             const r = await fetch('/api/settings/branding', { headers: { Authorization: 'Bearer ' + this.session.token } })
-            if (r.ok) this.brand = (await r.json()).assets || {}
+            if (!r.ok) return
+            const assets = (await r.json()).assets || {}
+            if (gen === this.brandGen) this.brand = assets
           } catch (_e) { /* 讀不到 ⇒ 卡片顯示空的預覽，上傳仍可用 */ }
         },
 
@@ -1063,6 +1068,7 @@
           this.brandIsError = !ok
           this.brandMsg = text
           if (assets) {
+            this.brandGen++
             this.brand = assets
             // 本頁的上方列與分頁圖示立即換成新版本；其他頁下一次載入就是新的（不帶版本的網址每次重新驗證）
             const top = document.querySelector('img[data-brand-logo="logo-dark"]')
