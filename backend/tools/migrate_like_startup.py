@@ -79,6 +79,9 @@ def check_expected_modules(expect):
         st = states.get(key)
         if st is None:
             bad.append((key, "沒有被載入器看到（模組資料夾或 module.json 不在）"))
+        elif st["state"] == registry.STATE_DISABLED:
+            # 稽核 D S5A-S1 裁定：拒絕（停用中的模組載入不了 ⇒ 驗不到新版能不能起來；不改成「預期 disabled」放行）
+            bad.append((key, "模組目前被管理者停用 ⇒ 驗不到新版能不能載入；先到「模組管理」啟用再更新，或改用完整更新包"))
         elif st["state"] != registry.STATE_LOADED:
             bad.append((key, "狀態是 %s：%s" % (st["state"], st.get("reason") or "")))
         elif str(st.get("version") or "") != ver:
