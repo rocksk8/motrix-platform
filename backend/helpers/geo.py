@@ -1631,7 +1631,20 @@ def warm_geocode_cache() -> dict:
 
     **可以單獨呼叫** —— 排程與測試共用同一支，
     🔑 那讓「排程呼叫的東西」與「測試驗過的東西」**不可能是兩份**。
+
+    🔴 SST §6.2（第十五班主持裁示）：底圖不是 Google ⇒ 整輪在 `without_google_content()` 裡，
+    只用免費來源補座標（地圖才畫得出點）；Google 定位等底圖切成 Google 後才用。
+    📌 只包入口、不動迴圈（`_warm_geocode_cache_round`）：待辦判斷（`cached_only`）與查詢
+       （`locate_cached`）都在範圍內 ⇒ 只有 Google 座標的地址會重新成為待辦、由免費階補上。
     """
+    if google_basemap():
+        return _warm_geocode_cache_round()
+    with without_google_content():
+        return _warm_geocode_cache_round()
+
+
+def _warm_geocode_cache_round() -> dict:
+    """`warm_geocode_cache()` 的一輪本體（範圍由呼叫端決定）。"""
     # `MP0c`：每一輪開頭先清掉過期的 Google 快取——在「地理查詢關著」的判斷**之前**：
     #    清除不對外連線，開關關著也要清（條款管的是「存了多久」，不是「有沒有在查」）。
     try:

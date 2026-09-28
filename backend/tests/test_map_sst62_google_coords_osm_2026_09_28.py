@@ -131,3 +131,51 @@ def test_scope_skips_google_cache_and_stage_and_leaves_no_negative_cache(env, mo
     # 範圍外恢復：Google 快取照讀
     hit = geo.cached_only(A_GOOGLE_ONLY)
     assert hit is not None and hit.source == geo.SOURCE_GOOGLE
+
+
+# ── 背景預熱（主持裁示：非 Google 底圖 ⇒ 整輪只用免費來源）──────────────────
+
+@pytest.fixture()
+def warm(env, monkeypatch):
+    """預熱只看一個假來源（A_GOOGLE_ONLY 與一個全新地址）；三階換成記錄器，節流不睡。"""
+    fresh = "台中市北屯區崇德路一段1號"
+    calls = {"google": [], "nominatim": []}
+    monkeypatch.setattr(geo, "_WARM_SOURCES", [lambda: [A_GOOGLE_ONLY, fresh]])
+    monkeypatch.setattr(geo, "_throttle", lambda: None)
+    monkeypatch.setattr(geo, "_locate_google",
+                        lambda a, errors=None: calls["google"].append(a) or ((24.30, 120.70), geo.PRECISION_EXACT))
+    monkeypatch.setattr(geo, "_locate_tgos", lambda a, errors=None: None)
+    monkeypatch.setattr(geo, "_locate_nominatim",
+                        lambda a, errors=None: calls["nominatim"].append(a) or (FREE_XY, geo.PRECISION_STREET))
+    geo.reset_geocode_misses()
+    return calls, fresh
+
+
+def _cached_sources(address):
+    import db
+    conn = db.get_db()
+    try:
+        return {r[0] for r in conn.execute("SELECT source FROM geocode_cache WHERE address=?", (address,))}
+    finally:
+        conn.close()
+
+
+def test_warm_on_osm_basemap_never_calls_google_and_fills_free_coords(env, warm):
+    calls, fresh = warm
+    geo.warm_geocode_cache()
+    assert calls["google"] == [], "非 Google 底圖的預熱問了 Google（SST §6.2）"
+    assert set(calls["nominatim"]) == {A_GOOGLE_ONLY, fresh}, "只有 Google 座標的地址要重新成為待辦、由免費階補上"
+    assert geo.SOURCE_NOMINATIM in _cached_sources(A_GOOGLE_ONLY)
+    assert _cached_sources(fresh) == {geo.SOURCE_NOMINATIM}
+    body, by_addr = env()
+    assert by_addr[A_GOOGLE_ONLY]["source"] == geo.SOURCE_NOMINATIM and body["googleOnlyHidden"] == 0, \
+        "預熱補了免費座標之後，地圖要畫得出來"
+
+
+def test_reverse_control_warm_on_google_basemap_asks_google_first(env, warm, monkeypatch):
+    calls, fresh = warm
+    monkeypatch.setattr(geo, "google_basemap", lambda: True)
+    geo.warm_geocode_cache()
+    assert calls["google"] == [fresh], "Google 底圖時照舊先問 Google（已有 Google 座標的不是待辦）"
+    assert calls["nominatim"] == []
+    assert _cached_sources(fresh) == {geo.SOURCE_GOOGLE}
