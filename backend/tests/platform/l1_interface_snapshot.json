@@ -1,5 +1,5 @@
 {
- "core_version": "1.63",
+ "core_version": "1.64",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -456,6 +456,7 @@
    "USER_AGENT": "const",
    "WARM_MAX_CONSECUTIVE_FAILURES": "const",
    "WARM_STATE_SETTING": "const",
+   "cache_read_session": "def()",
    "cached_only": "def(address, min_source=…)",
    "classify_precision": "def(info)",
    "current_billing_period": "def(start_day=…, today=…)",

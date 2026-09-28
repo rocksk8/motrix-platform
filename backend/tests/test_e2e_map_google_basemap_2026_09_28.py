@@ -30,43 +30,58 @@ BROWSER_KEY = "AIzaSyBrowserKeyForMapsJs0123456789cd"
 MAP_ID = "motrix-test-map-id"
 ADDR = {"台中市北區三民路三段1號": (24.1570, 120.6840), "台中市西區公益路2號": (24.1500, 120.6600)}
 
+#: 🔴 正式機 2026-09-28（Google 底圖顯示但標點全部消失）：Alpine 把存在元件上的 google.maps 物件讀回成 Proxy，
+#:    真 Google 不認（map 必須是當初 new 出來的那個）。假貨原本不檢查身分 ⇒ e2e 全綠而正式機沒有點。
+#:    ⇒ 假貨一律做**身分檢查**：收到的 map／marker／InfoWindow 必須 === 當初 new 出來的那個，否則丟 InvalidValueError；
+#:       方法的 this 也要是原物件（Proxy 呼叫方法時 this 是 Proxy）。AdvancedMarkerElement 的點擊只認 addEventListener('gmp-click')。
 FAKE_GMAPS = r"""
 (function () {
-  var rec = window.__gm = { maps: [], markers: [], circles: [], iw: null };
+  var rec = window.__gm = { maps: [], markers: [], circles: [], iw: null, legacyListener: 0 };
   function host() { return document.getElementById('mp-canvas') }
+  function bad(what) { throw new Error('InvalidValueError: ' + what + ' 不是當初建立的那個物件（Proxy？）') }
+  function isMap(m) { return rec.maps.indexOf(m) >= 0 }
   function LatLngBounds() { this.pts = [] }
   LatLngBounds.prototype.extend = function (p) { this.pts.push(p) };
   function Map(el, opts) { this.el = el; this.opts = opts; this.center = opts.center; this.zoom = opts.zoom;
     rec.maps.push(this); el.setAttribute('data-fake-gmap', '1') }
-  Map.prototype.fitBounds = function (b) { rec.fit = b.pts.length };
-  Map.prototype.setCenter = function (c) { this.center = c };
-  Map.prototype.setZoom = function (z) { this.zoom = z };
+  Map.prototype.fitBounds = function (b) { if (!isMap(this)) bad('Map.fitBounds 的 this'); rec.fit = b.pts.length };
+  Map.prototype.setCenter = function (c) { if (!isMap(this)) bad('Map.setCenter 的 this'); this.center = c };
+  Map.prototype.setZoom = function (z) { if (!isMap(this)) bad('Map.setZoom 的 this'); this.zoom = z };
   Map.prototype.getZoom = function () { return this.zoom };
   function AdvancedMarkerElement(o) { this.position = o.position; this.content = o.content; this.zIndex = o.zIndex;
-    this._map = null; rec.markers.push(this); if (o.map) this.map = o.map }
+    this.gmpClickable = !!o.gmpClickable; this._map = null; rec.markers.push(this); if (o.map) this.map = o.map }
   Object.defineProperty(AdvancedMarkerElement.prototype, 'map', {
     get: function () { return this._map },
-    set: function (m) { this._map = m; if (m) { host().appendChild(this.content) } else if (this.content.remove) { this.content.remove() } } });
-  AdvancedMarkerElement.prototype.addListener = function (ev, fn) { this.content.addEventListener(ev, fn) };
+    set: function (m) {
+      if (m && !isMap(m)) bad('AdvancedMarkerElement.map');
+      this._map = m; if (m) { host().appendChild(this.content) } else if (this.content.remove) { this.content.remove() } } });
+  AdvancedMarkerElement.prototype.addEventListener = function (ev, fn) {
+    if (ev === 'gmp-click') { if (!this.gmpClickable) bad('gmp-click 需要 gmpClickable'); this.content.addEventListener('click', fn) } };
+  AdvancedMarkerElement.prototype.addListener = function (ev, fn) { rec.legacyListener++; this.content.addEventListener(ev, fn) };
   function InfoWindow() { rec.iw = this; this.el = null }
-  InfoWindow.prototype.setContent = function (h) { this.html = h };
+  InfoWindow.prototype.setContent = function (h) { if (this !== rec.iw) bad('InfoWindow 的 this'); this.html = h };
   InfoWindow.prototype.setPosition = function (p) { this.position = p };
-  InfoWindow.prototype.open = function () { if (!this.el) { this.el = document.createElement('div'); this.el.id = 'fake-iw'; host().appendChild(this.el) }
+  InfoWindow.prototype.open = function (o) {
+    if (this !== rec.iw) bad('InfoWindow 的 this'); if (!o || !isMap(o.map)) bad('InfoWindow.open 的 map');
+    if (!this.el) { this.el = document.createElement('div'); this.el.id = 'fake-iw'; host().appendChild(this.el) }
     this.el.innerHTML = this.html; this.el.style.display = 'block' };
   InfoWindow.prototype.close = function () { if (this.el) this.el.style.display = 'none' };
-  function Circle(o) { this.o = o; rec.circles.push(o.radius) }
+  function Circle(o) { if (o.map && !isMap(o.map)) bad('Circle.map'); this.o = o; rec.circles.push(o.radius) }
   Circle.prototype.setMap = function () {};
   window.google = { maps: { Map: Map, LatLngBounds: LatLngBounds, InfoWindow: InfoWindow, Circle: Circle,
     marker: { AdvancedMarkerElement: AdvancedMarkerElement },
-    event: { addListenerOnce: function (o, e, fn) { setTimeout(fn, 0) } } } };
+    event: { addListenerOnce: function (o, e, fn) { if (!isMap(o)) bad('addListenerOnce 的 map'); setTimeout(fn, 0) } } } };
   var cb = new URL(document.currentScript.src).searchParams.get('callback');
   setTimeout(function () { window[cb]() }, 0);
 })();
 """
 
 FAKE_CLUSTER = r"""
-window.markerClusterer = { MarkerClusterer: function (o) { window.__gm.cluster = o.markers.length;
-  o.markers.forEach(function (m) { m.map = o.map }); this.clearMarkers = function () {}; this.setMap = function () {} } };
+window.markerClusterer = { MarkerClusterer: function (o) {
+  var rec = window.__gm;
+  if (rec.maps.indexOf(o.map) < 0) throw new Error('InvalidValueError: MarkerClusterer.map 不是當初建立的 Map（Proxy？）');
+  o.markers.forEach(function (m) { if (rec.markers.indexOf(m) < 0) throw new Error('InvalidValueError: marker 是 Proxy'); m.map = o.map });
+  rec.cluster = o.markers.length; this.clearMarkers = function () {}; this.setMap = function () {} } };
 """
 
 
@@ -143,6 +158,7 @@ def test_google_basemap_draws_with_the_browser_key_and_no_osm(live_server, make_
     assert page.evaluate("() => window.__gm.maps[0].opts.mapId") == MAP_ID
     assert page.evaluate("() => document.querySelectorAll('#mp-canvas .mp-pin').length") == 2
     assert page.evaluate("() => window.__gm.cluster") == 2, "資料點要進群聚"
+    assert page.evaluate("() => window.__gm.legacyListener") == 0, "AdvancedMarkerElement 的點擊要用 addEventListener('gmp-click')"
     assert seen["osm"] == 0, "Google 底圖畫面載了 OSM 圖磚（ToS §3.2.3(e)）"
     assert page.evaluate(f"() => {MD}.basemap") == "google"
     # 底圖出處（「底圖 © OpenStreetMap 貢獻者」那一行）不顯示；GB-S1 的「地點資料」那一行另題驗
