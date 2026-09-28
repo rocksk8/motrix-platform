@@ -23,7 +23,9 @@ def test_states_file_matches_registry(client, tmp_path):
     assert data["started_at"]
     want = {s["key"]: (s["state"], s.get("version")) for s in registry.module_states()}
     got = {m["key"]: (m["state"], m["version"]) for m in data["modules"]}
-    assert want and got == want, "狀態檔與 registry.module_states() 不一致"
+    assert got == want, "狀態檔與 registry.module_states() 不一致"
+    assert len(data["modules"]) == len(registry.module_states()), "一個模組一列"
+    # 〔更正（第二十班 core-only 交會紅）：原寫 `assert want and …`——核心版沒有 L2 時 want 本來就是空的；這一題驗的是 L1 寫檔（不可以標 requires_module，§G5 #7），改成只要與 registry 一致〕
     assert not list(tmp_path.rglob("*.tmp")), "先寫 .tmp 再改名：成功後不可以留 .tmp"
 
 

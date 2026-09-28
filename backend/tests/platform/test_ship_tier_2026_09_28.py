@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._requires import requires_module  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[3]
 _spec = importlib.util.spec_from_file_location("_ship_tier", REPO / "tools" / "platform" / "ship_tier.py")
 ST = importlib.util.module_from_spec(_spec)
@@ -292,6 +294,7 @@ def test_registry_internals_allowlist_is_needed_and_minimal(real_repo):
     assert any(h.startswith("backend/core/catalog.py:") for h in hits), hits
 
 
+@requires_module("case", "以 case 的能力清單驗例外清單（approval.reassign 由 case 等模組提供）；模組不在時沒有對象")
 def test_capability_string_allowlist_entries_are_live(real_repo):
     """例外清單每一筆今天仍對得上（那個檔真的在非取用位置出現那個字串）；拿掉它 ⇒ 真的會被抓（例外不是空設）。"""
     for (rel, cap), why in ST.CAPABILITY_STRING_ALLOWED.items():
@@ -335,6 +338,8 @@ def real_repo():
     return ST.Repo(src)
 
 
+@requires_module("arap", "提供者是 arap；模組不在時沒有對象")
+@requires_module("accounting", "斷言消費端 accounting；模組不在時沒有對象")
 def test_real_arap_attachments_provider_reaches_accounting(real_repo):
     """arap 在模組層 provide 了 attachments.for_document（invoice_vouchers.py）與 calendar.writeback ⇒ 消費端含
     accounting 的附件彙整（voucher_attachments.py）與 L1 google_calendar。〔更正 D 複審：case 是同一能力的另一個提供者，不是消費端〕"""
@@ -345,6 +350,8 @@ def test_real_arap_attachments_provider_reaches_accounting(real_repo):
     assert not pc["reject"], pc["reason"]
 
 
+@requires_module("case", "提供者是 case；模組不在時沒有對象")
+@requires_module("netplan", "斷言直接消費端 netplan；模組不在時沒有對象")
 def test_real_case_access_reaches_netplan_and_accounting(real_repo):
     """case.access：netplan 是**直接**消費端（netplan/api.py single_provider，DB3-S1）；L1 helpers/case_access 也是；
     accounting 經 helpers/case_access 間接用到（voucher_attachments.py import case_access）⇒ 要靠 modtest 選題展開。"""
@@ -355,6 +362,7 @@ def test_real_case_access_reaches_netplan_and_accounting(real_repo):
     assert not pc["reject"], pc["reason"]
 
 
+@requires_module("case", "正對照需要至少一個提供串接點的模組（case）；核心版沒有任何模組時比對對象是空的")
 def test_real_ast_capabilities_match_runtime_registry(client, real_repo):
     """能力清單的交叉比對（取代設計裡的 dep_graph 比對：dep_graph.json 沒有 capability 資料）：
     載入後 registry 實際登記的（ModuleSpec.providers＋模組層 provide），依提供函式所屬模組歸戶，必須 ⊆ AST 算出來的。
