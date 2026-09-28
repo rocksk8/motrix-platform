@@ -298,6 +298,12 @@ def test_run_ship_tests_refuses(tmp_path, body, why):
         MU.run_ship_tests(["test_mini.py"], repo=_mini(tmp_path, body))
 
 
+def test_run_ship_tests_names_the_failures(tmp_path):
+    with pytest.raises(MU.UpdateError) as ei:
+        MU.run_ship_tests(["test_mini.py"], repo=_mini(tmp_path, "def test_boom():\n    assert False\n"))
+    assert "test_mini.py::test_boom" in str(ei.value)
+
+
 def test_ship_tests_adds_consumers_of_a_changed_provider():
     """第②級選題（使用者裁示甲）：case 的提供者有改 ⇒ 選題含 netplan（case.access 的直接消費端）的題。"""
     import sys
