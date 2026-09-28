@@ -451,3 +451,12 @@
   3. 回滾的 log 檔名格式（§5 附註那一條）
   4. 以上完成後才拿掉第 3 行的 🔴「不可交正式機」警語
 - `module_update` 的 `interrupted_apply_pending` 訊息指向「套用腳本的回滾模式（範本 §5）」，現在工具存在了 ⇒ 等 §5 填好即一致
+
+## 17. 複核 B55F-M1 追加修正：wip/a-module-rollback-mode 9bd91371（D，2026-09-29）
+
+> 作者測試（依裁示採信）：`pytest tests/platform/test_module_rollback_mode_2026_09_29.py tests/platform/test_apply_module_update_ps1_2026_09_28.py` 58 passed、2 skipped（E4 兩格）；反向控制：舊綁定 ⇒ 2 紅（`-k executed`）。
+
+- B 的演練場次 D 抓到：PowerShell 腳本層的 `param($ModuleKey)` 與 `$script:ModuleKey` 是同一個變數（名稱不分大小寫），之後 `$script:ModuleKey = $null` 會清掉傳入值 ⇒ 回滾一律 `bad_args`；原本只有靜態題，抓不到
+- 修正：參數改綁 `$RollbackKey`，`[Alias("ModuleKey")]` 保持對外名稱；套用路徑「拒收回滾專用參數」的檢查同時恢復作用 ✔；新增 3 題**實際執行** ps1（複製到暫存安裝目錄、只改 `$ProdRoot`）✔
+- D 查驗：9bd91371 的 param 名稱（PackagePath、Yes、SkipAutoRollback、Rollback、RollbackKey、Backup、IncludeDatabase、ConfirmDatabaseOverwrite）與所有 `$script:` 變數名（轉小寫）**交集為空** ✔
+- B55F-M1 仍未關：等 S7（§16 的四項）
