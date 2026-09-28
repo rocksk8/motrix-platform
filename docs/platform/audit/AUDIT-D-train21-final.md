@@ -43,3 +43,13 @@
 - **T21F-O2**：B 的演練（基底 0af16ad1，§6.7(d) 路徑二＋「沒有確認檔 ⇒ refused_company_setup、正式機不動」）結果出來後再附上；依主持安排，演練與本審平行，演練發現問題才擋
 
 - 〔補 2026-09-29〕T21F-S1 已先在第 1 段落實：第 3 步同一個區塊內、兩行 `python` 之前設 `$env:PYTHONDONTWRITEBYTECODE = "1"`（第 64 行）✔；第 2 段同樣照做；`Invoke-CompanySetupCli`／發布工具改 `-B` 與 T21F-O1 列下一班
+
+## 5. 更正（2026-09-29 04:40，B 演練發現）：第 1 段預期的 reason
+
+- B 演練：沒有確認紀錄時 preflight 回 **`no_record`**（`developer: true`、`missing: []`），不是 §6.7 寫的 `developer_identity_unsigned`
+- D 對照 `company_setup.status()`（29e435df :328-351）：判定順序是「欄位不合格 ⇒ fields_invalid」→「**沒有確認紀錄 ⇒ no_record**」→ 識別不符 → 欄位變更 →「開發者身分且簽章檔不在／無效 ⇒ developer_identity_unsigned」。開發者資料又沒有簽章檔時，preflight 模擬的 backfill 是 `waiting_signature`（不寫紀錄）⇒ 停在 no_record ⇒ **程式正確，文件寫錯**
+- 第 1 段第 3 步已改成「`no_record`（developer:true、missing:[]）或 `developer_identity_unsigned` 都算正常」，並保留更正註記 ✔
+- 下一班：
+  - E：COMPANY-SETUP-GATE §6.7(a)(d) 的預期文字更正
+  - `apply_update.ps1`（第 807 行）拒絕訊息的處置說明只列 `developer_identity_unsigned`／`install_mismatch`，要補「`no_record` 且 `developer:true` ⇒ 同樣把 install 交給開發者簽確認檔」，否則正式機 Claude 看到 `no_record` 會對不上處置
+- D 自己的同類錯誤：AUDIT-D-E4-company-gate.md §4.1-①、§7.1 的表格寫「漏了第一、二步 ⇒ 預檢得 `developer_identity_unsigned`」——結論（停服前拒絕、正式機不動）不變，原因碼應為 `no_record`（developer:true）。已在該檔補更正（原句保留）
