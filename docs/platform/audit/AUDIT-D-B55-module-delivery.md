@@ -465,7 +465,7 @@
 
 - ✅ B55F-M1 關閉（937d0c7a）
 - 實機：B 的演練場次 D 在 9bd91371：套用 success（1.3.4 → 1.3.5）→ 回滾 `module_rollback_ok`／`restored`／`service=up`、`back_to_before=true`、installed 1.3.4（報告 `%TEMP%\motrix-drill-b55\20260929_014622.report.json`，A 轉述）
-  〔更正（2026-09-29，A 告知）：上句引的報告檔 `%TEMP%\motrix-drill-b5560929_014622.report.json` 已在 B 清理時刪除（同目錄 9/28 場次 A／B／C 的報告一併刪除；A／B／C 已記在 MODULE-UPDATE-DRILL-20260928.md）。場次 D 的結果目前只剩 B 的訊息：module_rollback_ok／restored／up、8.7 秒、back_to_before=true、installed 1.3.4、腳本 2026-09-28e。可重現：9bd91371＋E4＋wip/b-module-rollback-drill 2c3af473，`--only D`。下一班合回時 B 重跑並把報告放在不會被清的位置〕
+  〔更正（2026-09-29，A 告知）：上句引的報告檔 `%TEMP%\motrix-drill-b55\20260929_014622.report.json` 已在 B 清理時刪除（同目錄 9/28 場次 A／B／C 的報告一併刪除；A／B／C 已記在 MODULE-UPDATE-DRILL-20260928.md）。場次 D 的結果目前只剩 B 的訊息：module_rollback_ok／restored／up、8.7 秒、back_to_before=true、installed 1.3.4、腳本 2026-09-28e。可重現：9bd91371＋E4＋wip/b-module-rollback-drill 2c3af473，`--only D`。下一班合回時 B 重跑並把報告放在不會被清的位置〕
 - S7（937d0c7a）：§5 兩種指令（只回程式／連資料庫＋「套用之後寫入的所有資料都會回到快照當時，使用者明確同意才加旗標」）、`needs_database` 處置、回滾狀態表（ok／refused＋rollback_code／unhealthy／restore_failed）、桌面 log 用 `Tee-Object`；§3 讀不存在的 log 已更正（原句保留）；`interrupted_apply_pending` 與 `apply_plan` 的訊息改帶確切指令 ✔
 - 測試：B 的 172 題是在 1128a3ac 跑的；937d0c7a 對程式只改了兩段訊息字串與一題斷言 ⇒ D 只跑受影響的兩個題檔（`test_module_update_delivery`、`test_apply_plan`）：**97 passed**，不要求 B 整組重跑（裁示 8c34f08a：有疑慮的題才跑）
 - 殘留文字修正（非必修）：狀態表 `module_rollback_refused` 一列寫「停服後才被拒的，服務已照原樣重啟」，但 `needs_database`、`db_snapshot_missing` 是**停服前**拒絕（服務沒停過）⇒ 改成「停服前被拒（服務沒停）或停服後被拒（服務已照原樣重啟）」
