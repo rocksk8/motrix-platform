@@ -57,3 +57,61 @@
 - **CG-O1**：§3.4 對指紋退路的描述與現行程式不符（先退到 MachineGuid，最後才丟 RuntimeError）。實作前改寫；這也是 CG-M1「會自己漂」的根據
 - **CG-O2**：`/api/uploads/…?pt=` 在 auth_middleware 的登入檢查之前就放行（簽名 token，1 小時），不會經過閘門。token 只能由已受閘門保護的端點簽發 ⇒ 只剩閘門生效前已簽發、1 小時內的尾巴，可忽略；§1.4「已存檔的輸出一樣被第一道擋」要加這個但書
 - **CG-O3**：§1 的盤點（34＋1＋6、繞過 3 處）我沒有逐點重查。§7-② 掃描器的正對照（已知點全部要亮）就是用來驗這份盤點的，實作時以它為準
+
+---
+
+## 4. 複審 CG-M1／CG-M2：wip/e-company-gate 32d7c056（ede87d61＋Q7 C）（D，2026-09-28）
+
+> 依據主持裁示：綁定改 `backend/.install_identity`（不綁硬體；威脅模型＝防沿用預設與疏忽，不防改碼或整包複製）；Q7＝C。
+> 只讀文件＋現行程式碼；另做一個 FastAPI 探針（見 CG2-S1）。
+
+### 4.0 結論
+
+- ✅ CG-M1 關閉（32d7c056）
+- ✅ CG-M2 關閉（32d7c056）
+- **新必修 1（CG2-M1）、建議 4。**
+
+### 4.1 主持指定
+
+**① 兩階段漏做時，預檢會不會「拒絕升級、不停服」：成立，但有四個前提要寫進設計（CG2-S3）。**
+- 執行的是**包裡的新版** ps1：UPDATE-DELIVERY §3.4 步驟 2 先把 `staging\<包>\backend\tools\*` 複製到安裝目錄，再執行 apply_update.ps1 ⇒ 預檢與 `ensure-install-id` 會在第一次含閘門的升級就生效
+- 漏了第一階段（沒有識別檔、沒有簽章檔）：同一次執行裡 `ensure-install-id` 先產生識別檔，接著預檢得到 `developer_identity_unsigned` ⇒ 拒絕，這時服務還沒停
+- 簽章檔是對另一個識別簽的（例如識別檔被重建）：`install_mismatch` ⇒ 同樣拒絕
+- 還缺的前提：
+  - 預檢**自己**當掉、逾時、輸出看不懂 ⇒ 要視為拒絕（不可以當成通過）
+  - 預檢得到 `status_error`（configured:null）⇒ 也要拒絕：§3.6 說「會丟例外的新版在停服前就被擋下」，但 §6.3-1 只寫「未設定 ⇒ 拒絕」
+  - `-Force`（版本比對用）**不可以**略過預檢；要略過就另開一個旗標，並寫進 `::RESULT::`
+  - 套用後 CLI 得到 `configured:null` ⇒ 與「未設定」同樣自動回滾（新版上線即全公司停止輸出文件，等同故障）
+  - 手動套用（不經儀表板）時也要先複製包裡的 tools；正式機 Claude 指示要寫明
+
+**② 暫時放行：72 小時與「只能用 CLI」在檔案層面擋不住，要改成以伺服器記下的時間為準（CG2-S4）。**
+- 放行檔是本機檔案：任何能寫安裝目錄的人都可以不經 CLI 直接寫它，也可以同時改 `created` 與 `until` 來延長。在威脅模型（防疏忽，不防改碼）下可以接受，但「≤72h、不可延長」要由伺服器來保證：
+  - 伺服器第一次看到某份放行檔（以內容雜湊為鍵）時，記下 `first_seen`（寫進 DB 稽核）；有效期＝min(`until`, `first_seen`＋72h)
+  - `created` 晚於現在（容許幾分鐘誤差）⇒ 無效
+  - 檔案內容一改就是「新的一份」⇒ 新的稽核與告警。這讓「重建」看得見，但不禁止（設計本來就允許重建，每次都有紀錄）
+- 放行在 `status()` **丟例外**時讀不到（放行是在 status() 裡判斷的）：Q7 C 的中介層本來就放行，所以不影響功能；但 §3.6 表格的「§4.3 暫時放行對輸出端同樣有效」在 status_error 時不成立。這句要改寫，或把放行判斷放在 status() 之外
+
+**③ 428：成立。** 產品碼 0 處使用；`required` 與 `undetermined` 分開，後者不導設定頁，正確。殘留見 CG2-S2。
+
+**④ 精確白名單＋LICENSE_EXEMPT_PATHS：內容成立，比對方式不可行（CG2-S1）。**
+- `LICENSE_EXEMPT_PATHS`＝ping、login、logout、`/api/license/status`，都無害，而且前三個已在改密碼白名單內
+- 白名單內容：不含萬用字元與描述性條目，方法都寫了。備份還原、模組管理、使用者管理、部署頁都不在，正確
+
+### 4.2 新必修
+
+**CG2-M1（必修）　三個 F3 檔沒有登記為「安裝設定」⇒ 完整包升級、V9 轉換、回滾時可能被當成程式處理或清掉**
+
+- 新設計讓 `backend/.install_identity` 成為開發者正式機唯一的綁定依據（丟了 ⇒ `install_mismatch` ⇒ 要重簽或暫時放行）
+- 現行 `core.upgrade.CONFIG_FILES`（:74-83）列的是 license.key、`.deployed_commit.json` 等「安裝本身的設定」；沒列的檔在 `classify` 裡預設是「程式」。刪除計畫、cleanup-snapshot、兩種回滾都依這個分類決定動不動它
+- 設計 §7-⑧ 只要求「`.gitignore`、verify_package 拒絕帶入、不進備份」，沒有要求登記為設定
+- 修法：
+  - `.install_identity`、`company_confirmation.sig`、`company_setup_grace.json` 進 `_paths` 常數＋`core.upgrade.CONFIG_FILES`（同 DB-O1 對 `.deployed_modules.json` 的做法）
+  - §7-⑧ 加一題：刪除計畫、cleanup-snapshot、apply／rollback 之後三檔逐位元組不變
+  - 啟動時「識別檔不存在 ⇒ 產生並記 WARN」：若庫裡**已有**確認紀錄，重建就等於改掉綁定 ⇒ 至少要記 ERROR＋告警（寫明「識別檔遺失，已重建；確認紀錄失效」），不可只記 WARN
+
+### 4.3 建議
+
+- **CG2-S1　中介層拿不到路由樣板**：§4.1 寫「以 `request.scope["route"].path` 比對」。D 探針（FastAPI，本 repo venv）：`@app.middleware("http")` 在 `call_next` **之前** `scope["route"]` 是 **None**，之後才是 `/api/settings/branding/{kind}`（路由在 call_next 裡才解析）。改成中介層自己比對：對白名單中的每條路由呼叫 `route.matches(scope)`（Starlette `Match.FULL`），或啟動時由白名單的 (方法, 樣板) 編成正規式。§7-① 要有一題：有路徑參數的白名單條目（branding/{kind}）真的放行、同前綴的非白名單路徑真的擋
+- **CG2-S2　409 殘留**：§5（`CompanySetupRequired` ⇒「端點轉 409」）、§7-①（「必須 409」「不再 409」）、§7-③（「所有 identity 輸出 409」）還寫 409。守門照文件寫會跟 428 矛盾，實作前改掉
+- **CG2-S3**：見 4.1-①（預檢當掉＝拒絕、status_error＝拒絕、-Force 不略過、套用後 null＝回滾、手動套用先複製 tools）
+- **CG2-S4**：見 4.1-②（first_seen 由伺服器記、`created` 在未來＝無效、status_error 時放行讀不到）
