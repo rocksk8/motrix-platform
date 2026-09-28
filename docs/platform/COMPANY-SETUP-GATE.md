@@ -62,9 +62,9 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 
 | # | 路徑 | 會不會到客戶 | 處置（本案或另案） |
 |---|---|---|---|
-| ① | 預設 `frontend/static/logo.png`／`logo-white.png`／`favicon.png`（含英文公司名；`KEPT_DEFAULT_IMAGES`（_our_company_literals.py:55-59）使用者裁示保留）經 `/api/system/branding/<kind>` 顯示 | **會**（上傳前的畫面；PDF 不嵌 LOGO） | 待裁示 Q1：換成中性預設圖（產品名 MOTRIX）或未上傳時不顯示 |
-| ② | `backend/version_manifest.json` 內文 5 筆（:491、:1184、:1254、:1261、:1793）含 <字面值>；啟動時寫入客戶庫 `module_versions`（startup.py:526），V9 升上來的安裝全部顯示，且進每日備份（archive.py:2076） | **會** | 另案：出貨版本紀錄去識別化（改寫內文或出貨時過濾）＋既有客戶庫清理；需使用者裁示（已出貨的紀錄屬 ALLOWED「已出貨版本紀錄」） |
-| ③ | `docs/platform/**`（未 export-ignore，141 檔）如 `audit/AUDIT-X-9b-…md:75`、`AUDIT-X-C-batch1.md:116,136,176`；`DR-SOP.md:127`（demo 密碼＝<字面值>）；`.gitattributes:180`（網域註解） | **會**（進 git archive） | 另案：docs/platform export-ignore（或逐檔）＋DR-SOP 改寫；掃描器擴到 .md 與根目錄（§7-③） |
+| ① | 預設 `frontend/static/logo.png`／`logo-white.png`／`favicon.png`（含英文公司名；`KEPT_DEFAULT_IMAGES`（_our_company_literals.py:55-59）使用者裁示保留）經 `/api/system/branding/<kind>` 顯示 | **會**（上傳前的畫面；PDF 不嵌 LOGO） | 〔Q1 裁示：維持現狀，不在本案〕~~待裁示 Q1：換成中性預設圖或未上傳時不顯示~~ |
+| ② | `backend/version_manifest.json` 內文 5 筆（:491、:1184、:1254、:1261、:1793）含 <字面值>；啟動時寫入客戶庫 `module_versions`（startup.py:526），V9 升上來的安裝全部顯示，且進每日備份（archive.py:2076） | **會** | 〔Q5 裁示：另開一線〕另案：出貨版本紀錄去識別化（改寫內文或出貨時過濾）＋既有客戶庫清理；需使用者裁示（已出貨的紀錄屬 ALLOWED「已出貨版本紀錄」） |
+| ③ | `docs/platform/**`（未 export-ignore，141 檔）如 `audit/AUDIT-X-9b-…md:75`、`AUDIT-X-C-batch1.md:116,136,176`；`DR-SOP.md:127`（demo 密碼＝<字面值>）；`.gitattributes:180`（網域註解） | **會**（進 git archive） | 〔Q5 裁示：另開一線〕另案：docs/platform export-ignore（或逐檔）＋DR-SOP 改寫；掃描器擴到 .md 與根目錄（§7-③） |
 | ④ | `core/upgrade.py:683-686 _is_our_install`：統編相等**或名稱含兩字片段** ⇒ 把 `V9_COMPANY_DEFAULTS`（:653-659，全部 <字面值>）寫進空白欄位；由出貨的 `tools/platform/upgrade.py:157` 呼叫 | 只有 V9 轉換；**名稱含該片段的客戶會被寫入開發者統編** | **本案修**：改為只認統編指紋（§3.3），刪名稱片段判斷 |
 | ⑤ | `db.py:4704-4800 _m106`、`db.py:1032-1063 _m008`（staff 帳號名）、`helpers/auth.py:44`（弱密碼黑名單）、`tools/platform/upgrade_drill.py:96-97` | 凍結 migration／只寫演練暫存／黑名單，不寫進客戶輸出 | 不動（ALLOWED 已登記） |
 | ⑥ | 種子 `db.py:769` 空白、`DEFAULT_IDENTITY` 全空、demo 庫每次登入重建（system_settings 清空）、包內無 .db（verify_package.py:108、:159-162 擋） | 不會 | —（守門已在） |
@@ -92,7 +92,7 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 - 出貨程式碼內只放**雜湊**：`DEVELOPER_IDENTITY_FP = {sha256("motrix-devco-v1|" + 正規化值)}`，正規化值＝統編只取數字、公司名去空白與「股份有限公司／有限公司」字尾。建置時由開發者本機的一次性工具算出貼入（工具不存字面值）。
 - ⚠ **誠實說明**：統編只有 8 碼，有鹽的雜湊仍可在數秒內暴力還原（鹽在程式碼裡）。這個設計的目的是**不再多一處字面值**（文件、測試、設定、log 都不出現），不是保密——統編本來就是公開登記資料，且已以字面值存在於凍結的 `db.py`／`core/upgrade.py`（ALLOWED）。
 - 開發者機器登記：`DEVELOPER_MACHINES_FP = {sha256("motrix-devmachine-v1|" + 機器指紋)}`（開發機、正式機）；正式機指紋由正式機回報取得（`MOTRIX-交付\正式機回報`），不寫進文件。
-- 硬體更換的出口：開發者以既有交付簽章金鑰（Ed25519，D:\MOTRIX-KEYS\delivery）簽一個確認檔 `company_confirmation.sig`（內容：統編雜湊＋機器指紋＋簽發日），放安裝根目錄（F3，不進包、不上雲）；公鑰已內嵌於 licensing。**建議**以此為主、登記機器為輔（Q2）。
+- 硬體更換的出口：開發者以既有交付簽章金鑰（Ed25519，D:\MOTRIX-KEYS\delivery）簽一個確認檔 `company_confirmation.sig`（內容：統編雜湊＋機器指紋＋簽發日），放安裝根目錄（F3，不進包、不上雲）；公鑰已內嵌於 licensing。〔Q2 裁示：以此為主、登記機器為輔〕
 - `_our_company_literals` 守門：雜湊不是字面值、掃描器看不到 ⇒ 另加一題「指紋常數只出現在 `helpers/company_setup.py`」。
 
 ### 3.4 綁本機
@@ -119,7 +119,7 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 - 白名單 `_COMPANY_SETUP_ALLOWED`（每條附理由，§7-①）：登入／登出／`/api/auth/me`／改密碼／TOTP 與 Passkey 設定（帳號本身必要功能）、`/api/ping`、`/api/system/version`、健康檢查、`/api/system/branding*`（登入頁）、`/api/settings/company-profile`（GET／PUT）、`/api/settings/company-setup/status`、上傳品牌圖、`/api/platform/menu`（導頁需要）、使用者管理的「自己」端點。**其他全部擋**（預設拒絕：新 API 自動被擋，不必記得加）。
 - 效能：`status()` 結果快取在行程內，以 `system_settings` 的 `company_profile`／`company_identity_confirmation` 的 `updated_at` 當版本；機器指紋已有行程快取。
 - 非 HTTP 的輸出（每月排程報表信）：走第二道（§5），未設定 ⇒ 不寄、記一則「本公司資料未設定」系統告警（邊緣觸發、每日一封，比照〈告警必須有速率上限〉）。
-- demo：demo 庫每次登入重建、公司資料為空 ⇒ **待裁示 Q3**。建議：demo 庫種一份明確虛構的示範公司（名稱含「示範」、統編用不合檢查碼的 `00000000`）＋確認紀錄 `via: "demo_seed"`，且 demo 模式所有輸出加「示範資料」浮水印；demo 的虛構身分永遠不進正式庫（demo 隔離已有）。
+- demo：demo 庫每次登入重建、公司資料為空 ⇒ 〔Q3 裁示採建議〕：demo 庫種一份明確虛構的示範公司（名稱含「示範」、統編用不合檢查碼的 `00000000`）＋確認紀錄 `via: "demo_seed"`，且 demo 模式所有輸出加「示範資料」浮水印；demo 的虛構身分永遠不進正式庫（demo 隔離已有）。
 
 ### 4.2 前端
 - `static/notif.js` 的 fetch 包裝（已處理 `must_change_password`）加 `company_setup_required`：最高管理員 ⇒ 導 `company-profile-settings.html?setup=1`；其他人 ⇒ 導新頁 `company-setup-required.html`（「請最高管理員先完成本公司資料設定」＋最高管理員帳號名單不列，只說角色）。
@@ -129,7 +129,7 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 ## 5. 輸出端第二道
 - L1 `company_identity.require_for_output(kind)`：`status()` 不通過 ⇒ 丟 `CompanySetupRequired`（端點轉 409 同一個 code）；`kind="payment_request"` 另驗銀行欄位。
 - 放在**共用路徑本身**：`location_identity()` 之上加 `identity_for_output(location_id, kind)`，Head/Foot、`doc_template` identity 區塊、`company_heading`／`contact_line`／`footer_line` 的輸出呼叫全部改走它 ⇒ 一處擋住 1.1 全部。
-- 1.2 的三處改走 CI：voucher_pdf 改 `identity_for_output`；legal_params 等告知端點改 `company_name()`；薪資單前端預填改讀 `/api/system/branding` 的 LI 欄位，後端產 PDF 時若單據上的公司欄位與本公司不同 ⇒ 以本公司為準並提示（**待裁示 Q4**：薪資單可手改公司欄位是否保留）。
+- 1.2 的三處改走 CI：voucher_pdf 改 `identity_for_output`；legal_params 等告知端點改 `company_name()`；薪資單前端預填改讀 `/api/system/branding` 的 LI 欄位，後端產 PDF 時若單據上的公司欄位與本公司不同 ⇒ 以本公司為準並提示〔Q4 裁示：手改保留、第二道只驗已設定 ⇒ ~~以本公司為準並提示~~ 不做〕。
 - 1.3 不含本公司資料的輸出不加第二道（第一道已擋），但守門要求逐一登記「不含本公司資料」理由（§7-②）。
 
 ## 6. 既有正式機行為不變的證明
@@ -161,10 +161,16 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 7. demo 身分（依 Q3）。
 8. 文件：MODULE-GUIDE §3.7 補一條、INTEGRATION-POINTS（若模組需要登記「不含本公司資料」）、CORE CHANGELOG。
 
-## 9. 待裁示（交 D／主持／使用者）
+## 9. 待裁示（交 D／主持／使用者）〔裁示結果 2026-09-28，CORE-SPEC d27ce2dc，逐條附在各題後〕
 - **Q1** 預設 LOGO／favicon 含開發者英文名（使用者曾裁示保留）：販售版改中性預設圖，或未上傳時不顯示？
+  〔**裁示（使用者）：維持現狀**——預設 LOGO／favicon 不改；§2-① 列為已知、不在本案處理〕
 - **Q2** 開發者本機認定：簽章確認檔為主＋登記機器指紋為輔（建議），或只用其一？
+  〔**裁示：簽章確認檔為主＋機器指紋為輔**（照 §3.3 建議）〕
 - **Q3** demo：虛構示範公司＋浮水印（建議），或 demo 也強制設定？
+  〔**裁示：虛構示範公司＋浮水印**（照 §4.1 建議）〕
 - **Q4** 薪資單可手改公司欄位（存在單據上）是否保留；若保留，第二道只驗「已設定」，不驗單據上的值。
+  〔**裁示：保留手改；第二道只驗「已設定」**——§5 的「以本公司為準並提示」一句不做〕
 - **Q5** §2-②③（版本紀錄內文、docs 與根目錄文件）是否本案一起做，或另開一線。
+  〔**裁示：另開一線，不併本案**；但 §2-④ `_is_our_install` 名稱片段判斷**屬本案，照修**〕
 - **Q6** 必要欄位定案（建議：名稱＋統編（含檢查碼）＋電話或 email 其一；請款單另要銀行欄位）。
+  〔**裁示（使用者）：名稱＋統編（檢查碼）＋電話或 email 擇一；請款單另要銀行欄位**（照 §3.5）〕
