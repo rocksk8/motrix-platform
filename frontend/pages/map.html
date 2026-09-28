@@ -188,6 +188,14 @@
           <br>常見原因為僅有機關名稱而無門牌，或地址有誤；地址補齊或更正後，系統會自動重新查詢。
         </div>
       </div>
+      <!-- SST §6.2（Google 條款）：底圖是 OSM 時不可以畫 Google 定位的座標 ⇒ 那幾筆不畫，要說出來 -->
+      <div class="mp-note info" x-show="info && info.googleOnlyHidden > 0">
+        <span>🗺️</span>
+        <div>有 <strong x-text="info.googleOnlyHidden"></strong> 筆只有 Google 定位的座標，<strong>未顯示</strong>：
+          依 Google 條款，Google 定位結果只能配 Google 地圖使用，目前底圖為 OpenStreetMap。
+          改用 Google 底圖後即會顯示；免費定位來源補上座標的，也會自動顯示。
+        </div>
+      </div>
       <div class="mp-note info" x-show="info && info.pendingGeocode > 0">
         <div>有 <strong x-text="info.pendingGeocode"></strong> 個地址<strong>尚未定位</strong>，
           系統會在背景陸續完成（外部定位服務有查詢速率限制）；完成後重新開啟地圖即可看到，無須操作。
@@ -204,7 +212,7 @@
            x-show="info && info.locationsUnlocated && info.locationsUnlocated.length">
         <span>⚠️</span>
         <div><strong>有據點無法定位</strong>：
-          <span x-text="(info.locationsUnlocated || []).map(l => l.name + '（' + (l.address || '未填地址') + '）').join('、')"></span>。
+          <span x-text="(info.locationsUnlocated || []).map(l => l.name + '（' + (l.address || '未填地址') + (l.googleOnly ? '；只有 Google 定位座標，OpenStreetMap 底圖依 Google 條款不可使用' : '') + '）').join('、')"></span>。
           <br>這些據點<strong>不列入「最近據點」計算</strong>，鄰近案件的距離將以其他據點計算。
           請至<a href="company-profile-settings.html">公司資料設定</a>修正地址，或直接填入經緯度。
         </div>

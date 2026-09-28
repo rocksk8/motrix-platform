@@ -11,6 +11,8 @@ Nominatim 的使用政策明文要求**可識別的 User-Agent** 與**每秒最�
 而那跟「標案沒有地點」「沒有 Google 金鑰」在畫面上是同一個樣子
 ——三個成因、一個畫面、三種相反的處置，所以每一個都必須有自己的訊號。
 """
+import contextlib
+import contextvars
 import json
 import logging
 import re
@@ -370,6 +372,48 @@ def _google_key_configured() -> bool:
     from helpers.settings import _get_setting
     profile = _get_setting("company_profile", {}) or {}
     return bool((profile.get(GOOGLE_KEY_SETTING) or "").strip())
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Google 條款 SST §6.2：Geocoding 的結果不可以配非 Google 的底圖（第十五班 ②(a)）
+# ══════════════════════════════════════════════════════════════════════════
+# 逐字：「Customer must not use Google Maps Content from the Geocoding API in conjunction with a
+# non-Google map」（Google Maps Platform Service Specific Terms §6.2；CORE-SPEC「地圖底圖與 Google 條款」）。
+# ⇒ 底圖不是 Google 時，畫在地圖上的座標（含據點與由它算出的距離）**只能**來自免費來源。
+# 🔑 做成「這一段呼叫不用 Google 內容」的範圍（contextvar），不是在每個畫點的地方各自過濾：
+#    點、據點、距離都經過 cached_only／locate_cached，一處擋住就全部擋住；逐處過濾的話，
+#    下一個新來源（或新的距離欄位）會安靜地把 Google 座標帶出去。
+_NO_GOOGLE_CONTENT = contextvars.ContextVar("motrix_geo_no_google_content", default=False)
+
+
+@contextlib.contextmanager
+def without_google_content():
+    """範圍內：快取讀取與對外查詢都跳過 Google 階（只用 TGOS／Nominatim／行政區／人工座標）。"""
+    token = _NO_GOOGLE_CONTENT.set(True)
+    try:
+        yield
+    finally:
+        _NO_GOOGLE_CONTENT.reset(token)
+
+
+def google_content_blocked() -> bool:
+    return _NO_GOOGLE_CONTENT.get()
+
+
+def google_basemap() -> bool:
+    """地圖底圖是不是 Google。
+
+    ⚠️ 第十五班 ②(b)（有金鑰改用 Google 底圖）完成前，底圖一律 OSM（map.html 寫死）⇒ False。
+    ②(b) 上線時**只改這一支**：它決定 /api/map/points 要不要擋 Google 座標。"""
+    return False
+
+
+def has_google_coord(address) -> bool:
+    """這個地址快取裡有沒有 Google 來源的座標（**不受 without_google_content 影響**：用來計數「被擋下的」）。"""
+    address = (address or "").strip()
+    return bool(address) and _cached_stage(address, SOURCE_GOOGLE) is not None
+
+
 TGOS_APPID_SETTING = "tgos_app_id"
 
 #: 快取多久之後要重新查一次。
@@ -889,6 +933,8 @@ def _stage_allowed(source) -> bool:
     """
     if source != SOURCE_GOOGLE:
         return True
+    if google_content_blocked():
+        return False            # SST §6.2：非 Google 底圖的範圍內不查 Google
     # 🔑 具名呼叫模組層函式，不要抓住參考：抓住的話測試 patch 打不到，
     #    而那一題會安靜地失效。
     return not quota_exceeded()
@@ -1231,7 +1277,8 @@ def cached_only(address, min_source=None):
     address = (address or "").strip()
     if not address:
         return None
-    if min_source == SOURCE_GOOGLE and _google_key_configured():
+    blocked = google_content_blocked()
+    if min_source == SOURCE_GOOGLE and _google_key_configured() and not blocked:
         return _cached_stage(address, SOURCE_GOOGLE)
 
     # 🔴 **一次連線問完四階**，不是四次。
@@ -1243,6 +1290,8 @@ def cached_only(address, min_source=None):
     #    真正該查的那幾個走到 deadline ⇒ 畫面說「這次來不及」。
     #    ⇒ 使用者的症狀只解掉一半，**而那一半正是他抱怨的那一半**。
     order = [source for _name, source in _STAGES] + [SOURCE_NOMINATIM_DISTRICT]
+    if blocked:
+        order = [src for src in order if src != SOURCE_GOOGLE]      # SST §6.2（見 without_google_content）
     # 記憶體先看（免費），只有沒命中的才進那一次查詢。
     missing = [src for src in order if (address, src) not in _CACHE]
     fetched = _cache_get_many(address, missing) if missing else {}
@@ -1343,8 +1392,14 @@ def locate_cached(address, manual_coord=None):
     # 🔴 §15 補三：**只有「三階都乾淨地 miss」才可以記負快取。**
     # 任何一階回報 `err`（逾時／對方回錯／連不上）⇒ 這一輪什麼都不記。
     errors = []
+    # SST §6.2：範圍內連 Google 的快取都不讀（讀到就等於把 Google 座標畫上 OSM）；
+    # 也因此下面「三階都 miss」不成立 ⇒ 不可以記負快取（Google 根本沒被問）。
+    skipped_google = False
 
     for name, source in _STAGES:
+        if source == SOURCE_GOOGLE and google_content_blocked():
+            skipped_google = True
+            continue
         hit = _cached_stage(address, source)
         if hit:
             return hit
@@ -1382,6 +1437,10 @@ def locate_cached(address, manual_coord=None):
     result = _locate_district(address, errors=errors)
     if result.coord:
         _remember(address, result)
+    elif skipped_google:
+        # SST §6.2 範圍內跳過了 Google 階 ⇒ 不是「三階都乾淨地 miss」⇒ 不記
+        # （記了的話，背景預熱七天內都不會再用 Google 查這個地址）。
+        logger.info("不記負快取（非 Google 底圖範圍，Google 階未查）：%s", address)
     elif errors:
         # 🔴 **有任何一階沒問到 ⇒ 不記。**
         # ☠️ 記下去的話：Nominatim 出一次 20 分鐘的故障，那段時間查過的每一個
