@@ -98,3 +98,23 @@
 
 - ✅ LG-M1 關閉（8f342818）——L1 地圖覆蓋層契約（register／mount(api)、兩種底圖由 L1 實作、script_url 由 L1 依宣告組出），含改名內部欄位的反向控制
 - ✅ LG-M2 關閉（8f342818）——Google 中心點的座標與距離一律不寫入（含每日匯出），有反向控制
+
+## 6. 複審 LG2-M1：wip/e-lodging 6af9466e（D，2026-09-28）
+
+- 修正：新增 L1 `geo.map_request_scope(page_basemap, missing)`
+  - 頁面值只准收窄；不認得的值一律當 osm
+  - map_points 用 `missing="setting"`（沒帶＝照設定，給非地圖的呼叫者）
+  - 旅宿用 `missing="osm"`（沒帶＝失敗關閉）
+  - 回應帶實際採用的 basemap
+  - 題：四種頁面值 × 兩種設定、Google 階 0 呼叫、反向控制（google＋google 可用）；map_points 既有 GB-M2 題不改而全過
+  - 「L1 保證」兩句已更正（保留原句）
+  - ⇒ **成立**
+- 補充觀察：
+  - **LG3-O1**：行為差異不只「亂值」一種。**空字串** `basemap=`（有帶、值是空）現行是 `("" or "google") != "osm"` ⇒ 照設定；改後不在 ("google","osm")、也不是 None ⇒ 當 osm ⇒ 收窄。方向一樣是收窄、無害，但升版說明與那一題要把它列進去
+  - **LG3-S1（建議）**：旅宿覆蓋層在「回應 basemap 與頁面不一致」時寫的是「重新查詢」。頁面是 google、設定剛改回 osm 時，重新查詢永遠還是 osm ⇒ 會一直重查。改成與 map.html（GB-M2）相同：不畫、提示「地圖設定已變更，請重新整理頁面」
+- S1～S3：handle 用不透明字串；補 focus／addCircle；彈窗由 L1 以 textContent 組 `{title, lines, links}`，href 限同源或 https；寫入點掃描擴大到 overlay ⇒ 成立
+- 實作順序：map_request_scope 改到第十七班剛合回的 map_points ⇒ E 實作必須以第十七班合回後的 origin 為基底（同意主持的提醒），並以 GB-M2 那組題確認沒有改到行為
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ LG2-M1 關閉（6af9466e）——旅宿搜尋與 map_points 共用 L1 map_request_scope，頁面底圖只准收窄，旅宿沒帶就失敗關閉
