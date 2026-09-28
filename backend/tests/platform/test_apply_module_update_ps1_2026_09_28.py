@@ -89,9 +89,22 @@ def test_rc_the_extractor_sees_a_one_character_drift():
 
 # ── ② 順序 ──────────────────────────────────────────────────────────────
 
+def _split_rollback(code):
+    """（套用那一條, 回滾模式那一段）：回滾模式是 `if ($Rollback) {` 到下一個第 0 欄的 `}`（B55F-M1）。"""
+    i = code.index("\nif ($Rollback) {\n") + 1
+    j = code.index("\n}\n", i) + 3
+    return code[:i] + code[j:], code[i:j]
+
+
 def _main_flow():
+    """套用那一條（不含回滾模式那一段）。"""
     code = _code(_src(NEW))
-    return code[code.index('Write-Host "::PROTOCOL:: v=2"'):]
+    return _split_rollback(code[code.index('Write-Host "::PROTOCOL:: v=2"'):])[0]
+
+
+def _rollback_flow():
+    code = _code(_src(NEW))
+    return _split_rollback(code[code.index('Write-Host "::PROTOCOL:: v=2"'):])[1]
 
 
 def test_main_flow_order():

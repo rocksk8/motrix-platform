@@ -16,6 +16,13 @@
   用法（由部署儀表板呼叫；已在它的畫面做過明確確認 ⇒ 帶 -Yes）：
     powershell -ExecutionPolicy Bypass -File apply_module_update.ps1 -PackagePath <包目錄> -Yes
     powershell -ExecutionPolicy Bypass -File apply_module_update.ps1 -PackagePath <包目錄> -Yes -SkipAutoRollback
+  回滾模式（B55F-M1，主持裁示①；回到某一次套用之前）：
+    powershell -ExecutionPolicy Bypass -File apply_module_update.ps1 -Rollback -ModuleKey <模組代號> [-Backup <備份名>] -Yes
+    powershell -ExecutionPolicy Bypass -File apply_module_update.ps1 -Rollback -ModuleKey <模組代號> [-Backup <備份名>] -Yes -IncludeDatabase -ConfirmDatabaseOverwrite
+    - 不帶 -Backup ＝ 該模組最新一份備份；中斷的套用（in_progress）帶那次的備份名，只准最新一份（module_update §10）
+    - 預設只回模組程式、資料庫保留（比照使用者對 rollback_update 的裁示 DM1）；要連資料庫一起還原到那次套用前的快照，
+      兩個旗標都要給（-Yes 不算數），覆寫前先另存。那次套用若新增了 migration ⇒ 只回程式時舊版程式要跑在新 schema 上，
+      判斷不了 ⇒ 拒絕並要求帶資料庫旗標（主持 2026-09-29）
   沒有演練繞過分支（§7：演練工具把本檔複製到演練目錄、只改寫 $ProdRoot／$Port 兩行）。
 #>
 
@@ -23,13 +30,18 @@
 param(
     [string]$PackagePath,
     [switch]$Yes,
-    [switch]$SkipAutoRollback
+    [switch]$SkipAutoRollback,
+    [switch]$Rollback,
+    [string]$ModuleKey,
+    [string]$Backup,
+    [switch]$IncludeDatabase,
+    [switch]$ConfirmDatabaseOverwrite
 )
 
 $ErrorActionPreference = "Stop"
 
 # 本腳本的版本（apply_module_update.version.json 登記它與內容雜湊；包的 min_apply_module_script 比的是它）。
-$ApplyModuleScriptVersion = "2026-09-28c"
+$ApplyModuleScriptVersion = "2026-09-28d"
 
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $Port = 666
@@ -534,7 +546,105 @@ if ($scriptRoot -ne $ProdRoot) {
 }
 Info "身分確認：正式機（$ProdRoot）`n"
 
+# ── 回滾模式（B55F-M1，主持裁示①）：鎖 → 唯讀預檢 → 確認 → 停服 → module_update rollback →（選）DB 快照還原 → 重啟 → 健檢 ──
+#   §10 code 的處置：一個檔都沒動（④ RollbackRefused＋備份壞／不在）⇒ 照原樣重啟（手動回滾前模組本來就在跑，不停用）；
+#   磁碟可能半套（restore_mismatch、unexpected、沒有結果行）⇒ F13 停用該模組再重啟。
+$RollbackUntouchedCodes = $RollbackRefusedCodes + @("backup_corrupt", "no_backup", "backup_not_found")
+if ($Rollback) {
+    if ($PackagePath) { Fail "-Rollback 不帶 -PackagePath（回滾用的是安裝目錄裡的備份）。" "bad_args" }
+    if (-not $ModuleKey -or $ModuleKey -notmatch '^[a-z][a-z0-9_]*$') { Fail "-Rollback 需要 -ModuleKey <模組代號>（小寫英數與底線）。" "bad_args" }
+    if ($Backup -and $Backup -notmatch '^\d{8}_\d{6}(_\d+)?$') { Fail "-Backup 的格式是 yyyyMMdd_HHmmss（備份資料夾名）：$Backup" "bad_args" }
+    if ([bool]$IncludeDatabase -ne [bool]$ConfirmDatabaseOverwrite) {
+        Fail "要連資料庫一起還原，-IncludeDatabase 與 -ConfirmDatabaseOverwrite 兩個都要給（-Yes 不算數）；只回程式就兩個都不要給。" "bad_args"
+    }
+    $script:ModuleKey = $ModuleKey
+    $script:ResultPackage = $null
+    $lockState = Enter-InstallLock "apply_module_update" ("rollback:" + $ModuleKey)
+    if ($lockState -eq "locked") { Fail "另一個套用或回滾正在進行（見上方鎖檔內容），這次不動任何東西。" "apply_locked" }
+    if ($lockState -eq "stale") { Fail "有殘留的鎖檔（持有者已不在）：確認沒有套用在跑之後，手動刪除 $BackendDir\.apply.lock 再重試。" "apply_locked_stale" }
+
+    Info "[1/6] 回滾預檢（只讀）..."
+    $chkArgs = @($StepsTool, "rollback-check", "--root", $ProdRoot, "--key", $ModuleKey)
+    if ($Backup) { $chkArgs += @("--backup", $Backup) }
+    $chk = Invoke-Py $chkArgs
+    Write-Host $chk.Text
+    $chkLine = ($chk.Text -split "`r?`n" | Where-Object { $_ -like "ROLLBACK_CHECK_*" } | Select-Object -Last 1)
+    if ($chk.Exit -ne 0 -or -not $chkLine -or $chkLine -notlike "ROLLBACK_CHECK_OK *") {
+        if ($chkLine -match '^ROLLBACK_CHECK_FAIL (\S+)') { $script:RollbackCode = $Matches[1] }
+        Fail "回滾預檢未通過（$($script:RollbackCode)）：見上方；沒有動任何東西。" "module_rollback_refused"
+    }
+    $rcInfo = $chkLine.Substring("ROLLBACK_CHECK_OK ".Length) | ConvertFrom-Json
+    $script:ModStamp = [string]$rcInfo.stamp
+    $script:FromVersion = $rcInfo.applied_version
+    $script:ToVersion = $rcInfo.version
+    $script:ProdState = "applied"
+    $migAdded = @($rcInfo.migrations_added | Where-Object { $_ })
+    if ($migAdded.Count -gt 0 -and -not $IncludeDatabase) {
+        $script:RollbackCode = "needs_database"
+        Fail ("備份 $($script:ModStamp) 那次套用新增了 migration（$($migAdded -join '、')），多半已在重啟時跑過；只回程式時舊版程式要跑在新 schema 上，這裡判斷不了 ⇒ 不回滾。" +
+              "要回到套用前，加 -IncludeDatabase -ConfirmDatabaseOverwrite 連資料庫一起還原（套用之後寫入的資料會回到快照當時）。沒有動任何東西。") "module_rollback_refused"
+    }
+    $dbSnapDir = Join-Path $BackendDir ("db_backups\pre_module_{0}_{1}" -f $ModuleKey, $script:ModStamp)
+    if ($IncludeDatabase -and -not (Test-Path (Join-Path $dbSnapDir "motrix_erp.db"))) {
+        $script:RollbackCode = "db_snapshot_missing"
+        Fail "找不到那次套用前的資料庫快照（$dbSnapDir）⇒ 無法連資料庫一起還原；沒有動任何東西。" "module_rollback_refused"
+    }
+    Info ("  回滾 $ModuleKey：$($script:FromVersion) → $(if ($script:ToVersion) { $script:ToVersion } else { '（套用前沒有這個模組）' })，備份 $($script:ModStamp)" +
+          "$(if ($IncludeDatabase) { '，資料庫還原到 ' + $dbSnapDir } else { '，資料庫保留' })")
+    if (-not $Yes) {
+        $ans = Read-Host "確定回滾模組 $ModuleKey 到 $($script:ToVersion)？(y/N)"
+        if ($ans -ne "y") { Fail "使用者取消。" "user_cancelled" }
+    }
+
+    Info "[2/6] 停止服務..."
+    Stop-InstallService | Out-Null
+    $script:ServiceState = "down"
+
+    Info "[3/6] 回滾模組..."
+    $rb = Invoke-ModuleRollback
+    if (-not $rb.Ok) {
+        if ($RollbackUntouchedCodes -contains $rb.Code) {
+            # 一個檔都沒動 ⇒ 磁碟＝停服前那一版（本來就在跑）⇒ 照原樣重啟，不停用
+            $restartAt = Get-Date -Format "yyyy-MM-ddTHH:mm:ss"
+            Start-InstallService
+            for ($i = 0; $i -lt 20; $i++) {
+                Start-Sleep -Seconds 2
+                if (Test-Ping -Url $PingUrl -TimeoutSec 5) { $script:ServiceState = "up"; break }
+            }
+            Fail "回滾被拒絕（$($rb.Code)，見上方）：一個檔都沒動，服務已照原樣重新啟動$(if ($script:ServiceState -eq 'up') { '' } else { '（但健康檢查沒有回應，需要人工確認）' })。" "module_rollback_refused"
+        }
+        Fail-DisableModule $rb.Code
+    }
+    $script:ProdState = "restoring"
+
+    $dbRestored = $true
+    if ($IncludeDatabase) {
+        Info "[4/6] 資料庫還原到套用前的快照（覆寫前先另存）..."
+        $dbRestored = Restore-Databases $dbSnapDir
+    } else {
+        Info "[4/6] 資料庫保留（沒有帶 -IncludeDatabase）。"
+    }
+
+    Info "[5/6] 重新啟動並健康檢查..."
+    $restartAt = Get-Date -Format "yyyy-MM-ddTHH:mm:ss"
+    Start-InstallService
+    $back = Test-ModuleHealth $ModuleKey $script:ToVersion $restartAt
+    if ($back.Healthy) { $script:ServiceState = "up" }
+    $ok = if ($script:ToVersion) { $back.Healthy -and $back.ModuleOk } else { $back.Healthy }
+    $script:ProdState = if ($ok -and $dbRestored) { "restored" } else { "restored_unhealthy" }
+    Info "[6/6] 結果"
+    if ($script:ProdState -eq "restored") {
+        Ok "  已回滾 $ModuleKey 到 $(if ($script:ToVersion) { $script:ToVersion } else { '套用前（沒有這個模組）' })，服務正常。"
+        Emit-Result "module_rollback_ok" 0
+        exit 0
+    }
+    Fail "已回滾 $ModuleKey 的程式，但$(if (-not $dbRestored) { '資料庫沒有還原（見上方）；' } else { '' })回滾後的健康檢查沒過：$($back.Reason)。需要人工確認。" "module_rollback_unhealthy"
+}
+
 # ── Step 1：參數與包 ─────────────────────────────────────────────
+if ($ModuleKey -or $Backup -or $IncludeDatabase -or $ConfirmDatabaseOverwrite) {
+    Fail "-ModuleKey／-Backup／-IncludeDatabase／-ConfirmDatabaseOverwrite 只用於 -Rollback。" "bad_args"
+}
 if (-not $PackagePath) { Fail "-PackagePath 為必填參數。" "bad_args" }
 if (-not (Test-Path $PackagePath)) { Fail "找不到更新包路徑：$PackagePath" "package_missing" }
 $pkgLockPath = Join-Path $PackagePath "module-update.lock.json"

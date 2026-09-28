@@ -2,7 +2,7 @@
 """apply_module_update.ps1 的 Python 步驟（B55 單一模組更新包 §1.3；ps1 只管流程，判斷放在這裡才測得到）。
 
 [單位] tool:module_apply_steps    [層] 部署工具
-[公開介面] build_overlay, check_states, disable_module, main
+[公開介面] build_overlay, check_states, disable_module, rollback_check, main
 [不變式] 疊加樹只複製安裝目錄 backend\\ 底下 core.upgrade.classify(rel)=="program" 的檔（白名單，D 審 DB-M1），
     另排除 .apply.lock；不複製任何 db／data／config；模組資料夾換成包裡那一份。
     載入狀態檔（logs/module_states.json，B 的 loader._write_module_states）必須是「重啟之後、正在聽 port 的那個行程」寫的，
@@ -15,6 +15,8 @@
   states   --file <module_states.json> --key <K> --since <ISO 時間> --pids <p1,p2,…>
            [--version <V>] [--state loaded|disabled]                  → STATES_OK
   disable  --key <K>                                                   → DISABLE_OK（寫安裝目錄主庫的停用清單）
+  rollback-check --root <ROOT> --key <K> [--backup <STAMP>]           → ROLLBACK_CHECK_OK <JSON>（只讀；回滾模式 B55F-M1）
+           失敗印 `ROLLBACK_CHECK_FAIL <code> <原因>`（code 沿用 module_update §10：no_backup／backup_not_found／backup_corrupt）
 """
 import argparse
 import json
@@ -108,6 +110,51 @@ def disable_module(key):
     return module_switches.set_enabled(key, False)
 
 
+class CheckFail(Exception):
+    def __init__(self, code, msg):
+        super().__init__(msg)
+        self.code = code
+
+
+def _load_module_update(root):
+    """安裝目錄那一份 tools/platform/module_update.py（與 ps1 呼叫的是同一份；備份目錄與紀錄格式由它定義）。"""
+    import importlib.util
+    path = os.path.join(root, "tools", "platform", "module_update.py")
+    spec = importlib.util.spec_from_file_location("_installed_module_update", path)
+    mu = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mu)
+    return mu
+
+
+def rollback_check(root, key, backup=None, mu=None):
+    """回滾模式的唯讀預檢（B55F-M1）：回 {stamp, version, applied_version, status, migrations_added}。
+
+    - stamp：要回滾的那一份（沒指定＝最新一份，與 module_update.rollback 同一規則）；
+    - version：回滾後的版本（套用前；原本沒有這個模組 ⇒ None）；
+    - migrations_added：這次套用新增、而套用前沒有的 migration 檔 ⇒ 多半已在重啟時跑過。只回程式時，舊版程式要能在
+      新 schema 上跑；判斷不了 ⇒ ps1 要求帶資料庫旗標（主持 2026-09-29）。
+    拒絕條件（module_changed／state_changed／base_changed／interrupted_not_latest）不在這裡重寫一份：
+    由 module_update.rollback 在停服之後判定、一個檔都不動 ⇒ ps1 照原樣重啟。
+    """
+    mu = mu or _load_module_update(root)
+    avail = mu.backups(root, key)
+    if not avail:
+        raise CheckFail("no_backup", "模組 %s 沒有任何套用備份 ⇒ 無從回滾" % key)
+    stamp = backup or avail[-1]
+    if stamp not in avail:
+        raise CheckFail("backup_not_found", "找不到備份 %s（有：%s）" % (stamp, "、".join(avail)))
+    rec = mu._record(root, key, stamp)
+    if rec is None:
+        raise CheckFail("backup_corrupt", "備份 %s 的 apply.json 讀不懂 ⇒ 備份已損壞" % stamp)
+    prefix = "backend/modules/%s/migrations/" % key
+    before = set(rec.get("files_before") or {})
+    now = set(mu._tree_hashes(root, key))
+    added = sorted(r for r in now - before
+                   if r.startswith(prefix) and r.endswith(".py") and not r.endswith("/__init__.py"))
+    return {"stamp": stamp, "version": rec.get("from_version"), "applied_version": rec.get("to_version"),
+            "status": rec.get("status", "applied"), "migrations_added": added}
+
+
 def main(argv=None):
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -129,8 +176,12 @@ def main(argv=None):
     s.add_argument("--state", default="loaded", choices=("loaded", "disabled"))
     d = sub.add_parser("disable")
     d.add_argument("--key", required=True)
+    rc = sub.add_parser("rollback-check")
+    rc.add_argument("--root", required=True)
+    rc.add_argument("--key", required=True)
+    rc.add_argument("--backup")
     a = ap.parse_args(argv)
-    name = a.cmd.upper()
+    name = a.cmd.upper().replace("-", "_")
     try:
         if a.cmd == "overlay":
             n = build_overlay(a.install, a.pkg, a.key, a.dest)
@@ -142,9 +193,16 @@ def main(argv=None):
                 print("STATES_FAIL %s" % why)
                 return 2
             print("STATES_OK")
-        else:
+        elif a.cmd == "disable":
             lst = disable_module(a.key)
             print("DISABLE_OK %s" % ",".join(sorted(lst)))
+        else:
+            try:
+                got = rollback_check(a.root, a.key, a.backup)
+            except CheckFail as e:
+                print("ROLLBACK_CHECK_FAIL %s %s" % (e.code, e))
+                return 2
+            print("ROLLBACK_CHECK_OK " + json.dumps(got, ensure_ascii=True))
     except Exception as e:  # noqa: BLE001 — ps1 要一行原因，不要 traceback 淹沒
         print("%s_FAIL %s: %s" % (name, e.__class__.__name__, e))
         return 2

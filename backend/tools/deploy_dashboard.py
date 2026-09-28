@@ -196,6 +196,7 @@ _STATUS_SUCCEEDED = frozenset({
     "checkonly_ok",                 # :140  -CheckOnly 且 ping 成功
     "success",                      # :646  正常成功
     "rollback_ok",                  # rollback_update.ps1 正常完成
+    "module_rollback_ok",           # apply_module_update.ps1 -Rollback 正常完成（B55F-M1）
 })
 _STATUS_FAILED = frozenset({
     "not_prod_machine",             # :131
@@ -243,6 +244,9 @@ _STATUS_FAILED = frozenset({
     "module_copy_failed",                                       # F9 換檔中途失敗：已回滾（或回滾失敗 ⇒ applied_no_restore）
     "module_unhealthy_rolled_back",                             # F11 ping 過、模組沒載入／版本不對：已回滾
     "module_restore_failed",                                    # F13 回滾備份損壞：該模組已停用（或停用失敗 ⇒ 服務未啟動）
+    # apply_module_update.ps1 -Rollback（B55F-M1，主持裁示①）
+    "module_rollback_refused",                                  # 一個檔都沒動（預檢不過／回滾拒絕 ⇒ 服務照原樣重啟）
+    "module_rollback_unhealthy",                                # 已回滾程式，但回滾後健檢沒過（或資料庫沒還原）
 })
 _STATUS_ALL = _STATUS_SUCCEEDED | _STATUS_FAILED
 
