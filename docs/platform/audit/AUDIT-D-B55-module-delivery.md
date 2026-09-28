@@ -136,3 +136,27 @@
 
 - ✅ DB2-M1 關閉（269adafe）——能力清單含 import 時登記、取用函式由 registry 介面產生、判不了整體退回乙、間接消費端經 modtest 選題
 - ✅ DB-M2 關閉（269adafe）——使用者裁示甲落地為單一設定點，消費端取法經 DB2-M1 修正
+
+## 6. 分段稽核 S1：ship_tier（wip/b-module-delivery-2 4ae837fd）（D，2026-09-28）
+
+**結論：必修 0、建議 2。** 題 47 過（拋棄式樹）；B 回報 tests/platform 1635 過、突變 8/8 紅。
+
+- **偏離 (a)　文件級＝export-ignore ∪ docs/**，加上守門「執行期不讀 docs/」**：成立
+  - 查證：backend 非測試碼裡出現 `docs/platform` 的只有註解（core/menu.py:78、helpers/privacy_notice.py:15），沒有任何讀檔
+  - `test_docs_are_never_read_at_runtime` 附正對照（`test_docs_path_scanner_positive_control`）
+  - docs/platform 雖然隨完整包出貨，但對執行沒有影響，所以判①合理
+- **偏離 (b)　交叉比對改成「AST 能力清單 ⊇ 執行期 registry 實際登記」**（`test_real_ast_capabilities_match_runtime_registry`）：**方向對，但只守得到能力那一側**
+  - 主持的問題：消費端漏抓時，會不會仍然靜默放行？**會，只要取用不經 registry 的取用函式**
+  - 現況（grep 查證）：
+    - 不經取用函式的只有 `core/catalog.py:192`（`registry._LEGACY_PROVIDERS`）與 `:196`（`m.spec.providers`）。它把所有提供者列成目錄、不呼叫、也不依任何能力的行為 ⇒ **今天沒有真的漏抓**
+    - 沒有 `from core.registry import *`
+  - `consumers()` 只在「取用函式被直接呼叫、或以名稱引用」時才看得到。下列三種會是**找不到**，而不是判不了：
+    - 讀 registry 內部（`_LEGACY_PROVIDERS`、`spec.providers`、`registry.loaded()` 再取 providers）
+    - 星號 import（names 表裡沒有這些名稱）
+    - 經 L1 包裝函式（這一種由 modtest 虛擬改動的間接選題補上）
+- **DB4-S1（建議）　消費端也要有一道「全部有交代」的守門**：
+  - ① 核心之外讀 `_LEGACY_PROVIDERS`／`.spec.providers`（以及 `registry.loaded()` 之後取 providers）⇒ 白名單（目前只有 core/catalog.py，理由：只列目錄）；新增的位置 ⇒ 守門紅
+  - ② `from core.registry import *` ⇒ `consumers()` 當成判不了
+  - ③ 每一個能力字串常數在後端非測試碼裡的每一次出現，都必須落在「提供者模組」「已解析的消費端檔」「白名單（registry、catalog、INTEGRATION 註解）」其中之一，否則判不了、退回乙。能力字串是唯一的鍵，這一道抓得到「用了意料之外的管道」
+  - 附反向控制：合成一個以 `registry._LEGACY_PROVIDERS[("case.access","case")]` 取用的檔 ⇒ 判不了
+- **DB4-S2（建議）　交叉比對寫明它只守能力清單**：文件把 (b) 寫成「與 dep_graph 交叉比對」的替代，但它只驗能力那一側。§4.3 補一句它不涵蓋消費端，由 DB4-S1 負責
