@@ -115,3 +115,24 @@
 ### 關閉紀錄（標準格式，PLAYBOOK §E-6）
 
 - ✅ DB-M1 關閉（79489c98）——疊加樹改白名單（已安裝的 classify==program），DB 只放快照副本，另排除 .apply.lock
+
+## 5. 複審 DB2-M1：wip/b-module-delivery 269adafe（只改 §4.3）（D，2026-09-28）
+
+- 修正：
+  - 能力清單＝`ModuleSpec.providers` 的 key ∪ 模組層 `registry.provide(cap…)` 的 cap
+  - 取用函式由 `core/registry.py` 的公開介面產生（第一個參數名是 capability，扣掉 provide），並有守門
+  - AST 解析別名與跨檔字串常數；任何一處判不了 ⇒ 整體退回乙
+  - 消費端檔案當成虛擬改動交給 `modtest.select`，連間接依賴一起選
+  - 與 dep_graph 不一致 ⇒ 退回乙
+  - 正對照 3 組、突變 4 個
+  - ⇒ **成立**
+- **B 對 D 的更正，查證後**：
+  - `attachments.for_document` 的消費端是 accounting（voucher_attachments.py:103），case 是同一能力的另一個提供者（case/__init__.py:57）⇒ **B 對，D 原文錯**（設計已改，原文保留）
+  - `case.access`：L1 `helpers/case_access.py:81/86`（CASE_PRESENT）是直接消費端。**但 netplan 也是直接消費端**（`modules/netplan/api.py:43`：`_registry.single_provider("case.access")`；netplan 並沒有 import case_access）；accounting 則是經 case_access 間接用到（voucher_attachments.py:46 import `case_page_readable`）⇒ B 的「netplan、accounting 都是經由 case_access 間接」只對了 accounting 那一半
+- **DB3-S1（建議，實作時改題目即可）**：突變「拿掉虛擬改動、只留直接消費端 ⇒ netplan 正對照紅」**不會紅**，因為 netplan 是直接消費端，AST 本來就找得到。間接那一條的見證要改用 **accounting**（改 `case.access` 提供者 ⇒ 選題含 accounting 的題，只有經 modtest 的間接選題才會選到）；§4.3 那一句「netplan、accounting 都 import case_access」照實更正
+- **DB3-S2（建議）**：能力清單只收**模組層**的 provide 呼叫。函式內的 provide（目前 0 筆，grep 查證）日後若出現，應該算**判不了 ⇒ 退回乙**，而不是略過——與「任一處判不了就退回乙」同一條原則
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ DB2-M1 關閉（269adafe）——能力清單含 import 時登記、取用函式由 registry 介面產生、判不了整體退回乙、間接消費端經 modtest 選題
+- ✅ DB-M2 關閉（269adafe）——使用者裁示甲落地為單一設定點，消費端取法經 DB2-M1 修正
