@@ -114,6 +114,9 @@ def test_company_location_with_only_google_coords_is_not_drawn_and_says_why(env,
 
 def test_scope_skips_google_cache_and_stage_and_leaves_no_negative_cache(env, monkeypatch):
     called = []
+    # 模組層的「Google 實際回了查無」表會被同一個 worker 先跑的題留下紀錄（第十八班 --train 實測：A14c 量尺題）
+    # ⇒ 這一題自己的空表，斷言只看這一題造成的
+    monkeypatch.setattr(geo, "_MISS_CACHE_ALL", {})
     monkeypatch.setattr(geo, "_locate_google", lambda a, errors=None: called.append(a) or (GOOGLE_XY, "exact"))
     monkeypatch.setattr(geo, "_locate_tgos", lambda a, errors=None: None)
     monkeypatch.setattr(geo, "_locate_nominatim", lambda a, errors=None: None)
