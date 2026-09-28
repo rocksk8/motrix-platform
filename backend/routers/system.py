@@ -866,6 +866,9 @@ class CompanyProfile(BaseModel):
     # Maps JavaScript API 的網址上 ⇒ 由使用者在 Google Cloud 限定 HTTP referrer＋只開 Maps JavaScript API。
     # 有填 ⇒ 地圖改用 Google 底圖（geo.google_basemap()）；設定頁同樣遮蔽顯示。
     google_maps_browser_key: str = ''
+    # 第十五班 ②(b)：Google Cloud Console 建的「地圖 ID」（Map ID）。AdvancedMarkerElement 需要它。
+    # ⚠️ 不是秘密（會出現在前端），不遮蔽。官方示範用的 map ID 只准在測試／開發，正式路徑不預設（守門題 test_demo_map_id_never_appears_in_product_code）。
+    google_maps_map_id: str = ''
     # 手動座標（2026-09-22 §3o A2／A10）。填了就**跳過所有查詢**，
     # 精度是 exact、來源是 manual。
     # 🔑 它存在的理由：圖資認不得台灣的門牌，而使用者知道自己在哪裡。
@@ -901,7 +904,7 @@ class CompanyProfile(BaseModel):
 _COMPANY_PROFILE_DEFAULT = {
     "name": "", "tax_id": "", "contact_info": "",
     "bank_name": "", "bank_branch": "", "bank_account_name": "", "bank_account_number": "",
-    "address": "", "google_maps_api_key": "", "google_maps_browser_key": "",
+    "address": "", "google_maps_api_key": "", "google_maps_browser_key": "", "google_maps_map_id": "",
     "office_lat": None, "office_lon": None,
     "locations": [],
     "privacy_notice": "",       # R3 個資蒐集告知（空白＝用範本，helpers/privacy_notice.py）

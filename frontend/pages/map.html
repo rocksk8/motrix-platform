@@ -394,7 +394,9 @@
         <div id="mp-canvas"></div>
         <!-- OSM 使用條款要求標示出處。Leaflet 的 attribution 控制項會顯示，
              這一行是它載不出來時的後備。 -->
-        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px">
+        <!-- 第十五班 ②(b)：Google 底圖時不顯示 OSM 出處（Google 標誌與資料歸屬由 Maps JavaScript API 自己畫在圖上，
+             依條款不可遮蓋、不可換成客戶品牌）。 -->
+        <div style="font-size:11px;color:var(--text-secondary);margin-top:6px" x-show="basemap !== 'google'">
           底圖 © <a href="https://www.openstreetmap.org/copyright"
                     target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者
           ・<a href="https://www.openstreetmap.org/fixthemap"
@@ -568,6 +570,9 @@ function mapPage() {
     // 📌 客戶與供應商預設開著 —— 使用者原話：「看不到其他商家就等於沒有效果」。
     picked: ['tenders', 'customers', 'suppliers', 'vendor_contractors', 'cases'],
     mapOpen: false, mapLoading: false, tileError: false, _map: null,
+    // 第十五班 ②(b)：底圖種類以後端 `/api/map/config` 為準（有地圖金鑰 ⇒ google，否則 osm）。
+    //   🔴 取不到設定就**不畫**（不退回 OSM）：後端在 Google 底圖模式時會給 Google 座標，畫在 OSM 上＝違反 SST §6.2。
+    basemap: 'osm',
     // 斷路器：上一次載不到圖磚 ⇒ 這一次不自動開，而**要說出來**。
     // ☠️ 不說的話，「這一頁以前會自動出現地圖」變成「今天沒有」，
     // 而使用者會以為功能壞了。
@@ -874,10 +879,36 @@ function mapPage() {
     openMap() {
       if (this.mapOpen || this.mapLoading) return
       this.mapLoading = true
-      this._loadLeaflet()
+      this._mapConfig()
+        .then(cfg => {
+          this.basemap = cfg.basemap === 'google' ? 'google' : 'osm'
+          return this.basemap === 'google' ? this._loadGoogle(cfg) : this._loadLeaflet()
+        })
         .then(() => { this.mapOpen = true; this.$nextTick(() => this._draw()) })
-        .catch(() => { this.loadError = '地圖元件載入失敗（檔案不存在或遭阻擋）' })
+        .catch(e => { this.loadError = (e && e.motrixMsg) || '地圖元件載入失敗（檔案不存在或遭阻擋）' })
         .finally(() => { this.mapLoading = false })
+    },
+
+    //: 第十五班 ②(b)：問後端這台用哪一種底圖。**失敗就不畫**（理由見 `basemap` 欄位）。
+    _mapConfig() {
+      return fetch('/api/map/config', { headers: this._h() }).then(r => {
+        if (!r.ok) { const e = new Error('config'); e.motrixMsg = '地圖設定載入失敗（HTTP ' + r.status + '）'; throw e }
+        return r.json()
+      })
+    },
+
+    //: Google 底圖：載入轉接層（static/map-google.js），由它覆寫本元件的繪圖方法並載入 Maps JavaScript API。
+    //  📌 標記、彈窗的內容與「畫什麼」仍由本頁決定（`_pinHtml`／`_popupHtml`…），兩種底圖不各寫一份。
+    _loadGoogle(cfg) {
+      const install = () => window.MotrixGoogleMap.install(this, cfg)
+      if (window.MotrixGoogleMap) return install()
+      return new Promise((resolve, reject) => {
+        const js = document.createElement('script')
+        js.src = '../static/map-google.js'
+        js.onload = resolve
+        js.onerror = reject
+        document.head.appendChild(js)
+      }).then(install)
     },
 
     _loadLeaflet() {
@@ -1028,8 +1059,7 @@ function mapPage() {
       // 尺寸是 0 時 `fitBounds` 會算出一個退化的 bounds，
       // 而結果是**直接撞 maxZoom** —— 畫面上那是「地圖放到最大、只有一個點」，
       // ☠️ 看起來像「資料只有一筆」，而不是「尺寸量錯了」。
-      const size = this._map.getSize()
-      if (!(size && size.x > 0 && size.y > 0)) this._syncMapSize()
+      this._ensureMapSize()
       const pts = this.view.points
       const office = this.info && this.info.office
       const box = pts.map(p => [p.lat, p.lon])
@@ -1051,6 +1081,15 @@ function mapPage() {
       // `MP1`／`MP2`：有 `?focus=` 時視野由焦點決定——只記下這一組點（之後同一組點不再重框），不動視野
       //   （先框全部再跳到焦點＝多一段沒有意義的移動）。
       if (sigOnly) return
+      this._applyFit(box)
+    },
+    //: 尺寸是 0 就先校正（Leaflet；Google 版由轉接層覆寫）。
+    _ensureMapSize() {
+      const size = this._map.getSize()
+      if (!(size && size.x > 0 && size.y > 0)) this._syncMapSize()
+    },
+    //: 把視野框住 `box`（[[lat, lon], …]）。Google 版由轉接層覆寫。
+    _applyFit(box) {
       if (box.length > 1) {
         // maxZoom 擋住「只有兩個很近的點」時放大到街道等級 ——
         // 那會讓使用者以為地圖壞了（整片都是同一條路）。
@@ -1077,6 +1116,39 @@ function mapPage() {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
     },
 
+    //: 標記與彈窗的 HTML——**兩種底圖共用**（Leaflet 的 divIcon／bindPopup、Google 的 AdvancedMarker／InfoWindow）。
+    //  🔴 `MP0`：名稱／機關／地址是外部資料，**逐段跳脫**再用 <br> 接。
+    _siteHtml(loc) { return '<span class="mp-site">' + this._esc(loc.name || '據點') + '</span>' },
+    _sitePopupHtml(loc) {
+      return '<strong>' + this._esc(loc.name || '據點') + '</strong><br>' + this._esc(loc.address || '')
+    },
+    //  🔴 **標記本身就要分得出來**：一個字＋顏色（要點開才知道類別的話，地圖就沒有回答「哪幾個是我的廠商」）。
+    _pinHtml(p) {
+      const d = this.datasetOf(p)
+      return this.precisionIsCoarse(p.precision)
+        ? ('<span class="mp-pin mp-pin--coarse" style="--pin:' + this.pinColor(p) + '">' + d.mark + '</span>')
+        : ('<span class="mp-pin" style="background:' + this.pinColor(p) + '">' + d.mark + '</span>')
+    },
+    _popupHtml(p) {
+      const d = this.datasetOf(p)
+      const url = this.recordUrl(p)
+      const nav = this.navUrl(p)
+      const ds = this.deadlineStyleOf(p)
+      return [d.label + '｜' + (p.name || ''), p.org, p.address || p.location,
+              ds ? ('截止：' + (p.deadline || '—') + '（' + ds.label + '）') : '',
+              (p.distanceFromUserKm === null || p.distanceFromUserKm === undefined)
+                ? '' : ('距您約 ' + p.distanceFromUserKm + ' km'
+                        + (this.accuracyLabel() ? '（' + this.accuracyLabel() + '）' : '')),
+              (p.distanceFromOfficeKm === null || p.distanceFromOfficeKm === undefined)
+                ? '' : ('離' + (p.nearestLocationName || '據點') + '約 '
+                        + p.distanceFromOfficeKm + ' km（'
+                        + this.precisionLabel(p.precision) + '）')]
+             .filter(Boolean).map(t => this._esc(t)).join('<br>')
+           + (url ? '<br><a class="mp-rec" href="' + this._esc(url) + '">開啟單據</a>' : '')
+           + (nav ? (url ? '　' : '<br>') + '<a class="mp-nav" href="' + this._esc(nav)
+                    + '" target="_blank" rel="noopener noreferrer">Google 導航</a>' : '')
+    },
+
     //: 把資料點、辦公室、以及「你」重新畫一次。
     //  📌 舊的圖層整組丟掉再畫，不是一個一個比對差異 ——
     //  比對差異會讓「少畫一個」與「多留一個」兩種錯誤同時可能發生。
@@ -1093,13 +1165,12 @@ function mapPage() {
       this.locationsOf().forEach(loc => {
         const icon = window.L.divIcon({
           className: '',
-          html: '<span class="mp-site">' + this._esc(loc.name || '據點') + '</span>',
+          html: this._siteHtml(loc),
           iconSize: [null, 20], iconAnchor: [0, 10],
         })
         window.L.marker([loc.lat, loc.lon], { icon, zIndexOffset: 500 })
           .addTo(this._layer)
-          .bindPopup('<strong>' + this._esc(loc.name || '據點') + '</strong><br>'
-                     + this._esc(loc.address || ''))
+          .bindPopup(this._sitePopupHtml(loc))
       })
       this._markerByKey = {}
       this._markerOf = new WeakMap()
@@ -1112,39 +1183,21 @@ function mapPage() {
         : null
       const dataLayer = this._cluster || this._layer
       pts.forEach(p => {
-        const d = this.datasetOf(p)
         // 🔴 **標記本身就要分得出來。** 用 divIcon 放一個字＋顏色。
         // popup 要點才看得到 ⇒ 如果要點開才知道這個點屬於哪一類，
         // **地圖就沒有回答「哪幾個是我的廠商」那個問題。**
         const icon = window.L.divIcon({
           className: '',
-          html: this.precisionIsCoarse(p.precision)
-                ? ('<span class="mp-pin mp-pin--coarse" style="--pin:' + this.pinColor(p) + '">' + d.mark + '</span>')
-                : ('<span class="mp-pin" style="background:' + this.pinColor(p) + '">' + d.mark + '</span>'),
+          html: this._pinHtml(p),
           iconSize: [20, 20], iconAnchor: [10, 10],
         })
         // 🔴 `MP0`：彈窗內容**逐段跳脫**再用 <br> 接——名稱／機關／地址是外部資料
         //    （標案來自政府網站），直接拼進 HTML ＝ 在每個開地圖的人瀏覽器裡執行它。
-        const url = this.recordUrl(p)
         const marker = window.L.marker([p.lat, p.lon], { icon }).addTo(dataLayer)
         const fk = window.MotrixRecordLink ? window.MotrixRecordLink.focusKey(p) : null
         if (fk && !this._markerByKey[fk]) this._markerByKey[fk] = marker
         this._markerOf.set(this._raw(p), marker)
-        const nav = this.navUrl(p)
-        const ds = this.deadlineStyleOf(p)
-        marker.bindPopup([d.label + '｜' + (p.name || ''), p.org, p.address || p.location,
-                      ds ? ('截止：' + (p.deadline || '—') + '（' + ds.label + '）') : '',
-                      (p.distanceFromUserKm === null || p.distanceFromUserKm === undefined)
-                        ? '' : ('距您約 ' + p.distanceFromUserKm + ' km'
-                                + (this.accuracyLabel() ? '（' + this.accuracyLabel() + '）' : '')),
-                      (p.distanceFromOfficeKm === null || p.distanceFromOfficeKm === undefined)
-                        ? '' : ('離' + (p.nearestLocationName || '據點') + '約 '
-                                + p.distanceFromOfficeKm + ' km（'
-                                + this.precisionLabel(p.precision) + '）')]
-                     .filter(Boolean).map(t => this._esc(t)).join('<br>')
-                   + (url ? '<br><a class="mp-rec" href="' + this._esc(url) + '">開啟單據</a>' : '')
-                   + (nav ? (url ? '　' : '<br>') + '<a class="mp-nav" href="' + this._esc(nav)
-                            + '" target="_blank" rel="noopener noreferrer">Google 導航</a>' : ''))
+        marker.bindPopup(this._popupHtml(p))
       })
       if (this._cluster) this._cluster.addTo(this._layer)
       this._drawUser()

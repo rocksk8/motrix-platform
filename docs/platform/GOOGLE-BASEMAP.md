@@ -1,6 +1,7 @@
 # Google 底圖：計費、條款與做法比較（第十五班 ②(b)，A，2026-09-28 11:40）
 
-> 狀態：**查證與建議，尚未實作**（主持派工：「選定做法前把比較與建議回報我，不要先寫整個實作」）。
+> 狀態：〔更正 2026-09-28 12:15：使用者裁示採 **B（Maps JavaScript API）**、金鑰分兩把（CORE-SPEC dee64c54）；已實作，見 §7。原句「查證與建議，尚未實作」保留如下〕
+> ~~查證與建議，尚未實作~~（主持派工：「選定做法前把比較與建議回報我，不要先寫整個實作」）。
 > 來源：2026-09-28 以 `curl` 抓官方原始 HTML、只去標籤、自己讀（未經摘要模型）。各頁 footer「Last updated 2026-09-24 UTC」。
 > 引文一律逐字（英文原文），中文是我的說明。
 
@@ -83,3 +84,31 @@ ToS §3.2.3(e)（逐字）：「Customer will not use the Google Maps Core Servi
 - Maps JavaScript API 的 CSP 官方指南（B 要逐字查）。
 - 實際每次開圖的圖磚數（A 的成本估算基礎；可在開發機量）。
 - 伺服器代抓圖磚（proxy）是否被允許：沒查到明文許可 ⇒ **不採用**（§3.2.3(b) No Caching 的預設是禁止）。
+
+## 7. 實作（B，第十五班，wip/a-google-basemap）與人工驗收清單
+
+### 7.1 做了什麼
+- 公司資料設定：「Google 地圖（瀏覽器）金鑰」（遮蔽、不入稽核值）與「Google 地圖 ID」兩欄；伺服器定位金鑰維持原欄位、**永不送到瀏覽器**（守門：`test_map_google_basemap_2026_09_28.py` 的回應檢查與 AST 讀取點白名單）。
+- `geo.google_basemap()`＝有地圖金鑰。它同時決定：地圖頁載 Google 或 OSM、`/api/map/points` 是否可用 Google 座標、背景預熱與據點存檔是否問 Google（SST §6.2）。
+- `GET /api/map/config`：`{basemap, browserKey, mapId}`（osm 時只有 basemap）；回 google 一次記一次 `google:dynamic-maps`（開圖次數近似 map load，額度設定頁 SKU 清單已列，實際以 Cloud Console 為準）。
+- 地圖頁：`map.html` 先問設定；google ⇒ 載 `static/map-google.js` 轉接層（覆寫繪圖方法；標記／彈窗內容仍由 map.html 的 `_pinHtml`／`_popupHtml`／`_siteHtml` 產生），**同畫面不載 OSM**、OSM 出處不顯示；設定取不到 ⇒ 說出來、不畫。標記 `AdvancedMarkerElement`＋`mapId`；群聚 `@googlemaps/markerclusterer 2.6.2`（vendor，PROVENANCE 附雜湊）。
+- CSP：官方 Allowlist 範例只套在 `/pages/map.html`。
+
+### 7.2 自動測試證明不了的（需要真的瀏覽器金鑰與網路）
+e2e 以攔截回一支假的 `google.maps` 驗「我們呼叫轉接層與畫面邏輯正確」，**不證明真 Google 的行為**。上線前由有金鑰的人照下表實測一次（開發機或正式機皆可；正式機要先在 Cloud Console 把正式網址加進 HTTP 參照網址）：
+
+| # | 步驟 | 通過條件 |
+|---|---|---|
+| 1 | 公司資料設定填地圖金鑰與地圖 ID，存檔，開地圖頁 | 出現 Google 地圖（不是 OSM）；左下 Google 標誌、右下資料來源標示可見、沒有被我們的按鈕或標記蓋住 |
+| 2 | 瀏覽器開發者工具 → Network，篩 `tile.openstreetmap.org` | 0 筆 |
+| 3 | Network 篩 `maps.googleapis.com/maps/api/js` | 網址的 `key=` 是**地圖金鑰**（末四碼對得上），不是伺服器金鑰 |
+| 4 | Console | 沒有 CSP 違規、沒有 `InvalidKeyMapError`／`RefererNotAllowedMapError`／Map ID 相關警告 |
+| 5 | 地圖上的點、據點、「目前位置」與精度圈 | 與清單一致；點的顏色與字母和 OSM 版相同；重疊的點合成數字圈，點開會散開 |
+| 6 | 點一個標記 | 彈窗內容與 OSM 版相同（名稱、地址、距離、「開啟單據」「Google 導航」連結可用） |
+| 7 | 從單據頁按「在地圖上看」（`?focus=`） | 地圖放大到那一筆並開彈窗 |
+| 8 | 清除地圖金鑰、存檔、重開地圖頁 | 回到 OSM；只有 Google 座標的點不顯示並有說明（googleOnlyHidden） |
+| 9 | 故意填錯地圖金鑰 | 畫面顯示「Google 地圖金鑰無法使用…」而不是一片空白 |
+| 10 | Cloud Console → Maps JavaScript API 用量 | 與額度設定頁「地圖載入」的近似次數同一量級（近似，不要求相等） |
+
+### 7.3 待裁示
+- 沒填地圖 ID 時怎麼辦（主持問使用者中；目前轉接層照傳 `mapId`，未寫分支）。

@@ -479,7 +479,7 @@ def map_config(authorization: str = Header(None)):
     if not geo.google_basemap():
         return {"basemap": "osm"}
     geo.record_geocode_call(geo.USAGE_SKU_DYNAMIC_MAPS)
-    return {"basemap": "google", "browserKey": geo.google_browser_key()}
+    return {"basemap": "google", "browserKey": geo.google_browser_key(), "mapId": geo.google_map_id() or None}
 
 
 @router.get("/api/map/points")

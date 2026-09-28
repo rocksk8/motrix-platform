@@ -50,7 +50,7 @@ def test_browser_key_means_google_basemap_and_only_that_key_is_returned(client, 
     before = _usage(geo.USAGE_SKU_DYNAMIC_MAPS)
     r = client.get("/api/map/config", headers=h)
     assert r.status_code == 200
-    assert r.json() == {"basemap": "google", "browserKey": BROWSER_KEY}
+    assert r.json() == {"basemap": "google", "browserKey": BROWSER_KEY, "mapId": None}
     assert geo.google_basemap() is True
     assert _usage(geo.USAGE_SKU_DYNAMIC_MAPS) == before + 1, "回 Google 底圖一次要記一次 dynamic-maps（近似）"
 
@@ -136,3 +136,27 @@ def test_only_whitelisted_files_read_the_server_key():
     extra = hits - SERVER_KEY_READERS
     assert not extra, "新的檔案讀了伺服器定位金鑰：%s ⇒ 確認不會進任何回應後再加進白名單" % sorted(extra)
     assert hits, "正對照：至少 geo.py 讀得到（掃描器沒壞）"
+
+
+def test_map_id_is_returned_when_set(client, h):
+    from helpers.settings import _get_setting, _set_setting
+    _set_keys(browser=BROWSER_KEY)
+    cur = _get_setting("company_profile", {})
+    _set_setting("company_profile", {**cur, "google_maps_map_id": "abc123mapid"})
+    assert client.get("/api/map/config", headers=h).json()["mapId"] == "abc123mapid"
+
+
+def test_demo_map_id_never_appears_in_product_code():
+    """DEMO_MAP_ID 只准在測試／開發（主持裁示）：產品程式（backend 非測試、frontend）不可以出現它，也不可以預設它。"""
+    root = BACKEND.parent
+    bad = []
+    for base in (BACKEND, root / "frontend"):
+        for p in base.rglob("*"):
+            if p.suffix not in (".py", ".js", ".html", ".json") or not p.is_file():
+                continue
+            rel = p.relative_to(root).as_posix()
+            if "/tests/" in rel or "__pycache__" in rel or "/vendor/" in rel:
+                continue
+            if "DEMO_MAP_ID" in p.read_text(encoding="utf-8", errors="replace"):
+                bad.append(rel)
+    assert not bad, bad

@@ -365,6 +365,16 @@ GOOGLE_KEY_SETTING = "google_maps_api_key"
 GOOGLE_BROWSER_KEY_SETTING = "google_maps_browser_key"
 
 
+GOOGLE_MAP_ID_SETTING = "google_maps_map_id"
+
+
+def google_map_id() -> str:
+    """Google Cloud Console 的地圖 ID（AdvancedMarkerElement 需要）；沒填回空字串（不預設官方示範用的 map ID）。"""
+    from helpers.settings import _get_setting
+    profile = _get_setting("company_profile", {}) or {}
+    return (profile.get(GOOGLE_MAP_ID_SETTING) or "").strip()
+
+
 def google_browser_key() -> str:
     """地圖用（瀏覽器）金鑰；沒填回空字串。"""
     from helpers.settings import _get_setting
