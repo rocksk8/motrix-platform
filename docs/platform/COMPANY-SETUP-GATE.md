@@ -248,7 +248,8 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
    `company_setup_cli.py preflight --db <正式庫> --root <安裝目錄>`：模擬 backfill＋`status()`。
    結果會是「未設定」且沒有有效暫時放行 ⇒ **拒絕升級**、服務不停、`::RESULT:: v=2 status=refused_company_setup reason=<代碼>`；
    〔CG2-S3 補前提〕以下一律視為**拒絕**（不可當成通過）：預檢行程丟例外／非零結束／逾時（上限 60 秒）／輸出不是預期的一行 JSON；結果 `configured: null`（`status_error`）。
-   `-Force`（版本比對用）**不略過**預檢；真的要略過另開 `-SkipCompanySetupPreflight`，只准人工使用、`::RESULT::` 帶 `company_preflight=skipped`、並寫系統稽核。
+   `-Force`（版本比對用）**不略過**預檢。~~真的要略過另開 `-SkipCompanySetupPreflight`，只准人工使用、`::RESULT::` 帶 `company_preflight=skipped`、並寫系統稽核。~~
+   〔更正 CG3-M1（D bfdb5003 §5，主持裁示）：正式機 ps1 **沒有任何略過預檢的參數**。理由：套用後 status 會自動回滾、§4.3 的 72 小時放行已涵蓋「先升級後補設定」、預檢壞了要修工具重出包（跳過＝〈降級之後它還是會動〉）；儀表板以 `-Yes` 呼叫擋不住「只准人工」；`::RESULT::` 多一個欄位會動到出口值域。〕
    正式機 Claude 指示寫明各代碼的處置（`developer_identity_unsigned` ⇒ 先做 6.2 的簽章檔；`fields_invalid` ⇒ 先在舊版設定頁補欄位）。
 2. **套用後自動健檢**：`/api/ping` 通過之後，再執行 `company_setup_cli.py status --db … --root …`（本機、免登入、直接讀庫與識別檔，**不開新的網路端點**）。
    未設定（且無有效放行）**或 `configured: null`（判定失敗）或 CLI 當掉／逾時** ⇒ 與 ping 失敗同級：**自動回滾**，`::RESULT::` 帶原因〔CG2-S3：新版上線即全公司停止輸出文件，等同故障〕。
@@ -293,7 +294,7 @@ h-branding 守「**程式碼**不含本公司字面值」＋「單據與頁面�
 | ⑥ | 白名單精確（CG-M2） | `_COMPANY_SETUP_ALLOWED` 每條是 (方法, 路由樣板)、存在於 app 路由表、方法相符、理由 ≥ 20 字；不含 `*`；`_MUST_CHANGE_PW_ALLOWED`／`_PUBLIC_API_PATHS`／`LICENSE_EXEMPT_PATHS` 都被涵蓋；反向控制：加 `DELETE /api/settings/company-profile`、加前綴條目、加描述性條目 ⇒ 各自紅 |
 | ⑦ | 停擺防線（CG-M1）；Q7 題見 §3.6-4 | preflight／status CLI 與中介層走同一支 `status()`（AST：CLI 不自己判斷）；apply_update.ps1 的 refused_company_setup 與自動回滾路徑有 ps1 題（比照既有 `::RESULT::` 協定題）；暫時放行的到期、不可延長、install 不符、不寫確認紀錄各一題；§3.6 依 Q7 裁示的行為題 |
 | ⑧ | F3 檔不外流、也不被當程式處理 | `.install_identity`、`company_confirmation.sig`、`company_setup_grace.json`：`.gitignore` 有、`verify_package` 帶入就拒、每日／月備份不收（掃備份樹）；**在 `core.upgrade.CONFIG_FILES`**；刪除計畫、cleanup-snapshot、apply、兩種 rollback 之後三檔**逐位元組不變**（合成安裝目錄）；庫裡已有確認紀錄而啟動時重建識別檔 ⇒ ERROR＋告警（反向控制：新裝重建 ⇒ WARN、無告警）〔CG2-M1〕 |
-| ⑨ | 預檢與套用後不放水（CG2-S3） | ps1 題：預檢丟例外／逾時／輸出壞 ⇒ refused；`configured:null` ⇒ refused；`-Force` 仍跑預檢；`-SkipCompanySetupPreflight` ⇒ RESULT 帶 skipped＋稽核；套用後 null／CLI 當掉 ⇒ 自動回滾 |
+| ⑨ | 預檢與套用後不放水（CG2-S3、CG3-M1） | ps1 題：預檢丟例外／逾時／輸出壞 ⇒ refused；`configured:null` ⇒ refused；`-Force` 仍跑預檢；**正式機 ps1 沒有任何略過預檢的參數**（掃 `param(...)` 區塊與所有 `$`旗標：名稱或說明含 skip／bypass＋preflight／company 的一律紅；正對照：合成一個 `-SkipCompanySetupPreflight` ⇒ 紅）；套用後 null／CLI 當掉 ⇒ 自動回滾。演練要測「預檢失敗」⇒ 在**演練副本**注入預檢結果（同 U-M2 的做法），不在正式 ps1 開後門 |
 | ⑩ | 放行期限由伺服器保證（CG2-S4） | `until` 設 30 天 ⇒ 有效期仍 ≤ first_seen＋72h；`created` 在未來 ⇒ 無效；改一個字 ⇒ 新 first_seen＋新稽核；status_error 時輸出仍拒絕（放行不適用） |
 | ⑪ | 白名單比對方式（CG2-S1） | 中介層以 `route.matches(scope)` 比對：帶路徑參數的白名單（`PUT /api/settings/branding/{kind}`）放行、同路徑 DELETE 擋、相似前綴（`/api/settings/branding-x`）擋；白名單條目在路由表找不到 ⇒ 啟動 ERROR＋守門紅 |
 | ⑤ | 指紋只在一處 | 開發者指紋常數只准出現在 `helpers/company_setup.py`；repo 任何地方出現與開發者統編相同的 8 碼字面值 ⇒ 沿用 h-branding 的 ALLOWED 規則 |
