@@ -1340,9 +1340,23 @@ def _locate_locations(locations, budget=None):
             except (TypeError, ValueError):
                 manual = None
         if manual is not None:
-            # 人工填的座標不對外連線，也不佔預算（A2）。
-            out[ident] = locate_cached(address, manual_coord=manual)
-            continue
+            src = loc.get("coord_source")
+            if src == SOURCE_MANUAL:
+                # 人工填的座標不對外連線，也不佔預算（A2）。
+                out[ident] = locate_cached(address, manual_coord=manual)
+                continue
+            if src in (SOURCE_TGOS, SOURCE_NOMINATIM, SOURCE_NOMINATIM_DISTRICT):
+                # 存檔時由免費來源自動填的：照它的來源回報（不是 manual、不是 exact）
+                out[ident] = GeoResult(coord=manual, precision=loc.get("coord_precision") or PRECISION_STREET,
+                                       source=src, address=address)
+                continue
+            if src is None:
+                # 既有資料（第十五班之前存的，沒有 coord_source）⇒ 視為手填（使用者裁示 2026-09-28，CORE-SPEC dee64c54）。
+                # 依據：正式機 geocode_usage 從來 0 筆（計數點在收到 Google 回應之後）⇒ 從未收過 Google 座標，
+                # 既有據點座標不可能是 Google 來源。第十五班起存檔一律記 coord_source，新資料不會再落到這一支。
+                out[ident] = locate_cached(address, manual_coord=manual)
+                continue
+            # 其餘（google——存檔時已不寫入，只可能是手改設定）：不當座標，往下照來源規則查快取
         if not address:
             continue
         known = cached_only(address)

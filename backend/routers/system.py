@@ -1128,6 +1128,21 @@ def _clean_locations(raw, previous):
             raise HTTPException(422, f"據點「{name}」的座標必須是數字")
         if clean["lat"] is None or clean["lon"] is None:
             clean["lat"] = clean["lon"] = None
+        # 🔴 D 稽核 SST-M1：座標要記**來源**——手填的才是人工座標；存檔時自動定位填的照它的來源。
+        # 🔑 來源由後端推導，不信前端送來的 coord_source：設定頁把存著的座標載進輸入框、存檔時原樣送回，
+        #    「送回來的值」分不出是使用者打的還是上次自動填的 ⇒ 看它跟上次存的是不是同一組。
+        if clean["lat"] is not None:
+            prev = prev_by_id.get(ident) or {}
+            same = (prev.get("lat") is not None and prev.get("lon") is not None
+                    and abs(float(prev["lat"]) - clean["lat"]) < 1e-9
+                    and abs(float(prev["lon"]) - clean["lon"]) < 1e-9)
+            if not same:
+                clean["coord_source"] = "manual"          # 新填或改過 ⇒ 使用者輸入
+            elif prev.get("coord_source"):
+                clean["coord_source"] = prev["coord_source"]
+                if prev.get("coord_precision"):
+                    clean["coord_precision"] = prev["coord_precision"]
+            # 同一組、上次也沒有來源（既有資料）⇒ 不寫 coord_source（來源未知；處置見 geo._locate_locations）
         for field in _LOCATION_BANK_FIELDS + _LOCATION_IDENTITY_FIELDS:
             value = str(item.get(field) or "").strip()
             if value:
@@ -1148,13 +1163,24 @@ def _fill_location_coords(locations):
 
     ⚠️ 查不到就留 `None`（不是 `0`），由地圖那一側回報 `locationsUnlocated`。
     """
+    # 🔴 D 稽核 SST-M1（Google SST §6.2／§6.3）：
+    # ① 底圖不是 Google ⇒ 在 `geo.without_google_content()` 裡查（只用免費來源，不問 Google）；
+    # ② **Google 來源的座標不寫進 profile**——profile 永久保存、進每日備份，而 Google 經緯度最多快取 30 天
+    #    （SST §6.3.1），`purge_expired_google_cache` 清不到這裡；Google 底圖時地圖直接讀 geocode_cache（受 30 天清除）；
+    # ③ 寫入時一併記 coord_source／coord_precision，讀的一側（geo._locate_locations）只把 manual 當人工座標。
+    import contextlib
     from helpers import geo
-    for loc in locations or []:
-        if loc.get("lat") is not None and loc.get("lon") is not None:
-            continue
-        found = geo.locate_cached(loc.get("address") or "")
-        if found and found.coord:
-            loc["lat"], loc["lon"] = found.coord[0], found.coord[1]
+    scope = contextlib.nullcontext() if geo.google_basemap() else geo.without_google_content()
+    with scope:
+        for loc in locations or []:
+            if loc.get("lat") is not None and loc.get("lon") is not None:
+                continue
+            found = geo.locate_cached(loc.get("address") or "")
+            if found and found.coord and found.source != geo.SOURCE_GOOGLE:
+                loc["lat"], loc["lon"] = found.coord[0], found.coord[1]
+                loc["coord_source"] = found.source
+                if found.precision:
+                    loc["coord_precision"] = found.precision
     return locations
 
 

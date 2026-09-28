@@ -179,3 +179,99 @@ def test_reverse_control_warm_on_google_basemap_asks_google_first(env, warm, mon
     assert calls["google"] == [fresh], "Google 底圖時照舊先問 Google（已有 Google 座標的不是待辦）"
     assert calls["nominatim"] == []
     assert _cached_sources(fresh) == {geo.SOURCE_GOOGLE}
+
+
+# ── D 稽核 SST-M1：公司資料存檔時的自動定位與 profile 裡的座標 ────────────────
+
+A_OFFICE = "台中市大里區中興路二段1號"
+PROFILE = "/api/settings/company-profile"
+
+
+@pytest.fixture()
+def admin_h(client, make_user):
+    u, p = make_user(username="sst_m1_admin", role="superadmin")
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+@pytest.fixture()
+def stages(monkeypatch):
+    calls = {"google": [], "nominatim": []}
+    monkeypatch.setattr(geo, "GEO_ENABLED", True)
+    monkeypatch.setattr(geo, "_CACHE", {})
+    monkeypatch.setattr(geo, "_throttle", lambda: None)
+    monkeypatch.setattr(geo, "_locate_google",
+                        lambda a, errors=None: calls["google"].append(a) or (GOOGLE_XY, geo.PRECISION_ROOFTOP))
+    monkeypatch.setattr(geo, "_locate_tgos", lambda a, errors=None: None)
+    monkeypatch.setattr(geo, "_locate_nominatim",
+                        lambda a, errors=None: calls["nominatim"].append(a) or (FREE_XY, geo.PRECISION_STREET))
+    geo.reset_geocode_misses()
+    return calls
+
+
+def _saved_locations():
+    from helpers.settings import _get_setting
+    return (_get_setting("company_profile", {}) or {}).get("locations") or []
+
+
+def test_save_on_osm_basemap_never_asks_google_and_records_the_free_source(client, admin_h, stages):
+    r = client.put(PROFILE, json={"locations": [{"name": "總公司", "address": A_OFFICE}]}, headers=admin_h)
+    assert r.status_code == 200, r.text
+    assert stages["google"] == [], "非 Google 底圖存檔時問了 Google（SST-M1）"
+    loc = _saved_locations()[0]
+    assert (loc["lat"], loc["lon"]) == FREE_XY and loc["coord_source"] == geo.SOURCE_NOMINATIM
+
+
+def test_google_sourced_coords_are_never_written_into_the_profile(client, admin_h, stages, monkeypatch):
+    monkeypatch.setattr(geo, "google_basemap", lambda: True)
+    r = client.put(PROFILE, json={"locations": [{"name": "總公司", "address": A_OFFICE}]}, headers=admin_h)
+    assert r.status_code == 200, r.text
+    assert stages["google"] == [A_OFFICE], "前提：Google 底圖時照舊先問 Google"
+    loc = _saved_locations()[0]
+    assert loc["lat"] is None and loc["lon"] is None and "coord_source" not in loc, \
+        "Google 座標進了 profile（永久保存、進備份，超過 SST §6.3.1 的 30 天）"
+
+
+def test_manual_coords_stay_manual_across_resaves_and_are_drawn_on_osm(client, admin_h, stages, env):
+    body = {"locations": [{"name": "總公司", "address": A_OFFICE, "lat": 24.11, "lon": 120.66}]}
+    assert client.put(PROFILE, json=body, headers=admin_h).status_code == 200
+    assert _saved_locations()[0]["coord_source"] == "manual"
+    # 設定頁原樣送回（同一組值）⇒ 仍是 manual
+    assert client.put(PROFILE, json=body, headers=admin_h).status_code == 200
+    assert _saved_locations()[0]["coord_source"] == "manual"
+    got, _ = env()
+    loc = [l for l in got["locations"] if l["address"] == A_OFFICE][0]
+    assert loc["source"] == geo.SOURCE_MANUAL and (loc["lat"], loc["lon"]) == (24.11, 120.66), \
+        "反向控制：使用者手填的座標照用"
+
+
+def test_auto_filled_coords_resent_unchanged_keep_their_source(client, admin_h, stages, env):
+    assert client.put(PROFILE, json={"locations": [{"name": "總公司", "address": A_OFFICE}]},
+                      headers=admin_h).status_code == 200
+    loc = _saved_locations()[0]
+    # 設定頁把自動填的座標載進輸入框、存檔原樣送回 ⇒ 不可以因此變成 manual
+    resend = {"locations": [{"id": loc["id"], "name": "總公司", "address": A_OFFICE,
+                             "lat": loc["lat"], "lon": loc["lon"]}]}
+    assert client.put(PROFILE, json=resend, headers=admin_h).status_code == 200
+    assert _saved_locations()[0]["coord_source"] == geo.SOURCE_NOMINATIM
+    got, _ = env()
+    drawn = [l for l in got["locations"] if l["address"] == A_OFFICE][0]
+    assert drawn["source"] == geo.SOURCE_NOMINATIM, "自動填的座標被當成人工座標"
+
+
+def test_legacy_coords_without_source_are_treated_as_manual(env):
+    """既有資料（沒有 coord_source）⇒ 視為手填（使用者裁示 2026-09-28，CORE-SPEC dee64c54）。
+
+    判斷依據：正式機診斷二 geocode_usage 從來 0 筆，而計數點在「收到 Google 回應之後」⇒ 正式機從未收過
+    Google 座標 ⇒ 既有據點座標不是 Google 來源，不必背景重算。第十五班起存檔一律記 coord_source
+    （見上面三題），新資料不會再是「來源未知」。
+    ⚙️ 對照：coord_source=google 的（只可能是手改設定）在 OSM 上不當座標。"""
+    from helpers.settings import _set_setting
+    _set_setting("company_profile", {"name": "舊公司", "locations": [
+        {"id": "loc_1", "name": "總公司", "address": A_OFFICE, "lat": 24.11, "lon": 120.66},
+        {"id": "loc_2", "name": "分公司", "address": A_FREE, "lat": 24.4, "lon": 120.9, "coord_source": "google"}]})
+    got, _ = env()
+    by = {l["address"]: l for l in got["locations"]}
+    assert by[A_OFFICE]["source"] == geo.SOURCE_MANUAL and (by[A_OFFICE]["lat"], by[A_OFFICE]["lon"]) == (24.11, 120.66)
+    assert (by[A_FREE]["lat"], by[A_FREE]["lon"]) == FREE_XY and by[A_FREE]["source"] == geo.SOURCE_TGOS,         "coord_source=google 的座標在 OSM 上被畫出；應改用同地址的免費來源"
