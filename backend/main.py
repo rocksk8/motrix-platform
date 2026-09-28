@@ -495,6 +495,33 @@ _CSP = (
 )
 
 
+#: 🔴 地圖頁的 CSP（第十五班 ②(b)：有地圖金鑰時載 Maps JavaScript API）。
+#: 來源：Google「Content Security Policy Guide」（developers.google.com/maps/documentation/javascript/
+#: content-security-policy，2026-09-28 逐字查，Last updated 2026-09-24）的 **Allowlist CSP** 範例：
+#:   script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googleapis.com https://*.gstatic.com *.google.com
+#:              https://*.ggpht.com *.googleusercontent.com blob:;
+#:   img-src 'self' https://*.googleapis.com https://*.gstatic.com *.google.com *.googleusercontent.com data:;
+#:   frame-src *.google.com;  connect-src 'self' https://*.googleapis.com *.google.com https://*.gstatic.com data: blob:;
+#:   font-src https://fonts.gstatic.com;  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;  worker-src blob:;
+#: ⚠️ **只給這一頁**（同 Referrer-Policy 的做法）：整站放寬等於讓每一頁都能載 Google 網域的腳本。
+#: 📌 我們現行的 script-src 已經有 'unsafe-inline'（Alpine），所以不走 nonce 的 strict CSP（那要全站改寫）。
+_CSP_MAP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net "
+    "https://*.googleapis.com https://*.gstatic.com *.google.com https://*.ggpht.com *.googleusercontent.com blob:; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "img-src 'self' data: blob: https://tile.openstreetmap.org "
+    "https://*.googleapis.com https://*.gstatic.com *.google.com *.googleusercontent.com; "
+    "font-src 'self' data: https://fonts.gstatic.com; "
+    "connect-src 'self' https://*.googleapis.com *.google.com https://*.gstatic.com data: blob:; "
+    "frame-src 'self' blob: *.google.com; "
+    "worker-src blob:; "
+    "object-src 'none'; "
+    "frame-ancestors 'self'"
+)
+_CSP_MAP_PATHS = frozenset({"/pages/map.html"})
+
+
 #: 🔴 **只有這一頁放寬 `Referrer-Policy`。**
 #:
 #: OSM 的圖磚條款逐字要求兩件事，而我們**兩件都踩到了**：
@@ -532,7 +559,8 @@ async def security_headers(request: Request, call_next):
                 else _REFERRER_POLICY_DEFAULT)
     response.headers.setdefault("Referrer-Policy", referrer)
     response.headers.setdefault("X-XSS-Protection", "1; mode=block")
-    response.headers.setdefault("Content-Security-Policy", _CSP)
+    response.headers.setdefault("Content-Security-Policy",
+                                _CSP_MAP if request.url.path in _CSP_MAP_PATHS else _CSP)
     return response
 
 

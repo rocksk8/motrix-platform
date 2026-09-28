@@ -56,6 +56,7 @@
    "js:static/auth-guard.js",
    "js:static/custom-layout.js",
    "js:static/form-preview.js",
+   "js:static/map-google.js",
    "js:static/edit-presence.js",
    "js:static/gov-lookup.js",
    "js:static/layout-editor.js",

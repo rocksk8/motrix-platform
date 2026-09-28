@@ -862,6 +862,13 @@ class CompanyProfile(BaseModel):
     #    但**不可以寫進任何 log**：log 會被打包、被寄出、被放進備份，
     #    而那些地方沒有人在管金鑰。兩者的保存期限完全不同。
     google_maps_api_key: str = ''
+    # 第十五班 ②(b)：地圖（瀏覽器）用金鑰——**與上面那把分開**（使用者裁示）。它會出現在瀏覽器載入
+    # Maps JavaScript API 的網址上 ⇒ 由使用者在 Google Cloud 限定 HTTP referrer＋只開 Maps JavaScript API。
+    # 有填 ⇒ 地圖改用 Google 底圖（geo.google_basemap()）；設定頁同樣遮蔽顯示。
+    google_maps_browser_key: str = ''
+    # 第十五班 ②(b)：Google Cloud Console 建的「地圖 ID」（Map ID）。AdvancedMarkerElement 需要它。
+    # ⚠️ 不是秘密（會出現在前端），不遮蔽。官方示範用的 map ID 只准在測試／開發，正式路徑不預設（守門題 test_demo_map_id_never_appears_in_product_code）。
+    google_maps_map_id: str = ''
     # 手動座標（2026-09-22 §3o A2／A10）。填了就**跳過所有查詢**，
     # 精度是 exact、來源是 manual。
     # 🔑 它存在的理由：圖資認不得台灣的門牌，而使用者知道自己在哪裡。
@@ -897,7 +904,7 @@ class CompanyProfile(BaseModel):
 _COMPANY_PROFILE_DEFAULT = {
     "name": "", "tax_id": "", "contact_info": "",
     "bank_name": "", "bank_branch": "", "bank_account_name": "", "bank_account_number": "",
-    "address": "", "google_maps_api_key": "",
+    "address": "", "google_maps_api_key": "", "google_maps_browser_key": "", "google_maps_map_id": "",
     "office_lat": None, "office_lon": None,
     "locations": [],
     "privacy_notice": "",       # R3 個資蒐集告知（空白＝用範本，helpers/privacy_notice.py）
@@ -1128,6 +1135,21 @@ def _clean_locations(raw, previous):
             raise HTTPException(422, f"據點「{name}」的座標必須是數字")
         if clean["lat"] is None or clean["lon"] is None:
             clean["lat"] = clean["lon"] = None
+        # 🔴 D 稽核 SST-M1：座標要記**來源**——手填的才是人工座標；存檔時自動定位填的照它的來源。
+        # 🔑 來源由後端推導，不信前端送來的 coord_source：設定頁把存著的座標載進輸入框、存檔時原樣送回，
+        #    「送回來的值」分不出是使用者打的還是上次自動填的 ⇒ 看它跟上次存的是不是同一組。
+        if clean["lat"] is not None:
+            prev = prev_by_id.get(ident) or {}
+            same = (prev.get("lat") is not None and prev.get("lon") is not None
+                    and abs(float(prev["lat"]) - clean["lat"]) < 1e-9
+                    and abs(float(prev["lon"]) - clean["lon"]) < 1e-9)
+            if not same:
+                clean["coord_source"] = "manual"          # 新填或改過 ⇒ 使用者輸入
+            elif prev.get("coord_source"):
+                clean["coord_source"] = prev["coord_source"]
+                if prev.get("coord_precision"):
+                    clean["coord_precision"] = prev["coord_precision"]
+            # 同一組、上次也沒有來源（既有資料）⇒ 不寫 coord_source（來源未知；處置見 geo._locate_locations）
         for field in _LOCATION_BANK_FIELDS + _LOCATION_IDENTITY_FIELDS:
             value = str(item.get(field) or "").strip()
             if value:
@@ -1148,13 +1170,24 @@ def _fill_location_coords(locations):
 
     ⚠️ 查不到就留 `None`（不是 `0`），由地圖那一側回報 `locationsUnlocated`。
     """
+    # 🔴 D 稽核 SST-M1（Google SST §6.2／§6.3）：
+    # ① 底圖不是 Google ⇒ 在 `geo.without_google_content()` 裡查（只用免費來源，不問 Google）；
+    # ② **Google 來源的座標不寫進 profile**——profile 永久保存、進每日備份，而 Google 經緯度最多快取 30 天
+    #    （SST §6.3.1），`purge_expired_google_cache` 清不到這裡；Google 底圖時地圖直接讀 geocode_cache（受 30 天清除）；
+    # ③ 寫入時一併記 coord_source／coord_precision，讀的一側（geo._locate_locations）只把 manual 當人工座標。
+    import contextlib
     from helpers import geo
-    for loc in locations or []:
-        if loc.get("lat") is not None and loc.get("lon") is not None:
-            continue
-        found = geo.locate_cached(loc.get("address") or "")
-        if found and found.coord:
-            loc["lat"], loc["lon"] = found.coord[0], found.coord[1]
+    scope = contextlib.nullcontext() if geo.google_basemap() else geo.without_google_content()
+    with scope:
+        for loc in locations or []:
+            if loc.get("lat") is not None and loc.get("lon") is not None:
+                continue
+            found = geo.locate_cached(loc.get("address") or "")
+            if found and found.coord and found.source != geo.SOURCE_GOOGLE:
+                loc["lat"], loc["lon"] = found.coord[0], found.coord[1]
+                loc["coord_source"] = found.source
+                if found.precision:
+                    loc["coord_precision"] = found.precision
     return locations
 
 
@@ -1206,7 +1239,7 @@ def _looks_masked(value) -> bool:
 #: 哪些欄位在回傳時要遮起來。
 #: 🔑 具名清單而不是 if：下一個憑證欄位（TGOS AppID…）加進來時，
 #: **加在這裡就同時得到遮蔽與 UA3c 的安全網**，不會只做到一半。
-_MASKED_FIELDS = ("google_maps_api_key",)
+_MASKED_FIELDS = ("google_maps_api_key", "google_maps_browser_key")
 
 
 def _migrated_locations(profile):
@@ -1285,7 +1318,7 @@ _AUDIT_MASKED_VALUE_FIELDS = ("bank_account_number", "tax_id")
 #: **Google 金鑰是一個付費憑證 ⇒ 撿到就能刷我們的帳。**
 #: 🔑 而一個「一律遮成末四碼」的實作會讓帳號那一題全綠，**同時洩漏這一把**。
 #: 📌〈判準的寬窄都會騙人〉：一個統一的規則對其中一類來說太寬。
-_AUDIT_NEVER_VALUE_FIELDS = ("google_maps_api_key",)
+_AUDIT_NEVER_VALUE_FIELDS = ("google_maps_api_key", "google_maps_browser_key")
 
 
 def _audit_tail(value) -> str:
@@ -1684,6 +1717,8 @@ def get_google_quota_setting(authorization: str = Header(None)):
              "label": "附近商家搜尋（Places Text Search，尚未啟用）"},
             {"key": geo.USAGE_SKU_PLACE_DETAILS,
              "label": "商家詳細資料（Place Details，尚未啟用）"},
+            {"key": geo.USAGE_SKU_DYNAMIC_MAPS,
+             "label": "地圖載入（Dynamic Maps；以開地圖次數近似，實際以 Google Cloud Console 為準）"},
         ],
     }
 

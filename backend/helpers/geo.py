@@ -11,6 +11,8 @@ Nominatim 的使用政策明文要求**可識別的 User-Agent** 與**每秒最�
 而那跟「標案沒有地點」「沒有 Google 金鑰」在畫面上是同一個樣子
 ——三個成因、一個畫面、三種相反的處置，所以每一個都必須有自己的訊號。
 """
+import contextlib
+import contextvars
 import json
 import logging
 import re
@@ -357,6 +359,27 @@ SOURCE_NOMINATIM = "nominatim"
 SOURCE_NOMINATIM_DISTRICT = "nominatim_district"
 
 GOOGLE_KEY_SETTING = "google_maps_api_key"
+#: 地圖（瀏覽器）用的金鑰（第十五班 ②(b)，使用者裁示：**金鑰分兩把**）。
+#: 🔑 這一把會出現在瀏覽器載入 Maps JavaScript API 的網址上 ⇒ 由使用者在 Google Cloud 限定 HTTP referrer
+#:    與只開 Maps JavaScript API；伺服器定位那一把（GOOGLE_KEY_SETTING）**永不外流**。
+GOOGLE_BROWSER_KEY_SETTING = "google_maps_browser_key"
+
+
+GOOGLE_MAP_ID_SETTING = "google_maps_map_id"
+
+
+def google_map_id() -> str:
+    """Google Cloud Console 的地圖 ID（AdvancedMarkerElement 需要）；沒填回空字串（不預設官方示範用的 map ID）。"""
+    from helpers.settings import _get_setting
+    profile = _get_setting("company_profile", {}) or {}
+    return (profile.get(GOOGLE_MAP_ID_SETTING) or "").strip()
+
+
+def google_browser_key() -> str:
+    """地圖用（瀏覽器）金鑰；沒填回空字串。"""
+    from helpers.settings import _get_setting
+    profile = _get_setting("company_profile", {}) or {}
+    return (profile.get(GOOGLE_BROWSER_KEY_SETTING) or "").strip()
 
 
 def _google_key_configured() -> bool:
@@ -370,6 +393,51 @@ def _google_key_configured() -> bool:
     from helpers.settings import _get_setting
     profile = _get_setting("company_profile", {}) or {}
     return bool((profile.get(GOOGLE_KEY_SETTING) or "").strip())
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Google 條款 SST §6.2：Geocoding 的結果不可以配非 Google 的底圖（第十五班 ②(a)）
+# ══════════════════════════════════════════════════════════════════════════
+# 逐字：「Customer must not use Google Maps Content from the Geocoding API in conjunction with a
+# non-Google map」（Google Maps Platform Service Specific Terms §6.2；CORE-SPEC「地圖底圖與 Google 條款」）。
+# ⇒ 底圖不是 Google 時，畫在地圖上的座標（含據點與由它算出的距離）**只能**來自免費來源。
+# 🔑 做成「這一段呼叫不用 Google 內容」的範圍（contextvar），不是在每個畫點的地方各自過濾：
+#    點、據點、距離都經過 cached_only／locate_cached，一處擋住就全部擋住；逐處過濾的話，
+#    下一個新來源（或新的距離欄位）會安靜地把 Google 座標帶出去。
+_NO_GOOGLE_CONTENT = contextvars.ContextVar("motrix_geo_no_google_content", default=False)
+
+
+@contextlib.contextmanager
+def without_google_content():
+    """範圍內：快取讀取與對外查詢都跳過 Google 階（只用 TGOS／Nominatim／行政區／人工座標）。"""
+    token = _NO_GOOGLE_CONTENT.set(True)
+    try:
+        yield
+    finally:
+        _NO_GOOGLE_CONTENT.reset(token)
+
+
+def google_content_blocked() -> bool:
+    return _NO_GOOGLE_CONTENT.get()
+
+
+def google_basemap() -> bool:
+    """地圖底圖是不是 Google。
+
+    第十五班 ②(b)（使用者裁示，CORE-SPEC dee64c54）：**地圖（瀏覽器）金鑰＋地圖 ID 兩項都有 ⇒ Google 底圖**
+    （Maps JavaScript API＋AdvancedMarkerElement）；缺一項 ⇒ OSM＋免費定位、不使用任何 Google 內容
+    （使用者裁示 2026-09-28 12:30：不做舊 Marker 分支）。它決定 /api/map/points、背景預熱、據點存檔
+    要不要擋 Google 座標（SST §6.2），也決定 map.html 載哪一種地圖（`/api/map/config`）。
+    ⚠️ 呼叫一律經模組屬性（`geo.google_basemap()`／模組內裸名），測試 patch 才打得到。"""
+    return bool(google_browser_key() and google_map_id())
+
+
+def has_google_coord(address) -> bool:
+    """這個地址快取裡有沒有 Google 來源的座標（**不受 without_google_content 影響**：用來計數「被擋下的」）。"""
+    address = (address or "").strip()
+    return bool(address) and _cached_stage(address, SOURCE_GOOGLE) is not None
+
+
 TGOS_APPID_SETTING = "tgos_app_id"
 
 #: 快取多久之後要重新查一次。
@@ -459,6 +527,10 @@ QUOTA_SETTING = "google_quota"
 USAGE_SKU_GEOCODING = "google:geocoding"
 USAGE_SKU_PLACES_TEXT = "google:places-text-search"
 USAGE_SKU_PLACE_DETAILS = "google:place-details"
+#: 地圖載入（Maps JavaScript API，SKU「Dynamic Maps」，計費事件「Successful map load」）。
+#: ⚠️ **近似值**：地圖在瀏覽器直接向 Google 載入，伺服器看不到；我們以「開地圖頁取地圖設定」
+#:    的次數近似（`/api/map/config` 回 Google 底圖一次記一次）。實際以 Google Cloud Console 為準。
+USAGE_SKU_DYNAMIC_MAPS = "google:dynamic-maps"
 
 #: 預設值。`monthly_free_quota` **留空（None）= 不管制**，不是 0（GB7）。
 #:
@@ -809,7 +881,10 @@ def _locate_google(address, errors=None, **_kw):
         # ☠️ 只看有沒有座標的話，「查不到」與「連不上」會被歸成同一類。
         # 🔴 而它同時是「不可以寫負快取」的那一種（§15 補三）。
         if errors is not None:
-            errors.append(("google", str(exc) or exc.__class__.__name__))
+            # D 稽核 GB-O1：錯誤字串會進預熱狀態（畫面看得到）；換了 HTTP 函式庫之後例外可能帶完整網址（含 key=）
+            #   ⇒ 放進去之前先把伺服器金鑰遮掉。
+            msg = (str(exc) or exc.__class__.__name__).replace(key, "***")
+            errors.append(("google", msg))
         return None
     # 🔴 **計數點在這裡**：收到回應之後、解析之前（GB2／GB3）。
     # ☠️ 放在解析之後的話，`ZERO_RESULTS` 這種「送出去了、對方回了、
@@ -889,6 +964,8 @@ def _stage_allowed(source) -> bool:
     """
     if source != SOURCE_GOOGLE:
         return True
+    if google_content_blocked():
+        return False            # SST §6.2：非 Google 底圖的範圍內不查 Google
     # 🔑 具名呼叫模組層函式，不要抓住參考：抓住的話測試 patch 打不到，
     #    而那一題會安靜地失效。
     return not quota_exceeded()
@@ -1231,7 +1308,8 @@ def cached_only(address, min_source=None):
     address = (address or "").strip()
     if not address:
         return None
-    if min_source == SOURCE_GOOGLE and _google_key_configured():
+    blocked = google_content_blocked()
+    if min_source == SOURCE_GOOGLE and _google_key_configured() and not blocked:
         return _cached_stage(address, SOURCE_GOOGLE)
 
     # 🔴 **一次連線問完四階**，不是四次。
@@ -1243,6 +1321,8 @@ def cached_only(address, min_source=None):
     #    真正該查的那幾個走到 deadline ⇒ 畫面說「這次來不及」。
     #    ⇒ 使用者的症狀只解掉一半，**而那一半正是他抱怨的那一半**。
     order = [source for _name, source in _STAGES] + [SOURCE_NOMINATIM_DISTRICT]
+    if blocked:
+        order = [src for src in order if src != SOURCE_GOOGLE]      # SST §6.2（見 without_google_content）
     # 記憶體先看（免費），只有沒命中的才進那一次查詢。
     missing = [src for src in order if (address, src) not in _CACHE]
     fetched = _cache_get_many(address, missing) if missing else {}
@@ -1291,9 +1371,23 @@ def _locate_locations(locations, budget=None):
             except (TypeError, ValueError):
                 manual = None
         if manual is not None:
-            # 人工填的座標不對外連線，也不佔預算（A2）。
-            out[ident] = locate_cached(address, manual_coord=manual)
-            continue
+            src = loc.get("coord_source")
+            if src == SOURCE_MANUAL:
+                # 人工填的座標不對外連線，也不佔預算（A2）。
+                out[ident] = locate_cached(address, manual_coord=manual)
+                continue
+            if src in (SOURCE_TGOS, SOURCE_NOMINATIM, SOURCE_NOMINATIM_DISTRICT):
+                # 存檔時由免費來源自動填的：照它的來源回報（不是 manual、不是 exact）
+                out[ident] = GeoResult(coord=manual, precision=loc.get("coord_precision") or PRECISION_STREET,
+                                       source=src, address=address)
+                continue
+            if src is None:
+                # 既有資料（第十五班之前存的，沒有 coord_source）⇒ 視為手填（使用者裁示 2026-09-28，CORE-SPEC dee64c54）。
+                # 依據：正式機 geocode_usage 從來 0 筆（計數點在收到 Google 回應之後）⇒ 從未收過 Google 座標，
+                # 既有據點座標不可能是 Google 來源。第十五班起存檔一律記 coord_source，新資料不會再落到這一支。
+                out[ident] = locate_cached(address, manual_coord=manual)
+                continue
+            # 其餘（google——存檔時已不寫入，只可能是手改設定）：不當座標，往下照來源規則查快取
         if not address:
             continue
         known = cached_only(address)
@@ -1343,8 +1437,14 @@ def locate_cached(address, manual_coord=None):
     # 🔴 §15 補三：**只有「三階都乾淨地 miss」才可以記負快取。**
     # 任何一階回報 `err`（逾時／對方回錯／連不上）⇒ 這一輪什麼都不記。
     errors = []
+    # SST §6.2：範圍內連 Google 的快取都不讀（讀到就等於把 Google 座標畫上 OSM）；
+    # 也因此下面「三階都 miss」不成立 ⇒ 不可以記負快取（Google 根本沒被問）。
+    skipped_google = False
 
     for name, source in _STAGES:
+        if source == SOURCE_GOOGLE and google_content_blocked():
+            skipped_google = True
+            continue
         hit = _cached_stage(address, source)
         if hit:
             return hit
@@ -1382,6 +1482,10 @@ def locate_cached(address, manual_coord=None):
     result = _locate_district(address, errors=errors)
     if result.coord:
         _remember(address, result)
+    elif skipped_google:
+        # SST §6.2 範圍內跳過了 Google 階 ⇒ 不是「三階都乾淨地 miss」⇒ 不記
+        # （記了的話，背景預熱七天內都不會再用 Google 查這個地址）。
+        logger.info("不記負快取（非 Google 底圖範圍，Google 階未查）：%s", address)
     elif errors:
         # 🔴 **有任何一階沒問到 ⇒ 不記。**
         # ☠️ 記下去的話：Nominatim 出一次 20 分鐘的故障，那段時間查過的每一個
@@ -1572,7 +1676,20 @@ def warm_geocode_cache() -> dict:
 
     **可以單獨呼叫** —— 排程與測試共用同一支，
     🔑 那讓「排程呼叫的東西」與「測試驗過的東西」**不可能是兩份**。
+
+    🔴 SST §6.2（第十五班主持裁示）：底圖不是 Google ⇒ 整輪在 `without_google_content()` 裡，
+    只用免費來源補座標（地圖才畫得出點）；Google 定位等底圖切成 Google 後才用。
+    📌 只包入口、不動迴圈（`_warm_geocode_cache_round`）：待辦判斷（`cached_only`）與查詢
+       （`locate_cached`）都在範圍內 ⇒ 只有 Google 座標的地址會重新成為待辦、由免費階補上。
     """
+    if google_basemap():
+        return _warm_geocode_cache_round()
+    with without_google_content():
+        return _warm_geocode_cache_round()
+
+
+def _warm_geocode_cache_round() -> dict:
+    """`warm_geocode_cache()` 的一輪本體（範圍由呼叫端決定）。"""
     # `MP0c`：每一輪開頭先清掉過期的 Google 快取——在「地理查詢關著」的判斷**之前**：
     #    清除不對外連線，開關關著也要清（條款管的是「存了多久」，不是「有沒有在查」）。
     try:

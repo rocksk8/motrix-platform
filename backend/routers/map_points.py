@@ -466,9 +466,26 @@ def _user_position(lat, lon, accuracy):
     return (lat_f, lon_f), acc_f
 
 
+@router.get("/api/map/config")
+def map_config(authorization: str = Header(None)):
+    """地圖頁載哪一種底圖（第十五班 ②(b)）。
+
+    - 有地圖（瀏覽器）金鑰 ⇒ `{"basemap": "google", "browserKey": <那一把>}`；否則 `{"basemap": "osm"}`。
+    - 🔴 **只回瀏覽器那一把**；伺服器定位那一把（company_profile.google_maps_api_key）永不出現在任何回應
+      （守門題 test_map_google_basemap_2026_09_28）。
+    - 📌 回 Google 底圖一次，記一次 `google:dynamic-maps`（開圖次數近似 map load，不是帳單數字）。
+    """
+    _require_user(authorization)
+    if not geo.google_basemap():
+        return {"basemap": "osm"}
+    geo.record_geocode_call(geo.USAGE_SKU_DYNAMIC_MAPS)
+    return {"basemap": "google", "browserKey": geo.google_browser_key(), "mapId": geo.google_map_id() or None}
+
+
 @router.get("/api/map/points")
 def map_points(response: Response, sources: str = "tenders",
                lat: str = None, lon: str = None, accuracy: str = None,
+               basemap: str = None,
                x_map_position: str = Header(None),
                authorization: str = Header(None)):
     """地圖上的點，以及**所有「為什麼這裡是空的」的理由**。
@@ -543,7 +560,12 @@ def map_points(response: Response, sources: str = "tenders",
                              and user.get("role") not in ("superadmin", "admin")) else None)
     # ⚠️ 地理查詢開關也算進鍵：關著時算出來的「沒有點」不可以在打開之後繼續被回
     #    （G7 抓到的——第一版的鍵沒有它，開關切換後 60 秒內回的都是舊結果）。
-    key = (tuple(sorted(set(wanted))), visible, bool(geo.geo_on()), who)
+    # SST §6.2：底圖是否為 Google 決定座標能不能用 Google 來源 ⇒ 也算進鍵（②(b) 切換底圖後不可回舊結果）。
+    # 🔴 D 稽核 GB-M2：頁面帶自己的底圖（`basemap=osm|google`），後端**只准收窄**——
+    #    頁面說 osm ⇒ 一律不用 Google 內容（即使設定剛改成 google：開著的 OSM 頁下一次取點不可以拿到 Google 座標）；
+    #    頁面說 google 而設定不是 ⇒ 照設定（osm）。沒帶（非地圖的呼叫者，例：標案雷達只讀計數）⇒ 照設定。
+    google_map = geo.google_basemap() and (basemap or "google") != "osm"
+    key = (tuple(sorted(set(wanted))), visible, bool(geo.geo_on()), who, google_map)
     fp = _data_fingerprint()
     now = time.monotonic()
     with _RESP_LOCK:
@@ -552,10 +574,18 @@ def map_points(response: Response, sources: str = "tenders",
                                and now - hit["at"] < MAP_RESPONSE_TTL_SECONDS) else None
     response.headers["X-Map-Cache"] = "hit" if base is not None else "miss"
     if base is None:
-        base = _build_points(user, wanted)
+        if google_map:
+            base = _build_points(user, wanted)
+        else:
+            # 🔴 SST §6.2（逐字「must not use Google Maps Content from the Geocoding API in conjunction
+            #    with a non-Google map」）：OSM 底圖 ⇒ 整段只用免費來源（點、據點、距離一起），
+            #    只有 Google 座標的那幾筆不畫、計數說明（googleOnlyHidden）。
+            with geo.without_google_content():
+                base = _build_points(user, wanted)
         with _RESP_LOCK:
             _RESP_CACHE[key] = {"at": now, "fp": fp, "body": base}
     out = copy.deepcopy(base)
+    out["basemap"] = "google" if google_map else "osm"      # GB-M2：前端拿它跟頁面底圖比對
     for pt in out["points"]:
         pt["distanceFromUserKm"] = (
             round(geo.haversine_km(user_coord, (pt["lat"], pt["lon"])), 1)
@@ -737,6 +767,11 @@ def _build_points(user, wanted):
         # ☠️ 合併的話，使用者會去翻資料找一個不存在的錯。
         # 📌 快取是永久的 ⇒ 這個數字**只會往下掉**，按幾次就歸零。
         "pendingGeocode": budget.pending,
+        # 🔴 SST §6.2：底圖是 OSM、而那幾筆**只有 Google 定位的座標** ⇒ 不畫，數量要說出來
+        #    （否則又是一個「少幾個點」而沒有人報修的成因）。`basemap` 讓畫面說得出原因。
+        "googleOnlyHidden": budget.google_only,
+        # 這一次**實際採用**的底圖（收窄之後）；`map_points()` 回傳前再覆寫一次，快取鍵已含它
+        "basemap": "osm" if geo.google_content_blocked() else ("google" if geo.google_basemap() else "osm"),
         # 🔴 GC8：**查過查不到**的筆數，與「這次來不及」分開回。
         # ☠️ 合在一起的話，畫面會永遠說「這次來不及」，而那句話會變成
         #    一個**永久的謊** —— 再按幾次都不會變少。
@@ -792,7 +827,10 @@ def _locate_locations(profile):
         else:
             unlocated.append({"id": loc.get("id"),
                               "name": loc.get("name") or "",
-                              "address": address})
+                              "address": address,
+                              # SST §6.2：不是地址錯，是只有 Google 座標而底圖不是 Google ⇒ 畫面要分得出來
+                              "googleOnly": bool(geo.google_content_blocked()
+                                                 and geo.has_google_coord(address))})
     return located, unlocated
 
 
@@ -859,6 +897,8 @@ class _GeocodeBudget:
         #    而使用者再按幾次也不會變少（實測：60 → 103，方向是反的）。
         # 🔑 兩者的處置相反：一個是**等**，一個是**要去改地址**。
         self.unresolvable = 0
+        # SST §6.2：底圖不是 Google 時，快取只有 Google 座標的筆數（不畫；與「來不及」「查不到」分開）。
+        self.google_only = 0
 
     def locate(self, address):
         """回 `GeoResult` 或 `None`。
@@ -877,6 +917,11 @@ class _GeocodeBudget:
         hit = geo.cached_only(address)
         if hit is not None:
             return hit          # 已經知道的一律免費
+        if geo.google_content_blocked() and geo.has_google_coord(address):
+            # 🔴 不是「來不及」（背景預熱不會補它：它已經有 Google 座標）、也不是「查不到」
+            #    ⇒ 各自的計數器都不對，另計；回 None 讓呼叫端當成「這次不畫」（不進 withoutLocation）。
+            self.google_only += 1
+            return None
         if geo.geocode_missed_recently(address):
             # 📌 不佔時間預算：它根本不會發出請求。
             self.unresolvable += 1

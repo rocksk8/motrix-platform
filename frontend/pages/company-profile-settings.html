@@ -359,8 +359,45 @@
                      ⚠️ 讀取時只回末四碼：那是一個**付費憑證**，
                      而這個畫面會被截圖、被投影、被肩後看見。 -->
                 <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
-                  只用來開啟「附近廠商」。地圖底圖與距離計算<strong>不需要它</strong>。
+                  伺服器定位用（地址轉座標、附近廠商），<strong>只在伺服器使用、不會送到瀏覽器</strong>。
                   為了安全，讀取時只會顯示末四碼。
+                </div>
+              </div>
+            </div>
+
+            <!-- 第十五班 ②(b)（使用者裁示：金鑰分兩把）：地圖（瀏覽器）金鑰＋地圖 ID。
+                 有填地圖金鑰 ⇒ 地圖頁改用 Google 地圖（Maps JavaScript API）；沒填 ⇒ 照舊 OpenStreetMap＋免費定位。 -->
+            <div class="ns-row">
+              <div class="ns-field" style="flex:1 1 100%">
+                <label>Google 地圖（瀏覽器）金鑰（選填）</label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                  <input type="password" style="flex:1 1 280px" x-model="bkText" id="google_maps_browser_key"
+                         :placeholder="bkSet ? '已設定，留空表示不變更' : '未設定（地圖使用 OpenStreetMap）'"
+                         autocomplete="off">
+                  <span x-show="bkSet && !bkCleared" style="font-size:11px;color:var(--text-secondary)"
+                        x-text="'目前：' + bkMasked"></span>
+                  <button type="button" class="btn btn-ghost btn-sm"
+                          x-show="bkSet && !bkCleared" @click="bkCleared = true; bkText = ''">清除金鑰</button>
+                  <span x-show="bkCleared" style="font-size:11px;color:var(--warning)">
+                    儲存後會清除（按取消或重新整理可還原）
+                  </span>
+                </div>
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
+                  <strong>地圖金鑰與下方的地圖 ID 兩項都填</strong>，地圖頁才會改用 Google 地圖（缺一項照舊使用 OpenStreetMap）。
+                  這把金鑰會出現在瀏覽器載入地圖的網址上，
+                  <strong>請與上面的伺服器金鑰分開</strong>，並在 Google Cloud 主控台設定：
+                  「應用程式限制」選 HTTP 參照網址（填本系統的網址），「API 限制」只勾 Maps JavaScript API。
+                  依 Google 條款，地圖上的 Google 標誌與資料來源標示不可遮蓋，也不可換成貴公司品牌。
+                </div>
+              </div>
+            </div>
+            <div class="ns-row">
+              <div class="ns-field" style="flex:1 1 100%">
+                <label>Google 地圖 ID（使用 Google 地圖時需要）</label>
+                <input type="text" id="google_maps_map_id" x-model="cfg.google_maps_map_id" autocomplete="off"
+                       placeholder="在 Google Cloud 主控台「地圖管理」建立的地圖 ID">
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
+                  地圖上的標記使用 Google 的進階標記，它需要一個地圖 ID（不另外計費）。
                 </div>
               </div>
             </div>
@@ -923,6 +960,7 @@
         // 📌 後端已經有安全網（收到遮蔽字視為沒送），而**兩邊都做**是刻意的：
         // 前端不送＝正確的行為，後端擋＝前端回歸時的防線。
         keyText: '', keyMasked: '', keySet: false, keyCleared: false,
+        bkText: '', bkMasked: '', bkSet: false, bkCleared: false,
         saving: false,
         saved: false,
         msg: '',
@@ -994,6 +1032,10 @@
             this.keySet = !!this.keyMasked
             this.keyText = ''
             this.keyCleared = false
+            this.bkMasked = data.google_maps_browser_key || ''
+            this.bkSet = !!this.bkMasked
+            this.bkText = ''
+            this.bkCleared = false
           }
           if (this.isSuperadmin) {
             await this.loadBranding()
@@ -1416,6 +1458,7 @@
           // 它們由後端從 `locations[0]` 導出。送的話就是「兩個地方都能編輯同一件事」。
           const payload = { ...this.cfg, locations: locations }
           delete payload.google_maps_api_key
+          delete payload.google_maps_browser_key     // 同上：cfg 裡是遮蔽字
           delete payload.address
           delete payload.office_lat
           delete payload.office_lon
@@ -1424,6 +1467,11 @@
           } else if (this.keyText.trim()) {
             payload.google_maps_api_key = this.keyText.trim()
           }                                        // 兩者皆非 ⇒ **不送**＝保留現值
+          if (this.bkCleared) {
+            payload.google_maps_browser_key = ''
+          } else if (this.bkText.trim()) {
+            payload.google_maps_browser_key = this.bkText.trim()
+          }
           const r = await fetch('/api/settings/company-profile', {
             method: 'PUT',
             headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
@@ -1444,6 +1492,12 @@
               this.keyMasked = '\u2022'.repeat(8) + this.keyText.trim().slice(-4)
             }
             this.keyText = ''; this.keyCleared = false
+            if (this.bkCleared) { this.bkSet = false; this.bkMasked = '' }
+            else if (this.bkText.trim()) {
+              this.bkSet = true
+              this.bkMasked = '\u2022'.repeat(8) + this.bkText.trim().slice(-4)
+            }
+            this.bkText = ''; this.bkCleared = false
           } else {
             const d = await r.json().catch(() => ({}))
             this.msg = d.detail || '儲存失敗'; this.isError = true

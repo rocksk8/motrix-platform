@@ -1,5 +1,5 @@
 {
- "core_version": "1.62",
+ "core_version": "1.63",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -420,8 +420,10 @@
    "GEOCODE_WARM_DAILY_LIMIT": "const",
    "GEOCODE_WARM_INTERVAL_SECONDS": "const",
    "GEO_ENABLED": "const",
+   "GOOGLE_BROWSER_KEY_SETTING": "const",
    "GOOGLE_CACHE_TTL_DAYS": "const",
    "GOOGLE_KEY_SETTING": "const",
+   "GOOGLE_MAP_ID_SETTING": "const",
    "GeoResult": "class",
    "GeoResult.__init__": "def(self, coord=…, precision=…, source=…, error=…, address=…)",
    "LOCATION_LOOKUP_BUDGET": "const",
@@ -447,6 +449,7 @@
    "TILE_PROBE_UNKNOWN_CACHE_SECONDS": "const",
    "TILE_PROBE_URL": "const",
    "TRUNCATION_MARKERS": "const",
+   "USAGE_SKU_DYNAMIC_MAPS": "const",
    "USAGE_SKU_GEOCODING": "const",
    "USAGE_SKU_PLACES_TEXT": "const",
    "USAGE_SKU_PLACE_DETAILS": "const",
@@ -461,6 +464,11 @@
    "geocode": "def(address)",
    "geocode_miss_count": "def()",
    "geocode_missed_recently": "def(address)",
+   "google_basemap": "def()",
+   "google_browser_key": "def()",
+   "google_content_blocked": "def()",
+   "google_map_id": "def()",
+   "has_google_coord": "def(address)",
    "haversine_km": "def(a, b)",
    "locate": "def(address, manual_coord=…)",
    "locate_cached": "def(address, manual_coord=…)",
@@ -480,7 +488,8 @@
    "tiles_blocked": "def()",
    "usage_this_period": "def(source=…)",
    "warm_geocode_cache": "def()",
-   "warm_status": "def()"
+   "warm_status": "def()",
+   "without_google_content": "def()"
   },
   "helper:google_calendar": {
    "create_test_event": "def()",
