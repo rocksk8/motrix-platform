@@ -485,6 +485,7 @@ def map_config(authorization: str = Header(None)):
 @router.get("/api/map/points")
 def map_points(response: Response, sources: str = "tenders",
                lat: str = None, lon: str = None, accuracy: str = None,
+               basemap: str = None,
                x_map_position: str = Header(None),
                authorization: str = Header(None)):
     """地圖上的點，以及**所有「為什麼這裡是空的」的理由**。
@@ -560,7 +561,10 @@ def map_points(response: Response, sources: str = "tenders",
     # ⚠️ 地理查詢開關也算進鍵：關著時算出來的「沒有點」不可以在打開之後繼續被回
     #    （G7 抓到的——第一版的鍵沒有它，開關切換後 60 秒內回的都是舊結果）。
     # SST §6.2：底圖是否為 Google 決定座標能不能用 Google 來源 ⇒ 也算進鍵（②(b) 切換底圖後不可回舊結果）。
-    google_map = geo.google_basemap()
+    # 🔴 D 稽核 GB-M2：頁面帶自己的底圖（`basemap=osm|google`），後端**只准收窄**——
+    #    頁面說 osm ⇒ 一律不用 Google 內容（即使設定剛改成 google：開著的 OSM 頁下一次取點不可以拿到 Google 座標）；
+    #    頁面說 google 而設定不是 ⇒ 照設定（osm）。沒帶（非地圖的呼叫者，例：標案雷達只讀計數）⇒ 照設定。
+    google_map = geo.google_basemap() and (basemap or "google") != "osm"
     key = (tuple(sorted(set(wanted))), visible, bool(geo.geo_on()), who, google_map)
     fp = _data_fingerprint()
     now = time.monotonic()
@@ -581,6 +585,7 @@ def map_points(response: Response, sources: str = "tenders",
         with _RESP_LOCK:
             _RESP_CACHE[key] = {"at": now, "fp": fp, "body": base}
     out = copy.deepcopy(base)
+    out["basemap"] = "google" if google_map else "osm"      # GB-M2：前端拿它跟頁面底圖比對
     for pt in out["points"]:
         pt["distanceFromUserKm"] = (
             round(geo.haversine_km(user_coord, (pt["lat"], pt["lon"])), 1)
@@ -765,7 +770,8 @@ def _build_points(user, wanted):
         # 🔴 SST §6.2：底圖是 OSM、而那幾筆**只有 Google 定位的座標** ⇒ 不畫，數量要說出來
         #    （否則又是一個「少幾個點」而沒有人報修的成因）。`basemap` 讓畫面說得出原因。
         "googleOnlyHidden": budget.google_only,
-        "basemap": "google" if geo.google_basemap() else "osm",
+        # 這一次**實際採用**的底圖（收窄之後）；`map_points()` 回傳前再覆寫一次，快取鍵已含它
+        "basemap": "osm" if geo.google_content_blocked() else ("google" if geo.google_basemap() else "osm"),
         # 🔴 GC8：**查過查不到**的筆數，與「這次來不及」分開回。
         # ☠️ 合在一起的話，畫面會永遠說「這次來不及」，而那句話會變成
         #    一個**永久的謊** —— 再按幾次都不會變少。

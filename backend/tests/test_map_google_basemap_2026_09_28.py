@@ -173,3 +173,80 @@ def test_demo_map_id_never_appears_in_product_code():
             if "DEMO_MAP_ID" in p.read_text(encoding="utf-8", errors="replace"):
                 bad.append(rel)
     assert not bad, bad
+
+
+# ── D 稽核 GB-M2：取點帶頁面底圖，後端只准收窄 ────────────────────────────
+
+GADDR = "台中市西屯區市政路1號"
+
+
+@pytest.fixture()
+def gpoint(client):
+    """一筆客戶，地址只有 Google 座標（快取）。"""
+    from datetime import datetime
+    import json as _json
+    import db
+    from tests._map_cache_warm import clear_map_response_cache
+    geo._CACHE.clear()
+    clear_map_response_cache()
+    now = datetime.now().isoformat()
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO geocode_cache (address, lat, lon, source, precision, created_at) VALUES (?,?,?,?,?,?)",
+                     (GADDR, 24.16, 120.64, geo.SOURCE_GOOGLE, geo.PRECISION_ROOFTOP, now))
+        conn.execute("INSERT INTO customers (name, data_json, created_at) VALUES (?,?,?)",
+                     ("G客戶", _json.dumps({"deliveryAddress": GADDR}, ensure_ascii=False), now))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _points(client, h, basemap=None):
+    from tests._map_cache_warm import clear_map_response_cache
+    clear_map_response_cache()
+    q = "/api/map/points?sources=customers" + ("&basemap=" + basemap if basemap else "")
+    r = client.get(q, headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_gbm2_osm_page_never_gets_google_coords_even_after_settings_switch_to_google(client, h, gpoint):
+    _set_keys(browser=BROWSER_KEY)                       # 管理員剛填好金鑰＋地圖 ID ⇒ 設定是 google
+    body = _points(client, h, basemap="osm")             # 開著的 OSM 頁取點
+    assert body["basemap"] == "osm"
+    assert not [p for p in body["points"] if p["source"] == geo.SOURCE_GOOGLE], body["points"]
+    assert body["googleOnlyHidden"] == 1
+
+
+def test_gbm2_reverse_control_google_page_with_google_settings_gets_google_coords(client, h, gpoint):
+    _set_keys(browser=BROWSER_KEY)
+    body = _points(client, h, basemap="google")
+    assert body["basemap"] == "google"
+    assert [p for p in body["points"] if p["source"] == geo.SOURCE_GOOGLE]
+
+
+def test_gbm2_google_page_cannot_widen_when_settings_are_osm(client, h, gpoint):
+    _set_keys(browser="")                                # 設定是 osm（金鑰被清掉）
+    body = _points(client, h, basemap="google")
+    assert body["basemap"] == "osm"
+    assert not [p for p in body["points"] if p["source"] == geo.SOURCE_GOOGLE]
+
+
+def test_gbm2_callers_without_basemap_follow_the_settings(client, h, gpoint):
+    """非地圖的呼叫者（沒帶 basemap）照設定——不畫地圖，SST §6.1 允許不配地圖使用。"""
+    _set_keys(browser=BROWSER_KEY)
+    assert _points(client, h)["basemap"] == "google"
+
+
+def test_gbo1_google_error_text_never_carries_the_server_key(monkeypatch):
+    from helpers.settings import _set_setting
+    _set_setting("company_profile", {"google_maps_api_key": SERVER_KEY})
+    monkeypatch.setattr(geo, "quota_exceeded", lambda *a, **k: False)
+    monkeypatch.setattr(geo, "_throttle", lambda: None)
+
+    def boom(req, timeout=None):
+        raise RuntimeError("GET " + req.full_url + " failed")   # 例外帶完整網址（含 key=）
+    monkeypatch.setattr(geo.urllib.request, "urlopen", boom)
+    errors = []
+    assert geo._locate_google("台中市西屯區市政路1號", errors=errors) is None
+    assert errors and SERVER_KEY not in errors[0][1] and "***" in errors[0][1], errors

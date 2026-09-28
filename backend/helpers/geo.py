@@ -881,7 +881,10 @@ def _locate_google(address, errors=None, **_kw):
         # ☠️ 只看有沒有座標的話，「查不到」與「連不上」會被歸成同一類。
         # 🔴 而它同時是「不可以寫負快取」的那一種（§15 補三）。
         if errors is not None:
-            errors.append(("google", str(exc) or exc.__class__.__name__))
+            # D 稽核 GB-O1：錯誤字串會進預熱狀態（畫面看得到）；換了 HTTP 函式庫之後例外可能帶完整網址（含 key=）
+            #   ⇒ 放進去之前先把伺服器金鑰遮掉。
+            msg = (str(exc) or exc.__class__.__name__).replace(key, "***")
+            errors.append(("google", msg))
         return None
     # 🔴 **計數點在這裡**：收到回應之後、解析之前（GB2／GB3）。
     # ☠️ 放在解析之後的話，`ZERO_RESULTS` 這種「送出去了、對方回了、

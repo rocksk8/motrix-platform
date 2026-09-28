@@ -394,6 +394,12 @@
         <div id="mp-canvas"></div>
         <!-- OSM 使用條款要求標示出處。Leaflet 的 attribution 控制項會顯示，
              這一行是它載不出來時的後備。 -->
+        <!-- D 稽核 GB-S1（主持裁示，授權義務）：畫面上有 Nominatim 來源的點 ⇒ 標示地點資料出處（ODbL／Nominatim 使用政策）。
+             兩種底圖都顯示；放在圖面下方，不蓋住 Google 的標誌與歸屬。 -->
+        <div class="mp-osm-data" style="font-size:11px;color:var(--text-secondary);margin-top:6px"
+             x-show="hasOsmDataPoints">
+          地點資料 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>
+        </div>
         <!-- 第十五班 ②(b)：Google 底圖時不顯示 OSM 出處（Google 標誌與資料歸屬由 Maps JavaScript API 自己畫在圖上，
              依條款不可遮蓋、不可換成客戶品牌）。 -->
         <div style="font-size:11px;color:var(--text-secondary);margin-top:6px" x-show="basemap !== 'google'">
@@ -717,6 +723,12 @@ function mapPage() {
         const src = this._focus.split(':')[0]
         if (this.sources.some(s => s.key === src) && !this.picked.includes(src)) this.picked.push(src)
       }
+      // GB-M2：取點前先知道這一頁要用哪一種底圖（取點會帶上它，後端只准收窄）。
+      //   取不到 ⇒ 維持 osm（收窄方向，安全）；開地圖時再問一次，那時取不到才說出來、不畫。
+      try {
+        this._cfg = await this._mapConfig()
+        this.basemap = this._cfg.basemap === 'google' ? 'google' : 'osm'
+      } catch (_e) { this._cfg = null }
       await this.refresh()
       // 🔴 XA4：**自動開圖**（使用者裁示：「正式機都長期開著，
       // 為什麼不能預載好地圖發給使用者，還要使用者點選開啟地圖」）。
@@ -737,6 +749,13 @@ function mapPage() {
       } else {
         this.openMap()
       }
+    },
+
+    //: GB-S1：畫面上（含據點）有沒有 Nominatim 來源的座標。
+    get hasOsmDataPoints() {
+      const info = this.info || {}
+      const osm = s => s === 'nominatim' || s === 'nominatim_district'
+      return (info.points || []).some(p => osm(p.source)) || (info.locations || []).some(l => osm(l.source))
     },
 
     //: 這一次的回傳裡到底有沒有用到定位。**以後端說的為準**，
@@ -843,14 +862,21 @@ function mapPage() {
           headers['X-Map-Position'] = this.userPos.lat + ',' + this.userPos.lon
                                     + ',' + this.userPos.accuracy
         }
-        const r = await fetch('/api/map/points?sources=' + want, { headers })
+        const r = await fetch('/api/map/points?sources=' + want + '&basemap=' + this.basemap, { headers })
         if (!r.ok) {
           // ⚠️ 失敗時 info 留 null ⇒ 統計與清單都不渲染。
           // **不要顯示一個全是 0 的畫面**——那會讓「沒載到」看起來像「一切正常且沒東西」。
           this.loadError = '地圖資料載入失敗（HTTP ' + r.status + '）'
           return
         }
-        this.info = await r.json()
+        const data = await r.json()
+        // 🔴 D 稽核 GB-M2：回應的底圖與這一頁的不同（設定在頁面開著時被改了）⇒ **不畫**，請重新整理。
+        //    後端已收窄（頁面 osm 不會拿到 Google 座標）；這一道擋的是另一個方向與日後的漏網。
+        if (data.basemap && data.basemap !== this.basemap) {
+          this.loadError = '地圖設定已變更，請重新整理頁面'
+          return
+        }
+        this.info = data
         // ⚠️ 地圖開著的時候要跟著重畫 —— 不然清單更新了而地圖沒有，
         // 而**兩邊不一致時使用者會相信看得見的那一邊**。
         this._redraw()
@@ -879,7 +905,7 @@ function mapPage() {
     openMap() {
       if (this.mapOpen || this.mapLoading) return
       this.mapLoading = true
-      this._mapConfig()
+      ;(this._cfg ? Promise.resolve(this._cfg) : this._mapConfig())
         .then(cfg => {
           this.basemap = cfg.basemap === 'google' ? 'google' : 'osm'
           return this.basemap === 'google' ? this._loadGoogle(cfg) : this._loadLeaflet()

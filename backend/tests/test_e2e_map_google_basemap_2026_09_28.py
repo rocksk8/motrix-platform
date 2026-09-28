@@ -145,7 +145,8 @@ def test_google_basemap_draws_with_the_browser_key_and_no_osm(live_server, make_
     assert page.evaluate("() => window.__gm.cluster") == 2, "資料點要進群聚"
     assert seen["osm"] == 0, "Google 底圖畫面載了 OSM 圖磚（ToS §3.2.3(e)）"
     assert page.evaluate(f"() => {MD}.basemap") == "google"
-    assert not page.locator("a[href='https://www.openstreetmap.org/copyright']").is_visible()
+    # 底圖出處（「底圖 © OpenStreetMap 貢獻者」那一行）不顯示；GB-S1 的「地點資料」那一行另題驗
+    assert not page.get_by_text("OpenStreetMap", exact=True).is_visible()
     # 點標記開彈窗；使用者資料要跳脫（名稱是 <b>客戶0</b> 字面）
     page.locator("#mp-canvas .mp-pin").first.click()
     page.wait_for_selector("#fake-iw", state="visible")
@@ -227,3 +228,62 @@ def test_settings_page_saves_browser_key_and_map_id_without_touching_the_server_
     assert prof["google_maps_api_key"] == SERVER_KEY, "伺服器金鑰被改動了"
     page.wait_for_function("k => document.body.innerText.includes('目前：' + '\u2022'.repeat(8) + k)", arg=BROWSER_KEY[-4:])
     assert BROWSER_KEY not in page.content()
+
+
+@pytest.mark.e2e
+def test_gbm2_settings_changed_while_page_open_is_said_and_not_drawn(live_server, make_user, seeded, e2e_browser):
+    _keys(BROWSER_KEY)
+    u = make_user(username="gbm_e6", role="superadmin")
+    page, _seen = _open(e2e_browser, live_server, u)
+    _wait_drawn(page)
+    _keys("")                                             # 管理員把地圖金鑰清掉（頁面還開著）
+    from tests._map_cache_warm import clear_map_response_cache
+    clear_map_response_cache()
+    page.evaluate(f"() => {MD}.refresh()")
+    page.wait_for_function(f"() => {MD}.loadError.includes('地圖設定已變更')", timeout=20000)
+
+
+@pytest.mark.e2e
+def test_gbs1_nominatim_points_show_osm_data_attribution_on_google(live_server, make_user, seeded, e2e_browser):
+    """GB-S1：Google 底圖上有 Nominatim 來源的點 ⇒ 顯示「地點資料 © OpenStreetMap contributors」；
+    反向控制：全是 Google 座標時不顯示。"""
+    _keys(BROWSER_KEY)
+    u = make_user(username="gbm_e7", role="superadmin")
+    page, _seen = _open(e2e_browser, live_server, u)
+    _wait_drawn(page)
+    assert not page.locator(".mp-osm-data").is_visible()
+    import db
+    from helpers import geo
+    conn = db.get_db()
+    try:
+        conn.execute("DELETE FROM geocode_cache WHERE address=?", (list(ADDR)[0],))
+        conn.execute("INSERT INTO geocode_cache (address, lat, lon, source, precision, created_at) VALUES (?,?,?,?,?,?)",
+                     (list(ADDR)[0], 24.157, 120.684, geo.SOURCE_NOMINATIM, geo.PRECISION_STREET, datetime.now().isoformat()))
+        conn.commit()
+    finally:
+        conn.close()
+    from tests._map_cache_warm import clear_map_response_cache
+    geo._CACHE.clear()
+    clear_map_response_cache()
+    page.evaluate(f"() => {MD}.refresh()")
+    page.wait_for_selector(".mp-osm-data", state="visible", timeout=20000)
+    assert "OpenStreetMap contributors" in page.inner_text(".mp-osm-data")
+
+
+@pytest.mark.e2e
+def test_gbm2_open_osm_page_keeps_free_coords_after_settings_switch_to_google(live_server, make_user, seeded, e2e_browser):
+    """OSM 頁開著、管理員填好金鑰＋地圖 ID ⇒ 下一次取點（頁面帶 basemap=osm）仍不可以拿到 Google 座標。"""
+    _keys("")
+    u = make_user(username="gbm_e8", role="superadmin")
+    page, seen = _open(e2e_browser, live_server, u)
+    page.wait_for_function(f"() => {{ try {{ return {MD}._map && !{MD}.loading }} catch (e) {{ return false }} }}", timeout=20000)
+    assert page.evaluate(f"() => {MD}.basemap") == "osm"
+    _keys(BROWSER_KEY)
+    from tests._map_cache_warm import clear_map_response_cache
+    clear_map_response_cache()
+    with page.expect_response(lambda r: "/api/map/points" in r.url) as resp:
+        page.evaluate(f"() => {MD}.refresh()")
+    assert "basemap=osm" in resp.value.url
+    body = resp.value.json()
+    assert body["basemap"] == "osm" and not [p for p in body["points"] if p["source"] == "google"], body["points"]
+    assert seen["gmaps"] == []
