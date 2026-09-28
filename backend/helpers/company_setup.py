@@ -457,13 +457,13 @@ def observe(conn, root=None, now=None) -> None:
 
 
 #: 簽章確認檔到期前幾天開始每日告警（§6.5）；暫時放行到期前幾小時提醒（§4.3）
-#   〔2026-09-29 主持：使用者授權的確認檔有效期是 30 天 ⇒ ~~30 天~~ 改 7 天，否則一簽就開始每日告警〕
-SIGNED_EXPIRY_WARN_DAYS = 7
+#   〔2026-09-29 兩次變更：有效期 30 天時 ~~30 天~~ 改 ~~7 天~~（否則一簽就每日告警）⇒ 同日使用者改有效期 365 天 ⇒ 回到 30 天〕
+SIGNED_EXPIRY_WARN_DAYS = 30
 GRACE_EXPIRY_WARN_HOURS = 6
 
 
 def observe_expiry(conn, root=None, now=None) -> None:
-    """到期提醒（COMPANY-SETUP-GATE §4.3、§6.5）：簽章確認檔剩 ≤ 7 天、暫時放行剩 ≤ 6 小時 ⇒ 告警（同一代碼每日一次）。
+    """到期提醒（COMPANY-SETUP-GATE §4.3、§6.5）：簽章確認檔剩 ≤ 30 天、暫時放行剩 ≤ 6 小時 ⇒ 告警（同一代碼每日一次）。
     不丟例外；呼叫端負責 commit。"""
     now = now or datetime.now()
     try:

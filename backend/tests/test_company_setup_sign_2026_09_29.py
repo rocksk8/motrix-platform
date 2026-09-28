@@ -59,6 +59,8 @@ def test_sign_writes_a_file_the_server_accepts(tmp_path, dev, capsys):
     (Path(root) / "backend" / "company_confirmation.sig").write_bytes(out_file.read_bytes())
     profile = dict(GOOD, tax_id=UBN_A)
     assert cs.signed_file_state(profile, root) == "valid"
+    from datetime import date
+    assert (date.fromisoformat(res["expires"]) - date.fromisoformat(res["issued"])).days == 365      # 不帶 --days ⇒ 365
     conn = _db(tmp_path, profile)
     assert cs.backfill_once(conn, root) == "backfilled" and cs.status(conn, root)["configured"] is True
 
@@ -74,7 +76,7 @@ def test_sign_refusals_write_nothing(tmp_path, dev, capsys, case):
     elif case == "bad_install":
         args["--install"] = "xyz"
     elif case == "days":
-        args["--days"] = "401"
+        args["--days"] = "366"                                                  # 授權上限 365（D SG-M1）
     elif case == "exists":
         out_file.write_text("old", encoding="utf-8")
     elif case == "wrong_key":

@@ -99,9 +99,9 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 - **威脅模型（CG-S4，主持裁示寫明）**：本閘門防的是「**沿用預設**」與「**疏忽**」（忘了設定、從開發者那裡拿到的庫直接用），**不防**會修改程式碼、或整包複製安裝目錄的客戶——程式碼在客戶機器上。**不要把它當成授權或防盜機制來加強**；那是 licensing 的職責。
   - 加鹽雜湊防的是「程式碼與文件裡多一處字面值」，不防還原：統編 8 碼可在數秒內暴力還原（鹽在程式碼裡）；統編是公開登記資料，且已以字面值存在於凍結的 `db.py`／`core/upgrade.py`（ALLOWED）⇒ 可還原不構成新風險。
 - **開發者簽章確認檔**（Q2 裁示：主要且唯一的開發者認定方式；~~登記機器指紋為輔~~ 依主持裁示綁定不再看硬體，機器指紋不用）：
-  - 檔名 `company_confirmation.sig`，放 `backend/`（與 license.key 同層；〔實作註：~~安裝根目錄~~〕F3：`.gitignore`、`verify_package` 拒絕帶入、每日備份不收、不上雲）。
+  - 檔名 `company_confirmation.sig`，放 `backend/`（與 license.key 同層；〔實作註：~~安裝根目錄~~〕F3：`.gitignore`、`verify_package` 拒絕帶入、每日備份不收、~~不上雲~~〔D SG-S1：只經交付資料夾傳遞、用完刪除，§6.7(c)〕）。
   - 被簽內容（正規化 JSON）：`{"purpose": "motrix-company-confirm-v1", "identity_fp": "<統編指紋>", "install": "<sha256(安裝識別)>", "issued": "YYYY-MM-DD", "expires": "YYYY-MM-DD"}`；簽章原文前綴 `motrix-company-confirm-v1\n`（CG-S3 網域分隔：與交付包共用同一把 Ed25519 金鑰，驗證端只認這個前綴與 `purpose`，交付包的簽章不能被當成確認檔，反之亦然）。
-  - 到期日：~~建議簽 3 年；到期前 30 天起~~〔2026-09-29 使用者授權（主持）：有效期 **30 天**；到期前 **7 天**起〕每日告警一次（速率上限），到期 ⇒ `signed_file_expired`（等同未設定，§4.3 暫時放行可用）。
+  - 到期日：~~建議簽 3 年；到期前 30 天起~~〔~~2026-09-29 使用者授權（主持）：有效期 30 天；到期前 7 天起~~〕〔有效期兩次變更：2026-09-29 先 30 天（主持轉述授權）⇒ 同日使用者表單改 **365 天**，理由：過期＝全公司暫停，每月重簽風險太高〕有效期 **365 天**；到期前 **30 天**起每日告警一次（速率上限），到期 ⇒ `signed_file_expired` ⇒ **全公司暫停**（中介層 428，直到放入新簽章檔或啟用 §4.3 暫時放行）。
   - 公鑰：〔實作註：交付簽章公鑰（與 `backend/tools/delivery.py` 的 `DELIVERY_PUBKEY_PEM` 相同，題目比對一致；CG-S3 指的就是這把）〕~~沿用 licensing 內嵌的開發／正式公鑰（`env` 記在 status 回傳，開發金鑰簽的檔在正式機上標示）。~~
 - `_our_company_literals` 守門：雜湊不是字面值、掃描器看不到 ⇒ 另加一題「指紋常數只出現在 `helpers/company_setup.py`」。
 
@@ -249,7 +249,7 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
   - 側欄（§4.2）：`/api/platform/menu` 回 `companySetup`；未設定 ⇒ `groups` 與 `layout.groups` 只留設定頁入口（非最高管理員＝空）；在伺服器端過濾，sidebar.js 不改。
   - CG5-S1：已確認的安裝，一般存檔會改動必要欄位（欄位雜湊變）⇒ 409 `company_setup_reconfirm`、**不存**；設定頁把確認卡換成「儲存並確認本公司資料」（同一請求帶 confirmIdentity）。本來就未確認 ⇒ 照常存。
   - CG5-S2：判定失敗後 `ERROR_CACHE_SECONDS`（60）秒內直接回 undetermined 不重算；告警另有行程內「每代碼每日一次」節流（庫讀不到節流紀錄時仍擋得住）。
-  - 到期提醒（§4.3、§6.5 原設計，段①未做，段③補）：`observe_expiry`——放行剩 ≤ 6 小時、開發者簽章檔剩 ≤ ~~30~~ 7 天（2026-09-29：有效期 30 天） ⇒ 告警（每日一次），在 `gate` 重算時呼叫。
+  - 到期提醒（§4.3、§6.5 原設計，段①未做，段③補）：`observe_expiry`——放行剩 ≤ 6 小時、開發者簽章檔剩 ≤ 30 天（2026-09-29：~~30~~ ⇒ ~~7~~ ⇒ 30，有效期 365 天） ⇒ 告警（每日一次），在 `gate` 重算時呼叫。
   - CG-S5：status 端點對最高管理員回 `superadminCount`；設定頁只有一位時提示再設一位。DR-SOP §4a〈本公司資料設定〉。
   - §2-④：`core.upgrade._is_our_install` 只認統編（去分隔符比對），刪名稱片段；`test_b2_blank_string_fill_passes_verify` 的前提（名稱在、統編空白）隨之改為統編在、名稱空白字串。
   - 測試：`conftest` 預設同時換掉 `status` 與 `gate`（第二道在沒有建庫的單元題也會被呼叫）。
@@ -296,7 +296,9 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 ### 6.5 DR-SOP 補一節〈本公司資料設定〉（CG-S5）
 - 還原到新機器／新目錄 ⇒ 必然未設定（識別檔不在備份裡）⇒ 最高管理員登入後按「確認本公司資料」；開發者正式機 ⇒ 用暫時放行撐到新簽章檔到位。
 - 唯一最高管理員不在 ⇒ 伺服器本機建暫時放行（72 小時，記稽核）⇒ 同時處理「第二位最高管理員」。
-- 簽章檔到期 ⇒ 到期前 ~~30~~ 7 天起已有告警（有效期 30 天，主持 2026-09-29）；過期當下以暫時放行撐到新檔。
+- 簽章檔到期 ⇒ ~~到期前 7 天起已有告警（有效期 30 天）~~ 到期前 30 天起每日告警（有效期 365 天）〔有效期兩次變更：2026-09-29 先 30 天（主持轉述授權）⇒ 同日使用者表單改 **365 天**，理由：過期＝全公司暫停，每月重簽風險太高〕。
+  **到期＝全公司暫停**（D SG-M2）：`signed_file_expired` ⇒ 中介層對全公司 428，直到放入新簽章檔或啟用暫時放行（72 小時）。
+  **年度重簽（負責人：主持）**：安裝識別不變 ⇒ **(a) 不必重做**，只做 §6.7 (b)(c)（`--install` 用上次回報的值）；在告警期（到期前 30 天）內完成。
 
 ### 6.6 與品牌設定（h-branding）的關係
 h-branding 守「**程式碼**不含本公司字面值」＋「單據與頁面經 `company_profile`／`/api/system/branding`」；本案守「**資料**不可以是開發者的、且有人確認過」。兩者互補：本案的指紋常數是雜湊（h-branding 掃描器看不到），另加「指紋只在一處」題；§2-③ 的 .md／根目錄盲區屬另一線（Q5 裁示）。
@@ -325,17 +327,18 @@ D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe backend\tools\company_setup_cli.p
     --private-key D:\MOTRIX-KEYS\delivery\<交付私鑰檔> ^
     --install <(a) 回報的 install> ^
     --tax <開發者公司統編> ^
-    --days 30 ^
+    --days 365 ^
     --out "G:\我的雲端硬碟\MOTRIX-交付\company-confirmation\<yyyyMMdd_HHmm>_<install 前 8 碼>\company_confirmation.sig"
 ```
 - 工具只簽**開發者身分**（`--tax` 不在開發者指紋內 ⇒ 拒絕）；`--install` 必須是 64 碼十六進位；`--days` 1～400；輸出檔已存在不覆蓋。
-- 輸出一行 JSON：`{"ok": true, "out": …, "install": …, "issued": …, "expires": …}`。有效期 30 天（使用者授權，主持 2026-09-29；`--days` 預設 30，上限 400）；到期前 7 天起正式機每日告警（§6.5）。
+- 輸出一行 JSON：`{"ok": true, "out": …, "install": …, "issued": …, "expires": …}`。有效期 **365 天**（`--days` 預設 365、上限 365）〔有效期兩次變更：2026-09-29 先 30 天（主持轉述授權）⇒ 同日使用者表單改 **365 天**，理由：過期＝全公司暫停，每月重簽風險太高〕；到期前 30 天起正式機每日告警；**到期＝全公司暫停**，年度重簽只做 (b)(c)（§6.5）。
 - 簽章檔不進 git（`.gitignore`）、不進正式機備份；交付資料夾是唯一傳遞路徑。
 
 **(c) 正式機：取用確認檔**
 1. 把 (b) 的檔複製到 `<安裝目錄>\backend\company_confirmation.sig`（檔名固定）。
 2. 再跑一次 (a) 的 `preflight`：預期 `allowed: true`、`reason: "configured"`、`via: "upgrade_backfill"`（模擬升級時自動補確認紀錄）。不是 ⇒ 不套用，把輸出回報開發機（`install_mismatch`＝雜湊不同，重做 (a)(b)；`signed_file_expired`＝重簽）。
-3. 之後照一般流程套用更新包（apply_update.ps1 自己也會在停服前再跑一次這個預檢，並在 log 印 `::NOTE:: company_bank=ok`）。
+3. 預檢通過後，**刪除交付資料夾裡的那一份**（`G:\我的雲端硬碟\MOTRIX-交付\company-confirmation\<…>\`）：確認檔只經交付資料夾傳遞、用完刪除（D SG-S1；檔案本身不是秘密，公開可驗、只綁這一個安裝）。
+4. 之後照一般流程套用更新包（apply_update.ps1 自己也會在停服前再跑一次這個預檢，並在 log 印 `::NOTE:: company_bank=ok`）。
 
 **(d) 演練（apply-run 演練目錄；兩條都演）**
 - **路徑一：新安裝／一般客戶的確認路徑**（演練庫是新庫）
