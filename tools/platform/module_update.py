@@ -221,7 +221,7 @@ def run_ship_tests(tests, repo=REPO):
     t0 = time.time()
     flags = 0x00004000 if os.name == "nt" else 0          # BELOW_NORMAL_PRIORITY_CLASS
     try:
-        r = subprocess.run([sys.executable, "-m", "pytest", *tests, "-n", "2", "-p", "no:cacheprovider", "-q",
+        r = subprocess.run([sys.executable, "-m", "pytest", *tests, "-n", "2", "-p", "no:cacheprovider", "-q", "-rfE",
                             "--basetemp=%s" % bt], cwd=str(Path(repo) / "backend"), capture_output=True,
                            creationflags=flags)
     finally:
@@ -231,8 +231,11 @@ def run_ship_tests(tests, repo=REPO):
     num = lambda w: int((re.search(r"(\d+) %s" % w, line) or [0, 0])[1])   # noqa: E731
     res = {"tests": tests, "passed": num("passed"), "failed": num("failed"), "errors": num("error"),
            "seconds": round(time.time() - t0, 1), "line": line.strip("= "), "exit": r.returncode}
+    res["failures"] = [l.split(" ", 1)[1].split(" - ")[0] for l in out if l.startswith(("FAILED ", "ERROR "))][:20]
     if r.returncode != 0 or res["failed"] or res["errors"] or not res["passed"]:
-        raise UpdateError("第②級測試沒有全綠（exit %s）：%s" % (r.returncode, res["line"] or "沒有結果行"))
+        # 失敗的題名一併列出（S6 演練：只給數字時要重跑十幾分鐘才知道是哪兩題）
+        raise UpdateError("第②級測試沒有全綠（exit %s）：%s%s" % (r.returncode, res["line"] or "沒有結果行",
+                          "".join("\n  ✗ " + f for f in res["failures"])))
     return res
 
 
