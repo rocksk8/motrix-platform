@@ -262,3 +262,36 @@
 
 **建議**
 - **S3R-S1**：`rolled_back` 的備份不在 `backups()` 裡，而 `_prune_backups` 只清 `backups()` 列出的 ⇒ 回滾過的備份資料夾永遠不會被清。清理時一併算進去（保留最近 N 份，不分狀態）
+
+## 10. 稽核 S4＋複核 S3R-M1：wip/b-module-delivery-2 2d842201（D，2026-09-28）
+
+> 拋棄式 worktree 跑探針（不提交，跑完刪、暫存已清）。
+
+### 10.1 S3R-M1：**未關**（同一模組已擋，跨模組仍在）
+
+| 探針 | 情境 | 結果 |
+|---|---|---|
+| P5b | 套用中途 Ctrl+C | `apply_failed_restored`，逐位元組回到套用前 ✔ |
+| P7 | zz 中斷（`apply_failed_half`，留 in_progress）→ 再套 zz | `interrupted_apply_pending` ✔ |
+| **P8** | zz 中斷 → **套 yy（另一個模組）成功** → `rollback zz` | **照做**：lock 的 yy 條目、`.deployed_modules.json` 的 yy 都不見，而 yy 的檔還在 |
+
+- 原因：`pending_interrupted`、`interrupted_not_latest` 都只看**同一個模組**的備份。但 lock 與三個狀態檔是**全安裝共用**的，in_progress 的回滾是整檔還原（`lock_before.json`、`state_before/`），也沒有 `state_after` 可以比對
+- 這就是 §9 S3R-M1 原文的情境（「沒回滾就重新套用成功 → **套 B** → 回滾舊的 in_progress」），修正只擋了「重新套用同一個模組」這一步
+- 修法（擇一，建議第一個）：
+  - preflight：**任何**模組有 in_progress ⇒ 拒絕套用任何模組（`interrupted_apply_pending` 帶模組與備份名）；完整包的 apply 也要先檢查（或至少在 ::RESULT:: 報出來）
+  - rollback：in_progress 的回滾要求「全安裝所有模組的備份裡，沒有比它新的」
+- 題：P8 ⇒ 套 yy 被拒（或 rollback zz 被拒），安裝目錄一個檔都不動
+
+### 10.2 S4：kind 與分派
+
+**主持問的兩點：成立。**
+- **kind 在簽章範圍內**：`kind` 寫在 `delivery.json`，而 `signed_bytes` 涵蓋 `delivery.json`＋`package.sha256` ⇒ 改 kind ＝簽章不符。缺 kind ⇒ full（本欄位之前的包）；不認得 ⇒ 拒絕
+- **完整包的驗證端不會把模組包當完整包套**：
+  - 新版 `verify_staged`：kind＝module 走 `_verify_module`（簽章或雜湊不過就不跑 preflight），**不會**進完整包的腳本版本／verify_package 分支；`apply_staged` 依 verified 的 kind 選已安裝的 `apply_module_update.ps1`，不複製任何工具
+  - 正式機上**舊版** `delivery.py`（還不認得 kind）收到模組包：`script_version` 找不到 `apply_update.ps1` ⇒ 列為問題；`apply_staged` 要求包裡有 `backend\tools` ⇒ 丟例外。兩道都會擋下
+- preflight 用**已安裝**的 `module_update.py`，只讀包裡的 JSON 與雜湊，不 import 包裡的程式
+
+**建議**
+- **S4-S1　套用工具版本不要用字串比較**：`_verify_module` 用 `str(have) < str(need)`。現行版本格式 `2026-09-28g` 在字尾是單一字母時可以，到 `…z` 之後（`aa`）就會比錯。訂格式（正規式）＋比較函式，完整包那一側若有同樣的比較一併換
+- **S4-S2　lock 的頁面路徑要驗形狀**：`apply` 對 `lock["pages"]` 的每個 rel 直接 `root / rel` 寫入，`check` 只驗雜湊。lock 在簽章範圍內，所以不是外部攻擊面；但單模組包的承諾是「只動該模組與它宣告的頁面」，建議 preflight 驗每個 rel 符合 `^frontend/pages/[a-z0-9-]+\.html$` 且 resolve 後在 `frontend/pages` 底下（rollback 刪除 `files_after` 的頁面時同一套）
+- **S4-O1（觀察）**：正式機升到新 delivery.py 之前，儀表板的包清單會把模組包列成一般的包（product＝`mod-…`）；按下去會被上述兩道擋下，訊息是「包裡沒有 apply_update.ps1」。建議正式機 Claude 指示裡提一句
