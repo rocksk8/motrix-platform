@@ -50,8 +50,21 @@ PII_ROUTED_SETTINGS = None   # 由 pii_routed_settings() 現場推導；保留�
 
 
 def _backed():
+    """每日 JSON 備份涵蓋的表——**以「所有已安裝模組都載入」為前提**。
+    〔第二十一班：模組宣告的 T1 表只在模組「已載入」時才進備份（archive._module_declared_backup_tables 讀
+    registry.loaded()）⇒ 原本這題只在同一個 worker 先 import 過 main 時才綠（順序相依；單獨跑或換批次就紅，
+    基底 51105a06 單獨跑也紅）。改成用各模組自己的 module.json 組出「已載入」清單餵給同一支備份函式——
+    驗的仍是 archive 的宣告式機制，不是把宣告抄一遍〕"""
+    from types import SimpleNamespace
+    from unittest import mock
     import archive
-    return set(archive.backed_up_table_names())
+    from core import registry
+    fake = []
+    for d in source_tree.module_dirs():
+        m = json.loads((d / "module.json").read_text(encoding="utf-8"))
+        fake.append(SimpleNamespace(key=m.get("key") or d.name, manifest=m))
+    with mock.patch.object(registry, "loaded", lambda: fake):
+        return set(archive.backed_up_table_names())
 
 
 def _excluded():

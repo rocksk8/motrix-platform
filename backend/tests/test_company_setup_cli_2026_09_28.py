@@ -251,16 +251,13 @@ def robocopy_statements(text):
     return out
 
 
-#: CONFIG_FILES 裡「robocopy 不排除」的例外（檔名 ⇒ 理由）。第二十一班交會：B55 把 `.deployed_modules.json` 加進
-#: CONFIG_FILES，但 apply／rollback 的 robocopy 沒有排除它——整包回滾時它是否該跟著程式回到快照是 B55 的語意，
-#: 不是本題能決定的 ⇒ 列為例外並交代理主持（A）裁示；裁示「要排除」時刪掉這一條並在兩支腳本加 /XF。
-ROBOCOPY_EXEMPT = {".deployed_modules.json": "第二十一班交會紅：待 A 裁示整包回滾時模組部署紀錄的語意"}
+#: 〔第二十一班交會：B55 把 `.deployed_modules.json` 加進 CONFIG_FILES、robocopy 沒排除 ⇒ ~~暫列例外~~；
+#:   代理主持 A 裁示「要排除」（條目帶 prod_base_commit，整包回滾後自然對得上）⇒ 兩支腳本補 /XF，例外撤掉〕
 
 
 def backend_config_basenames():
     from core import upgrade as U
-    return {rel.split("/")[-1] for rel in U.CONFIG_FILES
-            if rel.startswith("backend/") and rel.count("/") == 1} - set(ROBOCOPY_EXEMPT)
+    return {rel.split("/")[-1] for rel in U.CONFIG_FILES if rel.startswith("backend/") and rel.count("/") == 1}
 
 
 @pytest.mark.parametrize("script", ["apply_update.ps1", "rollback_update.ps1"])
