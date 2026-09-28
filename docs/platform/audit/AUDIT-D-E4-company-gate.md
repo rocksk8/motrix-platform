@@ -336,3 +336,11 @@ D 探針（拋棄式 worktree，3a49c1b5；題目 54 過，探針不提交、已
 - D 在拋棄式 worktree 跑 `test_company_setup_output_gate_2026_09_28.py`：21 passed
 - ⇒ 依主持的正式機只讀實況，**E4S3-S1 的風險在正式機不成立**（請款單不會被擋）
 - **觀察 E4-O1**：這個題檔是一般 in-process 的 `client` 題，跑完樹裡卻多了 `backend/.initial_admin_credentials.txt`、`.initial_demo_credentials.txt` ⇒ `client` fixture 的 `import main` 本身就會寫這兩個檔（範圍比 AB-S1 的子行程題更廣，可能是既有狀況）。共用主樹上這兩個檔會一直被測試改寫；建議 conftest 在 import main 前把兩個帳密檔路徑導到暫存（同 A46-S1 的位置）
+
+## 14. 抽查 E4-O1 的修正：wip/a-conftest-creds ae27088f（A，基底 0af16ad1）（D，2026-09-28）
+
+- **放行。** conftest `_app` 在 import main 之前，把 `helpers.auth._CREDENTIALS_FILE`、`helpers.startup._DEMO_CREDENTIALS_FILE` 導到 session 暫存
+- 寫入端都在呼叫時讀模組變數（`auth.py:130`、`startup.py:262`）⇒ 導向對 import main 與之後每個 client 題都有效；`helpers/__init__.py` 另有一份重新匯出的 `_CREDENTIALS_FILE`，只供讀取，不影響
+- BK19 的存量清單移除這兩列 ⇒ 之後有人把帳密檔寫回樹上，守門會紅（有人做過決定）
+- D 在拋棄式 worktree 跑新題＋`test_archive_isolation`＋`test_api_docs_off`：32 passed；**跑完樹上沒有任何帳密檔**（對照：§13 在 E4 樹上跑 client 題會留下兩個）
+- E4 分支合流時：E4 也改了 conftest（閘門預設、FILES_OVERRIDE），兩邊都在 `_app` 的同一段 ⇒ 合流那一班要確認兩組導向都在
