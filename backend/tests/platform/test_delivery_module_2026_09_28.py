@@ -8,6 +8,7 @@
 import json
 import os
 import subprocess
+import time
 import sys
 from pathlib import Path
 
@@ -276,16 +277,54 @@ def test_cli_outcome_is_fail_closed(res, outcome):
     assert D.outcome_from_result(res) == outcome
 
 
-def test_cli_writeback_reads_the_result_file_and_writes_back(env):
-    install = _install(env["tmp"])
+def _result(install, stamp, **kw):
     logs = install / "backend" / "logs"
-    logs.mkdir()
-    (logs / "apply_module_update_20260928_200000.result.json").write_text(json.dumps(
-        {"status": "success", "exit": 0, "rolled_back": "applied", "service": "up", "kind": "module", "module_key": "zz",
-         "to_version": "1.1.0", "prod_base_commit": BASE, "commit": BUILT, "finished_at": "2026-09-28 20:01:00"}), encoding="utf-8")
-    name = "20260928_195000_" + BUILT[:8] + "_mod-zz"
-    rc = D.main(["writeback", "--root", str(env["root"]), "--name", name, "--install-root", str(install)])
-    assert rc == 0
+    logs.mkdir(exist_ok=True)
+    rec = {"status": "success", "exit": 0, "rolled_back": "applied", "service": "up", "kind": "module", "module_key": "zz",
+           "to_version": "1.1.0", "prod_base_commit": BASE, "commit": BUILT, "finished_at": "2026-09-28 20:01:00"}
+    rec.update(kw)
+    (logs / ("apply_module_update_%s.result.json" % stamp)).write_text(json.dumps(rec), encoding="utf-8")
+
+
+def test_cli_writeback_checks_the_result_belongs_to_the_package(env):
+    name, _staged = _publish_stage(env)
+    install = _install(env["tmp"])
+    t0 = time.time() - 5
+    _result(install, "20260928_200000")
+    assert D.main(["writeback", "--root", str(env["root"]), "--name", name, "--install-root", str(install),
+                   "--since", str(t0)]) == 0
     rec = json.loads((env["root"] / "results" / (name + ".result.json")).read_text(encoding="utf-8"))
-    assert rec["outcome"] == "succeeded" and rec["kind"] == "module" and rec["module_key"] == "zz"
-    assert D.module_overlays(str(env["root"])) == {}, "沒有完整包紀錄 ⇒ 覆蓋算不出來（不猜）"
+    assert rec["outcome"] == "succeeded" and rec["kind"] == "module" and rec["module_key"] == "zz" and "mismatch" not in rec
+
+
+def test_cli_writeback_requires_since(env):
+    name, _staged = _publish_stage(env)
+    with pytest.raises(SystemExit):
+        D.main(["writeback", "--root", str(env["root"]), "--name", name, "--install-root", str(_install(env["tmp"]))])
+
+
+@pytest.mark.parametrize("kw, field", [
+    ({"module_key": "yy"}, "module_key"),
+    ({"to_version": "9.9.9"}, "to_version"),
+    ({"prod_base_commit": "c" * 40}, "prod_base_commit"),
+    ({"kind": None}, "kind"),
+])
+def test_cli_writeback_mismatch_is_failed(env, kw, field):
+    """D 探針：logs 只有別的模組（或別的版本）的 success ⇒ 不可以寫回成這個包 succeeded。"""
+    name, _staged = _publish_stage(env)
+    install = _install(env["tmp"])
+    t0 = time.time() - 5
+    _result(install, "20260928_200000", **kw)
+    assert D.main(["writeback", "--root", str(env["root"]), "--name", name, "--install-root", str(install),
+                   "--since", str(t0)]) == 1
+    rec = json.loads((env["root"] / "results" / (name + ".result.json")).read_text(encoding="utf-8"))
+    assert rec["outcome"] == "failed" and any(m.startswith(field) for m in rec["mismatch"]), rec
+
+
+def test_writeback_full_package_compares_commit(env):
+    from tests.platform.test_delivery_2026_09_28 import _pkg, COMMIT
+    name = D.publish(str(_pkg(env["tmp"])), str(env["root"]), env["priv"])
+    meta = json.loads((env["root"] / "packages" / name / D.META_JSON).read_text(encoding="utf-8"))
+    assert D.result_mismatch(meta, {"commit": COMMIT, "status": "success"}) == []
+    assert D.result_mismatch(meta, {"commit": "d" * 40, "status": "success"})
+    assert D.result_mismatch(None, {"commit": COMMIT})

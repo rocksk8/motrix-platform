@@ -651,7 +651,46 @@ def outcome_from_result(res):
     return "succeeded" if res.get("status") == "success" and str(res.get("exit")) == "0" else "failed"
 
 
-def write_back(root, name, result, outcome, host=None):
+def result_mismatch(meta, res):
+    """結果檔是不是**這個包**的（稽核 D W-M1）⇒ 不符清單（空＝相符）。以 packages\\<包名>\\delivery.json 為準：
+    module ⇒ kind、module_key、to_version、prod_base_commit；full ⇒ kind、commit。任何一項讀不到 ⇒ 不符（不猜）。"""
+    if not isinstance(meta, dict):
+        return ["讀不到這個包的 delivery.json"]
+    if not isinstance(res, dict) or "unreadable" in res:
+        return ["沒有結果檔或讀不懂"]
+    out = []
+    try:
+        kind = package_kind(meta)
+    except DeliveryError as e:
+        return [str(e)]
+    if (res.get("kind") or KIND_FULL) != kind:
+        out.append("kind：結果 %r ≠ 包 %r" % (res.get("kind") or KIND_FULL, kind))
+    if kind == KIND_MODULE:
+        mod = meta.get("module") or {}
+        for rk, mk in (("module_key", "key"), ("to_version", "version"), ("prod_base_commit", "prod_base_commit")):
+            if not res.get(rk) or str(res.get(rk)) != str(mod.get(mk)):
+                out.append("%s：結果 %r ≠ 包 %r" % (rk, res.get(rk), mod.get(mk)))
+    elif not res.get("commit") or str(res.get("commit")) != str(meta.get("commit")):
+        out.append("commit：結果 %r ≠ 包 %r" % (res.get("commit"), meta.get("commit")))
+    return out
+
+
+def writeback(root, name, install_root, script, since):
+    """CLI writeback：找 since 之後的結果檔 ⇒ 與包的 delivery.json 比對 ⇒ 判定（fail-closed）⇒ 寫回。⇒ (outcome, 路徑, 不符清單)。"""
+    if since is None:
+        raise DeliveryError("writeback 必須給 --since（套用開始的時間）")
+    _require_root(root)
+    if not NAME_RE.match(name or ""):
+        raise DeliveryError("包名不合格：%r" % name)
+    _raw, meta = _read_meta(os.path.join(root, "packages", name, META_JSON))
+    res = find_result(install_root, script, since=since)
+    mismatch = result_mismatch(meta, res)
+    outcome = "failed" if mismatch else outcome_from_result(res)
+    usable = res if isinstance(res, dict) and "unreadable" not in res else {}
+    return outcome, write_back(root, name, usable, outcome, mismatch=mismatch), mismatch
+
+
+def write_back(root, name, result, outcome, host=None, mismatch=None):
     """正式機把結果寫到 <交付資料夾>\\results\\<包名>.result.json（先 .tmp 再改名）。只帶 WRITE_BACK_FIELDS＋name／outcome／host。"""
     _require_root(root)
     if not NAME_RE.match(name or ""):
@@ -660,6 +699,8 @@ def write_back(root, name, result, outcome, host=None):
         raise DeliveryError("outcome 只能是 succeeded／failed：%r" % outcome)
     rec = {k: (result or {}).get(k) for k in WRITE_BACK_FIELDS}
     rec.update(name=name, outcome=outcome, host=host or os.environ.get("COMPUTERNAME", ""))
+    if mismatch:
+        rec["mismatch"] = list(mismatch)             # 稽核 D W-M1：結果檔不是這個包的 ⇒ 記下哪裡不符（判定已是 failed）
     d = os.path.join(root, "results")
     os.makedirs(d, exist_ok=True)
     final = os.path.join(d, name + ".result.json")
@@ -761,7 +802,8 @@ def main(argv=None, resolver=None):
     w = sub.add_parser("writeback"); w.add_argument("--root"); w.add_argument("--name", required=True)
     w.add_argument("--install-root", required=True)
     w.add_argument("--script", default="apply_module_update", choices=("apply_update", "apply_module_update"))
-    w.add_argument("--since", type=float, help="只看這個 epoch 秒之後寫的結果檔（套用開始的時間）")
+    w.add_argument("--since", type=float, required=True,
+                   help="套用開始的 epoch 秒：只看這之後寫的結果檔（必填：不帶會拿到別次套用的結果，稽核 D W-M1）")
     a = ap.parse_args(argv)
     try:
         if a.cmd in ("publish", "scan", "stage", "writeback") and not a.root:
@@ -777,9 +819,9 @@ def main(argv=None, resolver=None):
         elif a.cmd == "stage":
             print("DELIVERY_STAGE_OK %s" % stage(a.root, a.name, a.staging))
         elif a.cmd == "writeback":
-            res = find_result(a.install_root, a.script, since=a.since)
-            outcome = outcome_from_result(res)
-            path = write_back(a.root, a.name, res if isinstance(res, dict) and "unreadable" not in res else {}, outcome)
+            outcome, path, mismatch = writeback(a.root, a.name, a.install_root, a.script, a.since)
+            for m in mismatch:
+                print("  不符：%s" % m)
             print("DELIVERY_WRITEBACK_OK %s %s" % (outcome, path))
             return 0 if outcome == "succeeded" else 1
         else:
