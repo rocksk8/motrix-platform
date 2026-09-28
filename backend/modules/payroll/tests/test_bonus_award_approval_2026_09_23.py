@@ -432,9 +432,8 @@ def _find_award_action_path(client, candidates):
 
     找不到就**明著說是規格哪一節定的**，不要讓 404/405/422 變成一個要猜的謎題。
     """
-    r = client.get("/openapi.json")
-    assert r.status_code == 200, "讀不到 openapi.json：%s" % r.text[:200]
-    spec = r.json()
+    # 2026-09-28 起 /openapi.json 預設關閉（MOTRIX_API_DOCS）⇒ 直接向 app 要同一份 schema（不經 HTTP）
+    spec = client.app.openapi()
     paths = spec.get("paths") or {}
     for cand in candidates:
         hits = [p for p, methods in paths.items()
