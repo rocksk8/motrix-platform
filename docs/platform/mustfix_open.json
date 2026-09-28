@@ -2,6 +2,7 @@
  "_說明": "登記中的未關必修（tools/platform/mustfix_scan.py、PLAYBOOK §E-6）：稽核檔宣告了、還沒有關閉紀錄、而且有人在修的。必須與掃描結果完全相同；稽核者寫下「✅ <編號> 關閉（<commit>）」之後從這裡移除。上限 10 筆。",
  "open": {
   "S5A-M1": {"audit": "AUDIT-D-B55-module-delivery.md", "owner": "A", "fix": "wip/a-module-apply-ps1", "state": "修正中（3a852cdc 待修：B d764026c 新增的回滾拒絕碼未走 F13、interrupted_apply_pending 未列一檔不動）", "since": "2026-09-28"},
+  "CG5-M1": {"audit": "AUDIT-D-E4-company-gate.md", "owner": "E", "fix": "wip/e-company-gate-impl", "state": "修正中（e71e904d 待修：判定失敗時橫幅說暫停輸出、輸出卻照常）", "since": "2026-09-28"},
   "H3-M1": {"audit": "AUDIT-D-H3-builder3.md", "owner": "H3", "fix": "（未開實作）", "state": "修正中——暫緩：使用者裁示建構器第三輪暫緩（CORE-SPEC 2e32977f），未開實作（登記表沒有暫緩狀態，依主持指示用修正中＋備註）", "since": "2026-09-28"},
   "H3-M2": {"audit": "AUDIT-D-H3-builder3.md", "owner": "H3", "fix": "（未開實作）", "state": "修正中——暫緩：使用者裁示建構器第三輪暫緩（CORE-SPEC 2e32977f），未開實作（登記表沒有暫緩狀態，依主持指示用修正中＋備註）", "since": "2026-09-28"},
   "H3-M3": {"audit": "AUDIT-D-H3-builder3.md", "owner": "H3", "fix": "（未開實作）", "state": "修正中——暫緩：使用者裁示建構器第三輪暫緩（CORE-SPEC 2e32977f），未開實作（登記表沒有暫緩狀態，依主持指示用修正中＋備註）", "since": "2026-09-28"}
