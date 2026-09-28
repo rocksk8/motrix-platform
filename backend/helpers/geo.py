@@ -1914,24 +1914,40 @@ def _warm_geocode_cache_round() -> dict:
     return _finish(reason, processed, succeeded, misses, failures)
 
 
+#: 啟動後第一輪背景定位的延遲（秒）。第十五班緊急修補 B54：第一輪改在背景執行緒跑、啟動不等它。
+_GEOCODE_WARM_FIRST_DELAY_SECONDS = 30
+
+
 def schedule_geocode_warm():
-    """啟動時呼叫一次：跑一輪，然後排下一次。
+    """啟動時呼叫一次：**立即返回**；第一輪在背景執行緒（daemon Timer，短延遲）跑，之後每輪結束排下一輪。
+
+    🔴 第十五班緊急修補 B54：原本在這裡**同步**跑第一輪 ⇒ `main.py` 模組層呼叫它時，
+       `import main` 要等整輪定位跑完才繼續啟動。B50 之後查無不再讓迴圈停下，正式機 333 筆待辦×
+       Nominatim 每秒 1 次 ⇒ 啟動被卡數分鐘 ⇒ 套用後 83 秒內 port 沒在聽 ⇒ 自動回滾（8b04d99d）。
+       ☠️ 演練沒抓到：演練安裝設 `MOTRIX_DISABLE_SCHEDULERS=1`，這一行根本沒跑。
+
+    ⚠️ `threading.Timer` 走模組屬性，`from threading import Timer`
+    會讓 monkeypatch 打不到。
+    """
+    t = threading.Timer(_GEOCODE_WARM_FIRST_DELAY_SECONDS, _geocode_warm_tick)
+    t.daemon = True
+    t.start()
+
+
+def _geocode_warm_tick():
+    """背景執行緒裡跑一輪，然後排下一次。
 
     ⚠️ 工作包在 `try` 裡、**重排放在 `finally`** —— 形狀照
     `tender_source.schedule_tender_scan()`。
     把重排放在工作之後而沒包 try 的話，丟一次例外就**永遠不會再排**，
     而「排程死了」跟「今天沒事做」長得一模一樣。
-
-    ⚠️ `threading.Timer` 走模組屬性，`from threading import Timer`
-    會讓 monkeypatch 打不到。
     """
     try:
         warm_geocode_cache()
     except Exception:                     # noqa: BLE001
         logger.exception("warm_geocode_cache failed")
     finally:
-        t = threading.Timer(GEOCODE_WARM_INTERVAL_SECONDS,
-                            schedule_geocode_warm)
+        t = threading.Timer(GEOCODE_WARM_INTERVAL_SECONDS, _geocode_warm_tick)
         t.daemon = True
         t.start()
 
