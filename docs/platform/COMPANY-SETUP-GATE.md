@@ -245,6 +245,8 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 3. **第二階段（含閘門的版本）**：`apply_update.ps1` 套用。
 
 ### 6.3 `apply_update.ps1` 的兩道檢查（CG-M1 ①②）
+〔主持裁示 2026-09-28 19:47：**單模組更新包（`apply_module_update.ps1`）同樣做**這兩道檢查（同樣會重啟服務）——逐字複製 `Invoke-CompanySetupCli` 與兩個呼叫點（停服前預檢、套用後檢查＋自動回滾），同樣沒有任何略過參數；由 A 在該腳本落地，逐字守門比照既有共用函式〕
+
 1. **套用前預檢（停服之前）**：以**新版**程式碼（包內 `backend/`，不 import main）執行
    `company_setup_cli.py preflight --db <正式庫> --root <安裝目錄>`：模擬 backfill＋`status()`。
    結果會是「未設定」且沒有有效暫時放行 ⇒ **拒絕升級**、服務不停、`::RESULT:: v=2 status=refused_company_setup reason=<代碼>`；
