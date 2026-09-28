@@ -24,6 +24,7 @@ DEPLOY_SCRIPTS = frozenset({
     "setup_autostart_task.ps1",
     "setup_heartbeat_task.ps1",
     "tools/apply_update.ps1",
+    "tools/apply_module_update.ps1",  # S5 單一模組更新：$ProdRoot 預設值與 apply_update.ps1 同一行
     "tools/check_prod_drift.ps1",
     "tools/rollback_update.ps1",
     "tools/_dashboard_remote.ps1",
