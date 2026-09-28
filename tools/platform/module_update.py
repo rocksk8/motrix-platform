@@ -50,7 +50,12 @@ DEPLOYED_COMMIT_REL = "backend/.deployed_commit.json"
 
 
 class UpdateError(Exception):
-    pass
+    """code：機器可讀的原因（--json 輸出；apply_module_update.ps1 依它分流，例：backup_corrupt ⇒ 停用該模組再重啟，設計 §2 F13）。
+    值域見 docs/platform/MODULE-UPDATE-DELIVERY.md §10。"""
+
+    def __init__(self, msg, code="refused"):
+        super().__init__(msg)
+        self.code = code
 
 
 # ── 小工具 ────────────────────────────────────────────────────────────────
@@ -263,12 +268,12 @@ def ship(key, out_dir, prod_base, commit="HEAD", overlays=None, run_tests=True, 
 def load_pkg(pkg):
     lp = Path(pkg) / LOCK_NAME
     if not lp.is_file():
-        raise UpdateError("不是模組更新包：缺 %s" % LOCK_NAME)
+        raise UpdateError("不是模組更新包：缺 %s" % LOCK_NAME, code="pkg_invalid")
     lock = json.loads(lp.read_text(encoding="utf-8"))
     if lock.get("lock_version") != PS.LOCK_VERSION or lock.get("kind") != "module_update":
-        raise UpdateError("看不懂的 lock（lock_version=%r、kind=%r）⇒ 不猜" % (lock.get("lock_version"), lock.get("kind")))
+        raise UpdateError("看不懂的 lock（lock_version=%r、kind=%r）⇒ 不猜" % (lock.get("lock_version"), lock.get("kind")), code="pkg_invalid")
     if len(lock.get("modules") or {}) != 1:
-        raise UpdateError("模組更新包一次只能帶一個模組：%s" % sorted(lock.get("modules") or {}))
+        raise UpdateError("模組更新包一次只能帶一個模組：%s" % sorted(lock.get("modules") or {}), code="pkg_invalid")
     return lock
 
 
@@ -308,12 +313,12 @@ def _license_for(root):
         return _license_check
     backend = Path(root) / "backend"
     if not (backend / "helpers" / "licensing.py").is_file():
-        raise UpdateError("安裝目錄沒有 helpers/licensing.py ⇒ 授權判不了，不套用")
+        raise UpdateError("安裝目錄沒有 helpers/licensing.py ⇒ 授權判不了，不套用", code="license_unavailable")
     sys.path.insert(0, str(backend))
     try:
         from helpers import licensing as L
     except Exception as e:                              # noqa: BLE001  算不出來就不動（不猜）
-        raise UpdateError("讀不到授權判定（helpers.licensing：%s），不套用" % e)
+        raise UpdateError("讀不到授權判定（helpers.licensing：%s），不套用" % e, code="license_unavailable")
     L.LICENSE_PATH = str(backend / "license.key")
     gate = L.LICENSE_GATE_ENABLED
     status = L.verify_license() if gate else {}
@@ -324,38 +329,38 @@ def preflight(root, pkg, allow_downgrade=False, require_base=False):
     """套用前檢查；回傳 (key, lock, installed_version)。任何一項不過 ⇒ UpdateError（什麼都還沒動）。"""
     problems = check(pkg)
     if problems:
-        raise UpdateError("更新包檢查不過：" + "；".join(problems))
+        raise UpdateError("更新包檢查不過：" + "；".join(problems), code="pkg_invalid")
     lock = load_pkg(pkg)
     (key, entry), = lock["modules"].items()
     backend = Path(root) / "backend"
     inst_lock_p = backend / PS.LOCK_NAME
     if not inst_lock_p.is_file():
-        raise UpdateError("安裝目錄沒有 backend/%s ⇒ 不是經過產品選配的安裝，不套用" % PS.LOCK_NAME)
+        raise UpdateError("安裝目錄沒有 backend/%s ⇒ 不是經過產品選配的安裝，不套用" % PS.LOCK_NAME, code="no_install_lock")
     base = lock.get("prod_base_commit")
     if base or require_base:
         cur = deployed_commit(root)
         if not base:
-            raise UpdateError("更新包沒有記正式機基準 commit（不是用 ship 出貨的包）⇒ 不套用")
+            raise UpdateError("更新包沒有記正式機基準 commit（不是用 ship 出貨的包）⇒ 不套用", code="no_base")
         if cur is None:
-            raise UpdateError("安裝目錄沒有 %s ⇒ 判不了這個包是不是對這一版做的，不套用" % DEPLOYED_COMMIT_REL)
+            raise UpdateError("安裝目錄沒有 %s ⇒ 判不了這個包是不是對這一版做的，不套用" % DEPLOYED_COMMIT_REL, code="no_deployed_marker")
         if cur != base:
             raise UpdateError("這個包是對正式機 %s 做的，而安裝目錄是 %s ⇒ 不套用（請以目前版本重新出貨，或改用完整包）"
-                              % (base[:8], cur[:8]))
+                              % (base[:8], cur[:8]), code="base_mismatch")
     inst_core = _core_version(backend)
     if not _core_ok(entry.get("core"), inst_core):
-        raise UpdateError("模組 %s 要求 core %s，安裝目錄是 %s ⇒ 不相容" % (key, entry.get("core"), inst_core))
+        raise UpdateError("模組 %s 要求 core %s，安裝目錄是 %s ⇒ 不相容" % (key, entry.get("core"), inst_core), code="core_incompatible")
     manifest = json.loads((Path(pkg) / "backend" / "modules" / key / "module.json").read_text(encoding="utf-8"))
     ok, why = _license_for(root)(manifest)
     if not ok:
-        raise UpdateError("模組 %s 不在這台機器的授權內（%s）⇒ 不套用" % (key, why))
+        raise UpdateError("模組 %s 不在這台機器的授權內（%s）⇒ 不套用" % (key, why), code="unlicensed")
     inst_lock = json.loads(inst_lock_p.read_text(encoding="utf-8"))
     installed = (inst_lock.get("modules") or {}).get(key)
     inst_ver = installed.get("version") if isinstance(installed, dict) else installed
     if isinstance(installed, dict) and installed.get("sha256") == entry.get("sha256"):
-        raise UpdateError("模組 %s 已是這一版（內容雜湊相同）⇒ 不需套用" % key)
+        raise UpdateError("模組 %s 已是這一版（內容雜湊相同）⇒ 不需套用" % key, code="already_installed")
     if inst_ver is not None and _ver(entry["version"]) <= _ver(inst_ver) and not allow_downgrade:
         raise UpdateError("模組 %s：更新包 %s 不高於已安裝 %s ⇒ 拒絕（降版或重裝請加 --allow-downgrade）"
-                          % (key, entry["version"], inst_ver))
+                          % (key, entry["version"], inst_ver), code="not_higher")
     return key, lock, inst_ver
 
 
@@ -382,7 +387,7 @@ def _restore_state(root, bdir, absent):
             continue
         src = bdir / "state_before" / rel
         if not src.is_file():
-            raise UpdateError("備份裡缺狀態檔 %s ⇒ 備份已損壞，停止回滾" % rel)
+            raise UpdateError("備份裡缺狀態檔 %s ⇒ 備份已損壞，停止回滾" % rel, code="backup_corrupt")
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
 
@@ -454,86 +459,46 @@ def overlays(root):
             if isinstance(v, dict) and v.get("prod_base_commit") == cur}
 
 
-def apply(root, pkg, allow_downgrade=False, require_base=False):
-    key, lock, inst_ver = preflight(root, pkg, allow_downgrade, require_base)
-    root = Path(root)
-    backend = root / "backend"
-    from datetime import datetime
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")   # 含微秒：同一秒內連續套用不可撞名
-    bdir = root / BACKUP_DIR / key / stamp
-    bdir.mkdir(parents=True)
-    before = _tree_hashes(root, key)
-    for rel in before:
-        dst = bdir / "files" / rel
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(root / rel, dst)
-    inst_lock_p = backend / PS.LOCK_NAME
-    shutil.copy2(inst_lock_p, bdir / "lock_before.json")
-    state_absent = _save_state(root, bdir)
-    inst_lock = json.loads(inst_lock_p.read_text(encoding="utf-8"))
-    record = {"key": key, "from_version": inst_ver, "to_version": lock["modules"][key]["version"],
-              "built_from": lock.get("built_from"), "prod_base_commit": lock.get("prod_base_commit"),
-              "files_before": before, "lock_entry_before": (inst_lock.get("modules") or {}).get(key),
-              "excluded_before": list(inst_lock.get("excluded", [])), "state_absent": state_absent,
-              "applied_at": stamp}
-    # 替換＝鏡像（稽核 D DB-S6）：整個模組資料夾刪掉再放新的、舊版宣告的頁面刪掉再放新版宣告的
-    # ⇒ 新版刪掉的檔不會留著被載入
-    old_mdir = backend / "modules" / key
-    if old_mdir.exists():
-        _rmtree(old_mdir)
-    for rel in before:
-        if rel.startswith("frontend/") and (root / rel).is_file():
-            (root / rel).unlink()
-    shutil.copytree(Path(pkg) / "backend" / "modules" / key, old_mdir)
-    for rel in lock.get("pages") or {}:
-        dst = root / rel
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(Path(pkg) / rel, dst)
-    inst_lock.setdefault("modules", {})[key] = lock["modules"][key]
-    inst_lock["excluded"] = [k for k in inst_lock.get("excluded", []) if k != key]
-    inst_lock_p.write_text(json.dumps(inst_lock, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    after = _tree_hashes(root, key)
-    record["files_after"] = after
-    record["baseline_updated"] = _update_baseline(root, key, set(before), set(after))
-    record["manifest_inserted"] = _insert_manifest(root, lock.get("manifest_lines"))
-    _update_deployed_modules(root, key, lock, stamp)
-    (bdir / "apply.json").write_text(json.dumps(record, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    _prune_backups(root, key)
-    return record, bdir
+def _state_hashes(root):
+    """lock＋三個狀態檔的現值雜湊（不存在 ⇒ None）：套用完成時記下，回滾前比對（稽核 D S3-M2）。"""
+    out = {}
+    for rel in ("backend/" + PS.LOCK_NAME,) + STATE_FILES:
+        p = Path(root) / rel
+        out[rel] = _sha(p) if p.is_file() else None
+    return out
 
 
-def _prune_backups(root, key, keep=None):
-    keep = BACKUP_KEEP if keep is None else keep
-    d = Path(root) / BACKUP_DIR / key
-    for name in backups(root, key)[:-keep]:
-        _rmtree(d / name)
+def _write_record(bdir, record):
+    _write_json_atomic(Path(bdir) / "apply.json", record)
 
 
-def backups(root, key):
-    d = Path(root) / BACKUP_DIR / key
-    return sorted(p.name for p in d.iterdir() if (p / "apply.json").is_file()) if d.is_dir() else []
-
-
-def rollback(root, key, stamp=None):
-    root = Path(root)
-    avail = backups(root, key)
-    if not avail:
-        raise UpdateError("模組 %s 沒有任何套用備份 ⇒ 無從回滾" % key)
-    stamp = stamp or avail[-1]
-    if stamp not in avail:
-        raise UpdateError("找不到備份 %s（有：%s）" % (stamp, avail))
-    bdir = root / BACKUP_DIR / key / stamp
-    rec = json.loads((bdir / "apply.json").read_text(encoding="utf-8"))
-    # 先核對備份（全部對得上才開始動；對不上 ⇒ 停止，安裝目錄維持原樣，由呼叫端決定停用模組）
+def _verify_backup(bdir, rec):
     for rel, h in rec["files_before"].items():
-        src = bdir / "files" / rel
+        src = Path(bdir) / "files" / rel
         if not src.is_file() or _sha(src) != h:
-            raise UpdateError("備份檔 %s 的雜湊與紀錄不符 ⇒ 備份已損壞，停止回滾" % rel)
+            raise UpdateError("備份檔 %s 的雜湊與紀錄不符 ⇒ 備份已損壞，停止回滾" % rel, code="backup_corrupt")
+    # lock 與三個狀態檔的備份也要核對（它們是整檔還原：壞掉的備份會把壞內容寫回正式機）
+    for rel, h in (rec.get("backup_hashes") or {}).items():
+        src = Path(bdir) / rel
+        if not src.is_file() or _sha(src) != h:
+            raise UpdateError("備份檔 %s 不在或雜湊與紀錄不符 ⇒ 備份已損壞，停止回滾" % rel, code="backup_corrupt")
+    if not (Path(bdir) / "lock_before.json").is_file() and "lock_entry_before" not in rec:
+        raise UpdateError("備份裡沒有 lock_before.json ⇒ 備份已損壞，停止回滾", code="backup_corrupt")
+
+
+def _restore_from(root, key, bdir, rec):
+    """用一份備份把這個模組、宣告頁面、lock、三個狀態檔還原成套用前（apply 中途失敗與 rollback 共用）。
+    先核對備份；對不上 ⇒ UpdateError，安裝目錄一個檔都不動。"""
+    root, bdir = Path(root), Path(bdir)
+    _verify_backup(bdir, rec)
     backend = root / "backend"
     mdir = backend / "modules" / key
-    # 移除套用後的檔（模組資料夾＋套用後宣告的頁面），再還原備份
-    for rel in rec.get("files_after", {}):
-        if rel.startswith("frontend/") and (root / rel).is_file():
+    # 移除套用後（或套用到一半）的檔：模組資料夾＋套用前／套用後宣告的頁面
+    pages = {r for r in rec.get("files_after", {}) if r.startswith("frontend/")}
+    pages |= {r for r in rec.get("pages_after", []) if r.startswith("frontend/")}
+    pages |= {r for r in rec["files_before"] if r.startswith("frontend/")}
+    for rel in pages:
+        if (root / rel).is_file():
             (root / rel).unlink()
     if mdir.exists():
         _rmtree(mdir)
@@ -558,7 +523,139 @@ def rollback(root, key, stamp=None):
     after = _tree_hashes(root, key)
     if after != rec["files_before"]:
         diff = sorted(set(after.items()) ^ set(rec["files_before"].items()))
-        raise UpdateError("回滾後雜湊與套用前不一致：%s" % diff[:5])
+        raise UpdateError("還原後雜湊與套用前不一致：%s" % diff[:5], code="restore_mismatch")
+
+
+STAMP_RE = re.compile(r"^\d{8}_\d{6}(_\d{1,6})?$")
+
+
+def apply(root, pkg, allow_downgrade=False, require_base=False, stamp=None):
+    """stamp：呼叫端指定備份名（apply_module_update.ps1 開頭就定好，寫進 log 與結果檔，中途失敗時用它 rollback --backup）。"""
+    if stamp is not None and not STAMP_RE.match(str(stamp)):
+        raise UpdateError("--stamp 格式不對：%r（yyyyMMdd_HHmmss[_微秒]）" % stamp, code="bad_args")
+    key, lock, inst_ver = preflight(root, pkg, allow_downgrade, require_base)
+    root = Path(root)
+    backend = root / "backend"
+    from datetime import datetime
+    if stamp is None:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")   # 含微秒：同一秒內連續套用不可撞名
+    bdir = root / BACKUP_DIR / key / stamp
+    if bdir.exists():
+        raise UpdateError("備份 %s 已存在 ⇒ 不覆蓋（stamp 重複）" % bdir, code="bad_args")
+    bdir.mkdir(parents=True)
+    before = _tree_hashes(root, key)
+    for rel in before:
+        dst = bdir / "files" / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / rel, dst)
+    inst_lock_p = backend / PS.LOCK_NAME
+    shutil.copy2(inst_lock_p, bdir / "lock_before.json")
+    state_absent = _save_state(root, bdir)
+    backup_hashes = {"lock_before.json": _sha(bdir / "lock_before.json")}
+    for rel in STATE_FILES:
+        if rel not in state_absent:
+            backup_hashes["state_before/" + rel] = _sha(bdir / "state_before" / rel)
+    inst_lock = json.loads(inst_lock_p.read_text(encoding="utf-8"))
+    record = {"key": key, "status": "in_progress", "backup_hashes": backup_hashes, "from_version": inst_ver, "to_version": lock["modules"][key]["version"],
+              "built_from": lock.get("built_from"), "prod_base_commit": lock.get("prod_base_commit"),
+              "files_before": before, "pages_after": sorted(lock.get("pages") or {}),
+              "lock_entry_before": (inst_lock.get("modules") or {}).get(key),
+              "excluded_before": list(inst_lock.get("excluded", [])), "state_absent": state_absent,
+              "applied_at": stamp}
+    # 稽核 D S3-M1：**動檔之前**先寫紀錄（in_progress）——中途被砍掉（行程被殺、斷電）時 rollback 找得到這一份
+    _write_record(bdir, record)
+    try:
+        # 替換＝鏡像（稽核 D DB-S6）：整個模組資料夾刪掉再放新的、舊版宣告的頁面刪掉再放新版宣告的
+        # ⇒ 新版刪掉的檔不會留著被載入
+        old_mdir = backend / "modules" / key
+        if old_mdir.exists():
+            _rmtree(old_mdir)
+        for rel in before:
+            if rel.startswith("frontend/") and (root / rel).is_file():
+                (root / rel).unlink()
+        shutil.copytree(Path(pkg) / "backend" / "modules" / key, old_mdir)
+        for rel in lock.get("pages") or {}:
+            dst = root / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(Path(pkg) / rel, dst)
+        inst_lock.setdefault("modules", {})[key] = lock["modules"][key]
+        inst_lock["excluded"] = [k for k in inst_lock.get("excluded", []) if k != key]
+        inst_lock_p.write_text(json.dumps(inst_lock, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        after = _tree_hashes(root, key)
+        record["files_after"] = after
+        record["baseline_updated"] = _update_baseline(root, key, set(before), set(after))
+        record["manifest_inserted"] = _insert_manifest(root, lock.get("manifest_lines"))
+        _update_deployed_modules(root, key, lock, stamp)
+    except Exception as e:                                  # noqa: BLE001  任何中途失敗：用本次備份還原
+        try:
+            _restore_from(root, key, bdir, record)
+        except Exception as e2:                             # noqa: BLE001
+            raise UpdateError("套用中途失敗（%s），而且用本次備份還原也失敗（%s）⇒ 安裝目錄是半套狀態；"
+                              "備份 %s 仍在（rollback 會用它）" % (e, e2, bdir), code="apply_failed_half")
+        _rmtree(bdir)                                       # S3-S1：還原成功 ⇒ 這一份失敗的備份沒有用了
+        raise UpdateError("套用中途失敗（%s）⇒ 已用本次備份還原到套用前" % e, code="apply_failed_restored")
+    # 稽核 D S3-M2：套用完成時的現值——回滾前比對，之後有任何寫入（別的模組包、完整包）⇒ 拒絕整檔還原
+    record["status"] = "applied"
+    record["state_after"] = _state_hashes(root)
+    _write_record(bdir, record)
+    _prune_backups(root, key)
+    return record, bdir
+
+
+def _prune_backups(root, key, keep=None):
+    keep = BACKUP_KEEP if keep is None else keep
+    d = Path(root) / BACKUP_DIR / key
+    for name in backups(root, key)[:-keep]:
+        _rmtree(d / name)
+
+
+def _record(root, key, name):
+    try:
+        return json.loads((Path(root) / BACKUP_DIR / key / name / "apply.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def backups(root, key):
+    """可回滾的備份：套用完成（applied）、中途被砍掉而留下的（in_progress）、舊版紀錄（沒有 status）；
+    已回滾過的（rolled_back）不列。"""
+    d = Path(root) / BACKUP_DIR / key
+    if not d.is_dir():
+        return []
+    out = []
+    for p in sorted(d.iterdir()):
+        rec = _record(root, key, p.name) if (p / "apply.json").is_file() else None
+        if rec is not None and rec.get("status", "applied") in ("applied", "in_progress"):
+            out.append(p.name)
+    return out
+
+
+def rollback(root, key, stamp=None):
+    root = Path(root)
+    avail = backups(root, key)
+    if not avail:
+        raise UpdateError("模組 %s 沒有任何套用備份 ⇒ 無從回滾" % key, code="no_backup")
+    stamp = stamp or avail[-1]
+    if stamp not in avail:
+        raise UpdateError("找不到備份 %s（有：%s）" % (stamp, avail), code="backup_not_found")
+    bdir = root / BACKUP_DIR / key / stamp
+    rec = _record(root, key, stamp)
+    if rec.get("status") != "in_progress":
+        # 稽核 D S3-M2：整檔還原只在「套用完成之後沒有任何其他寫入」時才安全
+        if "files_after" in rec and _tree_hashes(root, key) != rec["files_after"]:
+            raise UpdateError("模組 %s 在這次套用（%s）之後又被改過 ⇒ 不回滾到它之前（會蓋掉之後的改動）" % (key, stamp), code="module_changed")
+        if "state_after" in rec:
+            cur = _state_hashes(root)
+            changed = sorted(r for r in rec["state_after"] if cur.get(r) != rec["state_after"][r])
+            if changed:
+                raise UpdateError("這次套用之後又有別的寫入（%s）⇒ 不回滾（整檔還原會蓋掉之後的套用）" % "、".join(changed), code="state_changed")
+        base = rec.get("prod_base_commit")
+        if base and deployed_commit(root) != base:
+            raise UpdateError("正式機已換成另一個完整包（%s ≠ 套用時的 %s）⇒ 不回滾這個模組包"
+                              % (str(deployed_commit(root))[:8], base[:8]), code="base_changed")
+    _restore_from(root, key, bdir, rec)
+    rec["status"] = "rolled_back"
+    _write_record(bdir, rec)
     (bdir / "rollback.json").write_text(json.dumps({"rolled_back_at": time.strftime("%Y%m%d_%H%M%S")}) + "\n",
                                         encoding="utf-8")
     return rec, stamp
@@ -593,6 +690,7 @@ def main(argv=None):
     a.add_argument("--allow-downgrade", action="store_true")
     a.add_argument("--require-base", action="store_true")
     a.add_argument("--json", action="store_true")
+    a.add_argument("--stamp", help="備份名（yyyyMMdd_HHmmss[_微秒]）；apply_module_update.ps1 開頭就定好")
     r = sub.add_parser("rollback")
     r.add_argument("--root", required=True)
     r.add_argument("--key", required=True)
@@ -600,6 +698,7 @@ def main(argv=None):
     r.add_argument("--json", action="store_true")
     lst = sub.add_parser("list")
     lst.add_argument("--root", required=True)
+    lst.add_argument("--json", action="store_true", help="正式機可見性（主持裁示）：模組版本、備份、覆蓋紀錄、部署 commit")
     args = ap.parse_args(argv)
     as_json = getattr(args, "json", False)
     try:
@@ -622,7 +721,7 @@ def main(argv=None):
             else:
                 print("✓ 可以套用 %s：%s → %s" % (key, inst_ver or "（原本沒有）", lock["modules"][key]["version"]))
         elif args.cmd == "apply":
-            rec, bdir = apply(args.root, args.pkg, args.allow_downgrade, args.require_base)
+            rec, bdir = apply(args.root, args.pkg, args.allow_downgrade, args.require_base, args.stamp)
             if as_json:
                 _emit(True, key=rec["key"], stamp=rec["applied_at"], from_version=rec["from_version"],
                       to_version=rec["to_version"], backup=str(bdir))
@@ -635,6 +734,11 @@ def main(argv=None):
                 _emit(True, key=rec["key"], stamp=stamp, version=rec["from_version"])
             else:
                 print("✓ 已回滾 %s 至套用前（備份 %s，雜湊逐一相等）。⚠ 需重啟服務才生效。" % (rec["key"], stamp))
+        elif as_json:
+            lock = json.loads((Path(args.root) / "backend" / PS.LOCK_NAME).read_text(encoding="utf-8"))
+            _emit(True, deployed_commit=deployed_commit(args.root), overlays=overlays(args.root),
+                  modules={k: {"version": e.get("version") if isinstance(e, dict) else e, "backups": backups(args.root, k)}
+                           for k, e in sorted((lock.get("modules") or {}).items())})
         else:
             lock = json.loads((Path(args.root) / "backend" / PS.LOCK_NAME).read_text(encoding="utf-8"))
             for k, e in sorted((lock.get("modules") or {}).items()):
@@ -642,10 +746,16 @@ def main(argv=None):
                                               "、".join(backups(args.root, k)) or "無"))
     except UpdateError as e:
         if as_json:
-            _emit(False, error=str(e))
+            _emit(False, code=e.code, error=str(e), stamp=getattr(args, "stamp", None) or getattr(args, "backup", None))
         else:
             print("✗ %s" % e)
         return 2
+    except Exception as e:                  # noqa: BLE001  §10：非預期例外也要印一行（ps1 視為 module_copy_failed 並用 stamp 回滾）
+        if as_json:
+            _emit(False, code="unexpected", error="%s: %s" % (type(e).__name__, e),
+                  stamp=getattr(args, "stamp", None) or getattr(args, "backup", None))
+            return 3
+        raise
     return 0
 
 

@@ -309,3 +309,159 @@ def test_ship_tests_adds_consumers_of_a_changed_provider():
     sel = MU.ship_tests("case", {"provider": pc})
     assert "tests/platform" in sel and "modules/case/tests" in sel
     assert any(s.startswith("modules/netplan/tests/") for s in sel), sel
+
+
+# ── 稽核 D S3-M1：套用中途失敗 ──────────────────────────────────────────────────
+
+def _boom(*a, **k):
+    raise OSError("模擬：複製到一半失敗")
+
+
+def test_first_apply_failing_midway_restores_and_leaves_no_backup(src, tmp_path, monkeypatch):
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)                          # 模組原本不在
+    before = _snapshot(root)
+    monkeypatch.setattr(MU.shutil, "copytree", _boom)
+    with pytest.raises(MU.UpdateError, match="已用本次備份還原"):
+        MU.apply(root, pkg)
+    assert _snapshot(root) == before, "中途失敗 ⇒ 安裝目錄回到套用前（模組不可以就此消失）"
+    assert MU.backups(root, "zz") == [], "還原成功的那一份失敗備份要清掉（S3-S1）"
+
+
+def test_v2_to_v3_failing_midway_stays_on_v2(src, tmp_path, monkeypatch):
+    p = _git(src, "rev-parse", "HEAD")
+    root = _install(tmp_path, p, src=src)
+    x = _v2(src)
+    MU.apply(root, MU.ship("zz", tmp_path / "o2", p, x, run_tests=False, repo=src))
+    on_v2 = _snapshot(root)
+    _module(src, "1.2.0", {"new.py": "Y = 3\n"})
+    x3 = _commit(src, "v3")
+    pkg3 = MU.ship("zz", tmp_path / "o3", p, x3, run_tests=False, repo=src)
+    monkeypatch.setattr(MU.shutil, "copytree", _boom)
+    with pytest.raises(MU.UpdateError, match="已用本次備份還原"):
+        MU.apply(root, pkg3)
+    assert _snapshot(root) == on_v2, "v3 失敗 ⇒ 仍是 v2（不是半套、也不是 v1）"
+    assert len(MU.backups(root, "zz")) == 1, "只剩 v2 那一次的備份"
+
+
+def test_crash_midway_leaves_in_progress_record_that_rollback_uses(src, tmp_path, monkeypatch):
+    """行程在套用中途死掉（還原也沒機會跑）⇒ 留下 in_progress 紀錄 ⇒ rollback 用它回到套用前。"""
+    p = _git(src, "rev-parse", "HEAD")
+    root = _install(tmp_path, p, src=src)
+    before = _snapshot(root)
+    x = _v2(src)
+    pkg = MU.ship("zz", tmp_path / "o2", p, x, run_tests=False, repo=src)
+    monkeypatch.setattr(MU.shutil, "copytree", _boom)
+    real_restore = MU._restore_from
+    monkeypatch.setattr(MU, "_restore_from", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("行程被殺")))
+    with pytest.raises(MU.UpdateError, match="半套"):
+        MU.apply(root, pkg)
+    monkeypatch.setattr(MU, "_restore_from", real_restore)
+    [stamp] = MU.backups(root, "zz")
+    assert MU._record(root, "zz", stamp)["status"] == "in_progress"
+    MU.rollback(root, "zz")
+    assert _snapshot(root) == before
+
+
+# ── 稽核 D S3-M2：整檔還原不可以蓋掉之後的寫入 ──────────────────────────────────────
+
+def test_rollback_refused_after_another_module_was_applied(src, tmp_path):
+    """套 A（zz）→ 套 B（yy）→ 回滾 A ⇒ 拒絕（三個狀態檔與 lock 已被 B 改過，整檔還原會把 B 抹掉）。"""
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)
+    MU.apply(root, pkg)
+    y = src / "backend" / "modules" / "yy"
+    _write(y / "module.json", json.dumps({"key": "yy", "version": "1.0.0", "core": ">=1.0,<2.0", "pages": []}))
+    _write(y / "api.py", "Y = 1\n")
+    _commit(src, "yy")
+    MU.apply(root, MU.build("yy", tmp_path / "yy", repo=src))
+    snap = _snapshot(root)
+    with pytest.raises(MU.UpdateError, match="又有別的寫入"):
+        MU.rollback(root, "zz")
+    assert _snapshot(root) == snap, "被拒絕時不可以動任何檔"
+
+
+def test_rollback_refused_after_a_full_package(src, tmp_path):
+    """模組包之後裝了完整包（部署 commit 換了）⇒ 拒絕回滾這個模組包。"""
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)
+    MU.apply(root, pkg)
+    _write(root / "backend" / ".deployed_commit.json", "\ufeff" + json.dumps({"commit": "9" * 40}))
+    snap = _snapshot(root)
+    with pytest.raises(MU.UpdateError, match="另一個完整包"):
+        MU.rollback(root, "zz")
+    assert _snapshot(root) == snap
+
+
+def test_rollback_refused_when_module_files_changed_later(src, tmp_path):
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)
+    MU.apply(root, pkg)
+    (root / "backend" / "modules" / "zz" / "api.py").write_text("HOTFIX = 1\n", encoding="utf-8")
+    with pytest.raises(MU.UpdateError, match="又被改過"):
+        MU.rollback(root, "zz")
+
+
+def test_rolled_back_record_is_not_offered_again(src, tmp_path):
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)
+    MU.apply(root, pkg)
+    MU.rollback(root, "zz")
+    assert MU.backups(root, "zz") == [], "回滾過的那一份不再列為可回滾"
+
+
+# ── §10 機器可讀輸出（A 的 apply_module_update.ps1 對齊）─────────────────────────────
+
+def _last(capsys):
+    line = capsys.readouterr().out.strip().splitlines()[-1]
+    assert line.startswith("MODULE_UPDATE_RESULT ") and line.isascii(), line
+    return json.loads(line.split(" ", 1)[1])
+
+
+def test_apply_uses_caller_stamp_and_rejects_bad_or_duplicate(src, tmp_path, capsys):
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)
+    assert MU.main(["apply", "--root", str(root), "--pkg", str(pkg), "--stamp", "bad", "--json"]) == 2
+    assert _last(capsys)["code"] == "bad_args"
+    assert MU.main(["apply", "--root", str(root), "--pkg", str(pkg), "--stamp", "20260928_190000", "--json"]) == 0
+    d = _last(capsys)
+    assert d["stamp"] == "20260928_190000" and MU.backups(root, "zz") == ["20260928_190000"]
+
+
+def test_rollback_json_codes(src, tmp_path, capsys):
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)
+    assert MU.main(["rollback", "--root", str(root), "--key", "zz", "--json"]) == 2
+    assert _last(capsys)["code"] == "no_backup"
+    MU.apply(root, pkg, stamp="20260928_190001")
+    victim = next((root / MU.BACKUP_DIR / "zz" / "20260928_190001" / "state_before").rglob("*.json"))
+    victim.write_text("CORRUPT", encoding="utf-8")
+    (root / MU.BACKUP_DIR / "zz" / "20260928_190001" / "lock_before.json").unlink()
+    snap = _snapshot(root)
+    assert MU.main(["rollback", "--root", str(root), "--key", "zz", "--backup", "20260928_190001", "--json"]) == 2
+    d = _last(capsys)
+    assert d["code"] == "backup_corrupt" and d["stamp"] == "20260928_190001", d
+    assert _snapshot(root) == snap, "backup_corrupt：一個檔都不動（ps1 據此改走「停用該模組再重啟」）"
+
+
+def test_unexpected_exception_still_prints_a_result_line(src, tmp_path, capsys, monkeypatch):
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)
+    monkeypatch.setattr(MU, "apply", lambda *a, **k: (_ for _ in ()).throw(ValueError("爆")))
+    assert MU.main(["apply", "--root", str(root), "--pkg", str(pkg), "--stamp", "20260928_190002", "--json"]) == 3
+    d = _last(capsys)
+    assert d == {"ok": False, "code": "unexpected", "error": "ValueError: 爆", "stamp": "20260928_190002"}
+
+
+def test_every_code_is_documented_for_the_ps1():
+    """程式裡每一個 UpdateError code 都列在設計 §10 的值域表（A 的 ps1 依它分流；新增 code 沒寫進表 ⇒ 紅）。"""
+    import ast
+    src_text = (REPO / "tools" / "platform" / "module_update.py").read_text(encoding="utf-8")
+    codes = {kw.value.value for n in ast.walk(ast.parse(src_text)) if isinstance(n, ast.Call)
+             for kw in n.keywords if kw.arg == "code" and isinstance(kw.value, ast.Constant)}
+    codes |= {"refused", "unexpected"}
+    doc = (REPO / "docs" / "platform" / "MODULE-UPDATE-DELIVERY.md").read_text(encoding="utf-8")
+    table = doc[doc.index("## 10."):]
+    missing = sorted(c for c in codes if "| `%s` |" % c not in table)
+    assert not missing, "設計 §10 沒列的 code：%s" % missing
+    assert len(codes) >= 20, "正對照：程式裡應該抓得到二十幾個 code（抓不到＝這一題量尺壞了）"
