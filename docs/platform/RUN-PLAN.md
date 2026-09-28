@@ -149,6 +149,9 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-28 17:14 A（列車長）：**第十七班合回**——gm-raw（正式機 Google 底圖標點全部消失：Alpine 讀回 Proxy 真 Google 不認 map ⇒ Google 物件標 __v_skip＋Alpine.raw、點擊改 gmp-click；取點延遲：每個地址各開一次連線 ⇒ geo.cache_read_session 整次共用，400 地址 get_db 404→5）。自 origin ee383527 cherry-pick A fdb3cee0／b637704f＋D 審 4 筆（已合回的 2 筆以 --cherry-pick 排除），無衝突；CORE 1.64（core_bump 確認）、地圖 28i；D 的 B55 設計審宣告必修 DB-M1／DB-M2 ⇒ 同班登記 mustfix_open.json（owner B、修正中）；產生檔 740c97bb。modtest --train：差異題 3182＋2143 過、tests/platform 1591 過（是否最新三題有跑）；core-only RC ok。不跑全量（建包會跑）。建包、演練、發布、正式機套用由主持接。
+  - **更正**（保留原列）：第十六班那一列「下一輪待辦 ①BASELINE c006a2a0→822286ed」——本班已改為 **54a2d6b6**（b637704f，主持接受；原裁示前提是緊急包只帶 B54，本班因地圖 28g 已隨 54a2d6b6 出貨、新增 28i 需要正確基準）。
+  - **下一輪待辦**（本班）：GM-S1 Leaflet 版的地圖物件也標 raw（另開包，附 OSM e2e 回歸）；GM-S2 補題「cache_read_session 範圍結束後連線已關、範圍外使用 ⇒ closed database」。
 - 2026-09-28 16:06 主持：**正式機已更新到 54a2d6b6**（第十六班緊急包；經遠端控制由正式機 Claude 套用，使用者授權見 CORE-SPEC「遠端套用」）。
   - 事故：14:39 正式機套用 8b04d99d ⇒ unhealthy_rolled_back（main.py:676 同步 schedule_geocode_warm 首輪；B50 後查無不停 ⇒ 跑到每日上限，啟動卡 84 秒）。演練漏抓：前四輪演練設 MOTRIX_DISABLE_SCHEDULERS=1。8b04d99d 包與指示已撤到 `MOTRIX-交付\rejected\`（B54-S1）。
   - 修補：B54（geo 與 tender_radar 首輪改背景 Timer 30 秒；真 import main 子行程整合題）；D 必修 0；第十六班 origin 54a2d6b6（A 列車長）。建包 5628＋e2e 545 過；547 檔；package.sha256 SHA256＝7B44DCB9…5064。
