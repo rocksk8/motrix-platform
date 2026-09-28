@@ -326,3 +326,13 @@ D 探針（拋棄式 worktree，3a49c1b5；題目 54 過，探針不提交、已
   - 代價：寫回開發機的 result.json 不帶這個註記 ⇒ **正式機安裝指示要請正式機 Claude 把 `::NOTE::` 那一行照抄進回報**（下一班指示範本加一句）
 - **E4S3-S2**：非 demo 庫拒收 `00000000`（`RESERVED_DEMO_UBN`；確認回 422、直接寫庫的 status 判 `fields_invalid`）；demo 由 `db.is_demo_mode()` 判定（中介層依 token），CLI 對正式庫預設非 demo ✔
 - 版本撞號見 AUDIT-D-A-switch-warn.md SW-O1（已補）
+
+## 13. 抽查正式機形狀的匯款欄位回退：wip/e-company-gate-impl bee605e0（只加題）（D，2026-09-28）
+
+- **回退鏈成立。** `identity_from_profile`：每個欄位取「該據點 → 主要據點 → 頂層別名（`_PROFILE_ALIASES`）→ 聯絡方式 → 預設」第一個有值的
+  - `bank_name`／`bank_branch`／`bank_account_name`／`bank_account_number` 四個都在 `DEFAULT_IDENTITY` 的鍵裡，`_PROFILE_ALIASES` 也對應到頂層同名欄位（另收 camelCase）⇒ 據點沒有任何 bank 鍵時，逐欄落回公司層級
+  - `_require_payment_bank` 與 `payment_bank_missing` 都走這一支；舊單的凍結快照空欄位也會退回即時值（§11.2）
+- 新題 `test_prod_shape_company_level_bank_with_locations_without_bank_keys`：正式機實況形狀（公司層級四欄有值、兩個據點無 bank 鍵）⇒ 主要據點與兩個據點都取公司層級、不 428；預檢 CLI 子行程 `payment_bank_missing == []`；反向控制（清空公司層級帳號）⇒ 428、缺「帳號」✔
+- D 在拋棄式 worktree 跑 `test_company_setup_output_gate_2026_09_28.py`：21 passed
+- ⇒ 依主持的正式機只讀實況，**E4S3-S1 的風險在正式機不成立**（請款單不會被擋）
+- **觀察 E4-O1**：這個題檔是一般 in-process 的 `client` 題，跑完樹裡卻多了 `backend/.initial_admin_credentials.txt`、`.initial_demo_credentials.txt` ⇒ `client` fixture 的 `import main` 本身就會寫這兩個檔（範圍比 AB-S1 的子行程題更廣，可能是既有狀況）。共用主樹上這兩個檔會一直被測試改寫；建議 conftest 在 import main 前把兩個帳密檔路徑導到暫存（同 A46-S1 的位置）
