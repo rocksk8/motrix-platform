@@ -13,7 +13,8 @@
     "helper:settings",
     "helper:startup",
     "helper:storage_locations",
-    "plat:paths"
+    "plat:paths",
+    "plat:registry"
    ],
    "kind": "core",
    "path": "backend/archive.py",
@@ -304,6 +305,7 @@
     "helper:daily_checks",
     "helper:geo",
     "helper:licensing",
+    "helper:map_overlays",
     "helper:module_startup",
     "helper:startup",
     "plat:loader",
@@ -791,6 +793,20 @@
    "imports": [],
    "kind": "helper",
    "path": "backend/helpers/mail_types.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:map_overlays": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "plat:loader",
+    "plat:registry"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/map_overlays.py",
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
@@ -1744,6 +1760,17 @@
    "routers_called": [
     "router:map_points"
    ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "js:static/map-overlay.js": {
+   "api_calls": [],
+   "api_prefixes": [],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/map-overlay.js",
+   "routers_called": [],
    "tables_r": [],
    "tables_w": []
   },
@@ -4725,6 +4752,270 @@
     "daily_tasks",
     "notifications",
     "system_settings"
+   ]
+  },
+  "mod:lodging/__init__": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:lodging/api",
+    "mod:lodging/api_records",
+    "mod:lodging/source",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "lodging",
+   "path": "backend/modules/lodging/__init__.py",
+   "role": "init",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:lodging/api": {
+   "api_prefixes": [
+    "/api/lodging"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:lodging/attribution",
+    "mod:lodging/source"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "mod:lodging/attribution",
+    "mod:lodging/source"
+   ],
+   "kind": "mod",
+   "module_key": "lodging",
+   "path": "backend/modules/lodging/api.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "lodging_status",
+     "line": 26,
+     "method": "GET",
+     "path": "/api/lodging/status"
+    },
+    {
+     "func": "lodging_refresh",
+     "line": 52,
+     "method": "POST",
+     "path": "/api/lodging/refresh"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "lodging_catalog",
+    "notifications",
+    "system_settings"
+   ]
+  },
+  "mod:lodging/api_records": {
+   "api_prefixes": [
+    "/api/lodging"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:geo",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:lodging/attribution",
+    "mod:lodging/search",
+    "mod:lodging/source"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:geo",
+    "mod:lodging/api",
+    "mod:lodging/attribution",
+    "mod:lodging/search",
+    "mod:lodging/source",
+    "plat:txn"
+   ],
+   "kind": "mod",
+   "module_key": "lodging",
+   "path": "backend/modules/lodging/api_records.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "lodging_search_endpoint",
+     "line": 107,
+     "method": "POST",
+     "path": "/api/lodging/search"
+    },
+    {
+     "func": "lodging_record_create",
+     "line": 133,
+     "method": "POST",
+     "path": "/api/lodging/records"
+    },
+    {
+     "func": "lodging_record_list",
+     "line": 156,
+     "method": "GET",
+     "path": "/api/lodging/records"
+    },
+    {
+     "func": "lodging_record_detail",
+     "line": 183,
+     "method": "GET",
+     "path": "/api/lodging/records/{rid}"
+    },
+    {
+     "func": "lodging_record_delete",
+     "line": 193,
+     "method": "DELETE",
+     "path": "/api/lodging/records/{rid}"
+    },
+    {
+     "func": "lodging_record_export",
+     "line": 227,
+     "method": "GET",
+     "path": "/api/lodging/records/{rid}/export"
+    },
+    {
+     "func": "lodging_compare",
+     "line": 256,
+     "method": "GET",
+     "path": "/api/lodging/compare"
+    },
+    {
+     "func": "lodging_quote_create",
+     "line": 284,
+     "method": "POST",
+     "path": "/api/lodging/quotes"
+    },
+    {
+     "func": "lodging_quote_list",
+     "line": 330,
+     "method": "GET",
+     "path": "/api/lodging/quotes"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "lodging_catalog"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "lodging_catalog",
+    "lodging_quotes",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [
+    "lodging_quotes",
+    "lodging_search_items",
+    "lodging_searches"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "geocode_cache",
+    "geocode_usage",
+    "lodging_catalog",
+    "lodging_quotes",
+    "lodging_search_items",
+    "lodging_searches",
+    "notifications",
+    "system_settings"
+   ]
+  },
+  "mod:lodging/attribution": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:lodging/source"
+   ],
+   "kind": "mod",
+   "module_key": "lodging",
+   "path": "backend/modules/lodging/attribution.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:lodging/search": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:geo",
+    "mod:lodging/source"
+   ],
+   "kind": "mod",
+   "module_key": "lodging",
+   "path": "backend/modules/lodging/search.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "lodging_catalog",
+    "lodging_quotes"
+   ],
+   "tables_w": [
+    "lodging_search_items",
+    "lodging_searches"
+   ]
+  },
+  "mod:lodging/source": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:settings",
+    "plat:txn"
+   ],
+   "kind": "mod",
+   "module_key": "lodging",
+   "path": "backend/modules/lodging/source.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": [
+    "lodging_catalog"
    ]
   },
   "mod:netplan/__init__": {
@@ -7723,6 +8014,42 @@
    "tables_r": [],
    "tables_w": []
   },
+  "page:pages/lodging-records.html": {
+   "api_calls": [
+    "/api/lodging/compare",
+    "/api/lodging/quotes",
+    "/api/lodging/records",
+    "/api/lodging/records/",
+    "/api/lodging/refresh",
+    "/api/lodging/status",
+    "/api/system/branding/favicon"
+   ],
+   "api_prefixes": [
+    "/api/lodging",
+    "/api/system"
+   ],
+   "api_unmatched": [],
+   "imports": [
+    "js:static/auth-guard.js",
+    "js:static/notif.js",
+    "js:static/record-link.js",
+    "js:static/sidebar.js"
+   ],
+   "kind": "page",
+   "path": "frontend/pages/lodging-records.html",
+   "routers_called": [
+    "mod:lodging/api",
+    "mod:lodging/api_records",
+    "router:system"
+   ],
+   "routers_called_effective": [
+    "mod:lodging/api",
+    "mod:lodging/api_records",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "page:pages/login-qr-approve.html": {
    "api_calls": [
     "/api/auth/login/qr-approve",
@@ -7819,6 +8146,7 @@
   "page:pages/map.html": {
    "api_calls": [
     "/api/map/config",
+    "/api/map/overlays",
     "/api/map/points",
     "/api/system/branding/favicon"
    ],
@@ -7829,6 +8157,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/map-overlay.js",
     "js:static/notif.js",
     "js:static/record-link.js",
     "js:static/sidebar.js"
@@ -10378,6 +10707,7 @@
     "helper:email_notify",
     "helper:geo",
     "helper:mail_types",
+    "helper:map_overlays",
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:row_access",
@@ -10389,6 +10719,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:geo",
+    "helper:map_overlays",
     "helper:row_access",
     "helper:settings",
     "plat:registry",
@@ -10405,8 +10736,14 @@
      "path": "/api/map/config"
     },
     {
-     "func": "map_points",
+     "func": "map_overlays_list",
      "line": 486,
+     "method": "GET",
+     "path": "/api/map/overlays"
+    },
+    {
+     "func": "map_points",
+     "line": 499,
      "method": "GET",
      "path": "/api/map/points"
     }
@@ -12500,6 +12837,65 @@
    "tables_w": [],
    "writers": [
     "router:item_reads"
+   ]
+  },
+  "table:lodging_catalog": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/lodging/migrations/0001_lodging_tables.py:17",
+   "readers": [
+    "mod:lodging/api_records",
+    "mod:lodging/search"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:lodging/source"
+   ]
+  },
+  "table:lodging_quotes": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/lodging/migrations/0001_lodging_tables.py:71",
+   "readers": [
+    "mod:lodging/search"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:lodging/api_records"
+   ]
+  },
+  "table:lodging_search_items": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/lodging/migrations/0001_lodging_tables.py:53",
+   "readers": [],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:lodging/api_records",
+    "mod:lodging/search"
+   ]
+  },
+  "table:lodging_searches": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/lodging/migrations/0001_lodging_tables.py:36",
+   "readers": [],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:lodging/api_records",
+    "mod:lodging/search"
    ]
   },
   "table:login_rate_limit": {
