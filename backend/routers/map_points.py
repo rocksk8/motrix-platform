@@ -574,14 +574,17 @@ def map_points(response: Response, sources: str = "tenders",
                                and now - hit["at"] < MAP_RESPONSE_TTL_SECONDS) else None
     response.headers["X-Map-Cache"] = "hit" if base is not None else "miss"
     if base is None:
-        if google_map:
-            base = _build_points(user, wanted)
-        else:
-            # 🔴 SST §6.2（逐字「must not use Google Maps Content from the Geocoding API in conjunction
-            #    with a non-Google map」）：OSM 底圖 ⇒ 整段只用免費來源（點、據點、距離一起），
-            #    只有 Google 座標的那幾筆不畫、計數說明（googleOnlyHidden）。
-            with geo.without_google_content():
+        # 正式機 2026-09-28（「進標案雷達都會延遲」）：每個地址各開一次連線讀定位快取 ⇒ 數百地址要數秒；
+        # 整次取點共用一條讀取連線（geo.cache_read_session），兩種底圖都一樣。
+        with geo.cache_read_session():
+            if google_map:
                 base = _build_points(user, wanted)
+            else:
+                # 🔴 SST §6.2（逐字「must not use Google Maps Content from the Geocoding API in conjunction
+                #    with a non-Google map」）：OSM 底圖 ⇒ 整段只用免費來源（點、據點、距離一起），
+                #    只有 Google 座標的那幾筆不畫、計數說明（googleOnlyHidden）。
+                with geo.without_google_content():
+                    base = _build_points(user, wanted)
         with _RESP_LOCK:
             _RESP_CACHE[key] = {"at": now, "fp": fp, "body": base}
     out = copy.deepcopy(base)
