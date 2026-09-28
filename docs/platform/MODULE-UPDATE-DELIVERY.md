@@ -264,3 +264,47 @@
 | U-M4 | module_update.py 放哪 | ①搬到 `backend/tools/`（正式機有；tools/platform 留一支轉呼叫給開發機舊用法）②留在 tools/platform，正式機腳本改呼叫包裡帶的那份（違反「單模組包不帶工具」，不推薦） |
 | U-M5 | 版本紀錄（version_manifest）怎麼跟著單模組包 | ①包帶該模組的新 manifest 條目，套用時以文字插入安裝目錄的 version_manifest.json、回滾時移除（畫面的版本紀錄才看得到）②不帶，等下一個完整包補上 |
 | U-M6 | 單模組包要不要設「距離上一個完整包最多幾個模組包」上限 | ①不設，靠 base commit 必須等於正式機 commit 自然限制②設 N 個 |
+
+## 10. `module_update.py` 的機器可讀輸出（給 apply_module_update.ps1；B，S3，A 並行做 S5 時對齊用）
+
+- 位置：正式機 `<ROOT>\tools\platform\module_update.py`（隨完整包出貨，`product_select.REQUIRED_PKG_FILES` 守門）。ps1 一律以**已安裝**的這一份執行。
+- 加 `--json` 時，stdout **最後一行**是：`MODULE_UPDATE_RESULT <JSON>`（JSON 以 `ensure_ascii=True` 輸出＝整行 ASCII，不受主控台編碼影響）。ps1 取最後一行以此開頭者解析；沒有這一行 ⇒ 視為失敗（apply 時＝`module_copy_failed`，用自己定的 stamp 回滾）。
+- exit code：`0` 成功；`2` 已知拒絕或失敗（`ok:false`，有 `code`）；`3` 非預期例外（`ok:false`、`code:"unexpected"`）；其他（Python 本身起不來等）⇒ 沒有結果行。
+
+| 子命令 | 成功（`ok:true`）欄位 | 失敗（`ok:false`）欄位 |
+|---|---|---|
+| `preflight --root R --pkg P --require-base --json` | `key`、`from_version`（原本沒有 ⇒ null）、`to_version`、`has_migrations`（bool） | `code`、`error`、`stamp`（null） |
+| `apply --root R --pkg P --require-base --stamp S --json` | `key`、`stamp`（＝S）、`from_version`、`to_version`、`backup`（備份目錄） | `code`、`error`、`stamp`（＝S） |
+| `rollback --root R --key K [--backup S] --json` | `key`、`stamp`（實際用的備份）、`version`（還原後的版本＝套用前版本，原本沒有 ⇒ null） | `code`、`error`、`stamp`（＝--backup 或 null） |
+| `list --root R --json` | `deployed_commit`、`overlays`（{key: sha256}，只含 base＝目前 commit 的）、`modules`（{key: {version, backups[]}}） | `code`、`error` |
+
+- `--stamp` 格式 `yyyyMMdd_HHmmss[_微秒]`（`STAMP_RE`）；同名備份已存在 ⇒ `bad_args`（不覆蓋）。ps1 開頭定 stamp，寫進 log 與結果檔；apply 中途失敗時 module_update 自己會用本次備份還原（`apply_failed_restored`）；還原也失敗（`apply_failed_half`）⇒ 備份以 `in_progress` 留著，ps1 用同一個 stamp 呼叫 `rollback --backup S`。
+
+`code` 值域（`UpdateError.code`；守門題：程式裡每一個 code 都要列在這張表）：
+
+| code | 子命令 | 意思 | ps1 對應（設計 §2） |
+|---|---|---|---|
+| `pkg_invalid` | preflight／apply | 包本身不對（缺 lock、看不懂、多模組、雜湊不符） | F2 `package_invalid` |
+| `no_install_lock` | preflight／apply | 安裝目錄沒有 modules.lock.json | F4 `module_preflight_failed` |
+| `no_base` | preflight／apply | 包沒有正式機基準 commit（不是 ship 出貨的） | F4 |
+| `no_deployed_marker` | preflight／apply | 安裝目錄沒有 .deployed_commit.json | F4 |
+| `base_mismatch` | preflight／apply | 包的基準 commit ≠ 正式機 commit | F4 |
+| `core_incompatible` | preflight／apply | 模組要求的 core 範圍不含安裝的 CORE_VERSION | F4 |
+| `license_unavailable` | preflight／apply | 授權判定讀不到 | F4 |
+| `unlicensed` | preflight／apply | 模組不在授權內 | F4 |
+| `already_installed` | preflight／apply | 內容雜湊相同 | F5 `duplicate_version` |
+| `not_higher` | preflight／apply | 版本不高於已安裝 | F4 |
+| `bad_args` | apply | stamp 格式不對或重複 | F2 `bad_args` |
+| `apply_failed_restored` | apply | 換檔中途失敗，已用本次備份還原到套用前 | F9 `module_copy_failed`（rolled_back＝restored；服務照樣重啟＋健檢） |
+| `apply_failed_half` | apply | 換檔中途失敗，而且還原也失敗（備份 in_progress 留著） | F9 → `rollback --backup S`；再失敗 ⇒ F13 |
+| `no_backup` | rollback | 沒有任何可回滾的備份 | F13 `module_restore_failed` |
+| `backup_not_found` | rollback | 指定的備份不在（或已回滾過） | F13 |
+| `backup_corrupt` | rollback | 備份雜湊不符 ⇒ **停止、一個檔都沒動** | F13：停用該模組再重啟（DB-S5） |
+| `restore_mismatch` | rollback／apply | 還原後雜湊與套用前不一致 | F13 |
+| `module_changed` | rollback | 模組在這次套用之後又被改過 ⇒ 拒絕整檔還原 | 手動處理（不自動重試） |
+| `state_changed` | rollback | lock 或三個狀態檔在這次套用之後又被寫過（別的模組包、完整包）⇒ 拒絕 | 手動處理 |
+| `base_changed` | rollback | 正式機已換成另一個完整包 ⇒ 拒絕 | 手動處理 |
+| `refused` | 任何 | 其他已知拒絕（預設值） | 依子命令視為失敗 |
+| `unexpected` | 任何 | 非預期例外（exit 3） | apply ⇒ F9；其他 ⇒ 失敗 |
+
+- ⚠ 自動回滾（健檢失敗後）的 rollback 會遇到 `state_changed`？不會：健檢失敗時這次套用之後沒有別的寫入（同一把 `.apply.lock` 擋住並行），`state_after` 與現值相同。啟動時 migration 對**資料庫**的寫入不在比對範圍（DB 由 ps1 以快照還原）。
