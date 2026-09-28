@@ -237,6 +237,12 @@ _STATUS_FAILED = frozenset({
     "restore_copy_failed_backend", "restore_copy_failed_frontend",
     "rollback_copy_failed_backend", "rollback_copy_failed_frontend",
     "rollback_copy_failed_root_dirs", "rollback_cleanup_failed",  # 🔴 還原到一半
+    # B55 單一模組更新包（apply_module_update.ps1，MODULE-UPDATE-DELIVERY §2 的新 status）
+    "module_preflight_failed",                                  # F4 預檢：尚未被觸碰
+    "module_load_dryrun_failed",                                # F7 疊加樹上新版模組載不起來：尚未被觸碰
+    "module_copy_failed",                                       # F9 換檔中途失敗：已回滾（或回滾失敗 ⇒ applied_no_restore）
+    "module_unhealthy_rolled_back",                             # F11 ping 過、模組沒載入／版本不對：已回滾
+    "module_restore_failed",                                    # F13 回滾備份損壞：該模組已停用（或停用失敗 ⇒ 服務未啟動）
 })
 _STATUS_ALL = _STATUS_SUCCEEDED | _STATUS_FAILED
 
