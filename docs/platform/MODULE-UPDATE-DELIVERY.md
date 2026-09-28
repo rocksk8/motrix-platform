@@ -227,6 +227,7 @@
   - 讀碼註記：D 稽核提到的 `drill_apply_copy.py` 在 origin 所有分支都找不到（2026-09-28 逐一 ls-tree）⇒ 本設計新寫 drill_module_apply.py，不假設既有工具。
 - 演練 A（成功）：挑 tender_radar，演練分支只改一行頁面文案＋版號 → ship_tier 判 2 → 第②級測試 → build → publish 到演練交付資料夾 → 儀表板 prepare／apply（真 superadmin 登入）→ 期待 `success`、lock 版本＝新版、server.log 有「已載入」、`.deployed_modules.json` 有一筆、results 寫回、開發機 prod-status 顯示覆蓋。**計時**：從按下到健康 ≤ 3 分鐘。
 - 演練 B（自動回滾）：演練分支讓 tender_radar 的 `__init__.py` 在 import 時丟例外（其他不變）→ 乾跑的「模組載入」應先擋下（F7，`module_load_dryrun_failed`，正式機沒被碰）；再用演練副本（drill_module_apply.py 另外把乾跑那一段改寫成跳過；正式腳本沒有這個參數）強行套用 → ping 過而模組未載入 ⇒ F11 → 自動回滾 → 期待 `module_unhealthy_rolled_back`、`restored`、模組資料夾與頁面雜湊逐一等於套用前、DB 與套用前一致、服務 up、舊版「已載入」。
+- 〔實作時更正（S6）：演練 B 不改寫乾跑段——`drill_module_apply.py` 讓 tender_radar 的 `__init__` 只在「uvicorn 已載入」時丟例外：疊加樹乾跑（沒有 uvicorn）載得起來、過得了步驟 5，真的啟動時載入失敗 ⇒ 健檢抓到 ⇒ 自動回滾。演練副本因此**只改 $ProdRoot／$Port 兩行**，沒有任何其他改寫（DB-S2 更嚴）。A 走完整條交付（演練金鑰簽章發布 → stage → verify → ps1）；B／C 直接對 ship 產物跑 ps1（它們驗的是套用保護，不是交付）〕
 - 演練 C（加做，便宜）：帶一支會回未完成原因的 migration → F7 `migration_dryrun_failed`，正式機沒被碰。
 - 每次演練記：命令、耗時、`::RESULT::` 行、result.json、前後雜湊；報告寫進 docs/platform/MODULE-UPDATE-DRILL-<日期>.md。
 

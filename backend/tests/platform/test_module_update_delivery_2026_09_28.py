@@ -534,3 +534,70 @@ def test_prune_also_removes_rolled_back_but_never_in_progress(src, tmp_path, mon
     MU.apply(root, pkg)
     names = MU._all_records(root, "zz")
     assert len(names) == 1 and MU._record(root, "zz", names[0])["status"] == "applied", names
+
+
+# ── 稽核 D P8：中斷的套用跨模組（lock 與狀態檔是全安裝共用）─────────────────────────────
+
+def _yy(src, tmp_path):
+    y = src / "backend" / "modules" / "yy"
+    _write(y / "module.json", json.dumps({"key": "yy", "version": "1.0.0", "core": ">=1.0,<2.0", "pages": []}))
+    _write(y / "api.py", "Y = 1\n")
+    _commit(src, "yy")
+    return MU.build("yy", tmp_path / "yy", repo=src)
+
+
+def test_interrupted_apply_of_one_module_blocks_every_module(src, tmp_path, monkeypatch):
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)
+    _crash(monkeypatch, root, pkg)
+    with pytest.raises(MU.UpdateError) as ei:
+        MU.apply(root, _yy(src, tmp_path))
+    assert ei.value.code == "interrupted_apply_pending" and "zz" in str(ei.value)
+
+
+def test_p8_rollback_of_interrupted_zz_after_yy_is_refused(src, tmp_path, monkeypatch):
+    """D 探針 P8：zz 中斷 → （繞過檢查）套 yy 成功 → rollback zz ⇒ 拒絕（否則 lock 的 yy 條目與覆蓋紀錄被抹掉而 yy 檔還在）。"""
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)
+    _crash(monkeypatch, root, pkg)
+    [zz_stamp] = MU.pending_interrupted(root, "zz")
+    ypkg = _yy(src, tmp_path)
+    monkeypatch.setattr(MU, "pending_interrupted_any", lambda *a: [])          # 模擬舊版工具（沒有 ① 的檢查）
+    MU.apply(root, ypkg)
+    monkeypatch.undo()
+    MU._license_check = lambda manifest: (True, "")
+    snap = _snapshot(root)
+    with pytest.raises(MU.UpdateError) as ei:
+        MU.rollback(root, "zz", zz_stamp)
+    assert ei.value.code == "interrupted_not_latest" and "yy" in str(ei.value)
+    assert _snapshot(root) == snap
+
+
+def test_full_package_plan_refuses_while_a_module_apply_is_interrupted(tmp_path):
+    """完整包（apply_update → apply_plan plan）也要檢查並報出 ⇒ plan_refused 級（APPLY_PLAN_REFUSED）。"""
+    import sys
+    sys.path.insert(0, str(REPO / "backend" / "tools"))
+    import apply_plan as AP
+    root = tmp_path / "install"
+    rec = root / AP.MODULE_BACKUP_DIR / "zz" / "20260928_190000"
+    rec.mkdir(parents=True)
+    (rec / "apply.json").write_text(json.dumps({"status": "in_progress"}), encoding="utf-8")
+    assert AP.interrupted_module_applies(str(root)) == [("zz", "20260928_190000")]
+    with pytest.raises(AP.Refuse, match="中斷的單模組套用"):
+        AP.make_plan(str(root), str(REPO), 200)
+    (rec / "apply.json").write_text(json.dumps({"status": "applied"}), encoding="utf-8")
+    assert AP.interrupted_module_applies(str(root)) == []
+
+
+# ── 稽核 D S4-S2：lock 的頁面路徑形狀 ────────────────────────────────────────────
+
+@pytest.mark.parametrize("bad", [PAGES_DIR + "/../../backend/main.py", PAGES_DIR + "/sub/x.html", "backend/x.html",
+                                 PAGES_DIR + "/x.htm"])
+def test_lock_page_paths_must_stay_in_the_pages_dir(src, tmp_path, bad):
+    p, pkg = _shipped(src, tmp_path)
+    lock = MU.load_pkg(pkg)
+    lock["pages"] = {bad: "0" * 64}
+    MU._write_lock(pkg, lock)
+    assert any("頁面路徑不合格" in x for x in MU.check(pkg))
+    root = _install(tmp_path, p)
+    _refused(root, pkg, "頁面路徑不合格")

@@ -2,7 +2,7 @@
 """apply_update.ps1 的「刪除／新增」計畫：platform 安裝套 platform 包的日常更新（UPGRADE-RUNBOOK §8）。
 
 [單位] tool:apply_plan    [層] 部署工具（正式機由 apply_update.ps1 呼叫，跑的是**新包裡**這一份）
-[公開介面] package_files, deletable, make_plan, execute, cleanup_added, not_in_snapshot, cleanup_not_in_snapshot,
+[公開介面] package_files, deletable, make_plan, interrupted_module_applies, execute, cleanup_added, not_in_snapshot, cleanup_not_in_snapshot,
     verify_snapshot, write_baseline
 [不變式] 只刪程式目錄（backend 程式、frontend、tools、product）裡 classify==program 的檔；資料／DB／設定／
     uploads／PDF 一律不碰；刪除上限超過 ⇒ 不動任何檔（exit 3）；每一個要刪的檔在快照裡都要找得到
@@ -125,6 +125,29 @@ def _license_check_for(root, pkg):
     return lambda manifest: L.module_licensed(manifest, status, gate)
 
 
+#: 單模組套用的備份目錄（tools/platform/module_update.BACKUP_DIR；安裝根目錄底下，不在 PROGRAM_SCOPES）
+MODULE_BACKUP_DIR = "module_backups"
+
+
+def interrupted_module_applies(root):
+    """<ROOT>/module_backups/<模組>/<備份>/apply.json 的 status＝in_progress ⇒ [(模組, 備份)]。讀不懂的紀錄也算（不猜）。"""
+    d = os.path.join(root, MODULE_BACKUP_DIR)
+    out = []
+    for key in (sorted(os.listdir(d)) if os.path.isdir(d) else []):
+        kd = os.path.join(d, key)
+        for st in (sorted(os.listdir(kd)) if os.path.isdir(kd) else []):
+            rec_p = os.path.join(kd, st, "apply.json")
+            if not os.path.isfile(rec_p):
+                continue
+            try:
+                status = (_read_json(rec_p) or {}).get("status", "applied")
+            except ValueError:
+                status = "in_progress"
+            if status == "in_progress":
+                out.append((key, st))
+    return out
+
+
 def make_plan(root, pkg, max_files):
     u = load_classifier(pkg)
     root, pkg = os.path.abspath(root), os.path.abspath(pkg)
@@ -135,6 +158,11 @@ def make_plan(root, pkg, max_files):
     lock = _read_json(lock_path) if os.path.isfile(lock_path) else None
     if lock is not None and lock.get("kind") != "full_package":
         raise Refuse("部署包的 modules.lock.json kind=%r：apply_update 只套完整包（full_package）" % lock.get("kind"))
+    pending = interrupted_module_applies(root)
+    if pending:
+        raise Refuse("安裝目錄有中斷的單模組套用（%s，in_progress）：先用 tools\\platform\\module_update.py rollback --key <模組> "
+                     "--backup <備份> 回到套用前，再套完整包（B55／稽核 D P8：lock 與狀態檔是全安裝共用）"
+                     % "、".join("%s/%s" % kv for kv in pending))
     base_path = os.path.join(root, BASELINE_REL)
     baseline = _read_json(base_path) if os.path.isfile(base_path) else None
     if baseline is not None and not isinstance(baseline.get("files"), list):

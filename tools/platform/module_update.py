@@ -97,7 +97,12 @@ def _core_ok(spec, core_version):
 
 
 def _page_paths(manifest):
-    return ["frontend/pages/%s" % p["path"] for p in manifest.get("pages", [])]
+    return ["%s/%s" % (_PAGES_DIR, p["path"]) for p in manifest.get("pages", [])]
+
+
+_PAGES_DIR = "frontend/pages"
+#: 稽核 D S4-S2：套用時會寫到 <ROOT>/<rel> ⇒ 只准頁面目錄底下、單層、.html；不准 ..、絕對路徑、子目錄
+PAGE_REL_RE = re.compile("^" + re.escape(_PAGES_DIR) + r"/[A-Za-z0-9_\-]+(?:\.[A-Za-z0-9_\-]+)*\.html$")
 
 
 def _tree_hashes(root, key):
@@ -291,6 +296,11 @@ def check(pkg):
     cur = PS.module_entry(mdir)
     if cur["version"] != entry.get("version") or cur["sha256"] != entry.get("sha256"):
         problems.append("模組 %s 的版本或內容雜湊與 lock 不符（打包後被改過）" % key)
+    for rel in (lock.get("pages") or {}):
+        if not PAGE_REL_RE.match(str(rel)):
+            problems.append("lock 的頁面路徑不合格（只准 %s/<檔名>.html）：%r" % (_PAGES_DIR, rel))
+    if any(not PAGE_REL_RE.match(str(r)) for r in (lock.get("pages") or {})):
+        return problems
     for rel, h in (lock.get("pages") or {}).items():
         if not (Path(pkg) / rel).is_file() or _sha(Path(pkg) / rel) != h:
             problems.append("頁面 %s 不存在或雜湊不符" % rel)
@@ -346,10 +356,11 @@ def preflight(root, pkg, allow_downgrade=False, require_base=False):
         if cur != base:
             raise UpdateError("這個包是對正式機 %s 做的，而安裝目錄是 %s ⇒ 不套用（請以目前版本重新出貨，或改用完整包）"
                               % (base[:8], cur[:8]), code="base_mismatch")
-    pending = pending_interrupted(root, key)
+    pending = pending_interrupted_any(root)
     if pending:
-        raise UpdateError("模組 %s 有中斷的套用（%s，in_progress）⇒ 先 rollback --backup %s 回到套用前，再重新套用"
-                          % (key, pending[-1], pending[-1]), code="interrupted_apply_pending")
+        k, st = pending[-1]
+        raise UpdateError("模組 %s 有中斷的套用（%s，in_progress）⇒ 先 rollback --key %s --backup %s 回到套用前，再套用任何模組"
+                          "（lock 與狀態檔是全安裝共用；稽核 D S3R-M1／P8）" % (k, st, k, st), code="interrupted_apply_pending")
     inst_core = _core_version(backend)
     if not _core_ok(entry.get("core"), inst_core):
         raise UpdateError("模組 %s 要求 core %s，安裝目錄是 %s ⇒ 不相容" % (key, entry.get("core"), inst_core), code="core_incompatible")
@@ -627,6 +638,26 @@ def _all_records(root, key):
     return sorted(p.name for p in d.iterdir() if (p / "apply.json").is_file()) if d.is_dir() else []
 
 
+def pending_interrupted_any(root):
+    """全安裝所有模組的中斷套用 ⇒ [(模組, 備份名)]，依備份名（時間）排序。"""
+    d = Path(root) / BACKUP_DIR
+    out = []
+    for kd in (sorted(x for x in d.iterdir() if x.is_dir()) if d.is_dir() else []):
+        out += [(kd.name, n) for n in pending_interrupted(root, kd.name)]
+    return sorted(out, key=lambda t: t[1])
+
+
+def newest_record_any(root):
+    """全安裝所有模組最新的一份備份 ⇒ (模組, 備份名) 或 None。"""
+    d = Path(root) / BACKUP_DIR
+    best = None
+    for kd in (sorted(x for x in d.iterdir() if x.is_dir()) if d.is_dir() else []):
+        for n in _all_records(root, kd.name):
+            if best is None or n > best[1]:
+                best = (kd.name, n)
+    return best
+
+
 def pending_interrupted(root, key):
     """中斷的套用（status＝in_progress）⇒ 備份名清單（稽核 D S3R-M1）。"""
     return [n for n in _all_records(root, key) if (_record(root, key, n) or {}).get("status") == "in_progress"]
@@ -658,9 +689,10 @@ def rollback(root, key, stamp=None):
     rec = _record(root, key, stamp)
     if rec.get("status") == "in_progress":
         # 稽核 D S3R-M1：中斷的套用只准回滾「最新一份」——比它新的紀錄存在＝之後又動過，整檔還原會蓋掉它們
-        newest = _all_records(root, key)[-1]
-        if stamp != newest:
-            raise UpdateError("備份 %s 是中斷的套用，但之後還有 %s ⇒ 不回滾到它（會蓋掉之後的改動）" % (stamp, newest),
+        newest = newest_record_any(root)
+        if newest != (key, stamp):
+            raise UpdateError("備份 %s 是中斷的套用，但全安裝之後還有 %s/%s ⇒ 不回滾到它（lock 與狀態檔是共用的，"
+                              "整檔還原會蓋掉之後的套用；稽核 D P8）" % (stamp, newest[0], newest[1]),
                               code="interrupted_not_latest")
         base = rec.get("prod_base_commit")
         if base and deployed_commit(root) != base:

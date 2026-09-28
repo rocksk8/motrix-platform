@@ -244,3 +244,48 @@ def test_required_pkg_files_include_module_tools():
     r = subprocess.run(["git", "-C", str(REPO), "check-attr", "export-ignore", "--",
                         "tools/platform/module_update.py", "tools/platform/product_select.py"], capture_output=True, text=True)
     assert r.returncode == 0 and "set" not in r.stdout, "不可以被 export-ignore（完整包要帶）：%s" % r.stdout
+
+
+# ── 稽核 D S4-S1：工具版本以格式比較，不用字串比 ──────────────────────────────────────
+
+def test_tool_version_key_orders_and_rejects_bad_format():
+    k = D.tool_version_key
+    assert k("2026-09-28") < k("2026-09-28a") < k("2026-09-28b") < k("2026-09-29") < k("2026-10-01")
+    for bad in ("2026-9-3", "v1", "", None, "2026-09-28ab", "2026-09-28A"):
+        assert k(bad) is None, bad
+
+
+def test_verify_refuses_unparseable_tool_versions(env):
+    _name, staged = _publish_stage(env)
+    install = _install(env["tmp"], tool_version="2026-9-30")
+    r = D.verify_staged(staged, str(install), module_runner=_ok_runner())
+    assert not r["ok"] and any("格式不認得" in p for p in r["problems"])
+
+
+# ── 正式機沒有儀表板：CLI writeback（主持裁示）───────────────────────────────────
+
+@pytest.mark.parametrize("res, outcome", [
+    ({"status": "success", "exit": 0}, "succeeded"),
+    ({"status": "success", "exit": 1}, "failed"),
+    ({"status": "module_unhealthy_rolled_back", "exit": 1}, "failed"),
+    ({"status": "checkonly_ok", "exit": 0}, "failed"),
+    (None, "failed"),
+    ({"unreadable": "x"}, "failed"),
+])
+def test_cli_outcome_is_fail_closed(res, outcome):
+    assert D.outcome_from_result(res) == outcome
+
+
+def test_cli_writeback_reads_the_result_file_and_writes_back(env):
+    install = _install(env["tmp"])
+    logs = install / "backend" / "logs"
+    logs.mkdir()
+    (logs / "apply_module_update_20260928_200000.result.json").write_text(json.dumps(
+        {"status": "success", "exit": 0, "rolled_back": "applied", "service": "up", "kind": "module", "module_key": "zz",
+         "to_version": "1.1.0", "prod_base_commit": BASE, "commit": BUILT, "finished_at": "2026-09-28 20:01:00"}), encoding="utf-8")
+    name = "20260928_195000_" + BUILT[:8] + "_mod-zz"
+    rc = D.main(["writeback", "--root", str(env["root"]), "--name", name, "--install-root", str(install)])
+    assert rc == 0
+    rec = json.loads((env["root"] / "results" / (name + ".result.json")).read_text(encoding="utf-8"))
+    assert rec["outcome"] == "succeeded" and rec["kind"] == "module" and rec["module_key"] == "zz"
+    assert D.module_overlays(str(env["root"])) == {}, "沒有完整包紀錄 ⇒ 覆蓋算不出來（不猜）"
