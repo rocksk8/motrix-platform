@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 773,
+  "tests": 774,
   "unmapped": 8,
   "kinds": {
    "api": 411,
    "e2e": 181,
    "audit": 111,
-   "unit": 70
+   "unit": 71
   },
   "routes": 597
  },
@@ -12400,6 +12400,19 @@
      "frontend/js/",
      "frontend/pages/",
      "frontend/pages/case-management.html"
+    ]
+   }
+  },
+  "backend/tests/test_collect_only_no_lock_2026_09_29.py": {
+   "kind": "unit",
+   "units": [
+    "dir:tools/platform/",
+    "file:tools/platform/modtest.py"
+   ],
+   "evidence": {
+    "path": [
+     "tools/platform/",
+     "tools/platform/modtest.py"
     ]
    }
   },
