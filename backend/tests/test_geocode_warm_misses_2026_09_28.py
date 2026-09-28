@@ -305,7 +305,7 @@ def test_inside_the_scope_a_free_miss_is_remembered_and_not_asked_again(client, 
         assert geo.geocode_missed_recently(ADDR_F) and geo.geocode_miss_count() == 1
         geo.locate_cached(ADDR_F)
         assert len(calls["nominatim"]) == 1, "範圍內第二次不可以再打 Nominatim（查不到的機關名稱每輪重打＝違反使用政策）"
-    assert geo._MISS_CACHE == {}, "範圍內只記 free，不可以記成 all（會擋住日後 Google）"
+    assert geo._MISS_CACHE_ALL == {}, "範圍內 Google 沒被實際問到 ⇒ 不可以記成 all（會擋住日後 Google）"
 
 
 def test_outside_the_scope_a_free_miss_does_not_block_google(client, real_path, monkeypatch):
@@ -325,7 +325,7 @@ def test_reverse_control_an_all_sources_miss_blocks_both_inside_and_outside(clie
     calls = _two_sources(monkeypatch, lambda: GOOGLE_ZERO, lambda a: EMPTY)
     geo.locate_cached(ADDR_F)                                  # 範圍外：Google 與免費都查無 ⇒ scope=all
     assert calls["google"] == [ADDR_F] and len(calls["nominatim"]) == 1
-    assert geo._MISS_CACHE and geo._MISS_CACHE_FREE == {}
+    assert geo._MISS_CACHE_ALL, "Google 實際回了 ZERO_RESULTS、免費也查無 ⇒ 記 all"
     with _no_google_scope():
         geo.locate_cached(ADDR_F)
         assert geo.geocode_missed_recently(ADDR_F)
@@ -353,7 +353,7 @@ def test_miss_classification_does_not_depend_on_the_negative_cache(client, backl
     """稽核 D GEO-M1：預熱的「查無」判定不可以依賴負快取有沒有寫（A44 範圍內曾經不寫 ⇒ 查無落到 failures、三筆就停）。
     兩種負快取的寫入都換成 no-op ⇒ 仍然 6 筆都查、misses 5、不停。"""
     monkeypatch.setattr(geo, "remember_geocode_miss", lambda address: None)
-    monkeypatch.setattr(geo, "_remember_free_miss", lambda address: None)
+    monkeypatch.setattr(geo, "_remember_all_miss", lambda address: None)
     asked = _fake_urlopen(monkeypatch, lambda a: HIT if a == "待定位機關3" else EMPTY)
     st = geo.warm_geocode_cache()
     assert len(asked) == 6 and st["misses"] == 5 and st["failures"] == 0 and st["stoppedBecause"] == "no_backlog", (asked, st)

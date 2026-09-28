@@ -99,10 +99,45 @@ def test_quota_filled_as_zero_skips_google_and_the_status_says_degraded(spy, quo
 
 
 def test_a_negative_cached_address_is_not_asked_again(spy):
+    """Google 實際回過查無（all）⇒ 有金鑰時也不再問。〔更正（B，2026-09-28 主持裁示）：原本用 remember_geocode_miss（任何查無）
+    也會擋——裁示後「Google 沒被實際問到」的查無不擋 Google，見下一題〕"""
     _key()
-    geo.remember_geocode_miss(ADDR)
+    geo._remember_all_miss(ADDR)
     geo.locate_cached(ADDR)
     assert spy["google"] == [] and spy["nominatim"] == [], spy
+
+
+def test_a_miss_from_before_google_was_asked_does_not_block_google(spy):
+    """主持裁示：沒金鑰時的查無（Google 沒被實際問到）⇒ 放上金鑰後同一地址要問 Google。"""
+    _key("")
+    geo.locate_cached(ADDR)                                   # 沒金鑰：只有 Nominatim，查無
+    assert spy["google"] == [] and len(spy["nominatim"]) == 1 and geo._MISS_CACHE_ALL == {}
+    assert geo.geocode_missed_recently(ADDR), "沒金鑰時仍算查無（七天內不重打 Nominatim）"
+    _key()
+    assert not geo.geocode_missed_recently(ADDR), "放上金鑰之後，那筆查無不算數"
+    r = geo.locate_cached(ADDR)
+    assert spy["google"] == [ADDR] and r.source == geo.SOURCE_GOOGLE, spy
+
+
+def test_a_miss_while_quota_is_used_up_does_not_block_google_after_recovery(spy, monkeypatch):
+    _key()
+    locked = {"v": True}
+    monkeypatch.setattr(geo, "quota_exceeded", lambda *a, **k: locked["v"])
+    geo.locate_cached(ADDR)
+    assert spy["google"] == [] and geo._MISS_CACHE_ALL == {}
+    locked["v"] = False                                       # 額度恢復
+    geo.locate_cached(ADDR)
+    assert spy["google"] == [ADDR], spy
+
+
+def test_reverse_control_google_zero_results_is_remembered_as_all(spy):
+    """Google 實際回了 ZERO_RESULTS（沒有 Google 錯誤）、Nominatim 也查無 ⇒ 記 all ⇒ 有金鑰時也不再問。"""
+    _key()
+    spy["google_behave"] = lambda: _Resp(json.dumps({"status": "ZERO_RESULTS", "results": []}).encode())
+    geo.locate_cached(ADDR)
+    assert spy["google"] == [ADDR] and geo._MISS_CACHE_ALL
+    geo.locate_cached(ADDR)
+    assert spy["google"] == [ADDR] and len(spy["nominatim"]) == 1, "all 之後不再問：%r" % spy
 
 
 @pytest.mark.parametrize("exc", [ssl.SSLError("CERTIFICATE_VERIFY_FAILED"), OSError("proxy 拒絕連線")], ids=["ssl", "proxy"])
