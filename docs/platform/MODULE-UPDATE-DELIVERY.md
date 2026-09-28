@@ -128,7 +128,7 @@
 
 | 類別 | 檔案 | 等級 |
 |---|---|---|
-| doc | 〔D 審 DB-S3：改以「完整包不出貨的路徑」判定，不看副檔名〕`.gitattributes` 的 export-ignore 樣式命中者（docs/**、backend/tests/**、backend/conftest.py、backend/modules/*/tests/**、backend/modules/*/SPEC.md、requirements-dev…）＋ build_deploy_package 的建包精簡規則會移除者；兩者由工具**讀原檔**取得（不在 ship_tier 裡另抄一份清單）。⚠ 其中 fixture 層（conftest、pytest.ini、requirements*）與 `tools/**` 雖不出貨，照舊判③（它們改變測試環境或建包工具，先於本規則比對） | ① |
+| doc | 〔D 審 DB-S3：改以「完整包不出貨的路徑」判定，不看副檔名〕`.gitattributes` 的 export-ignore 樣式命中者（docs/**、backend/tests/**、backend/conftest.py、backend/modules/*/tests/**、backend/modules/*/SPEC.md、requirements-dev…）＋ build_deploy_package 的建包精簡規則會移除者；兩者由工具**讀原檔**取得（不在 ship_tier 裡另抄一份清單）。⚠ 其中 fixture 層（conftest、pytest.ini、requirements*）與 `tools/**` 雖不出貨，照舊判③（它們改變測試環境或建包工具，先於本規則比對）。〔實作時更正（B，2026-09-28）：①「建包精簡規則」讀碼後沒有（build_deploy_package 只是 git archive 後解開，不另刪檔）⇒ 只用 export-ignore（`git check-attr --source X`）。② **`docs/**` 大部分不在 export-ignore 裡（docs/platform 整個會出貨）**——照字面規則，正式機版本之後任何人改過 RUN-PLAN 或對照表都會讓每一個模組包判③，單模組包實際上出不了。改為 doc＝export-ignore ∪ `docs/**`，前提「執行期沒有程式讀 docs/」由守門題 `test_docs_are_never_read_at_runtime`（AST 找路徑用法，含正對照）釘住；日後有程式讀 docs/ ⇒ 題紅 ⇒ 收窄。根目錄會出貨的 .md（例 README.md）照 DB-S3 判③〕 | ① |
 | module:<k> | `backend/modules/<k>/**` | ② |
 | page:<k> | `frontend/**` 且被**恰好一個**模組 <k> 的 module.json `pages` 宣告（X 或 P 任一版宣告即算） | ② |
 | manifest | `backend/version_manifest.json`，且 P→X 新增的條目 module 都屬同一個 <k>（JSON 層比對） | ②（跟著 <k>） |
@@ -166,8 +166,9 @@
   - 其他一切（f-string、函式參數、變數被重新指派、`getattr(registry, ...)`、把取用函式當值傳遞、`*args`）⇒ **判不了**。
   - 🔴 **判不了 ≠ 沒有消費端**：任何一處取用呼叫判不了（不論它最後是不是在取 <k> 的能力）⇒ 整個判定退回乙（拒絕出單模組包，列出判不了的位置）。「找不到消費端」只有在所有取用呼叫都解析成功、而且沒有一個屬於 <k> 能力清單時才成立（〈盤點工具的正對照〉）。
 - **消費端的題**：把消費端檔案當作「虛擬改動」交給 modtest 的選題（`modtest.select`，同 §C-11a 規則），連帶選到依賴它們的單位的題。
-  - 🔑 這一步是必要的：`case.access` 的直接消費端是 L1 的 `helpers/case_access.py`，netplan、accounting 是**經由它**用到 case（`modules/netplan/api.py`、`modules/accounting/voucher_attachments.py` 都 import case_access）；只選直接消費端的題會漏掉它們。
-- **與 dep_graph.json 交叉比對**：dep_graph 若另有 <k> 能力清單上的消費關係而 AST 沒找到 ⇒ 退回乙並列出差異（兩個來源不一致時不猜誰對）。
+  - 🔑 這一步是必要的：`case.access` 的直接消費端有 L1 的 `helpers/case_access.py` 與 netplan（`modules/netplan/api.py:43` 直接 `single_provider("case.access")`）；accounting 則是**經由** `helpers/case_access` 間接用到（`modules/accounting/voucher_attachments.py:46` import `case_page_readable`）。只選直接消費端的題會漏掉 accounting。〔更正（D 複審 DB3-S1）：原句寫「netplan、accounting 都是經由 case_access」——netplan 其實是直接消費端；間接見證改用 accounting〕
+- 〔D 複審 DB3-S2〕模組內**函式／類別裡**的 `provide(...)` 呼叫 ⇒ 登記時機判不了 ⇒ 列進判不了 ⇒ 退回乙（不略過）。
+- ~~**與 dep_graph.json 交叉比對**：dep_graph 若另有 <k> 能力清單上的消費關係而 AST 沒找到 ⇒ 退回乙並列出差異（兩個來源不一致時不猜誰對）。~~〔實作時更正（B，2026-09-28）：`dep_graph.json` 的單位欄位（imports、routers_called、tables_* …）**沒有任何 capability 資料**，這條做不出來。改為守門題 `test_real_ast_capabilities_match_runtime_registry`：載入全部模組後，registry 實際登記的能力（ModuleSpec.providers＋模組層 provide，依提供函式所屬模組歸戶）必須 ⊆ AST 算出來的能力清單——AST 漏掉任何一種登記寫法 ⇒ 紅。消費端那一側仍由「判不了 ⇒ 退回乙」保護〕
 - **正對照（真實 repo，D 補題；讀碼 2026-09-28 核對後的實際消費端）**：
   - 改 arap 的 `_InvoiceVoucherAttachments`（`attachments.for_document` 提供者）⇒ 選題含 **accounting** 的附件彙整題（消費端是 `modules/accounting/voucher_attachments.py:103`；〔更正 D 複審原文「⇒ case 消費端題」：case 是同一能力的**另一個提供者**（`modules/case/__init__.py:57`），不是消費端〕）。
   - 改 arap 的 `_calendar_writeback` ⇒ 選題含 `helpers/google_calendar.py:236` 的單位的題。
