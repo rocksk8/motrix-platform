@@ -181,25 +181,16 @@ def _core_version_at(commit, repo):
 # ── ship（出貨：判等級 → 第②級測試 → 打包）─────────────────────────────────────
 
 def manifest_lines(prod_base, commit, key, repo=REPO):
-    """X 的 version_manifest.json 裡、P 沒有、而且屬於 <key> 的條目 ⇒ 原始文字行（去掉行尾逗號；套用時以文字插入）。"""
-    import ship_tier as ST
+    """X 的 version_manifest.json 裡、P 沒有、而且屬於 <key> 的條目 ⇒ 各一行 JSON 文字（套用時以文字插入安裝目錄的檔頭）。
+    〔更正（S6 演練踩到）：原本逐行讀 X 的原始文字、要求一行一筆——實際的 version_manifest 前段一行一筆、較舊的條目跨多行
+    ⇒ 解析整份 JSON 取條目，再各自輸出成一行（json.dumps，欄位順序照原條目）；安裝目錄的其他行照樣逐位元組不動〕"""
     old = json.loads(_git("show", "%s:%s" % (prod_base, MANIFEST_REL), repo=repo) or "[]")
+    new = json.loads(_git("show", "%s:%s" % (commit, MANIFEST_REL), repo=repo) or "[]")
     have = {(e.get("module"), e.get("version")) for e in old}
     man = json.loads(_git("show", "%s:backend/modules/%s/module.json" % (commit, key), repo=repo))
     names = {n for n in (man.get("name"), man.get("manifest_name"), key) if n}
-    out = []
-    for line in _git("show", "%s:%s" % (commit, MANIFEST_REL), repo=repo).splitlines():
-        raw = line.strip().rstrip(",")
-        if not raw.startswith("{"):
-            continue
-        try:
-            e = json.loads(raw)
-        except ValueError:
-            raise UpdateError("version_manifest.json 不是一行一筆（不能以文字插入）：%s" % raw[:60])
-        if (e.get("module"), e.get("version")) not in have and e.get("module") in names:
-            out.append(raw)
-    del ST
-    return out
+    return [json.dumps(e, ensure_ascii=False) for e in new
+            if isinstance(e, dict) and (e.get("module"), e.get("version")) not in have and e.get("module") in names]
 
 
 def ship_tests(key, tier_result, repo=REPO):
