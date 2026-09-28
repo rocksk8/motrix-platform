@@ -115,6 +115,10 @@ _NOT_IN_JSON_BACKUP = {
         "自訂模組單據的欄位索引：內容完全由 custom_records.data_json 推得（helpers.custom_modules._write_index），"
         "從 JSON 重建單據後執行 custom_modules.rebuild_index(conn) 即可（test_custom_module_index_can_be_rebuilt_from_the_records）；"
         "單據本身（custom_records）有進每日匯出",
+    # ── 2026-09-28 · 附近旅宿（lodging 模組，module.json 宣告 T3）──
+    "lodging_catalog":
+        "交通部觀光署開放資料的本機快照：最高管理者按「更新旅宿資料」整批重抓即可重建（每日更新的公開資料）；"
+        "⚠️ 同模組的 lodging_searches／lodging_search_items／lodging_quotes 是使用者紀錄，**要備份**（T1）",
 }
 
 
