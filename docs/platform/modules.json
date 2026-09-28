@@ -566,7 +566,8 @@
     "mod:lodging/api_records",
     "mod:lodging/attribution",
     "mod:lodging/search",
-    "mod:lodging/source"
+    "mod:lodging/source",
+    "page:pages/lodging-records.html"
    ],
    "tables": [
     "lodging_catalog",

@@ -14,12 +14,10 @@ from modules.lodging import source as lodging_source
 
 router = APIRouter()
 
-PERM_KEY = "lodging"
-
 
 def _require_lodging(authorization: str) -> dict:
     user = _require_user(authorization)
-    require_any_module(user, (PERM_KEY,), "附近旅宿")
+    require_any_module(user, ("lodging",), "附近旅宿")   # 字面值：test_module_keys_consistency 掃它
     return user
 
 
