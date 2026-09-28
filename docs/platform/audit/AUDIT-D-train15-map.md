@@ -196,3 +196,19 @@
 ### 關閉紀錄（標準格式，PLAYBOOK §E-6）
 
 - ✅ GB-M1 關閉（b54f7f25）——google_basemap＝瀏覽器金鑰且地圖 ID，缺一項 osm 且不回金鑰
+
+## 8. 複核 GB-M2（＋GB-S1、GB-O1）：wip/a-google-basemap 8b7e04d3（D，2026-09-28）
+
+- **GB-M2**：
+  - 後端：`/api/map/points` 收 `basemap`，`google_map = google_basemap() and basemap != "osm"` ⇒ 只准收窄。範圍（`without_google_content`）與回應快取鍵都用收窄後的值；回應的 `basemap`＝實際採用的底圖
+  - 前端：開頁先取設定，取不到維持 osm；取點帶 `&basemap=<頁面底圖>`；回應的底圖與頁面不同 ⇒ 不畫，並提示重新整理
+  - 題 30 過（非 e2e）。突變：
+    - M1「忽略頁面底圖」⇒ 1 紅
+    - M2「頁面可以放寬」⇒ 2 紅
+  - **成立**
+- **GB-S1**：畫面上的點或據點有 `nominatim`／`nominatim_district` 來源時，兩種底圖都顯示「地點資料 © OpenStreetMap contributors」，放在圖面下方。已確認 points 與 locations 的回應都帶 `source` 欄位（map_points.py:241／306／372、:825）。成立
+- **GB-O1**：Google 錯誤字串放進 errors 之前，先把伺服器金鑰取代成 `***`（取代之前已確認金鑰不是空字串）。成立
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ GB-M2 關閉（8b7e04d3）——取點帶頁面底圖、後端只准收窄、前端比對不同就不畫
