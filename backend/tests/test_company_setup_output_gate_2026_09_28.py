@@ -119,6 +119,18 @@ def test_payment_request_needs_bank_fields(client, boss):
     pdf_gen._require_payment_bank({})                                                # 補齊 ⇒ 放行
 
 
+def test_both_payment_request_generators_check_bank_fields_first():
+    """下載與簽核後存檔兩條產生路徑都在組 HTML 之前驗匯款欄位（AST：呼叫順序）。"""
+    import ast
+    import inspect
+    import pdf_gen
+    for fn in (pdf_gen.generate_payment_request_pdf_bytes, pdf_gen._generate_payment_request_pdf):
+        calls = [n.func.id for n in ast.walk(ast.parse(inspect.getsource(fn)))
+                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
+        assert "_require_payment_bank" in calls, fn.__name__
+        assert calls.index("_require_payment_bank") < calls.index("_build_payment_request_html"), fn.__name__
+
+
 # ── 排程月報（非 HTTP）───────────────────────────────────────────────────────────
 
 def test_monthly_report_is_skipped_and_alerted_without_advancing(client, monkeypatch, no_mail):
@@ -301,8 +313,9 @@ def test_grace_expiring_soon_alerts(client, no_mail, gate_files):
                    "install": cs.install_hash(root)}, f)
     conn = db.get_db()
     try:
-        cs.observe_expiry(conn, root, now)
-        cs.observe_expiry(conn, root, now)
+        assert cs.gate(conn)[0] == cs.GATE_GRACE                                     # 經 gate（中介層同一條路）觸發
+        cs.reset_cache()
+        cs.gate(conn)
         assert _alert_codes(conn).count("grace_expiring") == 1
     finally:
         conn.close()
