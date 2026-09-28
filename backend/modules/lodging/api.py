@@ -2,7 +2,8 @@
 """附近旅宿的端點（前綴 `/api/lodging`，權限 key `lodging`）。
 
 只 import core／helpers／db（L1）與本模組；不 import 其他 L2。
-查詢一律只查本機快照；唯一的對外連線是 `POST /refresh`（最高管理者、開關開著、速率允許）。
+旅宿資料只在 `POST /refresh`（最高管理者、開關開著、速率允許）時連線；查詢只查本機快照
+（地址定位經 L1 geo，見 api_records.py 檔頭）。
 """
 from fastapi import APIRouter, Header, HTTPException
 

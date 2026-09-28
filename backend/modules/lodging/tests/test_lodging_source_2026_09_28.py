@@ -188,6 +188,30 @@ def test_download_size_limit(monkeypatch):
     assert ls.fetch_raw() == b"x" * 30
 
 
+def test_download_total_time_limit(monkeypatch):
+    """D 稽核 E2-S1：對方慢慢送（每次讀取都在逾時內）也不可以一直握著更新鎖。"""
+    class Resp:
+        def read(self, n):
+            return b"x"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    clock = {"t": 0.0}
+
+    def tick():
+        clock["t"] += 10.0
+        return clock["t"]
+    monkeypatch.setattr(ls.urllib.request, "urlopen", lambda req, timeout: Resp())
+    monkeypatch.setattr(ls.time, "monotonic", tick)
+    with pytest.raises(ls.SourceError, match="總時限"):
+        ls.fetch_raw()
+    assert clock["t"] <= ls.FETCH_TOTAL_SECONDS + 30          # 到點就停，不是讀完才停
+
+
 # ── 解析：來源改版 ─────────────────────────────────────────────────────────────
 
 def test_parse_rejects_shape_change():

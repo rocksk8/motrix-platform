@@ -93,6 +93,22 @@
       .mp-search { width:100% !important; }
       .mp-table-scroll .table { min-width:640px; }
     }
+    /* 覆蓋層（IP-101 map.overlay；static/map-overlay.js）：標記、面板。顏色由 JS 取語意 token */
+    .mp-ov-divicon { background:none; border:none; }
+    .mp-ov-pin { display:block; width:14px; height:14px; border-radius:50%; border:2px solid var(--white);
+                 box-shadow:var(--shadow-sm); }
+    .mp-ov-pin.mp-ov-homestay { border-radius:3px; }
+    .mp-ov-pin.mp-ov-center { width:16px; height:16px; }
+    .mp-ov-panel { margin-top:12px; padding:12px 14px; }
+    .mp-ov-title { font-size:14px; margin:0 0 8px; }
+    .mp-ov-error { color:var(--danger); font-size:12px; }
+    .mp-ov-pop { font-size:12px; line-height:1.5; max-width:260px; }
+    .mp-ov-pop a { display:inline-block; margin-top:4px; }
+    .mp-ov-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px; font-size:12px; }
+    .mp-ov-dim { color:var(--text-dim); font-size:11px; }
+    .mp-ov-list { list-style:none; margin:6px 0; padding:0; max-height:260px; overflow:auto; font-size:12px; }
+    .mp-ov-msg[data-kind=err] { color:var(--danger); }
+    .mp-ov-msg[data-kind=warn] { color:var(--warning); }
   </style>
 </head>
 <body>
@@ -371,7 +387,17 @@
                 @click="userPos ? clearPosition() : usePosition()"
                 :disabled="geoBusy || loading"
                 x-text="geoBusy ? '定位中…' : (userPos ? '停用我的位置' : '使用我的位置')"></button>
+        <!-- IP-101：已安裝模組的覆蓋層（清單由 L1 /api/map/overlays 依 module.json 宣告產生；模組不在＝沒有按鈕）。
+             手動開啟：按了才載入腳本、才查資料（CORE-SPEC「地圖附近旅宿」）。 -->
+        <template x-for="o in overlays" :key="o.key">
+          <button type="button" class="btn btn-sm" :data-map-overlay="o.key"
+                  :class="overlayOn[o.key] ? 'btn-primary' : 'btn-ghost'"
+                  @click="toggleOverlay(o)" x-text="o.label"></button>
+        </template>
         <button class="btn btn-ghost btn-sm" @click="refresh()" :disabled="loading">重新整理</button>
+      </div>
+      <div class="mp-panel-body" x-show="overlayError" style="padding-top:0">
+        <div class="mp-note warn" data-map-overlay-load-error x-text="overlayError"></div>
       </div>
       <!-- ⚠️ 定位失敗要說**是哪一種失敗**：拒絕、量不到、逾時、非安全環境，
            四種的下一步完全不同，而它們都只會讓「離你多遠」那一欄不出現。 -->
@@ -418,6 +444,9 @@
         </div>
       </div>
     </div>
+
+    <!-- IP-101 覆蓋層面板（由 static/map-overlay.js 的 api.panel() 建在這裡） -->
+    <div id="mp-overlay-panels"></div>
 
     <!-- ── 清單：**預設就是這個**，零對外連線 ── -->
     <div class="panel" style="margin-top:12px">
@@ -537,6 +566,7 @@
 <script src="../static/record-link.js"></script>
 <script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
+<script src="../static/map-overlay.js"></script>
 <script>
 function mapPage() {
   return {
@@ -585,6 +615,7 @@ function mapPage() {
     // 第十五班 ②(b)：底圖種類以後端 `/api/map/config` 為準（有地圖金鑰 ⇒ google，否則 osm）。
     //   🔴 取不到設定就**不畫**（不退回 OSM）：後端在 Google 底圖模式時會給 Google 座標，畫在 OSM 上＝違反 SST §6.2。
     basemap: 'osm',
+    overlays: [], overlayOn: {}, overlayError: '',
     // 斷路器：上一次載不到圖磚 ⇒ 這一次不自動開，而**要說出來**。
     // ☠️ 不說的話，「這一頁以前會自動出現地圖」變成「今天沒有」，
     // 而使用者會以為功能壞了。
@@ -735,6 +766,7 @@ function mapPage() {
         this._cfg = await this._mapConfig()
         this.basemap = this._cfg.basemap === 'google' ? 'google' : 'osm'
       } catch (_e) { this._cfg = null }
+      this._loadOverlays()
       await this.refresh()
       // 🔴 XA4：**自動開圖**（使用者裁示：「正式機都長期開著，
       // 為什麼不能預載好地圖發給使用者，還要使用者點選開啟地圖」）。
@@ -915,6 +947,7 @@ function mapPage() {
     //  ⚠️ 一個「只建不收」的資源，在加上關閉入口的那一天會變成洩漏，
     //  而那時沒有人會記得它是在這裡建的。
     closeMap() {
+      if (window.MotrixMapOverlay) window.MotrixMapOverlay._mapClosed()
       if (this._sizeWatcher) { this._sizeWatcher.disconnect(); this._sizeWatcher = null }
       if (this._map) { this._map.remove(); this._map = null }
       this._layer = null
@@ -922,6 +955,57 @@ function mapPage() {
       this._focusMarker = null
       this._userLayer = null
       this.mapOpen = false
+    },
+
+    // ── IP-101 覆蓋層（L1 契約在 static/map-overlay.js；本頁只管按鈕、載腳本、生命週期） ──
+    //: 清單由後端依已載入模組的宣告產生；取不到 ⇒ 沒有按鈕並記在 console（不擋地圖）。
+    _loadOverlays() {
+      if (window.MotrixMapOverlay) window.MotrixMapOverlay._attach(this)
+      return fetch('/api/map/overlays', { headers: this._h() })
+        .then(r => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+        .then(d => { this.overlays = Array.isArray(d.overlays) ? d.overlays : [] })
+        .catch(e => { console.warn('[map] 讀不到覆蓋層清單：', e) })
+    },
+
+    _overlayMapReady() {
+      if (window.MotrixMapOverlay) window.MotrixMapOverlay._mapReady()
+    },
+
+    //: 腳本只載一次（網址只用 L1 回的 scriptUrl，同源 /map-overlays/…）。
+    _loadOverlayScript(o) {
+      window.__motrixOverlayScripts = window.__motrixOverlayScripts || {}
+      const cache = window.__motrixOverlayScripts
+      if (!cache[o.scriptUrl]) {
+        cache[o.scriptUrl] = new Promise((resolve, reject) => {
+          const js = document.createElement('script')
+          js.src = o.scriptUrl
+          js.onload = resolve
+          js.onerror = () => { delete cache[o.scriptUrl]; reject(new Error('script')) }
+          document.head.appendChild(js)
+        })
+      }
+      return cache[o.scriptUrl]
+    },
+
+    async toggleOverlay(o) {
+      const M = window.MotrixMapOverlay
+      if (!M) { this.overlayError = '地圖覆蓋層元件沒有載入（static/map-overlay.js）'; return }
+      this.overlayError = ''
+      if (M.isActive(o.key)) {
+        M._unmount(o.key)
+        this.overlayOn = Object.assign({}, this.overlayOn, { [o.key]: false })
+        return
+      }
+      try {
+        await this._loadOverlayScript(o)
+      } catch (_e) {
+        this.overlayError = o.label + '載入失敗：無法取得腳本'
+        return
+      }
+      if (!M.isRegistered(o.key)) { this.overlayError = o.label + '載入失敗：腳本沒有註冊'; return }
+      if (!this.mapOpen) this.openMap()
+      M._mount(o.key, o.label)
+      this.overlayOn = Object.assign({}, this.overlayOn, { [o.key]: true })
     },
 
     openMap() {
@@ -932,7 +1016,7 @@ function mapPage() {
           this.basemap = cfg.basemap === 'google' ? 'google' : 'osm'
           return this.basemap === 'google' ? this._loadGoogle(cfg) : this._loadLeaflet()
         })
-        .then(() => { this.mapOpen = true; this.$nextTick(() => this._draw()) })
+        .then(() => { this.mapOpen = true; this.$nextTick(() => { this._draw(); this._overlayMapReady() }) })
         .catch(e => { this.loadError = (e && e.motrixMsg) || '地圖元件載入失敗（檔案不存在或遭阻擋）' })
         .finally(() => { this.mapLoading = false })
     },

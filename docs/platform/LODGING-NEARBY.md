@@ -194,11 +194,26 @@ MOTRIX 是賣給多個客戶的產品 ⇒ 所有客戶的查詢合計算在「�
 - ~~⚠ **D 審查點 Q3**：`distance_m` 是由（可能來自 Google 的）中心座標算出的衍生數字。我的判讀：SST §6.3 限的是 lat/lng 本身，30 天清座標、保留距離與使用者輸入的地址文字即可；保守替代：`center_source='google'` 時連同 `distance_m` 一起清空（紀錄只剩名單與價格）。~~
   〔更正 LG-M2（D 審）：`center_source='google'` 時**座標與距離都不存**，只存地址文字、來源、精度；紀錄頁該筆顯示「中心點為 Google 定位，距離不保存」。回查時要距離 ⇒ 使用者按「重算」以當下 L1 定位重算並顯示，**不寫回**。device／nominatim／tgos／manual 照存〕
 
+#### 3.3a 每日 JSON 備份的接點（主持裁示 2026-09-28 17:13，E 線提問、採建議）
+- lodging 是第一個「自己 migration 建表」的模組；每日 JSON 備份清單寫死在 L1 `archive._daily_backup_tables()`，
+  硬加 L2 表名 ⇒ 模組未載入／停用時表不存在 ⇒ 該表 "error" ⇒ 每日備份誤報 daily_partial。
+- 裁示：archive 自動併入**已載入**模組 `module.json` `data.tables` 宣告的表（表名只取已驗證宣告、`SELECT * … ORDER BY rowid`；
+  未載入或停用＝不列、不 error，資料仍在整庫備份）；非法表名 ⇒ 不列並記 ERROR；已在寫死清單的不重複匯出。
+  L1 不可寫死 L2 表名：現行 payment_requests／tender_* 是既有債，本次不動，列下一輪「改為宣告式」。
+- 〔實作差異，E 2026-09-28 17:48：只自動併入 **T1**；宣告 T2 的表不自動列、記 ERROR——T2 有祕密欄位，`SELECT *` 會把祕密寫進 JSON
+  （MODULE-GUIDE §3.3「匯出但必須排除祕密欄位」）；T2 仍照舊在 archive 逐欄明列。〕
+- 實作：`archive._module_declared_backup_tables`（鍵 `模組-<key>-<表>`）；守門 `tests/test_archive_module_declared_tables_2026_09_28.py`
+  （合成模組：T1 列、T2／T3／非法名不列、寫死的不重複；停用 ⇒ 不列不 error；正對照：載入中而表不在 ⇒ "error"）；CORE 1.65。
+
 ### 3.4 個資
 - 紀錄的中心點可能是使用者家／工地地址 ⇒ `center_label` 視同 IP-97 的地址：只給建立者與 admin+ 看、不寫 log、每日 JSON 匯出照 T1 但不進任何對外匯出。**D 審查點 Q4**：是否要列 `case_read_scope` 類的逐筆權限（預設：建立者＋admin+）。
 - 旅宿本身是營業登記資訊（名稱、地址、證號），不是個資；經營者姓名／統編／電話不收（§3.3）。
 
 ### 3.5 對外連線：開關、速率上限、關閉方法
+
+〔補 D 稽核 E2-S3（2026-09-28）：**旅宿資料**只在下表的手動更新時連線；但「輸入地址」查詢時，若 L1 定位快取沒命中，會經
+`geo.locate_cached()` 對外定位（受 `MOTRIX_GEO` 開關與 L1 節流；TGOS／Nominatim；頁面與設定都是 Google 底圖時才可能用 Google，§3.1.1）。
+「目前位置」只用瀏覽器定位，不經伺服器對外。E2-S1：下載另有整次總時限 `FETCH_TOTAL_SECONDS`（180 秒），慢送不會一直握著更新鎖。〕
 
 | 項目 | 設計 |
 |---|---|
@@ -214,6 +229,12 @@ MOTRIX 是賣給多個客戶的產品 ⇒ 所有客戶的查詢合計算在「�
 | 沒有快照時 | 查詢回 `unavailable: "no_catalog"`＋「尚未下載旅宿資料，請最高管理者按『更新旅宿資料』」（不是 0 筆） |
 
 ### 3.6 與地圖頁（L1）的串接
+
+〔實作差異，E 2026-09-28 17:48（D 完整稽核時請看）：
+① 覆蓋層清單另開 `GET /api/map/overlays`，**不併進** `/api/map/config`——config 的回應形狀有金鑰守門題逐字比對（`test_map_google_basemap` 的 `== {"basemap": "osm"}`），不動它。
+② 腳本網址是 `/map-overlays/<模組>/<檔名>`（main.py 在 StaticFiles 之前的路由，同 /pages）：`<script src>` 帶不了 Authorization ⇒ 不能放在 /api 底下；
+   只提供「已載入模組宣告、檔案在該模組 `pages/` 底下」的腳本，其餘 404。腳本是程式碼、不含資料；資料一律經模組自己的 /api 端點。
+③ 宣告的驗證放在 L1 `helpers.map_overlays.declared_overlays()`（不合格式 ⇒ 不列、記 ERROR），沒有放進 loader（不因覆蓋層宣告寫錯而整個模組載入失敗）。〕
 
 〔更正 LG-M1（D 審）：原設計只說「地圖頁載入模組腳本」，沒有定義兩者介面、腳本路徑由提供者回傳。原句保留如下（刪除線），新設計接在後面〕
 

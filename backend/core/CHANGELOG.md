@@ -5,6 +5,14 @@
 ## （不升版號：介面不變）— 2026-09-28（B，wip/b-warm-async：第十五班緊急修補 B54）
 - L1（行為）：`helpers.geo.schedule_geocode_warm()` 改為**立即返回**：第一輪背景定位排進 daemon `threading.Timer`（私有常數 `_GEOCODE_WARM_FIRST_DELAY_SECONDS`＝30 秒）在背景執行緒跑，之後每輪結束（含丟例外）再排下一輪（私有 `_geocode_warm_tick`，重排維持 `finally`）。原本在呼叫當下同步跑第一輪 ⇒ `main.py` 模組層呼叫它時 `import main` 被整輪定位卡住（正式機套用 8b04d99d：333 筆待辦×Nominatim 每秒 1 次 ⇒ 83 秒內 port 666 沒在聽 ⇒ 自動回滾）。守門 `tests/test_geocode_warm_async_2026_09_28.py`
 
+## 1.65 — 2026-09-28（E 暫用，列車取號；wip/e-lodging-impl：附近旅宿 L1 接點）
+- L1（新增）：`helpers.geo.map_request_scope(page_basemap, missing="osm")`＋常數 `MAP_SCOPE_MISSING_SETTING`／`MAP_SCOPE_MISSING_OSM`——地圖頁請求的 Google 範圍判定（頁面底圖只准收窄設定；D 稽核 LG2-M1）。`/api/map/points` 改用它（`missing="setting"`）：None／google／osm 行為不變；**不認得的值（含空字串 `basemap=`）原本可用 Google，現在視同 osm**（收窄，LG3-O1）。守門 `tests/test_map_request_scope_2026_09_28.py`＋既有 GB-M2 題
+- L1（新增）：`archive._daily_backup_tables()` 併入**已載入**模組 `module.json` `data.tables` 宣告 T1 的表（鍵 `模組-<key>-<表>`，常數 `archive.MODULE_BACKUP_PREFIX`）；模組未載入＝不列（不誤報 daily_partial）；非法表名、T2 不列並記 ERROR；已在寫死清單的不重複（主持裁示 2026-09-28）。守門 `tests/test_archive_module_declared_tables_2026_09_28.py`
+- L1（資料）：權限目錄 `helpers.module_registry.MODULES` 新增 `lodging`（附近旅宿，業務）
+
+## （不升版號：介面不變）— 2026-09-28（B，wip/b-warm-async：第十五班緊急修補 B54）
+- L1（行為）：`helpers.geo.schedule_geocode_warm()` 改為**立即返回**：第一輪背景定位排進 daemon `threading.Timer`（私有常數 `_GEOCODE_WARM_FIRST_DELAY_SECONDS`＝30 秒）在背景執行緒跑，之後每輪結束（含丟例外）再排下一輪（私有 `_geocode_warm_tick`，重排維持 `finally`）。原本在呼叫當下同步跑第一輪 ⇒ `main.py` 模組層呼叫它時 `import main` 被整輪定位卡住（正式機套用 8b04d99d：333 筆待辦×Nominatim 每秒 1 次 ⇒ 83 秒內 port 666 沒在聽 ⇒ 自動回滾）。守門 `tests/test_geocode_warm_async_2026_09_28.py`
+
 ## 1.64 — 2026-09-28（A 暫用，列車取號；wip/a-gm-raw：正式機 Google 底圖標點消失、取點延遲）
 - L1（新增）：`helpers.geo.cache_read_session()`——範圍內 `_cache_get`／`_cache_get_many` 共用一條讀取連線（寫入照舊自己開）；`/api/map/points` 整次取點在範圍內（正式機約 400 地址，原本每個地址開一次連線 ⇒ 2～7 秒；兩種底圖成本相同）
 - 頁面：`static/map-google.js` 的 Google 物件建立後標 `__v_skip`、傳給 Google 的 map 經 `Alpine.raw`（Alpine 讀回 Proxy ⇒ 真 Google 不認 map ⇒ 標點全部不見）；標記點擊改 `gmpClickable`＋`addEventListener('gmp-click')`；`map.html` 的 `x-text` 在 `info` 為 null 時不丟錯
