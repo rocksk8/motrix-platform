@@ -15,6 +15,8 @@
      A 成功：tender_radar 頁面文案＋修正版號 ⇒ ship（含第②級測試）⇒ 簽章發布到演練交付資料夾 ⇒ stage ⇒ verify ⇒ ps1
      B 自動回滾：模組 __init__ 在「uvicorn 已載入」時丟例外 ⇒ 疊加樹乾跑（沒有 uvicorn）載得起來、真的啟動時載入失敗
                ⇒ 健檢判模組沒載入 ⇒ 自動回滾（期待 module_unhealthy_rolled_back、restored、雜湊回到套用前）
+     D 手動回滾（B55F-M1）：同 A 的改動 ⇒ 套用成功 ⇒ `-Rollback -ModuleKey tender_radar -Yes`（預設只回程式、資料庫保留）
+               ⇒ 期待 module_rollback_ok、雜湊回到套用前、舊版已載入、服務 up
      C 乾跑擋下：多一支回「未完成原因」的 migration ⇒ migration_dryrun_failed、正式機（演練安裝）沒被碰
   4. 報告：stdout 最後一行 JSON；--keep 以外全部清掉（服務一律停掉）。
 ⚠ 本機若有排程工作「MOTRIX ERP Server Autostart」⇒ 拒絕（ps1 的 Start-InstallService 會去啟動它，而那是別的安裝）。
@@ -280,10 +282,10 @@ def make_variant(worktree, variant, at_least=None):
     first = body.index("\n## ")
     cl.write_text(body[:first] + "\n## %s — 演練（B55 S6 %s，不出貨）\n- 演練用改動\n" % (new_ver, variant) + body[first:],
                   encoding="utf-8")
-    if variant == "A":
+    if variant in ("A", "D"):
         import ship_tier as ST                              # 宣告頁面的目錄由 core.paths 取得（test_page_paths_centralized）
         page = Path(worktree) / ST.PAGES_REL / man["pages"][0]["path"]
-        page.write_text(page.read_text(encoding="utf-8") + "\n<!-- B55 drill A -->\n", encoding="utf-8")
+        page.write_text(page.read_text(encoding="utf-8") + "\n<!-- B55 drill %s -->\n" % variant, encoding="utf-8")
     elif variant == "B":
         init = mdir / "__init__.py"
         init.write_text("import sys as _drill_sys\nif 'uvicorn' in _drill_sys.modules:\n"
@@ -303,13 +305,15 @@ def make_variant(worktree, variant, at_least=None):
 
 # ── 4. 跑 ps1 ────────────────────────────────────────────────────────────────
 
-def run_ps1(root, pkg, timeout=20 * 60):
+def run_ps1(root, pkg, timeout=20 * 60, args=None):
+    """args：取代預設的 `-PackagePath <pkg> -Yes`（例：回滾模式 `-Rollback -ModuleKey <key> -Yes`）。"""
     ps1 = Path(root) / "backend" / "tools" / "apply_module_update.ps1"
     env = dict(os.environ)
     env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")    # ps1 的 `python` 用專案 venv
     t0 = time.time()
     r = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ps1),
-                        "-PackagePath", str(pkg), "-Yes"], capture_output=True, text=True, encoding="utf-8",
+                        *(args if args is not None else ["-PackagePath", str(pkg), "-Yes"])],
+                       capture_output=True, text=True, encoding="utf-8",
                        errors="replace", timeout=timeout, env=env)
     out = r.stdout + r.stderr
     m = RESULT_RE.findall(out)
@@ -399,6 +403,12 @@ def main(argv=None):
             rec["verify"] = verify
             after = tree_hashes(root)
             rec.update(version=ver, pkg=str(pkg), unchanged=(after == before), healthy_after=ping(a.port))
+            if v == "D":
+                # B55F-M1：手動回滾模式（預設只回模組程式、資料庫保留）⇒ 回到套用前
+                rb = run_ps1(root, None, args=["-Rollback", "-ModuleKey", KEY, "-Yes"])
+                rec["rollback"] = {k: rb.get(k) for k in ("returncode", "seconds", "result", "result_json", "tail")}
+                rec["rollback"].update(back_to_before=(tree_hashes(root) == before),
+                                       installed_after=installed_version(root), healthy_after=ping(a.port))
             report["drills"][v] = rec
     finally:
         report["stop"] = stop(root, a.port)

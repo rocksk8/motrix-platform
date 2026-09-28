@@ -57,7 +57,7 @@ def wt(tmp_path):
     return tmp_path
 
 
-@pytest.mark.parametrize("variant", ["A", "B", "C"])
+@pytest.mark.parametrize("variant", ["A", "B", "C", "D"])
 def test_variants_bump_version_and_stay_valid_python(wt, variant):
     import json
     before = json.loads((wt / "backend" / "modules" / DR.KEY / "module.json").read_text(encoding="utf-8"))["version"]
