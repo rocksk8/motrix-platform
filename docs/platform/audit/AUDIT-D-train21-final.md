@@ -82,3 +82,5 @@
 **建議（非必修）**
 - **T21P2-S1**：第 5 步的區塊沒有設 `PYTHONDONTWRITEBYTECODE=1`；`apply_update.ps1` 的閘門預檢會從 `$PKG` 執行 CLI（子行程繼承這個 PowerShell 的環境）⇒ 套用時仍會在包裡寫 pyc，並隨 robocopy 進正式機。已判定功能無害（§4 T21F-S1），可在第 5 步區塊加同一行求一致
 - **T21P2-S2**：第 7 步可加一項「`/openapi.json`、`/docs` 回 404」（A46 在本包，演練已驗；第十九班起的同一建議）
+
+- 〔補 2026-09-29〕T21P2-S1 已補（第 5 步區塊加 `PYTHONDONTWRITEBYTECODE=1`）；T21P2-S2 不採納——A 理由：path2 已實測 404，正式機 PS 5.1 對自簽 https 量狀態碼容易誤判。D 同意；第 2 段已交主持轉正式機
