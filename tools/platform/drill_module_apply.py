@@ -334,10 +334,24 @@ def main(argv=None):
         report["stop"] = stop(root, a.port)
         for wt in wts:
             _git("worktree", "remove", "--force", str(wt), check=False)
+        # 先把報告寫到演練目錄**外**（刪除失敗會刪掉一部分證據：〈遞迴刪除失敗≠沒刪〉），再清
+        out = base.parent / (base.name + ".report.json")
+        out.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(json.dumps(report, ensure_ascii=True))
         if not a.keep:
-            _rmtree(base)
-    print(json.dumps(report, ensure_ascii=True))
+            report["cleanup"] = cleanup(base)
     return 0
+
+
+def cleanup(base, tries=10):
+    """服務剛停時 server.log 可能還被正在結束的行程占著 ⇒ 等一下再試；最後還刪不掉就回報、不丟例外。"""
+    for _i in range(tries):
+        try:
+            _rmtree(base)
+            return "removed"
+        except OSError:
+            time.sleep(3)
+    return "left: %s" % base
 
 
 if __name__ == "__main__":
