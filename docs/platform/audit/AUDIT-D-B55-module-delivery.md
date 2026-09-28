@@ -231,3 +231,34 @@
 - **S3-O1**：偏離 U-M4（不搬到 backend/tools）：理由成立。讀碼確認根目錄 `tools/` 隨完整包出貨（`product_select.REQUIRED_PKG_FILES` 要求 `tools/platform/upgrade.py`），正式機本來就有這一份。設計表已用〔更正〕保留原句
 - **S3-O2**：DB5-S1 關閉條件成立：狀態檔改在 `mount_modules()` 之後、只在 pytest 之下不寫，並多記 `schedulers_disabled`（突變 S4 紅）。會 `import main` 的非測試程式有 `tools/platform/startup_writes.py`（在拋棄式複本裡跑，不影響安裝目錄）與建包腳本（開發機），都不會寫到正式機的狀態檔
 - ✅ DB5-S1 關閉（87a472b1）
+
+## 9. 複核 S3-M1／S3-M2：wip/b-module-delivery-2 18e66f7b（D，2026-09-28）
+
+> 拋棄式 worktree 跑探針 8 題（不提交，跑完刪、暫存已清）。
+
+- ✅ S3-M1 關閉（18e66f7b）
+- ✅ S3-M2 關閉（18e66f7b）
+- **新必修 1（S3R-M1）。**
+
+| 探針 | 情境 | 結果 |
+|---|---|---|
+| P1 | 第一次套用在 copytree 失敗 | `apply_failed_restored`，安裝目錄逐位元組等於套用前，失敗的備份已刪 |
+| P2 | v2 之後 v3 中途失敗 | 停在 v2（逐位元組），不再退到 v1 |
+| P3 | 套用後裝了完整包（lock／baseline／commit 都變） | `state_changed` 拒絕，一個檔都不動 |
+| P3b | 完整包只換了 deployed_commit | `base_changed` 拒絕 |
+| P4 | 套 A→套 B→回滾 A | `state_changed` 拒絕；先回滾 B 再回滾 A 可以 |
+| P5 | 行程在套用中途被砍（KeyboardInterrupt，不被 `except Exception` 接住） | 留下 in_progress；rollback 回到套用前（逐位元組） |
+| P6 | 被砍 → 回滾 → 重新套用 | 回滾過的那份不再列出 |
+| **P7** | 被砍（in_progress）→ **沒回滾就重新套用成功** → 套 B → `rollback --backup <舊 in_progress>` | **照做**：lock 回到最初（yy 條目不見），而 yy 的檔還在 |
+
+**S3R-M1（必修）　舊的 in_progress 備份會繞過 S3-M2 的檢查**
+
+- `rollback` 對 `status == "in_progress"` 的紀錄完全不比對現值（:640 起；因為它沒有 `state_after`），而且 `backups()` 會一直列出它
+- 只要中斷之後有人沒回滾就重新套用（preflight 不擋：模組資料夾不在、lock 還是舊條目 ⇒ 雜湊不同、版號較高），這份 in_progress 就一直留著；之後指定它回滾，就是 S3-M2 原本要擋的整檔覆蓋（P7：lock 被還原成最初，yy 的條目消失而檔案還在）
+- 修法（擇一，建議兩個都做）：
+  - preflight：這個模組有 in_progress 備份 ⇒ 拒絕套用（新 code，例如 `interrupted_apply_pending`），訊息寫「先 rollback 那一次」
+  - rollback：in_progress 只有在它是這個模組**最新的**一份備份、而且 `deployed_commit == prod_base_commit` 時才准
+- 題：P7 情境 ⇒ 重新套用被拒，或指定舊 in_progress 回滾被拒；兩者都要做到安裝目錄一個檔都不動
+
+**建議**
+- **S3R-S1**：`rolled_back` 的備份不在 `backups()` 裡，而 `_prune_backups` 只清 `backups()` 列出的 ⇒ 回滾過的備份資料夾永遠不會被清。清理時一併算進去（保留最近 N 份，不分狀態）
