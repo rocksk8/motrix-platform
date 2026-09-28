@@ -5,7 +5,7 @@
   python company_setup_cli.py preflight --db <庫> --root <安裝目錄>     套用前預檢：在記憶體副本上模擬 backfill＋status（不寫庫）
   python company_setup_cli.py status    --db <庫> --root <安裝目錄>     套用後檢查（不寫庫）
   python company_setup_cli.py grace     --root <安裝目錄> --hours 72 --reason "<原因>"   暫時放行（≤72 小時）
-  python company_setup_cli.py sign --private-key <私鑰檔> --install <安裝識別雜湊> --tax <統編> [--days 365] --out <檔>
+  python company_setup_cli.py sign --private-key <私鑰檔> --install <安裝識別雜湊> --tax <統編> [--days 30] --out <檔>
                                                       **開發機用**：簽開發者正式機的確認檔（§6.2）。私鑰只以路徑傳入、
                                                       不印不存；簽完以內嵌的交付公鑰自驗，驗不過就不寫檔
 
@@ -161,7 +161,7 @@ def main(argv=None):
     s.add_argument("--private-key", required=True)
     s.add_argument("--install", required=True)
     s.add_argument("--tax", required=True)
-    s.add_argument("--days", type=int, default=365)
+    s.add_argument("--days", type=int, default=30)          # 使用者授權：有效期 30 天（主持 2026-09-29）
     s.add_argument("--out", required=True)
     a = p.parse_args(argv)
     try:

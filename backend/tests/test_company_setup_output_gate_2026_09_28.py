@@ -396,7 +396,10 @@ def test_signed_file_expiring_soon_alerts(client, monkeypatch, no_mail, gate_fil
         write(200)
         cs.observe_expiry(conn)                                                      # 反向控制：還早 ⇒ 不告警
         assert "signed_file_expiring" not in _alert_codes(conn)
-        write(10)
+        write(8)                                                                      # 反向控制：8 天 ⇒ 門檻（7 天）外
+        cs.observe_expiry(conn)
+        assert "signed_file_expiring" not in _alert_codes(conn)
+        write(5)
         cs.observe_expiry(conn)
         assert _alert_codes(conn).count("signed_file_expiring") == 1
     finally:
