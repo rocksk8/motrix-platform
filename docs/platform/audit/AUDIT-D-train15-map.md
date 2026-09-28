@@ -76,3 +76,45 @@
 
 - **MAP-O1**：`google_basemap()` 目前寫死回 False；②(b) 上線時「只改這一支」。屆時 SST-M1 的修法（存檔範圍依底圖決定）也要跟著走同一支，不要另寫判斷
 - **MAP-O2**：`has_google_coord` 刻意不受範圍影響（用來計數被擋下的）。日後不可以把它拿去當座標來源，建議在 docstring 補一句「只回真假、不回座標」的限制
+
+## 5. 複核（D，2026-09-28）
+
+### SST-M1：wip/a-google-basemap 33386b56＋3587fe41
+
+- 修正內容：
+  - 存檔時的自動定位：非 Google 底圖 ⇒ 在 `without_google_content()` 內；Google 來源的座標在任何底圖都不寫進 profile
+  - 記 `coord_source`／`coord_precision`，由後端推導：新填或改過＝manual；原樣送回＝沿用上次的來源，不信前端
+  - `_locate_locations` 只把 manual 當人工座標；免費來源照它的來源回報；coord_source=google 不當座標
+  - 沒有來源的既有資料＝手填：這是使用者裁示，依據是正式機 geocode_usage 為 0
+- 探針（拋棄式樹 3587fe41；Google 階回 (24.2, 120.5)，有金鑰）：
+  - 存檔後 lat／lon／coord_source 全是 None ⇒ Google 座標沒有寫進去
+  - coord_source=google 的據點在 OSM 範圍內 ⇒ 不畫
+- 題 test_map_sst62 13 過
+
+### GEO-M1：wip/b-geo-warm-fix d973524c（33d39734 → ea5fbf25 → d973524c）
+
+- 修正內容：
+  - 新增 `_MISS_CACHE_FREE`（scope=free）；範圍內跳過 Google 時記 free，而不是什麼都不記
+  - 預熱的查無判定改看本輪 `_LAST_STAGE_ERRORS`（免費階與 Google 階都沒有 err，而且有結果），不再依賴負快取
+- 驗法：拋棄式合併樹（origin/platform dee64c54＋A 3587fe41＋B d973524c；geo.py 用主持的 `geo.py.resolved`）
+  - resolved 裡沒有 A 的 `elif skipped_google` 那一支（讀碼確認，已換成 scope=free）
+  - 定位與地圖九個題檔 161 過（含第一輪抓紅的兩題）
+- 突變（合併樹）：
+  - G1「查無判定改回依賴負快取」⇒ 紅
+  - G2「免費階有錯也算查無」⇒ 4 紅
+
+### 🔴 列車注意（T15-C1）：`D:\MOTRIX-DRILLS\handoff\b-geo-merge\geo.py.resolved` 過期，不可以直接用
+
+- 它做在 A 的 33386b56 **之前**：整個檔沒有 `coord_source`（A 的 3587fe41 版 geo.py 有 3 處）
+- 直接用它 ⇒ SST-M1 讀取端（`_locate_locations` 只把 manual 當人工座標）被靜默撤回
+- 在合併樹上實測，A 的兩題紅：
+  - `test_auto_filled_coords_resent_unchanged_keep_their_source`
+  - `test_legacy_coords_without_source_are_treated_as_manual`
+- 把 A 在 geo.py 的差異（`git diff b870d8d1 3587fe41 -- backend/helpers/geo.py`）套在 resolved 之上 ⇒ 乾淨套上，161 題全過
+- **列車用的 geo.py 必須同時有 coord_source（A）與 scope=free（B）**；合回後以上面那九個題檔確認
+- 另外，本機 git rerere 記著 D 第一輪的解法（「Resolved using previous resolution」）。列車合 geo.py 時要看清楚，不要讓 rerere 自動套上
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ SST-M1 關閉（3587fe41）——存檔自動定位受底圖規則約束、Google 來源不寫進 profile、只有 manual 當人工座標
+- ✅ GEO-M1 關閉（d973524c）——預熱查無判定看本輪各階錯誤、不依賴負快取；範圍內記 scope=free 負快取
