@@ -40,10 +40,12 @@ def _mem_copy(db_path):
         src.close()
 
 
-def _result(st):
+def _result(st, root=None):
     from helpers import company_setup as cs
     allowed = cs.allows(st)
+    # CGI-S1：印出安裝識別雜湊——開發者正式機被拒（developer_identity_unsigned／install_mismatch）時，開發者要照這個值簽確認檔
     return {"configured": bool(st.get("configured")), "reason": st.get("reason"), "via": st.get("via"),
+            "install": cs.install_hash(root),
             "developer": bool(st.get("developer")), "missing": st.get("missing") or [],
             "grace": bool(st.get("grace")), "grace_until": (st.get("grace") or {}).get("until"),
             "allowed": allowed}, (EXIT_OK if allowed else EXIT_NOT_CONFIGURED)
@@ -63,7 +65,7 @@ def cmd_check(a, simulate_backfill):
     try:
         if simulate_backfill:
             cs.backfill_once(conn, a.root)
-        out, code = _result(cs.status(conn, a.root))
+        out, code = _result(cs.status(conn, a.root), a.root)
         return _emit(out, code)
     finally:
         conn.close()

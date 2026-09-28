@@ -63,7 +63,7 @@ $ErrorActionPreference = "Stop"
 # AH-M2（2026-09-28 A 稽核）：這支腳本的版本。開頭與部署包裡那一份比對，不同就拒絕——
 #   手動執行時跑到安裝目錄裡的**舊**腳本（沒有先把包裡的 backend\tools 複製過來）會讓整套日常更新規則都不生效。
 #   改這支腳本的行為時要改這個值。用常數不用雜湊：演練副本會改路徑與 port，雜湊必然不同。
-$ApplyScriptVersion = "2026-09-28h"
+$ApplyScriptVersion = "2026-09-28i"
 # robocopy 一律 /R:3 /W:5（2026-09-28）：預設 /R:1000000 /W:30 ⇒ 被占用的檔會讓套用卡住數天而不是失敗，
 #   複製失敗的出口（AH-S7 自動寫回快照）永遠走不到。
 
@@ -741,7 +741,7 @@ if (Test-Path $prodDbForGate) {
     Write-Host $gatePre.Text
     if (-not $gatePre.Allowed) {
         Fail ("套用後本公司資料會是「未設定」或無法判定（原因：$($gatePre.Reason)），新版上線即全公司停止使用，中止（正式機尚未被觸碰）。" +
-              "處置見 COMPANY-SETUP-GATE §6.2／§6.3：developer_identity_unsigned ⇒ 先放開發者簽章確認檔；fields_invalid ⇒ 先在設定頁補齊欄位；" +
+              "處置見 COMPANY-SETUP-GATE §6.2／§6.3：developer_identity_unsigned／install_mismatch ⇒ 把上方 JSON 的 install（安裝識別雜湊）交給開發者簽確認檔；fields_invalid ⇒ 先在設定頁補齊欄位；" +
               "其他 ⇒ 聯絡開發者。") "refused_company_setup"
     }
     Ok "  本公司資料設定預檢通過（$($gatePre.Reason)）。"
@@ -765,7 +765,7 @@ Info "  建立程式碼回滾快照：$rollbackDir"
 #    ⇒ 與「還原到一半」**不可以共用一個 status**：前者重跑就好，後者要叫人。
 # 2026-09-28：/XD 補上資料目錄（export_archive＝勞報個資、_demo_*＝demo 資料、uploads／報價單PDF 等）——
 #   先前每次套用都把個資複製進 rollback_snapshots。回滾不需要它們：套用本來就不碰資料目錄。
-robocopy $BackendDir (Join-Path $rollbackDir "backend") /E /R:3 /W:5 /XD db_backups rollback_snapshots logs uploads 報價單PDF export_archive backup_alerts _demo_* __pycache__ certs /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json server.log license.key autostart.bat .apply.lock | Out-Null
+robocopy $BackendDir (Join-Path $rollbackDir "backend") /E /R:3 /W:5 /XD db_backups rollback_snapshots logs uploads 報價單PDF export_archive backup_alerts _demo_* __pycache__ certs /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json server.log license.key autostart.bat .apply.lock .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "建立程式碼回滾快照失敗（backend，exit code $LASTEXITCODE）——快照不完整就繼續套用的話，出事時沒有東西可以回滾。" "snapshot_failed_backend" }
 robocopy $FrontendDir (Join-Path $rollbackDir "frontend") /E /R:3 /W:5 | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "建立程式碼回滾快照失敗（frontend，exit code $LASTEXITCODE）——快照不完整就繼續套用的話，出事時沒有東西可以回滾。" "snapshot_failed_frontend" }
@@ -849,13 +849,13 @@ function Restore-ProgramAfterCopyFailure {
     Write-Host $clean.Text
     if ($clean.Exit -ne 0 -or ($clean.Text -notmatch "APPLY_SNAPCLEAN_OK")) { $ok = $false }
     foreach ($pair in @(@("backend", $BackendDir), @("frontend", $FrontendDir))) {
-        robocopy (Join-Path $rollbackDir $pair[0]) $pair[1] /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
+        robocopy (Join-Path $rollbackDir $pair[0]) $pair[1] /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt | Out-Null
         if ($LASTEXITCODE -ge 8) { Warn "  寫回快照失敗（$($pair[0])，exit $LASTEXITCODE）"; $ok = $false }
     }
     foreach ($d in $RootProgramDirs) {
         $snap = Join-Path $rollbackDir $d
         if (-not (Test-Path $snap)) { continue }
-        robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
+        robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt | Out-Null
         if ($LASTEXITCODE -ge 8) { Warn "  寫回快照失敗（$d，exit $LASTEXITCODE）"; $ok = $false }
     }
     $rd = Join-Path $rollbackDir "root_docs"
@@ -882,7 +882,7 @@ $script:ProdState = "applied_no_restore"
 #   包裡那份是出貨預設值；先前每次套用都被蓋掉（core/upgrade.py 的 PACKAGE_DEFAULT_CONFIG 同一條規則）。
 $rc1 = robocopy (Join-Path $PackagePath "backend") $BackendDir /E /R:3 /W:5 `
     /XD db_backups rollback_snapshots uploads logs 報價單PDF export_archive backup_alerts _demo_* `
-    /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json .deployed_files.json server.log autostart.bat
+    /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json .deployed_files.json server.log autostart.bat license.key .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt
 if ($LASTEXITCODE -ge 8) { Fail-AfterStop "robocopy backend/ 失敗（exit code $LASTEXITCODE）。" "copy_failed_backend" }
 
 $rc2 = robocopy (Join-Path $PackagePath "frontend") $FrontendDir /E /R:3 /W:5
@@ -1151,14 +1151,14 @@ if ($healthy -and -not $logErrors) {
     # ☠️ 先前失敗**不中止**，直接流進下面的健康檢查 —— 而半還原的 backend
     #    也可能回得出 `/api/ping` ⇒ 報 `restored`＝「已還原且健康」，
     #    **而磁碟上是還原到一半的殘骸。**
-    robocopy (Join-Path $rollbackDir "backend") $BackendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
+    robocopy (Join-Path $rollbackDir "backend") $BackendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt | Out-Null
     if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（backend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_backend" }
-    robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
+    robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt | Out-Null
     if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（frontend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_frontend" }
     foreach ($d in $RootProgramDirs) {
         $snap = Join-Path $rollbackDir $d
         if (-not (Test-Path $snap)) { continue }
-        robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
+        robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt | Out-Null
         if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（$d，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_root_dirs" }
     }
 

@@ -251,6 +251,7 @@
    "DEVELOPER_UNSIGNED": "const",
    "FIELDS_CHANGED": "const",
    "FIELDS_INVALID": "const",
+   "FILES_OVERRIDE": "const",
    "GRACE_MAX_HOURS": "const",
    "GRACE_SEEN_SETTING": "const",
    "INSTALL_MISMATCH": "const",

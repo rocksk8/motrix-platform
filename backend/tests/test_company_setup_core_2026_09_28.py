@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
+pytestmark = pytest.mark.company_gate   # 用真的判定（conftest 預設把一般題目視為已設定）
+
 from helpers import company_setup as cs
 
 WEIGHTS = (1, 2, 1, 2, 1, 2, 4, 1)
@@ -224,7 +226,7 @@ def test_backfill_existing_install_once(tmp_path):
 def test_backfill_empty_profile_never_confirms_later(tmp_path):
     """全新安裝：第一次啟動欄位是空的 ⇒ 記「做過」⇒ 之後管理員填了欄位也不會被自動確認（要按確認）。"""
     conn, root = _db(tmp_path, {}), _root(tmp_path)
-    assert cs.backfill_once(conn, root) == "skipped"
+    assert cs.backfill_once(conn, root) == "skipped_fields"
     cs._set(conn, "company_profile", GOOD)
     assert cs.backfill_once(conn, root) == "already_done"
     assert cs.status(conn, root)["reason"] == cs.NO_RECORD
@@ -232,12 +234,30 @@ def test_backfill_empty_profile_never_confirms_later(tmp_path):
 
 def test_backfill_developer_identity(tmp_path, devco):
     conn, root = _db(tmp_path, GOOD), _root(tmp_path)
-    assert cs.backfill_once(conn, root) == "skipped"                              # 沒有簽章檔 ⇒ 不補
+    assert cs.backfill_once(conn, root) == "waiting_signature"                    # 沒有簽章檔 ⇒ 不補
     (tmp_path / "x").mkdir()
     conn2, root2 = _db(tmp_path / "x", GOOD), _root(tmp_path, "r2")                # 另一個安裝：有簽章檔
     cs.ensure_install_id(root2)
     _write_sig(root2, devco)
     assert cs.backfill_once(conn2, root2) == "backfilled"
+
+
+def test_backfill_retries_after_the_signed_file_arrives(tmp_path, devco):
+    """CGI-M1（D 以 devco 五步重現）：開發者資料、簽章檔未到 ⇒ 先用暫時放行升級 ⇒ 之後簽章檔到位 ⇒ 下次啟動要補上確認。"""
+    conn, root = _db(tmp_path, GOOD), _root(tmp_path)
+    cs.ensure_install_id(root)
+    assert cs.backfill_once(conn, root) == "waiting_signature"                    # ① 第一次啟動：等簽章
+    now = datetime.now()
+    with open(cs._files(root)[2], "w", encoding="utf-8") as f:                    # ② 暫時放行撐著
+        json.dump({"created": now.isoformat(), "until": (now + timedelta(hours=72)).isoformat(),
+                   "reason": "等簽章", "install": cs.install_hash(root)}, f)
+    assert cs.status(conn, root)["grace"]["active"]
+    assert cs.backfill_once(conn, root) == "waiting_signature"                    # ③ 再啟動一次：仍等
+    _write_sig(root, devco)                                                        # ④ 簽章檔到位
+    assert cs.backfill_once(conn, root) == "backfilled"                           # ⑤ 下次啟動補上
+    st = cs.status(conn, root)
+    assert st["configured"] is True and st["via"] == "upgrade_backfill"
+    assert cs.backfill_once(conn, root) == "already_done"
 
 
 def test_backfill_never_raises(tmp_path, monkeypatch, caplog):

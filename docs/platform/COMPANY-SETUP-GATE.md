@@ -240,7 +240,8 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 - ⚠ 其他已上線客戶（目前沒有）：資料非開發者 ⇒ 同樣自動補；是開發者資料 ⇒ 不補（正是要擋的情境）。
 
 ### 6.2 開發者正式機：兩階段
-1. **第一階段（不動服務）**：隨下一個一般修補包（或單獨一支腳本）執行 `company_setup_cli.py ensure-install-id --root <安裝目錄>`，把安裝識別的 sha256 寫進正式機回報（`MOTRIX-交付\正式機回報`）。
+1. 〔CGI-S1：第一次升級前，CLI 要**從 staging（包內 `backend\tools`）執行**——安裝目錄裡還沒有這支工具；預檢被拒時 `::RESULT::` 上方的 JSON 帶 `install`（安裝識別雜湊），開發者照這個值簽〕
+   **第一階段（不動服務）**：隨下一個一般修補包（或單獨一支腳本）執行 `company_setup_cli.py ensure-install-id --root <安裝目錄>`，把安裝識別的 sha256 寫進正式機回報（`MOTRIX-交付\正式機回報`）。
 2. 開發者在自己的機器以交付金鑰簽 `company_confirmation.sig`（`identity_fp`＋`install`＋到期日），經交付資料夾送到正式機，放安裝根目錄。
 3. **第二階段（含閘門的版本）**：`apply_update.ps1` 套用。
 

@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.company_gate   # 用真的判定（conftest 預設把一般題目視為已設定）
+
 from helpers import company_setup as cs
 from tests.test_company_setup_core_2026_09_28 import GOOD, _db, _root
 
@@ -44,6 +46,7 @@ def test_cli_status_preflight_and_no_write(tmp_path):
     assert code == 0 and out["created"] is True
     code, out = run_cli("preflight", "--db", db, "--root", root)                  # 模擬 backfill ⇒ 會通過
     assert code == 0 and out["allowed"] is True and out["via"] == "upgrade_backfill"
+    assert out["install"] == cs.install_hash(root)                                # CGI-S1：印出安裝識別雜湊
     assert _sha(db) == before, "預檢不可以寫正式庫"
     code, out = run_cli("status", "--db", db, "--root", root)                     # 仍未寫 ⇒ status 仍未設定
     assert code == 3
@@ -227,3 +230,41 @@ def test_gate_files_survive_apply_plan_execute_and_cleanups(tmp_path):
     assert {rel: _sha(root / rel) for rel in GATE_FILES} == before
     for rel in GATE_FILES:
         assert _upgrade.classify(rel) == "config"
+
+
+# ── CGI-S3：程式碼快照／寫回（robocopy）一律排除安裝設定檔 ─────────────────────────
+
+def robocopy_statements(text):
+    """每一句 robocopy（含反引號續行），回 [(句子, /XF 清單)]。"""
+    lines = text.replace("\r\n", "\n").split("\n")
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        if "robocopy" in line and not line.lstrip().startswith("#"):
+            stmt = line
+            while stmt.rstrip().endswith("`") and i + 1 < len(lines):
+                i += 1
+                stmt = stmt.rstrip()[:-1] + " " + lines[i].strip()
+            m = re.search(r"/XF\s+(.*?)(?:\||$)", stmt)
+            out.append((stmt, set(m.group(1).split()) if m else set()))
+        i += 1
+    return out
+
+
+def backend_config_basenames():
+    from core import upgrade as U
+    return {rel.split("/")[-1] for rel in U.CONFIG_FILES if rel.startswith("backend/") and rel.count("/") == 1}
+
+
+@pytest.mark.parametrize("script", ["apply_update.ps1", "rollback_update.ps1"])
+def test_every_robocopy_excludes_install_config_files(script):
+    text = (BACKEND / "tools" / script).read_text(encoding="utf-8-sig")
+    stmts = robocopy_statements(text)
+    assert stmts, "找不到 robocopy（寫法變了 ⇒ 守門失效）"
+    need = backend_config_basenames()
+    assert {".install_identity", "company_confirmation.sig", "company_setup_grace.json"} <= need   # 正對照：清單真的讀到了
+    bad = [(s[:120], sorted(need - xf)) for s, xf in stmts if xf and not need <= xf]
+    assert not bad, bad
+    # 反向控制：拿掉其中一個 ⇒ 被抓到
+    planted = text.replace(" company_setup_grace.json", "", 1)
+    assert any(not need <= xf for _s, xf in robocopy_statements(planted) if xf)

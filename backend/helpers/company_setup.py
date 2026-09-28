@@ -4,7 +4,7 @@
 [單位] helper:company_setup    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] ALERT_DAY_SETTING, BACKFILL_DONE_SETTING, CONFIGURED, CONFIRMATION_SETTING, ConfirmRefused, DELIVERY_PUBKEY_PEM,
     DEVELOPER_IDENTITY_FP, DEVELOPER_UNSIGNED, FIELDS_CHANGED, FIELDS_INVALID, GRACE_MAX_HOURS, GRACE_SEEN_SETTING,
-    INSTALL_MISMATCH, NO_RECORD, PUBKEYS, PURPOSE, SIGNED_EXPIRED, SIGN_PREFIX, STATUS_ERROR, alert, allows,
+    FILES_OVERRIDE, INSTALL_MISMATCH, NO_RECORD, PUBKEYS, PURPOSE, SIGNED_EXPIRED, SIGN_PREFIX, STATUS_ERROR, alert, allows,
     backfill_once, confirm, ensure_install_id, fields_hash, grace_state, identity_fp, install_hash,
     is_developer_identity, observe, required_problems, sign_confirmation, signed_file_state, startup_install_check,
     status, ubn_valid
@@ -69,9 +69,15 @@ CONFIGURED = "configured"
 
 # ── 路徑（可指定安裝根目錄：CLI 預檢讀的是另一個目錄） ─────────────────────────
 
+#: 執行中這一份安裝的三個檔改放別處（只給測試：xdist 每個 worker 各一份，不碰 repo 的 backend/）。None＝core.paths。
+FILES_OVERRIDE = None
+
+
 def _files(root=None):
     """(識別檔, 簽章檔, 放行檔)。root＝安裝根目錄；None ⇒ 執行中的這一份。"""
     if root is None:
+        if FILES_OVERRIDE:
+            return tuple(FILES_OVERRIDE)
         return _paths.INSTALL_IDENTITY_FILE, _paths.COMPANY_CONFIRMATION_FILE, _paths.COMPANY_SETUP_GRACE_FILE
     b = os.path.join(root, "backend")
     return (os.path.join(b, os.path.basename(_paths.INSTALL_IDENTITY_FILE)),
@@ -350,18 +356,26 @@ def backfill_once(conn, root=None) -> str:
     try:
         if _get(conn, BACKFILL_DONE_SETTING):
             return "already_done"
-        result = "skipped"
+        result = "had_record"
         if not isinstance(_get(conn, CONFIRMATION_SETTING), dict):
             profile = _get(conn, "company_profile", {}) or {}
-            if not required_problems(profile) and (
-                    not is_developer_identity(profile) or signed_file_state(profile, root) == "valid"):
+            if required_problems(profile):
+                result = "skipped_fields"          # 欄位不合格（含全新安裝）：之後由最高管理員在設定頁按確認
+            elif is_developer_identity(profile) and signed_file_state(profile, root) != "valid":
+                result = "waiting_signature"       # 開發者資料、簽章檔未到：先用暫時放行升級的那條路
+            else:
                 _created, ih = ensure_install_id(root)
-                if ih:
-                    _set(conn, CONFIRMATION_SETTING, {
-                        "confirmed_by": "", "confirmed_at": datetime.now().isoformat(timespec="seconds"),
-                        "fields_hash": fields_hash(profile), "install": ih, "via": "upgrade_backfill"})
-                    result = "backfilled"
-        _set(conn, BACKFILL_DONE_SETTING, {"at": datetime.now().isoformat(timespec="seconds"), "result": result})
+                if not ih:
+                    return "error"                 # 識別檔寫不進去：不記做過，下次啟動再試
+                _set(conn, CONFIRMATION_SETTING, {
+                    "confirmed_by": "", "confirmed_at": datetime.now().isoformat(timespec="seconds"),
+                    "fields_hash": fields_hash(profile), "install": ih, "via": "upgrade_backfill"})
+                result = "backfilled"
+        # 🔴 CGI-M1（D 稽核）：waiting_signature **不記做過** ⇒ 簽章檔到位後下次啟動再試一次（否則 status 永遠停在
+        #    no_record、只能一再重建放行）。skipped_fields **要記**：全新安裝（欄位空）之後由最高管理員填好欄位時，
+        #    不可以被下一次啟動自動確認——「有人決定過」必須是設定頁的確認。
+        if result != "waiting_signature":
+            _set(conn, BACKFILL_DONE_SETTING, {"at": datetime.now().isoformat(timespec="seconds"), "result": result})
         return result
     except Exception:  # noqa: BLE001
         logger.exception("company_setup: backfill 失敗（不寫確認紀錄，交給預檢與暫時放行）")
@@ -443,3 +457,4 @@ def alert(conn, code: str, text: str) -> bool:
     except Exception:  # noqa: BLE001
         logger.exception("company_setup: 告警信寄送失敗")
     return True
+
