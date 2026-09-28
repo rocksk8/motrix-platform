@@ -149,6 +149,11 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-28 17:57 主持：**正式機已更新到 3e061d6f**（第十七班：Google 底圖無標點＋取點慢；經遠端控制由正式機 Claude 套用）。
+  - 事故證據（主持在使用者瀏覽器只讀查正式機頁）：points 201、_gmMarkers 202、DOM gmp-advanced-marker 0、Alpine.raw(c._map)!==c._map；把 2 個 marker.map 改設 raw ⇒ 0→2。取點慢＝每地址一條 DB 連線（冷快取 6.1～6.9s）。修：A gm-raw（__v_skip＋Alpine.raw、gmp-click、假 google.maps 身分檢查、geo.cache_read_session）；D 必修 0。
+  - 建包 5631＋e2e 545 過；549 檔；package.sha256 SHA256＝0F52F5CE…A475；演練（apply-run-t16，正式機條件，裝在 54a2d6b6）success 3 秒；D 最終判定可上（wip/d-audit-train16 1b846522）。
+  - 正式機（`MOTRIX-交付\正式機回報\20260928_175142_3e061d6f_成功\`）：success、健檢第 1 次 4 秒、刪 0 新增 0。上線驗證（使用者瀏覽器只讀）：Alpine.raw(c._map)===c._map、25 群＋2 據點＝27 個 gmp-advanced-marker 全部有尺寸、群內合計 200 點；冷取點 2960ms。更正：第一次查 DOM 為 0 是分頁在背景（visibilityState=hidden）繪製延後，不是修正無效。
+  - 同段期間開工：B55 單一模組更新包（設計過審，S1、S2 已推）、E 線地圖附近旅宿（hichan-58；設計過審，實作中）。
 - 2026-09-28 17:14 A（列車長）：**第十七班合回**——gm-raw（正式機 Google 底圖標點全部消失：Alpine 讀回 Proxy 真 Google 不認 map ⇒ Google 物件標 __v_skip＋Alpine.raw、點擊改 gmp-click；取點延遲：每個地址各開一次連線 ⇒ geo.cache_read_session 整次共用，400 地址 get_db 404→5）。自 origin ee383527 cherry-pick A fdb3cee0／b637704f＋D 審 4 筆（已合回的 2 筆以 --cherry-pick 排除），無衝突；CORE 1.64（core_bump 確認）、地圖 28i；D 的 B55 設計審宣告必修 DB-M1／DB-M2 ⇒ 同班登記 mustfix_open.json（owner B、修正中）；產生檔 740c97bb。modtest --train：差異題 3182＋2143 過、tests/platform 1591 過（是否最新三題有跑）；core-only RC ok。不跑全量（建包會跑）。建包、演練、發布、正式機套用由主持接。
   - **更正**（保留原列）：第十六班那一列「下一輪待辦 ①BASELINE c006a2a0→822286ed」——本班已改為 **54a2d6b6**（b637704f，主持接受；原裁示前提是緊急包只帶 B54，本班因地圖 28g 已隨 54a2d6b6 出貨、新增 28i 需要正確基準）。
   - **下一輪待辦**（本班）：GM-S1 Leaflet 版的地圖物件也標 raw（另開包，附 OSM e2e 回歸）；GM-S2 補題「cache_read_session 範圍結束後連線已關、範圍外使用 ⇒ closed database」。
