@@ -1,5 +1,5 @@
 {
- "core_version": "1.62",
+ "core_version": "1.63",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -461,6 +461,9 @@
    "geocode": "def(address)",
    "geocode_miss_count": "def()",
    "geocode_missed_recently": "def(address)",
+   "google_basemap": "def()",
+   "google_content_blocked": "def()",
+   "has_google_coord": "def(address)",
    "haversine_km": "def(a, b)",
    "locate": "def(address, manual_coord=…)",
    "locate_cached": "def(address, manual_coord=…)",
@@ -480,7 +483,8 @@
    "tiles_blocked": "def()",
    "usage_this_period": "def(source=…)",
    "warm_geocode_cache": "def()",
-   "warm_status": "def()"
+   "warm_status": "def()",
+   "without_google_content": "def()"
   },
   "helper:google_calendar": {
    "create_test_event": "def()",

@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.63 — 2026-09-28（A 暫用，列車取號；wip/a-google-basemap：Google SST §6.2）
+- L1（新增）：`helpers.geo.without_google_content()`（contextvar 範圍：cached_only／locate_cached／_stage_allowed 跳過 Google 階與其快取，範圍內不記負快取）、`geo.google_content_blocked()`、`geo.google_basemap()`（地圖底圖是否為 Google；②(b) 前一律 False，切換時只改這一支）、`geo.has_google_coord(address)`
+- L1 行為：`/api/map/points` 底圖非 Google ⇒ 點、據點、距離只用免費來源；只有 Google 座標的不畫，回 `googleOnlyHidden` 與 `basemap`；`locationsUnlocated[].googleOnly`。依據 Google Maps Platform SST §6.2 逐字「Customer must not use Google Maps Content from the Geocoding API in conjunction with a non-Google map」
+- 頁面：`map.html` 說明未顯示的筆數與原因
+
 ## 1.62 — 2026-09-28（主持暫用，列車取號；wip/a-storage-settings：D 稽核 SL-M1）〔core_bump：暫用 1.58 → 1.62〕
 - L1（新增，D 稽核 SL-M1）：`helpers.storage_locations.Unreadable`——讀不到設定（庫被鎖、損毀）≠ 沒設定：resolve 回 ""（source="unknown"）、不退回自動判斷、不快取；`configured()` 丟它，設定頁 API 回 503（不顯示空值，避免按儲存把真正的設定蓋掉）
 - 頁面（第十四班列車）：`storage-settings.html` 的分頁圖示改讀 `/api/system/branding/favicon`（H10 品牌設定之後才新增的頁面；test_no_our_company_literals 抓到）
