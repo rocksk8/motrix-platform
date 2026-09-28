@@ -91,3 +91,37 @@
 - 第 3 步刪雲端確認檔資料夾，被正式機 Claude Code 的安全檢查拒絕（不可逆的本機刪除）⇒ 正式機照指示停下，**未套用**，0af16ad1 不變 ✔（停下是對的：不可以為了繼續而繞過安全檢查）
 - A 裁示：第 3 步延後，留給**使用者手動刪**，任何 Claude 都不代刪；正式機從第 4 步繼續。D 同意：確認檔可公開驗證、只綁這一個安裝識別，暫留雲端不構成風險；SG-S1（用完刪除）改由使用者執行
 - 下一班：COMPANY-SETUP-GATE §6.7(c) 與指示範本把「刪雲端檔」改寫成「請使用者手動刪」，並在回報摘要留一欄「使用者是否已刪」
+
+## 9. 上線後查核：正式機 29e435df 成功（`正式機回報\20260929_042835_29e435df_成功\`）（D，2026-09-29）
+
+- **判定：上線成功，查核通過。** 建議 1（啟動時間）、待辦 2（使用者）
+
+| 項目 | 回報內容 | 對照 |
+|---|---|---|
+| `::RESULT::` | `v=2 status=success rolled_back=applied service=up exit=0` | result.json 同值；script_version 2026-09-28k、commit 29e435df ✔ |
+| 刪除計畫 | `APPLY_PLAN_OK delete=0 added=4`（基準 0af16ad1） | ✔ |
+| 本公司閘門 | 套用前預檢 configured、`::NOTE:: company_bank=ok`、套用後檢查 configured；status configured／upgrade_backfill | ✔（E4S3-S1 的匯款欄位在正式機齊全，與 §13 的回退鏈結論一致） |
+| 開關 | GEO／LODGING_FETCH／TENDER_RADAR 三行都在本次啟動段；「開關沒有生效」0 行 | ✔（A49 修正在正式機生效，T18F-O2 誤報消失） |
+| API 文件 | `/openapi.json`、`/docs` 404（server.log 有兩筆請求） | ✔（A46） |
+| 背景定位首輪 | 04:34:07 結束：processed 120、succeeded 112、misses 8、failures 0，停止原因 daily_limit；04:36:21 ping 仍正常 | ✔（補上 T21F-O2 演練沒驗到的「首輪真的有跑」） |
+| 模組 | 11 個模組已載入，含 lodging 1.1.1、tender_radar 1.3.4 | ✔ |
+
+### 建議 T21L-S1：啟動時間多了約 11 秒，原因未定，下一班加分段計時
+
+- 正式機 server.log：`CORS allow_origins`（04:28:47.774）→ `MOTRIX_GEO=1`（04:28:58.932）＝ **11.2 秒**；健檢因此到第 4 次（14 秒）才過
+- 對照：
+  - 正式機前三次升級，同一段都約 **0.67 秒**（3e061d6f 17:51:51.996→52.664、f04a245a 21:04:57.255→57.934、0af16ad1 23:29:36.539→37.225）
+  - 同一版（29e435df）在演練機只有 **0.07 秒**（t21 path1、path2）
+  - ⇒ 是這一版才出現、而且和正式機的資料或環境有關
+- 這一段依序是：`init_db`、`init_db(demo)`、完整性檢查、`_startup_company_setup`（**本版新增**：安裝識別檢查＋首次 backfill 寫確認紀錄）、`init_default_admin`、`init_demo_account`、`flag_weak_passwords`、`init_unlock_passwords`、`_cleanup_sessions`、排程註冊（A48 之後只排 Timer）。0af16ad1→29e435df 的啟動路徑上，程式只改了 `main.py` 與新增 `company_setup.py`（db.py、startup.py、auth.py 都沒動，也沒有新 migration）
+- 僅憑 log 定不出是哪一步；而且這是升級後**第一次**開機（backfill 首次寫入可能觸發累積 WAL 的 checkpoint 等一次性成本）
+- 風險：健檢上限約 40 秒，目前仍有餘裕；但第十五班 8b04d99d 就是「啟動太慢 ⇒ 好的包被自動回滾」。所以要在變成問題之前查清楚
+- 建議：
+  1. 下一班在 `main.py` 啟動路徑的每個步驟前後印一行耗時（INFO，只在啟動時一次），下次重啟就知道是哪一步
+  2. 下一次自然重啟（或下一次套用）時看這一段是否仍約 11 秒：回到 0.7 秒 ⇒ 一次性成本；仍 11 秒 ⇒ 依分段計時追
+  3. 不要為了量這個去重啟正式機（重啟是重要操作，要先得到使用者同意）
+
+### 待辦（使用者）
+
+1. 雲端 `MOTRIX-交付\company-confirmation\20260929_0421_9997d33f` 待使用者手動刪除（§8）
+2. 使用者登入確認：不會被導到「公司資料設定」、沒有「本公司資料尚未確認」橫幅、報價單 PDF 能開
