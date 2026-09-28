@@ -556,6 +556,27 @@
    "api_prefixes": [
     "/api/daily-tasks"
    ]
+  },
+  "M13": {
+   "key": "lodging",
+   "name": "附近旅宿",
+   "units": [
+    "mod:lodging/__init__",
+    "mod:lodging/api",
+    "mod:lodging/api_records",
+    "mod:lodging/attribution",
+    "mod:lodging/search",
+    "mod:lodging/source"
+   ],
+   "tables": [
+    "lodging_catalog",
+    "lodging_quotes",
+    "lodging_search_items",
+    "lodging_searches"
+   ],
+   "api_prefixes": [
+    "/api/lodging"
+   ]
   }
  },
  "retired": {
