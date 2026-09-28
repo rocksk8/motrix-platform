@@ -1,7 +1,4 @@
 {
  "_說明": "登記中的未關必修（tools/platform/mustfix_scan.py、PLAYBOOK §E-6）：稽核檔宣告了、還沒有關閉紀錄、而且有人在修的。必須與掃描結果完全相同；稽核者寫下「✅ <編號> 關閉（<commit>）」之後從這裡移除。上限 10 筆。",
- "open": {
-  "DB-M1": {"audit": "AUDIT-D-B55-module-delivery.md", "owner": "B", "fix": "wip/b-module-delivery", "state": "修正中（設計審，第十七班列車登記）", "since": "2026-09-28"},
-  "DB-M2": {"audit": "AUDIT-D-B55-module-delivery.md", "owner": "B", "fix": "wip/b-module-delivery", "state": "修正中（設計審，第十七班列車登記）", "since": "2026-09-28"}
- }
+ "open": {}
 }
