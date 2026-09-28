@@ -601,3 +601,22 @@ def test_lock_page_paths_must_stay_in_the_pages_dir(src, tmp_path, bad):
     assert any("頁面路徑不合格" in x for x in MU.check(pkg))
     root = _install(tmp_path, p)
     _refused(root, pkg, "頁面路徑不合格")
+
+
+
+# ── 稽核 D S5-S1（P9）／S5-S2 ──────────────────────────────────────────────────
+
+def test_unreadable_apply_record_counts_as_interrupted(src, tmp_path):
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)
+    rec = root / MU.BACKUP_DIR / "zz" / "20260928_190500"
+    rec.mkdir(parents=True)
+    (rec / "apply.json").write_text("{壞掉", encoding="utf-8")
+    assert MU.pending_interrupted_any(root) == [("zz", "20260928_190500")]
+    with pytest.raises(MU.UpdateError) as ei:
+        MU.apply(root, pkg)
+    assert ei.value.code == "interrupted_apply_pending"
+    assert "module_update" not in str(ei.value) and "回滾模式" in str(ei.value), "S5-S2：不叫人直接跑 module_update rollback"
+    with pytest.raises(MU.UpdateError) as ei2:
+        MU.rollback(root, "zz", "20260928_190500")
+    assert ei2.value.code == "backup_corrupt"

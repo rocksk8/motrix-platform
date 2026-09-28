@@ -1,5 +1,7 @@
 # 給正式機 Claude 的指示範本：套用單模組更新包
 
+> 🔴 **稽核 D S5-O1：§5 的回滾參數（`〈A 定稿後填〉`）填入之前，這份範本不可以交給正式機。**
+
 > B55 S7（設計 docs/platform/MODULE-UPDATE-DELIVERY.md §8 的全文版）。每次出單模組包時，主持把 `〈〉` 的欄位填好、
 > 連同包名交給使用者，由使用者貼給正式機的 Claude。**正式機目前沒有本機儀表板**（主持裁示 2026-09-28）⇒ 全程是正式機 Claude
 > 在使用者面前執行下列指令，套用那一步由使用者本人說「套用」之後才做。
@@ -58,6 +60,7 @@
 | status | 意思 | 下一步 |
 |---|---|---|
 | `success` | 已套用，新版本已載入，服務正常 | 做第 4 節寫回 |
+| `module_preflight_failed` 而訊息是「有中斷的套用（備份 …）」 | 上一次套用中途中斷（備份還在）；**所有模組**都不能套，完整包也不行 | 不要自己處理：回報使用者，照 §5 用套用腳本的回滾模式回到套用前（稽核 D S5-S2） |
 | `module_preflight_failed`、`duplicate_version`、`bad_args`、`package_invalid`、`apply_locked`、`apply_locked_stale` | 沒有套用（正式機沒被碰） | 原文回報；`apply_locked_stale` 要人確認後才可以刪鎖檔 |
 | `backup_failed`、`migration_dryrun_failed`、`module_load_dryrun_failed` | 套用前的檢查擋下，正式機沒被碰 | 原文回報（開發機要修模組） |
 | `module_copy_failed`（rolled_back＝restored） | 換檔中途失敗，已自動還原到套用前 | 原文回報 |
@@ -73,6 +76,7 @@
 
 `python <ROOT>\backend\tools\delivery.py writeback --root "<交付>" --name 〈包名〉 --install-root <ROOT> --script apply_module_update --since <開始時間的 epoch 秒>`
 
+- `--since` 必填（套用開始的時間）：不給會拿到別次套用的結果檔（稽核 D W-M1）。寫回前會比對結果檔的模組、版本、基準 commit 與這個包的 delivery.json，不符 ⇒ 一律寫成 failed 並列出不符處。
 - 印 `DELIVERY_WRITEBACK_OK succeeded|failed <路徑>`：開發機會從交付資料夾讀到結果（只有結果欄位，不含 log 與資料）。
 - 成功時再跑一次第 1 節的 `list --json`，確認 `modules.〈模組〉.version` 已是 `〈新版〉`、`overlays` 有這個模組。
 

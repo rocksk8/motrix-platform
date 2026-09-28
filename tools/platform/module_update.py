@@ -359,8 +359,9 @@ def preflight(root, pkg, allow_downgrade=False, require_base=False):
     pending = pending_interrupted_any(root)
     if pending:
         k, st = pending[-1]
-        raise UpdateError("模組 %s 有中斷的套用（%s，in_progress）⇒ 先 rollback --key %s --backup %s 回到套用前，再套用任何模組"
-                          "（lock 與狀態檔是全安裝共用；稽核 D S3R-M1／P8）" % (k, st, k, st), code="interrupted_apply_pending")
+        raise UpdateError("模組 %s 有中斷的套用（備份 %s）⇒ 先用套用腳本的回滾模式回到套用前（停服、還原、重啟、健檢；"
+                          "見 docs/platform/MODULE-UPDATE-PROD-INSTRUCTIONS.md §5），再套用任何模組"
+                          "（lock 與狀態檔是全安裝共用；稽核 D S3R-M1／P8）" % (k, st), code="interrupted_apply_pending")
     inst_core = _core_version(backend)
     if not _core_ok(entry.get("core"), inst_core):
         raise UpdateError("模組 %s 要求 core %s，安裝目錄是 %s ⇒ 不相容" % (key, entry.get("core"), inst_core), code="core_incompatible")
@@ -660,7 +661,9 @@ def newest_record_any(root):
 
 def pending_interrupted(root, key):
     """中斷的套用（status＝in_progress）⇒ 備份名清單（稽核 D S3R-M1）。"""
-    return [n for n in _all_records(root, key) if (_record(root, key, n) or {}).get("status") == "in_progress"]
+    # 稽核 D S5-S1（P9）：apply.json 讀不懂也算中斷（與 apply_plan.interrupted_module_applies 一致；不猜）
+    return [n for n in _all_records(root, key)
+            if _record(root, key, n) is None or _record(root, key, n).get("status") == "in_progress"]
 
 
 def backups(root, key):
@@ -671,8 +674,10 @@ def backups(root, key):
         return []
     out = []
     for p in sorted(d.iterdir()):
-        rec = _record(root, key, p.name) if (p / "apply.json").is_file() else None
-        if rec is not None and rec.get("status", "applied") in ("applied", "in_progress"):
+        if not (p / "apply.json").is_file():
+            continue
+        rec = _record(root, key, p.name)
+        if rec is None or rec.get("status", "applied") in ("applied", "in_progress"):
             out.append(p.name)
     return out
 
@@ -687,6 +692,8 @@ def rollback(root, key, stamp=None):
         raise UpdateError("找不到備份 %s（有：%s）" % (stamp, avail), code="backup_not_found")
     bdir = root / BACKUP_DIR / key / stamp
     rec = _record(root, key, stamp)
+    if rec is None:
+        raise UpdateError("備份 %s 的 apply.json 讀不懂 ⇒ 備份已損壞，停止回滾" % stamp, code="backup_corrupt")
     if rec.get("status") == "in_progress":
         # 稽核 D S3R-M1：中斷的套用只准回滾「最新一份」——比它新的紀錄存在＝之後又動過，整檔還原會蓋掉它們
         newest = newest_record_any(root)
