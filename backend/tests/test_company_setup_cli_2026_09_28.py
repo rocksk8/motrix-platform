@@ -105,10 +105,16 @@ def test_prod_script_has_no_parameter_to_skip_the_preflight():
 def test_preflight_runs_before_the_service_stops_and_post_check_rolls_back():
     code = "\n".join(l for l in _ps1().splitlines() if not l.lstrip().startswith("#"))
     pre = code.find('@("preflight"')
-    stop = code.find("Stop-InstallService\n", code.find("# Step 2") if "# Step 2" in code else 0)
     first_stop_call = min(i for i in (m.start() for m in re.finditer(r"^\s*\$null = Stop-InstallService|^\s*Stop-InstallService\s*$", code, re.M)))
     assert 0 < pre < first_stop_call, "預檢必須在第一次停服之前"
     assert '"refused_company_setup"' in code and 'Emit-Result "company_setup_rolled_back" 1' in code
+    # 結果真的決定行為：$gatePre／$gatePost 來自 Invoke-CompanySetupCli；不允許 ⇒ 拒絕／判成健康檢查失敗
+    assert re.search(r'^\s*\$gatePre = Invoke-CompanySetupCli \$gateCli @\("preflight"', code, re.M), "預檢沒有真的呼叫 CLI"
+    m = re.search(r"if \(-not \$gatePre\.Allowed\) \{(.*?)\n    \}", code, re.S)
+    assert m and '"refused_company_setup"' in m.group(1) and "Fail" in m.group(1), "預檢不允許時沒有拒絕"
+    assert re.search(r'^\s*\$gatePost = Invoke-CompanySetupCli .*"status"', code, re.M), "套用後檢查沒有真的呼叫 CLI"
+    assert re.search(r"if \(-not \$gatePost\.Allowed\) \{\s*\$companyGateFailed = \$true\s*\$healthy = \$false", code), \
+        "套用後檢查不允許時沒有判成健康檢查失敗"
     assert re.search(r"elseif \(\$SkipAutoRollback -and -not \$companyGateFailed\)", code), "-SkipAutoRollback 不可以留下閘門失敗的新版"
     # 預檢用包裡的新版、套用後用安裝目錄的
     assert re.search(r'\$gateCli = Join-Path \$PackagePath "backend\\tools\\company_setup_cli\.py"', code)
@@ -143,6 +149,8 @@ FAKES = {
     "ok": 'print(\'{"allowed": true, "configured": true, "reason": "configured"}\')',
     "not_configured": 'import sys; print(\'{"allowed": false, "configured": false, "reason": "no_record"}\'); sys.exit(3)',
     "null": 'import sys; print(\'{"allowed": false, "configured": null, "reason": "status_error"}\'); sys.exit(2)',
+    # 結束碼 0、allowed 也寫 true，但 configured 是 null（判定失敗）⇒ 仍不可以放行（CG2-S3：null＝拒絕）
+    "null_exit0": 'print(\'{"allowed": true, "configured": null, "reason": "status_error"}\')',
     "lying_exit": 'import sys; print(\'{"allowed": true, "configured": true, "reason": "configured"}\'); sys.exit(1)',
     "bad_output": 'print("Traceback: something")',
     "crash": 'raise SystemExit(9)',
@@ -153,6 +161,7 @@ FAKES = {
 @pytest.mark.skipif(sys.platform != "win32", reason="apply_update.ps1 只在 Windows 正式機執行")
 @pytest.mark.parametrize("case,allowed,reason", [
     ("ok", True, "configured"), ("not_configured", False, "no_record"), ("null", False, "status_error"),
+    ("null_exit0", False, "status_error"),
     ("lying_exit", False, "configured"), ("bad_output", False, "bad_output"), ("crash", False, "bad_output"),
     ("slow", False, "timeout"), ("missing", False, "tool_missing"),
 ])
