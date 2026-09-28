@@ -381,3 +381,13 @@
 
 - **S5A-S1　停用中的模組能不能更新**：模組目前被管理員停用時，乾跑載入得到 `disabled` ⇒ `MODULE_LOAD_FAIL` ⇒ 拒絕。若要允許「停用中照樣更新」，乾跑與套用後檢查應預期 `disabled`（`states --state disabled` 已支援）；若不允許，拒絕訊息要說明「先啟用或改用完整包」。兩種都可以，請定一個
 - **S5A-S2　S7 指示的狀態表要跟 ps1 的出口一致**：ps1 另有 `package_missing`、`user_cancelled`、`not_prod_machine`、`refused_company_setup`、`company_setup_rolled_back`、`unhealthy_not_rolled_back`（只在 -SkipAutoRollback）；S7（B 的範本）列的不完整。建議以 ps1 的 `Emit-Result`／`Fail` 呼叫點自動列出，對照 S7 表的題（同儀表板值域 1:1 的做法）
+
+## 14. 複核 S5A-M1：wip/a-module-apply-ps1-2 19eda14c（rebase 到 origin 0af16ad1）（D，2026-09-28）
+
+- ✅ S5A-M1 關閉（19eda14c）
+- ps1 開頭四組處置：①動檔前拒絕（加 `interrupted_apply_pending`）②動檔後失敗 ③回滾失敗（備份壞／不在）④回滾拒絕、一檔不動（`module_changed`、`state_changed`、`base_changed`、`interrupted_not_latest`）；③④ 都走 `Fail-DisableModule`（F13：停用 → 重啟 → 確認 disabled，status `module_restore_failed`，結果檔帶 `rollback_code`），F9 與自動回滾兩處共用
+- 守門改從 `MODULE-UPDATE-DELIVERY.md` §10 表抓 code（缺、多、重複都紅）。本樹沒有 B 的 §10 ⇒ 兩格 skip；D 在拋棄式 worktree 放入 **B 最新**（origin/wip/b-module-delivery-2 9eb938a7）的 §10 實跑：**43 passed**，skip 只剩兩格「等 E4 合回」的逐字比對
+- D 突變：④ 漏掉 `state_changed` ⇒ **3 紅**（每個 code 恰好一組、S5A-M1 行為題、版本決定題）
+- S5A-S1：裁定「停用中的模組拒絕更新」，`MODULE_LOAD_FAIL` 並說明「先到模組管理啟用，或改用完整包」（題 +1）⇒ 已定案 ✔
+- S5A-S2（S7 狀態表對 ps1 出口）：S7 在 B 分支，未做；**合流那一班要補**（A、B 兩線都上車之後）
+- 合流注意：本樹的 §10 守門在 B 的文件上車之前都是 skip ⇒ 列車合入 B55 那一班，必須確認這兩格從 skip 變 passed
