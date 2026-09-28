@@ -95,7 +95,9 @@ def backend_keys():
     keys = set(re.findall(r"user_has_module\([^,]+,\s*['\"]([a-z_]+)['\"]", src))
     keys |= set(re.findall(r"module=['\"]([a-z_]+)['\"]", src))
     keys |= set(re.findall(r"['\"]([a-z_]+)['\"]\s+in\s+(?:mods|modules|user_mods)\b", src))
-    keys |= set(re.findall(r"_(?:EDIT_)?MODULE\s*=\s*['\"]([a-z_]+)['\"]", src))
+    # 變數名要以 `_MODULE`／`_EDIT_MODULE` 開頭（前面不是識別字元）：第二十班交會紅——
+    # delivery.py 的 `KIND_FULL, KIND_MODULE = "full", "module"`（包的種類，不是權限）被當成權限 key "full"
+    keys |= set(re.findall(r"(?<![A-Za-z0-9])_(?:EDIT_)?MODULE\s*=\s*['\"]([a-z_]+)['\"]", src))
     # 2026-09-14 補上：`require_any_module(user, ('a','b'), "標籤")` 這個形式
     # **在此之前完全沒有被比對到**——而 2026-09-13 那輪補的 94 處後端檢查全部
     # 是這個寫法。它們之所以沒被判成「後端沒讀」，純粹是因為同一批 key 剛好
