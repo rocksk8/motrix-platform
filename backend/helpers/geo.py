@@ -1111,16 +1111,47 @@ def _locate_district(address, errors=None):
                      source=SOURCE_NOMINATIM_DISTRICT, address=address)
 
 
-def _cache_get(address, source):
-    """讀資料庫快取。**過期的當成沒有。**"""
+#: 一段呼叫共用一條「讀定位快取」的連線（正式機 2026-09-28：`/api/map/points` 400 個地址各開一次連線，
+#: 開連線本身就是每筆數毫秒 ⇒ 一次取點 2～7 秒；使用者「進標案雷達都會延遲」）。
+#: 📌 只給**讀**用：寫入（`_remember`／負快取）照舊自己開、自己 commit。沒有進範圍的呼叫照舊每次開連線。
+_READ_CONN = contextvars.ContextVar("motrix_geo_read_conn", default=None)
+
+
+@contextlib.contextmanager
+def cache_read_session():
+    """範圍內 `_cache_get`／`_cache_get_many` 共用一條連線；巢狀呼叫沿用外層那一條。"""
+    if _READ_CONN.get() is not None:
+        yield
+        return
     from db import get_db
     conn = get_db()
+    token = _READ_CONN.set(conn)
+    try:
+        yield
+    finally:
+        _READ_CONN.reset(token)
+        conn.close()
+
+
+def _read_conn():
+    """(連線, 用完要不要關)。"""
+    shared = _READ_CONN.get()
+    if shared is not None:
+        return shared, False
+    from db import get_db
+    return get_db(), True
+
+
+def _cache_get(address, source):
+    """讀資料庫快取。**過期的當成沒有。**"""
+    conn, own = _read_conn()
     try:
         row = conn.execute(
             "SELECT lat, lon, precision, created_at FROM geocode_cache "
             "WHERE address=? AND source=?", (address, source)).fetchone()
     finally:
-        conn.close()
+        if own:
+            conn.close()
     return _row_to_result(row, address, source)
 
 
@@ -1138,7 +1169,6 @@ def _cache_get_many(address, sources):
     sources = [x for x in (sources or []) if x]
     if not address or not sources:
         return {}
-    from db import get_db
     marks = ",".join("?" * len(sources))
     # ⚠️ **只有 `finally`，沒有 `except`** —— 與 `_cache_get()` 逐字相同。
     #
@@ -1153,14 +1183,15 @@ def _cache_get_many(address, sources):
     #    在「起來了但做錯事」時沒有人看。
     # ⇒ 要讓地圖在 DB 出事時還能畫，那是一個**獨立的決定**，
     #    要配一題「DB 讀取失敗時的行為」＋反向控制，不是夾帶。
-    conn = get_db()
+    conn, own = _read_conn()
     try:
         rows = conn.execute(
             "SELECT source, lat, lon, precision, created_at FROM geocode_cache "
             "WHERE address=? AND source IN (%s)" % marks,
             (address, *sources)).fetchall()
     finally:
-        conn.close()
+        if own:
+            conn.close()
     out = {}
     for row in rows:
         hit = _row_to_result(row, address, row["source"])
