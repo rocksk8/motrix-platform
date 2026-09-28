@@ -15562,10 +15562,14 @@
     "helper:geo",
     "helper:settings",
     "page:pages/map.html",
+    "plat:__init__",
+    "plat:source_tree",
     "router:map_points"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
      "backend/helpers/geo.py",
      "backend/helpers/settings.py",
@@ -15575,9 +15579,6 @@
      "backend/routers/map_points.py"
     ],
     "page": [
-     "frontend/pages/map.html"
-    ],
-    "path": [
      "frontend/pages/map.html"
     ]
    },

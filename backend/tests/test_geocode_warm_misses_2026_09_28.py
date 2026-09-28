@@ -20,14 +20,14 @@
 import io
 import json
 import urllib.error
-from pathlib import Path
 
 import pytest
 
+from core import source_tree
 from helpers import geo
 from tests.test_geocode_warm_2026_09_22 import backlog  # noqa: F401  （fixture：6 筆「待定位機關0～5」）
 
-FRONT = Path(__file__).resolve().parents[2] / "frontend"
+# 頁面路徑一律經 core.source_tree（test_page_paths_centralized；第十五班列車上修，交會紅）
 
 
 class _Resp(io.BytesIO):
@@ -141,7 +141,7 @@ def test_google_denied_is_an_error_but_zero_results_is_a_miss(client, real_path,
 # ── ⑥ 頁面 ────────────────────────────────────────────────────────────────
 
 def test_the_page_says_misses_and_refusals_separately(client):
-    src = (FRONT / "pages" / "map.html").read_text(encoding="utf-8")
+    src = source_tree.page_file("map.html").read_text(encoding="utf-8")
     i = src.index("warmNote() {")
     body = src[i:src.index("accuracyLabel()", i)]
     assert "w.misses" in body and "w.failures" in body
@@ -265,7 +265,7 @@ def test_map_endpoint_carries_zero_quota_and_the_page_shows_its_own_note(client,
     tok = client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]
     body = client.get("/api/map/points?sources=suppliers", headers={"Authorization": "Bearer " + tok}).json()
     assert body["quota"]["disabledByZero"] is True and body["quota"]["degraded"] is True, body["quota"]
-    src = (FRONT / "pages" / "map.html").read_text(encoding="utf-8")
+    src = source_tree.page_file("map.html").read_text(encoding="utf-8")
     zero = src[src.index('data-testid="map-quota-zero"'):]
     assert "info.quota.disabledByZero" in zero[:200] and "Google 定位已停用" in zero[:400] and "不會自動恢復" in zero[:600]
     deg = src[src.index('data-testid="map-quota-degraded"'):]
