@@ -433,3 +433,21 @@
 4. A 的 §10 守門（2 格）在 B55 文件上車後要從 skip 變 passed；`Invoke-CompanySetupCli` 逐字比對（2 格）要等 E4 合回後變 passed
 5. conftest `_app`：A 的帳密檔導向（ae27088f）與 E4 的閘門預設／FILES_OVERRIDE 都要在
 - 演練樹 `D:\MOTRIX-PLATFORM-B55-drill3`：D 最終稽核已完成，可以刪
+
+## 16. 複核 B55F-M1（工具部分）：wip/a-module-rollback-mode 1128a3ac（基底 platform 51105a06）（D，2026-09-29）
+
+> 作者測試（依裁示 8c34f08a 採信）：`pytest tests/platform/test_module_rollback_mode_2026_09_29.py` 15 passed；`pytest tests/platform …部署相關 3 檔 -n 2` 1944 passed、6 skipped；突變 6/6 紅。實機一場由 B 的演練場次 D 負責。
+
+- **B55F-M1：工具部分成立；文件部分未完成 ⇒ 仍未關**
+- 回滾模式 `-Rollback -ModuleKey <key> [-Backup <stamp>] [-IncludeDatabase -ConfirmDatabaseOverwrite] [-Yes]`：
+  - 鎖 → `rollback-check`（唯讀；選取規則與 `module_update.rollback` 相同：沒指定＝最新一份）→ 那次套用新增了 migration 而沒帶資料庫旗標 ⇒ **停服前**拒絕 → 確認 → 停服 → `module_update rollback --backup` →（選）資料庫還原（覆寫前另存）→ 重啟 → 健檢 ✔
+  - 資料庫快照路徑：套用時 `pre_module_<key>_<RunStamp>`，而模組備份的 stamp 就是 `--stamp RunStamp` ⇒ 回滾時以同一 stamp 組出同一路徑 ✔；快照不在 ⇒ 停服前拒絕 ✔
+  - 兩個資料庫旗標必須同時給（`-Yes` 不算數），比照 DM1 ✔
+  - 回滾拒絕、一檔未動（RollbackRefused 四碼＋備份壞／不在）⇒ 照原樣重啟、不停用（手動回滾前模組本來就在跑）；半套（restore_mismatch、unexpected、沒有結果行）⇒ F13 ✔
+  - 套用路徑拒收回滾專用參數；新 status 進儀表板值域 ✔
+- **尚缺（關閉條件）**：`MODULE-UPDATE-PROD-INSTRUCTIONS.md`（S7，platform 1128a3ac 上）仍是「〈A 定稿後填〉」：
+  1. §5 填入實際指令（只回程式／連資料庫兩種寫法），並寫明「那次套用新增了 migration ⇒ 會被拒、需要連資料庫；連資料庫＝套用之後寫入的資料回到快照當時，要先得到使用者同意」
+  2. 狀態表加 `module_rollback_ok`、`module_rollback_refused`（含 `rollback_code`：needs_database、db_snapshot_missing、§10 拒絕碼）、`module_rollback_unhealthy`
+  3. 回滾的 log 檔名格式（§5 附註那一條）
+  4. 以上完成後才拿掉第 3 行的 🔴「不可交正式機」警語
+- `module_update` 的 `interrupted_apply_pending` 訊息指向「套用腳本的回滾模式（範本 §5）」，現在工具存在了 ⇒ 等 §5 填好即一致
