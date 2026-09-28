@@ -11,7 +11,7 @@
     CODE_REQUIRED, CODE_UNDETERMINED, GATE_GRACE, GATE_OK, GATE_REQUIRED, GATE_UNDETERMINED, HEADER, MSG_REQUIRED,
     MSG_UNDETERMINED, SETTINGS_URL, compile_allowed, gate, is_allowed, reset_cache,
     CompanySetupRequired, DEMO_INSTALL, DEMO_PROFILE, DEMO_WATERMARK, ERROR_CACHE_SECONDS, GRACE_EXPIRY_WARN_HOURS,
-    SIGNED_EXPIRY_WARN_DAYS, observe_expiry, require, seed_demo, RESERVED_DEMO_UBN, payment_bank_missing
+    SIGNED_EXPIRY_WARN_DAYS, observe_expiry, require, seed_demo, RESERVED_DEMO_UBN, payment_bank_missing, verified_doc
 [不變式] status() 是純判斷（不寫庫、不寫檔）；只有 confirm()（設定頁「確認本公司資料」）與 backfill_once()（每庫一次）會寫確認紀錄；
     綁定＝安裝識別檔（不看硬體，主持裁示 CG-M1）；開發者身分需要開發者簽章確認檔；backfill_once／observe／ensure_install_id 不丟例外
 [契約題] tests/test_company_setup_core_2026_09_28.py、tests/test_company_setup_cli_2026_09_28.py、
@@ -245,28 +245,32 @@ def sign_confirmation(payload: dict, private_pem: bytes) -> str:
     return json.dumps(dict(body, sig=base64.b64encode(sig).decode("ascii")), ensure_ascii=False, indent=1)
 
 
+def verified_doc(raw):
+    """確認檔內容 ⇒ 簽章與用途都驗過的 dict；任何一項不對 ⇒ None。"""
+    try:
+        doc = json.loads(raw)
+        sig = base64.b64decode(doc["sig"].encode("ascii"), validate=True)
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(doc, dict) or doc.get("purpose") != PURPOSE:
+        return None
+    from cryptography.hazmat.primitives import serialization
+    for pem in PUBKEYS:
+        try:
+            serialization.load_pem_public_key(pem).verify(sig, SIGN_PREFIX + _canonical(doc))
+            return doc
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
 def signed_file_state(profile, root=None, today=None) -> str:
     """'valid'／'missing'／'invalid'／'expired'／'mismatch'（簽的是另一個安裝識別或另一個身分）。"""
     raw = _read_text(_files(root)[1])
     if raw is None:
         return "missing"
-    try:
-        doc = json.loads(raw)
-        sig = base64.b64decode(doc["sig"].encode("ascii"), validate=True)
-    except Exception:  # noqa: BLE001
-        return "invalid"
-    if doc.get("purpose") != PURPOSE:
-        return "invalid"
-    from cryptography.hazmat.primitives import serialization
-    ok = False
-    for pem in PUBKEYS:
-        try:
-            serialization.load_pem_public_key(pem).verify(sig, SIGN_PREFIX + _canonical(doc))
-            ok = True
-            break
-        except Exception:  # noqa: BLE001
-            continue
-    if not ok:
+    doc = verified_doc(raw)
+    if doc is None:
         return "invalid"
     ident = _identity(profile)
     if doc.get("install") != install_hash(root) or doc.get("identity_fp") != identity_fp("tax", ident.get("tax_id")):

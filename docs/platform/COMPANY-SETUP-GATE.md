@@ -301,6 +301,55 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 ### 6.6 與品牌設定（h-branding）的關係
 h-branding 守「**程式碼**不含本公司字面值」＋「單據與頁面經 `company_profile`／`/api/system/branding`」；本案守「**資料**不可以是開發者的、且有人確認過」。兩者互補：本案的指紋常數是雜湊（h-branding 掃描器看不到），另加「指紋只在一處」題；§2-③ 的 .md／根目錄盲區屬另一線（Q5 裁示）。
 
+### 6.7 開發者正式機登記兩步：操作說明（主持 2026-09-29；使用者授權主持執行，CORE-SPEC 6d8b1a17）
+
+> 順序：**(a) → (b) → (c) → 套用第二十一班更新包**。(a)(c) 在正式機，(b) 在開發機。任一步不照做的結果都是「套用前預檢拒絕、正式機不動」（fail closed），不是停擺。
+> 以下 `<…>` 都是要代入的值；本文件不寫開發者公司的統編等字面值。
+
+**(a) 正式機：產生並回報安裝識別雜湊**（不寫資料庫、不停服、不重啟；只在 `<安裝目錄>\backend\` 建一個 `.install_identity` 檔，已存在就不動）
+1. 更新包已照 UPDATE-DELIVERY §3.4 複製到本機 staging：`<ROOT>\..\motrix-staging\<包名>\`（本步只需要這份包裡的 `backend\` 程式碼，不套用）。
+2. 在正式機執行（`python`＝apply_update.ps1 用的同一個）：
+   ```
+   python <staging>\<包名>\backend\tools\company_setup_cli.py ensure-install-id --root <安裝目錄>
+   python <staging>\<包名>\backend\tools\company_setup_cli.py preflight --db <安裝目錄>\backend\motrix_erp.db --root <安裝目錄>
+   ```
+   - 第一行輸出一行 JSON：`{"created": true|false, "install": "<64 碼十六進位>", "ok": true}`。`install` 就是安裝識別雜湊（不是秘密；是這個安裝目錄的隨機識別，不含任何機器資訊）。
+   - 第二行是**唯讀**預檢（在正式庫的記憶體副本上模擬，正式庫一個位元組都不動）。預期 `allowed: false`、`reason: "developer_identity_unsigned"`（正式機的公司資料是開發者的、還沒有簽章檔）；同時看 `payment_bank_missing` 應為 `[]`（E4S3-S1；非空 ⇒ 先在舊版設定頁補匯款欄位）。
+3. 把兩行的輸出原樣寫回開發機：`G:\我的雲端硬碟\MOTRIX-交付\正式機回報\<yyyyMMdd_HHmm>_<正式機 commit>_install-id\install_id.json`（兩行 JSON 各一行）。
+4. ⚠ 從這一步到套用之間，**不要**用舊版 apply_update／rollback 套任何別的包：舊版腳本的 robocopy 沒有排除 `.install_identity`，會把它刪掉 ⇒ 下次重建的雜湊不同 ⇒ (b) 簽的檔失效（預檢會拒絕，不會停擺，但要重做 (a)(b)）。
+
+**(b) 開發機：用交付私鑰簽確認檔**（私鑰只以路徑傳入；工具不印、不存私鑰內容，簽完以內嵌的交付公鑰自驗，驗不過就不寫檔）
+```
+cd D:\MOTRIX-PLATFORM            （第二十一班合回前：D:\MOTRIX-PLATFORM-E2，wip/e-company-gate-impl 才有 sign）
+D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe backend\tools\company_setup_cli.py sign ^
+    --private-key D:\MOTRIX-KEYS\delivery\<交付私鑰檔> ^
+    --install <(a) 回報的 install> ^
+    --tax <開發者公司統編> ^
+    --days 365 ^
+    --out "G:\我的雲端硬碟\MOTRIX-交付\company-confirmation\<yyyyMMdd_HHmm>_<install 前 8 碼>\company_confirmation.sig"
+```
+- 工具只簽**開發者身分**（`--tax` 不在開發者指紋內 ⇒ 拒絕）；`--install` 必須是 64 碼十六進位；`--days` 1～400；輸出檔已存在不覆蓋。
+- 輸出一行 JSON：`{"ok": true, "out": …, "install": …, "issued": …, "expires": …}`。到期前 30 天起正式機每日告警（§6.5）。
+- 簽章檔不進 git（`.gitignore`）、不進正式機備份；交付資料夾是唯一傳遞路徑。
+
+**(c) 正式機：取用確認檔**
+1. 把 (b) 的檔複製到 `<安裝目錄>\backend\company_confirmation.sig`（檔名固定）。
+2. 再跑一次 (a) 的 `preflight`：預期 `allowed: true`、`reason: "configured"`、`via: "upgrade_backfill"`（模擬升級時自動補確認紀錄）。不是 ⇒ 不套用，把輸出回報開發機（`install_mismatch`＝雜湊不同，重做 (a)(b)；`signed_file_expired`＝重簽）。
+3. 之後照一般流程套用更新包（apply_update.ps1 自己也會在停服前再跑一次這個預檢，並在 log 印 `::NOTE:: company_bank=ok`）。
+
+**(d) 演練（apply-run 演練目錄；兩條都演）**
+- **路徑一：新安裝／一般客戶的確認路徑**（演練庫是新庫）
+  1. 演練目錄全新安裝 ⇒ 啟動 ⇒ 最高管理員登入 ⇒ 自動導到「公司資料設定」（`?setup=1`），其他帳號導到說明頁；業務 API 一律 428。
+  2. 填測試公司（名稱、**通過檢查碼的測試統編**——不可用 00000000，E4S3-S2 會拒收——、電話）、匯款三欄 ⇒ 勾選「以上為本公司的資料」⇒「確認本公司資料」。
+  3. 驗：`company_setup_cli.py status --db <演練庫> --root <演練目錄>` ⇒ `configured: true`、`via: "settings_page"`；報價單 PDF、請款單 PDF 200；側欄完整；改公司名按一般「儲存」⇒ 出現「儲存並確認」（CG5-S1）。
+  4. 反向：刪 `<演練目錄>\backend\.install_identity` ⇒ 重啟 ⇒ `install_mismatch`、428、log 有 ERROR＋告警 ⇒ 最高管理員重新確認即恢復。
+- **路徑二：開發者簽章路徑**（演練庫放「公司資料為開發者身分」的庫：開發機既有的演練庫形狀，**不用正式機資料**）
+  1. 對演練目錄做 (a) ⇒ 預檢 `developer_identity_unsigned`＋`install`。
+  2. 做 (b)，`--install` 用演練目錄的值、`--days 7`、`--out` 放演練目錄旁的暫存位置（演練用檔，用完刪）。
+  3. 做 (c) ⇒ 預檢 `configured`／`upgrade_backfill` ⇒ 用 apply_update.ps1 套第二十一班包 ⇒ `::RESULT::` status=success、log 有 `::NOTE:: company_bank=…`；套用後 status `configured`；登入無導頁；報價單 PDF 200。
+  4. 反向：刪簽章檔重啟 ⇒ 428 ⇒ `company_setup_cli.py grace --root <演練目錄> --hours 72 --reason "演練"` ⇒ 恢復、橫幅出現、稽核有；把放行檔的 `until` 手改成 80 小時 ⇒ 有效期仍以伺服器第一次看到的時間＋72 小時為準。
+  5. 演練完刪除演練用的簽章檔與放行檔（不留在任何雲端資料夾）。
+
 > ~~## 6. 既有正式機行為不變的證明~~
 > ~~- 升級 migration（L1，核心 migration 新版號）：若本庫沒有確認紀錄，且必要欄位合格，且（統編未命中開發者指紋，**或**本機是登記的開發者機器／有有效簽章確認檔）⇒ 寫確認紀錄 `via: "upgrade_backfill"`；否則不寫（該安裝首次登入會被導向設定頁）。~~
 > ~~  - 開發者正式機：機器指紋先登記（出貨前由正式機回報取得）⇒ 升級當下補紀錄 ⇒ 登入後沒有任何導頁、所有輸出照舊。~~

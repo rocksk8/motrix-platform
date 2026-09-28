@@ -314,7 +314,8 @@
    "signed_file_state": "def(profile, root=…, today=…)",
    "startup_install_check": "def(conn, root=…)",
    "status": "def(conn, root=…, now=…, demo=…)",
-   "ubn_valid": "def(tax_id)"
+   "ubn_valid": "def(tax_id)",
+   "verified_doc": "def(raw)"
   },
   "helper:custom_fields": {
    "DATA_CLASSES": "const",
