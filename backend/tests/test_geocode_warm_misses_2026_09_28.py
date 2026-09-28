@@ -270,3 +270,80 @@ def test_map_endpoint_carries_zero_quota_and_the_page_shows_its_own_note(client,
     assert "info.quota.disabledByZero" in zero[:200] and "Google 定位已停用" in zero[:400] and "不會自動恢復" in zero[:600]
     deg = src[src.index('data-testid="map-quota-degraded"'):]
     assert "!info.quota.disabledByZero" in deg[:200], "額度 0 時不可以同時顯示「下個週期自動恢復」那一則"
+
+
+# ── 主持派工（A44 殘留風險）：「免費來源查無」負快取（scope=free）───────────────────────────
+import contextlib  # noqa: E402
+
+
+@contextlib.contextmanager
+def _no_google_scope():
+    """「不用 Google」的範圍：合回 A44 後用 geo.without_google_content()；合回前用本分支的本輪跳過旗標。"""
+    wgc = getattr(geo, "without_google_content", None)
+    if wgc is not None:
+        with wgc():
+            yield
+        return
+    token = geo._WARM_SKIP_GOOGLE.set(True)
+    try:
+        yield
+    finally:
+        geo._WARM_SKIP_GOOGLE.reset(token)
+
+
+ADDR_F = "衛生福利部樂生醫院"
+GOOGLE_ZERO = json.dumps({"status": "ZERO_RESULTS", "results": []}).encode("utf-8")
+
+
+def test_inside_the_scope_a_free_miss_is_remembered_and_not_asked_again(client, real_path, monkeypatch):
+    _set_google_key(monkeypatch=monkeypatch)
+    monkeypatch.setattr(geo, "quota_exceeded", lambda *a, **k: False)
+    calls = _two_sources(monkeypatch, lambda: GOOGLE_OK, lambda a: EMPTY)
+    with _no_google_scope():
+        r1 = geo.locate_cached(ADDR_F)
+        assert r1.coord is None and calls["google"] == [] and len(calls["nominatim"]) == 1, calls
+        assert geo.geocode_missed_recently(ADDR_F) and geo.geocode_miss_count() == 1
+        geo.locate_cached(ADDR_F)
+        assert len(calls["nominatim"]) == 1, "範圍內第二次不可以再打 Nominatim（查不到的機關名稱每輪重打＝違反使用政策）"
+    assert geo._MISS_CACHE == {}, "範圍內只記 free，不可以記成 all（會擋住日後 Google）"
+
+
+def test_outside_the_scope_a_free_miss_does_not_block_google(client, real_path, monkeypatch):
+    _set_google_key(monkeypatch=monkeypatch)
+    monkeypatch.setattr(geo, "quota_exceeded", lambda *a, **k: False)
+    calls = _two_sources(monkeypatch, lambda: GOOGLE_OK, lambda a: EMPTY)
+    with _no_google_scope():
+        geo.locate_cached(ADDR_F)
+    assert not geo.geocode_missed_recently(ADDR_F), "範圍外只看 scope=all"
+    r = geo.locate_cached(ADDR_F)
+    assert calls["google"] == [ADDR_F] and r.coord, "Google 可用時仍要去問 Google：%r" % calls
+
+
+def test_reverse_control_an_all_sources_miss_blocks_both_inside_and_outside(client, real_path, monkeypatch):
+    _set_google_key(monkeypatch=monkeypatch)
+    monkeypatch.setattr(geo, "quota_exceeded", lambda *a, **k: False)
+    calls = _two_sources(monkeypatch, lambda: GOOGLE_ZERO, lambda a: EMPTY)
+    geo.locate_cached(ADDR_F)                                  # 範圍外：Google 與免費都查無 ⇒ scope=all
+    assert calls["google"] == [ADDR_F] and len(calls["nominatim"]) == 1
+    assert geo._MISS_CACHE and geo._MISS_CACHE_FREE == {}
+    with _no_google_scope():
+        geo.locate_cached(ADDR_F)
+        assert geo.geocode_missed_recently(ADDR_F)
+    geo.locate_cached(ADDR_F)
+    assert calls["google"] == [ADDR_F] and len(calls["nominatim"]) == 1, "all 在範圍內外都擋：%r" % calls
+
+
+def test_second_warm_round_does_not_hit_nominatim_again_for_free_misses(client, backlog, real_path, monkeypatch):
+    """背景迴圈：Google 連不上 ⇒ 第 4 筆起本輪跳過 Google、免費查無記 free；第二輪同樣的 3 筆不再打 Nominatim。"""
+    _set_google_key(monkeypatch=monkeypatch)
+    monkeypatch.setattr(geo, "quota_exceeded", lambda *a, **k: False)
+    calls = _two_sources(monkeypatch, lambda: urllib.error.URLError("proxy"), lambda a: EMPTY)
+    geo.warm_geocode_cache()
+    first = list(calls["nominatim"])
+    assert len(first) == 6, first
+    skipped_round1 = first[3:]                                  # 跳過 Google 之後查的 3 筆 ⇒ 記 free
+    calls["nominatim"].clear()
+    calls["google"].clear()
+    geo.warm_geocode_cache()
+    assert not set(calls["nominatim"]) & set(skipped_round1), \
+        "第二輪又打了 Nominatim：%r（第一輪已記 free：%r）" % (calls["nominatim"], skipped_round1)

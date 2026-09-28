@@ -1174,6 +1174,39 @@ GEOCODE_MISS_TTL_SECONDS = 7 * 24 * 60 * 60
 #: 📌 要讓它跨重啟存活得另開一張表（不是 `geocode_cache`），那需要 migration。
 _MISS_CACHE = {}
 
+#: 第十五班（主持派工，A44 殘留風險）：**只有免費來源查過**而查無（scope=free）。鍵同 `_MISS_CACHE`（`(資料庫, 地址)`）。
+#: `_MISS_CACHE` 本身是 scope=all（每一個可用的來源都問過而查無）。
+#: ☠️ 為什麼要分：非 Google 底圖（A44 的 without_google_content 範圍）或本輪跳過 Google 時，Google 根本沒被問 ⇒
+#:    記成 all 會擋住日後 Google；**完全不記**的話，查不到的機關名稱每一輪都重打 Nominatim（違反其使用政策、有被封 IP 風險）。
+#: ⇒ 範圍內查無記 free；判斷「最近查無」時，範圍內看 free 或 all、範圍外只看 all（Google 可用時仍會去問 Google）。
+_MISS_CACHE_FREE = {}
+
+
+def _google_scoped_out() -> bool:
+    """這一段呼叫是不是「不用 Google」的範圍：背景迴圈本輪跳過 Google（第十五班），或 A44 的 without_google_content。
+    ⚠️ A44 的 google_content_blocked 以 globals 查找：合回前這支函式不存在 ⇒ 當成 False；合回後自動生效，不必改這裡。"""
+    if _WARM_SKIP_GOOGLE.get():
+        return True
+    blocked = globals().get("google_content_blocked")
+    return bool(blocked()) if callable(blocked) else False
+
+
+def _remember_free_miss(address) -> None:
+    """記下「免費來源都查過、查無」（Google 這次沒被問）。只在 `_google_scoped_out()` 範圍內用。"""
+    address = (address or "").strip()
+    if address:
+        _MISS_CACHE_FREE[_miss_key(address)] = time.time()
+
+
+def _fresh(cache, key) -> bool:
+    at = cache.get(key)
+    if at is None:
+        return False
+    if time.time() - at >= GEOCODE_MISS_TTL_SECONDS:
+        cache.pop(key, None)            # 過期就忘掉
+        return False
+    return True
+
 
 def _miss_key(address):
     """負快取的鍵：`(資料庫, 地址)`。
@@ -1208,11 +1241,14 @@ def remember_geocode_miss(address) -> None:
 
 
 def geocode_missed_recently(address) -> bool:
-    """這個地址最近查過而且查不到嗎。"""
+    """這個地址最近查過而且查不到嗎。
+    範圍外（Google 可用）只看 scope=all；`_google_scoped_out()` 範圍內 scope=free 也算（第十五班）。"""
     address = (address or "").strip()
     if not address:
         return False
     key = _miss_key(address)
+    if _google_scoped_out() and _fresh(_MISS_CACHE_FREE, key):
+        return True
     at = _MISS_CACHE.get(key)
     if at is None:
         return False
@@ -1233,8 +1269,9 @@ def reset_geocode_misses() -> int:
        「待定位機關0」，會讓後一題的背景迴圈一筆都不跑。
     ☠️ 那種失效的樣子是「跑了 0 次」，而它跟「迴圈壞了」長得一模一樣。
     """
-    n = len(_MISS_CACHE)
+    n = len(_MISS_CACHE) + len(_MISS_CACHE_FREE)
     _MISS_CACHE.clear()
+    _MISS_CACHE_FREE.clear()
     return n
 
 
@@ -1242,8 +1279,12 @@ def geocode_miss_count() -> int:
     """**這個資料庫**目前記著幾個「查不到」。畫面要用它把兩種情況分開講。"""
     now = time.time()
     where = _miss_key("")[0]
-    return sum(1 for (db_path, _addr), at in _MISS_CACHE.items()
-               if db_path == where and now - at < GEOCODE_MISS_TTL_SECONDS)
+    seen = {addr for (db_path, addr), at in _MISS_CACHE.items()
+            if db_path == where and now - at < GEOCODE_MISS_TTL_SECONDS}
+    if _google_scoped_out():
+        seen |= {addr for (db_path, addr), at in _MISS_CACHE_FREE.items()
+                 if db_path == where and now - at < GEOCODE_MISS_TTL_SECONDS}
+    return len(seen)
 
 
 def cached_only(address, min_source=None):
@@ -1388,12 +1429,15 @@ def locate_cached(address, manual_coord=None):
     # 任何一階回報 `err`（逾時／對方回錯／連不上）⇒ 這一輪什麼都不記。
     errors = []
     _LAST_STAGE_ERRORS.set(errors)       # 同一個 list：之後各階 append 的錯誤呼叫端都看得到（第十五班）
+    scoped_out_google = False           # Google 階因「不用 Google」範圍被跳過（第十五班）⇒ 查無只能記 free
 
     for name, source in _STAGES:
         hit = _cached_stage(address, source)
         if hit:
             return hit
         if not _stage_allowed(source):
+            if source == SOURCE_GOOGLE and _google_scoped_out():
+                scoped_out_google = True
             # 🔴 GB10／GB16：**跳過，而不是用免費階的結果去填 google 的快取鍵。**
             # ☠️ 填進去的話，額度恢復之後 `cached_only()` 會在 google 階命中
             #    ⇒ **永遠不會再問 Google** —— 就是 A9／GC1 那個坑。
@@ -1441,7 +1485,12 @@ def locate_cached(address, manual_coord=None):
         # ☠️ 把查詢失敗（配額用完／逾時／金鑰錯）記成查不到的話，
         #    **一次配額用完會讓那些地址七天內都不再被查** ——
         #    而那是一個沒有人看得見的降級。
-        remember_geocode_miss(address)
+        if scoped_out_google:
+            # 第十五班：Google 這次因範圍沒被問 ⇒ 只能說「免費來源查無」（scope=free）；
+            # 範圍外（Google 可用）時不看 free ⇒ 日後照樣會去問 Google，但範圍內七天內不再重打 Nominatim。
+            _remember_free_miss(address)
+        else:
+            remember_geocode_miss(address)
     return result
 
 
@@ -1714,7 +1763,10 @@ def _warm_geocode_cache_round() -> dict:
         if result is not None and getattr(result, "coord", None):
             succeeded += 1
             streak = 0
-        elif result is not None and geocode_missed_recently(address):
+        elif result is not None and not free_errs and not google_errs:
+            # 〔更正（B，2026-09-28，稽核 D GEO-M1）：原本判準是 geocode_missed_recently(address)——依賴負快取有沒有寫。
+            #   合回 A44 後範圍內「跳過 Google ⇒ 不記負快取」，查無就落到 failures、三筆就停＝正式機原始症狀。
+            #   改成**不依賴負快取**：這次實際問了的每一階都沒回報錯誤（乾淨查無）⇒ miss〕
             # 🔴 第十五班（正式機 2026-09-28）：「查過、對方說沒有」**不是失敗**。
             # locate_cached 只在每一階都乾淨地查無時才記負快取（有任何一階連不上／被拒／回錯 ⇒ 不記）
             # ⇒ 走到這裡＝對方有回應、只是查不到（例：機關名稱「衛生福利部樂生醫院」）。
