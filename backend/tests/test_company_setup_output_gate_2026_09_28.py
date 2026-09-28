@@ -209,7 +209,13 @@ def test_demo_gets_a_fictional_company_and_watermark(client, make_user, boss):
         assert cs._get(conn, cs.CONFIRMATION_SETTING) is None
         # 反向控制：demo 的確認紀錄帶進正式庫 ⇒ install_mismatch（DEMO_INSTALL 只有 demo 判定認得）
         cs.seed_demo(conn)
+        assert cs.status(conn)["reason"] == cs.FIELDS_INVALID                        # E4S3-S2：保留統編先被擋
+        # 換成一般統編、確認紀錄仍是 demo 的（install＝DEMO_INSTALL）⇒ install_mismatch
+        cs._set(conn, "company_profile", PROFILE)
+        cs._set(conn, cs.CONFIRMATION_SETTING, dict(cs._get(conn, cs.CONFIRMATION_SETTING),
+                                                    fields_hash=cs.fields_hash(PROFILE)))
         assert cs.status(conn)["reason"] == cs.INSTALL_MISMATCH
+        assert cs.status(conn, demo=True)["configured"] is True                      # 正對照：demo 判定認得
         conn.rollback()
     finally:
         conn.close()
@@ -226,8 +232,28 @@ def test_demo_gets_a_fictional_company_and_watermark(client, make_user, boss):
 
 def test_demo_fictional_identity_is_marked_and_valid():
     assert cs.DEMO_WATERMARK in cs.DEMO_PROFILE["name"]
-    assert cs.required_problems(cs.DEMO_PROFILE) == []
+    assert cs.required_problems(cs.DEMO_PROFILE, demo=True) == []
     assert not cs.is_developer_identity(cs.DEMO_PROFILE)
+
+
+def test_reserved_demo_ubn_is_refused_outside_demo(client, boss):
+    """D E4S3-S2：00000000 會通過檢查碼 ⇒ 非 demo 庫拒收（demo 庫照常）。"""
+    import db
+    assert cs.ubn_valid(cs.RESERVED_DEMO_UBN)                                        # 前提：它真的過檢查碼
+    bad = dict(PROFILE, tax_id=cs.RESERVED_DEMO_UBN)
+    assert any("保留" in m for m in cs.required_problems(bad))
+    assert cs.required_problems(bad, demo=True) == []
+    r = _confirm(client, boss, tax_id=cs.RESERVED_DEMO_UBN)
+    assert r.status_code == 422 and "保留的示範統編" in r.json()["detail"]
+    conn = db.get_db()
+    try:                                                                             # 直接寫庫：判定為 fields_invalid
+        cs._set(conn, "company_profile", bad)
+        assert cs.status(conn)["reason"] == cs.FIELDS_INVALID
+        assert cs.status(conn, demo=True)["reason"] != cs.FIELDS_INVALID
+        conn.rollback()
+    finally:
+        conn.close()
+    assert cs.required_problems(PROFILE) == []                                       # 反向控制：一般統編照常
 
 
 def test_real_watermark_is_absent_outside_demo(client, boss):

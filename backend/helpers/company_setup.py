@@ -11,7 +11,7 @@
     CODE_REQUIRED, CODE_UNDETERMINED, GATE_GRACE, GATE_OK, GATE_REQUIRED, GATE_UNDETERMINED, HEADER, MSG_REQUIRED,
     MSG_UNDETERMINED, SETTINGS_URL, compile_allowed, gate, is_allowed, reset_cache,
     CompanySetupRequired, DEMO_INSTALL, DEMO_PROFILE, DEMO_WATERMARK, ERROR_CACHE_SECONDS, GRACE_EXPIRY_WARN_HOURS,
-    SIGNED_EXPIRY_WARN_DAYS, observe_expiry, require, seed_demo
+    SIGNED_EXPIRY_WARN_DAYS, observe_expiry, require, seed_demo, RESERVED_DEMO_UBN, payment_bank_missing
 [不變式] status() 是純判斷（不寫庫、不寫檔）；只有 confirm()（設定頁「確認本公司資料」）與 backfill_once()（每庫一次）會寫確認紀錄；
     綁定＝安裝識別檔（不看硬體，主持裁示 CG-M1）；開發者身分需要開發者簽章確認檔；backfill_once／observe／ensure_install_id 不丟例外
 [契約題] tests/test_company_setup_core_2026_09_28.py、tests/test_company_setup_cli_2026_09_28.py、
@@ -139,13 +139,20 @@ def _identity(profile):
     return identity_from_profile(profile or {})
 
 
-def required_problems(profile) -> list:
-    """必要欄位（Q6 裁示）：名稱＋統編（檢查碼）＋電話或 email 擇一。回缺漏清單（空＝合格）。"""
+#: demo 示範公司的統編（D E4S3-S2）：它**會**通過檢查碼 ⇒ 非 demo 庫一律拒收，否則一串 0 就能跳過「必要欄位」
+RESERVED_DEMO_UBN = "00000000"
+
+
+def required_problems(profile, demo=False) -> list:
+    """必要欄位（Q6 裁示）：名稱＋統編（檢查碼；非 demo 庫不收保留值 00000000）＋電話或 email 擇一。回缺漏清單（空＝合格）。"""
     ident = _identity(profile)
     out = []
     if not ident.get("company_name"):
         out.append("公司名稱")
-    if not ubn_valid(_norm_tax(ident.get("tax_id"))):
+    tax = _norm_tax(ident.get("tax_id"))
+    if not demo and tax == RESERVED_DEMO_UBN:
+        out.append("統一編號（%s 是系統保留的示範統編）" % RESERVED_DEMO_UBN)
+    elif not ubn_valid(tax):
         out.append("統一編號（8 碼且通過檢查碼）")
     if not (ident.get("phone") or ident.get("email")):
         out.append("電話或 email（至少一項）")
@@ -307,7 +314,7 @@ def status(conn, root=None, now=None, demo=False) -> dict:
     now = now or datetime.now()
     profile = _get(conn, "company_profile", {}) or {}
     grace = grace_state(conn, root, now)
-    out = {"configured": False, "reason": NO_RECORD, "via": None, "missing": required_problems(profile),
+    out = {"configured": False, "reason": NO_RECORD, "via": None, "missing": required_problems(profile, demo=demo),
            "developer": is_developer_identity(profile), "grace": grace if grace.get("active") else None}
     rec = _get(conn, CONFIRMATION_SETTING)
     if out["missing"]:
@@ -329,6 +336,13 @@ def status(conn, root=None, now=None, demo=False) -> dict:
             return out
     out.update(configured=True, reason=CONFIGURED, via=rec.get("via"))
     return out
+
+
+def payment_bank_missing(profile) -> list:
+    """請款單匯款三欄（主要據點解析後；分公司逐欄落空到主要據點）缺哪些（D E4S3-S1：預檢只報不擋）。"""
+    from helpers.company_identity import PAYMENT_BANK_FIELDS
+    ident = _identity(profile)
+    return [label for field, label in PAYMENT_BANK_FIELDS if not str(ident.get(field) or "").strip()]
 
 
 def allows(st: dict) -> bool:

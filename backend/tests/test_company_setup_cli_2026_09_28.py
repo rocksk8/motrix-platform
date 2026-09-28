@@ -268,3 +268,54 @@ def test_every_robocopy_excludes_install_config_files(script):
     # 反向控制：拿掉其中一個 ⇒ 被抓到
     planted = text.replace(" company_setup_grace.json", "", 1)
     assert any(not need <= xf for _s, xf in robocopy_statements(planted) if xf)
+
+
+# ── D E4S3-S1：預檢回報請款單匯款三欄（只報不擋）──
+
+def test_cli_reports_payment_bank_fields(tmp_path):
+    conn, root = _db(tmp_path, GOOD), _root(tmp_path)
+    conn.close()
+    db = str(tmp_path / "t.db")
+    run_cli("ensure-install-id", "--root", root)
+    code, out = run_cli("preflight", "--db", db, "--root", root)
+    assert code == 0 and set(out["payment_bank_missing"]) == {"銀行名稱", "戶名", "帳號"}   # 不擋，只報
+    conn = sqlite3.connect(db)
+    cs._set(conn, "company_profile", dict(GOOD, bank_name="測試銀行", bank_account_name="測試甲",
+                                          bank_account_number="0001"))
+    conn.commit()
+    conn.close()
+    code, out = run_cli("preflight", "--db", db, "--root", root)
+    assert out["payment_bank_missing"] == []
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="apply_update.ps1 只在 Windows 正式機執行")
+@pytest.mark.parametrize("text,expect", [
+    ('{"allowed": true, "payment_bank_missing": ["銀行名稱", "帳號"]}', "::NOTE:: company_bank_missing=銀行名稱,帳號"),
+    ('{"allowed": true, "payment_bank_missing": []}', "::NOTE:: company_bank=ok"),
+    ('{"allowed": true}', "::NOTE:: company_bank=unknown"),                       # 舊版 CLI 沒有這個欄位
+    ('Traceback: boom', "::NOTE:: company_bank=unknown"),
+])
+def test_bank_note_is_printed_and_never_fails(tmp_path, text, expect):
+    fn = _ps_function(_ps1(), "Write-CompanyBankNote")
+    assert fn, "找不到 Write-CompanyBankNote"
+    script = tmp_path / "t.ps1"
+    script.write_text("$ErrorActionPreference = 'Stop'\n[Console]::OutputEncoding = [Text.Encoding]::UTF8\n"
+                      + fn + "\n"
+                      "$r = Write-CompanyBankNote '%s'\nWrite-Output (\"RET=\" + $r)\n" % text.replace("'", "''"),
+                      encoding="utf-8-sig")
+    r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90)
+    notes = [l for l in r.stdout.splitlines() if l.startswith("::NOTE::")]
+    assert notes == [expect], r.stdout + r.stderr
+    assert any(l.startswith("RET=") for l in r.stdout.splitlines()), r.stdout + r.stderr
+
+
+def test_bank_note_runs_after_a_passing_preflight_before_the_service_stops():
+    code = "\n".join(l for l in _ps1().splitlines() if not l.lstrip().startswith("#"))
+    ok = code.index("Ok \"  本公司資料設定預檢通過")
+    note = code.index("$null = Write-CompanyBankNote $gatePre.Text")
+    first_stop_call = min(m.start() for m in re.finditer(
+        r"^\s*\$null = Stop-InstallService|^\s*Stop-InstallService\s*$", code, re.M))
+    assert ok < note < first_stop_call, "匯款欄位註記要在預檢通過之後、第一次停服之前"
+    fn = _ps_function(_ps1(), "Write-CompanyBankNote")
+    assert "::RESULT::" not in fn and "Fail" not in fn and "exit" not in fn.lower()          # 只報不擋、不動 RESULT 行

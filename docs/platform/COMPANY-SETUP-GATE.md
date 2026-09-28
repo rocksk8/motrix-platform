@@ -253,6 +253,7 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
   - CG-S5：status 端點對最高管理員回 `superadminCount`；設定頁只有一位時提示再設一位。DR-SOP §4a〈本公司資料設定〉。
   - §2-④：`core.upgrade._is_our_install` 只認統編（去分隔符比對），刪名稱片段；`test_b2_blank_string_fill_passes_verify` 的前提（名稱在、統編空白）隨之改為統編在、名稱空白字串。
   - 測試：`conftest` 預設同時換掉 `status` 與 `gate`（第二道在沒有建庫的單元題也會被呼叫）。
+  - 〔D §11 建議，主持視為上車前必做〕E4S3-S1：`company_setup_cli` preflight／status 的 JSON 加 `payment_bank_missing`（主要據點解析後缺哪幾欄；讀不到＝null），`apply_update.ps1`（2026-09-28j）預檢通過後 `Write-CompanyBankNote` 印 `[WARN]`＋`::NOTE:: company_bank_missing=<欄位>`／`company_bank=ok`／`company_bank=unknown`——**只報不擋**；`::RESULT::` 與結果檔不動（欄位與值域固定、結果檔寫入函式與 rollback 逐字相同）、`Invoke-CompanySetupCli` 不動（單模組腳本逐字複製它；A 落地時若複製呼叫點，連這一行一起）。E4S3-S2：`required_problems(profile, demo=False)` 非 demo 庫拒收 `RESERVED_DEMO_UBN`（00000000）⇒ 設定頁確認 422、直接寫庫的判定為 `fields_invalid`；demo 判定照常。
 
 ## 6. 既有正式機行為不變的證明〔修訂 CG-M1、CG-S2、CG-S5〕
 

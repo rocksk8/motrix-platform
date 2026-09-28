@@ -63,7 +63,7 @@ $ErrorActionPreference = "Stop"
 # AH-M2（2026-09-28 A 稽核）：這支腳本的版本。開頭與部署包裡那一份比對，不同就拒絕——
 #   手動執行時跑到安裝目錄裡的**舊**腳本（沒有先把包裡的 backend\tools 複製過來）會讓整套日常更新規則都不生效。
 #   改這支腳本的行為時要改這個值。用常數不用雜湊：演練副本會改路徑與 port，雜湊必然不同。
-$ApplyScriptVersion = "2026-09-28i"
+$ApplyScriptVersion = "2026-09-28j"
 # robocopy 一律 /R:3 /W:5（2026-09-28）：預設 /R:1000000 /W:30 ⇒ 被占用的檔會讓套用卡住數天而不是失敗，
 #   複製失敗的出口（AH-S7 自動寫回快照）永遠走不到。
 
@@ -319,6 +319,32 @@ function Invoke-CompanySetupCli([string]$Cli, [string[]]$CliArgs, [int]$TimeoutS
     } finally {
         Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
     }
+}
+
+# ── 請款單匯款欄位註記（D E4S3-S1：只報不擋）──────────────────────────────
+# 讀 company_setup_cli 那一行 JSON 的 payment_bank_missing：缺 ⇒ [WARN]＋`::NOTE:: company_bank_missing=<欄位>`
+# （升級後請款單 PDF 會 428，要先請使用者在設定頁補齊）；齊全 ⇒ `::NOTE:: company_bank=ok`；讀不到 ⇒ `company_bank=unknown`。
+# 不改 ::RESULT::（欄位順序與值域固定）；本函式不丟例外、不影響升級。
+function Write-CompanyBankNote([string]$CliText) {
+    $note = "unknown"
+    try {
+        $line = @(("$CliText" -split "\r?\n") | Where-Object { $_.Trim().StartsWith("{") }) | Select-Object -Last 1
+        if ($line) {
+            $obj = $line | ConvertFrom-Json
+            $miss = $obj.payment_bank_missing
+            if ($null -ne $miss) {
+                $items = @($miss | ForEach-Object { [string]$_ })
+                if ($items.Count -gt 0) { $note = "missing" } else { $note = "ok" }
+            }
+        }
+    } catch { $note = "unknown" }
+    if ($note -eq "missing") {
+        Write-Host ("[WARN]   請款單匯款欄位未齊全（" + ($items -join "、") + "）：升級後請款單 PDF 會被擋（428 company_bank_required），請先在公司資料設定補齊") -ForegroundColor Yellow
+        Write-Host ("::NOTE:: company_bank_missing=" + ($items -join ","))
+    } else {
+        Write-Host ("::NOTE:: company_bank=" + $note)
+    }
+    return $note
 }
 
 # ── 停服／啟動（2026-09-28）─────────────────────────────────────────────
@@ -745,6 +771,7 @@ if (Test-Path $prodDbForGate) {
               "其他 ⇒ 聯絡開發者。") "refused_company_setup"
     }
     Ok "  本公司資料設定預檢通過（$($gatePre.Reason)）。"
+    $null = Write-CompanyBankNote $gatePre.Text
 } else {
     Warn "  找不到正式庫 motrix_erp.db，略過本公司資料設定預檢（視為全新安裝：首次登入由最高管理員設定）。"
 }
