@@ -391,3 +391,45 @@
 - S5A-S1：裁定「停用中的模組拒絕更新」，`MODULE_LOAD_FAIL` 並說明「先到模組管理啟用，或改用完整包」（題 +1）⇒ 已定案 ✔
 - S5A-S2（S7 狀態表對 ps1 出口）：S7 在 B 分支，未做；**合流那一班要補**（A、B 兩線都上車之後）
 - 合流注意：本樹的 §10 守門在 B 的文件上車之前都是 skip ⇒ 列車合入 B55 那一班，必須確認這兩格從 skip 變 passed
+
+## 15. B55 最終稽核（上車判定）：wip/b-module-delivery-2 64b38f39＋wip/a-module-apply-ps1-2 844268be（D，2026-09-29）
+
+### 15.0 判定
+
+- **可上車。**
+- **S7 範本還不可以交給正式機** ⇒ 新必修 **B55F-M1**（擋「正式機使用單模組包」，不擋上車：本班只出貨工具，不會發送任何模組包）
+
+### 15.1 必修
+
+- mustfix_scan（本稽核分支）：B55 系列（DB-M1、DB2-M1、DB-M2、S3-M1、S3-M2、S3R-M1、W-M1、S5A-M1）**全部有關閉紀錄**；未關的只有暫緩中的 H3-M1～M3（與 B55 無關，已在 platform 的清單登記）
+
+### 15.2 §10 與 ps1 對照
+
+- 把 B 最終的 `MODULE-UPDATE-DELIVERY.md`（64b38f39）放進 A 的樹（844268be）跑 `test_apply_module_update_ps1`：**40 passed**，skip 只剩兩格「等 E4 合回」的逐字比對 ⇒ §10 的每個 code 在 ps1 都恰好歸一組
+- S5A-S2：S7 狀態表涵蓋 ps1 所有出口——固定的（Fail／Emit-Result 字面值）與動態的（`module_preflight_failed`、`duplicate_version`、`company_setup_rolled_back`、`module_unhealthy_rolled_back`、`unhealthy_rolled_back`）⇒ ✅ S5A-S2 成立
+
+### 15.3 演練（MODULE-UPDATE-DRILL-20260928.md）
+
+- A success／applied（16.8 秒，完整鏈 ship → 簽章發布 → stage → verify → ps1）、B module_unhealthy_rolled_back／restored（68 秒，回滾後雜湊逐一相等）、C migration_dryrun_failed／not_applied ⇒ 三種結果都照預期
+- 演練抓修 6 項都有題；「C 不在最終樹重跑」的理由成立（後續修改都不經過 C 的路徑）
+- `manifest_lines` 改成解析整份 JSON、各輸出一行：安裝目錄以 (module, version) 去重、其他行不動 ✔
+
+### 15.4 必修
+
+**B55F-M1（必修）　正式機沒有「允許使用」的單模組回滾工具**
+- `apply_module_update.ps1`（844268be）的參數只有 `-PackagePath`、`-Yes`、`-SkipAutoRollback`，**沒有回滾模式**
+- 但 S7 §5 寫「用套用腳本的回滾模式」（參數仍是「〈A 定稿後填〉」）；B 的 `interrupted_apply_pending` 錯誤訊息（S5-S2 改過）也叫人用它；而 S7 同時禁止直接跑 `module_update.py rollback`（不停服、不重啟、不還原資料庫）
+- ⇒ 正式機遇到「使用者要求回滾」或「中斷的套用」時，**沒有任何被允許的做法**；中斷的套用又會擋住之後所有模組的套用（S3R-M1 的設計）⇒ 只能等開發機人工處理
+- 修法（擇一）：
+  1. A 在 ps1 加回滾模式（例：`-RollbackKey <key> [-Backup <stamp>]`：同一把鎖 → 停服 → `module_update rollback` → DB 快照還原（依該次備份）→ 重啟 → 健檢 → `::RESULT::`），S7 §5 填入參數
+  2. 或 S7 與錯誤訊息改寫成「回報開發機，由開發機指示」，並刪掉「回滾模式」的說法（等工具做好再加回）
+- 無論哪一種，S7 的 🔴「填入前不可交正式機」警語要在完成後才拿掉
+
+### 15.5 合流那一班的檢查項（演練報告 §3＋D 的其他紀錄）
+
+1. CORE 版號：A 與 E4 同搶 1.67 ⇒ 重新取號、CHANGELOG 分段
+2. version_manifest「部署工具」兩筆未出貨條目（28l、28m）⇒ 合成一筆（VR3）
+3. `apply_update.ps1` 的 `$ApplyScriptVersion`：A49（28j）與 E4（28i、13a2fbfd 起 28j）撞號 ⇒ 取新號並重算 `apply_update.version.json` 的雜湊（SW-O1）
+4. A 的 §10 守門（2 格）在 B55 文件上車後要從 skip 變 passed；`Invoke-CompanySetupCli` 逐字比對（2 格）要等 E4 合回後變 passed
+5. conftest `_app`：A 的帳密檔導向（ae27088f）與 E4 的閘門預設／FILES_OVERRIDE 都要在
+- 演練樹 `D:\MOTRIX-PLATFORM-B55-drill3`：D 最終稽核已完成，可以刪
