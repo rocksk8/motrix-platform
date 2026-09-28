@@ -82,6 +82,28 @@ def test_undetermined_passes_general_api_but_refuses_output(client, boss, clerk,
         assert d["code"] == cs.CODE_UNDETERMINED and d["detail"] == cs.MSG_UNDETERMINED, d
 
 
+def test_undetermined_quotation_pdf_is_428(client, boss, clerk, monkeypatch, no_mail):
+    """D CG5-M1 指定的題：status() 丟例外 ⇒ 報價單 PDF 下載 428 company_setup_undetermined（不是 200／500）。"""
+    import db
+    import pdf_gen
+    assert _confirm(client, boss).status_code == 200
+    now = "2026-01-01T00:00:00"
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json,"
+                     " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                     ("Q-CG5-001", "已送出", "客", "案", 21, 20,
+                      json.dumps({"items": [{"desc": "x", "qty": 1, "unitPrice": 20, "amount": 20}]}), now, now))
+        conn.commit()
+    finally:
+        conn.close()
+    monkeypatch.setattr(pdf_gen, "_get_edge_path", lambda: "edge-not-needed")      # 428 在組 HTML 時就發生
+    _boom(monkeypatch)
+    r = client.get("/api/quotations/Q-CG5-001/pdf-download", headers=boss)
+    assert r.status_code == 428, (r.status_code, r.text[:300])
+    assert r.json()["code"] == cs.CODE_UNDETERMINED
+
+
 def test_output_helpers_refuse_when_unconfigured_or_undetermined(client, monkeypatch):
     import pdf_gen
     from helpers import company_identity as ci
