@@ -82,3 +82,12 @@ def test_variant_b_loads_without_uvicorn_and_fails_with_it(wt, monkeypatch):
     monkeypatch.setitem(sys.modules, "uvicorn", object())
     with pytest.raises(RuntimeError, match="演練 B"):
         exec(code, {})
+
+
+def test_variant_bumps_above_the_installed_version(wt):
+    """同一個演練安裝連續跑多場：前一場成功後已是新版 ⇒ 下一場要再往上升（否則 preflight not_higher，演練 B 沒跑到回滾）。"""
+    import json
+    cur = json.loads((wt / "backend" / "modules" / DR.KEY / "module.json").read_text(encoding="utf-8"))["version"]
+    ahead = DR._bump(cur)
+    ver = DR.make_variant(wt, "B", ahead)
+    assert DR._vkey(ver) > DR._vkey(ahead)
