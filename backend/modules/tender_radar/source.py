@@ -1309,10 +1309,12 @@ def schedule_tender_scan():
 def _tender_scan_tick():
     """背景執行緒裡跑一輪，然後排下一次。
 
-    ⚠️ **不可以抄既有四支的形狀。** `archive._schedule_daily` 把工作放在 Timer
-    重排**之前**而且沒包 try——丟一次例外就永遠不會再排，**排程靜默死亡**，
+    ⚠️ 工作包在 `try` 裡、**重排放在 `finally`**：不管發生什麼，下一次一定排得上。
+    ☠️ 重排若放在工作之後而沒包 try，丟一次例外就永遠不會再排——**排程靜默死亡**，
     而「排程死了」跟「今天沒事做」長得一模一樣。
-    ⇒ 這裡工作包在 `try` 裡，**重排放在 `finally`**：不管發生什麼，下一次一定排得上。
+    〔更正（B，2026-09-29，D 觀察）：原句「不可以抄既有四支的形狀：`archive._schedule_daily` 把工作放在 Timer 重排之前
+    而且沒包 try」是當時的事實；B54-S2（A，wip/a-archive-bg）已把 archive 的排程改成同一個形狀（背景第一輪、try＋finally 重排），
+    合回後那一句就不成立了 ⇒ 改成只講規則本身，不再點名別的排程當反例〕
 
     ⚠️ `threading.Timer` 走模組屬性，`from threading import Timer` 會讓
     monkeypatch 打不到 ⇒ S3 永遠綠。
