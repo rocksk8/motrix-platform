@@ -41,7 +41,9 @@ MODULES_JSON = REPO / "docs" / "platform" / "modules.json"
 LOCK_NAME = "modules.lock.json"
 #: 包根目錄底下一定要有的檔（相對部署包根）。tools/ 刻意進包：升級精靈與 UPGRADE-RUNBOOK 在正式機執行
 #: <NEW>\\tools\\platform\\upgrade.py（主持 2026-09-25 裁示；不可加 export-ignore）。
-REQUIRED_PKG_FILES = ("tools/platform/upgrade.py",)
+REQUIRED_PKG_FILES = ("tools/platform/upgrade.py",
+                      # B55（主持裁示）：單模組包不帶工具，正式機用**已安裝**的這兩支做 preflight／套用／回滾
+                      "tools/platform/module_update.py", "tools/platform/product_select.py")
 
 
 class SelectError(Exception):

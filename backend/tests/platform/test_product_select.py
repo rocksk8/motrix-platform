@@ -28,7 +28,9 @@ def _pkg(tmp_path, mods=("alpha", "beta")):
     (pkg / "frontend" / "pages").mkdir(parents=True)
     (pkg / "frontend" / "pages" / "index.html").write_text("", encoding="utf-8")
     (pkg / "tools" / "platform").mkdir(parents=True)
-    (pkg / "tools" / "platform" / "upgrade.py").write_text("", encoding="utf-8")
+    for rel in PS.REQUIRED_PKG_FILES:          # 〔B55：原本只寫 upgrade.py；必要檔清單加了 module_update／product_select〕
+        (pkg / rel).parent.mkdir(parents=True, exist_ok=True)
+        (pkg / rel).write_text("", encoding="utf-8")
     for i, k in enumerate(mods):
         d = b / "modules" / k
         d.mkdir(parents=True)

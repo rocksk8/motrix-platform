@@ -910,8 +910,14 @@ def _delivered_status() -> dict:
         return {"configured": True, "available": False, "notice": "讀不到交付資料夾的結果：%s" % e}
     if not latest:
         return {"configured": True, "available": False, "notice": "交付資料夾裡還沒有任何成功套用的結果"}
+    try:
+        overlays = _dl.module_overlays(root)            # B55：這個完整包之上成功套用的單模組包（開發機側顯示）
+    except (_dl.DeliveryError, OSError):
+        overlays = {}
     return {"configured": True, "available": True, "commit": latest["commit"], "finishedAt": latest.get("finished_at"),
-            "name": latest["name"]}
+            "name": latest["name"],
+            "moduleOverlays": {k: {"version": v.get("version"), "finishedAt": v.get("finished_at"), "name": v.get("name")}
+                               for k, v in overlays.items()}}
 
 
 def _check_prod_status() -> dict:
