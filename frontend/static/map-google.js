@@ -159,10 +159,12 @@
       marker.__motrixPopup = '目前位置<br>' + this._esc(this.accuracyLabel() || '定位誤差不明')
       var self = this
       marker.addListener('click', function () { self._gmOpen(marker) })
+      // 顏色取語意 token（PLAYBOOK §G5 #3 不寫死色碼）；Google Circle 只收顏色字串 ⇒ 從 CSS 變數讀
+      var danger = (getComputedStyle(document.documentElement).getPropertyValue('--danger') || '').trim() || 'red'
       // 🔴 精度圓的半徑用真的那個數字（公尺）——寫死一個好看的圈比沒有更糟。
       var circle = new g.Circle({
         map: this._map, center: pos(me.lat, me.lon), radius: me.accuracy,
-        strokeColor: '#DC2626', strokeWeight: 1, fillColor: '#DC2626', fillOpacity: 0.10, clickable: false,
+        strokeColor: danger, strokeWeight: 1, fillColor: danger, fillOpacity: 0.10, clickable: false,
       })
       this._userLayer = { marker: marker, circle: circle }
     },
