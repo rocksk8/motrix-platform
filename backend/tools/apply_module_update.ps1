@@ -215,6 +215,43 @@ function Invoke-Py([string[]]$PyArgs) {
     return @{ Text = ($out | Out-String); Exit = $code }
 }
 
+# ── 本公司資料設定閘門（COMPANY-SETUP-GATE §6.3；E4）——與 apply_update.ps1 逐字相同 ──
+# 模組包不帶 backend\tools ⇒ 兩道都用**安裝目錄**那份 company_setup_cli.py（模組包不改 L1，判定邏輯就是正在跑的那一版）。
+function Invoke-CompanySetupCli([string]$Cli, [string[]]$CliArgs, [int]$TimeoutSec = 60) {
+    $res = @{ Allowed = $false; Reason = "tool_failed"; Text = ""; Exit = -1 }
+    if (-not (Test-Path $Cli)) { $res.Reason = "tool_missing"; return $res }
+    $outFile = Join-Path $env:TEMP ("motrix_company_setup_" + [guid]::NewGuid().ToString("N") + ".out")
+    $errFile = "$outFile.err"
+    try {
+        $argLine = (@($Cli) + $CliArgs | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join " "
+        $proc = Start-Process -FilePath "python" -ArgumentList $argLine -NoNewWindow -PassThru `
+                    -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+        $null = $proc.Handle   # 先取 Handle，行程結束後 ExitCode 才讀得到（PS 5.1）
+        if (-not $proc.WaitForExit($TimeoutSec * 1000)) {
+            try { $proc.Kill() } catch { }
+            $res.Reason = "timeout"
+            return $res
+        }
+        $res.Exit = $proc.ExitCode
+        $text = ""
+        if (Test-Path $outFile) { $text = (Get-Content $outFile -Raw -Encoding UTF8) }
+        if (Test-Path $errFile) { $text += (Get-Content $errFile -Raw -Encoding UTF8) }
+        $res.Text = "$text"
+        $line = @(("$text" -split "\r?\n") | Where-Object { $_.Trim().StartsWith("{") }) | Select-Object -Last 1
+        if (-not $line) { $res.Reason = "bad_output"; return $res }
+        $obj = $line | ConvertFrom-Json
+        $res.Reason = [string]$obj.reason
+        $res.Allowed = ($res.Exit -eq 0 -and $obj.allowed -eq $true -and $null -ne $obj.configured)
+        return $res
+    } catch {
+        $res.Reason = "tool_crashed"
+        $res.Text = "$_"
+        return $res
+    } finally {
+        Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Stop-InstallService {
     $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
     $byPid = @{}
@@ -501,6 +538,26 @@ $script:FromVersion = $pf.Data.from_version
 $script:ToVersion = $pf.Data.to_version
 Ok "  可以套用 $($script:ModuleKey)：$(if ($script:FromVersion) { $script:FromVersion } else { '（原本沒有）' }) → $($script:ToVersion)"
 
+# 本公司資料設定預檢（COMPANY-SETUP-GATE §6.3-1，同 apply_update；停服之前）：判定「未設定」或判定不了 ⇒ 不動任何東西
+$gateCli = Join-Path $BackendDir "tools\company_setup_cli.py"
+$prodDbForGate = Join-Path $BackendDir "motrix_erp.db"
+if (Test-Path $prodDbForGate) {
+    Info "  本公司資料設定預檢..."
+    $gateId = Invoke-CompanySetupCli $gateCli @("ensure-install-id", "--root", $ProdRoot)
+    if ($gateId.Exit -ne 0) {
+        Write-Host $gateId.Text
+        Fail "本公司資料設定預檢無法建立安裝識別檔（$($gateId.Reason)），中止（正式機尚未被觸碰）。" "refused_company_setup"
+    }
+    $gatePre = Invoke-CompanySetupCli $gateCli @("preflight", "--db", $prodDbForGate, "--root", $ProdRoot)
+    Write-Host $gatePre.Text
+    if (-not $gatePre.Allowed) {
+        Fail "本公司資料會是「未設定」或無法判定（原因：$($gatePre.Reason)），中止（正式機尚未被觸碰）；處置見 COMPANY-SETUP-GATE §6.2／§6.3。" "refused_company_setup"
+    }
+    Ok "  本公司資料設定預檢通過（$($gatePre.Reason)）。"
+} else {
+    Warn "  找不到正式庫 motrix_erp.db，略過本公司資料設定預檢。"
+}
+
 if (-not $Yes) {
     $ans = Read-Host "確定套用模組 $($script:ModuleKey) $($script:ToVersion)？(y/N)"
     if ($ans -ne "y") { Fail "使用者取消。" "user_cancelled" }
@@ -593,6 +650,16 @@ Info "[6/7] 重新啟動並健康檢查..."
 $restartAt = Get-Date -Format "yyyy-MM-ddTHH:mm:ss"
 Start-InstallService
 $hc = Test-ModuleHealth $script:ModuleKey $script:ToVersion $restartAt
+# 本公司資料設定（COMPANY-SETUP-GATE §6.3-2，同 apply_update）：與 ping 失敗同級 ⇒ 自動回滾；-SkipAutoRollback 不適用
+$companyGateFailed = $false
+if ($hc.Healthy -and $hc.ModuleOk -and (Test-Path $prodDbForGate)) {
+    $gatePost = Invoke-CompanySetupCli $gateCli @("status", "--db", $prodDbForGate, "--root", $ProdRoot)
+    Write-Host $gatePost.Text
+    if (-not $gatePost.Allowed) {
+        $companyGateFailed = $true
+        $hc = @{ Healthy = $true; ModuleOk = $false; Reason = "本公司資料設定檢查未通過（$($gatePost.Reason)）" }
+    }
+}
 if ($hc.Healthy -and $hc.ModuleOk) {
     $script:ServiceState = "up"
     Ok "  服務正常、$($script:ModuleKey) $($script:ToVersion) 已載入。"
@@ -601,7 +668,7 @@ if ($hc.Healthy -and $hc.ModuleOk) {
 }
 Warn "  健康檢查沒過：$($hc.Reason)"
 if ($hc.Healthy) { $script:ServiceState = "up" }
-if ($SkipAutoRollback) {
+if ($SkipAutoRollback -and -not $companyGateFailed) {
     Warn "  已依 -SkipAutoRollback 略過自動回滾——新版模組留在原地。要回到套用前：module_update.py rollback --root `"$ProdRoot`" --key $($script:ModuleKey) --backup $($script:ModStamp)"
     # 同 apply_update P0-00：結束碼 0，而這是一次失敗 ⇒ 由 status 說出來
     Emit-Result "unhealthy_not_rolled_back" 0
@@ -610,7 +677,7 @@ if ($SkipAutoRollback) {
 
 # ── 自動回滾（§2 R 系列）─────────────────────────────────────────
 Info "[7/7] 自動回滾..."
-$failStatus = if ($hc.Healthy) { "module_unhealthy_rolled_back" } else { "unhealthy_rolled_back" }
+$failStatus = if ($companyGateFailed) { "company_setup_rolled_back" } elseif ($hc.Healthy) { "module_unhealthy_rolled_back" } else { "unhealthy_rolled_back" }
 Stop-InstallService | Out-Null
 $script:ServiceState = "down"
 $rb = Invoke-ModuleRollback
