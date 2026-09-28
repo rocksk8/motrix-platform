@@ -113,6 +113,10 @@ db.DEMO_DB_PATH = os.path.join(_tmp, "d.db")
 import helpers.auth as _auth, helpers.startup as _startup
 _auth._CREDENTIALS_FILE = os.path.join(_tmp, "initial_admin_credentials.txt")
 _startup._DEMO_CREDENTIALS_FILE = os.path.join(_tmp, "initial_demo_credentials.txt")
+# 第二十班交會（B55 S2）：main 在排程閘門內寫 logs/module_states.json（core.paths.LOGS_DIR，呼叫時讀）⇒ 一併導到暫存
+import core.paths as _core_paths
+_core_paths.LOGS_DIR = os.path.join(_tmp, "logs")
+os.makedirs(_core_paths.LOGS_DIR, exist_ok=True)
 
 import archive
 archive.cloud_archive_enabled = lambda: False
@@ -148,11 +152,11 @@ os._exit(0)
 
 
 def _tree_credentials_state():
-    """AB-S1：子行程不可以動這棵樹的首次安裝帳密檔（開發機自己的那一份）。回 {檔名: mtime 或 None}。"""
+    """AB-S1：子行程不可以動這棵樹的首次安裝帳密檔（開發機自己的那一份）與載入狀態檔。回 {檔名: mtime 或 None}。"""
     import os
     from pathlib import Path
     backend = Path(__file__).resolve().parents[1]
-    names = (".initial_admin_credentials.txt", ".initial_demo_credentials.txt")
+    names = (".initial_admin_credentials.txt", ".initial_demo_credentials.txt", "logs/module_states.json")
     return {n: (os.path.getmtime(backend / n) if (backend / n).exists() else None) for n in names}
 
 
@@ -164,7 +168,7 @@ def test_import_main_finishes_while_every_scheduler_is_slow():
     backend = Path(__file__).resolve().parents[1]
     before = _tree_credentials_state()
     proc = run_python(["-c", _IMPORT_MAIN_SCRIPT], cwd=backend, timeout=_SLOW * 5)
-    assert _tree_credentials_state() == before, "子行程改動了這棵樹的首次安裝帳密檔（AB-S1）"
+    assert _tree_credentials_state() == before, "子行程改動了這棵樹的首次安裝帳密檔或載入狀態檔（AB-S1）"
     assert proc.returncode == 0, f"子行程失敗（returncode={proc.returncode}）：\n{proc.stderr[-2500:]}"
     vals = dict(l.split("=", 1) for l in proc.stdout.splitlines() if "=" in l and l.split("=", 1)[0].isupper())
     assert "IMPORT_SECONDS" in vals, f"子行程沒有印出耗時：\n{proc.stdout[-1500:]}\n{proc.stderr[-1500:]}"

@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 754,
+  "tests": 765,
   "unmapped": 8,
   "kinds": {
-   "api": 406,
+   "api": 409,
    "e2e": 180,
-   "audit": 100,
-   "unit": 68
+   "audit": 107,
+   "unit": 69
   },
   "routes": 596
  },
@@ -7371,6 +7371,23 @@
     "/api/vouchers.py"
    ]
   },
+  "backend/tests/platform/test_apply_module_update_ps1_2026_09_28.py": {
+   "kind": "audit",
+   "units": [
+    "dir:docs/platform/",
+    "file:backend/tools/apply_module_update.version.json",
+    "file:backend/tools/deploy_dashboard.py",
+    "file:docs/platform/MODULE-UPDATE-DELIVERY.md"
+   ],
+   "evidence": {
+    "path": [
+     "backend/tools/apply_module_update.version.json",
+     "backend/tools/deploy_dashboard.py",
+     "docs/platform/",
+     "docs/platform/MODULE-UPDATE-DELIVERY.md"
+    ]
+   }
+  },
   "backend/tests/platform/test_apply_plan_2026_09_28.py": {
    "kind": "audit",
    "units": [
@@ -7415,6 +7432,17 @@
      "product/full.json",
      "tools/platform/",
      "tools/platform/upgrade.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_apply_update_startup_range_2026_09_28.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/tools/apply_update.ps1"
+   ],
+   "evidence": {
+    "path": [
+     "backend/tools/apply_update.ps1"
     ]
    }
   },
@@ -8226,6 +8254,31 @@
     ]
    }
   },
+  "backend/tests/platform/test_delivery_module_2026_09_28.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/tools/",
+    "dir:tools/platform/",
+    "file:backend/tests/platform/test_delivery_2026_09_28.py",
+    "file:backend/tools/apply_module_update.version.json",
+    "file:tools/platform/module_update.py",
+    "file:tools/platform/product_select.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/platform/test_delivery_2026_09_28.py"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/tools/",
+     "backend/tools/apply_module_update.version.json",
+     "tools/platform/",
+     "tools/platform/module_update.py",
+     "tools/platform/product_select.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_dep_scan_controls.py": {
    "kind": "audit",
    "units": [
@@ -8532,6 +8585,23 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/platform/test_drill_module_apply_2026_09_28.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/",
+    "dir:frontend/",
+    "dir:tools/platform/",
+    "file:tools/platform/drill_module_apply.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/modules/",
+     "frontend/",
+     "tools/platform/",
+     "tools/platform/drill_module_apply.py"
+    ]
+   }
   },
   "backend/tests/platform/test_e2e_classification.py": {
    "kind": "audit",
@@ -9179,6 +9249,17 @@
    },
    "login_fixture": true
   },
+  "backend/tests/platform/test_migrate_like_startup_expect_module_2026_09_28.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/tests/platform/test_migrate_like_startup_modular_2026_09_28.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/platform/test_migrate_like_startup_modular_2026_09_28.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_migrate_like_startup_modular_2026_09_28.py": {
    "kind": "unit",
    "units": [
@@ -9305,6 +9386,25 @@
      "tools/platform/",
      "tools/platform/modtest.py",
      "tools/platform/scope_rc.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_module_apply_steps_2026_09_28.py": {
+   "kind": "audit",
+   "units": [
+    "core:main",
+    "file:backend/tools/module_apply_steps.py",
+    "helper:geo",
+    "helper:module_switches"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/module_switches.py"
+    ],
+    "path": [
+     "backend/helpers/geo.py",
+     "backend/main.py",
+     "backend/tools/module_apply_steps.py"
     ]
    }
   },
@@ -9621,6 +9721,32 @@
     "/api/zz-waitlist"
    ]
   },
+  "backend/tests/platform/test_module_states_file_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "core:main",
+    "file:backend/tools/apply_plan.py",
+    "mod:tender_radar/source",
+    "plat:__init__",
+    "plat:loader",
+    "plat:registry",
+    "plat:upgrade"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/loader.py",
+     "backend/core/registry.py",
+     "backend/core/upgrade.py"
+    ],
+    "path": [
+     "backend/core/loader.py",
+     "backend/main.py",
+     "backend/modules/tender_radar/source.py",
+     "backend/tools/apply_plan.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_module_update.py": {
    "kind": "audit",
    "units": [
@@ -9641,6 +9767,50 @@
      "backend/core/registry.py",
      "backend/modules/",
      "frontend/pages/",
+     "tools/platform/",
+     "tools/platform/module_update.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_module_update_delivery_2026_09_28.py": {
+   "kind": "audit",
+   "units": [
+    "core:main",
+    "dir:backend/",
+    "dir:backend/core/",
+    "dir:backend/modules/",
+    "dir:backend/modules/case/tests/",
+    "dir:backend/modules/netplan/tests/",
+    "dir:backend/tests/platform/",
+    "dir:backend/tools/",
+    "dir:docs/platform/",
+    "dir:tools/platform/",
+    "file:backend/version_manifest.json",
+    "file:docs/platform/MODULE-UPDATE-DELIVERY.md",
+    "file:tools/platform/module_update.py",
+    "mod:case/api/quotations",
+    "page:index.html",
+    "plat:registry"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/index.html"
+    ],
+    "path": [
+     "backend/",
+     "backend/core/",
+     "backend/core/registry.py",
+     "backend/main.py",
+     "backend/modules/",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/tests/",
+     "backend/modules/netplan/tests/",
+     "backend/tests/platform/",
+     "backend/tools/",
+     "backend/version_manifest.json",
+     "docs/platform/",
+     "docs/platform/MODULE-UPDATE-DELIVERY.md",
+     "frontend/index.html",
      "tools/platform/",
      "tools/platform/module_update.py"
     ]
@@ -9684,6 +9854,7 @@
    "kind": "audit",
    "units": [
     "file:backend/tools/_dashboard_remote.ps1",
+    "file:backend/tools/apply_module_update.ps1",
     "file:backend/tools/apply_update.ps1",
     "file:backend/tools/check_prod_drift.ps1",
     "file:backend/tools/rollback_update.ps1",
@@ -9697,6 +9868,7 @@
     ],
     "path": [
      "backend/tools/_dashboard_remote.ps1",
+     "backend/tools/apply_module_update.ps1",
      "backend/tools/apply_update.ps1",
      "backend/tools/check_prod_drift.ps1",
      "backend/tools/rollback_update.ps1"
@@ -10183,6 +10355,79 @@
      "backend/helpers/email_notify.py",
      "backend/modules/tender_radar/__init__.py",
      "tools/platform/"
+    ]
+   }
+  },
+  "backend/tests/platform/test_ship_tier_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "core:main",
+    "dir:backend/",
+    "dir:backend/core/",
+    "dir:backend/modules/",
+    "dir:backend/tools/",
+    "dir:tools/platform/",
+    "file:backend/conftest.py",
+    "file:backend/modules/tender_radar/CHANGELOG.md",
+    "file:backend/modules/tender_radar/README.md",
+    "file:backend/modules/tender_radar/SPEC.md",
+    "file:backend/requirements.txt",
+    "file:backend/tools/apply_update.ps1",
+    "file:docs/platform/RUN-PLAN.md",
+    "file:tools/platform/modtest.py",
+    "file:tools/platform/ship_tier.py",
+    "helper:case_access",
+    "helper:geo",
+    "helper:google_calendar",
+    "mod:accounting/voucher_attachments",
+    "mod:arap/api/invoice_vouchers",
+    "mod:case/api/quotations",
+    "mod:netplan/api",
+    "mod:tender_radar/source",
+    "page:pages/quotations.html",
+    "page:pages/tender-radar.html",
+    "plat:__init__",
+    "plat:catalog",
+    "plat:paths",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/paths.py",
+     "backend/core/registry.py"
+    ],
+    "page": [
+     "frontend/pages/quotations.html",
+     "frontend/pages/tender-radar.html"
+    ],
+    "path": [
+     "backend/",
+     "backend/conftest.py",
+     "backend/core/",
+     "backend/core/catalog.py",
+     "backend/core/paths.py",
+     "backend/core/registry.py",
+     "backend/helpers/case_access.py",
+     "backend/helpers/geo.py",
+     "backend/helpers/google_calendar.py",
+     "backend/main.py",
+     "backend/modules/",
+     "backend/modules/accounting/voucher_attachments.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/netplan/api.py",
+     "backend/modules/tender_radar/CHANGELOG.md",
+     "backend/modules/tender_radar/README.md",
+     "backend/modules/tender_radar/SPEC.md",
+     "backend/modules/tender_radar/source.py",
+     "backend/requirements.txt",
+     "backend/tools/",
+     "backend/tools/apply_update.ps1",
+     "docs/platform/RUN-PLAN.md",
+     "tools/platform/",
+     "tools/platform/modtest.py",
+     "tools/platform/ship_tier.py"
     ]
    }
   },
@@ -10858,6 +11103,23 @@
    "evidence": {
     "import": [
      "backend/archive.py"
+    ]
+   }
+  },
+  "backend/tests/test_archive_schedule_async_2026_09_28.py": {
+   "kind": "audit",
+   "units": [
+    "core:archive",
+    "core:main",
+    "file:backend/tests/_subproc.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/archive.py",
+     "backend/tests/_subproc.py"
+    ],
+    "path": [
+     "backend/main.py"
     ]
    }
   },
@@ -12283,6 +12545,23 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_conftest_credentials_isolation_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "helper:auth",
+    "helper:startup",
+    "plat:__init__",
+    "plat:paths"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/paths.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/startup.py"
+    ]
+   }
   },
   "backend/tests/test_core.py": {
    "kind": "audit",
