@@ -241,6 +241,8 @@
 - 金鑰：32 bytes 隨機，存開發機離線金鑰目錄（與交付簽章金鑰同一處、同規則：不讀進對話、不上雲）＋隨身碟備份；正式機執行 export 時由隨身碟提供，**不留在正式機**。清單檔本身沒有金鑰無法還原，可以放交付資料夾，但仍不進 repo、不進包。
 - 清單檔頭：`{"v":1, "key_id": HMAC(key,"motrix-deid-keycheck")[:8], "created": ..., "source_counts": {kind: n}, "lengths": {...}, "anchors": [...], "hashes": [...]}`。`key_id` 讓掃描器驗證「手上的金鑰就是產生清單的那一把」，對不上 ⇒ 拒絕建包（不是略過）。
 - 更新時機：每次出販售包前清單不得超過 30 天（檔頭 `created`）；超過 ⇒ 拒絕建販售包並提示到正式機重跑 export。
+  〔補 2026-09-28 19:12，D 設計審 H2-S3〕到期前 7 天起，開發機建包工具（own／sale 都算）先印提示「清單將於 YYYY-MM-DD 到期」；正式機回報流程加一項「清單到期日」。避免急修時才發現不能出 sale 包。
+- 〔補 2026-09-28 19:12，D 設計審 H2-S2〕**建包時的金鑰**：金鑰路徑只由參數或環境變數提供；建包腳本與掃描器**不印、不寫 log、不寫進 deploy_manifest**（衍生值只准 `key_id`）；Claude 不讀金鑰內容（比照交付簽章金鑰）。若開發視窗無法保證這一點 ⇒ sale 建包的「掃描」這一步由使用者執行。
 
 **(b) 正規化與比對**
 
@@ -263,7 +265,9 @@
 - `build_deploy_package.ps1` 新參數 `-Audience sale|own`，**預設 sale**（忘了給＝走嚴格那一邊）。`-License` 給了而授權對象不是本公司 ⇒ 強制 sale，給 `own` 直接中止。
 - `own`：不剪、不擋；仍跑掃描，只記錄命中數到 `deploy_manifest.json`（`deid: {audience, hits, list_created, key_id}`），方便追蹤。
 - `sale`：剪、投影、掃描、正對照全部過才產出；`deploy_manifest.json` 記 `audience: "sale"`、清單指紋、掃描題數、金絲雀結果；**不記開發機路徑**（現行 `python.path` 欄位在 sale 改記版本字串）。
-- 套用端 `apply_update.ps1`：`audience=own` 的包只准套在 E4 認定為本公司的安裝（有效的開發者簽章確認檔，綁安裝識別檔）；否則拒絕並說明。`sale` 的包套在本公司安裝上照常可用（只是少了本公司專用的回填，見 §2.4）。
+- 套用端 `apply_update.ps1`：`audience=own` 的包只准套在 E4 認定為本公司的安裝（有效的開發者簽章確認檔，綁安裝識別檔）；否則拒絕並說明。~~`sale` 的包套在本公司安裝上照常可用（只是少了本公司專用的回填，見 §2.4）。~~
+  〔更正 2026-09-28 19:12，D 設計審 H2-M2〕刪除上句。`helpers/startup._sync_module_versions` 每次啟動都把 `updated_by='system'` 的列 `UPDATE … SET content=?` ⇒ 本公司安裝套一次 sale 包，安裝基準之前的版本紀錄內文全被洗成投影字串，且改寫後的內容會進每日備份與匯出。⇒ **本公司安裝（E4 開發者認定成立）套 sale 包一律拒絕**，訊息「本公司安裝請改用 own 包」。題：本公司形狀的安裝＋sale 包 ⇒ 被拒、`module_versions` 逐列不變。
+  〔補 2026-09-28 19:12，D 設計審 H2-S4〕這兩道套用端檢查都**依賴 E4**（安裝識別檔＋開發者簽章確認檔）⇒ 實作順序 E4 先合回；在那之前**不可**以「讀不到 E4 ⇒ 放行」過渡——讀不到就拒絕套 own 包，sale 包的本公司判定讀不到也拒絕。
 - `verify_package.py`：驗 `deid` 欄位存在、`audience` 合法；sale 包再跑一次樣式層（不需金鑰）當第二道。
 
 ### 2.3 sale 建包的剪裁與投影（掃描之前做）
@@ -272,6 +276,7 @@
 - **隨包客戶文件**：`DEPLOY.md`、`DR-SOP.md`、`HTTPS-DEPLOY-CHECKLIST.md` 改寫為不含本公司環境的版本（內網 IP、路徑、demo 密碼改成 `<伺服器 IP>`、`<安裝目錄>`）；本公司專用段落搬到 export-ignore 的內部文件。這是 Q5「docs／根目錄文件的開發者資訊」的落點。
 - **version_manifest 投影**（sale）：安裝基準（sale 包的 `install_baseline`）以前的條目保留 `module／version／date／time`，`content` 換成固定字串「安裝基準之前的紀錄」；之後的條目照原文，但要過掃描。原因：客戶畫面本來就不顯示基準前的紀錄，而 `_sync_module_versions()` 需要版本鍵（登入頁版號、VR3 重複判定）。**repo 裡的 version_manifest 一字不改**（已出貨條目不可改寫），投影只存在包裡。
 - 基準後的條目若含識別值（不能改寫）：`backend/version_manifest_sale_overlay.json`（進 repo）以 `module+version` 為鍵給出去識別後的內文，投影時覆蓋；覆蓋檔本身也要過掃描。另在 PLAYBOOK §G5 加一列：「新寫版本紀錄內文不准含公司／客戶／人員名稱、正式機現況描述」，以樣式層＋雜湊層在 commit 前自查。
+- 〔補 2026-09-28 19:12，D 設計審 H2-S1〕**投影要能從 git 重算**：剪裁與投影讓 sale 包不再逐檔等於 git blob。`deploy_manifest.deid` 記投影的輸入（安裝基準版號、overlay 檔 blob 雜湊、`sale_prune.json` blob 雜湊），另提供重算工具（`tools/platform/deid_project.py rebuild --commit <c> --inputs <deploy_manifest>`）由 commit＋輸入重建出相同的 `version_manifest.json` 與檔案清單。出貨前逐檔驗證改為：除投影檔外其餘等於 blob、被剪的檔不在、投影檔等於重算結果。
 
 ### 2.4 產品碼裡「會出貨的例外」怎麼處理
 
@@ -280,9 +285,21 @@
 | `core/upgrade.py:645-686`（V9 公司預設值、`_is_our_install`）＋`tools/platform/upgrade_drill.py:96-97` | 只在本公司安裝動作，但明文隨包 | 搬進 **own 專用** 的模組或檔（`sale_prune.json` 剪掉）；升級精靈在 sale 包裡找不到它 ⇒ 不回填（客戶本來就不該回填）。`_is_our_install` 的「含兩字簡稱」判準一併拿掉（§1.4c） |
 | `helpers/auth.py:44`（弱密碼黑名單） | 明文 | 改存 `sha256(正規化密碼)`（黑名單只需「相等」判斷；雖可窮舉，但不再是可 grep 的明文）；或併入 E4 的開發者指紋同一套（§5 T3） |
 | `helpers/startup.py`、`routers/auth.py`（既有安裝的預設管理員帳號名） | 明文 | 既有安裝判斷改讀庫內實際存在的最高管理員帳號，不寫死名字 |
-| `db.py` 凍結 migration（統編判準、英文名回填、人員姓名與 email） | 明文，凍結不可改 | **待裁示**（§5 T1）：①行為等價改寫（字面值比較改 HMAC 比較，英文名回填改讀 own 專用檔）＋契約題證明新舊結果相同；②維持凍結、sale 包以登記例外放行（＝包內仍有明文）|
+| `db.py` 凍結 migration（統編判準、英文名回填、人員姓名與 email） | 明文，凍結不可改 | ~~**待裁示**（§5 T1）：①行為等價改寫（字面值比較改 HMAC 比較，英文名回填改讀 own 專用檔）＋契約題證明新舊結果相同；②維持凍結、sale 包以登記例外放行（＝包內仍有明文）~~ 〔更正 2026-09-28 19:12，D 設計審 H2-M1：①「讀 own 專用檔（內容沒釘住）」會讓 sale 包在開發者形狀的庫上**成功完成、記下版號、沒有回填**，sale／own 寫出兩段不同的歷史；建包時投影 db.py 也不行（出貨檔≠git blob、測試與客戶跑不同程式）。改為下方 §2.4.1 三類做法〕 |
 | 頁面／程式的內網 IP 預設值 | 明文 | 改讀設定或 `request.host`；提示文字用 `<伺服器 IP>` |
 | `deploy_manifest.json` 直譯器路徑 | 開發機路徑 | sale 包不記路徑 |
+
+#### 2.4.1 凍結 migration 的三類處理（2026-09-28 19:12，依 D 設計審 H2-M1；AUDIT-D-H2-sale-deid.md §1.3）
+
+| 類 | 位置（`db.py`） | 做法 | 證明 |
+|---|---|---|---|
+| A 註解／docstring | `:763-768` 註解、`_m106` docstring、`:4445`、`:4894` 附近 docstring | 直接改寫成不含識別值的文字 | 一題：舊版（`git show <舊 commit>:backend/db.py`）與新版的**每一支** `_mNNN` 編譯後比較 `co_code`＋`co_consts`（排除 docstring），逐一相等 |
+| B 守門條件 | `_m106` 的統編相等判斷；`_m008` 的舊顯示名清單與 `username=` 條件 | **就地**改成 `hashlib.sha256(<與原比較完全相同的前處理>.encode()).hexdigest() == "<常數>"`；`_m008` 的 `IN (...)` 改為 Python 端以雜湊集合篩出 id 再 UPDATE。只用標準庫、不 import 活模組、不讀外部檔（兩邊換成同一函數的輸出，不違反〈凍住的歷史不要呼叫活的程式碼〉） | 契約題：從舊 commit 載入舊版函式，與新版跑同一組語料（全新庫、開發者形狀的庫、客戶形狀的庫、空白與全形變形），執行後**整庫逐位元組相等**。雜湊可窮舉還原——與 T3 同理接受，目的是不再有可 grep 的明文。E4 的開發者統編常數與此同值：migration 保留自己的常數（不可 import E4 的活模組），另一題驗兩值相等 |
+| C 寫進庫的值 | `_m106` 的公司英文名；`_m008` 的真實人名與個人 email | 搬到**內容釘住**的凍結資料檔 `backend/migrations_frozen/own_payload.json`，**只隨 own 包出貨**（`sale_prune.json` 剪掉）；migration 內寫死該檔 sha256，**只在 B 成立時才讀**；檔不在或雜湊不符 ⇒ **丟例外**（migration 失敗、啟動失敗、整包回滾），**不可**跳過並記下版號 | 題：sale 全新安裝跑完全部 migration ⇒ 不丟例外、整庫 HMAC 掃描 0 命中；開發者形狀 V9 庫＋own 檔 ⇒ 與舊版函式結果逐位元組相等；開發者形狀庫＋沒有 own 檔 ⇒ 丟例外（反向控制） |
+
+- **可達性**（sale 包為何永遠走不到 C 的例外）：全新安裝 ⇒ 空表／空種子，B 不成立；災難還原 ⇒ 還原庫已記錄這些版號，不再執行；其他客戶的既有庫 ⇒ B 比對的是開發者統編與舊帳號名，不成立。**唯一走得到 C 的**是把開發者自己的 V9 庫再轉換一次（演練、重建正式機）⇒ **V9 轉換工具與 apply 預檢以 E4 開發者認定擋下 sale 包，要求 own 包**。結果只有兩種：sale 與 own 相同，或 sale 明確拒絕；不會出現「兩段都成功而不同」的歷史。
+- 釘住的資料檔不會演進 ⇒ 不是「活的程式碼」。sale 不做 migration 投影（出貨的 `db.py` 永遠等於 git blob）。
+- **優先順序**：`_m008` 的 C 類（真實人名＋個人 email＝個資）先做，公司英文名（Q1 預設 LOGO 圖中本來就有）後做。另 `_m008` 的 `username=` 條件是常見英文名，改雜湊後也消除「將來客戶 V9 庫有同名帳號且 email 空白 ⇒ 被寫入開發者 email」的誤寫風險（D 觀察 H2-O1）。
 
 ### 2.5 ③ 正對照與反向控制
 
@@ -314,8 +331,8 @@
 | S2 | 清單產生器 | `tools/platform/deid_hashlist.py export`（唯讀開庫、只輸出雜湊、檔頭 key_id） | 合成庫產生→掃合成包命中；輸出檔 grep 不到合成明文 |
 | S3 | 虛構登記＋placeholder 更正 | `deid_fiction.json`；§1.4f 的 placeholder 改保留值；`demo_fixture.json` | 樣式層在 `frontend/` 0 風險 |
 | S4 | 剪裁與投影 | `product/sale_prune.json`、version_manifest sale 投影、overlay 檔、客戶版 DEPLOY／DR-SOP／HTTPS 清單 | sale 包 `verify_package` 過、`apply_update` 在全新安裝演練過（含 `_sync_module_versions`、登入頁版號） |
-| S5 | 產品碼例外外移 | §2.4 表（凍結 migration 依 T1 裁示） | 現行 `test_no_our_company_literals` 的 ALLOWED 只剩裁示保留項 |
-| S6 | 建包接線 | `build_deploy_package.ps1 -Audience`、`deploy_manifest.deid`、金絲雀；`verify_package.py`、`apply_update.ps1` 檢查 audience | 反向控制 6；植入金絲雀的 sale 建包被拒 |
+| S5 | 產品碼例外外移 | §2.4 表（凍結 migration 依 ~~T1 裁示~~ §2.4.1 三類，`_m008` 優先） | 現行 `test_no_our_company_literals` 的 ALLOWED 只剩裁示保留項；〔補 19:12 H2-M1〕§2.4.1 三組題（A co_code／co_consts 相等、B 舊新整庫逐位元組相等、C sale 全新 0 命中／own 相等／缺檔丟例外） |
+| S6 | 建包接線 | `build_deploy_package.ps1 -Audience`、`deploy_manifest.deid`（含投影輸入，H2-S1）、金絲雀、重算工具；`verify_package.py`、`apply_update.ps1` 檢查 audience | 反向控制 6；植入金絲雀的 sale 建包被拒；〔補 19:12〕本公司形狀的安裝＋sale 包 ⇒ 被拒且 `module_versions` 不變（H2-M2）；投影檔等於重算結果（H2-S1）；**E4 合回之後才做套用端**（H2-S4） |
 | S7 | 文件與規則 | MODULE-GUIDE §3.7 補「sale 包掃描」、PLAYBOOK §G5 補版本紀錄內文一列、DR-SOP 補金鑰保管與清單更新 | D 審 |
 
 核心代碼方向（示意，非最終）：
@@ -343,14 +360,16 @@ def scan_text(t: str, hl: HashList) -> Iterator[tuple[int, str]]:
 2. **version_manifest 全文出貨**：「已出貨不可改寫」讓 repo 內無法清，必須靠建包投影；規則偵測抓不到「正式機某張單卡死」這類案件敘述（81 筆），只能靠整段換掉。
 3. **守門登記的例外照樣出貨＋明文清單在 repo**：`ALLOWED` 讓 CI 綠但包裡仍有明文；守門自己又以明文存樣式。雜湊清單＋sale 剪裁要同時解決兩件事，而凍結 migration 需要裁示才能動。
 
-## 5. 待主持裁示
+## 5. ~~待主持裁示~~ 裁示結果（2026-09-28 19:12 更正：主持裁示 T2～T7；T1 交 D 判，依 AUDIT-D-H2-sale-deid.md §1.3）
 
-| # | 事項 | 建議 |
-|---|---|---|
-| T1 | 凍結 migration（`db.py`）內的本公司字面值 | ①行為等價改寫（HMAC 比較＋讀 own 專用檔），附新舊結果相同的契約題；凍結規則為此開一次例外 |
-| T2 | 現行 `_our_company_literals.py` 的明文樣式 | 改 HMAC 清單；金鑰不在 ⇒ 題目紅；git 歷史不改寫 |
-| T3 | E4 統編指紋與弱密碼黑名單的雜湊強度 | 改 scrypt 高成本（或接受：統編屬公開登記資料）——需與 E4 線一起定 |
-| T4 | 樣式層「開發環境路徑」命中是擋還是警告 | 擋（sale 剪裁後預期只剩部署腳本數處，改成相對路徑即可歸零） |
-| T5 | 清單產生地點與金鑰保管 | 正式機讀備份複本執行 export；金鑰離線存放＋隨身碟，不留正式機、不上雲；清單 30 天有效 |
-| T6 | 經銷商／原廠網域（公開資訊但透露供應商關係）是否納入 | 不納入雜湊層；選型資料庫本來就是公開規格 |
-| T7 | `-Audience` 預設值 | sale（忘記給時走嚴格的一邊） |
+| # | 事項 | 原建議 | 裁示 |
+|---|---|---|---|
+| T1 | 凍結 migration（`db.py`）內的本公司字面值 | ~~①行為等價改寫（HMAC 比較＋讀 own 專用檔），附新舊結果相同的契約題；凍結規則為此開一次例外~~ | **D 判（H2-M1）**：分 A／B／C 三類（§2.4.1）——A 註解直接改寫＋co_code／co_consts 相等；B 就地 sha256 常數比較、只用標準庫、舊新整庫逐位元組相等；C 搬到釘住 sha256 的凍結資料檔、只隨 own 包、只在 B 成立時讀、缺檔或不符丟例外不記版號；sale 不做 migration 投影；`_m008` 個資優先 |
+| T2 | 現行 `_our_company_literals.py` 的明文樣式 | 改 HMAC 清單；金鑰不在 ⇒ 題目紅；git 歷史不改寫 | **HMAC**（照建議） |
+| T3 | E4 統編指紋與弱密碼黑名單的雜湊強度 | 改 scrypt 高成本（或接受：統編屬公開登記資料）——需與 E4 線一起定 | **接受**（統編屬公開登記資料；目的是不再有可 grep 的明文）。§2.4.1 B 類同理 |
+| T4 | 樣式層「開發環境路徑」命中是擋還是警告 | 擋（sale 剪裁後預期只剩部署腳本數處，改成相對路徑即可歸零） | **擋** |
+| T5 | 清單產生地點與金鑰保管 | 正式機讀備份複本執行 export；金鑰離線存放＋隨身碟，不留正式機、不上雲；清單 30 天有效 | **照建議**；另加 H2-S2（金鑰不印不寫 log、Claude 不讀內容）與 H2-S3（到期前 7 天提示） |
+| T6 | 經銷商／原廠網域（公開資訊但透露供應商關係）是否納入 | 不納入雜湊層；選型資料庫本來就是公開規格 | **不納入** |
+| T7 | `-Audience` 預設值 | sale（忘記給時走嚴格的一邊） | **預設 sale** |
+
+D 設計審（`wip/d-audit-train16` f47fc40d）處置：必修 H2-M1（§2.4／§2.4.1／S5／T1）、H2-M2（§2.2d／S6）已改；建議 H2-S1（§2.3）、S2、S3（§2.2a）、S4（§2.2d／S6）全收；觀察 O1 併入 §2.4.1、O2 併入 §2.4.1 B 類。
