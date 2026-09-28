@@ -179,5 +179,8 @@ register("backup_error", "備份嚴重錯誤", _S, "superadmins", "",
          "請確認雲端硬碟是否已掛載、本機快照（backend/db_backups/）是否存在，以及伺服器磁碟空間。")
 register("geo_quota_warning", "地圖定位額度達警戒線", _S, "superadmins", "",
          "達到額度上限後，系統改用精度較低的免費定位來源；功能不會關閉。", "如需維持定位精度，請調整額度設定；下一個計費週期開始時自動恢復。")
+register("company_setup_alert", "本公司資料設定狀態告警", _S, "superadmins", "",
+         "本公司資料未確認、判定失敗或暫時放行中時，對外文件可能暫停輸出或使用未經確認的公司資料。",
+         "請最高管理員至「公司資料設定」確認本公司資料；判定失敗時請聯絡系統負責人檢查伺服器記錄。")
 register("system_test_mail", "測試信", _S, "superadmins", "",
          "本信僅用於確認寄信設定。", "收到本信表示寄信設定正確，無需處理。")

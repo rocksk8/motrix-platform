@@ -624,6 +624,24 @@ def _startup_integrity_check():
 
 
 _startup_integrity_check()
+
+
+def _startup_company_setup():
+    """本公司資料設定閘門（COMPANY-SETUP-GATE §3.4、§6.1）：安裝識別檔不在就建（庫裡已有確認紀錄 ⇒ ERROR＋告警）；
+    既有安裝升級時補一次確認紀錄（每庫一次）。兩支都不丟例外；這裡再包一層：閘門的問題不可以讓服務起不來。"""
+    from helpers import company_setup as _cs
+    conn = get_db()
+    try:
+        _cs.startup_install_check(conn)
+        _cs.backfill_once(conn)
+        conn.commit()
+    except Exception:                                        # noqa: BLE001
+        logger.exception("本公司資料設定閘門啟動檢查失敗（服務照常啟動）")
+    finally:
+        conn.close()
+
+
+_startup_company_setup()
 init_default_admin()
 init_demo_account()
 flag_weak_passwords()

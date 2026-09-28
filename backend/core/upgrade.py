@@ -80,6 +80,10 @@ CONFIG_FILES = tuple(sorted({
     _rel(_p.NO_CLOUD_MARKER),
     _rel(_p.NO_EMAIL_SEND_MARKER),
     _rel(_p.AUTOSTART_BAT),
+    # 本公司資料設定閘門的三個安裝設定檔（CG2-M1：沒登記 ⇒ classify 當程式 ⇒ 升級／回滾可能動到，識別檔一丟就被擋）
+    _rel(_p.INSTALL_IDENTITY_FILE),
+    _rel(_p.COMPANY_CONFIRMATION_FILE),
+    _rel(_p.COMPANY_SETUP_GRACE_FILE),
 }))
 # ⚠ `.build_commit`（`_p.BUILD_COMMIT_FILE`）**不是**設定：它是打包時寫下「這份程式碼是哪個 commit」，
 #   跟著程式走 ⇒ 歸類成程式（classify 的預設）：轉換時隨新版包安裝、兩種回滾都還原成 V9 的那一份。

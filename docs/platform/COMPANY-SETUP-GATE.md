@@ -5,6 +5,7 @@
 > 「未來販售輸出的檔案，需要對方強制設定自己的公司名稱跟統編等訊息，避免對方用預設我的公司統編輸出報價單等相關文件」；
 > 「例如先導航去公司設置，設置完才開放功能」。
 > 〔修訂 2026-09-28 18:53：D 設計審 AUDIT-D-E4-company-gate.md（wip/d-audit-train16 1bf0dadd）必修 CG-M1／CG-M2、建議 CG-S1～S5 全收；主持裁示：**綁定主體改為安裝識別檔**（不看硬體）、威脅模型照 CG-S4。被取代的段落以刪除線保留〕
+> 〔實作註 2026-09-28（wip/e-company-gate-impl 第一段）：CLI 在 `backend/tools/`（UPDATE-DELIVERY §3.4 先複製包內 backend	ools，預檢才用得到新版）；三個 F3 檔都在 `backend/`；CLI 一律 UTF-8 輸出〕
 > 〔修訂 2026-09-28 18:59：D 複審（wip/d-audit-train16 8661a1da §4）CG-M1／CG-M2 關閉；新必修 CG2-M1、建議 CG2-S1～S4 全收〕
 > 本文件**不寫任何開發者公司的字面值**（公司名、統編、電話、網域…）：一律以「<字面值>」＋檔案:行號指稱（§3.3 說明為什麼與怎麼存指紋）。
 > 盤點方式：兩個唯讀搜尋（輸出點／回退路徑）＋本人逐點抽查（voucher_pdf、legal_params、payslip-form、core/upgrade、.gitattributes 已對照原始碼）。
@@ -98,16 +99,16 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 - **威脅模型（CG-S4，主持裁示寫明）**：本閘門防的是「**沿用預設**」與「**疏忽**」（忘了設定、從開發者那裡拿到的庫直接用），**不防**會修改程式碼、或整包複製安裝目錄的客戶——程式碼在客戶機器上。**不要把它當成授權或防盜機制來加強**；那是 licensing 的職責。
   - 加鹽雜湊防的是「程式碼與文件裡多一處字面值」，不防還原：統編 8 碼可在數秒內暴力還原（鹽在程式碼裡）；統編是公開登記資料，且已以字面值存在於凍結的 `db.py`／`core/upgrade.py`（ALLOWED）⇒ 可還原不構成新風險。
 - **開發者簽章確認檔**（Q2 裁示：主要且唯一的開發者認定方式；~~登記機器指紋為輔~~ 依主持裁示綁定不再看硬體，機器指紋不用）：
-  - 檔名 `company_confirmation.sig`，放安裝根目錄（F3：`.gitignore`、`verify_package` 拒絕帶入、每日備份不收、不上雲）。
+  - 檔名 `company_confirmation.sig`，放 `backend/`（與 license.key 同層；〔實作註：~~安裝根目錄~~〕F3：`.gitignore`、`verify_package` 拒絕帶入、每日備份不收、不上雲）。
   - 被簽內容（正規化 JSON）：`{"purpose": "motrix-company-confirm-v1", "identity_fp": "<統編指紋>", "install": "<sha256(安裝識別)>", "issued": "YYYY-MM-DD", "expires": "YYYY-MM-DD"}`；簽章原文前綴 `motrix-company-confirm-v1\n`（CG-S3 網域分隔：與交付包共用同一把 Ed25519 金鑰，驗證端只認這個前綴與 `purpose`，交付包的簽章不能被當成確認檔，反之亦然）。
   - 到期日：建議簽 3 年；到期前 30 天起每日告警一次（速率上限），到期 ⇒ `signed_file_expired`（等同未設定，§4.3 暫時放行可用）。
-  - 公鑰：沿用 licensing 內嵌的開發／正式公鑰（`env` 記在 status 回傳，開發金鑰簽的檔在正式機上標示）。
+  - 公鑰：〔實作註：交付簽章公鑰（與 `backend/tools/delivery.py` 的 `DELIVERY_PUBKEY_PEM` 相同，題目比對一致；CG-S3 指的就是這把）〕~~沿用 licensing 內嵌的開發／正式公鑰（`env` 記在 status 回傳，開發金鑰簽的檔在正式機上標示）。~~
 - `_our_company_literals` 守門：雜湊不是字面值、掃描器看不到 ⇒ 另加一題「指紋常數只出現在 `helpers/company_setup.py`」。
 
 ### 3.4 綁本安裝：安裝識別檔〔修訂 CG-M1、CG-O1，主持裁示〕
 - **不看硬體**：D 查證 `licensing.machine_fingerprint()` 會因插 USB 網卡、手機 USB 分享（MAC 較小即換）、PowerShell 被擋（改用 MachineGuid、**不丟例外**、整個行程快取）而漂移 ⇒ 用它擋全部功能＝停擺風險。
 - `backend/.install_identity`：安裝時產生（`secrets.token_hex(32)`＋建立時間），隨安裝目錄；F3：`.gitignore`、`verify_package` 拒絕帶入、**不進每日／月備份**、不上雲。紀錄與簽章檔只存它的 sha256。
-- 產生時機：`tools/platform/company_setup_cli.py ensure-install-id --root <安裝目錄>`（冪等：已有就不動）由 `apply_update.ps1` 在**停服之前**呼叫；新裝由安裝程序呼叫；啟動時仍不存在 ⇒ 產生，並依庫裡有沒有確認紀錄分兩種：
+- 產生時機：`backend/tools/company_setup_cli.py ensure-install-id --root <安裝目錄>`（冪等：已有就不動）由 `apply_update.ps1` 在**停服之前**呼叫；新裝由安裝程序呼叫；啟動時仍不存在 ⇒ 產生，並依庫裡有沒有確認紀錄分兩種：
   - 庫裡**沒有**確認紀錄（新裝、第一次啟動）⇒ 記 WARN；
   - 庫裡**已有**確認紀錄 ⇒ 重建＝改掉綁定 ⇒ **ERROR＋系統告警**（與備份告警同一套：邊緣觸發、每日一封）「安裝識別檔遺失，已重建；本公司資料確認紀錄失效，請最高管理員重新確認（開發者正式機：需新簽章檔或暫時放行）」〔CG2-M1；~~產生並記 WARN（第一次啟動）~~〕
 - **登記為安裝設定（CG2-M1）**：三個 F3 檔（`.install_identity`、`company_confirmation.sig`、`company_setup_grace.json`）進 `core.paths` 常數＋`core.upgrade.CONFIG_FILES`（:74-83，同 license.key、`.deployed_commit.json`；同 DB-O1 對 `.deployed_modules.json` 的做法）。沒登記的檔在 `classify` 預設是「程式」⇒ 刪除計畫、cleanup-snapshot、完整包套用、V9 轉換、兩種回滾都可能動到它；識別檔一丟，開發者正式機就被擋。
@@ -212,8 +213,8 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 - 設定頁 `?setup=1`：頂端說明「輸出文件會使用以下資料；確認前系統其他功能暫停」＋必要欄位驗證＋「確認本公司資料」鈕（勾選「以上為本公司資料」才可按）；命中開發者指紋 ⇒ 明說「這是 MOTRIX 開發者的公司資料，請改成貴公司資料」，確認鈕停用。
 
 ### 4.3 現場安全閥：暫時放行（CG-M1 ③）
-- 形式：安裝根目錄的 `company_setup_grace.json`（F3：`.gitignore`、`verify_package` 拒絕、不進備份、不上雲），由 **本機 CLI** 建立：
-  `python tools/platform/company_setup_cli.py grace --root <安裝目錄> --hours 72 --reason "<原因>"`（只在伺服器本機執行；不開網路端點，免登入＝最高管理員不在也能用）。
+- 形式：`backend/company_setup_grace.json`（〔實作註：~~安裝根目錄的~~〕F3：`.gitignore`、`verify_package` 拒絕、不進備份、不上雲），由 **本機 CLI** 建立：
+  `python backend/tools/company_setup_cli.py grace --root <安裝目錄> --hours 72 --reason "<原因>"`（只在伺服器本機執行；不開網路端點，免登入＝最高管理員不在也能用）。
 - 內容：`{"created": ISO, "until": ISO, "reason", "install": sha256(安裝識別), "created_by_os_user"}`。
 - **有效期由伺服器保證**（CG2-S4；檔案是本機檔，任何能寫安裝目錄的人都可以不經 CLI 改它）：
   - 伺服器第一次看到某份放行檔（以**內容雜湊**為鍵）⇒ 記 `first_seen` 到 DB（設定鍵 `company_setup_grace_seen`＝{內容雜湊: first_seen}，T1）＋系統稽核；
@@ -300,7 +301,7 @@ h-branding 守「**程式碼**不含本公司字面值」＋「單據與頁面�
 | ⑤ | 指紋只在一處 | 開發者指紋常數只准出現在 `helpers/company_setup.py`；repo 任何地方出現與開發者統編相同的 8 碼字面值 ⇒ 沿用 h-branding 的 ALLOWED 規則 |
 
 ## 8. 步驟（實作時，依序）
-1. L1 `helpers/company_setup.py`：`status(db_path, install_root)`（純函式）、確認紀錄讀寫、指紋常數、安裝識別檔、簽章確認檔驗證（用途前綴＋到期）、暫時放行檔、統編檢查碼；`tools/platform/company_setup_cli.py`（ensure-install-id／preflight／status／grace）；題（§7-③④⑤⑦⑧）。
+1. L1 `helpers/company_setup.py`：`status(db_path, install_root)`（純函式）、確認紀錄讀寫、指紋常數、安裝識別檔、簽章確認檔驗證（用途前綴＋到期）、暫時放行檔、統編檢查碼；`backend/tools/company_setup_cli.py`（ensure-install-id／preflight／status／grace）；題（§7-③④⑤⑦⑧）。
    〔~~機器綁定（含安裝識別檔退路）~~ 更正 CG-M1〕
 2. `PUT /api/settings/company-profile` 接 `confirmIdentity`；`GET /api/settings/company-setup/status`；稽核。
 3. `main.py` 中介層＋白名單；§7-① 題。

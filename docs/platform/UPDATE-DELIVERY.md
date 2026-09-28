@@ -91,6 +91,12 @@
 ## 4. 結果呈現（對應裁示 ③④）
 
 - 判定只看最後一行 `::RESULT:: v=2 status=… rolled_back=… service=… exit=…`（`parse_result_line`／`decide_outcome`，不另寫正則）。
+- 〔2026-09-28 E 線，COMPANY-SETUP-GATE §6.3〕本公司資料設定閘門新增兩個失敗出口（已進 `deploy_dashboard._STATUS_FAILED`）：
+  | status | 何時 | 正式機狀態 | 處置 |
+  |---|---|---|---|
+  | `refused_company_setup` | 停服前預檢：套用後會「未設定」或無法判定（含預檢工具缺、當掉、逾時、輸出壞） | 尚未被觸碰（服務照常） | 依 `::RESULT::` 上方印出的 reason：`developer_identity_unsigned` ⇒ 先放開發者簽章確認檔；`fields_invalid` ⇒ 先在設定頁補欄位；其他 ⇒ 聯絡開發者 |
+  | `company_setup_rolled_back` | 套用後本機 CLI 判定未設定／無法判定 | 已自動回滾（`-SkipAutoRollback` 不適用） | 同上；回滾後照舊運作 |
+  - 正式機 `apply_update.ps1` **沒有**任何略過這兩道檢查的參數（CG3-M1）。手動套用前一樣要先把包內 `backend\tools\*` 複製到安裝目錄（§3.4 步驟 2），否則跑到的是舊版腳本、不會做預檢。
   - 版本不符、值域外、沒有結果行 ⇒ 失敗（fail-closed）
 - 畫面三行，全部沿用現有文案表：
   - **結果**：succeeded／failed

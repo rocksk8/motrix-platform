@@ -78,6 +78,7 @@ EVENT_GROUPS = [
         ("disk_space_low",       "磁碟空間不足（每日檢查，低於 10% 且低於 20 GB）"),
         ("backup_error",         "備份嚴重錯誤（每日每類最多一次）"),
         ("geo_quota_warning",    "地圖定位額度達警戒線"),
+        ("company_setup_alert",  "本公司資料設定狀態告警（每日每類最多一次）"),
         ("system_test_mail",     "寄信設定測試信"),
     ]),
     # 標案雷達（2026-09-21，細線 6 第 5 步）。

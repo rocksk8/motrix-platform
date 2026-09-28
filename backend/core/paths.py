@@ -2,7 +2,8 @@
 """資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。
 
 [單位] plat:paths    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] AUTOSTART_BAT, BACKEND_DIR, BACKUP_ALERT_DIR, BUILD_COMMIT_FILE, CERTS_DIR, CERT_PEM, DB_PATH,
+[公開介面] AUTOSTART_BAT, BACKEND_DIR, BACKUP_ALERT_DIR, BUILD_COMMIT_FILE, CERTS_DIR, CERT_PEM, COMPANY_CONFIRMATION_FILE,
+    COMPANY_SETUP_GRACE_FILE, DB_PATH, INSTALL_IDENTITY_FILE,
     DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR, DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR, DEMO_DB_PATH,
     DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR, DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR,
     DEMO_PAYSLIP_ARCHIVE_DIR, DEMO_PDF_ARCHIVE_DIR, DEMO_PROJECT_PHOTOS_DIR,
@@ -97,6 +98,11 @@ SERVER_LOG = os.path.join(LOGS_DIR, "server.log")
 # ── 設定、憑證、身分檔 ─────────────────────────────────────────────────────
 HEARTBEAT_CONFIG = backend("heartbeat_config.json")
 LICENSE_PATH = backend("license.key")
+#: 本公司資料設定閘門（docs/platform/COMPANY-SETUP-GATE.md §3.3、§3.4、§4.3）：三個都是**安裝本身的設定**（F3）——
+#: 不進包（verify_package 拒絕）、不進備份、不上雲；登記在 core.upgrade.CONFIG_FILES（升級／回滾不當程式處理，CG2-M1）
+INSTALL_IDENTITY_FILE = backend(".install_identity")
+COMPANY_CONFIRMATION_FILE = backend("company_confirmation.sig")
+COMPANY_SETUP_GRACE_FILE = backend("company_setup_grace.json")
 CERTS_DIR = backend("certs")
 CERT_PEM = os.path.join(CERTS_DIR, "cert.pem")
 INITIAL_ADMIN_CREDENTIALS = backend(".initial_admin_credentials.txt")

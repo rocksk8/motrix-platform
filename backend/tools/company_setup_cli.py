@@ -1,0 +1,126 @@
+# -*- coding: utf-8 -*-
+"""本公司資料設定閘門的本機工具（COMPANY-SETUP-GATE §3.4、§4.3、§6.3）。不 import main、不開網路端點。
+
+  python company_setup_cli.py ensure-install-id --root <安裝目錄>
+  python company_setup_cli.py preflight --db <庫> --root <安裝目錄>     套用前預檢：在記憶體副本上模擬 backfill＋status（不寫庫）
+  python company_setup_cli.py status    --db <庫> --root <安裝目錄>     套用後檢查（不寫庫）
+  python company_setup_cli.py grace     --root <安裝目錄> --hours 72 --reason "<原因>"   暫時放行（≤72 小時）
+
+輸出：一行 JSON。結束碼：0＝允許（已設定或放行中）、3＝未設定、2＝判定失敗（configured: null）。
+**用的是這支檔旁邊的 backend 程式碼**：預檢時執行包內（staging）的這一支 ⇒ 判定用的是新版程式碼。
+正式機 apply_update.ps1 **沒有**任何略過預檢的參數（CG3-M1）；非 0 一律視為拒絕（預檢）或回滾（套用後）。
+"""
+import argparse
+import json
+import os
+import sqlite3
+import sys
+from datetime import datetime, timedelta
+
+_BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _BACKEND not in sys.path:
+    sys.path.insert(0, _BACKEND)
+
+EXIT_OK, EXIT_ERROR, EXIT_NOT_CONFIGURED = 0, 2, 3
+
+
+def _emit(obj, code):
+    print(json.dumps(obj, ensure_ascii=False, sort_keys=True))
+    return code
+
+
+def _mem_copy(db_path):
+    """唯讀開啟 ⇒ 複製到記憶體（預檢在副本上模擬 backfill，正式庫一個位元組都不動）。"""
+    src = sqlite3.connect("file:%s?mode=ro" % db_path.replace("\\", "/"), uri=True)
+    try:
+        mem = sqlite3.connect(":memory:")
+        src.backup(mem)
+        return mem
+    finally:
+        src.close()
+
+
+def _result(st):
+    from helpers import company_setup as cs
+    allowed = cs.allows(st)
+    return {"configured": bool(st.get("configured")), "reason": st.get("reason"), "via": st.get("via"),
+            "developer": bool(st.get("developer")), "missing": st.get("missing") or [],
+            "grace": bool(st.get("grace")), "grace_until": (st.get("grace") or {}).get("until"),
+            "allowed": allowed}, (EXIT_OK if allowed else EXIT_NOT_CONFIGURED)
+
+
+def cmd_ensure(a):
+    from helpers import company_setup as cs
+    created, h = cs.ensure_install_id(a.root)
+    if not h:
+        return _emit({"ok": False, "error": "安裝識別檔無法建立"}, EXIT_ERROR)
+    return _emit({"ok": True, "created": created, "install": h}, EXIT_OK)
+
+
+def cmd_check(a, simulate_backfill):
+    from helpers import company_setup as cs
+    conn = _mem_copy(a.db)
+    try:
+        if simulate_backfill:
+            cs.backfill_once(conn, a.root)
+        out, code = _result(cs.status(conn, a.root))
+        return _emit(out, code)
+    finally:
+        conn.close()
+
+
+def cmd_grace(a):
+    from helpers import company_setup as cs
+    if not (0 < a.hours <= cs.GRACE_MAX_HOURS):
+        return _emit({"ok": False, "error": "--hours 必須在 1～%d" % cs.GRACE_MAX_HOURS}, EXIT_ERROR)
+    if not a.reason.strip():
+        return _emit({"ok": False, "error": "--reason 必填"}, EXIT_ERROR)
+    _created, ih = cs.ensure_install_id(a.root)
+    if not ih:
+        return _emit({"ok": False, "error": "安裝識別檔無法建立"}, EXIT_ERROR)
+    now = datetime.now()
+    body = {"created": now.isoformat(timespec="seconds"),
+            "until": (now + timedelta(hours=a.hours)).isoformat(timespec="seconds"),
+            "reason": a.reason.strip(), "install": ih,
+            "created_by_os_user": os.environ.get("USERNAME") or os.environ.get("USER") or ""}
+    path = cs._files(a.root)[2]
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(body, f, ensure_ascii=False)
+    os.replace(tmp, path)
+    return _emit({"ok": True, "until": body["until"]}, EXIT_OK)
+
+
+def main(argv=None):
+    # 一律 UTF-8 輸出：apply_update.ps1 以 UTF-8 讀；Windows 主控台預設 cp950／cp932 會讓中文變亂碼、JSON 解不開
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+    p = argparse.ArgumentParser(description="本公司資料設定閘門本機工具")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    e = sub.add_parser("ensure-install-id")
+    e.add_argument("--root", required=True)
+    for name in ("preflight", "status"):
+        s = sub.add_parser(name)
+        s.add_argument("--db", required=True)
+        s.add_argument("--root", required=True)
+    g = sub.add_parser("grace")
+    g.add_argument("--root", required=True)
+    g.add_argument("--hours", type=int, default=72)
+    g.add_argument("--reason", required=True)
+    a = p.parse_args(argv)
+    try:
+        if a.cmd == "ensure-install-id":
+            return cmd_ensure(a)
+        if a.cmd == "grace":
+            return cmd_grace(a)
+        return cmd_check(a, simulate_backfill=(a.cmd == "preflight"))
+    except Exception as exc:  # noqa: BLE001 — 判定失敗：configured null、結束碼 2（呼叫端視為拒絕／回滾）
+        return _emit({"configured": None, "reason": "status_error", "allowed": False,
+                      "error": "%s: %s" % (type(exc).__name__, exc)}, EXIT_ERROR)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

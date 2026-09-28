@@ -19,6 +19,7 @@
    "helper:case_access",
    "helper:case_roles",
    "helper:company_identity",
+   "helper:company_setup",
    "helper:daily_checks",
    "helper:custom_fields",
    "helper:custom_modules",

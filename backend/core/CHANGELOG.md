@@ -5,6 +5,16 @@
 ## （不升版號：介面不變）— 2026-09-28（B，wip/b-warm-async：第十五班緊急修補 B54）
 - L1（行為）：`helpers.geo.schedule_geocode_warm()` 改為**立即返回**：第一輪背景定位排進 daemon `threading.Timer`（私有常數 `_GEOCODE_WARM_FIRST_DELAY_SECONDS`＝30 秒）在背景執行緒跑，之後每輪結束（含丟例外）再排下一輪（私有 `_geocode_warm_tick`，重排維持 `finally`）。原本在呼叫當下同步跑第一輪 ⇒ `main.py` 模組層呼叫它時 `import main` 被整輪定位卡住（正式機套用 8b04d99d：333 筆待辦×Nominatim 每秒 1 次 ⇒ 83 秒內 port 666 沒在聽 ⇒ 自動回滾）。守門 `tests/test_geocode_warm_async_2026_09_28.py`
 
+## 1.65 — 2026-09-28（E 暫用，列車取號；wip/e-company-gate-impl 第一段：本公司資料設定閘門的正式機段）〔core_bump：暫用 1.66 → 1.65〕
+- L1（新增）：`helpers.company_setup`——判定（`status`：確認紀錄＋安裝識別＋必要欄位雜湊＋開發者指紋需簽章確認檔）、`confirm`、`backfill_once`（每庫一次、不丟例外）、`startup_install_check`（識別檔重建且已有紀錄 ⇒ ERROR＋告警）、暫時放行（`grace_state`、`observe`：有效期＝min(until, first_seen＋72h)）、統編檢查碼 `ubn_valid`、`alert`（每日一次）。設計 docs/platform/COMPANY-SETUP-GATE.md
+- L1（新增）：`helpers.company_identity.identity_from_profile(profile, location_id)`（`location_identity` 的純函式版；行為不變）
+- L1（新增）：`core.paths.INSTALL_IDENTITY_FILE`／`COMPANY_CONFIRMATION_FILE`／`COMPANY_SETUP_GRACE_FILE`，並登記進 `core.upgrade.CONFIG_FILES`（CG2-M1）；`verify_package` 拒收、`.gitignore`
+- 工具：`backend/tools/company_setup_cli.py`（ensure-install-id／preflight／status／grace；UTF-8 輸出）；`apply_update.ps1` 2026-09-28h：停服前預檢（`refused_company_setup`）、套用後本機檢查未通過 ⇒ 自動回滾（`company_setup_rolled_back`，`-SkipAutoRollback` 不適用），無任何略過參數；`deploy_dashboard._STATUS_FAILED` 加兩個出口
+- 啟動：`main.py` 啟動時做安裝識別檢查＋一次性 backfill（閘門本身尚未擋任何 API；第二段才接中介層）；信件類型 `company_setup_alert`（系統技術，超級管理員）
+
+## （不升版號：介面不變）— 2026-09-28（B，wip/b-warm-async：第十五班緊急修補 B54）
+- L1（行為）：`helpers.geo.schedule_geocode_warm()` 改為**立即返回**：第一輪背景定位排進 daemon `threading.Timer`（私有常數 `_GEOCODE_WARM_FIRST_DELAY_SECONDS`＝30 秒）在背景執行緒跑，之後每輪結束（含丟例外）再排下一輪（私有 `_geocode_warm_tick`，重排維持 `finally`）。原本在呼叫當下同步跑第一輪 ⇒ `main.py` 模組層呼叫它時 `import main` 被整輪定位卡住（正式機套用 8b04d99d：333 筆待辦×Nominatim 每秒 1 次 ⇒ 83 秒內 port 666 沒在聽 ⇒ 自動回滾）。守門 `tests/test_geocode_warm_async_2026_09_28.py`
+
 ## 1.64 — 2026-09-28（A 暫用，列車取號；wip/a-gm-raw：正式機 Google 底圖標點消失、取點延遲）
 - L1（新增）：`helpers.geo.cache_read_session()`——範圍內 `_cache_get`／`_cache_get_many` 共用一條讀取連線（寫入照舊自己開）；`/api/map/points` 整次取點在範圍內（正式機約 400 地址，原本每個地址開一次連線 ⇒ 2～7 秒；兩種底圖成本相同）
 - 頁面：`static/map-google.js` 的 Google 物件建立後標 `__v_skip`、傳給 Google 的 map 經 `Alpine.raw`（Alpine 讀回 Proxy ⇒ 真 Google 不認 map ⇒ 標點全部不見）；標記點擊改 `gmpClickable`＋`addEventListener('gmp-click')`；`map.html` 的 `x-text` 在 `info` 為 null 時不丟錯

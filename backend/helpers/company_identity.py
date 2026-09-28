@@ -90,7 +90,13 @@ def location_identity(location_id=None) -> dict:
     ⚠️ 不要丟例外：一張綁著已刪據點的舊單據**仍然要印得出來**，
     ☠️ 而印不出來的那一刻，使用者手上就只剩一張紙。
     """
-    profile = _get_setting("company_profile", {}) or {}
+    return identity_from_profile(_get_setting("company_profile", {}) or {}, location_id)
+
+
+def identity_from_profile(profile: dict, location_id=None) -> dict:
+    """`location_identity` 的純函式版：給一份 `company_profile`（dict），回同一套解析結果。
+    本公司資料設定閘門（helpers.company_setup）用它讀**指定的庫**（CLI 預檢讀的不是執行中的那個庫）。"""
+    profile = profile if isinstance(profile, dict) else {}
     locations = profile.get("locations") or []
     primary = locations[0] if locations else {}
     here = primary
