@@ -69,7 +69,10 @@ def _docs_kwargs(environ=None) -> dict:
             "openapi_url": "/openapi.json" if on else None}
 
 
-app = FastAPI(title="MOTRIX ERP API", version="1.0.0", **_docs_kwargs())
+_DOCS = _docs_kwargs()
+# ⚠️ 明列關鍵字，不用 `**`（守門 test_case_summary_purpose：非字面值的 ** 呼叫基線 0）
+app = FastAPI(title="MOTRIX ERP API", version="1.0.0", docs_url=_DOCS["docs_url"],
+              redoc_url=_DOCS["redoc_url"], openapi_url=_DOCS["openapi_url"])
 
 _DEFAULT_CORS_ORIGINS = [
     "http://localhost:666",

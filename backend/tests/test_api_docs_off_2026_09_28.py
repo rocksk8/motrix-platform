@@ -26,7 +26,8 @@ def test_docs_routes_are_off_by_default(client, path):
 
 
 def test_reverse_control_flag_on_registers_all_four():
-    app = FastAPI(**_main()._docs_kwargs({"MOTRIX_API_DOCS": "1"}))
+    kw = _main()._docs_kwargs({"MOTRIX_API_DOCS": "1"})
+    app = FastAPI(docs_url=kw["docs_url"], redoc_url=kw["redoc_url"], openapi_url=kw["openapi_url"])
     c = TestClient(app)
     for p in DOC_PATHS:
         assert c.get(p).status_code == 200, p
