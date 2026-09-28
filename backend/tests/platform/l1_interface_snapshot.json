@@ -1,5 +1,5 @@
 {
- "core_version": "1.65",
+ "core_version": "1.66",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -61,6 +61,7 @@
    "V9_BASELINE": "const",
    "_MIGRATIONS": "const",
    "db_conn": "def()",
+   "demo_module_tables": "def()",
    "get_db": "def()",
    "get_demo_db": "def()",
    "init_db": "def(path=…)",

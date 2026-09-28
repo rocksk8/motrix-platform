@@ -66,6 +66,7 @@
       .catch(function (e) { if (st) st.status.textContent = '讀取旅宿資料狀態失敗：' + e.message })
   }
 
+  //: 只畫標記（地圖必須已建好：由 onBasemapReady 呼叫）。清單與訊息不靠它（見 search 的說明）。
   function draw(d) {
     var api = st.api
     api.clear()
@@ -86,7 +87,6 @@
       if (list.length) st.handles[k] = api.addMarkers(list, { icon: k, color: k === 'hotel' ? 'accent' : 'success' })
     })
     api.fitTo(st.handles.circle)
-    renderList(d)
   }
 
   function renderList(d) {
@@ -124,7 +124,20 @@
           return null
         }
         if (!d.available) { st.api.clear(); say(d.message, 'warn'); return null }
-        draw(d)
+        // 🔴 第十八班偶發紅（產品競態）：回應先到、地圖還沒建好（開頁自動開圖在高負載下慢）⇒ 原本直接畫標記丟例外，
+        //    被下面的 catch 當成「連線不到伺服器」、清單也沒出現。⇒ 清單、訊息、顯名先出；標記等地圖就緒再畫，
+        //    而且只畫**最後一次**查詢（期間又查了一次 ⇒ 舊的那次不畫）。
+        st.handles = {}
+        st.api.clear()
+        renderList(d)
+        var seq = ++st.seq
+        st.api.onBasemapReady(function () {
+          if (!st || st.seq !== seq) return
+          try { draw(d) } catch (e) {
+            console.error('[lodging-overlay] 標記畫不出來', e)
+            say('清單已列出，但地圖標記畫不出來：' + (e && e.message ? e.message : '未知錯誤'), 'warn')
+          }
+        })
         var head = '半徑 ' + (d.radiusM / 1000) + ' km 內 ' + d.count + ' 間'
         if (d.center.precisionNote) head += '；' + d.center.precisionNote
         if (d.stale) head += '；資料已超過 ' + d.staleDays + ' 天'
@@ -138,7 +151,13 @@
             say(head + '；已存成紀錄 #' + res2.x.id + '（可到「附近旅宿紀錄」頁回查、比較）', 'ok')
           })
       })
-      .catch(function () { if (st) say('查詢失敗：連線不到伺服器', 'err') })
+      .catch(function (e) {
+        if (!st) return
+        // 只有 fetch 本身失敗才是「連線不到」；其他例外照實說（不要把程式錯誤說成網路問題）
+        var net = e instanceof TypeError && /fetch|network|Failed/i.test(String(e.message || ''))
+        console.error('[lodging-overlay] 查詢失敗', e)
+        say('查詢失敗：' + (net ? '連線不到伺服器' : (e && e.message ? e.message : '未知錯誤')), 'err')
+      })
   }
 
   function build(panel) {
@@ -213,6 +232,7 @@
       st = build(panel)
       st.api = api
       st.handles = {}
+      st.seq = 0
       loadStatus()
     },
     unmount: function () { st = null },

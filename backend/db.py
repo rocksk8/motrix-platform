@@ -299,7 +299,7 @@ def reset_demo_db() -> None:
                 conn.execute(f"DROP TRIGGER IF EXISTS {name}")
             # ⚠️ 跳過不存在的表：這段 DELETE 跑在 `init_db()` **之前**，
             #    而一個舊的 `demo.db` 可能還沒有比較新的那幾張表。
-            for t in DEMO_CLEARED_TABLES:
+            for t in DEMO_CLEARED_TABLES | demo_module_tables()[0]:
                 if t in present:
                     conn.execute(f"DELETE FROM {t}")
             for t, where in DEMO_FILTERED_CLEARS.items():
@@ -363,6 +363,36 @@ DEMO_FILTERED_CLEARS = {
 #: 給守門用的別名：**被過濾清除**的那幾張表。
 #: ⚠️ 它不是「完全不清」—— 那正是上面那段註解在講的事。
 DEMO_PARTIALLY_CLEARED_TABLES = frozenset(DEMO_FILTERED_CLEARS)
+
+
+def demo_module_tables():
+    """**已載入**模組 `module.json` `data.tables` 宣告的表 ⇒ (demo 重置清空的, demo 重置保留的)。
+
+    2026-09-28（E 線，附近旅宿是第一個自己 migration 建表的模組）：L1 這兩份靜態清單不寫 L2 表名——
+    模組不在（core-only 產品）時表不存在，寫死會變成「清單裡有不存在的表」。規則同每日 JSON 備份（archive
+    `_module_declared_backup_tables`，主持裁示）：T1／T2＝使用者資料 ⇒ 清空（每個客戶的展示從乾淨開始，
+    不留上一位試用者的紀錄）；T3＝可重建的系統資料 ⇒ 保留（例：旅宿的官方資料快照；demo 模式本來就不會下載，
+    清與不清結果相同，歸這邊是依它的意義）。表名只收 `^[a-z][a-z0-9_]{0,62}$`。
+    🔴 已在 L1 兩份清單裡的表**以 L1 為準、不再列**（例：accounting 宣告 `account_items` 為 T1，而 L1 只清
+    非法定列——整張清會撞法定科目的 TRIGGER）；同 archive「已在寫死清單的不重複」。"""
+    import re as _re
+    clear, keep = set(), set()
+    try:
+        from core import registry as _registry
+        for lm in _registry.loaded():
+            for t in (((lm.manifest or {}).get("data") or {}).get("tables") or []):
+                name = t.get("name") if isinstance(t, dict) else None
+                if not (isinstance(name, str) and _re.fullmatch(r"[a-z][a-z0-9_]{0,62}", name)):
+                    continue
+                if name in DEMO_CLEARED_TABLES or name in DEMO_PARTIALLY_CLEARED_TABLES:
+                    continue
+                if t.get("class") in ("T1", "T2"):
+                    clear.add(name)
+                elif t.get("class") == "T3":
+                    keep.add(name)
+    except Exception:                                                  # noqa: BLE001
+        logger.exception("demo_module_tables: 讀模組宣告失敗（只清 L1 清單裡的表）")
+    return frozenset(clear), frozenset(keep)
 
 DEMO_CLEARED_TABLES = frozenset((
     "access_categories", "access_fit", "access_products",
