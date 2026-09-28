@@ -330,6 +330,13 @@ def _app(tmp_path_factory):
     # 同理（2026-09-28 A46-S1）：開發機可自設 MOTRIX_API_DOCS=1 開文件頁；漏進測試會讓
     # 「預設關閉」題與非 /api 白名單題紅。main 在 import 時讀它 ⇒ 必須在下面 import main 之前清掉。
     _os.environ.pop("MOTRIX_API_DOCS", None)
+    # 首次安裝帳密檔（2026-09-28 D E4-O1）：import main 的 init_default_admin／init_demo_account 會寫
+    # backend/.initial_admin_credentials.txt／.initial_demo_credentials.txt ⇒ 共用樹上的那兩個檔一直被測試改寫。
+    # 兩支都在呼叫時讀模組變數 ⇒ 在 import main 之前導到這個 session 的暫存。
+    import helpers.auth as _auth
+    _auth._CREDENTIALS_FILE = str(base / "initial_admin_credentials.txt")
+    _startup_mod = importlib.import_module("helpers.startup")
+    _startup_mod._DEMO_CREDENTIALS_FILE = str(base / "initial_demo_credentials.txt")
     archive._NO_CLOUD_MARKER_PATH = str(base / "no_cloud_archive_marker")
 
     archive_base = base / "archive_base"

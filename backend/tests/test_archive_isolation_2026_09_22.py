@@ -232,10 +232,8 @@ KNOWN_REPO_WRITES = (
     "_demo_pdf_archive",
     "_demo_shipping_pdf_archive",
     "export_archive",
-    ".initial_admin_credentials.txt",
-    # 2026-09-25（B）：與上一列同一類（demo 帳號的初始密碼檔，路徑見 core/paths.py INITIAL_DEMO_CREDENTIALS）。
-    #   不是新缺口：以前看不到，是因為本檔的 `import conftest` 拿到空的複本（見 test_bk19_the_write_guard_… 的註記）。
-    ".initial_demo_credentials.txt",
+    # 2026-09-28（A，D E4-O1）：.initial_admin_credentials.txt／.initial_demo_credentials.txt 已由 conftest 導到暫存
+    #   ⇒ 從存量移除（再出現＝回歸，這道守門會紅）。
 )
 
 #: pytest／Python 自己的，不算缺口。
