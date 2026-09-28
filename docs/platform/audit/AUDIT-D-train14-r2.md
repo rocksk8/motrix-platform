@@ -115,3 +115,40 @@
 - 必修 0
 
 - D5-S1 已處理（34e2cbef）：`test_pages_rel_matches_the_real_install_layout` 以 core.paths 為期望值。D 重跑突變「PAGES_REL 改成 "frontend/page"」⇒ 只有這一題紅、其餘 51 題綠；還原後 worktree 乾淨（D，2026-09-28）
+
+## 8. 最終審：第十四班部署包與第三輪演練（822286ed）（D，2026-09-28）
+
+**判定：可上正式機**（條件見本節最後）。
+
+**包的完整性**（本機包 D:\MOTRIX-DRILLS\t14-package\20260928_055420_822286ed；腳本逐檔算 git blob 雜湊，對照 `git ls-tree -r 822286ed`）：
+
+| 項目 | 結果 |
+|---|---|
+| 包內檔數 | 540 |
+| 與 822286ed 的 blob 完全相同 | 513 |
+| 只差換行 | 23：全部是 `.gitattributes` 規則下的預期轉換（`eol=crlf` 的 .bat／.ps1／.vbs，以及 `text=auto` 在 `core.autocrlf=true` 下取出的 .gitignore、.ini、.txt） |
+| 內容不同 | 1：`backend/version_manifest.json`，是建包 Step 5.6 有意的投影（只留 module、version、date、time、content）。語意比對：422 筆對 422 筆，投影後完全相等；git 裡沒有其他欄位 |
+| git 沒有的檔 | 3：建包產生的 `deploy_manifest.json`（commit 822286ed、product full、帶 BOM）、`backend/.build_commit`（822286ed）、`backend/modules.lock.json`（full_package、core 1.62） |
+| pyc／__pycache__ | 0 |
+| 建包後的改動 | 沒有：包裡沒有任何檔比 deploy_manifest.json 新 |
+| git 有、包沒有 | 965：backend/tests、各模組 tests、docs、根目錄說明文件、SPEC.md、開發機工具（build_deploy_package、deploy_dashboard、_dashboard_remote 等），都是 export-ignore 與建包精簡規則的預期排除。apply_update.ps1、rollback_update.ps1、apply_plan.py、migrate_like_startup.py、delivery.py 都在包裡 |
+
+**雲端發布**（G:\我的雲端硬碟\MOTRIX-交付\packages\20260928_055639_822286ed_full）：
+- payload 540 檔，與本機包逐檔 SHA-256 相同：只在一邊的 0、內容不同的 0
+- `package.sha256` 本身的 SHA-256＝AEF49EF3…9867，與主持回報的相同
+- 驗章沿用主持的獨立驗證（出貨公鑰 True）；私鑰沒有讀
+
+**第三輪演練**（D:\MOTRIX-DRILLS\apply-run-0928\r3_*）：
+- **P2M_b**：`modules=like_startup`，主庫與 demo 庫的乾跑都報「drillmig v1 例外：RuntimeError」⇒ `migration_dryrun_failed rolled_back=not_applied`。沒有進入 [2/6]、沒有建快照；`r3_prog_before_P2M` 與 `r3_prog_after_P2M_b` 位元組相同 ⇒ 程式檔 0 變動。**這是 H12 DS2／AH-S6 要求的 P2m，成立**（也證實了 PM1 的「模組例外＝未完成、不往上丟」在真實啟動路徑上成立）
+- **P2M 第一次**（unhandled_exception）：演練改寫 deploy_manifest.json 時沒有帶 BOM，而 apply_update 用不帶 -Encoding 的 Get-Content 讀，把中文讀壞了。正式包的 deploy_manifest.json 有 BOM（已確認），不受影響；trap 也如實回報，而且沒有停服、沒有動檔。**D6-S1（建議）**：讀 manifest 一律指定 `-Encoding UTF8`
+- **FINAL**：
+  - 部署包是 822286ed、built_at 05:54:22，與最終包的 deploy_manifest 一致 ⇒ 同一次建包的產物（pkgs\FINAL 已刪，無法再逐檔比對）
+  - 刪 0 檔、新增 12 檔；停服只停演練安裝的迴圈與行程；健檢第 1 次就成功
+  - `::RESULT:: status=success rolled_back=applied service=up`
+  - P2M 之後到 FINAL 之前的程式檔雜湊不變
+- 主持提到的「未授權模組頁面保護把 pages 物件當字串」：讀碼同意本版走不到——授權閘門關閉時所有模組都算有授權，走拒絕路徑；而且完整包沒有少任何模組。列下一輪（**D6-S2**，建議）
+
+**上正式機的條件**：
+1. 正式機現在是 c006a2a0，它的 apply_update.ps1 沒有版本檢查 ⇒ 一定要照 UPGRADE-RUNBOOK §8 第 1 步，先把包裡的 `backend\tools` 複製進安裝目錄，再執行（演練照這個順序做）。走部署儀表板時，它會自動做這一步
+2. 用雲端那一份（20260928_055639_822286ed_full），或本機這一份；兩者已確認相同
+3. 開發機的部署儀表板（deploy_dashboard.py）依建包規則不在包裡 ⇒ 本版在正式機上沒有「套用更新」頁（U-8 一鍵套用）。這一次請走 RUNBOOK §8 或儀表板的 WinRM 路徑；正式機本機儀表板怎麼出貨，列下一輪（**D6-O1**，觀察）
