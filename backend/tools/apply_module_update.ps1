@@ -29,7 +29,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # 本腳本的版本（apply_module_update.version.json 登記它與內容雜湊；包的 min_apply_module_script 比的是它）。
-$ApplyModuleScriptVersion = "2026-09-28b"
+$ApplyModuleScriptVersion = "2026-09-28c"
 
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $Port = 666
@@ -343,6 +343,18 @@ function Start-InstallService {
     Warn "  排程工作「$AutostartTaskName」不存在或已停用：改由本腳本直接啟動 autostart.bat。遠端工作階段結束時它可能跟著結束，事後請確認排程工作。"
 }
 
+function Get-StartupRange($tail) {
+    $lastStartIdx = -1
+    for ($i = $tail.Count - 1; $i -ge 0; $i--) {
+        if ($tail[$i] -like "*Uvicorn running on*") { $lastStartIdx = $i; break }
+    }
+    if ($lastStartIdx -lt 0) { return $null }
+    for ($i = $lastStartIdx; $i -ge 0; $i--) {
+        if ($tail[$i] -like "*MOTRIX ERP starting*") { return ,@($tail[$i..($tail.Count - 1)]) }
+    }
+    return $null
+}
+
 # module_update.py 子命令（--json）：回 @{ Ok; Data; Text }。
 #   Data＝最後一行 `MODULE_UPDATE_RESULT {json}` 解出的物件；沒有那一行 ⇒ Ok=$false、Data=$null（ps1 視為失敗）。
 function Invoke-ModuleUpdate([string[]]$ToolArgs) {
@@ -381,15 +393,19 @@ function Wait-ModuleState([string]$key, [string]$version, [string]$state, [strin
     return @{ Ok = $false; Reason = $why }
 }
 
-# server.log 最後一次成功啟動之後的錯誤行＋模組載入字串（第二道）。回 @{ Errors; Loaded; NotLoaded }。
+# server.log 的錯誤行（最後一次成功啟動之後）＋模組載入字串（本次啟動那一段；第二道）。回 @{ Errors; Loaded; NotLoaded; Boot }。
 #   掃描核心（良性 ConnectionResetError 區塊過濾）與 apply_update.ps1 Step 5 逐字相同（守門題比對）。
+#   「已載入／未載入」在 import 時印、早於 Uvicorn running on ⇒ 範圍用 Get-StartupRange（與 apply_update 逐字共用）；
+#   找不到本次啟動的起點 ⇒ Boot＝$false（驗不到，不退回整段 tail：回滾後檢查舊版本時，上一個行程印的同一行會假綠）。
+#   ⚠ 以 UTF-8 讀（2026-09-28 B 演練：PS 5.1 預設 ANSI 讀 ⇒「已載入」永遠比對不到 ⇒ 誤判不健康而自動回滾）。
 function Get-LogCheck([string]$key, [string]$version) {
     $logErrors = @()
     $loadedSeen = $false
     $notLoadedSeen = $false
     $logPath = Join-Path $BackendDir "logs\server.log"
-    if (-not (Test-Path $logPath)) { return @{ Errors = @(); Loaded = $false; NotLoaded = $false } }
-    $tail = Get-Content $logPath -Tail 200
+    if (-not (Test-Path $logPath)) { return @{ Errors = @(); Loaded = $false; NotLoaded = $false; Boot = $false } }
+    $tail = Get-Content $logPath -Tail 200 -Encoding UTF8
+    $bootRange = Get-StartupRange $tail
     $lastStartIdx = -1
     for ($i = $tail.Count - 1; $i -ge 0; $i--) {
         if ($tail[$i] -like "*Uvicorn running on*") { $lastStartIdx = $i; break }
@@ -400,8 +416,7 @@ function Get-LogCheck([string]$key, [string]$version) {
     } elseif ($lastStartIdx -eq ($tail.Count - 1)) {
         $scanRange = @()
     }
-    # 模組載入字串：載入發生在 Uvicorn running on 之前 ⇒ 在整段 tail 裡找最後一次
-    foreach ($ln in $tail) {
+    foreach ($ln in @($bootRange)) {
         if ($ln -like "*模組 $key $version 已載入*") { $loadedSeen = $true }
         if ($ln -like "*模組 $key 未載入*") { $notLoadedSeen = $true }
     }
@@ -419,7 +434,7 @@ function Get-LogCheck([string]$key, [string]$version) {
         $cleanedLines.Add($ln)
     }
     $logErrors = $cleanedLines | Select-String -Pattern "Traceback|ERROR" -SimpleMatch:$false
-    return @{ Errors = @($logErrors); Loaded = $loadedSeen; NotLoaded = $notLoadedSeen }
+    return @{ Errors = @($logErrors); Loaded = $loadedSeen; NotLoaded = $notLoadedSeen; Boot = [bool]$bootRange }
 }
 
 # 健檢：ping 20 次 → 載入狀態檔 → log。回 @{ Healthy; ModuleOk; Reason }。
@@ -438,6 +453,9 @@ function Test-ModuleHealth([string]$key, [string]$version, [string]$sinceIso) {
     if ($lc.Errors.Count -gt 0) {
         foreach ($e in $lc.Errors) { Info "    $($e.Line)" }
         return @{ Healthy = $true; ModuleOk = $false; Reason = "server.log 有 $($lc.Errors.Count) 筆錯誤（見上方）" }
+    }
+    if (-not $lc.Boot) {
+        return @{ Healthy = $true; ModuleOk = $false; Reason = "server.log 找不到本次啟動的起點（MOTRIX ERP starting … Uvicorn running on）⇒ 驗不到模組 $key $version 有沒有載入" }
     }
     if ($lc.NotLoaded -or -not $lc.Loaded) {
         return @{ Healthy = $true; ModuleOk = $false; Reason = "server.log 沒有「模組 $key $version 已載入」（或有「未載入」）" }

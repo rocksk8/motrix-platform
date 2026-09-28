@@ -22,7 +22,7 @@ import pytest
 _TOOLS = Path(__file__).resolve().parents[2] / "tools"
 NEW = "apply_module_update.ps1"
 SHARED = ("Test-Ping", "Fail", "Info", "Warn", "Ok", "Enter-InstallLock", "Exit-InstallLock", "Write-ResultFile",
-          "Backup-DatabasesOnline", "Invoke-Py", "Stop-InstallService", "Start-InstallService")
+          "Backup-DatabasesOnline", "Invoke-Py", "Stop-InstallService", "Start-InstallService", "Get-StartupRange")
 NEW_STATUSES = {"module_preflight_failed", "module_load_dryrun_failed", "module_copy_failed",
                 "module_unhealthy_rolled_back", "module_restore_failed"}
 
@@ -341,3 +341,69 @@ def test_e4_statuses_are_in_the_domain_once_e4_is_merged():
         assert not _e4_merged(), "apply_update 已有 Invoke-CompanySetupCli（E4 已合回）而儀表板值域沒有 %s" % sorted(E4_STATUSES - domain)
         pytest.skip(E4_WAIT)
     assert E4_STATUSES <= _statuses()
+
+
+# ── ⑦ 模組載入字串：本次啟動那一段、UTF-8（B 演練 A：已載入早於 Uvicorn running on；PS 5.1 預設 ANSI 讀）──
+
+_PS = shutil.which("powershell.exe") or shutil.which("powershell")
+
+
+def _log_check(tmp_path, lines, key="tender_radar", version="1.3.4"):
+    """實際執行模組 ps1 的 Get-LogCheck（連同逐字共用的 Get-StartupRange），對一份 UTF-8 無 BOM 的 server.log。"""
+    if not _PS:
+        pytest.skip("需要 Windows PowerShell")
+    (tmp_path / "logs").mkdir(exist_ok=True)
+    (tmp_path / "logs" / "server.log").write_bytes(("\r\n".join(lines) + "\r\n").encode("utf-8"))
+    text = _src(NEW)
+    body = "\n".join([
+        "$ErrorActionPreference = 'Stop'",
+        "function Info($msg) { }",
+        _fn(text, "Get-StartupRange"),
+        _fn(text, "Get-LogCheck"),
+        "$BackendDir = '%s'" % str(tmp_path).replace("'", "''"),
+        "$lc = Get-LogCheck '%s' '%s'" % (key, version),
+        "Write-Output ('RESULT ' + (@{ loaded = [bool]$lc.Loaded; not_loaded = [bool]$lc.NotLoaded; boot = [bool]$lc.Boot;"
+        " errors = @($lc.Errors).Count } | ConvertTo-Json -Compress))",
+    ])
+    script = tmp_path / "harness.ps1"
+    script.write_bytes(b"\xef\xbb\xbf" + body.encode("utf-8"))
+    r = subprocess.run([_PS, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script)], capture_output=True, timeout=60)
+    out = r.stdout.decode("utf-8", "replace")
+    line = [l for l in out.splitlines() if l.startswith("RESULT ")]
+    assert r.returncode == 0 and line, (out, r.stderr.decode("utf-8", "replace"))
+    return json.loads(line[-1][len("RESULT "):])
+
+
+def _boot(ver, loaded=True):
+    return (["[2026/09/28 週一 21:57:15.20] MOTRIX ERP starting... "]
+            + (["INFO:core.loader:模組 tender_radar %s 已載入" % ver] if loaded else ["INFO:core.loader:模組 tender_radar 未載入：壞了"])
+            + ["INFO:     Started server process [4242]", "INFO:     Application startup complete.",
+               "INFO:     Uvicorn running on https://0.0.0.0:666 (Press CTRL+C to quit)",
+               'INFO:     127.0.0.1:50001 - "GET /api/ping HTTP/1.1" 200 OK'])
+
+
+_STOPPED = ["[2026/09/28 週一 21:57:10.12] MOTRIX ERP stopped (exit code 1). restart in 5s... "]
+
+
+def test_loaded_line_before_uvicorn_running_counts_as_loaded(tmp_path):
+    """B 演練 A 的真實順序：「已載入」在 Uvicorn running on 之前 ⇒ 判載入（舊碼：ANSI 讀 ⇒ 判沒載入而自動回滾）。"""
+    d = _log_check(tmp_path, _boot("1.3.3") + _STOPPED + _boot("1.3.4"))
+    assert d == {"loaded": True, "not_loaded": False, "boot": True, "errors": 0}, d
+
+
+def test_reverse_control_this_start_without_the_loaded_line_is_not_loaded(tmp_path):
+    d = _log_check(tmp_path, _boot("1.3.3") + _STOPPED + _boot("1.3.4", loaded=False))
+    assert d["loaded"] is False and d["not_loaded"] is True, d
+
+
+def test_rollback_check_does_not_see_the_previous_process_line(tmp_path):
+    """回滾後查舊版本 1.3.3：上一個行程（套用前）印過「1.3.3 已載入」，這次啟動沒有 ⇒ 不可以判載入（整段 tail 會假綠）。"""
+    d = _log_check(tmp_path, _boot("1.3.3") + _STOPPED + _boot("1.3.4"), version="1.3.3")
+    assert d["loaded"] is False, d
+
+
+def test_no_start_marker_is_cannot_verify(tmp_path):
+    d = _log_check(tmp_path, [l for l in _boot("1.3.4") if "MOTRIX ERP starting" not in l])
+    assert d["boot"] is False and d["loaded"] is False, d
+    h = _fn(_src(NEW), "Test-ModuleHealth")
+    assert h.index("if (-not $lc.Boot)") < h.index("if ($lc.NotLoaded -or -not $lc.Loaded)")
