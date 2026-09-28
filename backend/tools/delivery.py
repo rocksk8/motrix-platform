@@ -3,7 +3,8 @@
 
 [單位] tool:delivery    [層] 部署工具（開發機與正式機各跑**自己安裝的**這一份）
 [公開介面] keygen, publish, scan, stage, verify_staged, sign, verify_signature, signed_bytes,
-           apply_staged, find_result, latest_result, write_back, read_results, latest_prod_commit
+           apply_staged, find_result, latest_result, write_back, read_results, latest_prod_commit,
+           package_kind, module_package_meta, module_script_version, module_preflight_cmd, module_overlays（B55 單模組包）
 [不變式] 發布以「整個目錄改名」收尾（incoming\\<包>.partial → packages\\<包>）；正式機只看 packages\\。
          驗證用**正式機已安裝版本**內建的公鑰（`DELIVERY_PUBKEY_PEM`），不用包自己帶的——新包不能替自己背書。
          簽章涵蓋 delivery.json＋package.sha256（`signed_bytes`）⇒ 改任何一個都驗不過。
@@ -56,6 +57,22 @@ NAME_RE = re.compile(r"^\d{8}_\d{6}_[0-9a-f]{8}_[a-z0-9_-]+$")
 _PS1 = "backend/tools/apply_update.ps1"
 _PS1_REG = "backend/tools/apply_update.version.json"
 _PS1_VER_RE = re.compile(r'^\$ApplyScriptVersion = "([^"]+)"', re.M)
+
+#: 包型別（B55，設計 docs/platform/MODULE-UPDATE-DELIVERY.md §1.1／§1.2）。delivery.json 的 kind 在簽章範圍內。
+#: kind 缺席 ⇒ full（本欄位之前發布的包）；不認得 ⇒ 拒絕。
+KIND_FULL, KIND_MODULE = "full", "module"
+KINDS = (KIND_FULL, KIND_MODULE)
+MODULE_LOCK = "module-update.lock.json"               # tools/platform/module_update.LOCK_NAME
+_MOD_PS1 = "backend/tools/apply_module_update.ps1"
+_MOD_PS1_REG = "backend/tools/apply_module_update.version.json"
+_MOD_TOOL = "tools/platform/module_update.py"        # 正式機用**已安裝**的這一份做 preflight
+
+
+def package_kind(meta):
+    kind = (meta or {}).get("kind") or KIND_FULL
+    if kind not in KINDS:
+        raise DeliveryError("看不懂的包型別 kind=%r（認得：%s）⇒ 不猜" % (kind, "／".join(KINDS)))
+    return kind
 
 
 class DeliveryError(Exception):
@@ -187,9 +204,50 @@ def package_name(pkg, now=None):
     return "%s_%s_%s" % ((now or datetime.now()).strftime("%Y%m%d_%H%M%S"), commit[:8], product), m
 
 
-def publish(pkg, root, private_pem, keep=KEEP_DEFAULT, now=None):
-    """發布一份完整包 ⇒ 包名。步驟：複製到 incoming\\<包>.partial\\payload → 寫 delivery.json、清單、簽章 → 改名成 packages\\<包>。"""
+def module_script_version(tools_dir):
+    """apply_module_update.version.json 的 version（套用工具的版本）；讀不到 ⇒ None。tools_dir＝某一份安裝的 backend/tools。"""
+    try:
+        return json.load(open(os.path.join(tools_dir, os.path.basename(_MOD_PS1_REG)), encoding="utf-8-sig")).get("version")
+    except (OSError, ValueError):
+        return None
+
+
+def module_package_meta(pkg, tools_dir=None):
+    """單模組包（module_update.ship 產生）⇒ (包名尾段, delivery.json 的模組欄位)。不是用 ship 出貨的（沒有正式機基準、
+    沒跑第②級題）⇒ 拒絕發布。"""
+    try:
+        lock = json.load(open(os.path.join(pkg, MODULE_LOCK), encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise DeliveryError("讀不到 %s：%s" % (MODULE_LOCK, e))
+    mods = lock.get("modules") or {}
+    if lock.get("kind") != "module_update" or len(mods) != 1:
+        raise DeliveryError("%s 不是單一模組更新包的 lock" % MODULE_LOCK)
+    (key, entry), = mods.items()
+    if not re.match(r"^[a-z0-9_]+$", key):
+        raise DeliveryError("模組代號不合格：%r" % key)
+    if not lock.get("prod_base_commit") or lock.get("tier") != "module":
+        raise DeliveryError("這個包沒有正式機基準 commit 或不是第②級出貨（請用 module_update.py build --prod-base 出貨）")
+    tests = lock.get("tests") or {}
+    if not tests.get("passed") or tests.get("failed") or tests.get("errors") or "skipped" in tests:
+        raise DeliveryError("這個包沒有第②級測試全綠的紀錄 ⇒ 不發布")
+    ver = module_script_version(tools_dir or os.path.dirname(os.path.abspath(__file__)))
+    if not ver:
+        raise DeliveryError("開發機沒有 %s ⇒ 算不出正式機需要的套用工具版本，不發布" % _MOD_PS1_REG)
+    return "mod-%s" % key.replace("_", "-"), {
+        "commit": lock.get("built_from"), "product": "mod-" + key.replace("_", "-"),
+        "module": {"key": key, "version": entry.get("version"), "core": entry.get("core"),
+                   "built_from": lock.get("built_from"), "prod_base_commit": lock.get("prod_base_commit"),
+                   "tests": {k: tests.get(k) for k in ("passed", "seconds", "line")},
+                   "provider": lock.get("provider")},
+        "min_apply_module_script": ver}
+
+
+def publish(pkg, root, private_pem, keep=KEEP_DEFAULT, now=None, tools_dir=None):
+    """發布一份包（完整包或單模組包）⇒ 包名。步驟：複製到 incoming\\<包>.partial\\payload → 寫 delivery.json、清單、簽章 → 改名成 packages\\<包>。
+    包裡有 module-update.lock.json ⇒ kind＝module（只含該模組與宣告頁面；不帶 tools，不要求 apply_update.ps1）。"""
     _require_root(root)
+    if os.path.isfile(os.path.join(pkg, MODULE_LOCK)):
+        return _publish_module(pkg, root, private_pem, keep, now, tools_dir)
     name, manifest = package_name(pkg, now)
     final = os.path.join(root, "packages", name)
     if os.path.exists(final):
@@ -204,10 +262,37 @@ def publish(pkg, root, private_pem, keep=KEEP_DEFAULT, now=None):
         shutil.rmtree(partial)
         raise DeliveryError("包的 apply_update 版本不一致，不發布：" + "；".join(problems))
     entries = payload_entries(payload)
-    sha_bytes = sha_list_text(entries).encode("utf-8")
-    meta = {"format": FORMAT, "name": name, "commit": manifest.get("commit"), "product": manifest.get("product"),
+    meta = {"format": FORMAT, "name": name, "kind": KIND_FULL, "commit": manifest.get("commit"),
+            "product": manifest.get("product"),
             "built_at": manifest.get("built_at"), "files": len(entries), "bytes": sum(n for _r, _s, n in entries),
             "apply_script_version": ver, "published_at": (now or datetime.now()).isoformat(timespec="seconds")}
+    return _finish_publish(root, name, partial, final, meta, entries, private_pem, keep)
+
+
+def _publish_module(pkg, root, private_pem, keep, now, tools_dir):
+    tail, mod = module_package_meta(pkg, tools_dir)
+    commit = str(mod["commit"] or "")
+    if not re.match(r"^[0-9a-f]{8,40}$", commit):
+        raise DeliveryError("模組包的 built_from 不合格：%r" % commit)
+    name = "%s_%s_%s" % ((now or datetime.now()).strftime("%Y%m%d_%H%M%S"), commit[:8], tail)
+    final = os.path.join(root, "packages", name)
+    if os.path.exists(final):
+        raise DeliveryError("已經發布過同名的包：%s" % final)
+    partial = os.path.join(root, "incoming", name + ".partial")
+    if os.path.exists(partial):
+        shutil.rmtree(partial)
+    shutil.copytree(pkg, os.path.join(partial, PAYLOAD))
+    entries = payload_entries(os.path.join(partial, PAYLOAD))
+    meta = {"format": FORMAT, "name": name, "kind": KIND_MODULE, "commit": commit, "product": mod["product"],
+            "built_at": (now or datetime.now()).isoformat(timespec="seconds"),
+            "files": len(entries), "bytes": sum(n for _r, _s, n in entries), "module": mod["module"],
+            "min_apply_module_script": mod["min_apply_module_script"],
+            "published_at": (now or datetime.now()).isoformat(timespec="seconds")}
+    return _finish_publish(root, name, partial, final, meta, entries, private_pem, keep)
+
+
+def _finish_publish(root, name, partial, final, meta, entries, private_pem, keep):
+    sha_bytes = sha_list_text(entries).encode("utf-8")
     meta_bytes = json.dumps(meta, ensure_ascii=False, indent=1, sort_keys=True).encode("utf-8")
     with open(os.path.join(partial, SHA_LIST), "wb") as f:
         f.write(sha_bytes)
@@ -257,7 +342,11 @@ def scan(root):
         _raw, meta = _read_meta(os.path.join(pk, n, META_JSON))
         if not isinstance(meta, dict) or meta.get("name") != n:
             continue
-        out.append({k: meta.get(k) for k in ("name", "commit", "product", "built_at", "files", "bytes")})
+        row = {k: meta.get(k) for k in ("name", "commit", "product", "built_at", "files", "bytes")}
+        row["kind"] = meta.get("kind") or KIND_FULL
+        if row["kind"] == KIND_MODULE:
+            row["module"] = {k: (meta.get("module") or {}).get(k) for k in ("key", "version", "prod_base_commit")}
+        out.append(row)
     return out
 
 
@@ -310,8 +399,58 @@ def _installed_deployed(install_root):
         return None
 
 
-def verify_staged(staged, install_root, pubkey_pem=None, run_verify_package=True):
-    """⇒ {ok, problems, notes, meta}。problems 非空 ⇒ 不可以套用；notes 是要給人看、但不擋的（例：退版要確認）。"""
+def module_preflight_cmd(install_root, payload):
+    """用**已安裝版本**的 module_update.py 做單模組包的套用前檢查（只讀）。"""
+    return [sys.executable, os.path.join(install_root, *_MOD_TOOL.split("/")), "preflight", "--root", install_root,
+            "--pkg", payload, "--require-base", "--json"]
+
+
+def _run_cmd(cmd, timeout=600):
+    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+    return r.returncode, r.stdout + r.stderr
+
+
+def _verify_module(meta, payload, install_root, notes, runner=None):
+    """kind＝module 的驗證（簽章與逐檔雜湊已由呼叫端做完）⇒ 問題清單。設計 §1.2。"""
+    problems = []
+    mod = meta.get("module") or {}
+    if not mod.get("key") or not mod.get("prod_base_commit"):
+        return ["delivery.json 缺模組代號或正式機基準 commit"]
+    need = meta.get("min_apply_module_script")
+    have = module_script_version(os.path.join(install_root, "backend", "tools"))
+    if not have:
+        problems.append("正式機沒有單模組套用工具（%s）⇒ 請先套用帶新工具的完整包" % _MOD_PS1_REG)
+    elif not need or str(have) < str(need):
+        problems.append("正式機的單模組套用工具 %s 比這個包需要的 %s 舊 ⇒ 請先套用完整包" % (have, need))
+    if not os.path.isfile(os.path.join(install_root, *_MOD_TOOL.split("/"))):
+        problems.append("正式機沒有 %s ⇒ 請先套用完整包" % _MOD_TOOL)
+    dep = _installed_deployed(install_root)
+    if not dep or not dep.get("commit"):
+        problems.append("讀不到目前安裝的部署紀錄（.deployed_commit.json）⇒ 判不了這個包是不是對這一版做的")
+    elif dep.get("commit") != mod.get("prod_base_commit"):
+        problems.append("這個包是對正式機 %s 做的，而目前安裝的是 %s ⇒ 不套用（請以目前版本重新出貨或改用完整包）"
+                        % (str(mod.get("prod_base_commit"))[:8], str(dep.get("commit"))[:8]))
+    if problems:
+        return problems
+    rc, out = (runner or _run_cmd)(module_preflight_cmd(install_root, payload))
+    line = next((l for l in reversed(out.splitlines()) if l.startswith("MODULE_UPDATE_RESULT ")), None)
+    try:
+        res = json.loads(line.split(" ", 1)[1]) if line else None
+    except ValueError:
+        res = None
+    if res is None:
+        return ["單模組套用前檢查沒有結果行（exit %s）：%s" % (rc, out[-400:])]
+    if not res.get("ok") or rc != 0:
+        return ["單模組套用前檢查不通過：%s" % res.get("error")]
+    notes.append("單模組更新：%s %s → %s%s" % (res.get("key"), res.get("from_version") or "（原本沒有）",
+                                              res.get("to_version"), "（帶 migration，套用時先乾跑）" if res.get("has_migrations") else ""))
+    return []
+
+
+def verify_staged(staged, install_root, pubkey_pem=None, run_verify_package=True, module_runner=None):
+    """⇒ {ok, problems, notes, meta, kind}。problems 非空 ⇒ 不可以套用；notes 是要給人看、但不擋的（例：退版要確認）。
+    kind＝module：不驗 apply_update 腳本版本與 verify_package（不適用），改驗正式機的單模組套用工具版本、基準 commit、
+    與已安裝 module_update.py 的 preflight（module_runner：題目注入點）。"""
     problems, notes = [], []
     pub = DELIVERY_PUBKEY_PEM if pubkey_pem is None else pubkey_pem
     meta_bytes, meta = _read_meta(os.path.join(staged, META_JSON))
@@ -344,6 +483,14 @@ def verify_staged(staged, install_root, pubkey_pem=None, run_verify_package=True
                 problems.append("%s %d 個：%s" % (label, len(items), "、".join(items[:10])))
         if meta.get("files") != len(listed):
             problems.append("delivery.json 的檔數 %s 與清單 %d 不同" % (meta.get("files"), len(listed)))
+    try:
+        kind = package_kind(meta)
+    except DeliveryError as e:
+        return {"ok": False, "problems": problems + [str(e)], "notes": notes, "meta": meta, "kind": None}
+    if kind == KIND_MODULE:
+        if not problems:                               # 簽章或雜湊不過就不往下跑（不在不信任的包上執行 preflight）
+            problems += _verify_module(meta, payload, install_root, notes, module_runner)
+        return {"ok": not problems, "problems": problems, "notes": notes, "meta": meta, "kind": kind}
     # 3. 腳本版本（AH-O7）
     ver, sv_problems = script_version(payload)
     problems += sv_problems
@@ -367,7 +514,7 @@ def verify_staged(staged, install_root, pubkey_pem=None, run_verify_package=True
                                encoding="utf-8", errors="replace", timeout=600)
             if r.returncode != 0:
                 problems.append("verify_package 不通過（exit %s）：%s" % (r.returncode, (r.stdout + r.stderr)[-600:]))
-    return {"ok": not problems, "problems": problems, "notes": notes, "meta": meta}
+    return {"ok": not problems, "problems": problems, "notes": notes, "meta": meta, "kind": kind}
 
 
 # ── 正式機：一鍵套用 (c) ──────────────────────────────────────────────────────
@@ -377,7 +524,9 @@ LOCK_REL = os.path.join("backend", ".apply.lock")
 RESULT_CORE = (("status", "status"), ("rolled_back", "rolledBack"), ("service", "service"), ("exit", "exit"))
 #: 寫回雲端的欄位（白名單：不帶 package 路徑以外的本機資訊、不帶 log）
 WRITE_BACK_FIELDS = ("protocol", "status", "rolled_back", "service", "exit", "script", "script_version", "timestamp",
-                     "commit", "started_at", "finished_at")
+                     "commit", "started_at", "finished_at",
+                     # B55 單模組包（apply_module_update.ps1 的 result.json 才有；完整包 ⇒ None）
+                     "kind", "module_key", "from_version", "to_version", "prod_base_commit")
 
 
 def read_lock(install_root):
@@ -391,12 +540,16 @@ def read_lock(install_root):
         return {"unreadable": True}
 
 
-def apply_cmd(install_root, payload):
+def apply_cmd(install_root, payload, script="apply_update"):
+    """script＝apply_update（完整包）或 apply_module_update（單模組包）；一律跑**已安裝**的那一份。"""
     return ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-            os.path.join(install_root, "backend", "tools", "apply_update.ps1"), "-PackagePath", payload, "-Yes"]
+            os.path.join(install_root, "backend", "tools", script + ".ps1"), "-PackagePath", payload, "-Yes"]
 
 
-def _run_powershell(cmd, timeout=45 * 60):
+def _run_powershell(cmd, timeout=None):
+    """逾時：完整包 45 分；單模組包 20 分（由腳本名決定，呼叫端不必知道）。逾時不自動中止（沿用原則）——由 subprocess 丟例外。"""
+    if timeout is None:
+        timeout = 20 * 60 if any(str(c).endswith("apply_module_update.ps1") for c in cmd) else 45 * 60
     r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     return r.returncode, r.stdout + r.stderr
 
@@ -448,19 +601,25 @@ def apply_staged(staged, install_root, verified, judge, run=None, clock=None):
         return {"started": False, "outcome": "failed", "result": None, "lock": lock,
                 "problems": ["另一個套用或回滾正在執行，或有殘留的鎖檔（不自動清；確認後由人刪除 backend\\.apply.lock）"]}
     payload = os.path.join(staged, PAYLOAD)
-    tools_src = os.path.join(payload, "backend", "tools")
-    if not os.path.isdir(tools_src):
-        raise DeliveryError("包裡沒有 backend\\tools：不能先換上新的套用腳本（AH-M2），不套用")
-    shutil.copytree(tools_src, os.path.join(install_root, "backend", "tools"), dirs_exist_ok=True)   # AH-M2
+    kind = verified.get("kind") or KIND_FULL
+    if kind == KIND_MODULE:
+        # 單模組包不帶 tools（設計 §0）：跑正式機**已安裝**的 apply_module_update.ps1；不複製任何工具
+        script = "apply_module_update"
+    else:
+        tools_src = os.path.join(payload, "backend", "tools")
+        if not os.path.isdir(tools_src):
+            raise DeliveryError("包裡沒有 backend\\tools：不能先換上新的套用腳本（AH-M2），不套用")
+        shutil.copytree(tools_src, os.path.join(install_root, "backend", "tools"), dirs_exist_ok=True)   # AH-M2
+        script = "apply_update"
     started = clock()
-    rc, out = (run or _run_powershell)(apply_cmd(install_root, payload))
+    rc, out = (run or _run_powershell)(apply_cmd(install_root, payload, script))
     decide, parse = judge
-    res = find_result(install_root, "apply_update", since=started - 2)
+    res = find_result(install_root, script, since=started - 2)
     problems = []
     outcome = decide(rc, out, "deploy")
     stdout_res = parse(out)
     if res is None or "unreadable" in res:
-        problems.append("找不到這一次的結果檔（backend\\logs\\apply_update_*.result.json）或讀不懂")
+        problems.append("找不到這一次的結果檔（backend\\logs\\%s_*.result.json）或讀不懂" % script)
         outcome = "failed"
     elif stdout_res is not None:
         mism = [rk for rk, sk in RESULT_CORE if str(res.get(rk)) != str(stdout_res.get(sk))]
@@ -509,15 +668,36 @@ def read_results(root):
 
 
 def latest_prod_commit(root):
-    """開發機 /api/prod-status 用：最近一次 outcome=succeeded 的 {commit, finished_at, name}；沒有 ⇒ None（不猜）。"""
+    """開發機 /api/prod-status 用：最近一次 outcome=succeeded 的**完整包** {commit, finished_at, name}；沒有 ⇒ None（不猜）。
+    單模組包（kind＝module）不算：它不改變正式機的 commit，只是在那個 commit 之上覆蓋一個模組（見 module_overlays）。"""
     best = None
     for name, r in read_results(root).items():
         if name == "_unreadable" or r.get("outcome") != "succeeded" or not r.get("commit"):
+            continue
+        if (r.get("kind") or KIND_FULL) != KIND_FULL:
             continue
         key = (str(r.get("finished_at") or ""), name)
         if best is None or key > best[0]:
             best = (key, {"commit": r["commit"], "finished_at": r.get("finished_at"), "name": name})
     return best[1] if best else None
+
+
+def module_overlays(root):
+    """開發機：正式機在「最近一次完整包」之上成功套用的單模組包 ⇒ {模組: {version, finished_at, name}}（同一模組取最新）。
+    只算 prod_base_commit＝那個完整包 commit 的（換了完整包 ⇒ 舊覆蓋過期，設計 §3）。沒有完整包紀錄 ⇒ {}（不猜）。"""
+    base = latest_prod_commit(root)
+    if not base:
+        return {}
+    out = {}
+    for name, r in read_results(root).items():
+        if name == "_unreadable" or r.get("outcome") != "succeeded" or r.get("kind") != KIND_MODULE:
+            continue
+        if r.get("prod_base_commit") != base["commit"] or not r.get("module_key"):
+            continue
+        cur = out.get(r["module_key"])
+        if cur is None or str(r.get("finished_at") or "") > str(cur["finished_at"] or ""):
+            out[r["module_key"]] = {"version": r.get("to_version"), "finished_at": r.get("finished_at"), "name": name}
+    return out
 
 
 def _default_resolver():

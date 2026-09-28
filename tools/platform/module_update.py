@@ -346,6 +346,10 @@ def preflight(root, pkg, allow_downgrade=False, require_base=False):
         if cur != base:
             raise UpdateError("這個包是對正式機 %s 做的，而安裝目錄是 %s ⇒ 不套用（請以目前版本重新出貨，或改用完整包）"
                               % (base[:8], cur[:8]), code="base_mismatch")
+    pending = pending_interrupted(root, key)
+    if pending:
+        raise UpdateError("模組 %s 有中斷的套用（%s，in_progress）⇒ 先 rollback --backup %s 回到套用前，再重新套用"
+                          % (key, pending[-1], pending[-1]), code="interrupted_apply_pending")
     inst_core = _core_version(backend)
     if not _core_ok(entry.get("core"), inst_core):
         raise UpdateError("模組 %s 要求 core %s，安裝目錄是 %s ⇒ 不相容" % (key, entry.get("core"), inst_core), code="core_incompatible")
@@ -586,7 +590,7 @@ def apply(root, pkg, allow_downgrade=False, require_base=False, stamp=None):
         record["baseline_updated"] = _update_baseline(root, key, set(before), set(after))
         record["manifest_inserted"] = _insert_manifest(root, lock.get("manifest_lines"))
         _update_deployed_modules(root, key, lock, stamp)
-    except Exception as e:                                  # noqa: BLE001  任何中途失敗：用本次備份還原
+    except BaseException as e:                              # noqa: BLE001  任何中途失敗（含 Ctrl+C）：用本次備份還原（S3R-M1）
         try:
             _restore_from(root, key, bdir, record)
         except Exception as e2:                             # noqa: BLE001
@@ -605,8 +609,9 @@ def apply(root, pkg, allow_downgrade=False, require_base=False, stamp=None):
 def _prune_backups(root, key, keep=None):
     keep = BACKUP_KEEP if keep is None else keep
     d = Path(root) / BACKUP_DIR / key
-    for name in backups(root, key)[:-keep]:
-        _rmtree(d / name)
+    for name in _all_records(root, key)[:-keep]:
+        if (_record(root, key, name) or {}).get("status") != "in_progress":
+            _rmtree(d / name)
 
 
 def _record(root, key, name):
@@ -614,6 +619,17 @@ def _record(root, key, name):
         return json.loads((Path(root) / BACKUP_DIR / key / name / "apply.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
+
+
+def _all_records(root, key):
+    """這個模組的全部備份目錄名（有 apply.json 的），舊到新。"""
+    d = Path(root) / BACKUP_DIR / key
+    return sorted(p.name for p in d.iterdir() if (p / "apply.json").is_file()) if d.is_dir() else []
+
+
+def pending_interrupted(root, key):
+    """中斷的套用（status＝in_progress）⇒ 備份名清單（稽核 D S3R-M1）。"""
+    return [n for n in _all_records(root, key) if (_record(root, key, n) or {}).get("status") == "in_progress"]
 
 
 def backups(root, key):
@@ -640,7 +656,17 @@ def rollback(root, key, stamp=None):
         raise UpdateError("找不到備份 %s（有：%s）" % (stamp, avail), code="backup_not_found")
     bdir = root / BACKUP_DIR / key / stamp
     rec = _record(root, key, stamp)
-    if rec.get("status") != "in_progress":
+    if rec.get("status") == "in_progress":
+        # 稽核 D S3R-M1：中斷的套用只准回滾「最新一份」——比它新的紀錄存在＝之後又動過，整檔還原會蓋掉它們
+        newest = _all_records(root, key)[-1]
+        if stamp != newest:
+            raise UpdateError("備份 %s 是中斷的套用，但之後還有 %s ⇒ 不回滾到它（會蓋掉之後的改動）" % (stamp, newest),
+                              code="interrupted_not_latest")
+        base = rec.get("prod_base_commit")
+        if base and deployed_commit(root) != base:
+            raise UpdateError("正式機已換成另一個完整包（%s ≠ 套用時的 %s）⇒ 不回滾這個模組包"
+                              % (str(deployed_commit(root))[:8], base[:8]), code="base_changed")
+    else:
         # 稽核 D S3-M2：整檔還原只在「套用完成之後沒有任何其他寫入」時才安全
         if "files_after" in rec and _tree_hashes(root, key) != rec["files_after"]:
             raise UpdateError("模組 %s 在這次套用（%s）之後又被改過 ⇒ 不回滾到它之前（會蓋掉之後的改動）" % (key, stamp), code="module_changed")

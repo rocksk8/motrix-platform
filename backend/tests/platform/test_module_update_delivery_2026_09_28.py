@@ -465,3 +465,72 @@ def test_every_code_is_documented_for_the_ps1():
     missing = sorted(c for c in codes if "| `%s` |" % c not in table)
     assert not missing, "設計 §10 沒列的 code：%s" % missing
     assert len(codes) >= 20, "正對照：程式裡應該抓得到二十幾個 code（抓不到＝這一題量尺壞了）"
+
+
+# ── 稽核 D S3R-M1（探針 P7）：中斷的套用 ─────────────────────────────────────────
+
+def _crash(monkeypatch, root, pkg):
+    """模擬行程在換檔中途被砍（還原也來不及跑）⇒ 留下 in_progress。"""
+    monkeypatch.setattr(MU.shutil, "copytree", _boom)
+    real = MU._restore_from
+    monkeypatch.setattr(MU, "_restore_from", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("行程被殺")))
+    with pytest.raises(MU.UpdateError):
+        MU.apply(root, pkg)
+    monkeypatch.undo()
+    MU._license_check = lambda manifest: (True, "")        # undo 也還原了 autouse 的授權注入
+    return real
+
+
+def test_interrupted_apply_blocks_new_apply_until_rolled_back(src, tmp_path, monkeypatch):
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)
+    _crash(monkeypatch, root, pkg)
+    [stamp] = MU.pending_interrupted(root, "zz")
+    with pytest.raises(MU.UpdateError) as ei:
+        MU.apply(root, pkg)
+    assert ei.value.code == "interrupted_apply_pending" and stamp in str(ei.value)
+    MU.rollback(root, "zz", stamp)
+    assert MU.pending_interrupted(root, "zz") == []
+    MU.apply(root, pkg)                                      # 回滾之後才准再套
+
+
+def test_rollback_of_an_older_interrupted_record_is_refused(src, tmp_path, monkeypatch):
+    """D 探針 P7：舊的 in_progress 之後又有紀錄（例：繞過檢查重套）⇒ rollback --backup <舊的> 拒絕，不動任何檔。"""
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)
+    _crash(monkeypatch, root, pkg)
+    [old] = MU.pending_interrupted(root, "zz")
+    MU._restore_from(root, "zz", root / MU.BACKUP_DIR / "zz" / old, MU._record(root, "zz", old))   # 人工收拾現場
+    monkeypatch.setattr(MU, "pending_interrupted", lambda *a: [])                                  # 模擬舊版工具（沒有 ① 的檢查）
+    MU.apply(root, pkg)
+    monkeypatch.undo()
+    MU._license_check = lambda manifest: (True, "")
+    snap = _snapshot(root)
+    with pytest.raises(MU.UpdateError) as ei:
+        MU.rollback(root, "zz", old)
+    assert ei.value.code == "interrupted_not_latest"
+    assert _snapshot(root) == snap
+
+
+def test_interrupted_rollback_checks_the_full_package_base(src, tmp_path, monkeypatch):
+    p, pkg = _shipped(src, tmp_path)
+    root = _install(tmp_path, p)
+    _crash(monkeypatch, root, pkg)
+    _write(root / "backend" / ".deployed_commit.json", json.dumps({"commit": "8" * 40}))
+    with pytest.raises(MU.UpdateError) as ei:
+        MU.rollback(root, "zz")
+    assert ei.value.code == "base_changed"
+
+
+def test_prune_also_removes_rolled_back_but_never_in_progress(src, tmp_path, monkeypatch):
+    """S3R-S1：回滾過的備份也在保留數之內被清；in_progress 永遠不刪（它是唯一的還原依據）。"""
+    p = _git(src, "rev-parse", "HEAD")
+    root = _install(tmp_path, p, src=src)
+    monkeypatch.setattr(MU, "BACKUP_KEEP", 1)
+    x = _v2(src)
+    pkg = MU.ship("zz", tmp_path / "o", p, x, run_tests=False, repo=src)
+    MU.apply(root, pkg)
+    MU.rollback(root, "zz")
+    MU.apply(root, pkg)
+    names = MU._all_records(root, "zz")
+    assert len(names) == 1 and MU._record(root, "zz", names[0])["status"] == "applied", names

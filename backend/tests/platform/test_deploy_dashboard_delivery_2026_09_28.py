@@ -182,3 +182,16 @@ def test_rc_prod_status_without_delivery_folder_keeps_the_old_path(env, monkeypa
     monkeypatch.setattr(dd.requests, "get", boom)
     d = env["c"].get("/api/prod-status").json()
     assert d["healthy"] is False and calls and d["delivered"]["configured"] is False
+
+
+def test_prod_status_shows_module_overlays_on_dev_side(env, monkeypatch):
+    """B55（主持裁示：儀表板只做開發機側）：交付結果裡有「這個完整包之上」的單模組包 ⇒ prod-status 列出模組覆蓋；
+    完整包的 commit 不因模組包改變。"""
+    monkeypatch.setattr(dd.requests, "get", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("不可以連正式機")))
+    D.write_back(str(env["root"]), env["name"], {"commit": COMMIT, "finished_at": "2026-09-28 03:16:00"}, "succeeded")
+    mod_name = "20260928_040000_" + "b" * 8 + "_mod-zz"
+    D.write_back(str(env["root"]), mod_name, {"commit": "b" * 40, "kind": "module", "module_key": "zz", "to_version": "1.1.0",
+                                               "prod_base_commit": COMMIT, "finished_at": "2026-09-28 04:01:00"}, "succeeded")
+    d = env["c"].get("/api/prod-status").json()
+    assert d["deployed"]["commit"] == COMMIT, "模組包不改變正式機 commit"
+    assert d["delivered"]["moduleOverlays"] == {"zz": {"version": "1.1.0", "finishedAt": "2026-09-28 04:01:00", "name": mod_name}}

@@ -72,6 +72,8 @@
 
 ### 1.4 儀表板與寫回
 
+〔實作時更正（S4，主持裁示 2026-09-28）：正式機**目前沒有本機儀表板**（`deploy_dashboard.py` 自 PK1 a1585914 起 export-ignore，不在完整包；正式機的更新路徑是「正式機 Claude 照安裝指示執行 ps1」）。⇒ 儀表板只做**開發機側**：prod-status 的 `delivered.moduleOverlays`（這個完整包之上成功套用的單模組包）。正式機可見性改由 `apply_module_update.ps1` 的 `::RESULT::`＋result.json＋`module_update.py list --json`（§10）。`delivery.apply_staged` 的 kind 分派照做（CLI／日後儀表板共用）。儀表板怎麼出貨到正式機＝下一輪 D6-O1〕
+
 - `apply_staged` 依 kind 分派：module ⇒ 不複製 tools（包裡沒有），直接跑**已安裝**的 `apply_module_update.ps1`；逾時 20 分（不自動中止，同完整包原則）。
 - `find_result` 依腳本名找 `apply_module_update_*.result.json`。
 - `write_back` 多帶 `kind`、`module_key`、`to_version`。
@@ -295,6 +297,7 @@
 | `already_installed` | preflight／apply | 內容雜湊相同 | F5 `duplicate_version` |
 | `not_higher` | preflight／apply | 版本不高於已安裝 | F4 |
 | `bad_args` | apply | stamp 格式不對或重複 | F2 `bad_args` |
+| `interrupted_apply_pending` | preflight／apply | 這個模組有中斷的套用（in_progress 備份）⇒ 先 `rollback --backup <它>` 再套（稽核 D S3R-M1） | F4 `module_preflight_failed`（訊息帶備份名） |
 | `apply_failed_restored` | apply | 換檔中途失敗，已用本次備份還原到套用前 | F9 `module_copy_failed`（rolled_back＝restored；服務照樣重啟＋健檢） |
 | `apply_failed_half` | apply | 換檔中途失敗，而且還原也失敗（備份 in_progress 留著） | F9 → `rollback --backup S`；再失敗 ⇒ F13 |
 | `no_backup` | rollback | 沒有任何可回滾的備份 | F13 `module_restore_failed` |
@@ -304,6 +307,7 @@
 | `module_changed` | rollback | 模組在這次套用之後又被改過 ⇒ 拒絕整檔還原 | 手動處理（不自動重試） |
 | `state_changed` | rollback | lock 或三個狀態檔在這次套用之後又被寫過（別的模組包、完整包）⇒ 拒絕 | 手動處理 |
 | `base_changed` | rollback | 正式機已換成另一個完整包 ⇒ 拒絕 | 手動處理 |
+| `interrupted_not_latest` | rollback | 指定的是中斷的套用，但它之後還有別的紀錄 ⇒ 拒絕（只准回滾最新一份 in_progress，S3R-M1） | 手動處理 |
 | `refused` | 任何 | 其他已知拒絕（預設值） | 依子命令視為失敗 |
 | `unexpected` | 任何 | 非預期例外（exit 3） | apply ⇒ F9；其他 ⇒ 失敗 |
 
