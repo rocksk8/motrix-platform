@@ -204,6 +204,16 @@ def package_name(pkg, now=None):
     return "%s_%s_%s" % ((now or datetime.now()).strftime("%Y%m%d_%H%M%S"), commit[:8], product), m
 
 
+_TOOL_VER_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})([a-z]?)$")
+
+
+def tool_version_key(v):
+    """套用工具版本（同 $ApplyScriptVersion 的格式：YYYY-MM-DD 加一個小寫字母，例 2026-09-28g）⇒ 可比較的 tuple；
+    格式不對 ⇒ None（稽核 D S4-S1：不用字串比——'2026-09-28' 與 '2026-09-28a'、'2026-9-3' 之類會比錯）。"""
+    m = _TOOL_VER_RE.match(str(v or ""))
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3)), m.group(4)) if m else None
+
+
 def module_script_version(tools_dir):
     """apply_module_update.version.json 的 version（套用工具的版本）；讀不到 ⇒ None。tools_dir＝某一份安裝的 backend/tools。"""
     try:
@@ -420,7 +430,9 @@ def _verify_module(meta, payload, install_root, notes, runner=None):
     have = module_script_version(os.path.join(install_root, "backend", "tools"))
     if not have:
         problems.append("正式機沒有單模組套用工具（%s）⇒ 請先套用帶新工具的完整包" % _MOD_PS1_REG)
-    elif not need or str(have) < str(need):
+    elif tool_version_key(have) is None or tool_version_key(need) is None:
+        problems.append("套用工具版本格式不認得（正式機 %r、包需要 %r；格式 YYYY-MM-DD[a-z]）⇒ 不猜" % (have, need))
+    elif tool_version_key(have) < tool_version_key(need):
         problems.append("正式機的單模組套用工具 %s 比這個包需要的 %s 舊 ⇒ 請先套用完整包" % (have, need))
     if not os.path.isfile(os.path.join(install_root, *_MOD_TOOL.split("/"))):
         problems.append("正式機沒有 %s ⇒ 請先套用完整包" % _MOD_TOOL)
@@ -631,6 +643,14 @@ def apply_staged(staged, install_root, verified, judge, run=None, clock=None):
 
 # ── 結果寫回 (d) ──────────────────────────────────────────────────────────────
 
+def outcome_from_result(res):
+    """沒有儀表板時（CLI writeback）的判定：**只有** status＝success 而且 exit＝0 才算成功；其他一律 failed（fail-closed）。
+    儀表板在時仍用它自己的 decide_outcome（值域在儀表板，HC1c）；這裡刻意只認一個成功值，不抄儀表板的值域。"""
+    if not isinstance(res, dict) or "unreadable" in res:
+        return "failed"
+    return "succeeded" if res.get("status") == "success" and str(res.get("exit")) == "0" else "failed"
+
+
 def write_back(root, name, result, outcome, host=None):
     """正式機把結果寫到 <交付資料夾>\\results\\<包名>.result.json（先 .tmp 再改名）。只帶 WRITE_BACK_FIELDS＋name／outcome／host。"""
     _require_root(root)
@@ -737,9 +757,14 @@ def main(argv=None, resolver=None):
     st.add_argument("--staging", required=True)
     v = sub.add_parser("verify"); v.add_argument("--staged", required=True); v.add_argument("--install-root", required=True)
     v.add_argument("--skip-verify-package", action="store_true")
+    #: B55：正式機沒有本機儀表板（主持裁示）⇒ 正式機 Claude 套用完用這個把結果寫回交付資料夾（開發機 prod-status 讀它）
+    w = sub.add_parser("writeback"); w.add_argument("--root"); w.add_argument("--name", required=True)
+    w.add_argument("--install-root", required=True)
+    w.add_argument("--script", default="apply_module_update", choices=("apply_update", "apply_module_update"))
+    w.add_argument("--since", type=float, help="只看這個 epoch 秒之後寫的結果檔（套用開始的時間）")
     a = ap.parse_args(argv)
     try:
-        if a.cmd in ("publish", "scan", "stage") and not a.root:
+        if a.cmd in ("publish", "scan", "stage", "writeback") and not a.root:
             a.root = configured_root(resolver)
         if a.cmd == "keygen":
             print(keygen(a.private_out).decode("ascii"))
@@ -751,6 +776,12 @@ def main(argv=None, resolver=None):
             print(json.dumps(scan(a.root), ensure_ascii=False, indent=1))
         elif a.cmd == "stage":
             print("DELIVERY_STAGE_OK %s" % stage(a.root, a.name, a.staging))
+        elif a.cmd == "writeback":
+            res = find_result(a.install_root, a.script, since=a.since)
+            outcome = outcome_from_result(res)
+            path = write_back(a.root, a.name, res if isinstance(res, dict) and "unreadable" not in res else {}, outcome)
+            print("DELIVERY_WRITEBACK_OK %s %s" % (outcome, path))
+            return 0 if outcome == "succeeded" else 1
         else:
             r = verify_staged(a.staged, a.install_root, run_verify_package=not a.skip_verify_package)
             print(json.dumps(r, ensure_ascii=False, indent=1))
