@@ -347,3 +347,13 @@ def test_second_warm_round_does_not_hit_nominatim_again_for_free_misses(client, 
     geo.warm_geocode_cache()
     assert not set(calls["nominatim"]) & set(skipped_round1), \
         "第二輪又打了 Nominatim：%r（第一輪已記 free：%r）" % (calls["nominatim"], skipped_round1)
+
+
+def test_miss_classification_does_not_depend_on_the_negative_cache(client, backlog, real_path, monkeypatch):
+    """稽核 D GEO-M1：預熱的「查無」判定不可以依賴負快取有沒有寫（A44 範圍內曾經不寫 ⇒ 查無落到 failures、三筆就停）。
+    兩種負快取的寫入都換成 no-op ⇒ 仍然 6 筆都查、misses 5、不停。"""
+    monkeypatch.setattr(geo, "remember_geocode_miss", lambda address: None)
+    monkeypatch.setattr(geo, "_remember_free_miss", lambda address: None)
+    asked = _fake_urlopen(monkeypatch, lambda a: HIT if a == "待定位機關3" else EMPTY)
+    st = geo.warm_geocode_cache()
+    assert len(asked) == 6 and st["misses"] == 5 and st["failures"] == 0 and st["stoppedBecause"] == "no_backlog", (asked, st)
