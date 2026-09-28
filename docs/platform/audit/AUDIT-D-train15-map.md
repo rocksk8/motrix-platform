@@ -212,3 +212,24 @@
 ### 關閉紀錄（標準格式，PLAYBOOK §E-6）
 
 - ✅ GB-M2 關閉（8b7e04d3）——取點帶頁面底圖、後端只准收窄、前端比對不同就不畫
+
+## 9. 驗新 resolved（dee64c54＋A 8b7e04d3＋B 4115c6e4）（D，2026-09-28）
+
+- `geo.py.resolved` sha256 cd77f9bc…1165，與主持給的相同；與 B 合併樹 27c4dd22 的 geo.py 位元組相同
+- 逐行比對「兩邊各自在 geo.py 新增的行」是否留在 resolved 裡：
+  - A 缺 12 行：其中 8 行是本來就該刪的 `skipped_google`（被 B 的 scope 取代）；4 行是預熱入口的範圍判斷，只是被包進 B 的 try、縮排不同，語意都在
+  - B 缺 2 行：docstring 改寫，以及同一個入口的縮排
+  - 有 coord_source、有金鑰遮蔽（`replace(key`）；沒有 `_MISS_CACHE_FREE`、沒有 `skipped_google`
+- **D 自建合併樹**（不借用 B 的樹）：rerere 關閉，依序合 A、提交後再合 B；geo.py 用 resolved，其餘衝突（CHANGELOG、version_manifest、CORE-SPEC）取一邊，只為了跑題；再套 adjust.diff
+  - ⚠ D 第一次建樹時，A 的衝突沒提交就合 B ⇒ B 沒合進來，題檔不在，xdist 回「no tests ran」。已重建並逐檔確認題檔存在（〈xdist 列了不存在的檔＝整批沒跑〉）
+- 題：定位與地圖十個題檔（含 test_map_google_basemap）**181 過**
+- 突變：
+
+| 突變 | 結果 |
+|---|---|
+| N1「查無一律記 all」 | 5 紅 |
+| N2「預熱不進 SST 範圍」 | 1 紅 |
+| N3「google_basemap 只看金鑰」 | 1 紅 |
+
+- **T15-C1 完成**：列車可以用這份 resolved。version_manifest 與 CORE-SPEC 的合法合併由 B 在 27c4dd22 處理（地圖 28g 合成一筆、決定表三列都留），D 沒有驗那兩個檔的內容
+- B 提的「geo.py:923 Google error_message 也要遮金鑰」：同意列下一輪。error_message 是 Google 回的文字，目前不含金鑰；防的是日後的變化
