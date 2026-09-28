@@ -3,7 +3,7 @@
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
 ## （不升版號：介面不變）— 2026-09-28（B，wip/b-module-delivery-2：B55 單一模組更新包 S2）
-- L1（行為，私有）：`core.loader._write_module_states(path)`——啟動完成時寫 `logs/module_states.json`（`{pid, started_at, modules:[{key, state, version, reason}]}`，先寫 .tmp 再改名；寫失敗只記 WARNING）；`main.py` 在排程閘門內、`start_schedulers()` 之後呼叫（測試 session 不寫）。給單模組更新的健檢讀（稽核 D DB-S4）。loader 的「模組 %s %s 已載入」「模組 %s 未載入：%s」兩行 log 字串列為契約（守門題）
+- L1（行為，私有）：`core.loader._write_module_states(path)`——啟動完成時寫 `logs/module_states.json`（`{pid, started_at, modules:[{key, state, version, reason}]}`，先寫 .tmp 再改名；寫失敗只記 WARNING）；~~`main.py` 在排程閘門內、`start_schedulers()` 之後呼叫（測試 session 不寫）~~〔更正（S3，稽核 D DB5-S1）：**不綁排程閘門**，`mount_modules()` 之後、以「pytest 不在 sys.modules」為條件呼叫；檔內多記 `schedulers_disabled`（以 DISABLE_SCHEDULERS 啟動的演練也有狀態檔，健檢說得出原因）〕。給單模組更新的健檢讀（稽核 D DB-S4）。loader 的「模組 %s %s 已載入」「模組 %s 未載入：%s」兩行 log 字串列為契約（守門題）
 - L1（行為）：`core.upgrade.CONFIG_FILES` 加 `backend/.deployed_modules.json`（單模組包的覆蓋紀錄，與 `.deployed_commit.json` 同類；稽核 D DB-O1）⇒ 完整包刪除計畫與 cleanup-snapshot 不碰它
 - 守門 `tests/platform/test_module_states_file_2026_09_28.py`
 

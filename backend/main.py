@@ -749,8 +749,11 @@ if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
     # 例：標案雷達；關著時 run_scan() 立刻返回、不對外連線。只跑 registry.loaded() 的
     # （停用／未授權不 import、路由衝突已 unload ⇒ 不跑）；子行程守門呼叫同一個函式驗證。
     module_loader.start_schedulers()
-    # B55（稽核 D DB-S4）：這次啟動的模組載入結果 ⇒ logs/module_states.json（單模組更新的健檢讀它）。
-    # 放在排程閘門內：測試 session 不寫進 repo 的 logs/（正式機與演練一律開著）。
+# B55（稽核 D DB-S4）：這次啟動的模組載入結果 ⇒ logs/module_states.json（單模組更新的健檢讀它）。
+# 〔稽核 D DB5-S1：**不綁排程閘門**——以 MOTRIX_DISABLE_SCHEDULERS=1 啟動的安裝（例：演練）也要寫，否則健檢會把
+#   「沒有狀態檔」誤判成「模組沒載入」（同第十六班事故：演練與正式機條件不同）。只在 pytest 之下不寫（不寫進 repo 的 logs/）；
+#   檔內另記 schedulers_disabled，讓健檢說得出原因〕
+if "pytest" not in __import__("sys").modules:
     module_loader._write_module_states(os.path.join(_paths.LOGS_DIR, "module_states.json"))
 # ⚠️ 啟動提示**不可以**放進排程閘門：「這台機器會不會對外連線」與排程開不開無關（理由見上面「標案雷達：
 #    只記開著那一側」）。
