@@ -905,6 +905,14 @@ def _batches_by_length(rel, budget=_ARGV_SAFE_CHARS):
     return out or [[]]
 
 
+def _collect_env(environ=None):
+    """collect-only 子行程的環境：拿掉建包獨佔旗標（其餘照舊）。"""
+    env = dict(os.environ if environ is None else environ)
+    for k in ("MOTRIX_PYTEST_EXCLUSIVE", "MOTRIX_PYTEST_EXCLUSIVE_OWNER"):
+        env.pop(k, None)
+    return env
+
+
 def run_pytest(targets, extra, window, full, collect_only=False):
     """在 backend/ 下跑 pytest；basetemp 專屬、結束必刪。回傳 (exit code, stdout)。
     targets 太多檔會撞 Windows 命令列長度上限 ⇒ 依長度分批，逐批各自的 basetemp，合併結果（tail 串接、
@@ -921,8 +929,10 @@ def run_pytest(targets, extra, window, full, collect_only=False):
         proc = None
         try:
             if collect_only:
+                # 只收集不需要建包獨佔：不帶 MOTRIX_PYTEST_EXCLUSIVE*（2026-09-29 第二十一班建包卡死——建包持有全機鎖，
+                # 題目起的 `modtest --dry-run` 收集繼承這個旗標 ⇒ 被判成重跑、排在自己的父行程後面等鎖 90 分）
                 proc = subprocess.run(cmd, cwd=str(BACKEND), capture_output=True, text=True, encoding="utf-8",
-                                      errors="replace")
+                                      errors="replace", env=_collect_env())
                 codes.append(proc.returncode)
                 tails.append(proc.stdout)
                 continue
