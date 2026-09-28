@@ -63,7 +63,7 @@ $ErrorActionPreference = "Stop"
 # AH-M2（2026-09-28 A 稽核）：這支腳本的版本。開頭與部署包裡那一份比對，不同就拒絕——
 #   手動執行時跑到安裝目錄裡的**舊**腳本（沒有先把包裡的 backend\tools 複製過來）會讓整套日常更新規則都不生效。
 #   改這支腳本的行為時要改這個值。用常數不用雜湊：演練副本會改路徑與 port，雜湊必然不同。
-$ApplyScriptVersion = "2026-09-28g"
+$ApplyScriptVersion = "2026-09-28j"
 # robocopy 一律 /R:3 /W:5（2026-09-28）：預設 /R:1000000 /W:30 ⇒ 被占用的檔會讓套用卡住數天而不是失敗，
 #   複製失敗的出口（AH-S7 自動寫回快照）永遠走不到。
 
@@ -266,6 +266,43 @@ function Backup-DatabasesOnline([string]$destDir) {
     }
 }
 # ── 逐字相同的區段到此為止 ──
+
+# 本次啟動那一段 server.log（2026-09-28 A：開關誤報、模組健檢誤判的共同根因）。
+#   起點＝最後一次「Uvicorn running on」往前最近的「MOTRIX ERP starting」（autostart.bat 每輪迴圈開頭寫）。
+#   ⚠ 不可以用「Uvicorn running on」當起點：main.py 在 import 時印的行（開關 MOTRIX_GEO=1／MOTRIX_TENDER_RADAR=1、
+#     「模組 <key> <版本> 已載入」）都在它之前 ⇒ 永遠掃不到。
+#   找不到 ⇒ $null（呼叫端要說「驗不到」；不可以退回整段 tail——裡面有上一個行程印的同一行，回滾後的檢查會假綠）。
+#   $tail 由呼叫端讀：Get-Content -Encoding UTF8（server.log 是 Python 寫的 UTF-8、沒有 BOM；PS 5.1 預設用 ANSI 讀 ⇒ 中文比對不到）。
+function Get-StartupRange($tail) {
+    $lastStartIdx = -1
+    for ($i = $tail.Count - 1; $i -ge 0; $i--) {
+        if ($tail[$i] -like "*Uvicorn running on*") { $lastStartIdx = $i; break }
+    }
+    if ($lastStartIdx -lt 0) { return $null }
+    for ($i = $lastStartIdx; $i -ge 0; $i--) {
+        if ($tail[$i] -like "*MOTRIX ERP starting*") { return ,@($tail[$i..($tail.Count - 1)]) }
+    }
+    return $null
+}
+
+# 開關生效檢查的判定（Step 5 呼叫；抽出來才測得到）。$range＝Get-StartupRange 的結果。
+#   Want＝autostart.bat 寫著要開（set X=1，:: 註解掉的不算）；Missing＝要開而這次啟動那一段 log 沒有「X=1」那一行。
+function Get-SwitchMismatch([string]$autostartText, $range, [string[]]$names) {
+    $want = @()
+    $missing = @()
+    foreach ($sw in $names) {
+        $wantOn = $false
+        foreach ($ln in ($autostartText -split "\r?\n")) {
+            $t = $ln.Trim()
+            if ($t.StartsWith("::")) { continue }   # 被註解掉的不算
+            if ($t -match ("^set\s+" + [regex]::Escape($sw) + "\s*=\s*1$")) { $wantOn = $true }
+        }
+        if (-not $wantOn) { continue }
+        $want += $sw
+        if (@($range | Where-Object { $_ -match ([regex]::Escape($sw) + "=1") }).Count -eq 0) { $missing += $sw }
+    }
+    return @{ Want = $want; Missing = $missing }
+}
 
 # 呼叫 python 並回 @{ Text; Exit }。
 # ⚠️ PS 5.1：原生執行檔往 stderr 印任何東西，在 $ErrorActionPreference = "Stop" 底下會被包成
@@ -919,7 +956,8 @@ for ($i = 0; $i -lt 20; $i++) {
 $logErrors = @()
 $logPath = Join-Path $BackendDir "logs\server.log"
 if (Test-Path $logPath) {
-    $tail = Get-Content $logPath -Tail 200
+    $tail = Get-Content $logPath -Tail 200 -Encoding UTF8
+    $bootRange = Get-StartupRange $tail
     # crash-restart 迴圈搶 port 666 重新綁定時，重試階段偶爾會留下 1～2 次
     # [Errno 10048]（位址已被使用）之類的暫時性錯誤，迴圈本身會自動重試到成功；
     # 這類「最終有成功啟動」的暫時性錯誤不該被算成這次更新失敗。只檢查
@@ -987,7 +1025,8 @@ if ($healthy -and -not $logErrors) {
     # 那三句話沒有一句會讓人想到環境變數。
     #
     # 判準：autostart.bat 裡【寫著要開】的，就必須在這次啟動的 log 裡看得到
-    # 對應那一行。後端啟動時會印（main.py），而那一行讀的是 os.environ ——
+    # 對應那一行（範圍＝Get-StartupRange：import 時印的，在 Uvicorn running on 之前；
+    # 2026-09-28 A：原本掃 Uvicorn running on 之後 ⇒ 每次部署都誤報）。後端啟動時會印（main.py），而那一行讀的是 os.environ ——
     # 它回答的是「這個行程實際拿到什麼」，不是「檔案裡寫了什麼」。
     #
     # 只檢查「該開而沒開」這一個方向：沒有要求開的就不會有那一行，
@@ -996,24 +1035,15 @@ if ($healthy -and -not $logErrors) {
     $switchNames = @("MOTRIX_TENDER_RADAR", "MOTRIX_GEO")
     $autostartPath = Join-Path $BackendDir "autostart.bat"
     $switchMismatch = @()
-    if ((Test-Path $autostartPath) -and $scanRange) {
+    if ((Test-Path $autostartPath) -and $bootRange) {
         $autostartText = Get-Content $autostartPath -Raw -ErrorAction SilentlyContinue
-        foreach ($sw in $switchNames) {
-            $wantOn = $false
-            foreach ($ln in ($autostartText -split "\r?\n")) {
-                $t = $ln.Trim()
-                if ($t.StartsWith("::")) { continue }   # 被註解掉的不算
-                if ($t -match ("^set\s+" + [regex]::Escape($sw) + "\s*=\s*1$")) { $wantOn = $true }
-            }
-            $sawLine = @($scanRange | Where-Object { $_ -match ([regex]::Escape($sw) + "=1") }).Count -gt 0
-            if ($wantOn -and -not $sawLine) {
-                $switchMismatch += $sw
-            } elseif ($wantOn) {
-                Ok "  開關 $sw：autostart.bat 要求開啟，這次啟動的 log 裡看得到它 —— 生效。"
-            }
+        $sm = Get-SwitchMismatch $autostartText $bootRange $switchNames
+        $switchMismatch = @($sm.Missing)
+        foreach ($sw in $sm.Want) {
+            if ($switchMismatch -notcontains $sw) { Ok "  開關 $sw：autostart.bat 要求開啟，這次啟動的 log 裡看得到它 —— 生效。" }
         }
     } else {
-        Info "  開關生效檢查略過（找不到 autostart.bat，或這次沒有取到啟動後的 log）。"
+        Info "  開關生效檢查略過（找不到 autostart.bat，或 server.log 裡找不到本次啟動的起點「MOTRIX ERP starting」）——驗不到，不代表生效。"
     }
     if ($switchMismatch.Count -gt 0) {
         Write-Host ""
