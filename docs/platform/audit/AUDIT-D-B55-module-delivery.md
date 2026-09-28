@@ -80,3 +80,38 @@
 
 - **DB-O1**：`.deployed_modules.json` 的分類是 program，會進程式快照、也會被 cleanup-snapshot 處理。推演下來行為是對的：完整包回滾到較舊快照 ⇒ 模組覆蓋紀錄跟著消失，而模組資料夾也回到那個快照。但它是狀態檔，建議明確列進 STATE_FILES，並寫一段「兩種回滾各自怎麼處理它」，不要靠推演
 - **DB-O2**：U-M4 選 ①、U-M5 選 ①、U-M6 選 ① 都同意。U-M5 的文字插入照〈共用 JSON 用文字插入〉的做法，回滾時要移除同一段，而且要有題
+
+## 4. 複審第二、三版：wip/b-module-delivery 79489c98（0d5636cc＋DB-M2 改甲）（D，2026-09-28）
+
+**結論：必修 1（新）、其餘成立。**
+
+| 項目 | 判定 |
+|---|---|
+| DB-M1 | 成立：改白名單（已安裝的 `classify=="program"`），DB 只放快照副本；另排除 `.apply.lock`；殘留目錄在下一次開頭清（只清前綴、而且沒有鎖時）；有反向控制題與突變。✅ 關閉行見本節末 |
+| DB-M2 | 使用者裁示甲；設定點單一（`PROVIDER_CHANGE_POLICY="consumers"`）、判定不了就退回乙、與 dep_graph 交叉比對 ⇒ 方向成立。**但消費端與能力清單的取法太窄，見 DB2-M1**；關閉要等 DB2-M1 |
+| U-M1②、U-M2②、DB-S3～S6、DB-O1、U-M4～M6 | 成立 |
+
+**B 指出的三處前提（逐一確認）**：
+1. `drill_apply_copy.py` 不在 origin：**B 說得對**。它在 `D:\MOTRIX-DRILLS\apply-run-0928\tools\`（演練目錄、不進 repo），D 寫成「既有做法」，但沒說它不在 repo。設計改成新寫一支、放進 repo 的 `tools/platform/drill_module_apply.py`，比較好
+2. classify 白名單會帶進 `.apply.lock` 等非個資狀態檔：**B 說得對**。已另排除 `.apply.lock`，其餘不含個資，可以接受
+3. 「STATE_FILES 實為 CONFIG_FILES」：**兩個都存在**。`apply_plan.STATE_FILES`（`.deployed_files.json`、`.apply.lock`）是 D 原本的意思；B 改用 `core.upgrade.CONFIG_FILES`（與 `.deployed_commit.json` 同類）。後果：完整包刪除計畫與 cleanup-snapshot 不碰它、程式快照照樣含它、V9 完整回滾時照設定檔還原——推演一致，**接受 B 的選擇**。它是 L1 改動，已經列進第③級
+
+**DB2-M1（必修）　§4.3 找消費端的判準太窄：漏了 `single_provider`，也漏了 import 時登記的提供者**
+- 取用端：設計只寫 `registry.providers("<cap>")`／`registry.provider("<cap>")`
+  - 但 `core.registry` 沒有 `provider` 這個函式
+  - 實際上最常用的是 **`registry.single_provider(...)`**：origin/platform 的模組、helpers、routers 裡，single_provider 的呼叫比 providers 還多
+  - ⇒ 照設計實作，大部分消費端不會被找到，而且是「找不到」而不是「判不了」⇒ 不會退回乙，是靜默放行（〈判準的寬窄都會騙人〉的太窄）
+- 提供端：「提供者有改」與能力清單只讀 `ModuleSpec.providers`
+  - 但 arap 另外在 import 時以 `_registry.provide(...)` 登記了 `calendar.writeback`（invoice_vouchers.py:870、payment_requests.py:908）與 `attachments.for_document`（invoice_vouchers.py:958）
+  - ⇒ 改到這些函式時，能力清單裡沒有它們 ⇒ 消費端（例：case 的附件彙整、行事曆寫回）不會被選到
+- 修法：
+  - 能力清單＝`ModuleSpec.providers` 的 key ∪ 模組檔案裡以字串常數呼叫 `registry.provide(cap, …)` 的 cap
+  - 取用端＝`registry.providers`／`registry.single_provider`，以及 `core.registry` 裡日後新增的任何「以 capability 取提供者」的函式——**由 registry 的公開介面清單產生**，不在 ship_tier 裡手抄
+  - 要處理別名（`_registry.`、`from core.registry import single_provider`）與模組層字串常數（例：helpers/case_access.py:86 的 `_registry.providers(CASE_PRESENT)`）。仍解析不了 ⇒ 退回乙（原設計）
+- 補題：
+  - 正對照（真實 repo）：改 arap 的 `_InvoiceVoucherAttach…` ⇒ 選題含 `attachments.for_document` 的消費端；改 case 的 `case.access` 提供者 ⇒ 選題含 netplan、accounting 的消費端
+  - 突變：把 single_provider 從取用端清單拿掉 ⇒ 正對照紅
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ DB-M1 關閉（79489c98）——疊加樹改白名單（已安裝的 classify==program），DB 只放快照副本，另排除 .apply.lock
