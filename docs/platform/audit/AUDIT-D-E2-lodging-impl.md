@@ -1,4 +1,4 @@
-# 稽核：E2 附近旅宿實作第一、二段（wip/e-lodging-impl 2e44395d，lodging 1.0.0）（D，2026-09-28）
+# 稽核：E2 附近旅宿實作（wip/e-lodging-impl：第一、二段 2e44395d；全段 7760dcf3，lodging 1.1.0）（D，2026-09-28）
 
 > 範圍：`backend/modules/lodging/**`、INTEGRATION-POINTS、modules.json。依據 LODGING-NEARBY.md（D 審過的設計 6af9466e）。
 > 題目與突變在拋棄式樹跑，暫存已清。
@@ -51,3 +51,66 @@
 - **E2-O1**：突變 L6（`_BAD_NAME` 拿掉 `..`）存活，因為這種檔名也不在白名單裡，由白名單擋下 ⇒ 屬於多一層的保護，行為仍然正確。要讓 `_BAD_NAME` 自己有題，可以測一個「白名單放寬之後」的單元情境。不必要
 - **E2-O2**：D 第一次用 `-n 2` 跑突變 L1 時卡住（超過 10 分鐘沒有結束）；改成不用 xdist、每個突變設 240 秒死線之後，L1 正常變紅。判斷是這台機器上 xdist 的環境問題，不是題目；記錄備查
 - **E2-O3**：`admin` 在列表看得到所有人的查詢紀錄（含中心點地址文字）＝D 審 Q4 的預設（建立者＋admin+），與設計一致
+
+---
+
+## 4. E2 全段（wip/e-lodging-impl 7760dcf3，lodging 1.1.0、CORE 1.65 暫號）
+
+> 範圍：2043c5e4、e1ef554e、7760dcf3（c0b48473 之後 E 自己的差異）＋66d823a7 第三段。基底含 3e061d6f（祖先確認）。
+> 拋棄式 worktree（detached 7760dcf3）跑題與突變，`-p no:xdist`、每個突變 300 秒死線；暫存已清，還原後 status 乾淨。
+
+### 4.0 結論
+
+- **必修 0、建議 3、觀察 3。**
+- 相關題 92 過（覆蓋層契約、map_request_scope、宣告式備份、read_session、lodging records）；`test_system_audit` 24 過——§0 的「已知紅 3（T1 沒進每日 JSON）」已由宣告式併入轉綠。
+- 突變 8 個：
+
+| 突變 | 結果 |
+|---|---|
+| M1 `script_path` 只比模組、不比宣告的檔名 | 紅 |
+| M2 `_file_of` 拿掉「必須在 pages/ 目錄」 | 存活，見 E3-O1 |
+| M3 宣告的 script 不驗格式 | 4 紅 |
+| M4 T2 也自動匯出 | 紅 |
+| M5 表名不驗 | 紅 |
+| M6 未載入模組的表也列 | 紅 |
+| M7 亂值（含空字串）不收窄 | 7 紅 |
+| M8 `missing=osm` 失效 | 3 紅 |
+
+### 4.1 主持指定
+
+**① T2 不自動併入、記 ERROR（偏離原裁示）：同意 E 的作法；不會每天告警，也不會被當成失敗。**
+- ERROR 只是 `logger.error`。告警走的是明確的告警呼叫（main.py 啟動檢查那條 `level="ERROR"`：寄信、BACKUP_ALERT、audit），**沒有任何 handler 或工具把 log 的 ERROR 行轉成告警**（grep `addHandler`／`levelno` 在產品碼 0 筆）
+- 每日備份的成敗看的是表匯出結果（`daily_partial`）。T2 表**不進** `_daily_backup_tables()` ⇒ 也不進 `expected_tables` ⇒ 兩邊同源、不會少一張、不會誤報 partial
+- 現況**沒有任何模組宣告 T2**（grep module.json 0 筆）⇒ 這條 ERROR 目前不會出現
+- 偏離的理由成立：T2 含祕密欄位，`SELECT *` 會把祕密寫進雲端同步的 JSON。原裁示「T1／T2 都併入」若照做，要逐欄排除，L1 做不到自動化
+- 代價：宣告 T2 的表**不在 JSON 層**（仍在整庫備份那一層），而唯一的訊號是 log。見 E3-S1
+
+**② `/map-overlays/<模組>/<檔>` 不需登入：成立，無必修。**
+- 只取得到宣告的檔：`script_path` 走 `declared_overlays()`（只列**已載入**模組），要求模組 key 與完整 scriptUrl 都相等（突變 M1 紅）
+- 無路徑穿越：路由參數 `{script}` 不含 `/`；宣告的檔名受 `^[a-z0-9][a-z0-9-]*\.js$` 限制（M3 紅）；另有 realpath 後 dirname 必須等於 `modules/<key>/pages`（M2 存活，見 E3-O1）；題目有 `..%2Fmodule.json`、未宣告檔、未載入模組都是 404
+- 不列目錄：只有單一檔路由，沒有 index；不存在一律同一個 404
+- 公開端點清單不用動：`auth_middleware`／授權 middleware 都是「非 `/api/` 一律放行」，`_PUBLIC_API_PATHS` 只管 `/api/` 底下。新路由不在 `/api/` 下，跟 `/pages/…`、`/static/sidebar.js` 同一類；**清單沒被改到**（main.py 差異只有這條路由＋註解）。`/api/map/overlays` 照常要登入（`_require_user`）
+- 內容是程式碼、不含資料；資料仍經 `/api/lodging/*` 各自驗權限
+- 缺的是「非 /api 路由」這一類本身沒有守門，見 E3-S2
+
+**③ Google 底圖物件 raw 化：全在 L1，成立。**
+- `map-overlay.js`：地圖一律經 `raw(_comp._map)` 取出；覆蓋層建的 Google 物件（InfoWindow、AdvancedMarkerElement、MarkerClusterer、Circle）都經 `keepRaw`（`__v_skip`）；交給 Google 的座標都是新建的純物件（`Number()`），`content` 是 L1 建的 DOM
+- 物件只存在閉包的 `st.handles`；交給覆蓋層的是不透明字串 handle ⇒ 覆蓋層的 Alpine 狀態裡不會出現地圖物件
+- `lodging-overlay.js`：grep `google`／`Alpine`／`_map`／`_comp`／`innerHTML` 0 筆，只用 `api.*`
+- `map-google.js` 只多一行：`closeMap` 先 `_mapClosed()`
+
+**其他一併看的**
+- `map_request_scope`：None／google／osm 與原本的判斷逐一對照相同；空字串與亂值收窄成 osm（M7 紅）；`missing` 預設 osm（M8 紅）。map_points 用 `setting`、旅宿用 `osm`，與裁示相符
+- 宣告式 T1：只收已載入模組、表名正規式、已在寫死清單的不重複（M4～M6 紅）
+
+### 4.2 建議
+
+- **E3-S1　略過的 T2 要進備份結果，不只進 log**：現在唯一的訊號是 `logger.error`，而且每次呼叫 `_daily_backup_tables()` 都會記一次（一輪備份會呼叫好幾次）。建議把「宣告 T2、未匯出」的表名寫進備份摘要（例如 `skipped_t2: [...]`），備份頁看得到；log 改成每輪一次。〈降級之後它還是會動〉：少備一張表而備份仍是「成功」
+- **E3-S2　非 /api 的動態路由加一題清單守門**：「非 `/api/` 一律放行」是設計，而現在這類路由有 `/pages/…`、`/map-overlays/…`、`/static/sidebar.js`、`/` 四條，沒有題目列出它們。下一條回傳資料的非 /api 路由會直接變成公開端點。建議一題列出 app 裡所有不在 `/api/` 的路由並比對白名單（新增要一起改白名單＝有人做過決定）
+- **E3-S3　覆蓋層就緒回呼沒綁同一次 mount**：`onBasemapReady` 的回呼只檢查 `_active[key]` 有沒有值。地圖還在載入時，按覆蓋層→再按（卸下）→再按（重掛），就緒時舊的回呼也會跑，用的是**第一次 mount 的 api**，畫出的標點記在舊的 handles 裡 ⇒ 之後卸下清不掉。建議回呼比對 `_active[key] === made`（掛上時那一份）。同處：`closeMap()` 經 `_mapClosed()` 卸下全部，但 `overlayOn` 沒有重設，按鈕仍顯示為開著
+
+### 4.3 觀察
+
+- **E3-O1**：M2（拿掉 dirname 檢查）存活：檔名正規式已擋掉分隔符，這層只剩一個作用——擋 `pages/` 裡指向外面的 symlink（realpath 之後 dirname 不同）。模組包有簽章，實際風險低；同 E2-O1，是多一層的保護
+- **E3-O2**：`backend/core/CHANGELOG.md` 的 B54「不升版號」那一段在 1.65 上下各出現一次（合併 origin/platform 時重複），列車取號時一併整理
+- **E3-O3**：D 自己的操作失誤：18:02 一個 `cd` 失敗後的 `git checkout --detach 7760dcf3` 落在**共用主樹 D:\MOTRIX-PLATFORM**，約 1 分鐘後依 reflog 切回 `platform`（3e061d6f），status 乾淨、沒有檔案被改。這段期間若有人在主樹跑題，看到的是 7760dcf3。之後 worktree 操作一律 `git -C`
