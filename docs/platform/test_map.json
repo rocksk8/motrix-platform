@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 742,
+  "tests": 743,
   "unmapped": 8,
   "kinds": {
-   "api": 397,
+   "api": 398,
    "e2e": 177,
    "audit": 100,
    "unit": 68
@@ -15551,6 +15551,31 @@
     "path": [
      "backend/main.py",
      "frontend/pages/"
+    ]
+   }
+  },
+  "backend/tests/test_geocode_warm_async_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "core:main",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_subproc.py",
+    "file:backend/tests/test_geocode_warm_2026_09_22.py",
+    "file:backend/tests/test_geocode_warm_misses_2026_09_28.py",
+    "helper:daily_checks",
+    "helper:geo"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/daily_checks.py",
+     "backend/helpers/geo.py",
+     "backend/tests/_subproc.py",
+     "backend/tests/test_geocode_warm_2026_09_22.py",
+     "backend/tests/test_geocode_warm_misses_2026_09_28.py"
+    ],
+    "path": [
+     "backend/main.py"
     ]
    }
   },
