@@ -114,3 +114,14 @@
 - **E3-O1**：M2（拿掉 dirname 檢查）存活：檔名正規式已擋掉分隔符，這層只剩一個作用——擋 `pages/` 裡指向外面的 symlink（realpath 之後 dirname 不同）。模組包有簽章，實際風險低；同 E2-O1，是多一層的保護
 - **E3-O2**：`backend/core/CHANGELOG.md` 的 B54「不升版號」那一段在 1.65 上下各出現一次（合併 origin/platform 時重複），列車取號時一併整理
 - **E3-O3**：D 自己的操作失誤：18:02 一個 `cd` 失敗後的 `git checkout --detach 7760dcf3` 落在**共用主樹 D:\MOTRIX-PLATFORM**，約 1 分鐘後依 reflog 切回 `platform`（3e061d6f），status 乾淨、沒有檔案被改。這段期間若有人在主樹跑題，看到的是 7760dcf3。之後 worktree 操作一律 `git -C`
+
+## 5. 抽查 E3-S1～S3：wip/e-lodging-impl 487b26f0（D，2026-09-28）
+
+- **結論：三條建議都已採納，沒有新的必修；可排第十八班。**
+- 題目 17 過（白名單、宣告式備份、備份表數、覆蓋層 e2e）。D 補突變 3 個全紅：
+  - X1 白名單不走進 include 的子 router ⇒ 2 紅
+  - X2 彙總檔拿掉 `skipped_t2` ⇒ 紅
+  - X3 就緒回呼退回只看 `_active[key]` ⇒ e2e 紅
+- E3-S1：`skipped_t2` 是彙總檔的固定欄位（`_daily_backup_summary_header` 每輪呼叫一次，ERROR 也每輪一次），月備份也有。`daily_partial` 的判斷是 `v == "error"`，多一個 list 欄位不影響；「實際寫出幾筆」的固定欄位集合取自 header 本身，不是寫死的數字
+- E3-S2：遞迴走 `_IncludedRouter`（逐層帶前綴）＋Mount；正對照（子 router 帶前綴的新路由會亮）、反向控制（過期、理由太短）都有。`/openapi.json`、`/docs`、`/docs/oauth2-redirect`、`/redoc` 標「待主持裁示」、行為沒改＝盤點出來、交給主持決定，不是順手做掉
+- E3-S3：`current()` 比對同一次 mount；`addMarkers`／`addCircle` 在已卸下的 api 上回 null；`_mapClosed` 重設 `overlayOn`
