@@ -102,6 +102,7 @@
 - S2. `TENDER_RADAR_ENABLED = False` 時，排程觸發 → **`fetch_raw` 計數器 == 0**
 - S4. 同一天排程觸發兩次 → `fetch_raw` 計數器 == 1（沿用第 4 輪 9c 的形狀）
 - S5. 🔴🔴 **子行程裡先把 `archive` 等模組塞進 `sys.modules` 成記錄器、再 `import main`（不設 `MOTRIX_DISABLE_SCHEDULERS`）→ `schedule_tender_scan` 被呼叫 1 次**
+- S6. 🔴🔴 **第一輪掃描不可以卡住 `import main`**（第十五班緊急修補 B54，主持裁示；正式機套用 8b04d99d 時同步預熱卡啟動 84 秒 ⇒ 自動回滾）：形狀同 S5，第一輪掃描換成「睡 60 秒」、首輪延遲設 0 ⇒ `import main` 耗時 < 60 秒（`schedule_tender_scan()` 立即返回，第一輪在 daemon Timer 跑）〔第十六班列車補宣告：題目先用了 S6 而規格沒有，test_spec_coverage 抓到〕
 - N1. 🔴 **命中 5 筆 → `email_notify._async_send` 被呼叫 1 次**（不是 5 次）
 - N2. 命中 0 筆 → 寄信函式 **0 次**
 - N3. 🔴 **抓取失敗 → 寄信函式 1 次**（§T.6：雷達瞎了要有人知道）
