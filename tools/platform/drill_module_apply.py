@@ -250,12 +250,29 @@ def _bump(ver):
     return "%d.%d.%d" % (parts[0], parts[1], parts[2] + 1)
 
 
-def make_variant(worktree, variant):
+def _vkey(v):
+    return tuple(int(x) for x in re.findall(r"\d+", str(v or "0")))
+
+
+def installed_version(root, key=KEY):
+    """演練安裝目前的模組版本（modules.lock.json）；讀不到 ⇒ None。"""
+    try:
+        e = (json.loads((Path(root) / "backend" / "modules.lock.json").read_text(encoding="utf-8")).get("modules") or {}).get(key)
+    except (OSError, ValueError):
+        return None
+    return e.get("version") if isinstance(e, dict) else e
+
+
+def make_variant(worktree, variant, at_least=None):
+    """at_least：新版本號至少要高於它（同一個演練安裝連續跑多場時，前一場可能已經把版本升上去）。"""
     """在演練 worktree 裡改 tender_radar ⇒ 回新版本號。"""
     mdir = Path(worktree) / "backend" / "modules" / KEY
     mj = mdir / "module.json"
     man = json.loads(mj.read_text(encoding="utf-8"))
-    new_ver = _bump(man["version"])
+    base_ver = man["version"]
+    if at_least and _vkey(at_least) > _vkey(base_ver):
+        base_ver = at_least
+    new_ver = _bump(base_ver)
     text = mj.read_text(encoding="utf-8").replace('"version": "%s"' % man["version"], '"version": "%s"' % new_ver, 1)
     mj.write_text(text, encoding="utf-8")
     cl = mdir / "CHANGELOG.md"
@@ -364,7 +381,7 @@ def main(argv=None):
             wt = base / ("wt_" + v)
             _git("worktree", "add", "--detach", str(wt), report["commit"])
             wts.append(wt)
-            ver = make_variant(wt, v)
+            ver = make_variant(wt, v, installed_version(root))   # 前一場成功後安裝已是新版 ⇒ 這一場要再往上升
             _git("-c", "user.name=drill", "-c", "user.email=drill@example.invalid", "commit", "-q", "-a", "-m",
                  "B55 drill %s（不推）" % v, repo=wt)
             x = _git("rev-parse", "HEAD", repo=wt)
