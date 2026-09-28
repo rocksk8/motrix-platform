@@ -149,6 +149,12 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-28 16:06 主持：**正式機已更新到 54a2d6b6**（第十六班緊急包；經遠端控制由正式機 Claude 套用，使用者授權見 CORE-SPEC「遠端套用」）。
+  - 事故：14:39 正式機套用 8b04d99d ⇒ unhealthy_rolled_back（main.py:676 同步 schedule_geocode_warm 首輪；B50 後查無不停 ⇒ 跑到每日上限，啟動卡 84 秒）。演練漏抓：前四輪演練設 MOTRIX_DISABLE_SCHEDULERS=1。8b04d99d 包與指示已撤到 `MOTRIX-交付\rejected\`（B54-S1）。
+  - 修補：B54（geo 與 tender_radar 首輪改背景 Timer 30 秒；真 import main 子行程整合題）；D 必修 0；第十六班 origin 54a2d6b6（A 列車長）。建包 5628＋e2e 545 過；547 檔；package.sha256 SHA256＝7B44DCB9…5064。
+  - 演練第五輪 `D:\MOTRIX-DRILLS\apply-run-t16`（排程開、MOTRIX_GEO=1、雲端存檔 off、150 筆查無地址）：8b04d99d 反向控制 87 秒無回應 ⇒ 自動回滾（重現）；54a2d6b6 健檢第 1 次 3 秒過。D 最終判定可上（wip/d-audit-train16 fd03dc4f；誘餌推論更正 2d0719d0）。
+  - 正式機結果（`MOTRIX-交付\正式機回報\20260928_155709_54a2d6b6_成功\`）：success、健檢第 1 次 4 秒、刪 0 新增 4；首輪預熱 15:57 啟動、16:03 結束 used=120 processed=111 succeeded=67 misses=44 stopped=daily_limit；條款只讀檢查：geocode_usage 空、今日快取 nominatim 56＋nominatim_district 11、瀏覽器金鑰與地圖 ID 皆未填 ⇒ 未使用 Google。更正：主持給的檢查 SQL 用 created_at >= '2026-09-28 15:57'，而該欄只存日期 ⇒ 會漏掉全部列；正式機 Claude 發現並改用日期補查。
+  - **下一輪待辦（加列）**：apply_update 誤報「開關沒有生效：MOTRIX_TENDER_RADAR、MOTRIX_GEO」（822286ed 與 54a2d6b6 兩次都誤報，server.log 實際有）；演練誘餌加心跳檔（D 建議）；B54-S2 驗收加「雲端路徑在但慢」；BASELINE→54a2d6b6（正式機現況）。
 - 2026-09-28 15:21 A（列車長）：**第十六班（緊急）合回**——B54：`schedule_geocode_warm()`／`schedule_tender_scan()` 立即返回、第一輪改 daemon Timer（正式機套用 8b04d99d 時同步預熱卡啟動 84 秒 ⇒ unhealthy_rolled_back，已回 822286ed）。自 origin 5020e985 cherry-pick B 10b10d14／b13cd5c3＋D 審 f53a9321／3d967f30（無衝突）；產生檔 63faf892；CORE 無介面變動、tender_radar 1.3.3、manifest 標案雷達 28h（唯一）、地圖 28g 沿用。modtest --train：差異題 2 紅＝test_spec_coverage（B 題目用了 S6 而 tender_radar SPEC 只宣告到 S5）⇒ 列車上補宣告 S6＋重產 spec_impl_modules.json（a4071fab）；tests/platform＋spec_coverage 1609 過；core-only RC ok（非預期 0）。不跑全量（主持：建包會跑）。建包、演練、發布由主持接。
   - **下一輪待辦**（本班）：①BASELINE c006a2a0→822286ed（正式機 2026-09-28 已部署；第十六班上線後再依實際版本更新）（主持裁示列第一項）；②B54-S2：archive 同步排程移背景＋「所有排程都慢時 import main 仍在時限內」題。
 - 2026-09-28 14:29 主持：**第十五班（地圖修正包）出貨就緒，交使用者套用**。
