@@ -161,3 +161,44 @@ def test_no_overlays_no_buttons(live_server, make_user, e2e_browser):
     page.wait_for_function("() => { try { return Array.isArray(Alpine.$data(document.querySelector('.mp-wrap')).overlays) }"
                            " catch (e) { return false } }", timeout=10000)
     assert page.locator("[data-map-overlay]").count() == 0
+
+
+PINS = "() => document.querySelectorAll('#mp-canvas .mp-ov-pin, #mp-canvas .marker-cluster').length"
+
+
+@pytest.mark.e2e
+def test_quick_unmount_remount_while_map_loads_leaves_nothing_uncleared(live_server, make_user, e2e_browser):
+    """E3-S3：地圖載入中「掛上→卸下→再掛上」⇒ 只有最後一次畫；清掉之後地圖上一個覆蓋層標點都不剩。"""
+    _keys("")
+    page = _open(e2e_browser, live_server, make_user(username="ov_race", role="superadmin"))
+    _mount(page, "osm")                                            # 先載好腳本
+    page.locator("[data-map-overlay=zz]").click()                  # 卸下
+    page.wait_for_function(PINS + " === 0", timeout=10000)
+    # 關圖 ⇒ 同一個同步區塊內：掛上、卸下、再掛上、開圖（就緒回呼排隊中）
+    page.evaluate(f"() => {{ const d = {MD}; d.closeMap(); const M = window.MotrixMapOverlay;"
+                  " window.__zzUnmounted = 0; M._mount('zz', '合成覆蓋層'); M._unmount('zz'); M._mount('zz', '合成覆蓋層');"
+                  " d.openMap() }")
+    page.wait_for_selector("#zz-out[data-ready=osm]", state="attached", timeout=20000)
+    page.wait_for_function(PINS + " > 0", timeout=10000)
+    assert page.evaluate("() => document.querySelectorAll('[data-map-overlay-panel=zz]').length") == 1
+    page.evaluate("() => window.__zz.api.clear()")                 # 用現在這一次的 api 清
+    page.wait_for_function(PINS + " === 0", timeout=10000)         # 修正前：第一次 mount 的標點留在圖上清不掉
+    assert page.evaluate("() => document.querySelectorAll('#mp-canvas path.leaflet-interactive').length") == 0
+    # 反向控制：被取代的舊 api 畫圖 ⇒ 回 null、不畫
+    assert page.evaluate("() => window.MotrixMapOverlay.isActive('zz')")
+
+
+@pytest.mark.e2e
+def test_close_map_unmounts_and_resets_the_button(live_server, make_user, e2e_browser):
+    """E3-S3：closeMap ⇒ 覆蓋層卸下、按鈕回到未開（反向控制：關之前是開著的樣子）。"""
+    _keys("")
+    page = _open(e2e_browser, live_server, make_user(username="ov_close", role="superadmin"))
+    _mount(page, "osm")
+    btn = page.locator("[data-map-overlay=zz]")
+    assert "btn-primary" in btn.get_attribute("class")             # 反向控制
+    page.evaluate(f"() => {MD}.closeMap()")
+    page.wait_for_function("() => window.__zzUnmounted === 1", timeout=10000)
+    page.wait_for_function("() => !document.querySelector('[data-map-overlay=zz]').classList.contains('btn-primary')",
+                           timeout=10000)
+    assert page.evaluate(f"() => {MD}.overlayOn.zz") in (None, False)
+    assert page.locator("[data-map-overlay-panel=zz]").count() == 0

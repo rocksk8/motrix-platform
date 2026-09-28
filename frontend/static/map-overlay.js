@@ -7,7 +7,8 @@
  *   api.basemap()                      'google'｜'osm'（這一頁的底圖；查資料時帶給後端，後端只准收窄）
  *   api.center()                       地圖頁目前位置 {lat, lng, source:'device'}；沒有 ⇒ null
  *   api.panel(title)                   L1 給的側邊容器（HTMLElement）；覆蓋層只在裡面畫自己的 UI（用 textContent／createElement）
- *   api.onBasemapReady(cb)             地圖建好後呼叫（已建好 ⇒ 下一個 tick 呼叫）
+ *   api.onBasemapReady(cb)             地圖建好後呼叫（已建好 ⇒ 下一個 tick 呼叫）；只對「同一次 mount」呼叫（E3-S3）
+ *   （已卸下或被新的一次 mount 取代的 api：addMarkers／addCircle 回 null、不畫）
  *   api.addMarkers(list, style)        ⇒ handle（**不透明字串**）。list：[{id, lat, lng, title, popup:{title, lines:[字串], links:[{label, href}]}}]
  *                                      style：{icon:'hotel'｜'homestay'｜'center', color:語意 token 名（例 'accent'）}
  *                                      大量標點由 L1 群聚（OSM＝markercluster、Google＝@googlemaps/markerclusterer）
@@ -201,6 +202,10 @@
 
   function makeApi(key) {
     var st = { handles: {}, clicks: {}, panel: null }
+    //: 這一次掛上的那一份（D 稽核 E3-S3）：就緒回呼與畫圖都要比對「還是不是同一次 mount」——
+    //  地圖載入中快速卸下再掛，舊那次的回呼會拿舊 api 畫進舊 handles ⇒ 之後卸下清不掉。
+    var self = {}
+    function current() { return _active[key] === self }
     var api = {
       basemap: function () { return isGoogle() ? 'google' : 'osm' },
       center: function () {
@@ -226,10 +231,11 @@
         return body
       },
       onBasemapReady: function (cb) {
-        if (map()) setTimeout(function () { if (_active[key]) cb() }, 0)
-        else _readyCbs.push(function () { if (_active[key]) cb() })
+        if (map()) setTimeout(function () { if (current()) cb() }, 0)
+        else _readyCbs.push(function () { if (current()) cb() })
       },
       addMarkers: function (list, style) {
+        if (!current()) return null            // 已卸下（或被新的一次取代）⇒ 不畫，免得留下清不掉的標點
         if (!map()) throw new Error('地圖尚未建立（請在 onBasemapReady 之後畫）')
         var id = key + ':' + (++_seq)
         var clean = (Array.isArray(list) ? list : []).filter(function (p) {
@@ -244,6 +250,7 @@
         return id
       },
       addCircle: function (c, radiusM, style) {
+        if (!current()) return null
         if (!map()) throw new Error('地圖尚未建立（請在 onBasemapReady 之後畫）')
         var id = key + ':' + (++_seq)
         st.handles[id] = impl().circle({ lat: Number(c.lat), lng: Number(c.lng) }, Number(radiusM), style || {})
@@ -261,7 +268,9 @@
       focus: function (h, id) { var x = st.handles[h]; if (x) impl().focus(x, String(id)) },
       onMarkerClick: function (h, cb) { if (st.handles[h]) st.clicks[h] = cb },
     }
-    return { api: api, st: st }
+    self.api = api
+    self.st = st
+    return self
   }
 
   function unmountOne(key) {
@@ -292,7 +301,10 @@
       _readyCbs = []
       cbs.forEach(function (cb) { try { cb() } catch (e) { console.error('[map-overlay]', e) } })
     },
-    _mapClosed: function () { Object.keys(_active).forEach(unmountOne) },
+    _mapClosed: function () {
+      Object.keys(_active).forEach(unmountOne)
+      if (_comp) _comp.overlayOn = {}          // E3-S3：按鈕不可以還顯示「開著」
+    },
     //: 掛上；mount 丟例外 ⇒ 面板說明「載入失敗」，其他覆蓋層與地圖照常。回傳是否成功。
     _mount: function (key, label) {
       if (_active[key] || !_impls[key]) return false
