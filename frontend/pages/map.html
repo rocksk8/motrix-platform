@@ -148,7 +148,13 @@
               **沒有人查得出來。**
            ⚠️ 排在「地理查詢未啟用」之前：那一則講的是「什麼都定位不到」，
               這一則講的是「定位得到，只是比較粗」——兩件事不要疊在一起講。 -->
-      <div class="mp-note warn" x-show="info && info.quota && info.quota.degraded">
+      <!-- 第十五班（地圖修正包 ③）：額度**明填 0** 是「停用 Google 定位」，不是「本週期用完」，也不會自動恢復——單獨說。 -->
+      <div class="mp-note warn" data-testid="map-quota-zero" x-show="info && info.quota && info.quota.disabledByZero">
+        <div><strong>Google 定位已停用</strong>：Google 地圖定位額度設定為 0，系統不會向 Google 查詢，
+          定位來源一律使用免費服務，<strong>精度較低</strong>（可能僅至路段或行政區），<strong>不會自動恢復</strong>。
+          <br><span style="opacity:.8">如要使用 Google 定位，請由最高管理員於「公司資料設定」調整額度（留空＝不設上限）。</span></div>
+      </div>
+      <div class="mp-note warn" data-testid="map-quota-degraded" x-show="info && info.quota && info.quota.degraded && !info.quota.disabledByZero">
         <div><strong>目前為節費模式</strong>：本週期的 Google 地圖額度已用畢
           （<span x-text="(info.quota && info.quota.used) || 0"></span>／<span
              x-text="(info.quota && info.quota.quota) || 0"></span>），
@@ -781,11 +787,27 @@ function mapPage() {
         return '背景定位今日的額度已用畢（' + (w.usedToday || 0) + '／'
              + (w.dailyLimit || 0) + '），明日會自動繼續。'
       }
+      // 第十五班（2026-09-28）：「查不到」與「沒查成功」分開說——前者去改地址或手動定位，
+      // 後者才是對方可能拒絕。合成一句的話，使用者會去查一個沒有壞的東西。
+      const misses = w.misses || 0
+      const missNote = misses > 0
+        ? '另有 ' + misses + ' 個地址外部地圖服務查不到（多為機關或場所名稱，不是地址），'
+          + '請到原單據改成可查的地址，或在地圖上手動定位。'
+        : ''
+      // 第十五班（主持裁示）：Google 階本輪連續連線失敗／被拒 ⇒ 已改用免費來源（迴圈沒停），要說出來並指向網路或金鑰限制
+      const googleNote = w.googleSkipped
+        ? 'Google 定位本輪連線失敗 ' + (w.googleFailures || 0) + ' 次（' + (w.googleSkipReason || '原因不明')
+          + '），已改用免費來源；請檢查網路或金鑰限制。'
+        : ''
       if (why === 'failures') {
-        return '背景定位因連續失敗而暫停，外部地圖服務可能暫時拒絕本機查詢；'
-             + '系統將於下一時段重試，詳情請查閱伺服器記錄。'
+        return '背景定位因連續連線失敗而暫停（' + (w.failures || 0) + ' 次），外部地圖服務可能暫時拒絕本機查詢；'
+             + '系統將於下一時段重試，詳情請查閱伺服器記錄。' + missNote + googleNote
       }
-      return ''
+      if (misses > 0) {
+        return '背景定位本輪有 ' + misses + ' 個地址查不到（多為機關或場所名稱，不是地址），'
+             + '請到原單據改成可查的地址，或在地圖上手動定位；其餘會繼續定位。' + googleNote
+      }
+      return googleNote
     },
 
     accuracyLabel() {

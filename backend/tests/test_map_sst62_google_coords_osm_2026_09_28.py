@@ -126,6 +126,10 @@ def test_scope_skips_google_cache_and_stage_and_leaves_no_negative_cache(env, mo
         r2 = geo.locate_cached("台中市沒有快取的新地址1號")
         assert not r2.coord
     assert called == [], "範圍內問了 Google"
+    # 〔合回第十五班 B（主持裁示：只有 Google 實際回了查無才記 all）：「日後會用 Google 查它」只在 Google 問得到時才有意義——
+    #   這一題的 env 沒有金鑰，沒金鑰時查無本來就該算（不重打 Nominatim）。⇒ 斷言前讓 Google 問得到〕
+    monkeypatch.setattr(geo, "_google_key_configured", lambda: True)
+    assert geo._MISS_CACHE_ALL == {}, "範圍內 Google 沒被問 ⇒ 不可以記成「Google 實際回了查無」"
     assert not geo.geocode_missed_recently("台中市沒有快取的新地址1號"), \
         "Google 階沒被問卻記了負快取 ⇒ 背景預熱七天內不會再用 Google 查它"
     # 範圍外恢復：Google 快取照讀
