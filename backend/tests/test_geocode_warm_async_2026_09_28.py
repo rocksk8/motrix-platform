@@ -185,3 +185,60 @@ def test_main_scheduler_block_returns_while_first_warm_round_is_slow(client, bac
     finally:
         for t in made:
             t.cancel()
+
+
+# ── 整合：真的 `import main`（子行程、排程開著）────────────────────────────────
+#
+# 形狀照 modules/tender_radar/tests/test_tender_notify_2026_09_21.py 的 S5：DB 指到暫存、archive 整支換成空殼
+# （不可以真的備份）、每日檢查換掉、**不設** MOTRIX_DISABLE_SCHEDULERS。第一輪預熱換成「睡 _SLOW 秒」並把首輪延遲設 0
+# ⇒ 同步版本 import main 至少多 _SLOW 秒。
+
+_SLOW = 60
+
+_IMPORT_MAIN_SCRIPT = '''
+import os, sys, types, tempfile, time, threading
+import db
+_tmp = tempfile.mkdtemp()
+db.DB_PATH = os.path.join(_tmp, "t.db")
+db.DEMO_DB_PATH = os.path.join(_tmp, "d.db")
+
+class _Stub(types.ModuleType):
+    def __getattr__(self, name):
+        return lambda *a, **kw: None
+
+sys.modules["archive"] = _Stub("archive")
+import helpers.daily_checks as _dck
+_dck.schedule_daily_checks = lambda *a, **kw: None
+
+from helpers import geo
+started = threading.Event()
+def _slow_round():
+    started.set()
+    time.sleep(%d)
+    return {}
+geo.warm_geocode_cache = _slow_round
+geo._GEOCODE_WARM_FIRST_DELAY_SECONDS = 0
+os.environ.pop("MOTRIX_DISABLE_SCHEDULERS", None)
+
+t0 = time.monotonic()
+import main  # noqa: F401
+print("IMPORT_SECONDS=%%.2f" %% (time.monotonic() - t0))
+print("WARM_STARTED=%%d" %% int(started.wait(10)))
+sys.stdout.flush()
+os._exit(0)
+''' % _SLOW
+
+
+def test_import_main_finishes_while_first_warm_round_is_slow():
+    """主持追加：預熱第一輪很慢（睡 60 秒）時，真的 `import main` 仍在 60 秒內完成，而第一輪確實在背景起跑。"""
+    from pathlib import Path
+    from tests._subproc import run_python
+    backend = Path(__file__).resolve().parents[1]
+    proc = run_python(["-c", _IMPORT_MAIN_SCRIPT], cwd=backend, timeout=_SLOW * 3)
+    assert proc.returncode == 0, f"子行程失敗（returncode={proc.returncode}）：\n{proc.stderr[-2500:]}"
+    vals = dict(l.split("=", 1) for l in proc.stdout.splitlines() if "=" in l and l.split("=", 1)[0].isupper())
+    assert "IMPORT_SECONDS" in vals, f"子行程沒有印出耗時：\n{proc.stdout[-1500:]}\n{proc.stderr[-1500:]}"
+    secs = float(vals["IMPORT_SECONDS"])
+    assert secs < _SLOW, (f"import main 花了 {secs:.1f} 秒 ≥ 第一輪預熱的 {_SLOW} 秒 ⇒ 啟動在等預熱"
+                          "（正式機 8b04d99d：83 秒內 port 沒在聽 ⇒ 自動回滾）")
+    assert vals.get("WARM_STARTED") == "1", "import main 之後第一輪預熱沒有在背景起跑"

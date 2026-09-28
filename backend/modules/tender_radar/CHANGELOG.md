@@ -1,5 +1,8 @@
 # 標案雷達 更新紀錄
 
+## 1.3.3 — 2026-09-28 14:50（暫用號；第十五班緊急修補 B54，主持裁示）
+- `source.schedule_tender_scan()` 改為立即返回：第一輪排進 daemon Timer（`_TENDER_SCAN_FIRST_DELAY_SECONDS`＝30 秒）在背景跑，之後每輪結束（含丟例外）再排下一輪（`_tender_scan_tick`，重排維持 finally）。原本同步跑第一輪 ⇒ 套用時間落在抓取時段且未抓過時啟動被卡最多約 340 秒 ⇒ 健康檢查失敗、自動回滾
+
 ## 1.3.2 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
 - 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`tender-radar.html`
 

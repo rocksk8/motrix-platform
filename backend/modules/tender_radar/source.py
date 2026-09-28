@@ -1286,8 +1286,28 @@ def _seconds_until_next_run():
     return max(min(candidates), 1.0)
 
 
+#: 啟動後第一輪排程的延遲（秒）。第十五班緊急修補 B54（主持裁示）：第一輪改在背景執行緒跑、啟動不等它。
+_TENDER_SCAN_FIRST_DELAY_SECONDS = 30
+
+
 def schedule_tender_scan():
-    """啟動時呼叫一次：跑一輪，然後排下一次。
+    """啟動時呼叫一次：**立即返回**；第一輪在背景執行緒（daemon Timer，短延遲）跑，之後每輪結束排下一輪。
+
+    🔴 第十五班緊急修補 B54（主持裁示）：原本在這裡**同步**跑第一輪 ⇒ `core.loader.start_schedulers()`
+       逐個同步呼叫模組排程 ⇒ `import main` 要等它跑完。套用時間落在抓取時段（預設 9／12／15／18 點）而該時段
+       還沒抓過 ⇒ 抓外網＋明細最壞約 340 秒 ⇒ 套用後的健康檢查（83 秒）必失敗 ⇒ 自動回滾
+       （與 geo.schedule_geocode_warm 在正式機 8b04d99d 卡住啟動是同一型）。
+
+    ⚠️ `threading.Timer` 走模組屬性，`from threading import Timer` 會讓
+    monkeypatch 打不到 ⇒ S3 永遠綠。
+    """
+    t = threading.Timer(_TENDER_SCAN_FIRST_DELAY_SECONDS, _tender_scan_tick)
+    t.daemon = True
+    t.start()
+
+
+def _tender_scan_tick():
+    """背景執行緒裡跑一輪，然後排下一次。
 
     ⚠️ **不可以抄既有四支的形狀。** `archive._schedule_daily` 把工作放在 Timer
     重排**之前**而且沒包 try——丟一次例外就永遠不會再排，**排程靜默死亡**，
@@ -1302,7 +1322,7 @@ def schedule_tender_scan():
     except Exception:  # noqa: BLE001
         logger.exception("run_scheduled_scan failed")
     finally:
-        t = threading.Timer(_seconds_until_next_run(), schedule_tender_scan)
+        t = threading.Timer(_seconds_until_next_run(), _tender_scan_tick)
         t.daemon = True
         t.start()
 
