@@ -218,6 +218,7 @@
 | 15 | 略過條件的來源 | 守門的 `skip`（或「免比」）條件**不可以取自被檢查的東西本身**（被檢查的表、掃描結果）——要用獨立訊號（例：modules.json 登記＋資料夾在不在），否則表或掃描壞掉時整題靜默略過；判定抽成一個函式，真實題與反向控制都走它，反向控制要含「被檢查的東西壞掉／被塞了假值」 | AB3-M1、T13-M1（第二次同型，B 2026-09-27） |
 | 16 | 題目讀頁面路徑 | 新題出現 `"pages"`／`FRONT / "pages"` 寫死路徑 ⇒ 改 `core.source_tree.page_file(...)` | test_page_paths_only_decrease（第十五班 core-only RC，B 題檔） |
 | 17 | 新規格編號要宣告 | 新題名帶模組規格編號（例 S6）⇒ grep 該模組 SPEC 已宣告；送測清單加 `test_spec_coverage` | test_spec_coverage（第十六班 --train，B54） |
+| 18 | 新增頁／表／權限 key | 送測前跑全域釘子（modtest 模組選題選不到）：test_alpine_double_init（頁母體）、test_demo_reset dm1（表分類）、test_module_registry＋test_module_keys_consistency（權限目錄）、test_system_audit＋test_module_data_classes（備份分類） | 第十八班 --train 6 紅（E lodging） |
 
 清單會長大：列車或稽核抓到「讀碼就看得出來」的紅，當輪加一列（寫出處）。
 

@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>附近旅宿紀錄 - MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    /* 前綴 lg- 避免與 style.css 衝突；顏色一律用 style.css 的語意 token */
+    .lg-wrap { padding:18px 22px; max-width:1280px; }
+    .lg-note { display:flex; gap:10px; padding:10px 13px; border-radius:var(--radius); font-size:12px; margin-bottom:12px; }
+    .lg-note.warn { background:var(--warning-light); color:var(--warning); }
+    .lg-note.err  { background:var(--danger-light); color:var(--danger); }
+    .lg-note.info { background:var(--icon-btn-bg); color:var(--text-secondary); }
+    .lg-body { padding:12px 14px; }
+    .lg-row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+    .lg-dim { color:var(--text-dim); font-size:11px; }
+    .lg-suspect { color:var(--text-dim); font-size:11px; }
+    .lg-attr { font-size:11px; color:var(--text-dim); margin-top:10px; line-height:1.6; }
+    .lg-form { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:8px 0; }
+    .lg-form label { font-size:11px; color:var(--text-secondary); display:flex; flex-direction:column; gap:3px; }
+    .lg-tag { font-size:11px; padding:1px 6px; border-radius:var(--radius); background:var(--icon-btn-bg); color:var(--text-secondary); }
+  </style>
+</head>
+<body>
+
+<header id="app-topbar" class="topbar"></header>
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+<aside class="sidebar" id="app-sidebar"></aside>
+
+<div class="app-shell">
+  <main class="main">
+  <div x-data="lodgingRecordsPage()" x-init="init()" class="lg-wrap">
+
+    <h1 class="page-title">附近旅宿紀錄</h1>
+    <p class="lg-dim">在地圖頁開啟「附近旅宿」查詢並存成紀錄；這裡回查、比較與登記詢價。價格為官方登記參考值（非即時）與人工詢價。</p>
+
+    <!-- 資料狀態：沒有資料、過舊、更新失敗都要說出來，不可以跟「附近 0 間」長得一樣 -->
+    <div class="panel" data-lodging-status style="margin-top:12px">
+      <div class="lg-body">
+        <div class="lg-row">
+          <strong>旅宿資料</strong>
+          <span x-show="status && status.count" x-text="'共 ' + (status ? status.count : 0) + ' 筆；資料日期 ' + fmtDate(status && status.datasetUpdatedAt)"></span>
+          <span x-show="status && !status.count" data-lodging-no-catalog x-text="noCatalogText()"></span>
+          <template x-if="status && status.canRefresh">
+            <button class="btn btn-primary btn-sm" data-lodging-refresh :disabled="refreshing || !status.fetchEnabled"
+                    @click="refreshData()" x-text="refreshing ? '更新中…' : '更新旅宿資料'"></button>
+          </template>
+        </div>
+        <div class="lg-note warn" x-show="status && status.stale" style="margin-top:8px"
+             x-text="'資料日期已超過 ' + (status ? status.staleDays : 30) + ' 天，內容可能過舊'"></div>
+        <div class="lg-note info" x-show="status && status.canRefresh && !status.fetchEnabled" style="margin-top:8px">
+          旅宿資料下載未開啟（伺服器需設定 MOTRIX_LODGING_FETCH=1 並重啟）
+        </div>
+        <div class="lg-note err" x-show="status && status.lastError" style="margin-top:8px"
+             x-text="'上次更新失敗（' + fmtTime(status && status.lastFailureAt) + '）：' + (status ? status.lastError : '')"></div>
+        <div class="lg-note info" x-show="refreshMsg" style="margin-top:8px" data-lodging-refresh-msg x-text="refreshMsg"></div>
+      </div>
+    </div>
+
+    <div class="lg-note err" x-show="error" style="margin-top:12px" x-text="error"></div>
+
+    <!-- 紀錄清單 -->
+    <div class="panel" style="margin-top:12px">
+      <div class="lg-body">
+        <div class="lg-row" style="justify-content:space-between">
+          <strong>查詢紀錄</strong>
+          <button class="btn btn-ghost btn-sm" data-lodging-compare-btn :disabled="selected.length !== 2"
+                  @click="compareSelected()">比較勾選的兩筆</button>
+        </div>
+        <p class="lg-dim" x-show="!records.length && loaded" data-lodging-empty>還沒有紀錄。</p>
+        <table class="data-table" x-show="records.length" style="margin-top:8px">
+          <thead><tr><th></th><th>時間</th><th>建立者</th><th>中心點</th><th>半徑</th><th>筆數</th><th>備註</th><th></th></tr></thead>
+          <tbody>
+            <template x-for="r in records" :key="r.id">
+              <tr :data-record-id="r.id">
+                <td><input type="checkbox" :checked="selected.includes(r.id)" @change="toggleSel(r.id)"></td>
+                <td x-text="fmtTime(r.createdAt)"></td>
+                <td x-text="r.createdBy"></td>
+                <td><span x-text="r.centerLabel"></span> <span class="lg-tag" x-text="sourceLabel(r)"></span></td>
+                <td x-text="(r.radiusM / 1000) + ' km'"></td>
+                <td x-text="r.resultCount"></td>
+                <td x-text="r.note"></td>
+                <td class="lg-row">
+                  <button class="btn btn-ghost btn-sm" data-lodging-open @click="openRecord(r.id)">查看</button>
+                  <button class="btn btn-ghost btn-sm" x-show="confirmDel !== r.id" @click="confirmDel = r.id">刪除</button>
+                  <button class="btn btn-primary btn-sm" x-show="confirmDel === r.id" data-lodging-delete-confirm @click="deleteRecord(r.id)">確定刪除</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="lg-attr" x-show="records.length" data-lodging-attribution x-text="listAttribution"></div>
+      </div>
+    </div>
+
+    <!-- 紀錄明細 -->
+    <div class="panel" style="margin-top:12px" x-show="detail" data-lodging-detail>
+      <div class="lg-body" x-show="detail">
+        <div class="lg-row" style="justify-content:space-between">
+          <strong x-text="detail ? ('紀錄 #' + detail.record.id + '　' + detail.record.centerLabel) : ''"></strong>
+          <span class="lg-row">
+            <button class="btn btn-ghost btn-sm" data-lodging-export="csv" @click="exportRecord('csv')">匯出 CSV</button>
+            <button class="btn btn-ghost btn-sm" data-lodging-export="json" @click="exportRecord('json')">匯出 JSON</button>
+            <button class="btn btn-ghost btn-sm" @click="window.print()">列印</button>
+            <button class="btn btn-ghost btn-sm" @click="detail = null">關閉</button>
+          </span>
+        </div>
+        <div class="lg-note warn" x-show="detail && detail.record.googleCenter" style="margin-top:8px"
+             data-lodging-google-note x-text="detail ? detail.record.googleCenterNote : ''"></div>
+        <table class="data-table" style="margin-top:8px">
+          <thead><tr><th>名稱</th><th>類別</th><th>登記證號</th><th>地址</th><th>直線距離</th><th>官方參考房價</th><th>最近詢價</th><th></th></tr></thead>
+          <tbody>
+            <template x-for="it in (detail ? detail.items : [])" :key="it.sourceId">
+              <tr :data-source-id="it.sourceId">
+                <td x-text="it.name"></td>
+                <td x-text="it.classLabel"></td>
+                <td x-text="it.licenseNo"></td>
+                <td x-text="it.address"></td>
+                <td x-text="fmtDistance(it.distanceM)"></td>
+                <td>
+                  <span x-show="!it.priceSuspect" x-text="fmtPrice(it)"></span>
+                  <span class="lg-suspect" x-show="it.priceSuspect" data-lodging-suspect x-text="'參考房價異常（官方登記值：' + fmtPrice(it) + '）'"></span>
+                  <div class="lg-dim" x-show="it.priceRegisteredAt" x-text="'業者登記於 ' + fmtMonth(it.priceRegisteredAt)"></div>
+                </td>
+                <td x-text="fmtQuote(it.latestQuote)"></td>
+                <td><button class="btn btn-ghost btn-sm" data-lodging-quote-open @click="startQuote(it)">新增詢價</button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div x-show="quoteFor" data-lodging-quote-form style="margin-top:10px">
+          <strong x-text="quoteFor ? ('詢價：' + quoteFor.name) : ''"></strong>
+          <div class="lg-form">
+            <label>詢價日期<input type="date" x-model="quote.quotedOn" data-q="quotedOn"></label>
+            <label>房型<input type="text" maxlength="100" x-model="quote.roomType" data-q="roomType"></label>
+            <label>金額（元）<input type="number" min="1" step="1" x-model.number="quote.price" data-q="price"></label>
+            <label>計價<select x-model="quote.unit" data-q="unit"><option value="per_night">每晚</option><option value="per_person">每人</option></select></label>
+            <label>管道<select x-model="quote.channel" data-q="channel"><option value="phone">電話</option><option value="website">官網</option><option value="onsite">現場</option><option value="other">其他</option></select></label>
+            <label>包含<input type="text" maxlength="100" x-model="quote.includes" data-q="includes"></label>
+            <label>備註<input type="text" maxlength="500" x-model="quote.remark" data-q="remark"></label>
+          </div>
+          <div class="lg-row">
+            <button class="btn btn-primary btn-sm" data-lodging-quote-save :disabled="savingQuote" @click="saveQuote()">儲存詢價</button>
+            <button class="btn btn-ghost btn-sm" @click="quoteFor = null">取消</button>
+            <span class="lg-dim" x-text="quoteMsg"></span>
+          </div>
+        </div>
+        <div class="lg-attr" data-lodging-attribution x-text="detail ? detail.attribution : ''"></div>
+      </div>
+    </div>
+
+    <!-- 比較 -->
+    <div class="panel" style="margin-top:12px" x-show="cmp" data-lodging-compare>
+      <div class="lg-body" x-show="cmp">
+        <div class="lg-row" style="justify-content:space-between">
+          <strong x-text="cmp ? ('比較：#' + cmp.a.id + '（' + fmtTime(cmp.a.createdAt) + '）與 #' + cmp.b.id + '（' + fmtTime(cmp.b.createdAt) + '）') : ''"></strong>
+          <button class="btn btn-ghost btn-sm" @click="cmp = null">關閉</button>
+        </div>
+        <table class="data-table" style="margin-top:8px">
+          <thead><tr><th>名稱</th><th>類別</th><th>A 距離</th><th>A 參考房價</th><th>B 距離</th><th>B 參考房價</th><th>說明</th></tr></thead>
+          <tbody>
+            <template x-for="r in (cmp ? cmp.rows : [])" :key="r.sourceId">
+              <tr :data-source-id="r.sourceId">
+                <td x-text="r.name"></td>
+                <td x-text="r.classLabel"></td>
+                <td x-text="r.a ? fmtDistance(r.a.distanceM) : '—'"></td>
+                <td x-text="r.a ? fmtSide(r.a) : '—'"></td>
+                <td x-text="r.b ? fmtDistance(r.b.distanceM) : '—'"></td>
+                <td x-text="r.b ? fmtSide(r.b) : '—'"></td>
+                <td data-lodging-cmp-note x-text="cmpNote(r)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+        <div class="lg-attr" data-lodging-attribution x-text="cmp ? cmp.attribution : ''"></div>
+      </div>
+    </div>
+
+  </div>
+  </main>
+</div>
+
+<script src="../static/record-link.js"></script>
+<script src="../static/notif.js"></script>
+<script src="../static/sidebar.js"></script>
+<script>
+function lodgingRecordsPage() {
+  return {
+    session: {}, token: '', status: null, records: [], listAttribution: '', loaded: false, error: '',
+    selected: [], detail: null, cmp: null, confirmDel: null,
+    refreshing: false, refreshMsg: '',
+    quoteFor: null, quote: {}, quoteMsg: '', savingQuote: false,
+    _initDone: false,
+
+    _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },
+
+    async init() {
+      if (this._initDone) return
+      this._initDone = true
+      const raw = localStorage.getItem('motrix_session')
+      if (!raw) { location.href = 'login.html'; return }
+      this.session = JSON.parse(raw)
+      this.token = this.session.token || ''
+      await Promise.all([this.loadStatus(), this.loadRecords()])
+    },
+
+    async _get(url) {
+      const r = await fetch(url, { headers: this._h() })
+      if (!r.ok) {
+        let msg = 'HTTP ' + r.status
+        try { msg = (await r.json()).detail || msg } catch (_e) { /* 非 JSON */ }
+        throw new Error(msg)
+      }
+      return r.json()
+    },
+
+    async loadStatus() {
+      try { this.status = await this._get('/api/lodging/status') }
+      catch (e) { this.error = '讀取旅宿資料狀態失敗：' + e.message }
+    },
+
+    async loadRecords() {
+      try {
+        const d = await this._get('/api/lodging/records')
+        this.records = d.records || []
+        this.listAttribution = d.attribution || ''
+        this.selected = this.selected.filter(id => this.records.some(r => r.id === id))
+        this.loaded = true
+      } catch (e) { this.error = '讀取紀錄失敗：' + e.message }   // 不清空清單：失敗≠沒有紀錄
+    },
+
+    async refreshData() {
+      this.refreshing = true
+      this.refreshMsg = ''
+      try {
+        const r = await fetch('/api/lodging/refresh', { method: 'POST', headers: this._h() })
+        const d = await r.json()
+        this.refreshMsg = r.ok ? d.message : ('更新失敗：' + (d.detail || ('HTTP ' + r.status)))
+      } catch (_e) {
+        this.refreshMsg = '更新失敗：連線不到伺服器'
+      } finally {
+        this.refreshing = false
+        await this.loadStatus()
+      }
+    },
+
+    toggleSel(id) {
+      if (this.selected.includes(id)) this.selected = this.selected.filter(x => x !== id)
+      else this.selected = this.selected.concat([id]).slice(-2)
+    },
+
+    async openRecord(id) {
+      this.error = ''
+      this.quoteFor = null
+      try { this.detail = await this._get('/api/lodging/records/' + id) }
+      catch (e) { this.error = '讀取紀錄失敗：' + e.message }
+    },
+
+    async deleteRecord(id) {
+      this.confirmDel = null
+      try {
+        const r = await fetch('/api/lodging/records/' + id, { method: 'DELETE', headers: this._h() })
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        if (this.detail && this.detail.record.id === id) this.detail = null
+        this.cmp = null
+        await this.loadRecords()
+      } catch (e) { this.error = '刪除失敗：' + e.message }
+    },
+
+    async compareSelected() {
+      if (this.selected.length !== 2) return
+      const [a, b] = this.selected.slice().sort((x, y) => x - y)
+      try { this.cmp = await this._get('/api/lodging/compare?a=' + a + '&b=' + b) }
+      catch (e) { this.error = '比較失敗：' + e.message }
+    },
+
+    async exportRecord(fmt) {
+      if (!this.detail) return
+      const id = this.detail.record.id
+      try {
+        const r = await fetch('/api/lodging/records/' + id + '/export?format=' + fmt, { headers: this._h() })
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        const blob = await r.blob()
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = 'lodging-' + id + '.' + fmt
+        document.body.appendChild(a)
+        a.click()
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove() }, 0)
+      } catch (e) { this.error = '匯出失敗：' + e.message }
+    },
+
+    startQuote(it) {
+      this.quoteFor = it
+      this.quoteMsg = ''
+      this.quote = { quotedOn: new Date().toISOString().slice(0, 10), roomType: '', price: null,
+                     unit: 'per_night', channel: 'phone', includes: '', remark: '' }
+    },
+
+    async saveQuote() {
+      if (!this.quoteFor) return
+      this.savingQuote = true
+      this.quoteMsg = ''
+      const q = this.quote
+      const body = { source: this.quoteFor.source, sourceId: this.quoteFor.sourceId, quotedOn: q.quotedOn,
+                     roomType: q.roomType, price: q.price, unit: q.unit, channel: q.channel,
+                     includes: q.includes, note: q.remark }
+      try {
+        const r = await fetch('/api/lodging/quotes', { method: 'POST', headers: this._h(), body: JSON.stringify(body) })
+        if (!r.ok) {
+          let msg = 'HTTP ' + r.status
+          try { msg = (await r.json()).detail || msg } catch (_e) { /* 非 JSON */ }
+          this.quoteMsg = '儲存失敗：' + msg
+          return
+        }
+        this.quoteFor = null
+        await this.openRecord(this.detail.record.id)
+      } catch (_e) {
+        this.quoteMsg = '儲存失敗：連線不到伺服器'
+      } finally {
+        this.savingQuote = false
+      }
+    },
+
+    // ── 顯示 ──
+    fmtDate(s) { return s ? String(s).slice(0, 10) : '' },
+    fmtTime(s) { return s ? String(s).slice(0, 16).replace('T', ' ') : '' },
+    fmtMonth(s) { return s ? String(s).slice(0, 7) : '' },
+    fmtDistance(m) {
+      if (m === null || m === undefined) return '不保存'
+      return m >= 1000 ? (m / 1000).toFixed(1) + ' km' : m + ' m'
+    },
+    fmtPrice(it) {
+      const lo = it.priceLow, hi = it.priceHigh
+      if (lo === null && hi === null) return '未登記'
+      const n = v => (v === null ? '—' : Number(v).toLocaleString('zh-TW'))
+      return n(lo) + '～' + n(hi) + ' 元'
+    },
+    fmtSide(s) {
+      const p = this.fmtPrice(s)
+      return s.priceSuspect ? ('參考房價異常（官方登記值：' + p + '）') : p
+    },
+    fmtQuote(q) {
+      if (!q) return '—'
+      return q.quotedOn + ' ' + (q.roomType || '') + ' ' + Number(q.price).toLocaleString('zh-TW') + ' 元／'
+             + q.unitLabel + '（' + q.channelLabel + '）'
+    },
+    sourceLabel(r) {
+      const m = { device: '目前位置', google: 'Google 定位', nominatim: 'OSM 定位', nominatim_district: 'OSM 行政區',
+                  tgos: 'TGOS 定位', manual: '人工座標' }
+      return m[r.centerSource] || r.centerSource || ''
+    },
+    noCatalogText() {
+      if (!this.status) return ''
+      return '尚未下載旅宿資料' + (this.status.canRefresh ? '，請按「更新旅宿資料」' : '，請聯絡最高管理者')
+    },
+    cmpNote(r) {
+      if (r.only === 'a') return '只在 A'
+      if (r.only === 'b') return '只在 B'
+      if (r.officialUnchanged) return '官方登記未變動'
+      return '官方登記有變動'
+    },
+  }
+}
+</script>
+</body>
+</html>

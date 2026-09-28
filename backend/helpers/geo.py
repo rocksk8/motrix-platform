@@ -436,6 +436,37 @@ def google_basemap() -> bool:
     return bool(google_browser_key() and google_map_id())
 
 
+#: map_request_scope 的 missing：頁面沒帶底圖時怎麼辦
+MAP_SCOPE_MISSING_SETTING = "setting"   # 照設定（給非地圖的呼叫者，例：標案雷達只讀計數）
+MAP_SCOPE_MISSING_OSM = "osm"           # 視同 osm（失敗關閉；只會從地圖頁來的請求用這個）
+
+
+@contextlib.contextmanager
+def map_request_scope(page_basemap, missing=MAP_SCOPE_MISSING_OSM):
+    """地圖頁送來的請求：**頁面底圖只准收窄設定**（D 稽核 GB-M2；LODGING-NEARBY §3.1.1，LG2-M1）。
+
+    `with geo.map_request_scope(頁面底圖) as google_ok:` —— google_ok 為 True 才可以用 Google 內容；
+    False ⇒ 整段在 `without_google_content()` 內（定位、快取、距離都不碰 Google 座標，SST §6.2）。
+
+    - 頁面說 'osm' ⇒ 一律不用 Google（即使設定剛改成 google：開著的 OSM 頁不可以拿到 Google 座標）。
+    - 頁面說 'google' 而設定不是 ⇒ 照設定（不用）。
+    - 沒帶（None）⇒ 依 `missing`：'setting'＝照設定、'osm'＝不用。
+    - 其他任何值（含空字串 ''、大小寫不同、前後空白）⇒ 視同 'osm'（收窄，不猜；LG3-O1）。
+    🔑 擋 Google 的範圍要由呼叫端包進去（contextvar），不是 L1 自動保證——所以地圖類端點一律經這一支判定，
+       不各寫一次（map_points 與附近旅宿共用）。
+    """
+    if page_basemap is None:
+        page = "google" if missing == MAP_SCOPE_MISSING_SETTING else "osm"
+    else:
+        page = page_basemap if page_basemap in ("google", "osm") else "osm"
+    allowed = bool(google_basemap()) and page != "osm"
+    if allowed:
+        yield True
+    else:
+        with without_google_content():
+            yield False
+
+
 def has_google_coord(address) -> bool:
     """這個地址快取裡有沒有 Google 來源的座標（**不受 without_google_content 影響**：用來計數「被擋下的」）。"""
     address = (address or "").strip()

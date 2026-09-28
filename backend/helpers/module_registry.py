@@ -51,6 +51,7 @@ MODULES = (
     ("dev_crm", "業務開發 CRM", "業務"),
     ("tender_radar", "標案雷達", "業務"),
     ("map", "地圖", "業務"),
+    ("lodging", "附近旅宿", "業務"),
     ("quotation", "報價單／簽核佇列", "業務"),
     ("case_manage", "案件管理", "業務"),
     ("project_manage", "案件叫料－修改", "業務"),

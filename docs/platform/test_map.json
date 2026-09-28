@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 744,
+  "tests": 753,
   "unmapped": 8,
   "kinds": {
-   "api": 399,
-   "e2e": 177,
+   "api": 405,
+   "e2e": 180,
    "audit": 100,
    "unit": 68
   },
-  "routes": 583
+  "routes": 596
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -3849,6 +3849,144 @@
    },
    "module": "daily_tasks"
   },
+  "backend/modules/lodging/tests/test_lodging_overlay_e2e_2026_09_28.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/lodging/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
+    "helper:geo",
+    "mod:lodging/__init__",
+    "mod:lodging/api_records",
+    "mod:lodging/source",
+    "mod:lodging/tests/__init__",
+    "mod:lodging/tests/_fixtures",
+    "page:pages/map.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/geo.py",
+     "backend/modules/lodging/__init__.py",
+     "backend/modules/lodging/source.py",
+     "backend/modules/lodging/tests/__init__.py",
+     "backend/modules/lodging/tests/_fixtures.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/lodging/api_records.py"
+    ],
+    "page": [
+     "frontend/pages/map.html"
+    ],
+    "path": [
+     "frontend/pages/map.html"
+    ],
+    "module_dir": [
+     "backend/modules/lodging/"
+    ]
+   },
+   "module": "lodging"
+  },
+  "backend/modules/lodging/tests/test_lodging_records_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/lodging/",
+    "file:backend/helpers/__init__.py",
+    "helper:geo",
+    "mod:lodging/__init__",
+    "mod:lodging/api_records",
+    "mod:lodging/search",
+    "mod:lodging/source",
+    "mod:lodging/tests/__init__",
+    "mod:lodging/tests/_fixtures"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/geo.py",
+     "backend/modules/lodging/__init__.py",
+     "backend/modules/lodging/search.py",
+     "backend/modules/lodging/source.py",
+     "backend/modules/lodging/tests/__init__.py",
+     "backend/modules/lodging/tests/_fixtures.py"
+    ],
+    "api": [
+     "backend/modules/lodging/api_records.py"
+    ],
+    "module_dir": [
+     "backend/modules/lodging/"
+    ]
+   },
+   "module": "lodging"
+  },
+  "backend/modules/lodging/tests/test_lodging_records_e2e_2026_09_28.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/lodging/",
+    "mod:lodging/__init__",
+    "mod:lodging/api_records",
+    "mod:lodging/search",
+    "mod:lodging/source",
+    "mod:lodging/tests/__init__",
+    "mod:lodging/tests/_fixtures",
+    "page:pages/lodging-records.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/lodging/__init__.py",
+     "backend/modules/lodging/search.py",
+     "backend/modules/lodging/source.py",
+     "backend/modules/lodging/tests/__init__.py",
+     "backend/modules/lodging/tests/_fixtures.py"
+    ],
+    "api": [
+     "backend/modules/lodging/api_records.py"
+    ],
+    "page": [
+     "frontend/pages/lodging-records.html"
+    ],
+    "path": [
+     "frontend/pages/lodging-records.html"
+    ],
+    "module_dir": [
+     "backend/modules/lodging/"
+    ]
+   },
+   "module": "lodging"
+  },
+  "backend/modules/lodging/tests/test_lodging_source_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/lodging/",
+    "mod:lodging/__init__",
+    "mod:lodging/api",
+    "mod:lodging/source",
+    "mod:lodging/tests/__init__",
+    "mod:lodging/tests/_fixtures"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/lodging/__init__.py",
+     "backend/modules/lodging/source.py",
+     "backend/modules/lodging/tests/__init__.py",
+     "backend/modules/lodging/tests/_fixtures.py"
+    ],
+    "api": [
+     "backend/modules/lodging/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/lodging/"
+    ]
+   },
+   "module": "lodging"
+  },
   "backend/modules/netplan/tests/test_netplan_case_access.py": {
    "kind": "api",
    "units": [
@@ -7054,8 +7192,7 @@
     ],
     "path": [
      "backend/modules/tender_radar/",
-     "backend/modules/tender_radar/notify.py",
-     "backend/modules/tender_radar/source.py"
+     "backend/modules/tender_radar/notify.py"
     ],
     "module_dir": [
      "backend/modules/tender_radar/"
@@ -10679,6 +10816,23 @@
     ]
    }
   },
+  "backend/tests/test_archive_module_declared_tables_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "core:archive",
+    "core:db",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/archive.py",
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py"
+    ]
+   }
+  },
   "backend/tests/test_archive_ownership_2026_09_14.py": {
    "kind": "unit",
    "units": [
@@ -14046,6 +14200,32 @@
     ]
    }
   },
+  "backend/tests/test_e2e_map_overlay_contract_2026_09_28.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/test_e2e_map_google_basemap_2026_09_28.py",
+    "file:frontend/static/vendor/markerclusterer-2.6.2/markerclusterer.min.js",
+    "helper:geo",
+    "page:pages/map.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/geo.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/test_e2e_map_google_basemap_2026_09_28.py"
+    ],
+    "page": [
+     "frontend/pages/map.html",
+     "frontend/static/vendor/markerclusterer-2.6.2/markerclusterer.min.js"
+    ],
+    "path": [
+     "frontend/pages/map.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_map_under_topbar_2026_09_25.py": {
    "kind": "e2e",
    "units": [
@@ -16005,6 +16185,43 @@
     ]
    }
   },
+  "backend/tests/test_map_overlay_contract_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/",
+    "dir:frontend/static/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_custom_records_no_js_html_sink_2026_09_28.py",
+    "helper:map_overlays",
+    "js:static/map-overlay.js",
+    "plat:__init__",
+    "plat:loader",
+    "plat:registry",
+    "router:map_points"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/loader.py",
+     "backend/core/registry.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/map_overlays.py",
+     "backend/tests/test_custom_records_no_js_html_sink_2026_09_28.py"
+    ],
+    "api": [
+     "backend/routers/map_points.py"
+    ],
+    "page": [
+     "frontend/static/map-overlay.js"
+    ],
+    "path": [
+     "backend/modules/",
+     "frontend/static/",
+     "frontend/static/map-overlay.js"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_map_own_vendors_2026_09_22.py": {
    "kind": "api",
    "units": [
@@ -16051,6 +16268,27 @@
     ],
     "api": [
      "backend/routers/auth.py",
+     "backend/routers/map_points.py"
+    ]
+   }
+  },
+  "backend/tests/test_map_request_scope_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_map_cache_warm.py",
+    "file:backend/tests/test_map_google_basemap_2026_09_28.py",
+    "helper:geo",
+    "router:map_points"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/geo.py",
+     "backend/tests/_map_cache_warm.py",
+     "backend/tests/test_map_google_basemap_2026_09_28.py"
+    ],
+    "api": [
      "backend/routers/map_points.py"
     ]
    }
@@ -16948,6 +17186,25 @@
     "/api/zz-probe/export"
    ]
   },
+  "backend/tests/test_non_api_routes_whitelist_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "js:static/sidebar.js",
+    "page:index.html"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/index.html",
+     "frontend/static/sidebar.js"
+    ],
+    "path": [
+     "frontend/static/sidebar.js"
+    ]
+   },
+   "unresolved_api": [
+    "/api/fine"
+   ]
+  },
   "backend/tests/test_notification_prefs_coverage.py": {
    "kind": "api",
    "units": [
@@ -17315,6 +17572,8 @@
     "mod:case/api/quotations",
     "mod:crm/api",
     "mod:daily_tasks/api",
+    "mod:lodging/api",
+    "mod:lodging/api_records",
     "mod:netplan/api",
     "mod:payroll/api/bonus",
     "mod:payroll/api/payslips",
@@ -17373,6 +17632,8 @@
      "backend/modules/case/api/quotations.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
+     "backend/modules/lodging/api.py",
+     "backend/modules/lodging/api_records.py",
      "backend/modules/netplan/api.py",
      "backend/modules/payroll/api/bonus.py",
      "backend/modules/payroll/api/payslips.py",

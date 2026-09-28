@@ -1,0 +1,41 @@
+{
+  "key": "lodging",
+  "name": "附近旅宿",
+  "version": "1.1.1",
+  "core": ">=1.0,<2.0",
+  "license_key": "lodging",
+  "permissions": [
+    "lodging"
+  ],
+  "tables": [
+    "lodging_catalog",
+    "lodging_searches",
+    "lodging_search_items",
+    "lodging_quotes"
+  ],
+  "tables_note": "表由本模組自己的 migration（migrations/0001_lodging_tables.py）建立",
+  "data": {
+    "tables": [
+      {"name": "lodging_catalog", "class": "T3"},
+      {"name": "lodging_searches", "class": "T1"},
+      {"name": "lodging_search_items", "class": "T1"},
+      {"name": "lodging_quotes", "class": "T1"}
+    ],
+    "files": []
+  },
+  "provides": {
+    "api_prefixes": [
+      "/api/lodging"
+    ],
+    "probes": ["/api/lodging/status"]
+  },
+  "pages": [{"path": "lodging-records.html",
+             "menu": {"group": "business", "label": "附近旅宿紀錄", "order": 35, "perm": ["lodging"]}}],
+  "map_overlays": [{"key": "lodging", "label": "附近旅宿", "script": "lodging-overlay.js"}],
+  "customization": {
+    "schema": 1,
+    "fields": {},
+    "pages": [],
+    "outputs": []
+  }
+}

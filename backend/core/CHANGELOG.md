@@ -2,10 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## （不升版號：介面不變）— 2026-09-28（B，wip/b-warm-async：第十五班緊急修補 B54）
-- L1（行為）：`helpers.geo.schedule_geocode_warm()` 改為**立即返回**：第一輪背景定位排進 daemon `threading.Timer`（私有常數 `_GEOCODE_WARM_FIRST_DELAY_SECONDS`＝30 秒）在背景執行緒跑，之後每輪結束（含丟例外）再排下一輪（私有 `_geocode_warm_tick`，重排維持 `finally`）。原本在呼叫當下同步跑第一輪 ⇒ `main.py` 模組層呼叫它時 `import main` 被整輪定位卡住（正式機套用 8b04d99d：333 筆待辦×Nominatim 每秒 1 次 ⇒ 83 秒內 port 666 沒在聽 ⇒ 自動回滾）。守門 `tests/test_geocode_warm_async_2026_09_28.py`
-
-## 1.65 — 2026-09-28（E 暫用，列車取號；wip/e-company-gate-impl 第一段：本公司資料設定閘門的正式機段）〔core_bump：暫用 1.66 → 1.65〕
+## 1.67 — 2026-09-28（E 暫用，列車取號；wip/e-company-gate-impl 第一段：本公司資料設定閘門的正式機段）〔core_bump：暫用 1.66 → 1.65〕〔core_bump：暫用 1.65 → 1.67〕
 - L1（新增）：`helpers.company_setup`——判定（`status`：確認紀錄＋安裝識別＋必要欄位雜湊＋開發者指紋需簽章確認檔）、`confirm`、`backfill_once`（每庫一次、不丟例外）、`startup_install_check`（識別檔重建且已有紀錄 ⇒ ERROR＋告警）、暫時放行（`grace_state`、`observe`：有效期＝min(until, first_seen＋72h)）、統編檢查碼 `ubn_valid`、`alert`（每日一次）。設計 docs/platform/COMPANY-SETUP-GATE.md
 - L1（新增）：`helpers.company_identity.identity_from_profile(profile, location_id)`（`location_identity` 的純函式版；行為不變）
 - L1（新增）：`core.paths.INSTALL_IDENTITY_FILE`／`COMPANY_CONFIRMATION_FILE`／`COMPANY_SETUP_GRACE_FILE`，並登記進 `core.upgrade.CONFIG_FILES`（CG2-M1）；`verify_package` 拒收、`.gitignore`
@@ -13,8 +10,15 @@
 - 〔第二段〕L1（新增）：`company_setup.gate`（中介層與輸出端共用、行程內快取、不丟例外：判定失敗 ⇒ `GATE_UNDETERMINED`，Q7＝C）、`compile_allowed`／`is_allowed`（白名單以 Starlette `compile_path` 比對 (方法, 路由樣板)）、`reset_cache` 與常數；`main.auth_middleware`：未設定 ⇒ 白名單外 /api 一律 428 `company_setup_required`；判定失敗／暫時放行 ⇒ 放行＋標頭 `X-Motrix-Company-Setup`；`GET /api/settings/company-setup/status`；`PUT /api/settings/company-profile` 帶 `confirmIdentity` 才寫確認紀錄（先驗後寫）；頁面 `company-setup-required.html`、設定頁確認卡、`notif.js` 導頁與橫幅；demo 帳號暫不擋（第三段種虛構示範公司）
 - 啟動：`main.py` 啟動時做安裝識別檢查＋一次性 backfill（閘門本身尚未擋任何 API；第二段才接中介層）；信件類型 `company_setup_alert`（系統技術，超級管理員）
 
-## （不升版號：介面不變）— 2026-09-28（B，wip/b-warm-async：第十五班緊急修補 B54）
-- L1（行為）：`helpers.geo.schedule_geocode_warm()` 改為**立即返回**：第一輪背景定位排進 daemon `threading.Timer`（私有常數 `_GEOCODE_WARM_FIRST_DELAY_SECONDS`＝30 秒）在背景執行緒跑，之後每輪結束（含丟例外）再排下一輪（私有 `_geocode_warm_tick`，重排維持 `finally`）。原本在呼叫當下同步跑第一輪 ⇒ `main.py` 模組層呼叫它時 `import main` 被整輪定位卡住（正式機套用 8b04d99d：333 筆待辦×Nominatim 每秒 1 次 ⇒ 83 秒內 port 666 沒在聽 ⇒ 自動回滾）。守門 `tests/test_geocode_warm_async_2026_09_28.py`
+## 1.66 — 2026-09-28（E 暫用，列車取號；wip/e-lodging-impl：第十八班全域守門）
+- L1（新增）：`db.demo_module_tables()`——展示重置時，已載入模組 `module.json` 宣告的表依分類處理（T1／T2 清空、T3 保留；規則同每日 JSON 備份），L1 靜態清單不寫 L2 表名；`test_demo_reset` 的分類窮盡題把模組宣告算進去
+- 資料：權限目錄釘子題（test_module_registry）與 Alpine 頁面母體（test_alpine_double_init 50→51）因附近旅宿（使用者裁示 09888e19）更新
+
+## 1.65 — 2026-09-28（E 暫用，列車取號；wip/e-lodging-impl：附近旅宿 L1 接點）
+- L1（新增）：`helpers.geo.map_request_scope(page_basemap, missing="osm")`＋常數 `MAP_SCOPE_MISSING_SETTING`／`MAP_SCOPE_MISSING_OSM`——地圖頁請求的 Google 範圍判定（頁面底圖只准收窄設定；D 稽核 LG2-M1）。`/api/map/points` 改用它（`missing="setting"`）：None／google／osm 行為不變；**不認得的值（含空字串 `basemap=`）原本可用 Google，現在視同 osm**（收窄，LG3-O1）。守門 `tests/test_map_request_scope_2026_09_28.py`＋既有 GB-M2 題
+- L1（新增）：`archive._daily_backup_tables()` 併入**已載入**模組 `module.json` `data.tables` 宣告 T1 的表（鍵 `模組-<key>-<表>`，常數 `archive.MODULE_BACKUP_PREFIX`）；模組未載入＝不列（不誤報 daily_partial）；非法表名、T2 不列並記 ERROR；已在寫死清單的不重複（主持裁示 2026-09-28）。〔補 D 稽核 E3-S1：略過的 T2 寫進彙總檔固定欄位 `skipped_t2`（新增 `archive.module_backup_skipped_t2()`），ERROR 每輪一次〕守門 `tests/test_archive_module_declared_tables_2026_09_28.py`
+- L1（資料）：權限目錄 `helpers.module_registry.MODULES` 新增 `lodging`（附近旅宿，業務）
+- L1（新增）：地圖覆蓋層串接點 IP-101 `map.overlay`——`helpers.map_overlays`（`declared_overlays`／`script_path`／`OVERLAY_KEY_RE`／`SCRIPT_NAME_RE`／`URL_PREFIX`）、`GET /api/map/overlays`、`main.map_overlay_script`（`/map-overlays/<模組>/<檔名>`）、前端契約 `static/map-overlay.js`（`MotrixMapOverlay`）；`map.html`／`map-google.js` 接生命週期。守門 `tests/test_map_overlay_contract_2026_09_28.py`、`tests/test_e2e_map_overlay_contract_2026_09_28.py`
 
 ## 1.64 — 2026-09-28（A 暫用，列車取號；wip/a-gm-raw：正式機 Google 底圖標點消失、取點延遲）
 - L1（新增）：`helpers.geo.cache_read_session()`——範圍內 `_cache_get`／`_cache_get_many` 共用一條讀取連線（寫入照舊自己開）；`/api/map/points` 整次取點在範圍內（正式機約 400 地址，原本每個地址開一次連線 ⇒ 2～7 秒；兩種底圖成本相同）

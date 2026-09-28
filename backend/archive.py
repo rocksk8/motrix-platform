@@ -1921,6 +1921,9 @@ def _daily_backup_summary_header(day_label: str = "",
         "exported_at": exported_at,
         # 🔑 直接 len()，不寫死 —— 見 `_daily_backup_tables()` 的 docstring。
         "expected_tables": len(_daily_backup_tables()),
+        # D 稽核 E3-S1：模組宣告 T2 而沒有自動匯出的表（祕密欄位；仍在整庫備份）——寫進產物，不只在 log
+        # 〈降級之後它還是會動〉：少備一張表而備份仍是「成功」。本函式每輪備份呼叫一次 ⇒ log 也每輪一次。
+        "skipped_t2": module_backup_skipped_t2(log=True),
     }
 
 
@@ -1950,7 +1953,7 @@ def _daily_backup_tables() -> dict:
     ⚠️ 連「原本是多少」也不要寫：那個敘述同樣是一個會過期的數字，
        而守門分不出「現況」與「歷史」。（`BK32`）
     """
-    return {
+    tables = {
         # ── 主檔 ──
         "報價單":           "SELECT * FROM quotations ORDER BY id",
         "客戶":             "SELECT * FROM customers ORDER BY id",
@@ -2156,6 +2159,71 @@ def _daily_backup_tables() -> dict:
         #    「有項目、沒有人」⇒ 產生獎金分潤單時靜默發不出去。無 id 欄（複合主鍵）。
         "獎金項目人員":     "SELECT * FROM bonus_item_people ORDER BY bonus_item_id, username",
     }
+    # 模組自己宣告的 T1 表（主持裁示 2026-09-28，LODGING-NEARBY §3.3a）：L1 不寫死 L2 表名
+    tables.update(_module_declared_backup_tables(tables))
+    return tables
+
+
+#: 模組宣告的表名只收這個形狀（SQL 直接拼接，所以不收引號、空白、點、分號）
+_MODULE_TABLE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
+#: 模組宣告表的匯出檔名前綴（與上面的中文檔名分開，不會撞名）
+MODULE_BACKUP_PREFIX = "模組-"
+
+
+def module_backup_skipped_t2(log: bool = False) -> list:
+    """已載入模組宣告 T2、因此沒有自動進 JSON 匯出的表 ⇒ ["<模組>.<表>", …]（排序）。
+    `log=True` ⇒ 每一筆（與非法表名）記 ERROR——只由彙總檔的固定欄位呼叫（每輪備份一次，D 稽核 E3-S1）。"""
+    report = []
+    _module_declared_backup_tables({}, report=report, log=log)
+    return sorted(report)
+
+
+def _module_declared_backup_tables(existing: dict, report: list = None, log: bool = False) -> dict:
+    """**已載入**模組 `module.json` 的 `data.tables` 中宣告 T1 的表 ⇒ 每日（與月）JSON 匯出。
+
+    主持裁示 2026-09-28（E 線附近旅宿；LODGING-NEARBY §3.3a）：
+    - L1 不可以寫死 L2 表名：模組未載入／停用時表可能不存在 ⇒ 寫死的話那張表 "error" ⇒ 每日備份誤報 daily_partial。
+      模組未載入＝不列（資料仍在整庫備份那一層）。現行寫死的 L2 表（payment_requests、tender_* …）是既有債，
+      本次不動，列下一輪「改為宣告式」。
+    - 表名只取已驗證的宣告：不合 `_MODULE_TABLE_NAME_RE` ⇒ 不列、記 ERROR（不猜、不引號跳脫）。
+    - 已經在上面寫死清單裡的表 ⇒ 不重複匯出。
+    - ⚠ **只收 T1**：T2（含祕密欄位）要逐欄排除祕密，`SELECT *` 會把祕密寫進 JSON ⇒ 宣告 T2 的表不自動列，
+      需要時在上面的清單逐欄明列（MODULE-GUIDE §3.3；G3b 未守門）。略過的 T2 進彙總檔 `skipped_t2`＋每輪一次 ERROR
+      （`module_backup_skipped_t2`；本函式一輪會被呼叫好幾次，平常不記 log）。
+    鍵＝`模組-<模組key>-<表名>`；值＝`SELECT * FROM <表名> ORDER BY rowid`。
+    """
+    try:
+        from core import registry
+        loaded = registry.loaded()
+    except Exception:                          # noqa: BLE001  載入器不可用（極早期／工具）⇒ 只有寫死的那份
+        logger.exception("module declared backup tables: registry unavailable")
+        return {}
+    already = {m for sql in existing.values() for m in _BACKUP_TABLE_RE.findall(sql)}
+    out = {}
+    for lm in sorted(loaded, key=lambda m: m.key):
+        data = (lm.manifest or {}).get("data") or {}
+        for t in (data.get("tables") or []):
+            if not isinstance(t, dict):
+                continue
+            name, cls = t.get("name"), t.get("class")
+            if cls == "T2":
+                if report is not None:
+                    report.append("%s.%s" % (lm.key, name))
+                if log:
+                    logger.error("module %s declares T2 table %r: not auto-exported (secret columns); list it explicitly",
+                                 lm.key, name)
+                continue
+            if cls != "T1":
+                continue
+            if not isinstance(name, str) or not _MODULE_TABLE_NAME_RE.match(name):
+                if log:
+                    logger.error("module %s declares invalid table name %r: not exported", lm.key, name)
+                continue
+            if name in already:
+                continue
+            already.add(name)
+            out["%s%s-%s" % (MODULE_BACKUP_PREFIX, lm.key, name)] = "SELECT * FROM %s ORDER BY rowid" % name
+    return out
 
 
 #: 從一句 `SELECT … FROM <表>` 裡取出表名。
@@ -2432,6 +2500,7 @@ def _monthly_backup():
 
     summary["month"] = month_label
     summary["exported_at"] = now
+    summary["skipped_t2"] = module_backup_skipped_t2()      # E3-S1：月備份產物同樣看得到（log 由每日那輪記）
 
     # 整庫 .db 也要進月備份——JSON 那層刻意不收憑證欄位與內嵌影像（見 §8.3），
     # 只有整庫檔案是完整的。長期保留的那一份如果只有 JSON，等於長期保留了一份

@@ -237,6 +237,13 @@ def test_dm1_every_table_is_classified_as_user_or_system_data(demo_sandbox):
     """
     name_sys, sys_tables = _named(_SYSTEM_SEAMS)
     name_usr, usr_tables = _named(_USER_SEAMS)
+    # 2026-09-28（E 線，附近旅宿）：模組自己 migration 建的表由模組 `module.json` 的分類決定（`db.demo_module_tables()`，
+    # 規則同每日 JSON 備份：T1／T2 清空、T3 保留），不寫進 L1 的靜態清單——模組不在時表不存在，寫死會變成「幽靈表」。
+    # 這仍是「有人決定過」：分類寫在模組宣告裡、G3 守著宣告與備份一致；少宣告一張 ⇒ 下面「沒有被分類」照樣紅。
+    if sys_tables is not None and usr_tables is not None:
+        mod_clear, mod_keep = db.demo_module_tables()
+        usr_tables = frozenset(usr_tables) | mod_clear
+        sys_tables = frozenset(sys_tables) | mod_keep
     assert sys_tables is not None and usr_tables is not None, (
         "`db` 缺少那兩份清單（找過：%s ／ %s）——\n"
         % (list(_SYSTEM_SEAMS), list(_USER_SEAMS))

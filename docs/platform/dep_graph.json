@@ -13,7 +13,8 @@
     "helper:settings",
     "helper:startup",
     "helper:storage_locations",
-    "plat:paths"
+    "plat:paths",
+    "plat:registry"
    ],
    "kind": "core",
    "path": "backend/archive.py",
@@ -136,7 +137,8 @@
    "dynamic_sql": true,
    "imports": [
     "plat:migrations",
-    "plat:paths"
+    "plat:paths",
+    "plat:registry"
    ],
    "kind": "core",
    "path": "backend/db.py",
@@ -304,6 +306,7 @@
     "helper:daily_checks",
     "helper:geo",
     "helper:licensing",
+    "helper:map_overlays",
     "helper:module_startup",
     "helper:startup",
     "plat:loader",
@@ -791,6 +794,20 @@
    "imports": [],
    "kind": "helper",
    "path": "backend/helpers/mail_types.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:map_overlays": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "plat:loader",
+    "plat:registry"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/map_overlays.py",
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
@@ -1744,6 +1761,17 @@
    "routers_called": [
     "router:map_points"
    ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "js:static/map-overlay.js": {
+   "api_calls": [],
+   "api_prefixes": [],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/map-overlay.js",
+   "routers_called": [],
    "tables_r": [],
    "tables_w": []
   },
@@ -4725,6 +4753,270 @@
     "daily_tasks",
     "notifications",
     "system_settings"
+   ]
+  },
+  "mod:lodging/__init__": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:lodging/api",
+    "mod:lodging/api_records",
+    "mod:lodging/source",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "lodging",
+   "path": "backend/modules/lodging/__init__.py",
+   "role": "init",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:lodging/api": {
+   "api_prefixes": [
+    "/api/lodging"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:lodging/attribution",
+    "mod:lodging/source"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "mod:lodging/attribution",
+    "mod:lodging/source"
+   ],
+   "kind": "mod",
+   "module_key": "lodging",
+   "path": "backend/modules/lodging/api.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "lodging_status",
+     "line": 26,
+     "method": "GET",
+     "path": "/api/lodging/status"
+    },
+    {
+     "func": "lodging_refresh",
+     "line": 52,
+     "method": "POST",
+     "path": "/api/lodging/refresh"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "lodging_catalog",
+    "notifications",
+    "system_settings"
+   ]
+  },
+  "mod:lodging/api_records": {
+   "api_prefixes": [
+    "/api/lodging"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:geo",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:lodging/attribution",
+    "mod:lodging/search",
+    "mod:lodging/source"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:geo",
+    "mod:lodging/api",
+    "mod:lodging/attribution",
+    "mod:lodging/search",
+    "mod:lodging/source",
+    "plat:txn"
+   ],
+   "kind": "mod",
+   "module_key": "lodging",
+   "path": "backend/modules/lodging/api_records.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "lodging_search_endpoint",
+     "line": 107,
+     "method": "POST",
+     "path": "/api/lodging/search"
+    },
+    {
+     "func": "lodging_record_create",
+     "line": 133,
+     "method": "POST",
+     "path": "/api/lodging/records"
+    },
+    {
+     "func": "lodging_record_list",
+     "line": 156,
+     "method": "GET",
+     "path": "/api/lodging/records"
+    },
+    {
+     "func": "lodging_record_detail",
+     "line": 183,
+     "method": "GET",
+     "path": "/api/lodging/records/{rid}"
+    },
+    {
+     "func": "lodging_record_delete",
+     "line": 193,
+     "method": "DELETE",
+     "path": "/api/lodging/records/{rid}"
+    },
+    {
+     "func": "lodging_record_export",
+     "line": 227,
+     "method": "GET",
+     "path": "/api/lodging/records/{rid}/export"
+    },
+    {
+     "func": "lodging_compare",
+     "line": 256,
+     "method": "GET",
+     "path": "/api/lodging/compare"
+    },
+    {
+     "func": "lodging_quote_create",
+     "line": 284,
+     "method": "POST",
+     "path": "/api/lodging/quotes"
+    },
+    {
+     "func": "lodging_quote_list",
+     "line": 330,
+     "method": "GET",
+     "path": "/api/lodging/quotes"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "lodging_catalog"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "lodging_catalog",
+    "lodging_quotes",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [
+    "lodging_quotes",
+    "lodging_search_items",
+    "lodging_searches"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "geocode_cache",
+    "geocode_usage",
+    "lodging_catalog",
+    "lodging_quotes",
+    "lodging_search_items",
+    "lodging_searches",
+    "notifications",
+    "system_settings"
+   ]
+  },
+  "mod:lodging/attribution": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:lodging/source"
+   ],
+   "kind": "mod",
+   "module_key": "lodging",
+   "path": "backend/modules/lodging/attribution.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:lodging/search": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:geo",
+    "mod:lodging/source"
+   ],
+   "kind": "mod",
+   "module_key": "lodging",
+   "path": "backend/modules/lodging/search.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "lodging_catalog",
+    "lodging_quotes"
+   ],
+   "tables_w": [
+    "lodging_search_items",
+    "lodging_searches"
+   ]
+  },
+  "mod:lodging/source": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:settings",
+    "plat:txn"
+   ],
+   "kind": "mod",
+   "module_key": "lodging",
+   "path": "backend/modules/lodging/source.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": [
+    "lodging_catalog"
    ]
   },
   "mod:netplan/__init__": {
@@ -7723,6 +8015,42 @@
    "tables_r": [],
    "tables_w": []
   },
+  "page:pages/lodging-records.html": {
+   "api_calls": [
+    "/api/lodging/compare",
+    "/api/lodging/quotes",
+    "/api/lodging/records",
+    "/api/lodging/records/",
+    "/api/lodging/refresh",
+    "/api/lodging/status",
+    "/api/system/branding/favicon"
+   ],
+   "api_prefixes": [
+    "/api/lodging",
+    "/api/system"
+   ],
+   "api_unmatched": [],
+   "imports": [
+    "js:static/auth-guard.js",
+    "js:static/notif.js",
+    "js:static/record-link.js",
+    "js:static/sidebar.js"
+   ],
+   "kind": "page",
+   "path": "frontend/pages/lodging-records.html",
+   "routers_called": [
+    "mod:lodging/api",
+    "mod:lodging/api_records",
+    "router:system"
+   ],
+   "routers_called_effective": [
+    "mod:lodging/api",
+    "mod:lodging/api_records",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "page:pages/login-qr-approve.html": {
    "api_calls": [
     "/api/auth/login/qr-approve",
@@ -7819,6 +8147,7 @@
   "page:pages/map.html": {
    "api_calls": [
     "/api/map/config",
+    "/api/map/overlays",
     "/api/map/points",
     "/api/system/branding/favicon"
    ],
@@ -7829,6 +8158,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/map-overlay.js",
     "js:static/notif.js",
     "js:static/record-link.js",
     "js:static/sidebar.js"
@@ -10378,6 +10708,7 @@
     "helper:email_notify",
     "helper:geo",
     "helper:mail_types",
+    "helper:map_overlays",
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:row_access",
@@ -10389,6 +10720,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:geo",
+    "helper:map_overlays",
     "helper:row_access",
     "helper:settings",
     "plat:registry",
@@ -10405,8 +10737,14 @@
      "path": "/api/map/config"
     },
     {
-     "func": "map_points",
+     "func": "map_overlays_list",
      "line": 486,
+     "method": "GET",
+     "path": "/api/map/overlays"
+    },
+    {
+     "func": "map_points",
+     "line": 499,
      "method": "GET",
      "path": "/api/map/points"
     }
@@ -11504,7 +11842,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3169",
+   "path": "backend/db.py:3199",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -11517,7 +11855,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3182",
+   "path": "backend/db.py:3212",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -11530,7 +11868,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3193",
+   "path": "backend/db.py:3223",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -11543,7 +11881,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3160",
+   "path": "backend/db.py:3190",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -11556,7 +11894,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:4290",
+   "path": "backend/db.py:4320",
    "readers": [
     "core:archive",
     "mod:accounting/api/accounting_export",
@@ -11576,7 +11914,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:2297",
+   "path": "backend/db.py:2327",
    "readers": [
     "core:archive",
     "helper:tiered_approval",
@@ -11597,7 +11935,7 @@
     "helper:module_registry",
     "router:system"
    ],
-   "path": "backend/db.py:541",
+   "path": "backend/db.py:571",
    "readers": [
     "helper:system_checks",
     "mod:analytics/api/dashboard",
@@ -11626,7 +11964,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2205",
+   "path": "backend/db.py:2235",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -11639,7 +11977,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2218",
+   "path": "backend/db.py:2248",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -11652,7 +11990,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2229",
+   "path": "backend/db.py:2259",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -11665,7 +12003,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2196",
+   "path": "backend/db.py:2226",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -11682,7 +12020,7 @@
     "helper:edit_log",
     "mod:payroll/api/bonus"
    ],
-   "path": "backend/db.py:5227",
+   "path": "backend/db.py:5257",
    "readers": [
     "core:archive",
     "mod:payroll/api/bonus"
@@ -11696,7 +12034,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:5352",
+   "path": "backend/db.py:5382",
    "readers": [
     "core:archive",
     "mod:payroll/bonus_pdf"
@@ -11713,7 +12051,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:5319",
+   "path": "backend/db.py:5349",
    "readers": [
     "core:archive",
     "core:db",
@@ -11733,7 +12071,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4573",
+   "path": "backend/db.py:4603",
    "readers": [
     "core:archive",
     "mod:payroll/bonus_payouts"
@@ -11751,7 +12089,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4557",
+   "path": "backend/db.py:4587",
    "readers": [
     "core:archive",
     "mod:payroll/bonus_deductions",
@@ -11769,7 +12107,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:4539",
+   "path": "backend/db.py:4569",
    "readers": [
     "core:archive",
     "mod:payroll/bonus_deductions",
@@ -11790,7 +12128,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4868",
+   "path": "backend/db.py:4898",
    "readers": [
     "core:archive"
    ],
@@ -11807,7 +12145,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4858",
+   "path": "backend/db.py:4888",
    "readers": [
     "core:archive"
    ],
@@ -11824,7 +12162,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4628",
+   "path": "backend/db.py:4658",
    "readers": [
     "core:archive"
    ],
@@ -11839,7 +12177,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:5287",
+   "path": "backend/db.py:5317",
    "readers": [
     "core:archive"
    ],
@@ -11856,7 +12194,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:5308",
+   "path": "backend/db.py:5338",
    "readers": [
     "core:archive"
    ],
@@ -11871,7 +12209,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:5301",
+   "path": "backend/db.py:5331",
    "readers": [
     "core:archive"
    ],
@@ -11884,7 +12222,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2047",
+   "path": "backend/db.py:2077",
    "readers": [
     "core:archive",
     "core:pdf_gen"
@@ -11903,7 +12241,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:1994",
+   "path": "backend/db.py:2024",
    "readers": [
     "core:archive"
    ],
@@ -11920,7 +12258,7 @@
    "named_by": [
     "mod:case/attachments"
    ],
-   "path": "backend/db.py:3436",
+   "path": "backend/db.py:3466",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -11943,7 +12281,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:1707",
+   "path": "backend/db.py:1737",
    "readers": [
     "core:archive",
     "core:pdf_gen"
@@ -11960,7 +12298,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:1689",
+   "path": "backend/db.py:1719",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -11984,7 +12322,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:1430",
+   "path": "backend/db.py:1460",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -12006,7 +12344,7 @@
     "mod:case/api/quotations",
     "router:map_points"
    ],
-   "path": "backend/db.py:3557",
+   "path": "backend/db.py:3587",
    "readers": [
     "core:archive",
     "mod:case/api/quotations",
@@ -12025,7 +12363,7 @@
    "named_by": [
     "mod:subcontract/attachments"
    ],
-   "path": "backend/db.py:691",
+   "path": "backend/db.py:721",
    "readers": [
     "core:archive",
     "core:db",
@@ -12050,7 +12388,7 @@
     "helper:system_checks",
     "mod:case/api/quotations"
    ],
-   "path": "backend/db.py:1530",
+   "path": "backend/db.py:1560",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -12075,7 +12413,7 @@
     "core:trail",
     "router:map_points"
    ],
-   "path": "backend/db.py:626",
+   "path": "backend/db.py:656",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -12165,7 +12503,7 @@
     "router:map_points",
     "router:search"
    ],
-   "path": "backend/db.py:506",
+   "path": "backend/db.py:536",
    "readers": [
     "core:archive",
     "mod:analytics/api/dashboard",
@@ -12186,7 +12524,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:730",
+   "path": "backend/db.py:760",
    "readers": [
     "core:archive",
     "core:db",
@@ -12206,7 +12544,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:1356",
+   "path": "backend/db.py:1386",
    "readers": [
     "core:archive"
    ],
@@ -12223,7 +12561,7 @@
    "named_by": [
     "mod:daily_tasks/__init__"
    ],
-   "path": "backend/db.py:712",
+   "path": "backend/db.py:742",
    "readers": [
     "core:archive",
     "core:db",
@@ -12245,7 +12583,7 @@
     "core:db",
     "core:trail"
    ],
-   "path": "backend/db.py:1645",
+   "path": "backend/db.py:1675",
    "readers": [
     "core:archive",
     "helper:email_notify",
@@ -12267,7 +12605,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:1391",
+   "path": "backend/db.py:1421",
    "readers": [
     "core:archive",
     "helper:audit",
@@ -12290,7 +12628,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:1406",
+   "path": "backend/db.py:1436",
    "readers": [
     "core:archive",
     "mod:analytics/api/dashboard",
@@ -12310,7 +12648,7 @@
    "named_by": [
     "core:trail"
    ],
-   "path": "backend/db.py:1637",
+   "path": "backend/db.py:1667",
    "readers": [
     "core:archive",
     "helper:tiered_approval",
@@ -12329,7 +12667,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3728",
+   "path": "backend/db.py:3758",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12342,7 +12680,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2635",
+   "path": "backend/db.py:2665",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12355,7 +12693,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2663",
+   "path": "backend/db.py:2693",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12368,7 +12706,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2648",
+   "path": "backend/db.py:2678",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12381,7 +12719,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3259",
+   "path": "backend/db.py:3289",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12394,7 +12732,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3272",
+   "path": "backend/db.py:3302",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12407,7 +12745,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3283",
+   "path": "backend/db.py:3313",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12420,7 +12758,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3250",
+   "path": "backend/db.py:3280",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12435,7 +12773,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4070",
+   "path": "backend/db.py:4100",
    "readers": [
     "router:map_points"
    ],
@@ -12452,7 +12790,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4190",
+   "path": "backend/db.py:4220",
    "readers": [
     "core:archive"
    ],
@@ -12471,7 +12809,7 @@
     "mod:case/api/quotations",
     "router:definitions"
    ],
-   "path": "backend/db.py:1581",
+   "path": "backend/db.py:1611",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -12492,7 +12830,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4399",
+   "path": "backend/db.py:4429",
    "readers": [
     "core:archive"
    ],
@@ -12502,6 +12840,65 @@
     "router:item_reads"
    ]
   },
+  "table:lodging_catalog": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/lodging/migrations/0001_lodging_tables.py:17",
+   "readers": [
+    "mod:lodging/api_records",
+    "mod:lodging/search"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:lodging/source"
+   ]
+  },
+  "table:lodging_quotes": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/lodging/migrations/0001_lodging_tables.py:71",
+   "readers": [
+    "mod:lodging/search"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:lodging/api_records"
+   ]
+  },
+  "table:lodging_search_items": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/lodging/migrations/0001_lodging_tables.py:53",
+   "readers": [],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:lodging/api_records",
+    "mod:lodging/search"
+   ]
+  },
+  "table:lodging_searches": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/lodging/migrations/0001_lodging_tables.py:36",
+   "readers": [],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:lodging/api_records",
+    "mod:lodging/search"
+   ]
+  },
   "table:login_rate_limit": {
    "api_prefixes": [],
    "imports": [],
@@ -12509,7 +12906,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:1129",
+   "path": "backend/db.py:1159",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12525,7 +12922,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:894",
+   "path": "backend/db.py:924",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12540,7 +12937,7 @@
    "named_by": [
     "helper:module_registry"
    ],
-   "path": "backend/db.py:741",
+   "path": "backend/db.py:771",
    "readers": [
     "core:archive",
     "core:db"
@@ -12557,7 +12954,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3082",
+   "path": "backend/db.py:3112",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12570,7 +12967,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3095",
+   "path": "backend/db.py:3125",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12583,7 +12980,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3106",
+   "path": "backend/db.py:3136",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12596,7 +12993,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3073",
+   "path": "backend/db.py:3103",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12609,7 +13006,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2711",
+   "path": "backend/db.py:2741",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12622,7 +13019,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2720",
+   "path": "backend/db.py:2750",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12635,7 +13032,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2736",
+   "path": "backend/db.py:2766",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12650,7 +13047,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:2163",
+   "path": "backend/db.py:2193",
    "readers": [
     "core:archive"
    ],
@@ -12668,7 +13065,7 @@
     "core:db",
     "core:trail"
    ],
-   "path": "backend/db.py:560",
+   "path": "backend/db.py:590",
    "readers": [
     "core:archive"
    ],
@@ -12688,7 +13085,7 @@
     "mod:case/api/quotations",
     "router:search"
    ],
-   "path": "backend/db.py:526",
+   "path": "backend/db.py:556",
    "readers": [
     "core:archive",
     "mod:analytics/api/reports",
@@ -12709,7 +13106,7 @@
     "helper:system_checks",
     "mod:case/api/quotations"
    ],
-   "path": "backend/db.py:1852",
+   "path": "backend/db.py:1882",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -12729,7 +13126,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:672",
+   "path": "backend/db.py:702",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12746,7 +13143,7 @@
     "core:db",
     "core:trail"
    ],
-   "path": "backend/db.py:649",
+   "path": "backend/db.py:679",
    "readers": [
     "core:archive",
     "core:pdf_gen"
@@ -12764,7 +13161,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:584",
+   "path": "backend/db.py:614",
    "readers": [
     "core:archive",
     "core:db"
@@ -12780,7 +13177,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:600",
+   "path": "backend/db.py:630",
    "readers": [
     "core:archive"
    ],
@@ -12796,7 +13193,7 @@
     "core:photos",
     "plat:paths"
    ],
-   "path": "backend/db.py:571",
+   "path": "backend/db.py:601",
    "readers": [
     "core:archive",
     "core:db",
@@ -12814,7 +13211,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3898",
+   "path": "backend/db.py:3928",
    "readers": [
     "core:archive"
    ],
@@ -12836,7 +13233,7 @@
     "mod:case/attachments",
     "router:search"
    ],
-   "path": "backend/db.py:454",
+   "path": "backend/db.py:484",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -12884,7 +13281,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:477",
+   "path": "backend/db.py:507",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -12900,7 +13297,7 @@
     "core:archive",
     "plat:upgrade"
    ],
-   "path": "backend/db.py:448",
+   "path": "backend/db.py:478",
    "readers": [
     "plat:upgrade",
     "router:system"
@@ -12916,7 +13313,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:498",
+   "path": "backend/db.py:528",
    "readers": [
     "helper:audit",
     "helper:auth",
@@ -12939,7 +13336,7 @@
     "mod:case/api/quotations",
     "router:map_points"
    ],
-   "path": "backend/db.py:2885",
+   "path": "backend/db.py:2915",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -12959,7 +13356,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2465",
+   "path": "backend/db.py:2495",
    "readers": [
     "core:archive"
    ],
@@ -12977,7 +13374,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3040",
+   "path": "backend/db.py:3070",
    "readers": [
     "core:archive",
     "core:db",
@@ -13001,7 +13398,7 @@
     "router:map_points",
     "router:search"
    ],
-   "path": "backend/db.py:516",
+   "path": "backend/db.py:546",
    "readers": [
     "core:archive",
     "mod:supply/api/inventory",
@@ -13018,7 +13415,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2800",
+   "path": "backend/db.py:2830",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -13031,7 +13428,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2813",
+   "path": "backend/db.py:2843",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -13044,7 +13441,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2824",
+   "path": "backend/db.py:2854",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -13057,7 +13454,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2791",
+   "path": "backend/db.py:2821",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -13072,7 +13469,7 @@
    "named_by": [
     "core:archive"
    ],
-   "path": "backend/db.py:554",
+   "path": "backend/db.py:584",
    "readers": [
     "core:archive",
     "mod:payroll/bonus_deductions",
@@ -13099,7 +13496,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:2511",
+   "path": "backend/db.py:2541",
    "readers": [
     "core:archive"
    ],
@@ -13114,7 +13511,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3972",
+   "path": "backend/db.py:4002",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -13128,7 +13525,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3963",
+   "path": "backend/db.py:3993",
    "readers": [
     "core:archive"
    ],
@@ -13146,7 +13543,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3935",
+   "path": "backend/db.py:3965",
    "readers": [
     "core:archive",
     "mod:tender_radar/source"
@@ -13164,7 +13561,7 @@
    "named_by": [
     "router:map_points"
    ],
-   "path": "backend/db.py:3949",
+   "path": "backend/db.py:3979",
    "readers": [
     "core:archive",
     "router:map_points"
@@ -13201,7 +13598,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3628",
+   "path": "backend/db.py:3658",
    "readers": [
     "router:system"
    ],
@@ -13218,7 +13615,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:2605",
+   "path": "backend/db.py:2635",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -13233,7 +13630,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3666",
+   "path": "backend/db.py:3696",
    "readers": [
     "router:system"
    ],
@@ -13256,7 +13653,7 @@
     "router:mail_settings",
     "router:system"
    ],
-   "path": "backend/db.py:482",
+   "path": "backend/db.py:512",
    "readers": [
     "core:archive",
     "core:main",
@@ -13304,7 +13701,7 @@
     "core:db",
     "router:map_points"
    ],
-   "path": "backend/db.py:677",
+   "path": "backend/db.py:707",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -13326,7 +13723,7 @@
     "core:db",
     "mod:accounting/voucher_attachments"
    ],
-   "path": "backend/db.py:5098",
+   "path": "backend/db.py:5128",
    "readers": [
     "core:archive",
     "mod:accounting/voucher",
@@ -13346,7 +13743,7 @@
     "helper:edit_log",
     "mod:accounting/api/vouchers"
    ],
-   "path": "backend/db.py:5588",
+   "path": "backend/db.py:5618",
    "readers": [
     "core:archive",
     "mod:accounting/api/vouchers"
@@ -13360,7 +13757,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:5556",
+   "path": "backend/db.py:5586",
    "readers": [
     "core:archive",
     "core:db"
@@ -13379,7 +13776,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:5607",
+   "path": "backend/db.py:5637",
    "readers": [
     "core:archive"
    ],
@@ -13394,7 +13791,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:5600",
+   "path": "backend/db.py:5630",
    "readers": [
     "core:archive"
    ],
@@ -13412,7 +13809,7 @@
     "mod:case/api/quotations",
     "mod:payroll/api/bonus"
    ],
-   "path": "backend/db.py:5552",
+   "path": "backend/db.py:5582",
    "readers": [
     "mod:accounting/api/vouchers"
    ],
@@ -13425,7 +13822,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:5510",
+   "path": "backend/db.py:5540",
    "readers": [
     "core:archive",
     "core:db",
@@ -13443,7 +13840,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2364",
+   "path": "backend/db.py:2394",
    "readers": [
     "core:archive",
     "router:system"
@@ -13460,7 +13857,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:615",
+   "path": "backend/db.py:645",
    "readers": [
     "core:archive",
     "core:pdf_gen",

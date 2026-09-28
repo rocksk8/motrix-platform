@@ -848,6 +848,18 @@ def module_page(name: str):
     return HTMLResponse(r[1], status_code=404)
 
 
+# ── 地圖覆蓋層腳本（IP-101 `map.overlay`；helpers.map_overlays）───────────────────────
+# 🔴 必須在 StaticFiles 之前（同 /pages）。`<script src>` 帶不了 Authorization ⇒ 不在 /api 底下（腳本是程式碼，不含資料；
+# 資料一律經模組自己的 /api 端點、各自檢查權限）。只提供「已載入模組宣告、檔案在該模組 pages/ 底下」的腳本，其餘 404。
+@app.api_route("/map-overlays/{module_key}/{script}", methods=["GET", "HEAD"], include_in_schema=False)
+def map_overlay_script(module_key: str, script: str):
+    from helpers import map_overlays as _map_overlays
+    path = _map_overlays.script_path(module_key, script)
+    if path is None:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    return FileResponse(path, media_type="application/javascript; charset=utf-8")
+
+
 # ── 選單宣告（階段 C／C4）：/static/sidebar.js 前置 window.MOTRIX_MENU ────────────────
 # 🔴 必須在 StaticFiles 之前（同 /pages）。與使用者無關（這個請求沒有 token）；內容見 routers/platform_menu.sidebar_js_source。
 @app.api_route("/static/sidebar.js", methods=["GET", "HEAD"], include_in_schema=False)

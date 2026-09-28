@@ -37,6 +37,7 @@
    "helper:google_calendar",
    "helper:licensing",
    "helper:mail_types",
+   "helper:map_overlays",
    "helper:module_registry",
    "helper:module_startup",
    "helper:module_switches",
@@ -58,6 +59,7 @@
    "js:static/custom-layout.js",
    "js:static/form-preview.js",
    "js:static/map-google.js",
+   "js:static/map-overlay.js",
    "js:static/edit-presence.js",
    "js:static/gov-lookup.js",
    "js:static/layout-editor.js",
@@ -557,6 +559,28 @@
    ],
    "api_prefixes": [
     "/api/daily-tasks"
+   ]
+  },
+  "M13": {
+   "key": "lodging",
+   "name": "附近旅宿",
+   "units": [
+    "mod:lodging/__init__",
+    "mod:lodging/api",
+    "mod:lodging/api_records",
+    "mod:lodging/attribution",
+    "mod:lodging/search",
+    "mod:lodging/source",
+    "page:pages/lodging-records.html"
+   ],
+   "tables": [
+    "lodging_catalog",
+    "lodging_quotes",
+    "lodging_search_items",
+    "lodging_searches"
+   ],
+   "api_prefixes": [
+    "/api/lodging"
    ]
   }
  },

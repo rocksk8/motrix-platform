@@ -149,6 +149,8 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-28 20:24 A（列車長）：**第十八班合回**——E 地圖附近旅宿（L2 lodging 1.1.0；L1 geo.map_request_scope、宣告式 T1 備份、IP-101 覆蓋層 map.overlay、非 /api 路由白名單守門）＋E b4528e8d（覆蓋層查詢早於地圖建立的產品競態、db.demo_module_tables、權限目錄 27→28、Alpine 頁 50→51）＋D 審。自 origin 99702431 cherry-pick（E 的 merge c0b48473 無手動解 ⇒ 逐筆）；CORE 1.66（core_bump；E3-O2 B54 段重複兩度整理成一段）；IP-101 未撞號。--train 第一輪：交會紅 7（全屬 E：lodging e2e 逾時＝產品競態、Alpine 頁數、demo 重置分類、權限目錄×3）⇒ E 修 b4528e8d、D 抽查放行；局部重跑（7 題所在 4 檔 41 過＋modtest --train --base 86e10a80）：差異題 2882＋2983 過／1 紅＝test_map_sst62::test_scope_skips…（同 worker 先跑 A14c 量尺題留下 geo._MISS_CACHE_ALL 紀錄 ⇒ 斷言整表為空而紅；順序決定性重現，題目改用自己的空表，957e132a）；tests/platform 1592 過；core-only ok。mustfix 登記：S3R-M1（B，修正中）、H3-M1～M3（H3，修正中＋備註暫緩：CORE-SPEC 2e32977f）；DB-M1／M2、CG2-M1、CG3-M1、H2-M1／M2 已關。不跑全量（建包會跑）。
+  - **下一輪待辦**（本班）：T18-S1 demo 重置直接驗 T1 清空／T3 保留；T18-S2 列出「模組 T1/T2 不在 L1 清單」的表並比對明文預期（目前旅宿三張）；T18-O1 geo 模組層快取表（_MISS_CACHE_ALL 等）在測試間殘留 ⇒ conftest 或各題夾具統一重置（本班靠單題換空表避開）。
 - 2026-09-28 17:57 主持：**正式機已更新到 3e061d6f**（第十七班：Google 底圖無標點＋取點慢；經遠端控制由正式機 Claude 套用）。
   - 事故證據（主持在使用者瀏覽器只讀查正式機頁）：points 201、_gmMarkers 202、DOM gmp-advanced-marker 0、Alpine.raw(c._map)!==c._map；把 2 個 marker.map 改設 raw ⇒ 0→2。取點慢＝每地址一條 DB 連線（冷快取 6.1～6.9s）。修：A gm-raw（__v_skip＋Alpine.raw、gmp-click、假 google.maps 身分檢查、geo.cache_read_session）；D 必修 0。
   - 建包 5631＋e2e 545 過；549 檔；package.sha256 SHA256＝0F52F5CE…A475；演練（apply-run-t16，正式機條件，裝在 54a2d6b6）success 3 秒；D 最終判定可上（wip/d-audit-train16 1b846522）。
