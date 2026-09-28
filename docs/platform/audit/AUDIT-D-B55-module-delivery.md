@@ -326,3 +326,19 @@
 
 **觀察**
 - **S5-O1**：S7 §5 的回滾參數還是「〈A 定稿後填〉」；在 A 的 S5 定稿、填上之前，這份指示不能交給正式機
+
+## 12. 複核 W-M1＋S5-S1／S2／O1：wip/b-module-delivery-2 d764026c（D，2026-09-28）
+
+- ✅ W-M1 關閉（d764026c）
+- 以暫存目錄實跑 `delivery.py writeback`（d764026c 的那一份）：
+
+| 情境 | 結果 |
+|---|---|
+| W1 不帶 `--since` | argparse 拒絕（exit 2），沒有寫任何結果 ✔ |
+| W2 `--since 0`，logs 裡只有 9/1 一份 zz 的 success，寫回 yy 的包 | `failed`，mismatch 列出 module_key、to_version ✔ |
+| W3 同一包、`--since` 之後的 success（yy 1.0.0、同基準） | `succeeded` ✔（正對照） |
+| W4 同一包但 to_version 不符 | `failed`＋mismatch ✔ |
+
+- S5-S1：`apply.json` 讀不懂 ⇒ 算中斷（與 apply_plan 一致）；對它回滾 ⇒ `backup_corrupt` ✔
+- S5-S2：拒絕訊息改成指向套用腳本的回滾模式（S7 §5）✔；S5-O1：範本已加警語 ✔
+- **觀察 W-O1**：`apply.json` 壞掉時，套用（任何模組、完整包）被擋，而對它回滾回 `backup_corrupt` ⇒ 兩邊都走不下去，只能人工處理。這是 fail-closed，可以接受；但 S7 的狀態表要寫出這種情況的處置（回報開發機；開發機指示人工檢查該備份目錄後，才移走那份紀錄），不要讓正式機 Claude 自己刪
