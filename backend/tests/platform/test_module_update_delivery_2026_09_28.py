@@ -620,3 +620,15 @@ def test_unreadable_apply_record_counts_as_interrupted(src, tmp_path):
     with pytest.raises(MU.UpdateError) as ei2:
         MU.rollback(root, "zz", "20260928_190500")
     assert ei2.value.code == "backup_corrupt"
+
+
+def test_manifest_lines_handle_multi_line_older_entries(src, tmp_path):
+    """S6 演練踩到：實際的 version_manifest 較舊的條目跨多行 ⇒ 原本逐行解析就丟例外。新條目照樣取成一行。"""
+    p0 = _git(src, "rev-parse", "HEAD")
+    multi = '[\n  {\n    "module": "其他",\n    "version": "2026-08-01a",\n    "content": "舊的多行條目"\n  }\n]\n'
+    (src / "backend" / "version_manifest.json").write_text(multi, encoding="utf-8")
+    p = _commit(src, "multi-line manifest")
+    x = _v2(src)
+    lines = MU.manifest_lines(p, x, "zz", repo=src)
+    assert [json.loads(l)["version"] for l in lines] == ["2026-09-28z"] and all("\n" not in l for l in lines)
+    del p0
