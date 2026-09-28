@@ -1,6 +1,6 @@
 # 給正式機 Claude 的指示範本：套用單模組更新包
 
-> 🔴 **稽核 D S5-O1：§5 的回滾參數（`〈A 定稿後填〉`）填入之前，這份範本不可以交給正式機。**
+> 🔴 **稽核 D S5-O1：B55F-M1 關閉之前，這份範本不可以交給正式機。** §5 的回滾參數已照 A 定稿（1128a3ac）填入；尚待：套用腳本回滾模式收不到 `-ModuleKey` 的缺陷修正（場次 D 2026-09-29 紅）＋場次 D 重跑綠＋D 關閉 B55F-M1。
 
 > B55 S7（設計 docs/platform/MODULE-UPDATE-DELIVERY.md §8 的全文版）。每次出單模組包時，主持把 `〈〉` 的欄位填好、
 > 連同包名交給使用者，由使用者貼給正式機的 Claude。**正式機目前沒有本機儀表板**（主持裁示 2026-09-28）⇒ 全程是正式機 Claude
@@ -49,10 +49,11 @@
 ### 3. 套用（使用者說「套用」之後）
 
 1. 記下開始時間，然後執行（這一步會**停服約 1 分鐘**：只停這個安裝的服務，套用完自動重啟並健康檢查）：
-   `powershell -ExecutionPolicy Bypass -File <ROOT>\backend\tools\apply_module_update.ps1 -PackagePath <staging 路徑>\payload -Yes`
+   `powershell -ExecutionPolicy Bypass -File <ROOT>\backend\tools\apply_module_update.ps1 -PackagePath <staging 路徑>\payload -Yes | Tee-Object -FilePath "$env:USERPROFILE\Desktop\apply_module_update_〈模組代號〉.log"`
+   - 在 PowerShell 執行；`Tee-Object` 讓畫面輸出同時存到桌面 log（套用腳本本身只寫結果檔，不寫 log）。
    - `-Yes` 是因為使用者已經在對話裡確認過；不要在沒有確認時加。
    - 跑的是**正式機已安裝的**那一份腳本（單模組包不帶任何工具）。
-2. 等它結束。10 分鐘還沒結束 ⇒ 回報「仍在執行」，讀 `<ROOT>\backend\logs\apply_module_update_*.log` 最後 30 行給使用者看；
+2. 等它結束。10 分鐘還沒結束 ⇒ 回報「仍在執行」，讀桌面 `apply_module_update_〈模組代號〉.log` 最後 30 行給使用者看〔更正（2026-09-29 B）：原寫 `<ROOT>\backend\logs\apply_module_update_*.log`——套用腳本不寫這個檔，只寫 `.result.json`〕；
    **不要中止它**（中止會留下中斷的套用，要另外回滾）。
 3. 讀最後一行 `::RESULT:: v=2 status=… rolled_back=… service=… exit=…`，以及
    `<ROOT>\backend\logs\apply_module_update_<時間>.result.json`，照下表告訴使用者：
@@ -60,7 +61,7 @@
 | status | 意思 | 下一步 |
 |---|---|---|
 | `success` | 已套用，新版本已載入，服務正常 | 做第 4 節寫回 |
-| `module_preflight_failed` 而訊息是「有中斷的套用（備份 …）」 | 上一次套用中途中斷（備份還在）；**所有模組**都不能套，完整包也不行 | 不要自己處理：回報使用者，照 §5 用套用腳本的回滾模式回到套用前（稽核 D S5-S2） |
+| `module_preflight_failed` 而訊息是「有中斷的套用（備份 …）」 | 上一次套用中途中斷（備份還在）；**所有模組**都不能套，完整包也不行 | 不要自己處理：回報使用者；使用者同意後照 §5 用套用腳本的回滾模式回到套用前，`-ModuleKey`／`-Backup` 用訊息裡的模組與備份（稽核 D S5-S2） |
 | `module_preflight_failed` 而訊息是「有中斷的套用」，照 §5 回滾時又回 `backup_corrupt`（紀錄檔 apply.json 讀不懂） | 套用被擋、回滾也做不了：只能人工處理（稽核 D W-O1） | **回報開發機，由開發機指示人工檢查；正式機 Claude 不可自行刪除或修改任何紀錄檔**（`<ROOT>\module_backups\` 底下的任何檔都不要動） |
 | `module_preflight_failed`、`duplicate_version`、`bad_args`、`package_invalid`、`package_missing`、`apply_locked`、`apply_locked_stale` | 沒有套用（正式機沒被碰） | 原文回報；`package_missing`＝`-PackagePath` 指錯（檢查 staging 路徑後重下指令，這一項可以自己修正再跑一次）；`apply_locked_stale` 要人確認後才可以刪鎖檔 |
 | `not_prod_machine` | 腳本不是在正式機安裝目錄執行（身分守門） | **停**：回報使用者；不要把腳本複製到別處或改腳本裡的路徑 |
@@ -87,9 +88,25 @@
 
 ### 5. 手動回滾（只在使用者要求時）
 
-- 單模組包的回滾要停服、還原、重啟、健康檢查——**用套用腳本的回滾模式**：`〈A 定稿後填：apply_module_update.ps1 的回滾參數〉`。
+單模組包的回滾要停服、還原、重啟、健康檢查——**用套用腳本的回滾模式**（使用者在對話裡確認過才加 `-Yes`；`-Backup` 省略＝最新一份）：
+
+1. **只回程式**（資料庫保留；預設用這個）：
+   `powershell -ExecutionPolicy Bypass -File <ROOT>\backend\tools\apply_module_update.ps1 -Rollback -ModuleKey 〈模組代號〉 [-Backup <備份名>] -Yes | Tee-Object -FilePath "$env:USERPROFILE\Desktop\apply_module_update_rollback_〈模組代號〉.log"`
+2. **連資料庫**（資料庫還原到那次套用前的快照）：同上，後面加 `-IncludeDatabase -ConfirmDatabaseOverwrite`（兩個都要給；`-Yes` 不算數）。
+   - **套用之後寫入的所有資料都會回到快照當時**（不只這個模組的資料）。先把這句話原文告訴使用者，**使用者明確同意連資料庫還原**才可以加這兩個旗標。
+   - 那次套用新增了 migration 而只回程式 ⇒ 腳本在停服前拒絕（`module_rollback_refused`，`rollback_code`＝`needs_database`）：回報使用者，由使用者決定要不要改用第 2 種；不要自己加旗標重跑。
+
+結果：最後一行 `::RESULT:: …`，以及 `<ROOT>\backend\logs\apply_module_update_<時間>.result.json`（與套用同一種檔名），照下表：
+
+| status | 意思 | 下一步 |
+|---|---|---|
+| `module_rollback_ok` | 已回到套用前的版本（或套用前沒有這個模組），服務正常 | 做第 4 節寫回；再跑第 1 節 `list --json` 確認版本 |
+| `module_rollback_refused` | 沒有回滾，一個檔都沒動（停服後才被拒的，服務已照原樣重啟）。`rollback_code`：`needs_database`＝見上（要連資料庫）；`db_snapshot_missing`＝找不到那次套用前的資料庫快照、無法連資料庫還原；`module_changed`／`state_changed`／`base_changed`／`interrupted_not_latest`＝之後又套過別的模組包或完整包、或不是最新一份；`backup_corrupt`／`no_backup`／`backup_not_found`＝備份壞了或不在 | 原文回報，**連同 `rollback_code`**；`backup_corrupt` 照 §3 表 W-O1 那一列（不動 `module_backups`）；`bad_args` 等其他 status 也原文回報 |
+| `module_rollback_unhealthy` | 程式已回滾，但回滾後的健康檢查沒過（或資料庫沒還原成功） | **立刻**回報使用者；用瀏覽器確認系統能不能用 |
+| `module_restore_failed` | 回滾中途可能半套（`rollback_code`：`restore_mismatch`／`unexpected`）：該模組已被**停用**、其他功能照常 | 立刻回報，連同 `rollback_code`；等開發機指示 |
+
 - 不要直接執行 `module_update.py rollback`（它只還原檔案，不停服、不重啟、不還原資料庫）。
-- 回滾會被拒絕的情形（原文回報即可）：之後又套過別的模組包或完整包（`state_changed`、`base_changed`）、備份損壞（`backup_corrupt`）。
+- 任何非 `module_rollback_ok` 都**不要重跑**；等開發機看過原因。
 
 ### 6. 不要做的事
 
@@ -103,4 +120,4 @@
 
 - **S4-O1**：若日後正式機有了本機儀表板（D6-O1），舊版儀表板不認得 `kind`，會把模組包當一般包列出；按下套用時，舊版 `delivery.verify_staged` 找不到 `apply_update.ps1` ⇒ 驗證不過、擋下（fail-closed），不會誤套。新版儀表板照 `verified["kind"]` 分派。
 - 填範本的資料來源：包名、`module.*`、`min_apply_module_script` 都在交付資料夾 `packages\<包名>\delivery.json`；`〈舊版〉` 從開發機 prod-status 的 `delivered.moduleOverlays`（有覆蓋時）或完整包的 lock 取得。
-- `〈A 定稿後填〉`：A 的 S5（wip/a-module-apply-ps1）定案後，補上回滾模式的參數與 log 檔名格式。
+- ~~`〈A 定稿後填〉`：A 的 S5 定案後，補上回滾模式的參數與 log 檔名格式。~~ 已填（2026-09-29 B，依 A 定稿 1128a3ac；結果檔同套用 `logs\apply_module_update_<RunStamp>.result.json`，桌面 log 用 `Tee-Object`）。

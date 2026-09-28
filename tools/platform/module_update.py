@@ -353,9 +353,12 @@ def preflight(root, pkg, allow_downgrade=False, require_base=False):
     pending = pending_interrupted_any(root)
     if pending:
         k, st = pending[-1]
-        raise UpdateError("模組 %s 有中斷的套用（備份 %s）⇒ 先用套用腳本的回滾模式回到套用前（停服、還原、重啟、健檢；"
-                          "見 docs/platform/MODULE-UPDATE-PROD-INSTRUCTIONS.md §5），再套用任何模組"
-                          "（lock 與狀態檔是全安裝共用；稽核 D S3R-M1／P8）" % (k, st), code="interrupted_apply_pending")
+        raise UpdateError("模組 %s 有中斷的套用（備份 %s）⇒ 先用套用腳本的回滾模式回到套用前（停服、還原、重啟、健檢）：使用者同意後執行 "
+                          "`powershell -ExecutionPolicy Bypass -File <ROOT>\\backend\\tools\\apply_module_update.ps1 "
+                          "-Rollback -ModuleKey %s -Backup %s -Yes`；那次套用新增了 migration 會被拒（needs_database），"
+                          "要連資料庫還原須使用者同意後再加 -IncludeDatabase -ConfirmDatabaseOverwrite"
+                          "（見 docs/platform/MODULE-UPDATE-PROD-INSTRUCTIONS.md §5）；回滾完才可以再套用任何模組"
+                          "（lock 與狀態檔是全安裝共用；稽核 D S3R-M1／P8）" % (k, st, k, st), code="interrupted_apply_pending")
     inst_core = _core_version(backend)
     if not _core_ok(entry.get("core"), inst_core):
         raise UpdateError("模組 %s 要求 core %s，安裝目錄是 %s ⇒ 不相容" % (key, entry.get("core"), inst_core), code="core_incompatible")

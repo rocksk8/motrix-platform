@@ -160,8 +160,11 @@ def make_plan(root, pkg, max_files):
         raise Refuse("部署包的 modules.lock.json kind=%r：apply_update 只套完整包（full_package）" % lock.get("kind"))
     pending = interrupted_module_applies(root)
     if pending:
-        raise Refuse("安裝目錄有中斷的單模組套用（%s）：先用 apply_module_update.ps1 的回滾模式回到套用前"
-                     "（見 docs/platform/MODULE-UPDATE-PROD-INSTRUCTIONS.md §5），再套完整包（B55／稽核 D P8：lock 與狀態檔是全安裝共用）"
+        raise Refuse("安裝目錄有中斷的單模組套用（%s）：先用套用腳本的回滾模式回到套用前——使用者同意後執行 "
+                     "`powershell -ExecutionPolicy Bypass -File <ROOT>\\backend\\tools\\apply_module_update.ps1 "
+                     "-Rollback -ModuleKey <模組> -Backup <備份> -Yes`（模組／備份即上面的 <模組>/<備份>；新增了 migration 會被拒，"
+                     "要連資料庫還原須使用者同意後再加 -IncludeDatabase -ConfirmDatabaseOverwrite；"
+                     "見 docs/platform/MODULE-UPDATE-PROD-INSTRUCTIONS.md §5），再套完整包（B55／稽核 D P8：lock 與狀態檔是全安裝共用）"
                      % "、".join("%s/%s" % kv for kv in pending))
     base_path = os.path.join(root, BASELINE_REL)
     baseline = _read_json(base_path) if os.path.isfile(base_path) else None

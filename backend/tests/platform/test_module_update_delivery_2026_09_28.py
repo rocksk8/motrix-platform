@@ -626,7 +626,11 @@ def test_unreadable_apply_record_counts_as_interrupted(src, tmp_path):
     with pytest.raises(MU.UpdateError) as ei:
         MU.apply(root, pkg)
     assert ei.value.code == "interrupted_apply_pending"
-    assert "module_update" not in str(ei.value) and "回滾模式" in str(ei.value), "S5-S2：不叫人直接跑 module_update rollback"
+    # 〔更正（B55F-M1 填入確切指令，2026-09-29 B）：原寫 `"module_update" not in`——確切指令 apply_module_update.ps1 本身含這個子字串；改驗「不叫人跑 module_update.py」且帶上確切的回滾指令〕
+    msg = str(ei.value)
+    assert "module_update.py" not in msg and "回滾模式" in msg, "S5-S2：不叫人直接跑 module_update rollback"
+    assert "apply_module_update.ps1 -Rollback -ModuleKey zz -Backup 20260928_190500 -Yes" in msg, "B55F-M1：訊息帶確切指令（模組與備份）"
+    assert "-IncludeDatabase -ConfirmDatabaseOverwrite" in msg and "needs_database" in msg
     with pytest.raises(MU.UpdateError) as ei2:
         MU.rollback(root, "zz", "20260928_190500")
     assert ei2.value.code == "backup_corrupt"
