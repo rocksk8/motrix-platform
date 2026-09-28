@@ -753,6 +753,8 @@ def download_invoice_voucher_pdf(voucher_no: str, authorization: str = Header(No
         pdf_bytes = generate_invoice_voucher_pdf_bytes(voucher_no)
     except (ValueError, RuntimeError) as e:
         raise HTTPException(503, str(e))
+    except HTTPException:          # 第二道 428（COMPANY-SETUP-GATE §5）不可以被下面的 except Exception 吞成 500
+        raise
     except Exception as e:
         tid = trace_id()
         logger.exception("invoice_voucher pdf failed trace=%s", tid)

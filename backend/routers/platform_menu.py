@@ -110,6 +110,33 @@ def sidebar_js_source(page_map, frontend_dir):
     return "window.MOTRIX_MENU = %s;" % _js_literal(menu_declaration(page_map)) + chr(10) + body
 
 
+#: 本公司資料未設定時側欄唯一留下的項目（COMPANY-SETUP-GATE §4.2）
+_SETUP_ONLY_HREF = "company-profile-settings.html"
+
+
+def _company_setup_brief(sa: bool) -> dict:
+    """側欄用的設定狀態：configured＝True／False／None（判定失敗）；grace＝放行中。判定不丟例外（gate）。"""
+    from helpers import company_setup as _cs
+    conn = get_db()
+    try:
+        kind, _st = _cs.gate(conn)
+        conn.commit()
+    finally:
+        conn.close()
+    return {"configured": None if kind == _cs.GATE_UNDETERMINED else kind == _cs.GATE_OK,
+            "grace": kind == _cs.GATE_GRACE, "canFix": sa, "blocked": kind == _cs.GATE_REQUIRED}
+
+
+def _setup_only(groups: list) -> list:
+    """未設定 ⇒ 只留設定頁入口（沒權限看到它的人 ⇒ 空選單；說明頁由 notif.js 導過去）。"""
+    out = []
+    for g in groups or []:
+        items = [it for it in (g.get("items") or []) if str(it.get("href") or "") == _SETUP_ONLY_HREF]
+        if items:
+            out.append(dict(g, items=items))
+    return out
+
+
 @router.get("/api/platform/menu")
 def platform_menu(authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -120,8 +147,16 @@ def platform_menu(authorization: str = Header(None)):
     mod_items = core_menu.module_items({m.key: m.manifest for m in registry.loaded()})
     l1, sa = core_menu.load_l1(), user.get("role") == "superadmin"
     groups = core_menu.build(l1, mod_items, modules, sa)
+    layout = _layout_for(user, groups, mod_items)
+    setup = _company_setup_brief(sa)
+    if setup["blocked"]:
+        # 本公司資料未設定（COMPANY-SETUP-GATE §4.2）：其他頁的 API 全部 428 ⇒ 側欄只留設定頁入口
+        groups = _setup_only(groups)
+        if isinstance(layout, dict):
+            layout = dict(layout, groups=_setup_only(layout.get("groups")))
     return {"groups": groups,
             "denied": core_menu.denied(l1, mod_items, modules, sa),
-            "layout": _layout_for(user, groups, mod_items),
+            "companySetup": setup,
+            "layout": layout,
             # 完整的頁面⇒模組（含已安裝未載入；登入後才給，C4-O3）：前端藏頁內連結、直接打網址的後備提示用
             "pageModules": _page_modules(PAGE_MAP)}

@@ -335,6 +335,15 @@ def test_company_gate_call_sites_and_order():
     assert r'$gateCli = Join-Path $BackendDir "tools\company_setup_cli.py"' in m, "模組包不帶 tools ⇒ 用安裝目錄那份"
 
 
+def test_company_bank_note_is_verbatim_and_runs_after_the_preflight():
+    """第二十一班（E4S3-S1）：請款單匯款欄位註記與 apply_update 逐字相同；預檢通過之後、停服之前印（只報不擋）。"""
+    fa = _fn(_src("apply_update.ps1"), "Write-CompanyBankNote")
+    assert fa is not None and fa == _fn(_src(NEW), "Write-CompanyBankNote")
+    m = _main_flow()
+    note = m.index("$null = Write-CompanyBankNote $gatePre.Text")
+    assert m.index('Invoke-CompanySetupCli $gateCli @("preflight"') < note < m.index("Stop-InstallService")
+
+
 def test_e4_statuses_are_in_the_domain_once_e4_is_merged():
     domain = _dashboard_domain()
     if not (E4_STATUSES <= domain):

@@ -47,6 +47,10 @@ V9_LOCATIONS = {
     "SERVER_LOG": os.path.join(BACKEND, "logs", "server.log"),
     "HEARTBEAT_CONFIG": os.path.join(BACKEND, "heartbeat_config.json"),
     "LICENSE_PATH": os.path.join(BACKEND, "license.key"),
+    # 2026-09-28（E 線，本公司資料設定閘門）：新位置，V9 沒有這三個檔（位置本身不動既有安裝）
+    "INSTALL_IDENTITY_FILE": os.path.join(BACKEND, ".install_identity"),
+    "COMPANY_CONFIRMATION_FILE": os.path.join(BACKEND, "company_confirmation.sig"),
+    "COMPANY_SETUP_GRACE_FILE": os.path.join(BACKEND, "company_setup_grace.json"),
     "CERT_PEM": os.path.join(BACKEND, "certs", "cert.pem"),
     "INITIAL_ADMIN_CREDENTIALS": os.path.join(BACKEND, ".initial_admin_credentials.txt"),
     "INITIAL_DEMO_CREDENTIALS": os.path.join(BACKEND, ".initial_demo_credentials.txt"),

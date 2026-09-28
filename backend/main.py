@@ -171,6 +171,30 @@ _MUST_CHANGE_PW_ALLOWED = {
     "/api/ping",
 }
 
+# 本公司資料未設定時仍可用的 API（COMPANY-SETUP-GATE §4.1，D 稽核 CG-M2）：**精確的 (方法, 路由樣板)**，每條附理由；
+# 不收萬用字元、不收描述性條目。其餘 /api 一律 428（預設擋：新 API 自動被擋，不必記得加）。
+# 不在這裡的：備份還原、模組管理、使用者管理、部署與更新、所有業務與報表——未設定時要用 ⇒ 經 72 小時暫時放行。
+# 守門：tests/test_company_setup_gate_2026_09_28.py（每條存在於路由表、方法相符、理由 ≥ 20 字；_MUST_CHANGE_PW_ALLOWED 與
+# licensing.LICENSE_EXEMPT_PATHS 都被涵蓋）。_PUBLIC_API_PATHS 在登入檢查之前就放行，本來就不經過這道閘門。
+_COMPANY_SETUP_ALLOWED = {
+    ("POST", "/api/auth/login"): "帳號本身必要：登入（同「必須先改密碼」白名單）",
+    ("POST", "/api/auth/logout"): "帳號本身必要：登出（同「必須先改密碼」白名單）",
+    ("GET", "/api/auth/me"): "帳號本身必要：前端取目前使用者與角色，決定導向設定頁或說明頁",
+    ("PATCH", "/api/auth/change-password"): "帳號本身必要：改密碼（同「必須先改密碼」白名單；首次登入要先改密碼）",
+    ("GET", "/api/ping"): "健康檢查：部署工具與前端判斷服務是否在線（不含任何資料）",
+    ("GET", "/api/license/status"): "授權自救（licensing.LICENSE_EXEMPT_PATHS）：兩道閘門同時生效時要能看到授權狀態",
+    ("GET", "/api/settings/company-profile"): "設定頁讀取本公司資料（最高管理員才看得到完整內容，端點自己驗權限）",
+    ("PUT", "/api/settings/company-profile"): "設定頁存檔與「確認本公司資料」（限最高管理員，端點自己驗權限）",
+    ("PUT", "/api/settings/branding/{kind}"): "設定頁上傳品牌圖（LOGO／favicon；限最高管理員，端點自己驗權限）",
+    ("GET", "/api/settings/branding"): "設定頁「品牌與公司名稱」卡讀取目前的品牌圖狀態（限最高管理員，端點自己驗權限）",
+    ("DELETE", "/api/settings/branding/{kind}"): "設定頁品牌圖「恢復預設」（刪除上傳的圖；限最高管理員，端點自己驗權限）",
+    ("GET", "/api/settings/company-setup/status"): "前端判斷要導向設定頁還是說明頁、以及橫幅內容",
+    ("GET", "/api/platform/menu"): "側欄：未設定時只顯示設定頁入口（回應內容已依權限過濾）",
+    ("GET", "/api/auth/totp/status"): "帳號安全狀態（設定頁頂端提示是否已啟用兩階段驗證）",
+    ("POST", "/api/auth/totp/setup"): "帳號本身必要：首次綁定兩階段驗證（產生金鑰）",
+    ("POST", "/api/auth/totp/enable"): "帳號本身必要：首次綁定兩階段驗證（確認驗證碼後啟用）",
+}
+
 
 # 慢請求記錄（2026-09-10）
 #
@@ -384,6 +408,36 @@ async def license_gate_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+from helpers import company_setup as _company_setup                     # noqa: E402
+_COMPANY_SETUP_ALLOWED_COMPILED = _company_setup.compile_allowed(_COMPANY_SETUP_ALLOWED)
+
+
+@app.exception_handler(_company_setup.CompanySetupRequired)
+async def _company_setup_required_handler(request: Request, exc):
+    """輸出端第二道（COMPANY-SETUP-GATE §5）：與中介層同形的 428 JSON（`code` 在最外層，notif.js 以它判斷）。"""
+    body = {"detail": exc.detail, "code": exc.code, "canFix": False,
+            "settingsUrl": _company_setup.SETTINGS_URL}
+    if exc.missing:
+        body["missing"] = exc.missing
+    return JSONResponse(status_code=428, content=body)
+
+
+def _company_setup_gate_kind(token: str) -> str:
+    """這個請求看到的閘門狀態。demo 帳號與正式帳號同一套判定（demo 登入時種虛構示範公司＋demo 專用確認紀錄，
+    `gate` 依 db.is_demo_mode 取 demo 庫判定；〔~~第三段前 demo 先不擋~~ 段③ 拿掉豁免〕）。
+    判定一律經 `_company_setup.gate`（呼叫時才取模組屬性：測試換得掉）；它不丟例外。"""
+    conn = get_db()
+    try:
+        kind, _st = _company_setup.gate(conn)
+        conn.commit()
+        return kind
+    except Exception:                                                  # noqa: BLE001
+        logger.exception("company setup gate failed")
+        return _company_setup.GATE_UNDETERMINED
+    finally:
+        conn.close()
+
+
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     if request.method == "OPTIONS":
@@ -479,11 +533,21 @@ async def auth_middleware(request: Request, call_next):
         _demo_why = _module_startup.demo_absent_reason(path)
         if _demo_why:
             return JSONResponse(status_code=404, content={"detail": _demo_why})
+    # 本公司資料設定閘門（COMPANY-SETUP-GATE §4.1、§3.6）：未設定 ⇒ 白名單外一律 428；判定失敗 ⇒ 放行＋標頭（Q7＝C）
+    _gate_kind = _company_setup_gate_kind(token)
+    if _gate_kind == _company_setup.GATE_REQUIRED and not _company_setup.is_allowed(
+            _COMPANY_SETUP_ALLOWED_COMPILED, request.method, path):
+        return JSONResponse(status_code=428, content={
+            "detail": _company_setup.MSG_REQUIRED, "code": _company_setup.CODE_REQUIRED,
+            "canFix": row["role"] == "superadmin", "settingsUrl": _company_setup.SETTINGS_URL})
     response = await call_next(request)
     # 操作軌跡（2026-09-14）：記在**回應之後**才拿得到狀態碼——被擋下來的操作
     # （403/404）跟成功的一樣重要，甚至更重要。
     _record_request_trail(row["id"], now_dt, request.method, path,
                           request.headers.get("Referer", ""), response.status_code)
+    if _gate_kind in (_company_setup.GATE_UNDETERMINED, _company_setup.GATE_GRACE):
+        response.headers[_company_setup.HEADER] = (
+            "status_error" if _gate_kind == _company_setup.GATE_UNDETERMINED else "grace")
     return response
 
 
@@ -640,6 +704,24 @@ def _startup_integrity_check():
 
 
 _startup_integrity_check()
+
+
+def _startup_company_setup():
+    """本公司資料設定閘門（COMPANY-SETUP-GATE §3.4、§6.1）：安裝識別檔不在就建（庫裡已有確認紀錄 ⇒ ERROR＋告警）；
+    既有安裝升級時補一次確認紀錄（每庫一次）。兩支都不丟例外；這裡再包一層：閘門的問題不可以讓服務起不來。"""
+    from helpers import company_setup as _cs
+    conn = get_db()
+    try:
+        _cs.startup_install_check(conn)
+        _cs.backfill_once(conn)
+        conn.commit()
+    except Exception:                                        # noqa: BLE001
+        logger.exception("本公司資料設定閘門啟動檢查失敗（服務照常啟動）")
+    finally:
+        conn.close()
+
+
+_startup_company_setup()
 init_default_admin()
 init_demo_account()
 flag_weak_passwords()

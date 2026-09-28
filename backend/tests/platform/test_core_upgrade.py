@@ -503,10 +503,11 @@ def test_m1_cli_verify_failure_suggests_rollback_with_commands(inst, new_src, tm
 # ── B-2（AUDIT-X-C-batch1）：鍵存在、值是空字串 ⇒ 補值不是改寫 ─────────────────
 
 def test_b2_blank_string_fill_passes_verify(inst, new_src, tmp_path):
-    _set_profile(inst, {"name": "允碩整合集創股份有限公司", "tax_id": "", "contact_info": "", "phone": "  "})
+    # 〔2026-09-28 COMPANY-SETUP-GATE §2-④：本公司安裝只認統編 ⇒ ~~名稱在、統編空白~~ 改為統編在、名稱／電話是空白字串〕
+    _set_profile(inst, {"name": "", "tax_id": U.V9_COMPANY_DEFAULTS["tax_id"], "contact_info": "", "phone": "  "})
     m = _convert(inst, new_src, str(tmp_path / "bk"))
     filled = U.fill_company_profile_blanks(_db(inst))["filled"]
-    assert {"tax_id", "phone"} <= set(filled)
+    assert {"company_name", "phone"} <= set(filled)
     assert U.verify_conversion(inst, m) == []
 
 
@@ -897,3 +898,14 @@ def test_every_setting_written_at_startup_is_classified():
     assert written, "掃不到任何寫入（正對照：至少有每日掃描的節流日期）"
     classified = U.RUNTIME_STATE_SETTINGS | U.INSTALL_ONCE_SETTINGS      # H10：全新安裝才寫一次的鍵另一類
     assert written <= classified, "啟動時寫入、卻沒有分類的設定鍵：%s" % sorted(written - classified)
+
+
+def test_name_fragment_alone_does_not_count_as_our_install(tmp_path):
+    """COMPANY-SETUP-GATE §2-④：公司名含本公司名稱片段、統編不同 ⇒ 不補（原本名稱片段也算）。字面值由常數推導，不寫進題目。"""
+    name = U.V9_COMPANY_DEFAULTS["company_name"][:2] + "測試工程行"
+    db = _profile_db(tmp_path, {"name": name, "tax_id": "12345675"})
+    r = U.fill_company_profile_blanks(db)
+    assert r["filled"] == {} and "看不出是本公司安裝" in r["skipped"]
+    assert _profile(db) == {"name": name, "tax_id": "12345675"}
+    # 正對照：統編相同（含分隔符）⇒ 認得
+    assert U._is_our_install({"taxId": U.V9_COMPANY_DEFAULTS["tax_id"][:4] + "-" + U.V9_COMPANY_DEFAULTS["tax_id"][4:]})

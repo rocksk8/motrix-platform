@@ -29,7 +29,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # 本腳本的版本（apply_module_update.version.json 登記它與內容雜湊；包的 min_apply_module_script 比的是它）。
-$ApplyModuleScriptVersion = "2026-09-28c"
+$ApplyModuleScriptVersion = "2026-09-29a"
 
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $Port = 666
@@ -258,6 +258,32 @@ function Invoke-CompanySetupCli([string]$Cli, [string[]]$CliArgs, [int]$TimeoutS
     } finally {
         Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
     }
+}
+
+# ── 請款單匯款欄位註記（D E4S3-S1：只報不擋）──────────────────────────────
+# 讀 company_setup_cli 那一行 JSON 的 payment_bank_missing：缺 ⇒ [WARN]＋`::NOTE:: company_bank_missing=<欄位>`
+# （升級後請款單 PDF 會 428，要先請使用者在設定頁補齊）；齊全 ⇒ `::NOTE:: company_bank=ok`；讀不到 ⇒ `company_bank=unknown`。
+# 不改 ::RESULT::（欄位順序與值域固定）；本函式不丟例外、不影響升級。
+function Write-CompanyBankNote([string]$CliText) {
+    $note = "unknown"
+    try {
+        $line = @(("$CliText" -split "\r?\n") | Where-Object { $_.Trim().StartsWith("{") }) | Select-Object -Last 1
+        if ($line) {
+            $obj = $line | ConvertFrom-Json
+            $miss = $obj.payment_bank_missing
+            if ($null -ne $miss) {
+                $items = @($miss | ForEach-Object { [string]$_ })
+                if ($items.Count -gt 0) { $note = "missing" } else { $note = "ok" }
+            }
+        }
+    } catch { $note = "unknown" }
+    if ($note -eq "missing") {
+        Write-Host ("[WARN]   請款單匯款欄位未齊全（" + ($items -join "、") + "）：升級後請款單 PDF 會被擋（428 company_bank_required），請先在公司資料設定補齊") -ForegroundColor Yellow
+        Write-Host ("::NOTE:: company_bank_missing=" + ($items -join ","))
+    } else {
+        Write-Host ("::NOTE:: company_bank=" + $note)
+    }
+    return $note
 }
 
 function Stop-InstallService {
@@ -583,6 +609,7 @@ if (Test-Path $prodDbForGate) {
         Fail "本公司資料會是「未設定」或無法判定（原因：$($gatePre.Reason)），中止（正式機尚未被觸碰）；處置見 COMPANY-SETUP-GATE §6.2／§6.3。" "refused_company_setup"
     }
     Ok "  本公司資料設定預檢通過（$($gatePre.Reason)）。"
+    $null = Write-CompanyBankNote $gatePre.Text
 } else {
     Warn "  找不到正式庫 motrix_erp.db，略過本公司資料設定預檢。"
 }

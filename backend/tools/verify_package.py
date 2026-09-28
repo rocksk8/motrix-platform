@@ -126,6 +126,9 @@ BAD = [
     # 2026-09-25：開發機標記檔帶進部署包 ⇒ 正式機不寄信／不上雲（而且沒有錯誤）
     ("dev-marker", "開發機標記檔",
      lambda r, n: n.lower() in (".no_email_send", ".no_cloud_archive")),
+    # 2026-09-28（COMPANY-SETUP-GATE §3.4、CG2-M1）：本公司資料閘門的安裝設定檔帶進包 ⇒ 客戶安裝沿用開發者的安裝識別／確認／放行
+    ("company-setup", "本公司資料閘門的安裝設定檔",
+     lambda r, n: n.lower() in (".install_identity", "company_confirmation.sig", "company_setup_grace.json")),
 ]
 
 # ---- 不該給客戶的「能力」（不是檔案欄）----

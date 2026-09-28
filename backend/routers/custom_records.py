@@ -307,6 +307,8 @@ def preview_custom_output(key: str, payload: dict = Body(...), format: str = Que
             resp = HTMLResponse(html)
     except CM.CustomModuleError as e:
         return JSONResponse(status_code=422, content={"detail": str(e), "problems": e.problems})
+    except HTTPException:          # 第二道 428（COMPANY-SETUP-GATE §5）不可以被下面的 except Exception 吞成 500
+        raise
     except Exception as e:                                   # noqa: BLE001 — 預覽是唯讀的輔助：半成品草稿不可以讓它 500
         # log 與回應都只帶例外型別＋位置（檔:行:函式）：例外訊息可能含草稿內容，stack 不回給前端
         import logging

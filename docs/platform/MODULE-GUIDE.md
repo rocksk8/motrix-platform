@@ -116,6 +116,7 @@
 - LOGO／深色底 LOGO／favicon 一律用 `GET /api/system/branding/<logo|logo-dark|favicon>`（沒上傳 ⇒ 回 `frontend/static` 的預設檔），不直接引用 `static/logo*.png`、`static/favicon.png`。上傳與驗證只經 L1 `helpers.branding`（檔頭判斷 PNG／JPEG／WebP、拒收 SVG、重新編碼去 metadata）。守門：同下一條的掃描（樣式「直接引用預設圖檔」）；e2e `test_e2e_branding_2026_09_27.py` 驗登入頁、上方列、分頁圖示真的換圖。
 - 產品碼（backend、frontend、tools；不含 tests 與 .md）不可以出現本公司的公司名、統編、電話、email／網域、地址、座標、人員姓名與 email。必須留著的（凍結 migration、只在本公司安裝才動作的升級回填、安全黑名單、升級演練資料、已出貨的版本紀錄）逐筆登記在 `tests/platform/_our_company_literals.py` 的 `ALLOWED`，寫次數、類別與理由；頁面不可以登記。守門：`tests/platform/test_no_our_company_literals.py`（正對照：凍結 migration 的統編判準要被掃到；反向控制：合成樹、次數不符、登記頁面、類別不在清單、登記過期都要紅）。
 - 產品名「MOTRIX」不在此限（使用者裁示 2026-09-27：保留）。
+- 〔補 2026-09-28（COMPANY-SETUP-GATE §5、§7-②）〕**含本公司資料的輸出要經第二道**：產生前呼叫 `helpers.company_identity.require_for_output()`，或用本來就會問它的輸出 helper（`company_name`／`company_heading`／`contact_line`／`name_pair`／`footer_line`，pdf_gen 的 `_identity_head／_identity_foot／_identity_foot_short`）；未設定／判定失敗 ⇒ `CompanySetupRequired`（428）。端點裡有 `except Exception` 包住產生的，前面先 `except HTTPException: raise`（否則 428 被吞成 500）。不含本公司資料的輸出（清單、使用者上傳原檔、已存檔 PDF）登記在 `tests/test_company_setup_output_points_2026_09_28.py` 的 `NO_COMPANY_DATA`（理由 ≥ 20 字）。非 HTTP 的輸出（排程信）自己呼叫並在被擋時告警、不前進。守門即該檔（掃描器正對照：已知 20 個輸出點；反向控制：合成的 XLSX 端點、拿掉 `_identity_head` 的第二道）。
 
 ## 4. 資料庫與 migration
 

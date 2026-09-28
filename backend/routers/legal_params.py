@@ -45,13 +45,16 @@ def get_privacy_notice(purpose: str = "contractor", authorization: str = Header(
     _require_user(authorization)
     if purpose not in pn.PURPOSES:
         raise HTTPException(400, "不認得的告知用途：" + str(purpose))
+    # 第二道（COMPANY-SETUP-GATE §5）：告知文字含本公司名稱、會被列印 ⇒ 未設定／判定失敗 ⇒ 428
+    from helpers.company_identity import company_name
+    name = company_name()
     profile = _get_setting("company_profile", {}) or {}
     text = pn.purpose_notice_text(profile, purpose)
     key = pn.PURPOSES[purpose][1]
-    return {"company": profile.get("name", ""), "text": text, "hash": pn.notice_hash(text),
+    return {"company": name, "text": text, "hash": pn.notice_hash(text),
             "purpose": purpose, "profileKey": key,
             "isTemplate": not str(profile.get(key) or "").strip(),
-            "template": pn.purpose_template_for(purpose, profile.get("name", ""))}
+            "template": pn.purpose_template_for(purpose, name)}
 
 
 @router.get("/api/legal-params/privacy-notice/texts/{notice_hash}")

@@ -120,21 +120,10 @@ def _company_name():
     而 `pdf_gen.py:510` 逐字：「`pdf_gen.py` 不可以知道 `company_profile` 的
     地址結構」⇒ 沿用那個邊界。
     """
-    prof = _get_setting("company_profile", {})
-    # ⚠️ 舊資料可能是**字串**（某些版本把整包 JSON 當字串存）⇒ 兩種都吃。
-    #    🔑 而 `isinstance` 判斷寫在這裡，不是靠 try 去撞 —— 用例外做流程控制
-    #       正是上面那個 bug 能藏起來的原因。
-    if isinstance(prof, str):
-        try:
-            prof = json.loads(prof or "{}")
-        except ValueError:
-            logger.warning("company_profile 的值不是合法 JSON，抬頭留空")
-            return ""
-    if not isinstance(prof, dict):
-        logger.warning("company_profile 的型別是 %s（預期 dict），抬頭留空",
-                       type(prof).__name__)
-        return ""
-    return prof.get("name") or ""
+    # 〔COMPANY-SETUP-GATE §1.2（2026-09-28）：~~只讀 company_profile["name"]~~ 改走 company_identity：
+    #   主要據點／別名都認，且先過第二道（未設定／判定失敗 ⇒ 428，傳票不產生）〕
+    from helpers.company_identity import company_name
+    return company_name()
 
 
 def split_attachments(rows):

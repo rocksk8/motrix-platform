@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## 1.0.10 — 2026-09-28（暫用號，列車取號；E4 wip/e-company-gate-impl 第三段）
+- 本公司資料設定閘門第二道（COMPANY-SETUP-GATE §5；D CG5-M1）：開票申請、請款單 PDF 下載端點：`except Exception` 前先 `except HTTPException: raise`（第二道的 428 不被吞成 500）；請款單另驗本公司匯款三欄（L1 pdf_gen `_require_payment_bank`，缺 ⇒ 428 `company_bank_required`）
+
 ## 1.0.9 — 2026-09-28（第十四班列車取號，原暫用 1.0.8；B；wip/b-payreq：請款流程）
 - 出納「請款待付款」頁籤：`GET /api/cashier/pending-payables`（IP-100 多提供者合併）、`POST /api/cashier/pending-payables/{來源}/{key}/pay`（登錄付款經提供者寫回付款日；admin+／出納，finance 只能看）；M01 不在 ⇒ 200 available:false＋原因。既有 payable-queue（IP-14）與 bonus-queue（IP-8）不動
 ## 1.0.8 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）

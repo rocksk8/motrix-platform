@@ -10,6 +10,12 @@ backend/.initial_demo_credentials.txt
 # license.key 本身是 per-installation（同 heartbeat_config.json 的性質），
 # 由簽發流程產生後放進客戶機器，不是程式碼的一部分。
 backend/license.key
+# 本公司資料設定閘門的安裝設定檔（COMPANY-SETUP-GATE §3.4；per-installation，同 license.key）
+backend/.install_identity
+backend/.install_identity.tmp
+backend/company_confirmation.sig
+backend/company_setup_grace.json
+backend/company_setup_grace.json.tmp
 backend/tools/_license_private_key*.pem
 **/*_private_key*.pem
 

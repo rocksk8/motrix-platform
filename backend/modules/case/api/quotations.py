@@ -5165,6 +5165,8 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
         pdf_bytes = generate_pdf_bytes(quote_no, internal=internal)
     except ValueError as e:
         raise HTTPException(503, str(e))
+    except HTTPException:          # 第二道 428（COMPANY-SETUP-GATE §5）不可以被下面的 except Exception 吞成 500
+        raise
     except Exception as e:
         tid = trace_id()
         logger.exception("quotation pdf failed trace=%s", tid)
@@ -5331,6 +5333,8 @@ def download_case_closing_report_pdf(quote_no: str, authorization: str = Header(
         pdf_bytes = generate_case_closing_pdf_bytes(quote_no)
     except ValueError as e:
         raise HTTPException(503, str(e))
+    except HTTPException:          # 第二道 428（COMPANY-SETUP-GATE §5）不可以被下面的 except Exception 吞成 500
+        raise
     except Exception as e:
         tid = trace_id()
         logger.exception("quotation case-closing pdf failed trace=%s", tid)
@@ -5362,6 +5366,8 @@ def download_project_execution_report_pdf(quote_no: str, authorization: str = He
         pdf_bytes = generate_project_execution_report_pdf_bytes(quote_no)
     except ValueError as e:
         raise HTTPException(503, str(e))
+    except HTTPException:          # 第二道 428（COMPANY-SETUP-GATE §5）不可以被下面的 except Exception 吞成 500
+        raise
     except Exception as e:
         tid = trace_id()
         logger.exception("quotation project-execution-report pdf failed trace=%s", tid)

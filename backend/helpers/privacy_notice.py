@@ -114,11 +114,18 @@ def template_for(company_name: str) -> str:
     return TEMPLATE.replace(COMPANY_PLACEHOLDER, (company_name or "").strip() or "本公司")
 
 
+def _company_name_of(profile: dict) -> str:
+    """範本代入的公司名：與單據同一套解析（company_identity，主要據點→別名→`name`；COMPANY-SETUP-GATE §1.2）。
+    只讀傳進來的 profile（純函式）；輸出端的第二道在端點（routers/legal_params.py）。"""
+    from helpers.company_identity import identity_from_profile
+    return identity_from_profile(profile or {}).get("company_name", "")
+
+
 def notice_text(profile: dict) -> str:
     """公司自訂的告知文字；空白 ⇒ 範本。"""
     profile = profile or {}
     custom = str(profile.get("privacy_notice") or "").strip()
-    return custom if custom else template_for(profile.get("name", ""))
+    return custom if custom else template_for(_company_name_of(profile))
 
 
 def current_notice() -> str:
@@ -137,7 +144,7 @@ def purpose_notice_text(profile: dict, purpose: str) -> str:
     profile = profile or {}
     key = PURPOSES[purpose][1]
     custom = str(profile.get(key) or "").strip()
-    return custom if custom else purpose_template_for(purpose, profile.get("name", ""))
+    return custom if custom else purpose_template_for(purpose, _company_name_of(profile))
 
 
 def current_purpose_notice(purpose: str) -> str:

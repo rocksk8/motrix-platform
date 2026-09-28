@@ -63,7 +63,7 @@ $ErrorActionPreference = "Stop"
 # AH-M2（2026-09-28 A 稽核）：這支腳本的版本。開頭與部署包裡那一份比對，不同就拒絕——
 #   手動執行時跑到安裝目錄裡的**舊**腳本（沒有先把包裡的 backend\tools 複製過來）會讓整套日常更新規則都不生效。
 #   改這支腳本的行為時要改這個值。用常數不用雜湊：演練副本會改路徑與 port，雜湊必然不同。
-$ApplyScriptVersion = "2026-09-28j"
+$ApplyScriptVersion = "2026-09-28k"
 # robocopy 一律 /R:3 /W:5（2026-09-28）：預設 /R:1000000 /W:30 ⇒ 被占用的檔會讓套用卡住數天而不是失敗，
 #   複製失敗的出口（AH-S7 自動寫回快照）永遠走不到。
 
@@ -317,6 +317,71 @@ function Invoke-Py([string[]]$PyArgs) {
         $ErrorActionPreference = $prevEap
     }
     return @{ Text = ($out | Out-String); Exit = $code }
+}
+
+# ── 本公司資料設定閘門（COMPANY-SETUP-GATE §6.3；2026-09-28 E 線）──────────────────────
+# 呼叫 company_setup_cli.py（不 import main、不開網路端點），回 @{ Allowed; Reason; Text; Exit }。
+# 🔴 fail closed（CG2-S3）：行程當掉／非零結束／逾時（60 秒）／輸出不是一行 JSON／configured 為 null ⇒ Allowed=$false。
+# 🔴 正式機這支腳本**沒有**任何略過這項檢查的參數（CG3-M1）；-Force 只管版本比對，不影響這裡。
+function Invoke-CompanySetupCli([string]$Cli, [string[]]$CliArgs, [int]$TimeoutSec = 60) {
+    $res = @{ Allowed = $false; Reason = "tool_failed"; Text = ""; Exit = -1 }
+    if (-not (Test-Path $Cli)) { $res.Reason = "tool_missing"; return $res }
+    $outFile = Join-Path $env:TEMP ("motrix_company_setup_" + [guid]::NewGuid().ToString("N") + ".out")
+    $errFile = "$outFile.err"
+    try {
+        $argLine = (@($Cli) + $CliArgs | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join " "
+        $proc = Start-Process -FilePath "python" -ArgumentList $argLine -NoNewWindow -PassThru `
+                    -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+        $null = $proc.Handle   # 先取 Handle，行程結束後 ExitCode 才讀得到（PS 5.1）
+        if (-not $proc.WaitForExit($TimeoutSec * 1000)) {
+            try { $proc.Kill() } catch { }
+            $res.Reason = "timeout"
+            return $res
+        }
+        $res.Exit = $proc.ExitCode
+        $text = ""
+        if (Test-Path $outFile) { $text = (Get-Content $outFile -Raw -Encoding UTF8) }
+        if (Test-Path $errFile) { $text += (Get-Content $errFile -Raw -Encoding UTF8) }
+        $res.Text = "$text"
+        $line = @(("$text" -split "\r?\n") | Where-Object { $_.Trim().StartsWith("{") }) | Select-Object -Last 1
+        if (-not $line) { $res.Reason = "bad_output"; return $res }
+        $obj = $line | ConvertFrom-Json
+        $res.Reason = [string]$obj.reason
+        $res.Allowed = ($res.Exit -eq 0 -and $obj.allowed -eq $true -and $null -ne $obj.configured)
+        return $res
+    } catch {
+        $res.Reason = "tool_crashed"
+        $res.Text = "$_"
+        return $res
+    } finally {
+        Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# ── 請款單匯款欄位註記（D E4S3-S1：只報不擋）──────────────────────────────
+# 讀 company_setup_cli 那一行 JSON 的 payment_bank_missing：缺 ⇒ [WARN]＋`::NOTE:: company_bank_missing=<欄位>`
+# （升級後請款單 PDF 會 428，要先請使用者在設定頁補齊）；齊全 ⇒ `::NOTE:: company_bank=ok`；讀不到 ⇒ `company_bank=unknown`。
+# 不改 ::RESULT::（欄位順序與值域固定）；本函式不丟例外、不影響升級。
+function Write-CompanyBankNote([string]$CliText) {
+    $note = "unknown"
+    try {
+        $line = @(("$CliText" -split "\r?\n") | Where-Object { $_.Trim().StartsWith("{") }) | Select-Object -Last 1
+        if ($line) {
+            $obj = $line | ConvertFrom-Json
+            $miss = $obj.payment_bank_missing
+            if ($null -ne $miss) {
+                $items = @($miss | ForEach-Object { [string]$_ })
+                if ($items.Count -gt 0) { $note = "missing" } else { $note = "ok" }
+            }
+        }
+    } catch { $note = "unknown" }
+    if ($note -eq "missing") {
+        Write-Host ("[WARN]   請款單匯款欄位未齊全（" + ($items -join "、") + "）：升級後請款單 PDF 會被擋（428 company_bank_required），請先在公司資料設定補齊") -ForegroundColor Yellow
+        Write-Host ("::NOTE:: company_bank_missing=" + ($items -join ","))
+    } else {
+        Write-Host ("::NOTE:: company_bank=" + $note)
+    }
+    return $note
 }
 
 # ── 停服／啟動（2026-09-28）─────────────────────────────────────────────
@@ -721,6 +786,33 @@ if (-not $plan.baseline_present) {
     Warn "  沒有上一次套用的檔案清單（backend\.deployed_files.json；V9→新版轉換後的第一次會這樣）：只依 modules.lock 與模組資料夾刪除，其餘 $(@($plan.no_baseline_candidates).Count) 個候選只列出不刪。成功後會寫下清單。"
 }
 
+# ============================================================
+# 本公司資料設定閘門預檢（COMPANY-SETUP-GATE §6.3-1；停服之前、用**包裡的新版**判定）
+# ============================================================
+# 新版上線後若判定「未設定」⇒ 全公司所有功能停住（第一個擋全部功能的機制）⇒ 先在這裡擋下，正式機完全不動。
+# 先確保安裝識別檔存在（冪等；已有就不動），再在正式庫的**記憶體副本**上模擬 backfill＋判定。
+$prodDbForGate = Join-Path $BackendDir "motrix_erp.db"
+if (Test-Path $prodDbForGate) {
+    Info "  本公司資料設定預檢..."
+    $gateCli = Join-Path $PackagePath "backend\tools\company_setup_cli.py"
+    $gateId = Invoke-CompanySetupCli $gateCli @("ensure-install-id", "--root", $ProdRoot)
+    if ($gateId.Exit -ne 0) {
+        Write-Host $gateId.Text
+        Fail "本公司資料設定預檢無法建立安裝識別檔（$($gateId.Reason)），中止（正式機尚未被觸碰）。" "refused_company_setup"
+    }
+    $gatePre = Invoke-CompanySetupCli $gateCli @("preflight", "--db", $prodDbForGate, "--root", $ProdRoot)
+    Write-Host $gatePre.Text
+    if (-not $gatePre.Allowed) {
+        Fail ("套用後本公司資料會是「未設定」或無法判定（原因：$($gatePre.Reason)），新版上線即全公司停止使用，中止（正式機尚未被觸碰）。" +
+              "處置見 COMPANY-SETUP-GATE §6.2／§6.3：developer_identity_unsigned／install_mismatch ⇒ 把上方 JSON 的 install（安裝識別雜湊）交給開發者簽確認檔；fields_invalid ⇒ 先在設定頁補齊欄位；" +
+              "其他 ⇒ 聯絡開發者。") "refused_company_setup"
+    }
+    Ok "  本公司資料設定預檢通過（$($gatePre.Reason)）。"
+    $null = Write-CompanyBankNote $gatePre.Text
+} else {
+    Warn "  找不到正式庫 motrix_erp.db，略過本公司資料設定預檢（視為全新安裝：首次登入由最高管理員設定）。"
+}
+
 $rollbackRoot = Join-Path $BackendDir "rollback_snapshots"
 $rollbackDir = Join-Path $rollbackRoot $timestamp
 New-Item -ItemType Directory -Force -Path $rollbackDir | Out-Null
@@ -737,7 +829,7 @@ Info "  建立程式碼回滾快照：$rollbackDir"
 #    ⇒ 與「還原到一半」**不可以共用一個 status**：前者重跑就好，後者要叫人。
 # 2026-09-28：/XD 補上資料目錄（export_archive＝勞報個資、_demo_*＝demo 資料、uploads／報價單PDF 等）——
 #   先前每次套用都把個資複製進 rollback_snapshots。回滾不需要它們：套用本來就不碰資料目錄。
-robocopy $BackendDir (Join-Path $rollbackDir "backend") /E /R:3 /W:5 /XD db_backups rollback_snapshots logs uploads 報價單PDF export_archive backup_alerts _demo_* __pycache__ certs /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json server.log license.key autostart.bat .apply.lock | Out-Null
+robocopy $BackendDir (Join-Path $rollbackDir "backend") /E /R:3 /W:5 /XD db_backups rollback_snapshots logs uploads 報價單PDF export_archive backup_alerts _demo_* __pycache__ certs /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json server.log license.key autostart.bat .apply.lock .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "建立程式碼回滾快照失敗（backend，exit code $LASTEXITCODE）——快照不完整就繼續套用的話，出事時沒有東西可以回滾。" "snapshot_failed_backend" }
 robocopy $FrontendDir (Join-Path $rollbackDir "frontend") /E /R:3 /W:5 | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "建立程式碼回滾快照失敗（frontend，exit code $LASTEXITCODE）——快照不完整就繼續套用的話，出事時沒有東西可以回滾。" "snapshot_failed_frontend" }
@@ -821,13 +913,13 @@ function Restore-ProgramAfterCopyFailure {
     Write-Host $clean.Text
     if ($clean.Exit -ne 0 -or ($clean.Text -notmatch "APPLY_SNAPCLEAN_OK")) { $ok = $false }
     foreach ($pair in @(@("backend", $BackendDir), @("frontend", $FrontendDir))) {
-        robocopy (Join-Path $rollbackDir $pair[0]) $pair[1] /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
+        robocopy (Join-Path $rollbackDir $pair[0]) $pair[1] /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt | Out-Null
         if ($LASTEXITCODE -ge 8) { Warn "  寫回快照失敗（$($pair[0])，exit $LASTEXITCODE）"; $ok = $false }
     }
     foreach ($d in $RootProgramDirs) {
         $snap = Join-Path $rollbackDir $d
         if (-not (Test-Path $snap)) { continue }
-        robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
+        robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt | Out-Null
         if ($LASTEXITCODE -ge 8) { Warn "  寫回快照失敗（$d，exit $LASTEXITCODE）"; $ok = $false }
     }
     $rd = Join-Path $rollbackDir "root_docs"
@@ -854,7 +946,7 @@ $script:ProdState = "applied_no_restore"
 #   包裡那份是出貨預設值；先前每次套用都被蓋掉（core/upgrade.py 的 PACKAGE_DEFAULT_CONFIG 同一條規則）。
 $rc1 = robocopy (Join-Path $PackagePath "backend") $BackendDir /E /R:3 /W:5 `
     /XD db_backups rollback_snapshots uploads logs 報價單PDF export_archive backup_alerts _demo_* `
-    /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json .deployed_files.json server.log autostart.bat
+    /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json .deployed_files.json server.log autostart.bat license.key .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt
 if ($LASTEXITCODE -ge 8) { Fail-AfterStop "robocopy backend/ 失敗（exit code $LASTEXITCODE）。" "copy_failed_backend" }
 
 $rc2 = robocopy (Join-Path $PackagePath "frontend") $FrontendDir /E /R:3 /W:5
@@ -1009,6 +1101,22 @@ if (Test-Path $logPath) {
     }
 }
 
+# 本公司資料設定（COMPANY-SETUP-GATE §6.3-2）：/api/ping 在閘門白名單內驗不到它 ⇒ 用本機 CLI 直接讀庫與識別檔。
+# 未設定、判定失敗（configured null）、CLI 當掉或逾時 ⇒ 與 ping 失敗同級：自動回滾；**-SkipAutoRollback 不適用**
+# （那個旗標是給偶發的 ping 偽陰性；閘門的結果不會自己變好，留著＝全公司停擺）。
+$companyGateFailed = $false
+if ($healthy -and -not $logErrors -and (Test-Path (Join-Path $BackendDir "motrix_erp.db"))) {
+    $gatePost = Invoke-CompanySetupCli (Join-Path $BackendDir "tools\company_setup_cli.py") @("status", "--db", (Join-Path $BackendDir "motrix_erp.db"), "--root", $ProdRoot)
+    Write-Host $gatePost.Text
+    if (-not $gatePost.Allowed) {
+        $companyGateFailed = $true
+        $healthy = $false
+        Warn "  本公司資料設定檢查未通過（原因：$($gatePost.Reason)）⇒ 視為健康檢查失敗。"
+    } else {
+        Ok "  本公司資料設定檢查通過（$($gatePost.Reason)）。"
+    }
+}
+
 if ($healthy -and -not $logErrors) {
     Ok "  /api/ping 回應正常，log 未見新錯誤。"
 
@@ -1056,7 +1164,7 @@ if ($healthy -and -not $logErrors) {
         Write-Host "  不處理的後果：服務正常、畫面正常，而雷達不掃、地圖上沒有點。" -ForegroundColor Yellow
         Write-Host "======================================" -ForegroundColor Yellow
     }
-} elseif ($SkipAutoRollback) {
+} elseif ($SkipAutoRollback -and -not $companyGateFailed) {
     Write-Host ""
     Write-Host "======================================" -ForegroundColor Yellow
     Write-Host "  健康檢查判定異常：healthy=$healthy, log 錯誤筆數=$($logErrors.Count)" -ForegroundColor Yellow
@@ -1100,14 +1208,14 @@ if ($healthy -and -not $logErrors) {
     # ☠️ 先前失敗**不中止**，直接流進下面的健康檢查 —— 而半還原的 backend
     #    也可能回得出 `/api/ping` ⇒ 報 `restored`＝「已還原且健康」，
     #    **而磁碟上是還原到一半的殘骸。**
-    robocopy (Join-Path $rollbackDir "backend") $BackendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
+    robocopy (Join-Path $rollbackDir "backend") $BackendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt | Out-Null
     if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（backend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_backend" }
-    robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
+    robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt | Out-Null
     if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（frontend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_frontend" }
     foreach ($d in $RootProgramDirs) {
         $snap = Join-Path $rollbackDir $d
         if (-not (Test-Path $snap)) { continue }
-        robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
+        robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json .install_identity company_confirmation.sig company_setup_grace.json .initial_admin_credentials.txt .initial_demo_credentials.txt | Out-Null
         if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（$d，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_root_dirs" }
     }
 
@@ -1198,7 +1306,7 @@ if ($healthy -and -not $logErrors) {
     # 📌 「它可能其實活著、只是健康檢查偽陰性」那個可能性**由上方印出的
     #    port 666 監聽狀態負責**，不由這個欄位負責 —— 一個欄位只講一件事。
     if ($rolledBackHealthy) { $script:ServiceState = "up" }
-    Emit-Result "unhealthy_rolled_back" 1
+    if ($companyGateFailed) { Emit-Result "company_setup_rolled_back" 1 } else { Emit-Result "unhealthy_rolled_back" 1 }
     exit 1
 }
 
