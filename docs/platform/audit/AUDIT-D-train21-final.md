@@ -65,3 +65,20 @@
 - D 查核的唯一疑點（金鑰）：path2 (b) 要通過「內嵌交付公鑰自驗」。`drill_t21.py` 當場產生**拋棄式**演練金鑰，只在 staging 那份包的**副本**把演練公鑰加進 `PUBKEYS`（一處取代、斷言恰好一次、寫進報告），正本包、repo、正式交付私鑰都不碰；結束時刪除演練私鑰 ✔
 - path3 的兩點落差（A 裁示接受）：(i) 預檢前的 `ensure-install-id` 會建 `.install_identity`，而拒絕訊息寫「正式機尚未被觸碰」⇒ 訊息列下一班改成「只建立了安裝識別檔，其餘未動」；(ii) 拒絕時 `service=unknown`（停服前沒有量）⇒ 可接受
 - 首輪背景定位只驗到排程啟動 ⇒ 由正式機第 2 段套用後的 `geocode_warm_state` 查核補上
+
+## 7. 第 2 段指示審查（`CLAUDE-正式機安裝指示_29e435df_第2段_確認檔與套用.md`）＋確認檔獨立驗證（D，2026-09-29）
+
+- **判定：第 2 段可以交給正式機。** 必修 0、建議 2
+- **正式機第 1 段回報**（`正式機回報\20260929_0420_0af16ad1_install-id\`）：install `9997d33f…4091`；preflight `no_record`、`developer: true`、`missing: []`、`payment_bank_missing: []`（exit 3＝未設定，屬預期；§5 更正後的正常值）
+- **確認檔**（`company-confirmation\20260929_0421_9997d33f\company_confirmation.sig`）：D 以 29e435df 的常數**只用公鑰**獨立驗證（不碰私鑰）：
+  - 以內嵌交付公鑰驗章：**通過**；`purpose` 正確
+  - `permanent: true`、**沒有** `expires`、`issued` 2026-09-29
+  - `install` 等於正式機第 1 段回報的值
+  - `identity_fp` 在開發者指紋內
+  - 欄位只有 identity_fp／install／issued／permanent／purpose／sig
+- **第 2 段流程**：第 0 步再核對本地包 `bad=0 files=588` → 第 1 步放確認檔（雜湊比對）→ 第 2 步 preflight 必須 exit 0／configured／upgrade_backfill／`payment_bank_missing: []`，否則**不套用、不刪雲端檔** → 第 3 步預檢通過後才刪雲端那一份 → 第 4 步 robocopy tools（排除 `__pycache__`）、版號 `28k` → 第 5 步套用 → 第 6 步狀態表含 `refused_company_setup`、`company_setup_rolled_back`，回滾目標 0af16ad1 → 第 7 步 ping、`.build_commit`、status configured、「開關沒有生效」0 行、`geocode_warm_state`（補 T21F-O2 的首輪定位）、登入不導頁／無橫幅／報價單 PDF ✔
+- 禁止事項列出 grace／sign／編輯確認檔／動 `.install_identity`、`-SkipAutoRollback` 等；回報不可放確認檔、金鑰 ✔
+
+**建議（非必修）**
+- **T21P2-S1**：第 5 步的區塊沒有設 `PYTHONDONTWRITEBYTECODE=1`；`apply_update.ps1` 的閘門預檢會從 `$PKG` 執行 CLI（子行程繼承這個 PowerShell 的環境）⇒ 套用時仍會在包裡寫 pyc，並隨 robocopy 進正式機。已判定功能無害（§4 T21F-S1），可在第 5 步區塊加同一行求一致
+- **T21P2-S2**：第 7 步可加一項「`/openapi.json`、`/docs` 回 404」（A46 在本包，演練已驗；第十九班起的同一建議）
