@@ -194,6 +194,13 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 
   - **不在**白名單（CG-M2）：備份還原、模組管理、使用者管理、部署與更新頁、所有業務與報表 API。未設定時需要它們 ⇒ 經 §4.3 暫時放行。
   - 白名單的最終內容以實作時的路由表為準；守門 §7-① 驗每一條存在於路由表、方法相符、理由 ≥ 20 字。
+  - 〔實作註 段②〕
+    - 比對：~~`route.matches(scope)`~~ 改用 Starlette 的 `compile_path(樣板)` 編出與路由同一套的正規式（`company_setup.compile_allowed／is_allowed`；HEAD 視同 GET）。理由：`route.matches` 需要完整 scope，且同樣板多方法時要逐一找 route 物件；`compile_path` 就是路由自己用的編譯器，規則一致。守門：白名單每條都在路由表且方法相符；**路由表裡每一條不在白名單的 `/api` 路由（>300 條，`/api/uploads/` 靜態除外）逐條打一次都回 428**（新 API 自動被擋的證明）。
+    - 表外補兩條（實跑設定頁發現）：`GET /api/settings/branding`（設定頁「品牌與公司名稱」卡讀目前品牌圖狀態）、`DELETE /api/settings/branding/{kind}`（品牌圖「恢復預設」）。兩者限最高管理員、端點自己驗權限，只動品牌圖、不動確認紀錄。上表「DELETE 不在」一句作廢。
+    - 標頭 `X-Motrix-Company-Setup: status_error|grace` 在 `_record_request_trail` 之後設（`call_next` 後緊接記軌跡是既有守門）。
+    - demo token 段② 先視同已設定；段③ 種虛構示範公司後拿掉豁免。
+    - 測試：`conftest` 預設把 `company_setup.status` 釘成已設定（否則全部既有題都 428）；閘門題以 marker `company_gate` 退出這個預設；每個 xdist worker 的識別檔／簽章檔／放行檔經 `FILES_OVERRIDE` 放各自暫存目錄。
+    - 未做（併段③）：`/api/platform/menu` 回 `companySetup` 讓側欄只留設定入口（現況：側欄照常，點任何業務頁 ⇒ 該頁 API 428 ⇒ 導回設定頁／說明頁，擋的效果相同，只是多一次跳轉）；設定頁「只有一位最高管理員時建議再設一位」提示。
 - 效能：`status()` 結果快取在行程內，以 `company_profile`／`company_identity_confirmation` 的 `updated_at`＋安裝識別檔與簽章檔的 mtime 當版本。
 - 非 HTTP 的輸出（每月排程報表信）：走第二道（§5），未設定 ⇒ 不寄、記一則「本公司資料未設定」系統告警（邊緣觸發、每日一封，比照〈告警必須有速率上限〉）。
 - demo（Q3 裁示）：demo 庫每次登入重建 ⇒ 重建時種虛構示範公司（名稱含「示範」、統編 `00000000`，**不過檢查碼**＝不可能是真公司）＋確認紀錄 `via: "demo_seed"`（`install` 綁 demo 專用常數，只在 demo 庫有效）；demo 模式所有輸出加「示範資料」浮水印；demo 的虛構身分永遠不進正式庫（demo 隔離已有）。

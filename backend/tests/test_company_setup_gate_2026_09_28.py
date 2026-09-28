@@ -94,8 +94,20 @@ def test_confirm_refused_saves_nothing(client, boss, over, msg):
 
 def test_developer_identity_cannot_be_confirmed_without_signed_file(client, boss, monkeypatch):
     monkeypatch.setattr(cs, "DEVELOPER_IDENTITY_FP", frozenset({cs.identity_fp("tax", UBN)}))
+    before = client.get("/api/settings/company-profile", headers=boss).json()
     r = _confirm(client, boss)
     assert r.status_code == 422 and "開發者" in r.json()["detail"]
+    # 先驗再寫：被拒 ⇒ 開發者資料沒被存進去（只靠 confirm() 丟例外會是「已存檔＋422」）
+    assert client.get("/api/settings/company-profile", headers=boss).json() == before
+
+
+def test_confirm_clears_gate_cache_even_if_cache_key_unchanged(client, boss, clerk, monkeypatch):
+    """快取鍵含 updated_at（秒）；同一秒內確認時鍵不變 ⇒ 靠 reset_cache() 立即生效。"""
+    monkeypatch.setattr(cs, "_cache_key", lambda conn, root=None: "fixed")
+    cs.reset_cache()
+    assert client.get("/api/customers", headers=clerk).status_code == 428        # 快取進「未設定」
+    assert _confirm(client, boss).status_code == 200
+    assert client.get("/api/customers", headers=clerk).status_code == 200
 
 
 # ── 暫時放行、判定失敗（Q7＝C） ────────────────────────────────────────────────
