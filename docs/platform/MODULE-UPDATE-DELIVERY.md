@@ -64,6 +64,7 @@
    - ping：同 apply_update（20 次）。
    - 〔D 審 DB-S4〕**第一道：機器可讀的載入狀態**。L1 新增：啟動完成（mount_modules 之後）寫 `backend\logs\module_states.json`＝`{pid, started_at, modules:[{key, state, version, reason}]}`（由 `registry.module_states()` 產生；先寫 .tmp 再改名）。健檢要求：檔案的 `started_at` 晚於步驟 8 重啟那一刻、`pid` 是正在聽 666 的那個行程、該模組 `state=loaded` 且 `version`＝新版。等不到（逾時同 ping）⇒ 判失敗。（loader 對單一模組壞掉是隔離的 ⇒ ping 會過，只看 ping 會把「模組沒載入」判成功）
    - 第二道：server.log 的 `模組 <key> <新版本> 已載入`／`模組 <key> 未載入`（兩道都要過）；另沿用 Traceback／ERROR 掃描。loader 兩個格式字串照樣有守門題。
+     〔更正（S6 演練 A 實際踩到，2026-09-28 22:13）：**錨點不可以是「最後一次 Uvicorn running on 之後」**——loader 在 `import main` 時就印「已載入」，**早於** uvicorn 的 `Uvicorn running on`（演練 server.log：第 49 行 `模組 tender_radar 1.3.3 已載入`、第 69 行 `Uvicorn running on`）⇒ 照原寫法永遠找不到那一行 ⇒ 每次套用都被判失敗、自動回滾（演練 A 得到 `module_unhealthy_rolled_back`，而 module_states.json 那一道其實是對的）。改為：從**本次重啟之後**的第一行 `MOTRIX ERP starting...`（autostart.bat 每次迴圈開頭寫的）起算，或以 log 時間戳 ≥ 步驟 8 的重啟時刻為範圍；Traceback／ERROR 掃描仍可沿用 apply_update 的錨點〕
    - 這是 L1 改動（main.py 或 core/loader）⇒ 屬第③級，隨「先套一版帶新工具的完整包」一起上。
    - 模組宣告了 `provides.probes` ⇒ 逐一打（本機、不需登入者才打；需要登入的只記錄不判）。
 10. 成功：寫 `backend\.deployed_modules.json`（§3），`Emit-Result success`。套用成功時把 version_manifest 條目以文字插入（U-M5①，§3）。

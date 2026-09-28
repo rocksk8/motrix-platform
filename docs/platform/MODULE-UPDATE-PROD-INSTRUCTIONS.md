@@ -62,12 +62,16 @@
 | `success` | 已套用，新版本已載入，服務正常 | 做第 4 節寫回 |
 | `module_preflight_failed` 而訊息是「有中斷的套用（備份 …）」 | 上一次套用中途中斷（備份還在）；**所有模組**都不能套，完整包也不行 | 不要自己處理：回報使用者，照 §5 用套用腳本的回滾模式回到套用前（稽核 D S5-S2） |
 | `module_preflight_failed` 而訊息是「有中斷的套用」，照 §5 回滾時又回 `backup_corrupt`（紀錄檔 apply.json 讀不懂） | 套用被擋、回滾也做不了：只能人工處理（稽核 D W-O1） | **回報開發機，由開發機指示人工檢查；正式機 Claude 不可自行刪除或修改任何紀錄檔**（`<ROOT>\module_backups\` 底下的任何檔都不要動） |
-| `module_preflight_failed`、`duplicate_version`、`bad_args`、`package_invalid`、`apply_locked`、`apply_locked_stale` | 沒有套用（正式機沒被碰） | 原文回報；`apply_locked_stale` 要人確認後才可以刪鎖檔 |
+| `module_preflight_failed`、`duplicate_version`、`bad_args`、`package_invalid`、`package_missing`、`apply_locked`、`apply_locked_stale` | 沒有套用（正式機沒被碰） | 原文回報；`package_missing`＝`-PackagePath` 指錯（檢查 staging 路徑後重下指令，這一項可以自己修正再跑一次）；`apply_locked_stale` 要人確認後才可以刪鎖檔 |
+| `not_prod_machine` | 腳本不是在正式機安裝目錄執行（身分守門） | **停**：回報使用者；不要把腳本複製到別處或改腳本裡的路徑 |
+| `user_cancelled` | 腳本在互動確認時被取消（這份指示一律帶 `-Yes`，不應出現） | 回報使用者；確認指令有沒有漏 `-Yes` |
+| `refused_company_setup` | 本公司資料設定預檢不過（未設定、無法判定、或預檢工具不在），正式機沒被碰 | 回報使用者；處置見 COMPANY-SETUP-GATE §6.2／§6.3（通常是請最高管理員到設定頁確認本公司資料）；不要自己改設定或建檔 |
 | `backup_failed`、`migration_dryrun_failed`、`module_load_dryrun_failed` | 套用前的檢查擋下，正式機沒被碰 | 原文回報（開發機要修模組） |
 | `module_copy_failed`（rolled_back＝restored） | 換檔中途失敗，已自動還原到套用前 | 原文回報 |
 | `unhealthy_rolled_back`、`module_unhealthy_rolled_back`（rolled_back＝restored） | 新版本起不來或模組沒載入，已自動回滾到套用前，服務正常 | 原文回報（開發機要修模組） |
 | 上面兩行但 rolled_back＝`restored_unhealthy` | 已回滾，但服務健康檢查沒通過 | **立刻**回報使用者；用瀏覽器確認系統能不能用 |
-| `module_restore_failed` | 自動回滾本身失敗：該模組已被**停用**、其他功能照常 | 立刻回報；模組管理頁會看到它停用；等開發機指示，不要自己啟用 |
+| `module_restore_failed` | 自動回滾沒有完成：該模組已被**停用**、其他功能照常。result.json 的 `rollback_code` 說明原因：`backup_corrupt`／`no_backup`／`backup_not_found`／`restore_mismatch`＝備份壞了或還原對不上（磁碟上可能半新半舊）；`module_changed`／`state_changed`／`base_changed`／`interrupted_not_latest`＝回滾被拒、一個檔都沒動（磁碟上仍是這次的新模組，但之後又有別的寫入，整檔還原會蓋掉它）（稽核 D S5A-S2） | 立刻回報，**連同 `rollback_code`**；模組管理頁會看到它停用；等開發機指示，不要自己啟用、不要動 `module_backups` |
+| `company_setup_rolled_back` | 套用後的本公司資料檢查沒過（例：新模組讓設定變成未設定），已自動回滾到套用前 | 回報使用者（開發機要修模組）；不要自己改本公司資料 |
 | `unhealthy_not_rolled_back` | （只在加了 -SkipAutoRollback 時）健檢失敗而沒有回滾 | 這份指示不會用到這個參數；出現就立刻回報 |
 | `unhandled_exception`、其他 | 非預期 | 立刻回報原文與 result.json |
 
