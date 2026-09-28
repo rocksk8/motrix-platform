@@ -475,7 +475,10 @@ def alert(conn, code: str, text: str) -> bool:
 # ── 中介層（第一道，COMPANY-SETUP-GATE §4.1；Q7＝C）────────────────────────────
 #
 # 判定結果快取在行程內：鍵＝三個相關設定的 updated_at＋三個檔的 mtime（任一變 ⇒ 重算）。
-GATE_OK, GATE_GRACE, GATE_REQUIRED, GATE_UNDETERMINED = "ok", "grace", "required", "undetermined"
+GATE_OK = "ok"
+GATE_GRACE = "grace"
+GATE_REQUIRED = "required"
+GATE_UNDETERMINED = "undetermined"
 HEADER = "X-Motrix-Company-Setup"
 CODE_REQUIRED = "company_setup_required"
 CODE_UNDETERMINED = "company_setup_undetermined"

@@ -170,6 +170,8 @@ _COMPANY_SETUP_ALLOWED = {
     ("GET", "/api/settings/company-profile"): "設定頁讀取本公司資料（最高管理員才看得到完整內容，端點自己驗權限）",
     ("PUT", "/api/settings/company-profile"): "設定頁存檔與「確認本公司資料」（限最高管理員，端點自己驗權限）",
     ("PUT", "/api/settings/branding/{kind}"): "設定頁上傳品牌圖（LOGO／favicon；限最高管理員，端點自己驗權限）",
+    ("GET", "/api/settings/branding"): "設定頁「品牌與公司名稱」卡讀取目前的品牌圖狀態（限最高管理員，端點自己驗權限）",
+    ("DELETE", "/api/settings/branding/{kind}"): "設定頁品牌圖「恢復預設」（刪除上傳的圖；限最高管理員，端點自己驗權限）",
     ("GET", "/api/settings/company-setup/status"): "前端判斷要導向設定頁還是說明頁、以及橫幅內容",
     ("GET", "/api/platform/menu"): "側欄：未設定時只顯示設定頁入口（回應內容已依權限過濾）",
     ("GET", "/api/auth/totp/status"): "帳號安全狀態（設定頁頂端提示是否已啟用兩階段驗證）",
