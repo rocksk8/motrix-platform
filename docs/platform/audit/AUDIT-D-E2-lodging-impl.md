@@ -125,3 +125,23 @@
 - E3-S1：`skipped_t2` 是彙總檔的固定欄位（`_daily_backup_summary_header` 每輪呼叫一次，ERROR 也每輪一次），月備份也有。`daily_partial` 的判斷是 `v == "error"`，多一個 list 欄位不影響；「實際寫出幾筆」的固定欄位集合取自 header 本身，不是寫死的數字
 - E3-S2：遞迴走 `_IncludedRouter`（逐層帶前綴）＋Mount；正對照（子 router 帶前綴的新路由會亮）、反向控制（過期、理由太短）都有。`/openapi.json`、`/docs`、`/docs/oauth2-redirect`、`/redoc` 標「待主持裁示」、行為沒改＝盤點出來、交給主持決定，不是順手做掉
 - E3-S3：`current()` 比對同一次 mount；`addMarkers`／`addCircle` 在已卸下的 api 上回 null；`_mapClosed` 重設 `overlayOn`
+
+## 6. 抽查第十八班：wip/e-lodging-impl b4528e8d（D，2026-09-28）
+
+- **結論：放行，沒有必修；建議 2。**
+- 題目 8 過（旅宿覆蓋層 e2e＋demo 重置）。D 突變 2 個全紅：
+  - Y1 回到「查詢回應一到就畫標記」（舊碼）⇒ 2 紅，包含新的決定性重現題
+  - Y2 demo 重置不清模組 T1 ⇒ 紅（是旅宿 e2e 抓到的，見 T18-S1）
+
+**① 覆蓋層競態修正**：成立。清單、訊息、顯名先出；標記經 `onBasemapReady`（E3-S3 之後只對同一次 mount 觸發）補畫，`st.seq` 只畫最後一次查詢；unmount 後 `st` 為 null 會先返回；非網路例外照實顯示。
+
+**② `db.demo_module_tables()` 會不會清掉原本不清的東西：目前不會；規則對未來有一個缺口（T18-S2）。**
+- 以 b4528e8d 所有模組 `module.json` 計算：模組宣告 T1／T2、而不在 L1 兩份清單（`DEMO_CLEARED_TABLES`、`DEMO_PARTIALLY_CLEARED_TABLES`）裡的，只有旅宿的 `lodging_searches`、`lodging_search_items`、`lodging_quotes` ⇒ 這次新增清空的就是這三張，符合預期
+- 與 L1 重疊的 48 張依 L1 為準（其中 3 張模組宣告 T3 而 L1 清空，例：編號序列表，L1 行為不變）
+- 缺口：L1 沒有「保留」的明確清單（不在兩份清單裡＝保留）。L1 優先規則只查兩份清單 ⇒ 將來某模組把一張 L1 默認保留的表宣告成 T1／T2，demo 重置就會**靜默改成清空**。另外 L1 只對靜態清單先 DROP 保護用的 TRIGGER，模組表若帶保護 TRIGGER，DELETE 會丟例外
+
+**③ 權限目錄 27→28、Alpine 頁 50→51**：對應旅宿紀錄頁與權限 key，數字調整有對應的新增。
+
+**建議**
+- **T18-S1　demo 重置要有直接的題**：驗「重置後模組 T1／T2 表為空、T3 表的列還在」（例：`lodging_searches` 清空、`lodging_catalog` 保留）。現在 Y2 是被 e2e 間接抓到，demo 重置題本身只驗「每張表都有分類」
+- **T18-S2　新增清空要經過決定**：加一題列出「模組 T1／T2 而不在 L1 兩份清單」的表，比對一份明文的預期清單（目前就是旅宿三張）。新模組加表時要一起改這份清單＝有人確認過「demo 重置會清它、它沒有保護 TRIGGER」
