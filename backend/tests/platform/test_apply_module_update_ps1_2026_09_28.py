@@ -278,7 +278,7 @@ def test_company_gate_call_sites_and_order():
     assert m.index("Test-ModuleHealth $script:ModuleKey $script:ToVersion") < post < m.index('Emit-Result "success" 0')
     assert "if ($SkipAutoRollback -and -not $companyGateFailed)" in m, "閘門失敗不適用 -SkipAutoRollback"
     assert '"company_setup_rolled_back"' in m and '"refused_company_setup"' in m
-    assert '$gateCli = Join-Path $BackendDir "tools\company_setup_cli.py"' in m, "模組包不帶 tools ⇒ 用安裝目錄那份"
+    assert r'$gateCli = Join-Path $BackendDir "tools\company_setup_cli.py"' in m, "模組包不帶 tools ⇒ 用安裝目錄那份"
 
 
 def test_e4_statuses_are_in_the_domain_once_e4_is_merged():
