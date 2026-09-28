@@ -39,6 +39,15 @@ $FrontendDir = Join-Path $ProdRoot "frontend"
 $ModuleUpdateTool = Join-Path $ProdRoot "tools\platform\module_update.py"
 $StepsTool = Join-Path $BackendDir "tools\module_apply_steps.py"
 $TempPrefix = "motrix-modapply-"
+# module_update.py --json 的 code（MODULE-UPDATE-DELIVERY §10 表）→ 本腳本的 status／處置
+#   預檢：沒列到的一律 module_preflight_failed（F4）
+$PreflightStatus = @{ "pkg_invalid" = "package_invalid"; "already_installed" = "duplicate_version"; "bad_args" = "bad_args" }
+#   回滾失敗而磁碟上「模組可能是半新半舊或還原不了」⇒ F13：停用該模組再重啟
+$RestoreFailedCodes = @("backup_corrupt", "no_backup", "backup_not_found", "restore_mismatch")
+#   apply 在動檔之前就拒絕（預檢那一類）⇒ 磁碟沒變，只要把服務拉回來
+$ApplyUntouchedCodes = @("pkg_invalid", "no_install_lock", "no_base", "no_deployed_marker", "base_mismatch",
+                         "core_incompatible", "license_unavailable", "unlicensed", "already_installed", "not_higher",
+                         "bad_args", "refused")
 
 $UsesHttps = Test-Path (Join-Path $BackendDir "certs\cert.pem")
 if ($UsesHttps) {
@@ -416,8 +425,9 @@ function Invoke-ModuleRollback {
     if ($script:ModStamp) { $rbArgs += @("--backup", $script:ModStamp) }
     $rb = Invoke-ModuleUpdate $rbArgs
     Write-Host $rb.Text
-    $corrupt = [bool]($rb.Data -and $rb.Data.code -eq "backup_corrupt")
-    return @{ Ok = $rb.Ok; Corrupt = $corrupt; Text = $rb.Text }
+    $code = if ($rb.Data) { [string]$rb.Data.code } else { "" }
+    $corrupt = [bool]((-not $rb.Ok) -and ($RestoreFailedCodes -contains $code))
+    return @{ Ok = $rb.Ok; Corrupt = $corrupt; Code = $code; Text = $rb.Text }
 }
 
 # F13（D 審 DB-S5）：備份損壞 ⇒ 不回滾，把該模組寫進停用清單再重啟、確認它是 disabled；停用寫入失敗 ⇒ 不重啟。
@@ -482,8 +492,9 @@ $pf = Invoke-ModuleUpdate @("preflight", "--root", $ProdRoot, "--pkg", $PackageP
 Write-Host $pf.Text
 if (-not $pf.Ok) {
     $why = if ($pf.Data -and $pf.Data.error) { $pf.Data.error } else { "預檢沒有回結果（見上方輸出）" }
-    $st = if ($pf.Data -and $pf.Data.code -eq "duplicate_version") { "duplicate_version" } else { "module_preflight_failed" }
-    Fail "預檢未通過：$why" $st
+    $code = if ($pf.Data) { $pf.Data.code } else { $null }
+    $st = if ($PreflightStatus.ContainsKey([string]$code)) { $PreflightStatus[[string]$code] } else { "module_preflight_failed" }
+    Fail "預檢未通過（$code）：$why" $st
 }
 $script:ModuleKey = $pf.Data.key
 $script:FromVersion = $pf.Data.from_version
@@ -545,12 +556,26 @@ $script:ProdState = "applied_no_restore"
 $ap = Invoke-ModuleUpdate @("apply", "--root", $ProdRoot, "--pkg", $PackagePath, "--require-base", "--stamp", $script:ModStamp)
 Write-Host $ap.Text
 if (-not $ap.Ok) {
-    # F9：換檔中途失敗 ⇒ 用本次 stamp 回滾（備份是 apply 最先寫的）→ 重啟 → ping
-    if ($ap.Data -and $ap.Data.stamp) { $script:ModStamp = $ap.Data.stamp }
-    $rb = Invoke-ModuleRollback
-    if ($rb.Corrupt) { Fail-RestoreCorrupt (Get-Date -Format "yyyy-MM-ddTHH:mm:ss") }
-    if (-not $rb.Ok) {
-        Fail "替換模組中途失敗，回滾也沒有成功（見上方）——服務未重新啟動，需要人工處理。" "module_copy_failed"
+    $apCode = if ($ap.Data) { [string]$ap.Data.code } else { "" }
+    if ($ApplyUntouchedCodes -contains $apCode) {
+        # 動檔之前就拒絕（§10：預檢那一類／stamp 不對）⇒ 磁碟沒變，把服務拉回來
+        $script:ProdState = "not_applied"
+        Start-InstallService
+        for ($i = 0; $i -lt 20; $i++) {
+            Start-Sleep -Seconds 2
+            if (Test-Ping -Url $PingUrl -TimeoutSec 5) { $script:ServiceState = "up"; break }
+        }
+        $st = if ($PreflightStatus.ContainsKey($apCode)) { $PreflightStatus[$apCode] } else { "module_preflight_failed" }
+        Fail "替換前被拒絕（$apCode）：$(if ($ap.Data) { $ap.Data.error })；沒有動任何檔，服務已重新啟動。" $st
+    }
+    # F9：換檔中途失敗。apply_failed_restored ⇒ module_update 已用本次備份還原；
+    #     apply_failed_half／unexpected／沒有結果行 ⇒ 用本次 stamp 回滾（備份以 in_progress 留著）
+    if ($apCode -ne "apply_failed_restored") {
+        $rb = Invoke-ModuleRollback
+        if ($rb.Corrupt) { Fail-RestoreCorrupt (Get-Date -Format "yyyy-MM-ddTHH:mm:ss") }
+        if (-not $rb.Ok) {
+            Fail "替換模組中途失敗，回滾也沒有成功（$($rb.Code)，見上方）——服務未重新啟動，需要人工處理。" "module_copy_failed"
+        }
     }
     $script:ProdState = "restored_unhealthy"
     Start-InstallService
