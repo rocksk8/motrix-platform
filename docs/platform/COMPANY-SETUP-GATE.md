@@ -17,7 +17,7 @@
 | 「已設定」判準 | **確認紀錄**（本安裝最高管理員在設定頁按「確認本公司資料」）＋**綁本安裝**（安裝識別檔，不看硬體）＋**欄位雜湊一致**；公司統編／名稱命中**開發者指紋**時另需「開發者簽章的確認檔」（綁安裝識別、有到期日）（§3）〔更正 CG-M1：~~綁本機（機器指紋）；登記的開發者機器~~〕 |
 | 引導與擋 | 比照既有「必須先改密碼」：auth_middleware 之後擋所有 `/api/`（**精確 (方法, 路由樣板) 白名單**）回 **428** `company_setup_required`〔更正 CG-S1／CG-M2：~~409；白名單例外~~〕；`notif.js` 導向設定頁（最高管理員）或說明頁（其他人）；輸出端 `company_identity.require_for_output()` 第二道（§4、§5） |
 | 既有正式機 | **兩階段**：先建安裝識別檔並回報 ⇒ 開發者簽確認檔 ⇒ 升級（套用前乾跑 status，會「未設定」就拒絕升級；套用後以本機 CLI 驗 status，未設定就自動回滾）⇒ 行為不變；現場另有 72 小時暫時放行（§4.3、§6）〔更正 CG-M1：~~登記正式機機器指紋；健檢靠人工回報~~〕 |
-| 停擺風險 | 這是正式機第一個「擋全部功能」的機制（`LICENSE_GATE_ENABLED=False`）⇒ 預檢、套用後自動回滾、暫時放行、`status()` 例外處理（§3.6，待裁示 Q7）四層 |
+| 停擺風險 | 這是正式機第一個「擋全部功能」的機制（`LICENSE_GATE_ENABLED=False`）⇒ 預檢、套用後自動回滾、暫時放行、`status()` 例外處理（§3.6，Q7 裁示 C：中介層放行＋輸出拒絕，且橫幅＋告警不安靜）四層 |
 | 守門 | ①所有 `/api` 路由預設被擋（白名單要逐條理由＋存在性）②輸出點掃描器（先讓已知 40 點亮起）——新輸出點沒經過 `require_for_output` 或未登記「不含本公司資料」⇒ 紅（§7） |
 
 ## 1. 對外輸出點盤點（本公司資料從哪來）
@@ -110,7 +110,7 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 - 後果（寫進 DR-SOP，CG-S5）：只複製資料庫、或還原到新目錄／新機器 ⇒ 識別不同 ⇒ 未設定 ⇒ 最高管理員重新確認一次；開發者正式機 ⇒ 需新簽確認檔或 §4.3 暫時放行。整包複製安裝目錄（連識別檔）⇒ 視為同一安裝（威脅模型外，3.3）。
 - ~~首選 `licensing.machine_fingerprint()`（主機板 UUID＋第一張實體網卡 MAC，已有且已測）…讀不到硬體（RuntimeError）⇒ 退用安裝識別檔…網卡更換會讓紀錄失效~~（CG-O1：與現行程式不符——先退到 MachineGuid、最後才丟 RuntimeError；整段取代）
 
-### 3.6 `status()` 自己出錯時〔CG-M1 ⑤：提出取捨，待主持裁示 Q7〕
+### 3.6 `status()` 自己出錯時〔CG-M1 ⑤；**主持裁示 Q7＝C**（2026-09-28）：中介層放行（避免全公司停擺）＋含本公司資料的輸出一律拒絕（保護面不降級）〕
 | 選項 | 行為 | 停擺風險 | 錯印開發者資料的風險 |
 |---|---|---|---|
 | A 全部視為未設定（fail closed） | 中介層 428＋輸出拒絕 | **高**：`status()` 的任何 bug（壞 JSON、權限、檔案鎖）＝全公司停擺，只能靠 §4.3 暫時放行或回滾 | 無 |
@@ -118,7 +118,18 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 | **C（建議）中介層 fail open／輸出端 fail closed** | 功能照常可用；**有本公司資料的輸出**拒絕並說明「無法確認本公司資料設定狀態」；兩處都記 ERROR＋系統告警（邊緣觸發、每日一封） | 低：只停「印本公司抬頭的文件」，其餘業務照常；§4.3 暫時放行對輸出端同樣有效 | 無：抬頭輸出被擋住 |
 - 理由：閘門的目的（不讓預設／開發者資料印在客戶文件上）只需要擋輸出；擋全部功能是「引導」的手段。`status()` 出錯時保住目的、放掉手段，停擺範圍最小。
 - 另外兩層讓 C 的輸出端也不太會在正式機觸發：套用前乾跑（§6-1）與套用後 CLI 驗證（§6-2）用同一支 `status()`，會丟例外的新版在停服前就被擋下。
-- 題：`status()` 丟例外 ⇒ 中介層放行＋ERROR；報價單 PDF 428 帶 `status_error`；告警每日一封（第二次不寄）。
+- ~~題：`status()` 丟例外 ⇒ 中介層放行＋ERROR；報價單 PDF 428 帶 `status_error`；告警每日一封（第二次不寄）。~~（由下方「裁示附帶要求」取代）
+
+**裁示附帶要求（〈降級之後它還是會動〉：降級不能安靜）**
+1. **ERROR＋每日告警**：`status()` 丟例外 ⇒ 記 ERROR（含例外類型與訊息，不含設定值）；系統告警與**備份告警同級**（`_write_backup_alert` 同一套：邊緣觸發、每日一封、寄超級管理員，mail_types 登記「系統技術」類 `company_setup.status_error`）；恢復正常 ⇒ 告警解除。
+2. **全頁橫幅**：中介層放行時在回應標頭帶 `X-Motrix-Company-Setup: status_error`；`notif.js` 看到就在所有頁面頂端顯示橫幅「本公司設定狀態無法判定，對外文件暫停輸出，請聯絡管理員」（不可關閉；標頭消失即移除）。另 `GET /api/settings/company-setup/status` 回 `{configured: null, reason: "status_error"}`，設定頁顯示同一句。
+3. **輸出拒絕的訊息與「未設定」不同**：code 分開——未設定 `company_setup_required`（「尚未完成本公司資料設定」，導設定頁）；判定失敗 `company_setup_undetermined`（「本公司設定狀態無法判定，對外文件暫停輸出，請聯絡管理員」，**不導設定頁**：去設定頁按確認解決不了程式錯誤）。狀態碼同為 428；排程報表信判定失敗 ⇒ 不寄、告警寫明「判定失敗」而非「未設定」。
+4. **題**：
+   - `status()` 丟例外（monkeypatch）⇒ 一般 API（例：`GET /api/customers`）**200** 且帶 `X-Motrix-Company-Setup: status_error`；輸出 API（報價單 PDF、財報 Excel、自訂模組輸出）**428 `company_setup_undetermined`**；告警寫入一次，同日第二次呼叫不重寫；ERROR 有；
+   - e2e：一般頁面出現橫幅文字（DOM 終點）；
+   - 反向控制①：`status()` 正常且已設定 ⇒ 無標頭、無橫幅、輸出 200、無告警；
+   - 反向控制②：`status()` 正常而未設定 ⇒ 中介層 428 `company_setup_required`（不是 undetermined、不是放行）；
+   - 反向控制③：例外消失 ⇒ 下一個請求橫幅消失、告警解除。
 
 
 > ~~### 3.2 確認紀錄（新設定鍵 `company_identity_confirmation`，T1）~~
@@ -267,7 +278,7 @@ h-branding 守「**程式碼**不含本公司字面值」＋「單據與頁面�
 | ③ | 不回退到開發者資料 | 全新庫：`status()` 未設定、所有 identity 輸出 409；複製庫（帶確認紀錄、機器指紋不同）⇒ 未設定；開發者指紋資料在非登記機器上按確認 ⇒ 拒絕；§2-④ 名稱片段 ⇒ 不再認；demo 輸出不含正式庫資料 |
 | ④ | 判準是「有人決定過」 | 欄位全非空但沒有確認紀錄 ⇒ 未設定；改必要欄位（直接寫 DB）⇒ 紀錄失效；只存 Google 金鑰（不帶 confirmIdentity）⇒ 不寫紀錄 |
 | ⑥ | 白名單精確（CG-M2） | `_COMPANY_SETUP_ALLOWED` 每條是 (方法, 路由樣板)、存在於 app 路由表、方法相符、理由 ≥ 20 字；不含 `*`；`_MUST_CHANGE_PW_ALLOWED`／`_PUBLIC_API_PATHS`／`LICENSE_EXEMPT_PATHS` 都被涵蓋；反向控制：加 `DELETE /api/settings/company-profile`、加前綴條目、加描述性條目 ⇒ 各自紅 |
-| ⑦ | 停擺防線（CG-M1） | preflight／status CLI 與中介層走同一支 `status()`（AST：CLI 不自己判斷）；apply_update.ps1 的 refused_company_setup 與自動回滾路徑有 ps1 題（比照既有 `::RESULT::` 協定題）；暫時放行的到期、不可延長、install 不符、不寫確認紀錄各一題；§3.6 依 Q7 裁示的行為題 |
+| ⑦ | 停擺防線（CG-M1）；Q7 題見 §3.6-4 | preflight／status CLI 與中介層走同一支 `status()`（AST：CLI 不自己判斷）；apply_update.ps1 的 refused_company_setup 與自動回滾路徑有 ps1 題（比照既有 `::RESULT::` 協定題）；暫時放行的到期、不可延長、install 不符、不寫確認紀錄各一題；§3.6 依 Q7 裁示的行為題 |
 | ⑧ | F3 檔不外流 | `.install_identity`、`company_confirmation.sig`、`company_setup_grace.json`：`.gitignore` 有、`verify_package` 帶入就拒、每日／月備份不收（掃備份樹） |
 | ⑤ | 指紋只在一處 | 開發者指紋常數只准出現在 `helpers/company_setup.py`；repo 任何地方出現與開發者統編相同的 8 碼字面值 ⇒ 沿用 h-branding 的 ALLOWED 規則 |
 
@@ -294,5 +305,6 @@ h-branding 守「**程式碼**不含本公司字面值」＋「單據與頁面�
 - **Q5** §2-②③（版本紀錄內文、docs 與根目錄文件）是否本案一起做，或另開一線。
   〔**裁示：另開一線，不併本案**；但 §2-④ `_is_our_install` 名稱片段判斷**屬本案，照修**〕
 - **Q7**（CG-M1 ⑤）`status()` 丟例外時：A 全擋／B 全放／**C（建議）中介層放行＋輸出拒絕**，理由與停擺取捨見 §3.6。
+  〔**裁示（主持）：C**，附帶要求①～④ 已寫進 §3.6〕
 - **Q6** 必要欄位定案（建議：名稱＋統編（含檢查碼）＋電話或 email 其一；請款單另要銀行欄位）。
   〔**裁示（使用者）：名稱＋統編（檢查碼）＋電話或 email 擇一；請款單另要銀行欄位**（照 §3.5）〕
