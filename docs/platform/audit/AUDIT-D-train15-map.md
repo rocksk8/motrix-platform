@@ -118,3 +118,48 @@
 
 - ✅ SST-M1 關閉（3587fe41）——存檔自動定位受底圖規則約束、Google 來源不寫進 profile、只有 manual 當人工座標
 - ✅ GEO-M1 關閉（d973524c）——預熱查無判定看本輪各階錯誤、不依賴負快取；範圍內記 scope=free 負快取
+
+## 6. 第二次複核：③、T15-C1 新 resolved、A ②(b) 第一段（D，2026-09-28）
+
+### ③ B 4115c6e4（負快取依「Google 有沒有實際回答」分兩種）
+
+- `_MISS_CACHE`＝任何查無；`_MISS_CACHE_ALL`＝Google 實際回了查無。`_google_askable()`（有金鑰，而且 `_stage_allowed`：額度、SST 範圍、本輪跳過都在裡面）⇒ 問得到時只看 ALL，問不到時看任何查無
+- `google_answered` 只在 Google 階真的被放行並執行、而且沒有新增 Google 錯誤時才成立（讀碼：跳過的階在 `_stage_allowed` 就 continue 了）⇒ 沒金鑰、額度用完、範圍外、本輪跳過時的查無，都不會擋住日後的 Google
+- `_MISS_CACHE_FREE` 已移除（resolved 裡 grep 0 筆）
+- **成立**
+
+### T15-C1：新 resolved（sha256 3745e9f5…e112，與主持給的一致）
+
+- 合併樹：origin/platform dee64c54＋3587fe41＋4115c6e4，rerere 關閉，geo.py 用新 resolved，再套 `test_map_sst62.adjust.diff`
+- 檢查：
+  - coord_source 3 處在（A 的 SST-M1 讀取端）
+  - 沒有 `_MISS_CACHE_FREE`，也沒有 `skipped_google`
+- 定位與地圖九個題檔 **164 過**
+- 突變「查無一律記 all」⇒ 5 紅
+- **成立**。⚠ 這份 resolved 不含 A 的 21ef7ef1（②(b) 第一段也改了 geo.py：`google_basemap()`、瀏覽器金鑰、`USAGE_SKU_DYNAMIC_MAPS`）⇒ 三段同包合回時，要再以同樣的方法重做一次、重驗
+
+### A 21ef7ef1（②(b) 第一段：瀏覽器金鑰、/api/map/config、地圖頁 CSP）
+
+**GB-M1（必修，隨三段同包處理）　`google_basemap()` 只看瀏覽器金鑰，與使用者裁示「瀏覽器金鑰＋地圖 ID 都填才切 Google 底圖，缺一項維持 OSM、不用 Google 內容」不符**
+- 證據：`google_basemap()` 回 `bool(google_browser_key())`（geo.py，21ef7ef1）
+- 這一支同時決定兩件事：
+  - `/api/map/points`、背景預熱、據點存檔要不要擋 Google 座標
+  - `/api/map/config` 回不回 google
+- ⇒ 只填了瀏覽器金鑰、沒填地圖 ID 時，後端會放行 Google 座標並回 `basemap: google`。而依裁示，地圖此時應維持 OSM ⇒ Google 座標畫在 OSM 上（§6.2），正是這一班要防的事
+- 修法：`google_basemap()`＝兩者都填（地圖 ID 由同一支讀取）；`/api/map/config` 也經這一支，google 時一併回 mapId。補題：只有金鑰、只有地圖 ID、兩者都有，三種情況各自對應的底圖與座標規則
+
+**GB-C1（第二、三段的上線條件）　前端退回 OSM 時不可以沿用 Google 座標**
+- 底圖由伺服器判定，而地圖實際在瀏覽器載入：Maps JavaScript API 載入失敗時（金鑰被 referrer 限制、網路、額度），map.html 若退回 OSM，就會把已經以 `basemap=google` 拿到的點（可能是 Google 座標）畫在 OSM 上
+- 要求：
+  - Google 載入失敗時，不顯示點，並說明原因
+  - 或者以 osm 範圍重新取點——後端要提供明確的參數，而且這個參數只能收窄、不能放寬
+
+**其餘成立**：
+- 瀏覽器金鑰與伺服器金鑰分開；兩者都遮蔽、都不寫進稽核的值
+- `/api/map/config` 只回瀏覽器那一把（有題）
+- 地圖頁專用 CSP 取自 Google 官方 Allowlist 範例，只套在 `/pages/map.html`，其他頁不變。它帶 `'unsafe-eval'`，屬於官方範例的一部分，限縮在單一頁可以接受
+- 開地圖次數當成 Dynamic Maps 用量的近似值，並明說以 Cloud Console 為準
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+（③ 與 T15-C1 不是必修，不需要關閉行；GB-M1 仍開著，登記：owner A，wip/a-google-basemap）
