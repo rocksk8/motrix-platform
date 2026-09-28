@@ -53,3 +53,15 @@
   - E：COMPANY-SETUP-GATE §6.7(a)(d) 的預期文字更正
   - `apply_update.ps1`（第 807 行）拒絕訊息的處置說明只列 `developer_identity_unsigned`／`install_mismatch`，要補「`no_record` 且 `developer:true` ⇒ 同樣把 install 交給開發者簽確認檔」，否則正式機 Claude 看到 `no_record` 會對不上處置
 - D 自己的同類錯誤：AUDIT-D-E4-company-gate.md §4.1-①、§7.1 的表格寫「漏了第一、二步 ⇒ 預檢得 `developer_identity_unsigned`」——結論（停服前拒絕、正式機不動）不變，原因碼應為 `no_record`（developer:true）。已在該檔補更正（原句保留）
+
+## 6. T21F-O2：B 的演練結果（包 20260929_040602_29e435df；A 轉述，依裁示採信）
+
+| 場次 | 結果 |
+|---|---|
+| path1 新安裝／一般客戶確認路徑 | 15/15：未設定 428 ⇒ 設定頁確認 ⇒ configured；刪識別檔 ⇒ install_mismatch＋ERROR ⇒ 重新確認恢復 |
+| path2 開發者簽章路徑（基底 0af16ad1） | 22/22：(a) no_record／developer:true ⇒ (b) `--days 7` ⇒ (c) configured／upgrade_backfill ⇒ success／applied／up（17.2 秒）、`::NOTE:: company_bank=ok`；`/docs`、`/openapi.json` 404；沒有「開關沒有生效」誤報；刪簽章檔 ⇒ 428 ⇒ grace 72h（手改 until 無效）；`secrets_left=[]` |
+| path3 沒有確認檔直接套（基底 0af16ad1） | refused_company_setup／not_applied；部署標記、schema、本公司設定列、migration 都不變，ping 正常 |
+
+- D 查核的唯一疑點（金鑰）：path2 (b) 要通過「內嵌交付公鑰自驗」。`drill_t21.py` 當場產生**拋棄式**演練金鑰，只在 staging 那份包的**副本**把演練公鑰加進 `PUBKEYS`（一處取代、斷言恰好一次、寫進報告），正本包、repo、正式交付私鑰都不碰；結束時刪除演練私鑰 ✔
+- path3 的兩點落差（A 裁示接受）：(i) 預檢前的 `ensure-install-id` 會建 `.install_identity`，而拒絕訊息寫「正式機尚未被觸碰」⇒ 訊息列下一班改成「只建立了安裝識別檔，其餘未動」；(ii) 拒絕時 `service=unknown`（停服前沒有量）⇒ 可接受
+- 首輪背景定位只驗到排程啟動 ⇒ 由正式機第 2 段套用後的 `geocode_warm_state` 查核補上
