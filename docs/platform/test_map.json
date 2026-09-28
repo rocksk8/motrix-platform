@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 737,
+  "tests": 742,
   "unmapped": 8,
   "kinds": {
-   "api": 393,
-   "e2e": 176,
+   "api": 397,
+   "e2e": 177,
    "audit": 100,
    "unit": 68
   },
-  "routes": 582
+  "routes": 583
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -14007,6 +14007,45 @@
     ]
    }
   },
+  "backend/tests/test_e2e_map_google_basemap_2026_09_28.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_map_cache_warm.py",
+    "file:frontend/static/vendor/markerclusterer-2.6.2/markerclusterer.min.js",
+    "helper:geo",
+    "helper:settings",
+    "page:pages/company-profile-settings.html",
+    "page:pages/map.html",
+    "router:map_points",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/geo.py",
+     "backend/helpers/settings.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_map_cache_warm.py"
+    ],
+    "api": [
+     "backend/routers/map_points.py",
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/company-profile-settings.html",
+     "frontend/pages/map.html",
+     "frontend/static/vendor/markerclusterer-2.6.2/markerclusterer.min.js"
+    ],
+    "path": [
+     "frontend/pages/company-profile-settings.html",
+     "frontend/pages/map.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_map_under_topbar_2026_09_25.py": {
    "kind": "e2e",
    "units": [
@@ -15515,6 +15554,35 @@
     ]
    }
   },
+  "backend/tests/test_geocode_warm_misses_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_geocode_warm_2026_09_22.py",
+    "helper:geo",
+    "helper:settings",
+    "page:pages/map.html",
+    "router:map_points"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/geo.py",
+     "backend/helpers/settings.py",
+     "backend/tests/test_geocode_warm_2026_09_22.py"
+    ],
+    "api": [
+     "backend/routers/map_points.py"
+    ],
+    "page": [
+     "frontend/pages/map.html"
+    ],
+    "path": [
+     "frontend/pages/map.html"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_google_key_setting_2026_09_22.py": {
    "kind": "api",
    "units": [
@@ -15587,6 +15655,21 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_google_stage_conditions_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:geo",
+    "helper:settings"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/geo.py",
+     "backend/helpers/settings.py"
+    ]
+   }
   },
   "backend/tests/test_high_risk_routes_2026_09_22.py": {
    "kind": "api",
@@ -15841,6 +15924,45 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_map_google_basemap_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_map_cache_warm.py",
+    "helper:geo",
+    "helper:settings",
+    "page:pages/login.html",
+    "page:pages/map.html",
+    "router:map_points",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/geo.py",
+     "backend/helpers/settings.py",
+     "backend/tests/_map_cache_warm.py"
+    ],
+    "api": [
+     "backend/routers/map_points.py",
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/login.html",
+     "frontend/pages/map.html"
+    ],
+    "path": [
+     "backend/helpers/geo.py",
+     "backend/routers/map_points.py",
+     "backend/routers/system.py",
+     "frontend/pages/login.html",
+     "frontend/pages/map.html"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_map_invalidate_size_2026_09_22.py": {
    "kind": "audit",
    "units": [
@@ -15878,6 +16000,32 @@
     ],
     "api": [
      "backend/routers/map_points.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_map_sst62_google_coords_osm_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_map_cache_warm.py",
+    "helper:geo",
+    "helper:settings",
+    "router:map_points",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/geo.py",
+     "backend/helpers/settings.py",
+     "backend/tests/_map_cache_warm.py"
+    ],
+    "api": [
+     "backend/routers/map_points.py",
+     "backend/routers/system.py"
     ]
    },
    "login_fixture": true
