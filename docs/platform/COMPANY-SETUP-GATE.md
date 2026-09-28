@@ -330,7 +330,7 @@ D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe backend\tools\company_setup_cli.p
     --days 365 ^
     --out "G:\我的雲端硬碟\MOTRIX-交付\company-confirmation\<yyyyMMdd_HHmm>_<install 前 8 碼>\company_confirmation.sig"
 ```
-- 工具只簽**開發者身分**（`--tax` 不在開發者指紋內 ⇒ 拒絕）；`--install` 必須是 64 碼十六進位；`--days` 1～400；輸出檔已存在不覆蓋。
+- 工具只簽**開發者身分**（`--tax` 不在開發者指紋內 ⇒ 拒絕）；`--install` 必須是 64 碼十六進位；`--days` 1～365（~~1～400~~，2026-09-29 授權改 365）；輸出檔已存在不覆蓋。
 - 輸出一行 JSON：`{"ok": true, "out": …, "install": …, "issued": …, "expires": …}`。有效期 **365 天**（`--days` 預設 365、上限 365）〔有效期兩次變更：2026-09-29 先 30 天（主持轉述授權）⇒ 同日使用者表單改 **365 天**，理由：過期＝全公司暫停，每月重簽風險太高〕；到期前 30 天起正式機每日告警；**到期＝全公司暫停**，年度重簽只做 (b)(c)（§6.5）。
 - 簽章檔不進 git（`.gitignore`）、不進正式機備份；交付資料夾是唯一傳遞路徑。
 
