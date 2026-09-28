@@ -862,6 +862,10 @@ class CompanyProfile(BaseModel):
     #    但**不可以寫進任何 log**：log 會被打包、被寄出、被放進備份，
     #    而那些地方沒有人在管金鑰。兩者的保存期限完全不同。
     google_maps_api_key: str = ''
+    # 第十五班 ②(b)：地圖（瀏覽器）用金鑰——**與上面那把分開**（使用者裁示）。它會出現在瀏覽器載入
+    # Maps JavaScript API 的網址上 ⇒ 由使用者在 Google Cloud 限定 HTTP referrer＋只開 Maps JavaScript API。
+    # 有填 ⇒ 地圖改用 Google 底圖（geo.google_basemap()）；設定頁同樣遮蔽顯示。
+    google_maps_browser_key: str = ''
     # 手動座標（2026-09-22 §3o A2／A10）。填了就**跳過所有查詢**，
     # 精度是 exact、來源是 manual。
     # 🔑 它存在的理由：圖資認不得台灣的門牌，而使用者知道自己在哪裡。
@@ -897,7 +901,7 @@ class CompanyProfile(BaseModel):
 _COMPANY_PROFILE_DEFAULT = {
     "name": "", "tax_id": "", "contact_info": "",
     "bank_name": "", "bank_branch": "", "bank_account_name": "", "bank_account_number": "",
-    "address": "", "google_maps_api_key": "",
+    "address": "", "google_maps_api_key": "", "google_maps_browser_key": "",
     "office_lat": None, "office_lon": None,
     "locations": [],
     "privacy_notice": "",       # R3 個資蒐集告知（空白＝用範本，helpers/privacy_notice.py）
@@ -1232,7 +1236,7 @@ def _looks_masked(value) -> bool:
 #: 哪些欄位在回傳時要遮起來。
 #: 🔑 具名清單而不是 if：下一個憑證欄位（TGOS AppID…）加進來時，
 #: **加在這裡就同時得到遮蔽與 UA3c 的安全網**，不會只做到一半。
-_MASKED_FIELDS = ("google_maps_api_key",)
+_MASKED_FIELDS = ("google_maps_api_key", "google_maps_browser_key")
 
 
 def _migrated_locations(profile):
@@ -1311,7 +1315,7 @@ _AUDIT_MASKED_VALUE_FIELDS = ("bank_account_number", "tax_id")
 #: **Google 金鑰是一個付費憑證 ⇒ 撿到就能刷我們的帳。**
 #: 🔑 而一個「一律遮成末四碼」的實作會讓帳號那一題全綠，**同時洩漏這一把**。
 #: 📌〈判準的寬窄都會騙人〉：一個統一的規則對其中一類來說太寬。
-_AUDIT_NEVER_VALUE_FIELDS = ("google_maps_api_key",)
+_AUDIT_NEVER_VALUE_FIELDS = ("google_maps_api_key", "google_maps_browser_key")
 
 
 def _audit_tail(value) -> str:
@@ -1710,6 +1714,8 @@ def get_google_quota_setting(authorization: str = Header(None)):
              "label": "附近商家搜尋（Places Text Search，尚未啟用）"},
             {"key": geo.USAGE_SKU_PLACE_DETAILS,
              "label": "商家詳細資料（Place Details，尚未啟用）"},
+            {"key": geo.USAGE_SKU_DYNAMIC_MAPS,
+             "label": "地圖載入（Dynamic Maps；以開地圖次數近似，實際以 Google Cloud Console 為準）"},
         ],
     }
 

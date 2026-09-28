@@ -359,6 +359,17 @@ SOURCE_NOMINATIM = "nominatim"
 SOURCE_NOMINATIM_DISTRICT = "nominatim_district"
 
 GOOGLE_KEY_SETTING = "google_maps_api_key"
+#: 地圖（瀏覽器）用的金鑰（第十五班 ②(b)，使用者裁示：**金鑰分兩把**）。
+#: 🔑 這一把會出現在瀏覽器載入 Maps JavaScript API 的網址上 ⇒ 由使用者在 Google Cloud 限定 HTTP referrer
+#:    與只開 Maps JavaScript API；伺服器定位那一把（GOOGLE_KEY_SETTING）**永不外流**。
+GOOGLE_BROWSER_KEY_SETTING = "google_maps_browser_key"
+
+
+def google_browser_key() -> str:
+    """地圖用（瀏覽器）金鑰；沒填回空字串。"""
+    from helpers.settings import _get_setting
+    profile = _get_setting("company_profile", {}) or {}
+    return (profile.get(GOOGLE_BROWSER_KEY_SETTING) or "").strip()
 
 
 def _google_key_configured() -> bool:
@@ -403,9 +414,11 @@ def google_content_blocked() -> bool:
 def google_basemap() -> bool:
     """地圖底圖是不是 Google。
 
-    ⚠️ 第十五班 ②(b)（有金鑰改用 Google 底圖）完成前，底圖一律 OSM（map.html 寫死）⇒ False。
-    ②(b) 上線時**只改這一支**：它決定 /api/map/points 要不要擋 Google 座標。"""
-    return False
+    第十五班 ②(b)（使用者裁示，CORE-SPEC dee64c54）：**有地圖（瀏覽器）金鑰 ⇒ Google 底圖**
+    （Maps JavaScript API）；沒有 ⇒ OSM＋免費定位。它決定 /api/map/points、背景預熱、據點存檔
+    要不要擋 Google 座標（SST §6.2），也決定 map.html 載哪一種地圖（`/api/map/config`）。
+    ⚠️ 呼叫一律經模組屬性（`geo.google_basemap()`／模組內裸名），測試 patch 才打得到。"""
+    return bool(google_browser_key())
 
 
 def has_google_coord(address) -> bool:
@@ -503,6 +516,10 @@ QUOTA_SETTING = "google_quota"
 USAGE_SKU_GEOCODING = "google:geocoding"
 USAGE_SKU_PLACES_TEXT = "google:places-text-search"
 USAGE_SKU_PLACE_DETAILS = "google:place-details"
+#: 地圖載入（Maps JavaScript API，SKU「Dynamic Maps」，計費事件「Successful map load」）。
+#: ⚠️ **近似值**：地圖在瀏覽器直接向 Google 載入，伺服器看不到；我們以「開地圖頁取地圖設定」
+#:    的次數近似（`/api/map/config` 回 Google 底圖一次記一次）。實際以 Google Cloud Console 為準。
+USAGE_SKU_DYNAMIC_MAPS = "google:dynamic-maps"
 
 #: 預設值。`monthly_free_quota` **留空（None）= 不管制**，不是 0（GB7）。
 #:

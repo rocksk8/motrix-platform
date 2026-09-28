@@ -466,6 +466,22 @@ def _user_position(lat, lon, accuracy):
     return (lat_f, lon_f), acc_f
 
 
+@router.get("/api/map/config")
+def map_config(authorization: str = Header(None)):
+    """地圖頁載哪一種底圖（第十五班 ②(b)）。
+
+    - 有地圖（瀏覽器）金鑰 ⇒ `{"basemap": "google", "browserKey": <那一把>}`；否則 `{"basemap": "osm"}`。
+    - 🔴 **只回瀏覽器那一把**；伺服器定位那一把（company_profile.google_maps_api_key）永不出現在任何回應
+      （守門題 test_map_google_basemap_2026_09_28）。
+    - 📌 回 Google 底圖一次，記一次 `google:dynamic-maps`（開圖次數近似 map load，不是帳單數字）。
+    """
+    _require_user(authorization)
+    if not geo.google_basemap():
+        return {"basemap": "osm"}
+    geo.record_geocode_call(geo.USAGE_SKU_DYNAMIC_MAPS)
+    return {"basemap": "google", "browserKey": geo.google_browser_key()}
+
+
 @router.get("/api/map/points")
 def map_points(response: Response, sources: str = "tenders",
                lat: str = None, lon: str = None, accuracy: str = None,
