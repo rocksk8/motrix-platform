@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._requires import requires_module  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[3]
 _spec = importlib.util.spec_from_file_location("_module_update_b55", REPO / "tools" / "platform" / "module_update.py")
 MU = importlib.util.module_from_spec(_spec)
@@ -304,6 +306,8 @@ def test_run_ship_tests_names_the_failures(tmp_path):
     assert "test_mini.py::test_boom" in str(ei.value)
 
 
+@requires_module("case", "提供者是 case（case.access）；模組不在時沒有對象")
+@requires_module("netplan", "斷言消費端 netplan 的題被選到；模組不在時沒有對象")
 def test_ship_tests_adds_consumers_of_a_changed_provider():
     """第②級選題（使用者裁示甲）：case 的提供者有改 ⇒ 選題含 netplan（case.access 的直接消費端）的題。"""
     import sys

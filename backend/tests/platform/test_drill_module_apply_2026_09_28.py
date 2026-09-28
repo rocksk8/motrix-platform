@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._requires import requires_module  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[3]
 _spec = importlib.util.spec_from_file_location("_drill_b55", REPO / "tools" / "platform" / "drill_module_apply.py")
 DR = importlib.util.module_from_spec(_spec)
@@ -57,6 +59,7 @@ def wt(tmp_path):
     return tmp_path
 
 
+@requires_module("tender_radar", "演練工具改的是 tender_radar（複製它的模組資料夾與頁面）；模組不在時沒有對象")
 @pytest.mark.parametrize("variant", ["A", "B", "C"])
 def test_variants_bump_version_and_stay_valid_python(wt, variant):
     import json
@@ -72,6 +75,7 @@ def test_variants_bump_version_and_stay_valid_python(wt, variant):
         assert "migrations=[(1, _drill_not_now)]" in init and "return 'B55" in init
 
 
+@requires_module("tender_radar", "演練工具改的是 tender_radar（複製它的模組資料夾與頁面）；模組不在時沒有對象")
 def test_variant_b_loads_without_uvicorn_and_fails_with_it(wt, monkeypatch):
     """B 的關鍵：乾跑（沒有 uvicorn）載得起來 ⇒ 過得了步驟 5；真的啟動（有 uvicorn）載入失敗 ⇒ 健檢抓到。"""
     DR.make_variant(wt, "B")
@@ -84,6 +88,7 @@ def test_variant_b_loads_without_uvicorn_and_fails_with_it(wt, monkeypatch):
         exec(code, {})
 
 
+@requires_module("tender_radar", "演練工具改的是 tender_radar（複製它的模組資料夾與頁面）；模組不在時沒有對象")
 def test_variant_bumps_above_the_installed_version(wt):
     """同一個演練安裝連續跑多場：前一場成功後已是新版 ⇒ 下一場要再往上升（否則 preflight not_higher，演練 B 沒跑到回滾）。"""
     import json
