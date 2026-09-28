@@ -11,6 +11,7 @@ Nominatim 的使用政策明文要求**可識別的 User-Agent** 與**每秒最�
 而那跟「標案沒有地點」「沒有 Google 金鑰」在畫面上是同一個樣子
 ——三個成因、一個畫面、三種相反的處置，所以每一個都必須有自己的訊號。
 """
+import contextvars
 import json
 import logging
 import re
@@ -638,6 +639,16 @@ def quota_exceeded(used=None, quota=None, pct=None) -> bool:
     return float(used or 0) >= limit
 
 
+def _is_zero_quota(quota) -> bool:
+    """額度明填 0（含 "0"）。None＝沒填＝不管制，不是 0（GB7）。"""
+    if quota is None:
+        return False
+    try:
+        return float(quota) == 0
+    except (TypeError, ValueError):
+        return False
+
+
 def quota_status() -> dict:
     """現在是不是省錢模式，以及這個週期到哪天。給畫面用（GB9）。"""
     settings = quota_settings()
@@ -651,6 +662,9 @@ def quota_status() -> dict:
         "quota": quota,
         "periodStart": period,
         "degraded": quota_exceeded(used=used, quota=quota),
+        # 第十五班（地圖修正包 ③）：額度**明填 0** ＝「一次都不准查」——不是「本週期用完」，也**不會**在下個週期自動恢復。
+        # 畫面要把這一種單獨說出來（原本會顯示「額度已用畢（0／0）…下一個計費週期開始後自動恢復」）。
+        "disabledByZero": _is_zero_quota(quota),
         "warnPct": settings.get("warn_pct"),
         "hardPct": settings.get("hard_pct"),
         "cycleStartDay": settings.get("cycle_start_day"),
@@ -893,6 +907,16 @@ _STAGES = (("_locate_google", SOURCE_GOOGLE),
            ("_locate_nominatim", SOURCE_NOMINATIM))
 
 
+#: 第十五班（主持裁示 2026-09-28）：背景迴圈同一輪裡 Google 階連續「連線層失敗／被拒」這麼多次 ⇒ 本輪其餘地址跳過 Google 階。
+_WARM_GOOGLE_MAX_CONSECUTIVE_FAILURES = 3
+
+#: 只在背景迴圈自己的執行緒（context）裡為 True：本輪跳過 Google 階。**不影響其他呼叫端**（使用者請求、手動定位）。
+_WARM_SKIP_GOOGLE = contextvars.ContextVar("motrix_geo_warm_skip_google", default=False)
+
+#: locate_cached 最近一次呼叫各階回報的錯誤（[(階, 原因)]）；背景迴圈用它分辨「Google 失敗」與「免費來源失敗」。
+_LAST_STAGE_ERRORS = contextvars.ContextVar("motrix_geo_last_stage_errors", default=None)
+
+
 def _stage_allowed(source) -> bool:
     """這一階現在可不可以走。
 
@@ -906,6 +930,8 @@ def _stage_allowed(source) -> bool:
     """
     if source != SOURCE_GOOGLE:
         return True
+    if _WARM_SKIP_GOOGLE.get():
+        return False                    # 背景迴圈本輪已判定 Google 連不上／被拒（第十五班），只在那個執行緒內生效
     # 🔑 具名呼叫模組層函式，不要抓住參考：抓住的話測試 patch 打不到，
     #    而那一題會安靜地失效。
     return not quota_exceeded()
@@ -1334,6 +1360,7 @@ def locate_cached(address, manual_coord=None):
     => 使用者後來填了 Google 金鑰 => **快取命中，永遠拿不到門牌精度**（A9）。
     而症狀是**沒有症狀**：地圖上有點、距離有數字，只是一直差幾公里。
     """
+    _LAST_STAGE_ERRORS.set([])
     if manual_coord is not None:
         return locate(address, manual_coord)
     address = (address or "").strip()
@@ -1360,6 +1387,7 @@ def locate_cached(address, manual_coord=None):
     # 🔴 §15 補三：**只有「三階都乾淨地 miss」才可以記負快取。**
     # 任何一階回報 `err`（逾時／對方回錯／連不上）⇒ 這一輪什麼都不記。
     errors = []
+    _LAST_STAGE_ERRORS.set(errors)       # 同一個 list：之後各階 append 的錯誤呼叫端都看得到（第十五班）
 
     for name, source in _STAGES:
         hit = _cached_stage(address, source)
@@ -1511,6 +1539,10 @@ def warm_status() -> dict:
         # 前者要去改地址或手動定位，後者是對方拒絕／連不上；合在一起的話畫面只能說一句誤導的話。
         "misses": state.get("misses", 0),
         "failures": state.get("failures", 0),
+        # 第十五班：本輪 Google 階被跳過（連續連線失敗／被拒）——免費來源照常繼續
+        "googleSkipped": bool(state.get("google_skipped", False)),
+        "googleSkipReason": state.get("google_skip_reason") or "",
+        "googleFailures": state.get("google_failures", 0),
         "usedToday": state.get("used", 0),
         "dailyLimit": GEOCODE_WARM_DAILY_LIMIT,
     }
@@ -1594,7 +1626,16 @@ def warm_geocode_cache() -> dict:
 
     **可以單獨呼叫** —— 排程與測試共用同一支，
     🔑 那讓「排程呼叫的東西」與「測試驗過的東西」**不可能是兩份**。
+    「本輪跳過 Google」只在這一輪、這個 context 內有效（結束一律還原），不外漏給其他呼叫端。
     """
+    token = _WARM_SKIP_GOOGLE.set(False)
+    try:
+        return _warm_geocode_cache_round()
+    finally:
+        _WARM_SKIP_GOOGLE.reset(token)
+
+
+def _warm_geocode_cache_round() -> dict:
     # `MP0c`：每一輪開頭先清掉過期的 Google 快取——在「地理查詢關著」的判斷**之前**：
     #    清除不對外連線，開關關著也要清（條款管的是「存了多久」，不是「有沒有在查」）。
     try:
@@ -1609,6 +1650,8 @@ def warm_geocode_cache() -> dict:
         state["date"] = today
         state["used"] = 0
 
+    google = {"skipped": False, "reason": "", "failures": 0}
+
     def _finish(reason, processed=0, succeeded=0, misses=0, failures=0):
         # 🔴 **每一趟都寫，包含什麼都沒做的那些。**
         # ☠️ 只在有做事時才更新的話，畫面會永遠寫著「上次處理 3 筆」，
@@ -1618,6 +1661,9 @@ def warm_geocode_cache() -> dict:
         state["succeeded"] = succeeded
         state["misses"] = misses
         state["failures"] = failures
+        state["google_skipped"] = google["skipped"]
+        state["google_skip_reason"] = google["reason"]
+        state["google_failures"] = google["failures"]
         state["stopped_because"] = reason
         _save_warm_state(state)
         return warm_status()
@@ -1640,7 +1686,7 @@ def warm_geocode_cache() -> dict:
     if remaining <= 0:
         return _finish("daily_limit")
 
-    processed = succeeded = streak = misses = failures = 0
+    processed = succeeded = streak = misses = failures = google_streak = 0
     reason = "no_backlog"                 # 全部查完 ⇒ 待辦空了
     for address in backlog:
         if processed >= remaining:
@@ -1650,11 +1696,15 @@ def warm_geocode_cache() -> dict:
         # ☠️ 另開一條不受節流的路 ＝ 用最快的速度連打對方，
         # 而那正是被封 IP 的標準做法。
         _throttle()
+        _LAST_STAGE_ERRORS.set([])
         try:
             result = locate_cached(address)
         except Exception:                 # noqa: BLE001
             logger.exception("暖快取查詢失敗：%s", address)
             result = None
+        errs = list(_LAST_STAGE_ERRORS.get() or [])
+        google_errs = [e for e in errs if e and e[0] == "google"]
+        free_errs = [e for e in errs if e and e[0] != "google"]
         processed += 1
         state["used"] = int(state.get("used", 0) or 0) + 1
         # ── 防線④：連續失敗就停，**而失敗不只認例外** ────────────────
@@ -1673,6 +1723,10 @@ def warm_geocode_cache() -> dict:
             # 負快取照記（七天內不再問），繼續下一筆；連續失敗計數歸零（對方剛剛回應正常）。
             misses += 1
             streak = 0
+        elif result is not None and google_errs and not free_errs:
+            # 🔴 第十五班（主持裁示）：只有 Google 階失敗、免費來源乾淨地查無 ⇒ **不是免費來源的失敗**，不算停止條件。
+            # （不記負快取：有一階沒問到——等 Google 恢復還要再查）
+            streak = 0
         else:
             failures += 1
             streak += 1
@@ -1682,6 +1736,20 @@ def warm_geocode_cache() -> dict:
                     "（對方可能拒絕了我們——請看上面的錯誤訊息）", streak)
                 reason = "failures"
                 break
+        # ── 第十五班：Google 階連續連線失敗／被拒 ⇒ 本輪其餘地址跳過 Google，免費來源繼續 ──────────
+        # ☠️ 不跳過的話：Google 連不上（SSL／proxy／金鑰限制）時，每一筆都「有階失敗」⇒ 不記負快取、算失敗、
+        #    三筆就停 ⇒ 免費來源查得到的地址也永遠補不上。
+        if google_errs:
+            google["failures"] += 1
+            google_streak += 1
+            if google_streak >= _WARM_GOOGLE_MAX_CONSECUTIVE_FAILURES and not google["skipped"]:
+                google["skipped"] = True
+                google["reason"] = str(google_errs[-1][1])[:200]
+                _WARM_SKIP_GOOGLE.set(True)
+                logger.warning("暖快取：Google 定位連續失敗 %d 次（%s），本輪其餘地址改用免費來源",
+                               google_streak, google["reason"])
+        elif not google["skipped"]:
+            google_streak = 0
     # 📌 每一輪結束時看一次警戒線（`GB12`）——
     #    這裡是**唯一**會定期醒來而且不在請求路徑上的地方。
     _check_quota_warning()

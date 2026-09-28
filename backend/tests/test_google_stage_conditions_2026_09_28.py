@@ -37,6 +37,8 @@ def spy(client, monkeypatch):
     """地理查詢開著、不節流、清快取與負快取；urlopen 換成記錄器：Google ⇒ 依 google_behave、Nominatim ⇒ 空陣列。"""
     monkeypatch.setattr(geo, "GEO_ENABLED", True)
     monkeypatch.setattr(geo, "_throttle", lambda: None)
+    # 合回 A 的 §6.2 守門（A44）之後：非 Google 底圖時背景迴圈整輪不用 Google ⇒ 這一檔在 Google 底圖為真的情境（raising=False：本分支還沒有那個函式）
+    monkeypatch.setattr(geo, "google_basemap", lambda: True, raising=False)
     monkeypatch.setattr(geo, "_CACHE", {})
     geo.reset_geocode_misses()
     calls = {"google": [], "nominatim": [], "google_behave": lambda: _Resp(json.dumps(
