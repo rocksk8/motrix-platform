@@ -9476,6 +9476,7 @@
     "file:backend/tests/test_system_audit_2026_09_14.py",
     "plat:__init__",
     "plat:paths",
+    "plat:registry",
     "plat:source_tree"
    ],
    "evidence": {
@@ -9483,6 +9484,7 @@
      "backend/archive.py",
      "backend/core/__init__.py",
      "backend/core/paths.py",
+     "backend/core/registry.py",
      "backend/core/source_tree.py",
      "backend/tests/test_system_audit_2026_09_14.py"
     ],
