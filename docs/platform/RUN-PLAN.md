@@ -149,6 +149,8 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-28 15:21 A（列車長）：**第十六班（緊急）合回**——B54：`schedule_geocode_warm()`／`schedule_tender_scan()` 立即返回、第一輪改 daemon Timer（正式機套用 8b04d99d 時同步預熱卡啟動 84 秒 ⇒ unhealthy_rolled_back，已回 822286ed）。自 origin 5020e985 cherry-pick B 10b10d14／b13cd5c3＋D 審 f53a9321／3d967f30（無衝突）；產生檔 63faf892；CORE 無介面變動、tender_radar 1.3.3、manifest 標案雷達 28h（唯一）、地圖 28g 沿用。modtest --train：差異題 2 紅＝test_spec_coverage（B 題目用了 S6 而 tender_radar SPEC 只宣告到 S5）⇒ 列車上補宣告 S6＋重產 spec_impl_modules.json（a4071fab）；tests/platform＋spec_coverage 1609 過；core-only RC ok（非預期 0）。不跑全量（主持：建包會跑）。建包、演練、發布由主持接。
+  - **下一輪待辦**（本班）：①BASELINE c006a2a0→822286ed（正式機 2026-09-28 已部署；第十六班上線後再依實際版本更新）（主持裁示列第一項）；②B54-S2：archive 同步排程移背景＋「所有排程都慢時 import main 仍在時限內」題。
 - 2026-09-28 14:29 主持：**第十五班（地圖修正包）出貨就緒，交使用者套用**。
   - 合回：origin/platform dee64c54 → **8b04d99d**（A 列車長；A44 Google 底圖＋SST-M1／GB-M1／GB-M2、B50 預熱查無＋GEO-M1＋「只有 Google 實際回查無才記 all」；B 合併樹 27c4dd22 為起點；D 必修全關）。f86825eb：CORE-SPEC 裁示「出貨前測試依改動範圍分級」。
   - 建包：D:\MOTRIX-DRILLS\t15-package\20260928_142316_8b04d99d（full；建包測試 5621＋e2e 545 過；pyc 0；546 檔）。
