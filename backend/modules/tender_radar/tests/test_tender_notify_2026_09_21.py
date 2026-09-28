@@ -123,11 +123,12 @@ def test_s3_exception_still_reschedules_next_timer(client, monkeypatch):
     **這題會永遠綠** —— 跟第 4 輪 8b 的 `fetch_raw` 是同一條。
     """
     _need(ts, "threading")
-    timers = []
+    timers, funcs = [], []
 
     class _FakeTimer:
         def __init__(self, interval, func, *a, **kw):
             timers.append(interval)
+            funcs.append(func)
             self.daemon = True
 
         def start(self):
@@ -140,8 +141,15 @@ def test_s3_exception_still_reschedules_next_timer(client, monkeypatch):
 
     monkeypatch.setattr(ts, "run_scan", _boom)
 
-    _need(ts, "schedule_tender_scan")()      # 不可以把例外往外丟
-    assert timers, (
+    # 〔更正 2026-09-28 第十五班緊急修補 B54（主持裁示）：schedule_tender_scan() 改為只排第一輪（daemon Timer、短延遲）
+    #   就返回，工作在排進去的那一支裡跑 ⇒ 原寫法「呼叫 schedule_tender_scan() 後 timers 非空」只驗到第一輪的 Timer，
+    #   驗不到「跑完（丟例外）照樣重排」。改為：呼叫 → 執行排進去的那一支 → 斷言又排了下一次。原寫法：
+    #     _need(ts, "schedule_tender_scan")()
+    #     assert timers, ...〕
+    _need(ts, "schedule_tender_scan")()
+    assert len(timers) == 1, "schedule_tender_scan() 應只排第一輪就返回"
+    funcs[0]()                               # 不可以把例外往外丟
+    assert len(timers) == 2, (
         "run_scan 丟例外之後，下一次 Timer 沒有被排上 —— 排程會安靜地死掉。"
         "⚠️ 若這題在實作正確時仍然紅，先查 tender_source 是不是寫了 "
         "`from threading import Timer`（那樣 monkeypatch 打不到）。"
@@ -155,20 +163,28 @@ def test_s3b_timer_is_scheduled_on_the_happy_path_too(client, monkeypatch):
     而紅燈不會告訴你是哪一種。**先證明量尺有刻度，再拿它去量。**
     """
     _need(ts, "threading")
-    timers = []
+    timers, funcs = [], []
 
     class _FakeTimer:
         def __init__(self, interval, func, *a, **kw):
             timers.append(interval)
+            funcs.append(func)
             self.daemon = True
 
         def start(self):
             pass
 
     monkeypatch.setattr(ts.threading, "Timer", _FakeTimer)
-    _spy(monkeypatch, ts, "run_scan")
+    # 〔更正 2026-09-28 第十五班緊急修補 B54（主持裁示）：schedule_tender_scan() 改為只排第一輪（daemon Timer、短延遲）
+    #   就返回，工作在排進去的那一支裡跑 ⇒ 原寫法「呼叫 schedule_tender_scan() 後 timers 非空」只驗到第一輪的 Timer，
+    #   驗不到「跑完（丟例外）照樣重排」。改為：呼叫 → 執行排進去的那一支 → 斷言又排了下一次。原寫法：
+    #     _need(ts, "schedule_tender_scan")()
+    #     assert timers, ...〕
+    scans = _spy(monkeypatch, ts, "run_scan")
     _need(ts, "schedule_tender_scan")()
-    assert timers, "正常情況下也必須排下一次 Timer"
+    assert len(timers) == 1 and not scans, "schedule_tender_scan() 應只排第一輪就返回（不在呼叫者執行緒裡掃描）"
+    funcs[0]()
+    assert len(timers) == 2, "正常情況下也必須排下一次 Timer"
 
 
 def test_s4_second_trigger_same_slot_makes_no_external_request(client, monkeypatch):
@@ -1008,3 +1024,57 @@ def test_r3b_fetch_timeout_is_bounded(client):
     t = _need(ts, "FETCH_TIMEOUT_SECONDS")
     assert isinstance(t, (int, float)), f"FETCH_TIMEOUT_SECONDS 型別不對：{t!r}"
     assert 0 < t <= 15, f"逾時應該是 15 秒以內的正數，實際 {t!r}"
+
+
+# ── S6：第十五班緊急修補 B54（主持裁示）：第一輪不可以卡住 import main ─────────────────────────
+#
+# 形狀同 S5（子行程、排程開著、archive 空殼）。第一輪掃描換成「睡 _S6_SLOW 秒」、首輪延遲設 0。
+# ☠️ 同步版本：套用時間落在抓取時段而未抓過 ⇒ 啟動被卡（最壞約 340 秒）⇒ 健康檢查 83 秒失敗 ⇒ 自動回滾。
+
+_S6_SLOW = 60
+
+_S6_SCRIPT = '''
+import os, sys, types, tempfile, time, threading
+import db
+_tmp = tempfile.mkdtemp()
+db.DB_PATH = os.path.join(_tmp, "t.db")
+db.DEMO_DB_PATH = os.path.join(_tmp, "d.db")
+
+class _Stub(types.ModuleType):
+    def __getattr__(self, name):
+        return lambda *a, **kw: None
+
+sys.modules["archive"] = _Stub("archive")
+import helpers.daily_checks as _dck
+_dck.schedule_daily_checks = lambda *a, **kw: None
+from helpers import geo
+geo.schedule_geocode_warm = lambda *a, **kw: None
+
+import modules.tender_radar.source as _ts
+started = threading.Event()
+def _slow_scan(*a, **kw):
+    started.set()
+    time.sleep(%d)
+_ts.run_scheduled_scan = _slow_scan
+_ts._TENDER_SCAN_FIRST_DELAY_SECONDS = 0
+os.environ.pop("MOTRIX_DISABLE_SCHEDULERS", None)
+
+t0 = time.monotonic()
+import main  # noqa: F401
+print("IMPORT_SECONDS=%%.2f" %% (time.monotonic() - t0))
+print("SCAN_STARTED=%%d" %% int(started.wait(10)))
+sys.stdout.flush()
+os._exit(0)
+''' % _S6_SLOW
+
+
+def test_s6_first_scan_does_not_block_import_main():
+    """第一輪掃描很慢（睡 60 秒）時，真的 `import main` 仍在 60 秒內完成，而第一輪確實在背景起跑。"""
+    backend = Path(__file__).resolve().parents[3]
+    proc = run_python(["-c", _S6_SCRIPT], cwd=backend, timeout=_S6_SLOW * 3)
+    assert proc.returncode == 0, f"子行程失敗（returncode={proc.returncode}）：\n{proc.stderr[-2500:]}"
+    vals = dict(l.split("=", 1) for l in proc.stdout.splitlines() if "=" in l and l.split("=", 1)[0].isupper())
+    assert "IMPORT_SECONDS" in vals, f"子行程沒有印出耗時：\n{proc.stdout[-1500:]}\n{proc.stderr[-1500:]}"
+    secs = float(vals["IMPORT_SECONDS"])
+    assert secs < _S6_SLOW, f"import main 花了 {secs:.1f} 秒 ≥ 第一輪掃描的 {_S6_SLOW} 秒 ⇒ 啟動在等標案抓取"
+    assert vals.get("SCAN_STARTED") == "1", "import main 之後第一輪掃描沒有在背景起跑"
