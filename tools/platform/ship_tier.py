@@ -39,8 +39,12 @@ MANIFEST = "backend/version_manifest.json"
 
 def _pages_rel():
     """module.json 宣告的頁面（`pages[].path`）所在目錄，repo 相對路徑；由 core.paths 取得，不寫死（test_page_paths_centralized）。"""
-    sys.path.insert(0, str(REPO / "backend"))
-    from core import paths as _paths
+    # 以檔案路徑載入**本 repo** 的 core/paths.py（不經 sys.path）：呼叫端（例：演練工具）可能已把別的安裝的 backend
+    # 放進 sys.path，`from core import paths` 會拿到那一份 ⇒ 頁面目錄算到別的地方（B55 S6 演練實際踩到）
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_ship_tier_core_paths", str(REPO / "backend" / "core" / "paths.py"))
+    _paths = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(_paths)
     return Path(_paths.FRONTEND_PAGES_DIR).resolve().relative_to(REPO.resolve()).as_posix()
 
 

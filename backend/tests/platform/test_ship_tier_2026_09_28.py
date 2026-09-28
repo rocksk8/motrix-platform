@@ -6,6 +6,7 @@
 """
 import importlib.util
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -395,3 +396,21 @@ def test_real_history_l1_commit_is_tier3():
         pytest.skip("repo 沒有 d0f1078a（淺複製）")
     r = ST.tier_for("d0f1078a^", "d0f1078a")
     assert r["tier"] == 3 and any(f == "backend/helpers/geo.py" for f, _ in r["offenders"]), r
+
+
+def test_pages_rel_ignores_another_install_on_sys_path(tmp_path, monkeypatch):
+    """B55 S6 演練實際踩到：呼叫端先把別的安裝的 backend 放進 sys.path ⇒ `from core import paths` 拿到那一份 ⇒
+    頁面目錄算到 repo 外而 ship_tier 匯入就失敗。現在以檔案路徑載入本 repo 的 core/paths.py。"""
+    other = tmp_path / "other_install" / "backend" / "core"
+    other.mkdir(parents=True)
+    (other / "__init__.py").write_text("", encoding="utf-8")
+    (other / "paths.py").write_text("FRONTEND_PAGES_DIR = r'%s'\n" % (tmp_path / "elsewhere"), encoding="utf-8")
+    monkeypatch.syspath_prepend(str(other.parent))
+    for m in [m for m in sys.modules if m == "core" or m.startswith("core.")]:
+        monkeypatch.delitem(sys.modules, m)
+    import core.paths  # noqa: F401  別的安裝的 core 已經被匯入並快取（演練工具先匯入了安裝目錄的 apply_plan／core.upgrade）
+    assert "other_install" in sys.modules["core.paths"].__file__, "正對照：誘餌真的佔住了 core.paths"
+    spec = importlib.util.spec_from_file_location("_ship_tier_decoy", REPO / "tools" / "platform" / "ship_tier.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.PAGES_REL == ST.PAGES_REL
