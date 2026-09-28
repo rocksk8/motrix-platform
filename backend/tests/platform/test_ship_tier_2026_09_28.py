@@ -174,13 +174,22 @@ def test_getter_names_come_from_registry_public_interface():
     'from core import registry\nx = registry.single_provider(capability="p.cap")\n',
 ])
 def test_consumer_forms_are_found(consumer_src):
-    repo = _repo({"backend/modules/p/__init__.py": PROVIDER_INIT,
-                    "backend/modules/p/api.py": "def f(): pass\n",
-                    "backend/helpers/consts.py": 'PCAP = "p.cap"\n',
-                    "backend/modules/c/api.py": consumer_src})
-    pc = ST.provider_check(repo, "p", ["backend/modules/p/api.py"], policy="consumers")
+    files = {"backend/modules/p/__init__.py": PROVIDER_INIT, "backend/modules/p/api.py": "def f(): pass\n",
+             "backend/modules/c/api.py": consumer_src}
+    if "consts" in consumer_src:
+        # 只在消費端真的用到時才放：沒人用的能力常數本身就是「散落的能力字串」（DB4-S1 ③ 判不了，見下一題）
+        files["backend/helpers/consts.py"] = 'PCAP = "p.cap"\n'
+    pc = ST.provider_check(_repo(files), "p", ["backend/modules/p/api.py"], policy="consumers")
     assert pc["provider_changed"] and pc["caps"] == ["p.cap"], pc
     assert pc["consumers"] == ["backend/modules/c/api.py"] and not pc["reject"], pc
+
+
+def test_unused_capability_constant_is_unresolved():
+    """定義了能力常數卻沒有任何已解析的取用用到它 ⇒ 可能經別的路徑（getattr、字串拼接）被取用 ⇒ 判不了。"""
+    files = {"backend/modules/p/__init__.py": PROVIDER_INIT, "backend/modules/p/api.py": "def f(): pass\n",
+             "backend/helpers/consts.py": 'PCAP = "p.cap"\n'}
+    pc = ST.provider_check(_repo(files), "p", ["backend/modules/p/api.py"], policy="consumers")
+    assert pc["reject"] and any(u.startswith("backend/helpers/consts.py:") for u in pc["unresolved"]), pc
 
 
 @pytest.mark.parametrize("consumer_src, why", [
@@ -227,6 +236,90 @@ def test_policy_reject_turns_provider_change_into_tier3():
 
 def test_default_policy_is_user_ruling():
     assert ST.PROVIDER_CHANGE_POLICY == "consumers", "使用者裁示甲（CORE-SPEC ee383527）"
+
+
+# ── DB4-S1（主持裁示必做）：繞過取用函式的讀法 ⇒ 判不了 ──────────────────────────────
+
+_P_FILES = {"backend/modules/p/__init__.py": PROVIDER_INIT, "backend/modules/p/api.py": "def f(): pass\n"}
+
+
+@pytest.mark.parametrize("src, why", [
+    ('from core import registry\nx = registry._LEGACY_PROVIDERS[("p.cap", "p")]\n', "讀 registry 內部取用（主持指定的反向控制）"),
+    ('from core import registry as R\nfor k in R._LEGACY_PROVIDERS: pass\n', "別名讀內部"),
+    ('from core.registry import _LEGACY_PROVIDERS\n', "import 內部名稱"),
+    ('from core.registry import *\nx = single_provider(CAP)\n', "星號 import"),
+    ('from core import registry\nfor m in registry.loaded():\n    fn = m.spec.providers[("p.cap", "p")]\n', "經 loaded() 取 spec.providers（能力字串出現在非取用位置）"),
+    ('from core import registry\nfrom helpers.consts import PCAP\nfor m in registry.loaded():\n    fn = m.spec.providers[(PCAP, "p")]\n',
+     "能力常數（跨檔）用在非取用位置"),
+    ('from core import registry\nfrom helpers.consts import PCAP\nok = registry.providers(PCAP)\nfor m in registry.loaded():\n    fn = m.spec.providers[(PCAP, "p")]\n',
+     "同一檔有合法取用、另一處繞過（消費端檔不整檔豁免）"),
+    ('from core import registry\nfrom helpers import consts\nok = registry.providers(consts.PCAP)\nfor m in registry.loaded():\n    fn = m.spec.providers[(consts.PCAP, "p")]\n',
+     "能力常數以屬性形式（consts.PCAP）用在非取用位置"),
+    ('from core import registry\nfor (cap, name), fn in registry._LEGACY_PROVIDERS.items():\n    fn()\n',
+     "讀 registry 內部、完全沒有能力字串（只有 ① 抓得到）"),
+    ('from core.registry import *\nx = single_provider(cap_from_somewhere)\n', "星號 import（只有 ② 抓得到）"),
+])
+def test_bypassing_the_getters_is_unresolved(src, why):
+    files = {**_P_FILES, "backend/modules/c/api.py": src}
+    if "consts" in src or "PCAP" in src:
+        files["backend/helpers/consts.py"] = 'PCAP = "p.cap"\n'     # 只在用到時放（沒人用的能力常數本身就判不了，會混淆這一題）
+    repo = _repo(files)
+    pc = ST.provider_check(repo, "p", ["backend/modules/p/api.py"], policy="consumers")
+    assert pc["reject"] and pc["unresolved"], (why, pc)
+
+
+def test_co_providers_of_the_same_capability_are_not_stray():
+    """同一能力可以有多個提供者：別的模組在 ModuleSpec.providers／provide 登記同一個 cap，不是取用、不算判不了。"""
+    other = ('from core.registry import ModuleSpec\nfrom core import registry\nfrom . import api\n'
+             'MODULE = ModuleSpec(key="q", providers={("p.cap", "q"): api.g})\n'
+             'registry.provide("p.cap", "q2", api.g)\n')
+    repo = _repo({**_P_FILES, "backend/modules/q/__init__.py": other, "backend/modules/q/api.py": "def g(): pass\n"})
+    pc = ST.provider_check(repo, "p", ["backend/modules/p/api.py"], policy="consumers")
+    assert not pc["reject"], pc
+
+
+def test_registry_internals_allowlist_is_needed_and_minimal(real_repo):
+    """白名單的正對照：拿掉 core/catalog.py ⇒ 它真的會被抓（白名單不是空設）；白名單外沒有任何人讀 registry 內部。"""
+    assert set(ST.REGISTRY_INTERNALS_ALLOWED) == {"backend/core/catalog.py"}
+    assert not ST.registry_bypasses(real_repo, "case"), "白名單外有人讀 registry 內部"
+    saved = dict(ST.REGISTRY_INTERNALS_ALLOWED)
+    try:
+        ST.REGISTRY_INTERNALS_ALLOWED.clear()
+        hits = ST.registry_bypasses(real_repo, "case")
+    finally:
+        ST.REGISTRY_INTERNALS_ALLOWED.update(saved)
+    assert any(h.startswith("backend/core/catalog.py:") for h in hits), hits
+
+
+def test_capability_string_allowlist_entries_are_live(real_repo):
+    """例外清單每一筆今天仍對得上（那個檔真的在非取用位置出現那個字串）；拿掉它 ⇒ 真的會被抓（例外不是空設）。"""
+    for (rel, cap), why in ST.CAPABILITY_STRING_ALLOWED.items():
+        assert why, (rel, cap)
+        consts = [n for n in ast_walk(real_repo, rel) if getattr(n, "value", None) == cap]
+        assert consts, "例外清單過期：%s 已沒有 %r ⇒ 刪掉這一筆" % (rel, cap)
+    saved = dict(ST.CAPABILITY_STRING_ALLOWED)
+    try:
+        ST.CAPABILITY_STRING_ALLOWED.clear()
+        pc = ST.provider_check(ST.Repo(real_repo.sources), "case", ["backend/modules/case/x.py"], policy="consumers")
+    finally:
+        ST.CAPABILITY_STRING_ALLOWED.update(saved)
+    assert any(u.startswith("backend/routers/approval_queue.py:") for u in pc["unresolved"]), pc["unresolved"]
+
+
+def ast_walk(repo, rel):
+    import ast
+    return list(ast.walk(repo.file(rel).tree))
+
+
+def test_real_repo_every_provider_module_resolves(real_repo):
+    """今天所有提供串接點的模組都要判得出來（否則單模組包對它們一律退回乙——要知道是哪一處）。"""
+    bad = {}
+    for d in sorted((REPO / "backend" / "modules").iterdir()):
+        if (d / "module.json").is_file():
+            pc = ST.provider_check(real_repo, d.name, ["backend/modules/%s/x.py" % d.name], policy="consumers")
+            if pc["reject"]:
+                bad[d.name] = pc["unresolved"][:5]
+    assert not bad, bad
 
 
 # ── 真實 repo 正對照（DB2-M1 補題；讀碼 2026-09-28 核對的實際消費端）──────────────────

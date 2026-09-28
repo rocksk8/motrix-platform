@@ -169,6 +169,8 @@
   - 🔑 這一步是必要的：`case.access` 的直接消費端有 L1 的 `helpers/case_access.py` 與 netplan（`modules/netplan/api.py:43` 直接 `single_provider("case.access")`）；accounting 則是**經由** `helpers/case_access` 間接用到（`modules/accounting/voucher_attachments.py:46` import `case_page_readable`）。只選直接消費端的題會漏掉 accounting。〔更正（D 複審 DB3-S1）：原句寫「netplan、accounting 都是經由 case_access」——netplan 其實是直接消費端；間接見證改用 accounting〕
 - 〔D 複審 DB3-S2〕模組內**函式／類別裡**的 `provide(...)` 呼叫 ⇒ 登記時機判不了 ⇒ 列進判不了 ⇒ 退回乙（不略過）。
 - ~~**與 dep_graph.json 交叉比對**：dep_graph 若另有 <k> 能力清單上的消費關係而 AST 沒找到 ⇒ 退回乙並列出差異（兩個來源不一致時不猜誰對）。~~〔實作時更正（B，2026-09-28）：`dep_graph.json` 的單位欄位（imports、routers_called、tables_* …）**沒有任何 capability 資料**，這條做不出來。改為守門題 `test_real_ast_capabilities_match_runtime_registry`：載入全部模組後，registry 實際登記的能力（ModuleSpec.providers＋模組層 provide，依提供函式所屬模組歸戶）必須 ⊆ AST 算出來的能力清單——AST 漏掉任何一種登記寫法 ⇒ 紅。消費端那一側仍由「判不了 ⇒ 退回乙」保護〕
+- 〔D 複審 DB4-S2〕上一條的執行期比對**只守能力側**（提供者登記了什麼）；它看不到任何消費端。消費端的保護是下一條（DB4-S1）與「判不了 ⇒ 退回乙」。
+- 〔D 複審 DB4-S1，主持裁示必做〕繞過取用函式的讀法一律判不了（退回乙）：① <k> 以外讀 `core.registry` 內部（底線名稱、import 內部名稱）⇒ 判不了，白名單 `ship_tier.REGISTRY_INTERNALS_ALLOWED` 目前只有 `backend/core/catalog.py`（平台目錄頁列出所有提供者，不依賴任何能力的回傳形狀）；② 從 `core` 星號 import ⇒ 判不了；③ 能力字串（完全相等的字串常數）在後端每一次出現，都要落在「提供者登記位置（任何模組或 L1 的 ModuleSpec.providers key、provide 第一個引數：同一能力可以有多個提供者）／已解析的消費端檔／白名單」其一，否則判不了。反向控制：合成一個以 `registry._LEGACY_PROVIDERS[("case.access", "case")]` 取用的檔 ⇒ 判不了。
 - **正對照（真實 repo，D 補題；讀碼 2026-09-28 核對後的實際消費端）**：
   - 改 arap 的 `_InvoiceVoucherAttachments`（`attachments.for_document` 提供者）⇒ 選題含 **accounting** 的附件彙整題（消費端是 `modules/accounting/voucher_attachments.py:103`；〔更正 D 複審原文「⇒ case 消費端題」：case 是同一能力的**另一個提供者**（`modules/case/__init__.py:57`），不是消費端〕）。
   - 改 arap 的 `_calendar_writeback` ⇒ 選題含 `helpers/google_calendar.py:236` 的單位的題。
