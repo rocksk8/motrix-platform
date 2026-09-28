@@ -98,3 +98,49 @@ def test_missing_key_file_does_not_leak_a_traceback(tmp_path, dev, capsys):
     code, res, raw = _run(capsys, "--private-key", str(tmp_path / "nope.pem"), "--install", "b" * 64,
                           "--tax", UBN_A, "--out", str(tmp_path / "o.sig"))
     assert code == cli.EXIT_ERROR and "FileNotFoundError" in res["error"] and "Traceback" not in raw
+
+
+# ── 永久授權（使用者 2026-09-29「正式機為永久授權」，主持轉達）──
+
+def test_permanent_sign_never_expires_and_never_alerts(tmp_path, dev, capsys, caplog):
+    from datetime import date, timedelta
+    kp, _priv = dev
+    root = _root(tmp_path)
+    _ok, ih = cs.ensure_install_id(root)
+    out_file = tmp_path / "company_confirmation.sig"
+    code, res, _raw = _run(capsys, "--private-key", str(kp), "--install", ih, "--tax", UBN_A, "--permanent",
+                           "--out", str(out_file))
+    assert code == 0 and res["permanent"] is True and res["expires"] is None
+    doc = json.loads(out_file.read_text(encoding="utf-8"))
+    assert "expires" not in doc and doc["permanent"] is True and cs.is_permanent_doc(cs.verified_doc(out_file.read_text(encoding="utf-8")))
+    (Path(root) / "backend" / "company_confirmation.sig").write_bytes(out_file.read_bytes())
+    profile = dict(GOOD, tax_id=UBN_A)
+    assert cs.signed_file_state(profile, root) == "valid"
+    assert cs.signed_file_state(profile, root, date.today() + timedelta(days=3650)) == "valid"   # 十年後仍有效
+    conn = _db(tmp_path, profile)
+    assert cs.backfill_once(conn, root) == "backfilled" and cs.status(conn, root)["configured"] is True
+    caplog.clear()
+    cs.observe_expiry(conn, root)
+    alerts = conn.execute("SELECT COUNT(*) FROM audit_log WHERE action='company_setup.alert'").fetchone()[0]
+    assert alerts == 0 and "到期檢查失敗" not in caplog.text                                       # 不告警、也不是靠例外略過
+
+
+@pytest.mark.parametrize("case", ["with_days", "not_developer"])
+def test_permanent_refusals(tmp_path, dev, capsys, case):
+    kp, _priv = dev
+    out_file = tmp_path / "out.sig"
+    args = ["--private-key", str(kp), "--install", "c" * 64, "--permanent", "--out", str(out_file)]
+    args += ["--tax", UBN_B] if case == "not_developer" else ["--tax", UBN_A, "--days", "30"]
+    code, res, _raw = _run(capsys, *args)
+    assert code == cli.EXIT_ERROR and res["ok"] is False and not out_file.exists()
+
+
+def test_a_signed_file_without_expires_and_without_the_permanent_mark_is_not_permanent(tmp_path, dev):
+    """反向控制：永久要簽章內明寫 permanent；只是少了 expires（例：手工簽的）⇒ 不算有效。"""
+    kp, priv = dev
+    root = _root(tmp_path)
+    _ok, ih = cs.ensure_install_id(root)
+    text = cs.sign_confirmation({"identity_fp": cs.identity_fp("tax", UBN_A), "install": ih,
+                                 "issued": "2026-01-01"}, priv)
+    (Path(root) / "backend" / "company_confirmation.sig").write_text(text, encoding="utf-8")
+    assert cs.signed_file_state(dict(GOOD, tax_id=UBN_A), root) == "expired"

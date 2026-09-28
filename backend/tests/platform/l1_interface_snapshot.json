@@ -303,6 +303,7 @@
    "install_hash": "def(root=…)",
    "is_allowed": "def(compiled, method, path)",
    "is_developer_identity": "def(profile)",
+   "is_permanent_doc": "def(doc)",
    "observe": "def(conn, root=…, now=…)",
    "observe_expiry": "def(conn, root=…, now=…)",
    "payment_bank_missing": "def(profile)",

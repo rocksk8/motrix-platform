@@ -22,7 +22,8 @@ import pytest
 _TOOLS = Path(__file__).resolve().parents[2] / "tools"
 NEW = "apply_module_update.ps1"
 SHARED = ("Test-Ping", "Fail", "Info", "Warn", "Ok", "Enter-InstallLock", "Exit-InstallLock", "Write-ResultFile",
-          "Backup-DatabasesOnline", "Invoke-Py", "Stop-InstallService", "Start-InstallService", "Get-StartupRange")
+          "Backup-DatabasesOnline", "Invoke-Py", "Stop-InstallService", "Start-InstallService", "Get-StartupRange",
+          "Write-CompanyBankNote")      # 第二十一班（E4S3-S1）
 NEW_STATUSES = {"module_preflight_failed", "module_load_dryrun_failed", "module_copy_failed",
                 "module_unhealthy_rolled_back", "module_restore_failed"}
 

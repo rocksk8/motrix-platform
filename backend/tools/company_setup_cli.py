@@ -5,7 +5,7 @@
   python company_setup_cli.py preflight --db <庫> --root <安裝目錄>     套用前預檢：在記憶體副本上模擬 backfill＋status（不寫庫）
   python company_setup_cli.py status    --db <庫> --root <安裝目錄>     套用後檢查（不寫庫）
   python company_setup_cli.py grace     --root <安裝目錄> --hours 72 --reason "<原因>"   暫時放行（≤72 小時）
-  python company_setup_cli.py sign --private-key <私鑰檔> --install <安裝識別雜湊> --tax <統編> [--days 365] --out <檔>
+  python company_setup_cli.py sign --private-key <私鑰檔> --install <安裝識別雜湊> --tax <統編> (--permanent | [--days 365]) --out <檔>
                                                       **開發機用**：簽開發者正式機的確認檔（§6.2）。私鑰只以路徑傳入、
                                                       不印不存；簽完以內嵌的交付公鑰自驗，驗不過就不寫檔
 
@@ -117,13 +117,20 @@ def cmd_sign(a):
     fp = cs.identity_fp("tax", tax)
     if fp not in cs.DEVELOPER_IDENTITY_FP:
         return _emit({"ok": False, "error": "--tax 不是開發者公司的統編：確認檔只簽開發者身分（其他安裝在設定頁由最高管理員確認）"}, EXIT_ERROR)
-    if not (0 < a.days <= SIGN_MAX_DAYS):
+    if a.permanent and a.days is not None:
+        return _emit({"ok": False, "error": "--permanent 與 --days 只能擇一"}, EXIT_ERROR)
+    days = SIGN_MAX_DAYS if a.days is None else a.days
+    if not a.permanent and not (0 < days <= SIGN_MAX_DAYS):
         return _emit({"ok": False, "error": "--days 必須在 1～%d" % SIGN_MAX_DAYS}, EXIT_ERROR)
     if os.path.exists(a.out):
         return _emit({"ok": False, "error": "輸出檔已存在，不覆蓋：%s" % a.out}, EXIT_ERROR)
     today = datetime.now().date()
-    payload = {"identity_fp": fp, "install": a.install, "issued": today.isoformat(),
-               "expires": (today + timedelta(days=a.days)).isoformat()}
+    payload = {"identity_fp": fp, "install": a.install, "issued": today.isoformat()}
+    if a.permanent:
+        # 使用者 2026-09-29「正式機為永久授權」：不寫 expires、寫 permanent（都在簽章範圍內）；只准開發者身分（上面已驗）
+        payload["permanent"] = True
+    else:
+        payload["expires"] = (today + timedelta(days=days)).isoformat()
     try:
         with open(a.private_key, "rb") as f:
             text = cs.sign_confirmation(payload, f.read())
@@ -136,7 +143,7 @@ def cmd_sign(a):
         f.write(text)
     os.replace(tmp, a.out)
     return _emit({"ok": True, "out": a.out, "install": a.install, "issued": payload["issued"],
-                  "expires": payload["expires"]}, EXIT_OK)
+                  "expires": payload.get("expires"), "permanent": bool(a.permanent)}, EXIT_OK)
 
 
 def main(argv=None):
@@ -162,7 +169,8 @@ def main(argv=None):
     s.add_argument("--private-key", required=True)
     s.add_argument("--install", required=True)
     s.add_argument("--tax", required=True)
-    s.add_argument("--days", type=int, default=SIGN_MAX_DAYS)   # 使用者授權 365 天（2026-09-29：~~30~~ ⇒ 365）
+    s.add_argument("--days", type=int, default=None)   # 不帶 ⇒ 365（使用者授權上限；2026-09-29：~~30~~ ⇒ 365）
+    s.add_argument("--permanent", action="store_true")  # 開發者本公司正式機：永久（使用者 2026-09-29）
     s.add_argument("--out", required=True)
     a = p.parse_args(argv)
     try:

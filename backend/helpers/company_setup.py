@@ -11,7 +11,8 @@
     CODE_REQUIRED, CODE_UNDETERMINED, GATE_GRACE, GATE_OK, GATE_REQUIRED, GATE_UNDETERMINED, HEADER, MSG_REQUIRED,
     MSG_UNDETERMINED, SETTINGS_URL, compile_allowed, gate, is_allowed, reset_cache,
     CompanySetupRequired, DEMO_INSTALL, DEMO_PROFILE, DEMO_WATERMARK, ERROR_CACHE_SECONDS, GRACE_EXPIRY_WARN_HOURS,
-    SIGNED_EXPIRY_WARN_DAYS, observe_expiry, require, seed_demo, RESERVED_DEMO_UBN, payment_bank_missing, verified_doc
+    SIGNED_EXPIRY_WARN_DAYS, observe_expiry, require, seed_demo, RESERVED_DEMO_UBN, payment_bank_missing, verified_doc,
+    is_permanent_doc
 [不變式] status() 是純判斷（不寫庫、不寫檔）；只有 confirm()（設定頁「確認本公司資料」）與 backfill_once()（每庫一次）會寫確認紀錄；
     綁定＝安裝識別檔（不看硬體，主持裁示 CG-M1）；開發者身分需要開發者簽章確認檔；backfill_once／observe／ensure_install_id 不丟例外
 [契約題] tests/test_company_setup_core_2026_09_28.py、tests/test_company_setup_cli_2026_09_28.py、
@@ -245,6 +246,12 @@ def sign_confirmation(payload: dict, private_pem: bytes) -> str:
     return json.dumps(dict(body, sig=base64.b64encode(sig).decode("ascii")), ensure_ascii=False, indent=1)
 
 
+def is_permanent_doc(doc) -> bool:
+    """永久確認檔：簽章內含 `permanent: true` 且**沒有** `expires`（兩者都在簽章範圍內，改不了）。
+    沒有 expires 又沒有 permanent 標記 ⇒ 不算永久（signed_file_state 比對到期日時自然判 expired）。"""
+    return isinstance(doc, dict) and doc.get("permanent") is True and "expires" not in doc
+
+
 def verified_doc(raw):
     """確認檔內容 ⇒ 簽章與用途都驗過的 dict；任何一項不對 ⇒ None。"""
     try:
@@ -276,6 +283,8 @@ def signed_file_state(profile, root=None, today=None) -> str:
     if doc.get("install") != install_hash(root) or doc.get("identity_fp") != identity_fp("tax", ident.get("tax_id")):
         return "mismatch"
     today = (today or datetime.now().date()).isoformat()
+    if is_permanent_doc(doc):                # 永久授權（使用者 2026-09-29「正式機為永久授權」）：只看簽發日
+        return "valid" if str(doc.get("issued", "")) <= today else "expired"
     if not (str(doc.get("issued", "")) <= today <= str(doc.get("expires", ""))):
         return "expired"
     return "valid"
@@ -478,6 +487,8 @@ def observe_expiry(conn, root=None, now=None) -> None:
         profile = _get(conn, "company_profile", {}) or {}
         if is_developer_identity(profile) and signed_file_state(profile, root, now.date()) == "valid":
             doc = json.loads(_read_text(_files(root)[1]))
+            if is_permanent_doc(doc):
+                return                       # 永久確認檔不到期、不提醒
             expires = datetime.fromisoformat(str(doc["expires"])).date()
             if (expires - now.date()).days <= SIGNED_EXPIRY_WARN_DAYS:
                 alert(conn, "signed_file_expiring",
