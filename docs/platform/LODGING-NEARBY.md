@@ -2,6 +2,7 @@
 
 > 狀態：**來源調查＋設計，尚未實作**（主持派工：交 D 審，過了才寫產品碼）。
 > 〔修訂 2026-09-28 16:50：D 審 AUDIT-D-E1-lodging.md（wip/d-audit-train16 fb225dd9）必修 LG-M1／LG-M2、建議 LG-S1～S5 全收；Q2 不顯示電話、Q4 建立者＋admin+ 照原設計；Q1 使用者裁示採用 §1.1.4 判讀（CORE-SPEC ff3b1e14）。被取代的原句以刪除線保留〕
+> 〔修訂 2026-09-28 16:55：D 複審（wip/d-audit-train16 7a9cddb2 §5）LG-M1／LG-M2 關閉；新必修 LG2-M1、建議 LG2-S1～S3 全收〕
 > 依據：CORE-SPEC 裁示表「地圖附近旅宿（新功能，第 E 線）」（09888e19）。
 > 取證方式：2026-09-28 16:30～16:45 以 `curl` 抓原始檔，只去標籤、自己讀（未經摘要模型）。引文一律逐字；中文說明是我的判讀。
 > 原始檔保存在 E 線 session scratchpad（未進 repo）；重抓網址逐條列在各節。
@@ -135,14 +136,45 @@ MOTRIX 是賣給多個客戶的產品 ⇒ 所有客戶的查詢合計算在「�
 
 ### 3.1 模組定位
 - 新 L2 模組 `lodging`（名稱「附近旅宿」，可獨立販售，`license_key: "lodging"`）。**不 import 任何 L2**；只用 L0／L1：`core.paths`、`core.registry`、`helpers.geo`（定位）、`db`。
-- 定位走 L1 `helpers.geo.locate_cached(address)`：Google／TGOS／Nominatim 的選用與底圖規則（SST §6.2、`geo.google_basemap()`）**全部由 L1 決定**，模組不自己打任何定位 API。
+- ~~定位走 L1 `helpers.geo.locate_cached(address)`：Google／TGOS／Nominatim 的選用與底圖規則（SST §6.2、`geo.google_basemap()`）**全部由 L1 決定**，模組不自己打任何定位 API。~~
+  〔更正 LG2-M1（D 複審）：不成立——`locate_cached()` 擋 Google 靠 contextvar，範圍要由**呼叫端**用 `with geo.without_google_content()` 包；目前只有 map_points、背景預熱、據點存檔三處有包，旅宿直接呼叫就會在 OSM 底圖＋有伺服器金鑰時問 Google（SST §6.2）。改為下一條〕
+- 定位走 L1 `helpers.geo.locate_cached(address)`，而且**一律包在 L1 新函式 `geo.map_request_scope(page_basemap, missing=…)` 裡**（§3.1.1）；模組不自己打任何定位 API、不自己判斷底圖。
 - 距離：伺服器端 haversine（純計算，不呼叫 Distance Matrix 等外部服務）。顯示「直線距離」，不宣稱路程。
+
+#### 3.1.1 地圖請求的 Google 範圍（LG2-M1；L1，旅宿與 map_points 共用）
+- 現況：`routers/map_points.py` 自己寫 `google_map = geo.google_basemap() and (basemap or "google") != "osm"`，否則 `with geo.without_google_content()`（GB-M2「只准收窄」）。
+- 抽成 L1 一支（CORE 小版號新增）：
+  ```python
+  @contextmanager
+  def map_request_scope(page_basemap, missing="osm"):
+      """地圖頁送來的請求：頁面底圖只准收窄設定。yield True＝這次可以用 Google 內容。
+      page_basemap: 'google'｜'osm'｜None；None 依 missing（'osm'＝視同 osm，'setting'＝照設定）。"""
+      page = page_basemap if page_basemap in ("google", "osm") else (None if page_basemap is None else "osm")
+      if page is None:
+          page = "google" if missing == "setting" else "osm"
+      allowed = google_basemap() and page != "osm"
+      if allowed:
+          yield True
+      else:
+          with without_google_content():
+              yield False
+  ```
+  - 不認得的值（例 `"GOOGLE "`、`"x"`）⇒ 當 osm（收窄，不猜）。
+  - map_points 改用 `map_request_scope(basemap, missing="setting")`——`None`／`google`／`osm` 三種值的行為與現在相同（沒帶＝照設定，給標案雷達計數這類非地圖呼叫者），由既有 GB-M2 題守住；⚠ **唯一的行為差異**：不認得的值（例 `basemap=x`）現在是 `"x" != "osm"` ⇒ 可用 Google，改後視同 osm ⇒ **收窄**（有意的，符合「只准收窄」；map_points 升版並寫 CHANGELOG，加一題）。
+  - 旅宿用 `missing="osm"`：旅宿搜尋只會從地圖頁來，沒帶底圖＝失敗關閉。
+- 旅宿搜尋端點 `POST /api/lodging/search` 收 `basemap`（覆蓋層取 `api.basemap()` 帶上）；整段（定位中心點＋距離）在 `with geo.map_request_scope(body.basemap, missing="osm") as google_ok:` 內；回應帶 `basemap: "google" if google_ok else "osm"`，覆蓋層拿它與 `api.basemap()` 比對，不一致 ⇒ 重新查詢（GB-M2 同型：頁面 osm、設定剛改 google）。
+- 題：
+  - 伺服器金鑰在、Google 階會命中（攔截回一個 Google 座標）、頁面 `osm` ⇒ 中心點 `source` 不是 google、Google 階 0 次呼叫；
+  - 頁面沒帶 `basemap` ⇒ 同上（missing="osm"）；不認得的值 ⇒ 同上；
+  - 設定 osm、頁面 google ⇒ 不用 Google（只准收窄）；
+  - **反向控制**：頁面 google＋設定 google（有地圖金鑰與 Map ID）⇒ 可以是 google（且依 LG-M2 不保存座標與距離）；
+  - map_points 既有 GB-M2 題不改而全過（證明抽函式沒改行為）；另加 `map_request_scope` 單元題（四種頁面值 × 兩種設定）。
 
 ### 3.2 使用流程（地圖頁手動開啟）
 1. 地圖頁出現「附近旅宿」按鈕（只在模組已載入時）；**預設關**，按了才開面板。開面板**不**對外連線。
 2. 中心點二選一：
    - 「目前位置」：沿用地圖頁既有 `navigator.geolocation`（裝置定位，不經我們的伺服器對外）；
-   - 「輸入地址」：送後端 → `geo.locate_cached()`。回傳精度是 `district`（行政區中心，Nominatim 無門牌）⇒ **畫面明說**「中心點只定位到行政區，距離誤差可能數公里」，仍可查。
+   - 「輸入地址」：送後端 → ~~`geo.locate_cached()`~~〔LG2-M1：→ `map_request_scope(頁面底圖)` 內的 `geo.locate_cached()`，§3.1.1〕。回傳精度是 `district`（行政區中心，Nominatim 無門牌）⇒ **畫面明說**「中心點只定位到行政區，距離誤差可能數公里」，仍可查。
 3. 條件：半徑（1／3／5／10 km，預設 3）、類別（旅館／民宿，預設兩者）、排序（距離／參考房價）。
 4. 查詢**只查本機快照**（§3.5），回清單＋地圖標記（旅館、民宿不同圖示）＋每筆：名稱、類別、證號、地址、距離、參考房價、最近一次人工詢價。
 5. 「記錄這次查詢」：存成一筆紀錄（§3.3），之後可在「旅宿紀錄」頁回查、兩筆紀錄並列比較（同一家的距離／價格變化）。
@@ -202,13 +234,14 @@ MOTRIX 是賣給多個客戶的產品 ⇒ 所有客戶的查詢合計算在「�
 | 形式 | ①模組 `module.json` 宣告（**不經** `core.registry` provider）＋②前端 JS 註冊 |
 | 後端語法 | 模組在 `module.json` 宣告 `"map_overlays": [{"key": "lodging", "label": "附近旅宿", "script": "lodging-overlay.js"}]`（`script` 只能是檔名，位於模組 `pages/` 底下）；L1 `/api/map/config` 回 `overlays: [{key, label, script_url}]`——**`script_url` 由 L1 依已載入模組的宣告組出同源路徑**（`/modules/<key>/pages/<檔名>` 之類，格式隨階段 C 的頁面路徑），提供者不回傳任何網址；檔名不合 `^[a-z0-9-]+\.js$` 或檔案不存在 ⇒ 不列、記 ERROR |
 | 前端語法 | 腳本載入後呼叫 `window.MotrixMapOverlay.register(key, {mount(api), unmount()})`；使用者按該覆蓋層的按鈕 ⇒ L1 呼叫 `mount(api)`；再按或離頁 ⇒ `unmount()`，L1 清掉該覆蓋層所有標記 |
-| `api`（L1 提供，Leaflet 與 Google 各自實作在 L1 轉接層） | `addMarkers(list, style) -> handle`（`list`：`[{id, lat, lng, title, popupHtml}]`；`style`：`{icon: 'hotel'｜'homestay'｜'center', color: 語意 token 名}`；popupHtml 由 L1 以純文字＋白名單標籤清洗）、`clear(handle?)`、`fitTo(list｜handle)`、`center() -> {lat, lng, source} | null`（地圖頁目前的「目前位置」，沒有則 null）、`onBasemapReady(cb)`、`onMarkerClick(handle, cb(id))`、`panel(title) -> HTMLElement`（L1 給一個側邊容器，覆蓋層只在裡面畫自己的 UI；容器位置由 L1 保證不蓋 Google logo 與資料歸屬）、`basemap() -> 'google'｜'osm'` |
+| `api`（L1 提供，Leaflet 與 Google 各自實作在 L1 轉接層） | ~~`addMarkers(list, style) -> handle`（`list`：`[{id, lat, lng, title, popupHtml}]`；…；popupHtml 由 L1 以純文字＋白名單標籤清洗）~~〔更正 LG2-S1／S2〕`addMarkers(list, style) -> handle`：**`handle` 是不透明字串**（L1 內部表的鍵；Google／Leaflet 物件永遠只留在 L1，覆蓋層把 handle 存進任何狀態再交回都不受 Proxy 影響）；`list`：`[{id, lat, lng, title, popup: {title, lines: [字串], links: [{label, href}]}}]`——**彈窗由 L1 以結構化欄位自己組 DOM（textContent），覆蓋層不交 HTML**；`href` 只收同源相對路徑或 `https:`；`style`：`{icon: 'hotel'｜'homestay'｜'center', color: 語意 token 名}`；**大量標點由 L1 群聚**（OSM＝既有 markercluster、Google＝既有 @googlemaps/markerclusterer），覆蓋層不自己處理；`focus(handle, id)`：移到該點並開彈窗（清單點一筆用）；`addCircle(center, radius_m, style) -> handle`：畫搜尋半徑；`clear(handle?)`、`fitTo(handle)`、`center() -> {lat, lng, source} | null`（地圖頁目前的「目前位置」，沒有則 null）、`onBasemapReady(cb)`、`onMarkerClick(handle, cb(id))`、`panel(title) -> HTMLElement`（L1 給一個側邊容器，覆蓋層只在裡面畫自己的 UI；容器位置由 L1 保證不蓋 Google logo 與資料歸屬）、`basemap() -> 'google'｜'osm'` |
 | 回傳／錯誤 | `mount` 丟例外 ⇒ L1 在該覆蓋層面板顯示「附近旅宿載入失敗」、其他覆蓋層與地圖照常 |
 | 對方不在時 | 模組未載入 ⇒ `overlays` 沒有這一項 ⇒ 沒有按鈕（功能未安裝，不是 0 筆）；直接打模組端點 ⇒ 既有「模組未載入」提示 |
 | 契約版本 | 1（加方法＝相容；改名／改參數＝版本 +1，並寫 core CHANGELOG） |
-| 守門 | ①兩種底圖（OSM 真的 Leaflet、Google 用既有攔截的假 `google.maps`）各跑一次合成覆蓋層：`addMarkers`／`clear`／`fitTo`／`panel` 都生效；②**反向控制**：把 map.html 的 `_map`／`_layer` 等內部欄位改名後，合成覆蓋層照常（證明它沒碰內部）；③靜態掃描：`modules/*/pages/*overlay*.js` 不得出現 `_map`、`_layer`、`_gm`、`Alpine`、`__x`、`google.maps`、`L.`；④`script_url` 一律是 L1 組出的同源路徑：提供者宣告 `https://…`、`../x.js`、不存在的檔 ⇒ 不列（反向控制三種）；⑤合成的第二個覆蓋層（非 lodging）也能註冊——守門不綁 lodging（MODULE-GUIDE §7） |
+| 守門 | ①兩種底圖（OSM 真的 Leaflet、Google 用既有攔截的假 `google.maps`）各跑一次合成覆蓋層：`addMarkers`／`clear`／`fitTo`／`panel` 都生效；②**反向控制**：把 map.html 的 `_map`／`_layer` 等內部欄位改名後，合成覆蓋層照常（證明它沒碰內部）；③靜態掃描：`modules/*/pages/*overlay*.js` 不得出現 `_map`、`_layer`、`_gm`、`Alpine`、`__x`、`google.maps`、`L.`；④`script_url` 一律是 L1 組出的同源路徑：提供者宣告 `https://…`、`../x.js`、不存在的檔 ⇒ 不列（反向控制三種）；⑤合成的第二個覆蓋層（非 lodging）也能註冊——守門不綁 lodging（MODULE-GUIDE §7）；⑥〔LG2-S1〕合成覆蓋層把 handle 存進 Alpine `reactive` 再交回 `clear`／`focus` ⇒ 照常（兩種底圖）；⑦〔LG2-S2〕`focus`、`addCircle`、500 點群聚兩種底圖各一題；彈窗 `lines` 內含 `<img onerror>` ⇒ 顯示為文字；`href` 為 `javascript:`／`//evil` ⇒ 不產生連結；⑧〔LG2-S3〕custom-records 的 JS 寫入點守門（`tests/test_custom_records_no_js_html_sink_2026_09_28.py` 的 sink_sites／check）掃描對象擴到 `modules/*/pages/*overlay*.js`，白名單預設 0（覆蓋層畫面板清單只准 textContent／createElement）；正對照：合成覆蓋層寫 `innerHTML` ⇒ 紅 |
 
-- 底圖規則（不變）：旅宿標記是官方開放資料座標，畫在 Google 或 OSM 底圖都不涉及 Google 內容；中心點若是 Google 定位，只會在 `google_basemap()` 為真時產生（L1 保證），且依 LG-M2 不保存。
+- ~~底圖規則（不變）：旅宿標記是官方開放資料座標，畫在 Google 或 OSM 底圖都不涉及 Google 內容；中心點若是 Google 定位，只會在 `google_basemap()` 為真時產生（L1 保證），且依 LG-M2 不保存。~~
+  〔更正 LG2-M1：「L1 保證」不成立（範圍要呼叫端包）。改為：旅宿標記是官方開放資料座標，任何底圖可顯示（Q1 裁示 ff3b1e14）；中心點的定位與距離計算包在 `geo.map_request_scope(頁面底圖, missing="osm")` 內，頁面是 osm 或沒帶就不會用到 Google（§3.1.1）；是 Google 時依 LG-M2 不保存〕
 - 顯名：見 §3.6.2。
 
 #### 3.6.2 顯名範圍（LG-S2）
@@ -239,9 +272,9 @@ MOTRIX 是賣給多個客戶的產品 ⇒ 所有客戶的查詢合計算在「�
 2. migration 0001：四張表（SQL 寫在檔內，不 import 會演進的碼、不自己 commit）。
 3. `source.py`：下載＋驗證（大小、zip 內只有預期檔、JSON 結構）＋整批替換 `lodging_catalog`（`core.txn.write_txn`）＋速率狀態。〔LG-S3：加檔名白名單、zip slip、解壓上限〕
 4. `search.py`：bbox 預篩＋haversine、類別與半徑過濾、錯值價格標記。
-5. `api.py`：`GET /api/lodging/status`（probe，純讀）、`POST /api/lodging/refresh`（superadmin）、`POST /api/lodging/search`、`POST /api/lodging/records`、`GET /api/lodging/records[/{id}]`、`POST /api/lodging/quotes`、`GET /api/lodging/compare?a=&b=`。
+5. `api.py`：`GET /api/lodging/status`（probe，純讀）、`POST /api/lodging/refresh`（superadmin）、`POST /api/lodging/search`（收 `basemap`，LG2-M1）、`POST /api/lodging/records`、`GET /api/lodging/records[/{id}]`、`POST /api/lodging/quotes`、`GET /api/lodging/compare?a=&b=`。
 6. `__init__.py`：`ModuleSpec(routers, runtime_switches=[MOTRIX_LODGING_FETCH], startup_notices)`；覆蓋層改在 `module.json` 宣告 `map_overlays`。~~`__init__.py`：`ModuleSpec(routers, runtime_switches=[MOTRIX_LODGING_FETCH], startup_notices, providers={"map.overlay": …})`；30 天清除走 IP-11 `daily.check`（每日 08:00，不另開排程）。~~〔更正 LG-M2：不需要 30 天清除；LG-M1：覆蓋層不經 provider 回傳腳本〕
-7. L1（**先做、獨立一個 commit**）：`static/map-overlay.js`（`MotrixMapOverlay.register` 與 `api`，Leaflet／Google 兩套實作）；`/api/map/config` 依已載入模組的 `map_overlays` 宣告組 `overlays`；map.html 顯示按鈕、只經契約 mount／unmount；loader 驗 `map_overlays` 格式；INTEGRATION-POINTS 登記 §3.6.1；CORE 版號＋CHANGELOG；§3.6.1 守門 ①～⑤。~~L1：`/api/map/config` 加 `overlays`（`registry.providers("map.overlay")`）；map.html 顯示按鈕並載入腳本；INTEGRATION-POINTS 登記；CORE 版號＋CHANGELOG（L1 介面新增）。~~
+7. L1（**先做、獨立一個 commit**）：`geo.map_request_scope`＋map_points 改用它（LG2-M1，§3.1.1）；`static/map-overlay.js`（`MotrixMapOverlay.register` 與 `api`，Leaflet／Google 兩套實作）；`/api/map/config` 依已載入模組的 `map_overlays` 宣告組 `overlays`；map.html 顯示按鈕、只經契約 mount／unmount；loader 驗 `map_overlays` 格式；INTEGRATION-POINTS 登記 §3.6.1；CORE 版號＋CHANGELOG；§3.6.1 守門 ①～⑤。~~L1：`/api/map/config` 加 `overlays`（`registry.providers("map.overlay")`）；map.html 顯示按鈕並載入腳本；INTEGRATION-POINTS 登記；CORE 版號＋CHANGELOG（L1 介面新增）。~~
 8. 前端：`lodging-overlay.js`（面板、標記、顯名）、`lodging-records.html`（回查、比較、詢價）；`sidebar.js` `MODULE_PAGES` 登記。
 9. §3.7 守門＋e2e（面板開關、查詢、記錄、比較）；PLAYBOOK §G5 自查後送測。
 
@@ -279,7 +312,7 @@ def refresh(conn, now):
 - Q3 Google 中心點 30 天後：只清座標，或連距離一起清（§3.3）。〔LG-M2：座標與距離都不存〕
 - Q4 查詢紀錄的可見範圍（預設建立者＋admin+）。〔D：同意；地址文字照 IP-97〕
 - Q5 參考房價錯值門檻（< 300 或 > 100,000）。〔LG-S4：具名常數＋原值灰字〕
-- Q6 `map.overlay` 串接點放進 L1（CORE 小版號新增）是否可以，或改成模組自己的頁面、不動 map.html。〔LG-M1：可以，先定義 §3.6.1 契約〕
+- Q6 `map.overlay` 串接點放進 L1（CORE 小版號新增）是否可以，或改成模組自己的頁面、不動 map.html。〔LG-M1：可以，先定義 §3.6.1 契約；LG2-S1～S3 補強〕
 
 ## 5. 未查證
 - Agoda、Expedia、trivago、Amadeus 條款原文（JS 渲染／429）。
