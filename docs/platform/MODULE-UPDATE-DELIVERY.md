@@ -2,7 +2,7 @@
 
 > B，2026-09-28。依據：CORE-SPEC「單一模組更新包上線（正式機可用）」列（a8ec2b4b）、「出貨前測試依改動範圍分級」列、「完整包與客戶加購模組」列。
 > 本文件只寫設計；D 審過再實作。沿用 UPDATE-DELIVERY.md（完整包交付）的通道、簽章、儀表板與結果協定，**只寫與完整包不同的地方**。
-> **第二版（D 設計審 AUDIT-D-B55-module-delivery.md，wip/d-audit-train16 6b7d7552；主持裁示）**：DB-M1 照 D（疊加樹改白名單）；U-M1＝②、U-M2＝②；DB-S3～S6 全收；U-M4～M6＝①；DB-M2 待使用者，實作成可切換的判斷點、預設乙（§4.3）。各處改動以〔D 審〕標示，原文保留在 git 歷史（2ab3585d）。
+> **第二版（D 設計審 AUDIT-D-B55-module-delivery.md，wip/d-audit-train16 6b7d7552；主持裁示）**：DB-M1 照 D（疊加樹改白名單）；U-M1＝②、U-M2＝②；DB-S3～S6 全收；U-M4～M6＝①；DB-M2 實作成可切換的判斷點（§4.3），第二版預設乙；**第三版：使用者裁示＝甲（CORE-SPEC ee383527），預設改 consumers**。各處改動以〔D 審〕標示，原文保留在 git 歷史（2ab3585d）。
 > 現況盤點（2026-09-28 讀碼）：`tools/platform/module_update.py`（P7）有 build／check／preflight／apply／rollback（備份到 `module_backups/<key>/<ts>/`、雜湊逐一核對），但沒有鎖、停服、健檢、自動回滾、`::RESULT::`；遇到 `migrations/` 一律拒絕（P7b）。`delivery.py` 沒有包型別，`verify_staged`／`apply_staged` 假設完整包（要 `payload/backend/tools`、跑 `apply_update.ps1`）。
 
 ## 0. 邊界與不變式
@@ -21,7 +21,7 @@
 
 1. 取得**正式機目前的 commit** P：`delivery.latest_prod_commit()`（交付資料夾 results 中最新一筆 succeeded）；讀不到 ⇒ 拒絕（不退回 tests/_prod_baseline 猜）。另讀正式機已套用的模組覆蓋紀錄（§3 `deployed_modules`，隨結果寫回）。
 2. 分級判定 `tier(P, X, key)`（§4）：X＝要出貨的 commit。結果不是「②單一模組 key」⇒ 拒絕，印出越界的檔。
-3. 出貨前測試（第②級）：該模組的題（`backend/modules/<key>/tests`）＋`backend/tests/platform`＋該模組宣告頁面的 e2e（用 test_map 的 page→e2e 對應）〔D 審 DB-M2：＋ 判斷點「提供者有改」選甲時，加消費端模組的題；選乙（預設）時根本不會走到這裡——已在步驟 2 判③拒絕。見 §4.3〕。-n 2、低優先權、basetemp 用完刪。紅 ⇒ 拒絕。結果摘要（題數、passed、耗時、tree 雜湊）寫進 delivery.json。
+3. 出貨前測試（第②級）：該模組的題（`backend/modules/<key>/tests`）＋`backend/tests/platform`＋該模組宣告頁面的 e2e（用 test_map 的 page→e2e 對應）〔D 審 DB-M2：＋ 判斷點「提供者有改」預設甲（使用者裁示）：提供者有改 ⇒ 加所有消費端模組的題；消費端判定不了 ⇒ 退回乙，在步驟 2 判③拒絕。見 §4.3〕。-n 2、低優先權、basetemp 用完刪。紅 ⇒ 拒絕。結果摘要（題數、passed、耗時、tree 雜湊）寫進 delivery.json。
 4. `module_update.build(key, out, commit=X)`（既有）產生包目錄；lock 另加 `prod_base_commit: P`、`tier: "module"`、`tests: {...}`。
 5. `delivery.py publish --kind module`：payload＝上述包目錄；`delivery.json` 加 `kind:"module"`、`module:{key, version, core, built_from:X, prod_base_commit:P, from_version:<P 時的版本>}`、`min_apply_module_script:<版本>`（**在簽章範圍內**）；包名 `<ts>_<commit8>_mod-<key>`（符合既有 `NAME_RE`，不改正則）。不要求 payload 有 apply_update.ps1（`script_version` 檢查只對 full）。
 
@@ -143,11 +143,11 @@
 - 正對照：以實際 repo 的一段真實歷史（某個只改 tender_radar 的 commit 對其父）跑一次，必須判 2（〈盤點工具的正對照〉）。
 - 〔D 審 DB-S3〕反向控制加：根目錄一個 .md 若**不在** export-ignore 內（會出貨）⇒ 不是 doc ⇒ 3；`docs/x.md` ⇒ 1；模組內的 `tests/test_x.py` 單獨改 ⇒ 屬 export-ignore，但路徑在 `backend/modules/<k>/` ⇒ 仍算 module:<k>（題要跑，判 2 不判 1）。
 
-### 4.3 判斷點「提供者有改」（D 審 DB-M2；使用者裁示前預設乙）
+### 4.3 判斷點「提供者有改」（D 審 DB-M2；**使用者裁示＝甲**，CORE-SPEC ee383527）
 
 - 問題：模組 <k> 以 `ModuleSpec.providers` 提供串接點（`core.registry.provide(capability, name, fn)`，INTEGRATION-POINTS）給其他模組；只出 <k> 時正式機是「<k> 新＋消費端舊」，而第②級的題不跑消費端。
 - 判定「提供者有改」（保守、可機器算）：<k> 在 P 或 X 有非空的 `providers`（讀 `__init__.py` 的 ModuleSpec，AST；讀不出來 ⇒ 當成有）**而且** P→X 改到 <k> 的任何 `.py`（不含 tests）。只改頁面／文件／module.json 的非 provides 欄位 ⇒ 不算。
-- 設定點：`ship_tier.PROVIDER_CHANGE_POLICY = "reject"`（乙，預設）｜`"consumers"`（甲）。**只在這一處**；工具與題都讀它（不在別處寫死）。
+- 設定點：`ship_tier.PROVIDER_CHANGE_POLICY = "consumers"`（甲，**預設**，使用者裁示）｜`"reject"`（乙）。〔更正：第二版寫「預設乙」，使用者裁示後改甲〕**只在這一處**；工具與題都讀它（不在別處寫死）。
   - 乙：判③，拒絕出單模組包，訊息「<k> 提供串接點 <capability…> 給其他模組，而這次改到它的程式 ⇒ 必須完整包」。
   - 甲：仍判②，但第②級題目加上**消費端模組的題**：消費端＝其他模組的 `.py` 裡以字串常數呼叫 `registry.providers("<cap>")`／`registry.provider("<cap>")` 取用 <k> 提供的 capability 者（AST 掃描；呼叫參數不是字串常數 ⇒ 判不了 ⇒ 退回乙）。與 dep_graph.json 交叉比對，兩者不一致 ⇒ 退回乙並列出差異。
 - 題：兩種設定各一組；乙：改 case 提供者函式 ⇒ 3；只改 case 頁面 ⇒ 2。甲：同一個改動 ⇒ 2 且選題含 netplan／accounting／arap 的消費端題（D 補題）；消費端用動態字串 ⇒ 退回 3。突變：把「讀不出 providers ⇒ 當成有」改成「當成沒有」必須紅。
@@ -226,7 +226,7 @@
 | U-M4 | ①搬到 backend/tools | §5 |
 | U-M5 | ①包帶條目、文字插入、回滾整檔還原 | §3 |
 | U-M6 | ①不設上限 | — |
-| DB-M2 | **待使用者**（主持用表單問）；實作成單一設定點，預設乙（拒絕） | §4.3 |
+| DB-M2 | 使用者裁示＝甲（CORE-SPEC ee383527）：加消費端題；判定不了 ⇒ 退回乙。單一設定點，預設 consumers | §4.3 |
 
 原始選項（第一版，保留）：
 
