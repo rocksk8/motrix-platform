@@ -146,11 +146,34 @@
 ### 4.3 判斷點「提供者有改」（D 審 DB-M2；**使用者裁示＝甲**，CORE-SPEC ee383527）
 
 - 問題：模組 <k> 以 `ModuleSpec.providers` 提供串接點（`core.registry.provide(capability, name, fn)`，INTEGRATION-POINTS）給其他模組；只出 <k> 時正式機是「<k> 新＋消費端舊」，而第②級的題不跑消費端。
-- 判定「提供者有改」（保守、可機器算）：<k> 在 P 或 X 有非空的 `providers`（讀 `__init__.py` 的 ModuleSpec，AST；讀不出來 ⇒ 當成有）**而且** P→X 改到 <k> 的任何 `.py`（不含 tests）。只改頁面／文件／module.json 的非 provides 欄位 ⇒ 不算。
+- 判定「提供者有改」（保守、可機器算）：<k> 在 P 或 X 的**能力清單**非空（定義見下方〔D 複審 DB2-M1〕；讀不出來 ⇒ 當成有）**而且** P→X 改到 <k> 的任何 `.py`（不含 tests）。只改頁面／文件／module.json 的非 provides 欄位 ⇒ 不算。
 - 設定點：`ship_tier.PROVIDER_CHANGE_POLICY = "consumers"`（甲，**預設**，使用者裁示）｜`"reject"`（乙）。〔更正：第二版寫「預設乙」，使用者裁示後改甲〕**只在這一處**；工具與題都讀它（不在別處寫死）。
   - 乙：判③，拒絕出單模組包，訊息「<k> 提供串接點 <capability…> 給其他模組，而這次改到它的程式 ⇒ 必須完整包」。
-  - 甲：仍判②，但第②級題目加上**消費端模組的題**：消費端＝其他模組的 `.py` 裡以字串常數呼叫 `registry.providers("<cap>")`／`registry.provider("<cap>")` 取用 <k> 提供的 capability 者（AST 掃描；呼叫參數不是字串常數 ⇒ 判不了 ⇒ 退回乙）。與 dep_graph.json 交叉比對，兩者不一致 ⇒ 退回乙並列出差異。
-- 題：兩種設定各一組；乙：改 case 提供者函式 ⇒ 3；只改 case 頁面 ⇒ 2。甲：同一個改動 ⇒ 2 且選題含 netplan／accounting／arap 的消費端題（D 補題）；消費端用動態字串 ⇒ 退回 3。突變：把「讀不出 providers ⇒ 當成有」改成「當成沒有」必須紅。
+  - 甲：仍判②，但第②級題目加上**消費端的題**（定義見下方〔D 複審 DB2-M1〕）。
+  - 〔第二版原文，D 複審判太窄：「消費端＝其他模組的 `.py` 裡以字串常數呼叫 `registry.providers("<cap>")`／`registry.provider("<cap>")`」——`core.registry` 沒有 `provider()`；漏了最常用的 `single_provider`；也漏了 import 時登記的提供者〕
+
+#### 〔D 複審 DB2-M1〕能力清單與消費端的取法
+
+- **能力清單**（<k> 提供了哪些 capability）＝
+  - `ModuleSpec.providers` 的 key（`__init__.py` AST；key 是 `(capability, name)` tuple，取第一項）
+  - ∪ <k> 資料夾內任何 `.py` 在**模組層**呼叫 `registry.provide(cap, …)` 的 cap（例：arap `invoice_vouchers.py:870`／`payment_requests.py:908` 的 `calendar.writeback`、`invoice_vouchers.py:958` 的 `attachments.for_document`）
+  - cap 引數要解析成字串（見下方「解析」）；有任何一個 provide 呼叫的 cap 解析不了 ⇒ **判不了 ⇒ 退回乙**。
+- **取用函式清單**：不在 ship_tier 手抄。由 `backend/core/registry.py` 產生：檔頭 `[公開介面]` 列出、而且第一個參數名是 `capability` 的函式，扣掉登記用的 `provide` ⇒ 今天是 `{providers, single_provider}`；registry 日後新增任何「以 capability 取提供者」的函式會自動納入（寧可多選題）。守門題：產生出來的集合必須包含 `providers`、`single_provider`（正對照），而且 `provide` 不在裡面。
+- **消費端**＝在 <k> 以外的全部後端程式（`backend/**/*.py`，含 L1 helpers／routers／core／main 與其他模組；不含任何 tests）中，呼叫取用函式、而且 cap 解析後屬於 <k> 能力清單的**檔案**。
+- **解析**（AST，逐檔）：
+  - 呼叫形式：`registry.X(...)`、`_registry.X(...)`、任何別名（`from core import registry as R` ⇒ `R.X`；`import core.registry as r` ⇒ `r.X`；`from core.registry import single_provider as sp` ⇒ `sp(...)`）。以 import 表解析名稱，不靠字面 `registry`。
+  - cap 引數：字串常數；同檔模組層 `NAME = "..."` 的名稱（例 `helpers/case_access.py:81/86` 的 `CASE_PRESENT`）；以 import 取得的另一個 repo 內模組的模組層字串常數（`from helpers.case_access import CASE_PRESENT`、`case_access.CASE_PRESENT`），跟到定義檔為止。
+  - 其他一切（f-string、函式參數、變數被重新指派、`getattr(registry, ...)`、把取用函式當值傳遞、`*args`）⇒ **判不了**。
+  - 🔴 **判不了 ≠ 沒有消費端**：任何一處取用呼叫判不了（不論它最後是不是在取 <k> 的能力）⇒ 整個判定退回乙（拒絕出單模組包，列出判不了的位置）。「找不到消費端」只有在所有取用呼叫都解析成功、而且沒有一個屬於 <k> 能力清單時才成立（〈盤點工具的正對照〉）。
+- **消費端的題**：把消費端檔案當作「虛擬改動」交給 modtest 的選題（`modtest.select`，同 §C-11a 規則），連帶選到依賴它們的單位的題。
+  - 🔑 這一步是必要的：`case.access` 的直接消費端是 L1 的 `helpers/case_access.py`，netplan、accounting 是**經由它**用到 case（`modules/netplan/api.py`、`modules/accounting/voucher_attachments.py` 都 import case_access）；只選直接消費端的題會漏掉它們。
+- **與 dep_graph.json 交叉比對**：dep_graph 若另有 <k> 能力清單上的消費關係而 AST 沒找到 ⇒ 退回乙並列出差異（兩個來源不一致時不猜誰對）。
+- **正對照（真實 repo，D 補題；讀碼 2026-09-28 核對後的實際消費端）**：
+  - 改 arap 的 `_InvoiceVoucherAttachments`（`attachments.for_document` 提供者）⇒ 選題含 **accounting** 的附件彙整題（消費端是 `modules/accounting/voucher_attachments.py:103`；〔更正 D 複審原文「⇒ case 消費端題」：case 是同一能力的**另一個提供者**（`modules/case/__init__.py:57`），不是消費端〕）。
+  - 改 arap 的 `_calendar_writeback` ⇒ 選題含 `helpers/google_calendar.py:236` 的單位的題。
+  - 改 case 的 `case.access` 提供者（`quotations._CaseAccess`）⇒ 選題含 **netplan**（`modules/netplan/tests/test_netplan_case_access.py`）與 **accounting** 的題（經 `helpers/case_access`）。
+- **突變**：取用函式清單拿掉 `single_provider` ⇒ 正對照紅；拿掉「模組層 provide 呼叫」那一半能力清單 ⇒ arap 正對照紅；把「判不了 ⇒ 退回乙」改成「判不了 ⇒ 略過」⇒ 判不了那一題紅；拿掉「虛擬改動交給 modtest」只留直接消費端 ⇒ netplan 正對照紅。
+- 題：兩種設定各一組；乙：改 case 提供者函式 ⇒ 3；只改 case 頁面 ⇒ 2。甲：同一個改動 ⇒ 2 且選題含 netplan／accounting 的消費端題（D 補題）；消費端用動態字串 ⇒ 退回 3。突變：把「讀不出 providers ⇒ 當成有」改成「當成沒有」必須紅。
 - 使用者裁示後：只改設定值（與 CORE-SPEC 決定列），不改判定程式。
 
 ## 5. 核心代碼方向（檔案／函式）
