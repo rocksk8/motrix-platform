@@ -111,10 +111,12 @@
       <div>
         <!-- 本公司資料設定閘門（COMPANY-SETUP-GATE §4.2）：未確認 ⇒ 其他功能暫停；最高管理員在這裡按「確認本公司資料」。
              一般的「儲存」不算確認（複製來的資料庫只要存一次任何設定就「確認」了）。 -->
-        <div class="ns-card" data-company-setup-card x-show="setup && setup.configured !== true">
+        <div class="ns-card" data-company-setup-card x-show="(setup && setup.configured !== true) || reconfirm">
           <div class="ns-card-head"><div class="ns-card-head-title">確認本公司資料（完成前系統其他功能暫停）</div></div>
           <div class="ns-card-body">
-            <div class="ns-desc" data-company-setup-reason x-text="setupReasonText()"></div>
+            <!-- D CG5-S1：已確認的安裝改了必要欄位 ⇒ 後端 409 不存；這裡改成「儲存並確認」（同一個請求） -->
+            <div class="ns-desc" data-company-setup-reconfirm x-show="reconfirm" x-text="reconfirmText"></div>
+            <div class="ns-desc" data-company-setup-reason x-show="!reconfirm" x-text="setupReasonText()"></div>
             <template x-if="setup && setup.missing && setup.missing.length">
               <div class="ns-desc" data-company-setup-missing x-text="'尚未完成：' + setup.missing.join('、')"></div>
             </template>
@@ -123,9 +125,13 @@
               <input type="checkbox" data-company-setup-ack x-model="setupAck"> 以上為本公司的資料（輸出文件將使用這些資料）
             </label>
             <button type="button" class="btn btn-primary" data-company-setup-confirm
-                    :disabled="!setupAck || saving" @click="save(true)">確認本公司資料</button>
+                    :disabled="!setupAck || saving" @click="save(true)"
+                    x-text="reconfirm ? '儲存並確認本公司資料' : '確認本公司資料'"></button>
           </div>
         </div>
+        <!-- CG-S5：只有一位最高管理員 ⇒ 他不在時只剩伺服器本機的暫時放行（DR-SOP〈本公司資料設定〉） -->
+        <div class="ns-desc" data-company-setup-single-admin x-show="setup && setup.superadminCount === 1"
+             style="margin:0 0 12px">建議再設一位最高管理員：本公司資料需要最高管理員確認，唯一的最高管理員不在時，只能由系統負責人在伺服器本機使用暫時放行。</div>
         <!-- 品牌（2026-09-27 H10；使用者：「公司名稱、公司LOGO這些都要能在設定中上傳跟修改」）
              公司名稱存在 company_profile（與下方各卡同一支 save()）；三種圖檔各自上傳、立即生效。
              只收 PNG／JPG／WebP，伺服器以檔案內容判斷格式並重新編碼（去掉拍攝資訊等 metadata）。 -->
@@ -1023,7 +1029,7 @@
         get isSuperadmin() { return this.session.role === 'superadmin' },
 
         _initDone: false,
-        setup: null, setupAck: false,
+        setup: null, setupAck: false, reconfirm: false, reconfirmText: '',
 
         //: 本公司資料設定狀態（COMPANY-SETUP-GATE §4.2）；只回判定與缺漏欄位名，不回任何值
         async loadSetup() {
@@ -1525,7 +1531,7 @@
           this.saving = false
           if (r.ok) {
             this.msg = confirmIdentity === true ? '本公司資料已確認，系統功能已開放' : '設定已儲存'; this.isError = false
-            if (confirmIdentity === true) { this.setupAck = false; this.loadSetup() }
+            if (confirmIdentity === true) { this.setupAck = false; this.reconfirm = false; this.loadSetup() }
             this.saved = true; setTimeout(() => this.saved = false, 3000)
             // 存完把金鑰欄位歸位：輸入框清空、狀態改成「已設定」。
             // ⚠️ 不重新 GET —— 那會把使用者其他還沒存的欄位蓋掉。
@@ -1546,7 +1552,12 @@
             this.bkText = ''; this.bkCleared = false
           } else {
             const d = await r.json().catch(() => ({}))
-            this.msg = d.detail || '儲存失敗'; this.isError = true
+            if (r.status === 409 && d.detail && d.detail.code === 'company_setup_reconfirm') {
+              this.reconfirm = true; this.reconfirmText = d.detail.message; this.setupAck = false
+              this.msg = '尚未儲存：' + d.detail.message; this.isError = true
+            } else {
+              this.msg = (d.detail && d.detail.message) || d.detail || '儲存失敗'; this.isError = true
+            }
           }
           setTimeout(() => this.msg = '', 4000)
         },

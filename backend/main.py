@@ -396,11 +396,20 @@ from helpers import company_setup as _company_setup                     # noqa: 
 _COMPANY_SETUP_ALLOWED_COMPILED = _company_setup.compile_allowed(_COMPANY_SETUP_ALLOWED)
 
 
+@app.exception_handler(_company_setup.CompanySetupRequired)
+async def _company_setup_required_handler(request: Request, exc):
+    """輸出端第二道（COMPANY-SETUP-GATE §5）：與中介層同形的 428 JSON（`code` 在最外層，notif.js 以它判斷）。"""
+    body = {"detail": exc.detail, "code": exc.code, "canFix": False,
+            "settingsUrl": _company_setup.SETTINGS_URL}
+    if exc.missing:
+        body["missing"] = exc.missing
+    return JSONResponse(status_code=428, content=body)
+
+
 def _company_setup_gate_kind(token: str) -> str:
-    """這個請求看到的閘門狀態。demo 帳號：第三段種虛構示範公司之前先不擋（demo 庫每次登入重建，公司資料為空）。
+    """這個請求看到的閘門狀態。demo 帳號與正式帳號同一套判定（demo 登入時種虛構示範公司＋demo 專用確認紀錄，
+    `gate` 依 db.is_demo_mode 取 demo 庫判定；〔~~第三段前 demo 先不擋~~ 段③ 拿掉豁免〕）。
     判定一律經 `_company_setup.gate`（呼叫時才取模組屬性：測試換得掉）；它不丟例外。"""
-    if token.startswith(DEMO_TOKEN_PREFIX):
-        return _company_setup.GATE_OK
     conn = get_db()
     try:
         kind, _st = _company_setup.gate(conn)

@@ -42,7 +42,7 @@ _COMPILED = {k: re.compile(v, re.I) for k, v in NEEDLES.items()}
 #: frontend/ 底下一律不可以登記（頁面是客戶看得到的）。
 CATEGORIES = {
     "凍結 migration": "db.py 的 _mNNN：歷史不可以改（MODULE-GUIDE §4）",
-    "本公司安裝的升級回填": "只在統編或公司名對得上本公司時才動作，全新安裝與客戶安裝不會寫入",
+    "本公司安裝的升級回填": "只在統編對得上本公司時才動作（2026-09-28 起不看公司名），全新安裝與客戶安裝不會寫入",
     "安全黑名單": "舊弱密碼清單：啟動時掃描並強制改密碼，不會顯示",
     "升級演練資料": "模擬本公司 V9 升級的合成資料（演練工具）",
     "已出貨的版本紀錄": "已出貨的條目不改寫；全新安裝只顯示安裝基準版本之後的紀錄（使用者表單裁示 2026-09-27，"
@@ -65,7 +65,7 @@ ALLOWED = {
     ("backend/db.py", "人員 email"): (1, "凍結 migration", "_m008"),
     ("backend/db.py", "英文名（Synergy Integration）"): (1, "凍結 migration", "_m106 回填英文名（僅本公司統編）"),
     ("backend/db.py", "人員姓名"): (2, "凍結 migration", "_m008 舊顯示名修正；_m1xx 說明"),
-    ("backend/core/upgrade.py", "公司名（允碩）"): (4, "本公司安裝的升級回填", "V9_COMPANY_DEFAULTS／_is_our_install"),
+    ("backend/core/upgrade.py", "公司名（允碩）"): (2, "本公司安裝的升級回填", "V9_COMPANY_DEFAULTS 與出處註解"),
     ("backend/core/upgrade.py", "英文名（Synergy Integration）"): (2, "本公司安裝的升級回填", "V9_COMPANY_DEFAULTS 與出處註解"),
     ("backend/core/upgrade.py", "統編"): (3, "本公司安裝的升級回填", "V9_COMPANY_DEFAULTS 與出處註解"),
     ("backend/core/upgrade.py", "電話"): (2, "本公司安裝的升級回填", "V9_COMPANY_DEFAULTS 與出處註解"),

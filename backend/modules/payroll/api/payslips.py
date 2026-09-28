@@ -528,6 +528,8 @@ def pdf_download(slip_no: str, authorization: str = Header(None)):
         pdf_bytes = generate_payslip_pdf_bytes(slip_no)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    except HTTPException:          # 第二道 428（COMPANY-SETUP-GATE §5）不可以被下面的 except Exception 吞成 500
+        raise
     except Exception as e:
         tid = trace_id()
         logger.exception("payslip pdf (download) failed trace=%s", tid)

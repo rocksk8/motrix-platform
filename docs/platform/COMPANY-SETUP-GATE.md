@@ -203,7 +203,7 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
     - 未做（併段③）：`/api/platform/menu` 回 `companySetup` 讓側欄只留設定入口（現況：側欄照常，點任何業務頁 ⇒ 該頁 API 428 ⇒ 導回設定頁／說明頁，擋的效果相同，只是多一次跳轉）；設定頁「只有一位最高管理員時建議再設一位」提示。
 - 效能：`status()` 結果快取在行程內，以 `company_profile`／`company_identity_confirmation` 的 `updated_at`＋安裝識別檔與簽章檔的 mtime 當版本。
 - 非 HTTP 的輸出（每月排程報表信）：走第二道（§5），未設定 ⇒ 不寄、記一則「本公司資料未設定」系統告警（邊緣觸發、每日一封，比照〈告警必須有速率上限〉）。
-- demo（Q3 裁示）：demo 庫每次登入重建 ⇒ 重建時種虛構示範公司（名稱含「示範」、統編 `00000000`，**不過檢查碼**＝不可能是真公司）＋確認紀錄 `via: "demo_seed"`（`install` 綁 demo 專用常數，只在 demo 庫有效）；demo 模式所有輸出加「示範資料」浮水印；demo 的虛構身分永遠不進正式庫（demo 隔離已有）。
+- demo（Q3 裁示）：demo 庫每次登入重建 ⇒ 重建時種虛構示範公司（名稱含「示範」、統編 `00000000`，~~**不過檢查碼**＝不可能是真公司~~〔更正 段③：`00000000` 加權和為 0，**會通過**檢查碼；「不會被當成真公司」改由名稱含「示範資料」、只在 demo 庫有效的確認紀錄、demo 單據浮水印三者保證〕）＋確認紀錄 `via: "demo_seed"`（`install` 綁 demo 專用常數，只在 demo 庫有效）；demo 模式所有輸出加「示範資料」浮水印；demo 的虛構身分永遠不進正式庫（demo 隔離已有）。
 
 > ~~### 4.1 後端（第一道）~~
 > ~~- 位置：`main.py` `auth_middleware` 在「必須先改密碼」之後、`call_next` 之前（同一套形狀：`_MUST_CHANGE_PW_ALLOWED` 那個白名單＋`code`）。~~
@@ -238,6 +238,21 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
 - 放在**共用路徑本身**：`location_identity()` 之上加 `identity_for_output(location_id, kind)`，Head/Foot、`doc_template` identity 區塊、`company_heading`／`contact_line`／`footer_line` 的輸出呼叫全部改走它 ⇒ 一處擋住 1.1 全部。
 - 1.2 的三處改走 CI：voucher_pdf 改 `identity_for_output`；legal_params 等告知端點改 `company_name()`；薪資單前端預填改讀 `/api/system/branding` 的 LI 欄位，後端產 PDF 時若單據上的公司欄位與本公司不同 ⇒ 以本公司為準並提示〔Q4 裁示：手改保留、第二道只驗已設定 ⇒ ~~以本公司為準並提示~~ 不做〕。
 - 1.3 不含本公司資料的輸出不加第二道（第一道已擋），但守門要求逐一登記「不含本公司資料」理由（§7-②）。
+- 〔實作註 段③（併 D CG5-M1 必修、CG5-S1／S2 建議）〕
+  - 例外：`company_setup.CompanySetupRequired` 繼承 `HTTPException(428)`，`code`＝`company_setup_required`／`company_setup_undetermined`／`company_bank_required`；`main.py` 專屬 handler 回與中介層同形 JSON（`code` 在最外層）。判定走 `company_setup.require()` ⇒ `gate()`（同中介層；grace 放行，undetermined 拒絕）。
+  - 位置：~~`identity_for_output` 取代 `location_identity()` 的所有輸出呼叫~~ 改為**輸出文字的 helper 一進來就問**——`company_identity.company_name／company_heading／contact_line／name_pair／footer_line` 與 pdf_gen `_identity_head／_identity_foot／_identity_foot_short`。理由：pdf_gen 的 8 支 builder 要保留 `location_identity` 這個測試接縫（`apply_snapshot` docstring），改 helper 一處即涵蓋 8 種單據、完工單、自訂模組輸出（`doc_template` identity 區塊呼叫的也是這兩支）。`location_identity`／`identity_from_profile` 不擋（登入頁品牌、稽核、閘門自己也用）。`identity_for_output` 仍提供給新呼叫端。
+  - 請款單匯款欄位：~~builder 內~~ 放在兩個產生端（`generate_payment_request_pdf_bytes`、簽核後存檔），驗該筆所屬據點解析後的銀行名稱／戶名／帳號；builder 單元題本來就驗「空白資料排得出版面」。
+  - 吞例外：輸出端點 `except Exception` 前補 `except HTTPException: raise`（10 處）；守門掃 KNOWN_GATED 端點。
+  - 1.2 三處：傳票 `voucher_pdf._company_name` → `company_name()`；個資告知 `legal_params` 回傳公司名與範本代入改走 company_identity（`privacy_notice._company_name_of`，同一套解析；告知文字的雜湊只在「name 與主要據點公司名不同」的安裝會變）；勞報單 Q4：`_payslip_view` 開頭只驗已設定。
+  - 月報：`_catchup_monthly_reports` 與 `_send_monthly_report_for` 開頭問第二道；被擋 ⇒ 不寄、`monthly_report_skipped` 告警（每日一次）、`monthly_report_last_sent` 不前進（設定後補寄）。
+  - demo：`routers/auth.py` demo 登入重建後 `seed_demo`；`gate(demo=None)` 依 `db.is_demo_mode()` 判 demo 庫、比對 `DEMO_INSTALL`，demo 與正式分開快取；中介層拿掉 demo 豁免；pdf_gen `_identity_head` 在 demo 加「示範資料」浮水印。XLSX／報表 HTML 沒有浮水印版位 ⇒ 靠公司名本身含「示範資料」。
+  - 側欄（§4.2）：`/api/platform/menu` 回 `companySetup`；未設定 ⇒ `groups` 與 `layout.groups` 只留設定頁入口（非最高管理員＝空）；在伺服器端過濾，sidebar.js 不改。
+  - CG5-S1：已確認的安裝，一般存檔會改動必要欄位（欄位雜湊變）⇒ 409 `company_setup_reconfirm`、**不存**；設定頁把確認卡換成「儲存並確認本公司資料」（同一請求帶 confirmIdentity）。本來就未確認 ⇒ 照常存。
+  - CG5-S2：判定失敗後 `ERROR_CACHE_SECONDS`（60）秒內直接回 undetermined 不重算；告警另有行程內「每代碼每日一次」節流（庫讀不到節流紀錄時仍擋得住）。
+  - 到期提醒（§4.3、§6.5 原設計，段①未做，段③補）：`observe_expiry`——放行剩 ≤ 6 小時、開發者簽章檔剩 ≤ 30 天 ⇒ 告警（每日一次），在 `gate` 重算時呼叫。
+  - CG-S5：status 端點對最高管理員回 `superadminCount`；設定頁只有一位時提示再設一位。DR-SOP §4a〈本公司資料設定〉。
+  - §2-④：`core.upgrade._is_our_install` 只認統編（去分隔符比對），刪名稱片段；`test_b2_blank_string_fill_passes_verify` 的前提（名稱在、統編空白）隨之改為統編在、名稱空白字串。
+  - 測試：`conftest` 預設同時換掉 `status` 與 `gate`（第二道在沒有建庫的單元題也會被呼叫）。
 
 ## 6. 既有正式機行為不變的證明〔修訂 CG-M1、CG-S2、CG-S5〕
 

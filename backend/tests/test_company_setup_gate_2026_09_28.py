@@ -133,7 +133,7 @@ def test_status_error_passes_general_api_with_header_and_alerts_once(client, cle
     import helpers.email_notify as en
     monkeypatch.setattr(en, "_group_emails", lambda key: ["a@example.invalid"])
     monkeypatch.setattr(en, "_send_raising", lambda to, subj, body: sent.append(subj) or "sent")
-    monkeypatch.setattr(cs, "status", lambda conn, root=None, now=None: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(cs, "status", lambda conn, root=None, now=None, demo=False: (_ for _ in ()).throw(RuntimeError("boom")))
     r = client.get("/api/customers", headers=clerk)
     assert r.status_code == 200 and r.headers.get(cs.HEADER) == "status_error"
     st = client.get("/api/settings/company-setup/status", headers=clerk).json()

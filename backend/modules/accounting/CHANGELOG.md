@@ -1,5 +1,8 @@
 # 會計 更新紀錄
 
+## 1.0.5 — 2026-09-28（暫用號，列車取號；E4 wip/e-company-gate-impl 第三段）
+- 本公司資料設定閘門第二道（COMPANY-SETUP-GATE §5；D CG5-M1）：傳票 PDF 的公司抬頭改走 L1 `company_identity.company_name()`（主要據點與別名都認，且先過第二道：未設定／判定失敗 ⇒ 428，不產生）；原本只讀 `company_profile["name"]`
+
 ## 1.0.4 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
 - 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`voucher.html`、`account-items.html`
 

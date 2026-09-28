@@ -9,10 +9,13 @@
     is_developer_identity, observe, required_problems, sign_confirmation, signed_file_state, startup_install_check,
     status, ubn_valid,
     CODE_REQUIRED, CODE_UNDETERMINED, GATE_GRACE, GATE_OK, GATE_REQUIRED, GATE_UNDETERMINED, HEADER, MSG_REQUIRED,
-    MSG_UNDETERMINED, SETTINGS_URL, compile_allowed, gate, is_allowed, reset_cache
+    MSG_UNDETERMINED, SETTINGS_URL, compile_allowed, gate, is_allowed, reset_cache,
+    CompanySetupRequired, DEMO_INSTALL, DEMO_PROFILE, DEMO_WATERMARK, ERROR_CACHE_SECONDS, GRACE_EXPIRY_WARN_HOURS,
+    SIGNED_EXPIRY_WARN_DAYS, observe_expiry, require, seed_demo
 [不變式] status() 是純判斷（不寫庫、不寫檔）；只有 confirm()（設定頁「確認本公司資料」）與 backfill_once()（每庫一次）會寫確認紀錄；
     綁定＝安裝識別檔（不看硬體，主持裁示 CG-M1）；開發者身分需要開發者簽章確認檔；backfill_once／observe／ensure_install_id 不丟例外
-[契約題] tests/test_company_setup_core_2026_09_28.py、tests/test_company_setup_cli_2026_09_28.py
+[契約題] tests/test_company_setup_core_2026_09_28.py、tests/test_company_setup_cli_2026_09_28.py、
+    tests/test_company_setup_gate_2026_09_28.py、tests/test_company_setup_output_gate_2026_09_28.py
 
 威脅模型（§3.3，CG-S4）：防「沿用預設」與「疏忽」，不防會改程式碼或整包複製安裝目錄的客戶——這不是授權／防盜機制。
 開發者指紋只存加鹽雜湊（DEVELOPER_IDENTITY_FP）：目的是不多一處字面值；統編 8 碼可暴力還原，而它本來就是公開登記資料。
@@ -297,8 +300,10 @@ def grace_state(conn, root=None, now=None) -> dict:
 
 # ── 判定 ─────────────────────────────────────────────────────────────────────
 
-def status(conn, root=None, now=None) -> dict:
-    """純判斷（不寫庫、不寫檔）。conn＝要判定的那個庫。丟例外由呼叫端處理（§3.6，Q7＝C）。"""
+def status(conn, root=None, now=None, demo=False) -> dict:
+    """純判斷（不寫庫、不寫檔）。conn＝要判定的那個庫。丟例外由呼叫端處理（§3.6，Q7＝C）。
+    demo＝True（demo 庫）：確認紀錄的安裝識別改比對 DEMO_INSTALL（demo 種子寫的常數；正式庫永遠比對安裝識別檔
+    ⇒ demo 紀錄被帶進正式庫也是 install_mismatch）。"""
     now = now or datetime.now()
     profile = _get(conn, "company_profile", {}) or {}
     grace = grace_state(conn, root, now)
@@ -310,7 +315,7 @@ def status(conn, root=None, now=None) -> dict:
         return out
     if not isinstance(rec, dict) or not rec.get("install") or not rec.get("fields_hash"):
         return out
-    ih = install_hash(root)
+    ih = DEMO_INSTALL if demo else install_hash(root)
     if not ih or rec["install"] != ih:
         out["reason"] = INSTALL_MISMATCH
         return out
@@ -433,6 +438,35 @@ def observe(conn, root=None, now=None) -> None:
         logger.exception("company_setup: observe 失敗")
 
 
+#: 簽章確認檔到期前幾天開始每日告警（§6.5）；暫時放行到期前幾小時提醒（§4.3）
+SIGNED_EXPIRY_WARN_DAYS = 30
+GRACE_EXPIRY_WARN_HOURS = 6
+
+
+def observe_expiry(conn, root=None, now=None) -> None:
+    """到期提醒（COMPANY-SETUP-GATE §4.3、§6.5）：簽章確認檔剩 ≤ 30 天、暫時放行剩 ≤ 6 小時 ⇒ 告警（同一代碼每日一次）。
+    不丟例外；呼叫端負責 commit。"""
+    now = now or datetime.now()
+    try:
+        g = grace_state(conn, root, now)
+        if g.get("active") and g.get("until"):
+            left = datetime.fromisoformat(g["until"]) - now
+            if left <= timedelta(hours=GRACE_EXPIRY_WARN_HOURS):
+                alert(conn, "grace_expiring", "本公司資料暫時放行將於 %s 到期，請最高管理員儘快確認本公司資料" % g["until"])
+    except Exception:  # noqa: BLE001
+        logger.exception("company_setup: 放行到期檢查失敗")
+    try:
+        profile = _get(conn, "company_profile", {}) or {}
+        if is_developer_identity(profile) and signed_file_state(profile, root, now.date()) == "valid":
+            doc = json.loads(_read_text(_files(root)[1]))
+            expires = datetime.fromisoformat(str(doc["expires"])).date()
+            if (expires - now.date()).days <= SIGNED_EXPIRY_WARN_DAYS:
+                alert(conn, "signed_file_expiring",
+                      "開發者簽章確認檔將於 %s 到期，請聯絡開發者換發（過期後輸出暫停，可用暫時放行撐到新檔到位）" % expires)
+    except Exception:  # noqa: BLE001
+        logger.exception("company_setup: 簽章檔到期檢查失敗")
+
+
 def _audit_system(conn, action, detail):
     try:
         conn.execute("INSERT INTO audit_log (at, user_id, username, display_name, action, target_type, target_id,"
@@ -443,9 +477,15 @@ def _audit_system(conn, action, detail):
         logger.exception("company_setup: 稽核寫入失敗")
 
 
+_ALERTED_IN_PROCESS = {}
+
+
 def alert(conn, code: str, text: str) -> bool:
     """系統告警（同備份告警：邊緣觸發、同一代碼每日一次）：ERROR log＋系統稽核＋寄超級管理員。回是否這次有發。"""
     today = datetime.now().date().isoformat()
+    if _ALERTED_IN_PROCESS.get(code) == today:           # CG5-S2：庫讀不到節流紀錄時，行程內這一層仍擋得住
+        return False
+    _ALERTED_IN_PROCESS[code] = today
     try:
         marks = _get(conn, ALERT_DAY_SETTING, {}) or {}
     except Exception:  # noqa: BLE001
@@ -486,6 +526,9 @@ MSG_REQUIRED = "尚未完成本公司資料設定"
 MSG_UNDETERMINED = "本公司設定狀態無法判定，對外文件暫停輸出，請聯絡管理員"
 SETTINGS_URL = "/pages/company-profile-settings.html?setup=1"
 _GATE_CACHE = {"key": None, "value": None}
+#: 判定失敗的短時快取（CG5-S2）：{demo: 到期時間}
+_GATE_ERROR_UNTIL = {}
+ERROR_CACHE_SECONDS = 60
 
 
 def _cache_key(conn, root=None):
@@ -500,20 +543,39 @@ def _cache_key(conn, root=None):
     return (tuple(sorted((r[0], r[1]) for r in rows)), tuple(mt), datetime.now().strftime("%Y-%m-%d %H:%M"))
 
 
-def gate(conn, root=None) -> tuple:
-    """中介層與輸出端共用：回 (kind, status 或 None)。**不丟例外**：status() 出錯 ⇒ GATE_UNDETERMINED（Q7＝C）。
-    放行檔第一次出現時記 first_seen＋稽核（observe）。呼叫端負責 commit。"""
+def _is_demo():
     try:
-        key = _cache_key(conn, root)
+        from db import is_demo_mode
+        return bool(is_demo_mode())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def gate(conn, root=None, demo=None) -> tuple:
+    """中介層與輸出端共用：回 (kind, status 或 None)。**不丟例外**：status() 出錯 ⇒ GATE_UNDETERMINED（Q7＝C）。
+    放行檔第一次出現時記 first_seen＋稽核（observe）。呼叫端負責 commit。
+    demo＝None ⇒ 看目前請求是不是 demo（db.is_demo_mode）；demo 與正式分開快取（兩個庫）。
+    判定失敗 ⇒ 之後 ERROR_CACHE_SECONDS 秒內直接回 GATE_UNDETERMINED，不重算、不重發告警（CG5-S2）。"""
+    demo = _is_demo() if demo is None else bool(demo)
+    now = datetime.now()
+    err_until = _GATE_ERROR_UNTIL.get(demo)
+    if err_until and now < err_until:
+        return GATE_UNDETERMINED, None
+    try:
+        key = (demo, _cache_key(conn, root))
         if _GATE_CACHE["key"] == key and _GATE_CACHE["value"] is not None:
             return _GATE_CACHE["value"]
-        observe(conn, root)
-        st = status(conn, root)
+        if not demo:
+            observe(conn, root)
+            observe_expiry(conn, root)
+        st = status(conn, root, demo=demo)
         kind = GATE_OK if st.get("configured") else (GATE_GRACE if st.get("grace") else GATE_REQUIRED)
-        _GATE_CACHE.update(key=_cache_key(conn, root), value=(kind, st))
+        _GATE_CACHE.update(key=(demo, _cache_key(conn, root)), value=(kind, st))
+        _GATE_ERROR_UNTIL.pop(demo, None)
         return kind, st
     except Exception:  # noqa: BLE001
         logger.exception("company_setup: 判定失敗（Q7＝C：一般功能放行、含本公司資料的輸出拒絕）")
+        _GATE_ERROR_UNTIL[demo] = now + timedelta(seconds=ERROR_CACHE_SECONDS)
         try:
             alert(conn, "status_error", MSG_UNDETERMINED)
         except Exception:  # noqa: BLE001
@@ -524,6 +586,7 @@ def gate(conn, root=None) -> tuple:
 
 def reset_cache():
     _GATE_CACHE.update(key=None, value=None)
+    _GATE_ERROR_UNTIL.clear()
 
 
 def compile_allowed(allowed: dict) -> list:
@@ -543,3 +606,70 @@ def is_allowed(compiled: list, method: str, path: str):
         if meth == m and regex.match(path):
             return template
     return None
+
+
+# ── 輸出端第二道（COMPANY-SETUP-GATE §5；D CG5-M1）─────────────────────────────
+#
+# 第一道（中介層）在「判定失敗」時放行（Q7＝C），所以**含本公司資料的輸出必須自己再問一次**：
+# 判定失敗 ⇒ 428 company_setup_undetermined；未設定（例：非 HTTP 的排程信、demo）⇒ 428 company_setup_required。
+# 繼承 HTTPException：沒改到的呼叫端至少是 428 而不是 200；main.py 另掛專屬 handler 回與中介層同形的 JSON。
+# ⚠ 端點裡的 `except Exception` 會吞掉它 ⇒ 輸出端點一律先 `except HTTPException: raise`（守門掃描）。
+
+from fastapi import HTTPException as _HTTPException  # noqa: E402
+
+
+class CompanySetupRequired(_HTTPException):
+    """輸出被第二道擋下。code＝CODE_REQUIRED／CODE_UNDETERMINED。"""
+
+    def __init__(self, code: str, detail: str = None, missing=None):
+        self.code = code
+        self.missing = list(missing or [])
+        super().__init__(status_code=428, detail=detail or (MSG_UNDETERMINED if code == CODE_UNDETERMINED else MSG_REQUIRED))
+
+
+def require(conn=None, demo=None) -> str:
+    """輸出前呼叫：已設定或放行中 ⇒ 回 gate kind；否則丟 CompanySetupRequired。conn 省略 ⇒ 自己開（依 demo 情境取庫）。"""
+    own = conn is None
+    if own:
+        from db import get_db
+        conn = get_db()
+    try:
+        kind, _st = gate(conn, demo=demo)
+        if own:
+            try:
+                conn.commit()                       # observe() 可能寫了 first_seen
+            except Exception:  # noqa: BLE001
+                pass
+    finally:
+        if own:
+            conn.close()
+    if kind == GATE_UNDETERMINED:
+        raise CompanySetupRequired(CODE_UNDETERMINED)
+    if kind == GATE_REQUIRED:
+        raise CompanySetupRequired(CODE_REQUIRED)
+    return kind
+
+
+# ── demo（Q3 裁示：虛構示範公司＋浮水印）─────────────────────────────────────────
+#
+# demo 庫每次登入重建（system_settings 清空）⇒ 重建後種一份虛構公司＋確認紀錄 via "demo_seed"。
+# 確認紀錄的 install 是 DEMO_INSTALL 常數：status(demo=True) 才認；正式庫比對安裝識別檔 ⇒ 帶進正式庫也無效。
+# 〔更正 §4.1「統編 00000000 不過檢查碼」：它的加權和是 0，**會通過**檢查碼。
+#   「不可能被當成真公司」改由三件事保證：名稱含「示範資料」、只在 demo 庫有效的確認紀錄、demo 輸出浮水印〕
+DEMO_INSTALL = hashlib.sha256(b"motrix-demo-install-v1").hexdigest()
+DEMO_WATERMARK = "示範資料"
+DEMO_PROFILE = {
+    "name": "示範資料科技股份有限公司",
+    "companyNameEn": "Demo Data Co., Ltd. (Sample)",
+    "tax_id": "00000000",
+    "contact_info": "Tel: 00-0000-0000｜demo@example.com",
+}
+
+
+def seed_demo(conn) -> dict:
+    """demo 庫重建後呼叫（routers/auth.py demo 登入）。只准寫 demo 庫：呼叫端給的 conn 必須是 demo 庫。"""
+    _set(conn, "company_profile", dict(DEMO_PROFILE))
+    rec = {"confirmed_by": "demo", "confirmed_at": datetime.now().isoformat(timespec="seconds"),
+           "fields_hash": fields_hash(DEMO_PROFILE), "install": DEMO_INSTALL, "via": "demo_seed"}
+    _set(conn, CONFIRMATION_SETTING, rec)
+    return rec

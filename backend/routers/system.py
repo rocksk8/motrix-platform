@@ -1451,6 +1451,8 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
                     sent[alias] = sent[edited]
     confirm_identity = bool(sent.pop("confirmIdentity", None))
     value = {**cur, **sent}
+    if not confirm_identity:
+        _guard_reconfirm(cur, value)
     if confirm_identity:
         # 🔴 確認前先驗（同「先驗證，再寫入」）：被拒 ⇒ 422、什麼都不存
         from helpers import company_setup as _cs
@@ -1485,6 +1487,33 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
     return {"ok": True}
 
 
+RECONFIRM_CODE = "company_setup_reconfirm"
+
+
+def _guard_reconfirm(cur: dict, value: dict) -> None:
+    """D CG5-S1：已確認的安裝，一般「儲存」若會改動必要欄位（名稱／統編／電話或 email）⇒ 確認紀錄立即失效、
+    全公司 428。⇒ 不存，回 409 `company_setup_reconfirm`，設定頁改成「儲存並確認」（同一個請求帶 confirmIdentity）。
+    只在「現在的確認紀錄對得上現在的欄位」時才擋（本來就未確認 ⇒ 照常存）。判定出錯 ⇒ 不擋（不因閘門故障擋存檔）。"""
+    from helpers import company_setup as _cs
+    from db import get_db as _gdb
+    try:
+        conn = _gdb()
+        try:
+            rec = _cs._get(conn, _cs.CONFIRMATION_SETTING)
+        finally:
+            conn.close()
+        old_hash = _cs.fields_hash(cur)
+        blocks = (isinstance(rec, dict) and rec.get("fields_hash") == old_hash
+                  and _cs.fields_hash(value) != old_hash)
+    except Exception:  # noqa: BLE001
+        logger.exception("company_setup: 重新確認判定失敗（不擋存檔）")
+        return
+    if blocks:
+        raise HTTPException(409, {"code": RECONFIRM_CODE,
+                                  "message": "這次修改了本公司必要欄位（公司名稱／統一編號／電話或 email）。"
+                                             "儲存後其他人會暫停使用系統直到重新確認 ⇒ 請勾選確認後按「儲存並確認本公司資料」"})
+
+
 @router.get("/api/settings/company-setup/status")
 def company_setup_status(authorization: str = Header(None)):
     """本公司資料設定狀態（所有登入者可讀；只回判定結果與缺漏欄位名，不回任何公司資料值）。
@@ -1502,10 +1531,19 @@ def company_setup_status(authorization: str = Header(None)):
     if kind == _cs.GATE_UNDETERMINED:
         return {"configured": None, "reason": _cs.STATUS_ERROR, "canFix": can_fix, "message": _cs.MSG_UNDETERMINED}
     grace = (st or {}).get("grace")
-    return {"configured": bool(st.get("configured")), "reason": st.get("reason"), "via": st.get("via"),
-            "missing": st.get("missing") or [], "developer": bool(st.get("developer")) if can_fix else None,
-            "grace": {"until": grace.get("until")} if grace else None, "canFix": can_fix,
-            "settingsUrl": _cs.SETTINGS_URL}
+    out = {"configured": bool(st.get("configured")), "reason": st.get("reason"), "via": st.get("via"),
+           "missing": st.get("missing") or [], "developer": bool(st.get("developer")) if can_fix else None,
+           "grace": {"until": grace.get("until")} if grace else None, "canFix": can_fix,
+           "settingsUrl": _cs.SETTINGS_URL}
+    if can_fix:
+        # CG-S5：只有一位最高管理員 ⇒ 設定頁建議再設一位（唯一的人不在時只剩本機暫時放行）
+        conn = _gdb()
+        try:
+            out["superadminCount"] = conn.execute(
+                "SELECT COUNT(*) FROM users WHERE role='superadmin' AND active=1").fetchone()[0]
+        finally:
+            conn.close()
+    return out
 
 
 # ── Quotation default payment terms ───────────────────────────────────────────

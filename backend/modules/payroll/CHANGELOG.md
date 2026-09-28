@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## 1.0.8 — 2026-09-28（暫用號，列車取號；E4 wip/e-company-gate-impl 第三段）
+- 本公司資料設定閘門第二道（COMPANY-SETUP-GATE §5；D CG5-M1）：勞報單 PDF 下載端點：`except Exception` 前先 `except HTTPException: raise`；勞報單視圖（L1）先驗本公司已設定（Q4：單據上手改的公司欄位保留）
+
 ## 1.0.7 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
 - 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`payslips.html`、`payslip-form.html`、`bonus.html`
 

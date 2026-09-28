@@ -637,6 +637,8 @@ def download_shipping_pdf(note_no: str, authorization: str = Header(None)):
         pdf_bytes = generate_shipping_pdf_bytes(note_no)
     except ValueError as e:
         raise HTTPException(503, str(e))
+    except HTTPException:          # 第二道 428（COMPANY-SETUP-GATE §5）不可以被下面的 except Exception 吞成 500
+        raise
     except Exception as e:
         tid = trace_id()
         logger.exception("shipping_note pdf failed trace=%s", tid)

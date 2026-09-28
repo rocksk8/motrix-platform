@@ -702,15 +702,21 @@ _ROLE_DEFAULT_MODULES = {
 @pytest.fixture(autouse=True)
 def _company_setup_gate_default(request, monkeypatch):
     """本公司資料設定閘門（COMPANY-SETUP-GATE §4）：一般的題目視為「已設定」（等同正式機已確認的狀態），
-    否則每一題打 API 都會先被 428 擋住。**只換判定函式 `company_setup.status`**，產品程式沒有任何略過開關；
+    否則每一題打 API 都會先被 428 擋住。**只換判定函式 `company_setup.status`／`gate`**，產品程式沒有任何略過開關；
     驗閘門本身的題目標 `@pytest.mark.company_gate` ⇒ 用真的判定。"""
-    if request.node.get_closest_marker("company_gate"):
-        yield
-        return
     from helpers import company_setup as _cs
-    monkeypatch.setattr(_cs, "status", lambda conn, root=None, now=None: {
-        "configured": True, "reason": _cs.CONFIGURED, "via": "test_default", "missing": [],
-        "developer": False, "grace": None})
+    _cs._ALERTED_IN_PROCESS.clear()                  # 告警的行程內節流（CG5-S2）不可以跨題
+    if request.node.get_closest_marker("company_gate"):
+        _cs.reset_cache()
+        yield
+        _cs.reset_cache()
+        return
+    _st = {"configured": True, "reason": _cs.CONFIGURED, "via": "test_default", "missing": [],
+           "developer": False, "grace": None}
+    monkeypatch.setattr(_cs, "status", lambda conn, root=None, now=None, demo=False: dict(_st))
+    # 段③：輸出端第二道（require_for_output）在沒有建庫的單元題裡也會被呼叫 ⇒ gate 本身也換成「已設定」
+    # （gate 的快取鍵要查 system_settings；閘門題用真的 gate）
+    monkeypatch.setattr(_cs, "gate", lambda conn, root=None, demo=None: (_cs.GATE_OK, dict(_st)))
     _cs.reset_cache()
     yield
     _cs.reset_cache()

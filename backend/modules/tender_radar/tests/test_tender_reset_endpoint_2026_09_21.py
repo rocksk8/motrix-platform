@@ -104,7 +104,7 @@ import main
 # 2026-09-28（本公司資料設定閘門，COMPANY-SETUP-GATE §4）：子行程沒有 conftest ⇒ 全新庫＝「未設定」、每個 API 都 428，
 # E1 會變成「兩個都 428 所以相等」的空綠。比照 conftest：只換判定函式，視為已設定（產品程式沒有略過開關）。
 import helpers.company_setup as _cs
-_cs.status = lambda conn, root=None, now=None: {'configured': True, 'reason': 'configured', 'via': 'test_default',
+_cs.status = lambda conn, root=None, now=None, demo=False: {'configured': True, 'reason': 'configured', 'via': 'test_default',
                                                  'missing': [], 'developer': False, 'grace': None}
 from fastapi.testclient import TestClient
 from helpers.auth import _hash_pw

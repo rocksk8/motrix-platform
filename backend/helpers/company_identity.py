@@ -133,9 +133,45 @@ def contact_info_parts(profile: dict) -> dict:
     return {"phone": p.group(0).strip() if p else "", "email": email}
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# 輸出端第二道（COMPANY-SETUP-GATE §5；D CG5-M1）
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# 🔴 下面這些「組輸出文字」的函式（company_name／company_heading／contact_line／name_pair／footer_line）
+#    以及 pdf_gen 的 `_identity_head／_identity_foot／_identity_foot_short` **一進來就問第二道**：
+#    本公司資料沒設定（或判定失敗）⇒ 丟 `CompanySetupRequired`（428），文件不產生。
+#    `location_identity()`／`identity_from_profile()` **不擋**：它們也被畫面（登入頁品牌）、稽核與閘門自己用。
+
+#: 請款單（`kind="payment_request"`）另外要的匯款欄位：(欄位, 顯示名)
+PAYMENT_BANK_FIELDS = (("bank_name", "銀行名稱"), ("bank_account_name", "戶名"), ("bank_account_number", "帳號"))
+CODE_BANK_REQUIRED = "company_bank_required"
+
+
+def require_for_output(kind: str = None, ident: dict = None) -> None:
+    """含本公司資料的輸出產生前呼叫。未設定／判定失敗 ⇒ `CompanySetupRequired`（428）。
+    `kind="payment_request"` 另驗 `ident`（該據點解析後的身分）的匯款欄位（缺 ⇒ 428 `company_bank_required`）。"""
+    from helpers import company_setup as _cs
+    _cs.require()
+    if kind == "payment_request":
+        ident = ident if ident is not None else location_identity()
+        missing = [label for field, label in PAYMENT_BANK_FIELDS if not str(ident.get(field) or "").strip()]
+        if missing:
+            raise _cs.CompanySetupRequired(
+                CODE_BANK_REQUIRED, "請款單需要本公司匯款資料（" + "、".join(missing) + "），請最高管理員到「公司資料設定」填寫",
+                missing)
+
+
+def identity_for_output(location_id=None, kind: str = None) -> dict:
+    """`location_identity()` 的輸出版：先過第二道再回身分。"""
+    ident = location_identity(location_id)
+    require_for_output(kind, ident)
+    return ident
+
+
 def company_name() -> str:
     """報表／匯出抬頭用的公司名（主要據點；ROADMAP A8：取代 reports／accounting_export／
-    network_plan_export 各自寫死的 `_COMPANY`）。全部留空 ⇒ `""`。"""
+    network_plan_export 各自寫死的 `_COMPANY`）。全部留空 ⇒ `""`。輸出用：先過第二道。"""
+    require_for_output()
     return location_identity()["company_name"]
 
 
@@ -159,7 +195,8 @@ def short_name(name: str) -> str:
 def contact_line(sep: str = " ｜ ", tax_label: str = "統一編號 ", phone_label: str = "Tel: ",
                  ident: dict = None) -> str:
     """統編／電話／email 串成一行（ROADMAP A8c：取代 reports／network_plan_export 寫死的聯絡資料）。
-    空的欄位整段略過，不留孤立的分隔符；全部空白 ⇒ `""`。"""
+    空的欄位整段略過，不留孤立的分隔符；全部空白 ⇒ `""`。輸出用：先過第二道。"""
+    require_for_output()
     ident = ident if ident is not None else location_identity()
     parts = []
     if ident.get("tax_id"):
@@ -172,14 +209,15 @@ def contact_line(sep: str = " ｜ ", tax_label: str = "統一編號 ", phone_lab
 
 
 def name_pair(ident: dict = None) -> str:
-    """`英文名 短名`（空的略過）。"""
+    """`英文名 短名`（空的略過）。輸出用：先過第二道。"""
+    require_for_output()
     ident = ident if ident is not None else location_identity()
     return " ".join(x for x in (ident.get("company_name_en", ""), short_name(ident.get("company_name", ""))) if x)
 
 
 def footer_line(ident: dict = None) -> str:
     """頁尾完整版：`英文名 短名 ｜ email ｜ Tel: 電話 ｜ 統一編號: 統編`（全部有值時與 pdf_gen 單據頁尾同格式）；
-    空的欄位整段略過，不留孤立的分隔符。"""
+    空的欄位整段略過，不留孤立的分隔符。輸出用：先過第二道（經 name_pair）。"""
     ident = ident if ident is not None else location_identity()
     parts = [name_pair(ident), ident.get("email", ""),
              ("Tel: " + ident["phone"]) if ident.get("phone") else "",

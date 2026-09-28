@@ -555,8 +555,22 @@ def html_to_pdf_bytes(html_content: str) -> bytes:
 # 命名空間裡，C 的題用 `monkeypatch.setattr(pdf_gen, "location_identity", …)`
 # 換掉它們來驗「8 支 builder 有沒有真的去取值」。
 from helpers.company_identity import (      # noqa: E402
-    DEFAULT_IDENTITY, location_identity, _location_of, apply_snapshot,
+    DEFAULT_IDENTITY, location_identity, _location_of, apply_snapshot, require_for_output,
 )
+
+
+def _demo_watermark() -> str:
+    """demo 模式的所有單據加「示範資料」浮水印（COMPANY-SETUP-GATE §4.1，Q3 裁示）；正式模式回空字串。"""
+    try:
+        from db import is_demo_mode
+        if not is_demo_mode():
+            return ""
+    except Exception:       # noqa: BLE001
+        return ""
+    from helpers.company_setup import DEMO_WATERMARK
+    return ('    <div data-demo-watermark style="position:fixed;top:40%;left:0;right:0;text-align:center;'
+            'font-size:72px;font-weight:700;color:rgba(185,28,28,.14);transform:rotate(-24deg);'
+            'pointer-events:none;z-index:999">' + DEMO_WATERMARK + '</div>\n')
 
 
 def _identity_head(ident: dict) -> str:
@@ -567,7 +581,8 @@ def _identity_head(ident: dict) -> str:
     """
     third = "統一編號：%s　｜　電話：%s　｜　%s" % (
         ident.get("tax_id", ""), ident.get("phone", ""), ident.get("email", ""))
-    return (
+    require_for_output()                  # 第二道（COMPANY-SETUP-GATE §5）：未設定／判定失敗 ⇒ 428，文件不產生
+    return _demo_watermark() + (
         '    <div class="co-name">%s</div>\n'
         '    <div class="co-sub">%s</div>\n'
         '    <div class="co-sub" style="margin-top:4px">%s</div>\n'
@@ -577,6 +592,7 @@ def _identity_head(ident: dict) -> str:
 
 def _identity_foot(ident: dict) -> str:
     """頁尾那一行（完整版：英文名 ＋ 中文名 ｜ email ｜ Tel ｜ 統編）。"""
+    require_for_output()
     return "  %s %s ｜ %s ｜ Tel: %s ｜ 統一編號: %s\n" % (
         ident.get("company_name_en", ""),
         # ⚠️ 頁尾用的是**不含「股份有限公司」的短名**。改版前寫死的是本公司名稱的短名，
@@ -588,6 +604,7 @@ def _identity_foot(ident: dict) -> str:
 
 def _identity_foot_short(ident: dict) -> str:
     """頁尾那一行（短版：只有英文名與中文短名）。"""
+    require_for_output()
     return "%s %s\n</div>\n" % (
         ident.get("company_name_en", ""),
         _short_name(ident.get("company_name", "")))
@@ -610,6 +627,7 @@ def _payslip_view(d: dict) -> dict:
     - R3（個資法 §8 I）：`privacyNotice`（伺服器蓋的 {at, by}）有值 ⇒ 印「已告知（時間、人員）」；
       沒有 ⇒ 附上告知事項全文（取自公司資料設定的「個資蒐集告知」，空白用範本）。
     """
+    require_for_output()      # 第二道（COMPANY-SETUP-GATE §5；Q4：單據上手改的公司欄位保留，只驗本安裝已設定）
     company = d.get('companyName', '')
     tax_id = d.get('companyTaxId', '')
     contact = d.get('companyContactInfo', '')
@@ -2111,6 +2129,12 @@ def _payment_request_dict(row) -> dict:
     return out
 
 
+def _require_payment_bank(v: dict) -> None:
+    """請款單產生前（COMPANY-SETUP-GATE §5）：第二道＋這一筆所屬據點解析後的匯款欄位（銀行、戶名、帳號）。
+    缺 ⇒ 428 `company_bank_required`，不產生。放在產生端而不是 builder：builder 的版面題要驗「空白資料也排得出來」。"""
+    require_for_output("payment_request", apply_snapshot(location_identity(_location_of(v)), v))
+
+
 def generate_payment_request_pdf_bytes(request_no: str) -> bytes:
     """Edge Headless 產生請款單 PDF 並以 bytes 回傳（供 API 下載使用）。"""
     edge = _get_edge_path()
@@ -2120,6 +2144,7 @@ def generate_payment_request_pdf_bytes(request_no: str) -> bytes:
     if not row:
         raise ValueError("請款單不存在")
     v = _payment_request_dict(row)
+    _require_payment_bank(v)
     html_content = _build_payment_request_html(v)
     tmp_html = tmp_pdf = None
     try:
@@ -2166,6 +2191,7 @@ def _generate_payment_request_pdf(request_no: str, actor: str = '', action_type:
         if not row:
             return
         v = _payment_request_dict(row)
+        _require_payment_bank(v)
         html_content = _build_payment_request_html(v)
 
         today   = date.today().strftime('%Y%m%d')

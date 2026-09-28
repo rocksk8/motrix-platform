@@ -652,7 +652,8 @@ def add_missing_settings(db_path: str, new_settings: dict = None) -> dict:
 #   backend/routers/reports.py:66      _COMPANY2 = "統一編號 60575481 ｜ Tel: 04-3610-6566 ｜ info@miactw.com"
 #   backend/network_plan_export.py:19  _COMPANY  = "允碩整合集創股份有限公司"
 #   backend/network_plan_export.py:20  _COMPANY2 = "MOTRIX Synergy Integration Corp."
-# 🔴 只在**看得出是本公司安裝**時才補（統編是 60575481，或公司名含「允碩」）：
+# 🔴 只在**看得出是本公司安裝**時才補（統編是 60575481）：
+#    〔COMPANY-SETUP-GATE §2-④ 2026-09-28：~~或公司名含兩字片段~~ 刪——名稱含該片段的客戶會被寫入本公司統編；只認統編〕
 #    新版會賣給客戶，不可以把我們的聯絡資料蓋進別人的安裝（比照 db._m106 只認統編）。
 V9_COMPANY_DEFAULTS = {
     "company_name": "允碩整合集創股份有限公司",
@@ -685,9 +686,9 @@ def _contact_info_parts(profile: dict) -> dict:
 
 
 def _is_our_install(profile: dict) -> bool:
-    tax = str(profile.get("taxId") or profile.get("tax_id") or "").strip()
-    names = " ".join(str(profile.get(k) or "") for k in ("companyName", "company_name", "name"))
-    return tax == V9_COMPANY_DEFAULTS["tax_id"] or "允碩" in names
+    """只認統編（COMPANY-SETUP-GATE §2-④）：公司名不當判準（別家公司名可能含同樣的字）。"""
+    tax = re.sub(r"\D", "", str(profile.get("taxId") or profile.get("tax_id") or ""))
+    return tax == V9_COMPANY_DEFAULTS["tax_id"]
 
 
 def fill_company_profile_blanks(db_path: str) -> dict:
@@ -702,7 +703,7 @@ def fill_company_profile_blanks(db_path: str) -> dict:
         if not isinstance(profile, dict):
             return {"filled": {}, "skipped": "company_profile 不是物件，不動"}
         if not _is_our_install(profile):
-            return {"filled": {}, "skipped": "看不出是本公司安裝（統編與公司名都對不上），不補"}
+            return {"filled": {}, "skipped": "看不出是本公司安裝（統編對不上），不補"}
         filled = {}
         for field, value in V9_COMPANY_DEFAULTS.items():
             if any(str(profile.get(a) or "").strip() for a in _PROFILE_ALIASES[field]):

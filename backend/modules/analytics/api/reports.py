@@ -2769,6 +2769,8 @@ def _send_monthly_report_for(period_str: str) -> None:
     餘額」類指標則維持不篩選（跟互動版 reports.html 同一份邏輯一致——那些
     本來就是累計快照，不是本期流量，不該隨月份歸零）。"""
     from helpers.email_notify import notify_monthly_report
+    if _monthly_report_blocked():
+        return
     try:
         label, d0, d1 = _parse_period(period_str)
         data   = _augment_with_targets(_collect(d0, d1), d0)
@@ -2815,8 +2817,33 @@ def _send_monthly_report_for(period_str: str) -> None:
         _log.warning("_send_monthly_report_for 失敗（%s）: %s", period_str, exc)
 
 
+def _monthly_report_blocked() -> bool:
+    """第二道（COMPANY-SETUP-GATE §4.1、§5）：排程信不經 HTTP（中介層看不到）⇒ 自己問。
+    本公司資料未設定／判定失敗 ⇒ 不寄、系統告警（同一代碼每日一次），回 True；**呼叫端不可以把月份往前推**
+    （設定完成後下一輪補寄）。"""
+    from helpers import company_setup as _cs
+    try:
+        _cs.require()
+        return False
+    except _cs.CompanySetupRequired as exc:
+        _log.error("每月報表信暫停：%s（%s）", exc.detail, exc.code)
+        try:
+            from db import get_db
+            conn = get_db()
+            try:
+                _cs.alert(conn, "monthly_report_skipped", "每月報表信暫停寄送：" + str(exc.detail))
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:       # noqa: BLE001 —— 告警失敗不影響「不寄」
+            _log.exception("月報暫停告警寫入失敗")
+        return True
+
+
 def _catchup_monthly_reports() -> None:
     """Process all months from (last_sent + 1) through previous month in order."""
+    if _monthly_report_blocked():
+        return                  # 本公司資料未設定 ⇒ 不寄、monthly_report_last_sent 不前進
     prev = _prev_month_str()
     last_sent = _get_setting("monthly_report_last_sent") or ""
 

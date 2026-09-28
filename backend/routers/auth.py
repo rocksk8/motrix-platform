@@ -439,6 +439,10 @@ def auth_login(body: LoginIn, request: Request):
         with demo_reset_lock:
             reset_demo_db()
             dconn = get_demo_db()
+            # 本公司資料設定閘門（COMPANY-SETUP-GATE §4.1，Q3 裁示）：demo 庫種虛構示範公司＋demo 專用確認紀錄
+            # （install＝DEMO_INSTALL，只有 demo 判定認得；正式庫永遠比對安裝識別檔）
+            from helpers import company_setup as _cs
+            _cs.seed_demo(dconn)
             dconn.execute(
                 "INSERT INTO users (username, password_hash, display_name, role, modules, "
                 "active, created_at, must_change_password) VALUES ('demo',?,?,?,?,1,?,0)",
