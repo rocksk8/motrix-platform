@@ -137,3 +137,67 @@
 
 - §6.3-1 拿掉 `-SkipCompanySetupPreflight`（原句以刪除線保留＋更正說明）；§7-⑨ 改為「正式機 ps1 沒有任何略過預檢的參數」的掃描題＋正對照；演練以副本注入。比對條件（skip／bypass＋preflight／company）不會誤中既有的 `-SkipAutoRollback`
 - ✅ CG3-M1 關閉（6387eb87）
+
+---
+
+## 7. 完整稽核實作段①（正式機段）：wip/e-company-gate-impl db551e01（D，2026-09-28）
+
+> 範圍：d6f196d7..db551e01 的產品碼：`helpers/company_setup.py`、`tools/company_setup_cli.py`、`apply_update.ps1`（2026-09-28h）、`main.py` 啟動、`core.paths`／`CONFIG_FILES`／`verify_package`。本段不擋任何 API。
+> 拋棄式 worktree：相關題 49 過（core＋cli＋D 探針）；探針不提交、跑完刪、暫存已清。
+
+### 7.0 結論
+
+- **必修 1（CGI-M1）、建議 3、觀察 1。**
+- 最壞情況的回答：**本段不會造成全公司停擺**。中介層還沒有擋任何 API，任何漏做都只會讓「升級被拒」（服務還沒停），或在套用後檢查失敗時自動回滾（連資料庫快照一起還原）
+- 但有一條正式機實際會走的路（用暫時放行先升級）會卡死 backfill，見 CGI-M1
+
+### 7.1 主持指定
+
+**① 正式機第一次升到含本段版本的完整路徑**
+
+| 情境 | 結果 |
+|---|---|
+| 照順序：ensure-install-id → 開發者簽 `company_confirmation.sig` → 升級 | 預檢通過 → 啟動時 backfill 寫確認紀錄 → 套用後檢查通過 ✔ |
+| 漏了第一、二步，直接升級 | ps1 先建識別檔，預檢得 `developer_identity_unsigned` ⇒ `refused_company_setup`，**停服之前**就中止，正式機沒被動 ✔。但拒絕時**沒有印出安裝識別雜湊**，開發者簽不了（CGI-S1） |
+| 簽章檔是對另一個識別簽的 | `install_mismatch` ⇒ 預檢拒絕 ✔ |
+| 升級後因任何原因未設定（backfill 出錯等） | 套用後 CLI 檢查不過 ⇒ `company_setup_rolled_back`，程式與資料庫快照一起還原 ⇒ `BACKFILL_DONE` 旗標也回到套用前 ✔；`-SkipAutoRollback` 不適用 ✔ |
+| 升級後識別檔被刪 | 啟動重建＋ERROR＋告警 ✔；本段不擋 API ⇒ 不停擺；下一次升級會被預檢拒絕，直到重簽 |
+| **簽章檔還沒到，先用 72h 放行升級** | 預檢因放行而通過 → 啟動 backfill 因為沒有簽章檔回 `skipped`，**卻照樣寫下 `BACKFILL_DONE`** → 之後簽章檔到位也不會再補（見 CGI-M1） |
+
+- 第一步的 CLI 在第一次升級之前**只存在於包裡**（正式機還沒有這支檔）。§6.2 要寫明從 staging 執行：`python <staging>\payload\backend\tools\company_setup_cli.py ensure-install-id --root <ROOT>`；或者直接讓第一次升級被拒，由拒絕訊息帶出雜湊（CGI-S1）
+- 第二步由使用者以交付金鑰簽（Claude 不讀私鑰）
+
+**② backfill_once 在啟動時不丟例外；失敗時的狀態：成立，只有一個缺口。**
+- 整支包在 try/except 裡；出錯回 `"error"`，而且例外發生在寫 `BACKFILL_DONE` 之前 ⇒ **不會**寫旗標，下次啟動會重試 ✔
+- `main._startup_company_setup` 再包一層，閘門的問題不會讓服務起不來 ✔
+- 缺口：`skipped` 也寫旗標（CGI-M1）
+
+**③ ps1 的兩個新呼叫點要逐字複製到 A 的 `apply_module_update.ps1`**
+- `Invoke-CompanySetupCli` 放在 apply_update.ps1「逐字相同的區段」標記（:268）**之後**，也不在 `test_apply_plan` 的 `_SYNCED_FUNCS` 裡 ⇒ 目前沒有守門會要求兩支 ps1 的這個函式相同
+- A 的 DB-S1 逐字比對清單要加入 `Invoke-CompanySetupCli`（CGI-S2）
+- 單模組包不帶 tools ⇒ 模組 ps1 的預檢與套用後檢查應呼叫**已安裝**的 `backend\tools\company_setup_cli.py`（core 沒換，已安裝版即新版），而不是 `$PackagePath\backend\tools\…`
+
+### 7.2 必修
+
+**CGI-M1（必修）　backfill 在 `skipped` 時不可以寫「已完成」**
+- D 探針（`test_company_setup_core` 的 `devco` fixture＋放行檔）：
+  1. 放行中 ⇒ 預檢判定 allows＝True
+  2. 啟動 backfill ⇒ `skipped`，`BACKFILL_DONE={result: skipped}`
+  3. 簽章檔到位（`signed_file_state`＝valid）、放行移除
+  4. 再跑 backfill ⇒ `already_done`
+  5. status ⇒ `configured False / no_record`，allows False
+- 而本段**沒有**寫確認紀錄的入口（設定頁的 confirm API 在之後的段）⇒ 之後每一次升級，預檢都拒絕；唯一出路是一再重建 72h 放行。這正是 §6.5 寫的「開發者正式機 ⇒ 用暫時放行撐到新簽章檔到位」那條路
+- 修法（擇一）：
+  - 只有 `backfilled`，或確認紀錄已存在時，才寫 `BACKFILL_DONE`；`skipped` 不寫（每次啟動多讀幾個設定，成本可忽略）
+  - 或保留旗標，但在 status 端讓「開發者身分＋有效簽章檔＋無紀錄」在啟動時補寫（等於 backfill 可重跑）
+- 題：探針的五步 ⇒ 第 4 步回 `backfilled`、第 5 步 configured
+
+### 7.3 建議
+
+- **CGI-S1　拒絕時要帶出安裝識別雜湊**：`ensure-install-id` 的輸出只在失敗時 `Write-Host`；預檢拒絕的訊息沒有 `install`。開發者要簽檔就需要它 ⇒ 預檢拒絕時印出（並寫進 result.json 的一個欄位），正式機回報就有了。同時在 §6.2 寫明第一次要從 staging 執行 CLI
+- **CGI-S2　逐字比對清單加 `Invoke-CompanySetupCli`**：見 7.1-③
+- **CGI-S3　ps1 的 robocopy 排除清單與 `CONFIG_FILES` 對齊**：:768（程式快照）、:885（複製包）的 `/XF` 明列 `license.key`、`.deployed_commit.json` 等設定檔，新的三個 F3 檔沒有列。現在不會出事（包裡沒有這三檔；快照在 ensure 之後才拍），但 CG2-M1 要的是「升級與回滾不當程式處理」。建議列入 `/XF`，並加一題「ps1 的 `/XF` ⊇ `CONFIG_FILES` 裡位於 backend 的檔」
+
+### 7.4 觀察
+
+- **CGI-O1**：本段上線之後，開發者正式機的**每一次**升級（含急修）都要先有有效簽章檔或放行。§6.2 的兩階段要在本段出貨**之前**完成，否則第一個急修就要走放行（而放行正是 CGI-M1 的路）
