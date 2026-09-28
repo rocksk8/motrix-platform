@@ -401,3 +401,48 @@ def test_signed_file_expiring_soon_alerts(client, monkeypatch, no_mail, gate_fil
         assert _alert_codes(conn).count("signed_file_expiring") == 1
     finally:
         conn.close()
+
+
+def test_prod_shape_company_level_bank_with_locations_without_bank_keys(client, boss, tmp_path):
+    """正式機實況形狀（主持 2026-09-28 只讀查詢）：公司層級四個 bank_* 有值、兩個據點**沒有任何 bank 開頭的鍵** ⇒
+    請款單不擋（兩個據點都逐欄落回公司層級）、預檢回報齊全。正對照。"""
+    import db
+    import pdf_gen
+    from helpers import company_identity as ci
+    prod_shape = dict(PROFILE, bank_name="測試銀行", bank_branch="測試分行", bank_account_name="測試丙股份有限公司",
+                      bank_account_number="0001234567",
+                      locations=[{"id": "loc-a", "name": "總公司", "address": "測試市一路 1 號"},
+                                 {"id": "loc-b", "name": "分公司", "address": "測試市二路 2 號"}])
+    assert not any(k.startswith("bank") for loc in prod_shape["locations"] for k in loc)       # 前提：據點沒有 bank 鍵
+    assert _confirm(client, boss).status_code == 200
+    conn = db.get_db()
+    try:
+        cs._set(conn, "company_profile", prod_shape)
+        conn.commit()
+        assert cs.payment_bank_missing(prod_shape) == []
+    finally:
+        conn.close()
+    cs.reset_cache()
+    for loc in (None, "loc-a", "loc-b"):
+        ident = ci.location_identity(loc)
+        assert ident["bank_account_number"] == "0001234567" and ident["bank_name"] == "測試銀行", loc
+        pdf_gen._require_payment_bank({"locationId": loc} if loc else {})              # 不丟 428
+    # 預檢 CLI 也回報齊全（讀同一份庫的副本）
+    import subprocess
+    import sys
+    from pathlib import Path
+    cli = Path(__file__).resolve().parents[1] / "tools" / "company_setup_cli.py"
+    r = subprocess.run([sys.executable, str(cli), "status", "--db", db.DB_PATH, "--root", str(tmp_path)],
+                       capture_output=True, text=True, encoding="utf-8", timeout=60)
+    out = json.loads([l for l in r.stdout.splitlines() if l.startswith("{")][-1])
+    assert out["payment_bank_missing"] == []
+    # 反向控制：公司層級拿掉帳號 ⇒ 兩個據點都擋
+    conn = db.get_db()
+    try:
+        cs._set(conn, "company_profile", dict(prod_shape, bank_account_number=""))
+        conn.commit()
+    finally:
+        conn.close()
+    with pytest.raises(cs.CompanySetupRequired) as e:
+        pdf_gen._require_payment_bank({"locationId": "loc-b"})
+    assert e.value.code == "company_bank_required" and e.value.missing == ["帳號"]
