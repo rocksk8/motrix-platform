@@ -201,3 +201,27 @@
 ### 7.4 觀察
 
 - **CGI-O1**：本段上線之後，開發者正式機的**每一次**升級（含急修）都要先有有效簽章檔或放行。§6.2 的兩階段要在本段出貨**之前**完成，否則第一個急修就要走放行（而放行正是 CGI-M1 的路）
+
+## 8. 複核 CGI-M1＋S1／S3：wip/e-company-gate-impl 3a49c1b5（D，2026-09-28）
+
+- ✅ CGI-M1 關閉（3a49c1b5）
+- CGI-S1（預檢輸出帶安裝識別雜湊，拒絕訊息指明交給開發者簽；§6.2 staging）、CGI-S3（`/XF` 補三檔＋兩個初始帳密檔）都已採納；CGI-S2 依主持裁示由 A 的模組 ps1 逐字守門負責
+- **偏離（skipped_fields 照記、waiting_signature 不記）：同意。** E 的理由成立：一律不記，全新安裝在管理員存好欄位後重啟就會被自動確認，跳過了「有人決定過」
+- **但同一個理由在 `waiting_signature` 上沒有守住 ⇒ 新必修 CGI2-M1**
+
+D 探針（拋棄式 worktree，3a49c1b5；題目 54 過，探針不提交、已刪）：
+
+| 探針 | 步驟 | 結果 |
+|---|---|---|
+| 五步（CGI-M1） | 放行中升級 → backfill → 簽章檔到位、放行移除 → 再 backfill → status | `waiting_signature`（不記）→ `backfilled` → configured ✔ |
+| 全新安裝 | 空欄位 backfill → 管理員存好欄位 → 重啟 backfill | `skipped_fields` → `already_done`、`no_record` ✔（E 的反向控制成立） |
+| **複製的開發者庫** | 開發者資料、沒有簽章檔 → backfill → 有人把名稱與統編改成別家、**沒按確認** → 重啟 backfill | `waiting_signature` → **`backfilled`，via `upgrade_backfill`，configured** |
+
+**CGI2-M1（必修）　`waiting_signature` 之後的重試，只能補「開發者身分＋有效簽章檔」這一種情況**
+- 開發者資料的庫出現在沒有簽章檔的安裝，正是閘門要防的情境（§3.1）。它停在 waiting；之後有人改了欄位但沒有按確認，下一次啟動 backfill 就把它當成「既有安裝的合格資料」自動確認 ⇒ 與 E 為全新安裝所擋的是同一件事
+- 修法：上一次結果是 `waiting_signature` 的庫，重試時
+  - 仍是開發者身分，且簽章檔有效 ⇒ `backfilled`
+  - 仍是開發者身分，簽章檔未到 ⇒ 繼續 `waiting_signature`（不記）
+  - **已不是開發者身分** ⇒ 記下做過（例：`skipped_identity_changed`），**不寫確認紀錄** ⇒ 由最高管理員在設定頁確認
+  - 做法：waiting 時也記一筆「狀態」（例如 `BACKFILL_DONE={result: waiting_signature}`，但 backfill 對這個結果值照樣重試），這樣重試時才分得出「上次是 waiting」
+- 題：上表第三列 ⇒ 不自動確認，status `no_record`；五步那一列照舊 configured（正對照）
