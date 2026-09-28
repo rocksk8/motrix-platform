@@ -64,6 +64,13 @@ def test_invalid_declarations_are_not_listed(synth, decl, caplog):
         assert listed == []
 
 
+@pytest.mark.parametrize("name", ["Zz.js", "zz_overlay.js", "zz.overlay.js", "zz.mjs"])
+def test_script_name_outside_the_pattern_is_not_listed_even_if_the_file_exists(synth, name):
+    """檔案真的在 pages/ 底下，但檔名不合 SCRIPT_NAME_RE ⇒ 不列（檔名規則本身有守，不靠路徑檢查兜底）。"""
+    synth("zz_name", [{"key": "zz", "label": "合成", "script": name}], {name: JS_OK})
+    assert [o for o in map_overlays.declared_overlays() if o["module"] == "zz_name"] == []
+
+
 def test_duplicate_overlay_key_second_is_not_listed(synth):
     synth("zz_a", [{"key": "zz", "label": "甲", "script": "a.js"}], {"a.js": JS_OK})
     synth("zz_b", [{"key": "zz", "label": "乙", "script": "b.js"}], {"b.js": JS_OK})
