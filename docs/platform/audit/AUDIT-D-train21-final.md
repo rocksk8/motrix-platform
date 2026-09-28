@@ -41,3 +41,5 @@
 - **T21F-S1　從包目錄執行 CLI 會把 pyc 寫進包**：D 以包的暫存複本重現第 1 段第 64、65 行（`python "$PKG\backend\tools\company_setup_cli.py" ensure-install-id／preflight`）⇒ 包裡多出 **24 個 `.pyc`**（`backend/`、`core/`、`helpers/` 的 `__pycache__`）。第 2 段套用時 robocopy 不排除 `__pycache__` ⇒ 會一起複製進正式機；它們由同一份新版原始碼編譯，同版 Python 有效、不同版會被忽略，功能無害；`apply_update.ps1` 的公司閘門預檢本來也從包執行 CLI，每次套用都會這樣（演練在這個條件下通過）⇒ **不擋**。下一班：指示與 `Invoke-CompanySetupCli` 用 `python -B`（或設 `PYTHONDONTWRITEBYTECODE=1`），發布工具同樣處理，讓包保持「pyc 0」
 - **T21F-O1**：version_manifest 沒有 E4（本公司資料設定閘門）的條目（最上面是標案雷達 29a、系統備份 28n、部署工具 28m、附近旅宿 28k）。已設定的正式機畫面無可見變化，不擋；但這是對客戶有感的大功能，下一班補一筆（同 T18F-O1）
 - **T21F-O2**：B 的演練（基底 0af16ad1，§6.7(d) 路徑二＋「沒有確認檔 ⇒ refused_company_setup、正式機不動」）結果出來後再附上；依主持安排，演練與本審平行，演練發現問題才擋
+
+- 〔補 2026-09-29〕T21F-S1 已先在第 1 段落實：第 3 步同一個區塊內、兩行 `python` 之前設 `$env:PYTHONDONTWRITEBYTECODE = "1"`（第 64 行）✔；第 2 段同樣照做；`Invoke-CompanySetupCli`／發布工具改 `-B` 與 T21F-O1 列下一班
