@@ -29,7 +29,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # 本腳本的版本（apply_module_update.version.json 登記它與內容雜湊；包的 min_apply_module_script 比的是它）。
-$ApplyModuleScriptVersion = "2026-09-28a"
+$ApplyModuleScriptVersion = "2026-09-28b"
 
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $Port = 666
@@ -39,15 +39,21 @@ $FrontendDir = Join-Path $ProdRoot "frontend"
 $ModuleUpdateTool = Join-Path $ProdRoot "tools\platform\module_update.py"
 $StepsTool = Join-Path $BackendDir "tools\module_apply_steps.py"
 $TempPrefix = "motrix-modapply-"
-# module_update.py --json 的 code（MODULE-UPDATE-DELIVERY §10 表）→ 本腳本的 status／處置
+# module_update.py --json 的 code（MODULE-UPDATE-DELIVERY §10 表）→ 本腳本的處置。
+# §10 的每一個 code 恰好屬於下面四組之一（守門題從 §10 表抓 code 比對，缺／多／重複都紅；稽核 D S5A-M1）。
 #   預檢：沒列到的一律 module_preflight_failed（F4）
 $PreflightStatus = @{ "pkg_invalid" = "package_invalid"; "already_installed" = "duplicate_version"; "bad_args" = "bad_args" }
-#   回滾失敗而磁碟上「模組可能是半新半舊或還原不了」⇒ F13：停用該模組再重啟
-$RestoreFailedCodes = @("backup_corrupt", "no_backup", "backup_not_found", "restore_mismatch")
-#   apply 在動檔之前就拒絕（預檢那一類）⇒ 磁碟沒變，只要把服務拉回來
+#   ① apply 在動檔之前就拒絕（預檢那一類）⇒ 磁碟沒變，只要把服務拉回來
 $ApplyUntouchedCodes = @("pkg_invalid", "no_install_lock", "no_base", "no_deployed_marker", "base_mismatch",
                          "core_incompatible", "license_unavailable", "unlicensed", "already_installed", "not_higher",
-                         "bad_args", "refused")
+                         "bad_args", "interrupted_apply_pending", "refused")
+#   ② apply 動過檔才失敗（F9）：apply_failed_restored 已由 module_update 還原；其餘用本次 stamp 回滾
+$ApplyInFlightCodes = @("apply_failed_restored", "apply_failed_half", "unexpected")
+#   ③ 回滾失敗而磁碟上「模組可能是半新半舊或還原不了」⇒ F13：停用該模組再重啟
+$RestoreFailedCodes = @("backup_corrupt", "no_backup", "backup_not_found", "restore_mismatch")
+#   ④ 回滾「拒絕、一個檔都沒動」（套用之後又有別的寫入）⇒ 磁碟上仍是這次的新模組 ⇒ 同 F13：停用該模組再重啟，
+#      不可以停著服務不管（全站停擺）；status module_restore_failed、結果檔 rollback_code 帶 code
+$RollbackRefusedCodes = @("module_changed", "state_changed", "base_changed", "interrupted_not_latest")
 
 $UsesHttps = Test-Path (Join-Path $BackendDir "certs\cert.pem")
 if ($UsesHttps) {
@@ -90,6 +96,7 @@ $script:ModuleKey = $null
 $script:FromVersion = $null
 $script:ToVersion = $null
 $script:ModStamp = $null
+$script:RollbackCode = $null
 
 function Emit-Result($status, $code) {
     # 一行、無前後空白、大小寫固定、欄位順序固定（B.md §九 定版）。
@@ -195,6 +202,7 @@ function Add-ModuleResultFields {
         $res | Add-Member -NotePropertyName module_key -NotePropertyValue $script:ModuleKey -Force
         $res | Add-Member -NotePropertyName from_version -NotePropertyValue $script:FromVersion -Force
         $res | Add-Member -NotePropertyName to_version -NotePropertyValue $script:ToVersion -Force
+        if ($script:RollbackCode) { $res | Add-Member -NotePropertyName rollback_code -NotePropertyValue $script:RollbackCode -Force }
         $tmpPath = "$resPath.tmp"
         [System.IO.File]::WriteAllText($tmpPath, ($res | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding($false)))
         Move-Item -Path $tmpPath -Destination $resPath -Force
@@ -456,30 +464,33 @@ function Restore-Databases([string]$snapDir) {
     return $true
 }
 
-# 模組回滾（停服之後呼叫）。回 @{ Ok; Corrupt; Text }：Corrupt＝備份雜湊不符（F13）。
+# 模組回滾（停服之後呼叫）。回 @{ Ok; NeedsDisable; Code; Text }：NeedsDisable＝回滾沒把模組還原（③④）⇒ F13。
 function Invoke-ModuleRollback {
     $rbArgs = @("rollback", "--root", $ProdRoot, "--key", $script:ModuleKey)
     if ($script:ModStamp) { $rbArgs += @("--backup", $script:ModStamp) }
     $rb = Invoke-ModuleUpdate $rbArgs
     Write-Host $rb.Text
     $code = if ($rb.Data) { [string]$rb.Data.code } else { "" }
-    $corrupt = [bool]((-not $rb.Ok) -and ($RestoreFailedCodes -contains $code))
-    return @{ Ok = $rb.Ok; Corrupt = $corrupt; Code = $code; Text = $rb.Text }
+    if (-not $rb.Ok) { $script:RollbackCode = $code }
+    $needsDisable = [bool]((-not $rb.Ok) -and (($RestoreFailedCodes + $RollbackRefusedCodes) -contains $code))
+    return @{ Ok = $rb.Ok; NeedsDisable = $needsDisable; Code = $code; Text = $rb.Text }
 }
 
-# F13（D 審 DB-S5）：備份損壞 ⇒ 不回滾，把該模組寫進停用清單再重啟、確認它是 disabled；停用寫入失敗 ⇒ 不重啟。
-function Fail-RestoreCorrupt([string]$sinceIso) {
+# F13（D 審 DB-S5、S5A-M1）：回滾沒把模組還原（備份壞／不在／還原不一致，或回滾拒絕、一檔不動）⇒
+#   把該模組寫進停用清單再重啟、確認它是 disabled；停用寫入失敗 ⇒ 不重啟。
+function Fail-DisableModule([string]$code) {
     $script:ProdState = "applied_no_restore"
+    $why = if ($RollbackRefusedCodes -contains $code) { "回滾被拒絕（$code：套用之後又有別的寫入，一個檔都沒動）" } else { "回滾沒有成功（$code：備份損壞、不在或還原後不一致）" }
     $d = Invoke-Py @($StepsTool, "disable", "--key", $script:ModuleKey)
     Write-Host $d.Text
     if ($d.Exit -ne 0 -or $d.Text -notmatch "DISABLE_OK") {
-        Fail "模組 $($script:ModuleKey) 的套用備份已損壞（雜湊不符），而且寫入停用清單失敗 ⇒ 服務未重新啟動（半新半舊的模組不可以載入），需要人工處理。" "module_restore_failed"
+        Fail "模組 $($script:ModuleKey) $why，而且寫入停用清單失敗 ⇒ 服務未重新啟動（不健康的模組不可以載入），需要人工處理。" "module_restore_failed"
     }
     $restartAt = Get-Date -Format "yyyy-MM-ddTHH:mm:ss"
     Start-InstallService
     $st = Wait-ModuleState $script:ModuleKey $null "disabled" $restartAt
     if ($st.Ok) { $script:ServiceState = "up" }
-    Fail "模組 $($script:ModuleKey) 的套用備份已損壞（雜湊不符）⇒ 沒有回滾；已把它停用並重新啟動（其他模組照常）$(if ($st.Ok) { '' } else { '，但沒有確認到它是停用狀態：' + $st.Reason })。修好後到「模組管理」重新啟用。" "module_restore_failed"
+    Fail "模組 $($script:ModuleKey) $why ⇒ 已把它停用並重新啟動（其他模組照常）$(if ($st.Ok) { '' } else { '，但沒有確認到它是停用狀態：' + $st.Reason })。需要開發機人工處理後，到「模組管理」重新啟用。" "module_restore_failed"
 }
 
 # 未預期的例外：印結果行、寫結果檔、放鎖（同 apply_update AH-S11）；我們停了服務且磁碟不是換到一半 ⇒ 拉回來。
@@ -629,7 +640,7 @@ if (-not $ap.Ok) {
     #     apply_failed_half／unexpected／沒有結果行 ⇒ 用本次 stamp 回滾（備份以 in_progress 留著）
     if ($apCode -ne "apply_failed_restored") {
         $rb = Invoke-ModuleRollback
-        if ($rb.Corrupt) { Fail-RestoreCorrupt (Get-Date -Format "yyyy-MM-ddTHH:mm:ss") }
+        if ($rb.NeedsDisable) { Fail-DisableModule $rb.Code }
         if (-not $rb.Ok) {
             Fail "替換模組中途失敗，回滾也沒有成功（$($rb.Code)，見上方）——服務未重新啟動，需要人工處理。" "module_copy_failed"
         }
@@ -681,7 +692,7 @@ $failStatus = if ($companyGateFailed) { "company_setup_rolled_back" } elseif ($h
 Stop-InstallService | Out-Null
 $script:ServiceState = "down"
 $rb = Invoke-ModuleRollback
-if ($rb.Corrupt) { Fail-RestoreCorrupt (Get-Date -Format "yyyy-MM-ddTHH:mm:ss") }
+if ($rb.NeedsDisable) { Fail-DisableModule $rb.Code }
 if (-not $rb.Ok) {
     Fail "健康檢查沒過（$($hc.Reason)），而模組回滾失敗（見上方）——服務未重新啟動，需要人工處理。" $failStatus
 }

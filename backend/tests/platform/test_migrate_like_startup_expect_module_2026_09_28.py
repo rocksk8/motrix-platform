@@ -46,6 +46,15 @@ def test_missing_module_fails(tmp_path, monkeypatch, iso, capsys):
     assert code == 2 and "MODULE_LOAD_FAIL zz_nope" in out, out
 
 
+def test_disabled_module_is_refused_with_a_way_forward(tmp_path, monkeypatch, iso, capsys):
+    """稽核 D S5A-S1 裁定：停用中的模組不接受單一模組更新（驗不到能不能載入），訊息要說怎麼辦。"""
+    _pkg(tmp_path, monkeypatch, "zzexp_off", {"zz_a": OK_MODULE % "zz_a"})
+    main_db = _settings_db(tmp_path / "main.db", disabled=["zz_a"])
+    _stub_init_db(monkeypatch, {main_db: {}})
+    code, out = _run(["--db", main_db, "--expect-module", "zz_a=0.0.1"], capsys)
+    assert code == 2 and "MODULE_LOAD_FAIL zz_a" in out and "停用" in out and "模組管理" in out, out
+
+
 def test_old_package_without_module_startup_cannot_verify(tmp_path, monkeypatch, iso, capsys):
     monkeypatch.setattr(MLS, "has_module_startup", lambda backend=None: False)
     main_db = str(tmp_path / "main.db")

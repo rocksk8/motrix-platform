@@ -14,6 +14,7 @@ import json
 import re
 import shutil
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -123,7 +124,7 @@ def test_db_restore_saves_pre_rollback_before_overwriting():
 
 
 def test_f13_disables_the_module_before_restarting_and_does_not_restart_when_disable_fails():
-    f = _fn(_src(NEW), "Fail-RestoreCorrupt")
+    f = _fn(_src(NEW), "Fail-DisableModule")
     assert f.index('"disable"') < f.index("Start-InstallService"), "先停用才重啟（DB-S5）"
     fail_idx = f.index('"module_restore_failed"')
     assert fail_idx < f.index("Start-InstallService"), "停用寫入失敗的出口在重啟之前（不重啟）"
@@ -181,7 +182,7 @@ def test_every_status_is_in_the_dashboard_domain_and_every_new_one_has_an_exit()
 
 def test_every_fail_call_names_its_status():
     code = _code(_src(NEW))
-    body = code[code.index("function Fail-RestoreCorrupt"):]
+    body = code[code.index("function Fail-DisableModule"):]
     bad = [l.strip() for l in body.split("\n")
            if re.match(r'\s*(if .*\{\s*)?Fail\s+"', l) and not re.search(r'"\s+(\$[a-zA-Z]+|"[a-z_]+")\s*\}?\s*$', l)]
     assert not bad, "Fail 沒給 status（會變 unknown）：%s" % bad
@@ -209,31 +210,84 @@ def test_script_parses_without_errors():
     assert r.stdout.strip().splitlines()[-1] == "0", r.stdout + r.stderr
 
 
-# ── ⑤ 與 module_update.py --json 的 code 表對齊（B，MODULE-UPDATE-DELIVERY §10，wip/b-module-delivery-2 18e66f7b）──
+# ── ⑤ 與 module_update.py --json 的 code 表對齊（B，MODULE-UPDATE-DELIVERY §10）──
+# 稽核 D S5A-M1：原本這裡手抄一份 §10 的 code（B 18e66f7b），B 後來加的 code 沒跟上 ⇒ 自動回滾遇到時服務停著。
+# 根治：code 一律從 §10 表抓（B 的 test_every_code_is_documented_for_the_ps1 釘住「程式每個 code 都在表上」），
+# 這裡釘反向：「表上每個 code 在 ps1 恰好屬於一組處置」——缺、多、重複都紅，不再手抄。
 
-#: §10 的 code 值域（B 那邊有守門題釘住程式裡每個 code 都在表上；這裡釘 ps1 對每個 code 都有處置）
-S10_CODES = {"pkg_invalid", "no_install_lock", "no_base", "no_deployed_marker", "base_mismatch", "core_incompatible",
-             "license_unavailable", "unlicensed", "already_installed", "not_higher", "bad_args", "apply_failed_restored",
-             "apply_failed_half", "no_backup", "backup_not_found", "backup_corrupt", "restore_mismatch",
-             "module_changed", "state_changed", "base_changed", "refused", "unexpected"}
-#: 不自動處理（§10「手動處理」／「apply ⇒ F9」）：落到 ps1 的預設分支即可
-S10_DEFAULT = {"apply_failed_half", "unexpected", "module_changed", "state_changed", "base_changed"}
+S10_DOC = Path(__file__).resolve().parents[3] / "docs" / "platform" / "MODULE-UPDATE-DELIVERY.md"
+B55_WAIT = ("等 B55 合回（wip/b-module-delivery-2）：本樹還沒有 MODULE-UPDATE-DELIVERY.md ⇒ §10 對照在合回那一班生效"
+            "（合回那一班的列車長要確認這幾格是 passed，不是 skip）")
+#: ps1 的四組處置（apply_module_update.ps1 開頭）
+GROUPS = ("ApplyUntouchedCodes", "ApplyInFlightCodes", "RestoreFailedCodes", "RollbackRefusedCodes")
+
+
+def _parse_s10(text):
+    """§10 的 code 值域表：`## 10.` 到下一個 `## ` 之間，第一欄是 `code` 的列。"""
+    i = text.index("\n## 10.")
+    j = text.find("\n## ", i + 1)
+    sec = text[i:j if j > 0 else len(text)]
+    return set(re.findall(r"^\|\s*`([a-z_]+)`\s*\|", sec, re.M))
+
+
+def _s10_codes():
+    if not S10_DOC.exists():
+        pytest.skip(B55_WAIT)
+    return _parse_s10(S10_DOC.read_text(encoding="utf-8"))
 
 
 def _ps_list(name):
     code = _code(_src(NEW))
     m = re.search(r'^\$%s = @\((.*?)\)' % name, code, re.M | re.S)
+    assert m, "ps1 沒有 $%s" % name
     return set(re.findall(r'"([a-z_]+)"', m.group(1)))
 
 
-def test_every_s10_code_has_a_handling():
-    untouched, restore = _ps_list("ApplyUntouchedCodes"), _ps_list("RestoreFailedCodes")
-    code = _code(_src(NEW))
-    handled = untouched | restore | {"apply_failed_restored"} | S10_DEFAULT
-    assert S10_CODES <= handled, sorted(S10_CODES - handled)
-    assert not (untouched & restore)
-    assert '"apply_failed_restored"' in code, "apply 自己已還原的那一種要跳過回滾"
-    assert restore == {"backup_corrupt", "no_backup", "backup_not_found", "restore_mismatch"}, "§10 對應 F13 的那四個"
+def _groups():
+    return {g: _ps_list(g) for g in GROUPS}
+
+
+def _disposition_problems(codes, groups):
+    n = Counter(c for g in groups.values() for c in g)
+    dup = sorted(c for c, k in n.items() if k > 1)
+    handled = set(n)
+    return {"missing": sorted(codes - handled), "extra": sorted(handled - codes), "dup": dup}
+
+
+def test_s10_parser_sees_known_codes():
+    """正對照：抓得到表頭之後的列、抓得到最後加的那幾個（抓不到 ⇒ 下面的比對是空的在比）。"""
+    codes = _s10_codes()
+    assert {"pkg_invalid", "backup_corrupt", "interrupted_apply_pending", "interrupted_not_latest", "unexpected"} <= codes, sorted(codes)
+    assert len(codes) >= 20, sorted(codes)
+
+
+def test_every_s10_code_has_exactly_one_disposition():
+    problems = _disposition_problems(_s10_codes(), _groups())
+    assert problems == {"missing": [], "extra": [], "dup": []}, (
+        "§10 的 code 與 ps1 的四組處置（%s）不一致：%s ⇒ 在 apply_module_update.ps1 開頭把 code 歸到一組" % (", ".join(GROUPS), problems))
+
+
+def test_reverse_control_a_new_s10_code_is_caught():
+    """反向控制：§10 多一列 ⇒ 比對抓得到（題目不是對什麼都綠）；同一個 code 放兩組 ⇒ 抓得到。"""
+    doc = ("# x\n\n## 10. 輸出\n\n| code | 子命令 | 意思 | ps1 |\n|---|---|---|---|\n"
+           "| `backup_corrupt` | rollback | 壞 | F13 |\n| `brand_new_code` | apply | 新 | ? |\n\n## 11. 下一節\n| `not_this` | x |\n")
+    codes = _parse_s10(doc)
+    assert codes == {"backup_corrupt", "brand_new_code"}
+    groups = {"A": {"backup_corrupt"}, "B": {"backup_corrupt"}}
+    assert _disposition_problems(codes, groups) == {"missing": ["brand_new_code"], "extra": [], "dup": ["backup_corrupt"]}
+
+
+def test_s5a_m1_rollback_refusals_disable_the_module_instead_of_leaving_the_service_down():
+    """D S5A-M1：「回滾拒絕、一檔不動」⇒ 與 F13 同：停用模組再重啟；apply 回 interrupted_apply_pending ⇒ 沒動檔。"""
+    g = _groups()
+    assert {"module_changed", "state_changed", "base_changed", "interrupted_not_latest"} <= g["RollbackRefusedCodes"]
+    assert "interrupted_apply_pending" in g["ApplyUntouchedCodes"]
+    rb = _fn(_src(NEW), "Invoke-ModuleRollback")
+    assert "($RestoreFailedCodes + $RollbackRefusedCodes) -contains $code" in rb
+    assert "$script:RollbackCode = $code" in rb
+    m = _code(_src(NEW))
+    assert m.count("if ($rb.NeedsDisable) { Fail-DisableModule $rb.Code }") == 2, "F9 與自動回滾兩處"
+    assert "rollback_code" in _fn(_src(NEW), "Add-ModuleResultFields"), "結果檔帶回滾的 code"
 
 
 def test_apply_refused_before_touching_restarts_the_service_before_failing():
