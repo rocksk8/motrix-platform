@@ -9,6 +9,7 @@
 - L1（新增）：`helpers.geo.map_request_scope(page_basemap, missing="osm")`＋常數 `MAP_SCOPE_MISSING_SETTING`／`MAP_SCOPE_MISSING_OSM`——地圖頁請求的 Google 範圍判定（頁面底圖只准收窄設定；D 稽核 LG2-M1）。`/api/map/points` 改用它（`missing="setting"`）：None／google／osm 行為不變；**不認得的值（含空字串 `basemap=`）原本可用 Google，現在視同 osm**（收窄，LG3-O1）。守門 `tests/test_map_request_scope_2026_09_28.py`＋既有 GB-M2 題
 - L1（新增）：`archive._daily_backup_tables()` 併入**已載入**模組 `module.json` `data.tables` 宣告 T1 的表（鍵 `模組-<key>-<表>`，常數 `archive.MODULE_BACKUP_PREFIX`）；模組未載入＝不列（不誤報 daily_partial）；非法表名、T2 不列並記 ERROR；已在寫死清單的不重複（主持裁示 2026-09-28）。守門 `tests/test_archive_module_declared_tables_2026_09_28.py`
 - L1（資料）：權限目錄 `helpers.module_registry.MODULES` 新增 `lodging`（附近旅宿，業務）
+- L1（新增）：地圖覆蓋層串接點 IP-101 `map.overlay`——`helpers.map_overlays`（`declared_overlays`／`script_path`／`OVERLAY_KEY_RE`／`SCRIPT_NAME_RE`／`URL_PREFIX`）、`GET /api/map/overlays`、`main.map_overlay_script`（`/map-overlays/<模組>/<檔名>`）、前端契約 `static/map-overlay.js`（`MotrixMapOverlay`）；`map.html`／`map-google.js` 接生命週期。守門 `tests/test_map_overlay_contract_2026_09_28.py`、`tests/test_e2e_map_overlay_contract_2026_09_28.py`
 
 ## （不升版號：介面不變）— 2026-09-28（B，wip/b-warm-async：第十五班緊急修補 B54）
 - L1（行為）：`helpers.geo.schedule_geocode_warm()` 改為**立即返回**：第一輪背景定位排進 daemon `threading.Timer`（私有常數 `_GEOCODE_WARM_FIRST_DELAY_SECONDS`＝30 秒）在背景執行緒跑，之後每輪結束（含丟例外）再排下一輪（私有 `_geocode_warm_tick`，重排維持 `finally`）。原本在呼叫當下同步跑第一輪 ⇒ `main.py` 模組層呼叫它時 `import main` 被整輪定位卡住（正式機套用 8b04d99d：333 筆待辦×Nominatim 每秒 1 次 ⇒ 83 秒內 port 666 沒在聽 ⇒ 自動回滾）。守門 `tests/test_geocode_warm_async_2026_09_28.py`

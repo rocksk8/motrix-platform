@@ -77,6 +77,7 @@
    "FRONTEND_DIR": "const",
    "auth_middleware": "async def(request, call_next)",
    "license_gate_middleware": "async def(request, call_next)",
+   "map_overlay_script": "def(module_key, script)",
    "module_page": "def(name)",
    "no_cache_static": "async def(request, call_next)",
    "root": "def()",
@@ -576,6 +577,13 @@
    "keys": "def()",
    "register": "def(key, name, category, group, event, impact, action, owner=…)",
    "subject": "def(key, reason)"
+  },
+  "helper:map_overlays": {
+   "OVERLAY_KEY_RE": "const",
+   "SCRIPT_NAME_RE": "const",
+   "URL_PREFIX": "const",
+   "declared_overlays": "def()",
+   "script_path": "def(module_key, script)"
   },
   "helper:module_registry": {
    "BADGE_EXCLUDE": "const",
