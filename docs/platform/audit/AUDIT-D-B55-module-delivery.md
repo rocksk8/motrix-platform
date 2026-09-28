@@ -160,3 +160,26 @@
   - ③ 每一個能力字串常數在後端非測試碼裡的每一次出現，都必須落在「提供者模組」「已解析的消費端檔」「白名單（registry、catalog、INTEGRATION 註解）」其中之一，否則判不了、退回乙。能力字串是唯一的鍵，這一道抓得到「用了意料之外的管道」
   - 附反向控制：合成一個以 `registry._LEGACY_PROVIDERS[("case.access","case")]` 取用的檔 ⇒ 判不了
 - **DB4-S2（建議）　交叉比對寫明它只守能力清單**：文件把 (b) 寫成「與 dep_graph 交叉比對」的替代，但它只驗能力那一側。§4.3 補一句它不涵蓋消費端，由 DB4-S1 負責
+
+## 7. 分段稽核 S2：wip/b-module-delivery-2 0b646a01（D，2026-09-28）
+
+**結論：必修 0、建議 2。** ship_tier＋module_states 題 68 過（拋棄式樹，不用 xdist）；B 回報 S2 選題 1820 過、突變 S2 4、DB4 7、S1 8 全紅。
+
+- **DB4-S1**：成立
+  - ① `registry_bypasses`：讀 `core.registry` 的底線名稱（含別名）、import 內部名稱 ⇒ 判不了；白名單只有 core/catalog.py，附理由
+  - ② 星號 import core 的模組 ⇒ 判不了
+  - ③ `stray_capability_strings`：能力字串（含跨檔常數）只要出現在「已解析的取用引數、提供者登記位置、白名單（approval.reassign 稽核動作同名）」以外的地方 ⇒ 判不了
+  - ③ 是真正的兜底：①沒列到的寫法（`getattr(registry, "providers")("case.access")`、`for m in registry.loaded(): m.spec.providers[("case.access", …)]`）只要帶著能力字串，③都會抓到；不帶特定能力字串的通用讀法（像 catalog 列目錄）本來就不依任何能力的行為
+- **DB4-S2**：§4.3 已寫明 runtime 比對只守能力那一側。成立
+- **DB-S4（module_states.json）**：寫法成立：先寫 .tmp 再改名、寫失敗只記 WARNING、pid＝服務行程本身、在 fail_incomplete_modules 與 start_schedulers 之後。loader 的兩行 log 字串列為契約
+- **DB-O1**：`.deployed_modules.json` 加進 CONFIG_FILES。成立
+
+**DB5-S1（建議）　module_states.json 的寫入不要綁在排程閘門**
+- 現在只在 `MOTRIX_DISABLE_SCHEDULERS` 沒設時才寫（理由：測試 session 不寫進 repo 的 logs/）
+- 但它與「排程」無關：任何以 DISABLE_SCHEDULERS 起的安裝（演練、日後若有客戶為了除錯關排程），單模組更新的健檢都會讀不到這個檔 ⇒ 每次都判失敗、自動回滾。方向是保守的，但成因會很難查（畫面只會說「模組沒有載入」）
+- 第十六班的事故就是演練設了 DISABLE_SCHEDULERS 而沒照到真實路徑
+- 建議：改用獨立的條件（例：不在 pytest 之下，或 `LOGS_DIR` 不在 repo 工作樹內）；或者健檢讀不到檔時，訊息明說「狀態檔不存在（排程閘門關閉？）」
+
+**DB5-S2（建議）　③ 的完全相等比對擋不到拼出來的字串**
+- `"case." + "access"`、f-string 這類會漏過③；而①②只看 registry 名稱，也看不到
+- repo 目前沒有這種寫法。可以在取用函式的引數不是常數時已經判不了的基礎上，再加一題：能力字串的組成片段（第一個 `.` 之前的前綴，例如 `case.`）出現在 BinOp／JoinedStr 裡 ⇒ 判不了。成本低，可以留到下一輪
