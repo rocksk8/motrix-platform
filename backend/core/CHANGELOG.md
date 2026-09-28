@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## （不升版號：介面不變）— 2026-09-28（B，wip/b-geo-warm-fix：第十五班 地圖修正包 ①）
+- L1（行為）：`helpers.geo`——①`_locate_nominatim`：`geocode()` 的「查無此地址」（對方回空陣列）不再進 errors ⇒ `locate_cached` 對真的查無會記負快取（原本任何 err 都進 errors ⇒ 負快取在真實路徑上從來沒寫過；既有題的替身回 None 不報錯所以一直綠）；②`_locate_google`：回應不是 JSON、或 status 是 REQUEST_DENIED／OVER_QUERY_LIMIT／INVALID_REQUEST／UNKNOWN_ERROR ⇒ 進 errors（原本回 None 不報錯 ⇒ 被當成查無、記負快取）；③`warm_geocode_cache`：查無（已記負快取）不算連續失敗、計數歸零，只有沒查成功才算；`warm_status()` 多回 `misses`、`failures`（回傳鍵新增，函式介面不變）。守門 `tests/test_geocode_warm_misses_2026_09_28.py`
+
 ## 1.62 — 2026-09-28（主持暫用，列車取號；wip/a-storage-settings：D 稽核 SL-M1）〔core_bump：暫用 1.58 → 1.62〕
 - L1（新增，D 稽核 SL-M1）：`helpers.storage_locations.Unreadable`——讀不到設定（庫被鎖、損毀）≠ 沒設定：resolve 回 ""（source="unknown"）、不退回自動判斷、不快取；`configured()` 丟它，設定頁 API 回 503（不顯示空值，避免按儲存把真正的設定蓋掉）
 - 頁面（第十四班列車）：`storage-settings.html` 的分頁圖示改讀 `/api/system/branding/favicon`（H10 品牌設定之後才新增的頁面；test_no_our_company_literals 抓到）

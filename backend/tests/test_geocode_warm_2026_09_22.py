@@ -299,8 +299,14 @@ def test_vb4_a_refusal_that_arrives_as_a_normal_response_still_counts(
 
     tries = []
 
-    def _refused(address, **_kw):
+    def _refused(address, errors=None, **_kw):
         tries.append(address)
+        # 〔更正（B，2026-09-28 第十五班）：原本是「return None，不報錯」——那是**乾淨的查無**，
+        #   第十五班起查無不算連續失敗（正式機待辦前三筆是機關名稱就停、333 筆卡住）。
+        #   真實的「HTTP 200 而內容是拒絕」在 geocode() 裡是 JSON 解析失敗 ⇒ 有 err ⇒ 進 errors；
+        #   替身照那個形狀：正常回傳（不丟例外）、沒有座標、**回報錯誤**〕
+        if errors is not None:
+            errors.append(("nominatim", "JSONDecodeError: 對方回了一頁拒絕的 HTML"))
         return None                     # 正常回傳，只是沒有座標
 
     monkeypatch.setattr(geo, "_locate_google", lambda *a, **k: None)
@@ -337,9 +343,11 @@ def test_vb4b_a_success_in_between_resets_the_failure_streak(
 
     tries = []
 
-    def _alternating(address, **_kw):
+    def _alternating(address, errors=None, **_kw):
         tries.append(address)
         if len(tries) % 2:
+            if errors is not None:                   # 〔第十五班：失敗要報錯，否則是查無〕
+                errors.append(("nominatim", "URLError: 連不上"))
             return None                              # 失敗
         return ((24.0, 120.0), geo.PRECISION_STREET)  # 成功
 

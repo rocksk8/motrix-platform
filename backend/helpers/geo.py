@@ -92,6 +92,10 @@ def _unpack_geocode(got):
     return coord, err, info
 
 
+#: `geocode()` 查過、對方說沒有時的 err 字串。**這不是錯誤**：它是「查無」，不可以進 errors（第十五班）。
+_GEOCODE_NOT_FOUND = "查無此地址"
+
+
 def geocode(address: str):
     """地址 → `((lat, lon), None, info)`；失敗回 `(None, "原因", None)`。
 
@@ -133,7 +137,7 @@ def geocode(address: str):
         return None, f"{type(exc).__name__}: {exc}", None
 
     if not rows:
-        return None, "查無此地址", None
+        return None, _GEOCODE_NOT_FOUND, None
     try:
         row = rows[0]
         return (float(row["lat"]), float(row["lon"])), None, row
@@ -818,7 +822,17 @@ def _locate_google(address, errors=None, **_kw):
     record_geocode_call(USAGE_SKU_GEOCODING)
     try:
         data = json.loads(raw.decode("utf-8"))
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        # 第十五班：回應看不懂＝回應異常，不是查無 ⇒ 記進 errors（不可以寫負快取）
+        if errors is not None:
+            errors.append(("google", "回應格式不認得：%s" % exc.__class__.__name__))
+        return None
+    status = data.get("status") if isinstance(data, dict) else None
+    if status not in (None, "OK", "ZERO_RESULTS"):
+        # 🔴 第十五班：REQUEST_DENIED／OVER_QUERY_LIMIT／INVALID_REQUEST／UNKNOWN_ERROR 是**被拒或出錯**，不是查無。
+        # ☠️ 原本它們的 results 是空的 ⇒ 回 None 而不報錯 ⇒ 被當成乾淨的查無、記負快取七天，畫面也看不出金鑰被拒。
+        if errors is not None:
+            errors.append(("google", "%s %s" % (status, data.get("error_message") or "")))
         return None
     results = data.get("results") or []
     if not results:
@@ -863,7 +877,10 @@ def _locate_nominatim(address, errors=None, **_kw):
         # 🔴 **把「我沒問到」與「對方說沒有」分開**（§15 補三）。
         # ⚠️ 回傳型別沒有變（仍然是 `None`）—— 錯誤走呼叫端給的容器，
         #    所以既有呼叫端與既有測試替身一個字都不用改。
-        if err and errors is not None:
+        # 🔴 第十五班（正式機 2026-09-28）：`查無此地址`（對方回了空陣列）**不是錯誤**。
+        # ☠️ 原本任何 err 都進 errors ⇒ 真的查無也被 locate_cached 當成「有階失敗」⇒ 負快取從來沒寫過、
+        #    背景迴圈把每一筆查無都算成失敗、三筆就停。測試替身直接回 None（不報錯）所以一直綠著。
+        if err and err != _GEOCODE_NOT_FOUND and errors is not None:
             errors.append(("nominatim", err))
         return None
     return coord, classify_precision(info)
@@ -1426,6 +1443,7 @@ GEOCODE_WARM_DAILY_LIMIT = 120
 
 #: 連續失敗幾次就停。**連續，不是累計。**
 #:
+#: 📌 **只數「沒查成功」**（連不上／被拒／HTTP 錯誤／回應異常）；「查過、查無此地址」不算（第十五班）。
 #: ☠️ 累計判準會在**正常運作**時停住：待辦裡本來就有查不到的地址
 #: （實測：門牌一律查不到）⇒ 跑三筆就永久停，
 #: 🔑 而症狀是「背景好像沒在跑」，**跟「它根本沒被排程」一模一樣**。
@@ -1489,6 +1507,10 @@ def warm_status() -> dict:
         "processed": state.get("processed", 0),
         "succeeded": state.get("succeeded", 0),
         "stoppedBecause": state.get("stopped_because"),
+        # 第十五班（2026-09-28 正式機）：「查過、查無此地址」與「沒查成功」分開數——
+        # 前者要去改地址或手動定位，後者是對方拒絕／連不上；合在一起的話畫面只能說一句誤導的話。
+        "misses": state.get("misses", 0),
+        "failures": state.get("failures", 0),
         "usedToday": state.get("used", 0),
         "dailyLimit": GEOCODE_WARM_DAILY_LIMIT,
     }
@@ -1587,13 +1609,15 @@ def warm_geocode_cache() -> dict:
         state["date"] = today
         state["used"] = 0
 
-    def _finish(reason, processed=0, succeeded=0):
+    def _finish(reason, processed=0, succeeded=0, misses=0, failures=0):
         # 🔴 **每一趟都寫，包含什麼都沒做的那些。**
         # ☠️ 只在有做事時才更新的話，畫面會永遠寫著「上次處理 3 筆」，
         # 而那個迴圈可能已經停了三天 —— **一個看起來很健康的畫面。**
         state["last_run_at"] = datetime.now().isoformat(timespec="seconds")
         state["processed"] = processed
         state["succeeded"] = succeeded
+        state["misses"] = misses
+        state["failures"] = failures
         state["stopped_because"] = reason
         _save_warm_state(state)
         return warm_status()
@@ -1616,7 +1640,7 @@ def warm_geocode_cache() -> dict:
     if remaining <= 0:
         return _finish("daily_limit")
 
-    processed = succeeded = streak = 0
+    processed = succeeded = streak = misses = failures = 0
     reason = "no_backlog"                 # 全部查完 ⇒ 待辦空了
     for address in backlog:
         if processed >= remaining:
@@ -1640,7 +1664,17 @@ def warm_geocode_cache() -> dict:
         if result is not None and getattr(result, "coord", None):
             succeeded += 1
             streak = 0
+        elif result is not None and geocode_missed_recently(address):
+            # 🔴 第十五班（正式機 2026-09-28）：「查過、對方說沒有」**不是失敗**。
+            # locate_cached 只在每一階都乾淨地查無時才記負快取（有任何一階連不上／被拒／回錯 ⇒ 不記）
+            # ⇒ 走到這裡＝對方有回應、只是查不到（例：機關名稱「衛生福利部樂生醫院」）。
+            # ☠️ 原本把它算進連續失敗 ⇒ 待辦前三筆是機關名稱就停、333 筆永遠卡住，
+            #    畫面還說「外部服務可能拒絕本機查詢」——在叫人去查一個沒有壞的東西。
+            # 負快取照記（七天內不再問），繼續下一筆；連續失敗計數歸零（對方剛剛回應正常）。
+            misses += 1
+            streak = 0
         else:
+            failures += 1
             streak += 1
             if streak >= WARM_MAX_CONSECUTIVE_FAILURES:
                 logger.warning(
@@ -1651,7 +1685,7 @@ def warm_geocode_cache() -> dict:
     # 📌 每一輪結束時看一次警戒線（`GB12`）——
     #    這裡是**唯一**會定期醒來而且不在請求路徑上的地方。
     _check_quota_warning()
-    return _finish(reason, processed, succeeded)
+    return _finish(reason, processed, succeeded, misses, failures)
 
 
 def schedule_geocode_warm():
