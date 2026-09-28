@@ -2724,15 +2724,53 @@ def _daily_backup():
         _write_backup_alert(f"每日雲端 JSON 備份失敗: {e}", level="ERROR")
 
 
-def _schedule_daily():
-    _daily_backup()
-    try:
-        _cleanup_sessions()
-    except Exception:
-        logger.exception("_cleanup_sessions failed in daily schedule")
-    t = threading.Timer(2 * 3600, _schedule_daily)
+#: 啟動後第一輪的延遲（秒）與之後的週期。B54-S2（2026-09-28 A）：第一輪改在背景 Timer 跑、啟動不等它。
+_DAILY_FIRST_DELAY_SECONDS = 30
+_DAILY_INTERVAL_SECONDS = 2 * 3600
+_WEEKLY_FIRST_DELAY_SECONDS = 90          # 與每日錯開：兩支都寫雲端存檔路徑
+_WEEKLY_INTERVAL_SECONDS = 6 * 3600
+
+
+def _start_timer(seconds, fn):
+    """⚠️ `threading.Timer` 走模組屬性（`from threading import Timer` 會讓 monkeypatch 打不到）。"""
+    t = threading.Timer(seconds, fn)
     t.daemon = True
     t.start()
+
+
+def _schedule_daily():
+    """啟動時呼叫一次：**立即返回**；第一輪（先 `_ensure_archive_dirs()` 再 `_daily_backup()`）在背景 Timer 跑，
+    之後每輪結束排下一輪。
+
+    🔴 B54-S2（D 稽核第十五班緊急包；2026-09-28 A）：原本在這裡**同步**跑第一輪（整庫快照＋41 張表 JSON＋月備份＋
+       鏡像，全部寫雲端存檔路徑），`_ensure_archive_dirs()` 也在 `main.py` 同步呼叫 ⇒ 主持實測 `import main` 被卡
+       16～24 秒；雲端硬碟掛著但卡住時，會重演 8b04d99d「好的包因 port 沒在聽而被自動回滾」。形狀照
+       `geo.schedule_geocode_warm`／`tender_source.schedule_tender_scan`：工作包在 try、**重排在 finally**
+       （原本重排在工作之後且沒包 try ⇒ 丟一次例外排程就靜默死亡）。
+    """
+    _start_timer(_DAILY_FIRST_DELAY_SECONDS, _daily_first_tick)
+
+
+def _daily_first_tick():
+    # 雲端碟不見的提早告警（BK20：不可以在模組層；B54-S2：也不可以在啟動路徑上同步跑）⇒ 放在背景第一輪、每日備份之前
+    try:
+        _ensure_archive_dirs()
+    except Exception:  # noqa: BLE001
+        logger.exception("_ensure_archive_dirs failed in first daily round")
+    _daily_tick()
+
+
+def _daily_tick():
+    try:
+        _daily_backup()
+        try:
+            _cleanup_sessions()
+        except Exception:  # noqa: BLE001
+            logger.exception("_cleanup_sessions failed in daily schedule")
+    except Exception:  # noqa: BLE001
+        logger.exception("_daily_backup failed in daily schedule")
+    finally:
+        _start_timer(_DAILY_INTERVAL_SECONDS, _daily_tick)
 
 
 def _weekly_backup():
@@ -2772,7 +2810,14 @@ def _weekly_backup():
 
 
 def _schedule_weekly():
-    _weekly_backup()
-    t = threading.Timer(6 * 3600, _schedule_weekly)
-    t.daemon = True
-    t.start()
+    """啟動時呼叫一次：**立即返回**；第一輪在背景 Timer 跑、之後每輪結束排下一輪（B54-S2，同 `_schedule_daily`）。"""
+    _start_timer(_WEEKLY_FIRST_DELAY_SECONDS, _weekly_tick)
+
+
+def _weekly_tick():
+    try:
+        _weekly_backup()
+    except Exception:  # noqa: BLE001
+        logger.exception("_weekly_backup failed in weekly schedule")
+    finally:
+        _start_timer(_WEEKLY_INTERVAL_SECONDS, _weekly_tick)

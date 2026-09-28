@@ -22,7 +22,7 @@ from helpers import (
     init_unlock_passwords, flag_weak_passwords,
     _sync_module_versions, DEMO_TOKEN_PREFIX,
 )
-from archive import _ensure_archive_dirs, _schedule_weekly, _schedule_daily
+from archive import _schedule_weekly, _schedule_daily
 import trail
 
 from helpers import licensing as license_core
@@ -668,7 +668,8 @@ _cleanup_sessions()
 if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
     # BK20：`_ensure_archive_dirs()` 原本在模組層 ⇒ import 當下就在真實
     # 磁碟上建目錄，比 conftest 的隔離還早。完整理由寫在該函式的 docstring。
-    _ensure_archive_dirs()
+    # B54-S2（2026-09-28 A）：它與每日／週備份的第一輪都改在背景 Timer 跑（archive._schedule_daily），
+    # 這兩行立即返回 ⇒ 雲端存檔路徑慢或卡住時 import main 不被拖住（套用後健康檢查有時限）。
     _schedule_daily()
     _schedule_weekly()
     # 2026-09-26：每日 08:00 檢查改由 L1 執行器跑（模組以 daily.check 登記；系統健康檢查不依賴任何 L2 模組）
