@@ -149,6 +149,8 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-28 14:01 A（列車長）：**第十五班合回**（地圖修正包：①背景定位查無不算失敗、②Google 底圖＋SST §6.2 守門、③Google 階被跳過的可見性）。起點＝B 已驗合併樹 27c4dd22（dee64c54＋A 8b7e04d3＋B 4115c6e4，geo.py resolved cd77f9bc…1165 核對相符；主持例外：不 cherry-pick A／B）＋D 審 6 筆（6c825ff0）。CORE 1.63（core_bump 確認）；mustfix 109 宣告 0 未關；產生檔重產（7324aeef）。modtest --train：唯一紅 page_paths（B 題檔寫死 frontend/pages）⇒ 列車上修（1c87a3ca，主持授權，不登基線）。core-only RC（1c87a3ca）ok；全量（1c87a3ca，-n 4／e2e 3）：非 e2e 5620 過／1 紅＝test_branch_does_not_touch_generated_files（全量不設 MOTRIX_TRAIN 的預期紅，同第十四班）、e2e 545 過。建包、演練、發布由主持接。上線前：GOOGLE-BASEMAP.md §7.2 人工驗收（真 Google 需瀏覽器金鑰＋地圖 ID）。
+  - **下一輪待辦**（本班新增）：geo.py:923 Google `error_message`（回應內容）放進 errors 前也遮伺服器金鑰（GB-O1 只遮了例外字串）；全量在 train/* 自動帶 MOTRIX_TRAIN（第十四班 A 線待辦第 9 項，本班又出現一次）。
 - 2026-09-28 06:00 主持：**第十四班出貨就緒，交使用者套用**（使用者睡前授權「自己處理，最後上傳到雲端，再告訴我步驟」）。
   - 合回：origin/platform 9826d304 → **822286ed**（A 列車長；CORE 1.62、case 1.0.17；18 包＋B49 US2＋B48 依授權建包＋P2m 契約題；mustfix 登記表清空，D 未關必修 0；全量非 e2e 5552 過／e2e 537 過，唯一紅是列車本來就重產產生檔的那題）。
   - 建包：D:\MOTRIX-DRILLS\t14-package\20260928_055420_822286ed（full；建包測試 5553＋537 過）。第一次建包紅 1 題＝主持把 .venv312 放 PATH 前面，使 test_build_python_selection 的退回題失去前提（環境造成）；a-build-python-2 合回後不需改 PATH，已更正交接記憶。
