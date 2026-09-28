@@ -77,6 +77,7 @@ CONFIG_FILES = tuple(sorted({
     _rel(_p.INITIAL_ADMIN_CREDENTIALS),
     _rel(_p.INITIAL_DEMO_CREDENTIALS),
     _rel(_p.DEPLOYED_COMMIT_FILE),
+    _rel(_p.backend(".deployed_modules.json")),   # B55（稽核 D DB-O1）：單模組包的覆蓋紀錄，與 .deployed_commit.json 同類
     _rel(_p.NO_CLOUD_MARKER),
     _rel(_p.NO_EMAIL_SEND_MARKER),
     _rel(_p.AUTOSTART_BAT),

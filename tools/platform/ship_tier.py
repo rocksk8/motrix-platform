@@ -172,7 +172,7 @@ class _File:
                     base = ".".join(parts + ([node.module] if node.module else []))
                 for a in node.names:
                     self.names[a.asname or a.name] = (base + "." + a.name) if base else a.name
-        self.consts, assigned = {}, {}
+        self.consts, self.const_nodes, assigned = {}, {}, {}
         for node in ast.walk(self.tree):
             targets = []
             if isinstance(node, (ast.Assign,)):
@@ -187,6 +187,7 @@ class _File:
                     and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str) \
                     and assigned.get(node.targets[0].id) == 1:
                 self.consts[node.targets[0].id] = node.value.value
+                self.const_nodes[node.targets[0].id] = node.value
 
     def full(self, expr):
         """運算式 ⇒ 完整名稱（Name／Attribute 鏈）；認不得 ⇒ None。"""
@@ -204,6 +205,14 @@ class Repo:
     def __init__(self, sources):
         self.sources = sources
         self._files = {}
+        #: 解析取用／登記呼叫時實際用到的常數定義節點 id（DB4-S1 ③：定義處不算「散落的能力字串」）
+        self.used_const_nodes = set()
+        #: 解析成功的取用呼叫 capability 引數節點 id（DB4-S1 ③：只有這些位置算「已解析的取用」）
+        self.used_arg_nodes = set()
+
+    def _use(self, f, name):
+        self.used_const_nodes.add(id(f.const_nodes[name]))
+        return f.consts[name]
 
     def file(self, rel):
         if rel not in self._files:
@@ -219,7 +228,7 @@ class Repo:
             if rel in self.sources:
                 f = self.file(rel)
                 if name in f.consts:
-                    return f.consts[name]
+                    return self._use(f, name)
                 if name in f.names:                     # 再從別處 import 進來
                     return self.const(f.names[name], depth + 1)
         raise Unresolved(fullname)
@@ -229,7 +238,7 @@ class Repo:
             return expr.value
         if isinstance(expr, ast.Name):
             if expr.id in f.consts:
-                return f.consts[expr.id]
+                return self._use(f, expr.id)
             if expr.id in f.names:
                 return self.const(f.names[expr.id])
             raise Unresolved("%s：%s 不是模組層字串常數" % (f.rel, expr.id))
@@ -336,11 +345,105 @@ def consumers(repo, key, caps, getters):
                 arg = _cap_arg(call)
                 if arg is None:
                     raise Unresolved("%s:%s %s 沒有 capability 引數" % (rel, line, name))
-                if repo.arg_value(f, arg) in caps:
+                value = repo.arg_value(f, arg)
+                repo.used_arg_nodes.add(id(arg))
+                if value in caps:
                     found.add(rel)
             except Unresolved as e:
                 unresolved.append(str(e))
     return found, unresolved
+
+
+#: 可以讀 core.registry 內部（底線名稱）、或以非取用函式的方式碰到能力字串的檔（DB4-S1 ①③）。
+#: 只收**核心**自己的彙整工具；新增一筆＝有人決定「這個讀法不必算消費端」，要有理由寫在這裡。
+REGISTRY_INTERNALS_ALLOWED = {
+    "backend/core/catalog.py": "平台目錄頁：列出所有提供者供顯示，不依賴任何一個能力的回傳形狀",
+}
+
+
+#: 能力字串在非取用位置出現、但確認不是在取提供者的（DB4-S1 ③ 的例外）：{(檔, 能力): 理由}。
+#: 以「檔＋字串」為鍵（不寫行號：行號一動就失效）。守門題驗每一筆今天仍然對得上（過期就刪）。
+CAPABILITY_STRING_ALLOWED = {
+    ("backend/routers/approval_queue.py", "approval.reassign"): "稽核動作名稱 _audit(…, \"approval.reassign\", …)，與能力同名，不是取用",
+}
+
+
+def registry_bypasses(repo, key):
+    """DB4-S1 ①②：<key> 以外的後端程式裡，讀 core.registry 內部（底線名稱）或星號 import registry 的位置 ⇒ 判不了清單。"""
+    out = []
+    for rel in sorted(r for r in repo.sources if _is_consumer_scope(r, key)):
+        if rel in REGISTRY_INTERNALS_ALLOWED:
+            continue
+        f = repo.file(rel)
+        for node in ast.walk(f.tree):
+            if isinstance(node, ast.ImportFrom) and any(a.name == "*" for a in node.names) \
+                    and (node.module or "").startswith("core"):
+                out.append("%s:%s 星號 import（%s）⇒ 取用關係判不了" % (rel, node.lineno, node.module))
+            elif isinstance(node, ast.ImportFrom) and node.module == "core.registry" \
+                    and any(a.name.startswith("_") for a in node.names):
+                out.append("%s:%s import 了 core.registry 的內部名稱" % (rel, node.lineno))
+            elif isinstance(node, ast.Attribute) and node.attr.startswith("_"):
+                base = f.full(node.value)
+                if base == "core.registry":
+                    out.append("%s:%s 讀 core.registry.%s（內部）" % (rel, node.lineno, node.attr))
+    return out
+
+
+def stray_capability_strings(repo, key, caps, consumer_files):
+    """DB4-S1 ③：能力字串在後端每一次出現（字串常數，完全相等）都要落在提供者（<key> 自己）、已解析的消費端或白名單；
+    其他位置 ⇒ 判不了（可能以取用函式以外的方式拿到提供者，例：registry._LEGACY_PROVIDERS[("case.access", "case")]）。"""
+    out = []
+    for rel in sorted(r for r in repo.sources if _is_consumer_scope(r, key)):
+        if rel in REGISTRY_INTERNALS_ALLOWED:
+            continue
+        f = repo.file(rel)
+        allowed = _provider_sites(f) | repo.used_arg_nodes | repo.used_const_nodes
+        for node in ast.walk(f.tree):
+            if id(node) in allowed:
+                continue
+            value = None
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                value = node.value
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) \
+                    and (node.id in f.consts or node.id in f.names):
+                value = _try_value(repo, f, node)
+            elif isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
+                value = _try_value(repo, f, node)
+            if value in caps and (rel, value) not in CAPABILITY_STRING_ALLOWED:
+                out.append("%s:%s 出現能力 %r（字串或常數），但不是已解析的取用呼叫" % (rel, node.lineno, value))
+    return out
+
+
+def _try_value(repo, f, node):
+    """名稱／屬性若是（跨檔）模組層字串常數 ⇒ 它的值；不是 ⇒ None（不記「用到」）。"""
+    saved = set(repo.used_const_nodes)
+    try:
+        return repo.arg_value(f, node)
+    except Unresolved:
+        return None
+    finally:
+        repo.used_const_nodes = saved
+
+
+def _provider_sites(f):
+    """檔內「登記提供者」位置的字串節點 id：ModuleSpec(providers={(cap, name): …}) 的 cap、provide(cap, …) 的 cap。
+    同一能力可以有多個提供者（例：approval.*、attachments.for_document）——別的模組／L1 登記同一能力不是在取用它。"""
+    out = set()
+    for node in ast.walk(f.tree):
+        if not isinstance(node, ast.Call):
+            continue
+        full = f.full(node.func) or ""
+        if full.endswith("ModuleSpec"):
+            for kw in node.keywords:
+                if kw.arg == "providers" and isinstance(kw.value, ast.Dict):
+                    for k in kw.value.keys:
+                        if isinstance(k, ast.Tuple) and k.elts:
+                            out.add(id(k.elts[0]))
+        elif full == "core.registry.provide":
+            arg = _cap_arg(node)
+            if arg is not None:
+                out.add(id(arg))
+    return out
 
 
 def provider_check(repo, key, changed_files, policy=None, registry_src=None):
@@ -368,6 +471,8 @@ def provider_check(repo, key, changed_files, policy=None, registry_src=None):
     found, un2 = consumers(repo, key, caps, getters)
     out["consumers"] = sorted(found)
     out["unresolved"] += un2
+    out["unresolved"] += registry_bypasses(repo, key)                       # DB4-S1 ①②
+    out["unresolved"] += stray_capability_strings(repo, key, caps, found)    # DB4-S1 ③（要在 consumers() 之後：用它記下的已解析位置）
     if out["unresolved"]:
         out.update(reject=True, reason="消費端判不了 ⇒ 退回乙（拒絕出單模組包）：\n  " + "\n  ".join(out["unresolved"]))
     return out

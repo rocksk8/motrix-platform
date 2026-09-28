@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## （不升版號：介面不變）— 2026-09-28（B，wip/b-module-delivery-2：B55 單一模組更新包 S2）
+- L1（行為，私有）：`core.loader._write_module_states(path)`——啟動完成時寫 `logs/module_states.json`（`{pid, started_at, modules:[{key, state, version, reason}]}`，先寫 .tmp 再改名；寫失敗只記 WARNING）；`main.py` 在排程閘門內、`start_schedulers()` 之後呼叫（測試 session 不寫）。給單模組更新的健檢讀（稽核 D DB-S4）。loader 的「模組 %s %s 已載入」「模組 %s 未載入：%s」兩行 log 字串列為契約（守門題）
+- L1（行為）：`core.upgrade.CONFIG_FILES` 加 `backend/.deployed_modules.json`（單模組包的覆蓋紀錄，與 `.deployed_commit.json` 同類；稽核 D DB-O1）⇒ 完整包刪除計畫與 cleanup-snapshot 不碰它
+- 守門 `tests/platform/test_module_states_file_2026_09_28.py`
+
 ## （不升版號：介面不變）— 2026-09-28（B，wip/b-warm-async：第十五班緊急修補 B54）
 - L1（行為）：`helpers.geo.schedule_geocode_warm()` 改為**立即返回**：第一輪背景定位排進 daemon `threading.Timer`（私有常數 `_GEOCODE_WARM_FIRST_DELAY_SECONDS`＝30 秒）在背景執行緒跑，之後每輪結束（含丟例外）再排下一輪（私有 `_geocode_warm_tick`，重排維持 `finally`）。原本在呼叫當下同步跑第一輪 ⇒ `main.py` 模組層呼叫它時 `import main` 被整輪定位卡住（正式機套用 8b04d99d：333 筆待辦×Nominatim 每秒 1 次 ⇒ 83 秒內 port 666 沒在聽 ⇒ 自動回滾）。守門 `tests/test_geocode_warm_async_2026_09_28.py`
 

@@ -169,6 +169,29 @@ def check_migrations(items) -> None:
         raise ValueError("migrations 版號必須從 1 起連續、不重複：%s" % sorted(versions))
 
 
+def _write_module_states(path) -> bool:
+    """啟動完成時把這次的模組載入結果寫成機器可讀的檔（B55／稽核 D DB-S4）：單模組更新的健檢
+    （backend/tools/apply_module_update.ps1）讀它判斷「新版本真的載入了」——loader 對單一模組壞掉是隔離的，
+    只看 ping 會把「模組沒載入」判成功；log 字串會輪替、會交錯，所以另寫一份。
+
+    內容：`{"pid", "started_at", "modules": [{"key", "state", "version", "reason"}]}`；先寫 .tmp 再改名。
+    寫失敗只記 WARNING、回 False（不影響啟動：健檢讀不到 ⇒ 判失敗，由套用端處理）。"""
+    from datetime import datetime
+    data = {"pid": os.getpid(), "started_at": datetime.now().isoformat(timespec="seconds"),
+            "modules": [{"key": s.get("key"), "state": s.get("state"), "version": s.get("version"),
+                         "reason": s.get("reason") or ""} for s in registry.module_states()]}
+    tmp = str(path) + ".tmp"
+    try:
+        os.makedirs(os.path.dirname(str(path)) or ".", exist_ok=True)
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, str(path))
+        return True
+    except OSError as e:
+        logger.warning("寫模組載入狀態檔失敗（%s）：%s", path, e)
+        return False
+
+
 def start_schedulers() -> int:
     """啟動已載入模組的排程（main.py 在排程閘門開著時呼叫），回傳呼叫了幾個。
 
