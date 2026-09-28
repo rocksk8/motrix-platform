@@ -10,6 +10,7 @@
 - L1（新增）：`helpers.company_identity.identity_from_profile(profile, location_id)`（`location_identity` 的純函式版；行為不變）
 - L1（新增）：`core.paths.INSTALL_IDENTITY_FILE`／`COMPANY_CONFIRMATION_FILE`／`COMPANY_SETUP_GRACE_FILE`，並登記進 `core.upgrade.CONFIG_FILES`（CG2-M1）；`verify_package` 拒收、`.gitignore`
 - 工具：`backend/tools/company_setup_cli.py`（ensure-install-id／preflight／status／grace；UTF-8 輸出）；`apply_update.ps1` 2026-09-28h：停服前預檢（`refused_company_setup`）、套用後本機檢查未通過 ⇒ 自動回滾（`company_setup_rolled_back`，`-SkipAutoRollback` 不適用），無任何略過參數；`deploy_dashboard._STATUS_FAILED` 加兩個出口
+- 〔第二段〕L1（新增）：`company_setup.gate`（中介層與輸出端共用、行程內快取、不丟例外：判定失敗 ⇒ `GATE_UNDETERMINED`，Q7＝C）、`compile_allowed`／`is_allowed`（白名單以 Starlette `compile_path` 比對 (方法, 路由樣板)）、`reset_cache` 與常數；`main.auth_middleware`：未設定 ⇒ 白名單外 /api 一律 428 `company_setup_required`；判定失敗／暫時放行 ⇒ 放行＋標頭 `X-Motrix-Company-Setup`；`GET /api/settings/company-setup/status`；`PUT /api/settings/company-profile` 帶 `confirmIdentity` 才寫確認紀錄（先驗後寫）；頁面 `company-setup-required.html`、設定頁確認卡、`notif.js` 導頁與橫幅；demo 帳號暫不擋（第三段種虛構示範公司）
 - 啟動：`main.py` 啟動時做安裝識別檢查＋一次性 backfill（閘門本身尚未擋任何 API；第二段才接中介層）；信件類型 `company_setup_alert`（系統技術，超級管理員）
 
 ## （不升版號：介面不變）— 2026-09-28（B，wip/b-warm-async：第十五班緊急修補 B54）

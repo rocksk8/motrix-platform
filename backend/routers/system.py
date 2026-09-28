@@ -884,6 +884,8 @@ class CompanyProfile(BaseModel):
     # 每一筆：`id`（後端配發）／`name`（必填、不可重複）／`address`（必填）／
     # `lat`／`lon`（選填）／銀行四欄（選填，**留空＝沿用主要據點**）。
     locations: Optional[list] = None
+    # 本公司資料設定閘門（COMPANY-SETUP-GATE §3.2）：設定頁「確認本公司資料」才帶 true；一般存檔不帶 ⇒ 不寫確認紀錄。不存進 company_profile
+    confirmIdentity: Optional[bool] = None
     # R3（個資法 §8 I）：個資蒐集告知文字；空白 ⇒ 列印時用範本（helpers/privacy_notice.py）
     privacy_notice: str = ''
     # 2026-09-26：其他蒐集個資的表單各自的告知文字（聯絡人／使用者帳號）；空白 ⇒ 該用途的範本
@@ -1402,7 +1404,7 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
     # 實際後果：`automation` 是 `role=viewer` 而 `modules` 含 `settings`
     # ⇒ **它改得動匯款帳號** —— 而那個號碼就印在寄給客戶的請款單上。
     # 📌 不傳 `module` ⇒ 只剩 superadmin 那一條路。
-    _require_user(authorization, require_superadmin=True)
+    me = _require_user(authorization, require_superadmin=True)
     # 🔴 **先驗證，再寫入。** 「回了錯誤碼」與「沒有存進去」是兩件事——
     # 一邊驗一邊寫的話，使用者會看到 422 而值已經生效了。
     _check_office_coord(body)
@@ -1447,7 +1449,16 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
             for alias in shadows:
                 if alias in cur:
                     sent[alias] = sent[edited]
+    confirm_identity = bool(sent.pop("confirmIdentity", None))
     value = {**cur, **sent}
+    if confirm_identity:
+        # 🔴 確認前先驗（同「先驗證，再寫入」）：被拒 ⇒ 422、什麼都不存
+        from helpers import company_setup as _cs
+        missing = _cs.required_problems(value)
+        if missing:
+            raise HTTPException(422, "必要欄位未完成：" + "、".join(missing))
+        if _cs.is_developer_identity(value) and _cs.signed_file_state(value) != "valid":
+            raise HTTPException(422, "這是 MOTRIX 開發者的公司資料，請改成貴公司的名稱與統一編號")
     _set_setting("company_profile", value)
     # 🔴 SA2：稽核要記**哪些欄位變了**，金錢／身分欄位連前後值（遮成末四碼）。
     # ⚠️ `target_label` 仍然放公司名（那是「這筆紀錄講的是哪個對象」），
@@ -1455,7 +1466,46 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
     _audit(_tok(authorization), "settings.company_profile.update", "settings",
            "company_profile", value.get("name", ""),
            detail=_profile_audit_detail(cur, value, sent.keys()))
+    if confirm_identity:
+        from helpers import company_setup as _cs
+        from db import get_db as _gdb
+        conn = _gdb()
+        try:
+            try:
+                rec = _cs.confirm(conn, me.get("username", ""))
+            except _cs.ConfirmRefused as e:          # 上面已先驗；這裡只剩安裝識別檔寫不進去
+                raise HTTPException(422, str(e))
+            conn.commit()
+        finally:
+            conn.close()
+        _cs.reset_cache()
+        _audit(_tok(authorization), "settings.company_identity.confirm", "settings", "company_profile",
+               value.get("name", ""), detail={"fields_hash": rec["fields_hash"], "via": rec["via"]})
+        return {"ok": True, "confirmed": True}
     return {"ok": True}
+
+
+@router.get("/api/settings/company-setup/status")
+def company_setup_status(authorization: str = Header(None)):
+    """本公司資料設定狀態（所有登入者可讀；只回判定結果與缺漏欄位名，不回任何公司資料值）。
+    configured: null ＝判定失敗（Q7＝C：一般功能照常、含本公司資料的輸出暫停）。"""
+    user = _require_user(authorization)
+    from helpers import company_setup as _cs
+    from db import get_db as _gdb
+    conn = _gdb()
+    try:
+        kind, st = _cs.gate(conn)
+        conn.commit()
+    finally:
+        conn.close()
+    can_fix = user.get("role") == "superadmin"
+    if kind == _cs.GATE_UNDETERMINED:
+        return {"configured": None, "reason": _cs.STATUS_ERROR, "canFix": can_fix, "message": _cs.MSG_UNDETERMINED}
+    grace = (st or {}).get("grace")
+    return {"configured": bool(st.get("configured")), "reason": st.get("reason"), "via": st.get("via"),
+            "missing": st.get("missing") or [], "developer": bool(st.get("developer")) if can_fix else None,
+            "grace": {"until": grace.get("until")} if grace else None, "canFix": can_fix,
+            "settingsUrl": _cs.SETTINGS_URL}
 
 
 # ── Quotation default payment terms ───────────────────────────────────────────

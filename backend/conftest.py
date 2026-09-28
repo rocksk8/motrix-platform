@@ -301,6 +301,14 @@ def _app(tmp_path_factory):
     db.DB_PATH = str(base / "motrix_erp.db")
     db.DEMO_DB_PATH = str(base / "motrix_erp_demo.db")
 
+    # 本公司資料設定閘門的三個安裝設定檔（COMPANY-SETUP-GATE §3.4）：每個 worker 自己一份，不碰 repo 的 backend/
+    # （xdist 多個 worker 同時 import main 會同時建識別檔 ⇒ 互相蓋掉）。company_setup 呼叫時才讀這三個常數。
+    # ⚠️ 不改 core.paths 的常數（core.upgrade.CONFIG_FILES 以它們相對 backend 目錄算，指到暫存目錄會壞）；
+    #    改用 company_setup 的位置覆寫（只影響「這一份安裝」的三個檔放哪）。
+    from helpers import company_setup as _gate_cs
+    _gate_cs.FILES_OVERRIDE = (str(base / ".install_identity"), str(base / "company_confirmation.sig"),
+                               str(base / "company_setup_grace.json"))
+
     import archive
     archive.DB_PATH = db.DB_PATH  # archive.py imported DB_PATH by value — repoint it too
     # 2026-09-07 修正：這裡曾經 patch archive._ARCHIVE_BASE/_REALTIME_DIR/_WEEKLY_DIR/
@@ -689,6 +697,23 @@ _ROLE_DEFAULT_MODULES = {
     ],
     "viewer": ["dashboard"],
 }
+
+
+@pytest.fixture(autouse=True)
+def _company_setup_gate_default(request, monkeypatch):
+    """本公司資料設定閘門（COMPANY-SETUP-GATE §4）：一般的題目視為「已設定」（等同正式機已確認的狀態），
+    否則每一題打 API 都會先被 428 擋住。**只換判定函式 `company_setup.status`**，產品程式沒有任何略過開關；
+    驗閘門本身的題目標 `@pytest.mark.company_gate` ⇒ 用真的判定。"""
+    if request.node.get_closest_marker("company_gate"):
+        yield
+        return
+    from helpers import company_setup as _cs
+    monkeypatch.setattr(_cs, "status", lambda conn, root=None, now=None: {
+        "configured": True, "reason": _cs.CONFIGURED, "via": "test_default", "missing": [],
+        "developer": False, "grace": None})
+    _cs.reset_cache()
+    yield
+    _cs.reset_cache()
 
 
 @pytest.fixture()

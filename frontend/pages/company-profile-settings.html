@@ -109,6 +109,23 @@
 
     <template x-if="isSuperadmin">
       <div>
+        <!-- 本公司資料設定閘門（COMPANY-SETUP-GATE §4.2）：未確認 ⇒ 其他功能暫停；最高管理員在這裡按「確認本公司資料」。
+             一般的「儲存」不算確認（複製來的資料庫只要存一次任何設定就「確認」了）。 -->
+        <div class="ns-card" data-company-setup-card x-show="setup && setup.configured !== true">
+          <div class="ns-card-head"><div class="ns-card-head-title">確認本公司資料（完成前系統其他功能暫停）</div></div>
+          <div class="ns-card-body">
+            <div class="ns-desc" data-company-setup-reason x-text="setupReasonText()"></div>
+            <template x-if="setup && setup.missing && setup.missing.length">
+              <div class="ns-desc" data-company-setup-missing x-text="'尚未完成：' + setup.missing.join('、')"></div>
+            </template>
+            <div class="ns-desc">輸出的報價單、請款單等文件會使用下方「品牌與公司名稱」及主要據點的公司名稱、統一編號、電話／email。請確認是貴公司的資料後再按確認。</div>
+            <label class="ns-desc" style="display:flex;gap:6px;align-items:center">
+              <input type="checkbox" data-company-setup-ack x-model="setupAck"> 以上為本公司的資料（輸出文件將使用這些資料）
+            </label>
+            <button type="button" class="btn btn-primary" data-company-setup-confirm
+                    :disabled="!setupAck || saving" @click="save(true)">確認本公司資料</button>
+          </div>
+        </div>
         <!-- 品牌（2026-09-27 H10；使用者：「公司名稱、公司LOGO這些都要能在設定中上傳跟修改」）
              公司名稱存在 company_profile（與下方各卡同一支 save()）；三種圖檔各自上傳、立即生效。
              只收 PNG／JPG／WebP，伺服器以檔案內容判斷格式並重新編碼（去掉拍攝資訊等 metadata）。 -->
@@ -1006,6 +1023,31 @@
         get isSuperadmin() { return this.session.role === 'superadmin' },
 
         _initDone: false,
+        setup: null, setupAck: false,
+
+        //: 本公司資料設定狀態（COMPANY-SETUP-GATE §4.2）；只回判定與缺漏欄位名，不回任何值
+        async loadSetup() {
+          try {
+            const r = await fetch('/api/settings/company-setup/status', { headers: { Authorization: 'Bearer ' + this.session.token } })
+            this.setup = r.ok ? await r.json() : null
+          } catch (_e) { this.setup = null }
+        },
+        setupReasonText() {
+          const s = this.setup
+          if (!s) return ''
+          if (s.configured === null) return '本公司設定狀態無法判定，對外文件暫停輸出，請聯絡系統負責人。'
+          const m = {
+            no_record: '本公司資料尚未確認。',
+            fields_invalid: '本公司資料的必要欄位尚未完成（名稱、統一編號、電話或 email）。',
+            fields_changed: '本公司資料的必要欄位已修改，需要重新確認。',
+            install_mismatch: '這份資料庫來自另一個安裝（例如從別台電腦複製或還原），需要重新確認本公司資料。',
+            developer_identity_unsigned: '目前的公司資料是 MOTRIX 開發者的公司資料，請改成貴公司的名稱與統一編號後再確認。',
+            signed_file_expired: '開發者確認檔已過期，請聯絡開發者。',
+          }
+          let txt = m[s.reason] || ('本公司資料尚未確認（' + s.reason + '）。')
+          if (s.grace && s.grace.until) txt += '目前為暫時放行，至 ' + String(s.grace.until).replace('T', ' ') + '。'
+          return txt
+        },
 
         async init() {
           // ⚠️ 這頁的 <body> 同時有 `x-data="companyProfilePage()"` 與 `x-init="init()"`
@@ -1037,6 +1079,7 @@
             this.bkText = ''
             this.bkCleared = false
           }
+          await this.loadSetup()
           if (this.isSuperadmin) {
             await this.loadBranding()
             await this.loadWebauthnConfig()
@@ -1420,7 +1463,7 @@
           return Number.isFinite(n) ? n : undefined
         },
 
-        async save() {
+        async save(confirmIdentity) {
           this.coordWarn = ''
           const locations = []
           for (let i = 0; i < this.locations.length; i++) {
@@ -1472,6 +1515,8 @@
           } else if (this.bkText.trim()) {
             payload.google_maps_browser_key = this.bkText.trim()
           }
+          delete payload.confirmIdentity
+          if (confirmIdentity === true) payload.confirmIdentity = true    // 只有「確認本公司資料」鈕才帶
           const r = await fetch('/api/settings/company-profile', {
             method: 'PUT',
             headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
@@ -1479,7 +1524,8 @@
           })
           this.saving = false
           if (r.ok) {
-            this.msg = '設定已儲存'; this.isError = false
+            this.msg = confirmIdentity === true ? '本公司資料已確認，系統功能已開放' : '設定已儲存'; this.isError = false
+            if (confirmIdentity === true) { this.setupAck = false; this.loadSetup() }
             this.saved = true; setTimeout(() => this.saved = false, 3000)
             // 存完把金鑰欄位歸位：輸入框清空、狀態改成「已設定」。
             // ⚠️ 不重新 GET —— 那會把使用者其他還沒存的欄位蓋掉。

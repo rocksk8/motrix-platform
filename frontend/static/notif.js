@@ -2,8 +2,52 @@
   if (window.MOTRIX_PREVIEW) return   // 模組建構器的即時預覽：不打 API（BUILDER-UX §3.3）
   var _origFetch = window.fetch
   var _redirecting = false
+  // ── 本公司資料設定閘門（COMPANY-SETUP-GATE §3.6、§4.2）──────────────────────────
+  // ① 428 company_setup_required ⇒ 最高管理員導向設定頁、其他人導向說明頁（這兩頁本身與登入頁不導）
+  // ② 回應標頭 X-Motrix-Company-Setup（status_error／grace）⇒ 所有頁面頂端橫幅；之後的 /api 回應沒有這個標頭 ⇒ 移除
+  var _SETUP_BANNER_TEXT = {
+    status_error: '本公司設定狀態無法判定，對外文件暫停輸出，請聯絡管理員',
+    grace: '本公司資料尚未確認，目前為暫時放行（有期限），請最高管理員儘快到「公司資料設定」確認',
+  }
+  function _setupBanner(kind) {
+    var el = document.getElementById('motrix-company-setup-banner')
+    if (!kind || !_SETUP_BANNER_TEXT[kind]) { if (el) el.remove(); return }
+    if (!document.body) return
+    if (!el) {
+      el = document.createElement('div')
+      el.id = 'motrix-company-setup-banner'
+      el.setAttribute('role', 'alert')
+      el.style.cssText = 'position:sticky;top:0;z-index:9999;padding:8px 14px;font-size:13px;text-align:center;' +
+        'background:var(--danger-light);color:var(--danger);border-bottom:1px solid var(--danger-border)'
+      document.body.insertBefore(el, document.body.firstChild)
+    }
+    el.setAttribute('data-kind', kind)
+    el.textContent = _SETUP_BANNER_TEXT[kind]
+  }
+  function _isApi(args) {
+    var u = args && args[0]
+    u = (u && u.url) || String(u || '')
+    return u.indexOf('/api/') >= 0
+  }
   window.fetch = async function () {
     var r = await _origFetch.apply(this, arguments)
+    if (_isApi(arguments) && r.status < 500) {
+      try { _setupBanner(r.headers.get('X-Motrix-Company-Setup')) } catch (e) {}
+    }
+    if (r.status === 428 && !_redirecting) {
+      try {
+        var d428 = await r.clone().json()
+        if (d428 && d428.code === 'company_setup_required') {
+          var here = window.location.pathname.split('/').pop()
+          if (['company-profile-settings.html', 'company-setup-required.html', 'login.html'].indexOf(here) < 0) {
+            _redirecting = true
+            var inPages = window.location.pathname.includes('/pages/')
+            var target = d428.canFix ? 'company-profile-settings.html?setup=1' : 'company-setup-required.html'
+            window.location.replace(inPages ? target : 'pages/' + target)
+          }
+        }
+      } catch (e) {}
+    }
     if (r.status === 403 && !_redirecting) {
       var clone = r.clone()
       try {

@@ -59,7 +59,8 @@ SCAN_FILES = ("helpers/email_notify.py", "modules/tender_radar/notify.py",
               #   管理員（不是維護者）⇒ 依本檔「寫給誰看的」那條線在範圍〕
               "archive.py",            # 備份失敗告警信
               "routers/system.py",     # 寄信設定的測試信
-              "helpers/geo.py")        # 地理編碼告警信
+              "helpers/geo.py",        # 地理編碼告警信
+              "helpers/company_setup.py")   # 本公司資料設定狀態告警信（寄客戶端最高管理員）
 
 #: 有送信、而**刻意不掃**的檔：`{路徑: 理由}`。理由不可以空白；清單裡的檔必須仍是送信檔（過期要刪）。
 #: 📌 與 SCAN_FILES 合起來＝「送信檔都有人決定過」（`test_every_mail_sender_is_classified`）。

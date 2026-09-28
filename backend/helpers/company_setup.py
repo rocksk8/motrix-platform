@@ -7,7 +7,9 @@
     FILES_OVERRIDE, INSTALL_MISMATCH, NO_RECORD, PUBKEYS, PURPOSE, SIGNED_EXPIRED, SIGN_PREFIX, STATUS_ERROR, alert, allows,
     backfill_once, confirm, ensure_install_id, fields_hash, grace_state, identity_fp, install_hash,
     is_developer_identity, observe, required_problems, sign_confirmation, signed_file_state, startup_install_check,
-    status, ubn_valid
+    status, ubn_valid,
+    CODE_REQUIRED, CODE_UNDETERMINED, GATE_GRACE, GATE_OK, GATE_REQUIRED, GATE_UNDETERMINED, HEADER, MSG_REQUIRED,
+    MSG_UNDETERMINED, SETTINGS_URL, compile_allowed, gate, is_allowed, reset_cache
 [不變式] status() 是純判斷（不寫庫、不寫檔）；只有 confirm()（設定頁「確認本公司資料」）與 backfill_once()（每庫一次）會寫確認紀錄；
     綁定＝安裝識別檔（不看硬體，主持裁示 CG-M1）；開發者身分需要開發者簽章確認檔；backfill_once／observe／ensure_install_id 不丟例外
 [契約題] tests/test_company_setup_core_2026_09_28.py、tests/test_company_setup_cli_2026_09_28.py
@@ -469,3 +471,72 @@ def alert(conn, code: str, text: str) -> bool:
         logger.exception("company_setup: 告警信寄送失敗")
     return True
 
+
+# ── 中介層（第一道，COMPANY-SETUP-GATE §4.1；Q7＝C）────────────────────────────
+#
+# 判定結果快取在行程內：鍵＝三個相關設定的 updated_at＋三個檔的 mtime（任一變 ⇒ 重算）。
+GATE_OK, GATE_GRACE, GATE_REQUIRED, GATE_UNDETERMINED = "ok", "grace", "required", "undetermined"
+HEADER = "X-Motrix-Company-Setup"
+CODE_REQUIRED = "company_setup_required"
+CODE_UNDETERMINED = "company_setup_undetermined"
+MSG_REQUIRED = "尚未完成本公司資料設定"
+MSG_UNDETERMINED = "本公司設定狀態無法判定，對外文件暫停輸出，請聯絡管理員"
+SETTINGS_URL = "/pages/company-profile-settings.html?setup=1"
+_GATE_CACHE = {"key": None, "value": None}
+
+
+def _cache_key(conn, root=None):
+    rows = conn.execute("SELECT key, updated_at FROM system_settings WHERE key IN (?,?,?)",
+                        ("company_profile", CONFIRMATION_SETTING, GRACE_SEEN_SETTING)).fetchall()
+    mt = []
+    for p in _files(root):
+        try:
+            mt.append(os.path.getmtime(p))
+        except OSError:
+            mt.append(None)
+    return (tuple(sorted((r[0], r[1]) for r in rows)), tuple(mt), datetime.now().strftime("%Y-%m-%d %H:%M"))
+
+
+def gate(conn, root=None) -> tuple:
+    """中介層與輸出端共用：回 (kind, status 或 None)。**不丟例外**：status() 出錯 ⇒ GATE_UNDETERMINED（Q7＝C）。
+    放行檔第一次出現時記 first_seen＋稽核（observe）。呼叫端負責 commit。"""
+    try:
+        key = _cache_key(conn, root)
+        if _GATE_CACHE["key"] == key and _GATE_CACHE["value"] is not None:
+            return _GATE_CACHE["value"]
+        observe(conn, root)
+        st = status(conn, root)
+        kind = GATE_OK if st.get("configured") else (GATE_GRACE if st.get("grace") else GATE_REQUIRED)
+        _GATE_CACHE.update(key=_cache_key(conn, root), value=(kind, st))
+        return kind, st
+    except Exception:  # noqa: BLE001
+        logger.exception("company_setup: 判定失敗（Q7＝C：一般功能放行、含本公司資料的輸出拒絕）")
+        try:
+            alert(conn, "status_error", MSG_UNDETERMINED)
+        except Exception:  # noqa: BLE001
+            pass
+        _GATE_CACHE.update(key=None, value=None)
+        return GATE_UNDETERMINED, None
+
+
+def reset_cache():
+    _GATE_CACHE.update(key=None, value=None)
+
+
+def compile_allowed(allowed: dict) -> list:
+    """{(方法, 路由樣板): 理由} ⇒ [(方法, 正規式, 樣板)]；用 Starlette 自己的樣板編譯（與路由比對同一套規則）。"""
+    from starlette.routing import compile_path
+    out = []
+    for (method, template), _why in allowed.items():
+        regex, _fmt, _conv = compile_path(template)
+        out.append((method.upper(), regex, template))
+    return out
+
+
+def is_allowed(compiled: list, method: str, path: str):
+    """回命中的樣板或 None。HEAD 視同 GET（Starlette 路由亦然）。"""
+    m = "GET" if method.upper() == "HEAD" else method.upper()
+    for meth, regex, template in compiled:
+        if meth == m and regex.match(path):
+            return template
+    return None

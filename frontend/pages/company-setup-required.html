@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>尚未完成本公司資料設定 - MOTRIX 專案管理系統</title>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .cs-wrap { max-width:640px; margin:64px auto; padding:24px 28px; background:var(--white);
+               border:1px solid var(--border-light); border-radius:var(--radius-lg); line-height:1.8; }
+    .cs-title { font-size:20px; margin:0 0 8px; }
+    .cs-dim { color:var(--text-secondary); font-size:13px; }
+    .cs-row { display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+  <!-- 本公司資料設定閘門（COMPANY-SETUP-GATE §4.2）：非最高管理員在「未設定」時看到這一頁。
+       不用 Alpine（不增加 Alpine 頁面母體）；只讀 /api/settings/company-setup/status（白名單內），不讀任何公司資料值。 -->
+  <div class="cs-wrap" data-company-setup-required>
+    <h1 class="cs-title" id="cs-title">尚未完成本公司資料設定</h1>
+    <p id="cs-msg">系統輸出的報價單、請款單等文件需要使用貴公司的名稱與統一編號。<br>
+      請最高管理員先到「公司資料設定」確認本公司資料；完成之前，系統其他功能暫停使用。</p>
+    <p class="cs-dim" id="cs-absent">最高管理員不在時：請貴公司的系統負責人依《DR-SOP》〈本公司資料設定〉，
+      在伺服器本機使用「暫時放行」（最長 72 小時，會留下紀錄）。</p>
+    <div class="cs-row">
+      <button type="button" class="btn btn-primary" id="cs-retry">重新檢查</button>
+      <button type="button" class="btn btn-ghost" id="cs-logout">登出</button>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var sess = {}
+      try { sess = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { sess = {} }
+      if (!sess.token) { location.replace('login.html'); return }
+      var H = { Authorization: 'Bearer ' + sess.token }
+      function check() {
+        fetch('/api/settings/company-setup/status', { headers: H })
+          .then(function (r) { return r.ok ? r.json() : null })
+          .then(function (s) {
+            if (!s) return
+            if (s.configured === true || s.grace) { location.replace('../index.html'); return }
+            if (s.canFix) { location.replace('company-profile-settings.html?setup=1'); return }
+            if (s.configured === null) {
+              document.getElementById('cs-title').textContent = '本公司設定狀態無法判定'
+              document.getElementById('cs-msg').textContent = '本公司設定狀態無法判定，對外文件暫停輸出，請聯絡管理員。'
+            }
+          })
+          .catch(function () { /* 連不上就留在這頁，按「重新檢查」再試 */ })
+      }
+      document.getElementById('cs-retry').addEventListener('click', check)
+      document.getElementById('cs-logout').addEventListener('click', function () {
+        fetch('/api/auth/logout', { method: 'POST', headers: H }).finally(function () {
+          try { localStorage.removeItem('motrix_session') } catch (e) {}
+          location.replace('login.html')
+        })
+      })
+      check()
+    })()
+  </script>
+</body>
+</html>
