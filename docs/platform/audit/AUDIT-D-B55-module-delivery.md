@@ -342,3 +342,41 @@
 - S5-S1：`apply.json` 讀不懂 ⇒ 算中斷（與 apply_plan 一致）；對它回滾 ⇒ `backup_corrupt` ✔
 - S5-S2：拒絕訊息改成指向套用腳本的回滾模式（S7 §5）✔；S5-O1：範本已加警語 ✔
 - **觀察 W-O1**：`apply.json` 壞掉時，套用（任何模組、完整包）被擋，而對它回滾回 `backup_corrupt` ⇒ 兩邊都走不下去，只能人工處理。這是 fail-closed，可以接受；但 S7 的狀態表要寫出這種情況的處置（回報開發機；開發機指示人工檢查該備份目錄後，才移走那份紀錄），不要讓正式機 Claude 自己刪
+
+## 13. 分段稽核 S5（A）：wip/a-module-apply-ps1 3a852cdc（基底 f04a245a）（D，2026-09-28）
+
+> 只讀碼。對照 B 的最新 module_update（wip/b-module-delivery-2 d764026c，§10 code 表）。
+
+- **必修 1（S5-M1）、建議 2。**
+
+**① module_apply_steps.py：成立。**
+- 疊加樹只複製安裝目錄 `backend\` 底下 `classify(rel)=="program"` 的檔（白名單，DB-M1），排除 `.apply.lock` 與 `__pycache__`，模組資料夾換成包裡那一份；目的地已存在 ⇒ 拒絕
+- 狀態檔：要求 `started_at` 晚於重啟時刻、`pid` 是正在聽 port 的行程、模組狀態與版本相符；讀不到、不是 JSON、沒有行程在聽都算失敗（不是通過）
+- `disable` 走 `module_switches.set_enabled`（與模組管理頁同一機制）
+
+**② migrate_like_startup --expect-module：成立。** 載入後必須 loaded 且版本相同；舊包沒有 `module_startup` ⇒ 一律失敗（驗不到不當通過）；與 migration 失敗分開印 `MODULE_LOAD_FAIL`。
+
+**③ ps1 流程：順序正確，錯誤處理有一處與 B 最新的 §10 不一致 ⇒ S5-M1。**
+- 順序：身分守門 → 鎖 → 預檢（只讀）→ 本公司閘門預檢（**已安裝**的 CLI，模組包不帶 tools，正確）→ DB 快照 → 疊加樹乾跑（migration＋模組載入）→ 停服 → `apply --stamp` → 重啟＋健檢（ping＋狀態檔＋server.log）→ 本公司閘門套用後檢查 → 失敗就自動回滾（模組＋DB 快照）
+- 換檔前拒絕（`$ApplyUntouchedCodes`）⇒ 只把服務拉回來 ✔；`apply_failed_restored` 不再回滾 ✔；備份損壞類 ⇒ F13 停用模組再重啟 ✔
+
+**④ 逐字比對**：`Invoke-CompanySetupCli` 兩題以 E4 未合回為條件 skip，skip 原因寫明；E4 合回那一班必須驗到 passed（列車檢查項）。
+
+**⑤ deploy_dashboard**：5 個 `module_*` 狀態已加入值域。
+
+### S5-M1（必修）　回滾「拒絕、一檔不動」的 code 會讓服務停著
+
+- A 的對照依據 B 18e66f7b 的 §10；B 之後（S3R-M1、S5 系列，至 d764026c）新增了幾個**回滾在動檔之前就拒絕**的 code：`state_changed`、`module_changed`、`base_changed`、`interrupted_not_latest`（以及預檢／apply 的 `interrupted_apply_pending`）
+- ps1 的自動回滾（:680 起）與換檔失敗後的回滾（:630 起）：`$rb.Corrupt` 只認 `$RestoreFailedCodes`（backup_corrupt／no_backup／backup_not_found／restore_mismatch）；其餘 `-not $rb.Ok` 一律「回滾失敗 ⇒ **服務未重新啟動**，需要人工處理」
+- 對「拒絕、一檔不動」的 code 來說，磁碟上仍是那個**健檢沒過的新模組**，而服務停著 ⇒ 全站停擺，要等人工。正確的處置與 F13 相同：停用該模組、重新啟動（其他模組照常），status 用 `module_restore_failed` 並帶 code
+- 什麼時候會發生：套用後到回滾之間，有東西寫了 lock／三個狀態檔，或模組資料夾（`_tree_hashes` 不含 `__pycache__`，但模組若在自己的資料夾寫檔就會觸發）。機率低，但後果是停擺
+- 修法：
+  1. `$RestoreFailedCodes` 補上 `state_changed`、`module_changed`、`base_changed`、`interrupted_not_latest`（或反過來：回滾失敗時，除非 code 表明「已動檔、半套」，否則一律走 F13）
+  2. `$ApplyUntouchedCodes` 補 `interrupted_apply_pending`（apply 內的 preflight 也會回它；現在它會被當成換檔中途失敗而去回滾一份不存在的 stamp ⇒ `backup_not_found` ⇒ F13 停用模組——結果是一個**什麼都沒動**的模組被停用）
+  3. 加一題：以 B 最新的 §10 code 表為來源，每個 code 在 ps1 都有明確歸類（未觸碰／已還原／F13／人工），不在表中的 code ⇒ 題目紅
+- 題：模擬回滾回 `state_changed` ⇒ 模組停用、服務起來、`module_restore_failed`；apply 回 `interrupted_apply_pending` ⇒ 服務拉回、不回滾、不停用
+
+### 建議
+
+- **S5-S1　停用中的模組能不能更新**：模組目前被管理員停用時，乾跑載入得到 `disabled` ⇒ `MODULE_LOAD_FAIL` ⇒ 拒絕。若要允許「停用中照樣更新」，乾跑與套用後檢查應預期 `disabled`（`states --state disabled` 已支援）；若不允許，拒絕訊息要說明「先啟用或改用完整包」。兩種都可以，請定一個
+- **S5-S2　S7 指示的狀態表要跟 ps1 的出口一致**：ps1 另有 `package_missing`、`user_cancelled`、`not_prod_machine`、`refused_company_setup`、`company_setup_rolled_back`、`unhealthy_not_rolled_back`（只在 -SkipAutoRollback）；S7（B 的範本）列的不完整。建議以 ps1 的 `Emit-Result`／`Fail` 呼叫點自動列出，對照 S7 表的題（同儀表板值域 1:1 的做法）
