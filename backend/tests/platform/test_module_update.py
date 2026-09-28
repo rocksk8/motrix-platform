@@ -16,6 +16,12 @@ MU = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(MU)
 
 
+@pytest.fixture(autouse=True)
+def _licensed(monkeypatch):
+    """合成安裝目錄沒有 helpers/licensing ⇒ 題目注入授權判定（真的判定另有反向控制題）。"""
+    monkeypatch.setattr(MU, "_license_check", lambda manifest: (True, ""))
+
+
 def _git(repo, *args):
     subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
@@ -121,11 +127,16 @@ def _refused(root, pkg, match, **kw):
 
 
 def test_rc_same_or_lower_version_is_refused(src, tmp_path):
+    """〔更正（B55）：同一個包再套一次，現在先以「內容雜湊相同 ⇒ 已是這一版」拒絕（allow_downgrade 也不放行：沒有東西要換）；
+    原寫法「同一包 ⇒ 不高於已安裝；加 allow_downgrade 就放行」改成用內容不同的低版本驗〕"""
     root = _install(tmp_path)
-    pkg = _build(src, tmp_path)
-    MU.apply(root, pkg)
-    _refused(root, pkg, "不高於已安裝")
-    MU.apply(root, pkg, allow_downgrade=True)              # 明確要求才允許
+    MU.apply(root, _build(src, tmp_path, "v1"))
+    _refused(root, _build(src, tmp_path, "v1b"), "已是這一版", allow_downgrade=True)
+    _module(src, "0.9.0", extra="OLD = 1\n")
+    _commit(src, "v0.9")
+    low = _build(src, tmp_path, "v09")
+    _refused(root, low, "不高於已安裝")
+    MU.apply(root, low, allow_downgrade=True)              # 明確要求才允許
 
 
 def test_rc_incompatible_core_is_refused(src, tmp_path):
@@ -147,11 +158,14 @@ def test_rc_tampered_page_is_refused(src, tmp_path):
     _refused(root, pkg, "雜湊不符")
 
 
-def test_rc_module_with_migrations_is_refused(src, tmp_path):
+def test_module_with_migrations_is_no_longer_refused(src, tmp_path):
+    """〔更正（B55，設計 §1.3 步驟 5）：原題 test_rc_module_with_migrations_is_refused 要求帶 migrations/ 一律拒絕（P7b 未實作）。
+    模組 migration 已由 core.migrations 在啟動時跑，單模組套用改由 apply_module_update.ps1 在疊加樹上乾跑把關 ⇒ 工具本身不再拒絕〕"""
     _write(src / "backend" / "modules" / "zz" / "migrations" / "0001_x.py", "")
     _commit(src, "add migration")
     root = _install(tmp_path)
-    _refused(root, _build(src, tmp_path), "P7b")
+    rec, _ = MU.apply(root, _build(src, tmp_path))
+    assert (root / "backend" / "modules" / "zz" / "migrations" / "0001_x.py").is_file()
 
 
 def test_rc_install_without_lock_is_refused(src, tmp_path):

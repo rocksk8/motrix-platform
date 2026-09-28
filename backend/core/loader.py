@@ -178,6 +178,7 @@ def _write_module_states(path) -> bool:
     寫失敗只記 WARNING、回 False（不影響啟動：健檢讀不到 ⇒ 判失敗，由套用端處理）。"""
     from datetime import datetime
     data = {"pid": os.getpid(), "started_at": datetime.now().isoformat(timespec="seconds"),
+            "schedulers_disabled": os.getenv("MOTRIX_DISABLE_SCHEDULERS") == "1",   # DB5-S1：健檢說得出原因
             "modules": [{"key": s.get("key"), "state": s.get("state"), "version": s.get("version"),
                          "reason": s.get("reason") or ""} for s in registry.module_states()]}
     tmp = str(path) + ".tmp"

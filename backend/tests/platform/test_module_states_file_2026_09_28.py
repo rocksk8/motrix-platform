@@ -35,16 +35,37 @@ def test_write_failure_is_a_warning_not_a_crash(tmp_path, caplog):
     assert any("寫模組載入狀態檔失敗" in r.getMessage() for r in caplog.records)
 
 
-def test_main_writes_states_inside_scheduler_gate_after_start_schedulers():
-    """AST（註解不在 AST 裡）：`if MOTRIX_DISABLE_SCHEDULERS` 區塊裡、start_schedulers 之後呼叫 _write_module_states。"""
+def test_main_writes_states_outside_scheduler_gate_unless_pytest():
+    """〔更正（稽核 D DB5-S1）：原題要求寫在排程閘門內——以 DISABLE_SCHEDULERS 啟動的安裝（演練）就沒有狀態檔，
+    健檢會誤判成「模組沒載入」。改為：不在任何 MOTRIX_DISABLE_SCHEDULERS 的 if 裡；只以「pytest 不在 sys.modules」為條件；
+    位置在 mount_modules 之後（載入結果已定）〕"""
     tree = ast.parse((BACKEND / "main.py").read_text(encoding="utf-8"))
-    blocks = [n for n in ast.walk(tree) if isinstance(n, ast.If) and "MOTRIX_DISABLE_SCHEDULERS" in ast.dump(n.test)
-              and any(isinstance(c, ast.Call) and getattr(c.func, "attr", "") == "start_schedulers" for c in ast.walk(n))]
-    assert len(blocks) == 1, "找不到（或不只一個）啟動模組排程的閘門區塊"
-    calls = [getattr(c.func, "attr", getattr(c.func, "id", "")) for s in blocks[0].body for c in ast.walk(s)
-             if isinstance(c, ast.Call)]
-    assert "_write_module_states" in calls, "排程閘門內沒有寫模組載入狀態檔"
-    assert calls.index("start_schedulers") < calls.index("_write_module_states")
+    parents = {}
+    for n in ast.walk(tree):
+        for c in ast.iter_child_nodes(n):
+            parents[c] = n
+    calls = [c for c in ast.walk(tree) if isinstance(c, ast.Call) and getattr(c.func, "attr", "") == "_write_module_states"]
+    assert len(calls) == 1, "main.py 應該恰好一處寫模組載入狀態檔"
+    node, guards = calls[0], []
+    while node in parents:
+        node = parents[node]
+        if isinstance(node, ast.If):
+            guards.append(ast.dump(node.test))
+    assert not any("MOTRIX_DISABLE_SCHEDULERS" in g for g in guards), "不可以綁排程閘門（DB5-S1）"
+    assert any("pytest" in g for g in guards), "要以「不在 pytest 之下」為條件（測試 session 不寫進 repo 的 logs/）"
+    mount = next(c for c in ast.walk(tree) if isinstance(c, ast.Call) and getattr(c.func, "attr", "") == "mount_modules")
+    assert mount.lineno < calls[0].lineno, "要在 mount_modules 之後（載入結果已定）"
+
+
+def test_states_file_records_scheduler_flag(tmp_path, monkeypatch):
+    """DB5-S1：檔內記 schedulers_disabled ⇒ 健檢讀不到新版本時說得出「此安裝以 DISABLE_SCHEDULERS 啟動」。"""
+    from core import loader
+    monkeypatch.setenv("MOTRIX_DISABLE_SCHEDULERS", "1")
+    loader._write_module_states(tmp_path / "s.json")
+    assert json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))["schedulers_disabled"] is True
+    monkeypatch.delenv("MOTRIX_DISABLE_SCHEDULERS")
+    loader._write_module_states(tmp_path / "s.json")
+    assert json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))["schedulers_disabled"] is False
 
 
 def test_loader_log_strings_are_a_contract():
