@@ -482,6 +482,19 @@ def map_config(authorization: str = Header(None)):
     return {"basemap": "google", "browserKey": geo.google_browser_key(), "mapId": geo.google_map_id() or None}
 
 
+@router.get("/api/map/overlays")
+def map_overlays_list(authorization: str = Header(None)):
+    """地圖覆蓋層清單（IP-101 `map.overlay`；LODGING-NEARBY §3.6.1）：已載入模組宣告的覆蓋層與**由 L1 組出的**同源腳本網址。
+
+    〔另開端點，不併進 /api/map/config：config 回應形狀有金鑰守門題逐字比對（test_map_google_basemap），不動它〕
+    模組未載入 ⇒ 沒有這一項 ⇒ 地圖頁沒有按鈕（功能未安裝，不是 0 筆）。
+    權限：覆蓋層自己的端點各自檢查模組權限；這裡只列「裝了哪些」，不列使用者沒有權限的也無妨（按了會看到 403 說明）。
+    """
+    _require_user(authorization)
+    from helpers import map_overlays
+    return {"overlays": [{k: o[k] for k in ("key", "label", "scriptUrl")} for o in map_overlays.declared_overlays()]}
+
+
 @router.get("/api/map/points")
 def map_points(response: Response, sources: str = "tenders",
                lat: str = None, lon: str = None, accuracy: str = None,
@@ -564,29 +577,27 @@ def map_points(response: Response, sources: str = "tenders",
     # 🔴 D 稽核 GB-M2：頁面帶自己的底圖（`basemap=osm|google`），後端**只准收窄**——
     #    頁面說 osm ⇒ 一律不用 Google 內容（即使設定剛改成 google：開著的 OSM 頁下一次取點不可以拿到 Google 座標）；
     #    頁面說 google 而設定不是 ⇒ 照設定（osm）。沒帶（非地圖的呼叫者，例：標案雷達只讀計數）⇒ 照設定。
-    google_map = geo.google_basemap() and (basemap or "google") != "osm"
-    key = (tuple(sorted(set(wanted))), visible, bool(geo.geo_on()), who, google_map)
-    fp = _data_fingerprint()
-    now = time.monotonic()
-    with _RESP_LOCK:
-        hit = _RESP_CACHE.get(key)
-        base = hit["body"] if (hit and hit["fp"] == fp
-                               and now - hit["at"] < MAP_RESPONSE_TTL_SECONDS) else None
-    response.headers["X-Map-Cache"] = "hit" if base is not None else "miss"
-    if base is None:
-        # 正式機 2026-09-28（「進標案雷達都會延遲」）：每個地址各開一次連線讀定位快取 ⇒ 數百地址要數秒；
-        # 整次取點共用一條讀取連線（geo.cache_read_session），兩種底圖都一樣。
-        with geo.cache_read_session():
-            if google_map:
-                base = _build_points(user, wanted)
-            else:
-                # 🔴 SST §6.2（逐字「must not use Google Maps Content from the Geocoding API in conjunction
-                #    with a non-Google map」）：OSM 底圖 ⇒ 整段只用免費來源（點、據點、距離一起），
-                #    只有 Google 座標的那幾筆不畫、計數說明（googleOnlyHidden）。
-                with geo.without_google_content():
-                    base = _build_points(user, wanted)
+    # 〔2026-09-28 E 線 LG2-M1：判定抽成 L1 `geo.map_request_scope`（與附近旅宿共用）。None／google／osm 行為不變；
+    #   其他值（含空字串 `basemap=`）原本 `"x" != "osm"` ⇒ 可用 Google，現在視同 osm ⇒ 收窄（LG3-O1）〕
+    with geo.map_request_scope(basemap, missing=geo.MAP_SCOPE_MISSING_SETTING) as google_map:
+        key = (tuple(sorted(set(wanted))), visible, bool(geo.geo_on()), who, google_map)
+        fp = _data_fingerprint()
+        now = time.monotonic()
         with _RESP_LOCK:
-            _RESP_CACHE[key] = {"at": now, "fp": fp, "body": base}
+            hit = _RESP_CACHE.get(key)
+            base = hit["body"] if (hit and hit["fp"] == fp
+                                   and now - hit["at"] < MAP_RESPONSE_TTL_SECONDS) else None
+        response.headers["X-Map-Cache"] = "hit" if base is not None else "miss"
+        if base is None:
+            # 正式機 2026-09-28（「進標案雷達都會延遲」）：每個地址各開一次連線讀定位快取 ⇒ 數百地址要數秒；
+            # 整次取點共用一條讀取連線（geo.cache_read_session），兩種底圖都一樣。
+            # 🔴 SST §6.2（逐字「must not use Google Maps Content from the Geocoding API in conjunction
+            #    with a non-Google map」）：google_map 為 False ⇒ 已在 without_google_content 範圍內
+            #    （map_request_scope），整段只用免費來源（點、據點、距離一起），只有 Google 座標的那幾筆不畫、計數說明。
+            with geo.cache_read_session():
+                base = _build_points(user, wanted)
+            with _RESP_LOCK:
+                _RESP_CACHE[key] = {"at": now, "fp": fp, "body": base}
     out = copy.deepcopy(base)
     out["basemap"] = "google" if google_map else "osm"      # GB-M2：前端拿它跟頁面底圖比對
     for pt in out["points"]:

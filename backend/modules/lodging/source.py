@@ -22,6 +22,7 @@ import logging
 import os
 import re
 import threading
+import time
 import urllib.request
 import zipfile
 from datetime import datetime, timedelta
@@ -45,6 +46,8 @@ LODGING_FETCH_ENABLED = False
 MIN_SUCCESS_INTERVAL = timedelta(hours=24)
 FAILURE_COOLDOWN = timedelta(hours=1)
 FETCH_TIMEOUT_SECONDS = 60
+#: 整次下載的總時限（D 稽核 E2-S1：逾時只管單次讀取，對方慢慢送會一直握著更新鎖）
+FETCH_TOTAL_SECONDS = 180
 MAX_DOWNLOAD_BYTES = 50 << 20
 MAX_UNZIP_TOTAL_BYTES = 200 << 20
 #: zip 內只准這幾個檔名（2026-09-28 實測內容：HotelList.json＋manifest.csv＋兩個 schema csv）
@@ -126,9 +129,12 @@ def catalog_state(conn) -> dict:
 def fetch_raw(url: str = DATASET_URL) -> bytes:
     """下載 zip（有大小上限與逾時）。測試換掉這一支；它是唯一會對外連線的地方。"""
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    deadline = time.monotonic() + FETCH_TOTAL_SECONDS
     with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT_SECONDS) as resp:  # noqa: S310（固定網址）
         buf = io.BytesIO()
         while True:
+            if time.monotonic() > deadline:
+                raise SourceError("下載超過 %d 秒總時限，已中止" % FETCH_TOTAL_SECONDS)
             chunk = resp.read(1 << 16)
             if not chunk:
                 break

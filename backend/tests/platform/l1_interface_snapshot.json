@@ -1,7 +1,8 @@
 {
- "core_version": "1.64",
+ "core_version": "1.65",
  "interface": {
   "core:archive": {
+   "MODULE_BACKUP_PREFIX": "const",
    "PRUNE_KEEP_NEWEST": "const",
    "PiiFolderMissing": "class",
    "SNAPSHOT_IDENTITY_TABLES": "const",
@@ -427,6 +428,8 @@
    "GeoResult": "class",
    "GeoResult.__init__": "def(self, coord=…, precision=…, source=…, error=…, address=…)",
    "LOCATION_LOOKUP_BUDGET": "const",
+   "MAP_SCOPE_MISSING_OSM": "const",
+   "MAP_SCOPE_MISSING_SETTING": "const",
    "NOMINATIM_URL": "const",
    "POI_CLASSES": "const",
    "PRECISION_DISTRICT": "const",
@@ -474,6 +477,7 @@
    "locate": "def(address, manual_coord=…)",
    "locate_cached": "def(address, manual_coord=…)",
    "looks_truncated": "def(name)",
+   "map_request_scope": "def(page_basemap, missing=…)",
    "notify_quota_warning": "def(used=…, quota=…)",
    "purge_expired_google_cache": "def(today=…)",
    "quota_calculator": "def()",

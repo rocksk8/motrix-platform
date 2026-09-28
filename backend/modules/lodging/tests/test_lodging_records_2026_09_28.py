@@ -104,13 +104,43 @@ def test_price_suspect_thresholds(low, high, sus):
     assert lsearch.price_suspect(low, high) is sus
 
 
-def test_address_center_never_uses_google_in_interim(client, users, seeded, monkeypatch):
+@pytest.mark.parametrize("setting_google,page,blocked", [
+    (True, "osm", True), (True, None, True), (True, "", True), (True, "GOOGLE", True),   # 頁面 osm／沒帶／亂值 ⇒ 不用
+    (False, "google", True),                                                           # 設定 osm＋頁面 google ⇒ 不用
+    (True, "google", False),                                                           # 反向控制：兩邊都是 google ⇒ 可用
+])
+def test_address_center_google_scope_only_narrows(client, users, seeded, monkeypatch, setting_google, page, blocked):
+    """LG2-M1：定位包在 geo.map_request_scope(頁面底圖, missing="osm") 內；觀測點＝定位當下是否擋 Google。"""
+    monkeypatch.setattr(geo, "google_basemap", lambda: setting_google)
     seen = _fake_locate(monkeypatch, precision="district")
-    d = client.post("/api/lodging/search", json={"center": {"kind": "address", "address": "測試市測試區"},
-                                                 "radiusM": 3000, "basemap": "google"}, headers=users["a"]).json()
-    assert seen == [True]                                   # 定位當下在 without_google_content 範圍內
-    assert d["available"] and d["center"]["source"] == "nominatim"
-    assert "行政區" in d["center"]["precisionNote"]
+    body = {"center": {"kind": "address", "address": "測試市測試區"}, "radiusM": 3000}
+    if page is not None:
+        body["basemap"] = page
+    d = client.post("/api/lodging/search", json=body, headers=users["a"]).json()
+    assert seen == [blocked]
+    assert d["basemap"] == ("osm" if blocked else "google")     # 覆蓋層拿它與頁面比對（LG3-S1）
+    assert d["available"] and "行政區" in d["center"]["precisionNote"]
+
+
+def test_google_blocked_really_skips_google_stage(client, users, seeded, monkeypatch):
+    """不是只看旗標：擋住時 L1 真的不打 Google 階（_locate_google 0 次），可用時才打。"""
+    monkeypatch.setattr(geo, "google_basemap", lambda: True)
+    monkeypatch.setattr(geo, "geo_on", lambda: True)
+    monkeypatch.setattr(geo, "quota_exceeded", lambda *a, **k: False)
+    calls = []
+
+    def fake_google(address, errors=None, **_kw):
+        calls.append(address)
+        return (C_LAT, C_LNG), geo.PRECISION_ROOFTOP
+    monkeypatch.setattr(geo, "_locate_google", fake_google)
+    monkeypatch.setattr(geo, "_locate_tgos", lambda address, **_kw: None)
+    monkeypatch.setattr(geo, "_locate_nominatim", lambda address, errors=None, **_kw: ((C_LAT, C_LNG), geo.PRECISION_STREET))
+    body = {"center": {"kind": "address", "address": "測試市甲路1號"}, "radiusM": 3000}
+    d = client.post("/api/lodging/search", json=dict(body, basemap="osm"), headers=users["a"]).json()
+    assert calls == [] and d["center"]["source"] != geo.SOURCE_GOOGLE
+    body["center"]["address"] = "測試市乙路2號"
+    d = client.post("/api/lodging/search", json=dict(body, basemap="google"), headers=users["a"]).json()
+    assert calls == ["測試市乙路2號"] and d["center"]["source"] == geo.SOURCE_GOOGLE
 
 
 def test_address_not_found_is_unavailable(client, users, seeded, monkeypatch):
@@ -197,6 +227,21 @@ def test_export_csv_and_json_carry_attribution(client, users, seeded, monkeypatc
     js = client.get("/api/lodging/records/%d/export?format=json" % rid, headers=users["a"]).json()
     assert "交通部觀光署 2026" in js["attribution"]
     assert client.get("/api/lodging/records/%d/export?format=xml" % rid, headers=users["a"]).status_code == 422
+
+
+def test_csv_export_neutralises_formula_cells(client, users):
+    """D 稽核 E2-S2：官方資料的名稱／地址以 = + - @ 開頭 ⇒ CSV 儲存格前加 '（不讓試算表當公式）。"""
+    _seed([_near(1, 0.001, HotelName='=HYPERLINK("http://evil","x")',
+                 PostalAddress={"City": "", "Town": "", "StreetAddress": "+886 測試路"}),
+           _near(2, 0.002, HotelName="@SUM(A1)"), _near(3, 0.003, HotelName="-2+3"), _near(4, 0.004)])
+    rid = client.post("/api/lodging/records", json=_dev(), headers=users["a"]).json()["id"]
+    import csv
+    import io
+    rows = list(csv.reader(io.StringIO(client.get("/api/lodging/records/%d/export" % rid, headers=users["a"]).text.lstrip("﻿"))))
+    names = [r[0] for r in rows[2:]]
+    assert names == ["'=HYPERLINK(\"http://evil\",\"x\")", "'@SUM(A1)", "'-2+3", "測試旅宿4"]
+    assert rows[2][3] == "'+886 測試路"
+    assert not [c for r in rows for c in r if c[:1] in ("=", "+", "-", "@")]
 
 
 def test_attribution_lists_every_dataset_year(client, users, seeded):

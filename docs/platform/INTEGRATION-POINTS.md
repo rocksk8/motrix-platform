@@ -616,7 +616,8 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ## IP-101　`map.overlay`：地圖頁覆蓋層（任何 L2 → L1 地圖頁；首個提供方：lodging）
 
-**狀態：設計（E 線 E1，2026-09-28；D 審 LG-M1），尚未實作。編號暫定（101），列車定號。** 出處：`docs/platform/LODGING-NEARBY.md` §3.6.1。
+**狀態：〔更正 2026-09-28 17:48：已實作（E 線 E2，wip/e-lodging-impl）〕~~設計（E 線 E1，2026-09-28；D 審 LG-M1），尚未實作~~。編號暫定（101），列車定號。**
+實作：L1 `frontend/static/map-overlay.js`（契約）、`helpers/map_overlays.py`（宣告驗證、網址）、`GET /api/map/overlays`（`routers/map_points.py`）、`/map-overlays/<模組>/<檔名>`（`main.py`）、`pages/map.html`（按鈕、面板容器、生命週期）；清單端點與腳本路由的理由見 LODGING-NEARBY §3.6 實作差異。 出處：`docs/platform/LODGING-NEARBY.md` §3.6.1。
 L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件與 `_map`／`_layer`／`_gmMarkers` 等內部欄位（第十五班 a-gm-raw：`_map` 讀回來是 Proxy）。
 
 | 欄位 | 內容 |

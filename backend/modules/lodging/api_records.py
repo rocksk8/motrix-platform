@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """附近旅宿：查詢、紀錄、匯出、比較、人工詢價（只查本機快照，不對外連線）。
 
-中心點定位：
-  ⚠ 過渡（第十七班合回前）：地址定位**一律**包在 `geo.without_google_content()` 內——不用 Google（失敗關閉）。
-  合回後改為 `geo.map_request_scope(頁面底圖, missing="osm")`（LODGING-NEARBY §3.1.1，LG2-M1）。
+對外連線：旅宿資料本身不連線（只查本機快照）；但「輸入地址」的定位若快取沒命中，會經 L1 `geo.locate_cached()` 對外查詢
+  （受 `MOTRIX_GEO` 開關與 L1 節流；Nominatim／TGOS，頁面與設定都是 Google 底圖時才可能用 Google）——D 稽核 E2-S3。
+中心點定位：包在 L1 `geo.map_request_scope(頁面底圖, missing="osm")` 內（LODGING-NEARBY §3.1.1，LG2-M1）——
+  頁面底圖只准收窄設定；沒帶或不認得的值 ⇒ 不用 Google。回應帶實際 `basemap`，覆蓋層與頁面不一致 ⇒ 不畫、請重新整理（LG3-S1）。
 紀錄可見範圍：建立者＋admin+（D 審 Q4）；看不到與不存在同一個 404。
 """
 import csv
@@ -64,12 +65,12 @@ def _body_options(body: dict):
 
 
 def _resolve_center(c: dict) -> dict:
-    """中心點 → {kind, label, lat, lng, source, precision, precisionNote}；定位不到 ⇒ {"error": 原因}。"""
+    """中心點 → {kind, label, lat, lng, source, precision, precisionNote}；定位不到 ⇒ {"error": 原因}。
+    呼叫端必須已在 `geo.map_request_scope(...)` 範圍內（_run_search）。"""
     if c["kind"] == "device":
         return {"kind": "device", "label": "目前位置", "lat": c["lat"], "lng": c["lng"],
                 "source": "device", "precision": "device", "precisionNote": ""}
-    with geo.without_google_content():      # 過渡：失敗關閉，見檔頭
-        found = geo.locate_cached(c["address"])
+    found = geo.locate_cached(c["address"])
     if not found.coord:
         return {"error": found.error or "查無此地址"}
     note = ""
@@ -83,18 +84,20 @@ def _run_search(conn, body: dict):
     """回 (payload, center, items, cat)。沒有快照、定位不到 ⇒ payload 帶 available=False（不是 0 筆）。"""
     c = _body_center(body)
     radius, kinds, sort = _body_options(body)
+    page_basemap = body.get("basemap")
     cat = lodging_source.catalog_state(conn)
-    base = {"radiusM": radius, "kinds": kinds, "sort": sort, "basemap": "osm",
-            "datasetUpdatedAt": cat["dataset_updated_at"], "stale": cat["stale"],
-            "staleDays": lodging_source.STALE_DAYS}
-    if not cat["count"]:
-        return dict(base, available=False, reason="no_catalog",
-                    message="尚未下載旅宿資料，請最高管理者按「更新旅宿資料」"), None, [], cat
-    center = _resolve_center(c)
-    if center.get("error"):
-        return dict(base, available=False, reason="center_not_found",
-                    message="無法定位中心點：%s" % center["error"]), None, [], cat
-    items = lodging_search.nearby(conn, center["lat"], center["lng"], radius, kinds, sort)
+    with geo.map_request_scope(page_basemap, missing=geo.MAP_SCOPE_MISSING_OSM) as google_ok:
+        base = {"radiusM": radius, "kinds": kinds, "sort": sort, "basemap": "google" if google_ok else "osm",
+                "datasetUpdatedAt": cat["dataset_updated_at"], "stale": cat["stale"],
+                "staleDays": lodging_source.STALE_DAYS}
+        if not cat["count"]:
+            return dict(base, available=False, reason="no_catalog",
+                        message="尚未下載旅宿資料，請最高管理者按「更新旅宿資料」"), None, [], cat
+        center = _resolve_center(c)
+        if center.get("error"):
+            return dict(base, available=False, reason="center_not_found",
+                        message="無法定位中心點：%s" % center["error"]), None, [], cat
+        items = lodging_search.nearby(conn, center["lat"], center["lng"], radius, kinds, sort)
     payload = dict(base, available=True, center=center, count=len(items), items=items,
                    attribution=lodging_attr.attribution_text([cat["dataset_updated_at"]]))
     return payload, center, items, cat
@@ -203,6 +206,18 @@ def lodging_record_delete(rid: int, authorization: str = Header(None)):
     return {"ok": True}
 
 
+#: CSV 公式注入（D 稽核 E2-S2）：開頭是這些字元的儲存格，前面加 ' 讓試算表當文字
+_CSV_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_cell(v):
+    if v is None:
+        return ""
+    if isinstance(v, str) and v.startswith(_CSV_FORMULA_LEAD):
+        return "'" + v
+    return v
+
+
 _EXPORT_COLS = (("name", "名稱"), ("classLabel", "類別"), ("licenseNo", "登記證號"), ("address", "地址"),
                 ("distanceM", "直線距離（公尺）"), ("priceLow", "官方參考最低房價"), ("priceHigh", "官方參考最高房價"),
                 ("priceRegisteredAt", "業者登記時間"))
@@ -227,12 +242,12 @@ def lodging_record_export(rid: int, format: str = "csv", authorization: str = He
                         headers={"Content-Disposition": 'attachment; filename="lodging-%d.json"' % rid})
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["資料來源", attr])
+    w.writerow(["資料來源", _csv_cell(attr)])
     if d["record"]["googleCenter"]:
-        w.writerow(["說明", d["record"]["googleCenterNote"]])
+        w.writerow(["說明", _csv_cell(d["record"]["googleCenterNote"])])
     w.writerow([label for _k, label in _EXPORT_COLS])
     for it in d["items"]:
-        w.writerow(["" if it[k] is None else it[k] for k, _l in _EXPORT_COLS])
+        w.writerow([_csv_cell(it[k]) for k, _l in _EXPORT_COLS])
     return Response("﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": 'attachment; filename="lodging-%d.csv"' % rid})
 

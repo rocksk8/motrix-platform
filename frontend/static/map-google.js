@@ -69,6 +69,7 @@
 
   var methods = {
     closeMap: function () {
+      if (window.MotrixMapOverlay) window.MotrixMapOverlay._mapClosed()   // IP-101：先卸下覆蓋層
       this._gmClear()
       this._gmClearUser()
       if (this._gmInfo) { this._gmInfo.close(); this._gmInfo = null }
