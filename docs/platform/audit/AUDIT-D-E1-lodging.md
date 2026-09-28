@@ -65,3 +65,31 @@
 | Q4 紀錄可見範圍 | 同意預設建立者＋admin+；地址文字照 IP-97 處理 |
 | Q5 錯值門檻 | 見 LG-S4 |
 | Q6 map.overlay | 見 LG-M1：可以，但要先定義 L1 覆蓋層 JS 介面與腳本路徑規則 |
+
+## 5. 複審：wip/e-lodging 8f342818（D，2026-09-28）
+
+| 項目 | 判定 |
+|---|---|
+| LG-M1 | `MotrixMapOverlay.register／mount(api)`；兩種底圖各自在 L1 轉接層實作；`script_url` 由 L1 依 `module.json map_overlays` 組出同源路徑（檔名正則、不存在就不列）；守門①～⑤含「改名內部欄位」的反向控制與「非 lodging 的第二個覆蓋層」；契約有版本號 ⇒ **成立**（補強見 LG2-S1～S3） |
+| LG-M2 | google 中心點 ⇒ 座標與距離存 NULL＋守門 ⇒ **成立** |
+| S1～S5 | 已收：每筆登記日期、顯名範圍＋年份依資料、解壓上限／zip slip／白名單、錯值具名常數＋原值灰字、取證雜湊 |
+| Q1 | 使用者裁示採用（ff3b1e14），有人做過決定 ⇒ 結案 |
+
+**LG2-M1（必修，新）　「中心點若是 Google 定位，只會在 google_basemap() 為真時產生（L1 保證）」不成立：擋 Google 的範圍要由呼叫端包進去，旅宿搜尋沒有包**
+- 事實（讀碼）：`geo.locate_cached()` 只看 `_stage_allowed()`，而它擋 Google 靠的是 contextvar `google_content_blocked()`；這個範圍是**呼叫端**用 `with geo.without_google_content()` 設的。目前設了的只有三處：`/api/map/points`（收窄後）、背景預熱入口、據點存檔
+- 設計 §3.2「輸入地址：送後端 → `geo.locate_cached()`」、§3.1「底圖規則全部由 L1 決定」 ⇒ 旅宿搜尋直接呼叫 locate_cached，**不在範圍內** ⇒ 有伺服器金鑰時，OSM 底圖也會問 Google，而回傳的 Google 中心座標由覆蓋層畫在 OSM 上（中心標記，以及由它算出的距離）⇒ SST §6.2
+- 還有 GB-M2 同型的問題：頁面以 OSM 開著、設定剛改成 Google 時，也要以頁面的底圖為準、只准收窄
+- 修法：
+  - 旅宿搜尋端點收 `basemap`（由覆蓋層取 `api.basemap()` 帶上）
+  - 後端以「`geo.google_basemap()` 而且頁面不是 osm」判定，否則整段包在 `without_google_content()` 內
+  - 最好把這個判定抽成 L1 的一支（例：`geo.map_request_scope(page_basemap)`），map_points 與旅宿共用，不要兩處各寫一次
+  - 補題：伺服器金鑰在、Google 階會命中、頁面 osm ⇒ 中心點來源不是 google（反向控制：頁面 google＋設定 google ⇒ 可以是 google）
+  - 同時更正 §3.1、§3.6.1 那兩句「L1 保證」（保留原句）
+
+**建議**
+- **LG2-S1　`handle` 做成不透明字串，不要是物件**：覆蓋層若把 `addMarkers` 回傳的 handle 存進自己的 Alpine 狀態，交還 L1 時會是 Proxy。這正是 a-gm-raw 那一型；L1 若拿 handle 裡的 Google 物件去操作，就會失效。handle＝L1 內部表的鍵（字串），物件永遠只留在 L1
+- **LG2-S2　api 補兩個方法，否則覆蓋層會伸手進內部**：
+  - `focus(handle, id)`：清單點一筆 ⇒ 地圖移過去並打開那一筆的彈窗（清單＋地圖一定會有這個需求）
+  - `addCircle(center, radius_m, style)`：畫搜尋半徑
+  - 另外寫明 `addMarkers` 大量標點時由 L1 群聚（兩種底圖各用既有的群聚），覆蓋層不自己處理
+- **LG2-S3　面板內容也要守 HTML 寫入點**：`panel()` 交出 HTMLElement，而靜態掃描③禁止覆蓋層用 Alpine ⇒ 覆蓋層會用原生 DOM 畫清單，裡面是官方資料的名稱與地址。建議把 custom-records 的 JS 寫入點守門（sink_sites／check）的掃描對象擴大到 `modules/*/pages/*overlay*.js`，白名單預設 0。`popupHtml` 的清洗改成由 L1 收結構化欄位（title、lines[]、links[]）自己組 HTML，比「清洗任意 HTML」可靠
