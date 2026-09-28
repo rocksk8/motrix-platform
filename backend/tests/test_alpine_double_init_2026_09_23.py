@@ -77,7 +77,9 @@ SHARED_FILES = ("auth-guard.js", "notif.js", "sidebar.js", "edit-presence.js",
 #:    （自訂模組執行頁），兩頁都是 Alpine、有 _initDone 守衛。
 #: 🔴 2026-09-26（主持，列車 train/0926-0415）交會：47（a-mail）＋2（P8 前端）＝49。
 #: 2026-09-28（A，wip/a-storage-settings）49 -> 50：新增 storage-settings.html（儲存位置，Alpine，有 _initDone 守衛）。
-PAGE_POPULATION = 49 + 1
+#: 2026-09-28（E 線，wip/e-lodging-impl）50 -> 51：新增 lodging-records.html（附近旅宿紀錄，Alpine，有 _initDone 守衛；
+#:    使用者裁示新增此功能，CORE-SPEC 09888e19）。
+PAGE_POPULATION = 49 + 1 + 1
 SHARED_POPULATION = 2
 ALREADY_GUARDED = 2
 
