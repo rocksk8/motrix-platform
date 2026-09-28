@@ -163,3 +163,36 @@
 ### 關閉紀錄（標準格式，PLAYBOOK §E-6）
 
 （③ 與 T15-C1 不是必修，不需要關閉行；GB-M1 仍開著，登記：owner A，wip/a-google-basemap）
+
+## 7. 複核 A ②(b) 第二、三段：wip/a-google-basemap b54f7f25（6ef38cca、437add7a、b54f7f25）（D，2026-09-28）
+
+| 項目 | 驗法 | 結果 |
+|---|---|---|
+| GB-M1 | `google_basemap()`＝`bool(google_browser_key() and google_map_id())`；`/api/map/config` 經同一支，google 時回 mapId；有題「只填金鑰／只填 ID ⇒ osm、不回金鑰」（主持的突變「只看金鑰」⇒ 紅） | **成立** |
+| GB-C1 第一條（Google 載不到不退回 OSM） | map.html：`/api/map/config` 失敗 ⇒ 不畫（不退回 Leaflet）；`_loadGoogle` 的腳本載不到、Maps API 載不到 ⇒ catch ⇒ `loadError`，不載 Leaflet；`gm_authFailure` 會說明原因 | 成立 |
+| ① 伺服器金鑰不外露 | `/api/map/config` 只回 `google_browser_key()`；兩把金鑰在設定 GET 都遮蔽，也都不寫進稽核的值；頁面 HTML 不嵌任何金鑰；`_locate_google` 的錯誤字串是 `str(exc)`（HTTPError／URLError 不含網址，address 有 urlencode）| 成立；觀察見 GB-O1 |
+| ② Google 底圖時不發 OSM 請求 | Google 模式只走 `_loadGoogle`，不載 Leaflet ⇒ 不會請求 OSM 圖磚；OSM 出處只在非 Google 時顯示 | 成立；授權標示見 GB-S1 |
+| ③ vendor 來源 | 由 D 獨立下載 npm 官方 tarball：sha512 等於 registry 公布的 integrity；解出來的 `package/dist/index.min.js` 與 repo 的 `markerclusterer.min.js` **位元組相同**（sha256 e4261b90…82ff）；LICENSE sha256 cfc7749b…3d30 與 PROVENANCE 相同 | 成立 |
+| 題 | test_map_google_basemap＋test_map_sst62 共 25 過（非 e2e，拋棄式樹） | — |
+
+**GB-M2（必修）　GB-C1 第二條沒有做到：頁面以 OSM 開著時，之後取點可能拿到 Google 座標並畫在 OSM 上**
+- 底圖在開頁時只問一次（`/api/map/config` ⇒ `this.basemap`）；之後每次取點（`/api/map/points?sources=…`，切換圖層、重新整理都會打）都**沒有帶上頁面自己的底圖**，而後端每次重新判定 `google_basemap()`
+- 情境：使用者 A 的地圖頁以 OSM 開著；管理員在設定頁填好瀏覽器金鑰＋地圖 ID ⇒ A 下一次取點時，後端判定 google、回 Google 座標 ⇒ A 的頁面照樣用 Leaflet 畫在 OSM 上（§6.2）
+- 回應裡其實帶了 `"basemap": "google"`，但前端沒有拿它與 `this.basemap` 比對（grep map.html：`basemap` 只出現在 config 那一段）
+- 修法（建議兩個都做）：
+  - ① 取點時帶 `basemap=<頁面的底圖>`；後端只准收窄——頁面說 osm ⇒ 一律 `without_google_content()`，即使設定已經是 google；說 google 而設定不是 ⇒ 照設定的 osm
+  - ② 前端比對回應的 `basemap` 與 `this.basemap`，不同就不畫，並提示「地圖設定已變更，請重新整理」
+  - 補題：頁面 osm＋設定 google ⇒ 回的點沒有 Google 座標（反向控制：頁面 google＋設定 google ⇒ 照舊）
+- 發生機率不高（要剛好在切換設定時有人開著地圖），但在設定上線當天正好會發生，而這正是本班要擋的條款違規
+
+**GB-S1（建議）　Google 底圖上的免費來源座標要標 OpenStreetMap 出處**
+- Google 模式把 OSM 出處藏起來了，但點的座標仍可能來自 Nominatim（`cached_only` 依序退到免費階）
+- Nominatim 使用政策與 ODbL 都要求標示「© OpenStreetMap contributors」
+- Google 條款限制的是「Google 內容配非 Google 地圖」，不限制在 Google 地圖上放第三方資料
+- 建議：有任何點來自 Nominatim 時，圖面下方保留一行資料出處（不蓋住 Google 的標誌與歸屬）。要不要做、怎麼寫，屬於授權與畫面的決定，由主持／使用者裁示
+
+**GB-O1（觀察）**：`_locate_google` 把 `str(exc)` 放進 errors，而 `googleSkipReason`（預熱狀態）會顯示在畫面上。目前的例外字串不含網址，但日後換 HTTP 函式庫（例如 requests 的例外會帶 URL，而 URL 裡有 `key=`）就會把伺服器金鑰帶到畫面。建議在放進 errors 之前，把金鑰字串遮掉（一行）
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ GB-M1 關閉（b54f7f25）——google_basemap＝瀏覽器金鑰且地圖 ID，缺一項 osm 且不回金鑰
