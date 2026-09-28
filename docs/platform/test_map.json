@@ -3858,6 +3858,7 @@
     "file:backend/tests/_e2e_login.py",
     "helper:geo",
     "mod:lodging/__init__",
+    "mod:lodging/api_records",
     "mod:lodging/source",
     "mod:lodging/tests/__init__",
     "mod:lodging/tests/_fixtures",
@@ -3873,6 +3874,9 @@
      "backend/modules/lodging/tests/__init__.py",
      "backend/modules/lodging/tests/_fixtures.py",
      "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/lodging/api_records.py"
     ],
     "page": [
      "frontend/pages/map.html"
