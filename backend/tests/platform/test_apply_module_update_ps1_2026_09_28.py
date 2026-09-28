@@ -128,6 +128,9 @@ def test_f13_disables_the_module_before_restarting_and_does_not_restart_when_dis
     fail_idx = f.index('"module_restore_failed"')
     assert fail_idx < f.index("Start-InstallService"), "停用寫入失敗的出口在重啟之前（不重啟）"
     assert 'Wait-ModuleState $script:ModuleKey $null "disabled"' in f
+    # 兩個出口（停用失敗不重啟／停用後重啟）都是 module_restore_failed（突變 S4：只改第二個曾經沒被抓到）
+    exits = re.findall(r'Fail\s+".*?"\s+"([a-z_]+)"', f, re.S)
+    assert len(exits) == 2 and set(exits) == {"module_restore_failed"}, exits
 
 
 def test_health_check_has_both_layers_beyond_ping():
