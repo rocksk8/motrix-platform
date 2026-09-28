@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 766,
+  "tests": 773,
   "unmapped": 8,
   "kinds": {
-   "api": 409,
-   "e2e": 180,
-   "audit": 107,
+   "api": 411,
+   "e2e": 181,
+   "audit": 111,
    "unit": 70
   },
-  "routes": 596
+  "routes": 597
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -12549,6 +12549,246 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_company_setup_cli_2026_09_28.py": {
+   "kind": "audit",
+   "units": [
+    "core:main",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_company_setup_core_2026_09_28.py",
+    "file:backend/tools/apply_plan.py",
+    "file:backend/tools/apply_update.ps1",
+    "file:backend/tools/company_setup_cli.py",
+    "file:backend/tools/deploy_dashboard.py",
+    "helper:company_setup",
+    "plat:__init__",
+    "plat:upgrade"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/upgrade.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/company_setup.py",
+     "backend/tests/test_company_setup_core_2026_09_28.py"
+    ],
+    "path": [
+     "backend/main.py",
+     "backend/tools/apply_plan.py",
+     "backend/tools/apply_update.ps1",
+     "backend/tools/company_setup_cli.py",
+     "backend/tools/deploy_dashboard.py"
+    ]
+   }
+  },
+  "backend/tests/test_company_setup_core_2026_09_28.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tools/delivery.py",
+    "file:backend/tools/verify_package.py",
+    "helper:company_setup",
+    "helper:email_notify",
+    "plat:__init__",
+    "plat:paths",
+    "plat:upgrade"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/paths.py",
+     "backend/core/upgrade.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/company_setup.py",
+     "backend/helpers/email_notify.py"
+    ],
+    "path": [
+     "backend/helpers/company_setup.py",
+     "backend/tools/delivery.py",
+     "backend/tools/verify_package.py"
+    ]
+   }
+  },
+  "backend/tests/test_company_setup_gate_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:main",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_company_setup_core_2026_09_28.py",
+    "helper:company_setup",
+    "helper:email_notify",
+    "helper:licensing",
+    "page:pages/company-profile-settings.html",
+    "router:auth",
+    "router:customers",
+    "router:system",
+    "router:uploads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/company_setup.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/licensing.py",
+     "backend/main.py",
+     "backend/tests/test_company_setup_core_2026_09_28.py"
+    ],
+    "api": [
+     "backend/routers/auth.py",
+     "backend/routers/customers.py",
+     "backend/routers/system.py",
+     "backend/routers/uploads.py"
+    ],
+    "page": [
+     "frontend/pages/company-profile-settings.html"
+    ]
+   },
+   "unresolved_api": [
+    "/api/settings/branding*",
+    "/api/settings/branding-x/logo",
+    "/api/settings/branding/logo/extra"
+   ]
+  },
+  "backend/tests/test_company_setup_output_gate_2026_09_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:pdf_gen",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_company_setup_core_2026_09_28.py",
+    "file:backend/tools/company_setup_cli.py",
+    "helper:auth",
+    "helper:company_identity",
+    "helper:company_setup",
+    "helper:email_notify",
+    "helper:settings",
+    "mod:accounting/__init__",
+    "mod:accounting/voucher_pdf",
+    "mod:analytics/api/__init__",
+    "mod:analytics/api/reports",
+    "mod:case/api/quotations",
+    "page:pages/company-profile-settings.html",
+    "router:customers",
+    "router:legal_params",
+    "router:platform_menu",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
+     "backend/helpers/company_identity.py",
+     "backend/helpers/company_setup.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/settings.py",
+     "backend/modules/accounting/__init__.py",
+     "backend/modules/accounting/voucher_pdf.py",
+     "backend/modules/analytics/api/__init__.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/pdf_gen.py",
+     "backend/tests/test_company_setup_core_2026_09_28.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/customers.py",
+     "backend/routers/legal_params.py",
+     "backend/routers/platform_menu.py",
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/company-profile-settings.html"
+    ],
+    "path": [
+     "backend/tools/company_setup_cli.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_company_setup_output_points_2026_09_28.py": {
+   "kind": "audit",
+   "units": [
+    "helper:custom_modules",
+    "helper:email_notify",
+    "helper:startup",
+    "mod:accounting/api/accounting_export",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher_pdf",
+    "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
+    "mod:case/api/completion_notes",
+    "mod:case/api/quotations",
+    "mod:case/completion_pdf",
+    "mod:daily_tasks/api",
+    "mod:lodging/api_records",
+    "mod:netplan/api",
+    "mod:netplan/export",
+    "mod:payroll/api/bonus",
+    "mod:payroll/api/payslips",
+    "mod:payroll/bonus_pdf",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/contractors",
+    "mod:supply/api/shipping_notes",
+    "router:custom_records",
+    "router:definitions",
+    "router:system",
+    "router:uploads"
+   ],
+   "evidence": {
+    "path": [
+     "backend/helpers/custom_modules.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/startup.py",
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/accounting/voucher_pdf.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/completion_pdf.py",
+     "backend/modules/daily_tasks/api.py",
+     "backend/modules/lodging/api_records.py",
+     "backend/modules/netplan/api.py",
+     "backend/modules/netplan/export.py",
+     "backend/modules/payroll/api/bonus.py",
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/payroll/bonus_pdf.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/supply/api/shipping_notes.py",
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py",
+     "backend/routers/system.py",
+     "backend/routers/uploads.py"
+    ]
+   }
+  },
+  "backend/tests/test_company_setup_sign_2026_09_29.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_company_setup_core_2026_09_28.py",
+    "file:backend/tools/company_setup_cli.py",
+    "helper:company_setup"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/company_setup.py",
+     "backend/tests/test_company_setup_core_2026_09_28.py"
+    ],
+    "path": [
+     "backend/tools/company_setup_cli.py"
+    ]
+   }
+  },
   "backend/tests/test_completion_notes_2026_09_12.py": {
    "kind": "api",
    "units": [
@@ -13994,6 +14234,42 @@
      "frontend/pages/case-management.html"
     ]
    }
+  },
+  "backend/tests/test_e2e_company_setup_gate_2026_09_28.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_company_setup_core_2026_09_28.py",
+    "helper:company_setup",
+    "helper:email_notify",
+    "page:pages/company-profile-settings.html",
+    "page:pages/company-setup-required.html",
+    "page:pages/customers.html",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/company_setup.py",
+     "backend/helpers/email_notify.py",
+     "backend/tests/test_company_setup_core_2026_09_28.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/company-profile-settings.html",
+     "frontend/pages/company-setup-required.html",
+     "frontend/pages/customers.html"
+    ],
+    "path": [
+     "frontend/pages/company-profile-settings.html",
+     "frontend/pages/customers.html"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_completion_form_2026_09_12.py": {
    "kind": "e2e",
@@ -19568,6 +19844,7 @@
    "kind": "audit",
    "units": [
     "dir:backend/modules/tender_radar/",
+    "helper:company_setup",
     "helper:email_notify",
     "helper:geo",
     "mod:tender_radar/notify",
@@ -19582,6 +19859,7 @@
      "backend/helpers/email_notify.py"
     ],
     "path": [
+     "backend/helpers/company_setup.py",
      "backend/helpers/email_notify.py",
      "backend/helpers/geo.py",
      "backend/modules/tender_radar/",
