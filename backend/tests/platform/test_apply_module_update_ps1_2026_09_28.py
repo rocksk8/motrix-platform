@@ -161,8 +161,11 @@ def _statuses():
     code = _code(_src(NEW))
     # Fail／Emit-Result 的字面 status，加上「$變數 = if (…) { "a" } else { "b" }」再交給 Fail 的那兩處
     lit = set(re.findall(r'(?:Fail\s+.*?|Emit-Result\s+)"([a-z_]+)"', code))
-    for a, b in re.findall(r'\$(?:failStatus|st) = if \(.*?\) \{ "([a-z_]+)" \} else \{ "([a-z_]+)" \}', code):
-        lit |= {a, b}
+    for line in code.split("\n"):
+        if re.match(r'\s*\$(?:failStatus|st) = if ', line):
+            lit |= set(re.findall(r'\{ "([a-z_]+)" \}', line))
+    m = re.search(r'^\$PreflightStatus = @\{(.*?)\}', code, re.M)
+    lit |= set(re.findall(r'= "([a-z_]+)"', m.group(1)))       # 預檢 code 對照表的值（交給 Fail 的 status）
     return lit
 
 
@@ -203,3 +206,43 @@ def test_script_parses_without_errors():
           "Write-Output $e.Count") % str(_TOOLS / NEW)
     r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=120)
     assert r.stdout.strip().splitlines()[-1] == "0", r.stdout + r.stderr
+
+
+# ── ⑤ 與 module_update.py --json 的 code 表對齊（B，MODULE-UPDATE-DELIVERY §10，wip/b-module-delivery-2 18e66f7b）──
+
+#: §10 的 code 值域（B 那邊有守門題釘住程式裡每個 code 都在表上；這裡釘 ps1 對每個 code 都有處置）
+S10_CODES = {"pkg_invalid", "no_install_lock", "no_base", "no_deployed_marker", "base_mismatch", "core_incompatible",
+             "license_unavailable", "unlicensed", "already_installed", "not_higher", "bad_args", "apply_failed_restored",
+             "apply_failed_half", "no_backup", "backup_not_found", "backup_corrupt", "restore_mismatch",
+             "module_changed", "state_changed", "base_changed", "refused", "unexpected"}
+#: 不自動處理（§10「手動處理」／「apply ⇒ F9」）：落到 ps1 的預設分支即可
+S10_DEFAULT = {"apply_failed_half", "unexpected", "module_changed", "state_changed", "base_changed"}
+
+
+def _ps_list(name):
+    code = _code(_src(NEW))
+    m = re.search(r'^\$%s = @\((.*?)\)' % name, code, re.M | re.S)
+    return set(re.findall(r'"([a-z_]+)"', m.group(1)))
+
+
+def test_every_s10_code_has_a_handling():
+    untouched, restore = _ps_list("ApplyUntouchedCodes"), _ps_list("RestoreFailedCodes")
+    code = _code(_src(NEW))
+    handled = untouched | restore | {"apply_failed_restored"} | S10_DEFAULT
+    assert S10_CODES <= handled, sorted(S10_CODES - handled)
+    assert not (untouched & restore)
+    assert '"apply_failed_restored"' in code, "apply 自己已還原的那一種要跳過回滾"
+    assert restore == {"backup_corrupt", "no_backup", "backup_not_found", "restore_mismatch"}, "§10 對應 F13 的那四個"
+
+
+def test_apply_refused_before_touching_restarts_the_service_before_failing():
+    m = _main_flow()
+    seg = m[m.index("if ($ApplyUntouchedCodes -contains $apCode)"):]
+    seg = seg[:seg.index("Fail ")]
+    assert "Start-InstallService" in seg and '$script:ProdState = "not_applied"' in seg
+
+
+def test_apply_failed_restored_skips_the_second_rollback():
+    m = _main_flow()
+    i = m.index('if ($apCode -ne "apply_failed_restored")')
+    assert i < m.index("$rb = Invoke-ModuleRollback", i)
