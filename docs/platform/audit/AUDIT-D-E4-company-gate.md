@@ -236,3 +236,45 @@ D 探針（拋棄式 worktree，3a49c1b5；題目 54 過，探針不提交、已
 | 五步（放行升級 → 簽章檔到位） | `waiting_signature` → `backfilled` → configured ✔ |
 | 複製的開發者庫、改成別家、沒按確認 | `waiting_signature` → `skipped_identity_changed` → status `no_record` → 之後 `already_done` ✔ |
 | 等簽章期間把聯絡欄位清空 | `skipped_fields`、`fields_invalid` ✔ |
+
+---
+
+## 10. 完整稽核實作段②（中介層＋確認＋428）：wip/e-company-gate-impl e71e904d（D，2026-09-28）
+
+> 範圍：段①（6ee28810）之後 E 的改動：`main.py` 中介層與白名單、`company_setup.gate／compile_allowed／is_allowed`、`routers/system.py` 確認與狀態端點、`notif.js` 導頁與橫幅、設定頁與說明頁。只讀碼＋grep。
+
+### 10.0 結論
+
+- **必修 1（CG5-M1）、建議 2。**
+- 白名單偏離（多 `GET /api/settings/branding`、`DELETE /api/settings/branding/{kind}`）：**同意**。兩條都限最高管理員、端點自己驗權限，只動品牌圖、不動確認紀錄與公司資料；設定頁在未設定時本來就要能用它們。不算過寬
+
+### 10.1 主持指定
+
+**① 白名單以外的 /api 真的全擋：成立。**
+- `test_every_other_api_route_is_blocked_when_unconfigured`：走訪路由表，白名單與公開路徑以外的每一條（路徑參數填假值）逐一打，未設定時都必須 428
+- 比對用 Starlette 的 `compile_path`（與路由同一套編譯規則），HEAD 視同 GET；`test_allowlist_is_exact_and_exists` 驗每條存在、方法相符；`test_allowlist_reverse_controls` 驗萬用字元／描述性條目會紅
+- 中介層位置：登入檢查、改密碼閘門之後，`call_next` 之前 ✔；`/api/uploads?pt=` 在登入檢查前放行（CG-O2 已記），不受影響
+
+**② 正式機（已 backfill 為 configured）行為不變：成立。**
+- `gate()` ⇒ `GATE_OK` ⇒ 中介層不擋、不加標頭；`test_reverse_control_configured_has_no_header` 驗「已設定 ⇒ 200 且沒有標頭」
+- 判定有行程內快取（鍵＝三個設定的 updated_at＋三個檔的 mtime＋分鐘），Ed25519 驗章只在快取失效時做，每個請求只多一次讀設定的查詢
+- demo token 段② 視同已設定（段③ 種示範公司後拿掉），正式帳號不受影響
+
+**③ status 例外（Q7＝C）：一般 API 放行＋標頭＋橫幅成立；「輸出拒絕」沒有實作 ⇒ CG5-M1。**
+- 中介層：`gate()` 丟例外 ⇒ `GATE_UNDETERMINED` ⇒ 放行並加 `X-Motrix-Company-Setup: status_error`；告警每日一次；有題 ✔
+- 但 `gate()` 的呼叫點只有 `main._company_setup_gate_kind` 與 `routers/system.company_setup_status`（grep）；沒有任何輸出路徑（報價單等 PDF、財報、自訂模組輸出、排程報表信）呼叫它，也沒有 `company_setup_undetermined` 的回應
+
+### 10.2 必修
+
+**CG5-M1（必修）　判定失敗時，橫幅說「對外文件暫停輸出」，但輸出照常**
+- Q7 裁示 C 的兩半是一起的：放行一般功能（避免停擺）**＋** 含本公司資料的輸出拒絕（保護面不降級）。段② 只做了前一半
+- 結果：status 出錯時，中介層放行所有 API，**包括 PDF／匯出**；而 notif.js 的橫幅與 status 端點的訊息都寫「本公司設定狀態無法判定，對外文件暫停輸出」⇒ 畫面告訴使用者的與系統實際做的不同
+- 修法（擇一）：
+  1. 在本段補上輸出端第二道：共用路徑 `identity_for_output`（§5）遇 `GATE_UNDETERMINED` ⇒ 428 `company_setup_undetermined`；至少報價單 PDF、財報匯出、自訂模組輸出三條路徑，加上排程報表信（不寄＋告警）
+  2. 或者本段先**不**宣稱：橫幅與 status 訊息改成不提「暫停輸出」，並在文件寫明輸出端在段③；等段③ 補上再改回
+- 無論哪一種，都要在正式機升到本段之前完成；題：`status()` 丟例外 ⇒ 報價單 PDF 428 `company_setup_undetermined`（或採 2 時：訊息不含「暫停輸出」）
+
+### 10.3 建議
+
+- **CG5-S1　一般存檔改到必要欄位 ⇒ 全公司立即 428**：`fields_hash` 含名稱、統編、電話、email。最高管理員在設定頁只改了電話、按「儲存」（沒按確認）⇒ 確認紀錄失效 ⇒ 其他人全部 428，直到他按確認。設計如此，但很容易發生。建議設定頁在必要欄位有變動時，把「儲存」換成「儲存並確認」（或存檔前提示「這會暫停其他人的使用，直到確認」）；後端不變
+- **CG5-S2　判定失敗時每個請求都重算**：`gate()` 失敗時清快取，所以 status 出錯期間每個 /api 請求都重跑一次判定並呼叫 `alert()`（有每日節流，但每次都讀寫一次節流設定）。建議失敗結果也快取一分鐘（同鍵）
