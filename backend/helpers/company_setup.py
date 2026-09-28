@@ -2,7 +2,7 @@
 """本公司資料設定閘門：「這個安裝的本公司資料有沒有人確認過」（docs/platform/COMPANY-SETUP-GATE.md §3、§4.3、§6）。
 
 [單位] helper:company_setup    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] ALERT_DAY_SETTING, BACKFILL_DONE_SETTING, CONFIGURED, CONFIRMATION_SETTING, ConfirmRefused, DELIVERY_PUBKEY_PEM,
+[公開介面] ALERT_DAY_SETTING, BACKFILL_DONE_SETTING, BACKFILL_WAITING_SETTING, CONFIGURED, CONFIRMATION_SETTING, ConfirmRefused, DELIVERY_PUBKEY_PEM,
     DEVELOPER_IDENTITY_FP, DEVELOPER_UNSIGNED, FIELDS_CHANGED, FIELDS_INVALID, GRACE_MAX_HOURS, GRACE_SEEN_SETTING,
     FILES_OVERRIDE, INSTALL_MISMATCH, NO_RECORD, PUBKEYS, PURPOSE, SIGNED_EXPIRED, SIGN_PREFIX, STATUS_ERROR, alert, allows,
     backfill_once, confirm, ensure_install_id, fields_hash, grace_state, identity_fp, install_hash,
@@ -51,6 +51,8 @@ _NAME_SUFFIXES = ("股份有限公司", "有限公司", "企業社", "工作室"
 CONFIRMATION_SETTING = "company_identity_confirmation"
 GRACE_SEEN_SETTING = "company_setup_grace_seen"
 BACKFILL_DONE_SETTING = "company_setup_backfill_done"
+#: backfill 在等開發者簽章檔（CGI2-M1）：記下「當時是開發者身分」，重試時身分已改 ⇒ 不自動確認
+BACKFILL_WAITING_SETTING = "company_setup_backfill_waiting"
 ALERT_DAY_SETTING = "company_setup_alerted"
 
 GRACE_MAX_HOURS = 72
@@ -359,10 +361,17 @@ def backfill_once(conn, root=None) -> str:
         result = "had_record"
         if not isinstance(_get(conn, CONFIRMATION_SETTING), dict):
             profile = _get(conn, "company_profile", {}) or {}
+            waiting = _get(conn, BACKFILL_WAITING_SETTING)
             if required_problems(profile):
                 result = "skipped_fields"          # 欄位不合格（含全新安裝）：之後由最高管理員在設定頁按確認
             elif is_developer_identity(profile) and signed_file_state(profile, root) != "valid":
                 result = "waiting_signature"       # 開發者資料、簽章檔未到：先用暫時放行升級的那條路
+                if not waiting:
+                    _set(conn, BACKFILL_WAITING_SETTING, {"at": datetime.now().isoformat(timespec="seconds")})
+            elif waiting and not is_developer_identity(profile):
+                # 🔴 CGI2-M1（D 稽核）：等簽章期間有人把名稱／統編改成別家、沒按確認 ⇒ **不可以**自動確認
+                #    （那等於「複製來的開發者庫改個欄位就過關」）；記做過、交設定頁確認
+                result = "skipped_identity_changed"
             else:
                 _created, ih = ensure_install_id(root)
                 if not ih:
@@ -371,6 +380,8 @@ def backfill_once(conn, root=None) -> str:
                     "confirmed_by": "", "confirmed_at": datetime.now().isoformat(timespec="seconds"),
                     "fields_hash": fields_hash(profile), "install": ih, "via": "upgrade_backfill"})
                 result = "backfilled"
+        if result != "waiting_signature" and _get(conn, BACKFILL_WAITING_SETTING):
+            conn.execute("DELETE FROM system_settings WHERE key=?", (BACKFILL_WAITING_SETTING,))
         # 🔴 CGI-M1（D 稽核）：waiting_signature **不記做過** ⇒ 簽章檔到位後下次啟動再試一次（否則 status 永遠停在
         #    no_record、只能一再重建放行）。skipped_fields **要記**：全新安裝（欄位空）之後由最高管理員填好欄位時，
         #    不可以被下一次啟動自動確認——「有人決定過」必須是設定頁的確認。

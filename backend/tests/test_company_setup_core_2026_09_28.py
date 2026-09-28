@@ -260,6 +260,22 @@ def test_backfill_retries_after_the_signed_file_arrives(tmp_path, devco):
     assert cs.backfill_once(conn, root) == "already_done"
 
 
+def test_copied_developer_db_with_fields_changed_is_not_auto_confirmed(tmp_path, devco):
+    """CGI2-M1：開發者資料、無簽章檔（複製庫）⇒ waiting；有人把名稱與統編改成別家、沒按確認 ⇒ 重啟也不自動確認。"""
+    conn, root = _db(tmp_path, GOOD), _root(tmp_path)
+    cs.ensure_install_id(root)
+    assert cs.backfill_once(conn, root) == "waiting_signature"
+    cs._set(conn, "company_profile", {**GOOD, "name": "別家股份有限公司", "tax_id": UBN_B})
+    assert cs.backfill_once(conn, root) == "skipped_identity_changed"
+    assert cs.status(conn, root)["reason"] == cs.NO_RECORD
+    assert cs.backfill_once(conn, root) == "already_done"                         # 之後也不會再補
+    assert cs._get(conn, cs.BACKFILL_WAITING_SETTING) is None
+    # 反向控制：非開發者、從沒等過簽章的既有安裝 ⇒ 照常補
+    (tmp_path / "y").mkdir()
+    conn2, root2 = _db(tmp_path / "y", {**GOOD, "tax_id": UBN_B}), _root(tmp_path, "r3")
+    assert cs.backfill_once(conn2, root2) == "backfilled"
+
+
 def test_backfill_never_raises(tmp_path, monkeypatch, caplog):
     conn, root = _db(tmp_path, GOOD), _root(tmp_path)
     monkeypatch.setattr(cs, "required_problems", lambda p: (_ for _ in ()).throw(RuntimeError("boom")))

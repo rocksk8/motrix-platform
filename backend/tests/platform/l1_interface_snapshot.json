@@ -243,6 +243,7 @@
   "helper:company_setup": {
    "ALERT_DAY_SETTING": "const",
    "BACKFILL_DONE_SETTING": "const",
+   "BACKFILL_WAITING_SETTING": "const",
    "CONFIGURED": "const",
    "CONFIRMATION_SETTING": "const",
    "ConfirmRefused": "class",
