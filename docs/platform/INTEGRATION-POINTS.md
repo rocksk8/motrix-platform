@@ -611,3 +611,23 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 守門 | `modules/arap/tests/test_cashier_pending_payables_2026_09_27.py`（列出／登錄後消失／權限／404／409／400；`test_without_the_case_module_cashier_says_so_and_other_queues_still_work`＝**反向控制**，真刪 M01 的安裝包裡同一題不必模擬）、`modules/case/tests/test_payreq_2026_09_27.py::test_provider_lists_approved_unpaid_and_mark_paid_writes_back`、整條 `tests/test_e2e_payreq_2026_09_27.py`。突變：提供者不過濾付款日／登錄不寫回／出納不讀提供者 ⇒ 轉紅 |
 
 出納通常看不到案件本身（案件擁有者規則不放行出納）⇒ 付款寫回**經提供者**，不走 M01 的 `PATCH …/dates`（那一支經案件守門，純出納會 404）。月支出現金口徑（IP-95 `extra_entries`）有付款日就用付款日、不再是暫用。
+
+---
+
+## IP-101　`map.overlay`：地圖頁覆蓋層（任何 L2 → L1 地圖頁；首個提供方：lodging）
+
+**狀態：設計（E 線 E1，2026-09-28；D 審 LG-M1），尚未實作。編號暫定（101），列車定號。** 出處：`docs/platform/LODGING-NEARBY.md` §3.6.1。
+L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件與 `_map`／`_layer`／`_gmMarkers` 等內部欄位（第十五班 a-gm-raw：`_map` 讀回來是 Proxy）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | 任何 L2（首個：`lodging`） |
+| 使用方 | L1 地圖頁 `frontend/pages/map.html`＋新的 L1 轉接層 `frontend/static/map-overlay.js` |
+| 形式 | ①模組 `module.json` 宣告（**不經** `core.registry` provider）＋②前端 JS 註冊 |
+| 後端語法 | 模組在 `module.json` 宣告 `"map_overlays": [{"key": "lodging", "label": "附近旅宿", "script": "lodging-overlay.js"}]`（`script` 只能是檔名，位於模組 `pages/` 底下）；L1 `/api/map/config` 回 `overlays: [{key, label, script_url}]`——**`script_url` 由 L1 依已載入模組的宣告組出同源路徑**（`/modules/<key>/pages/<檔名>` 之類，格式隨階段 C 的頁面路徑），提供者不回傳任何網址；檔名不合 `^[a-z0-9-]+\.js$` 或檔案不存在 ⇒ 不列、記 ERROR |
+| 前端語法 | 腳本載入後呼叫 `window.MotrixMapOverlay.register(key, {mount(api), unmount()})`；使用者按該覆蓋層的按鈕 ⇒ L1 呼叫 `mount(api)`；再按或離頁 ⇒ `unmount()`，L1 清掉該覆蓋層所有標記 |
+| `api`（L1 提供，Leaflet 與 Google 各自實作在 L1 轉接層） | `addMarkers(list, style) -> handle`（`list`：`[{id, lat, lng, title, popupHtml}]`；`style`：`{icon: 'hotel'｜'homestay'｜'center', color: 語意 token 名}`；popupHtml 由 L1 以純文字＋白名單標籤清洗）、`clear(handle?)`、`fitTo(list｜handle)`、`center() -> {lat, lng, source} | null`（地圖頁目前的「目前位置」，沒有則 null）、`onBasemapReady(cb)`、`onMarkerClick(handle, cb(id))`、`panel(title) -> HTMLElement`（L1 給一個側邊容器，覆蓋層只在裡面畫自己的 UI；容器位置由 L1 保證不蓋 Google logo 與資料歸屬）、`basemap() -> 'google'｜'osm'` |
+| 回傳／錯誤 | `mount` 丟例外 ⇒ L1 在該覆蓋層面板顯示「附近旅宿載入失敗」、其他覆蓋層與地圖照常 |
+| 對方不在時 | 模組未載入 ⇒ `overlays` 沒有這一項 ⇒ 沒有按鈕（功能未安裝，不是 0 筆）；直接打模組端點 ⇒ 既有「模組未載入」提示 |
+| 契約版本 | 1（加方法＝相容；改名／改參數＝版本 +1，並寫 core CHANGELOG） |
+| 守門 | ①兩種底圖（OSM 真的 Leaflet、Google 用既有攔截的假 `google.maps`）各跑一次合成覆蓋層：`addMarkers`／`clear`／`fitTo`／`panel` 都生效；②**反向控制**：把 map.html 的 `_map`／`_layer` 等內部欄位改名後，合成覆蓋層照常（證明它沒碰內部）；③靜態掃描：`modules/*/pages/*overlay*.js` 不得出現 `_map`、`_layer`、`_gm`、`Alpine`、`__x`、`google.maps`、`L.`；④`script_url` 一律是 L1 組出的同源路徑：提供者宣告 `https://…`、`../x.js`、不存在的檔 ⇒ 不列（反向控制三種）；⑤合成的第二個覆蓋層（非 lodging）也能註冊——守門不綁 lodging（MODULE-GUIDE §7） |
