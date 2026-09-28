@@ -225,3 +225,14 @@ D 探針（拋棄式 worktree，3a49c1b5；題目 54 過，探針不提交、已
   - **已不是開發者身分** ⇒ 記下做過（例：`skipped_identity_changed`），**不寫確認紀錄** ⇒ 由最高管理員在設定頁確認
   - 做法：waiting 時也記一筆「狀態」（例如 `BACKFILL_DONE={result: waiting_signature}`，但 backfill 對這個結果值照樣重試），這樣重試時才分得出「上次是 waiting」
 - 題：上表第三列 ⇒ 不自動確認，status `no_record`；五步那一列照舊 configured（正對照）
+
+## 9. 複核 CGI2-M1：wip/e-company-gate-impl 6ee28810（D，2026-09-28）
+
+- ✅ CGI2-M1 關閉（6ee28810）
+- 探針重跑（拋棄式 worktree；題目 56 過，探針不提交、已刪）：
+
+| 探針 | 結果 |
+|---|---|
+| 五步（放行升級 → 簽章檔到位） | `waiting_signature` → `backfilled` → configured ✔ |
+| 複製的開發者庫、改成別家、沒按確認 | `waiting_signature` → `skipped_identity_changed` → status `no_record` → 之後 `already_done` ✔ |
+| 等簽章期間把聯絡欄位清空 | `skipped_fields`、`fields_invalid` ✔ |
