@@ -8,6 +8,7 @@
 - 頁面：`map.html` 說明未顯示的筆數與原因
 - L1 行為（D 稽核 SST-M1）：公司資料存檔的據點自動定位——非 Google 底圖只用免費來源；Google 來源座標不寫進 `company_profile`（SST §6.3.1 30 天）；據點多存 `coord_source`／`coord_precision`（後端推導：新填或改過＝manual，原樣送回沿用）；`geo._locate_locations` 只把 manual（與沒有來源的既有資料）當人工座標
 - L1 行為：背景預熱 `warm_geocode_cache()` 在非 Google 底圖時整輪只用免費來源
+- L1（新增，②(b) 第一段）：`geo.GOOGLE_BROWSER_KEY_SETTING`、`geo.google_browser_key()`、`geo.USAGE_SKU_DYNAMIC_MAPS`（開圖次數近似 map load）；`geo.google_basemap()` 改為「有地圖（瀏覽器）金鑰」；`GET /api/map/config`（只回瀏覽器金鑰）；公司資料新欄位 `google_maps_browser_key`（遮蔽、不入稽核）；地圖頁專用 CSP
 
 ## 1.62 — 2026-09-28（主持暫用，列車取號；wip/a-storage-settings：D 稽核 SL-M1）〔core_bump：暫用 1.58 → 1.62〕
 - L1（新增，D 稽核 SL-M1）：`helpers.storage_locations.Unreadable`——讀不到設定（庫被鎖、損毀）≠ 沒設定：resolve 回 ""（source="unknown"）、不退回自動判斷、不快取；`configured()` 丟它，設定頁 API 回 503（不顯示空值，避免按儲存把真正的設定蓋掉）
