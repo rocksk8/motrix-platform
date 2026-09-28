@@ -172,7 +172,8 @@ def _statuses():
 def test_every_status_is_in_the_dashboard_domain_and_every_new_one_has_an_exit():
     domain, st = _dashboard_domain(), _statuses()
     assert {"success", "unhandled_exception"} <= st and len(st) >= 12, sorted(st)
-    assert not (st - domain), sorted(st - domain)
+    pending = set() if _e4_merged() else E4_STATUSES      # E4 合回前那兩個由 E4 自己加進值域（見 ⑥）
+    assert not (st - domain - pending), sorted(st - domain - pending)
     assert NEW_STATUSES <= st, "設計 §2 的新 status 沒有出口：%s" % sorted(NEW_STATUSES - st)
     assert NEW_STATUSES <= domain
     assert "made_up_status" not in domain                          # 反向控制
@@ -246,3 +247,43 @@ def test_apply_failed_restored_skips_the_second_rollback():
     m = _main_flow()
     i = m.index('if ($apCode -ne "apply_failed_restored")')
     assert i < m.index("$rb = Invoke-ModuleRollback", i)
+
+
+# ── ⑥ E4 本公司資料設定閘門（wip/e-company-gate-impl db551e01；主持裁示：兩道＋逐字）──
+
+E4_WAIT = "等 E4 合回（wip/e-company-gate-impl）：apply_update.ps1 還沒有 Invoke-CompanySetupCli，逐字比對在合回那一班生效"
+E4_STATUSES = {"refused_company_setup", "company_setup_rolled_back"}
+
+
+def _e4_merged():
+    return _fn(_src("apply_update.ps1"), "Invoke-CompanySetupCli") is not None
+
+
+def test_company_setup_cli_is_present_in_the_module_script():
+    """不論 E4 合回與否，模組腳本都要有它（apply_update 有而模組腳本沒有 ⇒ 紅，不是 skip）。"""
+    assert _fn(_src(NEW), "Invoke-CompanySetupCli") is not None
+
+
+def test_company_setup_cli_is_verbatim_once_e4_is_merged():
+    if not _e4_merged():
+        pytest.skip(E4_WAIT)
+    assert _fn(_src("apply_update.ps1"), "Invoke-CompanySetupCli") == _fn(_src(NEW), "Invoke-CompanySetupCli")
+
+
+def test_company_gate_call_sites_and_order():
+    m = _main_flow()
+    pre = m.index('Invoke-CompanySetupCli $gateCli @("preflight"')
+    assert m.index('"ensure-install-id"') < pre < m.index("Backup-DatabasesOnline $dbSnapDir") < m.index("Stop-InstallService")
+    post = m.index('Invoke-CompanySetupCli $gateCli @("status"')
+    assert m.index("Test-ModuleHealth $script:ModuleKey $script:ToVersion") < post < m.index('Emit-Result "success" 0')
+    assert "if ($SkipAutoRollback -and -not $companyGateFailed)" in m, "閘門失敗不適用 -SkipAutoRollback"
+    assert '"company_setup_rolled_back"' in m and '"refused_company_setup"' in m
+    assert '$gateCli = Join-Path $BackendDir "tools\company_setup_cli.py"' in m, "模組包不帶 tools ⇒ 用安裝目錄那份"
+
+
+def test_e4_statuses_are_in_the_domain_once_e4_is_merged():
+    domain = _dashboard_domain()
+    if not (E4_STATUSES <= domain):
+        assert not _e4_merged(), "apply_update 已有 Invoke-CompanySetupCli（E4 已合回）而儀表板值域沒有 %s" % sorted(E4_STATUSES - domain)
+        pytest.skip(E4_WAIT)
+    assert E4_STATUSES <= _statuses()
