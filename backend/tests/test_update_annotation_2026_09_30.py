@@ -110,7 +110,7 @@ def test_docs_or_tests_only_change_needs_no_bump(repo):
     assert UA.build(repo, c0, c1)["warnings"] == []
 
 
-def test_l1_change_is_flagged_and_core_version_compared(repo):
+def test_core_change_is_flagged_and_core_version_compared(repo):
     c0 = _mk(repo, BASE)
     c1 = _mk(repo, {"backend/main.py": "m=2\n"})
     a = UA.build(repo, c0, c1)
@@ -177,6 +177,6 @@ def test_modtest_takes_its_changed_files_from_the_annotation(tmp_path):
     mt = _load("_mt_ann", "tools/platform/modtest.py")
     f = tmp_path / "a.json"
     f.write_text(json.dumps({"format": 1, "complete": True, "l1": {"files": ["backend/main.py"]},
-                             "modules": [{"key": "a", "files": ["backend/modules/a/x.py", "frontend/pages/a.html"]}]}), encoding="utf-8")
+                             "modules": [{"key": "a", "files": ["backend/modules/a/x.py", "frontend/js/a.js"]}]}), encoding="utf-8")
     got = mt.changed_files(Namespace(annotation=str(f), files=None, commit=None, changed_since=None, base=None))
-    assert got == ["backend/main.py", "backend/modules/a/x.py", "frontend/pages/a.html"]
+    assert got == ["backend/main.py", "backend/modules/a/x.py", "frontend/js/a.js"]
