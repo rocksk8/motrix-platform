@@ -56,3 +56,9 @@
 ## 6. 建議（不擋）
 - **T22S-S1**：步驟 2 沒有第二十一班已採納的 T21P2-S1（`$env:PYTHONDONTWRITEBYTECODE = "1"`）；不加只是 pyc 會寫進包再隨 robocopy 進正式機（同 T21F-S1，功能無害），求一致可補。
 - **T22S-O1（觀察）**：演練用的是本機建包目錄（含 3 個 pyc）而非雲端 stage 過的那份；兩者除 pyc 外相同，不影響結論。path2 為了在演練金鑰下走通，「清 backfill 設定列」重走 upgrade_backfill，比正式機真實狀態（29e435df 已補過確認紀錄）更嚴；本班 `main.py`／`helpers/`／`core/` 都沒動 ⇒ 公司閘門程式與已上線版本相同，以差異推論真實路徑更容易通過，不擋。
+
+## 7. 複核 T22S-M1／M2／S1（步驟檔 origin/platform c48cf4ee；main 553fa1d7、雲端皆與其位元組相同）— 通過，必修 0
+- **M1** ✔：「你可以自己做的」明列步驟 4 的只回程式回滾為唯一例外，附使用者原話（2026-09-29：「有問題就回滾等我確認，沒問題直接上線」），限定不帶 `-IncludeDatabase`、回滾後停下等確認；步驟 4 開頭重述此例外；連資料庫回滾仍一律先問。（「正式機使用者已同意 hichan-3d 指示適用同一規則」為主持轉述，D 無從獨立驗證，已如實標示出處。）
+- **M2** ✔：#8 改為只看最後一次 `Uvicorn running on` 之後、濾 ConnectionResetError 良性區塊，只有指向 lodging／tender_radar／main 的 Traceback 才算不過，其餘 ERROR 列前 5 行與總數、不作回滾條件（與演練 path2 觀察的 monthly_report ERROR 一致）；步驟 0 新增第 5 項記下套用前 `module_states.json`（模組數與各模組 key／version／state），#7 改「與套用前相同，唯一允許 lodging→1.2.1、tender_radar→1.5.1」；#9 改「埠 666 監聽 PID 只有一個」；回滾觸發句同步（#1～#7、#9 任一不過，或 #8 有指向三者的 Traceback）。步驟 0 重新編號後無殘留舊參照。
+- **S1** ✔：步驟 2 已在套用前設 `$env:PYTHONDONTWRITEBYTECODE = '1'`。
+- 觀察（不擋）：#8 只掃 `Uvicorn running on` 之後，import 期的 Traceback 看不到，但那種情形服務起不來，會被 #2（ping）與 #7（模組狀態）抓到。
