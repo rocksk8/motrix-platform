@@ -1,7 +1,7 @@
 {
   "key": "lodging",
   "name": "附近旅宿",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "core": ">=1.0,<2.0",
   "license_key": "lodging",
   "permissions": [
@@ -30,7 +30,7 @@
     "probes": ["/api/lodging/status"]
   },
   "pages": [{"path": "lodging-records.html",
-             "menu": {"group": "business", "label": "附近旅宿紀錄", "order": 35, "perm": ["lodging"]}}],
+             "menu": {"group": "system", "label": "旅宿檔案更新", "order": 35, "perm": ["lodging"]}}],
   "map_overlays": [{"key": "lodging", "label": "附近旅宿", "script": "lodging-overlay.js"}],
   "customization": {
     "schema": 1,
