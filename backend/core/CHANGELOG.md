@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## （不升版號：介面不變）— 2026-09-29（wip/cloud-startup-timing：T21-1 啟動逐步耗時）
+- L0（行為，私有）：`main.py` 啟動路徑逐段記耗時——每段一行 INFO `STARTUP_STEP <名稱> <毫秒>ms`（距上一段結束），最後一行 `STARTUP_TOTAL <毫秒>ms steps=<段數>`（距 main.py 開始執行；不含 Python／uvicorn 本身載入）。29 段：import_core、import_routers、load_modules、build_info、app_cors、middleware_setup、require_db、init_db_main、init_db_demo、fail_incomplete_modules、integrity_check、company_setup、init_default_admin、init_demo_account、flag_weak_passwords、init_unlock_passwords、cleanup_sessions、schedulers（整個排程閘門區塊，含 GEO 預熱排程）、geo_notice、prune_login_locks、init_rate_limiting、sync_module_versions、include_routers、page_map、mount_modules、module_schedulers、module_states_file、startup_notices、page_and_static_routes。私有 `_startup_step`／`_startup_total`：記錄出錯一律吞掉；`logging.basicConfig` 之前的段先暫存、之後一起印。啟動行為、順序、例外處理不變；排程閘門區塊內部不動（test_geocode_warm_async 逐字執行它）。起因：正式機第二十一班啟動到健檢 14 秒（CORS 行 → GEO 行 11.2 秒）分不出是哪一段。守門 `tests/platform/test_startup_timing_2026_09_29.py`
+
 ## 1.68 — 2026-09-28（E 暫用，列車取號；wip/e-company-gate-impl 第一段：本公司資料設定閘門的正式機段）〔core_bump：暫用 1.66 → 1.65〕〔core_bump：暫用 1.65 → 1.67〕〔core_bump：暫用 1.67 → 1.68〕
 - L1（新增）：`helpers.company_setup`——判定（`status`：確認紀錄＋安裝識別＋必要欄位雜湊＋開發者指紋需簽章確認檔）、`confirm`、`backfill_once`（每庫一次、不丟例外）、`startup_install_check`（識別檔重建且已有紀錄 ⇒ ERROR＋告警）、暫時放行（`grace_state`、`observe`：有效期＝min(until, first_seen＋72h)）、統編檢查碼 `ubn_valid`、`alert`（每日一次）。設計 docs/platform/COMPANY-SETUP-GATE.md
 - L1（新增）：`helpers.company_identity.identity_from_profile(profile, location_id)`（`location_identity` 的純函式版；行為不變）
