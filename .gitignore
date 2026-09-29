@@ -130,3 +130,6 @@ backend/.build_commit
 tools/platform/.last_full.json
 tools/platform/.last_full.json.*.tmp
 tools/platform/full_results/
+
+# 去識別化：本公司資料檔（建包／本機產生，不進程式庫；tools/platform/own_payload.py）
+backend/migrations_frozen/own_payload.json

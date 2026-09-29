@@ -2151,3 +2151,23 @@ def pytest_probe_leak_sessionfinish(session, exitstatus):
         print(msg)
     if session.exitstatus == 0:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+# ── 去識別化：needs_own_payload marker（SALE-PACKAGE-DEID.md §9；使用者裁示 2026-09-28：本公司資料不進程式庫）──────────────
+@pytest.fixture(autouse=True)
+def _needs_own_payload_gate(request):
+    """標了 `@pytest.mark.needs_own_payload` 的題需要本公司資料檔（tools/platform/own_payload.py generate 產生）。
+    缺檔／版本不符：一般開發機 ⇒ skip 並印原因與產生指令；列車（MOTRIX_TRAIN=1）或建包（MOTRIX_REQUIRE_OWN_PAYLOAD=1）⇒ **紅**，
+    不可靜默略過。只看 marker，不影響其他題。"""
+    if not request.node.get_closest_marker("needs_own_payload"):
+        return
+    import db as _db
+    import os as _os
+    try:
+        _db._frozen_own_payload()
+        return
+    except _db.FrozenOwnPayloadError as e:
+        msg = "缺本公司資料檔（%s）：%s" % (_db._own_payload_path(), e)
+    if _os.environ.get("MOTRIX_TRAIN") == "1" or _os.environ.get("MOTRIX_REQUIRE_OWN_PAYLOAD") == "1":
+        pytest.fail(msg + "（列車／建包環境必須有這個檔；缺檔視為紅）")
+    pytest.skip(msg + "；產生：python tools/platform/own_payload.py generate --out <路徑>")
