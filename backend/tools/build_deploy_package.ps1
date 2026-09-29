@@ -958,6 +958,16 @@ if ($LASTEXITCODE -ne 0) {
     Fail "不出貨清單（export_ignore.json）產生失敗（exit code $LASTEXITCODE），部署包未完成，已中止。"
 }
 
+# --- Step 5.56: 更新標註 backend/update_annotation.json（W3 待辦 4；使用者：每次更新標註動到哪些模組含版號）---
+# 由 tools/platform/update_annotation.py 從「正式機已部署的 commit（tests/_prod_baseline.py 的 BASELINE）」算到這一包的 commit：
+# 動到哪些模組、版號 from→to、共用核心有沒有動。包內＝被 package.sha256 涵蓋；驗包 (8) 對帳，RUN-PLAN／步驟檔用同一份產生。
+# 算不出來（例如 BASELINE 那個 commit 這台機器沒有）只警告、不擋建包；包內沒有標註時驗包 (8) 會明說「沒有標註」。
+$annotationTool = Join-Path $projectRoot "tools\platform\update_annotation.py"
+& $pyExe $annotationTool --to $commit --out (Join-Path $pkgDir "backend\update_annotation.json")
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  警告：更新標註產生失敗（exit code $LASTEXITCODE）；這一包不會帶 update_annotation.json。" -ForegroundColor Yellow
+}
+
 # --- Step 5.6: 精簡 backend/version_manifest.json（PK1 → T12）---
 #
 # 🔴 這份檔案有兩個讀者：

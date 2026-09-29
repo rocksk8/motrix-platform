@@ -505,6 +505,11 @@ def main():
     print("### (7) 產品選配：modules.lock.json ＝ 包內模組、L0／L1 必要檔齊全（🔴 擋關，CORE-SPEC §9c①）")
     check_product_selection(pkg)
 
+    print()
+
+    print("### (8) 更新標註 backend/update_annotation.json：與 modules.lock.json／deploy_manifest.json 對帳（有才驗；沒有只警告）")
+    check_update_annotation(pkg)
+
     sys.exit(R.finish())
 
 
@@ -826,6 +831,55 @@ def check_exclusion_vs_must_exist(pkg):
                        "（git check-attr 回傳 %s）" % (name, rel, value))
             else:
                 print("    %-20s %-40s git check-attr => %s ✅" % (name, rel, value))
+
+
+ANNOTATION_REL = "backend/update_annotation.json"
+
+
+def check_update_annotation(pkg):
+    """W3 待辦 4：包內的更新標註（tools/platform/update_annotation.py 建包時寫）。
+    沒有 ⇒ 警告（舊建包工具／算不出來）；有 ⇒ 格式、`to` 與 deploy_manifest 的 commit、各模組 `to` 版號與 modules.lock.json 都要對得上（FAIL）。
+    標註自己的 warnings（動了檔沒升版）只印出來，不擋（使用者裁定 2026-09-30）。"""
+    path = os.path.join(pkg, *ANNOTATION_REL.split("/"))
+    if not os.path.isfile(path):
+        print("  ⚠️ 包內沒有 %s（沒有更新標註：看不出這一包動到哪些模組）" % ANNOTATION_REL)
+        return
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            a = json.load(f)
+    except (OSError, ValueError) as exc:
+        R.fail("更新標註", "%s 讀不懂：%s" % (ANNOTATION_REL, exc))
+        return
+    if not isinstance(a, dict) or a.get("format") != 1 or not isinstance(a.get("modules"), list):
+        R.fail("更新標註", "%s 格式不對（要 format=1、modules 為陣列）" % ANNOTATION_REL)
+        return
+    try:
+        with open(os.path.join(pkg, "deploy_manifest.json"), encoding="utf-8-sig") as f:
+            commit = json.load(f).get("commit")
+    except (OSError, ValueError):
+        commit = None
+    if not commit or not str(a.get("to", "")).startswith(str(commit)[:8]):
+        R.fail("更新標註", "標註的 to（%s）與 deploy_manifest 的 commit（%s）不同：這份標註不是這一包的" % (str(a.get("to"))[:8], str(commit)[:8]))
+    try:
+        with open(os.path.join(pkg, "backend", "modules.lock.json"), encoding="utf-8-sig") as f:
+            lock = (json.load(f).get("modules") or {})
+    except (OSError, ValueError):
+        lock = {}
+    n_ok = 0
+    for m in a["modules"]:
+        k = m.get("key")
+        if k not in lock:
+            continue                                   # 產品選配沒帶這個模組：標註照列，但沒有東西可對
+        if str((lock.get(k) or {}).get("version")) != str(m.get("to")):
+            R.fail("更新標註", "模組 %s：標註寫 %s，modules.lock.json 是 %s" % (k, m.get("to"), (lock.get(k) or {}).get("version")))
+        else:
+            n_ok += 1
+    print("  標註 %s→%s：動到 %d 個模組，%d 個與 modules.lock.json 版號一致 ✅" % (
+        str(a.get("from"))[:8], str(a.get("to"))[:8], len(a["modules"]), n_ok))
+    if not a.get("complete", False):
+        print("  ⚠️ 標註不完整（有版號讀不到）")
+    for w in a.get("warnings") or []:
+        print("  ⚠️ %s" % w)
 
 
 def check_provenance(pkg, lower):

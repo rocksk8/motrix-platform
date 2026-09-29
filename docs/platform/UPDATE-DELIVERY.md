@@ -194,3 +194,17 @@
 - 內容（UTF-8 JSON，無 BOM）：`{"protocol": 2, "status": ..., "rolled_back": ..., "service": ..., "exit": <int>, "script": ..., "script_version": "<$ApplyScriptVersion>", "timestamp": "<yyyyMMdd_HHmmss>", "package": "<PackagePath 或空>", "commit": "<包的 commit 或空>", "started_at": ..., "finished_at": ...}`
 - 前五欄必須與同一次 stdout 最後一行的 `::RESULT::` 逐欄相同（守門比對兩者；不同 ⇒ 以 fail-closed 判失敗）。
 - 讀取：儀表板取檔名時間戳最大的那一份，當作「上一次套用的結果」（§5-6）。寫回雲端的 `results\<包名>.result.json` 由 (d) 從這個檔轉出，只帶這些欄位，不帶 log。
+
+## 10. 包內兩份由建包端算好的清單（2026-09-30，W3）
+
+建包端（有 git、有完整歷史的地方）把「只有這裡才算得出」的結果寫進包；正式機（沒有 `.git`）的驗包讀包內清單，不自己重新實作 git 語意。兩份都在 `backend/` 下（不動 `apply_update.ps1`），被 `package.sha256` 的逐檔雜湊與簽章涵蓋。
+
+| 檔 | 產生者（`build_deploy_package.ps1` 步驟） | 內容 | 驗包 |
+|---|---|---|---|
+| `backend/export_ignore.json` | `backend/tools/export_ignore_list.py`（5.55；失敗＝建包中止） | git 判定 `export-ignore` 為 set 的已追蹤檔（`git ls-tree` ＋ `git check-attr --source <commit>`） | 4a：**有 .git** ⇒ 照舊問 `git check-attr`；**沒有 .git** ⇒ 讀清單：清單缺／壞 ⇒ FAIL（不是略過）、`MUST_EXIST` 在清單裡 ⇒ FAIL、清單裡的檔出現在包裡 ⇒ FAIL |
+| `backend/update_annotation.json` | `tools/platform/update_annotation.py`（5.56；失敗＝警告、不擋） | 從正式機已部署 commit 到這一包：動到哪些模組（key、名稱、版號 from→to、檔案、CHANGELOG 新增行）、共用核心有沒有動與 `CORE_VERSION` 變化、沒動的模組、warnings（動了程式檔卻沒升版號） | (8)：沒有 ⇒ 警告；有 ⇒ 格式、`to`＝`deploy_manifest.commit`、各模組 `to` 版號＝`modules.lock.json` 都要對，否則 FAIL；warnings 只印不擋 |
+
+**更新標註的四個用法**（同一份清單）：① 包內；② `update_annotation.py --to <SHA> --render-runplan` 印 RUN-PLAN 班次紀錄用的一行；③ `--render-stepfile` 印步驟檔步驟 3 #7「唯一允許的版本變化」，`--check-stepfile <md>` 對帳手寫的那一句；④ `modtest.py --annotation <json>` 依清單的檔案選題（稽核與演練共用）。
+`--from` 預設取 `backend/tests/_prod_baseline.py` 的 `BASELINE`——**每次部署後要更新它**，否則標註會把已部署的模組也算進來。
+
+使用者裁定（2026-09-30）：只標列車／出貨包；動了程式檔沒升版號先**警告不擋**。其餘由實作者決定並寫明：L1（共用核心）有動 ⇒ 標 `l1.changed` 與 `CORE_VERSION` 變化，驗證範圍沿用 `modtest` 的反向依賴擴大（標註不列消費端）；`version_manifest.json` 這一版**不**加 `module_key` 欄（舊 435 筆不回填，之後有需要再議）；只動文件／測試（`*.md`、`tests/`）不要求升版。

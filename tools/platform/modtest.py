@@ -73,6 +73,18 @@ def git(*args):
 
 
 def changed_files(a):
+    ann = getattr(a, "annotation", None)
+    if ann:
+        # 更新標註（tools/platform/update_annotation.py）：改動檔＝標註裡各模組與共用核心的 files（同一份清單，稽核與演練共用）
+        d = json.load(open(ann, encoding="utf-8-sig"))
+        if d.get("format") != 1:
+            sys.exit("更新標註格式不認得：%r" % d.get("format"))
+        if not d.get("complete", False):
+            print("⚠ 更新標註不完整（有版號讀不到）：選題以檔案清單為準，請人工確認範圍")
+        fs = set(d.get("l1", {}).get("files") or [])
+        for m in d.get("modules", []):
+            fs.update(m.get("files") or [])
+        return sorted(f.replace("\\", "/") for f in fs)
     if a.files:
         return sorted({f.replace("\\", "/") for f in a.files})
     # --no-renames：搬檔時新舊路徑都要算（舊路徑的單位才對得到既有測試）
@@ -1207,6 +1219,7 @@ def main(argv=None):
     g.add_argument("--commit")
     g.add_argument("--changed-since", metavar="SHA", help="SHA 之後（不含）到 HEAD 的已提交改動")
     g.add_argument("--files", nargs="+")
+    g.add_argument("--annotation", metavar="JSON", help="改動檔取自更新標註（update_annotation.py --out 產出；發布包內 backend/update_annotation.json 也可）")
     g.add_argument("--rebase-check", metavar="GREEN", help="§C-11：全量綠在 GREEN，rebase 到 --onto 之後該跑哪些題（只判定、不執行；永遠不建議各線跑全量，§G3）")
     ap.add_argument("--onto", default="origin/platform", help="--rebase-check 的 rebase 目標（預設 origin/platform）")
     ap.add_argument("--dry-run", action="store_true")
