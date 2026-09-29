@@ -51,6 +51,8 @@ FAILURE_COOLDOWN = timedelta(hours=1)
 DAILY_REFRESH_HOUR = 3
 #: 自動更新的最短成功間隔：比手動的 24 小時短，否則固定鐘點的檢查會被前一天的成功時間卡住而每天往後漂
 SCHEDULED_MIN_INTERVAL = timedelta(hours=20)
+#: 每日自動更新：當天失敗累計到這個次數就不再試，隔天重來（來源長期故障時不每小時連線＋記 WARNING；D 稽核 S1）。手動更新不受限
+DAILY_MAX_FAILURES = 3
 _DAILY_FIRST_DELAY_SECONDS = 120
 _DAILY_CHECK_SECONDS = 3600
 FETCH_TIMEOUT_SECONDS = 60
@@ -335,8 +337,18 @@ def daily_due(state: dict, now: datetime) -> bool:
     """今天該不該自動更新：過了 `DAILY_REFRESH_HOUR` 點、而且今天還沒成功更新過。"""
     if now.hour < DAILY_REFRESH_HOUR:
         return False
+    if state.get("daily_fail_day") == now.date().isoformat() and int(state.get("daily_fail_count") or 0) >= DAILY_MAX_FAILURES:
+        return False
     ok = _parse_ts(state.get("last_success_at"))
     return not ok or ok.date() < now.date()
+
+
+def _count_daily_failure(now: datetime) -> None:
+    """當天失敗次數 +1（換日歸零）；計數記在同一份狀態設定，重啟不清。"""
+    state = fetch_state()
+    today = now.date().isoformat()
+    n = int(state.get("daily_fail_count") or 0) if state.get("daily_fail_day") == today else 0
+    _set_setting(STATE_SETTING, dict(state, daily_fail_day=today, daily_fail_count=n + 1))
 
 
 def run_daily_refresh():
@@ -349,6 +361,7 @@ def run_daily_refresh():
     if result.get("ok"):
         logger.info("lodging daily refresh: %s", result.get("message"))
     elif result.get("reason") not in ("rate_limited", "busy"):
+        _count_daily_failure(_now())
         logger.warning("lodging daily refresh: %s", result.get("message"))
     return result
 

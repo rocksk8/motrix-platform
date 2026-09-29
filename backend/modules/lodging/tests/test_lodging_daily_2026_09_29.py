@@ -132,3 +132,26 @@ def test_status_reports_daily_hour(client, make_user):
     h = fx.token(client, make_user, "lod_daily", "sales", modules=["lodging"])
     r = client.get("/api/lodging/status", headers=h)
     assert r.status_code == 200 and r.json()["dailyRefreshHour"] == ls.DAILY_REFRESH_HOUR
+
+
+# ── 當天失敗上限（D 稽核 S1）──────────────────────────────────────────────────
+
+def test_daily_stops_after_max_failures_and_retries_next_day(net, monkeypatch):
+    def boom(url=ls.DATASET_URL):
+        net["calls"].append(url)
+        raise ls.SourceError("來源掛了")
+    monkeypatch.setattr(ls, "fetch_raw", boom)
+    for i in range(ls.DAILY_MAX_FAILURES):
+        net["now"] = DAY1_0305 + timedelta(hours=2 * i)          # 每次都超過 1 小時失敗冷卻
+        assert ls.run_daily_refresh()["reason"] == "fetch_failed"
+    assert len(net["calls"]) == ls.DAILY_MAX_FAILURES
+    net["now"] = DAY1_0305 + timedelta(hours=2 * ls.DAILY_MAX_FAILURES + 3)   # 同一天更晚
+    assert ls.run_daily_refresh() is None and len(net["calls"]) == ls.DAILY_MAX_FAILURES   # 達上限 ⇒ 不再連線
+    net["now"] = DAY1_0305 + timedelta(days=1)                                # 隔天歸零
+    assert ls.run_daily_refresh()["reason"] == "fetch_failed" and len(net["calls"]) == ls.DAILY_MAX_FAILURES + 1
+
+
+def test_manual_refresh_is_not_limited_by_the_daily_failure_cap(net, monkeypatch):
+    ls._set_setting(ls.STATE_SETTING, {"daily_fail_day": DAY1_0305.date().isoformat(),
+                                       "daily_fail_count": ls.DAILY_MAX_FAILURES})
+    assert ls.refresh()["ok"] and len(net["calls"]) == 1

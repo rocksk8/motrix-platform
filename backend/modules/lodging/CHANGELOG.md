@@ -1,5 +1,10 @@
 # 附近旅宿 更新紀錄
 
+## 1.2.1 — 2026-09-29 12:20（D 稽核 AUDIT-D-lodging-daily S1～S3）
+- 修改：每日自動更新當天失敗累計 `DAILY_MAX_FAILURES`（3）次就不再試，隔天歸零重來；來源長期故障時不再每小時連線＋記 WARNING（計數記在 `lodging_fetch_state` 的 `daily_fail_day`／`daily_fail_count`）。手動更新不受影響
+- 文件：LODGING-NEARBY 測試計畫「不自動連線」註明排程第一輪除外；兩處殘留舊名「附近旅宿紀錄」改為新名
+- 題：`test_daily_stops_after_max_failures_and_retries_next_day`、`test_manual_refresh_is_not_limited_by_the_daily_failure_cap`
+
 ## 1.2.0 — 2026-09-29 11:30（使用者：「附近旅宿紀錄改名為旅宿檔案更新」「旅宿檔案更新改到系統內，並且每天自動更新」）
 - 修改：側欄項目「附近旅宿紀錄」改名「旅宿檔案更新」，移到「系統」群組（頁面標題同步；地圖覆蓋層內的連結文字同步）
 - 新增：每日自動更新（`schedulers`：`source.schedule_daily_refresh`）——每小時檢查，當天 3 點後還沒成功過才下載；仍受 `MOTRIX_LODGING_FETCH`、展示模式、失敗冷卻與更新鎖限制；自動更新的最短間隔 20 小時（手動按鈕維持 24 小時），避免固定鐘點被前一天的成功時間卡住而逐日往後漂
