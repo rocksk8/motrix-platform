@@ -541,7 +541,11 @@ function tenderRadarPage() {
             ? '<span style="color:var(--text-dim)">—</span>'
             : t.matchedWatches.map(w => '<span class="chip" style="margin:0 3px 3px 0">' + this._esc(w.name) + '</span>').join(''))
             + '</span>'
-        default: return ''
+        default:
+          // 版面登記了、卻沒有畫法的欄：不畫（與舊版 x-if 相同），但只吵一次，日後新增欄位漏補 case 才看得到
+          if (!this._warnedCols) this._warnedCols = {}
+          if (!this._warnedCols[field]) { this._warnedCols[field] = true; console.warn('[tender-radar] 欄位「' + field + '」沒有畫法（cellHtml 缺 case），已略過') }
+          return ''
       }
     },
     tbodyHtml() {
@@ -559,7 +563,19 @@ function tenderRadarPage() {
       const btn = ev.target && ev.target.closest ? ev.target.closest('button[data-mark]') : null
       if (!btn) return
       const t = this.tenders.find(x => x.caseNo === btn.dataset.mark)
-      if (t) this.toggleMark(t)
+      // 整個 tbody 會重畫（鈕被換成新節點）⇒ 先記下焦點原本在這顆鈕上，重畫後還原（鍵盤／讀屏使用者不掉焦點）
+      if (t) { this._refocusMark = document.activeElement === btn ? t.caseNo : null; this.toggleMark(t) }
+    },
+    //: 重畫完成後把焦點還給同一筆的標註鈕（只在焦點原本就在表內的鈕上時；找不到＝那一筆已不在清單，不亂放）
+    _restoreMarkFocus() {
+      const no = this._refocusMark
+      this._refocusMark = null
+      if (!no) return
+      const cur = document.activeElement
+      if (cur && cur !== document.body && !cur.closest('tbody')) return       // 使用者已經移到別處：不搶
+      for (const b of document.querySelectorAll('tbody button[data-mark]')) {
+        if (b.dataset.mark === no) { b.focus({ preventScroll: true }); return }
+      }
     },
 
     _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },
@@ -641,6 +657,7 @@ function tenderRadarPage() {
         this.markError = '標註失敗：連線不到伺服器'
       } finally {
         this.markBusy = ''
+        this.$nextTick(() => this.$nextTick(() => this._restoreMarkFocus()))   // 等 x-html 重畫完
       }
     },
 

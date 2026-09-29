@@ -392,7 +392,11 @@ def test_so7_both_the_tender_name_and_the_organisation_are_clickable():
 
     def _linked(field):
         # T22-4：連結改由 `_link(t.url, <欄位>)` 產生（一格一個 x-html）；舊寫法（<a> 內直接用欄位）仍接受
-        return any(field in chunk[:400] for chunk in links) or ("_link(t.url, %s)" % field) in text
+        # 只認 `cellHtml` 該欄自己的 case（`case 'org': ... _link(t.url, t.org)`），不是整頁任何地方出現這串字（稽核 S2）
+        import re
+        col = field.split(".")[-1]
+        pat = (r"case '" + col + r"':[^" + chr(10) + r"]*_link\(t\.url, " + re.escape(field) + r"\)")
+        return any(field in chunk[:400] for chunk in links) or re.search(pat, text) is not None
 
     assert _linked("t.name") or _linked("tender.name"), (
         "沒有任何 `<a>` 裡用到標案名稱"
