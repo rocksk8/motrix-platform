@@ -44,6 +44,7 @@ def lodging_status(authorization: str = Header(None)):
         "lastFailureAt": st.get("last_failure_at") or "",
         "lastError": st.get("last_error") or "",
         "nextAllowedAt": nxt.isoformat(timespec="seconds") if nxt else "",
+        "dailyRefreshHour": lodging_source.DAILY_REFRESH_HOUR,
         "attribution": lodging_attr.attribution_text([cat["dataset_updated_at"]]) if cat["count"] else "",
     }
 

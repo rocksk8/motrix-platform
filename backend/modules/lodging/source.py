@@ -6,7 +6,9 @@
 ## 這是本模組**唯一**的對外連線（§3.5）
 
 - 開關：`MOTRIX_LODGING_FETCH=1` 才准下載（預設關；關著時連 `fetch_raw` 都不呼叫）。
-- 觸發：只有最高管理者按「更新旅宿資料」（`refresh()`）；**不排程、開頁與查詢都不連線**。
+- 觸發：①最高管理者按「更新旅宿資料」（`refresh()`）②每日自動更新（`schedule_daily_refresh()`；2026-09-29 使用者：
+  「旅宿檔案更新改到系統內，並且每天自動更新」，取代原「不排程」裁示）：每小時檢查一次，當天 `DAILY_REFRESH_HOUR` 點後
+  還沒成功更新過才下載；同樣受開關、展示模式、速率與更新鎖限制。開頁與查詢都不連線。
 - 速率：兩次成功間隔 ≥ `MIN_SUCCESS_INTERVAL`（24 小時，來源每日更新一次）；失敗後冷卻 `FAILURE_COOLDOWN`（1 小時）；
   同時只跑一個（`_REFRESH_LOCK`，非阻塞；拿不到 ⇒ 回「更新中」）。狀態記在設定 `lodging_fetch_state`（計數有落點）。
 - 失敗 ⇒ 舊快照不動，狀態記原因；**不可以**讓查詢看起來像「附近 0 間」（查詢端看 `catalog_state()`）。
@@ -45,6 +47,12 @@ LODGING_FETCH_ENABLED = False
 
 MIN_SUCCESS_INTERVAL = timedelta(hours=24)
 FAILURE_COOLDOWN = timedelta(hours=1)
+#: 每日自動更新：這個鐘點之後、當天還沒成功過才下載（來源每日更新一次；避開上班時段）
+DAILY_REFRESH_HOUR = 3
+#: 自動更新的最短成功間隔：比手動的 24 小時短，否則固定鐘點的檢查會被前一天的成功時間卡住而每天往後漂
+SCHEDULED_MIN_INTERVAL = timedelta(hours=20)
+_DAILY_FIRST_DELAY_SECONDS = 120
+_DAILY_CHECK_SECONDS = 3600
 FETCH_TIMEOUT_SECONDS = 60
 #: 整次下載的總時限（D 稽核 E2-S1：逾時只管單次讀取，對方慢慢送會一直握著更新鎖）
 FETCH_TOTAL_SECONDS = 180
@@ -99,12 +107,12 @@ def _parse_ts(v):
         return None
 
 
-def next_allowed_at(state: dict, now: datetime):
+def next_allowed_at(state: dict, now: datetime, min_interval: timedelta = MIN_SUCCESS_INTERVAL):
     """下一次可以下載的時間；None＝現在就可以。"""
     cands = []
     ok = _parse_ts(state.get("last_success_at"))
     if ok:
-        cands.append(ok + MIN_SUCCESS_INTERVAL)
+        cands.append(ok + min_interval)
     bad = _parse_ts(state.get("last_failure_at"))
     if bad and (not ok or bad > ok):
         cands.append(bad + FAILURE_COOLDOWN)
@@ -276,8 +284,8 @@ def replace_catalog(conn, rows) -> None:
 
 # ── 對外：更新 ────────────────────────────────────────────────────────────────
 
-def refresh() -> dict:
-    """最高管理者按「更新旅宿資料」。回 {ok, reason?, message, ...}；不丟例外給端點。"""
+def refresh(min_interval: timedelta = MIN_SUCCESS_INTERVAL) -> dict:
+    """最高管理者按「更新旅宿資料」或每日自動更新。回 {ok, reason?, message, ...}；不丟例外給端點。"""
     now = _now()
     if is_demo_mode():
         return {"ok": False, "reason": "demo", "message": "展示模式不對外連線，無法更新旅宿資料"}
@@ -285,7 +293,7 @@ def refresh() -> dict:
         return {"ok": False, "reason": "switch_off",
                 "message": "旅宿資料下載未開啟（需要 %s=1，重啟服務後生效）" % FETCH_ENV}
     state = fetch_state()
-    nxt = next_allowed_at(state, now)
+    nxt = next_allowed_at(state, now, min_interval)
     if nxt:
         return {"ok": False, "reason": "rate_limited", "next_allowed_at": nxt.isoformat(timespec="seconds"),
                 "message": "距離上次下載未滿間隔，下次可更新時間：%s" % nxt.strftime("%Y-%m-%d %H:%M")}
@@ -319,3 +327,50 @@ def refresh() -> dict:
                 "message": "已更新 %d 筆旅宿資料" % len(parsed["rows"])}
     finally:
         _REFRESH_LOCK.release()
+
+
+# ── 每日自動更新 ──────────────────────────────────────────────────────────────
+
+def daily_due(state: dict, now: datetime) -> bool:
+    """今天該不該自動更新：過了 `DAILY_REFRESH_HOUR` 點、而且今天還沒成功更新過。"""
+    if now.hour < DAILY_REFRESH_HOUR:
+        return False
+    ok = _parse_ts(state.get("last_success_at"))
+    return not ok or ok.date() < now.date()
+
+
+def run_daily_refresh():
+    """排程的一輪。回 None＝這輪不用做（開關關、展示模式、今天已更新過）；否則回 `refresh()` 的結果。"""
+    if not fetch_on() or is_demo_mode():
+        return None
+    if not daily_due(fetch_state(), _now()):
+        return None
+    result = refresh(min_interval=SCHEDULED_MIN_INTERVAL)
+    if result.get("ok"):
+        logger.info("lodging daily refresh: %s", result.get("message"))
+    elif result.get("reason") not in ("rate_limited", "busy"):
+        logger.warning("lodging daily refresh: %s", result.get("message"))
+    return result
+
+
+def schedule_daily_refresh():
+    """啟動時呼叫一次：**立即返回**；第一輪在背景 daemon Timer（短延遲）跑，之後每小時檢查一次。
+
+    形狀照標案雷達 `schedule_tender_scan`（B54：不可在啟動路徑同步下載，會拖垮套用後的健康檢查）。
+    ⚠️ `threading.Timer` 走模組屬性，monkeypatch 才打得到。
+    """
+    t = threading.Timer(_DAILY_FIRST_DELAY_SECONDS, _daily_tick)
+    t.daemon = True
+    t.start()
+
+
+def _daily_tick():
+    """跑一輪再排下一輪；重排放在 `finally`：丟一次例外也不會讓排程靜默死亡。"""
+    try:
+        run_daily_refresh()
+    except Exception:  # noqa: BLE001
+        logger.exception("lodging daily refresh failed")
+    finally:
+        t = threading.Timer(_DAILY_CHECK_SECONDS, _daily_tick)
+        t.daemon = True
+        t.start()

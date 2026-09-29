@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>附近旅宿紀錄 - MOTRIX 專案管理系統</title>
+  <title>旅宿檔案更新 - MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -36,7 +36,7 @@
   <main class="main">
   <div x-data="lodgingRecordsPage()" x-init="init()" class="lg-wrap">
 
-    <h1 class="page-title">附近旅宿紀錄</h1>
+    <h1 class="page-title">旅宿檔案更新</h1>
     <p class="lg-dim">在地圖頁開啟「附近旅宿」查詢並存成紀錄；這裡回查、比較與登記詢價。價格為官方登記參考值（非即時）與人工詢價。</p>
 
     <!-- 資料狀態：沒有資料、過舊、更新失敗都要說出來，不可以跟「附近 0 間」長得一樣 -->
@@ -51,6 +51,8 @@
                     @click="refreshData()" x-text="refreshing ? '更新中…' : '更新旅宿資料'"></button>
           </template>
         </div>
+        <div class="lg-note info" x-show="status && status.fetchEnabled" style="margin-top:8px" data-lodging-daily
+             x-text="'每日 ' + (status ? status.dailyRefreshHour : 3) + ' 點後自動更新一次' + (status && status.lastSuccessAt ? '；上次成功 ' + fmtTime(status.lastSuccessAt) : '')"></div>
         <div class="lg-note warn" x-show="status && status.stale" style="margin-top:8px"
              x-text="'資料日期已超過 ' + (status ? status.staleDays : 30) + ' 天，內容可能過舊'"></div>
         <div class="lg-note info" x-show="status && status.canRefresh && !status.fetchEnabled" style="margin-top:8px">

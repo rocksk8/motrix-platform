@@ -57,7 +57,7 @@
       .then(function (d) {
         if (!st) return
         if (!d.count) {
-          st.status.textContent = '尚未下載旅宿資料' + (d.canRefresh ? '，請到「附近旅宿紀錄」頁按「更新旅宿資料」' : '，請聯絡最高管理者')
+          st.status.textContent = '尚未下載旅宿資料' + (d.canRefresh ? '，請到「旅宿檔案更新」頁按「更新旅宿資料」' : '，請聯絡最高管理者')
         } else {
           st.status.textContent = '官方資料 ' + d.count + ' 筆，資料日期 ' + String(d.datasetUpdatedAt).slice(0, 10)
             + (d.stale ? '（已超過 ' + d.staleDays + ' 天，可能過舊）' : '')
@@ -148,7 +148,7 @@
           .then(function (res2) {
             if (!st) return
             if (!res2.ok) { say('儲存失敗：' + (res2.x.detail || '請稍後再試'), 'err'); return }
-            say(head + '；已存成紀錄 #' + res2.x.id + '（可到「附近旅宿紀錄」頁回查、比較）', 'ok')
+            say(head + '；已存成紀錄 #' + res2.x.id + '（可到「旅宿檔案更新」頁回查、比較）', 'ok')
           })
       })
       .catch(function (e) {
@@ -210,7 +210,7 @@
     var note = node('input', { type: 'text', maxlength: '500', placeholder: '紀錄備註（選填）', 'data-lodging-note': '' })
     var save = node('button', { type: 'button', class: 'btn btn-ghost btn-sm', 'data-lodging-save': '' }, '查詢並存成紀錄')
     save.addEventListener('click', function () { search(true) })
-    var link = node('a', { href: RECORDS_PAGE, target: '_blank', rel: 'noopener' }, '附近旅宿紀錄')
+    var link = node('a', { href: RECORDS_PAGE, target: '_blank', rel: 'noopener' }, '旅宿檔案更新')
     row3.appendChild(note)
     row3.appendChild(save)
     row3.appendChild(link)
