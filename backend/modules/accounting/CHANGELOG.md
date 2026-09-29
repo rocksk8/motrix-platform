@@ -1,5 +1,12 @@
 # 會計 更新紀錄
 
+## 1.1.0 — 2026-09-30（暫用號，列車取號；W4 總帳 P1，wip/w4-gl）
+- 新增總帳基礎（設計：docs/platform/plans 之 proposal-general-ledger；本版只含 P1）：會計年度／期間（可建到任意過去年度，補登用）、結帳／重開／鎖定、期間稽核軌跡（只增不改不刪）、期初餘額匯入（批次＋期初傳票草稿，過帳前可撤銷）、科目屬性（gl_account_meta：類別、正常餘額、可過帳、報表列）與科目角色（gl_account_roles）、帳簿報表（試算表、總分類帳、明細分類帳、序時帳簿）與兩個頁面。
+- **行為變化（請寫進使用者說明）**：①已結帳／鎖定期間**不可過帳**、**不可作廢已過帳傳票**（要更正請開沖轉傳票，或由具權限者先「重開期間」並填理由）；之前已過帳傳票可隨時作廢重開。②已過帳傳票的日期與分錄在資料庫層也不可修改。未建立任何期間資料的部署，行為與舊版相同（沒有期間 ＝ 全部開放）。
+- 自有 migration v1（modules/accounting/migrations/0001_ledger_base.py）：新表 gl_*；`voucher_lines` 加 `case_no`／`party_key`／`tax_code`／`doc_no`；`vouchers_all` 加 `kind`／`reverses_no`／`is_backfill`／`origin`；8 個 DB 觸發器（三層鎖定的第三層）。全部為加法，回退程式碼時舊程式不讀新東西。
+- 提供者 `voucher.draft`（IP-2）加**可選**參數 `origin`（產生來源標記；契約仍是版本 1，舊呼叫端不受影響）。
+- 權限：讀＝cashier／finance；結帳、重開、期初、科目設定＝finance；鎖定／解鎖＝superadmin（未新增權限鍵）。
+
 ## 1.0.6 — 2026-09-29（暫用號，列車取號；wip/payslip-void-signed）
 - 新增提供者 `voucher.by_no`（IP-4 追加）：以傳票單號查 `{id, voucher_no, status, voided}`，不存在 ⇒ None；唯讀。勞報單出納付款回填傳票單號時驗證用（M07 不直接讀 `vouchers_all`）。
 

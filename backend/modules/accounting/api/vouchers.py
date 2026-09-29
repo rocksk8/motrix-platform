@@ -50,6 +50,7 @@ from modules.accounting.voucher_attachments import (
     resolve_picks, copy_into, abs_path, case_attachments,
     line_source_files, LINE_SOURCES, EXPENSE_LINE_SOURCES, expense_line_uses, unavailable_sources, hidden_sources, CaseNotVisible, CASE_NOT_FOUND,
 )
+from modules.accounting.ledger import periods as _ledger_periods
 from modules.accounting.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
     next_voucher_no, post_voucher, can_send_back, next_revision_no,
@@ -1183,6 +1184,11 @@ def void_voucher(voucher_id: int, body: dict = Body(default={}),
     conn = get_db()
     try:
         cur = _load(conn, voucher_id)    # 已作廢的會在這裡被擋掉
+        # 總帳 P1：已過帳傳票落在已結帳／鎖定期間 ⇒ 不可作廢，改開沖轉傳票或先重開期間（DB 觸發器是第三層）
+        if cur["status"] == "已過帳":
+            lock_msg = _ledger_periods.lock_error(conn, cur["voucher_date"])
+            if lock_msg:
+                raise HTTPException(409, lock_msg + "已過帳傳票不可作廢；請開沖轉傳票，或先重開該期間。")
         conn.execute(
             "UPDATE vouchers_all SET voided_at=?, voided_by=?, void_reason=?,"
             " updated_at=? WHERE id=?",
@@ -1831,11 +1837,14 @@ def preview_voucher(voucher_id: int, authorization: str = Header(None)):
 # ── 連接器 IP-2 voucher.draft（docs/platform/INTEGRATION-POINTS.md，契約版本 1）───────────
 # 別組（例：M07 獎金）要開傳票草稿時走這裡，不 import 本檔的私有函式。
 # 在呼叫端的交易裡寫入，**不 commit**；科目有效性由呼叫端先用 voucher.account_check 檢查。
-def _provide_voucher_draft(conn, *, voucher_date, summary, lines, created_by, now):
-    """lines：[{account_code, summary, debit, credit}]。回 {"id", "voucher_no"}。"""
+def _provide_voucher_draft(conn, *, voucher_date, summary, lines, created_by, now, origin=""):
+    """lines：[{account_code, summary, debit, credit}]。回 {"id", "voucher_no"}。
+    `origin`（選填，總帳 P1 加，契約仍是版本 1）：產生來源標記（例 bonus_accrual），總帳引擎據此辨識既有自動傳票、不重複產生。"""
     norm = _line_sources(_amount_lines(lines))
     vid, no = insert_draft_voucher(conn, voucher_date, summary, norm, created_by, now,
                                    classify_category(conn, norm))
+    if origin:
+        conn.execute("UPDATE vouchers_all SET origin=? WHERE id=?", (str(origin)[:40], vid))
     return {"id": vid, "voucher_no": no}
 
 
