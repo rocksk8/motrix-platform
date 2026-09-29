@@ -37,3 +37,22 @@
 
 ## 4. 待審
 正式機安裝指示（步驟檔）與 apply 演練 path1／2／3 結果：hichan-90 完成後我再審（比照第二十一班 §3、§6、§7）。RA-M1（rowaccess）依主持裁示暫緩。
+
+---
+## 5. 演練與正式機步驟檔審查（origin/platform docs/platform/prod-tasks/20260929-train22-apply.md，ec8c8177；D，2026-09-29）
+
+**判定：步驟檔必修 2 項，修完可交正式機。** 演練本身通過（path1 15 步、path2、path3 全 ok，secrets_left=[]；path3 refused_company_setup／not_applied／服務照常）。
+
+已驗（無問題）：雲端檔與 origin/platform 文字相同；包名、`package.sha256` 雜湊 68B75F85B22EB143…49FE（與實際相符）、檔數 592；`delivery.py stage --root --name --staging`／`verify --staged --install-root` 參數與程式相符；回滾指令 `rollback_update.ps1 -SnapshotTimestamp <ts> -Yes` 參數存在、未帶 `-IncludeDatabase`；`apply_update_<ts>.result.json` 有 `timestamp` 欄且與 `rollback_snapshots\<ts>` 同戳；`module_states.json` 有 `started_at`／`modules[].state/version`；沒有要正式機 Claude 重啟排程或刪雲端確認檔的步驟（雲端殘留檔明寫由使用者刪）；路徑寫 H:。
+
+### T22S-M1 步驟 4 與開頭規則互相矛盾
+第 12 行：「手動回滾／`-IncludeDatabase`… **一律先回報、等使用者同意**」；步驟 4 卻直接命令「執行 rollback_update.ps1 … -Yes」。正式機 Claude 只能二擇一：違反第 12 行，或停住不回滾。**修法**：步驟 4 第 0 句明寫「先回報使用者失敗的檢查與證據，取得同意後才執行」，或在第 12 行明列「步驟 4 的只回程式回滾已由使用者預先授權」（要有使用者原話出處）。
+
+### T22S-M2 套用後判準 #7／#8／#9 不是「機械可判定」，且會產生假不過 ⇒ 觸發不必要的回滾
+- **#8（自 t0 起 ERROR／Traceback 為 0）與演練觀察不一致**：path2 演練的 server.log 在 t0（16:20:36）之後就有 ERROR 行（16:20:36 `信件類型 'monthly_report'：沒有啟用中、設定了 email … 超級管理員 ⇒ 不寄`，同類的 company_setup 告警訊息在其他時點也以 ERROR 記錄）；正式機若沒有啟用中且設 email 的超級管理員，每次啟動都會有這類 ERROR，與版本好壞無關。`apply_update.ps1` 自己的錯誤掃描只看「最後一次 Uvicorn running on 之後」並濾掉已知良性的 `ConnectionResetError` 區塊，本表卻掃整段 t0 之後、無濾除。**修法**：#8 改成與腳本一致（只看最後一次 `Uvicorn running on` 之後、排除 `_call_connection_lost` 良性區塊），或改成「列出 ERROR／Traceback 行數與前 5 行回報，不作為回滾條件；只有 Traceback 且指向 lodging／tender_radar／main 才算不過」。
+- **#7 的基準沒有地方記**：「模組總數與套用前相同（套用前先記下數量）」，但步驟 0 沒有「記下套用前 `module_states.json` 的模組數與各模組 state」這一項；`module_states.json` 會在重啟時被覆寫，套用後就沒有基準可比。**修法**：步驟 0 加第 6 項：記下套用前 `modules` 數與每個模組的 key／state；判準改「與套用前相同（除 lodging→1.2.1、tender_radar→1.5.1 的版本外）」，不要寫死「皆 loaded」（正式機可能有 unlicensed／disabled 的既有狀態）。
+- **#9「只有一組 uvicorn 行程」**：演練停服回報每個伺服器停了**兩個** PID（例 `STOPPED 20672,37004`、`9868,43988`）⇒ 一個服務對應兩個行程（launcher＋子行程）是常態，「一組」無法機械判定。**修法**：改成「埠 666 有在監聽，且監聽的 PID 只有一個」。
+
+## 6. 建議（不擋）
+- **T22S-S1**：步驟 2 沒有第二十一班已採納的 T21P2-S1（`$env:PYTHONDONTWRITEBYTECODE = "1"`）；不加只是 pyc 會寫進包再隨 robocopy 進正式機（同 T21F-S1，功能無害），求一致可補。
+- **T22S-O1（觀察）**：演練用的是本機建包目錄（含 3 個 pyc）而非雲端 stage 過的那份；兩者除 pyc 外相同，不影響結論。path2 為了在演練金鑰下走通，「清 backfill 設定列」重走 upgrade_backfill，比正式機真實狀態（29e435df 已補過確認紀錄）更嚴；本班 `main.py`／`helpers/`／`core/` 都沒動 ⇒ 公司閘門程式與已上線版本相同，以差異推論真實路徑更容易通過，不擋。
