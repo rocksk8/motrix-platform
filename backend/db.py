@@ -7,6 +7,7 @@ __l1_public__ = (
 )
 
 import sqlite3
+import hashlib
 import os
 import re
 import json
@@ -802,7 +803,7 @@ def init_db(path: str = None):
     # 所以這個改動對既有安裝零影響——已經存在的那一列不會被這裡動到，
     # 而它解決的是往後每一個新客戶：全新安裝不會再印出我們的公司抬頭。
     # （既有安裝的回填是 `_m106_company_profile_identity_backfill`，
-    # 只認 `tax_id == "60575481"` 這一個信號，不是這裡。）
+    # 只認統編雜湊相符這一個信號，不是這裡。）
     _seed_setting(conn, "company_profile", {
         "name": "",
         "tax_id": "",
@@ -981,6 +982,69 @@ def _run_migrations(conn) -> None:
 # ——它把每一支跑兩次）。在那之前這是一條**沒有人檢查的規定**。
 # 🔑 寫下規則與守住規則是兩件事，而讀起來一模一樣。
 
+# ═════════════════════════════════════════════════════════════════════════════
+# 去識別化（SALE-PACKAGE-DEID.md §2.4.1）——凍結 migration 裡「本公司資料」的三類處理
+#   A 註解／docstring  ⇒ 改寫成不含值
+#   B 比較條件         ⇒ 比 sha256（行為等價：前處理與原比較完全相同——只對 str 取 utf-8/surrogatepass 的 sha256，非 str 一律不命中）
+#   C 要寫入的值       ⇒ 讀 own 資料檔（不進程式庫；tools/platform/own_payload.py 建包／本機由固定的舊版 db.py 產生）
+#                        缺檔／版本不符 ⇒ FrozenOwnPayloadError，**在任何寫入之前**丟出（migration 丟例外＝不記版號）
+# 雜湊常數由 `python tools/platform/own_payload.py hashes` 印出（短字串的雜湊可窮舉還原：只為「不再有可 grep 的明文」，T3 已接受）。
+# ═════════════════════════════════════════════════════════════════════════════
+_OWN_PAYLOAD_SOURCE_BLOB = "cb3d1c27f5dfb30527b3554b9a272abaaffa99b4"
+_M008_OLD_NAME_SHA256 = frozenset((
+    "0f1a271a2caaab53570eddda9f83f26161516d8b94444722d6f94fa1bdea5d16",
+    "2e0b8d61fa2a6959d254b6ff5d0fb512249329097336a35568089933b49abdde",
+    "5ea82826366936444eb341fce0dc376ed6c32b355684a92d5750d1df033a9095",
+    "71a641991f8815604252ed8f14c4590bfe02e566c3498ecd2d0871fc593c732c",
+    "aea5a5ee6792fab36f3c60e62ef64e40061a8dac7d868b359aff7a4786a32e51",
+    "ba93263da9b77c618588832436aa61338349e43612d73ec4b10e871e67c58a95",
+))
+_M008_USERNAME_SHA256 = "2e0b8d61fa2a6959d254b6ff5d0fb512249329097336a35568089933b49abdde"
+_M106_TAX_ID_SHA256 = "3cfd8e1c6f7c4436f7475278b21e294f06d67e7b1854f226e0fd8fa22785ad80"
+
+
+class FrozenOwnPayloadError(RuntimeError):
+    """凍結 migration 需要 own 資料檔而拿不到（缺檔、讀不懂、版本不符）。訊息不含任何值。"""
+
+
+def _frozen_sha256(v):
+    """對 str 取 sha256（hex）；非 str 回 None（與原本 `in tuple`／SQL `=`／`IN` 的二進位比較一致：不 strip、不轉型）。"""
+    if not isinstance(v, str):
+        return None
+    return hashlib.sha256(v.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def _own_payload_path():
+    p = os.environ.get("MOTRIX_OWN_PAYLOAD")
+    return p if p else os.path.join(os.path.dirname(os.path.abspath(__file__)), "migrations_frozen", "own_payload.json")
+
+
+def _frozen_own_payload():
+    path = _own_payload_path()
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            d = json.load(f)
+    except (OSError, ValueError) as e:
+        raise FrozenOwnPayloadError(
+            "凍結 migration 需要本公司資料檔（own_payload.json），讀不到：%s。"
+            "產生方式：python tools/platform/own_payload.py generate --out <路徑>；"
+            "路徑用環境變數 MOTRIX_OWN_PAYLOAD 指定，或放在 backend/migrations_frozen/。" % type(e).__name__)
+    if not isinstance(d, dict) or d.get("v") != 1 or d.get("source_blob") != _OWN_PAYLOAD_SOURCE_BLOB:
+        raise FrozenOwnPayloadError("本公司資料檔的版本與這份 db.py 不符（source_blob），拒絕使用。")
+    return d
+
+
+def _own_value(payload, section, key):
+    try:
+        v = payload[section][key]
+    except (KeyError, TypeError):
+        v = None
+    if not isinstance(v, str) or not v:
+        raise FrozenOwnPayloadError("本公司資料檔缺欄位 %s.%s。" % (section, key))
+    return v
+
+
+
 def _m001_export_columns(conn):
     if not _col_exists(conn, "quotations", "export_count"):
         conn.execute("ALTER TABLE quotations ADD COLUMN export_count INTEGER DEFAULT 0")
@@ -1067,37 +1131,49 @@ def _m007_fix_legacy_display_names(conn):
 
 
 def _m008_fix_legacy_owner_names(conn):
-    """One-time: replace historical jeff display-name variants with correct name."""
-    old_names = ("jeff", "Jeff", "Jeff 管理員", "jeff管理員", "jeff超級管理員", "Jeff超級管理員")
-    correct = "黃玉龍"
-    rows = conn.execute("SELECT id, data_json FROM customers").fetchall()
-    for r in rows:
+    """One-time: replace historical owner display-name variants with the correct name.
+
+    去識別化：哪些列要改＝比 sha256（`_M008_OLD_NAME_SHA256`／`_M008_USERNAME_SHA256`）；正確的名稱與 email 讀 own 資料檔
+    （`_frozen_own_payload`）。**先規劃（只讀）、有任何一列要改才讀資料檔、讀不到在任何寫入之前丟例外**；
+    沒有命中的庫（全新安裝、客戶的庫）完全不讀資料檔。
+    """
+    def legacy(v):
+        return _frozen_sha256(v) in _M008_OLD_NAME_SHA256
+
+    def owner(u):
+        return _frozen_sha256(u) == _M008_USERNAME_SHA256
+
+    plan_customers = []
+    for r in conn.execute("SELECT id, data_json FROM customers").fetchall():
         try:
             d = json.loads(r["data_json"] or "{}")
-            if d.get("ownerName") in old_names:
-                d["ownerName"] = correct
-                conn.execute(
-                    "UPDATE customers SET data_json=? WHERE id=?",
-                    (json.dumps(d, ensure_ascii=False), r["id"]),
-                )
+            if legacy(d.get("ownerName")):
+                plan_customers.append((r["id"], d))
         except Exception:
             pass
-    conn.execute(
-        "UPDATE quotations SET sales_person=? WHERE sales_person IN ({})".format(
-            ",".join("?" * len(old_names))
-        ),
-        [correct] + list(old_names),
-    )
-    # Also fix jeff display_name if it's still a legacy variant
-    conn.execute(
-        "UPDATE users SET display_name=? WHERE username='jeff' AND display_name IN ({})".format(
-            ",".join("?" * len(old_names))
-        ),
-        [correct] + list(old_names),
-    )
-    conn.execute(
-        "UPDATE users SET email='jeff@miactw.com' WHERE username='jeff' AND (email='' OR email IS NULL)"
-    )
+    plan_quotations = [r["id"] for r in conn.execute("SELECT id, sales_person FROM quotations").fetchall()
+                       if legacy(r["sales_person"])]
+    users = conn.execute("SELECT id, username, display_name, email FROM users").fetchall()
+    plan_names = [r["id"] for r in users if owner(r["username"]) and legacy(r["display_name"])]
+    plan_emails = [r["id"] for r in users if owner(r["username"]) and (r["email"] is None or r["email"] == "")]
+
+    if plan_customers or plan_quotations or plan_names or plan_emails:
+        payload = _frozen_own_payload()                       # 讀不到 ⇒ 這裡丟例外，前面沒有任何寫入
+        correct = _own_value(payload, "m008", "correct")
+        email = _own_value(payload, "m008", "email") if plan_emails else None
+        for cid, d in plan_customers:
+            try:
+                d["ownerName"] = correct
+                conn.execute("UPDATE customers SET data_json=? WHERE id=?",
+                             (json.dumps(d, ensure_ascii=False), cid))
+            except Exception:
+                pass
+        for qid in plan_quotations:
+            conn.execute("UPDATE quotations SET sales_person=? WHERE id=?", (correct, qid))
+        for uid in plan_names:
+            conn.execute("UPDATE users SET display_name=? WHERE id=?", (correct, uid))
+        for uid in plan_emails:
+            conn.execute("UPDATE users SET email=? WHERE id=?", (email, uid))
     conn.commit()
 
 
@@ -2316,7 +2392,7 @@ def _m067_approval_delegates(conn):
     """簽核代理人機制（2026-08-28，企業管理優化）：目前簽核只有「代理送審」
     （approval.delegateSubmitter，申請人請人代為送出申請），沒有「代理簽核」——
     tiers 裡的簽核人若請假，除了 superadmin 外沒有人能代替他完成該層簽核，容易
-    卡住整條簽核鏈（尤其正式機目前 superadmin 只有 jeff/corbin 兩人，見
+    卡住整條簽核鏈（尤其正式機目前 superadmin 只有兩人，見
     MOTRIX-ERP-QUICK.md §12 相關討論）。
 
     新表 approval_delegates：一筆＝「delegator_username 把自己的簽核權限在
@@ -2356,7 +2432,7 @@ def _m067_approval_delegates(conn):
 def _m072_totp(conn):
     """使用者帳號新增 TOTP 兩步驟驗證欄位（2026-09-07）：架構地圖 §6.2 建議
     superadmin 至少加 TOTP（目前只有密碼＋Bearer token 單因子），採自助啟用
-    模式（非強制）——正式機 superadmin 是 jeff/corbin 兩位真人業主，若做成
+    模式（非強制）——正式機 superadmin 是兩位真人業主，若做成
     下次登入強制進入設定流程，部署當下他們手邊若沒有先裝好驗證 App 會直接
     被鎖在外面，屬於會中斷真實業務的風險；改為任何角色都可以自行到帳號設定
     開啟，`routers/auth.py` 對 admin/superadmin 登入後未開啟時顯示提醒 banner
@@ -4479,7 +4555,7 @@ def _m110_voucher_category_manual(conn):
 
 
 def _m115_ac2_recognition_dates(conn):
-    """v115（2026-09-24 `AC2`）：營運報表改權責口徑要用的欄位（hichan-0a 核准）。
+    """v115（2026-09-24 `AC2`）：營運報表改權責口徑要用的欄位（已核准）。
 
     ```
     case_stages.ratio_bp               階段收入比例（基點，NULL＝未設）
@@ -4739,53 +4815,38 @@ def _m107_deactivate_legacy_demo_account(conn):
 
 
 def _m106_company_profile_identity_backfill(conn):
-    """v106（2026-09-23 `WL7` §5⓪②）：`DEFAULT_IDENTITY` 清空前，先把「已經在
-    跑的這一份」的值原封不動搬進 `company_profile`。
+    """v106（2026-09-23）：把 `company_profile` 缺的欄位從「這台機器自己跑的這一份」的值原封不動搬進去。
 
-    ## 🔴 為什麼要有這支：`DEFAULT_IDENTITY` 本來是每一份單據的第四層 fallback
+    ## 為什麼要有這支：`DEFAULT_IDENTITY` 本來是每一份單據的第四層 fallback
 
-    `helpers/company_identity.py` 的解析鏈：據點欄 → 主要據點欄 →
-    `company_profile` 頂層欄 → `DEFAULT_IDENTITY`。`DEFAULT_IDENTITY` 目前
-    **就是我們的公司資料**（改版前這組值寫死在 32 行 PDF 產生碼裡，搬進
-    常數時原封不動搬了過來）——這一輪 `DEFAULT_IDENTITY` 的五欄要清空
-    （`WL7` §5⓪），若不先把值搬到第三層，**這台機器自己產的單據會立刻
-    印出空白公司抬頭**（`pdf_gen.py` 的 8 支 builder 都讀這條鏈）。
+    `helpers/company_identity.py` 的解析鏈：據點欄 → 主要據點欄 → `company_profile` 頂層欄 → `DEFAULT_IDENTITY`。
+    `DEFAULT_IDENTITY` 本來就是開發者自己的公司資料，這一輪它的五欄要清空；若不先把值搬到第三層，
+    **開發者自己的機器產的單據會立刻印出空白公司抬頭**。
 
-    ## 🔴 而它絕對不可以在客戶的全新安裝上寫入我們的資料
+    ## 🔴 而它絕對不可以在別人的全新安裝上寫入開發者的資料
 
-    ⇒ **只認一個信號**：`company_profile.tax_id == "60575481"`
-    （我們自己的統一編號，`SPEC-WL7.md §1` D 也拿它當交叉驗證用的獨立尺）。
+    ⇒ **只認一個信號**：`company_profile.tax_id` 等於開發者公司的統一編號（去識別化後改比 sha256，`_M106_TAX_ID_SHA256`）。
     ```
-    全新安裝        company_profile 這一列在這支 migration 跑的當下還不存在
-                   （`_seed_setting` 排在 `_run_migrations` 之後，且 §5① 已把
-                   種子值改成空字串）=> tax_id 讀出來是 "" != "60575481"
-                   => 直接跳過，不寫入任何東西
-    別人的既有安裝   tax_id 是他自己的統編，一樣 != "60575481" => 跳過
-    我們自己這台     tax_id 本來就是 "60575481" => 才會走進去回填
+    全新安裝        company_profile 這一列在這支 migration 跑的當下還不存在 ⇒ tax_id 讀出來是 "" ⇒ 不相符 ⇒ 直接跳過
+    別人的既有安裝   tax_id 是他自己的統編 ⇒ 不相符 ⇒ 跳過
+    開發者自己這台   tax_id 相符 ⇒ 才會走進去回填
     ```
-    ⚠️ 不是「只做一次」或「只挑特定機器跑」這種需要人工操作的旗標——
-    這個統編字面值本身就是唯一需要的判準，**判準寫死在程式碼裡，不是操作規程**。
+    ⚠️ 不是「只做一次」或「只挑特定機器跑」這種需要人工操作的旗標——統編的雜湊本身就是唯一需要的判準。
 
     ## ⚠️ `company_name`／`tax_id`／`phone`／`email` 從這台自己現有的資料回填
 
-    〈凍住的歷史不要呼叫活的程式碼〉——這支 migration**不 import**
-    `company_identity.DEFAULT_IDENTITY`（那個常數這一輪就要被清空，
-    migration 引用會演進的常數＝歷史被回溯改寫）。這四欄直接從這一列
-    `company_profile` 自己已經有的 `name`／`tax_id`／`contact_info`
-    （`"Tel: 04-3610-6566｜info@miactw.com"` 這種形狀）現算，不是抄一份
-    寫死在別處的字串。
+    〈凍住的歷史不要呼叫活的程式碼〉——這支 migration**不 import** `company_identity.DEFAULT_IDENTITY`。
+    這四欄直接從這一列 `company_profile` 自己已經有的 `name`／`tax_id`／`contact_info` 現算，不是抄一份寫死在別處的字串。
 
     ## ⚠️ 唯一的例外：`company_name_en`
 
-    `company_profile` 的既有 shape（`_COMPANY_PROFILE_DEFAULT`）從來沒有
-    英文公司名欄位，這一列**沒有任何地方**可以現算出它——只能是一個凍結的
-    字面值。✅ 而這裡是安全的：能走到這一步，前面已經先驗過
-    `tax_id == "60575481"`，這一步只可能在**我們自己**的資料列上執行。
+    `company_profile` 的既有 shape 從來沒有英文公司名欄位，這一列**沒有任何地方**可以現算出它——只能是一個凍結的值。
+    去識別化後這個值不在程式庫：讀 own 資料檔（`_frozen_own_payload`）。能走到這一步，前面已經先驗過統編，
+    只可能在開發者自己的資料列上執行；資料檔讀不到 ⇒ 在任何寫入之前丟 `FrozenOwnPayloadError`。
 
     ## ✅ 逐欄不覆蓋，可重跑兩次（`test_u10_every_migration_can_be_run_twice`）
 
-    每一欄只在目前是空的時候才寫，不論是「使用者已經自己填了」還是
-    「這支 migration 上次已經跑過」，第二次跑都是 no-op。
+    每一欄只在目前是空的時候才寫，不論是「使用者已經自己填了」還是「這支 migration 上次已經跑過」，第二次跑都是 no-op。
     """
     row = conn.execute(
         "SELECT value_json FROM system_settings WHERE key='company_profile'"
@@ -4797,8 +4858,10 @@ def _m106_company_profile_identity_backfill(conn):
     if not isinstance(profile, dict):
         profile = {}
 
-    if str(profile.get("tax_id") or "").strip() != "60575481":
-        return  # 不是我們自己這台——不寫入任何東西
+    if _frozen_sha256(str(profile.get("tax_id") or "").strip()) != _M106_TAX_ID_SHA256:
+        return  # 不是開發者自己這台——不寫入任何東西
+
+    own_en = _own_value(_frozen_own_payload(), "m106", "company_name_en")   # 讀不到 ⇒ 這裡丟例外，前面沒有任何寫入
 
     changed = [False]
 
@@ -4822,8 +4885,8 @@ def _m106_company_profile_identity_backfill(conn):
     _backfill("phone", phone)
     _backfill("email", email)
 
-    # 凍結字面值——唯一沒有現有欄位可以回填的一項，見上方 docstring。
-    _backfill("company_name_en", "MOTRIX Synergy Integration Corp.")
+    # 凍結的值——唯一沒有現有欄位可以回填的一項，見上方 docstring（值來自 own 資料檔）。
+    _backfill("company_name_en", own_en)
 
     if changed[0]:
         conn.execute(
@@ -4928,7 +4991,7 @@ def _m103_bonus_award_lines_username(conn):
     ## 🔴 成因：`people_for_item()` 兩個來源回傳兩種識別
 
     `case_stages.assigned_to` 本來就存帳號；`quotations.sales_person`
-    存的是**顯示名**（'黃玉龍'／'高晟耀'），而兩者一律被當成 username
+    存的是**顯示名**（人名，不是帳號），而兩者一律被當成 username
     寫進 `bonus_award_lines.username`——只有 `sales_person` 那一支是壞的
     （詳見 `docs/windows/SPEC-QS1-a.md §1`）。
 

@@ -59,12 +59,6 @@ KEPT_DEFAULT_IMAGES = {
 }
 
 ALLOWED = {
-    ("backend/db.py", "統編"): (7, "凍結 migration", "_m106 只認 tax_id == 60575481 才回填（含說明）；:768 為說明"),
-    ("backend/db.py", "電話"): (1, "凍結 migration", "_m106 說明文字"),
-    ("backend/db.py", "email／網域（miac）"): (2, "凍結 migration", "_m008 補 jeff email（全新安裝時 users 是空的）；_m106 說明"),
-    ("backend/db.py", "人員 email"): (1, "凍結 migration", "_m008"),
-    ("backend/db.py", "英文名（Synergy Integration）"): (1, "凍結 migration", "_m106 回填英文名（僅本公司統編）"),
-    ("backend/db.py", "人員姓名"): (2, "凍結 migration", "_m008 舊顯示名修正；_m1xx 說明"),
     ("backend/core/upgrade.py", "公司名（允碩）"): (2, "本公司安裝的升級回填", "V9_COMPANY_DEFAULTS 與出處註解"),
     ("backend/core/upgrade.py", "英文名（Synergy Integration）"): (2, "本公司安裝的升級回填", "V9_COMPANY_DEFAULTS 與出處註解"),
     ("backend/core/upgrade.py", "統編"): (3, "本公司安裝的升級回填", "V9_COMPANY_DEFAULTS 與出處註解"),
@@ -97,6 +91,10 @@ def read_text_any(path: Path) -> str:
     return raw.decode("latin-1")
 
 
+#: 去識別化（tools/platform/own_payload.py）：凍結 migration 要寫入的本公司資料，放在程式庫之外；本機有這個檔時掃描器略過它
+OWN_PAYLOAD_REL = "backend/migrations_frozen/own_payload.json"
+
+
 def _scannable(rel_parts, suffix) -> bool:
     return suffix.lower() in SUFFIXES and not any(p in EXCLUDED_PARTS for p in rel_parts)
 
@@ -114,6 +112,8 @@ def scan(root: Path = REPO, roots=ROOTS) -> dict:
             rel = path.relative_to(root)
             if not _scannable(rel.parts[:-1], path.suffix) or path.name.startswith("conftest"):
                 continue
+            if rel.as_posix() == OWN_PAYLOAD_REL:
+                continue        # 本公司資料檔（gitignored、本機／建包產生，不進程式庫、不進販售包）——它的存在本來就是為了裝這些值
             try:
                 text = read_text_any(path)
             except OSError:
