@@ -10,6 +10,7 @@
 📌 2026-09-25 15:3x：使用者回報已部署 20260925_151234_2220aedb ⇒ 基準改 2220aedb。
 📌 2026-09-28：正式機已部署 c006a2a0（主持派工第十四班）⇒ 基準改 c006a2a0。
 📌 2026-09-28 16:33（記錄時間）：正式機已部署 54a2d6b6（第十六班；主持確認地圖 28g、標案雷達 28h 已出貨）⇒ 基準改 54a2d6b6。
+📌 2026-09-29 04:28：正式機已更新到 29e435df（第二十、二十一班合成一次上線，RUN-PLAN §6）⇒ 基準改 29e435df；第二十二班列車才發現漏更新（VR3 把已出貨的 29a／28k 當未出貨）。
 """
 import json
 import subprocess
@@ -18,7 +19,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "54a2d6b6"
+BASELINE = "29e435df"
 
 
 def baseline_manifest():
