@@ -314,6 +314,10 @@
               <button class="ctab" x-show="bonusQueue.visible" :class="{on: cashierSub==='bonus'}" @click="cashierSub='bonus'" data-testid="cashier-bonus-tab">
                 獎金待發放<span class="tab__cnt" x-text="bonusQueue.items.length"></span>
               </button>
+              <!-- 勞報單待付款（IP-103 payslip.payables；只給最高管理者與出納） -->
+              <button class="ctab" x-show="payslipQueue.visible" :class="{on: cashierSub==='payslip'}" @click="cashierSub='payslip'" data-testid="cashier-payslip-tab">
+                勞報單待付款<span class="tab__cnt" x-text="payslipQueue.items.length"></span>
+              </button>
               <!-- 請款待付款（IP-100 payables.pending：案件額外支出已核准、未登錄付款日；2026-09-27 請款流程） -->
               <button class="ctab" :class="{on: cashierSub==='payreq'}" @click="cashierSub='payreq'" data-testid="cashier-payreq-tab">
                 請款待付款<span class="tab__cnt" x-text="payreqQueue.items.length"></span>
@@ -355,6 +359,48 @@
                           <td class="c">
                             <button x-show="canExecuteCashier()" class="action-btn pay" @click="openPayVoucherModal(v)">標記已匯款</button>
                             <span x-show="!canExecuteCashier()" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+            </div>
+
+            <!-- 勞報單待付款（IP-103）：對方已簽回；出納填付款日期＋既有傳票單號。付款日期即營運報表成本歸月 -->
+            <div x-show="cashierSub==='payslip'" data-testid="cashier-payslip">
+              <div class="alert-bar" x-show="payslipQueue.notice" data-testid="cashier-payslip-notice">
+                <span x-text="payslipQueue.notice"></span>
+              </div>
+              <template x-if="payslipQueue.available && payslipQueue.items.length===0">
+                <div class="empty-state">目前沒有已簽回待付款的勞報單</div>
+              </template>
+              <template x-if="payslipQueue.items.length>0">
+                <div class="panel">
+                  <table class="data-table">
+                    <thead><tr>
+                      <th>勞報單號</th><th>承攬人</th><th class="r">應付總額</th><th class="r">實發金額</th>
+                      <th>簽回檔</th><th class="c">付款日期</th><th class="c">傳票單號</th><th class="c">動作</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="p in payslipQueue.items" :key="p.slipNo">
+                        <tr :data-testid="'cashier-payslip-row-' + p.slipNo">
+                          <td class="mono" x-text="p.slipNo"></td>
+                          <td x-text="p.contractor"></td>
+                          <td class="r mono" x-text="fmt(p.gross)"></td>
+                          <td class="r mono" x-text="fmt(p.net)"></td>
+                          <td>
+                            <template x-for="f in p.files" :key="f.id">
+                              <a href="#" @click.prevent="openPayslipSigned(p, f)" x-text="f.filename" style="display:block;font-size:12px"></a>
+                            </template>
+                          </td>
+                          <td class="c"><input type="date" x-model="payslipForm[p.slipNo].date" style="width:140px"></td>
+                          <td class="c"><input type="text" x-model="payslipForm[p.slipNo].voucherNo" placeholder="例 20260929-001" style="width:150px"></td>
+                          <td class="c">
+                            <button x-show="payslipQueue.canMarkPaid" class="action-btn pay" :disabled="payslipForm[p.slipNo].saving" @click="markPayslipPaid(p)"
+                                    :data-testid="'cashier-payslip-pay-' + p.slipNo">標記已付款</button>
+                            <div x-show="payslipForm[p.slipNo].err" x-text="payslipForm[p.slipNo].err" style="color:var(--danger);font-size:11px"></div>
                           </td>
                         </tr>
                       </template>

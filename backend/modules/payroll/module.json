@@ -1,7 +1,7 @@
 {
   "key": "payroll",
   "name": "薪資獎金",
-  "version": "1.0.8",
+  "version": "1.1.0",
   "core": ">=1.0,<2.0",
   "license_key": "payroll",
   "permissions": ["payslip"],
@@ -9,7 +9,7 @@
   "tables": ["payslips", "payslip_seq", "bonus_items", "bonus_item_people", "bonus_groups", "bonus_group_members",
              "bonus_awards", "bonus_award_lines", "bonus_award_edit_log",
              "bonus_case_awards", "bonus_case_award_lines", "bonus_case_award_edit_log"],
-  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration。勞報單的身分證號、地址等個資欄位由 archive._F2_FIELDS 分流",
+  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；payslips 的作廢／簽回／付款 10 欄由本模組自己的 migration（migrations/0001_payslip_void_signed_paid.py）新增。勞報單的身分證號、地址等個資欄位由 archive._F2_FIELDS 分流；簽回檔實體檔放勞報單存檔目錄（F2）",
   "data": {
     "tables": [
       {"name": "payslips", "class": "T1"}, {"name": "payslip_seq", "class": "T3"},

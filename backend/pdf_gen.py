@@ -824,11 +824,35 @@ def _build_payslip_html(d: dict, template: dict = None) -> str:
     }
     return _dt.render(template or _published_output_template("payslip", d), view, parts)
 
+def _payslip_void_mark_html(info: dict) -> str:
+    """已作廢勞報單（2026-09-29）：整頁斜向「已作廢」浮水印＋頂端紅色橫幅（作廢時間、作廢人、原因）。"""
+    esc = _payslip_esc
+    return (
+        '<div style="position:fixed;top:0;left:0;right:0;bottom:0;display:flex;'
+        'align-items:center;justify-content:center;pointer-events:none;z-index:9999">'
+        '<div style="transform:rotate(-30deg);font-size:120pt;font-weight:900;'
+        'letter-spacing:12pt;color:rgba(200,30,30,.22);white-space:nowrap">已作廢</div></div>\n'
+        '<div style="margin:0 0 10px;padding:8px 12px;border:2px solid #C81E1E;'
+        'background:#FEF2F2;color:#B91C1C;font-size:10pt;font-weight:700;line-height:1.7">'
+        '⚠ 此勞報單已作廢，不具給付效力。'
+        f'<div style="font-weight:400;font-size:9pt">作廢時間：{esc(info.get("at", ""))}　'
+        f'作廢人：{esc(info.get("by", ""))}<br>作廢原因：{esc(info.get("reason", ""))}</div></div>\n')
+
+
+def _payslip_apply_void_mark(html_content: str, info: dict) -> str:
+    """把作廢標示插在 <body> 開頭；找不到 <body>（版型被覆寫成別的結構）就放在最前面——不可以靜默漏掉標示。"""
+    mark = _payslip_void_mark_html(info)
+    m = re.search(r"<body[^>]*>", html_content, re.I)
+    if m:
+        return html_content[:m.end()] + mark + html_content[m.end():]
+    return mark + html_content
+
+
 def generate_payslip_pdf_bytes(slip_no: str) -> bytes:
     edge = _get_edge_path()
     conn = get_db()
     row = conn.execute(
-        "SELECT data_json, contractor_id FROM payslips WHERE slip_no=?", (slip_no,)
+        "SELECT data_json, contractor_id, status, voided_at, voided_by, void_reason FROM payslips WHERE slip_no=?", (slip_no,)
     ).fetchone()
     if not row:
         conn.close()
@@ -851,6 +875,10 @@ def generate_payslip_pdf_bytes(slip_no: str) -> bytes:
     d["_id_card_back"]  = id_card_back
     d["_bank_passbook"] = bank_passbook
     html_content = _build_payslip_html(d)
+    if row["status"] == "已作廢":
+        html_content = _payslip_apply_void_mark(html_content, {
+            "at": (row["voided_at"] or "")[:19].replace("T", " "),
+            "by": row["voided_by"] or "", "reason": row["void_reason"] or ""})
     tmp_html = tmp_pdf = None
     try:
         with tempfile.NamedTemporaryFile(mode='w', suffix='.html', encoding='utf-8', delete=False) as f:

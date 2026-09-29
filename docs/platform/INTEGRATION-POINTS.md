@@ -84,7 +84,7 @@ grandTotal（直接讀 `contractor_dispatches`，沒有經過 `_dispatch_row`）
 
 ---
 
-## IP-4　`voucher.void_draft`＋`voucher.status`：作廢草稿、查傳票狀態（M06 → M07）
+## IP-4　`voucher.void_draft`＋`voucher.status`＋`voucher.by_no`：作廢草稿、查傳票狀態、以單號查傳票（M06 → M07）
 
 接續 IP-2 的「尚未處理」。原本 `helpers/bonus_vouchers.py::withdraw_accrual`／`linked_vouchers`（M07）直接讀寫
 M06 的 `vouchers_all`。
@@ -98,6 +98,7 @@ M06 的 `vouchers_all`。
 | 回傳 | void_draft：`{"result": "voided"｜"not_draft"｜"gone", "voucher_no", "status"}`——只作廢「草稿」；已送審 ⇒ `not_draft` 不動；不存在或早已作廢 ⇒ `gone`。status：`{"id", "voucher_no", "status", "voided"}`，不存在 ⇒ `None`。兩者都在呼叫端的交易裡，**不 commit** |
 | 對方不在時 | **退回照常**成立；不作廢、**保留連結**（之後查得到是哪一張），回傳 `notice`＝「未作廢傳票（#id）：會計模組未安裝；退回照常，請會計另行處理那一張傳票」。明細仍列出每一張連結的傳票，標 `unavailable` 與「會計模組未安裝，無法查詢狀態」，頁面不給連結（不讓傳票從畫面消失）。<br>**M06 回來後**：再次進入待發放時，若舊連結仍是未作廢的草稿 ⇒ 不另開、不覆蓋，notice 明說「上一張轉帳傳票草稿 … 尚未作廢」；舊連結已送審 ⇒ 照原行為另開新草稿 |
 | 契約版本 | 1（2026-09-25） |
+| 追加：以單號查（2026-09-29，`voucher.by_no`） | 提供方 `modules/accounting/api/vouchers.py::_provide_voucher_by_no`；使用方 M07 `modules/payroll/api/payslips.py::payslip_mark_paid`（勞報單出納付款回填**既有**傳票單號時驗證）。`fn(conn, voucher_no) -> {"id", "voucher_no", "status", "voided"} \| None`，唯讀。對方不在時：**拒絕標記付款並說明**（409「會計模組未安裝，無法驗證傳票單號，暫不能標記付款」），不猜、不放行。契約版本 1。守門：`backend/modules/payroll/tests/test_payslip_void_signed_paid_2026_09_29.py::test_mark_paid_needs_real_voucher_and_valid_date`、`::test_mark_paid_refuses_and_says_so_without_accounting`（反向控制） |
 | 守門 | `backend/modules/payroll/tests/test_voucher_status_connectors.py`：①void_draft 三種結果＋status 形狀＋不 commit ②**反向控制**：有 M06 時退回會作廢（正對照）；拿掉後不作廢、有提示、連結保留、M06 的表沒被動、明細標無法查詢 ③M06 回來：殘留草稿不另開不覆蓋；已送審的舊連結照常另開 ④M07 原始碼不再出現 `vouchers_all`、頁面有 unavailable 分支。突變 5 種皆轉紅（默默略過、傳票從明細消失、拿掉殘留防護、防護放太寬擋到已送審、M06 不在仍解除連結） |
 
 ---
@@ -181,7 +182,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M07 薪資獎金：`modules/payroll/bonus_payouts.py::_expense_entries`（名稱 `bonus`） |
+| 提供方 | M07 薪資獎金：`modules/payroll/bonus_payouts.py::_expense_entries`（名稱 `bonus`）；`modules/payroll/payslip_payouts.py::_expense_entries`（名稱 `payslip`，2026-09-29：已付款勞報單，以**付款日期**歸月、金額取**應付總額**，類別「勞報單」，`quoteNo` 空 ⇒ 篩部門時無法歸屬而排除；已作廢、未付款、付款後退回者不列；權責與現金口徑相同）。守門：`backend/modules/payroll/tests/test_payslip_void_signed_paid_2026_09_29.py::test_cost_report_counts_paid_by_payment_month_gross`、`::test_cost_report_still_works_without_payslip_provider`（反向控制） |
 | 使用方 | M08 `modules/analytics/api/reports.py::_collect_expenses`（⇒ `/api/reports/expenses-monthly`、`/api/reports/financial`（JSON／Excel／PDF）、每月營運報表信、首頁儀表板支出） |
 | 形式 | provider，**多提供者、以名稱區分**（`registry.providers("expense.entries")`；依名稱排序逐一呼叫）。之後其他模組的支出（例：勞報單）可登記同一個名稱空間，報表不用改 |
 | 語法 | 提供：`registry.provide("expense.entries", "bonus", _expense_entries)`<br>取用：`for name, fn in sorted(registry.providers("expense.entries").items()): fn(conn, d0, d1)` |
@@ -191,6 +192,25 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 守門 | 同上測試檔：`test_report_counts_bonus_on_paid_date`（待發放不算、發放後出現在發放月、月合計差額＝發放總額）、`test_reverse_without_payroll_report_still_works`（**反向控制**）。突變：報表不讀提供者 ⇒ 轉紅 |
 
 **案件頁相關傳票（同一項裁示）**：不新增串接點。獎金產生的兩張傳票草稿，每一行都帶摘要來源 `source_type="case"`、`source_key=案件單號`（JV36），經 IP-2 `voucher.draft` 寫入；案件頁的 `GET /api/vouchers/by-case/{單號}` 本來就依這個來源找。IP-2 的 `lines` 因此多了兩個**選填**欄位（只加不改，契約版本不變）。守門：`test_case_page_related_vouchers_show_bonus_vouchers`；突變：拿掉來源 ⇒ 轉紅。⚠ 這次之前已產生的獎金傳票沒有來源、不回填（開發機測試資料）。
+
+---
+
+## IP-103　`payslip.payables`：勞報單待付款（M07 → M05 出納）
+
+對應使用者 2026-09-29 裁示：勞報單匯出、對方簽回上傳後，要能與出納、營運報表成本聯動（成本取應付總額、歸月依付款日期、出納回填既有傳票單號）。
+出納頁（M05）不 import M07，改由 M07 公開這一個讀取連接器。**「標記已付款」不經連接器**：出納頁直接打勞報單那一支
+`POST /api/payslips/{單號}/mark-paid`（同一個動作只有一份實作；M07 不在時那支端點本來就不存在，出納頁也不會出現按鈕）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M07 薪資獎金：`modules/payroll/payslip_payouts.py::_Payables`（`pending`） |
+| 使用方 | M05 `modules/arap/api/cashier.py`：`GET /api/cashier/payslip-queue`（出納頁「勞報單待付款」子頁籤）；頁面 `pages/cashier.html`、`js/cashier.js` |
+| 形式 | provider，單一提供者（`core.registry`；`ModuleSpec.providers` 宣告） |
+| 語法 | 提供：`("payslip.payables", "payroll"): payslip_payouts._Payables`<br>取用：`p = registry.single_provider("payslip.payables")`；`None` ⇒ 退化。`p.pending(conn)` |
+| 回傳 | `pending`：`[{slipNo, contractor, incomeType, gross, tax, nhi, net, slipDate, signedAt, signedBy, files:[{id, filename}]}]`（簽回早的在前）。**只回付款需要的欄位**：不回身分證字號、地址、電話、銀行帳號（F2）；簽回檔內容經 `GET /api/payslips/{單號}/signed-files/{id}`（最高管理者或出納） |
+| 對方不在時 | `payslip-queue` 回 200 `{"available": false, "visible": true, "notice": "薪資獎金模組未安裝：出納頁不顯示勞報單待付款", "items": []}`，頁面顯示那一句；待付款／待收款／獎金等其餘照常。**可見範圍**：只有最高管理者與出納（cashier）看得到；財務（finance）`visible: false`、不顯示該子頁籤 |
+| 契約版本 | 1（2026-09-29） |
+| 守門 | `backend/modules/payroll/tests/test_payslip_void_signed_paid_2026_09_29.py`：`test_cashier_queue_lists_signed_only_and_hides_from_finance`（只列已簽回、不含個資欄位、財務看不到）、`test_cashier_queue_says_so_when_payroll_provider_missing`（**反向控制**）；`test_cashier_can_pay_but_plain_user_cannot`（付款權限）。突變：M07 不在時默默略過、財務看得到 ⇒ 轉紅 |
 
 ---
 

@@ -303,6 +303,35 @@ def get_receivable_queue(status: str = Query("unreceived"), authorization: str =
         conn.close()
 
 
+#: 薪資獎金模組（M07）不在時，勞報單待付款子頁籤對使用者說的話（IP-103）
+PAYSLIP_MISSING = "薪資獎金模組未安裝：出納頁不顯示勞報單待付款"
+
+
+def _payslip_visible(user: dict) -> bool:
+    """勞報單金額只給最高管理者與出納（同獎金分潤的可見範圍）；本頁的財務（finance）看不到。"""
+    return user.get("role") == "superadmin" or user_has_module(user, "cashier")
+
+
+@router.get("/api/cashier/payslip-queue")
+def get_payslip_queue(authorization: str = Header(None)):
+    """勞報單待付款（IP-103 payslip.payables）：對方已簽回、等出納填付款日期與傳票單號。
+    「標記已付款」打的是勞報單那一支 `POST /api/payslips/{單號}/mark-paid`——同一個動作，不在這裡另寫一份。"""
+    user = _require_user(authorization)
+    _require_view_access(user)
+    visible = _payslip_visible(user)
+    if not visible:
+        return {"available": True, "visible": False, "notice": "", "items": []}
+    p = registry.single_provider("payslip.payables")
+    if p is None:
+        return {"available": False, "visible": True, "notice": PAYSLIP_MISSING, "items": []}
+    conn = get_db()
+    try:
+        items = p.pending(conn)
+    finally:
+        conn.close()
+    return {"available": True, "visible": True, "notice": "", "items": items, "canMarkPaid": True}
+
+
 @router.get("/api/cashier/bonus-queue")
 def get_bonus_queue(authorization: str = Header(None)):
     """獎金分潤待發放（CORE-SPEC 獎金分潤：送交出納）。「標記已發放」打的是獎金那一支

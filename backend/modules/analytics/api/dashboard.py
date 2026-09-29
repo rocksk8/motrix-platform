@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Query
 
 from db import db_conn
-from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_at,
+from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_ymd, norm_at,
                      user_has_module, can_see_financial,
                      require_any_module, _get_setting, _set_setting)
 from helpers import row_access
@@ -307,7 +307,7 @@ def dashboard_monthly(department_id: Optional[int] = Query(None), authorization:
             for i, p in enumerate(pay_items):
                 if not p.get("received"):
                     continue
-                mo = (p.get("receivedAt") or "")[:7]
+                mo = norm_ymd(p.get("receivedAt"))[:7]
                 if not mo:
                     continue
                 act_amt = p.get("actualAmount")

@@ -39,6 +39,8 @@ GATED_BY_CALLER = {
 
 #: (c) 不含本公司資料：{(檔, 函式): 理由}
 NO_COMPANY_DATA = {
+    ("modules/payroll/api/payslips.py", "get_signed_file"):
+        "讀取對方簽回的掃描檔原樣輸出（使用者上傳的 pdf／jpg／png，系統不產生內容），不含本公司資料生成",
     ("helpers/startup.py", "run_edge_pdf"): "Edge 轉 PDF 的底層（只轉呼叫端給的 HTML）；內容由呼叫端決定並各自經第二道",
     ("helpers/email_notify.py", "_send_with_attachments"):
         "寄附件的共用底層（以 target= 參考傳給背景執行緒，不是直接呼叫）；附件由呼叫端產生並各自經第二道",

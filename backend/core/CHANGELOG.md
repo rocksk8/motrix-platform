@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.69 — 2026-09-29（暫用，列車取號；wip/payslip-void-signed）
+- L1（新增）：`helpers.tax_calc.norm_ymd`（款項日期正規化為 YYYY-MM-DD：接受斜線、點、單位數月日、民國年、「年月日」；讀不懂的原樣截 10 碼、不假造）；`helpers` 匯出 `norm_ymd`。收入報表歸月與儲存端共用。
+
 ## 1.68 — 2026-09-28（E 暫用，列車取號；wip/e-company-gate-impl 第一段：本公司資料設定閘門的正式機段）〔core_bump：暫用 1.66 → 1.65〕〔core_bump：暫用 1.65 → 1.67〕〔core_bump：暫用 1.67 → 1.68〕
 - L1（新增）：`helpers.company_setup`——判定（`status`：確認紀錄＋安裝識別＋必要欄位雜湊＋開發者指紋需簽章確認檔）、`confirm`、`backfill_once`（每庫一次、不丟例外）、`startup_install_check`（識別檔重建且已有紀錄 ⇒ ERROR＋告警）、暫時放行（`grace_state`、`observe`：有效期＝min(until, first_seen＋72h)）、統編檢查碼 `ubn_valid`、`alert`（每日一次）。設計 docs/platform/COMPANY-SETUP-GATE.md
 - L1（新增）：`helpers.company_identity.identity_from_profile(profile, location_id)`（`location_identity` 的純函式版；行為不變）

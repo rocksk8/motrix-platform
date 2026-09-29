@@ -91,6 +91,9 @@ function cashierApp() {
     bonusQueue: { available: false, visible: false, notice: '', items: [], canMarkPaid: false },
     bonusPay: { show: false, quoteNo: '', detail: null, bank: '', saving: false, error: '' },
     bonusPayNotice: '',
+    // 勞報單待付款（IP-103 payslip.payables）：對方已簽回；出納填付款日期＋既有傳票單號
+    payslipQueue: { available: false, visible: false, notice: '', items: [], canMarkPaid: false },
+    payslipForm: {},   // slipNo -> {date, voucherNo, saving, err}
     // 請款待付款（IP-100）
     payreqQueue: { available: false, notice: '', items: [], canPay: false },
     payreqDates: {},
@@ -252,7 +255,7 @@ function cashierApp() {
       const today = new Date()
       this.cashierHistoryStart = this._localDateStr(new Date(today.getFullYear(), today.getMonth(), 1))
       this.cashierHistoryEnd = this._localDateStr(today)
-      await Promise.all([this.loadPayable(), this.loadReceivable(), this.loadCashierHistory(), this.loadBonusQueue(), this.loadPayreqQueue(), this.loadRemitReviews()])
+      await Promise.all([this.loadPayable(), this.loadReceivable(), this.loadCashierHistory(), this.loadBonusQueue(), this.loadPayreqQueue(), this.loadRemitReviews(), this.loadPayslipQueue()])
       this.cashierLoaded = true
     },
 
@@ -325,6 +328,43 @@ function cashierApp() {
         await Promise.all([this.loadPayreqQueue(), this.loadRemitReviews()])
       } catch (e) { this.payreqNotice = '登錄付款失敗：' + e.message }
       finally { this.payreqBusy = false }
+    },
+
+    async loadPayslipQueue() {
+      try {
+        const r = await fetch('/api/cashier/payslip-queue', { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (!r.ok) return
+        this.payslipQueue = await r.json()
+        ;(this.payslipQueue.items || []).forEach(p => {
+          if (!this.payslipForm[p.slipNo]) this.payslipForm[p.slipNo] = { date: this._localDateStr(), voucherNo: '', saving: false, err: '' }
+        })
+      } catch (e) { console.error(e) }
+    },
+
+    async markPayslipPaid(p) {
+      const f = this.payslipForm[p.slipNo]
+      if (!f || f.saving) return
+      f.err = ''
+      if (!f.date || !(f.voucherNo || '').trim()) { f.err = '請填付款日期與傳票單號'; return }
+      f.saving = true
+      try {
+        const r = await fetch('/api/payslips/' + encodeURIComponent(p.slipNo) + '/mark-paid', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this._token(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payment_date: f.date, voucher_no: f.voucherNo.trim() })
+        })
+        if (r.ok) { await this.loadPayslipQueue() }
+        else { let m = ''; try { m = (await r.json()).detail } catch (e) {}; f.err = m || ('失敗（' + r.status + '）') }
+      } catch (e) { f.err = '失敗：' + e.message }
+      f.saving = false
+    },
+
+    async openPayslipSigned(p, file) {
+      try {
+        const r = await fetch('/api/payslips/' + encodeURIComponent(p.slipNo) + '/signed-files/' + encodeURIComponent(file.id), {
+          headers: { Authorization: 'Bearer ' + this._token() } })
+        if (r.ok) window.open(URL.createObjectURL(await r.blob()), '_blank')
+      } catch (e) { console.error(e) }
     },
 
     async loadBonusQueue() {

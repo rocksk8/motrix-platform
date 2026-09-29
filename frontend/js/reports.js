@@ -230,6 +230,15 @@ function reportsApp() {
     toggleFlag(kind) { this.flagOpen = Object.assign({}, this.flagOpen, { [kind]: !this.flagOpen[kind] }) },
     fmtMasked(v) { return v === null || v === undefined ? '—' : this.fmt(v) },
     get paymentAnomalyTotal() { return (this.expensesData || {}).paymentAnomalyTotal || 0 },
+    // 權責視圖的「實收對照」（依收款日、含稅；現金口徑時後端回空）
+    get activeCashReceiptItems() {
+      var d = this.expensesData || {}
+      return this._scopePick(this.expensesScope, d.monthCashReceiptItems || [], d.quarterCashReceiptItems || [], d.yearCashReceiptItems || [])
+    },
+    get activeCashReceiptTotal() {
+      var d = this.expensesData || {}
+      return this._scopePick(this.expensesScope, d.monthCashReceiptTotal || 0, d.quarterCashReceiptTotal || 0, d.yearCashReceiptTotal || 0)
+    },
     get yearIncomeItems()   { return (this.expensesData || {}).yearIncomeItems   || [] },
     get yearIncomeTotal()   { return (this.expensesData || {}).yearIncomeTotal   || 0 },
     get quarterExpenseItems() { return (this.expensesData || {}).quarterExpenseItems || [] },

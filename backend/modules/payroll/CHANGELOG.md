@@ -1,5 +1,13 @@
 # 薪資獎金 更新紀錄
 
+## 1.1.0 — 2026-09-29（暫用號，列車取號；wip/payslip-void-signed）
+- 勞報單作廢（新功能）：`POST /api/payslips/{單號}/void`，只准從「已匯出」、原因必填，終結狀態（不可改／刪／再匯出）；PDF 對已作廢單加斜向「已作廢」浮水印與頂端紅色橫幅（作廢時間、人、原因；`pdf_gen._payslip_apply_void_mark`，版型沒有 <body> 也不漏）。
+- 勞報單簽回（新功能）：上傳對方簽回檔 `POST /api/payslips/{單號}/signed-files`（已匯出 → 已簽回；pdf／jpg／png、單檔 20MB），實體檔放勞報單存檔目錄（F2，鏡像流程照走）；讀取 `GET …/signed-files/{id}`（最高管理者或出納）；`DELETE` 只准已簽回、刪光退回已匯出；`POST …/unsign` 退回簽回（才可作廢）。
+- 出納付款（新功能）：`POST /api/payslips/{單號}/mark-paid`（最高管理者或 cashier 模組；已簽回 → 已付款；付款日期 YYYY-MM-DD、傳票單號經 M06 `voucher.by_no` 驗證存在且未作廢；會計模組不在 ⇒ 拒絕並說明），`POST …/unpay` 退回付款。
+- 新增提供者 IP-103 `payslip.payables`（出納頁待付款，只回付款需要的欄位、不含 F2 個資）與 IP-9 `expense.entries`（名稱 `payslip`：已付款者依付款日期歸月、取應付總額，類別「勞報單」）。
+- 狀態鎖：已匯出／已簽回／已付款／已作廢一律不可修改、刪除；補印（再匯出）不會把已簽回／已付款洗回已匯出。
+- 首個模組自有 migration：`migrations/0001_payslip_void_signed_paid.py`（payslips 加 10 欄，只新增、冪等、表不在回原因字串）。⚠ 模組更新包（P7）拒收帶 migrations 的模組 ⇒ 這一版走完整部署包。
+
 ## 1.0.8 — 2026-09-28（暫用號，列車取號；E4 wip/e-company-gate-impl 第三段）
 - 本公司資料設定閘門第二道（COMPANY-SETUP-GATE §5；D CG5-M1）：勞報單 PDF 下載端點：`except Exception` 前先 `except HTTPException: raise`；勞報單視圖（L1）先驗本公司已設定（Q4：單據上手改的公司欄位保留）
 
