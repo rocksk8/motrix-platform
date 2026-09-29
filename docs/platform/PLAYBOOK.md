@@ -127,9 +127,28 @@
 ## D. 發行與正式換版（使用者執行，儀表板操作）
 
 **發行前（開發機）**
-1. 在要發行的 commit 上跑全量：`python tools/platform/modtest.py --full`。全綠之後，儀表板的測試閘門才會放行。
+1. 在要發行的 commit 上跑全量：`python tools/platform/modtest.py --full`。全綠之後，儀表板的測試閘門才會放行。〔補 2026-09-30：這一包沒動到底層時，可改跑範圍驗證，見下方 §D-1a〕
 2. 儀表板 →「1. 打包」（階段 2 完成後，可以選擇產品設定檔）。
 3. 儀表板 →「這一包會改到哪些模組」：確認改動範圍，以及各模組的更新紀錄。
+
+### D-1a. 範圍驗證閘門：沒動到底層就不跑全量（2026-09-30 使用者：「如果未影響到底層，審核測試上包可由獨立模組，不需要跑全域，也可以視這次更動範圍做驗證減少只改小部分但仍需花大量時間跑全域」）
+
+**規則**
+- 比較範圍＝正式機基準 P（要打包的 commit X 上 `backend/tests/_prod_baseline.py` 的 `BASELINE`）→ X 的**所有**改動檔（不是只看最後一個 commit）。
+- 底層清單的**唯一來源**是 `tools/platform/bottom_layer.json`（規則由上往下、第一條符合者決定；**沒有規則符合 ⇒ 當成底層**）。底層＝L0／L1（`backend/core/**`、`backend/helpers/**`、`backend/db.py`、`backend/main.py`、`backend/routers/**`、`backend/migrations_frozen/**`、backend 根目錄其他檔）、fixture 層（任何 `conftest.py`、`pytest.ini`、`requirements*.txt`）、**模組的 `migrations/**`**、建包／部署／平台工具（`backend/tools/**`、`tools/**`，含本閘門與清單本身）、`product/**`、共用前端（`frontend/static|js|css|fonts/**`、`frontend/index.html`、沒有恰好一個模組宣告的頁面）、測試共用工具（`backend/tests/` 下不是 `test_*.py` 的檔）。可走範圍驗證的只有：`backend/modules/<key>/**`（migrations 除外）、恰好一個模組宣告的頁面、`test_*.py`、`docs/**` 與根目錄 `*.md`、`version_manifest.json` 與 `_prod_baseline.py`（這兩個另帶 VR 守門題）。
+- P→X **有任何一檔在底層** ⇒ 照舊全量（`modtest --full`；建包腳本自己跑全量）。**全部不在底層** ⇒ 在 X 上跑 `python tools/platform/scope_gate.py run`（工作樹乾淨、HEAD＝X；`plan` 只判定與選題），綠了儀表板閘門與建包腳本就接受它、不跑全量。
+- 範圍驗證的內容＝`modtest --train` 同型：P→X 改動檔＋改到的提供者的消費端（`ship_tier.provider_check`；判不了 ⇒ 全量）當改動，**遞移選題**（不用名稱層級縮小——閘門寧寬）＋改到頁面的 e2e＋`tests/platform` 全部（`MOTRIX_TRAIN=1`，「是否最新」三題不可以被 skip）＋規則附帶的題；非 e2e 與 e2e 兩段都要綠。紀錄寫主工作樹 `tools/platform/full_results/scoped/<X>.json`。
+- 閘門（`scope_gate.py gate`；儀表板 `/api/build-gate`、建包腳本 Step 3 都呼叫它）**現場重算**判定，不信紀錄自己寫的：紀錄的 commit＝X、非 dirty、ok、基準＝現在的 P、模組集合＝現場算出的集合，缺一 ⇒ 不接受；判定出錯 ⇒ 不接受（回到全量）。建包加 `-ForceTests` ⇒ 一律全量。全量那條路不變。
+- 哪一種驗證放行寫進部署包 `deploy_manifest.json` 的 `verification`：`mode`＝`full`（沿用同 tree 綠燈時另有 `reused_from`）或 `scoped`（附 `base`、`units`、`consumers`、題檔數、完成時間、紀錄路徑）。稽核與正式機步驟檔看這一欄；`scoped` 的包在步驟檔上註明「未跑全量，驗證單位：…」。
+
+**為什麼可以（安全論證）與反方**
+- 支持：全量的大半是「沒被改到的東西再驗一次」。模組只經 L1 介面互相接觸（MODULE-GUIDE §1）；L1 沒變 ⇒ 別的模組的執行環境沒變。契約題（`tests/platform`）每次全跑，守的正是模組與底層的邊界。
+- 反方 ① **共用資料庫 schema**：模組的 migration 寫的是同一個庫，別的模組可能讀它的表。⇒ 模組 `migrations/**` 列為底層（一律全量）；沒有 migration 的表讀寫由 modtest 的資料表一跳（table_hop）把讀那張表的單位選進來。
+- 反方 ② **提供者契約漂移**：模組改了它提供的串接點（capability），消費端在別的模組／L1。⇒ `ship_tier.provider_check` 找出消費端當虛擬改動選題；任何一處取用判不了 ⇒ 全量（不猜）。
+- 反方 ③ **跨模組 e2e**：頁面流程可能經過別的模組的頁（例：傳票 e2e 點案件來源）。⇒ 改到的頁面與經相依圖擴散到的單位的 e2e 都選；純「資料依賴」的 e2e 由 table_hop 抓；抓不到的殘餘風險由 §G1 ③ 列車全量（每批合回後）與 ④ 發版演練承擔——範圍驗證只替代**出包前那一次**全量，不替代列車。
+- 反方 ④ **清單過期**（新增共用目錄沒登記）：沒有規則符合 ⇒ 底層（fail closed）；守門題驗每一條規則今天都對得到已追蹤的檔、modtest 的 fixture 層與 ship_tier 的完整包路徑都在底層。改清單本身＝改 `tools/**`＝那一包必須全量。
+- 反方 ⑤ **紀錄被沿用到別的 commit／基準**：紀錄以完整 SHA 分檔，閘門比對 commit、基準、模組集合，並現場重算底層判定。
+- 守門：`tests/platform/test_scope_gate_2026_09_30.py`（(a) 動到底層 ⇒ 不接受；(b) 只動模組 ⇒ 接受；(c) 別的 commit／dirty／紅／基準或模組不同 ⇒ 不接受；(d) 對 `scope_gate.py` 的真突變各一、對應題轉紅；暫存 repo 上的 P→X 整合題；儀表板與建包腳本的分支）。
 
 **換版當天（儀表板「5. 升級精靈」，逐步按下並確認）**
 
@@ -190,7 +209,7 @@
 | ① 開發中 | 每次存檔或 commit 前 | 名稱層級選題（改到的名稱 ⇒ 真的用到它的單位）＋該單位的契約題 | 數分鐘 |
 | ② 合回閘門 | push 到 platform 前 | ①＋tests/platform（契約與守門）＋有改到的頁面的 e2e；`--rebase-check` 判定差異題要擴大到哪些檔（~~要不要升到③~~〔更正 2026-09-26：影響大也不升到③，全量交給列車，§G3〕） | ≤20 分鐘 |
 | ③ 批次全量 | 每批合回之後、動到 fixture 層時〔更正（§G3）：**由列車跑**，各線不自己跑〕 | 全量（2 個名額、-n 4、低優先權） | ≤60 分鐘 |
-| ④ 發版 | 出部署包前 | 全量＋D7 型的升級演練（正式機資料的複本、兩種回滾、冒煙） | 以演練報告為準 |
+| ④ 發版 | 出部署包前 | 全量＋D7 型的升級演練（正式機資料的複本、兩種回滾、冒煙）〔補 2026-09-30：正式機基準→這一包沒動到底層 ⇒ 全量可由範圍驗證代替，§D-1a〕 | 以演練報告為準 |
 
 - 安全靠的是**邊界上的契約題**加上**守門的突變抽查**，不是每次都跑全部。每新增一道守門，都要附一個會讓它轉紅的突變。
 - 偶發失敗一律當成真問題查（O1 的教訓：它其實不是偶發），不准標成 flaky 或加重試。

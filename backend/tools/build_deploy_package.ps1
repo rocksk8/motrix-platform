@@ -35,7 +35,7 @@ param(
     # 0 = 不依天數清理。與 KeepPackages 並用：符合任一條就刪；這一次剛做好的包兩條都不會刪。
     [int]$MaxAgeDays = 7,
     # 同一份 tree（含環境）今天 12 小時內已嚴格全綠 ⇒ 預設沿用、不重跑測試（PLAN-TEST-PERF §3.1）。
-    # 加 -ForceTests 一律重跑（每週至少一次、或懷疑環境變了時用）。
+    # 加 -ForceTests 一律重跑（每週至少一次、或懷疑環境變了時用）。也關掉範圍驗證（PLAYBOOK §D-1a）⇒ 一律全量。
     [switch]$ForceTests,
     # 產品設定檔（CORE-SPEC §9c①）：repo 根目錄 product/<名稱>.json 列出要包的 L2 模組；
     # 沒選到的 backend/modules/<key>/（連同它宣告的頁面）不進包，包內寫 backend/modules.lock.json。
@@ -663,11 +663,48 @@ function Record-TestResult([bool]$green) {
     try { & $pyExe $reuseTool record --records $testRecords --fp $testFp --green $flag --commit $commitShort | Out-Null } catch {}
 }
 
+# ── 範圍驗證（PLAYBOOK §D-1a，2026-09-30 使用者：「如果未影響到底層……不需要跑全域」）──────────────────────
+# 正式機基準（backend/tests/_prod_baseline.py 的 BASELINE）→ 這個 commit 的改動**沒有一個在底層**
+# （tools/platform/bottom_layer.json）而且這個 commit 有全綠的範圍驗證（scope_gate.py run）⇒ 不跑全量。
+# 判定在 scope_gate.py gate（現場重算，不信紀錄自己的 mode）；判不了、出錯、-ForceTests ⇒ 照舊全量（fail closed）。
+# 哪一種驗證放行寫進 deploy_manifest.json 的 verification（稽核與正式機步驟檔看這個）。
+$scoped = $null
+$Verification = [ordered]@{ mode = "full" }
+if (-not $reuse -and -not $ForceTests) {
+    try {
+        $sgOut = & $pyExe (Join-Path $projectRoot "tools\platform\scope_gate.py") gate --commit $commit --json
+        $sgExit = $LASTEXITCODE
+        if ($sgOut) {
+            $sg = ($sgOut -join "`n") | ConvertFrom-Json
+            if ($sgExit -eq 0 -and $sg.accepted -eq $true -and $sg.commit -eq $commit) { $scoped = $sg }
+            elseif ($sg.record_present) { Write-Host "  [範圍驗證] 不適用：$($sg.detail) ⇒ 跑全量" -ForegroundColor Yellow }
+        }
+    } catch {
+        Write-Host "  [WARN] 範圍驗證判定失敗（$($_.Exception.Message)）—— 照常跑全量" -ForegroundColor Yellow
+        $scoped = $null
+    }
+}
+
 if ($reuse) {
     Write-Host "`n[測試] 沿用 $($reuse.tested_at) 的全綠結果（同一份 tree 與環境，commit $($reuse.commit)）—— 不重跑。要重跑請加 -ForceTests" -ForegroundColor Cyan
     $testExit = 0
     $e2eExit = 0
     $BuildStats["reused_tests_from"] = $reuse.tested_at
+    $Verification = [ordered]@{ mode = "full"; reused_from = $reuse.tested_at; reused_commit = $reuse.commit }
+} elseif ($scoped) {
+    Write-Host "`n[測試] 範圍驗證放行（沒有動到底層）：$($scoped.detail) —— 不跑全量。要全量請加 -ForceTests" -ForegroundColor Cyan
+    $testExit = 0
+    $e2eExit = 0
+    $Verification = [ordered]@{
+        mode         = "scoped"
+        base         = $scoped.base
+        units        = @($scoped.units)
+        consumers    = @($scoped.consumers)
+        test_files   = $scoped.tests
+        counts       = $scoped.counts
+        finished     = $scoped.finished
+        record       = $scoped.record_path
+    }
 } else {
 Acquire-TestExclusive
 $env:MOTRIX_PYTEST_EXCLUSIVE = "1"
@@ -1020,6 +1057,8 @@ $manifest = [ordered]@{
     #    答案在產物裡而不在誰的記憶裡**。
     durations_sec        = $BuildT
     tests                = $BuildStats
+    # PLAYBOOK §D-1a：哪一種驗證放行這一包（full＝全量；scoped＝範圍驗證，附模組清單與基準）
+    verification         = $Verification
     env                  = [ordered]@{
         phys_cores = $physCores
         workers    = $workers

@@ -185,6 +185,7 @@ modules/<key>/
 
 - 改 L2 模組 ⇒ 只跑該模組的測試加契約測試：`python tools/platform/modtest.py`。
 - 改 L1 ⇒ 範圍接近全量，是結構造成的，就接受全量。
+- 出包（PLAYBOOK §D-1a，2026-09-30）：正式機基準→這一包**沒有一檔在底層**（唯一清單 `tools/platform/bottom_layer.json`；模組的 `migrations/**`、任何 `conftest.py`、共用前端、工具都算底層，沒登記的路徑也算）⇒ 出包接受 `python tools/platform/scope_gate.py run` 的範圍驗證代替全量；有任何一檔在底層 ⇒ 照舊全量。部署包 `deploy_manifest.json` 的 `verification.mode` 記用了哪一種。新增會被多個模組用到的共用目錄時，同一個 commit 把它加進清單（否則它落到「沒有規則符合 ⇒ 底層」，只會變嚴、不會漏）。
 - 動到 fixture 層（conftest、pytest.ini、requirements）⇒ ~~一律全量~~〔更正 2026-09-26（主持，§G3）：各線不自己跑全量——差異題＋tests/platform＋改到頁面的 e2e 照跑，**全量由列車跑一次**；月台登記註明 fixture 層、排在列車最前面。`modtest` 閘門過了回 exit 3＝要註明〕。
 - pytest 一律帶自己的 `--basetemp`，跑完刪掉。
 - e2e：開瀏覽器的題一律帶 `@pytest.mark.e2e`（逐題死線、全量的 e2e 段都看它，不看檔名）；**瀏覽器 fixture 一律經 `new_context`**

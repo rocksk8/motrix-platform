@@ -1395,11 +1395,34 @@ def _head_full_sha() -> str:
         return ""
 
 
+def _scoped_gate(head: str):
+    """PLAYBOOK §D-1a 範圍驗證閘門（tools/platform/scope_gate.py）；紀錄在 FULL_RESULTS_DIR/scoped/<SHA>.json。
+    判定出錯 ⇒ 不接受（fail closed，回到全量閘門），原因寫進 detail。"""
+    try:
+        sp = str(PROJECT_ROOT / "tools" / "platform")
+        if sp not in sys.path:
+            sys.path.insert(0, sp)
+        import scope_gate
+        return scope_gate.gate(head, repo=PROJECT_ROOT, rdir=FULL_RESULTS_DIR / "scoped")
+    except Exception as e:  # noqa: BLE001
+        return {"accepted": False, "record_present": True, "detail": f"範圍驗證判定失敗：{e}"}
+
+
 @app.get("/api/build-gate")
 def build_gate():
-    """§9e D6：要打包的 HEAD 有沒有全綠的全量。前端在打包按鈕旁顯示；非 ok 時打包預設擋下。"""
+    """§9e D6：要打包的 HEAD 有沒有全綠的全量；沒有 ⇒ 再看範圍驗證（PLAYBOOK §D-1a：P→HEAD 沒動到底層＋這個 commit 的範圍驗證全綠）。
+    前端在打包按鈕旁顯示；非 ok 時打包預設擋下。mode：full／scoped＝哪一種驗證放行（None＝沒放行）。"""
     head = _head_full_sha()
-    return {"head": head, **deploy_insights.last_full(deploy_insights.full_result_path(FULL_RESULTS_DIR, head), head)}
+    full = deploy_insights.last_full(deploy_insights.full_result_path(FULL_RESULTS_DIR, head), head)
+    if full["state"] == "ok":
+        return {"head": head, "mode": "full", **full}
+    sc = _scoped_gate(head) if head else None
+    if sc and sc.get("accepted"):
+        return {"head": head, "mode": "scoped", "state": "ok", "detail": sc["detail"], "record": None,
+                "scoped": sc, "full_state": full["state"]}
+    if sc and sc.get("record_present"):
+        full = dict(full, detail=f"{full['detail']}；範圍驗證不適用：{sc.get('detail')}")
+    return {"head": head, "mode": None, **full}
 
 
 @app.get("/api/module-changes")
@@ -1447,7 +1470,7 @@ def start_build(body: BuildIn = None):
     gate = build_gate()
     if gate["state"] != "ok" and not body.overrideTestGate:
         return JSONResponse(status_code=409, content={
-            "detail": f"測試閘門未通過：{gate['detail']}。先跑全量（modtest --full），或勾選「略過測試閘門」並寫明原因。",
+            "detail": f"測試閘門未通過：{gate['detail']}。先跑全量（modtest --full；沒動到底層時可改跑範圍驗證 scope_gate.py run），或勾選「略過測試閘門」並寫明原因。",
             "gate": gate})
     job_id = uuid.uuid4().hex
     if gate["state"] != "ok":
