@@ -677,16 +677,7 @@
       </div>
     </div>
 
-    <!-- ─── 出貨單等我簽核 ─── -->
-    <div x-show="opsAlerts.shippingWaitingForMe > 0"
-         style="background:var(--warning-light);border-left:3px solid var(--warning);border-radius:var(--radius);padding:10px 16px;margin-bottom:8px;display:flex;gap:12px;align-items:center;cursor:pointer"
-         @click="location.href='pages/case-management.html'">
-      <span style="font-size:13px">📦</span>
-      <div style="flex:1;font-size:12px">
-        有 <strong x-text="opsAlerts.shippingWaitingForMe"></strong> 張出貨單等您簽核
-      </div>
-      <span style="font-size:11px;color:var(--warning);font-weight:600">前往案件管理 →</span>
-    </div>
+    <!-- 出貨單等我簽核：已併入「等我簽核」清單（同一份來源），這裡不再另算一個數字 -->
 
     <!-- ─── 開發案停滯（洽談中 30 天無新開發記錄） ─── -->
     <div x-show="canDevCrm && opsAlerts.devStale.length > 0"
@@ -751,39 +742,40 @@
          （移除的區塊共 27328 字元） -->
 
     <!-- ─── 底部：待審核 + 應收款項 ─── -->
-    <div class="chart-row-bottom" x-show="canFinance || canQuotation">
+    <div class="chart-row-bottom">
 
-      <!-- 待審核報價單（quotation only）-->
-      <div class="panel" x-show="canQuotation">
+      <!-- 等我簽核（與側欄角標／簽核佇列頁同一份：/api/approval-queue/count；含代理人與各類單據）-->
+      <div class="panel" data-testid="home-mine-panel">
         <div class="panel__head">
           <div class="panel__title">
-            待審核報價單
-            <span class="panel__count" :style="stats.pendingQuotes ? 'background:var(--warning-light);color:var(--warning)' : ''"
-                  x-text="(stats.pendingList?.length || 0) + ' 筆'"></span>
+            等我簽核
+            <span class="panel__count" data-testid="home-mine-count" :style="stats.waitingForMe ? 'background:var(--warning-light);color:var(--warning)' : ''"
+                  x-text="mineLoaded ? (stats.waitingForMe + ' 筆') : '—'"></span>
           </div>
           <a href="pages/approval-queue.html" class="panel__action">前往審核 →</a>
         </div>
         <div class="table-scroll">
         <table class="data-table">
           <thead>
-            <tr><th>報價單號</th><th>客戶</th><th style="text-align:right">金額</th><th>審核原因</th><th>申請人</th></tr>
+            <tr><th>單據</th><th>單號</th><th>客戶／案件</th><th>申請人</th></tr>
           </thead>
           <tbody>
-            <template x-for="q in (stats.pendingList || [])" :key="q.quoteNo">
-              <tr style="cursor:pointer" @click="location.href='pages/quotation-form.html?id='+q.quoteNo">
+            <template x-for="(q, qi) in mineItems" :key="q.type + ':' + q.quoteNo + ':' + qi">
+              <tr style="cursor:pointer" data-testid="home-mine-row" @click="location.href='pages/approval-queue.html'">
+                <td><span class="badge badge--warning" x-text="q.typeLabel"></span></td>
                 <td><span style="font-family:LINE Seed TW_OTF, sans-serif;font-size:11px" x-text="q.quoteNo"></span></td>
-                <td x-text="q.customer || '—'"></td>
-                <td class="num" x-text="fmtAmountFull(q.total)"></td>
-                <td>
-                  <template x-for="r in (q.reasons || ['需審核'])" :key="r">
-                    <span class="badge badge--warning" x-text="r" style="margin-right:3px"></span>
-                  </template>
-                </td>
-                <td style="color:var(--text-dim);font-size:11px" x-text="q.requestedBy || q.salesPerson || '—'"></td>
+                <td x-text="(q.customer || '—') + (q.projectName ? '｜' + q.projectName : '')"></td>
+                <td style="color:var(--text-dim);font-size:11px" x-text="q.requestedByDisplay || '—'"></td>
               </tr>
             </template>
-            <tr x-show="!loading && !(stats.pendingList?.length)">
-              <td colspan="5" style="text-align:center;color:var(--text-dim);padding:24px">目前無待審核的報價單</td>
+            <tr x-show="mineLoaded && stats.waitingForMe > mineItems.length">
+              <td colspan="4" style="text-align:center;color:var(--text-dim);padding:8px" x-text="'… 還有 ' + (stats.waitingForMe - mineItems.length) + ' 筆，前往簽核佇列'"></td>
+            </tr>
+            <tr x-show="!loading && mineLoaded && !mineItems.length">
+              <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">清單是空的：沒有輪到您的簽核單</td>
+            </tr>
+            <tr x-show="!loading && !mineLoaded">
+              <td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">讀不到待簽核清單，這裡的資料暫時不準</td>
             </tr>
           </tbody>
         </table>
@@ -1016,7 +1008,10 @@ feedCount(key) {
         this.now   = this.today + ' ' + d.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})
 
         this.onboardingDismissed = !!localStorage.getItem('motrix_onboarding_banner_dismissed')
-        await this.loadStats()
+        await Promise.all([this.loadStats(), this.loadApprovalMine()])
+        // 簽核在別的分頁／視窗處理完，回到首頁時數字與清單要跟著更新（與側欄角標同一支端點）
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) this.loadApprovalMine() })
+        window.addEventListener('focus', () => this.loadApprovalMine())
         this.monthly  = await this.loadMonthly()
         this.expenses = this.canFinance ? await this.loadExpenses() : []
         this.loadFunnel()
@@ -1025,6 +1020,22 @@ feedCount(key) {
         this.loadOrgTree()
         this.loading = false
         // 2026-09-14：圖表已移至營運報表，此處不再初始化 Chart.js
+      },
+
+      //: 「等我簽核」單一真相：`/api/approval-queue/count`（與側欄角標、簽核佇列頁同一份 `_counts_for_me`；
+      //  含代理人與所有單據類型）。數字與清單都來自這一個回應，不再用 `dashboard/stats` 只算報價單的版本。
+      //  讀不到 ⇒ `mineLoaded=false`，畫面說「讀不到」，不可以顯示成 0。
+      mineLoaded: false,
+      mineItems: [],
+      async loadApprovalMine() {
+        try {
+          const r = await fetch(`${API}/approval-queue/count`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) { this.mineLoaded = false; return }
+          const d = await r.json()
+          this.stats.waitingForMe = d.count || 0
+          this.mineItems = d.items || []
+          this.mineLoaded = true
+        } catch { this.mineLoaded = false }
       },
 
       async loadOrgTree() {
@@ -1066,7 +1077,9 @@ feedCount(key) {
           //    而且日後新增欄位時不會再漏一次。這是同一個形狀的第二次
           //    （第一次是 `4e3ebdb` 的側邊欄權限被不完整的 200 洗空）。
           if (r.ok) {
+            const keep = this.stats.waitingForMe
             this.stats = { ...this.stats, ...(await r.json()) }
+            if (this.mineLoaded) this.stats.waitingForMe = keep   // 等我簽核以簽核佇列（/approval-queue/count）為準
             this.statsLoaded = true
           } else {
             // FX33：讀不到就是讀不到。**不可以讓它看起來像「沒有資料」** ——

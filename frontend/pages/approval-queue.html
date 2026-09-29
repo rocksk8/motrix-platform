@@ -1242,6 +1242,7 @@
           // 一致寫「傳票（會計）」，否則簽核人分不出卡片上是哪一種。
           if (item.type === 'voucher') return '傳票（會計）'
           // SPEC-BONUS §十一（2026-09-24）：以案件為中心的獎金分潤
+          if (item.type === 'bonus_award') return '獎金'   // 之前漏了 ⇒ 落到最後一行被標成「報價單」
           if (item.type === 'bonus_case_award') return '獎金分潤'
           // P8（IP-10）：自訂模組單據，標籤用模組名稱
           if (item.type === 'custom_record') return item.moduleName || item.moduleKey || '自訂模組'
