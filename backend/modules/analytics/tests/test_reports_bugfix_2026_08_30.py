@@ -52,7 +52,7 @@ def test_income_html_shows_zero_net_amount_not_actual_amount(client, make_user):
                     "items": [{
                         "type": "訂金", "pct": 100, "amount": 5000,
                         "received": True, "receivedAt": "2026-06-15",
-                        "actualAmount": 5000, "feeAmount": 5000,  # netAmount = 0
+                        "actualAmount": 0, "feeAmount": 5000,  # 銀行入帳 0（2026-09-30：實收＝入帳，淨額＝實收）⇒ netAmount = 0；收入＝入帳＋手續費＝5000
                     }]
                 }
             },
@@ -82,5 +82,5 @@ def test_income_html_shows_zero_net_amount_not_actual_amount(client, make_user):
     row_start = html.index("MQ-NET0-001")
     row_end   = html.index("</tr>", row_start)
     row_html  = html[row_start:row_end]
-    assert "NT$ 5,000" in row_html   # 實收金額欄
+    assert "NT$ 5,000" in row_html   # 收入欄（入帳 0＋手續費 5,000）；bug 修復前「實收淨額」欄會被 `or aa_v` 誤帶成非 0
     assert "NT$ 0" in row_html       # 實收淨額欄（bug 修復前這裡看不到）

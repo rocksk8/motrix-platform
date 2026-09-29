@@ -211,18 +211,18 @@ def expense_entries(conn, start, end):
     """收款日在 [start, end] 的手續費（客戶內扣）⇒ `[{date, quoteNo, desc, amount, category}]`，一個收款品項一筆。
     收入已用「銀行入帳＋手續費」（`receipt_amounts`）算成含稅收入，手續費在這裡另列費用，損益才與銀行帳一致；權責／現金兩口徑相同（它是現金事件）。"""
     out = []
-    for row in conn.execute("""
-        SELECT quote_no, customer_name,
-               json_extract(data_json,'$.caseRecord.payment.items') AS pay_json
-        FROM quotations
-        WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
-          AND json_extract(data_json,'$.caseRecord.payment.items') IS NOT NULL
-    """).fetchall():
+    # 不用 SQL 的 JSON 取值函式（ratchet 守門：只准變少）：先用 LIKE 只撈「提到手續費」的案件再在 Python 解析，
+    # 不必為每次報表解析全部報價單的 data_json。
+    for row in conn.execute(
+            "SELECT quote_no, customer_name, deal_tag, data_json FROM quotations WHERE data_json LIKE '%feeAmount%'").fetchall():
         try:
-            items = json.loads(row["pay_json"] or "[]")
+            data = json.loads(row["data_json"] or "{}") or {}
         except Exception:
             continue
-        for idx, pi in enumerate(items or []):
+        if (row["deal_tag"] or data.get("dealTag") or "") not in ("已成案", "已結案"):
+            continue
+        items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+        for idx, pi in enumerate(items):
             if not pi.get("received"):
                 continue
             try:

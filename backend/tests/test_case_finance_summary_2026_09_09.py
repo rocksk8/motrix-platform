@@ -122,7 +122,7 @@ def test_receivable_totals_match_payment_items(client, make_user):
     assert recv["collectedTotal"] == 70000          # 應收金額口徑（非實收）
     assert recv["outstandingTotal"] == 30000
     assert recv["feeTotal"] == 30
-    assert recv["netCollected"] == 29500 - 30 + 40000  # 實收 - 手續費
+    assert recv["netCollected"] == 29500 + 40000  # 2026-09-30：實收＝銀行入帳（已扣客戶內扣手續費），淨額不再減手續費
     assert len(recv["items"]) == 3
     assert recv["items"][0]["receivedAt"] == "2026-03-05"   # 只留日期
     assert recv["items"][2]["received"] is False
