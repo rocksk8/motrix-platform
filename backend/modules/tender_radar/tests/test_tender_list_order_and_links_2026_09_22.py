@@ -391,7 +391,8 @@ def test_so7_both_the_tender_name_and_the_organisation_are_clickable():
         "**那是連結那一段被改掉或刪掉了**。")
 
     def _linked(field):
-        return any(field in chunk[:400] for chunk in links)
+        # T22-4：連結改由 `_link(t.url, <欄位>)` 產生（一格一個 x-html）；舊寫法（<a> 內直接用欄位）仍接受
+        return any(field in chunk[:400] for chunk in links) or ("_link(t.url, %s)" % field) in text
 
     assert _linked("t.name") or _linked("tender.name"), (
         "沒有任何 `<a>` 裡用到標案名稱"
