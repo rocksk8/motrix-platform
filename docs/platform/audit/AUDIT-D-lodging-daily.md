@@ -26,3 +26,13 @@
 現在載入模組會排 Timer，120 秒後（開關開著時）可能連線。既有題在 120 秒內結束所以綠，但敘述已不精確；建議註明「排程第一輪除外／關閉 `MOTRIX_DISABLE_SCHEDULERS`」。
 ### D-lodging-S3 殘留舊名
 `tests/test_lodging_records_e2e_2026_09_28.py` 檔頭、`test_alpine_double_init` 註解仍稱「附近旅宿紀錄」；CHANGELOG 舊條為歷史、不動。純字面，可下次順手。
+
+---
+## 複核（lodging 1.2.1，c1a86740）— 必修 0 項
+依 8c34f08a：以作者結果為準（1936 過），只跑探針與突變。
+| 項目 | 結果 |
+|---|---|
+| S1 當天失敗上限 | `daily_due` 讀 `daily_fail_day／daily_fail_count`，達 3 次當天不再連線、隔天歸零；計數記在 `lodging_fetch_state`，重啟不清。`refresh()` 成功／失敗寫狀態皆用 `dict(fetch_state(), …)`，不會洗掉計數；只有真失敗才計（`rate_limited`／`busy` 不計）；手動更新不受限（題有）✔ |
+| 突變（自做 2） | 上限比較改成 10**6 ⇒ `test_daily_stops_after_max_failures…` 紅；拿掉 `_count_daily_failure` ⇒ 同題紅 ✔（已還原）；新題 12 過 |
+| S2／S3 | LODGING-NEARBY「不自動連線」列註明排程第一輪例外；舊名字面更新 ✔ |
+| ship_tier `--prod 60520f8f` | 等級 2（模組 lodging）✔ |
