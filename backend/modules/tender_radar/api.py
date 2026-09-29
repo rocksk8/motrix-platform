@@ -23,6 +23,7 @@ from helpers.settings import  _set_setting
 from helpers import _audit, _require_user, _tok, require_any_module
 # ⚠️ 走模組不是 `from ... import run_scan`：那會複製走副本，
 # 測試換不掉，而「換不掉」的症狀是計數器永遠 0、那一題永遠綠。
+from modules.tender_radar import listing as tender_listing
 from modules.tender_radar import match as tender_match
 from modules.tender_radar import source as tender_source
 # ⚠️ 同理走模組：`geo.geocode` 要 patch 得到（M8b）。
@@ -126,6 +127,7 @@ def create_watch(body: dict = Body(...), authorization: str = Header(None)):
         )
         new_id = cur.lastrowid
         conn.commit()
+        tender_listing.bump()
     finally:
         conn.close()
     _audit(_tok(authorization), "tender_watch.create", "tender_watch",
@@ -208,6 +210,7 @@ def update_watch(watch_id: int, body: dict = Body(...),
              enabled, now, watch_id),
         )
         conn.commit()
+        tender_listing.bump()
     finally:
         conn.close()
     _audit(_tok(authorization), "tender_watch.update", "tender_watch",
@@ -228,6 +231,7 @@ def delete_watch(watch_id: int, authorization: str = Header(None)):
         conn.execute("DELETE FROM tender_hits WHERE watch_id=?", (watch_id,))
         conn.execute("DELETE FROM tender_watches WHERE id=?", (watch_id,))
         conn.commit()
+        tender_listing.bump()
     finally:
         conn.close()
     _audit(_tok(authorization), "tender_watch.delete", "tender_watch",
@@ -299,141 +303,30 @@ def list_tenders(watch: int = None, q: str = None,
     （中間有人刪掉條件就會講錯話）⇒ 這個訊號必須跟清單同一個回應出來。
     """
     _require_radar(authorization)
+    # 🔴 標籤仍是即時算的（不掛 tender_hits 帳本），但算出來的結果留在 `listing` 快取：
+    # 寫入端呼叫 `listing.bump()` 失效並背景預算，請求端只做 watch／q 過濾（快取的順序已含命中／標註提前）。
     conn = get_db()
     try:
-        rows = conn.execute("""
-            SELECT * FROM tenders
-            ORDER BY (deadline IS NULL), deadline ASC, id DESC
-        """).fetchall()
-        watches = []
-        for r in conn.execute(
-                "SELECT * FROM tender_watches WHERE enabled=1").fetchall():
-            w = dict(r)
-            # ⚠️ `keywords`／`excludes` 在資料庫裡是 **JSON 字串**，不是 list。
-            # 不解析的話 `_as_list` 會把整串 `'["監視"]'` 當成**一個關鍵字**
-            # ⇒ 永遠比不到，**而畫面上看起來像「這個條件沒有命中任何標案」**。
-            # 📌 形狀照 `tender_source._store()`（同一份資料的同一種解析）。
-            for key in ("keywords", "excludes"):
-                try:
-                    w[key] = json.loads(w[key] or "[]")
-                except (ValueError, TypeError):
-                    w[key] = []
-            watches.append(w)
+        cached = tender_listing.get_listing(conn)
     finally:
         conn.close()
+    items, hay = cached["items"], cached["hay"]
 
-    # 🔴 **標籤是即時算出來的，不是從 `tender_hits` 讀的。**
-    #
-    # 兩個理由，而第二個才是重點：
-    # ① 新增一個條件就立刻看得到它的標籤（P5），不必等下一次抓取。
-    # ② ☠️ **`tender_hits` 是「通知的帳本」**——每一列代表「這一筆要寄給使用者」。
-    #    把顯示也掛在它上面的話，**「讓畫面看得到」就會變成「寄一封信」**：
-    #    使用者新增一個條件 ⇒ 回溯比對寫進 200 列未通知的命中
-    #    ⇒ 下一個寄信時段**一次寄出 200 筆**，而那封信會讓他關掉整個功能。
-    # 🔑 P4 擔心的是「顯示與通知共用一個命中概念」——
-    #    **而真正的解不是小心一點，是讓它們不再共用。**
-    # ── 標註人的名字：一次查完，不要每一列各打一次 ──────────────
-    # 🔴 `SELECT *` 已經把 `marked_at`／`marked_by` 帶回來了（v92 加的兩欄），
-    # 缺的只有「那個 id 是誰」。
-    # ⚠️ 不用 JOIN：`SELECT *` 加 JOIN 之後欄位名會相撞（`tenders.id` 與
-    # `users.id`），而 sqlite3 的 Row 取名字時**後面的會蓋掉前面的** ——
-    # ☠️ 那會讓 `r["id"]` 安靜地變成使用者的 id，而清單看起來完全正常。
-    marker_ids = sorted({r["marked_by"] for r in rows
-                         if r["marked_by"] is not None})
-    marker_names = {}
-    if marker_ids:
-        conn2 = get_db()
-        try:
-            qs = ",".join("?" * len(marker_ids))
-            for u in conn2.execute(
-                    f"SELECT id, display_name, username FROM users"
-                    f" WHERE id IN ({qs})", marker_ids).fetchall():
-                marker_names[u["id"]] = (u["display_name"] or "").strip() \
-                    or u["username"]
-        finally:
-            conn2.close()
-
-    labels = {}
-    for t in rows:
-        tender = {"name": t["name"], "org": t["org"], "budget": t["budget"]}
-        hit = [{"id": w["id"], "name": w["name"]}
-               for w in watches if tender_match.matches(tender, w)]
-        if hit:
-            labels[t["id"]] = hit
-
-    items = [{
-        "id": r["id"], "caseNo": r["case_no"], "org": r["org"], "name": r["name"],
-        "publishedAt": r["published_at"], "deadline": r["deadline"],
-        "budget": r["budget"], "url": _clean_url(r["url"]),
-        "location": r["location"], "procurementType": r["procurement_type"],
-        "tenderMethod": r["tender_method"],
-        # ⚠️ 沒命中是**空陣列**不是缺這個鍵（P2）——
-        # 缺鍵的話前端每個用到它的地方都要防 undefined，
-        # 而漏防的那一處會是「畫面整塊消失」。
-        "matchedWatches": labels.get(r["id"], []),
-        # 🔑 判定一律 `is not None`，**不可以用真假值** ——
-        # `marked_at` 是字串，空字串是假的而它代表「有標註」。
-        # 📌 〈null 不等於 0〉：「沒有值」與「值是空的」是兩件事。
-        "marked": r["marked_at"] is not None,
-        "markedAt": r["marked_at"],
-        "markedBy": r["marked_by"],
-        # ⚠️ 讀不到對應的人時給「未知」，**不是把那一列藏起來**，
-        # 也不是回 `null` 讓前端自己想辦法 ——
-        # ☠️ 使用者被刪掉之後標註仍然要在，而畫面要說得出「不知道是誰」。
-        "markedByName": marker_names.get(r["marked_by"], ""),
-    } for r in rows]
-
-    # 🔴 **命中的整段排在前面**，兩段各自再依截止日排。
-    # ⚠️ **不是「整份排完再分段」**：資料庫已經照截止日排好了，
-    # 而 Python 的 sort 是**穩定**的 ⇒ 只用「有沒有命中」當鍵，
-    # 段內的截止日順序自然保留。
-    # 📌 只看截止日的話，一筆沒命中但截止日很近的會被推到最前面，
-    # 而使用者第一眼看到的就會是他不做的那一類。
-    items.sort(key=lambda it: not it["matchedWatches"])
-
-    # 🔴 **標註的整批提到最前面**（TD5／TD8）。
-    #
-    # > 使用者原話：「當這個標案被標誌，**則顯示於標案的最上方**」
-    #
-    # ⚠️ 這是**第二次** `sort`，不是把兩個鍵併成一個 tuple ——
-    # 🔑 Python 的 sort 是**穩定**的 ⇒ 後排的鍵是主鍵，而前一次排好的順序
-    #    在每一組內部原封不動保留下來。
-    # ⇒ TD8 要的「整批提前，**內部照既有排序**（不另外排）」就是這個意思：
-    #    標註那一批內部仍然是「命中的在前、再依截止日」，**沒有被重排過**。
-    # ☠️ 若照**標註時間**排，先標晚的再標早的會得到相反的順序 ——
-    #    而那兩種實作在「只標一筆」的測試下完全無法分辨。
-    #
-    # 🔴 而它擺在這裡（**篩選之前**）是刻意的：
-    #    下面的 `watch` 與 `q` 是在這個順序上做**過濾**，過濾不會改變順序。
-    # ☠️ 反過來把標註的「UNION 上去」的話，一筆**不符合搜尋條件**的標案
-    #    會因為被標註而冒出來 —— 而使用者會以為搜尋壞了。
-    items.sort(key=lambda it: not it["marked"])
-
-    # ⚠️ **在 `q` 篩選之前算**：這個訊號問的是「搜尋條件有沒有命中東西」，
-    # 不是「這次的搜尋結果有幾筆」。兩者混在一起的話，
-    # 使用者打一個查無結果的字，畫面會告訴他「你的搜尋條件都沒命中」——
-    # **而那是另一件事，會害他跑去改條件。**
-    if not watches:
-        matched_empty_reason = "no_watches"
-    elif not labels:
-        matched_empty_reason = "no_hits"
-    else:
-        matched_empty_reason = None
+    # ⚠️ `matchedEmptyReason` 在 watch／q 篩選之前定案：它問的是「搜尋條件有沒有命中東西」，不是「這次結果幾筆」
+    matched_empty_reason = cached["reason"]
 
     if watch is not None:
         # 📌 篩選是**可選的**：不帶參數就是全部（P3）。
-        items = [it for it in items
-                 if any(w["id"] == watch for w in it["matchedWatches"])]
+        keep = [(it, h) for it, h in zip(items, hay)
+                if any(w["id"] == watch for w in it["matchedWatches"])]
+        items, hay = [p[0] for p in keep], [p[1] for p in keep]
 
-    # 🔴 `q` 是**篩選**不是查詢：清空就回到全部，什麼都不留下。
-    # ⚠️ 空字串與沒給參數是同一件事（`?q=` 也是「不篩選」）——
-    # 把空字串當成「查一個空關鍵字」的話會篩掉全部，而畫面上那是「沒有標案」。
+    # 🔴 `q` 是**篩選**不是查詢：清空就回到全部；空字串與沒給參數是同一件事。
     needle = tender_match.normalize((q or "").strip())
     if needle:
-        items = [it for it in items
-                 if needle in tender_match.normalize(
-                     " ".join(str(it.get(k) or "")
-                              for k in ("name", "org", "caseNo")))]
+        items = [it for it, h in zip(items, hay) if needle in h]
+    else:
+        items = list(items)
 
     return {"items": items, "source": "資料來源：政府電子採購網",
             "matchedEmptyReason": matched_empty_reason}
@@ -665,6 +558,7 @@ def mark_tender(case_no: str, authorization: str = Header(None)):
                 (datetime.now().isoformat(timespec="seconds"),
                  user["id"], row["id"]))
             conn.commit()
+            tender_listing.bump()
             row = _mark_target(conn, case_no)
     finally:
         conn.close()
@@ -699,6 +593,7 @@ def unmark_tender(case_no: str, authorization: str = Header(None)):
             "UPDATE tenders SET marked_at=NULL, marked_by=NULL WHERE id=?",
             (row["id"],))
         conn.commit()
+        tender_listing.bump()
     finally:
         conn.close()
     _audit(_tok(authorization), "tender.unmark", "tender", case_no,

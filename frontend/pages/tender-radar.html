@@ -567,19 +567,30 @@ function tenderRadarPage() {
 
     //: 依篩選器過濾。**篩選是畫面上的事，不改資料**——
     //  後端回的永遠是全部，所以切換篩選不必重新請求。
-    //: 打字時不要每一鍵都打一次 API。
-    //  ⚠️ 250ms 是**體感**不是量測——它只影響請求次數，不影響正確性。
+    //: 打字時不要每一鍵都打一次 API：停手 500ms 才送、字沒變不送、上一趟還沒回來就取消它。
+    //  ⚠️ 500ms 是**體感**不是量測——它只影響請求次數，不影響正確性；
+    //  正確性靠 loadTenders 只採用「最後一次送出」的回應（_listSeq）。
     onSearch() {
       clearTimeout(this._searchTimer)
-      this._searchTimer = setTimeout(() => this.loadTenders(), 250)
+      this._searchTimer = setTimeout(() => {
+        const q = (this.search || '').trim()
+        if (q === this._lastQ) return
+        this.loadTenders()
+      }, 500)
     },
 
     async loadTenders() {
       const q = (this.search || '').trim()
       const url = '/api/tender-radar/tenders'
                 + (q ? ('?q=' + encodeURIComponent(q)) : '')
+      // 只採用最後一次送出的回應；前一趟還在飛就取消（慢的舊回應晚到會把新結果蓋掉）
+      const seq = this._listSeq = (this._listSeq || 0) + 1
+      if (window.__trListAbort) window.__trListAbort.abort()   // ⚠️ 放 window：Alpine 的 Proxy 包住 AbortController 會 Illegal invocation
+      const ctl = window.__trListAbort = new AbortController()
+      this._lastQ = q
       try {
-        const r = await fetch(url, { headers: this._h() })
+        const r = await fetch(url, { headers: this._h(), signal: ctl.signal })
+        if (seq !== this._listSeq) return
         if (!r.ok) {
           // ⚠️ 失敗時**不要把清單清空**——清空看起來像「沒有標案」，
           // 而那是另一件事。留著上一次的內容並說載入失敗。
@@ -587,10 +598,12 @@ function tenderRadarPage() {
           return
         }
         const body = await r.json()
+        if (seq !== this._listSeq) return
         this.tenders = body.items || []
         this.matchedEmptyReason = body.matchedEmptyReason || null
         this.listError = ''
       } catch (_e) {
+        if (_e && _e.name === 'AbortError') return   // 被新的一趟取代，不是失敗
         this.listError = '標案清單載入失敗：連線不到伺服器'
       }
     },

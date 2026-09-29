@@ -63,6 +63,7 @@ from datetime import date, datetime, timedelta
 
 from db import get_db
 from helpers.settings import _get_setting, _set_setting
+from modules.tender_radar import listing as _listing
 
 logger = logging.getLogger(__name__)
 
@@ -809,6 +810,8 @@ def run_scan():
             if backlog:
                 _fetch_details(conn, backlog)
         conn.commit()
+        if recognised:
+            _listing.bump()   # 標案清單快取失效並背景預算（listing.py）
         return {
             "fetched": True, "error": None, "recognised": recognised,
             "parsed": len(items), "dropped": dropped,
