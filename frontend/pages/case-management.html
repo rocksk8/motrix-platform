@@ -2170,6 +2170,7 @@
                         <span>開票申請 <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="finRelatedDocs().invoiceVouchers.length"></span> 張</span>
                         <span>請款單 <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="finRelatedDocs().paymentRequests.length"></span> 張</span>
                         <span>精算額外支出 <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="caseSettleFmt(finExtrasTotal())"></span>（未計入應付）</span>
+                        <span x-show="(financeSummary?.payable?.remitFeeTotal || 0) + (financeSummary?.settlementExtras?.remitFeeTotal || 0) > 0" data-testid="fin-remit-fee">匯款手續費（已匯款，列入成本） <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="caseSettleFmt((financeSummary?.payable?.remitFeeTotal || 0) + (financeSummary?.settlementExtras?.remitFeeTotal || 0))"></span></span>
                       </div>
 
                       <!-- 展開明細 -->
@@ -2497,7 +2498,7 @@
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="caseSettleFmt(caseSettleSummary().quotedPretax)"></td></tr>
                             <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">品項實際成本</td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-warning-fg)" x-text="caseSettleFmt(caseSettleSummary().itemActualTotal)"></td></tr>
-                            <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">額外支出</td>
+                            <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">額外支出<span x-show="caseSettleSummary().remitFeeTotal" style="font-size:11px" x-text="'（含匯款手續費 ' + caseSettleFmt(caseSettleSummary().remitFeeTotal) + '）'"></span></td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-warning-fg)" x-text="caseSettleFmt(caseSettleSummary().extraTotal)"></td></tr>
                             <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">承攬商派發成本</td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-warning-fg)" x-text="caseSettleFmt(caseSettleSummary().dispatchTotal)"></td></tr>
@@ -2736,7 +2737,19 @@
                       <template x-for="f in (d.files||[])" :key="f.id">
                         <span style="display:flex;align-items:center;gap:4px;font-size:11px;background:var(--surface-neutral);border-radius:4px;padding:2px 6px">
                           <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
-                          <button @click="deleteDispatchFile(d, f.id)" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:11px;padding:0 2px">×</button>
+                          <span x-show="f.deleteRequest" data-testid="dispatch-file-delete-pending"
+                                style="color:var(--tone-warning-fg);font-weight:600"
+                                :title="f.deleteRequest ? ('申請人 ' + (f.deleteRequest.requestedByDisplay || f.deleteRequest.requestedBy) + '：' + (f.deleteRequest.reason || '')) : ''">刪除待審</span>
+                          <template x-if="f.deleteRequest && canDecideFileDelete(f)">
+                            <span>
+                              <button @click="decideFileDelete(d, f, 'approve')" data-testid="dispatch-file-delete-approve"
+                                      style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:11px;padding:0 2px">核可刪除</button>
+                              <button @click="decideFileDelete(d, f, 'reject')" data-testid="dispatch-file-delete-reject"
+                                      style="border:none;background:none;color:var(--text-secondary);cursor:pointer;font-size:11px;padding:0 2px">退回</button>
+                            </span>
+                          </template>
+                          <button x-show="!f.deleteRequest" @click="deleteDispatchFile(d, f.id)" title="申請刪除（需審核）" data-testid="dispatch-file-delete"
+                                  style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:11px;padding:0 2px">×</button>
                         </span>
                       </template>
                       <label x-show="['superadmin','admin'].includes(session.role)"
@@ -2786,7 +2799,7 @@
                           <span :class="'badge ' + _cvStatusClass(_dispatchVoucher(d).status)" x-text="_cvStatusLabel(_dispatchVoucher(d).status)"
                                 style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
                           <span x-show="_dispatchVoucher(d).isPaid" style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--tone-success-bg-strong);color:var(--tone-success-fg)">
-                            ✓ 已匯款<span x-show="_dispatchVoucher(d).paidAt" x-text="'（' + _dispatchVoucher(d).paidAt.slice(0,10) + '）'"></span>
+                            ✓ 已匯款<span x-show="_dispatchVoucher(d).paidAt" x-text="'（' + _dispatchVoucher(d).paidAt.slice(0,10) + '）'"></span><span x-show="_dispatchVoucher(d).remitReview==='pending'" style="color:var(--tone-warning-fg)"> ⚠ 差額待審核</span><span x-show="_dispatchVoucher(d).remitFee" x-text="' 手續費 ' + _dispatchVoucher(d).remitFee"></span>
                           </span>
 
                           <div x-show="_dispatchVoucher(d).status==='草稿'" style="display:flex;gap:6px">
@@ -3434,7 +3447,7 @@
      style="position:fixed;inset:0;background:var(--overlay-backdrop);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px"
      @click.self="closeDispatchModalGuarded()"
      @keydown.escape.window="closeDispatchModalGuarded()">
-  <div style="background:var(--surface);border-radius:12px;width:100%;max-width:680px;max-height:calc(90vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:var(--shadow-popover)">
+  <div style="background:var(--surface);border-radius:12px;width:100%;max-width:920px;margin:auto;max-height:calc(90vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:var(--shadow-popover)" data-testid="dispatch-modal-box">
     <!-- Header -->
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
@@ -3481,10 +3494,10 @@
             <option value="cancelled">已取消</option>
           </select>
         </div>
-        <div>
-          <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">工作範圍</label>
-          <input data-saved-field type="text" x-model="dispatchForm.scope" placeholder="簡述承攬工項…"
-                 style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
+        <div style="grid-column:1 / -1">
+          <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">派工內容（工作範圍）</label>
+          <textarea data-saved-field x-model="dispatchForm.scope" rows="5" placeholder="承攬工項、施作範圍、注意事項…（可多行）" data-testid="dispatch-form-scope"
+                    style="width:100%;min-height:110px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;line-height:1.6;font-family:inherit;outline:none;resize:vertical;box-sizing:border-box"></textarea>
         </div>
         <div>
           <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">發票號碼</label>
@@ -3505,6 +3518,13 @@
 
       <!-- Items -->
       <div style="font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--border-light);padding-bottom:4px;margin-bottom:10px">承攬商報價品項</div>
+      <datalist id="dispatch-unit-options">
+        <option value="式"></option><option value="組"></option><option value="米"></option><option value="台"></option>
+        <option value="套"></option><option value="個"></option><option value="捲"></option><option value="箱"></option>
+        <option value="包"></option><option value="人月"></option><option value="人日"></option><option value="次"></option>
+        <option value="年"></option><option value="月"></option><option value="批"></option><option value="項"></option>
+        <option value="坪"></option><option value="才"></option><option value="公尺"></option><option value="公斤"></option>
+      </datalist>
       <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px">
         <thead>
           <tr style="color:var(--text-dim);border-bottom:1px solid var(--border-light)">
@@ -3520,8 +3540,8 @@
           <template x-for="(it, ii) in dispatchForm.items" :key="it.id">
             <tr style="border-bottom:1px solid var(--surface-sunken)">
               <td style="padding:4px 0">
-                <input type="text" x-model="it.description" placeholder="品項說明"
-                       style="width:100%;padding:5px 8px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box">
+                <textarea x-model="it.description" rows="2" placeholder="品項說明" data-testid="dispatch-item-desc"
+                          style="width:100%;min-height:44px;padding:5px 8px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;line-height:1.5;font-family:inherit;outline:none;resize:vertical;box-sizing:border-box"></textarea>
               </td>
               <td style="padding:4px 6px">
                 <input type="number" x-model.number="it.qty" min="0.01" step="1"
@@ -3529,25 +3549,8 @@
                        style="width:100%;padding:5px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;text-align:right;outline:none;box-sizing:border-box">
               </td>
               <td style="padding:4px 4px">
-                <select x-model="it.unit"
-                        style="width:100%;padding:5px 2px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;background:var(--surface);cursor:pointer">
-                  <option>式</option>
-                  <option>台</option>
-                  <option>套</option>
-                  <option>個</option>
-                  <option>組</option>
-                  <option>米</option>
-                  <option>捲</option>
-                  <option>箱</option>
-                  <option>包</option>
-                  <option>人月</option>
-                  <option>人日</option>
-                  <option>次</option>
-                  <option>年</option>
-                  <option>月</option>
-                  <option>批</option>
-                  <option>項</option>
-                </select>
+                <input type="text" x-model="it.unit" list="dispatch-unit-options" placeholder="單位" maxlength="12" data-testid="dispatch-item-unit"
+                       style="width:100%;padding:5px 4px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;background:var(--surface)">
               </td>
               <td style="padding:4px 6px">
                 <input type="number" x-model="it.unitPrice" min="0" step="1" placeholder="0"
@@ -3643,7 +3646,7 @@
       <!-- Notes -->
       <div style="margin-top:14px">
         <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">備註</label>
-        <textarea x-model="dispatchForm.notes" rows="2" placeholder="合作條件、特殊備註…"
+        <textarea x-model="dispatchForm.notes" rows="4" placeholder="合作條件、特殊備註…"
                   style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;resize:vertical;box-sizing:border-box"></textarea>
       </div>
       <div x-show="dispatchMsg" style="color:var(--danger);font-size:12px;margin-top:8px" x-text="dispatchMsg"></div>
@@ -3979,9 +3982,24 @@
       <button @click="closePayVoucherModalGuarded()" style="width:28px;height:28px;border:none;background:var(--surface-sunken);border-radius:5px;cursor:pointer;font-size:16px">×</button>
     </div>
     <div style="padding:18px 20px">
-      <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">匯款日期</label>
-      <input type="date" x-model="payVoucherDate"
+      <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">匯款日期（必填）</label>
+      <input type="date" x-model="payVoucherDate" required data-testid="cm-pay-date"
              style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;margin-bottom:14px">
+      <div style="display:flex;gap:10px;margin-bottom:8px;font-family:var(--font-zh);font-size:12px">
+        <div style="flex:1"><div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">應付金額</div>
+          <div style="padding:7px 0;font-family:'LINE Seed TW_OTF',sans-serif" x-text="'NT$ ' + Number(payVoucherTarget ? payVoucherTarget.grandTotal : 0).toLocaleString()"></div></div>
+        <div style="flex:1"><label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">實付金額</label>
+          <input type="number" min="0" step="0.01" x-model="payRemit.actual" data-testid="cm-pay-actual"
+                 style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;outline:none;box-sizing:border-box"></div>
+      </div>
+      <div x-show="remitDiff(payRemit, payVoucherTarget ? payVoucherTarget.grandTotal : 0) !== 0" data-testid="cm-pay-diff-warn"
+           style="font-size:12px;padding:6px 10px;margin-bottom:8px;border-radius:6px;background:var(--tone-warning-bg);color:var(--tone-warning-fg)">
+        ⚠ 實付與應付差 <b x-text="remitDiff(payRemit, payVoucherTarget ? payVoucherTarget.grandTotal : 0)"></b> 元：標記後單據會標「差額待審核」並通知管理員。</div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:8px"><input type="checkbox" x-model="payRemit.hasFee" data-testid="cm-pay-hasfee"> 有匯款手續費（公司自付，不從受款方扣）</label>
+      <div x-show="payRemit.hasFee" style="margin-bottom:12px"><label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">手續費金額</label>
+        <input type="number" min="0" step="0.01" x-model="payRemit.fee" data-testid="cm-pay-fee"
+               style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;outline:none;box-sizing:border-box"></div>
+      <div x-show="remitError(payRemit)" x-text="remitError(payRemit)" style="font-size:12px;color:var(--tone-danger-fg);margin-bottom:8px"></div>
       <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">匯款銀行帳戶（選填，供 T100 傳票匯出使用）</label>
       <select x-model="payVoucherBankAcctCode" @change="onPayVoucherBankChange()"
               style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:var(--font-zh);outline:none;box-sizing:border-box;margin-bottom:14px">
@@ -3995,7 +4013,7 @@
     <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
       <button @click="payVoucherModal=false" :disabled="payVoucherSaving"
               style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--surface);cursor:pointer">取消</button>
-      <button @click="confirmPayVoucher()" :disabled="payVoucherSaving || !payVoucherDate"
+      <button @click="confirmPayVoucher()" :disabled="payVoucherSaving || !payVoucherDate || !!remitError(payRemit)"
               style="padding:7px 16px;border:none;border-radius:7px;font-size:13px;font-weight:600;font-family:var(--font-zh);background:var(--tone-success-solid);color:var(--surface);cursor:pointer"
               x-text="payVoucherSaving ? '處理中…' : '確認標記已匯款'"></button>
     </div>

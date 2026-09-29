@@ -1,5 +1,14 @@
 # 外包工班 更新紀錄
 
+## 1.0.19 — 2026-09-30（暫用號，列車取號；N1 承攬商派工，接在 W1 之後）
+- N1 稽核補修：刪除申請進簽核佇列（`approval.queue_items` 名稱 `subcontract_dispatch_file`、`approval.detail` `dispatch_file_delete`；佇列頁可直接核可／退回）；申請人不能核可／退回自己的申請；核可端點簽核人防呆
+- W1 稽核補修：`paid-toggle` 標記已匯款不帶 `paid_at` ⇒ 400（不再默認今天）；待審核差額（實付≠應付）標記匯款者不能自己核可／退回（403）；手續費 `expense.entries` 帶 `pending`；`_voucher_public` 帶 remitReview
+- N1 承攬商派工（暫用號，列車取號）：承攬商報價單附件刪除改為「申請刪除、要審核」（`DELETE …/files/{id}` 帶原因；簽核走案件既有簽核層級＝報價單的流程設定（預設統一流程；申請人沒有部門主管解析不出來時退回由最高管理者核可），沒設層級時由最高管理者核可，最高管理者自己申請且沒設層級才直接刪）；新增 `POST …/files/{id}/delete-approve`／`delete-reject`；核可前檔案保留、檔案帶 `deleteRequest`（畫面標「刪除待審」）；派工視窗：派工內容改大輸入框、視窗加寬置中、品項說明改多行、單位改可自行輸入（datalist）
+
+## 1.0.18 — 2026-09-30（暫用號，列車取號；W1 wip/w1-remit-fee）
+- 稽核補修（見 1.0.19 段）：日期必填 400、自己標記不能自己核可、待審核差額標示
+- W1 出納匯款手續費（暫用號，列車取號）：`contractor_payment_vouchers` 加實付／手續費／差額審核欄位（本模組首支 migration v1 `0001_remit_fee`）；`paid-toggle` 收 `actualAmount`／`hasFee`／`fee`，實付≠應付 ⇒ `remit_review='pending'`（差額待審核，通知管理員），取消匯款一併清空；匯款日期不帶仍退回今天（舊契約）；提供 IP-102 `remit.reviews`（名稱 `contractor_voucher`：清單、核可／退回）、IP-9 `expense.entries`（名稱 `remit_fee_contractor`：手續費以匯款日列營運報表支出）；`GET /api/contractor-vouchers/remit-fee-total`（案件成本用）；匯款單公開形狀加 payableAmount／remitActual／remitFee／remitDiff／remitReview*（IP-14 加欄位、相容）。⚠ 帶 migrations/ 的模組目前不能用單模組更新包出貨（P7b）
+
 ## 1.0.17 — 2026-09-28（暫用號，列車取號；E4 wip/e-company-gate-impl 第三段）
 - 本公司資料設定閘門第二道（COMPANY-SETUP-GATE §5；D CG5-M1）：承攬匯款申請 PDF 下載端點：`except Exception` 前先 `except HTTPException: raise`（第二道的 428 不被吞成 500）
 

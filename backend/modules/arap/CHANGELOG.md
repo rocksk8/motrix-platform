@@ -1,5 +1,9 @@
 # 應收應付 更新紀錄
 
+## 1.0.11 — 2026-09-30（暫用號，列車取號；W1 wip/w1-remit-fee）
+- 稽核補修：登錄付款 `paidDate` 必填（不帶 ⇒ 400，不再默認今天）；審核決定的 403／409 由提供者例外決定；財務總覽顯示手續費在案件管理頁
+- W1 出納匯款手續費（暫用號，列車取號）：`pending-payables/…/pay` 收實付／手續費並回差額待審核；新增 IP-102 取用端點 `GET /api/cashier/remit-reviews`、`POST /api/cashier/remit-reviews/{來源}/{key}/decision`（只限 admin+，退回必填原因）；執行紀錄與 Excel 匯出加實付／手續費／差額審核欄與「請款付款明細」；出納頁三個標記已匯款入口加實付／手續費欄、新增「差額審核」頁籤、T100 設定加手續費科目
+
 ## 1.0.10 — 2026-09-28（暫用號，列車取號；E4 wip/e-company-gate-impl 第三段）
 - 本公司資料設定閘門第二道（COMPANY-SETUP-GATE §5；D CG5-M1）：開票申請、請款單 PDF 下載端點：`except Exception` 前先 `except HTTPException: raise`（第二道的 428 不被吞成 500）；請款單另驗本公司匯款三欄（L1 pdf_gen `_require_payment_bank`，缺 ⇒ 428 `company_bank_required`）
 

@@ -96,6 +96,15 @@ function cashierApp() {
     payreqDates: {},
     payreqBusy: false,
     payreqNotice: '',
+    payreqRemits: {},                    // W1：每筆請款的實付／手續費輸入 { 'source:key': {actual, hasFee, fee} }
+    // W1：匯款實付／手續費（三個標記已匯款入口共用同一組欄位規則）；實付空白＝等於應付；手續費是公司自付、不參與比對
+    payRemit:  { actual: '', hasFee: false, fee: '' },
+    bankRemit: { actual: '', hasFee: false, fee: '' },
+    // W1：匯款差額審核（IP-102）
+    remitReviews: { available: false, notice: '', items: [], canDecide: false },
+    remitDecisionMemo: {},
+    remitReviewBusy: false,
+    remitReviewNotice: '',
     cashierHistoryBonus: [],
     cashierHistoryBonusTotal: 0,
     cashierHistoryBonusVisible: false,
@@ -186,13 +195,64 @@ function cashierApp() {
       return dateStr <= this._localDateStr(soon)
     },
 
+    // ── W1：匯款實付／手續費欄位規則 ─────────────────────────────────────────────
+    _newRemit(payable) { return { actual: payable != null ? String(payable) : '', hasFee: false, fee: '' } },
+    remitDiff(st, payable) {
+      const a = (st.actual === '' || st.actual == null) ? Number(payable) : Number(st.actual)
+      return Math.round((a - Number(payable || 0)) * 100) / 100 /* 非金額：僅畫面警示 */
+    },
+    remitError(st) {
+      if (st.actual !== '' && st.actual != null && !(Number(st.actual) > 0)) return '實付金額必須大於 0'
+      if (st.hasFee && (st.fee === '' || st.fee == null || !(Number(st.fee) >= 0))) return '請填寫手續費金額（不可為負數）'
+      return ''
+    },
+    remitBody(st) {
+      const b = {}
+      if (st.actual !== '' && st.actual != null) b.actualAmount = Number(st.actual)
+      if (st.hasFee) { b.hasFee = true; b.fee = Number(st.fee) }
+      return b
+    },
+    remitReviewLabel(s) { return s === 'pending' ? '差額待審核' : (s === 'approved' ? '差額已核可' : '') },
+    payreqRemit(it) {
+      const k = it.source + ':' + it.key
+      if (!this.payreqRemits[k]) this.payreqRemits[k] = this._newRemit('')
+      return this.payreqRemits[k]
+    },
+
+    async loadRemitReviews() {
+      try {
+        const r = await fetch('/api/cashier/remit-reviews', { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (r.ok) this.remitReviews = await r.json()
+      } catch (e) { console.error(e) }
+    },
+
+    // 核可／退回：POST /api/cashier/remit-reviews/{來源}/{key}/decision（只限 admin+；退回要填原因，退回＝回未匯款）
+    async decideRemitReview(it, decision) {
+      const k = it.source + ':' + it.key
+      const note = (this.remitDecisionMemo[k] || '').trim()
+      if (decision === 'reject' && !note) { this.remitReviewNotice = '退回請先在「原因」欄填寫原因'; return }
+      this.remitReviewBusy = true
+      this.remitReviewNotice = ''
+      try {
+        const r = await fetch('/api/cashier/remit-reviews/' + encodeURIComponent(it.source) + '/' + encodeURIComponent(it.key) + '/decision', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ decision, note }),
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this.remitReviewNotice = d.detail || ('操作失敗（HTTP ' + r.status + '）'); return }
+        this.remitReviewNotice = (decision === 'approve' ? '已核可：' : '已退回（回未匯款）：') + (it.quoteNo || '') + '　' + it.payee
+        await Promise.all([this.loadRemitReviews(), this.loadPayable(), this.loadPayreqQueue(), this.loadCashierHistory()])
+      } catch (e) { this.remitReviewNotice = '操作失敗：' + e.message }
+      finally { this.remitReviewBusy = false }
+    },
+
     async showCashierTab() {
       this.activeTab = 'cashier'
       if (this.cashierLoaded) return
       const today = new Date()
       this.cashierHistoryStart = this._localDateStr(new Date(today.getFullYear(), today.getMonth(), 1))
       this.cashierHistoryEnd = this._localDateStr(today)
-      await Promise.all([this.loadPayable(), this.loadReceivable(), this.loadCashierHistory(), this.loadBonusQueue(), this.loadPayreqQueue()])
+      await Promise.all([this.loadPayable(), this.loadReceivable(), this.loadCashierHistory(), this.loadBonusQueue(), this.loadPayreqQueue(), this.loadRemitReviews()])
       this.cashierLoaded = true
     },
 
@@ -255,12 +315,14 @@ function cashierApp() {
         const k = it.source + ':' + it.key
         const r = await fetch('/api/cashier/pending-payables/' + encodeURIComponent(it.source) + '/' + encodeURIComponent(it.key) + '/pay', {
           method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({ paidDate: this.payreqDates[k] || '' }),
+          body: JSON.stringify({ paidDate: this.payreqDates[k] || '', ...this.remitBody(this.payreqRemit(it)) }),
         })
         const d = await r.json().catch(() => ({}))
         if (!r.ok) { this.payreqNotice = d.detail || ('登錄付款失敗（HTTP ' + r.status + '）'); return }
         this.payreqNotice = '已登錄付款：' + (it.quoteNo || '') + '　' + it.title + '　付款日 ' + d.paidDate
-        await this.loadPayreqQueue()
+          + (d.remitReview ? '　⚠ 實付與應付差 ' + d.diff + '，已送管理員審核' : '')
+        delete this.payreqRemits[k]
+        await Promise.all([this.loadPayreqQueue(), this.loadRemitReviews()])
       } catch (e) { this.payreqNotice = '登錄付款失敗：' + e.message }
       finally { this.payreqBusy = false }
     },
@@ -378,6 +440,7 @@ function cashierApp() {
       this.payVoucherBankAcctCode = ''
       this.payVoucherDate = v.payableDate || this._localDateStr()
       this.payVoucherNote = ''
+      this.payRemit = this._newRemit(v.grandTotal)
       this.payVoucherModal = true
       await this.loadT100BankAccounts()
       const url = v.vendorId ? `/api/contractor-vouchers/last-paid-bank-account?vendor_id=${v.vendorId}` : ''
@@ -386,7 +449,7 @@ function cashierApp() {
 
     async confirmPayVoucher() {
       const v = this.payVoucherTarget
-      if (!v || !this.payVoucherDate) return
+      if (!v || !this.payVoucherDate || this.remitError(this.payRemit)) return
       this.payVoucherSaving = true
       try {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {
@@ -395,12 +458,13 @@ function cashierApp() {
           body: JSON.stringify({
             action: 'pay', paid_at: this.payVoucherDate, note: this.payVoucherNote,
             bankAccountCode: this.payVoucherBankAcctCode, bankAccountName: this._t100BankName(this.payVoucherBankAcctCode),
+            ...this.remitBody(this.payRemit),
           })
         })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); this.payVoucherSaving = false; return }
         this.payVoucherModal = false
         this.payVoucherTarget = null
-        await Promise.all([this.loadPayable(), this.loadCashierHistory()])
+        await Promise.all([this.loadPayable(), this.loadCashierHistory(), this.loadRemitReviews()])
       } catch (e) { alert('標記已匯款失敗：' + e.message) }
       this.payVoucherSaving = false
     },
@@ -543,19 +607,20 @@ function cashierApp() {
       if (!row || !row.match) return
       this.bankPayRow = row
       this.bankPayDate = this._guessDateFromBankText(row.date) || this._localDateStr()
+      this.bankRemit = this._newRemit(row.match.amount)
       this.bankPayModal = true
     },
 
     async confirmBankPay() {
       const row = this.bankPayRow
-      if (!row || !row.match || !this.bankPayDate) return
+      if (!row || !row.match || !this.bankPayDate || this.remitError(this.bankRemit)) return
       const voucherNo = row.match.voucherNo
       this.bankPaySaving = true
       try {
         var res = await fetch('/api/contractor-vouchers/' + voucherNo + '/paid-toggle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({ action: 'pay', paid_at: this.bankPayDate, note: '銀行對帳單比對後標記' }),
+          body: JSON.stringify({ action: 'pay', paid_at: this.bankPayDate, note: '銀行對帳單比對後標記', ...this.remitBody(this.bankRemit) }),
         })
         if (!res.ok) {
           var j = await res.json().catch(function () { return {} })
@@ -564,7 +629,7 @@ function cashierApp() {
         row.match._paid = true
         this.bankPayModal = false
         this.bankPayRow = null
-        await Promise.all([this.loadPayable(), this.loadCashierHistory()])
+        await Promise.all([this.loadPayable(), this.loadCashierHistory(), this.loadRemitReviews()])
       } catch (e) {
         alert('標記失敗：' + (e.message || e))
       }

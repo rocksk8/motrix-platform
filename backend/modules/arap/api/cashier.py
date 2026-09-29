@@ -30,7 +30,7 @@ from urllib.parse import quote as _url_quote
 
 from core import registry
 from db import get_db
-from helpers import _require_user, user_has_module, payment_item_amounts
+from helpers import _require_user, user_has_module, payment_item_amounts, notify_module_activity
 from modules.arap.receivables import collect_income_items as _collect_income_items  # 本模組（ROADMAP A8b 已收回）
 from helpers.legal_params import round_half_up          # bank-reconcile（金額四捨五入唯一來源）
 from helpers import _audit, _tok                         # bank-reconcile 的稽核
@@ -108,7 +108,9 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
     p = registry.providers("payables.pending").get(source)
     if p is None:
         raise HTTPException(404, "找不到請款來源「%s」（對應的模組未安裝）" % source)
-    paid = str((body or {}).get("paidDate") or date.today().isoformat()).strip()
+    paid = str((body or {}).get("paidDate") or "").strip()
+    if not paid:
+        raise HTTPException(400, "請填寫付款日（paidDate，YYYY-MM-DD）")             # W1：必填，不再默認今天
     if not _PAID_DATE_RE.match(paid):
         raise HTTPException(400, "付款日格式必須是 YYYY-MM-DD")
     try:
@@ -118,16 +120,82 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
     conn = get_db()
     try:
         try:
-            res = p.mark_paid(conn, key, paid, user)
+            res = p.mark_paid(conn, key, paid, user, remit=body)          # W1：實付／手續費／差額審核
         except LookupError as e:
             raise HTTPException(404, str(e))
         except ValueError as e:
-            raise HTTPException(409, str(e))
+            raise HTTPException(getattr(e, "status", 409), str(e))
         conn.commit()
     finally:
         conn.close()
     _audit(_tok(authorization), "cashier.payable_paid", source, key,
-           "出納登錄請款付款：%s #%s（%s）付款日 %s" % (source, key, res.get("quoteNo") or "", paid))
+           "出納登錄請款付款：%s #%s（%s）付款日 %s 實付 %s 手續費 %s%s" % (
+               source, key, res.get("quoteNo") or "", paid, res.get("actual"), res.get("fee"),
+               "（差額 %+g，待審核）" % res["diff"] if res.get("remitReview") else ""))
+    if res.get("remitReview"):
+        notify_module_activity("請款付款", "匯款差額待審核", user.get("display_name") or user["username"],
+                               "%s #%s（%s）" % (source, key, res.get("quoteNo") or ""), "cashier.html",
+                               detail="實付與應付不符（差額 %+g），請管理員到出納頁核可或退回。" % res["diff"])
+    return {"ok": True, **res}
+
+
+# ── 匯款差額審核（W1；IP-102 `remit.reviews`，多提供者：承攬商匯款、案件額外支出）────────────────
+
+REMIT_REVIEWS_MISSING = "沒有任何提供匯款差額審核的模組：出納頁不顯示差額待審核"
+
+
+def _is_admin(user: dict) -> bool:
+    return user.get("role") in ("superadmin", "admin")
+
+
+@router.get("/api/cashier/remit-reviews")
+def get_remit_reviews(authorization: str = Header(None)):
+    """實付≠應付、已標記已匯款、待管理員核可或退回的清單（各提供者合併，依匯款日）。出納／財務／管理員可看，只有 admin+ 能決定。"""
+    user = _require_user(authorization)
+    _require_view_access(user)
+    provs = registry.providers("remit.reviews")
+    conn = get_db()
+    try:
+        items = []
+        for name, p in sorted(provs.items()):
+            for it in p.pending(conn):
+                items.append(dict(it, source=name))
+    finally:
+        conn.close()
+    items.sort(key=lambda v: (v.get("paidAt") or "", v["source"], v["key"]))
+    return {"available": bool(provs), "notice": "" if provs else REMIT_REVIEWS_MISSING,
+            "items": items, "canDecide": _is_admin(user)}
+
+
+@router.post("/api/cashier/remit-reviews/{source}/{key}/decision")
+def decide_remit_review(source: str, key: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """核可（approve）或退回（reject＝回未匯款，實付／手續費清空）。只限 admin／superadmin。"""
+    user = _require_user(authorization)
+    if not _is_admin(user):
+        raise HTTPException(403, "只有管理員可以核可或退回匯款差額")
+    p = registry.providers("remit.reviews").get(source)
+    if p is None:
+        raise HTTPException(404, "找不到審核來源「%s」（對應的模組未安裝）" % source)
+    decision = str((body or {}).get("decision") or "").strip()
+    note = str((body or {}).get("note") or "").strip()
+    if decision not in ("approve", "reject"):
+        raise HTTPException(400, "decision 必須為 approve 或 reject")
+    if decision == "reject" and not note:
+        raise HTTPException(400, "退回請填寫原因")
+    conn = get_db()
+    try:
+        try:
+            res = p.decide(conn, key, decision, user, note)
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+        except ValueError as e:
+            raise HTTPException(getattr(e, "status", 409), str(e))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "cashier.remit_review_" + decision, source, key,
+           "%s匯款差額：%s #%s（%s）%s" % ("核可" if decision == "approve" else "退回（回未匯款）", source, key,
+                                       res.get("quoteNo") or "", note))
     return {"ok": True, **res}
 
 
@@ -271,9 +339,17 @@ def _execution_history(conn, start: str, end: str, user: dict = None) -> dict:
     """, (start, end)).fetchall() if pub else []
     outgoing = [pub(r, include_snapshot=False) for r in outgoing_rows]
     incoming = _collect_income_items(start, end)
+    # W1：請款付款（案件額外支出等，IP-100）的付款紀錄；提供者沒有 paid ⇒ 略過
+    payreq = []
+    for name, p in sorted(registry.providers("payables.pending").items()):
+        if hasattr(p, "paid"):
+            payreq.extend(dict(it, source=name) for it in p.paid(conn, start, end))
     out = {
         "start": start, "end": end,
         "outgoing": outgoing, "outgoingTotal": sum(v["grandTotal"] for v in outgoing),
+        "outgoingActualTotal": sum((v["remitActual"] if v.get("remitActual") is not None else v["grandTotal"]) for v in outgoing),
+        "outgoingFeeTotal": sum(v.get("remitFee") or 0 for v in outgoing),
+        "payreqPaid": payreq, "payreqFeeTotal": sum(i.get("fee") or 0 for i in payreq),
         "incoming": incoming, "incomingTotal": sum(i["amount"] for i in incoming),
         "contractorNotice": "" if pub else CONTRACTOR_MISSING,
     }
@@ -324,10 +400,11 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
 
     ws1 = wb.create_sheet("已匯款明細")
     ws1.sheet_view.showGridLines = False
-    hdrs1 = ["申請單號", "關聯案件", "廠商", "應付金額", "應付款日期", "匯款日期"]
-    for i, w in enumerate([14, 14, 18, 12, 12, 12], 1):
+    hdrs1 = ["申請單號", "關聯案件", "廠商", "應付金額", "應付款日期", "匯款日期", "實付金額", "手續費", "差額", "差額審核"]
+    review_label = {"pending": "待審核", "approved": "已核可", "": ""}
+    for i, w in enumerate([14, 14, 18, 12, 12, 12, 12, 10, 10, 10], 1):
         ws1.column_dimensions[chr(64 + i)].width = w
-    ws1.merge_cells(f"A1:F1")
+    ws1.merge_cells("A1:J1")
     c = ws1["A1"]
     c.value = f"出納執行紀錄 — 已匯款（{start} ~ {end}）"
     c.font = mk(bold=True, size=12, color=C_WHITE)
@@ -338,19 +415,38 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
              aligns=[al("center")], height=20)
     r = 3
     if data["contractorNotice"]:                                    # IP-14 不在 ⇒ 表內明說，不是空白表
-        set_row(ws1, r, [data["contractorNotice"]] + [""] * 5, font=mk(size=9), border=BD,
+        set_row(ws1, r, [data["contractorNotice"]] + [""] * 9, font=mk(size=9), border=BD,
                 aligns=[al("left")], height=18)
         r += 1
     for v in data["outgoing"]:
         set_row(ws1, r, [v["voucherNo"], v["quoteNo"], v["vendorName"] or "（外包人員點工）",
-                           v["grandTotal"], v["payableDate"] or "", v["paidAt"][:10] if v["paidAt"] else ""],
+                           v["grandTotal"], v["payableDate"] or "", v["paidAt"][:10] if v["paidAt"] else "",
+                           v["remitActual"] if v.get("remitActual") is not None else v["grandTotal"],
+                           v.get("remitFee") or 0, v.get("remitDiff") or 0, review_label.get(v.get("remitReview") or "", "")],
                  font=mk(size=9), border=BD, aligns=[al("left")], height=18)
-        ws1.cell(row=r, column=4).number_format = '#,##0'
+        for col in (4, 7, 8, 9):
+            ws1.cell(row=r, column=col).number_format = '#,##0.##'
         r += 1
-    set_row(ws1, r, ["合計", "", "", data["outgoingTotal"], "", ""],
+    set_row(ws1, r, ["合計", "", "", data["outgoingTotal"], "", "", data["outgoingActualTotal"], data["outgoingFeeTotal"], "", ""],
              font=mk(bold=True, size=9, color=C_WHITE), fill=fill(C_DARK), border=BD,
              aligns=[al("left")], height=20)
-    ws1.cell(row=r, column=4).number_format = '#,##0'
+    for col in (4, 7, 8):
+        ws1.cell(row=r, column=col).number_format = '#,##0.##'
+
+    if data["payreqPaid"]:                                          # W1：請款付款（案件額外支出）明細
+        wsp = wb.create_sheet("請款付款明細")
+        wsp.sheet_view.showGridLines = False
+        for i, w in enumerate([10, 14, 24, 12, 12, 10, 12, 10], 1):
+            wsp.column_dimensions[chr(64 + i)].width = w
+        set_row(wsp, 1, ["來源", "關聯案件", "事由", "應付金額", "實付金額", "手續費", "付款日", "差額審核"],
+                font=mk(bold=True, size=9, color=C_WHITE), fill=fill("374151"), border=BD, aligns=[al("center")], height=20)
+        for i, it in enumerate(data["payreqPaid"], 2):
+            set_row(wsp, i, [it.get("sourceLabel") or it["source"], it.get("quoteNo") or "", it.get("title") or "",
+                             it.get("payable") or 0, it.get("actual") or 0, it.get("fee") or 0, it.get("paidAt") or "",
+                             review_label.get(it.get("review") or "", "")],
+                    font=mk(size=9), border=BD, aligns=[al("left")], height=18)
+            for col in (4, 5, 6):
+                wsp.cell(row=i, column=col).number_format = '#,##0.##'
 
     ws2 = wb.create_sheet("已收款明細")
     ws2.sheet_view.showGridLines = False

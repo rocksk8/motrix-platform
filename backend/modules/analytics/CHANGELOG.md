@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## 1.0.12 — 2026-09-30（暫用號，列車取號；W1 稽核補修）
+- 營運報表支出明細：現金口徑「差額待審核」的承攬商匯款與其手續費照計，但明細標 `pending`＋備註「差額待審核」（`expense.entries` 提供者可帶 `pending`）
+
 ## 1.0.11 — 2026-09-28（暫用號，列車取號；E4 wip/e-company-gate-impl 第三段）
 - 本公司資料設定閘門第二道（COMPANY-SETUP-GATE §5；D CG5-M1）：每月報表排程信：開頭先問第二道，被擋 ⇒ 不寄、系統告警（每日一次）、`monthly_report_last_sent` 不前進（設定完成後補寄）；報表 Excel／PDF 的抬頭經 `company_heading`／`contact_line`（已含第二道）
 
