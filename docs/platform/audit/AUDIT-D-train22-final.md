@@ -70,3 +70,9 @@
 - **沒漏掉原有檢查**：`delivery verify --skip-verify-package` 只略過第 5 項（結構）；簽章、逐檔雜湊、檔數、腳本版本、已是這一版／退版判斷都照跑；第 5 項改由步驟檔單獨執行並依上列判準判讀。
 - 併入的更正：步驟 0 第 6 項「量測第 2 節需使用者操作、不阻擋套用」與量測檔一致，不擋。
 - **不擋的觀察**：第二十一班終審／本班演練都在 git 工作樹內跑 verify_package，所以沒發現這項（同意主持登記「演練改用非 git 安裝目錄」）；下一版修 `verify_package` 的 4a（非 git 時改用包內宣告，或明確標示略過而非 FAIL）。
+
+## 9. 急件複核：步驟 2 少了 `payload\`（正式機 package_invalid；步驟檔 origin/platform 1a87ac3a；main fcb1e3c7、雲端皆位元組相同）— 通過，必修 0
+- **兩行與 `delivery.apply_staged` 一致**：`Copy-Item …\<包名>\payload\backend\tools\*`＝`shutil.copytree(payload\backend\tools → install\backend\tools, dirs_exist_ok=True)`（AH-M2）；`apply_update.ps1 -PackagePath …\<包名>\payload -Yes`＝`apply_cmd(install_root, payload, "apply_update")`（`-PackagePath` 為 payload，`-Yes`）。
+- **同錯掃描**：步驟檔內所有 staging 路徑——步驟 1 的 `delivery.py verify --staged <包名>`（`--staged` 本來就是含 `delivery.json` 的 staging 根，正確）、`verify_package.py <包名>\payload`（正確）、步驟 2 兩行（已改）；步驟 3 判準、步驟 4 回滾（用 `apply_update_*.result.json` 的 timestamp，不涉及 staging）、步驟 5 回報（只複製 log 與結果檔）皆無 staging 路徑 ⇒ 無其他同錯。
+- **演練為何沒抓到**：`drill_t22.py` 的「staging」是 `shutil.copytree(a.pkg → <root>\staging\<包名>)`，`a.pkg` 是建包輸出目錄（＝`payload` 的內容，`deploy_manifest.json`／`backend\tools` 在第一層），再以 `-PackagePath staging` 呼叫演練副本 apply_update——**從未走 `delivery.py stage`，沒有 `payload\` 這一層**，所以「staging 結構」在演練裡跟正式機不同；且演練不是照步驟檔的命令行執行（由 Python 內部組命令）。與上一則 4a 的「演練在 git 工作樹內」同類：**演練環境與正式機步驟檔的實際指令／目錄結構不一致**。下一版題：演練必須由 `delivery.py stage` → `verify` → 步驟檔逐行命令（可從步驟檔的 code block 機械抽取執行）走，安裝目錄用非 git 目錄。
+- **建議 T22S-S2（不擋）**：步驟 2 的更正說明段落含控制字元——`\payload\backend\tools\*` 中的 `\b`、`\t` 被寫成退格（0x08）與 Tab，顯示成 `payloadackend    ools`（bytes 偏移約 3671／3678）；不在 code block 內，指令本身正確，但閱讀者會困惑。建議把該行改成用 Write 工具（或雙反斜線）重寫。
