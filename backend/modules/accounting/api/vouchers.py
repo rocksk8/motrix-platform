@@ -1867,6 +1867,16 @@ def _provide_voucher_status(conn, voucher_id):
     return {"id": v["id"], "voucher_no": v["voucher_no"], "status": v["status"], "voided": bool(v["voided_at"])}
 
 
+def _provide_voucher_by_no(conn, voucher_no):
+    """IP-4 追加 `voucher.by_no`（2026-09-29，勞報單付款回填傳票單號用）：以傳票單號查。
+    回 {"id", "voucher_no", "status", "voided"}；不存在 ⇒ None。唯讀。"""
+    v = conn.execute("SELECT id, voucher_no, status, voided_at FROM vouchers_all WHERE voucher_no = ?",
+                     (str(voucher_no or "").strip(),)).fetchone()
+    if v is None:
+        return None
+    return {"id": v["id"], "voucher_no": v["voucher_no"], "status": v["status"], "voided": bool(v["voided_at"])}
+
+
 # （提供者改由 modules/accounting/__init__.py 的 ModuleSpec.providers 宣告：voucher.void_draft）
 # IP-22（暫定號）：M01 案件整包的傳票段；同一份授權、權限判斷與單獨打 /api/vouchers/by-case/{no} 逐字相同
 # （提供者改由 modules/accounting/__init__.py 的 ModuleSpec.providers 宣告：voucher.by_case）

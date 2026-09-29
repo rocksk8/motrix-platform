@@ -900,6 +900,40 @@
               </div>
             </template>
 
+            <!-- 權責視圖的「實收對照」（2026-09-29）：依收款日、含稅；「尚未認列」＝該案件今年還沒有任何權責收入
+                 （階段比例未設或尾款未結清），所以這筆錢不在下方權責收入裡。數字不併入權責合計。 -->
+            <template x-if="isAccrual && activeCashReceiptItems.length > 0">
+              <div data-testid="cash-receipt-compare" style="margin-bottom:20px;border:1px solid #BFDBFE;border-radius:8px;background:#EFF6FF;padding:12px 14px">
+                <div style="font-size:13px;font-weight:700;color:#1E40AF;font-family:var(--font-zh);margin-bottom:6px"
+                     x-text="scopeLabel + '實收對照（依收款日，含稅）：' + activeCashReceiptItems.length + ' 筆，合計 ' + fmt(activeCashReceiptTotal)"></div>
+                <div style="font-size:12px;color:#1E40AF;font-family:var(--font-zh);line-height:1.7;margin-bottom:8px">
+                  權責口徑的收入依階段完成月認列；下列是同期間實際收到的款項。標「尚未認列」者，案件的階段比例未設或尾款未結清，
+                  所以不在下方權責收入裡（此表僅供對照，不併入權責合計）。
+                </div>
+                <table class="data-table">
+                  <thead><tr>
+                    <th>案件號</th><th>客戶</th><th>款項類型</th><th class="c">收款日</th><th class="r">實收金額</th><th>權責認列</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="it in activeCashReceiptItems" :key="it.quoteNo + '-' + it.type + '-' + it.receivedAt">
+                      <tr>
+                        <td class="mono">
+                          <a :href="'case-management.html?q=' + encodeURIComponent(it.quoteNo) + '&tab=fin'"
+                             style="color:var(--accent);text-decoration:underline" x-text="it.quoteNo"></a>
+                        </td>
+                        <td x-text="it.customer"></td>
+                        <td class="c" x-text="it.type"></td>
+                        <td class="c mono" x-text="it.receivedAt"></td>
+                        <td class="r mono" x-text="fmt(it.amount)"></td>
+                        <td :style="it.recognized ? 'color:var(--text-dim)' : 'color:#B91C1C;font-weight:600'"
+                            x-text="it.recognized ? '已有認列' : '尚未認列'"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+
             <!-- 收入明細 -->
             <div class="cm-section-title" style="margin-bottom:8px;font-size:13px;font-weight:700;font-family:var(--font-zh)"
                  x-text="scopeLabel + '收入明細（' + activeIncomeItems.length + ' 筆）'"></div>

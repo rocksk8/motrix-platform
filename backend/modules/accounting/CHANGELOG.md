@@ -1,5 +1,8 @@
 # 會計 更新紀錄
 
+## 1.0.6 — 2026-09-29（暫用號，列車取號；wip/payslip-void-signed）
+- 新增提供者 `voucher.by_no`（IP-4 追加）：以傳票單號查 `{id, voucher_no, status, voided}`，不存在 ⇒ None；唯讀。勞報單出納付款回填傳票單號時驗證用（M07 不直接讀 `vouchers_all`）。
+
 ## 1.0.5 — 2026-09-28（暫用號，列車取號；E4 wip/e-company-gate-impl 第三段）
 - 本公司資料設定閘門第二道（COMPANY-SETUP-GATE §5；D CG5-M1）：傳票 PDF 的公司抬頭改走 L1 `company_identity.company_name()`（主要據點與別名都認，且先過第二道：未設定／判定失敗 ⇒ 428，不產生）；原本只讀 `company_profile["name"]`
 

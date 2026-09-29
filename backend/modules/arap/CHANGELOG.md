@@ -1,5 +1,9 @@
 # 應收應付 更新紀錄
 
+## 1.0.11 — 2026-09-29（暫用號，列車取號；wip/payslip-void-signed）
+- 出納頁新增「勞報單待付款」子頁籤：`GET /api/cashier/payslip-queue`（IP-103 `payslip.payables`；只給最高管理者與出納，財務看不到；薪資獎金模組不在 ⇒ `available:false`＋說明）。標記付款打勞報單那一支 `POST /api/payslips/{單號}/mark-paid`。
+- 收款日期歸月：`receivables` 的現金口徑收入與發票期別改用 `helpers.norm_ymd`（「2026/09/01」等寫法不再被排除在月份外）。
+
 ## 1.0.10 — 2026-09-28（暫用號，列車取號；E4 wip/e-company-gate-impl 第三段）
 - 本公司資料設定閘門第二道（COMPANY-SETUP-GATE §5；D CG5-M1）：開票申請、請款單 PDF 下載端點：`except Exception` 前先 `except HTTPException: raise`（第二道的 428 不被吞成 500）；請款單另驗本公司匯款三欄（L1 pdf_gen `_require_payment_bank`，缺 ⇒ 428 `company_bank_required`）
 

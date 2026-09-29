@@ -19,6 +19,7 @@ MODULE = ModuleSpec(
         # IP-4：M07 作廢草稿、查傳票狀態
         ("voucher.void_draft", "accounting"): vouchers._provide_voucher_void_draft,
         ("voucher.status", "accounting"): vouchers._provide_voucher_status,
+        ("voucher.by_no", "accounting"): vouchers._provide_voucher_by_no,
         # IP-22（暫定號）：M01 案件整包的傳票段
         ("voucher.by_case", "accounting"): vouchers.vouchers_by_case,
         # M01-PLAN §3-7（C）：待我簽核的傳票項目、轉簽的簽核鏈讀寫（M01 佇列只彙整）

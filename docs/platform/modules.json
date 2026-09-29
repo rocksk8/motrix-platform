@@ -425,6 +425,7 @@
     "mod:payroll/bonus_case",
     "mod:payroll/bonus_deductions",
     "mod:payroll/bonus_payouts",
+    "mod:payroll/payslip_payouts",
     "mod:payroll/bonus_pdf",
     "mod:payroll/bonus_queue",
     "mod:payroll/bonus_vouchers",

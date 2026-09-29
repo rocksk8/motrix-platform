@@ -28,6 +28,10 @@
     .tag{display:inline-flex;padding:2px 8px;border-radius:3px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif}
     .tag-exported{background:#ECFDF5;color:#059669}
     .tag-draft{background:#F3F4F6;color:#6B7280}
+    .tag-signed{background:#EFF6FF;color:#1D4ED8}
+    .tag-paid{background:#DCFCE7;color:#166534}
+    .tag-void{background:#FEE2E2;color:#B91C1C;text-decoration:line-through}
+    .void-banner{margin:0 0 10px;padding:8px 12px;border:1px solid #FCA5A5;background:#FEF2F2;color:#B91C1C;border-radius:var(--radius);font-size:12px;line-height:1.7}
     .itype{display:inline-flex;padding:1px 7px;border-radius:3px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;background:var(--accent-light);color:var(--accent)}
     .exp-chip{display:inline-flex;padding:1px 7px;border-radius:10px;font-size:10px;font-family:LINE Seed TW_OTF, monospace;background:#F0EEE9;color:var(--text-dim);border:1px solid var(--border-light);cursor:pointer;margin-left:4px}
     .exp-chip:hover{background:#e8f0fe;border-color:#93c5fd;color:var(--accent)}
@@ -130,7 +134,7 @@
               <td class="amt" style="font-weight:600" x-text="'NT$ ' + (p.net_amount||0).toLocaleString()"></td>
               <td style="font-size:12px;font-family:LINE Seed TW_OTF, monospace" x-text="p.slip_date || '—'"></td>
               <td>
-                <span class="tag" :class="p.status === '已匯出' ? 'tag-exported' : 'tag-draft'"
+                <span class="tag" :class="statusCls(p.status)"
                       x-text="p.status"></span>
                 <span class="exp-chip" x-show="p.export_count > 0"
                       x-text="'×' + p.export_count"
@@ -168,7 +172,7 @@
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:14px" x-text="selectedSlip.contractor_name || '—'"></div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap">
-            <span class="tag" :class="selectedSlip.status === '已匯出' ? 'tag-exported' : 'tag-draft'"
+            <span class="tag" :class="statusCls(selectedSlip.status)"
                   x-text="selectedSlip.status"></span>
             <span class="itype" x-text="selectedSlip.income_type"></span>
           </div>
@@ -177,6 +181,25 @@
       </div>
       <div class="detail-body">
 
+        <div class="void-banner" x-show="selectedSlip.status === '已作廢'">
+          <strong>已作廢</strong>　<span x-text="(selectedSlip.voided_at||'').slice(0,19).replace('T',' ')"></span>　<span x-text="selectedSlip.voided_by"></span><br>
+          原因：<span x-text="selectedSlip.void_reason"></span>
+        </div>
+        <template x-if="selectedSlip.status === '已簽回' || selectedSlip.status === '已付款'">
+          <div style="background:#F0F9FF;border-radius:var(--radius);padding:10px 12px;margin-bottom:10px;font-size:12px;line-height:1.8">
+            <div><strong>對方已簽回</strong>　<span x-text="(selectedSlip.signed_at||'').slice(0,10)"></span>　<span x-text="selectedSlip.signed_by"></span></div>
+            <template x-for="f in signedFilesOf(selectedSlip)" :key="f.id">
+              <div style="display:flex;gap:8px;align-items:center">
+                <a href="#" @click.prevent="openSigned(selectedSlip, f)" x-text="f.filename"></a>
+                <a href="#" x-show="selectedSlip.status === '已簽回'" @click.prevent="delSigned(selectedSlip, f)" style="color:#B91C1C">刪除</a>
+              </div>
+            </template>
+            <div x-show="selectedSlip.status === '已付款'" style="color:#166534">
+              <strong>已付款</strong>　<span x-text="selectedSlip.payment_date"></span>　傳票 <span x-text="selectedSlip.voucher_no"></span>　<span x-text="selectedSlip.paid_by"></span>
+            </div>
+            <div x-show="selectedSlip.status === '已簽回'" style="color:var(--text-dim)">待出納填付款日期與傳票單號</div>
+          </div>
+        </template>
         <div class="detail-sec">單據資訊</div>
         <div class="detail-row">
           <span class="detail-label">單號</span>
@@ -219,13 +242,26 @@
         <hr class="detail-divider">
         <div style="display:flex;flex-direction:column;gap:8px">
           <div style="display:flex;gap:8px">
-            <a :href="'payslip-form.html?id=' + selectedSlip.slip_no" class="btn btn-ghost btn-sm" style="flex:1;justify-content:center">編輯</a>
+            <a x-show="selectedSlip.status !== '已作廢' && selectedSlip.status !== '已簽回' && selectedSlip.status !== '已付款'" :href="'payslip-form.html?id=' + selectedSlip.slip_no" class="btn btn-ghost btn-sm" style="flex:1;justify-content:center">編輯</a>
             <button class="btn btn-primary btn-sm" style="flex:1" @click="previewPdf(selectedSlip)">預覽 PDF</button>
           </div>
           <div style="display:flex;gap:8px" x-show="selectedSlip.export_count > 0">
             <button class="btn btn-ghost btn-sm" style="flex:1" @click="openHistory(selectedSlip)">匯出歷史</button>
           </div>
-          <button x-show="selectedSlip.status !== '已匯出'"
+          <label x-show="selectedSlip.status === '已匯出' || selectedSlip.status === '已簽回'"
+                 class="btn btn-primary btn-sm" style="width:100%;justify-content:center;cursor:pointer">
+            <span x-text="selectedSlip.status === '已簽回' ? '補傳簽回檔' : '上傳對方簽回檔（確認完成）'"></span>
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple style="display:none"
+                   @change="uploadSigned(selectedSlip, $event)">
+          </label>
+          <button x-show="selectedSlip.status === '已簽回'" class="btn btn-ghost btn-sm"
+                  style="width:100%;justify-content:center" @click="unsign(selectedSlip)">退回簽回（才可作廢）</button>
+          <div x-show="actionErr" x-text="actionErr" style="color:#B91C1C;font-size:12px"></div>
+          <button x-show="selectedSlip.status === '已匯出'"
+                  class="btn btn-danger btn-sm"
+                  style="width:100%;justify-content:center"
+                  @click="openVoid(selectedSlip)">作廢勞報單</button>
+          <button x-show="['草稿'].includes(selectedSlip.status)"
                   class="btn btn-danger btn-sm"
                   style="width:100%;justify-content:center"
                   @click="del(selectedSlip)">刪除勞報單</button>
@@ -246,6 +282,12 @@
       </div>
       <button class="pv-close" @click="closePreview()">×</button>
     </div>
+    <div class="void-banner" x-show="previewItem?.status === '已作廢'" style="margin:0;border-radius:0">
+      ⚠ <strong>此勞報單已作廢</strong>，不具給付效力。
+      作廢時間：<span x-text="(previewItem?.voided_at||'').slice(0,19).replace('T',' ')"></span>　
+      作廢人：<span x-text="previewItem?.voided_by"></span>　
+      原因：<span x-text="previewItem?.void_reason"></span>
+    </div>
     <div class="pv-body">
       <div class="pv-spinner" x-show="previewFetching || !previewIframeReady">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2">
@@ -258,6 +300,7 @@
     </div>
     <div class="pv-foot">
       <div x-show="!previewArchiveMode" style="font-size:11px;color:var(--text-dim)">
+        <span x-show="previewItem?.status === '已作廢'" style="color:#B91C1C;font-weight:600">已作廢　</span>
         <span x-show="!previewItem?.export_count">尚未匯出</span>
         <span x-show="previewItem?.export_count > 0">
           已匯出 <strong x-text="previewItem?.export_count"></strong> 次
@@ -268,7 +311,7 @@
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-ghost" @click="closePreview()">關閉</button>
-        <button x-show="!previewArchiveMode" class="btn btn-primary"
+        <button x-show="!previewArchiveMode && previewItem?.status !== '已作廢'" class="btn btn-primary"
                 @click="confirmExport()" :disabled="previewFetching || !previewIframeReady">
           確認匯出（下載 PDF）
         </button>
@@ -276,6 +319,33 @@
                 @click="downloadArchivePreview()" :disabled="!previewBlobUrl">
           下載此存檔
         </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 作廢 Modal ══ -->
+<div x-show="voidModal" x-cloak class="pv-overlay" @keydown.escape.window="voidModal=false">
+  <div class="pv-modal" style="max-width:460px;height:auto" @click.stop>
+    <div class="pv-head">
+      <div>
+        <div class="pv-title">作廢勞報單</div>
+        <div class="pv-sub" x-text="(voidItem?.slip_no||'') + '　' + (voidItem?.contractor_name||'')"></div>
+      </div>
+      <button class="pv-close" @click="voidModal=false">×</button>
+    </div>
+    <div style="padding:16px 20px">
+      <div style="font-size:12px;color:#B91C1C;margin-bottom:8px">作廢後不可還原、不可修改或再匯出；預覽會標示「已作廢」。</div>
+      <label style="font-size:12px;color:var(--text-secondary)">作廢原因（必填）</label>
+      <textarea x-model="voidReason" rows="3" maxlength="200"
+                style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--border-light);border-radius:var(--radius);font:inherit"></textarea>
+      <div x-show="voidErr" x-text="voidErr" style="color:#B91C1C;font-size:12px;margin-top:6px"></div>
+    </div>
+    <div class="pv-foot">
+      <div></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" @click="voidModal=false">取消</button>
+        <button class="btn btn-danger" :disabled="voidBusy || !voidReason.trim()" @click="submitVoid()">確認作廢</button>
       </div>
     </div>
   </div>
@@ -350,6 +420,8 @@ function payslipsPage() {
     selectedId: null,
     selectedSlip: null,
     previewModal: false,
+    actionErr: '',
+    voidModal: false, voidItem: null, voidReason: '', voidErr: '', voidBusy: false,
     previewBlobUrl: '',
     previewFetching: false,
     previewIframeReady: false,
@@ -570,6 +642,71 @@ function payslipsPage() {
         setTimeout(() => URL.revokeObjectURL(url), 2000)
       } catch(e) { alert('下載失敗：' + e.message) }
       this.downloading = false
+    },
+
+    signedFilesOf(p) {
+      try { return JSON.parse(p.signed_files_json || '[]') } catch (e) { return [] }
+    },
+
+    async openSigned(p, f) {
+      try {
+        const r = await fetch(`${API}/payslips/${p.slip_no}/signed-files/${f.id}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) return
+        window.open(URL.createObjectURL(await r.blob()), '_blank')
+      } catch (e) {}
+    },
+
+    async _post(url, opts) {
+      this.actionErr = ''
+      try {
+        const r = await fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { await this.load(); return true }
+        let m = ''; try { m = (await r.json()).detail } catch (e) {}
+        this.actionErr = m || ('操作失敗（' + r.status + '）')
+      } catch (e) { this.actionErr = '操作失敗：' + e.message }
+      return false
+    },
+
+    async uploadSigned(p, ev) {
+      const files = [...ev.target.files]; ev.target.value = ''
+      if (!files.length) return
+      const fd = new FormData(); files.forEach(f => fd.append('files', f))
+      await this._post(`${API}/payslips/${p.slip_no}/signed-files`, { method: 'POST', body: fd })
+    },
+
+    async delSigned(p, f) {
+      if (!confirm('確定刪除此簽回檔？')) return
+      await this._post(`${API}/payslips/${p.slip_no}/signed-files/${f.id}`, { method: 'DELETE' })
+    },
+
+    async unsign(p) {
+      if (!confirm('退回簽回後狀態回到「已匯出」，確定？')) return
+      await this._post(`${API}/payslips/${p.slip_no}/unsign`, { method: 'POST' })
+    },
+
+    statusCls(st) {
+      return st === '已匯出' ? 'tag-exported' : st === '已作廢' ? 'tag-void' : st === '已簽回' ? 'tag-signed' : st === '已付款' ? 'tag-paid' : 'tag-draft'
+    },
+
+    openVoid(p) {
+      this.voidItem = p; this.voidReason = ''; this.voidErr = ''; this.voidModal = true
+    },
+
+    async submitVoid() {
+      const reason = this.voidReason.trim()
+      if (!reason || this.voidBusy) return
+      this.voidBusy = true; this.voidErr = ''
+      try {
+        const r = await fetch(`${API}/payslips/${this.voidItem.slip_no}/void`, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason })
+        })
+        if (r.ok) { this.voidModal = false; await this.load() }
+        else { let m = ''; try { m = (await r.json()).detail } catch(e) {}; this.voidErr = m || ('作廢失敗（' + r.status + '）') }
+      } catch(e) { this.voidErr = '作廢失敗：' + e.message }
+      this.voidBusy = false
     },
 
     async del(p) {
