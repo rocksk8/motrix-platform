@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """D7 最終轉移升級驗證（RUN-PLAN §3）：用 V9 開發目錄的**複本**，照 UPGRADE-RUNBOOK 走一次完整的升級與兩種回滾。
 
-  python tools/platform/final_drill.py [--v9-dir C:\\Users\\hichan\\Desktop\\MOTRIX-ERP] [--drill-root D:\\MOTRIX-FINAL-DRILL]
+  python tools/platform/final_drill.py [--v9-dir C:\\Users\\hichan\\Desktop\\MOTRIX-ERP] [--drill-root D:\\開發測試檔\\MOTRIX-FINAL-DRILL]
                                        [--package <部署包目錄> | --new-rev origin/platform]
                                        [--report docs/platform/FINAL-DRILL-REPORT.md] [--keep-install]
 
@@ -44,7 +44,7 @@ import upgrade_drill as UD  # noqa: E402
 U = T.U
 
 DEFAULT_V9 = r"C:\Users\hichan\Desktop\MOTRIX-ERP"
-DEFAULT_ROOT = r"D:\MOTRIX-FINAL-DRILL"
+DEFAULT_ROOT = r"D:\開發測試檔\MOTRIX-FINAL-DRILL"  # 2026-09-29 使用者：開發測試目錄不直接建在 D 槽根目錄
 _SKIP_DIRS = {".git", "node_modules", "__pycache__", "deploy_packages", ".pytest_cache"}
 _DB_SUFFIXES = (".db", ".db-wal", ".db-shm", ".db-journal")
 DRILL_ADMIN = ("final_drill_admin", "Final-Drill-Pass-2026!")

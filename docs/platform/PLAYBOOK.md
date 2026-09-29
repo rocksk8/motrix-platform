@@ -27,7 +27,8 @@
 ## B. 把一個業務模組搬進 `modules/`（每個模組都一樣）
 
 **開工**
-1. 回報你的工作目錄。建立 worktree：`git worktree add ..\MOTRIX-PLATFORM-<視窗> -b wip/<視窗>-<模組> platform`。
+1. 回報你的工作目錄。建立 worktree：`git worktree add D:\開發測試檔\MOTRIX-PLATFORM-<視窗> -b wip/<視窗>-<模組> platform`。
+   - 🔴 **開發／測試用的目錄一律放 `D:\開發測試檔\` 底下**（worktree、演練樹、演練根目錄、建包暫存、比對輸出等），**不直接建在 D 槽根目錄**（使用者 2026-09-29 裁示；起因：D 槽根目錄堆了 20 個 worktree 與演練目錄，而根目錄下一層的刪除會被安全檢查擋下，只能由使用者手動清）。pytest 的 `--basetemp` 照舊放 `%TEMP%`。
 2. 讀 `DEPENDENCY-MAP.md` 裡這個模組的成員、擁有的表、跨組相依。再重跑一次掃描確認現況：`python tools/platform/dep_scan.py --check-modules`。
 
 **先切相依，再搬檔**

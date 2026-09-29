@@ -45,7 +45,7 @@ powershell -ExecutionPolicy Bypass -File backend\tools\build_deploy_package.ps1 
 | 項目 | 設定 |
 |---|---|
 | 來源 | `C:\Users\hichan\Desktop\MOTRIX-ERP`（V9 開發目錄，只讀） |
-| 演練根目錄 | `D:\MOTRIX-FINAL-DRILL`（RUN-PLAN §3 指定；`source-backup` 保留到使用者回來，§3-7）。前哨用自己的目錄（例如 `D:\MOTRIX-FINAL-DRILL-D6`），不動正式那一份 |
+| 演練根目錄 | `D:\開發測試檔\MOTRIX-FINAL-DRILL`（2026-09-29 起，開發測試目錄不直接建在 D 槽根目錄；原 `D:\MOTRIX-FINAL-DRILL`，RUN-PLAN §3 指定；`source-backup` 保留到使用者回來，§3-7）。前哨用自己的目錄（例如 `D:\開發測試檔\MOTRIX-FINAL-DRILL-D6`），不動正式那一份 |
 | 工具 | `python tools\platform\final_drill.py --package <包目錄> --drill-root D:\MOTRIX-FINAL-DRILL --report docs\platform\FINAL-DRILL-REPORT.md` |
 | Python | `D:\MOTRIX-PLATFORM\.venv312`（只用，不改） |
 | 優先權 | BelowNormal（子行程繼承）；不跑 pytest |
