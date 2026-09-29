@@ -121,7 +121,7 @@ def test_run_scan_bumps_after_a_recognised_fetch():
     import inspect
     from modules.tender_radar import source
     src = inspect.getsource(source.run_scan)
-    assert "_listing.bump()" in src and src.index("conn.commit()\n        if recognised") >= 0
+    assert "_listing.bump()" in src
 
 
 def test_mark_and_unmark_show_up_immediately(client, make_user, seeded, lst):

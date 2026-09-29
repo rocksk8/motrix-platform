@@ -1,5 +1,11 @@
 # 標案雷達 更新紀錄
 
+## 1.4.0 — 2026-09-29 11:50（暫用號；使用者：載入慢七秒，伺服器端先算好）
+- 新增 `listing.py`：`GET /api/tender-radar/tenders` 的「全表＋逐筆×逐條件比對」結果留在記憶體快取；請求端只做 watch／q 過濾。失效三道：寫入端 `bump()`（抓取寫入、條件新增／修改／刪除、標註／取消標註）、資料庫簽章、TTL 300 秒。啟動後 20 秒與每次失效後 1 秒在背景預先重算（`schedulers` 註冊 `listing.enable_warm`），使用者第一次點進模組直接吃熱的
+- 前端 `tender-radar.html`：搜尋停手 500ms 才送、字沒變不送、前一趟未回就取消、只採用最後一次送出的回應
+- 行為不變：清單內容、排序、標籤、`matchedEmptyReason`、q 異體字比對與重算逐字相同（題：test_tender_listing_cache_2026_09_29）
+- ⚠️ 已知代價：就地改 tenders 非簽章欄位而未呼叫 `bump()` 時，最久 5 分鐘才看得到
+
 ## 1.3.4 — 2026-09-29 00:02（暫用號；D 觀察，主持派工）
 - 只改註解：`source._tender_scan_tick` 的說明不再點名 `archive._schedule_daily` 當反例（B54-S2 已把它改成同一個形狀），只講「工作包 try、重排放 finally」這條規則本身；行為不變
 
