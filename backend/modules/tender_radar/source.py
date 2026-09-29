@@ -811,7 +811,7 @@ def run_scan():
                 _fetch_details(conn, backlog)
         conn.commit()
         if recognised:
-            _listing.bump()   # 標案清單快取失效並背景預算（listing.py）
+            _listing.bump(background=True)   # 標案清單快取失效、背景重算（請求先拿舊的；listing.py）
         return {
             "fetched": True, "error": None, "recognised": recognised,
             "parsed": len(items), "dropped": dropped,

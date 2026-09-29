@@ -1,46 +1,65 @@
 # -*- coding: utf-8 -*-
-"""標案清單快取（2026-09-29 使用者：「標案雷達載入慢七秒，先在伺服器端算好，不要等使用者點進模組才算」）。
+"""標案清單快取（2026-09-29 使用者：「標案雷達載入慢七秒，先在伺服器端先有運算好，不要等使用者點選進模組才做運算」；
+「先下載分類好資訊，最後一次回傳給使用者」「只有定期更新標案的時候才計算」）。
 
 [單位] tender_radar:listing   [層] L2（只 import db）   [穩定度] 內部
-[不變式] ①回傳的清單與「當下重算一次」逐字相同（順序、標籤、標註、`matchedEmptyReason`）
-         ②任何寫入 tenders／tender_watches 的地方都呼叫 `bump()`；漏掉時由資料庫簽章與 TTL 兜底，不會永遠過期
-         ③快取只存在記憶體，重啟即空；不寫檔、不進備份
+[不變式] ①請求端**只有「從來沒算過」才同步分類**；有舊結果就先回舊的（stale-while-revalidate）
+         ②回傳的清單內容與「當下重算一次」逐字相同（順序、標籤、標註、`matchedEmptyReason`）
+         ③重算只發生在：啟動預算一次、定期抓取寫入標案後（背景）、使用者改條件／標註時（寫入端自己算完才回）；**沒有 TTL、沒有定時重算**
+         ④快取只在記憶體，重啟即空；不寫檔、不進備份；快取的是**序列化後的 JSON 位元組**
 
 ## 為什麼要快取
-`GET /api/tender-radar/tenders` 每次都 SELECT 全表，再逐筆 × 逐條件比對（O(N×W)）；標籤即時算是刻意設計
+`GET /api/tender-radar/tenders` 原本每次都 SELECT 全表，再逐筆 × 逐條件比對（O(N×W)）；標籤即時算是刻意設計
 （見 api.list_tenders docstring：顯示不掛在 `tender_hits` 通知帳本上），所以**不改成讀帳本**，只把「算」的結果留著。
 
-## 失效（三道）
-1. `bump()`：抓取寫入、補詳情、條件新增／修改／刪除、標註／取消標註之後呼叫；同時排一個背景預算（有開才排）。
-2. 資料庫簽章：筆數、最大 id、最新抓取時間、標註數與最新標註時間、條件的筆數／最大 id／最新更新時間／啟用數——
-   別條路徑（測試直接寫 SQL、人手改庫）動到這些也會失效。
-3. TTL（`TTL_SECONDS`）：兜住簽章看不到的（例如使用者顯示名稱改了、就地改標案欄位）。
-⚠️ 已知代價：就地改 tenders 的非簽章欄位而沒呼叫 `bump()`，最久 `TTL_SECONDS` 才看得到。
+## 什麼時候重算（`bump()`）
+- 抓取寫入後（`source.run_scan`）：`bump(background=True)`——背景重算，這段時間請求先拿舊的。
+- 使用者新增／修改／刪除條件、標註／取消標註：`bump()`——**寫入端同步重算完才回應**，使用者接著重讀就是新的
+  （否則按完標註立刻重讀會看到舊的）；請求端不承擔。
+- 讀時發現資料庫簽章（筆數、最大 id、最新抓取／標註／條件更新時間…）變了而**沒人 bump**（人手改庫、別條寫入路徑）：
+  同步重算——這是「不明寫入者」，寧可慢一次也不回錯的。
+- 背景預算未啟用（`enable_warm()` 沒呼叫：測試、單機腳本）：bump 後的第一個讀取同步重算。
+⚠️ 已知取捨：沒有 TTL ⇒ 就地改 tenders 的非簽章欄位、使用者顯示名稱（標註人）改名，要等下一次抓取／條件／標註異動才反映。
 """
+import json
 import logging
 import threading
-import time
 
 from db import get_db
 from modules.tender_radar import match as tender_match
 
 logger = logging.getLogger(__name__)
 
-TTL_SECONDS = 300
 _WARM_DELAY_SECONDS = 1.0
 _STARTUP_WARM_DELAY_SECONDS = 20
+_RESP_CACHE_MAX = 64
 
 _LOCK = threading.Lock()        # 建構用（可能持有數秒）
 _META = threading.Lock()        # 只護 gen／pending，短暫持有：寫入端 bump() 不可以被建構卡住
-_STATE = {"gen": 0, "key": None, "built_at": 0.0, "data": None}
+_STATE = {"gen": 0, "built_gen": -1, "sig": None, "data": None}
 _WARM = {"enabled": False, "pending": False}
 
 
-def bump():
-    """資料變了：作廢快取，並（若已啟用）在背景預先重算。可從任何執行緒呼叫，不丟例外。"""
+def bump(background=False):
+    """資料變了：作廢快取。
+
+    `background=True`（抓取寫入後）：背景重算，請求先拿舊的。
+    預設（使用者改條件／標註）：**在呼叫的寫入端就地重算完**再回，使用者接著重讀就是新的。
+    重算失敗只記錄（請求端會在讀時補算），不丟例外給寫入端。
+    """
     with _META:
         _STATE["gen"] += 1
-    _schedule_warm(_WARM_DELAY_SECONDS)
+    if background:
+        _schedule_warm(_WARM_DELAY_SECONDS)
+        return
+    try:
+        conn = get_db()
+        try:
+            _rebuild(conn)
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        logger.exception("tender listing rebuild after write failed")
 
 
 def enable_warm():
@@ -67,10 +86,10 @@ def _warm_once():
     try:
         conn = get_db()
         try:
-            get_listing(conn)
+            _rebuild(conn)
         finally:
             conn.close()
-    except Exception:  # noqa: BLE001 —— 預算失敗只影響速度，使用者請求仍會即時算
+    except Exception:  # noqa: BLE001 —— 預算失敗只影響速度：請求端仍有舊結果，或「從來沒算過」時同步算
         logger.exception("tender listing warm failed")
 
 
@@ -94,8 +113,6 @@ def _clean_url(raw):
 
 
 def _build(conn):
-    import json
-
     rows = conn.execute("""
         SELECT * FROM tenders
         ORDER BY (deadline IS NULL), deadline ASC, id DESC
@@ -158,22 +175,56 @@ def _build(conn):
     return {"items": items, "hay": hay, "reason": reason}
 
 
-def get_listing(conn):
-    """回 `{items, hay, reason}`；命中快取就不碰 tenders 全表。**回傳的結構唯讀，呼叫端不可改。**"""
-    now = time.monotonic()
-    gen = _STATE["gen"]
-    key = (gen, _signature(conn))
+def _rebuild(conn):
+    """重算一份並換上去。單一建構者；已經是最新的（gen 與簽章都對）就直接回現成的。"""
     with _LOCK:
+        gen = _STATE["gen"]
+        sig = _signature(conn)
         data = _STATE["data"]
-        if data is not None and _STATE["key"] == key and now - _STATE["built_at"] < TTL_SECONDS:
-            return data
-    with _LOCK:   # 單一建構者：同時進來的請求排隊後直接吃新的
-        data = _STATE["data"]
-        if data is not None and _STATE["key"] == key and time.monotonic() - _STATE["built_at"] < TTL_SECONDS:
+        if data is not None and _STATE["built_gen"] == gen and _STATE["sig"] == sig:
             return data
         data = _build(conn)
-        _STATE.update(key=key, built_at=time.monotonic(), data=data)
+        data["resp"] = {}
+        _STATE.update(built_gen=gen, sig=sig, data=data)
         return data
+
+
+def _snapshot(conn):
+    """請求端取快取。**只有「從來沒算過」才同步分類**（另見模組 docstring 的兩個保守例外）。"""
+    data = _STATE["data"]
+    if data is None:
+        return _rebuild(conn)
+    if _STATE["built_gen"] != _STATE["gen"]:
+        if _WARM["enabled"]:
+            _schedule_warm(0)        # 已知有新資料、背景重算中（或漏排了就補排）：先回舊的
+            return data
+        return _rebuild(conn)        # 沒有背景預算可等
+    if _signature(conn) == _STATE["sig"]:
+        return data
+    return _rebuild(conn)            # 不明寫入者（沒人 bump 而資料變了）：寧可慢一次
+
+
+def respond(conn, watch=None, q=None):
+    """`GET /tenders` 的回應本體（UTF-8 JSON 位元組）。同一份快取、同一組 (watch, q) 直接回現成的位元組。"""
+    data = _snapshot(conn)
+    needle = tender_match.normalize((q or "").strip())
+    key = (watch, needle)
+    body = data["resp"].get(key)
+    if body is None:
+        items, hay = data["items"], data["hay"]
+        if watch is not None:
+            keep = [(it, h) for it, h in zip(items, hay)
+                    if any(w["id"] == watch for w in it["matchedWatches"])]
+            items, hay = [p[0] for p in keep], [p[1] for p in keep]
+        if needle:
+            items = [it for it, h in zip(items, hay) if needle in h]
+        # ⚠️ `matchedEmptyReason` 是「搜尋條件有沒有命中東西」，不受 watch／q 篩選影響
+        body = json.dumps({"items": items, "source": "資料來源：政府電子採購網",
+                           "matchedEmptyReason": data["reason"]},
+                          ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if len(data["resp"]) < _RESP_CACHE_MAX:
+            data["resp"][key] = body
+    return body
 
 
 def reset():
@@ -181,4 +232,4 @@ def reset():
     with _META:
         _STATE["gen"] += 1
     with _LOCK:
-        _STATE.update(key=None, built_at=0.0, data=None)
+        _STATE.update(built_gen=-1, sig=None, data=None)

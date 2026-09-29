@@ -16,7 +16,7 @@ import json
 import os
 from datetime import datetime
 
-from fastapi import APIRouter, Body, Header, HTTPException
+from fastapi import APIRouter, Body, Header, HTTPException, Response
 
 from db import get_db
 from helpers.settings import  _set_setting
@@ -303,33 +303,14 @@ def list_tenders(watch: int = None, q: str = None,
     （中間有人刪掉條件就會講錯話）⇒ 這個訊號必須跟清單同一個回應出來。
     """
     _require_radar(authorization)
-    # 🔴 標籤仍是即時算的（不掛 tender_hits 帳本），但算出來的結果留在 `listing` 快取：
-    # 寫入端呼叫 `listing.bump()` 失效並背景預算，請求端只做 watch／q 過濾（快取的順序已含命中／標註提前）。
+    # 🔴 標籤仍是即時算的（不掛 tender_hits 帳本），但**請求端不分類**：分類結果（連同序列化後的 JSON）由 `listing` 預先算好；
+    # 只有「從來沒算過」才在這裡同步算。重算時機見 listing.py 模組 docstring。
     conn = get_db()
     try:
-        cached = tender_listing.get_listing(conn)
+        body = tender_listing.respond(conn, watch, q)
     finally:
         conn.close()
-    items, hay = cached["items"], cached["hay"]
-
-    # ⚠️ `matchedEmptyReason` 在 watch／q 篩選之前定案：它問的是「搜尋條件有沒有命中東西」，不是「這次結果幾筆」
-    matched_empty_reason = cached["reason"]
-
-    if watch is not None:
-        # 📌 篩選是**可選的**：不帶參數就是全部（P3）。
-        keep = [(it, h) for it, h in zip(items, hay)
-                if any(w["id"] == watch for w in it["matchedWatches"])]
-        items, hay = [p[0] for p in keep], [p[1] for p in keep]
-
-    # 🔴 `q` 是**篩選**不是查詢：清空就回到全部；空字串與沒給參數是同一件事。
-    needle = tender_match.normalize((q or "").strip())
-    if needle:
-        items = [it for it, h in zip(items, hay) if needle in h]
-    else:
-        items = list(items)
-
-    return {"items": items, "source": "資料來源：政府電子採購網",
-            "matchedEmptyReason": matched_empty_reason}
+    return Response(content=body, media_type="application/json")
 
 
 # ── 雷達健康狀態 ─────────────────────────────────────────────────────────────
