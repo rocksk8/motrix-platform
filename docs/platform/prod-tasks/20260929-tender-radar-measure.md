@@ -36,7 +36,7 @@ print("fetch_log 最近 3 筆", c.execute("select * from tender_fetch_log order 
 - `<安裝目錄>\backend\logs\server.log` 量測時間前後 5 分鐘的 WARNING／ERROR：只列行數與前 5 行
 
 ## 4. 回報
-寫到雲端硬碟：`我的雲端硬碟\MOTRIX-交付\正式機回報\<yyyyMMdd_HHmm>_<commit 前 8 碼>_標案量測\摘要.md`（開發機看到的是 `G:\我的雲端硬碟\...`；正式機若掛在別的磁碟代號，用同一個資料夾）。
+改放 GitHub：寫到 repo 內 `docs/platform/prod-reports/<yyyyMMdd_HHmm>_<commit 前 8 碼>_標案量測/摘要.md`，用 `docs/platform/prod-tasks/tools/tender_radar_measure.py`（不帶 `--report-root` 即預設寫到此處），然後 `git add`、`git commit`、`git push` 到 `main`（或使用者指定的分支），開發機再 pull 讀取。不再寫雲端硬碟。
 
 `摘要.md` 只要：
 - 第 0 節：commit 前 8 碼、量測時間、量測時是否已套用第二十二班
@@ -44,4 +44,4 @@ print("fetch_log 最近 3 筆", c.execute("select * from tender_fetch_log order 
 - 第 2 節：TTFB、Content Download、Size、status／watches 的 Time、體感秒數、`q=` 請求的 Time
 - 第 3 節：結論一行
 
-**不要**附資料庫檔、license.key、任何金鑰或個資（fetch_log 內容只摘要，不整段貼）。
+**repo 是版本庫，一旦推上去就留在歷史裡**，所以**不要**附資料庫檔、license.key、任何金鑰或個資（fetch_log 內容只摘要，不整段貼）。

@@ -6,10 +6,10 @@
 
 用法（正式機 cmd／PowerShell）：
   python tender_radar_measure.py --install-dir "C:\\Users\\Motrix\\Desktop\\V9.0" ^
-      --report-root "G:\\我的雲端硬碟\\MOTRIX-交付\\正式機回報" --applied-22 no ^
+      --applied-22 no ^
       [--ttfb 6.8s --download 0.2s --size "1.2MB/8MB" --status-time 40ms --watches-time 35ms ^
        --felt 7 --q-time 300ms]
-不給 --report-root 則只印到畫面。
+不給 --report-root 則寫到 repo 的 docs/platform/prod-reports/（之後需自行 git add/commit/push）；給 --report-root 可改寫別處。
 """
 import argparse, json, re, sqlite3, sys
 from datetime import datetime, timedelta
@@ -68,7 +68,7 @@ def log_section(root: Path, at: datetime) -> tuple[list[str], str]:
 def main() -> int:
     a = argparse.ArgumentParser()
     a.add_argument("--install-dir", required=True)
-    a.add_argument("--report-root")
+    a.add_argument("--report-root", default=str(Path(__file__).resolve().parents[2] / "prod-reports"))
     a.add_argument("--applied-22", choices=["yes", "no"], default="no")
     a.add_argument("--at", help="量測時間 YYYY-MM-DD HH:MM，預設現在")
     for k in ("ttfb", "download", "size", "status-time", "watches-time", "felt", "q-time"):
