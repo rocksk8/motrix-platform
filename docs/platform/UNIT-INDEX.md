@@ -19,7 +19,7 @@
 | `plat:migrations` | L0 | 每模組獨立版本的 migration（CORE-SPEC §6）。 | 5 | 3 | `tests/test_definitions_store_2026_09_25.py`、`tests/platform/test_migration_incomplete.py` |
 | `plat:pages` | L0 | 頁面對照與提供（階段 C／C1，docs/platform/STAGE-C-DESIGN.md §3）：`/pages/<檔名>` ⇒ 實體檔、提示頁或 404。 | 15 | 2 | `tests/platform/test_core_pages.py` |
 | `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 44 | 23 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
-| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 21 | 48 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
+| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 21 | 49 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
 | `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 11 | 0 | `tests/platform/test_core_loader.py` |
 | `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 modules/case/quotations.py 下沉）。 | 7 | 18 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
 | `plat:upgrade` | L0 | V9 → 新版 升級轉換與回滾的核心（CORE-SPEC §9b）。L0 工具，不是業務模組。 | 50 | 0 | `tests/platform/test_core_upgrade.py` |
@@ -71,7 +71,7 @@
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 23 | 10 | — |
 | `helper:storage_locations` | L1 | 儲存位置：雲端存檔根目錄、個資資料夾、更新交付資料夾的**唯一**解析處（CORE-SPEC 裁示表「儲存位置可設定」，2026-09-28）。 | 13 | 2 | `tests/platform/test_storage_locations_2026_09_28.py` |
 | `helper:system_checks` | L1 | L1 系統健康的每日檢查（2026-09-26 自 routers/daily_tasks.py 搬出，M12 搬遷前置）。（無單位卡） | 8 | 2 | — |
-| `helper:tax_calc` | L1 | 稅額純函式（L1；2026-09-26 自 M01 `helpers/quotations.py` 下沉，主持核准「T」）。（無單位卡） | 10 | 8 | — |
+| `helper:tax_calc` | L1 | 稅額純函式（L1；2026-09-26 自 M01 `helpers/quotations.py` 下沉，主持核准「T」）。（無單位卡） | 11 | 8 | — |
 | `helper:tiered_approval` | L1 | 共用的 tiers 依序簽核純邏輯（2026-08-22）。（無單位卡） | 28 | 19 | — |
 | `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 7 | 11 | — |
 | `helper:xlsx_out` | L1 | L1 輸出：Excel 樣式、公式注入防護、匯出速率限制（ROADMAP A8／DEPENDENCY-MAP §3 #10 #13）。（無單位卡） | 7 | 3 | — |
