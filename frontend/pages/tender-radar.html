@@ -461,6 +461,8 @@ MotrixLayout.init({
 })
 </script>
 <script>
+// 沒有畫法的欄位只警告一次；放模組層（不是 this）——cellHtml 在 Alpine effect 內執行，寫響應式狀態會多觸發一次重畫
+const _trWarnedCols = new Set()
 function tenderRadarPage() {
   return {
     session: {}, token: '', loading: false, scanning: false,
@@ -543,8 +545,7 @@ function tenderRadarPage() {
             + '</span>'
         default:
           // 版面登記了、卻沒有畫法的欄：不畫（與舊版 x-if 相同），但只吵一次，日後新增欄位漏補 case 才看得到
-          if (!this._warnedCols) this._warnedCols = {}
-          if (!this._warnedCols[field]) { this._warnedCols[field] = true; console.warn('[tender-radar] 欄位「' + field + '」沒有畫法（cellHtml 缺 case），已略過') }
+          if (!_trWarnedCols.has(field)) { _trWarnedCols.add(field); console.warn('[tender-radar] 欄位「' + field + '」沒有畫法（cellHtml 缺 case），已略過') }
           return ''
       }
     },

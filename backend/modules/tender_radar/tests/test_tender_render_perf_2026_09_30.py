@@ -19,6 +19,8 @@ from tests._mapiso import no_tile_probe  # noqa: E402,F401
 
 N = 500
 PW = "T-Pass-1234"
+MAX_DOM_NODES = 30000
+MAX_LONGTASK_MS = 600
 BUDGET_SECONDS = 3.0   # 本機約 0.5 秒；放寬是為了全機高負載不假紅，修前實測 2.3 秒以上仍抓得到退化（稽核 S1）
 
 INIT = """
@@ -86,6 +88,11 @@ def measure(live_server, make_user, e2e_browser):
 def test_500_tenders_visible_within_budget(live_server, make_user, no_tile_probe, e2e_browser):
     r = measure(live_server, make_user, e2e_browser)
     print("\nPERF %s" % json.dumps(r, ensure_ascii=False))
+    # 主判準（確定性，不受機器負載影響）：DOM 節點數。修前（每格 11 個 x-if）約 79,478；修後約 15,000（W3 交叉稽核 R1）
+    assert r["domNodes"] < MAX_DOM_NODES, r
+    # 次判準：主執行緒最長一段被占住的時間。修前約 1,350～1,700 ms；修後約 90～100 ms
+    assert r["longTaskMaxMs"] < MAX_LONGTASK_MS, r
+    # 時間門檻放寬（高負載下不假紅），單獨不足以守住退化（舊頁面 1.7～2.3 秒也會過），所以上面兩條才是守門
     assert r["rowsAtMs"] / 1000 < BUDGET_SECONDS, r
 
 
