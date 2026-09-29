@@ -55,16 +55,29 @@ def test_drill_refuses_inside_a_git_repo(tmp_path):
     assert not list((tmp_path / "w").iterdir())
 
 
-def test_drill_reproduces_prod_nongit_failure(tmp_path, monkeypatch):
-    """演練安裝目錄非 git ⇒ verify_package 4a 的 git check-attr 失敗，與正式機第二十二班相同（不在演練裡被吞掉）。
-    %TEMP% 在家目錄 repo 之內 ⇒ 用 GIT_CEILING_DIRECTORIES 讓 git 不往上找（等同正式機「上面沒有 repo」）。"""
+def _run(tmp_path, monkeypatch, **kw):
+    """%TEMP% 在家目錄 repo 之內 ⇒ 用 GIT_CEILING_DIRECTORIES 讓 git 不往上找（等同正式機「上面沒有 repo」）。"""
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     step = tmp_path / "s.md"
     step.write_text(_md(STAGE, VERIFY_PKG), encoding="utf-8")
     work = tmp_path / "w"
-    rep = SD.drill(str(step), str(work), (1,))
+    rep = SD.drill(str(step), str(work), (1,), **kw)
+    assert not list(work.iterdir())                                     # 用完清掉
+    return rep
+
+
+def test_drill_nongit_install_passes_verify_package_with_the_package_list(tmp_path, monkeypatch):
+    """T22-2：非 git 安裝目錄＋包內不出貨清單 ⇒ 第二十二班步驟 1 的 stage／verify／verify_package 全部 exit 0（原本 2 項 FAIL）。"""
+    rep = _run(tmp_path, monkeypatch)
     tails = " | ".join(b["tail"] for b in rep["blocks"])
     assert rep["blocks"][0]["exit"] == 0, tails
     assert not rep["blocks"][1]["static"], rep["blocks"][1]["static"]
-    assert rep["blocks"][1]["exit"] != 0, tails
-    assert not list(work.iterdir())                                     # 用完清掉
+    assert rep["blocks"][1]["exit"] == 0, tails
+    assert rep["ok"] is True
+
+
+def test_drill_nongit_install_without_the_list_still_fails(tmp_path, monkeypatch):
+    """反向控制：包內沒有清單 ⇒ verify_package 紅（不是略過）。"""
+    rep = _run(tmp_path, monkeypatch, write_ignore_list=False)
+    assert rep["blocks"][1]["exit"] != 0
+    assert "export_ignore" in rep["blocks"][1]["tail"] or rep["ok"] is False

@@ -88,7 +88,7 @@ def _git_archive(dest, subdir=None):
     tarfile.open(fileobj=io.BytesIO(r.stdout)).extractall(dest)
 
 
-def build_drill(base):
+def build_drill(base, write_ignore_list=True):
     """⇒ dict(inst, pkg_name, delivery_root, staging, sha256)"""
     import delivery as D
     from cryptography.hazmat.primitives import serialization
@@ -100,6 +100,10 @@ def build_drill(base):
     sys.path.insert(0, str(REPO / "tools" / "platform"))
     import product_select as PS                  # 與 build_deploy_package 相同：選配 full、寫 modules.lock.json
     PS.apply(pkg, PS.load_product("full"))
+    if write_ignore_list:      # 與 build_deploy_package.ps1 Step 5.55 相同：建包端讓 git 算好不出貨清單、寫進包
+        import export_ignore_list as EI
+        (pkg / "backend" / "export_ignore.json").write_text(
+            json.dumps(EI.build(str(REPO), "HEAD"), ensure_ascii=False, indent=1), encoding="utf-8")
     (inst / "backend" / ".deployed_commit.json").write_text(json.dumps(
         {"commit": "0" * 40, "commit_short": "00000000", "built_at": "2000-01-01 00:00:00"}), encoding="utf-8")
     (pkg / "deploy_manifest.json").write_text(json.dumps(
@@ -129,7 +133,7 @@ def run_block(command, cwd):
     return r.returncode, (r.stdout + r.stderr)
 
 
-def drill(step_file, work, steps=(1,), keep=False):
+def drill(step_file, work, steps=(1,), keep=False, write_ignore_list=True):
     """⇒ 報告 dict：{blocks:[{step,command,static,exit,tail}], ok, base}。"""
     md = Path(step_file).read_text(encoding="utf-8")
     blocks = extract_blocks(md, steps)
@@ -139,7 +143,7 @@ def drill(step_file, work, steps=(1,), keep=False):
     base.mkdir(parents=True)
     report = {"base": str(base), "blocks": [], "ok": True}
     try:
-        d = build_drill(base)
+        d = build_drill(base, write_ignore_list)
         # 🔴 演練的前提是「安裝目錄不在任何 git repo 之內」——家目錄本身就是 repo 的機器上，放在 %TEMP% 會讓 git 檢查意外成功，
         #    演練綠、正式機紅（第二十二班的形狀）⇒ 前提不成立就拒絕，不是降級照跑。
         if subprocess.run(["git", "-C", str(d["inst"]), "rev-parse", "--git-dir"], capture_output=True).returncode == 0:
