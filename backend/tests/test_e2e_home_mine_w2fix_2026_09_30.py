@@ -1,8 +1,8 @@
-"""W2 稽核修正（S1／S5／S6）：首頁「等我簽核」。
+"""W2 稽核修正（W2F1／W2F5／W2F6）：首頁「等我簽核」。
 
-S1  focus＋visibilitychange 連發只送一趟 /approval-queue/count；隔一段時間再觸發會再送（不是永久封鎖）。
-S5  /count 讀不到 ⇒ hero／band 顯示「—」，不沿用 dashboard/stats 的報價單版本數字。
-S6  /count 在 dashboard/stats 的 json 解析期間完成 ⇒ 數字不被舊值蓋回。
+W2F1  focus＋visibilitychange 連發只送一趟 /approval-queue/count；隔一段時間再觸發會再送（不是永久封鎖）。
+W2F5  /count 讀不到 ⇒ hero／band 顯示「—」，不沿用 dashboard/stats 的報價單版本數字。
+W2F6  /count 在 dashboard/stats 的 json 解析期間完成 ⇒ 數字不被舊值蓋回。
 """
 import pytest
 
@@ -24,7 +24,7 @@ def _home(e2e_browser, live_server, make_user, name, route=None):
 
 
 @pytest.mark.e2e
-def test_s1_focus_and_visibility_share_one_request(live_server, make_user, e2e_browser):
+def test_w2f1_focus_and_visibility_share_one_request(live_server, make_user, e2e_browser):
     page = _home(e2e_browser, live_server, make_user, "w2fix_s1")
     page.wait_for_function(f"() => {{ try {{ return {DATA}.mineLoaded === true }} catch (e) {{ return false }} }}", timeout=20000)
     page.wait_for_timeout(600)                                   # 讓初次載入的 300 ms 節流窗過去
@@ -40,7 +40,7 @@ def test_s1_focus_and_visibility_share_one_request(live_server, make_user, e2e_b
 
 
 @pytest.mark.e2e
-def test_s5_when_count_fails_hero_and_band_show_dash(live_server, make_user, e2e_browser):
+def test_w2f5_when_count_fails_hero_and_band_show_dash(live_server, make_user, e2e_browser):
     page = _home(e2e_browser, live_server, make_user, "w2fix_s5", route=lambda r: r.fulfill(status=500, body="{}"))
     page.wait_for_function(f"() => {{ try {{ return {DATA}.statsLoaded === true && !{DATA}.loading }} catch (e) {{ return false }} }}", timeout=20000)
     assert page.locator(".h-band__c .h-band__n").first.inner_text().strip() == "—"
@@ -52,7 +52,7 @@ def test_s5_when_count_fails_hero_and_band_show_dash(live_server, make_user, e2e
 
 
 @pytest.mark.e2e
-def test_s6_count_finishing_during_stats_json_is_not_overwritten(live_server, make_user, e2e_browser):
+def test_w2f6_count_finishing_during_stats_json_is_not_overwritten(live_server, make_user, e2e_browser):
     page = _home(e2e_browser, live_server, make_user, "w2fix_s6")
     page.wait_for_function(f"() => {{ try {{ return {DATA}.mineLoaded === true && {DATA}.statsLoaded === true }} catch (e) {{ return false }} }}", timeout=20000)
     res = page.evaluate(f"""async () => {{
