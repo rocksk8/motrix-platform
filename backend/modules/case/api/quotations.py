@@ -726,8 +726,10 @@ def next_quote_no(authorization: str = Header(None)):
 
 # ── CM7：案件清單常用篩選（WHERE 片段，皆不帶前綴）────────────────────────────
 # 我負責的：業務歸屬（同可見性規則的前兩項）、被分配、或案件角色（CM3 起存帳號）是我
+# 舊資料比顯示名稱：空對空不算相符（2026-09-29f，同 helpers.row_access；否則 cashier 等看得到全部案件的人
+# 顯示名稱空時，業務名稱空的舊案件會被歸成「我負責的」）
 _CASE_MINE_SQL = (
-    "(sales_person_id=? OR (sales_person_id IS NULL AND sales_person=?)"
+    "(sales_person_id=? OR (sales_person_id IS NULL AND sales_person=? AND sales_person<>'')"
     " OR EXISTS (SELECT 1 FROM json_each(COALESCE(assigned_user_ids,'[]')) WHERE value=?)"
     " OR json_extract(data_json,'$.caseRecord.roles.filler.username')=?"
     " OR json_extract(data_json,'$.caseRecord.roles.sales.username')=?"

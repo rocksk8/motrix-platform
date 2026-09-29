@@ -101,6 +101,14 @@ def _id_list(raw, lenient: bool) -> list:
     return v if isinstance(v, list) else []
 
 
+def _legacy_name(user: dict):
+    """舊資料比對用的顯示名稱；空字串／None ⇒ None（不參與比對）。
+
+    空對空不算相符（2026-09-29f）：否則顯示名稱空的使用者會看到所有業務名稱空的舊案件。"""
+    name = user["display_name"]
+    return None if name is None or name == "" else name
+
+
 def visible(kind: str, user: dict, row, scope: str = "owner") -> bool:
     rule = rule_for(kind)
     if rule is None:
@@ -112,10 +120,10 @@ def visible(kind: str, user: dict, row, scope: str = "owner") -> bool:
         oid = _get(row, rule.owner_id_col)
         if oid is not None and oid == uid:
             return True
-        if (rule.legacy_name_col and oid is None
-                and _get(row, rule.legacy_name_col) is not None
-                and _get(row, rule.legacy_name_col) == user["display_name"]):
-            return True
+        if rule.legacy_name_col and oid is None:
+            rv = _get(row, rule.legacy_name_col)
+            if rv is not None and rv == _legacy_name(user):   # _legacy_name 空 ⇒ None ⇒ 不相符
+                return True
     if rule.creator_col:
         cb = _get(row, rule.creator_col)
         if cb is not None and cb == uid:
@@ -138,9 +146,10 @@ def filter_sql(kind: str, user: dict, prefix: str = "", scope: str = "owner") ->
     if rule.owner_id_col:
         terms.append(f"{p}{rule.owner_id_col}=?")
         params.append(user["id"])
-        if rule.legacy_name_col:
+        name = _legacy_name(user) if rule.legacy_name_col else None
+        if name is not None:                          # 顯示名稱空 ⇒ 不產生這一條（空對空不算相符）
             terms.append(f"({p}{rule.owner_id_col} IS NULL AND {p}{rule.legacy_name_col}=?)")
-            params.append(user["display_name"])
+            params.append(name)
     if rule.creator_col:
         terms.append(f"{p}{rule.creator_col}=?")
         params.append(user["id"])
