@@ -1492,6 +1492,11 @@ async def add_voucher_attachments(voucher_id: int, request: Request,
             raise HTTPException(404, "找不到這張傳票。")
         if dict(row).get("voided_at"):
             raise HTTPException(400, "這張傳票已經作廢，不能再加附件。")
+        # W2 稽核 S4：與刪除同一條規則——離開草稿就不可再加（加了也刪不掉）；前端入口本來就只在草稿顯示，這裡補上後端那一半。
+        if not can_edit(dict(row).get("status")):
+            raise HTTPException(
+                400, "只有「%s」的傳票可以加附件，這一張現在是「%s」。若要補附件，請作廢整張傳票再重開。"
+                     % ("／".join(EDITABLE_STATUSES), dict(row).get("status")))
 
         ctype = (request.headers.get("content-type") or "").lower()
         incomplete = []
