@@ -1,5 +1,10 @@
 # 應收應付 更新紀錄
 
+## 1.0.12 — 2026-09-30（暫用號，列車取號；wip/w2-report-cash）
+- 收款端手續費不再重複扣（使用者 2026-09-30，正式機案件 MQ-202607-045：實收 263,813（銀行入帳，已扣客戶內扣手續費 15）被報表再減 15 成 263,798，且 9 月當月收入是 0（預設權責））：收入明細 `collect_income_items` 的 `amount`＝銀行入帳＋手續費（含稅收入）、`netAmount`＝銀行入帳（L1 `receipt_amounts`）；`collect_tax_invoices` 多回 `feeAmount`／`bankAmount`（T100 收款傳票用）。
+- 新增提供者 `expense.entries`／`receipt_fee`（IP-9）：客戶內扣的收款手續費以收款日列營運報表支出（類別「收款手續費」）。
+- 出納執行紀錄：已收款「實收金額」＝銀行入帳、另列手續費（頁面與 Excel）；收款視窗標籤說明「銀行實際入帳金額（已扣客戶內扣手續費）」。
+
 ## 1.0.11 — 2026-09-29（暫用號，列車取號；wip/payslip-void-signed）
 - 出納頁新增「勞報單待付款」子頁籤：`GET /api/cashier/payslip-queue`（IP-103 `payslip.payables`；只給最高管理者與出納，財務看不到；薪資獎金模組不在 ⇒ `available:false`＋說明）。標記付款打勞報單那一支 `POST /api/payslips/{單號}/mark-paid`。
 - 收款日期歸月：`receivables` 的現金口徑收入與發票期別改用 `helpers.norm_ymd`（「2026/09/01」等寫法不再被排除在月份外）。
