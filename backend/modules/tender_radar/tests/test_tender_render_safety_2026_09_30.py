@@ -50,9 +50,8 @@ def _page(live_server, e2e_browser):
     inject_login(page, live_server, "safeuser", PW)
     page.goto(live_server + "/pages/tender-radar.html")
     page.wait_for_function("() => document.querySelectorAll('table[data-layout-list=tenders] tbody tr').length >= 3", timeout=20000)
-    # 等載入終點：清單第一次畫出來之後，個人版面偏好（user prefs／layout-cols）還會再抵達並重畫整個 tbody 一次（實測第二次重畫在
-    # 第一次之後約 300～550 ms）；此時 focus() 的鈕被換掉、焦點掉到 BODY、Enter 沒有作用 ⇒ 偶發紅（40 次裡 2～4 次）。等網路靜止再開始。
-    page.wait_for_load_state("networkidle", timeout=20000)
+    # （不再等 networkidle：首載只畫一次 tbody 是產品保證，見 test_first_load_draws_the_tbody_once；
+    #   之前是版面偏好在清單第一次畫出後 300～550 ms 才到、整個 tbody 重畫，focus() 的鈕被換掉 ⇒ 焦點題偶發紅。）
     return page
 
 
@@ -115,3 +114,56 @@ def test_focus_is_not_stolen_when_user_moved_elsewhere(live_server, make_user, n
     page.wait_for_function("() => document.querySelector('tr[data-case-no=\"K-1\"] button[data-mark].on')", timeout=10000)
     page.wait_for_timeout(300)
     assert page.evaluate("() => document.activeElement && document.activeElement.tagName") == "INPUT", "焦點被搶回標註鈕"
+
+
+DRAWS = """
+(() => {
+  window.__draws = 0;
+  const iv = setInterval(() => { const b = document.querySelector('table[data-layout-list=tenders] tbody'); if (!b) return; clearInterval(iv);
+    new MutationObserver(ms => { for (const m of ms) if (m.addedNodes.length) window.__draws++ }).observe(b, { childList: true }) }, 2);
+})();
+"""
+
+
+def _open_counting(live_server, e2e_browser, route=None):
+    page = e2e_browser.new_context(viewport={"width": 1440, "height": 900}).new_page()
+    block_tiles(page)
+    page.add_init_script(DRAWS)
+    if route:
+        page.route("**/api/list-prefs/**", route)
+    inject_login(page, live_server, "safeuser", PW)
+    page.goto(live_server + "/pages/tender-radar.html")
+    return page
+
+
+@pytest.mark.e2e
+def test_first_load_draws_the_tbody_once(live_server, make_user, no_tile_probe, e2e_browser):
+    """版面（含個人偏好）回來之前不畫 tbody ⇒ 首載只畫一次（不是先用預設欄畫、偏好到了再整個重畫）。"""
+    make_user("safeuser", PW, role="superadmin")
+    _seed("一般人")
+    page = _open_counting(live_server, e2e_browser)
+    page.wait_for_function("() => document.querySelectorAll('table[data-layout-list=tenders] tbody tr').length >= 3", timeout=20000)
+    page.wait_for_load_state("networkidle", timeout=20000)
+    assert page.evaluate("() => window.__draws") == 1, "首載畫了 %s 次" % page.evaluate("() => window.__draws")
+
+
+@pytest.mark.e2e
+def test_list_still_appears_when_personal_prefs_fail(live_server, make_user, no_tile_probe, e2e_browser):
+    make_user("safeuser", PW, role="superadmin")
+    _seed("一般人")
+    page = _open_counting(live_server, e2e_browser, route=lambda r: r.fulfill(status=500, body="{}"))
+    page.wait_for_function("() => document.querySelectorAll('table[data-layout-list=tenders] tbody tr').length >= 3", timeout=20000)
+    assert page.evaluate("() => document.documentElement.dataset.layoutState") in ("ready", "failed")
+    page.wait_for_selector("table[data-layout-list=tenders]", state="visible", timeout=2000)
+    assert page.evaluate("() => window.__draws") == 1
+
+
+@pytest.mark.e2e
+def test_list_appears_after_a_timeout_when_personal_prefs_never_answer(live_server, make_user, no_tile_probe, e2e_browser):
+    """偏好請求一直不回 ⇒ 版面永遠不會 ready；3 秒後照畫（程式預設欄），不可以卡空白。"""
+    make_user("safeuser", PW, role="superadmin")
+    _seed("一般人")
+    page = _open_counting(live_server, e2e_browser, route=lambda r: None)      # 收下請求、永不回應
+    page.wait_for_function("() => document.querySelectorAll('table[data-layout-list=tenders] tbody tr').length >= 3", timeout=10000)
+    assert page.evaluate("() => document.documentElement.dataset.layoutState") != "ready"
+    page.wait_for_selector("table[data-layout-list=tenders]", state="visible", timeout=2000)      # 看得見，不只是 DOM 裡有

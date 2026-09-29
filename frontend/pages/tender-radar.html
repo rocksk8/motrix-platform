@@ -409,7 +409,7 @@
       <!-- P9：欄的顯示、順序、標題由版面決定（$store.layout.cols：角色 ＞ 公司 ＞ 程式預設，再疊個人層）；
            每一欄「怎麼畫」仍寫在這裡。版面還沒回來之前不畫表（避免先畫預設再跳成別的樣子）。 -->
       <table class="data-table" data-layout-list="tenders"
-             x-show="visibleTenders.length > 0 && ($store.layout.ready || $store.layout.failed)">
+             x-show="visibleTenders.length > 0 && ($store.layout.ready || $store.layout.failed || layoutWaitDone)">
         <thead><tr>
           <template x-for="c in $store.layout.cols('tenders')" :key="c.field">
             <th :data-col="c.field" :style="c.field === 'marked' ? 'width:52px' : (c.field === 'budget' ? 'text-align:right' : '')"
@@ -465,7 +465,7 @@ MotrixLayout.init({
 const _trWarnedCols = new Set()
 function tenderRadarPage() {
   return {
-    session: {}, token: '', loading: false, scanning: false,
+    session: {}, token: '', loading: false, scanning: false, layoutWaitDone: false,
     status: null, watches: [], tenders: [], formError: '',
     schedule: null, scheduleMsg: '', listError: '', watchFilter: '',
     // ⚠️ 存的是**哪一筆正在送**（`caseNo`），不是一個布林值 ——
@@ -550,7 +550,11 @@ function tenderRadarPage() {
       }
     },
     tbodyHtml() {
-      const cols = this.$store.layout.cols('tenders')
+      const L = this.$store.layout
+      // 版面（含個人層偏好）還沒回來之前不畫：否則先用預設欄畫一次 500 列，偏好一到又整個重畫（首載畫兩次，還會洗掉鍵盤焦點）。
+      // 版面載入失敗（failed）或等超過 3 秒（layoutWaitDone）⇒ 照樣畫（公司版面／程式預設），不可以卡空白。
+      if (!(L.ready || L.failed || this.layoutWaitDone)) return ''
+      const cols = L.cols('tenders')
       const focus = this.focusCase
       return this.visibleTenders.map(t =>
         '<tr' + (t.marked ? ' class="tr-marked"' : '') + ' data-case-no="' + this._esc(t.caseNo) + '"'
@@ -703,6 +707,7 @@ function tenderRadarPage() {
     async init() {
       if (this._initDone) return
       this._initDone = true
+      setTimeout(() => { this.layoutWaitDone = true }, 3000)   // 版面等太久就照畫（見 tbodyHtml）
       const raw = localStorage.getItem('motrix_session')
       if (!raw) { location.href = 'login.html'; return }
       this.session = JSON.parse(raw)
