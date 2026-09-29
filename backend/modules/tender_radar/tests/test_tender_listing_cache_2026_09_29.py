@@ -248,3 +248,34 @@ def test_serialized_json_bytes_are_cached(client, make_user, seeded, lst):
     finally:
         conn.close()
     assert a is b and isinstance(a, bytes)
+
+
+def test_a_failed_background_rebuild_is_retried_by_the_next_read(client, make_user, seeded, lst, timers, monkeypatch):
+    """TR-M1：背景重算失敗一次不可以讓請求永遠拿舊資料——保底是 _snapshot 在 stale 時補排背景重算。"""
+    import db
+    hdr = _auth(client, make_user)
+    lst.enable_warm()
+    lst._warm_once()                                     # 熱的
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO tenders (case_no, org, name, deadline, fetched_at) VALUES (?,?,?,?,?)",
+                     ("LC-9", "新機關", "新標案", "2026-10-09", "2026-09-29T12:00:00"))
+        conn.commit()
+    finally:
+        conn.close()
+    real = lst._build
+    fail = {"on": True}
+
+    def flaky(c):
+        if fail["on"]:
+            fail["on"] = False
+            raise RuntimeError("第一次重建失敗")
+        return real(c)
+    monkeypatch.setattr(lst, "_build", flaky)
+    lst.bump(background=True)
+    timers[-1].fn()                                      # 背景重算：失敗（只記錄）
+    n = len(timers)
+    assert "LC-9" not in _cases(client, hdr)             # 讀到舊資料，沒有丟 500
+    assert len(timers) == n + 1, "stale 時沒有補排背景重算"   # 下次讀會重排
+    timers[-1].fn()                                      # 重排的那次成功
+    assert "LC-9" in _cases(client, hdr)
