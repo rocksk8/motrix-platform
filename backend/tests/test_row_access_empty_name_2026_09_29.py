@@ -27,6 +27,7 @@ ROWS = [
     (5, 8, None, "[]"),         # 新案件、業務 id＝8
     (6, 2, "", "[7,8]"),        # 別人的案件、7／8 是協作者（不可以被收緊）
     (7, 2, "", "[]"),           # 別人的案件、業務名稱空字串但有 id ⇒ 本來就看不到
+    (8, None, "", "[7]"),       # 舊案件、業務名稱空、7 是協作者 ⇒ 7 仍看得到（D 稽核 RA-M1：不可連協作者一起扣掉）
 ]
 
 
@@ -52,7 +53,7 @@ def _sql(conn, user, scope):
 @pytest.mark.parametrize("user", [EMPTY, NONE], ids=["empty", "none"])
 def test_blank_display_name_does_not_see_blank_legacy_cases(user, scope):
     conn = _db()
-    expected = {4, 6} if user is EMPTY else {5, 6}          # 只有自己的（id 相符）與被指派的
+    expected = {4, 6, 8} if user is EMPTY else {5, 6}          # 只有自己的（id 相符）與被指派的
     assert _py(conn, user, scope) == expected
     assert _sql(conn, user, scope) == expected
 
@@ -81,4 +82,4 @@ def test_bypass_rules_unchanged():
     everything = {r[0] for r in ROWS}
     assert _py(conn, admin, "owner") == _sql(conn, admin, "owner") == everything
     assert _py(conn, cashier, "read") == _sql(conn, cashier, "read") == everything
-    assert _py(conn, cashier, "owner") == _sql(conn, cashier, "owner") == {4, 6}
+    assert _py(conn, cashier, "owner") == _sql(conn, cashier, "owner") == {4, 6, 8}

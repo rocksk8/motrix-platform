@@ -145,16 +145,22 @@ def _OLD_can_access_case(user, row):                     # routers/dev_crm.py:10
 
 
 # 舊實作有定義的資料：陣列（含 NULL）。空字串與非陣列 JSON 在舊 SQL／舊單筆之間本來就不一致，另題列出。
-OLD_DEFINED = [None, "[]", "[1]", "[2]", "[1,2]", '["1"]', "[1.0]", "[true]", "[[1]]", "[4]"]
+# "[3]"：讓空顯示名稱的 viewer3 當協作者（D 稽核 RA-M1：扣格若放寬到協作者可見的列，比對要抓得到）
+OLD_DEFINED = [None, "[]", "[1]", "[2]", "[1,2]", '["1"]', "[1.0]", "[true]", "[[1]]", "[4]", "[3]"]
 
 
-def _minus_intended_change_2026_09_29f(conn, user, old):
+def _minus_intended_change_2026_09_29f(conn, user, old, scope):
     """刻意的行為變更（2026-09-29f，tests/test_row_access_empty_name_2026_09_29.py）：顯示名稱空的使用者
-    不再以「空對空」比中業務名稱空的舊案件。舊實作仍原封凍結；這裡只從舊結果扣掉那一格，其餘照比。"""
+    不再以「空對空」比中業務名稱空的舊案件。舊實作仍原封凍結；這裡只從舊結果扣掉**只靠空對空**才可見的列：
+    admin／cashier(read) 直通、或本人是協作者的列不扣（D 稽核 RA-M1：扣格不可比那一格寬）。"""
     if user["display_name"] not in ("", None) or user["role"] in ("superadmin", "admin"):
         return old
-    return old - {r["id"] for r in conn.execute(
-        "SELECT id FROM q WHERE sales_person_id IS NULL AND sales_person = ''")}
+    if scope == "read" and "cashier" in json.loads(user.get("modules") or "[]"):
+        return old
+    cell = {r["id"] for r in conn.execute(
+                "SELECT id, assigned_user_ids FROM q WHERE sales_person_id IS NULL AND sales_person = ''")
+            if user["id"] not in json.loads(r["assigned_user_ids"] or "[]")}
+    return old - cell
 
 
 @pytest.mark.parametrize("user", USERS, ids=lambda u: f"{u['role']}{u['id']}")
@@ -165,7 +171,7 @@ def test_case_matches_old_sql_read_scope(user):
     else:
         frag, params = _OLD_visible_case_filter_sql(user)
         old = {r["id"] for r in conn.execute(f"SELECT id FROM q WHERE 1=1{frag}", params)}
-    assert _sql_ids(conn, "q", "_t_case", user, "read") == _minus_intended_change_2026_09_29f(conn, user, old)
+    assert _sql_ids(conn, "q", "_t_case", user, "read") == _minus_intended_change_2026_09_29f(conn, user, old, "read")
 
 
 @pytest.mark.parametrize("user", USERS, ids=lambda u: f"{u['role']}{u['id']}")
@@ -178,7 +184,7 @@ def test_case_matches_old_single_owner_scope(user):
             old.add(r["id"])
         except HTTPException:
             pass
-    assert _py_ids(conn, "q", "_t_case", user, "owner") == _minus_intended_change_2026_09_29f(conn, user, old)
+    assert _py_ids(conn, "q", "_t_case", user, "owner") == _minus_intended_change_2026_09_29f(conn, user, old, "owner")
 
 
 @pytest.mark.parametrize("user", USERS, ids=lambda u: f"{u['role']}{u['id']}")

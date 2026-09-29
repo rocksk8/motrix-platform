@@ -3,7 +3,7 @@
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
 ## 1.69 — 2026-09-29 14:27（雲端暫用，列車取號；wip/cloud-rowaccess-empty-name：舊計畫「顯示名稱為空的使用者，看得到業務名稱為空的舊案件」）
-- L1（修正）：`helpers.row_access` 的舊資料名稱比對（`legacy_name_col`，案件＝`sales_person`）——使用者顯示名稱為空字串／None 一律不算相符（`visible` 與 `filter_sql` 同一條：SQL 不再產生該項）。原本空對空相等 ⇒ 顯示名稱空的非 admin 使用者看得到所有 `sales_person_id` 為 NULL、`sales_person` 為空的舊案件。其餘規則（本人 id、協作者、建立者、admin／cashier 直通、顯示名稱有值時的名稱比對）不變。公開介面不變。守門 `tests/test_row_access_empty_name_2026_09_29.py`；`tests/test_row_access_2026_09_25.py` 與凍結舊實作的比對扣掉這一格（`_minus_intended_change_2026_09_29f`）
+- L1（修正）：`helpers.row_access` 的舊資料名稱比對（`legacy_name_col`，案件＝`sales_person`）——使用者顯示名稱為空字串／None 一律不算相符（`visible` 與 `filter_sql` 同一條：SQL 不再產生該項）。原本空對空相等 ⇒ 顯示名稱空的非 admin 使用者看得到所有 `sales_person_id` 為 NULL、`sales_person` 為空的舊案件。其餘規則（本人 id、協作者、建立者、admin／cashier 直通、顯示名稱有值時的名稱比對）不變。公開介面不變。守門 `tests/test_row_access_empty_name_2026_09_29.py`；`tests/test_row_access_2026_09_25.py` 與凍結舊實作的比對扣掉這一格（`_minus_intended_change_2026_09_29f`）。〔補 D 稽核 RA-M1：扣格只扣「只靠空對空才可見」的列，協作者／直通可見的列不扣；資料加入空名稱使用者當協作者的列〕
 
 ## 1.68 — 2026-09-28（E 暫用，列車取號；wip/e-company-gate-impl 第一段：本公司資料設定閘門的正式機段）〔core_bump：暫用 1.66 → 1.65〕〔core_bump：暫用 1.65 → 1.67〕〔core_bump：暫用 1.67 → 1.68〕
 - L1（新增）：`helpers.company_setup`——判定（`status`：確認紀錄＋安裝識別＋必要欄位雜湊＋開發者指紋需簽章確認檔）、`confirm`、`backfill_once`（每庫一次、不丟例外）、`startup_install_check`（識別檔重建且已有紀錄 ⇒ ERROR＋告警）、暫時放行（`grace_state`、`observe`：有效期＝min(until, first_seen＋72h)）、統編檢查碼 `ubn_valid`、`alert`（每日一次）。設計 docs/platform/COMPANY-SETUP-GATE.md
