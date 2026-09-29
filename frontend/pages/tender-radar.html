@@ -595,6 +595,7 @@ function tenderRadarPage() {
           // ⚠️ 失敗時**不要把清單清空**——清空看起來像「沒有標案」，
           // 而那是另一件事。留著上一次的內容並說載入失敗。
           this.listError = '標案清單載入失敗（HTTP ' + r.status + '）'
+          this._lastQ = null   // 失敗不算「已載入這個字」：同一個字再觸發要能重送
           return
         }
         const body = await r.json()
@@ -604,6 +605,7 @@ function tenderRadarPage() {
         this.listError = ''
       } catch (_e) {
         if (_e && _e.name === 'AbortError') return   // 被新的一趟取代，不是失敗
+        this._lastQ = null
         this.listError = '標案清單載入失敗：連線不到伺服器'
       }
     },
