@@ -50,6 +50,9 @@ def _page(live_server, e2e_browser):
     inject_login(page, live_server, "safeuser", PW)
     page.goto(live_server + "/pages/tender-radar.html")
     page.wait_for_function("() => document.querySelectorAll('table[data-layout-list=tenders] tbody tr').length >= 3", timeout=20000)
+    # 等載入終點：清單第一次畫出來之後，個人版面偏好（user prefs／layout-cols）還會再抵達並重畫整個 tbody 一次（實測第二次重畫在
+    # 第一次之後約 300～550 ms）；此時 focus() 的鈕被換掉、焦點掉到 BODY、Enter 沒有作用 ⇒ 偶發紅（40 次裡 2～4 次）。等網路靜止再開始。
+    page.wait_for_load_state("networkidle", timeout=20000)
     return page
 
 
