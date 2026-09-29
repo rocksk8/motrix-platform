@@ -19,7 +19,7 @@ import json
 from typing import Optional
 
 from db import get_db
-from helpers import payment_item_amounts
+from helpers import payment_item_amounts, receipt_amounts
 from helpers.tax_calc import norm_ymd, quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts   # T：L1（第六班合回後補：receivables 在第六班才進 platform）
 
 __all__ = ["collect_income_items", "collect_tax_invoices", "round_half_up_invoice"]
@@ -124,6 +124,10 @@ def collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = None
                 "amountPretax":  amt_pretax,
                 "taxAmount":     tax_amt,
                 "amountTotal":   amt_incl,
+                # 2026-09-30：客戶內扣手續費（公司費用）與銀行實際入帳；T100 收款傳票要「借 銀行(入帳)＋借 手續費／貸 收入＋稅」
+                #   （amountTotal 仍是含稅收入；bankAmount＝amountTotal − feeAmount，借貸相等；匯差不另立科目）
+                "feeAmount":     float(pi.get("feeAmount") or 0),
+                "bankAmount":    amt_incl - float(pi.get("feeAmount") or 0),
                 "taxType":       tax_type,
                 "taxNote":       tax_note,
                 # 收款進帳的 MOTRIX 銀行帳戶（2026-09-01 新增，供 accounting_export.py
@@ -180,8 +184,8 @@ def collect_income_items(d0: str, d1: str, department_id: Optional[int] = None) 
             amt = amounts[idx]
             aa  = pi.get("actualAmount")
             fee = pi.get("feeAmount") or 0
-            # 統一用 actualAmount（實收金額），未填則退回系統試算金額
-            gross_amt = aa if aa is not None else amt
+            # 2026-09-30：actualAmount＝銀行入帳（已扣客戶內扣手續費）；收入(含稅)＝入帳＋手續費；淨額＝入帳（不再減手續費）
+            bank_amt, gross_amt, fee = receipt_amounts(amt, aa, fee)
             items.append({
                 "quoteNo":      row["quote_no"],
                 "customer":     row["customer_name"] or "",
@@ -192,8 +196,44 @@ def collect_income_items(d0: str, d1: str, department_id: Optional[int] = None) 
                 "receivedAt":   rat,
                 "actualAmount": aa,
                 "feeAmount":    fee,
-                "netAmount":    gross_amt - fee,
+                "netAmount":    bank_amt,
                 "invoiceNo":    pi.get("invoiceNo", ""),
             })
     items.sort(key=lambda x: x["receivedAt"], reverse=True)
     return items
+
+
+#: IP-9 `expense.entries`（M05 → M08 報表）：客戶內扣的收款手續費列為支出（2026-09-30 使用者裁示）。
+RECEIPT_FEE_CATEGORY = "收款手續費"
+
+
+def expense_entries(conn, start, end):
+    """收款日在 [start, end] 的手續費（客戶內扣）⇒ `[{date, quoteNo, desc, amount, category}]`，一個收款品項一筆。
+    收入已用「銀行入帳＋手續費」（`receipt_amounts`）算成含稅收入，手續費在這裡另列費用，損益才與銀行帳一致；權責／現金兩口徑相同（它是現金事件）。"""
+    out = []
+    for row in conn.execute("""
+        SELECT quote_no, customer_name,
+               json_extract(data_json,'$.caseRecord.payment.items') AS pay_json
+        FROM quotations
+        WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
+          AND json_extract(data_json,'$.caseRecord.payment.items') IS NOT NULL
+    """).fetchall():
+        try:
+            items = json.loads(row["pay_json"] or "[]")
+        except Exception:
+            continue
+        for idx, pi in enumerate(items or []):
+            if not pi.get("received"):
+                continue
+            try:
+                fee = float(pi.get("feeAmount") or 0)
+            except (TypeError, ValueError):
+                continue
+            rat = norm_ymd(pi.get("receivedAt"))
+            if fee <= 0 or not (start <= rat <= end):
+                continue
+            out.append({"date": rat, "quoteNo": row["quote_no"],
+                        "desc": "%s｜%s %s（客戶內扣）" % (RECEIPT_FEE_CATEGORY, row["customer_name"] or "", pi.get("type") or ("第%d期" % (idx + 1))),
+                        "amount": fee, "category": RECEIPT_FEE_CATEGORY})
+    out.sort(key=lambda e: (e["date"], e["quoteNo"]))
+    return out

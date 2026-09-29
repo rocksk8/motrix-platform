@@ -96,6 +96,7 @@ _DEFAULT_T100_CONFIG = {
     "salesRevenueAccount":       "",  # 銷貨收入科目代號
     "outputTaxAccount":          "",  # 銷項稅額科目代號
     "contractorExpenseAccount":  "",  # 承攬商費用科目代號
+    "receiptFeeAccount":         "",  # 收款手續費支出科目代號（2026-09-30：客戶內扣手續費另借一行；選填，沒填匯出時提示）
     "inventoryExpenseAccounts":  {},  # {料件分類: 科目代號}，鍵對應 helpers/part_catalog.py::PART_CATEGORIES（2026-09-01 同輪新增）
     "departmentCode":            "",  # 部門別代號（選填，留空則傳票不分部門）
     "voucherCategory":           "轉", # 傳票別（T100 常見：現／轉／記，預設「轉」）
@@ -115,6 +116,7 @@ class T100ExportConfigBody(BaseModel):
     salesRevenueAccount: str = ""
     outputTaxAccount: str = ""
     contractorExpenseAccount: str = ""
+    receiptFeeAccount: str = ""
     inventoryExpenseAccounts: Dict[str, str] = {}
     departmentCode: str = ""
     voucherCategory: str = "轉"
@@ -200,6 +202,8 @@ def config_code_issues(conn, cfg):
     _check("銷貨收入", cfg.get("salesRevenueAccount"))
     _check("銷項稅額", cfg.get("outputTaxAccount"))
     _check("承攬商費用", cfg.get("contractorExpenseAccount"))
+    if (cfg.get("receiptFeeAccount") or "").strip():                 # 選填：沒填不算「指不到東西」，匯出時另行提示
+        _check("收款手續費支出", cfg.get("receiptFeeAccount"))
     for name, code in (cfg.get("inventoryExpenseAccounts") or {}).items():
         _check("料件分類：%s" % name, code)
     for b in (cfg.get("bankAccounts") or []):
@@ -297,7 +301,8 @@ def _collect_t100_events(start: str, end: str, exclude_confirmed: bool = True) -
     cfg = _t100_config()
     events = []
 
-    # 收款事件（銷項）：借 銀行存款(含稅) / 貸 銷貨收入(未稅) ＋ 貸 銷項稅額(稅額)
+    # 收款事件（銷項）：借 銀行存款(實際入帳) ＋ 借 收款手續費(客戶內扣) / 貸 銷貨收入(未稅) ＋ 貸 銷項稅額(稅額)
+    #   （2026-09-30：入帳＝含稅 − 手續費，借貸相等；沒有手續費時與舊版完全相同；實收與應收的匯差不另立科目）
     for inv in _collect_tax_invoices():
         d = (inv.get("date") or "")[:10]
         if not d or not (start <= d <= end):
@@ -308,9 +313,15 @@ def _collect_t100_events(start: str, end: str, exclude_confirmed: bool = True) -
         summary = f"{inv['customer']} {inv['quoteNo']} 發票{inv['invoiceNo']} 收款"[:60]
         bank_name = inv.get("bankAccountName") or "銀行存款"
         bank_code = inv.get("bankAccountCode") or ""
+        fee = inv.get("feeAmount") or 0
         lines = [
             _voucher_line(d, cfg["voucherCategory"], summary, bank_code, bank_name,
-                          inv["amountTotal"], 0, cfg["departmentCode"], inv["quoteNo"], inv["customer"]),
+                          inv["amountTotal"] - fee, 0, cfg["departmentCode"], inv["quoteNo"], inv["customer"]),
+        ]
+        if fee:
+            lines.append(_voucher_line(d, cfg["voucherCategory"], summary, cfg.get("receiptFeeAccount") or "", "收款手續費支出",
+                                       fee, 0, cfg["departmentCode"], inv["quoteNo"], inv["customer"]))
+        lines += [
             _voucher_line(d, cfg["voucherCategory"], summary, cfg["salesRevenueAccount"], "銷貨收入",
                           0, inv["amountPretax"], cfg["departmentCode"], inv["quoteNo"], inv["customer"]),
         ]
@@ -406,6 +417,8 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
 
     missing_codes = [k for k in ("salesRevenueAccount", "outputTaxAccount", "contractorExpenseAccount")
                       if not cfg.get(k)]
+    if any(r.get("acctName") == "收款手續費支出" for r in rows) and not cfg.get("receiptFeeAccount"):
+        missing_codes.append("receiptFeeAccount（收款手續費支出科目）")
     if not cfg.get("bankAccounts"):
         missing_codes.append("bankAccounts（尚未設定任何銀行帳戶）")
     if not any((cfg.get("inventoryExpenseAccounts") or {}).values()):

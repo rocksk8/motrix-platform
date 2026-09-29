@@ -33,7 +33,7 @@ from .audit import (_notify, _audit, _filter_live_notifications, _purge_notifica
 # 純函式已在 L1：norm_at（dates，§3-2）、summarize_payment_items（tax_calc，CA-O4）、steps_to_tiers（tiered_approval，§3-2；直接 import 那裡）。
 from .tax_calc import summarize_payment_items  # noqa: E402
 from .case_access import guard_case_access, is_document_approver  # L1（2026-09-26 自 quotations 下沉）
-from .tax_calc import payment_item_amounts, norm_ymd          # T（2026-09-26）：稅額純函式在 L1
+from .tax_calc import payment_item_amounts, norm_ymd, receipt_amounts   # T（2026-09-26）：稅額純函式在 L1；receipt_amounts（2026-09-30）收款實收／收入／手續費
 from .dates import _add_months, _warranty_expiry, _workdays_elapsed, norm_at   # norm_at：M01-PLAN §3-2 下沉
 from .tiered_approval import (
     active_tiers, current_tier_idx, setting_to_active_tiers,
@@ -131,7 +131,7 @@ __all__ = [
     # audit
     "_notify", "_audit", "_filter_live_notifications", "_purge_notifications",
     # 稅額／日期純函式（L1）、案件權限（L1 case_access）
-    "payment_item_amounts", "norm_ymd", "summarize_payment_items", "norm_at",
+    "payment_item_amounts", "norm_ymd", "receipt_amounts", "summarize_payment_items", "norm_at",
     "guard_case_access", "is_document_approver",
     # dates
     "_add_months", "_warranty_expiry", "_workdays_elapsed",
