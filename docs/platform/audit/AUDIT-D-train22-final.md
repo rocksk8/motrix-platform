@@ -62,3 +62,11 @@
 - **M2** ✔：#8 改為只看最後一次 `Uvicorn running on` 之後、濾 ConnectionResetError 良性區塊，只有指向 lodging／tender_radar／main 的 Traceback 才算不過，其餘 ERROR 列前 5 行與總數、不作回滾條件（與演練 path2 觀察的 monthly_report ERROR 一致）；步驟 0 新增第 5 項記下套用前 `module_states.json`（模組數與各模組 key／version／state），#7 改「與套用前相同，唯一允許 lodging→1.2.1、tender_radar→1.5.1」；#9 改「埠 666 監聽 PID 只有一個」；回滾觸發句同步（#1～#7、#9 任一不過，或 #8 有指向三者的 Traceback）。步驟 0 重新編號後無殘留舊參照。
 - **S1** ✔：步驟 2 已在套用前設 `$env:PYTHONDONTWRITEBYTECODE = '1'`。
 - 觀察（不擋）：#8 只掃 `Uvicorn running on` 之後，import 期的 Traceback 看不到，但那種情形服務起不來，會被 #2（ping）與 #7（模組狀態）抓到。
+
+## 8. 急件複核：正式機 verify_package 4a 在非 git 安裝目錄必 FAIL（步驟檔 origin/platform 5828b43f；main a3f7af93、雲端皆位元組相同）— 通過，必修 0
+- **重現**：把第二十一班雲端包 payload（＝正式機現況 29e435df 的內容）複製到非 git 目錄當「安裝目錄」，用其 `backend/tools/verify_package.py` 對本班 payload 跑 `--expect-db-version 116` ⇒ exit 1，**剛好 2 項 FAIL**，都是 `排除清單 vs MUST_EXIST`（`backend/autostart.bat`、`DEPLOY.md`），訊息含 `returned non-zero exit status 128`；其餘（含 (4b) autostart 內容、(5b) 版本紀錄、(6) db 版本 116＝期望值、(7) 產品選配）皆過。與正式機回報一致；暫存目錄已刪。
+- **判準可機械判定**：結尾 `🔴 共 N 項 FAIL：` 與 `✅ 全部通過（0 項 FAIL）` 的字串與程式相符；真的違反排除規則時的訊息是「…（git check-attr 回傳 <值>）」，不含 128／not a git repository，不會被誤放行；「正對照不成立／整份報告作廢」字串與程式相符。
+- **路徑與參數**：`<staging>\<包>\payload`＝`delivery.verify_package_cmd` 的 payload；`--expect-db-version 116`＝已安裝 db.py（29e435df）的 CURRENT_VERSION＝包內 116（本班無 migration）；用已安裝版 `verify_package.py`（受信任的是正式機上的程式）與 `delivery.verify_package_cmd` 一致。
+- **沒漏掉原有檢查**：`delivery verify --skip-verify-package` 只略過第 5 項（結構）；簽章、逐檔雜湊、檔數、腳本版本、已是這一版／退版判斷都照跑；第 5 項改由步驟檔單獨執行並依上列判準判讀。
+- 併入的更正：步驟 0 第 6 項「量測第 2 節需使用者操作、不阻擋套用」與量測檔一致，不擋。
+- **不擋的觀察**：第二十一班終審／本班演練都在 git 工作樹內跑 verify_package，所以沒發現這項（同意主持登記「演練改用非 git 安裝目錄」）；下一版修 `verify_package` 的 4a（非 git 時改用包內宣告，或明確標示略過而非 FAIL）。
