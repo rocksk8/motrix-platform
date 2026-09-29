@@ -148,6 +148,15 @@ def _OLD_can_access_case(user, row):                     # routers/dev_crm.py:10
 OLD_DEFINED = [None, "[]", "[1]", "[2]", "[1,2]", '["1"]', "[1.0]", "[true]", "[[1]]", "[4]"]
 
 
+def _minus_intended_change_2026_09_29f(conn, user, old):
+    """刻意的行為變更（2026-09-29f，tests/test_row_access_empty_name_2026_09_29.py）：顯示名稱空的使用者
+    不再以「空對空」比中業務名稱空的舊案件。舊實作仍原封凍結；這裡只從舊結果扣掉那一格，其餘照比。"""
+    if user["display_name"] not in ("", None) or user["role"] in ("superadmin", "admin"):
+        return old
+    return old - {r["id"] for r in conn.execute(
+        "SELECT id FROM q WHERE sales_person_id IS NULL AND sales_person = ''")}
+
+
 @pytest.mark.parametrize("user", USERS, ids=lambda u: f"{u['role']}{u['id']}")
 def test_case_matches_old_sql_read_scope(user):
     conn = _db(case_rows=_case_rows(OLD_DEFINED))
@@ -156,7 +165,7 @@ def test_case_matches_old_sql_read_scope(user):
     else:
         frag, params = _OLD_visible_case_filter_sql(user)
         old = {r["id"] for r in conn.execute(f"SELECT id FROM q WHERE 1=1{frag}", params)}
-    assert _sql_ids(conn, "q", "_t_case", user, "read") == old
+    assert _sql_ids(conn, "q", "_t_case", user, "read") == _minus_intended_change_2026_09_29f(conn, user, old)
 
 
 @pytest.mark.parametrize("user", USERS, ids=lambda u: f"{u['role']}{u['id']}")
@@ -169,7 +178,7 @@ def test_case_matches_old_single_owner_scope(user):
             old.add(r["id"])
         except HTTPException:
             pass
-    assert _py_ids(conn, "q", "_t_case", user, "owner") == old
+    assert _py_ids(conn, "q", "_t_case", user, "owner") == _minus_intended_change_2026_09_29f(conn, user, old)
 
 
 @pytest.mark.parametrize("user", USERS, ids=lambda u: f"{u['role']}{u['id']}")
