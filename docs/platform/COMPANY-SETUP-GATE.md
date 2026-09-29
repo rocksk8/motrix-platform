@@ -277,7 +277,7 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
    〔CG2-S3 補前提〕以下一律視為**拒絕**（不可當成通過）：預檢行程丟例外／非零結束／逾時（上限 60 秒）／輸出不是預期的一行 JSON；結果 `configured: null`（`status_error`）。
    `-Force`（版本比對用）**不略過**預檢。~~真的要略過另開 `-SkipCompanySetupPreflight`，只准人工使用、`::RESULT::` 帶 `company_preflight=skipped`、並寫系統稽核。~~
    〔更正 CG3-M1（D bfdb5003 §5，主持裁示）：正式機 ps1 **沒有任何略過預檢的參數**。理由：套用後 status 會自動回滾、§4.3 的 72 小時放行已涵蓋「先升級後補設定」、預檢壞了要修工具重出包（跳過＝〈降級之後它還是會動〉）；儀表板以 `-Yes` 呼叫擋不住「只准人工」；`::RESULT::` 多一個欄位會動到出口值域。〕
-   正式機 Claude 指示寫明各代碼的處置（`developer_identity_unsigned` ⇒ 先做 6.2 的簽章檔；`fields_invalid` ⇒ 先在舊版設定頁補欄位）。
+   正式機 Claude 指示寫明各代碼的處置（~~`developer_identity_unsigned`~~〔更正 2026-09-29：開發者身分的庫還沒有確認紀錄時預檢是 `no_record`＋`developer: true`，`developer_identity_unsigned` 只在已有紀錄、簽章檔無效時出現；兩者處置相同，同 §6.7(a) 第 2 步的更正；apply_update.ps1 拒絕訊息的字面另案〕 ⇒ 先做 6.2 的簽章檔；`fields_invalid` ⇒ 先在舊版設定頁補欄位）。
 2. **套用後自動健檢**：`/api/ping` 通過之後，再執行 `company_setup_cli.py status --db … --root …`（本機、免登入、直接讀庫與識別檔，**不開新的網路端點**）。
    未設定（且無有效放行）**或 `configured: null`（判定失敗）或 CLI 當掉／逾時** ⇒ 與 ping 失敗同級：**自動回滾**，`::RESULT::` 帶原因〔CG2-S3：新版上線即全公司停止輸出文件，等同故障〕。
 3. **手動套用也要先複製 tools**（CG2-S3）：UPDATE-DELIVERY §3.4 步驟 2 先把包內 `backend/tools/*` 複製到安裝目錄再執行 `apply_update.ps1`——預檢與 `ensure-install-id` 是新版 tools 的一部分；正式機 Claude 指示與更新步驟檔都寫明，漏了這步＝舊版 ps1 不會做預檢。
