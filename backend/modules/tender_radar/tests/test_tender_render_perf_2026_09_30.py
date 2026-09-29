@@ -82,12 +82,14 @@ def measure(live_server, make_user, e2e_browser):
     return r
 
 
+@pytest.mark.e2e
 def test_500_tenders_visible_within_budget(live_server, make_user, no_tile_probe, e2e_browser):
     r = measure(live_server, make_user, e2e_browser)
     print("\nPERF %s" % json.dumps(r, ensure_ascii=False))
     assert r["rowsAtMs"] / 1000 < BUDGET_SECONDS, r
 
 
+@pytest.mark.e2e
 def test_cells_are_escaped_and_only_http_links_are_made(live_server, make_user, no_tile_probe, e2e_browser):
     """整格 x-html 的前提：抓來的資料一律跳脫；非 http(s) 的網址不產生 <a>（純文字）。"""
     import db
