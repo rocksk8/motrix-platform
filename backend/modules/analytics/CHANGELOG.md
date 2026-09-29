@@ -1,5 +1,11 @@
 # 營運分析 更新紀錄
 
+## 1.0.12 — 2026-09-29（暫用號，列車取號；wip/payslip-void-signed）
+- 收款日期歸月改用 L1 `norm_ymd`（收入明細、月收入趨勢、首頁收款月統計；「2026/09/01」等寫法不再被排除）。
+- 收款資料異常清單新增兩種：`received_bad_date`（已收款但日期讀不懂）、`case_not_won`（已收款且有日期，但案件不是已成案／已結案，收入報表不算）。
+- 營運報表權責視圖新增「實收對照」（`monthCashReceiptItems`／`quarterCashReceiptItems`／`yearCashReceiptItems`，依收款日、含稅，標 `recognized`）：階段比例未設或尾款未結清而權責認列 0 的已收款看得見；權責數字不動，現金口徑不附。頁面 `reports.html`／`reports.js` 顯示。
+- 營運報表成本納入已付款勞報單（IP-9 `expense.entries` 名稱 `payslip`，併入「其他支出」、類別「勞報單」；報表程式不需改）。
+
 ## 1.0.11 — 2026-09-28（暫用號，列車取號；E4 wip/e-company-gate-impl 第三段）
 - 本公司資料設定閘門第二道（COMPANY-SETUP-GATE §5；D CG5-M1）：每月報表排程信：開頭先問第二道，被擋 ⇒ 不寄、系統告警（每日一次）、`monthly_report_last_sent` 不前進（設定完成後補寄）；報表 Excel／PDF 的抬頭經 `company_heading`／`contact_line`（已含第二道）
 

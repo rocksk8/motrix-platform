@@ -20,7 +20,7 @@ from typing import Optional
 
 from db import get_db
 from helpers import payment_item_amounts
-from helpers.tax_calc import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts   # T：L1（第六班合回後補：receivables 在第六班才進 platform）
+from helpers.tax_calc import norm_ymd, quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts   # T：L1（第六班合回後補：receivables 在第六班才進 platform）
 
 __all__ = ["collect_income_items", "collect_tax_invoices", "round_half_up_invoice"]
 
@@ -93,8 +93,8 @@ def collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = None
             inv_no = (pi.get("invoiceNo") or "").strip()
             if not inv_no:
                 continue
-            received_at  = pi.get("receivedAt") or ""
-            invoice_date = pi.get("invoiceDate") or received_at
+            received_at  = norm_ymd(pi.get("receivedAt"))
+            invoice_date = norm_ymd(pi.get("invoiceDate")) or received_at
             if year and invoice_date[:4] != str(year):
                 continue
             if month and invoice_date[5:7] != f"{month:02d}":
@@ -174,7 +174,7 @@ def collect_income_items(d0: str, d1: str, department_id: Optional[int] = None) 
         for idx, pi in enumerate(pay):
             if not pi.get("received"):
                 continue
-            rat = (pi.get("receivedAt") or "")[:10]
+            rat = norm_ymd(pi.get("receivedAt"))
             if not (d0 <= rat <= d1):
                 continue
             amt = amounts[idx]

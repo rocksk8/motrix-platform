@@ -36,7 +36,7 @@ from helpers import (
     check_no_tier_self_approval, resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     submitter_manager_tiers, cascade_self_tiers, notify_org_chain_notice, save_document_files,
     delete_document_file, notify_case_close_blocked, notify_case_change_requested, norm_at,
-    active_delegators_for, user_has_module, can_see_financial, require_any_module, summarize_payment_items,
+    active_delegators_for, user_has_module, can_see_financial, require_any_module, summarize_payment_items, norm_ymd,
 )
 from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E402  CA-O4：L1
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
@@ -1130,7 +1130,7 @@ def get_last_received_bank_account(customerName: Optional[str] = None, authoriza
             code = it.get("bankAccountCode") or ""
             if not (it.get("received") and code):
                 continue
-            at = it.get("receivedAt") or ""
+            at = norm_ymd(it.get("receivedAt"))
             if at > best_at:
                 best_at, best_name, best_code = at, it.get("bankAccountName") or "", code
     return {"name": best_name, "acctCode": best_code}
@@ -1620,6 +1620,12 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     is_unlock_edit = bool(q.pop("_isUnlockEdit", False))
     expected_updated_at = q.pop("_expectedUpdatedAt", None)
     validate_quote_tax(q)   # AC1：只能存法定稅別；舊 1～4% 單要改選
+    # 款項日期一律存 YYYY-MM-DD（「2026/09/01」等寫法否則會被報表歸月靜默漏掉）
+    for _pi in (((q.get("caseRecord") or {}).get("payment") or {}).get("items") or []):
+        if isinstance(_pi, dict):
+            for _k in ("receivedAt", "expectedReceiptDate", "invoiceDate"):
+                if _pi.get(_k):
+                    _pi[_k] = norm_ymd(_pi[_k])
 
     new_status = body.status or q.get("status", "草稿")
 

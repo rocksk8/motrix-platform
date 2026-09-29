@@ -2,6 +2,7 @@
 import csv
 import io
 import json
+import re
 import logging
 import os
 import tempfile
@@ -21,7 +22,7 @@ from fastapi.responses import StreamingResponse
 from db import get_db
 from helpers import (
     _require_user, _tok, _audit, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
-    payment_item_amounts, summarize_payment_items,
+    payment_item_amounts, norm_ymd, summarize_payment_items,
     user_has_module, run_edge_pdf,
 )
 from helpers.tax_calc import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts   # T：L1
@@ -284,7 +285,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             for idx, pi in enumerate(pay):
                 amt  = amounts[idx]
                 rcvd = bool(pi.get("received"))
-                rat  = (pi.get("receivedAt") or "")[:10]
+                rat  = norm_ymd(pi.get("receivedAt"))
                 aa   = pi.get("actualAmount")
                 fee  = pi.get("feeAmount") or 0
                 net  = ((aa if aa is not None else amt) - fee) if rcvd else None
@@ -2979,7 +2980,7 @@ def monthly_trend(months: int = 12, authorization: str = Header(None)):
                     continue
                 amt = amounts[idx]
                 aa  = pi.get("actualAmount")
-                rat = (pi.get("receivedAt") or "")[:7]
+                rat = norm_ymd(pi.get("receivedAt"))[:7]
                 if rat in month_map:
                     month_map[rat]["collected"] += int(aa if aa is not None else amt)
 
@@ -3085,9 +3086,9 @@ def _collect_payment_anomalies(department_id: Optional[int] = None) -> list:
     rows = conn.execute("""
         SELECT quote_no, customer_name, project_name, sales_person, sales_person_id,
                total, pretax,
-               json_extract(data_json,'$.caseRecord') AS cr_json
+               json_extract(data_json,'$.caseRecord') AS cr_json,
+               COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag_eff
         FROM quotations
-        WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
     """).fetchall()
     dept_by_user = {}
     if department_id:
@@ -3111,8 +3112,20 @@ def _collect_payment_anomalies(department_id: Optional[int] = None) -> list:
         amounts = payment_item_amounts(row["total"] or 0, pay, row["pretax"])
         for idx, pi in enumerate(pay):
             rcvd = bool(pi.get("received"))
-            rat  = (pi.get("receivedAt") or "")[:10]
-            if rcvd and not rat:
+            rat  = norm_ymd(pi.get("receivedAt"))
+            if row["deal_tag_eff"] not in ("已成案", "已結案"):
+                # 收入報表只撈已成案／已結案的案件：案件不是成案狀態、款項卻已收且有日期 ⇒
+                # 這筆錢在所有月份的收入報表都看不到，而且沒有任何提示（2026-09-29）
+                if not (rcvd and rat):
+                    continue   # 沒勾已收或沒日期的未成案款項：維持原範圍，不點名（避免雜訊）
+                kind, hint = ("case_not_won",
+                              "款項已收，但案件不是「已成案／已結案」——收入報表只算成案案件，"
+                              "這筆不會出現在任何月份的收入（請先把案件標成案）")
+            elif rcvd and rat and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", rat):
+                kind, hint = ("received_bad_date",
+                              "已收款但收款日期格式無法辨識（請改成 YYYY-MM-DD）——"
+                              "這筆不屬於任何月份，當月收入撈不到它")
+            elif rcvd and not rat:
                 kind, hint = ("received_no_date",
                               "已勾「已收款」但沒填收款日期——這筆不屬於任何月份，"
                               "當月收入與未收款項都撈不到它")
@@ -3257,6 +3270,25 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     month_unreceived = _collect_unreceived_items(m0, m1, department_id)
     payment_anomalies = _collect_payment_anomalies(department_id)
 
+    # 權責視圖的「實收對照」（2026-09-29）：權責收入依階段完成月認列，階段比例沒設或尾款未結清的案件會是 0，
+    # 已收到的錢（例如 9/1 的交貨款）就看不見。這裡另附依「收款日」的實收明細（含稅），標出案件今年是否已有
+    # 權責認列；權責數字本身不動。現金口徑不需要。M01（權責提供者）或 M05（實收提供者）不在 ⇒ 該欄為空。
+    if basis == "accrual" and rec is not None:
+        _c = get_db()
+        try:
+            _recognized = {i["quoteNo"] for i in rec.accrual_income_items(_c, y0, y1, department_id)}
+        finally:
+            _c.close()
+
+        def _cash_view(a, b):
+            return [dict(it, recognized=it["quoteNo"] in _recognized)
+                    for it in _collect_income_items(a, b, department_id)]
+        month_cash = _cash_view(m0, m1)
+        year_cash = _cash_view(y0, y1)
+    else:
+        _cash_view = None
+        month_cash, year_cash = [], []
+
     # 「季」範圍（2026-09-10）：只有呼叫端明確指定 quarter 時才計算，沒指定就回
     # 空集合——月/年兩套欄位的行為完全不變，既有呼叫端（Excel／PDF／每月結算
     # 寄信）不傳 quarter，多花的成本是零。季一定落在 year 之內，所以直接沿用
@@ -3273,7 +3305,9 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
         quarter_slice      = _months_expense_slice(expenses_annual, _quarter_months(year, quarter))
         quarter_income     = _income(q0, q1, department_id)
         quarter_unreceived = _collect_unreceived_items(q0, q1, department_id)
+        quarter_cash       = _cash_view(q0, q1) if _cash_view else []
     else:
+        quarter_cash       = []
         quarter_slice      = {"items": [], "total": 0}
         quarter_income     = []
         quarter_unreceived = []
@@ -3303,6 +3337,12 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
         "monthIncomeNet":    sum(i["netAmount"] or 0 for i in month_income),
         "monthUnreceivedItems": month_unreceived,
         "monthUnreceivedTotal":  sum(i["amount"] for i in month_unreceived),
+        "monthCashReceiptItems":   month_cash,
+        "monthCashReceiptTotal":   sum(i["amount"] for i in month_cash),
+        "quarterCashReceiptItems": quarter_cash,
+        "quarterCashReceiptTotal": sum(i["amount"] for i in quarter_cash),
+        "yearCashReceiptItems":    year_cash,
+        "yearCashReceiptTotal":    sum(i["amount"] for i in year_cash),
         "yearIncomeItems":   year_income,
         "yearIncomeTotal":   sum(i["amount"] for i in year_income),
         "yearIncomeNet":     sum(i["netAmount"] or 0 for i in year_income),
@@ -3595,7 +3635,7 @@ def _build_receivables_scopes(year: int, month: str, department_id: Optional[int
   # 的坑。所以另外回傳 `undated*` 兩組（不分期別、固定顯示），前端獨立列一區。
   # 刻意**不併進月份合計**，否則同一筆會在每個月被重複計算。
   def _recv_month(i):
-    return (i.get("receivedAt") or "")[:7]
+    return norm_ymd(i.get("receivedAt"))[:7]
 
   def _due_month(i):
     return (i.get("expectedReceiptDate") or "")[:7]

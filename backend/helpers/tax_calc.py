@@ -85,6 +85,35 @@ def invoice_amounts(item: dict):
     return (p, t) if p is not None and t is not None else None
 
 
+_YMD_RE = None
+
+
+def norm_ymd(v) -> str:
+    """把款項日期正規化成 YYYY-MM-DD（2026-09-29）。
+
+    收款日期原本一律以字串前綴（[:7]／[:10]）與 `YYYY-MM` 比對歸月，「2026/09/01」「2026.9.1」
+    「115/09/01（民國）」這類寫法會被靜默排除在該月之外（'/' 排序在 '-' 之後，區間比對也落在範圍外）。
+    ⇒ 讀取端一律先過這支；儲存端也存標準格式。
+    ⚠️ 讀不懂的（非空）原樣截 10 碼回傳——不假造日期；由收款資料異常清單抓出來。
+    """
+    global _YMD_RE
+    import re
+    from datetime import datetime as _dt
+    if _YMD_RE is None:
+        _YMD_RE = re.compile(r"^\s*(\d{3,4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})")
+    s = str(v or "")
+    m = _YMD_RE.match(s)
+    if not m:
+        return s[:10]
+    y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if len(m.group(1)) == 3:      # 民國年
+        y += 1911
+    try:
+        return _dt(y, mo, d).strftime("%Y-%m-%d")
+    except ValueError:
+        return s[:10]
+
+
 def payment_item_amounts(total: float, pay_items: list, pretax: float = None,
                           apply_tax_exempt: bool = True) -> list:
     """Return the effective **receivable** amount for each payment item, in order.
@@ -188,7 +217,7 @@ def summarize_payment_items(total: float, pay_items: list, pretax: float = None)
             "pct":          pi.get("pct") or 0,
             "amount":       amt,
             "received":     rcvd,
-            "receivedAt":   (pi.get("receivedAt") or "")[:10],
+            "receivedAt":   norm_ymd(pi.get("receivedAt")),
             "receivedBy":   pi.get("receivedBy", ""),
             "expectedReceiptDate": pi.get("expectedReceiptDate", ""),
             "actualAmount": aa,
