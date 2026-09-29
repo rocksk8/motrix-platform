@@ -4892,7 +4892,7 @@
     },
     {
      "func": "lodging_refresh",
-     "line": 52,
+     "line": 53,
      "method": "POST",
      "path": "/api/lodging/refresh"
     }
@@ -6914,6 +6914,7 @@
    "dynamic_sql": false,
    "imports": [
     "mod:tender_radar/api",
+    "mod:tender_radar/listing",
     "mod:tender_radar/source",
     "plat:registry"
    ],
@@ -6940,6 +6941,7 @@
     "helper:notification_prefs",
     "helper:settings",
     "helper:tiered_approval",
+    "mod:tender_radar/listing",
     "mod:tender_radar/match",
     "mod:tender_radar/notify",
     "mod:tender_radar/source"
@@ -6949,6 +6951,7 @@
     "helper:audit",
     "helper:auth",
     "helper:settings",
+    "mod:tender_radar/listing",
     "mod:tender_radar/match",
     "mod:tender_radar/source"
    ],
@@ -6960,82 +6963,80 @@
    "routes": [
     {
      "func": "list_watches",
-     "line": 94,
+     "line": 95,
      "method": "GET",
      "path": "/api/tender-radar/watches"
     },
     {
      "func": "create_watch",
-     "line": 106,
+     "line": 107,
      "method": "POST",
      "path": "/api/tender-radar/watches"
     },
     {
      "func": "update_watch",
-     "line": 137,
+     "line": 139,
      "method": "PUT",
      "path": "/api/tender-radar/watches/{watch_id}"
     },
     {
      "func": "delete_watch",
-     "line": 219,
+     "line": 222,
      "method": "DELETE",
      "path": "/api/tender-radar/watches/{watch_id}"
     },
     {
      "func": "list_tenders",
-     "line": 260,
+     "line": 264,
      "method": "GET",
      "path": "/api/tender-radar/tenders"
     },
     {
      "func": "radar_status",
-     "line": 445,
+     "line": 319,
      "method": "GET",
      "path": "/api/tender-radar/status"
     },
     {
      "func": "get_schedule",
-     "line": 491,
+     "line": 365,
      "method": "GET",
      "path": "/api/tender-radar/schedule"
     },
     {
      "func": "set_schedule",
-     "line": 539,
+     "line": 413,
      "method": "PUT",
      "path": "/api/tender-radar/schedule"
     },
     {
      "func": "manual_scan",
-     "line": 570,
+     "line": 444,
      "method": "POST",
      "path": "/api/tender-radar/scan"
     },
     {
      "func": "mark_tender",
-     "line": 645,
+     "line": 519,
      "method": "POST",
      "path": "/api/tender-radar/tenders/{case_no}/mark"
     },
     {
      "func": "unmark_tender",
-     "line": 677,
+     "line": 552,
      "method": "DELETE",
      "path": "/api/tender-radar/tenders/{case_no}/mark"
     },
     {
      "func": "reset_today",
-     "line": 601,
+     "line": 475,
      "method": "POST",
      "path": "/api/tender-radar/reset-today"
     }
    ],
    "tables_ddl": [],
    "tables_named": [],
-   "tables_r": [
-    "users"
-   ],
+   "tables_r": [],
    "tables_r_transitive": [
     "approval_delegates",
     "daily_tasks",
@@ -7047,6 +7048,7 @@
     "sessions",
     "shipping_notes",
     "tender_watches",
+    "tenders",
     "users"
    ],
    "tables_w": [
@@ -7064,6 +7066,26 @@
     "tender_watches",
     "tenders"
    ]
+  },
+  "mod:tender_radar/listing": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "mod:tender_radar/match"
+   ],
+   "kind": "mod",
+   "module_key": "tender_radar",
+   "path": "backend/modules/tender_radar/listing.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "tender_watches",
+    "tenders",
+    "users"
+   ],
+   "tables_w": []
   },
   "mod:tender_radar/match": {
    "api_prefixes": [],
@@ -7100,6 +7122,7 @@
    "imports": [
     "core:db",
     "helper:settings",
+    "mod:tender_radar/listing",
     "mod:tender_radar/match",
     "mod:tender_radar/notify"
    ],
@@ -13696,6 +13719,7 @@
    "path": "backend/db.py:3965",
    "readers": [
     "core:archive",
+    "mod:tender_radar/listing",
     "mod:tender_radar/source"
    ],
    "tables_r": [],
@@ -13714,6 +13738,7 @@
    "path": "backend/db.py:3979",
    "readers": [
     "core:archive",
+    "mod:tender_radar/listing",
     "router:map_points"
    ],
    "tables_r": [],
@@ -13827,7 +13852,7 @@
     "mod:payroll/api/bonus",
     "mod:payroll/bonus_payouts",
     "mod:payroll/bonus_pdf",
-    "mod:tender_radar/api",
+    "mod:tender_radar/listing",
     "router:approval_delegates",
     "router:approval_queue",
     "router:mail_settings",

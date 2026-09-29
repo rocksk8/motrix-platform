@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 774,
+  "tests": 777,
   "unmapped": 8,
   "kinds": {
-   "api": 411,
-   "e2e": 181,
+   "api": 413,
+   "e2e": 182,
    "audit": 111,
    "unit": 71
   },
@@ -3849,6 +3849,32 @@
    },
    "module": "daily_tasks"
   },
+  "backend/modules/lodging/tests/test_lodging_daily_2026_09_29.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/lodging/",
+    "mod:lodging/__init__",
+    "mod:lodging/api",
+    "mod:lodging/source",
+    "mod:lodging/tests/__init__",
+    "mod:lodging/tests/_fixtures"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/lodging/__init__.py",
+     "backend/modules/lodging/source.py",
+     "backend/modules/lodging/tests/__init__.py",
+     "backend/modules/lodging/tests/_fixtures.py"
+    ],
+    "api": [
+     "backend/modules/lodging/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/lodging/"
+    ]
+   },
+   "module": "lodging"
+  },
   "backend/modules/lodging/tests/test_lodging_overlay_e2e_2026_09_28.py": {
    "kind": "e2e",
    "units": [
@@ -6984,6 +7010,33 @@
    "login_fixture": true,
    "module": "tender_radar"
   },
+  "backend/modules/tender_radar/tests/test_tender_listing_cache_2026_09_29.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/api",
+    "mod:tender_radar/listing",
+    "mod:tender_radar/source"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/listing.py",
+     "backend/modules/tender_radar/source.py"
+    ],
+    "api": [
+     "backend/modules/tender_radar/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "tender_radar"
+  },
   "backend/modules/tender_radar/tests/test_tender_mark_2026_09_23.py": {
    "kind": "api",
    "units": [
@@ -7280,6 +7333,31 @@
     ]
    },
    "login_fixture": true,
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_search_retry_e2e_2026_09_29.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/tender_radar/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_mapiso.py",
+    "page:pages/tender-radar.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_mapiso.py"
+    ],
+    "page": [
+     "frontend/pages/tender-radar.html"
+    ],
+    "path": [
+     "frontend/pages/tender-radar.html"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
    "module": "tender_radar"
   },
   "backend/modules/tender_radar/tests/test_tender_spec_debts_2026_09_22.py": {
