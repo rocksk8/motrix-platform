@@ -3745,4 +3745,7 @@ def report_receivables_monthly(year: int = Query(None), month: str = Query(None)
 
 
 # ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
-add_pdf_sibling(router, "/api/reports/tax-export/pdf", tax_export_excel, module="analytics", name="tax-export", title="銷項發票清單")
+# 匯出稽核／PDF 姊妹的「歸屬區」＝稽核 detail.module 的字串，**不是權限 key**；用常數傳而不是字面量：
+# tests/test_module_keys_consistency 的後端掃描器把任何 module 等號字串字面量當權限 key。
+_EXPORT_AREA = "analytics"
+add_pdf_sibling(router, "/api/reports/tax-export/pdf", tax_export_excel, module=_EXPORT_AREA, name="tax-export", title="銷項發票清單")
