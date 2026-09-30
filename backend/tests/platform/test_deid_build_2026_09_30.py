@@ -44,6 +44,7 @@ def _tiny_repo(tmp_path):
     files = {
         "product/sale_prune.json": (REPO / "product" / "sale_prune.json").read_text(encoding="utf-8"),
         **_marked_files(),
+        **{it["registry"]: '{"version": "v", "sha256": "0"}' for it in P.load_config().get("rehash", [])},
         "backend/version_manifest.json": json.dumps(ENTRIES, ensure_ascii=False),
         "backend/main.py": "print('hi')\n",
         "DEPLOY.md": "原檔（內部）\n", "DR-SOP.md": "原檔（內部）\n", "HTTPS-DEPLOY-CHECKLIST.md": "原檔（內部）\n",

@@ -168,6 +168,28 @@ def load_overlay(path=DEFAULT_OVERLAY):
 
 # ── 主流程 ────────────────────────────────────────────────────────────────────────
 
+def script_sha256(path):
+    """與 apply_update／apply_module_update 的版本登記檔相同的雜湊：去 BOM、CRLF→LF 後的 sha256。"""
+    raw = Path(path).read_bytes()
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+    return hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest()
+
+
+def rehash_registries(root, items):
+    """剪段改了腳本內容 ⇒ 版本登記檔的 sha256 要跟著重算（版本字串不動：只是去掉自用路徑，行為對客戶不變）。"""
+    done = []
+    for it in items or []:
+        sp, rp = Path(root) / it["script"], Path(root) / it["registry"]
+        if not sp.is_file() or not rp.is_file():
+            raise ProjectError("重算登記檔的檔不存在：%s／%s" % (it["script"], it["registry"]))
+        reg = json.loads(rp.read_text(encoding="utf-8-sig"))
+        reg["sha256"] = script_sha256(sp)
+        rp.write_text(json.dumps(reg, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
+        done.append(it["registry"])
+    return done
+
+
 def apply_replacements(root, replace):
     """`replace`：{包內路徑: 包內來源路徑}。用客戶版文件覆蓋原檔（來源本身之後由 remove 清掉）。來源不存在 ⇒ 丟例外（不猜）。"""
     done = []
@@ -194,8 +216,9 @@ def prune_tree(root, cfg=None, overlay=None):
         except OSError:
             pass
     cuts = apply_cuts(root, cfg["cuts"])
+    rehashed = rehash_registries(root, cfg.get("rehash"))
     changed = project_manifest(root, cfg, overlay if overlay is not None else load_overlay())
-    return {"removed": len(rm), "cuts": cuts, "manifest_projected": changed, "replaced": replaced}
+    return {"removed": len(rm), "cuts": cuts, "manifest_projected": changed, "replaced": replaced, "rehashed": rehashed}
 
 
 def verify_tree(root, cfg=None):
@@ -223,6 +246,10 @@ def verify_tree(root, cfg=None):
             probs.append("%s 還有 OWN-ONLY 標記（該段沒剪掉）" % c["path"])
         if c["stub"].strip().splitlines()[0] not in t:
             probs.append("%s 找不到替身文字（剪段沒套用？）" % c["path"])
+    for it in cfg.get("rehash") or []:
+        sp, rp = root / it["script"], root / it["registry"]
+        if sp.is_file() and rp.is_file() and json.loads(rp.read_text(encoding="utf-8-sig")).get("sha256") != script_sha256(sp):
+            probs.append("%s 的 sha256 與剪段後的 %s 不符（登記檔沒重算？）" % (it["registry"], it["script"]))
     mp = root / MANIFEST_REL
     if mp.is_file():
         base = version_sort_key(cfg["manifest_baseline"])

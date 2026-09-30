@@ -119,8 +119,18 @@ def _stub_files():
     return files
 
 
+def _registries(files):
+    """版本登記檔（sha256 對應剪段後的腳本）。"""
+    out = {}
+    for it in CFG.get("rehash", []):
+        out[it["registry"]] = json.dumps({"version": "v", "sha256": P.hashlib.sha256(files[it["script"]].replace("\r\n", "\n").encode("utf-8")).hexdigest()})
+    return out
+
+
 def _mini_pkg(tmp_path):
+    stubs = _stub_files()
     return _write(tmp_path / "pkg", {
+        **_registries(stubs),
         **_stub_files(),
         P.MANIFEST_REL: P.dump_manifest([{"module": "m", "version": "2026-09-01", "date": "d", "time": "t", "content": P.GENERIC_CONTENT}]),
         "backend/main.py": "pass\n",
@@ -154,6 +164,29 @@ def test_replace_overwrites_from_the_in_package_source_and_refuses_a_missing_sou
     assert (root / "DEPLOY.md").read_text(encoding="utf-8") == "客戶版"
     with pytest.raises(P.ProjectError):
         P.apply_replacements(root, {"DEPLOY.md": "product/sale_docs/NOPE.md"})
+
+
+def test_verify_rejects_a_stale_version_registry_after_the_cut(tmp_path):
+    root = _mini_pkg(tmp_path)
+    reg = root / CFG["rehash"][0]["registry"]
+    reg.write_text(json.dumps({"version": "v", "sha256": "0" * 64}), encoding="utf-8")
+    assert any("sha256" in p for p in P.verify_tree(root, CFG))
+
+
+def test_rehash_registries_recomputes_only_the_hash_and_keeps_the_version(tmp_path):
+    root = _write(tmp_path, {"s.ps1": "a\r\nb\r\n", "s.version.json": json.dumps({"version": "2026-09-28k", "sha256": "0" * 64, "_說明": "x"})})
+    P.rehash_registries(root, [{"script": "s.ps1", "registry": "s.version.json"}])
+    reg = json.loads((root / "s.version.json").read_text(encoding="utf-8"))
+    assert reg["version"] == "2026-09-28k" and reg["_說明"] == "x" and reg["sha256"] == P.hashlib.sha256(b"a\nb\n").hexdigest()
+    with pytest.raises(P.ProjectError):
+        P.rehash_registries(root, [{"script": "nope.ps1", "registry": "s.version.json"}])
+
+
+def test_own_registries_match_the_own_scripts():
+    """自用腳本只加了註解／標記 ⇒ 版本不動、sha256 更新（AH-O7）；登記檔要等於腳本現況。"""
+    for it in CFG["rehash"]:
+        reg = json.loads((REPO / it["registry"]).read_text(encoding="utf-8-sig"))
+        assert reg["sha256"] == P.script_sha256(REPO / it["script"]), it
 
 
 def test_verify_rejects_leftover_own_only_and_unprojected_manifest(tmp_path):

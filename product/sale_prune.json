@@ -98,5 +98,15 @@
     "DEPLOY.md": "<安裝目錄>",
     "DR-SOP.md": "<安裝目錄>",
     "HTTPS-DEPLOY-CHECKLIST.md": "<安裝目錄>"
-  }
+  },
+  "rehash": [
+    {
+      "script": "backend/tools/apply_update.ps1",
+      "registry": "backend/tools/apply_update.version.json"
+    },
+    {
+      "script": "backend/tools/apply_module_update.ps1",
+      "registry": "backend/tools/apply_module_update.version.json"
+    }
+  ]
 }
