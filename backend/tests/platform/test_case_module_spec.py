@@ -25,6 +25,8 @@ EXPECTED = {
     ("calendar.writeback", "quotation"), ("calendar.writeback", "case_stage"),
     ("quotation.append_items", "quotations"), ("attachments.for_document", "case"),
     ("payables.pending", "case"),          # IP-100 請款待付款（2026-09-27）
+    ("remit.reviews", "case"),             # IP-102 匯款差額審核（W1，2026-09-30）
+    ("expense.entries", "remit_fee_case"),  # IP-9 額外支出匯款手續費（W1）
 }
 
 

@@ -1,7 +1,7 @@
-"""W2 稽核修正（S2／S4）：傳票帶入附件。
+"""W2 稽核修正（W2F2／W2F4）：傳票帶入附件。
 
-S4：後端 POST attachments 只允許草稿（與刪除同一條規則；前端入口本來就只在草稿顯示）。
-S2：新傳票自動存檔期間 `uploading` 保持鎖定 ⇒ 雙擊不再出現「傳票尚未儲存」假錯誤、也不會重複帶入。
+W2F4：後端 POST attachments 只允許草稿（與刪除同一條規則；前端入口本來就只在草稿顯示）。
+W2F2：新傳票自動存檔期間 `uploading` 保持鎖定 ⇒ 雙擊不再出現「傳票尚未儲存」假錯誤、也不會重複帶入。
 """
 import io
 import json
@@ -30,13 +30,13 @@ def _png():
 
 
 def _voucher(client, h):
-    r = client.post("/api/vouchers", headers=h, json={"summary": "S4", "lines": [
+    r = client.post("/api/vouchers", headers=h, json={"summary": "W2F4", "lines": [
         {"account_code": "6111", "debit": 10, "credit": 0}, {"account_code": "1113", "debit": 0, "credit": 10}]})
     assert r.status_code == 200, r.text[:300]
     return r.json()["id"]
 
 
-def test_s4_only_a_draft_accepts_attachments(client, make_user):
+def test_w2f4_only_a_draft_accepts_attachments(client, make_user):
     u = make_user(username="w2fix_s4", role="superadmin")
     h = _hdr(client, u)
     vid = _voucher(client, h)
@@ -58,7 +58,7 @@ pytestmark_e2e = requires_module("case", "打 M01（案件）的資料")
 
 @pytest.mark.e2e
 @pytestmark_e2e
-def test_s2_double_click_on_a_new_voucher_shows_no_false_error(live_server, make_user, e2e_browser, client):
+def test_w2f2_double_click_on_a_new_voucher_shows_no_false_error(live_server, make_user, e2e_browser, client):
     from modules.accounting.tests.test_e2e_voucher_source_block_below_2026_09_25 import D, _seed, _pick_case
     u = make_user(username="w2fix_s2", role="superadmin")
     _seed(client, u)

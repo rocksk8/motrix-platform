@@ -3405,7 +3405,8 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         monthly[mo]["contractor"] += e["amount"]
         details["contractor"].append({
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round_half_up(e["amount"]),
-            "taxNote": e["taxNote"], "provisional": e["provisional"],
+            "taxNote": e["taxNote"] + ("｜差額待審核" if e.get("remitPending") else ""), "provisional": e["provisional"],
+            "pending": bool(e.get("remitPending")),
         })
 
     # ── 叫料（`AC2`：原本完全沒算進支出；併入「料件」類，不會寫入 stock_items ⇒ 不重複）
@@ -3463,7 +3464,8 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             "amount": round_half_up(e["amount"]), "files": e["files"],
             # 精算尚未完結：金額還可能變動，前端會標示出來，不要讓使用者
             # 誤以為是已定稿的數字
-            "pending": e["pending"], "taxNote": e["taxNote"], "provisional": e["provisional"],
+            "pending": e["pending"] or bool(e.get("remitPending")),
+            "taxNote": e["taxNote"] + ("｜差額待審核" if e.get("remitPending") else ""), "provisional": e["provisional"],
             "category": e["category"],   # `AC2`：首頁儀表板 otherBreakdown 用
         })
 
@@ -3478,8 +3480,8 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             monthly[mo]["other"] += e["amount"]
             details["other"].append({
                 "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round(e["amount"]),
-                "files": [], "pending": False, "taxNote": "", "provisional": False,
-                "category": e["category"],
+                "files": [], "pending": bool(e.get("pending")), "taxNote": "差額待審核" if e.get("pending") else "",
+                "provisional": False, "category": e["category"],
             })
 
     if own_conn:

@@ -133,3 +133,6 @@ tools/platform/full_results/
 
 # 去識別化：本公司資料檔（建包／本機產生，不進程式庫；tools/platform/own_payload.py）
 backend/migrations_frozen/own_payload.json
+
+# 失敗先行出 log（tools/platform/fail_stream.py）：每次跑一個 JSONL，本機狀態
+tools/platform/fail_stream/
