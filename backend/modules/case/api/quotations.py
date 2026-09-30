@@ -2615,6 +2615,14 @@ def _strip_foreign_file_entries(new_cr, old_cr) -> int:
     return dropped
 
 
+def _invoice_no_change_allowed(user: dict) -> bool:
+    """**更換**已登錄的發票號碼（舊值非空、新值不同）的權限：admin 以上，或持 cashier／finance 模組（MONEY-FLOWS §9 L12）。
+    第一次登錄（舊值空白）維持任何登入者皆可。
+    下游效應（R1）：營運報表現金收入不變；稅務匯出立即變；總帳 E01（銷項發票事件鍵＝案件::發票號碼）——
+    舊號碼消失 ⇒ 已過帳者 orphan（反向草稿）、新號碼 ⇒ 新 E01 草稿，要到『分錄草稿』手動執行才會動。"""
+    return user["role"] in ("superadmin", "admin") or user_has_module(user, "cashier") or user_has_module(user, "finance")
+
+
 def _payment_items_lock_violation(old_items: list, new_items: list) -> Optional[str]:
     """非 admin、非出納的整包存檔：回傳違規說明，None 表示放行。
 
@@ -2792,6 +2800,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         # 過去完全沒有走到格式/重複驗證，等於前面加的防呆對最常用的入口沒有生效。
         # 用 item id 比對排除自己這筆（見 validate_invoice_no() docstring 說明
         # 為什麼不能用陣列位置）。
+        invoice_changes = []
         new_items_for_inv = ((body.case_record or {}).get("payment") or {}).get("items") or []
         old_items_for_inv = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
         old_inv_by_id = {it.get("id"): it.get("invoiceNo") for it in old_items_for_inv if it.get("id") is not None}
@@ -2803,6 +2812,11 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
                 new_inv = new_it.get("invoiceNo")
                 if new_it.get("id") is not None and old_inv_by_id.get(new_it.get("id")) == new_inv:
                     continue  # 未變動，不必重新驗證
+                _old_inv = (old_inv_by_id.get(new_it.get("id")) or "").strip() if new_it.get("id") is not None else ""
+                if _old_inv and (new_inv or "").strip() != _old_inv:
+                    if not _invoice_no_change_allowed(user):   # MONEY-FLOWS §9 L12
+                        raise HTTPException(403, "已登錄的發票號碼只有管理員、出納或財務可以更換")
+                    invoice_changes.append((_old_inv, new_inv))
                 validate_invoice_no(conn, new_inv, exclude_quote_no=quote_no, exclude_item_id=new_it.get("id"))
         except Exception:
             conn.close()
@@ -2844,6 +2858,9 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         conn.close()
         spawn_bg_thread(_backup_quotation, args=(quote_no,))
         _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
+        for _o, _n in invoice_changes:                     # MONEY-FLOWS §9 L12：更換已登錄的發票號碼留稽核
+            _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', quote_no,
+                   f"{quote_no} 發票號碼 {_o} → {_n}（總帳 E01 將在下次引擎執行時沖轉並重建）")
         out = {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts, "adopted": adopted}
         if gl_warn:
             out["glWarning"] = gl_warn
@@ -3786,9 +3803,13 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
             _iid = pits[idx].get("id")
             gl_warn = (gl_posted_warning(conn, "quotation_receipt", "%s::%s" % (no, _iid)) if _iid is not None
                        else gl_posted_warning(conn, "quotation_receipt", no + "::", prefix=True))
+        invoice_changed_from = None
         if "invoiceNo" in body:
             _old_inv = (pits[idx].get("invoiceNo") or "").strip()
             if _old_inv and (body["invoiceNo"] or "").strip() != _old_inv:
+                if not _invoice_no_change_allowed(user):       # MONEY-FLOWS §9 L12：更換已登錄的發票號碼要 admin＋／出納／財務
+                    raise HTTPException(403, "已登錄的發票號碼只有管理員、出納或財務可以更換")
+                invoice_changed_from = _old_inv
                 gl_warn = gl_warn or gl_posted_warning(conn, "quotation_invoice", "%s::%s" % (no, _old_inv))
             validate_invoice_no(conn, body["invoiceNo"], exclude_quote_no=no, exclude_idx=idx)
         # AC1：驗「套用後」那一期的發票未稅／稅額（只送其中一欄、而另一欄原本也是空的 ⇒ 拒存）
@@ -3826,6 +3847,9 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         else ('標記收款' if body.get('received') else '取消收款')
     )
     _audit(_tok(authorization), 'payment.mark', 'quotation', no, f"{no} {label}（{action_detail}）")
+    if invoice_changed_from:
+        _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', no,
+               f"{no} {label} 發票號碼 {invoice_changed_from} → {body.get('invoiceNo')}（總帳 E01 將在下次引擎執行時沖轉並重建）")
     notify_module_activity("報價單", action_detail, user.get("display_name") or user["username"],
                             f"{no} {label}", "quotations.html")
     return {"ok": True, "updated_at": now, **({"glWarning": gl_warn} if gl_warn else {})}
