@@ -442,7 +442,7 @@
                           <td class="c">
                             <!-- 獎金更正單的補發（kind='correction'）：扣繳試算與銀行選擇在更正單頁，這裡給連結 -->
                             <a x-show="b.kind === 'correction'" class="action-btn pay" :href="'bonus-corrections.html?no=' + encodeURIComponent(b.quoteNo)"
-                               :data-testid="'cashier-bonus-pay-' + b.quoteNo">前往補發</a>
+                               :data-testid="'cashier-bonus-corr-' + b.quoteNo">前往補發</a>
                             <button x-show="bonusQueue.canMarkPaid && b.kind !== 'correction'" class="action-btn pay" @click="openBonusPayModal(b)"
                                     :data-testid="'cashier-bonus-pay-' + b.quoteNo">標記已發放</button>
                             <span x-show="!bonusQueue.canMarkPaid" style="font-size:11px;color:var(--text-dim)">僅檢視</span>

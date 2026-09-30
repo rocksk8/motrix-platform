@@ -179,6 +179,19 @@ def test_full_lifecycle_supplement(live_server, make_user, e2e_browser):
     assert sa2.locator('[data-testid="bc-clawback-pending"]').is_hidden()
     _shot(sa2, "05-approved-awaiting-payout")
     # 出納標記補發
+    # 出納頁「獎金待發放」：更正單的補發列是連結（不在出納頁直接標記），點了落在更正單頁並開好那一張
+    cp = e2e_browser.new_context().new_page()
+    inject_login(cp, live_server, *u["e2c_cash"])
+    cp.goto(live_server + "/pages/cashier.html")
+    cp.locator('[data-testid="cashier-bonus-tab"]').wait_for(state="visible", timeout=20000)
+    cp.locator('[data-testid="cashier-bonus-tab"]').click()
+    link = cp.locator(f'[data-testid="cashier-bonus-corr-{cn}"]')
+    link.wait_for(state="visible", timeout=15000)
+    assert cp.locator(f'[data-testid="cashier-bonus-pay-{cn}"]').count() == 0 or cp.locator(f'[data-testid="cashier-bonus-pay-{cn}"]').is_hidden()
+    _shot(cp, "05b-cashier-bonus-queue-link")
+    link.click()
+    cp.wait_for_url("**/bonus-corrections.html*", timeout=15000)
+    cp.locator('[data-testid="bc-mark-paid"]').wait_for(timeout=15000)       # ?no= 直接開到該張
     cash = _page_as(e2e_browser, live_server, u["e2c_cash"])
     cash.locator(f'[data-testid="bc-item-{cn}"]').click()
     cash.locator('[data-testid="bc-mark-paid"]').wait_for(timeout=10000)
