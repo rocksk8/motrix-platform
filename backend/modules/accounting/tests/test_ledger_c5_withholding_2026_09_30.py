@@ -224,8 +224,8 @@ def test_bonus_payment_withholding_enters_the_list_and_follows_changes(conn):
     conn.commit()
     assert len(_bonus_items(conn, aid)) == 2                                               # 冪等
     import json
-    conn.execute("UPDATE bonus_case_award_edit_log SET changes_json=? WHERE award_id=?",
-                 (json.dumps({"deductions": {"lines": [{"username": "u1", "gross": 50000, "withholding": 5000, "nhiPremium": 0}]}}), aid))
+    conn.execute("INSERT INTO bonus_case_award_edit_log(award_id, changed_by, changed_at, action, changes_json) VALUES (?,?,?,?,?)",      # 編寫紀錄只增不改：以較新的一筆為準
+                 (aid, "t", "2179-06-30T00:00:00", "mark_paid", json.dumps({"deductions": {"lines": [{"username": "u1", "gross": 50000, "withholding": 5000, "nhiPremium": 0}]}})))
     conn.commit()
     E.run(conn, "2179-06-01", "2179-06-30", "acc")
     conn.commit()

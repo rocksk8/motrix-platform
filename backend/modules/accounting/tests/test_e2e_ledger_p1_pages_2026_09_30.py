@@ -255,22 +255,22 @@ def test_hub_page_lists_features_and_toggle_shows_and_hides_the_tab(live_server,
     page = e2e_browser.new_page()
     bad, errs = _open(page, live_server, user, pw, "ledger-hub.html")
     page.wait_for_selector("[data-testid=hb-features]")
-    page.wait_for_selector("[data-testid=hb-row-tax401]")
-    assert page.locator("[data-testid=hb-none]").is_visible()                       # 預設全關：明說「沒有已開啟的功能」
-    assert page.locator("[data-testid=hb-tab-tax401]").count() == 0
+    page.wait_for_selector("[data-testid=hb-row-invoice_adjustments]")
+    assert page.locator("[data-testid=hb-none]").is_visible()   # 尚未做完的功能（C7 折讓）用來驗證開關與頁籤；已做完的功能（401、扣繳、分錄草稿）有自己的內容題                       # 預設全關：明說「沒有已開啟的功能」
+    assert page.locator("[data-testid=hb-tab-invoice_adjustments]").count() == 0
 
-    page.locator("[data-testid=hb-row-tax401] [data-testid=hb-toggle]").click()
-    page.wait_for_selector("[data-testid=hb-tab-tax401]", state="visible")           # 開啟 ⇒ 頁籤出現
+    page.locator("[data-testid=hb-row-invoice_adjustments] [data-testid=hb-toggle]").click()
+    page.wait_for_selector("[data-testid=hb-tab-invoice_adjustments]", state="visible")           # 開啟 ⇒ 頁籤出現
     page.wait_for_selector("[data-testid=hb-body]", state="visible")
-    assert "C5" in page.locator("[data-testid=hb-body]").inner_text()
+    assert "C7" in page.locator("[data-testid=hb-body]").inner_text()
     conn = db.get_db()
     try:
-        assert conn.execute("SELECT value FROM gl_settings WHERE key='feature.tax401'").fetchone()[0] == "1"
+        assert conn.execute("SELECT value FROM gl_settings WHERE key='feature.invoice_adjustments'").fetchone()[0] == "1"
     finally:
         conn.close()
 
-    page.locator("[data-testid=hb-row-tax401] [data-testid=hb-toggle]").click()
-    page.wait_for_function("() => !document.querySelector('[data-testid=hb-tab-tax401]')")
+    page.locator("[data-testid=hb-row-invoice_adjustments] [data-testid=hb-toggle]").click()
+    page.wait_for_function("() => !document.querySelector('[data-testid=hb-tab-invoice_adjustments]')")
     assert not bad, "開總帳作業頁時有請求失敗：%s" % bad[:4]
     assert not errs, "頁面丟了例外：%s" % errs[:3]
 
