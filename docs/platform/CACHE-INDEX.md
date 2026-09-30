@@ -46,6 +46,15 @@
   兩者衝突時以 platform 的規格與 CORE-SPEC「使用者裁示」為準。
 - 章節索引：architecture｜data-model｜api-core｜mod-case／mod-quotation／mod-contractor／mod-crm／mod-inventory／mod-shipping／mod-selection-guides｜ops-backup／ops-deploy｜security｜known-limits｜changelog*
 
+## FINANCE-INTEGRATION（16KB；財務串接總覽，本身即快取）
+
+- 來源檔：docs/platform/FINANCE-INTEGRATION.md｜來源 commit：0254d9d7
+- 摘要：錢從來源模組走到營運報表、案件成本、出納、總帳的集中說明（使用者 2026-09-30「財務相依性高，做一個檔把串接方式處理一份，未來不用重複讀取」）。
+  串接總表（IP 編號／提供方→使用方／資料形狀／冪等與反轉／功能旗標／守門）；總帳 `gl.events` 契約 v1 事件形狀；引擎冪等、drift、orphan、期間鎖規則；
+  功能旗標（`gl_settings` feature.*，READY 才能開）與 `remit_require_payslip`；新增提供者時會誤觸的全域守門；新增金流來源檢查表；已知陷阱。
+  每個收支來源一列（含總帳事件碼／分錄角色／狀態）在 `MONEY-FLOWS.md`；總帳規則快取在 `backend/modules/accounting/ledger/README.md`。
+- 章節索引：§1 串接總表｜§2 gl.events 契約 v1｜§3 引擎冪等與反轉｜§4 功能旗標與設定｜§5 會被誤觸的全域守門｜§6 新增金流來源檢查表｜§7 已知陷阱
+
 ---
 
 ## 維護
