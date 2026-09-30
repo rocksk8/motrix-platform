@@ -142,12 +142,13 @@ def test_positive_and_reverse_control_of_the_scan():
 def test_positive_and_reverse_control_of_stale_and_expiry():
     f = MODULE + "/api/vouchers.py"
     found = {f: {"case_extra_expenses"}}
-    assert stale(found, set(found)) == []
+    one = {f: KNOWN_FOREIGN_READS[f]}                      # 合成資料只看一個檔（真實基線可有多檔）
+    assert stale(found, set(found), one) == []
     shrunk = dict(found, **{f: set()})
-    assert stale(shrunk, set(found)) == ["%s 已不讀 case_extra_expenses ⇒ 自基線刪除" % f]
-    assert stale(found, set()) == ["%s：檔案不在 ⇒ 自基線刪除" % f]
-    assert expired(set()) == []
-    got = expired({"case.extra_expenses"})
+    assert stale(shrunk, set(found), one) == ["%s 已不讀 case_extra_expenses ⇒ 自基線刪除" % f]
+    assert stale(found, set(), one) == ["%s：檔案不在 ⇒ 自基線刪除" % f]
+    assert expired(set(), one) == []
+    got = expired({"case.extra_expenses"}, one)
     assert len(got) == 1 and "case_extra_expenses" in got[0], got
     provided, _ = code_capabilities({"x.py": 'registry.provide("case.extra_expenses", "case", X)\n'})
-    assert [g for g in expired(provided) if "case_extra_expenses" in g], "code_capabilities 的提供者要能觸發到期"
+    assert [g for g in expired(provided, one) if "case_extra_expenses" in g], "code_capabilities 的提供者要能觸發到期"
