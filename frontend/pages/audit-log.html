@@ -112,7 +112,7 @@
     <div class="page-header">
       <div>
         <div class="page-header__title">歷史紀錄</div>
-        <div class="page-header__sub" x-text="'共 ' + total + ' 筆操作紀錄'"></div>
+        <div class="page-header__sub" x-text="'共 ' + total + (totalCapped ? '＋' : '') + ' 筆操作紀錄' + (totalCapped ? '（只數到 1 萬筆，請加條件縮小範圍）' : '')"></div>
       </div>
     </div>
 
@@ -431,6 +431,7 @@
       session: {},
       items:  [],
       total:  0,
+      totalCapped: false,
       page:   1,
       perPage: 50,
       loading: false,
@@ -528,6 +529,7 @@
             const d = await r.json()
             this.items = d.items || []
             this.total = d.total || 0
+            this.totalCapped = !!d.totalCapped
           }
         } catch(e) {}
         this.loading = false

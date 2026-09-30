@@ -396,8 +396,24 @@ def audit_module_counts(body: dict = Body(...), authorization: str = Header(None
     return result
 
 
+#: 安全審查 W3 #5（2026-09-30）：歷史紀錄搜尋的輸入上限與成本上限
+_AUDIT_TEXT_MAX = 100          # 每個文字篩選值最多 100 字（超過截斷，不報錯）
+_AUDIT_OFFSET_MAX = 10000      # 舊的 offset 分頁最多跳 1 萬列（＝總數上限）；更深請用 before_id（keyset）
+_AUDIT_COUNT_CAP = 10000       # 「總數」最多數到 1 萬（超過回 10000＋totalCapped），不對全表 COUNT(*)
+
+
+def _like_escape(s: str) -> str:
+    """LIKE 的跳脫：使用者輸入的 %、_、反斜線當字面值（否則 `q=%%%%…` 會變成全表掃描的萬用字元炸彈）。搭配 ESCAPE 子句。"""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _audit_filters(module, case_no, ref_no, user_q, action, date_from, date_to, result, q):
-    """歷史紀錄的共用篩選（列表、樹、失敗摘要同一套）。除 q（相容舊版的關鍵字）外都走索引：精確／前綴，不用 %x%。"""
+    """歷史紀錄的共用篩選（列表、樹、失敗摘要同一套）。除 q（相容舊版的關鍵字）外都走索引：精確／前綴，不用 %x%。
+    文字值一律截到 `_AUDIT_TEXT_MAX`；LIKE 的萬用字元一律跳脫（安全審查 W3 #5）。"""
+    mx = _AUDIT_TEXT_MAX
+    module, case_no, ref_no, user_q, action, q = [
+        (v[:mx] if isinstance(v, str) else v) for v in (module, case_no, ref_no, user_q, action, q)]
+    date_from, date_to = [(v[:32] if isinstance(v, str) else v) for v in (date_from, date_to)]
     where, params = [], []
     if module:
         where.append("module=?");        params.append("" if module == "other" else module)
@@ -407,8 +423,8 @@ def _audit_filters(module, case_no, ref_no, user_q, action, date_from, date_to, 
         where.append("ref_no=?");        params.append(ref_no.strip())
     if user_q:
         u = user_q.strip()
-        where.append("(username=? OR display_name=? OR username LIKE ? OR display_name LIKE ?)")
-        params.extend([u, u, u + "%", u + "%"])
+        where.append("(username=? OR display_name=? OR username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\')")
+        params.extend([u, u, _like_escape(u) + "%", _like_escape(u) + "%"])
     if action:
         where.append("action=?");        params.append(action)
     if date_from:
@@ -418,8 +434,9 @@ def _audit_filters(module, case_no, ref_no, user_q, action, date_from, date_to, 
     if result in ("ok", "fail"):
         where.append("result=?");        params.append(result)
     if q:
-        like = f'%{q}%'
-        where.append("(target_label LIKE ? OR username LIKE ? OR display_name LIKE ? OR target_id LIKE ?)")
+        like = "%" + _like_escape(q) + "%"
+        where.append("(target_label LIKE ? ESCAPE '\\' OR username LIKE ? ESCAPE '\\'"
+                     " OR display_name LIKE ? ESCAPE '\\' OR target_id LIKE ? ESCAPE '\\')")
         params.extend([like, like, like, like])
     return where, params
 
@@ -456,14 +473,15 @@ def list_audit_log(
     try:
         where, params = _audit_filters(module, case_no, ref_no, user, action, date_from, date_to, result, q)
         cond = ("WHERE " + " AND ".join(where)) if where else ""
-        total = conn.execute(f"SELECT COUNT(*) FROM audit_log {cond}", params).fetchone()[0]
+        # 總數只數到 _AUDIT_COUNT_CAP（帶索引的篩選很快；無篩選時不對百萬列做 COUNT(*)）
+        total = conn.execute(f"SELECT COUNT(*) FROM (SELECT 1 FROM audit_log {cond} LIMIT {_AUDIT_COUNT_CAP})", params).fetchone()[0]
         w2, p2 = list(where), list(params)
         if before_id:
             w2.append("id<?");           p2.append(int(before_id))
         cond2 = ("WHERE " + " AND ".join(w2)) if w2 else ""
         rows = conn.execute(
             f"SELECT * FROM audit_log {cond2} ORDER BY id DESC LIMIT ? OFFSET ?",
-            p2 + [limit, 0 if before_id else max(0, int(offset))]
+            p2 + [limit, 0 if before_id else max(0, min(int(offset), _AUDIT_OFFSET_MAX))]
         ).fetchall()
     finally:
         conn.close()
@@ -471,7 +489,8 @@ def list_audit_log(
     for it in items:
         it["module_label"] = _AUDIT_MODULE_LABELS.get(it.get("module") or "", it.get("module") or "其他")
         it["reason_label"] = _AUDIT_FAIL_LABELS.get(it.get("reason_code") or "", "")
-    return {"total": total, "items": items, "next_before_id": items[-1]["id"] if len(items) == limit else None}
+    return {"total": total, "totalCapped": total >= _AUDIT_COUNT_CAP, "items": items,
+            "next_before_id": items[-1]["id"] if len(items) == limit else None}
 
 
 @router.get("/api/audit-log/tree")
