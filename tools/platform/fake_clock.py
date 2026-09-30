@@ -9,7 +9,8 @@
 ## 限制（誠實寫在這裡，紅燈要人看，不是自動判定產品有 bug）
 - 只換**本行程**的 Python 層：SQLite 的 `datetime('now')`、子行程（伺服器行程、PowerShell）、檔案 mtime 仍是真實時間。
   用檔案 mtime 對「今天」的題在這裡可能假紅——對照 boundary_days 的 control（真實時鐘）那一輪判斷。
-- `datetime.datetime`／`datetime.date` 被換成子類別：在本 plugin 載入**之前**就 `from datetime import date` 的模組拿到原類別（不平移）。
+- `datetime.datetime`／`datetime.date` 被換成**替身類別**（建出、回傳的都是真實例，sqlite 綁參數沒問題；`type(x) is datetime.datetime` 為假）：
+  在本 plugin 載入**之前**就 `from datetime import date` 的模組拿到原類別（不平移）。
   所以一定要用 `-p fake_clock`（pytest 最早載入的 plugin）。
 - 不驅動 `time.monotonic()`／`perf_counter()`（逾時計算不受影響）。
 """
@@ -43,10 +44,35 @@ def delta_to(target, real_now=None):
     return (target - real_now).total_seconds()
 
 
-class FakeDatetime(_REAL_DATETIME):
+class _Meta(type):
+    """替身類別：**建出來、回傳的都是真的 datetime／date 實例**（sqlite3 的轉接器只認真類別；子類別實例會被拒絕
+    "type 'FakeDatetime' is not supported" ⇒ 假紅，W3 複審 2026-10-01）。
+
+    - 呼叫（`datetime.datetime(2020, 1, 1)`）、`strptime`／`fromisoformat`／`combine`／`min`／`max`… 一律轉給真類別；
+    - `isinstance(x, datetime.datetime)`／`issubclass` 對真實例成立（產品程式碼的型別檢查照常）；
+    - 只有 `now()`／`today()`／`utcnow()` 是平移過的。
+    已知限制：`type(x) is datetime.datetime` 為假（x 的型別是真類別、名字指到替身）；繼承 `datetime.datetime` 的類別拿到替身。"""
+    _real = None
+
+    def __call__(cls, *args, **kwargs):
+        return cls._real(*args, **kwargs)
+
+    def __getattr__(cls, name):
+        return getattr(cls._real, name)
+
+    def __instancecheck__(cls, inst):
+        return isinstance(inst, cls._real)
+
+    def __subclasscheck__(cls, sub):
+        return issubclass(sub, cls._real) or sub is cls
+
+
+class FakeDatetime(metaclass=_Meta):
+    _real = _REAL_DATETIME
+
     @classmethod
     def now(cls, tz=None):
-        return cls.fromtimestamp(_REAL_TIME() + DELTA, tz)
+        return _REAL_DATETIME.fromtimestamp(_REAL_TIME() + DELTA, tz)
 
     @classmethod
     def today(cls):
@@ -54,13 +80,15 @@ class FakeDatetime(_REAL_DATETIME):
 
     @classmethod
     def utcnow(cls):
-        return cls.fromtimestamp(_REAL_TIME() + DELTA, _dt.timezone.utc).replace(tzinfo=None)
+        return _REAL_DATETIME.fromtimestamp(_REAL_TIME() + DELTA, _dt.timezone.utc).replace(tzinfo=None)
 
 
-class FakeDate(_REAL_DATE):
+class FakeDate(metaclass=_Meta):
+    _real = _REAL_DATE
+
     @classmethod
     def today(cls):
-        return cls.fromtimestamp(_REAL_TIME() + DELTA)
+        return _REAL_DATE.fromtimestamp(_REAL_TIME() + DELTA)
 
 
 def _fake_time():
@@ -78,6 +106,12 @@ def _fake_gmtime(secs=None):
 def install(target):
     """把本行程的時鐘平移到 target 起算。回傳 delta 秒。重複呼叫以最新的 target 為準。"""
     global DELTA
+    # sqlite3 在 import 時把 date／datetime 的轉接器登記在『當時的 datetime.date／datetime 物件』上：
+    # 先 import（沿用真類別登記），之後再換成替身，真實例才綁得進去（W3 複審；順序反了會丟 "type 'datetime.datetime' is not supported"）
+    try:
+        import sqlite3  # noqa: F401
+    except ImportError:
+        pass
     DELTA = delta_to(target)
     _dt.datetime, _dt.date = FakeDatetime, FakeDate
     _time.time, _time.localtime, _time.gmtime = _fake_time, _fake_localtime, _fake_gmtime

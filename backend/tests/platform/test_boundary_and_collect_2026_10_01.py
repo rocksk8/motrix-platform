@@ -318,3 +318,53 @@ def test_test_today_and_fake_now_are_not_part_of_the_reuse_fingerprint(monkeypat
     monkeypatch.setenv("MOTRIX_EDGE_PDF_TIMEOUT", "40")
     env = tr.current_env()["motrix_env"]
     assert "MOTRIX_EDGE_PDF_TIMEOUT" in env and "MOTRIX_TEST_TODAY" not in env and "MOTRIX_FAKE_NOW" not in env
+
+
+_SQLITE_PROBE = """
+import sys, warnings
+warnings.simplefilter('ignore')
+sys.path.insert(0, %(plat)r)
+import fake_clock as fc
+fc.install(fc.parse('2026-02-28T23:59:30'))
+import sqlite3        # 故意在 install 之後才 import（fake_clock.install 自己要先 import 它）
+import datetime
+from datetime import date, datetime as DT, timezone
+con = sqlite3.connect(':memory:')
+con.execute('create table t(a, b, c, d, e, f, g)')
+vals = (DT.now(), date.today(), DT.now(timezone.utc), DT.utcnow(), DT(2020, 1, 1), DT.strptime('2026-01-02', '%%Y-%%m-%%d'),
+        date(2020, 1, 1))
+con.execute('insert into t values (?,?,?,?,?,?,?)', vals)       # 子類別實例會在這裡丟 "type 'X' is not supported"
+row = con.execute('select * from t').fetchone()
+assert all(isinstance(x, str) for x in row), row
+assert row[1] == '2026-02-28', row
+assert type(DT.now()) is fc._REAL_DATETIME and type(date.today()) is fc._REAL_DATE and type(DT.utcnow()) is fc._REAL_DATETIME
+assert isinstance(DT.now(), datetime.datetime) and isinstance(date.today(), datetime.date) and isinstance(DT.now(), datetime.date)
+assert not isinstance('2026-01-01', datetime.datetime)
+assert issubclass(fc._REAL_DATETIME, datetime.datetime) and DT.min.year == 1 and date.max.year == 9999
+print('SQLITE-OK')
+"""
+
+
+def test_fake_clock_values_bind_into_sqlite_as_real_types():
+    """W3 複審：替身若回子類別實例，sqlite3 會拒絕 ⇒ 假紅。now／today／utcnow／帶時區／建構式／strptime 全要是真類別。"""
+    p = run_python(["-c", _SQLITE_PROBE % {"plat": str(PLAT)}], cwd=BACKEND, timeout=60)
+    assert p.returncode == 0 and "SQLITE-OK" in p.stdout, p.stdout[-400:] + p.stderr[-800:]
+
+
+def test_sqlite_binding_under_the_pytest_plugin(tmp_path):
+    t = tmp_path / "t"
+    t.mkdir()
+    (t / "test_sql.py").write_text(textwrap.dedent("""
+        import sqlite3, warnings
+        from datetime import date, datetime
+        def test_bind():
+            warnings.simplefilter("ignore")
+            c = sqlite3.connect(":memory:")
+            c.execute("create table t(a, b)")
+            c.execute("insert into t values (?, ?)", (datetime.now(), date.today()))
+            assert c.execute("select b from t").fetchone()[0] == "2026-02-28"
+    """), encoding="utf-8")
+    env = utf8_env(PYTHONPATH=str(PLAT), MOTRIX_FAKE_NOW="2026-02-28T12:00:00", MOTRIX_PYTEST_LOCK=str(tmp_path / "lock"))
+    p = run_python(["-m", "pytest", "-q", "-p", "fake_clock", "-p", "no:cacheprovider", "--basetemp=%s" % (tmp_path / "bt-adhoc"),
+                    *probe_pytest_args(t / "test_sql.py")], cwd=BACKEND, env=env, timeout=120)
+    assert p.returncode == 0 and "1 passed" in p.stdout, (p.stdout + p.stderr)[-600:]
