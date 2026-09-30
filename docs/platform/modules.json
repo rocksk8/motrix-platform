@@ -237,6 +237,7 @@
     "page:pages/sales-orders.html",
     "page:pages/settlement.html",
     "mod:case/__init__",
+    "mod:case/gl_events",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",

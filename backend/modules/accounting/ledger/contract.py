@@ -163,6 +163,8 @@ def apply_annotations(conn, ev):
         ev.setdefault("meta", {})["annotation_ignored"] = "input_tax=%r" % raw
         return ev
     old_tax = sum(ln["amount"] for ln in lines if ln.get("role") == _ROLE_INPUT_TAX)
+    if old_tax == 0 and (ev.get("meta") or {}).get("tax_unsplit"):
+        return _split_unsplit_tax(ev, lines, tax)
     keep = [ln for ln in lines if ln.get("role") != _ROLE_INPUT_TAX]
     code_ = ev.get("tax_code") or "IN-5"
     if tax:
@@ -174,6 +176,27 @@ def apply_annotations(conn, ev):
     ev["tax_code"] = code_ if tax else "IN-EX"
     m = ev.setdefault("meta", {})
     m["tax_estimated"] = False
+    m["tax_annotated"] = True
+    return ev
+
+
+def _split_unsplit_tax(ev, lines, tax):
+    """來源金額是含稅未拆稅（額外支出、叫料）：補登進項稅額 ⇒ 成本改為 全額－稅額，另加一行進項稅額，應付不變。稅額 0 或不小於成本 ⇒ 忽略並標記。"""
+    cost = [ln for ln in lines if ln.get("side") == "D" and ln.get("role") != _ROLE_INPUT_TAX]
+    if tax <= 0 or len(cost) != 1 or tax >= cost[0]["amount"]:
+        ev.setdefault("meta", {})["annotation_ignored"] = "input_tax=%r（需為大於 0 且小於成本的整數）" % tax
+        return ev
+    cost[0]["amount"] -= tax
+    code_ = ev.get("tax_code") or "IN-5"
+    new = []
+    for ln in lines:
+        new.append(ln)
+        if ln is cost[0]:
+            new.append({"role": _ROLE_INPUT_TAX, "side": "D", "amount": tax, "memo": "進項稅額（會計補登）", "tax_code": code_})
+    ev["lines"] = new
+    ev["tax_code"] = code_
+    m = ev.setdefault("meta", {})
+    m["tax_unsplit"] = False
     m["tax_annotated"] = True
     return ev
 

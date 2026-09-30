@@ -66,7 +66,7 @@ def test_pay_modal_requires_payslip_link_then_marks_both_paid(live_server, make_
     err = page.locator(f'[data-testid="pay-link-error-{cid}"]')
     err.wait_for(state="visible")
     assert "尚未關聯" in err.inner_text()
-    confirm = page.locator('button[\@click^="confirmPayVoucher"]')         # 頁面另有『銀行帳戶標記已匯款』同名按鈕，用 @click 區分
+    confirm = page.locator(r'button[\@click^="confirmPayVoucher"]')         # 頁面另有『銀行帳戶標記已匯款』同名按鈕，用 @click 區分
     page.fill('[data-testid="pay-date"]', "2176-06-20")
     assert confirm.is_disabled(), "未關聯勞報單時不可以按確認"
 
