@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import traceback
 from datetime import date, datetime
 
@@ -381,6 +382,10 @@ def _visible(user, system, row) -> bool:
     return system or row_access.visible("case", user, row, scope="read")
 
 
+#: SQLite 是否認得 `->`／`->>`（3.38+；Python 3.12 內建的是 3.45）。不認得 ⇒ 待簽佇列與案件摘要退回逐筆 Python 解析（較慢、語意相同）。
+JSON_ARROW_OK = sqlite3.sqlite_version_info >= (3, 38, 0)
+
+
 def case_summary(conn, user, quote_nos=None, *, purpose=None) -> list:
     """`case.summary`（M01 提供；主持裁示 2026-09-26）：案件摘要 `{quote_no, customer_name, project_name, status,
     sales_person_id, deal_tag}`（deal_tag：2026-09-27 加欄，L1 佇列詳情的案件抬頭；`wide` 分支不回）。`quote_nos` 省略 ⇒ 這個人看得到的全部；給清單 ⇒ 只回其中看得到、而且存在的（其餘不回，
@@ -397,9 +402,11 @@ def case_summary(conn, user, quote_nos=None, *, purpose=None) -> list:
     # Python 再 json.loads 只為了取 dealTag）：欄位空時由 SQLite 直接取 `$.dealTag`（巢狀 CASE：json_valid 為假就不執行 json_type，
     # 壞 JSON 不會讓整個查詢丟例外）；壞 JSON、dealTag 不是字串、或任何拿不準的形狀 ⇒ `_dt_fast` 為 NULL ⇒ 才把 data_json 撈回來，
     # 走下面照舊的 Python 解析（語意不變：壞的那一筆 ⇒ ""＋ERROR）。
+    # `->>`（SQLite >= 3.38）：json_extract 棘輪（tests/platform/test_json_extract_ratchet.py）的用意是「壞一筆 JSON 讓整個查詢丟例外」，
+    # 這裡以巢狀 CASE 的 json_valid 擋掉（等價題逐形狀驗過）；SQLite 太舊不認得 `->>` ⇒ 整段退回舊算法（NULL、撈 data_json 走 Python）。
     fast = ("CASE WHEN COALESCE(deal_tag,'')<>'' THEN NULL WHEN json_valid(data_json) THEN "
             "CASE WHEN json_type(data_json,'$.dealTag') IS NULL OR json_type(data_json,'$.dealTag')='null' THEN '' "
-            "WHEN json_type(data_json,'$.dealTag')='text' THEN json_extract(data_json,'$.dealTag') END END")
+            "WHEN json_type(data_json,'$.dealTag')='text' THEN data_json ->> '$.dealTag' END END") if JSON_ARROW_OK else "NULL"
     inner = "SELECT id, quote_no, customer_name, project_name, status, deal_tag, data_json, %s, %s AS _dt_fast FROM quotations" % (_CASE_VIS_COLS, fast)
     cols = ("quote_no, customer_name, project_name, status, deal_tag, _dt_fast, " + _CASE_VIS_COLS
             + ", CASE WHEN COALESCE(deal_tag,'')='' AND _dt_fast IS NULL THEN data_json END AS _dj")

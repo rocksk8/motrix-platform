@@ -89,14 +89,15 @@ EDGE_PDF_TIMEOUT_SECONDS = int(os.environ.get("MOTRIX_EDGE_PDF_TIMEOUT", "120"))
 _BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
 
 
-def _edge_priority_kwargs() -> dict:
+def _edge_creationflags() -> int:
+    """`subprocess.run(creationflags=)`：背景工作＋Windows ⇒ BELOW_NORMAL；其餘 0（POSIX 的 creationflags 只能是 0）。"""
     if os.name != "nt" or os.environ.get("MOTRIX_EDGE_PDF_PRIORITY", "").lower() == "normal":
-        return {}
+        return 0
     try:
         from db import _BACKGROUND_WORK
-        return {"creationflags": _BELOW_NORMAL_PRIORITY_CLASS} if _BACKGROUND_WORK.get() else {}
+        return _BELOW_NORMAL_PRIORITY_CLASS if _BACKGROUND_WORK.get() else 0
     except Exception:                                        # noqa: BLE001 — 優先權只是加分，取不到就照常
-        return {}
+        return 0
 
 
 def run_edge_pdf(cmd: list) -> None:
@@ -115,7 +116,7 @@ def run_edge_pdf(cmd: list) -> None:
             subprocess.run(
                 cmd, timeout=EDGE_PDF_TIMEOUT_SECONDS, check=False,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                **_edge_priority_kwargs(),
+                creationflags=_edge_creationflags(),
             )
         except subprocess.TimeoutExpired:
             logger.warning(

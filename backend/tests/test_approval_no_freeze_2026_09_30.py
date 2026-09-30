@@ -300,14 +300,14 @@ def test_edge_pdf_uses_below_normal_priority_only_for_background_work(monkeypatc
     monkeypatch.setattr(startup.os, "name", "nt")
     monkeypatch.delenv("MOTRIX_EDGE_PDF_PRIORITY", raising=False)
     startup.run_edge_pdf(["edge"])                                   # 使用者正在等的 PDF：不降
-    assert "creationflags" not in calls[-1]
+    assert calls[-1].get("creationflags", 0) == 0
     tok = db._BACKGROUND_WORK.set(True)
     try:
         startup.run_edge_pdf(["edge"])
         assert calls[-1].get("creationflags") == 0x00004000
         monkeypatch.setenv("MOTRIX_EDGE_PDF_PRIORITY", "normal")     # 可關掉
         startup.run_edge_pdf(["edge"])
-        assert "creationflags" not in calls[-1]
+        assert calls[-1].get("creationflags", 0) == 0
     finally:
         db._BACKGROUND_WORK.reset(tok)
     monkeypatch.delenv("MOTRIX_EDGE_PDF_PRIORITY", raising=False)
@@ -315,7 +315,7 @@ def test_edge_pdf_uses_below_normal_priority_only_for_background_work(monkeypatc
     tok = db._BACKGROUND_WORK.set(True)
     try:
         startup.run_edge_pdf(["edge"])
-        assert "creationflags" not in calls[-1]
+        assert calls[-1].get("creationflags", 0) == 0
     finally:
         db._BACKGROUND_WORK.reset(tok)
 
