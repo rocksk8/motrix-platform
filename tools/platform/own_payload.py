@@ -34,6 +34,9 @@ FORMAT = 1
 PINNED_AUTH_BLOB = "43f2afc70a683f0199d2e044d84e33352c8081c2"
 PINNED_AUTH_SHA256 = "e4ee76e4683fd74c0d31216bd0a11de6526d65fa0914795ec1dc461cf41cf04c"
 GENERIC_WEAK = ("password", "123456", "admin", "motrix", "motrix123")
+#: 伺服器 IP 的來源：去識別化之前的 backend/main.py（git 歷史）。helpers/own_values.NETWORK_SOURCE_BLOB 與此相同。
+PINNED_NET_BLOB = "ffd66139d69f340e87cb99b9205d0bd9b707d03f"
+PINNED_NET_SHA256 = "0aebf6172a43fcc31d08aa8c84c851542d4044daea4f54f8c11dfc64cb8b46b7"
 
 
 def pinned_source(repo=REPO):
@@ -52,6 +55,24 @@ def pinned_auth_source(repo=REPO):
     if hashlib.sha256(r.stdout).hexdigest() != PINNED_AUTH_SHA256:
         raise SystemExit("固定的舊版 auth.py 內容雜湊不符（blob %s）" % PINNED_AUTH_BLOB)
     return r.stdout.decode("utf-8")
+
+
+def pinned_net_source(repo=REPO):
+    r = subprocess.run(["git", "-C", str(repo), "cat-file", "blob", PINNED_NET_BLOB], capture_output=True)
+    if r.returncode != 0:
+        raise SystemExit("取不到固定的舊版 main.py（blob %s）" % PINNED_NET_BLOB)
+    if hashlib.sha256(r.stdout).hexdigest() != PINNED_NET_SHA256:
+        raise SystemExit("固定的舊版 main.py 內容雜湊不符（blob %s）" % PINNED_NET_BLOB)
+    return r.stdout.decode("utf-8")
+
+
+def extract_network(text):
+    """⇒ {"source_blob", "server_ip"}：舊版 main.py 的 CORS 預設清單裡，本機以外的那一個 IP（必須恰好一個）。"""
+    import re
+    ips = set(re.findall(r"https?://(\d{1,3}(?:\.\d{1,3}){3}):666", text)) - {"127.0.0.1"}
+    if len(ips) != 1:
+        raise SystemExit("舊版 main.py 的結構與預期不同，抽不出伺服器 IP（不印細節）")
+    return {"source_blob": PINNED_NET_BLOB, "server_ip": ips.pop()}
 
 
 def extract_auth(text):
@@ -109,7 +130,7 @@ def extract(text):
         raise SystemExit("舊版 db.py 的結構與預期不同，抽不出全部值（不印細節，避免洩漏）")
     h = lambda v: hashlib.sha256(v.encode("utf-8", "surrogatepass")).hexdigest()
     payload = {"v": FORMAT, "source_blob": PINNED_BLOB, "m008": {"correct": correct, "email": email}, "m106": {"company_name_en": name_en},
-               "auth": extract_auth(pinned_auth_source())}
+               "auth": extract_auth(pinned_auth_source()), "network": extract_network(pinned_net_source())}
     hashes = {"m008_old_names": sorted(h(v) for v in old_names), "m008_username": h(owner_user), "m106_tax_id": h(taxid),
               "auth_weak": sorted(h(v) for v in extract_auth(pinned_auth_source())["legacy_weak_passwords"])}
     values = {"old_names": old_names, "username": owner_user, "tax_id": taxid, "weak_passwords": payload["auth"]["legacy_weak_passwords"]}
@@ -128,6 +149,9 @@ def verify_payload(d):
         for k in keys:
             if not isinstance(s, dict) or not isinstance(s.get(k), str) or not s[k]:
                 probs.append("缺欄位 %s.%s" % (sec, k))
+    n = d.get("network")
+    if not isinstance(n, dict) or n.get("source_blob") != PINNED_NET_BLOB or not isinstance(n.get("server_ip"), str) or not n["server_ip"]:
+        probs.append("缺 network 區段或來源版本（source_blob）不符（用 add-auth 補）")
     a = d.get("auth")
     if not isinstance(a, dict) or a.get("source_blob") != PINNED_AUTH_BLOB:
         probs.append("缺 auth 區段或來源版本（source_blob）不符（用 add-auth 補）")
@@ -142,17 +166,17 @@ def add_auth(path):
     d = json.load(open(p, encoding="utf-8-sig"))
     if not isinstance(d, dict) or d.get("v") != FORMAT or d.get("source_blob") != PINNED_BLOB:
         return "OWN_PAYLOAD_REFUSED 不是這一版的資料檔（v／source_blob 不符）"
-    sec = extract_auth(pinned_auth_source())
-    if d.get("auth") == sec:
-        return "OWN_PAYLOAD_UNCHANGED auth 區段已是最新"
-    d["auth"] = sec
+    sec, net = extract_auth(pinned_auth_source()), extract_network(pinned_net_source())
+    if d.get("auth") == sec and d.get("network") == net:
+        return "OWN_PAYLOAD_UNCHANGED auth／network 區段已是最新"
+    d["auth"], d["network"] = sec, net
     tmp = p.with_name(p.name + ".tmp")
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         json.dump(d, f, ensure_ascii=False, indent=1)
         f.write("\n")
     import os
     os.replace(tmp, p)
-    return "OWN_PAYLOAD_UPDATED auth 區段已補上（值不顯示）"
+    return "OWN_PAYLOAD_UPDATED auth／network 區段已補上（值不顯示）"
 
 
 def main(argv=None):

@@ -1853,7 +1853,7 @@ def _validate_webauthn_pair(rp_id: str, origin: str) -> None:
 
     # IP 位址不能當 RP ID。W3C WebAuthn 規格要求 RP ID 是「可註冊網域後綴」，
     # IP 位址不具備這個性質，Chrome/Edge/Safari 一律直接拒絕註冊。
-    # 這一條特別容易踩到：這台正式機平常就是用 172.16.10.177:666 存取，
+    # 這一條特別容易踩到：正式機平常就是用 IP:666 存取，
     # 很自然會想直接把 IP 填進去——填了會存得進資料庫、前端 Passkey 按鈕
     # 也會亮起來（configured=true），但實際點下去只會拿到一句沒有上下文的
     # SecurityError，看起來像功能壞掉。必須先有內部 DNS 名稱指向這台機器。
@@ -2375,6 +2375,8 @@ def set_cloud_backup_target_setting(body: CloudBackupTargetBody, authorization: 
 
 # ── Email notification settings ───────────────────────────────────────────────
 
+from helpers.own_values import default_base_url as _own_default_base_url
+
 _EMAIL_DEFAULTS = {
     "enabled":       False,
     "smtp_host":     "smtp.gmail.com",
@@ -2382,7 +2384,7 @@ _EMAIL_DEFAULTS = {
     "smtp_user":     "",
     "smtp_password": "",
     "from_name":     "MOTRIX專案管理系統",
-    "base_url":      "https://172.16.10.177:666",  # 2026-08-27：見 backend/tools/https_setup.ps1
+    "base_url":      _own_default_base_url(),  # 2026-08-27：見 backend/tools/https_setup.ps1；本公司環境預設 https://<IP>:666，客戶環境空（去識別化）
     "dev_mode":      False,  # 開發機測試模式：寄出信件標題加註「【開發機測試】」，
                              # 存在本機 DB，不隨部署流程移動到正式機（2026-08-26）
 }
