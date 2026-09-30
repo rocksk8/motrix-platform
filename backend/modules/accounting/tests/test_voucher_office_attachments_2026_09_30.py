@@ -67,7 +67,7 @@ def test_other_document_types_keep_the_old_whitelist():
 
     with pytest.raises(HTTPException) as e:
         asyncio.run(go("quotations"))
-    assert e.value.status_code == 400 and "jpg/png/pdf" in e.value.detail and "docx" not in e.value.detail
+    assert e.value.status_code == 400 and "jpg/png/pdf" in e.value.detail and "/docx" not in e.value.detail   # 訊息只列 jpg/png/pdf（檔名 x.docx 本身會出現，所以比對「/docx」）
     assert up._EXTRA_EXTS_BY_SUBFOLDER.keys() == {"voucher_attachments"}
 
 
