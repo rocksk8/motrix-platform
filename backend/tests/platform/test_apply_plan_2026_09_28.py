@@ -672,7 +672,7 @@ def test_d2s1_refusal_is_reported_as_plan_refused_before_plan_failed():
 
 #: core.paths 裡本來就是程式（隨包出貨）的常數
 _PROGRAM_PATHS = {"BACKEND_DIR", "INSTALL_ROOT", "STATIC_DATA_DIR", "FRONTEND_DIR", "FRONTEND_PAGES_DIR",
-                  "VERSION_MANIFEST", "BUILD_COMMIT_FILE"}
+                  "VERSION_MANIFEST", "BUILD_COMMIT_FILE", "FORM_TEMPLATES_DIR"}     # FORM_TEMPLATES_DIR：建構器內建範本（隨包出貨的 JSON，不是執行期寫入位置）
 
 
 def _runtime_path_constants():
