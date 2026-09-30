@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — 2026-10-01（wip/w1-a2-0：A2 費用單據的底層預留切片，一次到位；之後各類型只動模組）
+## 1.92 — 2026-10-01（wip/w1-a2-0：A2 費用單據的底層預留切片，一次到位；之後各類型只動模組）
 - L0（新增）：`core.definitions.register_kind(kind, label="", validator=None, default=None)`／`kinds()`／`kinds_meta()`——定義種類可登記（內建四種不變；重複登記或覆寫內建 ⇒ ValueError）；`save_draft／publish／list_definitions／…` 認得登記的種類。路由 `GET /api/definition-kinds`（超級管理員）。
 - L1（新增）：`helpers.tiered_approval.register_doc_type(code, label, unified=False)`／`doc_types_meta()`（就地擴充 `APPROVAL_DOC_TYPES／DEFAULT_UNIFIED_DOC_TYPES／APPROVAL_DOC_TYPE_LABELS`）；路由 `GET /api/settings/approval-doc-types`。`PUT /api/settings/approval-flow-scope` 由固定欄位模型改成依登記表驗證（鍵＝目前全部單據類型、值＝布林；缺／多／非布林 ⇒ 422，與原行為一致）；簽核設定頁接上登記的類型。
 - L1（新增）簽核佇列項目契約（選用欄位，舊項目不變）：`typeLabel`（未知 type 自帶標籤；內建不被覆寫）、`openUrl／approveUrl／rejectUrl／rejectField`（前端優先使用）、`caseless: True`（不掛案件的單據：簽核鏈上的人與送審人＋超級管理員可開，其餘 404；項目與 `approval.detail` 同一個判斷 `_access_step(caseless=)`）。

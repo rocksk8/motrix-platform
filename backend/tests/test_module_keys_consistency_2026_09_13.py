@@ -39,7 +39,6 @@ AUTH_PY = os.path.join(ROOT, "backend", "helpers", "auth.py")
 UNREAD_BY_DESIGN = {
     # A2-0 #13 預留：key 與目錄先進底層（一次），讀它的端點由 A2-1（W2，modules/case 額外支出的無案件新增）同一班上；
     # 那支一讀它，下面的 test_unread_by_design_entries_are_really_unread 會紅，逼著把這一筆刪掉。
-    "expense_forms": "A2-0 預留；A2-1 的無案件新增端點會讀它",
 }
 
 # 後端會擋、但刻意不出現在權限目錄的 key：{key: 原因}

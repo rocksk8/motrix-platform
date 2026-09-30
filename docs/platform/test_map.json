@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 932,
+  "tests": 941,
   "unmapped": 12,
   "kinds": {
-   "api": 500,
-   "e2e": 219,
+   "api": 505,
+   "e2e": 221,
    "audit": 128,
-   "unit": 85
+   "unit": 87
   },
-  "routes": 699
+  "routes": 711
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -206,6 +206,38 @@
    },
    "module": "accounting"
   },
+  "backend/modules/accounting/tests/test_category_map_g1_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_category_map",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/category_map",
+    "mod:accounting/ledger/roles",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/accounting/api/ledger_category_map.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/category_map.py",
+     "backend/modules/accounting/ledger/roles.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_category_map.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
   "backend/modules/accounting/tests/test_custom_account_items_2026_09_23.py": {
    "kind": "api",
    "units": [
@@ -362,6 +394,28 @@
    },
    "module": "accounting"
   },
+  "backend/modules/accounting/tests/test_e2e_ledger_category_map_2026_10_01.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/ledger-settings.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/ledger-settings.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
   "backend/modules/accounting/tests/test_e2e_ledger_export_pdf_2026_09_30.py": {
    "kind": "e2e",
    "units": [
@@ -429,6 +483,7 @@
     "dir:backend/modules/accounting/",
     "file:backend/tests/_e2e_login.py",
     "mod:accounting/api/ledger_annotations",
+    "mod:accounting/api/ledger_category_map",
     "mod:accounting/api/ledger_closing",
     "mod:accounting/api/ledger_engine",
     "mod:accounting/api/ledger_periods",
@@ -454,6 +509,7 @@
     ],
     "api": [
      "backend/modules/accounting/api/ledger_annotations.py",
+     "backend/modules/accounting/api/ledger_category_map.py",
      "backend/modules/accounting/api/ledger_closing.py",
      "backend/modules/accounting/api/ledger_engine.py",
      "backend/modules/accounting/api/ledger_periods.py",
@@ -6098,6 +6154,35 @@
    "login_fixture": true,
    "module": "netplan"
   },
+  "backend/modules/payroll/tests/test_bank_account_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/__init__",
+    "mod:payroll/api/bank_account",
+    "mod:payroll/bank_account",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/bank_account.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bank_account.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
   "backend/modules/payroll/tests/test_bn10_award_detail_2026_09_24.py": {
    "kind": "api",
    "units": [
@@ -7003,6 +7088,31 @@
     ]
    },
    "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_e2e_bank_account_2026_10_01.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/bank-account.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/bank-account.html"
+    ],
+    "path": [
+     "frontend/pages/bank-account.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
    "module": "payroll"
   },
   "backend/modules/payroll/tests/test_e2e_bonus_case_page_2026_09_24.py": {
@@ -8459,6 +8569,7 @@
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
+    "mod:payroll/api/bank_account",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -8471,6 +8582,7 @@
     "router:company_lookup",
     "router:custom_records",
     "router:customers",
+    "router:definitions",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
@@ -8496,6 +8608,7 @@
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
+     "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
@@ -8508,6 +8621,7 @@
      "backend/routers/company_lookup.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
+     "backend/routers/definitions.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
@@ -9920,6 +10034,33 @@
     ]
    }
   },
+  "backend/tests/platform/test_approval_queue_item_contract_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/routers/__init__.py",
+    "helper:approval_queue",
+    "plat:__init__",
+    "plat:registry",
+    "router:approval_queue"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/helpers/approval_queue.py",
+     "backend/routers/__init__.py",
+     "backend/routers/approval_queue.py"
+    ],
+    "api": [
+     "backend/routers/approval_queue.py"
+    ]
+   },
+   "unresolved_api": [
+    "/api/x/1/approve",
+    "/api/x/1/reject"
+   ],
+   "login_fixture": true
+  },
   "backend/tests/platform/test_approval_queue_l1.py": {
    "kind": "api",
    "units": [
@@ -11077,6 +11218,23 @@
    },
    "login_fixture": true
   },
+  "backend/tests/platform/test_doc_render_2026_10_01.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:custom_modules",
+    "helper:doc_render",
+    "helper:doc_template"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/custom_modules.py",
+     "backend/helpers/doc_render.py",
+     "backend/helpers/doc_template.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_drill_module_apply_2026_09_28.py": {
    "kind": "audit",
    "units": [
@@ -11275,6 +11433,7 @@
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
+    "mod:payroll/api/bank_account",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -11313,6 +11472,7 @@
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
+     "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
@@ -11715,6 +11875,25 @@
     ],
     "path": [
      "backend/helpers/email_notify.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_mail_send_registered_2026_10_01.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/platform/test_mail_registry.py",
+    "helper:email_notify",
+    "helper:mail_types",
+    "helper:notification_prefs"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/mail_types.py",
+     "backend/helpers/notification_prefs.py",
+     "backend/tests/platform/test_mail_registry.py"
     ]
    }
   },
@@ -12263,6 +12442,7 @@
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
+    "mod:payroll/api/bank_account",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -12279,6 +12459,7 @@
     "router:company_lookup",
     "router:custom_records",
     "router:customers",
+    "router:definitions",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
@@ -12311,6 +12492,7 @@
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
+     "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
@@ -12323,6 +12505,7 @@
      "backend/routers/company_lookup.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
+     "backend/routers/definitions.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
@@ -13756,6 +13939,24 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_approval_doc_type_registry_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:tiered_approval",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/tiered_approval.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_approval_flow_scope.py": {
    "kind": "api",
    "units": [
@@ -14202,6 +14403,7 @@
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
+    "mod:payroll/api/bank_account",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -14216,6 +14418,7 @@
     "router:company_lookup",
     "router:custom_records",
     "router:customers",
+    "router:definitions",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
@@ -14243,6 +14446,7 @@
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
+     "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
@@ -14255,6 +14459,7 @@
      "backend/routers/company_lookup.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
+     "backend/routers/definitions.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
@@ -16549,6 +16754,26 @@
     ],
     "api": [
      "backend/routers/custom_records.py",
+     "backend/routers/definitions.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_definition_kinds_registry_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "plat:__init__",
+    "plat:definitions",
+    "plat:migrations",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/core/migrations.py"
+    ],
+    "api": [
      "backend/routers/definitions.py"
     ]
    },
@@ -21308,6 +21533,7 @@
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
+    "mod:payroll/api/bank_account",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -21325,6 +21551,7 @@
     "router:company_lookup",
     "router:custom_records",
     "router:customers",
+    "router:definitions",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
@@ -21352,6 +21579,7 @@
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
+     "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
@@ -21364,6 +21592,7 @@
      "backend/routers/company_lookup.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
+     "backend/routers/definitions.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
@@ -22372,6 +22601,7 @@
     "mod:accounting/api/account_items",
     "mod:accounting/api/accounting_export",
     "mod:accounting/api/ledger_annotations",
+    "mod:accounting/api/ledger_category_map",
     "mod:accounting/api/ledger_periods",
     "mod:accounting/api/ledger_reports",
     "mod:accounting/api/ledger_requests",
@@ -22393,6 +22623,7 @@
     "mod:lodging/api",
     "mod:lodging/api_records",
     "mod:netplan/api",
+    "mod:payroll/api/bank_account",
     "mod:payroll/api/bonus",
     "mod:payroll/api/bonus_correction",
     "mod:payroll/api/payslips",
@@ -22442,6 +22673,7 @@
      "backend/modules/accounting/api/account_items.py",
      "backend/modules/accounting/api/accounting_export.py",
      "backend/modules/accounting/api/ledger_annotations.py",
+     "backend/modules/accounting/api/ledger_category_map.py",
      "backend/modules/accounting/api/ledger_periods.py",
      "backend/modules/accounting/api/ledger_reports.py",
      "backend/modules/accounting/api/ledger_requests.py",
@@ -22463,6 +22695,7 @@
      "backend/modules/lodging/api.py",
      "backend/modules/lodging/api_records.py",
      "backend/modules/netplan/api.py",
+     "backend/modules/payroll/api/bank_account.py",
      "backend/modules/payroll/api/bonus.py",
      "backend/modules/payroll/api/bonus_correction.py",
      "backend/modules/payroll/api/payslips.py",
