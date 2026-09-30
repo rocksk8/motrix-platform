@@ -165,5 +165,5 @@
 
 ## 去識別化裁示（12:5x 主持）
 - core/upgrade.py 本公司識別：sale 包剪裁整段 V9 升級補欄位（守門：sale 包不得含）。
-- helpers/auth.py `_LEGACY_WEAK_PASSWORDS` 兩個真實舊密碼：移 own_payload；本公司環境行為不變、客戶包不含；own 建包缺 payload 即失敗。**提醒使用者：這兩個舊密碼若仍在任何系統使用，應更換。**
+- helpers/auth.py `_LEGACY_WEAK_PASSWORDS` 兩個真實舊密碼：移 own_payload；本公司環境行為不變、客戶包不含；own 建包缺 payload 即失敗。（使用者 13:0x 確認：兩個密碼未在任何系統使用，只用於開發測試 ⇒ 不需更換；移出 repo 仍照做。）
 - 正式機內網 IP 172.16.10.177 寫死（main.py CORS、email_notify、system.py、notification-settings.html）：另案排下下班——改讀設定、預設空、migration 寫入正式機現值（行為不變）。
