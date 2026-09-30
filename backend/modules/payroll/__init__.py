@@ -5,8 +5,9 @@ from core.registry import ModuleSpec
 
 import importlib
 
-from modules.payroll import attachments, bonus, bonus_payouts, bonus_queue, payslip_payouts
+from modules.payroll import bonus, bonus_payouts, bonus_queue, payslip_payouts
 from modules.payroll.api import bonus as bonus_api, payslips as payslips_api
+from modules.payroll import attachments   # 要在 api 之後：提供者用 payslips 的 _signed_path／_archive_dir
 
 _m0001 = importlib.import_module("modules.payroll.migrations.0001_payslip_void_signed_paid")
 
