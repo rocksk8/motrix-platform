@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """L1 單據輸出的公開入口 `render_document`（A2-0 #7）：版型＋單據視圖 ⇒ 完整 HTML（交給 `html_to_pdf_bytes` 轉 PDF）。
 
-[單位] plat:doc_render    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
+[單位] helper:doc_render    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] render_document
+[契約題] tests/platform/test_doc_render_2026_10_01.py
 [不變式] 核可狀態由程式決定、不由版型決定：`view["unapproved"]` 為真 ⇒ 一律補紅色橫幅＋每頁標示（冪等）；
     抬頭／頁尾用公司身分（總公司據點）；簽核欄用與財務單據相同的共用元件
 
