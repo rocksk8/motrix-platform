@@ -119,5 +119,5 @@ def gl_events(start, end, *, changed_since=""):
     if no_withhold:
         notices.append("%d 張匯款單含個人點工（未關聯勞報單）：以專案成本／應付帳款認列，未扣繳所得稅與二代健保，請改開勞報單。" % no_withhold)
     if estimated:
-        notices.append("%d 筆承攬商發票的進項稅額是估計稅額：依派工稅率估算（派工沒填稅率時以 5% 估算）；實際發票稅額不同時，請在來源憑證補登（input_tax）。" % estimated)
+        notices.append("%d 筆承攬商發票的進項稅額是估計稅額：依派工稅率估算（派工沒填稅率時以 5%% 估算）；實際發票稅額不同時，請在來源憑證補登（input_tax）。" % estimated)
     return {"events": events, "notice": " ".join(notices)}
