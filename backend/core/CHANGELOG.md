@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.76 — 2026-09-30（暫用號；wip/w2-attach-p2：附件目錄 P2，IP-105）
+- L1（新增）：`helpers.uploads.ATTACHMENTS_CATALOG`（capability 名 `attachments.catalog`）、`OpenedFile`（`abs_path, filename, mime, size`）、`pick_file(files, file_id)`、`opened_upload_file(entry)`；`routers/attachments.py`：`GET /api/attachments/open?type=&doc=&file=`（找認領 type 的提供者 ⇒ `open()`；看不到＝查無＝404；實體檔必須在 uploads 或提供者宣告的 `ROOTS` 之下）。`save_document_files` 與既有 `attachments.for_document`／`uploads.path_access` 不變。
+
 ## 1.75 — 2026-09-30（列車 25 合併補號；wip/w1-builder3 c98f5bcc 的 L1 新增，原寫在 1.73 段但 1.74 已被行事曆開關取用）
 - L1（新增）：`core.paths.FORM_TEMPLATES_DIR`（自訂模組內建範本資料夾；原本用 `__file__` 算，違反 core.paths 守門）
 
