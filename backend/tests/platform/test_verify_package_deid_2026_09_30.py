@@ -168,5 +168,5 @@ def test_commented_switches_do_not_count_as_enabled(tmp_path):
 def test_template_is_ascii_only_and_has_no_company_data():
     raw = TEMPLATE.read_bytes()
     assert all(b < 128 for b in raw), "範本刻意只用 ASCII（cmd 在 chcp 之前就會讀到內容）"
-    for needle in (b"Motrix", b"miactw", b"172.16", b"C:\Users"):
+    for needle in (b"Motrix", b"miactw", b"172.16", b"C:" + bytes([92]) + b"Users"):
         assert needle not in raw
