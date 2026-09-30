@@ -1764,6 +1764,26 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:js/expense-types.js": {
+   "api_calls": [
+    "/api/definitions/",
+    "/api/settings/approval-doc-types"
+   ],
+   "api_prefixes": [
+    "/api/definitions",
+    "/api/settings"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/js/expense-types.js",
+   "routers_called": [
+    "router:definitions",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:js/ledger-hub.js": {
    "api_calls": [
     "/api/ledger/annotations",
@@ -11488,6 +11508,34 @@
    "routers_called_effective": [
     "mod:analytics/api/dashboard",
     "router:auth",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "page:pages/expense-types.html": {
+   "api_calls": [
+    "/api/system/branding/favicon"
+   ],
+   "api_prefixes": [
+    "/api/system"
+   ],
+   "api_unmatched": [],
+   "imports": [
+    "js:js/expense-types.js",
+    "js:static/auth-guard.js",
+    "js:static/form-preview.js",
+    "js:static/notif.js",
+    "js:static/sidebar.js",
+    "js:static/ui.js"
+   ],
+   "kind": "page",
+   "path": "frontend/pages/expense-types.html",
+   "routers_called": [
+    "router:system"
+   ],
+   "routers_called_effective": [
+    "router:definitions",
     "router:system"
    ],
    "tables_r": [],
