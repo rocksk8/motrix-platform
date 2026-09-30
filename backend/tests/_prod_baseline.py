@@ -12,6 +12,7 @@
 📌 2026-09-28 16:33（記錄時間）：正式機已部署 54a2d6b6（第十六班；主持確認地圖 28g、標案雷達 28h 已出貨）⇒ 基準改 54a2d6b6。
 📌 2026-09-29 04:28：正式機已更新到 29e435df（第二十、二十一班合成一次上線，RUN-PLAN §6）⇒ 基準改 29e435df；第二十二班列車才發現漏更新（VR3 把已出貨的 29a／28k 當未出貨）。
 📌 2026-09-30：正式機已是 a806ba19（第二十三班勞報單，RUN-PLAN §6；第二十二班 b6182dbf 亦已上線）⇒ 基準改 a806ba19（W3 標案雷達 1.5.2 新條目 VR3 交會才發現仍停在 29e435df）。
+📌 2026-09-30 11:22：正式機已更新到 0c20864a（第二十四班，RUN-PLAN §6）⇒ 基準改 0c20864a。
 """
 import json
 import subprocess
@@ -20,7 +21,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "a806ba19"
+BASELINE = "0c20864a"
 
 
 def baseline_manifest():
