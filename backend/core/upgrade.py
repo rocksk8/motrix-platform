@@ -645,6 +645,7 @@ def add_missing_settings(db_path: str, new_settings: dict = None) -> dict:
 
 
 
+# >>> OWN-ONLY:v9-company-defaults（sale 包由 product/sale_prune.json 剪掉這一段，換成空預設；客戶包不含任何公司預設值）
 # ── 公司資料只補空值（主持 2026-09-25，A8c 的升級側）────────────────────────────
 #
 # A8c 把報表／網路規劃裡寫死的聯絡資料改從 company_identity 取；正式機的 company_profile
@@ -663,6 +664,8 @@ V9_COMPANY_DEFAULTS = {
     "phone": "04-3610-6566",
     "email": "info@miactw.com",
 }
+# <<< OWN-ONLY:v9-company-defaults
+
 #: company_identity 讀的別名（任一個有值就算「已有值」）。⚠ 必須與 helpers.company_identity._PROFILE_ALIASES
 #: 相同（本檔不 import app；tests/test_company_contact_a8c 比對兩份）。注意 V9 種子形狀的 `name`
 #: **不在**別名裡——company_identity 不讀它 ⇒ 公司名空白時先沿用 `name`（使用者自己的資料），沒有才用常數。
@@ -686,10 +689,12 @@ def _contact_info_parts(profile: dict) -> dict:
     return {"phone": p.group(0).strip() if p else "", "email": email}
 
 
+# >>> OWN-ONLY:is-our-install
 def _is_our_install(profile: dict) -> bool:
     """只認統編（COMPANY-SETUP-GATE §2-④）：公司名不當判準（別家公司名可能含同樣的字）。"""
     tax = re.sub(r"\D", "", str(profile.get("taxId") or profile.get("tax_id") or ""))
     return tax == V9_COMPANY_DEFAULTS["tax_id"]
+# <<< OWN-ONLY:is-our-install
 
 
 def fill_company_profile_blanks(db_path: str) -> dict:
