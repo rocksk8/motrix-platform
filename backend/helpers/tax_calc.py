@@ -114,6 +114,21 @@ def norm_ymd(v) -> str:
         return s[:10]
 
 
+def receipt_amounts(receivable: float, actual, fee) -> tuple:
+    """一筆已收款項的三個金額 ⇒ `(bank, gross, fee)`（2026-09-30 使用者裁示，正式機案件 MQ-202607-045 第 2 期交貨款）。
+
+    語意（單一來源；報表、案件財務彙總、案件結算單、T100 收款傳票都用這一支，不各寫一份）：
+    - `bank`（銀行實際入帳）＝`actualAmount`（實收金額，**已扣客戶內扣手續費**）；沒填 ⇒ 應收 − 手續費（舊行為）。
+    - `gross`（收入，含稅）＝`bank + fee`：客戶該付的金額，手續費是公司的費用、另列支出，**不從收入扣**。
+    - 淨額＝`bank`：**不再減手續費**（實收已經是扣過的；再減一次＝手續費扣兩次）。
+    損益＝`gross − fee(列費用) − 其他支出`＝`bank − 其他支出`，與銀行帳一致。
+    歷史資料不改，只改計算。
+    """
+    fee = float(fee or 0)
+    bank = float(actual) if actual is not None else float(receivable or 0) - fee
+    return bank, bank + fee, fee
+
+
 def payment_item_amounts(total: float, pay_items: list, pretax: float = None,
                           apply_tax_exempt: bool = True) -> list:
     """Return the effective **receivable** amount for each payment item, in order.
@@ -201,9 +216,9 @@ def summarize_payment_items(total: float, pay_items: list, pretax: float = None)
         rcvd = bool(pi.get("received"))
         aa   = pi.get("actualAmount")
         fee  = pi.get("feeAmount") or 0
-        # 已收款項的「實際入帳淨額」：有填實收金額就用實收（匯差/短收），
-        # 沒填就用應收金額，再扣掉手續費——對應前端 netReceivedTotal()。
-        net  = ((aa if aa is not None else amt) - fee) if rcvd else None
+        # 已收款項的「實際入帳淨額」＝銀行入帳（receipt_amounts；實收已扣客戶內扣手續費，不再減一次；
+        # 沒填實收 ⇒ 應收 − 手續費）——對應前端 netReceivedTotal()。
+        net  = receipt_amounts(amt, aa, fee)[0] if rcvd else None
         receivable += amt
         if rcvd:
             collected     += amt          # 對應前端 receivedTotal()（用應收金額，非實收）

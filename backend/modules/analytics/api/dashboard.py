@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Header, Query
 
 from db import db_conn
 from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_ymd, norm_at,
-                     user_has_module, can_see_financial,
+                     user_has_module, can_see_financial, receipt_amounts,
                      require_any_module, _get_setting, _set_setting)
 from helpers import row_access
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
@@ -216,7 +216,8 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
                     recv_received += amt
                     recv_fee      += p.get("feeAmount") or 0
                     act_amt        = p.get("actualAmount")
-                    recv_actual   += act_amt if act_amt is not None else amt
+                    # 2026-09-30：實收＝銀行入帳（已扣客戶內扣手續費）⇒ 實收淨額＝入帳，不再減手續費
+                    recv_actual   += receipt_amounts(amt, act_amt, p.get("feeAmount"))[0]
         except Exception:
             pass
 
@@ -259,7 +260,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
             "received":    recv_received                     if can_finance else 0,
             "unreceived":  (recv_total - recv_received)      if can_finance else 0,
             "feeTotal":    recv_fee                          if can_finance else 0,
-            "netReceived": (recv_actual - recv_fee)          if can_finance else 0,
+            "netReceived": recv_actual                       if can_finance else 0,
         },
     }
 
@@ -311,7 +312,7 @@ def dashboard_monthly(department_id: Optional[int] = Query(None), authorization:
                 if not mo:
                     continue
                 act_amt = p.get("actualAmount")
-                amt = act_amt if act_amt is not None else amounts[i]
+                amt = receipt_amounts(amounts[i], act_amt, p.get("feeAmount"))[1]   # 收入（含手續費）；net＝amount−fee＝銀行入帳
                 monthly_amount[mo] = monthly_amount.get(mo, 0) + amt
                 monthly_count[mo]  = monthly_count.get(mo, 0) + 1
                 monthly_fee[mo]    = monthly_fee.get(mo, 0) + (p.get("feeAmount") or 0)

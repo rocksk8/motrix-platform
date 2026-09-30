@@ -15,6 +15,7 @@
   另：`from … import SQL_DEAL_TAG as _T` 這種 **import 別名**追不到（只認常數的原名；稽核 D T13-S1b，列 ROADMAP 下一輪）。
 - 判準：每個檔的次數 ≤ 基線（json_extract_baseline.json）；基線沒有的檔出現 ⇒ 紅；降下來了 ⇒ 同一個 commit 重產基線
   （`python tests/platform/test_json_extract_ratchet.py --update`），不調的話之後加回去會照綠。模組不在（選配）⇒ 它的條目不比。
+- 基線**增加**的例外（主持裁示才准）：理由寫在 json_extract_baseline_reasons.md（每筆一行；日後降下來時同一個 commit 刪掉）。
 """
 import ast
 import json

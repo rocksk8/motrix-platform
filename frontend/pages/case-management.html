@@ -1906,7 +1906,7 @@
                       <div>
                       <div x-show="!moneyMasked()" class="pay-grid" style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-light)">
                         <div>
-                          <label class="fi-label" :for="'pay-' + item.id + '-actual'">實收金額（含稅）<span class="fi-req" title="已收款的期別必填">*</span></label>
+                          <label class="fi-label" :for="'pay-' + item.id + '-actual'">實收金額（銀行實際入帳，已扣客戶內扣手續費）<span class="fi-req" title="已收款的期別必填">*</span></label>
                           <div style="position:relative">
                             <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
                             <input class="fi fi--sm" type="text" inputmode="decimal" :data-num="'act-' + item.id" :id="'pay-' + item.id + '-actual'" aria-required="true"
@@ -2136,7 +2136,7 @@
                         </div>
                         <div class="cm-kpi__pill" style="cursor:pointer" @click="finShowRecvDetail = true; $nextTick(() => document.getElementById('fin-recv-detail')?.scrollIntoView({behavior:'smooth',block:'start'}))" :style="finShowRecvDetail ? 'opacity:0.8' : ''">
                           <span class="cm-kpi__val" x-text="caseSettleFmt(finReceivable().netCollected)"></span>
-                          <span class="cm-kpi__lbl">實收淨額（扣手續費 <span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="caseSettleFmt(finReceivable().feeTotal)"></span>）</span>
+                          <span class="cm-kpi__lbl">實收淨額（銀行入帳；客戶內扣手續費 <span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="caseSettleFmt(finReceivable().feeTotal)"></span> 另列費用）</span>
                         </div>
                       </div>
 

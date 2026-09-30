@@ -713,7 +713,7 @@
                               <td x-text="it.customer"></td>
                               <td x-text="it.salesPerson"></td>
                               <td x-text="it.type"></td>
-                              <td class="r mono" x-text="fmt(it.actualAmount !== null ? it.actualAmount : it.amount)"></td>
+                              <td class="r mono" x-text="fmt(it.netAmount !== null && it.netAmount !== undefined ? it.netAmount : it.amount)"></td>
                               <td class="c mono" x-text="it.receivedAt"></td>
                             </tr>
                           </template>
@@ -978,6 +978,10 @@
             <input type="text" x-model="t100Config.remitFeeAccount" :disabled="_role()!=='superadmin'" data-testid="t100-remit-fee-account" style="width:100%;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;box-sizing:border-box">
             </div>
             <div>
+            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">收款手續費支出（客戶內扣，選填）</label>
+            <input type="text" x-model="t100Config.receiptFeeAccount" data-testid="t100-receipt-fee-account" :disabled="_role()!=='superadmin'" style="width:100%;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;box-sizing:border-box">
+            </div>
+            <div>
             <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">部門別（選填）</label>
             <input type="text" x-model="t100Config.departmentCode" :disabled="_role()!=='superadmin'" style="width:100%;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;box-sizing:border-box">
             </div>
@@ -1123,9 +1127,9 @@
       <div class="modal-body">
         <label class="field-label">收款日期</label>
         <input type="date" class="field-input" x-model="receiveDate">
-        <label class="field-label">實收金額（含稅）</label>
+        <label class="field-label">實收金額（銀行實際入帳金額，已扣客戶內扣手續費）</label>
         <input type="number" min="0" class="field-input" x-model.number="receiveActualAmount">
-        <label class="field-label">手續費 / 扣款</label>
+        <label class="field-label">手續費 / 扣款（客戶內扣；另列費用，不再從實收扣）</label>
         <input type="number" min="0" class="field-input" x-model.number="receiveFeeAmount">
         <div x-show="receiveAmountError()" x-text="receiveAmountError()"
              style="margin:-4px 0 8px;font-size:12px;color:#B91C1C;font-family:var(--font-zh)"></div>

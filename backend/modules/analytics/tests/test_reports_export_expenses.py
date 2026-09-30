@@ -66,7 +66,7 @@ def test_excel_export_includes_expenses_sheet_and_month_grouped_cases(client, ma
     _make_case_with_expense("MQ-XLSX-001", 3)
     _make_case_with_expense("MQ-XLSX-002", 7)
 
-    r = client.get("/api/reports/financial/excel?period=2026", headers=_auth(token))
+    r = client.get("/api/reports/financial/excel?period=2026&basis=accrual", headers=_auth(token))
     assert r.status_code == 200, r.text
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
     assert "當月收支" in wb.sheetnames
@@ -106,7 +106,7 @@ def test_pdf_html_includes_expenses_and_month_grouped_cases(client, make_user):
     label, d0, d1 = _parse_period("2026")
     data = _augment_with_targets(_collect(d0, d1, None), d0)
     data["arAging"] = _compute_ar_aging()
-    data.update(_build_income_expense_scopes(2026, "2026-05", None))
+    data.update(_build_income_expense_scopes(2026, "2026-05", None, basis="accrual"))
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     html = _build_report_html(data, label, gen_at)
