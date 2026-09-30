@@ -149,18 +149,25 @@ def _read(conn, source_type, doc_no):
     raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
 
 
+#: 額外支出的**舊版**附件資料夾（DB v75 之前：精算頁 `settlement.extraItems[]` 的附件，鍵＝`{案件編號}_{舊陣列索引}`）。
+#: v75 只搬 metadata、沒搬檔案，所以正式機的額外支出列（`files_json`）至今仍指向這個資料夾。索引是當年的陣列位置、不是現在的列 id，
+#: 所以**只綁案件**（鍵的案件編號＝那一列的 quote_no），不比索引；別的案件的路徑一律不收。
+LEGACY_EXTRA_FOLDER = "quotation_settlement_extra"
+
 class _CasePathAccess:
     """`uploads.path_access`（IP-104，2026-09-30 P0）：M01 存的上傳檔 ⇒ 擁有單據 ⇒ 那張單據自己的讀取規則。
 
     | 資料夾 | 其餘各段 | 規則 |
     |---|---|---|
     | quotations／quotation_payment_items／quotation_materials／quotation_materials_invoices／case_updates／case_extra_expense | `單號/檔名` | 同 `_READ_RULE`（附件提供者；可見範圍＝原單據） |
+    | quotation_settlement_extra（額外支出的舊版資料夾） | `案件編號_舊索引/檔名` | 只綁案件：該案某筆額外支出的 files_json 真的列了這個路徑 ∧ 額外支出的讀取規則 |
     | completion_notes | `完工單號/檔名` | 完工單清單 `guard_case_access(allow_module="case_manage")`＝`case_documents_readable` |
     | _pending_case_changes | `變更id/案件編號_序號/檔名` | 變更申請存在且屬於該案 ∧（申請人本人 ∨ 案件頁規則 `case_page_readable`） |
     """
     _FOLDER_SOURCE = {"quotations": "quotation_signed", "quotation_payment_items": "payment_item",
                       "quotation_materials": "material", "quotation_materials_invoices": "material_invoice",
-                      "case_updates": "case_update", "case_extra_expense": "extra_expense"}
+                      "case_updates": "case_update", "case_extra_expense": "extra_expense",
+                      LEGACY_EXTRA_FOLDER: "extra_expense_legacy"}
     FOLDERS = tuple(_FOLDER_SOURCE) + ("completion_notes", "_pending_case_changes")
 
     @staticmethod
@@ -188,6 +195,15 @@ class _CasePathAccess:
             quote_no, idx = _quote_and_index(key)
             if idx is None:
                 return False
+        elif st == "extra_expense_legacy":                # 舊版 `{案件編號}_{舊索引}`：只綁案件——該案的某筆額外支出的 files_json 真的列了這個路徑
+            quote_no, idx = _quote_and_index(key)
+            if idx is None:
+                return False
+            rel = "%s/%s/%s" % (folder, key, rest[1])
+            rows = conn.execute("SELECT files_json FROM case_extra_expenses WHERE quote_no = ?", (quote_no,)).fetchall()
+            if not any(rel in (r["files_json"] or "") for r in rows):
+                return False
+            st = "extra_expense"
         elif st == "extra_expense":                       # `{案件編號}_{額外支出 id}`：那一列要真的掛在該案
             quote_no, eid = _quote_and_index(key)
             if eid is None or conn.execute("SELECT 1 FROM case_extra_expenses WHERE id = ? AND quote_no = ?",
@@ -210,6 +226,13 @@ def _path_bound_to_doc(conn, source_type, doc_no, entry):
     額外支出＝`<案件>_<id>` 全等。"""
     from helpers.uploads import upload_path_key
     key = upload_path_key(entry, _CATALOG_FOLDER[source_type])
+    if key is None and source_type == "extra_expense":
+        legacy = upload_path_key(entry, LEGACY_EXTRA_FOLDER)          # 舊版資料夾：只綁案件
+        if legacy is None:
+            return False
+        quote_no = _quote_of(conn, source_type, doc_no)
+        base, idx = _quote_and_index(legacy)
+        return quote_no is not None and idx is not None and base == quote_no
     if key is None:
         return False
     if source_type in ("quotation_signed", "case_update", "completion_note"):
