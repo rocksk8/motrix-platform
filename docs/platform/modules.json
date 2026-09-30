@@ -440,6 +440,7 @@
     "page:pages/ledger-hub.html",
     "mod:accounting/ledger/features",
     "mod:accounting/ledger/inventory",
+    "mod:accounting/api/ledger_annotations",
     "mod:accounting/api/ledger_closing",
     "mod:accounting/ledger/closing",
     "mod:accounting/ledger/export",
