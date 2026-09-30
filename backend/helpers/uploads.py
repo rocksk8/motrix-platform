@@ -15,6 +15,7 @@ UPLOADS_ROOT 刻意跟 routers/projects.py 各自獨立計算一份（而不是�
 #: L1 以外只可以用這裡列出的底線名稱（守門：test_l1_interface_snapshot::test_l2_uses_only_declared_l1_underscore_names）。
 __l1_public__ = (
     "_effective_subfolder",
+    "_check_upload_magic",          # 檔頭檢查唯一關卡：自有存檔邏輯的 L2（勞報單回簽檔）也呼叫同一支（2026-09-30）
 )
 
 import json
