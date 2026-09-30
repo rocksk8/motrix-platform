@@ -1018,7 +1018,8 @@ def set_dispatch_invoice_date(did: int, body: dict = Body(...), authorization: s
         conn.close()
     _audit(_tok(authorization), "vendor.dispatch.invoice_date", "contractor_dispatch", str(did),
            "%s 發票日期：%s → %s" % (row["quote_no"], row["invoice_date"] or "（未登錄）", inv or "（未登錄）"))
-    return {"ok": True, "invoiceDate": inv, "updated_at": now, **({"glWarning": gl_warn} if gl_warn else {})}
+    return {"ok": True, "invoiceDate": inv, "updated_at": now,
+            **({"glWarning": gl_warn.replace("此筆", "此筆（派工單 %s／%s）" % (did, row["quote_no"]), 1)} if gl_warn else {})}
 
 
 # ── 驗收流程節點 ──────────────────────────────────────────────────────────────

@@ -74,7 +74,8 @@ def test_unmarking_a_posted_receipt_returns_glwarning(client, conn, make_user):
     h = _admin(client, make_user)
     r = client.patch("/api/quotations/MQ-GW-001/payment/0", headers=h, json={"received": False, "receivedAt": "", "itemId": "it1"})
     assert r.status_code == 200, r.text
-    assert "已入總帳" in (r.json().get("glWarning") or "")
+    w = r.json().get("glWarning") or ""
+    assert "已入總帳" in w and "MQ-GW-001" in w, w                              # 要說得出是哪一筆（W1 複核）
 
 
 def test_unmarking_a_not_posted_receipt_has_no_warning(client, conn, make_user):
@@ -94,7 +95,8 @@ def test_case_record_save_changing_a_posted_receipt_returns_glwarning(client, co
             "actualAmount": 29000, "feeAmount": 1000, "invoiceNo": ""}
     r = client.patch("/api/quotations/MQ-GW-003/case-record", headers=h, json={"case_record": {"payment": {"items": [item]}}})
     assert r.status_code == 200, r.text
-    assert "已入總帳" in (r.json().get("glWarning") or "")
+    w = r.json().get("glWarning") or ""
+    assert "已入總帳" in w and "MQ-GW-003" in w, w
 
 
 def test_dispatch_invoice_date_change_on_a_posted_dispatch_returns_glwarning(client, conn, make_user):
@@ -114,4 +116,5 @@ def test_dispatch_invoice_date_change_on_a_posted_dispatch_returns_glwarning(cli
     same = client.patch(url, headers=h, json={"invoiceDate": "2200-02-01"})
     assert same.status_code == 200 and "glWarning" not in same.json()                 # 日期沒變 ⇒ 不提示
     changed = client.patch(url, headers=h, json={"invoiceDate": "2200-03-01"})
-    assert changed.status_code == 200 and "已入總帳" in (changed.json().get("glWarning") or "")
+    w = changed.json().get("glWarning") or ""
+    assert changed.status_code == 200 and "已入總帳" in w and "MQ-GW-D1" in w and ("派工單 %d" % did) in w, w
