@@ -8061,7 +8061,8 @@
     "mod:payroll/bonus_correction",
     "mod:payroll/bonus_deductions",
     "mod:payroll/bonus_payouts",
-    "mod:payroll/bonus_vouchers"
+    "mod:payroll/bonus_vouchers",
+    "plat:txn"
    ],
    "kind": "mod",
    "module_key": "payroll",
@@ -8071,61 +8072,61 @@
    "routes": [
     {
      "func": "list_corrections",
-     "line": 90,
+     "line": 91,
      "method": "GET",
      "path": "/api/bonus/corrections"
     },
     {
      "func": "current_amounts",
-     "line": 113,
+     "line": 114,
      "method": "GET",
      "path": "/api/bonus/corrections/current/{quote_no}"
     },
     {
      "func": "get_correction",
-     "line": 132,
+     "line": 133,
      "method": "GET",
      "path": "/api/bonus/corrections/{corr_no}"
     },
     {
      "func": "create_correction",
-     "line": 148,
+     "line": 149,
      "method": "POST",
      "path": "/api/bonus/corrections"
     },
     {
      "func": "update_correction",
-     "line": 182,
+     "line": 183,
      "method": "PUT",
      "path": "/api/bonus/corrections/{corr_no}"
     },
     {
      "func": "cancel_correction",
-     "line": 209,
+     "line": 210,
      "method": "POST",
      "path": "/api/bonus/corrections/{corr_no}/cancel"
     },
     {
      "func": "submit_correction",
-     "line": 257,
+     "line": 258,
      "method": "POST",
      "path": "/api/bonus/corrections/{corr_no}/submit"
     },
     {
      "func": "approve_correction",
-     "line": 280,
+     "line": 281,
      "method": "POST",
      "path": "/api/bonus/corrections/{corr_no}/approve"
     },
     {
      "func": "reject_correction",
-     "line": 340,
+     "line": 341,
      "method": "POST",
      "path": "/api/bonus/corrections/{corr_no}/reject"
     },
     {
      "func": "mark_supplement_paid",
-     "line": 371,
+     "line": 372,
      "method": "POST",
      "path": "/api/bonus/corrections/{corr_no}/mark-paid"
     }
