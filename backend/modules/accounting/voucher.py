@@ -21,6 +21,8 @@ import json
 import logging
 import re
 
+from modules.accounting.ledger import periods as _periods
+
 #: 施工圖 `§一`「狀態值」那一行，**逐字五個**。
 #:
 #: ⚠️ 「作廢」**不是狀態**，是動作 —— 它落在 `voided_at`／`voided_by`／
@@ -664,6 +666,11 @@ def post_voucher(conn, voucher_id, user):
         #    否則使用者要自己回去翻那張單才知道卡在哪。
         return False, ("只有「已核准」的傳票可以過帳，這一張現在是「%s」。"
                        % voucher.get("status"))
+
+    # ②b 期間鎖定（總帳 P1）：日期落在已結帳／鎖定的會計期間不可過帳。DB 觸發器是第三層，這裡先給友善訊息。
+    lock_msg = _periods.lock_error(conn, voucher.get("voucher_date"))
+    if lock_msg:
+        return False, lock_msg + "請先重開期間，或把傳票日期改到開放的期間。"
 
     # ③ 凍結科目名稱。**先凍分錄再改狀態** ——
     # ☠️ 反過來的話，中途失敗會留下一張「已過帳而沒有凍結值」的傳票，

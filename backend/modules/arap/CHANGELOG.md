@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## 1.0.15 — 2026-09-30（暫用號，列車取號；W4 總帳 C1）
+- 新增提供者 `gl.events`（IP-GL1）：銷項發票（E01）與客戶收款（E03）事件，供 M06 總帳引擎產生傳票草稿；唯讀、不寫資料。收款採 W2 語意（實收＋手續費＝含稅收入，手續費另列）；先收款後開票用預收貨款沖轉；實收與發票含稅不一致、缺開立日期、無不可變 id 皆在 notice 明說。
+- `receivables.collect_tax_invoices`／`collect_income_items` 的回傳**多帶**欄位（itemId、itemIdx、hasInvoiceDate、invoiceDate、bankAccountCode）；既有呼叫端不讀、行為不變。
 ## 1.0.14 — 2026-09-30（暫用號，列車取號；wip/sec-p0 安全修正 P0）
 - 安全修正 P0：新增提供者 `uploads.path_access`／`arap`（IP-104，`invoice_vouchers._InvoiceVoucherPathAccess`，`ModuleSpec.providers`）：`invoice_vouchers/<開票單號>/` 的已開立檔案只簽給開票申請單筆規則 `_voucher_readable` 放行的人（本單簽核人經簽核佇列情境）。原本任何登入者都拿得到簽章。
 

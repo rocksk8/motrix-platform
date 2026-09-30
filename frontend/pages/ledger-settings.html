@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>報表設定 - MOTRIX 專案管理系統</title>
+  <script src="../js/ledger-settings.js"></script>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));background:var(--white)}
+    .ls-title{font-size:20px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary);margin-bottom:6px}
+    .ls-note{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.7;margin-bottom:14px;max-width:920px}
+    .ls-tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border-light)}
+    .ls-tab{padding:8px 16px;border:none;background:none;font-size:13px;font-family:var(--font-zh);color:var(--text-secondary);cursor:pointer;border-bottom:2px solid transparent}
+    .ls-tab.on{color:var(--text-primary);font-weight:700;border-bottom-color:var(--accent)}
+    .ls-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+    .ls-input,.ls-select{padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:var(--surface)}
+    .ls-table{width:100%;border-collapse:collapse;font-size:13px;font-family:var(--font-zh);background:var(--surface)}
+    .ls-table th{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border-light);color:var(--text-secondary);font-weight:600;background:var(--surface-muted)}
+    .ls-table td{padding:5px 8px;border-bottom:1px solid var(--line)}
+    .ls-table tr.bad td{background:var(--tone-danger-bg)}
+    .ls-err{color:var(--tone-danger-fg);background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px}
+    .ls-ok{color:var(--success);background:var(--success-light);border:1px solid var(--success-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px}
+    .ls-warn{color:var(--warning);background:var(--warning-light);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px}
+    .ls-code{font-family:var(--font-mono,monospace);color:var(--text-secondary)}
+  </style>
+</head>
+<body x-data="ledgerSettingsPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div id="sidebar-root"></div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div>
+    <main class="page-main">
+      <div class="ls-title">報表設定</div>
+      <div class="ls-note">
+        決定每個會計科目出現在財務報表的哪一列，以及在現金流量表（間接法）屬於營業、投資或籌資活動。預設值依經濟部商業會計項目表與一般行業做法建立；
+        會計師可在這裡調整，不需要改程式。任何科目缺少歸屬或分類，對應的報表就會漏算，下面的檢查會標出來。
+      </div>
+
+      <div class="ls-err" x-show="error" x-text="error" data-testid="ls-error"></div>
+      <div class="ls-ok" x-show="notice" x-text="notice" data-testid="ls-notice"></div>
+
+      <template x-if="check">
+        <div>
+          <div class="ls-ok" x-show="check.ok" data-testid="ls-check-ok">設定完整：所有可過帳科目都有報表歸屬，資產負債科目都有現金流量分類。</div>
+          <div class="ls-warn" x-show="check.missing_fs_line.length" data-testid="ls-missing-fs" x-text="'尚未歸屬報表列的科目：' + check.missing_fs_line.join('、')"></div>
+          <div class="ls-warn" x-show="check.unclassified_cashflow.length" data-testid="ls-missing-cf" x-text="'尚未分類現金流量的科目：' + check.unclassified_cashflow.join('、')"></div>
+          <div class="ls-warn" x-show="check.unknown_fs_lines.length" x-text="'科目指向不存在的報表列：' + check.unknown_fs_lines.join('、')"></div>
+          <div class="ls-warn" x-show="check.inactive_lines_in_use.length" x-text="'已停用卻仍有科目歸屬的報表列：' + check.inactive_lines_in_use.join('、')"></div>
+        </div>
+      </template>
+
+      <div class="ls-tabs">
+        <button class="ls-tab" :class="{on: tab==='accounts'}" @click="tab='accounts'" data-testid="ls-tab-accounts">科目歸屬與分類</button>
+        <button class="ls-tab" :class="{on: tab==='lines'}" @click="tab='lines'" data-testid="ls-tab-lines">報表列</button>
+      </div>
+
+      <template x-if="tab==='accounts'">
+        <div>
+          <div class="ls-bar">
+            <input class="ls-input" type="search" x-model="q" placeholder="搜尋代號或名稱…" data-testid="ls-search">
+            <label class="ls-note" style="margin:0"><input type="checkbox" x-model="onlyProblems" data-testid="ls-only-problems"> 只看有問題的</label>
+            <span class="ls-note" style="margin:0" x-text="'共 ' + matchCount + ' 筆' + (matchCount > 300 ? '（只顯示前 300 筆，請縮小搜尋）' : '')"></span>
+          </div>
+          <table class="ls-table" data-testid="ls-accounts-table">
+            <thead><tr><th>科目</th><th>名稱</th><th>類別</th><th>報表列</th><th>現金流量分類</th></tr></thead>
+            <tbody>
+              <template x-for="a in shown" :key="a.code">
+                <tr :class="{bad: problem(a)}" :data-testid="'ls-row-' + a.code">
+                  <td class="ls-code" x-text="a.code"></td>
+                  <td x-text="a.display_name || a.name"></td>
+                  <td x-text="typeLabel(a.acct_type)"></td>
+                  <td>
+                    <select class="ls-select" :disabled="!canWrite" :value="a.fs_line" @change="saveAccount(a, 'fs_line', $event.target.value)" data-testid="ls-fs-select">
+                      <option value="" x-show="!a.fs_line">（未歸屬）</option>
+                      <template x-for="l in lines.filter(x => x.statement === (a.acct_type === 'asset' || a.acct_type === 'liability' || a.acct_type === 'equity' ? 'BS' : 'IS') && x.kind === 'line')" :key="l.code">
+                        <option :value="l.code" x-text="l.label" :selected="l.code === a.fs_line"></option>
+                      </template>
+                    </select>
+                  </td>
+                  <td>
+                    <template x-if="isBs(a)">
+                      <select class="ls-select" :disabled="!canWrite" :value="a.cashflow_class" @change="saveAccount(a, 'cashflow_class', $event.target.value)" data-testid="ls-cf-select">
+                        <option value="" x-show="!a.cashflow_class">（未分類）</option>
+                        <template x-for="c in classes" :key="c"><option :value="c" x-text="classLabel(c)" :selected="c === a.cashflow_class"></option></template>
+                      </select>
+                    </template>
+                    <span class="ls-note" style="margin:0" x-show="!isBs(a)">不分類（淨利整體歸營業活動）</span>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+      <template x-if="tab==='lines'">
+        <div>
+          <template x-for="stmt in ['BS','IS']" :key="stmt">
+            <div style="margin-bottom:22px">
+              <div class="ls-note" style="font-weight:700;margin-bottom:6px" x-text="stmt === 'BS' ? '資產負債表' : '綜合損益表'"></div>
+              <table class="ls-table">
+                <thead><tr><th>代碼</th><th>名稱</th><th>排序</th><th>類型</th><th>啟用</th></tr></thead>
+                <tbody>
+                  <template x-for="l in linesOf(stmt)" :key="l.code">
+                    <tr :data-testid="'ls-line-' + l.code">
+                      <td class="ls-code" x-text="l.code"></td>
+                      <td><input class="ls-input" type="text" :disabled="!canWrite" :value="l.label" @change="saveLine(l, 'label', $event.target.value)" data-testid="ls-line-label"></td>
+                      <td><input class="ls-input" type="number" style="width:80px" :disabled="!canWrite" :value="l.sort" @change="saveLine(l, 'sort', $event.target.value)"></td>
+                      <td x-text="l.kind === 'computed' ? '計算列' : '科目列'"></td>
+                      <td><input type="checkbox" :disabled="!canWrite" :checked="!!l.is_active" @change="saveLine(l, 'is_active', $event.target.checked)"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </div>
+      </template>
+    </main>
+  </div>
+</body>
+</html>

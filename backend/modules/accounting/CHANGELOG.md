@@ -1,5 +1,16 @@
 # 會計 更新紀錄
 
+## 1.1.1 — 2026-09-30（暫用號，列車取號；W4 總帳 C2）
+- 分錄引擎 C2：事件收集可套用會計在 `gl_source_annotations` 補登的來源憑證資料（目前認得 field=input_tax，覆寫承攬商發票的估算進項稅額；補登值壞掉則忽略並在事件 meta 標記）；`GET /api/ledger/events/preview` 與引擎共用；接入 subcontract 提供者（E04／E05／E05b）。
+
+## 1.1.0 — 2026-09-30（暫用號，列車取號；W4 總帳「底層一次到位」＋A／B1／B2 ，wip/w4-gl）
+- 新增總帳基礎（設計：docs/platform/plans 之 proposal-general-ledger）：會計年度／期間（可建到任意過去年度，補登用）、結帳／重開／鎖定、期間稽核軌跡（只增不改不刪）、期初餘額匯入（批次＋期初傳票草稿，過帳前可撤銷）、科目屬性（類別、正常餘額、可過帳、報表列、現金流量分類）與科目角色、帳簿報表（試算表、總分類帳、明細分類帳、序時帳簿）、財務報表（資產負債表、綜合損益表；權益變動表、現金流量表隨後）、報表設定頁、總帳作業頁（功能旗標，預設全關）。
+- **行為變化（請寫進使用者說明）**：①已結帳／鎖定期間**不可過帳**、**不可作廢已過帳傳票**（要更正請開沖轉傳票，或由具權限者先「重開期間」並填理由）；之前已過帳傳票可隨時作廢重開。②已過帳傳票的日期與分錄在資料庫層也不可修改。未建立任何期間資料的部署，行為與舊版相同（沒有期間＝全部開放）。
+- 自有 migration v1（modules/accounting/migrations/0001_ledger_base.py，**上線後凍結**）：一次涵蓋後續各批會用到的 31 張表（gl_*、fa_*）、`voucher_lines`（case_no／party_key／tax_code／doc_no）與 `vouchers_all`（kind／reverses_no／is_backfill／origin／gl_event_id）新欄位、15 個觸發器；全部只新增、冪等。之後若欄位不夠一律新增下一支 migration，不改 0001。
+- 提供者 `voucher.draft`（IP-2）加**可選**參數 `origin`（契約仍是版本 1，舊呼叫端不受影響）；新增 `gl.events` 契約 v1 的收集與驗證（`ledger/contract.py`、`GET /api/ledger/events/preview`，目前無來源提供者，回應明說「未安裝／尚未接入」，不產生傳票）。
+- 年度結轉與決算（B5）：產生兩張結轉傳票草稿（損益結轉入 3353、3353 轉 3351；kind=closing，日期＝年度末日，走一般簽核過帳）；決算要「1～11 期已結帳＋結轉傳票已過帳＋損益科目歸零＋四大表對帳全過」才成立，並寫入凍結快照；年度重開（最高管理者＋理由）把期間、結轉傳票復原並留稽核軌跡；四大表 Excel 匯出（決算後匯出凍結版）。財務報表新增權益變動表、現金流量表（間接法）。
+- `api/vouchers.py` 純搬移拆檔（voucher_common／voucher_summary／voucher_providers；行為不變，名稱重新匯入）。
+- 權限：讀＝cashier／finance；結帳、重開、期初、科目設定＝finance；鎖定／解鎖、功能旗標＝superadmin（未新增權限鍵）。
 ## 1.0.11 — 2026-09-30（暫用號，列車取號；wip/w2-voucher-office）
 - 傳票附件開放 Word／Excel（使用者裁示）：docx／xlsx／doc／xls 也可上傳（jpg／png／pdf 保留；exe 等其他格式仍拒）；放行只限傳票附件（L1 `helpers/uploads.py::_EXTRA_EXTS_BY_SUBFOLDER`，函式簽章不動），單檔 20MB 上限沿用；三個上傳入口（主頁面、預覽窗、來源清單為空）的檔案選擇器與提示同步。
 - 匯出「含附件」PDF：Word／Excel 不併入，只在最後一頁列檔名（既有「未能併入」規則）；附件標籤改「不會併入 PDF（只列檔名）」。下載一律 `attachment` 且檔名正確（含中文）。

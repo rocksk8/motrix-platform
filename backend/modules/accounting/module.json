@@ -1,7 +1,7 @@
 {
   "key": "accounting",
   "name": "會計",
-  "version": "1.0.11",
+  "version": "1.1.1",
   "core": ">=1.0,<2.0",
   "license_key": "accounting",
   "permissions": [
@@ -10,6 +10,37 @@
   ],
   "tables": [
     "account_items",
+    "fa_assets",
+    "fa_categories",
+    "fa_depr_lines",
+    "fa_depr_runs",
+    "fa_revisions",
+    "gl_account_meta",
+    "gl_account_roles",
+    "gl_backfill_runs",
+    "gl_balance_snapshot",
+    "gl_category_map",
+    "gl_confirm_batches",
+    "gl_cursors",
+    "gl_custom_field_map",
+    "gl_engine_runs",
+    "gl_fiscal_years",
+    "gl_fs_lines",
+    "gl_inv_moves",
+    "gl_inv_parts",
+    "gl_invoice_adjustments",
+    "gl_opening_balances",
+    "gl_opening_batches",
+    "gl_opening_items",
+    "gl_period_log",
+    "gl_periods",
+    "gl_settings",
+    "gl_source_annotations",
+    "gl_source_events",
+    "gl_statement_snapshots",
+    "gl_tax401_map",
+    "gl_tax_settlements",
+    "gl_withholding_items",
     "t100_export_confirmations",
     "voucher_attachments",
     "voucher_edit_log",
@@ -19,11 +50,135 @@
   "views": [
     "vouchers"
   ],
-  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration。`views`：`vouchers` 是只露出未作廢傳票的 VIEW（不是表：不備份、不分類；備份的是 vouchers_all）",
+  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組自 v1.1.0 起有自有 migration（modules/accounting/migrations，總帳 P1：gl_* 表與鎖定觸發器）；傳票／科目表仍由 V9 建立。`views`：`vouchers` 是只露出未作廢傳票的 VIEW（不是表：不備份、不分類；備份的是 vouchers_all）",
   "data": {
     "tables": [
       {
         "name": "account_items",
+        "class": "T1"
+      },
+      {
+        "name": "fa_assets",
+        "class": "T1"
+      },
+      {
+        "name": "fa_categories",
+        "class": "T1"
+      },
+      {
+        "name": "fa_depr_lines",
+        "class": "T1"
+      },
+      {
+        "name": "fa_depr_runs",
+        "class": "T1"
+      },
+      {
+        "name": "fa_revisions",
+        "class": "T1"
+      },
+      {
+        "name": "gl_account_meta",
+        "class": "T1"
+      },
+      {
+        "name": "gl_account_roles",
+        "class": "T1"
+      },
+      {
+        "name": "gl_backfill_runs",
+        "class": "T1"
+      },
+      {
+        "name": "gl_balance_snapshot",
+        "class": "T1"
+      },
+      {
+        "name": "gl_category_map",
+        "class": "T1"
+      },
+      {
+        "name": "gl_confirm_batches",
+        "class": "T1"
+      },
+      {
+        "name": "gl_cursors",
+        "class": "T1"
+      },
+      {
+        "name": "gl_custom_field_map",
+        "class": "T1"
+      },
+      {
+        "name": "gl_engine_runs",
+        "class": "T1"
+      },
+      {
+        "name": "gl_fiscal_years",
+        "class": "T1"
+      },
+      {
+        "name": "gl_fs_lines",
+        "class": "T1"
+      },
+      {
+        "name": "gl_inv_moves",
+        "class": "T1"
+      },
+      {
+        "name": "gl_inv_parts",
+        "class": "T1"
+      },
+      {
+        "name": "gl_invoice_adjustments",
+        "class": "T1"
+      },
+      {
+        "name": "gl_opening_balances",
+        "class": "T1"
+      },
+      {
+        "name": "gl_opening_batches",
+        "class": "T1"
+      },
+      {
+        "name": "gl_opening_items",
+        "class": "T1"
+      },
+      {
+        "name": "gl_period_log",
+        "class": "T1"
+      },
+      {
+        "name": "gl_periods",
+        "class": "T1"
+      },
+      {
+        "name": "gl_settings",
+        "class": "T1"
+      },
+      {
+        "name": "gl_source_annotations",
+        "class": "T1"
+      },
+      {
+        "name": "gl_source_events",
+        "class": "T1"
+      },
+      {
+        "name": "gl_statement_snapshots",
+        "class": "T1"
+      },
+      {
+        "name": "gl_tax401_map",
+        "class": "T1"
+      },
+      {
+        "name": "gl_tax_settlements",
+        "class": "T1"
+      },
+      {
+        "name": "gl_withholding_items",
         "class": "T1"
       },
       {
@@ -59,6 +214,7 @@
   "provides": {
     "api_prefixes": [
       "/api/account-items",
+      "/api/ledger",
       "/api/reports",
       "/api/settings",
       "/api/vouchers"
@@ -89,6 +245,66 @@
         "order": 40,
         "perm": [
           "cashier"
+        ]
+      }
+    },
+    {
+      "path": "ledger-periods.html",
+      "menu": {
+        "group": "finance",
+        "label": "會計期間",
+        "order": 50,
+        "perm": [
+          "cashier",
+          "finance"
+        ]
+      }
+    },
+    {
+      "path": "ledger-reports.html",
+      "menu": {
+        "group": "finance",
+        "label": "帳簿報表",
+        "order": 55,
+        "perm": [
+          "cashier",
+          "finance"
+        ]
+      }
+    },
+    {
+      "path": "ledger-settings.html",
+      "menu": {
+        "group": "finance",
+        "label": "報表設定",
+        "order": 60,
+        "perm": [
+          "cashier",
+          "finance"
+        ]
+      }
+    },
+    {
+      "path": "ledger-statements.html",
+      "menu": {
+        "group": "finance",
+        "label": "財務報表",
+        "order": 58,
+        "perm": [
+          "cashier",
+          "finance"
+        ]
+      }
+    },
+    {
+      "path": "ledger-hub.html",
+      "menu": {
+        "group": "finance",
+        "label": "總帳作業",
+        "order": 70,
+        "perm": [
+          "cashier",
+          "finance"
         ]
       }
     }

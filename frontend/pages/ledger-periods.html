@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>會計期間 - MOTRIX 專案管理系統</title>
+  <script src="../js/ledger-periods.js"></script>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));background:var(--white)}
+    .lp-title{font-size:20px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary);margin-bottom:6px}
+    .lp-note{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.7;margin-bottom:16px;max-width:920px}
+    .lp-card{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius);padding:16px 18px;margin-bottom:18px}
+    .lp-h{font-size:14px;font-weight:700;font-family:var(--font-zh);margin-bottom:10px;color:var(--text-primary)}
+    .lp-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+    .lp-input,.lp-area{padding:6px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:var(--surface)}
+    .lp-area{width:100%;min-height:120px;font-family:var(--font-mono,monospace)}
+    .lp-btn{padding:5px 13px;border-radius:var(--radius);border:1px solid var(--border-light);background:var(--surface);color:var(--text-primary);font-size:12px;font-family:var(--font-zh);cursor:pointer}
+    .lp-btn:hover{background:var(--surface-sunken)}
+    .lp-btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+    .lp-btn:disabled{opacity:.5;cursor:default}
+    .lp-table{width:100%;border-collapse:collapse;font-size:13px;font-family:var(--font-zh)}
+    .lp-table th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border-light);color:var(--text-secondary);font-weight:600}
+    .lp-table td{padding:6px 8px;border-bottom:1px solid var(--line)}
+    .lp-num{text-align:right;font-variant-numeric:tabular-nums}
+    .lp-tag{font-size:11px;padding:1px 8px;border-radius:9px;border:1px solid var(--border-light)}
+    .lp-tag.open{background:var(--success-light);color:var(--success);border-color:var(--success-border)}
+    .lp-tag.closed{background:var(--warning-light);color:var(--warning)}
+    .lp-tag.locked{background:var(--surface-neutral);color:var(--text-secondary)}
+    .lp-err{color:var(--tone-danger-fg);background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px}
+    .lp-ok{color:var(--success);background:var(--success-light);border:1px solid var(--success-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px}
+    .lp-warn{color:var(--warning);background:var(--warning-light);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:8px}
+    .lp-back{position:fixed;inset:0;background:var(--overlay-backdrop);display:flex;align-items:center;justify-content:center;z-index:50}
+    .lp-dlg{background:var(--surface);border-radius:var(--radius-lg);padding:20px 22px;width:min(520px,92vw);box-shadow:var(--shadow-popover)}
+    .lp-stale{font-size:11px;color:var(--warning);margin-left:6px}
+  </style>
+</head>
+<body x-data="ledgerPeriodsPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div id="sidebar-root"></div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div>
+    <main class="page-main">
+      <div class="lp-title">會計期間與結帳</div>
+      <div class="lp-note">
+        已結帳或鎖定的期間不能再過帳、也不能作廢已過帳傳票；要更正請開沖轉傳票，或由財務人員「重開期間」（須填理由，全程留稽核軌跡）。
+        鎖定（決算、申報後）只有最高管理者可以解除。還沒建立任何期間時，所有日期都視為開放。
+      </div>
+
+      <div class="lp-err" x-show="error" x-text="error" data-testid="lp-error"></div>
+      <div class="lp-ok" x-show="notice" x-text="notice" data-testid="lp-notice"></div>
+
+      <div class="lp-card">
+        <div class="lp-h">建立會計年度</div>
+        <div class="lp-row">
+          <input class="lp-input" type="number" placeholder="西元年，例如 2026" x-model="newYear" data-testid="lp-new-year">
+          <button class="lp-btn primary" :disabled="busy" @click="createYear()" data-testid="lp-create-year">建立（12 個期間）</button>
+          <span class="lp-note" style="margin:0">補登過去的帳：直接建立過去的年度即可。</span>
+        </div>
+      </div>
+
+      <template x-for="y in years" :key="y.year">
+        <div class="lp-card">
+          <div class="lp-h">
+            <span x-text="y.year + ' 年度'"></span>
+            <span class="lp-tag" :class="y.status === 'closed' ? 'closed' : 'open'" x-text="y.status === 'closed' ? '已決算' : '年度進行中'" :data-testid="'lp-year-status-' + y.year"></span>
+            <button class="lp-btn" style="margin-left:10px" @click="openClosing(y)" :data-testid="'lp-closing-' + y.year">年度結轉／決算</button>
+            <button class="lp-btn" @click="exportStatements(y)" :data-testid="'lp-export-' + y.year">匯出四大表</button>
+            <span class="lp-note" style="margin:0 0 0 10px" x-text="y.start_date + ' ～ ' + y.end_date + '　期初：' + (y.opening_mode === 'imported' ? '匯入（' + y.opening_date + '）' : y.opening_mode === 'carry' ? '自上年結轉' : '零')"></span>
+          </div>
+          <table class="lp-table">
+            <thead><tr><th>期間</th><th>起訖</th><th>狀態</th><th>結帳</th><th></th></tr></thead>
+            <tbody>
+              <template x-for="p in y.periods" :key="p.id">
+                <tr :data-testid="'lp-period-' + y.year + '-' + p.period_no">
+                  <td x-text="'第 ' + p.period_no + ' 期'"></td>
+                  <td x-text="p.start_date + ' ～ ' + p.end_date"></td>
+                  <td>
+                    <span class="lp-tag" :class="p.status" x-text="statusLabel(p.status)"></span>
+                    <span class="lp-stale" x-show="p.stale" title="前面的期間被重開過，這一期需要重新結帳">需重新結帳</span>
+                  </td>
+                  <td x-text="p.closed_by ? (p.closed_by + '　' + (p.closed_at || '').slice(0, 16).replace('T', ' ')) : ''"></td>
+                  <td style="text-align:right">
+                    <button class="lp-btn" x-show="p.status === 'open'" @click="openClose(p)" data-testid="lp-close">結帳</button>
+                    <button class="lp-btn" x-show="p.status === 'closed'" @click="openReopen(p)" data-testid="lp-reopen">重開</button>
+                    <button class="lp-btn" x-show="p.status === 'closed' && isSuper()" @click="lock(p)" data-testid="lp-lock">鎖定</button>
+                    <button class="lp-btn" x-show="p.status === 'locked' && isSuper()" @click="openUnlock(p)" data-testid="lp-unlock">解鎖</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </template>
+      <div class="lp-note" x-show="loaded && !years.length">還沒有任何會計年度。</div>
+
+      <div class="lp-card">
+        <div class="lp-h">期初餘額（開帳）</div>
+        <div class="lp-note">
+          貼上「科目代號,借方,貸方」，每行一筆（可從 Excel 直接複製）。系統只會建立一張<b>期初傳票草稿</b>，須經簽核、過帳才入帳；
+          過帳後帳簿從開帳日起算，開帳日之前的既有傳票視為歷史、不計入餘額。每個年度一批；過帳前可撤銷。
+        </div>
+        <div class="lp-err" x-show="op.error" x-text="op.error" data-testid="lp-op-error"></div>
+        <div class="lp-row">
+          <select class="lp-input" x-model="op.year" data-testid="lp-op-year">
+            <option value="">選年度</option>
+            <template x-for="y in years" :key="y.year"><option :value="y.year" x-text="y.year"></option></template>
+          </select>
+          <input class="lp-input" type="date" x-model="op.date" data-testid="lp-op-date">
+          <input class="lp-input" type="text" placeholder="來源說明（選填）" x-model="op.filename">
+        </div>
+        <textarea class="lp-area" x-model="op.text" placeholder="1113,500000,&#10;3111,,500000" data-testid="lp-op-text"></textarea>
+        <div class="lp-row" style="margin-top:10px">
+          <button class="lp-btn" :disabled="op.busy" @click="previewOpening()" data-testid="lp-op-preview">預覽檢查</button>
+          <button class="lp-btn primary" :disabled="op.busy" @click="importOpening()" data-testid="lp-op-import">建立期初傳票草稿</button>
+        </div>
+        <template x-if="op.result">
+          <div>
+            <table class="lp-table">
+              <thead><tr><th>科目</th><th>名稱</th><th class="lp-num">借方</th><th class="lp-num">貸方</th></tr></thead>
+              <tbody>
+                <template x-for="r in op.result.rows" :key="r.account_code">
+                  <tr><td x-text="r.account_code"></td><td x-text="r.name"></td><td class="lp-num" x-text="fmt(r.debit)"></td><td class="lp-num" x-text="fmt(r.credit)"></td></tr>
+                </template>
+                <tr><td colspan="2"><b>合計</b></td><td class="lp-num"><b x-text="fmt(op.result.debit)"></b></td><td class="lp-num"><b x-text="fmt(op.result.credit)"></b></td></tr>
+              </tbody>
+            </table>
+            <div class="lp-err" x-show="!op.result.balanced" x-text="'借貸不平衡，差 ' + fmt(op.result.diff)" style="margin-top:8px" data-testid="lp-op-diff"></div>
+          </div>
+        </template>
+
+        <div class="lp-h" style="margin-top:16px" x-show="batches.length">已匯入的批次</div>
+        <table class="lp-table" x-show="batches.length">
+          <thead><tr><th>年度</th><th>開帳日</th><th>傳票</th><th>狀態</th><th class="lp-num">借方合計</th><th></th></tr></thead>
+          <tbody>
+            <template x-for="b in batches" :key="b.id">
+              <tr>
+                <td x-text="b.year"></td><td x-text="b.opening_date"></td><td x-text="b.voucher_no || ''"></td>
+                <td x-text="batchLabel(b)"></td><td class="lp-num" x-text="fmt(b.debit)"></td>
+                <td style="text-align:right"><button class="lp-btn" x-show="!b.undone_at && b.voucher_status === '草稿'" @click="undoBatch(b)" data-testid="lp-op-undo">撤銷</button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="lp-card" x-show="log.length">
+        <div class="lp-h">稽核軌跡（最近 50 筆，只增不改）</div>
+        <table class="lp-table">
+          <thead><tr><th>時間</th><th>動作</th><th>年度</th><th>人員</th><th>理由</th></tr></thead>
+          <tbody>
+            <template x-for="l in log" :key="l.id">
+              <tr><td x-text="(l.at || '').replace('T', ' ')"></td><td x-text="actionLabel(l.action)"></td><td x-text="l.year || ''"></td><td x-text="l.actor"></td><td x-text="l.reason"></td></tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <div class="lp-back" x-show="dlg" @click.self="closeDlg()" data-testid="lp-dialog">
+    <div class="lp-dlg" x-show="dlg">
+      <div class="lp-h" x-text="dlg ? (dlg.kind === 'close' ? '結帳' : dlg.kind === 'reopen' ? '重開期間' : '解鎖期間') + '：' + dlg.period.year + ' 年度第 ' + dlg.period.period_no + ' 期' : ''"></div>
+      <div class="lp-err" x-show="dlgError" x-text="dlgError" data-testid="lp-dlg-error"></div>
+      <template x-if="dlg && dlg.kind === 'close'">
+        <div>
+          <template x-for="b in dlg.checklist.blockers" :key="b"><div class="lp-err" x-text="b"></div></template>
+          <template x-for="w in dlg.checklist.warnings" :key="w"><div class="lp-warn" x-text="w"></div></template>
+          <div class="lp-note" x-show="!dlg.checklist.blockers.length && !dlg.checklist.warnings.length">檢查全部通過。</div>
+          <label class="lp-note" x-show="dlg.checklist.warnings.length" style="display:block">
+            <input type="checkbox" x-model="dlg.accept" data-testid="lp-accept"> 我已確認以上提醒，仍要結帳
+          </label>
+        </div>
+      </template>
+      <template x-if="dlg && dlg.kind !== 'close'">
+        <div>
+          <div class="lp-note">必須填寫理由，會留在稽核軌跡。</div>
+          <input class="lp-input" style="width:100%" type="text" x-model="dlg.reason" placeholder="理由" data-testid="lp-reason">
+        </div>
+      </template>
+      <div class="lp-row" style="margin-top:14px;justify-content:flex-end">
+        <button class="lp-btn" @click="closeDlg()">取消</button>
+        <button class="lp-btn primary" :disabled="busy" @click="submitDlg()" data-testid="lp-submit">確定</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="lp-back" x-show="cdlg" @click.self="closeClosing()" data-testid="lp-closing-dialog">
+    <div class="lp-dlg" style="width:min(640px,94vw)" x-show="cdlg">
+      <div class="lp-h" x-text="cdlg ? cdlg.year + ' 年度結轉與決算' : ''"></div>
+      <div class="lp-err" x-show="cdlg && cdlg.error" x-text="cdlg && cdlg.error" data-testid="lp-closing-error"></div>
+      <div class="lp-ok" x-show="cdlg && cdlg.done" x-text="cdlg && cdlg.done" data-testid="lp-closing-done"></div>
+      <template x-if="cdlg">
+        <div>
+          <div class="lp-note">本期淨利（尚未結轉的損益科目合計）：<b x-text="fmt(cdlg.pv.net_income)" data-testid="lp-closing-ni"></b>；損益科目 <span x-text="cdlg.pv.pl_accounts"></span> 個。</div>
+          <template x-for="m in cdlg.pv.problems" :key="m"><div class="lp-err" x-text="m"></div></template>
+          <template x-for="m in cdlg.pv.prerequisites_unmet" :key="m"><div class="lp-warn" x-text="m"></div></template>
+          <div class="lp-note" x-show="cdlg.pv.existing.length">已有結轉傳票：<span x-text="cdlg.pv.existing.map(v => v.voucher_no + '（' + v.status + '）').join('、')" data-testid="lp-closing-existing"></span></div>
+          <template x-for="v in cdlg.pv.vouchers" :key="v.key">
+            <div x-show="v.lines.length" style="margin-bottom:8px">
+              <div class="lp-note" style="margin:0" x-text="v.summary"></div>
+              <table class="lp-table"><tbody>
+                <template x-for="l in v.lines" :key="l.account_code"><tr><td x-text="l.account_code"></td><td x-text="l.name"></td><td class="lp-num" x-text="fmt(l.debit)"></td><td class="lp-num" x-text="fmt(l.credit)"></td></tr></template>
+              </tbody></table>
+            </div>
+          </template>
+          <div class="lp-note" style="margin-top:6px">流程：1～11 期逐期結帳 → 產生結轉傳票（草稿）→ 送審、核准、過帳 → 決算（四大表對帳全部通過才成立，並凍結）。要更正請「重開年度」。</div>
+          <label class="lp-note" style="display:block"><input type="checkbox" x-model="cdlg.accept" data-testid="lp-closing-accept"> 決算時第 12 期若有未過帳傳票等提醒，我已確認</label>
+          <input class="lp-input" style="width:100%;margin:6px 0" type="text" x-show="isSuper() && cdlg.status === 'closed'" x-model="cdlg.reason" placeholder="重開年度的理由（必填）" data-testid="lp-closing-reason">
+        </div>
+      </template>
+      <div class="lp-row" style="margin-top:12px;justify-content:flex-end">
+        <button class="lp-btn" @click="closeClosing()">關閉</button>
+        <button class="lp-btn" :disabled="cdlg && cdlg.busy" x-show="cdlg && cdlg.status !== 'closed' && cdlg.pv.existing.length" @click="generateClosing(true)" data-testid="lp-closing-regen">重新產生草稿</button>
+        <button class="lp-btn" :disabled="cdlg && cdlg.busy" x-show="cdlg && cdlg.status !== 'closed'" @click="generateClosing(false)" data-testid="lp-closing-generate">產生結轉傳票</button>
+        <button class="lp-btn primary" :disabled="cdlg && cdlg.busy" x-show="cdlg && cdlg.status !== 'closed'" @click="closeYearAct()" data-testid="lp-closing-close">決算</button>
+        <button class="lp-btn" :disabled="cdlg && cdlg.busy" x-show="isSuper() && cdlg && cdlg.status === 'closed'" @click="reopenYearAct()" data-testid="lp-closing-reopen">重開年度</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

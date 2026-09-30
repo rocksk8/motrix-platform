@@ -79,7 +79,11 @@ SHARED_FILES = ("auth-guard.js", "notif.js", "sidebar.js", "edit-presence.js",
 #: 2026-09-28（A，wip/a-storage-settings）49 -> 50：新增 storage-settings.html（儲存位置，Alpine，有 _initDone 守衛）。
 #: 2026-09-28（E 線，wip/e-lodging-impl）50 -> 51：新增 lodging-records.html（旅宿檔案更新，原名附近旅宿紀錄，Alpine，有 _initDone 守衛；
 #:    使用者裁示新增此功能，CORE-SPEC 09888e19）。
-PAGE_POPULATION = 49 + 1 + 1
+#: 2026-09-30（W4，wip/w4-gl 總帳 P1）51 -> 53：新增 ledger-periods.html（會計期間）、ledger-reports.html（帳簿報表），Alpine，都有 _initDone 守衛。
+#: 2026-09-30（W4，B1）53 -> 54：新增 ledger-settings.html（報表設定），Alpine，有 _initDone 守衛。
+#: 2026-09-30（W4，B2）54 -> 55：新增 ledger-statements.html（財務報表），Alpine，有 _initDone 守衛。
+#: 2026-09-30（W4，底層一次到位）55 -> 56：新增 ledger-hub.html（總帳作業，功能旗標中樞），Alpine，有 _initDone 守衛。
+PAGE_POPULATION = 49 + 1 + 1 + 2 + 1 + 1 + 1
 SHARED_POPULATION = 2
 ALREADY_GUARDED = 2
 

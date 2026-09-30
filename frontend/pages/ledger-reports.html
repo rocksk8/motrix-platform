@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>帳簿報表 - MOTRIX 專案管理系統</title>
+  <script src="../js/ledger-reports.js"></script>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));background:var(--white)}
+    .lr-title{font-size:20px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary);margin-bottom:6px}
+    .lr-note{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.7;margin-bottom:14px}
+    .lr-tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border-light)}
+    .lr-tab{padding:8px 16px;border:none;background:none;font-size:13px;font-family:var(--font-zh);color:var(--text-secondary);cursor:pointer;border-bottom:2px solid transparent}
+    .lr-tab.on{color:var(--text-primary);font-weight:700;border-bottom-color:var(--accent)}
+    .lr-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+    .lr-input{padding:6px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:var(--surface)}
+    .lr-btn{padding:5px 13px;border-radius:var(--radius);border:1px solid var(--border-light);background:var(--surface);font-size:12px;font-family:var(--font-zh);cursor:pointer;color:var(--text-primary)}
+    .lr-btn:hover{background:var(--surface-sunken)}
+    .lr-btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+    .lr-table{width:100%;border-collapse:collapse;font-size:13px;font-family:var(--font-zh);background:var(--surface)}
+    .lr-table th{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border-light);color:var(--text-secondary);font-weight:600;background:var(--surface-muted)}
+    .lr-table td{padding:6px 8px;border-bottom:1px solid var(--line)}
+    .lr-table tr.click{cursor:pointer}
+    .lr-table tr.click:hover{background:var(--surface-muted)}
+    .lr-num{text-align:right;font-variant-numeric:tabular-nums}
+    .lr-total td{font-weight:700;background:var(--surface-muted)}
+    .lr-err{color:var(--tone-danger-fg);background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px}
+    .lr-warn{color:var(--warning);background:var(--warning-light);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px}
+    .lr-empty{padding:32px;text-align:center;color:var(--text-secondary);font-size:13px;font-family:var(--font-zh)}
+    .lr-vhead{font-weight:700;padding:8px;background:var(--surface-muted);font-family:var(--font-zh);font-size:13px}
+  </style>
+</head>
+<body x-data="ledgerReportsPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div id="sidebar-root"></div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div>
+    <main class="page-main">
+      <div class="lr-title">帳簿報表</div>
+      <div class="lr-note">只計「已過帳」且未作廢的傳票；勾選「含未過帳」可預覽尚未過帳的草稿（畫面會標示）。試算表與總帳依會計年度計算，損益科目每年度歸零。</div>
+
+      <div class="lr-tabs">
+        <button class="lr-tab" :class="{on: tab==='tb'}" @click="setTab('tb')" data-testid="lr-tab-tb">試算表</button>
+        <button class="lr-tab" :class="{on: tab==='gl'}" @click="setTab('gl')" data-testid="lr-tab-gl">總分類帳</button>
+        <button class="lr-tab" :class="{on: tab==='sub'}" @click="setTab('sub')" data-testid="lr-tab-sub">明細分類帳</button>
+        <button class="lr-tab" :class="{on: tab==='jr'}" @click="setTab('jr')" data-testid="lr-tab-jr">序時帳簿</button>
+      </div>
+
+      <div class="lr-bar">
+        <input class="lr-input" type="date" x-model="start" data-testid="lr-start">
+        <span>～</span>
+        <input class="lr-input" type="date" x-model="end" data-testid="lr-end">
+        <template x-if="tab==='gl' || tab==='sub'">
+          <span>
+            <input class="lr-input" list="lr-accounts" x-model="account" placeholder="科目代號（可含子科目）" style="width:200px" data-testid="lr-account">
+            <datalist id="lr-accounts">
+              <template x-for="a in accounts" :key="a.code"><option :value="a.code" x-text="(a.display_name || a.name)"></option></template>
+            </datalist>
+          </span>
+        </template>
+        <select class="lr-input" x-show="tab==='sub'" x-model="dimension" data-testid="lr-dimension">
+          <option value="party_key">交易對象</option><option value="case_no">案件</option><option value="doc_no">單據號</option>
+        </select>
+        <label class="lr-note" style="margin:0"><input type="checkbox" x-model="drafts" data-testid="lr-drafts"> 含未過帳（試算）</label>
+        <button class="lr-btn primary" @click="run()" data-testid="lr-run">查詢</button>
+        <button class="lr-btn" @click="exportCsv()" x-show="tab!=='jr'" data-testid="lr-csv">匯出 CSV</button>
+      </div>
+
+      <div class="lr-err" x-show="error" x-text="error" data-testid="lr-error"></div>
+      <div class="lr-warn" x-show="drafts" data-testid="lr-drafts-warn">目前包含未過帳的傳票，數字僅供預覽，不是正式帳。</div>
+
+      <!-- 試算表 -->
+      <template x-if="tab==='tb' && tb">
+        <div>
+          <div class="lr-err" x-show="!tb.balanced" data-testid="lr-unbalanced">
+            試算表借貸不平衡（本期借方 <span x-text="fmt(tb.totals.period_debit)"></span>、貸方 <span x-text="fmt(tb.totals.period_credit)"></span>）：帳上資料有問題，請先查明再結帳。
+          </div>
+          <table class="lr-table" data-testid="lr-tb-table">
+            <thead><tr><th>科目</th><th>名稱</th><th class="lr-num">期初借</th><th class="lr-num">期初貸</th><th class="lr-num">本期借</th><th class="lr-num">本期貸</th><th class="lr-num">期末借</th><th class="lr-num">期末貸</th></tr></thead>
+            <tbody>
+              <template x-for="r in tb.rows" :key="r.code + r.name">
+                <tr :class="r.code ? 'click' : ''" @click="openLedger(r.code)">
+                  <td x-text="r.code"></td><td x-text="r.name"></td>
+                  <td class="lr-num" x-text="dash(r.opening_debit)"></td><td class="lr-num" x-text="dash(r.opening_credit)"></td>
+                  <td class="lr-num" x-text="dash(r.period_debit)"></td><td class="lr-num" x-text="dash(r.period_credit)"></td>
+                  <td class="lr-num" x-text="dash(r.closing_debit)"></td><td class="lr-num" x-text="dash(r.closing_credit)"></td>
+                </tr>
+              </template>
+              <tr class="lr-total"><td colspan="2">合計</td>
+                <td class="lr-num" x-text="fmt(tb.totals.opening_debit)"></td><td class="lr-num" x-text="fmt(tb.totals.opening_credit)"></td>
+                <td class="lr-num" x-text="fmt(tb.totals.period_debit)"></td><td class="lr-num" x-text="fmt(tb.totals.period_credit)"></td>
+                <td class="lr-num" x-text="fmt(tb.totals.closing_debit)"></td><td class="lr-num" x-text="fmt(tb.totals.closing_credit)"></td></tr>
+            </tbody>
+          </table>
+          <div class="lr-empty" x-show="!tb.rows.length">這段期間沒有任何過帳的分錄。</div>
+          <div class="lr-note" style="margin-top:8px">點任一科目可查看它的總分類帳。</div>
+        </div>
+      </template>
+
+      <!-- 總分類帳 -->
+      <template x-if="tab==='gl'">
+        <div>
+          <div class="lr-empty" x-show="!gl">請輸入科目代號後查詢。</div>
+          <template x-if="gl">
+            <table class="lr-table" data-testid="lr-gl-table">
+              <thead><tr><th colspan="6" x-text="gl.account + ' ' + gl.name"></th></tr>
+                <tr><th>日期</th><th>傳票號</th><th>摘要</th><th class="lr-num">借方</th><th class="lr-num">貸方</th><th class="lr-num">餘額</th></tr></thead>
+              <tbody>
+                <tr><td colspan="5">期初餘額</td><td class="lr-num" x-text="fmt(gl.opening)"></td></tr>
+                <template x-for="(l, i) in gl.lines" :key="i">
+                  <tr><td x-text="(l.voucher_date || '').slice(0, 10)"></td><td x-text="l.voucher_no"></td><td x-text="l.summary"></td>
+                    <td class="lr-num" x-text="dash(l.debit)"></td><td class="lr-num" x-text="dash(l.credit)"></td><td class="lr-num" x-text="fmt(l.balance)"></td></tr>
+                </template>
+                <tr class="lr-total"><td colspan="3">本期合計／期末餘額</td>
+                  <td class="lr-num" x-text="fmt(gl.period_debit)"></td><td class="lr-num" x-text="fmt(gl.period_credit)"></td><td class="lr-num" x-text="fmt(gl.closing)"></td></tr>
+              </tbody>
+            </table>
+          </template>
+        </div>
+      </template>
+
+      <!-- 明細分類帳 -->
+      <template x-if="tab==='sub'">
+        <div>
+          <div class="lr-empty" x-show="!sub">請輸入科目代號後查詢（例如 1191 應收帳款，依交易對象或案件展開）。</div>
+          <template x-if="sub">
+            <table class="lr-table" data-testid="lr-sub-table">
+              <thead><tr><th x-text="dimLabel(sub.dimension)"></th><th class="lr-num">期初</th><th class="lr-num">本期借</th><th class="lr-num">本期貸</th><th class="lr-num">期末</th></tr></thead>
+              <tbody>
+                <template x-for="r in sub.rows" :key="r.key">
+                  <tr><td x-text="r.key || '（未填）'"></td><td class="lr-num" x-text="fmt(r.opening)"></td><td class="lr-num" x-text="dash(r.period_debit)"></td>
+                    <td class="lr-num" x-text="dash(r.period_credit)"></td><td class="lr-num" x-text="fmt(r.closing)"></td></tr>
+                </template>
+                <tr class="lr-total"><td>合計</td><td colspan="3"></td><td class="lr-num" x-text="fmt(sub.total_closing)"></td></tr>
+              </tbody>
+            </table>
+          </template>
+        </div>
+      </template>
+
+      <!-- 序時帳簿 -->
+      <template x-if="tab==='jr' && jr">
+        <div data-testid="lr-jr">
+          <div class="lr-warn" x-show="jr.truncated">傳票筆數超過上限，只顯示前面一部分；請縮小日期範圍。</div>
+          <div class="lr-empty" x-show="!jr.vouchers.length">這段期間沒有傳票。</div>
+          <template x-for="v in jr.vouchers" :key="v.id">
+            <div style="margin-bottom:12px">
+              <div class="lr-vhead" x-text="(v.voucher_date || '').slice(0, 10) + '　' + v.voucher_no + '　' + v.category + '　' + v.summary + (v.status !== '已過帳' ? '　【' + v.status + '】' : '')"></div>
+              <table class="lr-table">
+                <tbody>
+                  <template x-for="l in v.lines" :key="l.line_no">
+                    <tr><td style="width:90px" x-text="l.account_code"></td><td x-text="l.account_name"></td><td x-text="l.summary"></td>
+                      <td class="lr-num" style="width:110px" x-text="dash(l.debit)"></td><td class="lr-num" style="width:110px" x-text="dash(l.credit)"></td></tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </div>
+      </template>
+    </main>
+  </div>
+</body>
+</html>

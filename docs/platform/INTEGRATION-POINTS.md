@@ -57,7 +57,7 @@ grandTotal（直接讀 `contractor_dispatches`，沒有經過 `_dispatch_row`）
 | 語法 | 提供：`_registry.provide("voucher.draft", "accounting", _provide_voucher_draft)`、`_registry.provide("voucher.account_check", "accounting", validate_account_code)`<br>取用：`registry.single_provider("voucher.draft")(conn, voucher_date=…, summary=…, lines=[{account_code, summary, debit, credit}], created_by=…, now=…)`；`registry.single_provider("voucher.account_check")(conn, code)` |
 | 回傳 | draft：`{"id": int, "voucher_no": str}`；在呼叫端的交易裡寫入 `vouchers_all`＋`voucher_lines`，**不 commit**（呼叫端的狀態與傳票連結一起成功、一起失敗）。分錄正規化與傳票類別由 M06 決定。<br>account_check：`(ok: bool, err: str)` |
 | 對方不在時 | **獎金核准／標記已發放照常成立**，不產生傳票，而且明說：回傳 `notice`＝「未產生傳票：會計模組未安裝（獎金狀態照常更新；需要傳票請由會計手動開立）」（前端 `_withNotice` 顯示）。出納帶了銀行科目也不驗、不擋發放。科目設定：GET 的 `problems` 每一項為「會計模組未安裝，無法驗證科目」；PUT 回 400 並寫明原因，一個都不寫入（驗證不了就不存）。<br>**實體缺席（稽核 Y-2，2026-09-25）**：M07 的 `helpers/bonus_pdf.py` 組獎金分潤單預覽／PDF 要用 M06 的 `helpers.voucher`、`helpers.voucher_pdf`；已改成函式內延遲載入，M06 檔案不在包裡時 M07 照常載入，只有舊流程的預覽／PDF 端點回 503「會計模組未安裝：無法產生獎金分潤單預覽／PDF」。這仍是 M07 → M06 的相依（`l2_import_baseline` 兩筆），要清掉得把三支共用函式下沉 L1 |
-| 契約版本 | 1（2026-09-25） |
+| 契約版本 | 1（2026-09-25）。**追加（2026-09-30，總帳 P1，W4）**：draft 加**可選**關鍵字參數 `origin`（產生來源標記，例 `bonus_accrual`／`bonus_payment`，寫入 `vouchers_all.origin`），總帳引擎據此辨識既有自動傳票、不重複產生；舊呼叫端不帶＝行為不變（不升契約版本）。守門：`backend/modules/accounting/tests/test_ledger_p1_reports_2026_09_30.py::test_draft_provider_origin_is_optional_and_recorded` |
 | 守門 | `backend/modules/payroll/tests/test_voucher_connectors.py`：①提供者存在、draft 真的寫出草稿與分錄且不 commit、account_check 對錯都對 ②**反向控制**：同一條流程有 M06 時產生兩張草稿（正對照），拿掉提供者後獎金照走、零張傳票、notice／voucherNotice／problems 都有明確提示 ③M07 不再 import M06 ④頁面綁定 `detail.voucherNotice`。突變驗證：不查 M06、默默略過（notice 空）、仍驗銀行、銀行清單不處理缺席，四者皆轉紅 |
 
 **尚未處理（不在 A7 範圍）**：`helpers/bonus_vouchers.py::withdraw_accrual`（退回時作廢轉帳草稿）與
@@ -690,3 +690,21 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 底圖與 Google 內容 | 覆蓋層向自己模組後端查資料時必須帶 `api.basemap()`；後端在 `geo.map_request_scope(頁面底圖, missing="osm")` 內定位與算距離，回應帶實際 `basemap`，與頁面不一致 ⇒ 覆蓋層重查（LG2-M1；LODGING-NEARBY §3.1.1） |
 | 契約版本 | 1（加方法＝相容；改名／改參數＝版本 +1，並寫 core CHANGELOG） |
 | 守門 | ①兩種底圖（OSM 真的 Leaflet、Google 用既有攔截的假 `google.maps`）各跑一次合成覆蓋層：`addMarkers`／`clear`／`fitTo`／`panel` 都生效；②**反向控制**：把 map.html 的 `_map`／`_layer` 等內部欄位改名後，合成覆蓋層照常（證明它沒碰內部）；③靜態掃描：`modules/*/pages/*overlay*.js` 不得出現 `_map`、`_layer`、`_gm`、`Alpine`、`__x`、`google.maps`、`L.`；④`script_url` 一律是 L1 組出的同源路徑：提供者宣告 `https://…`、`../x.js`、不存在的檔 ⇒ 不列（反向控制三種）；⑤合成的第二個覆蓋層（非 lodging）也能註冊——守門不綁 lodging（MODULE-GUIDE §7）；⑥〔LG2-S1〕合成覆蓋層把 handle 存進 Alpine `reactive` 再交回 `clear`／`focus` ⇒ 照常（兩種底圖）；⑦〔LG2-S2〕`focus`、`addCircle`、500 點群聚兩種底圖各一題；彈窗 `lines` 內含 `<img onerror>` ⇒ 顯示為文字；`href` 為 `javascript:`／`//evil` ⇒ 不產生連結；⑧〔LG2-S3〕custom-records 的 JS 寫入點守門（`tests/test_custom_records_no_js_html_sink_2026_09_28.py` 的 sink_sites／check）掃描對象擴到 `modules/*/pages/*overlay*.js`，白名單預設 0（覆蓋層畫面板清單只准 textContent／createElement）；正對照：合成覆蓋層寫 `innerHTML` ⇒ 紅 |
+
+---
+
+## IP-GL1　`gl.events`：總帳事件來源（各來源模組 → M06；暫定號，列車定號）
+
+對應總帳設計稿 02-events-engine.md §2（proposal-general-ledger，W4）。**C1（2026-09-30）**：引擎依事件產生傳票**草稿**（kind=auto），功能旗標 `engine_drafts` 預設關，關閉時對現有手工傳票沒有任何副作用。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M05 應收應付：`modules/arap/gl_events.py`（銷項發票 E01、客戶收款 E03；2026-09-30 C1）。M04 外包工班：`modules/subcontract/gl_events.py`（承攬商發票 E04、匯款 E05／E05b；2026-09-30 C2）。之後逐批接入：payroll／supply／case／建構器 outbox（C3～C7），每接一個在本列加一筆 `modules/<key>/…` |
+| 使用方 | M06 `modules/accounting/ledger/contract.py::collect`（`GET /api/ledger/events/preview`）與 `modules/accounting/ledger/engine.py::run`（`POST /api/ledger/engine/run`，功能旗標 engine_drafts） |
+| 形式 | provider，多提供者（`registry.providers("gl.events")`，鍵＝來源模組 key） |
+| 語法 | 提供：`ModuleSpec(providers={("gl.events", "<模組key>"): fn})`；`fn(start, end, *, changed_since="") -> {"events": [Event], "notice": str}`<br>Event：`{source_type, source_key(不可變、不含陣列索引), event_code, event_date(YYYY-MM-DD 權責日), doc_no, case_no, party{key,name}, tax_code, mode(snapshot｜cumulative｜append), lines:[{role, side(D｜C), amount(非負整數新臺幣), case_no, party_key, tax_code, memo}], meta}`。來源給**角色**，角色→科目由 M06 設定（`gl_account_roles`） |
+| 回傳 | 見語法。`notice` 由來源自報（例：某來源資料缺席的原因） |
+| 對方不在時 | arap 不在 ⇒ 引擎不產生銷項／收款草稿，回應與期末檢查明說「arap 模組未安裝：不含銷項發票、客戶收款」，其餘來源照常。收集結果的 `notices` 逐來源明說：模組未安裝＝「○○模組未安裝：不含○○」、已載入但未提供＝「○○尚未接入總帳」、提供者丟例外＝「○○的分錄事件讀取失敗（例外型別）」；一個來源失敗不影響其他來源；無效事件列入 `invalid`（附原因），不消失。**不可與「0 筆」長得一樣** |
+| 契約版本 | 1（2026-09-30） |
+| 守門 | `backend/modules/accounting/tests/test_ledger_a_contract_2026_09_30.py`：驗證（12 種壞事件各有原因）、內容雜湊（meta／順序／說明不參與，金額變了雜湊必變）、正對照（合格事件必出現且帶雜湊）、反向控制（缺席、未接入、提供者壞掉、無效事件、重複、notice 傳遞）、API 權限與缺席說明 |
+
