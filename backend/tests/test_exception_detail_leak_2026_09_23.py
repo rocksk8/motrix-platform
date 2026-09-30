@@ -360,7 +360,8 @@ def _decoy_correct_after_fix():
     #    ——temp 目錄不在 `ROOT` 底下會直接 `ValueError`，所以誘餌檔案
     #    要放在 `ROOT` 底下（`backend/tests/` 自己這裡，真正的 `_scan_
     #    all()` 已經排除 `tests/`，不會把這個誘餌檔算進真實母體）。
-    p = pathlib.Path(__file__).resolve().parent / "_em3_decoy_TEMP.py"
+    # 檔名加 uuid（同時跑的兩份不互相覆蓋）；不是 test_*.py，pytest 不會收集它（共用目錄裡的暫存檔，登記在 test_no_temp_files_in_shared_tests_dir）
+    p = pathlib.Path(__file__).resolve().parent / ("_em3_decoy_TEMP_%s.py" % __import__("uuid").uuid4().hex[:8])
     try:
         p.write_text(synthetic, encoding="utf-8")
         got = {(e["function"], e["group"], e["leaks"]) for e in _scan_router_file(p)}
