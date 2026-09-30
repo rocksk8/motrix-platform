@@ -34,6 +34,17 @@ class DefinitionError(ValueError):
         self.problems = problems or []
 
 
+class DefinitionConflict(DefinitionError):
+    """與目前狀態衝突（HTTP 409）：例如這份定義有送審中的版本時，直接發布／還原會讓那份送審變成過期的（W3 #3）。"""
+
+
+def _open_blocks_direct(conn, kind, key, scope, what):
+    sub_ = open_submission(conn, kind, key, scope)
+    if sub_ is not None:
+        raise DefinitionConflict("這份定義有送審中的第 %s 版，不能直接%s：請先審核（核可／退回）那一版，或請審核人退回後再處理"
+                                 % (sub_["version"], what))
+
+
 def register_validator(kind: str, fn) -> None:
     _VALIDATORS[kind] = fn
 
@@ -249,6 +260,7 @@ def publish(conn, kind, key, scope, note="", user="") -> dict:
 
 
 def _publish_locked(conn, kind, key, scope, note, user) -> dict:
+    _open_blocks_direct(conn, kind, key, scope, "發布")
     draft = get(conn, kind, key, scope, 0)
     if draft is None:
         raise DefinitionError("沒有草稿可以發布")
@@ -276,6 +288,7 @@ def restore(conn, kind, key, scope, version, note="", user="") -> dict:
 
 
 def _restore_locked(conn, kind, key, scope, version, note, user) -> dict:
+    _open_blocks_direct(conn, kind, key, scope, "還原")
     old = get(conn, kind, key, scope, int(version))
     if old is None or old["status"] != "published":
         raise DefinitionError("找不到第 %s 版（已發布）" % version)

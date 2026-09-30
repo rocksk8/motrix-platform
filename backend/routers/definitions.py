@@ -135,6 +135,8 @@ def _custom_module_scope_guard(kind, scope):
 
 
 def _err(e: D.DefinitionError, status=400):
+    if isinstance(e, D.DefinitionConflict):
+        status = 409
     return JSONResponse(status_code=status, content={"detail": str(e), "problems": e.problems})
 
 
