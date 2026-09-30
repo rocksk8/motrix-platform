@@ -324,6 +324,41 @@ def _deny_detail(user: dict, type_: str, doc_id, reason: str):
     raise HTTPException(404, detail_not_found_message(doc_id))
 
 
+def _open_detail(conn, user: dict, type_: str, doc_id: str) -> dict:
+    """詳情的內容＋存取守門（詳情端點與 `/api/photo-token` 的簽核佇列情境共用同一支）。
+    類型沒有提供者 ⇒ 400；查無或看不到 ⇒ 同一個 404（`_deny_detail`）。回提供者的原始內容（未遮蔽）。"""
+    prov = registry.providers("approval.detail").get(type_)
+    if prov is None:
+        raise HTTPException(400, "不支援的類型（或該單據的模組未安裝）：" + str(type_))
+    try:
+        d = prov(conn, doc_id)
+    except HTTPException as e:                           # 提供者自己的查無訊息（例：「完工單不存在」）也統一
+        if e.status_code != 404:
+            raise
+        d = None
+    if not d:
+        _deny_detail(user, type_, doc_id, "not_found")
+    approval_raw = d.get("approvalRaw")
+    # `selfViewBy`：申請人本人不經每案守門。**只有 M01 的已結案變更（case_change）宣告**——單層「任一 superadmin」、
+    # 沒有簽核鏈可比對，而申請人要看得到自己送出的內容；其他提供者不可以宣告（它會繞過每案守門）。
+    if not (d.get("selfViewBy") and d["selfViewBy"] == user["username"]):
+        try:
+            _guard_queue_detail(conn, user, d["quoteNo"], approval_raw)
+        except HTTPException as e:                       # 守門的 404 帶關聯的案件單號（會洩漏掛在哪一案）⇒ 換成同一句
+            if e.status_code != 404:
+                raise
+            _deny_detail(user, type_, doc_id, "denied")  # 案件層的真正原因 case_access 已另記
+    return d
+
+
+def detail_file_paths(conn, user: dict, type_: str, doc_id: str) -> set:
+    """這個人**點得開的**簽核佇列詳情 (type, id) 列出的檔案路徑（`/api/photo-token` 的簽核佇列情境，2026-09-30 P0）。
+    簽核人常常不是案件的人（`_guard_queue_detail` 放行順序 1）⇒ 單看路徑的擁有單據規則會擋掉他要簽的附件；
+    這裡只放行「詳情守門放行 ∧ 詳情真的列出這個路徑」。看不到 ⇒ 丟與詳情相同的 404。"""
+    d = _open_detail(conn, user, type_, doc_id)
+    return {f.get("path") for f in (d.get("files") or []) if isinstance(f, dict) and f.get("path")}
+
+
 @router.get("/api/approval-queue/detail")
 def approval_queue_detail(type: str, id: str, authorization: str = Header(None)):
     """一筆待簽核項目的完整內容：屬於哪個案件、送審了什麼、夾帶哪些檔案、改了什麼。
@@ -331,29 +366,10 @@ def approval_queue_detail(type: str, id: str, authorization: str = Header(None))
     內容由擁有模組提供（`approval.detail`，名稱＝type）；這裡做每案權限、案件抬頭與金額遮蔽。
     真正的動作權限（核准／退回）仍由各自的端點把關。"""
     user = _require_user(authorization)
-    prov = registry.providers("approval.detail").get(type)
-    if prov is None:
-        raise HTTPException(400, "不支援的類型（或該單據的模組未安裝）：" + str(type))
     conn = get_db()
     try:
-        try:
-            d = prov(conn, id)
-        except HTTPException as e:                       # 提供者自己的查無訊息（例：「完工單不存在」）也統一
-            if e.status_code != 404:
-                raise
-            d = None
-        if not d:
-            _deny_detail(user, type, id, "not_found")
+        d = _open_detail(conn, user, type, id)
         approval_raw = d.get("approvalRaw")
-        # `selfViewBy`：申請人本人不經每案守門。**只有 M01 的已結案變更（case_change）宣告**——單層「任一 superadmin」、
-        # 沒有簽核鏈可比對，而申請人要看得到自己送出的內容；其他提供者不可以宣告（它會繞過每案守門）。
-        if not (d.get("selfViewBy") and d["selfViewBy"] == user["username"]):
-            try:
-                _guard_queue_detail(conn, user, d["quoteNo"], approval_raw)
-            except HTTPException as e:                   # 守門的 404 帶關聯的案件單號（會洩漏掛在哪一案）⇒ 換成同一句
-                if e.status_code != 404:
-                    raise
-                _deny_detail(user, type, id, "denied")   # 案件層的真正原因 case_access 已另記
         out = {"type": type, "id": id, "title": d.get("title") or id,
                "fields": list(d.get("fields") or []), "items": list(d.get("items") or []),
                "files": list(d.get("files") or []), "changes": d.get("changes"),

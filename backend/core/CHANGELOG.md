@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.72 — 2026-09-30（暫用，列車取號；wip/sec-p0 安全修正 P0）
+- L1（新增）：`helpers.uploads.PATH_ACCESS`（＝`"uploads.path_access"`，IP-104）、`canonical_upload_path(raw)`（上傳相對路徑正規化：絕對路徑、`..`、`.`、反斜線、冒號、NUL、空段、只有一段、realpath 與字面不同〔連結／junction〕或跑出 UPLOADS_ROOT ⇒ None）、`upload_owner(rel)`（⇒ `(資料夾, 其餘各段)`，去掉 `_demo_uploads/`、`_demo_projects/`→`projects`）、`upload_readable(conn, rel, user)`（依資料夾找 `uploads.path_access` 提供者、用擁有單據的規則判斷；沒人認領 ⇒ False；提供者例外 ⇒ False＋ERROR）
+- L1（行為，安全）：`GET /api/photo-token` 原本對任何路徑簽發（只要求登入）、`GET /api/uploads/{path}` 帶 Authorization 那條也只要求登入 ⇒ 兩者改為 `canonical_upload_path`（不合法 403）＋`upload_readable`，或帶 `type`／`id`（簽核佇列情境）時詳情守門放行且詳情列出該路徑；其餘 404「檔案不存在」（與查無同一句）。簽章改綁正規路徑（`a/b/c`）；已發出的舊簽章（1 小時）部署後失效、重新載入即可
+- L1（新增，私有）：`routers/approval_queue._open_detail`（詳情端點的守門抽出，行為不變）、`detail_file_paths`；`routers/system._WorkLogPhotoAccess`（`projects/` 工作日誌照片：`work_log`／`case_manage` 模組，或日誌掛的案件 `case_documents_readable`）
+- 頁面：`approval-queue.html` 換簽章時帶目前詳情的 (type, id)
+
 ## 1.71 — 2026-09-30（暫用，列車取號；wip/w2-report-cash）
 - L1（新增）：`helpers.tax_calc.receipt_amounts(receivable, actual, fee)` ⇒ `(bank, gross, fee)`，經 `helpers` 匯出：已收款項的銀行入帳／收入(含稅)／手續費單一定義（實收＝銀行入帳、收入＝入帳＋手續費、淨額＝入帳不再減手續費）。`summarize_payment_items` 的 `netAmount`／`netCollected` 改用它。
 - L1（新增）：`helpers.recognition_basis.DEFAULT_BASIS`（營運報表預設口徑＝`cash`）；`normalize_basis(None)` 回它（原為 accrual）。

@@ -39,5 +39,7 @@ MODULE = ModuleSpec(
         ("approval.detail", "dispatch_file_delete"): vendor_contractors.delete_queue_detail,
         # IP-21（暫定號）：M06 傳票帶入附件的來源（派工單、承攬商發票）
         ("attachments.for_document", "subcontract"): attachments._SubcontractAttachments,
+        # IP-104：上傳檔的讀取權限（派工單附件、承攬商發票；2026-09-30 P0）
+        ("uploads.path_access", "subcontract"): attachments._SubcontractPathAccess,
     },
 )

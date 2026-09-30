@@ -42,21 +42,26 @@ def _auth(token):
 def dev_log_attachment(request, client, make_user):
     """建一個附件，回傳 (token, 附件 metadata)。讀檔端（/api/photo-token、/api/uploads）是 L1，附件從哪裡來有兩種
     （B，2026-09-28，稽核 D RM-S1）：`crm`＝經業務開發記錄上傳（驗與 CRM 的整合，CRM 在才跑）；
-    `l1`＝直接走 CRM 底下那支 L1 存檔函式 helpers.uploads.save_document_files（沒有 CRM 的安裝包也驗得到讀檔）。"""
+    `l1`＝L1 自己的工作日誌照片（沒有 CRM 的安裝包也驗得到讀檔；2026-09-30 P0 起讀檔要有擁有單據，見下方更正）。"""
     u, p = make_user(username="att_serve", role="superadmin")
     token = _login(client, u, p)
-    if request.param == "l1":
-        import asyncio
-        import io
-        from starlette.datastructures import UploadFile
-        from helpers.uploads import save_document_files
-        f = UploadFile(file=io.BytesIO(_png_bytes()), filename="site.png")
-        return token, asyncio.run(save_document_files("dev_logs", "L1-SERVE", [f], u, watermark_by=u))[0]
-
     import db
     conn = db.get_db()
     uid = conn.execute("SELECT id FROM users WHERE username=?", (u,)).fetchone()["id"]
     conn.close()
+
+    if request.param == "l1":
+        # 〔更正 2026-09-30 P0：原本直接 save_document_files("dev_logs", "L1-SERVE") 存一個**沒有擁有單據**的檔。
+        #  讀檔端改為「只放行讀得到擁有單據的人」之後，那種檔沒有人讀得到（設計如此）⇒ 改用 L1 自己擁有的
+        #  工作日誌照片（`/api/work-logs/{id}/photos`，routers/system.py），一樣不需要 CRM。〕
+        r = client.post("/api/work-logs", headers=_auth(token),
+                        json={"log_date": "2026-09-15", "user_id": uid, "content": "現場照"})
+        assert r.status_code in (200, 201), r.text
+        wid = r.json()["id"]
+        r = client.post(f"/api/work-logs/{wid}/photos", headers=_auth(token),
+                        files=[("files", ("site.png", _png_bytes(), "image/png"))])
+        assert r.status_code == 201, r.text
+        return token, r.json()["photos"][0]
 
     case_id = client.post("/api/dev-cases", headers=_auth(token),
                           json={"case_name": "附件讀取測試"}).json()["id"]

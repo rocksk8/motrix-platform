@@ -23,5 +23,7 @@ MODULE = ModuleSpec(
         ("approval.reassign", "payment_request"): payment_requests.REASSIGN,
         ("approval.detail", "invoice_voucher"): invoice_vouchers.queue_detail,
         ("approval.detail", "payment_request"): payment_requests.queue_detail,
+        # IP-104：上傳檔的讀取權限（開票申請已開立檔案；2026-09-30 P0）
+        ("uploads.path_access", "arap"): invoice_vouchers._InvoiceVoucherPathAccess,
     },
 )

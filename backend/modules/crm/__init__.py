@@ -12,5 +12,7 @@ MODULE = ModuleSpec(
     providers={
         # IP-13：M01 刪報價單時，轉建連結指到它的業務開發案件解除連結（同一筆交易）
         ("crm.quote_deleted", "crm"): api.unlink_deleted_quote,
+        # IP-104：上傳檔的讀取權限（開發記錄附件；2026-09-30 P0）
+        ("uploads.path_access", "crm"): api._DevLogPathAccess,
     },
 )

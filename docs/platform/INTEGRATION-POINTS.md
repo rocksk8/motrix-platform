@@ -614,6 +614,25 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ---
 
+## IP-104　`uploads.path_access`：上傳檔的讀取權限（各單據模組＋L1 工作日誌 → L1 `/api/photo-token`、`/api/uploads/…`；多提供者）
+
+2026-09-30 安全修正 P0（設計審查）：原本 `/api/photo-token` 對**任何路徑**簽發簽章、`/api/uploads/…` 帶 Authorization 也只要求登入 ⇒ 任何登入者讀得到任何單據附件（路徑形狀 `<資料夾>/<單號>/<檔名>` 可列舉）。改為依第一段資料夾交給**擁有那張單據的模組**，用那張單據自己的讀取規則判斷；沒有人認領的資料夾一律不放行。**編號暫定（104），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`modules/case/attachments.py::_CasePathAccess`（quotations、quotation_payment_items、quotation_materials、quotation_materials_invoices、case_updates、case_extra_expense、completion_notes、_pending_case_changes）；M02：`modules/crm/api.py::_DevLogPathAccess`（dev_logs）；M03：`modules/supply/api/shipping_notes.py::_ShippingPathAccess`（shipping_notes）；M04：`modules/subcontract/attachments.py::_SubcontractPathAccess`（contractor_dispatches、contractor_dispatch_invoices）；M05：`modules/arap/api/invoice_vouchers.py::_InvoiceVoucherPathAccess`（invoice_vouchers）；L1：`routers/system.py::_WorkLogPhotoAccess`（projects＝工作日誌照片，`registry.provide`） |
+| 使用方 | L1 `helpers/uploads.py::upload_readable`（`routers/uploads.py` 的 `GET /api/photo-token` 與 `GET /api/uploads/{path}` 標頭那條） |
+| 形式 | provider，**多提供者、以模組 key 區分**；每個提供者宣告 `FOLDERS`（兩兩不重疊） |
+| 語法 | 提供：`ModuleSpec(providers={("uploads.path_access", "<key>"): Obj})`；`Obj.FOLDERS`、`Obj.readable(conn, folder, rest, user) -> bool`（`rest`＝資料夾之後各段、含檔名；demo 前綴 `_demo_uploads/`、`_demo_projects/`→`projects` 已由 L1 去掉）。取用：`helpers.uploads.canonical_upload_path(raw)`（不合法 ⇒ None ⇒ 403）→ `upload_readable(conn, rel, user)` |
+| 回傳 | `readable` ⇒ True／False；單據不存在、看不到、形狀不對（段數、編號）⇒ False。規則＝該單據自己端點的判斷：報價單上四類 `case_page_readable`、動態 `case_documents_readable`、額外支出 `case_owner_readable`（同 IP-21）；完工單／出貨單＝清單規則 `case_documents_readable`；待核准變更＝申請人本人 ∨ `case_page_readable`（變更 id 必須屬於該案）；開票申請 `_voucher_readable`；派工單＝單筆端點模組 ∨ `case_documents_readable`；開發記錄＝`_require_dev`＋row_access `dev_case`；工作日誌＝`work_log`／`case_manage` 模組 ∨ 日誌掛的案件 `case_documents_readable`。提供者丟例外 ⇒ L1 當 False 並記 ERROR（fail closed） |
+| 對方不在時 | 那幾個資料夾沒有提供者 ⇒ 讀不到（404，與查無同一句「檔案不存在」）——**安全的方向**，檔案本身不動；單據頁在模組不在時本來就不存在 |
+| 契約版本 | 1（2026-09-30） |
+| 守門 | `backend/tests/test_upload_path_access_2026_09_30.py`（正規化／穿越／連結、無人認領 404、工作日誌、FOLDERS 不重疊、提供者例外 fail closed）；`backend/modules/case/tests/test_upload_access_p0_2026_09_30.py`、`backend/modules/supply/tests/test_shipping_note_access_p0_2026_09_30.py`、`backend/modules/crm/tests/test_dev_log_upload_access_p0_2026_09_30.py`、`backend/modules/subcontract/tests/test_dispatch_upload_access_p0_2026_09_30.py`、`backend/modules/arap/tests/test_invoice_voucher_upload_access_p0_2026_09_30.py` |
+
+簽核佇列情境（非 provider，L1 內部）：`/api/photo-token?path=…&type=…&id=…` ⇒ `routers/approval_queue.py::detail_file_paths`——詳情守門（`_open_detail`，與 `GET /api/approval-queue/detail` 同一支）放行，而且詳情列出這個路徑才簽；簽核人常常不是案件的人。approval-queue 頁帶目前詳情的 (type, id)。
+
+---
+
 ## IP-100　`payables.pending`：請款待付款（M01 → M05 出納；多提供者）
 
 對應 CORE-SPEC「請款流程（下一版）」（2026-09-27 使用者裁示）：核准而未付款的請款（案件額外支出）進出納待付款；出納登錄付款寫回付款日。

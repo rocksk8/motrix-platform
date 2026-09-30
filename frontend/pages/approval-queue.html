@@ -1358,9 +1358,16 @@
           this.previewFetching = false
         },
 
+        // 簽核人常常不是案件的人：換簽章時帶上目前詳情的 (type, id)，伺服器以詳情守門＋詳情列出的路徑放行（2026-09-30 P0）
+        _photoTokenUrl(path) {
+          const d = this.detail
+          const ctx = (d && d.type && d.id) ? '&type=' + encodeURIComponent(d.type) + '&id=' + encodeURIComponent(d.id) : ''
+          return API + '/api/photo-token?path=' + encodeURIComponent(path) + ctx
+        },
+
         async previewFile(file) {
           try {
-            const r = await fetch(`${API}/api/photo-token?path=${encodeURIComponent(file.path)}`, {
+            const r = await fetch(this._photoTokenUrl(file.path), {
               headers: { Authorization: 'Bearer ' + this.session.token }
             })
             if (!r.ok) { alert('取得檔案連結失敗'); return }
@@ -1539,7 +1546,7 @@
           for (const f of (this.detail?.files || [])) {
             if (f.kind !== 'image' || !f.path || f.dataUrl) continue
             try {
-              const r = await fetch(API + '/api/photo-token?path=' + encodeURIComponent(f.path),
+              const r = await fetch(this._photoTokenUrl(f.path),
                                     { headers: { Authorization: 'Bearer ' + this.session.token } })
               if (!r.ok) continue
               const d = await r.json()

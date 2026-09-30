@@ -958,3 +958,16 @@ class _InvoiceVoucherAttachments:
 
 
 _registry.provide("attachments.for_document", "arap", _InvoiceVoucherAttachments)
+
+
+class _InvoiceVoucherPathAccess:
+    """`uploads.path_access`（IP-104，2026-09-30 P0）：`invoice_vouchers/<開票單號>/<檔名>`（已開立檔案）
+    ⇒ 開票申請單筆的讀取規則 `_voucher_readable`（案件層＋金額層，含本單簽核人例外）。"""
+    FOLDERS = ("invoice_vouchers",)
+
+    @staticmethod
+    def readable(conn, folder, rest, user):
+        if len(rest) != 2:
+            return False
+        row = conn.execute("SELECT quote_no, data_json FROM invoice_vouchers WHERE voucher_no = ?", (rest[0],)).fetchone()
+        return bool(row) and _voucher_readable(conn, row, user)

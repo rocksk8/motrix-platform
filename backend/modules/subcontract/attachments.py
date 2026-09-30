@@ -39,6 +39,28 @@ class _SubcontractAttachments:
         return files_from_json_column(conn, "contractor_dispatches", "id", doc_no, _COLUMNS[source_type])
 
 
+#: 派工單單筆 `GET /api/contractor-dispatches/{did}` 的模組（回應含 files_json／invoice_files_json 的路徑）
+DISPATCH_READ_MODULES = ('procurement', 'case_manage', 'contractor_list', 'quotation')
+
+
+class _SubcontractPathAccess:
+    """`uploads.path_access`（IP-104，2026-09-30 P0）：`contractor_dispatches|contractor_dispatch_invoices/<派工id>/<檔名>`
+    ⇒ 派工單存在，且（派工單單筆端點的模組規則 ∨ 看得到該案的單據 `case_documents_readable`，同 IP-21 提供者）。"""
+    FOLDERS = ("contractor_dispatches", "contractor_dispatch_invoices")
+
+    @staticmethod
+    def readable(conn, folder, rest, user):
+        from helpers.auth import user_has_module
+        if len(rest) != 2 or not rest[0].isdigit():
+            return False
+        row = conn.execute("SELECT quote_no FROM contractor_dispatches WHERE id = ?", (int(rest[0]),)).fetchone()
+        if row is None:
+            return False
+        if user.get("role") == "superadmin" or any(user_has_module(user, k) for k in DISPATCH_READ_MODULES):
+            return True
+        return bool(row["quote_no"]) and case_documents_readable(conn, row["quote_no"], user)
+
+
 def _count(conn, source_type, doc_no):
     """看不到的那一筆有幾個附件（只給 hidden 的數字用；壞資料算 1）。"""
     try:

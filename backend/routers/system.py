@@ -626,6 +626,38 @@ def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(N
     return {"ok": True}
 
 
+class _WorkLogPhotoAccess:
+    """`uploads.path_access`（IP-104，2026-09-30 P0）：`projects/…`（demo：`_demo_projects/…`）＝工作日誌照片
+    （含 2026-08-26 從專案日誌搬過來的舊路徑）。擁有單據＝`photos` 列出這個路徑的那筆 `work_logs`；讀取規則＝
+    `GET /api/work-logs`（`work_log` 或 `case_manage` 模組；superadmin 直通），或該日誌掛的案件的動態看得到
+    （案件動態端點把掛在案件上的工作日誌連照片一起列出，規則 `case_documents_readable`）。沒有任何一筆列出 ⇒ False。"""
+    FOLDERS = ("projects",)
+
+    @staticmethod
+    def readable(conn, folder, rest, user):
+        from helpers.auth import user_has_module
+        from helpers.case_access import case_documents_readable
+        from helpers.uploads import upload_owner
+        by_module = user.get("role") == "superadmin" or any(user_has_module(user, k) for k in ('work_log', 'case_manage'))
+        want = (folder, tuple(rest))
+        tail = "/".join(rest)
+        like = "%" + tail.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        for r in conn.execute("SELECT case_no, photos FROM work_logs WHERE photos LIKE ? ESCAPE '\\'", (like,)):
+            try:
+                photos = json.loads(r["photos"] or "[]") or []
+            except (TypeError, ValueError):
+                continue
+            if not any(isinstance(p, dict) and upload_owner(p.get("path") or "") == want for p in photos):
+                continue
+            if by_module or (r["case_no"] and case_documents_readable(conn, r["case_no"], user)):
+                return True
+        return False
+
+
+from core import registry as _registry  # noqa: E402
+_registry.provide("uploads.path_access", "work_log", _WorkLogPhotoAccess)
+
+
 # ── 執行時的開關（2026-09-22 §8 FX1a）─────────────────────────────────────────
 
 #: 這台機器上「會不會對外連線」的兩個總開關。

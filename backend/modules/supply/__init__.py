@@ -20,5 +20,7 @@ MODULE = ModuleSpec(
         ("approval.queue_items", "shipping_note"): shipping_notes._queue_items,
         ("approval.reassign", "shipping_note"): shipping_notes.REASSIGN,
         ("approval.detail", "shipping_note"): shipping_notes._queue_detail,
+        # IP-104：上傳檔的讀取權限（出貨單回簽附件；2026-09-30 P0）
+        ("uploads.path_access", "supply"): shipping_notes._ShippingPathAccess,
     },
 )
