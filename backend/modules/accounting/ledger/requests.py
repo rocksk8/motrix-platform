@@ -17,7 +17,7 @@ from modules.accounting.ledger import opening as _opening
 from modules.accounting.ledger import periods as _periods
 
 PENDING, APPROVED, RETURNED, WITHDRAWN = "待審核", "已核准", "已退回", "已撤回"
-STATUS_LABEL = {PENDING: "待核准", APPROVED: "已核准並執行", RETURNED: "已退回", WITHDRAWN: "已撤回"}
+STATUS_LABEL = {PENDING: "待簽核", APPROVED: "已執行（已核准）", RETURNED: "已退回", WITHDRAWN: "已撤回"}          # 全畫面統一用「待簽核」（佇列頁、申請清單、訊息）
 ACTIONS = ("period_close", "period_reopen", "year_close", "opening_create")
 _MAX_PARAMS_BYTES = 2_000_000
 
@@ -100,14 +100,14 @@ def _next_no(conn, now):
 
 
 def create(conn, user, action, params):
-    """建立申請（pending）。同一人同一動作同一參數已有待核准 ⇒ 擋（避免連按產生多張）。"""
+    """建立申請（待簽核）。同一人同一動作同一參數已有待簽核 ⇒ 擋（避免連按產生多張）。"""
     p, label = normalize(conn, action, params)
     blob = json.dumps(p, ensure_ascii=False, sort_keys=True)
     uname = (user or {}).get("username") or ""
     dup = conn.execute("SELECT request_no FROM gl_action_requests WHERE status='待審核' AND action=? AND requested_by=? AND params_json=?",
                        (action, uname, blob)).fetchone()
     if dup:
-        raise RequestConflict("你已經送出同一個申請（%s），請等待最高管理者核准。" % dup["request_no"])
+        raise RequestConflict("你已經送出同一個申請（%s），請等待最高管理者簽核。" % dup["request_no"])
     now = _dt.datetime.now().isoformat(timespec="seconds")
     no = _next_no(conn, now)
     display = (user or {}).get("display_name") or uname

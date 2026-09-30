@@ -10,6 +10,7 @@
 """
 import calendar
 import datetime as _dt
+import json
 
 from modules.accounting.ledger import periods as _periods
 from modules.accounting.ledger import roles as _roles
@@ -109,6 +110,27 @@ def forget(conn, row):
     conn.execute("DELETE FROM gl_withholding_items WHERE source_type=? AND source_key=? AND remitted_at=''", (row["source_type"], row["source_key"]))
 
 
+def _names(conn, items):
+    """每個項目加 `party_name`（畫面顯示姓名，不要只有『C1』這種編號）：先取來源事件裡的對象姓名（勞報單事件的 party.name），
+    沒有就用使用者顯示名稱（獎金發放的對象是帳號），再沒有就退回編號。只讀。"""
+    users = {}
+    for it in items:
+        name = ""
+        r = conn.execute("SELECT payload_json FROM gl_source_events WHERE source_type=? AND source_key=? ORDER BY rev DESC LIMIT 1",
+                         (it["source_type"], it["source_key"])).fetchone()
+        if r:
+            try:
+                name = ((json.loads(r["payload_json"] or "{}").get("party") or {}).get("name") or "").strip()
+            except ValueError:
+                name = ""
+        if not name and it["party_key"]:
+            if it["party_key"] not in users:
+                u = conn.execute("SELECT display_name FROM users WHERE username=?", (it["party_key"],)).fetchone()
+                users[it["party_key"]] = (u["display_name"] if u else "") or ""
+            name = users[it["party_key"]]
+        it["party_name"] = name or it["party_key"]
+
+
 def report(conn, ym=None, kind=None, today=None):
     """清單＋依（種類，所屬月）彙總＋逾期旗標＋與 2252 貸方發生額對帳。ym 給 'YYYY-MM' 只看該月。"""
     today = today or _dt.date.today().isoformat()
@@ -130,6 +152,7 @@ def report(conn, ym=None, kind=None, today=None):
             g["unremitted"] += it["amount"]
     for g in groups.values():
         g["overdue"] = bool(g["unremitted"] and today > g["due"])
+    _names(conn, items)
     out = {"items": items, "groups": sorted(groups.values(), key=lambda x: (x["period_ym"], x["kind"])), "checks": [], "truncated": truncated}
     if ym:
         code = _roles.resolve_role(conn, "WITHHOLD_TAX", on_date=ym + "-28") or ""
@@ -138,9 +161,13 @@ def report(conn, ym=None, kind=None, today=None):
             "SELECT COALESCE(SUM(l.credit),0) FROM voucher_lines l JOIN vouchers_all v ON v.id=l.voucher_id WHERE v.status='已過帳' AND v.voided_at=''"
             " AND v.kind<>'closing' AND l.account_code=? AND substr(v.voucher_date,1,10) BETWEEN ? AND ?", (code, lo, hi)).fetchone()[0] if code else 0
         listed = sum(i["amount"] for i in items)
-        out["checks"].append({"key": "vs_account", "label": "清單合計 ＝ 代扣科目 %s 當月貸方發生額" % (code or "（未設定）"), "left": int(listed), "right": int(credit),
-                              "ok": int(listed) == int(credit),
-                              "note": "不符多半是尚未進清單的來源（例：獎金代扣）或該月傳票尚未過帳。"})
+        if code:
+            out["checks"].append({"key": "vs_account", "label": "清單合計 ＝ 代扣科目 %s 當月貸方發生額" % code, "left": int(listed), "right": int(credit),
+                                  "ok": int(listed) == int(credit),
+                                  "note": "不符多半是尚未進清單的來源（例：獎金代扣）或該月傳票尚未過帳。"})
+        else:                                                              # 沒有代扣科目可對：明說怎麼辦（不是拿 0 去比一個看不懂的不符）
+            out["checks"].append({"key": "vs_account", "label": "清單合計 ＝ 代扣科目當月貸方發生額（代扣科目尚未設定）", "left": int(listed), "right": 0, "ok": False,
+                                  "note": "請先到「總帳設定」把角色「代扣所得稅」對應到代扣科目（通常是 2252），再回到這裡核對。"})
     return out
 
 

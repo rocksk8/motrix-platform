@@ -229,3 +229,14 @@ def test_decision_is_a_conditional_update_and_takes_the_write_lock(client, world
         assert c.execute("SELECT status FROM gl_action_requests WHERE id=?", (rid,)).fetchone()[0] == "待審核"
     finally:
         c.close()
+
+
+def test_labels_use_one_word_for_pending_and_show_executed_proof(client, world):
+    made = client.post("/api/ledger/periods/%d/close" % world["pid"], headers=world["fin"], json={}).json()
+    assert "待簽核" in made["message"]                                                                   # 送出當下的訊息與清單用同一個詞
+    assert client.get("/api/ledger/action-requests/%d" % made["request_id"], headers=world["fin"]).json()["status_label"] == "待簽核"
+    dup = client.post("/api/ledger/periods/%d/close" % world["pid"], headers=world["fin"], json={})
+    assert dup.status_code == 409 and "簽核" in dup.json()["detail"]
+    client.post("/api/ledger/action-requests/%d/approve" % made["request_id"], headers=world["sup"])
+    done = client.get("/api/ledger/action-requests/%d" % made["request_id"], headers=world["fin"]).json()
+    assert done["status_label"].startswith("已執行") and done["decided_by"] == world["su"] and done["decided_at"]      # 已執行的證明：誰、何時
