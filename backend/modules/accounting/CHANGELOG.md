@@ -6,6 +6,7 @@
 - 新 API：`GET/PUT /api/ledger/category-map`、`DELETE /api/ledger/category-map/{category}`、`PUT /api/ledger/expense-categories`（寫入只有最高管理者，稽核含舊值）；單一提供者 `expense.categories`。
 - 引擎把事件行選填 `dims` 寫入 `voucher_lines.dim_json`；`dims` 有值才進內容雜湊（舊事件雜湊不變）。
 - 新提供者 `gl.category_account`（費用類別代碼或啟用中名稱 → 科目代號；無對應回 None；唯讀、顯示用快照）。
+- 新 `GET /api/expense-categories`：任何登入者可讀啟用中的類別 `{categories:[{code,name,default_tax}]}`（費用單據下拉選單用；不含科目；對應表仍只給出納／財務）。
 - 不開功能旗標、無畫面（行內頁籤待解凍後接）；來源（W1 費用單）尚未送 `category`，上線後行為不變。
 
 ## 1.1.45 — 2026-10-01（wip/w4-acceptance-2）W4 驗收複核後的文字修正

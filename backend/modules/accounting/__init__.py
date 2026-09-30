@@ -20,7 +20,7 @@ _m0003 = importlib.import_module("modules.accounting.migrations.0003_dims_and_ca
 
 MODULE = ModuleSpec(
     key="accounting",
-    routers=[accounting_export.router, ledger_annotations.router, ledger_category_map.router, account_items.router, vouchers.router, ledger_periods.router, ledger_reports.router, ledger_engine.router, ledger_settings.router, ledger_tax.router, ledger_statements.router, ledger_closing.router, ledger_requests.router],
+    routers=[accounting_export.router, ledger_annotations.router, ledger_category_map.router, ledger_category_map.list_router, account_items.router, vouchers.router, ledger_periods.router, ledger_reports.router, ledger_engine.router, ledger_settings.router, ledger_tax.router, ledger_statements.router, ledger_closing.router, ledger_requests.router],
     migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up)],
     schedulers=[lambda: _auto_run.schedule()],          # L1：分錄引擎每小時自動產生草稿（旗標 engine_drafts 開著才跑）
     providers={
