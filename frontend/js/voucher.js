@@ -622,7 +622,7 @@ function voucherPage() {
       return {
         image: '預計併入（圖片）',
         pdf: '預計併入（PDF）',
-        unsupported: '不支援的格式，不會併入',
+        unsupported: '不會併入 PDF（只列檔名）',
       }[kind] || ''
     },
 
