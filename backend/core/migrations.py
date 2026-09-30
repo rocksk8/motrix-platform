@@ -208,5 +208,60 @@ def _core_v2_custom_records(conn):
     conn.commit()
 
 
+def _cols(conn, table):
+    return {r[1] for r in conn.execute("PRAGMA table_info(%s)" % table).fetchall()}
+
+
+def _add_col(conn, table, col, ddl):
+    if col not in _cols(conn, table):
+        conn.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, col, ddl))
+
+
+def _core_v3_builder_foundation(conn):
+    """建構器 S1～S5 底層（只增不改，建構器第三輪一次設計）：
+    ① 定義送審／退回（ui_definitions 加 submitted_by／submitted_at／decision_json；status 另有 submitted／rejected，本表無 CHECK）；
+    ② 單據修訂 -R（custom_records 加 base_no／rev／supersedes_id；custom_record_revisions 記修訂原因與前後單）；
+    ③ 金流事件 outbox（custom_record_finance_outbox：即時算不建分錄表，事件供 W4 總帳消費；dedupe_key 唯一＝冪等）。
+    明細表值（data_json 內 list-of-dict）、欄位／選單可見設定（定義 body 的 fields[].access／menu.visibleTo／menu.group）
+    都在 JSON 內，不需結構變更。"""
+    _add_col(conn, "ui_definitions", "submitted_by", "TEXT NOT NULL DEFAULT ''")
+    _add_col(conn, "ui_definitions", "submitted_at", "TEXT NOT NULL DEFAULT ''")
+    _add_col(conn, "ui_definitions", "decision_json", "TEXT NOT NULL DEFAULT '{}'")
+    _add_col(conn, "custom_records", "base_no", "TEXT NOT NULL DEFAULT ''")
+    _add_col(conn, "custom_records", "rev", "INTEGER NOT NULL DEFAULT 0")
+    _add_col(conn, "custom_records", "supersedes_id", "INTEGER NOT NULL DEFAULT 0")
+    conn.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_custom_records_base ON custom_records(module_key, base_no);
+        CREATE TABLE IF NOT EXISTS custom_record_revisions (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            module_key  TEXT    NOT NULL,
+            base_no     TEXT    NOT NULL,
+            rev         INTEGER NOT NULL,
+            record_id   INTEGER NOT NULL,
+            prev_id     INTEGER NOT NULL DEFAULT 0,
+            reason      TEXT    NOT NULL DEFAULT '',
+            by_user     TEXT    NOT NULL DEFAULT '',
+            at          TEXT    NOT NULL DEFAULT '',
+            UNIQUE(module_key, base_no, rev)
+        );
+        CREATE TABLE IF NOT EXISTS custom_record_finance_outbox (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            dedupe_key   TEXT    NOT NULL UNIQUE,
+            event        TEXT    NOT NULL,
+            module_key   TEXT    NOT NULL,
+            record_id    INTEGER NOT NULL,
+            record_no    TEXT    NOT NULL DEFAULT '',
+            kind         TEXT    NOT NULL DEFAULT '',
+            payload_json TEXT    NOT NULL DEFAULT '{}',
+            created_at   TEXT    NOT NULL DEFAULT '',
+            processed_at TEXT    NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_finance_outbox_pending ON custom_record_finance_outbox(processed_at, id);
+        CREATE INDEX IF NOT EXISTS idx_custom_finance_outbox_record ON custom_record_finance_outbox(module_key, record_id);
+    """)
+    conn.commit()
+
+
 register("core", 1, _core_v1_ui_definitions)
 register("core", 2, _core_v2_custom_records)
+register("core", 3, _core_v3_builder_foundation)
