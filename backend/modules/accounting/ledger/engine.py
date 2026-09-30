@@ -186,8 +186,9 @@ def _create_or_block(conn, ev, user, stats, rev=1, supersedes_id=None, existing_
         return _set_blocked(conn, ev, "blocked_closed", lock + "請重開期間，或改併入當期。", rev, supersedes_id, existing_id, stats)
     eid = existing_id or _insert_event(conn, ev, "pending", rev, None, supersedes_id)
     vid, no = _make_draft(conn, ev, resolved, user, event_id=eid)
-    conn.execute("UPDATE gl_source_events SET status='drafted', voucher_id=?, content_hash=?, event_date=?, payload_json=?, note='', last_seen=? WHERE id=?",
-                 (vid, ev["content_hash"], ev["event_date"], json.dumps(ev, ensure_ascii=False), _now(), eid))
+    conn.execute("UPDATE gl_source_events SET status='drafted', voucher_id=?, content_hash=?, event_date=?, amount=?, payload_json=?, note='', last_seen=? WHERE id=?",
+                 (vid, ev["content_hash"], ev["event_date"], sum(l["amount"] for l in ev["lines"] if l["side"] == "D"),
+                  json.dumps(ev, ensure_ascii=False), _now(), eid))
     if ev.get("mode") == "stock":
         _inv.issue(conn, ev["stock_part_no"], ev["stock_qty"], "stock_issue", _stock_key(ev["source_key"], rev), ev.get("case_no") or "",
                    at=ev["event_date"] + "T23:59:59")
