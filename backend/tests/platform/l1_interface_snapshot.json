@@ -1040,6 +1040,7 @@
    "validate_manifest": "def(manifest)"
   },
   "plat:definitions": {
+   "DefinitionConflict": "class",
    "DefinitionError": "class",
    "DefinitionError.__init__": "def(self, message, problems=…)",
    "KINDS": "const",
