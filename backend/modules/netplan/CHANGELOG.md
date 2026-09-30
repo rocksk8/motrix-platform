@@ -1,7 +1,8 @@
 # 網路規劃 更新紀錄
 
-## 1.0.7 — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
+## (next) — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
 - 匯出規則（使用者 2026-09-30）：網路規劃 Excel／PDF 匯出每次寫稽核（`export.xlsx`／`export.pdf`）。
+
 ## 1.0.6 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
 - 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`network-plans.html`、`network-plan-form.html`、`topology-quick.html`
 
