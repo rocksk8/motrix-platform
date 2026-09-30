@@ -2252,23 +2252,57 @@ def get_google_calendar(authorization: str = Header(None)):
     # 提示管理員授權時要用哪個 Gmail 帳號（跟寄信用的 SMTP 帳號同一組）
     email_cfg = _get_setting("email_notify", {}) or {}
     safe["smtp_user_hint"] = email_cfg.get("smtp_user", "")
+    # 事件種類開關（2026-09-30）：回有效值（缺項＝預設）＋目錄
+    from helpers.google_calendar import event_switches, event_types
+    safe["events"] = event_switches(cfg)
+    safe["eventTypes"] = event_types()
     return safe
+
+
+def _gcal_event_changes(body: dict, current: dict):
+    """驗 body["events"]（{代碼: bool}，只收已知代碼）⇒ (新的 events dict 或 None, [(代碼, 舊, 新)])。不合法 ⇒ 400。"""
+    from helpers.google_calendar import EVENT_CODES, event_switches
+    if "events" not in body:
+        return None, []
+    ev = body["events"]
+    if not isinstance(ev, dict):
+        raise HTTPException(400, "events 必須是 {事件代碼: true/false}")
+    bad = [k for k in ev if k not in EVENT_CODES]
+    if bad:
+        raise HTTPException(400, "未知的事件種類：%s" % "、".join(sorted(map(str, bad))))
+    if any(not isinstance(v, bool) for v in ev.values()):
+        raise HTTPException(400, "事件開關的值必須是 true 或 false")
+    before = event_switches(current)
+    stored = dict(current.get("events") if isinstance(current.get("events"), dict) else {})
+    stored.update(ev)
+    changes = [(c, before[c], ev[c]) for c in EVENT_CODES if c in ev and ev[c] != before[c]]
+    return stored, changes
 
 
 @router.put("/api/settings/google-calendar")
 def set_google_calendar(body: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     current = _get_setting("google_calendar", {}) or {}
+    new_events, changes = _gcal_event_changes(body, current)
     data = {k: body[k] for k in _GCAL_DEFAULTS if k in body}
     data = {**_GCAL_DEFAULTS, **current, **data}
     if data.get("client_secret") in ("", _MASKED):
         data["client_secret"] = current.get("client_secret", "")
     # refresh_token 只由一次性授權腳本寫入，這個端點絕不清空/覆蓋它
     data["refresh_token"] = current.get("refresh_token", "")
+    if new_events is not None:
+        data["events"] = new_events
     _set_setting("google_calendar", data)
-    _audit(_tok(authorization), "settings.google_calendar.update", "settings",
+    tok = _tok(authorization)
+    _audit(tok, "settings.google_calendar.update", "settings",
            "google_calendar", "Google 行事曆設定")
-    return {"ok": True}
+    # 每個事件種類開關的變更各記一筆（誰、哪一種、由什麼改成什麼）
+    from helpers.google_calendar import event_types
+    labels = {t["code"]: t["label"] for t in event_types()}
+    for code, old, new in changes:
+        _audit(tok, "settings.google_calendar.event_toggle", "settings", "google_calendar." + code,
+               "行事曆事件「%s」%s" % (labels[code], "開啟" if new else "關閉"), {"event": code, "from": old, "to": new})
+    return {"ok": True, "changed": [c for c, _o, _n in changes]}
 
 
 @router.post("/api/settings/google-calendar/test")

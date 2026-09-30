@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.72 — 2026-09-30 12:00（暫用，列車取號；wip/cal-toggle：行事曆推送可選）
+- L1（新增）：`helpers.google_calendar` 事件種類開關——`EVENT_TYPES`／`EVENT_CODES`（13 種：既有 9 種預設開、新 4 種 `case_update`／`dev_case_update`／`contractor_payout`／`expense_payout` 預設關）、`event_types()`、`event_switches(cfg=None)`（缺項或非 bool 取預設）、`event_enabled(code)`（未知代碼 ⇒ False）。存於 `system_settings.google_calendar.events`，不需 migration；全域 `enabled` 仍為總開關。
+- L1（新增）：`helpers.google_calendar.push_event_for_module(code, summary, description, event_date=None, merge_key="")`（經 `helpers` 匯出）——模組組好內容、L1 只判斷開關並呼叫 Google；`merge_key` ⇒ 同一 (代碼, key, 日期) 合併為一個事件（以 Google private extendedProperty `motrixMergeKey` 找回、說明累加；行程內每 key 一把鎖）。fire-and-forget、不拋出；呼叫端須在 commit 之後 `spawn_bg_thread`（名稱符合 write_txn_scan 的 `push_event_*`）。
+- L1（行為）：既有 9 支 `push_event_for_*` 開頭先判斷自己的開關；關閉 ⇒ 不建、不改、不刪（既有事件保留）。`push_event_delete_for_case_stage`（階段被刪除的清理）不受開關影響。
+- L1（行為）：`GET /api/settings/google-calendar` 多回 `events`（有效值）與 `eventTypes`（目錄）；`PUT` 收 `events: {代碼: bool}`（未知代碼／非 bool ⇒ 400），每個實際變更記一筆稽核 `settings.google_calendar.event_toggle`（detail：event／from／to），回 `changed`。仍只限最高管理者。頁面 `google-calendar-settings.html` 加事件種類勾選清單。守門 `tests/test_calendar_event_toggles_2026_09_30.py`、`tests/test_e2e_calendar_event_toggles_2026_09_30.py`；假行事曆 `tests/_fake_gcal.py`
+
 ## 1.71 — 2026-09-30（暫用，列車取號；wip/w2-report-cash）
 - L1（新增）：`helpers.tax_calc.receipt_amounts(receivable, actual, fee)` ⇒ `(bank, gross, fee)`，經 `helpers` 匯出：已收款項的銀行入帳／收入(含稅)／手續費單一定義（實收＝銀行入帳、收入＝入帳＋手續費、淨額＝入帳不再減手續費）。`summarize_payment_items` 的 `netAmount`／`netCollected` 改用它。
 - L1（新增）：`helpers.recognition_basis.DEFAULT_BASIS`（營運報表預設口徑＝`cash`）；`normalize_basis(None)` 回它（原為 accrual）。

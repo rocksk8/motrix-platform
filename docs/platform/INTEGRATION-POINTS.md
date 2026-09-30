@@ -139,6 +139,8 @@ M06 的 `vouchers_all`。
 
 **尚未處理（不在 A11 範圍）**：L1 行事曆仍**直接讀** 5 張 L2 表來組事件標題與內容（`SELECT … FROM invoice_vouchers` 等）。寫入已歸位，讀取的相依還在；要切斷須改成各模組提供「事件內容」或把 push 函式移回各模組，另開題。
 
+**新事件的寫法（2026-09-30 wip/cal-toggle，行事曆推送可選；CORE 1.72 暫用號）**：新增的事件種類**一律**由模組組好標題／說明／日期，commit 之後 `spawn_bg_thread(push_event_for_module, args=(代碼, 標題, 說明, 日期, merge_key))`（`from helpers import push_event_for_module`）；L1 只判斷事件種類開關（`system_settings.google_calendar.events`，目錄＝`helpers.google_calendar.EVENT_TYPES`）並呼叫 Google，**不查 L2 表**。新代碼要先加進 `EVENT_TYPES`（未知代碼一律不推）。使用方：M01 `case_update`、M02 `dev_case_update`、M04 `contractor_payout`、M05 `expense_payout`。守門 `backend/tests/test_calendar_event_toggles_2026_09_30.py`（開關、預設、合併、未知代碼）＋各模組 `test_*_calendar_2026_09_30.py`（觸發點）；寫鎖內呼叫由 `tools/platform/write_txn_scan.py`（`push_event_*`）擋。
+
 ---
 
 ## IP-7　L1 法規參數讀取介面（L1 `helpers.legal_params` → 所有算扣繳／補充保費的模組；首個使用方：M07 勞報單，下一個：U4 獎金分潤）

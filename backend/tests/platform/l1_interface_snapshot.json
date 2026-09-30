@@ -1,5 +1,5 @@
 {
- "core_version": "1.71",
+ "core_version": "1.72",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -575,7 +575,12 @@
    "without_google_content": "def()"
   },
   "helper:google_calendar": {
+   "EVENT_CODES": "const",
+   "EVENT_TYPES": "const",
    "create_test_event": "def()",
+   "event_enabled": "def(code)",
+   "event_switches": "def(cfg=…)",
+   "event_types": "def()",
    "push_event_delete_for_case_stage": "def(event_id)",
    "push_event_for_case_stage_done": "def(stage_id)",
    "push_event_for_case_stage_due": "def(stage_id)",
@@ -583,6 +588,7 @@
    "push_event_for_dev_case_stale": "def(case_id, case_name, customer_name, days)",
    "push_event_for_important_comment": "def(update_id, quote_no, content, author_display)",
    "push_event_for_invoice_voucher": "def(voucher_no)",
+   "push_event_for_module": "def(code, summary, description, event_date=…, merge_key=…)",
    "push_event_for_payment_request": "def(request_no)",
    "push_event_for_quotation_won": "def(quote_no)",
    "push_event_for_shipping_note": "def(note_no)"
