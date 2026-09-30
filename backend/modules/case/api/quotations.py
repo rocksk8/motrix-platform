@@ -5870,6 +5870,14 @@ def detail_completion_note(conn, doc_no):
     }
 
 
+def _lines_of_row(r) -> list:
+    try:
+        v = json.loads(r["lines_json"] or "[]")
+        return v if isinstance(v, list) else []
+    except Exception:
+        return []
+
+
 def detail_extra_expense(conn, doc_no):
     r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (doc_no,)).fetchone()
     if not r:
@@ -5920,11 +5928,18 @@ def detail_extra_expense(conn, doc_no):
                 "before": {"項目": r["description"], "數量": r["qty"],
                            "單價": r["unit_cost"], "小計": r["total_cost"],
                            "備註": r["note"]},
+                # 修正（A2）：提議內容的鍵是 camelCase（`unitCost`／`totalCost`／`addFiles`，見 `_proposal_from`）；原本讀 snake_case 鍵，
+                # 簽核人看到的「改後單價／小計」永遠是空的、待核准附件也列不出來
                 "after": {"項目": chg.get("description"), "數量": chg.get("qty"),
-                          "單價": chg.get("unit_cost"), "小計": chg.get("total_cost"),
+                          "單價": chg.get("unitCost"), "小計": chg.get("totalCost"),
                           "備註": chg.get("note")},
-                "files": _file_entries(json.dumps(chg.get("files") or [])),
+                "files": _file_entries(json.dumps(chg.get("addFiles") or [])),
             }
+            if "lines" in chg:               # 費用單據：明細與收款人也要讓簽核人看到前後對照
+                out["changes"]["before"].update({"明細列數": len(_lines_of_row(r)), "收款人": r["payee_name"] or ""})
+                out["changes"]["after"].update({"明細列數": len(chg.get("lines") or []), "收款人": chg.get("payeeName") or ""})
+                out["changes"]["afterLines"] = [{"description": (l.get("summary") or l.get("category") or ""), "amount": l.get("amount", 0)}
+                                                for l in (chg.get("lines") or []) if isinstance(l, dict)]
     return out
 
 
