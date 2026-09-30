@@ -333,3 +333,10 @@ def test_module_counts_non_string_since_is_400_not_500(client, make_user, bad):
     u, p = make_user(username="mc_ok2", role="admin", modules=["audit_log"])
     r = client.post("/api/audit-log/module-counts", headers=_login(client, u, p), json={"modules": {"quotation": bad}})
     assert r.status_code == 400, r.text
+
+
+def test_preview_posts_are_not_recorded_as_failed_writes(client):
+    """純預覽的 POST（路由樣板以 /preview 結尾）驗證不過回 422 ⇒ 不記失敗列；其他寫入照記。
+    **反向控制**：拿掉 `_FAIL_SKIP_SUFFIXES` 的判斷 ⇒ 第一個斷言紅。"""
+    assert A._audit_failure(3, "x", "X", "POST", "/api/custom-modules/{key}/output/preview", 422, now=10.0) == "skip"
+    assert A._audit_failure(3, "x", "X", "POST", "/api/custom-modules/{key}/output/render", 422, now=10.0) == "new"

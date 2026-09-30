@@ -53,6 +53,8 @@ NO_COMPANY_DATA = {
     ("main.py", "map_overlay_script"): "地圖覆蓋層腳本（靜態 JS），不含本公司資料",
     ("main.py", "root"): "首頁靜態檔（FileResponse），不含本公司資料；登入頁品牌經 /api/system/branding（公開、非文件）",
     ("routers/uploads.py", "serve_upload"): "使用者上傳的原始檔（照片、附件）原樣送回；不是系統產生的文件",
+    ("routers/attachments.py", "open_attachment"):
+        "使用者上傳的原始檔原樣送回（同 serve_upload；系統不產生內容）；train 26 路由關閉（ATTACHMENTS_OPEN_ENABLED），P3 打開時路徑綁單據後再複查是否仍屬此類",
     ("routers/system.py", "get_branding_asset"): "品牌圖檔（LOGO／favicon，§2-① 使用者裁示維持）；不是文件輸出",
     ("modules/accounting/api/vouchers.py", "line_source_file_endpoint"): "傳票分錄的原始憑證檔（使用者上傳）原樣送回",
     ("modules/accounting/api/vouchers.py", "download_voucher_attachment"): "傳票附件（使用者上傳的原始檔）原樣送回，不是系統產生的文件",
