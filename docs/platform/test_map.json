@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 928,
+  "tests": 930,
   "unmapped": 12,
   "kinds": {
-   "api": 497,
+   "api": 499,
    "e2e": 218,
    "audit": 128,
    "unit": 85
@@ -4996,6 +4996,62 @@
     ],
     "path": [
      "frontend/pages/approval-queue.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_expense_caseless_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/api/case_extra_expenses"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_expense_forms_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:arap/api/cashier",
+    "mod:case/__init__",
+    "mod:case/api/__init__",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/quotations",
+    "mod:case/expense_forms",
+    "mod:case/gl_events",
+    "mod:case/recognition"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/expense_forms.py",
+     "backend/modules/case/gl_events.py",
+     "backend/modules/case/recognition.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/case_extra_expenses.py"
     ],
     "module_dir": [
      "backend/modules/case/"

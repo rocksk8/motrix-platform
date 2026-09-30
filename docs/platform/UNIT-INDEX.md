@@ -21,7 +21,7 @@
 | `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 45 | 24 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
 | `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 21 | 62 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
 | `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 11 | 0 | `tests/platform/test_core_loader.py` |
-| `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 modules/case/quotations.py 下沉）。 | 7 | 24 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
+| `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 modules/case/quotations.py 下沉）。 | 7 | 25 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
 | `plat:upgrade` | L0 | V9 → 新版 升級轉換與回滾的核心（CORE-SPEC §9b）。L0 工具，不是業務模組。 | 50 | 0 | `tests/platform/test_core_upgrade.py` |
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 24 | 8 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
@@ -59,7 +59,7 @@
 | `helper:geo` | L1 | 地理查詢：地址 → 座標（OSM／Nominatim），以及兩點間的直線距離。（無單位卡） | 80 | 5 | — |
 | `helper:gl_status` | L1 | [單位] helper:gl_status    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版） | 2 | 3 | `tests/test_gl_source_status_2026_09_30.py` |
 | `helper:google_calendar` | L1 | Google 行事曆整合 — Phase 1（系統 → 行事曆，push only，2026-08-21）。（無單位卡） | 17 | 8 | — |
-| `helper:legal_params` | L1 | L1 法規參數服務（R1；規格 CUSTOMIZATION-SPEC §9.1）。（無單位卡） | 27 | 27 | — |
+| `helper:legal_params` | L1 | L1 法規參數服務（R1；規格 CUSTOMIZATION-SPEC §9.1）。（無單位卡） | 27 | 28 | — |
 | `helper:licensing` | L1 | 授權金鑰核心（2026-09-21，細線 1 第 1、2 步）。（無單位卡） | 13 | 4 | — |
 | `helper:mail_types` | L1 | L1 信件類型登記表（CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）。（無單位卡） | 13 | 9 | — |
 | `helper:map_overlays` | L1 | L1 地圖覆蓋層（串接點 IP-101 `map.overlay`；docs/platform/LODGING-NEARBY.md §3.6.1，D 稽核 LG-M1／LG2-S1～S3）。 | 5 | 2 | `tests/test_map_overlay_contract_2026_09_28.py`、`tests/test_e2e_map_overlay_contract_2026_09_28.py` |
