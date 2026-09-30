@@ -162,22 +162,90 @@
               <div class="cr-sec__t" x-show="sec.title" x-text="sec.title"></div>
               <div class="cr-grid">
                 <template x-for="f in sec.fields" :key="f.key">
-                  <div class="cr-f" :class="{ 'is-bad': fieldErr[f.key] }" :data-field="f.key">
+                  <div class="cr-f" :class="{ 'is-bad': fieldErr[f.key], 'cr-f--wide': f.type === 'table' || f.type === 'textarea' }" :data-field="f.key">
                     <label :for="'cr-in-' + f.key"><span x-text="f.label || f.key"></span><span class="req" x-show="f.required">*</span></label>
                     <template x-if="f.type === 'text'">
                       <input type="text" :id="'cr-in-' + f.key" x-model="values[f.key]">
                     </template>
+                    <template x-if="f.type === 'textarea'">
+                      <textarea :id="'cr-in-' + f.key" x-model="values[f.key]" :maxlength="f.maxLength || null" :placeholder="f.placeholder || ''"></textarea>
+                    </template>
                     <template x-if="f.type === 'number'">
-                      <input type="number" step="any" :id="'cr-in-' + f.key" x-model="values[f.key]">
+                      <input type="number" step="any" :id="'cr-in-' + f.key" x-model="values[f.key]" :min="f.min" :max="f.max">
                     </template>
                     <template x-if="f.type === 'date'">
-                      <input type="date" :id="'cr-in-' + f.key" x-model="values[f.key]">
+                      <input :type="f.withTime ? 'datetime-local' : 'date'" :id="'cr-in-' + f.key" x-model="values[f.key]">
                     </template>
-                    <template x-if="f.type === 'select'">
+                    <template x-if="f.type === 'daterange'">
+                      <div class="cr-range" :data-range="f.key">
+                        <input :type="f.withTime ? 'datetime-local' : 'date'" :id="'cr-in-' + f.key" x-model="values[f.key].from" aria-label="起">
+                        <span>～</span>
+                        <input :type="f.withTime ? 'datetime-local' : 'date'" x-model="values[f.key].to" aria-label="迄">
+                      </div>
+                    </template>
+                    <template x-if="f.type === 'select' && !f.allowOther">
                       <select :id="'cr-in-' + f.key" x-model="values[f.key]">
                         <option value="">（未選）</option>
                         <template x-for="o in (f.options || [])" :key="o"><option :value="o" x-text="o"></option></template>
                       </select>
+                    </template>
+                    <template x-if="f.type === 'select' && f.allowOther">
+                      <div>
+                        <input type="text" :id="'cr-in-' + f.key" x-model="values[f.key]" :list="'cr-dl-' + f.key" placeholder="選一個或自己輸入">
+                        <datalist :id="'cr-dl-' + f.key"><template x-for="o in (f.options || [])" :key="o"><option :value="o"></option></template></datalist>
+                      </div>
+                    </template>
+                    <template x-if="f.type === 'radio'">
+                      <div class="cr-opts" role="radiogroup" :data-radio="f.key">
+                        <template x-for="o in (f.options || [])" :key="o">
+                          <label><input type="radio" :name="'cr-rd-' + f.key" :value="o" x-model="values[f.key]"><span x-text="o"></span></label>
+                        </template>
+                        <template x-if="f.allowOther">
+                          <label><input type="radio" :name="'cr-rd-' + f.key" :checked="isOther(f)" @change="values[f.key] = ''"><span>其他</span>
+                            <input type="text" class="cr-other" :value="isOther(f) ? values[f.key] : ''" @input="values[f.key] = $event.target.value" aria-label="其他內容"></label>
+                        </template>
+                      </div>
+                    </template>
+                    <template x-if="f.type === 'checkboxes' || f.type === 'multiselect'">
+                      <div class="cr-opts" :data-multi="f.key">
+                        <template x-for="o in (f.options || [])" :key="o">
+                          <label><input type="checkbox" :checked="(values[f.key] || []).indexOf(o) >= 0" @change="toggleMulti(f, o, $event.target.checked)"><span x-text="o"></span></label>
+                        </template>
+                      </div>
+                    </template>
+                    <template x-if="f.type === 'table'">
+                      <div class="cr-tbl" :data-table="f.key">
+                        <table>
+                          <thead><tr>
+                            <template x-for="c in (f.columns || [])" :key="c.key"><th x-text="c.label || c.key"></th></template>
+                            <th class="cr-tbl__x"></th>
+                          </tr></thead>
+                          <tbody>
+                            <template x-for="(row, ri) in (values[f.key] || [])" :key="row._k">
+                              <tr :data-row="ri">
+                                <template x-for="c in (f.columns || [])" :key="c.key">
+                                  <td :data-col="c.key">
+                                    <template x-if="c.type === 'formula'"><div class="cr-ro" x-text="fmt(cellCalc(f, ri, c))"></div></template>
+                                    <template x-if="c.type === 'text'"><input type="text" x-model="row[c.key]"></template>
+                                    <template x-if="c.type === 'number'"><input type="number" step="any" class="num" x-model="row[c.key]" :min="c.min" :max="c.max"></template>
+                                    <template x-if="c.type === 'date'"><input type="date" x-model="row[c.key]"></template>
+                                    <template x-if="c.type === 'checkbox'"><input type="checkbox" x-model="row[c.key]"></template>
+                                    <template x-if="c.type === 'select' && !c.allowOther">
+                                      <select x-model="row[c.key]"><option value="">（未選）</option><template x-for="o in (c.options || [])" :key="o"><option :value="o" x-text="o"></option></template></select>
+                                    </template>
+                                    <template x-if="c.type === 'select' && c.allowOther">
+                                      <div><input type="text" x-model="row[c.key]" :list="'cr-dl-' + f.key + '-' + c.key">
+                                        <datalist :id="'cr-dl-' + f.key + '-' + c.key"><template x-for="o in (c.options || [])" :key="o"><option :value="o"></option></template></datalist></div>
+                                    </template>
+                                  </td>
+                                </template>
+                                <td class="cr-tbl__x"><button type="button" class="btn btn-ghost btn-sm" :data-remove-row="ri" aria-label="刪除這一列" @click="removeRow(f, ri)">✕</button></td>
+                              </tr>
+                            </template>
+                          </tbody>
+                        </table>
+                        <button type="button" class="btn btn-ghost btn-sm cr-tbl__add" :data-add-row="f.key" @click="addRow(f)" x-text="'＋ ' + (f.addLabel || '新增一列')"></button>
+                      </div>
                     </template>
                     <template x-if="f.type === 'checkbox'">
                       <!-- 布林：寫死 value＋x-model.boolean（空字串＝沒填） -->
@@ -220,7 +288,7 @@
                     </template>
                     <template x-if="f.type === 'formula'">
                       <div class="cr-ro" :id="'cr-in-' + f.key" data-formula
-                           x-text="(record && record.data[f.key] !== undefined && record.data[f.key] !== null) ? fmt(record.data[f.key]) : '（儲存後由系統計算）'"></div>
+                           x-text="formulaShown(f)"></div>
                     </template>
                     <div class="cr-fx" :data-fx-readable="f.key" x-show="f.type === 'formula' && fxReadable(f)" x-text="fxReadable(f)"></div>
                     <div class="cr-help" :data-field-help="f.key" x-show="f.help" x-text="f.help"></div>
@@ -260,7 +328,18 @@
                   <div class="cr-sec__t" x-show="sec.title" x-text="sec.title"></div>
                   <div class="cr-kv">
                     <template x-for="f in sec.fields" :key="f.key">
-                      <div :data-view-field="f.key"><span x-text="f.label || f.key"></span><b x-text="fmt(record.data[f.key]) || '—'"></b></div>
+                      <div :data-view-field="f.key" :class="{ 'cr-f--wide': f.type === 'table' }">
+                        <span x-text="f.label || f.key"></span>
+                        <template x-if="f.type !== 'table'"><b x-text="fmt(record.data[f.key]) || '—'"></b></template>
+                        <template x-if="f.type === 'table'">
+                          <div class="cr-tbl"><table>
+                            <thead><tr><template x-for="c in (f.columns || [])" :key="c.key"><th x-text="c.label || c.key"></th></template></tr></thead>
+                            <tbody><template x-for="(row, ri) in (record.data[f.key] || [])" :key="ri">
+                              <tr><template x-for="c in (f.columns || [])" :key="c.key"><td :class="c.type === 'number' || c.type === 'formula' ? 'num' : ''" x-text="fmt(row[c.key])"></td></template></tr>
+                            </template></tbody>
+                          </table><b x-show="!(record.data[f.key] || []).length">—</b></div>
+                        </template>
+                      </div>
                     </template>
                   </div>
                 </div>
@@ -340,7 +419,8 @@
         refOptions: {}, refState: {}, refQuery: {}, refErr: {}, _refSeq: {}, _refTimers: {}, note: '', busy: false, outputHtml: '', me: {}, _initDone: false, _defCache: {},
         //: 預覽模式（BUILDER-UX §3.3）：同一個旗標擋住本頁所有 API 呼叫（讀與寫）
         preview: !!window.MOTRIX_PREVIEW, previewHl: null,
-        KNOWN_TYPES: ['text', 'number', 'date', 'select', 'checkbox', 'ref', 'formula'],
+        KNOWN_TYPES: ['text', 'textarea', 'number', 'date', 'daterange', 'select', 'radio', 'checkboxes', 'multiselect', 'checkbox', 'ref', 'formula', 'table'],
+        computed: {}, computedTables: {}, _cmpTimer: null, _cmpSeq: 0, _rowSeq: 0,
         retry: null,     // 網路失敗時錯誤列上的按鈕：{label, run, msg}（msg≠目前的 errMsg ⇒ 不顯示）
 
         _hdr() {
@@ -385,6 +465,7 @@
         async init() {
           if (this._initDone) return
           this._initDone = true
+          this.$watch('values', () => this.queueCompute())
           if (this.preview) return this._initPreview()
           try { this.me = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { this.me = {} }
           var q = new URLSearchParams(location.search)
@@ -536,28 +617,86 @@
         // ── 新增／編輯 ──
         blankValues(def) {
           var v = {}
+          var self = this
           ;(def.fields || []).forEach(function (f) {
             if (f.type === 'formula') return
-            v[f.key] = (f.default !== undefined && f.default !== null) ? f.default : ''
+            if (f.type === 'table') { v[f.key] = self.rowsOf(f, null); return }
+            if (f.type === 'checkboxes' || f.type === 'multiselect') { v[f.key] = []; return }
+            if (f.type === 'daterange') { v[f.key] = { from: '', to: '' }; return }
+            // `default` 是 {"$": token} ⇒ 由伺服器在建立時決定（前端只留空），不當成固定值
+            v[f.key] = (f.default !== undefined && f.default !== null && typeof f.default !== 'object') ? f.default : ''
           })
           return v
+        },
+        // ── 新型別的輔助（W1 建構器第三輪）──
+        rowsOf(f, rows) {
+          var self = this
+          return (Array.isArray(rows) ? rows : []).map(function (r) { return Object.assign({ _k: ++self._rowSeq }, r) })
+        },
+        addRow(f) {
+          var row = { _k: ++this._rowSeq }
+          ;(f.columns || []).forEach(function (c) { if (c.type !== 'formula') row[c.key] = c.type === 'checkbox' ? false : '' })
+          if (!Array.isArray(this.values[f.key])) this.values[f.key] = []
+          this.values[f.key].push(row)
+        },
+        removeRow(f, i) { this.values[f.key].splice(i, 1) },
+        toggleMulti(f, o, on) {
+          var cur = Array.isArray(this.values[f.key]) ? this.values[f.key].slice() : []
+          var at = cur.indexOf(o)
+          if (on && at < 0) cur.push(o)
+          if (!on && at >= 0) cur.splice(at, 1)
+          this.values[f.key] = cur
+        },
+        isOther(f) { var v = this.values[f.key]; return v !== '' && v !== null && v !== undefined && (f.options || []).indexOf(v) < 0 },
+        // 公式欄：填單時顯示伺服器即時算的（compute），存檔後顯示單據的值
+        formulaShown(f) {
+          var c = this.computed[f.key]
+          if (c !== undefined && c !== null) return this.fmt(c)
+          if (this.record && this.mode === 'view' && this.record.data[f.key] !== undefined && this.record.data[f.key] !== null) return this.fmt(this.record.data[f.key])
+          return '（儲存後由系統計算）'
+        },
+        cellCalc(f, ri, c) {
+          var rows = this.computedTables[f.key]
+          return rows && rows[ri] ? rows[ri][c.key] : null
+        },
+        // 值一改就（去抖）請伺服器算公式與明細列；較晚送出的才算數。預覽模式不打 API
+        queueCompute() {
+          if (this.preview || !(this.mode === 'new' || this.mode === 'edit')) return
+          clearTimeout(this._cmpTimer)
+          var seq = ++this._cmpSeq
+          this._cmpTimer = setTimeout(async () => {
+            var version = this.mode === 'edit' && this.record ? this.record.def_version : this.metaVersion
+            var r = await this.post(this.base() + '/compute?version=' + encodeURIComponent(version), { values: this.payload() })
+            if (seq !== this._cmpSeq || !r.ok) return
+            this.computed = r.data.computed || {}
+            this.computedTables = r.data.tables || {}
+          }, 300)
         },
         startNew() {
           this.record = null; this.recDef = null
           this.formDef = this.def
           this.values = this.blankValues(this.def)
           this.fieldErr = {}; this.dropped = []
+          this.computed = {}; this.computedTables = {}
           this.loadRefOptions(this.def)
           this.mode = 'new'
-          this.$nextTick(function () { var el = document.getElementById('cr-form'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }) })
+          this.$nextTick(() => { this.queueCompute(); var el = document.getElementById('cr-form'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }) })
         },
         startEdit() {
           if (!this.record || !this.recDef) return
           this.formDef = this.recDef
           var v = this.blankValues(this.recDef)
           var data = this.record.data || {}
-          Object.keys(v).forEach(function (k) { if (data[k] !== undefined && data[k] !== null) v[k] = data[k] })
+          var self = this
+          ;(this.recDef.fields || []).forEach(function (f) {
+            if (data[f.key] === undefined || data[f.key] === null || f.type === 'formula') return
+            if (f.type === 'table') v[f.key] = self.rowsOf(f, data[f.key])
+            else if (f.type === 'daterange') v[f.key] = { from: (data[f.key].from || ''), to: (data[f.key].to || '') }
+            else if (f.type === 'date' && f.withTime) v[f.key] = String(data[f.key]).replace(' ', 'T')
+            else v[f.key] = data[f.key]
+          })
           this.values = v
+          this.computed = {}; this.computedTables = {}
           this.fieldErr = {}; this.dropped = []
           this.loadRefOptions(this.recDef)
           this.mode = 'edit'
@@ -569,6 +708,10 @@
           ;(this.formDef.fields || []).forEach(function (f) {
             if (f.type === 'formula') return
             var v = self.values[f.key]
+            if (f.type === 'table') { out[f.key] = self.tablePayload(f, v); return }
+            if (f.type === 'daterange') { out[f.key] = (v && (v.from || v.to)) ? { from: v.from, to: v.to } : null; return }
+            if ((f.type === 'checkboxes' || f.type === 'multiselect')) { out[f.key] = (Array.isArray(v) && v.length) ? v : null; return }
+            if (f.type === 'date' && f.withTime && typeof v === 'string') v = v.replace('T', ' ')
             if (v === '' || v === undefined) v = null
             if (f.type === 'number' && v !== null && typeof v === 'string') { var n = Number(v); v = isNaN(n) ? v : n }
             // 下拉的值是字串 ⇒ 換回伺服器給的原值（客戶的 id 是數字）
@@ -579,6 +722,20 @@
             out[f.key] = v
           })
           return out
+        },
+        // 明細表送出：去掉前端的列識別、數字轉成數字、空字串當沒填
+        tablePayload(f, rows) {
+          return (Array.isArray(rows) ? rows : []).map(function (r) {
+            var o = {}
+            ;(f.columns || []).forEach(function (c) {
+              if (c.type === 'formula') return
+              var x = r[c.key]
+              if (x === '' || x === undefined) x = null
+              if (c.type === 'number' && x !== null && typeof x === 'string') { var n = Number(x); x = isNaN(n) ? x : n }
+              o[c.key] = x
+            })
+            return o
+          })
         },
         async save() {
           if (this.preview) return            // 預覽模式：存檔無效（api／post／put 也各自擋）
@@ -765,12 +922,7 @@
           var what = names[l.action] || (t ? t.label : l.action)
           return what + (l.to_state && l.to_state !== l.from_state ? ' → ' + (labels[l.to_state] || l.to_state) : '')
         },
-        fmt(v) {
-          if (v === null || v === undefined) return ''
-          if (v === true) return '是'
-          if (v === false) return '否'
-          return String(v)
-        },
+        fmt(v) { return L.formatValue(v) },
       }
     }
   </script>

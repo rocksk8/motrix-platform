@@ -69,11 +69,20 @@
     if (key === '$status') return (stateLabels && stateLabels[rec.status]) || rec.status || ''
     if (key === '$createdBy') return rec.created_by || ''
     if (key === '$createdAt') return (rec.created_at || '').slice(0, 16).replace('T', ' ')
-    var v = (rec.data || {})[key]
+    return formatValue((rec.data || {})[key])
+  }
+
+  /** 值的顯示文字（列表、單據檢視共用）：布林 是／否、多選 用「、」串、區間「起 ～ 迄」、明細表「N 筆」、日期時間去掉 T。 */
+  function formatValue(v) {
     if (v === null || v === undefined) return ''
     if (v === true) return '是'
     if (v === false) return '否'
-    return String(v)
+    if (Array.isArray(v)) {
+      if (v.length && typeof v[0] === 'object') return v.length + ' 筆'
+      return v.join('、')
+    }
+    if (typeof v === 'object') return [v.from, v.to].filter(function (x) { return x }).map(function (x) { return String(x).replace('T', ' ') }).join(' ～ ')
+    return String(v).replace(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/, '$1 $2')
   }
 
   /** 陣列內移動一格（dir＝-1 上移、+1 下移）；超出邊界就不動。回傳新陣列。 */
@@ -567,6 +576,7 @@
     formSections: formSections,
     listColumns: listColumns,
     cellValue: cellValue,
+    formatValue: formatValue,
     move: move,
     // 編輯操作
     addGroup: addGroup,

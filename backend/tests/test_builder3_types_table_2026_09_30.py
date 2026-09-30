@@ -232,3 +232,108 @@ def test_finance_validation():
     b5 = _module()
     b5["fields"][4]["finance"] = {"kind": "none"}
     assert CM.validate_module(b5, "qt") == []
+
+
+# ── 目錄、範本、預設值 token、不可重複（API）────────────────────────────────
+
+def _login(client, make_user, name, role="user", modules=None):
+    u, p = make_user(name, "Custom-Pass-123", role=role, modules=modules)[:2]
+    tok = client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]
+    return {"Authorization": "Bearer " + tok}
+
+
+def test_catalog_lists_elements_specs_and_templates(client, make_user):
+    sup = _login(client, make_user, "b3_sup", role="superadmin")
+    cat = client.get("/api/custom-modules/catalog", headers=sup).json()
+    types = set(cat["fieldTypes"])
+    assert {"textarea", "radio", "checkboxes", "multiselect", "daterange", "table"} <= types
+    assert {e["type"] for e in cat["fieldElements"]} <= types                      # 元件只准用目錄裡的型別
+    assert {g["id"] for g in cat["elementGroups"]} >= {e["group"] for e in cat["fieldElements"]}
+    assert set(cat["fieldTypeSpecs"]) == types                                     # 每個型別都有屬性規格
+    assert all(a["kind"] in ("text", "int", "number", "bool", "options", "columns")
+               for s in cat["fieldTypeSpecs"].values() for a in s["attrs"])
+    assert "total" in cat["tableFunctions"] and "round_half_up" in cat["formulaFunctions"]
+    assert cat["financeKinds"] == ["income", "expense"]
+    q = next(t for t in cat["templates"] if t["key"] == "quotation")
+    assert q["name"] == "報價單" and "table" in q["requires"]
+    body = client.get("/api/custom-modules/templates/quotation", headers=sup).json()["body"]
+    assert any(f["type"] == "table" for f in body["fields"])
+    assert client.get("/api/custom-modules/templates/nope", headers=sup).status_code == 404
+    other = _login(client, make_user, "b3_user", modules=[])
+    assert client.get("/api/custom-modules/templates/quotation", headers=other).status_code == 403
+
+
+def test_templates_with_problems_are_not_listed_but_reported(tmp_path, monkeypatch):
+    import json as _j
+    (tmp_path / "ok.json").write_text(_j.dumps(_j.load(open(CM._TEMPLATE_DIR + "/quotation.json", encoding="utf-8")), ensure_ascii=False),
+                                      encoding="utf-8")
+    (tmp_path / "broken.json").write_text("{not json", encoding="utf-8")
+    bad_type = {"key": "badtype", "name": "x", "body": {"name": "x", "fields": [{"key": "a", "label": "A", "type": "hologram"}]}}
+    (tmp_path / "badtype.json").write_text(_j.dumps(bad_type), encoding="utf-8")
+    bad_flow = _j.load(open(CM._TEMPLATE_DIR + "/quotation.json", encoding="utf-8"))
+    bad_flow["key"] = "badflow"
+    bad_flow["body"]["workflow"]["initial"] = "nowhere"
+    (tmp_path / "badflow.json").write_text(_j.dumps(bad_flow, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(CM, "_TEMPLATE_DIR", str(tmp_path))
+    listed, gaps = CM.templates(include_gaps=True)
+    assert [t["key"] for t in listed] == ["quotation"]
+    assert {g["key"] for g in gaps} == {"broken.json", "badtype", "badflow"} and all(g["reason"] for g in gaps)
+    assert CM.template_body("badtype") is None and CM.template_body("quotation") is not None
+
+
+def test_quotation_template_end_to_end_tokens_tax_and_finance_fields(client, make_user):
+    sup = _login(client, make_user, "b3_sup2", role="superadmin")
+    body = client.get("/api/custom-modules/templates/quotation", headers=sup).json()["body"]
+    body["permission"] = "custom.b3q"
+    r = client.put("/api/definitions/custom_module/b3q/draft", headers=sup, json={"body": body})
+    assert r.status_code == 200 and r.json()["problems"] == [], r.text
+    assert client.post("/api/definitions/custom_module/b3q/publish", headers=sup, json={}).status_code == 200
+    r = client.post("/api/custom/b3q/records", headers=sup, json={"values": {
+        "cust": "客戶甲", "lines": [{"name": "線材", "qty": 5, "unit": "坪", "price": 50250}]}})
+    assert r.status_code == 200, r.text
+    d = r.json()["data"]
+    assert d["sub"] == 251250 and d["vat"] == 12563 and d["grand"] == 263813        # 251,250 × 5% = 12,562.5 → 12,563
+    assert d["lines"][0]["unit"] == "坪" and d["lines"][0]["amt"] == 251250        # 單位可自打
+    assert d["tax"] == "應稅5%"                                                     # 固定預設
+    import datetime
+    assert d["qdate"] == datetime.date.today().isoformat() and d["sales"] == "b3_sup2"   # token：填單當下、申請人（伺服器決定）
+    # 前端送來的值優先於 token（有填就不覆蓋）
+    r2 = client.post("/api/custom/b3q/records", headers=sup, json={"values": {
+        "cust": "乙", "qdate": "2026-01-02", "lines": [{"name": "x", "qty": 1, "price": 10}], "tax": "免稅"}})
+    assert r2.json()["data"]["qdate"] == "2026-01-02" and r2.json()["data"]["vat"] == 0
+    # 必填的明細沒填 ⇒ 400 並指出
+    r3 = client.post("/api/custom/b3q/records", headers=sup, json={"values": {"cust": "丙"}})
+    assert r3.status_code == 400
+
+
+def test_default_token_only_on_matching_types():
+    b = _module()
+    b["fields"][0]["default"] = {"$": "today"}                       # radio 不能用 today
+    assert any(p["path"] == "fields[0].default" for p in CM.validate_module(b, "qt"))
+    b = _module()
+    b["fields"][5]["default"] = {"$": "now"}                         # date 沒有 withTime 不能用 now
+    assert any(p["path"] == "fields[5].default" for p in CM.validate_module(b, "qt"))
+    b["fields"][5].update(withTime=True)
+    assert CM.validate_module(b, "qt") == []
+    b["fields"][5]["default"] = {"$": "tomorrow"}
+    assert any(p["path"] == "fields[5].default" for p in CM.validate_module(b, "qt"))
+
+
+def test_unique_field_blocks_duplicates_on_create_and_update(client, make_user):
+    sup = _login(client, make_user, "b3_sup3", role="superadmin")
+    body = {"name": "唯一測試", "permission": "custom.b3u", "numbering": {"prefix": "UQ", "date": "YYYYMMDD", "digits": 4},
+            "fields": [{"key": "code", "label": "代碼", "type": "text", "required": True, "unique": True}],
+            "workflow": {"initial": "draft", "states": [{"key": "draft", "label": "草稿"}, {"key": "done", "label": "完成", "final": True}],
+                         "transitions": [{"key": "go", "label": "完成", "from": "draft", "to": "done"}]}}
+    assert client.put("/api/definitions/custom_module/b3u/draft", headers=sup, json={"body": body}).json()["problems"] == []
+    assert client.post("/api/definitions/custom_module/b3u/publish", headers=sup, json={}).status_code == 200
+    a = client.post("/api/custom/b3u/records", headers=sup, json={"values": {"code": "X1"}})
+    assert a.status_code == 200
+    dup = client.post("/api/custom/b3u/records", headers=sup, json={"values": {"code": "X1"}})
+    assert dup.status_code == 400 and "已有其他單據" in dup.text
+    b = client.post("/api/custom/b3u/records", headers=sup, json={"values": {"code": "X2"}})
+    no = b.json()["record_no"]
+    up = client.put("/api/custom/b3u/records/%s" % no, headers=sup, json={"values": {"code": "X1"}})
+    assert up.status_code == 400
+    ok = client.put("/api/custom/b3u/records/%s" % no, headers=sup, json={"values": {"code": "X2"}})     # 自己不算重複
+    assert ok.status_code == 200

@@ -1,0 +1,381 @@
+{
+ "key": "quotation",
+ "name": "報價單",
+ "category": "業務",
+ "description": "客戶、報價明細（品名、數量、單位、單價、金額）、未稅小計／稅額／含稅合計、發票日與收款日；合計列為收入（權責依發票日、現金依收款日）。",
+ "note": "本單是獨立的報價登記；有對應的內建案件時請填「關聯案件」，收入由內建報價單認列，不會重複計入營運報表。",
+ "body": {
+  "name": "報價單",
+  "icon": "",
+  "menu": {
+   "group": "業務",
+   "order": 50
+  },
+  "numbering": {
+   "prefix": "QT",
+   "date": "YYYYMMDD",
+   "digits": 4
+  },
+  "fields": [
+   {
+    "key": "cust",
+    "label": "客戶",
+    "type": "text",
+    "required": true,
+    "dataClass": "T1"
+   },
+   {
+    "key": "proj",
+    "label": "專案名稱",
+    "type": "text",
+    "dataClass": "T1"
+   },
+   {
+    "key": "qdate",
+    "label": "報價日期",
+    "type": "date",
+    "default": {
+     "$": "today"
+    },
+    "dataClass": "T1"
+   },
+   {
+    "key": "valid_until",
+    "label": "有效期限",
+    "type": "date",
+    "dataClass": "T1"
+   },
+   {
+    "key": "sales",
+    "label": "業務",
+    "type": "ref",
+    "target": "users",
+    "default": {
+     "$": "requester"
+    },
+    "dataClass": "T1"
+   },
+   {
+    "key": "case_no",
+    "label": "關聯案件",
+    "type": "text",
+    "help": "有對應的內建案件時填案件單號；收入由內建報價單認列，本單不會重複計入報表",
+    "dataClass": "T1"
+   },
+   {
+    "key": "tax",
+    "label": "稅別",
+    "type": "radio",
+    "options": [
+     "應稅5%",
+     "免稅",
+     "零稅率"
+    ],
+    "default": "應稅5%",
+    "required": true,
+    "dataClass": "T1"
+   },
+   {
+    "key": "lines",
+    "label": "報價明細",
+    "type": "table",
+    "required": true,
+    "minRows": 1,
+    "maxRows": 200,
+    "addLabel": "新增一列",
+    "dataClass": "T1",
+    "columns": [
+     {
+      "key": "name",
+      "label": "品名",
+      "type": "text",
+      "required": true
+     },
+     {
+      "key": "spec",
+      "label": "規格",
+      "type": "text"
+     },
+     {
+      "key": "qty",
+      "label": "數量",
+      "type": "number",
+      "min": 0
+     },
+     {
+      "key": "unit",
+      "label": "單位",
+      "type": "select",
+      "options": [
+       "式",
+       "組",
+       "米",
+       "台",
+       "套",
+       "個",
+       "批"
+      ],
+      "allowOther": true
+     },
+     {
+      "key": "price",
+      "label": "單價",
+      "type": "number",
+      "min": 0
+     },
+     {
+      "key": "amt",
+      "label": "金額",
+      "type": "formula",
+      "formula": "qty * price"
+     }
+    ]
+   },
+   {
+    "key": "sub",
+    "label": "未稅小計",
+    "type": "formula",
+    "formula": "total(lines, \"amt\")",
+    "dataClass": "T1",
+    "finance": {
+     "kind": "income",
+     "dateField": "inv_date",
+     "cashDateField": "paid_date",
+     "caseField": "case_no",
+     "cashAmountField": "grand"
+    }
+   },
+   {
+    "key": "vat",
+    "label": "稅額",
+    "type": "formula",
+    "formula": "if(tax == \"應稅5%\", round_half_up(sub * 0.05), 0)",
+    "dataClass": "T1"
+   },
+   {
+    "key": "grand",
+    "label": "含稅合計",
+    "type": "formula",
+    "formula": "sub + vat",
+    "dataClass": "T1"
+   },
+   {
+    "key": "inv_date",
+    "label": "發票日",
+    "type": "date",
+    "help": "權責口徑的歸屬日期；沒填時營運報表列入「待補登」",
+    "dataClass": "T1"
+   },
+   {
+    "key": "paid_date",
+    "label": "收款日",
+    "type": "date",
+    "help": "現金口徑的歸屬日期",
+    "dataClass": "T1"
+   },
+   {
+    "key": "notes",
+    "label": "備註",
+    "type": "textarea",
+    "maxLength": 1000,
+    "dataClass": "T1"
+   }
+  ],
+  "workflow": {
+   "initial": "draft",
+   "states": [
+    {
+     "key": "draft",
+     "label": "草稿"
+    },
+    {
+     "key": "pending",
+     "label": "簽核中",
+     "approval": {
+      "tiers": [
+       {
+        "approvers": [
+         {
+          "sourceType": "submitter_manager"
+         }
+        ]
+       }
+      ],
+      "on_approved": "approved",
+      "on_rejected": "draft"
+     }
+    },
+    {
+     "key": "approved",
+     "label": "已核准",
+     "final": true,
+     "notify": {
+      "requester": true
+     }
+    }
+   ],
+   "transitions": [
+    {
+     "key": "submit",
+     "label": "送審",
+     "from": "draft",
+     "to": "pending"
+    }
+   ]
+  },
+  "ui": {
+   "form": {
+    "groups": [
+     {
+      "title": "基本資料",
+      "fields": [
+       "cust",
+       "proj",
+       "qdate",
+       "valid_until",
+       "sales",
+       "case_no",
+       "tax"
+      ]
+     },
+     {
+      "title": "報價明細",
+      "fields": [
+       "lines"
+      ]
+     },
+     {
+      "title": "金額",
+      "fields": [
+       "sub",
+       "vat",
+       "grand"
+      ]
+     },
+     {
+      "title": "發票與收款",
+      "fields": [
+       "inv_date",
+       "paid_date"
+      ]
+     },
+     {
+      "title": "其他",
+      "fields": [
+       "notes"
+      ]
+     }
+    ]
+   },
+   "list": {
+    "columns": [
+     "cust",
+     "proj",
+     "grand"
+    ]
+   }
+  },
+  "output": {
+   "template": {
+    "theme": "voucher_standard",
+    "blocks": [
+     {
+      "type": "identity_header",
+      "title": "報價單"
+     },
+     {
+      "type": "meta",
+      "fields": [
+       {
+        "label": "單號",
+        "path": "recordNo"
+       },
+       {
+        "label": "客戶",
+        "path": "fields.cust"
+       },
+       {
+        "label": "專案",
+        "path": "fields.proj"
+       },
+       {
+        "label": "報價日期",
+        "path": "fields.qdate",
+        "format": "date10"
+       },
+       {
+        "label": "有效期限",
+        "path": "fields.valid_until",
+        "format": "date10"
+       }
+      ]
+     },
+     {
+      "type": "items_table",
+      "source": "fields.lines",
+      "label": "報價明細",
+      "columns": [
+       {
+        "title": "#",
+        "format": "index"
+       },
+       {
+        "title": "品名",
+        "path": "name"
+       },
+       {
+        "title": "規格",
+        "path": "spec"
+       },
+       {
+        "title": "數量",
+        "path": "qty",
+        "align": "right"
+       },
+       {
+        "title": "單位",
+        "path": "unit"
+       },
+       {
+        "title": "單價",
+        "path": "price",
+        "format": "money",
+        "align": "right"
+       },
+       {
+        "title": "金額",
+        "path": "amt",
+        "format": "money",
+        "align": "right"
+       }
+      ]
+     },
+     {
+      "type": "totals",
+      "rows": [
+       {
+        "label": "未稅小計",
+        "path": "fields.sub"
+       },
+       {
+        "label": "稅額",
+        "path": "fields.vat"
+       },
+       {
+        "label": "含稅合計",
+        "path": "fields.grand",
+        "grand": true
+       }
+      ]
+     },
+     {
+      "type": "approval_sign"
+     },
+     {
+      "type": "identity_footer"
+     }
+    ]
+   }
+  }
+ }
+}

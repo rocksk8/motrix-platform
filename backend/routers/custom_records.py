@@ -126,6 +126,20 @@ def create_custom_record(key: str, payload: dict = Body(...), authorization: str
     return rec
 
 
+@router.post("/api/custom/{key}/compute")
+def compute_custom_record(key: str, payload: dict = Body(...), version: int = Query(None), authorization: str = Header(None)):
+    """填單時即時算公式與明細列（不存檔；權限同建立單據）。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        _can_use(conn, u, key)
+        return CM.compute_preview(conn, key, payload.get("values"), version)
+    except CM.CustomModuleError as e:
+        return _err(e)
+    finally:
+        conn.close()
+
+
 @router.get("/api/custom/{key}/records/{record_no}")
 def get_custom_record(key: str, record_no: str, authorization: str = Header(None)):
     u = _require_user(authorization)
@@ -239,19 +253,36 @@ def custom_module_catalog(authorization: str = Header(None)):
     """能力目錄（建構器只能從這裡挑）：欄位型別、公式函式、參照對象、日期格式、輸出積木。"""
     _require_user(authorization, require_superadmin=True)
     from helpers import doc_template as dt
+    tpls, tpl_gaps = CM.templates(include_gaps=True)
     return {"fieldTypes": list(CM.FIELD_TYPES), "formulaFunctions": list(FX.FUNCTIONS), "refTargets": CM.ref_targets(),
+            "fieldTypeSpecs": CM.field_type_specs(), "fieldElements": CM.FIELD_ELEMENTS, "elementGroups": CM.ELEMENT_GROUPS,
+            "financeKinds": list(CM.FINANCE_KINDS), "templates": tpls, "templateGaps": tpl_gaps,
+            "tableColumnTypes": list(CM.TABLE_COL_TYPES), "tableFunctions": list(FX.TABLE_FUNCTIONS),
             "numberingDateFormats": [k for k in CM.DATE_FORMATS], "outputBlocks": sorted(dt.BLOCKS),
             "outputBlockSpecs": dt.BLOCK_SPECS, "outputBlockItemSpecs": dt.BLOCK_ITEM_SPECS,
             "outputThemes": sorted(dt.THEMES), "outputFormats": ["html", "pdf"], "fieldFormats": list(dt.FORMATS),
             "approverSources": CM.APPROVER_SOURCES, "dataClasses": ["T1"]}
 
 
+@router.get("/api/custom-modules/templates/{tkey}")
+def custom_module_template(tkey: str, authorization: str = Header(None)):
+    """範本的整份定義（新建模組時「從範本開始」用；套用後與範本脫鉤）。僅超級管理員。"""
+    _require_user(authorization, require_superadmin=True)
+    body = CM.template_body(tkey)
+    if body is None:
+        raise HTTPException(404, "沒有這個範本（或範本沒通過載入驗證）")
+    return {"key": tkey, "body": body}
+
+
 @router.post("/api/custom-modules/formula/check")
 def check_custom_formula(payload: dict = Body(...), authorization: str = Header(None)):
-    """公式語法檢查：`{"formula": "qty * price", "fields": ["qty", "price"]}` ⇒ `{"problems": [{"pos", "message"}]}`。"""
+    """公式語法檢查：`{"formula": "qty * price", "fields": ["qty", "price"], "tables": {"lines": ["amt"]}}`
+    ⇒ `{"problems": [{"pos", "message"}]}`（`tables`＝明細表 key ⇒ 可加總的數值欄，選填）。"""
     _require_user(authorization, require_superadmin=True)
     fields = payload.get("fields")
-    return {"problems": FX.check(payload.get("formula"), fields if isinstance(fields, list) else None)}
+    tables = payload.get("tables")
+    return {"problems": FX.check(payload.get("formula"), fields if isinstance(fields, list) else None,
+                                 tables if isinstance(tables, dict) else None)}
 
 
 @router.post("/api/custom-modules/numbering/preview")

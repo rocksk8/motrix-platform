@@ -13,6 +13,7 @@
 本檔不碰 FastAPI；HTTP 由 `routers/custom_records.py` 包。寫入的函式吃呼叫端的連線、自己 commit。
 """
 import json
+import os
 import math
 import re
 from datetime import date, datetime
@@ -30,6 +31,102 @@ TABLE_MAX_ROWS, TABLE_MAX_COLS = 200, 12
 TABLE_COL_TYPES = ("text", "number", "date", "select", "checkbox", "formula")
 #: 金流性質（附錄 B）：欄位 `finance.kind`；缺／none ＝不計
 FINANCE_KINDS = ("income", "expense")
+#: 預設值 token（伺服器在建立單據時決定，不信前端）：`{"$": "today"｜"now"｜"requester"}`
+DEFAULT_TOKENS = ("today", "now", "requester")
+
+#: 建構器的元件分組（`fieldElements[].group` 用它）
+ELEMENT_GROUPS = [{"id": "basic", "label": "基礎元件"}, {"id": "layout", "label": "版面元件"}, {"id": "advanced", "label": "進階元件"}]
+#: 元件列（建構器左欄）：一個元件＝一個型別＋預設屬性（preset）。型別本身一律要在 FIELD_TYPES 內。
+FIELD_ELEMENTS = [
+    {"id": "text", "type": "text", "label": "單行文字", "group": "basic", "preset": {}},
+    {"id": "textarea", "type": "textarea", "label": "多行文字", "group": "basic", "preset": {}},
+    {"id": "datetime", "type": "date", "label": "日期時間", "group": "basic", "preset": {"withTime": True}},
+    {"id": "date", "type": "date", "label": "日期", "group": "basic", "preset": {}},
+    {"id": "daterange", "type": "daterange", "label": "日期時間區間", "group": "basic", "preset": {"withTime": True}},
+    {"id": "number", "type": "number", "label": "數字", "group": "basic", "preset": {}},
+    {"id": "radio", "type": "radio", "label": "單選", "group": "basic", "preset": {"options": ["選項一", "選項二"]}},
+    {"id": "checkboxes", "type": "checkboxes", "label": "複選", "group": "basic", "preset": {"options": ["選項一", "選項二"]}},
+    {"id": "select", "type": "select", "label": "下拉單選", "group": "basic", "preset": {"options": ["選項一", "選項二"]}},
+    {"id": "multiselect", "type": "multiselect", "label": "下拉複選", "group": "basic", "preset": {"options": ["選項一", "選項二"]}},
+    {"id": "checkbox", "type": "checkbox", "label": "勾選（是／否）", "group": "basic", "preset": {}},
+    {"id": "table", "type": "table", "label": "明細表", "group": "layout", "preset": {
+        "minRows": 0, "maxRows": 200, "addLabel": "新增一列", "columns": [
+            {"key": "item", "label": "項目", "type": "text"}, {"key": "qty", "label": "數量", "type": "number"},
+            {"key": "price", "label": "單價", "type": "number"}, {"key": "amt", "label": "金額", "type": "formula", "formula": "qty * price"}]}},
+    {"id": "formula", "type": "formula", "label": "公式（唯讀）", "group": "advanced", "preset": {}},
+    {"id": "ref", "type": "ref", "label": "參照", "group": "advanced", "preset": {}},
+]
+#: 每個型別在屬性面板可設的屬性（面板依它產生；kind：text／int／number／bool／options／columns）
+FIELD_ATTRS = {
+    "text": [("placeholder", "提示語", "text"), ("default", "預設值", "text"), ("maxLength", "最大長度", "int"), ("unique", "不可重複", "bool")],
+    "textarea": [("placeholder", "提示語", "text"), ("maxLength", "最大長度", "int")],
+    "number": [("placeholder", "提示語", "text"), ("min", "最小值", "number"), ("max", "最大值", "number"), ("unique", "不可重複", "bool")],
+    "date": [("withTime", "包含時間", "bool")],
+    "daterange": [("withTime", "包含時間", "bool")],
+    "radio": [("options", "選項（一行一個）", "options"), ("allowOther", "允許「其他」自己輸入", "bool")],
+    "checkboxes": [("options", "選項（一行一個）", "options"), ("allowOther", "允許「其他」自己輸入", "bool"),
+                   ("minSelect", "至少選幾項", "int"), ("maxSelect", "最多選幾項", "int")],
+    "select": [("options", "選項（一行一個）", "options"), ("allowOther", "允許「其他」自己輸入", "bool")],
+    "multiselect": [("options", "選項（一行一個）", "options"), ("allowOther", "允許「其他」自己輸入", "bool"),
+                    ("minSelect", "至少選幾項", "int"), ("maxSelect", "最多選幾項", "int")],
+    "checkbox": [], "formula": [], "ref": [],
+    "table": [("columns", "欄位", "columns"), ("minRows", "最少列數", "int"), ("maxRows", "最多列數", "int"), ("addLabel", "新增列按鈕文字", "text")],
+}
+
+
+def field_type_specs() -> dict:
+    """給建構器的型別規格：`{型別: {attrs: [{key, label, kind}]}}`（型別清單與屬性面板都由這裡產生，頁面不寫死）。"""
+    return {t: {"attrs": [{"key": k, "label": l, "kind": kd} for k, l, kd in FIELD_ATTRS.get(t, [])]} for t in FIELD_TYPES}
+
+
+# ── 範本（W1 建構器第三輪）：`helpers/form_templates/*.json`，程式出貨的資料；載入時驗證，壞的不列 ─────────────
+_TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "form_templates")
+
+
+def templates(include_gaps: bool = False):
+    """⇒ `[{key, name, category, description, note, requires}]`（要整份內容用 `template_body`）。
+    每個範本載入時用 `validate_module` 驗一次；驗不過或檔案壞掉 ⇒ 不列，`include_gaps=True` 時另回 `[{key, reason}]`。
+    `requires`＝範本用到的欄位型別（含明細表欄型別）；有任何型別不在 `FIELD_TYPES` ⇒ 不列（型別就緒的才出現）。"""
+    out, gaps = [], []
+    for name in sorted(os.listdir(_TEMPLATE_DIR)) if os.path.isdir(_TEMPLATE_DIR) else []:
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(_TEMPLATE_DIR, name), encoding="utf-8") as fh:
+                t = json.load(fh)
+            key, body = t["key"], t["body"]
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            gaps.append({"key": name, "reason": "範本檔讀不出來：%s" % e})
+            continue
+        types = sorted({f.get("type") for f in body.get("fields", []) if isinstance(f, dict)} |
+                       {c.get("type") for f in body.get("fields", []) if isinstance(f, dict) and f.get("type") == "table"
+                        for c in f.get("columns", []) if isinstance(c, dict)})
+        if any(x not in FIELD_TYPES + ("formula",) for x in types):
+            gaps.append({"key": key, "reason": "用到還沒就緒的型別：%s" % "、".join(x for x in types if x not in FIELD_TYPES)})
+            continue
+        probs = validate_module(dict(body, permission="custom.%s" % key), key if KEY_RE.match(key) else "")
+        if probs:
+            gaps.append({"key": key, "reason": "驗證不過：%s" % probs[0]["message"]})
+            continue
+        out.append({"key": key, "name": t.get("name") or key, "category": t.get("category", ""), "description": t.get("description", ""),
+                    "note": t.get("note", ""), "requires": types})
+    return (out, gaps) if include_gaps else out
+
+
+def template_body(key: str):
+    """範本的整份定義（深拷貝）；不存在或沒通過載入驗證 ⇒ None。"""
+    if not any(t["key"] == key for t in templates()):
+        return None
+    for name in sorted(os.listdir(_TEMPLATE_DIR)):
+        if name.endswith(".json"):
+            try:
+                with open(os.path.join(_TEMPLATE_DIR, name), encoding="utf-8") as fh:
+                    t = json.load(fh)
+            except (OSError, ValueError):
+                continue
+            if isinstance(t, dict) and t.get("key") == key:
+                return t["body"]
+    return None
 DATE_FORMATS = {"YYYYMMDD": "%Y%m%d", "YYYYMM": "%Y%m", "": ""}
 EVENT_TRANSITIONED = "custom_module.transitioned"
 
@@ -193,6 +290,10 @@ def _validate_fields(fields):
         elif t == "table":
             out += _validate_table(p, f)
         else:
+            tok = _default_token(f)
+            if tok is not None:
+                out += _validate_token(p, f, tok)
+                f = {k: v for k, v in f.items() if k != "default"}       # token 由伺服器決定，型別驗證不看它
             for prob in _cf.validate_definition({"fields": [f]}, types=_cf.MODULE_TYPES):
                 out.append(_p(prob["path"].replace("fields[0]", p, 1), prob["message"]))
     formulas = {f["key"]: f.get("formula") for f in fields if isinstance(f, dict) and f.get("type") == "formula" and f.get("key")}
@@ -201,6 +302,40 @@ def _validate_fields(fields):
     except _fx.FormulaError as e:
         out.append(_p("fields", str(e)))
     return out
+
+
+def _default_token(f):
+    """欄位的 `default` 是 `{"$": token}` ⇒ token 字串（可能不合法）；不是 ⇒ None。"""
+    d = f.get("default")
+    return d.get("$", "") if isinstance(d, dict) else None
+
+
+def _validate_token(p, f, tok):
+    """token 只准用在對應型別：today→date、now→date（含時間）、requester→ref(users)。"""
+    ok = {"today": f.get("type") == "date", "now": f.get("type") == "date" and bool(f.get("withTime")),
+          "requester": f.get("type") == "ref" and f.get("target") == "users"}.get(tok)
+    if tok not in DEFAULT_TOKENS:
+        return [_p(p + ".default", "預設值只認得 %s：%r" % ("、".join(DEFAULT_TOKENS), tok))]
+    if not ok:
+        return [_p(p + ".default", "預設值「%s」不能用在這個型別的欄位" % tok)]
+    return []
+
+
+def _with_default_tokens(body, values, user):
+    """建立單據時，把沒填的欄位的 token 預設值換成伺服器當下的值（不信前端）。"""
+    values = dict(values) if isinstance(values, dict) else {}
+    now = datetime.now()
+    for f in body.get("fields", []):
+        tok = _default_token(f) if isinstance(f, dict) else None
+        if tok is None or values.get(f["key"]) not in (None, ""):
+            continue
+        if tok == "today":
+            values[f["key"]] = now.strftime("%Y-%m-%dT%H:%M") if f.get("withTime") else now.date().isoformat()
+        elif tok == "now":
+            values[f["key"]] = now.strftime("%Y-%m-%dT%H:%M")
+        elif tok == "requester":
+            values[f["key"]] = user.get("username")
+    return values
 
 
 def table_columns(fields) -> dict:
@@ -277,15 +412,16 @@ def _validate_finance(fields, body):
         any_finance = True
         if f.get("type") not in ("number", "formula"):
             out.append(_p(p, "只有數字或公式欄位可以設金流性質"))
-        for name, types in (("dateField", ("date",)), ("cashDateField", ("date",)), ("caseField", ("text", "ref"))):
+        for name, types in (("dateField", ("date",)), ("cashDateField", ("date",)), ("caseField", ("text", "ref")),
+                            ("cashAmountField", ("number", "formula"))):
             ref = fin.get(name)
             if ref in (None, ""):
                 continue
             tgt = by_key.get(ref)
             if tgt is None or tgt.get("type") not in types:
                 out.append(_p(p + "." + name, "%s 必須是%s欄位：%r" % (
-                    {"dateField": "歸屬日期", "cashDateField": "現金日期", "caseField": "關聯案件"}[name],
-                    "日期" if types == ("date",) else "文字或參照", ref)))
+                    {"dateField": "歸屬日期", "cashDateField": "現金日期", "caseField": "關聯案件", "cashAmountField": "現金口徑金額"}[name],
+                    "日期" if types == ("date",) else ("數字或公式" if name == "cashAmountField" else "文字或參照"), ref)))
     if any_finance:
         states = {s.get("key") for s in (body.get("workflow") or {}).get("states", []) if isinstance(s, dict)}
         ps = (body.get("finance") or {}).get("postStates")
@@ -447,6 +583,23 @@ def _input_fields(body):
     return [f for f in body.get("fields", []) if f.get("type") not in ("formula",)]
 
 
+def unique_errors(conn, module_key, body, vals, exclude_id=None) -> list:
+    """欄位屬性 `unique`（不可重複）：同一模組其他單據已有相同的值 ⇒ 錯誤。只比 text／number，靠欄位索引。"""
+    out = []
+    for f in body.get("fields", []):
+        if not (isinstance(f, dict) and f.get("unique") and f.get("type") in ("text", "number")):
+            continue
+        v = vals.get(f["key"])
+        if v is None:
+            continue
+        row = conn.execute("SELECT 1 FROM custom_record_values WHERE module_key=? AND field=? AND value_text=? AND record_id != ? LIMIT 1",
+                           (module_key, f["key"], v if isinstance(v, str) else json.dumps(v, ensure_ascii=False),
+                            exclude_id if exclude_id is not None else -1)).fetchone()
+        if row:
+            out.append({"key": f["key"], "message": "%s：已有其他單據使用「%s」" % (f.get("label") or f["key"], v)})
+    return out
+
+
 def clean_table(f: dict, raw) -> tuple:
     """明細表的值 ⇒ `(rows, errors)`。逐列逐欄用同一套 `_coerce`；列內公式在欄位清理後、依引用順序算；
     整列全空的列丟掉；錯誤帶路徑 key（`tbl[3].col`）。"""
@@ -506,6 +659,7 @@ def clean_values(conn, body: dict, values) -> tuple:
     values = values if isinstance(values, dict) else {}
     tables = [f for f in _input_fields(body) if f.get("type") == "table"]
     plain = [dict(f, type="text") if f.get("type") == "ref" else f for f in _input_fields(body) if f.get("type") != "table"]
+    plain = [{k: v for k, v in f.items() if not (k == "default" and isinstance(v, dict))} for f in plain]      # token 預設在 create_record 換掉
     out, errors, dropped = _cf.clean(values, {"fields": plain})
     dropped = [k for k in dropped if k not in {t["key"] for t in tables}]
     for t in tables:
@@ -797,6 +951,18 @@ def _log(conn, rec_id, action, from_state, to_state, user, note=""):
                                             datetime.now().isoformat(timespec="seconds")))
 
 
+def compute_preview(conn, module_key, values, version=None) -> dict:
+    """填單時即時算：同一套 `clean_values`（所以與存檔算出來的一定一樣），但**不存檔、不查必填**。
+    回 `{computed: {公式欄: 值}, tables: {明細表: 算好列內公式的列}, errors: [公式相關錯誤]}`；
+    公式無法算（缺欄位、除以 0）⇒ 該欄為空並回報，不丟例外。"""
+    body = _load_def(conn, module_key, version)["body"]
+    vals, errors, _dropped = clean_values(conn, body, values)
+    formulas = {f["key"] for f in body.get("fields", []) if isinstance(f, dict) and f.get("type") == "formula"}
+    tables = {f["key"] for f in body.get("fields", []) if isinstance(f, dict) and f.get("type") == "table"}
+    return {"computed": {k: vals.get(k) for k in formulas}, "tables": {k: vals.get(k) or [] for k in tables},
+            "errors": [e for e in errors if "公式" in e["message"]]}
+
+
 def get_record(conn, module_key, record_no) -> dict:
     rec = _row(conn, module_key, record_no)
     d = _load_def(conn, module_key, rec["def_version"])
@@ -835,7 +1001,9 @@ def create_record(conn, module_key, values, user) -> dict:
     from core.txn import write_txn
     d = _load_def(conn, module_key)
     body = d["body"]
+    values = _with_default_tokens(body, values, user)
     vals, errors, dropped = clean_values(conn, body, values)
+    errors = errors + unique_errors(conn, module_key, body, vals)
     if errors:
         raise CustomModuleError("有 %d 個欄位不對" % len(errors), errors)
     now = datetime.now().isoformat(timespec="seconds")
@@ -875,6 +1043,7 @@ def update_record(conn, module_key, record_no, values, user) -> dict:
             raise CustomModuleError("單據已送出（%s），不能再修改內容" % rec["status"], status=409)
         _require_draft_owner(rec, body, user)
         vals, errors, dropped = clean_values(conn, body, values)
+        errors = errors + unique_errors(conn, module_key, body, vals, exclude_id=rec["id"])
         if errors:
             raise CustomModuleError("有 %d 個欄位不對" % len(errors), errors)
         now = datetime.now().isoformat(timespec="seconds")
