@@ -1,5 +1,5 @@
 {
- "core_version": "1.81",
+ "core_version": "1.82",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -997,6 +997,7 @@
    "pick_file": "def(files, file_id)",
    "save_document_files": "async def(subfolder, doc_no, files, uploaded_by, watermark_by=…)",
    "upload_owner": "def(rel)",
+   "upload_path_key": "def(entry, folder, depth=…)",
    "upload_readable": "def(conn, rel, user)"
   },
   "helper:xlsx_out": {

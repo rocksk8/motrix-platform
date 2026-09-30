@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.82 — 2026-09-30（暫用號；wip/w2-open-bind：附件開檔路徑綁單據，安全審查 W3）〔core_bump：暫用 1.99 → 1.82〕
+- L1（新增）：`helpers.uploads.upload_path_key(entry, folder, depth=2)`——metadata 的 `path` 在指定資料夾底下時回單據鍵，否則 None（demo 前綴已去掉）。給 `attachments.catalog` 提供者驗「被提供的檔案屬於這張單據」。`routers/attachments.ATTACHMENTS_OPEN_ENABLED` 重新預設開（緊急開關）。
+
 ## 1.81 — 2026-09-30（暫用，列車取號；wip/w1-t26fix：列車 26 守門修補）
 - L1（行為，安全）：`GET /api/attachments/open` 本班關閉（`routers/attachments.ATTACHMENTS_OPEN_ENABLED = False`，一律 404；W3 安全檢查：路徑未綁定來源單據，正式修正隨 P3）；`POST /api/audit-log/module-counts` 需 `audit_log` 權限、`since` 非字串 400（wip/w2-t26sec）
 - L1（新增宣告）：`helpers.audit.__l1_public__` 加 `_audit_login_failed`、`_FAIL_REASON_LABELS`、`_MODULE_LABELS`（routers/auth.py、routers/system.py 已在用；wip/w2-t26fix）
