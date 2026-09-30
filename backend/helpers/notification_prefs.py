@@ -117,6 +117,25 @@ EVENT_GROUPS = [
 
 EVENT_KEYS = [key for _, items in EVENT_GROUPS for key, _ in items]
 
+#: 模組自己登記的信件類型（`mail_types.register`）若不在上面的固定清單 ⇒ 自動併進這一組（A2-0 #6）：
+#: 使用者在「使用者管理 → 通知偏好」看得到、關得掉，模組不必回頭改這支 L1 檔。
+MODULE_GROUP_LABEL = "其他模組通知"
+
+
+def ensure_event(key: str, desc: str) -> bool:
+    """`key` 不在 `EVENT_KEYS` ⇒ 加進「其他模組通知」組（沒有這組就建）並回 True；已在 ⇒ 什麼都不做、回 False。
+    就地修改 `EVENT_GROUPS`／`EVENT_KEYS`（舊的 import 名稱指向同一物件）。"""
+    if not key or key in EVENT_KEYS:
+        return False
+    for label, items in EVENT_GROUPS:
+        if label == MODULE_GROUP_LABEL:
+            items.append((key, desc or key))
+            break
+    else:
+        EVENT_GROUPS.append((MODULE_GROUP_LABEL, [(key, desc or key)]))
+    EVENT_KEYS.append(key)
+    return True
+
 
 def is_enabled(muted_json, event_key: str) -> bool:
     """True unless event_key is present in the user's muted list.

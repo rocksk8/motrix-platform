@@ -140,6 +140,13 @@ def _err(e: D.DefinitionError, status=400):
     return JSONResponse(status_code=status, content={"detail": str(e), "problems": e.problems})
 
 
+@router.get("/api/definition-kinds")
+def list_definition_kinds(authorization: str = Header(None)):
+    """定義種類清單（內建＋模組登記的）——編輯畫面用；只有超級管理員。"""
+    _require_user(authorization, require_superadmin=True)
+    return {"kinds": D.kinds_meta()}
+
+
 @router.get("/api/definitions/{kind}")
 def list_definitions(kind: str, authorization: str = Header(None)):
     """同一 kind 的所有定義（含只有草稿的）——建構器的模組清單（主持 P8 缺口 #5）。"""

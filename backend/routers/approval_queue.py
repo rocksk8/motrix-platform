@@ -76,16 +76,19 @@ def _item_approval_raw(item: dict) -> str:
 OPEN, DENY, CASE_RULE = "open", "deny", "case_rule"
 
 
-def _access_step(conn, user: dict, case_key, approval_raw, case_present: bool, existing=None) -> str:
+def _access_step(conn, user: dict, case_key, approval_raw, case_present: bool, existing=None, caseless: bool = False) -> str:
     """**佇列列出與詳情放行共用的唯一判斷**（§G5 #13：同一個函式、同一組輸入；稽核 D AL2-M1 的成因是兩邊各看各的欄位）。
     輸入＝（這張單掛的案件單號、簽核 JSON）：佇列取項目的 `linkedQuoteNo`＋tiers／requestedBy，詳情取提供者的 `quoteNo`＋`approvalRaw`
     ——兩者是同一件事，契約題 `test_queue_items_malformed_json` 逐一核對 `linkedQuoteNo == 詳情 quoteNo`。
     - 簽核鏈上的人與送審人（`_on_chain`）⇒ OPEN
     - M01 不在，或沒掛案件，或**掛的案件已不存在**（孤兒單；稽核 D 建議、主持採納）⇒ DENY（每案守門一定查無）
       `existing`：已知存在的案件單號集合（佇列一次查完）；None ⇒ 這裡查這一筆（詳情）——同一個 `_case_names`
-    - 其餘 ⇒ CASE_RULE（交給 `guard_case_access`：admin+／業務／協作者／案件管理；佇列對非 admin 本來就只列簽核鏈上的人）"""
+    - 其餘 ⇒ CASE_RULE（交給 `guard_case_access`：admin+／業務／協作者／案件管理；佇列對非 admin 本來就只列簽核鏈上的人）
+    - `caseless`（A2-0：單據本來就不掛案件，項目與詳情提供者都帶 `caseless: True`）：沒有案件可查 ⇒ 簽核鏈上的人與送審人（上面）＋超級管理員 ⇒ OPEN，其餘 DENY"""
     if _on_chain(conn, user, approval_raw):
         return OPEN
+    if caseless:
+        return OPEN if user.get("role") == "superadmin" else DENY
     if not (case_present and case_key):
         return DENY
     if case_key not in (existing if existing is not None else _case_names(conn, [case_key])):
@@ -97,7 +100,8 @@ def _detail_opens(conn, user: dict, item: dict, case_present: bool, detail_types
     """佇列這一筆要不要列：這一類沒有詳情提供者 ⇒ 不歸這裡管（詳情回 400，佇列照列）；否則 `_access_step` 不是 DENY。"""
     if item.get("type") not in detail_types:
         return True
-    return _access_step(conn, user, item.get("linkedQuoteNo"), _item_approval_raw(item), case_present, existing) != DENY
+    return _access_step(conn, user, item.get("linkedQuoteNo"), _item_approval_raw(item), case_present, existing,
+                        caseless=bool(item.get("caseless"))) != DENY
 
 
 def _openable(conn, user: dict, items: list) -> list:
@@ -209,7 +213,9 @@ def _item_type_label(it: dict) -> str:
     t = it.get("type")
     if t == "custom_record":
         return it.get("moduleName") or it.get("moduleKey") or "自訂模組"
-    return _ITEM_TYPE_LABELS.get(t, "報價單")
+    if t in _ITEM_TYPE_LABELS:
+        return _ITEM_TYPE_LABELS[t]
+    return it.get("typeLabel") or "報價單"      # 模組登記的新單據類型（A2-0 #2）自帶標籤；都沒有才退回舊預設
 
 
 @router.get("/api/approval-queue/count")
@@ -251,7 +257,7 @@ def _case_header(conn, quote_no: str) -> dict:
             "projectName": q["project_name"] or "", "dealTag": q.get("deal_tag") or ""}
 
 
-def _guard_queue_detail(conn, user: dict, quote_no: str, approval_raw=None) -> None:
+def _guard_queue_detail(conn, user: dict, quote_no: str, approval_raw=None, caseless: bool = False) -> None:
     """簽核佇列詳情的存取守門（2026-09-14 自動安全掃描後補上）。
 
     詳情回傳完整內容（明細、附件路徑、變更 payload、匯款帳戶），而 `id` 是可預測的單號或小整數 ⇒
@@ -260,7 +266,7 @@ def _guard_queue_detail(conn, user: dict, quote_no: str, approval_raw=None) -> N
     2. 其餘走一般的每案規則 `guard_case_access()`（admin+／該案業務／協作者／案件管理模組、案件本身的簽核人）；
        看不到與查無同一個 404（c-case404，M01-O1）；M01 不在 ⇒ 404（`case_access` 的 fail-closed）
     """
-    step = _access_step(conn, user, quote_no, approval_raw, case_module_present())
+    step = _access_step(conn, user, quote_no, approval_raw, case_module_present(), caseless=caseless)
     if step == OPEN:
         return
     if step == DENY:
@@ -344,7 +350,7 @@ def _open_detail(conn, user: dict, type_: str, doc_id: str) -> dict:
     # 沒有簽核鏈可比對，而申請人要看得到自己送出的內容；其他提供者不可以宣告（它會繞過每案守門）。
     if not (d.get("selfViewBy") and d["selfViewBy"] == user["username"]):
         try:
-            _guard_queue_detail(conn, user, d["quoteNo"], approval_raw)
+            _guard_queue_detail(conn, user, d["quoteNo"], approval_raw, caseless=bool(d.get("caseless")))
         except HTTPException as e:                       # 守門的 404 帶關聯的案件單號（會洩漏掛在哪一案）⇒ 換成同一句
             if e.status_code != 404:
                 raise

@@ -2,8 +2,8 @@
 """定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。
 
 [單位] plat:definitions    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] DefinitionConflict, DefinitionError, KINDS, decide_submitted, delete_draft, diff, get, list_definitions, open_submission, publish,
-    register_default, register_validator, resolve, restore, save_decision, save_draft, submit_draft, validate, versions
+[公開介面] DefinitionConflict, DefinitionError, KINDS, decide_submitted, delete_draft, diff, get, kinds, kinds_meta, list_definitions, open_submission, publish,
+    register_default, register_kind, register_validator, resolve, restore, save_decision, save_draft, submit_draft, validate, versions
 [不變式] 每個 (kind, key, scope) 最多一份草稿；已發布的版本不可改、不可刪；還原＝把舊版再發布成新的一版；發布前驗證不過就不發布
 [契約題] tests/test_definitions_store_2026_09_25.py
 [注意] 函式吃呼叫端的連線、不自己開；寫入的函式自己 commit
@@ -18,7 +18,10 @@ import json
 import re
 from datetime import datetime
 
+#: 內建的四種（固定）；其餘由模組／helper 以 `register_kind()` 登記（資料驅動：新增一種定義不必再改這支 L0 檔）。
 KINDS = ("layout", "output_template", "custom_fields", "custom_module")
+_EXTRA_KINDS = {}    # kind -> {"label": str}（`register_kind` 登記的；內建四種不在這裡）
+_BUILTIN_LABELS = {"layout": "頁面版面", "output_template": "輸出版型", "custom_fields": "自訂欄位", "custom_module": "自訂模組"}
 _KEY_RE = re.compile(r"^[a-z][a-z0-9_:.\-]{0,79}$")
 _SCOPE_RE = re.compile(r"^(company|role:[A-Za-z0-9_\-]{1,40})$")
 
@@ -49,13 +52,40 @@ def register_validator(kind: str, fn) -> None:
     _VALIDATORS[kind] = fn
 
 
+def register_kind(kind: str, label: str = "", validator=None, default=None) -> None:
+    """登記一種新的定義種類（預留鉤子：A2 的 `expense_type` 是第一個使用者）。
+    `kind`＝小寫英數與底線（與 key 同規則）；已登記的種類不可重複登記（兩個登記者在搶 ⇒ ValueError；內建四種也不可覆寫）；
+    `validator(body, key) -> [problem]`、`default(key) -> body|None` 與 `register_validator`／`register_default` 同義。
+    登記後 `save_draft／publish／…` 與 `GET /api/definition-kinds` 立即認得它；版本、差異、還原、送審機制全部共用。"""
+    if not isinstance(kind, str) or not re.match(r"^[a-z][a-z0-9_]{0,39}$", kind):
+        raise ValueError("定義種類名稱不合法：%r" % (kind,))
+    if kind in KINDS or kind in _EXTRA_KINDS:
+        raise ValueError("定義種類已登記：%r" % kind)
+    _EXTRA_KINDS[kind] = {"label": label or kind}
+    if validator is not None:
+        register_validator(kind, validator)
+    if default is not None:
+        register_default(kind, default)
+
+
+def kinds() -> tuple:
+    """所有可用的定義種類（內建四種＋已登記的）。"""
+    return KINDS + tuple(sorted(_EXTRA_KINDS))
+
+
+def kinds_meta() -> list:
+    """`[{kind, label, builtin}]`（編輯畫面的種類清單用）。"""
+    return ([{"kind": k, "label": _BUILTIN_LABELS.get(k, k), "builtin": True} for k in KINDS] +
+            [{"kind": k, "label": _EXTRA_KINDS[k]["label"], "builtin": False} for k in sorted(_EXTRA_KINDS)])
+
+
 def register_default(kind: str, fn) -> None:
     _DEFAULTS[kind] = fn
 
 
 def _check(kind, key, scope):
-    if kind not in KINDS:
-        raise DefinitionError("未知的定義種類：%r（可用：%s）" % (kind, "、".join(KINDS)))
+    if kind not in kinds():
+        raise DefinitionError("未知的定義種類：%r（可用：%s）" % (kind, "、".join(kinds())))
     if not _KEY_RE.match(key or ""):
         raise DefinitionError("定義的 key 不合法：%r" % key)
     if not _SCOPE_RE.match(scope or ""):
@@ -123,8 +153,8 @@ def versions(conn, kind, key, scope) -> list:
 
 def list_definitions(conn, kind) -> list:
     """同一 kind 的所有定義（含只有草稿、還沒發布過的）：`[{key, scope, latestVersion, hasDraft, updatedAt}]`。"""
-    if kind not in KINDS:
-        raise DefinitionError("未知的定義種類：%r（可用：%s）" % (kind, "、".join(KINDS)))
+    if kind not in kinds():
+        raise DefinitionError("未知的定義種類：%r（可用：%s）" % (kind, "、".join(kinds())))
     rows = conn.execute(
         "SELECT key, scope, MAX(CASE WHEN status='published' THEN version END) AS latest, "
         "MAX(CASE WHEN status='draft' THEN 1 ELSE 0 END) AS has_draft, "

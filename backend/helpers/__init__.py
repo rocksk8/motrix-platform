@@ -43,7 +43,7 @@ from .tiered_approval import (
     plan_self_cascade, cascade_self_tiers,
     resolve_tier_approvers, UnresolvedManagerError,
     approval_flow_setting_key, resolve_active_flow_setting, active_delegators_for,
-    APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES, APPROVAL_DOC_TYPE_LABELS,
+    APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES, APPROVAL_DOC_TYPE_LABELS, register_doc_type, doc_types_meta,
 )
 from .email_notify import (
     notify_approval_request,
@@ -142,7 +142,7 @@ __all__ = [
     "resolve_submitter_org_chain", "submitter_manager_tiers", "org_chain_notice_usernames",
     "plan_self_cascade", "cascade_self_tiers", "notify_org_chain_notice",
     "approval_flow_setting_key", "resolve_active_flow_setting",
-    "APPROVAL_DOC_TYPES", "DEFAULT_UNIFIED_DOC_TYPES", "APPROVAL_DOC_TYPE_LABELS",
+    "APPROVAL_DOC_TYPES", "DEFAULT_UNIFIED_DOC_TYPES", "APPROVAL_DOC_TYPE_LABELS", "register_doc_type", "doc_types_meta",
     # email_notify
     "notify_approval_request", "notify_next_tier", "notify_approved",
     "notify_returned", "notify_resubmit_requester", "notify_settlement_finalized",

@@ -589,7 +589,8 @@
                  退回頁面（`voucher.html`），佇列這裡直接連過去，不必在通用
                  抽屜裡重做一次（`/api/approval-queue/detail` 也還沒有它的分支，
                  那個守門是 `_guard_case()`，是「案件」的存取模型，傳票不是）。 -->
-            <a :href="selected?.type === 'voucher' ? ('voucher.html?id=' + (selected?.voucherId||''))
+            <a :href="selected?.openUrl ? selected.openUrl
+                    : selected?.type === 'voucher' ? ('voucher.html?id=' + (selected?.voucherId||''))
                     : selected?.type === 'ledger_action' ? 'ledger-periods.html'
                     : selected?.type === 'bonus_case_award' ? ('bonus.html?q=' + encodeURIComponent(selected?.quoteNo||''))
                     : selected?.type === 'bonus_correction' ? ('bonus-corrections.html?no=' + encodeURIComponent(selected?.quoteNo||''))
@@ -597,7 +598,7 @@
                     : ('quotation-form.html?id=' + (selected?.quoteNo||''))" target="_blank"
                style="font-size:12px;color:var(--accent);text-decoration:none;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);display:inline-flex;align-items:center;gap:5px">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-              <span x-text="selected?.type === 'voucher' ? '開啟傳票' : selected?.type === 'ledger_action' ? '開啟期間與結帳' : selected?.type === 'bonus_case_award' ? '開啟獎金分潤' : selected?.type === 'bonus_correction' ? '開啟獎金更正單' : (isVoucher(selected) ? '開啟案件管理' : '開啟報價單')"></span>
+              <span x-text="selected?.openUrl ? '開啟單據' : selected?.type === 'voucher' ? '開啟傳票' : selected?.type === 'ledger_action' ? '開啟期間與結帳' : selected?.type === 'bonus_case_award' ? '開啟獎金分潤' : selected?.type === 'bonus_correction' ? '開啟獎金更正單' : (isVoucher(selected) ? '開啟案件管理' : '開啟報價單')"></span>
             </a>
             <button class="btn btn-sm" x-show="selected?.type !== 'case_change' && selected?.type !== 'bonus_case_award' && selected?.type !== 'bonus_correction'" @click="previewItem(selected)" :disabled="previewFetching"
                     style="font-size:12px;color:var(--accent);background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;display:inline-flex;align-items:center;gap:5px;cursor:pointer">
@@ -1257,7 +1258,7 @@
           // P8（IP-10）：自訂模組單據，標籤用模組名稱
           if (item.type === 'custom_record') return item.moduleName || item.moduleKey || '自訂模組'
           if (item.type === 'custom_module_def') return '自訂模組定義'     // S4：模組定義送審
-          return '報價單'
+          return item.typeLabel || '報價單'     // A2-0 #2：模組登記的新單據類型自帶標籤
         },
 
         // P8：自訂模組單據開在執行頁（簽核人不需要模組權限；網址帶 key 與單號，不必手打）
@@ -1697,7 +1698,8 @@
           }
           // 額外支出的端點掛在案件底下（/quotations/{no}/extra-expenses/{id}/approve），
           // 形狀跟 apiBase(item) + quoteNo 那套不一樣，另外組。
-          const approveUrl = item.type === 'extra_expense'
+          const approveUrl = item.approveUrl ? item.approveUrl    // A2-0 #2：項目自帶端點（新單據類型不必再改這一頁）
+            : item.type === 'extra_expense'
             ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/approve`
             : item.type === 'extra_expense_change'
             ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/change-request/approve`
@@ -1833,7 +1835,8 @@
             const isVoucherType = item.type === 'voucher' || item.type === 'ledger_action'     // 總帳申請的退回端點與傳票同形狀（/send-back、body.reason）
             // 獎金分潤的駁回端點是 /reject，body 欄位名是 reason（同額外支出）
             const isBonusCase = item.type === 'bonus_case_award' || item.type === 'bonus_correction'
-            const rejectUrl = isXEC
+            const rejectUrl = item.rejectUrl ? item.rejectUrl
+              : isXEC
               ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/change-request/reject`
               : item.type === 'extra_expense'
               ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/reject`
@@ -1845,7 +1848,7 @@
             const r = await fetch(rejectUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-              body: JSON.stringify((isXE || isVoucherType || isBonusCase) ? { reason: this.rejectNote } : { note: this.rejectNote })
+              body: JSON.stringify((item.rejectField ? item.rejectField === 'reason' : (isXE || isVoucherType || isBonusCase)) ? { reason: this.rejectNote } : { note: this.rejectNote })
             })
             if (!r.ok) {
               const err = await r.json().catch(() => ({}))

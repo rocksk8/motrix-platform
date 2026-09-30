@@ -852,6 +852,24 @@ def _custom_def_page(module_key: str) -> str:
     return f"{_base_url()}/pages/custom-def-review.html?key={_q(module_key)}"
 
 
+def send_registered(event_key: str, *, title: str, rows: list, usernames: list = None, to_group: bool = False,
+                    reason: str = "", badge_text: str = "通知", badge_color: str = "#2F6FD6",
+                    link: str = "", note: str = "", button_text: str = "前往系統查看") -> bool:
+    """模組用的通用寄信入口（A2-0 #6）：信件類型由模組自己 `mail_types.register()` 登記，這裡只負責收件人＋內文＋主旨。
+    收件人＝`usernames`（事件收件人）加上 `to_group`（登記的群組收件人）；都套超級管理員的覆寫與個人退訂。
+    `event_key` 必須是呼叫端寫死的字面字串（守門 test_mail_registry 逐一核對已登記）；其餘參數一律用關鍵字。
+    回 True＝有收件人、已排入寄送；False＝沒有收件人（不寄、記 warning）。"""
+    to = list(dict.fromkeys((_lookup_emails(usernames, event_key) if usernames else [])
+                            + (_group_emails(event_key) if to_group else [])))
+    if not to:
+        logger.warning("send_registered: %r 沒有收件人（usernames=%r, to_group=%r）", event_key, usernames, to_group)
+        return False
+    html = _build_html(event_key, title, badge_text, badge_color, rows, "", link or _base_url(),
+                       intro=reason, button_text=button_text, note=note)
+    _async_send(to, _mt.subject(event_key, reason or title), html)
+    return True
+
+
 def notify_custom_record_submitted(module_name: str, record_no: str, approver_usernames: list, module_key: str = "") -> None:
     """自訂模組單據送審 → 通知當層簽核人"""
     to = _lookup_emails(approver_usernames, "custom_record_submitted")
