@@ -15,6 +15,7 @@ from helpers.xlsx_out import check_export_rate
 from modules.accounting.ledger import export as _export
 from modules.accounting.ledger import features as _features
 from modules.accounting.ledger import tax401 as _tax
+from modules.accounting.ledger import withholding as _wh
 
 router = APIRouter(prefix="/api/ledger", tags=["ledger"])
 
@@ -100,3 +101,65 @@ def tax401_settlement(body: dict = Body(...), authorization: str = Header(None))
     _audit(_tok(authorization), "ledger.tax401.settlement", "gl_tax_settlements", "%s-%s" % (b.get("year"), b.get("period")),
            "產生稅額結轉草稿 %s（應實繳 %d、新留抵 %d）" % (res["voucher_no"], res["payable"], res["carry_new"]))
     return res
+
+
+# ── 扣繳（代扣所得稅／二代健保）應繳未繳清單（旗標 `withholding`）────────────────────────────────
+
+def _wh_flag(conn):
+    if not _features.flags(conn).get("withholding"):
+        raise HTTPException(409, "扣繳清單功能尚未開啟（最高管理者在「總帳作業」開啟）。")
+
+
+@router.get("/withholding")
+def withholding(ym: str = None, kind: str = None, authorization: str = Header(None)):
+    _require_tax_read(authorization)
+    if ym is not None and not (len(ym) == 7 and ym[4] == "-" and ym[:4].isdigit() and ym[5:].isdigit() and 1 <= int(ym[5:]) <= 12):
+        raise HTTPException(400, "月份格式要是 YYYY-MM。")
+    if kind not in (None, "income_tax", "nhi"):
+        raise HTTPException(400, "種類只能是 income_tax 或 nhi。")
+    conn = get_db()
+    try:
+        _wh_flag(conn)
+        return _wh.report(conn, ym, kind)
+    finally:
+        conn.close()
+
+
+@router.post("/withholding/remit")
+def withholding_remit(body: dict = Body(...), authorization: str = Header(None)):
+    """登記繳庫（出納／會計實際繳款後）。分錄由會計手工傳票處理（借 2252／貸銀行），這裡只記日期與傳票單號。"""
+    user = _require_tax_write(authorization)
+    b = body or {}
+    conn = get_db()
+    try:
+        _wh_flag(conn)
+        try:
+            n = _wh.mark_remitted(conn, b.get("ids") or [], b.get("remitted_at"), str(b.get("voucher_no") or ""))
+        except (_wh.WithholdingError, ValueError, TypeError) as exc:
+            conn.rollback()
+            raise HTTPException(400, str(exc))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "ledger.withholding.remit", "gl_withholding_items", ",".join(str(i) for i in (b.get("ids") or [])[:20]),
+           "登記繳庫 %d 筆（%s）" % (n, b.get("remitted_at")))
+    return {"updated": n}
+
+
+@router.post("/withholding/unremit")
+def withholding_unremit(body: dict = Body(...), authorization: str = Header(None)):
+    user = _require_tax_write(authorization)
+    ids = (body or {}).get("ids") or []
+    conn = get_db()
+    try:
+        _wh_flag(conn)
+        try:
+            n = _wh.unmark_remitted(conn, ids)
+        except (ValueError, TypeError) as exc:
+            conn.rollback()
+            raise HTTPException(400, str(exc))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "ledger.withholding.unremit", "gl_withholding_items", ",".join(str(i) for i in ids[:20]), "取消繳庫登記 %d 筆" % n)
+    return {"updated": n}

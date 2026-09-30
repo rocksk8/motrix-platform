@@ -17,6 +17,7 @@ from modules.accounting.ledger import contract as _contract
 from modules.accounting.ledger import inventory as _inv
 from modules.accounting.ledger import periods as _periods
 from modules.accounting.ledger import roles as _roles
+from modules.accounting.ledger import withholding as _wh
 
 
 _R_INVENTORY = "INVENTORY"        # 帳務角色名（用常數比對，避免被使用者角色字串掃描誤判）
@@ -116,7 +117,7 @@ def sync_statuses(conn):
         if e["status"] == "drafted":
             if v and v["voided_at"]:
                 new = "rejected"
-                _stock_reverse(conn, dict(conn.execute("SELECT * FROM gl_source_events WHERE id=?", (e["id"],)).fetchone()))
+                _event_gone(conn, dict(conn.execute("SELECT * FROM gl_source_events WHERE id=?", (e["id"],)).fetchone()))
             elif v and v["status"] == "已過帳":
                 new = "posted"
         elif e["status"] in ("drift", "orphan") and rv and rv["status"] == "已過帳" and not rv["voided_at"]:
@@ -158,6 +159,12 @@ def _stock_reverse(conn, row):
         _inv.reverse_issue(conn, p["stock_part_no"], "stock_issue", _stock_key(row["source_key"], row["rev"]))
 
 
+def _event_gone(conn, row):
+    """事件列不再有效（來源消失、內容變動、草稿被作廢）⇒ 存貨鏈回沖、未繳庫的扣繳列移除。"""
+    _stock_reverse(conn, row)
+    _wh.forget(conn, row)
+
+
 def _record_receipt(conn, ev):
     """進貨入庫事件（E08，帶 meta.part_no／qty）不是被擋住的 ⇒ 記入存貨鏈（成本改變另記 adjust）。"""
     m = ev.get("meta") or {}
@@ -189,6 +196,7 @@ def _create_or_block(conn, ev, user, stats, rev=1, supersedes_id=None, existing_
     conn.execute("UPDATE gl_source_events SET status='drafted', voucher_id=?, content_hash=?, event_date=?, amount=?, payload_json=?, note='', last_seen=? WHERE id=?",
                  (vid, ev["content_hash"], ev["event_date"], sum(l["amount"] for l in ev["lines"] if l["side"] == "D"),
                   json.dumps(ev, ensure_ascii=False), _now(), eid))
+    _wh.record(conn, ev)
     if ev.get("mode") == "stock":
         _inv.issue(conn, ev["stock_part_no"], ev["stock_qty"], "stock_issue", _stock_key(ev["source_key"], rev), ev.get("case_no") or "",
                    at=ev["event_date"] + "T23:59:59")
@@ -267,7 +275,7 @@ def _process(conn, ev, user, stats):
         conn.execute("UPDATE gl_source_events SET last_seen=? WHERE id=?", (_now(), latest["id"]))
         return
     v = _voucher_row(conn, latest["voucher_id"])
-    _stock_reverse(conn, latest)                                                                   # 存貨鏈：舊的出庫先以原金額回沖
+    _event_gone(conn, latest)                                                                      # 存貨鏈：舊的出庫先以原金額回沖；未繳庫的扣繳列移除（新版本會重記）
     stats["drift"] += 1
     if latest["status"] in ("superseded", "rejected", "reversed"):
         _create_or_block(conn, ev, user, stats, rev=latest["rev"] + 1, supersedes_id=latest["id"])
@@ -292,7 +300,7 @@ def _orphans(conn, start, end, seen, ok_sources, user, stats):
         e = dict(e)
         if e["source_module"] not in ok_sources or (e["source_type"], e["source_key"], e["event_code"]) in seen:
             continue
-        _stock_reverse(conn, e)                                                                    # 來源消失（例：退回入庫）⇒ 存貨鏈以原金額回沖
+        _event_gone(conn, e)                                                                        # 來源消失（例：退回入庫）⇒ 存貨鏈以原金額回沖；未繳庫的扣繳列移除
         v = _voucher_row(conn, e["voucher_id"])
         if v and not v["voided_at"] and v["status"] == "草稿":
             _void_draft(conn, v["id"], user, "來源事件已不存在")

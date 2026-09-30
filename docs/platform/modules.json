@@ -416,6 +416,7 @@
     "mod:accounting/ledger/equity",
     "mod:accounting/ledger/statements",
     "mod:accounting/ledger/tax401",
+    "mod:accounting/ledger/withholding",
     "js:js/ledger-statements.js",
     "page:pages/ledger-statements.html",
     "js:js/ledger-hub.js",
