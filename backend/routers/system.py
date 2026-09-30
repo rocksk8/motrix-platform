@@ -804,6 +804,9 @@ class _WorkLogCatalog:
         entry = pick_file(photos, file_id)
         if entry is None:
             return None
+        from helpers.uploads import upload_path_key
+        if upload_path_key(entry, "projects", depth=3) != "worklog_%d" % int(doc_no):
+            return None                                          # 路徑不在這則日誌自己的資料夾 ⇒ 當作沒有這個檔（W3）
         owner = upload_owner(entry.get("path") or "")
         if owner is None or not _WorkLogPhotoAccess.readable(conn, owner[0], owner[1], user):
             raise AttachmentNotVisible()

@@ -1420,6 +1420,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     # body.created_by 欄位保留不刪（前端仍會送），但一律以 session 為準。
     user = _require_user(authorization)
     q   = body.data
+    _strip_foreign_file_entries(q.get("caseRecord"), {})   # 安全審查 W3：新建沒有既有檔案，前端帶的檔案路徑一律不收
     validate_quote_tax(q)   # AC1：只能存法定稅別
     validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
     if body.status == "待審核":
@@ -1720,6 +1721,10 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     if existing["status"] == "已拒絕":
         conn.close()
         raise HTTPException(403, "已拒絕結案的報價單不可修改")
+    try:                                                   # 安全審查 W3：整份存檔也不得夾帶新的檔案路徑
+        _strip_foreign_file_entries(q.get("caseRecord"), (json.loads(existing["data_json"] or "{}") or {}).get("caseRecord") or {})
+    except (ValueError, TypeError):
+        _strip_foreign_file_entries(q.get("caseRecord"), {})
     # 樂觀鎖（選填）：草稿階段沒有狀態鎖保護，兩人同時編輯同一張草稿會後寫覆蓋
     # 前寫且完全沒有提示。自動存檔（autoSave）跟手動存檔共用這支端點，衝突時
     # 一律回 409，讓呼叫端自行決定要不要提示使用者或重新載入。
@@ -2562,6 +2567,51 @@ def _payment_item_label(it: dict, i: int) -> str:
     return it.get("type") or it.get("label") or f"第{i + 1}期"
 
 
+#: caseRecord 裡存「已上傳檔案 metadata」的三種清單：(外層鍵, 陣列鍵, 檔案鍵)（同 attachments 提供者的 `_INDEXED`）
+_CASE_FILE_LISTS = (("payment", "items", "invoiceFiles"), (None, "materials", "files"), (None, "materials", "invoiceFiles"))
+
+
+def _case_file_entries(cr) -> dict:
+    """caseRecord 目前已有的檔案 metadata：`{path: 那一筆}`。"""
+    out = {}
+    for outer, key, fkey in _CASE_FILE_LISTS:
+        arr = ((cr or {}).get(outer) or {}).get(key) if outer else (cr or {}).get(key)
+        for it in (arr if isinstance(arr, list) else []):
+            for f in ((it or {}).get(fkey) if isinstance(it, dict) else None) or []:
+                if isinstance(f, dict) and isinstance(f.get("path"), str):
+                    out[f["path"]] = f
+    return out
+
+
+def _strip_foreign_file_entries(new_cr, old_cr) -> int:
+    """前端送來的 caseRecord 裡，`files`／`invoiceFiles` 只准是**資料庫裡本來就有**的那幾筆（安全審查 W3，2026-09-30）。
+
+    檔案只能經專屬的上傳端點（`save_document_files`）進來、路徑由伺服器產生；整包／分段存檔不得夾帶新的檔案路徑——
+    否則前端可塞任意 uploads 路徑，借這張案件的權限讀別人的檔（附件目錄開檔、`/api/photo-token` 都以這份 metadata 為憑）。
+    比對用 `path`：在現值裡 ⇒ 沿用**資料庫的那一筆**（前端改過的檔名／大小不收）；不在 ⇒ 丟掉。回丟掉的筆數。
+    ⚠️ 只看 `files`／`invoiceFiles` 這三種清單；其他欄位不動。**下游效應（R1）**：檔案只影響附件顯示與開檔，不影響營運報表／總帳／出納。"""
+    if not isinstance(new_cr, dict):
+        return 0
+    known = _case_file_entries(old_cr)
+    dropped = 0
+    for outer, key, fkey in _CASE_FILE_LISTS:
+        arr = (new_cr.get(outer) or {}).get(key) if outer else new_cr.get(key)
+        if not isinstance(arr, list):
+            continue
+        for it in arr:
+            if not isinstance(it, dict) or fkey not in it:
+                continue
+            kept = []
+            for f in (it.get(fkey) if isinstance(it.get(fkey), list) else []):
+                p = f.get("path") if isinstance(f, dict) else None
+                if isinstance(p, str) and p in known:
+                    kept.append(known[p])
+                else:
+                    dropped += 1
+            it[fkey] = kept
+    return dropped
+
+
 def _payment_items_lock_violation(old_items: list, new_items: list) -> Optional[str]:
     """非 admin、非出納的整包存檔：回傳違規說明，None 表示放行。
 
@@ -2744,6 +2794,8 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             conn.close()
             raise
 
+        # 安全審查 W3：檔案 metadata 只准是資料庫現有的那幾筆（要在排進審核之前剝，否則審核 payload 也帶著）
+        _strip_foreign_file_entries(body.case_record, data.get("caseRecord") or {})
         gated, change_id = _gate_case_edit(
             conn, quote_no, user, authorization, "case_record_update",
             f"{label} 更新案件記錄（材料/款項/角色/合約等）", {"case_record": body.case_record or {}},

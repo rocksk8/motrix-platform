@@ -3,7 +3,7 @@
 `doc_no`＝傳票 id、`file_id`＝附件的 file_id。權限＝傳票各端點的閘門（`cashier`／`finance` 模組；看不到 ⇒ 與查無同一句 404），
 附件必須屬於**這一張**傳票且未刪（同 `GET /api/vouchers/{id}/attachments/{file_id}`）。作廢傳票的附件照列（稽核要看得到）。"""
 from helpers.auth import user_has_module
-from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, opened_upload_file
+from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, opened_upload_file, upload_path_key
 
 _VOUCHER_MODULES = ("cashier", "finance")         # 與 api/vouchers.py 的 _VOUCHER_MODULES 同；守門：tests 逐字比對
 
@@ -26,4 +26,7 @@ class _AccountingCatalog:
             "WHERE a.voucher_id = ? AND a.file_id = ? AND a.deleted_at = ''", (int(doc_no), str(file_id))).fetchone()
         if att is None:
             return None
-        return opened_upload_file({"path": att["path"], "filename": att["filename"], "mime": att["mime"]})
+        entry = {"path": att["path"], "filename": att["filename"], "mime": att["mime"]}
+        if upload_path_key(entry, "voucher_attachments") != str(int(doc_no)):
+            return None                                          # 路徑不在這張傳票自己的資料夾 ⇒ 當作沒有這個檔（W3）
+        return opened_upload_file(entry)
