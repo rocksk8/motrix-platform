@@ -793,13 +793,19 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 契約版本 | 1（2026-09-30） |
 | 守門 | `backend/modules/accounting/tests/test_ledger_a_contract_2026_09_30.py`：驗證（12 種壞事件各有原因）、內容雜湊（meta／順序／說明不參與，金額變了雜湊必變）、正對照（合格事件必出現且帶雜湊）、反向控制（缺席、未接入、提供者壞掉、無效事件、重複、notice 傳遞）、API 權限與缺席說明 |
 
-## IP-GL2　`expense.categories`／`tax.input_invoices`／`gl.month_totals`：總帳預留的三個能力名稱（暫定號，列車定號；2026-10-01，W4）
+## IP-108　`expense.categories`：費用類別清單（M06 → 費用單據／請款；暫定號，列車定號；2026-10-01，W4）
 
-| 能力 | 狀態 | 契約（回傳一律字典清單，消費端忽略未知鍵） |
-|---|---|---|
-| `expense.categories` | **已實作**（G1，單一提供者 `accounting`，`api/ledger_category_map.py::provide_categories`） | `fn(conn) -> [{code, name, default_tax}]`，只含啟用中的類別；**代碼發布後不可改**（單據存的是代碼；改名只改 name、停用用 active=0）。清單歸會計主管維護（`PUT /api/ledger/expense-categories`，只有最高管理者）；費用單據（W1）與請款只消費、不維護。事件行用 `category`（代碼）＋選填 `tax`／`doc_type`，科目由 `gl_category_map` 決定（`ledger/category_map.py`）。 |
-| `tax.input_invoices` | 只登記名稱（未實作） | 多提供者（鍵＝來源模組）：`fn(start, end) -> [{invoiceNo, invoiceDate, pretax, tax, deductible, source}]`；401 進項彙總之後讀所有提供者；沒有提供者 ⇒ 退化為現況（讀帳上稅碼列）。 |
-| `gl.month_totals` | 只登記名稱（未實作） | `fn(conn, start, end, dims=None) -> {contract_version, rows:[{month, category, amount}]}`；`dims`＝維度篩選（`voucher_lines.dim_json`，migration 0003）。 |
+費用類別清單歸會計主管維護（`expense_categories`，migration 0003）；費用單據只消費代碼、不維護。事件行用 `category`（代碼）＋選填 `tax`／`doc_type`，科目由 `gl_category_map` 決定（`ledger/category_map.py`，引擎收集時套用）。
 
-事件契約 v1 的行另有選填 `dims`（`{維度代碼: 字串}`）：引擎寫入 `voucher_lines.dim_json`；有值才進內容雜湊。守門：`modules/accounting/tests/test_category_map_g1_2026_10_01.py`。
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計：`modules/accounting/api/ledger_category_map.py::provide_categories` |
+| 使用方 | 尚無（M01 費用單據 A2 接入時補；目前只有總帳自己的對應頁） |
+| 形式 | provider，單一提供者（名稱 `accounting`） |
+| 語法 | 提供：`("expense.categories", "accounting"): fn`；取用：`registry.providers("expense.categories").get("accounting")` ⇒ `fn(conn)` |
+| 回傳 | `[{code, name, default_tax}]`，只含啟用中的類別；**代碼發布後不可改**（單據存代碼；改名只改 name、停用用 active=0）；消費端忽略未知鍵 |
+| 對方不在時 | 提供者不在 ⇒ 費用單據退回自己的固定類別清單（不阻擋） |
+| 契約版本 | 1（2026-10-01） |
+| 守門 | `backend/modules/accounting/tests/test_category_map_g1_2026_10_01.py` |
 
+另預留兩個能力名稱（尚未實作，不在本表登記；實作時各開一節）：進項憑證來源（多提供者，`fn(start, end) -> [{invoiceNo, invoiceDate, pretax, tax, deductible, source}]`，401 進項彙總讀所有提供者）、逐月類別彙總（帶維度篩選 `dims`，對應 `voucher_lines.dim_json`）。事件契約 v1 的行另有選填 `dims`（`{維度代碼: 字串}`）：引擎寫入 `voucher_lines.dim_json`；有值才進內容雜湊。
