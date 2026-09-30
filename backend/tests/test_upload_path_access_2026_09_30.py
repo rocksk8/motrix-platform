@@ -6,12 +6,15 @@
 ② 沒有提供者認領的資料夾（branding、voucher_attachments、亂寫的）⇒ 404（預設拒絕），連 superadmin 也一樣
 ③ L1 自己的工作日誌照片：模組規則（work_log／case_manage）放行，沒有模組 ⇒ 404；標頭那條同規則
 ④ 提供者契約：FOLDERS 兩兩不重疊；提供者丟例外 ⇒ 不放行（fail closed）
+⑤ （稽核 S3）Windows 檔名變體：尾端點號／空白、8.3 短檔名、ADS、大小寫、%2e%2e —— **有權限的人**打變體也不可以 200
 """
 import os
+from urllib.parse import quote
 
 import pytest
 
 from helpers import uploads as up
+from tests._requires import requires_module
 
 PNG = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4"
        b"\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82")
@@ -158,3 +161,74 @@ def test_provider_exception_fails_closed(client, monkeypatch):
 
     monkeypatch.setitem(registry._LEGACY_PROVIDERS, (up.PATH_ACCESS, "zz_boom"), _Boom)
     assert up.upload_readable(None, "boom_folder/x/y.png", {"role": "superadmin", "username": "x"}) is False
+
+
+# ── ⑤ 稽核 S3：Windows 檔名變體（有權限者打變體也不可以讀到；簽章綁的只有正規那一個）──────────────
+
+S3_Q = "MQ-S3-1"
+S3_OK = f"quotations/{S3_Q}/a.pdf"
+S3_VARIANTS = [
+    f"quotations/{S3_Q}./a.pdf",            # 尾端點號（Windows 會去掉 ⇒ 實際是同一個資料夾）
+    f"quotations./{S3_Q}/a.pdf",
+    f"quotations/{S3_Q}/a.pdf.",
+    f"quotations/{S3_Q} /a.pdf",            # 尾端空白
+    f"quotations/{S3_Q}/a.pdf ",
+    f"QUOTAT~1/{S3_Q}/a.pdf",               # 8.3 短檔名
+    f"quotations/MQ-S3~1/a.pdf",
+    f"quotations/{S3_Q}/a.pdf::$DATA",      # ADS
+    f"quotations/{S3_Q}/a.pdf:x",
+    f"Quotations/{S3_Q}/a.pdf",             # 大小寫變體（NTFS 不分大小寫）
+    f"quotations/mq-s3-1/a.pdf",
+    f"QUOTATIONS/{S3_Q}/A.PDF",
+    "%2e%2e/backend/main.py",               # 編碼過的 ..（伺服器不可以再解一次）
+    "quotations/%2e%2e/%2e%2e/backend/main.py",
+    f"quotations/{S3_Q}/..%2fa.pdf",
+]
+
+
+@pytest.fixture
+def s3_world(client, make_user):
+    import db
+    u, p = make_user(username="s3_sa", role="superadmin")
+    c = db.get_db()
+    try:
+        c.execute("INSERT INTO quotations (quote_no, status, data_json, created_at, updated_at) VALUES (?,?,?,?,?)",
+                  (S3_Q, "已送出", "{}", "2026-09-30", "2026-09-30"))
+        c.commit()
+    finally:
+        c.close()
+    full = os.path.join(up.UPLOADS_ROOT, *S3_OK.split("/"))
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    open(full, "wb").write(b"%PDF-1.4 s3")
+    return _login(client, u, p)
+
+
+@requires_module("case", "正對照的擁有單據是 M01 報價單回簽檔（有權限者 200 才證明變體被擋是因為變體本身）")
+def test_s3_positive_control_exact_path_ok(client, s3_world):
+    t = s3_world
+    r = client.get("/api/photo-token", headers=_h(t), params={"path": S3_OK})
+    assert r.status_code == 200, r.text
+    assert client.get("/api/uploads/" + S3_OK, params={"pt": r.json()["token"]}).content == b"%PDF-1.4 s3"
+    assert client.get("/api/uploads/" + S3_OK, headers=_h(t)).status_code == 200
+
+
+@requires_module("case", "同上：有權限的人打變體")
+@pytest.mark.parametrize("variant", S3_VARIANTS)
+def test_s3_variant_never_served(client, s3_world, variant):
+    t = s3_world
+    r = client.get("/api/photo-token", headers=_h(t), params={"path": variant})
+    if r.status_code == 200:
+        # 只有「在有權限的單據資料夾裡、字面上是另一個檔名」（例 `..%2fa.pdf` 是一個合法的檔名段，伺服器不再解碼）
+        # 才可能簽出來；那個簽章讀不到任何東西（字面檔案不存在），更讀不到 a.pdf
+        assert variant.startswith(f"quotations/{S3_Q}/"), (variant, r.text)
+        got = client.get("/api/uploads/" + quote(variant, safe="/"), params={"pt": r.json()["token"]})
+        assert got.status_code in (403, 404), (variant, got.status_code)
+    else:
+        assert r.status_code in (403, 404), (variant, r.status_code, r.text)
+    r = client.get("/api/uploads/" + quote(variant, safe="/"), headers=_h(t))
+    assert r.status_code in (403, 404), (variant, r.status_code)
+    r = client.get("/api/uploads/" + variant, headers=_h(t))            # 不再編碼：由伺服器端解碼一次
+    assert r.status_code in (403, 404, 405), (variant, r.status_code)
+    # 正規路徑的簽章不可以拿來讀變體
+    pt = client.get("/api/photo-token", headers=_h(t), params={"path": S3_OK}).json()["token"]
+    assert client.get("/api/uploads/" + quote(variant, safe="/"), params={"pt": pt}).status_code in (403, 404), variant

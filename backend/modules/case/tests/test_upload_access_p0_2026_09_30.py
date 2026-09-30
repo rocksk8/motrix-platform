@@ -182,3 +182,99 @@ def test_approval_context_lets_chain_member_open_listed_file(client, world, make
     assert _token(client, t_ap, f"quotations/{Q}/s.pdf", type="completion_note", id=note_no).status_code == 404
     # 不在簽核鏈上的人帶情境 ⇒ 仍 404
     assert _token(client, users["p0_out"], path, type="completion_note", id=note_no).status_code == 404
+
+
+# ── ④ 批次簽章（稽核 S1：N 張圖不可以 N 次詳情守門＋N 筆 audit）─────────────────
+
+N_IMAGES = 20
+
+
+def _twenty_listed(note_no, approver):
+    files = [{"id": "f%02d" % i, "filename": "p%02d.png" % i, "path": f"completion_notes/{note_no}/p{i:02d}.png"}
+             for i in range(N_IMAGES)]
+    _exec("UPDATE completion_notes SET signed_files_json=?, data_json=? WHERE note_no=?",
+          (json.dumps(files), json.dumps({"approval": {"tiers": [{"approvers": [{"username": approver}]}],
+                                                        "requestedBy": "p0_admin"}}), note_no))
+    return [f["path"] for f in files]
+
+
+@pytest.fixture
+def count_detail(monkeypatch):
+    from routers import approval_queue as aq
+    calls = []
+    real = aq._open_detail
+
+    def spy(*a, **k):
+        calls.append(a[2:])
+        return real(*a, **k)
+    monkeypatch.setattr(aq, "_open_detail", spy)
+    return calls
+
+
+def test_batch_runs_detail_guard_once_for_twenty_images(client, world, make_user, count_detail):
+    import time
+    users, note_no = world
+    u, p = make_user(username="p0_apb", role="sales", modules=["quotation"])
+    t_ap = _login(client, u, p)
+    paths = _twenty_listed(note_no, "p0_apb")
+
+    t0 = time.perf_counter()                                   # 修前的做法：每張一次單張端點
+    for pth in paths:
+        assert _token(client, t_ap, pth, type="completion_note", id=note_no).status_code == 200
+    before_s, before_calls = time.perf_counter() - t0, len(count_detail)
+    count_detail.clear()
+
+    t0 = time.perf_counter()
+    r = client.post("/api/photo-token/batch", headers=_h(t_ap),
+                    json={"paths": paths + [f"quotations/{Q}/s.pdf", "../x"], "type": "completion_note", "id": note_no})
+    after_s = time.perf_counter() - t0
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert sorted(body["tokens"]) == sorted(paths)
+    assert sorted(body["denied"]) == sorted([f"quotations/{Q}/s.pdf", "../x"])   # 沒列在詳情／不合法 ⇒ 不簽
+    assert len(count_detail) == 1, count_detail                 # 🔑 一次請求只跑一次詳情守門
+    assert before_calls == N_IMAGES
+    # 簽出來的簽章跟單張端點一樣可用
+    assert client.get(f"/api/uploads/{paths[0]}", params={"pt": body["tokens"][paths[0]]}).status_code in (200, 404)
+    print("\n[S1 量測] %d 張圖：單張端點 %d 次詳情守門 %.1f ms；批次 %d 次 %.1f ms"
+          % (N_IMAGES, before_calls, before_s * 1000, len(count_detail), after_s * 1000))
+
+
+def test_batch_denied_writes_one_audit_and_skips_detail_when_readable(client, world, count_detail):
+    import db
+    import time
+    users, note_no = world
+    paths = _twenty_listed(note_no, "someone_else")
+    r = client.post("/api/photo-token/batch", headers=_h(users["p0_out"]),
+                    json={"paths": paths, "type": "completion_note", "id": note_no})
+    assert r.status_code == 200 and r.json()["tokens"] == {} and len(r.json()["denied"]) == N_IMAGES
+    assert len(count_detail) == 1
+    for _ in range(50):                                        # audit 在背景執行緒寫
+        c = db.get_db()
+        n = c.execute("SELECT COUNT(*) AS n FROM audit_log WHERE action='approval.detail_denied'").fetchone()["n"]
+        c.close()
+        if n:
+            break
+        time.sleep(0.05)
+    time.sleep(0.3)
+    c = db.get_db()
+    n = c.execute("SELECT COUNT(*) AS n FROM audit_log WHERE action='approval.detail_denied'").fetchone()["n"]
+    c.close()
+    assert n == 1, n
+    # 本來就讀得到（案件業務本人）⇒ 連一次詳情守門都不跑
+    count_detail.clear()
+    r = client.post("/api/photo-token/batch", headers=_h(users["p0_owner"]),
+                    json={"paths": paths, "type": "completion_note", "id": note_no})
+    assert len(r.json()["tokens"]) == N_IMAGES and count_detail == []
+
+
+def test_batch_limit_and_no_context(client, world):
+    users, note_no = world
+    r = client.post("/api/photo-token/batch", headers=_h(users["p0_owner"]),
+                    json={"paths": ["completion_notes/%s/%d.png" % (note_no, i) for i in range(201)]})
+    assert r.status_code == 400
+    r = client.post("/api/photo-token/batch", headers=_h(users["p0_out"]),
+                    json={"paths": [f"completion_notes/{note_no}/a.png"]})
+    assert r.status_code == 200 and r.json() == {"tokens": {}, "denied": [f"completion_notes/{note_no}/a.png"],
+                                                 "ttl": 3600}
+    assert client.post("/api/photo-token/batch", json={"paths": []}).status_code == 401
