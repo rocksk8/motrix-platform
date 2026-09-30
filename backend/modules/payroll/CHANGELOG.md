@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
+- 附件目錄 P3：`_PayrollCatalog` 加 `search`／`count`（勞報單簽回檔；權限＝最高管理者或出納模組，不符一筆都不列）。
+
 ## 1.1.16 — 2026-10-01（暫用號，列車取號；wip/w3-bank-profile）
 - 員工收款帳號（A2 收款人，使用者 2026-10-01）：migration 0003 新增 `user_bank_accounts`（每人一個有效帳戶、舊的留歷史）；`/api/me/bank-account`（本人）、`/api/bank-accounts*`（超級管理員／財務維護；出納查看）；頁面 `bank-account.html`；遮蔽：本人完整、有資格者要 `reveal=1` 才回完整並寫稽核、其他人只見末四碼；提供者 `payee.bank_profile`（IP-BK1）。只新增表，舊程式碼不讀它（回滾相容）。
 

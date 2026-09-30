@@ -70,6 +70,9 @@
 - L1（新增）：`helpers.case_access.case_exists(conn, quote_no)`、`case_sales_department(conn, quote_no)`（L1 金流串接 `helpers/custom_finance` 讀 quotations 只准經這個檔，DEPENDENCY-MAP §3.2）。
 - L1（行為）：`GET /api/custom-modules/finance/case/{案件單號}` 看不到案件／查無案件改回 404（走 `case_access.deny_case`，M01-O1 看不到＝不存在；原為 403）；自訂模組定義送審的簽核佇列提供者改用 `approval_json_of` 讀 `decision_json.approval`（壞 JSON 那一筆跳過並記 ERROR）、詳情 `quoteNo` 改回空（沒有掛案件）。
 
+## 1.82 — 2026-09-30（暫用，列車取號；wip/w1-attach-p3：附件目錄 P3 搜尋）
+- L1（新增）：`helpers/attachment_search`（`normalize_crit／make_item／matches／finish／count_by_type／case_names／CRIT_KEYS／ITEM_KEYS`）——`attachments.catalog` 提供者的 `search`／`count` 共用件（項目鍵固定、沒有 path；看不到的不列也不回個數）；`preview 元件` 新增 `MotrixFilePreview.byAttachmentRef`（前端）。提供者契約 IP-105 加 `search`／`count`（同契約版次只增）。
+
 ## 1.80 — 2026-09-30（wip/version-slots：版號佔位，使用者「撞號太多次了，想辦法解決」）〔train_number：1.79 → 1.80〕
 - L0（新增）：`core.migrations.NEXT`——`register("core", NEXT, fn)`＝未取號的 core migration（分支用）：排在已編號的之後跑、不記版號、每次 `run_all` 重跑（靠冪等）；非 core 登記 NEXT ⇒ ValueError。列車 `tools/platform/train_number.py assign` 依檔案順序換成連續整數；列車／platform 上有 NEXT ⇒ `test_version_slots` 紅。已編號的行為不變。
 - 流程：分支不再取號——模組／CORE CHANGELOG 寫 `## (next)`、manifest 寫 `"version": "next"`、`core_bump.py --pending`（G1 快照 core_version="next"、CORE_VERSION 不動）；列車 `train_number.py assign` 一次取號；CHANGELOG／version_manifest 的 git 合併驅動（`setup_merge_drivers.py`）讓兩邊的新增都留。PLAYBOOK §G6

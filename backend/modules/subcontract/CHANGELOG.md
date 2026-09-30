@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
+- 附件目錄 P3：`_SubcontractCatalog` 加 `search`／`count`（派工單附件、承攬商發票；權限＝`_SubcontractPathAccess.readable` 逐派工單）。
+
 ## 1.0.36 — 2026-10-01（wip/w4-acceptance-2）
 - 承攬商發票進項稅額的提示統一寫『估計稅額』，並說明派工沒填稅率時以 5% 估算。⚠ 提示字串若寫壞（例：格式字串裡的裸 `%`），整個事件提供者會丟 TypeError、所有承攬商事件靜默消失（引擎只在 notices 寫『讀取失敗』）；驗收測試 `test_ledger_acceptance` 斷言每個事件來源都讀取成功。
 
