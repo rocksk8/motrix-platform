@@ -22,7 +22,7 @@ import json
 import os
 import uuid
 from datetime import datetime
-from typing import List
+from typing import List, NamedTuple
 
 from fastapi import HTTPException, UploadFile
 
@@ -240,6 +240,44 @@ class AttachmentNotVisible(Exception):
         super().__init__()
         self.visible = list(visible or [])
         self.hidden = int(hidden or 0)
+
+
+# ── 附件目錄（`attachments.catalog`，契約 v1，2026-09-30；設計 proposal-attachments-search-preview §4）──────────────
+# 「全部文件」的附件目錄：擁有模組各自宣告 `CATEGORIES`（source_type ⇒ 顯示資訊）與 `open()`（取出單一檔案）。
+# 與 `attachments.for_document`（IP-21，會計憑證來源政策）分開：範圍不同（全部文件 vs 傳票可帶入的來源）。
+# 權限＝擁有模組對**那張單據**自己的讀取規則（多數沿用 `uploads.path_access` 或 `for_document` 已有的判斷，不另寫第二份）。
+ATTACHMENTS_CATALOG = "attachments.catalog"
+
+
+class OpenedFile(NamedTuple):
+    """`attachments.catalog` 提供者的 `open()` 回傳：一個已確認存在的實體檔。"""
+    abs_path: str
+    filename: str
+    mime: str
+    size: int
+
+
+def pick_file(files, file_id):
+    """`files`（`save_document_files` 的 metadata 陣列）裡 id 等於 `file_id` 的那一筆；沒有 ⇒ None。"""
+    fid = str(file_id)
+    return next((f for f in (files or []) if isinstance(f, dict) and str(f.get("id")) == fid), None)
+
+
+def opened_upload_file(entry):
+    """metadata 一筆（含 `path`＝uploads 相對路徑）⇒ `OpenedFile`；路徑不合法、跑出 uploads、檔案不在 ⇒ None。
+    只認 uploads 底下的檔（勞報單封存目錄等別處的檔由各提供者自己組 `OpenedFile`，由 L1 端點驗它宣告的根）。"""
+    if not isinstance(entry, dict):
+        return None
+    rel = canonical_upload_path(entry.get("path"))
+    if rel is None:
+        return None
+    full = os.path.realpath(os.path.join(UPLOADS_ROOT, *rel.split("/")))
+    if not os.path.isfile(full):
+        return None
+    import mimetypes
+    name = str(entry.get("filename") or os.path.basename(full))
+    mime = str(entry.get("mime") or mimetypes.guess_type(name)[0] or "application/octet-stream")
+    return OpenedFile(full, name, mime, os.path.getsize(full))
 
 
 def files_from_json_column(conn, table: str, key_col: str, key, col: str) -> list:

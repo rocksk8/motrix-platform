@@ -635,6 +635,27 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ---
 
+## IP-105　`attachments.catalog`：附件目錄（各單據模組＋L1 工作日誌 → L1 `GET /api/attachments/open`；多提供者）
+
+2026-09-30 附件目錄 P2（設計 `proposal-attachments-search-preview` §4；使用者：「所有上傳的檔案都要參照出納裡面有預覽的功能」＋分類搜尋）。開檔走一支 L1 端點，權限由**擁有那張單據的模組**判斷；P3 再在同一契約加 `search`／`count`（檔案中心）。**編號暫定（105），列車定號。**與 IP-21 `attachments.for_document`（會計憑證來源政策）分開：範圍不同。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`modules/case/attachments.py::_CaseCatalog`（quotation_signed、case_update、payment_item、material、material_invoice、extra_expense、completion_note）；M03：`modules/supply/attachments.py::_SupplyCatalog`（shipping_note）；M05：`modules/arap/attachments.py::_ArapCatalog`（invoice_voucher）；M04：`modules/subcontract/attachments.py::_SubcontractCatalog`（contractor_dispatch、contractor_invoice）；M02：`modules/crm/attachments.py::_CrmCatalog`（dev_log）；M06：`modules/accounting/attachments_catalog.py::_AccountingCatalog`（voucher）；M07：`modules/payroll/attachments.py::_PayrollCatalog`（payslip_signed）；L1：`routers/system.py::_WorkLogCatalog`（work_log_photo，`registry.provide`） |
+| 使用方 | L1 `routers/attachments.py`：`GET /api/attachments/open?type=&doc=&file=`（預覽元件 `MotrixFilePreview` 的 `byAttachmentRef` 轉接器；沒裝檔案中心也能用）。P3：`modules/filehub` 的搜尋頁 |
+| 形式 | provider，**多提供者、以模組 key 區分**；每個提供者宣告 `CATEGORIES`（source_type ⇒ `{label, doc, module}`，兩兩不重疊） |
+| 語法 | 提供：`ModuleSpec(providers={("attachments.catalog", "<key>"): Obj})`；`Obj.CATEGORIES`、`Obj.open(conn, user, source_type, doc_no, file_id) -> OpenedFile \| None`（`OpenedFile(abs_path, filename, mime, size)`，L1 `helpers.uploads`）；可選 `Obj.ROOTS()`＝uploads 以外允許的根目錄（例：勞報單封存目錄）。取用：`registry.providers("attachments.catalog")` 找 `CATEGORIES` 含該 type 的那個 |
+| 回傳 | `open` ⇒ `OpenedFile`；單據或檔案不存在 ⇒ `None`；看不到 ⇒ raise `AttachmentNotVisible`；來源資料壞 ⇒ raise `AttachmentSourceError`（訊息給使用者）。端點：看不到＝查無＝未知 type＝提供者例外＝實體檔不在允許的根之下 ⇒ 同一句 404「檔案不存在」（fail closed，不洩漏存在）；資料壞 ⇒ 400；body＝`application/octet-stream` 的檔案本身。`doc`／`file` 的意義：`doc`＝單據鍵（案件／單號／id，各類見 `CATEGORIES` 的提供者 docstring），`file`＝`save_document_files` 回的 metadata `id`（傳票為 `file_id`） |
+| 權限 | **不另寫第二份規則**：多數類別直接用擁有單據已有的判斷（`uploads.path_access` 的 `readable`、IP-21 `for_document` 的 `files`、傳票／勞報單各自端點的閘門）；守門題驗「對每個使用者，`open` 成功 ⇔ `photo-token` 成功」 |
+| 不收 | 待核准暫存檔（`_pending_case_changes`、額外支出變更申請）：未核准不是正式檔案（設計 Q6）；PII（身分證、存簿）；暫存匯入檔；設定圖檔——登記在 `docs/platform/upload_points.json` 的 `excluded` |
+| 對方不在時 | 沒有提供者認領該 type ⇒ 404；P3 搜尋頁回 `unavailable=[{category, reason}]` 明說（屆時補契約） |
+| 契約版本 | 1（2026-09-30；只有 `CATEGORIES`＋`open`，`search`／`count` 留 P3） |
+| 守門 | `backend/tests/platform/test_upload_points_registered.py`（每個上傳端點必須分類；`catalog` 必須有提供者認領、每個 category 有上傳點餵它、兩兩不重疊；反向控制：合成未登記端點、死列、重疊、沒人認領、沒人餵）；`backend/tests/test_attachments_open_2026_09_30.py`（打得開且位元組相同、看不到＝查無同一句 404、與 photo-token 同答案、根目錄檢查、提供者例外 fail closed、資料壞 400、沒有提供者 404、契約形狀） |
+
+**新增上傳端點時**：先在 `docs/platform/upload_points.json` 加一列（`catalog`＝source_type，或 `excluded`＋理由，或 `pending`＋理由）；`catalog` 類由擁有模組的提供者宣告該 type 並實作 `open`。
+
+---
+
 ## IP-100　`payables.pending`：請款待付款（M01 → M05 出納；多提供者）
 
 對應 CORE-SPEC「請款流程（下一版）」（2026-09-27 使用者裁示）：核准而未付款的請款（案件額外支出）進出納待付款；出納登錄付款寫回付款日。

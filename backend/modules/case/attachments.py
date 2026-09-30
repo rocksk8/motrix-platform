@@ -198,4 +198,37 @@ class _CasePathAccess:
         return bool(_READ_RULE.get(st, case_documents_readable)(conn, quote_no, user))
 
 
+class _CaseCatalog:
+    """`attachments.catalog`（契約 v1，2026-09-30 P2）：M01 的文件類附件。權限＝擁有單據自己的讀取規則
+    （同 `_CaseAttachments` 的 `_READ_RULE`／完工單清單規則 `case_documents_readable`），不另寫第二份。
+    待核准暫存檔（`_pending_case_changes`、額外支出變更申請）不進目錄（設計 Q6：未核准的不是正式檔案）。"""
+    CATEGORIES = {
+        "quotation_signed": {"label": "報價單回簽", "doc": "報價單", "module": "案件"},
+        "case_update": {"label": "案件動態附件", "doc": "案件動態", "module": "案件"},
+        "payment_item": {"label": "收付款項目發票", "doc": "案件收付款", "module": "案件"},
+        "material": {"label": "材料附件", "doc": "案件材料", "module": "案件"},
+        "material_invoice": {"label": "材料發票", "doc": "案件材料", "module": "案件"},
+        "extra_expense": {"label": "額外支出／請款附件", "doc": "額外支出", "module": "案件"},
+        "completion_note": {"label": "完工單回簽", "doc": "完工單", "module": "案件"},
+    }
+
+    @staticmethod
+    def open(conn, user, source_type, doc_no, file_id):
+        from helpers.uploads import opened_upload_file, pick_file
+        if source_type == "completion_note":
+            row = conn.execute("SELECT quote_no, signed_files_json FROM completion_notes WHERE note_no = ?",
+                               (doc_no,)).fetchone()
+            if row is None:
+                return None
+            if not case_documents_readable(conn, row["quote_no"], user):
+                raise AttachmentNotVisible()
+            try:
+                files = json.loads(row["signed_files_json"] or "[]") or []
+            except (TypeError, ValueError):
+                raise AttachmentSourceError("完工單「%s」的附件資料格式不正確。" % doc_no)
+        else:
+            files = _CaseAttachments.files(conn, source_type, doc_no, user)      # 看不到 ⇒ AttachmentNotVisible
+        return opened_upload_file(pick_file(files, file_id))
+
+
 from core import registry as _registry  # noqa: E402

@@ -58,6 +58,8 @@ MODULE = ModuleSpec(
         ("attachments.for_document", "case"): attachments._CaseAttachments,
         # IP-104：上傳檔的讀取權限（/api/photo-token、/api/uploads；2026-09-30 P0）
         ("uploads.path_access", "case"): attachments._CasePathAccess,
+        # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
+        ("attachments.catalog", "case"): attachments._CaseCatalog,
         # IP-100：請款待付款（已核准、未登錄付款日的額外支出 ⇒ M05 出納；登錄付款寫回付款日）
         ("payables.pending", "case"): payables._Payables,
         # IP-102（W1）：匯款差額審核；IP-9：額外支出的匯款手續費列營運報表支出

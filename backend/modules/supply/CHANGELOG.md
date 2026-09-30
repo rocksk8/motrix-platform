@@ -1,5 +1,8 @@
 # 採購・庫存・出貨 更新紀錄
 
+## 1.0.9 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
+- 新增 `attachments.py::_SupplyCatalog`（`attachments.catalog`／`supply`，IP-105）：出貨單回簽附件開檔；權限＝出貨單清單規則 `case_documents_readable`。
+
 ## 1.0.8 — 2026-09-30（暫用號，列車取號；wip/sec-p0 安全修正 P0）
 - 安全修正 P0：`GET /api/shipping-notes/{no}` 與 `POST /api/shipping-notes/{no}/signed-files` 原本只要求登入 ⇒ 改用出貨單清單的規則（`_readable_note`：`guard_case_access(allow_module="case_manage")`）；看不到與查無同一句 404「出貨單 X 不存在」（不帶案件單號），上傳被擋時不寫檔。
 - 新增提供者 `uploads.path_access`／`supply`（IP-104，`_ShippingPathAccess`）：`shipping_notes/<單號>/` 依同一規則判斷。

@@ -39,6 +39,31 @@ class _SubcontractAttachments:
         return files_from_json_column(conn, "contractor_dispatches", "id", doc_no, _COLUMNS[source_type])
 
 
+class _SubcontractCatalog:
+    """`attachments.catalog`（契約 v1，2026-09-30 P2）：派工單報價單附件與承攬商發票。
+    權限＝派工單單筆端點的規則（模組 ∨ 看得到該案的單據），同 `_SubcontractPathAccess`（不用 for_document 那條較窄的：
+    單筆端點本來就讓這些模組看到檔案路徑）。"""
+    CATEGORIES = {
+        "contractor_dispatch": {"label": "派工單附件", "doc": "承攬派工單", "module": "外包工班"},
+        "contractor_invoice": {"label": "承攬商發票", "doc": "承攬派工單", "module": "外包工班"},
+    }
+
+    @staticmethod
+    def open(conn, user, source_type, doc_no, file_id):
+        from helpers.uploads import opened_upload_file, pick_file
+        if source_type not in _COLUMNS:
+            raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
+        if not str(doc_no).isdigit():
+            return None
+        row = conn.execute("SELECT id FROM contractor_dispatches WHERE id = ?", (int(doc_no),)).fetchone()
+        if row is None:
+            return None
+        if not _SubcontractPathAccess.readable(conn, "contractor_dispatches", (str(int(doc_no)), "-"), user):
+            raise AttachmentNotVisible()
+        files = files_from_json_column(conn, "contractor_dispatches", "id", int(doc_no), _COLUMNS[source_type])
+        return opened_upload_file(pick_file(files, file_id))
+
+
 #: 派工單單筆 `GET /api/contractor-dispatches/{did}` 的模組（回應含 files_json／invoice_files_json 的路徑）
 DISPATCH_READ_MODULES = ('procurement', 'case_manage', 'contractor_list', 'quotation')
 

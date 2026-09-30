@@ -43,5 +43,7 @@ MODULE = ModuleSpec(
         ("attachments.for_document", "subcontract"): attachments._SubcontractAttachments,
         # IP-104：上傳檔的讀取權限（派工單附件、承攬商發票；2026-09-30 P0）
         ("uploads.path_access", "subcontract"): attachments._SubcontractPathAccess,
+        # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
+        ("attachments.catalog", "subcontract"): attachments._SubcontractCatalog,
     },
 )

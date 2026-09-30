@@ -3,6 +3,9 @@
 ## (next) — 2026-09-30（wip/host-ledger-chrome：總帳頁面外框）
 - 修正：`ledger-hub／periods／reports／settings／statements.html` 補載 `notif.js`＋`sidebar.js`（第二十五班上線後使用者回報沒有頂列／logo／模組選單）；無權限改顯示平台共用「你沒有這個頁面的權限」。守門 `tests/test_page_shell_scripts_2026_09_30.py`。
 
+## 1.1.3 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
+- 新增 `attachments_catalog.py::_AccountingCatalog`（`attachments.catalog`／`accounting`，IP-105）：傳票附件開檔；權限＝cashier／finance（同傳票各端點），附件必須屬於該傳票且未刪。
+
 ## 1.1.2 — 2026-09-30（暫用號，列車取號；W4 總帳 列車修補）
 - 修補：四大表匯出經公司資料第二道；傳票提供者／佇列登記改自 voucher_providers.py；`general-ledger` 查詢參數 `key` 改 `dimension_value`；設定更新寫稽核；`_run` 不再用非字面值 `**kw`；期初餘額試算端點登記為純試算。純修補，無 migration。
 

@@ -20,6 +20,9 @@ core migration v6（audit_log 加 module／case_no／ref_no／result／reason_co
 ## 1.76 — 2026-09-30（暫用號；wip/w2-upload-magic：上傳檔頭檢查）
 - L1（新增）：`helpers.uploads._check_upload_magic`（列入 `__l1_public__`）——副檔名白名單之外的檔頭（magic bytes）檢查，唯一關卡；`save_document_files` 自動套用，自有存檔邏輯的 L2（勞報單回簽檔）與 L1 工作日誌照片呼叫同一支。不符 ⇒ 400＋稽核 `upload.rejected_magic`。白名單裡沒有檔頭規則的副檔名一律擋（fail-closed）。`save_document_files` 簽章不變。
 
+## 1.76 — 2026-09-30（暫用號；wip/w2-attach-p2：附件目錄 P2，IP-105）
+- L1（新增）：`helpers.uploads.ATTACHMENTS_CATALOG`（capability 名 `attachments.catalog`）、`OpenedFile`（`abs_path, filename, mime, size`）、`pick_file(files, file_id)`、`opened_upload_file(entry)`；`routers/attachments.py`：`GET /api/attachments/open?type=&doc=&file=`（找認領 type 的提供者 ⇒ `open()`；看不到＝查無＝404；實體檔必須在 uploads 或提供者宣告的 `ROOTS` 之下）。`save_document_files` 與既有 `attachments.for_document`／`uploads.path_access` 不變。
+
 ## 1.75 — 2026-09-30（列車 25 合併補號；wip/w1-builder3 c98f5bcc 的 L1 新增，原寫在 1.73 段但 1.74 已被行事曆開關取用）
 - L1（新增）：`core.paths.FORM_TEMPLATES_DIR`（自訂模組內建範本資料夾；原本用 `__file__` 算，違反 core.paths 守門）
 

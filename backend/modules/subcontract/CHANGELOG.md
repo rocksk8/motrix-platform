@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.23 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
+- 新增 `attachments.py::_SubcontractCatalog`（`attachments.catalog`／`subcontract`，IP-105）：派工單附件與承攬商發票開檔；權限＝派工單單筆端點規則（同 `_SubcontractPathAccess`）。
+
 ## 1.0.22 — 2026-09-30（暫用號，列車取號；wip/cal-toggle 行事曆推送可選）
 - 行事曆「包商撥款」（預設關，事件種類開關在 L1）：`paid-toggle` 標記已匯款 commit 之後推 `push_event_for_module('contractor_payout', …)`，事件日期＝匯款日期，說明含應付／實付／手續費；取消匯款不刪事件。題 `modules/subcontract/tests/test_payout_calendar_2026_09_30.py`
 ## 1.0.21 — 2026-09-30（暫用號，列車取號；W4 總帳 C2）
