@@ -114,6 +114,22 @@ DEV_CASE_ACCESS = row_access.OwnerRule(
 row_access.register("dev_case", DEV_CASE_ACCESS)
 
 
+class _DevLogPathAccess:
+    """`uploads.path_access`（IP-104，2026-09-30 P0）：`dev_logs/<業務開發案 id>/<檔名>`（開發記錄附件）
+    ⇒ 同 `GET /dev-cases/{case_id}/logs`：`_require_dev` 的模組規則（admin+ 或 dev_crm）＋ row_access `dev_case`。"""
+    FOLDERS = ("dev_logs",)
+
+    @staticmethod
+    def readable(conn, folder, rest, user):
+        if len(rest) != 2 or not rest[0].isdigit():
+            return False
+        mods = json.loads(user.get("modules") or "[]")
+        if user.get("role") not in ("superadmin", "admin") and "dev_crm" not in mods:
+            return False
+        row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (int(rest[0]),)).fetchone()
+        return bool(row) and row_access.visible("dev_case", user, row)
+
+
 # ── Customer visit sync ──────────────────────────────────────────────────────
 
 def _sync_customer_visit(conn, case_id: int, log_id: int, action: str, log_data: dict = None):

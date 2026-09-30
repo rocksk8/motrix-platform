@@ -1358,9 +1358,16 @@
           this.previewFetching = false
         },
 
+        // 簽核人常常不是案件的人：換簽章時帶上目前詳情的 (type, id)，伺服器以詳情守門＋詳情列出的路徑放行（2026-09-30 P0）
+        _photoTokenUrl(path) {
+          const d = this.detail
+          const ctx = (d && d.type && d.id) ? '&type=' + encodeURIComponent(d.type) + '&id=' + encodeURIComponent(d.id) : ''
+          return API + '/api/photo-token?path=' + encodeURIComponent(path) + ctx
+        },
+
         async previewFile(file) {
           try {
-            const r = await fetch(`${API}/api/photo-token?path=${encodeURIComponent(file.path)}`, {
+            const r = await fetch(this._photoTokenUrl(file.path), {
               headers: { Authorization: 'Bearer ' + this.session.token }
             })
             if (!r.ok) { alert('取得檔案連結失敗'); return }
@@ -1535,17 +1542,25 @@
         },
 
         // 圖片要能直接顯示縮圖 → 先換簽章 URL（/api/uploads 需要 pt 簽章）
+        // 2026-09-30 稽核 S1：一次批次換完（原本每張圖打一次單張端點 ⇒ 伺服器每張都重跑一次詳情守門）
         async _prefetchImages() {
-          for (const f of (this.detail?.files || [])) {
-            if (f.kind !== 'image' || !f.path || f.dataUrl) continue
-            try {
-              const r = await fetch(API + '/api/photo-token?path=' + encodeURIComponent(f.path),
-                                    { headers: { Authorization: 'Bearer ' + this.session.token } })
-              if (!r.ok) continue
-              const d = await r.json()
-              this.fileUrls[f.id] = API + '/api/uploads/' + f.path + '?pt=' + encodeURIComponent(d.token)
-            } catch (e) {}
-          }
+          const d = this.detail
+          const imgs = (d?.files || []).filter(f => f.kind === 'image' && f.path && !f.dataUrl)
+          if (!imgs.length) return
+          try {
+            const r = await fetch(API + '/api/photo-token/batch', {
+              method: 'POST',
+              headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ paths: imgs.map(f => f.path), type: d.type || null, id: d.id || null }),
+            })
+            if (!r.ok) return
+            const res = await r.json()
+            if (this.detail !== d) return            // 回應晚到：使用者已切到別筆
+            for (const f of imgs) {
+              const t = (res.tokens || {})[f.path]
+              if (t) this.fileUrls[f.id] = API + '/api/uploads/' + f.path + '?pt=' + encodeURIComponent(t)
+            }
+          } catch (e) {}
         },
 
         async openFile(f) {

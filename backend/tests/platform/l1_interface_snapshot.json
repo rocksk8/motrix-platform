@@ -1,5 +1,5 @@
 {
- "core_version": "1.72",
+ "core_version": "1.73",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -913,11 +913,15 @@
    "AttachmentNotVisible": "class",
    "AttachmentNotVisible.__init__": "def(self, visible=…, hidden=…)",
    "AttachmentSourceError": "class",
+   "PATH_ACCESS": "const",
    "UPLOADS_ROOT": "const",
    "_effective_subfolder": "def(subfolder)",
+   "canonical_upload_path": "def(raw)",
    "delete_document_file": "def(subfolder, doc_no, existing_files, file_id)",
    "files_from_json_column": "def(conn, table, key_col, key, col)",
-   "save_document_files": "async def(subfolder, doc_no, files, uploaded_by, watermark_by=…)"
+   "save_document_files": "async def(subfolder, doc_no, files, uploaded_by, watermark_by=…)",
+   "upload_owner": "def(rel)",
+   "upload_readable": "def(conn, rel, user)"
   },
   "helper:xlsx_out": {
    "EXCEL_COOLDOWN": "const",

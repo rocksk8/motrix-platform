@@ -190,3 +190,77 @@ def files_from_json_column(conn, table: str, key_col: str, key, col: str) -> lis
         return json.loads(row["v"] or "[]") or []
     except (TypeError, ValueError):
         raise AttachmentSourceError("來源「%s」的附件資料格式不正確，無法帶入。" % table)
+
+
+# ── 上傳檔的讀取權限（`uploads.path_access`，IP-104；2026-09-30 安全修正 P0）──────────────────────────
+# 原本 `/api/photo-token` 與 `/api/uploads/…`（Authorization 標頭那條）只要求登入 ⇒ 任何登入者拿得到任何單據
+# 附件（路徑形狀可列舉：`<資料夾>/<單號>/<檔名>`）。改為：路徑先正規化，再依第一段資料夾交給**擁有那張單據的
+# 模組**，用那張單據自己的讀取規則判斷。沒有提供者認領的資料夾一律不放行（預設拒絕）。
+
+#: 提供者 capability：`Obj.FOLDERS`（負責的第一段資料夾名稱）、`Obj.readable(conn, folder, rest, user) -> bool`
+#: （`rest`＝資料夾之後的各段，含檔名；單據不存在或看不到 ⇒ False）。
+PATH_ACCESS = "uploads.path_access"
+
+#: demo 隔離前綴 ⇒ 去掉前綴後的第一段（`_demo_projects` 是 `projects` 的 demo 版，見 photos._photo_root）
+_DEMO_PREFIXES = {_DEMO_SUBFOLDER_PREFIX: None, "_demo_projects": "projects"}
+
+
+def _path_seg_ok(seg: str) -> bool:
+    return bool(seg) and seg not in ('.', '..') and not any(c in seg for c in _BAD_PATH_CHARS)
+
+
+def canonical_upload_path(raw):
+    """請求帶來的上傳相對路徑 ⇒ 正規形式 `a/b/c`；不合法 ⇒ None。
+
+    ```
+    拒絕  空字串、絕對路徑（/ 開頭、磁碟代號）、反斜線、冒號（含 ADS）、NUL、. 與 ..、空段、只有一段
+    拒絕  realpath 與字面路徑不同（連結／junction／Windows 尾端點號等 ⇒ 實際指到別處）或跑出 UPLOADS_ROOT
+    ```
+    不「幫忙正規化」（例如把 `a/../b` 變成 `b`）：合法的呼叫端送的都是存檔當下產生的正規路徑。"""
+    s = str(raw or "")
+    if not s or os.path.isabs(s):
+        return None
+    segs = s.split("/")
+    if len(segs) < 2 or not all(_path_seg_ok(x) for x in segs):
+        return None
+    root = os.path.realpath(UPLOADS_ROOT)
+    literal = os.path.normpath(os.path.join(root, *segs))
+    real = os.path.realpath(literal)
+    if os.path.normcase(real) != os.path.normcase(literal):
+        return None
+    if os.path.commonpath([os.path.normcase(root), os.path.normcase(real)]) != os.path.normcase(root):
+        return None
+    return "/".join(segs)
+
+
+def upload_owner(rel: str):
+    """正規路徑 ⇒ `(資料夾, 其餘各段)`（去掉 demo 前綴）；形狀不對 ⇒ None。"""
+    segs = str(rel or "").split("/")
+    if segs and segs[0] in _DEMO_PREFIXES:
+        alias = _DEMO_PREFIXES[segs[0]]
+        segs = ([alias] if alias else []) + segs[1:]
+    if len(segs) < 2:
+        return None
+    return segs[0], tuple(segs[1:])
+
+
+def upload_readable(conn, rel: str, user) -> bool:
+    """這個人能不能讀這個上傳檔（`rel` 須先經 `canonical_upload_path`）。
+
+    依第一段資料夾找 `uploads.path_access` 的提供者（擁有模組），用那張單據自己的讀取規則判斷。
+    沒有提供者（模組不在，或資料夾沒有人認領，例：branding、voucher_attachments 各有自己的端點）⇒ False。
+    提供者丟例外 ⇒ False 並記 ERROR（fail closed：壞掉只會少看到，不會多看到）。"""
+    owner = upload_owner(rel)
+    if owner is None or not isinstance(user, dict):
+        return False
+    folder, rest = owner
+    from core import registry
+    for key, prov in sorted(registry.providers(PATH_ACCESS).items()):
+        if folder in (getattr(prov, "FOLDERS", ()) or ()):
+            try:
+                return bool(prov.readable(conn, folder, rest, user))
+            except Exception:                                   # noqa: BLE001  fail closed
+                import logging
+                logging.getLogger(__name__).exception("uploads.path_access 提供者 %s 判斷 %s 失敗", key, rel)
+                return False
+    return False

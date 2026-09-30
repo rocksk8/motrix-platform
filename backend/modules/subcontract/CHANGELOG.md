@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.20 — 2026-09-30（暫用號，列車取號；wip/sec-p0 安全修正 P0）
+- 安全修正 P0：新增提供者 `uploads.path_access`／`subcontract`（IP-104，`attachments._SubcontractPathAccess`）：`contractor_dispatches/`、`contractor_dispatch_invoices/` 的附件只簽給派工單單筆端點的模組（procurement／case_manage／contractor_list／quotation）或看得到該案單據的人。原本任何登入者都拿得到簽章。
+
 ## 1.0.19 — 2026-09-30（暫用號，列車取號；N1 承攬商派工，接在 W1 之後）
 - N1 稽核補修：刪除申請進簽核佇列（`approval.queue_items` 名稱 `subcontract_dispatch_file`、`approval.detail` `dispatch_file_delete`；佇列頁可直接核可／退回）；申請人不能核可／退回自己的申請；核可端點簽核人防呆
 - W1 稽核補修：`paid-toggle` 標記已匯款不帶 `paid_at` ⇒ 400（不再默認今天）；待審核差額（實付≠應付）標記匯款者不能自己核可／退回（403）；手續費 `expense.entries` 帶 `pending`；`_voucher_public` 帶 remitReview

@@ -1,5 +1,8 @@
 # 業務開發 更新紀錄
 
+## 1.0.9 — 2026-09-30（暫用號，列車取號；wip/sec-p0 安全修正 P0）
+- 安全修正 P0：新增提供者 `uploads.path_access`／`crm`（IP-104，`api._DevLogPathAccess`）：`dev_logs/<案 id>/` 的附件只簽給 `GET /dev-cases/{id}/logs` 放行的人（admin+ 或 dev_crm，且 row_access `dev_case`）。原本任何登入者都拿得到簽章。
+
 ## 1.0.8 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
 - 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`dev-crm.html`
 
