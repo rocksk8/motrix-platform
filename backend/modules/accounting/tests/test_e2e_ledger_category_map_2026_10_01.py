@@ -48,7 +48,7 @@ def test_superadmin_adds_category_maps_it_and_removes_the_mapping(live_server, m
     row.locator("[data-testid=ls-catmap-account]").select_option("6134")
     row.locator("[data-testid=ls-catmap-nd]").check()
     row.locator("[data-testid=ls-catmap-save]").click()
-    page.wait_for_selector("[data-testid=ls-catmap-notice]", state="visible")
+    page.wait_for_function("() => (document.querySelector('[data-testid=ls-catmap-notice]') || {}).textContent.includes('已儲存')")     # 等這一次動作的終點（上一則「已新增」的提示還在畫面上）
     assert _q("SELECT account_code, nondeductible FROM gl_category_map WHERE source='extra_expense' AND category='e2e_travel'") == [("6134", 1)]
     page.wait_for_function("() => !document.querySelector('[data-testid=ls-catmap-unmapped]') || document.querySelector('[data-testid=ls-catmap-unmapped]').offsetParent === null")
     page.locator("[data-testid=ls-catmap-row-e2e_travel] [data-testid=ls-catmap-del]").click()
