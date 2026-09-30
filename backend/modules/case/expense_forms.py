@@ -8,6 +8,7 @@
 明細與 data 只做保存與顯示，不直接被金流讀。
 """
 import json
+from datetime import date
 
 from fastapi import HTTPException
 
@@ -137,6 +138,50 @@ def department_of(data: dict, explicit=None):
         if isinstance(v, str) and v.strip().isdigit():
             return int(v.strip())
     return None
+
+
+#: 付款方式（出納登錄付款時選）：總帳貸方腿由它決定（零用金貸 PETTY 1112，其餘貸銀行 1113；W4 的 E11b 讀 `pay_method`／`pay_account_code`）
+PAY_METHODS = ("transfer", "cash", "petty_cash")
+PAY_METHOD_LABEL = {"transfer": "轉帳", "cash": "現金", "petty_cash": "零用金"}
+
+
+def parse_payout(kind: str, row_pay_terms: str, row_remit_date: str, body: dict, paid_date: str) -> dict:
+    """出納登錄付款時的新欄位 ⇒ `{pay_method, pay_account_code, pay_terms, remit_date}`；不合法 ⇒ ValueError(status=400)（狀態不變）。
+
+    - 採購單（purchase_order）：**匯款日與付款條件必填**（本次 body 有給就用，否則沿用單據上已填的；都沒有 ⇒ 400）
+    - 零用金支付單（petty_cash）：付款方式**必填**（零用金／現金／轉帳）；其他類型預設轉帳（可選現金）
+    - 付款科目（`payAccountCode`）選填：只做格式檢查，科目是否存在由出納端點用會計連接器驗
+    下游效應（R1）：付款方式決定總帳 E11b 貸方腿（W4）；營運報表現金口徑只看付款日與實付，不受影響。"""
+    body = body or {}
+
+    def bad(msg):
+        e = ValueError(msg)
+        e.status = 400
+        return e
+    method = str(body.get("payMethod") or "").strip()
+    if method and method not in PAY_METHODS:
+        raise bad("付款方式只能是：%s" % "、".join(PAY_METHOD_LABEL[m] for m in PAY_METHODS))
+    if kind == "petty_cash" and not method:
+        raise bad("零用金支付單必須選擇付款方式（零用金／現金／轉帳）")
+    method = method or "transfer"
+    terms = str(body.get("payTerms") or "").strip() or (row_pay_terms or "")
+    remit = str(body.get("remitDate") or "").strip() or (row_remit_date or "")
+    if kind == "purchase_order":
+        if not terms:
+            raise bad("採購單請填寫付款條件")
+        if not remit:
+            raise bad("採購單請填寫匯款日")
+    if len(terms) > MAX_TEXT:
+        raise bad("付款條件太長（上限 %d 字）" % MAX_TEXT)
+    if remit:
+        try:
+            date.fromisoformat(remit)
+        except ValueError:
+            raise bad("匯款日必須是有效的日期（YYYY-MM-DD）")
+    acct = str(body.get("payAccountCode") or "").strip()
+    if len(acct) > 20:
+        raise bad("付款科目代碼太長")
+    return {"pay_method": method, "pay_account_code": acct, "pay_terms": terms, "remit_date": remit or paid_date}
 
 
 def next_doc_code(conn, kind: str, today: str) -> str:

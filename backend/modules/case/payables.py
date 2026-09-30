@@ -46,6 +46,7 @@ def _item(r):
         "payee": _col(r, "payee_name") or r["payer_name"] or r["created_by_name"] or "", "requestedBy": r["created_by_name"] or "",
         # 費用單據（A2）：類型、單號、收款人類型、付款條件／匯款日（採購單由出納核准後填）；舊列＝kind ''
         "kind": _col(r, "kind") or "", "docCode": _col(r, "doc_code") or "", "payeeType": _col(r, "payee_type") or "",
+        "payeeUsername": _payee_username(r), "payeeBank": _mask_bank(_col(r, "payee_bank"), _col(r, "payee_account")),
         "payTerms": _col(r, "pay_terms") or "", "remitDate": _col(r, "remit_date") or "",
         "expenseDate": (r["expense_date"] or "")[:10], "approvedAt": _approved_at(r["approval_json"]) or "",
         "invoiceDate": (_col(r, "invoice_date") or "")[:10], "invoiceNo": _col(r, "invoice_no") or "",
@@ -54,8 +55,40 @@ def _item(r):
     }
 
 
+def _payee_username(r) -> str:
+    """員工收款人的帳號（查銀行資料表用）：單據 data.applicant → 支出人帳號 → 建立者；廠商／無 ⇒ ''。"""
+    if (_col(r, "payee_type") or "") == "vendor":
+        return ""
+    try:
+        d = json.loads(_col(r, "data_json") or "{}")
+    except Exception:
+        d = {}
+    return str(d.get("applicant") or r["payer_username"] or r["created_by"] or "")
+
+
+def _mask_bank(bank, account) -> str:
+    """清單上的銀行資料只給遮罩（末 4 碼）；完整帳號只經出納專用端點、每次看都留稽核。"""
+    acct = str(account or "").strip()
+    if not acct and not (bank or "").strip():
+        return ""
+    return ("%s ****%s" % ((bank or "").strip(), acct[-4:])).strip()
+
+
 class _Payables:
     """IP-100 提供者（多提供者，名稱 `case`）。"""
+
+    @staticmethod
+    def payee_info(conn, key) -> dict:
+        """出納付款前看「收款人資料」：單據上手填的收款人／銀行／帳號（完整，只給出納端點）與員工帳號。查無 ⇒ LookupError。"""
+        try:
+            exp_id = int(key)
+        except (TypeError, ValueError):
+            raise LookupError("找不到這筆請款")
+        r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
+        if not r or not _EF.is_payable_kind(r["kind"] or "") or r["status"] != "已核准":
+            raise LookupError("找不到這筆請款")
+        return {"payeeType": _col(r, "payee_type") or "", "payeeName": _col(r, "payee_name") or r["payer_name"] or "",
+                "payeeUsername": _payee_username(r), "bank": _col(r, "payee_bank") or "", "account": _col(r, "payee_account") or ""}
 
     @staticmethod
     def pending(conn) -> list:
@@ -88,16 +121,21 @@ class _Payables:
             exp_id = int(key)
         except (TypeError, ValueError):
             raise LookupError("找不到這筆請款")
-        row = conn.execute("SELECT total_cost FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
+        row = conn.execute("SELECT total_cost, kind, pay_terms, remit_date FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
         if not row:
             raise LookupError("找不到這筆請款")
+        if not _EF.is_payable_kind(row["kind"] or ""):
+            raise ValueError("這類單據（請購單）只是核准文件，不進出納付款")
         rm = parse_remit(remit, row["total_cost"])
+        pay = _EF.parse_payout(row["kind"] or "", row["pay_terms"], row["remit_date"], remit, paid_date)   # 採購單：匯款日＋付款條件必填
         cur = conn.execute(
             "UPDATE case_extra_expenses SET paid_date=?, updated_at=?, updated_by_name=?,"
-            " remit_actual=?, remit_fee=?, remit_review=?, remit_review_by='', remit_review_at='', remit_review_note=''"
+            " remit_actual=?, remit_fee=?, remit_review=?, remit_review_by='', remit_review_at='', remit_review_note='',"
+            " pay_method=?, pay_account_code=?, pay_terms=?, remit_date=?, paid_by=?"
             " WHERE id=? AND status='已核准' AND COALESCE(paid_date, '')=''",
             (paid_date, datetime.now().isoformat(timespec="seconds"),
-             user.get("display_name") or user.get("username") or "", rm["actual"], rm["fee"], rm["review"], exp_id))
+             user.get("display_name") or user.get("username") or "", rm["actual"], rm["fee"], rm["review"],
+             pay["pay_method"], pay["pay_account_code"], pay["pay_terms"], pay["remit_date"], user.get("username") or "", exp_id))
         r = conn.execute("SELECT id, quote_no, status, paid_date, total_cost, category, description, payer_name"
                          " FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
         if cur.rowcount == 0:

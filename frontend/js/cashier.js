@@ -103,6 +103,7 @@ function cashierApp() {
     payreqDates: {},
     payreqBusy: false,
     payreqNotice: '',
+    payreqExtras: {},                    // A2-3：費用單據的出納欄位 { 'source:key': {payMethod, payTerms, remitDate, bank, bankBusy, bankErr} }
     payreqRemits: {},                    // W1：每筆請款的實付／手續費輸入 { 'source:key': {actual, hasFee, fee} }
     // W1：匯款實付／手續費（三個標記已匯款入口共用同一組欄位規則）；實付空白＝等於應付；手續費是公司自付、不參與比對
     payRemit:  { actual: '', hasFee: false, fee: '' },
@@ -218,6 +219,39 @@ function cashierApp() {
       return b
     },
     remitReviewLabel(s) { return s === 'pending' ? '差額待審核' : (s === 'approved' ? '差額已核可' : '') },
+    kindLabel(k) { return { purchase_req: '請購單', purchase_order: '採購單', travel: '差旅費用請款單', petty_cash: '零用金支付單' }[k] || '' },
+    payreqExtra(it) {
+      const k = it.source + ':' + it.key
+      if (!this.payreqExtras[k]) this.payreqExtras[k] = { payMethod: '', payTerms: it.payTerms || '', remitDate: it.remitDate || '', bank: null, bankBusy: false, bankErr: '' }
+      return this.payreqExtras[k]
+    },
+    // 採購單：匯款日＋付款條件必填；零用金支付單：付款方式必填（後端同規則，這裡只是提早提示）
+    payreqExtraError(it) {
+      const x = this.payreqExtra(it)
+      if (it.kind === 'purchase_order' && (!x.remitDate || !(x.payTerms || '').trim())) return '採購單請填匯款日與付款條件'
+      if (it.kind === 'petty_cash' && !x.payMethod) return '零用金支付單請選付款方式'
+      return ''
+    },
+    payreqExtraBody(it) {
+      if (!it.kind) return {}
+      const x = this.payreqExtra(it), b = {}
+      if (x.payMethod) b.payMethod = x.payMethod
+      if (it.kind === 'purchase_order') { b.payTerms = (x.payTerms || '').trim(); b.remitDate = x.remitDate }
+      return b
+    },
+    async viewPayeeBank(it) {
+      const x = this.payreqExtra(it)
+      x.bankBusy = true; x.bankErr = ''; x.bank = null
+      try {
+        const r = await fetch('/api/cashier/pending-payables/' + encodeURIComponent(it.source) + '/' + encodeURIComponent(it.key) + '/payee-bank',
+          { headers: { Authorization: 'Bearer ' + this._token() } })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { x.bankErr = d.detail || ('查詢失敗（HTTP ' + r.status + '）'); return }
+        x.bank = d
+        if (d.notice) x.bankErr = d.notice
+      } catch (e) { x.bankErr = '查詢失敗：' + e.message }
+      finally { x.bankBusy = false }
+    },
     payreqRemit(it) {
       const k = it.source + ':' + it.key
       if (!this.payreqRemits[k]) this.payreqRemits[k] = this._newRemit('')
@@ -320,13 +354,14 @@ function cashierApp() {
         const k = it.source + ':' + it.key
         const r = await fetch('/api/cashier/pending-payables/' + encodeURIComponent(it.source) + '/' + encodeURIComponent(it.key) + '/pay', {
           method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({ paidDate: this.payreqDates[k] || '', ...this.remitBody(this.payreqRemit(it)) }),
+          body: JSON.stringify({ paidDate: this.payreqDates[k] || '', ...this.remitBody(this.payreqRemit(it)), ...this.payreqExtraBody(it) }),
         })
         const d = await r.json().catch(() => ({}))
         if (!r.ok) { this.payreqNotice = d.detail || ('登錄付款失敗（HTTP ' + r.status + '）'); return }
         this.payreqNotice = '已登錄付款：' + (it.quoteNo || '') + '　' + it.title + '　付款日 ' + d.paidDate
           + (d.remitReview ? '　⚠ 實付與應付差 ' + d.diff + '，已送管理員審核' : '')
         delete this.payreqRemits[k]
+        delete this.payreqExtras[k]
         await Promise.all([this.loadPayreqQueue(), this.loadRemitReviews()])
       } catch (e) { this.payreqNotice = '登錄付款失敗：' + e.message }
       finally { this.payreqBusy = false }

@@ -720,6 +720,8 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ## IP-100　`payables.pending`：請款待付款（M01 → M05 出納；多提供者）
 
+> **A2-3 追加（2026-10-01，加法、契約版本不變）**：項目多 `kind／docCode／payeeType／payeeUsername／payeeBank（遮罩）／payTerms／remitDate`；`mark_paid` 的 `remit` 多收 `payMethod（transfer／cash／petty_cash）／payAccountCode／payTerms／remitDate`；提供者可選實作 `payee_info(conn, key)`（出納端點 `GET /api/cashier/pending-payables/{來源}/{key}/payee-bank` 用；完整銀行資料只給能付款的人、每次留稽核）。可選的銀行資料表提供者 `payee.bank_profile(conn, username, viewer) → {bank, account, accountName} | None`（W3，payroll；不在 ⇒ 用單據手填快照）。
+
 對應 CORE-SPEC「請款流程（下一版）」（2026-09-27 使用者裁示）：核准而未付款的請款（案件額外支出）進出納待付款；出納登錄付款寫回付款日。
 以**額外引用疊加**：出納既有的兩個來源（IP-14 承攬商匯款、IP-8 獎金分潤）不動，另開一個名稱空間。
 
