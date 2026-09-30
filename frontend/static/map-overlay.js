@@ -97,7 +97,7 @@
       var byId = {}
       list.forEach(function (p) {
         var m = L.marker([p.lat, p.lng], { title: p.title || '',
-          icon: L.divIcon({ className: 'mp-ov-divicon', html: pinNode(style), iconSize: [14, 14] }) })
+          icon: L.divIcon({ className: 'mp-ov-divicon', html: pinNode(style), iconSize: [0, 0], iconAnchor: [0, 0] }) })
         m.bindPopup(function () { return popupNode(p.popup) })
         m.on('click', function () { onClick(p.id) })
         group.addLayer(m)

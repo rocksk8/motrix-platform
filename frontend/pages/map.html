@@ -48,28 +48,60 @@
           兩者要一起改才不會差 1px。量到的值不是估的。 */
     .mp-note > span:first-child { flex:none; width:16px; text-align:center; }
     .mp-note.info { background:#F5F4F0; color:var(--text-secondary); }
+    /* 圖例：圖釘 28px（--mp-pin）、標記字 14px 粗體、名稱 13px、標題 13px 粗體深色；窄螢幕自然換行（flex-wrap）。 */
+    .mp-legend { --mp-pin:28px; gap:10px 14px !important; }
+    .mp-lg-h { font-size:13px; font-weight:700; color:var(--text-primary,#111827); }
+    .mp-lg-i { display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#1F2937; }
     /* 圖釘：**字在圖釘上**，不是在 popup 裡。
        popup 要點才看得到，而使用者要的是「看一眼就知道哪幾個是自己的廠商」。 */
-    .mp-pin { display:inline-flex; align-items:center; justify-content:center;
-              width:20px; height:20px; border-radius:50%; color:#fff;
-              font-size:11px; font-weight:700; line-height:1;
-              box-shadow:0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,.35); }
+    /* 2026-09-30 使用者：Google 底圖上我們的圖釘被滿地 POI 淹掉（截圖：34px 紅圓＋「標」，旁邊是一堆橘藍水滴）。
+       ⇒ 形狀跟 Google 的水滴／圓形分開：**圓角方塊**、粗白框＋深色外環＋陰影，尺寸隨縮放放大（--mp-pin，
+       由 `_syncPinSize()` 依縮放寫在 #mp-canvas 上：≤12 → 44px、13–15 → 50px、≥16 → 56px）。
+       圖例用同一個 class，容器把 --mp-pin 設成 28px ⇒ 圖例與地圖上的形狀完全一致。 */
+    #mp-canvas { --mp-pin:44px; }
+    .mp-pin { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box;
+              width:var(--mp-pin,28px); height:var(--mp-pin,28px); border-radius:28%; color:#fff;
+              font-size:max(14px, calc(var(--mp-pin,28px) * .5)); font-weight:800; line-height:1;
+              border:3px solid #fff; flex:none;
+              box-shadow:0 0 0 2px rgba(15,23,42,.6), 0 4px 10px rgba(0,0,0,.55); }
+    /* 地圖上的標記根元素（Leaflet divIcon／Google AdvancedMarker 的 content；`el()` 取 firstElementChild ⇒ 它必須是根）：
+       Leaflet：divIcon 0×0，標記以座標點為中心；Google：content 的「下緣中心」對到座標 ⇒ 下移半個高度才置中。 */
+    /* ⚠️ display:block：它是 <span>，Google 路徑（position:relative）若維持 inline，定位過的行內盒會蓋在自己的子圖釘上面 ⇒ 點擊落在外層 */
+    .mp-mk { display:block; position:absolute; left:0; top:0; width:var(--mp-pin,28px); height:var(--mp-pin,28px);
+             transform:translate(-50%,-50%); }
+    #mp-canvas[data-mp-bm="google"] .mp-mk,
+    #mp-canvas[data-mp-bm="google"] .mp-me,
+    #mp-canvas[data-mp-bm="google"] .mp-ov-pin { position:relative; left:auto; top:auto; transform:translateY(50%); }
+    .mp-mk > .mp-pin { display:flex; }
+    /* 名稱標籤（chip）：白底、深字 13px 粗體、邊框顏色＝圖釘顏色（--pin）；第二行 11px 機關・截止日。
+       名稱最多 16 字＋…（JS 截）；重疊時 `_declutterChips()` 只留「截止最近」的一個，其餘 --off，滑過圖釘才顯示。 */
+    .mp-chip { position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%);
+               background:#fff; color:#111827; border:1px solid var(--pin,#6B7280); border-left-width:4px;
+               border-radius:6px; padding:2px 8px; white-space:nowrap; text-align:left;
+               font-size:13px; font-weight:700; line-height:1.3; pointer-events:none;
+               box-shadow:0 1px 5px rgba(0,0,0,.4); }
+    .mp-chip small { display:block; font-size:11px; font-weight:500; color:#374151; }
+    .mp-chip--off { display:none; }
+    .mp-mk:hover { z-index:5; }
+    .mp-mk:hover .mp-chip--off { display:block; }
+    .mp-chip--static { position:static; transform:none; display:inline-block; vertical-align:middle; }
     /* `MP2`：粗精度（區級／未知）＝**空心＋淡**。實心圖釘會讓人以為「就在這裡」，
        而區級的點可能差好幾公里——精度要從圖上看得出來，不是點開彈窗才知道。 */
-    .mp-pin--coarse { background:#fff; color:var(--pin); opacity:.6;
-                      box-shadow:inset 0 0 0 2px var(--pin), 0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,.25); }
+    .mp-pin--coarse { background:#fff; color:var(--pin); opacity:.8; border-color:var(--pin);
+                      box-shadow:0 0 0 2px #fff, 0 3px 8px rgba(0,0,0,.4); }
     /* 據點（分公司）：**方形牌子＋名稱**，跟圓形的資料點一眼分得開。
        🔑 名稱直接寫在圖上 —— 多據點時「離公司 12 km」那句話要指得出是哪一個。 */
     .mp-site { display:inline-block; padding:2px 7px; border-radius:4px;
-               background:#1F2937; color:#fff; font-size:11px; font-weight:600;
-               white-space:nowrap; box-shadow:0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,.4); }
+               background:#1F2937; color:#fff; font-size:13px; font-weight:700;
+               white-space:nowrap; box-shadow:0 0 0 2px #fff, 0 3px 8px rgba(0,0,0,.5); }
     /* 「你在這裡」：**刻意跟資料點長得不一樣。**
        ☠️ 一張圖上有標案／客戶／供應商／辦公室，全部同一個圖釘的話，
        **多畫一個等於沒有畫** —— 使用者找不到自己。
        📌 用一個帶白邊與脈動外環的實心圓點，不是另一個有字的方塊。 */
-    .mp-me { display:block; width:14px; height:14px; border-radius:50%;
-             background:#DC2626; border:3px solid #fff;
-             box-shadow:0 0 0 1px #DC2626, 0 1px 4px rgba(0,0,0,.4); }
+    .mp-me { display:block; position:absolute; left:0; top:0; box-sizing:border-box;
+             width:max(24px, calc(var(--mp-pin,44px) * .55)); height:max(24px, calc(var(--mp-pin,44px) * .55));
+             border-radius:50%; background:#DC2626; border:4px solid #fff; transform:translate(-50%,-50%);
+             box-shadow:0 0 0 2px #DC2626, 0 4px 10px rgba(0,0,0,.55); }
     /* `MP5`：高度隨視窗。字級按鈕用根元素 zoom，而 zoom 會把 vh 一起放大 ⇒ 除以 `--fz`
        （同 `test_fz_no_raw_vh_is_left_in_the_frontend` 的規則）。下限 320px：矮視窗仍看得到地圖。 */
     #mp-canvas { height:max(320px, calc(62vh / var(--fz,1))); border-radius:var(--radius);
@@ -95,10 +127,11 @@
     }
     /* 覆蓋層（IP-101 map.overlay；static/map-overlay.js）：標記、面板。顏色由 JS 取語意 token */
     .mp-ov-divicon { background:none; border:none; }
-    .mp-ov-pin { display:block; width:14px; height:14px; border-radius:50%; border:2px solid var(--white);
-                 box-shadow:var(--shadow-sm); }
-    .mp-ov-pin.mp-ov-homestay { border-radius:3px; }
-    .mp-ov-pin.mp-ov-center { width:16px; height:16px; }
+    .mp-ov-pin { display:block; position:absolute; left:0; top:0; box-sizing:border-box; transform:translate(-50%,-50%);
+                 width:max(26px, calc(var(--mp-pin,44px) * .6)); height:max(26px, calc(var(--mp-pin,44px) * .6));
+                 border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(15,23,42,.55), 0 3px 8px rgba(0,0,0,.5); }
+    .mp-ov-pin.mp-ov-homestay { border-radius:5px; }
+    .mp-ov-pin.mp-ov-center { width:max(30px, calc(var(--mp-pin,44px) * .68)); height:max(30px, calc(var(--mp-pin,44px) * .68)); }
     .mp-ov-panel { margin-top:12px; padding:12px 14px; }
     .mp-ov-title { font-size:14px; margin:0 0 8px; }
     .mp-ov-error { color:var(--danger); font-size:12px; }
@@ -332,25 +365,26 @@
       <!-- 圖例：**圖釘上的字才是分辨的載體**。
            🔑 顏色只是輔助 —— 色覺差異的人要看得出來，
            而**點開才知道等於沒有回答**。 -->
-      <div class="mp-panel-body" style="display:flex;gap:12px;flex-wrap:wrap;
+      <div class="mp-panel-body mp-legend" data-testid="mp-legend" style="display:flex;gap:12px;flex-wrap:wrap;
            align-items:center;padding-top:0">
-        <span style="font-size:11px;color:var(--text-dim)">圖例</span>
+        <span class="mp-lg-h" data-testid="mp-legend-h">圖例</span>
         <template x-for="d in datasets" :key="d.key">
-          <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;
-                       color:var(--text-secondary)">
-            <span class="mp-pin" :style="'background:' + d.color" x-text="d.mark"></span>
+          <span class="mp-lg-i">
+            <span class="mp-pin" data-testid="mp-legend-pin" :style="'background:' + d.color" x-text="d.mark"></span>
             <span x-text="d.label"></span>
           </span>
         </template>
         <!-- `MP3`：標案圖釘的顏色＝截止狀態（字仍是「標」）。 -->
-        <span style="font-size:11px;color:var(--text-dim);margin-left:8px">標案截止</span>
+        <span class="mp-lg-h" data-testid="mp-legend-h-deadline" style="margin-left:8px">標案截止</span>
         <template x-for="st in ['open', 'closing', 'closed']" :key="st">
-          <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;
-                       color:var(--text-secondary)">
-            <span class="mp-pin" :style="'background:' + deadlineStyles[st].color">標</span>
+          <span class="mp-lg-i">
+            <span class="mp-pin" data-testid="mp-legend-pin" :style="'background:' + deadlineStyles[st].color">標</span>
             <span x-text="deadlineStyles[st].label"></span>
           </span>
         </template>
+        <!-- 名稱標籤範例：圖釘旁的白底標籤＝名稱（最多 16 字）＋第二行 機關・截止日 -->
+        <span class="mp-lg-h" style="margin-left:8px">標籤</span>
+        <span class="mp-chip mp-chip--static" data-testid="mp-legend-chip" style="--pin:#2563EB">標案名稱（最多 16 字…）<small>機關 · 截止日</small></span>
       </div>
     </div>
 
@@ -1116,6 +1150,8 @@ function mapPage() {
       // 🔑 那道判準是脆的（我今天已經撞到三次），**而在它修好之前，
       // 讓程式碼靠近錨點比讓註解靠近程式碼重要。**
       this._map = window.L.map('mp-canvas').setView(centre, pts.length ? 8 : 7)
+      document.getElementById('mp-canvas').setAttribute('data-mp-bm', 'leaflet')
+      this._map.on('zoomend moveend', () => this._afterPins())
       this._syncMapSize()    // ← 尺寸校正，理由見上面那段
       this._watchMapSize()   // ← 之後每一次尺寸變化也跟上（XA2）
 
@@ -1157,7 +1193,7 @@ function mapPage() {
       const me = this.userPos
       const icon = window.L.divIcon({
         className: '', html: '<span class="mp-me"></span>',
-        iconSize: [20, 20], iconAnchor: [10, 10],
+        iconSize: [0, 0], iconAnchor: [0, 0],
       })
       const marker = window.L.marker([me.lat, me.lon], { icon, zIndexOffset: 1000 })
         .addTo(this._map)
@@ -1255,12 +1291,63 @@ function mapPage() {
       return '<strong>' + this._esc(loc.name || '據點') + '</strong><br>' + this._esc(loc.address || '')
     },
     //  🔴 **標記本身就要分得出來**：一個字＋顏色（要點開才知道類別的話，地圖就沒有回答「哪幾個是我的廠商」）。
+    //  2026-09-30：根元素 `.mp-mk`（圖釘＋名稱標籤）。名稱標籤＝標案名稱／客戶名稱最多 16 字（`_chipTitle`），
+    //  第二行「機關 · 截止日」；全部逐段跳脫（名稱是使用者／政府資料）。
+    _chipTitle(text) {
+      const a = Array.from(String(text == null ? '' : text).trim())
+      return a.length > 16 ? a.slice(0, 16).join('') + '…' : a.join('')
+    },
+    //  重疊時誰留下：截止最近的標案優先（未截止的照日期由近到遠，已截止的殿後，日期不明再後面），其他種類最後。
+    _pinPrio(p) {
+      if (p.dataset !== 'tenders') return 1e6
+      const t = Date.parse(p.deadline || '')
+      if (isNaN(t)) return 4e5
+      const days = (t - Date.now()) / 864e5
+      return days >= -1 ? Math.max(days, 0) : 5e5 + Math.abs(days)
+    },
     _pinHtml(p) {
       const d = this.datasetOf(p)
-      return this.precisionIsCoarse(p.precision)
-        ? ('<span class="mp-pin mp-pin--coarse" style="--pin:' + this.pinColor(p) + '">' + d.mark + '</span>')
-        : ('<span class="mp-pin" style="background:' + this.pinColor(p) + '">' + d.mark + '</span>')
+      const coarse = this.precisionIsCoarse(p.precision)
+      const color = this.pinColor(p)
+      const title = this._chipTitle(p.name)
+      const sub = [p.org, p.dataset === 'tenders' ? p.deadline : ''].filter(Boolean).join(' · ')
+      const chip = title
+        ? ('<span class="mp-chip" title="' + this._esc(p.name) + '"><span class="mp-chip-t">' + this._esc(title) + '</span>'
+           + (sub ? '<small>' + this._esc(sub) + '</small>' : '') + '</span>')
+        : ''
+      return '<span class="mp-mk" data-chip="' + (title ? '1' : '') + '" data-prio="' + this._pinPrio(p) + '" style="--pin:' + color + '">'
+        + '<span class="mp-pin' + (coarse ? ' mp-pin--coarse' : '') + '"' + (coarse ? '' : ' style="background:' + color + '"') + '>'
+        + this._esc(d.mark) + '</span>' + chip + '</span>'
     },
+    //: 圖釘尺寸隨縮放（≤12 → 44px、13–15 → 50px、≥16 → 56px），寫成 #mp-canvas 上的 --mp-pin；兩種底圖共用。
+    _pinSizeFor(z) { return z >= 16 ? 56 : (z >= 13 ? 50 : 44) },
+    _syncPinSize() {
+      const cv = document.getElementById('mp-canvas')
+      if (!cv || !this._map || !this._map.getZoom) return
+      cv.style.setProperty('--mp-pin', this._pinSizeFor(this._map.getZoom()) + 'px')
+    },
+    //: 名稱標籤重疊時只留一個（優先序 `data-prio`）；被藏的滑過圖釘才顯示，全文在彈窗。
+    _declutterChips() {
+      const cv = document.getElementById('mp-canvas')
+      if (!cv) return
+      const mks = Array.from(cv.querySelectorAll('.mp-mk[data-chip="1"]'))
+      mks.forEach(m => { const c = m.querySelector('.mp-chip'); if (c) c.classList.remove('mp-chip--off') })
+      mks.sort((a, b) => Number(a.dataset.prio) - Number(b.dataset.prio))
+      const hits = (a, b) => !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom)
+      // 障礙物：所有圖釘（別人的圖釘蓋住標籤＝標籤讀不到）＋已留下的標籤
+      const pins = Array.from(cv.querySelectorAll('.mp-mk > .mp-pin')).map(e => ({ el: e, r: e.getBoundingClientRect() }))
+      const kept = []
+      mks.forEach(m => {
+        const c = m.querySelector('.mp-chip')
+        if (!c) return
+        const r = c.getBoundingClientRect()
+        if (!r.width) return
+        const own = m.querySelector('.mp-pin')
+        const hit = kept.some(k => hits(r, k)) || pins.some(p => p.el !== own && hits(r, p.r))
+        if (hit) c.classList.add('mp-chip--off'); else kept.push(r)
+      })
+    },
+    _afterPins() { this._syncPinSize(); this._declutterChips() },
     _popupHtml(p) {
       const d = this.datasetOf(p)
       const url = this.recordUrl(p)
@@ -1321,11 +1408,11 @@ function mapPage() {
         const icon = window.L.divIcon({
           className: '',
           html: this._pinHtml(p),
-          iconSize: [20, 20], iconAnchor: [10, 10],
+          iconSize: [0, 0], iconAnchor: [0, 0],          // 標記自己用 .mp-mk 置中（尺寸隨縮放）
         })
         // 🔴 `MP0`：彈窗內容**逐段跳脫**再用 <br> 接——名稱／機關／地址是外部資料
         //    （標案來自政府網站），直接拼進 HTML ＝ 在每個開地圖的人瀏覽器裡執行它。
-        const marker = window.L.marker([p.lat, p.lon], { icon }).addTo(dataLayer)
+        const marker = window.L.marker([p.lat, p.lon], { icon, zIndexOffset: 800 }).addTo(dataLayer)
         const fk = window.MotrixRecordLink ? window.MotrixRecordLink.focusKey(p) : null
         if (fk && !this._markerByKey[fk]) this._markerByKey[fk] = marker
         this._markerOf.set(this._raw(p), marker)
@@ -1336,6 +1423,7 @@ function mapPage() {
       this._fitAll(!!this._focus)
       this._applyFocus()
       if (this._pendingRow) { const r = this._pendingRow; this._pendingRow = null; this._focusPoint(r) }
+      this._afterPins()
     },
 
     //: `MP1`：把視野移到 `?focus=` 指的那一點並打開彈窗。**找不到要說出來**——

@@ -54,7 +54,12 @@ FAKE_GMAPS = r"""
     get: function () { return this._map },
     set: function (m) {
       if (m && !isMap(m)) bad('AdvancedMarkerElement.map');
-      this._map = m; if (m) { host().appendChild(this.content) } else if (this.content.remove) { this.content.remove() } } });
+      // 真 Google 會把 content 放在各自的定位容器（下緣中心對到座標）；假貨也各給一個絕對定位容器，
+      // 標記才不會在 #mp-canvas 裡上下疊在一起、互相蓋住點擊（2026-09-30 圖釘加大、加名稱標籤後才顯出來）
+      this._map = m;
+      if (m) { var w = document.createElement('div'); w.style.cssText = 'position:absolute;left:' + (30 + (rec.markers.indexOf(this) % 12) * 110) + 'px;top:' + (120 + Math.floor(rec.markers.indexOf(this) / 12) * 120) + 'px';
+               w.appendChild(this.content); host().appendChild(w); this._w = w }
+      else if (this._w) { this._w.remove(); this._w = null } } });
   AdvancedMarkerElement.prototype.addEventListener = function (ev, fn) {
     if (ev === 'gmp-click') { if (!this.gmpClickable) bad('gmp-click 需要 gmpClickable'); this.content.addEventListener('click', fn) } };
   AdvancedMarkerElement.prototype.addListener = function (ev, fn) { rec.legacyListener++; this.content.addEventListener(ev, fn) };
