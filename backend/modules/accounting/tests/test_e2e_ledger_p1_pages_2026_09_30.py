@@ -146,8 +146,10 @@ def test_reports_page_requires_the_ledger_modules(live_server, make_user, e2e_br
     user, pw = make_user(username="e2e_gl_none", role="staff", modules=[])
     page = e2e_browser.new_page()
     _open(page, live_server, user, pw, "ledger-reports.html")
-    page.wait_for_selector("[data-testid=lr-error]", state="visible")
-    assert "權限" in page.locator("[data-testid=lr-error]").inner_text()           # 沒權限＝明說，不是空白頁
+    # 2026-09-30：頁面補載 sidebar.js（原本漏載 ⇒ 沒有頂列／logo）後，沒權限改由平台共用的頁面守門
+    # 顯示「你沒有這個頁面的權限」（#no-module-notice，與其他模組頁一致），不再是頁內的 lr-error。
+    page.wait_for_selector("#no-module-notice", state="visible")
+    assert "權限" in page.locator("#no-module-notice").inner_text()                # 沒權限＝明說，不是空白頁
 
 
 # ── B1：報表設定頁 ──────────────────────────────────────────────────────
