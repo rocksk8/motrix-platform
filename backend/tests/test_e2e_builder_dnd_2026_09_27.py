@@ -62,12 +62,14 @@ def test_palette_is_icon_and_text_for_every_catalog_type_and_enter_adds(live_ser
     u, pw = make_user(username="dnd_pal_api", role="superadmin")
     tok = client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]
     catalog = client.get("/api/custom-modules/catalog", headers={"Authorization": "Bearer " + tok}).json()
-    assert types == catalog["fieldTypes"], (types, catalog["fieldTypes"])     # 只來自 catalog，順序照舊
-    for t in types:
-        btn = page.locator('#mb-palette [data-palette-type="%s"]' % t)
-        assert btn.locator("svg").count() == 1, "型別 %s 沒有 icon" % t
-        assert btn.inner_text().strip(), "型別 %s 沒有文字" % t
-    page.locator('#mb-palette [data-palette-type="date"]').focus()
+    # 〔改題 2026-09-30〕第三輪元件列依目錄分組，一個型別可有多個元件（單選／下拉都是選項型）⇒ 比集合，順序不再等於 fieldTypes
+    assert set(types) == set(catalog["fieldTypes"]), (types, catalog["fieldTypes"])
+    btns = page.locator('#mb-palette [data-palette-element]')
+    for i in range(btns.count()):
+        btn = btns.nth(i)
+        assert btn.locator("svg").count() == 1, "元件 %s 沒有 icon" % btn.get_attribute("data-palette-element")
+        assert btn.inner_text().strip(), "元件 %s 沒有文字" % btn.get_attribute("data-palette-element")
+    page.locator('#mb-palette [data-palette-element="date"]').first.focus()
     page.keyboard.press("Enter")
     page.wait_for_selector('.mb-fc[data-field-index="0"]')
     _saved(page)
@@ -175,19 +177,18 @@ def test_output_and_list_previews_follow_the_canvas_on_the_same_screen(live_serv
     page.locator("#mb-f-label").click()
     page.keyboard.type("設備名稱甲", delay=40)
     _saved(page)
-    out = page.frame_locator("#mb-output-host iframe")
-    lst = page.frame_locator("#mb-list-host iframe")
-    out.locator("body:has-text('設備名稱甲')").wait_for(state="attached", timeout=15000)
-    lst.locator("body:has-text('設備名稱甲')").wait_for(state="attached", timeout=15000)
     assert page.evaluate("() => document.activeElement && document.activeElement.id") == "mb-f-label"
     page.fill("#mb-f-label", "設備名稱乙")
-    out.locator("body:has-text('設備名稱乙')").wait_for(state="attached", timeout=15000)
-    lst.locator("body:has-text('設備名稱乙')").wait_for(state="attached", timeout=15000)
-    assert page.locator("#mb-output-host iframe").count() == 1 and page.locator("#mb-list-host iframe").count() == 1   # 不重建
-    # 〔改題 2026-09-30 建構器第三輪：輸出預覽與列表預覽改成右欄同頁頁籤（屬性｜輸出預覽｜列表預覽），不再同時顯示；仍不跳頁、不開彈窗〕
+    _saved(page)
+    # 〔改題 2026-09-30 建構器第三輪：輸出預覽與列表預覽改成右欄同頁頁籤（屬性｜輸出預覽｜列表預覽），不再同時顯示；
+    # 仍不跳頁、不開彈窗。預覽只在該頁籤開著時渲染 ⇒ 切過去再等內容跟上最新名稱〕
     page.click("#mb-side-output")
+    out = page.frame_locator("#mb-output-host iframe")
+    out.locator("body:has-text('設備名稱乙')").wait_for(state="attached", timeout=15000)
     assert page.locator("#mb-output-host iframe").is_visible() and not page.locator("#mb-list-host iframe").is_visible()
     page.click("#mb-side-list")
+    lst = page.frame_locator("#mb-list-host iframe")
+    lst.locator("body:has-text('設備名稱乙')").wait_for(state="attached", timeout=15000)
     assert page.locator("#mb-list-host iframe").is_visible() and not page.locator("#mb-output-host iframe").is_visible()
     assert not errors, errors
 

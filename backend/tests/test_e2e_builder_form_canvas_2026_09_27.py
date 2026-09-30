@@ -135,6 +135,7 @@ def test_palette_drops_into_a_section_at_a_position_and_fields_move_across_secti
     _saved(page)
     d = _draft(key)
     assert [g["fields"] for g in d["ui"]["form"]["groups"]] == [["a", "field_1", "b"], ["c", "field_2"]], d["ui"]
+    page.locator('.mb-sec[data-section-group="0"] .mb-sec__h').evaluate("e => e.scrollIntoView({ block: 'center' })")   # 〔2026-09-30〕標題列別被固定頂列蓋住
     _drag(page, '.mb-sec[data-section-group="1"] .mb-sec__h .h', '.mb-sec[data-section-group="0"] .mb-sec__h .h')  # 區塊二拖到最前
     page.wait_for_function("() => document.querySelector('[data-group-title=\"0\"]').value === '二'")
     _saved(page)

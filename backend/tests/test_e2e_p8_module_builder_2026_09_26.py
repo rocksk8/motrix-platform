@@ -233,6 +233,7 @@ def _build_equipment_loan(page, base):
     page.locator('.mb-sec[data-section-group="0"] .mb-sec__h').evaluate("e => e.scrollIntoView({ block: 'center' })")   # 標題列別被固定頂列蓋住
     page.drag_and_drop('.mb-fc[data-field-key="qty"] .mb-fc__bar .h', '.mb-sec[data-section-group="0"] .mb-sec__h .h')
     page.wait_for_selector('.mb-sec[data-section-group="0"] .mb-fc[data-field-key="qty"]')
+    page.click("#mb-side-list")                                              # 〔改題 2026-09-30〕列表欄位在右欄「列表預覽」頁籤
     page.click('[data-list-column="borrower"]')
     _wait_saved(page)
 
