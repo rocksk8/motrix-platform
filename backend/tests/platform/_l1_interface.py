@@ -13,6 +13,8 @@
 用法：
   python backend/tests/platform/_l1_interface.py --diff      列出目前介面與快照的差異
   python backend/tests/platform/_l1_interface.py --update    依升版規則重產快照
+  python backend/tests/platform/_l1_interface.py --update --pending   分支用（PLAYBOOK §G6）：只記介面、core_version="next"，
+                                                                      號碼與幅度由列車 tools/platform/train_number.py assign 定
 """
 import ast
 import json
@@ -321,6 +323,13 @@ def changelog_top_version(text=None):
     return m.group(1)
 
 
+def changelog_pending(text=None):
+    """最上面一個「## 主.次」之上有沒有 `## (next…)` 佔位段落（PLAYBOOK §G6：分支不取號，列車 train_number.py 取號）。"""
+    text = CHANGELOG.read_text(encoding="utf-8") if text is None else text
+    first = re.search(r"^##\s+\d", text, re.M)
+    return bool(re.search(r"^##[ \t]+\(next(?::(?:patch|minor|major))?\)", text[:first.start()] if first else text, re.M))
+
+
 def _scope1_desc(v):
     """範圍 2 的描述 ⇒ 範圍 1 的格式（拿掉 async 前綴與 `/` 標記），用來和舊快照比對「本來就看得見的」有沒有變。"""
     v = v[len("async "):] if v.startswith("async ") else v
@@ -370,11 +379,16 @@ def scope_changes_without_rule_docs(repo=None, snapshot_rel=None):
 
 def main(argv):
     cur = current_interface()
-    ver = core_version()
+    # --pending（PLAYBOOK §G6 版號佔位）：分支上只記介面、不取號 ⇒ 快照 core_version="next"，升版幅度由列車 train_number.py 定
+    pending = "--pending" in argv
+    ver = "next" if pending else core_version()
     if "--update" in argv:
         if SNAPSHOT.exists():
             snap = load_snapshot()
             old = snap["interface"]
+            if snap.get("core_version") == "next" and not pending:
+                print("拒絕重產：快照是佔位（core_version=next）⇒ 分支用 --update --pending；列車用 tools/platform/train_number.py assign")
+                return 1
             scope_change = snap.get("scope_version", 1) < SCOPE_VERSION
             if scope_change and not _arg(argv, "--reason"):
                 print("拒絕重產：快照範圍 %s → %s 要附原因（--reason \"…\"），並在同一個 commit 修改 MODULE-GUIDE／CORE-SPEC 的規則說明"
@@ -388,7 +402,7 @@ def main(argv):
             else:
                 a, c, r = diff(old, cur)
             need = required_bump(a, c, r)
-            if not bump_ok(snap["core_version"], ver, need):
+            if not pending and not bump_ok(snap["core_version"], ver, need):
                 print("拒絕重產：介面差異需要 %s 升版，而 CORE_VERSION %s → %s 不足。"
                       % (need, snap["core_version"], ver))
                 return 1

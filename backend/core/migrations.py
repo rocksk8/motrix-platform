@@ -2,11 +2,13 @@
 """每模組獨立版本的 migration（CORE-SPEC §6）。
 
 [單位] plat:migrations    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] current_version, incomplete, register, registered, run_all
+[公開介面] NEXT, current_version, incomplete, register, registered, run_all
 [不變式] 版本從 1 起、連續、不可重複；每支**回 None** 才記版本（回原因字串＝未完成：不記、ERROR、該模組後面的這次不跑、其他模組照跑、
          不丟例外）；只准新增（加表、加欄位），不刪欄位、不改名；每支必須冪等
          core 以外的模組逐支 SAVEPOINT：**丟例外＝未完成**（原因「例外：<型別>: <訊息>」、撤回這一支的寫入、不往上丟，稽核 D PM1）；
          core 的例外照舊往上丟；模組 migration 不准自己 commit（run_all 負責）
+         `register("core", NEXT, fn)`＝未取號（分支用，PLAYBOOK §G6）：排在已編號的之後跑、**不記版號**、每次 run_all 重跑
+         （靠冪等）；列車 `train_number.py assign` 換成連續整數；platform／列車上有 NEXT ⇒ 守門紅（test_version_slots）
 [契約題] tests/test_definitions_store_2026_09_25.py、tests/platform/test_migration_incomplete.py
 [注意] V9 基準（db._MIGRATIONS v1~v116）凍結不動，新表一律由這裡建；模組沒安裝 ⇒ migration 沒登記 ⇒ 不建它的表
 
@@ -31,11 +33,22 @@ import sqlite3
 from datetime import datetime
 
 _REGISTRY = {}          # module -> {version: fn}
+_PENDING = []           # 未取號的 core migration（register("core", NEXT, fn)），依登記順序
+#: 未取號的版號（只准 core；分支上用，列車取號時換成整數——PLAYBOOK §G6）
+NEXT = "NEXT"
 _INCOMPLETE = {}        # 正規化的庫路徑 -> {module: (version, reason)}；主庫、demo 庫各一份，互不覆蓋
 _log = logging.getLogger("motrix.migrations")
 
 
 def register(module: str, version: int, fn) -> None:
+    if version == NEXT:
+        # 為什麼不在執行時自動給號（max+1）：開發庫會記下那個號碼，列車取號後同一號可能換成別支 ⇒ 那一支在該庫永遠不跑。
+        # 不記版號＋每次重跑（靠冪等）⇒ 資料庫裡出現的永遠只有列車定的連續整數。
+        if module != "core":
+            raise ValueError("NEXT（未取號）只給 core 用；模組 migration 用 ModuleSpec.migrations 的整數版號")
+        if fn not in _PENDING:
+            _PENDING.append(fn)
+        return
     per = _REGISTRY.setdefault(module, {})
     if version in per and per[version] is not fn:
         raise ValueError("migration %s v%d 已登記為另一支函式" % (module, version))
@@ -100,6 +113,17 @@ def run_all(conn) -> dict:
                 "ON CONFLICT(module) DO UPDATE SET version=excluded.version, applied_at=excluded.applied_at",
                 (module, v, datetime.now().isoformat()))
             conn.commit()
+        if module == "core" and _PENDING and module not in todo:
+            _log.warning("未取號的 core migration %d 支（只限開發分支；不記版號、每次啟動重跑）：%s",
+                         len(_PENDING), ", ".join(getattr(f, "__name__", "?") for f in _PENDING))
+            for fn in _PENDING:
+                res = fn(conn)                  # core：例外照舊往上丟
+                if res is not None:
+                    why = res.strip() if isinstance(res, str) and res.strip() else (
+                        "migration 回傳值只能是 None（完成）或原因字串（未完成），收到 %r" % (res,))
+                    todo[module] = (max(versions) + 1, why)
+                    _log.error("未取號的 core migration 未完成（%s）：%s", getattr(fn, "__name__", "?"), why)
+                    break
         end = current_version(conn, module)
         if end != start:
             ran[module] = (start, end)

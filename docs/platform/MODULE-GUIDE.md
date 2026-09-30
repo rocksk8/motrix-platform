@@ -41,7 +41,7 @@
 - L0＋L1 對外公開的介面（函式名稱、參數、回傳形狀、資料表欄位）以 `core.registry.CORE_VERSION` 標版本。
 - **同一主版號內只准新增，不准修改或刪除。** 要改或刪 ⇒ 主版號 +1，並且每個模組的 `module.json` 的 `core` 範圍都要重新確認。
 - 模組以 `"core": ">=1.0,<2.0"` 宣告相容範圍；載入器看不懂範圍或範圍不相容 ⇒ 不載入，並寫明原因，不猜。
-- 守門：`backend/tests/platform/test_l1_interface_snapshot.py`（G1）——modules.json 的 L1 Python 單位（plat:／core:／helper:）之公開函式／類別／dataclass 欄位簽章與大寫常數名稱（**範圍 2，2026-09-25 稽核 G-1／G-2**：「公開」＝不以底線開頭，或列在**該 L1 檔自己的 `__l1_public__ = ("_名稱", …)`**——例如 `helpers/auth.py` 的 `_require_user`〔2026-09-26 改為顯式宣告（主持裁示）：原本「被 L1 以外 import 就算公開」會讓介面隨裝了哪些模組而改變——拿掉 M04 ⇒ `_generate_contractor_voucher_pdf` 變成「刪除」、要升主版號；首次導入時把當時跨模組在用的 42 個名稱逐檔寫成宣告，介面不增不減、不升版〕；**另一道守門** `test_l2_uses_only_declared_l1_underscore_names`：L1 以外（含經 `helpers/__init__.py` 的 `__all__` 轉出）用到的 L1 底線名稱必須已宣告，否則紅——要用就先宣告（它就成為契約）；描述含 `async` 與僅限位置參數 `/`；**預設值的內容不納入**，預設值語意改變要自己升版並寫 CHANGELOG），與快照 `l1_interface_snapshot.json` 比對；有差異就紅。修法：升 `CORE_VERSION`、寫 `core/CHANGELOG.md`、跑 `_l1_interface.py --update`（版號不足會拒絕重產）。另驗 CHANGELOG 最上面的版號＝`CORE_VERSION`。快照的判定範圍（`scope_version`）變動時，`--update` 要附 `--reason`，快照記下 `scope_history`（原因、新看得見的名稱），且同一個 commit 必須修改本節或 CORE-SPEC（守門驗 git 歷史）；範圍變大不等於介面新增，不要求升版。
+- 守門：`backend/tests/platform/test_l1_interface_snapshot.py`（G1）——modules.json 的 L1 Python 單位（plat:／core:／helper:）之公開函式／類別／dataclass 欄位簽章與大寫常數名稱（**範圍 2，2026-09-25 稽核 G-1／G-2**：「公開」＝不以底線開頭，或列在**該 L1 檔自己的 `__l1_public__ = ("_名稱", …)`**——例如 `helpers/auth.py` 的 `_require_user`〔2026-09-26 改為顯式宣告（主持裁示）：原本「被 L1 以外 import 就算公開」會讓介面隨裝了哪些模組而改變——拿掉 M04 ⇒ `_generate_contractor_voucher_pdf` 變成「刪除」、要升主版號；首次導入時把當時跨模組在用的 42 個名稱逐檔寫成宣告，介面不增不減、不升版〕；**另一道守門** `test_l2_uses_only_declared_l1_underscore_names`：L1 以外（含經 `helpers/__init__.py` 的 `__all__` 轉出）用到的 L1 底線名稱必須已宣告，否則紅——要用就先宣告（它就成為契約）；描述含 `async` 與僅限位置參數 `/`；**預設值的內容不納入**，預設值語意改變要自己升版並寫 CHANGELOG），與快照 `l1_interface_snapshot.json` 比對；有差異就紅。修法：升 `CORE_VERSION`、寫 `core/CHANGELOG.md`、跑 `_l1_interface.py --update`（版號不足會拒絕重產）〔2026-09-30 起分支不取號：寫 `## (next)` 段落＋`core_bump.py --pending`（快照 `core_version: "next"`），列車 `train_number.py assign` 依介面差異定次／主版號（§6、PLAYBOOK §G6）〕。另驗 CHANGELOG 最上面的版號＝`CORE_VERSION`。快照的判定範圍（`scope_version`）變動時，`--update` 要附 `--reason`，快照記下 `scope_history`（原因、新看得見的名稱），且同一個 commit 必須修改本節或 CORE-SPEC（守門驗 git 歷史）；範圍變大不等於介面新增，不要求升版。
 - ⚠ 未守門：回傳形狀（靜態讀不出來）、L1 router 的 HTTP 端點、L1 資料表欄位（已排入 ROADMAP 階段 G：G1b）
 
 ## 3. 資料分類與存放規則
@@ -126,6 +126,7 @@
   〔補 2026-09-28 00:49（主持派工）：因為「載入才登記」，**只做 `db.init_db(p)` 的工具**（apply_update 乾跑 migration、`tools/platform/upgrade.py run_migrations`）必須先呼叫 `helpers.module_startup.load_modules_like_startup(db_path=<被試跑的那個庫>)`（與 main.py 啟動同一段），否則模組 migration **靜默不跑**；停用清單讀帶進來的那個庫，不讀正式庫。main.py 端守門 `tests/platform/test_module_startup.py`；⚠ 未守門：兩支工具的呼叫端（H12 在本分支合回後接上）〕
   〔補 2026-09-28（使用者裁示「該補就補」）：migration 函式**做不了就回原因字串**（例：依賴的表還不在）⇒ 版號不前進、記 ERROR、下次啟動再試，服務照常起來；**不可以什麼都不做卻回 None**（那會記版號、之後永遠不補）。回 None＝完成。未完成的列在 `core.migrations.incomplete(db_path)`。先檢查、後動手，不留半套。守門 `tests/platform/test_migration_incomplete.py`〕
   〔補 2026-09-28（稽核 D PM1）：run_all 對 core 以外逐支包 SAVEPOINT——migration **丟例外也只算這個模組未完成**（撤回、下線、其他模組照跑），不會讓整台起不來；因此模組 migration **不准自己 commit**（也不准 `executescript`、不准寫 `COMMIT`），commit 由 run_all 做。守門 `tests/platform/test_module_migrations.py::test_module_migrations_do_not_commit_themselves`（正對照：真的掃到 case 0001；反向控制：commit／executescript／COMMIT 各一）〕
+  〔補 2026-09-30（PLAYBOOK §G6 版號佔位）：**core** 的新 migration 在分支上寫 `register("core", NEXT, _fn)`——排在已編號之後跑、**不記版號**、每次啟動重跑（所以必須冪等）；列車 `train_number.py assign` 依檔案順序換成連續整數。不在分支上用 max+1 自動給號：開發庫會記下那個號碼，列車取號後同一號可能換成別支 ⇒ 那一支在該庫永遠不跑。模組 migration 仍用整數檔名（`NNNN_`），同一模組兩包同時加 migration 很少見，撞到時列車手動改檔名〕
 - migration 只准新增，不准改動或刪除欄位（這樣才能回退到 V9 的程式）。
 - V9 維護期間若新增 migration，必須用同一個版號、同樣的內容追進新版。
 - 凍結的歷史 migration 不可以呼叫會繼續演進的程式碼。
@@ -180,6 +181,12 @@ modules/<key>/
 - 系統的「版本紀錄」頁從各模組的 CHANGELOG 彙整產生，不再手動維護一份集中的清單。⚠ 未實作（V9 的 `version_manifest.json` 在過渡期仍然同步，已排入路線圖）
 - 查詢某個模組的歷史，只需要讀那個模組的 CHANGELOG。
 - 守門：`test_module_changelog_follows_code.py`（G4）——模組程式（扣掉 tests／README／SPEC／CHANGELOG／module.json）最後一次改動之後，CHANGELOG 最上面必須有新寫進去的版號條目；工作樹有未提交的程式改動而 CHANGELOG 沒改也紅。版號升的幅度是否合理不判斷。
+- **號碼在列車上才定**（2026-09-30，使用者「撞號太多次了，想辦法解決」；流程見 PLAYBOOK §G6）：分支上的條目標題寫佔位
+  ```
+  ## (next) — 2026-09-30 14:10（wip/<分支>）說明        ← 修正（預設 +0.0.1）
+  ## (next:minor) — …                                    ← 新增功能；不相容寫 (next:major)
+  ```
+  `module.json` 的 `version` **不動**（G2 比的是最上面一個「## X.Y.Z」，佔位之下那一個仍等於 module.json）；CORE 同樣寫 `## (next)`，跑 `tools/platform/core_bump.py --pending`，`CORE_VERSION` 不動；`version_manifest.json` 條目寫 `"version": "next"`；core migration 寫 `register("core", NEXT, fn)`。列車 `tools/platform/train_number.py assign` 把全部佔位換成號碼（從正式機基準與目前兩者較大的往上、依段落由下往上遞增）並同步 module.json／CORE_VERSION／G1 快照。G4 把 `## (next)` 當成「有寫條目」；列車與 platform 上還有佔位 ⇒ `test_version_slots` 紅。CHANGELOG 與 version_manifest 設了 git 合併驅動（`tools/platform/setup_merge_drivers.py`）：兩條分支都在最上面插入 ⇒ 兩邊都留，不再手解衝突。
 
 ## 7. 測試
 

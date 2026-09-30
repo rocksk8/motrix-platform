@@ -137,6 +137,23 @@ def test_rc_manifest_same_entry_changed_on_both_sides_is_a_conflict(repo):
     assert res["high_impact"] is True and MAN in res["overlap"]
 
 
+def test_manifest_placeholders_of_different_modules_are_not_a_conflict(repo):
+    """版號佔位（PLAYBOOK §G6）：兩包都寫 `"version": "next"` ⇒ 不是同一筆（以模組＋日期時間辨認）。"""
+    res = _check(repo, {MAN: _edit(MAN, lambda o: o.insert(0, {"module": "傳票", "version": "next", "date": "2026-09-30",
+                                                                 "time": "10:00", "content": "m"}))},
+                 {MAN: _edit(MAN, lambda o: o.insert(0, {"module": "地圖", "version": "next", "date": "2026-09-30",
+                                                          "time": "10:00", "content": "t"}))})
+    assert res["high_impact"] is False
+
+
+def test_rc_manifest_same_placeholder_changed_on_both_sides_is_a_conflict(repo):
+    """反向控制：同一筆佔位（同模組同時間）兩邊內容不同 ⇒ 仍判衝突。"""
+    e = {"module": "傳票", "version": "next", "date": "2026-09-30", "time": "10:00"}
+    res = _check(repo, {MAN: _edit(MAN, lambda o: o.insert(0, dict(e, content="mine")))},
+                 {MAN: _edit(MAN, lambda o: o.insert(0, dict(e, content="theirs")))})
+    assert res["high_impact"] is True and MAN in res["overlap"]
+
+
 # ── modules.json ─────────────────────────────────────────────────────────
 
 def test_modules_json_different_new_units_is_not_a_conflict(repo):

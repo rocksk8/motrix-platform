@@ -116,6 +116,8 @@ def _flat(obj, path=()):
         else:
             for i, x in enumerate(obj):
                 ident = (x.get("version") or x.get("key")) if isinstance(x, dict) else None
+                if ident == "next":        # 版號佔位（PLAYBOOK §G6）：各包都寫 next，不是同一筆 ⇒ 以模組＋日期時間辨認
+                    ident = "next:%s@%s %s" % (x.get("module"), x.get("date"), x.get("time"))
                 out.update(_flat(x, path + ("[%s]" % (ident or i),)))
     else:
         out[path] = obj

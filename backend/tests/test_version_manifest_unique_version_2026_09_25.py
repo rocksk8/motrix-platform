@@ -24,9 +24,12 @@ def _entries():
 
 
 def colliding_versions(entries, since=CUTOFF):
-    """回傳 {版本號: [模組, …]}：至少有一筆日期 >= since、而版本號被兩筆以上條目使用。"""
+    """回傳 {版本號: [模組, …]}：至少有一筆日期 >= since、而版本號被兩筆以上條目使用。
+    佔位 `"version": "next"`（PLAYBOOK §G6）不是號碼，不算重複——號碼由列車 train_number.py 定；准不准有佔位由 test_version_slots 守。"""
     by_ver = collections.defaultdict(list)
     for e in entries:
+        if e.get("version") == "next":
+            continue
         by_ver[e.get("version")].append(e)
     return {v: [e.get("module") for e in es] for v, es in by_ver.items()
             if len(es) > 1 and any((e.get("date") or "") >= since for e in es)}
@@ -53,3 +56,11 @@ def test_the_guard_catches_a_collision_and_leaves_history_alone():
     hist = colliding_versions(_entries(), since="0000")
     assert hist, "預期真實檔案裡有歷史重複（2026-07～09-11）；若已被清掉，這一段可以拿掉"
     assert all(v < CUTOFF for v in hist), "歷史重複以外出現了新的重複：%s" % sorted(v for v in hist if v >= CUTOFF)
+
+
+def test_placeholders_are_not_collisions_but_numbers_still_are():
+    """佔位兩筆 ⇒ 不算撞號；反向控制：同樣兩筆一旦取了同一個號 ⇒ 照樣抓到。"""
+    a = {"version": "next", "date": "2026-09-30", "module": "甲"}
+    b = {"version": "next", "date": "2026-09-30", "module": "乙"}
+    assert colliding_versions([a, b]) == {}
+    assert colliding_versions([dict(a, version="2026-09-30h"), dict(b, version="2026-09-30h")]) == {"2026-09-30h": ["甲", "乙"]}
