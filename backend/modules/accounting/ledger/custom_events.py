@@ -13,7 +13,11 @@
 - 收入行關聯到**內建案件**（由內建報價單認列，E01 已記，與營運報表同一判準）；
 - 沒有對應日期的行（不產生該口徑的事件，列入 notice 的『待補登』數，不可以靜默少列）；
 - 金額為 0。
-⚠️ 稅額：自訂模組欄位沒有稅額拆分（開放事項 A6），金額一律視為**未稅、不拆稅**，notice 提醒；需要稅額請在 `gl_custom_field_map.tax_code` 指定稅碼或改用手工傳票。
+稅額（G3，2026-10-01；規則同費用單據，**待使用者確認**）：欄位屬性 `finance.taxField`（稅額欄位 key）與 `finance.docTypeField`（憑證種類欄位 key）為選填；
+  金額欄位＝**含稅總額**。有 `taxField` 且值 >0 且 < 總額：憑證種類是統一發票（`docTypeField` 的值是 invoice／統一發票／發票／電子發票；**沒設 `docTypeField` 視為統一發票**）⇒
+  支出 借 成本（總額−稅額）＋借 進項稅額 INPUT_TAX（稅碼 IN-5）／貸 應付；收入 借 應收（總額）／貸 收入（總額−稅額）＋貸 銷項稅額 OUTPUT_TAX（稅碼 OUT-5）。
+  收據、國外憑證等非統一發票 ⇒ 稅額併入成本／收入、不拆稅；**沒有稅額欄位 ⇒ 含稅全額入帳（與 G3 之前完全相同）**。稅額欄位填了不合理的值（非數字、≥ 總額）⇒ 不拆、notice 提醒。
+  `gl_custom_field_map.debit_account／credit_account` 只指定成本／收入那一行；`tax_code` 有指定時覆蓋預設稅碼。
 🔑 對象：自訂單據沒有統編／往來對象，事件對象只帶模組名稱。只讀，不寫資料。
 """
 from db import get_db
@@ -22,6 +26,32 @@ from helpers.legal_params import round_half_up
 
 def _i(x):
     return int(round_half_up(x or 0))
+
+
+_INVOICE_TYPES = {"invoice", "統一發票", "發票", "電子發票"}
+
+
+def _split_tax(ln, data, amt):
+    """回 `(tax, note)`：tax＝要拆出的稅額（整數元，0＝不拆）；note＝不拆的原因（空字串＝沒有需要說明的）。
+    規則見模組說明；只讀 `ln["finance"]`（L1 helper 原樣帶出的屬性字典）與單據資料。"""
+    fin = ln.get("finance") or {}
+    tf = fin.get("taxField")
+    if not tf:
+        return 0, ""
+    raw = data.get(tf)
+    if raw in (None, ""):
+        return 0, ""
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return 0, "稅額欄位不是數字"
+    tax = _i(raw)
+    if tax <= 0:
+        return 0, ""
+    if tax >= amt:
+        return 0, "稅額不小於含稅總額"
+    dtf = fin.get("docTypeField")
+    if dtf and str(data.get(dtf) or "").strip().lower() not in {x.lower() for x in _INVOICE_TYPES}:
+        return 0, "非統一發票：稅額併入"
+    return tax, ""
 
 
 def gl_events(start, end, *, changed_since=""):
@@ -33,7 +63,8 @@ def gl_events(start, end, *, changed_since=""):
     finally:
         conn.close()
     events, notices = [], []
-    undated = dup = 0
+    undated = dup = split = 0
+    bad_tax = []
     for rec in recs:
         for ln in rec["lines"]:
             if ln["skipped"]:
@@ -60,12 +91,27 @@ def gl_events(start, end, *, changed_since=""):
             if not d:
                 undated += 1
             elif start <= d <= end:
+                tax, why = _split_tax(ln, rec.get("data") or {}, amt)
+                if why:
+                    bad_tax.append(why)
                 if income:
-                    lines = [_line("AR", "D", amt, m.get("debit_account", "")), _line("REV_OTHER", "C", amt, m.get("credit_account", ""))]
+                    if tax:
+                        lines = [_line("AR", "D", amt, m.get("debit_account", "")), _line("REV_OTHER", "C", amt - tax, m.get("credit_account", "")),
+                                 _line("OUTPUT_TAX", "C", tax)]
+                    else:
+                        lines = [_line("AR", "D", amt, m.get("debit_account", "")), _line("REV_OTHER", "C", amt, m.get("credit_account", ""))]
                 else:
-                    lines = [_line("COST_PROJECT" if ln["case"] else "EXP_OTHER", "D", amt, m.get("debit_account", "")), _line("AP", "C", amt, m.get("credit_account", ""))]
+                    cost_role = "COST_PROJECT" if ln["case"] else "EXP_OTHER"
+                    if tax:
+                        lines = [_line(cost_role, "D", amt - tax, m.get("debit_account", "")), _line("INPUT_TAX", "D", tax), _line("AP", "C", amt, m.get("credit_account", ""))]
+                    else:
+                        lines = [_line(cost_role, "D", amt, m.get("debit_account", "")), _line("AP", "C", amt, m.get("credit_account", ""))]
+                if tax:
+                    split += 1
+                    meta = dict(meta, tax_split=tax)
+                ev_tax = m.get("tax_code", "") or (("OUT-5" if income else "IN-5") if tax else "")
                 events.append({"source_type": "custom_record", "source_key": key, "event_code": "E20", "event_date": d, "doc_no": rec["recordNo"],
-                               "case_no": ln["case"], "party": party, "tax_code": m.get("tax_code", ""), "mode": "snapshot", "lines": lines, "meta": meta})
+                               "case_no": ln["case"], "party": party, "tax_code": ev_tax, "mode": "snapshot", "lines": lines, "meta": meta})
             cd = ln["cashDate"]
             if cd and start <= cd <= end:
                 camt = _i(ln["cashAmount"])
@@ -77,6 +123,9 @@ def gl_events(start, end, *, changed_since=""):
         notices.append("%d 筆自訂模組金流行沒有權責日期：不產生入帳事件（請在單據補日期）。" % undated)
     if dup:
         notices.append("%d 筆自訂模組收入關聯到內建案件：由內建報價單認列，不重複入帳。" % dup)
+    if bad_tax:
+        notices.append("%d 筆自訂模組金流行的稅額欄位未拆稅（%s）：含稅全額入帳。" % (len(bad_tax), "、".join(sorted(set(bad_tax)))))
     if events:
-        notices.append("自訂模組單據的金額視為未稅、不拆稅（自訂欄位沒有稅額）；科目預設為應收／其他營業收入、其他費用／應付，要改用別的科目請洽系統維護人員設定欄位對應。")
+        notices.append("自訂模組單據的金額視為含稅總額；有設稅額欄位且為統一發票者拆進項／銷項稅額（%d 筆已拆），其餘含稅全額入帳；科目預設為應收／其他營業收入、其他費用／應付，"
+                       "要改用別的科目請洽系統維護人員設定欄位對應。" % split)
     return {"events": events, "notice": " ".join(notices)}

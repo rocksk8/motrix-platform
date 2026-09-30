@@ -103,19 +103,27 @@ def _posted(conn):
 
 def gl_lines(conn) -> list:
     """總帳事件提供者（M06 `gl.events`，source＝custom_modules）用：入帳中單據的金流行，含事件所需的全部欄位。
-    ⇒ `[{module, moduleName, recordId, recordNo, createdBy, lines:[{kind, field, label, amount, date, cashDate, cashAmount, case, skipped}]}]`。
-    `skipped`＝收入行關聯到內建案件（由內建報價單認列，總帳 E01 已記，不重複，與營運報表同一判準）。沒有金流行的單據不回。只讀。"""
+    ⇒ `[{module, moduleName, recordId, recordNo, createdBy, data, lines:[{kind, field, label, amount, date, cashDate, cashAmount, case, skipped, finance}]}]`。
+    `skipped`＝收入行關聯到內建案件（由內建報價單認列，總帳 E01 已記，不重複，與營運報表同一判準）。沒有金流行的單據不回。只讀。
+    `finance`＝該欄位的**整個** `finance` 屬性字典（唯讀副本）、`data`＝單據資料（唯讀副本）：之後新增的金流屬性（例 `taxField`／`docTypeField`）
+    由總帳提供者自己解讀，**不必再改這支 L1 helper**（GL-BASE-HOOKS A4）。"""
     out = []
     for r, body, lines in _posted(conn):
         if not lines:
             continue
+        fin_of = {f["key"]: f["finance"] for f in _finance_fields(body)}
+        try:
+            data = json.loads(r["data_json"] or "{}")
+        except (TypeError, ValueError):
+            data = {}
         ls = []
         for ln in lines:
             ln = dict(ln)
             ln["skipped"] = bool(ln["kind"] == "income" and ln["case"] and _ca.case_exists(conn, ln["case"]))
+            ln["finance"] = dict(fin_of.get(ln["field"]) or {})
             ls.append(ln)
         out.append({"module": r["module_key"], "moduleName": str(body.get("name") or ""), "recordId": r["id"], "recordNo": r["record_no"],
-                    "createdBy": r["created_by"], "lines": ls})
+                    "createdBy": r["created_by"], "data": dict(data) if isinstance(data, dict) else {}, "lines": ls})
     return out
 
 

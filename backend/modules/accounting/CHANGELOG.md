@@ -7,6 +7,7 @@
 - 引擎把事件行選填 `dims` 寫入 `voucher_lines.dim_json`；`dims` 有值才進內容雜湊（舊事件雜湊不變）。
 - 新提供者 `gl.category_account`（費用類別代碼或啟用中名稱 → 科目代號；無對應回 None；唯讀、顯示用快照）。
 - 新 `GET /api/expense-categories`：任何登入者可讀啟用中的類別 `{categories:[{code,name,default_tax}]}`（費用單據下拉選單用；不含科目；對應表仍只給出納／財務）。
+- G3 自訂模組金額稅額規則：欄位屬性 `finance.taxField`／`docTypeField`（選填）；金額＝含稅總額，有稅額欄位且為統一發票 ⇒ 拆進項（支出）／銷項（收入）稅額，收據等 ⇒ 併入成本，沒有稅額欄位 ⇒ 含稅全額入帳（與之前相同）；規則待使用者確認、`custom_records` 旗標仍關。
 - 不開功能旗標、無畫面（行內頁籤待解凍後接）；來源（W1 費用單）尚未送 `category`，上線後行為不變。
 
 ## 1.1.45 — 2026-10-01（wip/w4-acceptance-2）W4 驗收複核後的文字修正
