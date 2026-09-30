@@ -21,6 +21,12 @@ from helpers import uploads as _uploads
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+#: 🔒 train 26 關閉（安全審查 W3，2026-09-30）：`opened_upload_file` 只驗「在 uploads 底下且存在」，沒驗該路徑屬於這張單據；
+#: 案件紀錄 PATCH 接受前端帶的 files／invoiceFiles 路徑 ⇒ 打開後可借別人的單據讀 uploads 任一檔。目前沒有 UI 呼叫端（P3 才有）。
+#: 真正的修補（路徑綁單據：經 `uploads.path_access` 驗證／拒絕前端帶路徑）隨 P3 一起做，做完才把這個常數打開。
+#: 關閉時路由照掛、一律 404（與「沒有提供者」同一句），程式與測試保留（測試夾具把它打開）。
+ATTACHMENTS_OPEN_ENABLED = False
+
 _NOT_FOUND = "檔案不存在"
 
 
@@ -56,6 +62,8 @@ def _inside(full: str, roots: list) -> bool:
 def open_attachment(type: str = Query(...), doc: str = Query(...), file: str = Query(...),
                     authorization: str = Header(None)):
     user = _require_user(authorization)
+    if not ATTACHMENTS_OPEN_ENABLED:
+        raise HTTPException(404, _NOT_FOUND)
     key, prov = _provider_for(type)
     if prov is None:
         raise HTTPException(404, _NOT_FOUND)

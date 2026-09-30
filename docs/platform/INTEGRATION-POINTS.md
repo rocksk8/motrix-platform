@@ -672,6 +672,8 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 契約版本 | 1（2026-09-30；只有 `CATEGORIES`＋`open`，`search`／`count` 留 P3） |
 | 守門 | `backend/tests/platform/test_upload_points_registered.py`（每個上傳端點必須分類；`catalog` 必須有提供者認領、每個 category 有上傳點餵它、兩兩不重疊；反向控制：合成未登記端點、死列、重疊、沒人認領、沒人餵）；`backend/tests/test_attachments_open_2026_09_30.py`（打得開且位元組相同、看不到＝查無同一句 404、與 photo-token 同答案、根目錄檢查、提供者例外 fail closed、資料壞 400、沒有提供者 404、契約形狀） |
 
+> 🔒 **train 26：端點關閉**（`routers/attachments.ATTACHMENTS_OPEN_ENABLED = False`，一律 404；安全審查 W3）。`opened_upload_file` 只驗「在 uploads 底下且存在」，沒驗路徑屬於該單據，而案件紀錄 PATCH 接受前端帶的 `files`／`invoiceFiles` 路徑。真正的修補（路徑綁單據：經 `uploads.path_access` 驗證／拒絕前端帶路徑）隨 P3 一起做，做完才打開。
+
 **新增上傳端點時**：先在 `docs/platform/upload_points.json` 加一列（`catalog`＝source_type，或 `excluded`＋理由，或 `pending`＋理由）；`catalog` 類由擁有模組的提供者宣告該 type 並實作 `open`。
 
 ---
