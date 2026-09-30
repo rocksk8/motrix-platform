@@ -62,6 +62,7 @@ from pdf_gen import (
 )
 
 router = APIRouter()
+from helpers.xlsx_out import add_pdf_sibling, export_logged   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
 
 
 # ── Approval tier helpers ─────────────────────────────────────────────────────
@@ -6073,6 +6074,7 @@ def case_batch_assign(body: dict = Body(...), authorization: str = Header(None))
 
 
 @router.post("/api/case-batch/export")
+@export_logged("xlsx", "case", "case-batch")
 def case_batch_export(body: dict = Body(...), authorization: str = Header(None)):
     """批次匯出勾選的案件（xlsx）。只含呼叫者看得到的案件（規則同案件清單）；
     看不到金額的帳號金額欄留空（CM13）。"""
@@ -6342,3 +6344,7 @@ def list_sales_orders(authorization: str = Header(None)):
             "stagesCount":    stages_count,
         })
     return {"items": items, "total": len(items)}
+
+
+# ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
+add_pdf_sibling(router, "/api/case-batch/export/pdf", case_batch_export, module="case", name="case-batch", title="案件匯出", method="POST")

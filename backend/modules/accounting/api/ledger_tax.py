@@ -11,7 +11,7 @@ from fastapi.responses import Response
 from core import registry
 from db import get_db
 from helpers import _audit, _require_user, _tok, require_any_module
-from helpers.xlsx_out import check_export_rate
+from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged
 from modules.accounting.ledger import export as _export
 from modules.accounting.ledger import features as _features
 from modules.accounting.ledger import tax401 as _tax
@@ -62,6 +62,7 @@ def tax401(year: int, period: int, authorization: str = Header(None)):
 
 
 @router.get("/tax401/export")
+@export_logged("xlsx", "accounting", "ledger-tax401")
 def tax401_export(year: int, period: int, authorization: str = Header(None)):
     user = _require_tax_read(authorization)
     check_export_rate(user["id"], "excel")
@@ -163,3 +164,7 @@ def withholding_unremit(body: dict = Body(...), authorization: str = Header(None
         conn.close()
     _audit(_tok(authorization), "ledger.withholding.unremit", "gl_withholding_items", ",".join(str(i) for i in ids[:20]), "取消繳庫登記 %d 筆" % n)
     return {"updated": n}
+
+
+# ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
+add_pdf_sibling(router, "/tax401/export/pdf", tax401_export, module="accounting", name="ledger-tax401", title="營業稅 401 工作底稿")

@@ -51,6 +51,7 @@ from modules.netplan.topology import build_topology_svg
 from helpers.errors import trace_id
 
 router = APIRouter()
+from helpers.xlsx_out import export_logged   # noqa: E402  匯出稽核（2026-09-30）
 logger = logging.getLogger(__name__)
 
 _EDIT_MODULE = "netplan_edit"
@@ -291,6 +292,7 @@ def preview_network_plan_topology(plan_id: int, body: dict = Body(...), authoriz
 # ── 匯出（§10 步驟 8/9） ──────────────────────────────────────────────────────
 
 @router.get("/api/network-plans/{plan_id}/export/excel")
+@export_logged("xlsx", "netplan", "network-plan")
 def export_network_plan_excel(plan_id: int, authorization: str = Header(None)):
     _require_user(authorization)
     conn = get_db()
@@ -309,6 +311,7 @@ def export_network_plan_excel(plan_id: int, authorization: str = Header(None)):
 
 
 @router.get("/api/network-plans/{plan_id}/export/pdf")
+@export_logged("pdf", "netplan", "network-plan")
 def export_network_plan_pdf(plan_id: int, authorization: str = Header(None)):
     _require_user(authorization)
     conn = get_db()

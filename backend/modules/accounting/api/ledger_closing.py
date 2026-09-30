@@ -10,7 +10,7 @@ from fastapi.responses import Response
 
 from db import get_db
 from helpers import _audit, _require_user, _tok, require_any_module
-from helpers.xlsx_out import check_export_rate
+from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged
 from modules.accounting.ledger import closing as _closing
 from modules.accounting.ledger import export as _export
 from modules.accounting.ledger import periods as _periods
@@ -113,6 +113,7 @@ def year_statements(year: int, authorization: str = Header(None)):
 
 
 @router.get("/years/{year}/statements/export")
+@export_logged("xlsx", "accounting", "ledger-statements")
 def year_statements_export(year: int, authorization: str = Header(None)):
     user = _require_closing_read(authorization)
     check_export_rate(user["id"], "excel")
@@ -127,3 +128,7 @@ def year_statements_export(year: int, authorization: str = Header(None)):
     name = urllib.parse.quote("財務報表_%s年度%s.xlsx" % (year, "_決算" if source == "frozen" else ""))
     return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": "attachment; filename*=UTF-8''" + name})
+
+
+# ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
+add_pdf_sibling(router, "/years/{year}/statements/export/pdf", year_statements_export, module="accounting", name="ledger-statements", title="財務報表")

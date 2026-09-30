@@ -17,7 +17,7 @@ from openpyxl.styles import Alignment
 from openpyxl.utils import get_column_letter
 
 from fastapi import APIRouter, Header, HTTPException, Query, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from db import get_db
 from helpers import (
@@ -53,7 +53,7 @@ def _collect_tax_invoices(year=None, month=None):
     if p is None:
         raise HTTPException(404, RECEIVABLES_MISSING)
     return p(year, month)
-from helpers.xlsx_out import check_export_rate, set_row, xl_style
+from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, set_row, xl_style
 from helpers.company_identity import company_heading, contact_line
 from helpers.recognition_basis import normalize_basis, BASIS_NOTES, DEFAULT_BASIS   # `AC2`：口徑的純標籤（L1）
 
@@ -2339,6 +2339,7 @@ def report_json(
 
 
 @router.get("/api/reports/financial/excel")
+@export_logged("xlsx", "analytics", "financial-report")
 def report_excel(
     period: Optional[str] = Query(None),
     department_id: Optional[int] = Query(None),
@@ -2366,14 +2367,15 @@ def report_excel(
     _audit(_tok(authorization), "reports.export", "reports", "financial",
            f"營運報表 Excel 匯出（{label}）",
            {"format": "excel", "period": period, "departmentId": department_id})
-    return StreamingResponse(
-        io.BytesIO(xlsx),
+    return Response(
+        content=xlsx,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
     )
 
 
 @router.get("/api/reports/financial/pdf")
+@export_logged("pdf", "analytics", "financial-report")
 def report_pdf(
     period: Optional[str] = Query(None),
     department_id: Optional[int] = Query(None),
@@ -2621,6 +2623,7 @@ def _build_tax_export_excel(rows: list, period_label: str, gen_at: str) -> bytes
 
 
 @router.get("/api/reports/tax-export")
+@export_logged("xlsx", "analytics", "tax-export")
 def tax_export_excel(
     year: Optional[int] = Query(None),
     month: Optional[int] = Query(None),
@@ -2642,8 +2645,8 @@ def tax_export_excel(
     _audit(_tok(authorization), "reports.export", "reports", "tax-export",
            f"銷項發票清單匯出（{label}，共 {len(rows)} 筆）",
            {"year": year, "month": month, "count": len(rows)})
-    return StreamingResponse(
-        io.BytesIO(xlsx),
+    return Response(
+        content=xlsx,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
     )
@@ -3739,3 +3742,7 @@ def report_receivables_monthly(year: int = Query(None), month: str = Query(None)
   year  = year or today.year
   month = month or today.strftime("%Y-%m")
   return _build_receivables_scopes(year, month, department_id, quarter)
+
+
+# ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
+add_pdf_sibling(router, "/api/reports/tax-export/pdf", tax_export_excel, module="analytics", name="tax-export", title="銷項發票清單")

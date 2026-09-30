@@ -110,6 +110,7 @@ def _stamp_passbook(data_uri: str) -> str:
 
 
 router = APIRouter()
+from helpers.xlsx_out import add_pdf_sibling, export_logged   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
 
 _LIST_COLS = (
     "id, name, id_number, nationality, has_union_insurance, "
@@ -228,6 +229,7 @@ def _mask_id(v):
 
 
 @router.get("/api/contractors/export")
+@export_logged("xlsx", "subcontract", "contractors")
 def export_contractors(authorization: str = Header(None)):
     """匯出外包名冊（含停用的人）。證件號碼遮成末 4 碼；分行與帳號照實（出納匯款要用）。寫稽核。"""
     import openpyxl
@@ -498,3 +500,7 @@ def upload_id_card(cid: int, body: dict = Body(...), authorization: str = Header
     label = f"上傳影本（{'、'.join(parts)}）" if parts else "移除影本"
     _audit(_tok(authorization), 'contractor.id_card.update', 'contractor', str(cid), label)
     return {"ok": True, "updated_at": now}
+
+
+# ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
+add_pdf_sibling(router, "/api/contractors/export/pdf", export_contractors, module="subcontract", name="contractors", title="外包名冊")
