@@ -756,7 +756,7 @@ def _personnel_link_errors(conn, snapshot_json, require_all):
             errs.append("%s：勞報單 %s 狀態是「%s」，須為已簽回%s" % (name, no, c["status"], "（已由匯款單 %s 付款）" % c["paidViaRemit"] if c["paidViaRemit"] else ""))
         elif p.get("id") and c["contractorId"] and int(p["id"]) != int(c["contractorId"]):
             errs.append("%s：勞報單 %s 的受款人是 %s，不符" % (name, no, c["contractorName"]))
-        elif round(float(p.get("amount") or 0), 2) != round(c["net"], 2):
+        elif abs(float(p.get("amount") or 0) - c["net"]) > 0.005:          # 金額比對（到分），不做進位
             errs.append("%s：匯款金額 %g 必須等於勞報單 %s 的實付 %g" % (name, float(p.get("amount") or 0), no, c["net"]))
         else:
             ok.append(no)
