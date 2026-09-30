@@ -612,6 +612,7 @@ window.CM_PARTS.push(() => ({
           this.dirty = false
           this.segConflict = null
           const res = await r.json().catch(() => ({}))
+          if (res.glWarning) MotrixUI.toast(res.glWarning, {kind: 'info', ms: 9000})   // MONEY-FLOWS §9 L3：已入帳的收款被改動
           if (res.pending) {
             // 已結案案件半解鎖期間：此次存檔不會立即生效，已排隊等最高管理員審核
             // （見 backend/routers/quotations.py::_gate_case_edit()）。

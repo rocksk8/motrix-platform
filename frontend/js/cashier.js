@@ -592,6 +592,8 @@ function cashierApp() {
           })
         })
         if (!r.ok) { alert(await _caseActionError(r)); this.receiveSaving = false; return }
+        const rr = await r.json().catch(() => ({}))
+        if (rr.glWarning) MotrixUI.toast(rr.glWarning, {kind: 'info', ms: 9000})   // MONEY-FLOWS §9 L3
         this.receiveModal = false
         this.receiveTarget = null
         await Promise.all([this.loadReceivable(), this.loadCashierHistory()])
@@ -608,6 +610,8 @@ function cashierApp() {
           body: JSON.stringify({ received, receivedAt: '', receivedBy: '', ...(item.itemId != null ? { itemId: item.itemId } : {}) })
         })
         if (!r.ok) { alert(await _caseActionError(r)); return }
+        const tr = await r.json().catch(() => ({}))
+        if (tr.glWarning) MotrixUI.toast(tr.glWarning, {kind: 'info', ms: 9000})   // MONEY-FLOWS §9 L3：取消已入帳的收款
         await this.loadReceivable()
       } catch (e) { alert('更新收款狀態失敗：' + e.message) }
     },

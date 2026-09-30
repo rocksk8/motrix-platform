@@ -2730,6 +2730,17 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         except HTTPException:
             conn.close()
             raise
+        # MONEY-FLOWS §9 L3：改動／刪除**已入帳**的已收款期別 ⇒ 下次引擎執行時 E03 drift／orphan。下游效應：營運報表現金收入立即變；
+        # 總帳要手動執行才反映。只提示、不擋；提示放在回應 `glWarning`，前端 toast。
+        gl_warn = None
+        for _oit in old_items:
+            if not (isinstance(_oit, dict) and _oit.get("received") and _oit.get("id") is not None):
+                continue
+            _nit = next((x for x in new_items if isinstance(x, dict) and x.get("id") == _oit.get("id")), None)
+            if _nit is None or any(_nit.get(k) != _oit.get(k) for k in ("received", "receivedAt", "actualAmount", "feeAmount")):
+                gl_warn = gl_posted_warning(conn, "quotation_receipt", "%s::%s" % (quote_no, _oit.get("id")))
+                if gl_warn:
+                    break
 
         # 2026-09-02（反派/國稅局視角複查發現）：這支整包存檔端點是案件管理財務
         # Tab 填發票號碼的實際主要路徑（mark_payment() 的 invoiceNo 驗證只涵蓋
@@ -2797,6 +2808,8 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', quote_no,
                    f"{quote_no} 發票號碼 {_o} → {_n}（總帳 E01 將在下次引擎執行時沖轉並重建）")
         out = {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts, "adopted": adopted}
+        if gl_warn:
+            out["glWarning"] = gl_warn
         if stock_notice:
             out["stockNotice"] = stock_notice
         return out

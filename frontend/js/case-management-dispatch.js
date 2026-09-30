@@ -243,6 +243,7 @@ window.CM_PARTS.push(() => ({
         if (!r.ok) { MotrixUI.toast(j.detail || '發票日期儲存失敗', {kind: 'error'}); return }
         d.invoiceDate = j.invoiceDate
         this.flashSaved('dispatch-' + d.id)
+        if (j.glWarning) MotrixUI.toast(j.glWarning, {kind: 'info', ms: 9000})   // MONEY-FLOWS §9 L3：已入帳的 E04 會 drift
         if (j.updated_at) d.updatedAt = j.updated_at
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
@@ -470,6 +471,8 @@ window.CM_PARTS.push(() => ({
           body: JSON.stringify({ action: 'unpay', note: '' })
         })
         if (!r.ok) { MotrixUI.toast((await r.json()).detail || '操作失敗', {kind: 'error'}); return }
+        const unpayRes = await r.json().catch(() => ({}))
+        if (unpayRes.glWarning) MotrixUI.toast(unpayRes.glWarning, {kind: 'info', ms: 9000})   // MONEY-FLOWS §9 L3：已入帳的 E05 會 orphan（反向草稿）
         await this.loadContractorVouchers(this.selected?.quote_no)
         this.loadFinanceSummary(this.selected?.quote_no)   // 已付/未付數字會變
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
