@@ -468,7 +468,7 @@
             <template x-for="item in lane.items" :key="itemKey(item)">
               <div class="aq-card"
                    :class="{active: selected && itemKey(selected) === itemKey(item)}"
-                   @click="selectItem(item)">
+                   @click="selectItem(item)" :data-testid="'aq-item-' + item.quoteNo">
                 <span class="vm-spine" :class="'vm-spine--' + ageTone(item)"></span>
                 <div class="aq-card__in">
                   <div class="aq-card__r1">
@@ -540,7 +540,7 @@
             <template x-for="item in grp.items" :key="itemKey(item)">
               <div class="aq-qrow"
                    :class="{active: selected && itemKey(selected) === itemKey(item)}"
-                   @click="selectItem(item)">
+                   @click="selectItem(item)" :data-testid="'aq-item-' + item.quoteNo">
                 <span class="vm-lamp" :class="'vm-lamp--' + ageTone(item)"></span>
                 <span class="aq-qrow__no" x-text="item.quoteNo"></span>
                 <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)" x-text="docTypeLabel(item)"></span>
@@ -613,11 +613,11 @@
             <!-- Can approve: my turn in steps, OR (no steps + superadmin + not self) -->
             <template x-if="canApprove(selected)">
               <div style="display:flex;gap:8px;flex-wrap:wrap">
-                <button class="btn btn-approve btn-sm" @click="doApprove()" :disabled="actioning">
+                <button class="btn btn-approve btn-sm" @click="doApprove()" data-testid="aq-approve" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   確認簽核
                 </button>
-                <button class="btn btn-reject btn-sm" @click="openRejectModal()" :disabled="actioning">
+                <button class="btn btn-reject btn-sm" @click="openRejectModal()" data-testid="aq-reject" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   退回草稿
                 </button>
@@ -632,7 +632,7 @@
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                 <span style="font-size:11px;color:#6B7280;padding:5px 9px;background:#F3F4F6;border-radius:5px;white-space:nowrap"
                       x-text="waitingForText(selected)"></span>
-                <button class="btn btn-reject btn-sm" @click="openRejectModal()" :disabled="actioning">
+                <button class="btn btn-reject btn-sm" @click="openRejectModal()" data-testid="aq-reject" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   退回草稿
                 </button>
@@ -940,12 +940,12 @@
 
         <!-- Bottom action bar: show when canApprove and there's content to scroll past -->
         <div x-show="canApprove(selected)" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-light);display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <button class="btn btn-approve" @click="doApprove()" :disabled="actioning" style="min-width:110px">
+          <button class="btn btn-approve" @click="doApprove()" data-testid="aq-approve" :disabled="actioning" style="min-width:110px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             <span x-show="!actioning">確認簽核</span>
             <span x-show="actioning">處理中…</span>
           </button>
-          <button class="btn btn-reject" @click="openRejectModal()" :disabled="actioning" style="min-width:90px">
+          <button class="btn btn-reject" @click="openRejectModal()" data-testid="aq-reject" :disabled="actioning" style="min-width:90px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             退回草稿
           </button>
@@ -993,10 +993,10 @@
       <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" x-show="selected?.type === 'case_change'">
         此變更申請將被拒絕、不會套用到案件資料（暫存的上傳檔案會一併刪除），申請人會收到通知。
       </p>
-      <textarea x-model="rejectNote" placeholder="退回原因（選填，供申請人參考）"></textarea>
+      <textarea x-model="rejectNote" data-testid="aq-reject-note" placeholder="退回原因（選填，供申請人參考）"></textarea>
       <div class="reject-modal-footer">
         <button class="btn btn-ghost btn-sm" @click="rejectModalOpen=false">取消</button>
-        <button class="btn btn-reject btn-sm" @click="doReject()" :disabled="actioning" x-text="selected?.type === 'case_change' ? '確認拒絕' : '確認退回'"></button>
+        <button class="btn btn-reject btn-sm" @click="doReject()" data-testid="aq-reject-confirm" :disabled="actioning" x-text="selected?.type === 'case_change' ? '確認拒絕' : '確認退回'"></button>
       </div>
     </div>
   </div>
@@ -1602,6 +1602,8 @@
             const cur = item.currentTier ?? 0
             if (cur >= tiers.length) return false
             const approvers = tiers[cur].approvers || []
+            // 系統規定的最終關卡（傳票的『最高管理者（會計主管）』層、總帳申請）：同一層的任一人都可以核准，不是循序
+            if (tiers[cur].system) return approvers.some(a => a.status !== 'approved' && this._isMeOrDelegate(a.username))
             // sequential within tier: only the first unapproved approver may act
             const firstPending = approvers.find(a => a.status !== 'approved')
             return firstPending && this._isMeOrDelegate(firstPending.username)
@@ -1619,6 +1621,7 @@
             const cur = item.currentTier ?? 0
             if (cur < tiers.length) {
               const firstPending = (tiers[cur].approvers || []).find(a => a.status !== 'approved')
+              if (tiers[cur].system && firstPending) return `等待最高管理者（會計主管）簽核（第 ${cur + 1}/${tiers.length} 層）`
               if (firstPending) {
                 const name = firstPending.displayName || firstPending.username
                 return `等待 ${name} 簽核（第 ${cur + 1}/${tiers.length} 層）`
