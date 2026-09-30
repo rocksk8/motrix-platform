@@ -11,7 +11,9 @@
     "tools/platform/**",
     "product/sale_docs/**",
     "backend/setup_heartbeat_task.ps1",
-    "product/sale_files/**"
+    "product/sale_files/**",
+    "backend/tools/fetch_root_ca.ps1",
+    "backend/tools/setup_passkey_client.ps1"
   ],
   "keep": [
     "tools/platform/upgrade.py",
@@ -44,7 +46,9 @@
     "backend/tests/**",
     "product/sale_docs/**",
     "backend/setup_heartbeat_task.ps1",
-    "product/sale_files/**"
+    "product/sale_files/**",
+    "backend/tools/fetch_root_ca.ps1",
+    "backend/tools/setup_passkey_client.ps1"
   ],
   "cuts": [
     {
@@ -91,6 +95,26 @@
       "path": "backend/setup_autostart_task.ps1",
       "name": "prod-root",
       "stub": ". (Join-Path $BackendDir \"tools\\_install_root.ps1\")\n$InstallRootInfo = Test-InstallRoot -Root (Split-Path -Parent $BackendDir)\n$ProdRoot = $InstallRootInfo.Root\nif ($InstallRootInfo.Error) {\n    Write-Error (\"這裡不是可以註冊排程的安裝目錄：\" + $InstallRootInfo.Error + \"。中止，未做任何變更。\")\n    exit 1\n}"
+    },
+    {
+      "path": "backend/tools/https_setup.ps1",
+      "name": "usage-ip",
+      "stub": "    powershell -ExecutionPolicy Bypass -File https_setup.ps1 -Host2 <伺服器 IP>   # 伺服器 IP 必填（憑證會綁定這個位址）"
+    },
+    {
+      "path": "backend/tools/https_setup.ps1",
+      "name": "san-note",
+      "stub": "  若要用內部網域名稱存取，既有憑證的 SAN 必須包含該網域，否則會出現憑證主機名不符的錯誤；\n  用 -ExtraNames 把網域加進 SAN 後重產憑證。"
+    },
+    {
+      "path": "backend/tools/https_setup.ps1",
+      "name": "host2-default",
+      "stub": "    [Parameter(Mandatory = $true)][string]$Host2,"
+    },
+    {
+      "path": "firewall_setup.bat",
+      "name": "firewall-rule",
+      "stub": "set \"REMOTE=%~1\"\nif \"%REMOTE%\"==\"\" (\n    echo Usage: firewall_setup.bat ^<allowed network, e.g. 192.168.1.0/24^>\n    echo The rule only accepts connections from that network.\n    exit /b 1\n)\nnetsh advfirewall firewall add rule ^\n    name=\"MOTRIX ERP Port 666\" ^\n    dir=in ^\n    action=allow ^\n    protocol=TCP ^\n    localport=666 ^\n    remoteip=%REMOTE% ^\n    description=\"MOTRIX ERP Web Application (%REMOTE% only)\""
     }
   ],
   "replace": {

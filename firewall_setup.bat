@@ -15,6 +15,7 @@ echo ====================================
 :: 刪除舊規則（如有）
 netsh advfirewall firewall delete rule name="MOTRIX ERP Port 666" >nul 2>&1
 
+:: >>> OWN-ONLY:firewall-rule
 :: 新增入站規則（2026-08-27：補上 remoteip 限制僅允許公司內網網段連入，
 :: 原本沒有這道限制等於對任何來源開放，防護完全只靠路由器沒有對外轉發 666
 :: port，機器自己沒有第二層防護。內網範圍 172.16.10.0/23 涵蓋 172.16.10.x
@@ -27,6 +28,7 @@ netsh advfirewall firewall add rule ^
     localport=666 ^
     remoteip=172.16.10.0/23 ^
     description="MOTRIX ERP Web Application (內網限定 172.16.10.0/23)"
+:: <<< OWN-ONLY:firewall-rule
 
 if %errorLevel% equ 0 (
     echo.

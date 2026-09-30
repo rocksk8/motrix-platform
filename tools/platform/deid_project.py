@@ -35,8 +35,8 @@ DEFAULT_CONFIG = REPO / "product" / "sale_prune.json"
 DEFAULT_OVERLAY = REPO / "backend" / "version_manifest_sale_overlay.json"
 MANIFEST_REL = "backend/version_manifest.json"
 GENERIC_CONTENT = "安裝基準之前的紀錄"
-BEGIN_RE = "# >>> OWN-ONLY:%s"
-END_RE = "# <<< OWN-ONLY:%s"
+BEGIN_RE = ">>> OWN-ONLY:%s"          # 前導符號不限（"# " 用於 py／ps1，":: " 用於批次檔）
+END_RE = "<<< OWN-ONLY:%s"
 
 
 class ProjectError(Exception):

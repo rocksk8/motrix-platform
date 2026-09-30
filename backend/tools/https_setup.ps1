@@ -15,13 +15,17 @@
 
   用法：
     powershell -ExecutionPolicy Bypass -File https_setup.ps1
+# >>> OWN-ONLY:usage-ip
     powershell -ExecutionPolicy Bypass -File https_setup.ps1 -Host2 172.16.10.177   # 正式機 IP 變動時可覆寫
+# <<< OWN-ONLY:usage-ip
     powershell -ExecutionPolicy Bypass -File https_setup.ps1 -ExtraNames motrix.internal
     powershell -ExecutionPolicy Bypass -File https_setup.ps1 -ExtraNames motrix.internal -Force
 
   2026-09-10 新增 -ExtraNames／-Force，起因是 Passkey：
+# >>> OWN-ONLY:san-note
   正式機的內部 DNS 已加了 motrix.internal -> 172.16.10.177，但既有憑證的 SAN
   只有 172.16.10.177 / localhost / 127.0.0.1（實測確認），用網域存取一定會出現
+# <<< OWN-ONLY:san-note
   憑證主機名不符的錯誤。WebAuthn 對「安全內容」很敏感，憑證有錯的頁面是不能
   指望 navigator.credentials 正常運作的——所以要用 motrix.internal 當 RP ID，
   就得先把它加進 SAN 重產憑證。
@@ -40,7 +44,9 @@
 
 [CmdletBinding()]
 param(
+# >>> OWN-ONLY:host2-default
     [string]$Host2 = "172.16.10.177",
+# <<< OWN-ONLY:host2-default
     # 額外要寫進 SAN 的名稱（內部 DNS 網域等），可給多個
     [string[]]$ExtraNames = @(),
     # 憑證已存在時自動備份並重產，不用先手動刪檔
