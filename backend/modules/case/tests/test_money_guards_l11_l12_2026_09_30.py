@@ -25,7 +25,7 @@ def _seed(invoice_no):
     import db
     c = db.get_db()
     try:
-        c.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at, deal_tag)"
+        c.execute("INSERT OR IGNORE INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at, deal_tag)"
                   " VALUES (?,?,?,?,?,?,?,?)",
                   (Q, "已送出", "客戶", "專案", json.dumps({"caseRecord": {"payment": {"items": [
                       {"id": "it1", "type": "訂金款", "pct": 30, "amount": 30000, "received": False, "invoiceNo": invoice_no}]}}}),

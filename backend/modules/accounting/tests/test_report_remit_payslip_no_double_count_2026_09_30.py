@@ -50,8 +50,8 @@ def _slip(cid, gross=10000, tax=1000, nhi=211):
 
 def _expense_total(month="2174-02"):
     d = R._collect_expenses(2174, basis="cash")
-    m = d["monthly"][month]
-    return round(sum(m.values())), d
+    m = next(x for x in d["monthly"] if x["month"] == month)
+    return round(m["contractor"] + m["equipment"] + m["material"] + m["other"]), d
 
 
 def _remit_paid_payslip(client, tok):
