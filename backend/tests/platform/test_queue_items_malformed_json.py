@@ -34,7 +34,7 @@ APPR = {"requestedBy": "aqj_req", "requestedByDisplay": "aqj_req", "requestedAt"
         "tiers": [{"approvers": [{"username": "aqj_x", "displayName": "aqj_x", "status": "pending"}]}]}
 #: 已知的提供者（名稱 → 擁有模組；None＝L1）。正對照：少了就是掃描壞了
 EXPECTED = {"case": "case", "invoice_voucher": "arap", "payment_request": "arap", "subcontract": "subcontract",
-            "shipping_note": "supply", "payroll": "payroll", "voucher": "accounting", "custom_modules": None,
+            "shipping_note": "supply", "payroll": "payroll", "voucher": "accounting", "ledger_action": "accounting", "custom_modules": None,
             "custom_module_def": None}
 
 

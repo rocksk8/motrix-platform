@@ -468,7 +468,7 @@
             <template x-for="item in lane.items" :key="itemKey(item)">
               <div class="aq-card"
                    :class="{active: selected && itemKey(selected) === itemKey(item)}"
-                   @click="selectItem(item)">
+                   @click="selectItem(item)" :data-testid="'aq-item-' + item.quoteNo">
                 <span class="vm-spine" :class="'vm-spine--' + ageTone(item)"></span>
                 <div class="aq-card__in">
                   <div class="aq-card__r1">
@@ -540,7 +540,7 @@
             <template x-for="item in grp.items" :key="itemKey(item)">
               <div class="aq-qrow"
                    :class="{active: selected && itemKey(selected) === itemKey(item)}"
-                   @click="selectItem(item)">
+                   @click="selectItem(item)" :data-testid="'aq-item-' + item.quoteNo">
                 <span class="vm-lamp" :class="'vm-lamp--' + ageTone(item)"></span>
                 <span class="aq-qrow__no" x-text="item.quoteNo"></span>
                 <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)" x-text="docTypeLabel(item)"></span>
@@ -590,12 +590,13 @@
                  抽屜裡重做一次（`/api/approval-queue/detail` 也還沒有它的分支，
                  那個守門是 `_guard_case()`，是「案件」的存取模型，傳票不是）。 -->
             <a :href="selected?.type === 'voucher' ? ('voucher.html?id=' + (selected?.voucherId||''))
+                    : selected?.type === 'ledger_action' ? 'ledger-periods.html'
                     : selected?.type === 'bonus_case_award' ? ('bonus.html?q=' + encodeURIComponent(selected?.quoteNo||''))
                     : isVoucher(selected) ? ('case-management.html?no=' + (selected?.linkedQuoteNo||''))
                     : ('quotation-form.html?id=' + (selected?.quoteNo||''))" target="_blank"
                style="font-size:12px;color:var(--accent);text-decoration:none;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);display:inline-flex;align-items:center;gap:5px">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-              <span x-text="selected?.type === 'voucher' ? '開啟傳票' : selected?.type === 'bonus_case_award' ? '開啟獎金分潤' : (isVoucher(selected) ? '開啟案件管理' : '開啟報價單')"></span>
+              <span x-text="selected?.type === 'voucher' ? '開啟傳票' : selected?.type === 'ledger_action' ? '開啟期間與結帳' : selected?.type === 'bonus_case_award' ? '開啟獎金分潤' : (isVoucher(selected) ? '開啟案件管理' : '開啟報價單')"></span>
             </a>
             <button class="btn btn-sm" x-show="selected?.type !== 'case_change' && selected?.type !== 'bonus_case_award'" @click="previewItem(selected)" :disabled="previewFetching"
                     style="font-size:12px;color:var(--accent);background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;display:inline-flex;align-items:center;gap:5px;cursor:pointer">
@@ -613,11 +614,11 @@
             <!-- Can approve: my turn in steps, OR (no steps + superadmin + not self) -->
             <template x-if="canApprove(selected)">
               <div style="display:flex;gap:8px;flex-wrap:wrap">
-                <button class="btn btn-approve btn-sm" @click="doApprove()" :disabled="actioning">
+                <button class="btn btn-approve btn-sm" @click="doApprove()" data-testid="aq-approve" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   確認簽核
                 </button>
-                <button class="btn btn-reject btn-sm" @click="openRejectModal()" :disabled="actioning">
+                <button class="btn btn-reject btn-sm" @click="openRejectModal()" data-testid="aq-reject" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   退回草稿
                 </button>
@@ -632,7 +633,7 @@
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                 <span style="font-size:11px;color:#6B7280;padding:5px 9px;background:#F3F4F6;border-radius:5px;white-space:nowrap"
                       x-text="waitingForText(selected)"></span>
-                <button class="btn btn-reject btn-sm" @click="openRejectModal()" :disabled="actioning">
+                <button class="btn btn-reject btn-sm" @click="openRejectModal()" data-testid="aq-reject" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   退回草稿
                 </button>
@@ -940,12 +941,12 @@
 
         <!-- Bottom action bar: show when canApprove and there's content to scroll past -->
         <div x-show="canApprove(selected)" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-light);display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <button class="btn btn-approve" @click="doApprove()" :disabled="actioning" style="min-width:110px">
+          <button class="btn btn-approve" @click="doApprove()" data-testid="aq-approve" :disabled="actioning" style="min-width:110px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             <span x-show="!actioning">確認簽核</span>
             <span x-show="actioning">處理中…</span>
           </button>
-          <button class="btn btn-reject" @click="openRejectModal()" :disabled="actioning" style="min-width:90px">
+          <button class="btn btn-reject" @click="openRejectModal()" data-testid="aq-reject" :disabled="actioning" style="min-width:90px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             退回草稿
           </button>
@@ -993,10 +994,10 @@
       <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" x-show="selected?.type === 'case_change'">
         此變更申請將被拒絕、不會套用到案件資料（暫存的上傳檔案會一併刪除），申請人會收到通知。
       </p>
-      <textarea x-model="rejectNote" placeholder="退回原因（選填，供申請人參考）"></textarea>
+      <textarea x-model="rejectNote" data-testid="aq-reject-note" placeholder="退回原因（選填，供申請人參考）"></textarea>
       <div class="reject-modal-footer">
         <button class="btn btn-ghost btn-sm" @click="rejectModalOpen=false">取消</button>
-        <button class="btn btn-reject btn-sm" @click="doReject()" :disabled="actioning" x-text="selected?.type === 'case_change' ? '確認拒絕' : '確認退回'"></button>
+        <button class="btn btn-reject btn-sm" @click="doReject()" data-testid="aq-reject-confirm" :disabled="actioning" x-text="selected?.type === 'case_change' ? '確認拒絕' : '確認退回'"></button>
       </div>
     </div>
   </div>
@@ -1242,6 +1243,7 @@
           // 開票申請憑據都叫「傳票」的舊稱），這裡要跟後端 APPROVAL_DOC_TYPE_LABELS
           // 一致寫「傳票（會計）」，否則簽核人分不出卡片上是哪一種。
           if (item.type === 'voucher') return '傳票（會計）'
+          if (item.type === 'ledger_action') return '總帳申請'        // 會計規定 C 類：結帳／重開期間／年度決算／期初批次
           // SPEC-BONUS §十一（2026-09-24）：以案件為中心的獎金分潤
           if (item.type === 'bonus_award') return '獎金'   // 之前漏了 ⇒ 落到最後一行被標成「報價單」
           if (item.type === 'bonus_case_award') return '獎金分潤'
@@ -1272,7 +1274,7 @@
           if (item?.type === 'payment_request') return 'pr'
           if (item?.type === 'case_change') return 'cc'
           if (item?.type === 'dispatch_file_delete') return 'cv'
-          if (item?.type === 'voucher') return 'vo'
+          if (item?.type === 'voucher' || item?.type === 'ledger_action') return 'vo'
           if (item?.type === 'bonus_case_award') return 'pr'
           if (item?.type === 'custom_record' || item?.type === 'custom_module_def') return 'cm'
           return 'quotation'
@@ -1285,6 +1287,7 @@
           if (item?.type === 'completion_note') return '/api/completion-notes'
           if (item?.type === 'payment_request') return '/api/payment-requests'
           if (item?.type === 'voucher') return '/api/vouchers'
+          if (item?.type === 'ledger_action') return '/api/ledger/action-requests'
           // 吃案件單號：/api/bonus/cases/{quote_no}/approve|reject
           if (item?.type === 'bonus_case_award') return '/api/bonus/cases'
           return '/api/quotations'
@@ -1295,7 +1298,7 @@
         //    不同的識別碼，不能沿用 `apiBase(item) + '/' + item.quoteNo` 那一套。
         //    ⚠️ 這裡只解決「用哪個當路徑參數」，不是新開一套動作邏輯。
         itemPathId(item) {
-          return item?.type === 'voucher' ? item.voucherId : item?.quoteNo
+          return item?.type === 'voucher' ? item.voucherId : item?.type === 'ledger_action' ? item.requestId : item?.quoteNo
         },
 
         isVoucher(item) {
@@ -1602,6 +1605,8 @@
             const cur = item.currentTier ?? 0
             if (cur >= tiers.length) return false
             const approvers = tiers[cur].approvers || []
+            // 系統規定的最終關卡（傳票的『最高管理者（會計主管）』層、總帳申請）：同一層的任一人都可以核准，不是循序
+            if (tiers[cur].system) return approvers.some(a => a.status !== 'approved' && this._isMeOrDelegate(a.username))
             // sequential within tier: only the first unapproved approver may act
             const firstPending = approvers.find(a => a.status !== 'approved')
             return firstPending && this._isMeOrDelegate(firstPending.username)
@@ -1619,6 +1624,7 @@
             const cur = item.currentTier ?? 0
             if (cur < tiers.length) {
               const firstPending = (tiers[cur].approvers || []).find(a => a.status !== 'approved')
+              if (tiers[cur].system && firstPending) return `等待最高管理者（會計主管）簽核（第 ${cur + 1}/${tiers.length} 層）`
               if (firstPending) {
                 const name = firstPending.displayName || firstPending.username
                 return `等待 ${name} 簽核（第 ${cur + 1}/${tiers.length} 層）`
@@ -1798,7 +1804,7 @@
             // 🔴 `AS3`：傳票沒有「拒絕」端點，「退回」對它就是 send-back
             //    （`vouchers.py:562`：狀態回草稿＋清除簽核＋單號升版），
             //    不是 `/reject`。body 的欄位名也是 `reason`，跟額外支出同形狀。
-            const isVoucherType = item.type === 'voucher'
+            const isVoucherType = item.type === 'voucher' || item.type === 'ledger_action'     // 總帳申請的退回端點與傳票同形狀（/send-back、body.reason）
             // 獎金分潤的駁回端點是 /reject，body 欄位名是 reason（同額外支出）
             const isBonusCase = item.type === 'bonus_case_award'
             const rejectUrl = isXEC

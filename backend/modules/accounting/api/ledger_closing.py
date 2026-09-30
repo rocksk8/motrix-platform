@@ -10,6 +10,7 @@ from fastapi.responses import Response
 
 from db import get_db
 from helpers import _audit, _require_user, _tok, require_any_module
+from modules.accounting.api import ledger_requests as _requests
 from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged
 from modules.accounting.ledger import closing as _closing
 from modules.accounting.ledger import export as _export
@@ -76,6 +77,8 @@ def closing_generate(year: int, body: dict = Body(default={}), authorization: st
 @router.post("/years/{year}/close")
 def year_close(year: int, body: dict = Body(default={}), authorization: str = Header(None)):
     user = _require_closing_write(authorization)
+    if user.get("role") != "superadmin":                # C：一般財務人員送申請，最高管理者核准後自動執行
+        return _requests.submit(user, "year_close", dict(body or {}, year=year), authorization)
     conn = get_db()
     try:
         res = _run(conn, _closing.close_year, year, _who(user), bool((body or {}).get("accept_warnings")))
