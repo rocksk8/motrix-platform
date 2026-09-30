@@ -72,7 +72,7 @@
                 <button class="hb-btn primary" :disabled="eng.busy" @click="engRun()" data-testid="hb-eng-run">產生分錄草稿</button>
                 <select class="hb-input filter" x-model="eng.filter" @change="engLoad()" data-testid="hb-eng-filter">
                   <option value="">全部狀態</option>
-                  <template x-for="st in ['drafted','posted','drift','orphan','blocked_closed','blocked_no_account','superseded','rejected','reversed','native']" :key="st"><option :value="st" x-text="statusLabel(st)"></option></template>
+                  <template x-for="st in ['drafted','posted','drift','orphan','blocked_closed','blocked_no_account','blocked_inventory','superseded','rejected','reversed','native']" :key="st"><option :value="st" x-text="statusLabel(st)"></option></template>
                 </select>
                 <span class="hb-note" style="margin:0" x-text="Object.keys(eng.counts).map(k => statusLabel(k) + ' ' + eng.counts[k]).join('　')" data-testid="hb-eng-counts"></span>
               </div>

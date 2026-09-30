@@ -55,10 +55,10 @@ function ledgerHubPage() {
     },
     statusLabel(st) {
       return ({ drafted: '草稿待確認', posted: '已過帳', drift: '來源已變動', reversed: '已沖轉', superseded: '已被新版取代', orphan: '來源已消失',
-        rejected: '已被作廢', native: '既有傳票（不重複產生）', blocked_closed: '期間已結帳（擋下）', blocked_no_account: '缺科目（擋下）' })[st] || st
+        rejected: '已被作廢', native: '既有傳票（不重複產生）', blocked_closed: '期間已結帳（擋下）', blocked_no_account: '缺科目（擋下）', blocked_inventory: '在庫不足（擋下）' })[st] || st
     },
     fmt(n) { return (n || 0).toLocaleString('zh-TW') },
-    engBad(e) { return ['drift', 'orphan', 'blocked_closed', 'blocked_no_account'].indexOf(e.status) >= 0 },
+    engBad(e) { return ['drift', 'orphan', 'blocked_closed', 'blocked_no_account', 'blocked_inventory'].indexOf(e.status) >= 0 },
     async engLoad() {
       const g = this.eng
       g.error = ''

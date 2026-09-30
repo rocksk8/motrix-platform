@@ -19,9 +19,11 @@ CAPABILITY = "gl.events"
 _ROLE_AP = "AP"
 _ROLE_INPUT_TAX = "INPUT_TAX"
 _ROLE_BANK = "BANK"
-MODES = ("snapshot", "cumulative", "append", "native")
+MODES = ("snapshot", "cumulative", "append", "native", "stock")
 #: mode=native：來源模組**已經自己開了傳票**（例：獎金核准／發放），事件只登記「這張傳票就是這個事件」，引擎不重複產生、不改動它。
 #: 事件帶 `native_voucher_id`（正整數），不帶 lines。
+#: mode=stock：存貨出庫（E10）。來源只回『哪個料號、出庫幾件、哪個案件、哪天』（`stock_part_no`、`stock_qty`，不帶 lines、不帶金額）；
+#: 金額由引擎依移動加權平均（`ledger/inventory.py`）在產生草稿時算出，來源不知道也不該知道成本。
 SIDES = ("D", "C")
 
 #: 已知的事件來源模組與它們負責的事件（缺席時的說明用；順序＝畫面順序）。
@@ -64,6 +66,13 @@ def validate_event(ev, roles=None):
             p.append("event_date 格式要是 YYYY-MM-DD（%r）" % d)
     if ev.get("mode", "snapshot") not in MODES:
         p.append("mode 只能是 %s" % "、".join(MODES))
+    if ev.get("mode") == "stock":
+        qty = ev.get("stock_qty")
+        if not isinstance(ev.get("stock_part_no"), str) or not ev.get("stock_part_no").strip():
+            p.append("mode=stock 需要 stock_part_no")
+        if not (isinstance(qty, int) and not isinstance(qty, bool) and qty > 0):
+            p.append("mode=stock 需要正整數 stock_qty")
+        return p
     if ev.get("mode") == "native":
         nv = ev.get("native_voucher_id")
         if not (isinstance(nv, int) and not isinstance(nv, bool) and nv > 0):
@@ -98,6 +107,9 @@ def validate_event(ev, roles=None):
 
 def canonical_hash(ev):
     """內容雜湊：入帳日、各行（角色／方向／金額／維度）、案件、對象、稅碼。`meta` 與說明文字不參與（診斷用，改了不算內容變）。"""
+    if ev.get("mode") == "stock":       # 不含金額：均價變動不算來源變動
+        return hashlib.sha256(json.dumps({"stock": [ev.get("stock_part_no"), ev.get("stock_qty")], "date": ev.get("event_date"),
+                                          "case": ev.get("case_no") or ""}, sort_keys=True).encode("utf-8")).hexdigest()
     if ev.get("mode") == "native":
         return hashlib.sha256(json.dumps({"native": ev.get("native_voucher_id"), "date": ev.get("event_date")}, sort_keys=True).encode("utf-8")).hexdigest()
     core = {

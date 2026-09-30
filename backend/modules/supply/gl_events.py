@@ -8,6 +8,9 @@
 - E09 進貨付款（付款日）：借 應付帳款（貨款＋進項稅額）／貸 銀行（有付款帳戶代號則帶 `account_code`）。稅額與 E08b 一致（同一個估計／補登值由引擎在
   `contract.apply_annotations` 對 E08b 覆寫，E09 讀 E08b 的同一筆補登、調整應付與銀行金額，`meta.est_tax` 記估計值）。
 只讀，不寫資料。
+- E10 出庫成本（出貨單核准 shipped、案件序號認領 installed）：來源只回『料號、件數、案件、日期』（mode=stock，不帶金額）；
+  金額由引擎依移動加權平均（`ledger/inventory.py`）算出並組成 借營業成本（依案件）／貸存貨。退回入庫（狀態回 in_stock）⇒ 事件消失 ⇒ 引擎以原金額回沖。
+  報廢／盤損（void）尚未入帳：notice 提醒手工傳票。
 """
 from db import get_db
 from helpers.legal_params import round_half_up
@@ -36,6 +39,8 @@ def gl_events(start, end, *, changed_since=""):
         conn.close()
     events, notices = [], []
     zero = est = 0
+    scrap_n, out_events = _stock_out(start, end)
+    events += out_events
     for r in rows:
         cost = _i(r["total"])
         if cost <= 0:
@@ -69,9 +74,39 @@ def gl_events(start, end, *, changed_since=""):
                 "source_type": "stock_batch_payment", "source_key": r["batch_no"], "event_code": "E09", "event_date": pd, "doc_no": r["batch_no"],
                 "case_no": "", "party": party, "tax_code": "", "mode": "snapshot",
                 "lines": [{"role": "AP", "side": "D", "amount": pay, "memo": memo}, bank], "meta": {"tax_estimated": bool(tax), "est_tax": tax}})
+    if scrap_n:
+        notices.append("%d 件庫存於期間內被標為作廢（報廢／盤損）：尚未自動入帳，請會計以手工傳票（借存貨損失／貸存貨）處理。" % scrap_n)
     if zero:
         notices.append("%d 個進貨批次的成本合計為 0：不產生分錄（請補成本）。" % zero)
     if est:
         notices.append("%d 個進貨批次的進項稅額與發票日期為估計（成本×5%%、批次建立日）；實際值請在來源憑證補登（input_tax、invoice_date）。" % est)
     return {"events": events, "notice": " ".join(notices)}
 
+
+def _stock_out(start, end):
+    """出庫事件（mode=stock）與期間內被標為作廢的件數。"""
+    conn = get_db()
+    try:
+        shipped = conn.execute(
+            "SELECT shipping_note_no, part_no, quote_no, MIN(consumed_at) AS at, COUNT(*) AS qty FROM stock_items "
+            "WHERE status='shipped' AND shipping_note_no<>'' AND consumed_at<>'' GROUP BY shipping_note_no, part_no").fetchall()
+        claimed = conn.execute(
+            "SELECT quote_no, part_no, substr(consumed_at,1,10) AS d, COUNT(*) AS qty FROM stock_items "
+            "WHERE status='installed' AND consumed_at<>'' GROUP BY quote_no, part_no, substr(consumed_at,1,10)").fetchall()
+        scrap = conn.execute("SELECT COUNT(*) FROM stock_items WHERE status='void' AND substr(updated_at,1,10) BETWEEN ? AND ?", (start, end)).fetchone()[0]
+    finally:
+        conn.close()
+    out = []
+    for r in shipped:
+        d = (r["at"] or "")[:10]
+        if d and start <= d <= end:
+            out.append({"source_type": "stock_issue_shipping", "source_key": "%s::%s" % (r["shipping_note_no"], r["part_no"]), "event_code": "E10",
+                        "event_date": d, "doc_no": r["shipping_note_no"], "case_no": r["quote_no"] or "", "party": {"key": "", "name": ""},
+                        "tax_code": "", "mode": "stock", "stock_part_no": r["part_no"], "stock_qty": int(r["qty"]), "meta": {"via": "shipping_note"}})
+    for r in claimed:
+        d = r["d"] or ""
+        if d and start <= d <= end:
+            out.append({"source_type": "stock_issue_claim", "source_key": "%s::%s::%s" % (r["quote_no"], r["part_no"], d), "event_code": "E10",
+                        "event_date": d, "doc_no": r["quote_no"] or "", "case_no": r["quote_no"] or "", "party": {"key": "", "name": ""},
+                        "tax_code": "", "mode": "stock", "stock_part_no": r["part_no"], "stock_qty": int(r["qty"]), "meta": {"via": "claim"}})
+    return int(scrap or 0), out
