@@ -2749,10 +2749,15 @@ def _monthly_backup():
     # ⚠️ 前提不成立時**仍然驗結構**，只是不做身分對照 ——
     # 🔑 「這份檔是不是我們的資料庫」不需要對照組，而那一半照樣守得住。
     # ☠️ 整個跳過的話，`BK12`（月備份複製了一份空庫）就沒有人守了。
+    # 🔴 2026-10-01 正式機（月備份 2026-10 卡住：快照 audit_log 3319／彙總 3321，重跑 3319／3326）：每日層早在 T11 就帶
+    #    `allowance`（快照**之後**才寫進正式庫的筆數），月備份這一條漏了 ⇒ 月備份是在每日快照之後才匯出 JSON，
+    #    之間的稽核列（至少備份自己那筆 backup.sqlite_snapshot）讓彙總必定比快照多 ⇒ `got < want` ⇒ 整庫沒進月備份、不標完成。
+    #    ⚠️ 修的是**判準**（同每日層）：只放寬「快照之後寫的」那幾列；空庫／他庫（差幾千列）照樣擋。
+    snap_allow = _rows_written_after_snapshot(today_snapshot) if os.path.isfile(today_snapshot) else {}
     snap_ok, snap_reasons, _snap_counts = _snapshot_health(
         today_snapshot,
         summary=summary if _summary_is_comparable() else None,
-        day=month_label)
+        day=month_label, allowance=snap_allow)
     if os.path.isfile(today_snapshot) and not snap_ok:
         summary["db_snapshot"] = False
         _write_backup_alert(
