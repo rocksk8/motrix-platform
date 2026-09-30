@@ -26,6 +26,11 @@ def _n(v):
 
 
 def statements_workbook(stm, year, source="live", title="財務報表"):
+    # 四大表抬頭含公司名 ⇒ 輸出點要經第二道（COMPANY-SETUP-GATE §5；未設定本公司資料 ⇒ 428）
+    from helpers.company_identity import company_name
+    company = company_name()
+    if company:
+        title = "%s　%s" % (company, title)
     wb = Workbook()
     f, fill, border, al = xl_style(wb)
     head_font, head_fill = f(bold=True, size=10), fill("F0EEE9")
