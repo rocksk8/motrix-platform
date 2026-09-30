@@ -10,6 +10,8 @@ function ledgerHubPage() {
     tab: '',
     isSuper: false,
 
+    // 扣繳清單（C5：withholding）
+    wh: { ym: '', data: null, selected: {}, date: '', voucherNo: '', busy: false, error: '', notice: '' },
     // 營業稅 401（C5：tax401）
     tax: { year: new Date().getFullYear(), period: Math.ceil((new Date().getMonth() + 1) / 2), data: null, busy: false, error: '', notice: '' },
     // 分錄草稿（C1：engine_drafts）
@@ -49,6 +51,7 @@ function ledgerHubPage() {
         if (!this.enabled.some(f => f.key === this.tab)) this.tab = this.enabled.length ? this.enabled[0].key : ''
         if (this.tab === 'engine_drafts') await this.engLoad()
         if (this.tab === 'tax401') await this.taxLoad()
+        if (this.tab === 'withholding') await this.whLoad()
       } catch (e) { this.error = e.message }
       this.loaded = true
     },
@@ -56,6 +59,39 @@ function ledgerHubPage() {
       this.tab = key
       if (key === 'engine_drafts') await this.engLoad()
       if (key === 'tax401') await this.taxLoad()
+      if (key === 'withholding') await this.whLoad()
+    },
+    async whLoad() {
+      const w = this.wh
+      w.error = ''
+      w.busy = true
+      try {
+        w.data = await this._api('GET', '/api/ledger/withholding' + (w.ym ? '?ym=' + encodeURIComponent(w.ym) : ''))
+        w.selected = {}
+      } catch (e) { w.error = e.message; w.data = null }
+      w.busy = false
+    },
+    whIds() { return this.wh.data ? this.wh.data.items.filter(i => this.wh.selected[i.id] && !i.remitted_at).map(i => i.id) : [] },
+    whKindLabel(k) { return k === 'income_tax' ? '代扣所得稅' : (k === 'nhi' ? '二代健保補充保費' : k) },
+    async whRemit() {
+      const w = this.wh
+      w.error = ''
+      w.notice = ''
+      const ids = this.whIds()
+      if (!ids.length) { w.error = '請先勾選尚未繳庫的項目'; return }
+      if (!w.date) { w.error = '請填寫繳庫日'; return }
+      w.busy = true
+      try {
+        const r = await this._api({ method: 'POST' }, '/api/ledger/withholding/remit', { ids, remitted_at: w.date, voucher_no: w.voucherNo })
+        w.notice = '已登記繳庫 ' + r.updated + ' 筆'
+        await this.whLoad()
+      } catch (e) { w.error = e.message }
+      w.busy = false
+    },
+    async whUnremit(i) {
+      const w = this.wh
+      w.error = ''
+      try { await this._api({ method: 'POST' }, '/api/ledger/withholding/unremit', { ids: [i.id] }); await this.whLoad() } catch (e) { w.error = e.message }
     },
     async taxLoad() {
       const t = this.tax

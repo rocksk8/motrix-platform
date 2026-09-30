@@ -61,7 +61,48 @@
           <div>
             <div class="hb-title" style="font-size:16px" x-text="current().label"></div>
             <div class="hb-note" x-text="current().description"></div>
-            <div class="hb-note" x-show="current().key !== 'engine_drafts' && current().key !== 'tax401'">這項功能已開啟，畫面隨批次 <b x-text="current().batch"></b> 完成後出現在這裡；目前尚未提供內容。</div>
+            <div class="hb-note" x-show="['engine_drafts', 'tax401', 'withholding'].indexOf(current().key) < 0">這項功能已開啟，畫面隨批次 <b x-text="current().batch"></b> 完成後出現在這裡；目前尚未提供內容。</div>
+
+            <!-- 扣繳清單（C5） -->
+            <div x-show="current().key === 'withholding'" data-testid="hb-wh">
+              <div class="hb-err" x-show="wh.error" x-text="wh.error" data-testid="hb-wh-error"></div>
+              <div class="hb-ok" x-show="wh.notice" x-text="wh.notice" data-testid="hb-wh-notice"></div>
+              <div class="hb-row">
+                <input class="hb-input filter" type="month" x-model="wh.ym" data-testid="hb-wh-ym">
+                <button class="hb-btn primary" :disabled="wh.busy" @click="whLoad()" data-testid="hb-wh-load">查詢</button>
+                <input class="hb-input" type="date" x-model="wh.date" data-saved-field data-testid="hb-wh-date"> 繳庫日
+                <input class="hb-input" type="text" x-model="wh.voucherNo" data-saved-field placeholder="繳庫傳票單號（選填）" data-testid="hb-wh-voucher">
+                <button class="hb-btn" :disabled="wh.busy" @click="whRemit()" data-testid="hb-wh-remit">登記繳庫</button>
+              </div>
+              <template x-if="wh.data">
+                <div>
+                  <template x-for="c in wh.data.checks" :key="c.key">
+                    <div :class="c.ok ? 'hb-ok' : 'hb-warn'" :data-testid="'hb-wh-check-' + c.key"
+                         x-text="c.label + '：清單 ' + fmt(c.left) + ' ／ 帳上 ' + fmt(c.right) + (c.ok ? '（相符）' : '（不符：' + c.note + '）')"></div>
+                  </template>
+                  <table class="hb-table" data-testid="hb-wh-groups">
+                    <thead><tr><th>所屬月</th><th>種類</th><th>繳庫期限</th><th class="hb-num">筆數</th><th class="hb-num">合計</th><th class="hb-num">未繳庫</th><th>狀態</th></tr></thead>
+                    <tbody>
+                      <template x-for="g in wh.data.groups" :key="g.period_ym + g.kind">
+                        <tr :class="{bad: g.overdue}"><td x-text="g.period_ym"></td><td x-text="g.label"></td><td x-text="g.due"></td><td class="hb-num" x-text="g.count"></td>
+                          <td class="hb-num" x-text="fmt(g.total)"></td><td class="hb-num" x-text="fmt(g.unremitted)"></td><td x-text="g.overdue ? '已逾期未繳庫' : (g.unremitted ? '待繳庫' : '已繳庫')"></td></tr>
+                      </template>
+                    </tbody>
+                  </table>
+                  <table class="hb-table" style="margin-top:12px" data-testid="hb-wh-items">
+                    <thead><tr><th></th><th>所屬月</th><th>種類</th><th>來源</th><th>對象</th><th>所得類別</th><th class="hb-num">給付總額</th><th class="hb-num">代扣金額</th><th>繳庫日</th></tr></thead>
+                    <tbody>
+                      <template x-for="i in wh.data.items" :key="i.id">
+                        <tr><td><input type="checkbox" :disabled="!!i.remitted_at" x-model="wh.selected[i.id]"></td><td x-text="i.period_ym"></td><td x-text="whKindLabel(i.kind)"></td>
+                          <td x-text="i.source_key"></td><td x-text="i.party_key"></td><td x-text="i.income_type"></td><td class="hb-num" x-text="fmt(i.gross)"></td><td class="hb-num" x-text="fmt(i.amount)"></td>
+                          <td><span x-text="i.remitted_at"></span> <button class="hb-btn" x-show="i.remitted_at" @click="whUnremit(i)">取消</button></td></tr>
+                      </template>
+                    </tbody>
+                  </table>
+                  <div class="hb-note" x-show="!wh.data.items.length" data-testid="hb-wh-empty">目前沒有扣繳項目。勞報單簽回後，於『分錄草稿』執行引擎產生草稿時會記入這裡。</div>
+                </div>
+              </template>
+            </div>
 
             <!-- 營業稅 401（C5） -->
             <div x-show="current().key === 'tax401'" data-testid="hb-tax">
