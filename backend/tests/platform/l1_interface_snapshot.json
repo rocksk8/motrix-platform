@@ -1,5 +1,5 @@
 {
- "core_version": "1.81",
+ "core_version": "1.82",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -674,6 +674,10 @@
    "warm_geocode_cache": "def()",
    "warm_status": "def()",
    "without_google_content": "def()"
+  },
+  "helper:gl_status": {
+   "MESSAGE": "const",
+   "gl_posted_warning": "def(conn, source_type, source_key, prefix=…)"
   },
   "helper:google_calendar": {
    "EVENT_CODES": "const",

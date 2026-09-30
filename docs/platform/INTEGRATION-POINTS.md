@@ -678,6 +678,23 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ---
 
+## IP-106　`gl.source_status`：來源是否已入總帳（M06 → L1 `helpers/gl_status` → 各來源寫入端點）
+
+2026-09-30（MONEY-FLOWS §9 L3，主持裁示）：使用者改動／取消**已入總帳**的來源（收款、派工發票日、匯款…）前後，回應帶一句非阻擋提示「此筆已入總帳：修改後下次引擎執行會產生沖轉草稿」。**編號暫定（106），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計：`modules/accounting/ledger/source_status.py::source_status`（`ModuleSpec.providers`，名稱 `accounting`） |
+| 使用方 | L1 `helpers/gl_status.py::gl_posted_warning`；呼叫端：M01 `mark_payment`／案件紀錄整包存（E03、E01）、M04 派工 `invoice-date`（E04）與匯款 `paid-toggle unpay`（E05） |
+| 形式 | provider，單一提供者（名稱 `accounting`） |
+| 語法 | 提供：`("gl.source_status", "accounting"): fn`；取用：`registry.providers("gl.source_status").get("accounting")` ⇒ `fn(conn, source_type, source_key, prefix=False) -> [{event_code, status, voucher_no, event_date}]` |
+| 回傳 | 只回 `posted`（已過帳）與 `drift`（來源已變、舊傳票仍在）；草稿不算入帳（改了引擎會自動重建）。`prefix=True` ⇒ `source_key` 當前綴。表不存在／查詢失敗 ⇒ `[]` |
+| 對方不在時 | 沒有提供者 ⇒ `gl_posted_warning` 回 `None`（沒有總帳就沒有可提示的），寫入照常；提供者丟例外 ⇒ 記 ERROR、回 `None`，不擋寫入 |
+| 契約版本 | 1（2026-09-30） |
+| 守門 | `backend/tests/test_gl_source_status_2026_09_30.py` |
+
+---
+
 ## IP-100　`payables.pending`：請款待付款（M01 → M05 出納；多提供者）
 
 對應 CORE-SPEC「請款流程（下一版）」（2026-09-27 使用者裁示）：核准而未付款的請款（案件額外支出）進出納待付款；出納登錄付款寫回付款日。
