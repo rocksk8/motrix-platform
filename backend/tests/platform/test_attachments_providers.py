@@ -181,7 +181,7 @@ def _seed_case_with_file(quote_no, owner_id=None):
     import db
     import os
     import helpers.uploads as up
-    rel = "att_perm/%s.png" % quote_no
+    rel = "quotations/%s/sign.png" % quote_no          # 真實配置：<資料夾>/<單據鍵>/<檔>（open-bind：路徑必須在該單據自己的資料夾）
     full = os.path.join(up.UPLOADS_ROOT, rel)
     os.makedirs(os.path.dirname(full), exist_ok=True)
     with open(full, "wb") as f:
@@ -261,17 +261,18 @@ def _seed_extra_expense_file(quote_no):
     import db
     import os
     import helpers.uploads as up
-    rel = "att_perm/%s-ee.png" % quote_no
-    full = os.path.join(up.UPLOADS_ROOT, rel)
-    os.makedirs(os.path.dirname(full), exist_ok=True)
-    with open(full, "wb") as f:
-        f.write(b"x")
     conn = db.get_db()
     try:
         conn.execute("INSERT INTO quotations (quote_no, status, data_json, created_at, updated_at)"
                      " VALUES (?,?,?,?,?)", (quote_no, "已送出", "{}", "2026-01-01", "2026-01-01"))
-        eid = conn.execute("INSERT INTO case_extra_expenses (quote_no, files_json) VALUES (?, ?)",
-                           (quote_no, json.dumps([{"id": "e1", "filename": "ee.png", "path": rel}]))).lastrowid
+        eid = conn.execute("INSERT INTO case_extra_expenses (quote_no, files_json) VALUES (?, ?)", (quote_no, "[]")).lastrowid
+        rel = "case_extra_expense/%s_%s/ee.png" % (quote_no, eid)          # 真實配置（open-bind）：資料夾鍵＝<案件>_<支出 id>
+        full = os.path.join(up.UPLOADS_ROOT, rel)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "wb") as f:
+            f.write(b"x")
+        conn.execute("UPDATE case_extra_expenses SET files_json=? WHERE id=?",
+                     (json.dumps([{"id": "e1", "filename": "ee.png", "path": rel}]), eid))
         conn.commit()
         return str(eid)
     finally:
@@ -332,7 +333,7 @@ def test_invoice_voucher_attachments_keep_the_amount_layer(client, make_user):
                      " VALUES ('ATT-IV-P','已送出','{}','2026-01-01','2026-01-01')")
         conn.execute("INSERT INTO invoice_vouchers (voucher_no, quote_no, issued_files_json, created_at, updated_at)"
                      " VALUES ('IV-ATT-P','ATT-IV-P',?,'2026-01-01','2026-01-01')",
-                     (json.dumps([{"id": "i1", "filename": "iv.pdf", "path": "att_perm/iv.pdf"}]),))
+                     (json.dumps([{"id": "i1", "filename": "iv.pdf", "path": "invoice_vouchers/IV-ATT-P/iv.pdf"}]),))
         conn.commit()
     finally:
         conn.close()
@@ -357,7 +358,7 @@ def test_invoice_voucher_attachments_keep_the_amount_layer(client, make_user):
     got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-IV-P", headers=no_amt)
     assert got.status_code == 200 and [f for f in got.json()["files"] if f.get("type") == "invoice_voucher"] == []
     assert _hidden(got).get("hidden:invoice_voucher") == 1, "因權限沒列出要明說（主持裁示），不可以跟「沒有」長得一樣"
-    _no_identifiers(got, "IV-ATT-P", "iv.pdf", "att_perm/iv.pdf", "ATT-IV-P")
+    _no_identifiers(got, "IV-ATT-P", "iv.pdf", "invoice_vouchers/IV-ATT-P/iv.pdf", "ATT-IV-P")
     ok = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-IV-P", headers=amt)
     assert "hidden:invoice_voucher" not in _hidden(ok), "看得到的人不該被告知有沒列出的"
 
@@ -398,7 +399,7 @@ def test_quotation_attachments_are_not_wider_than_the_case_page(client, make_use
     assert _hidden(got).get("hidden:quotation_signed") == 1, got.json().get("hidden")
     ss = client.get("/api/vouchers/summary-sources?quote_no=ATT-QP-1", headers=h)
     assert ss.status_code == 200 and _hidden(ss).get("hidden:quotation_signed") == 1, ss.json().get("hidden")
-    _no_identifiers(got, "sign.png", "att_perm/ATT-QP-1.png", "f1")
+    _no_identifiers(got, "sign.png", "quotations/ATT-QP-1/sign.png", "f1")
     prev = client.get("/api/vouchers/line-source-file?source_type=case&ref=ATT-QP-1&file_id=f1", headers=h)
     assert prev.status_code in (403, 404), prev.status_code
     assert _pick(client, h, "ATT-QP-1").status_code == 403
@@ -476,8 +477,8 @@ def test_hidden_notice_carries_no_identifier_of_the_unseen_document(client, make
     import helpers.uploads as up
     owner = _hdr(client, make_user, "att_leak_own", "engineer", ["finance"])
     other = _hdr(client, make_user, "att_leak_other", "engineer", ["finance", "case_manage"])
-    rel = "att_perm/LEAK-SECRET-9f3.png"
-    os.makedirs(os.path.join(up.UPLOADS_ROOT, "att_perm"), exist_ok=True)
+    rel = "quotations/MQ-LEAK-001/LEAK-SECRET-9f3.png"                    # 真實配置（open-bind）
+    os.makedirs(os.path.join(up.UPLOADS_ROOT, "quotations", "MQ-LEAK-001"), exist_ok=True)
     open(os.path.join(up.UPLOADS_ROOT, rel), "wb").write(b"x")
     meta = [{"id": "fid-LEAK-77", "filename": "機密合約-LEAK.png", "path": rel},
             {"id": "fid-LEAK-78", "filename": "第二張-LEAK.png", "path": rel}]
@@ -507,7 +508,7 @@ def _add_case_update_file(quote_no):
     conn = db.get_db()
     try:
         conn.execute("INSERT INTO case_updates (quote_no, author, content, files_json, created_at) VALUES (?,?,?,?,?)",
-                     (quote_no, "t", "t", json.dumps([{"id": "cu1", "filename": "update.png", "path": "att_perm/cu.png"}]),
+                     (quote_no, "t", "t", json.dumps([{"id": "cu1", "filename": "update.png", "path": "case_updates/%s/cu.png" % quote_no}]),
                       "2026-01-01"))
         conn.commit()
     finally:
@@ -532,7 +533,7 @@ def test_partially_visible_invoice_vouchers_list_the_visible_one(client, make_us
         for no, data, fid in (("IV-AP-MINE", appr, "mine"), ("IV-AP-OTHER", "{}", "other")):
             conn.execute("INSERT INTO invoice_vouchers (voucher_no, quote_no, data_json, issued_files_json, created_at,"
                          " updated_at) VALUES (?,?,?,?,'2026-01-01','2026-01-01')",
-                         (no, "ATT-AP-2", data, json.dumps([{"id": fid, "filename": fid + ".pdf", "path": "att_perm/x.pdf"}])))
+                         (no, "ATT-AP-2", data, json.dumps([{"id": fid, "filename": fid + ".pdf", "path": "invoice_vouchers/%s/x.pdf" % no}])))
         conn.commit()
     finally:
         conn.close()

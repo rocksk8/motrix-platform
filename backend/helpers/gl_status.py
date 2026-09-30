@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-"""[單位] plat:gl-status    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] gl_posted_warning
+"""[單位] helper:gl_status    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
+[公開介面] MESSAGE, gl_posted_warning
+[契約題] tests/test_gl_source_status_2026_09_30.py
 [不變式] 只讀、吞例外；沒有總帳提供者（模組不在／旗標關）⇒ None（沒有總帳就沒有可提示的）；提示是**非阻擋**的，不影響寫入本身
 [注意] 各來源模組的寫入端點用：修改已入帳來源前呼叫，成功後把文字放進回應的 `glWarning`，前端顯示 toast（MONEY-FLOWS §9 L3）
 
