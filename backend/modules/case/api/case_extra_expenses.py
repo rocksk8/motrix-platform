@@ -630,6 +630,11 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
 
         now = datetime.now().isoformat(timespec="seconds")
         label = f"{row['description']}（NT$ {float(row['total_cost'] or 0):,.0f}）"
+        if _col(row, "kind", "") or "":
+            # 送審當下：費用類別驗證（不在啟用清單 ⇒ 400，狀態不變）＋類別代碼／科目快照寫進明細（W4 合約）
+            _new_lines = EF.prepare_submit(conn, _jlist(row, "lines_json"))
+            conn.execute("UPDATE case_extra_expenses SET lines_json=? WHERE id=? AND quote_no=?",
+                         (EF.dumps_lines(_new_lines), exp_id, quote_no))
 
         if not tiers:
             conn.execute(
@@ -1215,6 +1220,10 @@ def submit_change_request(quote_no: str, exp_id: int, authorization: str = Heade
         display = user.get("display_name") or user["username"]
         old_total = float(row["total_cost"] or 0)
         new_total = float(change.get("totalCost") or 0)
+        if "lines" in change:                                   # 費用單據的變更申請：同樣在送審當下驗類別、寫代碼／科目快照
+            change["lines"] = EF.prepare_submit(conn, change["lines"])
+            conn.execute("UPDATE case_extra_expenses SET change_json=? WHERE id=? AND quote_no=?",
+                         (json.dumps(change, ensure_ascii=False), exp_id, quote_no))
         label = f"{change.get('description')}（NT$ {old_total:,.0f} → NT$ {new_total:,.0f}）"
 
         if not tiers:

@@ -121,6 +121,37 @@ def normalize_data(data, existing: dict = None) -> dict:
     return merged
 
 
+def prepare_submit(conn, lines: list) -> list:
+    """送審當下處理明細的費用類別（W4 合約 2026-10-01）：
+    1. 提供者 `expense.categories` 在 ⇒ 每列的 `category`（代碼或名稱）必須是**啟用中**的類別，否則 400（狀態不變）；
+       通過的列寫入 `categoryCode`（代碼，改名不會壞）＋`categoryName`（顯示快照）。提供者不在 ⇒ 不驗證、不加。
+    2. 提供者 `gl.category_account` 在 ⇒ 寫入唯讀的 `accountCode` 快照（**只供顯示**：過帳時總帳從事件行的 category 重新解，之後改對照表以新的為準）；
+       解不出來（None）⇒ 空字串。提供者不在 ⇒ 不動。
+    草稿可以放任何類別；只有送審擋。回新的明細列（不改傳入的）。"""
+    from core import registry
+    cats_fn = registry.providers("expense.categories").get("accounting")
+    acct_fn = registry.providers("gl.category_account").get("accounting")
+    out = [dict(l) for l in (lines or [])]
+    if cats_fn is not None:
+        cats = cats_fn(conn) or []
+        by_code = {c["code"]: c["name"] for c in cats}
+        by_name = {c["name"]: c["code"] for c in cats}
+        for i, l in enumerate(out, 1):
+            v = (l.get("categoryCode") or l.get("category") or "").strip()
+            if v in by_code:
+                code = v
+            elif v in by_name:
+                code = by_name[v]
+            else:
+                raise HTTPException(400, "第 %d 列的費用類別「%s」不是啟用中的類別，請重新選擇" % (i, v[:40]))
+            l["categoryCode"], l["categoryName"] = code, by_code[code]
+    if acct_fn is not None:
+        for l in out:
+            key = l.get("categoryCode") or l.get("category") or ""
+            l["accountCode"] = (acct_fn(conn, key) or "") if key else ""
+    return out
+
+
 def dumps_lines(lines: list) -> str:
     s = json.dumps(lines, ensure_ascii=False)
     if len(s) > MAX_LINES_BYTES:

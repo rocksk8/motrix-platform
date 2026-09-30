@@ -217,3 +217,91 @@ def test_queue_item_and_detail_for_caseless(client, H):
     assert it["approveUrl"] == "/api/quotations/-/extra-expenses/%d/approve" % eid and it["rejectUrl"].endswith("/reject")
     assert it["quoteNo"].startswith("TE-") and not it["quoteNo"].startswith("-")
     assert det["caseless"] is True and len(det["items"]) == 2 and det["items"][0]["amount"] == 301 and det["title"].startswith("差旅費用請款單")
+
+
+# ── 送審：費用類別驗證＋代碼／科目快照（W4 合約）；GL 事件行 ─────────────────────
+
+CATS = [{"code": "TRAVEL", "name": "交通費", "default_tax": 0}, {"code": "LODGE", "name": "住宿費", "default_tax": 0}]
+
+
+@pytest.fixture
+def providers(monkeypatch):
+    """假的 accounting 提供者：expense.categories（啟用的類別）、gl.category_account（類別→科目）。"""
+    from core import registry
+    real = registry.providers
+    fake = {"expense.categories": {"accounting": lambda conn: CATS},
+            "gl.category_account": {"accounting": lambda conn, k: {"TRAVEL": "6151", "LODGE": "6152"}.get(k)}}
+    monkeypatch.setattr(registry, "providers", lambda name, *a, **k: fake[name] if name in fake else real(name, *a, **k))
+    return fake
+
+
+def _draft(client, h, lines, kind="travel", **extra):
+    r = client.post(SENT, headers=h, json={"kind": kind, "lines": lines, "data": {"applicant": "ef_form"}, **extra})
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def test_submit_rejects_unknown_category_but_draft_may_hold_anything(client, H, providers):
+    _no_tiers()
+    eid = _draft(client, H["ef_form"], [{"category": "不存在的類別", "amount": 100}])                 # 草稿：放什麼都行
+    r = client.post("%s/%d/submit" % (SENT, eid), headers=H["ef_form"])
+    assert r.status_code == 400 and "不是啟用中的類別" in r.json()["detail"]
+    row = _q("SELECT status, lines_json FROM case_extra_expenses WHERE id=?", (eid,))[0]
+    assert row["status"] == "草稿" and "categoryCode" not in row["lines_json"]                         # 狀態不變、明細沒被動
+
+
+def test_submit_writes_category_code_name_and_account_snapshot(client, H, providers):
+    _no_tiers()
+    eid = _draft(client, H["ef_form"], [{"category": "交通費", "amount": 100, "keep": 1}, {"category": "LODGE", "amount": 200}])
+    assert client.post("%s/%d/submit" % (SENT, eid), headers=H["ef_form"]).json()["status"] == "已核准"
+    lines = json.loads(_q("SELECT lines_json FROM case_extra_expenses WHERE id=?", (eid,))[0]["lines_json"])
+    assert [(l["categoryCode"], l["categoryName"], l["accountCode"]) for l in lines] == [("TRAVEL", "交通費", "6151"), ("LODGE", "住宿費", "6152")]
+    assert lines[0]["keep"] == 1 and lines[0]["category"] == "交通費"                                   # 原欄位保留
+
+
+def test_without_providers_nothing_is_validated_or_added(client, H):
+    _no_tiers()
+    eid = _draft(client, H["ef_form"], [{"category": "隨便", "amount": 100}])
+    assert client.post("%s/%d/submit" % (SENT, eid), headers=H["ef_form"]).json()["status"] == "已核准"
+    (l,) = json.loads(_q("SELECT lines_json FROM case_extra_expenses WHERE id=?", (eid,))[0]["lines_json"])
+    assert "categoryCode" not in l and "accountCode" not in l
+
+
+def test_gl_events_per_category_lines_and_payment_leg(client, H, providers):
+    from modules.case import gl_events as G
+    _no_tiers()
+    eid = _draft(client, H["ef_form"], [{"category": "TRAVEL", "amount": 100}, {"category": "TRAVEL", "amount": 50}, {"category": "LODGE", "amount": 200}],
+                 kind="petty_cash")
+    client.post("%s/%d/submit" % (SENT, eid), headers=H["ef_form"])
+    import db
+    c = db.get_db()
+    try:
+        c.execute("UPDATE case_extra_expenses SET paid_date=?, pay_method='petty_cash', pay_account_code='1112' WHERE id=?", (date.today().isoformat(), eid))
+        c.commit()
+    finally:
+        c.close()
+    d = date.today().isoformat()
+    ev = {e["event_code"]: e for e in G.gl_events(d, d)["events"] if e["source_key"] == str(eid)}
+    acc = ev["E11"]["lines"]
+    assert sorted((l["role"], l["side"], l["amount"], l.get("category")) for l in acc) == sorted([
+        ("EXP_OTHER", "D", 150, "TRAVEL"), ("EXP_OTHER", "D", 200, "LODGE"), ("AP", "C", 350, None)])      # 無案件 ⇒ EXP_OTHER、逐類
+    assert ev["E11"]["case_no"] == ""
+    pay = ev["E11b"]["lines"]
+    assert [(l["role"], l["side"], l["amount"]) for l in pay] == [("AP", "D", 350), ("PETTY", "C", 350)] and pay[-1]["account_code"] == "1112"
+
+
+def test_gl_events_legacy_row_unchanged(client, H, seed_extra_expense):
+    from modules.case import gl_events as G
+    import db
+    c = db.get_db()
+    try:
+        c.execute("INSERT OR IGNORE INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at, deal_tag)"
+                  " VALUES ('MQ-GL-LEG','已送出','c','p',1,1,'{}','2026-01-01','2026-01-01','已成案')")
+        c.commit()
+    finally:
+        c.close()
+    eid = seed_extra_expense("MQ-GL-LEG", total_cost=300, category="運費", description="舊", expense_date=date.today().isoformat())
+    d = date.today().isoformat()
+    evs = [e for e in G.gl_events(d, d)["events"] if e["source_key"] == str(eid) and e["event_code"] == "E11"]
+    assert evs and [(l["role"], l["side"], l["amount"]) for l in evs[0]["lines"]] == [("COST_PROJECT", "D", 300), ("AP", "C", 300)]
+    assert all("category" not in l for l in evs[0]["lines"])
