@@ -155,7 +155,10 @@
    "tier_fields": "def(approval_json_raw)"
   },
   "helper:audit": {
+   "_FAIL_REASON_LABELS": "const",
+   "_MODULE_LABELS": "const",
    "_audit": "def(token, action, target_type=…, target_id=…, target_label=…, detail=…)",
+   "_audit_login_failed": "def(username, ip=…, now=…)",
    "_filter_live_notifications": "def(conn, rows)",
    "_notify": "def(username, type_, ref_id, ref_label, message)",
    "_purge_notifications": "def(ref_id, types)",
