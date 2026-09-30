@@ -194,7 +194,20 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
     u = _require_user(authorization, require_superadmin=True)
     conn = get_db()
     try:
-        d = D.publish(conn, kind, key, scope, (payload or {}).get("note", ""), u["username"])
+        if kind == "custom_module" and scope == "company":
+            # S4：審核開啟且有簽核層 ⇒ 送審（回 pending）；否則與過去一樣直接發布
+            from helpers import custom_def_review as _defr
+            try:
+                r = _defr.submit(conn, key, u, (payload or {}).get("note", ""))
+            except _defr.ReviewError as e:
+                return JSONResponse({"detail": str(e), "problems": e.problems}, status_code=e.status)
+            if r["pending"]:
+                _audit(_tok(authorization), "definitions.submit", "ui_definition", "%s/%s/%s" % (kind, key, scope),
+                       "送審 %s 第 %d 版" % (key, r["version"]), {"note": (payload or {}).get("note", "")})
+                return dict(r["definition"], pending=True)
+            d = r["definition"]
+        else:
+            d = D.publish(conn, kind, key, scope, (payload or {}).get("note", ""), u["username"])
     except D.DefinitionError as e:
         return _err(e, 422 if e.problems else 400)
     finally:
@@ -251,6 +264,16 @@ def restore_definition(kind: str, key: str, version: int, scope: str = Query("co
     u = _require_user(authorization, require_superadmin=True)
     conn = get_db()
     try:
+        if kind == "custom_module" and scope == "company":
+            from helpers import custom_def_review as _defr
+            if _defr.review_enabled():          # S4：審核開啟時，還原＝把舊版放回草稿（再走送審），不直接發布
+                try:
+                    r = _defr.restore_to_draft(conn, key, version, u)
+                except _defr.ReviewError as e:
+                    return JSONResponse({"detail": str(e), "problems": e.problems}, status_code=e.status)
+                _audit(_tok(authorization), "definitions.restore_to_draft", "ui_definition", "%s/%s/%s" % (kind, key, scope),
+                       "把 %s 第 %d 版放回草稿" % (key, version), {})
+                return r
         d = D.restore(conn, kind, key, scope, version, (payload or {}).get("note", ""), u["username"])
     except D.DefinitionError as e:
         return _err(e, 422 if e.problems else 400)

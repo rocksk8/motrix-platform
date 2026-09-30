@@ -19,6 +19,7 @@ from helpers import custom_modules as CM
 from helpers import custom_builder_support as SUP
 from helpers import custom_files as CFILES
 from helpers import custom_finance as CFIN
+from helpers import custom_def_review as DEFR
 from helpers import uploads as _uploads
 from core import registry as _registry
 from helpers import formula as FX
@@ -276,6 +277,9 @@ def output_custom_record(key: str, record_no: str, format: str = Query("html"), 
 _registry.provide(_uploads.PATH_ACCESS, CFILES.PROVIDER, CFILES.CustomFilesAccess)
 # 自訂模組的支出進營運報表（IP-9 expense.entries；名稱 custom_module）
 _registry.provide("expense.entries", "custom_module", CFIN.expense_entries)
+# 模組定義送審（S4）：簽核佇列的待簽項目與詳情（type custom_module_def）
+_registry.provide("approval.queue_items", "custom_module_def", DEFR.queue_items)
+_registry.provide("approval.detail", DEFR.QUEUE_TYPE, DEFR.detail)
 
 
 @router.post("/api/custom/{key}/files/{field}")
@@ -347,6 +351,66 @@ def custom_finance_summary(basis: str = Query("cash"), authorization: str = Head
         conn.close()
 
 
+# ── 模組定義送審（S4）：審核畫面與核可／退回（送審本身走 POST /api/definitions/custom_module/{key}/publish）──
+
+def _review_err(e):
+    return JSONResponse({"detail": str(e), "problems": e.problems}, status_code=e.status)
+
+
+@router.get("/api/custom-modules/{key}/definition/review")
+def custom_definition_review(key: str, authorization: str = Header(None)):
+    """送審中的那一版（簽核進度、與現行版的差異）＋被退回的歷史。最高管理者、簽核鏈上的人、申請人可讀。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        return {"reviewEnabled": DEFR.review_enabled(), **DEFR.open_view(conn, key, u)}
+    except DEFR.ReviewError as e:
+        return _review_err(e)
+    finally:
+        conn.close()
+
+
+@router.post("/api/custom-modules/{key}/definition/{version}/approve")
+def approve_custom_definition(key: str, version: int, payload: dict = Body(default={}), authorization: str = Header(None)):
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        out = DEFR.decide(conn, key, version, u, True, (payload or {}).get("note", ""))
+    except DEFR.ReviewError as e:
+        return _review_err(e)
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "custom_def.approve", "ui_definition", "custom_module/%s" % key, "核可 %s 第 %d 版定義" % (key, version), {"published": out["published"]})
+    return out
+
+
+@router.post("/api/custom-modules/{key}/definition/{version}/reject")
+def reject_custom_definition(key: str, version: int, payload: dict = Body(default={}), authorization: str = Header(None)):
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        out = DEFR.decide(conn, key, version, u, False, (payload or {}).get("note", ""))
+    except DEFR.ReviewError as e:
+        return _review_err(e)
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "custom_def.reject", "ui_definition", "custom_module/%s" % key, "退回 %s 第 %d 版定義" % (key, version), {"note": (payload or {}).get("note", "")})
+    return out
+
+
+@router.put("/api/custom-modules/definition-review")
+def set_custom_definition_review(payload: dict = Body(...), authorization: str = Header(None)):
+    """開／關「定義送審」（預設關；關閉時發布與過去一樣直接發布）。僅超級管理員；寫稽核。"""
+    from helpers.settings import _set_setting
+    _require_user(authorization, require_superadmin=True)
+    on = payload.get("enabled")
+    if not isinstance(on, bool):
+        raise HTTPException(400, "enabled 要是 true／false")
+    _set_setting(DEFR.SETTING_KEY, on)
+    _audit(_tok(authorization), "custom_def.review_toggle", "settings", DEFR.SETTING_KEY, "定義送審：%s" % ("開啟" if on else "關閉"), {})
+    return {"enabled": on}
+
+
 # ── 建構器輔助（僅超級管理員）──────────────────────────────────────────────
 
 @router.get("/api/custom-modules/catalog")
@@ -363,7 +427,7 @@ def custom_module_catalog(authorization: str = Header(None)):
             "outputBlockSpecs": dt.BLOCK_SPECS, "outputBlockItemSpecs": dt.BLOCK_ITEM_SPECS,
             "outputThemes": sorted(dt.THEMES), "outputFormats": ["html", "pdf"], "fieldFormats": list(dt.FORMATS),
             "approverSources": CM.APPROVER_SOURCES, "dataClasses": ["T1"],
-            "roles": list(SUP.VISIBLE_ROLES)}
+            "roles": list(SUP.VISIBLE_ROLES), "defReviewEnabled": DEFR.review_enabled()}
 
 
 @router.get("/api/custom-modules/templates/{tkey}")

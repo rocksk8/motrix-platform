@@ -1046,8 +1046,12 @@
                 <input id="mb-publish-note" class="mb-in" x-model="publishNote" placeholder="這一版改了什麼">
               </div>
               <div class="mb-row" style="margin-top:10px">
-                <button class="btn btn-primary" id="mb-publish" @click="publish()" :disabled="busy">發布</button>
+                <button class="btn btn-primary" id="mb-publish" @click="publish()" :disabled="busy" x-text="defReview ? '送審／發布' : '發布'">發布</button>
                 <span class="mb-hint">已建立的單據維持它建立時的版本；新單據用新版。</span>
+              </div>
+              <div class="mb-f" style="margin-top:8px" id="mb-review-box">
+                <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="mb-review-toggle" style="width:auto" :checked="defReview" @change="setDefReview($event.target.checked)"><span>定義送審（開啟後：送審→簽核層核可才發布；退回要填原因，版號不回收）</span></label>
+                <div class="mb-hint" x-show="submittedVersion()">第 <span x-text="submittedVersion()"></span> 版送審中，<a :href="'custom-def-review.html?key=' + encodeURIComponent(key)" id="mb-review-link">前往審核頁</a>。</div>
               </div>
               <template x-if="publishProblems.length">
                 <div class="mb-err mb-probs" id="mb-publish-problems">
@@ -1069,7 +1073,7 @@
                   <template x-for="v in versions" :key="v.version">
                     <tr :data-version="v.version">
                       <td x-text="v.version === 0 ? '草稿' : '第 ' + v.version + ' 版'"></td>
-                      <td x-text="v.status === 'draft' ? '草稿' : '已發布'"></td>
+                      <td :data-status="v.status" x-text="({ draft: '草稿', published: '已發布', submitted: '送審中', rejected: '已退回' }[v.status] || v.status) + (v.status === 'rejected' && v.decision && v.decision.reason ? '：' + v.decision.reason : '')"></td>
                       <td x-text="v.note || ''"></td>
                       <td x-text="v.published_by || v.created_by || ''"></td>
                       <td x-text="(v.published_at || v.created_at || '').replace('T', ' ').slice(0, 16)"></td>

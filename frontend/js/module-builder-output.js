@@ -177,6 +177,12 @@
           var r = await this.api('GET', this.defUrl())
           if (r.ok) { this.versions = r.data.versions || []; this.latestVersion = r.data.latest ? r.data.latest.version : 0 }
         },
+        async setDefReview(on) {
+          var r = await this.api('PUT', '/api/custom-modules/definition-review', { enabled: !!on })
+          if (r.ok) this.defReview = !!r.data.enabled
+          else this.errMsg = '設定失敗：' + ((r.data && r.data.detail) || r.status)
+        },
+        submittedVersion() { var v = (this.versions || []).find(function (x) { return x.status === 'submitted' }); return v ? v.version : 0 },
         async publish() {
           if (this.busy) return
           this.busy = true; this.publishProblems = []; this.errMsg = ''
@@ -191,7 +197,7 @@
             this.publishNote = ''
             this.draftProblems = []
             this.saveState = 'idle'
-            window.MotrixUI && window.MotrixUI.toast('已發布第 ' + r.data.version + ' 版', { kind: 'ok' })
+            window.MotrixUI && window.MotrixUI.toast(r.data.pending ? ('已送審第 ' + r.data.version + ' 版，等待審核') : ('已發布第 ' + r.data.version + ' 版'), { kind: 'ok' })
             await this.reloadVersions()
             await this.loadDiff()
             var p = await this.api('GET', '/api/custom-modules')
@@ -208,6 +214,11 @@
             var r = await this.api('POST', this.defUrl() + '/restore/' + v, { note: '' })
             if (r.status === 422) { this.publishProblems = (r.data && r.data.problems) || []; return }
             if (!r.ok) { this.errMsg = '還原失敗：' + ((r.data && r.data.detail) || r.status); return }
+            if (r.data.restoredToDraft) {               // 定義送審開啟時：還原＝把舊版放回草稿（再送審），不直接發布
+              window.MotrixUI && window.MotrixUI.toast('已把第 ' + v + ' 版放回草稿，確認後按「送審」', { kind: 'ok' })
+              await this.openKey(this.key)
+              return
+            }
             window.MotrixUI && window.MotrixUI.toast('已還原成第 ' + r.data.version + ' 版', { kind: 'ok' })
             // 草稿改成還原後的內容（否則畫面上的草稿仍是舊的編輯，下一次發布會把還原蓋掉）
             this._loading = true

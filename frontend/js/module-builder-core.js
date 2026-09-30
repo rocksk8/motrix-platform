@@ -14,7 +14,7 @@
         numExample: '', numProblems: [], _numTimer: null,
         fxProblems: {}, fxState: {}, _fxTimers: {}, whenProblems: {}, whenState: {}, _whenTimers: {},
         previewHtml: '', previewProblems: [], previewState: '', previewBusy: false,
-        diff: [], diffLoaded: false, publishNote: '', busy: false, _initDone: false,
+        diff: [], diffLoaded: false, publishNote: '', busy: false, _initDone: false, defReview: false,
         defs: [], defsLoaded: false, pdfBusy: false, pdfState: '', pdfBytes: 0,
 
         _hdr() {
@@ -40,6 +40,7 @@
           var cat = await this.api('GET', '/api/custom-modules/catalog')
           if (!cat.ok) { this.errMsg = '讀取能力目錄失敗：' + ((cat.data && cat.data.detail) || cat.status); return }
           this.catalog = cat.data
+          this.defReview = !!cat.data.defReviewEnabled
           var res = await Promise.all([this.api('GET', '/api/users'), this.api('GET', '/api/org/tree'), this.api('GET', '/api/custom-modules')])
           this.users = res[0].ok ? (res[0].data || []).filter(function (u) { return u.active !== 0 }) : []
           this.orgTree = res[1].ok ? (res[1].data || []) : []
