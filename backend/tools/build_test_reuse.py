@@ -39,7 +39,9 @@ _ENV_IGNORE = {"MOTRIX_PYTEST_LOCK", "MOTRIX_PYTEST_LOCK_WAIT", "MOTRIX_PYTEST_L
                # worker 上限（影響快慢與負載，不影響題目本身；反方論證見 PLAYBOOK §D-建包）、失敗先行 log、建包守門
                "MOTRIX_FULL_MAX_WORKERS", "MOTRIX_PARTIAL_MAX_WORKERS", "MOTRIX_E2E_MAX_WORKERS",
                "MOTRIX_FAIL_STREAM_RUN", "MOTRIX_FAIL_STREAM_STAGE", "MOTRIX_FAIL_STREAM_DIR",
-               "MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_BUILD_GUARD"}
+               "MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_BUILD_GUARD",
+               # 2026-10-01：固定測試日期由 commit 日期決定（同一份 tree 恆相同），建包在指紋算完之後才設；假時鐘只給邊界日矩陣用
+               "MOTRIX_TEST_TODAY", "MOTRIX_FAKE_NOW"}
 #: 不進指紋的檔（repo 相對路徑）：只決定「建包放不放行」、不決定任何一題過或不過（2026-09-30）
 REUSE_EXCLUDE = frozenset({"tools/platform/known_flakes.json"})
 #: 分段沿用認得的段名（建包與 modtest --full 都是這兩段）

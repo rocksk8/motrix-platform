@@ -42,7 +42,7 @@ def make_zip(files: dict) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for name, data in files.items():
-            zf.writestr(name, data)
+            zf.writestr(zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0)), data)   # 固定時間戳（zip 位元組不隨現在時間變；2026-10-01）
     return buf.getvalue()
 
 

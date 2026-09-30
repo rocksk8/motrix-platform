@@ -1,0 +1,23 @@
+{
+ "_說明": "預期值取決於行事曆日期（日／月／年邊界、午夜）的測試檔；conftest 給這些檔的每一題加 date_sensitive 標記，tools/platform/boundary_days.py 用固定時鐘（月初、月底、年底、23:59／00:01、閏日）各跑一次。新增日期相依題：寫 @pytest.mark.date_sensitive，或把檔加到這裡（附原因）。",
+ "tests/test_monthly_backup_2026_09_14.py": "月備份目錄名＝今天的年月（每月 1 號 bk9 同類）",
+ "tests/test_backup_retention_policy_2026_09_14.py": "保留份取『本月』『上個月』：月初／月底邊界（bk9 每月 1 號紅過）",
+ "tests/test_backup_retention_visible_2026_09_22.py": "保留份、月備份目錄用今天的年月與日期",
+ "tests/test_backup_stale_alert_2026_09_21.py": "備份過期小時數：跨午夜",
+ "tests/test_backup_freshness_disk_2026_09_14.py": "備份新鮮度：以現在時間扣小時，午夜前後",
+ "tests/test_daily_backup_identity_after_snapshot_2026_09_24.py": "每日備份目錄名＝今天日期，跨午夜會換目錄",
+ "tests/test_backup_same_as_2026_09_30.py": "備份日期目錄與比對",
+ "tests/test_cloud_archive_policy_2026_09_15.py": "雲端封存政策：以現在時間扣小時／天",
+ "tests/test_doc_versions_2026_09_14.py": "文件版本目錄名＝今天日期",
+ "tests/test_states_data_ops_2026_09_25.py": "狀態資料維運：依日期修剪備份、時鐘跳變",
+ "tests/test_audit_search_dos_2026_09_30.py": "稽核搜尋視窗 90 天／366 天：以今天扣天數",
+ "tests/test_case_project_overdue_2026_09_10.py": "案件逾期：以今天加減天數",
+ "tests/test_cert_expiry_2026_09_11.py": "憑證到期日＝今天加剩餘天數",
+ "tests/test_online_activity_2026_09_14.py": "上線活動：以現在時間扣天／秒",
+ "tests/test_company_setup_core_2026_09_28.py": "公司設定簽章有效期以今天加減天數",
+ "tests/test_licensing_core_2026_09_21.py": "授權有效天數：今天與到期日",
+ "tests/test_mp0c_purge_expired_google_geocode_2026_09_24.py": "地理編碼快取 30 天到期：以今天扣天數",
+ "modules/lodging/tests/test_lodging_records_2026_09_28.py": "住宿報價 quotedOn＝今天、3 天前、明天（未來日期 422）",
+ "modules/supply/tests/test_procurement_leadtime_api.py": "採購前置期 ETA 以今天為基準",
+ "modules/tender_radar/tests/test_tender_schedule_2026_09_21.py": "標案抓取時段：整點邊界"
+}

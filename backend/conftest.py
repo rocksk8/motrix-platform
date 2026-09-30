@@ -1001,6 +1001,13 @@ def pytest_configure(config):
     那時候已經來不及了。
     """
     global _lock_taken_by_me
+    # 固定測試日期不合法 ⇒ 整輪不開跑（靜默退回真實時間＝以為固定了其實沒有；見 tests/_clock.py）
+    if os.environ.get("MOTRIX_TEST_TODAY", "").strip():
+        from tests import _clock
+        try:
+            _clock.fixed_date()
+        except ValueError as exc:
+            raise pytest.UsageError(str(exc))
     # e2e 逐題上限（檔尾那一段）：主控在 worker 起來之前寫好本次執行的目錄 id，worker 繼承同一個值
     if not hasattr(config, "workerinput"):
         import uuid as _uuid
@@ -1351,6 +1358,38 @@ def pytest_collection_modifyitems(config, items):
     """
     config.addinivalue_line(
         "markers", "%s: 這一題確實需要對外連線（目前一個都沒有）" % _ALLOW_OUTBOUND)
+    _apply_date_sensitive(items)
+
+
+def _date_sensitive_manifest():
+    """tests/date_sensitive.json：{相對 backend/ 的測試檔: 為什麼日期敏感}。讀不到 ⇒ 空（不讓標記機制弄壞收集）。"""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tests", "date_sensitive.json"), encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+        return {k: v for k, v in data.items() if not k.startswith("_")} if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _apply_date_sensitive(items):
+    """清單裡的檔的每一題加上 `date_sensitive` 標記（邊界日矩陣 tools/platform/boundary_days.py 只跑有這個標記的題）。
+    新題也可以直接寫 `@pytest.mark.date_sensitive`。用清單而不改各測試檔：多條分支同時標記時不會互相衝突。"""
+    files = _date_sensitive_manifest()
+    if not files:
+        return
+    root = os.path.dirname(os.path.abspath(__file__))
+    marked = {os.path.normcase(os.path.join(root, *k.split("/"))) for k in files}
+    for item in items:
+        if os.path.normcase(str(item.path)) in marked:
+            item.add_marker(pytest.mark.date_sensitive)
+
+
+@pytest.fixture(autouse=True)
+def _test_clock(monkeypatch):
+    """MOTRIX_TEST_TODAY 有設 ⇒ 產品既有的三個時鐘接縫回同一天（見 tests/_clock.py 檔頭的限制）；沒設 ⇒ 不動。"""
+    from tests import _clock
+    _clock.install_seams(monkeypatch)
+    yield
 
 
 @pytest.fixture(autouse=True)
