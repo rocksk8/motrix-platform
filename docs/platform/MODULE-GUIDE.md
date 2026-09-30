@@ -253,3 +253,13 @@ modules/<key>/
 - 信中不放敏感金額（例：獎金分潤），請收件人登入查看。
 
 **守門**：`backend/tests/platform/test_mail_registry.py`——收件人呼叫要帶已登記的字面 key、寄送的主旨要由 `subject()` 產生、`_build_html` 第一個參數是已登記的 key、信件字串不含禁用詞；行為題涵蓋預設群組、僅超級管理員、指定帳號／角色、未登記 fail closed、系統技術類一般管理員不收、個人退訂只能移除。
+
+## 13. 金流串接（使用者 2026-09-30：「只要有收入、支出項，都需要跟營運報表或是相關模組數據串接」）
+
+**新模組只要有「金額」（收入或支出、收付款、手續費、獎金、成本…），就必須登記金流來源**，否則報表、出納、總帳看不見它：
+
+1. 支出（現金事件日固定）：註冊 IP-9 `expense.entries` 提供者，`fn(conn, start, end) -> [{date, quoteNo, desc, amount, category}]`；收入：`receivables.income_items`。**不 import 別的 L2 模組**；提供者不在＝少那一類並明說，不是 0。
+2. 收付款的「實收／入帳／手續費」語意一律用 L1 `helpers.tax_calc.receipt_amounts`（入帳＝實收、收入＝入帳＋手續費、淨額＝入帳；手續費另列費用），不自己重寫公式。
+3. 口徑不同的支出（權責日期≠現金日期，例：派工、叫料、額外支出）交給 M01 `case.recognition` 決定，其他模組不自己歸月。
+4. **登記**：同一個 commit 在 `docs/platform/money_flows.json` 加一筆（module／capability／name／direction／doc）並更新 `docs/platform/MONEY-FLOWS.md` 覆蓋表（報表現金／權責、案件成本、出納、T100 各格標 ✅／🔴／⚪＋理由）。守門 `tests/platform/test_money_flows_registered.py` 兩邊對帳：登記了沒宣告、宣告了沒登記都紅。
+5. 不是金流（文件、參考價、預算）在 MONEY-FLOWS.md §3 寫明理由，不進 `money_flows.json`。

@@ -1,0 +1,12 @@
+{
+  "_note": "金流來源登記（MONEY-FLOWS.md §5）。每個註冊 expense.entries／receivables.income_items 提供者的模組，必須在這裡留名；守門 tests/platform/test_money_flows_registered.py 兩邊對帳。新增金流來源的分支同一個 commit 更新本檔與 MONEY-FLOWS.md。",
+  "capabilities": ["expense.entries", "receivables.income_items"],
+  "flows": [
+    {"module": "arap",       "capability": "receivables.income_items", "name": "arap",                 "direction": "income",  "doc": "R1", "what": "案件收款品項（收入＝銀行入帳＋客戶內扣手續費）"},
+    {"module": "arap",       "capability": "expense.entries",          "name": "receipt_fee",          "direction": "expense", "doc": "R2", "what": "客戶內扣收款手續費"},
+    {"module": "subcontract","capability": "expense.entries",          "name": "remit_fee_contractor", "direction": "expense", "doc": "E2", "what": "承攬商匯款手續費"},
+    {"module": "case",       "capability": "expense.entries",          "name": "remit_fee_case",       "direction": "expense", "doc": "E4", "what": "額外支出匯款手續費"},
+    {"module": "payroll",    "capability": "expense.entries",          "name": "payslip",              "direction": "expense", "doc": "E7", "what": "勞報單付款"},
+    {"module": "payroll",    "capability": "expense.entries",          "name": "bonus",                "direction": "expense", "doc": "E8", "what": "獎金分潤發放"}
+  ]
+}
