@@ -64,13 +64,13 @@ def _uploads_root():
     return pathlib.Path(str(base))
 
 
-def _make_file(subfolder, file_id):
-    folder = _uploads_root() / subfolder
+def _make_file(subfolder, file_id, doc_key):
+    folder = _uploads_root() / subfolder / doc_key          # 真實配置：<資料夾>/<單據鍵>/<檔名>（W3：路徑必須在該單據自己的資料夾）
     folder.mkdir(parents=True, exist_ok=True)
     real = folder / ("%s.pdf" % file_id)
     real.write_bytes(b"%PDF-1.4 jv18")
     return {"id": file_id, "name": "%s.pdf" % file_id,
-            "path": "%s/%s" % (subfolder, real.name)}
+            "path": "%s/%s/%s" % (subfolder, doc_key, real.name)}
 
 
 def _seed_case(conn, quote_no):
@@ -91,8 +91,8 @@ def _seed_invoice_voucher_candidate(conn, quote_no, file_id, voucher_no=None):
     `invoice_voucher` 用的鍵就是 `voucher_no`，不要跟「帶入它的那張
     `vouchers_all` 傳票」搞混，那是兩張完全不同的表。
     """
-    f = _make_file("invoice_vouchers", file_id)
     vno = voucher_no or ("IV-" + file_id)
+    f = _make_file("invoice_vouchers", file_id, vno)
     conn.execute(
         "INSERT INTO invoice_vouchers (voucher_no, quote_no, scope, status,"
         " snapshot_json, data_json, created_by, created_at, updated_at,"

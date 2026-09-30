@@ -337,7 +337,7 @@ def _seed_quotation_with_file(quote_no="MQ-JV3-001", name="來源憑證.pdf"):
 
     base = getattr(up, "UPLOADS_ROOT", None)
     assert base, "`helpers/uploads.py` 沒有 `UPLOADS_ROOT` —— **退回給我**。"
-    folder = pathlib.Path(str(base)) / "quotations"
+    folder = pathlib.Path(str(base)) / "quotations" / quote_no       # 真實配置：<資料夾>/<單據鍵>/<檔>（W3：路徑必須在該單據自己的資料夾）
     folder.mkdir(parents=True, exist_ok=True)
     file_id = "jv3src001"
     real = folder / ("%s_%s" % (file_id, name))
@@ -366,7 +366,7 @@ def _seed_quotation_with_file(quote_no="MQ-JV3-001", name="來源憑證.pdf"):
         conn.execute(
             "UPDATE quotations SET signed_files_json = ? WHERE quote_no = ?",
             (json.dumps([{"id": file_id, "name": name,
-                          "path": "quotations/%s" % real.name}]), quote_no))
+                          "path": "quotations/%s/%s" % (quote_no, real.name)}]), quote_no))
         conn.commit()
     finally:
         conn.close()
@@ -507,7 +507,7 @@ def _seed_json_source(source_type, quote_no):
 
     made = {}
     for k in ("files", "invoiceFiles"):
-        folder = pathlib.Path(str(base)) / subfolder
+        folder = pathlib.Path(str(base)) / subfolder / ("%s_0" % quote_no)   # 真實配置（W3）：<資料夾>/<案件>_<索引>/<檔>
         folder.mkdir(parents=True, exist_ok=True)
         fid = "jv3_%s_%s" % (source_type, k)
         real = folder / ("%s.pdf" % fid)
@@ -518,7 +518,7 @@ def _seed_json_source(source_type, quote_no):
     for k in ("files", "invoiceFiles"):
         fid, real = made[k]
         node[k] = [{"id": fid, "name": "%s.pdf" % fid,
-                    "path": "%s/%s" % (subfolder, real.name)}]
+                    "path": "%s/%s_0/%s" % (subfolder, quote_no, real.name)}]
 
     data = {}
     cur = data

@@ -38,7 +38,7 @@ def _seed(client, u):
     from helpers.uploads import UPLOADS_ROOT
     metas = []
     for i, (fid, name, at) in enumerate(FILES):
-        rel = "vcsrc/%s.png" % fid
+        rel = "quotations/%s/%s.png" % (QNO, fid)          # 真實配置（W3：路徑必須在該案件自己的資料夾）
         full = os.path.join(UPLOADS_ROOT, rel)
         os.makedirs(os.path.dirname(full), exist_ok=True)
         with open(full, "wb") as f:
