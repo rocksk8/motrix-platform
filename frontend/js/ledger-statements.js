@@ -20,6 +20,8 @@ function ledgerStatementsPage() {
     error: '',
     bs: null,
     is: null,
+    eq: null,
+    cf: null,
     open: {},
 
     _initDone: false,
@@ -55,6 +57,14 @@ function ledgerStatementsPage() {
           const r = await this._api('/api/ledger/balance-sheet?as_of=' + this.asOf + (this.compareAsOf ? '&compare_as_of=' + this.compareAsOf : '') + base)
           if (seq !== this._seq) return
           this.bs = r
+        } else if (this.tab === 'cf') {
+          const r = await this._api('/api/ledger/cash-flow?start=' + this.start + '&end=' + this.end + '&include_drafts=' + this.drafts)
+          if (seq !== this._seq) return
+          this.cf = r
+        } else if (this.tab === 'eq') {
+          const r = await this._api('/api/ledger/equity-statement?start=' + this.start + '&end=' + this.end + '&include_drafts=' + this.drafts)
+          if (seq !== this._seq) return
+          this.eq = r
         } else if (this.tab === 'is') {
           const cmp = this.compareStart && this.compareEnd ? '&compare_start=' + this.compareStart + '&compare_end=' + this.compareEnd : ''
           const r = await this._api('/api/ledger/income-statement?start=' + this.start + '&end=' + this.end + cmp + base)
@@ -114,6 +124,19 @@ function ledgerStatementsPage() {
       if (this.tab === 'bs' && this.bs) {
         rows.push(['項目', this.bs.as_of])
         for (const r of this.bsRows()) rows.push([r.label, r.amount === null ? '' : r.amount])
+      } else if (this.tab === 'cf' && this.cf) {
+        rows.push(['項目', this.cf.start + '～' + this.cf.end])
+        for (const sec of this.cf.sections) {
+          rows.push([sec.title, ''])
+          for (const l of sec.lines) rows.push(['　' + l.label, l.amount])
+          rows.push([sec.title + '淨額', sec.total])
+        }
+        rows.push(['本期現金及約當現金淨變動', this.cf.net_change])
+        rows.push(['期初現金及約當現金', this.cf.cash_opening])
+        rows.push(['期末現金及約當現金', this.cf.cash_closing])
+      } else if (this.tab === 'eq' && this.eq) {
+        rows.push(['項目'].concat(this.eq.columns.map(c => c.label)))
+        for (const r of this.eq.rows) rows.push([r.label].concat(this.eq.columns.map(c => r.amounts[c.key])))
       } else if (this.tab === 'is' && this.is) {
         rows.push(['項目', '本期 ' + this.is.start + '～' + this.is.end, '年初至今'])
         for (const l of this.is.lines) rows.push([l.label, l.period, l.ytd])

@@ -50,12 +50,17 @@
       <div class="st-tabs">
         <button class="st-tab" :class="{on: tab==='bs'}" @click="setTab('bs')" data-testid="st-tab-bs">資產負債表</button>
         <button class="st-tab" :class="{on: tab==='is'}" @click="setTab('is')" data-testid="st-tab-is">綜合損益表</button>
+        <button class="st-tab" :class="{on: tab==='eq'}" @click="setTab('eq')" data-testid="st-tab-eq">權益變動表</button>
+        <button class="st-tab" :class="{on: tab==='cf'}" @click="setTab('cf')" data-testid="st-tab-cf">現金流量表</button>
       </div>
 
       <div class="st-bar">
         <template x-if="tab==='bs'">
           <span>截至 <input class="st-input" type="date" x-model="asOf" data-testid="st-as-of">
             　比較 <input class="st-input" type="date" x-model="compareAsOf" data-testid="st-compare-as-of"></span>
+        </template>
+        <template x-if="tab==='eq' || tab==='cf'">
+          <span><input class="st-input" type="date" x-model="start" data-testid="st-start"> ～ <input class="st-input" type="date" x-model="end" data-testid="st-end"></span>
         </template>
         <template x-if="tab==='is'">
           <span><input class="st-input" type="date" x-model="start" data-testid="st-start"> ～ <input class="st-input" type="date" x-model="end" data-testid="st-end">
@@ -90,6 +95,65 @@
               </template>
             </tbody>
           </table>
+        </div>
+      </template>
+
+      <!-- 現金流量表（間接法） -->
+      <template x-if="tab==='cf' && cf">
+        <div>
+          <div class="st-err" x-show="!cf.checks.balanced" data-testid="st-cf-unbalanced">
+            現金流量表對帳未通過：
+            <span x-show="!cf.checks.activities_equal_cash_change">三大活動合計與現金淨變動不符；</span>
+            <span x-show="!cf.checks.cash_reconciles_to_balance_sheet">期初現金＋淨變動≠資產負債表期末現金；</span>
+            <span x-show="!cf.checks.net_income_matches_income_statement">淨利與損益表不一致；</span>
+            <span x-show="cf.unclassified.length" x-text="'以下科目有變動卻沒有現金流量分類：' + cf.unclassified.map(u => u.code + ' ' + u.name).join('、') + '（請到「報表設定」分類）'"></span>
+          </div>
+          <div class="st-ok" x-show="cf.checks.balanced" data-testid="st-cf-ok">三大活動合計＝現金淨變動，期末現金＝資產負債表現金（對帳通過）。</div>
+          <table class="st-table" data-testid="st-cf-table">
+            <tbody>
+              <template x-for="sec in cf.sections" :key="sec.key">
+                <template x-for="(row, ri) in [{h: true}].concat(sec.lines).concat([{t: true}])" :key="sec.key + ri">
+                  <tr :class="row.h ? 'st-sec' : (row.t ? 'st-total' : 'st-item')" :data-testid="row.t ? 'st-cf-total-' + sec.key : null">
+                    <td :style="(row.h || row.t) ? '' : 'padding-left:28px'" x-text="row.h ? sec.title : (row.t ? sec.title + '淨額' : row.label)"></td>
+                    <td class="num" x-text="row.h ? '' : fmt(row.t ? sec.total : row.amount)"></td>
+                  </tr>
+                </template>
+              </template>
+              <tr class="st-total" data-testid="st-cf-net"><td>本期現金及約當現金淨變動</td><td class="num" x-text="fmt(cf.net_change)"></td></tr>
+              <tr><td>期初現金及約當現金</td><td class="num" x-text="fmt(cf.cash_opening)"></td></tr>
+              <tr class="st-total" data-testid="st-cf-closing"><td>期末現金及約當現金</td><td class="num" x-text="fmt(cf.cash_closing)"></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+      <!-- 權益變動表 -->
+      <template x-if="tab==='eq' && eq">
+        <div>
+          <div class="st-err" x-show="!eq.checks.balanced" data-testid="st-eq-unbalanced">
+            權益變動表對帳未通過：
+            <span x-show="!eq.checks.closing_equals_balance_sheet">期末權益與資產負債表不符；</span>
+            <span x-show="!eq.checks.reconciled" x-text="'期初＋變動與期末差 ' + fmt(eq.unexplained.total) + '（期間內有期初傳票或帳上資料異常）；'"></span>
+            <span x-show="!eq.checks.income_statement_balanced || !eq.checks.balance_sheet_balanced">損益表或資產負債表本身不平衡。</span>
+          </div>
+          <div class="st-ok" x-show="eq.checks.balanced" data-testid="st-eq-ok">期初＋本期變動＝期末，且期末權益＝資產負債表權益（對帳通過）。</div>
+          <table class="st-table" style="max-width:1100px" data-testid="st-eq-table">
+            <tbody>
+              <tr class="st-sec"><td>項目</td><template x-for="c in eq.columns" :key="c.key"><td class="num" x-text="c.label"></td></template></tr>
+              <template x-for="r in eq.rows" :key="r.key">
+                <tr :class="r.key === 'opening' || r.key === 'closing' ? 'st-total' : ''" :data-testid="'st-eq-row-' + r.key">
+                  <td x-text="r.label"></td>
+                  <template x-for="c in eq.columns" :key="c.key"><td class="num" x-text="fmt(r.amounts[c.key])" :data-col="c.key"></td></template>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div class="st-note" style="margin-top:8px" x-show="eq.rows[3].details && Object.keys(eq.rows[3].details).length">
+            其他變動明細：
+            <template x-for="(items, col) in eq.rows[3].details" :key="col">
+              <span><template x-for="i in items" :key="i.code"><span x-text="i.code + ' ' + i.name + ' ' + fmt(i.amount) + '　'"></span></template></span>
+            </template>
+          </div>
         </div>
       </template>
 

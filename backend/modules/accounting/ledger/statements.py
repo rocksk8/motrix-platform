@@ -38,7 +38,9 @@ def balance_sheet(conn, as_of, include_drafts=False, show_zero=False):
     lines = _lines(conn, "BS")
     by_line, unmapped = {}, []
     cur_pl = 0                       # 本年度尚未結轉的損益（貸方為正＝獲利）
+    cur_oci = 0                      # 其中屬其他綜合損益者（權益變動表歸其他權益欄）
     prior_pl = 0                     # 以前年度尚未結轉的損益
+    equity_lines = {}                # 權益各列的貸方淨額（貸方為正；庫藏股為負）——權益變動表用
     for r in tb["rows"]:
         if not r["code"]:            # 以前年度損益（尚未結轉）補列
             prior_pl = -(r["closing_debit"] - r["closing_credit"])
@@ -46,8 +48,12 @@ def balance_sheet(conn, as_of, include_drafts=False, show_zero=False):
         m = meta.get(r["code"]) or {}
         if m.get("acct_type") in PL_TYPES:
             cur_pl += r["closing_credit"] - r["closing_debit"]
+            if m.get("acct_type") == "oci":
+                cur_oci += r["closing_credit"] - r["closing_debit"]
             continue
         net = r["closing_debit"] - r["closing_credit"]
+        if (m.get("fs_line") or "").startswith("BS_EQ_"):
+            equity_lines[m["fs_line"]] = equity_lines.get(m["fs_line"], 0) - net
         if net == 0 and not show_zero:
             continue
         fs = m.get("fs_line") or ""
@@ -87,7 +93,7 @@ def balance_sheet(conn, as_of, include_drafts=False, show_zero=False):
         "sections": {"current_assets": ca, "noncurrent_assets": nca, "current_liabilities": cl,
                      "noncurrent_liabilities": ncl, "equity": eq},
         "totals": {"assets": assets, "liabilities": liabilities, "equity": equity, "liabilities_and_equity": liabilities + equity},
-        "current_pl": cur_pl, "prior_pl": prior_pl, "unmapped": unmapped,
+        "current_pl": cur_pl, "current_oci": cur_oci, "prior_pl": prior_pl, "equity_lines": equity_lines, "unmapped": unmapped,
         "checks": {"balanced": diff == 0 and tb["balanced"] and not unmapped, "diff": diff, "trial_balance_balanced": tb["balanced"]},
     }
 

@@ -401,6 +401,8 @@
     "mod:accounting/api/voucher_summary",
     "mod:accounting/api/voucher_providers",
     "mod:accounting/api/ledger_statements",
+    "mod:accounting/ledger/cashflow",
+    "mod:accounting/ledger/equity",
     "mod:accounting/ledger/statements",
     "js:js/ledger-statements.js",
     "page:pages/ledger-statements.html",

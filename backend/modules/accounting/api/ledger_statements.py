@@ -10,6 +10,8 @@ from fastapi import APIRouter, Header, HTTPException
 
 from db import get_db
 from helpers import _require_user, require_any_module
+from modules.accounting.ledger import cashflow as _cf
+from modules.accounting.ledger import equity as _eq
 from modules.accounting.ledger import statements as _st
 
 router = APIRouter(prefix="/api/ledger", tags=["ledger"])
@@ -75,6 +77,39 @@ def statements_check(as_of: str, include_drafts: bool = False, authorization: st
     conn = get_db()
     try:
         return _st.check_consistency(conn, a, include_drafts)
+    finally:
+        conn.commit()
+        conn.close()
+
+
+@router.get("/equity-statement")
+def equity_statement(start: str, end: str, include_drafts: bool = False, authorization: str = Header(None)):
+    """權益變動表（期間不可跨會計年度）。`checks.balanced=False`＝期末權益與資產負債表不符或欄位對不起來，畫面必須明說。"""
+    _require_stmt_read(authorization)
+    s, e = _d(start, "起日"), _d(end, "迄日")
+    conn = get_db()
+    try:
+        try:
+            return _eq.equity_statement(conn, s, e, include_drafts)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+    finally:
+        conn.commit()
+        conn.close()
+
+
+@router.get("/cash-flow")
+def cash_flow(start: str, end: str, include_drafts: bool = False, authorization: str = Header(None)):
+    """現金流量表（間接法；期間不可跨會計年度）。`checks.balanced=False`＝三大活動與現金淨變動對不起來、期末現金與資產負債表不符、
+    或有變動的科目沒分類——畫面必須明說，不可當成正常報表。"""
+    _require_stmt_read(authorization)
+    s, e = _d(start, "起日"), _d(end, "迄日")
+    conn = get_db()
+    try:
+        try:
+            return _cf.cash_flow_statement(conn, s, e, include_drafts)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
     finally:
         conn.commit()
         conn.close()
