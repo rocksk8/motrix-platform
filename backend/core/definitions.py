@@ -2,7 +2,7 @@
 """定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。
 
 [單位] plat:definitions    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] DefinitionError, KINDS, decide_submitted, delete_draft, diff, get, list_definitions, open_submission, publish,
+[公開介面] DefinitionConflict, DefinitionError, KINDS, decide_submitted, delete_draft, diff, get, list_definitions, open_submission, publish,
     register_default, register_validator, resolve, restore, save_decision, save_draft, submit_draft, validate, versions
 [不變式] 每個 (kind, key, scope) 最多一份草稿；已發布的版本不可改、不可刪；還原＝把舊版再發布成新的一版；發布前驗證不過就不發布
 [契約題] tests/test_definitions_store_2026_09_25.py

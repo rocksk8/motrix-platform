@@ -1223,11 +1223,12 @@ class _Effects:
             _notify(username, type_, ref_id, ref_label, message)
         self.later.append(_send)
 
-    def mail(self, fn_name, *args, **kw):
-        """信件：與站內通知同一條路（commit 之後才寄；寄不出去不影響已 commit 的狀態）。"""
+    def mail(self, fn_name, *args, module_key=""):
+        """信件：與站內通知同一條路（commit 之後才寄；寄不出去不影響已 commit 的狀態）。
+        （`**` 呼叫棘輪：各 notify_custom_record_* 只吃一個關鍵字參數 module_key，明寫、不用 `**kw` 轉送。）"""
         def _send():
             from helpers import email_notify as _en
-            getattr(_en, fn_name)(*args, **kw)
+            getattr(_en, fn_name)(*args, module_key=module_key)
         self.later.append(_send)
 
     def flush(self):
