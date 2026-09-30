@@ -147,7 +147,8 @@
    "router:search",
    "router:system",
    "router:uploads",
-   "router:attachments"
+   "router:attachments",
+   "helper:gl_status"
   ],
   "tables": [
    "approval_delegates",
@@ -466,7 +467,8 @@
     "js:js/ledger-reports.js",
     "page:pages/ledger-periods.html",
     "page:pages/ledger-reports.html",
-    "mod:accounting/attachments_catalog"
+    "mod:accounting/attachments_catalog",
+    "mod:accounting/ledger/source_status"
    ],
    "tables": [
     "account_items",

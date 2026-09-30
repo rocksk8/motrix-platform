@@ -72,6 +72,8 @@ function cashierApp() {
     receiveNote:          '',
     receiveBankAcctCode:  '',
     receiveSaving:        false,
+    // MONEY-FLOWS §9 L3：改動已入總帳的收款時的非阻擋提示（行內可關閉；不用 alert，避免卡住頁面）
+    glNotice:             '',
     // T100 傳票匯出設定裡的銀行帳戶清單（2026-09-01 新增），標記已收款/已匯款
     // 時挑選要用哪個帳戶；每次開啟標記 Modal 都重抓最新清單，見
     // loadT100BankAccounts()
@@ -592,6 +594,7 @@ function cashierApp() {
           })
         })
         if (!r.ok) { alert(await _caseActionError(r)); this.receiveSaving = false; return }
+        this.glNotice = (await r.json().catch(() => ({}))).glWarning || ''
         this.receiveModal = false
         this.receiveTarget = null
         await Promise.all([this.loadReceivable(), this.loadCashierHistory()])
@@ -608,6 +611,7 @@ function cashierApp() {
           body: JSON.stringify({ received, receivedAt: '', receivedBy: '', ...(item.itemId != null ? { itemId: item.itemId } : {}) })
         })
         if (!r.ok) { alert(await _caseActionError(r)); return }
+        this.glNotice = (await r.json().catch(() => ({}))).glWarning || ''
         await this.loadReceivable()
       } catch (e) { alert('更新收款狀態失敗：' + e.message) }
     },

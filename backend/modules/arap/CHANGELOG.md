@@ -6,6 +6,9 @@
 ## (next) — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
 - 匯出規則（使用者 2026-09-30）：出納執行紀錄 Excel 匯出加 PDF 姊妹（`/api/cashier/export/pdf`），每次匯出寫稽核。
 
+## 1.0.20 — 2026-09-30（暫用號，列車取號；wip/w2-gl-warn：已入帳來源的修改提示（MONEY-FLOWS §9 L3））
+- 出納頁（`pages/cashier.html`／`js/cashier.js`）：取消或改動已入總帳的收款時，回應帶 `glWarning` ⇒ 頁首行內可關閉提示（不用 alert）。
+
 ## 1.0.19 — 2026-09-30（暫用號，列車取號；W4 總帳 R12 畫面）
 - 出納頁『標記已匯款』視窗：個人外包人員逐位挑選勞報單（R12，經承攬商匯款單的 `personnel-links`／`personnel-link` 端點），顯示勞報單實付與匯款金額差異；未通過驗證時按鈕停用並顯示原因。純畫面，無新端點、無 migration。
 
