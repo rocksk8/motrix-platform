@@ -5007,62 +5007,68 @@
      "path": "/api/cashier/pending-payables"
     },
     {
-     "func": "pay_pending_payable",
+     "func": "get_payee_bank",
      "line": 103,
+     "method": "GET",
+     "path": "/api/cashier/pending-payables/{source}/{key}/payee-bank"
+    },
+    {
+     "func": "pay_pending_payable",
+     "line": 135,
      "method": "POST",
      "path": "/api/cashier/pending-payables/{source}/{key}/pay"
     },
     {
      "func": "get_remit_reviews",
-     "line": 164,
+     "line": 203,
      "method": "GET",
      "path": "/api/cashier/remit-reviews"
     },
     {
      "func": "decide_remit_review",
-     "line": 183,
+     "line": 222,
      "method": "POST",
      "path": "/api/cashier/remit-reviews/{source}/{key}/decision"
     },
     {
      "func": "get_payable_queue",
-     "line": 295,
+     "line": 334,
      "method": "GET",
      "path": "/api/cashier/payable-queue"
     },
     {
      "func": "get_receivable_queue",
-     "line": 306,
+     "line": 345,
      "method": "GET",
      "path": "/api/cashier/receivable-queue"
     },
     {
      "func": "get_payslip_queue",
-     "line": 328,
+     "line": 367,
      "method": "GET",
      "path": "/api/cashier/payslip-queue"
     },
     {
      "func": "get_bonus_queue",
-     "line": 348,
+     "line": 387,
      "method": "GET",
      "path": "/api/cashier/bonus-queue"
     },
     {
      "func": "get_execution_history",
-     "line": 407,
+     "line": 446,
      "method": "GET",
      "path": "/api/cashier/execution-history"
     },
     {
      "func": "export_execution_history",
-     "line": 422,
+     "line": 461,
      "method": "GET",
      "path": "/api/cashier/export"
     },
     {
      "func": "bank_reconcile",
-     "line": 631,
+     "line": 670,
      "method": "POST",
      "path": "/api/reports/bank-reconcile"
     }
