@@ -527,6 +527,9 @@
             <button class="tab" :class="{on:activeTab==='ar'}" @click="showArTab()">
               帳齡分析<span class="tab__cnt" x-show="arAging" x-text="arAging ? arAging.total.count : ''"></span>
             </button>
+            <button class="tab" data-testid="tab-gldiff" :class="{on:activeTab==='gldiff'}" @click="showGlDiffTab()">
+              與總帳差異
+            </button>
             <button class="tab" :class="{on:activeTab==='cashpos'}" @click="showCashPosTab()">
               資金水位<span class="tab__cnt" x-show="cashPos" x-text="cashPos ? (cashPos.ar.count + cashPos.ap.count) : ''"></span>
             </button>
@@ -1852,6 +1855,78 @@
           </div>
 
           <!-- 資金水位 -->
+          <div x-show="activeTab==='gldiff'" class="panel" data-testid="gldiff-panel">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+              <select class="filter" data-testid="gldiff-year" x-model.number="glDiffYear" @change="loadGlDiff()">
+                <template x-for="y in [glDiffYear-2, glDiffYear-1, glDiffYear, glDiffYear+1].filter((v, i, a) => a.indexOf(v) === i)" :key="y">
+                  <option :value="y" x-text="y + ' 年'"></option>
+                </template>
+              </select>
+              <div class="period-type-tabs">
+                <button class="period-type-btn" data-testid="gldiff-basis-cash" :class="{on:glDiffBasis==='cash'}" @click="glDiffBasis='cash'; loadGlDiff()">現金（含稅）</button>
+                <button class="period-type-btn" data-testid="gldiff-basis-accrual" :class="{on:glDiffBasis==='accrual'}" @click="glDiffBasis='accrual'; loadGlDiff()">權責（未稅）</button>
+              </div>
+              <span style="font-size:12px;color:var(--text-dim)">唯讀：營運報表的數字 vs 總帳已過帳金額；差額依原因分桶。</span>
+            </div>
+            <div x-show="glDiffLoading" class="loading-text">載入中…</div>
+            <div x-show="glDiffError" data-testid="gldiff-error" style="color:#b91c1c;padding:8px 0" x-text="glDiffError"></div>
+            <template x-if="glDiff && !glDiffLoading">
+              <div>
+                <div x-show="!glDiff.glAvailable" data-testid="gldiff-unavailable" style="padding:10px;background:#fef3c7;border-radius:6px;margin-bottom:10px"
+                     x-text="'總帳不可用：' + glDiff.glNotice + '（只顯示營運報表欄）'"></div>
+                <div x-show="glDiff.incomeNotice" style="padding:6px 0;color:var(--text-secondary);font-size:12px" x-text="glDiff.incomeNotice"></div>
+                <table class="data-table" data-testid="gldiff-table">
+                  <thead><tr>
+                    <th>月份</th><th>收入：報表</th><th x-show="glDiff.glAvailable">總帳</th><th x-show="glDiff.glAvailable">差額</th>
+                    <th>支出：報表</th><th x-show="glDiff.glAvailable">總帳</th><th x-show="glDiff.glAvailable">差額</th>
+                    <th x-show="glDiff.glAvailable">待處理事件</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="m in glDiff.months" :key="m.month">
+                      <tr :data-month="m.month">
+                        <td x-text="m.month"></td>
+                        <td x-text="fmt(m.income.report)"></td>
+                        <td x-show="glDiff.glAvailable" x-text="fmt(m.income.gl)"></td>
+                        <td x-show="glDiff.glAvailable" :style="m.income.diff ? 'color:#b91c1c' : ''" x-text="fmt(m.income.diff)"></td>
+                        <td x-text="fmt(m.expense.report)"></td>
+                        <td x-show="glDiff.glAvailable" x-text="fmt(m.expense.gl)"></td>
+                        <td x-show="glDiff.glAvailable" :style="m.expense.diff ? 'color:#b91c1c' : ''" x-text="fmt(m.expense.diff)"></td>
+                        <td x-show="glDiff.glAvailable" x-text="m.pendingEvents ? (m.pendingEvents.drift + m.pendingEvents.orphan + m.pendingEvents.blocked) : 0"></td>
+                      </tr>
+                    </template>
+                    <tr style="font-weight:600" data-testid="gldiff-total">
+                      <td>合計</td>
+                      <td x-text="fmt(glDiff.totals.income.report)"></td>
+                      <td x-show="glDiff.glAvailable" x-text="fmt(glDiff.totals.income.gl)"></td>
+                      <td x-show="glDiff.glAvailable" x-text="fmt(glDiff.totals.income.diff)"></td>
+                      <td x-text="fmt(glDiff.totals.expense.report)"></td>
+                      <td x-show="glDiff.glAvailable" x-text="fmt(glDiff.totals.expense.gl)"></td>
+                      <td x-show="glDiff.glAvailable" x-text="fmt(glDiff.totals.expense.diff)"></td>
+                      <td x-show="glDiff.glAvailable"></td>
+                    </tr>
+                  </tbody>
+                </table>
+                <template x-if="glDiff.glAvailable">
+                  <div style="margin-top:14px">
+                    <div style="font-weight:600;margin-bottom:6px">差額原因（有差額的月份；正值＝報表比總帳多）</div>
+                    <template x-for="m in glDiff.months.filter(x => x.income.diff || x.expense.diff)" :key="'b' + m.month">
+                      <div style="margin-bottom:8px;font-size:13px" :data-buckets="m.month">
+                        <b x-text="m.month"></b>
+                        <span>收入：</span>
+                        <template x-for="(v, k) in m.income.buckets" :key="'i' + k"><span x-show="v" style="margin-right:8px" x-text="glDiffBucketLabel(k) + ' ' + fmt(v)"></span></template>
+                        <span style="margin-left:10px">支出：</span>
+                        <template x-for="(v, k) in m.expense.buckets" :key="'e' + k"><span x-show="v" style="margin-right:8px" x-text="glDiffBucketLabel(k) + ' ' + fmt(v)"></span></template>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+                <ul style="margin-top:12px;font-size:12px;color:var(--text-secondary);padding-left:18px">
+                  <template x-for="n in glDiff.notes" :key="n"><li x-text="n"></li></template>
+                </ul>
+              </div>
+            </template>
+          </div>
+
           <div x-show="activeTab==='cashpos'" class="panel">
             <div x-show="cashPosLoading" class="loading-text">資金水位載入中…</div>
             <template x-if="cashPos && !cashPosLoading">

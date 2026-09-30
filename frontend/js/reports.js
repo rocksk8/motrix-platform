@@ -48,6 +48,13 @@ function reportsApp() {
     cashPosLoading: false,
     cashPosLoaded:  false,
 
+    // ── 與總帳差異（MONEY-FLOWS §9 L4；唯讀）
+    glDiff:        null,
+    glDiffLoading: false,
+    glDiffYear:    new Date().getFullYear(),
+    glDiffBasis:   'cash',
+    glDiffError:   '',
+
     // ── 稅務匯出（銷項發票清單）
     taxExportYear:  new Date().getFullYear(),
     taxExportMonth: '',   // '' = 整年
@@ -1351,6 +1358,32 @@ function reportsApp() {
     // 科目代號設定完成度（視覺化提示用，非阻擋匯出的硬性檢查）：核心科目
     // （銷貨收入/銷項稅額/承攬商費用）與至少一個銀行帳戶都設定了，才算「已設定」。
     // 料件分類科目代號允許部分留白（可能有些分類真的沒進貨過），不列入判斷。
+
+    async showGlDiffTab() {
+      this.activeTab = 'gldiff'
+      if (!this.glDiff) await this.loadGlDiff()
+    },
+
+    async loadGlDiff() {
+      this.glDiffLoading = true
+      this.glDiffError = ''
+      try {
+        var res = await fetch('/api/reports/ledger-diff?year=' + this.glDiffYear + '&basis=' + this.glDiffBasis, {
+          headers: { Authorization: 'Bearer ' + this._token() }
+        })
+        if (!res.ok) throw new Error((await res.json().catch(function () { return {} })).detail || '載入失敗')
+        this.glDiff = await res.json()
+      } catch (e) {
+        this.glDiff = null
+        this.glDiffError = '與總帳差異載入失敗：' + (e.message || e)
+      } finally {
+        this.glDiffLoading = false
+      }
+    },
+
+    glDiffBucketLabel(k) {
+      return { unposted: '總帳未過帳草稿', tax: '稅額（報表含稅）', manual: '手工傳票', bonus: '獎金傳票', residual: '其餘（口徑／時點）' }[k] || k
+    },
 
     async showCashPosTab() {
       this.activeTab = 'cashpos'
