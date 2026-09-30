@@ -69,7 +69,17 @@ def pinned_net_source(repo=REPO):
 def extract_network(text):
     """⇒ {"source_blob", "server_ip"}：舊版 main.py 的 CORS 預設清單裡，本機以外的那一個 IP（必須恰好一個）。"""
     import re
-    ips = set(re.findall(r"https?://(\d{1,3}(?:\.\d{1,3}){3}):666", text)) - {"127.0.0.1"}
+    import ast as _ast
+    strings = []
+    try:
+        for n in _ast.walk(_ast.parse(text)):
+            if isinstance(n, _ast.Assign) and len(n.targets) == 1 and getattr(n.targets[0], "id", "") == "_DEFAULT_CORS_ORIGINS" and isinstance(n.value, _ast.List):
+                strings = [e.value for e in n.value.elts if isinstance(e, _ast.Constant) and isinstance(e.value, str)]
+    except SyntaxError:
+        strings = []
+    if not strings:                                   # 測試用的最小片段（不是完整 main.py）：退回整段文字
+        strings = [text]
+    ips = {ip for s_ in strings for ip in re.findall(r"https?://(\d{1,3}(?:\.\d{1,3}){3}):666", s_)} - {"127.0.0.1"}
     if len(ips) != 1:
         raise SystemExit("舊版 main.py 的結構與預期不同，抽不出伺服器 IP（不印細節）")
     return {"source_blob": PINNED_NET_BLOB, "server_ip": ips.pop()}

@@ -251,17 +251,24 @@ def test_apply_plan_never_deletes_or_lists_the_own_payload():
 
 
 def test_apply_plan_end_to_end_keeps_the_installed_payload_when_the_new_package_lacks_it(tmp_path):
-    sys.path.insert(0, str(BACKEND))
-    from core import upgrade as U
-    from tools import apply_plan as AP
+    """子行程執行：apply_plan.load_classifier 會改 sys.path 並匯入新包的 core（同行程跑會污染其他題）。"""
+    import shutil
+    import subprocess
     root, pkg = tmp_path / "inst", tmp_path / "pkg"
     for base in (root, pkg):
         (base / "backend" / "migrations_frozen").mkdir(parents=True)
-        (base / "backend" / "migrations_frozen" / "__init__.py").write_text("x", encoding="utf-8")
+        (base / "backend" / "migrations_frozen" / "keep_me.txt").write_text("x", encoding="utf-8")
     (root / "backend" / "migrations_frozen" / "own_payload.json").write_text("{}", encoding="utf-8")
-    (root / "backend" / ".deployed_files.json").write_text(json.dumps({"commit": "c", "package_files": [
-        "backend/migrations_frozen/__init__.py", "backend/migrations_frozen/own_payload.json"]}), encoding="utf-8")
-    import shutil
+    (root / "backend" / "migrations_frozen" / "old_program_file.py").write_text("y", encoding="utf-8")
+    (root / "backend" / ".deployed_files.json").write_text(json.dumps({"commit": "c", "files": [
+        "backend/migrations_frozen/keep_me.txt", "backend/migrations_frozen/own_payload.json", "backend/migrations_frozen/old_program_file.py"]}), encoding="utf-8")
     shutil.copytree(BACKEND / "core", pkg / "backend" / "core", ignore=shutil.ignore_patterns("__pycache__"))   # make_plan 用「新包的」分類器
-    plan = AP.make_plan(str(root), str(pkg), 200)
-    assert "own_payload.json" not in json.dumps(plan, default=str, ensure_ascii=False), plan
+    code = ("import sys, json; sys.path.insert(0, %r)\nfrom tools import apply_plan as AP\n"
+            "plan = AP.make_plan(%r, %r, 200)\nprint('PLAN=' + json.dumps(plan, default=str, ensure_ascii=False))") % (str(BACKEND), str(root), str(pkg))
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, encoding="utf-8", timeout=120)
+    assert r.returncode == 0, r.stderr[-600:]
+    plan = json.loads(r.stdout.split("PLAN=", 1)[1])
+    deleted = [d["rel"] for d in plan["delete"]]
+    assert "backend/migrations_frozen/own_payload.json" not in deleted, plan["delete"]
+    assert "backend/migrations_frozen/own_payload.json" not in plan["package_files"]
+    assert deleted == ["backend/migrations_frozen/old_program_file.py"], "對照：舊包有、新包沒有的一般程式檔照常進刪除清單（否則這題什麼都沒證明）"

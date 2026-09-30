@@ -114,7 +114,7 @@
     {
       "path": "firewall_setup.bat",
       "name": "firewall-rule",
-      "stub": "set \"REMOTE=%~1\"\nif \"%REMOTE%\"==\"\" (\n    echo Usage: firewall_setup.bat ^<allowed network, e.g. 192.168.1.0/24^>\n    echo The rule only accepts connections from that network.\n    exit /b 1\n)\nnetsh advfirewall firewall add rule ^\n    name=\"MOTRIX ERP Port 666\" ^\n    dir=in ^\n    action=allow ^\n    protocol=TCP ^\n    localport=666 ^\n    remoteip=%REMOTE% ^\n    description=\"MOTRIX ERP Web Application (%REMOTE% only)\""
+      "stub": "set \"REMOTE=%~1\"\nif \"%REMOTE%\"==\"\" (\n    echo Usage: firewall_setup.bat ^<allowed network, e.g. your LAN range in CIDR form^>\n    echo The rule only accepts connections from that network.\n    exit /b 1\n)\nnetsh advfirewall firewall add rule ^\n    name=\"MOTRIX ERP Port 666\" ^\n    dir=in ^\n    action=allow ^\n    protocol=TCP ^\n    localport=666 ^\n    remoteip=%REMOTE% ^\n    description=\"MOTRIX ERP Web Application (%REMOTE% only)\""
     }
   ],
   "replace": {
