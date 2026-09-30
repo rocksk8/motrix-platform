@@ -116,6 +116,10 @@ def test_path_access_provider_binds_legacy_paths_to_the_case_and_listing(client,
         assert up.upload_readable(c, up.canonical_upload_path(rels["foreign"]), user) is False      # 別案：那一案沒有任何額外支出列了它
         assert up.upload_readable(c, up.canonical_upload_path(rels["new"]), user) is True
         # 路徑對得上案件編號但 files_json 沒列 ⇒ 不放行（不能用猜路徑的方式讀）
+        # W4 稽核（2026-10-01）：不是子字串比對——名稱是已列出檔案「前綴」的檔不算列出；檔名含非 ASCII（json 逸出）也要比得對
+        prefix = rels["legacy"][:-len(".png")]                                            # .../old（已列出的是 .../old.png）
+        _put(prefix)
+        assert up.upload_readable(c, up.canonical_upload_path(prefix), user) is False
         ghost = "quotation_settlement_extra/%s_7/ghost.png" % Q
         _put(ghost)
         assert up.upload_readable(c, up.canonical_upload_path(ghost), user) is False
