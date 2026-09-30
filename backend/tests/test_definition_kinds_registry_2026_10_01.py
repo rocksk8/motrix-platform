@@ -91,3 +91,13 @@ def test_definition_kinds_endpoint_is_superadmin_only(client, make_user, clean_r
     # 既有的依種類路由照舊、也認得新種類
     assert client.get("/api/definitions/expense_type", headers=tok(boss)).status_code == 200
     assert client.get("/api/definitions/not_registered", headers=tok(boss)).status_code in (400, 404)
+
+
+def test_validate_route_knows_registered_kinds(client, make_user, clean_registry):
+    """W3 回報：`POST /api/definitions/{kind}/{key}/validate` 用內建 KINDS ⇒ 登記的種類 400；改用 `kinds()` 後要是 200。"""
+    D.register_kind("expense_type", label="請款類型", validator=_validator)
+    boss = make_user(username="vk_boss", role="superadmin")
+    tok = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": boss[0], "password": boss[1]}).json()["token"]}
+    r = client.post("/api/definitions/expense_type/travel/validate", headers=tok, json={"body": {"fields": "x"}})
+    assert r.status_code == 200 and r.json()["problems"], r.text               # 驗證器生效（fields 不是清單）
+    assert client.post("/api/definitions/not_registered/travel/validate", headers=tok, json={"body": {}}).status_code == 400
