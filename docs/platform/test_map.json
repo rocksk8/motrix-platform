@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 911,
+  "tests": 915,
   "unmapped": 12,
   "kinds": {
-   "api": 487,
-   "e2e": 213,
+   "api": 490,
+   "e2e": 214,
    "audit": 127,
    "unit": 84
   },
-  "routes": 686
+  "routes": 687
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -359,6 +359,36 @@
     "page": [
      "frontend/pages/ledger-hub.html",
      "frontend/pages/ledger-periods.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_ledger_l_gaps_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/features",
+    "page:pages/ledger-hub.html",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/features.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/ledger-hub.html"
     ],
     "module_dir": [
      "backend/modules/accounting/"
@@ -1562,6 +1592,7 @@
     "mod:accounting/ledger/inventory",
     "mod:accounting/ledger/roles",
     "mod:supply/__init__",
+    "mod:supply/api/inventory",
     "mod:supply/gl_events"
    ],
    "evidence": {
@@ -1575,10 +1606,14 @@
      "backend/modules/supply/__init__.py",
      "backend/modules/supply/gl_events.py"
     ],
+    "api": [
+     "backend/modules/supply/api/inventory.py"
+    ],
     "module_dir": [
      "backend/modules/accounting/"
     ]
    },
+   "login_fixture": true,
    "module": "accounting"
   },
   "backend/modules/accounting/tests/test_ledger_c4_supply_2026_09_30.py": {
@@ -1736,6 +1771,53 @@
     ],
     "api": [
      "backend/modules/accounting/api/ledger_tax.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_l_gaps_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_engine",
+    "mod:accounting/api/voucher_providers",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/auto_run",
+    "mod:accounting/ledger/engine",
+    "mod:accounting/ledger/features",
+    "mod:accounting/ledger/periods",
+    "mod:accounting/ledger/roles",
+    "mod:arap/gl_events",
+    "mod:payroll/__init__",
+    "mod:payroll/gl_events",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/accounting/api/voucher_providers.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/auto_run.py",
+     "backend/modules/accounting/ledger/engine.py",
+     "backend/modules/accounting/ledger/features.py",
+     "backend/modules/accounting/ledger/periods.py",
+     "backend/modules/accounting/ledger/roles.py",
+     "backend/modules/arap/gl_events.py",
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/gl_events.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_engine.py",
+     "backend/modules/accounting/api/vouchers.py"
     ],
     "module_dir": [
      "backend/modules/accounting/"
@@ -1959,6 +2041,37 @@
      "backend/modules/accounting/"
     ]
    },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_report_remit_payslip_no_double_count_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/roles",
+    "mod:analytics/api/__init__",
+    "mod:analytics/api/reports",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/roles.py",
+     "backend/modules/analytics/api/__init__.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
    "module": "accounting"
   },
   "backend/modules/accounting/tests/test_stock_batch_payment_2026_09_01.py": {
@@ -4712,6 +4825,33 @@
     ],
     "path": [
      "frontend/pages/approval-queue.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_money_guards_l11_l12_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/tests/_requires.py",
+    "mod:case/api/__init__",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
     ],
     "module_dir": [
      "backend/modules/case/"
