@@ -1,5 +1,8 @@
 # 會計 更新紀錄
 
+## 1.1.17 — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：安全審查 W3 sibling gap）
+- 傳票來源檔預覽（`line-source-file`）與帶入（`resolve_picks`）也要求檔案路徑在該來源單據自己的資料夾底下（`_path_belongs_to_doc`）：否則 404、不複製。
+
 ## 1.1.16 — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：附件開檔路徑綁單據（安全審查 W3））
 - 附件目錄提供者 `open()` 加路徑綁單據檢查（`helpers.uploads.upload_path_key`）：檔案路徑不在這張單據自己的資料夾 ⇒ 當作沒有這個檔。
 
