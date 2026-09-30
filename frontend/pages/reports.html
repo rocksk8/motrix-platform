@@ -265,6 +265,7 @@
       <!-- Period bar（財務報表期間選擇/匯出，僅 admin+；2026-08-31 出納併入
            本頁後，純 cashier/finance 模組使用者不該看到跟他們無關的期間/
            匯出控制列，出納自己的執行歷史匯出在出納頁籤裡另有一份） -->
+      <div class="rpt-sub" data-testid="reports-subtitle" style="font-size:12px;color:var(--text-secondary);margin:2px 0 8px">管理用・即時計算（非會計帳）</div>
       <div class="period-bar">
         <button class="period-type-btn" :class="{on: periodType==='month'}" @click="switchType('month')">月報</button>
         <button class="period-type-btn" :class="{on: periodType==='quarter'}" @click="switchType('quarter')">季報</button>
