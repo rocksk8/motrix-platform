@@ -285,10 +285,10 @@ def test_hub_unbuilt_features_show_in_development_and_cannot_be_enabled(live_ser
     page = e2e_browser.new_page()
     bad, errs = _open(page, live_server, user, pw, "ledger-hub.html")
     page.wait_for_selector("[data-testid=hb-features]")
-    for key in ("fixed_assets", "invoice_adjustments", "custom_records", "backfill", "inventory_cost", "source_annotations", "tax401", "withholding"):
+    for key in ("fixed_assets", "invoice_adjustments", "custom_records", "backfill", "inventory_cost"):
         assert page.locator("[data-testid=hb-status-%s]" % key).inner_text() == "開發中", key
         assert page.locator("[data-testid=hb-row-%s] [data-testid=hb-toggle]" % key).is_disabled(), key
-    for key in ("engine_drafts",):
+    for key in ("engine_drafts", "tax401", "withholding", "source_annotations"):
         assert page.locator("[data-testid=hb-status-%s]" % key).inner_text() in ("未開啟", "已開啟"), key
         assert page.locator("[data-testid=hb-row-%s] [data-testid=hb-toggle]" % key).is_enabled(), key
     assert not bad and not errs
