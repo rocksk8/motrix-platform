@@ -2,6 +2,14 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.82 — 2026-09-30（暫用，列車取號；wip/w3-export-pdf：每個 Excel 匯出都要有 PDF、每次匯出都要留紀錄）
+- L1（新增）：`helpers.xlsx_out.export_logged(fmt, module, name, label="")`（匯出端點裝飾器：成功後寫稽核 `export.<fmt>`，detail＝module／篩選摘要／列數，不含個資值）、
+  `add_pdf_sibling(router, path, handler, *, module, name, title="", method="GET")`（xlsx 端點的 PDF 姊妹：同一個處理函式、公司資料第二道閘門、Edge headless、PDF 冷卻 30 秒、不吃 Excel 冷卻）、
+  `log_export(authorization, fmt, module, name, filters=None, rows=None, label="")`、`summarize_filters(params)`、`xlsx_to_html(data, title="", max_rows=4000)`、`count_xlsx_rows(data)`、常數 `XLSX_MEDIA`／`PDF_MAX_ROWS`。
+- 行為：8 支 xlsx 匯出端點掛 `export_logged` 並各有 PDF 姊妹（T100 傳票、四大表、營業稅 401、銷項發票清單、營運報表（既有 PDF）、出納執行紀錄、案件批次、外包名冊；網路規劃 Excel／PDF 既有）；
+  lodging 紀錄與每日工作事項歷史（CSV／JSON）匯出也記稽核。守門：`tests/platform/test_export_pdf_and_audit_2026_09_30.py`（AST）。
+- 稽核畫面：模組標籤「匯出」與四個動作標籤。
+
 ## 1.81 — 2026-09-30（暫用，列車取號；wip/w1-t26fix：列車 26 守門修補）
 - L1（行為，安全）：`GET /api/attachments/open` 本班關閉（`routers/attachments.ATTACHMENTS_OPEN_ENABLED = False`，一律 404；W3 安全檢查：路徑未綁定來源單據，正式修正隨 P3）；`POST /api/audit-log/module-counts` 需 `audit_log` 權限、`since` 非字串 400（wip/w2-t26sec）
 - L1（新增宣告）：`helpers.audit.__l1_public__` 加 `_audit_login_failed`、`_FAIL_REASON_LABELS`、`_MODULE_LABELS`（routers/auth.py、routers/system.py 已在用；wip/w2-t26fix）

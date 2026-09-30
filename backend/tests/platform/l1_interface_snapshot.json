@@ -1,5 +1,5 @@
 {
- "core_version": "1.81",
+ "core_version": "1.82",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -1002,11 +1002,19 @@
   "helper:xlsx_out": {
    "EXCEL_COOLDOWN": "const",
    "PDF_COOLDOWN": "const",
+   "PDF_MAX_ROWS": "const",
+   "XLSX_MEDIA": "const",
    "XL_FORMULA_TRIGGERS": "const",
+   "add_pdf_sibling": "def(router, path, handler, *, module, name, title=…, method=…)",
    "check_export_rate": "def(user_id, fmt)",
+   "count_xlsx_rows": "def(data)",
+   "export_logged": "def(fmt, module, name, label=…)",
+   "log_export": "def(authorization, fmt, module, name, filters=…, rows=…, label=…)",
    "set_row": "def(ws, row_idx, values, font=…, fill=…, border=…, aligns=…, height=…)",
+   "summarize_filters": "def(params)",
    "xl_safe": "def(val)",
-   "xl_style": "def(wb)"
+   "xl_style": "def(wb)",
+   "xlsx_to_html": "def(data, title=…, max_rows=…)"
   },
   "plat:catalog": {
    "CATALOG_VERSION": "const",

@@ -39,7 +39,7 @@ _MODULE_LABELS = {
     "dev_case": "業務開發", "dev_log": "業務開發記錄", "customer": "客戶", "supplier": "供應商", "part": "料號",
     "stock_item": "庫存", "stock_batch": "進貨批次", "work_log": "工作日誌", "daily_task": "每日工作事項",
     "network_plan": "網路架構規劃", "tender_watch": "標案雷達", "tender_radar": "標案雷達", "tender": "標案雷達",
-    "settings": "系統設定", "user": "使用者", "auth": "登入", "custom": "自訂模組", "custom_record": "自訂模組", "reports": "營運報表",
+    "export": "匯出", "settings": "系統設定", "user": "使用者", "auth": "登入", "custom": "自訂模組", "custom_record": "自訂模組", "reports": "營運報表",
     "backup": "系統備份", "lodging": "附近旅宿", "lodging_search": "附近旅宿", "credential": "憑證", "division": "組織",
     "department": "組織", "approval_delegate": "簽核代理人", "ui_definition": "介面自訂", "account_items": "會計科目",
     "sales_order": "銷售訂單", "settlement": "案件精算", "device": "設備", "warranty": "保固", "fail": "操作失敗",
