@@ -479,6 +479,9 @@
    "norm_at": "def(s)",
    "normalize_date": "def(v, label=…)"
   },
+  "helper:doc_render": {
+   "render_document": "def(template, view)"
+  },
   "helper:doc_template": {
    "BLOCKS": "const",
    "BLOCK_ITEM_SPECS": "const",
