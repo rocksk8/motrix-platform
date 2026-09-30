@@ -15,13 +15,13 @@ from modules.accounting.ledger import roles as _roles
 router = APIRouter(prefix="/api/ledger", tags=["ledger"])
 
 
-def _read(authorization):
+def _require_read(authorization):
     user = _require_user(authorization)
     require_any_module(user, ("cashier", "finance"), "總帳")
     return user
 
 
-def _write(authorization):
+def _require_write(authorization):
     user = _require_user(authorization)
     require_any_module(user, ("finance",), "總帳設定")
     return user
@@ -44,7 +44,7 @@ def _range(start, end):
 @router.get("/trial-balance")
 def trial_balance(start: str, end: str, include_drafts: bool = False, include_zero: bool = False,
                   authorization: str = Header(None)):
-    _read(authorization)
+    _require_read(authorization)
     s, e = _range(start, end)
     conn = get_db()
     try:
@@ -61,7 +61,7 @@ def trial_balance(start: str, end: str, include_drafts: bool = False, include_ze
 @router.get("/general-ledger")
 def general_ledger(account: str, start: str, end: str, include_drafts: bool = False,
                    dimension: str = None, key: str = None, authorization: str = Header(None)):
-    _read(authorization)
+    _require_read(authorization)
     s, e = _range(start, end)
     conn = get_db()
     try:
@@ -80,7 +80,7 @@ def general_ledger(account: str, start: str, end: str, include_drafts: bool = Fa
 @router.get("/subledger")
 def subledger(account: str, dimension: str, start: str, end: str, include_drafts: bool = False,
               authorization: str = Header(None)):
-    _read(authorization)
+    _require_read(authorization)
     s, e = _range(start, end)
     conn = get_db()
     try:
@@ -98,7 +98,7 @@ def subledger(account: str, dimension: str, start: str, end: str, include_drafts
 
 @router.get("/journal")
 def journal(start: str, end: str, include_drafts: bool = False, authorization: str = Header(None)):
-    _read(authorization)
+    _require_read(authorization)
     s, e = _range(start, end)
     conn = get_db()
     try:
@@ -111,7 +111,7 @@ def journal(start: str, end: str, include_drafts: bool = False, authorization: s
 
 @router.get("/accounts")
 def accounts(q: str = Query(default=""), only_postable: bool = False, authorization: str = Header(None)):
-    _read(authorization)
+    _require_read(authorization)
     conn = get_db()
     try:
         _roles.ensure_meta(conn)
@@ -137,7 +137,7 @@ def accounts(q: str = Query(default=""), only_postable: bool = False, authorizat
 @router.patch("/accounts/{code}")
 def patch_account(code: str, body: dict = Body(...), authorization: str = Header(None)):
     """可改：fs_line、display_name、is_active（總帳層停用，法定科目也可）、note。類別與方向不開放（改了報表會整批偏）。"""
-    _write(authorization)
+    _require_write(authorization)
     fields = {k: body[k] for k in ("fs_line", "display_name", "is_active", "note") if k in (body or {})}
     if not fields:
         raise HTTPException(400, "沒有可修改的欄位。")
@@ -161,7 +161,7 @@ def patch_account(code: str, body: dict = Body(...), authorization: str = Header
 @router.put("/roles")
 def put_role(body: dict = Body(...), authorization: str = Header(None)):
     """設定角色→科目（可帶 scope 與生效日）。科目必須存在；停用中的科目不可作為角色科目。"""
-    _write(authorization)
+    _require_write(authorization)
     b = body or {}
     role, code = str(b.get("role") or "").strip(), str(b.get("account_code") or "").strip()
     if not role or not code:

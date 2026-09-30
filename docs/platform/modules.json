@@ -396,7 +396,17 @@
     "page:pages/voucher.html",
     "mod:accounting/api/account_items",
     "mod:accounting/api/accounting_export",
-    "mod:accounting/api/vouchers"
+    "mod:accounting/api/vouchers",
+    "mod:accounting/api/ledger_periods",
+    "mod:accounting/api/ledger_reports",
+    "mod:accounting/ledger/opening",
+    "mod:accounting/ledger/periods",
+    "mod:accounting/ledger/reports",
+    "mod:accounting/ledger/roles",
+    "js:js/ledger-periods.js",
+    "js:js/ledger-reports.js",
+    "page:pages/ledger-periods.html",
+    "page:pages/ledger-reports.html"
    ],
    "tables": [
     "account_items",
@@ -404,13 +414,23 @@
     "voucher_attachments",
     "voucher_edit_log",
     "voucher_lines",
-    "vouchers_all"
+    "vouchers_all",
+    "gl_account_meta",
+    "gl_account_roles",
+    "gl_fiscal_years",
+    "gl_opening_balances",
+    "gl_opening_batches",
+    "gl_opening_items",
+    "gl_period_log",
+    "gl_periods",
+    "gl_settings"
    ],
    "api_prefixes": [
     "/api/account-items",
     "/api/reports",
     "/api/settings",
-    "/api/vouchers"
+    "/api/vouchers",
+    "/api/ledger"
    ]
   },
   "M07": {

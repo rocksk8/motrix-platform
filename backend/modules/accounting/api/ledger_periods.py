@@ -23,19 +23,19 @@ def _who(user):
     return (user or {}).get("username") or ""
 
 
-def _read(authorization):
+def _require_read(authorization):
     user = _require_user(authorization)
     require_any_module(user, _READ, "總帳")
     return user
 
 
-def _write(authorization):
+def _require_write(authorization):
     user = _require_user(authorization)
     require_any_module(user, _WRITE, "總帳結帳")
     return user
 
 
-def _superadmin(authorization):
+def _require_superadmin(authorization):
     user = _require_user(authorization)
     if user.get("role") != "superadmin":
         raise HTTPException(403, "只有 superadmin 可以鎖定或解鎖期間。")
@@ -56,7 +56,7 @@ def _run(conn, fn, *args, **kw):
 
 @router.get("/years")
 def years(authorization: str = Header(None)):
-    _read(authorization)
+    _require_read(authorization)
     conn = get_db()
     try:
         return {"years": _periods.list_years(conn), "fiscal_start_month": _periods.fiscal_start_month(conn),
@@ -67,7 +67,7 @@ def years(authorization: str = Header(None)):
 
 @router.post("/years")
 def create_year(body: dict = Body(...), authorization: str = Header(None)):
-    user = _write(authorization)
+    user = _require_write(authorization)
     try:
         year = int((body or {}).get("year"))
     except (TypeError, ValueError):
@@ -85,7 +85,7 @@ def create_year(body: dict = Body(...), authorization: str = Header(None)):
 @router.put("/settings")
 def put_settings(body: dict = Body(...), authorization: str = Header(None)):
     """目前只有 fiscal_year_start_month；已建立任何年度後不可再改（避免期間對不上）。"""
-    _write(authorization)
+    _require_write(authorization)
     conn = get_db()
     try:
         if "fiscal_year_start_month" in (body or {}):
@@ -106,7 +106,7 @@ def put_settings(body: dict = Body(...), authorization: str = Header(None)):
 
 @router.get("/periods/{period_id}/checklist")
 def checklist(period_id: int, authorization: str = Header(None)):
-    _read(authorization)
+    _require_read(authorization)
     conn = get_db()
     try:
         p = conn.execute("SELECT * FROM gl_periods WHERE id=?", (period_id,)).fetchone()
@@ -119,7 +119,7 @@ def checklist(period_id: int, authorization: str = Header(None)):
 
 @router.post("/periods/{period_id}/close")
 def close(period_id: int, body: dict = Body(default={}), authorization: str = Header(None)):
-    user = _write(authorization)
+    user = _require_write(authorization)
     conn = get_db()
     try:
         h = _run(conn, _periods.close_period, period_id, _who(user), bool((body or {}).get("accept_warnings")),
@@ -133,7 +133,7 @@ def close(period_id: int, body: dict = Body(default={}), authorization: str = He
 
 @router.post("/periods/{period_id}/reopen")
 def reopen(period_id: int, body: dict = Body(default={}), authorization: str = Header(None)):
-    user = _write(authorization)
+    user = _require_write(authorization)
     conn = get_db()
     try:
         stale = _run(conn, _periods.reopen_period, period_id, _who(user), str((body or {}).get("reason") or ""))
@@ -147,7 +147,7 @@ def reopen(period_id: int, body: dict = Body(default={}), authorization: str = H
 
 @router.post("/periods/{period_id}/lock")
 def lock(period_id: int, authorization: str = Header(None)):
-    user = _superadmin(authorization)
+    user = _require_superadmin(authorization)
     conn = get_db()
     try:
         _run(conn, _periods.lock_period, period_id, _who(user))
@@ -160,7 +160,7 @@ def lock(period_id: int, authorization: str = Header(None)):
 
 @router.post("/periods/{period_id}/unlock")
 def unlock(period_id: int, body: dict = Body(default={}), authorization: str = Header(None)):
-    user = _superadmin(authorization)
+    user = _require_superadmin(authorization)
     conn = get_db()
     try:
         _run(conn, _periods.unlock_period, period_id, _who(user), str((body or {}).get("reason") or ""))
@@ -174,7 +174,7 @@ def unlock(period_id: int, body: dict = Body(default={}), authorization: str = H
 
 @router.get("/period-log")
 def period_log(year: int = None, authorization: str = Header(None)):
-    _read(authorization)
+    _require_read(authorization)
     conn = get_db()
     try:
         return {"log": _periods.read_log(conn, year)}
@@ -186,7 +186,7 @@ def period_log(year: int = None, authorization: str = Header(None)):
 
 @router.post("/opening/preview")
 def opening_preview(body: dict = Body(...), authorization: str = Header(None)):
-    _write(authorization)
+    _require_write(authorization)
     conn = get_db()
     try:
         return _run(conn, _opening.preview, (body or {}).get("rows") or [], (body or {}).get("items") or [])
@@ -196,7 +196,7 @@ def opening_preview(body: dict = Body(...), authorization: str = Header(None)):
 
 @router.post("/opening")
 def opening_create(body: dict = Body(...), authorization: str = Header(None)):
-    user = _write(authorization)
+    user = _require_write(authorization)
     body = body or {}
     conn = get_db()
     try:
@@ -212,7 +212,7 @@ def opening_create(body: dict = Body(...), authorization: str = Header(None)):
 
 @router.post("/opening/{batch_id}/undo")
 def opening_undo(batch_id: int, authorization: str = Header(None)):
-    user = _write(authorization)
+    user = _require_write(authorization)
     conn = get_db()
     try:
         _run(conn, _opening.undo_batch, batch_id, _who(user))
