@@ -699,6 +699,23 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ---
 
+## IP-107　`ledger.month_totals`：總帳逐月彙總（M06 → M08 營運分析『與總帳差異』頁）
+
+2026-09-30（MONEY-FLOWS §9 L4 / Part B）：營運報表不讀總帳（F6）；差異頁需要總帳逐月的收入／費用彙總，經提供者取得（L2 不互相 import）。**編號暫定（107），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計：`modules/accounting/ledger/month_totals.py::month_totals` |
+| 使用方 | M08 `modules/analytics/api/ledger_diff.py`：`GET /api/reports/ledger-diff` |
+| 形式 | provider，單一提供者（名稱 `accounting`） |
+| 語法 | 提供：`("ledger.month_totals", "accounting"): fn`；取用：`registry.providers("ledger.month_totals").get("accounting")` ⇒ `fn(conn, year)` |
+| 回傳 | `{available, year, months:{"YYYY-MM":{engine_posted, engine_unposted, bonus_posted, manual_posted: {revenue, expense, tax_out, tax_in}, by_origin_posted:{origin: expense}}}, events:{"YYYY-MM":{drift, orphan, blocked}}}`；不含結轉（`kind='closing'`）與已作廢；表不存在 ⇒ `{available:false, notice}` |
+| 對方不在時 | 提供者不在 ⇒ 差異頁 `glAvailable:false` 並說明，只顯示營運報表欄（不是 0） |
+| 契約版本 | 1（2026-09-30） |
+| 守門 | `backend/tests/test_ledger_diff_2026_09_30.py` |
+
+---
+
 ## IP-100　`payables.pending`：請款待付款（M01 → M05 出納；多提供者）
 
 對應 CORE-SPEC「請款流程（下一版）」（2026-09-27 使用者裁示）：核准而未付款的請款（案件額外支出）進出納待付款；出納登錄付款寫回付款日。

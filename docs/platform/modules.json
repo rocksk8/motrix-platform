@@ -475,7 +475,8 @@
     "page:pages/ledger-periods.html",
     "page:pages/ledger-reports.html",
     "mod:accounting/attachments_catalog",
-    "mod:accounting/ledger/source_status"
+    "mod:accounting/ledger/source_status",
+    "mod:accounting/ledger/month_totals"
    ],
    "tables": [
     "account_items",
@@ -606,7 +607,8 @@
     "page:pages/warranty.html",
     "mod:analytics/__init__",
     "mod:analytics/api/dashboard",
-    "mod:analytics/api/reports"
+    "mod:analytics/api/reports",
+    "mod:analytics/api/ledger_diff"
    ],
    "tables": [],
    "api_prefixes": [
