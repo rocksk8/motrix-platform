@@ -61,6 +61,9 @@ def register(key, name, category, group, event, impact, action, owner="core"):
     if key in _REGISTRY and _REGISTRY[key].owner != owner:
         raise ValueError("信件類型 %s 重複登記（%s／%s）" % (key, _REGISTRY[key].owner, owner))
     _REGISTRY[key] = MailType(key, name, category, group, event, impact, action, owner)
+    if owner != "core":     # 模組登記的類型自動併進個人通知偏好（A2-0 #6）；core 的仍要手寫進固定清單（test_mail_registry 守著）
+        from helpers import notification_prefs as _np
+        _np.ensure_event(key, name)
     return _REGISTRY[key]
 
 
