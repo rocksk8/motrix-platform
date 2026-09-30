@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-09-30（wip/w1-t27fix2）
+- L1（行為）：`helpers.tiered_approval.require_reject_reason(note, conn=None)`——新增選用參數 `conn`（丟錯前先關連線）；各 reject／revoke-approval 端點改為**先狀態與權限、最後才驗原因**；自訂單據的退回原因檢查移進 `custom_modules.decide`（權限之後）。`helpers/custom_modules`／`custom_def_review` 的信件改以名稱明寫呼叫（不用動態 getattr）。
+
 ## 1.87 — 2026-09-30（暫用號；wip/w2-open-bind：附件開檔路徑綁單據，安全審查 W3）〔core_bump：暫用 1.99 → 1.82〕〔train_number：1.82 → 1.87〕
 - L1（新增）：`helpers.uploads.upload_path_key(entry, folder, depth=2)`——metadata 的 `path` 在指定資料夾底下時回單據鍵，否則 None（demo 前綴已去掉）。給 `attachments.catalog` 提供者驗「被提供的檔案屬於這張單據」。`routers/attachments.ATTACHMENTS_OPEN_ENABLED` 重新預設開（緊急開關）。
 

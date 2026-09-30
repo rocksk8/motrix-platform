@@ -317,8 +317,10 @@ def test_signed_toggle_requires_approved_and_blocks_revoke(client, make_user):
 
     # 取消回簽之後才可以撤銷
     client.post(f"{BASE}/{note_no}/signed-toggle", headers=_auth(token), json={"action": "unsign"})
+    # 撤銷核准一律要填原因（使用者 2026-09-30）：不填 ⇒ 400；填了 ⇒ 200
+    assert client.post(f"{BASE}/{note_no}/revoke-approval", headers=_auth(token), json={}).status_code == 400
     assert client.post(f"{BASE}/{note_no}/revoke-approval", headers=_auth(token),
-                       json={}).status_code == 200
+                       json={"note": "測試撤銷"}).status_code == 200
     assert _get(client, token, note_no)["status"] == "草稿"
 
 

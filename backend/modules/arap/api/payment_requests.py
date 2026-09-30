@@ -749,7 +749,7 @@ def revoke_payment_request_approval(request_no: str, body: dict = Body(default={
                                     authorization: str = Header(None)):
     user = _require_user(authorization)
     _require_admin(user)
-    note = require_reject_reason((body or {}).get("note", ""))
+    note = (body or {}).get("note", "")
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, snapshot_json, export_count FROM payment_requests WHERE request_no=? AND status='已核准'",
@@ -761,6 +761,7 @@ def revoke_payment_request_approval(request_no: str, body: dict = Body(default={
     if (row["export_count"] or 0) > 0:
         conn.close()
         raise HTTPException(409, "此請款單已匯出過，不可撤銷核准")
+    note = require_reject_reason(note, conn=conn)
     snap  = json.loads(row["snapshot_json"] or "{}")
     cname = snap.get("customerName") or ""
     d = json.loads(row["data_json"] or "{}")
@@ -788,7 +789,7 @@ def revoke_payment_request_approval(request_no: str, body: dict = Body(default={
 def reject_payment_request(request_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
     # 比照 quotations.py：退回權限由當層簽核人員判斷，不額外要求 admin 角色
     user = _require_user(authorization)
-    note = require_reject_reason((body or {}).get("note", ""))
+    note = (body or {}).get("note", "")
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, snapshot_json FROM payment_requests WHERE request_no=? AND status IN ('待審核','簽核中')",
@@ -808,6 +809,7 @@ def reject_payment_request(request_no: str, body: dict = Body(default={}), autho
     if not ok:
         conn.close()
         raise HTTPException(status_code, err_msg)
+    note = require_reject_reason(note, conn=conn)
 
     now       = datetime.now().isoformat()
     requester = appr.get("requestedBy")

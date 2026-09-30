@@ -1206,6 +1206,11 @@ def _state(body, key):
     return next((s for s in body["workflow"]["states"] if s["key"] == key), {})
 
 
+def _email():
+    from helpers import email_notify
+    return email_notify
+
+
 class _Effects:
     """交易內只收集、commit 之後才送：通知與事件的處理者會另開連線寫 DB，在寫入交易內做會 `database is locked`
     （而 `_notify` 把它吞成 WARNING ⇒ 通知靜默消失）。"""
@@ -1223,13 +1228,10 @@ class _Effects:
             _notify(username, type_, ref_id, ref_label, message)
         self.later.append(_send)
 
-    def mail(self, fn_name, *args, module_key=""):
-        """信件：與站內通知同一條路（commit 之後才寄；寄不出去不影響已 commit 的狀態）。
-        （`**` 呼叫棘輪：各 notify_custom_record_* 只吃一個關鍵字參數 module_key，明寫、不用 `**kw` 轉送。）"""
-        def _send():
-            from helpers import email_notify as _en
-            getattr(_en, fn_name)(*args, module_key=module_key)
-        self.later.append(_send)
+    def mail(self, send):
+        """信件：與站內通知同一條路（commit 之後才寄；寄不出去不影響已 commit 的狀態）。`send`＝呼叫 email_notify 某支函式的無參數函式
+        （以名稱明寫呼叫，不用動態 getattr——test_wording_guards）。"""
+        self.later.append(send)
 
     def flush(self):
         import logging
@@ -1332,7 +1334,7 @@ def _notify_state(body, rec, st, approval, notices):
         fp = next((a for a in tier["approvers"] if a.get("status") != "approved"), None)
         if fp:
             notices.notify(fp["username"], "approval", notify_ref(rec), label, "%s 待您簽核" % label)
-            notices.mail("notify_custom_record_submitted", body.get("name", ""), rec["record_no"], [fp["username"]], module_key=rec["module_key"])
+            notices.mail(lambda: _email().notify_custom_record_submitted(body.get("name", ""), rec["record_no"], [fp["username"]], module_key=rec["module_key"]))
             notices.append("已通知 %s 簽核" % fp.get("displayName", fp["username"]))
     for u in sorted(targets):
         msg = "%s 狀態：%s" % (label, st.get("label", st.get("key")))
@@ -1390,8 +1392,8 @@ def decide(conn, module_key, record_no, user, approve: bool, note="") -> dict:
                              (json.dumps(appr, ensure_ascii=False), rec["id"]))
                 rec["approval"] = appr
                 _enter_state(conn, body, rec, cfg["on_approved"], user, "approve", note, notices)
-                notices.mail("notify_custom_record_approved", body.get("name", ""), rec["record_no"],
-                             user.get("display_name") or user["username"], rec["created_by"], module_key=rec["module_key"])
+                notices.mail(lambda: _email().notify_custom_record_approved(body.get("name", ""), rec["record_no"],
+                                                                   user.get("display_name") or user["username"], rec["created_by"], module_key=rec["module_key"]))
             else:
                 conn.execute("UPDATE custom_records SET approval_json=?, updated_at=? WHERE id=?",
                              (json.dumps(appr, ensure_ascii=False), now, rec["id"]))
@@ -1400,14 +1402,17 @@ def decide(conn, module_key, record_no, user, approve: bool, note="") -> dict:
                 if nxt:
                     label = "%s %s" % (body.get("name", ""), rec["record_no"])
                     notices.notify(nxt["username"], "approval", notify_ref(rec), label, "%s 待您簽核" % label)
-                    notices.mail("notify_custom_record_next_tier", body.get("name", ""), rec["record_no"], appr["currentTier"] + 1, len(tiers),
-                                 [nxt["username"]], module_key=rec["module_key"])
+                    notices.mail(lambda: _email().notify_custom_record_next_tier(body.get("name", ""), rec["record_no"], appr["currentTier"] + 1, len(tiers),
+                                                                    [nxt["username"]], module_key=rec["module_key"]))
         else:
             ok, code, msg = ta.check_reject_permission(tiers, idx, user, conn)
             if not ok:
                 raise CustomModuleError(msg, status=code)
+            note = (note or "").strip()                              # 退回一律要填原因：先權限（403）、狀態（409），最後才是原因（400）
+            if not note:
+                raise CustomModuleError("退回要填原因", status=400)
             _enter_state(conn, body, rec, cfg["on_rejected"], user, "reject", note, notices)
-            notices.mail("notify_custom_record_returned", body.get("name", ""), rec["record_no"], note, rec["created_by"], module_key=rec["module_key"])
+            notices.mail(lambda: _email().notify_custom_record_returned(body.get("name", ""), rec["record_no"], note, rec["created_by"], module_key=rec["module_key"]))
         conn.commit()
     notices.flush()
     out = get_record(conn, module_key, record_no)

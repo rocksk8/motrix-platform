@@ -256,15 +256,32 @@ def test_invoice_voucher(client, live_server, make_user, new_page, login_as, com
     assert a and "稅額有誤" in (a["detail_json"] or "")
 
 
-# ─────────────────────────────── 後端：退回原因必填（每條退回路徑）───────────────────────────────
+# ─────────────────────────────── 後端：退回原因必填（順序：先狀態／權限，最後才是原因）───────────────────────────────
 
-@pytest.mark.parametrize("path,key", [("/api/shipping-notes/{no}/reject", "note"), ("/api/completion-notes/{no}/reject", "note"),
-                                      ("/api/payment-requests/{no}/reject", "note"), ("/api/invoice-vouchers/{no}/reject", "note"),
-                                      ("/api/contractor-vouchers/{no}/reject", "note")])
-def test_reject_without_reason_is_400_and_changes_nothing(client, make_user, path, key):
+@pytest.mark.parametrize("path", ["/api/shipping-notes/{no}/reject", "/api/completion-notes/{no}/reject",
+                                  "/api/payment-requests/{no}/reject", "/api/invoice-vouchers/{no}/reject",
+                                  "/api/contractor-vouchers/{no}/reject"])
+def test_reject_checks_state_before_reason(client, make_user, path):
+    """不存在／不在待審核的單據：先 404（狀態），不是 400；原因那一關在狀態與權限之後（第 27 班 build：409 被 400 蓋掉）。"""
     u = make_user(username="pu_rr_" + path.split("/")[2], role="superadmin")
     tok = client.post("/api/auth/login", json={"username": u[0], "password": u[1]}).json()["token"]
     h = {"Authorization": "Bearer " + tok}
-    for body in ({}, {key: ""}, {key: "   "}):
-        r = client.post(path.format(no="X-NOPE"), headers=h, json=body)
-        assert r.status_code == 400 and "要填原因" in r.json()["detail"], (path, body, r.status_code, r.text)
+    r = client.post(path.format(no="X-NOPE"), headers=h, json={})
+    assert r.status_code == 404, (path, r.status_code, r.text)
+
+
+def test_reject_without_reason_is_400_on_a_real_pending_doc(client, make_user):
+    req = make_user(username="pu_rr_req", role="superadmin")
+    qno = "MQ-PU-RR"
+    _seed_quote(qno)
+    now = datetime.now().isoformat()
+    _db("INSERT INTO shipping_notes (note_no, quote_no, status, customer_name, project_name, data_json, created_by, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?)", ("SN-PU-RR", qno, "待審核", "測試客戶", "測試案",
+                                      json.dumps({"approval": _approval(req[0], req[0])}, ensure_ascii=False), req[0], now, now), write=True)
+    tok = client.post("/api/auth/login", json={"username": req[0], "password": req[1]}).json()["token"]
+    h = {"Authorization": "Bearer " + tok}
+    for body in ({}, {"note": ""}, {"note": "   "}):
+        r = client.post("/api/shipping-notes/SN-PU-RR/reject", headers=h, json=body)
+        assert r.status_code == 400 and "要填原因" in r.json()["detail"], (body, r.status_code, r.text)
+    assert _db("SELECT status FROM shipping_notes WHERE note_no=?", ("SN-PU-RR",))[0]["status"] == "待審核"      # 沒有被退回
+    assert client.post("/api/shipping-notes/SN-PU-RR/reject", headers=h, json={"note": "有原因"}).status_code == 200
