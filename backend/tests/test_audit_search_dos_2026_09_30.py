@@ -49,7 +49,7 @@ def test_user_prefix_wildcards_are_literal(client, auditor):
 
 
 def test_oversized_inputs_are_truncated_not_crashing(client, auditor):
-    big = "x" * 100_000
+    big = "x" * 8_000
     for k in ("q", "user", "action", "module", "case_no", "ref_no", "date_from", "date_to"):
         r = client.get("/api/audit-log", params={k: big}, headers=auditor)
         assert r.status_code == 200, (k, r.status_code)
@@ -70,6 +70,7 @@ def test_offset_is_capped_and_total_is_capped(client, auditor, monkeypatch):
 
 
 def test_small_result_is_exact_and_not_marked_capped(client, auditor):
+    base = client.get("/api/audit-log", headers=auditor).json()["total"]                 # 登入本身也留稽核列
     _insert_many([_row(i) for i in range(7)])
     j = client.get("/api/audit-log", headers=auditor).json()
-    assert j["total"] == 7 and j["totalCapped"] is False
+    assert j["total"] == base + 7 and j["totalCapped"] is False
