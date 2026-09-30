@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## （不升版號：介面不變）— 歷史紀錄分層搜尋＋失敗紀錄
+core migration v3（audit_log 加 module／case_no／ref_no／result／reason_code／status_code＋搜尋索引＋分批回填）；L1 新增 helpers.audit 私有函式（_derive_fields／_audit_failure／_audit_login_failed），_audit 簽章不變；auth_middleware 回應後記失敗寫入（403/404/409/422/428/500，不含 GET、不含 401 過期）。
+
 ## 1.71 — 2026-09-30（暫用，列車取號；wip/w2-report-cash）
 - L1（新增）：`helpers.tax_calc.receipt_amounts(receivable, actual, fee)` ⇒ `(bank, gross, fee)`，經 `helpers` 匯出：已收款項的銀行入帳／收入(含稅)／手續費單一定義（實收＝銀行入帳、收入＝入帳＋手續費、淨額＝入帳不再減手續費）。`summarize_payment_items` 的 `netAmount`／`netCollected` 改用它。
 - L1（新增）：`helpers.recognition_basis.DEFAULT_BASIS`（營運報表預設口徑＝`cash`）；`normalize_basis(None)` 回它（原為 accrual）。
