@@ -416,6 +416,13 @@ function notifStore() {
      *  ⇒ 開執行頁的那一張（單號可能含冒號：只切前兩段）。 */
     refHref(item) {
       const ref = String((item && item.ref_id) || '')
+      // 模組定義送審：`customdef:<模組 key>:<版號>` ⇒ 審核頁（key 不含冒號）
+      if (ref.indexOf('customdef:') === 0) {
+        const parts = ref.slice(10).split(':')
+        if (!parts[0]) return null
+        const pg = window.location.pathname.includes('/pages/') ? 'custom-def-review.html' : 'pages/custom-def-review.html'
+        return pg + '?key=' + encodeURIComponent(parts[0])
+      }
       if (ref.indexOf('custom:') !== 0) return null
       const rest = ref.slice(7)
       const i = rest.indexOf(':')

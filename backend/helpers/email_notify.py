@@ -842,6 +842,103 @@ def notify_payment_request_returned(request_no: str, customer: str, note: str,
     _async_send(to, _mt.subject("payment_request_returned", f"請款單已退回：{request_no}（{customer}）"), html)
 
 
+def _custom_record_page(module_key: str, record_no: str) -> str:
+    from urllib.parse import quote as _q
+    return f"{_base_url()}/pages/custom-records.html?key={_q(module_key)}&no={_q(record_no)}"
+
+
+def _custom_def_page(module_key: str) -> str:
+    from urllib.parse import quote as _q
+    return f"{_base_url()}/pages/custom-def-review.html?key={_q(module_key)}"
+
+
+def notify_custom_record_submitted(module_name: str, record_no: str, approver_usernames: list, module_key: str = "") -> None:
+    """自訂模組單據送審 → 通知當層簽核人"""
+    to = _lookup_emails(approver_usernames, "custom_record_submitted")
+    if not to:
+        logger.warning("notify_custom_record_submitted: 簽核人 %s 皆無設定 email（record_no=%r）", approver_usernames, record_no)
+        return
+    html = _build_html("custom_record_submitted", f"{module_name}簽核申請", "待您審核", "#2F6FD6",
+                       [("單據", module_name), ("單號", record_no)], "", _custom_record_page(module_key, record_no),
+                       intro=f"您好，以下{module_name}已進入簽核流程，敬請於系統中完成審核作業。", button_text="前往審核")
+    _async_send(to, _mt.subject("custom_record_submitted", f"{module_name}待審核：{record_no}"), html)
+
+
+def notify_custom_record_next_tier(module_name: str, record_no: str, tier_no: int, total_tiers: int,
+                                   approver_usernames: list, module_key: str = "") -> None:
+    """自訂模組單據前層通過 → 通知下一層簽核人"""
+    to = _lookup_emails(approver_usernames, "custom_record_next_tier")
+    if not to:
+        logger.warning("notify_custom_record_next_tier: 第 %d 層簽核人 %s 皆無設定 email（record_no=%r）", tier_no, approver_usernames, record_no)
+        return
+    html = _build_html("custom_record_next_tier", f"{module_name}簽核流程通知", "輪到您審核", "#2F6FD6",
+                       [("單據", module_name), ("單號", record_no), ("目前進度", f"第 {tier_no} 層審核（共 {total_tiers} 層）")],
+                       "", _custom_record_page(module_key, record_no),
+                       intro=f"您好，前層審核已完成，{module_name}現已進入第 {tier_no} 層審核階段，敬請登入系統完成審核。", button_text="前往審核")
+    _async_send(to, _mt.subject("custom_record_next_tier", f"{module_name}審核通知（第 {tier_no}/{total_tiers} 層）：{record_no}"), html)
+
+
+def notify_custom_record_approved(module_name: str, record_no: str, approved_by: str, requester_username: str, module_key: str = "") -> None:
+    """自訂模組單據全員簽核完成 → 通知申請人"""
+    to = _lookup_emails([requester_username], "custom_record_approved")
+    if not to:
+        logger.warning("notify_custom_record_approved: 申請人 %r 無設定 email（record_no=%r）", requester_username, record_no)
+        return
+    html = _build_html("custom_record_approved", f"{module_name}審核完成", "已核准", "#16A34A",
+                       [("單據", module_name), ("單號", record_no), ("核准人", approved_by)], "", _custom_record_page(module_key, record_no),
+                       intro=f"您好，以下{module_name}已完成審核並核准。", button_text="前往查看")
+    _async_send(to, _mt.subject("custom_record_approved", f"{module_name}已核准：{record_no}"), html)
+
+
+def notify_custom_record_returned(module_name: str, record_no: str, note: str, requester_username: str, module_key: str = "") -> None:
+    """自訂模組單據退回 → 通知申請人"""
+    to = _lookup_emails([requester_username], "custom_record_returned")
+    if not to:
+        logger.warning("notify_custom_record_returned: 申請人 %r 無設定 email（record_no=%r）", requester_username, record_no)
+        return
+    html = _build_html("custom_record_returned", f"{module_name}退回通知", "請修改後重新送審", "#DC2626",
+                       [("單據", module_name), ("單號", record_no)], "", _custom_record_page(module_key, record_no),
+                       intro=f"您好，您送出的{module_name}經審核後，因需要調整已退回，請參閱下方備註後完成修改並重新送審。",
+                       note=note, button_text="前往修改")
+    _async_send(to, _mt.subject("custom_record_returned", f"{module_name}已退回：{record_no}"), html)
+
+
+def notify_custom_def_submitted(module_key: str, version: int, submitter: str, reviewer_usernames: list) -> None:
+    """模組定義送審 → 通知模組審核人"""
+    to = _lookup_emails(reviewer_usernames, "custom_def_submitted")
+    if not to:
+        logger.warning("notify_custom_def_submitted: 審核人 %s 皆無設定 email（module=%r v%s）", reviewer_usernames, module_key, version)
+        return
+    html = _build_html("custom_def_submitted", "自訂模組定義審核申請", "待您審核", "#2F6FD6",
+                       [("模組", module_key), ("版本", f"第 {version} 版"), ("送審人", submitter)], "", _custom_def_page(module_key),
+                       intro="您好，以下自訂模組定義已送審，敬請於系統中核可或退回。", button_text="前往審核")
+    _async_send(to, _mt.subject("custom_def_submitted", f"自訂模組定義待審核：{module_key}（第 {version} 版）"), html)
+
+
+def notify_custom_def_approved(module_key: str, version: int, decided_by: str, submitter_username: str) -> None:
+    """模組定義核可並發布 → 通知送審人"""
+    to = _lookup_emails([submitter_username], "custom_def_approved")
+    if not to:
+        logger.warning("notify_custom_def_approved: 送審人 %r 無設定 email（module=%r v%s）", submitter_username, module_key, version)
+        return
+    html = _build_html("custom_def_approved", "自訂模組定義審核完成", "已核可並發布", "#16A34A",
+                       [("模組", module_key), ("版本", f"第 {version} 版"), ("核可人", decided_by)], "", _custom_def_page(module_key),
+                       intro="您好，您送審的自訂模組定義已核可並發布。", button_text="前往查看")
+    _async_send(to, _mt.subject("custom_def_approved", f"自訂模組定義已核可：{module_key}（第 {version} 版）"), html)
+
+
+def notify_custom_def_returned(module_key: str, version: int, note: str, submitter_username: str) -> None:
+    """模組定義退回 → 通知送審人"""
+    to = _lookup_emails([submitter_username], "custom_def_returned")
+    if not to:
+        logger.warning("notify_custom_def_returned: 送審人 %r 無設定 email（module=%r v%s）", submitter_username, module_key, version)
+        return
+    html = _build_html("custom_def_returned", "自訂模組定義退回通知", "請修改後重新送審", "#DC2626",
+                       [("模組", module_key), ("版本", f"第 {version} 版")], "", _custom_def_page(module_key),
+                       intro="您好，您送審的自訂模組定義經審核後已退回，請參閱下方原因修改草稿後重新送審。", note=note, button_text="前往修改")
+    _async_send(to, _mt.subject("custom_def_returned", f"自訂模組定義已退回：{module_key}（第 {version} 版）"), html)
+
+
 def notify_bonus_submitted(quote_no: str, customer: str, approver_usernames: list) -> None:
     """獎金分潤送審／換人簽 → 通知現在輪到的簽核人（含代理人；CORE-SPEC 獎金分潤：通知）。
     🔴 信裡不放金額（屬敏感資訊）；名單上的成員不會因為在名單上而收到。"""

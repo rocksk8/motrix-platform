@@ -138,14 +138,39 @@ def submit(conn, module_key, user, note=""):
         raise ReviewError(str(e), 409 if isinstance(e, D.DefinitionConflict) else (422 if e.problems else 400), e.problems)
     _notify(conn, [r["username"] for r in st["reviewers"]], module_key, d["version"],
             "自訂模組「%s」的定義（第 %d 版）待您審核" % (module_key, d["version"]))
+    _mail("notify_custom_def_submitted", module_key, d["version"], user["username"], [r["username"] for r in st["reviewers"]])
     return {"published": False, "pending": True, "version": d["version"], "definition": d}
+
+
+def _mail(fn_name, *args):
+    """信件：與站內通知同一原則——寄不出去不可以讓送審／決定失敗（email_notify 內部已是非同步寄送並記 WARNING）。"""
+    try:
+        from helpers import email_notify as _en
+        getattr(_en, fn_name)(*args)
+    except Exception:                                                           # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).exception("自訂模組定義送審信件失敗 %s", fn_name)
+
+
+def _with_superadmins(conn, tiers, submitter):
+    """佇列／詳情用：審核人名單＋申請人以外的最高管理者（`_can_decide` 本來就放行他們，佇列卻沒列 ⇒ 「等我簽核」看不到）。
+    只改給佇列看的副本，不動存進 decision_json 的簽核鏈。每層 approvers 是「任一位都可以決定」（見 `decide`），不是依序。"""
+    tiers = json.loads(json.dumps(tiers or []))
+    if not tiers:
+        tiers = [{"order": 0, "approvers": []}]
+    have = {a.get("username") for t in tiers for a in t.get("approvers", [])}
+    for r in conn.execute("SELECT username, display_name FROM users WHERE role='superadmin' AND active=1 ORDER BY id").fetchall():
+        if r["username"] != submitter and r["username"] not in have:
+            tiers[0].setdefault("approvers", []).append({"username": r["username"], "displayName": r["display_name"] or r["username"], "status": "pending"})
+    return tiers
 
 
 def _notify(conn, usernames, module_key, version, message):
     try:
         from helpers.audit import _notify as _n
         for u in usernames:
-            _n(u, "custom_module_def", "%s:%d" % (module_key, version), module_key, message)
+            # ref_id＝`customdef:<模組 key>:<版號>`：notif.js 認得它 ⇒ 點鈴鐺開審核頁（原本 `key:ver` 沒人解析、點了只標已讀）
+            _n(u, "custom_module_def", "customdef:%s:%d" % (module_key, version), module_key, message)
     except Exception:                                                           # noqa: BLE001 — 通知失敗不擋送審
         pass
 
@@ -189,6 +214,10 @@ def decide(conn, module_key, version, user, approve, note=""):
         raise ReviewError(str(e), 422 if e.problems else 400, e.problems)
     _notify(conn, [row.get("submitted_by") or ""], module_key, row["version"],
             "自訂模組「%s」的定義（第 %d 版）已%s%s" % (module_key, row["version"], "核可並發布" if approve else "退回", "：" + note if note else ""))
+    if approve:
+        _mail("notify_custom_def_approved", module_key, row["version"], user["username"], row.get("submitted_by") or "")
+    else:
+        _mail("notify_custom_def_returned", module_key, row["version"], note, row.get("submitted_by") or "")
     return {"status": out["status"], "version": out["version"], "published": bool(approve)}
 
 
@@ -245,6 +274,12 @@ def queue_items(conn) -> list:
         raw = _aq.approval_json_of(r["decision_json"] or "{}", QUEUE_TYPE, doc_no)
         if raw is None:
             continue
+        try:
+            _a = json.loads(raw)
+            _a["tiers"] = _with_superadmins(conn, _a.get("tiers"), r["submitted_by"] or "")
+            raw = json.dumps(_a, ensure_ascii=False)
+        except (TypeError, ValueError):
+            pass
         fld = _aq.tier_fields(raw)
         items.append(_aq.base_item(QUEUE_TYPE, doc_no, fld,
                                    projectName="自訂模組定義「%s」第 %d 版" % (r["key"], r["version"]),
@@ -274,8 +309,8 @@ def detail(conn, doc_id):
         latest = {}
     changes = D.diff(latest, row["body"])
     return {"quoteNo": "", "title": "自訂模組定義送審（%s）" % doc_id,          # 沒有掛案件 ⇒ quoteNo 空（與佇列項目的 linkedQuoteNo 一致）
-            "approvalRaw": json.dumps({"tiers": (dec.get("approval") or {}).get("tiers") or [], "requestedBy": row.get("submitted_by") or ""},
-                                      ensure_ascii=False),
+            "approvalRaw": json.dumps({"tiers": _with_superadmins(conn, (dec.get("approval") or {}).get("tiers"), row.get("submitted_by") or ""),
+                                       "requestedBy": row.get("submitted_by") or ""}, ensure_ascii=False),
             "fields": [{"label": "模組", "value": key}, {"label": "版本", "value": "第 %s 版" % ver},
                        {"label": "申請人", "value": row.get("submitted_by") or "—"},
                        {"label": "送審說明", "value": row.get("note") or "—"},
