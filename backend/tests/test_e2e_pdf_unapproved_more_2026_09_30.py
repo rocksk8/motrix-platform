@@ -8,7 +8,7 @@ from datetime import datetime
 import pytest
 
 from tests.test_e2e_pdf_unapproved_2026_09_30 import (  # noqa: F401  共用的 fixture 與 helper
-    RED_TEXT, ROOT, _approval, _db, _do_return, _html_shot, _last_audit, _pdf_ok, _seed_quote, _shot, _users, company,
+    RED_TEXT, ROOT, _approval, _db, _do_return, _eventually, _html_shot, _last_audit, _pdf_ok, _seed_quote, _shot, _users, company,
 )
 
 pytest.importorskip("playwright.sync_api")
@@ -52,7 +52,7 @@ def test_contractor_voucher(client, live_server, make_user, new_page, login_as, 
         return
     _html_shot(new_page(), pdf_gen._build_contractor_voucher_html({"voucherNo": vno, "status": "待審核"}), "contractor-voucher-unapproved-html")
     _do_return(page, "匯款對象有誤")
-    assert _db("SELECT status FROM contractor_payment_vouchers WHERE voucher_no=?", (vno,))[0]["status"] == "草稿"
+    _eventually("SELECT status FROM contractor_payment_vouchers WHERE voucher_no=?", (vno,), "草稿", "退回後")
     a = _last_audit("contractor_voucher.reject")
     assert a and "匯款對象有誤" in (a["detail_json"] or "")
 
@@ -72,7 +72,11 @@ def _flow_and_voucher(client, make_user, tag, approved):
     vid = client.post("/api/vouchers", headers=bh, json={"summary": "PU", "lines": lines}).json()["id"]
     assert client.post("/api/vouchers/%s/submit" % vid, headers=bh).status_code == 200
     if approved:
+        # 傳票最後一層是最高管理者（會計主管，系統規定；W4）：簽核人簽完第一層，最後一層由「當時存在的最高管理者」簽
+        # （名單在送審時算出來：含製票人本人（JV30 製票人在當層名單內可自簽）與展示帳號）⇒ 用製票的最高管理者簽最後一層才算核准
         assert client.post("/api/vouchers/%s/approve" % vid, headers=_hdr(client, appr)).status_code == 200
+        r = client.post("/api/vouchers/%s/approve" % vid, headers=_hdr(client, boss))
+        assert r.status_code == 200 and r.json().get("status") == "已核准", r.text
     return boss, appr, vid
 
 

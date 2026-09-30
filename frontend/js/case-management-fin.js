@@ -592,7 +592,7 @@ window.CM_PARTS.push(() => ({
     // 退回（列表按鈕與預覽裡的「退回修改」同一條路）：原因必填，後端也強制
     rejectInvoiceVoucher(v) {
       window.MotrixApprovalReturn.ask({
-        title: `退回修改：開票申請憑據 ${v.voucherNo}`,
+        title: `退回開票申請憑據「${v.voucherNo}」`,
         post: (reason) => fetch(`/api/invoice-vouchers/${v.voucherNo}/reject`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
@@ -616,7 +616,7 @@ window.CM_PARTS.push(() => ({
     // 撤銷核准（退回草稿）：原因必填，後端也強制
     revokeInvoiceVoucherApproval(v) {
       window.MotrixApprovalReturn.ask({
-        title: `撤銷核准：開票申請憑據 ${v.voucherNo}`,
+        title: `撤銷開票申請憑據「${v.voucherNo}」的核准`,
         hint: '撤銷後單據退回草稿。撤銷原因必填，會寫進稽核並通知申請人。',
         post: (reason) => fetch(`/api/invoice-vouchers/${v.voucherNo}/revoke-approval`, {
           method: 'POST',

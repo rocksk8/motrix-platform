@@ -50,8 +50,31 @@
     return e;
   }
 
+  /** 頁面有 MotrixUI（案件頁）⇒ 用 MotrixUI.prompt：退回輸入框維持原本那一個元件（`ui-dialog` kind=prompt），不另外長一種。
+   *  原因必填：空白不送，toast 提示後重問；取消＝什麼都不送。後端同樣強制（400）。 */
+  async function askViaMotrixUI(opts) {
+    var UI = window.MotrixUI;
+    for (;;) {
+      var v = await UI.prompt((opts.title || '退回修改') + '，' + (opts.hintShort || '請填寫原因（必填）：'));
+      if (v === null || v === undefined) return;
+      var reason = String(v).trim();
+      if (!reason) { UI.toast('退回要填原因', { kind: 'error' }); continue; }
+      try {
+        var r = await opts.post(reason);
+        if (r && r.ok === false) {
+          var d = await r.json().catch(function () { return {}; });
+          UI.toast('退回失敗：' + (d.detail || r.status), { kind: 'error' });
+          return;
+        }
+      } catch (e) { UI.toast('網路錯誤：' + e.message, { kind: 'error' }); return; }
+      if (opts.onDone) opts.onDone(reason);
+      return;
+    }
+  }
+
   function ask(opts) {
     opts = opts || {};
+    if (window.MotrixUI && typeof window.MotrixUI.prompt === 'function') return askViaMotrixUI(opts);
     var prev = document.querySelector('[data-testid="return-dialog"]');
     if (prev) prev.remove();
     var overlay = el('div', { 'data-testid': 'return-dialog', style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px' });
