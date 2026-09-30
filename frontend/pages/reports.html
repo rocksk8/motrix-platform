@@ -1929,7 +1929,7 @@
                       <option value="">整年</option>
                       <template x-for="m in 12" :key="m"><option :value="m" x-text="m + ' 月'"></option></template>
                     </select>
-                    <button class="btn-export excel" @click="exportTaxInvoices()" :disabled="taxExporting">
+                    <button class="btn-export excel" data-testid="export-xlsx-tax-export" @click="exportTaxInvoices()" :disabled="taxExporting">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                       <span x-text="taxExporting ? '產製中…' : '匯出 Excel'"></span>
                     </button>

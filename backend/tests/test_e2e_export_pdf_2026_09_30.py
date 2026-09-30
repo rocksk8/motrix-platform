@@ -95,7 +95,7 @@ def test_case_batch_export_has_a_pdf_button_and_both_are_logged(live_server, mak
     for no in ("MQ-EX-1", "MQ-EX-2"):
         page.locator(f".cm-card[data-quote-no='{no}'] [data-testid=batch-check]").click()
     page.locator("[data-testid=batch-export-pdf]").wait_for(state="visible", timeout=5000)
-    x, p = _assert_download_pair(page, "[data-testid=batch-export]", "[data-testid=batch-export-pdf]", "case-batch")
+    x, p = _assert_download_pair(page, "[data-testid=batch-export]", "[data-testid=batch-export-pdf]", "case-batch", "case-batch")
     d = json.loads(p["detail"])
     assert d["filters"].get("body.quote_nos") == "<list:2>", d
     assert "王大明" not in p["detail"] and "MQ-EX" not in p["detail"], "稽核不可含客戶名與單號清單"
@@ -110,3 +110,35 @@ def test_contractors_export_has_a_pdf_button_and_both_are_logged(live_server, ma
     page.goto(f"{live_server}/pages/contractors.html")
     page.locator("[data-testid=ct-export-pdf]").wait_for(state="visible", timeout=20000)
     _assert_download_pair(page, "[data-testid=ct-export]", "[data-testid=ct-export-pdf]", "contractors", "contractors", expect_rows_min=1)
+
+
+def _open(page, live_server, user, path, ready):
+    page.on("dialog", lambda d: d.accept())
+    inject_login(page, live_server, user[0], user[1])
+    page.goto(f"{live_server}/pages/{path}")
+    page.wait_for_function(f"() => {DATA_JS} && 'activeTab' in {DATA_JS}", timeout=20000)
+    page.wait_for_load_state("networkidle", timeout=20000)
+    page.evaluate(f"() => {{ const d = {DATA_JS}; {ready} }}")
+
+
+@pytest.mark.e2e
+def test_cashier_history_and_t100_exports_have_pdf_and_are_logged(live_server, make_user, e2e_browser):
+    u = make_user(username="ex_cash", role="superadmin")
+    page = e2e_browser.new_context(accept_downloads=True).new_page()
+    _open(page, live_server, u, "cashier.html", "d.activeTab = 'recv'; d.cashierSub = 'history';")
+    page.locator("[data-testid=export-pdf-cashier-history]").wait_for(state="visible", timeout=10000)
+    _assert_download_pair(page, "[data-testid=export-xlsx-cashier-history]", "[data-testid=export-pdf-cashier-history]",
+                          "cashier-history", "cashier-history", expect_rows_min=0)
+    page.evaluate(f"() => {{ const d = {DATA_JS}; d.showT100Sub(); }}")
+    page.locator("[data-testid=export-pdf-t100]").wait_for(state="visible", timeout=10000)
+    _assert_download_pair(page, "[data-testid=export-xlsx-t100]", "[data-testid=export-pdf-t100]", "t100-vouchers", "t100-vouchers", expect_rows_min=0)
+
+
+@pytest.mark.e2e
+def test_reports_tax_export_has_pdf_and_is_logged(live_server, make_user, e2e_browser):
+    u = make_user(username="ex_rep", role="superadmin")
+    page = e2e_browser.new_context(accept_downloads=True).new_page()
+    _open(page, live_server, u, "reports.html", "d.showCashPosTab();")
+    page.locator("[data-testid=export-pdf-tax-export]").scroll_into_view_if_needed(timeout=10000)
+    _assert_download_pair(page, "[data-testid=export-xlsx-tax-export]", "[data-testid=export-pdf-tax-export]",
+                          "tax-export", "tax-export", expect_rows_min=0)
