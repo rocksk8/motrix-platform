@@ -1241,6 +1241,7 @@ def _enter_state(conn, body, rec, to_state, user, action, note, notices, _hops=0
             _log(conn, rec["id"], action, frm, to_state, user["username"], note)
             rec["status"] = to_state
             _published(body, rec, frm, to_state, action, user, notices)
+            _finance_hook(conn, body, rec, frm, to_state)
             if _hops >= _MAX_AUTO_HOPS:
                 raise CustomModuleError("流程設定有循環：簽核條件都不成立的狀態互相自動通過（超過 %d 次），請修正流程定義"
                                         % _MAX_AUTO_HOPS, status=409)
@@ -1254,8 +1255,15 @@ def _enter_state(conn, body, rec, to_state, user, action, note, notices, _hops=0
     _log(conn, rec["id"], action, frm, to_state, user["username"], note)
     rec["status"], rec["approval"] = to_state, approval
     _published(body, rec, frm, to_state, action, user, notices)
+    _finance_hook(conn, body, rec, frm, to_state)
     _notify_state(body, rec, st, approval if st.get("approval") else {}, notices)   # 保留的舊紀錄不再通知簽核人
     return rec
+
+
+def _finance_hook(conn, body, rec, frm, to):
+    """金流事件（outbox）：進入／離開入帳狀態時，與狀態變更同一個交易寫入（helpers.custom_finance）。"""
+    from . import custom_finance as _cfin
+    _cfin.on_transition(conn, body, rec, frm, to)
 
 
 def _published(body, rec, frm, to, action, user, effects):

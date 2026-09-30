@@ -370,6 +370,17 @@
    "remove_staged": "def(conn, module_key, file_id, username)",
    "view_names": "def(body, meta)"
   },
+  "helper:custom_finance": {
+   "EVENT_POSTED": "const",
+   "EVENT_REVERSED": "const",
+   "case_finance": "def(conn, case_no)",
+   "dup_skipped": "def(conn)",
+   "expense_entries": "def(conn, start, end)",
+   "income_items": "def(conn, start, end, basis, department_id=…)",
+   "on_transition": "def(conn, body, rec, frm, to)",
+   "post_states": "def(body)",
+   "undated_counts": "def(conn, basis)"
+  },
   "helper:custom_modules": {
    "APPROVER_SOURCES": "const",
    "CustomModuleError": "class",

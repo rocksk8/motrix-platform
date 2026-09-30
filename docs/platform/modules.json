@@ -23,6 +23,7 @@
    "helper:daily_checks",
    "helper:custom_builder_support",
    "helper:custom_files",
+   "helper:custom_finance",
    "helper:custom_fields",
    "helper:custom_modules",
    "helper:formula",

@@ -18,6 +18,7 @@ from helpers import _require_user, _tok, _audit
 from helpers import custom_modules as CM
 from helpers import custom_builder_support as SUP
 from helpers import custom_files as CFILES
+from helpers import custom_finance as CFIN
 from helpers import uploads as _uploads
 from core import registry as _registry
 from helpers import formula as FX
@@ -262,6 +263,8 @@ def output_custom_record(key: str, record_no: str, format: str = Query("html"), 
 
 # L1 沒有 ModuleSpec ⇒ 匯入時登記讀檔權限提供者（IP-104；同 routers/system 的工作日誌照片）
 _registry.provide(_uploads.PATH_ACCESS, CFILES.PROVIDER, CFILES.CustomFilesAccess)
+# 自訂模組的支出進營運報表（IP-9 expense.entries；名稱 custom_module）
+_registry.provide("expense.entries", "custom_module", CFIN.expense_entries)
 
 
 @router.post("/api/custom/{key}/files/{field}")
@@ -298,6 +301,34 @@ def delete_staged_custom_file(key: str, file_id: str, authorization: str = Heade
         if not CFILES.remove_staged(conn, key, file_id, u["username"]):
             raise HTTPException(404, "找不到這個暫存檔（只能刪自己上傳、尚未存進單據的檔）")
         return {"ok": True}
+    finally:
+        conn.close()
+
+
+# ── 金流：案件成本、待補登、被略過的收入 ─────────────────────────────────────
+
+@router.get("/api/custom-modules/finance/case/{case_no}")
+def custom_finance_of_case(case_no: str, authorization: str = Header(None)):
+    """某案件在自訂模組裡的入帳金流（案件成本用）。看得到案件底下單據的人才能讀（同 `case_documents_readable`）；
+    沒有案件模組／案件不存在 ⇒ 403（不洩漏案件是否存在）。"""
+    from helpers.case_access import case_documents_readable
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        if not case_documents_readable(conn, case_no, u):
+            raise HTTPException(403, "沒有這個案件的讀取權限")
+        return CFIN.case_finance(conn, case_no)
+    finally:
+        conn.close()
+
+
+@router.get("/api/custom-modules/finance/summary")
+def custom_finance_summary(basis: str = Query("cash"), authorization: str = Header(None)):
+    """建構器／管理者對帳用：待補登（缺該口徑日期）與因關聯內建案件而略過的收入。僅超級管理員。"""
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        return {"undated": CFIN.undated_counts(conn, basis), "dupSkipped": CFIN.dup_skipped(conn)}
     finally:
         conn.close()
 
