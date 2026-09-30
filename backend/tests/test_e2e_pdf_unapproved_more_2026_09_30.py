@@ -29,9 +29,13 @@ def test_contractor_voucher(client, live_server, make_user, new_page, login_as, 
     _seed_quote(qno)
     vno = "CV-PU-%d" % approved
     now = datetime.now().isoformat()
+    _db("INSERT INTO vendor_contractors (name) VALUES (?)", ("PU承攬商%d" % approved,), write=True)
+    vend = _db("SELECT id FROM vendor_contractors WHERE name=?", ("PU承攬商%d" % approved,))[0]["id"]
+    _db("INSERT INTO contractor_dispatches (quote_no, vendor_id) VALUES (?,?)", (qno, vend), write=True)
+    disp = _db("SELECT id FROM contractor_dispatches WHERE quote_no=? ORDER BY id DESC LIMIT 1", (qno,))[0]["id"]
     _db("INSERT INTO contractor_payment_vouchers (voucher_no, dispatch_id, quote_no, status, snapshot_json, data_json, created_by, created_at, updated_at) "
         "VALUES (?,?,?,?,?,?,?,?,?)",
-        (vno, 900 + approved, qno, "已核准" if approved else "待審核", "{}",
+        (vno, disp, qno, "已核准" if approved else "待審核", "{}",
          json.dumps({"approval": _approval(req[0], appr[0])}, ensure_ascii=False), req[0], now, now), write=True)
     _pdf_ok(client, appr, "/api/contractor-vouchers/%s/pdf-download" % vno, not approved)
     page = new_page()
@@ -118,8 +122,8 @@ def test_approval_queue_preview_voucher_and_shipping(client, live_server, make_u
     page.evaluate(f"""async () => {{ const r = {ROOT}; const it = r.queue.flatMap(g => g.items).find(i => i.type === 'voucher');
         r.selected = it; await r.previewItem(it) }}""")
     page.locator('[x-show="previewModal"]').wait_for(state="visible", timeout=30000)
-    blob = page.evaluate(f"() => {ROOT}.previewBlobUrl")
-    html = page.evaluate("async (u) => await (await fetch(u)).text()", blob)
+    html = client.get("/api/vouchers/%s/preview" % vid, headers=_hdr(client, appr)).text      # 預覽視窗載入的就是這一支
+    assert page.evaluate(f"() => !!{ROOT}.previewBlobUrl")
     assert 'data-unapproved="1"' in html and RED_TEXT in html
     _shot(page, "approval-queue-voucher-preview")
     _html_shot(new_page(), html, "approval-queue-voucher-preview-html")
@@ -165,7 +169,7 @@ def test_custom_record(client, live_server, make_user, new_page, login_as, compa
     user = make_user(username="pu_cuser%d" % approved, role="viewer", modules=["custom.%s" % key])
     hu, hm = _hdr(client, user), _hdr(client, mgr)
     no = client.post("/api/custom/%s/records" % key, json={"values": {"a": "x"}}, headers=hu).json()["record_no"]
-    r = client.post("/api/custom/%s/records/%s/transition" % (key, no), json={"transition": "submit"}, headers=hu)
+    r = client.post("/api/custom/%s/records/%s/transitions/submit" % (key, no), json={}, headers=hu)
     assert r.status_code == 200, r.text
     if approved:
         assert client.post("/api/custom/%s/records/%s/approve" % (key, no), json={"note": "ok"}, headers=hm).status_code == 200
@@ -209,22 +213,30 @@ def test_quotation(client, live_server, make_user, new_page, login_as, company, 
     _db("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at, deal_tag, quote_date, sales_person) "
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (qno, "已送出" if approved else "待審核", "測試客戶", "測試案", 1050, 1000, json.dumps(data, ensure_ascii=False), now, now, "洽談中", "2026-09-30", req[0]), write=True)
+    r = client.post("/api/quotations/preview-html", headers=_hdr(client, appr), json={"quoteNo": qno, "data": data, "internal": False})
+    assert r.status_code == 200, r.text[:300]
+    assert ('data-unapproved="1"' in r.json()["html"]) is (not approved), "預覽 HTML %s含警示" % ("應" if not approved else "不應")
     page = new_page()
     login_as(page, appr)
     page.goto(f"{live_server}/pages/quotation-form.html?id={qno}")
-    page.locator("button:has-text('預覽')").first.wait_for(state="visible", timeout=20000)
-    page.evaluate(f"() => {ROOT}.openPreview('external')")
+    pv = page.locator("button:has-text('預覽'):visible").first
+    pv.wait_for(state="visible", timeout=20000)
+    page.wait_for_function(f"() => {ROOT}.q && {ROOT}.q.quoteNo === '{qno}'", timeout=20000)
+    page.wait_for_load_state("networkidle")                # init() 最後才註冊 $watch('previewMode')：等載入完再點，否則點了沒人取預覽
+    pv.click()
+    page.wait_for_function(f"() => {ROOT}.previewMode && !{ROOT}.previewLoading && (({ROOT}.previewHtml || '').length > 0 || {ROOT}.previewError)", timeout=30000)
+    assert not page.evaluate(f"() => {ROOT}.previewError"), page.evaluate(f"() => {ROOT}.previewError")
     frame = page.frame_locator("#quote-preview-frame")
-    frame.locator("body").wait_for(timeout=30000)
+    frame.locator("html").wait_for(state="attached", timeout=30000)
     if approved:
         assert frame.locator('[data-unapproved="1"]').count() == 0
-        assert page.locator("button:has-text('退回修改'):visible").count() == 0
+        assert page.locator(".modal-foot button:has-text('退回修改'):visible").count() == 0
         _shot(page, "quotation-approved")
         return
-    frame.locator('[data-unapproved="1"]').wait_for(state="visible", timeout=20000)
-    assert RED_TEXT in frame.locator('[data-unapproved="1"]').inner_text()
+    frame.locator('[data-unapproved="1"]').wait_for(state="attached", timeout=20000)      # 預覽 iframe 高度由內容回報，先以「在 DOM 裡」為準
+    assert RED_TEXT in frame.locator('[data-unapproved="1"]').text_content()
     _shot(page, "quotation-unapproved")
-    ret = page.locator("button:has-text('退回修改'):visible").first
+    ret = page.locator(".modal-foot button:has-text('退回修改'):visible").first
     ret.wait_for(state="visible", timeout=10000)
     ret.click()
     page.locator("textarea:visible").first.wait_for(timeout=5000)
