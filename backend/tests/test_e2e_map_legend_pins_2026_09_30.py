@@ -13,7 +13,7 @@
 ⑤ Google：標記 zIndex 高於據點（500）、容器標了 data-mp-bm=google；
 ⑥ 反向控制：把 --mp-pin 拿掉（舊的 20px 規格）⇒ 尺寸斷言必須變紅。
 底圖圖磚與 Google JS 都用假的（不連外）——只證明我們的畫面邏輯，不證明真 Google；真 Google 的 POI 密度見 docs／回報。
-截圖：D:\\開發測試檔\\shots\\wip-w3-map-legend\\。
+截圖：D:\開發測試檔\shots\wip-w3-map-zoom\。
 """
 import json
 import os
@@ -30,7 +30,7 @@ from tests.test_e2e_map_google_basemap_2026_09_28 import (  # noqa: E402
     BROWSER_KEY, FAKE_CLUSTER, FAKE_GMAPS, MAP_ID, MD, PNG, SERVER_KEY, _keys)
 
 # 預設寫到暫存目錄（BK19：寫入護欄只准 repo／tmp）；要留在共用截圖資料夾時設 MOTRIX_SHOTS_DIR（並過護欄旗標）
-SHOTS = Path(os.environ.get("MOTRIX_SHOTS_DIR") or os.path.join(tempfile.gettempdir(), "aet27-shots")) / "wip-w3-map-legend"
+SHOTS = Path(os.environ.get("MOTRIX_SHOTS_DIR") or os.path.join(tempfile.gettempdir(), "aet27-shots")) / "wip-w3-map-zoom"
 
 #: 假 Google 補上 addListener／setZoom 觸發事件（原假貨沒有；真 Google 的 zoom_changed／idle）
 FAKE_GMAPS_EXTRA = r"""
@@ -44,12 +44,14 @@ FAKE_GMAPS_EXTRA = r"""
 
 LONG = "第一標案ABCDEFGHIJKLMNOPQRST"          # 24 字 ⇒ 前 16 字＋…
 SHORT = "短標案"
+LONG4 = "遠處標案ABCDEFGHIJKL"                  # 16 字（full 不截）；compact 前 10 字＋…
 XSS = "<b>x</b>&\"'"
 TENDERS = [  # (案號, 名稱, 機關, 座標, 截止幾天後)
     ("T-1", LONG, "臺中市政府", (24.1570, 120.6840), 30),          # 三點都在 1 公里內：z14 相距 70–110px＞群聚半徑 40px，但標籤（約 140px 寬）會互相重疊
     ("T-2", SHORT, "臺中榮總", (24.1570, 120.6901), 3),          # 與 T-1 東西相隔 70px ⇒ 標籤重疊；截止更近 ⇒ 它留下
     ("T-3", XSS, "彰化縣政府", (24.1610, 120.6780), 10),
-    ("T-4", "遠處標案", "苗栗縣政府", (24.4000, 120.7000), 20),        # 25 公里外：z10 是單獨的圖釘（其他三個群聚在一起）
+    ("T-4", LONG4, "苗栗縣政府", (24.4000, 120.7000), 20),        # 25 公里外：z11 是單獨的圖釘（其他三個群聚在一起）
+    ("T-5", "高雄遠處", "高雄市政府", (23.0000, 120.3000), 25),       # 約 175 公里外：z7／z9 也是單獨的圖釘
 ]
 
 
@@ -109,11 +111,49 @@ def _open(e2e_browser, base, user, google, viewport=None):
 
 
 def _set_zoom(page, z, google=False):
-    # Leaflet：固定看 T-1..T-3 中心（z10 時 T-4 在視野內、z14/17 時只有前三個）；假 Google 只有 setZoom
-    page.evaluate(f"() => {{ const m = {MD}._map; " + (f"m.setZoom({z})" if google else f"m.setView([24.159, 120.683], {z}, {{animate: false}})") + " }")
-    page.wait_for_function("(z) => { const v = getComputedStyle(document.getElementById('mp-canvas')).getPropertyValue('--mp-pin').trim();"
-                           " return v === (z >= 16 ? '56px' : (z >= 13 ? '50px' : '44px')) }", arg=z, timeout=10000)
+    # Leaflet：各層級固定的中心（見 CENTER）；假 Google 只有 setZoom。
+    # 頁面剛開時 `_fitAll` 可能還在收尾、把縮放改回去（偶發）⇒ 第一次等不到就再設一次
+    for attempt in range(4):
+        try:
+            _set_zoom_once(page, z, google, 4000 if attempt < 3 else 10000)
+        except Exception:                                        # noqa: BLE001
+            continue
+        # 等一下再確認縮放沒有被收尾的 `_fitAll` 改回去（量尺寸前一定要是穩定的）
+        page.wait_for_timeout(500)
+        zoom = page.evaluate(f"() => {{ const m = {MD}._map; return m.getZoom() }}")
+        if zoom == z:
+            return
+    raise AssertionError("縮放設不到 z%d（被別的縮放蓋回去）" % z)
+
+
+def _set_zoom_once(page, z, google, timeout):
+    c = CENTER.get(z, (24.159, 120.683))
+    page.evaluate(f"() => {{ const m = {MD}._map; " + (f"m.setZoom({z})" if google else f"m.setView([{c[0]}, {c[1]}], {z}, {{animate: false}})") + " }")
+    want = {7: 24, 8: 30, 9: 30, 10: 38, 11: 38, 12: 38, 13: 46, 14: 46, 15: 46}.get(z, 54 if z >= 16 else 24)
+    page.wait_for_function("([z, w]) => { const cv = document.getElementById('mp-canvas');"
+                           " return getComputedStyle(cv).getPropertyValue('--mp-pin').trim() === w + 'px' && cv.getAttribute('data-mp-chip') === "
+                           "(z >= 13 ? 'full' : (z >= 10 ? 'compact' : 'none')) }", arg=[z, want], timeout=timeout)
     page.wait_for_timeout(300)
+
+
+def _chip_mode_assertions(page, z, exp_compact_text=None):
+    """標籤模式（computed style）：none ⇒ 標籤全都 display:none；compact ⇒ 單行（第二行藏、長名 10 字＋…）；full ⇒ 兩行（16 字）。"""
+    r = page.evaluate("""() => { const cs = e => getComputedStyle(e).display;
+      const mks = [...document.querySelectorAll('#mp-canvas .mp-mk[data-chip="1"]')];
+      return mks.map(m => { const c = m.querySelector('.mp-chip'), t = m.querySelector('.mp-chip-t'), k = m.querySelector('.mp-chip-c'), s = m.querySelector('small');
+        return { chip: cs(c), full: cs(t), compact: cs(k), small: s ? cs(s) : 'none', off: c.classList.contains('mp-chip--off'), ct: k.textContent } }) }""")
+    mode = MODE[z]
+    assert r, "沒有任何帶標籤的圖釘"
+    for x in r:
+        if mode == "none":
+            assert x["chip"] == "none", (z, x)
+        elif mode == "compact":
+            assert x["chip"] != "none" or x["off"], (z, x)
+            assert x["full"] == "none" and x["compact"] != "none" and x["small"] == "none", (z, x)
+        else:
+            assert x["full"] != "none" and x["compact"] == "none", (z, x)
+    if exp_compact_text:
+        assert exp_compact_text in {x["ct"] for x in r}, (exp_compact_text, r)
 
 
 def _pin_size(page):
@@ -121,7 +161,12 @@ def _pin_size(page):
                          " return w.length ? Math.min(...w) : 0 }")          # 0 個圖釘 ⇒ 0（不讓「沒有圖釘」通過門檻）
 
 
-THRESH = {10: 44, 14: 50, 17: 56}
+#: 2026-10-01 使用者：全國視野（z7）44px＋標籤太大 ⇒ 縮放表：≤7 24、8–9 30、10–12 38、13–15 46、≥16 54（標籤模式 none／compact／full）
+THRESH = {7: 24, 9: 30, 11: 38, 14: 46, 17: 54}
+ZOOMS = (7, 9, 11, 14, 17)
+MODE = {7: "none", 9: "none", 11: "compact", 14: "full", 17: "full"}
+#: Leaflet 各縮放層級看的中心（讓「單獨的圖釘」在視野內）：全國層看 T-4／T-5，z11 看 T-4，z14／17 看 T-1..T-3
+CENTER = {7: (23.7, 120.5), 9: (23.7, 120.5), 11: (24.28, 120.69), 14: (24.159, 120.683), 17: (24.159, 120.683)}
 
 
 def _check_legend(page):
@@ -149,7 +194,7 @@ def _chips(page):
 
 
 def _expect_titles():
-    return {LONG[:16] + "…", SHORT, XSS}          # 用「包含」比：z10／Google 假底圖還會有 T-4
+    return {LONG[:16] + "…", SHORT, XSS}          # 用「包含」比：z11／Google 假底圖還會有 T-4／T-5
 
 
 @pytest.mark.e2e
@@ -161,12 +206,20 @@ def test_leaflet_legend_pins_zoom_steps_chips_and_overlap(live_server, make_user
     assert page.evaluate("() => document.getElementById('mp-canvas').getAttribute('data-mp-bm')") == "leaflet"
     _check_legend(page)
     _elshot(page, "[data-testid=mp-legend]", "legend_closeup")
-    for z in (10, 14, 17):
+    for z in ZOOMS:
         _set_zoom(page, z)
         assert _pin_size(page) >= THRESH[z], (z, _pin_size(page))
+        assert _pin_size(page) <= THRESH[z] + 1, "圖釘不可比規格大（z%d：%s）" % (z, _pin_size(page))
         me = page.evaluate("() => (document.querySelector('.mp-ov-pin') || {}).offsetWidth || 99")
         assert me >= 26
+        _chip_mode_assertions(page, z, exp_compact_text=(LONG4[:10] + "…") if z == 11 else None)
+        if z == 11:     # 標籤不可畫在群聚泡泡上（真的量矩形）
+            assert page.evaluate("""() => { const hit = (a, b) => !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+              const cl = [...document.querySelectorAll('#mp-canvas .marker-cluster')].map(e => e.getBoundingClientRect());
+              const vis = [...document.querySelectorAll('#mp-canvas .mp-mk[data-chip="1"] .mp-chip')].filter(c => !c.classList.contains('mp-chip--off') && c.getBoundingClientRect().width);
+              return cl.length > 0 && vis.length > 0 && vis.every(c => cl.every(r => !hit(c.getBoundingClientRect(), r))) }""")
         _shot(page, "leaflet_zoom%d" % z)
+    _set_zoom(page, 14)
     chips = _chips(page)
     assert _expect_titles() <= {c["title"] for c in chips}, chips
     assert all(len(c["title"]) <= 17 for c in chips)
@@ -204,9 +257,11 @@ def test_google_path_pins_zoom_steps_chips_and_z_order(live_server, make_user, e
     assert page.evaluate("() => document.getElementById('mp-canvas').getAttribute('data-mp-bm')") == "google"
     assert page.evaluate("() => window.__gm.maps[0].opts.clickableIcons") is False
     _check_legend(page)
-    for z in (10, 14, 17):
+    for z in ZOOMS:
         _set_zoom(page, z, google=True)
         assert _pin_size(page) >= THRESH[z], (z, _pin_size(page))
+        assert _pin_size(page) <= THRESH[z] + 1, (z, _pin_size(page))
+        _chip_mode_assertions(page, z, exp_compact_text=(LONG4[:10] + "…") if z == 11 else None)
         _shot(page, "google_zoom%d" % z)
     z = page.evaluate("() => window.__gm.markers.filter(m => m.content.classList && m.content.classList.contains('mp-mk')).map(m => m.zIndex)")
     assert z and min(z) >= 900, "資料點的 zIndex 要高於據點（500）與 Google 自己的標記：%s" % z
