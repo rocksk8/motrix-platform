@@ -1,6 +1,6 @@
 # 業務開發 更新紀錄
 
-## 1.0.11 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
+## 1.0.12 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
 - 新增 `attachments.py::_CrmCatalog`（`attachments.catalog`／`crm`，IP-105）：開發記錄附件開檔；權限＝`_DevLogPathAccess`（模組規則＋row_access dev_case）。
 
 ## 1.0.11 — 2026-09-30（暫用號，列車取號；wip/w1-file-preview 共用檔案預覽 P1）

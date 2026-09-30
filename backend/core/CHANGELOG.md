@@ -2,11 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.79 — 2026-09-30（wip/version-slots：版號佔位，使用者「撞號太多次了，想辦法解決」）
+## 1.80 — 2026-09-30（wip/version-slots：版號佔位，使用者「撞號太多次了，想辦法解決」）〔train_number：1.79 → 1.80〕
 - L0（新增）：`core.migrations.NEXT`——`register("core", NEXT, fn)`＝未取號的 core migration（分支用）：排在已編號的之後跑、不記版號、每次 `run_all` 重跑（靠冪等）；非 core 登記 NEXT ⇒ ValueError。列車 `tools/platform/train_number.py assign` 依檔案順序換成連續整數；列車／platform 上有 NEXT ⇒ `test_version_slots` 紅。已編號的行為不變。
 - 流程：分支不再取號——模組／CORE CHANGELOG 寫 `## (next)`、manifest 寫 `"version": "next"`、`core_bump.py --pending`（G1 快照 core_version="next"、CORE_VERSION 不動）；列車 `train_number.py assign` 一次取號；CHANGELOG／version_manifest 的 git 合併驅動（`setup_merge_drivers.py`）讓兩邊的新增都留。PLAYBOOK §G6
 
-## 1.78 — 2026-09-30（暫用，列車取號；W1 建構器 S2.5～S5：金流串接、欄位改得到、定義送審、單據修訂；wip/w1-builder3-s25）〔train_number：1.76 → 1.78〕
+## 1.79 — 2026-09-30（暫用，列車取號；W1 建構器 S2.5～S5：金流串接、欄位改得到、定義送審、單據修訂；wip/w1-builder3-s25）〔train_number：1.76 → 1.78〕〔train_number：1.78 → 1.79〕
 - L1（新增）：`core.paths.FORM_TEMPLATES_DIR`（自訂模組內建範本資料夾；原本用 `__file__` 算，違反 core.paths 守門）
 - L0（新增，只增）：`core.definitions.submit_draft／decide_submitted／open_submission／save_decision`（S4：草稿→送審＝不可變快照 `submitted`＋新版號→核可＝`published`／退回＝`rejected` 保留原因、版號不回收；草稿與快照相同才在核可時刪）；`versions()` 每列多 `submitted_by／submitted_at／decision`。`get()`／`resolve()` 仍只認 `published` ⇒ 舊行為不變
 - L1（新增）：`helpers/custom_def_review`（`submit／decide／open_view／restore_to_draft／queue_items／detail／review_state／set_review_settings`；**審核人名單**（系統設定 `custom_module_def_reviewers`）有申請人以外至少一人 ⇒ 送審自動啟用，沒有 ⇒ 發布維持直接發布並稽核「未經第二人審核」；手動覆寫 `custom_module_def_review`＝auto／on／off；審核人任一位（或代理、或申請人以外的最高管理者）核可即發布，退回要原因、版號不回收，申請人不能審自己送的；啟用時「還原」＝放回草稿）；端點 `GET／PUT /api/custom-modules/definition-review`、`GET /api/custom-modules/{key}/definition/review`、`POST …/definition/{版}/approve|reject`；`POST /api/definitions/custom_module/{key}/publish` 對 custom_module 改走它；簽核佇列新類型 `custom_module_def`（`approval.queue_items`／`approval.detail`）；頁面 `custom-def-review.html`；建構器標頭顯示送審狀態
@@ -17,10 +17,10 @@
 ## （不升版號：介面不變）— 歷史紀錄分層搜尋＋失敗紀錄
 core migration v6（audit_log 加 module／case_no／ref_no／result／reason_code／status_code＋搜尋索引＋分批回填）；L1 新增 helpers.audit 私有函式（_derive_fields／_audit_failure／_audit_login_failed），_audit 簽章不變；auth_middleware 回應後記失敗寫入（403/404/409/422/428/500，不含 GET、不含 401 過期）。
 
-## 1.77 — 2026-09-30（暫用號；wip/w2-upload-magic：上傳檔頭檢查）〔train_number：1.76 → 1.77〕
+## 1.78 — 2026-09-30（暫用號；wip/w2-upload-magic：上傳檔頭檢查）〔train_number：1.76 → 1.77〕〔train_number：1.77 → 1.78〕
 - L1（新增）：`helpers.uploads._check_upload_magic`（列入 `__l1_public__`）——副檔名白名單之外的檔頭（magic bytes）檢查，唯一關卡；`save_document_files` 自動套用，自有存檔邏輯的 L2（勞報單回簽檔）與 L1 工作日誌照片呼叫同一支。不符 ⇒ 400＋稽核 `upload.rejected_magic`。白名單裡沒有檔頭規則的副檔名一律擋（fail-closed）。`save_document_files` 簽章不變。
 
-## 1.76 — 2026-09-30（暫用號；wip/w2-attach-p2：附件目錄 P2，IP-105）
+## 1.77 — 2026-09-30（暫用號；wip/w2-attach-p2：附件目錄 P2，IP-105）〔train_number：1.76 → 1.77〕
 - L1（新增）：`helpers.uploads.ATTACHMENTS_CATALOG`（capability 名 `attachments.catalog`）、`OpenedFile`（`abs_path, filename, mime, size`）、`pick_file(files, file_id)`、`opened_upload_file(entry)`；`routers/attachments.py`：`GET /api/attachments/open?type=&doc=&file=`（找認領 type 的提供者 ⇒ `open()`；看不到＝查無＝404；實體檔必須在 uploads 或提供者宣告的 `ROOTS` 之下）。`save_document_files` 與既有 `attachments.for_document`／`uploads.path_access` 不變。
 
 ## 1.76 — 2026-09-30（暫用，列車取號；wip/w1-file-preview：共用檔案預覽元件 P1，前端新增、Python 介面不變）
