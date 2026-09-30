@@ -631,6 +631,7 @@
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   <span x-text="cashierExporting ? '匯出中…' : '匯出 Excel'"></span>
                 </button>
+                <button class="btn-export pdf" data-testid="export-pdf-cashier-history" :disabled="cashierExporting" @click="exportCashierHistory('pdf')">匯出 PDF</button>
               </div>
 
               <template x-if="cashierHistoryLoading">
@@ -826,6 +827,7 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             <span x-text="t100Exporting ? '產製中…' : '匯出傳票 Excel'"></span>
             </button>
+            <button class="btn-export pdf" data-testid="export-pdf-t100" @click="exportT100Vouchers('pdf')" :disabled="t100Exporting">匯出傳票 PDF</button>
             <button class="btn-ghost btn-sm" @click="loadT100Preview()" :disabled="t100Previewing" x-text="t100Previewing ? '載入中…' : '重新整理預覽'"></button>
             <!-- ⚠️ 這顆按鈕要與面板**同一個條件** —— 面板藏起來而按鈕留著，
                  按下去什麼都不會發生，而那與「功能壞了」在使用者眼中一樣。 -->

@@ -103,17 +103,17 @@ function ledgerHubPage() {
       } catch (e) { t.error = e.message; t.data = null }
       t.busy = false
     },
-    async taxExport() {
+    async taxExport(fmt) {
       const t = this.tax
       t.error = ''
       try {
-        const r = await fetch('/api/ledger/tax401/export?year=' + encodeURIComponent(t.year) + '&period=' + encodeURIComponent(t.period),
+        const r = await fetch('/api/ledger/tax401/export' + (fmt === 'pdf' ? '/pdf' : '') + '?year=' + encodeURIComponent(t.year) + '&period=' + encodeURIComponent(t.period),
           { headers: { Authorization: 'Bearer ' + (this._session().token || '') } })
         if (!r.ok) { let d = {}; try { d = await r.json() } catch (e) { d = {} } throw new Error(typeof d.detail === 'string' ? d.detail : '匯出失敗（' + r.status + '）') }
         const url = URL.createObjectURL(await r.blob())
         const a = document.createElement('a')
         a.href = url
-        a.download = '營業稅401_' + t.year + '年第' + t.period + '期.xlsx'
+        a.download = '營業稅401_' + t.year + '年第' + t.period + '期' + (fmt === 'pdf' ? '.pdf' : '.xlsx')
         a.click()
         URL.revokeObjectURL(url)
       } catch (e) { t.error = e.message }

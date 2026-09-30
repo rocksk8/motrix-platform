@@ -328,13 +328,13 @@ window.CM_PARTS.push(() => ({
       }
     },
 
-    async batchExport() {
+    async batchExport(fmt) {
       const nos = this.batchNos()
       if (!nos.length || this.batchBusy) return
       this.batchBusy = true
       this.batchMsg = ''
       try {
-        const r = await fetch('/api/case-batch/export', {
+        const r = await fetch('/api/case-batch/export' + (fmt === 'pdf' ? '/pdf' : ''), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ quote_nos: nos }),
@@ -347,7 +347,7 @@ window.CM_PARTS.push(() => ({
         const blob = await r.blob()
         const a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
-        a.download = '案件匯出.xlsx'
+        a.download = '案件匯出' + (fmt === 'pdf' ? '.pdf' : '.xlsx')
         document.body.appendChild(a)
         a.click()
         a.remove()
