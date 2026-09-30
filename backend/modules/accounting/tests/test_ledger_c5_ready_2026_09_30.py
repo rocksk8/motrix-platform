@@ -11,7 +11,7 @@ def _tok(client, make_user):
     return {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
 
 
-def test_ready_is_a_subset_and_listing_reports_it():
+def test_ready_is_a_subset_and_listing_reports_it(client):
     assert F.READY <= set(F.FEATURES) and F.READY == {"engine_drafts"}
     c = db.get_db()
     try:
