@@ -48,14 +48,14 @@ def test_menu_visible_to_users_and_unset_means_everyone():
 
 
 def test_formula_over_a_restricted_field_with_wider_visibility_is_a_leak():
-    assert [p["path"] for p in S.leaking_formulas(BODY)] == ["fields.g.formula"]
+    assert [p["path"] for p in S.leaking_formulas(BODY)] == ["fields[1].formula"]
     ok = {"fields": [dict(BODY["fields"][0]), dict(BODY["fields"][1], access={"visibleTo": {"roles": ["admin"]}})]}
     assert S.leaking_formulas(ok) == []
 
 
 def test_access_problems_reject_unknown_keys_and_bad_shapes():
     bad = {"fields": [{"key": "a", "access": {"hidden": True}}, {"key": "b", "access": {"visibleTo": {"roles": "x"}}}]}
-    assert [p["path"] for p in S.access_problems(bad)] == ["fields.a.access", "fields.b.access"]
+    assert [p["path"] for p in S.access_problems(bad)] == ["fields[0].access", "fields[1].access"]
     assert S.access_problems(BODY) == []
 
 

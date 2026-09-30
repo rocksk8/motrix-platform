@@ -2,7 +2,7 @@
 """建構器底層支援（建構器第三輪 S2.5／S3／S5，CORE 1.72，只增）。
 
 [單位] plat:custom-builder-support    [層] L1    [穩定度] 契約（只增）
-[公開介面] ACCESS_KEYS, hidden_keys, keep_hidden_values, mask_compute, mask_record, mask_records, render_output_for, EVENT_FINANCE_POSTED, EVENT_FINANCE_REVERSED, access_problems, can_see_field, can_see_menu,
+[公開介面] ACCESS_KEYS, VISIBLE_ROLES, hidden_keys, keep_hidden_values, mask_compute, mask_record, mask_records, render_output_for, EVENT_FINANCE_POSTED, EVENT_FINANCE_REVERSED, access_problems, can_see_field, can_see_menu,
     create_revision, emit_finance_event, leaking_formulas, mark_finance_processed, mask_for, pending_finance_events
 [不變式]
   - 欄位／選單可見設定存在定義 JSON（`fields[].access.visibleTo`、`menu.visibleTo`，形狀 `{roles:[…], users:[…]}`，
@@ -19,6 +19,8 @@ from datetime import datetime
 from . import formula
 
 ACCESS_KEYS = {"visibleTo"}
+#: 可見設定可選的角色（同 helpers.auth 的基本角色；建構器面板只列這些）
+VISIBLE_ROLES = ("superadmin", "admin", "sales", "engineer", "viewer")
 EVENT_FINANCE_POSTED = "custom_record.finance_posted"
 EVENT_FINANCE_REVERSED = "custom_record.finance_reversed"
 
@@ -129,28 +131,38 @@ def render_output_for(conn, module_key, record_no, user) -> str:
     return CM.render_view(body, rec["view"])
 
 
+def _shape_ok(v) -> bool:
+    return isinstance(v, dict) and not (set(v) - {"roles", "users"}) and all(isinstance(v.get(k, []), list) for k in ("roles", "users"))
+
+
+def _role_problem(path, v):
+    bad = [r for r in (v.get("roles") or []) if r not in VISIBLE_ROLES] if isinstance(v, dict) else []
+    return [{"path": path, "message": "不認得的角色：%s（可用：%s）" % ("、".join(map(str, bad)), "、".join(VISIBLE_ROLES))}] if bad else []
+
+
 def access_problems(body) -> list:
-    """定義的可見設定有問題 ⇒ [{key,message}]（發布驗證用）：未知鍵、形狀不對、角色／帳號不是字串清單。"""
+    """定義的可見設定有問題 ⇒ [{path,message}]（path 用 `fields[i]`，建構器才標得到卡片）：未知鍵、形狀不對、
+    角色不在清單、必填欄位設成受限。"""
     out = []
-    for f in body.get("fields", []):
+    for i, f in enumerate(body.get("fields", [])):
         acc = f.get("access") if isinstance(f, dict) else None
         if acc is None:
             continue
-        key = f.get("key")
+        p = "fields[%d].access" % i
         if not isinstance(acc, dict) or set(acc) - ACCESS_KEYS:
-            out.append({"path": "fields.%s.access" % key, "message": "欄位可見設定只認得 visibleTo"})
+            out.append({"path": p, "message": "欄位可見設定只認得 visibleTo"})
             continue
         v = acc.get("visibleTo")
-        if v is not None and (not isinstance(v, dict) or set(v) - {"roles", "users"}
-                              or not all(isinstance(v.get(k, []), list) for k in ("roles", "users"))):
-            out.append({"path": "fields.%s.access" % key, "message": "visibleTo 要是 {roles:[…], users:[…]}"})
-        if f.get("required") and _spec((acc.get("visibleTo") if isinstance(acc, dict) else None)) is not None:
-            out.append({"path": "fields.%s.required" % key, "message": "必填欄位不可以設成只有部分人看得到（其他人填不了就存不了）"})
+        if v is not None and not _shape_ok(v):
+            out.append({"path": p, "message": "visibleTo 要是 {roles:[…], users:[…]}"})
+            continue
+        out += _role_problem(p, v)
+        if f.get("required") and _spec(v) is not None:
+            out.append({"path": "fields[%d].required" % i, "message": "必填欄位不可以設成只有部分人看得到（其他人填不了就存不了）"})
     menu = body.get("menu")
     v = menu.get("visibleTo") if isinstance(menu, dict) else None
-    if v is not None and (not isinstance(v, dict) or set(v) - {"roles", "users"}
-                          or not all(isinstance(v.get(k, []), list) for k in ("roles", "users"))):
-        out.append({"path": "menu.visibleTo", "message": "選單 visibleTo 要是 {roles:[…], users:[…]}"})
+    if v is not None:
+        out += [{"path": "menu.visibleTo", "message": "選單 visibleTo 要是 {roles:[…], users:[…]}"}] if not _shape_ok(v) else _role_problem("menu.visibleTo", v)
     return out
 
 
@@ -159,6 +171,7 @@ def leaking_formulas(body) -> list:
     判準：被引用欄位受限（有 visibleTo）而公式欄的可見範圍不是它的子集（公式欄不限，或含了不在其中的角色／帳號）。"""
     fields = {f["key"]: f for f in body.get("fields", []) if isinstance(f, dict) and f.get("key")}
     out = []
+    index = {f.get("key"): n for n, f in enumerate(body.get("fields", [])) if isinstance(f, dict)}
     for f in fields.values():
         if f.get("type") != "formula" or not f.get("formula"):
             continue
@@ -171,7 +184,7 @@ def leaking_formulas(body) -> list:
             if theirs is None:
                 continue
             if mine is None or not (mine[0] <= theirs[0] and mine[1] <= theirs[1]):
-                out.append({"path": "fields.%s.formula" % f["key"], "message": "公式引用了受限欄位「%s」，但這個公式欄的可見範圍比它大——會洩漏" % (src.get("label") or ref)})
+                out.append({"path": "fields[%d].formula" % index[f["key"]], "message": "公式引用了受限欄位「%s」，但這個公式欄的可見範圍比它大——會洩漏" % (src.get("label") or ref)})
     return out
 
 

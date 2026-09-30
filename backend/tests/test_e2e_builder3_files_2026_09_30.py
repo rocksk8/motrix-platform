@@ -60,7 +60,7 @@ def test_runtime_upload_list_remove_save_and_view_link(live_server, make_user, n
     page.set_input_files("#cr-in-pics", [str(a), str(b)])
     page.wait_for_selector('[data-file-field="pics"] li', timeout=15000)
     assert page.locator('[data-file-field="pics"] li').count() == 2
-    staged = _q("SELECT id, path, record_id FROM custom_record_files WHERE module_key=? ORDER BY uploaded_at, id", (KEY,))
+    staged = _q("SELECT id, path, record_id, filename FROM custom_record_files WHERE module_key=? ORDER BY filename", (KEY,))   # 同一批上傳的時間戳相同 ⇒ 依檔名定序（不靠 id）
     assert len(staged) == 2 and all(r["record_id"] == 0 and _exists(r["path"]) for r in staged)
     # 移除剛上傳的一張 ⇒ 暫存列與實體檔都刪
     first = staged[0]
