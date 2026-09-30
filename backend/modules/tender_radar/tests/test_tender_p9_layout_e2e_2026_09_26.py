@@ -231,7 +231,7 @@ def test_layout_editor_role_override_and_restore(live_server, make_user, no_tile
 @pytest.mark.e2e
 def test_reopened_editor_is_locked_until_this_open_finished_loading(live_server, make_user, no_tile_probe, e2e_browser):
     """O7 第三次的決定性重現：重開排版器時，start() 在自己的 loadScope 之前還要等側欄請求；把側欄請求拖慢 1.5 秒，
-    這段期間面板必須是鎖住的（busy＝1、範圍下拉 disabled、loadedScope 空）；舊版這段期間是「已打開、舊 work 還在、可操作」，
+    這段期間面板必須是鎖住的（busy＝1、編輯區 inert、loadedScope 空）；舊版這段期間是「已打開、舊 work 還在、可操作」，
     使用者在此時做的編輯會被稍後 start 自己的 loadScope 用伺服器版蓋掉。"""
     _seed()
     _users(make_user)
@@ -243,8 +243,8 @@ def test_reopened_editor_is_locked_until_this_open_finished_loading(live_server,
     boss.wait_for_function("() => { const e = document.getElementById('ml-editor'); return !!e && e.style.display !== 'none' }")
     st = boss.evaluate("() => { const e = document.getElementById('ml-editor');"
                        " return {busy: e.dataset.busy, loaded: e.dataset.loadedScope,"
-                       " scopeDisabled: e.querySelector('[data-testid=ml-scope]').disabled} }")
-    assert st == {"busy": "1", "loaded": "", "scopeDisabled": True}, st            # 舊版：busy 0、loaded 有值（舊）、下拉可選
+                       " inert: e.querySelector('.ml-ed__body').inert} }")
+    assert st == {"busy": "1", "loaded": "", "inert": True}, st                    # 舊版：busy 0、loaded 有值（舊）、可操作
     boss.wait_for_function("() => { const e = document.getElementById('ml-editor');"
                            " return e.dataset.busy === '0' && !!e.dataset.loadedScope }", timeout=15000)
     boss.unroute("**/api/platform/menu*")

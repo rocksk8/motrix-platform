@@ -47,7 +47,7 @@
 '   <span class="ml-ed__row"><label>以角色預覽</label><select data-testid="ml-preview-role" x-model="previewRole" @change="previewAs()" :disabled="loading">' +
 '    <option value="">（編輯中的草稿）</option><template x-for="r in roles" :key="r.key"><option :value="r.key" x-text="r.label"></option></template></select>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-close" @click="close()">關閉</button></span></div>' +
-'  <div class="ml-ed__row"><label>套用範圍</label><select data-testid="ml-scope" x-model="scope" @change="loadScope()" :disabled="busy || loading">' +
+'  <div class="ml-ed__row"><label>套用範圍</label><select data-testid="ml-scope" x-model="scope" @change="loadScope()" :disabled="busy">' +
 '   <option value="company">公司預設</option><template x-for="r in roles" :key="r.key"><option :value="\'role:\' + r.key" x-text="\'角色：\' + r.label"></option></template></select>' +
 '   <span class="ml-ed__sub" x-text="startNote"></span>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-retry" x-show="loadError" @click="loadScope()">重試</button></div>' +
@@ -162,6 +162,7 @@
         // ⇒ 使用者（或 e2e）此時的編輯／範圍切換，會被稍後 start 自己的 loadScope 用伺服器版蓋掉（編輯無聲消失）。先鎖住，載入完才放開。
         this.loading = true
         this.loadedScope = ''
+        var seq0 = this._scopeSeq
         this.open = true
         document.body.classList.add('ml-editing')
         try {
@@ -178,6 +179,7 @@
           this.msg = this.loadError
           return
         }
+        if (this._scopeSeq !== seq0) return      // 等待期間使用者已切了範圍：那一趟載入自己會收尾（清 loading），這裡不再重載（會蓋掉切換後的編輯）
         await this.loadScope()      // 這一趟結束（成功或失敗）才由它清 loading；失敗時維持鎖定
       },
       close() {
