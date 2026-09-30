@@ -47,19 +47,37 @@ function ledgerReportsPage() {
     q() { return 'start=' + this.start + '&end=' + this.end + '&include_drafts=' + this.drafts },
     setTab(t) { this.tab = t; this.run() },
 
+    // 連續查詢時，較晚發出的請求以它的回應為準：舊請求晚到的回應一律丟掉（否則使用者看到的是上一個條件的數字）。
+    _seq: 0,
     async run() {
+      const seq = ++this._seq
       this.error = ''
       this.loading = true
       try {
-        if (this.tab === 'tb') this.tb = await this._api('/api/ledger/trial-balance?' + this.q())
-        else if (this.tab === 'gl') {
+        if (this.tab === 'tb') {
+          const r = await this._api('/api/ledger/trial-balance?' + this.q())
+          if (seq !== this._seq) return
+          this.tb = r
+        } else if (this.tab === 'gl') {
           if (!this.account) { this.gl = null; this.loading = false; return }
-          this.gl = await this._api('/api/ledger/general-ledger?account=' + encodeURIComponent(this.account) + '&' + this.q())
+          const r = await this._api('/api/ledger/general-ledger?account=' + encodeURIComponent(this.account) + '&' + this.q())
+          if (seq !== this._seq) return
+          this.gl = r
         } else if (this.tab === 'sub') {
           if (!this.account) { this.sub = null; this.loading = false; return }
-          this.sub = await this._api('/api/ledger/subledger?account=' + encodeURIComponent(this.account) + '&dimension=' + this.dimension + '&' + this.q())
-        } else this.jr = await this._api('/api/ledger/journal?' + this.q())
-      } catch (e) { this.error = e.message; this.tb = this.tab === 'tb' ? null : this.tb }
+          const r = await this._api('/api/ledger/subledger?account=' + encodeURIComponent(this.account) + '&dimension=' + this.dimension + '&' + this.q())
+          if (seq !== this._seq) return
+          this.sub = r
+        } else {
+          const r = await this._api('/api/ledger/journal?' + this.q())
+          if (seq !== this._seq) return
+          this.jr = r
+        }
+      } catch (e) {
+        if (seq !== this._seq) return
+        this.error = e.message
+        this.tb = this.tab === 'tb' ? null : this.tb
+      }
       this.loading = false
     },
     openLedger(code) { if (!code) return; this.account = code; this.setTab('gl') },

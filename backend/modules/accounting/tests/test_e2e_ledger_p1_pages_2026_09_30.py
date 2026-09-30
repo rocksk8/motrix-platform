@@ -193,3 +193,53 @@ def test_settings_page_shows_a_problem_account_and_the_warning(live_server, make
     page.check("[data-testid=ls-only-problems]")
     page.wait_for_selector("[data-testid=ls-row-1998]")
     assert page.locator("[data-testid^=ls-row-]").count() == 1
+
+
+# ── B2：財務報表頁 ──────────────────────────────────────────────────────
+
+@pytest.mark.e2e
+def test_statements_page_balance_sheet_income_statement_and_unmapped_banner(live_server, make_user, e2e_browser):
+    user, pw = make_user(username="e2e_gl_stmt", role="superadmin")
+    _seed("2171-01-05", [("1113", 100000, 0), ("3111", 0, 100000)])
+    _seed("2171-01-10", [("1191", 10500, 0), ("4111", 0, 10000), ("2204", 0, 500)])
+    _seed("2171-01-20", [("6112", 1000, 0), ("1113", 0, 1000)])
+    page = e2e_browser.new_page()
+    bad, errs = _open(page, live_server, user, pw, "ledger-statements.html")
+    page.wait_for_selector("[data-testid=st-as-of]")
+    page.fill("[data-testid=st-as-of]", "2171-01-31")
+    page.click("[data-testid=st-run]")
+    page.wait_for_selector("[data-testid=st-bs-table]")
+    # 等終點狀態（新日期的數字出現），不是等第一次自動載入留下的舊畫面（那次是今天、全 0、也是平衡的）
+    page.wait_for_function("() => { const e = document.querySelector('[data-testid=st-bs-total-assets] td.num'); return e && e.textContent.trim() === '109,500' }")
+    page.wait_for_selector("[data-testid=st-bs-ok]", state="visible")                # 對帳通過的綠燈
+    assert page.locator("[data-testid=st-bs-total-le] td.num").first.inner_text().strip() == "109,500"   # 資產 ＝ 負債＋權益（含本期損益 9,000）
+    assert not page.locator("[data-testid=st-bs-unbalanced]").is_visible()
+    page.locator("[data-testid=st-bs-line-BS_CA_AR]").click()                         # 點列展開科目明細
+    page.wait_for_function("() => document.body.innerText.includes('1191 應收帳款')")
+
+    page.click("[data-testid=st-tab-is]")
+    page.fill("[data-testid=st-start]", "2171-01-01")
+    page.fill("[data-testid=st-end]", "2171-01-31")
+    page.click("[data-testid=st-run]")
+    page.wait_for_function("() => { const e = document.querySelector('[data-testid=st-is-line-IS_NI] td.num'); return e && e.textContent.trim() === '9,000' }")
+    page.wait_for_selector("[data-testid=st-is-ok]", state="visible")
+
+    # 反向控制：有餘額卻沒有報表列的科目 ⇒ 紅色橫幅並點名，不可被吸收
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE gl_account_meta SET fs_line='' WHERE code='1191'")
+        conn.commit()
+    finally:
+        conn.close()
+    page.click("[data-testid=st-tab-bs]")
+    page.click("[data-testid=st-run]")
+    page.wait_for_selector("[data-testid=st-bs-unbalanced]", state="visible")
+    assert "1191" in page.locator("[data-testid=st-bs-unbalanced]").inner_text()
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE gl_account_meta SET fs_line='BS_CA_AR' WHERE code='1191'")
+        conn.commit()
+    finally:
+        conn.close()
+    assert not bad, "開財務報表頁時有請求失敗：%s" % bad[:4]
+    assert not errs, "頁面丟了例外：%s" % errs[:3]

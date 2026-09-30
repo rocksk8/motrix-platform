@@ -1,7 +1,7 @@
 {
   "key": "accounting",
   "name": "會計",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "core": ">=1.0,<2.0",
   "license_key": "accounting",
   "permissions": [
@@ -173,6 +173,18 @@
         "group": "finance",
         "label": "報表設定",
         "order": 60,
+        "perm": [
+          "cashier",
+          "finance"
+        ]
+      }
+    },
+    {
+      "path": "ledger-statements.html",
+      "menu": {
+        "group": "finance",
+        "label": "財務報表",
+        "order": 58,
         "perm": [
           "cashier",
           "finance"
