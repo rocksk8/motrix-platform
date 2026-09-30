@@ -703,6 +703,31 @@ def _looks_absolute(path):
 _CD_RE = re.compile(r'^\s*cd\s+(?:/d\s+)?"?([^"\r\n]*)"?\s*$', re.IGNORECASE)
 
 
+def _package_audience(pkg):
+    """deploy_manifest.json 的 audience（own／sale）；沒有檔或舊格式 ⇒ own（嚴格檢查照舊）。"""
+    try:
+        with io.open(os.path.join(pkg, "deploy_manifest.json"), encoding="utf-8-sig") as fh:
+            return json.load(fh).get("audience") or "own"
+    except Exception:                                                  # noqa: BLE001
+        return "own"
+
+
+def _check_autostart_sale(path, text):
+    """sale 包的 autostart.bat 是**客戶範本**：不綁絕對路徑（用 %~dp0）、兩個對外連線開關預設關（沒有被啟用的 set 行）、
+    不含任何本公司的路徑。與 own 的嚴格檢查方向相反——own 要求開關必須開、路徑必須絕對。"""
+    lines = text.splitlines()
+    live = [ln for ln in lines if not re.match(r"^\s*(rem\b|::)", ln, re.IGNORECASE)]
+    for sw in AUTOSTART_SWITCHES:
+        if any(re.search(r"^\s*set\s+%s\s*=" % sw, ln, re.IGNORECASE) for ln in live):
+            R.fail("autostart 開關", "sale 包的 autostart.bat 不可預設開啟 %s（出貨承諾：裝好之後不會自己對外連線）" % sw)
+    cds = [m.group(1).strip() for m in (_CD_RE.match(ln) for ln in lines) if m]
+    if not cds or not cds[-1].lower().startswith("%~dp0"):
+        R.fail("autostart 路徑", "sale 包的 autostart.bat 必須 cd 到 %~dp0（腳本所在資料夾），而不是寫死路徑（目前 %r）" % (cds[-1] if cds else None))
+    if re.search(r"[A-Za-z]:" + _BS + _BS + r"Users" + _BS + _BS, text, re.IGNORECASE):
+        R.fail("autostart 路徑", "sale 包的 autostart.bat 含使用者家目錄路徑（本公司環境資訊）")
+    print("  autostart.bat（sale 範本）  %s" % path)
+
+
 def check_autostart(pkg):
     r"""`VP6`：`autostart.bat` **不是只驗存在**。
 
@@ -750,6 +775,9 @@ def check_autostart(pkg):
 
     with io.open(path, "r", encoding="utf-8", errors="replace") as fh:
         text = fh.read()
+    if _package_audience(pkg) == "sale":
+        _check_autostart_sale(path, text)
+        return
     lines = text.splitlines()
 
     for sw in AUTOSTART_SWITCHES:

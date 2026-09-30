@@ -10,7 +10,8 @@
     "backend/pytest.ini",
     "tools/platform/**",
     "product/sale_docs/**",
-    "backend/setup_heartbeat_task.ps1"
+    "backend/setup_heartbeat_task.ps1",
+    "product/sale_files/**"
   ],
   "keep": [
     "tools/platform/upgrade.py",
@@ -42,7 +43,8 @@
     "tools/platform/*drill*.py",
     "backend/tests/**",
     "product/sale_docs/**",
-    "backend/setup_heartbeat_task.ps1"
+    "backend/setup_heartbeat_task.ps1",
+    "product/sale_files/**"
   ],
   "cuts": [
     {
@@ -94,12 +96,14 @@
   "replace": {
     "DEPLOY.md": "product/sale_docs/DEPLOY.md",
     "DR-SOP.md": "product/sale_docs/DR-SOP.md",
-    "HTTPS-DEPLOY-CHECKLIST.md": "product/sale_docs/HTTPS-DEPLOY-CHECKLIST.md"
+    "HTTPS-DEPLOY-CHECKLIST.md": "product/sale_docs/HTTPS-DEPLOY-CHECKLIST.md",
+    "backend/autostart.bat": "product/sale_files/autostart.bat"
   },
   "require_text": {
     "DEPLOY.md": "<安裝目錄>",
     "DR-SOP.md": "<安裝目錄>",
-    "HTTPS-DEPLOY-CHECKLIST.md": "<安裝目錄>"
+    "HTTPS-DEPLOY-CHECKLIST.md": "<安裝目錄>",
+    "backend/autostart.bat": "%~dp0"
   },
   "rehash": [
     {
