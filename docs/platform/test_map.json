@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 932,
+  "tests": 933,
   "unmapped": 12,
   "kinds": {
-   "api": 500,
+   "api": 501,
    "e2e": 219,
    "audit": 128,
    "unit": 85
@@ -5113,6 +5113,33 @@
     "api": [
      "backend/modules/arap/api/cashier.py",
      "backend/modules/case/api/case_extra_expenses.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_expense_masking_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:arap/api/cashier",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/quotations",
+    "router:approval_queue"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py"
     ],
     "module_dir": [
      "backend/modules/case/"
