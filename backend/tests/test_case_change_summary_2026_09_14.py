@@ -165,7 +165,7 @@ def test_detail_endpoint_returns_summary_not_raw_payload(client, make_user):
     conn.execute(
         "INSERT INTO quotations (quote_no, status, customer_name, project_name, "
         "data_json, created_at, updated_at, deal_tag) VALUES (?,?,?,?,?,?,?,?)",
-        ("MQ-202608-777", "已送出", "京城凱悅", "影視對講機",
+        ("MQ-202608-777", "已送出", "海天大飯店", "影視對講機",
          json.dumps({"caseRecord": _cr()}, ensure_ascii=False),
          "2026-08-01", "2026-08-01", "已結案"))
     new_cr = _cr(roles={"filler": "黃玉龍", "sales": "蔡紋惠", "executor": "黃玉龍"})

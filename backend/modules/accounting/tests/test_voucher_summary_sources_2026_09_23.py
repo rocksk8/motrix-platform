@@ -277,7 +277,7 @@ def test_jv7_a_case_source_carries_a_string_ready_to_paste(client, make_user):
 
     ```
     §164  案件來源 => 「{客戶簡稱}{報價單號}」
-                     例：京城凱悅報價單MQ-202608-009
+                     例：海天大飯店報價單MQ-202608-009
     ```
     🔑 釘「**字串在後端組好**」而不是「格式長什麼樣」的理由：
     ```
@@ -289,7 +289,7 @@ def test_jv7_a_case_source_carries_a_string_ready_to_paste(client, make_user):
        裡沒有，**那一段還沒定案**（已問 A）。
     """
     _u, hdr = _hdr(client, make_user, "jv7_case")
-    _seed_quotation("MQ-202608-009", "京城凱悅")
+    _seed_quotation("MQ-202608-009", "海天大飯店")
 
     items = _items(_get(client, hdr).json(), "案件")
     assert items, (
@@ -306,7 +306,7 @@ def test_jv7_a_case_source_carries_a_string_ready_to_paste(client, make_user):
     assert isinstance(s, str) and s.strip(), (
         "那一筆**沒有帶得出去的字串**（找過 summary／text／label／title）：%r\n" % one
         + "☠️ 前端只好自己拼 ⇒ 格式會與 `JV5` 的 PDF 長不一樣。")
-    assert "京城凱悅" in s, "帶入字串裡沒有客戶：%r" % s
+    assert "海天大飯店" in s, "帶入字串裡沒有客戶：%r" % s
     assert "MQ-202608-009" in s, "帶入字串裡沒有報價單號：%r" % s
 
 

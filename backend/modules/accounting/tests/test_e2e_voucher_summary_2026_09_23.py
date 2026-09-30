@@ -81,7 +81,7 @@ def _login(page, base_url, username, password):
     return inject_login(page, base_url, username, password)
 
 
-def _seed_case(quote_no="MQ-202608-009", customer="京城凱悅"):
+def _seed_case(quote_no="MQ-202608-009", customer="海天大飯店"):
     import db
     conn = db.get_db()
     try:
@@ -298,7 +298,7 @@ def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user, e2e_bro
     """
     username, password = make_user(username="e2e_jv7b", role="superadmin",
                                    modules=["cashier"])
-    _seed_case(quote_no="MQ-202608-010", customer="向量圓專")
+    _seed_case(quote_no="MQ-202608-010", customer="山川電子")
 
     browser = e2e_browser
     page = browser.new_page()

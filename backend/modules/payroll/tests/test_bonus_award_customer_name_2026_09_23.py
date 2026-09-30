@@ -161,12 +161,12 @@ def test_bn15_the_award_detail_includes_the_customer_and_project_name(
     ✅ **今天驗得到**（替身驗證過，`_case_names_for` 回空 dict 時這一題會紅）。
     """
     quote_no = QUOTE_NO_PREFIX + "-DETAIL"
-    _seed_quotation(quote_no, "京城凱悅飯店", "監控系統更新案")
+    _seed_quotation(quote_no, "海天大飯店飯店", "監控系統更新案")
     aid = _seed_award(quote_no, ["someone"])
 
     _u, hdr = _hdr(client, make_user, "bn15_detail")
     d = _award_detail(client, hdr, aid)
-    assert d.get("customer_name") == "京城凱悅飯店", (
+    assert d.get("customer_name") == "海天大飯店飯店", (
         "明細裡的 `customer_name` 是 %r。" % d.get("customer_name"))
     assert d.get("project_name") == "監控系統更新案", (
         "明細裡的 `project_name` 是 %r。" % d.get("project_name"))
