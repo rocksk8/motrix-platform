@@ -162,6 +162,15 @@ def log_export(authorization, fmt: str, module: str, name: str, filters=None, ro
     _audit(_tok(authorization), "export." + fmt, "export", name, label or name, detail)
 
 
+def _call_with(fn, a, kw):
+    """`fn(*a, **kw)`，不用 `**` 語法。裝飾器／姊妹端點是**轉手**：FastAPI 依簽名注入的參數個數與名稱由被包的端點決定，
+    這裡列舉不完；`test_case_summary_purpose` 的 `**` 棘輪（基線 0）不准非字面值 `**`，所以走 `partial.keywords`
+    （行為與 `fn(*a, **kw)` 完全相同：位置參數照傳、關鍵字參數以名稱傳入；同名衝突時 TypeError 一樣）。"""
+    p = functools.partial(fn, *a)
+    p.keywords.update(kw)
+    return p()
+
+
 def export_logged(fmt: str, module: str, name: str, label: str = ""):
     """匯出端點的稽核裝飾器（同步／非同步都可）。端點必須回 `Response`（有 `.body` bytes）；串流回應請改回 `Response`。"""
     def deco(fn):
@@ -171,13 +180,13 @@ def export_logged(fmt: str, module: str, name: str, label: str = ""):
         if inspect.iscoroutinefunction(fn):
             @functools.wraps(fn)
             async def wrapper(*a, **kw):
-                resp = await fn(*a, **kw)
+                resp = await _call_with(fn, a, kw)
                 _after(resp, kw)
                 return resp
         else:
             @functools.wraps(fn)
             def wrapper(*a, **kw):
-                resp = fn(*a, **kw)
+                resp = _call_with(fn, a, kw)
                 _after(resp, kw)
                 return resp
         wrapper.__export_inner__ = fn
@@ -323,7 +332,7 @@ def add_pdf_sibling(router, path: str, handler, *, module: str, name: str, title
         async def pdf_handler(*a, **kw):
             tok = _SKIP_EXCEL_RATE.set(True)
             try:
-                resp = await inner(*a, **kw)
+                resp = await _call_with(inner, a, kw)
             finally:
                 _SKIP_EXCEL_RATE.reset(tok)
             return _finish(resp, kw)
@@ -332,7 +341,7 @@ def add_pdf_sibling(router, path: str, handler, *, module: str, name: str, title
         def pdf_handler(*a, **kw):
             tok = _SKIP_EXCEL_RATE.set(True)
             try:
-                resp = inner(*a, **kw)
+                resp = _call_with(inner, a, kw)
             finally:
                 _SKIP_EXCEL_RATE.reset(tok)
             return _finish(resp, kw)
