@@ -154,7 +154,9 @@ def _base_url() -> str:
     # 2026-08-27：預設值改 https（見 backend/tools/https_setup.ps1）——但這只影響
     # 「從未存過設定值」的情況，正式機若已經存過 http 版本，這裡的預設值改變不會
     # 回溯更新既有設定，套用 HTTPS 後需要 superadmin 手動去通知設定頁更新一次。
-    return (_cfg().get("base_url") or "https://172.16.10.177:666").rstrip("/")
+    # 去識別化：預設值來自 own 資料檔（本公司環境）；客戶環境沒有 ⇒ 空字串，要在通知設定頁填「系統網址」。
+    from helpers.own_values import default_base_url
+    return (_cfg().get("base_url") or default_base_url()).rstrip("/")
 
 
 _DEV_SUBJECT_PREFIX = "【開發機測試】"

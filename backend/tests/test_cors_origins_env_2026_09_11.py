@@ -15,27 +15,29 @@ fixture 會在 `main` 已經被提早 import 時直接 fail（那道守門是防
 讓路徑先被導向隔離目錄，之後再 import 才安全。
 """
 
-EXPECTED_DEFAULTS = [
-    "http://localhost:666",
-    "http://127.0.0.1:666",
-    "http://172.16.10.177:666",
-    "https://localhost:666",
-    "https://127.0.0.1:666",
-    "https://172.16.10.177:666",
-]
+def _expected_defaults():
+    """預設清單：本機四筆；本公司環境（有 own 資料檔）多兩筆伺服器 IP（去識別化：IP 不在程式碼裡，見 helpers/own_values.py）。
+    與舊版逐字相同的證明（有資料檔時）在 test_default_equals_the_pre_change_literal_when_the_own_payload_is_present。"""
+    from helpers.own_values import server_ip
+    ip = server_ip()
+    return (["http://localhost:666", "http://127.0.0.1:666"] + (["http://%s:666" % ip] if ip else [])
+            + ["https://localhost:666", "https://127.0.0.1:666"] + (["https://%s:666" % ip] if ip else []))
+
+
+EXPECTED_DEFAULTS = None      # 保留名稱（舊題引用）；實際值用 _expected_defaults()
 
 
 def test_default_matches_pre_change_hardcoded_list(client):
     """沒設環境變數 → 原本那六筆，順序也一樣。"""
     import main
-    assert main._resolve_cors_origins("") == EXPECTED_DEFAULTS
+    assert main._resolve_cors_origins("") == _expected_defaults()
 
 
 def test_none_and_whitespace_fall_back_to_defaults(client):
     """空字串、只有空白、只有逗號，都要退回預設值而不是變成空清單。"""
     import main
     for raw in ("", "   ", ",", " , , "):
-        assert main._resolve_cors_origins(raw) == EXPECTED_DEFAULTS, f"raw={raw!r}"
+        assert main._resolve_cors_origins(raw) == _expected_defaults(), f"raw={raw!r}"
 
 
 def test_env_value_replaces_defaults_entirely(client):
@@ -43,7 +45,7 @@ def test_env_value_replaces_defaults_entirely(client):
     import main
     got = main._resolve_cors_origins("https://erp.miactw.com:666")
     assert got == ["https://erp.miactw.com:666"]
-    assert not any(o in got for o in EXPECTED_DEFAULTS)
+    assert not any(o in got for o in _expected_defaults())
 
 
 def test_env_value_is_comma_separated_and_trimmed(client):
@@ -63,4 +65,25 @@ def test_running_app_actually_uses_resolved_list(client):
     configured = cors[0].kwargs.get("allow_origins")
     assert configured == main._cors_origins
     # 這台開發機沒設環境變數，所以應該就是預設六筆
-    assert configured == EXPECTED_DEFAULTS
+    assert configured == _expected_defaults()
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.needs_own_payload
+def test_default_equals_the_pre_change_literal_when_the_own_payload_is_present(client):
+    """本公司環境（有資料檔）：預設清單與去識別化之前的 main.py 裡那六筆逐字、同順序相同。"""
+    import ast
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools" / "platform"))
+    import own_payload as OP
+    tree = ast.parse(OP.pinned_net_source())
+    old = None
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") == "_DEFAULT_CORS_ORIGINS":
+            old = [e.value for e in n.value.elts]
+    assert old and len(old) == 6
+    import main
+    assert main._resolve_cors_origins("") == old

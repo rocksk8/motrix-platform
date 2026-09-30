@@ -122,16 +122,11 @@ _DOCS = _docs_kwargs()
 app = FastAPI(title="MOTRIX ERP API", version="1.0.0", docs_url=_DOCS["docs_url"],
               redoc_url=_DOCS["redoc_url"], openapi_url=_DOCS["openapi_url"])
 
-_DEFAULT_CORS_ORIGINS = [
-    "http://localhost:666",
-    "http://127.0.0.1:666",
-    "http://172.16.10.177:666",
-    # 2026-08-27：正式機導入 HTTPS 後（見 backend/tools/https_setup.ps1），
-    # 保留原本 http 三筆是因為開發機仍是明文運作，共用同一份 main.py
-    "https://localhost:666",
-    "https://127.0.0.1:666",
-    "https://172.16.10.177:666",
-]
+# 去識別化：本公司伺服器 IP 不在程式碼裡（own 資料檔的 network 區段，見 helpers/own_values.py）。
+# 本公司環境的預設清單與舊版逐字相同（http 本機兩筆、http IP、https 本機兩筆、https IP）；客戶環境只有本機四筆。
+# 2026-08-27：正式機導入 HTTPS 後（見 backend/tools/https_setup.ps1），保留 http 是因為開發機仍是明文運作，共用同一份 main.py
+from helpers.own_values import default_cors_origins as _default_cors_origins
+_DEFAULT_CORS_ORIGINS = _default_cors_origins()
 
 
 def _resolve_cors_origins(env_value: str = None) -> list:
@@ -144,7 +139,7 @@ def _resolve_cors_origins(env_value: str = None) -> list:
 
     ⚠️ 這是安全邊界，不是一般設定：`MOTRIX_CORS_ORIGINS` 一旦設了就**完全取代**
     預設清單（不是附加），設錯會讓正式機的前端打不到自己的 API。設定格式範例：
-        MOTRIX_CORS_ORIGINS=https://erp.example.com:666,https://192.168.1.10:666
+        MOTRIX_CORS_ORIGINS=https://erp.example.com:666,https://192.0.2.10:666
 
     註：目前 `motrix.internal`（正式機 2026-09-11 起的正式網址）**不在預設清單裡**。
     今天沒事是因為前端跟 API 由同一個 FastAPI 服務提供、屬同源請求，CORS 根本不會
