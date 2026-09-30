@@ -15,7 +15,7 @@ function ledgerHubPage() {
     // 扣繳清單（C5：withholding）
     wh: { ym: '', data: null, selected: {}, date: '', voucherNo: '', unremitReason: '', busy: false, error: '', notice: '' },
     // 營業稅 401（C5：tax401）
-    tax: { year: new Date().getFullYear(), period: Math.ceil((new Date().getMonth() + 1) / 2), data: null, busy: false, error: '', notice: '' },
+    tax: { year: new Date().getFullYear(), period: Math.ceil((new Date().getMonth() + 1) / 2), data: null, busy: false, error: '', notice: '', info: '' },
     // 分錄草稿（C1：engine_drafts）
     eng: { start: '', end: '', events: [], counts: {}, selected: {}, run: null, busy: false, error: '', notice: '', results: null, filter: '' },
 
@@ -174,12 +174,17 @@ function ledgerHubPage() {
       const t = this.tax
       t.error = ''
       t.notice = ''
+      t.info = ''
       t.busy = true
       try {
         const r = await this._api({ method: 'POST' }, '/api/ledger/tax401/settlement', { year: t.year, period: t.period })
         await this.taxLoad()          // 先重讀再設訊息：taxLoad() 開頭會清掉訊息
         t.notice = '已產生稅額結轉草稿 ' + r.voucher_no + '（應實繳 ' + this.fmt(r.payable) + '、新留抵 ' + this.fmt(r.carry_new) + '）；請到傳票頁送審過帳。'
-      } catch (e) { t.error = e.message }
+      } catch (e) {
+        // 「這一期沒有稅額」不是錯誤，是資訊：用中性的提示樣式，不用紅字（W1 R3）
+        if (/沒有銷項與進項稅額/.test(e.message)) t.info = e.message
+        else t.error = e.message
+      }
       t.busy = false
     },
     statusLabel(st) {

@@ -620,7 +620,7 @@
                 </button>
                 <button class="btn btn-reject btn-sm" @click="openRejectModal()" data-testid="aq-reject" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                  退回草稿
+                  <span x-text="selected?.type === 'ledger_action' ? '退回申請' : '退回草稿'">退回草稿</span>
                 </button>
                 <button x-show="!isVoucher(selected)" class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
@@ -635,7 +635,7 @@
                       x-text="waitingForText(selected)"></span>
                 <button class="btn btn-reject btn-sm" @click="openRejectModal()" data-testid="aq-reject" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                  退回草稿
+                  <span x-text="selected?.type === 'ledger_action' ? '退回申請' : '退回草稿'">退回草稿</span>
                 </button>
                 <button x-show="!isVoucher(selected)" class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
@@ -948,7 +948,7 @@
           </button>
           <button class="btn btn-reject" @click="openRejectModal()" data-testid="aq-reject" :disabled="actioning" style="min-width:90px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            退回草稿
+            <span x-text="selected?.type === 'ledger_action' ? '退回申請' : '退回草稿'">退回草稿</span>
           </button>
           <button x-show="!isVoucher(selected)" class="btn btn-reject-final" @click="openRejectFinalModal()" :disabled="actioning" style="min-width:90px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
@@ -989,8 +989,11 @@
   <!-- Reject modal -->
   <div class="reject-modal-overlay" x-show="rejectModalOpen" @click.self="rejectModalOpen=false">
     <div class="reject-modal">
-      <h3 x-text="selected?.type === 'case_change' ? '拒絕此變更' : '退回草稿'"></h3>
-      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" x-show="selected?.type !== 'case_change'">
+      <h3 x-text="selected?.type === 'case_change' ? '拒絕此變更' : (selected?.type === 'ledger_action' ? '退回申請' : '退回草稿')"></h3>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" x-show="selected?.type === 'ledger_action'">
+        這個申請會退回給申請人，退回原因會顯示在他的申請列表；申請人可以修改後重新申請。
+      </p>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" x-show="selected?.type !== 'case_change' && selected?.type !== 'ledger_action'">
         此<span x-text="selected ? docTypeLabel(selected) : '報價單'"></span>將退回「草稿」狀態，申請人可修改後重新送出。
       </p>
       <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" x-show="selected?.type === 'case_change'">
@@ -1656,6 +1659,8 @@
           if (a.status === 'approved') return '已簽核' + selfTag + '　' + new Date(a.approvedAt).toLocaleString('zh-TW')
           if (tierIdx < currentTier) return '已完成'
           if (tierIdx > currentTier) return '尚未輪到' + selfTag
+          // 系統規定的最終關卡（最高管理者／會計主管）：同層任一位都可以核准，不是一位一位循序——不要寫「等待前一位完成」
+          if (tier.system) return '任一位最高管理者可核准' + selfTag
           const firstPending = (tier.approvers || []).find(ap => ap.status !== 'approved')
           return (firstPending?.username === a.username ? '等待簽核中' : '等待前一位完成') + selfTag
         },

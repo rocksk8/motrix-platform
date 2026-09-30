@@ -138,6 +138,7 @@
             <div x-show="current().key === 'tax401'" data-testid="hb-tax">
               <div class="hb-err" x-show="tax.error" x-text="tax.error" data-testid="hb-tax-error"></div>
               <div class="hb-ok" x-show="tax.notice" x-text="tax.notice" data-testid="hb-tax-notice"></div>
+              <div class="hb-note" x-show="tax.info" x-text="tax.info" data-testid="hb-tax-info"></div>
               <div class="hb-row">
                 <input class="hb-input filter" type="number" x-model.number="tax.year" style="width:90px" data-testid="hb-tax-year"> 年
                 <select class="hb-input filter" x-model.number="tax.period" data-testid="hb-tax-period">

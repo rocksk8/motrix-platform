@@ -651,17 +651,21 @@
                     @click="submit()">送出審核</button>
             <button class="vc-btn" data-testid="voucher-approve"
                     x-show="isSaved && (status === '待審核' || status === '簽核中')"
-                    :disabled="busy" @click="approve()">簽核</button>
+                    :disabled="busy || !actionAllowed('approve')" :title="actionReason('approve')" @click="approve()">簽核</button>
             <button class="vc-btn" data-testid="voucher-post"
                     x-show="isSaved && status === '已核准'" :disabled="busy"
                     @click="post()">過帳</button>
             <button class="vc-btn vc-btn--warn" data-testid="voucher-sendback"
                     x-show="isSaved && (status === '待審核' || status === '簽核中' || status === '已核准')"
-                    :disabled="busy" @click="openReason('sendback')">退回修改</button>
+                    :disabled="busy || !actionAllowed('send_back')" :title="actionReason('send_back')" @click="openReason('sendback')">退回修改</button>
             <button class="vc-btn vc-btn--warn" data-testid="voucher-void"
-                    x-show="isSaved" :disabled="busy"
+                    x-show="isSaved" :disabled="busy || !actionAllowed('void')" :title="actionReason('void')"
                     @click="openReason('void')">作廢</button>
           </div>
+          <!-- 不能按的原因（後端算的一句話）：停用的鍵旁邊一定要看得到為什麼 -->
+          <template x-for="r in blockedReasons" :key="r">
+            <div class="vc-note" style="margin-top:6px;color:var(--text-secondary)" x-text="r" data-testid="voucher-blocked-reason"></div>
+          </template>
 
           <!-- ══ 匯出（JV5）════════════════════════════════════════════
                🔴 **兩個動作不是一個**：只印本體／含附件。
