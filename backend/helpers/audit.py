@@ -60,6 +60,8 @@ _FAIL_STATUS_REASON = {403: "permission_denied", 404: "not_found_or_hidden", 409
 #: 這些狀態碼的寫入請求才記失敗列（不記 GET、不記 401 過期——登入失敗另走 `_audit_login_failed`）
 _FAIL_STATUSES = frozenset({403, 404, 409, 422, 428, 500})
 _FAIL_WINDOW_SECONDS = 60
+#: `detail` 的字元上限（超過 ⇒ 改存 `{_truncated, originalLength, preview}`）。簽章不變；所有既有呼叫端的 detail 都遠小於此
+_DETAIL_MAX = 2000
 _FAIL_HOURLY_CAP = 200
 _FAIL_LOCK = threading.Lock()
 _FAIL_LAST = {}      # (user, method, route, status) -> (monotonic 秒, audit_log id)
@@ -199,6 +201,9 @@ def _audit(
         d = _derive_fields(action, target_type, target_id, target_label, detail)
         now = datetime.now().isoformat()
         payload = json.dumps(detail or {}, ensure_ascii=False)
+        if len(payload) > _DETAIL_MAX:                     # 安全審查 W3 #5：detail 沒有上限 ⇒ 單列可以塞到很大（放大資料庫與搜尋成本）
+            payload = json.dumps({"_truncated": True, "originalLength": len(payload), "preview": payload[:_DETAIL_MAX - 200]},
+                                 ensure_ascii=False)
         try:
             conn.execute(
                 "INSERT INTO audit_log "

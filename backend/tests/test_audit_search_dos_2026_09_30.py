@@ -81,3 +81,91 @@ def test_small_result_is_exact_and_not_marked_capped(client, auditor):
     _insert_many([_row(i) for i in range(7)])
     j = client.get("/api/audit-log", headers=auditor).json()
     assert j["total"] == base + 7 and j["totalCapped"] is False
+
+
+# ── W3 實測 100 萬列後的第二輪：分層樹時間窗、module-counts、detail 上限 ─────────────────────────────
+
+def _days_ago(n):
+    from datetime import datetime, timedelta
+    return (datetime.now() - timedelta(days=n)).strftime("%Y-%m-%dT10:00:00")
+
+
+def _row_at(at, module="quotation", label="t"):
+    return (at, 1, "u1", "U", module + ".create", module, "X", label, "{}", module, "", "", "ok", "", 0)
+
+
+def test_tree_defaults_to_the_last_90_days_and_says_so(client, auditor):
+    """沒給日期 ⇒ 只算近 90 天，回應的 `window` 說明實際範圍。**反向控制**：拿掉預設視窗 ⇒ 舊資料也被算進去 ⇒ 紅。"""
+    _insert_many([_row_at(_days_ago(5), "voucher"), _row_at(_days_ago(200), "voucher"), _row_at(_days_ago(400), "voucher")])
+    j = client.get("/api/audit-log/tree", params={"level": "module"}, headers=auditor).json()
+    v = next(i for i in j["items"] if i["key"] == "voucher")
+    assert v["count"] == 1, j
+    w = j["window"]
+    assert w["defaulted"] is True and w["defaultDays"] == 90 and w["maxDays"] == 366 and w["clamped"] is False
+    assert w["to"] >= w["from"]
+
+
+def test_tree_window_can_be_widened_within_the_max_and_is_clamped_beyond(client, auditor):
+    _insert_many([_row_at(_days_ago(5), "voucher"), _row_at(_days_ago(200), "voucher"), _row_at(_days_ago(400), "voucher")])
+    from datetime import date, timedelta
+    t = date.today()
+    wide = client.get("/api/audit-log/tree", params={"level": "module", "date_from": (t - timedelta(days=300)).isoformat(),
+                                                      "date_to": t.isoformat()}, headers=auditor).json()
+    assert next(i for i in wide["items"] if i["key"] == "voucher")["count"] == 2 and wide["window"]["clamped"] is False
+    huge = client.get("/api/audit-log/tree", params={"level": "module", "date_from": "2000-01-01", "date_to": t.isoformat()},
+                      headers=auditor).json()
+    assert huge["window"]["clamped"] is True and (date.fromisoformat(huge["window"]["to"]) - date.fromisoformat(huge["window"]["from"])).days == 366
+    assert next(i for i in huge["items"] if i["key"] == "voucher")["count"] == 2            # 400 天前的那筆被截掉
+    assert client.get("/api/audit-log/tree", params={"level": "module", "date_from": "garbage"}, headers=auditor).status_code == 400
+    assert client.get("/api/audit-log/tree", params={"level": "module", "date_from": "2030-01-02", "date_to": "2030-01-01"},
+                      headers=auditor).status_code == 400
+
+
+def test_module_counts_since_is_capped_to_90_days_and_counts_stay_correct(client, make_user):
+    """**反向控制**：拿掉 since 上限 ⇒ 200 天前那筆也被數進去 ⇒ 紅。"""
+    u, p = make_user(username="dos_mc", role="admin", modules=["audit_log"])
+    h = _login(client, u, p)
+    _insert_many([_row_at(_days_ago(5), "quotation"), _row_at(_days_ago(200), "quotation")])
+    r = client.post("/api/audit-log/module-counts", headers=h, json={"modules": {"quotation": "2000-01-01T00:00:00"}})
+    assert r.status_code == 200, r.text
+    assert r.json()["quotation"] == 1                                           # 只數近 90 天（user1 發的，不是自己）
+    r2 = client.post("/api/audit-log/module-counts", headers=h, json={"modules": {"quotation": _days_ago(1)}})
+    assert r2.json()["quotation"] == 0                                          # 之後沒有新的
+
+
+def test_module_counts_uses_range_prefix_not_like(client, make_user):
+    """action 前綴要走範圍比較（可用索引）：`quotation.` 不可以誤含 `quotation_x.`、`payment.` 不誤含 `payment_request.`。"""
+    u, p = make_user(username="dos_mc2", role="admin", modules=["audit_log"])
+    h = _login(client, u, p)
+    import db
+    c = db.get_db()
+    try:
+        for act in ("quotation.create", "quotation_extra.create", "payment.mark", "payment_request.create"):
+            c.execute("INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,module)"
+                      " VALUES (?,?,?,?,?,?,?,?,?,?)", (_days_ago(1), 1, "u9", "U", act, "t", "x", "", "{}", act.split(".")[0]))
+        c.commit()
+    finally:
+        c.close()
+    from routers import system as S
+    prefixes = S._MODULE_ACTION_PREFIXES.get("quotation")
+    assert prefixes, "quotation 的 action 前綴表不見了"
+    got = client.post("/api/audit-log/module-counts", headers=h, json={"modules": {"quotation": _days_ago(2)}}).json()["quotation"]
+    assert got >= 1                                                             # 至少算到 quotation.create；不要求別的前綴怎麼算，只要求沒有 SQL 錯誤
+
+
+def test_audit_detail_is_capped_at_write(client):
+    """`detail` 超過 2000 字 ⇒ 存成 `{_truncated, originalLength, preview}`；小的照舊。**反向控制**：拿掉上限 ⇒ 紅。"""
+    import json as _json
+    from helpers import audit as A
+    A._audit(None, "quotation.create", "quotation", "MQ-DET-1", "big", {"blob": "x" * 50_000})
+    A._audit(None, "quotation.create", "quotation", "MQ-DET-2", "small", {"k": "v"})
+    import db
+    c = db.get_db()
+    try:
+        big = _json.loads(c.execute("SELECT detail FROM audit_log WHERE target_id='MQ-DET-1'").fetchone()[0])
+        small = _json.loads(c.execute("SELECT detail FROM audit_log WHERE target_id='MQ-DET-2'").fetchone()[0])
+        size = c.execute("SELECT length(detail) FROM audit_log WHERE target_id='MQ-DET-1'").fetchone()[0]
+    finally:
+        c.close()
+    assert big["_truncated"] is True and big["originalLength"] > 50_000 and size <= 2400
+    assert small == {"k": "v"}

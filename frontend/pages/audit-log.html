@@ -369,6 +369,10 @@
     <!-- 下鑽：模組 → 案件 → 單據 -->
     <aside class="drill">
       <h4>分層瀏覽</h4>
+      <div x-show="treeWindow" data-testid="tree-window" style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">
+        <span x-text="'範圍：' + (treeWindow ? treeWindow.from + ' ～ ' + treeWindow.to : '') + (treeWindow && treeWindow.defaulted ? '（預設近 ' + treeWindow.defaultDays + ' 天）' : '') + (treeWindow && treeWindow.clamped ? '（已縮到上限 ' + treeWindow.maxDays + ' 天）' : '')"></span>
+        <button type="button" data-testid="tree-widen" x-show="treeWindow && !treeWindow.clamped" @click="widenTree()" style="margin-left:6px;border:0;background:transparent;color:var(--primary,#2563eb);cursor:pointer;text-decoration:underline">擴大到 <span x-text="treeWindow ? treeWindow.maxDays : ''"></span> 天</button>
+      </div>
       <div class="crumb">
         <a @click="drillTo('module')">全部模組</a>
         <template x-if="fModule"><span> › <a @click="drillTo('case')" x-text="moduleLabel(fModule)"></a></span></template>
@@ -438,7 +442,7 @@
       q: '',
       filterAction: '',
       fModule: '', fCase: '', fRef: '', fUser: '', fFrom: '', fTo: '', fResult: '',
-      moduleOptions: [], tree: [], failSummary: { total: 0, byReason: [] },
+      moduleOptions: [], tree: [], treeWindow: null, failSummary: { total: 0, byReason: [] },
 
       // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，
       //    而 body 上那個明著呼叫初始化的屬性會再叫一次 ⇒ **跑兩遍**。
@@ -453,7 +457,7 @@
         if (!s.token) { location.href = 'login.html'; return }
         this.session = s
         await Promise.all([this.load(), this.loadTree(), this.loadFailSummary()])
-        this.moduleOptions = (await this.fetchTree('module', { all: true })) || []
+        this.moduleOptions = ((await this.fetchTree('module', { all: true })) || {}).items || []
       },
 
       _authGet(url) {
@@ -484,11 +488,25 @@
         p.set('level', level)
         try {
           const r = await this._authGet('/api/audit-log/tree?' + p)
-          if (r.ok) return (await r.json()).items
+          if (r.ok) return await r.json()
         } catch (e) {}
         return null
       },
-      async loadTree() { this.tree = (await this.fetchTree(this.treeLevel(), {})) || [] },
+      async loadTree() {
+        const d = await this.fetchTree(this.treeLevel(), {})
+        this.tree = (d && d.items) || []
+        this.treeWindow = (d && d.window) || null
+      },
+      widenTree() {
+        // 把起日拉到「迄日往前最長天數」（迄日沿用目前視窗的迄日）；伺服器最後仍以上限截斷
+        const w = this.treeWindow
+        if (!w) return
+        const end = new Date(w.to + 'T00:00:00')
+        end.setDate(end.getDate() - w.maxDays)
+        this.fFrom = end.toISOString().slice(0, 10)
+        this.fTo = w.to
+        this.applyFilter()
+      },
       async loadFailSummary() {
         const p = new URLSearchParams()
         if (this.fFrom) p.set('date_from', this.fFrom)
