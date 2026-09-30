@@ -59,6 +59,17 @@ def _newer(repo, a, b):
     return a
 
 
+def heading_commit(repo, version, path):
+    """CHANGELOG 版號標題「## x.y.z」被寫進去的 commit（沿第一親代那條主線）；找不到 ⇒ ""。
+
+    ⚠️ 不能用預設的 `git log -S`：它**不看 merge commit 的變動**。列車合併多條分支時，版號撞號（兩條分支各自取了同一號）
+    會在 merge 的解衝突裡重編（把後合的改成下一號）——那個標題只存在於 merge commit 裡 ⇒ 找不到 ⇒ 誤報「還沒提交」
+    （2026-09-30 一天內第三次，每次都靠「暫名→改回」兩個一般 commit 繞過＝修結果不修作法）。
+    `-m --first-parent`：merge 也對**第一親代**做 diff，且只沿主線走；分支上的各個 commit 併入主線時，標題出現的那一刻就是那次 merge。
+    原意不變：回傳的 commit 之後，程式不可以再有改動（由呼叫端的 is-ancestor 檢查）。"""
+    return _git(repo, "log", "-1", "-m", "--first-parent", "--format=%H", "-S", "## " + version, "--", path)
+
+
 def check_module(repo, rel_dir):
     """repo 內某個模組資料夾（repo 相對路徑）⇒ 問題清單。"""
     import json
@@ -76,8 +87,7 @@ def check_module(repo, rel_dir):
         if top is None:
             problems.append("有程式改動，但 CHANGELOG.md 沒有「## X.Y.Z」版號條目")
         else:
-            entry = _git(repo, "log", "-1", "--format=%H", "-S", "## " + top.group(1), "--",
-                         "%s/CHANGELOG.md" % rel_dir)
+            entry = heading_commit(repo, top.group(1), "%s/CHANGELOG.md" % rel_dir)
             if not entry:
                 problems.append("CHANGELOG 最上面的 %s 還沒提交" % top.group(1))
             elif subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", last_code, entry]).returncode != 0:
@@ -211,3 +221,69 @@ def test_rc_uncommitted_manifest_change_is_caught(repo):
     mp = repo / "mod" / "module.json"
     mp.write_text(json.dumps(dict(json.loads(mp.read_text(encoding="utf-8")), provides={"a": 1})), encoding="utf-8")
     assert any("未提交的程式改動" in p for p in check_module(repo, "mod"))
+
+
+# ── 合併內重編版號（列車撞號）：不紅；真的沒升版仍紅 ──────────────────────────────────────
+
+def _branch(r):
+    return _git(r, "symbolic-ref", "--short", "HEAD")
+
+
+def _collide(repo, resolved_changelog, feat_bumps=True):
+    """main 與 feat 各自在同一處新增「## 1.0.1」標題（撞號）；把 feat 合進 main，衝突的 CHANGELOG 以 `resolved_changelog` 解掉。
+    feat 另外改了 api.py（程式）。回傳 merge commit。"""
+    main = _branch(repo)
+    _git(repo, "checkout", "-q", "-b", "feat")
+    (repo / "mod" / "api.py").write_text("x = 'feat'\n", encoding="utf-8")
+    if feat_bumps:
+        (repo / "mod" / "CHANGELOG.md").write_text("# m\n\n## 1.0.1 — feat\n- feat 的改動\n\n## 1.0.0 — d\n- 初版\n", encoding="utf-8")
+    _commit(repo, "feat")
+    _git(repo, "checkout", "-q", main)
+    (repo / "mod" / "b.py").write_text("y = 1\n", encoding="utf-8")
+    (repo / "mod" / "CHANGELOG.md").write_text("# m\n\n## 1.0.1 — main\n- main 的改動\n\n## 1.0.0 — d\n- 初版\n", encoding="utf-8")
+    _commit(repo, "main")
+    r = subprocess.run(["git", "-C", str(repo), "merge", "--no-ff", "-q", "feat", "-m", "merge feat"], capture_output=True, text=True)
+    if r.returncode != 0:                                   # 撞號 ⇒ CHANGELOG 衝突
+        (repo / "mod" / "CHANGELOG.md").write_text(resolved_changelog, encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-q", "--no-edit")
+    return _git(repo, "rev-parse", "HEAD")
+
+
+RENUMBERED = ("# m\n\n## 1.0.2 — feat（合併時重編）\n- feat 的改動\n\n## 1.0.1 — main\n- main 的改動\n\n## 1.0.0 — d\n- 初版\n")
+
+
+def test_rc_renumbering_inside_a_merge_is_not_red(repo):
+    """列車：兩條分支撞號，merge 的解衝突把後合的重編成 1.0.2 ⇒ 標題只存在於 merge commit 裡；不可以誤報「還沒提交」。"""
+    m = _collide(repo, RENUMBERED)
+    assert _git(repo, "log", "-1", "--format=%H", "-S", "## 1.0.2", "--", "mod/CHANGELOG.md") == "", \
+        "前提：預設的 git log -S 看不到 merge 裡的變動（這正是舊守門誤報的原因）"
+    assert heading_commit(repo, "1.0.2", "mod/CHANGELOG.md") == m
+    assert check_module(repo, "mod") == []
+
+
+def test_rc_merge_that_brings_code_without_any_new_heading_is_still_red(repo):
+    """反向控制：feat 改了程式、卻沒有任何人為它升版（解衝突時把 feat 的標題丟掉）⇒ 仍紅。"""
+    only_main = "# m\n\n## 1.0.1 — main\n- main 的改動\n\n## 1.0.0 — d\n- 初版\n"
+    _collide(repo, only_main)
+    assert any("之後沒有新的版號條目" in p for p in check_module(repo, "mod"))
+
+
+def test_rc_code_change_after_the_renumbering_merge_is_still_red(repo):
+    """合併重編之後又改了程式、沒再升版 ⇒ 紅（原意：程式改動之後必須有新版號標題）。"""
+    _collide(repo, RENUMBERED)
+    (repo / "mod" / "api.py").write_text("x = 'after merge'\n", encoding="utf-8")
+    _commit(repo, "合併後又改程式")
+    assert any("之後沒有新的版號條目" in p for p in check_module(repo, "mod"))
+    (repo / "mod" / "CHANGELOG.md").write_text("# m\n\n## 1.0.3 — d\n\n" + RENUMBERED[len("# m\n\n"):], encoding="utf-8")
+    _commit(repo, "補版號")
+    assert check_module(repo, "mod") == []
+
+
+def test_rc_linear_history_behaves_as_before(repo):
+    """沒有 merge 的線性歷史：結果與改動前相同（既有題另守；這裡多驗一次 heading_commit 在線性歷史找得到）。"""
+    (repo / "mod" / "api.py").write_text("x = 2\n", encoding="utf-8")
+    (repo / "mod" / "CHANGELOG.md").write_text("# m\n\n## 1.0.1 — d\n\n## 1.0.0 — d\n", encoding="utf-8")
+    _commit(repo, "程式＋版號同一個 commit")
+    assert heading_commit(repo, "1.0.1", "mod/CHANGELOG.md") == _git(repo, "rev-parse", "HEAD")
+    assert check_module(repo, "mod") == []
