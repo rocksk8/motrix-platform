@@ -18,6 +18,7 @@ import math
 import re
 from datetime import date, datetime
 
+from core import paths as _paths
 from helpers import custom_fields as _cf
 from helpers import formula as _fx
 
@@ -88,7 +89,7 @@ def field_type_specs() -> dict:
 
 
 # ── 範本（W1 建構器第三輪）：`helpers/form_templates/*.json`，程式出貨的資料；載入時驗證，壞的不列 ─────────────
-_TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "form_templates")
+_TEMPLATE_DIR = _paths.FORM_TEMPLATES_DIR
 
 
 def templates(include_gaps: bool = False):
@@ -1076,7 +1077,12 @@ def get_record(conn, module_key, record_no) -> dict:
     rec["fileMeta"] = _cfiles.files_of_field(conn, module_key, d["body"], rec["data"])
     if rec["fileMeta"]:                              # 輸出／視圖只放檔名（不放路徑與連結）
         names = _cfiles.view_names(d["body"], rec["fileMeta"])
-        rec["view"] = dict(rec["view"], fields=dict(rec["view"]["fields"], **names), **names)
+        vf = dict(rec["view"]["fields"])
+        vf.update(names)
+        v = dict(rec["view"])
+        v["fields"] = vf
+        v.update(names)
+        rec["view"] = v
     rec["log"] = [dict(r) for r in conn.execute("SELECT action, from_state, to_state, by_user, note, at FROM custom_record_log "
                                                  "WHERE record_id=? ORDER BY id", (rec["id"],)).fetchall()]
     return rec

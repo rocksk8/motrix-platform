@@ -344,9 +344,12 @@ async def upload_custom_files(key: str, field: str, files: List[UploadFile] = Fi
                 raise HTTPException(400, "「%s」不接受 %s 檔（可用：%s）" % (f.get("label") or field, ext or "沒有副檔名", "、".join(sorted(set(e for e in ok if e != "jpeg")))))
         CFILES.purge_stale_staged(conn)
         saved = await _uploads.save_document_files("custom_records", key, files, u["username"])
-        return CFILES.register_staged(conn, key, field, saved, u["username"])
+        out = CFILES.register_staged(conn, key, field, saved, u["username"])
     finally:
         conn.close()
+    _audit(_tok(authorization), "custom.file_upload", "custom_record_file", "%s/%s" % (key, field),
+           "上傳附件 %d 個到 %s／%s" % (len(out), key, field), {"files": [m["filename"] for m in out]})
+    return out
 
 
 @router.delete("/api/custom/{key}/files/{file_id}")
@@ -358,9 +361,10 @@ def delete_staged_custom_file(key: str, file_id: str, authorization: str = Heade
         _can_use(conn, u, key)
         if not CFILES.remove_staged(conn, key, file_id, u["username"]):
             raise HTTPException(404, "找不到這個暫存檔（只能刪自己上傳、尚未存進單據的檔）")
-        return {"ok": True}
     finally:
         conn.close()
+    _audit(_tok(authorization), "custom.file_delete_staged", "custom_record_file", file_id, "刪除暫存附件 %s（%s）" % (file_id, key), {})
+    return {"ok": True}
 
 
 # ── 金流：案件成本、待補登、被略過的收入 ─────────────────────────────────────

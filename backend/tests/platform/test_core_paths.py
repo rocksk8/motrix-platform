@@ -55,6 +55,7 @@ V9_LOCATIONS = {
     "INITIAL_ADMIN_CREDENTIALS": os.path.join(BACKEND, ".initial_admin_credentials.txt"),
     "INITIAL_DEMO_CREDENTIALS": os.path.join(BACKEND, ".initial_demo_credentials.txt"),
     "BUILD_COMMIT_FILE": os.path.join(BACKEND, ".build_commit"),
+    "FORM_TEMPLATES_DIR": os.path.join(BACKEND, "helpers", "form_templates"),      # 2026-09-30 建構器範本（程式出貨資料）
     "DEPLOYED_COMMIT_FILE": os.path.join(BACKEND, ".deployed_commit.json"),
     "VERSION_MANIFEST": os.path.join(BACKEND, "version_manifest.json"),
     # V9 c83dae6e 的 backend/autostart.bat（排程工作啟動它；Python 不讀它）
