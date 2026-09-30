@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## 1.1.9 — 2026-09-30（暫用號，列車取號；wip/w2-money-guards：金流寫入連動修補（MONEY-FLOWS §9 L5/L11/L12））
+- L5：經承攬商匯款單付款（`paid_via_remit`）的勞報單，營運報表支出只列代扣部分（gross − net），匯款單實付已由承攬商支出計入，不再雙計。
+
 ## 1.1.8 — 2026-09-30（暫用號，列車取號；wip/w2-upload-magic：上傳檔頭檢查）
 - 勞報單簽回檔上傳（`POST /api/payslips/{no}/signed-files`）在副檔名檢查之後呼叫 L1 `_check_upload_magic`（檔頭與副檔名不符 ⇒ 400＋稽核）；單據狀態、大小、空檔檢查不變。
 
