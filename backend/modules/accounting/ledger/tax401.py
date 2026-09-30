@@ -53,8 +53,7 @@ LINE_NAMES = {
 
 #: 仍未能核實／未涵蓋的項目（畫面與 Excel 只顯示這幾項；其餘欄位代號已對照官方）
 UNVERIFIED = (
-    "發票種類（三聯式／二聯式／電子發票）：來源資料沒有發票種類欄位，一律依『預設發票媒介』（電子發票）落列；實際種類不同請改設定或於來源補登（官方檔案格式本身已核對，種類判定屬假設 A3）。",
-    "零稅率：一律落代號 7（非經海關出口應附證明文件者）；經海關出口者應為代號 15，本版未區分。",
+    "發票種類：來源資料沒有發票種類欄位，一律依『預設發票媒介』（電子發票）落列。發票種類不同只影響欄位分列（銷項 三聯式 1／2、電子 5／6、二聯式 9／10；進項 28／29 與 32／33），不影響銷售額合計、稅額合計、應納稅額。進項若是營業人之間的電子發票，官方應列 32／33（本版進項一律列 28／29），申報前請對照。",
     "本期(月)累積留抵稅額（代號 115）與得退稅限額（113／114）：官方欄位存在，但計算公式尚未取得官方說明，本版不自動計算（申報時請人工填寫）。",
     "媒體申報檔（TXT）：官方檔案格式（附件六 112 欄）已取得，但申報檔另需稅籍編號、檔案編號、申報代號等公司登記資料與進銷項明細檔（附件七），本版只輸出 Excel 工作底稿。",
 )
@@ -217,7 +216,7 @@ def summarize(conn, year, n, invoices=None):
     est = conn.execute("SELECT COUNT(*) FROM gl_source_events WHERE event_date BETWEEN ? AND ? AND status IN ('drafted','posted','drift') "
                        "AND payload_json LIKE '%\"tax_estimated\": true%'", (lo, hi)).fetchone()[0]
     if est:
-        warnings.append({"key": "estimated", "level": "amber", "text": "%d 筆進項稅額是估計值（發票稅額未補登）：請到來源憑證補登實際稅額，否則 107 不可靠。" % est})
+        warnings.append({"key": "estimated", "level": "amber", "text": "%d 筆進項稅額是估計稅額（發票稅額未補登）：請到來源憑證補登實際稅額，否則 107 不可靠。" % est})
     if carry_prev == 0 and conn.execute(
             "SELECT 1 FROM voucher_lines l JOIN vouchers_all v ON v.id=l.voucher_id WHERE v.status='已過帳' AND v.voided_at='' AND l.tax_code<>'' AND v.origin<>? "
             "AND substr(v.voucher_date,1,10) < ? LIMIT 1", (_CARRY_ORIGIN, lo)).fetchone() and not conn.execute(

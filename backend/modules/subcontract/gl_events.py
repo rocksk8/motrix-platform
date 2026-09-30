@@ -8,6 +8,7 @@
 - E05b 個人點工（歷史未關聯勞報單）：匯款單快照 personnelTotal 與 E05 同日認列「借 專案成本／貸 應付帳款」，`meta.no_withholding=true`，notice 提醒未扣繳。
   （使用者裁示 2026-09-30：新資料個人點工一律走勞報單 E06；此列只讓歷史匯款的應付帳款帳平。）
 只讀，不寫資料。
+⚠ 提示（notice）字串是 `%` 格式字串：字面的百分比要寫 `%%`。寫壞會丟 TypeError ⇒ 整個提供者失敗、所有承攬商事件消失（引擎只在 notices 記『讀取失敗』）——`test_ledger_acceptance` 斷言每個事件來源都讀取成功。
 """
 import json
 
@@ -119,5 +120,5 @@ def gl_events(start, end, *, changed_since=""):
     if no_withhold:
         notices.append("%d 張匯款單含個人點工（未關聯勞報單）：以專案成本／應付帳款認列，未扣繳所得稅與二代健保，請改開勞報單。" % no_withhold)
     if estimated:
-        notices.append("%d 筆承攬商發票稅額依派工稅率估算；實際發票稅額不同時，請在來源憑證補登（input_tax）。" % estimated)
+        notices.append("%d 筆承攬商發票的進項稅額是估計稅額：依派工稅率估算（派工沒填稅率時以 5%% 估算）；實際發票稅額不同時，請在來源憑證補登（input_tax）。" % estimated)
     return {"events": events, "notice": " ".join(notices)}

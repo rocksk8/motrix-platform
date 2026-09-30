@@ -151,7 +151,7 @@
               </div>
               <div class="hb-note" x-show="tax.data" data-testid="hb-tax-summary">這是申報前的工作底稿（數字來自已過帳傳票），不是可直接上傳的申報檔。<br>還要自己補：發票種類（三聯／二聯／電子）、零稅率性質、留抵稅額退稅相關欄位（113～115），以及媒體申報檔。</div>
               <details x-show="tax.data" style="margin-bottom:8px" data-testid="hb-tax-details"><summary style="cursor:pointer;font-size:13px;color:var(--text-secondary)">展開說明（欄位依據與未能核實的項目）</summary>
-              <div class="hb-note" x-show="tax.data" data-testid="hb-tax-legal">欄位代號與名稱已對照財政部《營業稅電子資料申報繳稅作業要點》附件六（113/04/12 令，存取日 2026-09-30）；含免稅銷售者應使用 403 表。</div>
+              <div class="hb-note" x-show="tax.data" data-testid="hb-tax-legal">欄位代號與名稱已對照財政部《營業稅電子資料申報繳稅作業要點》附件六（113/04/12 令，存取日 2026-09-30）；含免稅銷售者應使用 403 表。零稅率：勞務及類似外銷＝代號 7（非經海關出口）；經海關出口貨物＝代號 15（本版一律列 7，出口貨物請人工改列）。</div>
               <template x-if="tax.data && tax.data.unverified && tax.data.unverified.length">
                 <div class="hb-warn" data-testid="hb-tax-unverified">
                   <div>以下項目未能核實或本版未涵蓋，申報前請人工確認：</div>
