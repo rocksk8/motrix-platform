@@ -317,7 +317,8 @@ def custom_module_catalog(authorization: str = Header(None)):
             "numberingDateFormats": [k for k in CM.DATE_FORMATS], "outputBlocks": sorted(dt.BLOCKS),
             "outputBlockSpecs": dt.BLOCK_SPECS, "outputBlockItemSpecs": dt.BLOCK_ITEM_SPECS,
             "outputThemes": sorted(dt.THEMES), "outputFormats": ["html", "pdf"], "fieldFormats": list(dt.FORMATS),
-            "approverSources": CM.APPROVER_SOURCES, "dataClasses": ["T1"]}
+            "approverSources": CM.APPROVER_SOURCES, "dataClasses": ["T1"],
+            "roles": list(SUP.VISIBLE_ROLES)}
 
 
 @router.get("/api/custom-modules/templates/{tkey}")

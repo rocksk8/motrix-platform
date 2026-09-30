@@ -93,6 +93,36 @@
         if (v === null) delete f[a.key]; else f[a.key] = v
         this.def.fields.splice(i, 1, f)
       },
+      // ── 誰看得到（欄位 access.visibleTo／選單 menu.visibleTo）：scope＝欄位索引（數字）或 'menu'；不勾＝所有人 ──
+      visOf(scope) {
+        var o = scope === 'menu' ? ((this.def.menu || {}).visibleTo) : (((this.def.fields[scope] || {}).access || {}).visibleTo)
+        return { roles: (o && o.roles) || [], users: (o && o.users) || [] }
+      },
+      visHas(scope, kind, v) { return this.visOf(scope)[kind].indexOf(v) >= 0 },
+      visSummary(scope) {
+        var v = this.visOf(scope)
+        if (!v.roles.length && !v.users.length) return '所有人（有這個模組權限的都看得到）'
+        var self = this
+        return '限：' + v.roles.map(function (r) { return self.roleLabel(r) }).concat(v.users.map(function (u) { return self.userLabel(u) })).join('、')
+      },
+      roleLabel(r) { return { superadmin: '最高管理者', admin: '管理員', sales: '業務', engineer: '工程師', viewer: '檢視者' }[r] || r },
+      toggleVis(scope, kind, v, on) {
+        var cur = this.visOf(scope)
+        cur[kind] = cur[kind].filter(function (x) { return x !== v })
+        if (on) cur[kind].push(v)
+        var vis = (cur.roles.length || cur.users.length) ? { roles: cur.roles, users: cur.users } : null
+        if (scope === 'menu') {
+          var m = Object.assign({}, this.def.menu || {})
+          if (vis) m.visibleTo = vis; else delete m.visibleTo
+          this.def.menu = m
+        } else {
+          var f = Object.assign({}, this.def.fields[scope])
+          var a = Object.assign({}, f.access || {})
+          if (vis) a.visibleTo = vis; else delete a.visibleTo
+          if (Object.keys(a).length) f.access = a; else delete f.access
+          this.def.fields.splice(scope, 1, f)
+        }
+      },
       extChoices(f) { return f.type === 'image' ? ['jpg', 'png'] : ['jpg', 'png', 'pdf'] },
       toggleExt(i, e, on) {
         var f = Object.assign({}, this.def.fields[i])

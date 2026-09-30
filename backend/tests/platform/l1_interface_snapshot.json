@@ -322,6 +322,7 @@
    "ACCESS_KEYS": "const",
    "EVENT_FINANCE_POSTED": "const",
    "EVENT_FINANCE_REVERSED": "const",
+   "VISIBLE_ROLES": "const",
    "access_problems": "def(body)",
    "can_see_field": "def(field, user)",
    "can_see_menu": "def(menu, user)",

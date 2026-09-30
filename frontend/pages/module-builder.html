@@ -151,6 +151,22 @@
                 <label for="mb-menu-order">選單排序（小的在前）</label>
                 <input id="mb-menu-order" type="number" :value="(def.menu || {}).order" @input="setMenu('order', $event.target.value === '' ? null : Number($event.target.value))">
               </div>
+<div class="mb-f" data-vis="menu">
+                <label>誰看得到</label>
+                <div class="mb-hint" data-vis-summary x-text="visSummary('menu')"></div>
+                <div class="cr-opts">
+                  <template x-for="r in (catalog.roles || [])" :key="r">
+                    <label><input type="checkbox" style="width:auto" :data-vis-role="r" :checked="visHas('menu', 'roles', r)" @change="toggleVis('menu', 'roles', r, $event.target.checked)"><span x-text="roleLabel(r)"></span></label>
+                  </template>
+                </div>
+                <details style="margin-top:4px"><summary class="mb-hint" style="cursor:pointer">指定人員</summary>
+                  <div class="cr-opts" style="max-height:150px;overflow:auto">
+                    <template x-for="u in users" :key="u.username">
+                      <label><input type="checkbox" style="width:auto" :data-vis-user="u.username" :checked="visHas('menu', 'users', u.username)" @change="toggleVis('menu', 'users', u.username, $event.target.checked)"><span x-text="u.displayName || u.username"></span></label>
+                    </template>
+                  </div>
+                </details>
+              </div>
               <div class="mb-f" :class="{ 'is-bad': hasProblem('permission') }">
                 <label for="mb-perm">權限 key</label>
                 <input id="mb-perm" x-model.trim="def.permission">
@@ -501,6 +517,22 @@
                           </div>
                         </div>
                       </template>
+                      <div class="mb-f" data-vis="field">
+                <label>誰看得到</label>
+                <div class="mb-hint" data-vis-summary x-text="visSummary(sel)"></div>
+                <div class="cr-opts">
+                  <template x-for="r in (catalog.roles || [])" :key="r">
+                    <label><input type="checkbox" style="width:auto" :data-vis-role="r" :checked="visHas(sel, 'roles', r)" @change="toggleVis(sel, 'roles', r, $event.target.checked)"><span x-text="roleLabel(r)"></span></label>
+                  </template>
+                </div>
+                <details style="margin-top:4px"><summary class="mb-hint" style="cursor:pointer">指定人員</summary>
+                  <div class="cr-opts" style="max-height:150px;overflow:auto">
+                    <template x-for="u in users" :key="u.username">
+                      <label><input type="checkbox" style="width:auto" :data-vis-user="u.username" :checked="visHas(sel, 'users', u.username)" @change="toggleVis(sel, 'users', u.username, $event.target.checked)"><span x-text="u.displayName || u.username"></span></label>
+                    </template>
+                  </div>
+                </details>
+              </div>
                       <!-- 金流性質（數字／公式欄；含明細合計）：進營運報表與案件成本 -->
                       <template x-if="canFinance(def.fields[sel])">
                         <div class="mb-f mb-fin" data-finance>

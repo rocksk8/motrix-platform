@@ -215,9 +215,10 @@ def validate_module(body: dict, key: str = "") -> list:
     keys = [f.get("key") for f in fields if isinstance(f, dict)]
     out += _validate_workflow(body.get("workflow"), keys)
     out += _validate_finance([f for f in fields if isinstance(f, dict)], body)
+    from . import custom_builder_support as _S
+    out += _S.access_problems(body)                       # 可見設定的形狀／角色／必填受限：隨時檢查（建構器即時標出卡片）
     if not out:
-        from . import custom_builder_support as _S       # 可見設定：形狀＋公式洩漏（只在前面都對時才算，公式才解析得了）
-        out += _S.access_problems(body) + _S.leaking_formulas(body)
+        out += _S.leaking_formulas(body)                  # 公式洩漏要公式解析得了才算 ⇒ 前面都對時
     if not out:
         out += _validate_by_sample(body)
     out += _validate_output(body)
