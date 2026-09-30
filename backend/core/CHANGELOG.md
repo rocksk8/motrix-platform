@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — 2026-09-30（wip/w1-t27fix3）
+## 1.89 — 2026-09-30（wip/w1-t27fix3）
 - 前端共用：`static/approval-return.js` 的 `MotrixApprovalReturn.ask` 在頁面有 `MotrixUI`（案件頁）時改用 `MotrixUI.prompt`（原因必填：空白 toast 後重問、取消不送），沒有才用自己的視窗；案件頁四個退回／撤銷核准的提示用語還原為原本的「退回出貨單「X」…」（test_case_page_p4b_dialogs 釘住的元件與用語）。公開介面不變。
 
 ## 1.88 — 2026-09-30（wip/w1-t27fix2）

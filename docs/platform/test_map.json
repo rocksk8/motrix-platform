@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 915,
+  "tests": 916,
   "unmapped": 12,
   "kinds": {
    "api": 490,
-   "e2e": 214,
+   "e2e": 215,
    "audit": 127,
    "unit": 84
   },
@@ -334,6 +334,32 @@
     ]
    },
    "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_ledger_c5_ready_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/features",
+    "page:pages/ledger-hub.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/features.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/ledger-hub.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
    "module": "accounting"
   },
   "backend/modules/accounting/tests/test_e2e_ledger_export_pdf_2026_09_30.py": {
@@ -18675,6 +18701,7 @@
     "core:db",
     "core:pdf_gen",
     "helper:settings",
+    "js:static/approval-return.js",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:case/__init__",
@@ -18702,7 +18729,8 @@
     ],
     "page": [
      "frontend/pages/case-management.html",
-     "frontend/pages/payment-request-form.html"
+     "frontend/pages/payment-request-form.html",
+     "frontend/static/approval-return.js"
     ]
    },
    "login_fixture": true
