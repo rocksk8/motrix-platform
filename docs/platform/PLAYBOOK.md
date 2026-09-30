@@ -131,6 +131,21 @@
 2. 儀表板 →「1. 打包」（階段 2 完成後，可以選擇產品設定檔）。
 3. 儀表板 →「這一包會改到哪些模組」：確認改動範圍，以及各模組的更新紀錄。
 
+#### D-建包：建包的測試流程（2026-09-30，使用者「安排建包的優化方式，避免非正常情況的失敗」）
+**起因（同一天實測）**：①同一份 tree 30 分鐘前 `modtest --full` 全綠，建包的沿用紀錄只有建包自己寫 ⇒ 全量又跑一次（非 e2e ~17 分＋e2e 8～13 分）；②建包 e2e 段紅在已知偶發題（RUN-PLAN O7，第 3 次；單獨跑 5/5 綠）⇒ 重建整套再 ~35 分，而非 e2e 早已綠；③建包持有獨佔時別的視窗照樣起臨時 `pytest …-adhoc`（單程序不搶鎖）加負載；④timeout.exe／TaskStop 結束外層後，pytest 孫行程還握著鎖。
+
+| 規則 | 作法（工具） | 正方 | 反方與處置 |
+|---|---|---|---|
+| ① 跨工具＋分段沿用 | `modtest --full` 在乾淨工作樹、無縮小範圍參數（-k／-m／路徑／--deselect／-x）時寫進建包的沿用紀錄（主工作樹 `backend/tools/deploy_logs/test_results.jsonl`，`build_test_reuse.record_full_run`）；建包各段各查（`lookup-stage`）：非 e2e 綠、只有 e2e 紅 ⇒ 重建只跑 e2e | 同一份 tree＋環境的綠是同一個證據，重跑只是花時間；每次發行省一輪全量（~25～30 分），e2e 偶發後的重建省 ~17 分 | worker 數不同（modtest e2e -n 2、建包 -n 4）：平行度只影響負載與快慢、不影響題目本身，而且較低平行度的綠只會**更少**偶發 ⇒ 接受，worker 上限類環境變數不進指紋。**假綠風險**：題目以假 run_pytest 呼叫 run_full ⇒ 只信這一輪自己的 fail_stream summary（下游證據），沒有就不寫。指紋在結束時算（樹沒變由 dirty 判定）；殘留風險＝跑到一半改了 pip 環境。窗口照舊：同一天、12 小時，以該段**原本實跑**的時間算（沿用不延長）。指紋扣掉 `tools/platform/known_flakes.json`（政策檔，不決定任何題目過或不過）⇒「登記偶發 → commit → 重建」仍只跑 e2e |
+| ② 偶發政策 | 一段紅了 ⇒ `tools/platform/flaky_retry.py` 只把紅的題**單獨、循序**重跑（最多 2 次，一過就停）。通過**且**登記在 `tools/platform/known_flakes.json`（nodeid、first_seen、owner、ticket、expires，最長 30 天）⇒ 繼續打包，manifest `verification.flaky_retried` 與 fail_stream（`type=flaky_retried`）記下；**未登記的偶發照樣擋**並印出登記指令；每次都紅 ⇒ 擋；中斷／收集錯誤／一次紅超過 5 題／認不出是哪一題 ⇒ 不重跑直接擋；登記簿有**過期**條目 ⇒ 建包一開頭就失敗 | 偶發題讓 35 分鐘的建包重來，而它單獨跑是綠的；只重跑紅的題，成本是秒級 | 「重跑到綠」是經典的假綠來源（〈偶發失敗先當產品競態〉）⇒ 三道限制：只有**人登記過**的題可放行（登記＝有人做過「這是偶發、要追根因」的決定）、登記有期限且過期就擋整個建包（逼根因修正）、放行的題寫進 manifest 看得到。整輪 retry、放寬 timeout 照舊不做 |
+| ③ 建包獨佔 | 建包持有獨佔登記期間，**不搶鎖的臨時 pytest 直接拒絕開始**（conftest `light_run_block_reason`，exit 4＋說明）；建包自己的子行程帶 `MOTRIX_PYTEST_BUILD_CHILD=<建包 pid>`（`utf8_env` 不剝掉它）；`--collect-only` 放行；重型測試照舊排隊 | 建包期間的額外負載是 e2e 偶發的主因之一 | 擋住別人的工作 ⇒ 訊息寫明原因與等待對象；真的非跑不可設 `MOTRIX_PYTEST_BUILD_GUARD=0`（明示的覆寫）。直接以獨佔身分跑（不經建包）時 conftest 替自己的子行程設 BUILD_CHILD |
+| ④ 盤點與孤兒 | 建包登記獨佔前跑 `tools/platform/build_preflight.py`：列出其他 pytest／modtest（附父行程鏈，venv 轉呼叫器只算一次）；鎖持有者父行程已不在（或 pid 被重用）、或祖先鏈沒有存活的 Claude／殼 ⇒ 標「疑似孤兒」並印 `taskkill` 指令；`-WaitForOtherTests N` 等非孤兒結束最多 N 分鐘 | 孤兒握鎖時建包只會安靜地排隊，看不出在等誰 | **不自動結束任何行程**：孤兒也可能是刻意放著跑的；盤點失敗只警告、永遠 exit 0（這一步不可以變成新的失敗來源） |
+
+- **開關（預設全開；關掉＝舊行為）**：`build_deploy_package.ps1 -NoStageReuse`（只沿用兩段都綠的完整紀錄）、`-NoFlakeRetry`（紅就擋、不查登記簿、不載 fail_stream）、`-NoPreflight`；conftest `MOTRIX_PYTEST_BUILD_GUARD=0`。`-ForceTests` 照舊（一律重跑）。
+- **登記偶發題**（人看過紅的現場、開了追根因的單才登記）：`.venv312\Scripts\python.exe tools\platform\known_flakes.py add --nodeid "<nodeid>" --owner "<負責人>" --ticket "<RUN-PLAN 編號>" --days 14`；根因修好 ⇒ `remove`；`check` 列出並驗過期。
+- **發行時的順序**：先 `modtest --full`（綠會被建包沿用）→ 儀表板打包；建包紅在 e2e 時，直接再建一次＝只跑 e2e。
+- **守門**：`backend/tests/platform/test_build_opt_2026_09_30.py`（每條規則含反向控制）；既有 `test_build_test_reuse_2026_09_25`、`test_pytest_exclusive_lock_2026_09_25`。
+
 **換版當天（儀表板「5. 升級精靈」，逐步按下並確認）**
 
 | 步驟 | 要看什麼 | 不過的話 |

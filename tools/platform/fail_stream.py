@@ -269,7 +269,9 @@ def _render(rec, as_json):
                                                                              rec.get("errors"), rec.get("passed"), rec.get("duration_s", 0))
         slow = rec.get("slowest_files") or []
         return s + ("\n  最慢的檔：" + "；".join("%s %.1fs" % (x["file"], x["seconds"]) for x in slow[:5]) if slow else "")
-    return "%s %s [%s] %s %s" % (rec.get("t"), "FAIL" if rec.get("type") == "fail" else "NODE-DOWN", rec.get("when"), rec.get("nodeid"),
+    # flaky_retried／flaky_blocked：建包的偶發重跑結果（tools/platform/flaky_retry.py 附加）
+    label = {"fail": "FAIL", "node_down": "NODE-DOWN"}.get(rec.get("type"), str(rec.get("type") or "?").upper().replace("_", "-"))
+    return "%s %s [%s] %s %s" % (rec.get("t"), label, rec.get("when"), rec.get("nodeid"),
                                  "(%s) %s" % (rec.get("module"), rec.get("summary")))
 
 

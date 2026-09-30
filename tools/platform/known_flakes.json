@@ -1,0 +1,13 @@
+{
+ "_說明": "建包偶發重跑登記簿；見 tools/platform/known_flakes.py 與 PLAYBOOK §D-建包。過期的條目會讓建包失敗。",
+ "flakes": [
+  {
+   "nodeid": "modules/tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26.py::test_layout_editor_role_override_and_restore",
+   "first_seen": "2026-09-26",
+   "owner": "H（tender_radar／版面）",
+   "ticket": "RUN-PLAN O7",
+   "expires": "2026-10-14",
+   "note": "第 3 次出現（2026-09-30 建包 e2e 段，-n 4 滿載）；單獨重跑 5/5 綠。疑點：發布後 reload 讀到舊版面。登記＝暫時容忍，到期前要查出根因（先當產品競態）。"
+  }
+ ]
+}
