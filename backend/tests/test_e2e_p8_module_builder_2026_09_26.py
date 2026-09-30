@@ -22,6 +22,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests._e2e_login import inject_login  # noqa: E402
+from tests._builder_nav import go_step, start_blank  # noqa: E402
 
 KEY = "equipment_loan"
 SAVED = """() => { const e = document.getElementById('mb-save-state');
@@ -144,7 +145,7 @@ def _wait_saved(page):
 
 
 def _step(page, n):
-    page.click('.mb-step[data-step="%d"]' % n)
+    go_step(page, n)
     page.wait_for_selector('#mb-step-%d' % n, state="visible")
 
 
@@ -179,9 +180,7 @@ def _transition_row(page, i):
 
 def _build_equipment_loan(page, base):
     page.goto(base + "/pages/module-builder.html")
-    page.fill("#mb-key", KEY)
-    page.click("#mb-open")
-    page.wait_for_selector("#mb-step-1", state="visible")
+    start_blank(page, KEY)                       # 第三輪：新模組先出「從範本開始」，選空白
 
     # ① 基本＋編號預覽（伺服器產生的範例）
     page.fill("#mb-name", "測試用設備借用單")

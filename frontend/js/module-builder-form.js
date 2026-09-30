@@ -5,7 +5,7 @@
         FORMAT_LABELS = MB.FORMAT_LABELS, NAV = MB.NAV, TYPE_ICONS = MB.TYPE_ICONS, TYPE_ICON_GENERIC = MB.TYPE_ICON_GENERIC, STEPS = MB.STEPS, clone = MB.clone
     return {
         // ── ② 欄位 ──
-        typeLabel(t) { return TYPE_LABELS[t] || t },
+        typeLabel(t) { return TYPE_LABELS[t] || this.elementLabel(t) },
         typeIcon(t) { return TYPE_ICONS[t] || TYPE_ICON_GENERIC },
         setHelp(i, v) {
           // 選填：清空就拿掉這個鍵（沒填的定義與舊版一樣）
@@ -47,18 +47,24 @@
           })
         },
         nextKey(t) {
-          var base = t === 'formula' ? 'calc' : (t === 'ref' ? 'ref' : 'field')
+          var base = t === 'formula' ? 'calc' : (t === 'ref' ? 'ref' : (t === 'table' ? 'tbl' : 'field'))
           var keys = this.def.fields.map(function (f) { return f.key })
           for (var i = 1; ; i++) { if (keys.indexOf(base + '_' + i) < 0) return base + '_' + i }
         },
-        addField(t, gi, index) {
-          // 新欄位放進區塊 gi（-1＝沒分組）的第 index 個（null ⇒ 最後）；回傳它在 def.fields 的位置
+        addField(t, gi, index, preset) {
+          // 新欄位放進區塊 gi（-1＝沒分組）的第 index 個（null ⇒ 最後）；回傳它在 def.fields 的位置。
+          // `preset`＝目錄元件的預設屬性（例：日期時間 withTime、單選的預設選項、明細表的預設欄）
           if ((this.catalog.fieldTypes || []).indexOf(t) < 0) return -1
           var f = { key: this.nextKey(t), label: '', type: t, dataClass: (this.catalog.dataClasses || ['T1'])[0] }
           if (t !== 'formula') f.required = false
           if (t === 'formula') f.formula = ''
           if (t === 'ref') f.target = ''
           if (t === 'select') f.options = []
+          if (preset && typeof preset === 'object') {
+            var p = clone(preset)
+            Object.keys(p).forEach(function (k) { f[k] = p[k] })
+            if (t === 'table') f.columns = (f.columns || []).map(function (c, n) { return Object.assign({ key: 'c' + (n + 1) }, c) })
+          }
           this.def.fields.push(f)
           return this.applyPlacement(f.key, gi === undefined ? -1 : gi, index)
         },
@@ -115,6 +121,11 @@
             idx = s ? s.secs[s.si].items.map(function (x) { return x.key }).filter(function (k) { return k !== moving }).indexOf(beforeKey) : null
           }
           if (d.indexOf('type:') === 0) { this.addField(d.slice(5), gi, idx); return }
+          if (d.indexOf('element:') === 0) {
+            var el = this.elements().find(function (x) { return x.id === d.slice(8) })
+            if (el) this.addField(el.type, gi, idx, el.preset)
+            return
+          }
           if (moving && this.fieldIndex(moving) >= 0) this.applyPlacement(moving, gi, idx)
         },
         moveField(i, dir) {
@@ -192,7 +203,7 @@
           var f = this.def.fields[i]
           if (!f || f.type !== 'formula') return
           var formula = f.formula
-          var r = await this.api('POST', '/api/custom-modules/formula/check', { formula: formula, fields: this.otherKeys(i) })
+          var r = await this.api('POST', '/api/custom-modules/formula/check', { formula: formula, fields: this.otherKeys(i), tables: this.tableColumnsMap() })
           if (!this.def.fields[i] || this.def.fields[i].formula !== formula) return   // 已經又改了
           var probs = r.ok ? (r.data.problems || []) : [{ pos: 0, message: '檢查失敗（' + r.status + '）' }]
           this.fxProblems = Object.assign({}, this.fxProblems, { [i]: probs })

@@ -8,7 +8,7 @@
         navAnchor: '', thumbTick: 0, previewMissing: false, liveMsg: '',
         ready: false, errMsg: '', me: {}, catalog: {}, users: [], orgTree: [], published: [], menuGroups: ['自訂模組'],
         keyInput: '', keyErr: '', key: '', def: null, latestVersion: 0, versions: [],
-        step: 1, sel: null, dragOver: false,
+        step: 1, tab: 'info', drawer: false, sel: null, dragOver: false,
         dirty: false, saving: false, saveState: 'idle', savedAt: '', _saveTimer: null, _loading: false, _inflight: null, flushLimitMs: 10000,
         draftProblems: [], publishProblems: [],
         numExample: '', numProblems: [], _numTimer: null,
@@ -119,20 +119,40 @@
           if (!KEY_RE.test(k)) { this.keyErr = '代號只能用小寫英文、數字與底線，英文開頭（2～40 字）'; return }
           var r = await this.api('GET', '/api/definitions/custom_module/' + encodeURIComponent(k))
           if (!r.ok) { this.keyErr = '讀取定義失敗：' + ((r.data && r.data.detail) || r.status); return }
+          if (!r.data.draft && !r.data.latest) { this.tplKey = k; this.tplChoice = true; return }      // 新模組：先挑範本（或空白）
           this._loading = true
           this.key = k
           this.latestVersion = r.data.latest ? r.data.latest.version : 0
           this.versions = r.data.versions || []
-          var body = r.data.draft ? r.data.draft.body : (r.data.latest ? r.data.latest.body : this.blankDef(k))
+          var body = r.data.draft ? r.data.draft.body : r.data.latest.body
           this.destroyPreviews()
           this.def = this.normalize(clone(body))
-          this.sel = null; this.step = 1
+          this.sel = null; this.step = 1; this.tab = 'info'; this.drawer = false; this.formMode = 'edit'; this.sideTab = 'props'
           this.draftProblems = []; this.publishProblems = []; this.fxProblems = {}; this.whenProblems = {}
           this.dirty = false; this.saveState = r.data.draft ? 'saved' : 'idle'
           try { var q = new URLSearchParams(location.search); q.set('key', k); history.replaceState(null, '', location.pathname + '?' + q.toString()) } catch (e) {}
           this.$nextTick(() => { this._loading = false; this.queueNumbering(); this.checkAllFormulas() })
           if (r.data.draft) this.validateNow()
         },
+        // 新模組：以範本（body 給了）或空白開始；套用後與範本脫鉤，之後一切照草稿走
+        async startBlank(k, body) {
+          this.tplChoice = false
+          var d = body ? clone(body) : this.blankDef(k)
+          d.permission = 'custom.' + k
+          this._loading = true
+          this.destroyPreviews()
+          this.key = k; this.latestVersion = 0; this.versions = []
+          this.def = this.normalize(d)
+          this.sel = null; this.step = 1; this.tab = 'info'; this.drawer = false; this.formMode = 'edit'; this.sideTab = 'props'
+          this.draftProblems = []; this.publishProblems = []; this.fxProblems = {}; this.whenProblems = {}
+          this.dirty = false; this.saveState = 'idle'
+          try { var q = new URLSearchParams(location.search); q.set('key', k); history.replaceState(null, '', location.pathname + '?' + q.toString()) } catch (e) {}
+          this.$nextTick(() => {
+            this._loading = false; this.queueNumbering(); this.checkAllFormulas()
+            this.dirty = true; this.saveState = 'dirty'; this.saveDraft()          // 範本／空白開始就先存成草稿
+          })
+        },
+        cancelTemplate() { this.tplChoice = false; this.tplKey = ''; this.keyInput = '' },
         async closeModule() {
           var pending = this.dirty ? this.saveDraft() : null
           this.destroyPreviews()
@@ -151,8 +171,8 @@
           clearTimeout(this._saveTimer)
           this._saveTimer = setTimeout(() => this.saveDraft(), 700)
           this.queueNumbering()
-          if (this.step === 5) this.queuePreview()
-          if (this.step === 6) this.diffLoaded = false
+          if (this.tab === 'info') this.queuePreview()
+          if (this.drawer) this.diffLoaded = false
         },
         // 回傳「這一次存檔」的 Promise；已有一次在路上 ⇒ 排下一次，並回傳路上那一次
         saveDraft(keepalive) {
@@ -237,7 +257,9 @@
           return this.allProblems().filter(function (p) { var path = String(p.path || ''); return path === prefix || path.indexOf(prefix + '.') === 0 })
         },
         jumpTo(path) {
-          this.step = this.stepOf(path)
+          this.drawer = false
+          this.step = this.stepOf(path); this.tab = this.TAB_OF_STEP[this.step] || 'info'
+          if (this.tab === 'form') this.sideTab = 'props'
           var m = /^fields\[(\d+)\]/.exec(path || '')
           if (m) this.sel = Number(m[1])
           this.$nextTick(() => {
@@ -250,11 +272,22 @@
             if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' })
           })
         },
+        // 三個頁籤（作業資訊＝基本＋輸出、表單設計、流程設計＝流程＋簽核＋通知）＋頂列「發布」抽屜（同頁）。
+        // 內部步驟號（1、2、4、5、6）保留為區段 id（#mb-step-N）與問題歸屬；沒有第 3 步。
+        TAB_OF_STEP: { 1: 'info', 5: 'info', 2: 'form', 4: 'flow' },
+        TAB_STEPS: { info: [1, 5], form: [2], flow: [4] },
         async goStep(n) {
           this.step = n
-          if (n === 5) this.previewOutput()
-          if (n === 6) { await this.flushSave(); await this.loadDiff(); await this.reloadVersions() }
+          if (n === 6) { this.drawer = true; await this.flushSave(); await this.loadDiff(); await this.reloadVersions(); return }
+          this.tab = this.TAB_OF_STEP[n] || 'info'
+          if (this.tab === 'info') this.previewOutput()
+          if (this.tab === 'form') this.$nextTick(() => this.syncPreviews(JSON.stringify(this.def), this.sel, 2))
         },
+        async goTab(t) { this.drawer = false; await this.goStep(t === 'form' ? 2 : (t === 'flow' ? 4 : 1)) },
+        closeDrawer() { this.drawer = false },
+        tabProblems(t) { var self = this; return (this.TAB_STEPS[t] || []).reduce(function (a, n) { return a.concat(self.stepProblems(n)) }, []) },
+        tabProblemCount(t) { return this.tabProblems(t).length },
+        totalProblemCount() { return this.allProblems().length },
 
         // ── ① 基本 ──
         setMenu(k, v) { var m = Object.assign({}, this.def.menu || {}); m[k] = v; this.def.menu = m },

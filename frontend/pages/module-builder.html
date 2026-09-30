@@ -10,6 +10,7 @@
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <link rel="stylesheet" href="../css/custom-form.css">
+  <link rel="stylesheet" href="../css/module-builder.css">
   <!--
     自訂模組建構器（CUSTOMIZATION-SPEC §8.1、§3.7；P8 前端）。僅超級管理員。
     步驟：① 基本 ② 表單 ④ 流程 ⑤ 輸出 ⑥ 發布（2026-09-27 使用者第二輪：原本的 ② 欄位＋③ 版面合成 ② 表單——畫布就是表單本身，
@@ -23,123 +24,6 @@
       畫布欄位的外觀用執行頁同一套 class（css/custom-form.css）。
     - 伺服器回的問題（problems[{path}]）依 path 標回對應的步驟與欄位。
   -->
-  <style>
-    .mb-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 24px 32px 60px;
-      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
-    .mb-wrap { max-width: 1280px; }
-    .mb-err { margin-top: 12px; padding: 11px 15px; border-radius: 8px; background: var(--tone-danger-bg);
-      border: 1px solid var(--tone-danger-border); color: var(--tone-danger-fg); font-size: 13px; line-height: 1.6; }
-    .mb-info { margin-top: 10px; padding: 9px 13px; border-radius: 8px; background: var(--tone-info-bg);
-      border: 1px solid var(--tone-info-border); color: var(--tone-info-fg); font-size: 12.5px; line-height: 1.6; }
-    .mb-card { border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; background: var(--surface, #fff); margin-top: 14px; }
-    .mb-card h3 { font-size: 13px; font-weight: 700; margin: 0 0 10px; }
-    .mb-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    .mb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 16px; }
-    .mb-f label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
-    .mb-f input, .mb-f select, .mb-f textarea, .mb-in { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--border);
-      border-radius: 6px; font-size: 13px; font-family: inherit; background: var(--white); color: var(--text-main, inherit); }
-    .mb-in-s { width: auto; min-width: 90px; }
-    .mb-hint { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; line-height: 1.5; }
-    .mb-bad { color: var(--danger); font-size: 11.5px; margin-top: 3px; }
-    .is-bad { outline: 2px solid var(--danger); outline-offset: 1px; border-radius: 6px; }
-    /* 步驟列 */
-    .mb-steps { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 16px; }
-    .mb-step { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 18px; border: 1px solid var(--border);
-      background: var(--surface, #fff); font-size: 12.5px; cursor: pointer; font-family: inherit; color: var(--text-secondary); }
-    .mb-step.is-on { background: var(--accent); color: #fff; border-color: var(--accent); }
-    .mb-step .bdg { font-size: 10.5px; min-width: 16px; padding: 0 5px; border-radius: 8px; background: var(--danger); color: #fff; }
-    .mb-save { font-size: 12px; color: var(--text-secondary); margin-left: auto; }
-    .mb-save[data-state="error"] { color: var(--danger); }
-    /* ② 欄位：三欄 */
-    .mb-fields { display: grid; grid-template-columns: 170px 1fr 360px; gap: 14px; margin-top: 14px; align-items: start; }
-    .mb-pal { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface-muted, #FAFAF8); }
-    .mb-pal__t { font-size: 11px; color: var(--text-secondary); font-weight: 700; margin-bottom: 6px; }
-    .mb-pal__i { display: block; width: 100%; text-align: left; padding: 7px 9px; margin-bottom: 5px; border: 1px solid var(--border);
-      border-radius: 6px; background: var(--white); cursor: grab; font-size: 12.5px; font-family: inherit; color: inherit; }
-    .mb-canvas { border: 2px dashed var(--border); border-radius: 10px; min-height: 240px; padding: 10px; }
-    .mb-canvas.is-over { border-color: var(--accent); background: var(--tone-accent-bg, #FFF1F2); }
-    .mb-fc { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
-      margin-bottom: 6px; background: var(--white); cursor: pointer; }
-    .mb-fc.is-sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-    .mb-fc.is-bad { border-color: var(--danger); outline: none; }
-    .mb-fc .t { font-size: 10.5px; padding: 1px 6px; border-radius: 4px; background: var(--border-light); color: var(--text-secondary); }
-    .mb-fc .k { font-family: var(--font-en, monospace); font-size: 11px; color: var(--text-dim); }
-    .mb-fc .grow { flex: 1; min-width: 0; }
-    .mb-ib { border: 1px solid var(--border-light); background: var(--white); border-radius: 5px; padding: 2px 7px; font-size: 12px; cursor: pointer; color: var(--text-secondary); font-family: inherit; }
-    .mb-props { border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
-    .mb-props .mb-f { margin-bottom: 10px; }
-    .mb-fx { font-family: var(--font-en, monospace); font-size: 12px; white-space: pre; background: var(--surface-muted, #FAFAF8);
-      border-radius: 6px; padding: 6px 8px; margin-top: 4px; overflow-x: auto; }
-    .mb-fx .caret { color: var(--danger); font-weight: 700; }
-    .mb-chipbtn { display: inline-block; font-size: 11px; padding: 1px 7px; margin: 2px 3px 0 0; border-radius: 10px; border: 1px solid var(--border-light);
-      background: var(--white); cursor: pointer; font-family: var(--font-en, monospace); color: var(--text-secondary); }
-    /* 表格 */
-    .mb-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-    .mb-table th, .mb-table td { padding: 6px 7px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
-    .mb-table th { font-size: 11px; color: var(--text-secondary); font-weight: 600; }
-    .mb-table tr.is-bad td { background: var(--tone-danger-bg); }
-    .mb-sub { margin: 6px 0 4px 10px; padding: 8px 10px; border-left: 3px solid var(--border); background: var(--surface-muted, #FAFAF8); border-radius: 0 6px 6px 0; }
-    .mb-tier { border: 1px solid var(--border-light); border-radius: 8px; padding: 8px 10px; margin-top: 6px; background: var(--white); }
-    .mb-tier.is-bad { border-color: var(--danger); }
-    .mb-frame { width: 100%; height: 560px; border: 1px solid var(--border-light); border-radius: 8px; background: #fff; }
-    .mb-diff { font-size: 12.5px; font-family: var(--font-en, monospace); }
-    .mb-diff div { padding: 3px 0; border-bottom: 1px dotted var(--border-light); word-break: break-all; }
-    .mb-diff .op-add { color: var(--success); } .mb-diff .op-remove { color: var(--danger); } .mb-diff .op-change { color: var(--tone-warning-fg, #92400E); }
-    .mb-probs { font-size: 12.5px; }
-    .mb-probs a { cursor: pointer; color: var(--accent); text-decoration: underline; margin-left: 6px; }
-    .mb-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .mb-chip { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; padding: 3px 8px; border-radius: 12px; border: 1px solid var(--border); margin: 3px 4px 0 0; background: var(--white); }
-    /* 縮圖導覽（BUILDER-UX §1：7 格；流程／簽核／通知三格都在第 4 步） */
-    .mb-nav { display: grid; grid-template-columns: repeat(7, minmax(84px, 1fr)); gap: 8px; margin-top: 16px; }
-    .mb-nav__i { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 6px; border-radius: 10px;
-      border: 1px solid var(--border); background: var(--surface, #fff); cursor: pointer; font-family: inherit; color: var(--text-secondary); text-align: left; }
-    .mb-nav__i.is-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); color: var(--text-main, inherit); }
-    .mb-nav__thumb { height: 46px; border-radius: 6px; background: var(--surface-muted); overflow: hidden; }
-    .mb-nav__thumb svg, .mb-nav__thumb iframe { width: 100%; height: 100%; border: 0; pointer-events: none; }
-    .mb-nav__l { font-size: 12px; display: flex; align-items: center; gap: 5px; }
-    .mb-nav__i[data-has-problems="1"]::after { content: ""; position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
-    /* 工具列 icon＋文字 */
-    .mb-pal__i { display: flex; align-items: center; gap: 8px; }
-    .mb-pal__i svg { flex: none; width: 16px; height: 16px; color: var(--text-secondary); }
-    .mb-pal__i:focus-visible, .mb-fc:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-    /* 畫布卡片：選中的就地展開 */
-    .mb-fc { flex-wrap: wrap; }
-    .mb-fc .h { cursor: grab; color: var(--text-dim); font-size: 13px; user-select: none; }
-    .mb-fc__ed { flex-basis: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-light); cursor: default; }
-    .mb-fc__ed .mb-f { margin-bottom: 10px; }
-    .mb-fc__fx { display: block; font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
-    .mb-fc__fx[data-fx-state="bad"] { color: var(--danger); }
-    .mb-fc__help { display: block; font-size: 11px; color: var(--text-dim); margin-top: 2px; white-space: pre-wrap; }
-    .mb-fc__q { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--text-secondary); }
-    /* ② 表單：畫布就是表單（.cr-* 來自 css/custom-form.css，與執行頁同一套）；建構器只加外框與工具列 */
-    .mb-canvas .cr-sec { margin-top: 10px; padding: 8px; border: 1px dashed transparent; border-radius: 8px; }
-    .mb-canvas .cr-sec:hover, .mb-canvas .cr-sec[data-empty="1"] { border-color: var(--border-light); }
-    .mb-sec__h { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
-    .mb-sec__h .h { cursor: grab; color: var(--text-dim); user-select: none; }
-    .mb-sec__h .mb-in { font-weight: 700; font-size: 12px; }
-    .mb-sec__drop { grid-column: 1 / -1; padding: 10px; text-align: center; }
-    .mb-canvas .mb-fc { display: block; margin: 0; padding: 8px 10px; }
-    .mb-canvas .mb-fc.is-sel { grid-column: 1 / -1; }
-    .mb-fc__bar { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
-    .mb-fc__bar .grow { flex: 1; }
-    .mb-fc__bar svg { width: 14px; height: 14px; color: var(--text-secondary); }
-    .cr-f .mb-fc__q { display: inline-flex; margin: 0; }
-    .cr-f .mb-fc__q input { width: auto; padding: 0; }
-    .mb-fc__mock { pointer-events: none; }
-    /* 右側即時預覽 */
-    .mb-pv { border: 1px solid var(--border); border-radius: 10px; padding: 10px; position: sticky; top: calc(var(--topbar-h) + 12px); }
-    .mb-pv__t { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; }
-    .mb-pv__host { min-height: 240px; }
-    .mb-pv__list { margin-top: 10px; }
-    .mb-pv__list summary { cursor: pointer; }
-    .mb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-    @media (max-width: 1100px) { .mb-fields { grid-template-columns: 150px 1fr; } .mb-props, .mb-pv { grid-column: 1 / -1; } .mb-nav { grid-template-columns: repeat(4, 1fr); } }
-    @media (max-width: 767px) {
-      .mb-main { margin-left: 0; padding: 16px 12px 48px; }
-      .mb-fields, .mb-layout { grid-template-columns: 1fr; }
-      .mb-table { display: block; overflow-x: auto; }
-    }
-  </style>
 </head>
 <body x-data="moduleBuilderPage()" x-init="init()" x-cloak>
   <header id="app-topbar" class="topbar"></header>
@@ -158,7 +42,27 @@
       <div class="mb-err" id="mb-error" x-show="errMsg" x-text="errMsg"></div>
 
       <!-- 選擇模組 -->
-      <template x-if="ready && !key">
+      <!-- 新模組：先從範本開始（也可空白）；套用後與範本脫鉤，可自由修改 -->
+      <template x-if="ready && !key && tplChoice">
+        <div class="mb-card" id="mb-tpl-pick">
+          <h3>建立「<span x-text="tplKey"></span>」：從範本開始</h3>
+          <div class="mb-hint">範本是一份預填好的草稿（欄位、區塊、明細表、簽核、輸出版型）；選了之後可以自由修改，不會再跟範本連動。</div>
+          <div class="mb-tpl">
+            <button class="mb-tpl__c" id="mb-tpl-blank" :disabled="tplBusy" @click="chooseTemplate(null)">
+              <strong>空白</strong><span>從沒有欄位的空白表單開始</span>
+            </button>
+            <template x-for="t in templates()" :key="t.key">
+              <button class="mb-tpl__c" :data-template="t.key" :disabled="tplBusy" @click="chooseTemplate(t.key)">
+                <strong x-text="t.name"></strong><span x-text="t.description"></span>
+                <span x-show="t.note" x-text="t.note" style="margin-top:4px;color:var(--text-dim)"></span>
+              </button>
+            </template>
+          </div>
+          <div class="mb-row" style="margin-top:12px"><button class="mb-chipbtn" id="mb-tpl-cancel" @click="cancelTemplate()">取消</button></div>
+        </div>
+      </template>
+
+      <template x-if="ready && !key && !tplChoice">
         <div class="mb-card" id="mb-pick">
           <h3>開啟或建立模組</h3>
           <div class="mb-row">
@@ -194,39 +98,36 @@
 
       <template x-if="def">
         <div>
-          <div class="mb-row" style="margin-top:14px">
-            <strong x-text="(def.name || '（未命名）') + '　' + key"></strong>
-            <span class="mb-hint" x-text="latestVersion ? '最新發布：第 ' + latestVersion + ' 版' : '尚未發布'"></span>
+          <div class="mb-top" id="mb-top">
+            <button class="mb-chipbtn" id="mb-back" @click="closeModule()" aria-label="回到模組清單">← 換一個模組</button>
+            <span class="mb-top__name" x-text="def.name || '（未命名）'"></span>
+            <span class="mb-top__key" x-text="key"></span>
+            <span class="mb-badge" :class="{ 'is-pub': latestVersion }" x-text="latestVersion ? '已發布 v' + latestVersion : '設計中'"></span>
             <a class="mb-chipbtn" x-show="latestVersion" :href="'custom-records.html?key=' + encodeURIComponent(key)">開啟執行頁</a>
-            <button class="mb-chipbtn" @click="closeModule()">換一個模組</button>
+            <nav class="mb-tabs" role="tablist" aria-label="建構頁籤" id="mb-tabs">
+              <template x-for="t in [{ id: 'info', l: '作業資訊' }, { id: 'form', l: '表單設計' }, { id: 'flow', l: '流程設計' }]" :key="t.id">
+                <button class="mb-tab" role="tab" :class="{ 'is-on': tab === t.id }" :data-tab="t.id" :aria-selected="tab === t.id ? 'true' : 'false'"
+                        :data-has-problems="tabProblemCount(t.id) ? '1' : '0'" @click="goTab(t.id)">
+                  <span x-text="t.l"></span><span class="bdg" x-show="tabProblemCount(t.id)" x-text="tabProblemCount(t.id)"></span>
+                </button>
+              </template>
+            </nav>
             <span class="mb-save" id="mb-save-state" :data-state="saveState" :data-dirty="dirty ? '1' : '0'" :data-saving="saving ? '1' : '0'"
                   x-text="saveLabel()"></span>
+            <button class="btn btn-primary mb-pubbtn" id="mb-publish-open" @click="goStep(6)">發布<span class="bdg" x-show="totalProblemCount()" x-text="totalProblemCount()"></span></button>
           </div>
 
-          <nav class="mb-nav" aria-label="建構步驟" id="mb-nav">
-            <template x-for="(it, ni) in NAV" :key="it.id">
-              <button :class="[it.alias ? 'mb-nav__i' : 'mb-nav__i mb-step', navOn(it) ? 'is-on' : '']" :data-nav="it.id"
-                      :data-step="it.alias ? null : it.step" :data-step-alias="it.alias ? it.step : null"
-                      :data-has-problems="it.alias ? '0' : (stepProblemCount(it.step) ? '1' : '0')"
-                      :aria-current="navOn(it) ? 'step' : null" @click="goNav(it)">
-                <div class="mb-nav__thumb" :data-thumb="it.thumb" x-effect="drawThumb($el, it.thumb, thumbTick)"></div>
-                <span class="mb-nav__l"><span x-text="(ni + 1) + ' ' + it.label"></span>
-                  <span class="bdg" x-show="!it.alias && stepProblemCount(it.step)" x-text="stepProblemCount(it.step)"></span></span>
-              </button>
-            </template>
-          </nav>
-
           <!-- 本步驟的問題（草稿驗證或發布被擋） -->
-          <template x-if="stepProblems(step).length">
+          <template x-if="tabProblems(tab).length">
             <div class="mb-err mb-probs" id="mb-step-problems">
-              <template x-for="(p, pi) in stepProblems(step)" :key="pi">
+              <template x-for="(p, pi) in tabProblems(tab)" :key="pi">
                 <div :data-problem-path="p.path"><span x-text="(p.path || '（整份）') + '：' + p.message"></span></div>
               </template>
             </div>
           </template>
 
           <!-- ① 基本 -->
-          <section x-show="step === 1" class="mb-card" id="mb-step-1">
+          <section x-show="tab === 'info'" class="mb-card" id="mb-step-1">
             <div class="mb-grid">
               <div class="mb-f" :class="{ 'is-bad': hasProblem('name') }">
                 <label for="mb-name">模組名稱</label>
@@ -285,87 +186,180 @@
           <!-- ② 表單（使用者 2026-09-27 第二輪：「預覽都在同一個頁面，直接放入」）：欄位與版面合成一步，中間的畫布就是表單本身——
                從工具列拖進某個區塊的某個位置；區塊可以新增、改名、拖曳排序；點欄位就地改屬性。
                欄位外觀沿用執行頁同一套 class 與標記（css/custom-form.css），畫布與執行頁一致有題。右側同時顯示輸出與列表預覽。 -->
-          <section x-show="step === 2" id="mb-step-2">
-            <div class="mb-fields">
-              <div class="mb-pal" id="mb-palette">
-                <div class="mb-pal__t">欄位（拖進表單的區塊；或按 Enter／點一下加到目前的區塊）</div>
-                <template x-for="t in (catalog.fieldTypes || [])" :key="t">
-                  <button class="mb-pal__i" draggable="true" :data-palette-type="t" :aria-label="'加入欄位：' + typeLabel(t)"
-                          @dragstart="$event.dataTransfer.setData('text/plain', 'type:' + t)" @click="addFieldHere(t)">
-                    <span x-html="typeIcon(t)"></span><span x-text="typeLabel(t)"></span>
-                  </button>
-                </template>
+          <section x-show="tab === 'form'" id="mb-step-2" class="mb3">
+            <div class="mb3__bar">
+              <div class="mb-seg" role="tablist" aria-label="編輯或預覽" id="mb-mode">
+                <button role="tab" id="mb-mode-edit" :class="{ 'is-on': formMode === 'edit' }" :aria-selected="formMode === 'edit' ? 'true' : 'false'" @click="setFormMode('edit')">✎ 編輯</button>
+                <button role="tab" id="mb-mode-preview" :class="{ 'is-on': formMode === 'preview' }" :aria-selected="formMode === 'preview' ? 'true' : 'false'" @click="setFormMode('preview')">👁 預覽</button>
               </div>
-              <div class="mb-canvas" id="mb-canvas" :class="{ 'is-over': dragOver }"
-                   @dragover.prevent="dragOver = true" @dragleave.self="dragOver = false" @drop.prevent="dropOn($event, -1, null)">
-                <div class="mb-hint" x-show="!def.fields.length">把左邊的欄位型別拖到這裡</div>
-                <template x-for="(sec, si) in L.editorSections(def)" :key="'g' + sec.gi">
-                  <div class="cr-sec mb-sec" :data-section-group="sec.gi" :data-group-index="sec.gi >= 0 ? sec.gi : null"
-                       :data-empty="sec.items.length ? '0' : '1'" role="list" :aria-label="sec.title || (sec.gi >= 0 ? '未命名區塊' : '表單')"
-                       @dragover.prevent.stop="dragOver = true" @drop.prevent.stop="dropOn($event, sec.gi, null)">
-                    <template x-if="sec.gi >= 0">
-                      <div class="mb-sec__h">
-                        <span class="h" draggable="true" title="拖曳調整區塊順序（鍵盤：↑／↓ 按鈕）" aria-hidden="true"
-                              @dragstart="$event.dataTransfer.setData('text/plain', 'group:' + sec.gi)">⠿</span>
-                        <input class="mb-in" :data-group-title="sec.gi" :value="sec.title" placeholder="區塊標題（例：借用資訊）" aria-label="區塊標題"
-                               @change="def.ui = L.renameGroup(def, sec.gi, $event.target.value)">
-                        <button class="mb-ib" aria-label="區塊上移" @click="moveGroupBy(sec.gi, -1)">↑</button>
-                        <button class="mb-ib" aria-label="區塊下移" @click="moveGroupBy(sec.gi, 1)">↓</button>
-                        <button class="mb-ib" aria-label="刪除區塊" :data-remove-group="sec.gi" @click="removeGroupAt(sec.gi)">✕</button>
+              <span class="mb-hint" x-show="formMode === 'preview'" style="margin:0">這是使用者填單的樣子（試填不會存檔）</span>
+              <span class="grow"></span>
+              <button class="mb-chipbtn mb3__pal-open" id="mb-pal-open" @click="palOpen = !palOpen; sideOpen = false">＋ 元件</button>
+              <button class="mb-chipbtn mb3__side-open" id="mb-side-open" @click="sideOpen = !sideOpen; palOpen = false">屬性</button>
+              <button class="mb-chipbtn" id="mb-form-settings" @click="sel = null; sideTab = 'props'; sideOpen = true">⚙ 表單設定</button>
+            </div>
+            <div class="mb3__grid" :data-mode="formMode" :data-pal-open="palOpen ? '1' : '0'" :data-side-open="sideOpen ? '1' : '0'">
+              <!-- 左：元件列（目錄 fieldElements／elementGroups；分組可收合、可搜尋） -->
+              <aside class="mb-pal mb3__pal" id="mb-palette" aria-label="元件列">
+                <input class="mb-pal__q" id="mb-palette-q" type="search" x-model="paletteQuery" placeholder="搜尋元件…" aria-label="搜尋元件">
+                <div class="mb-pal__t">拖進表單，或按 Enter／點一下加到目前的區塊</div>
+                <template x-for="g in paletteGroups()" :key="g.id">
+                  <div :data-palette-group="g.id">
+                    <button class="mb-pal__g" :aria-expanded="groupClosed[g.id] ? 'false' : 'true'" @click="toggleGroup(g.id)">
+                      <span x-text="g.label"></span><span x-text="groupClosed[g.id] ? '⌄' : '⌃'" aria-hidden="true"></span>
+                    </button>
+                    <template x-if="!groupClosed[g.id]">
+                      <div>
+                        <template x-for="e in g.items" :key="e.id">
+                          <button class="mb-pal__i" draggable="true" :data-palette-element="e.id" :data-palette-type="isPrimaryElement(e) ? e.type : null"
+                                  :aria-label="'加入元件：' + e.label"
+                                  @dragstart="$event.dataTransfer.setData('text/plain', 'element:' + e.id)" @click="addElementHere(e.id); palOpen = false">
+                            <span x-html="typeIcon(e.type)"></span><span x-text="e.label"></span>
+                          </button>
+                        </template>
                       </div>
                     </template>
-                    <div class="cr-sec__t" x-show="sec.gi < 0 && sec.title" x-text="sec.title"></div>
-                    <div class="cr-grid">
-                      <template x-for="it in sec.items" :key="it.key + ':' + it.index">
-                        <div class="cr-f mb-fc" :class="{ 'is-sel': sel === it.index, 'is-bad': hasProblem('fields[' + it.index + ']') }"
-                             :data-field-index="it.index" :data-field-key="it.key" tabindex="0" role="listitem"
-                             :aria-label="(it.f.label || '（未命名）') + '，' + typeLabel(it.f.type) + '，' + (sec.title ? '「' + sec.title + '」' : '') + '第 ' + (it.pos + 1) + ' 個'"
-                             @dragover.prevent.stop="dragOver = true" @drop.prevent.stop="dropOn($event, sec.gi, it.key)" @click="sel = it.index"
-                             @keydown.self.alt.up.prevent="moveFieldKb(it.index, -1)" @keydown.self.alt.down.prevent="moveFieldKb(it.index, 1)"
-                             @keydown.self.delete.prevent="removeFieldKb(it.index)" @keydown.self.enter.prevent="sel = it.index"
-                             @keydown.escape="if (sel === it.index) { sel = null; $el.focus() }">
-                          <div class="mb-fc__bar">
-                            <span class="h" draggable="true" title="拖曳（鍵盤：Alt＋↑／↓；到區塊邊界會移到相鄰區塊）" aria-hidden="true"
-                                  @dragstart="$event.dataTransfer.setData('text/plain', 'field:' + it.key)">⠿</span>
-                            <span x-html="typeIcon(it.f.type)"></span>
-                            <span class="t" x-text="typeLabel(it.f.type)"></span>
-                            <span class="k" x-text="it.key"></span>
-                            <span class="mb-bad" x-show="!it.f.label" style="margin:0">未命名</span>
-                            <span class="grow"></span>
-                            <label class="mb-fc__q" x-show="it.f.type !== 'formula' && sel !== it.index" @click.stop>
-                              <input type="checkbox" :data-quick-required="it.index" :checked="it.f.required === true" @change="it.f.required = $event.target.checked">必填</label>
-                            <button class="mb-ib" title="上移" @click.stop="moveField(it.index, -1)">↑</button>
-                            <button class="mb-ib" title="下移" @click.stop="moveField(it.index, 1)">↓</button>
-                            <button class="mb-ib" title="刪除" :data-remove-field="it.index" @click.stop="removeField(it.index)">✕</button>
+                  </div>
+                </template>
+                <div class="mb-hint" x-show="!paletteGroups().length">沒有符合的元件</div>
+              </aside>
+
+              <!-- 中：畫布＝表單本身（與執行頁同一套 class 與標記）；預覽模式就地切成填單視角 -->
+              <div class="mb3__center">
+                <div class="mb-canvas" id="mb-canvas" :class="{ 'is-over': dragOver, 'is-preview': formMode === 'preview' }" :data-mode="formMode"
+                     @dragover.prevent="dragOver = formMode === 'edit'" @dragleave.self="dragOver = false" @drop.prevent="formMode === 'edit' && dropOn($event, -1, null)">
+                  <div class="mb-hint" x-show="!def.fields.length && formMode === 'edit'">把左邊的元件拖到這裡</div>
+                  <h2 class="mb-canvas__title" style="font-size:18px;margin:4px 0 8px" x-text="def.name || '（未命名的表單）'"></h2>
+                  <template x-for="(sec, si) in L.editorSections(def)" :key="'g' + sec.gi">
+                    <div class="cr-sec mb-sec" :data-section-group="sec.gi" :data-group-index="sec.gi >= 0 ? sec.gi : null"
+                         x-show="formMode === 'edit' || sec.items.length"
+                         :data-empty="sec.items.length ? '0' : '1'" role="list" :aria-label="sec.title || (sec.gi >= 0 ? '未命名區塊' : '表單')"
+                         @dragover.prevent.stop="dragOver = formMode === 'edit'" @drop.prevent.stop="formMode === 'edit' && dropOn($event, sec.gi, null)">
+                      <template x-if="sec.gi >= 0 && formMode === 'edit'">
+                        <div class="mb-sec__h">
+                          <span class="h" draggable="true" title="拖曳調整區塊順序（鍵盤：↑／↓ 按鈕）" aria-hidden="true"
+                                @dragstart="$event.dataTransfer.setData('text/plain', 'group:' + sec.gi)">⠿</span>
+                          <input class="mb-in" :data-group-title="sec.gi" :value="sec.title" placeholder="區塊標題（例：借用資訊）" aria-label="區塊標題"
+                                 @change="def.ui = L.renameGroup(def, sec.gi, $event.target.value)">
+                          <select class="mb-in mb-in-s" :data-group-columns="sec.gi" :value="String(groupColumns(sec.gi))" aria-label="這個區塊一列幾欄"
+                                  @change="setGroupColumns(sec.gi, $event.target.value)">
+                            <option value="0">欄數：自動</option><option value="1">1 欄</option><option value="2">2 欄</option><option value="3">3 欄</option><option value="4">4 欄</option>
+                          </select>
+                          <button class="mb-ib" aria-label="區塊上移" @click="moveGroupBy(sec.gi, -1)">↑</button>
+                          <button class="mb-ib" aria-label="區塊下移" @click="moveGroupBy(sec.gi, 1)">↓</button>
+                          <button class="mb-ib" aria-label="刪除區塊" :data-remove-group="sec.gi" @click="removeGroupAt(sec.gi)">✕</button>
+                        </div>
+                      </template>
+                      <div class="cr-sec__t" x-show="(sec.gi < 0 || formMode === 'preview') && sec.title" x-text="sec.title"></div>
+                      <div class="cr-sec__t" x-show="sec.gi >= 0 && formMode === 'preview' && sec.title" x-text="sec.title"></div>
+                      <div class="cr-grid" :style="gridStyle(sec.gi)">
+                        <template x-for="it in sec.items" :key="it.key + ':' + it.index">
+                          <div class="cr-f mb-fc" :class="{ 'is-sel': sel === it.index && formMode === 'edit', 'is-bad': hasProblem('fields[' + it.index + ']'),
+                                                            'cr-f--wide': it.f.type === 'table' || it.f.type === 'textarea' }"
+                               :data-field-index="it.index" :data-field-key="it.key" :tabindex="formMode === 'edit' ? 0 : -1" role="listitem"
+                               :aria-label="(it.f.label || '（未命名）') + '，' + typeLabel(it.f.type) + '，' + (sec.title ? '「' + sec.title + '」' : '') + '第 ' + (it.pos + 1) + ' 個'"
+                               @dragover.prevent.stop="dragOver = formMode === 'edit'" @drop.prevent.stop="formMode === 'edit' && dropOn($event, sec.gi, it.key)"
+                               @click="formMode === 'edit' && selectField(it.index)"
+                               @keydown.self.alt.up.prevent="moveFieldKb(it.index, -1)" @keydown.self.alt.down.prevent="moveFieldKb(it.index, 1)"
+                               @keydown.self.delete.prevent="removeFieldKb(it.index)" @keydown.self.enter.prevent="selectField(it.index)"
+                               @keydown.escape="if (sel === it.index) { sel = null; $el.focus() }">
+                            <div class="mb-fc__bar" x-show="formMode === 'edit'">
+                              <span class="h" draggable="true" title="拖曳（鍵盤：Alt＋↑／↓；到區塊邊界會移到相鄰區塊）" aria-hidden="true"
+                                    @dragstart="$event.dataTransfer.setData('text/plain', 'field:' + it.key)">⠿</span>
+                              <span x-html="typeIcon(it.f.type)"></span>
+                              <span class="t" x-text="typeLabel(it.f.type)"></span>
+                              <span class="k" x-text="it.key"></span>
+                              <span class="mb-bad" x-show="!it.f.label" style="margin:0">未命名</span>
+                              <span class="grow"></span>
+                              <label class="mb-fc__q" x-show="it.f.type !== 'formula'" @click.stop>
+                                <input type="checkbox" :data-quick-required="it.index" :checked="it.f.required === true" @change="it.f.required = $event.target.checked">必填</label>
+                              <button class="mb-fc__dup" title="複製" :data-duplicate-field="it.index" @click.stop="duplicateField(it.index)">⧉</button>
+                              <button class="mb-ib" title="上移" @click.stop="moveField(it.index, -1)">↑</button>
+                              <button class="mb-ib" title="下移" @click.stop="moveField(it.index, 1)">↓</button>
+                              <button class="mb-ib" title="刪除" :data-remove-field="it.index" @click.stop="removeField(it.index)">✕</button>
+                            </div>
+                            <!-- 以下與執行頁 custom-records 的欄位標記相同（label＋必填星號、輸入框、可讀式子、說明） -->
+                            <label><span x-text="it.f.label || it.f.key"></span><span class="req" x-show="it.f.required">*</span></label>
+                            <div class="mb-fc__mock" :class="{ 'is-live': formMode === 'preview' }" :aria-hidden="formMode === 'edit' ? 'true' : null">
+                              <template x-if="mockKind(it.f) === 'ro'"><div class="cr-ro">（儲存後由系統計算）</div></template>
+                              <template x-if="mockKind(it.f) === 'input'">
+                                <input :type="mockInputType(it.f)" :placeholder="it.f.placeholder || ''" :disabled="formMode === 'edit'" tabindex="-1">
+                              </template>
+                              <template x-if="mockKind(it.f) === 'textarea'"><textarea :placeholder="it.f.placeholder || ''" :disabled="formMode === 'edit'" tabindex="-1"></textarea></template>
+                              <template x-if="mockKind(it.f) === 'select'">
+                                <select :disabled="formMode === 'edit'" tabindex="-1"><option>（未選）</option><template x-for="o in mockOptions(it.f)" :key="o"><option x-text="o"></option></template></select>
+                              </template>
+                              <template x-if="mockKind(it.f) === 'radio' || mockKind(it.f) === 'checks'">
+                                <div class="cr-opts">
+                                  <template x-for="o in mockOptions(it.f)" :key="o">
+                                    <label><input :type="mockKind(it.f) === 'radio' ? 'radio' : 'checkbox'" :name="'mb-mk-' + it.key" :disabled="formMode === 'edit'" tabindex="-1"><span x-text="o"></span></label>
+                                  </template>
+                                  <label x-show="it.f.allowOther"><input :type="mockKind(it.f) === 'radio' ? 'radio' : 'checkbox'" :name="'mb-mk-' + it.key" :disabled="formMode === 'edit'" tabindex="-1"><span>其他</span></label>
+                                </div>
+                              </template>
+                              <template x-if="mockKind(it.f) === 'range'">
+                                <div class="cr-range"><input :type="it.f.withTime ? 'datetime-local' : 'date'" :disabled="formMode === 'edit'" tabindex="-1"><span>～</span><input :type="it.f.withTime ? 'datetime-local' : 'date'" :disabled="formMode === 'edit'" tabindex="-1"></div>
+                              </template>
+                              <template x-if="mockKind(it.f) === 'table'">
+                                <div class="cr-tbl" :data-mock-table="it.key">
+                                  <table>
+                                    <thead><tr><template x-for="c in (it.f.columns || [])" :key="c.key"><th x-text="c.label || c.key"></th></template></tr></thead>
+                                    <tbody><template x-for="n in tableRows(it.f)" :key="n">
+                                      <tr><template x-for="c in (it.f.columns || [])" :key="c.key"><td><input :disabled="formMode === 'edit' || c.type === 'formula'" tabindex="-1" :placeholder="c.type === 'formula' ? '自動計算' : ''"></td></template></tr>
+                                    </template></tbody>
+                                  </table>
+                                  <button type="button" class="btn btn-ghost btn-sm cr-tbl__add" :disabled="formMode === 'edit'" tabindex="-1" @click="addPreviewRow(it.f)" x-text="'＋ ' + (it.f.addLabel || '新增一列')"></button>
+                                </div>
+                              </template>
+                            </div>
+                            <div class="cr-fx" x-show="it.f.type === 'formula'" :data-fx-readable="it.key"
+                                 :data-fx-state="(fxProblems[it.index] || []).length ? 'bad' : 'ok'" x-text="fxReadableLine(it.index)"></div>
+                            <div class="cr-help" x-show="it.f.help" :data-field-help="it.key" x-text="it.f.help"></div>
                           </div>
-                          <!-- 以下與執行頁 custom-records 的欄位標記相同（label＋必填星號、輸入框、可讀式子、說明） -->
-                          <label><span x-text="it.f.label || it.f.key"></span><span class="req" x-show="it.f.required">*</span></label>
-                          <div class="mb-fc__mock" aria-hidden="true">
-                            <div class="cr-ro" x-show="it.f.type === 'formula'">（儲存後由系統計算）</div>
-                            <select disabled tabindex="-1" x-show="['select', 'checkbox', 'ref'].indexOf(it.f.type) >= 0"><option>（未選）</option></select>
-                            <input disabled tabindex="-1" x-show="['select', 'checkbox', 'ref', 'formula'].indexOf(it.f.type) < 0"
-                                   :type="it.f.type === 'number' || it.f.type === 'date' ? it.f.type : 'text'">
-                          </div>
-                          <div class="cr-fx" x-show="it.f.type === 'formula'" :data-fx-readable="it.key"
-                               :data-fx-state="(fxProblems[it.index] || []).length ? 'bad' : 'ok'" x-text="fxReadableLine(it.index)"></div>
-                          <div class="cr-help" x-show="it.f.help" :data-field-help="it.key" x-text="it.f.help"></div>
-                          <template x-if="sel === it.index && def.fields[sel]">
-                            <div class="mb-fc__ed" :data-props-for="sel" @click.stop>
+                        </template>
+                        <div class="mb-sec__drop mb-hint" x-show="!sec.items.length && formMode === 'edit'">把元件拖到這個區塊</div>
+                      </div>
+                    </div>
+                  </template>
+                  <div class="mb-row" style="margin-top:10px" x-show="formMode === 'edit'">
+                    <button class="btn btn-ghost btn-sm" id="mb-add-group" @click="addGroupAt()">＋ 區塊</button>
+                  </div>
+                  <!-- 預覽模式：動作列（依流程的轉換；只顯示、不動作） -->
+                  <div class="mb-row" style="margin-top:14px" x-show="formMode === 'preview'" id="mb-preview-actions">
+                    <template x-for="t in (def.workflow.transitions || []).filter(function (x) { return x.from === def.workflow.initial || (Array.isArray(x.from) && x.from.indexOf(def.workflow.initial) >= 0) })" :key="t.key">
+                      <button class="btn btn-primary" type="button" @click="announce('預覽不會送出')" x-text="t.label || t.key"></button>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 右：屬性｜輸出預覽｜列表預覽（同頁頁籤，不另開頁） -->
+              <aside class="mb3__side mb-pv" id="mb-preview-pane">
+                <div class="mb3__tabs" role="tablist" aria-label="側欄">
+                  <button role="tab" id="mb-side-props" :class="{ 'is-on': sideTab === 'props' }" @click="setSideTab('props')">屬性</button>
+                  <button role="tab" id="mb-side-output" :class="{ 'is-on': sideTab === 'output' }" @click="setSideTab('output')">輸出預覽</button>
+                  <button role="tab" id="mb-side-list" :class="{ 'is-on': sideTab === 'list' }" @click="setSideTab('list')">列表預覽</button>
+                  <span style="flex:1"></span><button class="mb-ib mb3__side-open" aria-label="關閉屬性" @click="sideOpen = false">✕</button>
+                </div>
+                <div x-show="sideTab === 'props'" id="mb-props-pane">
+                  <template x-if="sel !== null && def.fields[sel]">
+                    <div class="mb-props mb-props--side" :data-props-for="sel">
+                      <div class="mb-props__t"><span x-html="typeIcon(def.fields[sel].type)"></span><span x-text="typeLabel(def.fields[sel].type)"></span></div>
+                      <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].label') }">
+                        <label for="mb-f-label">標題（顯示名稱）</label>
+                        <input id="mb-f-label" x-model="def.fields[sel].label">
+                      </div>
                       <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].key') }">
                         <label for="mb-f-key">欄位代號（key）</label>
                         <input id="mb-f-key" :value="def.fields[sel].key" @change="renameField(sel, $event.target.value.trim())">
                         <div class="mb-hint">公式、版面與輸出用它引用這個欄位。</div>
-                      </div>
-                      <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].label') }">
-                        <label for="mb-f-label">顯示名稱</label>
-                        <input id="mb-f-label" x-model="def.fields[sel].label">
                       </div>
                       <div class="mb-f">
                         <label>型別</label>
                         <div class="mb-fx" x-text="typeLabel(def.fields[sel].type) + '（' + def.fields[sel].type + '）'"></div>
                       </div>
                       <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].help') }">
-                        <label for="mb-f-help">說明（選填，顯示在表單欄位下方）</label>
+                        <label for="mb-f-help">說明（選填，顯示在欄位下方）</label>
                         <textarea id="mb-f-help" rows="2" maxlength="300" :value="def.fields[sel].help || ''"
                                   @input="setHelp(sel, $event.target.value)" :placeholder="def.fields[sel].type === 'formula' ? '例：含稅金額，依數量與單價計算' : '例：填寫設備的財產編號'"></textarea>
                       </div>
@@ -379,32 +373,52 @@
                           </select>
                         </div>
                       </template>
-                      <template x-if="def.fields[sel].type === 'select'">
+                      <template x-if="hasOptions(def.fields[sel])">
                         <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].options') }">
                           <label for="mb-f-options">選項（一行一個）</label>
-                          <textarea id="mb-f-options" rows="4" :value="(def.fields[sel].options || []).join('\n')"
-                                    @input="def.fields[sel].options = $event.target.value.split('\n').map(s => s.trim()).filter(s => s)"></textarea>
+                          <textarea id="mb-f-options" rows="4" :value="optionsText(def.fields[sel])" @input="setOptions(sel, $event.target.value)"></textarea>
                         </div>
                       </template>
-                      <template x-if="['text','number','date','select','checkbox'].indexOf(def.fields[sel].type) >= 0">
+                      <template x-for="a in genericAttrs(def.fields[sel])" :key="a.key">
+                        <div class="mb-f" :data-attr="a.key" :class="{ 'is-bad': hasProblem('fields[' + sel + '].' + a.key) }">
+                          <template x-if="a.kind === 'bool'">
+                            <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" style="width:auto" :checked="attrValue(def.fields[sel], a)" @change="setAttr(sel, a, $event.target.checked)"><span x-text="a.label"></span></label>
+                          </template>
+                          <template x-if="a.kind !== 'bool'">
+                            <div><label x-text="a.label"></label>
+                              <input :type="a.kind === 'text' ? 'text' : 'number'" :step="a.kind === 'number' ? 'any' : null" :value="attrValue(def.fields[sel], a)" @input="setAttr(sel, a, $event.target.value)"></div>
+                          </template>
+                        </div>
+                      </template>
+                      <template x-if="['text','number','date','select','radio','checkbox','ref'].indexOf(def.fields[sel].type) >= 0">
                         <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].default') }">
                           <label for="mb-f-default">預設值</label>
-                          <template x-if="def.fields[sel].type === 'checkbox'">
-                            <select id="mb-f-default" :value="def.fields[sel].default === true ? 'true' : (def.fields[sel].default === false ? 'false' : '')"
-                                    @change="setDefault(sel, $event.target.value === '' ? null : $event.target.value === 'true')">
-                              <option value="">（無）</option><option value="true">是</option><option value="false">否</option>
+                          <template x-if="defaultTokens(def.fields[sel]).length">
+                            <select id="mb-f-default-mode" :value="defaultMode(def.fields[sel])" @change="setDefaultMode(sel, $event.target.value)" style="margin-bottom:4px">
+                              <option value="none">（無）</option><option value="fixed" x-show="def.fields[sel].type !== 'ref'">固定值</option>
+                              <template x-for="tk in defaultTokens(def.fields[sel])" :key="tk.v"><option :value="tk.v" x-text="tk.l"></option></template>
                             </select>
                           </template>
-                          <template x-if="def.fields[sel].type === 'select'">
-                            <select id="mb-f-default" :value="def.fields[sel].default || ''" @change="setDefault(sel, $event.target.value || null)">
-                              <option value="">（無）</option>
-                              <template x-for="o in (def.fields[sel].options || [])" :key="o"><option :value="o" x-text="o" :selected="o === def.fields[sel].default"></option></template>
-                            </select>
-                          </template>
-                          <template x-if="['text','number','date'].indexOf(def.fields[sel].type) >= 0">
-                            <input id="mb-f-default" :type="def.fields[sel].type === 'text' ? 'text' : def.fields[sel].type" :step="def.fields[sel].type === 'number' ? 'any' : null"
-                                   :value="def.fields[sel].default === undefined || def.fields[sel].default === null ? '' : def.fields[sel].default"
-                                   @change="setDefault(sel, $event.target.value === '' ? null : (def.fields[sel].type === 'number' ? Number($event.target.value) : $event.target.value))">
+                          <template x-if="defaultMode(def.fields[sel]) === 'fixed' || (!defaultTokens(def.fields[sel]).length && def.fields[sel].type !== 'ref')">
+                            <div>
+                              <template x-if="def.fields[sel].type === 'checkbox'">
+                                <select id="mb-f-default" :value="def.fields[sel].default === true ? 'true' : (def.fields[sel].default === false ? 'false' : '')"
+                                        @change="setDefault(sel, $event.target.value === '' ? null : $event.target.value === 'true')">
+                                  <option value="">（無）</option><option value="true">是</option><option value="false">否</option>
+                                </select>
+                              </template>
+                              <template x-if="def.fields[sel].type === 'select' || def.fields[sel].type === 'radio'">
+                                <select id="mb-f-default" :value="def.fields[sel].default || ''" @change="setDefault(sel, $event.target.value || null)">
+                                  <option value="">（無）</option>
+                                  <template x-for="o in (def.fields[sel].options || [])" :key="o"><option :value="o" x-text="o" :selected="o === def.fields[sel].default"></option></template>
+                                </select>
+                              </template>
+                              <template x-if="['text','number','date'].indexOf(def.fields[sel].type) >= 0">
+                                <input id="mb-f-default" :type="def.fields[sel].type === 'text' ? 'text' : (def.fields[sel].type === 'date' && def.fields[sel].withTime ? 'datetime-local' : def.fields[sel].type)" :step="def.fields[sel].type === 'number' ? 'any' : null"
+                                       :value="def.fields[sel].default === undefined || def.fields[sel].default === null || typeof def.fields[sel].default === 'object' ? '' : def.fields[sel].default"
+                                       @change="setDefault(sel, $event.target.value === '' ? null : (def.fields[sel].type === 'number' ? Number($event.target.value) : $event.target.value))">
+                              </template>
+                            </div>
                           </template>
                         </div>
                       </template>
@@ -418,6 +432,7 @@
                           <div>
                             <template x-for="fn in (catalog.formulaFunctions || [])" :key="'f' + fn"><button class="mb-chipbtn" @click="insertFx(sel, fn + '(')" x-text="fn + '()'"></button></template>
                           </div>
+                          <div class="mb-hint" x-show="tableKeys().length">明細表加總：<code>total(表代號, "欄代號")</code>，表代號可用：<span x-text="tableKeys().join('、')"></span></div>
                           <div id="mb-f-formula-problems" :data-state="fxState[sel] || ''">
                             <template x-for="(p, pi) in (fxProblems[sel] || [])" :key="pi">
                               <div :data-pos="p.pos">
@@ -428,7 +443,7 @@
                             </template>
                             <div class="mb-hint" x-show="fxState[sel] === 'ok'">公式檢查通過</div>
                           </div>
-                          <div class="mb-hint">空值不等於 0；要當 0 請用 coalesce(欄位, 0)。</div>
+                          <div class="mb-hint">空值不等於 0；要當 0 請用 coalesce(欄位, 0)。稅額請用 round_half_up（四捨五入，.5 進位）。</div>
                         </div>
                       </template>
                       <template x-if="def.fields[sel].type === 'ref'">
@@ -438,6 +453,75 @@
                             <option value="">（請選擇）</option>
                             <template x-for="t in refTargetOptions()" :key="t.value"><option :value="t.value" x-text="t.label" :selected="t.value === def.fields[sel].target"></option></template>
                           </select>
+                        </div>
+                      </template>
+                      <!-- 明細表：欄位編輯 -->
+                      <template x-if="def.fields[sel].type === 'table'">
+                        <div class="mb-f" data-columns-editor :class="{ 'is-bad': hasProblem('fields[' + sel + '].columns') }">
+                          <label>明細表的欄</label>
+                          <template x-for="(c, ci) in (def.fields[sel].columns || [])" :key="ci + ':' + c.key">
+                            <div class="mb-col" :data-col-index="ci" :class="{ 'is-bad': hasProblem('fields[' + sel + '].columns[' + ci + ']') }">
+                              <div class="mb-row">
+                                <input class="mb-in" style="flex:1;min-width:80px" :value="c.label" placeholder="欄名" aria-label="欄名" @input="setColumn(sel, ci, 'label', $event.target.value)">
+                                <select class="mb-in mb-in-s" :value="c.type" aria-label="欄型別" @change="setColumnType(sel, ci, $event.target.value)">
+                                  <template x-for="t in tableColTypes()" :key="t"><option :value="t" x-text="colTypeLabel(t)" :selected="t === c.type"></option></template>
+                                </select>
+                                <button class="mb-ib" aria-label="欄往前" @click="moveColumn(sel, ci, -1)">←</button>
+                                <button class="mb-ib" aria-label="欄往後" @click="moveColumn(sel, ci, 1)">→</button>
+                                <button class="mb-ib" aria-label="刪除欄" :data-remove-column="ci" @click="removeColumn(sel, ci)">✕</button>
+                              </div>
+                              <div class="mb-row" style="margin-top:4px">
+                                <input class="mb-in mb-in-s" style="font-family:var(--font-en,monospace);width:90px" :value="c.key" aria-label="欄代號" title="欄代號（列內公式與 total 用它）" @change="renameColumn(sel, ci, $event.target.value.trim())">
+                                <label class="mb-fc__q" x-show="c.type !== 'formula'"><input type="checkbox" style="width:auto" :checked="c.required === true" @change="setColumn(sel, ci, 'required', $event.target.checked)">必填</label>
+                                <label class="mb-fc__q" x-show="c.type === 'select'"><input type="checkbox" style="width:auto" :checked="c.allowOther === true" @change="setColumn(sel, ci, 'allowOther', $event.target.checked)">可自己輸入</label>
+                              </div>
+                              <template x-if="c.type === 'formula'">
+                                <div style="margin-top:4px">
+                                  <input class="mb-in" style="font-family:var(--font-en,monospace)" :value="c.formula || ''" placeholder="例：qty * price" aria-label="列內公式" :data-col-formula="ci"
+                                         @input="setColumn(sel, ci, 'formula', $event.target.value)">
+                                  <div class="mb-colchips"><template x-for="k in colSiblings(def.fields[sel], ci)" :key="k"><button class="mb-chipbtn" @click="setColumn(sel, ci, 'formula', ((c.formula || '') + ' ' + k).trim())" x-text="k"></button></template></div>
+                                </div>
+                              </template>
+                              <template x-if="c.type === 'select'">
+                                <textarea class="mb-in" rows="3" style="margin-top:4px" :value="colOptionsText(c)" placeholder="選項（一行一個）" aria-label="欄選項" @input="setColOptions(sel, ci, $event.target.value)"></textarea>
+                              </template>
+                              <template x-for="pr in (problemsUnder('fields[' + sel + '].columns[' + ci + ']'))" :key="pr.path + pr.message"><div class="mb-bad" x-text="pr.message"></div></template>
+                            </div>
+                          </template>
+                          <div class="mb-colchips">
+                            <template x-for="t in tableColTypes()" :key="'add' + t"><button class="mb-chipbtn" :data-add-column="t" @click="addColumn(sel, t)" x-text="'＋' + colTypeLabel(t)"></button></template>
+                          </div>
+                        </div>
+                      </template>
+                      <!-- 金流性質（數字／公式欄；含明細合計）：進營運報表與案件成本 -->
+                      <template x-if="canFinance(def.fields[sel])">
+                        <div class="mb-f mb-fin" data-finance>
+                          <label for="mb-f-fin-kind">金流性質</label>
+                          <select id="mb-f-fin-kind" :value="fin(def.fields[sel]).kind || 'none'" @change="setFin(sel, 'kind', $event.target.value === 'none' ? '' : $event.target.value)">
+                            <option value="none">不計</option>
+                            <template x-for="k in (catalog.financeKinds || [])" :key="k"><option :value="k" x-text="k === 'income' ? '收入' : '支出'" :selected="k === fin(def.fields[sel]).kind"></option></template>
+                          </select>
+                          <template x-if="fin(def.fields[sel]).kind">
+                            <div style="margin-top:6px">
+                              <label>歸屬日期欄（權責口徑；例：發票日／付款日）</label>
+                              <select id="mb-f-fin-date" :value="fin(def.fields[sel]).dateField || ''" @change="setFin(sel, 'dateField', $event.target.value)">
+                                <option value="">（入帳當日）</option><template x-for="d in fieldsOfType(['date'])" :key="d.key"><option :value="d.key" x-text="d.label || d.key" :selected="d.key === fin(def.fields[sel]).dateField"></option></template>
+                              </select>
+                              <label style="margin-top:6px">現金日期欄（選填；例：收款日）</label>
+                              <select id="mb-f-fin-cashdate" :value="fin(def.fields[sel]).cashDateField || ''" @change="setFin(sel, 'cashDateField', $event.target.value)">
+                                <option value="">（同歸屬日期）</option><template x-for="d in fieldsOfType(['date'])" :key="d.key"><option :value="d.key" x-text="d.label || d.key" :selected="d.key === fin(def.fields[sel]).cashDateField"></option></template>
+                              </select>
+                              <label style="margin-top:6px">現金口徑金額欄（選填；例：含稅合計）</label>
+                              <select id="mb-f-fin-cashamt" :value="fin(def.fields[sel]).cashAmountField || ''" @change="setFin(sel, 'cashAmountField', $event.target.value)">
+                                <option value="">（同這個欄位）</option><template x-for="d in fieldsOfType(['number','formula'], def.fields[sel].key)" :key="d.key"><option :value="d.key" x-text="d.label || d.key" :selected="d.key === fin(def.fields[sel]).cashAmountField"></option></template>
+                              </select>
+                              <label style="margin-top:6px">關聯案件欄（選填；填案件單號 ⇒ 進該案件成本）</label>
+                              <select id="mb-f-fin-case" :value="fin(def.fields[sel]).caseField || ''" @change="setFin(sel, 'caseField', $event.target.value)">
+                                <option value="">（不關聯案件）</option><template x-for="d in fieldsOfType(['text','ref'])" :key="d.key"><option :value="d.key" x-text="d.label || d.key" :selected="d.key === fin(def.fields[sel]).caseField"></option></template>
+                              </select>
+                              <div class="mb-hint">單據核准（進入「入帳狀態」）後進營運報表；作廢／退回自動撤回。入帳狀態在「流程設計」設定。</div>
+                            </div>
+                          </template>
                         </div>
                       </template>
                       <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].dataClass') }">
@@ -450,44 +534,63 @@
                       <template x-for="(p, pi) in problemsUnder('fields[' + sel + ']')" :key="pi">
                         <div class="mb-bad" x-text="p.message"></div>
                       </template>
-                            </div>
-                          </template>
-                        </div>
-                      </template>
-                      <div class="mb-sec__drop mb-hint" x-show="!sec.items.length">把欄位拖到這個區塊</div>
+                      <div class="mb-row" style="margin-top:8px">
+                        <button class="btn btn-ghost btn-sm" @click="duplicateField(sel)">複製這個欄位</button>
+                        <button class="btn btn-ghost btn-sm" @click="removeField(sel)">刪除</button>
+                      </div>
                     </div>
-                  </div>
-                </template>
-                <div class="mb-row" style="margin-top:10px">
-                  <button class="btn btn-ghost btn-sm" id="mb-add-group" @click="addGroupAt()">＋ 區塊</button>
+                  </template>
+                  <template x-if="sel === null">
+                    <div class="mb-props mb-props--side" id="mb-form-settings-pane">
+                      <div class="mb-props__t">表單設定</div>
+                      <div class="mb-f"><label>名稱</label><div class="mb-fx" x-text="def.name || '（未命名）'"></div></div>
+                      <div class="mb-hint">點畫布上的欄位就會在這裡編輯它的屬性。模組名稱、圖示、選單位置、編號規則與輸出版型在「作業資訊」頁籤；區塊可以用區塊標題旁的下拉選 1～4 欄（網格）。</div>
+                      <button class="btn btn-ghost btn-sm" style="margin-top:8px" @click="goTab('info')">到作業資訊</button>
+                    </div>
+                  </template>
                 </div>
-              </div>
-              <div class="mb-pv" id="mb-preview-pane">
-                <div class="mb-pv__t">輸出預覽（拖入、修改時跟著更新）</div>
-                <div class="mb-pv__host" id="mb-output-host" x-effect="syncPreviews(JSON.stringify(def), sel, step)"></div>
-                <details class="mb-pv__list" id="mb-list-pv" open>
-                  <summary class="mb-pv__t">列表預覽與列表欄位</summary>
-                  <div id="mb-list-host"></div>
-                  <div class="mb-hint" style="margin-top:6px">列表顯示的欄位：</div>
-                  <template x-for="c in L.availableColumns(def)" :key="c.key">
-                    <label class="mb-chip"><input type="checkbox" :data-list-column="c.key" :checked="listColumnKeys().indexOf(c.key) >= 0"
-                           @change="def.ui = L.toggleColumn(def, c.key)"> <span x-text="c.label"></span></label>
-                  </template>
-                  <div class="mb-hint" style="margin-top:6px">順序：</div>
-                  <template x-for="(c, ci) in L.listColumns(def)" :key="c.key">
-                    <span class="mb-chip"><span x-text="c.label"></span>
-                      <button class="mb-ib" aria-label="往前" @click="def.ui = L.moveColumn(def, ci, -1)">←</button>
-                      <button class="mb-ib" aria-label="往後" @click="def.ui = L.moveColumn(def, ci, 1)">→</button></span>
-                  </template>
-                </details>
+                <div x-show="sideTab === 'output'" id="mb-output-pane">
+                  <div class="mb-pv__t">輸出預覽（拖入、修改時跟著更新）</div>
+                  <div class="mb-pv__host" id="mb-output-host" x-effect="syncPreviews(JSON.stringify(def), sel, tab === 'form' ? 2 : 0)"></div>
+                </div>
+                <div x-show="sideTab === 'list'" id="mb-list-pane">
+                  <details class="mb-pv__list" id="mb-list-pv" open>
+                    <summary class="mb-pv__t">列表預覽與列表欄位</summary>
+                    <div id="mb-list-host"></div>
+                    <div class="mb-hint" style="margin-top:6px">列表顯示的欄位：</div>
+                    <template x-for="c in L.availableColumns(def)" :key="c.key">
+                      <label class="mb-chip"><input type="checkbox" :data-list-column="c.key" :checked="listColumnKeys().indexOf(c.key) >= 0"
+                             @change="def.ui = L.toggleColumn(def, c.key)"> <span x-text="c.label"></span></label>
+                    </template>
+                    <div class="mb-hint" style="margin-top:6px">順序：</div>
+                    <template x-for="(c, ci) in L.listColumns(def)" :key="c.key">
+                      <span class="mb-chip"><span x-text="c.label"></span>
+                        <button class="mb-ib" aria-label="往前" @click="def.ui = L.moveColumn(def, ci, -1)">←</button>
+                        <button class="mb-ib" aria-label="往後" @click="def.ui = L.moveColumn(def, ci, 1)">→</button></span>
+                    </template>
+                  </details>
+                </div>
                 <div class="mb-hint" id="mb-preview-missing" x-show="previewMissing">預覽元件尚未載入（form-preview.js）；欄位照樣可以編輯與儲存。</div>
-              </div>
+              </aside>
             </div>
             <div class="mb-sr" aria-live="polite" id="mb-live" x-text="liveMsg"></div>
           </section>
 
           <!-- ④ 流程 -->
-          <section x-show="step === 4" id="mb-step-4">
+          <section x-show="tab === 'flow'" id="mb-step-4">
+            <!-- 金流入帳狀態：有欄位設了金流性質（收入／支出）才需要；預設由簽核核准後的終態推導 -->
+            <div class="mb-card" id="mb-sec-finance" x-show="financeFieldExists()">
+              <h3>入帳狀態（金流）</h3>
+              <div class="mb-hint">有欄位設了「金流性質」（收入／支出）。單據進入下列狀態才進營運報表與案件成本；離開（作廢、退回）自動撤回。</div>
+              <div class="mb-hint" x-show="!postStateList().length">
+                目前未指定：預設用簽核核准後的狀態（<span x-text="postStatesDerived().join('、') || '沒有——請指定'"></span>）。
+              </div>
+              <template x-for="st in def.workflow.states" :key="st.key">
+                <label class="mb-chip"><input type="checkbox" :data-post-state="st.key" :checked="postStateList().indexOf(st.key) >= 0"
+                       @change="togglePostState(st.key, $event.target.checked)"> <span x-text="st.label || st.key"></span></label>
+              </template>
+              <template x-for="(p, pi) in problemsUnder('finance')" :key="pi"><div class="mb-bad" x-text="p.message"></div></template>
+            </div>
             <div class="mb-card" id="mb-sec-workflow">
               <div class="mb-row">
                 <h3 style="margin:0">狀態</h3>
@@ -657,7 +760,7 @@
           </section>
 
           <!-- ⑤ 輸出 -->
-          <section x-show="step === 5" id="mb-step-5">
+          <section x-show="tab === 'info'" id="mb-step-5">
             <div class="mb-card">
               <div class="mb-row">
                 <label class="mb-chip"><input type="radio" id="mb-out-generic" name="mb-out" :checked="!hasCustomOutput()" @change="useGenericOutput()"> 通用版型（抬頭、編號、狀態、每個欄位一列、簽核欄、頁尾）</label>
@@ -863,7 +966,9 @@
           </section>
 
           <!-- ⑥ 發布 -->
-          <section x-show="step === 6" id="mb-step-6">
+          <div class="mb-drawer" id="mb-drawer" x-show="drawer" role="dialog" aria-label="發布" @keydown.escape.window="closeDrawer()">
+          <div class="mb-drawer__h"><strong>發布</strong><button class="mb-ib" id="mb-drawer-close" aria-label="關閉發布" @click="closeDrawer()">✕</button></div>
+          <section id="mb-step-6">
             <div class="mb-card">
               <div class="mb-row">
                 <h3 style="margin:0" x-text="latestVersion ? '與第 ' + latestVersion + ' 版的差異' : '第一次發布（全部是新增）'"></h3>
@@ -920,6 +1025,7 @@
               <div class="mb-hint">還原不改歷史：把舊版內容再發布成新的一版。</div>
             </div>
           </section>
+          </div>
         </div>
       </template>
     </div>
@@ -932,6 +1038,7 @@
   <script src="../js/module-builder-consts.js"></script>
   <script src="../js/module-builder-core.js"></script>
   <script src="../js/module-builder-form.js"></script>
+  <script src="../js/module-builder-elements.js"></script>
   <script src="../js/module-builder-flow.js"></script>
   <script src="../js/module-builder-output.js"></script>
 </body>

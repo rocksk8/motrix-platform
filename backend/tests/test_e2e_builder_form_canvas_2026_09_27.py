@@ -15,6 +15,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests._e2e_login import inject_login  # noqa: E402
+from tests._builder_nav import go_step, start_blank  # noqa: E402
 
 SAVED = """() => { const e = document.getElementById('mb-save-state');
   return !!e && e.dataset.dirty === '0' && e.dataset.saving === '0' && e.dataset.state === 'saved' }"""
@@ -50,7 +51,7 @@ def _open(new_context, base, make_user, client, name, body, key):
     inject_login(page, base, user[0], user[1])
     page.goto("%s/pages/module-builder.html?key=%s" % (base, key))
     page.wait_for_selector("#mb-step-1", state="visible")
-    page.click('.mb-step[data-step="2"]')
+    go_step(page, 2)
     page.wait_for_selector("#mb-step-2", state="visible")
     return page, errors
 

@@ -5,7 +5,8 @@ window.MotrixMB = (function () {
   var KEY_RE = /^[a-z][a-z0-9_]{1,39}$/
   var FIELD_KEY_RE = /^[a-z][a-z0-9_]{0,39}$/
       //: 顯示名稱（型別本身一律來自目錄；沒有對照的就顯示原代號）
-  var TYPE_LABELS = { text: '文字', number: '數字', date: '日期', select: '下拉選單', checkbox: '勾選（是／否）', formula: '公式（唯讀）', ref: '參照' }
+  var TYPE_LABELS = { text: '單行文字', textarea: '多行文字', number: '數字', date: '日期', daterange: '日期時間區間', select: '下拉單選', radio: '單選',
+                        checkboxes: '複選', multiselect: '下拉複選', checkbox: '勾選（是／否）', formula: '公式（唯讀）', ref: '參照', table: '明細表' }
       //: 積木與參數的顯示名稱（只影響畫面文字；有哪些積木、哪些參數一律來自目錄 outputBlockSpecs／outputBlockItemSpecs）
   var BLOCK_LABELS = { identity_header: '抬頭（公司身分＋標題）', accent_bar: '色條', meta: '資料列', banner: '提示橫幅',
                            approval_sign: '簽核欄', identity_footer: '頁尾（公司身分）', watermark: '浮水印', boxes: '資訊框',
@@ -38,7 +39,13 @@ window.MotrixMB = (function () {
         select: _SVG('<rect x="2.5" y="4" width="11" height="8" rx="1.5"/><path d="m9 7 1.5 1.5L12 7"/>'),
         checkbox: _SVG('<rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="m5 8 2 2 4-4"/>'),
         formula: _SVG('<path d="M9.5 2.5c-1.5 0-2 1-2.3 2.5L5.8 12c-.3 1.4-.9 1.8-2 1.8M5 6.5h5M10 9.5l3 3M13 9.5l-3 3"/>'),
-        ref: _SVG('<path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1"/>')
+        ref: _SVG('<path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1"/>'),
+        textarea: _SVG('<path d="M3 4h10M3 7h10M3 10h7"/>'),
+        daterange: _SVG('<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 7h11M5 10h6"/>'),
+        radio: _SVG('<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/>'),
+        checkboxes: _SVG('<rect x="2.5" y="2.5" width="5" height="5" rx="1"/><rect x="2.5" y="9" width="5" height="5" rx="1"/><path d="M10 5h4M10 11.5h4"/>'),
+        multiselect: _SVG('<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="m5 7 1.2 1.2L8.5 6M5 10.5h6"/>'),
+        table: _SVG('<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M2.5 10h11M7 3v10"/>')
       }
   var TYPE_ICON_GENERIC = _SVG('<rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5.5 8h5"/>')
   var STEPS = [{ n: 1, label: '基本' }, { n: 2, label: '表單' }, { n: 4, label: '流程' }, { n: 5, label: '輸出' }, { n: 6, label: '發布' }]
