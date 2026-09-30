@@ -1286,6 +1286,7 @@
     "mod:accounting/ledger/roles",
     "mod:accounting/ledger/statements",
     "mod:accounting/ledger/withholding",
+    "mod:payroll/api/payslips",
     "plat:__init__",
     "plat:registry"
    ],
@@ -1307,7 +1308,8 @@
      "backend/modules/accounting/api/ledger_engine.py",
      "backend/modules/accounting/api/ledger_periods.py",
      "backend/modules/accounting/api/ledger_tax.py",
-     "backend/modules/accounting/api/vouchers.py"
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/payroll/api/payslips.py"
     ],
     "module_dir": [
      "backend/modules/accounting/"
@@ -15289,18 +15291,23 @@
    "units": [
     "dir:frontend/js/",
     "dir:frontend/pages/",
+    "dir:frontend/static/",
     "js:js/case-management-core.js",
+    "js:static/motrix-date.js",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "page": [
      "frontend/js/case-management-core.js",
-     "frontend/pages/case-management.html"
+     "frontend/pages/case-management.html",
+     "frontend/static/motrix-date.js"
     ],
     "path": [
      "frontend/js/",
      "frontend/pages/",
-     "frontend/pages/case-management.html"
+     "frontend/pages/case-management.html",
+     "frontend/static/",
+     "frontend/static/motrix-date.js"
     ]
    }
   },
