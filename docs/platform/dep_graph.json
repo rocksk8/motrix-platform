@@ -469,6 +469,7 @@
     "account_items",
     "bonus_awards",
     "bonus_case_awards",
+    "bonus_corrections",
     "contractors",
     "customers",
     "parts",
@@ -2278,6 +2279,7 @@
     "mod:accounting/api/ledger_tax",
     "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
+    "mod:analytics/api/ledger_diff",
     "mod:analytics/api/reports",
     "mod:arap/api/cashier",
     "mod:arap/api/invoice_vouchers",
@@ -2293,6 +2295,7 @@
     "mod:lodging/api_records",
     "mod:netplan/api",
     "mod:payroll/api/bonus",
+    "mod:payroll/api/bonus_correction",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -2424,6 +2427,8 @@
     "mod:accounting/api/vouchers",
     "mod:accounting/attachments_catalog",
     "mod:accounting/ledger/auto_run",
+    "mod:accounting/ledger/custom_events",
+    "mod:accounting/ledger/month_totals",
     "mod:accounting/ledger/source_status",
     "plat:registry"
    ],
@@ -3835,115 +3840,115 @@
    "routes": [
     {
      "func": "create_voucher",
-     "line": 203,
+     "line": 235,
      "method": "POST",
      "path": "/api/vouchers"
     },
     {
      "func": "list_vouchers",
-     "line": 254,
+     "line": 286,
      "method": "GET",
      "path": "/api/vouchers"
     },
     {
      "func": "vouchers_by_case",
-     "line": 302,
+     "line": 334,
      "method": "GET",
      "path": "/api/vouchers/by-case/{quote_no}"
     },
     {
      "func": "summary_sources",
-     "line": 329,
+     "line": 361,
      "method": "GET",
      "path": "/api/vouchers/summary-sources"
     },
     {
      "func": "line_source_files_endpoint",
-     "line": 461,
+     "line": 493,
      "method": "GET",
      "path": "/api/vouchers/line-source-files"
     },
     {
      "func": "line_source_file_endpoint",
-     "line": 488,
+     "line": 520,
      "method": "GET",
      "path": "/api/vouchers/line-source-file"
     },
     {
      "func": "read_voucher",
-     "line": 521,
+     "line": 553,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}"
     },
     {
      "func": "voucher_edit_log",
-     "line": 581,
+     "line": 616,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/edit-log"
     },
     {
      "func": "submit_voucher",
-     "line": 616,
+     "line": 651,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/submit"
     },
     {
      "func": "approve_voucher",
-     "line": 691,
+     "line": 726,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/approve"
     },
     {
      "func": "send_back_voucher",
-     "line": 791,
+     "line": 826,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/send-back"
     },
     {
      "func": "void_voucher",
-     "line": 870,
+     "line": 905,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/void"
     },
     {
      "func": "post_voucher_endpoint",
-     "line": 954,
+     "line": 989,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/post"
     },
     {
      "func": "update_voucher",
-     "line": 989,
+     "line": 1024,
      "method": "PUT",
      "path": "/api/vouchers/{voucher_id}"
     },
     {
      "func": "add_voucher_attachments",
-     "line": 1172,
+     "line": 1207,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/attachments"
     },
     {
      "func": "delete_voucher_attachment",
-     "line": 1285,
+     "line": 1320,
      "method": "DELETE",
      "path": "/api/vouchers/{voucher_id}/attachments/{file_id}"
     },
     {
      "func": "download_voucher_attachment",
-     "line": 1354,
+     "line": 1389,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/attachments/{file_id}"
     },
     {
      "func": "download_voucher_pdf",
-     "line": 1457,
+     "line": 1492,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/pdf-download"
     },
     {
      "func": "preview_voucher",
-     "line": 1530,
+     "line": 1565,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/preview"
     }
@@ -4114,6 +4119,25 @@
    ],
    "tables_w": []
   },
+  "mod:accounting/ledger/custom_events": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:custom_finance",
+    "helper:legal_params"
+   ],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/ledger/custom_events.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "gl_custom_field_map"
+   ],
+   "tables_w": []
+  },
   "mod:accounting/ledger/engine": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -4235,6 +4259,26 @@
     "gl_inv_moves",
     "gl_inv_parts"
    ]
+  },
+  "mod:accounting/ledger/month_totals": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:accounting/ledger/roles"
+   ],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/ledger/month_totals.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "gl_account_meta",
+    "gl_source_events",
+    "voucher_lines",
+    "vouchers_all"
+   ],
+   "tables_w": []
   },
   "mod:accounting/ledger/opening": {
    "api_prefixes": [],
@@ -4543,6 +4587,7 @@
    "dynamic_sql": false,
    "imports": [
     "mod:analytics/api/dashboard",
+    "mod:analytics/api/ledger_diff",
     "mod:analytics/api/reports",
     "plat:registry"
    ],
@@ -4669,6 +4714,47 @@
    "tables_w_transitive": [
     "system_settings"
    ]
+  },
+  "mod:analytics/api/ledger_diff": {
+   "api_prefixes": [
+    "/api/reports"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:auth",
+    "helper:financial_mask",
+    "helper:module_registry",
+    "helper:recognition_basis"
+   ],
+   "imports": [
+    "helper:auth",
+    "helper:financial_mask",
+    "helper:recognition_basis",
+    "mod:analytics/api/reports",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "analytics",
+   "path": "backend/modules/analytics/api/ledger_diff.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "report_ledger_diff",
+     "line": 107,
+     "method": "GET",
+     "path": "/api/reports/ledger-diff"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "sessions",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": []
   },
   "mod:analytics/api/reports": {
    "api_prefixes": [
@@ -7587,9 +7673,11 @@
    "dynamic_sql": false,
    "imports": [
     "mod:payroll/api/bonus",
+    "mod:payroll/api/bonus_correction",
     "mod:payroll/api/payslips",
     "mod:payroll/attachments",
     "mod:payroll/bonus",
+    "mod:payroll/bonus_correction",
     "mod:payroll/bonus_payouts",
     "mod:payroll/bonus_queue",
     "mod:payroll/gl_events",
@@ -7626,6 +7714,7 @@
     "helper:tiered_approval",
     "mod:payroll/bonus",
     "mod:payroll/bonus_case",
+    "mod:payroll/bonus_correction",
     "mod:payroll/bonus_deductions",
     "mod:payroll/bonus_payouts",
     "mod:payroll/bonus_pdf",
@@ -7932,10 +8021,147 @@
     "bonus_case_award_edit_log",
     "bonus_case_award_lines",
     "bonus_case_awards",
+    "bonus_correction_log",
+    "bonus_corrections",
     "bonus_group_members",
     "bonus_groups",
     "bonus_item_people",
     "bonus_items",
+    "notifications",
+    "system_settings"
+   ]
+  },
+  "mod:payroll/api/bonus_correction": {
+   "api_prefixes": [
+    "/api/bonus"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:legal_params",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:payroll/bonus_correction",
+    "mod:payroll/bonus_deductions",
+    "mod:payroll/bonus_payouts",
+    "mod:payroll/bonus_vouchers"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:tiered_approval",
+    "mod:payroll/api/bonus",
+    "mod:payroll/bonus_correction",
+    "mod:payroll/bonus_deductions",
+    "mod:payroll/bonus_payouts",
+    "mod:payroll/bonus_vouchers"
+   ],
+   "kind": "mod",
+   "module_key": "payroll",
+   "path": "backend/modules/payroll/api/bonus_correction.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_corrections",
+     "line": 90,
+     "method": "GET",
+     "path": "/api/bonus/corrections"
+    },
+    {
+     "func": "current_amounts",
+     "line": 113,
+     "method": "GET",
+     "path": "/api/bonus/corrections/current/{quote_no}"
+    },
+    {
+     "func": "get_correction",
+     "line": 132,
+     "method": "GET",
+     "path": "/api/bonus/corrections/{corr_no}"
+    },
+    {
+     "func": "create_correction",
+     "line": 148,
+     "method": "POST",
+     "path": "/api/bonus/corrections"
+    },
+    {
+     "func": "update_correction",
+     "line": 182,
+     "method": "PUT",
+     "path": "/api/bonus/corrections/{corr_no}"
+    },
+    {
+     "func": "cancel_correction",
+     "line": 209,
+     "method": "POST",
+     "path": "/api/bonus/corrections/{corr_no}/cancel"
+    },
+    {
+     "func": "submit_correction",
+     "line": 257,
+     "method": "POST",
+     "path": "/api/bonus/corrections/{corr_no}/submit"
+    },
+    {
+     "func": "approve_correction",
+     "line": 280,
+     "method": "POST",
+     "path": "/api/bonus/corrections/{corr_no}/approve"
+    },
+    {
+     "func": "reject_correction",
+     "line": 340,
+     "method": "POST",
+     "path": "/api/bonus/corrections/{corr_no}/reject"
+    },
+    {
+     "func": "mark_supplement_paid",
+     "line": 371,
+     "method": "POST",
+     "path": "/api/bonus/corrections/{corr_no}/mark-paid"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [
+    "vouchers"
+   ],
+   "tables_r": [
+    "bonus_correction_log"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "bonus_case_award_edit_log",
+    "bonus_case_award_lines",
+    "bonus_case_awards",
+    "bonus_correction_log",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "system_settings",
+    "users"
+   ],
+   "tables_w": [
+    "bonus_corrections"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "bonus_case_awards",
+    "bonus_correction_log",
+    "bonus_corrections",
     "notifications",
     "system_settings"
    ]
@@ -8165,11 +8391,35 @@
    "tables_r": [],
    "tables_w": []
   },
+  "mod:payroll/bonus_correction": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:payroll/bonus_vouchers",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "payroll",
+   "path": "backend/modules/payroll/bonus_correction.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "bonus_case_award_lines",
+    "system_settings",
+    "users"
+   ],
+   "tables_w": [
+    "bonus_correction_log",
+    "bonus_corrections"
+   ]
+  },
   "mod:payroll/bonus_deductions": {
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
-    "helper:legal_params"
+    "helper:legal_params",
+    "mod:payroll/bonus_correction"
    ],
    "kind": "mod",
    "module_key": "payroll",
@@ -8187,7 +8437,9 @@
   "mod:payroll/bonus_payouts": {
    "api_prefixes": [],
    "dynamic_sql": false,
-   "imports": [],
+   "imports": [
+    "mod:payroll/bonus_correction"
+   ],
    "kind": "mod",
    "module_key": "payroll",
    "path": "backend/modules/payroll/bonus_payouts.py",
@@ -8243,7 +8495,8 @@
    "tables_named": [],
    "tables_r": [
     "bonus_awards",
-    "bonus_case_awards"
+    "bonus_case_awards",
+    "bonus_corrections"
    ],
    "tables_w": []
   },
@@ -9820,6 +10073,7 @@
     "/api/approval-queue/detail",
     "/api/approval-queue/reassign",
     "/api/bonus/cases",
+    "/api/bonus/corrections",
     "/api/case-changes/{}/approve",
     "/api/case-changes/{}/reject",
     "/api/completion-notes",
@@ -9884,6 +10138,7 @@
     "mod:case/api/completion_notes",
     "mod:case/api/quotations",
     "mod:payroll/api/bonus",
+    "mod:payroll/api/bonus_correction",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/shipping_notes",
@@ -9901,6 +10156,7 @@
     "mod:case/api/completion_notes",
     "mod:case/api/quotations",
     "mod:payroll/api/bonus",
+    "mod:payroll/api/bonus_correction",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/shipping_notes",
@@ -9975,6 +10231,41 @@
     "router:system"
    ],
    "routers_called_effective": [
+    "router:auth",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "page:pages/bonus-corrections.html": {
+   "api_calls": [
+    "/api/bonus/corrections",
+    "/api/bonus/corrections/",
+    "/api/bonus/corrections/current/",
+    "/api/system/branding/favicon",
+    "/api/users"
+   ],
+   "api_prefixes": [
+    "/api/bonus",
+    "/api/system",
+    "/api/users"
+   ],
+   "api_unmatched": [],
+   "imports": [
+    "js:static/auth-guard.js",
+    "js:static/notif.js",
+    "js:static/sidebar.js",
+    "js:static/ui.js"
+   ],
+   "kind": "page",
+   "path": "frontend/pages/bonus-corrections.html",
+   "routers_called": [
+    "mod:payroll/api/bonus_correction",
+    "router:auth",
+    "router:system"
+   ],
+   "routers_called_effective": [
+    "mod:payroll/api/bonus_correction",
     "router:auth",
     "router:system"
    ],
@@ -11692,9 +11983,11 @@
   },
   "page:pages/reports.html": {
    "api_calls": [
+    "/api/reports/ledger-diff",
     "/api/system/branding/favicon"
    ],
    "api_prefixes": [
+    "/api/reports",
     "/api/system"
    ],
    "api_unmatched": [],
@@ -11709,9 +12002,11 @@
    "kind": "page",
    "path": "frontend/pages/reports.html",
    "routers_called": [
+    "mod:analytics/api/ledger_diff",
     "router:system"
    ],
    "routers_called_effective": [
+    "mod:analytics/api/ledger_diff",
     "mod:analytics/api/reports",
     "mod:arap/api/cashier",
     "mod:case/api/case_action_items",
@@ -15247,6 +15542,7 @@
    "path": "backend/db.py:4594",
    "readers": [
     "core:archive",
+    "mod:payroll/bonus_correction",
     "mod:payroll/bonus_deductions",
     "mod:payroll/bonus_payouts",
     "mod:payroll/bonus_vouchers"
@@ -15278,6 +15574,39 @@
    "writers": [
     "mod:payroll/api/bonus",
     "mod:payroll/bonus_vouchers"
+   ]
+  },
+  "table:bonus_correction_log": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/payroll/migrations/0002_bonus_corrections.py:48",
+   "readers": [
+    "mod:payroll/api/bonus_correction"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:payroll/bonus_correction"
+   ]
+  },
+  "table:bonus_corrections": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [
+    "helper:audit"
+   ],
+   "path": "backend/modules/payroll/migrations/0002_bonus_corrections.py:16",
+   "readers": [
+    "mod:payroll/bonus_queue"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:payroll/api/bonus_correction",
+    "mod:payroll/bonus_correction"
    ]
   },
   "table:bonus_group_members": {
@@ -16132,6 +16461,7 @@
     "mod:accounting/ledger/closing",
     "mod:accounting/ledger/engine",
     "mod:accounting/ledger/equity",
+    "mod:accounting/ledger/month_totals",
     "mod:accounting/ledger/reports",
     "mod:accounting/ledger/statements",
     "mod:accounting/ledger/tax401"
@@ -16238,7 +16568,9 @@
    "kind": "table",
    "named_by": [],
    "path": "backend/modules/accounting/migrations/0001_ledger_base.py:98",
-   "readers": [],
+   "readers": [
+    "mod:accounting/ledger/custom_events"
+   ],
    "tables_r": [],
    "tables_w": [],
    "writers": []
@@ -16456,6 +16788,7 @@
    "path": "backend/modules/accounting/migrations/0001_ledger_base.py:77",
    "readers": [
     "mod:accounting/api/ledger_annotations",
+    "mod:accounting/ledger/month_totals",
     "mod:accounting/ledger/source_status",
     "mod:accounting/ledger/tax401",
     "mod:accounting/ledger/withholding"
@@ -17218,6 +17551,7 @@
    "path": "backend/db.py:591",
    "readers": [
     "core:archive",
+    "mod:payroll/bonus_correction",
     "mod:payroll/bonus_deductions",
     "mod:payroll/bonus_vouchers"
    ],
@@ -17433,6 +17767,7 @@
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:payroll/api/bonus",
+    "mod:payroll/bonus_correction",
     "mod:payroll/bonus_payouts",
     "mod:payroll/bonus_pdf",
     "mod:tender_radar/listing",
@@ -17526,6 +17861,7 @@
     "mod:accounting/api/voucher_providers",
     "mod:accounting/ledger/cashflow",
     "mod:accounting/ledger/equity",
+    "mod:accounting/ledger/month_totals",
     "mod:accounting/ledger/periods",
     "mod:accounting/ledger/reports",
     "mod:accounting/ledger/tax401",
@@ -17584,6 +17920,7 @@
     "mod:accounting/ledger/reports",
     "mod:case/api/quotations",
     "mod:payroll/api/bonus",
+    "mod:payroll/api/bonus_correction",
     "plat:migrations"
    ],
    "path": "backend/db.py:5589",
@@ -17607,6 +17944,7 @@
     "mod:accounting/attachments_catalog",
     "mod:accounting/ledger/cashflow",
     "mod:accounting/ledger/equity",
+    "mod:accounting/ledger/month_totals",
     "mod:accounting/ledger/periods",
     "mod:accounting/ledger/reports",
     "mod:accounting/ledger/source_status",

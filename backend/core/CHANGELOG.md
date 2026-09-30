@@ -2,10 +2,10 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — 2026-09-30（wip/w2-bonus-correction：獎金更正單的三種通知）
+## 1.91 — 2026-09-30（wip/w2-bonus-correction：獎金更正單的三種通知）
 - L1（新增）：`helpers.email_notify.notify_bonus_correction_submitted／_approved／_returned`——獎金更正單送審／核准／駁回的通知信（信內不放金額）；`helpers/mail_types.py` 登記三個信件類型。只新增，舊呼叫端不受影響。
 
-## (next) — 2026-10-01（wip/w1-unapproved-wm）
+## 1.90 — 2026-10-01（wip/w1-unapproved-wm）
 - L1（新增）未核可單據每一頁都要看得到：`helpers.doc_template.unapproved_overlay／UNAPPROVED_RED／UNAPPROVED_HEADER_TEXT`；`unapproved_banner`／`inject_unapproved` 加 `doc_no`、`wm_text`，並附帶每頁標示（fixed 大斜角紅色浮水印 ≥96px 粗體 opacity≈.2、`@page` 邊界框＝每頁頂端紅底白字「未核可預覽稿 – 不可作為正式文件」＋頁尾「單號 ｜ 未核可・僅供預覽 ｜ 第 N 頁」、body 背景平鋪後備；未核可時隱藏舊的灰色 `.wm`／`.wm-overlay`）。報價單（舊灰色浮水印太淡、第 2 頁以後幾乎沒有）與所有單據共用這一套。已核准輸出不變。
 
 ## 1.89 — 2026-09-30（wip/w1-t27fix3）
