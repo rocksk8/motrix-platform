@@ -9,7 +9,8 @@
     ".gitignore",
     "backend/pytest.ini",
     "tools/platform/**",
-    "product/sale_docs/**"
+    "product/sale_docs/**",
+    "backend/setup_heartbeat_task.ps1"
   ],
   "keep": [
     "tools/platform/upgrade.py",
@@ -40,7 +41,8 @@
     "tools/platform/modtest.py",
     "tools/platform/*drill*.py",
     "backend/tests/**",
-    "product/sale_docs/**"
+    "product/sale_docs/**",
+    "backend/setup_heartbeat_task.ps1"
   ],
   "cuts": [
     {
