@@ -8,6 +8,8 @@
 
 $TaskName = "MOTRIX ERP Server Autostart"
 $BackendDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+# >>> OWN-ONLY:prod-root
+# 去識別化（sale 包）：下面這段是本公司安裝的寫死路徑，sale 包由 product/sale_prune.json 換成「由腳本位置推得＋守門」；見 docs/platform/PRODROOT-GUARD-DESIGN.md
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 
 # 正式機原始版本沒有這段；autostart_hidden.vbs 內部路徑寫死 Motrix 帳號，在
@@ -17,6 +19,7 @@ if ($BackendDir -ne (Join-Path $ProdRoot "backend")) {
     Write-Error "此腳本只應在正式機（$ProdRoot）執行；目前路徑為 $BackendDir。中止，未做任何變更。"
     exit 1
 }
+# <<< OWN-ONLY:prod-root
 
 $Wscript = "$env:WINDIR\System32\wscript.exe"
 $Script = Join-Path $BackendDir "autostart_hidden.vbs"

@@ -28,8 +28,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# >>> OWN-ONLY:prod-root
+# 去識別化（sale 包）：下面這段是本公司安裝的寫死路徑，sale 包由 product/sale_prune.json 換成「由腳本位置推得＋守門」；見 docs/platform/PRODROOT-GUARD-DESIGN.md
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $Port = 666
+# <<< OWN-ONLY:prod-root
 $AutostartTaskName = "MOTRIX ERP Server Autostart"
 $BackendDir = Join-Path $ProdRoot "backend"
 $FrontendDir = Join-Path $ProdRoot "frontend"
@@ -342,11 +345,13 @@ Write-Host "======================================"
 # ============================================================
 # Step 0: 身分守門 —— 只能在正式機執行
 # ============================================================
+# >>> OWN-ONLY:prod-guard
 $scriptRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 if ($scriptRoot -ne $ProdRoot) {
     Fail "偵測到執行路徑為 '$scriptRoot'，不是正式機路徑 '$ProdRoot'。本腳本只允許在正式機執行，中止。" "rollback_not_prod_machine"
 }
 Info "身分確認：正式機（$ProdRoot）`n"
+# <<< OWN-ONLY:prod-guard
 
 # 同一時間只准一個套用／回滾（UPDATE-DELIVERY §9.2）
 $lockState = Enter-InstallLock "rollback_update" $SnapshotTimestamp

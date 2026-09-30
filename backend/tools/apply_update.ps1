@@ -67,8 +67,11 @@ $ApplyScriptVersion = "2026-09-28k"
 # robocopy 一律 /R:3 /W:5（2026-09-28）：預設 /R:1000000 /W:30 ⇒ 被占用的檔會讓套用卡住數天而不是失敗，
 #   複製失敗的出口（AH-S7 自動寫回快照）永遠走不到。
 
+# >>> OWN-ONLY:prod-root
+# 去識別化（sale 包）：下面這段是本公司安裝的寫死路徑，sale 包由 product/sale_prune.json 換成「由腳本位置推得＋守門」；見 docs/platform/PRODROOT-GUARD-DESIGN.md
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $Port = 666
+# <<< OWN-ONLY:prod-root
 $AutostartTaskName = "MOTRIX ERP Server Autostart"
 $BackendDir = Join-Path $ProdRoot "backend"
 $FrontendDir = Join-Path $ProdRoot "frontend"
@@ -534,11 +537,13 @@ Write-Host "======================================"
 # ============================================================
 # Step 0: 身分守門 —— 只能在正式機執行
 # ============================================================
+# >>> OWN-ONLY:prod-guard
 $scriptRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 if ($scriptRoot -ne $ProdRoot) {
     Fail "偵測到執行路徑為 '$scriptRoot'，不是正式機路徑 '$ProdRoot'。本腳本只允許在正式機執行，中止。" "not_prod_machine"
 }
 Info "身分確認：正式機（$ProdRoot）`n"
+# <<< OWN-ONLY:prod-guard
 
 if ($CheckOnly) {
     Info "[CheckOnly] 只測試健康檢查邏輯本身，不做任何備份／停服／部署動作。"

@@ -52,6 +52,41 @@
       "path": "backend/core/upgrade.py",
       "name": "is-our-install",
       "stub": "def _is_our_install(profile: dict) -> bool:\n    return False          # sale 包：沒有「本公司安裝」這回事，一律不回填"
+    },
+    {
+      "path": "backend/tools/apply_update.ps1",
+      "name": "prod-root",
+      "stub": ". (Join-Path $PSScriptRoot \"_install_root.ps1\")\n$InstallRootInfo = Resolve-InstallRoot $PSScriptRoot\n$ProdRoot = $InstallRootInfo.Root\n$Port = $InstallRootInfo.Port"
+    },
+    {
+      "path": "backend/tools/apply_update.ps1",
+      "name": "prod-guard",
+      "stub": "if ($InstallRootInfo.Error) {\n    Fail (\"這裡不是可以套用更新的安裝目錄：\" + $InstallRootInfo.Error) \"not_prod_machine\"\n}\nInfo \"身分確認：安裝目錄（$ProdRoot）`n\""
+    },
+    {
+      "path": "backend/tools/rollback_update.ps1",
+      "name": "prod-root",
+      "stub": ". (Join-Path $PSScriptRoot \"_install_root.ps1\")\n$InstallRootInfo = Resolve-InstallRoot $PSScriptRoot\n$ProdRoot = $InstallRootInfo.Root\n$Port = $InstallRootInfo.Port"
+    },
+    {
+      "path": "backend/tools/rollback_update.ps1",
+      "name": "prod-guard",
+      "stub": "if ($InstallRootInfo.Error) {\n    Fail (\"這裡不是可以套用更新的安裝目錄：\" + $InstallRootInfo.Error) \"rollback_not_prod_machine\"\n}\nInfo \"身分確認：安裝目錄（$ProdRoot）`n\""
+    },
+    {
+      "path": "backend/tools/apply_module_update.ps1",
+      "name": "prod-root",
+      "stub": ". (Join-Path $PSScriptRoot \"_install_root.ps1\")\n$InstallRootInfo = Resolve-InstallRoot $PSScriptRoot\n$ProdRoot = $InstallRootInfo.Root\n$Port = $InstallRootInfo.Port"
+    },
+    {
+      "path": "backend/tools/apply_module_update.ps1",
+      "name": "prod-guard",
+      "stub": "if ($InstallRootInfo.Error) {\n    Fail (\"這裡不是可以套用更新的安裝目錄：\" + $InstallRootInfo.Error) \"not_prod_machine\"\n}\nInfo \"身分確認：安裝目錄（$ProdRoot）`n\""
+    },
+    {
+      "path": "backend/setup_autostart_task.ps1",
+      "name": "prod-root",
+      "stub": ". (Join-Path $BackendDir \"tools\\_install_root.ps1\")\n$InstallRootInfo = Test-InstallRoot -Root (Split-Path -Parent $BackendDir)\n$ProdRoot = $InstallRootInfo.Root\nif ($InstallRootInfo.Error) {\n    Write-Error (\"這裡不是可以註冊排程的安裝目錄：\" + $InstallRootInfo.Error + \"。中止，未做任何變更。\")\n    exit 1\n}"
     }
   ],
   "replace": {
