@@ -69,11 +69,13 @@ def balance_sheet(conn, as_of, include_drafts=False, show_zero=False):
             if not any(l["code"].startswith(p) for p in prefix_list):
                 continue
             accts = by_line.get(l["code"], [])
-            amt = sum(_net(a, l["side"]) for a in accts)
+            # 權益區段一律以「貸方為正」呈現：庫藏股票（借方餘額）顯示為負數並扣減權益，不是加進權益
+            side = "C" if l["code"].startswith("BS_EQ_") else l["side"]
+            amt = sum(_net(a, side) for a in accts)
             if amt == 0 and not show_zero:
                 continue
             items.append({"code": l["code"], "label": l["label"], "amount": amt,
-                          "accounts": [{"code": a["code"], "name": a["name"], "amount": _net(a, l["side"])} for a in accts]})
+                          "accounts": [{"code": a["code"], "name": a["name"], "amount": _net(a, side)} for a in accts]})
             total += amt
         return {"title": title, "items": items, "total": total}
     ca, nca = section(["BS_CA_"], "流動資產"), section(["BS_NCA_"], "非流動資產")

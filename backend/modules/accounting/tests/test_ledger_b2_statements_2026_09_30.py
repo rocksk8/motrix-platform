@@ -146,6 +146,16 @@ def test_drafts_only_with_flag_and_lines_hide_zero_unless_asked(conn):
     assert len(ST.balance_sheet(conn, "2214-01-31", show_zero=True)["sections"]["current_assets"]["items"]) >= 1
 
 
+def test_treasury_stock_reduces_equity_and_the_sheet_still_balances(conn):
+    """回歸（B3 測試時發現）：庫藏股票是借方餘額的權益科目，必須以負數扣減權益，不是加進權益。"""
+    _book(conn, 2222)
+    _v(conn, "2222-01-28", [("3511", 500, 0), ("1113", 0, 500)])
+    bs = ST.balance_sheet(conn, "2222-01-31")
+    tr = _item(bs["sections"]["equity"], "BS_EQ_TREASURY")
+    assert tr["amount"] == -500 and bs["totals"]["equity"] == 104500 and bs["totals"]["assets"] == 111000
+    assert bs["checks"]["balanced"] and bs["checks"]["diff"] == 0
+
+
 # ── 綜合損益表 ───────────────────────────────────────────────────────────
 
 def _line(inc, code):

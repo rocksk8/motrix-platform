@@ -106,12 +106,12 @@ def test_treasury_stock_is_negative_in_its_own_column(conn):
 
 def test_reverse_control_opening_voucher_inside_period_is_flagged(conn):
     from modules.accounting.ledger import periods as P, opening as O
-    P.create_year(conn, 2306, "t")
+    P.create_year(conn, 2190, "t")
     conn.commit()
-    res = O.create_batch(conn, 2306, "2306-03-01", [{"account_code": "1113", "debit": 9000}, {"account_code": "3111", "credit": 9000}], [], "", "t")
+    res = O.create_batch(conn, 2190, "2190-03-01", [{"account_code": "1113", "debit": 9000}, {"account_code": "3111", "credit": 9000}], [], "", "t")
     conn.execute("UPDATE vouchers_all SET status='已過帳' WHERE id=?", (res["voucher_id"],))
     conn.commit()
-    r = EQ.equity_statement(conn, "2306-03-01", "2306-03-31")
+    r = EQ.equity_statement(conn, "2190-03-01", "2190-03-31")
     assert r["checks"]["balanced"] is False or r["unexplained"]["total"] == 0
     # 期初傳票屬 kind='opening'（不是結轉）⇒ 其權益分錄會被算成「其他變動」而不是無法解釋——兩者擇一：這裡驗證它沒有被悄悄吸收
     assert _row(r, "closing")["capital"] == 9000

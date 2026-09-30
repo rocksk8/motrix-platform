@@ -130,12 +130,12 @@ def test_reverse_control_unbalanced_books_are_flagged(conn):
 
 def test_opening_voucher_inside_period_reconciles_or_is_flagged_never_silent(conn):
     from modules.accounting.ledger import periods as P, opening as O
-    P.create_year(conn, 2406, "t")
+    P.create_year(conn, 2191, "t")
     conn.commit()
-    res = O.create_batch(conn, 2406, "2406-03-01", [{"account_code": "1113", "debit": 9000}, {"account_code": "3111", "credit": 9000}], [], "", "t")
+    res = O.create_batch(conn, 2191, "2191-03-01", [{"account_code": "1113", "debit": 9000}, {"account_code": "3111", "credit": 9000}], [], "", "t")
     conn.execute("UPDATE vouchers_all SET status='已過帳' WHERE id=?", (res["voucher_id"],))
     conn.commit()
-    r = CF.cash_flow_statement(conn, "2406-03-01", "2406-03-31")
+    r = CF.cash_flow_statement(conn, "2191-03-01", "2191-03-31")
     assert r["cash_closing"] == 9000 and r["checks"]["cash_reconciles_to_balance_sheet"] is True
     assert _line(_sec(r, "financing"), "股本")["amount"] == 9000                                # 期初傳票的現金與股本以籌資呈現，仍對得上
 
