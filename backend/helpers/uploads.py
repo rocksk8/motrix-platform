@@ -29,6 +29,10 @@ from core import paths as _paths
 UPLOADS_ROOT = _paths.UPLOADS_ROOT
 
 _ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.pdf'}
+#: 個別單據類型另外放行的副檔名（key＝呼叫端傳的 `subfolder`，不含 demo 前綴）。
+#: 傳票附件（2026-09-30 使用者裁示）：Word／Excel 也能夾帶；exe 等其他格式照舊擋。大小上限沿用 `_MAX_FILE_SIZE`。
+#: 函式簽章不動（L1 介面快照不變）：放行範圍由這張表決定，不是讓每個呼叫端自己傳白名單。
+_EXTRA_EXTS_BY_SUBFOLDER = {'voucher_attachments': {'.docx', '.xlsx', '.doc', '.xls'}}
 _MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB／檔
 
 # demo 帳號隔離前綴——2026-08-24 補上（原本這裡完全沒有 is_demo_mode() 判斷，
@@ -102,6 +106,8 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
     if not files:
         raise HTTPException(400, "請至少選擇一個檔案")
 
+    allowed = _ALLOWED_EXTS | _EXTRA_EXTS_BY_SUBFOLDER.get(subfolder, set())
+    allowed_label = 'jpg/png/pdf' + ('/docx/xlsx/doc/xls' if allowed != _ALLOWED_EXTS else '')
     subfolder = _effective_subfolder(subfolder)
     save_dir = _safe_save_dir(subfolder, doc_no)
     os.makedirs(save_dir, exist_ok=True)
@@ -110,8 +116,8 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
     now = datetime.now().isoformat()
     for upload in files:
         ext = os.path.splitext(upload.filename or '')[1].lower()
-        if ext not in _ALLOWED_EXTS:
-            raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 jpg/png/pdf）")
+        if ext not in allowed:
+            raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 {allowed_label}）")
         raw = await upload.read()
         if len(raw) > _MAX_FILE_SIZE:
             raise HTTPException(400, f"檔案過大：{upload.filename}（單檔上限 20MB）")

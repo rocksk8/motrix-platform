@@ -9,6 +9,7 @@ MOTRIX ERP 獨立備份腳本
     python backup_job.py
 """
 import logging
+import logging.handlers
 import os
 import sys
 
@@ -25,7 +26,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler(os.path.join(_LOG_DIR, "backup_job.log"), encoding="utf-8"),
+        # 2026-09-30 寫入量：加大小上限（5MB×3 代）；原本 FileHandler 永久累積
+        logging.handlers.RotatingFileHandler(os.path.join(_LOG_DIR, "backup_job.log"), maxBytes=5 * 1024 * 1024,
+                                             backupCount=2, encoding="utf-8"),
     ],
 )
 logger = logging.getLogger(__name__)

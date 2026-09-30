@@ -1,5 +1,9 @@
 # 外包工班 更新紀錄
 
+## 1.0.22 — 2026-09-30（暫用號，列車取號；wip/cal-toggle 行事曆推送可選）
+- 行事曆「包商撥款」（預設關，事件種類開關在 L1）：`paid-toggle` 標記已匯款 commit 之後推 `push_event_for_module('contractor_payout', …)`，事件日期＝匯款日期，說明含應付／實付／手續費；取消匯款不刪事件。題 `modules/subcontract/tests/test_payout_calendar_2026_09_30.py`
+## 1.0.21 — 2026-09-30（暫用號，列車取號；W4 總帳 C2）
+- 新增提供者 `gl.events`（IP-GL1）：承攬商發票（E04，依發票日、稅額依派工稅率估算並標 tax_estimated，會計可在總帳補登實際稅額）、匯款（E05，含手續費；實付≠應付且已核可才入帳，待審核不產生並 notice）、個人點工未關聯勞報單（E05b，標未扣繳）。唯讀、不寫資料、不改欄位。
 ## 1.0.20 — 2026-09-30（暫用號，列車取號；wip/sec-p0 安全修正 P0）
 - 安全修正 P0：新增提供者 `uploads.path_access`／`subcontract`（IP-104，`attachments._SubcontractPathAccess`）：`contractor_dispatches/`、`contractor_dispatch_invoices/` 的附件只簽給派工單單筆端點的模組（procurement／case_manage／contractor_list／quotation）或看得到該案單據的人。原本任何登入者都拿得到簽章。
 

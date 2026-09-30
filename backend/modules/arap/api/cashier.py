@@ -29,8 +29,8 @@ import io
 from urllib.parse import quote as _url_quote
 
 from core import registry
-from db import get_db
-from helpers import _require_user, user_has_module, payment_item_amounts, notify_module_activity
+from db import get_db, spawn_bg_thread
+from helpers import _require_user, user_has_module, payment_item_amounts, notify_module_activity, push_event_for_module
 from modules.arap.receivables import collect_income_items as _collect_income_items  # 本模組（ROADMAP A8b 已收回）
 from helpers.legal_params import round_half_up          # bank-reconcile（金額四捨五入唯一來源）
 from helpers import _audit, _tok                         # bank-reconcile 的稽核
@@ -136,7 +136,19 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
         notify_module_activity("請款付款", "匯款差額待審核", user.get("display_name") or user["username"],
                                "%s #%s（%s）" % (source, key, res.get("quoteNo") or ""), "cashier.html",
                                detail="實付與應付不符（差額 %+g），請管理員到出納頁核可或退回。" % res["diff"])
+    # 行事曆「支出付款」（2026-09-30，預設關；開關在 L1 判斷）：以付款日建立。勞報單付款走自己的端點，不在此列
+    spawn_bg_thread(push_event_for_module, args=_expense_calendar_args(source, key, paid, res, user))
     return {"ok": True, **res}
+
+
+def _expense_calendar_args(source, key, paid, res, user):
+    """行事曆「支出付款」事件的內容（push_event_for_module 的參數）；名目／金額取提供者回傳（出納不讀別的模組的表）。"""
+    title = res.get("title") or "%s #%s" % (source, key)
+    desc = ("出納已登錄付款。\n名目：%s\n關聯案件：%s\n受款人：%s\n金額：NT$ %s\n實付：NT$ %s\n手續費：NT$ %s\n付款日：%s\n登錄人：%s"
+            % (title, res.get("quoteNo") or "", res.get("payee") or "", "{:,.0f}".format(float(res.get("amount") or 0)),
+               "{:,.0f}".format(float(res.get("actual") or 0)), "{:,.0f}".format(float(res.get("fee") or 0)), paid,
+               user.get("display_name") or user.get("username") or ""))
+    return ("expense_payout", "支出付款 — %s" % title, desc, paid)
 
 
 # ── 匯款差額審核（W1；IP-102 `remit.reviews`，多提供者：承攬商匯款、案件額外支出）────────────────

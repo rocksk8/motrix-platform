@@ -35,11 +35,15 @@ MODULE = "modules/accounting"
 #:     做好之前保留直讀。到期能力名暫記 `dispatch.cost_for_case`，C 定名後同步改這裡（M06-PLAN §5 a' 列）
 #:     〔2026-09-26 到期刪除：B 的 b-ip15-cost（afbb1b8d）提供 dispatch.cost_for_case，本疊疊在它上面、兩處讀取改走它（主持裁示同包處理）〕
 KNOWN_FOREIGN_READS = {
+    MODULE + "/api/voucher_summary.py": {
+        "case_extra_expenses": ("case", "case.extra_expenses"),
+    },
     MODULE + "/api/vouchers.py": {
         "case_extra_expenses": ("case", "case.extra_expenses"),
     },
 }
 
+#: 2026-09-30（W4 總帳）：vouchers.py 拆檔後，該讀取隨函式搬到 voucher_summary.py（讀取內容不變，仍等 case.extra_expenses）。
 #: L1 的表（任何模組都可以讀）。只放 M06 真的在讀的，新增要有理由。
 L1_TABLES = {"users"}
 
@@ -138,12 +142,13 @@ def test_positive_and_reverse_control_of_the_scan():
 def test_positive_and_reverse_control_of_stale_and_expiry():
     f = MODULE + "/api/vouchers.py"
     found = {f: {"case_extra_expenses"}}
-    assert stale(found, set(found)) == []
+    one = {f: KNOWN_FOREIGN_READS[f]}                      # 合成資料只看一個檔（真實基線可有多檔）
+    assert stale(found, set(found), one) == []
     shrunk = dict(found, **{f: set()})
-    assert stale(shrunk, set(found)) == ["%s 已不讀 case_extra_expenses ⇒ 自基線刪除" % f]
-    assert stale(found, set()) == ["%s：檔案不在 ⇒ 自基線刪除" % f]
-    assert expired(set()) == []
-    got = expired({"case.extra_expenses"})
+    assert stale(shrunk, set(found), one) == ["%s 已不讀 case_extra_expenses ⇒ 自基線刪除" % f]
+    assert stale(found, set(), one) == ["%s：檔案不在 ⇒ 自基線刪除" % f]
+    assert expired(set(), one) == []
+    got = expired({"case.extra_expenses"}, one)
     assert len(got) == 1 and "case_extra_expenses" in got[0], got
     provided, _ = code_capabilities({"x.py": 'registry.provide("case.extra_expenses", "case", X)\n'})
-    assert [g for g in expired(provided) if "case_extra_expenses" in g], "code_capabilities 的提供者要能觸發到期"
+    assert [g for g in expired(provided, one) if "case_extra_expenses" in g], "code_capabilities 的提供者要能觸發到期"

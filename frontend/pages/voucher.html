@@ -497,10 +497,10 @@
                 </template>
                 <div class="vc-src__empty"
                      x-show="srcSel.key && !srcState().loading && !srcState().err && !srcFiles().length">
-                  這個來源沒有已上傳檔案。<span x-show="canEdit && isSaved">可直接從電腦上傳（圖片或 PDF）：
+                  這個來源沒有已上傳檔案。<span x-show="canEdit && isSaved">可直接從電腦上傳（圖片、PDF、Word、Excel）：
                 <label class="vc-btn" style="cursor:pointer">
                   ＋ 從電腦上傳檔案
-                  <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf"
+                  <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.doc,.xls"
                          data-testid="src-empty-upload" style="display:none"
                          @change="uploadAttachments($event)">
                 </label></span></div>
@@ -591,7 +591,7 @@
             <div class="vc-att__acts" x-show="canEdit">
               <label class="vc-btn" style="cursor:pointer">
                 ＋ 上傳檔案
-                <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf"
+                <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.doc,.xls"
                        data-testid="voucher-att-upload" style="display:none"
                        @change="uploadAttachments($event)">
               </label>
@@ -757,11 +757,11 @@
           <div class="vc-att__acts" x-show="canEdit && isSaved" style="margin-top:8px">
             <label class="vc-btn" style="cursor:pointer">
                   ＋ 從電腦上傳檔案
-                  <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf"
+                  <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.doc,.xls"
                          data-testid="voucher-preview-upload" style="display:none"
                          @change="uploadAttachments($event)">
                 </label>
-            <span class="vc-att__hint">圖片或 PDF；上傳後立即列在上面，匯出「含附件」會一併輸出。</span>
+            <span class="vc-att__hint">圖片、PDF、Word、Excel；上傳後立即列在上面。匯出「含附件」時圖片與 PDF 會併入，Word／Excel 只列檔名。</span>
           </div>
           <!-- `JV19②`：主頁面（395-401 附近）attErr／attMsg 兩個都有
                對應節點，這個 modal 之前只搬了 attErr 那一半——匯出成功時

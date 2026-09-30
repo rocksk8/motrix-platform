@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """建構器底層支援（建構器第三輪 S2.5／S3／S5，CORE 1.72，只增）。
 
-[單位] plat:custom-builder-support    [層] L1    [穩定度] 契約（只增）
+[單位] helper:custom_builder_support    [層] L1    [穩定度] 契約（只增）
 [公開介面] ACCESS_KEYS, VISIBLE_ROLES, can_edit_field, guard_writes, hidden_keys, keep_hidden_values, mask_compute, mask_record, mask_records, render_output_for, EVENT_FINANCE_POSTED, EVENT_FINANCE_REVERSED, access_problems, can_see_field, can_see_menu,
     create_revision, emit_finance_event, leaking_formulas, mark_finance_processed, mask_for, pending_finance_events
 [不變式]
@@ -11,7 +11,7 @@
   - 金流事件寫 `custom_record_finance_outbox`（與單據同一個交易內寫入，`dedupe_key` 唯一 ⇒ 重送冪等）；
     消費方（W4 總帳）自己讀 pending、處理完 mark processed；本模組不建分錄表
   - 修訂：`<原單號>-R<n>`；只能對「最新一版」修訂；新單回到起始狀態、內容複製、重新走簽核
-[契約題] tests/test_builder_support_2026_09_30.py（待建）
+[契約題] tests/test_builder_support_2026_09_30.py
 """
 import json
 from datetime import datetime

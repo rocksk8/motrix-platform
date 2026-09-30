@@ -33,7 +33,7 @@ from helpers import (
     notify_next_tier, notify_approved, notify_returned, notify_resubmit_requester,
     notify_settlement_finalized, notify_module_activity, push_event_for_quotation_won,
     push_event_for_important_comment, push_event_for_case_stage_due, push_event_delete_for_case_stage,
-    push_event_for_case_stage_done, check_approve_permission, check_reject_permission,
+    push_event_for_case_stage_done, push_event_for_module, check_approve_permission, check_reject_permission,
     check_no_tier_self_approval, resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     submitter_manager_tiers, cascade_self_tiers, notify_org_chain_notice, save_document_files,
     delete_document_file, notify_case_close_blocked, notify_case_change_requested, norm_at,
@@ -5012,6 +5012,16 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
     return results
 
 
+def _case_update_calendar_args(quote_no, customer_name, project_name, author, content, n_files, at):
+    """行事曆「案件更新」事件的內容（push_event_for_module 的參數）：標題「○○案件更新」，說明＝這一則更新；
+    merge_key＝案件編號 ⇒ 同一天的更新累加在同一個事件的說明裡。"""
+    title = f"{project_name or customer_name or quote_no}案件更新"
+    line = f"[{(at or '')[11:16]}] {quote_no} {author}：{content or '（附件）'}"
+    if n_files:
+        line += f"（附件 {n_files} 個）"
+    return ("case_update", title, line, (at or "")[:10] or None, quote_no)
+
+
 @router.post("/api/quotations/{quote_no}/updates", status_code=201)
 async def post_case_update(quote_no: str,
                            content: str = Form(""),
@@ -5080,6 +5090,10 @@ async def post_case_update(quote_no: str,
                             "case-management.html", detail=content)
     if important:
         spawn_bg_thread(push_event_for_important_comment, args=(new_id, quote_no, content, author_display))
+    else:
+        # 行事曆「案件更新」（2026-09-30，預設關；開關在 L1 判斷）：同一案件同一天合併成一個事件
+        spawn_bg_thread(push_event_for_module, args=_case_update_calendar_args(
+            quote_no, qrow["customer_name"], qrow["project_name"], author_display, content, len(saved_files), now))
     _audit(_tok(authorization), 'case.update_post', 'case_update', quote_no, quote_no, {'id': new_id, 'files': len(saved_files)})
     return {
         "id": new_id,

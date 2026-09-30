@@ -98,8 +98,10 @@ def _api(page, base, sess, path, method="GET", body=None):
 
 def _editor(page):
     page.get_by_test_id("ml-edit-open").click()
-    page.wait_for_function(IDLE)
-    page.wait_for_function("() => Alpine.$data(document.getElementById('ml-editor')).work !== null")
+    # 重開時 work 還留著上次的（舊）版面 ⇒ 不能只等 work !== null；要等「這一次開啟的載入完成」（loadedScope 有值且不忙）
+    page.wait_for_function("() => { const e = document.getElementById('ml-editor');"
+                           " return !!e && e.dataset.busy === '0' && !!e.dataset.loadedScope"
+                           " && Alpine.$data(e).work !== null }")
     return page.locator("#ml-editor")
 
 
@@ -224,6 +226,28 @@ def test_layout_editor_role_override_and_restore(live_server, make_user, no_tile
     assert _api(sales, live_server, sales_sess, "/api/layout/" + MOD)[1]["source"] == "company v3"
     ed.get_by_test_id("ml-close").click()
     assert "location" not in boss.evaluate(HEADS)                                    # 超級管理員自己的畫面（公司 v3）也回去
+
+
+@pytest.mark.e2e
+def test_reopened_editor_is_locked_until_this_open_finished_loading(live_server, make_user, no_tile_probe, e2e_browser):
+    """O7 第三次的決定性重現：重開排版器時，start() 在自己的 loadScope 之前還要等側欄請求；把側欄請求拖慢 1.5 秒，
+    這段期間面板必須是鎖住的（busy＝1、編輯區 inert、loadedScope 空）；舊版這段期間是「已打開、舊 work 還在、可操作」，
+    使用者在此時做的編輯會被稍後 start 自己的 loadScope 用伺服器版蓋掉。"""
+    _seed()
+    _users(make_user)
+    boss, _sess = _open(e2e_browser, live_server, "p9_boss")
+    ed = _editor(boss)
+    ed.get_by_test_id("ml-close").click()
+    boss.route("**/api/platform/menu*", lambda route: (boss.wait_for_timeout(1500), route.continue_()))
+    boss.get_by_test_id("ml-edit-open").click()
+    boss.wait_for_function("() => { const e = document.getElementById('ml-editor'); return !!e && e.style.display !== 'none' }")
+    st = boss.evaluate("() => { const e = document.getElementById('ml-editor');"
+                       " return {busy: e.dataset.busy, loaded: e.dataset.loadedScope,"
+                       " inert: e.querySelector('.ml-ed__body').inert} }")
+    assert st == {"busy": "1", "loaded": "", "inert": True}, st                    # 舊版：busy 0、loaded 有值（舊）、可操作
+    boss.wait_for_function("() => { const e = document.getElementById('ml-editor');"
+                           " return e.dataset.busy === '0' && !!e.dataset.loadedScope }", timeout=15000)
+    boss.unroute("**/api/platform/menu*")
 
 
 @pytest.mark.e2e

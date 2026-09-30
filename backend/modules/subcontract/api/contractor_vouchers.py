@@ -33,7 +33,7 @@ from helpers import (
     UnresolvedManagerError, resolve_active_flow_setting, user_has_module,
     guard_case_access, require_any_module,
 
-    can_see_financial, is_document_approver,
+    can_see_financial, is_document_approver, push_event_for_module,
 )
 from pdf_gen import generate_contractor_voucher_pdf_bytes, _generate_contractor_voucher_pdf
 from helpers.errors import trace_id
@@ -727,6 +727,20 @@ def record_contractor_voucher_export(voucher_no: str, mode: str = "external", au
 
 # ── 財務已匯款 toggle ─────────────────────────────────────────────────────────
 
+def _payout_calendar_args(voucher_no, snapshot_json, paid_at, rm, who):
+    """行事曆「包商撥款」事件的內容（push_event_for_module 的參數）。"""
+    try:
+        snap = json.loads(snapshot_json or "{}") or {}
+    except (TypeError, ValueError):
+        snap = {}
+    vname = snap.get("vendorName") or "外包人員點工"
+    payable = _remit._payable(snapshot_json)
+    desc = (f"承攬商匯款申請 {voucher_no} 已標記匯款。\n廠商：{vname}\n應付：NT$ {payable:,.0f}"
+            f"\n實付：NT$ {float(rm['actual'] or 0):,.0f}\n手續費：NT$ {float(rm['fee'] or 0):,.0f}"
+            f"\n匯款日期：{paid_at}\n標記人：{who}")
+    return ("contractor_payout", f"包商匯款 — {voucher_no}（{vname}）", desc, paid_at or None)
+
+
 @router.post("/api/contractor-vouchers/{voucher_no}/paid-toggle")
 def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = Header(None)):
     """標記已匯款**必須**帶 paid_at（YYYY-MM-DD，實際匯款日期，不一定等於操作
@@ -819,6 +833,10 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
     else:
         notify_module_activity("承攬商匯款申請", "已匯款" if action == "pay" else "取消已匯款", who, voucher_no,
                                "case-management.html", detail=note or "")
+    if action == "pay":
+        # 行事曆「包商撥款」（2026-09-30，預設關；開關在 L1 判斷）：以匯款日期建立；取消匯款不刪事件
+        spawn_bg_thread(push_event_for_module, args=_payout_calendar_args(
+            voucher_no, row["snapshot_json"], paid_at_value, rm, who))
     return {"ok": True, "is_paid": action == "pay", "paid_log": log,
             **({"remitReview": rm["review"], "diff": rm["diff"], "actual": rm["actual"], "fee": rm["fee"]} if action == "pay" else {})}
 

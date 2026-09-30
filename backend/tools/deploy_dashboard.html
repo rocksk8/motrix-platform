@@ -286,12 +286,12 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// §9e D6：打包前要有「這個 commit 的全綠全量」
+// §9e D6：打包前要有「這個 commit 的全綠全量」，或沒動到底層時的範圍驗證（PLAYBOOK §D-1a）
 async function refreshGate() {
   try {
     const g = await (await fetch('/api/build-gate')).json();
     const el = document.getElementById('gateState');
-    el.textContent = (g.state === 'ok' ? '✅ ' : '⛔ ') + g.detail;
+    el.textContent = (g.state === 'ok' ? '✅ ' : '⛔ ') + (g.mode === 'scoped' ? '［範圍驗證，未跑全量］' : '') + g.detail;
     el.style.color = g.state === 'ok' ? '#4ADE80' : '#F87171';
   } catch (e) {}
 }
