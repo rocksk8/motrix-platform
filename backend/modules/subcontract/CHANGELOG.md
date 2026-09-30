@@ -9,7 +9,7 @@
 ## (next) — 2026-09-30（暫用號，列車取號；W4 總帳 R12）
 - 個人外包人員 ↔ 勞報單（使用者裁示 R12）：新增 `POST /api/contractor-vouchers/{單號}/personnel-link`（快照 personnel[].payslipNo，additive、無 migration）；標記已匯款前驗證已關聯者（勞報單已簽回、受款人相符、匯款金額＝勞報單實付），`system_settings.remit_require_payslip`＝"1" 時每位個人都必須已關聯（預設關閉）；匯款成功一併把勞報單記為已付款（同一個交易），取消匯款一併退回。總帳 E05：已關聯者借『其他應付款』而非應付帳款，不再產生 E05b。
 
-## 1.0.23 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
+## (next) — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
 - 新增 `attachments.py::_SubcontractCatalog`（`attachments.catalog`／`subcontract`，IP-105）：派工單附件與承攬商發票開檔；權限＝派工單單筆端點規則（同 `_SubcontractPathAccess`）。
 
 ## 1.0.22 — 2026-09-30（暫用號，列車取號；wip/cal-toggle 行事曆推送可選）
