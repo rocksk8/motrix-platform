@@ -1,17 +1,25 @@
 # 會計 更新紀錄
 
-## 1.2.0 — 2026-09-30（暫用號，列車取號；W4 總帳 B1，wip/w4-gl）
-- 新增「報表設定」頁（財務選單）與報表列定義表 `gl_fs_lines`（資產負債表／綜合損益表各列；名稱、排序、停用可調，列代碼固定）；科目新增「現金流量分類」`cashflow_class`（現金及約當現金／營業／投資／籌資；預設依項目表群組推導，可逐科目調整；損益科目不分類）。
-- 設定完整性檢查 `GET /api/ledger/setup-check`：可過帳科目缺報表歸屬、指向不存在的報表列、資產負債科目缺現金流量分類、已停用的報表列仍有科目歸屬——任一項非空，B2～B4 的報表就會漏算，頁面與 API 都會明說。
-- migration v2（modules/accounting/migrations/0002_fs_lines_cashflow.py）：加表 `gl_fs_lines`、加欄 `gl_account_meta.cashflow_class`；冪等、只新增。
-- 新增 `gl.events` 契約 v1 的收集與驗證（`ledger/contract.py`，`GET /api/ledger/events/preview`）：目前沒有任何來源提供者，回應明說「未安裝／尚未接入」；不產生傳票。
+## 1.1.0 — 2026-09-30（暫用號，列車取號；W4 總帳「底層一次到位」＋A／B1／B2 ，wip/w4-gl）
+- 新增總帳基礎（設計：docs/platform/plans 之 proposal-general-ledger）：會計年度／期間（可建到任意過去年度，補登用）、結帳／重開／鎖定、期間稽核軌跡（只增不改不刪）、期初餘額匯入（批次＋期初傳票草稿，過帳前可撤銷）、科目屬性（類別、正常餘額、可過帳、報表列、現金流量分類）與科目角色、帳簿報表（試算表、總分類帳、明細分類帳、序時帳簿）、財務報表（資產負債表、綜合損益表；權益變動表、現金流量表隨後）、報表設定頁、總帳作業頁（功能旗標，預設全關）。
+- **行為變化（請寫進使用者說明）**：①已結帳／鎖定期間**不可過帳**、**不可作廢已過帳傳票**（要更正請開沖轉傳票，或由具權限者先「重開期間」並填理由）；之前已過帳傳票可隨時作廢重開。②已過帳傳票的日期與分錄在資料庫層也不可修改。未建立任何期間資料的部署，行為與舊版相同（沒有期間＝全部開放）。
+- 自有 migration v1（modules/accounting/migrations/0001_ledger_base.py，**上線後凍結**）：一次涵蓋後續各批會用到的 31 張表（gl_*、fa_*）、`voucher_lines`（case_no／party_key／tax_code／doc_no）與 `vouchers_all`（kind／reverses_no／is_backfill／origin／gl_event_id）新欄位、15 個觸發器；全部只新增、冪等。之後若欄位不夠一律新增下一支 migration，不改 0001。
+- 提供者 `voucher.draft`（IP-2）加**可選**參數 `origin`（契約仍是版本 1，舊呼叫端不受影響）；新增 `gl.events` 契約 v1 的收集與驗證（`ledger/contract.py`、`GET /api/ledger/events/preview`，目前無來源提供者，回應明說「未安裝／尚未接入」，不產生傳票）。
+- `api/vouchers.py` 純搬移拆檔（voucher_common／voucher_summary／voucher_providers；行為不變，名稱重新匯入）。
+- 權限：讀＝cashier／finance；結帳、重開、期初、科目設定＝finance；鎖定／解鎖、功能旗標＝superadmin（未新增權限鍵）。
 
-## 1.1.0 — 2026-09-30（暫用號，列車取號；W4 總帳 P1，wip/w4-gl）
-- 新增總帳基礎（設計：docs/platform/plans 之 proposal-general-ledger；本版只含 P1）：會計年度／期間（可建到任意過去年度，補登用）、結帳／重開／鎖定、期間稽核軌跡（只增不改不刪）、期初餘額匯入（批次＋期初傳票草稿，過帳前可撤銷）、科目屬性（gl_account_meta：類別、正常餘額、可過帳、報表列）與科目角色（gl_account_roles）、帳簿報表（試算表、總分類帳、明細分類帳、序時帳簿）與兩個頁面。
-- **行為變化（請寫進使用者說明）**：①已結帳／鎖定期間**不可過帳**、**不可作廢已過帳傳票**（要更正請開沖轉傳票，或由具權限者先「重開期間」並填理由）；之前已過帳傳票可隨時作廢重開。②已過帳傳票的日期與分錄在資料庫層也不可修改。未建立任何期間資料的部署，行為與舊版相同（沒有期間 ＝ 全部開放）。
-- 自有 migration v1（modules/accounting/migrations/0001_ledger_base.py）：新表 gl_*；`voucher_lines` 加 `case_no`／`party_key`／`tax_code`／`doc_no`；`vouchers_all` 加 `kind`／`reverses_no`／`is_backfill`／`origin`；8 個 DB 觸發器（三層鎖定的第三層）。全部為加法，回退程式碼時舊程式不讀新東西。
-- 提供者 `voucher.draft`（IP-2）加**可選**參數 `origin`（產生來源標記；契約仍是版本 1，舊呼叫端不受影響）。
-- 權限：讀＝cashier／finance；結帳、重開、期初、科目設定＝finance；鎖定／解鎖＝superadmin（未新增權限鍵）。
+## 1.0.10 — 2026-09-30（暫用號，列車取號；wip/w2-report-cash）
+- T100 收款傳票：客戶內扣手續費時「借 銀行(入帳＝含稅−手續費)＋借 收款手續費支出／貸 銷貨收入＋銷項稅額」，借貸相等；沒有手續費時與舊版完全相同。設定新增選填 `receiptFeeAccount`（收款手續費支出科目，出納頁 T100 設定可填；沒填時匯出檔頭提示）。
+## 1.0.9 — 2026-09-30（暫用號，列車取號；W1 wip/w1-remit-fee）
+- 稽核補修：T100 承攬商付款傳票排除「差額待審核」（核可後才進、退回則整筆消失），對齊 accounting_export 註解
+- W1 出納匯款手續費（暫用號，列車取號）：T100 承攬商付款傳票：承攬商費用＝實付金額（舊資料＝應付）、手續費另借「匯款手續費支出」（設定 `remitFeeAccount`，選填；沒填 ⇒ 匯出檔頁尾列出缺科目）、銀行存款貸方＝實付＋手續費（借貸相等）
+## 1.0.8 — 2026-09-30（暫用號，列車取號；wip/w2-voucher-dash-2，W2 交叉稽核 S2／S4）
+- S4：`POST /api/vouchers/{id}/attachments`（上傳與帶入兩種形態）只允許草稿（`can_edit`），與刪除同一條規則；離開草稿的傳票回 400（原本除作廢外不看狀態，加了也刪不掉）。作廢重開（JV24）走內部複製，不受影響。
+- S2：`bringIn` 新傳票自動存檔期間 `uploading` 保持鎖定；存檔中（busy）不插入。連點不再出現「傳票尚未儲存」假錯誤、也不會重複帶入。
+
+## 1.0.7 — 2026-09-30（暫用號，列車取號；W2 wip/w2-voucher-dash）
+- 傳票「帶入附件」：新傳票尚未存檔（沒有 id）時，`bringIn` 以前靜默 return ⇒ 按了沒反應；改為自動先存成草稿（存檔失敗才在附件區顯示原因），再帶入。後端契約不動（附件掛傳票 id）
+- 傳票預覽窗（草稿）新增「從電腦上傳檔案」入口；分錄下方來源清單為空時，同處提示可直接上傳。離開草稿後來源區塊與上傳入口本來就不出現（設計，非缺陷）
 
 ## 1.0.6 — 2026-09-29（暫用號，列車取號；wip/payslip-void-signed）
 - 新增提供者 `voucher.by_no`（IP-4 追加）：以傳票單號查 `{id, voucher_no, status, voided}`，不存在 ⇒ None；唯讀。勞報單出納付款回填傳票單號時驗證用（M07 不直接讀 `vouchers_all`）。

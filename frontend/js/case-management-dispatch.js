@@ -31,6 +31,8 @@ window.CM_PARTS.push(() => ({
     payVoucherNote: '',
     payVoucherBankAcctCode: '',
     payVoucherSaving: false,
+    // W1：匯款實付／手續費（實付空白＝等於應付；手續費是公司自付、不參與比對；實付≠應付 ⇒ 差額待審核，管理員在出納頁核可）
+    payRemit: { actual: '', hasFee: false, fee: '' },
     // T100 傳票匯出設定裡的銀行帳戶清單（2026-09-01 新增），標記已匯款/已收款
     // 時挑選要用哪個帳戶；每次開啟標記 Modal 都重抓最新清單，見
     // loadT100BankAccounts()
@@ -418,6 +420,22 @@ window.CM_PARTS.push(() => ({
       return this.t100DefaultBankAcctCode || ''
     },
 
+    remitDiff(st, payable) {
+      const a = (st.actual === '' || st.actual == null) ? Number(payable) : Number(st.actual)
+      return MotrixLegalRound.halfUp((a - Number(payable || 0)) * 100) / 100
+    },
+    remitError(st) {
+      if (st.actual !== '' && st.actual != null && !(Number(st.actual) > 0)) return '實付金額必須大於 0'
+      if (st.hasFee && (st.fee === '' || st.fee == null || !(Number(st.fee) >= 0))) return '請填寫手續費金額（不可為負數）'
+      return ''
+    },
+    remitBody(st) {
+      const b = {}
+      if (st.actual !== '' && st.actual != null) b.actualAmount = Number(st.actual)
+      if (st.hasFee) { b.hasFee = true; b.fee = Number(st.fee) }
+      return b
+    },
+
     onPayVoucherBankChange() {
       this._payVoucherBankName = (this.t100BankAccounts.find(b => b.acctCode === this.payVoucherBankAcctCode) || {}).name || ''
     },
@@ -429,6 +447,7 @@ window.CM_PARTS.push(() => ({
         this.payVoucherTarget = v
         this.payVoucherDate = this._localDateStr()
         this.payVoucherNote = ''
+        this.payRemit = { actual: v.grandTotal != null ? String(v.grandTotal) : '', hasFee: false, fee: '' }
         this.payVoucherBankAcctCode = ''
         this._payVoucherBankName = ''
         this.payVoucherModal = true
@@ -453,7 +472,7 @@ window.CM_PARTS.push(() => ({
 
     async confirmPayVoucher() {
       const v = this.payVoucherTarget
-      if (!v || !this.payVoucherDate) return
+      if (!v || !this.payVoucherDate || this.remitError(this.payRemit)) return
       this.payVoucherSaving = true
       try {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {
@@ -462,9 +481,12 @@ window.CM_PARTS.push(() => ({
           body: JSON.stringify({
             action: 'pay', paid_at: this.payVoucherDate, note: this.payVoucherNote,
             bankAccountCode: this.payVoucherBankAcctCode, bankAccountName: this._payVoucherBankName || '',
+            ...this.remitBody(this.payRemit),
           })
         })
         if (!r.ok) { MotrixUI.toast((await r.json()).detail || '操作失敗', {kind: 'error'}); this.payVoucherSaving = false; return }
+        const res = await r.json().catch(() => ({}))
+        if (res.remitReview) MotrixUI.toast('實付與應付差 ' + res.diff + ' 元，已送管理員審核（出納頁「差額審核」）', {kind: 'warn'})
         this.payVoucherModal = false
         this.payVoucherTarget = null
         await this.loadContractorVouchers(this.selected?.quote_no)
@@ -544,16 +566,50 @@ window.CM_PARTS.push(() => ({
       evt.target.value = ''
     },
 
+    // 承攬商報價單附件刪除＝申請刪除、要審核（N1）：核可前檔案保留並標「刪除待審」；沒設簽核層且是最高管理者才直接刪
     async deleteDispatchFile(d, fileId) {
-      if (!(await MotrixUI.confirm('確定刪除此報價附件？', {danger: true}))) return
+      const reason = await MotrixUI.prompt('刪除承攬商報價單附件需要審核，請填寫刪除原因：', {title: '申請刪除報價單附件', required: true, okText: '送出申請'})
+      if (reason === null || reason === undefined || reason === false) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}/files/${fileId}`, {
           method: 'DELETE',
-          headers: { Authorization: 'Bearer ' + this.session.token }
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ reason: String(reason) })
         })
-        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '刪除失敗', {kind: 'error'}); return }
-        if (d.files) d.files = d.files.filter(f => f.id !== fileId)
-      } catch (e) { MotrixUI.toast('刪除失敗：' + e.message, {kind: 'error'}) }
+        const body = await r.json().catch(() => ({}))
+        if (!r.ok) { MotrixUI.toast(body.detail || '申請失敗', {kind: 'error'}); return }
+        if (body.deleted) { if (d.files) d.files = d.files.filter(f => f.id !== fileId) }
+        else { MotrixUI.toast('已送出刪除申請，核可前檔案會保留', {kind: 'success'}); await this.loadDispatches(this.selected?.quote_no) }
+      } catch (e) { MotrixUI.toast('申請失敗：' + e.message, {kind: 'error'}) }
+    },
+
+    // 這個刪除申請現在輪到我審核嗎（有簽核層：當層排序最前的未簽人；沒有簽核層：最高管理者）
+    canDecideFileDelete(f) {
+      const req = f && f.deleteRequest
+      if (!req) return false
+      const tiers = req.tiers || []
+      if (!tiers.length) return this.session.role === 'superadmin'
+      const t = tiers[req.currentTier || 0]
+      const first = t && (t.approvers || []).find(a => a.status !== 'approved')
+      return !!first && first.username === this.session.username
+    },
+
+    async decideFileDelete(d, f, decision) {
+      let note = ''
+      if (decision === 'reject') {
+        note = await MotrixUI.prompt('退回刪除申請（檔案會保留），原因：', {title: '退回刪除申請', okText: '退回'})
+        if (note === null || note === undefined || note === false) return
+      } else if (!(await MotrixUI.confirm('核可後這個報價單附件會被刪除，確定？', {danger: true}))) return
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/files/${f.id}/${decision === 'approve' ? 'delete-approve' : 'delete-reject'}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note: String(note || '') })
+        })
+        const body = await r.json().catch(() => ({}))
+        if (!r.ok) { MotrixUI.toast(body.detail || '操作失敗', {kind: 'error'}); return }
+        await this.loadDispatches(this.selected?.quote_no)
+      } catch (e) { MotrixUI.toast('操作失敗：' + e.message, {kind: 'error'}) }
     },
 
     async uploadDispatchInvoiceFiles(d, evt) {

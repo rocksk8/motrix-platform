@@ -53,6 +53,8 @@ LEDGER = {
     "V3.10": "7a6144213a3b04032c3fbf08ffe62a56dccd41bc6a34e39d610f43337a1b77af",
     # V3.11（H10 品牌設定，第十四班列車補號）：分頁圖示改讀 /api/system/branding/favicon（品牌包漏 bump，列車 --train 抓到）。
     "V3.11": "3712ad39fdf3c56889a3b5729d477470db4c80c0065644443a1ec44edaff8bf4",
+    # V3.12（N1，2026-09-30）：成本欄「帶入承攬商報價」＋與承攬商報價的總差額提示。
+    "V3.12": "e6ccb49c4c67635073b88457ab4821cbbbbcfefc9921767b591b90b35f52004d",
 }
 
 

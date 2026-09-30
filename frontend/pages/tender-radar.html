@@ -409,90 +409,15 @@
       <!-- P9：欄的顯示、順序、標題由版面決定（$store.layout.cols：角色 ＞ 公司 ＞ 程式預設，再疊個人層）；
            每一欄「怎麼畫」仍寫在這裡。版面還沒回來之前不畫表（避免先畫預設再跳成別的樣子）。 -->
       <table class="data-table" data-layout-list="tenders"
-             x-show="visibleTenders.length > 0 && ($store.layout.ready || $store.layout.failed)">
+             x-show="visibleTenders.length > 0 && ($store.layout.ready || $store.layout.failed || layoutWaitDone)">
         <thead><tr>
           <template x-for="c in $store.layout.cols('tenders')" :key="c.field">
             <th :data-col="c.field" :style="c.field === 'marked' ? 'width:52px' : (c.field === 'budget' ? 'text-align:right' : '')"
                 x-text="$store.layout.colLabel('tenders', c.field, tenderColLabels[c.field])"></th>
           </template>
         </tr></thead>
-        <tbody>
-          <template x-for="t in visibleTenders" :key="t.id">
-            <tr :class="t.marked ? 'tr-marked' : ''" :data-case-no="t.caseNo"
-                :style="focusCase === t.caseNo ? 'outline:2px solid var(--accent);outline-offset:-2px' : ''">
-              <template x-for="c in $store.layout.cols('tenders')" :key="c.field">
-                <td :data-col="c.field" :style="tenderCellStyle(c.field)">
-                  <!-- 🔴 標註是**切換鈕**；title 帶「誰標的、什麼時候」，小字也給（手機點不出 tooltip） -->
-                  <template x-if="c.field === 'marked'">
-                    <span>
-                      <button class="tr-mark-btn" :class="t.marked ? 'on' : ''"
-                              x-show="$store.layout.shown('action', 'tenderMark')"
-                              :aria-label="$store.layout.label('action', 'tenderMark', '標註')"
-                              :disabled="markBusy === t.caseNo"
-                              @click="toggleMark(t)"
-                              :aria-pressed="t.marked ? 'true' : 'false'"
-                              :title="t.marked
-                                ? ((t.markedByName || '未知') + ' 於 '
-                                   + (t.markedAt || '不明時間') + ' 標註．再按一次取消')
-                                : '標註這一筆，它會排到清單最上方'"
-                              x-text="t.marked ? '\u2691' : '\u2690'"></button>
-                      <template x-if="t.marked">
-                        <span class="tr-mark-who"
-                              x-text="(t.markedByName || '未知')
-                                      + (t.markedAt ? ('．' + t.markedAt.slice(5, 10)) : '')"></span>
-                      </template>
-                    </span>
-                  </template>
-                  <!-- 🔴 機關與標案名稱都要可點；沒有網址時 DOM 裡不該有 <a>（x-if，不是 x-show）；rel=noopener 不是可選的 -->
-                  <template x-if="c.field === 'org'">
-                    <span>
-                      <template x-if="t.url">
-                        <a :href="t.url" target="_blank" rel="noopener noreferrer"
-                           x-text="t.org"></a>
-                      </template>
-                      <template x-if="!t.url"><span x-text="t.org"></span></template>
-                    </span>
-                  </template>
-                  <template x-if="c.field === 'caseNo'">
-                    <span>
-                      <span x-text="t.caseNo"></span>
-                      <a class="mp1-onmap" style="font-size:11px;margin-left:4px"
-                         :href="MotrixRecordLink.mapUrl('tenders', t.caseNo)">在地圖上看</a>
-                    </span>
-                  </template>
-                  <template x-if="c.field === 'name'">
-                    <span>
-                      <template x-if="t.url">
-                        <a :href="t.url" target="_blank" rel="noopener noreferrer"
-                           x-text="t.name"></a>
-                      </template>
-                      <template x-if="!t.url"><span x-text="t.name"></span></template>
-                    </span>
-                  </template>
-                  <!-- ⚠️ NULL 顯示「—」不是空白：空白分不出「沒有這個欄位」與「沒載好」 -->
-                  <template x-if="c.field === 'location'"><span x-text="t.location || '—'"></span></template>
-                  <template x-if="c.field === 'procurementType'"><span x-text="t.procurementType || '—'"></span></template>
-                  <template x-if="c.field === 'tenderMethod'"><span x-text="t.tenderMethod || '—'"></span></template>
-                  <!-- ⚠️ 預算用 === null 判斷：0 元是合法金額 -->
-                  <template x-if="c.field === 'budget'"><span x-text="t.budget === null ? '未公告' : t.budget.toLocaleString()"></span></template>
-                  <template x-if="c.field === 'publishedAt'"><span x-text="t.publishedAt || '—'"></span></template>
-                  <template x-if="c.field === 'deadline'"><span x-text="t.deadline || '未公告'"></span></template>
-                  <!-- ⚠️ 刻意不寫 `!t.matchedWatches ||`：後端保證沒命中是空陣列（P2），多一道防呆會把「後端漏鍵」變成看不見 -->
-                  <template x-if="c.field === 'matchedWatches'">
-                    <span>
-                      <template x-if="t.matchedWatches.length === 0">
-                        <span style="color:var(--text-dim)">—</span>
-                      </template>
-                      <template x-for="w in t.matchedWatches" :key="w.id">
-                        <span class="chip" style="margin:0 3px 3px 0" x-text="w.name"></span>
-                      </template>
-                    </span>
-                  </template>
-                </td>
-              </template>
-            </tr>
-          </template>
-        </tbody>
+        <!-- T22-4：整個 tbody 一個 x-html（500 列 × 11 欄不再是 5 千多個 effect）；內容全經 _esc，見 tbodyHtml() -->
+        <tbody @click="onTableClick($event)" x-html="tbodyHtml()"></tbody>
       </table>
       <!-- ⚠️ 空清單有三種成因，**而它們在畫面上長得一樣**。
            原本這裡寫「目前沒有命中的標案」——而清單早就改成「全部都列」了，
@@ -536,9 +461,11 @@ MotrixLayout.init({
 })
 </script>
 <script>
+// 沒有畫法的欄位只警告一次；放模組層（不是 this）——cellHtml 在 Alpine effect 內執行，寫響應式狀態會多觸發一次重畫
+const _trWarnedCols = new Set()
 function tenderRadarPage() {
   return {
-    session: {}, token: '', loading: false, scanning: false,
+    session: {}, token: '', loading: false, scanning: false, layoutWaitDone: false,
     status: null, watches: [], tenders: [], formError: '',
     schedule: null, scheduleMsg: '', listError: '', watchFilter: '',
     // ⚠️ 存的是**哪一筆正在送**（`caseNo`），不是一個布林值 ——
@@ -561,6 +488,99 @@ function tenderRadarPage() {
       if (field === 'budget') return 'text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif'
       if (field === 'caseNo') return 'font-size:12px;font-family:LINE Seed TW_OTF, sans-serif'
       return 'font-size:12px'
+    },
+
+    //: 一格的 HTML（2026-09-30 T22-4）。
+    //  原本每一格放 11 個 `<template x-if>`（每個都是一個 Alpine effect＋註解節點），500 列 × 11 欄 ≈ 8 萬個 DOM 節點，
+    //  進頁時主執行緒被占住數秒。改成每格一個 `x-html`：**內容一律經 _esc 跳脫**；連結只接受 http(s)（抓來的資料不可直接進 href）。
+    //  ⚠️ 依賴的 reactive 狀態（`markBusy`、版面 `$store.layout`）在函式裡讀取，所以它們改變時該格會重畫。
+    _esc(s) {
+      return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g,
+        c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+    },
+    _link(url, text) {
+      const u = (typeof url === 'string' && /^https?:[/][/]/i.test(url)) ? url : ''
+      return u
+        ? '<a href="' + this._esc(u) + '" target="_blank" rel="noopener noreferrer">' + this._esc(text) + '</a>'
+        : '<span>' + this._esc(text) + '</span>'
+    },
+    cellHtml(t, field) {
+      const L = this.$store.layout
+      switch (field) {
+        case 'marked': {
+          const shown = L.shown('action', 'tenderMark')
+          const who = (t.markedByName || '未知')
+          const title = t.marked
+            ? (who + ' 於 ' + (t.markedAt || '不明時間') + ' 標註．再按一次取消')
+            : '標註這一筆，它會排到清單最上方'
+          return '<span><button class="tr-mark-btn' + (t.marked ? ' on' : '') + '" data-mark="' + this._esc(t.caseNo) + '"'
+            + (shown ? '' : ' style="display:none"')
+            + ' aria-label="' + this._esc(L.label('action', 'tenderMark', '標註')) + '"'
+            + (this.markBusy === t.caseNo ? ' disabled' : '')
+            + ' aria-pressed="' + (t.marked ? 'true' : 'false') + '" title="' + this._esc(title) + '">'
+            + (t.marked ? '⚑' : '⚐') + '</button>'
+            + (t.marked
+              ? '<span class="tr-mark-who">' + this._esc(who + (t.markedAt ? ('．' + t.markedAt.slice(5, 10)) : '')) + '</span>'
+              : '')
+            + '</span>'
+        }
+        case 'org': return '<span>' + this._link(t.url, t.org) + '</span>'
+        case 'name': return '<span>' + this._link(t.url, t.name) + '</span>'
+        case 'caseNo':
+          return '<span><span>' + this._esc(t.caseNo) + '</span><a class="mp1-onmap" style="font-size:11px;margin-left:4px" href="'
+            + this._esc(MotrixRecordLink.mapUrl('tenders', t.caseNo)) + '">在地圖上看</a></span>'
+        // ⚠️ NULL 顯示「—」不是空白：空白分不出「沒有這個欄位」與「沒載好」
+        case 'location': return '<span>' + this._esc(t.location || '—') + '</span>'
+        case 'procurementType': return '<span>' + this._esc(t.procurementType || '—') + '</span>'
+        case 'tenderMethod': return '<span>' + this._esc(t.tenderMethod || '—') + '</span>'
+        // ⚠️ 預算用 === null 判斷：0 元是合法金額
+        case 'budget': return '<span>' + this._esc(t.budget === null ? '未公告' : t.budget.toLocaleString()) + '</span>'
+        case 'publishedAt': return '<span>' + this._esc(t.publishedAt || '—') + '</span>'
+        case 'deadline': return '<span>' + this._esc(t.deadline || '未公告') + '</span>'
+        // ⚠️ 刻意不寫 `!t.matchedWatches ||`：後端保證沒命中是空陣列（P2），多一道防呆會把「後端漏鍵」變成看不見
+        case 'matchedWatches':
+          return '<span>' + (t.matchedWatches.length === 0
+            ? '<span style="color:var(--text-dim)">—</span>'
+            : t.matchedWatches.map(w => '<span class="chip" style="margin:0 3px 3px 0">' + this._esc(w.name) + '</span>').join(''))
+            + '</span>'
+        default:
+          // 版面登記了、卻沒有畫法的欄：不畫（與舊版 x-if 相同），但只吵一次，日後新增欄位漏補 case 才看得到
+          if (!_trWarnedCols.has(field)) { _trWarnedCols.add(field); console.warn('[tender-radar] 欄位「' + field + '」沒有畫法（cellHtml 缺 case），已略過') }
+          return ''
+      }
+    },
+    tbodyHtml() {
+      const L = this.$store.layout
+      // 版面（含個人層偏好）還沒回來之前不畫：否則先用預設欄畫一次 500 列，偏好一到又整個重畫（首載畫兩次，還會洗掉鍵盤焦點）。
+      // 版面載入失敗（failed）或等超過 3 秒（layoutWaitDone）⇒ 照樣畫（公司版面／程式預設），不可以卡空白。
+      if (!(L.ready || L.failed || this.layoutWaitDone)) return ''
+      const cols = L.cols('tenders')
+      const focus = this.focusCase
+      return this.visibleTenders.map(t =>
+        '<tr' + (t.marked ? ' class="tr-marked"' : '') + ' data-case-no="' + this._esc(t.caseNo) + '"'
+        + (focus === t.caseNo ? ' style="outline:2px solid var(--accent);outline-offset:-2px"' : '') + '>'
+        + cols.map(c => '<td data-col="' + this._esc(c.field) + '" style="' + this._esc(this.tenderCellStyle(c.field)) + '">'
+                        + this.cellHtml(t, c.field) + '</td>').join('')
+        + '</tr>').join('')
+    },
+    //: 標註鈕用事件委派（一個監聽器，不是 500 個 @click）
+    onTableClick(ev) {
+      const btn = ev.target && ev.target.closest ? ev.target.closest('button[data-mark]') : null
+      if (!btn) return
+      const t = this.tenders.find(x => x.caseNo === btn.dataset.mark)
+      // 整個 tbody 會重畫（鈕被換成新節點）⇒ 先記下焦點原本在這顆鈕上，重畫後還原（鍵盤／讀屏使用者不掉焦點）
+      if (t) { this._refocusMark = document.activeElement === btn ? t.caseNo : null; this.toggleMark(t) }
+    },
+    //: 重畫完成後把焦點還給同一筆的標註鈕（只在焦點原本就在表內的鈕上時；找不到＝那一筆已不在清單，不亂放）
+    _restoreMarkFocus() {
+      const no = this._refocusMark
+      this._refocusMark = null
+      if (!no) return
+      const cur = document.activeElement
+      if (cur && cur !== document.body && !cur.closest('tbody')) return       // 使用者已經移到別處：不搶
+      for (const b of document.querySelectorAll('tbody button[data-mark]')) {
+        if (b.dataset.mark === no) { b.focus({ preventScroll: true }); return }
+      }
     },
 
     _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },
@@ -642,6 +662,7 @@ function tenderRadarPage() {
         this.markError = '標註失敗：連線不到伺服器'
       } finally {
         this.markBusy = ''
+        this.$nextTick(() => this.$nextTick(() => this._restoreMarkFocus()))   // 等 x-html 重畫完
       }
     },
 
@@ -686,6 +707,7 @@ function tenderRadarPage() {
     async init() {
       if (this._initDone) return
       this._initDone = true
+      setTimeout(() => { this.layoutWaitDone = true }, 3000)   // 版面等太久就照畫（見 tbodyHtml）
       const raw = localStorage.getItem('motrix_session')
       if (!raw) { location.href = 'login.html'; return }
       this.session = JSON.parse(raw)

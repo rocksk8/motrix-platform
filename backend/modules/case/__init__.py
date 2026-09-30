@@ -17,11 +17,12 @@ from modules.case.api import (case_action_items as _api_action_items, case_extra
 
 #: 模組自己的 migration（檔名以版號開頭，不是合法的 import 名稱 ⇒ importlib）
 _m0001 = importlib.import_module("modules.case.migrations.0001_extra_expense_invoice_no")
+_m0002 = importlib.import_module("modules.case.migrations.0002_extra_expense_remit_fee")
 
 MODULE = ModuleSpec(
     key="case",
-    # v1：case_extra_expenses.invoice_no（請款流程，2026-09-27）
-    migrations=[(1, _m0001.up)],
+    # v1：case_extra_expenses.invoice_no（請款流程，2026-09-27）；v2：匯款實付／手續費／差額審核欄位（W1，2026-09-30）
+    migrations=[(1, _m0001.up), (2, _m0002.up)],
     # 與搬遷前 main.py 的掛載順序相同（路由比對順序不變）
     routers=[_api_quotations.router, _api_material_orders.router, _api_extra_expenses.router,
              _api_completion_notes.router, _api_action_items.router],
@@ -57,5 +58,8 @@ MODULE = ModuleSpec(
         ("attachments.for_document", "case"): attachments._CaseAttachments,
         # IP-100：請款待付款（已核准、未登錄付款日的額外支出 ⇒ M05 出納；登錄付款寫回付款日）
         ("payables.pending", "case"): payables._Payables,
+        # IP-102（W1）：匯款差額審核；IP-9：額外支出的匯款手續費列營運報表支出
+        ("remit.reviews", "case"): payables._RemitReviews,
+        ("expense.entries", "remit_fee_case"): payables._expense_entries,
     },
 )

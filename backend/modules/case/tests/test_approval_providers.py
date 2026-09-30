@@ -72,6 +72,7 @@ def test_every_detail_type_has_one_provider(client):
         want.add("shipping_note")
     if source_tree.module_installed("modules/subcontract/"):
         want.add("contractor_voucher")
+        want.add("dispatch_file_delete")     # W1／N1（承攬商報價單附件刪除審核）由外包工班提供
     if source_tree.module_installed("modules/arap/"):
         want |= {"invoice_voucher", "payment_request"}
     got = registry.providers("approval.detail")

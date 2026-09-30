@@ -634,6 +634,24 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ---
 
+## IP-102　`remit.reviews`：匯款差額審核（M04／M01 → M05 出納；多提供者）
+
+W1（2026-09-30 使用者裁示）：出納標記已匯款可填**實付金額、手續費（公司自付，不從受款方扣）、匯款日期**；實付≠應付 ⇒ 照常標記並記錄，單據標「差額待審核」、通知 admin，admin／superadmin 在出納頁核可或退回（退回＝回未匯款／待付款，新欄位與審核狀態清空）。手續費不參與比對。**編號暫定（102），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M04 外包工班：`modules/subcontract/remit.py::_RemitReviews`（名稱 `contractor_voucher`，承攬商匯款單）；M01 案件：`modules/case/payables.py::_RemitReviews`（名稱 `case`，額外支出請款）。`ModuleSpec.providers` |
+| 使用方 | M05 `modules/arap/api/cashier.py`：`GET /api/cashier/remit-reviews`、`POST /api/cashier/remit-reviews/{來源}/{key}/decision`（`{decision: approve｜reject, note}`；只限 admin+；退回必填原因） |
+| 形式 | provider，多提供者、以名稱區分（`registry.providers("remit.reviews")`，依名稱排序合併） |
+| 語法 | `p.pending(conn)` ⇒ `[{key, sourceLabel, quoteNo, customerName, payee, payable, actual, diff, fee, paidAt, paidBy}]`；`p.decide(conn, key, "approve"｜"reject", user, note)` ⇒ `{quoteNo, key, decision}`；查無 ⇒ `LookupError`（404）、不是待審核 ⇒ `ValueError`（409）；帶條件的 UPDATE＋rowcount（兩位主管同按，後到的得 409）。不 commit（呼叫端） |
+| 資料 | 承攬匯款單（`contractor_payment_vouchers`，subcontract migration v1）與額外支出（`case_extra_expenses`，case migration v2）各加 `remit_actual`（NULL＝舊資料，回退應付）、`remit_fee`、`remit_review`（''／pending／approved）、`remit_review_by／at／note`。IP-14 公開形狀加 `payableAmount／remitActual／remitFee／remitDiff／remitReview*`；IP-100 `mark_paid(conn, key, paid_date, user, remit=None)` 多收 `remit`（`actualAmount／hasFee／fee`），並加 `paid(conn, start, end)`（出納執行紀錄用） |
+| 連動 | IP-9 `expense.entries`：`remit_fee_contractor`（M04）、`remit_fee_case`（M01）以**匯款／付款日**列「匯款手續費」支出（權責、現金兩口徑相同）；現金口徑金額改用實付（M01 `recognition.dispatch_entries／extra_entries`，欄位未建或舊資料回退應付）；案件成本：成本精算頁 `settlement.html` 的「額外支出」＝額外支出＋匯款手續費（十二格鍵名不動，另存 `remitFeeTotal`），來源 `GET /api/quotations/{單號}/extra-expenses` 的 `remitFeeTotal` 與 `GET /api/contractor-vouchers/remit-fee-total`；T100：承攬商費用＝實付、手續費另借「匯款手續費支出」（設定 `remitFeeAccount`）、銀行貸方＝實付＋手續費 |
+| 對方不在時 | 沒有提供者 ⇒ `GET` 回 200 `{available:false, notice:…, items:[]}`（明說）；`POST` 404「對應的模組未安裝」 |
+| 契約版本 | 1（2026-09-30） |
+| 守門 | `modules/subcontract/tests/test_remit_fee_2026_09_30.py`、`modules/arap/tests/test_cashier_remit_fee_2026_09_30.py`、e2e `tests/test_e2e_remit_fee_2026_09_30.py` |
+
+---
+
 ## IP-101　`map.overlay`：地圖頁覆蓋層（任何 L2 → L1 地圖頁；首個提供方：lodging）
 
 **狀態：〔更正 2026-09-28 17:48：已實作（E 線 E2，wip/e-lodging-impl）〕~~設計（E 線 E1，2026-09-28；D 審 LG-M1），尚未實作~~。編號暫定（101），列車定號。**

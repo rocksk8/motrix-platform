@@ -1234,6 +1234,7 @@
           if (item.type === 'payment_request') return '請款單'
           if (item.type === 'case_change') return '已結案案件變更'
           if (item.type === 'extra_expense') return '案件額外支出'
+          if (item.type === 'dispatch_file_delete') return '報價單附件刪除'
           // 已核准的額外支出要改內容走這條（DB v76）。標題要跟原單分得開，
           // 否則簽核人不知道自己簽的是「新增一筆」還是「改一筆已核准的」
           if (item.type === 'extra_expense_change') return '額外支出變更'
@@ -1242,6 +1243,7 @@
           // 一致寫「傳票（會計）」，否則簽核人分不出卡片上是哪一種。
           if (item.type === 'voucher') return '傳票（會計）'
           // SPEC-BONUS §十一（2026-09-24）：以案件為中心的獎金分潤
+          if (item.type === 'bonus_award') return '獎金'   // 之前漏了 ⇒ 落到最後一行被標成「報價單」
           if (item.type === 'bonus_case_award') return '獎金分潤'
           // P8（IP-10）：自訂模組單據，標籤用模組名稱
           if (item.type === 'custom_record') return item.moduleName || item.moduleKey || '自訂模組'
@@ -1265,6 +1267,7 @@
           if (item?.type === 'completion_note') return 'sn'
           if (item?.type === 'payment_request') return 'pr'
           if (item?.type === 'case_change') return 'cc'
+          if (item?.type === 'dispatch_file_delete') return 'cv'
           if (item?.type === 'voucher') return 'vo'
           if (item?.type === 'bonus_case_award') return 'pr'
           if (item?.type === 'custom_record') return 'cm'
@@ -1339,7 +1342,7 @@
 
         async previewItem(item) {
           // 額外支出跟已結案變更一樣沒有 PDF 可預覽
-          if (!item || item.type === 'case_change' || item.type === 'extra_expense'
+          if (!item || item.type === 'case_change' || item.type === 'dispatch_file_delete' || item.type === 'extra_expense'
               || item.type === 'extra_expense_change' || item.type === 'bonus_case_award') return
           this.previewFetching = true
           try {
@@ -1643,6 +1646,8 @@
             ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/approve`
             : item.type === 'extra_expense_change'
             ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/change-request/approve`
+            : item.type === 'dispatch_file_delete'
+            ? `${API}/api/contractor-dispatches/${item.dispatchId}/files/${encodeURIComponent(item.fileId)}/delete-approve`
             : `${API}${this.apiBase(item)}/${encodeURIComponent(this.itemPathId(item))}/approve`
           const tiers = item.tiers || []
           const isMultiTier = tiers.length > 0
@@ -1775,6 +1780,8 @@
               ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/change-request/reject`
               : item.type === 'extra_expense'
               ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/reject`
+              : item.type === 'dispatch_file_delete'
+              ? `${API}/api/contractor-dispatches/${item.dispatchId}/files/${encodeURIComponent(item.fileId)}/delete-reject`
               : isVoucherType
               ? `${API}${this.apiBase(item)}/${encodeURIComponent(this.itemPathId(item))}/send-back`
               : `${API}${this.apiBase(item)}/${encodeURIComponent(this.itemPathId(item))}/reject`

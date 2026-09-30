@@ -393,15 +393,24 @@ def case_summary(conn, user, quote_nos=None, *, purpose=None) -> list:
     wide = not system and case_summary_scope(user, purpose) == "all"
     # deal_tag 不用 SQL_DEAL_TAG（json_extract）：一張 data_json 壞掉 ⇒ 整個查詢丟例外（詳情 500、傳票案件清單整支壞；
     # 稽核 D AL2-M2）⇒ 欄位與 data_json 分開取、在 Python 逐筆補
-    cols = "quote_no, customer_name, project_name, status, deal_tag, data_json AS _dj, " + _CASE_VIS_COLS
+    # 效能（W3 approval-freeze：200 張待簽、每張 data_json 約 60KB 時，這一支佔待簽佇列 300 ms 中的 260 ms——把整份 data_json 撈進
+    # Python 再 json.loads 只為了取 dealTag）：欄位空時由 SQLite 直接取 `$.dealTag`（巢狀 CASE：json_valid 為假就不執行 json_type，
+    # 壞 JSON 不會讓整個查詢丟例外）；壞 JSON、dealTag 不是字串、或任何拿不準的形狀 ⇒ `_dt_fast` 為 NULL ⇒ 才把 data_json 撈回來，
+    # 走下面照舊的 Python 解析（語意不變：壞的那一筆 ⇒ ""＋ERROR）。
+    fast = ("CASE WHEN COALESCE(deal_tag,'')<>'' THEN NULL WHEN json_valid(data_json) THEN "
+            "CASE WHEN json_type(data_json,'$.dealTag') IS NULL OR json_type(data_json,'$.dealTag')='null' THEN '' "
+            "WHEN json_type(data_json,'$.dealTag')='text' THEN json_extract(data_json,'$.dealTag') END END")
+    inner = "SELECT id, quote_no, customer_name, project_name, status, deal_tag, data_json, %s, %s AS _dt_fast FROM quotations" % (_CASE_VIS_COLS, fast)
+    cols = ("quote_no, customer_name, project_name, status, deal_tag, _dt_fast, " + _CASE_VIS_COLS
+            + ", CASE WHEN COALESCE(deal_tag,'')='' AND _dt_fast IS NULL THEN data_json END AS _dj")
     if quote_nos is None:
-        rows = conn.execute("SELECT %s FROM quotations ORDER BY id DESC" % cols).fetchall()
+        rows = conn.execute("SELECT %s FROM (%s) ORDER BY id DESC" % (cols, inner)).fetchall()
     else:
         qs = [str(x) for x in quote_nos]
         if not qs:
             return []
-        rows = conn.execute("SELECT %s FROM quotations WHERE quote_no IN (%s) ORDER BY id DESC"
-                            % (cols, ",".join("?" * len(qs))), qs).fetchall()
+        rows = conn.execute("SELECT %s FROM (%s WHERE quote_no IN (%s)) ORDER BY id DESC"
+                            % (cols, inner, ",".join("?" * len(qs))), qs).fetchall()
     if wide:
         return [{k: r[k] or "" for k in SUMMARY_LINK_FIELDS} for r in rows]
     return [{"quote_no": r["quote_no"], "customer_name": r["customer_name"] or "",
@@ -414,6 +423,8 @@ def _deal_tag_of(r) -> str:
     """同 `SQL_DEAL_TAG`（欄位優先，pre-v6 的列退回 data_json.dealTag），但逐筆解析：壞的那一筆 ⇒ ""＋ERROR（寫單號不寫內容）。"""
     if r["deal_tag"]:
         return r["deal_tag"]
+    if r["_dt_fast"] is not None:                # SQLite 已從合法 JSON 取出（見 case_summary）
+        return r["_dt_fast"]
     try:
         d = json.loads(r["_dj"] or "{}")
     except (TypeError, ValueError):

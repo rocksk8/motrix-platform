@@ -465,12 +465,19 @@ function voucherPage() {
     //: 從來源帶入一筆憑證。**只送 (type, docNo, fileId)**。
     //: ☠️ 送路徑等於開一個任意檔案讀取 —— 路徑由後端自己組。
     async bringIn(it) {
+      // W2 稽核 S2：自動存檔期間 `uploading` **保持 true**（原本先放掉再拿回來 ⇒ 存檔中按鈕重新可點，
+      // 雙擊會出現「傳票尚未儲存」的假錯誤、第二次的 finally 還會提早解鎖）；使用者正在按「儲存」（busy）時也不插進來。
+      if (!it || this.uploading || this.busy) return
       this.attErr = ''
       this.attMsg = ''
-      if (!this.id || !it) return
-      if (this.uploading) return
       this.uploading = true
       try {
+        // 新傳票還沒有 id：附件掛在傳票（id）上，後端契約不動 ⇒ 先自動存成草稿再帶入
+        // （以前這裡靜默 return ⇒ 按了「帶入附件」沒反應）。存不成功就把 save() 的原因顯示在附件區，不繼續。
+        if (!this.id) {
+          await this.save()
+          if (!this.id) { this.attErr = '傳票尚未儲存，無法帶入附件：' + (this.actionErr || '請先按「儲存草稿」。'); return }
+        }
         const r = await fetch('/api/vouchers/' + this.id + '/attachments', {
           method: 'POST',
           headers: this._jsonAuth(),

@@ -1474,6 +1474,19 @@
                              :value="numShown(item.cost, $el, 'cost-' + item.id)" :class="{'num-bad': badNum['cost-' + item.id]}" placeholder="0"
                              @blur="$el.value = numShown(item.cost, $el, 'cost-' + item.id, true)"
                              @input="if (!setNumField(item, 'cost', 'cost-' + item.id, $event.target.value)) return; if(item.unitPriceOverride && item.unitPrice > 0 && item.cost > 0) item.margin = parseFloat((1 - item.cost * 1.05 / item.unitPrice).toFixed(4)); calcItem(item); setDirty(); checkApproval()">
+                      <!-- N1：報價成本與承攬商報價「消底」——帶入為預設、兩邊不一致標差額；案件成本仍以承攬商實際派工金額計，不重複計 -->
+                      <template x-if="vendorQuoteOpts.length">
+                        <div style="margin-top:3px">
+                          <select class="cell-input" style="font-size:10px;padding:1px 2px" data-testid="vq-pick"
+                                  :value="item.vendorQuoteRef || ''" @change="applyVendorQuote(item, $event.target.value); $event.target.value = item.vendorQuoteRef || ''">
+                            <option value="">帶入承攬商報價…</option>
+                            <template x-for="o in vendorQuoteOpts" :key="o.key"><option :value="o.key" x-text="o.label"></option></template>
+                          </select>
+                          <div x-show="vendorQuoteDiff(item) !== null && vendorQuoteDiff(item) !== 0" data-testid="vq-diff"
+                               style="font-size:10px;color:var(--danger);font-weight:600"
+                               x-text="vendorQuoteDiffText(item)"></div>
+                        </div>
+                      </template>
                     </td>
                   </template>
                   <template x-if="showCostCols && item.type !== 'header'">
@@ -2165,7 +2178,7 @@
   // V3.9（2026-09-26，X-VAT）：金額／稅額改用 static/legal-round.js 四捨五入（與後端一致；小數數量、負數不再差 1 元）
   // V3.10（2026-09-26，個資蒐集告知；列車上改號，V3.9 已被 X-VAT 使用）：聯絡人下方加告知區塊（列印告知書、已告知紀錄）
   // V3.11（2026-09-28，H10 品牌設定；第十四班列車補號）：分頁圖示改讀 /api/system/branding/favicon
-  const FORM_VERSION = 'V3.11'
+  const FORM_VERSION = 'V3.12'
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
   // 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：內容在
@@ -2181,6 +2194,7 @@
       showCostCols: true,
       isDirty: false,
       lastSaved: null,
+      vendorQuoteOpts: [],    // N1：該案承攬商報價品項（派工單），供成本欄逐項帶入
       _lastUpdatedAt: null,   // 樂觀鎖：loadQuote() 讀入、apiSave() 送出比對、成功後更新
       _saveConflict: false,  // apiSave() 收到 409 時設 true，saveDraft() 據此提示使用者
       previewMode: null,
@@ -3449,6 +3463,48 @@
         }
       },
 
+      // N1：載入該案的承攬商報價品項（取消的派工不列）；沒有權限或沒有派工 ⇒ 空清單，成本欄不出現帶入選單
+      async loadVendorQuoteOpts() {
+        this.vendorQuoteOpts = []
+        if (!this.q.quoteNo) return
+        try {
+          const r = await fetch(`${this.API}/contractor-dispatches?quote_no=${encodeURIComponent(this.q.quoteNo)}`,
+            { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) return
+          const out = []
+          for (const d of await r.json()) {
+            if (d.status === 'cancelled') continue
+            for (const it of (d.items || [])) {
+              const unit = Number(it.unitPrice) || (Number(it.qty) ? (Number(it.amount) || 0) / Number(it.qty) : 0)
+              out.push({ key: d.id + ':' + it.id, unitPrice: MotrixLegalRound.halfUp(unit * 100) / 100,
+                         label: (d.vendorName || '承攬商') + '｜' + (it.description || '（無說明）') + '｜單價 ' + unit.toLocaleString() })
+            }
+          }
+          this.vendorQuoteOpts = out
+        } catch (e) { /* 帶入是輔助功能，失敗不擋報價單 */ }
+      },
+      applyVendorQuote(item, key) {
+        const o = this.vendorQuoteOpts.find(x => x.key === key)
+        if (!o) { item.vendorQuoteRef = ''; return }
+        item.vendorQuoteRef = o.key
+        item.cost = o.unitPrice
+        if (item.unitPriceOverride && item.unitPrice > 0 && item.cost > 0) item.margin = parseFloat((1 - item.cost * 1.05 / item.unitPrice).toFixed(4))
+        this.calcItem(item); this.setDirty(); this.checkApproval()
+      },
+      vendorQuoteDiffText(item) {
+        const d = this.vendorQuoteDiff(item)
+        if (d === null || d === 0) return ''
+        return '與承攬商報價差 ' + (d > 0 ? '+' : '') + d.toLocaleString() + ' 元（未稅，單價差 × 數量 ' + (item.qty || 0) + '）'
+      },
+      // 報價成本與所帶入承攬商報價的**總差額**（沒帶入 ⇒ null；一致 ⇒ 0）＝（成本單價 − 承攬商未稅單價）× 報價品項數量。
+      // 口徑：報價單成本欄是未稅單位成本（毛利公式另外加 5% 不可扣抵進項稅），承攬商報價品項單價也是未稅（稅另在派工單稅率）⇒ 兩邊同為未稅，可直接相減。
+      vendorQuoteDiff(item) {
+        if (!item.vendorQuoteRef) return null
+        const o = this.vendorQuoteOpts.find(x => x.key === item.vendorQuoteRef)
+        if (!o) return null
+        return MotrixLegalRound.halfUp(((Number(item.cost) || 0) - o.unitPrice) * (Number(item.qty) || 0))
+      },
+
       async loadQuote() {
         const res = await fetch(`${this.API}/quotations/${encodeURIComponent(this.q.quoteNo)}`,
           { headers: { Authorization: 'Bearer ' + this.session.token } })
@@ -3464,6 +3520,7 @@
         this._fillMissingTerms(row.data)
         this.q.quoteNo = row.data.quoteNo || this.q.quoteNo
         this._lastUpdatedAt = row.updated_at || null
+        this.loadVendorQuoteOpts()
         // 同時編輯警示（2026-09-14）：載到哪一張就回報哪一張，有別人在編會跳警示條
         if (window.MotrixPresence) window.MotrixPresence.start('quotation', this.q.quoteNo)
         // 存檔版本清單（2026-09-14）。這是載入報價單的**第二條路徑**，跟 init()
@@ -3912,6 +3969,7 @@
                 if (matched) this.q.salesPersonUsername = matched.username
               }
               this._lastUpdatedAt = row.updated_at || null
+              this.loadVendorQuoteOpts()          // N1：`?id=` 載入路徑也要載入承攬商報價品項（與 loadQuote() 是兩條路徑）
               loaded = true
               // 同時編輯警示（2026-09-14）：編輯模式一載入就回報，有別人在編會跳警示條。
               // ⚠️ 這裡是 `?id=` 的載入路徑，跟 loadQuote() 是兩條——當初只在 loadQuote()

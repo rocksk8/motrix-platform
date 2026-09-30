@@ -277,7 +277,7 @@ case-batch XLSX（quotations.py:6004）、承攬人員 XLSX（contractors.py:230
    〔CG2-S3 補前提〕以下一律視為**拒絕**（不可當成通過）：預檢行程丟例外／非零結束／逾時（上限 60 秒）／輸出不是預期的一行 JSON；結果 `configured: null`（`status_error`）。
    `-Force`（版本比對用）**不略過**預檢。~~真的要略過另開 `-SkipCompanySetupPreflight`，只准人工使用、`::RESULT::` 帶 `company_preflight=skipped`、並寫系統稽核。~~
    〔更正 CG3-M1（D bfdb5003 §5，主持裁示）：正式機 ps1 **沒有任何略過預檢的參數**。理由：套用後 status 會自動回滾、§4.3 的 72 小時放行已涵蓋「先升級後補設定」、預檢壞了要修工具重出包（跳過＝〈降級之後它還是會動〉）；儀表板以 `-Yes` 呼叫擋不住「只准人工」；`::RESULT::` 多一個欄位會動到出口值域。〕
-   正式機 Claude 指示寫明各代碼的處置（`developer_identity_unsigned` ⇒ 先做 6.2 的簽章檔；`fields_invalid` ⇒ 先在舊版設定頁補欄位）。
+   正式機 Claude 指示寫明各代碼的處置（~~`developer_identity_unsigned`~~〔更正 2026-09-29：開發者身分的庫還沒有確認紀錄時預檢是 `no_record`＋`developer: true`，`developer_identity_unsigned` 只在已有紀錄、簽章檔無效時出現；兩者處置相同，同 §6.7(a) 第 2 步的更正；apply_update.ps1 拒絕訊息的字面另案〕 ⇒ 先做 6.2 的簽章檔；`fields_invalid` ⇒ 先在舊版設定頁補欄位）。
 2. **套用後自動健檢**：`/api/ping` 通過之後，再執行 `company_setup_cli.py status --db … --root …`（本機、免登入、直接讀庫與識別檔，**不開新的網路端點**）。
    未設定（且無有效放行）**或 `configured: null`（判定失敗）或 CLI 當掉／逾時** ⇒ 與 ping 失敗同級：**自動回滾**，`::RESULT::` 帶原因〔CG2-S3：新版上線即全公司停止輸出文件，等同故障〕。
 3. **手動套用也要先複製 tools**（CG2-S3）：UPDATE-DELIVERY §3.4 步驟 2 先把包內 `backend/tools/*` 複製到安裝目錄再執行 `apply_update.ps1`——預檢與 `ensure-install-id` 是新版 tools 的一部分；正式機 Claude 指示與更新步驟檔都寫明，漏了這步＝舊版 ps1 不會做預檢。
@@ -317,7 +317,7 @@ h-branding 守「**程式碼**不含本公司字面值」＋「單據與頁面�
    python <staging>\<包名>\backend\tools\company_setup_cli.py preflight --db <安裝目錄>\backend\motrix_erp.db --root <安裝目錄>
    ```
    - 第一行輸出一行 JSON：`{"created": true|false, "install": "<64 碼十六進位>", "ok": true}`。`install` 就是安裝識別雜湊（不是秘密；是這個安裝目錄的隨機識別，不含任何機器資訊）。
-   - 第二行是**唯讀**預檢（在正式庫的記憶體副本上模擬，正式庫一個位元組都不動）。預期 `allowed: false`、`reason: "developer_identity_unsigned"`（正式機的公司資料是開發者的、還沒有簽章檔）；同時看 `payment_bank_missing` 應為 `[]`（E4S3-S1；非空 ⇒ 先在舊版設定頁補匯款欄位）。
+   - 第二行是**唯讀**預檢（在正式庫的記憶體副本上模擬，正式庫一個位元組都不動）。預期 `allowed: false`、~~`reason: "developer_identity_unsigned"`~~〔更正 2026-09-29：沒有確認紀錄的開發者庫 `reason` 是 **`no_record`**，同時 `developer: true`；`status()` 先判「有沒有紀錄」，沒有紀錄就回 `no_record`，`developer_identity_unsigned` 只在「已有紀錄、但簽章檔無效」時出現（`helpers/company_setup.py` `status()`；正式機 2026-09-29 04:20 實測 no_record／developer:true，RUN-PLAN §6 T21-2）〕（正式機的公司資料是開發者的、還沒有簽章檔）；同時看 `payment_bank_missing` 應為 `[]`（E4S3-S1；非空 ⇒ 先在舊版設定頁補匯款欄位）。
 3. 把兩行的輸出原樣寫回開發機：`G:\我的雲端硬碟\MOTRIX-交付\正式機回報\<yyyyMMdd_HHmm>_<正式機 commit>_install-id\install_id.json`（兩行 JSON 各一行）。
 4. ⚠ 從這一步到套用之間，**不要**用舊版 apply_update／rollback 套任何別的包：舊版腳本的 robocopy 沒有排除 `.install_identity`，會把它刪掉 ⇒ 下次重建的雜湊不同 ⇒ (b) 簽的檔失效（預檢會拒絕，不會停擺，但要重做 (a)(b)）。
 
@@ -339,7 +339,8 @@ D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe backend\tools\company_setup_cli.p
 **(c) 正式機：取用確認檔**
 1. 把 (b) 的檔複製到 `<安裝目錄>\backend\company_confirmation.sig`（檔名固定）。
 2. 再跑一次 (a) 的 `preflight`：預期 `allowed: true`、`reason: "configured"`、`via: "upgrade_backfill"`（模擬升級時自動補確認紀錄）。不是 ⇒ 不套用，把輸出回報開發機（`install_mismatch`＝雜湊不同，重做 (a)(b)；`signed_file_expired`＝重簽）。
-3. 預檢通過後，**刪除交付資料夾裡的那一份**（`G:\我的雲端硬碟\MOTRIX-交付\company-confirmation\<…>\`）：確認檔只經交付資料夾傳遞、用完刪除（D SG-S1；檔案本身不是秘密，公開可驗、只綁這一個安裝）。
+3. 預檢通過後，~~**刪除交付資料夾裡的那一份**~~〔更正 2026-09-29：改為**請使用者手動刪除**交付資料夾裡的那一份；正式機 Claude **不自己刪**——第二十一班上線時（RUN-PLAN §6 2026-09-29 04:37 紀錄）正式機 Claude 刪雲端確認檔被正式機安全檢查拒絕（Irreversible Local Destruction），主持裁示留給使用者手動刪、不由任何 Claude 代刪（RUN-PLAN §6 T21-3）。正式機 Claude 的做法：把要刪的完整路徑唸給使用者、請使用者自己刪，再問使用者刪了沒〕（`G:\我的雲端硬碟\MOTRIX-交付\company-confirmation\<…>\`）：確認檔只經交付資料夾傳遞、用完刪除（D SG-S1；檔案本身不是秘密，公開可驗、只綁這一個安裝）。
+   - 〔新增 2026-09-29，T21-3〕寫回 `正式機回報\<…>\` 的回報摘要**加一欄「使用者是否已刪雲端確認檔」**：`是`（使用者說已刪）／`否`（使用者說還沒刪或不刪，附原因）／`未確認`（沒問到或使用者沒回）；填 `否`／`未確認` 時同時寫出那個資料夾的完整路徑，讓開發機把它列進使用者待辦。這一欄不影響是否套用：確認檔本身不是秘密，留在雲端只是沒清乾淨，不是阻斷條件。
 4. 之後照一般流程套用更新包（apply_update.ps1 自己也會在停服前再跑一次這個預檢，並在 log 印 `::NOTE:: company_bank=ok`）。
 
 **(d) 演練（apply-run 演練目錄；兩條都演）**
@@ -349,7 +350,7 @@ D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe backend\tools\company_setup_cli.p
   3. 驗：`company_setup_cli.py status --db <演練庫> --root <演練目錄>` ⇒ `configured: true`、`via: "settings_page"`；報價單 PDF、請款單 PDF 200；側欄完整；改公司名按一般「儲存」⇒ 出現「儲存並確認」（CG5-S1）。
   4. 反向：刪 `<演練目錄>\backend\.install_identity` ⇒ 重啟 ⇒ `install_mismatch`、428、log 有 ERROR＋告警 ⇒ 最高管理員重新確認即恢復。
 - **路徑二：開發者簽章路徑**（演練庫放「公司資料為開發者身分」的庫：開發機既有的演練庫形狀，**不用正式機資料**）
-  1. 對演練目錄做 (a) ⇒ 預檢 `developer_identity_unsigned`＋`install`。
+  1. 對演練目錄做 (a) ⇒ 預檢 ~~`developer_identity_unsigned`~~〔更正 2026-09-29：`no_record`＋`developer: true`，理由同 (a) 第 2 步的更正〕＋`install`。
   2. 做 (b)，`--install` 用演練目錄的值、`--days 7`、`--out` 放演練目錄旁的暫存位置（演練用檔，用完刪）。
   3. 做 (c) ⇒ 預檢 `configured`／`upgrade_backfill` ⇒ 用 apply_update.ps1 套第二十一班包 ⇒ `::RESULT::` status=success、log 有 `::NOTE:: company_bank=…`；套用後 status `configured`；登入無導頁；報價單 PDF 200。
   4. 反向：刪簽章檔重啟 ⇒ 428 ⇒ `company_setup_cli.py grace --root <演練目錄> --hours 72 --reason "演練"` ⇒ 恢復、橫幅出現、稽核有；把放行檔的 `until` 手改成 80 小時 ⇒ 有效期仍以伺服器第一次看到的時間＋72 小時為準。

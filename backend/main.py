@@ -7,6 +7,51 @@ import time
 import logging
 from datetime import datetime
 
+# ── 啟動逐步耗時（T21-1，2026-09-29）──────────────────────────────────────────
+# 正式機啟動到健檢通過從 3～4 秒變 14 秒（server.log 的 CORS 行 → GEO 行 11.2 秒），而 log 分不出是哪一段。
+# 每段結束呼叫一次 `_startup_step(名稱)` ⇒ 一行 `STARTUP_STEP <名稱> <毫秒>ms`（距上一段結束）；
+# 最後 `_startup_total()` ⇒ `STARTUP_TOTAL <毫秒>ms steps=<段數>`（距 main.py 開始執行；不含 Python／uvicorn 本身載入）。
+# 查法：`Select-String -Path logs\server.log -Pattern 'STARTUP_'`（格式固定，守門 tests/platform/test_startup_timing_2026_09_29.py）。
+# ⚠️ 只記錄，不改任何啟動行為、順序、例外處理；記錄本身出錯一律吞掉——診斷不可以變成起不來的理由（同 BR1）。
+# ⚠️ `logging.basicConfig` 之前的段（import）先暫存，root 有 handler 之後才一起印（uvicorn 只設它自己的 logger，
+#    basicConfig 之前印的 INFO 會被丟掉）。
+# ⚠️ 不可以放進 `if MOTRIX_DISABLE_SCHEDULERS` 區塊裡：test_geocode_warm_async 逐字執行那個區塊（不認得的名字 ⇒ NameError）。
+_STARTUP_T0 = time.monotonic()
+_STARTUP_LAST = [_STARTUP_T0]
+_STARTUP_PENDING = []
+_STARTUP_COUNT = [0]
+
+
+def _startup_flush():
+    if not logging.getLogger().handlers:
+        return
+    log = logging.getLogger(__name__)
+    while _STARTUP_PENDING:
+        log.info("%s", _STARTUP_PENDING.pop(0))
+
+
+def _startup_step(name):
+    """記一段啟動耗時（距上一段結束）。不丟例外。"""
+    try:
+        now = time.monotonic()
+        _STARTUP_PENDING.append("STARTUP_STEP %s %dms" % (name, int(round((now - _STARTUP_LAST[0]) * 1000))))
+        _STARTUP_LAST[0] = now
+        _STARTUP_COUNT[0] += 1
+        _startup_flush()
+    except Exception:                                        # noqa: BLE001
+        pass
+
+
+def _startup_total():
+    """最後一行：main.py 開始執行到現在的總耗時。不丟例外。"""
+    try:
+        _STARTUP_PENDING.append("STARTUP_TOTAL %dms steps=%d" % (
+            int(round((time.monotonic() - _STARTUP_T0) * 1000)), _STARTUP_COUNT[0]))
+        _startup_flush()
+    except Exception:                                        # noqa: BLE001
+        pass
+
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,6 +73,7 @@ import trail
 from helpers import licensing as license_core
 from helpers import geo as geo_core
 from core import loader as module_loader, pages as module_pages, registry as module_registry
+_startup_step("import_core")
 # L1：GCIS 與 /api/now（M08 搬遷 ②）；註解不寫在 import 行尾（test_router_registration 以行解析 import，第六班列車全量抓到）
 from routers import company_lookup
 from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, approval_delegates, approval_queue, licensing, map_points
@@ -39,6 +85,7 @@ from routers import legal_params
 from routers import mail_settings
 from routers import platform_menu
 from routers import platform_catalog
+_startup_step("import_routers")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -52,6 +99,7 @@ logger = logging.getLogger(__name__)
 # 這一段在 helpers/module_startup.py（乾跑 migration、V9→新版轉換也要先載模組，模組 migration 才會登記；CORE 1.58）。
 from helpers import module_startup as _module_startup
 _module_startup.load_modules_like_startup()
+_startup_step("load_modules")
 
 from core import paths as _paths
 FRONTEND_DIR = _paths.FRONTEND_DIR
@@ -121,6 +169,7 @@ try:
 except Exception as _e:                                  # noqa: BLE001
     # 取版本是**診斷**不是功能 —— 它不可以變成伺服器起不來的理由。
     logger.warning("BR1 啟動版本資訊不可得：%s", type(_e).__name__)
+_startup_step("build_info")
 
 _cors_origins = _resolve_cors_origins()
 logger.info(
@@ -135,6 +184,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+_startup_step("app_cors")
 
 _PUBLIC_API_PATHS = {
     "/api/auth/login", "/api/auth/login/totp", "/api/auth/logout",
@@ -672,6 +722,7 @@ async def _unhandled_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": "伺服器發生內部錯誤，請聯絡管理員"},
     )
+_startup_step("middleware_setup")
 
 
 # ── Startup ───────────────────────────────────────────────────────────────────
@@ -682,10 +733,14 @@ async def _unhandled_handler(request: Request, exc: Exception):
 import db as _db_for_guard
 if _db_for_guard.DB_PATH == _paths.DB_PATH:
     _paths.require_db(_db_for_guard.DB_PATH)
+_startup_step("require_db")
 init_db()
+_startup_step("init_db_main")
 init_db(DEMO_DB_PATH)
+_startup_step("init_db_demo")
 # 模組 migration 沒完成（回原因）的模組：改記 failed、路由不掛（稽核 A AB-S3；要在 mount_modules 之前）
 _module_startup.fail_incomplete_modules(_db_for_guard.DB_PATH, DEMO_DB_PATH)   # 主庫決定上下線（AB-S7）
+_startup_step("fail_incomplete_modules")
 # S-CD02：部分損毀的主庫照常啟動（init_db 不會發現）⇒ 啟動時做一次 quick_check，
 # 不通過 ⇒ ERROR 告警（寄信、BACKUP_ALERT、audit；升級預檢會因告警而擋）。不擋啟動：營運不中斷。
 def _startup_integrity_check():
@@ -704,6 +759,7 @@ def _startup_integrity_check():
 
 
 _startup_integrity_check()
+_startup_step("integrity_check")
 
 
 def _startup_company_setup():
@@ -722,11 +778,17 @@ def _startup_company_setup():
 
 
 _startup_company_setup()
+_startup_step("company_setup")
 init_default_admin()
+_startup_step("init_default_admin")
 init_demo_account()
+_startup_step("init_demo_account")
 flag_weak_passwords()
+_startup_step("flag_weak_passwords")
 init_unlock_passwords()
+_startup_step("init_unlock_passwords")
 _cleanup_sessions()
+_startup_step("cleanup_sessions")
 
 # ── 背景排程（2026-09-14 起可停用）────────────────────────────────────────────
 #
@@ -775,6 +837,7 @@ if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
     geo_core.schedule_geocode_warm()
 else:
     logger.info("MOTRIX_DISABLE_SCHEDULERS=1 —— 已略過所有背景排程（測試模式）")
+_startup_step("schedulers")
 
 # ── 標案雷達：只記「開著」那一側 ──────────────────────────────────────────────
 #
@@ -804,10 +867,14 @@ else:
 if geo_core.geo_on():
     logger.info("MOTRIX_GEO=1 —— 地址定位已開，"
                 "這台機器會對外連線（OpenStreetMap／Nominatim）")
+_startup_step("geo_notice")
 
 _prune_login_locks()
+_startup_step("prune_login_locks")
 auth.init_rate_limiting()
+_startup_step("init_rate_limiting")
 _sync_module_versions()
+_startup_step("sync_module_versions")
 
 
 # ── Routers ───────────────────────────────────────────────────────────────────
@@ -835,6 +902,7 @@ app.include_router(legal_params.router)
 app.include_router(mail_settings.router)
 app.include_router(platform_menu.router)
 app.include_router(platform_catalog.router)
+_startup_step("include_routers")
 
 # ── L2 模組：路由、排程、啟動提示（STATES-PLATFORM P-LD-07）──────────────────────
 # 🔴 必須在**所有** L1 include_router 之後、StaticFiles 之前：同方法同路徑的兩條路由都會掛上、
@@ -843,17 +911,21 @@ app.include_router(platform_catalog.router)
 # 頁面衝突比照路由衝突（階段 C／C1）：**在 mount_modules 之前**檢查，衝突的模組改記 failed ⇒ 路由、排程都不掛。
 _PAGE_MAP = module_pages.check_and_register(module_loader.MODULES_DIR, _paths.FRONTEND_PAGES_DIR)
 platform_menu.set_page_map(_PAGE_MAP)          # /api/platform/menu 的完整 pageModules（登入後；C4-O3）
+_startup_step("page_map")
 module_loader.mount_modules(app)
+_startup_step("mount_modules")
 if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
     # 例：標案雷達；關著時 run_scan() 立刻返回、不對外連線。只跑 registry.loaded() 的
     # （停用／未授權不 import、路由衝突已 unload ⇒ 不跑）；子行程守門呼叫同一個函式驗證。
     module_loader.start_schedulers()
+_startup_step("module_schedulers")
 # B55（稽核 D DB-S4）：這次啟動的模組載入結果 ⇒ logs/module_states.json（單模組更新的健檢讀它）。
 # 〔稽核 D DB5-S1：**不綁排程閘門**——以 MOTRIX_DISABLE_SCHEDULERS=1 啟動的安裝（例：演練）也要寫，否則健檢會把
 #   「沒有狀態檔」誤判成「模組沒載入」（同第十六班事故：演練與正式機條件不同）。只在 pytest 之下不寫（不寫進 repo 的 logs/）；
 #   檔內另記 schedulers_disabled，讓健檢說得出原因〕
 if "pytest" not in __import__("sys").modules:
     module_loader._write_module_states(os.path.join(_paths.LOGS_DIR, "module_states.json"))
+_startup_step("module_states_file")
 # ⚠️ 啟動提示**不可以**放進排程閘門：「這台機器會不會對外連線」與排程開不開無關（理由見上面「標案雷達：
 #    只記開著那一側」）。
 for _m in module_registry.loaded():
@@ -861,6 +933,7 @@ for _m in module_registry.loaded():
         _msg = _notice()
         if _msg:
             logger.info(_msg)
+_startup_step("startup_notices")
 
 
 # ── 頁面（階段 C／C1，core.pages）──────────────────────────────────────────────
@@ -909,3 +982,5 @@ def root():
 
 
 app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+_startup_step("page_and_static_routes")
+_startup_total()
