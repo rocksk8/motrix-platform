@@ -26,9 +26,10 @@ READY = frozenset({"engine_drafts"})            # 2026-09-30 主持裁示：401 
 
 
 def flags(conn):
-    """回 `{鍵: bool}`（沒有紀錄＝關）。"""
+    """回 `{鍵: bool}`（沒有紀錄＝關）。🔴 **有效值＝紀錄開著 且 在 READY 裡**：這是所有功能檢查的唯一入口（端點、頁籤、清單都讀這裡），
+    所以殘留的 `feature.x=1`（舊版開過、之後降回『開發中』）不會讓未出貨的功能又開起來（W3 交叉驗證 2026-09-30）。"""
     on = {r[0][len(_PREFIX):]: r[1] == "1" for r in conn.execute("SELECT key, value FROM gl_settings WHERE key LIKE 'feature.%'")}
-    return {k: bool(on.get(k)) for k in FEATURES}
+    return {k: bool(on.get(k)) and k in READY for k in FEATURES}
 
 
 def set_flag(conn, key, enabled):

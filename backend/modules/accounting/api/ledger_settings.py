@@ -45,8 +45,11 @@ def fs_lines(authorization: str = Header(None)):
 
 @router.patch("/fs-lines/{code}")
 def patch_fs_line(code: str, body: dict = Body(...), authorization: str = Header(None)):
-    """可改：label、sort、is_active、note。列代碼固定（報表程式依代碼取數）。停用仍有科目歸屬的列要先說明（回 409）。"""
-    _require_settings_write(authorization)
+    """可改：label、sort、is_active、note。列代碼固定（報表程式依代碼取數）。停用仍有科目歸屬的列要先說明（回 409）。
+    B：報表列設定只有最高管理者。"""
+    _user = _require_user(authorization)
+    if _user.get("role") != "superadmin":
+        raise HTTPException(403, "只有最高管理者（會計主管）可以修改報表列設定。")
     b = body or {}
     fields = {k: b[k] for k in ("label", "sort", "is_active", "note") if k in b}
     if not fields:

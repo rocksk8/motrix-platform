@@ -959,6 +959,9 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
              rm["actual"], rm["fee"], rm["review"], voucher_no)
         )
         if linked_slips:                                   # R12：連結的勞報單一併記為已付款（同一個交易）
+            # ⚠ 跨模組寫入連結（M04 → M07）：這裡改的是**薪資模組的資料**（payslips：status／payment_date／paid_by／data_json.paid_via_remit），
+            #   經 IP-105 `payslip.remit`，與本匯款單同一個連線、同一次 commit；反向在下面 unpay 的 unmark_paid。
+            #   登記：docs/platform/MONEY-FLOWS.md §9 列 W-1；守門：accounting/tests/test_ledger_r12_remit_payslip_2026_09_30.py。
             registry.single_provider("payslip.remit").mark_paid(conn, linked_slips, voucher_no, paid_at_value,
                                                                 user.get("display_name") or user["username"])
     else:
@@ -969,6 +972,7 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
         )
         prov = registry.single_provider("payslip.remit")
         if prov is not None:                               # R12：由這張匯款單付款的勞報單一併退回已簽回
+            # ⚠ 跨模組寫入連結（M04 → M07）：同上（MONEY-FLOWS §9 W-1）；只退回 data_json.paid_via_remit＝本匯款單號的勞報單。
             prov.unmark_paid(conn, voucher_no)
     conn.commit()
     conn.close()

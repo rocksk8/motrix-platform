@@ -48,9 +48,10 @@
 
 ## 4. 功能旗標與設定
 
-- **營業稅 401**（`tax401`）：`GET /api/ledger/tax401` 由已過帳分錄（稅碼＋科目類別）彙總，不另讀單據；對帳＝稅額科目、與 arap 發票逐項；`POST …/settlement` 產生期末稅額結轉草稿（E14）。**扣繳清單**（`withholding`）：引擎產生 E06 草稿時記入 `gl_withholding_items`，`GET /api/ledger/withholding`、`POST …/withholding/remit`。新來源若有稅額，事件行/事件要帶稅碼（OUT-*／IN-*），401 才抓得到。
+- **營業稅 401**（`tax401`；欄位代號逐一對照官方，見 `TAX401-OFFICIAL-FIELDS.md`）：`GET /api/ledger/tax401` 由已過帳分錄（稅碼＋科目類別）彙總，不另讀單據；對帳＝稅額科目、與 arap 發票逐項；`POST …/settlement` 產生期末稅額結轉草稿（E14）。**扣繳清單**（`withholding`）：引擎產生 E06 草稿時記入 `gl_withholding_items`，`GET /api/ledger/withholding`、`POST …/withholding/remit`。新來源若有稅額，事件行/事件要帶稅碼（OUT-*／IN-*），401 才抓得到。
 - 總帳作業（`ledger-hub`）的 `gl_settings` 鍵 `feature.<名稱>`，預設全關，最高管理者開：`engine_drafts`、`withholding`、`inventory_cost`、`tax401`、`fixed_assets`、`invoice_adjustments`、`custom_records`、`backfill`、`source_annotations`。旗標關閉時引擎 API 回說明、現有手工傳票行為完全不變。
 - `system_settings.remit_require_payslip`：個人外包匯款前必須關聯勞報單（預設開；`PUT /api/contractor-vouchers/settings/remit-require-payslip`，僅最高管理者、寫稽核）。已帶勞報單者不論設定一律驗證（已簽回、受款人相符、金額＝勞報單實付）。
+- **來源憑證補登輸入**（`source_annotations`）：`/api/ledger/annotations*`（PUT 新增／修改、DELETE、`pending` 待補登清單）；補登值在引擎收集時覆寫來源值（`contract.apply_annotations`），只影響之後產生的草稿。
 - `voucher_auto_approval_flow`（system_settings）：引擎傳票的簽核流程，未設定＝與手工傳票相同。
 
 ## 5. 會被誤觸的全域守門（新增提供者／頁面／端點常見紅燈）

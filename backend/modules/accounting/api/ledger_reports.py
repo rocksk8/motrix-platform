@@ -28,6 +28,13 @@ def _require_write(authorization):
     return user
 
 
+def _require_super(authorization, what):
+    user = _require_user(authorization)
+    if user.get("role") != "superadmin":
+        raise HTTPException(403, "只有最高管理者（會計主管）可以%s。" % what)
+    return user
+
+
 def _date(v, name):
     try:
         return _dt.date.fromisoformat(str(v))
@@ -140,7 +147,7 @@ def accounts(q: str = Query(default=""), only_postable: bool = False, authorizat
 def patch_account(code: str, body: dict = Body(...), authorization: str = Header(None)):
     """可改：fs_line（須是 gl_fs_lines 有的列）、cashflow_class（cash／operating／investing／financing）、display_name、
     is_active（總帳層停用，法定科目也可）、note。類別與方向不開放（改了報表會整批偏）。"""
-    _require_write(authorization)
+    _require_super(authorization, "修改科目的報表列與屬性")            # B：科目對應（報表列／現金流量分類…）只有最高管理者
     fields = {k: body[k] for k in ("fs_line", "cashflow_class", "display_name", "is_active", "note") if k in (body or {})}
     if not fields:
         raise HTTPException(400, "沒有可修改的欄位。")
@@ -172,7 +179,7 @@ def patch_account(code: str, body: dict = Body(...), authorization: str = Header
 @router.put("/roles")
 def put_role(body: dict = Body(...), authorization: str = Header(None)):
     """設定角色→科目（可帶 scope 與生效日）。科目必須存在；停用中的科目不可作為角色科目。"""
-    _require_write(authorization)
+    _require_super(authorization, "設定角色對應的科目")                # B：角色→科目對應只有最高管理者
     b = body or {}
     role, code = str(b.get("role") or "").strip(), str(b.get("account_code") or "").strip()
     if not role or not code:

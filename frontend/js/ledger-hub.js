@@ -10,8 +10,10 @@ function ledgerHubPage() {
     tab: '',
     isSuper: false,
 
+    // 來源憑證補登（source_annotations）
+    an: { items: [], truncated: false, drafts: {}, busy: false, error: '', notice: '' },
     // 扣繳清單（C5：withholding）
-    wh: { ym: '', data: null, selected: {}, date: '', voucherNo: '', busy: false, error: '', notice: '' },
+    wh: { ym: '', data: null, selected: {}, date: '', voucherNo: '', unremitReason: '', busy: false, error: '', notice: '' },
     // 營業稅 401（C5：tax401）
     tax: { year: new Date().getFullYear(), period: Math.ceil((new Date().getMonth() + 1) / 2), data: null, busy: false, error: '', notice: '' },
     // 分錄草稿（C1：engine_drafts）
@@ -52,6 +54,7 @@ function ledgerHubPage() {
         if (this.tab === 'engine_drafts') await this.engLoad()
         if (this.tab === 'tax401') await this.taxLoad()
         if (this.tab === 'withholding') await this.whLoad()
+        if (this.tab === 'source_annotations') await this.anLoad()
       } catch (e) { this.error = e.message }
       this.loaded = true
     },
@@ -60,6 +63,53 @@ function ledgerHubPage() {
       if (key === 'engine_drafts') await this.engLoad()
       if (key === 'tax401') await this.taxLoad()
       if (key === 'withholding') await this.whLoad()
+      if (key === 'source_annotations') await this.anLoad()
+    },
+    async anLoad() {
+      const a = this.an
+      a.error = ''
+      a.busy = true
+      try {
+        const d = await this._api('GET', '/api/ledger/annotations/pending')
+        a.items = d.items
+        a.truncated = d.truncated
+        const dr = {}
+        d.items.forEach(i => { dr[i.source_type + '|' + i.source_key] = { tax: i.input_tax, date: i.invoice_date } })
+        a.drafts = dr
+      } catch (e) { a.error = e.message; a.items = [] }
+      a.busy = false
+    },
+    anKey(i) { return i.source_type + '|' + i.source_key },
+    anKind(k) { return ({ estimated: '稅額為估計', unsplit: '來源未拆稅', annotated: '已補登' })[k] || k },
+    async anSave(i) {
+      const a = this.an
+      a.error = ''
+      a.notice = ''
+      const d = a.drafts[this.anKey(i)] || {}
+      const hasTax = String(d.tax === undefined ? '' : d.tax).trim() !== ''
+      const hasDate = !!i.can_date && String(d.date || '').trim() !== ''
+      if (!hasTax && !hasDate) { a.error = '請至少填入進項稅額' + (i.can_date ? '或發票日期' : ''); return }        // 兩格都空：不送、不顯示「已補登」
+      let wrote = false
+      try {
+        if (hasTax) { await this._api({ method: 'PUT' }, '/api/ledger/annotations', { source_type: i.source_type, source_key: i.source_key, field: 'input_tax', value: String(d.tax) }); wrote = true }
+        if (hasDate) { await this._api({ method: 'PUT' }, '/api/ledger/annotations', { source_type: i.source_type, source_key: i.source_key, field: 'invoice_date', value: d.date }); wrote = true }
+        a.notice = '已補登 ' + i.source_key + '；下次執行「分錄草稿」時套用（草稿會重建，已過帳的會產生反向草稿與新草稿）。'
+        await this.anLoad()
+      } catch (e) {
+        const msg = e.message
+        if (wrote) { await this.anLoad(); a.error = '部分已補登（' + i.source_key + '），另一項失敗：' + msg }        // 部分成功後重讀，畫面與資料一致
+        else a.error = msg
+      }
+    },
+    async anClear(i) {
+      const a = this.an
+      a.error = ''
+      a.notice = ''
+      try {
+        for (const id of [i.input_tax_id, i.invoice_date_id]) { if (id) await this._api({ method: 'DELETE' }, '/api/ledger/annotations/' + id) }
+        a.notice = '已清除 ' + i.source_key + ' 的補登，之後回到來源值。'
+        await this.anLoad()
+      } catch (e) { a.error = e.message }
     },
     async whLoad() {
       const w = this.wh
@@ -83,15 +133,17 @@ function ledgerHubPage() {
       w.busy = true
       try {
         const r = await this._api({ method: 'POST' }, '/api/ledger/withholding/remit', { ids, remitted_at: w.date, voucher_no: w.voucherNo })
-        w.notice = '已登記繳庫 ' + r.updated + ' 筆'
         await this.whLoad()
+        w.notice = r.updated ? '已登記繳庫 ' + r.updated + ' 筆' : '0 筆已登記：所選項目都已經繳庫過了'
       } catch (e) { w.error = e.message }
       w.busy = false
     },
     async whUnremit(i) {
       const w = this.wh
       w.error = ''
-      try { await this._api({ method: 'POST' }, '/api/ledger/withholding/unremit', { ids: [i.id] }); await this.whLoad() } catch (e) { w.error = e.message }
+      w.notice = ''          // 不留上一個動作的綠色訊息
+      if (!(w.unremitReason || '').trim()) { w.error = '取消繳庫要先在上方填原因'; return }
+      try { await this._api({ method: 'POST' }, '/api/ledger/withholding/unremit', { ids: [i.id], reason: w.unremitReason }); await this.whLoad(); w.notice = '已取消繳庫登記（僅限最高管理者操作，已留稽核）。' } catch (e) { w.error = e.message }
     },
     async taxLoad() {
       const t = this.tax
@@ -125,8 +177,8 @@ function ledgerHubPage() {
       t.busy = true
       try {
         const r = await this._api({ method: 'POST' }, '/api/ledger/tax401/settlement', { year: t.year, period: t.period })
+        await this.taxLoad()          // 先重讀再設訊息：taxLoad() 開頭會清掉訊息
         t.notice = '已產生稅額結轉草稿 ' + r.voucher_no + '（應實繳 ' + this.fmt(r.payable) + '、新留抵 ' + this.fmt(r.carry_new) + '）；請到傳票頁送審過帳。'
-        await this.taxLoad()
       } catch (e) { t.error = e.message }
       t.busy = false
     },

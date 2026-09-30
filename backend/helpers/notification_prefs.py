@@ -41,6 +41,15 @@ EVENT_GROUPS = [
         ("bonus_payout_ready","獎金分潤核准待發放（出納；信中不含金額）"),
         ("approval_reminder", "簽核逾期催辦提醒（工作日 1/3/5 天分級升級，含報價單／匯款申請／開票申請憑據／請款單）"),
     ]),
+    ("會計傳票與總帳申請", [
+        ("voucher_submitted",  "會計傳票待審核通知（當層簽核人）"),
+        ("voucher_next_tier",  "會計傳票進入下一層審核"),
+        ("voucher_approved",   "會計傳票審核完成"),
+        ("voucher_returned",   "會計傳票退回修改"),
+        ("ledger_action_submitted", "總帳申請待審核通知（最高管理者）"),
+        ("ledger_action_approved",  "總帳申請已核准並執行"),
+        ("ledger_action_returned",  "總帳申請被退回"),
+    ]),
     ("工作事項", [
         ("daily_task_assigned",  "工作事項指派通知"),
         ("daily_task_completed", "工作事項完成回報"),

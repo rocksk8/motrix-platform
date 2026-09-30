@@ -19,6 +19,7 @@ routers/vouchers.py  **不存在** => 沒有任何人在「改」的時候叫它
 """
 import datetime as _dt
 import json
+import logging
 import os
 from datetime import datetime
 
@@ -26,7 +27,9 @@ from fastapi import APIRouter, Body, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from urllib.parse import quote
 
+from core.txn import begin_write as _begin_write
 from db import get_db
+from modules.accounting import notify as _notify
 # 🔑 科目代號的規則**只有一份** —— 借用既有那一支，不在這裡再寫。
 #    （router 互相 import 在這個 repo 是既有做法，實查 7 處。）
 from modules.accounting.api.accounting_export import validate_account_code
@@ -57,6 +60,25 @@ from modules.accounting.voucher import (
     diff_lines, approval_done, parse_approval_json, VoucherChainUnreadable,
     normalize_amount_lines, classify_category,
 )
+
+_log = logging.getLogger(__name__)
+
+
+def _mail_safe(fn, *args):
+    """通知信是附帶動作：任何例外只記 log，不可以讓簽核動作失敗。"""
+    try:
+        fn(*args)
+    except Exception:  # noqa: BLE001
+        _log.exception("傳票通知信失敗（不影響簽核）")
+
+
+def _tier_users(tier):
+    return [a.get("username") for a in ((tier or {}).get("approvers") or []) if a.get("username")]
+
+
+def _superadmin_usernames(conn):
+    return [r["username"] for r in conn.execute("SELECT username FROM users WHERE role='superadmin' AND active=1")]
+
 
 router = APIRouter(prefix="/api/vouchers", tags=["vouchers"])
 
@@ -158,6 +180,8 @@ from modules.accounting.api.voucher_common import (  # noqa: F401  純搬移後�
     _check_account_codes,
     _appr_of,
     _require_voucher_actor,
+    require_final_superadmin,
+    with_final_superadmin_tier,
     _UNREADABLE_APPR,
     insert_draft_voucher,
 )
@@ -616,6 +640,8 @@ def submit_voucher(voucher_id: int, body: dict = Body(default={}),
             except UnresolvedManagerError as exc:
                 # 📌 主管解析不出來要**說得出是哪一層**，那一支已經寫好訊息了。
                 raise HTTPException(400, str(exc))
+        if tiers:          # 有設定流程 ⇒ 補最終關卡；沒設定（內建兩層）⇒ 第二層在 approve 時要求最高管理者
+            tiers = with_final_superadmin_tier(conn, tiers)          # 最終關卡：最高管理者（會計主管），系統規定、不改儲存的流程設定
         now = _dt.datetime.now().isoformat()
         # 🔴 `AS3`：其餘七種文件類型的 approval JSON 都嵌著
         #    `requestedBy`／`requestedByDisplay`／`requestedAt`（簽核佇列
@@ -638,8 +664,11 @@ def submit_voucher(voucher_id: int, body: dict = Body(default={}),
             " submitted_at=?, updated_at=?, approval_json=? WHERE id=?",
             (_user_name(user), now, now, appr, voucher_id))
         conn.commit()
+        _first = _tier_users(tiers[0]) if tiers else []
     finally:
         conn.close()
+    if _first:
+        _mail_safe(_notify.notify_voucher_submitted, v.get("voucher_no"), v.get("summary"), _first)
     _audit(_tok(authorization), "voucher.submit", "vouchers", str(voucher_id),
            "傳票送審")
     return {"ok": True, "status": "待審核"}
@@ -662,6 +691,7 @@ def approve_voucher(voucher_id: int, body: dict = Body(default={}),
     _require_voucher_access(user)
     conn = get_db()
     try:
+        _begin_write(conn)          # 先拿寫鎖再讀狀態（並行核准同一張時，第二個看到新狀態；W3 2026-09-30）
         v = _load(conn, voucher_id)
         status = v.get("status")
         if status not in ("待審核", "簽核中"):
@@ -671,6 +701,7 @@ def approve_voucher(voucher_id: int, body: dict = Body(default={}),
         appr = _appr_of(v)
         _require_voucher_actor(conn, appr, user, "approve")
         tiers = appr.get("tiers") or []
+        _nxt_users, _tier_no, _tier_total = [], 0, 0
         if tiers:
             # 🔴 **照鏈走**：簽完第 idx 層就往前一格，全部簽完才是已核准。
             idx = int(appr.get("currentTier") or 0)
@@ -697,6 +728,8 @@ def approve_voucher(voucher_id: int, body: dict = Body(default={}),
             idx += 1
             appr["tiers"], appr["currentTier"] = tiers, idx
             nxt = "已核准" if idx >= len(tiers) else "簽核中"
+            if nxt == "簽核中":
+                _nxt_users, _tier_no, _tier_total = _tier_users(tiers[idx]), idx + 1, len(tiers)
             # 📌 v99 那六欄退成**版面上的簽名格**：前兩層照舊投影過去，
             #    第三層以後**只存在鏈裡** —— 而版面本來就是「回幾格畫幾列」。
             #    ☠️ 反過來（把鏈塞進三個欄位）會在第三層那天靜默掉一格。
@@ -706,19 +739,31 @@ def approve_voucher(voucher_id: int, body: dict = Body(default={}),
             if slot:
                 sets += ["%s_by=?" % slot, "%s_at=?" % slot]
                 args += [_user_name(user), now]
-            conn.execute("UPDATE vouchers_all SET %s WHERE id=?"
-                         % ", ".join(sets), args + [voucher_id])
+            _cur = conn.execute("UPDATE vouchers_all SET %s WHERE id=? AND status=?"
+                                % ", ".join(sets), args + [voucher_id, status])
+            if _cur.rowcount != 1:
+                raise HTTPException(409, "這張傳票剛被其他人處理過，請重新整理。")
         else:
             # ⚠️ 沒有設定簽核流程 ⇒ 維持 `§161` 的內建兩層。
             slot, nxt = ("checked", "簽核中") if status == "待審核"                 else ("manager", "已核准")
+            if slot == "manager":
+                require_final_superadmin(conn, user)        # 最終關卡：內建兩層的第二層（主管）一律最高管理者（系統規定）
             # 🔑 只寫**這一格**的兩欄 —— 另一格的時間戳完全不碰。
-            conn.execute(
+            _cur = conn.execute(
                 "UPDATE vouchers_all SET status=?, %s_by=?, %s_at=?, updated_at=?"
-                " WHERE id=?" % (slot, slot),
-                (nxt, _user_name(user), now, now, voucher_id))
+                " WHERE id=? AND status=?" % (slot, slot),
+                (nxt, _user_name(user), now, now, voucher_id, status))
+            if _cur.rowcount != 1:
+                raise HTTPException(409, "這張傳票剛被其他人處理過，請重新整理。")
+            if nxt == "簽核中":
+                _nxt_users, _tier_no, _tier_total = _superadmin_usernames(conn), 2, 2          # 內建兩層：第二層一律最高管理者
         conn.commit()
     finally:
         conn.close()
+    if nxt == "簽核中":
+        _mail_safe(_notify.notify_voucher_next_tier, v.get("voucher_no"), v.get("summary"), _tier_no, _tier_total, _nxt_users)
+    else:
+        _mail_safe(_notify.notify_voucher_approved, v.get("voucher_no"), v.get("summary"), _user_name(user), appr.get("requestedBy"))
     _audit(_tok(authorization), "voucher.approve", "vouchers", str(voucher_id),
            "傳票簽核：%s" % nxt)
     # 🔴 `AS3`：`allDone` 是**通用簽核佇列頁**（`approval-queue.html`）拿來判斷
@@ -766,22 +811,26 @@ def send_back_voucher(voucher_id: int, body: dict = Body(default={}),
     _require_voucher_access(user)
     conn = get_db()
     try:
+        _begin_write(conn)          # 先拿寫鎖再讀狀態（W3 2026-09-30）
         v = _load(conn, voucher_id)
         if not can_send_back(v.get("status")):
             raise HTTPException(
                 400, "「%s」的傳票不能退回。%s"
                      % (v.get("status"),
                         "已過帳只能作廢重開。" if v.get("status") == "已過帳" else ""))
-        _require_voucher_actor(conn, _appr_of(v), user, "send_back")
+        _appr_before = _appr_of(v)
+        _require_voucher_actor(conn, _appr_before, user, "send_back")
         new_no = next_revision_no(v.get("voucher_no"))
         now = _dt.datetime.now().isoformat()
         reason = str((body or {}).get("reason") or "").strip()
-        conn.execute(
+        _cur = conn.execute(
             "UPDATE vouchers_all SET status='草稿', voucher_no=?,"
             " submitted_by='', submitted_at='', checked_by='', checked_at='',"
             " manager_by='', manager_at='', approval_json='{}',"
-            " updated_at=? WHERE id=?",
-            (new_no, now, voucher_id))
+            " updated_at=? WHERE id=? AND status=?",
+            (new_no, now, voucher_id, v.get("status")))
+        if _cur.rowcount != 1:
+            raise HTTPException(409, "這張傳票剛被其他人處理過，請重新整理。")
         # 🔴 `JV22`：「上次退回」要是**結構化**紀錄，不能只有 audit_log 那一句字串
         #    —— audit_log 有 730 天清理（`archive.py::_prune_audit_log`），
         #    而使用者要的是「長期記憶」⇒ 落點是 voucher_edit_log（資料庫層刪不掉，v109），
@@ -797,6 +846,7 @@ def send_back_voucher(voucher_id: int, body: dict = Body(default={}),
         conn.commit()
     finally:
         conn.close()
+    _mail_safe(_notify.notify_voucher_returned, new_no, v.get("summary"), reason, _appr_before.get("requestedBy"))
     _audit(_tok(authorization), "voucher.send_back", "vouchers",
            str(voucher_id), "傳票退回：%s（%s）"
            % (new_no, (body or {}).get("reason") or "未填原因"))
@@ -829,6 +879,8 @@ def void_voucher(voucher_id: int, body: dict = Body(default={}),
         cur = _load(conn, voucher_id)    # 已作廢的會在這裡被擋掉
         # 總帳 P1：已過帳傳票落在已結帳／鎖定期間 ⇒ 不可作廢，改開沖轉傳票或先重開期間（DB 觸發器是第三層）
         if cur["status"] == "已過帳":
+            if user.get("role") != "superadmin":       # B：已過帳傳票的作廢只有最高管理者（未過帳的照舊）
+                raise HTTPException(403, "只有最高管理者（會計主管）可以作廢已過帳的傳票。")
             lock_msg = _ledger_periods.lock_error(conn, cur["voucher_date"])
             if lock_msg:
                 raise HTTPException(409, lock_msg + "已過帳傳票不可作廢；請開沖轉傳票，或先重開該期間。")
