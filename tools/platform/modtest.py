@@ -913,6 +913,27 @@ def _collect_env(environ=None):
     return env
 
 
+#: 失敗先行出 log：同一次 modtest 的所有段共用一個 run-id（各段各寫一筆 summary）；plugin 不存在就不帶（不影響跑測試）
+_FAIL_STREAM_RUN = None
+
+
+def _fail_stream_args():
+    return ["-p", "fail_stream"] if (Path(__file__).resolve().parent / "fail_stream.py").is_file() else []
+
+
+def _fail_stream_env(window):
+    global _FAIL_STREAM_RUN
+    env = dict(os.environ)
+    if not _fail_stream_args():
+        return env
+    if _FAIL_STREAM_RUN is None:
+        _FAIL_STREAM_RUN = "%s_%d" % (time.strftime("%Y%m%d_%H%M%S"), os.getpid())
+    env["PYTHONPATH"] = os.pathsep.join([str(Path(__file__).resolve().parent)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
+    env["MOTRIX_FAIL_STREAM_RUN"] = _FAIL_STREAM_RUN
+    env["MOTRIX_FAIL_STREAM_STAGE"] = str(window or "")
+    return env
+
+
 def run_pytest(targets, extra, window, full, collect_only=False):
     """在 backend/ 下跑 pytest；basetemp 專屬、結束必刪。回傳 (exit code, stdout)。
     targets 太多檔會撞 Windows 命令列長度上限 ⇒ 依長度分批，逐批各自的 basetemp，合併結果（tail 串接、
@@ -925,6 +946,8 @@ def run_pytest(targets, extra, window, full, collect_only=False):
         cmd = [PYEXE or sys.executable, "-m", "pytest", *batch, "--basetemp=%s" % bt, "-p", "no:cacheprovider"]
         if collect_only:
             cmd += ["--collect-only", "-q"]
+        else:
+            cmd += _fail_stream_args()                    # 失敗先行出 log（tools/platform/fail_stream.py）：每題失敗當下寫 JSONL
         cmd += extra
         proc = None
         try:
@@ -937,7 +960,7 @@ def run_pytest(targets, extra, window, full, collect_only=False):
                 tails.append(proc.stdout)
                 continue
             proc = subprocess.Popen(cmd, cwd=str(BACKEND), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    creationflags=_low_priority_flags())
+                                    creationflags=_low_priority_flags(), env=_fail_stream_env(window))
             tail = []
             for raw in proc.stdout:                       # 照樣即時印出，另留尾段給摘要解析
                 line = raw.decode("utf-8", errors="replace")

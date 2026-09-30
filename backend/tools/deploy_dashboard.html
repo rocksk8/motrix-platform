@@ -66,6 +66,7 @@
     <div class="card" id="prodCard">
       <h2>正式機（172.16.10.177）<span id="wsIndicator" style="float:right;font-size:11px;color:#666">連線中…</span></h2>
       <div class="row"><span>健康狀態</span><span id="prodHealth"><span class="dot"></span>…</span></div>
+      <div class="row"><span>系統版本（/api/system/version）</span><span id="prodSysVer" data-testid="prod-sysver">…</span></div>
       <div class="row"><span>目前部署版本</span><span id="prodCommit">…</span></div>
       <div class="row"><span>最後確認時間</span><span id="prodCheckedAt">…</span></div>
     </div>
@@ -175,6 +176,12 @@
       <button class="danger" id="dlApplyBtn" data-testid="dl-apply" onclick="dlApply()">套用</button>
     </div>
     <div class="log hidden" id="dlResult" data-testid="dl-result" style="white-space:normal"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px" id="modVerCard">
+    <h2>模組版本對照（唯讀）<button class="ghost" style="float:right" onclick="refreshModuleVersions()">重新整理</button></h2>
+    <div style="font-size:12px;color:#aaa;margin-bottom:8px">開發樹／最新部署包 lock／交付已套用的單模組包。正式機實際已安裝版本請用上方「部署前健康檢查」表（需帳密）。</div>
+    <div id="modVerTable" data-testid="mod-versions">…</div>
   </div>
 
   <div class="card">
@@ -453,6 +460,8 @@ function renderProdStatus(prod) {
   if (dep.source === 'delivery') el.textContent = String(dep.commit || '').slice(0, 8) + '（交付結果 ' + (dep.finishedAt || '') + '）';
   else if (dl.configured && !dl.available) el.textContent = '未知：' + (dl.notice || '讀不到交付資料夾的結果');
   else el.textContent = dep.commit_short ? (dep.commit_short + ' (' + (dep.applied_at || '') + ')') : '未知';
+  const sv = prod.systemVersion || {};
+  document.getElementById('prodSysVer').textContent = sv.version ? (sv.version + (sv.date ? ' (' + sv.date + ')' : '')) : (prod.delivered && prod.delivered.configured ? '（交付模式：不連正式機）' : '查不到');
   document.getElementById('prodCheckedAt').textContent = prod.checkedAt || '…';
 }
 
@@ -701,7 +710,19 @@ async function loadCheckOnly() {
 }
 
 refreshDevStatus();
+async function refreshModuleVersions() {
+  const el = document.getElementById('modVerTable');
+  try {
+    const d = await (await fetch('/api/module-versions')).json();
+    el.innerHTML = '<table style="font-size:12px;width:100%"><tr><th align="left">模組</th><th align="left">開發樹</th><th align="left">最新包 lock' +
+      (d.package ? '（' + esc(d.package) + '）' : '') + '</th><th align="left">交付已套用</th><th align="left">差異</th></tr>' +
+      d.rows.map(r => { const diff = r.package && r.dev && r.package !== r.dev;
+        return `<tr><td>${esc(r.key)}</td><td>${esc(r.dev ?? '—')}</td><td>${esc(r.package ?? '—')}</td><td>${esc(r.delivered ?? '—')}</td>` +
+        `<td style="color:${diff ? '#F59E0B' : '#4ADE80'}">${diff ? '開發樹與包不同' : '—'}</td></tr>`; }).join('') + '</table>';
+  } catch (e) { el.textContent = '讀取失敗：' + e; }
+}
 refreshPackages();
+refreshModuleVersions();
 refreshHistory();
 refreshProducts();
 initUpgrade();

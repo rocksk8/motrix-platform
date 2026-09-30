@@ -294,18 +294,84 @@ def test_rc_new_cross_import_is_caught(units, groups, baseline):
     assert set(new) - set(before) == {"%s %s -> %s %s" % (g1, r1, g2, r2)}
 
 
-def test_rc_vanished_baseline_edge_is_caught(units, groups, baseline):
-    live = sorted(B.l2_import_edges(units, groups) & set(baseline))
-    if not live:
-        pytest.skip("基線裡沒有仍存在的邊可拿來突變")
-    edge = live[0]
-    src, dst = edge.split(" -> ")
-    src_u, dst_u = src.split(" ", 1)[1], dst.split(" ", 1)[1]
-    mut = copy.deepcopy(units)
-    mut[src_u]["imports"] = [d for d in mut[src_u]["imports"] if d != dst_u]
-    _, before = B.check_import_baseline(units, groups, baseline)
-    _, gone = B.check_import_baseline(mut, groups, baseline)
-    assert set(gone) - set(before) == {edge}
+# ── 合成的 L2 → L2 邊（A46-O1／T19-3）────────────────────────────────────
+# 原本「消失的邊」正對照拿基線裡仍存在的真實邊來突變；基線清空（edges: []）之後永遠 skip ⇒ 守門沒有證明自己
+# 抓得到東西。改在 tmp_path 造兩個假的 L2 模組（zz_p import zz_q），走真的掃描器（dep_scan.build）＋真的判定
+# （check_import_baseline），不依賴 repo 現況有沒有邊 ⇒ 永遠不 skip。repo 現況的「零新增／只准減少」原題不動。
+
+_SYN_EDGE = "MP mod:zz_p/api -> MQ mod:zz_q/svc"
+_SYN_IMPORT = "from modules.zz_q import svc          # 跨組：L2 模組 import 另一個 L2 模組\n"
+
+
+def _write_syn_l2(root, with_cross_import=True):
+    """在合成樹 root 加兩個 L2 模組：zz_p（api import 自己的 util；可選 import zz_q）、zz_q（svc）。"""
+    files = {
+        "backend/modules/zz_p/module.json": '{"key": "zz_p", "tables": [], "provides": {"api_prefixes": []}}\n',
+        "backend/modules/zz_p/api.py": ("from modules.zz_p import util         # 組內：不算跨組\n"
+                                        + (_SYN_IMPORT if with_cross_import else "")
+                                        + "def run():\n    return util.X\n"),
+        "backend/modules/zz_p/util.py": "X = 1\n",
+        "backend/modules/zz_q/module.json": '{"key": "zz_q", "tables": [], "provides": {"api_prefixes": []}}\n',
+        "backend/modules/zz_q/svc.py": "def q():\n    return 2\n",
+    }
+    for rel_path, text in files.items():
+        f = root / rel_path
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text, encoding="utf-8")
+
+
+def _syn_groups(dep_scan):
+    data = copy.deepcopy(dep_scan.SYNTHETIC_MODULES)
+    data["modules"]["MP"] = {"key": "zz_p", "name": "合成甲", "units": ["mod:zz_p/api", "mod:zz_p/util"], "tables": []}
+    data["modules"]["MQ"] = {"key": "zz_q", "name": "合成乙", "units": ["mod:zz_q/svc"], "tables": []}
+    return B.Groups(data)
+
+
+def _syn_scan(dep_scan, root):
+    with dep_scan.use_root(root):
+        return dep_scan.build()["units"]
+
+
+def _only_syn(edges):
+    return sorted(e for e in edges if "zz_p" in e or "zz_q" in e)
+
+
+@pytest.fixture
+def syn_tree(tmp_path, dep_scan):
+    """dep_scan 內建的合成樹（L0／L1／三個合成組）＋ zz_p → zz_q 的跨組 import ⇒ (root, units, groups)。"""
+    root = tmp_path / "syn"
+    dep_scan.build_synthetic(root)
+    _write_syn_l2(root)
+    return root, _syn_scan(dep_scan, root), _syn_groups(dep_scan)
+
+
+def test_rc_synthetic_l2_cross_import_is_caught(syn_tree):
+    """正對照（合成）：假 L2 模組 zz_p import 另一個假 L2 模組 zz_q，基線沒有這條 ⇒ 守門報「新增」；
+    登進基線之後不再報（只准減少）；組內 import（zz_p/api → zz_p/util）不算跨組。"""
+    _root, units, groups = syn_tree
+    assert "mod:zz_q/svc" in units.get("mod:zz_p/api", {}).get("imports", []), \
+        "掃描器沒看到合成的 import（mod:zz_p/api → mod:zz_q/svc）"
+    new, _ = B.check_import_baseline(units, groups, [])
+    assert _only_syn(new) == [_SYN_EDGE], new
+    assert _only_syn(B.l2_import_edges(units, groups)) == [_SYN_EDGE]
+    new2, gone2 = B.check_import_baseline(units, groups, [_SYN_EDGE])
+    assert _SYN_EDGE not in new2 and _SYN_EDGE not in gone2, (new2, gone2)
+
+
+def test_rc_vanished_baseline_edge_is_caught(syn_tree, dep_scan):
+    """正對照（合成，A46-O1）：基線登記 zz_p → zz_q；原始碼刪掉那行 import 重掃 ⇒ 守門報「消失」。
+    zz_p 不在 modules.json 登記 ⇒ 不會被「沒裝的已登記模組」規則吃掉。"""
+    root, units, groups = syn_tree
+    _, before = B.check_import_baseline(units, groups, [_SYN_EDGE])
+    assert _SYN_EDGE not in before, "邊還在時不可以報消失：%r" % before
+    api = root / "backend" / "modules" / "zz_p" / "api.py"
+    text = api.read_text(encoding="utf-8")
+    assert _SYN_IMPORT in text
+    api.write_text(text.replace(_SYN_IMPORT, ""), encoding="utf-8")
+    mutated = _syn_scan(dep_scan, root)
+    assert "mod:zz_q/svc" not in mutated["mod:zz_p/api"].get("imports", [])
+    _, gone = B.check_import_baseline(mutated, groups, [_SYN_EDGE])
+    assert _only_syn(gone) == [_SYN_EDGE], gone
 
 
 def test_rc_unowned_router_is_caught(units, groups):

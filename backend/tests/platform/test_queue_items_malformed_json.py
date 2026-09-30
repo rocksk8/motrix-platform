@@ -224,8 +224,16 @@ def test_reverse_control_tier_fields_swallowing_is_caught(client, caplog):
 
 @pytest.mark.parametrize("name", sorted(EXPECTED))
 def test_expected_providers_read_approval_in_python(client, name):
-    """靜態補強：已知的提供者源碼不可以再出現 json_extract(data_json,'$.approval')。"""
+    """靜態補強：已知的提供者源碼不可以出現**沒有 json_valid 保護**的 json_extract(data_json,…)。
+
+    2026-09-30（W3 approval-freeze，主持裁示）：原本一律禁止；待簽佇列 200 張×60KB 時逐筆 json.loads 佔 441 ms，
+    案件提供者改由 SQLite 取 `$.approval`——但**只有**巢狀 `CASE WHEN json_valid(data_json) THEN … json_extract(…)` 的形式：
+    壞 JSON 得到 NULL 而不是例外，NULL 再退回 Python 逐筆解析（語意不變）。行為由本檔其他題（壞 JSON 不消失、壞的那一筆不被列出）
+    與 test_approval_no_freeze 的逐形狀等價題守；這一題只擋「沒有保護的寫法」。登記見 json_extract_baseline_reasons.md。"""
     fn = registry.providers("approval.queue_items").get(name)
     if fn is None:
         pytest.skip("%s 的模組不在這個安裝包" % name)
-    assert "json_extract(data_json" not in inspect.getsource(fn), name
+    src = inspect.getsource(fn)
+    for m in re.finditer(r"json_extract\(data_json", src):
+        assert "json_valid(data_json)" in src[max(0, m.start() - 400):m.start()], (
+            "%s：json_extract(data_json…) 前面沒有 json_valid(data_json) 的保護（壞一筆 JSON 會讓整個查詢丟例外、整類待簽消失）" % name)

@@ -724,6 +724,55 @@ def _find_in_tree(root, name, skip):
     return hits
 
 
+EXPORT_IGNORE_REL = "backend/export_ignore.json"
+
+
+def _load_export_ignore_list(pkg):
+    """⇒ (paths 集合 或 None, 問題)。包內沒有／讀不懂／格式不對 ⇒ 問題（呼叫端記 FAIL，**不是略過**）。"""
+    path = os.path.join(pkg, *EXPORT_IGNORE_REL.split("/"))
+    if not os.path.isfile(path):
+        return None, "包內沒有 %s（建包端應由 tools/export_ignore_list.py 寫入）⇒ 沒有 .git 又沒有清單，這一項無從判定" % EXPORT_IGNORE_REL
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            d = json.load(f)
+    except (OSError, ValueError) as exc:
+        return None, "%s 讀不懂：%s" % (EXPORT_IGNORE_REL, exc)
+    paths = d.get("paths") if isinstance(d, dict) else None
+    if not isinstance(d, dict) or d.get("format") != 1 or not isinstance(paths, list) or not all(isinstance(p, str) for p in paths) \
+            or d.get("count") != len(paths):
+        return None, "%s 格式不對（要 format=1、paths 為字串陣列、count 與筆數相符）" % EXPORT_IGNORE_REL
+    return set(paths), None
+
+
+def _check_exclusion_from_package_list(pkg):
+    """沒有 .git 時的 4a：讀包內「不出貨清單」比對。
+    ① 清單缺／壞 ⇒ FAIL（不是略過）。② MUST_EXIST 的檔不可以在清單裡（與 git 模式同一個不變量）。
+    ③ 清單裡的任何檔不可以出現在包裡（git archive 該排除的東西不該在出貨包）。"""
+    ignored, problem = _load_export_ignore_list(pkg)
+    if problem:
+        R.fail("排除清單 vs MUST_EXIST", problem)
+        return
+    print("    （沒有 .git：改讀包內不出貨清單 %s，%d 個檔）" % (EXPORT_IGNORE_REL, len(ignored)))
+    for name in MUST_EXIST:
+        paths = _find_in_tree(pkg, name, PKG_SKIP)
+        if not paths:
+            R.fail("MUST_EXIST 找不到來源",
+                   "%s 在包裡找不到，無法驗證它會不會被排除掉" % name)
+            continue
+        for rel in paths:
+            if rel in ignored:
+                R.fail("排除清單 ∩ MUST_EXIST",
+                       "%s（%s）同時是 MUST_EXIST 又在包內不出貨清單裡（建包時 git 判定 export-ignore）" % (name, rel))
+            else:
+                print("    %-20s %-40s 不在不出貨清單 ✅" % (name, rel))
+    present = sorted(rel for rel, _fn, _full in walk(pkg, PKG_SKIP) if rel.replace("\\", "/") in ignored)
+    if present:
+        R.fail("不出貨清單的檔出現在包裡",
+               "%d 個檔 git 判定不出貨（export-ignore）卻在包裡，例如 %s" % (len(present), present[0]))
+    else:
+        print("    不出貨清單的 %d 個檔，包裡一個都沒有 ✅" % len(ignored))
+
+
 def check_exclusion_vs_must_exist(pkg):
     """🔴 不變量：`export-ignore` 排除清單 ∩ `MUST_EXIST` = 空集合。
 
@@ -750,7 +799,15 @@ def check_exclusion_vs_must_exist(pkg):
     （`.gitattributes` 蓋不蓋得到這個相對路徑），規則只存在於工作樹的
     git 中繼資料裡，`pkg` 目錄本身沒有 `.git`；而 `git archive` 保留原始
     目錄結構，`pkg` 裡量到的相對路徑與工作樹是同一套，兩步驟銜接得起來。
+
+    ## T22-2：沒有 .git 的目錄（正式機安裝目錄）
+    `git check-attr` 問不了（第二十二班兩次被擋下）。**檢查保留，判斷來源換成「建包時 git 自己算好、寫進包裡的清單」**
+    （`tools/export_ignore_list.py` → `backend/export_ignore.json`，被 package.sha256 涵蓋）；**這裡不重新實作 git 的比對語意**。
+    有 .git ⇒ 維持上面的 `git check-attr`，行為不變。
     """
+    if not os.path.exists(os.path.join(WT, ".git")):
+        _check_exclusion_from_package_list(pkg)
+        return
     for name in MUST_EXIST:
         paths = _find_in_tree(pkg, name, PKG_SKIP)
         if not paths:

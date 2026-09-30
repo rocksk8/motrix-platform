@@ -65,6 +65,8 @@ EDITABLE_STATUSES = ("草稿", "已駁回")
 #: 請款流程（2026-09-27）：發票號碼長度上限；附件分類（沒有 kind 的舊附件一律視為 other，不回填猜測）
 INVOICE_NO_MAX = 40
 FILE_KINDS = ("invoice", "other")
+_CLEAR_REMIT = ("remit_actual=NULL, remit_fee=0, remit_review='', remit_review_by='', "
+                "remit_review_at='', remit_review_note=''")
 _DATE_KEYS = {"invoice_date": "invoiceDate", "paid_date": "paidDate", "invoice_no": "invoiceNo"}
 
 CATEGORIES = ["工時", "材料", "差旅", "運費", "安裝", "外包", "其他"]
@@ -112,6 +114,10 @@ def _row_to_dict(r) -> dict:
         "paidDate":    _col(r, "paid_date", "") or "",
         # 請款流程（2026-09-27，case v1）：發票號碼（選填）；附件每筆的 kind：invoice＝發票、其他（含舊資料沒有 kind 的）＝other
         "invoiceNo":   _col(r, "invoice_no", "") or "",
+        # W1（case v2）：出納登錄付款時的實付／手續費／差額審核（沒記錄過 ⇒ 實付＝null、手續費 0）
+        "remitActual": _col(r, "remit_actual", None),
+        "remitFee":    float(_col(r, "remit_fee", 0) or 0),
+        "remitReview": _col(r, "remit_review", "") or "",
         "files":       files,
         "createdBy":       r["created_by"],
         "createdByName":   r["created_by_name"],
@@ -222,9 +228,12 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
         items = [_row_to_dict(r) for r in rows]
         total = sum(float(i["totalCost"] or 0) for i in items)
         pending = sum(float(i["totalCost"] or 0) for i in items if i["status"] != "已核准")
+        # W1：手續費（公司自付、已登錄付款者）另計，進案件成本（settlement 的 remitFeeTotal）；不併入 totalAmount
+        fee_total = sum(float(i["remitFee"] or 0) for i in items if i["paidDate"])
         return {
             "quoteNo": quote_no,
             "items": items,
+            "remitFeeTotal": fee_total,
             "totalAmount": total,
             "totalPending": pending,
             "pendingCount": sum(1 for i in items if i["status"] not in ("已核准", "草稿")),
@@ -418,6 +427,8 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
                 override = True
         now = datetime.now().isoformat(timespec="seconds")
         sets = ", ".join("%s=?" % k for k in changes)
+        if "paid_date" in changes and not changes["paid_date"]:      # W1：付款日清除 ⇒ 重回待付款，實付／手續費／審核一併清掉
+            sets += ", " + _CLEAR_REMIT
         conn.execute("UPDATE case_extra_expenses SET " + sets + ", updated_at=?, updated_by_name=?"
                      " WHERE id=? AND quote_no=?",
                      list(changes.values()) + [now, user.get("display_name") or user["username"], exp_id, quote_no])

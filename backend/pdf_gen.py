@@ -26,6 +26,7 @@ from db import (
     DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR, DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR,
 )
 from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report, run_edge_pdf
+from helpers import receipt_amounts as _receipt_amounts
 
 from core import paths as _paths
 
@@ -2455,7 +2456,7 @@ def _build_case_closing_html(data: dict) -> str:
     for pr in data["paymentRows"]:
         recv_cls = "#15803D" if pr["received"] else "#9CA3AF"
         recv_txt = "已收款" if pr["received"] else "未收款"
-        net_amt  = (pr["actualAmount"] if pr["actualAmount"] is not None else pr["amount"]) - (pr["feeAmount"] or 0)
+        net_amt  = _receipt_amounts(pr["amount"], pr["actualAmount"], pr["feeAmount"])[0]   # 銀行入帳（2026-09-30：實收已扣手續費，不再減一次）
         pay_rows_html += (
             f'<tr><td>{esc(pr["type"])}</td>'
             f'<td class="r">{pr["pct"]}%</td>'

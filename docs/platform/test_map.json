@@ -2,20 +2,22 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 777,
-  "unmapped": 8,
+  "tests": 803,
+  "unmapped": 10,
   "kinds": {
-   "api": 413,
-   "e2e": 182,
-   "audit": 111,
-   "unit": 71
+   "api": 424,
+   "e2e": 190,
+   "audit": 113,
+   "unit": 76
   },
-  "routes": 597
+  "routes": 610
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
   "backend/tests/platform/test_deploy_dashboard_health.py",
   "backend/tests/platform/test_deploy_dashboard_jobs.py",
+  "backend/tests/platform/test_stepfile_drill_2026_09_30.py",
+  "backend/tests/test_approval_queue_extra_types_2026_09_30.py",
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py",
   "backend/tests/test_e2e_bn3_manual_people_page_2026_09_24.py",
   "backend/tests/test_e2e_bn4_bonus_page_name_2026_09_24.py",
@@ -395,6 +397,38 @@
      "backend/modules/accounting/"
     ]
    },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_voucher_bring_in_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/tests/test_e2e_voucher_source_block_below_2026_09_25",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/accounting/tests/test_e2e_voucher_source_block_below_2026_09_25.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "path": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
    "module": "accounting"
   },
   "backend/modules/accounting/tests/test_e2e_voucher_feedback_2026_09_23.py": {
@@ -1190,6 +1224,38 @@
     "path": [
      "frontend/js/",
      "frontend/js/voucher.js"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_bring_in_w2fix_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/tests/test_e2e_voucher_source_block_below_2026_09_25",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/accounting/tests/test_e2e_voucher_source_block_below_2026_09_25.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "path": [
+     "frontend/pages/voucher.html"
     ],
     "module_dir": [
      "backend/modules/accounting/"
@@ -2141,6 +2207,39 @@
    },
    "module": "analytics"
   },
+  "backend/modules/analytics/tests/test_receipt_date_formats_2026_09_29.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/arap/",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "mod:analytics/api/reports",
+    "mod:analytics/tests/test_payment_anomalies_2026_09_11",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/analytics/tests/test_payment_anomalies_2026_09_11.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "path": [
+     "backend/modules/arap/",
+     "backend/modules/case/"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
   "backend/modules/analytics/tests/test_receivables_by_receipt_date_2026_09_12.py": {
    "kind": "api",
    "units": [
@@ -2160,6 +2259,46 @@
     ]
    },
    "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_report_cash_default_receipt_fee_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/arap/",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/accounting_export",
+    "mod:analytics/api/reports",
+    "mod:analytics/tests/test_payment_anomalies_2026_09_11",
+    "mod:arap/__init__",
+    "mod:arap/receivables",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/analytics/tests/test_payment_anomalies_2026_09_11.py",
+     "backend/modules/arap/__init__.py",
+     "backend/modules/arap/receivables.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "path": [
+     "backend/modules/arap/",
+     "backend/modules/case/"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
    "module": "analytics"
   },
   "backend/modules/analytics/tests/test_report_recognition_basis_2026_09_24.py": {
@@ -2808,6 +2947,39 @@
    "login_fixture": true,
    "module": "arap"
   },
+  "backend/modules/arap/tests/test_cashier_remit_fee_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "file:backend/tests/_requires.py",
+    "mod:arap/api/cashier",
+    "mod:case/__init__",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/quotations",
+    "mod:case/payables",
+    "mod:case/recognition"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/payables.py",
+     "backend/modules/case/recognition.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
   "backend/modules/arap/tests/test_e2e_cashier_bank_reconcile_module_absent_2026_09_26.py": {
    "kind": "e2e",
    "units": [
@@ -3364,6 +3536,22 @@
     ]
    },
    "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_case_mine_empty_name_2026_09_29.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/case/",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
    "module": "case"
   },
   "backend/modules/case/tests/test_payreq_2026_09_27.py": {
@@ -5510,6 +5698,51 @@
    "login_fixture": true,
    "module": "payroll"
   },
+  "backend/modules/payroll/tests/test_payslip_void_signed_paid_2026_09_29.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:pdf_gen",
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/arap/",
+    "dir:backend/modules/payroll/",
+    "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
+    "mod:payroll/api/__init__",
+    "mod:payroll/api/payslips",
+    "mod:payroll/tests/test_payslip_edit_guard_2026_08_28",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/payroll/api/__init__.py",
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/payroll/tests/test_payslip_edit_guard_2026_08_28.py",
+     "backend/pdf_gen.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/payroll/api/payslips.py"
+    ],
+    "path": [
+     "backend/modules/accounting/",
+     "backend/modules/analytics/",
+     "backend/modules/arap/"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
   "backend/modules/payroll/tests/test_voucher_connectors.py": {
    "kind": "api",
    "units": [
@@ -5837,6 +6070,30 @@
     ]
    },
    "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_dispatch_file_delete_review_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/api/vendor_contractors",
+    "mod:subcontract/tests/test_dispatch_file_uploads",
+    "router:approval_queue"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/subcontract/tests/test_dispatch_file_uploads.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/approval_queue.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
    "module": "subcontract"
   },
   "backend/modules/subcontract/tests/test_dispatch_file_uploads.py": {
@@ -6394,6 +6651,84 @@
     ]
    },
    "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_remit_fee_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:arap/api/cashier",
+    "mod:case/__init__",
+    "mod:case/recognition",
+    "mod:subcontract/__init__",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/remit",
+    "mod:subcontract/tests/test_contractor_voucher_paid_date_2026_08_31"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/recognition.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/remit.py",
+     "backend/modules/subcontract/tests/test_contractor_voucher_paid_date_2026_08_31.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "unresolved_api": [
+    "/api/cashier/remit-reviews/contractor_voucher"
+   ],
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_remit_fee_review_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/accounting_export",
+    "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
+    "mod:case/__init__",
+    "mod:case/recognition",
+    "mod:subcontract/__init__",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/remit",
+    "mod:subcontract/tests/test_contractor_voucher_paid_date_2026_08_31",
+    "mod:subcontract/tests/test_remit_fee_2026_09_30"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/recognition.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/remit.py",
+     "backend/modules/subcontract/tests/test_contractor_voucher_paid_date_2026_08_31.py",
+     "backend/modules/subcontract/tests/test_remit_fee_2026_09_30.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "unresolved_api": [
+    "/api/cashier/remit-reviews/contractor_voucher"
+   ],
    "module": "subcontract"
   },
   "backend/modules/subcontract/tests/test_report_recognition_basis_2026_09_24.py": {
@@ -7253,6 +7588,64 @@
    },
    "module": "tender_radar"
   },
+  "backend/modules/tender_radar/tests/test_tender_render_perf_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_map_tiles.py",
+    "file:backend/tests/_mapiso.py",
+    "page:pages/tender-radar.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_map_tiles.py",
+     "backend/tests/_mapiso.py"
+    ],
+    "page": [
+     "frontend/pages/tender-radar.html"
+    ],
+    "path": [
+     "frontend/pages/tender-radar.html"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_render_safety_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_map_tiles.py",
+    "file:backend/tests/_mapiso.py",
+    "page:pages/tender-radar.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_map_tiles.py",
+     "backend/tests/_mapiso.py"
+    ],
+    "page": [
+     "frontend/pages/tender-radar.html"
+    ],
+    "path": [
+     "frontend/pages/tender-radar.html"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "module": "tender_radar"
+  },
   "backend/modules/tender_radar/tests/test_tender_reset_endpoint_2026_09_21.py": {
    "kind": "api",
    "units": [
@@ -7521,6 +7914,47 @@
    "evidence": {
     "path": [
      "backend/tools/apply_update.ps1"
+    ]
+   }
+  },
+  "backend/tests/platform/test_approval_count_items_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "helper:approval_queue",
+    "plat:__init__",
+    "plat:registry",
+    "router:approval_queue"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/helpers/approval_queue.py"
+    ],
+    "api": [
+     "backend/routers/approval_queue.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_approval_labels_match_2026_09_30.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/routers/__init__.py",
+    "page:pages/approval-queue.html",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:approval_queue"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/routers/__init__.py",
+     "backend/routers/approval_queue.py"
+    ],
+    "page": [
+     "frontend/pages/approval-queue.html"
     ]
    }
   },
@@ -8765,6 +9199,25 @@
      "backend/tools/",
      "backend/tools/build_deploy_package.ps1",
      "tools/platform/",
+     "tools/platform/modtest.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_fail_stream_2026_09_30.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/tests/",
+    "dir:tools/platform/",
+    "file:backend/pytest.ini",
+    "file:tools/platform/fail_stream.py",
+    "file:tools/platform/modtest.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/pytest.ini",
+     "backend/tests/",
+     "tools/platform/",
+     "tools/platform/fail_stream.py",
      "tools/platform/modtest.py"
     ]
    }
@@ -10536,6 +10989,22 @@
     ]
    }
   },
+  "backend/tests/platform/test_startup_timing_2026_09_29.py": {
+   "kind": "api",
+   "units": [
+    "core:main",
+    "file:backend/tests/_subproc.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/main.py",
+     "backend/tests/_subproc.py"
+    ],
+    "path": [
+     "backend/main.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_startup_writes_only_via_startup.py": {
    "kind": "audit",
    "units": [
@@ -10556,6 +11025,11 @@
      "tools/platform/"
     ]
    }
+  },
+  "backend/tests/platform/test_stepfile_drill_2026_09_30.py": {
+   "kind": "unit",
+   "units": [],
+   "evidence": {}
   },
   "backend/tests/platform/test_storage_locations_2026_09_28.py": {
    "kind": "api",
@@ -10940,6 +11414,41 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_approval_no_freeze_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:tools/platform/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_queue_and_feed_scoping_2026_09_15.py",
+    "helper:case_access",
+    "helper:startup",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
+    "mod:case/quotations",
+    "router:approval_queue"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/case_access.py",
+     "backend/helpers/startup.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/quotations.py",
+     "backend/tests/test_queue_and_feed_scoping_2026_09_15.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py"
+    ],
+    "path": [
+     "tools/platform/"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_approval_queue_badge_consistency_2026_09_15.py": {
    "kind": "api",
    "units": [
@@ -11041,6 +11550,11 @@
      "backend/routers/auth.py"
     ]
    }
+  },
+  "backend/tests/test_approval_queue_extra_types_2026_09_30.py": {
+   "kind": "unit",
+   "units": [],
+   "evidence": {}
   },
   "backend/tests/test_approval_queue_quotation_attachments_2026_09_23.py": {
    "kind": "api",
@@ -13240,6 +13754,23 @@
     "/api/this-route-does-not-exist"
    ]
   },
+  "backend/tests/test_deploy_dashboard_module_versions_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/tools/deploy_dashboard.py",
+    "router:auth",
+    "router:module_versions"
+   ],
+   "evidence": {
+    "api": [
+     "backend/routers/auth.py",
+     "backend/routers/module_versions.py"
+    ],
+    "path": [
+     "backend/tools/deploy_dashboard.py"
+    ]
+   }
+  },
   "backend/tests/test_deploy_outcome_2026_09_23.py": {
    "kind": "audit",
    "units": [
@@ -14712,6 +15243,56 @@
     ]
    }
   },
+  "backend/tests/test_e2e_home_mine_w2fix_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "page:index.html",
+    "router:approval_queue"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/routers/approval_queue.py"
+    ],
+    "page": [
+     "frontend/index.html"
+    ],
+    "path": [
+     "frontend/index.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_home_waiting_for_me_sync_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/test_queue_and_feed_scoping_2026_09_15.py",
+    "mod:case/api/quotations",
+    "page:index.html",
+    "router:approval_queue"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
+     "backend/tests/test_queue_and_feed_scoping_2026_09_15.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py"
+    ],
+    "page": [
+     "frontend/index.html"
+    ],
+    "path": [
+     "frontend/index.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_index_without_analytics_2026_09_26.py": {
    "kind": "e2e",
    "units": [
@@ -14996,6 +15577,34 @@
      "frontend/pages/module-settings.html"
     ]
    }
+  },
+  "backend/tests/test_e2e_n1_dispatch_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/_ui_dialogs.py",
+    "mod:subcontract/api/vendor_contractors",
+    "page:pages/case-management.html",
+    "page:pages/quotation-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
+     "backend/tests/_ui_dialogs.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/quotation-form.html"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_notice_banners_2026_09_25.py": {
    "kind": "e2e",
@@ -15631,6 +16240,33 @@
      "frontend/pages/case-management.html"
     ]
    }
+  },
+  "backend/tests/test_e2e_remit_fee_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "mod:analytics/api/reports",
+    "page:pages/cashier.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "frontend/pages/cashier.html"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_report_recognition_2026_09_24.py": {
    "kind": "e2e",
@@ -18947,6 +19583,21 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_row_access_empty_name_2026_09_29.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:case_access",
+    "helper:row_access"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/case_access.py",
+     "backend/helpers/row_access.py"
+    ]
+   }
+  },
   "backend/tests/test_runtime_switches_2026_09_22.py": {
    "kind": "api",
    "units": [
@@ -19682,6 +20333,17 @@
    "evidence": {
     "path": [
      "backend/tools/verify_package.py"
+    ]
+   }
+  },
+  "backend/tests/test_verify_package_export_ignore_list_2026_09_30.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/autostart.bat"
+   ],
+   "evidence": {
+    "path": [
+     "backend/autostart.bat"
     ]
    }
   },
