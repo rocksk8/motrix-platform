@@ -472,7 +472,7 @@
                 <span class="vm-spine" :class="'vm-spine--' + ageTone(item)"></span>
                 <div class="aq-card__in">
                   <div class="aq-card__r1">
-                    <span class="aq-card__no" x-text="item.quoteNo"></span>
+                    <span class="aq-card__no" x-text="item.displayNo || item.quoteNo"></span>
                     <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)" x-text="docTypeLabel(item)"></span>
                     <span class="aq-card__age" :class="'vm-age--' + ageWord(item)" x-text="ageText(item)"></span>
                   </div>
@@ -542,7 +542,7 @@
                    :class="{active: selected && itemKey(selected) === itemKey(item)}"
                    @click="selectItem(item)">
                 <span class="vm-lamp" :class="'vm-lamp--' + ageTone(item)"></span>
-                <span class="aq-qrow__no" x-text="item.quoteNo"></span>
+                <span class="aq-qrow__no" x-text="item.displayNo || item.quoteNo"></span>
                 <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)" x-text="docTypeLabel(item)"></span>
                 <span class="aq-qrow__who" x-text="item.customer"></span>
                 <span class="aq-qrow__age" x-text="ageText(item)"></span>
@@ -579,7 +579,7 @@
           <button @click="closeDrawer()" class="mob-back-aq" style="display:none;align-items:center;gap:5px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);padding:0;font-family:var(--font-zh)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>列表</button>
           
           <div class="aq-detail-title">
-            <div class="aq-detail-quote-no" x-text="selected?.quoteNo"></div>
+            <div class="aq-detail-quote-no" x-text="selected?.displayNo || selected?.quoteNo"></div>
             <div class="aq-detail-customer" x-text="(selected?.customer || '') + (selected?.projectName ? '　' + selected.projectName : '')"></div>
           </div>
           <div class="aq-detail-actions">
@@ -1603,6 +1603,8 @@
             if (cur >= tiers.length) return false
             const approvers = tiers[cur].approvers || []
             // sequential within tier: only the first unapproved approver may act
+            // 模組定義送審：審核人（含最高管理者）任一位都可以決定，不是依序（helpers/custom_def_review.decide）
+            if (item.type === 'custom_module_def') return approvers.some(a => a.status !== 'approved' && this._isMeOrDelegate(a.username)) && item.requestedBy !== this.session.username
             const firstPending = approvers.find(a => a.status !== 'approved')
             return firstPending && this._isMeOrDelegate(firstPending.username)
           }

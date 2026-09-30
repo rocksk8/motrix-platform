@@ -7,6 +7,7 @@
 - L1（安全，行為）W3 #3 定義審核繞過：審核只涵蓋自訂模組定義（company）；其他 kind 直接發布與任何還原（審核未啟用時）**都寫稽核 `definitions.publish_unreviewed`**；自訂模組定義的 draft／publish／restore 只接受 `company` 範圍（其餘 400，引擎本來就只讀 company）。
 - L1（安全，新增）：`helpers.doc_template.esc_quotes／attr_esc`——引號跳脫的單一來源（各 builder 的區域 `esc()` 保留原本的 &<>／換行規則，最後一步交給 `esc_quotes`）；單據抬頭／頁尾（公司名稱、英文名、統編、電話、email）與 `<img src>`（存摺、身分證路徑）一律跳脫；JSON 的 Infinity／NaN 進 colspan／count ⇒ `TemplateError`。
 - L1（安全，新增）W3 #3 補：`core.definitions.DefinitionConflict`（HTTP 409）——這份定義有送審中的版本時，`publish`／`restore` 直接拒絕（寫鎖內判斷）；`custom_def_review`：送審記 `baseVersion`，核可時現行版已變 ⇒ 409「送審已過期」（退回仍可）；有送審中的定義時變更審核模式／審核人 ⇒ 409。
+- L1（新增）接線稽核（建構器簽核）：信件類型 `custom_record_submitted／next_tier／approved／returned`、`custom_def_submitted／approved／returned`（`helpers/mail_types`，出現在「信件與通知收件設定」）；`helpers.email_notify.notify_custom_record_*`／`notify_custom_def_*` 七支；模組定義送審的站內通知 ref_id 改 `customdef:<key>:<ver>`（`static/notif.js` 解析 ⇒ 點鈴鐺開審核頁）；定義審核的佇列項目／詳情補列「申請人以外的最高管理者」為可決定者（provider 內，不動 `case_access`）；自訂單據佇列項目新增 `displayNo`（修訂版帶 -R<n>，id 仍是原單號）。
 
 ## 1.81 — 2026-09-30（暫用，列車取號；wip/w1-t26fix：列車 26 守門修補）
 - L1（行為，安全）：`GET /api/attachments/open` 本班關閉（`routers/attachments.ATTACHMENTS_OPEN_ENABLED = False`，一律 404；W3 安全檢查：路徑未綁定來源單據，正式修正隨 P3）；`POST /api/audit-log/module-counts` 需 `audit_log` 權限、`since` 非字串 400（wip/w2-t26sec）

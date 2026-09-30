@@ -1200,6 +1200,13 @@ class _Effects:
             _notify(username, type_, ref_id, ref_label, message)
         self.later.append(_send)
 
+    def mail(self, fn_name, *args, **kw):
+        """信件：與站內通知同一條路（commit 之後才寄；寄不出去不影響已 commit 的狀態）。"""
+        def _send():
+            from helpers import email_notify as _en
+            getattr(_en, fn_name)(*args, **kw)
+        self.later.append(_send)
+
     def flush(self):
         import logging
         for fn in self.later:
@@ -1301,6 +1308,7 @@ def _notify_state(body, rec, st, approval, notices):
         fp = next((a for a in tier["approvers"] if a.get("status") != "approved"), None)
         if fp:
             notices.notify(fp["username"], "approval", notify_ref(rec), label, "%s 待您簽核" % label)
+            notices.mail("notify_custom_record_submitted", body.get("name", ""), rec["record_no"], [fp["username"]], module_key=rec["module_key"])
             notices.append("已通知 %s 簽核" % fp.get("displayName", fp["username"]))
     for u in sorted(targets):
         msg = "%s 狀態：%s" % (label, st.get("label", st.get("key")))
@@ -1358,6 +1366,8 @@ def decide(conn, module_key, record_no, user, approve: bool, note="") -> dict:
                              (json.dumps(appr, ensure_ascii=False), rec["id"]))
                 rec["approval"] = appr
                 _enter_state(conn, body, rec, cfg["on_approved"], user, "approve", note, notices)
+                notices.mail("notify_custom_record_approved", body.get("name", ""), rec["record_no"],
+                             user.get("display_name") or user["username"], rec["created_by"], module_key=rec["module_key"])
             else:
                 conn.execute("UPDATE custom_records SET approval_json=?, updated_at=? WHERE id=?",
                              (json.dumps(appr, ensure_ascii=False), now, rec["id"]))
@@ -1366,11 +1376,14 @@ def decide(conn, module_key, record_no, user, approve: bool, note="") -> dict:
                 if nxt:
                     label = "%s %s" % (body.get("name", ""), rec["record_no"])
                     notices.notify(nxt["username"], "approval", notify_ref(rec), label, "%s 待您簽核" % label)
+                    notices.mail("notify_custom_record_next_tier", body.get("name", ""), rec["record_no"], appr["currentTier"] + 1, len(tiers),
+                                 [nxt["username"]], module_key=rec["module_key"])
         else:
             ok, code, msg = ta.check_reject_permission(tiers, idx, user, conn)
             if not ok:
                 raise CustomModuleError(msg, status=code)
             _enter_state(conn, body, rec, cfg["on_rejected"], user, "reject", note, notices)
+            notices.mail("notify_custom_record_returned", body.get("name", ""), rec["record_no"], note, rec["created_by"], module_key=rec["module_key"])
         conn.commit()
     notices.flush()
     out = get_record(conn, module_key, record_no)
@@ -1419,7 +1432,7 @@ def queue_items(conn) -> list:
     """IP-10 `approval.queue_items`：簽核中的自訂模組單據，形狀同「待我簽核」佇列的其他類型（`type`＝`custom_record`）。
     只列「目前狀態有簽核、而且還沒簽完」的；誰看得到由佇列那一端的 `_queue_visible_to` 決定。"""
     out, defs = [], {}
-    rows = conn.execute("SELECT module_key, record_no, def_version, status, approval_json, created_by, created_at "
+    rows = conn.execute("SELECT module_key, record_no, def_version, status, approval_json, created_by, created_at, revision "
                         "FROM custom_records WHERE approval_json != '{}'").fetchall()
     for r in rows:
         key = (r["module_key"], r["def_version"])
@@ -1441,7 +1454,8 @@ def queue_items(conn) -> list:
             continue
         out.append({
             "type": "custom_record", "moduleKey": r["module_key"], "moduleName": body.get("name", ""),
-            "quoteNo": r["record_no"], "customer": "", "projectName": body.get("name", ""), "total": 0,
+            "quoteNo": r["record_no"], "displayNo": r["record_no"] + ("-R%d" % r["revision"] if r["revision"] else ""),
+            "customer": "", "projectName": body.get("name", ""), "total": 0,
             "quoteDate": (r["created_at"] or "")[:10], "salesPerson": "",
             "requestedBy": appr.get("requestedBy") or r["created_by"],
             "requestedByDisplay": appr.get("requestedByDisplay") or appr.get("requestedBy") or r["created_by"],

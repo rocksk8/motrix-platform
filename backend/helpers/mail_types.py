@@ -120,6 +120,16 @@ for _k, _n in (("returned", "報價單退回修改"), ("shipping_returned", "出
                ("invoice_voucher_returned", "開票申請憑據退回修改"),
                ("payment_request_returned", "請款單退回修改")):
     register(_k, _n, _A, "none", "申請人", "單據已退回，修改並重新送審之前流程暫停。", _RETURN_ACT)
+# 自訂模組（建構器）：單據簽核（提交／下一層／核准／退回）與「模組定義」送審審核（送審／核可／退回）
+for _k, _n, _ev, _imp in (
+        ("custom_record_submitted", "自訂模組單據待審核", "當層簽核人", "單據在您簽核之前不會進入下一個狀態。"),
+        ("custom_record_next_tier", "自訂模組單據進入下一層審核", "該層簽核人", "前一層已完成，單據在本層簽核之前不會繼續。"),
+        ("custom_def_submitted", "自訂模組定義待審核", "模組審核人", "這一版模組定義在審核之前不會發布，新單據仍用現行版。")):
+    register(_k, _n, _A, "none", _ev, _imp, _APPROVE_ACT)
+register("custom_record_approved", "自訂模組單據審核完成", _A, "none", "申請人", "單據已核准，進入後續狀態。", _RESULT_ACT)
+register("custom_def_approved", "自訂模組定義審核完成", _A, "none", "送審人", "這一版模組定義已核可並發布。", _RESULT_ACT)
+register("custom_record_returned", "自訂模組單據退回修改", _A, "none", "申請人", "單據已退回，修改並重新送審之前流程暫停。", _RETURN_ACT)
+register("custom_def_returned", "自訂模組定義退回修改", _A, "none", "送審人", "這一版模組定義已退回，現行版不變。", "請登入系統，於模組建構器依退回原因修改草稿後重新送審。")
 register("resubmit_requester", "修改版報價單重新送審確認", _A, "none", "申請人",
          "修改版已重新進入簽核流程，原版本不再流轉。", _RESULT_ACT)
 register("bonus_submitted", "獎金分潤待審核", _A, "none", "輪到的簽核人（含代理人）",
