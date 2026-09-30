@@ -72,6 +72,20 @@ def _pdf_text(body: bytes) -> str:
     return "\n".join((p.extract_text() or "") for p in PdfReader(io.BytesIO(body)).pages)
 
 
+def _eventually(sql, args, want, what, timeout=10.0):
+    """退回是在提示關閉之後才送出請求：資料庫終點用輪詢等（等終點狀態，不是等某一趟請求）。"""
+    import time
+    end = time.time() + timeout
+    got = None
+    while time.time() < end:
+        r = _db(sql, args)
+        got = r[0]["status"] if r else None
+        if got == want:
+            return
+        time.sleep(0.2)
+    raise AssertionError("%s：狀態是 %r，預期 %r" % (what, got, want))
+
+
 def _last_audit(action):
     r = _db("SELECT target_label, detail AS detail_json FROM audit_log WHERE action=? ORDER BY id DESC LIMIT 1", (action,))
     return r[0] if r else None
@@ -99,15 +113,28 @@ def _click_preview(page, click):
 
 
 def _do_return(page, reason):
+    """按預覽裡的「退回修改」⇒ 原因視窗（案件頁＝MotrixUI.prompt；其他頁＝approval-return.js 的視窗）⇒ 空白不送 ⇒ 填原因送出。"""
     btn = page.locator('[data-testid="preview-return"]:visible')
     btn.wait_for(state="visible", timeout=10000)
     btn.click()
-    page.locator('[data-testid="return-dialog"]').wait_for(state="visible", timeout=5000)
-    page.locator('[data-testid="return-confirm"]').click()                     # 沒填原因
-    assert "要填原因" in page.locator('[data-testid="return-error"]').inner_text()
-    page.fill('[data-testid="return-reason"]', reason)
-    page.locator('[data-testid="return-confirm"]').click()
-    page.locator('[data-testid="return-dialog"]').wait_for(state="detached", timeout=15000)
+    own = page.locator('[data-testid="return-dialog"]')
+    ui = page.locator('[data-testid="ui-dialog"][data-kind="prompt"]')
+    page.wait_for_function("""() => document.querySelector('[data-testid="return-dialog"]') ||
+                              document.querySelector('[data-testid="ui-dialog"][data-kind="prompt"]')""", timeout=8000)
+    if own.count():
+        own.wait_for(state="visible", timeout=5000)
+        page.locator('[data-testid="return-confirm"]').click()                     # 沒填原因
+        assert "要填原因" in page.locator('[data-testid="return-error"]').inner_text()
+        page.fill('[data-testid="return-reason"]', reason)
+        page.locator('[data-testid="return-confirm"]').click()
+        own.wait_for(state="detached", timeout=15000)
+    else:
+        ui.locator('[data-testid="ui-dialog-ok"]').click()                        # 沒填原因 ⇒ 提示後重問
+        page.locator('[data-testid="ui-toast"][data-kind="error"]').filter(has_text="要填原因").first.wait_for(state="visible", timeout=5000)
+        ui.wait_for(state="visible", timeout=5000)
+        ui.locator('[data-testid="ui-dialog-input"]').fill(reason)
+        ui.locator('[data-testid="ui-dialog-ok"]').click()
+        ui.wait_for(state="detached", timeout=15000)
 
 
 def _html_shot(page, html, name):
@@ -148,7 +175,7 @@ def test_shipping_note(client, live_server, make_user, new_page, login_as, compa
     _html_shot(new_page(), pdf_gen._build_shipping_html({"noteNo": nno, "status": "待審核", "items": []}), "shipping-unapproved-html")
     _do_return(page, "出貨數量有誤")
     page.wait_for_function("() => true")
-    assert _db("SELECT status FROM shipping_notes WHERE note_no=?", (nno,))[0]["status"] == "草稿"
+    _eventually("SELECT status FROM shipping_notes WHERE note_no=?", (nno,), "草稿", "退回後")
     a = _last_audit("shipping.reject")
     assert a and nno in a["target_label"] and "出貨數量有誤" in (a["detail_json"] or "")
 
@@ -186,7 +213,7 @@ def test_completion_note(client, live_server, make_user, new_page, login_as, com
         return
     _html_shot(new_page(), cp._build_completion_html({"noteNo": nno, "status": "待審核"}), "completion-unapproved-html")
     _do_return(page, "完工日期不對")
-    assert _db("SELECT status FROM completion_notes WHERE note_no=?", (nno,))[0]["status"] == "草稿"
+    _eventually("SELECT status FROM completion_notes WHERE note_no=?", (nno,), "草稿", "退回後")
     a = _last_audit("completion.reject")
     assert a and "完工日期不對" in (a["detail_json"] or "")
 
@@ -251,7 +278,7 @@ def test_invoice_voucher(client, live_server, make_user, new_page, login_as, com
         assert page.locator('[data-testid="preview-return"]:visible').count() == 0
         return
     _do_return(page, "稅額有誤")
-    assert _db("SELECT status FROM invoice_vouchers WHERE voucher_no=?", (vno,))[0]["status"] == "草稿"
+    _eventually("SELECT status FROM invoice_vouchers WHERE voucher_no=?", (vno,), "草稿", "退回後")
     a = _last_audit("invoice_voucher.reject")
     assert a and "稅額有誤" in (a["detail_json"] or "")
 
