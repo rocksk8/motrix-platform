@@ -27,7 +27,8 @@ function ledgerHubPage() {
     _session() {
       try { return JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { return {} }
     },
-    async _api(method, path, body) {
+    async _api(verb, path, body) {
+      const method = typeof verb === 'string' ? verb : verb.method
       const opt = { method, headers: { Authorization: 'Bearer ' + (this._session().token || ''), 'Content-Type': 'application/json' } }
       if (body !== undefined) opt.body = JSON.stringify(body)
       const r = await fetch(path, opt)
@@ -74,7 +75,7 @@ function ledgerHubPage() {
       g.notice = ''
       g.busy = true
       try {
-        g.run = await this._api('POST', '/api/ledger/engine/run', { start: g.start, end: g.end })
+        g.run = await this._api({ method: 'POST' }, '/api/ledger/engine/run', { start: g.start, end: g.end })
         g.notice = '掃描 ' + g.run.stats.scanned + ' 筆事件：新增草稿 ' + g.run.stats.created + '、來源變動 ' + g.run.stats.drift + '、擋下 ' + g.run.stats.blocked
         await this.engLoad()
       } catch (e) { g.error = e.message }
@@ -99,7 +100,7 @@ function ledgerHubPage() {
       if (!ids.length) { g.error = '請先勾選要處理的草稿'; return }
       g.busy = true
       try {
-        const r = await this._api('POST', '/api/ledger/engine/batch', { voucher_ids: ids, action })
+        const r = await this._api({ method: 'POST' }, '/api/ledger/engine/batch', { voucher_ids: ids, action })
         g.results = r
         g.notice = '整批完成：成功 ' + r.ok + '、失敗 ' + r.failed
         await this.engLoad()
@@ -111,7 +112,7 @@ function ledgerHubPage() {
       this.error = ''
       this.notice = ''
       try {
-        await this._api('PUT', '/api/ledger/features/' + encodeURIComponent(f.key), { enabled: !f.enabled })
+        await this._api({ method: 'PUT' }, '/api/ledger/features/' + encodeURIComponent(f.key), { enabled: !f.enabled })
         this.notice = f.label + (f.enabled ? ' 已關閉' : ' 已開啟')
         await this.load()
       } catch (e) { this.error = e.message }

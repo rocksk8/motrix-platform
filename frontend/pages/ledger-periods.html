@@ -59,7 +59,7 @@
       <div class="lp-card">
         <div class="lp-h">建立會計年度</div>
         <div class="lp-row">
-          <input class="lp-input" type="number" placeholder="西元年，例如 2026" x-model="newYear" data-testid="lp-new-year">
+          <input class="lp-input" type="number" placeholder="西元年，例如 2026" data-saved-field x-model="newYear" data-testid="lp-new-year">
           <button class="lp-btn primary" :disabled="busy" @click="createYear()" data-testid="lp-create-year">建立（12 個期間）</button>
           <span class="lp-note" style="margin:0">補登過去的帳：直接建立過去的年度即可。</span>
         </div>
@@ -108,7 +108,7 @@
         </div>
         <div class="lp-err" x-show="op.error" x-text="op.error" data-testid="lp-op-error"></div>
         <div class="lp-row">
-          <select class="lp-input" x-model="op.year" data-testid="lp-op-year">
+          <select class="lp-input" data-saved-field x-model="op.year" data-testid="lp-op-year">
             <option value="">選年度</option>
             <template x-for="y in years" :key="y.year"><option :value="y.year" x-text="y.year"></option></template>
           </select>

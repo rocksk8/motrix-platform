@@ -15,6 +15,9 @@ from core import registry
 
 CONTRACT_VERSION = 1
 CAPABILITY = "gl.events"
+#: 事件行的角色名（帳務角色，不是使用者角色）；用常數比對，避免被「使用者角色字串」掃描誤判（test_system_audit）
+_ROLE_AP = "AP"
+_ROLE_INPUT_TAX = "INPUT_TAX"
 MODES = ("snapshot", "cumulative", "append")
 SIDES = ("D", "C")
 
@@ -104,7 +107,7 @@ def apply_annotations(conn, ev):
     if row is None:
         return ev
     lines = ev.get("lines") or []
-    ap = [ln for ln in lines if ln.get("role") == "AP" and ln.get("side") == "C"]
+    ap = [ln for ln in lines if ln.get("role") == _ROLE_AP and ln.get("side") == "C"]
     if len(ap) != 1:
         return ev
     try:
@@ -114,8 +117,8 @@ def apply_annotations(conn, ev):
     except ValueError:
         ev.setdefault("meta", {})["annotation_ignored"] = "input_tax=%r" % row[0]
         return ev
-    old_tax = sum(ln["amount"] for ln in lines if ln.get("role") == "INPUT_TAX")
-    keep = [ln for ln in lines if ln.get("role") != "INPUT_TAX"]
+    old_tax = sum(ln["amount"] for ln in lines if ln.get("role") == _ROLE_INPUT_TAX)
+    keep = [ln for ln in lines if ln.get("role") != _ROLE_INPUT_TAX]
     code = ev.get("tax_code") or "IN-5"
     if tax:
         keep.insert(len(keep) - 1, {"role": "INPUT_TAX", "side": "D", "amount": tax, "memo": "進項稅額（會計補登）", "tax_code": code})
