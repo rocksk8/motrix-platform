@@ -21,6 +21,8 @@
 | 匯款單 ↔ 勞報單 | IP-105 `payslip.remit`（R12） | M07 payroll → M04 subcontract | `check(conn,slip_no)`；`candidates(conn,contractor_id)`；`mark_paid(conn,slips,remit_no,date,who)`；`unmark_paid(conn,remit_no)`（皆不 commit，與匯款同一交易） | 勞報單 `data_json.paid_via_remit`＝匯款單號；取消匯款一併退回；勞報單自己 unpay 被擋 | `system_settings.remit_require_payslip`（預設開，最高管理者可關、寫稽核） | `accounting/tests/test_ledger_r12_remit_payslip_2026_09_30.py` |
 | 上傳檔權限 | IP-104 `uploads.path_access`（sec-p0，與金流無關，僅編號備忘） | 各單據模組 → L1 | — | — | — | sec-p0 題 |
 | 自訂模組金流 | `custom_record_finance_outbox`（W1 S2.5，`wip/w1-builder3-s25`）＋IP-9 `custom_module` 提供者 | 建構器 L1 `helpers/custom_finance` → 報表（即時）／總帳（C7 消費 outbox） | outbox：`dedupe_key`（唯一）、`event`（入帳／反轉）、`module_key`、`record_id`、`record_no`、`kind`、`payload_json`、`processed_at`；狀態進入／離開入帳時**同一交易**寫入 | `dedupe_key` 唯一＝重送冪等；`processed_at` 空＝待消費；反轉是另一筆事件 | `custom_records`（C7） | W1 的 `test_custom_finance*`；C7 完成後加總帳題 |
+
+> **總帳不消費 outbox**（主持裁示 2026-09-30）：C7 以『拉取式提供者』讀目前處於入帳狀態的自訂單據（即時集合），事件由引擎冪等產生、單據離開入帳狀態 ⇒ 事件消失 ⇒ 引擎反轉；outbox 只作稽核軌跡。金額欄位 → 科目靠會計維護的 `gl_custom_field_map`，未對應的欄位 ⇒ 事件標 `blocked_no_account` 並說明。
 | 補登（不改來源） | `gl_source_annotations`（總帳自有表） | 會計 → 引擎收集 | `(source_type, source_key, field, value)`；認得 `input_tax`（非負整數：覆寫承攬商發票 E04／進貨發票 E08b 的估算稅額，E09 跟著調整；把『未拆稅』的額外支出 E11／叫料 E12 拆成成本＋進項稅額）與 `invoice_date`（E04／E08b 的入帳日） | 補登值不合法 ⇒ 忽略並在事件 `meta.annotation_ignored` 標記；補登改變內容雜湊 ⇒ 已過帳者走 drift | `source_annotations` | `c2_subcontract` |
 
 ## 2. `gl.events` 契約 v1（事件形狀）
