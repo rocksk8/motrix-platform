@@ -22,3 +22,20 @@
 
 ## 使用者待辦
 MQ-202610-001／002 報價日期手改 10/01；Google Cloud 地圖樣式隱藏景點；舊待辦（MQ-202607-045、hmac.key 備份、D 槽舊目錄）。
+
+## 各視窗分支與 sha（2026-10-01 停工時，皆在 origin）
+| 視窗 | 分支 | sha | 狀態 |
+|---|---|---|---|
+| W1 | wip/w1-a2-0-2 | ed92dd91 | A2-0 底層預留完成，預檢綠（已合入 wip/train-29-assembly） |
+| W1 | wip/w1-a2-2 | bc4d25bc | 類型定義**未完成、未過守門**；含 definitions.py 一行修正（D.KINDS→D.kinds()）；交接 HANDOFF-W1 |
+| W1 | wip/w1-expense-s1 / w1-attach-p3 | eee7e55e / 900506d8 | 前者僅參考勿合；後者擱置 |
+| W2 | wip/w2-expense-a2 | ab5e2ec4（程式 3021847a） | A2-1/3/5 完成；最後一批（報表列＋單價小計修正，case 1.0.52）只跑 19 題；作廢路徑、稽核/匯出/PDF、四型 e2e 未做 |
+| W3 | wip/w3-bank-profile(-2) | 567dd902 / 35aa1ef2 | 已合入 assembly；通知信、隱私說明未做 |
+| W3 | wip/w3-dept-dim | 12dd4a26 | 測試綠，預檢未完 |
+| W3 | wip/w3-etype-editor | b04ac8c0 | 編輯頁 v1，e2e 3 綠，基底是 w1-a2-0-2，未跑完整守門 |
+| W3 | wip/w3-map-zoom-2 | dca6b583 | 已 rebase，e2e/預檢未重跑 |
+| W3 | wip/w3-prodroot-2 | 2d804b2b | 去識別化，擱置 |
+| W4 | wip/w4-g1 | 9af015ee | 完成，已合入 assembly |
+| W4 | wip/w4-g2-5 | 10f6cbdd | 含 G1＋G2 測試＋G3（C7 稅額，28 測試綠，未跑整套）＋A5 守門自動探索 83eb814a（**未驗證，有疑慮單獨 revert**）；G4 文件、G5、recon 分桶、1213 補開未做 |
+交接文件：各自 `HANDOFF-W{1..4}-20261001.md`（在上列分支內）與 `D:\開發測試檔\handoff\`。
+合併陷阱：銀行帳號與編輯頁兩分支都在 tests/test_alpine_double_init_2026_09_23.py 的 PAGE_POPULATION +1（同一行，合併時手動加總）；W2 讀 expense_forms 後須刪 test_module_keys_consistency 的 UNREAD_BY_DESIGN 該項（assembly 已刪）；wip/w1-a2-2 的 definitions.py 修正 assembly 尚未含；總帳 401 未結：U3（113–115 公式）、U4（TXT 媒體檔）。
