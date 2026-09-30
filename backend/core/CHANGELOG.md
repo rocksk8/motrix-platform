@@ -2,6 +2,14 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-01（wip/w1-a2-0：A2 費用單據的底層預留切片，一次到位；之後各類型只動模組）
+- L0（新增）：`core.definitions.register_kind(kind, label="", validator=None, default=None)`／`kinds()`／`kinds_meta()`——定義種類可登記（內建四種不變；重複登記或覆寫內建 ⇒ ValueError）；`save_draft／publish／list_definitions／…` 認得登記的種類。路由 `GET /api/definition-kinds`（超級管理員）。
+- L1（新增）：`helpers.tiered_approval.register_doc_type(code, label, unified=False)`／`doc_types_meta()`（就地擴充 `APPROVAL_DOC_TYPES／DEFAULT_UNIFIED_DOC_TYPES／APPROVAL_DOC_TYPE_LABELS`）；路由 `GET /api/settings/approval-doc-types`。`PUT /api/settings/approval-flow-scope` 由固定欄位模型改成依登記表驗證（鍵＝目前全部單據類型、值＝布林；缺／多／非布林 ⇒ 422，與原行為一致）；簽核設定頁接上登記的類型。
+- L1（新增）簽核佇列項目契約（選用欄位，舊項目不變）：`typeLabel`（未知 type 自帶標籤；內建不被覆寫）、`openUrl／approveUrl／rejectUrl／rejectField`（前端優先使用）、`caseless: True`（不掛案件的單據：簽核鏈上的人與送審人＋超級管理員可開，其餘 404；項目與 `approval.detail` 同一個判斷 `_access_step(caseless=)`）。
+- L1（新增）：`helpers.notification_prefs.ensure_event(key, desc)`＋`MODULE_GROUP_LABEL`；`mail_types.register`（owner≠core）自動把新類型併進個人通知偏好「其他模組通知」組。`helpers.email_notify.send_registered(event_key, *, title, rows, usernames=None, to_group=False, reason="", …)`（模組通用寄信入口；字面 key 由 `test_mail_registry` 的掃描核對已登記）。
+- L1（新增）：`helpers.doc_render.render_document(template, view)`（版型＋單據視圖 ⇒ HTML，未核可由程式補標示）；`custom_modules.render_view` 改為委派。
+- L1（新增）權限目錄 `expense_forms`（費用單據；A2-1 起由無案件新增端點讀取；目前列在 `UNREAD_BY_DESIGN`，有人讀它時守門會要求刪掉那一筆）。
+
 ## 1.91 — 2026-09-30（wip/w2-bonus-correction：獎金更正單的三種通知）
 - L1（新增）：`helpers.email_notify.notify_bonus_correction_submitted／_approved／_returned`——獎金更正單送審／核准／駁回的通知信（信內不放金額）；`helpers/mail_types.py` 登記三個信件類型。只新增，舊呼叫端不受影響。
 
