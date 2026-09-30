@@ -38,10 +38,10 @@
 ## 4. 一次更新的標準對話
 1. 開發機：「請回報 hostname、安裝目錄，並產生狀態快照」→ 正式機回覆快照。
 2. 開發機：建包 → 稽核 → 演練 → 發布，步驟檔放雲端 → 通知正式機「第 N 班步驟檔已放，基準 <commit>」。
-3. 正式機：步驟 0～1，結果回覆＋寫回報。
+3. 正式機：步驟 0～1，結果回覆＋寫回報。步驟 0 必做（PLAYBOOK §D-1a，2026-09-30）：讀部署包 `deploy_manifest.json` 的 `verification`——`mode`＝`scoped` ⇒ `<ROOT>\backend\.deployed_commit.json` 的 `commit` 開頭必須＝`verification.scoped.base`（40 碼），不等 ⇒ 停下回報兩個值（範圍驗證是對著別的基準算的）；`mode`＝`full` ⇒ 記下即可；沒有 `verification` ⇒ 停下回報。範本 `prod-tasks/TEMPLATE-apply.md` 步驟 0 第 2 項。
 4. 步驟 2：權限放行則正式機執行；否則開發機請使用者本人執行（附兩行指令）。
 5. 正式機：步驟 3 → 寫 `…_成功\摘要.md`＋新的狀態快照 → 回覆全文。
-6. 開發機：RUN-PLAN §6 記錄、`tests/_prod_baseline.py` 基準改新 commit。
+6. 開發機：RUN-PLAN §6 記錄、`tests/_prod_baseline.py` 基準改新 commit；主持打受信 tag `prod/<新 commit 前 8 碼>` 並推上 origin（範圍驗證的基準只認最新的 `prod/*` tag，PLAYBOOK §D-1a）。
 
 ## 5. 異常
 - 對方沒回應：訊息不保證已讀 ⇒ 以雲端回報檔為準；超過 30 分鐘沒有新回報檔就請使用者看正式機畫面。
