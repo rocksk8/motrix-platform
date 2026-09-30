@@ -1,5 +1,8 @@
 # 會計 更新紀錄
 
+## 1.1.34 — 2026-09-30（暫用號，列車取號；wip/w2-recon2：與總帳差異（Part B））
+- 新增提供者 `ledger.month_totals`（IP-107 暫定號，`ledger/month_totals.py`）：總帳逐月收入／費用彙總（引擎已過帳／引擎草稿／獎金／手工、稅額、待處理事件數）；只讀。
+
 ## 1.1.33 — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：安全審查 W3 sibling gap）
 - 傳票來源檔預覽（`line-source-file`）與帶入（`resolve_picks`）也要求檔案路徑在該來源單據自己的資料夾底下（`_path_belongs_to_doc`）：否則 404、不複製。
 
