@@ -39,6 +39,7 @@ from pdf_gen import generate_contractor_voucher_pdf_bytes, _generate_contractor_
 from helpers.errors import trace_id
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
+from modules.subcontract import remit as _remit
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -167,6 +168,7 @@ def _voucher_public(row, include_snapshot: bool = True) -> dict:
         "paidBankAccountName": d.get("paid_bank_account_name") or "",
         "paidBankAccountCode": d.get("paid_bank_account_code") or "",
         "paidLog":       json.loads(d.get("paid_log") or "[]"),
+        **_remit.remit_fields(d),   # W1：應付／實付／差額／手續費／差額審核狀態
         "exportCount":   d.get("export_count") or 0,
         "exportLog":     json.loads(d.get("export_log") or "[]"),
         "approval":      approval,
@@ -181,6 +183,21 @@ def _voucher_public(row, include_snapshot: bool = True) -> dict:
 
 # ── 銀行帳戶預設值（2026-09-02 新增，見 accounting_export.py 檔頭「標記已付款/
 #    已收款時的銀行帳戶預設值」說明）────────────────────────────────────────────
+
+@router.get("/api/contractor-vouchers/remit-fee-total")
+def get_remit_fee_total(quote_no: str, authorization: str = Header(None)):
+    """W1：這個案件已匯款的承攬商匯款手續費合計（公司自付，進案件成本；成本精算頁 remitFeeTotal 用）。
+    權限＝案件層守門（同匯款申請清單）＋財務金額可視。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        guard_case_access(conn, quote_no, user, allow_module="case_manage")
+        if not can_see_financial(user):
+            raise HTTPException(403, "沒有查看財務金額的權限")
+        return {"quoteNo": quote_no, "feeTotal": _remit.fee_total_for_case(conn, quote_no)}
+    finally:
+        conn.close()
+
 
 @router.get("/api/contractor-vouchers/last-paid-bank-account")
 def get_last_paid_bank_account(vendor_id: Optional[int] = None, authorization: str = Header(None)):
@@ -712,9 +729,9 @@ def record_contractor_voucher_export(voucher_no: str, mode: str = "external", au
 
 @router.post("/api/contractor-vouchers/{voucher_no}/paid-toggle")
 def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = Header(None)):
-    """標記已匯款時可帶入 paid_at（YYYY-MM-DD，實際匯款日期，不一定等於操作
-    當下的系統時間——財務常常是先在銀行完成匯款，之後才回系統標記）；不帶
-    就沿用舊行為，退回今天。paid_log 裡的 "at"／updated_at 仍然是「這次操作
+    """標記已匯款**必須**帶 paid_at（YYYY-MM-DD，實際匯款日期，不一定等於操作
+    當下的系統時間——財務常常是先在銀行完成匯款，之後才回系統標記）；不帶 ⇒ 400
+    （2026-09-30 W1：原本不帶退回今天）。paid_log 裡的 "at"／updated_at 仍然是「這次操作
     本身發生的系統時間」，跟 paid_at（匯款發生的日期）是兩個不同概念，不要
     混用。"""
     user = _require_user(authorization)
@@ -728,22 +745,32 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
     note   = (body or {}).get("note", "")
     if action not in ("pay", "unpay"):
         raise HTTPException(400, "action 必須為 pay 或 unpay")
-    paid_at_value = date.today().isoformat()
+    paid_at_value = ""
     if action == "pay":
+        # W1（2026-09-30 使用者裁示）：匯款日期必填——不再默認今天（先在銀行匯完、隔天才回系統標記是常態，默認今天會記錯日期）
         raw_paid_at = (body or {}).get("paid_at") or ""
-        if raw_paid_at:
-            try:
-                date.fromisoformat(raw_paid_at)
-            except ValueError:
-                raise HTTPException(400, f"匯款日期格式錯誤（{raw_paid_at}），需為 YYYY-MM-DD")
-            paid_at_value = raw_paid_at
+        if not raw_paid_at:
+            raise HTTPException(400, "請填寫匯款日期（paid_at，YYYY-MM-DD）")
+        try:
+            date.fromisoformat(raw_paid_at)
+        except ValueError:
+            raise HTTPException(400, f"匯款日期格式錯誤（{raw_paid_at}），需為 YYYY-MM-DD")
+        paid_at_value = raw_paid_at
     conn = get_db()
     row = conn.execute(
-        "SELECT status, is_paid, paid_log FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)
+        "SELECT status, is_paid, paid_log, snapshot_json FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)
     ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "申請不存在")
+    rm = None
+    if action == "pay":
+        # W1：實付金額／手續費（公司自付、不參與比對）；實付≠應付 ⇒ 差額待審核
+        try:
+            rm = _remit.parse_remit(body, _remit._payable(row["snapshot_json"]))
+        except ValueError as e:
+            conn.close()
+            raise HTTPException(400, str(e))
     if row["status"] != "已核准":
         conn.close()
         raise HTTPException(409, "僅已核准狀態可標記已匯款")
@@ -760,31 +787,40 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
     log.append({
         "at": now, "username": user["username"], "userDisplay": user.get("display_name") or user["username"],
         "action": "paid" if action == "pay" else "unpaid", "note": note,
-        **({"paidAt": paid_at_value} if action == "pay" else {}),
+        **({"paidAt": paid_at_value, "actual": rm["actual"], "fee": rm["fee"], "diff": rm["diff"]} if action == "pay" else {}),
     })
     if action == "pay":
         bank_name = (body or {}).get("bank_account_name") or (body or {}).get("bankAccountName") or ""
         bank_code = (body or {}).get("bank_account_code") or (body or {}).get("bankAccountCode") or ""
         conn.execute(
             "UPDATE contractor_payment_vouchers SET is_paid=1, paid_by=?, paid_at=?, paid_log=?, "
-            "paid_bank_account_name=?, paid_bank_account_code=?, updated_at=? WHERE voucher_no=?",
+            "paid_bank_account_name=?, paid_bank_account_code=?, updated_at=?, "
+            "remit_actual=?, remit_fee=?, remit_review=?, remit_review_by='', remit_review_at='', remit_review_note='' "
+            "WHERE voucher_no=?",
             (user.get("display_name") or user["username"], paid_at_value,
-             json.dumps(log, ensure_ascii=False), bank_name, bank_code, now, voucher_no)
+             json.dumps(log, ensure_ascii=False), bank_name, bank_code, now,
+             rm["actual"], rm["fee"], rm["review"], voucher_no)
         )
     else:
         conn.execute(
             "UPDATE contractor_payment_vouchers SET is_paid=0, paid_by='', paid_at='', paid_log=?, "
-            "paid_bank_account_name='', paid_bank_account_code='', updated_at=? WHERE voucher_no=?",
+            "paid_bank_account_name='', paid_bank_account_code='', updated_at=?, " + _remit.CLEAR_SQL + " WHERE voucher_no=?",
             (json.dumps(log, ensure_ascii=False), now, voucher_no)
         )
     conn.commit()
     conn.close()
     _audit(_tok(authorization), f"contractor_voucher.{action}", "contractor_payment_voucher", voucher_no,
-           voucher_no, {"note": note, **({"paidAt": paid_at_value} if action == "pay" else {})})
-    notify_module_activity("承攬商匯款申請", "已匯款" if action == "pay" else "取消已匯款",
-                            user.get("display_name") or user["username"], voucher_no, "case-management.html",
-                            detail=note or "")
-    return {"ok": True, "is_paid": action == "pay", "paid_log": log}
+           voucher_no, {"note": note, **({"paidAt": paid_at_value, "actual": rm["actual"], "fee": rm["fee"],
+                                          "diff": rm["diff"], "review": rm["review"]} if action == "pay" else {})})
+    who = user.get("display_name") or user["username"]
+    if action == "pay" and rm["review"]:
+        notify_module_activity("承攬商匯款申請", "匯款差額待審核", who, voucher_no, "cashier.html",
+                               detail="實付與應付不符（差額 %+g），請管理員到出納頁核可或退回。%s" % (rm["diff"], note or ""))
+    else:
+        notify_module_activity("承攬商匯款申請", "已匯款" if action == "pay" else "取消已匯款", who, voucher_no,
+                               "case-management.html", detail=note or "")
+    return {"ok": True, "is_paid": action == "pay", "paid_log": log,
+            **({"remitReview": rm["review"], "diff": rm["diff"], "actual": rm["actual"], "fee": rm["fee"]} if action == "pay" else {})}
 
 
 # ── 簽核設定（獨立於報價單／出貨單）────────────────────────────────────────────
