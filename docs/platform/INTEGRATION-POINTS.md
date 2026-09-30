@@ -240,7 +240,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M01 案件：`modules/case/api/quotations.py::_append_items_to_quotation`；L1 自訂模組附件：`helpers/custom_files.py::CustomFilesAccess`（`custom_records`；2026-09-30 建構器第三輪 S2，登記在 `routers/custom_records.py` 匯入時：暫存檔＝上傳者、已綁單＝有該模組權限者／引用該檔的單據簽核人，且看得到該欄位 `access.visibleTo`） |
+| 提供方 | M01 案件：`modules/case/api/quotations.py::_append_items_to_quotation` |
 | 使用方 | M04 `modules/subcontract/api/vendor_contractors.py::import_dispatch_to_quote`（`POST /api/contractor-dispatches/{did}/import-to-quote`） |
 | 形式 | provider，單一提供者；要與呼叫端同一筆交易（呼叫端已拿寫鎖）⇒ 不用事件 |
 | 語法 | 提供：`_registry.provide("quotation.append_items", "quotations", _append_items_to_quotation)`<br>取用：`append = registry.single_provider("quotation.append_items")`；`None` ⇒ 退化。`append(conn, quote_no, header, items, now) -> now`；`items`＝`[{description, qty, unit, cost, note}]` |
@@ -622,7 +622,7 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M01 案件：`modules/case/attachments.py::_CasePathAccess`（quotations、quotation_payment_items、quotation_materials、quotation_materials_invoices、case_updates、case_extra_expense、completion_notes、_pending_case_changes）；M02：`modules/crm/api.py::_DevLogPathAccess`（dev_logs）；M03：`modules/supply/api/shipping_notes.py::_ShippingPathAccess`（shipping_notes）；M04：`modules/subcontract/attachments.py::_SubcontractPathAccess`（contractor_dispatches、contractor_dispatch_invoices）；M05：`modules/arap/api/invoice_vouchers.py::_InvoiceVoucherPathAccess`（invoice_vouchers）；L1：`routers/system.py::_WorkLogPhotoAccess`（projects＝工作日誌照片，`registry.provide`） |
+| 提供方 | M01 案件：`modules/case/attachments.py::_CasePathAccess`（quotations、quotation_payment_items、quotation_materials、quotation_materials_invoices、case_updates、case_extra_expense、completion_notes、_pending_case_changes）；M02：`modules/crm/api.py::_DevLogPathAccess`（dev_logs）；M03：`modules/supply/api/shipping_notes.py::_ShippingPathAccess`（shipping_notes）；M04：`modules/subcontract/attachments.py::_SubcontractPathAccess`（contractor_dispatches、contractor_dispatch_invoices）；M05：`modules/arap/api/invoice_vouchers.py::_InvoiceVoucherPathAccess`（invoice_vouchers）；L1：`routers/system.py::_WorkLogPhotoAccess`（projects＝工作日誌照片，`registry.provide`）；L1 自訂模組附件：`helpers/custom_files.py::CustomFilesAccess`（`custom_records`；2026-09-30 建構器第三輪 S2，登記在 `routers/custom_records.py` 匯入時：暫存檔＝上傳者、已綁單＝有該模組權限者／引用該檔的單據簽核人，且看得到該欄位 `access.visibleTo`） |
 | 使用方 | L1 `helpers/uploads.py::upload_readable`（`routers/uploads.py` 的 `GET /api/photo-token`、`POST /api/photo-token/batch`〔稽核 S1：多張一次換，簽核佇列情境每次請求最多一次詳情守門〕與 `GET /api/uploads/{path}` 標頭那條）。每個上傳寫入資料夾都要被認領或明列排除：守門 `backend/tests/platform/test_upload_folders_claimed_2026_09_30.py` |
 | 形式 | provider，**多提供者、以模組 key 區分**；每個提供者宣告 `FOLDERS`（兩兩不重疊） |
 | 語法 | 提供：`ModuleSpec(providers={("uploads.path_access", "<key>"): Obj})`；`Obj.FOLDERS`、`Obj.readable(conn, folder, rest, user) -> bool`（`rest`＝資料夾之後各段、含檔名；demo 前綴 `_demo_uploads/`、`_demo_projects/`→`projects` 已由 L1 去掉）。取用：`helpers.uploads.canonical_upload_path(raw)`（不合法 ⇒ None ⇒ 403）→ `upload_readable(conn, rel, user)` |
