@@ -49,13 +49,16 @@ def gl_events(start, end, *, changed_since=""):
         party = {"key": ("S%s" % r["supplier_id"]) if r["supplier_id"] else (r["supplier_name"] or ""), "name": r["supplier_name"] or ""}
         memo = "進貨 %s %s（%d 台）" % (r["batch_no"], r["part_no"], r["qty"])
         d = (r["created_at"] or "")[:10]
+        tax = _tax_for(cost, r["invoice_no"])
         if d and start <= d <= end:
+            inv_line = {"role": "INVENTORY", "side": "D", "amount": cost, "memo": memo}
+            if tax:
+                inv_line["tax_code"] = "IN-5"                     # 有發票的進貨：讓 401 的進項金額欄取得到這筆金額
             events.append({
                 "source_type": "stock_batch", "source_key": r["batch_no"], "event_code": "E08", "event_date": d, "doc_no": r["batch_no"],
                 "case_no": "", "party": party, "tax_code": "", "mode": "snapshot",
-                "lines": [{"role": "INVENTORY", "side": "D", "amount": cost, "memo": memo}, {"role": "AP", "side": "C", "amount": cost, "memo": memo}],
+                "lines": [inv_line, {"role": "AP", "side": "C", "amount": cost, "memo": memo}],
                 "meta": {"part_no": r["part_no"], "qty": r["qty"]}})
-        tax = _tax_for(cost, r["invoice_no"])
         if tax and d and start <= d <= end:
             est += 1
             events.append({

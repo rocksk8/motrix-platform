@@ -188,6 +188,7 @@ def _split_unsplit_tax(ev, lines, tax):
         return ev
     cost[0]["amount"] -= tax
     code_ = ev.get("tax_code") or "IN-5"
+    cost[0]["tax_code"] = code_
     new = []
     for ln in lines:
         new.append(ln)
