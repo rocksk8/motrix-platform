@@ -7,13 +7,14 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.accounting.api import account_items, accounting_export, ledger_closing, ledger_engine, ledger_periods, ledger_reports, ledger_settings, ledger_statements, ledger_tax, voucher_providers, vouchers
+from modules.accounting.ledger import fixed_assets as _fixed_assets
+from modules.accounting.api import account_items, accounting_export, ledger_closing, ledger_engine, ledger_periods, ledger_reports, ledger_assets, ledger_settings, ledger_statements, ledger_tax, voucher_providers, vouchers
 
 _m0001 = importlib.import_module("modules.accounting.migrations.0001_ledger_base")
 
 MODULE = ModuleSpec(
     key="accounting",
-    routers=[accounting_export.router, account_items.router, vouchers.router, ledger_periods.router, ledger_reports.router, ledger_engine.router, ledger_settings.router, ledger_tax.router, ledger_statements.router, ledger_closing.router],
+    routers=[accounting_export.router, account_items.router, vouchers.router, ledger_periods.router, ledger_reports.router, ledger_engine.router, ledger_settings.router, ledger_assets.router, ledger_tax.router, ledger_statements.router, ledger_closing.router],
     migrations=[(1, _m0001.up)],
     providers={
         # IP-2：M07 獎金傳票草稿與科目檢查
@@ -25,6 +26,8 @@ MODULE = ModuleSpec(
         ("voucher.void_draft", "accounting"): voucher_providers._provide_voucher_void_draft,
         ("voucher.status", "accounting"): voucher_providers._provide_voucher_status,
         ("voucher.by_no", "accounting"): voucher_providers._provide_voucher_by_no,
+        # IP-GL1（W4 總帳 C6）：固定資產取得 E13a、每月折舊 E13b（來源 fixed_assets，由總帳自己提供）；唯讀
+        ("gl.events", "fixed_assets"): _fixed_assets.gl_events,
         # IP-22（暫定號）：M01 案件整包的傳票段
         ("voucher.by_case", "accounting"): vouchers.vouchers_by_case,
         # M01-PLAN §3-7（C）：待我簽核的傳票項目、轉簽的簽核鏈讀寫（M01 佇列只彙整）
