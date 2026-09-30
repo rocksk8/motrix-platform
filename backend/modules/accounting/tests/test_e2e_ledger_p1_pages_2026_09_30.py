@@ -278,8 +278,6 @@ def test_hub_page_lists_features_and_toggle_shows_and_hides_the_tab(live_server,
 # ── B5：年度結轉與決算 ────────────────────────────────────────────────────
 
 @pytest.mark.e2e
-
-@pytest.mark.e2e
 def test_hub_unbuilt_features_show_in_development_and_cannot_be_enabled(live_server, make_user, e2e_browser):
     user, pw = make_user(username="e2e_gl_hub_ready", role="superadmin")
     page = e2e_browser.new_page()
@@ -293,6 +291,8 @@ def test_hub_unbuilt_features_show_in_development_and_cannot_be_enabled(live_ser
         assert page.locator("[data-testid=hb-row-%s] [data-testid=hb-toggle]" % key).is_enabled(), key
     assert not bad and not errs
 
+
+@pytest.mark.e2e
 def test_periods_page_year_closing_generate_close_and_reopen(live_server, make_user, e2e_browser):
     from modules.accounting.ledger import periods as P
     user, pw = make_user(username="e2e_gl_year", role="superadmin")
