@@ -25,7 +25,6 @@ from pydantic import BaseModel, Field
 from db import get_db, spawn_bg_thread
 from db import db_conn  # /api/sales-orders（M08 搬遷移入）
 from modules.case.quotations import payment_item_amounts  # 同上
-from modules.case.quotations import JSON_ARROW_OK as _JSON_ARROW_OK  # SQLite 是否認得 ->／->>
 from helpers import row_access
 from helpers.case_access import case_page_readable   # AT-M1c：與報價單上附件的提供者同一支
 from modules.case import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
@@ -4359,12 +4358,6 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
 # 報價單、已結案變更（case_change）、額外支出、完工單、額外支出變更。項目形狀見 `helpers/approval_queue.py::base_item`。
 # 權限過濾（誰看得到哪一筆）與角標計數都在 L1，這裡只列「待審核／簽核中」的單。
 
-#: 正常的單（JSON 合法、approval 是物件）由 SQLite 取 `$.approval`（`->`，SQLite >= 3.38；巢狀 CASE 保證壞 JSON 不丟例外）；
-#: SQLite 太舊 ⇒ NULL ⇒ 每一筆都走下面照舊的 Python 解析。
-_APPR_FAST_SQL = ("CASE WHEN json_valid(data_json) THEN CASE WHEN json_type(data_json, '$.approval') = 'object' "
-                  "THEN data_json -> '$.approval' END END") if _JSON_ARROW_OK else "NULL"
-
-
 def approval_queue_items(conn) -> list:
     """`approval.queue_items`（M01）：報價單、已結案案件變更、案件額外支出、完工單、額外支出變更。
 
@@ -4379,11 +4372,13 @@ def approval_queue_items(conn) -> list:
     # 物件、空字串、NULL）照舊走 Python 的 L1 `approval_json_of`（語意完全不變：壞的跳過＋ERROR、沒有簽核層照列）。
     rows = conn.execute("""
         SELECT quote_no, customer_name, project_name, total, quote_date, sales_person,
-               %s AS appr_fast
+               CASE WHEN json_valid(data_json) THEN
+                    CASE WHEN json_type(data_json, '$.approval') = 'object' THEN json_extract(data_json, '$.approval') END
+               END AS appr_fast
         FROM quotations
         WHERE status IN ('待審核','簽核中')
         ORDER BY id DESC
-    """ % _APPR_FAST_SQL).fetchall()
+    """).fetchall()
     for r in rows:
         # 簽核 JSON 在 Python 逐筆解析（L1 approval_json_of）：SQL json_extract 遇到一筆壞 JSON 會讓 M01 整類消失；
         # 壞的那一筆跳過＋ERROR：列出了也簽不了（核准端點讀這張單的 JSON 會丟 JSONDecodeError ⇒ 500、狀態不變；D 實測）（〔更正〕~~不可以當成沒有簽核層列出：那會變成任一 superadmin 可簽~~）；
