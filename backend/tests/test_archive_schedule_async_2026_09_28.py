@@ -107,6 +107,7 @@ _IMPORT_MAIN_SCRIPT = '''
 import os, sys, tempfile, time, threading
 import db
 _tmp = tempfile.mkdtemp()
+import atexit as _ax, shutil as _sh; _ax.register(_sh.rmtree, _tmp, True)   # 2026-09-30 寫入量：結束時刪暫存目錄（原本每跑一次留一個含 1.3MB 庫的目錄）
 db.DB_PATH = os.path.join(_tmp, "t.db")
 db.DEMO_DB_PATH = os.path.join(_tmp, "d.db")
 # 首次安裝帳密檔導到暫存（子行程沒有 conftest 的隔離；不導的話 init_default_admin 會寫進這棵樹，稽核 D AB-S1）

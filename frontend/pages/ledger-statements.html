@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>財務報表 - MOTRIX 專案管理系統</title>
+  <script src="../js/ledger-statements.js"></script>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));background:var(--white)}
+    .st-title{font-size:20px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary);margin-bottom:6px}
+    .st-note{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.7;margin-bottom:14px;max-width:920px}
+    .st-tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border-light)}
+    .st-tab{padding:8px 16px;border:none;background:none;font-size:13px;font-family:var(--font-zh);color:var(--text-secondary);cursor:pointer;border-bottom:2px solid transparent}
+    .st-tab.on{color:var(--text-primary);font-weight:700;border-bottom-color:var(--accent)}
+    .st-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+    .st-input{padding:6px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:var(--surface)}
+    .st-btn{padding:5px 13px;border-radius:var(--radius);border:1px solid var(--border-light);background:var(--surface);font-size:12px;font-family:var(--font-zh);cursor:pointer;color:var(--text-primary)}
+    .st-btn:hover{background:var(--surface-sunken)}
+    .st-btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+    .st-table{width:100%;max-width:820px;border-collapse:collapse;font-size:13px;font-family:var(--font-zh);background:var(--surface)}
+    .st-table td{padding:5px 10px;border-bottom:1px solid var(--line)}
+    .st-table .num{text-align:right;font-variant-numeric:tabular-nums;width:130px}
+    .st-sec td{font-weight:700;background:var(--surface-muted)}
+    .st-sub td{font-weight:600}
+    .st-total td{font-weight:700;background:var(--surface-muted);border-top:1px solid var(--border-light)}
+    .st-item{cursor:pointer}
+    .st-item:hover{background:var(--surface-muted)}
+    .st-acct td{color:var(--text-secondary);font-size:12px}
+    .st-err{color:var(--tone-danger-fg);background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px;max-width:820px}
+    .st-warn{color:var(--warning);background:var(--warning-light);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px;max-width:820px}
+    .st-ok{color:var(--success);background:var(--success-light);border:1px solid var(--success-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px;max-width:820px}
+  </style>
+</head>
+<body x-data="ledgerStatementsPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div id="sidebar-root"></div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div>
+    <main class="page-main">
+      <div class="st-title">財務報表</div>
+      <div class="st-note">只計「已過帳」且未作廢的傳票；勾選「含未過帳」可預覽草稿。數字不平衡時會直接標紅並說明差額，請先查明原因，不要當成正常報表使用。點資產負債表的任一列可展開科目明細。</div>
+
+      <div class="st-tabs">
+        <button class="st-tab" :class="{on: tab==='bs'}" @click="setTab('bs')" data-testid="st-tab-bs">資產負債表</button>
+        <button class="st-tab" :class="{on: tab==='is'}" @click="setTab('is')" data-testid="st-tab-is">綜合損益表</button>
+        <button class="st-tab" :class="{on: tab==='eq'}" @click="setTab('eq')" data-testid="st-tab-eq">權益變動表</button>
+        <button class="st-tab" :class="{on: tab==='cf'}" @click="setTab('cf')" data-testid="st-tab-cf">現金流量表</button>
+      </div>
+
+      <div class="st-bar">
+        <template x-if="tab==='bs'">
+          <span>截至 <input class="st-input" type="date" x-model="asOf" data-testid="st-as-of">
+            　比較 <input class="st-input" type="date" x-model="compareAsOf" data-testid="st-compare-as-of"></span>
+        </template>
+        <template x-if="tab==='eq' || tab==='cf'">
+          <span><input class="st-input" type="date" x-model="start" data-testid="st-start"> ～ <input class="st-input" type="date" x-model="end" data-testid="st-end"></span>
+        </template>
+        <template x-if="tab==='is'">
+          <span><input class="st-input" type="date" x-model="start" data-testid="st-start"> ～ <input class="st-input" type="date" x-model="end" data-testid="st-end">
+            　比較 <input class="st-input" type="date" x-model="compareStart"> ～ <input class="st-input" type="date" x-model="compareEnd"></span>
+        </template>
+        <label class="st-note" style="margin:0"><input type="checkbox" x-model="drafts" data-testid="st-drafts"> 含未過帳</label>
+        <label class="st-note" style="margin:0"><input type="checkbox" class="filter" x-model="showZero"> 顯示零列</label>
+        <button class="st-btn primary" @click="run()" data-testid="st-run">查詢</button>
+        <button class="st-btn" @click="exportCsv()" data-testid="st-csv">匯出 CSV</button>
+      </div>
+
+      <div class="st-err" x-show="error" x-text="error" data-testid="st-error"></div>
+      <div class="st-warn" x-show="drafts" data-testid="st-drafts-warn">目前包含未過帳的傳票，數字僅供預覽，不是正式帳。</div>
+
+      <!-- 資產負債表 -->
+      <template x-if="tab==='bs' && bs">
+        <div>
+          <div class="st-err" x-show="!bs.checks.balanced" data-testid="st-bs-unbalanced">
+            資產負債表不平衡：資產 − 負債 − 權益 ＝ <b x-text="fmt(bs.checks.diff)"></b>。
+            <span x-show="!bs.checks.trial_balance_balanced">（試算表本身借貸不平衡，帳上資料有問題。）</span>
+            <span x-show="bs.unmapped.length" x-text="'以下科目有餘額卻沒有報表列：' + bs.unmapped.map(u => u.code + ' ' + u.name).join('、') + '（請到「報表設定」歸屬）'"></span>
+          </div>
+          <div class="st-ok" x-show="bs.checks.balanced" data-testid="st-bs-ok">資產 ＝ 負債 ＋ 權益（對帳通過）。</div>
+          <table class="st-table" data-testid="st-bs-table">
+            <tbody>
+              <template x-for="(r, idx) in bsRows()" :key="idx">
+                <tr :class="rowClass(r)" @click="r.type === 'item' && toggle(r.key)" :data-testid="r.testid">
+                  <td :style="'padding-left:' + r.indent + 'px'" x-text="r.label"></td>
+                  <td class="num" x-text="r.amount === null ? (r.type === 'sec' ? bs.as_of : '') : fmt(r.amount)"></td>
+                  <td class="num" x-show="bs.compare" x-text="r.cmp === null || r.cmp === undefined ? (r.type === 'sec' ? bs.compare && bs.compare.as_of : '') : fmt(r.cmp)"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+      <!-- 現金流量表（間接法） -->
+      <template x-if="tab==='cf' && cf">
+        <div>
+          <div class="st-err" x-show="!cf.checks.balanced" data-testid="st-cf-unbalanced">
+            現金流量表對帳未通過：
+            <span x-show="!cf.checks.activities_equal_cash_change">三大活動合計與現金淨變動不符；</span>
+            <span x-show="!cf.checks.cash_reconciles_to_balance_sheet">期初現金＋淨變動≠資產負債表期末現金；</span>
+            <span x-show="!cf.checks.net_income_matches_income_statement">淨利與損益表不一致；</span>
+            <span x-show="cf.unclassified.length" x-text="'以下科目有變動卻沒有現金流量分類：' + cf.unclassified.map(u => u.code + ' ' + u.name).join('、') + '（請到「報表設定」分類）'"></span>
+          </div>
+          <div class="st-ok" x-show="cf.checks.balanced" data-testid="st-cf-ok">三大活動合計＝現金淨變動，期末現金＝資產負債表現金（對帳通過）。</div>
+          <table class="st-table" data-testid="st-cf-table">
+            <tbody>
+              <template x-for="sec in cf.sections" :key="sec.key">
+                <template x-for="(row, ri) in [{h: true}].concat(sec.lines).concat([{t: true}])" :key="sec.key + ri">
+                  <tr :class="row.h ? 'st-sec' : (row.t ? 'st-total' : 'st-item')" :data-testid="row.t ? 'st-cf-total-' + sec.key : null">
+                    <td :style="(row.h || row.t) ? '' : 'padding-left:28px'" x-text="row.h ? sec.title : (row.t ? sec.title + '淨額' : row.label)"></td>
+                    <td class="num" x-text="row.h ? '' : fmt(row.t ? sec.total : row.amount)"></td>
+                  </tr>
+                </template>
+              </template>
+              <tr class="st-total" data-testid="st-cf-net"><td>本期現金及約當現金淨變動</td><td class="num" x-text="fmt(cf.net_change)"></td></tr>
+              <tr><td>期初現金及約當現金</td><td class="num" x-text="fmt(cf.cash_opening)"></td></tr>
+              <tr class="st-total" data-testid="st-cf-closing"><td>期末現金及約當現金</td><td class="num" x-text="fmt(cf.cash_closing)"></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
+      <!-- 權益變動表 -->
+      <template x-if="tab==='eq' && eq">
+        <div>
+          <div class="st-err" x-show="!eq.checks.balanced" data-testid="st-eq-unbalanced">
+            權益變動表對帳未通過：
+            <span x-show="!eq.checks.closing_equals_balance_sheet">期末權益與資產負債表不符；</span>
+            <span x-show="!eq.checks.reconciled" x-text="'期初＋變動與期末差 ' + fmt(eq.unexplained.total) + '（期間內有期初傳票或帳上資料異常）；'"></span>
+            <span x-show="!eq.checks.income_statement_balanced || !eq.checks.balance_sheet_balanced">損益表或資產負債表本身不平衡。</span>
+          </div>
+          <div class="st-ok" x-show="eq.checks.balanced" data-testid="st-eq-ok">期初＋本期變動＝期末，且期末權益＝資產負債表權益（對帳通過）。</div>
+          <table class="st-table" style="max-width:1100px" data-testid="st-eq-table">
+            <tbody>
+              <tr class="st-sec"><td>項目</td><template x-for="c in eq.columns" :key="c.key"><td class="num" x-text="c.label"></td></template></tr>
+              <template x-for="r in eq.rows" :key="r.key">
+                <tr :class="r.key === 'opening' || r.key === 'closing' ? 'st-total' : ''" :data-testid="'st-eq-row-' + r.key">
+                  <td x-text="r.label"></td>
+                  <template x-for="c in eq.columns" :key="c.key"><td class="num" x-text="fmt(r.amounts[c.key])" :data-col="c.key"></td></template>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div class="st-note" style="margin-top:8px" x-show="eq.rows[3].details && Object.keys(eq.rows[3].details).length">
+            其他變動明細：
+            <template x-for="(items, col) in eq.rows[3].details" :key="col">
+              <span><template x-for="i in items" :key="i.code"><span x-text="i.code + ' ' + i.name + ' ' + fmt(i.amount) + '　'"></span></template></span>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- 綜合損益表 -->
+      <template x-if="tab==='is' && is">
+        <div>
+          <div class="st-err" x-show="!is.checks.balanced" data-testid="st-is-unbalanced">
+            綜合損益表對帳未通過：
+            <span x-show="!is.checks.trial_balance_balanced">試算表借貸不平衡；</span>
+            <span x-show="!is.checks.ni_equals_trial_balance">淨利與試算表損益類淨額不一致；</span>
+            <span x-show="is.unmapped.length" x-text="'以下損益科目沒有報表列：' + is.unmapped.map(u => u.code + ' ' + u.name).join('、') + '（請到「報表設定」歸屬）'"></span>
+          </div>
+          <div class="st-ok" x-show="is.checks.balanced" data-testid="st-is-ok">淨利與試算表損益類淨額一致（對帳通過）。</div>
+          <table class="st-table" data-testid="st-is-table">
+            <tbody>
+              <tr class="st-sec"><td>項目</td><td class="num">本期</td><td class="num">年初至今</td><td class="num" x-show="is.compare">比較期</td></tr>
+              <template x-for="l in is.lines" :key="l.code">
+                <tr :class="l.kind === 'computed' ? 'st-total' : 'st-item'" :data-testid="'st-is-line-' + l.code" @click="l.kind !== 'computed' && toggle('is' + l.code)">
+                  <td :style="l.kind === 'computed' ? '' : 'padding-left:28px'" x-text="l.label"></td>
+                  <td class="num" x-text="fmt(l.period)"></td><td class="num" x-text="fmt(l.ytd)"></td>
+                  <td class="num" x-show="is.compare" x-text="fmt(compareIs(l.code))"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </main>
+  </div>
+</body>
+</html>

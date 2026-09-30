@@ -16,6 +16,7 @@ system_settings.google_calendar.refresh_token，之後這裡的 _get_access_toke
 """
 import json
 import logging
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -222,6 +223,121 @@ def create_test_event() -> str:
     )
 
 
+# ── 事件種類開關（2026-09-30，使用者裁示「行事曆推送可選」）──────────────────────
+# 存在 system_settings.google_calendar.events = {代碼: bool}；缺項＝取 EVENT_TYPES 的預設
+# （既有 9 種預設開 ⇒ 升級後行為不變；新 4 種預設關）。全域 `enabled` 仍是總開關（_events_call）。
+# 開關只擋「新建／更新」：關掉之後已建立的事件保留，不刪（push_event_delete_for_case_stage
+# 是「階段被刪除」的清理，不是事件種類，不受開關影響）。
+EVENT_TYPES = (
+    # (代碼, 名稱, 分組, 說明, 預設)
+    ("invoice_voucher",    "開票申請憑據已核准",     "金額單據", "開票申請憑據簽核核准當天建立整天事件", True),
+    ("payment_request",    "請款單已核准",           "金額單據", "請款單簽核核准當天建立整天事件", True),
+    ("shipping_note",      "出貨單已核准",           "金額單據", "出貨單簽核核准後，以出貨日期建立整天事件", True),
+    ("quotation_won",      "報價單成案",             "案件",     "報價單標記為「已成案」當天建立整天事件", True),
+    ("stage_due",          "案件階段到期日",         "案件",     "執行進度階段設定到期日時建立（改日期同步更新、清空到期日刪除）", True),
+    ("stage_done",         "案件階段完成日",         "案件",     "執行進度階段勾選完成時以完成日建立（取消勾選刪除）", True),
+    ("important_comment",  "案件重要留言",           "案件",     "案件留言板標記為重要的留言", True),
+    ("case_update",        "案件更新",               "案件",     "案件留言板新增留言（重要留言除外）；同一案件同一天合併為一個「○○案件更新」事件", False),
+    ("dev_case_converted", "業務開發案件轉建報價單", "業務開發", "業務開發案件轉建為報價單當天建立", True),
+    ("dev_case_stale",     "業務開發案件停滯提醒",   "業務開發", "洽談中超過 30 天未更新（每個停滯週期只建一次）", True),
+    ("dev_case_update",    "業務開發案件更新",       "業務開發", "新增開發（拜訪）紀錄；同一案件同一天合併為一個「○○案件更新」事件", False),
+    ("contractor_payout",  "包商撥款",               "付款",     "承攬商匯款申請標記已匯款時，以匯款日期建立", False),
+    ("expense_payout",     "支出付款",               "付款",     "出納登錄請款（案件額外支出）付款時，以付款日建立；不含勞報單付款", False),
+)
+EVENT_CODES = tuple(t[0] for t in EVENT_TYPES)
+_EVENT_DEFAULTS = {t[0]: t[4] for t in EVENT_TYPES}
+
+
+def event_types() -> list:
+    """設定頁用的事件種類目錄（依 EVENT_TYPES 順序）。"""
+    return [{"code": c, "label": l, "group": g, "description": d, "default": dv}
+            for c, l, g, d, dv in EVENT_TYPES]
+
+
+def event_switches(cfg: dict = None) -> dict:
+    """{代碼: bool}；缺項或值不是 bool 一律取預設。"""
+    stored = (cfg if cfg is not None else _cfg()).get("events")
+    stored = stored if isinstance(stored, dict) else {}
+    return {c: (stored[c] if isinstance(stored.get(c), bool) else _EVENT_DEFAULTS[c]) for c in EVENT_CODES}
+
+
+def event_enabled(code: str) -> bool:
+    """該事件種類是否要推。未知代碼 ⇒ False（寫錯代碼不會默默推）。總開關仍由 _events_call 擋。"""
+    if code not in _EVENT_DEFAULTS:
+        logger.warning("未知的行事曆事件種類：%s", code)
+        return False
+    try:
+        return event_switches()[code]
+    except Exception as exc:  # 設定讀不到 ⇒ 取預設，不擋主流程
+        logger.warning("讀取行事曆事件開關失敗，採預設：%s", exc)
+        return _EVENT_DEFAULTS[code]
+
+
+# ── 模組組好內容的通用推送（新事件一律走這裡；L1 不查 L2 的表）─────────────────
+# 呼叫端（模組）在 commit 之後 spawn_bg_thread(push_event_for_module, args=(...))。
+# merge_key 有值 ⇒ 同一 (代碼, merge_key, 日期) 合併成一個事件：以 Google 事件的 private
+# extendedProperty `motrixMergeKey` 找回同一天那一筆，說明往後累加（不需要新表，重開機也找得回）；
+# 同一行程內以每個 key 一把鎖序列化，避免兩則同時送出各建一筆。
+_MERGE_PROP = "motrixMergeKey"
+_merge_locks: dict = {}
+_merge_locks_guard = threading.Lock()
+
+
+def _merge_lock(key: str):
+    with _merge_locks_guard:
+        return _merge_locks.setdefault(key, threading.Lock())
+
+
+def _find_merged_event(merge_key: str):
+    q = urllib.parse.urlencode({"privateExtendedProperty": f"{_MERGE_PROP}={merge_key}", "maxResults": 5})
+    items = (_events_call("GET", "?" + q) or {}).get("items") or []
+    live = [it for it in items if it.get("status") != "cancelled" and it.get("id")]
+    return live[0] if live else None
+
+
+def _create_merged_event(summary: str, description: str, event_date: date, merge_key: str) -> str:
+    body = {
+        "summary": summary, "description": description,
+        "start": {"date": event_date.isoformat()},
+        "end":   {"date": (event_date + timedelta(days=1)).isoformat()},
+        "extendedProperties": {"private": {_MERGE_PROP: merge_key}},
+    }
+    resp = _events_call("POST", "", body)
+    if not resp.get("id"):
+        raise RuntimeError(f"建立行事曆事件失敗，回應無 id：{resp}")
+    return resp["id"]
+
+
+def push_event_for_module(code: str, summary: str, description: str, event_date=None, merge_key: str = "") -> None:
+    """通用推送：模組組好標題／說明／日期（date 或 YYYY-MM-DD），L1 只判斷開關並跟 Google 打交道。
+    fire-and-forget：任何失敗只記 log，不拋出。"""
+    try:
+        if not event_enabled(code):
+            return
+        if isinstance(event_date, str):
+            try:
+                event_date = date.fromisoformat(event_date[:10])
+            except ValueError:
+                event_date = None
+        event_date = event_date or date.today()
+        if not merge_key:
+            event_id = _create_event_with_retry(summary, description, event_date)
+            logger.info("push_event_for_module(%s): -> event %s", code, event_id)
+            return
+        key = f"{code}:{merge_key}:{event_date.isoformat()}"
+        with _merge_lock(key):
+            found = _find_merged_event(key)
+            if found:
+                old = found.get("description") or ""
+                event_id = _update_event_with_retry(found["id"], summary,
+                                                    (old + "\n\n" + description) if old else description, event_date)
+            else:
+                event_id = _create_merged_event(summary, description, event_date, key)
+        logger.info("push_event_for_module(%s, %s): -> event %s", code, key, event_id)
+    except Exception as exc:
+        logger.warning("push_event_for_module(%r) failed: %s", code, exc)
+
+
 # ── 三個觸發點（2026-08-21 這輪範圍）──────────────────────────────────────────
 # 各自查一次最新資料、組整天事件內容、建立事件、把 event id 寫回 data_json——
 # 這輪只做「新建」，不做「更新既有事件」，event id 先存起來供之後擴充用。
@@ -242,6 +358,8 @@ def _write_back(kind: str, key, event_id: str, slot: str = "default") -> bool:
 
 
 def push_event_for_invoice_voucher(voucher_no: str) -> None:
+    if not event_enabled('invoice_voucher'):   # 事件種類開關（關閉 ⇒ 不建不改不刪，既有事件保留）
+        return
     try:
         from db import get_db
         conn = get_db()
@@ -267,6 +385,8 @@ def push_event_for_invoice_voucher(voucher_no: str) -> None:
 
 
 def push_event_for_payment_request(request_no: str) -> None:
+    if not event_enabled('payment_request'):   # 事件種類開關（關閉 ⇒ 不建不改不刪，既有事件保留）
+        return
     try:
         from db import get_db
         conn = get_db()
@@ -292,6 +412,8 @@ def push_event_for_payment_request(request_no: str) -> None:
 
 
 def push_event_for_shipping_note(note_no: str) -> None:
+    if not event_enabled('shipping_note'):   # 事件種類開關（關閉 ⇒ 不建不改不刪，既有事件保留）
+        return
     try:
         from db import get_db
         conn = get_db()
@@ -322,6 +444,8 @@ def push_event_for_shipping_note(note_no: str) -> None:
 
 
 def push_event_for_quotation_won(quote_no: str) -> None:
+    if not event_enabled('quotation_won'):   # 事件種類開關（關閉 ⇒ 不建不改不刪，既有事件保留）
+        return
     try:
         from db import get_db
         conn = get_db()
@@ -355,6 +479,8 @@ def push_event_for_quotation_won(quote_no: str) -> None:
 # 「先建立、不做更新/刪除同步」的既有原則，不記錄 event id。
 
 def push_event_for_dev_case_converted(case_id: int) -> None:
+    if not event_enabled('dev_case_converted'):   # 事件種類開關（關閉 ⇒ 不建不改不刪，既有事件保留）
+        return
     try:
         from db import get_db
         conn = get_db()
@@ -379,6 +505,8 @@ def push_event_for_dev_case_converted(case_id: int) -> None:
 def push_event_for_dev_case_stale(case_id: int, case_name: str, customer_name: str, days: int) -> None:
     """呼叫端（_check_dev_case_stale()）已經用獨立於 email 的 guard key 判斷
     「這個停滯週期第一次跨過 30 天」才會呼叫這裡，這裡本身不重複判斷。"""
+    if not event_enabled('dev_case_stale'):   # 事件種類開關
+        return
     try:
         event_id = _create_event_with_retry(
             f"業務開發案件停滯提醒 — {case_name}（{customer_name}）",
@@ -397,6 +525,8 @@ def push_event_for_dev_case_stale(case_id: int, case_name: str, customer_name: s
 # 行事曆上留一堆過期重複事件。
 
 def push_event_for_case_stage_due(stage_id: int) -> None:
+    if not event_enabled('stage_due'):   # 事件種類開關（關閉 ⇒ 不建不改不刪，既有事件保留）
+        return
     try:
         from db import get_db
         conn = get_db()
@@ -471,6 +601,8 @@ def push_event_delete_for_case_stage(event_id: str) -> None:
 # 不是「勾選這個動作發生的時間」——補登的話兩者會差很多天。
 
 def push_event_for_case_stage_done(stage_id: int) -> None:
+    if not event_enabled('stage_done'):   # 事件種類開關（關閉 ⇒ 不建不改不刪，既有事件保留）
+        return
     try:
         from db import get_db
         conn = get_db()
@@ -529,6 +661,8 @@ def push_event_for_case_stage_done(stage_id: int) -> None:
 
 
 def push_event_for_important_comment(update_id, quote_no: str, content: str, author_display: str) -> None:
+    if not event_enabled('important_comment'):   # 事件種類開關（關閉 ⇒ 不建不改不刪，既有事件保留）
+        return
     try:
         from db import get_db
         conn = get_db()

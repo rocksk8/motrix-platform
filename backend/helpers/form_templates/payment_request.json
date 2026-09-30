@@ -1,0 +1,297 @@
+{
+ "key": "payment_request",
+ "name": "請款單",
+ "category": "財務",
+ "description": "申請人、部門、收款對象、請款明細與合計、預計付款日與實際付款日；合計為支出（權責依請款日、現金依付款日）。",
+ "note": "本單是獨立的請款登記；有對應的內建案件時請填「關聯案件」，避免與內建請款重複計入營運報表。",
+ "body": {
+  "name": "請款單",
+  "icon": "",
+  "menu": {
+   "group": "財務",
+   "order": 60
+  },
+  "numbering": {
+   "prefix": "PR",
+   "date": "YYYYMMDD",
+   "digits": 4
+  },
+  "fields": [
+   {
+    "key": "applicant",
+    "label": "申請人",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "users",
+    "default": {
+     "$": "requester"
+    },
+    "required": true
+   },
+   {
+    "key": "dept",
+    "label": "部門",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "departments"
+   },
+   {
+    "key": "payee",
+    "label": "收款對象",
+    "type": "text",
+    "dataClass": "T1",
+    "required": true
+   },
+   {
+    "key": "req_date",
+    "label": "請款日",
+    "type": "date",
+    "dataClass": "T1",
+    "default": {
+     "$": "today"
+    }
+   },
+   {
+    "key": "case_no",
+    "label": "關聯案件",
+    "type": "text",
+    "dataClass": "T1",
+    "help": "有對應的內建案件時填案件單號，避免重複計入報表"
+   },
+   {
+    "key": "reason",
+    "label": "請款事由",
+    "type": "textarea",
+    "dataClass": "T1",
+    "maxLength": 500
+   },
+   {
+    "key": "lines",
+    "label": "請款明細",
+    "type": "table",
+    "dataClass": "T1",
+    "required": true,
+    "minRows": 1,
+    "maxRows": 200,
+    "addLabel": "新增一列",
+    "columns": [
+     {
+      "key": "item",
+      "label": "項目",
+      "type": "text",
+      "required": true
+     },
+     {
+      "key": "qty",
+      "label": "數量",
+      "type": "number",
+      "min": 0
+     },
+     {
+      "key": "price",
+      "label": "單價",
+      "type": "number",
+      "min": 0
+     },
+     {
+      "key": "amt",
+      "label": "金額",
+      "type": "formula",
+      "formula": "qty * price"
+     }
+    ]
+   },
+   {
+    "key": "total",
+    "label": "請款合計",
+    "type": "formula",
+    "dataClass": "T1",
+    "formula": "total(lines, \"amt\")",
+    "finance": {
+     "kind": "expense",
+     "dateField": "req_date",
+     "cashDateField": "pay_date",
+     "caseField": "case_no"
+    }
+   },
+   {
+    "key": "pay_date",
+    "label": "付款日",
+    "type": "date",
+    "dataClass": "T1",
+    "help": "現金口徑的歸屬日期（出納付款後填）"
+   },
+   {
+    "key": "bank_note",
+    "label": "匯款備註",
+    "type": "text",
+    "dataClass": "T1"
+   }
+  ],
+  "workflow": {
+   "initial": "draft",
+   "states": [
+    {
+     "key": "draft",
+     "label": "草稿"
+    },
+    {
+     "key": "pending",
+     "label": "簽核中",
+     "approval": {
+      "tiers": [
+       {
+        "approvers": [
+         {
+          "sourceType": "submitter_manager"
+         }
+        ]
+       }
+      ],
+      "on_approved": "approved",
+      "on_rejected": "draft"
+     }
+    },
+    {
+     "key": "approved",
+     "label": "已核准",
+     "final": true,
+     "notify": {
+      "requester": true
+     }
+    }
+   ],
+   "transitions": [
+    {
+     "key": "submit",
+     "label": "送審",
+     "from": "draft",
+     "to": "pending"
+    }
+   ]
+  },
+  "ui": {
+   "form": {
+    "groups": [
+     {
+      "title": "基本資料",
+      "fields": [
+       "applicant",
+       "dept",
+       "payee",
+       "req_date",
+       "case_no",
+       "reason"
+      ]
+     },
+     {
+      "title": "請款明細",
+      "fields": [
+       "lines"
+      ]
+     },
+     {
+      "title": "金額與付款",
+      "fields": [
+       "total",
+       "pay_date",
+       "bank_note"
+      ]
+     }
+    ]
+   },
+   "list": {
+    "columns": [
+     "applicant",
+     "payee",
+     "total"
+    ]
+   }
+  },
+  "output": {
+   "template": {
+    "theme": "voucher_standard",
+    "blocks": [
+     {
+      "type": "identity_header",
+      "title": "請款單"
+     },
+     {
+      "type": "meta",
+      "fields": [
+       {
+        "label": "單號",
+        "path": "recordNo"
+       },
+       {
+        "label": "申請人",
+        "path": "fields.applicant"
+       },
+       {
+        "label": "部門",
+        "path": "fields.dept"
+       },
+       {
+        "label": "收款對象",
+        "path": "fields.payee"
+       },
+       {
+        "label": "請款日",
+        "path": "fields.req_date",
+        "format": "date10"
+       }
+      ]
+     },
+     {
+      "type": "items_table",
+      "source": "fields.lines",
+      "label": "請款明細",
+      "columns": [
+       {
+        "title": "#",
+        "format": "index"
+       },
+       {
+        "title": "項目",
+        "path": "item"
+       },
+       {
+        "title": "數量",
+        "path": "qty",
+        "align": "right"
+       },
+       {
+        "title": "單價",
+        "path": "price",
+        "format": "money",
+        "align": "right"
+       },
+       {
+        "title": "金額",
+        "path": "amt",
+        "format": "money",
+        "align": "right"
+       }
+      ]
+     },
+     {
+      "type": "totals",
+      "rows": [
+       {
+        "label": "請款合計",
+        "path": "fields.total",
+        "grand": true
+       }
+      ]
+     },
+     {
+      "type": "approval_sign"
+     },
+     {
+      "type": "identity_footer"
+     }
+    ]
+   }
+  }
+ }
+}

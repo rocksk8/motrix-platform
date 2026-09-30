@@ -98,8 +98,19 @@
       margin-top: 20px;
       line-height: 1.7;
     }
-    .gc-event-list { font-size: 13px; color: var(--text-secondary); line-height: 1.9; }
-    .gc-event-list li::marker { color: var(--accent); }
+    .gc-ev-group { margin-bottom: 14px; }
+    .gc-ev-group-title { font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 4px; }
+    .gc-ev-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border-light);
+      cursor: pointer;
+    }
+    .gc-ev-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .gc-ev-default { font-size: 11px; color: var(--text-dim); margin-left: 6px; }
+    .gc-ev-desc { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
     .gc-check-row {
       display: flex;
       align-items: flex-start;
@@ -154,24 +165,45 @@
       <div class="pg__l">
         <div class="pg__eyebrow">系統設定</div>
         <h1 class="pg__t">Google 行事曆設定</h1>
-        <p class="pg__s">重要事件（開票申請憑據核准、出貨單核准、報價單成案）自動建立整天行事曆事件，讓系統跟日常行事曆結合（目前僅系統→行事曆單向推送）</p>
+        <p class="pg__s">依事件種類選擇要自動建立的整天行事曆事件，讓系統跟日常行事曆結合（系統→行事曆單向推送）</p>
       </div>
     </div>
 
-    <!-- 自動建立的事件 -->
-    <div class="gc-card">
+    <!-- 自動建立的事件：事件種類開關（2026-09-30，最高管理者；每個變更記稽核） -->
+    <div class="gc-card" id="gc-events-card">
       <div class="gc-card-head">
         <div class="gc-card-head-title">自動建立的行事曆事件</div>
+        <span x-show="evSaved" x-transition style="font-size:12px;color:var(--success);font-weight:600">已儲存</span>
       </div>
       <div class="gc-card-body">
-        <ul class="gc-event-list">
-          <li>開票申請憑據簽核核准 → 建立整天事件</li>
-          <li>出貨單簽核核准 → 建立整天事件</li>
-          <li>報價單標記為「已成案」 → 建立整天事件</li>
-        </ul>
+        <template x-for="g in eventGroups" :key="g.name">
+          <div class="gc-ev-group">
+            <div class="gc-ev-group-title" x-text="g.name"></div>
+            <template x-for="t in g.items" :key="t.code">
+              <label class="gc-ev-row" :data-gc-event="t.code">
+                <input type="checkbox" :data-gc-event-input="t.code" x-model="cfg.events[t.code]"
+                       style="width:16px;height:16px;margin-top:2px;cursor:pointer">
+                <span style="flex:1">
+                  <span class="gc-ev-label" x-text="t.label"></span>
+                  <span class="gc-ev-default" x-text="t.default ? '預設開' : '預設關'"></span>
+                  <span class="gc-ev-desc" x-text="t.description"></span>
+                </span>
+              </label>
+            </template>
+          </div>
+        </template>
+        <div class="gc-actions" style="margin-top:12px">
+          <button class="btn btn-primary" id="gc-events-save" @click="saveEvents()" :disabled="evSaving">
+            <span x-show="!evSaving">儲存事件設定</span>
+            <span x-show="evSaving">儲存中…</span>
+          </button>
+        </div>
+        <div x-show="evMsg" x-text="evMsg" id="gc-events-msg"
+             :style="evError ? 'color:var(--danger)' : 'color:var(--success)'"
+             style="font-size:13px;margin-top:12px;font-weight:600"></div>
         <div class="gc-hint">
-          事件會建立在下方設定的行事曆（Calendar ID）裡；建議使用一個獨立的次要行事曆，跟寄件帳號的主行事曆分開，方便篩選查看。<br>
-          目前僅支援「系統 → 行事曆」單向推送新建事件，尚未支援事件更新/刪除同步（例如出貨單核准後被撤銷，行事曆事件不會跟著移除）。
+          下方「啟用 Google 行事曆整合」是總開關；關閉時以上事件都不推送。關掉某一種事件只停止之後的新建與更新，已建立在行事曆上的事件保留、不會刪除。<br>
+          事件會建立在下方設定的行事曆（Calendar ID）裡；建議使用一個獨立的次要行事曆，跟寄件帳號的主行事曆分開，方便篩選查看。
         </div>
       </div>
     </div>
@@ -291,7 +323,13 @@
           calendar_id: 'primary',
           connected: false,
           smtp_user_hint: '',
+          events: {},
+          eventTypes: [],
         },
+        evSaving: false,
+        evSaved: false,
+        evMsg: '',
+        evError: false,
         saving: false,
         testing: false,
         saved: false,
@@ -317,6 +355,15 @@
             },
           ]
         },
+        get eventGroups() {
+          const groups = []
+          for (const t of (this.cfg.eventTypes || [])) {
+            let g = groups.find(x => x.name === t.group)
+            if (!g) { g = { name: t.group, items: [] }; groups.push(g) }
+            g.items.push(t)
+          }
+          return groups
+        },
         get readyCount() { return this.checks.filter(c => c.ok).length },
         get allReady() { return this.readyCount === this.checks.length },
 
@@ -331,6 +378,11 @@
           this._initDone = true
           const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
           if (!s.token) { location.replace('login.html'); return }
+          await this.load()
+        },
+
+        async load() {
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
           const r = await fetch('/api/settings/google-calendar', {
             headers: { Authorization: 'Bearer ' + s.token }
           })
@@ -340,10 +392,31 @@
           }
         },
 
+        async saveEvents() {
+          this.evSaving = true; this.evMsg = ''
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          const r = await fetch('/api/settings/google-calendar', {
+            method: 'PUT',
+            headers: { Authorization: 'Bearer ' + s.token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ events: { ...this.cfg.events } }),
+          })
+          this.evSaving = false
+          if (r.ok) {
+            this.evMsg = '事件設定已儲存'; this.evError = false
+            this.evSaved = true; setTimeout(() => this.evSaved = false, 3000)
+            await this.load()
+          } else {
+            const d = await r.json().catch(() => ({}))
+            this.evMsg = d.detail || '儲存失敗'; this.evError = true
+          }
+          setTimeout(() => this.evMsg = '', 4000)
+        },
+
         async save() {
           this.saving = true; this.msg = ''
           const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
-          const { connected: _c, smtp_user_hint: _h, ...payload } = this.cfg
+          // 事件開關由「儲存事件設定」單獨送出，這裡不帶（免得覆蓋另一張卡片尚未儲存的勾選）
+          const { connected: _c, smtp_user_hint: _h, events: _e, eventTypes: _t, ...payload } = this.cfg
           const r = await fetch('/api/settings/google-calendar', {
             method: 'PUT',
             headers: { Authorization: 'Bearer ' + s.token, 'Content-Type': 'application/json' },

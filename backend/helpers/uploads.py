@@ -29,6 +29,10 @@ from core import paths as _paths
 UPLOADS_ROOT = _paths.UPLOADS_ROOT
 
 _ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.pdf'}
+#: 個別單據類型另外放行的副檔名（key＝呼叫端傳的 `subfolder`，不含 demo 前綴）。
+#: 傳票附件（2026-09-30 使用者裁示）：Word／Excel 也能夾帶；exe 等其他格式照舊擋。大小上限沿用 `_MAX_FILE_SIZE`。
+#: 函式簽章不動（L1 介面快照不變）：放行範圍由這張表決定，不是讓每個呼叫端自己傳白名單。
+_EXTRA_EXTS_BY_SUBFOLDER = {'voucher_attachments': {'.docx', '.xlsx', '.doc', '.xls'}}
 _MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB／檔
 
 # demo 帳號隔離前綴——2026-08-24 補上（原本這裡完全沒有 is_demo_mode() 判斷，
@@ -102,6 +106,8 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
     if not files:
         raise HTTPException(400, "請至少選擇一個檔案")
 
+    allowed = _ALLOWED_EXTS | _EXTRA_EXTS_BY_SUBFOLDER.get(subfolder, set())
+    allowed_label = 'jpg/png/pdf' + ('/docx/xlsx/doc/xls' if allowed != _ALLOWED_EXTS else '')
     subfolder = _effective_subfolder(subfolder)
     save_dir = _safe_save_dir(subfolder, doc_no)
     os.makedirs(save_dir, exist_ok=True)
@@ -110,8 +116,8 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
     now = datetime.now().isoformat()
     for upload in files:
         ext = os.path.splitext(upload.filename or '')[1].lower()
-        if ext not in _ALLOWED_EXTS:
-            raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 jpg/png/pdf）")
+        if ext not in allowed:
+            raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 {allowed_label}）")
         raw = await upload.read()
         if len(raw) > _MAX_FILE_SIZE:
             raise HTTPException(400, f"檔案過大：{upload.filename}（單檔上限 20MB）")
@@ -190,3 +196,77 @@ def files_from_json_column(conn, table: str, key_col: str, key, col: str) -> lis
         return json.loads(row["v"] or "[]") or []
     except (TypeError, ValueError):
         raise AttachmentSourceError("來源「%s」的附件資料格式不正確，無法帶入。" % table)
+
+
+# ── 上傳檔的讀取權限（`uploads.path_access`，IP-104；2026-09-30 安全修正 P0）──────────────────────────
+# 原本 `/api/photo-token` 與 `/api/uploads/…`（Authorization 標頭那條）只要求登入 ⇒ 任何登入者拿得到任何單據
+# 附件（路徑形狀可列舉：`<資料夾>/<單號>/<檔名>`）。改為：路徑先正規化，再依第一段資料夾交給**擁有那張單據的
+# 模組**，用那張單據自己的讀取規則判斷。沒有提供者認領的資料夾一律不放行（預設拒絕）。
+
+#: 提供者 capability：`Obj.FOLDERS`（負責的第一段資料夾名稱）、`Obj.readable(conn, folder, rest, user) -> bool`
+#: （`rest`＝資料夾之後的各段，含檔名；單據不存在或看不到 ⇒ False）。
+PATH_ACCESS = "uploads.path_access"
+
+#: demo 隔離前綴 ⇒ 去掉前綴後的第一段（`_demo_projects` 是 `projects` 的 demo 版，見 photos._photo_root）
+_DEMO_PREFIXES = {_DEMO_SUBFOLDER_PREFIX: None, "_demo_projects": "projects"}
+
+
+def _path_seg_ok(seg: str) -> bool:
+    return bool(seg) and seg not in ('.', '..') and not any(c in seg for c in _BAD_PATH_CHARS)
+
+
+def canonical_upload_path(raw):
+    """請求帶來的上傳相對路徑 ⇒ 正規形式 `a/b/c`；不合法 ⇒ None。
+
+    ```
+    拒絕  空字串、絕對路徑（/ 開頭、磁碟代號）、反斜線、冒號（含 ADS）、NUL、. 與 ..、空段、只有一段
+    拒絕  realpath 與字面路徑不同（連結／junction／Windows 尾端點號等 ⇒ 實際指到別處）或跑出 UPLOADS_ROOT
+    ```
+    不「幫忙正規化」（例如把 `a/../b` 變成 `b`）：合法的呼叫端送的都是存檔當下產生的正規路徑。"""
+    s = str(raw or "")
+    if not s or os.path.isabs(s):
+        return None
+    segs = s.split("/")
+    if len(segs) < 2 or not all(_path_seg_ok(x) for x in segs):
+        return None
+    root = os.path.realpath(UPLOADS_ROOT)
+    literal = os.path.normpath(os.path.join(root, *segs))
+    real = os.path.realpath(literal)
+    if os.path.normcase(real) != os.path.normcase(literal):
+        return None
+    if os.path.commonpath([os.path.normcase(root), os.path.normcase(real)]) != os.path.normcase(root):
+        return None
+    return "/".join(segs)
+
+
+def upload_owner(rel: str):
+    """正規路徑 ⇒ `(資料夾, 其餘各段)`（去掉 demo 前綴）；形狀不對 ⇒ None。"""
+    segs = str(rel or "").split("/")
+    if segs and segs[0] in _DEMO_PREFIXES:
+        alias = _DEMO_PREFIXES[segs[0]]
+        segs = ([alias] if alias else []) + segs[1:]
+    if len(segs) < 2:
+        return None
+    return segs[0], tuple(segs[1:])
+
+
+def upload_readable(conn, rel: str, user) -> bool:
+    """這個人能不能讀這個上傳檔（`rel` 須先經 `canonical_upload_path`）。
+
+    依第一段資料夾找 `uploads.path_access` 的提供者（擁有模組），用那張單據自己的讀取規則判斷。
+    沒有提供者（模組不在，或資料夾沒有人認領，例：branding、voucher_attachments 各有自己的端點）⇒ False。
+    提供者丟例外 ⇒ False 並記 ERROR（fail closed：壞掉只會少看到，不會多看到）。"""
+    owner = upload_owner(rel)
+    if owner is None or not isinstance(user, dict):
+        return False
+    folder, rest = owner
+    from core import registry
+    for key, prov in sorted(registry.providers(PATH_ACCESS).items()):
+        if folder in (getattr(prov, "FOLDERS", ()) or ()):
+            try:
+                return bool(prov.readable(conn, folder, rest, user))
+            except Exception:                                   # noqa: BLE001  fail closed
+                import logging
+                logging.getLogger(__name__).exception("uploads.path_access 提供者 %s 判斷 %s 失敗", key, rel)
+                return False
+    return False

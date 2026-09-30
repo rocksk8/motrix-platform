@@ -35,7 +35,7 @@ param(
     # 0 = 不依天數清理。與 KeepPackages 並用：符合任一條就刪；這一次剛做好的包兩條都不會刪。
     [int]$MaxAgeDays = 7,
     # 同一份 tree（含環境）今天 12 小時內已嚴格全綠 ⇒ 預設沿用、不重跑測試（PLAN-TEST-PERF §3.1）。
-    # 加 -ForceTests 一律重跑（每週至少一次、或懷疑環境變了時用）。
+    # 加 -ForceTests 一律重跑（每週至少一次、或懷疑環境變了時用）。也關掉範圍驗證（PLAYBOOK §D-1a）⇒ 一律全量。
     [switch]$ForceTests,
     # 產品設定檔（CORE-SPEC §9c①）：repo 根目錄 product/<名稱>.json 列出要包的 L2 模組；
     # 沒選到的 backend/modules/<key>/（連同它宣告的頁面）不進包，包內寫 backend/modules.lock.json。
@@ -46,7 +46,18 @@ param(
     # 依客戶授權建包（CORE-SPEC「完整包與客戶加購模組」使用者裁示①，2026-09-28）：給了就以授權檔的 modules 決定包的內容
     # （驗章；"*"＝全部；驗不過或格式錯 ⇒ 建包中止），-Product 不用；包內 modules.lock.json 與 deploy_manifest.json
     # 記授權檔的指紋（SHA-256），不記內容。沒給 ⇒ 照舊用 -Product。
-    [string]$License = ""
+    [string]$License = "",
+    # ── 建包優化（2026-09-30 使用者「安排建包的優化方式，避免非正常情況的失敗」；PLAYBOOK §D-建包）──
+    # 預設全開；各自關掉 ⇒ 回到舊行為。
+    # 分段沿用：非 e2e／e2e 各自沿用同指紋的綠（含 modtest --full 寫的）；關掉 ⇒ 只沿用「兩段都綠」的完整紀錄。
+    [switch]$NoStageReuse,
+    # 偶發重跑：紅的題隔離重跑（最多 2 次），通過且登記在 tools/platform/known_flakes.json 才放行；
+    # 開頭另查登記簿是否有過期條目（有 ⇒ 建包失敗）。關掉 ⇒ 紅就擋（舊行為）。
+    [switch]$NoFlakeRetry,
+    # 開跑前盤點其他 pytest 與疑似孤兒的鎖持有者（只報告、不結束行程）。
+    [switch]$NoPreflight,
+    # 盤點時等其他（非孤兒）pytest 結束，最多幾分鐘；0＝不等（預設）。
+    [int]$WaitForOtherTests = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -142,7 +153,25 @@ function Release-TestExclusive {
         $info = Get-Content -Raw -Encoding UTF8 $script:TestExclusivePath | ConvertFrom-Json
         if ([int]$info.pid -eq $PID) { Remove-Item -LiteralPath $script:TestExclusivePath -Force }
     } catch {}
-    Remove-Item Env:\MOTRIX_PYTEST_EXCLUSIVE, Env:\MOTRIX_PYTEST_EXCLUSIVE_OWNER -ErrorAction SilentlyContinue
+    Remove-Item Env:\MOTRIX_PYTEST_EXCLUSIVE, Env:\MOTRIX_PYTEST_EXCLUSIVE_OWNER, Env:\MOTRIX_PYTEST_BUILD_CHILD -ErrorAction SilentlyContinue
+}
+
+function Invoke-PyTool([string[]]$ToolArgs) {
+    # 呼叫 tools\platform 的輔助工具：輸出 UTF-8、逐行印出；回傳 exit code
+    # PS 5.1：$ErrorActionPreference=Stop 時 2>&1 收到一行 stderr 就會變成終止錯誤 ⇒ 這個函式內改 Continue（只影響本函式）
+    $ErrorActionPreference = "Continue"
+    $prevIo = $env:PYTHONIOENCODING
+    $env:PYTHONIOENCODING = "utf-8"
+    $prevOut = $null
+    try { $prevOut = [Console]::OutputEncoding; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
+    try {
+        & $pyExe @ToolArgs 2>&1 | ForEach-Object { Write-Host "  $_" }
+        $code = $LASTEXITCODE
+    } finally {
+        $env:PYTHONIOENCODING = $prevIo
+        if ($prevOut) { try { [Console]::OutputEncoding = $prevOut } catch {} }
+    }
+    return $code
 }
 
 # --- 挑測試用的 Python（Step 2.5 與 -WhichPython 共用）---
@@ -453,6 +482,15 @@ if ($sel.Project -and $pyExe -ne $sel.Project) {
 Write-Host "[環境] 測試將使用：$pyExe" -ForegroundColor Green
 Write-Host "[OK] 依賴齊全。" -ForegroundColor Green
 
+# --- Step 2.51: 偶發登記簿（2026-09-30，PLAYBOOK §D-建包）---
+# 登記＝「暫時容忍、限期查根因」。過期或格式錯 ⇒ 建包在這裡就失敗（跑了 30 分鐘才被擋更糟）。-NoFlakeRetry ⇒ 不查（舊行為）。
+if (-not $NoFlakeRetry) {
+    $kfExit = Invoke-PyTool @((Join-Path $projectRoot "tools\platform\known_flakes.py"), "check")
+    if ($kfExit -ne 0) {
+        Fail "偶發登記簿（tools\platform\known_flakes.json）有過期或格式錯的條目（見上）。根因修好就刪掉那一筆；未修好要延期須由負責人重新登記。要暫時照舊行為建包可加 -NoFlakeRetry。"
+    }
+}
+
 # --- Step 2.52: 版本紀錄的反方向（2026-09-22 新增，§13 VR7）---
 # Step 1.6 守的是「manifest 舊於這一包的 commit」。A-2 指出它只守一半：
 #   manifest 有、DB 沒有   正常 —— 服務還沒重啟，下次開機會同步進去
@@ -641,44 +679,152 @@ $pytestTemp = Join-Path $env:TEMP "motrix-pytest-$(Get-Date -Format 'yyyyMMdd_HH
 # 判斷在 tools\build_test_reuse.py（純函式有題：test_build_test_reuse_2026_09_25）。
 $reuseTool = Join-Path $projectRoot "backend\tools\build_test_reuse.py"
 $testRecords = Join-Path $projectRoot "backend\tools\deploy_logs\test_results.jsonl"
+$flakyTool = Join-Path $projectRoot "tools\platform\flaky_retry.py"
+$preflightTool = Join-Path $projectRoot "tools\platform\build_preflight.py"
 $testFp = $null
 $reuse = $null
+# 分段沿用（2026-09-30，PLAYBOOK §D-建包）：非 e2e／e2e 各自查；modtest --full 的綠也寫在同一份紀錄（主工作樹）。
+# -NoStageReuse ⇒ 回到舊行為（只看同指紋最新一筆的嚴格全綠）。
+$stageReuse = @{}
 try {
     $fpOut = & $pyExe $reuseTool fingerprint
     if ($LASTEXITCODE -eq 0) { $testFp = ($fpOut | ConvertFrom-Json).fingerprint }
+    $rp = & $pyExe $reuseTool records-path
+    # 主工作樹的紀錄檔（worktree 共用）；路徑讀不懂（非 ASCII 被 locale 解壞）或目錄不在 ⇒ 用本專案的（舊行為）
+    if ($LASTEXITCODE -eq 0 -and $rp -and (Test-Path -LiteralPath (Split-Path -Parent ("$rp").Trim()))) { $testRecords = ("$rp").Trim() }
     if ($testFp -and -not $ForceTests) {
-        $lk = & $pyExe $reuseTool lookup --records $testRecords --fp $testFp
-        if ($LASTEXITCODE -eq 0 -and $lk -and $lk -ne "null") { $reuse = $lk | ConvertFrom-Json }
+        if ($NoStageReuse) {
+            $lk = & $pyExe $reuseTool lookup --records $testRecords --fp $testFp
+            if ($LASTEXITCODE -eq 0 -and $lk -and $lk -ne "null") { $reuse = $lk | ConvertFrom-Json }
+        } else {
+            foreach ($st in @("not_e2e", "e2e")) {
+                $ls = & $pyExe $reuseTool lookup-stage --records $testRecords --fp $testFp --stage $st
+                if ($LASTEXITCODE -eq 0 -and $ls -and $ls -ne "null") { $stageReuse[$st] = ($ls | ConvertFrom-Json) }
+            }
+            if ($stageReuse.Count -eq 2) {
+                $reuse = [pscustomobject]@{ tested_at = "$($stageReuse['not_e2e'].tested_at) / $($stageReuse['e2e'].tested_at)"
+                                            commit = "$($stageReuse['not_e2e'].commit) / $($stageReuse['e2e'].commit)" }
+            }
+        }
     }
 } catch {
     Write-Host "  [WARN] 無法判斷是否可沿用測試結果（$($_.Exception.Message)）—— 照常跑測試" -ForegroundColor Yellow
     $reuse = $null
+    $stageReuse = @{}
+}
+$runNonE2e = -not $stageReuse.ContainsKey("not_e2e")
+$runE2e = -not $stageReuse.ContainsKey("e2e")
+# manifest 的 verification：每一段是實跑還是沿用、哪些題是偶發重跑通過的
+$BuildVerification = [ordered]@{ not_e2e = "ran"; e2e = "ran"; flaky_retried = @() }
+foreach ($st in @($stageReuse.Keys)) {
+    $BuildVerification[$st] = "reused $($stageReuse[$st].tested_at)（$($stageReuse[$st].source)，commit $($stageReuse[$st].commit)）"
+    $BuildVerification["flaky_retried"] += @($stageReuse[$st].flaky_retried | Where-Object { $_ })
 }
 
 function Record-TestResult([bool]$green) {
     # 記下這一次的測試結果（沿用判斷用）。**紅了要在 Fail 離開之前記**——否則同一份 tree 之前那筆綠
     # 會被下次沿用（偶發紅之後又沿用舊綠）。守門：test_every_red_exit_from_the_test_stage_is_recorded_before_it_leaves。
-    if (-not $testFp) { return }
+    # 分段模式（預設）：各段完成時已由 Record-Stage 記過；這一行完整紀錄只在 -NoStageReuse（舊行為）寫。
+    if (-not $testFp -or -not $NoStageReuse) { return }
     $flag = if ($green) { "1" } else { "0" }
     try { & $pyExe $reuseTool record --records $testRecords --fp $testFp --green $flag --commit $commitShort | Out-Null } catch {}
 }
 
-if ($reuse) {
+function Record-Stage([string]$stage, [bool]$green, [string]$flakyFile = "") {
+    # 一段一行（build_test_reuse.py record-stage）；綠＝該段閘門通過（含已登記的偶發重跑，清單一併記下）
+    if (-not $testFp) { return }
+    $flag = if ($green) { "1" } else { "0" }
+    $rsArgs = @("record-stage", "--records", $testRecords, "--fp", $testFp, "--stage", $stage, "--green", $flag, "--commit", $commitShort)
+    if ($flakyFile) { $rsArgs += @("--flaky-from", $flakyFile) }
+    try { & $pyExe $reuseTool @rsArgs | Out-Null } catch {}
+}
+
+function Invoke-FlakyRetry([string]$stage, [int]$exitCode, $outLines) {
+    # 偶發重跑政策（PLAYBOOK §D-建包）：只重跑紅的題、單獨循序、最多 2 次；重跑通過且已登記 known_flakes ⇒ 放行。
+    # 回傳 @{ Ok; ResultFile }。-NoFlakeRetry ⇒ 不重跑（Ok=false，照舊擋下）。
+    if ($NoFlakeRetry) { return @{ Ok = $false; ResultFile = "" } }
+    $outFile = Join-Path $env:TEMP "motrix-build-$buildRunId-$stage.out.txt"
+    $resFile = Join-Path $env:TEMP "motrix-build-$buildRunId-$stage.retry.json"
+    @($outLines | ForEach-Object { "$_" }) | Set-Content -Path $outFile -Encoding UTF8
+    $env:MOTRIX_FAIL_STREAM_STAGE = $stage
+    $rc = Invoke-PyTool @($flakyTool, "--run-id", $buildRunId, "--stage", $stage, "--exit-code", "$exitCode",
+                          "--output-file", $outFile, "--python", $pyExe, "--basetemp-prefix", "${pytestTemp}_retry",
+                          "--result-out", $resFile)
+    Remove-Item -LiteralPath $outFile -ErrorAction SilentlyContinue
+    $res = $null
+    try { $res = Get-Content -Raw -Encoding UTF8 $resFile | ConvertFrom-Json } catch {}
+    $ok = ($rc -eq 0 -and $res -and $res.ok -eq $true)
+    if (-not $ok) { Remove-Item -LiteralPath $resFile -ErrorAction SilentlyContinue }
+    if ($ok) { $BuildVerification["flaky_retried"] += @($res.flaky_retried | ForEach-Object { $_.nodeid }) }
+    return @{ Ok = $ok; ResultFile = $(if ($ok) { $resFile } else { "" }) }
+}
+
+# ── 範圍驗證（PLAYBOOK §D-1a，2026-09-30 使用者：「如果未影響到底層……不需要跑全域」）──────────────────────
+# **優先判**：正式機基準（受信 tag prod/<sha>）→ 這個 commit 的改動**沒有一個在底層**（X 上的 tools/platform/bottom_layer.json）
+# 而且這個 commit 有全綠的範圍驗證（scope_gate.py run）⇒ 整段（分段沿用／全量）跳過。
+# 判定在 _scope_gate.ps1::Get-ScopedGateResult（fail closed：exit 非 0、看不懂、例外、commit 不符 ⇒ $null）；
+# 不接受、出錯、-ForceTests ⇒ 走下面 build-opt 的分段沿用／全量（舊行為不變）。
+$scoped = $null
+$VerificationMode = "full"
+$ScopedVerification = $null
+if (-not $ForceTests) {
+    . (Join-Path $PSScriptRoot "_scope_gate.ps1")
+    $sgr = Get-ScopedGateResult -PyExe $pyExe -GateScript (Join-Path $projectRoot "tools\platform\scope_gate.py") -Commit $commit
+    $scoped = $sgr.Scoped
+    if (-not $scoped -and $sgr.Note) { Write-Host "  [範圍驗證] $($sgr.Note)" -ForegroundColor Yellow }
+}
+
+if ($scoped) {
+    Write-Host "`n[測試] 範圍驗證放行（沒有動到底層）：$($scoped.detail) —— 不跑全量、不查分段沿用。要全量請加 -ForceTests" -ForegroundColor Cyan
+    $testExit = 0
+    $e2eExit = 0
+    $VerificationMode = "scoped"
+    $ScopedVerification = [ordered]@{
+        base         = $scoped.base
+        units        = @($scoped.units)
+        consumers    = @($scoped.consumers)
+        test_files   = $scoped.tests
+        counts       = $scoped.counts
+        finished     = $scoped.finished
+        record       = $scoped.record_path
+    }
+    $BuildVerification = [ordered]@{ not_e2e = "skipped (scoped)"; e2e = "skipped (scoped)"; flaky_retried = @() }
+} elseif ($reuse) {
     Write-Host "`n[測試] 沿用 $($reuse.tested_at) 的全綠結果（同一份 tree 與環境，commit $($reuse.commit)）—— 不重跑。要重跑請加 -ForceTests" -ForegroundColor Cyan
     $testExit = 0
     $e2eExit = 0
     $BuildStats["reused_tests_from"] = $reuse.tested_at
+    if ($NoStageReuse) { $BuildVerification["not_e2e"] = "reused $($reuse.tested_at)"; $BuildVerification["e2e"] = "reused $($reuse.tested_at)" }
 } else {
+# ── 建包前盤點（2026-09-30）：其他 pytest（附父行程鏈）與疑似孤兒的鎖持有者——只報告、不結束任何行程 ──
+if (-not $NoPreflight) {
+    Write-Host "`n[盤點] 本機其他測試行程與測試鎖..."
+    $null = Invoke-PyTool @($preflightTool, "--self-pid", "$PID", "--wait-minutes", "$WaitForOtherTests")
+}
 Acquire-TestExclusive
 $env:MOTRIX_PYTEST_EXCLUSIVE = "1"
 $env:MOTRIX_PYTEST_EXCLUSIVE_OWNER = "$PID"
-Write-Host "`n[測試] 執行 pytest（非 e2e，backend/tests/，含 API 整合測試，pytest-xdist 平行化，$workers 個 worker）..."
+# 建包自己的子行程（xdist worker、題目起的子 pytest、偶發重跑）認得這份登記；其他臨時 pytest 會被 conftest 拒絕
+$env:MOTRIX_PYTEST_BUILD_CHILD = "$PID"
+# 失敗先行出 log（tools/platform/fail_stream.py）：偶發重跑用它認出紅的是哪幾題；-NoFlakeRetry 時不載（舊行為）
+$buildRunId = "build_$(Get-Date -Format 'yyyyMMdd_HHmmss')_$PID"
+$prevPyPath = $env:PYTHONPATH
+$fsArgs = @()
+if (-not $NoFlakeRetry) {
+    $env:PYTHONPATH = (@((Join-Path $projectRoot "tools\platform")) + @($prevPyPath | Where-Object { $_ })) -join ";"
+    $env:MOTRIX_FAIL_STREAM_RUN = $buildRunId
+    $fsArgs = @("-p", "fail_stream")
+}
 Push-Location (Join-Path $projectRoot "backend")
+$testExit = 0
+if ($runNonE2e) {
+Write-Host "`n[測試] 執行 pytest（非 e2e，backend/tests/，含 API 整合測試，pytest-xdist 平行化，$workers 個 worker）..."
 # ⚠️ `--durations=20` 是**零額外時間**：那一輪本來就要跑，它只是把 pytest
 # 已經量到的分布印出來。而它量到的正是「**打包環境下**」的分布 ——
 # 🔑 那是我們先前唯一拿不到的那一格（單獨跑一支探針量不到 `-n 6` 的競爭）。
 $_tNonE2e = Get-Date
-& $pyExe -m pytest -q -m "not e2e" -n $workers --durations=20 --basetemp="$pytestTemp" 2>&1 |
+$env:MOTRIX_FAIL_STREAM_STAGE = "not_e2e"
+& $pyExe -m pytest -q -m "not e2e" -n $workers --durations=20 --basetemp="$pytestTemp" @fsArgs 2>&1 |
     Tee-Object -Variable nonE2eOut |
     ForEach-Object { Write-Host $_ }
 # ⚠️ `$LASTEXITCODE` 由原生執行檔設定，**管線接到 cmdlet 不會覆蓋它** ——
@@ -687,12 +833,23 @@ $testExit = $LASTEXITCODE
 Mark-Elapsed "pytest_not_e2e" $_tNonE2e
 $BuildStats["not_e2e"] = Parse-PytestSummary $nonE2eOut
 $BuildStats["workers"] = $workers
+$nonE2eFlaky = ""
+if ($testExit -ne 0) {
+    $retry = Invoke-FlakyRetry "not_e2e" $testExit $nonE2eOut
+    if ($retry.Ok) { $nonE2eFlaky = $retry.ResultFile; $testExit = 0 }
+}
 if ($testExit -ne 0) {
     Pop-Location
+    Record-Stage "not_e2e" $false
     Record-TestResult $false
     Fail "測試未全數通過（exit code $testExit），中止打包。請先修好測試再重新執行本腳本。"
 }
-Write-Host "[OK] 非 e2e 測試全數通過。" -ForegroundColor Green
+Record-Stage "not_e2e" $true $nonE2eFlaky
+Write-Host "[OK] 非 e2e 測試全數通過$(if ($nonE2eFlaky) { '（含已登記的偶發重跑，見上）' })。" -ForegroundColor Green
+} else {
+    Write-Host "`n[測試] 非 e2e：沿用 $($stageReuse['not_e2e'].tested_at) 的綠（$($stageReuse['not_e2e'].source)，同一份 tree 與環境）—— 只跑 e2e" -ForegroundColor Cyan
+    $BuildStats["reused_not_e2e_from"] = $stageReuse['not_e2e'].tested_at
+}
 
 # --- Step 3.1: 測試有沒有在工作樹留下東西（2026-09-22 新增，RG19）---
 # 【這道檢查在回答什麼】「除了我們已知的那幾個，還有沒有第八個？」
@@ -723,6 +880,11 @@ if ($leaked.Count -gt 0) {
     Write-Host "[OK] 跑完測試之後工作樹沒有多出任何東西。" -ForegroundColor Green
 }
 
+$e2eExit = 0
+$e2eOut = @()
+$e2eFlaky = ""
+$e2eRawExit = 0
+if ($runE2e) {
 Write-Host "`n[測試] 執行 pytest（e2e，真實瀏覽器）..."
 $_tE2e = Get-Date
 # `-rf` 讓失敗的那幾題印出 `FAILED <題> - <例外類別>: <訊息>` —— 那一行是
@@ -731,14 +893,28 @@ $_tE2e = Get-Date
 #   逾時算失敗（_e2e_gate.ps1）、建包獨佔兩格測試名額（Acquire-TestExclusive）、每 worker 一套共用瀏覽器與伺服器
 #   （conftest #5）、逐題上限（conftest `_e2e_hard_cap`，卡住的題印出堆疊並結束該 worker、不拖整輪）。
 # ⚠️ 平行下紅的時序題照「偶發先當產品競態」查，不加 retry、不放寬 timeout。切換前同一 tree 連跑多次 -n 4 全綠。
+# 〔2026-09-30 補：整輪照舊不 retry、逾時不放寬；紅了只把**紅的那幾題**隔離重跑，而且要登記在 known_flakes 才放行
+#   （Invoke-FlakyRetry）——未登記的偶發照樣擋，並印出登記指令。見 PLAYBOOK §D-建包〕
 $e2eWorkers = 4
-& $pyExe -m pytest -q -rf -m "e2e" -n $e2eWorkers --durations=20 --basetemp="${pytestTemp}_e2e" 2>&1 |
+$env:MOTRIX_FAIL_STREAM_STAGE = "e2e"
+& $pyExe -m pytest -q -rf -m "e2e" -n $e2eWorkers --durations=20 --basetemp="${pytestTemp}_e2e" @fsArgs 2>&1 |
     Tee-Object -Variable e2eOut |
     ForEach-Object { Write-Host $_ }
 $e2eExit = $LASTEXITCODE
 Mark-Elapsed "pytest_e2e" $_tE2e
 $BuildStats["e2e"] = Parse-PytestSummary $e2eOut
+$e2eRawExit = $e2eExit
+if ($e2eExit -ne 0) {
+    $retry = Invoke-FlakyRetry "e2e" $e2eExit $e2eOut
+    if ($retry.Ok) { $e2eFlaky = $retry.ResultFile; $e2eExit = 0 }
+}
+} else {
+    Write-Host "`n[測試] e2e：沿用 $($stageReuse['e2e'].tested_at) 的綠（$($stageReuse['e2e'].source)，同一份 tree 與環境）" -ForegroundColor Cyan
+    $BuildStats["reused_e2e_from"] = $stageReuse['e2e'].tested_at
+}
 Pop-Location
+$env:PYTHONPATH = $prevPyPath
+Remove-Item Env:\MOTRIX_FAIL_STREAM_RUN, Env:\MOTRIX_FAIL_STREAM_STAGE -ErrorAction SilentlyContinue
 
 # 🔴 **逾時與斷言失敗要分開判**（2026-09-22）。
 #
@@ -755,7 +931,10 @@ Pop-Location
 Release-TestExclusive    # 兩段測試都跑完了，後面的打包不需要佔住別人的測試名額
 # 記下這一次的測試結果（後面打包失敗再建時可以沿用）。**放在 e2e 閘門之前**：閘門紅了會直接 Fail 離開，
 # 要讓紅的這一次也記成非綠，否則同一份 tree 之前的綠紀錄會留著、下次被沿用（2026-09-25）。只有**兩段都 exit 0** 才算綠——逾時放行不算。
+# 〔2026-09-30：分段模式下 e2e 段另記一行（Record-Stage）；非 e2e 段已在它自己的閘門記過〕
+if ($runE2e) { Record-Stage "e2e" ($e2eExit -eq 0) $e2eFlaky }
 Record-TestResult ($testExit -eq 0 -and $e2eExit -eq 0)
+foreach ($rf in @($nonE2eFlaky, $e2eFlaky)) { if ($rf) { Remove-Item -LiteralPath $rf -ErrorAction SilentlyContinue } }
 # 📌 更正（2026-09-25）：上面「只有認得出來的逾時才降級成警告」已撤回——
 #    逾時的題**沒有驗到任何東西**，警告後繼續打包＝靜默少驗（平行化後只會更多）。
 #    現在逾時也擋下打包；逾時與斷言失敗仍分開列，並附每題的單獨重跑指令。
@@ -763,12 +942,16 @@ Record-TestResult ($testExit -eq 0 -and $e2eExit -eq 0)
 . (Join-Path $PSScriptRoot "_e2e_gate.ps1")
 $e2eGate = Get-E2eGateResult -ExitCode $e2eExit -Lines @($e2eOut | ForEach-Object { "$_" }) -PyExe $pyExe
 if ($e2eGate.Ok) {
-    Write-Host "[OK] e2e 測試也全數通過。" -ForegroundColor Green
+    if ($e2eFlaky) {
+        Write-Host "[OK] e2e 通過（原始 exit $e2eRawExit；紅的題隔離重跑通過且已登記 known_flakes ⇒ 記為 flaky_retried）。" -ForegroundColor Yellow
+    } else {
+        Write-Host "[OK] e2e 測試也全數通過。" -ForegroundColor Green
+    }
 } else {
     $e2eGate.Message | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
     Fail "e2e 未全數通過（斷言失敗 $($e2eGate.Failures.Count) 題、逾時 $($e2eGate.Timeouts.Count) 題）——逾時也算沒驗，不出包。見上方清單與單獨重跑指令。"
 }
-}   # end: if ($reuse) else
+}   # end: if ($reuse) else（前面另有 if ($scoped)；字串守門以這一行為錨點，不要改）
 
 # 2026-09-15：測試暫存跑完就自己刪。
 #
@@ -1020,6 +1203,11 @@ $manifest = [ordered]@{
     #    答案在產物裡而不在誰的記憶裡**。
     durations_sec        = $BuildT
     tests                = $BuildStats
+    # 驗證怎麼放行這一包（形狀統一，2026-09-30 合併 build-opt＋scope-gate）：
+    #   mode   ＝ full（全量：實跑或沿用）／scoped（範圍驗證，PLAYBOOK §D-1a）
+    #   scoped ＝ mode=scoped 時的判定（base 40 碼、units、consumers、test_files、counts…）；full 時為 null
+    #   stages ＝ 各段實跑／沿用（來源、時間）／因範圍驗證略過，與偶發重跑通過的題（flaky_retried）
+    verification         = [ordered]@{ mode = $VerificationMode; scoped = $ScopedVerification; stages = $BuildVerification }
     env                  = [ordered]@{
         phys_cores = $physCores
         workers    = $workers

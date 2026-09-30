@@ -737,6 +737,38 @@ def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(N
     return {"ok": True}
 
 
+class _WorkLogPhotoAccess:
+    """`uploads.path_access`（IP-104，2026-09-30 P0）：`projects/…`（demo：`_demo_projects/…`）＝工作日誌照片
+    （含 2026-08-26 從專案日誌搬過來的舊路徑）。擁有單據＝`photos` 列出這個路徑的那筆 `work_logs`；讀取規則＝
+    `GET /api/work-logs`（`work_log` 或 `case_manage` 模組；superadmin 直通），或該日誌掛的案件的動態看得到
+    （案件動態端點把掛在案件上的工作日誌連照片一起列出，規則 `case_documents_readable`）。沒有任何一筆列出 ⇒ False。"""
+    FOLDERS = ("projects",)
+
+    @staticmethod
+    def readable(conn, folder, rest, user):
+        from helpers.auth import user_has_module
+        from helpers.case_access import case_documents_readable
+        from helpers.uploads import upload_owner
+        by_module = user.get("role") == "superadmin" or any(user_has_module(user, k) for k in ('work_log', 'case_manage'))
+        want = (folder, tuple(rest))
+        tail = "/".join(rest)
+        like = "%" + tail.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        for r in conn.execute("SELECT case_no, photos FROM work_logs WHERE photos LIKE ? ESCAPE '\\'", (like,)):
+            try:
+                photos = json.loads(r["photos"] or "[]") or []
+            except (TypeError, ValueError):
+                continue
+            if not any(isinstance(p, dict) and upload_owner(p.get("path") or "") == want for p in photos):
+                continue
+            if by_module or (r["case_no"] and case_documents_readable(conn, r["case_no"], user)):
+                return True
+        return False
+
+
+from core import registry as _registry  # noqa: E402
+_registry.provide("uploads.path_access", "work_log", _WorkLogPhotoAccess)
+
+
 # ── 執行時的開關（2026-09-22 §8 FX1a）─────────────────────────────────────────
 
 #: 這台機器上「會不會對外連線」的兩個總開關。
@@ -2363,23 +2395,57 @@ def get_google_calendar(authorization: str = Header(None)):
     # 提示管理員授權時要用哪個 Gmail 帳號（跟寄信用的 SMTP 帳號同一組）
     email_cfg = _get_setting("email_notify", {}) or {}
     safe["smtp_user_hint"] = email_cfg.get("smtp_user", "")
+    # 事件種類開關（2026-09-30）：回有效值（缺項＝預設）＋目錄
+    from helpers.google_calendar import event_switches, event_types
+    safe["events"] = event_switches(cfg)
+    safe["eventTypes"] = event_types()
     return safe
+
+
+def _gcal_event_changes(body: dict, current: dict):
+    """驗 body["events"]（{代碼: bool}，只收已知代碼）⇒ (新的 events dict 或 None, [(代碼, 舊, 新)])。不合法 ⇒ 400。"""
+    from helpers.google_calendar import EVENT_CODES, event_switches
+    if "events" not in body:
+        return None, []
+    ev = body["events"]
+    if not isinstance(ev, dict):
+        raise HTTPException(400, "events 必須是 {事件代碼: true/false}")
+    bad = [k for k in ev if k not in EVENT_CODES]
+    if bad:
+        raise HTTPException(400, "未知的事件種類：%s" % "、".join(sorted(map(str, bad))))
+    if any(not isinstance(v, bool) for v in ev.values()):
+        raise HTTPException(400, "事件開關的值必須是 true 或 false")
+    before = event_switches(current)
+    stored = dict(current.get("events") if isinstance(current.get("events"), dict) else {})
+    stored.update(ev)
+    changes = [(c, before[c], ev[c]) for c in EVENT_CODES if c in ev and ev[c] != before[c]]
+    return stored, changes
 
 
 @router.put("/api/settings/google-calendar")
 def set_google_calendar(body: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     current = _get_setting("google_calendar", {}) or {}
+    new_events, changes = _gcal_event_changes(body, current)
     data = {k: body[k] for k in _GCAL_DEFAULTS if k in body}
     data = {**_GCAL_DEFAULTS, **current, **data}
     if data.get("client_secret") in ("", _MASKED):
         data["client_secret"] = current.get("client_secret", "")
     # refresh_token 只由一次性授權腳本寫入，這個端點絕不清空/覆蓋它
     data["refresh_token"] = current.get("refresh_token", "")
+    if new_events is not None:
+        data["events"] = new_events
     _set_setting("google_calendar", data)
-    _audit(_tok(authorization), "settings.google_calendar.update", "settings",
+    tok = _tok(authorization)
+    _audit(tok, "settings.google_calendar.update", "settings",
            "google_calendar", "Google 行事曆設定")
-    return {"ok": True}
+    # 每個事件種類開關的變更各記一筆（誰、哪一種、由什麼改成什麼）
+    from helpers.google_calendar import event_types
+    labels = {t["code"]: t["label"] for t in event_types()}
+    for code, old, new in changes:
+        _audit(tok, "settings.google_calendar.event_toggle", "settings", "google_calendar." + code,
+               "行事曆事件「%s」%s" % (labels[code], "開啟" if new else "關閉"), {"event": code, "from": old, "to": new})
+    return {"ok": True, "changed": [c for c, _o, _n in changes]}
 
 
 @router.post("/api/settings/google-calendar/test")

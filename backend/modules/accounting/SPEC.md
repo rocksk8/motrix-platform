@@ -98,6 +98,9 @@ JV(1):  JV6
 ## 登記
 
 ```
+C_OWNED E04 總帳事件代碼（承攬商發票；docs/platform 總帳設計稿 02 事件對照表），不是 SPEC 驗收條件
+C_OWNED E05 總帳事件代碼（承攬商匯款），不是 SPEC 驗收條件
+C_OWNED E05B 總帳事件代碼（個人點工），不是 SPEC 驗收條件
 AMBIGUOUS_ACK JV7 題檔撞名（test_e2e_voucher_summary／test_voucher_summary_sources，都在本模組）
 AMBIGUOUS_ACK JV16 題檔撞名（test_voucher_attachment_download／test_voucher_attachment_list_in_modal，都在本模組）
 NAMED_ELSEWHERE JV27 test_em5_approving_is_blocked_when_the_chain_is_unreadable

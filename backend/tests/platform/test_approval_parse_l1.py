@@ -93,5 +93,5 @@ def test_m01_approval_queue_no_longer_imports_m06():
     from core import source_tree
     if not source_tree.module_installed("modules/accounting/"):
         return                                     # M06 不在：沒有傳票那一側可驗（M01 那一側上面已驗）
-    vsrc = (BACKEND / "modules" / "accounting" / "api" / "vouchers.py").read_text(encoding="utf-8")   # M06 搬遷
+    vsrc = (BACKEND / "modules" / "accounting" / "api" / "voucher_providers.py").read_text(encoding="utf-8")   # M06 搬遷；2026-09-30 W4 拆檔後轉簽提供者在 voucher_providers.py
     assert "from helpers.tiered_approval import parse_approval_json, ApprovalChainUnreadable" in vsrc

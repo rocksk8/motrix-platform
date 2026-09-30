@@ -17,7 +17,7 @@ from helpers import (
     _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request,
     notify_dev_case_relink_request,
     _notify, _get_setting, _set_setting, notify_dev_case_stale, _purge_notifications,
-    push_event_for_dev_case_converted, push_event_for_dev_case_stale,
+    push_event_for_dev_case_converted, push_event_for_dev_case_stale, push_event_for_module,
 )
 
 router = APIRouter(prefix="/api")          # 原本由 main.py 以 prefix="/api" 掛載
@@ -112,6 +112,22 @@ DEV_CASE_ACCESS = row_access.OwnerRule(
     deny_message="無權限存取此業務開發案",
 )
 row_access.register("dev_case", DEV_CASE_ACCESS)
+
+
+class _DevLogPathAccess:
+    """`uploads.path_access`（IP-104，2026-09-30 P0）：`dev_logs/<業務開發案 id>/<檔名>`（開發記錄附件）
+    ⇒ 同 `GET /dev-cases/{case_id}/logs`：`_require_dev` 的模組規則（admin+ 或 dev_crm）＋ row_access `dev_case`。"""
+    FOLDERS = ("dev_logs",)
+
+    @staticmethod
+    def readable(conn, folder, rest, user):
+        if len(rest) != 2 or not rest[0].isdigit():
+            return False
+        mods = json.loads(user.get("modules") or "[]")
+        if user.get("role") not in ("superadmin", "admin") and "dev_crm" not in mods:
+            return False
+        row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (int(rest[0]),)).fetchone()
+        return bool(row) and row_access.visible("dev_case", user, row)
 
 
 # ── Customer visit sync ──────────────────────────────────────────────────────
@@ -899,9 +915,22 @@ async def create_dev_log(case_id: int,
             detail="\n".join(_detail_lines),
         )
         _sync_customer_visit(conn, case_id, cur.lastrowid, "upsert", body.dict())
+        # 行事曆「業務開發案件更新」（2026-09-30，預設關；開關在 L1 判斷）：同一案件同一天合併成一個事件
+        spawn_bg_thread(push_event_for_module, args=_dev_update_calendar_args(
+            case_id, case_name_str, case_row_chk["customer_name"],
+            user.get("display_name") or user["username"], body.log_date, _detail_lines, now))
         return _log_row(row, _user_map(conn))
     finally:
         conn.close()
+
+
+def _dev_update_calendar_args(case_id, case_name, customer_name, author, log_date, detail_lines, at):
+    """行事曆「業務開發案件更新」事件的內容（push_event_for_module 的參數）：標題「○○案件更新」，
+    說明＝這一筆開發紀錄；merge_key＝案件 id ⇒ 同一天的紀錄累加在同一個事件的說明裡。"""
+    head = f"[{(at or '')[11:16]}] {author}（紀錄日期 {log_date or ''}）"
+    desc = head + ("\n" + "\n".join(detail_lines) if detail_lines else "")
+    title = f"{case_name}案件更新" + (f"（{customer_name}）" if customer_name else "")
+    return ("dev_case_update", title, desc, (at or "")[:10] or None, f"dev{case_id}")
 
 
 @router.put("/dev-logs/{log_id}")

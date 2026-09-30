@@ -91,7 +91,11 @@ def _db_table_count(_cache={}):
     if "n" not in _cache:
         import sqlite3
         import tempfile
-        p = Path(tempfile.mkdtemp(prefix="motrix-C-bk32-")) / "x.db"
+        import atexit
+        import shutil
+        d = tempfile.mkdtemp(prefix="motrix-C-bk32-")
+        atexit.register(shutil.rmtree, d, True)      # 2026-09-30 寫入量：原本從不刪
+        p = Path(d) / "x.db"
         db.init_db(str(p))
         conn = sqlite3.connect(str(p))
         _cache["n"] = conn.execute(

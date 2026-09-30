@@ -1,5 +1,13 @@
 # 應收應付 更新紀錄
 
+## 1.0.16 — 2026-09-30（暫用號，列車取號；wip/cal-toggle 行事曆推送可選）
+- 行事曆「支出付款」（預設關，事件種類開關在 L1）：出納登錄請款付款（`pending-payables/{來源}/{key}/pay`）commit 之後推 `push_event_for_module('expense_payout', …)`，事件日期＝付款日；名目／受款人取提供者回傳（不讀別的模組的表）。勞報單付款走自己的端點，不推。題 `modules/arap/tests/test_expense_payout_calendar_2026_09_30.py`
+## 1.0.15 — 2026-09-30（暫用號，列車取號；W4 總帳 C1）
+- 新增提供者 `gl.events`（IP-GL1）：銷項發票（E01）與客戶收款（E03）事件，供 M06 總帳引擎產生傳票草稿；唯讀、不寫資料。收款採 W2 語意（實收＋手續費＝含稅收入，手續費另列）；先收款後開票用預收貨款沖轉；實收與發票含稅不一致、缺開立日期、無不可變 id 皆在 notice 明說。
+- `receivables.collect_tax_invoices`／`collect_income_items` 的回傳**多帶**欄位（itemId、itemIdx、hasInvoiceDate、invoiceDate、bankAccountCode）；既有呼叫端不讀、行為不變。
+## 1.0.14 — 2026-09-30（暫用號，列車取號；wip/sec-p0 安全修正 P0）
+- 安全修正 P0：新增提供者 `uploads.path_access`／`arap`（IP-104，`invoice_vouchers._InvoiceVoucherPathAccess`，`ModuleSpec.providers`）：`invoice_vouchers/<開票單號>/` 的已開立檔案只簽給開票申請單筆規則 `_voucher_readable` 放行的人（本單簽核人經簽核佇列情境）。原本任何登入者都拿得到簽章。
+
 ## 1.0.13 — 2026-09-30（暫用號，列車取號；wip/w2-report-cash）
 - 收款端手續費不再重複扣（使用者 2026-09-30，正式機案件 MQ-202607-045：實收 263,813（銀行入帳，已扣客戶內扣手續費 15）被報表再減 15 成 263,798，且 9 月當月收入是 0（預設權責））：收入明細 `collect_income_items` 的 `amount`＝銀行入帳＋手續費（含稅收入）、`netAmount`＝銀行入帳（L1 `receipt_amounts`）；`collect_tax_invoices` 多回 `feeAmount`／`bankAmount`（T100 收款傳票用）。
 - 新增提供者 `expense.entries`／`receipt_fee`（IP-9）：客戶內扣的收款手續費以收款日列營運報表支出（類別「收款手續費」）。

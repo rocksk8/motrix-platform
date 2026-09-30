@@ -4,7 +4,7 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.subcontract import attachments, remit
+from modules.subcontract import attachments, gl_events, remit
 from modules.subcontract.api import contractor_vouchers, contractors, vendor_contractors
 
 #: 模組自己的 migration（檔名以版號開頭，不是合法的 import 名稱 ⇒ importlib）
@@ -37,7 +37,11 @@ MODULE = ModuleSpec(
         # IP-10（N1）：承攬商報價單附件的刪除申請進簽核佇列（type＝dispatch_file_delete），核可／退回打派工的 delete-approve／delete-reject
         ("approval.queue_items", "subcontract_dispatch_file"): vendor_contractors.delete_queue_items,
         ("approval.detail", "dispatch_file_delete"): vendor_contractors.delete_queue_detail,
+        # IP-GL1（W4 總帳 C2）：承攬商發票（E04）與匯款（E05／E05b）事件，供 M06 總帳引擎產生傳票草稿；唯讀
+        ("gl.events", "subcontract"): gl_events.gl_events,
         # IP-21（暫定號）：M06 傳票帶入附件的來源（派工單、承攬商發票）
         ("attachments.for_document", "subcontract"): attachments._SubcontractAttachments,
+        # IP-104：上傳檔的讀取權限（派工單附件、承攬商發票；2026-09-30 P0）
+        ("uploads.path_access", "subcontract"): attachments._SubcontractPathAccess,
     },
 )

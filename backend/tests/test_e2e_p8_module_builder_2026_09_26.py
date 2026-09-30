@@ -22,6 +22,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests._e2e_login import inject_login  # noqa: E402
+from tests._builder_nav import go_step, start_blank  # noqa: E402
 
 KEY = "equipment_loan"
 SAVED = """() => { const e = document.getElementById('mb-save-state');
@@ -144,7 +145,7 @@ def _wait_saved(page):
 
 
 def _step(page, n):
-    page.click('.mb-step[data-step="%d"]' % n)
+    go_step(page, n)
     page.wait_for_selector('#mb-step-%d' % n, state="visible")
 
 
@@ -179,9 +180,7 @@ def _transition_row(page, i):
 
 def _build_equipment_loan(page, base):
     page.goto(base + "/pages/module-builder.html")
-    page.fill("#mb-key", KEY)
-    page.click("#mb-open")
-    page.wait_for_selector("#mb-step-1", state="visible")
+    start_blank(page, KEY)                       # 第三輪：新模組先出「從範本開始」，選空白
 
     # ① 基本＋編號預覽（伺服器產生的範例）
     page.fill("#mb-name", "測試用設備借用單")
@@ -234,6 +233,7 @@ def _build_equipment_loan(page, base):
     page.locator('.mb-sec[data-section-group="0"] .mb-sec__h').evaluate("e => e.scrollIntoView({ block: 'center' })")   # 標題列別被固定頂列蓋住
     page.drag_and_drop('.mb-fc[data-field-key="qty"] .mb-fc__bar .h', '.mb-sec[data-section-group="0"] .mb-sec__h .h')
     page.wait_for_selector('.mb-sec[data-section-group="0"] .mb-fc[data-field-key="qty"]')
+    page.click("#mb-side-list")                                              # 〔改題 2026-09-30〕列表欄位在右欄「列表預覽」頁籤
     page.click('[data-list-column="borrower"]')
     _wait_saved(page)
 

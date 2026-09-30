@@ -706,6 +706,8 @@ _DELETE_OWNERSHIP_VERIFIED = {
     ("system.py", "/api/edit-presence"),
     # 報價單刪除走**狀態**把關而不是角色——§5.1「僅草稿可刪；其他狀態回 403」
     ("modules/case/api/quotations.py", "/api/quotations/{quote_no}"),   # M01 ②：模組檔以相對路徑為名
+    # 自訂模組附件暫存檔：只有上傳者能刪、且只限尚未綁單的（`custom_files.remove_staged` 條件含 uploaded_by＝自己），不是角色把關
+    ("custom_records.py", "/api/custom/{key}/files/{file_id}"),
 }
 
 

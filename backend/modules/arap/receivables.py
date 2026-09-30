@@ -135,6 +135,10 @@ def collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = None
                 # 新 key，多帶不影響既有行為）
                 "bankAccountName": pi.get("bankAccountName") or "",
                 "bankAccountCode": pi.get("bankAccountCode") or "",
+                # 2026-09-30（總帳 C1）：款項期別的不可變 id 與陣列索引、開立日期是不是使用者填的（gl.events 用；既有呼叫端不讀，多帶不影響）
+                "itemId":        pi.get("id") or "",
+                "itemIdx":       idx,
+                "hasInvoiceDate": bool(norm_ymd(pi.get("invoiceDate"))),
             })
     out.sort(key=lambda r: (r["invoiceDate"], r["quoteNo"]))
     return out
@@ -198,6 +202,11 @@ def collect_income_items(d0: str, d1: str, department_id: Optional[int] = None) 
                 "feeAmount":    fee,
                 "netAmount":    bank_amt,
                 "invoiceNo":    pi.get("invoiceNo", ""),
+                # 2026-09-30（總帳 C1）：gl.events 用（款項期別的不可變 id／索引、開立日期、進帳的銀行科目）；既有呼叫端不讀，多帶不影響
+                "itemId":       pi.get("id") or "",
+                "itemIdx":      idx,
+                "invoiceDate":  norm_ymd(pi.get("invoiceDate")),
+                "bankAccountCode": pi.get("bankAccountCode") or "",
             })
     items.sort(key=lambda x: x["receivedAt"], reverse=True)
     return items

@@ -22,6 +22,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests._e2e_login import inject_login  # noqa: E402
+from tests._builder_nav import go_step, start_blank  # noqa: E402
 
 SAVED = """() => { const e = document.getElementById('mb-save-state');
   return !!e && e.dataset.dirty === '0' && e.dataset.saving === '0' && e.dataset.state === 'saved' }"""
@@ -311,7 +312,7 @@ def _draft(key):
 def _open_builder(page, base, key, step):
     page.goto("%s/pages/module-builder.html?key=%s" % (base, key))
     page.wait_for_selector("#mb-step-1", state="visible")
-    page.click('.mb-step[data-step="%d"]' % step)
+    go_step(page, step)
     page.wait_for_selector("#mb-step-%d" % step, state="visible")
 
 
@@ -433,7 +434,7 @@ def test_builder_theme_format_approver_lists_come_only_from_catalog(live_server,
     else:
         assert kinds == [], kinds
 
-    page.click('.mb-step[data-step="5"]')
+    go_step(page, 5)
     page.click("#mb-out-custom")
     page.wait_for_selector('#mb-out-editor [data-block-type="meta"]')
     theme_opts = page.eval_on_selector_all("#mb-out-theme option", "els => els.map(e => e.value)")

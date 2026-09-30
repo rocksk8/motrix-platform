@@ -89,8 +89,8 @@ def test_migration_backfills_matches_writer_rules_and_is_reentrant(tmp_path):
         c.execute("INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail) "
                   "VALUES ('2026-09-01',1,'u','U',?,?,?,?,?)", s)
     c.commit()
-    assert M._core_v3_audit_search(c) is None
-    assert M._core_v3_audit_search(c) is None                          # 可重入
+    assert M._core_v5_audit_search(c) is None
+    assert M._core_v5_audit_search(c) is None                          # 可重入
     idx = {r[1] for r in c.execute("PRAGMA index_list(audit_log)")}
     assert {"idx_audit_module", "idx_audit_case", "idx_audit_ref", "idx_audit_result", "idx_audit_user",
             "idx_audit_at", "idx_audit_action"} <= idx

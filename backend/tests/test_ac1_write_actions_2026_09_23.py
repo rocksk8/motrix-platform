@@ -98,6 +98,12 @@ READ_ONLY_PAGES = {
         "`/api/user-activity/trail` 三支查詢端點，"
         "**沒有任何對應的寫入端點** ⇒ 頁面唯讀與後端一致。",
     "receivables.html": "應收帳款：純報表，沖銷動作在出納那一頁。",
+    "ledger-reports.html":
+        "總帳報表（試算表、總分類帳、明細分類帳、日記帳）：只讀 `/api/ledger/trial-balance`、`general-ledger`、`subledger`、`journal`、"
+        "`accounts` 查詢端點（GET），過帳與結帳動作在總帳作業／期間頁 ⇒ 頁面唯讀與後端一致。",
+    "ledger-statements.html":
+        "總帳四大財務報表（資產負債表、損益表、權益變動表、現金流量表）：只讀 `/api/ledger/balance-sheet`、`income-statement`、"
+        "`equity-statement`、`cash-flow`（GET），年度決算與凍結在期間頁 ⇒ 頁面唯讀與後端一致。",
     "sales-orders.html": "銷貨單清單：純查詢，建立與修改在報價單那一邊。",
     "shipping-export-history.html": "出貨匯出歷程：純查詢，匯出動作在出貨單那一頁。",
 }

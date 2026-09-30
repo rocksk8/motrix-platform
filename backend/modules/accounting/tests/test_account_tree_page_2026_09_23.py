@@ -469,7 +469,7 @@ def test_fn1_custom_rows_must_still_be_editable_on_the_page():
 # ④⑤ 新增與停用
 # ══════════════════════════════════════════════════════════════════════
 
-def test_fn1_creating_a_custom_item_requires_an_existing_parent():
+def test_fn1_creating_a_custom_item_requires_an_existing_parent(tmp_path):
     """🔴 `FN1④` **新增自訂科目時，`parent_code` 必須指向存在的科目。**
 
     ☠️ 放行的後果不是報錯，是**那一筆從樹上消失**：
@@ -498,7 +498,7 @@ def test_fn1_creating_a_custom_item_requires_an_existing_parent():
         + "📌 我釘的形狀：`validate_parent(conn, parent_code) -> (ok, err)`；\n"
           "   `err` 是**給使用者看的字串**，而它要說出是哪一個代號找不到。")
 
-    path = Path(tempfile.mkdtemp(prefix="motrix-C-fn1p-")) / "motrix_erp.db"
+    path = tmp_path / "motrix_erp.db"          # 2026-09-30 寫入量：原本 mkdtemp 從不刪（累積 167 個），改 basetemp 內隨輪清除
     db.init_db(str(path))
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
@@ -574,7 +574,7 @@ def test_fn1_the_endpoint_answers_over_http(client, make_user):
           "   而會計科目表是內部資料。")
 
 
-def test_fn1_disabling_is_possible_without_deleting():
+def test_fn1_disabling_is_possible_without_deleting(tmp_path):
     """🔴 `FN1⑤` **要能「停用」而不是只能刪除 —— 而現在沒有那個欄位。**
 
     ```
@@ -595,7 +595,7 @@ def test_fn1_disabling_is_possible_without_deleting():
     import tempfile
 
     import db
-    path = Path(tempfile.mkdtemp(prefix="motrix-C-fn1-")) / "motrix_erp.db"
+    path = tmp_path / "motrix_erp.db"
     db.init_db(str(path))
     conn = sqlite3.connect(str(path))
     cols = {r[1] for r in conn.execute("PRAGMA table_info(%s)" % TABLE)}

@@ -27,6 +27,7 @@ EXPECTED = {
     ("payables.pending", "case"),          # IP-100 請款待付款（2026-09-27）
     ("remit.reviews", "case"),             # IP-102 匯款差額審核（W1，2026-09-30）
     ("expense.entries", "remit_fee_case"),  # IP-9 額外支出匯款手續費（W1）
+    ("uploads.path_access", "case"),        # IP-104 上傳檔讀取權限（sec-p0，2026-09-30）
 }
 
 

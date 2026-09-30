@@ -158,15 +158,29 @@
       async start() {
         if (window.innerWidth < 1024) { alert('排版器只在桌機使用（畫面寬度至少 1024px）。發布後的版面在手機上照常顯示。'); return }
         if (!this.$store.layout.ready) { alert('版面設定還沒載入完成，稍後再試。'); return }
+        // O7 第三次：start 在 loadScope 之前還有兩趟 await（角色標籤、側欄）；這段期間面板已打開、舊的 work 還在、loading 卻是 false
+        // ⇒ 使用者（或 e2e）此時的編輯／範圍切換，會被稍後 start 自己的 loadScope 用伺服器版蓋掉（編輯無聲消失）。先鎖住，載入完才放開。
+        this.loading = true
+        this.loadedScope = ''
+        var seq0 = this._scopeSeq
         this.open = true
         document.body.classList.add('ml-editing')
-        if (!this.roles.length) {
-          var r = await this._j('/api/settings/role-labels')
-          var labels = r.ok ? r.d : {}
-          this.roles = Object.keys(labels).map(function (k) { return { key: k, label: labels[k] } })
+        try {
+          if (!this.roles.length) {
+            var r = await this._j('/api/settings/role-labels')
+            var labels = r.ok ? r.d : {}
+            this.roles = Object.keys(labels).map(function (k) { return { key: k, label: labels[k] } })
+          }
+          await this.loadSidebar()
+        } catch (e) {
+          // 讀不到角色／側欄（斷線）⇒ 不放開鎖：明說並維持鎖定，讓使用者關掉重開（與 loadScope 失敗同一個處理）
+          this.state = 'error'
+          this.loadError = '排版器載入失敗（' + (e && e.message || e) + '），編輯已鎖定；請關閉後再打開'
+          this.msg = this.loadError
+          return
         }
-        await this.loadSidebar()
-        await this.loadScope()
+        if (this._scopeSeq !== seq0) return      // 等待期間使用者已切了範圍：那一趟載入自己會收尾（清 loading），這裡不再重載（會蓋掉切換後的編輯）
+        await this.loadScope()      // 這一趟結束（成功或失敗）才由它清 loading；失敗時維持鎖定
       },
       close() {
         this.open = false
