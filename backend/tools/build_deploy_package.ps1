@@ -671,18 +671,10 @@ function Record-TestResult([bool]$green) {
 $scoped = $null
 $Verification = [ordered]@{ mode = "full" }
 if (-not $reuse -and -not $ForceTests) {
-    try {
-        $sgOut = & $pyExe (Join-Path $projectRoot "tools\platform\scope_gate.py") gate --commit $commit --json
-        $sgExit = $LASTEXITCODE
-        if ($sgOut) {
-            $sg = ($sgOut -join "`n") | ConvertFrom-Json
-            if ($sgExit -eq 0 -and $sg.accepted -eq $true -and $sg.commit -eq $commit) { $scoped = $sg }
-            elseif ($sg.record_present) { Write-Host "  [範圍驗證] 不適用：$($sg.detail) ⇒ 跑全量" -ForegroundColor Yellow }
-        }
-    } catch {
-        Write-Host "  [WARN] 範圍驗證判定失敗（$($_.Exception.Message)）—— 照常跑全量" -ForegroundColor Yellow
-        $scoped = $null
-    }
+    . (Join-Path $PSScriptRoot "_scope_gate.ps1")
+    $sgr = Get-ScopedGateResult -PyExe $pyExe -GateScript (Join-Path $projectRoot "tools\platform\scope_gate.py") -Commit $commit
+    $scoped = $sgr.Scoped
+    if (-not $scoped -and $sgr.Note) { Write-Host "  [範圍驗證] $($sgr.Note)" -ForegroundColor Yellow }
 }
 
 if ($reuse) {

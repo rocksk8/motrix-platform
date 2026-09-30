@@ -1417,9 +1417,12 @@ def build_gate():
     if full["state"] == "ok":
         return {"head": head, "mode": "full", **full}
     sc = _scoped_gate(head) if head else None
-    if sc and sc.get("accepted"):
+    # 稽核 W4 S2：判定的 commit 必須就是要打包的 HEAD（不同 ⇒ 不放行）
+    if sc and sc.get("accepted") is True and sc.get("mode") == "scoped" and sc.get("commit") == head:
         return {"head": head, "mode": "scoped", "state": "ok", "detail": sc["detail"], "record": None,
                 "scoped": sc, "full_state": full["state"]}
+    if sc and sc.get("accepted") and sc.get("commit") != head:
+        sc = dict(sc, detail=f"範圍驗證判定的 commit {str(sc.get('commit'))[:8]} 不是要打包的 {head[:8]}")
     if sc and sc.get("record_present"):
         full = dict(full, detail=f"{full['detail']}；範圍驗證不適用：{sc.get('detail')}")
     return {"head": head, "mode": None, **full}

@@ -134,11 +134,11 @@
 ### D-1a. 範圍驗證閘門：沒動到底層就不跑全量（2026-09-30 使用者：「如果未影響到底層，審核測試上包可由獨立模組，不需要跑全域，也可以視這次更動範圍做驗證減少只改小部分但仍需花大量時間跑全域」）
 
 **規則**
-- 比較範圍＝正式機基準 P（要打包的 commit X 上 `backend/tests/_prod_baseline.py` 的 `BASELINE`）→ X 的**所有**改動檔（不是只看最後一個 commit）。
+- 比較範圍＝正式機基準 P → X 的**所有**改動檔（不是只看最後一個 commit）。P＝X 上 `backend/tests/_prod_baseline.py` 的 `BASELINE`，**而且必須等於受信來源**＝最新的 git tag `prod/<sha>`（主持在正式機確認部署後打，例 `prod/0c20864a`）；tag 不在或不符 ⇒ 全量〔稽核 W4 M4：候選 commit 可以自己改 `_prod_baseline.py` 把基準往後移，縮小比較範圍〕。部署包 `verification.base` 寫 40 碼完整 SHA；正式機步驟檔步驟 0 斷言 `.deployed_commit.json` 的 `commit` 開頭＝`verification.base`（範本 `docs/platform/prod-tasks/TEMPLATE-apply.md`）。
 - 底層清單的**唯一來源**是 `tools/platform/bottom_layer.json`（規則由上往下、第一條符合者決定；**沒有規則符合 ⇒ 當成底層**）。底層＝L0／L1（`backend/core/**`、`backend/helpers/**`、`backend/db.py`、`backend/main.py`、`backend/routers/**`、`backend/migrations_frozen/**`、backend 根目錄其他檔）、fixture 層（任何 `conftest.py`、`pytest.ini`、`requirements*.txt`）、**模組的 `migrations/**`**、建包／部署／平台工具（`backend/tools/**`、`tools/**`，含本閘門與清單本身）、`product/**`、共用前端（`frontend/static|js|css|fonts/**`、`frontend/index.html`、沒有恰好一個模組宣告的頁面）、測試共用工具（`backend/tests/` 下不是 `test_*.py` 的檔）。可走範圍驗證的只有：`backend/modules/<key>/**`（migrations 除外）、恰好一個模組宣告的頁面、`test_*.py`、`docs/**` 與根目錄 `*.md`、`version_manifest.json` 與 `_prod_baseline.py`（這兩個另帶 VR 守門題）。
 - P→X **有任何一檔在底層** ⇒ 照舊全量（`modtest --full`；建包腳本自己跑全量）。**全部不在底層** ⇒ 在 X 上跑 `python tools/platform/scope_gate.py run`（工作樹乾淨、HEAD＝X；`plan` 只判定與選題），綠了儀表板閘門與建包腳本就接受它、不跑全量。
-- 範圍驗證的內容＝`modtest --train` 同型：P→X 改動檔＋改到的提供者的消費端（`ship_tier.provider_check`；判不了 ⇒ 全量）當改動，**遞移選題**（不用名稱層級縮小——閘門寧寬）＋改到頁面的 e2e＋`tests/platform` 全部（`MOTRIX_TRAIN=1`，「是否最新」三題不可以被 skip）＋規則附帶的題；非 e2e 與 e2e 兩段都要綠。紀錄寫主工作樹 `tools/platform/full_results/scoped/<X>.json`。
-- 閘門（`scope_gate.py gate`；儀表板 `/api/build-gate`、建包腳本 Step 3 都呼叫它）**現場重算**判定，不信紀錄自己寫的：紀錄的 commit＝X、非 dirty、ok、基準＝現在的 P、模組集合＝現場算出的集合，缺一 ⇒ 不接受；判定出錯 ⇒ 不接受（回到全量）。建包加 `-ForceTests` ⇒ 一律全量。全量那條路不變。
+- 範圍驗證的內容＝`modtest --train` 同型：P→X 改動檔＋改到的提供者的消費端（`ship_tier.provider_check`；判不了 ⇒ 全量）當改動，**遞移選題**（不用名稱層級縮小——閘門寧寬）＋改到頁面的 e2e＋`tests/platform` 全部（`MOTRIX_TRAIN=1`，「是否最新」三題不可以被 skip）＋規則附帶的題（module／page 規則帶 `@global_tests`＝不靠 import、掃整個母體的全域釘子：`sqlite_master`、巡覽所有 `module.json`、glob 所有頁面、權限目錄；`scope_gate.global_test_candidates()` 掃得到的都必須列在 `global_tests`，守門題驗〔稽核 W4 M1〕）；非 e2e 與 e2e 兩段都要綠。紀錄寫主工作樹 `tools/platform/full_results/scoped/<X>.json`。
+- 閘門（`scope_gate.py gate`；儀表板 `/api/build-gate`、建包腳本 Step 3 都呼叫它）**現場重算**判定，不信紀錄自己寫的：紀錄的 commit＝X、非 dirty、ok、基準＝現在的 P、模組集合＝現場算出的集合、`config_sha256`＝X 上 `bottom_layer.json` 的雜湊、題目清單非空而且 ⊇ 現場重算的選題、非 e2e 段 exit 0 且有題通過、e2e 段 exit 0／5〔W4 M2〕，缺一 ⇒ 不接受；判定出錯 ⇒ 不接受（回到全量）。規則一律讀 `git show X:tools/platform/bottom_layer.json`；閘門只在 HEAD＝X、而且 `tools/`、`backend/tools/`、`product/` 沒有未 commit 的改動時判定（跑判定的程式就是 X 的版本）〔W4 M3〕。建包腳本的判定段在 `backend/tools/_scope_gate.ps1`：exit 非 0、輸出看不懂、例外、commit 不符、mode 不是 scoped、基準不是 40 碼 ⇒ 全量〔W4 S1〕；儀表板另比對判定的 commit＝HEAD〔W4 S2〕。建包加 `-ForceTests` ⇒ 一律全量。全量那條路不變。
 - 哪一種驗證放行寫進部署包 `deploy_manifest.json` 的 `verification`：`mode`＝`full`（沿用同 tree 綠燈時另有 `reused_from`）或 `scoped`（附 `base`、`units`、`consumers`、題檔數、完成時間、紀錄路徑）。稽核與正式機步驟檔看這一欄；`scoped` 的包在步驟檔上註明「未跑全量，驗證單位：…」。
 
 **為什麼可以（安全論證）與反方**
@@ -148,7 +148,8 @@
 - 反方 ③ **跨模組 e2e**：頁面流程可能經過別的模組的頁（例：傳票 e2e 點案件來源）。⇒ 改到的頁面與經相依圖擴散到的單位的 e2e 都選；純「資料依賴」的 e2e 由 table_hop 抓；抓不到的殘餘風險由 §G1 ③ 列車全量（每批合回後）與 ④ 發版演練承擔——範圍驗證只替代**出包前那一次**全量，不替代列車。
 - 反方 ④ **清單過期**（新增共用目錄沒登記）：沒有規則符合 ⇒ 底層（fail closed）；守門題驗每一條規則今天都對得到已追蹤的檔、modtest 的 fixture 層與 ship_tier 的完整包路徑都在底層。改清單本身＝改 `tools/**`＝那一包必須全量。
 - 反方 ⑤ **紀錄被沿用到別的 commit／基準**：紀錄以完整 SHA 分檔，閘門比對 commit、基準、模組集合，並現場重算底層判定。
-- 守門：`tests/platform/test_scope_gate_2026_09_30.py`（(a) 動到底層 ⇒ 不接受；(b) 只動模組 ⇒ 接受；(c) 別的 commit／dirty／紅／基準或模組不同 ⇒ 不接受；(d) 對 `scope_gate.py` 的真突變各一、對應題轉紅；暫存 repo 上的 P→X 整合題；建包腳本的分支）、`tests/platform/test_deploy_dashboard_scope_gate_2026_09_30.py`（儀表板閘門：全量綠優先、範圍驗證接受才放行、判定出錯不放行）。
+- **信任邊界（W4 S3）**：範圍驗證紀錄是開發機上**未簽章的 JSON**——任何能寫主工作樹 `full_results/` 的人都能偽造一份。閘門擋得住的是「過期／抄錯／跑錯範圍／跑錯 commit」這類**失誤**（全部欄位對照現場重算），擋不住**有意偽造**（寫一份欄位都對、但題目根本沒跑的紀錄）。信任的前提＝開發機本身可信（同全量紀錄 `full_results/<sha>.json`，它也沒有簽章）；基準的信任來自 git tag `prod/<sha>`，由主持在正式機確認部署後打，不由候選 commit 決定。要升級成可驗證的，要把紀錄與 pytest 的原始輸出一起簽章（未做）。
+- 守門：`tests/platform/test_scope_gate_2026_09_30.py`（(a) 動到底層 ⇒ 不接受；(b) 只動模組 ⇒ 接受；(c) 別的 commit／dirty／紅／基準或模組不同 ⇒ 不接受；(d) 對 `scope_gate.py` 的真突變各一、對應題轉紅；暫存 repo 上的 P→X 整合題；M1～M4 各一組正題＋真突變；建包判定段用 PowerShell 實跑假 scope_gate 八種輸出＋四個突變）、`tests/platform/test_deploy_dashboard_scope_gate_2026_09_30.py`（儀表板閘門：全量綠優先、範圍驗證接受才放行、判定出錯不放行）。
 
 **換版當天（儀表板「5. 升級精靈」，逐步按下並確認）**
 
