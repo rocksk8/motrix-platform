@@ -42,11 +42,27 @@ class _Payables:
 def _expense_entries(conn, start, end):
     """付款日期在 [start, end]（YYYY-MM-DD）、狀態＝已付款的勞報單：[{date, quoteNo, desc, amount, category}]。"""
     rows = conn.execute(
-        "SELECT slip_no, contractor_name, gross_amount, payment_date FROM payslips"
+        "SELECT slip_no, contractor_name, gross_amount, net_amount, payment_date, data_json FROM payslips"
         " WHERE status = '已付款' AND payment_date BETWEEN ? AND ? ORDER BY payment_date", (start, end)).fetchall()
-    return [{"date": r["payment_date"], "quoteNo": "",
-             "desc": ("勞報單 %s %s" % (r["slip_no"], r["contractor_name"] or "")).strip(),
-             "amount": int(r["gross_amount"] or 0), "category": EXPENSE_CATEGORY} for r in rows]
+    out = []
+    for r in rows:
+        gross = int(r["gross_amount"] or 0)
+        desc = ("勞報單 %s %s" % (r["slip_no"], r["contractor_name"] or "")).strip()
+        amount = gross
+        # MONEY-FLOWS §9 L5（下游效應：營運報表現金口徑）：經承攬商匯款單付款者（R12 `paid_via_remit`），匯款單的實付
+        # （net＝勞報單實付）已由現金口徑的承攬商支出（`case.recognition.dispatch_entries`，讀 `remit_actual`）計入；
+        # 這裡只列匯款單沒付的代扣部分（gross − net：所得稅＋補充保費），合計剛好一次 gross，不雙計。
+        try:
+            via = (json.loads(r["data_json"] or "{}") or {}).get("paid_via_remit")
+        except (TypeError, ValueError):
+            via = None
+        if via:
+            amount = max(0, gross - int(r["net_amount"] or 0))
+            desc += "（代扣部分；實付已列於匯款單 %s）" % via
+            if amount == 0:
+                continue
+        out.append({"date": r["payment_date"], "quoteNo": "", "desc": desc, "amount": amount, "category": EXPENSE_CATEGORY})
+    return out
 
 
 # IP-103 與 IP-9（名稱 payslip）由 modules/payroll/__init__.py 的 ModuleSpec.providers 登記
