@@ -88,7 +88,7 @@ def test_the_real_provider_scan_finds_the_owner_modules():
     from check_approval_queue_coverage import _provider_sources
     labels = {lbl.replace("\\", "/") for lbl, src in _provider_sources() if src}
     from core import source_tree
-    for f in ("modules/accounting/api/vouchers.py", "helpers/custom_modules.py"):   # 傳票 2026-09-26 隨 M06 搬進模組
+    for f in ("modules/accounting/api/voucher_providers.py", "helpers/custom_modules.py"):   # 傳票 2026-09-26 隨 M06 搬進模組；2026-09-30 W4 拆檔後提供者在 voucher_providers.py
         if not source_tree.module_installed(f):
             continue                                  # 模組不在（選配／反向控制）⇒ 它的提供者本來就不在
         assert f in labels, (f, sorted(labels))

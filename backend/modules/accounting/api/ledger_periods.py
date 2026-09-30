@@ -101,6 +101,7 @@ def put_settings(body: dict = Body(...), authorization: str = Header(None)):
         conn.commit()
     finally:
         conn.close()
+    _audit(_tok(authorization), "ledger.settings.update", "gl_settings", "fiscal_year_start_month", "更新總帳設定：%s" % ", ".join(sorted((body or {}).keys())))
     return {"ok": True}
 
 
