@@ -28,6 +28,7 @@
     "schema_version",
     "sessions",
     "system_settings",
+    "user_bank_accounts",
     "users",
     "vendor_contractors"
    ],
@@ -2294,6 +2295,7 @@
     "mod:lodging/api",
     "mod:lodging/api_records",
     "mod:netplan/api",
+    "mod:payroll/api/bank_account",
     "mod:payroll/api/bonus",
     "mod:payroll/api/bonus_correction",
     "mod:payroll/api/payslips",
@@ -7704,10 +7706,12 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "mod:payroll/api/bank_account",
     "mod:payroll/api/bonus",
     "mod:payroll/api/bonus_correction",
     "mod:payroll/api/payslips",
     "mod:payroll/attachments",
+    "mod:payroll/bank_account",
     "mod:payroll/bonus",
     "mod:payroll/bonus_correction",
     "mod:payroll/bonus_payouts",
@@ -7725,6 +7729,98 @@
    "tables_named": [],
    "tables_r": [],
    "tables_w": []
+  },
+  "mod:payroll/api/bank_account": {
+   "api_prefixes": [
+    "/api/bank-accounts",
+    "/api/me"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:payroll/bank_account"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "mod:payroll/bank_account"
+   ],
+   "kind": "mod",
+   "module_key": "payroll",
+   "path": "backend/modules/payroll/api/bank_account.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "get_my_account",
+     "line": 45,
+     "method": "GET",
+     "path": "/api/me/bank-account"
+    },
+    {
+     "func": "put_my_account",
+     "line": 55,
+     "method": "PUT",
+     "path": "/api/me/bank-account"
+    },
+    {
+     "func": "list_accounts",
+     "line": 68,
+     "method": "GET",
+     "path": "/api/bank-accounts"
+    },
+    {
+     "func": "get_account",
+     "line": 85,
+     "method": "GET",
+     "path": "/api/bank-accounts/{user_id}"
+    },
+    {
+     "func": "put_account",
+     "line": 101,
+     "method": "PUT",
+     "path": "/api/bank-accounts/{user_id}"
+    },
+    {
+     "func": "get_history",
+     "line": 117,
+     "method": "GET",
+     "path": "/api/bank-accounts/{user_id}/history"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [
+    "users"
+   ],
+   "tables_r": [
+    "user_bank_accounts",
+    "users"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "user_bank_accounts",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "notifications",
+    "system_settings",
+    "user_bank_accounts"
+   ]
   },
   "mod:payroll/api/bonus": {
    "api_prefixes": [
@@ -8397,6 +8493,24 @@
     "payslips"
    ],
    "tables_w": []
+  },
+  "mod:payroll/bank_account": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:audit",
+    "helper:auth"
+   ],
+   "kind": "mod",
+   "module_key": "payroll",
+   "path": "backend/modules/payroll/bank_account.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": [
+    "user_bank_accounts"
+   ]
   },
   "mod:payroll/bonus": {
    "api_prefixes": [],
@@ -10265,6 +10379,38 @@
    ],
    "routers_called_effective": [
     "router:auth",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "page:pages/bank-account.html": {
+   "api_calls": [
+    "/api/bank-accounts",
+    "/api/bank-accounts/",
+    "/api/me/bank-account",
+    "/api/system/branding/favicon"
+   ],
+   "api_prefixes": [
+    "/api/bank-accounts",
+    "/api/me",
+    "/api/system"
+   ],
+   "api_unmatched": [],
+   "imports": [
+    "js:static/auth-guard.js",
+    "js:static/notif.js",
+    "js:static/sidebar.js",
+    "js:static/ui.js"
+   ],
+   "kind": "page",
+   "path": "frontend/pages/bank-account.html",
+   "routers_called": [
+    "mod:payroll/api/bank_account",
+    "router:system"
+   ],
+   "routers_called_effective": [
+    "mod:payroll/api/bank_account",
     "router:system"
    ],
    "tables_r": [],
@@ -17727,6 +17873,23 @@
     "core:main"
    ]
   },
+  "table:user_bank_accounts": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [
+    "core:archive"
+   ],
+   "path": "backend/modules/payroll/migrations/0003_user_bank_accounts.py:13",
+   "readers": [
+    "mod:payroll/api/bank_account"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:payroll/bank_account"
+   ]
+  },
   "table:user_list_prefs": {
    "api_prefixes": [],
    "imports": [],
@@ -17771,6 +17934,7 @@
     "helper:custom_builder_support",
     "helper:custom_modules",
     "helper:email_notify",
+    "mod:payroll/api/bank_account",
     "router:mail_settings",
     "router:system"
    ],
@@ -17800,6 +17964,7 @@
     "mod:case/recognition",
     "mod:crm/api",
     "mod:daily_tasks/api",
+    "mod:payroll/api/bank_account",
     "mod:payroll/api/bonus",
     "mod:payroll/bonus_correction",
     "mod:payroll/bonus_payouts",

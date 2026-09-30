@@ -545,6 +545,8 @@
     "mod:payroll/api/bonus_correction",
     "mod:payroll/bonus_correction",
     "mod:payroll/api/payslips",
+    "mod:payroll/api/bank_account",
+    "mod:payroll/bank_account",
     "mod:payroll/bonus",
     "mod:payroll/bonus_case",
     "mod:payroll/bonus_deductions",
@@ -554,6 +556,7 @@
     "mod:payroll/bonus_queue",
     "mod:payroll/bonus_vouchers",
     "page:pages/bonus-corrections.html",
+    "page:pages/bank-account.html",
     "page:pages/bonus.html",
     "page:pages/payslip-form.html",
     "page:pages/payslips.html",
@@ -573,7 +576,8 @@
     "bonus_item_people",
     "bonus_items",
     "payslip_seq",
-    "payslips"
+    "payslips",
+    "user_bank_accounts"
    ],
    "data": {
     "files": [
@@ -598,11 +602,22 @@
        "data_json.bankAccountNumber"
       ],
       "note": "一般每日 JSON 排除 F2 欄位；完整列匯出到 系統存檔_個資/每日備份"
+     },
+     {
+      "name": "user_bank_accounts",
+      "class": "T1",
+      "f2_fields": [
+       "account_name",
+       "account_number"
+      ],
+      "note": "員工收款帳號；模組宣告 T1（自動進每日 JSON），戶名與帳號由 archive._F2_FIELDS 在一般份拿掉、完整列只進個資資料夾"
      }
     ]
    },
    "api_prefixes": [
+    "/api/bank-accounts",
     "/api/bonus",
+    "/api/me",
     "/api/next-slip-no",
     "/api/payslips",
     "/api/tax-rules"
