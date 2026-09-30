@@ -3,7 +3,7 @@
 只 import core／helpers／db（L1），不 import 其他 L2 模組（M04 的付款憑據走 IP-14、M07 的獎金走 IP-8）。"""
 from core.registry import ModuleSpec
 
-from modules.arap import receivables
+from modules.arap import gl_events, receivables
 from modules.arap.api import cashier, invoice_vouchers, payment_requests
 
 MODULE = ModuleSpec(
@@ -14,6 +14,8 @@ MODULE = ModuleSpec(
         ("receivables.income_items", "arap"): receivables.collect_income_items,
         # 銷項發票清單（已填發票號碼的收款品項）：M08 稅務匯出、M06 T100 收款事件
         ("receivables.tax_invoices", "arap"): receivables.collect_tax_invoices,
+        # IP-GL1（2026-09-30，總帳 C1）：銷項發票（E01）與客戶收款（E03）事件；M06 引擎收集後產生傳票草稿
+        ("gl.events", "arap"): gl_events.gl_events,
         # IP-9（2026-09-30）：客戶內扣的收款手續費列營運報表支出（收款日、類別「收款手續費」）
         ("expense.entries", "receipt_fee"): receivables.expense_entries,
         # IP-10／approval.reassign（M01-PLAN §3-7）：M01「待我簽核」佇列與轉簽的開票申請、請款單

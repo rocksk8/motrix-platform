@@ -605,6 +605,10 @@ def submit_voucher(voucher_id: int, body: dict = Body(default={}),
         # ⇒ 用 `_get_setting(key, None)` 判**鍵在不在**（〈null 不等於 0〉）。
         scope = _get_setting("approval_flow_scope", {}) or {}
         flow = _get_setting(approval_flow_setting_key("voucher", scope), None)
+        if v.get("kind") == "auto":                     # 總帳 C1：引擎產生的傳票可另設簽核流程（system_settings.voucher_auto_approval_flow）；沒設定＝與手工傳票同流程
+            auto_flow = _get_setting("voucher_auto_approval_flow", None)
+            if auto_flow is not None:
+                flow = auto_flow
         tiers = []
         if flow is not None:
             try:

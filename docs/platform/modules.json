@@ -366,6 +366,7 @@
    "key": "arap",
    "name": "應收應付",
    "units": [
+    "mod:arap/gl_events",
     "js:js/cashier.js",
     "page:pages/cashier.html",
     "page:pages/payment-request-form.html",
@@ -423,6 +424,7 @@
     "js:js/ledger-settings.js",
     "page:pages/ledger-settings.html",
     "mod:accounting/api/ledger_engine",
+    "mod:accounting/ledger/engine",
     "mod:accounting/ledger/contract",
     "mod:accounting/api/ledger_periods",
     "mod:accounting/api/ledger_reports",

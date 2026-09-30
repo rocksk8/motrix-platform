@@ -676,16 +676,16 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 
 ## IP-GL1　`gl.events`：總帳事件來源（各來源模組 → M06；暫定號，列車定號）
 
-對應總帳設計稿 02-events-engine.md §2（proposal-general-ledger，W4）。**A 階段（2026-09-30）只定介面與守門，事件來源後補**；M06 只收集與驗證、不產生傳票，所以對現有手工傳票沒有任何副作用。
+對應總帳設計稿 02-events-engine.md §2（proposal-general-ledger，W4）。**C1（2026-09-30）**：引擎依事件產生傳票**草稿**（kind=auto），功能旗標 `engine_drafts` 預設關，關閉時對現有手工傳票沒有任何副作用。
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | 來源模組（arap、subcontract、payroll、supply、case、fixed_assets、建構器 outbox）。**A 階段目前沒有任何提供者**；逐批接入（C1～C7）時，每接一個，本列改寫成 `modules/<key>/…` 並在第一個提供者上線時把「形式」改為 provider、取用處改字面值 capability（登記表守門只認 provider 形式與字面值，現在改會與「登記表有、程式碼沒有提供」衝突） |
-| 使用方 | M06 `modules/accounting/ledger/contract.py::collect`（`GET /api/ledger/events/preview`） |
-| 形式 | 介面契約（預定為 provider，多提供者：`registry.providers("gl.events")`，鍵＝來源模組 key）；**尚無提供者，故暫不列為 provider 形式** |
+| 提供方 | M05 應收應付：`modules/arap/gl_events.py`（銷項發票 E01、客戶收款 E03；2026-09-30 C1）。之後逐批接入：subcontract／payroll／supply／case／建構器 outbox（C2～C7），每接一個在本列加一筆 `modules/<key>/…` |
+| 使用方 | M06 `modules/accounting/ledger/contract.py::collect`（`GET /api/ledger/events/preview`）與 `modules/accounting/ledger/engine.py::run`（`POST /api/ledger/engine/run`，功能旗標 engine_drafts） |
+| 形式 | provider，多提供者（`registry.providers("gl.events")`，鍵＝來源模組 key） |
 | 語法 | 提供：`ModuleSpec(providers={("gl.events", "<模組key>"): fn})`；`fn(start, end, *, changed_since="") -> {"events": [Event], "notice": str}`<br>Event：`{source_type, source_key(不可變、不含陣列索引), event_code, event_date(YYYY-MM-DD 權責日), doc_no, case_no, party{key,name}, tax_code, mode(snapshot｜cumulative｜append), lines:[{role, side(D｜C), amount(非負整數新臺幣), case_no, party_key, tax_code, memo}], meta}`。來源給**角色**，角色→科目由 M06 設定（`gl_account_roles`） |
 | 回傳 | 見語法。`notice` 由來源自報（例：某來源資料缺席的原因） |
-| 對方不在時 | 收集結果的 `notices` 逐來源明說：模組未安裝＝「○○模組未安裝：不含○○」、已載入但未提供＝「○○尚未接入總帳」、提供者丟例外＝「○○的分錄事件讀取失敗（例外型別）」；一個來源失敗不影響其他來源；無效事件列入 `invalid`（附原因），不消失。**不可與「0 筆」長得一樣** |
+| 對方不在時 | arap 不在 ⇒ 引擎不產生銷項／收款草稿，回應與期末檢查明說「arap 模組未安裝：不含銷項發票、客戶收款」，其餘來源照常。收集結果的 `notices` 逐來源明說：模組未安裝＝「○○模組未安裝：不含○○」、已載入但未提供＝「○○尚未接入總帳」、提供者丟例外＝「○○的分錄事件讀取失敗（例外型別）」；一個來源失敗不影響其他來源；無效事件列入 `invalid`（附原因），不消失。**不可與「0 筆」長得一樣** |
 | 契約版本 | 1（2026-09-30） |
 | 守門 | `backend/modules/accounting/tests/test_ledger_a_contract_2026_09_30.py`：驗證（12 種壞事件各有原因）、內容雜湊（meta／順序／說明不參與，金額變了雜湊必變）、正對照（合格事件必出現且帶雜湊）、反向控制（缺席、未接入、提供者壞掉、無效事件、重複、notice 傳遞）、API 權限與缺席說明 |
 

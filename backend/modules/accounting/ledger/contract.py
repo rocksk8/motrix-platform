@@ -91,7 +91,7 @@ def canonical_hash(ev):
         "date": ev.get("event_date"), "case": ev.get("case_no") or "", "party": (ev.get("party") or {}).get("key") or "",
         "tax": ev.get("tax_code") or "",
         "lines": sorted([ln.get("role"), ln.get("side"), ln.get("amount"), ln.get("case_no") or "", ln.get("party_key") or "",
-                         ln.get("tax_code") or ""] for ln in ev.get("lines", [])),
+                         ln.get("tax_code") or "", ln.get("account_code") or ""] for ln in ev.get("lines", [])),
     }
     return hashlib.sha256(json.dumps(core, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 

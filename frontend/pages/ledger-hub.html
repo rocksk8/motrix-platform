@@ -24,6 +24,13 @@
     .hb-table td{padding:6px 8px;border-bottom:1px solid var(--line)}
     .hb-btn{padding:4px 12px;border-radius:var(--radius);border:1px solid var(--border-light);background:var(--surface);font-size:12px;font-family:var(--font-zh);cursor:pointer;color:var(--text-primary)}
     .hb-btn:hover{background:var(--surface-sunken)}
+    .hb-input{padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:var(--surface)}
+    .hb-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+    .hb-num{text-align:right;font-variant-numeric:tabular-nums}
+    .hb-btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+    .hb-btn:disabled{opacity:.5;cursor:default}
+    .hb-warn{color:var(--warning);background:var(--warning-light);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:8px}
+    .hb-table tr.bad td{background:var(--tone-danger-bg)}
     .hb-tag{font-size:11px;padding:1px 8px;border-radius:9px;border:1px solid var(--border-light)}
     .hb-tag.on{background:var(--success-light);color:var(--success);border-color:var(--success-border)}
     .hb-err{color:var(--tone-danger-fg);background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px}
@@ -45,7 +52,7 @@
 
       <div class="hb-tabs" x-show="enabled.length" data-testid="hb-tabs">
         <template x-for="f in enabled" :key="f.key">
-          <button class="hb-tab" :class="{on: tab === f.key}" @click="tab = f.key" x-text="f.label" :data-testid="'hb-tab-' + f.key"></button>
+          <button class="hb-tab" :class="{on: tab === f.key}" @click="selectTab(f.key)" x-text="f.label" :data-testid="'hb-tab-' + f.key"></button>
         </template>
       </div>
 
@@ -54,7 +61,56 @@
           <div>
             <div class="hb-title" style="font-size:16px" x-text="current().label"></div>
             <div class="hb-note" x-text="current().description"></div>
-            <div class="hb-note">這項功能已開啟，畫面隨批次 <b x-text="current().batch"></b> 完成後出現在這裡；目前尚未提供內容。</div>
+            <div class="hb-note" x-show="current().key !== 'engine_drafts'">這項功能已開啟，畫面隨批次 <b x-text="current().batch"></b> 完成後出現在這裡；目前尚未提供內容。</div>
+
+            <!-- 分錄草稿（C1） -->
+            <div x-show="current().key === 'engine_drafts'" data-testid="hb-engine">
+              <div class="hb-err" x-show="eng.error" x-text="eng.error" data-testid="hb-eng-error"></div>
+              <div class="hb-ok" x-show="eng.notice" x-text="eng.notice" data-testid="hb-eng-notice"></div>
+              <div class="hb-row">
+                <input class="hb-input" type="date" x-model="eng.start" data-testid="hb-eng-start"> ～ <input class="hb-input" type="date" x-model="eng.end" data-testid="hb-eng-end">
+                <button class="hb-btn primary" :disabled="eng.busy" @click="engRun()" data-testid="hb-eng-run">產生分錄草稿</button>
+                <select class="hb-input" x-model="eng.filter" @change="engLoad()" data-testid="hb-eng-filter">
+                  <option value="">全部狀態</option>
+                  <template x-for="st in ['drafted','posted','drift','orphan','blocked_closed','blocked_no_account','superseded','rejected','reversed']" :key="st"><option :value="st" x-text="statusLabel(st)"></option></template>
+                </select>
+                <span class="hb-note" style="margin:0" x-text="Object.keys(eng.counts).map(k => statusLabel(k) + ' ' + eng.counts[k]).join('　')" data-testid="hb-eng-counts"></span>
+              </div>
+              <template x-if="eng.run">
+                <div style="margin-bottom:10px">
+                  <template x-for="n in eng.run.notices" :key="n"><div class="hb-warn" x-text="n"></div></template>
+                  <div class="hb-warn" x-show="eng.run.invalid_count" x-text="eng.run.invalid_count + ' 筆事件格式不合格，已略過（例：' + (eng.run.invalid[0] ? eng.run.invalid[0].problems[0] : '') + '）'"></div>
+                </div>
+              </template>
+              <div class="hb-row" x-show="eng.events.length">
+                <button class="hb-btn" @click="engToggleAll(true)">全選草稿</button>
+                <button class="hb-btn" @click="engToggleAll(false)">全不選</button>
+                <button class="hb-btn" :disabled="eng.busy" @click="engBatch('submit')">整批送審</button>
+                <button class="hb-btn" :disabled="eng.busy" @click="engBatch('approve')">整批核准</button>
+                <button class="hb-btn" :disabled="eng.busy" @click="engBatch('post')">整批過帳</button>
+                <button class="hb-btn primary" :disabled="eng.busy" @click="engBatch('all')" data-testid="hb-eng-all">一鍵確認到過帳</button>
+              </div>
+              <table class="hb-table" data-testid="hb-eng-table">
+                <thead><tr><th></th><th>事件日</th><th>事件</th><th>來源鍵</th><th class="hb-num">金額</th><th>狀態</th><th>傳票</th><th>備註</th></tr></thead>
+                <tbody>
+                  <template x-for="e in eng.events" :key="e.id">
+                    <tr :class="{bad: engBad(e)}" :data-testid="'hb-eng-row-' + e.id">
+                      <td><input type="checkbox" :disabled="!e.voucher_id || e.voucher_status === '已過帳'" x-model="eng.selected[e.id]"></td>
+                      <td x-text="e.event_date"></td><td x-text="e.event_code + (e.rev > 1 ? ' v' + e.rev : '')"></td><td x-text="e.source_key"></td>
+                      <td class="hb-num" x-text="fmt(e.amount)"></td><td x-text="statusLabel(e.status)"></td>
+                      <td x-text="(e.voucher_no || '') + (e.voucher_status ? '（' + e.voucher_status + '）' : '')"></td>
+                      <td x-text="(e.reversal_no ? '沖轉 ' + e.reversal_no + '　' : '') + (e.note || '')"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+              <div class="hb-note" x-show="!eng.events.length" data-testid="hb-eng-empty">目前沒有事件。按「產生分錄草稿」向各來源模組收集（沒有提供者的來源會在上方說明原因）。</div>
+              <template x-if="eng.results">
+                <div style="margin-top:10px">
+                  <template x-for="r in eng.results.results.filter(x => !x.ok)" :key="r.id"><div class="hb-warn" x-text="'傳票 #' + r.id + '：' + r.error"></div></template>
+                </div>
+              </template>
+            </div>
           </div>
         </template>
       </div>

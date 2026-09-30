@@ -340,3 +340,49 @@ def test_periods_page_year_closing_generate_close_and_reopen(live_server, make_u
     # 唯一允許的 4xx＝本題刻意觸發的「還沒結轉就決算」400
     assert [b for b in bad if b[0] != 400] == [], bad[:4]
     assert not errs, "頁面丟了例外：%s" % errs[:3]
+
+
+# ── C1：總帳作業的「分錄草稿」頁籤 ────────────────────────────────────────
+
+@pytest.mark.e2e
+def test_hub_engine_tab_runs_lists_and_batch_confirms(live_server, make_user, e2e_browser):
+    import json as _json
+    from datetime import datetime as _dtm
+    user, pw = make_user(username="e2e_gl_engine", role="superadmin")
+    items = [{"id": "p1", "type": "全額", "amount": 10500, "invoiceNo": "EE12345678", "invoiceDate": "2172-09-10",
+              "received": True, "receivedAt": "2172-09-15", "actualAmount": 10485, "feeAmount": 15}]
+    conn = db.get_db()
+    try:
+        now = _dtm.now().isoformat()
+        data = {"quoteNo": "MQ-E2E-C1", "dealTag": "已成案", "caseRecord": {"payment": {"items": items}}}
+        conn.execute("INSERT INTO quotations (quote_no, status, total, pretax, data_json, created_at, updated_at, customer_name) VALUES (?,?,?,?,?,?,?,?)",
+                     ("MQ-E2E-C1", "已成案", 10500, 10000, _json.dumps(data, ensure_ascii=False), now, now, "甲公司"))
+        conn.execute("INSERT INTO gl_settings(key,value) VALUES ('feature.engine_drafts','1') ON CONFLICT(key) DO UPDATE SET value='1'")
+        conn.commit()
+    finally:
+        conn.close()
+    page = e2e_browser.new_page()
+    bad, errs = _open(page, live_server, user, pw, "ledger-hub.html")
+    page.wait_for_selector("[data-testid=hb-tab-engine_drafts]")
+    page.click("[data-testid=hb-tab-engine_drafts]")
+    page.wait_for_selector("[data-testid=hb-engine]", state="visible")
+    assert page.locator("[data-testid=hb-eng-empty]").is_visible()
+    page.fill("[data-testid=hb-eng-start]", "2172-09-01")
+    page.fill("[data-testid=hb-eng-end]", "2172-09-30")
+    page.click("[data-testid=hb-eng-run]")
+    page.wait_for_function("() => document.querySelectorAll('[data-testid^=hb-eng-row-]').length >= 2")           # E01＋E03
+    table = page.locator("[data-testid=hb-eng-table]").inner_text()
+    assert "E01" in table and "E03" in table and "草稿待確認" in table and "MQ-E2E-C1::EE12345678" in table
+    assert "尚未接入" in page.locator("[data-testid=hb-engine]").inner_text() or "未安裝" in page.locator("[data-testid=hb-engine]").inner_text()   # 其他來源明說缺席
+
+    page.click("text=全選草稿")
+    page.click("[data-testid=hb-eng-all]")
+    page.wait_for_function("() => document.querySelector('[data-testid=hb-eng-counts]').textContent.includes('已過帳')")
+    conn = db.get_db()
+    try:                                                                                    # 終點狀態：傳票真的過帳、試算表看得到應收
+        st = [r[0] for r in conn.execute("SELECT status FROM vouchers_all WHERE origin LIKE 'gl:%' AND voucher_date LIKE '2172-09-%'")]
+        assert st and set(st) == {"已過帳"}
+    finally:
+        conn.close()
+    assert not bad, "開總帳作業（分錄草稿）時有請求失敗：%s" % bad[:4]
+    assert not errs, "頁面丟了例外：%s" % errs[:3]
