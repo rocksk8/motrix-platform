@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.75 — 2026-09-30（列車 25 合併補號；wip/w1-builder3 c98f5bcc 的 L1 新增，原寫在 1.73 段但 1.74 已被行事曆開關取用）
+- L1（新增）：`core.paths.FORM_TEMPLATES_DIR`（自訂模組內建範本資料夾；原本用 `__file__` 算，違反 core.paths 守門）
+
 ## （不升版號：介面不變）— 2026-09-30（wip/w2-edge-profile：Edge PDF 重用專屬 profile）
 - L1（行為，私有）：`helpers/startup.py` 新增 `_EDGE_PROFILE_ROOT`（`<LOGS_DIR>/edge_profiles`）、`_EDGE_PROFILE_MAX_BYTES`／`_EDGE_PROFILE_CHECK_EVERY` 與內部池函式；`run_edge_pdf(cmd)` 簽章不變，命令沒有 `--user-data-dir` 時自動帶專屬 profile（逾時／非 0 結束／過大 ⇒ 整份重建；取不到 ⇒ 退回舊行為）。產品碼只有 `helpers/startup.py` 可以帶 `--user-data-dir`。
 
@@ -24,7 +27,6 @@
 - L1（新增）：`helpers.custom_builder_support`——`mask_for／can_see_field／can_see_menu／access_problems／leaking_formulas`（欄位 `access.visibleTo`、選單 `menu.visibleTo` 的後端強制與發布驗證，公式引用受限欄位而可見範圍較大＝洩漏，發布拒絕）；`emit_finance_event／pending_finance_events／mark_finance_processed`（金流 outbox，`EVENT_FINANCE_POSTED／REVERSED`）；`create_revision`（單據 -R 修訂）。`custom_modules.visible_to` 依 `menu.visibleTo` 過濾（沒設＝不變）；`validate_module` 加可見設定驗證
 - L1（新增）：組織元件（S2）——`helpers.custom_modules.ref_labels(conn, body, data)`（單據參照欄的顯示名稱）；`ref` 欄位屬性 `multiple`（複選，值＝去重代號清單，逐一驗證存在）；參照對象 `departments`；元件群組 `org` 與元件 `user／users／dept／depts`（都是 `ref` 的預設屬性組）；`get_record` 回傳多 `refLabels`（只增）
 - L1（新增）：`helpers.custom_builder_support`（S3）——`hidden_keys／mask_record／mask_records／mask_compute／keep_hidden_values／render_output_for`（欄位可見的後端強制：讀取、列表、寫入回應、即時計算、輸出都拿掉看不到的欄位；受限使用者存檔不會清掉看不到的欄位）；`access_problems` 加「必填欄位不可設成部分人才看得到」。`routers.custom_records` 全部單據端點改走這些函式；`VISIBLE_ROLES`（可見設定可選的角色，同基本角色；目錄 `roles`）；`access_problems` 的問題路徑改用 `fields[i]`（建構器標卡片）並檢查角色在清單內
-- L1（新增）：`core.paths.FORM_TEMPLATES_DIR`（自訂模組內建範本資料夾；原本用 `__file__` 算，違反 core.paths 守門）
 - L1（新增）：附件欄（S2）——core migration v4 `custom_record_files`（先傳後綁單；T1，實體檔在 `uploads/custom_records/<模組>/`）；`helpers/custom_files`（`accepted_exts／clean_ids／check_files／bind_files／remove_files／remove_staged／purge_stale_staged／register_staged／file_meta／files_of_field／view_names／CustomFilesAccess`，`uploads.path_access` 提供者 `custom_files` 認領資料夾 `custom_records`，IP-104）；欄位型別 `file`／`image`（屬性 `accept`＝白名單子集、`maxFiles`）；端點 `POST /api/custom/{key}/files/{欄位}`、`DELETE /api/custom/{key}/files/{id}`；`get_record` 多 `fileMeta`；`mask_record` 一併拿掉看不到欄位的 `fileMeta`；`db.py`／`archive.py` 登記 v3／v4 新表（demo 重置清單、每日匯出）
 
 ## （不升版號：介面不變）— 2026-09-30（wip/w2-voucher-office：傳票附件開放 Word／Excel）
