@@ -44,7 +44,7 @@ def _voucher(conn, status="草稿", kind="manual", origin="", voided=False, date
 # ── L9 ──────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("kind,origin,word", [("auto", "", "自動傳票"), ("reversal", "", "反向傳票"), ("manual", "bonus_accrual", "獎金入帳")])
-def test_l9_system_generated_vouchers_cannot_be_voided_from_the_voucher_page(client, make_user, conn, kind, origin, word):
+def test_gap_system_generated_vouchers_cannot_be_voided_from_the_voucher_page(client, make_user, conn, kind, origin, word):
     h = _login(client, make_user, "lg9")
     vid, _ = _voucher(conn, kind=kind, origin=origin)
     r = client.post("/api/vouchers/%d/void" % vid, headers=h, json={"reason": "想作廢"})
@@ -52,7 +52,7 @@ def test_l9_system_generated_vouchers_cannot_be_voided_from_the_voucher_page(cli
     assert conn.execute("SELECT COALESCE(voided_at,'') FROM vouchers_all WHERE id=?", (vid,)).fetchone()[0] == ""
 
 
-def test_l9_manual_vouchers_are_still_voidable(client, make_user, conn):
+def test_gap_manual_vouchers_are_still_voidable(client, make_user, conn):
     h = _login(client, make_user, "lg9b")
     vid, _ = _voucher(conn)
     assert client.post("/api/vouchers/%d/void" % vid, headers=h, json={"reason": "手工傳票作廢"}).status_code == 200
@@ -75,7 +75,7 @@ def _e06b(no):
     return [e for e in G.gl_events("2189-05-01", "2189-05-31")["events"] if e["event_code"] == "E06b" and e["source_key"] == no]
 
 
-def test_l6_a_manual_payment_voucher_suppresses_the_engine_payment_event(conn):
+def test_gap_a_manual_payment_voucher_suppresses_the_engine_payment_event(conn):
     _, vno = _voucher(conn, status="已過帳")
     no = _slip(conn, voucher_no=vno)
     assert _e06b(no) == []                                                  # 手工傳票已記付款 ⇒ 不重複
@@ -85,13 +85,13 @@ def test_l6_a_manual_payment_voucher_suppresses_the_engine_payment_event(conn):
 
 @pytest.mark.parametrize("kw,why", [({"voided": True}, "作廢的手工傳票不算"), ({"kind": "auto"}, "引擎自己產生的不算（否則自己的傳票被判來源消失）"),
                                     ({"origin": "bonus_payment"}, "獎金入帳傳票不算")])
-def test_l6_only_valid_manual_vouchers_count(conn, kw, why):
+def test_gap_only_valid_manual_vouchers_count(conn, kw, why):
     _, vno = _voucher(conn, status="已過帳", **kw)
     no = _slip(conn, voucher_no=vno)
     assert len(_e06b(no)) == 1, why
 
 
-def test_l6_unknown_or_empty_voucher_number_still_produces_the_event(conn):
+def test_gap_unknown_or_empty_voucher_number_still_produces_the_event(conn):
     assert len(_e06b(_slip(conn, voucher_no="NOPE-0001"))) == 1
     assert len(_e06b(_slip(conn, voucher_no=""))) == 1
 
@@ -128,7 +128,7 @@ def _post(conn, key):
     return vid
 
 
-def test_l2_an_old_posted_event_outside_the_window_is_still_detected_as_drift(conn, fake):
+def test_gap_an_old_posted_event_outside_the_window_is_still_detected_as_drift(conn, fake):
     fake["events"] = [_ev("L2-A", "2189-01-10")]
     E.run(conn, "2189-01-01", "2189-01-31", "acc")
     conn.commit()
@@ -141,7 +141,7 @@ def test_l2_an_old_posted_event_outside_the_window_is_still_detected_as_drift(co
     assert rows[0] == "drift" and len(rows) == 2                            # 舊列 drift，新版本另產
 
 
-def test_l2_an_old_posted_event_whose_source_vanished_is_reversed_outside_the_window(conn, fake):
+def test_gap_an_old_posted_event_whose_source_vanished_is_reversed_outside_the_window(conn, fake):
     fake["events"] = [_ev("L2-B", "2189-01-12")]
     E.run(conn, "2189-01-01", "2189-01-31", "acc")
     conn.commit()
@@ -153,7 +153,7 @@ def test_l2_an_old_posted_event_whose_source_vanished_is_reversed_outside_the_wi
     assert conn.execute("SELECT status FROM gl_source_events WHERE source_key='L2-B'").fetchone()[0] == "orphan"
 
 
-def test_l2_unknown_old_source_data_is_not_created_outside_the_window(conn, fake):
+def test_gap_unknown_old_source_data_is_not_created_outside_the_window(conn, fake):
     fake["events"] = [_ev("L2-C", "2189-01-15")]                            # 從沒跑過 1 月
     r = E.run(conn, "2189-03-01", "2189-03-31", "acc")
     conn.commit()
@@ -161,7 +161,7 @@ def test_l2_unknown_old_source_data_is_not_created_outside_the_window(conn, fake
     assert conn.execute("SELECT COUNT(*) FROM gl_source_events WHERE source_key='L2-C'").fetchone()[0] == 0     # 補登多年是 C8，不在這裡偷做
 
 
-def test_l1_pending_changes_counts_new_changed_and_gone_without_writing(conn, fake):
+def test_gap_pending_changes_counts_new_changed_and_gone_without_writing(conn, fake):
     fake["events"] = [_ev("L1-A", "2189-05-10"), _ev("L1-B", "2189-05-11")]
     E.run(conn, "2189-05-01", "2189-05-31", "acc")
     conn.commit()
@@ -172,7 +172,7 @@ def test_l1_pending_changes_counts_new_changed_and_gone_without_writing(conn, fa
     assert conn.execute("SELECT COUNT(*) FROM gl_source_events").fetchone()[0] == before                # 唯讀
 
 
-def test_l1_auto_run_only_runs_when_the_flag_is_on_and_records_the_result(conn, fake):
+def test_gap_auto_run_only_runs_when_the_flag_is_on_and_records_the_result(conn, fake):
     F.set_flag(conn, "engine_drafts", False)
     conn.commit()
     n0 = conn.execute("SELECT COUNT(*) FROM gl_engine_runs").fetchone()[0]
@@ -191,7 +191,7 @@ def test_l1_auto_run_only_runs_when_the_flag_is_on_and_records_the_result(conn, 
     conn.commit()
 
 
-def test_l1_auto_run_survives_a_crashing_engine_and_says_so(conn, fake, monkeypatch):
+def test_gap_auto_run_survives_a_crashing_engine_and_says_so(conn, fake, monkeypatch):
     F.set_flag(conn, "engine_drafts", True)
     conn.commit()
     monkeypatch.setattr(AR._engine, "run", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
@@ -202,7 +202,7 @@ def test_l1_auto_run_survives_a_crashing_engine_and_says_so(conn, fake, monkeypa
     conn.commit()
 
 
-def test_l1_status_endpoint_needs_the_flag_and_reads_only(client, make_user, conn, fake):
+def test_gap_status_endpoint_needs_the_flag_and_reads_only(client, make_user, conn, fake):
     h = _login(client, make_user, "lg1")
     F.set_flag(conn, "engine_drafts", False)
     conn.commit()
@@ -236,7 +236,7 @@ def _e01(no):
     return [e for e in res["events"] if e["event_code"] == "E01" and e["source_key"].startswith(no)], res["notice"]
 
 
-def test_l8_e01_follows_the_deal_tag_like_the_report_and_e03(conn):
+def test_gap_sales_invoice_event_follows_the_deal_tag_like_the_report_and_e03(conn):
     _quote(conn, "MQ-L8-00000001")
     evs, notice = _e01("MQ-L8-00000001")
     assert len(evs) == 1 and "不是「已成案" not in notice
@@ -246,7 +246,7 @@ def test_l8_e01_follows_the_deal_tag_like_the_report_and_e03(conn):
     assert evs == [] and "不是「已成案／已結案」" in notice
 
 
-def test_l8_closed_cases_still_count_and_the_column_wins_over_json(conn):
+def test_gap_closed_cases_still_count_and_the_column_wins_over_json(conn):
     _quote(conn, "MQ-L8-00000002", deal="已結案")
     assert len(_e01("MQ-L8-00000002")[0]) == 1
     conn.execute("UPDATE quotations SET deal_tag='已成案', data_json=json_set(data_json,'$.dealTag','洽談中') WHERE quote_no='MQ-L8-00000002'")   # 欄位優先於 JSON
@@ -254,7 +254,7 @@ def test_l8_closed_cases_still_count_and_the_column_wins_over_json(conn):
     assert len(_e01("MQ-L8-00000002")[0]) == 1
 
 
-def test_l8_a_posted_e01_of_a_downgraded_case_is_reversed_by_the_engine(conn):
+def test_gap_a_posted_sales_invoice_event_of_a_downgraded_case_is_reversed_by_the_engine(conn):
     _quote(conn, "MQ-L8-00000003")
     E.run(conn, "2189-07-01", "2189-07-31", "acc")
     conn.commit()
