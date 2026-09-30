@@ -88,10 +88,11 @@ def test_lists_approved_unpaid_and_pay_writes_back_then_disappears(client, make_
     assert r.status_code == 200 and r.json()["paidDate"] == "2031-05-20", r.text
     assert _q("SELECT paid_date FROM case_extra_expenses WHERE id=?", (int(ok),))[0]["paid_date"] == "2031-05-20"
     assert not _mine(client.get("/api/cashier/pending-payables", headers=cash), ok)          # 登錄後消失
-    assert client.post("/api/cashier/pending-payables/case/%s/pay" % ok, json={}, headers=cash).status_code == 409
-    assert client.post("/api/cashier/pending-payables/case/%s/pay" % draft, json={}, headers=cash).status_code == 409
-    assert client.post("/api/cashier/pending-payables/case/999999/pay", json={}, headers=cash).status_code == 404
-    assert client.post("/api/cashier/pending-payables/nope/%s/pay" % draft, json={}, headers=cash).status_code == 404
+    D = {"paidDate": "2031-05-21"}           # W1：付款日必填（不帶 ⇒ 400），下面各題要的是別的錯誤
+    assert client.post("/api/cashier/pending-payables/case/%s/pay" % ok, json=D, headers=cash).status_code == 409
+    assert client.post("/api/cashier/pending-payables/case/%s/pay" % draft, json=D, headers=cash).status_code == 409
+    assert client.post("/api/cashier/pending-payables/case/999999/pay", json=D, headers=cash).status_code == 404
+    assert client.post("/api/cashier/pending-payables/nope/%s/pay" % draft, json=D, headers=cash).status_code == 404
     assert client.post("/api/cashier/pending-payables/case/%s/pay" % draft, json={"paidDate": "2031/05/20"},
                        headers=cash).status_code == 400
     acts = [r["action"] for r in _q("SELECT action FROM audit_log WHERE action='cashier.payable_paid'")]

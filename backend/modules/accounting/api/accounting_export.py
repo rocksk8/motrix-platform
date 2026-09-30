@@ -96,6 +96,7 @@ _DEFAULT_T100_CONFIG = {
     "salesRevenueAccount":       "",  # 銷貨收入科目代號
     "outputTaxAccount":          "",  # 銷項稅額科目代號
     "contractorExpenseAccount":  "",  # 承攬商費用科目代號
+    "remitFeeAccount":           "",  # 匯款手續費支出科目代號（W1，2026-09-30：手續費是公司自付、另立一行借記）
     "receiptFeeAccount":         "",  # 收款手續費支出科目代號（2026-09-30：客戶內扣手續費另借一行；選填，沒填匯出時提示）
     "inventoryExpenseAccounts":  {},  # {料件分類: 科目代號}，鍵對應 helpers/part_catalog.py::PART_CATEGORIES（2026-09-01 同輪新增）
     "departmentCode":            "",  # 部門別代號（選填，留空則傳票不分部門）
@@ -116,6 +117,7 @@ class T100ExportConfigBody(BaseModel):
     salesRevenueAccount: str = ""
     outputTaxAccount: str = ""
     contractorExpenseAccount: str = ""
+    remitFeeAccount: str = ""
     receiptFeeAccount: str = ""
     inventoryExpenseAccounts: Dict[str, str] = {}
     departmentCode: str = ""
@@ -202,6 +204,8 @@ def config_code_issues(conn, cfg):
     _check("銷貨收入", cfg.get("salesRevenueAccount"))
     _check("銷項稅額", cfg.get("outputTaxAccount"))
     _check("承攬商費用", cfg.get("contractorExpenseAccount"))
+    if (cfg.get("remitFeeAccount") or "").strip():                  # 選填：沒填不算「指不到東西」，匯出時另行提示
+        _check("匯款手續費支出", cfg.get("remitFeeAccount"))
     if (cfg.get("receiptFeeAccount") or "").strip():                 # 選填：沒填不算「指不到東西」，匯出時另行提示
         _check("收款手續費支出", cfg.get("receiptFeeAccount"))
     for name, code in (cfg.get("inventoryExpenseAccounts") or {}).items():
@@ -338,20 +342,29 @@ def _collect_t100_events(start: str, end: str, exclude_confirmed: bool = True) -
         key = v["voucherNo"]
         if ("contractor_voucher", key) in confirmed:
             continue
+        if v.get("remitReview") == "pending":        # W1：實付≠應付、待管理員核可 ⇒ 不進傳票，核可後才進（退回則整筆消失）
+            continue
         vendor = v["vendorName"] or "外包人員點工"
         summary = f"{vendor} {v['quoteNo']} 匯款申請{v['voucherNo']}"[:60]
         paid_d = (v["paidAt"] or "")[:10]
         bank_name = v.get("paidBankAccountName") or "銀行存款"
         bank_code = v.get("paidBankAccountCode") or ""
+        # W1（2026-09-30）：承攬商費用＝實付金額（舊資料沒有實付 ⇒ 應付）；手續費（公司自付）另借「匯款手續費支出」；
+        # 銀行存款貸方＝實付＋手續費（真正流出的錢）。借貸一定相等，實付≠應付的差額不另立科目（經管理員核可才算數）。
+        actual = v["remitActual"] if v.get("remitActual") is not None else v["grandTotal"]
+        fee = v.get("remitFee") or 0
         lines = [
             _voucher_line(paid_d, cfg["voucherCategory"], summary, cfg["contractorExpenseAccount"], "承攬商費用",
-                          v["grandTotal"], 0, cfg["departmentCode"], v["voucherNo"], vendor),
-            _voucher_line(paid_d, cfg["voucherCategory"], summary, bank_code, bank_name,
-                          0, v["grandTotal"], cfg["departmentCode"], v["voucherNo"], vendor),
+                          actual, 0, cfg["departmentCode"], v["voucherNo"], vendor),
         ]
+        if fee:
+            lines.append(_voucher_line(paid_d, cfg["voucherCategory"], summary, cfg.get("remitFeeAccount") or "",
+                                       "匯款手續費支出", fee, 0, cfg["departmentCode"], v["voucherNo"], vendor))
+        lines.append(_voucher_line(paid_d, cfg["voucherCategory"], summary, bank_code, bank_name,
+                                   0, actual + fee, cfg["departmentCode"], v["voucherNo"], vendor))
         events.append({
             "sourceType": "contractor_voucher", "sourceKey": key,
-            "date": paid_d, "amount": v["grandTotal"], "summary": summary, "lines": lines,
+            "date": paid_d, "amount": actual + fee, "summary": summary, "lines": lines,
         })
 
     # 付款事件（料件/設備進貨）：借 料件設備成本 / 貸 銀行存款
@@ -417,6 +430,8 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
 
     missing_codes = [k for k in ("salesRevenueAccount", "outputTaxAccount", "contractorExpenseAccount")
                       if not cfg.get(k)]
+    if any(r.get("acctName") == "匯款手續費支出" for r in rows) and not cfg.get("remitFeeAccount"):
+        missing_codes.append("remitFeeAccount（匯款手續費支出科目）")
     if any(r.get("acctName") == "收款手續費支出" for r in rows) and not cfg.get("receiptFeeAccount"):
         missing_codes.append("receiptFeeAccount（收款手續費支出科目）")
     if not cfg.get("bankAccounts"):

@@ -322,6 +322,10 @@
               <button class="ctab" :class="{on: cashierSub==='payreq'}" @click="cashierSub='payreq'" data-testid="cashier-payreq-tab">
                 請款待付款<span class="tab__cnt" x-text="payreqQueue.items.length"></span>
               </button>
+              <!-- W1（IP-102 remit.reviews）：實付≠應付的差額待審核；admin+ 核可或退回 -->
+              <button class="ctab" :class="{on: cashierSub==='remitreview'}" @click="cashierSub='remitreview'" data-testid="cashier-remit-tab">
+                差額審核<span class="tab__cnt" x-text="remitReviews.items.length"></span>
+              </button>
               <button class="ctab" :class="{on: cashierSub==='history'}" @click="cashierSub='history'">執行歷史</button>
               <button class="ctab" :class="{on: cashierSub==='bank'}" @click="cashierSub='bank'">銀行對帳單比對</button>
               <!-- `FN3`：T100 匯出從報表頁搬進來，成為第 5 個子頁籤。
@@ -468,11 +472,20 @@
                           <td class="c mono" x-text="(it.approvedAt || '').slice(0, 10)"></td>
                           <td class="c" x-text="(it.invoiceNo || '—') + (it.invoiceFiles ? '（' + it.invoiceFiles + ' 檔）' : '')"></td>
                           <td class="c">
-                            <input type="date" class="field-input" style="width:140px" x-show="payreqQueue.canPay"
+                            <input type="date" class="field-input" style="width:140px" x-show="payreqQueue.canPay" required
                                    :data-testid="'cashier-payreq-date-' + it.source + '-' + it.key" x-model="payreqDates[it.source + ':' + it.key]">
+                            <div x-show="payreqQueue.canPay" style="margin-top:4px;text-align:left;font-size:11px">
+                              實付 <input type="number" min="0" step="0.01" class="field-input" style="width:90px;display:inline-block" :placeholder="it.amount"
+                                        x-model="payreqRemit(it).actual" :data-testid="'cashier-payreq-actual-' + it.source + '-' + it.key">
+                              <label><input type="checkbox" x-model="payreqRemit(it).hasFee" :data-testid="'cashier-payreq-hasfee-' + it.source + '-' + it.key"> 手續費</label>
+                              <input type="number" min="0" step="0.01" class="field-input" style="width:70px;display:inline-block" x-show="payreqRemit(it).hasFee"
+                                     x-model="payreqRemit(it).fee" :data-testid="'cashier-payreq-fee-' + it.source + '-' + it.key">
+                              <div style="color:#b45309" x-show="remitDiff(payreqRemit(it), it.amount) !== 0" x-text="'⚠ 差 ' + remitDiff(payreqRemit(it), it.amount) + '，將送管理員審核'"></div>
+                              <div style="color:#b91c1c" x-show="remitError(payreqRemit(it))" x-text="remitError(payreqRemit(it))"></div>
+                            </div>
                           </td>
                           <td class="c">
-                            <button x-show="payreqQueue.canPay" class="action-btn pay" @click="payPayreq(it)" :disabled="payreqBusy"
+                            <button x-show="payreqQueue.canPay" class="action-btn pay" @click="payPayreq(it)" :disabled="payreqBusy || !payreqDates[it.source + ':' + it.key] || !!remitError(payreqRemit(it))"
                                     :data-testid="'cashier-payreq-pay-' + it.source + '-' + it.key">登錄付款</button>
                             <span x-show="!payreqQueue.canPay" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
                           </td>
@@ -560,6 +573,53 @@
             </div>
 
             <!-- 執行歷史（2026-08-31） -->
+            <div x-show="cashierSub==='remitreview'" data-testid="cashier-remit">
+              <div class="alert-bar" x-show="remitReviewNotice" x-text="remitReviewNotice" data-testid="cashier-remit-result"></div>
+              <div class="alert-bar" x-show="remitReviews.notice" x-text="remitReviews.notice"></div>
+              <template x-if="remitReviews.available && remitReviews.items.length===0">
+                <div class="panel" style="padding:18px;text-align:center;color:var(--text-dim)">目前沒有待審核的匯款差額</div>
+              </template>
+              <template x-if="remitReviews.items.length>0">
+                <div class="panel">
+                  <table class="data-table">
+                    <thead><tr>
+                      <th>來源</th><th>案件號</th><th>客戶</th><th>受款人</th><th class="r">應付</th><th class="r">實付</th><th class="r">差額</th>
+                      <th class="r">手續費</th><th class="c">匯款日</th><th>經辦</th><th class="c">審核</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="it in remitReviews.items" :key="it.source + ':' + it.key">
+                        <tr :data-testid="'cashier-remit-row-' + it.source + '-' + it.key">
+                          <td x-text="it.sourceLabel"></td>
+                          <td class="mono" x-text="it.quoteNo"></td>
+                          <td x-text="it.customerName"></td>
+                          <td x-text="it.payee"></td>
+                          <td class="r mono" x-text="fmt(it.payable)"></td>
+                          <td class="r mono" x-text="fmt(it.actual)"></td>
+                          <td class="r mono" style="color:#b45309;font-weight:600" x-text="(it.diff > 0 ? '+' : '') + it.diff"></td>
+                          <td class="r mono" x-text="fmt(it.fee)"></td>
+                          <td class="c mono" x-text="it.paidAt"></td>
+                          <td x-text="it.paidBy"></td>
+                          <td class="c">
+                            <template x-if="remitReviews.canDecide">
+                              <div>
+                                <input type="text" class="field-input" style="width:120px;display:inline-block" placeholder="原因（退回必填）"
+                                       x-model="remitDecisionMemo[it.source + ':' + it.key]" :data-testid="'cashier-remit-note-' + it.source + '-' + it.key">
+                                <button class="action-btn pay" :disabled="remitReviewBusy" @click="decideRemitReview(it, 'approve')"
+                                        :data-testid="'cashier-remit-approve-' + it.source + '-' + it.key">核可</button>
+                                <button class="action-btn" :disabled="remitReviewBusy" @click="decideRemitReview(it, 'reject')"
+                                        :data-testid="'cashier-remit-reject-' + it.source + '-' + it.key">退回</button>
+                              </div>
+                            </template>
+                            <span x-show="!remitReviews.canDecide" style="font-size:11px;color:var(--text-dim)">待管理員審核</span>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+            </div>
+
             <div x-show="cashierSub==='history'">
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
                 <label class="field-label" style="margin:0">起</label>
@@ -586,7 +646,7 @@
                   <template x-if="cashierHistoryOutgoing.length>0">
                     <div class="panel" style="margin-bottom:20px">
                       <table class="data-table">
-                        <thead><tr><th>申請單號</th><th>關聯案件</th><th>廠商</th><th class="r">金額</th><th class="c">匯款日期</th></tr></thead>
+                        <thead><tr><th>申請單號</th><th>關聯案件</th><th>廠商</th><th class="r">應付</th><th class="r">實付</th><th class="r">手續費</th><th class="c">匯款日期</th><th class="c">差額審核</th></tr></thead>
                         <tbody>
                           <template x-for="v in cashierHistoryOutgoing" :key="v.voucherNo">
                             <tr>
@@ -594,7 +654,10 @@
                               <td class="mono" x-text="v.quoteNo"></td>
                               <td x-text="v.vendorName || '（外包人員點工）'"></td>
                               <td class="r mono" x-text="fmt(v.grandTotal)"></td>
+                              <td class="r mono" x-text="fmt(v.remitActual != null ? v.remitActual : v.grandTotal)"></td>
+                              <td class="r mono" x-text="v.remitFee ? fmt(v.remitFee) : '—'"></td>
                               <td class="c mono" x-text="v.paidAt ? v.paidAt.slice(0,10) : ''"></td>
+                              <td class="c" x-text="remitReviewLabel(v.remitReview) || '—'"></td>
                             </tr>
                           </template>
                         </tbody>
@@ -911,6 +974,10 @@
             <input type="text" x-model="t100Config.contractorExpenseAccount" :disabled="_role()!=='superadmin'" style="width:100%;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;box-sizing:border-box">
             </div>
             <div>
+            <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">匯款手續費支出（選填；有手續費的傳票另借一行）</label>
+            <input type="text" x-model="t100Config.remitFeeAccount" :disabled="_role()!=='superadmin'" data-testid="t100-remit-fee-account" style="width:100%;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;box-sizing:border-box">
+            </div>
+            <div>
             <label style="font-size:10px;color:var(--text-dim);display:block;margin-bottom:2px">收款手續費支出（客戶內扣，選填）</label>
             <input type="text" x-model="t100Config.receiptFeeAccount" data-testid="t100-receipt-fee-account" :disabled="_role()!=='superadmin'" style="width:100%;padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;box-sizing:border-box">
             </div>
@@ -971,8 +1038,18 @@
         <button class="modal-close" @click="payVoucherModal=false">&#10005;</button>
       </div>
       <div class="modal-body">
-        <label class="field-label">匯款日期</label>
-        <input type="date" class="field-input" x-model="payVoucherDate">
+        <label class="field-label">匯款日期（必填）</label>
+        <input type="date" class="field-input" x-model="payVoucherDate" required data-testid="pay-date">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+          <div><label class="field-label">應付金額</label><div class="mono" style="padding:6px 0" x-text="fmt((payVoucherTarget ? payVoucherTarget.grandTotal : 0))"></div></div>
+          <div><label class="field-label">實付金額</label><input type="number" min="0" step="0.01" class="field-input" x-model="payRemit.actual" data-testid="pay-remit-actual"></div>
+        </div>
+        <div class="alert-bar" x-show="remitDiff(payRemit, (payVoucherTarget ? payVoucherTarget.grandTotal : 0)) !== 0" data-testid="pay-remit-diff-warn">
+          ⚠ 實付與應付差 <b x-text="remitDiff(payRemit, (payVoucherTarget ? payVoucherTarget.grandTotal : 0))"></b> 元：標記後單據會標「差額待審核」並通知管理員，核可前請確認金額。
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:6px 0"><input type="checkbox" x-model="payRemit.hasFee" data-testid="pay-remit-hasfee"> 有匯款手續費（公司自付，不從受款方扣）</label>
+        <div x-show="payRemit.hasFee"><label class="field-label">手續費金額</label><input type="number" min="0" step="0.01" class="field-input" x-model="payRemit.fee" data-testid="pay-remit-fee"></div>
+        <div class="alert-bar" x-show="remitError(payRemit)" x-text="remitError(payRemit)"></div>
         <label class="field-label">匯款銀行帳戶（選填，供 T100 傳票匯出使用）</label>
         <select class="field-input" x-model="payVoucherBankAcctCode">
           <option value="">— 未指定 —</option>
@@ -983,7 +1060,7 @@
         <div style="display:flex;justify-content:flex-end;gap:8px">
           <button @click="payVoucherModal=false" :disabled="payVoucherSaving"
                   style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
-          <button @click="confirmPayVoucher()" :disabled="payVoucherSaving || !payVoucherDate"
+          <button @click="confirmPayVoucher()" :disabled="payVoucherSaving || !payVoucherDate || !!remitError(payRemit)"
                   style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
                   x-text="payVoucherSaving ? '處理中…' : '確認標記已匯款'"></button>
         </div>
@@ -1102,15 +1179,25 @@
         <button class="modal-close" @click="bankPayModal=false">&#10005;</button>
       </div>
       <div class="modal-body">
-        <label class="field-label">匯款日期</label>
-        <input type="date" class="field-input" x-model="bankPayDate">
+        <label class="field-label">匯款日期（必填）</label>
+        <input type="date" class="field-input" x-model="bankPayDate" required>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+          <div><label class="field-label">應付金額</label><div class="mono" style="padding:6px 0" x-text="fmt((bankPayRow && bankPayRow.match ? bankPayRow.match.amount : 0))"></div></div>
+          <div><label class="field-label">實付金額</label><input type="number" min="0" step="0.01" class="field-input" x-model="bankRemit.actual" data-testid="bank-remit-actual"></div>
+        </div>
+        <div class="alert-bar" x-show="remitDiff(bankRemit, (bankPayRow && bankPayRow.match ? bankPayRow.match.amount : 0)) !== 0" data-testid="bank-remit-diff-warn">
+          ⚠ 實付與應付差 <b x-text="remitDiff(bankRemit, (bankPayRow && bankPayRow.match ? bankPayRow.match.amount : 0))"></b> 元：標記後單據會標「差額待審核」並通知管理員，核可前請確認金額。
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin:6px 0"><input type="checkbox" x-model="bankRemit.hasFee" data-testid="bank-remit-hasfee"> 有匯款手續費（公司自付，不從受款方扣）</label>
+        <div x-show="bankRemit.hasFee"><label class="field-label">手續費金額</label><input type="number" min="0" step="0.01" class="field-input" x-model="bankRemit.fee" data-testid="bank-remit-fee"></div>
+        <div class="alert-bar" x-show="remitError(bankRemit)" x-text="remitError(bankRemit)"></div>
         <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh);margin-bottom:12px">
           銀行對帳單上的日期原文：<span x-text="bankPayRow ? (bankPayRow.date || '（無）') : ''"></span>　請核對後再確認
         </div>
         <div style="display:flex;justify-content:flex-end;gap:8px">
           <button @click="bankPayModal=false" :disabled="bankPaySaving"
                   style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
-          <button @click="confirmBankPay()" :disabled="bankPaySaving || !bankPayDate"
+          <button @click="confirmBankPay()" :disabled="bankPaySaving || !bankPayDate || !!remitError(bankRemit)"
                   style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
                   x-text="bankPaySaving ? '處理中…' : '確認標記已匯款'"></button>
         </div>

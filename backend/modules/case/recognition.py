@@ -192,17 +192,22 @@ def dispatch_entries(conn, basis):
     from core import registry
     out = []
     if basis == "cash":
+        # W1：現金口徑用實付金額（remit_actual；舊資料或欄位未建 ⇒ 回退快照應付）；手續費另走 IP-9 expense.entries
+        has_actual = any(c[1] == "remit_actual" for c in conn.execute("PRAGMA table_info(contractor_payment_vouchers)"))
         for r in conn.execute(
-                "SELECT v.dispatch_id, v.quote_no, v.snapshot_json, v.paid_at, v.voucher_no"
-                " FROM contractor_payment_vouchers v WHERE v.is_paid = 1"):
+                "SELECT v.dispatch_id, v.quote_no, v.snapshot_json, v.paid_at, v.voucher_no%s"
+                " FROM contractor_payment_vouchers v WHERE v.is_paid = 1" % (", v.remit_actual, v.remit_review" if has_actual else "")):
             paid = (r["paid_at"] or "")[:10]
             if paid == "":
                 continue
             snap = json.loads(r["snapshot_json"] or "{}")
             out.append({"date": paid, "quoteNo": r["quote_no"] or "",
                         "desc": "%s（匯款申請 %s）" % (snap.get("vendorName") or "（外包人員點工）", r["voucher_no"]),
-                        "amount": float(snap.get("grandTotal") or 0), "taxNote": "含稅",
-                        "provisional": False, "dispatchId": r["dispatch_id"]})
+                        "amount": float(snap.get("grandTotal") or 0) if not has_actual or r["remit_actual"] is None
+                        else float(r["remit_actual"]), "taxNote": "含稅",
+                        "provisional": False, "dispatchId": r["dispatch_id"],
+                        # W1：實付≠應付、待管理員核可 ⇒ 照計（已記錄）但報表標「差額待審核」
+                        "remitPending": bool(has_actual and r["remit_review"] == "pending")})
         return out
     dispatch_row = registry.single_provider("dispatch.row")
     if dispatch_row is None:
@@ -271,13 +276,15 @@ def extra_entries(conn, basis):
     for r in conn.execute(
             "SELECT e.id, e.quote_no, e.category, e.description, e.total_cost, e.expense_date,"
             " e.created_at, e.doc_no, e.files_json, e.status, e.approval_json, e.invoice_date,"
-            " e.paid_date, q.customer_name FROM case_extra_expenses e"
+            " e.paid_date, e.remit_actual, e.remit_review, q.customer_name FROM case_extra_expenses e"
             " LEFT JOIN quotations q ON q.quote_no = e.quote_no"
             " WHERE e.status IN (%s) ORDER BY e.id" % ",".join("?" * len(COUNTED_EXTRA_STATUSES)),
             COUNTED_EXTRA_STATUSES):
         cost = float(r["total_cost"] or 0)
         if not cost:
             continue
+        if basis == "cash" and (r["paid_date"] or "") != "" and r["remit_actual"] is not None:
+            cost = float(r["remit_actual"])                      # W1：現金口徑用實付金額
         voucher_day = (r["expense_date"] or r["created_at"] or "")[:10]
         inv, paid = (r["invoice_date"] or "")[:10], (r["paid_date"] or "")[:10]
         if basis == "cash":
@@ -297,6 +304,7 @@ def extra_entries(conn, basis):
                     "amount": cost, "taxNote": "未拆稅", "provisional": provisional,
                     "pending": r["status"] != "已核准", "files": files, "expenseId": r["id"],
                     "category": r["category"] or "其他",
+                    "remitPending": basis == "cash" and paid != "" and r["remit_review"] == "pending",
                     "invoiceDate": inv, "paidDate": paid})
     return out
 

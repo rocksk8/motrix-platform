@@ -318,6 +318,7 @@
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/vendor_contractors",
+    "mod:subcontract/remit",
     "page:pages/contractor-voucher-approval-settings.html",
     "page:pages/contractors.html",
     "page:pages/vendor-contractors.html"
@@ -326,10 +327,15 @@
     "contractor_dispatches",
     "contractor_payment_vouchers",
     "contractors",
+    "dispatch_file_delete_requests",
     "vendor_contractors"
    ],
    "data": {
     "tables": [
+     {
+      "name": "dispatch_file_delete_requests",
+      "class": "T1"
+     },
      {
       "name": "contractors",
       "class": "T2",

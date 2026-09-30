@@ -948,6 +948,16 @@ if ($License) {
     }
 }
 
+# --- Step 5.55: 寫入「不出貨清單」backend/export_ignore.json（T22-2）---
+# verify_package 4a（排除清單 ∩ MUST_EXIST）在正式機安裝目錄沒有 .git，問不了 `git check-attr`（第二十二班兩次被擋下）。
+# 判斷不自己重新實作 git 語意 ⇒ 在有 git 的這裡讓 git 算好（export-ignore 為 set 的已追蹤檔），寫進包；
+# 清單在包內 ⇒ 被 package.sha256 的逐檔雜湊與簽章涵蓋。算不出來 ⇒ 建包中止（沒有清單的包在正式機驗不過 4a）。
+$exportIgnoreTool = Join-Path $PSScriptRoot "export_ignore_list.py"
+& $pyExe $exportIgnoreTool --repo $projectRoot --commit $commit --out (Join-Path $pkgDir "backend\export_ignore.json")
+if ($LASTEXITCODE -ne 0) {
+    Fail "不出貨清單（export_ignore.json）產生失敗（exit code $LASTEXITCODE），部署包未完成，已中止。"
+}
+
 # --- Step 5.6: 精簡 backend/version_manifest.json（PK1 → T12）---
 #
 # 🔴 這份檔案有兩個讀者：

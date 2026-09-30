@@ -329,9 +329,9 @@ def test_page_fallback_columns_match_module_registration():
     block = re.search(r"fallback: \{ lists: \{(.*?)\} \}", html, re.S).group(1)
     got = {k: re.findall(r"'([A-Za-z]+)'", v) for k, v in re.findall(r"(\w+): \[([^\]]*)\]", block)}
     assert got == lists
-    # 每一個登記的欄都有畫法（x-if 分支），沒有登記的欄不會被畫
+    # 每一個登記的欄都有畫法（cellHtml 的 case 分支；T22-4 前是 x-if 分支），沒有登記的欄不會被畫
     for field in lists["tenders"]:
-        assert "c.field === '%s'" % field in html, field
+        assert ("case '%s'" % field) in html or ("c.field === '%s'" % field) in html, field
 
 
 # ── O7：切換範圍的載入期間（2026-09-26 第五班全量抓到：發布第 2 版後表頭仍是第 1 版）───────────────────

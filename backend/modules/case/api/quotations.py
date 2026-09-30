@@ -726,8 +726,10 @@ def next_quote_no(authorization: str = Header(None)):
 
 # ── CM7：案件清單常用篩選（WHERE 片段，皆不帶前綴）────────────────────────────
 # 我負責的：業務歸屬（同可見性規則的前兩項）、被分配、或案件角色（CM3 起存帳號）是我
+# 舊資料比顯示名稱：空對空不算相符（2026-09-29f，同 helpers.row_access；否則 cashier 等看得到全部案件的人
+# 顯示名稱空時，業務名稱空的舊案件會被歸成「我負責的」）
 _CASE_MINE_SQL = (
-    "(sales_person_id=? OR (sales_person_id IS NULL AND sales_person=?)"
+    "(sales_person_id=? OR (sales_person_id IS NULL AND sales_person=? AND sales_person<>'')"
     " OR EXISTS (SELECT 1 FROM json_each(COALESCE(assigned_user_ids,'[]')) WHERE value=?)"
     " OR json_extract(data_json,'$.caseRecord.roles.filler.username')=?"
     " OR json_extract(data_json,'$.caseRecord.roles.sales.username')=?"
@@ -4237,6 +4239,7 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
     # 有沒有付款。
     approved_unpaid = approved_paid = pending_total = 0
     pending_count = 0
+    voucher_fee_total = 0.0                      # W1：承攬商匯款單已匯款的手續費（公司自付，列入成本）
     vouchers = []
     for v in conn.execute(
         "SELECT * FROM contractor_payment_vouchers WHERE quote_no=? ORDER BY created_at DESC",
@@ -4246,6 +4249,11 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
         amount = float(snap.get("grandTotal") or 0)
         status = v["status"] or "草稿"
         paid   = bool(v["is_paid"])
+        try:
+            if paid:
+                voucher_fee_total += float(v["remit_fee"] or 0)
+        except (IndexError, KeyError):          # 欄位由 M04 的 migration 建；M04 不在 ⇒ 沒有手續費
+            pass
         if status == "已核准" and paid:
             approved_paid += amount
         elif status == "已核准":
@@ -4317,6 +4325,8 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
     ).fetchall()]
     # 2026-09-11：conn 從這裡才關——額外支出改讀 case_extra_expenses 表之後，
     # 上面那段列表推導需要連線，原本在它之前就 close() 會變成 use-after-close
+    extras_fee_total = sum(float(r["remit_fee"] or 0) for r in conn.execute(
+        "SELECT remit_fee FROM case_extra_expenses WHERE quote_no=? AND COALESCE(paid_date, '') != ''", (quote_no,)).fetchall())
     conn.close()
 
     return {
@@ -4327,6 +4337,7 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
             "approvedPaidTotal":   approved_paid,
             "pendingTotal":        pending_total,
             "pendingCount":        pending_count,
+            "remitFeeTotal":       voucher_fee_total,
             "vouchers":            vouchers,
         },
         "relatedDocuments": {
@@ -4335,6 +4346,7 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
         },
         "settlementExtras": {
             "total": sum(e["totalCost"] for e in extras),
+            "remitFeeTotal": extras_fee_total,
             "items": extras,
         },
     }

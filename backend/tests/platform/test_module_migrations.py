@@ -131,11 +131,12 @@ def test_case_v1_is_registered_by_the_real_loader_and_its_column_exists(client):
     from core import source_tree
     if not source_tree.module_installed("modules/case/"):
         pytest.skip("M01 不在這個安裝包：由下一題驗「不登記、不建欄」")
-    assert migrations.registered().get("case") == [1]
+    assert migrations.registered().get("case") == [1, 2]          # v2＝W1 匯款實付／手續費／差額審核欄位（2026-09-30）
     conn = db.get_db()
     try:
-        assert "invoice_no" in {r[1] for r in conn.execute("PRAGMA table_info(case_extra_expenses)")}
-        assert migrations.current_version(conn, "case") == 1
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(case_extra_expenses)")}
+        assert "invoice_no" in cols and {"remit_actual", "remit_fee", "remit_review"} <= cols
+        assert migrations.current_version(conn, "case") == 2
     finally:
         conn.close()
 

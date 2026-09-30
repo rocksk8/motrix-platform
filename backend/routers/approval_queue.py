@@ -195,6 +195,22 @@ def get_approval_queue(authorization: str = Header(None)):
             "reassignTypes": _reassign_types()}
 
 
+#: 與 approval-queue.html 的 `docTypeLabel()` 同一份對照（兩處標籤要一致）。
+_ITEM_TYPE_LABELS = {
+    "contractor_voucher": "匯款申請", "invoice_voucher": "開票申請憑據", "shipping_note": "出貨單",
+    "completion_note": "完工單", "payment_request": "請款單", "case_change": "已結案案件變更",
+    "extra_expense": "案件額外支出", "extra_expense_change": "額外支出變更", "voucher": "傳票（會計）",
+    "bonus_award": "獎金", "bonus_case_award": "獎金分潤",
+}
+
+
+def _item_type_label(it: dict) -> str:
+    t = it.get("type")
+    if t == "custom_record":
+        return it.get("moduleName") or it.get("moduleKey") or "自訂模組"
+    return _ITEM_TYPE_LABELS.get(t, "報價單")
+
+
 @router.get("/api/approval-queue/count")
 def get_approval_queue_count(authorization: str = Header(None)):
     """topbar 角標：輪到我簽核的項目數（含「我目前代理誰」，2026-08-28）。與佇列列表同一份來源
@@ -207,7 +223,16 @@ def get_approval_queue_count(authorization: str = Header(None)):
     finally:
         conn.close()
     is_sa = u["role"] == "superadmin"
-    return {"count": sum(1 for it in items if _counts_for_me(it, my_usernames, u["username"], is_sa))}
+    mine = [it for it in items if _counts_for_me(it, my_usernames, u["username"], is_sa)]
+    # 首頁「等我簽核」的數字與清單同一份（2026-09-30 使用者：儀表板與簽核佇列沒有連動）：
+    # 清單＝角標的那些項目（最早送審的在前，最多 10 筆），不含金額（首頁不做財務遮蔽判斷）。
+    mine.sort(key=lambda x: x.get("requestedAt") or "")
+    return {"count": len(mine),
+            "items": [{"type": it.get("type") or "", "typeLabel": _item_type_label(it),
+                       "quoteNo": it.get("quoteNo") or "", "customer": it.get("customer") or "",
+                       "projectName": it.get("projectName") or "",
+                       "requestedByDisplay": it.get("requestedByDisplay") or it.get("requestedBy") or ""}
+                      for it in mine[:10]]}
 
 
 # ── 詳情（依 type 分流到擁有模組的 `approval.detail`）─────────────────────────
