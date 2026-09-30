@@ -1110,8 +1110,8 @@ def _snapshot_health(path: str, summary: dict = None, day: str = None,
 # ☠️ 損毀的庫不可以被當成「沒變」（S-CD02）：指紋前先 `PRAGMA quick_check`，不是 ok ⇒ 不做「同上一份」，走原本的完整快照
 #    （快照健檢會擋下並告警）。
 # ⚠️ 只有本機資料夾型雲端後端會做「同上一份」；S3 後端維持每天完整寫（沒有可靠的硬連結／讀回標記）。
-SAME_AS_FILE = "SAME_AS.json"
-FINGERPRINT_FILE = "fingerprint.txt"
+_SAME_AS_FILE = "SAME_AS.json"
+_FINGERPRINT_FILE = "fingerprint.txt"
 #: 指紋要略過的列（備份程式自己每天寫的東西）：表名 ⇒ WHERE 條件（符合的列不進指紋）
 _FP_SKIP_ROWS = {
     "audit_log": "action LIKE 'backup.%'",
@@ -1176,11 +1176,11 @@ def _read_json_file(path: str):
         return None
 
 
-def resolve_same_as(day_dir: str) -> str:
+def _resolve_same_as(day_dir: str) -> str:
     """還原用：某一天的備份資料夾 ⇒ **真正存放內容的那個資料夾**。
     沒有 `SAME_AS.json` ⇒ 就是它自己；有 ⇒ 同層的 `same_as` 那一天（標記永遠直接指向實體那天，不會串鏈）。
     指向的資料夾不在 ⇒ 回 ""（呼叫端要說明：那一天的內容不見了，不可以假裝有）。"""
-    m = _read_json_file(os.path.join(day_dir, SAME_AS_FILE))
+    m = _read_json_file(os.path.join(day_dir, _SAME_AS_FILE))
     if not isinstance(m, dict) or not m.get("same_as"):
         return day_dir
     if m.get("linked") and os.path.isfile(os.path.join(day_dir, "motrix_erp.db")):
@@ -1209,7 +1209,7 @@ def _latest_real_snapshot(today: str):
         db_path = os.path.join(d, "motrix_erp.db")
         if not (os.path.isfile(os.path.join(d, ".done")) and os.path.isfile(db_path) and os.path.getsize(db_path) > 0):
             continue                        # 沒完成／缺檔的日子不能當參照，繼續往前找到第一個完整的
-        fp = _read_text(os.path.join(d, FINGERPRINT_FILE))
+        fp = _read_text(os.path.join(d, _FINGERPRINT_FILE))
         return (n, db_path, fp) if fp else None
     return None
 
@@ -1219,7 +1219,7 @@ def _write_fingerprint(dest_dir: str, dest: str) -> None:
     try:
         fp = _db_content_fingerprint(dest)
         if fp:
-            with open(os.path.join(dest_dir, FINGERPRINT_FILE), "w", encoding="utf-8") as f:
+            with open(os.path.join(dest_dir, _FINGERPRINT_FILE), "w", encoding="utf-8") as f:
                 f.write(fp)
     except Exception:                                           # noqa: BLE001
         logger.exception("_write_fingerprint failed for %s", dest)
@@ -1242,11 +1242,11 @@ def _try_same_snapshot(today: str, dest_dir: str, dest: str, marker: str) -> boo
             os.link(prev_path, dest)
         except OSError:
             return False
-        with open(os.path.join(dest_dir, SAME_AS_FILE), "w", encoding="utf-8") as f:
+        with open(os.path.join(dest_dir, _SAME_AS_FILE), "w", encoding="utf-8") as f:
             json.dump({"same_as": prev_day, "fingerprint": fp_src, "linked": True,
                        "at": datetime.now().isoformat(),
                        "note": "資料內容與前一份相同（不含備份程式自己的紀錄）；本檔是同一個檔案的硬連結"}, f, ensure_ascii=False)
-        with open(os.path.join(dest_dir, FINGERPRINT_FILE), "w", encoding="utf-8") as f:
+        with open(os.path.join(dest_dir, _FINGERPRINT_FILE), "w", encoding="utf-8") as f:
             f.write(fp_src)
         with open(marker, "w", encoding="utf-8") as f:
             f.write(datetime.now().isoformat())
@@ -1261,7 +1261,7 @@ def _try_same_snapshot(today: str, dest_dir: str, dest: str, marker: str) -> boo
 
 def _local_same_as_day(today: str) -> str:
     """今天的本機快照是不是「同上一份」⇒ 那一天（真正寫出內容的日子）；否則 ""。"""
-    m = _read_json_file(os.path.join(_LOCAL_DB_BACKUP, today, SAME_AS_FILE))
+    m = _read_json_file(os.path.join(_LOCAL_DB_BACKUP, today, _SAME_AS_FILE))
     return str(m["same_as"]) if isinstance(m, dict) and m.get("same_as") else ""
 
 
@@ -1274,7 +1274,7 @@ def _real_day_in(layer_dir: str, day: str, must_have: str) -> str:
     d = os.path.join(layer_dir, day)
     if os.path.isfile(os.path.join(d, must_have)):
         return day
-    m = _read_json_file(os.path.join(d, SAME_AS_FILE))
+    m = _read_json_file(os.path.join(d, _SAME_AS_FILE))
     if isinstance(m, dict) and m.get("same_as") and os.path.isfile(os.path.join(layer_dir, str(m["same_as"]), must_have)):
         return str(m["same_as"])
     return ""
@@ -1287,7 +1287,7 @@ def _write_same_marker(dir_abs: str, real_day: str, what: str, pii: bool = False
         _pii_ensure_dir(dir_abs)
     else:
         os.makedirs(dir_abs, exist_ok=True)
-    _atomic_json_write(os.path.join(dir_abs, SAME_AS_FILE), payload)
+    _atomic_json_write(os.path.join(dir_abs, _SAME_AS_FILE), payload)
 
 
 def _referenced_days(layer_dir: str) -> set:
@@ -1295,7 +1295,7 @@ def _referenced_days(layer_dir: str) -> set:
     out = set()
     try:
         for n in os.listdir(layer_dir):
-            m = _read_json_file(os.path.join(layer_dir, n, SAME_AS_FILE))
+            m = _read_json_file(os.path.join(layer_dir, n, _SAME_AS_FILE))
             if isinstance(m, dict) and m.get("same_as"):
                 out.add(str(m["same_as"]))
     except OSError:
@@ -1384,7 +1384,7 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
                     if _real:
                         # 同上一份：雲端整庫不重寫，只留一個小標記（還原見 DR-SOP「同上一份」）
                         _write_same_marker(os.path.dirname(pii_db), _real, "motrix_erp.db", pii=True)
-                        logger.info("cloud(PII) snapshot same as %s: wrote %s only", _real, SAME_AS_FILE)
+                        logger.info("cloud(PII) snapshot same as %s: wrote %s only", _real, _SAME_AS_FILE)
                     else:
                         _pii_copy_file(dest, pii_db,
                                        f"{_PII_ARCHIVE_DIRNAME}/每日備份/{today}/motrix_erp.db")
@@ -2867,7 +2867,7 @@ def _daily_backup():
                 summary.setdefault(_k, _v)                 # 各表筆數沿用前一份（內容相同）
             summary["same_as"] = same_ref
             _write_same_marker(day_dir, same_ref, "*.json（41 張表）")
-            logger.info("Daily JSON export same as %s: wrote %s only", same_ref, SAME_AS_FILE)
+            logger.info("Daily JSON export same as %s: wrote %s only", same_ref, _SAME_AS_FILE)
         else:
             conn = get_db()
             summary.update(_export_table_json_set(

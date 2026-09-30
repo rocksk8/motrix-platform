@@ -77,9 +77,9 @@ def _first_day(arch, pii_root):
     arch._daily_backup()
     d = _dirs(arch, pii_root)
     assert os.path.isfile(os.path.join(d["local"] % _today(), "motrix_erp.db")) and os.path.isfile(os.path.join(d["local"] % _today(), ".done"))
-    assert os.path.isfile(os.path.join(d["local"] % _today(), arch.FINGERPRINT_FILE)), "完整快照要留指紋（之後的比對基準）"
+    assert os.path.isfile(os.path.join(d["local"] % _today(), arch._FINGERPRINT_FILE)), "完整快照要留指紋（之後的比對基準）"
     assert os.path.isfile(os.path.join(d["pii"] % _today(), "motrix_erp.db")) and len(_jsons(d["daily"] % _today())) > 20
-    assert not os.path.exists(os.path.join(d["local"] % _today(), arch.SAME_AS_FILE))
+    assert not os.path.exists(os.path.join(d["local"] % _today(), arch._SAME_AS_FILE))
     _shift_today_to_yesterday(arch, pii_root)
     return d
 
@@ -90,15 +90,15 @@ def test_unchanged_data_writes_no_new_snapshot_json_or_cloud_db(arch, pii_root):
     local_today, local_prev = d["local"] % _today(), d["local"] % _yesterday()
     assert os.path.samefile(os.path.join(local_today, "motrix_erp.db"), os.path.join(local_prev, "motrix_erp.db")), \
         "資料沒變，本機快照卻寫了一份新的（要是前一份的硬連結）"
-    m = arch._read_json_file(os.path.join(local_today, arch.SAME_AS_FILE))
+    m = arch._read_json_file(os.path.join(local_today, arch._SAME_AS_FILE))
     assert m["same_as"] == _yesterday() and m["linked"] is True
     assert os.path.isfile(os.path.join(local_today, ".done"))
     pii_today = d["pii"] % _today()
     assert not os.path.exists(os.path.join(pii_today, "motrix_erp.db")), "雲端整庫又寫了一份"
-    assert arch._read_json_file(os.path.join(pii_today, arch.SAME_AS_FILE))["same_as"] == _yesterday()
+    assert arch._read_json_file(os.path.join(pii_today, arch._SAME_AS_FILE))["same_as"] == _yesterday()
     daily_today = d["daily"] % _today()
     assert _jsons(daily_today) == [], "41 張表 JSON 又寫了一遍：%s" % _jsons(daily_today)[:3]
-    assert arch._read_json_file(os.path.join(daily_today, arch.SAME_AS_FILE))["same_as"] == _yesterday()
+    assert arch._read_json_file(os.path.join(daily_today, arch._SAME_AS_FILE))["same_as"] == _yesterday()
     assert os.path.isfile(os.path.join(daily_today, "彙總.json")) and os.path.isfile(os.path.join(daily_today, ".done"))
     assert arch._read_json_file(os.path.join(daily_today, "彙總.json"))["same_as"] == _yesterday()
 
@@ -108,10 +108,10 @@ def test_changed_data_is_written_in_full(arch, pii_root):
     _seed(2, tag="B")                                             # 前一天之後有新資料
     arch._daily_backup()
     local_today, local_prev = d["local"] % _today(), d["local"] % _yesterday()
-    assert not os.path.exists(os.path.join(local_today, arch.SAME_AS_FILE))
+    assert not os.path.exists(os.path.join(local_today, arch._SAME_AS_FILE))
     assert not os.path.samefile(os.path.join(local_today, "motrix_erp.db"), os.path.join(local_prev, "motrix_erp.db"))
     assert os.path.isfile(os.path.join(d["pii"] % _today(), "motrix_erp.db"))
-    assert not os.path.exists(os.path.join(d["pii"] % _today(), arch.SAME_AS_FILE))
+    assert not os.path.exists(os.path.join(d["pii"] % _today(), arch._SAME_AS_FILE))
     assert len(_jsons(d["daily"] % _today())) > 20
     conn = sqlite3.connect(os.path.join(local_today, "motrix_erp.db"))
     try:
@@ -139,14 +139,14 @@ def test_monthly_backup_is_always_written_in_full(arch, pii_root, monkeypatch):
     shutil.rmtree(os.path.join(arch._monthly_dir(), month), ignore_errors=True)       # 讓這一輪的月備份重做
     shutil.rmtree(os.path.join(pii_root, "月備份", month), ignore_errors=True)
     arch._daily_backup()                                          # 今天是「同上一份」，月備份不可以跟著省
-    assert os.path.isfile(os.path.join(d["local"] % _today(), arch.SAME_AS_FILE)), "前提：今天確實是同上一份"
+    assert os.path.isfile(os.path.join(d["local"] % _today(), arch._SAME_AS_FILE)), "前提：今天確實是同上一份"
     shutil.rmtree(os.path.join(arch._monthly_dir(), month), ignore_errors=True)   # 上一行的每日備份內含的月備份若被既有健檢擋下，就在這裡重做
     shutil.rmtree(os.path.join(pii_root, "月備份", month), ignore_errors=True)
     monkeypatch.setattr(arch, "_snapshot_health", lambda *a, **k: (True, [], {}))   # 月備份的身分對照沒有「快照之後寫入」寬容（既有行為，與本題無關）
     arch._monthly_backup()
     mdir = os.path.join(arch._monthly_dir(), month)
     assert len(_jsons(mdir)) > 20 and os.path.isfile(os.path.join(mdir, ".done"))
-    assert not os.path.exists(os.path.join(mdir, arch.SAME_AS_FILE))
+    assert not os.path.exists(os.path.join(mdir, arch._SAME_AS_FILE))
     pdb = os.path.join(pii_root, "月備份", month, "motrix_erp.db")
     assert os.path.isfile(pdb) and os.path.getsize(pdb) > 0, "月備份整庫檔一定要完整寫"
 
@@ -154,24 +154,24 @@ def test_monthly_backup_is_always_written_in_full(arch, pii_root, monkeypatch):
 def test_restore_finds_the_real_content_from_the_marker(arch, pii_root, capsys):
     d = _first_day(arch, pii_root)
     arch._daily_backup()
-    real_pii = arch.resolve_same_as(d["pii"] % _today())
+    real_pii = arch._resolve_same_as(d["pii"] % _today())
     assert os.path.normcase(real_pii) == os.path.normcase(d["pii"] % _yesterday())
     assert os.path.isfile(os.path.join(real_pii, "motrix_erp.db"))
-    real_daily = arch.resolve_same_as(d["daily"] % _today())
+    real_daily = arch._resolve_same_as(d["daily"] % _today())
     assert os.path.normcase(real_daily) == os.path.normcase(d["daily"] % _yesterday()) and len(_jsons(real_daily)) > 20
-    assert arch.resolve_same_as(d["daily"] % _yesterday()) == d["daily"] % _yesterday()       # 沒有標記 ⇒ 自己
+    assert arch._resolve_same_as(d["daily"] % _yesterday()) == d["daily"] % _yesterday()       # 沒有標記 ⇒ 自己
     from tools import find_backup
     assert find_backup.main(["find_backup", d["pii"] % _today()]) == 0
     out = capsys.readouterr().out
     assert "實體資料夾" in out and _yesterday() in out and "motrix_erp.db" in out
     # 標記指向的那一天不在了 ⇒ 明說找不到（不假裝有）
     shutil.rmtree(d["pii"] % _yesterday())
-    assert arch.resolve_same_as(d["pii"] % _today()) == ""
+    assert arch._resolve_same_as(d["pii"] % _today()) == ""
     assert find_backup.main(["find_backup", d["pii"] % _today()]) == 1
     assert "找不到" in capsys.readouterr().out
     # 本機是硬連結：就算前一天的資料夾被清掉，今天自己仍有完整的檔
     shutil.rmtree(d["local"] % _yesterday())
-    real_local = arch.resolve_same_as(d["local"] % _today())
+    real_local = arch._resolve_same_as(d["local"] % _today())
     assert real_local == d["local"] % _today() and os.path.getsize(os.path.join(real_local, "motrix_erp.db")) > 0
 
 
@@ -215,22 +215,22 @@ def test_corrupt_source_falls_back_to_a_full_snapshot(arch, pii_root, monkeypatc
     monkeypatch.setattr(arch, "_db_content_fingerprint", lambda path: None)   # 來源庫讀不了／quick_check 失敗
     arch._daily_backup()
     local_today, local_prev = d["local"] % _today(), d["local"] % _yesterday()
-    assert not os.path.exists(os.path.join(local_today, arch.SAME_AS_FILE))
+    assert not os.path.exists(os.path.join(local_today, arch._SAME_AS_FILE))
     assert not os.path.samefile(os.path.join(local_today, "motrix_erp.db"), os.path.join(local_prev, "motrix_erp.db"))
 
 
 def test_fallbacks_hardlink_unsupported_no_fingerprint_and_missing_cloud_reference(arch, pii_root, monkeypatch):
     d = _first_day(arch, pii_root)
     # 舊版備份沒有指紋 ⇒ 不能比 ⇒ 完整寫
-    os.remove(os.path.join(d["local"] % _yesterday(), arch.FINGERPRINT_FILE))
+    os.remove(os.path.join(d["local"] % _yesterday(), arch._FINGERPRINT_FILE))
     arch._daily_backup()
-    assert not os.path.exists(os.path.join(d["local"] % _today(), arch.SAME_AS_FILE))
-    assert os.path.isfile(os.path.join(d["local"] % _today(), arch.FINGERPRINT_FILE))
+    assert not os.path.exists(os.path.join(d["local"] % _today(), arch._SAME_AS_FILE))
+    assert os.path.isfile(os.path.join(d["local"] % _today(), arch._FINGERPRINT_FILE))
     shutil.rmtree(d["local"] % _today())
     shutil.rmtree(d["daily"] % _today())
     shutil.rmtree(d["pii"] % _today())
     # 檔案系統不支援硬連結 ⇒ 完整寫（快照仍然存在、內容完整）
-    with open(os.path.join(d["local"] % _yesterday(), arch.FINGERPRINT_FILE), "w", encoding="utf-8") as f:
+    with open(os.path.join(d["local"] % _yesterday(), arch._FINGERPRINT_FILE), "w", encoding="utf-8") as f:
         f.write(arch._db_content_fingerprint(os.path.join(d["local"] % _yesterday(), "motrix_erp.db")))
     real_link = os.link
     monkeypatch.setattr(os, "link", lambda *a, **k: (_ for _ in ()).throw(OSError("no hardlink")))
@@ -243,14 +243,14 @@ def test_fallbacks_hardlink_unsupported_no_fingerprint_and_missing_cloud_referen
     shutil.rmtree(d["pii"] % _yesterday())
     arch._snapshot_sqlite(also_to_cloud=True)
     assert os.path.isfile(os.path.join(d["pii"] % _today(), "motrix_erp.db"))
-    assert not os.path.exists(os.path.join(d["pii"] % _today(), arch.SAME_AS_FILE))
+    assert not os.path.exists(os.path.join(d["pii"] % _today(), arch._SAME_AS_FILE))
 
 
 def test_prune_never_deletes_a_day_that_a_marker_still_points_to(arch, tmp_path):
     layer = tmp_path / "每日備份"
     for n in ("2026-01-01", "2026-01-02", "2026-01-03"):
         (layer / n).mkdir(parents=True)
-    arch._atomic_json_write(str(layer / "2026-01-03" / arch.SAME_AS_FILE), {"same_as": "2026-01-01"})
+    arch._atomic_json_write(str(layer / "2026-01-03" / arch._SAME_AS_FILE), {"same_as": "2026-01-01"})
     assert arch._protect_referenced(["2026-01-01", "2026-01-02"], str(layer), "測試") == ["2026-01-02"]
     assert arch._protect_referenced([], str(layer), "測試") == []
     assert arch._referenced_days(str(layer)) == {"2026-01-01"}

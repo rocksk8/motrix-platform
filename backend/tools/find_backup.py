@@ -23,13 +23,13 @@ def main(argv) -> int:
     if not os.path.isdir(day_dir):
         print("找不到資料夾：%s" % day_dir)
         return 1
-    from archive import resolve_same_as, SAME_AS_FILE
-    real = resolve_same_as(day_dir)
+    from archive import _resolve_same_as, _SAME_AS_FILE
+    real = _resolve_same_as(day_dir)
     if not real:
         print("這一天（%s）是「同上一份」，但標記指向的那一天已經不存在——內容找不到，請改用更早或更晚、有實體檔的一天。" % day_dir)
         return 1
     same = os.path.normcase(real) != os.path.normcase(day_dir)
-    print("實體資料夾：%s%s" % (real, "（%s 指向這裡）" % SAME_AS_FILE if same else ""))
+    print("實體資料夾：%s%s" % (real, "（%s 指向這裡）" % _SAME_AS_FILE if same else ""))
     db_path = os.path.join(real, "motrix_erp.db")
     if os.path.isfile(db_path):
         print("整庫檔：%s（%d bytes）" % (db_path, os.path.getsize(db_path)))
