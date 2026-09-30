@@ -214,6 +214,7 @@ def test_ledger_acceptance_end_to_end(client, make_user):
         # ── 2 引擎：各來源 → 草稿 ──
         run = client.post("/api/ledger/engine/run", headers=sup, json={"start": MAR1, "end": MAR31})
         T.check("引擎執行（HTTP）", 200, run.status_code)
+        T.check("每個事件來源都讀取成功（只有固定資產 C6 未安裝）", {"arap": "ok", "case": "ok", "custom_modules": "ok", "fixed_assets": "not_installed", "payroll": "ok", "subcontract": "ok", "supply": "ok"}, run.json().get("sources"))
         ev = {(r["status"], r["event_code"]) for r in conn.execute("SELECT status, event_code FROM gl_source_events WHERE event_date BETWEEN ? AND ?", (MAR1, MAR31))}
         counts = {}
         for r in conn.execute("SELECT status, COUNT(*) n FROM gl_source_events WHERE event_date BETWEEN ? AND ? GROUP BY status", (MAR1, MAR31)):
