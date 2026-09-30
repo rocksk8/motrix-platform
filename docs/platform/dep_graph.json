@@ -635,6 +635,7 @@
    "imports": [
     "helper:approval_queue",
     "helper:audit",
+    "helper:email_notify",
     "helper:settings",
     "helper:tiered_approval",
     "plat:definitions"
@@ -730,6 +731,7 @@
     "helper:custom_finance",
     "helper:custom_history",
     "helper:doc_template",
+    "helper:email_notify",
     "helper:formula",
     "helper:module_registry",
     "helper:tiered_approval",
@@ -6742,121 +6744,121 @@
    "routes": [
     {
      "func": "list_dev_cases",
-     "line": 287,
+     "line": 309,
      "method": "GET",
      "path": "/api/dev-cases"
     },
     {
      "func": "create_dev_case",
-     "line": 316,
+     "line": 339,
      "method": "POST",
      "path": "/api/dev-cases"
     },
     {
      "func": "get_dev_case",
-     "line": 353,
+     "line": 378,
      "method": "GET",
      "path": "/api/dev-cases/{case_id}"
     },
     {
      "func": "update_dev_case",
-     "line": 368,
+     "line": 393,
      "method": "PUT",
      "path": "/api/dev-cases/{case_id}"
     },
     {
      "func": "request_dev_case_delete",
-     "line": 407,
+     "line": 436,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/request-delete"
     },
     {
      "func": "cancel_dev_case_delete",
-     "line": 442,
+     "line": 471,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/cancel-delete"
     },
     {
      "func": "approve_dev_case_delete",
-     "line": 475,
+     "line": 504,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/approve-delete"
     },
     {
      "func": "update_dev_case_status",
-     "line": 523,
+     "line": 552,
      "method": "PATCH",
      "path": "/api/dev-cases/{case_id}/status"
     },
     {
      "func": "mark_converted",
-     "line": 553,
+     "line": 582,
      "method": "PATCH",
      "path": "/api/dev-cases/{case_id}/convert"
     },
     {
      "func": "request_dev_case_relink",
-     "line": 592,
+     "line": 621,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/request-relink-quote"
     },
     {
      "func": "cancel_dev_case_relink",
-     "line": 637,
+     "line": 666,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/cancel-relink-quote"
     },
     {
      "func": "approve_dev_case_relink",
-     "line": 670,
+     "line": 699,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/approve-relink-quote"
     },
     {
      "func": "list_pending_logs",
-     "line": 728,
+     "line": 757,
      "method": "GET",
      "path": "/api/dev-logs/pending"
     },
     {
      "func": "dev_crm_activity_stats",
-     "line": 744,
+     "line": 773,
      "method": "GET",
      "path": "/api/dev-crm/activity-stats"
     },
     {
      "func": "list_dev_logs",
-     "line": 822,
+     "line": 851,
      "method": "GET",
      "path": "/api/dev-cases/{case_id}/logs"
     },
     {
      "func": "create_dev_log",
-     "line": 842,
+     "line": 871,
      "method": "POST",
      "path": "/api/dev-cases/{case_id}/logs"
     },
     {
      "func": "update_dev_log",
-     "line": 937,
+     "line": 966,
      "method": "PUT",
      "path": "/api/dev-logs/{log_id}"
     },
     {
      "func": "delete_dev_log",
-     "line": 969,
+     "line": 998,
      "method": "DELETE",
      "path": "/api/dev-logs/{log_id}"
     },
     {
      "func": "delete_dev_log_file",
-     "line": 999,
+     "line": 1028,
      "method": "DELETE",
      "path": "/api/dev-logs/{log_id}/files/{file_id}"
     },
     {
      "func": "approve_dev_log",
-     "line": 1027,
+     "line": 1056,
      "method": "PATCH",
      "path": "/api/dev-logs/{log_id}/approve"
     }
@@ -12900,9 +12902,12 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:doc_template",
+    "helper:email_notify",
     "helper:formula",
     "helper:legal_params",
+    "helper:mail_types",
     "helper:module_registry",
+    "helper:notification_prefs",
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval",
@@ -13254,7 +13259,10 @@
     "helper:custom_def_review",
     "helper:custom_fields",
     "helper:doc_template",
+    "helper:email_notify",
+    "helper:mail_types",
     "helper:module_registry",
+    "helper:notification_prefs",
     "helper:settings",
     "helper:tiered_approval"
    ],
