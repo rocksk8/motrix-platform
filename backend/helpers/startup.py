@@ -100,6 +100,78 @@ def _edge_creationflags() -> int:
         return 0
 
 
+# ── Edge 專屬 profile（使用者 2026-09-30：「盡可能降低硬碟的重複寫入」）──────────────────────────────
+#
+# 原本每次 `msedge --headless` 都不帶 `--user-data-dir`：Edge 每次建一份全新 profile（快取、設定、GPU／Code 快取…），
+# PLAN-TEST-PERF 抽樣：一次寫 374 MB、PDF 本身只 3.5 MB（約 100 倍放大）。改成**重用產品自己的專屬 profile**：
+#   · 位置 `<LOGS_DIR>/edge_profiles/p1..pN`（N＝EDGE_PDF_MAX_CONCURRENCY）——與使用者自己的 Edge 完全分開，不碰、也不被它影響；
+#   · 同時跑的 Edge 各拿一份（同一份 profile 被兩個 Edge 同時開會被鎖）；用完歸還，之後重用；
+#   · 逾時被殺／非 0 結束的那一份可能留下鎖或壞檔 ⇒ 整份刪掉，下次自動重建；
+#   · 每用 50 次量一次大小，超過上限（300 MB）也刪掉重建（快取不會無限長）；
+#   · 拿不到（例外）⇒ 退回舊行為（不帶 --user-data-dir），功能不受影響。
+# ⚠️ 只認這一個位置：`tests/test_edge_profile_2026_09_25.py` 的守門是「產品碼只能在這裡帶 --user-data-dir、且只能指向專屬 profile 根目錄」。
+EDGE_PROFILE_ROOT = os.path.join(_paths.LOGS_DIR, "edge_profiles")
+EDGE_PROFILE_MAX_BYTES = 300 * 1024 * 1024
+EDGE_PROFILE_CHECK_EVERY = 50
+_EDGE_PROFILE_LOCK = threading.Lock()
+_EDGE_PROFILE_POOL = []            # 可用的 profile 目錄
+_EDGE_PROFILE_STATE = {"init": False, "runs": 0}
+
+
+def _edge_profile_acquire():
+    """拿一份專屬 profile 目錄；不可用 ⇒ None（呼叫端照舊不帶 --user-data-dir）。"""
+    try:
+        with _EDGE_PROFILE_LOCK:
+            if not _EDGE_PROFILE_STATE["init"]:
+                _EDGE_PROFILE_POOL[:] = [os.path.join(EDGE_PROFILE_ROOT, "p%d" % (i + 1)) for i in range(EDGE_PDF_MAX_CONCURRENCY)]
+                _EDGE_PROFILE_STATE["init"] = True
+            if not _EDGE_PROFILE_POOL:
+                return None                                   # 池空（理論上被 semaphore 擋住不會發生）⇒ 退回舊行為
+            d = _EDGE_PROFILE_POOL.pop(0)
+        os.makedirs(d, exist_ok=True)
+        return d
+    except Exception:                                         # noqa: BLE001
+        logger.exception("Edge 專屬 profile 取得失敗（退回不帶 --user-data-dir）")
+        return None
+
+
+def _dir_size(path: str) -> int:
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+    return total
+
+
+def _edge_profile_release(d: str, discard: bool) -> None:
+    """歸還；`discard` ⇒ 整份刪掉（下次重建）。定期量大小，過大也刪。"""
+    import shutil
+    try:
+        with _EDGE_PROFILE_LOCK:
+            _EDGE_PROFILE_STATE["runs"] += 1
+            check = _EDGE_PROFILE_STATE["runs"] % EDGE_PROFILE_CHECK_EVERY == 0
+        if not discard and check and _dir_size(d) > EDGE_PROFILE_MAX_BYTES:
+            logger.info("Edge 專屬 profile %s 超過 %d MB，重建", d, EDGE_PROFILE_MAX_BYTES // (1024 * 1024))
+            discard = True
+        if discard:
+            shutil.rmtree(d, ignore_errors=True)
+    except Exception:                                         # noqa: BLE001
+        logger.exception("Edge 專屬 profile 歸還處理失敗")
+    finally:
+        with _EDGE_PROFILE_LOCK:
+            _EDGE_PROFILE_POOL.append(d)
+
+
+def _with_profile(cmd: list, d: str) -> list:
+    """在 cmd 的執行檔之後插入 `--user-data-dir=<d>`（呼叫端已帶了就不動：測試端的 profile 池也是這樣接上的）。"""
+    if not d or any(str(a).startswith("--user-data-dir") for a in cmd):
+        return cmd
+    return [cmd[0], "--user-data-dir=%s" % d] + list(cmd[1:])
+
+
 def run_edge_pdf(cmd: list) -> None:
     """跑一次 Edge headless 產 PDF：拿 semaphore、限時、逾時不往外丟例外。
 
@@ -112,18 +184,26 @@ def run_edge_pdf(cmd: list) -> None:
     traceback，使用者與 log 都看不出是渲染逾時。現在 log 裡會有明確的一行。
     """
     with EDGE_PDF_SEMAPHORE:
+        already = any(str(a).startswith("--user-data-dir") for a in cmd)
+        profile = None if already else _edge_profile_acquire()
+        bad = False
         try:
-            subprocess.run(
-                cmd, timeout=EDGE_PDF_TIMEOUT_SECONDS, check=False,
+            r = subprocess.run(
+                _with_profile(cmd, profile), timeout=EDGE_PDF_TIMEOUT_SECONDS, check=False,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 creationflags=_edge_creationflags(),
             )
+            bad = bool(getattr(r, "returncode", 0))            # 非 0 結束：profile 可能有問題 ⇒ 刪掉重建
         except subprocess.TimeoutExpired:
+            bad = True                                         # 被殺：可能留下鎖／壞檔 ⇒ 刪掉重建
             logger.warning(
                 "Edge PDF 渲染逾時（%d 秒）——機器負載過高或該份文件過大；"
                 "可用環境變數 MOTRIX_EDGE_PDF_TIMEOUT 調整上限",
                 EDGE_PDF_TIMEOUT_SECONDS,
             )
+        finally:
+            if profile:
+                _edge_profile_release(profile, discard=bad)
 
 
 # ── Startup routines ──────────────────────────────────────────────────────────
