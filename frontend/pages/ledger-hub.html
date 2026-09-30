@@ -117,6 +117,7 @@
                 <button class="hb-btn" :disabled="tax.busy || !tax.data" @click="taxExport()" data-testid="hb-tax-export">匯出 Excel 工作底稿</button>
                 <button class="hb-btn" :disabled="tax.busy || !tax.data || !tax.data.reconciled" @click="taxSettle()" data-testid="hb-tax-settle">產生稅額結轉草稿</button>
               </div>
+              <div class="hb-warn" data-testid="hb-tax-legal">欄位代號待官方格式核對：401 欄位代號取自財政部空白表的二手轉載（可在欄位對照表設定），申報前請以當期官方格式逐欄核對；含免稅銷售者應使用 403 表。</div>
               <template x-if="tax.data">
                 <div>
                   <template x-for="w in tax.data.warnings" :key="w.key"><div class="hb-warn" x-text="w.text" :data-testid="'hb-tax-warn-' + w.key"></div></template>
