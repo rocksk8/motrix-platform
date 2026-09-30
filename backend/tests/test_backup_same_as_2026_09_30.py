@@ -176,19 +176,29 @@ def test_restore_finds_the_real_content_from_the_marker(arch, pii_root, capsys):
 
 
 def test_a_corrupt_database_is_never_treated_as_unchanged(arch, tmp_path):
+    import struct
     good = tmp_path / "good.db"
     conn = sqlite3.connect(str(good))
-    conn.execute("CREATE TABLE t (x)")
-    conn.executemany("INSERT INTO t VALUES (?)", [(i,) for i in range(5000)])
+    conn.execute("PRAGMA journal_mode=DELETE")
+    conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)")
+    conn.executemany("INSERT INTO t (v) VALUES (?)", [("x" * 200,) for _ in range(3000)])
+    conn.commit()
+    conn.execute("DELETE FROM t WHERE id % 2 = 0")
     conn.commit()
     conn.close()
     assert arch._db_content_fingerprint(str(good))
+    # 「壞了、但整張表照樣讀得出來」：只有 quick_check 抓得到（而不是雜湊時丟例外）——這才是 S-CD02 要守的縫
     bad = tmp_path / "bad.db"
     raw = bytearray(good.read_bytes())
-    for i in range(4096 * 2, len(raw) - 100, 97):                # 打亂資料頁，留住檔頭
-        raw[i] = (raw[i] + 1) % 256
+    raw[-4092:-4088] = struct.pack(">I", 0xFFFFFFF0)                 # 改最後一頁的頁首
     bad.write_bytes(bytes(raw))
-    assert arch._db_content_fingerprint(str(bad)) is None, "quick_check 不是 ok 的庫要回 None（呼叫端走完整寫入）"
+    c = sqlite3.connect(str(bad))
+    try:
+        assert c.execute("PRAGMA quick_check").fetchall()[0][0] != "ok", "前提：這份庫要被 quick_check 判壞"
+        assert sum(1 for _ in c.execute("SELECT * FROM t")) > 1000, "前提：這份庫整張表仍讀得出來（否則測不到 quick_check 這一關）"
+    finally:
+        c.close()
+    assert arch._db_content_fingerprint(str(bad)) is None, "quick_check 不是 ok 的庫要回 None（呼叫端走完整寫入，快照健檢會擋下並告警）"
     garbage = tmp_path / "garbage.db"
     garbage.write_bytes(b"this is not a database" * 100)
     assert arch._db_content_fingerprint(str(garbage)) is None
