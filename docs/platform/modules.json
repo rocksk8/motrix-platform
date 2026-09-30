@@ -146,7 +146,8 @@
    "router:platform_menu",
    "router:search",
    "router:system",
-   "router:uploads"
+   "router:uploads",
+   "router:attachments"
   ],
   "tables": [
    "approval_delegates",
@@ -217,7 +218,8 @@
    "/api/uploads",
    "/api/user-activity",
    "/api/users",
-   "/api/work-logs"
+   "/api/work-logs",
+   "/api/attachments"
   ]
  },
  "modules": {
@@ -289,6 +291,7 @@
    "units": [
     "mod:crm/__init__",
     "mod:crm/api",
+    "mod:crm/attachments",
     "page:pages/dev-crm.html"
    ],
    "tables": [
@@ -313,7 +316,8 @@
     "mod:supply/gl_events",
     "mod:supply/api/inventory",
     "mod:supply/api/shipping_notes",
-    "mod:supply/api/suppliers"
+    "mod:supply/api/suppliers",
+    "mod:supply/attachments"
    ],
    "tables": [
     "purchase_suggestion_status",
@@ -395,7 +399,8 @@
     "mod:arap/api/cashier",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
-    "mod:arap/receivables"
+    "mod:arap/receivables",
+    "mod:arap/attachments"
    ],
    "tables": [
     "invoice_vouchers",
@@ -459,7 +464,8 @@
     "js:js/ledger-periods.js",
     "js:js/ledger-reports.js",
     "page:pages/ledger-periods.html",
-    "page:pages/ledger-reports.html"
+    "page:pages/ledger-reports.html",
+    "mod:accounting/attachments_catalog"
    ],
    "tables": [
     "account_items",
@@ -528,7 +534,8 @@
     "mod:payroll/bonus_vouchers",
     "page:pages/bonus.html",
     "page:pages/payslip-form.html",
-    "page:pages/payslips.html"
+    "page:pages/payslips.html",
+    "mod:payroll/attachments"
    ],
    "tables": [
     "bonus_award_edit_log",
