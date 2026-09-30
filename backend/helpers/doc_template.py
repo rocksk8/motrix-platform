@@ -23,12 +23,47 @@ class TemplateError(ValueError):
 # ── 取值與格式 ──────────────────────────────────────────────────────────────
 
 def _esc(s) -> str:
-    """與既有 builder 相同的跳脫（& < > 與換行）。非字串一律先轉字串。"""
+    """跳脫（& < > " ' 與換行）。非字串一律先轉字串。
+
+    引號也要跳脫（W3 #2 儲存型 XSS）：版型的 class／width 等值會落在 HTML 屬性內，`"` 沒跳脫就能跳出屬性塞 onmouseover 等事件。"""
     if s is None:
         s = ""
     if not isinstance(s, str):
         s = str(s)
-    return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+    return (s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+             .replace('"', '&quot;').replace("'", '&#x27;').replace('\n', '<br>'))
+
+
+#: 版型作者可填、會落進屬性的值：一律白名單驗證（不是只跳脫）
+_CLASS_RE = re.compile(r"^[A-Za-z0-9_-]+(?: [A-Za-z0-9_-]+)*$")
+_WIDTH_RE = re.compile(r"^\d{1,4}(?:\.\d{1,2})?(?:%|px|mm|pt|em)?$")
+_MAX_WATERMARK = 60
+_MAX_COLSPAN = 20
+
+
+def _css_class(v) -> str:
+    v = "" if v is None else v
+    if not isinstance(v, str) or len(v) > 80 or not _CLASS_RE.match(v):
+        raise TemplateError("class 只能是英數、底線、連字號（多個以空白隔開）：%r" % (v,))
+    return v
+
+
+def _css_width(v) -> str:
+    if not isinstance(v, str) or not _WIDTH_RE.match(v.strip()):
+        raise TemplateError("width 只能是數字加單位（%%／px／mm／pt／em），例：12%%：%r" % (v,))
+    return v.strip()
+
+
+def _int_in(v, lo, hi, what) -> int:
+    if isinstance(v, bool):
+        raise TemplateError("%s 必須是整數：%r" % (what, v))
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        raise TemplateError("%s 必須是整數：%r" % (what, v)) from None
+    if not lo <= n <= hi:
+        raise TemplateError("%s 必須在 %d～%d：%r" % (what, lo, hi, v))
+    return n
 
 
 def _get(data: dict, path: str, default=""):
@@ -94,7 +129,7 @@ def _b_watermark(b, data, parts):
     if b.get("unless") and _cond(data, b["unless"]):
         return "\n"
     item = '<div class="wm-item"><b>%s</b><small>%s</small></div>' % (_esc(b["text"]), _esc(b["small"]))
-    return '<div class="wm">' + item * int(b.get("count", 12)) + '</div>' + "\n"
+    return '<div class="wm">' + item * _int_in(b.get("count", 12), 1, _MAX_WATERMARK, "浮水印 count") + '</div>' + "\n"
 
 
 def _b_accent_bar(b, data, parts):
@@ -141,7 +176,7 @@ def _b_when(b, data, parts):
 
 def _th(c):
     attrs = (' class="r"' if c.get("align") == "right" else "") + \
-            (' style="width:%s"' % c["width"] if c.get("width") else "")
+            (' style="width:%s"' % _css_width(c["width"]) if c.get("width") else "")
     return '<th%s>%s</th>' % (attrs, _esc(c["title"]))
 
 
@@ -247,13 +282,13 @@ def _cell(c, data):
         v = '<span class="tag">%s</span>' % v
     attrs = ""
     if c.get("class"):
-        attrs += ' class="%s"' % _esc(c["class"])
+        attrs += ' class="%s"' % _css_class(c["class"])
     if c.get("style"):
         if c["style"] not in _CELL_STYLES:
             raise TemplateError("未知儲存格樣式：%r（可用：%s）" % (c["style"], "、".join(_CELL_STYLES)))
         attrs += ' style="%s"' % _CELL_STYLES[c["style"]]
     if c.get("colspan"):
-        attrs += ' colspan="%d"' % int(c["colspan"])
+        attrs += ' colspan="%d"' % _int_in(c["colspan"], 1, _MAX_COLSPAN, "colspan")
     return "<td%s>%s</td>" % (attrs, v)
 
 
@@ -265,9 +300,9 @@ def _b_kv_table(b, data, parts):
             continue
         if r.get("unless") and _cond(data, r["unless"]):
             continue
-        cls = ' class="%s"' % _esc(r["class"]) if r.get("class") else ""
+        cls = ' class="%s"' % _css_class(r["class"]) if r.get("class") else ""
         rows.append("  <tr%s>%s</tr>\n" % (cls, "".join(_cell(c, data) for c in r["cells"])))
-    cls = ' class="%s"' % _esc(b["class"]) if b.get("class") else ""
+    cls = ' class="%s"' % _css_class(b["class"]) if b.get("class") else ""
     return "<table%s>\n%s</table>\n" % (cls, "".join(rows))
 
 
@@ -439,6 +474,8 @@ def problems(template: dict, sample_view: dict = None) -> list:
             if t not in BLOCKS:
                 out.append({"path": here + ".type", "message": "%s第 %d 塊：未知積木 %r" % (where, n + 1, t)})
                 continue
+            for msg in _attr_problems(b):
+                out.append({"path": here, "message": "%s第 %d 塊（%s）%s" % (where, n + 1, t, msg)})
             if t == "when":
                 walk(b.get("then"), where + "when/then ", here + ".then")
                 walk(b.get("else"), where + "when/else ", here + ".else")
@@ -452,6 +489,39 @@ def problems(template: dict, sample_view: dict = None) -> list:
 
 
 _MISSING = object()
+
+
+def _attr_problems(b) -> list:
+    """會落進 HTML 屬性的值（class／width／colspan／count）的靜態檢查；與渲染時用同一組檢查函式。"""
+    out = []
+
+    def chk(fn, *a):
+        try:
+            fn(*a)
+        except TemplateError as e:
+            out.append(str(e))
+    t = b.get("type")
+    if t == "watermark" and "count" in b:
+        chk(_int_in, b["count"], 1, _MAX_WATERMARK, "浮水印 count")
+    if t == "items_table":
+        for c in b.get("columns") or []:
+            if isinstance(c, dict) and c.get("width"):
+                chk(_css_width, c["width"])
+    if t == "kv_table":
+        if b.get("class"):
+            chk(_css_class, b["class"])
+        for r in b.get("rows") or []:
+            if not isinstance(r, dict):
+                continue
+            if r.get("class"):
+                chk(_css_class, r["class"])
+            for c in r.get("cells") or []:
+                if isinstance(c, dict):
+                    if c.get("class"):
+                        chk(_css_class, c["class"])
+                    if c.get("colspan"):
+                        chk(_int_in, c["colspan"], 1, _MAX_COLSPAN, "colspan")
+    return out
 
 
 def _paths_of(b):
