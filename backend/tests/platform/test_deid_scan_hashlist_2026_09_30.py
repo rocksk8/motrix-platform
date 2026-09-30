@@ -32,7 +32,8 @@ ACCOUNT = "1234567890123"
 
 
 def _valid_tax():
-    return next("1234567%d" % d for d in range(10) if S.tw_tax_id_valid("1234567%d" % d))
+    # 第 7 碼不能是 7（那是檢查碼的特例：兩個相鄰末碼會同時合法，做不出「錯的那一個」）
+    return next("1234560%d" % d for d in range(10) if S.tw_tax_id_valid("1234560%d" % d))
 
 
 TAX = _valid_tax()
@@ -210,6 +211,7 @@ def test_png_text_chunk_is_scanned(tmp_path, db_copy, key):
 def test_json_parsed_value_is_not_double_counted_with_the_raw_line(tmp_path, db_copy, key):
     hl = _hl(tmp_path, db_copy, key)
     hits = S.scan(_tree(tmp_path, {"d.json": json.dumps({"n": COMPANY}, ensure_ascii=False)}), hl)
+    hits = [h for h in hits if h.kind == "company"]                       # 樣式層的 company_pattern 是另一件事（W4 補的）
     assert len(hits) == 1 and hits[0].line == 1, hits
 
 
@@ -233,7 +235,7 @@ def test_pattern_layer_without_a_key(tmp_path):
         "p/ip.txt": "host 192.168.10.7 and 10.0.0.5\n",
         "p/path.txt": "cd C:\\Users\\someone\\Desktop\\proj\n",
         "p/tax_ok.txt": "統編 %s\n" % TAX,
-        "p/tax_bad.txt": "編號 12345670 \n" if not S.tw_tax_id_valid("12345670") else "編號 12345671 \n",
+        "p/tax_bad.txt": "統編 %s\n" % next("1234560%d" % d for d in range(10) if not S.tw_tax_id_valid("1234560%d" % d)),
         "p/phone.txt": "電話 04-2222-3333\n",
         "p/addr.txt": "臺中市西屯區示範路45號\n",
     })
@@ -247,7 +249,7 @@ def test_pattern_layer_without_a_key(tmp_path):
 
 
 def test_tw_tax_id_checksum():
-    assert S.tw_tax_id_valid(TAX) and not S.tw_tax_id_valid("1234567" + str((int(TAX[-1]) + 1) % 10))
+    assert S.tw_tax_id_valid(TAX) and not S.tw_tax_id_valid("1234560" + str((int(TAX[-1]) + 1) % 10))
     assert not S.tw_tax_id_valid("1234567") and not S.tw_tax_id_valid("abcdefgh")
 
 
@@ -279,3 +281,69 @@ def test_scan_skips_git_and_pycache_dirs(tmp_path):
 def test_main_without_hashlist_runs_the_pattern_layer_only(tmp_path, capsys):
     root = _tree(tmp_path, {"a.txt": "clean\n"})
     assert S.main([str(root)]) == 0 and "DEID_SCAN_OK" in capsys.readouterr().out
+
+
+# ── W4 出貨稽核補的四類（2026-09-30）：單據編號、公司全名樣式、密碼陳述、密碼集合常數 ─────────────────────
+
+def _kinds(root):
+    return sorted({h.kind for h in S.scan(root)})
+
+
+def _pkg(tmp_path, files):
+    for rel, text in files.items():
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+    return tmp_path
+
+
+def test_w4_docno_pattern_catches_a_real_looking_quote_number_next_to_a_customer_abbreviation(tmp_path):
+    """W4 (a)：`voucher.html` 的 placeholder「<客戶簡稱>報價單MQ-202608-009工資」——簡稱不在資料庫的完整名稱裡，雜湊層抓不到；單據編號樣式抓得到。"""
+    root = _pkg(tmp_path, {"frontend/pages/v.html": '<textarea placeholder="海天大飯店報價單MQ-202608-009工資"></textarea>\n',
+                           "backend/x.py": '"""範例：PS-202609-001 薪資單"""\n'})
+    assert {(h.path, h.kind) for h in S.scan(root)} == {("frontend/pages/v.html", "docno_pattern"), ("backend/x.py", "docno_pattern")}
+    assert _kinds(_pkg(tmp_path / "ok", {"a.md": "編號格式 MQ-YYYYMM-NNN；日期 2026-09-30；PO-12\n"})) == []      # 格式說明與日期不誤判
+
+
+def test_w4_company_pattern_catches_full_names_without_a_hashlist_and_ignores_generic_words(tmp_path):
+    """W4 (c)：`core/upgrade.py` 等內嵌公司全名——不需要清單，樣式就抓得到；「股份有限公司」這個類型字眼不誤判。"""
+    root = _pkg(tmp_path, {"backend/a.py": 'NAME = "海天整合股份有限公司"\nB = "山川企業社"\n',
+                           "docs/g.md": "本公司為股份有限公司；貴公司有限公司型態；該有限公司\n"})
+    hits = S.scan(root)
+    assert sorted((h.path, h.line, h.kind) for h in hits) == [("backend/a.py", 1, "company_pattern"), ("backend/a.py", 2, "company_pattern")]
+
+
+def test_w4_secret_literal_flags_every_string_in_a_password_collection_constant_only(tmp_path):
+    """W4 (b)：`_LEGACY_WEAK_PASSWORDS = ( "…", … )`——集合常數內每個字串字面值都報；同檔其他字串、名稱不含 PASSWORD 的集合不報。"""
+    src = ('X = ("plain-string-a",)\n'
+           '_LEGACY_WEAK_PASSWORDS = (\n'
+           '    "hunter2x",\n'
+           '    "sample@pw1",\n'
+           ')\n'
+           'OTHER = ("not-a-secret",)\n'
+           'API_SECRET_KEYS: list = ["k-1234", "k-5678"]\n'
+           'def f():\n'
+           '    y = "after-block"\n')
+    root = _pkg(tmp_path, {"backend/auth.py": src})
+    assert sorted((h.line, h.kind) for h in S.scan(root)) == [(3, "secret_literal"), (4, "secret_literal"), (7, "secret_literal"), (7, "secret_literal")]
+    assert len({h.value_id for h in S.scan(root)}) == 4                      # 值代碼不同、輸出不含明文
+    for h in S.scan(root):
+        assert "hunter2x" not in repr(h)
+
+
+def test_w4_credential_pattern_flags_password_statements_in_docs_but_not_code_or_labels(tmp_path):
+    root = _pkg(tmp_path, {"DR-SOP.md": "登入 demo，密碼：abc12345 仍可用\n",
+                           "s.ps1": "$password = 'pw-Sample9'\n",
+                           "p.html": "<script>fetch(u,{body: JSON.stringify({ password: this.form.pw, new_password: this.form.newPw })})</script>\n"
+                                     "<label>設定密碼：請輸入</label> 'auth.change_password': '修改密碼',\n",
+                           "c.py": "password = request.password\n"})
+    assert sorted((h.path, h.kind) for h in S.scan(root)) == [("DR-SOP.md", "credential_pattern"), ("s.ps1", "credential_pattern")]
+
+
+def test_w4_new_kinds_can_be_registered_as_fiction_by_value_code(tmp_path):
+    """虛構登記（value_id ＝ 樣式層值代碼）對新四類同樣有效；不在登記內照擋。"""
+    root = _pkg(tmp_path, {"a.py": 'N = "海天整合股份有限公司"  # MQ-202608-009\n'})
+    hits = S.scan(root)
+    assert {h.kind for h in hits} == {"company_pattern", "docno_pattern"}
+    fiction = [{"value_id": h.value_id} for h in hits if h.kind == "docno_pattern"]
+    assert {h.kind for h in S.scan(root, fiction=fiction)} == {"company_pattern"}
