@@ -411,7 +411,7 @@ D 設計審（`wip/d-audit-train16` f47fc40d）處置：必修 H2-M1（§2.4／�
 
 ### 9.4 下一步（開工順序）
 
-1. 裁示 9.3-1 ⇒ 寫 `tools/platform/own_payload.py`＋`db.py` 的 `_frozen_sha256`／`_frozen_own_payload`／`FrozenOwnPayloadError`。
+1. 裁示 9.3-1 ⇒ 寫 `tools/platform/own_payload.py`＋`db.py` 的 `_frozen_sha256`／`_frozen_own_payload`／`_FrozenOwnPayloadError`。
 2. `_m008`（個資優先）⇒ `_m106` ⇒ A 類註解。
 3. 題：A 類（每支 `_mNNN` 的 `co_code`＋`co_consts` 排 docstring、遞迴比巢狀 code，**明列排除 `_m008`、`_m106`**——H2R-S1）；B 類（舊函式從 2e32977f 以 ast 取出、固定時鐘，全新庫／開發者形狀／客戶形狀／空白與全形變形 ⇒ `iterdump` 逐列相等）；C 類（sale 全新 0 命中、開發者形狀＋own 檔與舊版相等、缺檔或雜湊不符丟例外且版號不前進）；突變：把雜湊常數改一字 ⇒ B 題紅、拿掉讀檔前的雜湊驗證 ⇒ C 題紅。
 4. ⓪自查（PLAYBOOK §G5）後送列車；段2、段3 依 §3 步驟表。
@@ -446,7 +446,7 @@ worktree：`D:\MOTRIX-PLATFORM-H2`（分支 `wip/h-deid-impl`）。暫存：未�
 
 ### 10.2 做法
 - **B 類**：`db._frozen_sha256(v)`（只對 `str` 取 sha256／utf-8＋surrogatepass；非 str 一律不命中——與原本 `in tuple`／SQL `=`／`IN` 的二進位比較一致，不 strip、不轉型）。常數：`_M008_OLD_NAME_SHA256`、`_M008_USERNAME_SHA256`、`_M106_TAX_ID_SHA256`（`python tools/platform/own_payload.py hashes` 印出；短字串雜湊可窮舉還原，T3 已接受）。
-- **C 類**：**不進程式庫**（CORE-SPEC「去識別化：本公司資料的存放」，2026-09-28 19:32）。`tools/platform/own_payload.py generate --out <路徑>` 由固定的舊版 db.py（git 歷史；blob id 與內容 sha256 釘在工具裡）以 ast 取出，寫成資料檔 `{"v":1,"source_blob":…,"m008":{…},"m106":{…}}`（值不印、不進 commit）。開發機：`D:\MOTRIX-KEYS\deid\own_payload.json`（另可 `--copy-to backend/migrations_frozen/own_payload.json`，已 `.gitignore`）。`db._frozen_own_payload()` 讀 `MOTRIX_OWN_PAYLOAD` 或 `backend/migrations_frozen/own_payload.json`；缺檔／讀不懂／`source_blob` 不符 ⇒ `FrozenOwnPayloadError`（訊息不含值）。
+- **C 類**：**不進程式庫**（CORE-SPEC「去識別化：本公司資料的存放」，2026-09-28 19:32）。`tools/platform/own_payload.py generate --out <路徑>` 由固定的舊版 db.py（git 歷史；blob id 與內容 sha256 釘在工具裡）以 ast 取出，寫成資料檔 `{"v":1,"source_blob":…,"m008":{…},"m106":{…}}`（值不印、不進 commit）。開發機：`D:\MOTRIX-KEYS\deid\own_payload.json`（另可 `--copy-to backend/migrations_frozen/own_payload.json`，已 `.gitignore`）。`db._frozen_own_payload()` 讀 `MOTRIX_OWN_PAYLOAD` 或 `backend/migrations_frozen/own_payload.json`；缺檔／讀不懂／`source_blob` 不符 ⇒ `_FrozenOwnPayloadError`（訊息不含值）。
 - **`_m008`**：先規劃（只讀）、**有任何一列要改才讀資料檔**、讀不到在**任何寫入之前**丟例外；沒命中的庫（全新安裝、客戶的庫）完全不讀資料檔。逐 id UPDATE 取代 `IN (…)`。
 - **`_m106`**：統編比較改雜湊；通過統編判準之後、任何寫入之前讀資料檔取英文公司名。
 - 掃描器略過 `backend/migrations_frozen/own_payload.json`（gitignored、本來就是為了裝這些值）。

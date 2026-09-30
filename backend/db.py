@@ -996,7 +996,7 @@ _M008_USERNAME_SHA256 = "2e0b8d61fa2a6959d254b6ff5d0fb512249329097336a3556808993
 _M106_TAX_ID_SHA256 = "3cfd8e1c6f7c4436f7475278b21e294f06d67e7b1854f226e0fd8fa22785ad80"
 
 
-class FrozenOwnPayloadError(RuntimeError):
+class _FrozenOwnPayloadError(RuntimeError):
     """凍結 migration 需要 own 資料檔而拿不到（缺檔、讀不懂、版本不符）。訊息不含任何值。"""
 
 
@@ -1018,12 +1018,12 @@ def _frozen_own_payload():
         with open(path, encoding="utf-8-sig") as f:
             d = json.load(f)
     except (OSError, ValueError) as e:
-        raise FrozenOwnPayloadError(
+        raise _FrozenOwnPayloadError(
             "凍結 migration 需要本公司資料檔（own_payload.json），讀不到：%s。"
             "產生方式：python tools/platform/own_payload.py generate --out <路徑>；"
             "路徑用環境變數 MOTRIX_OWN_PAYLOAD 指定，或放在 backend/migrations_frozen/。" % type(e).__name__)
     if not isinstance(d, dict) or d.get("v") != 1 or d.get("source_blob") != _OWN_PAYLOAD_SOURCE_BLOB:
-        raise FrozenOwnPayloadError("本公司資料檔的版本與這份 db.py 不符（source_blob），拒絕使用。")
+        raise _FrozenOwnPayloadError("本公司資料檔的版本與這份 db.py 不符（source_blob），拒絕使用。")
     return d
 
 
@@ -1033,7 +1033,7 @@ def _own_value(payload, section, key):
     except (KeyError, TypeError):
         v = None
     if not isinstance(v, str) or not v:
-        raise FrozenOwnPayloadError("本公司資料檔缺欄位 %s.%s。" % (section, key))
+        raise _FrozenOwnPayloadError("本公司資料檔缺欄位 %s.%s。" % (section, key))
     return v
 
 
@@ -4835,7 +4835,7 @@ def _m106_company_profile_identity_backfill(conn):
 
     `company_profile` 的既有 shape 從來沒有英文公司名欄位，這一列**沒有任何地方**可以現算出它——只能是一個凍結的值。
     去識別化後這個值不在程式庫：讀 own 資料檔（`_frozen_own_payload`）。能走到這一步，前面已經先驗過統編，
-    只可能在開發者自己的資料列上執行；資料檔讀不到 ⇒ 在任何寫入之前丟 `FrozenOwnPayloadError`。
+    只可能在開發者自己的資料列上執行；資料檔讀不到 ⇒ 在任何寫入之前丟 `_FrozenOwnPayloadError`。
 
     ## ✅ 逐欄不覆蓋，可重跑兩次（`test_u10_every_migration_can_be_run_twice`）
 

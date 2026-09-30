@@ -5,7 +5,7 @@
 db.py 的凍結 migration 原本把三類值寫成字面值：
   A 類  註解／docstring            ⇒ 直接改寫成不含值（不需要資料檔）
   B 類  比較條件（哪些列要改）      ⇒ 改比 sha256（`db._frozen_sha256`），行為等價（本工具 `hashes` 印出要貼進 db.py 的雜湊）
-  C 類  要寫進去的值（顯示名、email、英文公司名）⇒ 讀這份資料檔；缺檔或版本不符 ⇒ `db.FrozenOwnPayloadError`
+  C 類  要寫進去的值（顯示名、email、英文公司名）⇒ 讀這份資料檔；缺檔或版本不符 ⇒ `db._FrozenOwnPayloadError`
 這支工具就是產生／驗證 C 類資料檔的地方。**值不印到畫面、不寫 log、不進 commit。**
 
 用法：

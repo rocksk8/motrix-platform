@@ -2166,7 +2166,7 @@ def _needs_own_payload_gate(request):
     try:
         _db._frozen_own_payload()
         return
-    except _db.FrozenOwnPayloadError as e:
+    except _db._FrozenOwnPayloadError as e:
         msg = "缺本公司資料檔（%s）：%s" % (_db._own_payload_path(), e)
     if _os.environ.get("MOTRIX_TRAIN") == "1" or _os.environ.get("MOTRIX_REQUIRE_OWN_PAYLOAD") == "1":
         pytest.fail(msg + "（列車／建包環境必須有這個檔；缺檔視為紅）")
