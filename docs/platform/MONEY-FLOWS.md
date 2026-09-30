@@ -113,3 +113,19 @@ L2 模組**不互相 import**，一律經 provider；提供者不在 ⇒ 少那�
   → 試算表／總分類帳／明細分類帳／日記帳 → 資產負債表／損益表／權益變動表／現金流量表 → 年度結轉與決算（凍結快照）
 ```
 
+## 9. 跨模組寫入連結（使用者規則 R1，2026-09-30）
+
+> 規則：一個模組**改另一個模組的資料**（不是只讀）時，寫入點要有註解（`⚠ 跨模組寫入連結`）＋在這裡登記一列（誰寫誰、寫哪些欄位、怎麼寫、交易、反向、守門）。
+> 只讀的串接（provider 取數）不算；總帳引擎寫的是總帳自己的表（`gl_*`、`vouchers_all` 草稿）不算跨模組寫入。
+> 「註解」欄＝寫入點是否已加註解；未加者標「待補」，由擁有該寫入點的線補（不在本檔範圍動別人的程式）。
+
+| 編號 | 寫入方 → 被寫方 | 連接器 | 被寫的資料（欄位） | 交易／反向 | 寫入點 | 註解 | 守門測試 |
+|---|---|---|---|---|---|---|---|
+| W-1 | M04 subcontract → M07 payroll | IP-105 `payslip.remit`（`mark_paid`／`unmark_paid`） | `payslips.status`（已簽回⇄已付款）、`payment_date`、`paid_by`、`paid_at`、`data_json.paid_via_remit` | 與匯款單同連線同一次 commit；取消匯款反向退回；勞報單自己的 unpay 被擋（409） | `subcontract/api/contractor_vouchers.py::toggle_paid` | ✅ | `accounting/tests/test_ledger_r12_remit_payslip_2026_09_30.py` |
+| W-2 | M07 payroll → M06 accounting | IP-2 `voucher.draft`（`origin` 選填）、IP-4 `voucher.void_draft` | `vouchers_all`／`voucher_lines`（獎金核准應付、發放傳票草稿）；作廢草稿 | 呼叫端連線、不 commit；退回獎金時作廢未送審草稿 | `payroll/bonus_vouchers.py::_make`、`withdraw_accrual` | 待補（payroll 線） | `payroll/tests/test_voucher_connectors.py` |
+| W-3 | M05 arap（出納）→ M01 case | IP-100 `payables.pending`（`mark_paid`） | `case_extra_expenses.paid_date`（＋W1 `remit_actual`／`remit_fee`／`remit_review`） | 呼叫端連線、呼叫端 commit | `arap/api/cashier.py`（pending-payables/{來源}/{key}/pay） | 待補（arap／case 線） | `arap/tests/test_cashier_pending_payables_2026_09_27.py` |
+| W-4 | M05 arap（出納）→ M04／M01 | IP-102 `remit.reviews`（`decide`） | `contractor_payment_vouchers.remit_review*`、`case_extra_expenses.remit_review*`（核可＝記錄；退回＝回未匯款並清欄位） | 條件式 UPDATE＋rowcount | `arap/api/cashier.py`（remit-reviews/…/decision） | 待補 | subcontract／case 的 remit 題 |
+| W-5 | M01 case → M03 supply | IP-19 `stock.serial`（`claim`／`release`） | `stock_items.status`（in_stock⇄installed）、`quote_no`、`case_device_id`、`consumed_at` | 呼叫端連線、與案件資料同一次 commit | `case/api/quotations.py`（設備序號認領／釋放） | 待補（case 線） | supply／case 的序號題 |
+
+新增或改動跨模組寫入時：同一個 commit 補註解＋更新本表。
+
