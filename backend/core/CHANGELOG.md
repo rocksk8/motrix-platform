@@ -4,6 +4,7 @@
 
 ## (next) — 2026-09-30（wip/w1-xss：W3 #2 輸出版型儲存型 XSS；升版幅度由列車取號）
 - L1（安全，行為）：`helpers.doc_template._esc` 加跳脫 `"`／`'`；版型會落進屬性的值改白名單——`class`（英數／底線／連字號）、`width`（數字＋%／px／mm／pt／em）、`colspan`（1～20）、浮水印 `count`（1～60，原本可填任意大數撐爆記憶體）；壞值渲染丟 `TemplateError`、儲存驗證（`problems`）同步回報，存不進去。公開介面不變（快照不動）。
+- L1（安全，新增）：`helpers.doc_template.esc_quotes／attr_esc`——引號跳脫的單一來源（各 builder 的區域 `esc()` 保留原本的 &<>／換行規則，最後一步交給 `esc_quotes`）；單據抬頭／頁尾（公司名稱、英文名、統編、電話、email）與 `<img src>`（存摺、身分證路徑）一律跳脫；JSON 的 Infinity／NaN 進 colspan／count ⇒ `TemplateError`。
 
 ## 1.81 — 2026-09-30（暫用，列車取號；wip/w1-t26fix：列車 26 守門修補）
 - L1（行為，安全）：`GET /api/attachments/open` 本班關閉（`routers/attachments.ATTACHMENTS_OPEN_ENABLED = False`，一律 404；W3 安全檢查：路徑未綁定來源單據，正式修正隨 P3）；`POST /api/audit-log/module-counts` 需 `audit_log` 權限、`since` 非字串 400（wip/w2-t26sec）

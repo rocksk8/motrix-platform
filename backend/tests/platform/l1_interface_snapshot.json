@@ -486,6 +486,8 @@
    "FORMATS": "const",
    "THEMES": "const",
    "TemplateError": "class",
+   "attr_esc": "def(s)",
+   "esc_quotes": "def(text)",
    "load_default": "def(key)",
    "problems": "def(template, sample_view=…)",
    "render": "def(template, data, parts)",

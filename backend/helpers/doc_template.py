@@ -22,6 +22,21 @@ class TemplateError(ValueError):
 
 # ── 取值與格式 ──────────────────────────────────────────────────────────────
 
+def esc_quotes(text) -> str:
+    """只做引號那一步（單一來源）：`"` → `&quot;`、`'` → `&#x27;`。各 builder 自己的 `esc()` 保留原本的 `&<>` 與換行規則，
+    最後一步都交給這支——引號規則不再散在十幾個區域函式裡（W3 #2 再查：同形狀的 sink）。"""
+    return text.replace('"', '&quot;').replace("'", '&#x27;')
+
+
+def attr_esc(s) -> str:
+    """HTML 屬性值／單行文字用的完整跳脫（`& < > " '`；不轉換行）。非字串先轉字串，None ⇒ 空字串。"""
+    if s is None:
+        s = ""
+    if not isinstance(s, str):
+        s = str(s)
+    return esc_quotes(s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
+
+
 def _esc(s) -> str:
     """跳脫（& < > " ' 與換行）。非字串一律先轉字串。
 
@@ -30,8 +45,7 @@ def _esc(s) -> str:
         s = ""
     if not isinstance(s, str):
         s = str(s)
-    return (s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-             .replace('"', '&quot;').replace("'", '&#x27;').replace('\n', '<br>'))
+    return esc_quotes(s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')).replace('\n', '<br>')
 
 
 #: 版型作者可填、會落進屬性的值：一律白名單驗證（不是只跳脫）
@@ -59,7 +73,7 @@ def _int_in(v, lo, hi, what) -> int:
         raise TemplateError("%s 必須是整數：%r" % (what, v))
     try:
         n = int(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):                 # JSON 的 Infinity／NaN（float）也是「不是整數」，不是 500
         raise TemplateError("%s 必須是整數：%r" % (what, v)) from None
     if not lo <= n <= hi:
         raise TemplateError("%s 必須在 %d～%d：%r" % (what, lo, hi, v))
