@@ -6513,37 +6513,37 @@
     },
     {
      "func": "approval_history",
-     "line": 6063,
+     "line": 6078,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6183,
+     "line": 6198,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6251,
+     "line": 6266,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6405,
+     "line": 6420,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6419,
+     "line": 6434,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6450,
+     "line": 6465,
      "method": "GET",
      "path": "/api/sales-orders"
     }
