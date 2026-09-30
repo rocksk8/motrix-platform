@@ -190,6 +190,7 @@ def test_output_and_list_previews_follow_the_canvas_on_the_same_screen(live_serv
     lst = page.frame_locator("#mb-list-host iframe")
     lst.locator("body:has-text('設備名稱乙')").wait_for(state="attached", timeout=15000)
     assert page.locator("#mb-list-host iframe").is_visible() and not page.locator("#mb-output-host iframe").is_visible()
+    assert page.locator("#mb-output-host iframe").count() == 1 and page.locator("#mb-list-host iframe").count() == 1   # 不重建（原斷言保留）
     assert not errors, errors
 
 

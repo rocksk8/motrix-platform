@@ -161,7 +161,7 @@
 | 舊題 | 原斷言（驗什麼行為） | 新斷言 | 為什麼仍守同一個行為 | 反向控制（結果） |
 |---|---|---|---|---|
 | dnd `palette_is_icon_and_text_for_every_catalog_type…` | 元件列＝catalog `fieldTypes` 逐一相同（含順序）；每格有 icon＋文字；Enter 加到最後 | 元件列的**型別集合**＝catalog `fieldTypes` 集合；**每個元件**（不只主元件）都有 icon＋文字；Enter 加到最後（改點 `data-palette-element="date"`） | 行為是「catalog 每個型別都出現在元件列、只來自 catalog」；分組後順序由目錄分組決定，不再等於 fieldTypes 順序（順序不是這題要守的）。集合比對仍會在少一個或多一個型別時紅；icon／文字檢查範圍反而變大 | 讓 `table` 的主元件不出現 ⇒ 紅 |
-| dnd `output_and_list_previews_follow_the_canvas…` | 加欄位、改名稱 ⇒ 輸出預覽與列表預覽兩個 iframe **同時**跟著變；改名時焦點不離開輸入框；iframe 不重建 | 改名稱後焦點仍在輸入框（先驗）；切到「輸出預覽」頁籤 ⇒ iframe 內容含最新名稱、列表 iframe 不可見；切到「列表預覽」頁籤 ⇒ 同理；仍不跳頁不開彈窗 | 行為是「預覽跟著畫布的最新內容」；新 UI 預覽只在該頁籤開著時渲染，所以等待點移到切頁籤之後。仍用「最新名稱」（第二次改名的值）當判準，等到的是切換時重算的結果，不是舊值 | `syncPreviews` 直接 return ⇒ 紅 |
+| dnd `output_and_list_previews_follow_the_canvas…` | 加欄位、改名稱 ⇒ 輸出預覽與列表預覽兩個 iframe **同時**跟著變；改名時焦點不離開輸入框；iframe 不重建 | 改名稱後焦點仍在輸入框（先驗）；兩個預覽 iframe 各仍只有一個（不重建，原斷言保留）；切到「輸出預覽」頁籤 ⇒ iframe 內容含最新名稱、列表 iframe 不可見；切到「列表預覽」頁籤 ⇒ 同理；仍不跳頁不開彈窗 | 行為是「預覽跟著畫布的最新內容」；新 UI 預覽只在該頁籤開著時渲染，所以等待點移到切頁籤之後。仍用「最新名稱」（第二次改名的值）當判準，等到的是切換時重算的結果，不是舊值 | `syncPreviews` 直接 return ⇒ 紅 |
 | form_canvas `palette_drops_into_a_section…` | 元件列拖到卡片／區塊標題、欄位跨區塊搬、區塊拖曳排序 ⇒ 草稿 DB 的 groups／fields 順序正確 | 斷言不變；只在拖區塊前先把目標區塊標題列捲到畫面中央（固定頂列會蓋住放置點） | 只改操作前置，沒有動任何斷言 | `moveGroupTo` 不生效 ⇒ 紅 |
 | p8_module_builder `acceptance_equipment_loan…` | 在瀏覽器建出借用模組（欄位、分組、列表欄、流程）並端到端使用 | 斷言不變；勾「借用人」列表欄前先點「列表預覽」頁籤（勾選框搬到那裡） | 只改操作前置；後面照樣驗列表欄實際出現在執行頁 | 列表欄勾選不寫入 ⇒ 紅 |
 
