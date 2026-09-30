@@ -229,6 +229,10 @@ vm.createContext(ctx)
 vm.runInContext('var window = globalThis.window;', ctx)
 vm.runInContext(fs.readFileSync(lr, 'utf8'), ctx)
 vm.runInContext('var MotrixLegalRound = window.MotrixLegalRound;', ctx)
+// 2026-10-01：前端「今天」改走 static/motrix-date.js（MotrixDate）——頁面／分檔程式直接引用全域 MotrixDate，
+// 這個沙盒要先載入它（與 MotrixLegalRound 同一種做法；legal-round.js 與 motrix-date.js 在同一個目錄）
+vm.runInContext(fs.readFileSync(lr.replace(/legal-round\.js$/, 'motrix-date.js'), 'utf8'), ctx)
+vm.runInContext('var MotrixDate = window.MotrixDate;', ctx)
 let o
 if (kind === 'js') {
   vm.runInContext(fs.readFileSync(target, 'utf8'), ctx, { filename: target })
