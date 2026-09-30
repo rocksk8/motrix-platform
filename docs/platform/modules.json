@@ -491,6 +491,7 @@
    "units": [
     "js:js/bonus.js",
     "mod:payroll/__init__",
+    "mod:payroll/gl_events",
     "mod:payroll/api/bonus",
     "mod:payroll/api/payslips",
     "mod:payroll/bonus",
