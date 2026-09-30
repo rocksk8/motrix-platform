@@ -45,9 +45,11 @@ def test_runtime_upload_list_remove_save_and_view_link(live_server, make_user, n
     tok = client.post("/api/auth/login", json={"username": boss[0], "password": boss[1]}).json()["token"]
     _module(client, {"Authorization": "Bearer " + tok})
     a = tmp_path / "a.png"
-    a.write_bytes(b"\x89PNG\r\n\x1a\n" + b"1" * 40)
+    import base64
+    png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC")   # 真的 1×1 PNG（內嵌圖要能解碼、有寬高才算可見）
+    a.write_bytes(png)
     b = tmp_path / "b.png"
-    b.write_bytes(b"\x89PNG\r\n\x1a\n" + b"2" * 40)
+    b.write_bytes(png)
 
     errors = []
     page = new_context().new_page()

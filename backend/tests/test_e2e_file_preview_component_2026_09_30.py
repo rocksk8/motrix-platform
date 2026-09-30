@@ -15,7 +15,7 @@ window.__pv = { types: {}, revoked: [] }
 const _c = URL.createObjectURL.bind(URL), _r = URL.revokeObjectURL.bind(URL)
 URL.createObjectURL = (b) => { const u = _c(b); window.__pv.types[u] = b.type; return u }
 URL.revokeObjectURL = (u) => { window.__pv.revoked.push(u); return _r(u) }
-window.PNG = new Uint8Array([137,80,78,71,13,10,26,10,1,2,3,4]).buffer
+window.PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC'), c => c.charCodeAt(0)).buffer      // 真的 1×1 PNG（壞圖寬高為 0，會被當成不可見）
 window.PDF = new TextEncoder().encode('%PDF-1.4 x').buffer
 """
 
@@ -81,7 +81,7 @@ def test_arrow_keys_step_and_a_slow_first_response_never_overwrites_the_second(n
     page.evaluate("""() => {
       window.__order = []
       MotrixFilePreview.open({ items: [{filename: 'a.png', mime: 'image/png'}, {filename: 'b.pdf', mime: 'application/pdf'}, {filename: 'c.png', mime: 'image/png'}],
-        fetchBlob: (it) => { window.__order.push(it.filename); return new Promise(r => setTimeout(() => r(it.filename === 'a.png' ? window.PNG : window.PDF), it.filename === 'b.pdf' ? 500 : 10)) } })
+        fetchBlob: (it) => { window.__order.push(it.filename); return new Promise(r => setTimeout(() => r(it.filename.endsWith('.png') ? window.PNG : window.PDF), it.filename === 'b.pdf' ? 500 : 10)) } })
     }""")
     page.wait_for_selector('[data-testid="file-preview-img"]', state="visible", timeout=5000)
     page.keyboard.press("ArrowRight")                        # → b.pdf（慢 500ms）

@@ -300,6 +300,7 @@
     var s = S
     S = null
     s.seq++                                                             // 進行中的載入回來時當作已關閉
+    document.removeEventListener('keydown', onKey, true)
     if (s.root && s.root.parentNode) s.root.parentNode.removeChild(s.root)
     if (typeof s.opts.onClose === 'function') s.opts.onClose()
     var back = s.opener
@@ -315,11 +316,11 @@
     var root = el('div', { class: 'modal-overlay', style: 'z-index:300' })
     root.style.display = 'flex'
     root.addEventListener('click', function (ev) { if (ev.target === root) close() })
-    root.addEventListener('keydown', onKey)
     S = { opts: opts, items: items, idx: Math.max(0, Math.min(items.length - 1, opts.index || 0)), root: root, box: null, url: '', kind: '',
           err: '', status: '', loading: false, seq: 0, nav: opts.nav !== undefined ? !!opts.nav : items.length > 1,
           download: opts.download !== undefined ? !!opts.download : true, opener: opts.opener || document.activeElement }
     document.body.appendChild(root)
+    document.addEventListener('keydown', onKey, true)        // 載入中重畫會讓焦點掉到 body ⇒ 鍵盤事件掛 document（開著的期間），關閉時移除
     render()
     focusFirst(true)
     return load(S.idx)
