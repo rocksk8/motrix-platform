@@ -69,6 +69,9 @@
         <div class="lp-card">
           <div class="lp-h">
             <span x-text="y.year + ' 年度'"></span>
+            <span class="lp-tag" :class="y.status === 'closed' ? 'closed' : 'open'" x-text="y.status === 'closed' ? '已決算' : '年度進行中'" :data-testid="'lp-year-status-' + y.year"></span>
+            <button class="lp-btn" style="margin-left:10px" @click="openClosing(y)" :data-testid="'lp-closing-' + y.year">年度結轉／決算</button>
+            <button class="lp-btn" @click="exportStatements(y)" :data-testid="'lp-export-' + y.year">匯出四大表</button>
             <span class="lp-note" style="margin:0 0 0 10px" x-text="y.start_date + ' ～ ' + y.end_date + '　期初：' + (y.opening_mode === 'imported' ? '匯入（' + y.opening_date + '）' : y.opening_mode === 'carry' ? '自上年結轉' : '零')"></span>
           </div>
           <table class="lp-table">
@@ -184,6 +187,40 @@
       <div class="lp-row" style="margin-top:14px;justify-content:flex-end">
         <button class="lp-btn" @click="closeDlg()">取消</button>
         <button class="lp-btn primary" :disabled="busy" @click="submitDlg()" data-testid="lp-submit">確定</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="lp-back" x-show="cdlg" @click.self="closeClosing()" data-testid="lp-closing-dialog">
+    <div class="lp-dlg" style="width:min(640px,94vw)" x-show="cdlg">
+      <div class="lp-h" x-text="cdlg ? cdlg.year + ' 年度結轉與決算' : ''"></div>
+      <div class="lp-err" x-show="cdlg && cdlg.error" x-text="cdlg && cdlg.error" data-testid="lp-closing-error"></div>
+      <div class="lp-ok" x-show="cdlg && cdlg.done" x-text="cdlg && cdlg.done" data-testid="lp-closing-done"></div>
+      <template x-if="cdlg">
+        <div>
+          <div class="lp-note">本期淨利（尚未結轉的損益科目合計）：<b x-text="fmt(cdlg.pv.net_income)" data-testid="lp-closing-ni"></b>；損益科目 <span x-text="cdlg.pv.pl_accounts"></span> 個。</div>
+          <template x-for="m in cdlg.pv.problems" :key="m"><div class="lp-err" x-text="m"></div></template>
+          <template x-for="m in cdlg.pv.prerequisites_unmet" :key="m"><div class="lp-warn" x-text="m"></div></template>
+          <div class="lp-note" x-show="cdlg.pv.existing.length">已有結轉傳票：<span x-text="cdlg.pv.existing.map(v => v.voucher_no + '（' + v.status + '）').join('、')" data-testid="lp-closing-existing"></span></div>
+          <template x-for="v in cdlg.pv.vouchers" :key="v.key">
+            <div x-show="v.lines.length" style="margin-bottom:8px">
+              <div class="lp-note" style="margin:0" x-text="v.summary"></div>
+              <table class="lp-table"><tbody>
+                <template x-for="l in v.lines" :key="l.account_code"><tr><td x-text="l.account_code"></td><td x-text="l.name"></td><td class="lp-num" x-text="fmt(l.debit)"></td><td class="lp-num" x-text="fmt(l.credit)"></td></tr></template>
+              </tbody></table>
+            </div>
+          </template>
+          <div class="lp-note" style="margin-top:6px">流程：1～11 期逐期結帳 → 產生結轉傳票（草稿）→ 送審、核准、過帳 → 決算（四大表對帳全部通過才成立，並凍結）。要更正請「重開年度」。</div>
+          <label class="lp-note" style="display:block"><input type="checkbox" x-model="cdlg.accept" data-testid="lp-closing-accept"> 決算時第 12 期若有未過帳傳票等提醒，我已確認</label>
+          <input class="lp-input" style="width:100%;margin:6px 0" type="text" x-show="isSuper() && cdlg.status === 'closed'" x-model="cdlg.reason" placeholder="重開年度的理由（必填）" data-testid="lp-closing-reason">
+        </div>
+      </template>
+      <div class="lp-row" style="margin-top:12px;justify-content:flex-end">
+        <button class="lp-btn" @click="closeClosing()">關閉</button>
+        <button class="lp-btn" :disabled="cdlg && cdlg.busy" x-show="cdlg && cdlg.status !== 'closed' && cdlg.pv.existing.length" @click="generateClosing(true)" data-testid="lp-closing-regen">重新產生草稿</button>
+        <button class="lp-btn" :disabled="cdlg && cdlg.busy" x-show="cdlg && cdlg.status !== 'closed'" @click="generateClosing(false)" data-testid="lp-closing-generate">產生結轉傳票</button>
+        <button class="lp-btn primary" :disabled="cdlg && cdlg.busy" x-show="cdlg && cdlg.status !== 'closed'" @click="closeYearAct()" data-testid="lp-closing-close">決算</button>
+        <button class="lp-btn" :disabled="cdlg && cdlg.busy" x-show="isSuper() && cdlg && cdlg.status === 'closed'" @click="reopenYearAct()" data-testid="lp-closing-reopen">重開年度</button>
       </div>
     </div>
   </div>

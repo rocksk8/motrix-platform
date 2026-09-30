@@ -271,3 +271,70 @@ def test_hub_page_lists_features_and_toggle_shows_and_hides_the_tab(live_server,
     page.wait_for_function("() => !document.querySelector('[data-testid=hb-tab-tax401]')")
     assert not bad, "開總帳作業頁時有請求失敗：%s" % bad[:4]
     assert not errs, "頁面丟了例外：%s" % errs[:3]
+
+
+# ── B5：年度結轉與決算 ────────────────────────────────────────────────────
+
+@pytest.mark.e2e
+def test_periods_page_year_closing_generate_close_and_reopen(live_server, make_user, e2e_browser):
+    from modules.accounting.ledger import periods as P
+    user, pw = make_user(username="e2e_gl_year", role="superadmin")
+    y = 2196
+    conn = db.get_db()
+    try:
+        P.create_year(conn, y, "t")
+        conn.commit()
+    finally:
+        conn.close()
+    _seed("%d-01-05" % y, [("1113", 100000, 0), ("3111", 0, 100000)])
+    _seed("%d-01-10" % y, [("1191", 10500, 0), ("4111", 0, 10000), ("2204", 0, 500)])
+    _seed("%d-01-20" % y, [("6112", 1000, 0), ("1113", 0, 1000)])
+    conn = db.get_db()
+    try:
+        for n in range(1, 12):
+            P.close_period(conn, conn.execute("SELECT id FROM gl_periods WHERE year=? AND period_no=?", (y, n)).fetchone()[0], "acc", accept_warnings=True)
+        conn.commit()
+    finally:
+        conn.close()
+    page = e2e_browser.new_page()
+    bad, errs = _open(page, live_server, user, pw, "ledger-periods.html")
+    page.wait_for_selector("[data-testid=lp-closing-%d]" % y)
+    page.click("[data-testid=lp-closing-%d]" % y)
+    page.wait_for_selector("[data-testid=lp-closing-dialog]", state="visible")
+    assert page.locator("[data-testid=lp-closing-ni]").inner_text().strip() == "9,000"           # 收入 10,000 − 租金 1,000
+
+    page.click("[data-testid=lp-closing-close]")                                                # 還沒結轉就決算 ⇒ 被擋並說明
+    page.wait_for_selector("[data-testid=lp-closing-error]", state="visible")
+    assert "損益科目還有餘額" in page.locator("[data-testid=lp-closing-error]").inner_text()
+
+    page.click("[data-testid=lp-closing-generate]")
+    page.wait_for_selector("[data-testid=lp-closing-done]", state="visible")
+    page.wait_for_function("() => document.querySelector('[data-testid=lp-closing-existing]') && document.querySelector('[data-testid=lp-closing-existing]').textContent.includes('草稿')")
+    conn = db.get_db()
+    try:                                                                                        # 走過簽核後過帳（測試直接改狀態）
+        assert conn.execute("SELECT COUNT(*) FROM vouchers_all WHERE kind='closing' AND voided_at='' AND voucher_date LIKE ?", ("%d-%%" % y,)).fetchone()[0] == 2
+        conn.execute("UPDATE vouchers_all SET status='已過帳' WHERE kind='closing' AND voided_at='' AND voucher_date LIKE ?", ("%d-%%" % y,))
+        conn.commit()
+    finally:
+        conn.close()
+    page.check("[data-testid=lp-closing-accept]")
+    page.click("[data-testid=lp-closing-close]")
+    page.wait_for_function("() => document.querySelector('[data-testid=lp-year-status-%d]').textContent.trim() === '已決算'" % y)
+    conn = db.get_db()
+    try:
+        assert conn.execute("SELECT status FROM gl_fiscal_years WHERE year=?", (y,)).fetchone()[0] == "closed"
+    finally:
+        conn.close()
+
+    page.fill("[data-testid=lp-closing-reason]", "會計師要求調整")
+    page.click("[data-testid=lp-closing-reopen]")
+    page.wait_for_function("() => document.querySelector('[data-testid=lp-year-status-%d]').textContent.trim() === '年度進行中'" % y)
+    conn = db.get_db()
+    try:
+        assert conn.execute("SELECT status FROM gl_fiscal_years WHERE year=?", (y,)).fetchone()[0] == "open"
+        assert conn.execute("SELECT COUNT(*) FROM vouchers_all WHERE kind='closing' AND voided_at='' AND voucher_date LIKE ?", ("%d-%%" % y,)).fetchone()[0] == 0
+    finally:
+        conn.close()
+    # 唯一允許的 4xx＝本題刻意觸發的「還沒結轉就決算」400
+    assert [b for b in bad if b[0] != 400] == [], bad[:4]
+    assert not errs, "頁面丟了例外：%s" % errs[:3]
