@@ -68,6 +68,9 @@ def test_audit_log_page_window_widen_filters_and_drill(live_server, new_context,
     # 清除：回到全部、視窗回預設
     page.get_by_text("清除", exact=True).click()
     page.wait_for_function("() => document.querySelector('[data-testid=tree-window]').innerText.includes('預設近')", timeout=10000)
+    # 清除會同時重載「樹」與「清單」兩個請求：視窗文字回預設只代表樹回來了，清單可能還是只看失敗的那 1 列（競態，
+    # 全量負載下才出現）⇒ 等清單的**終點狀態**（回到全部、含非失敗列），不是只打一次快照
+    page.wait_for_function("() => document.querySelectorAll('.tl-item').length >= 3 && document.querySelectorAll('.tl-item:not(.is-fail)').length > 0", timeout=10000)
     assert page.locator(".tl-item").count() >= 3
     # 下鑽：點模組「傳票」⇒ 麵包屑出現、樹變成案件層
     page.locator(".drill-node", has_text="傳票").first.click()
