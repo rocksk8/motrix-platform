@@ -57,7 +57,16 @@ param(
     # 開跑前盤點其他 pytest 與疑似孤兒的鎖持有者（只報告、不結束行程）。
     [switch]$NoPreflight,
     # 盤點時等其他（非孤兒）pytest 結束，最多幾分鐘；0＝不等（預設）。
-    [int]$WaitForOtherTests = 0
+    [int]$WaitForOtherTests = 0,
+    # 去識別化（docs/platform/SALE-PACKAGE-DEID.md §2.2／S6；邏輯在 tools/platform/deid_build.py）：
+    #   own（預設，自用）：一律要本公司資料檔（-OwnPayload 或環境變數 MOTRIX_OWN_PAYLOAD），缺／驗不過 ⇒ 建包中止；資料檔進包。
+    #   sale（客戶）：剪裁＋客戶版文件＋manifest 投影，與 git 重算比對，雜湊層掃描必過（-DeidKey／-DeidHashlist 必給；清單 30 天有效）；
+    #                 包內不含本公司資料檔、deploy_manifest 不記開發機路徑。
+    [ValidateSet("own", "sale")]
+    [string]$Audience = "own",
+    [string]$OwnPayload = "",
+    [string]$DeidKey = "",
+    [string]$DeidHashlist = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -1190,11 +1199,34 @@ if ($projectedVersionManifest) {
 Mark-Elapsed "archive" $_tArchive
 $BuildT["total_so_far"] = [math]::Round(((Get-Date) - $BuildStart).TotalSeconds, 2)
 
+# --- Step 6.1: 去識別化 audience 邏輯（S6；own 要本公司資料檔、sale 剪裁＋重算比對＋掃描必過）---
+# 邏輯全在 tools/platform/deid_build.py（可單獨測）；這裡只組參數、失敗就中止、把 deid 區塊收進 deploy_manifest。
+# sale 不支援 -License（授權選配的包無法由 commit＋設定重算，重算比對會失敗）。
+if ($Audience -eq "sale" -and $License) {
+    Fail "-Audience sale 不支援 -License（授權選配的包無法由 git 重算比對）。請用 -Product。"
+}
+$deidTool = Join-Path $projectRoot "tools\platform\deid_build.py"
+$deidJson = Join-Path $env:TEMP ("deid_" + [guid]::NewGuid().ToString("N") + ".json")
+$deidArgs = @($deidTool, "apply", "--pkg", $pkgDir, "--audience", $Audience, "--commit", $commit, "--product", $Product, "--out", $deidJson)
+if ($OwnPayload)   { $deidArgs += @("--own-payload", $OwnPayload) }
+if ($DeidKey)      { $deidArgs += @("--key", $DeidKey) }
+if ($DeidHashlist) { $deidArgs += @("--hashlist", $DeidHashlist) }
+& $pyExe @deidArgs
+if ($LASTEXITCODE -ne 0) {
+    Fail "去識別化（-Audience $Audience）失敗（exit code $LASTEXITCODE），部署包未完成，已中止。原因見上面的 DEID_BUILD_FAIL。"
+}
+$deidBlock = Get-Content -Path $deidJson -Raw -Encoding UTF8 | ConvertFrom-Json
+Remove-Item -LiteralPath $deidJson -Force -ErrorAction SilentlyContinue
+Write-Host "      去識別化（$Audience）完成：命中 $($deidBlock.hits)"
+
+
 $manifest = [ordered]@{
     commit               = $commit
     commit_short         = $commitShort
     branch               = $branch
     product              = $Product
+    audience             = $Audience
+    deid                 = $deidBlock
     built_at             = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
     version_manifest_latest = $versionLatest
     # 🔴 2026-09-22 新增：使用者問「打包的時間為什麼會越來越久」，
@@ -1212,7 +1244,7 @@ $manifest = [ordered]@{
         phys_cores = $physCores
         workers    = $workers
         priority   = "BelowNormal"
-        python     = $pyEnv
+        python     = $(if ($Audience -eq "sale") { "" } else { $pyEnv })   # sale 包不記開發機路徑
     }
 }
 if ($License) {

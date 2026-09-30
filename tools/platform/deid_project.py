@@ -242,9 +242,10 @@ def rebuild(commit, out, product="full", repo=REPO, cfg=None, overlay=None):
     tar = subprocess.run(["git", "-C", str(repo), "archive", "--format=tar", commit], capture_output=True, check=True).stdout
     with tarfile.open(fileobj=io.BytesIO(tar)) as t:
         t.extractall(out)
-    sys.path.insert(0, str(HERE))
-    import product_select as PS
-    PS.apply(out, PS.load_product(product))
+    if product:                                                          # 空字串／None ＝ 不做產品選配（測試用的小 repo）
+        sys.path.insert(0, str(HERE))
+        import product_select as PS
+        PS.apply(out, PS.load_product(product))
     return prune_tree(out, cfg, overlay)
 
 

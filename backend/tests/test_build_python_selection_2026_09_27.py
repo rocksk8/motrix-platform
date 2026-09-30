@@ -138,4 +138,6 @@ def test_manifest_and_history_record_the_same_env_python():
     src = BUILD.read_text(encoding="utf-8-sig")
     assert src.count("function Get-PythonEnvRecord") == 1
     assert "$pyEnv = Get-PythonEnvRecord $sel" in src and "(Get-PythonEnvRecord $sel | ConvertTo-Json -Compress)" in src
-    assert src.count("python     = $pyEnv") == 2, "deploy_manifest.json 與 build_history.jsonl 的 env 都要有 python"
+    # 去識別化 S6：deploy_manifest 的 python 在 sale 包記空字串（不記開發機路徑），own 仍記 $pyEnv；build_history 是本機紀錄，一律記
+    assert src.count("python     = $pyEnv") + src.count('else { $pyEnv })') == 2, "deploy_manifest.json 與 build_history.jsonl 的 env 都要有 python"
+    assert src.count('python     = $(if ($Audience -eq "sale") { "" } else { $pyEnv })') == 1
