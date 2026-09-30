@@ -1439,7 +1439,7 @@ def render_view(body, view) -> str:
     tpl = (body.get("output") or {}).get("template") or default_template(body)
     html = dt.render(tpl, view, parts)
     # 核可狀態由程式決定、不由版型決定：單據目前停在「需要簽核」的狀態 ⇒ 紅色警示（冪等）
-    return dt.inject_unapproved(html, view.get("statusLabel") or view.get("status"), "此單據尚未核可") if view.get("unapproved") else html
+    return dt.inject_unapproved(html, view.get("statusLabel") or view.get("status"), "此單據尚未核可", doc_no=str(view.get("recordNo") or "")) if view.get("unapproved") else html
 
 
 def default_template(body) -> dict:

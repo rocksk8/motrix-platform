@@ -1,5 +1,5 @@
 {
- "core_version": "1.89",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -486,15 +486,18 @@
    "FORMATS": "const",
    "THEMES": "const",
    "TemplateError": "class",
+   "UNAPPROVED_HEADER_TEXT": "const",
+   "UNAPPROVED_RED": "const",
    "UNAPPROVED_TEXT": "const",
    "attr_esc": "def(s)",
    "esc_quotes": "def(text)",
-   "inject_unapproved": "def(html, status=…, detail=…)",
+   "inject_unapproved": "def(html, status=…, detail=…, doc_no=…, wm_text=…)",
    "load_default": "def(key)",
    "problems": "def(template, sample_view=…)",
    "render": "def(template, data, parts)",
    "render_blocks": "def(blocks, data, parts)",
-   "unapproved_banner": "def(status=…, detail=…, cls=…)",
+   "unapproved_banner": "def(status=…, detail=…, cls=…, doc_no=…, wm_text=…)",
+   "unapproved_overlay": "def(doc_no=…, wm_text=…)",
    "validate": "def(template, sample_view=…)"
   },
   "helper:edit_log": {
