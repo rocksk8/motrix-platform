@@ -277,6 +277,11 @@
 
       <h1 class="page-title">出納</h1>
 
+      <div x-show="glNotice" data-testid="gl-notice" class="alert-bar" style="display:flex;gap:12px;align-items:center;justify-content:space-between;background:#fef3c7;color:#92400e">
+        <span x-text="glNotice"></span>
+        <button type="button" data-testid="gl-notice-close" @click="glNotice = ''" style="border:0;background:transparent;cursor:pointer;font-size:16px" aria-label="關閉提示">✕</button>
+      </div>
+
       <div x-show="error" class="alert-bar" x-text="error"></div>
 
       <div x-show="!error" class="panel" style="padding:20px">

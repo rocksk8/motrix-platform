@@ -23,6 +23,7 @@ from pydantic import BaseModel, model_validator
 from db import get_db, next_entity_code, spawn_bg_thread
 from core import registry
 from core.txn import begin_write, write_txn
+from helpers.gl_status import gl_posted_warning
 from helpers import (
     _require_user, _tok, _audit, _notify, _get_setting, _set_setting, _purge_notifications,
     notify_module_activity, notify_contractor_voucher_submitted, notify_contractor_voucher_next_tier,
@@ -962,6 +963,9 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
             registry.single_provider("payslip.remit").mark_paid(conn, linked_slips, voucher_no, paid_at_value,
                                                                 user.get("display_name") or user["username"])
     else:
+        # MONEY-FLOWS §9 L3：取消已匯款 ⇒ 已入帳的 E05 來源消失（orphan）：下次引擎執行時產生反向草稿（日期＝今天）。
+        # 下游效應：營運報表現金支出立即消失；總帳要手動執行才反映；已結帳期間則要手工沖轉。只提示、不擋。
+        gl_warn = gl_posted_warning(conn, "contractor_voucher", voucher_no)
         conn.execute(
             "UPDATE contractor_payment_vouchers SET is_paid=0, paid_by='', paid_at='', paid_log=?, "
             "paid_bank_account_name='', paid_bank_account_code='', updated_at=?, " + _remit.CLEAR_SQL + " WHERE voucher_no=?",
@@ -987,7 +991,8 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
         spawn_bg_thread(push_event_for_module, args=_payout_calendar_args(
             voucher_no, row["snapshot_json"], paid_at_value, rm, who))
     return {"ok": True, "is_paid": action == "pay", "paid_log": log,
-            **({"remitReview": rm["review"], "diff": rm["diff"], "actual": rm["actual"], "fee": rm["fee"]} if action == "pay" else {})}
+            **({"remitReview": rm["review"], "diff": rm["diff"], "actual": rm["actual"], "fee": rm["fee"]} if action == "pay" else {}),
+            **({"glWarning": gl_warn} if action != "pay" and gl_warn else {})}
 
 
 # ── 簽核設定（獨立於報價單／出貨單）────────────────────────────────────────────

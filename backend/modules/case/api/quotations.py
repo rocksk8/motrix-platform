@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from db import get_db, spawn_bg_thread
 from db import db_conn  # /api/sales-orders（M08 搬遷移入）
 from modules.case.quotations import payment_item_amounts  # 同上
+from helpers.gl_status import gl_posted_warning
 from helpers import row_access
 from helpers.case_access import case_page_readable   # AT-M1c：與報價單上附件的提供者同一支
 from modules.case import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
@@ -2721,6 +2722,17 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         except HTTPException:
             conn.close()
             raise
+        # MONEY-FLOWS §9 L3：改動／刪除**已入帳**的已收款期別 ⇒ 下次引擎執行時 E03 drift／orphan。下游效應：營運報表現金收入立即變；
+        # 總帳要手動執行才反映。只提示、不擋；提示放在回應 `glWarning`，前端顯示。
+        gl_warn = None
+        for _oit in old_items:
+            if not (isinstance(_oit, dict) and _oit.get("received") and _oit.get("id") is not None):
+                continue
+            _nit = next((x for x in new_items if isinstance(x, dict) and x.get("id") == _oit.get("id")), None)
+            if _nit is None or any(_nit.get(k) != _oit.get(k) for k in ("received", "receivedAt", "actualAmount", "feeAmount")):
+                gl_warn = gl_posted_warning(conn, "quotation_receipt", "%s::%s" % (quote_no, _oit.get("id")))
+                if gl_warn:
+                    break
 
         # 2026-09-02（反派/國稅局視角複查發現）：這支整包存檔端點是案件管理財務
         # Tab 填發票號碼的實際主要路徑（mark_payment() 的 invoiceNo 驗證只涵蓋
@@ -2779,6 +2791,8 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         spawn_bg_thread(_backup_quotation, args=(quote_no,))
         _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
         out = {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts, "adopted": adopted}
+        if gl_warn:
+            out["glWarning"] = gl_warn
         if stock_notice:
             out["stockNotice"] = stock_notice
         return out
@@ -3711,7 +3725,17 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         received_by = user.get("display_name") or user["username"]
         if "received" in body:
             body["receivedBy"] = received_by
+        # MONEY-FLOWS §9 L3：改動**已入帳**的收款（取消收款、改收款日／實收／手續費）或更換已登錄的發票號碼 ⇒ 下次引擎執行時
+        # E03／E01 drift（沖轉草稿＋新草稿）或 orphan。下游效應：營運報表現金收入立即變；總帳要手動執行才反映。只提示、不擋。
+        gl_warn = None
+        if any(k in body for k in ("received", "receivedAt", "actualAmount", "feeAmount")):
+            _iid = pits[idx].get("id")
+            gl_warn = (gl_posted_warning(conn, "quotation_receipt", "%s::%s" % (no, _iid)) if _iid is not None
+                       else gl_posted_warning(conn, "quotation_receipt", no + "::", prefix=True))
         if "invoiceNo" in body:
+            _old_inv = (pits[idx].get("invoiceNo") or "").strip()
+            if _old_inv and (body["invoiceNo"] or "").strip() != _old_inv:
+                gl_warn = gl_warn or gl_posted_warning(conn, "quotation_invoice", "%s::%s" % (no, _old_inv))
             validate_invoice_no(conn, body["invoiceNo"], exclude_quote_no=no, exclude_idx=idx)
         # AC1：驗「套用後」那一期的發票未稅／稅額（只送其中一欄、而另一欄原本也是空的 ⇒ 拒存）
         validate_invoice_amounts({**pits[idx], **{k: body[k] for k in _INVOICE_AMOUNT_KEYS if k in body}})
@@ -3750,7 +3774,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
     _audit(_tok(authorization), 'payment.mark', 'quotation', no, f"{no} {label}（{action_detail}）")
     notify_module_activity("報價單", action_detail, user.get("display_name") or user["username"],
                             f"{no} {label}", "quotations.html")
-    return {"ok": True, "updated_at": now}
+    return {"ok": True, "updated_at": now, **({"glWarning": gl_warn} if gl_warn else {})}
 
 
 def _locate_item(arr: list, idx: int, item_id, range_msg: str) -> int:
