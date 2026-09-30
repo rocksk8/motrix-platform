@@ -80,6 +80,35 @@ APPROVAL_DOC_TYPE_LABELS = {
 }
 
 
+_BUILTIN_DOC_TYPES = tuple(APPROVAL_DOC_TYPES)   # 內建九類（固定）；其餘由 `register_doc_type()` 登記
+
+
+def register_doc_type(code: str, label: str, unified: bool = False) -> None:
+    """登記一種新的簽核單據類型（預留鉤子：A2 的請購／採購／差旅／零用金是第一批使用者）。
+    登記後它立刻出現在簽核設定頁（套用範圍＋獨立流程）、`/api/settings/approval-flow/{code}`、
+    `approval_flow_setting_key`；不必再改 `routers/system.py` 的固定模型或前端清單。
+    `unified`＝預設是否走統一流程（預設 False＝獨立；與 voucher／bonus 同樣先做可逆的一邊）。
+    重複登記（含內建九類）⇒ ValueError：兩個登記者搶同一個代碼不能靜默覆蓋。
+    就地修改 `APPROVAL_DOC_TYPES`／`DEFAULT_UNIFIED_DOC_TYPES`／`APPROVAL_DOC_TYPE_LABELS`（舊的 import 名稱不會失效）。"""
+    import re as _re
+    if not isinstance(code, str) or not _re.match(r"^[a-z][a-z0-9_]{0,39}$", code):
+        raise ValueError("簽核單據類型代碼不合法：%r" % (code,))
+    if code in APPROVAL_DOC_TYPES:
+        raise ValueError("簽核單據類型已登記：%r" % code)
+    if not isinstance(label, str) or not label.strip():
+        raise ValueError("簽核單據類型 %r 缺少名稱" % code)
+    APPROVAL_DOC_TYPES.append(code)
+    APPROVAL_DOC_TYPE_LABELS[code] = label.strip()
+    if unified:
+        DEFAULT_UNIFIED_DOC_TYPES.add(code)
+
+
+def doc_types_meta() -> list:
+    """`[{code, label, builtin, defaultUnified}]`（簽核設定頁用；順序＝內建在前、登記的依登記順序）。"""
+    return [{"code": c, "label": APPROVAL_DOC_TYPE_LABELS.get(c, c), "builtin": c in _BUILTIN_DOC_TYPES,
+             "defaultUnified": c in DEFAULT_UNIFIED_DOC_TYPES} for c in APPROVAL_DOC_TYPES]
+
+
 def approval_flow_setting_key(doc_type: str, scope: dict) -> str:
     """依 approval_flow_scope 設定解析某文件類型送審當下該讀寫哪把 system_settings
     key：scope[doc_type] 為 True（或沒設定時的預設分組）就是走 unified_approval_flow，

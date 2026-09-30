@@ -16,7 +16,7 @@ from db import get_db, CURRENT_VERSION, _MIGRATIONS
 from helpers import (
     _require_user, _tok, _audit, _get_setting, _set_setting, _get_edge_path,
     _filter_live_notifications, notify_module_activity, APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES,
-    APPROVAL_DOC_TYPE_LABELS, require_any_module)
+    APPROVAL_DOC_TYPE_LABELS, require_any_module, doc_types_meta)
 from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers   # M01-PLAN §3-2：L1
 from helpers.uploads import _check_upload_magic
 from helpers.errors import trace_id
@@ -141,57 +141,28 @@ def set_approval_flow_settings(body: ApprovalFlowSettings, authorization: str = 
 #     一把 key 的實際內容。
 # 這樣「切換」永遠不會弄丟另一邊的既有設定，勾來勾去也不會互相覆蓋。
 
-class ApprovalFlowScopeSettings(BaseModel):
-    # 刻意不給預設值——PUT 這個模型永遠代表「完整覆蓋」整組 scope，五個欄位都
-    # 必須明確帶值。2026-08-28 code review 抓到：若欄位有預設值，前端載入 scope
-    # 失敗（例如 GET 失敗留下空物件 `{}`）又剛好按了儲存，PUT body 會是 `{}`，
-    # Pydantic 會靜默把每個缺漏欄位填回這裡的預設值，等於在使用者毫無所覺的
-    # 情況下把已自訂的 scope 洗回預設分組。改成必填後，這種殘缺 body 會直接
-    # 422，而不是靜默套用預設值。
-    #
-    # 🔴 2026-09-23：這裡**少了三欄**，而少的那三類**存不進去**。
-    #
-    # ```
-    # GET   回 APPROVAL_DOC_TYPES 全部（8 類）
-    # 前端  docTypeOrder 列 7 類（2026-09-11 加了 completion／extra_expense）
-    # PUT   這個模型只有 5 欄 => pydantic 預設 extra='ignore'
-    #       ⇒ completion／extra_expense／voucher **被靜默丟掉**
-    # ```
-    # ☠️ 症狀不是報錯：使用者把「完工單」切成獨立設定、按儲存，
-    #    畫面說「✓ 已儲存套用範圍」，**而重新整理之後它自己變回統一流程**。
-    # 📌 〈判準的寬窄都會騙人〉的反面：這裡的模型**比對象窄**，
-    #    而窄掉的那一段沒有人會收到訊息。
-    quotation:          bool
-    shipping:           bool
-    invoice_voucher:    bool
-    payment_request:    bool
-    contractor_voucher: bool
-    completion:         bool
-    extra_expense:      bool
-    # ⚠️ `voucher`（會計傳票）也要有一欄 —— 它在 `APPROVAL_DOC_TYPES` 裡，
-    #    而 GET 會回它 ⇒ 前端原封不動送回來時，少一欄就是少一個決定。
-    #    📌 它不在 `DEFAULT_UNIFIED_DOC_TYPES`（A `§234` 裁）—— 那是**預設值**，
-    #       與「可不可以設定」是兩件事。
-    voucher:            bool
-    # ⚠️ `BN8`：`bonus`（獎金分潤單）同理，也不在 `DEFAULT_UNIFIED_DOC_TYPES`。
-    #    這裡少加的話，下面的 import-time 守門會**當場炸**——
-    #    那正是它的用途：忘了同步變成啟動就炸，不是十二天後才被使用者發現。
-    bonus:               bool
+def _validated_scope(body) -> dict:
+    """PUT scope 永遠代表「完整覆蓋」：鍵必須**剛好等於**目前登記的全部單據類型、值必須是布林。
+    （原本是固定欄位的 pydantic 模型＋import-time 斷言；單據類型改成可登記後，同一個決定改成在收到請求時查登記表。
+    缺欄／多欄／非布林 ⇒ 422，與舊行為一致：殘缺 body 不會被靜默補預設值。）"""
+    if not isinstance(body, dict):
+        raise HTTPException(422, "套用範圍必須是物件")
+    missing = [dt for dt in APPROVAL_DOC_TYPES if dt not in body]
+    extra = [k for k in body if k not in APPROVAL_DOC_TYPES]
+    if missing or extra:
+        raise HTTPException(422, "套用範圍的欄位要與目前的單據類型完全一致（缺：%s／多：%s）"
+                            % ("、".join(missing) or "無", "、".join(map(str, extra)) or "無"))
+    bad = [dt for dt in APPROVAL_DOC_TYPES if not isinstance(body[dt], bool)]
+    if bad:
+        raise HTTPException(422, "套用範圍的值必須是布林：%s" % "、".join(bad))
+    return {dt: body[dt] for dt in APPROVAL_DOC_TYPES}
 
 
-# 🔑 **驗「有沒有人做過決定」，不是驗「決定得對不對」。**
-#
-# ☠️ 上面那個缺三欄的狀態活了十二天，因為它的失敗方式是**少一段輸出**，
-#    不是一個錯誤 —— 沒有任何一次請求會紅。
-# ⇒ 下一次有人往 `APPROVAL_DOC_TYPES` 加一類而忘了這裡，**import 當場炸**，
-#   而不是等到某個使用者發現他的設定存不起來。
-_scope_fields = set(ApprovalFlowScopeSettings.model_fields)
-assert _scope_fields == set(APPROVAL_DOC_TYPES), (
-    "ApprovalFlowScopeSettings 的欄位與 APPROVAL_DOC_TYPES 對不上："
-    "少了 %s／多了 %s —— 少的那幾類 PUT 會被 pydantic 靜默丟掉，"
-    "而畫面照樣說「已儲存」。"
-    % (sorted(set(APPROVAL_DOC_TYPES) - _scope_fields) or "（無）",
-       sorted(_scope_fields - set(APPROVAL_DOC_TYPES)) or "（無）"))
+@router.get("/api/settings/approval-doc-types")
+def get_approval_doc_types(authorization: str = Header(None)):
+    """簽核單據類型清單（內建＋模組登記的）——簽核設定頁用。"""
+    _require_user(authorization)
+    return {"docTypes": doc_types_meta()}
 
 
 @router.get("/api/settings/approval-flow-scope")
@@ -202,10 +173,10 @@ def get_approval_flow_scope(authorization: str = Header(None)):
 
 
 @router.put("/api/settings/approval-flow-scope")
-def set_approval_flow_scope(body: ApprovalFlowScopeSettings, authorization: str = Header(None)):
+def set_approval_flow_scope(body: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
+    new_scope = _validated_scope(body)
     old_scope  = _get_setting("approval_flow_scope", {}) or {}
-    new_scope  = body.model_dump()
     unified_flow = _get_setting("unified_approval_flow", {"tiers": []}) or {"tiers": []}
     seeded = []
     for dt, is_unified in new_scope.items():
