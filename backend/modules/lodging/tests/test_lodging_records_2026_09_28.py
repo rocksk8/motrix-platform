@@ -294,8 +294,10 @@ def test_quote_create_and_show_latest_in_search(client, users, seeded):
 @pytest.mark.parametrize("kw,code", [
     ({"sourceId": "Hotel_NOPE"}, 404), ({"source": "osm"}, 422), ({"price": 0}, 422), ({"price": 12.5}, 422),
     ({"price": True}, 422), ({"unit": "per_room"}, 422), ({"channel": "fax"}, 422),
-    ({"quotedOn": "2026/09/28"}, 422), ({"quotedOn": (date.today() + timedelta(days=1)).isoformat()}, 422),
+    ({"quotedOn": "2026/09/28"}, 422), ({"quotedOn": "TOMORROW"}, 422),
     ({"note": "x" * 501}, 422)])
 def test_quote_validation(client, users, seeded, kw, code):
+    if kw.get("quotedOn") == "TOMORROW":       # 收集期不取時間（參數 id 會隨日期變；clock 棘輪 2026-10-01）
+        kw = dict(kw, quotedOn=(date.today() + timedelta(days=1)).isoformat())
     assert client.post("/api/lodging/quotes", json=_quote(**kw), headers=users["a"]).status_code == code
     assert fx.rows("SELECT * FROM lodging_quotes") == []

@@ -57,7 +57,13 @@ param(
     # 開跑前盤點其他 pytest 與疑似孤兒的鎖持有者（只報告、不結束行程）。
     [switch]$NoPreflight,
     # 盤點時等其他（非孤兒）pytest 結束，最多幾分鐘；0＝不等（預設）。
-    [int]$WaitForOtherTests = 0
+    [int]$WaitForOtherTests = 0,
+    # ── 時間不確定性守門（2026-10-01，建包連敗七次的教訓；PLAYBOOK §G5 第 20 項）──
+    # 測試用的『今天』：YYYY-MM-DD，預設＝這一包 commit 的日期。輸出成環境變數 MOTRIX_TEST_TODAY（測試的 tests/_clock.py 讀它；
+    # 產品既有的三個時鐘接縫也換成同一天）。建包跨午夜時，整輪測試看到同一天，不會收集時是 9/30、執行時是 10/1。
+    [string]$ClockDate = "",
+    # 略過建包前置的『收集決定性檢查』（pytest --collect-only 連跑兩次比對測試 id）。預設會查。
+    [switch]$NoCollectCheck
 )
 
 $ErrorActionPreference = "Stop"
@@ -800,6 +806,26 @@ if ($scoped) {
 if (-not $NoPreflight) {
     Write-Host "`n[盤點] 本機其他測試行程與測試鎖..."
     $null = Invoke-PyTool @($preflightTool, "--self-pid", "$PID", "--wait-minutes", "$WaitForOtherTests")
+}
+# ── 時間不確定性前置（2026-10-01）：固定測試日期＋收集決定性，都在 20 分鐘的測試階段之前（fail fast）──
+$clockDate = if ($ClockDate) { $ClockDate } else { $commitDate }
+$clockOk = $false
+if ("$clockDate" -match '^\d{4}-\d{2}-\d{2}$') {
+    try { [datetime]::ParseExact("$clockDate", "yyyy-MM-dd", [Globalization.CultureInfo]::InvariantCulture) | Out-Null; $clockOk = $true } catch {}
+}
+if (-not $clockOk) { Fail "測試日期 '$clockDate' 不是有效的 YYYY-MM-DD（-ClockDate 或 commit 日期）。" }
+# 指紋在上面已經算過（MOTRIX_TEST_TODAY 不進沿用指紋：它由 commit 日期決定，同一份 tree 恆相同）
+$env:MOTRIX_TEST_TODAY = $clockDate
+$BuildStats["clock_date"] = $clockDate
+Write-Host "  [時鐘] 測試日期固定為 $clockDate（MOTRIX_TEST_TODAY；-ClockDate 可改）" -ForegroundColor DarkGray
+if (-not $NoCollectCheck) {
+    Write-Host "`n[收集] 決定性檢查：pytest --collect-only 連跑兩次（間隔 2 秒）比對測試 id..."
+    Push-Location (Join-Path $projectRoot "backend")
+    $cdExit = Invoke-PyTool @((Join-Path $projectRoot "tools\platform\collect_determinism.py"), "--python", $pyExe)
+    Pop-Location
+    if ($cdExit -ne 0) {
+        Fail "收集不決定或收集失敗（exit $cdExit，見上方差異的測試 id）。帶現在時間／隨機值的參數 id 會讓 xdist 各 worker 收集不同而拒絕開跑；先修掉再建包（要略過加 -NoCollectCheck）。"
+    }
 }
 Acquire-TestExclusive
 $env:MOTRIX_PYTEST_EXCLUSIVE = "1"
