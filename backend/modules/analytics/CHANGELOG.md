@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## 1.0.19 — 2026-09-30（暫用號，列車取號；wip/w2-recon3：與總帳差異（Part B））
+- 新增 `api/ledger_diff.py`：`GET /api/reports/ledger-diff?year=&basis=`（唯讀）：逐月、逐類別 營運報表 vs 總帳已過帳金額、差額與原因分桶（未過帳草稿／稅額／手工傳票／獎金傳票／其餘）；總帳模組不在 ⇒ `glAvailable:false` 說明。營運報表頁新增「與總帳差異」頁籤（頁內巢狀元件，不動 js）。
+
 ## 1.0.18 — 2026-09-30（暫用號，列車取號；wip/w3-t27fix2）
 - 匯出 PDF 姊妹的歸屬區改用常數 `_EXPORT_AREA`（不寫 module 等號字串字面量：test_module_keys_consistency 的後端掃描器會把它當權限 key）；只動寫法，行為與稽核內容不變。
 
