@@ -267,3 +267,66 @@ def test_l8_a_posted_e01_of_a_downgraded_case_is_reversed_by_the_engine(conn):
     conn.commit()
     row = conn.execute("SELECT status, reversal_voucher_id FROM gl_source_events WHERE source_key LIKE 'MQ-L8-00000003%' AND event_code='E01'").fetchone()
     assert row["status"] == "orphan" and row["reversal_voucher_id"] and r["stats"]["orphans"] >= 1
+
+
+# ── voucher.draft(reverses_voucher_id)：獎金更正單的反向草稿 ─────────────────
+
+def _prov():
+    from modules.accounting.api.voucher_providers import _provide_voucher_draft
+    return _provide_voucher_draft
+
+
+def test_reversal_draft_mirrors_a_posted_voucher_and_is_marked(conn):
+    vid, no = _voucher(conn, status="已過帳", date="2189-08-10")
+    r = _prov()(conn, summary="更正", created_by="w2", now="2189-08-11T09:00:00", origin="bonus_correction", reverses_voucher_id=vid, voucher_date="2189-08-11")
+    conn.commit()
+    assert set(r) == {"id", "voucher_no"}
+    v = conn.execute("SELECT kind, reverses_no, origin, status, voucher_date FROM vouchers_all WHERE id=?", (r["id"],)).fetchone()
+    assert (v["kind"], v["reverses_no"], v["origin"], v["status"], v["voucher_date"]) == ("reversal", no, "bonus_correction", "草稿", "2189-08-11")
+    got = [(l["account_code"], l["debit"], l["credit"]) for l in conn.execute("SELECT * FROM voucher_lines WHERE voucher_id=? ORDER BY line_no", (r["id"],))]
+    assert got == [("1113", 0, 10), ("4111", 10, 0)]                              # 原：借1113/貸4111 ⇒ 互換
+
+
+def test_reversal_draft_refusals_return_a_reason_instead_of_raising(conn):
+    draft, _ = _voucher(conn, status="草稿", date="2189-08-12")
+    assert "只有已過帳" in _prov()(conn, summary="x", created_by="w2", now="n", reverses_voucher_id=draft)["blocked"]
+    voided, _ = _voucher(conn, status="已過帳", voided=True, date="2189-08-12")
+    assert "作廢" in _prov()(conn, summary="x", created_by="w2", now="n", reverses_voucher_id=voided)["blocked"]
+    assert "不存在" in _prov()(conn, summary="x", created_by="w2", now="n", reverses_voucher_id=99999999)["blocked"]
+    posted, _ = _voucher(conn, status="已過帳", date="2189-08-13")
+    first = _prov()(conn, summary="x", created_by="w2", now="2189-08-14T00:00:00", reverses_voucher_id=posted, voucher_date="2189-08-14")
+    assert "id" in first
+    assert "已經有沖轉" in _prov()(conn, summary="x", created_by="w2", now="2189-08-14T00:00:00", reverses_voucher_id=posted, voucher_date="2189-08-14")["blocked"]
+
+
+def test_reversal_into_a_closed_period_is_blocked(conn):
+    from modules.accounting.ledger import periods as P
+    P.create_year(conn, 2188, "t")
+    conn.commit()
+    posted, _ = _voucher(conn, status="已過帳", date="2188-03-10")
+    pid = conn.execute("SELECT id FROM gl_periods WHERE year=2188 AND period_no=3").fetchone()[0]
+    P.close_period(conn, pid, "t", True, "")
+    conn.commit()
+    r = _prov()(conn, summary="x", created_by="w2", now="2188-03-20T00:00:00", reverses_voucher_id=posted, voucher_date="2188-03-20")
+    assert "blocked" in r and "重開" in r["blocked"]
+
+
+def test_engine_ignores_a_native_row_after_its_reversal_posts(conn, fake):
+    """W2 的問題(2)：原傳票是 native 登記；沖轉傳票過帳後跑引擎 ⇒ 不產生新草稿、native 列狀態不變。"""
+    vid, no = _voucher(conn, status="已過帳", date="2189-09-05")
+    ev = {"source_type": "bonus_award", "source_key": "BON-NAT-1", "event_code": "E07b", "event_date": "2189-09-05", "doc_no": "BON-NAT-1", "case_no": "",
+          "party": {"key": "", "name": ""}, "tax_code": "", "mode": "native", "native_voucher_id": vid, "meta": {}}
+    fake["events"] = [ev]
+    E.run(conn, "2189-09-01", "2189-09-30", "acc")
+    conn.commit()
+    assert conn.execute("SELECT status FROM gl_source_events WHERE source_key='BON-NAT-1'").fetchone()[0] == "native"
+    r = _prov()(conn, summary="更正", created_by="w2", now="2189-09-20T00:00:00", reverses_voucher_id=vid, voucher_date="2189-09-20")
+    conn.execute("UPDATE vouchers_all SET status='已核准' WHERE id=?", (r["id"],))
+    conn.execute("UPDATE vouchers_all SET status='已過帳' WHERE id=?", (r["id"],))
+    conn.commit()
+    n0 = conn.execute("SELECT COUNT(*) FROM vouchers_all WHERE kind='auto'").fetchone()[0]
+    res = E.run(conn, "2189-09-01", "2189-09-30", "acc")
+    conn.commit()
+    rows = conn.execute("SELECT status, rev FROM gl_source_events WHERE source_key='BON-NAT-1'").fetchall()
+    assert [(x[0], x[1]) for x in rows] == [("native", 1)] and res["stats"]["orphans"] == 0 and res["stats"]["drift"] == 0
+    assert conn.execute("SELECT COUNT(*) FROM vouchers_all WHERE kind='auto'").fetchone()[0] == n0
