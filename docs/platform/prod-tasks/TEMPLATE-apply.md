@@ -21,6 +21,8 @@
 
 ## 步驟 2：套用
 
+- log 檔名一律帶時間戳：`Tee-Object <staging>\apply_trainNN_$(Get-Date -Format yyyyMMdd_HHmmss).log`。第二十五班使用者重跑一次（`duplicate_version` 正常拒絕）把成功那次的 log 覆蓋掉，步驟 3 #3／#5 因此只能部分驗證（2026-09-30）。步驟 3 引用 log 時寫「時間戳最大且 `::RESULT::` 為 success 的那份」。
+
 ## 步驟 3：套用後檢查（逐項、可機械判定）
 
 ## 步驟 4：只回程式的回滾（僅在「apply 顯示 success 但步驟 3 不過」時）
