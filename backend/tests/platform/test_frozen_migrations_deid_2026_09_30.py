@@ -6,7 +6,7 @@
 
 A 類（註解／docstring）  ⇒ 位元組碼（co_code＋排除 docstring 的 co_consts，遞迴）與舊版逐函式相同
 B 類（比較條件）         ⇒ `_m008`、`_m106`：同一份夾具、固定時鐘，舊新跑完的資料表逐列相同；客戶／全新形狀新版不讀資料檔
-C 類（要寫入的值）       ⇒ 開發者形狀需要資料檔（`@pytest.mark.needs_own_payload`）；缺檔／版本不符在**任何寫入之前**丟 `FrozenOwnPayloadError`
+C 類（要寫入的值）       ⇒ 開發者形狀需要資料檔（`@pytest.mark.needs_own_payload`）；缺檔／版本不符在**任何寫入之前**丟 `_FrozenOwnPayloadError`
 """
 import ast
 import contextlib
@@ -30,7 +30,7 @@ import db as NEW  # noqa: E402
 M008 = "_m008_fix_legacy_owner_names"
 M106 = "_m106_company_profile_identity_backfill"
 #: 新版允許多出來的函式（去識別化的輔助）；其餘新增函式一律要有人決定
-NEW_ONLY = {"_frozen_sha256", "_own_payload_path", "_frozen_own_payload", "_own_value", "FrozenOwnPayloadError"}
+NEW_ONLY = {"_frozen_sha256", "_own_payload_path", "_frozen_own_payload", "_own_value", "_FrozenOwnPayloadError"}
 
 
 @pytest.fixture(scope="module")
@@ -249,8 +249,14 @@ def _payload_error(monkeypatch, tmp_path, content):
     monkeypatch.setenv("MOTRIX_OWN_PAYLOAD", str(f))
 
 
+_FIELDS_OK = {"m008": {"correct": "x", "email": "y"}, "m106": {"company_name_en": "z"}}
+
+
 @pytest.mark.parametrize("content", [None, "{ not json", json.dumps({"v": 1, "source_blob": "0" * 40, "m008": {}, "m106": {}}),
-                                     json.dumps({"v": 2}), json.dumps([1])])
+                                     json.dumps({"v": 2}), json.dumps([1]),
+                                     # 欄位齊全、只有版本綁定不對：必須仍然被拒（突變「不驗 source_blob／v」要紅）
+                                     json.dumps(dict(_FIELDS_OK, v=1, source_blob="0" * 40)),
+                                     json.dumps(dict(_FIELDS_OK, v=2, source_blob=OP.PINNED_BLOB))])
 def test_c_class_bad_or_missing_payload_raises_before_any_write(old, vals, monkeypatch, tmp_path, content):
     _payload_error(monkeypatch, tmp_path, content)
     s = _m008_shapes(vals)
@@ -261,7 +267,7 @@ def test_c_class_bad_or_missing_payload_raises_before_any_write(old, vals, monke
             c.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?)", (k, val, "t"))
         c.commit()
         before = _dump(c)
-        with _fixed_clock(NEW), pytest.raises(NEW.FrozenOwnPayloadError):
+        with _fixed_clock(NEW), pytest.raises(NEW._FrozenOwnPayloadError):
             getattr(NEW, name)(c)
         c.rollback()
         assert _dump(c) == before, "%s 在丟例外之前已經寫入" % name
