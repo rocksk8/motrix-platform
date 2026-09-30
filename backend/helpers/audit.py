@@ -59,9 +59,6 @@ _FAIL_STATUS_REASON = {403: "permission_denied", 404: "not_found_or_hidden", 409
                        428: "gate_blocked", 500: "server_error", 401: "login_failed"}
 #: 這些狀態碼的寫入請求才記失敗列（不記 GET、不記 401 過期——登入失敗另走 `_audit_login_failed`）
 _FAIL_STATUSES = frozenset({403, 404, 409, 422, 428, 500})
-#: 路由樣板以這些結尾的 POST 是純預覽（不寫任何東西，驗證不過回 422 很平常）⇒ 不記失敗列
-#: （守門：test_builder_output_preview::test_preview_writes_nothing 要求預覽連稽核列都不寫）
-_FAIL_SKIP_SUFFIXES = ("/preview",)
 _FAIL_WINDOW_SECONDS = 60
 _FAIL_HOURLY_CAP = 200
 _FAIL_LOCK = threading.Lock()
@@ -235,8 +232,6 @@ def _audit_failure(user_id, username: str, display_name: str, method: str, route
     try:
         if method not in ("POST", "PUT", "PATCH", "DELETE") or int(status) not in _FAIL_STATUSES:
             return "skip"
-        if (route or "").rstrip("/").endswith(_FAIL_SKIP_SUFFIXES):
-            return "skip"                              # 純預覽／試算的 POST：沒有寫入，驗證失敗不是「被擋下的寫入」
         reason = reason if reason in _FAIL_REASON_LABELS else _FAIL_STATUS_REASON.get(int(status), "server_error")
         mono = time.monotonic() if now is None else now
         key = (user_id, method, route, int(status))
