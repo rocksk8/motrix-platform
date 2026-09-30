@@ -97,7 +97,7 @@ def pending_annotations(authorization: str = Header(None)):
         out = []
         for r in conn.execute("SELECT id, source_type, source_key, event_code, event_date, status, amount, payload_json FROM gl_source_events "
                               "WHERE status IN ('drafted','posted','drift') AND (payload_json LIKE '%\"tax_estimated\": true%' OR payload_json LIKE '%\"tax_unsplit\": true%' "
-                              "OR payload_json LIKE '%\"tax_annotated\": true%') ORDER BY event_date DESC, id DESC LIMIT %d" % (_MAX_LIST + 1)):
+                              "OR payload_json LIKE '%\"tax_annotated\": true%') ORDER BY event_date DESC, id DESC LIMIT ?", (_MAX_LIST + 1,)):
             try:
                 ev = json.loads(r["payload_json"] or "{}")
             except ValueError:

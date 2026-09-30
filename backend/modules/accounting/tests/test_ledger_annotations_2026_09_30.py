@@ -81,7 +81,7 @@ def test_put_update_delete_with_audit_and_previous_value(client, conn, make_user
     assert client.delete("/api/ledger/annotations/%d" % rows[0]["id"], headers=h).status_code == 404
     c = db.get_db()
     try:
-        acts = [r[0] for r in c.execute("SELECT detail FROM audit_log WHERE action IN ('ledger.annotation.put','ledger.annotation.delete') ORDER BY id")]
+        acts = [r[0] for r in c.execute("SELECT target_label FROM audit_log WHERE action IN ('ledger.annotation.put','ledger.annotation.delete') ORDER BY id")]
     finally:
         c.close()
     assert any("原值：140" in a for a in acts) and any("刪除補登" in a for a in acts)
