@@ -2,21 +2,22 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 793,
-  "unmapped": 9,
+  "tests": 801,
+  "unmapped": 10,
   "kinds": {
-   "api": 418,
-   "e2e": 188,
-   "audit": 112,
-   "unit": 75
+   "api": 422,
+   "e2e": 190,
+   "audit": 113,
+   "unit": 76
   },
-  "routes": 605
+  "routes": 610
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
   "backend/tests/platform/test_deploy_dashboard_health.py",
   "backend/tests/platform/test_deploy_dashboard_jobs.py",
   "backend/tests/platform/test_stepfile_drill_2026_09_30.py",
+  "backend/tests/test_approval_queue_extra_types_2026_09_30.py",
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py",
   "backend/tests/test_e2e_bn3_manual_people_page_2026_09_24.py",
   "backend/tests/test_e2e_bn4_bonus_page_name_2026_09_24.py",
@@ -2898,6 +2899,39 @@
     ],
     "api": [
      "backend/modules/arap/api/cashier.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_cashier_remit_fee_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "file:backend/tests/_requires.py",
+    "mod:arap/api/cashier",
+    "mod:case/__init__",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/quotations",
+    "mod:case/payables",
+    "mod:case/recognition"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/payables.py",
+     "backend/modules/case/recognition.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/quotations.py"
     ],
     "module_dir": [
      "backend/modules/arap/"
@@ -5998,6 +6032,30 @@
    "login_fixture": true,
    "module": "subcontract"
   },
+  "backend/modules/subcontract/tests/test_dispatch_file_delete_review_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/api/vendor_contractors",
+    "mod:subcontract/tests/test_dispatch_file_uploads",
+    "router:approval_queue"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/subcontract/tests/test_dispatch_file_uploads.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/approval_queue.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "module": "subcontract"
+  },
   "backend/modules/subcontract/tests/test_dispatch_file_uploads.py": {
    "kind": "api",
    "units": [
@@ -6553,6 +6611,84 @@
     ]
    },
    "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_remit_fee_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:arap/api/cashier",
+    "mod:case/__init__",
+    "mod:case/recognition",
+    "mod:subcontract/__init__",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/remit",
+    "mod:subcontract/tests/test_contractor_voucher_paid_date_2026_08_31"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/recognition.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/remit.py",
+     "backend/modules/subcontract/tests/test_contractor_voucher_paid_date_2026_08_31.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "unresolved_api": [
+    "/api/cashier/remit-reviews/contractor_voucher"
+   ],
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_remit_fee_review_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/accounting_export",
+    "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
+    "mod:case/__init__",
+    "mod:case/recognition",
+    "mod:subcontract/__init__",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/remit",
+    "mod:subcontract/tests/test_contractor_voucher_paid_date_2026_08_31",
+    "mod:subcontract/tests/test_remit_fee_2026_09_30"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/recognition.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/remit.py",
+     "backend/modules/subcontract/tests/test_contractor_voucher_paid_date_2026_08_31.py",
+     "backend/modules/subcontract/tests/test_remit_fee_2026_09_30.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "unresolved_api": [
+    "/api/cashier/remit-reviews/contractor_voucher"
+   ],
    "module": "subcontract"
   },
   "backend/modules/subcontract/tests/test_report_recognition_basis_2026_09_24.py": {
@@ -9027,6 +9163,25 @@
     ]
    }
   },
+  "backend/tests/platform/test_fail_stream_2026_09_30.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/tests/",
+    "dir:tools/platform/",
+    "file:backend/pytest.ini",
+    "file:tools/platform/fail_stream.py",
+    "file:tools/platform/modtest.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/pytest.ini",
+     "backend/tests/",
+     "tools/platform/",
+     "tools/platform/fail_stream.py",
+     "tools/platform/modtest.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_final_drill_tool.py": {
    "kind": "api",
    "units": [
@@ -11320,6 +11475,11 @@
      "backend/routers/auth.py"
     ]
    }
+  },
+  "backend/tests/test_approval_queue_extra_types_2026_09_30.py": {
+   "kind": "unit",
+   "units": [],
+   "evidence": {}
   },
   "backend/tests/test_approval_queue_quotation_attachments_2026_09_23.py": {
    "kind": "api",
@@ -15343,6 +15503,34 @@
     ]
    }
   },
+  "backend/tests/test_e2e_n1_dispatch_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/_ui_dialogs.py",
+    "mod:subcontract/api/vendor_contractors",
+    "page:pages/case-management.html",
+    "page:pages/quotation-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
+     "backend/tests/_ui_dialogs.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/quotation-form.html"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_e2e_notice_banners_2026_09_25.py": {
    "kind": "e2e",
    "units": [
@@ -15977,6 +16165,33 @@
      "frontend/pages/case-management.html"
     ]
    }
+  },
+  "backend/tests/test_e2e_remit_fee_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "mod:analytics/api/reports",
+    "page:pages/cashier.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "frontend/pages/cashier.html"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_report_recognition_2026_09_24.py": {
    "kind": "e2e",
