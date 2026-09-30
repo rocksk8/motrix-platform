@@ -2574,6 +2574,11 @@ def _payment_item_label(it: dict, i: int) -> str:
 _CASE_FILE_LISTS = (("payment", "items", "invoiceFiles"), (None, "materials", "files"), (None, "materials", "invoiceFiles"))
 
 
+def _gl_doc(msg, doc):
+    """把「此筆」說成「此筆（單號／項目）」：提示要說得出是哪一筆（W1 複核）。下游同 `helpers.gl_status`（L1 訊息本文不動；L1 加 doc 參數留給下一個有 L1 的班）。"""
+    return msg.replace("此筆", "此筆（%s）" % doc, 1) if msg else msg
+
+
 def _case_file_entries(cr) -> dict:
     """caseRecord 目前已有的檔案 metadata：`{path: 那一筆}`。"""
     out = {}
@@ -2782,7 +2787,8 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
                 continue
             _nit = next((x for x in new_items if isinstance(x, dict) and x.get("id") == _oit.get("id")), None)
             if _nit is None or any(_nit.get(k) != _oit.get(k) for k in ("received", "receivedAt", "actualAmount", "feeAmount")):
-                gl_warn = gl_posted_warning(conn, "quotation_receipt", "%s::%s" % (quote_no, _oit.get("id")))
+                gl_warn = _gl_doc(gl_posted_warning(conn, "quotation_receipt", "%s::%s" % (quote_no, _oit.get("id"))),
+                                  "%s／%s" % (quote_no, _oit.get("label") or _oit.get("type") or "款項"))
                 if gl_warn:
                     break
 
@@ -3828,7 +3834,8 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
     _audit(_tok(authorization), 'payment.mark', 'quotation', no, f"{no} {label}（{action_detail}）")
     notify_module_activity("報價單", action_detail, user.get("display_name") or user["username"],
                             f"{no} {label}", "quotations.html")
-    return {"ok": True, "updated_at": now, **({"glWarning": gl_warn} if gl_warn else {})}
+    return {"ok": True, "updated_at": now,
+            **({"glWarning": _gl_doc(gl_warn, "%s／%s" % (no, pits[idx].get("label") or pits[idx].get("type") or "第%d期" % (idx + 1)))} if gl_warn else {})}
 
 
 def _locate_item(arr: list, idx: int, item_id, range_msg: str) -> int:

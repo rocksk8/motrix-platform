@@ -67,6 +67,7 @@ def test_cancelling_a_posted_receipt_shows_a_dismissible_inline_notice(live_serv
     notice = page.locator('[data-testid="gl-notice"]')
     notice.wait_for(state="visible", timeout=10000)
     assert "已入總帳" in notice.inner_text() and "沖轉草稿" in notice.inner_text()
+    assert "MQ-GWE-001" in notice.inner_text(), notice.inner_text()                   # 說得出是哪一筆
     assert _received("MQ-GWE-001") is False                        # 寫入本身照常完成（提示不擋）
     os.makedirs(SHOTS, exist_ok=True)
     png = page.screenshot()                                        # 回傳 bytes（playwright 帶 path 會自己 makedirs，撞 BK19）
@@ -147,7 +148,7 @@ def test_dispatch_invoice_date_change_on_posted_dispatch_shows_toast(live_server
     inp.fill("2031-08-05")
     toast = page.locator('[data-testid="ui-toast"]', has_text="已入總帳")
     toast.wait_for(state="visible", timeout=10000)
-    assert "沖轉草稿" in toast.inner_text()
+    assert "沖轉草稿" in toast.inner_text() and "MQ-GWE-101" in toast.inner_text() and ("派工單 %d" % did) in toast.inner_text()
     import db
     c = db.get_db()
     try:
@@ -205,6 +206,8 @@ def test_unpay_posted_remit_voucher_shows_toast(live_server, new_context, make_u
     answer_confirm(page, ok=True, expect="取消")
     toast = page.locator('[data-testid="ui-toast"]', has_text="已入總帳")
     toast.wait_for(state="visible", timeout=10000)
+    assert vno in toast.inner_text(), toast.inner_text()                               # 說得出是哪一張匯款單
+    page.locator("button:has-text('標記已匯款')").first.wait_for(state="visible", timeout=10000)   # 畫面終態：取消後回到可再標記
     c = db.get_db()
     try:
         assert c.execute("SELECT is_paid FROM contractor_payment_vouchers WHERE voucher_no=?", (vno,)).fetchone()[0] == 0     # 取消照常完成

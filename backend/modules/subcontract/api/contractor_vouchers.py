@@ -999,7 +999,7 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
             voucher_no, row["snapshot_json"], paid_at_value, rm, who))
     return {"ok": True, "is_paid": action == "pay", "paid_log": log,
             **({"remitReview": rm["review"], "diff": rm["diff"], "actual": rm["actual"], "fee": rm["fee"]} if action == "pay" else {}),
-            **({"glWarning": gl_warn} if action != "pay" and gl_warn else {})}
+            **({"glWarning": gl_warn.replace("此筆", "此筆（匯款單 %s）" % voucher_no, 1)} if action != "pay" and gl_warn else {})}
 
 
 # ── 簽核設定（獨立於報價單／出貨單）────────────────────────────────────────────
