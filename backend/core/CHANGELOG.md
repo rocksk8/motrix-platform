@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## （不升版號：介面不變）— 2026-09-30（wip/w2-voucher-office：傳票附件開放 Word／Excel）
+- L1（行為，私有）：`helpers/uploads.py` 新增私有表 `_EXTRA_EXTS_BY_SUBFOLDER`（個別單據類型另外放行的副檔名；目前只有 `voucher_attachments`：docx／xlsx／doc／xls）；`save_document_files` 簽章與其他呼叫端的白名單（jpg／png／pdf）不變。
+
 ## 1.71 — 2026-09-30（暫用，列車取號；wip/w2-report-cash）
 - L1（新增）：`helpers.tax_calc.receipt_amounts(receivable, actual, fee)` ⇒ `(bank, gross, fee)`，經 `helpers` 匯出：已收款項的銀行入帳／收入(含稅)／手續費單一定義（實收＝銀行入帳、收入＝入帳＋手續費、淨額＝入帳不再減手續費）。`summarize_payment_items` 的 `netAmount`／`netCollected` 改用它。
 - L1（新增）：`helpers.recognition_basis.DEFAULT_BASIS`（營運報表預設口徑＝`cash`）；`normalize_basis(None)` 回它（原為 accrual）。
