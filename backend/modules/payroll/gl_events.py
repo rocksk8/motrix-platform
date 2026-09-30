@@ -88,6 +88,19 @@ def gl_events(start, end, *, changed_since=""):
     return {"events": events, "notice": " ".join(notices)}
 
 
+def _bonus_withholding(conn, award_id):
+    """已發放獎金的扣繳快照（發放當下寫的）⇒ [{kind, party_key, gross, amount, income_type}]；沒有快照（舊資料）⇒ []。"""
+    from modules.payroll import bonus_payouts
+    snap = bonus_payouts.paid_snapshot(conn, award_id) or {}
+    out = []
+    for ln in snap.get("lines") or []:
+        for kind, key in (("income_tax", "withholding"), ("nhi", "nhiPremium")):
+            amt = ln.get(key)
+            if isinstance(amt, int) and not isinstance(amt, bool) and amt > 0:
+                out.append({"kind": kind, "party_key": ln.get("username") or "", "gross": int(ln.get("gross") or 0), "amount": amt, "income_type": "bonus"})
+    return out
+
+
 def _bonus_native(start, end, notices):
     """獎金核准／發放已開的傳票 ⇒ mode=native 事件。會計模組不在（讀不到傳票）⇒ 不登記並 notice。"""
     status = registry.single_provider("voucher.status")
@@ -107,15 +120,22 @@ def _bonus_native(start, end, notices):
                 if not vid:
                     continue
                 v = status(conn, vid)
-                if v is None or v.get("voided"):
+                if v is None:
+                    gone += 1
+                    continue
+                if v.get("voided") and kind != "payment":
                     gone += 1
                     continue
                 d = v.get("date") or ""
                 if not d or not (start <= d <= end):
                     continue
+                meta = {"award_id": r["id"]}
+                if kind == "payment":                              # 發放：帶每人代扣稅款／補充保費，供總帳扣繳清單（作廢的傳票也照送，讓引擎移除未繳庫的列）
+                    meta["wh_prefix"] = "%d::" % r["id"]
+                    meta["withholding"] = _bonus_withholding(conn, r["id"])
                 out.append({"source_type": "bonus_" + kind, "source_key": str(r["id"]), "event_code": code, "event_date": d,
                             "doc_no": v["voucher_no"], "case_no": r["quote_no"], "party": {"key": "", "name": ""}, "tax_code": "",
-                            "mode": "native", "native_voucher_id": int(vid), "meta": {"award_id": r["id"]}})
+                            "mode": "native", "native_voucher_id": int(vid), "meta": meta})
         return out
     finally:
         conn.close()

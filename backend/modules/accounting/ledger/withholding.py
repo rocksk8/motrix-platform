@@ -50,6 +50,40 @@ def record(conn, ev):
              int(gross), int(l["amount"]), ev["event_date"][:7], now))
 
 
+def record_native(conn, ev):
+    """來源自己開了傳票的事件（例：獎金發放 E07b，mode=native）帶 `meta.withholding`＝[{kind, party_key, gross, amount}] 與 `meta.wh_prefix` ⇒ 記入清單；
+    同一來源前綴下、這次沒有的未繳庫列移除（人員或金額變了）。"""
+    m = ev.get("meta") or {}
+    prefix = m.get("wh_prefix")
+    if not prefix:
+        return
+    now = _dt.datetime.now().isoformat(timespec="seconds")
+    keep = set()
+    for it in m.get("withholding") or []:
+        if it.get("kind") not in KIND_LABEL or not int(it.get("amount") or 0):
+            continue
+        key = "%s%s" % (prefix, it.get("party_key") or "")
+        keep.add((it["kind"], key))
+        conn.execute(
+            "INSERT INTO gl_withholding_items(kind, source_type, source_key, party_key, income_type, gross, amount, period_ym, created_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(kind, source_type, source_key) DO UPDATE SET"
+            " party_key=excluded.party_key, income_type=excluded.income_type, gross=excluded.gross, amount=excluded.amount, period_ym=excluded.period_ym"
+            " WHERE gl_withholding_items.remitted_at=''",
+            (it["kind"], ev["source_type"], key, it.get("party_key") or "", str(it.get("income_type") or "bonus"), int(it.get("gross") or 0), int(it["amount"]),
+             ev["event_date"][:7], now))
+    for r in conn.execute("SELECT id, kind, source_key FROM gl_withholding_items WHERE source_type=? AND source_key LIKE ? AND remitted_at=''",
+                          (ev["source_type"], prefix + "%")).fetchall():
+        if (r["kind"], r["source_key"]) not in keep:
+            conn.execute("DELETE FROM gl_withholding_items WHERE id=?", (r["id"],))
+
+
+def forget_native(conn, ev):
+    """native 事件指向的傳票已不存在／已作廢 ⇒ 該來源前綴下未繳庫的扣繳列移除。"""
+    prefix = (ev.get("meta") or {}).get("wh_prefix")
+    if prefix:
+        conn.execute("DELETE FROM gl_withholding_items WHERE source_type=? AND source_key LIKE ? AND remitted_at=''", (ev["source_type"], prefix + "%"))
+
+
 def forget(conn, row):
     """事件列（gl_source_events 一列）消失／被取代／草稿被作廢 ⇒ 刪除該來源『未繳庫』的扣繳列。"""
     if row.get("event_code") != _SOURCE_EVENT:

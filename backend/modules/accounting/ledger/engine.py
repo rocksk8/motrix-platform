@@ -240,11 +240,13 @@ def _process_native(conn, ev, stats):
     """來源已自己開了傳票（mode=native）：登記成 status='native' 的事件，不產生、不改動那張傳票；傳票被作廢或來源改指向別張 ⇒ 舊列 superseded、新列 native。"""
     v = _voucher_row(conn, ev["native_voucher_id"])
     if not v or v["voided_at"]:
-        return                                                     # 指向不存在／已作廢的傳票：不登記（來源下次會指向新的）
+        _wh.forget_native(conn, ev)                                # 指向不存在／已作廢的傳票：不登記（來源下次會指向新的）；未繳庫的扣繳列一併移除
+        return
     latest = _latest(conn, ev)
     if latest and latest["status"] == "native" and latest["voucher_id"] == v["id"]:
         conn.execute("UPDATE gl_source_events SET last_seen=?, event_date=?, content_hash=? WHERE id=?",
                      (_now(), ev["event_date"], ev["content_hash"], latest["id"]))
+        _wh.record_native(conn, ev)
         return
     rev = 1
     sup = None
@@ -256,6 +258,7 @@ def _process_native(conn, ev, stats):
     amt = conn.execute("SELECT COALESCE(SUM(debit),0) FROM voucher_lines WHERE voucher_id=?", (v["id"],)).fetchone()[0]
     eid = _insert_event(conn, dict(ev, amount=int(amt or 0)), "native", rev, v["id"], sup, "來源模組自行開立的傳票（%s），引擎不重複產生。" % v["voucher_no"])
     conn.execute("UPDATE gl_source_events SET amount=? WHERE id=?", (int(amt or 0), eid))
+    _wh.record_native(conn, ev)
     stats["native"] = stats.get("native", 0) + 1
 
 
