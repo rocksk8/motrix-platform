@@ -18,7 +18,9 @@ def _seed():
     c = db.get_db()
     try:
         def at(n):
-            return (datetime.now() - timedelta(days=n)).strftime("%Y-%m-%dT10:00:00")
+            # 2026-10-01 教訓：原本固定 10:00，凌晨 00:00～10:00 跑時「今天 10:00」在未來、被查詢窗口（到現在為止）排除 ⇒ 測試只在白天綠。
+            # 改 00:00:01：任何時刻都已經過去。
+            return (datetime.now() - timedelta(days=n)).strftime("%Y-%m-%dT00:00:01")
         rows = [(at(3), "quotation.create", "quotation", "MQ-202609-001", "ok", ""), (at(4), "quotation.approve", "quotation", "MQ-202609-001", "ok", ""),
                 (at(6), "voucher.create", "voucher", "MQ-202609-002", "ok", ""), (at(2), "fail.POST", "voucher", "MQ-202609-002", "fail", "conflict"),
                 (at(250), "quotation.create", "quotation", "MQ-202601-009", "ok", "")]
