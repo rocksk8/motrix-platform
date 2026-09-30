@@ -195,10 +195,10 @@ def test_features_default_off_and_only_superadmin_can_toggle(client, make_user, 
     assert {f["key"] for f in feats} >= {"engine_drafts", "inventory_cost", "tax401", "fixed_assets", "invoice_adjustments",
                                           "custom_records", "backfill", "withholding", "source_annotations"}
     assert not any(f["enabled"] for f in feats), "旗標預設必須全部關閉（未完成的功能不可對使用者露出）"
-    assert client.put("/api/ledger/features/tax401", headers=fin, json={"enabled": True}).status_code == 403     # finance 不能開
+    assert client.put("/api/ledger/features/engine_drafts", headers=fin, json={"enabled": True}).status_code == 403     # finance 不能開
     assert client.put("/api/ledger/features/nope", headers=sup, json={"enabled": True}).status_code == 404
-    assert client.put("/api/ledger/features/tax401", headers=sup, json={"enabled": True}).status_code == 200
+    assert client.put("/api/ledger/features/engine_drafts", headers=sup, json={"enabled": True}).status_code == 200
     got = {f["key"]: f["enabled"] for f in client.get("/api/ledger/features", headers=fin).json()["features"]}
-    assert got["tax401"] is True and got["fixed_assets"] is False
-    assert client.put("/api/ledger/features/tax401", headers=sup, json={"enabled": False}).status_code == 200
-    assert not client.get("/api/ledger/features", headers=fin).json()["features"][2]["enabled"]
+    assert got["engine_drafts"] is True and got["fixed_assets"] is False
+    assert client.put("/api/ledger/features/engine_drafts", headers=sup, json={"enabled": False}).status_code == 200
+    assert not {f["key"]: f["enabled"] for f in client.get("/api/ledger/features", headers=fin).json()["features"]}["engine_drafts"]

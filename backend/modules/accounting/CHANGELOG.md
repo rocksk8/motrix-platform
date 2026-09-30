@@ -1,5 +1,8 @@
 # 會計 更新紀錄
 
+## 1.1.15 — 2026-09-30（暫用號，列車取號；W4 第 26 班 READY 縮減）
+- 總帳功能清單 `READY` 縮為只有分錄草稿（engine_drafts）：營業稅 401 與扣繳清單暫標『開發中』、不能開啟（主持裁示：W3 資安複查第 6 項待修＋401 欄位代號待官方核對）；程式與端點保留（旗標關閉時本來就不可用），修好後把鍵加回 `features.READY`。
+
 ## 1.1.14 — 2026-09-30（wip/host-ledger-chrome：總帳頁面外框）
 - 修正：`ledger-hub／periods／reports／settings／statements.html` 補載 `notif.js`＋`sidebar.js`（第二十五班上線後使用者回報沒有頂列／logo／模組選單）；無權限改顯示平台共用「你沒有這個頁面的權限」。守門 `tests/test_page_shell_scripts_2026_09_30.py`。
 
