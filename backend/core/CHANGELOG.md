@@ -14,6 +14,8 @@
 - L1（新增）：欄位「改得到」（S3 補完）——`helpers.custom_builder_support.can_edit_field／guard_writes`；欄位屬性 `access.editableTo`（形狀同 `visibleTo`；改得到蘊含看得到；看得到但改不到的欄位，送來的值與既有值不同 ⇒ 建立／修改端點回 403 並列出欄位）；`menu.visibleTo` 也擋直接打單據端點（`routers.custom_records._can_use` ⇒ 404，不只藏選單）；`access_problems` 兩個鍵都驗，必填欄位不可設成部分人看得到或改得到
 - L1（新增）：金流串接（S2.5）——`helpers/custom_finance`（`post_states／on_transition／expense_entries／income_items／undated_counts／dup_skipped／case_finance／EVENT_POSTED／EVENT_REVERSED`）；入帳狀態進入／離開時在同一交易寫 `custom_record_finance_outbox`（`custom_module._enter_state` 呼叫）；IP-9 `expense.entries` 多提供者 `custom_module`（entries 多選填鍵 `cashDate／cashAmount`，營運報表現金口徑改用）；營運報表收入併入自訂模組收入（`reports._custom_income`）與「待補登」說明；端點 `GET /api/custom-modules/finance/case/{案件單號}`、`GET /api/custom-modules/finance/summary`；`case_finance` 回傳 `income.skippedTotal`（案件是內建案件時收入行標 `skipped`）；端點 `GET /api/custom-modules/finance/case/{案件單號}` 需查看財務金額權限與案件單據讀取權限；案件財務總覽（M01）與成本精算頁併入自訂模組支出
 
+## （不升版號：介面不變）— 歷史紀錄分層搜尋＋失敗紀錄
+core migration v6（audit_log 加 module／case_no／ref_no／result／reason_code／status_code＋搜尋索引＋分批回填）；L1 新增 helpers.audit 私有函式（_derive_fields／_audit_failure／_audit_login_failed），_audit 簽章不變；auth_middleware 回應後記失敗寫入（403/404/409/422/428/500，不含 GET、不含 401 過期）。
 ## 1.75 — 2026-09-30（列車 25 合併補號；wip/w1-builder3 c98f5bcc 的 L1 新增，原寫在 1.73 段但 1.74 已被行事曆開關取用）
 - L1（新增）：`core.paths.FORM_TEMPLATES_DIR`（自訂模組內建範本資料夾；原本用 `__file__` 算，違反 core.paths 守門）
 

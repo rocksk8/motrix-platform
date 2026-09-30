@@ -28,6 +28,27 @@
     }
     .filter-bar input { width: 220px; }
     .filter-bar select { min-width: 140px; }
+    .filter-bar2 input[type=date] { width: 150px; }
+    .filter-bar2 input { width: 150px; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .seg button { padding: 6px 12px; border: 0; background: #fff; font-size: 13px; cursor: pointer; font-family: inherit; }
+    .seg button.on { background: var(--primary, #2563eb); color: #fff; }
+    .seg button.on.fail { background: #dc2626; }
+    .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; font-size: 12px; color: var(--text-secondary); }
+    .chip { padding: 3px 10px; border-radius: 12px; background: #fee2e2; color: #b91c1c; cursor: pointer; border: 0; font-size: 12px; font-family: inherit; }
+    .audit-layout { display: flex; gap: 20px; align-items: flex-start; }
+    .drill { width: 260px; flex-shrink: 0; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; max-height: 70vh; overflow: auto; }
+    .drill h4 { margin: 0 0 8px; font-size: 13px; }
+    .drill .crumb { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+    .drill .crumb a { cursor: pointer; text-decoration: underline; }
+    .drill-node { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .drill-node:hover { background: var(--border-light); }
+    .drill-node .n { color: var(--text-secondary); white-space: nowrap; }
+    .drill-node .f { color: #dc2626; margin-left: 6px; }
+    .audit-list { flex: 1; min-width: 0; }
+    .tl-item.is-fail { background: #fef2f2; }
+    .badge-fail { display: inline-block; padding: 2px 8px; border-radius: 10px; background: #dc2626; color: #fff; font-size: 12px; margin-right: 6px; }
+    @media (max-width: 900px) { .audit-layout { flex-direction: column; } .drill { width: 100%; max-height: 240px; } }
     .timeline { display: flex; flex-direction: column; gap: 0; }
     .tl-item {
       display: flex; gap: 16px; padding: 14px 0;
@@ -317,19 +338,67 @@
       <span style="font-size:12px;color:var(--text-dim);margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif" x-text="`第 ${page} 頁 / 共 ${Math.max(1,Math.ceil(total/perPage))} 頁`"></span>
     </div>
 
+    <!-- 分層搜尋：模組／案件單號／單據號／人員／日期／結果 -->
+    <div class="filter-bar filter-bar2">
+      <select class="filter" x-model="fModule" @change="applyFilter()">
+        <option value="">所有模組</option>
+        <template x-for="m in moduleOptions" :key="m.key"><option :value="m.key" x-text="m.label + '（' + m.count + '）'"></option></template>
+      </select>
+      <input type="search" placeholder="案件單號 MQ-…" x-model.debounce.400ms="fCase" @input="applyFilter()">
+      <input type="search" placeholder="單據號" x-model.debounce.400ms="fRef" @input="applyFilter()">
+      <input type="search" placeholder="人員（帳號或姓名）" x-model.debounce.400ms="fUser" @input="applyFilter()">
+      <input type="date" x-model="fFrom" @change="applyFilter()" title="起">
+      <input type="date" x-model="fTo" @change="applyFilter()" title="迄">
+      <span class="seg">
+        <button :class="{on: fResult===''}" @click="fResult=''; applyFilter()">全部</button>
+        <button :class="{on: fResult==='ok'}" @click="fResult='ok'; applyFilter()">成功</button>
+        <button :class="{on: fResult==='fail', fail: true}" @click="fResult='fail'; applyFilter()">只看失敗</button>
+      </span>
+      <button class="filter" style="padding:7px 12px" @click="resetFilter()">清除</button>
+    </div>
+
+    <!-- 失敗原因前 10（點一下＝套用篩選） -->
+    <div class="chips" x-show="failSummary.total > 0">
+      <span x-text="'失敗共 ' + failSummary.total + ' 筆；原因：'"></span>
+      <template x-for="r in failSummary.byReason" :key="r.key">
+        <button class="chip" @click="fResult='fail'; applyFilter()" x-text="r.label + ' ' + r.count"></button>
+      </template>
+    </div>
+
+    <div class="audit-layout">
+    <!-- 下鑽：模組 → 案件 → 單據 -->
+    <aside class="drill">
+      <h4>分層瀏覽</h4>
+      <div class="crumb">
+        <a @click="drillTo('module')">全部模組</a>
+        <template x-if="fModule"><span> › <a @click="drillTo('case')" x-text="moduleLabel(fModule)"></a></span></template>
+        <template x-if="fCase"><span> › <a @click="drillTo('ref')" x-text="fCase"></a></span></template>
+      </div>
+      <template x-for="n in tree" :key="n.key + '|' + n.label">
+        <div class="drill-node" @click="pickNode(n)">
+          <span x-text="n.label"></span>
+          <span class="n"><span x-text="n.count"></span><span class="f" x-show="n.failCount" x-text="'✕' + n.failCount"></span></span>
+        </div>
+      </template>
+      <div x-show="tree.length===0" style="font-size:12px;color:var(--text-dim)">沒有更下一層</div>
+    </aside>
+    <div class="audit-list">
+
     <!-- 時間線 -->
     <div class="timeline" x-show="!loading">
       <template x-for="item in items" :key="item.id">
-        <div class="tl-item">
+        <div class="tl-item" :class="{'is-fail': item.result==='fail'}">
           <div class="tl-dot" :style="`background:${dotBg(item.action)}`">
             <span x-text="dotIcon(item.action)"></span>
           </div>
           <div class="tl-body">
             <div class="tl-action">
+              <span class="badge-fail" x-show="item.result==='fail'" x-text="'失敗：' + (item.reason_label || item.status_code)"></span>
               <span class="badge-action" :style="`background:${badgeBg(item.action)};color:${badgeFg(item.action)}`"
-                    x-text="actionLabel(item.action)"></span>
+                    x-text="item.result==='fail' ? failTitle(item) : actionLabel(item.action)"></span>
             </div>
             <div class="tl-label" x-text="item.target_label || item.target_id || '—'"></div>
+            <div class="tl-label" x-show="item.case_no || item.ref_no" x-text="[item.module_label, item.case_no, item.ref_no].filter(Boolean).join(' › ')"></div>
             <div class="tl-meta">
               <span class="tl-user" x-text="item.display_name || item.username || '（系統）'"></span>
               <span class="tl-time" x-text="formatAt(item.at)"></span>
@@ -350,6 +419,8 @@
       <span class="pager-info" x-text="`${(page-1)*perPage+1}–${Math.min(page*perPage,total)} / ${total}`"></span>
       <button @click="nextPage()" :disabled="page*perPage>=total">下一頁 ›</button>
     </div>
+    </div><!-- /audit-list -->
+    </div><!-- /audit-layout -->
   </main>
 
   <script src="../static/notif.js"></script>
@@ -365,6 +436,8 @@
       loading: false,
       q: '',
       filterAction: '',
+      fModule: '', fCase: '', fRef: '', fUser: '', fFrom: '', fTo: '', fResult: '',
+      moduleOptions: [], tree: [], failSummary: { total: 0, byReason: [] },
 
       // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，
       //    而 body 上那個明著呼叫初始化的屬性會再叫一次 ⇒ **跑兩遍**。
@@ -378,7 +451,64 @@
         const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
         if (!s.token) { location.href = 'login.html'; return }
         this.session = s
-        await this.load()
+        await Promise.all([this.load(), this.loadTree(), this.loadFailSummary()])
+        this.moduleOptions = (await this.fetchTree('module', { all: true })) || []
+      },
+
+      _authGet(url) {
+        return fetch(url, { headers: { Authorization: 'Bearer ' + this.session.token } })
+      },
+      _filterParams() {
+        const p = new URLSearchParams()
+        if (this.filterAction) p.set('action', this.filterAction)
+        if (this.fModule) p.set('module', this.fModule)
+        if (this.fCase.trim()) p.set('case_no', this.fCase.trim())
+        if (this.fRef.trim()) p.set('ref_no', this.fRef.trim())
+        if (this.fUser.trim()) p.set('user', this.fUser.trim())
+        if (this.fFrom) p.set('date_from', this.fFrom)
+        if (this.fTo) p.set('date_to', this.fTo)
+        if (this.fResult) p.set('result', this.fResult)
+        return p
+      },
+      moduleLabel(k) { const m = this.moduleOptions.find(x => x.key === k); return m ? m.label : k },
+      failTitle(it) { return (it.module_label || '操作') + ' 寫入被擋下' + (it.target_label ? '（' + it.target_label + '）' : '') },
+      applyFilter() { this.page = 1; this.load(); this.loadTree(); this.loadFailSummary() },
+      resetFilter() {
+        this.fModule = this.fCase = this.fRef = this.fUser = this.fFrom = this.fTo = this.fResult = ''
+        this.filterAction = ''; this.q = ''; this.applyFilter()
+      },
+      treeLevel() { return !this.fModule ? 'module' : (!this.fCase ? 'case' : 'ref') },
+      async fetchTree(level, extra) {
+        const p = level === 'module' && extra && extra.all ? new URLSearchParams() : this._filterParams()
+        p.set('level', level)
+        try {
+          const r = await this._authGet('/api/audit-log/tree?' + p)
+          if (r.ok) return (await r.json()).items
+        } catch (e) {}
+        return null
+      },
+      async loadTree() { this.tree = (await this.fetchTree(this.treeLevel(), {})) || [] },
+      async loadFailSummary() {
+        const p = new URLSearchParams()
+        if (this.fFrom) p.set('date_from', this.fFrom)
+        if (this.fTo) p.set('date_to', this.fTo)
+        try {
+          const r = await this._authGet('/api/audit-log/failures/summary?' + p)
+          if (r.ok) this.failSummary = await r.json()
+        } catch (e) {}
+      },
+      pickNode(n) {
+        const lv = this.treeLevel()
+        if (lv === 'module') this.fModule = n.key
+        else if (lv === 'case') this.fCase = n.key
+        else this.fRef = n.key
+        this.applyFilter()
+      },
+      drillTo(level) {
+        if (level === 'module') { this.fModule = ''; this.fCase = ''; this.fRef = '' }
+        else if (level === 'case') { this.fCase = ''; this.fRef = '' }
+        else { this.fRef = '' }
+        this.applyFilter()
       },
 
       async load() {
@@ -387,7 +517,7 @@
           limit:  this.perPage,
           offset: (this.page - 1) * this.perPage,
         })
-        if (this.filterAction) params.set('action', this.filterAction)
+        for (const [k, v] of this._filterParams()) params.set(k, v)
         if (this.q.trim())    params.set('q', this.q.trim())
         try {
           const r = await fetch(`/api/audit-log?${params}`, {

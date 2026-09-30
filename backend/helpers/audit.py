@@ -11,11 +11,86 @@ __l1_public__ = (
 
 import json
 import logging
+import re
+import threading
+import time
 from datetime import datetime
 
 from db import get_db
 
 logger = logging.getLogger(__name__)
+
+# ── 歷史紀錄的分層搜尋欄位（使用者 2026-09-30：「人員的紀錄或是操作紀錄可以分層依模組、案件等搜尋，或是紀錄中有失敗能快速查詢」）──
+#
+# `audit_log` 新增 `module`／`case_no`／`ref_no`／`result`／`reason_code`／`status_code`（core migration v3）。
+# 寫入端一律用 `_derive_fields()` 補 module／case_no／ref_no——所有既有 `_audit()` 呼叫端不用改。
+# ⚠️ core/migrations.py 的 v3 回填有**凍結的一份**同樣的規則（migration 不准 import 會演進的程式）；
+#    tests/test_audit_search_2026_09_30.py 逐列驗證兩份對同一批資料算出一樣的結果。
+_CASE_NO_RE = re.compile(r"MQ-\d{6}-\d{3}")
+#: 動作第一段 ⇒ 畫面上的模組名（對不到 ⇒ 顯示原字串，不猜）
+_MODULE_LABELS = {
+    "quotation": "報價單", "case": "案件管理", "deal_tag": "成案標記", "case_stage": "案件階段", "case_update": "案件動態",
+    "case_action_item": "案件待辦", "extra_expense": "額外支出", "completion": "完工單", "shipping": "出貨單",
+    "voucher": "傳票", "invoice_voucher": "開票申請", "payment_request": "請款單", "payment": "收款",
+    "contractor_voucher": "承攬商匯款", "contractor": "承攬人員", "vendor": "外包廠商", "payslip": "勞報單", "bonus": "獎金分潤",
+    "dev_case": "業務開發", "dev_log": "業務開發記錄", "customer": "客戶", "supplier": "供應商", "part": "料號",
+    "stock_item": "庫存", "stock_batch": "進貨批次", "work_log": "工作日誌", "daily_task": "每日工作事項",
+    "network_plan": "網路架構規劃", "tender_watch": "標案雷達", "tender_radar": "標案雷達", "tender": "標案雷達",
+    "settings": "系統設定", "user": "使用者", "auth": "登入", "custom": "自訂模組", "custom_record": "自訂模組", "reports": "營運報表",
+    "backup": "系統備份", "lodging": "附近旅宿", "lodging_search": "附近旅宿", "credential": "憑證", "division": "組織",
+    "department": "組織", "approval_delegate": "簽核代理人", "ui_definition": "介面自訂", "account_items": "會計科目",
+    "sales_order": "銷售訂單", "settlement": "案件精算", "device": "設備", "warranty": "保固", "fail": "操作失敗",
+}
+#: target_type 屬於「單據」類 ⇒ `ref_no`＝target_id（其餘 ref_no 留空）
+_DOC_TARGET_TYPES = frozenset({
+    "vouchers", "contractor_dispatch", "shipping_note", "payslip", "completion_note", "invoice_voucher", "payment_request",
+    "bonus_awards", "bonus_case_awards", "contractor_payment_voucher", "custom_record", "stock_batch", "network_plan",
+    "case_action_item", "case_update",
+})
+#: 失敗列的原因碼（固定詞彙：不放自由文字，PII 安全）⇒ 中文標籤
+_FAIL_REASON_LABELS = {
+    "permission_denied": "沒有權限", "not_found_or_hidden": "找不到或看不到", "conflict": "狀態衝突",
+    "validation": "資料不合格", "gate_blocked": "被閘門擋下", "server_error": "系統錯誤", "login_failed": "登入失敗",
+}
+_FAIL_STATUS_REASON = {403: "permission_denied", 404: "not_found_or_hidden", 409: "conflict", 422: "validation",
+                       428: "gate_blocked", 500: "server_error", 401: "login_failed"}
+#: 這些狀態碼的寫入請求才記失敗列（不記 GET、不記 401 過期——登入失敗另走 `_audit_login_failed`）
+_FAIL_STATUSES = frozenset({403, 404, 409, 422, 428, 500})
+_FAIL_WINDOW_SECONDS = 60
+_FAIL_HOURLY_CAP = 200
+_FAIL_LOCK = threading.Lock()
+_FAIL_LAST = {}      # (user, method, route, status) -> (monotonic 秒, audit_log id)
+_FAIL_HOUR = {}      # user -> (小時桶, 筆數)
+#: 路由第一段 ⇒ 模組 key（與動作第一段同一套詞彙；對不到 ⇒ 第一段把 - 換成 _）
+_ROUTE_MODULE_ALIASES = {
+    "quotations": "quotation", "vouchers": "voucher", "completion-notes": "completion", "shipping-notes": "shipping",
+    "payslips": "payslip", "invoice-vouchers": "invoice_voucher", "payment-requests": "payment_request",
+    "contractor-vouchers": "contractor_voucher", "contractor-dispatches": "vendor", "vendor-contractors": "vendor",
+    "contractors": "contractor", "customers": "customer", "suppliers": "supplier", "parts": "part", "bonus": "bonus",
+    "dev-cases": "dev_case", "work-logs": "work_log", "daily-tasks": "daily_task", "network-plans": "network_plan",
+    "users": "user", "auth": "auth", "settings": "settings", "reports": "reports", "approval-queue": "quotation",
+}
+
+
+def _derive_fields(action: str, target_type: str = "", target_id: str = "", target_label: str = "",
+                   detail=None) -> dict:
+    """由一筆稽核的內容算出 `module`／`case_no`／`ref_no`（純函式）。
+    module＝動作第一段（`quotation.approve` ⇒ `quotation`）；case_no＝在 target_id／target_label／detail 的字串值裡找
+    `MQ-YYYYMM-NNN`（第一個）；ref_no＝target_type 屬單據類時的 target_id。對不到一律空字串（畫面顯示「其他」，不猜）。"""
+    module = (action or "").split(".", 1)[0]
+    hay = [str(target_id or ""), str(target_label or "")]
+    if isinstance(detail, dict):
+        hay += [v for v in detail.values() if isinstance(v, str)]
+    elif isinstance(detail, str):
+        hay.append(detail)
+    case_no = ""
+    for h in hay:
+        m = _CASE_NO_RE.search(h)
+        if m:
+            case_no = m.group(0)
+            break
+    ref_no = str(target_id or "") if (target_type or "") in _DOC_TARGET_TYPES else ""
+    return {"module": module, "case_no": case_no, "ref_no": ref_no}
 
 
 def _notify(username: str, type_: str, ref_id: str, ref_label: str, message: str) -> None:
@@ -118,17 +193,128 @@ def _audit(
             ).fetchone()
             if row:
                 user_id, username, display_name = row["id"], row["username"], row["display_name"]
-        conn.execute(
-            "INSERT INTO audit_log "
-            "(at,user_id,username,display_name,action,target_type,target_id,target_label,detail) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
-            (
-                datetime.now().isoformat(), user_id, username, display_name, action,
-                target_type, target_id, target_label,
-                json.dumps(detail or {}, ensure_ascii=False),
-            ),
-        )
+        d = _derive_fields(action, target_type, target_id, target_label, detail)
+        now = datetime.now().isoformat()
+        payload = json.dumps(detail or {}, ensure_ascii=False)
+        try:
+            conn.execute(
+                "INSERT INTO audit_log "
+                "(at,user_id,username,display_name,action,target_type,target_id,target_label,detail,"
+                "module,case_no,ref_no,result,reason_code,status_code) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'ok','',0)",
+                (now, user_id, username, display_name, action, target_type, target_id, target_label, payload,
+                 d["module"], d["case_no"], d["ref_no"]),
+            )
+        except Exception:
+            # 新欄位還沒建（core migration v3 尚未跑完的庫）⇒ 退回舊寫法，稽核不可以因此寫不進去
+            conn.execute(
+                "INSERT INTO audit_log "
+                "(at,user_id,username,display_name,action,target_type,target_id,target_label,detail) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (now, user_id, username, display_name, action, target_type, target_id, target_label, payload),
+            )
         conn.commit()
         conn.close()
     except Exception:
         pass
+
+
+def _audit_failure(user_id, username: str, display_name: str, method: str, route: str, status: int,
+                   reason: str = "", case_no: str = "", ref_no: str = "", now: float = None) -> str:
+    """記一筆「被擋下／失敗的寫入」（`result='fail'`）。回傳 `new`／`repeat`／`capped`／`skip`／`error`。
+
+    **不記請求內容**：只有方法、路由樣板、單號、狀態碼、原因碼（固定詞彙）。
+    **限流**：同 (人, 方法, 路由樣板, 狀態) 60 秒內只寫第一筆，後續只在那一列的 detail 累加 `repeat`；
+    另有每人每小時 200 筆上限（超過只記 log）。鉤子本身絕不丟例外、不擋回應。"""
+    try:
+        if method not in ("POST", "PUT", "PATCH", "DELETE") or int(status) not in _FAIL_STATUSES:
+            return "skip"
+        reason = reason if reason in _FAIL_REASON_LABELS else _FAIL_STATUS_REASON.get(int(status), "server_error")
+        mono = time.monotonic() if now is None else now
+        key = (user_id, method, route, int(status))
+        seg = (route or "").split("/")
+        first = seg[2] if len(seg) > 2 else ""
+        module = _ROUTE_MODULE_ALIASES.get(first, first.replace("-", "_"))
+        with _FAIL_LOCK:
+            last = _FAIL_LAST.get(key)
+            if last and mono - last[0] < _FAIL_WINDOW_SECONDS:
+                row_id = last[1]
+            else:
+                row_id = None
+                bucket = int(mono // 3600)
+                hb, cnt = _FAIL_HOUR.get(user_id, (bucket, 0))
+                if hb != bucket:
+                    hb, cnt = bucket, 0
+                if cnt >= _FAIL_HOURLY_CAP:
+                    _FAIL_HOUR[user_id] = (hb, cnt)
+                    logger.warning("audit failure cap reached for user %s (%d/hour): further failure rows dropped", user_id, _FAIL_HOURLY_CAP)
+                    return "capped"
+                _FAIL_HOUR[user_id] = (hb, cnt + 1)
+        conn = get_db()
+        try:
+            if row_id is not None:
+                r = conn.execute("SELECT detail FROM audit_log WHERE id=?", (row_id,)).fetchone()
+                if r is not None:
+                    try:
+                        det = json.loads(r["detail"] or "{}")
+                    except ValueError:
+                        det = {}
+                    det["repeat"] = int(det.get("repeat", 0)) + 1
+                    det["last_at"] = datetime.now().isoformat(timespec="seconds")
+                    conn.execute("UPDATE audit_log SET detail=? WHERE id=?", (json.dumps(det, ensure_ascii=False), row_id))
+                    conn.commit()
+                    return "repeat"
+            cur = conn.execute(
+                "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,"
+                "module,case_no,ref_no,result,reason_code,status_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'fail',?,?)",
+                (datetime.now().isoformat(), user_id, username or "", display_name or "", "fail." + method, "request", "",
+                 route, json.dumps({"method": method, "route": route, "repeat": 0}, ensure_ascii=False),
+                 module, case_no or "", ref_no or "", reason, int(status)),
+            )
+            conn.commit()
+            with _FAIL_LOCK:
+                _FAIL_LAST[key] = (mono, cur.lastrowid)
+            return "new"
+        finally:
+            conn.close()
+    except Exception:                                         # noqa: BLE001
+        logger.exception("_audit_failure failed")
+        return "error"
+
+
+def _audit_login_failed(username: str, ip: str = "", now: float = None) -> str:
+    """登入失敗（401）：記嘗試的帳號名與來源 IP，**不記密碼**。同帳號＋同 IP 60 秒限流（累加 repeat）。"""
+    try:
+        mono = time.monotonic() if now is None else now
+        key = ("login", (username or "")[:64], ip or "")
+        with _FAIL_LOCK:
+            last = _FAIL_LAST.get(key)
+            row_id = last[1] if last and mono - last[0] < _FAIL_WINDOW_SECONDS else None
+        conn = get_db()
+        try:
+            if row_id is not None:
+                r = conn.execute("SELECT detail FROM audit_log WHERE id=?", (row_id,)).fetchone()
+                if r is not None:
+                    try:
+                        det = json.loads(r["detail"] or "{}")
+                    except ValueError:
+                        det = {}
+                    det["repeat"] = int(det.get("repeat", 0)) + 1
+                    conn.execute("UPDATE audit_log SET detail=? WHERE id=?", (json.dumps(det, ensure_ascii=False), row_id))
+                    conn.commit()
+                    return "repeat"
+            cur = conn.execute(
+                "INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail,"
+                "module,case_no,ref_no,result,reason_code,status_code) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'fail','login_failed',401)",
+                (datetime.now().isoformat(), None, (username or "")[:64], "", "auth.login_failed", "user", (username or "")[:64],
+                 (username or "")[:64], json.dumps({"ip": ip or "", "repeat": 0}, ensure_ascii=False), "auth", "", ""),
+            )
+            conn.commit()
+            with _FAIL_LOCK:
+                _FAIL_LAST[key] = (mono, cur.lastrowid)
+            return "new"
+        finally:
+            conn.close()
+    except Exception:                                         # noqa: BLE001
+        logger.exception("_audit_login_failed failed")
+        return "error"

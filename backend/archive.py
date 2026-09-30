@@ -55,7 +55,7 @@ _BACKUP_RETENTION_DEFAULT = {
     "cloud_weekly_keep_days": 90,
     "cloud_monthly_keep_days": 0,      # 0 = 永久保留
     "local_pre_update_keep":  5,       # pre_update_* 快照保留份數（非天數）
-    "audit_log_keep_days":    730,
+    "audit_log_keep_days":    1825,     # 5 年（U9，2026-09-25 使用者裁示；已明確設定過的安裝沿用自己的值）
 }
 
 
@@ -1660,7 +1660,7 @@ def _mirror_pii_archives() -> int:
     return copied
 
 
-def _prune_audit_log(keep_days: int = 730) -> None:
+def _prune_audit_log(keep_days: int = 1825) -> None:
     """Delete audit_log rows older than keep_days. Daily backup exports first, so nothing is lost."""
     try:
         cutoff = (datetime.now() - timedelta(days=keep_days)).isoformat()

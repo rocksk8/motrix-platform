@@ -341,3 +341,72 @@ def _core_v5_custom_record_snapshots(conn):
 register("core", 3, _core_v3_builder_foundation)
 register("core", 4, _core_v4_custom_record_files)
 register("core", 5, _core_v5_custom_record_snapshots)
+
+
+# ── core v6：歷史紀錄分層搜尋（2026-09-30）───────────────────────────────────
+# 凍結的規則副本（migration 不准 import 會演進的程式）；與 helpers/audit.py::_derive_fields 同一份規則，
+# tests/test_audit_search_2026_09_30.py 逐列驗證兩邊算出同樣的結果。
+_V3_DOC_TARGET_TYPES = frozenset({
+    "vouchers", "contractor_dispatch", "shipping_note", "payslip", "completion_note", "invoice_voucher", "payment_request",
+    "bonus_awards", "bonus_case_awards", "contractor_payment_voucher", "custom_record", "stock_batch", "network_plan",
+    "case_action_item", "case_update",
+})
+_V3_BATCH = 5000
+
+
+def _v3_derive(action, target_type, target_id, target_label, detail):
+    import json as _json
+    import re as _re
+    rx = _re.compile(r"MQ-\d{6}-\d{3}")
+    module = (action or "").split(".", 1)[0]
+    hay = [str(target_id or ""), str(target_label or "")]
+    try:
+        d = _json.loads(detail or "{}")
+    except ValueError:
+        d = detail
+    if isinstance(d, dict):
+        hay += [v for v in d.values() if isinstance(v, str)]
+    elif isinstance(d, str):
+        hay.append(d)
+    case_no = ""
+    for h in hay:
+        m = rx.search(h)
+        if m:
+            case_no = m.group(0)
+            break
+    ref_no = str(target_id or "") if (target_type or "") in _V3_DOC_TARGET_TYPES else ""
+    return module, case_no, ref_no
+
+
+def _core_v6_audit_search(conn):
+    """audit_log 加 module／case_no／ref_no／result／reason_code／status_code＋搜尋索引；舊列分批回填（每批 commit、可重入）。"""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(audit_log)").fetchall()}
+    if not cols:
+        return "audit_log 表不存在"
+    for name, ddl in (("module", "TEXT NOT NULL DEFAULT ''"), ("case_no", "TEXT NOT NULL DEFAULT ''"),
+                      ("ref_no", "TEXT NOT NULL DEFAULT ''"), ("result", "TEXT NOT NULL DEFAULT 'ok'"),
+                      ("reason_code", "TEXT NOT NULL DEFAULT ''"), ("status_code", "INTEGER NOT NULL DEFAULT 0")):
+        if name not in cols:
+            conn.execute("ALTER TABLE audit_log ADD COLUMN %s %s" % (name, ddl))
+    for idx, cols_ in (("idx_audit_module", "module, result, id"), ("idx_audit_case", "case_no, result, id"),
+                       ("idx_audit_ref", "ref_no, result, id"),   # 含 result＝分層樹的 GROUP BY 只掃索引（不回表）
+                       ("idx_audit_result", "result, id"), ("idx_audit_user", "username, id"), ("idx_audit_at", "at"),
+                       ("idx_audit_action", "action, id")):
+        conn.execute("CREATE INDEX IF NOT EXISTS %s ON audit_log(%s)" % (idx, cols_))
+    conn.commit()
+    last = 0
+    while True:
+        rows = conn.execute(
+            "SELECT id, action, target_type, target_id, target_label, detail FROM audit_log "
+            "WHERE id>? AND module='' ORDER BY id LIMIT ?", (last, _V3_BATCH)).fetchall()
+        if not rows:
+            break
+        conn.executemany(
+            "UPDATE audit_log SET module=?, case_no=?, ref_no=? WHERE id=?",
+            [_v3_derive(r[1], r[2], r[3], r[4], r[5]) + (r[0],) for r in rows])
+        conn.commit()
+        last = rows[-1][0]
+    return None
+
+
+register("core", 6, _core_v6_audit_search)

@@ -351,6 +351,8 @@ def mark_all_notifications_read(authorization: str = Header(None)):
 from helpers.module_registry import BADGE_PREFIXES as _MODULE_ACTION_PREFIXES  # noqa: E402
 from helpers.module_registry import refuse_unknown_new_keys  # noqa: E402
 from helpers.module_registry import BADGE_EXCLUDE as _MODULE_EXCLUDE_ACTIONS  # noqa: E402
+from helpers.audit import _MODULE_LABELS as _AUDIT_MODULE_LABELS  # noqa: E402
+from helpers.audit import _FAIL_REASON_LABELS as _AUDIT_FAIL_LABELS  # noqa: E402
 
 
 @router.post("/api/audit-log/module-counts")
@@ -387,37 +389,146 @@ def audit_module_counts(body: dict = Body(...), authorization: str = Header(None
     return result
 
 
+def _audit_filters(module, case_no, ref_no, user_q, action, date_from, date_to, result, q):
+    """歷史紀錄的共用篩選（列表、樹、失敗摘要同一套）。除 q（相容舊版的關鍵字）外都走索引：精確／前綴，不用 %x%。"""
+    where, params = [], []
+    if module:
+        where.append("module=?");        params.append("" if module == "other" else module)
+    if case_no:
+        where.append("case_no=?");       params.append(case_no.strip())
+    if ref_no:
+        where.append("ref_no=?");        params.append(ref_no.strip())
+    if user_q:
+        u = user_q.strip()
+        where.append("(username=? OR display_name=? OR username LIKE ? OR display_name LIKE ?)")
+        params.extend([u, u, u + "%", u + "%"])
+    if action:
+        where.append("action=?");        params.append(action)
+    if date_from:
+        where.append("at>=?");           params.append(date_from)
+    if date_to:
+        where.append("at<?");            params.append(date_to + "T99" if len(date_to) == 10 else date_to)
+    if result in ("ok", "fail"):
+        where.append("result=?");        params.append(result)
+    if q:
+        like = f'%{q}%'
+        where.append("(target_label LIKE ? OR username LIKE ? OR display_name LIKE ? OR target_id LIKE ?)")
+        params.extend([like, like, like, like])
+    return where, params
+
+
+def _audit_view_guard(authorization):
+    # 2026-09-14 使用者裁示：這頁原本沒有對應的模組 key，只能靠角色寫死（`admin` 以上）。
+    # 建了 key（`audit_log`）後跟其他模組一樣可逐帳號勾選；列表、樹、失敗摘要同一個權限。
+    user = _require_user(authorization)
+    require_any_module(user, ["audit_log"], "歷史紀錄")
+    return user
+
+
 @router.get("/api/audit-log")
 def list_audit_log(
     limit:  int = 100,
     offset: int = 0,
     action: str = None,
     q:      str = None,
+    module: str = None,
+    case_no: str = None,
+    ref_no: str = None,
+    user:   str = None,
+    date_from: str = None,
+    date_to: str = None,
+    result: str = None,
+    before_id: int = None,
     authorization: str = Header(None),
 ):
-    # 2026-09-14 使用者裁示：這頁原本沒有對應的模組 key，只能靠角色寫死
-    # （`admin` 以上）。既然全站已經改成「未開啟的模組直接不顯示」，就替它
-    # 建一個 key（`audit_log`）——「沒有對應模組 key 也建立就沒有這個問題」。
-    # 好處是它從此跟其他模組一樣可以逐帳號勾選，不用再為了「誰能看稽核紀錄」
-    # 去改程式碼裡的角色判斷式。
-    user = _require_user(authorization)
-    require_any_module(user, ["audit_log"], "歷史紀錄")
+    """使用者 2026-09-30：「人員的紀錄或是操作紀錄可以分層依模組、案件等搜尋，或是紀錄中有失敗能快速查詢」。
+    分頁：`before_id`（keyset，走索引，深頁不掃描）；舊的 `offset` 仍可用。`limit` 上限 200。"""
+    _audit_view_guard(authorization)
+    limit = max(1, min(int(limit), 200))
     conn = get_db()
-    where, params = [], []
-    if action:
-        where.append("action=?");   params.append(action)
-    if q:
-        like = f'%{q}%'
-        where.append("(target_label LIKE ? OR username LIKE ? OR display_name LIKE ? OR target_id LIKE ?)")
-        params.extend([like, like, like, like])
-    cond = ("WHERE " + " AND ".join(where)) if where else ""
-    total = conn.execute(f"SELECT COUNT(*) FROM audit_log {cond}", params).fetchone()[0]
-    rows  = conn.execute(
-        f"SELECT * FROM audit_log {cond} ORDER BY id DESC LIMIT ? OFFSET ?",
-        params + [limit, offset]
-    ).fetchall()
-    conn.close()
-    return {"total": total, "items": [dict(r) for r in rows]}
+    try:
+        where, params = _audit_filters(module, case_no, ref_no, user, action, date_from, date_to, result, q)
+        cond = ("WHERE " + " AND ".join(where)) if where else ""
+        total = conn.execute(f"SELECT COUNT(*) FROM audit_log {cond}", params).fetchone()[0]
+        w2, p2 = list(where), list(params)
+        if before_id:
+            w2.append("id<?");           p2.append(int(before_id))
+        cond2 = ("WHERE " + " AND ".join(w2)) if w2 else ""
+        rows = conn.execute(
+            f"SELECT * FROM audit_log {cond2} ORDER BY id DESC LIMIT ? OFFSET ?",
+            p2 + [limit, 0 if before_id else max(0, int(offset))]
+        ).fetchall()
+    finally:
+        conn.close()
+    items = [dict(r) for r in rows]
+    for it in items:
+        it["module_label"] = _AUDIT_MODULE_LABELS.get(it.get("module") or "", it.get("module") or "其他")
+        it["reason_label"] = _AUDIT_FAIL_LABELS.get(it.get("reason_code") or "", "")
+    return {"total": total, "items": items, "next_before_id": items[-1]["id"] if len(items) == limit else None}
+
+
+@router.get("/api/audit-log/tree")
+def audit_log_tree(
+    level: str = "module",
+    module: str = None,
+    case_no: str = None,
+    ref_no: str = None,
+    user:   str = None,
+    action: str = None,
+    date_from: str = None,
+    date_to: str = None,
+    result: str = None,
+    authorization: str = Header(None),
+):
+    """分層下鑽：module（模組）→ case（案件，需 module）→ ref（單據，需 module／case_no）。每層回
+    `[{key, label, count, failCount, lastAt}]`；事件層用 `GET /api/audit-log` 帶同一組篩選。"""
+    _audit_view_guard(authorization)
+    col = {"module": "module", "case": "case_no", "ref": "ref_no"}.get(level)
+    if col is None:
+        raise HTTPException(400, "level 只能是 module／case／ref")
+    conn = get_db()
+    try:
+        where, params = _audit_filters(module, case_no, ref_no, user, action, date_from, date_to, result, None)
+        cond = ("WHERE " + " AND ".join(where)) if where else ""
+        rows = conn.execute(
+            f"SELECT {col} AS k, COUNT(*) AS n, SUM(result='fail') AS f, MAX(id) AS last_id "
+            f"FROM audit_log {cond} GROUP BY {col} ORDER BY MAX(id) DESC LIMIT 500", params).fetchall()
+        last_at = {r["last_id"]: (conn.execute("SELECT at FROM audit_log WHERE id=?", (r["last_id"],)).fetchone() or [None])[0]
+                   for r in rows}
+    finally:
+        conn.close()
+    out = []
+    for r in rows:
+        k = r["k"] or ""
+        label = (_AUDIT_MODULE_LABELS.get(k, k) if level == "module" else k) or "其他"
+        out.append({"key": k or ("other" if level == "module" else ""), "label": label, "count": r["n"],
+                    "failCount": r["f"] or 0, "lastAt": last_at.get(r["last_id"])})
+    return {"level": level, "items": out}
+
+
+@router.get("/api/audit-log/failures/summary")
+def audit_log_failure_summary(date_from: str = None, date_to: str = None, authorization: str = Header(None)):
+    """失敗紀錄摘要：總數＋原因碼／模組／人員前 10。"""
+    _audit_view_guard(authorization)
+    conn = get_db()
+    try:
+        where, params = _audit_filters(None, None, None, None, None, date_from, date_to, "fail", None)
+        cond = "WHERE " + " AND ".join(where)
+
+        def top(col, n=10):
+            return conn.execute(
+                f"SELECT {col} AS k, COUNT(*) AS n FROM audit_log {cond} GROUP BY {col} ORDER BY n DESC LIMIT {n}",
+                params).fetchall()
+        total = conn.execute(f"SELECT COUNT(*) FROM audit_log {cond}", params).fetchone()[0]
+        reasons, mods, users = top("reason_code"), top("module"), top("username")
+    finally:
+        conn.close()
+    return {
+        "total": total,
+        "byReason": [{"key": r["k"], "label": _AUDIT_FAIL_LABELS.get(r["k"], r["k"] or "其他"), "count": r["n"]} for r in reasons],
+        "byModule": [{"key": r["k"] or "other", "label": _AUDIT_MODULE_LABELS.get(r["k"], r["k"]) or "其他", "count": r["n"]} for r in mods],
+        "byUser": [{"key": r["k"], "label": r["k"] or "（未登入）", "count": r["n"]} for r in users],
+    }
 
 
 # ── Work Logs ─────────────────────────────────────────────────────────────────

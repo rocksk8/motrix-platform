@@ -350,6 +350,28 @@ async def no_cache_static(request: Request, call_next):
 # 2026-09-15：「哪些不記」「一次點擊打出的一串請求怎麼收斂」都搬到 `trail.py`
 # ——讀取端（routers/system.py 的軌跡端點）要用同一份清單把舊資料也一起藏起來，
 # 兩邊各存一份遲早不同步，而不同步的那一刻讀取端就會露出這裡決定不要的東西。
+def _record_failure_audit(request, row, status: int) -> None:
+    """被擋下／失敗的**寫入**請求記一筆歷史紀錄（result=fail，使用者 2026-09-30「紀錄中有失敗能快速查詢」）。
+    只記 POST／PUT／PATCH／DELETE 的 403／404／409／422／428／500；不記 GET、不記 401 過期、不記 `/api/audit-log*` 自己；
+    不記請求內容（只有路由樣板、單號、狀態碼、原因碼）；限流與吞例外在 `helpers.audit._audit_failure`。"""
+    try:
+        if status not in (403, 404, 409, 422, 428, 500) or request.method == "GET":
+            return
+        if request.url.path.startswith("/api/audit-log"):
+            return
+        route = request.scope.get("route")
+        template = getattr(route, "path", "") or request.url.path.split("?")[0]
+        pp = request.scope.get("path_params") or {}
+        from helpers.audit import _CASE_NO_RE, _audit_failure
+        case_no = next((m.group(0) for v in pp.values() for m in [_CASE_NO_RE.search(str(v))] if m), "")
+        ref_no = next((str(v) for v in pp.values() if str(v) != case_no and len(str(v)) <= 40 and not str(v).isdigit()), "")
+        _audit_failure(row["id"], row["username"], row["display_name"] or "",
+                       request.method, template, status,
+                       reason=getattr(request.state, "audit_reason", ""), case_no=case_no, ref_no=ref_no)
+    except Exception:                                         # noqa: BLE001 — 鉤子絕不擋回應
+        pass
+
+
 def _record_request_trail(user_id: int, now_dt, method: str, path: str,
                           referer: str, status: int) -> None:
     """把一次請求記進操作軌跡。失敗一律吞掉——這是觀測資料，不該擋下正常請求。"""
@@ -519,7 +541,7 @@ async def auth_middleware(request: Request, call_next):
     conn    = get_db()
     try:
         row = conn.execute(
-            "SELECT u.id, u.role, COALESCE(u.must_change_password, 0) AS must_change_password, "
+            "SELECT u.id, u.role, u.username, u.display_name, COALESCE(u.must_change_password, 0) AS must_change_password, "
             "s.last_active "
             "FROM sessions s JOIN users u ON s.user_id=u.id "
             "WHERE s.token=? AND u.active=1 "
@@ -595,6 +617,7 @@ async def auth_middleware(request: Request, call_next):
     # （403/404）跟成功的一樣重要，甚至更重要。
     _record_request_trail(row["id"], now_dt, request.method, path,
                           request.headers.get("Referer", ""), response.status_code)
+    _record_failure_audit(request, row, response.status_code)
     if _gate_kind in (_company_setup.GATE_UNDETERMINED, _company_setup.GATE_GRACE):
         response.headers[_company_setup.HEADER] = (
             "status_error" if _gate_kind == _company_setup.GATE_UNDETERMINED else "grace")
