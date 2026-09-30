@@ -106,7 +106,7 @@ def test_in_place_label_and_required_land_in_the_draft(live_server, make_user, n
     page.click('#mb-palette [data-palette-type="text"]')
     page.click('#mb-palette [data-palette-type="number"]')
     page.click('.mb-fc[data-field-index="0"]')
-    page.wait_for_selector('.mb-fc[data-field-index="0"] #mb-f-label')
+    page.wait_for_selector('#mb-props-pane #mb-f-label')          # 第三輪：屬性在右欄屬性面板（id 不變）
     page.fill("#mb-f-label", "設備名稱")
     page.select_option("#mb-f-required", "true")
     page.locator('.mb-fc[data-field-index="1"] [data-quick-required="1"]').check()
@@ -179,12 +179,16 @@ def test_output_and_list_previews_follow_the_canvas_on_the_same_screen(live_serv
     lst = page.frame_locator("#mb-list-host iframe")
     out.locator("body:has-text('設備名稱甲')").wait_for(state="attached", timeout=15000)
     lst.locator("body:has-text('設備名稱甲')").wait_for(state="attached", timeout=15000)
-    assert page.locator("#mb-output-host iframe").is_visible() and page.locator("#mb-list-host iframe").is_visible()
     assert page.evaluate("() => document.activeElement && document.activeElement.id") == "mb-f-label"
     page.fill("#mb-f-label", "設備名稱乙")
     out.locator("body:has-text('設備名稱乙')").wait_for(state="attached", timeout=15000)
     lst.locator("body:has-text('設備名稱乙')").wait_for(state="attached", timeout=15000)
     assert page.locator("#mb-output-host iframe").count() == 1 and page.locator("#mb-list-host iframe").count() == 1   # 不重建
+    # 〔改題 2026-09-30 建構器第三輪：輸出預覽與列表預覽改成右欄同頁頁籤（屬性｜輸出預覽｜列表預覽），不再同時顯示；仍不跳頁、不開彈窗〕
+    page.click("#mb-side-output")
+    assert page.locator("#mb-output-host iframe").is_visible() and not page.locator("#mb-list-host iframe").is_visible()
+    page.click("#mb-side-list")
+    assert page.locator("#mb-list-host iframe").is_visible() and not page.locator("#mb-output-host iframe").is_visible()
     assert not errors, errors
 
 
@@ -218,7 +222,7 @@ def test_formula_readable_swaps_keys_for_labels_and_operators_for_math_signs(new
 
 def _label(page, i, text):
     page.click('.mb-fc[data-field-index="%d"]' % i)
-    page.wait_for_selector('.mb-fc[data-field-index="%d"] #mb-f-label' % i)
+    page.wait_for_selector('#mb-props-pane [data-props-for="%d"] #mb-f-label' % i)
     page.fill("#mb-f-label", text)
 
 
