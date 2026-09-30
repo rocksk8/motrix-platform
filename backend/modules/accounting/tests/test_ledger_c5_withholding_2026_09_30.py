@@ -185,3 +185,61 @@ def test_real_payroll_provider_feeds_the_list(conn):
     assert r["sources"]["payroll"] == "ok"
     got = {i["kind"]: i for i in _items(conn, "LB-WH-REAL")}
     assert got["income_tax"]["amount"] == 1000 and got["nhi"]["amount"] == 211 and got["nhi"]["party_key"] == "C%s" % cid
+
+
+# ── 獎金發放的代扣（native 事件經 payroll 提供者帶進來）────────────────────────────────
+
+def _bonus_award(conn, deductions_lines, date="2179-06-10"):
+    import json
+    from datetime import datetime
+    _N[0] += 1
+    v = registry.single_provider("voucher.draft")(
+        conn, voucher_date=date, summary="獎金發放", created_by="t", now=date + "T00:00:00", origin="bonus_payment",
+        lines=[{"account_code": "2191", "summary": "x", "debit": 80000, "credit": 0}, {"account_code": "1113", "summary": "x", "debit": 0, "credit": 80000}])
+    now = datetime.now().isoformat()
+    aid = conn.execute(
+        "INSERT INTO bonus_case_awards(quote_no, status, net_profit, rate_bp, split_json, pool_amount, created_by, created_at, updated_by, updated_at,"
+        " accrual_voucher_id, payment_voucher_id) VALUES (?,?,?,?,?,?,?,?,?,?,0,?)",
+        ("MQ-WH-%d-%d" % (id(_N), _N[0]), "已發放", "1000", 1000, "{}", 100, "t", now, "t", now, v["id"])).lastrowid
+    conn.execute("INSERT INTO bonus_case_award_edit_log(award_id, changed_by, changed_at, action, changes_json) VALUES (?,?,?,?,?)",
+                 (aid, "t", now, "mark_paid", json.dumps({"deductions": {"lines": deductions_lines}})))
+    conn.commit()
+    return aid, v["id"]
+
+
+def _bonus_items(conn, aid):
+    return {(r["kind"], r["party_key"]): r for r in conn.execute("SELECT * FROM gl_withholding_items WHERE source_type='bonus_payment' AND source_key LIKE ?", ("%d::%%" % aid,))}
+
+
+def test_bonus_payment_withholding_enters_the_list_and_follows_changes(conn):
+    aid, vid = _bonus_award(conn, [{"username": "u1", "gross": 50000, "withholding": 5000, "nhiPremium": 1055},
+                                   {"username": "u2", "gross": 30000, "withholding": 0, "nhiPremium": 0}])
+    r = E.run(conn, "2179-06-01", "2179-06-30", "acc")
+    conn.commit()
+    assert r["stats"]["native"] >= 1
+    got = _bonus_items(conn, aid)
+    assert set(got) == {("income_tax", "u1"), ("nhi", "u1")} and got[("income_tax", "u1")]["amount"] == 5000 and got[("nhi", "u1")]["gross"] == 50000
+    assert got[("nhi", "u1")]["income_type"] == "bonus" and got[("nhi", "u1")]["period_ym"] == "2179-06"
+    E.run(conn, "2179-06-01", "2179-06-30", "acc")
+    conn.commit()
+    assert len(_bonus_items(conn, aid)) == 2                                               # 冪等
+    import json
+    conn.execute("UPDATE bonus_case_award_edit_log SET changes_json=? WHERE award_id=?",
+                 (json.dumps({"deductions": {"lines": [{"username": "u1", "gross": 50000, "withholding": 5000, "nhiPremium": 0}]}}), aid))
+    conn.commit()
+    E.run(conn, "2179-06-01", "2179-06-30", "acc")
+    conn.commit()
+    assert set(_bonus_items(conn, aid)) == {("income_tax", "u1")}                          # 補充保費不再代扣 ⇒ 該列移除
+
+
+def test_voided_bonus_voucher_removes_unremitted_rows_but_keeps_remitted(conn):
+    aid, vid = _bonus_award(conn, [{"username": "u1", "gross": 50000, "withholding": 5000, "nhiPremium": 1055}])
+    E.run(conn, "2179-06-01", "2179-06-30", "acc")
+    conn.commit()
+    tax = _bonus_items(conn, aid)[("income_tax", "u1")]
+    W.mark_remitted(conn, [tax["id"]], "2179-07-08")
+    conn.execute("UPDATE vouchers_all SET voided_at='2179-06-20T00:00:00' WHERE id=?", (vid,))
+    conn.commit()
+    E.run(conn, "2179-06-01", "2179-06-30", "acc")
+    conn.commit()
+    assert set(_bonus_items(conn, aid)) == {("income_tax", "u1")}                          # 未繳庫的補充保費移除；已繳庫的所得稅保留
