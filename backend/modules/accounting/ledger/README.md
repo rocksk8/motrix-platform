@@ -1,5 +1,6 @@
 # ledger/：M06 總帳（W4，P1）
 
+財務串接總覽（各來源的契約、提供者、冪等規則、旗標、守門、新增金流來源檢查表）：`docs/platform/FINANCE-INTEGRATION.md`。
 設計稿：proposal-general-ledger（分冊 01–10）。本資料夾＝**快取摘要**，常重讀的規則寫在這裡，改設計時同步更新。
 
 ## 檔案職責（每檔 <1500 行，各自獨立）
