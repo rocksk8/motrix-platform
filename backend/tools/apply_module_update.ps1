@@ -31,8 +31,11 @@ $ErrorActionPreference = "Stop"
 # 本腳本的版本（apply_module_update.version.json 登記它與內容雜湊；包的 min_apply_module_script 比的是它）。
 $ApplyModuleScriptVersion = "2026-09-29a"
 
+# >>> OWN-ONLY:prod-root
+# 去識別化（sale 包）：下面這段是本公司安裝的寫死路徑，sale 包由 product/sale_prune.json 換成「由腳本位置推得＋守門」；見 docs/platform/PRODROOT-GUARD-DESIGN.md
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $Port = 666
+# <<< OWN-ONLY:prod-root
 $AutostartTaskName = "MOTRIX ERP Server Autostart"
 $BackendDir = Join-Path $ProdRoot "backend"
 $FrontendDir = Join-Path $ProdRoot "frontend"
@@ -554,11 +557,13 @@ Write-Host "  MOTRIX ERP - Apply Module Update"
 Write-Host "======================================"
 
 # ── Step 0：身分守門 ─────────────────────────────────────────────
+# >>> OWN-ONLY:prod-guard
 $scriptRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 if ($scriptRoot -ne $ProdRoot) {
     Fail "偵測到執行路徑為 '$scriptRoot'，不是正式機路徑 '$ProdRoot'。本腳本只允許在正式機執行，中止。" "not_prod_machine"
 }
 Info "身分確認：正式機（$ProdRoot）`n"
+# <<< OWN-ONLY:prod-guard
 
 # ── Step 1：參數與包 ─────────────────────────────────────────────
 if (-not $PackagePath) { Fail "-PackagePath 為必填參數。" "bad_args" }
