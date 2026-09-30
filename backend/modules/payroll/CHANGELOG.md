@@ -1,6 +1,6 @@
 # 薪資獎金 更新紀錄
 
-## 1.2.0 — 2026-09-30（暫用號，列車取號；wip/w2-bonus-correction：獎金更正單）
+## 1.2.1 — 2026-09-30（暫用號，列車取號；wip/w2-bonus-correction：獎金更正單）
 沖轉改用總帳 `voucher.draft(reverses_voucher_id=…)`（連續更正時沖轉前一次的重開傳票；總帳拒絕時沖轉與重開都不開、畫面寫原因）；追回＝「其他應收款」傳票（設定鍵 bonus_corr_clawback_receivable_code，預設 1213），標「追回處理方式待確認」。
 新增獎金更正單（已發放獎金的事後更正）：migration 0002（bonus_corrections／bonus_correction_log）、/api/bonus/corrections、bonus-corrections.html、簽核佇列項目、IP-9 expense.entries（bonus_correction）、IP-8 補發列；核准開沖轉＋重開應付傳票草稿、出納補發。
 
