@@ -159,3 +159,6 @@
 - 快勝（W2 下一班）：test_account_tree_page mkdtemp→tmp_path、demo 庫用到才複製、heartbeat／log 上限＋hardcap 空目錄清理。
 - 已清：%TEMP% 559 個過期測試暫存（含 5 個中斷 modtest 共 9.66 GB）；train-0930 與 W2 四棵已合併 worktree 已移除。
 - 安全待辦（空檔）：上傳白名單只驗副檔名、不驗檔頭魔數（W2 指出，既有行為）。
+
+## 待使用者（不急）：去識別化補充檔
+- 樣式層抓不到客戶簡稱（例：報價單 placeholder 用過的真實簡稱）與廠商代碼；雜湊層只認資料庫完整值 ⇒ 需使用者在隨身碟補充檔提供：kind＝company（客戶／廠商簡稱、代碼）、kind＝secret（真實密碼字串，供掃描比對，不進 repo）。格式見 SALE-PACKAGE-DEID.md。販售包出貨前完成即可。
