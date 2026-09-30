@@ -75,6 +75,9 @@
     .cr-tier .ok { color: var(--success); }
     .cr-tier .cur { color: var(--accent); font-weight: 700; }
     .cr-ref-q { margin-bottom: 4px; }
+    .cr-flist { list-style: none; margin: 4px 0 0; padding: 0; font-size: 13px; }
+    .cr-flist li { padding: 2px 0; }
+    .cr-flist a { margin-left: 8px; font-size: 12px; }
     .cr-ref-list { max-height: 180px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
     .cr-opt { display: flex; gap: 6px; align-items: center; padding: 2px 0; font-size: 13px; }
     .cr-ref-why { font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; line-height: 1.5; }
@@ -257,6 +260,20 @@
                         <option value="false">否</option>
                       </select>
                     </template>
+                    <template x-if="f.type === 'file' || f.type === 'image'">
+                      <!-- 附件：先傳到暫存（伺服器回檔案代號），存單時才綁到單據；值＝檔案物件陣列，送出只送代號 -->
+                      <div class="cr-files" :data-file-field="f.key">
+                        <input type="file" multiple :id="'cr-in-' + f.key" :accept="fileAccept(f)" :disabled="busy || uploading[f.key]"
+                               @change="uploadFiles(f, $event)">
+                        <div class="cr-help" x-show="uploading[f.key]">上傳中…</div>
+                        <ul class="cr-flist">
+                          <template x-for="(m, mi) in (values[f.key] || [])" :key="m.id">
+                            <li :data-file-id="m.id"><span x-text="m.filename"></span> <small x-text="fileSize(m.size)"></small>
+                              <a href="javascript:void(0)" :data-file-remove="m.id" @click="removeFile(f, mi)">移除</a></li>
+                          </template>
+                        </ul>
+                      </div>
+                    </template>
                     <template x-if="f.type === 'ref' && f.multiple">
                       <!-- 複選參照（人員／部門）：可搜尋的核取清單；值＝代號陣列 -->
                       <div class="cr-ref" :data-ref-multi="f.key" :data-ref-state="refState[f.key] || 'loading'">
@@ -344,7 +361,15 @@
                     <template x-for="f in sec.fields" :key="f.key">
                       <div :data-view-field="f.key" :class="{ 'cr-f--wide': f.type === 'table' }">
                         <span x-text="f.label || f.key"></span>
-                        <template x-if="f.type !== 'table'"><b x-text="fmt(f.type === 'ref' && record.refLabels && record.refLabels[f.key] !== undefined ? record.refLabels[f.key] : record.data[f.key]) || '—'"></b></template>
+                        <template x-if="f.type === 'file' || f.type === 'image'">
+                          <div class="cr-files" :data-view-files="f.key">
+                            <template x-for="m in ((record.fileMeta || {})[f.key] || [])" :key="m.id">
+                              <div><a href="javascript:void(0)" :data-file-link="m.id" @click="openFile(m)" x-text="m.filename"></a> <small x-text="fileSize(m.size)"></small></div>
+                            </template>
+                            <b x-show="!((record.fileMeta || {})[f.key] || []).length">—</b>
+                          </div>
+                        </template>
+                        <template x-if="f.type !== 'table' && f.type !== 'file' && f.type !== 'image'"><b x-text="fmt(f.type === 'ref' && record.refLabels && record.refLabels[f.key] !== undefined ? record.refLabels[f.key] : record.data[f.key]) || '—'"></b></template>
                         <template x-if="f.type === 'table'">
                           <div class="cr-tbl"><table>
                             <thead><tr><template x-for="c in (f.columns || [])" :key="c.key"><th x-text="c.label || c.key"></th></template></tr></thead>
@@ -433,7 +458,7 @@
         refOptions: {}, refState: {}, refQuery: {}, refErr: {}, _refSeq: {}, _refTimers: {}, note: '', busy: false, outputHtml: '', me: {}, _initDone: false, _defCache: {},
         //: 預覽模式（BUILDER-UX §3.3）：同一個旗標擋住本頁所有 API 呼叫（讀與寫）
         preview: !!window.MOTRIX_PREVIEW, previewHl: null,
-        KNOWN_TYPES: ['text', 'textarea', 'number', 'date', 'daterange', 'select', 'radio', 'checkboxes', 'multiselect', 'checkbox', 'ref', 'formula', 'table'],
+        KNOWN_TYPES: ['text', 'textarea', 'number', 'date', 'daterange', 'select', 'radio', 'checkboxes', 'multiselect', 'checkbox', 'ref', 'formula', 'table', 'file', 'image'],
         computed: {}, computedTables: {}, _cmpTimer: null, _cmpSeq: 0, _rowSeq: 0,
         retry: null,     // 網路失敗時錯誤列上的按鈕：{label, run, msg}（msg≠目前的 errMsg ⇒ 不顯示）
 
@@ -641,6 +666,54 @@
                             .map(function (p) { return { value: p, label: String(p) } })
           return extra.concat(opts)
         },
+        // ── 附件 ──
+        uploading: {}, _staged: {},
+        fileAccept(f) {
+          var acc = (f.accept || []).map(function (x) { return '.' + String(x).replace(/^\./, '') })
+          if (f.type === 'image') return acc.length ? acc.join(',') : '.jpg,.jpeg,.png'
+          return acc.length ? acc.join(',') : '.jpg,.jpeg,.png,.pdf'
+        },
+        fileSize(n) { n = Number(n) || 0; return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB' },
+        async uploadFiles(f, ev) {
+          var input = ev.target
+          var list = Array.prototype.slice.call(input.files || [])
+          if (!list.length) return
+          this._noApiInPreview()
+          var fd = new FormData()
+          list.forEach(function (x) { fd.append('files', x) })
+          var h = this._hdr(); delete h['Content-Type']
+          this._setMap('uploading', f.key, true)
+          try {
+            var res = await fetch(this.base() + '/files/' + encodeURIComponent(f.key), { method: 'POST', headers: h, body: fd })
+            var data = await res.json().catch(function () { return null })
+            if (!res.ok) { this._setMap('fieldErr', f.key, (data && data.detail) ? String(data.detail) : '上傳失敗（' + res.status + '）'); return }
+            var cur = Array.isArray(this.values[f.key]) ? this.values[f.key].slice() : []
+            var st = Object.assign({}, this._staged)
+            data.forEach(function (m) { cur.push(m); st[m.id] = true })
+            this._staged = st
+            this.values[f.key] = cur
+            this._setMap('fieldErr', f.key, '')
+          } catch (e) {
+            this._setMap('fieldErr', f.key, '網路連線失敗，請重新選檔')
+          } finally {
+            this._setMap('uploading', f.key, false)
+            input.value = ''
+          }
+        },
+        async removeFile(f, i) {
+          var cur = (this.values[f.key] || []).slice()
+          var m = cur.splice(i, 1)[0]
+          this.values[f.key] = cur
+          if (m && this._staged[m.id]) {            // 這次才上傳、還沒綁單 ⇒ 順手刪暫存檔；已綁單的等存檔時由伺服器移除
+            await this._send(this.base() + '/files/' + encodeURIComponent(m.id), { method: 'DELETE', headers: this._hdr() })
+            var st = Object.assign({}, this._staged); delete st[m.id]; this._staged = st
+          }
+        },
+        async openFile(m) {
+          var r = await this.api('GET', '/api/photo-token?path=' + encodeURIComponent(m.path))
+          if (!r.ok) { this.errMsg = '取得檔案連結失敗：' + this.detail(r); return }
+          window.open('/api/uploads/' + m.path + '?pt=' + encodeURIComponent(r.data.token), '_blank')
+        },
         refHint(t) { return t === 'users' ? '輸入帳號' : (t === 'customers' ? '輸入客戶編號' : '輸入單號') },
 
         // ── 新增／編輯 ──
@@ -650,7 +723,7 @@
           ;(def.fields || []).forEach(function (f) {
             if (f.type === 'formula') return
             if (f.type === 'table') { v[f.key] = self.rowsOf(f, null); return }
-            if (f.type === 'checkboxes' || f.type === 'multiselect' || (f.type === 'ref' && f.multiple)) { v[f.key] = []; return }
+            if (f.type === 'checkboxes' || f.type === 'multiselect' || (f.type === 'ref' && f.multiple) || f.type === 'file' || f.type === 'image') { v[f.key] = []; return }
             if (f.type === 'daterange') { v[f.key] = { from: '', to: '' }; return }
             // `default` 是 {"$": token} ⇒ 由伺服器在建立時決定（前端只留空），不當成固定值
             v[f.key] = (f.default !== undefined && f.default !== null && typeof f.default !== 'object') ? f.default : ''
@@ -720,6 +793,7 @@
           ;(this.recDef.fields || []).forEach(function (f) {
             if (data[f.key] === undefined || data[f.key] === null || f.type === 'formula') return
             if (f.type === 'table') v[f.key] = self.rowsOf(f, data[f.key])
+            else if (f.type === 'file' || f.type === 'image') v[f.key] = ((self.record.fileMeta || {})[f.key] || []).slice()
             else if (f.type === 'daterange') v[f.key] = { from: (data[f.key].from || ''), to: (data[f.key].to || '') }
             else if (f.type === 'date' && f.withTime) v[f.key] = String(data[f.key]).replace(' ', 'T')
             else v[f.key] = data[f.key]
@@ -739,6 +813,7 @@
             var v = self.values[f.key]
             if (f.type === 'table') { out[f.key] = self.tablePayload(f, v); return }
             if (f.type === 'daterange') { out[f.key] = (v && (v.from || v.to)) ? { from: v.from, to: v.to } : null; return }
+            if (f.type === 'file' || f.type === 'image') { out[f.key] = (Array.isArray(v) && v.length) ? v.map(function (m) { return m.id }) : null; return }
             if ((f.type === 'checkboxes' || f.type === 'multiselect')) { out[f.key] = (Array.isArray(v) && v.length) ? v : null; return }
             if (f.type === 'date' && f.withTime && typeof v === 'string') v = v.replace('T', ' ')
             if (v === '' || v === undefined) v = null

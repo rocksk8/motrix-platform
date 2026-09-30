@@ -2029,6 +2029,10 @@ def _daily_backup_tables() -> dict:
         "自訂模組單據":     "SELECT * FROM custom_records ORDER BY id",
         "自訂模組單據歷程": "SELECT * FROM custom_record_log ORDER BY id",
         "自訂模組編號":     "SELECT * FROM custom_record_counters ORDER BY module, period",
+        # 2026-09-30 建構器第三輪（core v3／v4）：單據修訂、金流事件 outbox、附件清單（實體檔隨 uploads 鏡像備份）
+        "自訂模組單據修訂": "SELECT * FROM custom_record_revisions ORDER BY id",
+        "自訂模組金流事件": "SELECT * FROM custom_record_finance_outbox ORDER BY id",
+        "自訂模組附件":     "SELECT * FROM custom_record_files ORDER BY uploaded_at, id",
         "協力廠商":         "SELECT * FROM vendor_contractors ORDER BY id",
         "T100匯出確認":     "SELECT * FROM t100_export_confirmations ORDER BY id",
         # ── 業務開發 ──

@@ -6,7 +6,7 @@ window.MotrixMB = (function () {
   var FIELD_KEY_RE = /^[a-z][a-z0-9_]{0,39}$/
       //: 顯示名稱（型別本身一律來自目錄；沒有對照的就顯示原代號）
   var TYPE_LABELS = { text: '單行文字', textarea: '多行文字', number: '數字', date: '日期', daterange: '日期時間區間', select: '下拉單選', radio: '單選',
-                        checkboxes: '複選', multiselect: '下拉複選', checkbox: '勾選（是／否）', formula: '公式（唯讀）', ref: '參照', table: '明細表' }
+                        checkboxes: '複選', multiselect: '下拉複選', checkbox: '勾選（是／否）', formula: '公式（唯讀）', ref: '參照', table: '明細表', file: '附件（檔案）', image: '圖片' }
       //: 積木與參數的顯示名稱（只影響畫面文字；有哪些積木、哪些參數一律來自目錄 outputBlockSpecs／outputBlockItemSpecs）
   var BLOCK_LABELS = { identity_header: '抬頭（公司身分＋標題）', accent_bar: '色條', meta: '資料列', banner: '提示橫幅',
                            approval_sign: '簽核欄', identity_footer: '頁尾（公司身分）', watermark: '浮水印', boxes: '資訊框',
@@ -45,6 +45,8 @@ window.MotrixMB = (function () {
         radio: _SVG('<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/>'),
         checkboxes: _SVG('<rect x="2.5" y="2.5" width="5" height="5" rx="1"/><rect x="2.5" y="9" width="5" height="5" rx="1"/><path d="M10 5h4M10 11.5h4"/>'),
         multiselect: _SVG('<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="m5 7 1.2 1.2L8.5 6M5 10.5h6"/>'),
+        file: _SVG('<path d="M9.5 2.5H5A1.5 1.5 0 0 0 3.5 4v8A1.5 1.5 0 0 0 5 13.5h6A1.5 1.5 0 0 0 12.5 12V5.5z"/><path d="M9.5 2.5v3h3"/>'),
+        image: _SVG('<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><circle cx="6" cy="7" r="1"/><path d="m3 12 3.5-3 2.5 2 2-1.5 2 2.5"/>'),
         table: _SVG('<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M2.5 10h11M7 3v10"/>')
       }
   var TYPE_ICON_GENERIC = _SVG('<rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5.5 8h5"/>')

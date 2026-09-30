@@ -82,6 +82,8 @@ def mask_record(rec, user) -> dict:
         out["view"] = _mask_view(rec["view"], hidden)
     if isinstance(rec.get("refLabels"), dict):
         out["refLabels"] = {k: v for k, v in rec["refLabels"].items() if k not in hidden}
+    if isinstance(rec.get("fileMeta"), dict):
+        out["fileMeta"] = {k: v for k, v in rec["fileMeta"].items() if k not in hidden}
     out["hiddenFields"] = sorted(hidden)
     return out
 

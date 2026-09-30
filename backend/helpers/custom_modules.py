@@ -25,7 +25,7 @@ KEY_RE = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
 STATE_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,29}$")
 PREFIX_RE = re.compile(r"^[A-Z][A-Z0-9]{0,5}$")
 #: 欄位型別目錄：自訂欄位的型別＋公式（唯讀、由公式算出）＋參照（指到其他資料）
-FIELD_TYPES = _cf.MODULE_TYPES + ("formula", "ref", "table")
+FIELD_TYPES = _cf.MODULE_TYPES + ("formula", "ref", "table", "file", "image")
 #: 明細表（`table`）的限制與可用欄型別（W1 建構器第三輪，2026-09-30）
 TABLE_MAX_ROWS, TABLE_MAX_COLS = 200, 12
 TABLE_COL_TYPES = ("text", "number", "date", "select", "checkbox", "formula")
@@ -55,12 +55,14 @@ FIELD_ELEMENTS = [
             {"key": "price", "label": "單價", "type": "number"}, {"key": "amt", "label": "金額", "type": "formula", "formula": "qty * price"}]}},
     {"id": "formula", "type": "formula", "label": "公式（唯讀）", "group": "advanced", "preset": {}},
     {"id": "ref", "type": "ref", "label": "參照", "group": "advanced", "preset": {}},
+    {"id": "file", "type": "file", "label": "附件（檔案）", "group": "advanced", "preset": {}},
+    {"id": "image", "type": "image", "label": "圖片", "group": "advanced", "preset": {}},
     {"id": "user", "type": "ref", "label": "人員（單選）", "group": "org", "preset": {"target": "users"}},
     {"id": "users", "type": "ref", "label": "人員（複選）", "group": "org", "preset": {"target": "users", "multiple": True}},
     {"id": "dept", "type": "ref", "label": "部門（單選）", "group": "org", "preset": {"target": "departments"}},
     {"id": "depts", "type": "ref", "label": "部門（複選）", "group": "org", "preset": {"target": "departments", "multiple": True}},
 ]
-#: 每個型別在屬性面板可設的屬性（面板依它產生；kind：text／int／number／bool／options／columns）
+#: 每個型別在屬性面板可設的屬性（面板依它產生；kind：text／int／number／bool／options／columns／exts）
 FIELD_ATTRS = {
     "text": [("placeholder", "提示語", "text"), ("default", "預設值", "text"), ("maxLength", "最大長度", "int"), ("unique", "不可重複", "bool")],
     "textarea": [("placeholder", "提示語", "text"), ("maxLength", "最大長度", "int")],
@@ -74,6 +76,8 @@ FIELD_ATTRS = {
     "multiselect": [("options", "選項（一行一個）", "options"), ("allowOther", "允許「其他」自己輸入", "bool"),
                     ("minSelect", "至少選幾項", "int"), ("maxSelect", "最多選幾項", "int")],
     "checkbox": [], "formula": [], "ref": [("multiple", "可複選", "bool")],
+    "file": [("accept", "允許的檔案類型（不勾＝全部）", "exts"), ("maxFiles", "最多幾個檔", "int")],
+    "image": [("maxFiles", "最多幾張圖", "int")],
     "table": [("columns", "欄位", "columns"), ("minRows", "最少列數", "int"), ("maxRows", "最多列數", "int"), ("addLabel", "新增列按鈕文字", "text")],
 }
 
@@ -299,6 +303,8 @@ def _validate_fields(fields):
                 out.append(_p(p + ".multiple", "multiple 要是 true／false"))
         elif t == "table":
             out += _validate_table(p, f)
+        elif t in ("file", "image"):
+            out += _validate_file_field(p, f)
         else:
             tok = _default_token(f)
             if tok is not None:
@@ -311,6 +317,31 @@ def _validate_fields(fields):
         _fx.evaluation_order(formulas)
     except _fx.FormulaError as e:
         out.append(_p("fields", str(e)))
+    return out
+
+
+def _validate_file_field(p, f):
+    """附件欄：key／label；`accept` 只能是白名單（jpg／png／pdf）的子集（image 型別只有 jpg／png）；`maxFiles` 1～50。"""
+    from . import custom_files as _cfiles
+    out = []
+    if not _cf.KEY_RE.match(str(f.get("key") or "")):
+        out.append(_p(p + ".key", "key 只能用小寫英文、數字與底線，英文開頭，最長 40 字：%r" % (f.get("key"),)))
+    if not str(f.get("label") or "").strip():
+        out.append(_p(p + ".label", "必須有顯示名稱"))
+    acc = f.get("accept")
+    if acc is not None:
+        base = _cfiles.IMAGE_EXTS if f.get("type") == "image" else _cfiles.ALLOWED_EXTS
+        if not isinstance(acc, list) or any(not isinstance(x, str) for x in acc):
+            out.append(_p(p + ".accept", "accept 要是副檔名清單"))
+        else:
+            bad = [x for x in acc if x.strip().lower().lstrip(".") not in base and x.strip()]
+            if bad:
+                out.append(_p(p + ".accept", "不允許的副檔名：%s（可用：%s）" % ("、".join(bad), "、".join(sorted(set(e for e in base if e != "jpeg"))))))
+    mx = f.get("maxFiles")
+    if mx is not None and (isinstance(mx, bool) or not isinstance(mx, int) or not 1 <= mx <= 50):
+        out.append(_p(p + ".maxFiles", "最多檔數要是 1～50 的整數"))
+    if f.get("default") is not None:
+        out.append(_p(p + ".default", "附件欄不能設預設值"))
     return out
 
 
@@ -669,8 +700,9 @@ def clean_values(conn, body: dict, values) -> tuple:
     values = values if isinstance(values, dict) else {}
     tables = [f for f in _input_fields(body) if f.get("type") == "table"]
     multi_refs = [f for f in _input_fields(body) if f.get("type") == "ref" and f.get("multiple")]
+    file_fields = [f for f in _input_fields(body) if f.get("type") in ("file", "image")]
     plain = [dict(f, type="text") if f.get("type") == "ref" else f for f in _input_fields(body)
-             if f.get("type") != "table" and not (f.get("type") == "ref" and f.get("multiple"))]
+             if f.get("type") not in ("table", "file", "image") and not (f.get("type") == "ref" and f.get("multiple"))]
     plain = [{k: v for k, v in f.items() if not (k == "default" and isinstance(v, dict))} for f in plain]      # token 預設在 create_record 換掉
     out, errors, dropped = _cf.clean(values, {"fields": plain})
     dropped = [k for k in dropped if k not in {t["key"] for t in tables}]
@@ -679,6 +711,12 @@ def clean_values(conn, body: dict, values) -> tuple:
         errors += terr
         if rows:
             out[t["key"]] = rows
+    from . import custom_files as _cfiles
+    for f in file_fields:
+        ids, ferrs = _cfiles.clean_ids(f, values.get(f["key"]))
+        errors += ferrs
+        if ids:
+            out[f["key"]] = ids
     for f in multi_refs:
         picked, rerrs = _clean_multi_ref(conn, f, values.get(f["key"]))
         errors += rerrs
@@ -791,6 +829,8 @@ def _sample_of(f):
         return "2026-09-25T09:00"
     if t == "ref" and f.get("multiple"):
         return ["範例"]
+    if t in ("file", "image"):
+        return []
     return _SAMPLES.get(t, "範例")
 
 
@@ -1027,6 +1067,11 @@ def get_record(conn, module_key, record_no) -> dict:
     # 單據凍結在建立時的定義版本 ⇒ 畫面的標籤、欄位與按鈕要用這一版，不是最新版
     rec["definition"] = d["body"]
     rec["refLabels"] = ref_labels(conn, d["body"], rec["data"])
+    from . import custom_files as _cfiles
+    rec["fileMeta"] = _cfiles.files_of_field(conn, module_key, d["body"], rec["data"])
+    if rec["fileMeta"]:                              # 輸出／視圖只放檔名（不放路徑與連結）
+        names = _cfiles.view_names(d["body"], rec["fileMeta"])
+        rec["view"] = dict(rec["view"], fields=dict(rec["view"]["fields"], **names), **names)
     rec["log"] = [dict(r) for r in conn.execute("SELECT action, from_state, to_state, by_user, note, at FROM custom_record_log "
                                                  "WHERE record_id=? ORDER BY id", (rec["id"],)).fetchall()]
     return rec
@@ -1062,6 +1107,8 @@ def create_record(conn, module_key, values, user) -> dict:
     values = _with_default_tokens(body, values, user)
     vals, errors, dropped = clean_values(conn, body, values)
     errors = errors + unique_errors(conn, module_key, body, vals)
+    from . import custom_files as _cfiles
+    errors = errors + _cfiles.check_files(conn, module_key, body, vals, user["username"])
     if errors:
         raise CustomModuleError("有 %d 個欄位不對" % len(errors), errors)
     now = datetime.now().isoformat(timespec="seconds")
@@ -1072,6 +1119,7 @@ def create_record(conn, module_key, values, user) -> dict:
                            (module_key, no, d["version"], body["workflow"]["initial"], _dump_values(vals),
                             "{}", user["username"], now, user["username"], now))
         _write_index(conn, cur.lastrowid, module_key, vals)
+        _cfiles.bind_files(conn, module_key, body, vals, cur.lastrowid)
         _log(conn, cur.lastrowid, "create", "", body["workflow"]["initial"], user["username"])
         conn.commit()
     rec = get_record(conn, module_key, no)
@@ -1102,14 +1150,18 @@ def update_record(conn, module_key, record_no, values, user) -> dict:
         _require_draft_owner(rec, body, user)
         vals, errors, dropped = clean_values(conn, body, values)
         errors = errors + unique_errors(conn, module_key, body, vals, exclude_id=rec["id"])
+        from . import custom_files as _cfiles
+        errors = errors + _cfiles.check_files(conn, module_key, body, vals, user["username"], rec["id"])
         if errors:
             raise CustomModuleError("有 %d 個欄位不對" % len(errors), errors)
         now = datetime.now().isoformat(timespec="seconds")
         conn.execute("UPDATE custom_records SET data_json=?, updated_by=?, updated_at=? WHERE id=?",
                      (_dump_values(vals), user["username"], now, rec["id"]))
         _write_index(conn, rec["id"], module_key, vals)
+        doomed = _cfiles.bind_files(conn, module_key, body, vals, rec["id"], previous=rec["data"])
         _log(conn, rec["id"], "update", rec["status"], rec["status"], user["username"])
         conn.commit()
+    _cfiles.remove_files(doomed)
     out = get_record(conn, module_key, record_no)
     out["dropped"] = dropped
     return out

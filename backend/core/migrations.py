@@ -264,4 +264,29 @@ def _core_v3_builder_foundation(conn):
 
 register("core", 1, _core_v1_ui_definitions)
 register("core", 2, _core_v2_custom_records)
+def _core_v4_custom_record_files(conn):
+    """自訂模組附件（file／image 欄位，建構器 S2）：先傳後綁單。上傳當下 record_id＝0（暫存，只有上傳者讀得到）；
+    單據存檔時綁上 record_id；從單據拿掉 ⇒ 列與實體檔一併刪。實體檔在 uploads/custom_records/<模組>/…（demo 走 _demo_uploads 前綴）。
+    T1（含檔名；不含檔案內容——實體檔隨 uploads 鏡像備份）。"""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS custom_record_files (
+            id          TEXT    PRIMARY KEY,
+            module_key  TEXT    NOT NULL,
+            field       TEXT    NOT NULL,
+            record_id   INTEGER NOT NULL DEFAULT 0,
+            path        TEXT    NOT NULL UNIQUE,
+            filename    TEXT    NOT NULL DEFAULT '',
+            size        INTEGER NOT NULL DEFAULT 0,
+            mime        TEXT    NOT NULL DEFAULT '',
+            uploaded_by TEXT    NOT NULL DEFAULT '',
+            uploaded_at TEXT    NOT NULL DEFAULT '',
+            bound_at    TEXT    NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_record_files_record ON custom_record_files(record_id);
+        CREATE INDEX IF NOT EXISTS idx_custom_record_files_staged ON custom_record_files(record_id, uploaded_at);
+    """)
+    conn.commit()
+
+
 register("core", 3, _core_v3_builder_foundation)
+register("core", 4, _core_v4_custom_record_files)

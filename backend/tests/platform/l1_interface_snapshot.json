@@ -350,6 +350,25 @@
    "clean": "def(values, definition)",
    "validate_definition": "def(body, key=…, core_fields=…, types=…)"
   },
+  "helper:custom_files": {
+   "ALLOWED_EXTS": "const",
+   "CustomFilesAccess": "class",
+   "CustomFilesAccess.readable": "def(conn, folder, rest, user)",
+   "FOLDER": "const",
+   "IMAGE_EXTS": "const",
+   "PROVIDER": "const",
+   "accepted_exts": "def(field)",
+   "bind_files": "def(conn, module_key, body, vals, rec_id, previous=…)",
+   "check_files": "def(conn, module_key, body, vals, username, rec_id=…)",
+   "clean_ids": "def(f, raw)",
+   "file_meta": "def(conn, module_key, ids)",
+   "files_of_field": "def(conn, module_key, body, data)",
+   "purge_stale_staged": "def(conn, hours=…)",
+   "register_staged": "def(conn, module_key, field, saved, username)",
+   "remove_files": "def(paths)",
+   "remove_staged": "def(conn, module_key, file_id, username)",
+   "view_names": "def(body, meta)"
+  },
   "helper:custom_modules": {
    "APPROVER_SOURCES": "const",
    "CustomModuleError": "class",

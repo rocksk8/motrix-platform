@@ -8,13 +8,18 @@
 import json
 from datetime import date
 
-from fastapi import APIRouter, Body, Header, HTTPException, Query
+from typing import List
+
+from fastapi import APIRouter, Body, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from db import get_db
 from helpers import _require_user, _tok, _audit
 from helpers import custom_modules as CM
 from helpers import custom_builder_support as SUP
+from helpers import custom_files as CFILES
+from helpers import uploads as _uploads
+from core import registry as _registry
 from helpers import formula as FX
 from core import definitions as D
 
@@ -251,6 +256,50 @@ def output_custom_record(key: str, record_no: str, format: str = Query("html"), 
         return Response(pdf_gen.html_to_pdf_bytes(html), media_type="application/pdf",
                         headers={"Content-Disposition": 'attachment; filename="%s.pdf"' % record_no})
     return HTMLResponse(html)
+
+
+# ── 附件（file／image 欄位）：先傳後綁單 ─────────────────────────────────────
+
+# L1 沒有 ModuleSpec ⇒ 匯入時登記讀檔權限提供者（IP-104；同 routers/system 的工作日誌照片）
+_registry.provide(_uploads.PATH_ACCESS, CFILES.PROVIDER, CFILES.CustomFilesAccess)
+
+
+@router.post("/api/custom/{key}/files/{field}")
+async def upload_custom_files(key: str, field: str, files: List[UploadFile] = File(...), authorization: str = Header(None)):
+    """上傳附件到暫存（record_id＝0，只有自己讀得到）；存單時才綁到單據。副檔名＝欄位 accept ∩ uploads 白名單。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        d = _can_use(conn, u, key)
+        f = next((x for x in d["body"].get("fields", []) if isinstance(x, dict) and x.get("key") == field and x.get("type") in ("file", "image")), None)
+        if f is None:
+            raise HTTPException(404, "沒有這個附件欄位")
+        if not SUP.can_see_field(f, u):
+            raise HTTPException(403, "沒有這個欄位的權限")
+        ok = CFILES.accepted_exts(f)
+        for up in files:
+            ext = (up.filename or "").rsplit(".", 1)[-1].lower() if "." in (up.filename or "") else ""
+            if ext not in ok:
+                raise HTTPException(400, "「%s」不接受 %s 檔（可用：%s）" % (f.get("label") or field, ext or "沒有副檔名", "、".join(sorted(set(e for e in ok if e != "jpeg")))))
+        CFILES.purge_stale_staged(conn)
+        saved = await _uploads.save_document_files("custom_records", key, files, u["username"])
+        return CFILES.register_staged(conn, key, field, saved, u["username"])
+    finally:
+        conn.close()
+
+
+@router.delete("/api/custom/{key}/files/{file_id}")
+def delete_staged_custom_file(key: str, file_id: str, authorization: str = Header(None)):
+    """刪自己暫存、還沒綁單的檔（已綁單的要改單據內容才會移除；已送出的單據內容凍結 ⇒ 開修訂版）。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        _can_use(conn, u, key)
+        if not CFILES.remove_staged(conn, key, file_id, u["username"]):
+            raise HTTPException(404, "找不到這個暫存檔（只能刪自己上傳、尚未存進單據的檔）")
+        return {"ok": True}
+    finally:
+        conn.close()
 
 
 # ── 建構器輔助（僅超級管理員）──────────────────────────────────────────────

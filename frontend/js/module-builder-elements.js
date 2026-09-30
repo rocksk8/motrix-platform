@@ -59,6 +59,7 @@
         if (t === 'checkboxes') return 'checks'
         if (t === 'daterange') return 'range'
         if (t === 'table') return 'table'
+        if (t === 'file' || t === 'image') return 'file'
         if (t === 'select' || t === 'multiselect' || t === 'checkbox' || t === 'ref') return 'select'
         return 'input'
       },
@@ -90,6 +91,14 @@
         else if (a.kind === 'int' || a.kind === 'number') v = (raw === '' || raw === null || isNaN(Number(raw))) ? null : (a.kind === 'int' ? Math.trunc(Number(raw)) : Number(raw))
         else v = String(raw || '').trim() === '' ? null : raw
         if (v === null) delete f[a.key]; else f[a.key] = v
+        this.def.fields.splice(i, 1, f)
+      },
+      extChoices(f) { return f.type === 'image' ? ['jpg', 'png'] : ['jpg', 'png', 'pdf'] },
+      toggleExt(i, e, on) {
+        var f = Object.assign({}, this.def.fields[i])
+        var cur = (f.accept || []).filter(function (x) { return x !== e })
+        if (on) cur.push(e)
+        if (cur.length) f.accept = cur; else delete f.accept
         this.def.fields.splice(i, 1, f)
       },
       optionsText(f) { return (f.options || []).join('\n') },

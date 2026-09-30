@@ -284,6 +284,7 @@
                               <template x-if="mockKind(it.f) === 'input'">
                                 <input :type="mockInputType(it.f)" :placeholder="it.f.placeholder || ''" :disabled="formMode === 'edit'" tabindex="-1">
                               </template>
+                              <template x-if="mockKind(it.f) === 'file'"><input type="file" disabled tabindex="-1" :title="'執行頁在這裡上傳' + (it.f.type === 'image' ? '圖片' : '檔案')"></template>
                               <template x-if="mockKind(it.f) === 'textarea'"><textarea :placeholder="it.f.placeholder || ''" :disabled="formMode === 'edit'" tabindex="-1"></textarea></template>
                               <template x-if="mockKind(it.f) === 'select'">
                                 <select :disabled="formMode === 'edit'" tabindex="-1"><option>（未選）</option><template x-for="o in mockOptions(it.f)" :key="o"><option x-text="o"></option></template></select>
@@ -383,7 +384,15 @@
                           <template x-if="a.kind === 'bool'">
                             <label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" style="width:auto" :checked="attrValue(def.fields[sel], a)" @change="setAttr(sel, a, $event.target.checked)"><span x-text="a.label"></span></label>
                           </template>
-                          <template x-if="a.kind !== 'bool'">
+                          <template x-if="a.kind === 'exts'">
+                            <div><label x-text="a.label"></label>
+                              <div class="cr-opts">
+                                <template x-for="e in extChoices(def.fields[sel])" :key="e">
+                                  <label><input type="checkbox" :data-ext="e" style="width:auto" :checked="(def.fields[sel].accept || []).indexOf(e) >= 0" @change="toggleExt(sel, e, $event.target.checked)"><span x-text="e"></span></label>
+                                </template>
+                              </div></div>
+                          </template>
+                          <template x-if="a.kind !== 'bool' && a.kind !== 'exts'">
                             <div><label x-text="a.label"></label>
                               <input :type="a.kind === 'text' ? 'text' : 'number'" :step="a.kind === 'number' ? 'any' : null" :value="attrValue(def.fields[sel], a)" @input="setAttr(sel, a, $event.target.value)"></div>
                           </template>

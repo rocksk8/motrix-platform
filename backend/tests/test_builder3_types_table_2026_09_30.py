@@ -250,7 +250,7 @@ def test_catalog_lists_elements_specs_and_templates(client, make_user):
     assert {e["type"] for e in cat["fieldElements"]} <= types                      # 元件只准用目錄裡的型別
     assert {g["id"] for g in cat["elementGroups"]} >= {e["group"] for e in cat["fieldElements"]}
     assert set(cat["fieldTypeSpecs"]) == types                                     # 每個型別都有屬性規格
-    assert all(a["kind"] in ("text", "int", "number", "bool", "options", "columns")
+    assert all(a["kind"] in ("text", "int", "number", "bool", "options", "columns", "exts")
                for s in cat["fieldTypeSpecs"].values() for a in s["attrs"])
     assert "total" in cat["tableFunctions"] and "round_half_up" in cat["formulaFunctions"]
     assert cat["financeKinds"] == ["income", "expense"]
