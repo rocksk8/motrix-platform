@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """自訂模組單據的送簽修訂紀錄（建構器第三輪 S5，2026-09-30；使用者：單據送簽→退回→修改重送，單號加 -R1、-R2 並保留各版內容，可比對差異）。
 
-[單位] plat:custom-history    [層] L1    [穩定度] 契約（只增）
+[單位] helper:custom_history    [層] L1    [穩定度] 契約（只增）
 [公開介面] diff_revisions, display_no, list_revisions, on_decided, on_submitted
 [不變式]
   - `record_no` 本身不變（外部參照、附件、簽核歷史都綁它）；顯示單號＝`<record_no>-R<n>`，**首次送簽不帶尾碼**，被退回後重送＝-R1、再退回再送＝-R2

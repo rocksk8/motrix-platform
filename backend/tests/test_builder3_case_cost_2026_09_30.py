@@ -103,3 +103,9 @@ def test_settlement_page_adds_custom_expense_to_extra_cost_and_shows_the_skipped
     hint = page.locator('[data-testid="settle-custom-income-skipped"]').inner_text()
     assert "1 筆收入" in hint and "未重複計入" in hint
     assert not errors, errors
+
+
+def test_case_endpoint_unknown_or_invisible_case_is_404_not_403(world):
+    client, h, _u, _p = world
+    r = client.get("/api/custom-modules/finance/case/NO-SUCH-CASE", headers=h)
+    assert r.status_code == 404 and "不存在" in r.text                           # 查無／看不到＝同一個 404（M01-O1），不洩漏案件是否存在

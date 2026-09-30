@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """自訂模組「定義」的送審流程（建構器第三輪 S4，2026-09-30；使用者：定義送審→退回→修改重送，每次 v1→v2…，退回要填原因）。
 
-[單位] plat:custom-def-review    [層] L1    [穩定度] 契約（只增）
+[單位] helper:custom_def_review    [層] L1    [穩定度] 契約（只增）
 [公開介面] MODES, QUEUE_TYPE, REVIEWERS_KEY, ReviewError, SETTING_KEY, decide, detail, open_view, queue_items, restore_to_draft,
     review_state, set_review_settings, submit
 [不變式]
@@ -216,12 +216,13 @@ def queue_items(conn) -> list:
     items = []
     for r in conn.execute("SELECT key, version, note, submitted_by, submitted_at, decision_json FROM ui_definitions "
                           "WHERE kind='custom_module' AND scope='company' AND status='submitted' ORDER BY version DESC").fetchall():
-        dec = _dec(dict(r))
-        raw = _aq.approval_raw_of(json.dumps(dec.get("approval") or {}, ensure_ascii=False), QUEUE_TYPE, "%s:%d" % (r["key"], r["version"]))
+        doc_no = "%s:%d" % (r["key"], r["version"])
+        # 簽核鏈在 decision_json.approval：讀不出來的那一筆跳過並記 ERROR（寫單號不寫內容）——不可以當成「沒有簽核層」列出（c-queue-json）
+        raw = _aq.approval_json_of(r["decision_json"] or "{}", QUEUE_TYPE, doc_no)
         if raw is None:
             continue
         fld = _aq.tier_fields(raw)
-        items.append(_aq.base_item(QUEUE_TYPE, "%s:%d" % (r["key"], r["version"]), fld,
+        items.append(_aq.base_item(QUEUE_TYPE, doc_no, fld,
                                    projectName="自訂模組定義「%s」第 %d 版" % (r["key"], r["version"]),
                                    quoteDate=(r["submitted_at"] or "")[:10], moduleKey=r["key"], definitionVersion=r["version"],
                                    note=r["note"] or ""))
@@ -232,14 +233,23 @@ def detail(conn, doc_id):
     """IP-93 `approval.detail`：id＝「模組key:版號」；內容＝送審資訊與異動處數（完整差異在審核頁）。"""
     key, _, ver = str(doc_id).rpartition(":")
     try:
-        row = D.get(conn, "custom_module", key, "company", int(ver))
-    except (D.DefinitionError, ValueError):
+        # 直接讀列（不經 core.definitions.get：它會驗 key 形狀，佇列項目的 id 是我們自己組的「模組key:版號」）
+        r = conn.execute("SELECT * FROM ui_definitions WHERE kind='custom_module' AND scope='company' AND key=? AND version=? AND status='submitted'",
+                         (key, int(ver))).fetchone()
+        row = dict(r) if r is not None else None
+        if row is not None:
+            row["body"] = json.loads(row.get("body_json") or "{}")
+    except (ValueError, TypeError):
         return None
-    if row is None or row["status"] != "submitted":
+    if row is None:
         return None
     dec = _dec(row)
-    changes = D.diff((D.get(conn, "custom_module", key, "company") or {}).get("body") or {}, row["body"])
-    return {"quoteNo": str(doc_id), "title": "自訂模組定義送審",
+    try:
+        latest = (D.get(conn, "custom_module", key, "company") or {}).get("body") or {}
+    except D.DefinitionError:
+        latest = {}
+    changes = D.diff(latest, row["body"])
+    return {"quoteNo": "", "title": "自訂模組定義送審（%s）" % doc_id,          # 沒有掛案件 ⇒ quoteNo 空（與佇列項目的 linkedQuoteNo 一致）
             "approvalRaw": json.dumps({"tiers": (dec.get("approval") or {}).get("tiers") or [], "requestedBy": row.get("submitted_by") or ""},
                                       ensure_ascii=False),
             "fields": [{"label": "模組", "value": key}, {"label": "版本", "value": "第 %s 版" % ver},
