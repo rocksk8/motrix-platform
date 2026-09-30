@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """自訂模組附件（file／image 欄位，建構器第三輪 S2；core migration v4 `custom_record_files`）。
 
-[單位] plat:custom-files    [層] L1    [穩定度] 契約（只增）
+[單位] helper:custom_files    [層] L1    [穩定度] 契約（只增）
 [公開介面] ALLOWED_EXTS, CustomFilesAccess, FOLDER, IMAGE_EXTS, PROVIDER, accepted_exts, bind_files, check_files, clean_ids, file_meta,
     files_of_field, purge_stale_staged, register_staged, remove_files, remove_staged, view_names
 [不變式]
