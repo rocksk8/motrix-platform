@@ -1,5 +1,5 @@
 {
- "core_version": "1.71",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -978,6 +978,7 @@
    "visible": "def(perm, modules, superadmin)"
   },
   "plat:migrations": {
+   "NEXT": "const",
    "current_version": "def(conn, module)",
    "incomplete": "def(db_path)",
    "register": "def(module, version, fn)",

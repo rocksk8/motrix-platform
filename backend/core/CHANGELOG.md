@@ -2,6 +2,10 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-09-30（wip/version-slots：版號佔位，使用者「撞號太多次了，想辦法解決」）
+- L0（新增）：`core.migrations.NEXT`——`register("core", NEXT, fn)`＝未取號的 core migration（分支用）：排在已編號的之後跑、不記版號、每次 `run_all` 重跑（靠冪等）；非 core 登記 NEXT ⇒ ValueError。列車 `tools/platform/train_number.py assign` 依檔案順序換成連續整數；列車／platform 上有 NEXT ⇒ `test_version_slots` 紅。已編號的行為不變。
+- 流程：分支不再取號——模組／CORE CHANGELOG 寫 `## (next)`、manifest 寫 `"version": "next"`、`core_bump.py --pending`（G1 快照 core_version="next"、CORE_VERSION 不動）；列車 `train_number.py assign` 一次取號；CHANGELOG／version_manifest 的 git 合併驅動（`setup_merge_drivers.py`）讓兩邊的新增都留。PLAYBOOK §G6
+
 ## 1.71 — 2026-09-30（暫用，列車取號；wip/w2-report-cash）
 - L1（新增）：`helpers.tax_calc.receipt_amounts(receivable, actual, fee)` ⇒ `(bank, gross, fee)`，經 `helpers` 匯出：已收款項的銀行入帳／收入(含稅)／手續費單一定義（實收＝銀行入帳、收入＝入帳＋手續費、淨額＝入帳不再減手續費）。`summarize_payment_items` 的 `netAmount`／`netCollected` 改用它。
 - L1（新增）：`helpers.recognition_basis.DEFAULT_BASIS`（營運報表預設口徑＝`cash`）；`normalize_basis(None)` 回它（原為 accrual）。
