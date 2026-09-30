@@ -8,6 +8,7 @@ from tests._requires import requires_module  # noqa: E402
 import io
 import json
 import os
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -15,7 +16,8 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login  # noqa: E402
 
-SHOTS = Path(os.environ.get("MOTRIX_SHOTS_DIR", r"D:\開發測試檔\shots")) / "wip-w3-export-pdf"
+# 預設寫到暫存目錄（BK19：寫入護欄只准 repo／tmp）；要留在共用截圖資料夾時設 MOTRIX_SHOTS_DIR（並過護欄旗標）
+SHOTS = Path(os.environ.get("MOTRIX_SHOTS_DIR") or os.path.join(tempfile.gettempdir(), "aet27-shots")) / "wip-w3-export-pdf"
 
 
 def _shot(page, name):

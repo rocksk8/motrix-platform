@@ -17,6 +17,7 @@
 """
 import json
 import os
+import tempfile
 import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -28,7 +29,8 @@ from tests._e2e_login import inject_login  # noqa: E402
 from tests.test_e2e_map_google_basemap_2026_09_28 import (  # noqa: E402
     BROWSER_KEY, FAKE_CLUSTER, FAKE_GMAPS, MAP_ID, MD, PNG, SERVER_KEY, _keys)
 
-SHOTS = Path(os.environ.get("MOTRIX_SHOTS_DIR", r"D:\開發測試檔\shots")) / "wip-w3-map-legend"
+# 預設寫到暫存目錄（BK19：寫入護欄只准 repo／tmp）；要留在共用截圖資料夾時設 MOTRIX_SHOTS_DIR（並過護欄旗標）
+SHOTS = Path(os.environ.get("MOTRIX_SHOTS_DIR") or os.path.join(tempfile.gettempdir(), "aet27-shots")) / "wip-w3-map-legend"
 
 #: 假 Google 補上 addListener／setZoom 觸發事件（原假貨沒有；真 Google 的 zoom_changed／idle）
 FAKE_GMAPS_EXTRA = r"""
@@ -158,7 +160,7 @@ def test_leaflet_legend_pins_zoom_steps_chips_and_overlap(live_server, make_user
     page = _open(e2e_browser, live_server, u, google=False)
     assert page.evaluate("() => document.getElementById('mp-canvas').getAttribute('data-mp-bm')") == "leaflet"
     _check_legend(page)
-    page.locator("[data-testid=mp-legend]").screenshot(path=str(_mk(SHOTS) / "legend_closeup.png"))
+    _elshot(page, "[data-testid=mp-legend]", "legend_closeup")
     for z in (10, 14, 17):
         _set_zoom(page, z)
         assert _pin_size(page) >= THRESH[z], (z, _pin_size(page))
@@ -220,7 +222,7 @@ def test_legend_wraps_cleanly_on_a_narrow_screen(live_server, make_user, e2e_bro
     page = _open(e2e_browser, live_server, u, google=False, viewport={"width": 390, "height": 800})
     _check_legend(page)
     assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1"), "窄螢幕不可橫向捲動"
-    page.locator("[data-testid=mp-legend]").screenshot(path=str(_mk(SHOTS) / "legend_narrow.png"))
+    _elshot(page, "[data-testid=mp-legend]", "legend_narrow")
 
 
 @pytest.mark.e2e
@@ -235,6 +237,9 @@ def test_reverse_control_old_20px_spec_would_fail_the_size_assertions(live_serve
     assert 0 < _pin_size(page) < THRESH[17]
 
 
-def _mk(p):
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+def _elshot(page, selector, name):
+    try:
+        SHOTS.mkdir(parents=True, exist_ok=True)
+        page.locator(selector).screenshot(path=str(SHOTS / (name + ".png")))
+    except Exception:                                            # noqa: BLE001 — 截圖失敗（含 BK19 護欄）不影響判定
+        pass
