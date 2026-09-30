@@ -712,8 +712,11 @@ MODULES = ROOT / "docs" / "platform" / "modules.json"
 ASSIGNED_KINDS = ("router", "helper", "core", "page", "js", "mod", "plat")  # 皆須剛好歸屬一組
 
 
-def load_groups(path: Path = MODULES) -> tuple[dict[str, list[str]], dict[str, list[str]], set[str]]:
-    """modules.json ⇒ (unit→[群組…], table→[群組…], L2 群組集合)。群組名：L1／M01…／retired:M09。"""
+def load_groups(path: Path = MODULES, units: dict = None) -> tuple[dict[str, list[str]], dict[str, list[str]], set[str]]:
+    """modules.json ⇒ (unit→[群組…], table→[群組…], L2 群組集合)。群組名：L1／M01…／retired:M09。
+
+    慣例發現（GL-BASE-HOOKS A5，2026-10-01）：給了 `units`（掃描結果）時，`backend/modules/<key>/` 底下**沒列在任何群組**的 `mod:` 單位，
+    預設歸屬 key＝資料夾名的那個模組；列了的照列（例外與舊資料不變）。新增模組檔不必再回來改 modules.json 的 units。"""
     m = json.loads(path.read_text(encoding="utf-8"))
     groups = {"L1": m["L1"]}
     groups.update(m["modules"])
@@ -724,6 +727,11 @@ def load_groups(path: Path = MODULES) -> tuple[dict[str, list[str]], dict[str, l
             u2g[u].append(gname)
         for t in g.get("tables", []):
             t2g[t].append(gname)
+    if units:
+        by_key = {g["key"]: gid for gid, g in m["modules"].items() if g.get("key")}
+        for n, u in units.items():
+            if u.get("kind") == "mod" and not u2g.get(n) and u.get("module_key") in by_key:
+                u2g[n].append(by_key[u["module_key"]])
     return u2g, t2g, set(m["modules"])
 
 
@@ -732,7 +740,7 @@ def check_module_folders(U: dict, path: Path = MODULES) -> list[str]:
     ③module.json 的 tables／provides.api_prefixes 與 modules.json 該組一致。"""
     m = json.loads(path.read_text(encoding="utf-8"))
     by_key = {g["key"]: (gid, g) for gid, g in m["modules"].items()}
-    u2g, _, _ = load_groups(path)
+    u2g, _, _ = load_groups(path, U)
     errors = []
     keys = sorted({u["module_key"] for u in U.values() if u["kind"] == "mod"})
     for key in keys:
@@ -827,7 +835,7 @@ def check_route_ownership(U: dict, path: Path = MODULES, backend: Path = None) -
     m = json.loads(path.read_text(encoding="utf-8"))
     groups = {"L1": m["L1"]}
     groups.update(m["modules"])
-    u2g, _, _ = load_groups(path)
+    u2g, _, _ = load_groups(path, U)
     explicit = [(gid, pat) for gid, gr in groups.items() for pat in gr.get("routes", [])]
     installed = _installed_groups(groups, backend)
     prefixes = {gid: set(gr.get("api_prefixes", [])) for gid, gr in groups.items()}
@@ -863,7 +871,7 @@ def check_route_ownership(U: dict, path: Path = MODULES, backend: Path = None) -
 def check_modules(g: dict, path: Path = MODULES) -> tuple[list[str], dict[str, list[str]]]:
     """①歸屬檢查（錯誤）②跨群組邊清單（只列，不失敗）。"""
     U = g["units"]
-    u2g, t2g, l2 = load_groups(path)
+    u2g, t2g, l2 = load_groups(path, U)
     errors: list[str] = []
     for n, u in sorted(U.items()):
         if u["kind"] in ASSIGNED_KINDS and len(u2g.get(n, [])) != 1:
