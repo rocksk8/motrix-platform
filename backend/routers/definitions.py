@@ -116,6 +116,24 @@ def _payslip_sample_view():
 _SAMPLE_VIEWS = {"invoice_voucher": _invoice_voucher_sample_view, "payslip": _payslip_sample_view}
 
 
+#: 第二人審核只涵蓋「自訂模組定義（company 範圍）」——它會新增頁面、資料表與金流串接。
+#: 版面／輸出版型／自訂欄位 是超級管理員直接發布（不審核）；**每一條直接發布的路徑都寫稽核
+#: `definitions.publish_unreviewed`**（同一個動作名，稽核一次篩得到）。W3 #3：不准有沒留痕的直接發布。
+_UNREVIEWED_KIND_REASON = "此類定義不走第二人審核（只有自訂模組定義有審核流程）"
+
+
+def _audit_unreviewed(authorization, kind, key, scope, version, reason, verb="發布"):
+    _audit(_tok(authorization), "definitions.publish_unreviewed", "ui_definition", "%s/%s/%s" % (kind, key, scope),
+           "%s %s %s（%s）第 %d 版：未經第二人審核（%s）" % (verb, kind, key, scope, version, reason), {})
+
+
+def _custom_module_scope_guard(kind, scope):
+    """自訂模組定義只有 company 範圍：引擎只讀 company（`custom_modules.published_modules`），其他範圍不會生效，
+    也不該有一條不過審核的寫入路徑（W3 #3）。"""
+    if kind == "custom_module" and scope != "company":
+        raise HTTPException(400, "自訂模組定義只有 company 範圍")
+
+
 def _err(e: D.DefinitionError, status=400):
     return JSONResponse(status_code=status, content={"detail": str(e), "problems": e.problems})
 
@@ -168,6 +186,7 @@ def get_definition(kind: str, key: str, scope: str = Query("company"), authoriza
 def save_definition_draft(kind: str, key: str, scope: str = Query("company"), payload: dict = Body(...),
                           authorization: str = Header(None)):
     u = _require_user(authorization, require_superadmin=True)
+    _custom_module_scope_guard(kind, scope)
     conn = get_db()
     try:
         d = D.save_draft(conn, kind, key, scope, payload.get("body"), u["username"])
@@ -192,6 +211,7 @@ def validate_definition(kind: str, key: str, payload: dict = Body(...), authoriz
 def publish_definition(kind: str, key: str, scope: str = Query("company"), payload: dict = Body(default={}),
                        authorization: str = Header(None)):
     u = _require_user(authorization, require_superadmin=True)
+    _custom_module_scope_guard(kind, scope)
     conn = get_db()
     try:
         if kind == "custom_module" and scope == "company":
@@ -211,6 +231,7 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
                        "發布 %s 第 %d 版：未經第二人審核（%s）" % (key, d["version"], r.get("reason", "")), {"note": d.get("note", "")})
         else:
             d = D.publish(conn, kind, key, scope, (payload or {}).get("note", ""), u["username"])
+            _audit_unreviewed(authorization, kind, key, scope, d["version"], _UNREVIEWED_KIND_REASON)
     except D.DefinitionError as e:
         return _err(e, 422 if e.problems else 400)
     finally:
@@ -265,11 +286,15 @@ def diff_definition(kind: str, key: str, scope: str = Query("company"), a: str =
 def restore_definition(kind: str, key: str, version: int, scope: str = Query("company"),
                        payload: dict = Body(default={}), authorization: str = Header(None)):
     u = _require_user(authorization, require_superadmin=True)
+    _custom_module_scope_guard(kind, scope)
     conn = get_db()
+    unreviewed_reason = _UNREVIEWED_KIND_REASON
     try:
         if kind == "custom_module" and scope == "company":
             from helpers import custom_def_review as _defr
-            if _defr.review_state(conn, u["username"])["active"]:          # S4：審核啟用時，還原＝把舊版放回草稿（再走送審），不直接發布
+            _st = _defr.review_state(conn, u["username"])
+            unreviewed_reason = _st["reason"]
+            if _st["active"]:          # S4：審核啟用時，還原＝把舊版放回草稿（再走送審），不直接發布
                 try:
                     r = _defr.restore_to_draft(conn, key, version, u)
                 except _defr.ReviewError as e:
@@ -278,6 +303,7 @@ def restore_definition(kind: str, key: str, version: int, scope: str = Query("co
                        "把 %s 第 %d 版放回草稿" % (key, version), {})
                 return r
         d = D.restore(conn, kind, key, scope, version, (payload or {}).get("note", ""), u["username"])
+        _audit_unreviewed(authorization, kind, key, scope, d["version"], unreviewed_reason, verb="還原")
     except D.DefinitionError as e:
         return _err(e, 422 if e.problems else 400)
     finally:

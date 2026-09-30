@@ -13,8 +13,9 @@
   lodging 紀錄與每日工作事項歷史（CSV／JSON）匯出也記稽核。守門：`tests/platform/test_export_pdf_and_audit_2026_09_30.py`（AST）。
 - 稽核畫面：模組標籤「匯出」與四個動作標籤。
 
-## (next) — 2026-09-30（wip/w1-xss：W3 #2 輸出版型儲存型 XSS；升版幅度由列車取號）
+## (next) — 2026-09-30（wip/w1-xss：W3 #2 輸出版型儲存型 XSS；wip/w1-defreview-bypass：W3 #3；升版幅度由列車取號）
 - L1（安全，行為）：`helpers.doc_template._esc` 加跳脫 `"`／`'`；版型會落進屬性的值改白名單——`class`（英數／底線／連字號）、`width`（數字＋%／px／mm／pt／em）、`colspan`（1～20）、浮水印 `count`（1～60，原本可填任意大數撐爆記憶體）；壞值渲染丟 `TemplateError`、儲存驗證（`problems`）同步回報，存不進去。公開介面不變（快照不動）。
+- L1（安全，行為）W3 #3 定義審核繞過：審核只涵蓋自訂模組定義（company）；其他 kind 直接發布與任何還原（審核未啟用時）**都寫稽核 `definitions.publish_unreviewed`**；自訂模組定義的 draft／publish／restore 只接受 `company` 範圍（其餘 400，引擎本來就只讀 company）。
 
 ## 1.81 — 2026-09-30（暫用，列車取號；wip/w1-t26fix：列車 26 守門修補）
 - L1（行為，安全）：`GET /api/attachments/open` 本班關閉（`routers/attachments.ATTACHMENTS_OPEN_ENABLED = False`，一律 404；W3 安全檢查：路徑未綁定來源單據，正式修正隨 P3）；`POST /api/audit-log/module-counts` 需 `audit_log` 權限、`since` 非字串 400（wip/w2-t26sec）
