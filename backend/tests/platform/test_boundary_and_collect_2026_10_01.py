@@ -303,7 +303,8 @@ def test_build_script_has_clock_date_and_collect_check_before_the_test_stage():
     assert PS1.index("if ($ClockDate) { $ClockDate } else { $commitDate }") < acq, "預設不是 commit 日期"
     assert PS1.index("$env:MOTRIX_TEST_TODAY = $clockDate") < acq
     assert PS1.index("collect_determinism.py") < acq, "收集決定性檢查要在 20 分鐘的測試階段之前"
-    assert "if (-not $NoCollectCheck)" in PS1 and "Fail \"收集不決定" in PS1
+    i = PS1.index("$cdExit = Invoke-PyTool")
+    assert "if (-not $NoCollectCheck)" in PS1[:i] and "if ($cdExit -ne 0) {" in PS1[i:i + 400] and "Fail \"收集不決定" in PS1[i:i + 600], "收集不決定沒有被接成 Fail"
     assert "ParseExact" in PS1, "沒有驗證 -ClockDate 的格式"
     assert '$BuildStats["clock_date"]' in PS1
     # 指紋先算、環境變數後設：MOTRIX_TEST_TODAY 不能影響沿用指紋的計算順序
