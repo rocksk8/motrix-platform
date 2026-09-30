@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from db import get_db, is_demo_mode, DEMO_PAYSLIP_ARCHIVE_DIR
 from helpers import _require_user, _tok, _audit, _get_setting, notify_module_activity, user_has_module
+from helpers.uploads import _check_upload_magic
 from helpers.errors import trace_id
 from core.txn import write_txn
 from core import registry
@@ -638,6 +639,7 @@ async def upload_signed_files(slip_no: str, files: List[UploadFile] = File(...),
                 raise HTTPException(400, f"檔案是空的：{up.filename}")
             if len(raw) > _SIGNED_MAX_BYTES:
                 raise HTTPException(400, f"檔案過大：{up.filename}（單檔上限 20MB）")
+            _check_upload_magic(up.filename or "", ext, raw, "payslips", who)
             staged.append((up.filename or "", ext, raw))
         now = datetime.now().isoformat()
         new_files = []

@@ -35,6 +35,57 @@ _ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.pdf'}
 _EXTRA_EXTS_BY_SUBFOLDER = {'voucher_attachments': {'.docx', '.xlsx', '.doc', '.xls'}}
 _MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB／檔
 
+
+# ── 檔頭（magic bytes）檢查：副檔名白名單之外的第二道（NIGHT 計畫 line 161，2026-09-30）──────────────────────
+# 只驗副檔名 ⇒ 改個名字的 exe／html／腳本就能存進 uploads 並被下載或預覽。**唯一的關卡在這裡**：
+# 所有走 `save_document_files` 的上傳都自動套用；自有存檔邏輯的兩處（勞報單回簽檔、工作日誌照片）呼叫同一支函式，
+# 不各自抄一份。不符 ⇒ 400（整批擋下）＋寫一筆稽核 `upload.rejected_magic`（只記檔名、副檔名、資料夾、上傳者，不記內容）。
+# 白名單裡有副檔名、這張表卻沒有它的規則 ⇒ **一律擋**（fail-closed：日後放行新副檔名時忘了補檔頭規則不會變成無檢查）。
+_OLE_SIG = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+_OOXML_ROOT = {'.docx': 'word/', '.xlsx': 'xl/'}
+
+
+def _magic_matches(ext: str, raw: bytes) -> bool:
+    ext = ext.lower()
+    head = raw[:1024]
+    if ext in ('.jpg', '.jpeg'):
+        return raw[:3] == b"\xff\xd8\xff"
+    if ext == '.png':
+        return raw[:8] == b"\x89PNG\r\n\x1a\n"
+    if ext == '.gif':
+        return raw[:6] in (b"GIF87a", b"GIF89a")
+    if ext == '.webp':
+        return raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"
+    if ext == '.pdf':
+        return b"%PDF-" in head                 # PDF 規格允許標頭前有少量雜訊（前 1024 bytes）
+    if ext in ('.doc', '.xls'):
+        return raw[:8] == _OLE_SIG
+    if ext in _OOXML_ROOT:
+        if raw[:4] != b"PK\x03\x04":
+            return False
+        try:
+            import io
+            import zipfile
+            with zipfile.ZipFile(io.BytesIO(raw)) as z:
+                names = z.namelist()
+        except Exception:                       # noqa: BLE001 — 壞的壓縮檔＝不是 Office 檔
+            return False
+        return "[Content_Types].xml" in names and any(n.startswith(_OOXML_ROOT[ext]) for n in names)
+    return False                                # 沒有規則的副檔名 ⇒ 擋（fail-closed）
+
+
+def _check_upload_magic(filename: str, ext: str, raw: bytes, subfolder: str = '', uploaded_by: str = '') -> None:
+    """副檔名與檔頭不符 ⇒ 稽核＋`HTTPException(400)`。給 `save_document_files` 與兩處自有存檔邏輯共用。"""
+    if _magic_matches(ext, raw):
+        return
+    try:
+        from helpers.audit import _audit
+        _audit(None, "upload.rejected_magic", "upload", filename or "", filename or "",
+               {"ext": ext, "folder": subfolder, "by": uploaded_by, "size": len(raw)})
+    except Exception:                           # noqa: BLE001 — 稽核失敗不可以讓「擋下」變成「放行」
+        pass
+    raise HTTPException(400, f"檔案內容與副檔名不符：{filename}（{ext} 檔的檔頭不正確，請確認是原始檔案）")
+
 # demo 帳號隔離前綴——2026-08-24 補上（原本這裡完全沒有 is_demo_mode() 判斷，
 # demo 帳號傳的檔案會直接寫進真實 uploads/ 目錄且永久留存，資料庫那筆記錄
 # 卻因為 demo DB 每次登入被清空而變成孤兒檔案，跟 photos.py 既有的
@@ -123,6 +174,7 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
             raise HTTPException(400, f"檔案過大：{upload.filename}（單檔上限 20MB）")
         if not raw:
             raise HTTPException(400, f"檔案是空的：{upload.filename}")
+        _check_upload_magic(upload.filename or '', ext, raw, subfolder, uploaded_by)
         if watermark_by and ext in ('.jpg', '.jpeg', '.png'):
             try:
                 from photos import _process_project_photo
