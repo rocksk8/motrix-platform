@@ -301,6 +301,12 @@ def test_gl_events_legacy_row_unchanged(client, H, seed_extra_expense):
     finally:
         c.close()
     eid = seed_extra_expense("MQ-GL-LEG", total_cost=300, category="運費", description="舊", expense_date=date.today().isoformat())
+    c = db.get_db()
+    try:                                                  # 就算舊版列的 lines_json 裡有東西（不該有），kind='' 也一律單一借方
+        c.execute("UPDATE case_extra_expenses SET lines_json=? WHERE id=?", (json.dumps([{"category": "A", "amount": 100}, {"category": "B", "amount": 200}]), eid))
+        c.commit()
+    finally:
+        c.close()
     d = date.today().isoformat()
     evs = [e for e in G.gl_events(d, d)["events"] if e["source_key"] == str(eid) and e["event_code"] == "E11"]
     assert evs and [(l["role"], l["side"], l["amount"]) for l in evs[0]["lines"]] == [("COST_PROJECT", "D", 300), ("AP", "C", 300)]
