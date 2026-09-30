@@ -4498,6 +4498,27 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
 # 報價單、已結案變更（case_change）、額外支出、完工單、額外支出變更。項目形狀見 `helpers/approval_queue.py::base_item`。
 # 權限過濾（誰看得到哪一筆）與角標計數都在 L1，這裡只列「待審核／簽核中」的單。
 
+def _xe_doc_no(r, suffix: str) -> str:
+    """佇列上的單號顯示：有案件＝`{案件}-XE{id}`（舊行為）；無案件＝費用單據單號（doc_code），沒有就 `XE{id}`（不出現開頭的 `-`）。"""
+    if r["quote_no"]:
+        return f"{r['quote_no']}-XE{r['id']}{suffix}"
+    return (r["doc_code"] or f"XE{r['id']}") + suffix
+
+
+def _xe_caseless_fields(r, *actions) -> dict:
+    """無案件單據的佇列項目補欄位（W1 A2-0 佇列契約）：`caseless=True`、`typeLabel`、各動作 URL（哨兵路徑 `-`）。有案件 ⇒ 空。"""
+    if r["quote_no"]:
+        return {}
+    base = "/api/quotations/-/extra-expenses/%d" % r["id"]
+    out = {"caseless": True, "typeLabel": _XE_KIND_LABEL.get(r["kind"] or "", "費用單據"), "docCode": r["doc_code"] or ""}
+    for a in actions:
+        out[a.split("/")[-1] + "Url"] = base + "/" + a
+    return out
+
+
+_XE_KIND_LABEL = {"purchase_req": "請購單", "purchase_order": "採購單", "travel": "差旅費用請款單", "petty_cash": "零用金支付單"}
+
+
 def approval_queue_items(conn) -> list:
     """`approval.queue_items`（M01）：報價單、已結案案件變更、案件額外支出、完工單、額外支出變更。
 
@@ -4591,7 +4612,7 @@ def approval_queue_items(conn) -> list:
     # 的典型來源。tiers 用真實的分層資料（不像 case_change 借用空 tiers 的捷徑），
     # 因為這個類型走的就是正規的 tiered_approval。
     xe_rows = conn.execute("""
-        SELECT e.id, e.quote_no, e.description, e.total_cost, e.approval_json,
+        SELECT e.id, e.quote_no, e.description, e.total_cost, e.approval_json, e.kind, e.doc_code,
                q.customer_name, q.project_name
         FROM case_extra_expenses e
         LEFT JOIN quotations q ON q.quote_no = e.quote_no
@@ -4605,7 +4626,7 @@ def approval_queue_items(conn) -> list:
         f = _queue_tier_fields(raw)
         items.append({
             "type":                "extra_expense",
-            "quoteNo":             f"{r['quote_no']}-XE{r['id']}",
+            "quoteNo":             _xe_doc_no(r, ""),
             "customer":            r["customer_name"] or "",
             "projectName":         r["description"] or "",
             "total":               r["total_cost"] or 0,
@@ -4622,6 +4643,7 @@ def approval_queue_items(conn) -> list:
             "currentApprovers":    f["currentApprovers"],
             "linkedQuoteNo":       r["quote_no"],
             "extraExpenseId":      r["id"],
+            **_xe_caseless_fields(r, "approve", "reject"),
         })
 
     # 完工單（2026-09-12）：跟出貨單同一種形狀，簽核狀態在 data_json.$.approval。
@@ -4675,7 +4697,7 @@ def approval_queue_items(conn) -> list:
     # 列進佇列**——借用上面那個 extra_expense 類型的話，簽核人按下核准會打到本體
     # 的 /approve，那支看到 status 已經是「已核准」就 409，變更永遠簽不掉。
     xec_rows = conn.execute("""
-        SELECT e.id, e.quote_no, e.description, e.total_cost, e.change_json,
+        SELECT e.id, e.quote_no, e.description, e.total_cost, e.change_json, e.kind, e.doc_code,
                e.change_approval_json, q.customer_name, q.project_name
         FROM case_extra_expenses e
         LEFT JOIN quotations q ON q.quote_no = e.quote_no
@@ -4693,7 +4715,7 @@ def approval_queue_items(conn) -> list:
             chg = {}
         items.append({
             "type":                "extra_expense_change",
-            "quoteNo":             f"{r['quote_no']}-XE{r['id']}改",
+            "quoteNo":             _xe_doc_no(r, "改"),
             "customer":            r["customer_name"] or "",
             # 佇列上一眼就要看得出「改什麼、從多少變多少」，只放新說明的話簽核人
             # 得自己去案件裡翻舊值
@@ -4715,6 +4737,7 @@ def approval_queue_items(conn) -> list:
             "extraExpenseId":      r["id"],
             "previousTotal":       r["total_cost"] or 0,
             "pendingFileCount":    len(chg.get("addFiles") or []),
+            **_xe_caseless_fields(r, "change-request/approve", "change-request/reject"),
         })
 
     return items
@@ -5859,6 +5882,22 @@ def detail_extra_expense(conn, doc_no):
         "items": [],
         "files": _file_entries(r["files_json"]),
     }
+    _kind = r["kind"] if "kind" in r.keys() else ""
+    if _kind:
+        # 費用單據（A2）：單號、類型、部門、收款人、明細列（無案件＝caseless，簽核人／建立者／admin 才開得了：與佇列同一個判斷由 L1 做）
+        try:
+            _lines = json.loads(r["lines_json"] or "[]")
+        except Exception:
+            _lines = []
+        out["title"] = "%s %s" % (_XE_KIND_LABEL.get(_kind, "費用單據"), r["doc_code"] or "#" + str(r["id"]))
+        out["fields"][:0] = [{"label": "單號", "value": r["doc_code"] or "—"},
+                             {"label": "類型", "value": _XE_KIND_LABEL.get(_kind, _kind)}]
+        out["fields"].append({"label": "收款人", "value": r["payee_name"] or r["payer_name"] or "—"})
+        out["items"] = [{"description": (l.get("summary") or l.get("category") or ""), "brand": "", "qty": l.get("qty", ""),
+                         "unit": "", "unitPrice": l.get("unitCost", ""), "amount": l.get("amount", 0),
+                         "notes": " ".join(x for x in (l.get("category") or "", l.get("invoiceNo") or "") if x)}
+                        for l in _lines if isinstance(l, dict)]
+        out["caseless"] = not r["quote_no"]
     # 「編修後的結果」：已核准的額外支出要改內容必須走變更申請，
     # change_json 裡就是改完會變成什麼樣子——簽核人要看的正是這個對照。
     if (r["change_status"] or "") not in ("", "none"):

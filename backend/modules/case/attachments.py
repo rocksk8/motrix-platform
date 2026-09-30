@@ -154,6 +154,15 @@ def _read(conn, source_type, doc_no):
 #: 所以**只綁案件**（鍵的案件編號＝那一列的 quote_no），不比索引；別的案件的路徑一律不收。
 LEGACY_EXTRA_FOLDER = "quotation_settlement_extra"
 
+def _lists_path(files_json, rel: str) -> bool:
+    """這個額外支出的 `files_json` 有沒有**恰好**列了 `rel` 這個路徑（壞 JSON ⇒ 沒有）。"""
+    try:
+        files = json.loads(files_json or "[]")
+    except (TypeError, ValueError):
+        return False
+    return any(isinstance(f, dict) and f.get("path") == rel for f in (files if isinstance(files, list) else []))
+
+
 class _CasePathAccess:
     """`uploads.path_access`（IP-104，2026-09-30 P0）：M01 存的上傳檔 ⇒ 擁有單據 ⇒ 那張單據自己的讀取規則。
 
@@ -201,7 +210,7 @@ class _CasePathAccess:
                 return False
             rel = "%s/%s/%s" % (folder, key, rest[1])
             rows = conn.execute("SELECT files_json FROM case_extra_expenses WHERE quote_no = ?", (quote_no,)).fetchall()
-            if not any(rel in (r["files_json"] or "") for r in rows):
+            if not any(_lists_path(r["files_json"], rel) for r in rows):     # 逐筆解析、比對完整路徑（不是子字串：前綴同名的檔不算列出）
                 return False
             st = "extra_expense"
         elif st == "extra_expense":                       # `{案件編號}_{額外支出 id}`：那一列要真的掛在該案

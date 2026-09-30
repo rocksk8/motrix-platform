@@ -32,17 +32,19 @@
 """
 import json
 from datetime import datetime
-from typing import List
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Body, File, Form, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
+from core.txn import begin_write
 from db import get_db
 from helpers.case_access import deny_case, require_case   # M01-O1：逐案拒絕＝查無（同一個 404）
 from helpers import row_access
 from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供者同一支
 from helpers.auth import user_has_module
 from modules.case.recognition import normalize_date  # `AC2`
+from modules.case import expense_forms as EF   # 費用單據（A2）：類型／明細金額／data 合併
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 from helpers import (
@@ -59,6 +61,15 @@ from helpers import (
 from helpers.tiered_approval import cascade_self_tiers, sign_first_pending  # noqa: E402（helpers/__init__ 鎖定，直接取）
 
 router = APIRouter()
+
+
+#: 哨兵路徑段：`/api/quotations/-/extra-expenses/...` ＝ 沒有綁案件的費用單據（欄位 `quote_no` 存空字串）。
+#: 這是 case_read_scope.json 裡**唯一**明列的「無案件」例外（MODULE-GUIDE §1.1；使用者 2026-10-01 裁示）。
+CASELESS = "-"
+
+
+def _qn(quote_no: str) -> str:
+    return "" if quote_no == CASELESS else quote_no
 
 # 可編輯／可刪除的狀態。送審中或已核准的不給改——改了簽核就失去意義
 EDITABLE_STATUSES = ("草稿", "已駁回")
@@ -87,6 +98,15 @@ class ExtraExpenseIn(BaseModel):
     # payerUsername 有值才做得了「某人代墊多少」這類彙總
     payerUsername: str = ""
     payerName:     str = ""
+    # ── 費用單據（A2，2026-10-01）：kind＝''（舊版案件額外支出，行為不變）或 EF.KINDS；建立後 kind 不可改 ──
+    kind:          str = ""
+    data:          Optional[Any] = None       # 定義欄位值（物件；與既有值合併，None 值＝刪除該鍵）；型別由 EF 驗，不是 pydantic 422
+    lines:         Optional[Any] = None       # 明細列（陣列；金額以後端重算為準）
+    departmentId:  Optional[int] = None
+    payeeType:     str = ""                   # employee／vendor／''
+    payeeName:     str = ""
+    payeeBank:     str = ""                   # 手填快照；銀行資料權威來源是 payroll 銀行資料表（A2-3）
+    payeeAccount:  str = ""
 
 
 def _row_to_dict(r) -> dict:
@@ -135,6 +155,28 @@ def _row_to_dict(r) -> dict:
         "changeStatus":   _col(r, "change_status", ""),
         "change":         _jcol(r, "change_json"),
         "changeApproval": _jcol(r, "change_approval_json"),
+        # 費用單據（A2；migration 0003）。舊列＝kind ''、其餘空值
+        "kind":          _col(r, "kind", "") or "",
+        "docCode":       _col(r, "doc_code", "") or "",
+        "data":          _jcol(r, "data_json"),
+        "lines":         _jlist(r, "lines_json"),
+        "defVersion":    int(_col(r, "def_version", 0) or 0),
+        "departmentId":  _col(r, "department_id", None),
+        "payeeType":     _col(r, "payee_type", "") or "",
+        "payeeName":     _col(r, "payee_name", "") or "",
+        "payeeBank":     _col(r, "payee_bank", "") or "",
+        "payeeAccount":  _col(r, "payee_account", "") or "",
+        "payTerms":      _col(r, "pay_terms", "") or "",
+        "remitDate":     _col(r, "remit_date", "") or "",
+        "payMethod":     _col(r, "pay_method", "") or "",
+        "payAccountCode": _col(r, "pay_account_code", "") or "",
+        "paidBy":        _col(r, "paid_by", "") or "",
+        "pretax":        float(_col(r, "pretax", 0) or 0),
+        "tax":           float(_col(r, "tax", 0) or 0),
+        "currency":      _col(r, "currency", "TWD") or "TWD",
+        "voidReason":    _col(r, "void_reason", "") or "",
+        "voidedBy":      _col(r, "voided_by", "") or "",
+        "voidedAt":      _col(r, "voided_at", "") or "",
     }
 
 
@@ -146,6 +188,14 @@ def _col(r, name, default=None):
         return default
 
 
+def _jlist(r, name) -> list:
+    try:
+        v = json.loads(_col(r, name) or "[]")
+        return v if isinstance(v, list) else []
+    except Exception:
+        return []
+
+
 def _jcol(r, name) -> dict:
     try:
         return json.loads(_col(r, name) or "{}")
@@ -153,18 +203,48 @@ def _jcol(r, name) -> dict:
         return {}
 
 
-def _load(conn, quote_no: str, exp_id: int):
+def _load(conn, quote_no: str, exp_id: int, user: dict = None):
     row = conn.execute(
         "SELECT * FROM case_extra_expenses WHERE id=? AND quote_no=?", (exp_id, quote_no)
     ).fetchone()
     if not row:
         raise HTTPException(404, "找不到這筆額外支出")
+    if quote_no == "" and not _caseless_visible(conn, row, user):     # 無案件：逐列可見規則（看不到＝不存在）；user 沒給 ⇒ 關閉
+        raise HTTPException(404, "找不到這筆額外支出")
     return row
+
+
+def _subj(quote_no: str) -> str:
+    return "案件 %s" % quote_no if quote_no else "（無案件）"
+
+
+def _audit_target(quote_no: str, exp_id) -> tuple:
+    """稽核的 (target_type, target_id)：有案件＝沿用原本（quotation／案件單號）；無案件＝額外支出本身（不能把空字串當 target_id）。"""
+    return ("quotation", quote_no) if quote_no else ("case_extra_expense", str(exp_id))
+
+
+def _caseless_visible(conn, row, user) -> bool:
+    """無案件單據的逐列可見規則（不用 `case_owner_readable`：沒有案件可以查）：建立者本人、本單簽核鏈成員（含代理）、
+    admin／superadmin、出納／財務模組。user 為 None ⇒ False（fail closed）。"""
+    if not isinstance(user, dict):
+        return False
+    if user.get("role") in ("superadmin", "admin") or (row["created_by"] or "") == user.get("username"):
+        return True
+    if user_has_module(user, "cashier") or user_has_module(user, "finance"):
+        return True
+    return bool(is_document_approver(_col(row, "approval_json", ""), user, conn))
+
+
+def _caseless_create_allowed(user) -> bool:
+    """誰可以開無案件費用單：管理員以上，或持 `expense_forms` 權限（W1 登記的單一權限 key）。"""
+    return user.get("role") in ("superadmin", "admin") or user_has_module(user, "expense_forms")
 
 
 def _guard_case(conn, quote_no: str, user: dict):
     """報價單存在＋擁有者檢查。`quote_no` 可列舉，不擋就是 IDOR。
     准不准只看 L1 `case_owner_readable`（附件提供者用同一支，稽核 D AT-M1b）；這裡只負責說出原因。"""
+    if quote_no == "":
+        return          # 無案件：沒有報價單可查；逐列可見規則在 `_load`（`_caseless_visible`），建立權限在 create_extra_expense
     q = conn.execute(
         "SELECT sales_person_id, sales_person, assigned_user_ids FROM quotations WHERE quote_no=?",
         (quote_no,)
@@ -190,13 +270,23 @@ def _recalc(body: ExtraExpenseIn) -> float:
     return round_half_up(qty * unit_cost, 100) / 100   # 元以下兩位（分）四捨五入
 
 
+def _require_desc(body: ExtraExpenseIn):
+    """舊版案件額外支出（kind=''）一定要有品項說明；費用單據由明細摘要衍生，不強制。"""
+    if not (body.description or "").strip():
+        raise HTTPException(400, "請填寫品項說明")
+
+
 def _validate(body: ExtraExpenseIn):
     if body.category and body.category not in CATEGORIES:
         raise HTTPException(400, f"類別必須是：{'／'.join(CATEGORIES)}")
     if float(body.qty or 0) < 0 or float(body.unitCost or 0) < 0:
         raise HTTPException(400, "數量與單位成本不能為負")
-    if not (body.description or "").strip():
-        raise HTTPException(400, "請填寫品項說明")
+    EF.check_kind(body.kind)
+    if body.payeeType not in ("", "employee", "vendor"):
+        raise HTTPException(400, "收款人類型只能是 employee／vendor")
+    for _k in ("payeeName", "payeeBank", "payeeAccount"):
+        if len(getattr(body, _k) or "") > EF.MAX_TEXT:
+            raise HTTPException(400, "%s 太長（上限 %d 字）" % (_k, EF.MAX_TEXT))
 
 
 @router.get("/api/quotations/{quote_no}/extra-expenses")
@@ -207,6 +297,7 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
     **送審中但仍計入成本**的金額——使用者指定送審中的照樣算進成本，但畫面要提醒
     還沒簽完，所以這裡把它單獨算出來給前端做提示，不是從總額裡扣掉。
     """
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     conn = get_db()
     try:
@@ -221,6 +312,8 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
         #   ②這張單的簽核人——看不到金額就沒辦法判斷該不該簽
         # 合計同步只算看得到的那幾筆，避免「清單 3 筆、合計卻是 8 筆的金額」
         # 這種更難解釋的畫面。
+        if quote_no == "":
+            rows = [r for r in rows if _caseless_visible(conn, r, user)]       # 無案件：逐列可見規則
         if not can_see_financial(user):
             rows = [r for r in rows
                     if (r["created_by"] or "") == user["username"]
@@ -252,32 +345,49 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
     一個不存在的 session 路徑，結果實測 7 筆既有資料 0 筆有值。所以現在改成
     後端決定——前端傳什麼都不採用。
     """
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     _validate(body)
+    if quote_no == "" and not _caseless_create_allowed(user):
+        raise HTTPException(403, "沒有建立無案件費用單據的權限")
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
         now = datetime.now().isoformat(timespec="seconds")
-        total = _recalc(body)
+        kind = EF.check_kind(body.kind)
+        if not kind:
+            _require_desc(body)
+        if kind:
+            begin_write(conn)                                   # 配單號＋寫入要在同一把寫鎖裡
+            lines, total = EF.normalize_lines(body.lines)
+            data = EF.normalize_data(body.data)
+            doc_code = EF.next_doc_code(conn, kind, now[:10])
+            desc = (body.description or "").strip() or next((l.get("summary") for l in lines if l.get("summary")), "") or "（%s）" % doc_code
+        else:
+            lines, total, data, doc_code = [], _recalc(body), {}, ""
+            desc = (body.description or "").strip()
         display = user.get("display_name") or user["username"]
         cur = conn.execute(
             "INSERT INTO case_extra_expenses "
             "(quote_no, category, description, qty, unit, unit_cost, total_cost, note, "
             " expense_date, doc_no, files_json, created_by, created_by_name, created_by_inferred, "
-            " payer_username, payer_name, created_at, updated_at, updated_by_name, status, approval_json) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?,?,0,?,?,?,?,?,'草稿','{}')",
-            (quote_no, body.category or "其他", (body.description or "").strip(),
+            " payer_username, payer_name, created_at, updated_at, updated_by_name, status, approval_json,"
+            " kind, doc_code, data_json, lines_json, department_id, payee_type, payee_name, payee_bank, payee_account) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?,?,0,?,?,?,?,?,'草稿','{}',?,?,?,?,?,?,?,?,?)",
+            (quote_no, body.category or "其他", desc,
              float(body.qty or 0), (body.unit or "").strip(), float(body.unitCost or 0), total,
              (body.note or "").strip(), (body.expenseDate or "").strip(), (body.docNo or "").strip(),
              user["username"], display,
              (body.payerUsername or "").strip(), (body.payerName or "").strip(),
-             now, now, display),
+             now, now, display,
+             kind, doc_code, json.dumps(data, ensure_ascii=False), EF.dumps_lines(lines), EF.department_of(data, body.departmentId),
+             body.payeeType, (body.payeeName or "").strip(), (body.payeeBank or "").strip(), (body.payeeAccount or "").strip()),
         )
         conn.commit()
         exp_id = cur.lastrowid
-        _audit(_tok(authorization), "extra_expense.create", "quotation", quote_no,
-               f"{quote_no} 新增額外支出「{(body.description or '').strip()}」 NT$ {total:,.0f}")
-        return {"ok": True, "id": exp_id, "status": "草稿", "totalCost": total}
+        _audit(_tok(authorization), "extra_expense.create", *_audit_target(quote_no, exp_id),
+               f"{quote_no or '無案件'} 新增額外支出「{(body.description or '').strip()}」 NT$ {total:,.0f}")
+        return {"ok": True, "id": exp_id, "status": "草稿", "totalCost": total, "docCode": doc_code, "kind": kind}
     finally:
         conn.close()
 
@@ -286,33 +396,53 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
 def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body(...),
                          authorization: str = Header(None)):
     """編輯（僅草稿／已駁回）。會更新「更動日期」與「最後更動人」。"""
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     _validate(body)
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         if row["status"] not in EDITABLE_STATUSES:
             raise HTTPException(409, f"「{row['status']}」狀態不可編輯（僅草稿與已駁回可改）")
         if not _can_modify(row, user):
             raise HTTPException(403, "只有填寫人本人或管理員可以修改這筆額外支出")
 
         now = datetime.now().isoformat(timespec="seconds")
-        total = _recalc(body)
+        row_kind = _col(row, "kind", "") or ""
+        if not row_kind:
+            _require_desc(body)
+        if (body.kind or "") != row_kind and (body.kind or "") != "":
+            raise HTTPException(400, "單據類型建立後不可更改")
+        if row_kind:
+            begin_write(conn)
+            lines, total = EF.normalize_lines(body.lines if body.lines is not None else _jlist(row, "lines_json"))
+            data = EF.normalize_data(body.data, _jcol(row, "data_json"))       # 與既有值合併：沒送的鍵不會被丟掉
+            desc = (body.description or "").strip() or row["description"]
+        else:
+            lines, total, data, desc = _jlist(row, "lines_json"), _recalc(body), _jcol(row, "data_json"), (body.description or "").strip()
         conn.execute(
             "UPDATE case_extra_expenses SET category=?, description=?, qty=?, unit=?, "
             " unit_cost=?, total_cost=?, note=?, expense_date=?, doc_no=?, "
-            " payer_username=?, payer_name=?, updated_at=?, updated_by_name=? "
+            " payer_username=?, payer_name=?, updated_at=?, updated_by_name=?, "
+            " data_json=?, lines_json=?, department_id=?, payee_type=?, payee_name=?, payee_bank=?, payee_account=? "
             "WHERE id=? AND quote_no=?",
-            (body.category or "其他", (body.description or "").strip(), float(body.qty or 0),
+            (body.category or "其他", desc, float(body.qty or 0),
              (body.unit or "").strip(), float(body.unitCost or 0), total,
              (body.note or "").strip(), (body.expenseDate or "").strip(), (body.docNo or "").strip(),
              (body.payerUsername or "").strip(), (body.payerName or "").strip(),
-             now, user.get("display_name") or user["username"], exp_id, quote_no),
+             now, user.get("display_name") or user["username"],
+             json.dumps(data, ensure_ascii=False), EF.dumps_lines(lines),
+             EF.department_of(data, body.departmentId) if row_kind else _col(row, "department_id", None),
+             body.payeeType if row_kind else (_col(row, "payee_type", "") or ""),
+             (body.payeeName or "").strip() if row_kind else (_col(row, "payee_name", "") or ""),
+             (body.payeeBank or "").strip() if row_kind else (_col(row, "payee_bank", "") or ""),
+             (body.payeeAccount or "").strip() if row_kind else (_col(row, "payee_account", "") or ""),
+             exp_id, quote_no),
         )
         conn.commit()
-        _audit(_tok(authorization), "extra_expense.update", "quotation", quote_no,
-               f"{quote_no} 修改額外支出 #{exp_id}「{(body.description or '').strip()}」 NT$ {total:,.0f}")
+        _audit(_tok(authorization), "extra_expense.update", *_audit_target(quote_no, exp_id),
+               f"{quote_no or '無案件'} 修改額外支出 #{exp_id}「{(body.description or '').strip()}」 NT$ {total:,.0f}")
         return {"ok": True, "totalCost": total, "updatedAt": now}
     finally:
         conn.close()
@@ -369,7 +499,7 @@ def payreq_mine(authorization: str = Header(None)):
             " WHERE e.created_by = ? ORDER BY e.id DESC LIMIT 100", (user["username"],)).fetchall()
         out = []
         for r in rows:
-            if not case_owner_readable(conn, r["quote_no"], user):
+            if r["quote_no"] and not case_owner_readable(conn, r["quote_no"], user):      # 無案件列＝自己建立的，照列
                 continue
             d = _row_to_dict(r)
             d.update({"quoteNo": r["quote_no"], "customerName": r["_cust"] or "", "projectName": r["_proj"] or ""})
@@ -393,6 +523,7 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
     發票日期、發票號碼照舊（本人可登）。
     付款日只准在已核准之後設定（AB-S8，使用者 2026-09-28 裁示；出納、admin 都一樣）⇒ 未核准 409 並說明。
     """
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     body = body or {}
     changes = {}
@@ -410,7 +541,7 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         if not (_can_modify(row, user) or user_has_module(user, "cashier")):
             raise HTTPException(403, "只有填寫人本人、管理員或出納可以登錄這筆額外支出的日期")
         is_admin = user.get("role") in ("superadmin", "admin")
@@ -436,11 +567,11 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
     finally:
         conn.close()
     label = {"invoice_date": "發票日期", "paid_date": "付款日", "invoice_no": "發票號碼"}
-    _audit(_tok(authorization), "extra_expense.dates", "quotation", quote_no,
+    _audit(_tok(authorization), "extra_expense.dates", *_audit_target(quote_no, exp_id),
            "%s 額外支出 #%s 登錄%s" % (quote_no, exp_id, "、".join(
                "%s %s" % (label[k], v or "（清除）") for k, v in changes.items())))
     if override:                                          # AB-M1：已付的付款日被清除或更改 ⇒ 另一個查得到的動作
-        _audit(_tok(authorization), "extra_expense.paid_date_override", "quotation", quote_no,
+        _audit(_tok(authorization), "extra_expense.paid_date_override", *_audit_target(quote_no, exp_id),
                "%s 額外支出 #%s 付款日 %s → %s（管理員更正）" % (quote_no, exp_id, old_paid, changes["paid_date"] or "（清除，重回待付款）"))
     return {"ok": True, "updatedAt": now,
             **{_DATE_KEYS[k]: v for k, v in changes.items()}}
@@ -450,19 +581,20 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
 def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header(None)):
     """刪除（僅草稿／已駁回）。已核准的要移除只能請最高管理員從資料庫處理——
     已經計入成本與報表的數字不該被單方面刪掉。"""
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         if row["status"] not in EDITABLE_STATUSES:
             raise HTTPException(409, f"「{row['status']}」狀態不可刪除（僅草稿與已駁回可刪）")
         if not _can_modify(row, user):
             raise HTTPException(403, "只有填寫人本人或管理員可以刪除這筆額外支出")
         conn.execute("DELETE FROM case_extra_expenses WHERE id=? AND quote_no=?", (exp_id, quote_no))
         conn.commit()
-        _audit(_tok(authorization), "extra_expense.delete", "quotation", quote_no,
-               f"{quote_no} 刪除額外支出 #{exp_id}「{row['description']}」")
+        _audit(_tok(authorization), "extra_expense.delete", *_audit_target(quote_no, exp_id),
+               f"{quote_no or '無案件'} 刪除額外支出 #{exp_id}「{row['description']}」")
         return {"ok": True}
     finally:
         conn.close()
@@ -479,11 +611,12 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
     **沒有設定任何簽核層時直接視為已核准**：這個專案的簽核設定是選配的，
     若因為沒設定就把單據永久卡在「待審核」，等於新功能一上線就把所有人擋住。
     """
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         if row["status"] not in EDITABLE_STATUSES:
             raise HTTPException(409, f"「{row['status']}」狀態不可送審")
         if not _can_modify(row, user):
@@ -497,6 +630,11 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
 
         now = datetime.now().isoformat(timespec="seconds")
         label = f"{row['description']}（NT$ {float(row['total_cost'] or 0):,.0f}）"
+        if _col(row, "kind", "") or "":
+            # 送審當下：費用類別驗證（不在啟用清單 ⇒ 400，狀態不變）＋類別代碼／科目快照寫進明細（W4 合約）
+            _new_lines = EF.prepare_submit(conn, _jlist(row, "lines_json"))
+            conn.execute("UPDATE case_extra_expenses SET lines_json=? WHERE id=? AND quote_no=?",
+                         (EF.dumps_lines(_new_lines), exp_id, quote_no))
 
         if not tiers:
             conn.execute(
@@ -507,8 +645,8 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
                                  ensure_ascii=False), exp_id, quote_no),
             )
             conn.commit()
-            _audit(_tok(authorization), "extra_expense.auto_approve", "quotation", quote_no,
-                   f"{quote_no} 額外支出 #{exp_id} {label}：未設定簽核層，直接核准")
+            _audit(_tok(authorization), "extra_expense.auto_approve", *_audit_target(quote_no, exp_id),
+                   f"{quote_no or '無案件'} 額外支出 #{exp_id} {label}：未設定簽核層，直接核准")
             return {"ok": True, "status": "已核准", "autoApproved": True}
 
         approval = {
@@ -526,16 +664,16 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
         conn.commit()
 
         for a in (tiers[0].get("approvers") or []):
-            _notify(a["username"], "extra_expense_approval_request", str(exp_id), quote_no,
-                    f"案件 {quote_no} 的額外支出 {label} 需要您簽核")
+            _notify(a["username"], "extra_expense_approval_request", str(exp_id), quote_no or "無案件",
+                    f"{_subj(quote_no)} 的額外支出 {label} 需要您簽核")
         # 知會（2026-09-15）：整條簽核鏈都只有申請人本人時（他已在組織職權頂端），
         # 最高管理者不再被塞進簽核鏈，改收一則知會通知（仍可隨時以 superadmin 退回）。
-        notify_org_chain_notice(conn, tiers, user["username"], str(exp_id), quote_no,
-                                f"案件 {quote_no} 的額外支出 {label} 由 "
+        notify_org_chain_notice(conn, tiers, user["username"], str(exp_id), quote_no or "無案件",
+                                f"{_subj(quote_no)} 的額外支出 {label} 由 "
                                 f"{user.get('display_name') or user['username']} 依組織職權自行簽核，知會您",
                                 type_="extra_expense_approval_notice")
-        _audit(_tok(authorization), "extra_expense.submit", "quotation", quote_no,
-               f"{quote_no} 額外支出 #{exp_id} {label} 送審", {"tierCount": len(tiers)})
+        _audit(_tok(authorization), "extra_expense.submit", *_audit_target(quote_no, exp_id),
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} {label} 送審", {"tierCount": len(tiers)})
         return {"ok": True, "status": "待審核", "tierCount": len(tiers)}
     finally:
         conn.close()
@@ -550,11 +688,12 @@ def approve_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default=
     ——比照 `quotations.py`／`invoice_vouchers.py`，簽核設定頁允許把任何角色
     加進簽核人清單，這裡硬擋 admin 會讓非管理員簽核人永遠卡死。
     """
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         if row["status"] not in ("待審核", "簽核中"):
             raise HTTPException(409, f"「{row['status']}」狀態不在簽核中")
 
@@ -607,17 +746,17 @@ def approve_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default=
         label = f"{row['description']}（NT$ {float(row['total_cost'] or 0):,.0f}）"
         if not done:
             for a in (tiers[appr["currentTier"]].get("approvers") or []):
-                _notify(a["username"], "extra_expense_approval_request", str(exp_id), quote_no,
-                        f"案件 {quote_no} 的額外支出 {label} 需要您簽核")
+                _notify(a["username"], "extra_expense_approval_request", str(exp_id), quote_no or "無案件",
+                        f"{_subj(quote_no)} 的額外支出 {label} 需要您簽核")
         else:
             requester = appr.get("requestedBy")
             if requester:
-                _notify(requester, "extra_expense_approved", str(exp_id), quote_no,
-                        f"案件 {quote_no} 的額外支出 {label} 已核准")
-            notify_module_activity("案件管理", "額外支出核准", display, f"{quote_no}｜{label}",
+                _notify(requester, "extra_expense_approved", str(exp_id), quote_no or "無案件",
+                        f"{_subj(quote_no)} 的額外支出 {label} 已核准")
+            notify_module_activity("案件管理", "額外支出核准", display, f"{quote_no or '無案件'}｜{label}",
                                    f"case-management.html?q={quote_no}")
-        _audit(_tok(authorization), "extra_expense.approve", "quotation", quote_no,
-               f"{quote_no} 額外支出 #{exp_id} {label} 第 {ct + 1} 層核准 → {status}")
+        _audit(_tok(authorization), "extra_expense.approve", *_audit_target(quote_no, exp_id),
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} {label} 第 {ct + 1} 層核准 → {status}")
         return {"ok": True, "status": status, "currentTier": appr["currentTier"]}
     finally:
         conn.close()
@@ -630,11 +769,12 @@ def reject_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={
 
     刻意不是直接刪掉：駁回通常是「金額或說明要修」，不是「這筆支出不存在」。
     """
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         if row["status"] not in ("待審核", "簽核中"):
             raise HTTPException(409, f"「{row['status']}」狀態不在簽核中")
 
@@ -667,11 +807,11 @@ def reject_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={
         label = f"{row['description']}（NT$ {float(row['total_cost'] or 0):,.0f}）"
         requester = appr.get("requestedBy")
         if requester:
-            _notify(requester, "extra_expense_rejected", str(exp_id), quote_no,
-                    f"案件 {quote_no} 的額外支出 {label} 已被駁回"
+            _notify(requester, "extra_expense_rejected", str(exp_id), quote_no or "無案件",
+                    f"{_subj(quote_no)} 的額外支出 {label} 已被駁回"
                     + (f"：{reason}" if reason else ""))
-        _audit(_tok(authorization), "extra_expense.reject", "quotation", quote_no,
-               f"{quote_no} 額外支出 #{exp_id} {label} 被駁回" + (f"：{reason}" if reason else ""))
+        _audit(_tok(authorization), "extra_expense.reject", *_audit_target(quote_no, exp_id),
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} {label} 被駁回" + (f"：{reason}" if reason else ""))
         return {"ok": True, "status": "已駁回"}
     finally:
         conn.close()
@@ -711,6 +851,7 @@ async def upload_extra_expense_files(quote_no: str, exp_id: int,
                                      files: List[UploadFile] = File(...),
                                      kind: str = Form("other"),
                                      authorization: str = Header(None)):
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     kind = (kind or "other").strip()
     if kind not in FILE_KINDS:
@@ -718,7 +859,7 @@ async def upload_extra_expense_files(quote_no: str, exp_id: int,
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         _guard_files_editable(row, kind)
         after_approval = row["status"] == "已核准"
         # 「或出納」與 PATCH …/dates 同構：上面 _guard_case 先擋 ⇒ 出納也必須看得到這個案件（純出納＝404）。
@@ -742,23 +883,24 @@ async def upload_extra_expense_files(quote_no: str, exp_id: int,
     finally:
         conn.close()
     if after_approval:                                   # 核准後補發票：另一個稽核動作，查得到是誰、何時補的
-        _audit(_tok(authorization), "extra_expense.invoice_after_approval", "quotation", quote_no,
-               f"{quote_no} 額外支出 #{exp_id} 核准後補上傳發票 {len(new_files)} 個："
+        _audit(_tok(authorization), "extra_expense.invoice_after_approval", *_audit_target(quote_no, exp_id),
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} 核准後補上傳發票 {len(new_files)} 個："
                + "、".join(str(f.get("filename") or f.get("id") or "") for f in new_files))
     else:
-        _audit(_tok(authorization), "extra_expense.upload_files", "quotation", quote_no,
-               f"{quote_no} 額外支出 #{exp_id} 上傳 {len(new_files)} 個附件（{'發票' if kind == 'invoice' else '其他'}）")
+        _audit(_tok(authorization), "extra_expense.upload_files", *_audit_target(quote_no, exp_id),
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} 上傳 {len(new_files)} 個附件（{'發票' if kind == 'invoice' else '其他'}）")
     return {"ok": True, "added": len(new_files), "files": new_files}
 
 
 @router.delete("/api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}")
 def delete_extra_expense_file(quote_no: str, exp_id: int, file_id: str,
                               authorization: str = Header(None)):
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         _guard_files_editable(row)
         remaining = delete_document_file(
             "case_extra_expense", f"{quote_no}_{exp_id}", _files_of(row), file_id)
@@ -772,8 +914,8 @@ def delete_extra_expense_file(quote_no: str, exp_id: int, file_id: str,
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), "extra_expense.delete_file", "quotation", quote_no,
-           f"{quote_no} 額外支出 #{exp_id} 刪除附件")
+    _audit(_tok(authorization), "extra_expense.delete_file", *_audit_target(quote_no, exp_id),
+           f"{quote_no or '無案件'} 額外支出 #{exp_id} 刪除附件")
     return {"ok": True}
 
 
@@ -806,15 +948,26 @@ def _change_of(row) -> dict:
     return _jcol(row, "change_json")
 
 
-def _proposal_from(body: ExtraExpenseIn, keep_files: list) -> dict:
-    """把送進來的欄位組成提議內容。金額一律後端算（同 `_recalc()` 的理由）。"""
-    return {
+def _proposal_from(body: ExtraExpenseIn, keep_files: list, row=None) -> dict:
+    """把送進來的欄位組成提議內容。金額一律後端算（同 `_recalc()` 的理由）。
+
+    費用單據（kind≠''）：明細／data／部門／收款人也進提議（否則已核准後的變更申請會**靜默丟掉**這些欄位）；
+    金額＝Σ 明細（後端重算）。舊版列（kind=''）提議不帶這些鍵 ⇒ 套用時不動它們。"""
+    extra = {}
+    if row is not None and (_col(row, "kind", "") or ""):
+        lines, total = EF.normalize_lines(body.lines if body.lines is not None else _jlist(row, "lines_json"))
+        data = EF.normalize_data(body.data, _jcol(row, "data_json"))
+        extra = {"lines": lines, "data": data, "departmentId": EF.department_of(data, body.departmentId),
+                 "payeeType": body.payeeType, "payeeName": (body.payeeName or "").strip(),
+                 "payeeBank": (body.payeeBank or "").strip(), "payeeAccount": (body.payeeAccount or "").strip(),
+                 "totalFromLines": total}
+    return {**extra,
         "category":      body.category or "其他",
-        "description":   (body.description or "").strip(),
+        "description":   (body.description or "").strip() or (row["description"] if extra else ""),
         "qty":           float(body.qty or 0),
         "unit":          (body.unit or "").strip(),
         "unitCost":      float(body.unitCost or 0),
-        "totalCost":     _recalc(body),
+        "totalCost":     extra["totalFromLines"] if extra else _recalc(body),
         "note":          (body.note or "").strip(),
         "expenseDate":   (body.expenseDate or "").strip(),
         "docNo":         (body.docNo or "").strip(),
@@ -850,6 +1003,9 @@ def _apply_change(conn, row, change: dict, actor_display: str, now: str) -> floa
     exp_id, quote_no = row["id"], row["quote_no"]
     total = round_half_up(max(0.0, float(change.get("qty") or 0)) *
                           max(0.0, float(change.get("unitCost") or 0)), 100) / 100
+    _has_lines = "lines" in change                      # 費用單據的提議才有；舊版提議沒有 ⇒ 不動明細／data／收款人
+    if _has_lines:
+        clean_lines, total = EF.normalize_lines(change.get("lines"))          # 金額以明細後端重算為準，不信提議裡存的 totalCost
     merged_files = _files_of(row) + (change.get("addFiles") or [])
 
     appr = _jcol(row, "approval_json")
@@ -860,12 +1016,18 @@ def _apply_change(conn, row, change: dict, actor_display: str, now: str) -> floa
                  "qty": row["qty"], "unitCost": row["unit_cost"],
                  "category": row["category"], "expenseDate": row["expense_date"],
                  "docNo": row["doc_no"], "note": row["note"],
-                 "payerName": row["payer_name"]},
+                 "payerName": row["payer_name"],
+                 **({"lines": _jlist(row, "lines_json"), "data": _jcol(row, "data_json"),
+                     "payeeName": _col(row, "payee_name", ""), "departmentId": _col(row, "department_id", None)}
+                    if _has_lines else {})},
         "to":   {"description": change.get("description"), "totalCost": total,
                  "qty": change.get("qty"), "unitCost": change.get("unitCost"),
                  "category": change.get("category"), "expenseDate": change.get("expenseDate"),
                  "docNo": change.get("docNo"), "note": change.get("note"),
-                 "payerName": change.get("payerName")},
+                 "payerName": change.get("payerName"),
+                 **({"lines": clean_lines, "data": change.get("data"),
+                     "payeeName": change.get("payeeName"), "departmentId": change.get("departmentId")}
+                    if _has_lines else {})},
         "addedFiles": [f.get("filename") for f in (change.get("addFiles") or [])],
     })
 
@@ -883,6 +1045,13 @@ def _apply_change(conn, row, change: dict, actor_display: str, now: str) -> floa
          json.dumps(merged_files, ensure_ascii=False), now, actor_display,
          json.dumps(appr, ensure_ascii=False), exp_id, quote_no),
     )
+    if _has_lines:                                      # 費用單據：明細／data／部門／收款人一併覆寫（未知鍵原樣保留）
+        conn.execute(
+            "UPDATE case_extra_expenses SET lines_json=?, data_json=?, department_id=?, "
+            " payee_type=?, payee_name=?, payee_bank=?, payee_account=? WHERE id=? AND quote_no=?",
+            (EF.dumps_lines(clean_lines), json.dumps(EF.normalize_data(change.get("data"), {}), ensure_ascii=False),
+             change.get("departmentId"), change.get("payeeType") or "", change.get("payeeName") or "",
+             change.get("payeeBank") or "", change.get("payeeAccount") or "", exp_id, quote_no))
     # MONEY-FLOWS §9 L11：**已付款**的額外支出經變更申請改了金額 ⇒ 實付與新應付不一致，必須重走出納的差額審核，
     # 不可以讓已付款金額被悄悄改掉（原本不回審核，E11b 用新 total／舊 remit_actual 產生差額行）。
     # 做法＝沿用既有差額審核：`remit_review='pending'`；核可／退回都在出納頁（核可 ⇒ 報表不變、總帳下次執行才出 E11b；
@@ -901,14 +1070,17 @@ def upsert_change_request(quote_no: str, exp_id: int, body: ExtraExpenseIn = Bod
                           authorization: str = Header(None)):
     """建立／更新變更申請草稿。只有**已核准**的項目才走這條；草稿與已駁回本來就
     可以直接編輯（`update_extra_expense()`），不需要繞一圈。"""
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     _validate(body)
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         if row["status"] != "已核准":
             raise HTTPException(409, f"「{row['status']}」狀態請直接編輯，不需要提變更申請")
+        if not (_col(row, "kind", "") or ""):
+            _require_desc(body)
         if not _can_modify(row, user):
             raise HTTPException(403, "只有填寫人本人或管理員可以提出變更申請")
         cs = _col(row, "change_status", "") or ""
@@ -916,15 +1088,15 @@ def upsert_change_request(quote_no: str, exp_id: int, body: ExtraExpenseIn = Bod
             raise HTTPException(409, f"已有一筆變更申請在「{cs}」，請先完成或撤銷它")
 
         # 已駁回後再修改：沿用同一批待核准附件，不要讓使用者重傳一次
-        proposal = _proposal_from(body, (_change_of(row).get("addFiles") or []))
+        proposal = _proposal_from(body, (_change_of(row).get("addFiles") or []), row)
         now = datetime.now().isoformat(timespec="seconds")
         conn.execute(
             "UPDATE case_extra_expenses SET change_status='草稿', change_json=?, "
             "change_approval_json='{}' WHERE id=? AND quote_no=?",
             (json.dumps(proposal, ensure_ascii=False), exp_id, quote_no))
         conn.commit()
-        _audit(_tok(authorization), "extra_expense.change_draft", "quotation", quote_no,
-               f"{quote_no} 額外支出 #{exp_id} 變更申請草稿"
+        _audit(_tok(authorization), "extra_expense.change_draft", *_audit_target(quote_no, exp_id),
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更申請草稿"
                f"（NT$ {float(row['total_cost'] or 0):,.0f} → NT$ {proposal['totalCost']:,.0f}）")
         return {"ok": True, "changeStatus": "草稿", "totalCost": proposal["totalCost"],
                 "updatedAt": now}
@@ -936,11 +1108,12 @@ def upsert_change_request(quote_no: str, exp_id: int, body: ExtraExpenseIn = Bod
 def cancel_change_request(quote_no: str, exp_id: int, authorization: str = Header(None)):
     """撤銷變更申請（草稿或已駁回）。待核准附件的實體檔案一併刪除。
     送審中的要撤銷請先請簽核人駁回——否則簽核人手上的東西會憑空消失。"""
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         cs = _col(row, "change_status", "") or ""
         if cs not in ("草稿", "已駁回"):
             raise HTTPException(409, f"「{cs or '無'}」狀態的變更申請不可撤銷")
@@ -949,8 +1122,8 @@ def cancel_change_request(quote_no: str, exp_id: int, authorization: str = Heade
         _discard_pending_files(quote_no, exp_id, _change_of(row))
         _clear_change(conn, quote_no, exp_id)
         conn.commit()
-        _audit(_tok(authorization), "extra_expense.change_cancel", "quotation", quote_no,
-               f"{quote_no} 額外支出 #{exp_id} 撤銷變更申請")
+        _audit(_tok(authorization), "extra_expense.change_cancel", *_audit_target(quote_no, exp_id),
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} 撤銷變更申請")
         return {"ok": True}
     finally:
         conn.close()
@@ -963,11 +1136,12 @@ async def upload_change_request_files(quote_no: str, exp_id: int,
                                       authorization: str = Header(None)):
     """待核准附件：檔案實際落地，但只記在 `change_json.addFiles`，核准後才併進
     `files_json`。核准前任何讀取端（案件財務、結案報表 PDF）都看不到它。"""
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         cs = _col(row, "change_status", "") or ""
         if cs not in ("草稿", "已駁回"):
             raise HTTPException(409, "請先按「編輯」建立變更申請草稿，再上傳附件")
@@ -983,19 +1157,20 @@ async def upload_change_request_files(quote_no: str, exp_id: int,
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), "extra_expense.change_upload_files", "quotation", quote_no,
-           f"{quote_no} 額外支出 #{exp_id} 變更申請上傳 {len(new_files)} 個待核准附件")
+    _audit(_tok(authorization), "extra_expense.change_upload_files", *_audit_target(quote_no, exp_id),
+           f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更申請上傳 {len(new_files)} 個待核准附件")
     return {"ok": True, "added": len(new_files), "files": new_files}
 
 
 @router.delete("/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}")
 def delete_change_request_file(quote_no: str, exp_id: int, file_id: str,
                                authorization: str = Header(None)):
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         cs = _col(row, "change_status", "") or ""
         if cs not in ("草稿", "已駁回"):
             raise HTTPException(409, "送審中的變更申請不可增刪附件")
@@ -1009,8 +1184,8 @@ def delete_change_request_file(quote_no: str, exp_id: int, file_id: str,
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), "extra_expense.change_delete_file", "quotation", quote_no,
-           f"{quote_no} 額外支出 #{exp_id} 刪除變更申請待核准附件")
+    _audit(_tok(authorization), "extra_expense.change_delete_file", *_audit_target(quote_no, exp_id),
+           f"{quote_no or '無案件'} 額外支出 #{exp_id} 刪除變更申請待核准附件")
     return {"ok": True}
 
 
@@ -1020,11 +1195,12 @@ def submit_change_request(quote_no: str, exp_id: int, authorization: str = Heade
     多一個分頁——「改一筆已核准的支出」跟「新增一筆支出」該由同一批人把關）。
 
     沒有設定任何簽核層時直接套用，理由同 `submit_extra_expense()`。"""
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         cs = _col(row, "change_status", "") or ""
         if cs not in ("草稿", "已駁回"):
             raise HTTPException(409, f"「{cs or '無'}」狀態的變更申請不可送審")
@@ -1044,14 +1220,18 @@ def submit_change_request(quote_no: str, exp_id: int, authorization: str = Heade
         display = user.get("display_name") or user["username"]
         old_total = float(row["total_cost"] or 0)
         new_total = float(change.get("totalCost") or 0)
+        if "lines" in change:                                   # 費用單據的變更申請：同樣在送審當下驗類別、寫代碼／科目快照
+            change["lines"] = EF.prepare_submit(conn, change["lines"])
+            conn.execute("UPDATE case_extra_expenses SET change_json=? WHERE id=? AND quote_no=?",
+                         (json.dumps(change, ensure_ascii=False), exp_id, quote_no))
         label = f"{change.get('description')}（NT$ {old_total:,.0f} → NT$ {new_total:,.0f}）"
 
         if not tiers:
             change["requestedByDisplay"] = display
             total = _apply_change(conn, row, change, display, now)
             conn.commit()
-            _audit(_tok(authorization), "extra_expense.change_auto_apply", "quotation", quote_no,
-                   f"{quote_no} 額外支出 #{exp_id} {label}：未設定簽核層，變更直接生效")
+            _audit(_tok(authorization), "extra_expense.change_auto_apply", *_audit_target(quote_no, exp_id),
+                   f"{quote_no or '無案件'} 額外支出 #{exp_id} {label}：未設定簽核層，變更直接生效")
             return {"ok": True, "changeStatus": "", "applied": True,
                     "autoApproved": True, "totalCost": total}
 
@@ -1069,10 +1249,10 @@ def submit_change_request(quote_no: str, exp_id: int, authorization: str = Heade
         conn.commit()
 
         for a in (tiers[0].get("approvers") or []):
-            _notify(a["username"], "extra_expense_change_request", str(exp_id), quote_no,
-                    f"案件 {quote_no} 的額外支出變更申請 {label} 需要您簽核")
-        _audit(_tok(authorization), "extra_expense.change_submit", "quotation", quote_no,
-               f"{quote_no} 額外支出 #{exp_id} 變更申請 {label} 送審", {"tierCount": len(tiers)})
+            _notify(a["username"], "extra_expense_change_request", str(exp_id), quote_no or "無案件",
+                    f"{_subj(quote_no)} 的額外支出變更申請 {label} 需要您簽核")
+        _audit(_tok(authorization), "extra_expense.change_submit", *_audit_target(quote_no, exp_id),
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更申請 {label} 送審", {"tierCount": len(tiers)})
         return {"ok": True, "changeStatus": "待審核", "tierCount": len(tiers)}
     finally:
         conn.close()
@@ -1083,11 +1263,12 @@ def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default
                            authorization: str = Header(None)):
     """核准當層；全部層都過了才真的套用（`_apply_change()`）。在那之前本體的金額
     完全不動——這正是使用者要的「原核准金額不動，核准後才生效」。"""
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         cs = _col(row, "change_status", "") or ""
         if cs not in ("待審核", "簽核中"):
             raise HTTPException(409, f"「{cs or '無'}」狀態的變更申請不在簽核中")
@@ -1142,12 +1323,12 @@ def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default
             conn.commit()
             requester = appr.get("requestedBy")
             if requester:
-                _notify(requester, "extra_expense_change_approved", str(exp_id), quote_no,
-                        f"案件 {quote_no} 的額外支出變更 {label} 已核准並生效")
-            notify_module_activity("案件管理", "額外支出變更核准", display, f"{quote_no}｜{label}",
+                _notify(requester, "extra_expense_change_approved", str(exp_id), quote_no or "無案件",
+                        f"{_subj(quote_no)} 的額外支出變更 {label} 已核准並生效")
+            notify_module_activity("案件管理", "額外支出變更核准", display, f"{quote_no or '無案件'}｜{label}",
                                    f"case-management.html?q={quote_no}")
-            _audit(_tok(authorization), "extra_expense.change_approve", "quotation", quote_no,
-                   f"{quote_no} 額外支出 #{exp_id} 變更 {label} 第 {ct + 1} 層核准 → 已生效")
+            _audit(_tok(authorization), "extra_expense.change_approve", *_audit_target(quote_no, exp_id),
+                   f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更 {label} 第 {ct + 1} 層核准 → 已生效")
             return {"ok": True, "changeStatus": "", "applied": True, "totalCost": applied_total}
 
         conn.execute(
@@ -1156,10 +1337,10 @@ def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default
             (json.dumps(appr, ensure_ascii=False), exp_id, quote_no))
         conn.commit()
         for a in (tiers[appr["currentTier"]].get("approvers") or []):
-            _notify(a["username"], "extra_expense_change_request", str(exp_id), quote_no,
-                    f"案件 {quote_no} 的額外支出變更申請 {label} 需要您簽核")
-        _audit(_tok(authorization), "extra_expense.change_approve", "quotation", quote_no,
-               f"{quote_no} 額外支出 #{exp_id} 變更 {label} 第 {ct + 1} 層核准 → 簽核中")
+            _notify(a["username"], "extra_expense_change_request", str(exp_id), quote_no or "無案件",
+                    f"{_subj(quote_no)} 的額外支出變更申請 {label} 需要您簽核")
+        _audit(_tok(authorization), "extra_expense.change_approve", *_audit_target(quote_no, exp_id),
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更 {label} 第 {ct + 1} 層核准 → 簽核中")
         return {"ok": True, "changeStatus": "簽核中", "currentTier": appr["currentTier"]}
     finally:
         conn.close()
@@ -1170,11 +1351,12 @@ def reject_change_request(quote_no: str, exp_id: int, body: dict = Body(default=
                           authorization: str = Header(None)):
     """駁回變更申請 → 回到「已駁回」，申請人可以改完再送一次或整個撤銷。
     本體的金額從頭到尾沒被動過，所以駁回不需要回滾任何東西。"""
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
     user = _require_user(authorization)
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
-        row = _load(conn, quote_no, exp_id)
+        row = _load(conn, quote_no, exp_id, user)
         cs = _col(row, "change_status", "") or ""
         if cs not in ("待審核", "簽核中"):
             raise HTTPException(409, f"「{cs or '無'}」狀態的變更申請不在簽核中")
@@ -1208,11 +1390,11 @@ def reject_change_request(quote_no: str, exp_id: int, body: dict = Body(default=
         label = f"{change.get('description')}（NT$ {float(change.get('totalCost') or 0):,.0f}）"
         requester = appr.get("requestedBy")
         if requester:
-            _notify(requester, "extra_expense_change_rejected", str(exp_id), quote_no,
-                    f"案件 {quote_no} 的額外支出變更申請 {label} 已被駁回"
+            _notify(requester, "extra_expense_change_rejected", str(exp_id), quote_no or "無案件",
+                    f"{_subj(quote_no)} 的額外支出變更申請 {label} 已被駁回"
                     + (f"：{reason}" if reason else ""))
-        _audit(_tok(authorization), "extra_expense.change_reject", "quotation", quote_no,
-               f"{quote_no} 額外支出 #{exp_id} 變更申請 {label} 被駁回" + (f"：{reason}" if reason else ""))
+        _audit(_tok(authorization), "extra_expense.change_reject", *_audit_target(quote_no, exp_id),
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更申請 {label} 被駁回" + (f"：{reason}" if reason else ""))
         return {"ok": True, "changeStatus": "已駁回"}
     finally:
         conn.close()

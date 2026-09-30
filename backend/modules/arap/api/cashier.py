@@ -99,6 +99,38 @@ def get_pending_payables(authorization: str = Header(None)):
     return {"available": True, "notice": "", "items": items, "canPay": _can_pay(user)}
 
 
+@router.get("/api/cashier/pending-payables/{source}/{key}/payee-bank")
+def get_payee_bank(source: str, key: str, authorization: str = Header(None)):
+    """出納付款前看收款人銀行資料（A2-3）。**只有能付款的人**（管理員／出納）；每次查看都留稽核（不記帳號內容）。
+    來源優先序：銀行資料表提供者 `payee.bank_profile`（有登錄、員工）→ 單據上手填的快照 → 沒有（明說，不猜）。"""
+    user = _require_user(authorization)
+    if not _can_pay(user):
+        raise HTTPException(403, "只有管理員或出納可以查看收款人銀行資料")
+    p = registry.providers("payables.pending").get(source)
+    if p is None or not hasattr(p, "payee_info"):
+        raise HTTPException(404, "找不到請款來源「%s」（或該來源不提供收款人資料）" % source)
+    conn = get_db()
+    try:
+        try:
+            info = p.payee_info(conn, key)
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+        out = {"payeeType": info["payeeType"], "payeeName": info["payeeName"], "source": "none", "bank": "", "account": "", "accountName": "",
+               "notice": ""}
+        prof_fn = registry.single_provider("payee.bank_profile") if info.get("payeeUsername") else None
+        prof = prof_fn(conn, info["payeeUsername"], user) if prof_fn else None
+        if prof and prof.get("account"):
+            out.update(source="profile", bank=prof.get("bank") or "", account=prof.get("account") or "", accountName=prof.get("accountName") or "")
+        elif info["bank"] or info["account"]:
+            out.update(source="form", bank=info["bank"], account=info["account"])
+        else:
+            out["notice"] = "尚未登錄收款人銀行資料" + ("（員工請先到個人設定登錄）" if info.get("payeeUsername") else "")
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "cashier.payee_bank_view", source, key, "出納查看收款人銀行資料（來源：%s）" % out["source"])
+    return out
+
+
 @router.post("/api/cashier/pending-payables/{source}/{key}/pay")
 def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), authorization: str = Header(None)):
     """登錄付款：寫回來源單據的付款日（經提供者，出納不直接碰別的模組的表）⇒ 從待付款消失。"""
@@ -119,6 +151,13 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
         raise HTTPException(400, "付款日不是有效的日期")
     conn = get_db()
     try:
+        acct = str((body or {}).get("payAccountCode") or "").strip()      # A2-3：付款科目（選填）——有給就用會計連接器驗存在與啟用
+        if acct:
+            chk = registry.single_provider("voucher.account_check")
+            if chk is not None:
+                ok, err = chk(conn, acct)
+                if not ok:
+                    raise HTTPException(400, "付款科目：%s" % err)
         try:
             res = p.mark_paid(conn, key, paid, user, remit=body)          # W1：實付／手續費／差額審核
         except LookupError as e:
@@ -129,8 +168,8 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
     finally:
         conn.close()
     _audit(_tok(authorization), "cashier.payable_paid", source, key,
-           "出納登錄請款付款：%s #%s（%s）付款日 %s 實付 %s 手續費 %s%s" % (
-               source, key, res.get("quoteNo") or "", paid, res.get("actual"), res.get("fee"),
+           "出納登錄請款付款：%s #%s（%s）付款日 %s 實付 %s 手續費 %s 付款方式 %s%s" % (
+               source, key, res.get("quoteNo") or "", paid, res.get("actual"), res.get("fee"), (body or {}).get("payMethod") or "預設",
                "（差額 %+g，待審核）" % res["diff"] if res.get("remitReview") else ""))
     if res.get("remitReview"):
         notify_module_activity("請款付款", "匯款差額待審核", user.get("display_name") or user["username"],

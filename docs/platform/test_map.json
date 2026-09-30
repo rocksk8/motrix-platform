@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 928,
+  "tests": 932,
   "unmapped": 12,
   "kinds": {
-   "api": 497,
-   "e2e": 218,
+   "api": 500,
+   "e2e": 219,
    "audit": 128,
    "unit": 85
   },
-  "routes": 698
+  "routes": 699
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -4230,6 +4230,33 @@
    "login_fixture": true,
    "module": "arap"
   },
+  "backend/modules/arap/tests/test_cashier_payout_a2_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "mod:arap/api/cashier",
+    "mod:case/api/case_extra_expenses",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/case_extra_expenses.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
   "backend/modules/arap/tests/test_cashier_pending_payables_2026_09_27.py": {
    "kind": "api",
    "units": [
@@ -4315,6 +4342,36 @@
      "backend/modules/arap/"
     ]
    },
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_e2e_cashier_payout_a2_2026_10_01.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:case/api/case_extra_expenses",
+    "page:pages/cashier.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "frontend/pages/cashier.html"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
    "module": "arap"
   },
   "backend/modules/arap/tests/test_e2e_cashier_receive_amount_2026_09_24.py": {
@@ -4996,6 +5053,66 @@
     ],
     "path": [
      "frontend/pages/approval-queue.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_expense_caseless_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/api/case_extra_expenses"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_expense_forms_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:arap/api/cashier",
+    "mod:case/__init__",
+    "mod:case/api/__init__",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/quotations",
+    "mod:case/expense_forms",
+    "mod:case/gl_events",
+    "mod:case/recognition",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/expense_forms.py",
+     "backend/modules/case/gl_events.py",
+     "backend/modules/case/recognition.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/case_extra_expenses.py"
     ],
     "module_dir": [
      "backend/modules/case/"
