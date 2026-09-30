@@ -633,6 +633,8 @@ def post_voucher(conn, voucher_id, user):
     ⚠️ ④（法定副本／`ledger_confirmed`）**本輪不做** —— 沒有派工，
        而 `ledger_confirmed` 的預設值 0 已經讓它日後接得上。
     """
+    from core.txn import begin_write
+    begin_write(conn)      # 先拿寫鎖再讀狀態：並行過帳同一張，第二個要等第一個做完、看到「已過帳」（W3 交叉驗證 2026-09-30）
     row = conn.execute(
         "SELECT * FROM vouchers_all WHERE id = ?", (voucher_id,)).fetchone()
     if row is None:
@@ -682,10 +684,12 @@ def post_voucher(conn, voucher_id, user):
             (names.get(ln["account_code"], ""), ln["id"]))
 
     now = _dt.datetime.now().isoformat()
-    conn.execute(
+    cur = conn.execute(
         "UPDATE vouchers_all SET status = ?, posted_at = ?, posted_by = ?,"
-        " updated_at = ? WHERE id = ?",
+        " updated_at = ? WHERE id = ? AND status = '已核准'",          # 條件式更新：狀態被別人改走就不寫（rowcount==0）
         (_FROZEN_STATUS, now, user or "", now, voucher_id))
+    if cur.rowcount != 1:
+        return False, "這張傳票剛被其他人處理過，請重新整理後再看它現在的狀態。"
     return True, None
 
 

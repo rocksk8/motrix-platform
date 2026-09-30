@@ -25,7 +25,9 @@ def _shot(page, name):
                             cwd=os.path.dirname(__file__)).stdout.strip() or "unknown"
         d = os.path.join(os.environ.get("MOTRIX_SHOTS_DIR") or os.path.join(tempfile.gettempdir(), "w4-shots"), br.replace("/", "_"))
         os.makedirs(d, exist_ok=True)
-        page.screenshot(path=os.path.join(d, name + ".png"), full_page=True)
+        page.set_viewport_size({"width": 1280, "height": 1250})           # 一屏拍完：不用 full_page（黏在頂端的導覽列會被拼進中段）
+        page.evaluate("() => window.scrollTo(0, 0)")
+        page.screenshot(path=os.path.join(d, name + ".png"), full_page=False)
     except Exception:  # noqa: BLE001  截圖失敗不影響驗證
         pass
 

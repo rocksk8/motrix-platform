@@ -28,7 +28,7 @@ def _shots_dir():
     d = os.path.join(os.environ.get("MOTRIX_SHOTS_DIR") or os.path.join(tempfile.gettempdir(), "w4-shots"), branch.replace("/", "_"))
     try:
         os.makedirs(d, exist_ok=True)
-    except OSError:
+    except Exception:  # noqa: BLE001
         return None
     return d
 
@@ -118,7 +118,7 @@ def test_tax401_tab_query_export_and_settlement_buttons(live_server, make_user, 
         c.close()
     _shot(page, "tax401_settlement")
 
-    page.select_option("[data-testid=hb-tax-period]", "4")                                         # 沒有稅額的期別：查詢後按鈕停用（不可產生）
+    page.select_option("[data-testid=hb-tax-period]", "4")                                         # 沒有稅額的期別：仍可按（對帳相符時按鈕可用），後端明說沒有稅額所以不產生
     page.locator("[data-testid=hb-tax-load]").click()
     page.locator("[data-testid=hb-tax-settle]").click()
     page.wait_for_selector("[data-testid=hb-tax-error]", state="visible")
@@ -206,6 +206,9 @@ def test_annotation_tab_save_and_clear_buttons(live_server, make_user, e2e_brows
     page.wait_for_selector("[data-testid=hb-an-row-E2E-ANN-1]", state="visible")
     assert "稅額為估計" in page.locator("[data-testid=hb-an-row-E2E-ANN-1]").inner_text()
     _shot(page, "annotations_pending")
+    page.locator("[data-testid=hb-an-save-E2E-ANN-1]").click()                                     # 兩格都空：不送、不顯示已補登
+    page.wait_for_selector("[data-testid=hb-an-error]", state="visible")
+    assert "請至少填入" in page.locator("[data-testid=hb-an-error]").inner_text() and page.locator("[data-testid=hb-an-notice]").is_hidden()
     page.fill("[data-testid=hb-an-tax-E2E-ANN-1]", "480")
     page.fill("[data-testid=hb-an-date-E2E-ANN-1]", "2183-03-12")
     page.locator("[data-testid=hb-an-save-E2E-ANN-1]").click()
