@@ -5,22 +5,25 @@ from core.registry import ModuleSpec
 
 import importlib
 
-from modules.payroll import bonus, bonus_correction, bonus_payouts, bonus_queue, gl_events, payslip_payouts, remit_link
-from modules.payroll.api import bonus as bonus_api, bonus_correction as bonus_correction_api, payslips as payslips_api
+from modules.payroll import bank_account, bonus, bonus_correction, bonus_payouts, bonus_queue, gl_events, payslip_payouts, remit_link
+from modules.payroll.api import bank_account as bank_account_api, bonus as bonus_api, bonus_correction as bonus_correction_api, payslips as payslips_api
 from modules.payroll import attachments   # 要在 api 之後：提供者用 payslips 的 _signed_path／_archive_dir
 
 _m0001 = importlib.import_module("modules.payroll.migrations.0001_payslip_void_signed_paid")
 _m0002 = importlib.import_module("modules.payroll.migrations.0002_bonus_corrections")
+_m0003 = importlib.import_module("modules.payroll.migrations.0003_user_bank_accounts")
 
 MODULE = ModuleSpec(
     key="payroll",
-    routers=[payslips_api.router, bonus_correction_api.router, bonus_api.router],
-    migrations=[(1, _m0001.up), (2, _m0002.up)],
+    routers=[payslips_api.router, bonus_correction_api.router, bonus_api.router, bank_account_api.router],
+    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up)],
     providers={
         # IP-8：出納頁的獎金待發放與發放紀錄（M05）
         ("bonus.payouts", "payroll"): bonus_payouts._Payouts,
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
         ("attachments.catalog", "payroll"): attachments._PayrollCatalog,
+        # IP-BK1（A2 收款人）：員工收款帳號（依檢視者回完整／遮蔽；完整必帶稽核 token）
+        ("payee.bank_profile", "payroll"): bank_account.payee_bank_profile,
         # IP-9：已發放的獎金列入營運報表與月支出（M08）
         ("expense.entries", "bonus"): bonus_payouts._expense_entries,
         # IP-9：獎金更正單的補發（補發日）與追回（核准日）列入營運報表與月支出（M08，名稱 bonus_correction）

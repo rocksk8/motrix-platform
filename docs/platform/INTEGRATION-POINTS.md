@@ -793,3 +793,18 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 契約版本 | 1（2026-09-30） |
 | 守門 | `backend/modules/accounting/tests/test_ledger_a_contract_2026_09_30.py`：驗證（12 種壞事件各有原因）、內容雜湊（meta／順序／說明不參與，金額變了雜湊必變）、正對照（合格事件必出現且帶雜湊）、反向控制（缺席、未接入、提供者壞掉、無效事件、重複、notice 傳遞）、API 權限與缺席說明 |
 
+## IP-BK1　`payee.bank_profile`：收款人銀行資料（payroll → 請款／出納／A2 撥款；單一提供者；暫定號，列車定號）
+
+**狀態：實作於 `wip/w3-bank-profile`（2026-10-01，W3）。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | `modules/payroll/bank_account.py::payee_bank_profile` |
+| 使用方 | A2 請款收款人／出納撥款（`modules/case`、`modules/arap`；W2）、`modules/payroll/api/bank_account.py`（本模組 API 也走同一支） |
+| 形式 | provider（單一提供者；`ModuleSpec.providers[("payee.bank_profile", "payroll")]`）；簽章 `(conn, username, viewer, reveal=False, audit_token=None, purpose="") -> dict` |
+| 回傳 | `{"status": "none"}`（沒登錄）或 `{"status": "ok", bankCode, bankName, bankBranch, accountName, accountNumber（遮蔽時為空字串）, accountNumberMasked（`****1234`）, last4, masked, updatedAt, updatedBy}`；拒絕 reveal 時多 `revealRefused` |
+| 遮蔽規則 | 本人看自己：完整。超級管理員／財務（`finance`）／出納（`cashier`）：預設遮蔽，`reveal=True` **且帶 `audit_token`** 才回完整，並寫稽核 `user.bank_account.reveal`（誰、看誰、用途、末四碼；不記全碼）。其他人：遮蔽。`reveal` 沒帶 token ⇒ 照遮蔽回＋`revealRefused`（不會靜默給全碼又沒紀錄） |
+| 快照 | 單據送審時凍結用 `bank_account.snapshot(conn, username, viewer)`：只存遮蔽版（銀行／分行／戶名／末四碼／凍結時間）；**完整帳號不散落在單據 JSON**，付款時由有資格者 reveal 讀現值（送審後帳號被改 ⇒ 快照末四碼與現值不同，簽核畫面可據此警示） |
+| 對方不在時 | payroll 模組不在 ⇒ `single_provider("payee.bank_profile")` 為 None ⇒ 呼叫端退回收款人文字（請款單自己的收款人欄），不報錯 |
+| 資料 | payroll migration 0003 `user_bank_accounts`（T1）；每人一個 `active=1`（部分唯一索引），改帳號＝舊列 `active=0`＋新列 |
+| 守門 | `modules/payroll/tests/test_bank_account_2026_10_01.py`（遮蔽矩陣、IDOR、稽核不含全碼、快照、reveal 必帶 token）、e2e `test_e2e_bank_account_2026_10_01.py` |

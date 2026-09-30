@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## 1.1.16 — 2026-10-01（暫用號，列車取號；wip/w3-bank-profile）
+- 員工收款帳號（A2 收款人，使用者 2026-10-01）：migration 0003 新增 `user_bank_accounts`（每人一個有效帳戶、舊的留歷史）；`/api/me/bank-account`（本人）、`/api/bank-accounts*`（超級管理員／財務維護；出納查看）；頁面 `bank-account.html`；遮蔽：本人完整、有資格者要 `reveal=1` 才回完整並寫稽核、其他人只見末四碼；提供者 `payee.bank_profile`（IP-BK1）。只新增表，舊程式碼不讀它（回滾相容）。
+
 ## 1.1.15 — 2026-10-01（暫用號，列車取號；wip/w2-bonus-correction-3：列車 28 紅燈修正）
 - 獎金更正單：寫入交易改用 `core.txn.begin_write`（不再自己 `BEGIN IMMEDIATE`）；沖轉傳票呼叫 `voucher.draft` 改明列關鍵字（不用 `**`）；更正單頁的狀態篩選標 `class="filter"`。
 - 文件：`case_read_scope.json` 歸類更正單的兩條讀取路徑（`list_corrections`、`current_amounts`＝own_rule）；`money_flows.json`／MONEY-FLOWS.md 登記 E8b（IP-9 `bonus_correction`）；三種信件類型加進個人通知設定（`notification_prefs`）。行為不變。

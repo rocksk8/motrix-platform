@@ -2545,6 +2545,10 @@ _F2_FIELDS = {
     # 銀行代碼／名稱／分行是機構資訊，不列入（同外包人員）。
     "協力廠商": {"table": "vendor_contractors",
                  "json": ("data_json", _VENDOR_ACCOUNT_KEYS)},
+    # 2026-10-01（A2 收款人）：員工收款帳號（payroll 模組表 `user_bank_accounts`，模組宣告 T1 ⇒ 自動進每日 JSON，鍵＝`模組-payroll-…`）。
+    # 戶名與帳號是個資 ⇒ 一般份拿掉、完整列只進個資資料夾；銀行代碼／名稱／分行是機構資訊，不列入。
+    # ⚠️ 模組未載入時這張表不在 `_daily_backup_tables()`：`_export_pii_json_set` 對不在的表略過（不算 error）。
+    "模組-payroll-user_bank_accounts": {"table": "user_bank_accounts", "columns": ("account_name", "account_number")},
 }
 #: data_json 解析不了時一般份放這個——**不可以原樣照放**（那等於把個資原樣帶進一般份）
 _F2_UNPARSEABLE = "<含個資欄位且無法解析，僅收錄於個資備份>"
@@ -2623,6 +2627,8 @@ def _export_pii_json_set(conn, dest_dir_abs: str, now: str) -> dict:
     summary = {}
     tables = _daily_backup_tables()
     for fname in _F2_FIELDS:
+        if fname not in tables:                         # 宣告在模組表上、而模組沒載入 ⇒ 沒有這張表可匯（不是錯誤）
+            continue
         try:
             rows = [dict(r) for r in conn.execute(tables[fname]).fetchall()]
             path = os.path.join(dest_dir_abs, f"{fname}.json")

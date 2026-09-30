@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>收款帳號 - MOTRIX 專案管理系統</title>
+  <script src="../static/ui.js"></script>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:24px 28px;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));background:var(--bg,#F5F4F0)}
+    .ba-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+    .ba-title{font-size:20px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary)}
+    .ba-note{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh)}
+    .ba-card{border:1px solid var(--border-light);border-radius:8px;background:#fff;padding:16px 18px;margin-bottom:16px;max-width:760px}
+    .ba-sec{font-size:13px;font-weight:700;color:var(--text-primary);margin:0 0 10px;font-family:var(--font-zh)}
+    .ba-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+    .ba-f label{display:block;font-size:12px;color:var(--text-secondary);margin-bottom:3px;font-family:var(--font-zh)}
+    .ba-f input,.ba-f select{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--border-light);border-radius:6px;font-size:14px;font-family:var(--font-zh)}
+    .ba-num{font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.5px}
+    .ba-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+    .ba-btn{padding:7px 16px;border-radius:6px;border:1px solid transparent;font-size:13px;cursor:pointer;font-family:var(--font-zh);background:var(--black,#0A0A0A);color:#fff}
+    .ba-btn--ghost{background:#fff;color:var(--text-primary);border-color:var(--border-light)}
+    .ba-btn:disabled{opacity:.5;cursor:not-allowed}
+    .ba-err{font-size:13px;color:var(--danger);font-family:var(--font-zh)}
+    .ba-ok{font-size:13px;color:#15803D;font-family:var(--font-zh)}
+    .ba-mask{display:inline-block;padding:2px 8px;border-radius:9px;background:#F3F4F6;color:#374151;font-size:12px;font-family:var(--font-zh)}
+    .ba-hist{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);margin:6px 0 0;padding:0;list-style:none}
+    .ba-hist li{padding:3px 0;border-bottom:1px dashed var(--border-light)}
+    @media (max-width:767px){.page-main{margin-left:0;padding:16px}}
+  </style>
+</head>
+<body x-data="bankAccountPage()" x-init="init()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div id="sidebar-root"></div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div>
+    <main class="page-main">
+      <div class="ba-head">
+        <div class="ba-title">收款帳號</div>
+        <span class="ba-note">報銷、代墊款與勞務報酬匯給你的銀行帳號。只有你本人、超級管理員、財務與出納看得到完整帳號；其他人只看到末四碼。</span>
+      </div>
+
+      <!-- ── 我的收款帳號 ── -->
+      <section class="ba-card" data-testid="ba-mine">
+        <h3 class="ba-sec">我的收款帳號</h3>
+        <div x-show="!loaded" class="ba-note">載入中…</div>
+        <div x-show="loaded && mine.status === 'none'" class="ba-note" data-testid="ba-none">尚未登錄收款帳號（請款或報銷時會提示你先登錄）。</div>
+        <div x-show="loaded && mine.status === 'ok'" style="margin-bottom:10px" data-testid="ba-current">
+          目前：<b x-text="mine.bankName || mine.bankCode"></b>　<span x-text="mine.accountName"></span>
+          <span class="ba-num" x-text="showMine ? mine.accountNumber : mine.accountNumberMasked" data-testid="ba-current-number"></span>
+          <button type="button" class="ba-btn ba-btn--ghost" style="padding:2px 10px;margin-left:8px" data-testid="ba-toggle-show" @click="showMine = !showMine" x-text="showMine ? '隱藏' : '顯示'"></button>
+        </div>
+        <form @submit.prevent="saveMine()" data-testid="ba-form">
+          <div class="ba-grid">
+            <div class="ba-f"><label>銀行代碼（3 碼）</label><input data-testid="ba-bank-code" x-model="f.bankCode" maxlength="3" inputmode="numeric" autocomplete="off"></div>
+            <div class="ba-f"><label>銀行名稱</label><input data-testid="ba-bank-name" x-model="f.bankName" maxlength="40" autocomplete="off"></div>
+            <div class="ba-f"><label>分行</label><input data-testid="ba-branch" x-model="f.bankBranch" maxlength="40" autocomplete="off"></div>
+            <div class="ba-f"><label>戶名</label><input data-testid="ba-account-name" x-model="f.accountName" maxlength="40" autocomplete="off"></div>
+            <div class="ba-f"><label>帳號（可含空白或連字號）</label><input class="ba-num" data-testid="ba-account-number" x-model="f.accountNumber" maxlength="24" inputmode="numeric" autocomplete="off"></div>
+          </div>
+          <div class="ba-row">
+            <button type="submit" class="ba-btn" data-testid="ba-save" :disabled="busy">儲存</button>
+            <span class="ba-err" data-testid="ba-err" x-show="err" x-text="err"></span>
+            <span class="ba-ok" data-testid="ba-msg" x-show="msg" x-text="msg"></span>
+          </div>
+        </form>
+      </section>
+
+      <!-- ── 管理：查看／維護別人的（超級管理員、財務、出納） ── -->
+      <section class="ba-card" data-testid="ba-admin" x-show="canList" x-cloak>
+        <h3 class="ba-sec">同仁收款帳號<span class="ba-note" style="font-weight:400" x-text="canEdit ? '（可維護）' : '（只能查看，付款用）'"></span></h3>
+        <div class="ba-f" style="max-width:320px">
+          <label>選擇同仁</label>
+          <select data-testid="ba-user-select" x-model="pickId" @change="loadUser()">
+            <option value="">—</option>
+            <template x-for="u in users" :key="u.id">
+              <option :value="String(u.id)" x-text="u.displayName + '（' + (u.hasAccount ? (u.bankName || '已登錄') + ' ****' + u.last4 : '未登錄') + '）'"></option>
+            </template>
+          </select>
+        </div>
+        <div x-show="target" style="margin-top:12px" data-testid="ba-target">
+          <div x-show="target && target.account.status === 'none'" class="ba-note" data-testid="ba-target-none">這位同仁尚未登錄收款帳號。</div>
+          <div x-show="target && target.account.status === 'ok'">
+            <b x-text="target && target.account.bankName"></b>　<span x-text="target && target.account.accountName"></span>
+            <span class="ba-num" data-testid="ba-target-number" x-text="target && (target.account.masked ? target.account.accountNumberMasked : target.account.accountNumber)"></span>
+            <button type="button" class="ba-btn ba-btn--ghost" style="padding:2px 10px;margin-left:8px" data-testid="ba-reveal" x-show="target && target.account.masked" @click="reveal()">顯示完整帳號（會留稽核紀錄）</button>
+          </div>
+          <div x-show="canEdit" style="margin-top:12px">
+            <div class="ba-grid">
+              <div class="ba-f"><label>銀行代碼</label><input data-testid="ba-a-bank-code" x-model="af.bankCode" maxlength="3" autocomplete="off"></div>
+              <div class="ba-f"><label>銀行名稱</label><input data-testid="ba-a-bank-name" x-model="af.bankName" maxlength="40" autocomplete="off"></div>
+              <div class="ba-f"><label>分行</label><input data-testid="ba-a-branch" x-model="af.bankBranch" maxlength="40" autocomplete="off"></div>
+              <div class="ba-f"><label>戶名</label><input data-testid="ba-a-account-name" x-model="af.accountName" maxlength="40" autocomplete="off"></div>
+              <div class="ba-f"><label>帳號</label><input class="ba-num" data-testid="ba-a-account-number" x-model="af.accountNumber" maxlength="24" autocomplete="off"></div>
+            </div>
+            <div class="ba-row">
+              <button type="button" class="ba-btn" data-testid="ba-a-save" :disabled="busy" @click="saveTarget()">儲存（代為維護）</button>
+              <span class="ba-err" data-testid="ba-a-err" x-show="aerr" x-text="aerr"></span>
+              <span class="ba-ok" data-testid="ba-a-msg" x-show="amsg" x-text="amsg"></span>
+            </div>
+            <ul class="ba-hist" data-testid="ba-history" x-show="hist.length">
+              <template x-for="h in hist" :key="h.createdAt + h.last4">
+                <li x-text="h.createdAt.slice(0, 16).replace('T', ' ') + '　' + (h.bankName || h.bankCode) + ' ****' + h.last4 + '　by ' + h.createdBy + (h.active ? '（目前）' : '（已更換）')"></li>
+              </template>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+  function bankAccountPage() {
+    const blank = () => ({ bankCode: '', bankName: '', bankBranch: '', accountName: '', accountNumber: '' })
+    return {
+      loaded: false, mine: { status: 'none' }, f: blank(), showMine: false, busy: false, err: '', msg: '',
+      canList: false, canEdit: false, users: [], pickId: '', target: null, af: blank(), hist: [], aerr: '', amsg: '',
+      _token() { try { return (JSON.parse(localStorage.getItem('motrix_session') || '{}')).token || '' } catch (e) { return '' } },
+      _h(json) { const h = { Authorization: 'Bearer ' + this._token() }; if (json) h['Content-Type'] = 'application/json'; return h },
+      async _err(r) { try { const d = await r.json(); return typeof d.detail === 'string' ? d.detail : ('HTTP ' + r.status) } catch (e) { return 'HTTP ' + r.status } },
+      _initDone: false,
+      async init() {
+        // Alpine 3 會自動呼叫資料物件的 init()，<body> 又寫 x-init="init()" ⇒ 不守衛會跑兩遍（重複打 API）
+        if (this._initDone) return
+        this._initDone = true
+        await this.loadMine()
+        try {
+          const r = await fetch('/api/bank-accounts', { headers: this._h() })      // 沒資格 ⇒ 404 ⇒ 不顯示管理區
+          if (r.ok) { const d = await r.json(); this.users = d.users || []; this.canEdit = !!d.canEdit; this.canList = true }
+        } catch (e) {}
+      },
+      _fill(dst, a) { dst.bankCode = a.bankCode || ''; dst.bankName = a.bankName || ''; dst.bankBranch = a.bankBranch || ''; dst.accountName = a.accountName || ''; dst.accountNumber = a.accountNumber || '' },
+      async loadMine() {
+        try {
+          const r = await fetch('/api/me/bank-account', { headers: this._h() })
+          if (!r.ok) throw new Error(await this._err(r))
+          this.mine = (await r.json()).account || { status: 'none' }
+          if (this.mine.status === 'ok') this._fill(this.f, this.mine)
+        } catch (e) { this.err = '載入失敗（' + e.message + '）' }
+        this.loaded = true
+      },
+      async saveMine() {
+        this.err = this.msg = ''; this.busy = true
+        try {
+          const r = await fetch('/api/me/bank-account', { method: 'PUT', headers: this._h(true), body: JSON.stringify(this.f) })
+          if (!r.ok) { this.err = await this._err(r); return }
+          const d = await r.json()
+          this.mine = d.account || { status: 'none' }; this.msg = (d.changed || []).length ? '已儲存。' : '沒有變更。'
+          if (this.mine.status === 'ok') this._fill(this.f, this.mine)
+        } catch (e) { this.err = '儲存失敗：' + e.message } finally { this.busy = false }
+      },
+      async loadUser(reveal) {
+        this.aerr = this.amsg = ''; this.target = null; this.hist = []
+        if (!this.pickId) return
+        try {
+          const r = await fetch('/api/bank-accounts/' + encodeURIComponent(this.pickId) + (reveal ? '?reveal=1' : ''), { headers: this._h() })
+          if (!r.ok) { this.aerr = await this._err(r); return }
+          this.target = await r.json()
+          this.af = blank()
+          if (this.target.account.status === 'ok' && !this.target.account.masked) this._fill(this.af, this.target.account)
+          else if (this.target.account.status === 'ok') { this.af.bankCode = this.target.account.bankCode; this.af.bankName = this.target.account.bankName; this.af.bankBranch = this.target.account.bankBranch; this.af.accountName = this.target.account.accountName }
+          if (this.canEdit) {
+            const h = await fetch('/api/bank-accounts/' + encodeURIComponent(this.pickId) + '/history', { headers: this._h() })
+            if (h.ok) this.hist = (await h.json()).history || []
+          }
+        } catch (e) { this.aerr = '載入失敗：' + e.message }
+      },
+      reveal() { return this.loadUser(true) },
+      async saveTarget() {
+        this.aerr = this.amsg = ''; this.busy = true
+        try {
+          const r = await fetch('/api/bank-accounts/' + encodeURIComponent(this.pickId), { method: 'PUT', headers: this._h(true), body: JSON.stringify(this.af) })
+          if (!r.ok) { this.aerr = await this._err(r); return }
+          const d = await r.json()
+          const msg = (d.changed || []).length ? '已儲存。' : '沒有變更。'
+          const l = await fetch('/api/bank-accounts', { headers: this._h() })
+          if (l.ok) this.users = (await l.json()).users || this.users
+          await this.loadUser(false)            // 會清掉訊息 ⇒ 載完再顯示
+          this.amsg = msg
+        } catch (e) { this.aerr = '儲存失敗：' + e.message } finally { this.busy = false }
+      },
+    }
+  }
+  </script>
+  <!-- ⚠️ `notif.js` 必須與 `sidebar.js` 成對出現（同 bonus.html） -->
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

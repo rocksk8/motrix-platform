@@ -1,7 +1,7 @@
 {
   "key": "payroll",
   "name": "薪資獎金",
-  "version": "1.1.15",
+  "version": "1.1.16",
   "core": ">=1.0,<2.0",
   "license_key": "payroll",
   "permissions": ["payslip"],
@@ -9,7 +9,7 @@
   "tables": ["payslips", "payslip_seq", "bonus_items", "bonus_item_people", "bonus_groups", "bonus_group_members",
              "bonus_awards", "bonus_award_lines", "bonus_award_edit_log",
              "bonus_case_awards", "bonus_case_award_lines", "bonus_case_award_edit_log",
-             "bonus_corrections", "bonus_correction_log"],
+             "bonus_corrections", "bonus_correction_log", "user_bank_accounts"],
   "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；payslips 的作廢／簽回／付款 10 欄由本模組自己的 migration（migrations/0001_payslip_void_signed_paid.py）新增；獎金更正單兩張表由 migrations/0002_bonus_corrections.py 建。勞報單的身分證號、地址等個資欄位由 archive._F2_FIELDS 分流；簽回檔實體檔放勞報單存檔目錄（F2）",
   "data": {
     "tables": [
@@ -20,15 +20,18 @@
       {"name": "bonus_award_edit_log", "class": "T1"},
       {"name": "bonus_case_awards", "class": "T1"}, {"name": "bonus_case_award_lines", "class": "T1"},
       {"name": "bonus_case_award_edit_log", "class": "T1"},
-      {"name": "bonus_corrections", "class": "T1"}, {"name": "bonus_correction_log", "class": "T1"}
+      {"name": "bonus_corrections", "class": "T1"}, {"name": "bonus_correction_log", "class": "T1"},
+      {"name": "user_bank_accounts", "class": "T1"}
     ],
     "files": [{"key": "payslip_archive", "class": "F2", "setting": "payslip_archive_path"}]
   },
   "customization": {"schema": 1, "fields": {}, "pages": [], "outputs": []},
   "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；勞報單的輸出版型可覆寫（P2，helpers/output_templates/payslip.json，屬 L1 輸出引擎）",
-  "provides": {"api_prefixes": ["/api/payslips", "/api/next-slip-no", "/api/tax-rules", "/api/bonus"],
+  "provides": {"api_prefixes": ["/api/payslips", "/api/next-slip-no", "/api/tax-rules", "/api/bonus", "/api/me", "/api/bank-accounts"],
                "probes": ["/api/payslips", "/api/tax-rules", "/api/bonus/awards", "/api/bonus/items"]},
   "pages": [{"path": "payslips.html",
      "menu": {"group": "payroll", "label": "勞報單", "order": 20, "perm": ["payslip"], "active": ["payslips.html", "payslip-form.html"]}}, {"path": "payslip-form.html"}, {"path": "bonus-corrections.html"}, {"path": "bonus.html",
-     "menu": {"group": "finance", "label": "獎金分潤", "order": 90, "perm": "any"}}]
+     "menu": {"group": "finance", "label": "獎金分潤", "order": 90, "perm": "any"}},
+    {"path": "bank-account.html",
+     "menu": {"group": "finance", "label": "收款帳號", "order": 95, "perm": "any"}}]
 }
