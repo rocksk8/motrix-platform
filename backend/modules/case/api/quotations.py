@@ -1,4 +1,5 @@
 """Quotation CRUD, approval workflow, deal-tag, export endpoints."""
+import functools
 import json
 import logging
 import math
@@ -4375,8 +4376,15 @@ def approval_queue_items(conn) -> list:
     2026-09-11 額外支出與其變更申請；2026-09-12 完工單。其他模組的單據 2026-09-26 起由各模組提供。"""
     items = []
 
+    # 效能（W3 approval-freeze，量測 n=200 張待簽、每張 data_json 約 60KB：佇列 441 ms、角標 400 ms，幾乎全是逐筆 json.loads 整份
+    # data_json）：正常的單（JSON 合法、approval 是物件）由 SQLite 直接取出 `$.approval` 那一小段；**巢狀 CASE 保證壞 JSON 不會讓
+    # 整個查詢丟例外**（`json_valid` 為假就不會執行 json_type／json_extract），其餘一切形狀（壞 JSON、沒有 approval、approval 不是
+    # 物件、空字串、NULL）照舊走 Python 的 L1 `approval_json_of`（語意完全不變：壞的跳過＋ERROR、沒有簽核層照列）。
     rows = conn.execute("""
-        SELECT quote_no, customer_name, project_name, total, quote_date, sales_person, data_json
+        SELECT quote_no, customer_name, project_name, total, quote_date, sales_person,
+               CASE WHEN json_valid(data_json) THEN
+                    CASE WHEN json_type(data_json, '$.approval') = 'object' THEN json_extract(data_json, '$.approval') END
+               END AS appr_fast
         FROM quotations
         WHERE status IN ('待審核','簽核中')
         ORDER BY id DESC
@@ -4385,7 +4393,10 @@ def approval_queue_items(conn) -> list:
         # 簽核 JSON 在 Python 逐筆解析（L1 approval_json_of）：SQL json_extract 遇到一筆壞 JSON 會讓 M01 整類消失；
         # 壞的那一筆跳過＋ERROR：列出了也簽不了（核准端點讀這張單的 JSON 會丟 JSONDecodeError ⇒ 500、狀態不變；D 實測）（〔更正〕~~不可以當成沒有簽核層列出：那會變成任一 superadmin 可簽~~）；
         # 能解析而沒有簽核層的是「沒有設定流程」，照列
-        raw = _approval_json_of(r["data_json"], "quotation", r["quote_no"])
+        raw = r["appr_fast"]
+        if raw is None:
+            slow = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (r["quote_no"],)).fetchone()
+            raw = _approval_json_of(slow["data_json"] if slow else None, "quotation", r["quote_no"])
         if raw is None:
             continue
         f = _queue_tier_fields(raw)
@@ -4580,10 +4591,22 @@ def approval_queue_items(conn) -> list:
 
 
 
+def _run_after_commit(actions):
+    """寫鎖已放掉之後才做的事（另開連線寫入的通知、寄信、背景 PDF）。各自獨立、失敗只記 log：
+    這些是「簽核已經成立之後的副作用」，不可以因為其中一個失敗讓已 commit 的簽核回應 500。
+    （寫鎖內呼叫它們的問題：tools/platform/write_txn_scan.py 的說明。）"""
+    for act in actions:
+        try:
+            act()
+        except Exception:                                  # noqa: BLE001
+            logger.exception("簽核後續動作失敗（簽核本身已成立）：%r", getattr(act, "func", act))
+
+
 @router.post("/api/quotations/{quote_no}/approve")
 def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
+    after_commit = []       # 寫鎖內只收集，commit 之後才執行（見 _run_after_commit）
     with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（modules.case.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
         row = conn.execute(
             "SELECT data_json, customer_name FROM quotations WHERE quote_no=? AND status IN ('待審核','簽核中')",
@@ -4626,10 +4649,13 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
                     next_tier = tiers[landed]
                     _next_names = []
                     for na in next_tier.get("approvers") or []:
-                        _notify(na["username"], "approval_request", quote_no, quote_no,
-                                f"報價單 {quote_no}（{cname}）輪到您簽核（第 {landed + 1} 層 / 共 {len(tiers)} 層）")
+                        # 🔴 寫鎖內**只收集**：`_notify` 另開一條連線 INSERT，會等這個請求自己握著的寫鎖（W3 approval-freeze：
+                        #    使用者回報簽核時整個系統卡住 3 秒；通知還可能因為等滿 busy timeout 而遺失）⇒ commit 之後才做。
+                        after_commit.append(functools.partial(
+                            _notify, na["username"], "approval_request", quote_no, quote_no,
+                            f"報價單 {quote_no}（{cname}）輪到您簽核（第 {landed + 1} 層 / 共 {len(tiers)} 層）"))
                         _next_names.append(na["username"])
-                    notify_next_tier(quote_no, cname, landed + 1, len(tiers), _next_names)
+                    after_commit.append(functools.partial(notify_next_tier, quote_no, cname, landed + 1, len(tiers), _next_names))
             else:
                 all_done = False
 
@@ -4677,8 +4703,10 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             d["approval"] = appr
             save_quotation_json(conn, quote_no, d, status="已送出", updated_at=now)
             approver_name = appr.get("approvedByDisplay") or user.get("display_name") or user.get("username") or ""
-            spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, approver_name, '簽核'))
-            notify_approved(quote_no, cname, approver_name, appr.get("requestedBy") or "")
+            # PDF 背景工作與通知都要等 commit 之後：背景執行緒在 commit 前啟動會讀到簽核前的狀態（浮水印錯），
+            # 而且 Edge 無頭 PDF 是 2～4 秒的 CPU／GIL 工作，不該在持有寫鎖時開始。
+            after_commit.append(functools.partial(spawn_bg_thread, _generate_quotation_pdf, args=(quote_no, approver_name, '簽核')))
+            after_commit.append(functools.partial(notify_approved, quote_no, cname, approver_name, appr.get("requestedBy") or ""))
             detail_status = "已送出"
         else:
             d["approval"] = appr
@@ -4690,6 +4718,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         conn.close()
         _audit(_tok(authorization), "quotation.approve", "quotation", quote_no,
                f"{quote_no}（{cname}）", {"allDone": all_done, "status": detail_status})
+        _run_after_commit(after_commit)
         return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}
 
 

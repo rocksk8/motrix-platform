@@ -761,6 +761,7 @@
   "helper:recognition_basis": {
    "BASES": "const",
    "BASIS_NOTES": "const",
+   "DEFAULT_BASIS": "const",
    "normalize_basis": "def(v)"
   },
   "helper:row_access": {
@@ -844,6 +845,7 @@
    "norm_ymd": "def(v)",
    "payment_item_amounts": "def(total, pay_items, pretax=…, apply_tax_exempt=…)",
    "quote_tax_type": "def(data)",
+   "receipt_amounts": "def(receivable, actual, fee)",
    "summarize_payment_items": "def(total, pay_items, pretax=…)",
    "tax_split": "def(sales, tax_type)"
   },

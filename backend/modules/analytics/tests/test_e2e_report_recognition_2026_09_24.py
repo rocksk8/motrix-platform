@@ -33,6 +33,10 @@ def test_report_shows_basis_note_and_flag_list_and_switches_basis(live_server, m
     page.evaluate(f"() => {{ const c = {RPT}; c.expensesYear = 2026; c.showExpensesTab() }}")
     note = page.locator('[data-testid="basis-note"]')
     note.wait_for(state="visible", timeout=20000)
+    # 2026-09-30（使用者裁示）：預設現金口徑；先確認預設，再切到權責看待補登清單
+    assert page.evaluate(f"() => ({RPT}.expensesData || {{}}).basis") == "cash" and "現金" in note.inner_text()
+    page.click('[data-testid="basis-accrual"]')
+    page.wait_for_function(f"() => ({RPT}.expensesData || {{}}).basis === 'accrual'", timeout=20000)
     assert "權責" in note.inner_text()
     flag = page.locator('[data-testid="flag-dispatch_no_invoice"]')
     flag.wait_for(state="visible", timeout=10000)

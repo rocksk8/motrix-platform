@@ -379,7 +379,8 @@ def _execution_history(conn, start: str, end: str, user: dict = None) -> dict:
         "outgoingActualTotal": sum((v["remitActual"] if v.get("remitActual") is not None else v["grandTotal"]) for v in outgoing),
         "outgoingFeeTotal": sum(v.get("remitFee") or 0 for v in outgoing),
         "payreqPaid": payreq, "payreqFeeTotal": sum(i.get("fee") or 0 for i in payreq),
-        "incoming": incoming, "incomingTotal": sum(i["amount"] for i in incoming),
+        "incoming": incoming, "incomingTotal": sum(i["netAmount"] or 0 for i in incoming),      # 銀行實際入帳（2026-09-30；收入＝入帳＋客戶內扣手續費）
+        "incomingFeeTotal": sum(i["feeAmount"] or 0 for i in incoming),
         "contractorNotice": "" if pub else CONTRACTOR_MISSING,
     }
     # 獎金分潤發放紀錄（IP-8）：只給看得到獎金的人；M07 不在 ⇒ 空清單＋明說
@@ -479,10 +480,10 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
 
     ws2 = wb.create_sheet("已收款明細")
     ws2.sheet_view.showGridLines = False
-    hdrs2 = ["案件號", "客戶", "業務員", "款項類型", "實收金額", "收款日"]
-    for i, w in enumerate([14, 18, 10, 10, 12, 12], 1):
+    hdrs2 = ["案件號", "客戶", "業務員", "款項類型", "實收金額（銀行入帳）", "收款日", "客戶內扣手續費"]
+    for i, w in enumerate([14, 18, 10, 10, 18, 12, 14], 1):
         ws2.column_dimensions[chr(64 + i)].width = w
-    ws2.merge_cells(f"A1:F1")
+    ws2.merge_cells("A1:G1")
     c = ws2["A1"]
     c.value = f"出納執行紀錄 — 已收款（{start} ~ {end}）"
     c.font = mk(bold=True, size=12, color=C_WHITE)
@@ -493,13 +494,13 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
              aligns=[al("center")], height=20)
     r = 3
     for it in data["incoming"]:
-        aa = it["actualAmount"]
         set_row(ws2, r, [it["quoteNo"], it["customer"], it["salesPerson"], it["type"],
-                           aa if aa is not None else it["amount"], it["receivedAt"]],
+                           it["netAmount"], it["receivedAt"], it["feeAmount"] or None],
                  font=mk(size=9), border=BD, aligns=[al("left")], height=18)
         ws2.cell(row=r, column=5).number_format = '#,##0'
+        ws2.cell(row=r, column=7).number_format = '#,##0'
         r += 1
-    set_row(ws2, r, ["合計", "", "", "", data["incomingTotal"], ""],
+    set_row(ws2, r, ["合計", "", "", "", data["incomingTotal"], "", data["incomingFeeTotal"]],
              font=mk(bold=True, size=9, color=C_WHITE), fill=fill(C_DARK), border=BD,
              aligns=[al("left")], height=20)
     ws2.cell(row=r, column=5).number_format = '#,##0'
