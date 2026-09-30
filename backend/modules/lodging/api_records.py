@@ -18,6 +18,7 @@ from fastapi.responses import Response
 
 from db import get_db
 from helpers import _audit, _tok
+from helpers.xlsx_out import log_export
 # 走模組：測試要換得掉 geo.locate_cached
 from helpers import geo
 from modules.lodging import attribution as lodging_attr
@@ -238,6 +239,7 @@ def lodging_record_export(rid: int, format: str = "csv", authorization: str = He
     if format == "json":
         body = json.dumps({"attribution": attr, "record": d["record"], "items": d["items"]},
                           ensure_ascii=False, indent=1)
+        log_export(authorization, "json", "lodging", "lodging-record", {"format": format, "rid": rid}, len(d["items"]))     # 每次匯出都留紀錄（2026-09-30）
         return Response(body, media_type="application/json; charset=utf-8",
                         headers={"Content-Disposition": 'attachment; filename="lodging-%d.json"' % rid})
     buf = io.StringIO()
@@ -248,6 +250,7 @@ def lodging_record_export(rid: int, format: str = "csv", authorization: str = He
     w.writerow([label for _k, label in _EXPORT_COLS])
     for it in d["items"]:
         w.writerow([_csv_cell(it[k]) for k, _l in _EXPORT_COLS])
+    log_export(authorization, "csv", "lodging", "lodging-record", {"format": format, "rid": rid}, len(d["items"]))
     return Response("﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": 'attachment; filename="lodging-%d.csv"' % rid})
 

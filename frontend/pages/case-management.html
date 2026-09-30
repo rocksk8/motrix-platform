@@ -267,6 +267,8 @@
             </template>
             <button type="button" class="aq-sort" data-testid="batch-export" :disabled="batchBusy"
                     @click="batchExport()">匯出 Excel</button>
+            <button type="button" class="aq-sort" data-testid="batch-export-pdf" :disabled="batchBusy"
+                    @click="batchExport('pdf')">匯出 PDF</button>
             <span data-testid="batch-msg" x-show="batchMsg" x-text="batchMsg"
                   style="flex-basis:100%;color:var(--text-secondary)"></span>
           </div>

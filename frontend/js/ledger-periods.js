@@ -152,10 +152,10 @@ function ledgerPeriodsPage() {
         await this.load()
       })
     },
-    async exportStatements(y) {
+    async exportStatements(y, fmt) {
       this.error = ''
       try {
-        const r = await fetch('/api/ledger/years/' + y.year + '/statements/export', { headers: { Authorization: 'Bearer ' + (this._session().token || '') } })
+        const r = await fetch('/api/ledger/years/' + y.year + '/statements/export' + (fmt === 'pdf' ? '/pdf' : ''), { headers: { Authorization: 'Bearer ' + (this._session().token || '') } })
         if (!r.ok) {
           let d = {}
           try { d = await r.json() } catch (e) { d = {} }
@@ -164,7 +164,7 @@ function ledgerPeriodsPage() {
         const blob = await r.blob()
         const a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
-        a.download = '財務報表_' + y.year + '年度' + (y.status === 'closed' ? '_決算' : '') + '.xlsx'
+        a.download = '財務報表_' + y.year + '年度' + (y.status === 'closed' ? '_決算' : '') + (fmt === 'pdf' ? '.pdf' : '.xlsx')
         a.click()
         URL.revokeObjectURL(a.href)
       } catch (e) { this.error = e.message }

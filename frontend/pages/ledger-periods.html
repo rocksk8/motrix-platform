@@ -72,6 +72,7 @@
             <span class="lp-tag" :class="y.status === 'closed' ? 'closed' : 'open'" x-text="y.status === 'closed' ? '已決算' : '年度進行中'" :data-testid="'lp-year-status-' + y.year"></span>
             <button class="lp-btn" style="margin-left:10px" @click="openClosing(y)" :data-testid="'lp-closing-' + y.year">年度結轉／決算</button>
             <button class="lp-btn" @click="exportStatements(y)" :data-testid="'lp-export-' + y.year">匯出四大表</button>
+            <button class="lp-btn" @click="exportStatements(y, 'pdf')" :data-testid="'lp-export-pdf-' + y.year">匯出四大表 PDF</button>
             <span class="lp-note" style="margin:0 0 0 10px" x-text="y.start_date + ' ～ ' + y.end_date + '　期初：' + (y.opening_mode === 'imported' ? '匯入（' + y.opening_date + '）' : y.opening_mode === 'carry' ? '自上年結轉' : '零')"></span>
           </div>
           <table class="lp-table">
