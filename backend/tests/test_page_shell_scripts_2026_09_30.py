@@ -6,9 +6,8 @@
 而頁面本身其他功能正常，所以測試全綠。
 """
 import re
-from pathlib import Path
 
-PAGES = Path(__file__).resolve().parents[2] / "frontend" / "pages"
+from core.source_tree import page_file, page_files
 _SRC = re.compile(r'<script[^>]*\bsrc="([^"]+)"', re.I)
 
 
@@ -28,8 +27,8 @@ def shell_problems(html: str) -> list:
 
 
 def test_every_shell_page_loads_sidebar_and_notif():
-    pages = sorted(PAGES.glob("*.html"))
-    assert len(pages) > 50, "頁面目錄找錯了：%s" % PAGES
+    pages = page_files()                                  # 共用頁面＋各模組頁面
+    assert len(pages) > 50, "掃不到頁面（量尺）"
     bad = {p.name: shell_problems(p.read_text(encoding="utf-8")) for p in pages}
     bad = {k: v for k, v in bad.items() if v}
     assert not bad, bad
@@ -38,7 +37,7 @@ def test_every_shell_page_loads_sidebar_and_notif():
 def test_ledger_pages_are_covered():
     """正對照：這次出事的 5 頁都有 sidebar-root（守門真的看得到它們）。"""
     for n in ("hub", "periods", "reports", "settings", "statements"):
-        html = (PAGES / ("ledger-%s.html" % n)).read_text(encoding="utf-8")
+        html = page_file("ledger-%s.html" % n).read_text(encoding="utf-8")
         assert 'id="sidebar-root"' in html, n
         assert shell_problems(html) == [], n
 
