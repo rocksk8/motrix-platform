@@ -171,6 +171,11 @@ def is_demo_mode() -> bool:
     return _demo_mode.get()
 
 
+#: 目前這條執行緒是不是「背景工作」（spawn_bg_thread 起的）：背景工作可以降低外部行程（Edge 無頭 PDF）的 CPU 優先權，
+#: 使用者正在等的請求（下載 PDF 等）不降。W3 approval-freeze：簽核後的 PDF 是背景工作，不該跟服務搶 CPU。
+_BACKGROUND_WORK = contextvars.ContextVar("motrix_background_work", default=False)
+
+
 def spawn_bg_thread(target, args=(), kwargs=None, daemon=True) -> threading.Thread:
     """threading.Thread(...).start() 的安全版本：一般 threading.Thread 起的新執行緒
     永遠拿到全新、空白的 contextvars context，導致裡面呼叫的 is_demo_mode()/get_db()
@@ -179,6 +184,7 @@ def spawn_bg_thread(target, args=(), kwargs=None, daemon=True) -> threading.Thre
     任何在路由 handler 內起的背景工作，只要目標函式最終會碰 get_db()/is_demo_mode()，
     一律要用這個取代直接呼叫 threading.Thread。"""
     ctx = contextvars.copy_context()
+    ctx.run(_BACKGROUND_WORK.set, True)       # 只設在複本裡，不影響呼叫端
     t = threading.Thread(target=ctx.run, args=(target, *args), kwargs=kwargs or {}, daemon=daemon)
     t.start()
     return t

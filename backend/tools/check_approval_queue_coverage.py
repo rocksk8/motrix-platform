@@ -88,6 +88,12 @@ _OWNER_MODULE = {
 }
 
 
+#: 不是 `APPROVAL_DOC_TYPES`（沒有 submit 端點、簽核層借用別的單據類型）、但也會進簽核佇列的「附屬」類型：
+#: 佇列項目 type ⇒ 擁有模組。它們只由 `approval.queue_items` 提供者列出（N1，2026-09-30：承攬商報價單附件刪除申請，
+#: 簽核層＝報價單的流程設定）。擁有模組不在 ⇒ 不適用；在但沒有任何提供者源碼含那個 type 字面值、或 count 端點沒彙整提供者 ⇒ 漏掉。
+EXTRA_QUEUE_TYPES = {"dispatch_file_delete": "subcontract"}
+
+
 def _module_installed(key, backend_dir=None):
     """看 module.json（不看資料夾：拿掉模組後殘留的 __pycache__ 會讓資料夾還在）。"""
     return os.path.isfile(os.path.join(backend_dir or _BACKEND_DIR, "modules", key, "module.json"))
@@ -166,7 +172,7 @@ def _has_literal(src, lit):
 
 
 def check_approval_queue_coverage(doc_types=None, queue_source=None,
-                                  count_source=None, provider_sources=None, installed=None):
+                                  count_source=None, provider_sources=None, installed=None, extra_types=None):
     """回傳一個 dict，三個鍵在完全涵蓋時都應該是空 list：
 
     ```
@@ -181,6 +187,7 @@ def check_approval_queue_coverage(doc_types=None, queue_source=None,
     `installed`：`fn(module_key) -> bool`；留空看 `modules/<key>/module.json`。擁有模組不在的類型列在
     `not_applicable`（{doc_type: 原因}），不算漏掉。
     """
+    real_scan = provider_sources is None and queue_source is None and count_source is None            # 只有掃真的原始碼時，附屬類型才預設一併檢查（餵假源碼的題不受影響）
     if provider_sources is None:
         provider_sources = _provider_sources()
     if installed is None:
@@ -197,6 +204,13 @@ def check_approval_queue_coverage(doc_types=None, queue_source=None,
             count_source = _func_body_text(src, "get_approval_queue_count")
 
     missing_from_map, missing_from_queue, missing_from_count = [], [], []
+    missing_extra = []
+    for et, owner in sorted((EXTRA_QUEUE_TYPES if (extra_types is None and real_scan) else (extra_types or {})).items()):
+        if owner and not installed(owner):
+            not_applicable[et] = "擁有模組 %s 不在這個安裝包（它的單據不存在）" % owner
+            continue
+        if not any(_has_literal(src, et) for _lbl, src in provider_sources) or "_queue_provider_items(" not in count_source:
+            missing_extra.append(et)
     for dt in doc_types:
         owner = _OWNER_MODULE.get(dt)
         # 佇列端點在 L1（2026-09-27）：案件模組不在只讓 M01 自己的單據不適用（下一條），其他模組的單照常要涵蓋
@@ -219,13 +233,14 @@ def check_approval_queue_coverage(doc_types=None, queue_source=None,
         "missing_from_map":   sorted(missing_from_map),
         "missing_from_queue": sorted(missing_from_queue),
         "missing_from_count": sorted(missing_from_count),
+        "missing_extra":      sorted(missing_extra),
         "not_applicable":     not_applicable,
     }
 
 
 def is_clean(result):
     return not (result["missing_from_map"] or result["missing_from_queue"]
-                or result["missing_from_count"])
+                or result["missing_from_count"] or result.get("missing_extra"))
 
 
 def _self_check():
@@ -291,6 +306,8 @@ def main():
     if is_clean(result):
         say("   OK  全部涵蓋")
         sys.exit(0)
+    if result.get("missing_extra"):
+        say("   NG  附屬佇列類型沒有提供者列出或 count 端點沒彙整提供者：%s" % ", ".join(result["missing_extra"]))
     if result["missing_from_map"]:
         say("   NG  沒有登記翻譯表：%s" % ", ".join(result["missing_from_map"]))
     if result["missing_from_queue"]:

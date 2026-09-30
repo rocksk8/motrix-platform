@@ -76,7 +76,8 @@ def _dispatch(no, total=10000, dispatch_date="2026-03-15", invoice_date="", acce
         conn.close()
 
 
-def _report(client, hdr, basis=None, month="2026-03", year=2026):
+# 2026-09-30：營運報表預設改現金口徑（使用者裁示）；本檔測的是權責口徑的行為 ⇒ 明確指定 basis=accrual，題意不變
+def _report(client, hdr, basis="accrual", month="2026-03", year=2026):
     q = "%s?year=%s&month=%s" % (URL, year, month) + ("&basis=%s" % basis if basis else "")
     r = client.get(q, headers=hdr)
     assert r.status_code == 200, r.text

@@ -89,6 +89,11 @@ def _merge_expression(text):
         "📌 搜尋範圍：`frontend/index.html` 全文，用的是 "
         "`this\\.stats\\s*=` 這個樣式。")
     # 只要那一個「從回應來的」——它一定提到 `r.json()`。
+    # 回應也可能先存進變數再合併（W2 稽核 W2F6：json 解析完才讀 mineCount）：
+    # `const body = await r.json()` ⇒ 把變數名換回 `await r.json()` 再判定。
+    names = re.findall(r"const\s+([A-Za-z_]\w*)\s*=\s*await\s+r\.json\(\)", text)
+    for n in names:
+        hits = [re.sub(r"\b%s\b" % n, "await r.json()", h) for h in hits]
     from_response = [h for h in hits if "json()" in h]
     assert from_response, (
         f"找得到 `this.stats = …` 而沒有一個是從回應來的：{hits}\n"

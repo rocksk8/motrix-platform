@@ -593,8 +593,12 @@ def test_reverse_control_build_gate_segment(tmp_path, name, case, old, new):
 def test_build_script_uses_scope_gate_and_records_the_mode():
     s = (REPO / "backend" / "tools" / "build_deploy_package.ps1").read_text(encoding="utf-8-sig")
     assert '_scope_gate.ps1")' in s and "Get-ScopedGateResult -PyExe $pyExe" in s and "-Commit $commit" in s
-    assert "if (-not $reuse -and -not $ForceTests)" in s                     # -ForceTests ⇒ 一律全量
+    assert "if (-not $ForceTests) {\n    . (Join-Path $PSScriptRoot \"_scope_gate.ps1\")" in s.replace("\r\n", "\n")   # -ForceTests ⇒ 不判範圍驗證
     i_scoped, i_full = s.index("} elseif ($scoped) {"), s.index('Write-Host "`n[測試] 執行 pytest（非 e2e')
     assert i_scoped < i_full                                                   # 全量分支仍在，排在 else
-    assert 'mode         = "scoped"' in s and "base         = $scoped.base" in s
-    assert "verification         = $Verification" in s
+    assert '$VerificationMode = "scoped"' in s and "base         = $scoped.base" in s
+    assert "verification         = [ordered]@{ mode = $VerificationMode; scoped = $ScopedVerification; stages = $BuildVerification }" in s
+    # 優先序：範圍驗證先判，接受就整段（分段沿用／全量）跳過
+    assert s.index("if ($scoped) {") < s.index("} elseif ($reuse) {") < s.index("Acquire-TestExclusive\n$env:MOTRIX_PYTEST_EXCLUSIVE")
+    seg = s[s.index("if ($scoped) {"):s.index("} elseif ($reuse) {")]
+    assert "skipped (scoped)" in seg and "-m pytest" not in seg

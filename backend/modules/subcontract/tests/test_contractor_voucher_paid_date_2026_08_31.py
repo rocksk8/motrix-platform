@@ -75,20 +75,17 @@ def test_paid_toggle_accepts_custom_paid_at(client, make_user):
     assert dj["paidLog"][-1]["note"] == "測試備註"
 
 
-def test_paid_toggle_defaults_to_today_without_paid_at(client, make_user):
-    from datetime import date
-
+def test_paid_toggle_requires_paid_at(client, make_user):
+    """W1（2026-09-30 使用者裁示）：匯款日期必填——不帶 paid_at ⇒ 400、不標記已匯款（原本默認今天，會記錯日期）。"""
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     voucher_no = _make_approved_voucher(client, token, "MQ-PAIDDATE-002")
 
-    r = client.post(
-        f"/api/contractor-vouchers/{voucher_no}/paid-toggle", headers=_auth(token),
-        json={"action": "pay"},
-    )
-    assert r.status_code == 200, r.text
+    for body in ({"action": "pay"}, {"action": "pay", "paid_at": ""}):
+        r = client.post(f"/api/contractor-vouchers/{voucher_no}/paid-toggle", headers=_auth(token), json=body)
+        assert r.status_code == 400, r.text
     detail = client.get(f"/api/contractor-vouchers/{voucher_no}", headers=_auth(token))
-    assert detail.json()["paidAt"] == date.today().isoformat()
+    assert detail.json()["isPaid"] is False
 
 
 def test_paid_toggle_rejects_malformed_paid_at(client, make_user):

@@ -134,12 +134,13 @@
 ### D-1a. 範圍驗證閘門：沒動到底層就不跑全量（2026-09-30 使用者：「如果未影響到底層，審核測試上包可由獨立模組，不需要跑全域，也可以視這次更動範圍做驗證減少只改小部分但仍需花大量時間跑全域」）
 
 **規則**
-- 比較範圍＝正式機基準 P → X 的**所有**改動檔（不是只看最後一個 commit）。P＝X 上 `backend/tests/_prod_baseline.py` 的 `BASELINE`，**而且必須等於受信來源**＝最新的 git tag `prod/<sha>`（主持在正式機確認部署後打，例 `prod/0c20864a`）；tag 不在或不符 ⇒ 全量〔稽核 W4 M4：候選 commit 可以自己改 `_prod_baseline.py` 把基準往後移，縮小比較範圍〕。部署包 `verification.base` 寫 40 碼完整 SHA；正式機步驟檔步驟 0 斷言 `.deployed_commit.json` 的 `commit` 開頭＝`verification.base`（範本 `docs/platform/prod-tasks/TEMPLATE-apply.md`）。
+- 比較範圍＝正式機基準 P → X 的**所有**改動檔（不是只看最後一個 commit）。P＝X 上 `backend/tests/_prod_baseline.py` 的 `BASELINE`，**而且必須等於受信來源**＝最新的 git tag `prod/<sha>`（主持在正式機確認部署後打，例 `prod/0c20864a`）；tag 不在或不符 ⇒ 全量〔稽核 W4 M4：候選 commit 可以自己改 `_prod_baseline.py` 把基準往後移，縮小比較範圍〕。部署包 `verification.scoped.base` 寫 40 碼完整 SHA；正式機步驟檔步驟 0 斷言 `.deployed_commit.json` 的 `commit` 開頭＝`verification.scoped.base`（範本 `docs/platform/prod-tasks/TEMPLATE-apply.md`）。
 - 底層清單的**唯一來源**是 `tools/platform/bottom_layer.json`（規則由上往下、第一條符合者決定；**沒有規則符合 ⇒ 當成底層**）。底層＝L0／L1（`backend/core/**`、`backend/helpers/**`、`backend/db.py`、`backend/main.py`、`backend/routers/**`、`backend/migrations_frozen/**`、backend 根目錄其他檔）、fixture 層（任何 `conftest.py`、`pytest.ini`、`requirements*.txt`）、**模組的 `migrations/**`**、建包／部署／平台工具（`backend/tools/**`、`tools/**`，含本閘門與清單本身）、`product/**`、共用前端（`frontend/static|js|css|fonts/**`、`frontend/index.html`、沒有恰好一個模組宣告的頁面）、測試共用工具（`backend/tests/` 下不是 `test_*.py` 的檔）。可走範圍驗證的只有：`backend/modules/<key>/**`（migrations 除外）、恰好一個模組宣告的頁面、`test_*.py`、`docs/**` 與根目錄 `*.md`、`version_manifest.json` 與 `_prod_baseline.py`（這兩個另帶 VR 守門題）。
 - P→X **有任何一檔在底層** ⇒ 照舊全量（`modtest --full`；建包腳本自己跑全量）。**全部不在底層** ⇒ 在 X 上跑 `python tools/platform/scope_gate.py run`（工作樹乾淨、HEAD＝X；`plan` 只判定與選題），綠了儀表板閘門與建包腳本就接受它、不跑全量。
 - 範圍驗證的內容＝`modtest --train` 同型：P→X 改動檔＋改到的提供者的消費端（`ship_tier.provider_check`；判不了 ⇒ 全量）當改動，**遞移選題**（不用名稱層級縮小——閘門寧寬）＋改到頁面的 e2e＋`tests/platform` 全部（`MOTRIX_TRAIN=1`，「是否最新」三題不可以被 skip）＋規則附帶的題（module／page 規則帶 `@global_tests`＝不靠 import、掃整個母體的全域釘子：`sqlite_master`、巡覽所有 `module.json`、glob 所有頁面、權限目錄；`scope_gate.global_test_candidates()` 掃得到的都必須列在 `global_tests`，守門題驗〔稽核 W4 M1〕）；非 e2e 與 e2e 兩段都要綠。紀錄寫主工作樹 `tools/platform/full_results/scoped/<X>.json`。
 - 閘門（`scope_gate.py gate`；儀表板 `/api/build-gate`、建包腳本 Step 3 都呼叫它）**現場重算**判定，不信紀錄自己寫的：紀錄的 commit＝X、非 dirty、ok、基準＝現在的 P、模組集合＝現場算出的集合、`config_sha256`＝X 上 `bottom_layer.json` 的雜湊、題目清單非空而且 ⊇ 現場重算的選題、非 e2e 段 exit 0 且有題通過、e2e 段 exit 0／5〔W4 M2〕，缺一 ⇒ 不接受；判定出錯 ⇒ 不接受（回到全量）。規則一律讀 `git show X:tools/platform/bottom_layer.json`；閘門只在 HEAD＝X、而且 `tools/`、`backend/tools/`、`product/` 沒有未 commit 的改動時判定（跑判定的程式就是 X 的版本）〔W4 M3〕。建包腳本的判定段在 `backend/tools/_scope_gate.ps1`：exit 非 0、輸出看不懂、例外、commit 不符、mode 不是 scoped、基準不是 40 碼 ⇒ 全量〔W4 S1〕；儀表板另比對判定的 commit＝HEAD〔W4 S2〕。建包加 `-ForceTests` ⇒ 一律全量。全量那條路不變。
-- 哪一種驗證放行寫進部署包 `deploy_manifest.json` 的 `verification`：`mode`＝`full`（沿用同 tree 綠燈時另有 `reused_from`）或 `scoped`（附 `base`、`units`、`consumers`、題檔數、完成時間、紀錄路徑）。稽核與正式機步驟檔看這一欄；`scoped` 的包在步驟檔上註明「未跑全量，驗證單位：…」。
+- **優先序**（2026-09-30 合併 build-opt）：建包先判範圍驗證，接受 ⇒ 整段跳過（不查 §D-建包 的分段沿用、不跑測試）；不接受 ⇒ 走 §D-建包 的分段沿用／全量。
+- 哪一種驗證放行寫進部署包 `deploy_manifest.json` 的 `verification`，形狀統一為 `{mode, scoped, stages}`：`mode`＝`full`／`scoped`；`scoped`＝範圍驗證的判定（`base` 40 碼、`units`、`consumers`、`test_files`、`counts`、`finished`、`record`），`full` 時為 null；`stages`＝各段 `not_e2e`／`e2e` 是實跑、沿用（來源、時間）或 `skipped (scoped)`，以及 `flaky_retried`。稽核與正式機步驟檔看這一欄；`scoped` 的包在步驟檔上註明「未跑全量，驗證單位：…」。
 
 **為什麼可以（安全論證）與反方**
 - 支持：全量的大半是「沒被改到的東西再驗一次」。模組只經 L1 介面互相接觸（MODULE-GUIDE §1）；L1 沒變 ⇒ 別的模組的執行環境沒變。契約題（`tests/platform`）每次全跑，守的正是模組與底層的邊界。
@@ -150,6 +151,21 @@
 - 反方 ⑤ **紀錄被沿用到別的 commit／基準**：紀錄以完整 SHA 分檔，閘門比對 commit、基準、模組集合，並現場重算底層判定。
 - **信任邊界（W4 S3）**：範圍驗證紀錄是開發機上**未簽章的 JSON**——任何能寫主工作樹 `full_results/` 的人都能偽造一份。閘門擋得住的是「過期／抄錯／跑錯範圍／跑錯 commit」這類**失誤**（全部欄位對照現場重算），擋不住**有意偽造**（寫一份欄位都對、但題目根本沒跑的紀錄）。信任的前提＝開發機本身可信（同全量紀錄 `full_results/<sha>.json`，它也沒有簽章）；基準的信任來自 git tag `prod/<sha>`，由主持在正式機確認部署後打，不由候選 commit 決定。要升級成可驗證的，要把紀錄與 pytest 的原始輸出一起簽章（未做）。
 - 守門：`tests/platform/test_scope_gate_2026_09_30.py`（(a) 動到底層 ⇒ 不接受；(b) 只動模組 ⇒ 接受；(c) 別的 commit／dirty／紅／基準或模組不同 ⇒ 不接受；(d) 對 `scope_gate.py` 的真突變各一、對應題轉紅；暫存 repo 上的 P→X 整合題；M1～M4 各一組正題＋真突變；建包判定段用 PowerShell 實跑假 scope_gate 八種輸出＋四個突變）、`tests/platform/test_deploy_dashboard_scope_gate_2026_09_30.py`（儀表板閘門：全量綠優先、範圍驗證接受才放行、判定出錯不放行）。
+
+#### D-建包：建包的測試流程（2026-09-30，使用者「安排建包的優化方式，避免非正常情況的失敗」）
+**起因（同一天實測）**：①同一份 tree 30 分鐘前 `modtest --full` 全綠，建包的沿用紀錄只有建包自己寫 ⇒ 全量又跑一次（非 e2e ~17 分＋e2e 8～13 分）；②建包 e2e 段紅在已知偶發題（RUN-PLAN O7，第 3 次；單獨跑 5/5 綠）⇒ 重建整套再 ~35 分，而非 e2e 早已綠；③建包持有獨佔時別的視窗照樣起臨時 `pytest …-adhoc`（單程序不搶鎖）加負載；④timeout.exe／TaskStop 結束外層後，pytest 孫行程還握著鎖。
+
+| 規則 | 作法（工具） | 正方 | 反方與處置 |
+|---|---|---|---|
+| ① 跨工具＋分段沿用 | `modtest --full` 在乾淨工作樹、無縮小範圍參數（-k／-m／路徑／--deselect／-x）時寫進建包的沿用紀錄（主工作樹 `backend/tools/deploy_logs/test_results.jsonl`，`build_test_reuse.record_full_run`）；建包各段各查（`lookup-stage`）：非 e2e 綠、只有 e2e 紅 ⇒ 重建只跑 e2e | 同一份 tree＋環境的綠是同一個證據，重跑只是花時間；每次發行省一輪全量（~25～30 分），e2e 偶發後的重建省 ~17 分 | worker 數不同（modtest e2e -n 2、建包 -n 4）：平行度只影響負載與快慢、不影響題目本身，而且較低平行度的綠只會**更少**偶發 ⇒ 接受，worker 上限類環境變數不進指紋；`PYTEST_ADDOPTS` 有設就進指紋（可能含 -k／-m 縮小範圍，稽核 W4）。**假綠風險**：題目以假 run_pytest 呼叫 run_full ⇒ 只信這一輪自己的 fail_stream summary（下游證據），沒有就不寫。指紋在結束時算（樹沒變由 dirty 判定）；殘留風險＝跑到一半改了 pip 環境。窗口照舊：同一天、12 小時，以該段**原本實跑**的時間算（沿用不延長）。指紋扣掉 `tools/platform/known_flakes.json`（政策檔，不決定任何題目過或不過）⇒「登記偶發 → commit → 重建」仍只跑 e2e |
+| ② 偶發政策 | 一段紅了 ⇒ `tools/platform/flaky_retry.py` 只把紅的題**單獨、循序**重跑（最多 2 次，一過就停）。通過**且**登記在 `tools/platform/known_flakes.json`（nodeid、first_seen、owner、ticket、expires，最長 30 天；**延期**＝同一 nodeid 再登記（含 remove 後再登記）：每次 ≤14 天、要 `--reason`，第 2 次須換原因＋`--root-cause-link`，第 3 次一律拒絕——稽核 W4）⇒ 繼續打包，manifest `verification.stages.flaky_retried` 與 fail_stream（`type=flaky_retried`）記下；**未登記的偶發照樣擋**並印出登記指令；每次都紅 ⇒ 擋；中斷／收集錯誤／一次紅超過 5 題／認不出是哪一題 ⇒ 不重跑直接擋；登記簿有**過期**條目 ⇒ 建包一開頭就失敗 | 偶發題讓 35 分鐘的建包重來，而它單獨跑是綠的；只重跑紅的題，成本是秒級 | 「重跑到綠」是經典的假綠來源（〈偶發失敗先當產品競態〉）⇒ 三道限制：只有**人登記過**的題可放行（登記＝有人做過「這是偶發、要追根因」的決定）、登記有期限且過期就擋整個建包（逼根因修正）、放行的題寫進 manifest 看得到。整輪 retry、放寬 timeout 照舊不做 |
+| ③ 建包獨佔 | 建包持有獨佔登記期間，**不搶鎖的臨時 pytest 直接拒絕開始**（conftest `light_run_block_reason`，exit 4＋說明）；建包自己的子行程帶 `MOTRIX_PYTEST_BUILD_CHILD=<建包 pid>`（`utf8_env` 不剝掉它）；`--collect-only` 放行；重型測試照舊排隊 | 建包期間的額外負載是 e2e 偶發的主因之一 | 擋住別人的工作 ⇒ 訊息寫明原因與等待對象；真的非跑不可設 `MOTRIX_PYTEST_BUILD_GUARD=0`（明示的覆寫）。直接以獨佔身分跑（不經建包）時 conftest 替自己的子行程設 BUILD_CHILD |
+| ④ 盤點與孤兒 | 建包登記獨佔前跑 `tools/platform/build_preflight.py`：列出其他 pytest／modtest（附父行程鏈，venv 轉呼叫器只算一次）；鎖持有者父行程已不在（或 pid 被重用）、或祖先鏈沒有存活的 Claude／殼 ⇒ 標「疑似孤兒」並印 `taskkill` 指令；`-WaitForOtherTests N` 等非孤兒結束最多 N 分鐘 | 孤兒握鎖時建包只會安靜地排隊，看不出在等誰 | **不自動結束任何行程**：孤兒也可能是刻意放著跑的；盤點失敗只警告、永遠 exit 0（這一步不可以變成新的失敗來源） |
+
+- **開關（預設全開；關掉＝舊行為）**：`build_deploy_package.ps1 -NoStageReuse`（只沿用兩段都綠的完整紀錄）、`-NoFlakeRetry`（紅就擋、不查登記簿、不載 fail_stream）、`-NoPreflight`；conftest `MOTRIX_PYTEST_BUILD_GUARD=0`。`-ForceTests` 照舊（一律重跑）。
+- **登記偶發題**（人看過紅的現場、開了追根因的單才登記）：`.venv312\Scripts\python.exe tools\platform\known_flakes.py add --nodeid "<nodeid>" --owner "<負責人>" --ticket "<RUN-PLAN 編號>" --days 14`；根因修好 ⇒ `remove`；`check` 列出並驗過期。
+- **發行時的順序**：先 `modtest --full`（綠會被建包沿用）→ 儀表板打包；建包紅在 e2e 時，直接再建一次＝只跑 e2e。
+- **守門**：`backend/tests/platform/test_build_opt_2026_09_30.py`（每條規則含反向控制）；既有 `test_build_test_reuse_2026_09_25`、`test_pytest_exclusive_lock_2026_09_25`。
 
 **換版當天（儀表板「5. 升級精靈」，逐步按下並確認）**
 
@@ -310,3 +326,15 @@
   12. （2026-09-27 12:30 補，使用者「先跑局部驗證，多方完成再跑總體」）修掉交互紅之後**只跑局部**：紅的題＋`modtest.py --base <修之前的列車 HEAD>`＋tests/platform；整班 `--train` 只在已知紅全修完後跑一次當最終確認。一班跑兩趟以上整班＝回報主持說明原因。
 - **稽核分級**：①**必修**照舊逐項關閉並附突變；②**建議與觀察**每包彙整成一次回覆、一次複核，不逐項來回；③**只改文件或只改測試的小包**改抽查（看 diff＋跑受影響題＋1 個突變），不做完整稽核；④產品碼、main.py、fixture 層、模組搬遷、權限與個資相關照舊完整稽核。
 - **RUN-PLAN §6 只留最新 20 筆**，較舊的原文搬到 `RUN-LOG.md`（主持在 §6 超過 40 筆時封存一次）。
+
+### G-瓶頸（使用者 2026-09-30：「在寫代碼的時候也要思考哪些流程卡最久、錯誤率最高，未來同步避免，常讀取的可以寫快取讓未來讀取不需要讀大量篇幅，如果檔案太大，可拆分」）
+- **收尾一行**：每件工作回報時附「本次最卡／最易錯的環節＋預防做法」；能做成守門或工具的就做（例：fail_stream 失敗即時 log、合併前版號撞號預檢、直接 pytest 一律 `.venv312`）。
+- **快取**：同一份大量內容會被重讀 ⇒ 寫摘要／索引檔（標來源 commit，過期可偵測），之後先讀快取再按需開原檔。
+- **拆分門檻**：文件 > 約 40KB、程式檔 > 約 1500 行 ⇒ 拆分（文件依時間封存或依主題，程式依模組職責），原位置留對照表；目前超標：RUN-PLAN.md 148KB、MULTIWIN-PROTOCOL.md 77KB、CORE-SPEC.md 75KB。
+
+### G-寫入（使用者 2026-09-30：「盡可能降低硬碟的重複寫入」）
+- 同一份測試結果不重跑（建包沿用 modtest 全量、只重跑失敗段）；不為同一目的開第二個 worktree，完成即移除（`git worktree remove`，先確認乾淨）。
+- 測試暫存：能用記憶體 SQLite 的單元題不落碟；共用夾具的樣板庫只建一次再複製；basetemp 用完即刪（既有規則）。
+- 建包／交付：`deploy_packages\` 只留最近 3 包；staging 與演練目錄用完即刪；不重複 copy 同一包到多處。
+- 產品：日誌輪替與上限、同內容不重寫（寫前比對雜湊）、定時工作無變化不落檔。
+- 每一項優化附量測（寫入量前後），寫進 IMPROVEMENT-REPORT。

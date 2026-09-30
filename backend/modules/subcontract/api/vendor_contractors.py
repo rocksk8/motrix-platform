@@ -8,7 +8,9 @@ from fastapi import APIRouter, Body, File, HTTPException, Header, UploadFile
 from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, next_entity_code
-from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
+from helpers import (_require_user, _tok, _audit, _notify, notify_module_activity, require_any_module,
+                     check_approve_permission, resolve_active_flow_setting, UnresolvedManagerError,
+                     setting_to_active_tiers)
 from core.txn import begin_write, write_txn
 from core import registry as _registry
 from helpers.uploads import save_document_files, delete_document_file
@@ -469,7 +471,7 @@ def update_vendor_visits(vid: int, body: dict, authorization: str = Header(None)
 @router.get("/api/contractor-dispatches")
 def list_dispatches(quote_no: Optional[str] = None, authorization: str = Header(None)):
     user = _require_user(authorization)
-    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list', 'quotation'), "承攬商管理")
     conn = get_db()
     if quote_no:
         rows = conn.execute(
@@ -484,24 +486,26 @@ def list_dispatches(quote_no: Optional[str] = None, authorization: str = Header(
             "LEFT JOIN vendor_contractors v ON v.id=d.vendor_id "
             "ORDER BY d.created_at DESC LIMIT 200"
         ).fetchall()
+    out = _attach_delete_requests(conn, [_dispatch_row(r) for r in rows])
     conn.close()
-    return [_dispatch_row(r) for r in rows]
+    return out
 
 
 @router.get("/api/contractor-dispatches/{did}")
 def get_dispatch(did: int, authorization: str = Header(None)):
     user = _require_user(authorization)
-    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list', 'quotation'), "承攬商管理")
     conn = get_db()
     row = conn.execute(
         "SELECT d.*, v.name AS vendor_name FROM contractor_dispatches d "
         "LEFT JOIN vendor_contractors v ON v.id=d.vendor_id WHERE d.id=?",
         (did,)
     ).fetchone()
+    out = _attach_delete_requests(conn, [_dispatch_row(row)]) if row else None
     conn.close()
     if not row:
         raise HTTPException(404, "派發紀錄不存在")
-    return _dispatch_row(row)
+    return out[0]
 
 
 @router.post("/api/contractor-dispatches", status_code=201)
@@ -665,33 +669,258 @@ async def upload_dispatch_files(did: int, files: List[UploadFile] = File(...),
     return {"ok": True, "added": len(new_files), "files": new_files, "updated_at": now}
 
 
+def _load_quote_files(conn, did):
+    row = conn.execute("SELECT quote_no, files_json FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
+    if not row:
+        raise HTTPException(404, "派發紀錄不存在")
+    try:
+        files = json.loads(row["files_json"] or "[]")
+    except Exception:
+        files = []
+    return row, files
+
+
+def _save_quote_files(conn, did, files):
+    now = datetime.now().isoformat()
+    conn.execute("UPDATE contractor_dispatches SET files_json=?, updated_at=? WHERE id=?",
+                 (json.dumps(files, ensure_ascii=False), now, did))
+    return now
+
+
+def _quote_file(files, file_id):
+    f = next((x for x in files if x.get("id") == file_id), None)
+    if not f:
+        raise HTTPException(404, "找不到指定的檔案")
+    return f
+
+
+def _open_delete_request(conn, did, fid):
+    return conn.execute("SELECT * FROM dispatch_file_delete_requests WHERE dispatch_id=? AND file_id=? AND status='待審核'"
+                        " ORDER BY id DESC LIMIT 1", (did, fid)).fetchone()
+
+
+def _request_view(r):
+    """申請列 ⇒ 檔案上顯示用的 deleteRequest（簽核鏈解析不了 ⇒ 空鏈，不丟例外；佇列那邊另外擋壞資料）。"""
+    try:
+        a = json.loads(r["approval_json"] or "{}")
+        a = a if isinstance(a, dict) else {}
+    except (TypeError, ValueError):
+        a = {}
+    return {"requestedBy": r["requested_by"], "requestedByDisplay": a.get("requestedByDisplay") or r["requested_by"],
+            "requestedAt": r["requested_at"], "reason": r["reason"], "tiers": a.get("tiers") or [],
+            "currentTier": a.get("currentTier") or 0}
+
+
+def _attach_delete_requests(conn, dispatches):
+    """派工單的附件加上 `deleteRequest`（有待審的刪除申請才有；畫面標「刪除待審」）。"""
+    ids = [d["id"] for d in dispatches if d.get("files")]
+    if not ids:
+        return dispatches
+    reqs = {}
+    for r in conn.execute("SELECT * FROM dispatch_file_delete_requests WHERE status='待審核' AND dispatch_id IN (%s)"
+                          " ORDER BY id" % ",".join("?" * len(ids)), ids).fetchall():
+        reqs[(r["dispatch_id"], r["file_id"])] = r
+    for d in dispatches:
+        for f in d.get("files") or []:
+            r = reqs.get((d["id"], f.get("id")))
+            if r is not None:
+                f["deleteRequest"] = _request_view(r)
+    return dispatches
+
+
 @router.delete("/api/contractor-dispatches/{did}/files/{file_id}")
-def delete_dispatch_file(did: int, file_id: str, authorization: str = Header(None)):
+def delete_dispatch_file(did: int, file_id: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """承攬商報價單附件刪除＝**申請刪除，要審核**（N1，2026-09-30 使用者裁示；簽核走案件既有簽核層級＝報價單的流程設定，預設統一流程）。
+
+    - 核可前檔案保留，檔案上標 `deleteRequest`（畫面標「刪除待審」）；核可（走完全部簽核層）才真的刪檔；退回＝結案這份申請、檔案照舊。
+    - 沒有簽核層（或申請人的部門主管解析不出來）：申請人是最高管理者 ⇒ 直接刪；其他人 ⇒ 由最高管理者核可。
+    - 同一個檔案已有待審的刪除申請 ⇒ 409；申請人、原因、時間存在 `dispatch_file_delete_requests`＋稽核。"""
     user = _require_user(authorization)
     require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
     _require_admin(user)
+    reason = str((body or {}).get("reason") or "").strip()
     conn = get_db()
     try:
-        row = conn.execute(
-            "SELECT quote_no, files_json FROM contractor_dispatches WHERE id=?", (did,)
-        ).fetchone()
-        if not row:
-            raise HTTPException(404, "派發紀錄不存在")
+        row, files = _load_quote_files(conn, did)
+        f = _quote_file(files, file_id)
+        if _open_delete_request(conn, did, file_id) is not None:
+            raise HTTPException(409, "這個檔案已有待審核的刪除申請")
         try:
-            existing = json.loads(row["files_json"] or "[]")
-        except Exception:
-            existing = []
-        updated = delete_document_file("contractor_dispatches", str(did), existing, file_id)
+            tiers = setting_to_active_tiers(resolve_active_flow_setting("quotation"), conn, user["username"])
+        except UnresolvedManagerError:
+            tiers = []          # 申請人沒有歸屬部門／主管解析不出來 ⇒ 不卡死，由最高管理者核可
         now = datetime.now().isoformat()
-        conn.execute(
-            "UPDATE contractor_dispatches SET files_json=?, updated_at=? WHERE id=?",
-            (json.dumps(updated, ensure_ascii=False), now, did)
-        )
-        conn.commit()
+        if not tiers and user["role"] == "superadmin":
+            updated = delete_document_file("contractor_dispatches", str(did), files, file_id)
+            now = _save_quote_files(conn, did, updated)
+            conn.commit()
+            deleted = True
+        else:
+            appr = {"requestedBy": user["username"], "requestedByDisplay": user.get("display_name") or user["username"],
+                    "requestedAt": now, "tiers": tiers, "currentTier": 0}
+            conn.execute(
+                "INSERT INTO dispatch_file_delete_requests (dispatch_id, file_id, quote_no, filename, reason, status, approval_json,"
+                " requested_by, requested_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                (did, file_id, row["quote_no"] or "", f.get("filename") or "", reason, "待審核",
+                 json.dumps(appr, ensure_ascii=False), user["username"], now))
+            conn.commit()
+            deleted = False
     finally:
         conn.close()
-    _audit(_tok(authorization), "vendor.dispatch.delete_file", "contractor_dispatch", str(did), row["quote_no"])
-    return {"ok": True, "updated_at": now}
+    if deleted:
+        _audit(_tok(authorization), "vendor.dispatch.delete_file", "contractor_dispatch", str(did), row["quote_no"])
+        return {"ok": True, "deleted": True, "updated_at": now}
+    _audit(_tok(authorization), "vendor.dispatch.delete_file_request", "contractor_dispatch", str(did),
+           "%s 報價單附件「%s」申請刪除：%s" % (row["quote_no"], f.get("filename", ""), reason))
+    for a in (tiers[0].get("approvers") or []) if tiers else []:
+        _notify(a["username"], "dispatch_file_delete_request", str(did), row["quote_no"],
+                "承攬商報價單附件「%s」（案件 %s）申請刪除，需要您審核" % (f.get("filename", ""), row["quote_no"]))
+    if not tiers:
+        notify_module_activity("承攬商報價單", "申請刪除附件（待最高管理者審核）", user.get("display_name") or user["username"],
+                               row["quote_no"], "case-management.html", detail=f.get("filename", ""))
+    return {"ok": True, "deleted": False, "pending": True, "updated_at": now}
+
+
+def _can_decide_delete(conn, req, user):
+    """⇒ (ok, status, msg)。有簽核層：當層排序最前的未簽人（或其有效代理人）；沒有簽核層：只有最高管理者。
+    申請人不能核可／退回自己的刪除申請（稽核 M4；「沒簽核層、最高管理者自己申請」是直接刪、不會有申請，故無例外）。"""
+    if (req.get("requestedBy") or "") == user["username"]:
+        return False, 403, "不能審核自己送出的刪除申請"
+    tiers = req.get("tiers") or []
+    if tiers:
+        return check_approve_permission(tiers, req.get("currentTier") or 0, user["username"], conn=conn)
+    if user["role"] != "superadmin":
+        return False, 403, "沒有設定簽核層，僅最高管理者可審核刪除申請"
+    return True, None, None
+
+
+@router.post("/api/contractor-dispatches/{did}/files/{file_id}/delete-approve")
+def approve_dispatch_file_delete(did: int, file_id: str, authorization: str = Header(None)):
+    """核可刪除：簽完當層 → 下一層；全部簽完才真的刪檔。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        r = _open_delete_request(conn, did, file_id)
+        if r is None:
+            raise HTTPException(409, "這個檔案沒有待審核的刪除申請")
+        req = _request_view(r)
+        ok, code, msg = _can_decide_delete(conn, req, user)
+        if not ok:
+            raise HTTPException(code, msg)
+        tiers = req["tiers"]
+        done = True
+        if tiers:
+            ct = req["currentTier"]
+            approvers = tiers[ct].get("approvers") or []
+            nxt = next((a for a in approvers if a.get("status") != "approved"), None)
+            if nxt is None:
+                raise HTTPException(409, "此層所有簽核人員已完成")
+            nxt["status"] = "approved"
+            nxt["approvedAt"] = datetime.now().isoformat()
+            done = False
+            if all(a.get("status") == "approved" for a in approvers):
+                req["currentTier"] = ct + 1
+                done = req["currentTier"] >= len(tiers)
+        now = datetime.now().isoformat()
+        if done:
+            row, files = _load_quote_files(conn, did)
+            if any(x.get("id") == file_id for x in files):
+                files = delete_document_file("contractor_dispatches", str(did), files, file_id)
+                now = _save_quote_files(conn, did, files)
+            conn.execute("UPDATE dispatch_file_delete_requests SET status='已核可', decided_by=?, decided_at=? WHERE id=?",
+                         (user["username"], now, r["id"]))
+        else:
+            appr = json.loads(r["approval_json"] or "{}")
+            appr["tiers"], appr["currentTier"] = tiers, req["currentTier"]
+            conn.execute("UPDATE dispatch_file_delete_requests SET approval_json=? WHERE id=?",
+                         (json.dumps(appr, ensure_ascii=False), r["id"]))
+        conn.commit()
+        quote_no, filename = r["quote_no"], r["filename"]
+    finally:
+        conn.close()
+    if done:
+        _audit(_tok(authorization), "vendor.dispatch.delete_file", "contractor_dispatch", str(did),
+               "%s 報價單附件「%s」刪除已核可（申請人 %s）" % (quote_no, filename, req["requestedBy"]))
+    else:
+        _audit(_tok(authorization), "vendor.dispatch.delete_file_approve", "contractor_dispatch", str(did),
+               "%s 報價單附件「%s」刪除申請簽核一層" % (quote_no, filename))
+        for na in (tiers[req["currentTier"]].get("approvers") or []) if req["currentTier"] < len(tiers) else []:
+            _notify(na["username"], "dispatch_file_delete_request", str(did), quote_no,
+                    "承攬商報價單附件「%s」（案件 %s）刪除申請輪到您審核" % (filename, quote_no))
+    return {"ok": True, "deleted": done, "allDone": done, "updated_at": now}
+
+
+@router.post("/api/contractor-dispatches/{did}/files/{file_id}/delete-reject")
+def reject_dispatch_file_delete(did: int, file_id: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """退回刪除申請：檔案照舊保留、結案這份申請（原因寫稽核，並通知申請人）。"""
+    user = _require_user(authorization)
+    note = str((body or {}).get("note") or "").strip()
+    conn = get_db()
+    try:
+        r = _open_delete_request(conn, did, file_id)
+        if r is None:
+            raise HTTPException(409, "這個檔案沒有待審核的刪除申請")
+        ok, code, msg = _can_decide_delete(conn, _request_view(r), user)
+        if not ok:
+            raise HTTPException(code, msg)
+        now = datetime.now().isoformat()
+        conn.execute("UPDATE dispatch_file_delete_requests SET status='已退回', decided_by=?, decided_at=?, decision_note=? WHERE id=?",
+                     (user["username"], now, note, r["id"]))
+        conn.commit()
+        quote_no, filename, requester = r["quote_no"], r["filename"], r["requested_by"]
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "vendor.dispatch.delete_file_reject", "contractor_dispatch", str(did),
+           "%s 報價單附件「%s」刪除申請被退回：%s" % (quote_no, filename, note))
+    _notify(requester, "dispatch_file_delete_rejected", str(did), quote_no,
+            "承攬商報價單附件「%s」的刪除申請被退回（檔案保留）%s" % (filename, "：" + note if note else ""))
+    return {"ok": True, "updated_at": datetime.now().isoformat()}
+
+
+# ── 簽核佇列：承攬商報價單附件刪除申請（IP-10 `approval.queue_items`，type＝`dispatch_file_delete`）──
+# 一個待審的刪除申請＝佇列的一張卡；單號（項目的 quoteNo 欄）＝「派工id:檔案id」，掛的案件在 linkedQuoteNo。
+# 核可／退回打 `POST /api/contractor-dispatches/{派工id}/files/{檔案id}/delete-approve|delete-reject`（佇列頁依 type 組網址）。
+
+def delete_queue_items(conn) -> list:
+    """`approval.queue_items`：待審核的承攬商報價單附件刪除申請。簽核鏈壞掉的那一筆跳過（`approval_raw_of` 記 ERROR）。"""
+    from helpers import approval_queue as _aq
+    items = []
+    for r in conn.execute("SELECT * FROM dispatch_file_delete_requests WHERE status='待審核' ORDER BY id DESC").fetchall():
+        raw = _aq.approval_raw_of(r["approval_json"], "dispatch_file_delete", "%s:%s" % (r["dispatch_id"], r["file_id"]))
+        if raw is None:
+            continue
+        fld = _aq.tier_fields(raw)
+        items.append(_aq.base_item(
+            "dispatch_file_delete", "%s:%s" % (r["dispatch_id"], r["file_id"]), fld,
+            projectName="報價單附件「%s」申請刪除" % (r["filename"] or ""),
+            quoteDate=(r["requested_at"] or "")[:10], linkedQuoteNo=r["quote_no"],
+            dispatchId=r["dispatch_id"], fileId=r["file_id"], filename=r["filename"] or "", reason=r["reason"] or ""))
+    return items
+
+
+def delete_queue_detail(conn, doc_id):
+    """`approval.detail`（dispatch_file_delete）：id＝「派工id:檔案id」；權限、案件抬頭在 L1。"""
+    did, _, fid = str(doc_id).partition(":")
+    r = conn.execute("SELECT * FROM dispatch_file_delete_requests WHERE CAST(dispatch_id AS TEXT)=? AND file_id=? AND status='待審核'"
+                     " ORDER BY id DESC LIMIT 1", (did, fid)).fetchone()
+    if r is None:
+        return None
+    from helpers import approval_queue as _aq
+    files = []
+    d = conn.execute("SELECT files_json FROM contractor_dispatches WHERE id=?", (r["dispatch_id"],)).fetchone()
+    if d is not None:
+        try:
+            files = [x for x in _aq.file_entries(d["files_json"]) if x.get("id") == fid]
+        except Exception:                                                            # noqa: BLE001
+            files = []
+    return {"quoteNo": r["quote_no"], "title": "報價單附件刪除申請",
+            "approvalRaw": json.dumps({"tiers": _aq.tier_fields(r["approval_json"])["tiers"], "requestedBy": r["requested_by"]},
+                                      ensure_ascii=False),
+            "fields": [{"label": "附件", "value": r["filename"] or "—"},
+                       {"label": "刪除原因", "value": r["reason"] or "—"},
+                       {"label": "申請人", "value": r["requested_by"] or "—"},
+                       {"label": "申請時間", "value": (r["requested_at"] or "—")[:16].replace("T", " ")}],
+            "items": [], "files": files}
 
 
 # ── 廠商發票附件 ──────────────────────────────────────────────────────────────

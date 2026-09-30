@@ -990,7 +990,8 @@ def pytest_configure(config):
     if hasattr(config, "workerinput"):
         return
     if not _is_heavy_run(config):
-        return                       # 單檔臨時跑，不搶鎖
+        _refuse_light_run_during_build(config)
+        return                       # 單檔臨時跑，不搶鎖（建包獨佔期間例外：直接拒絕，見上一行）
 
     slots = _lock_slots()
     wait = _env_seconds("MOTRIX_PYTEST_LOCK_WAIT", LOCK_WAIT_SECONDS_DEFAULT)
@@ -1015,6 +1016,10 @@ def pytest_configure(config):
             return
         if ok:
             _lock_taken_by_me = mine
+            if exclusive and not os.environ.get(BUILD_CHILD_ENV):
+                # 直接以獨佔身分跑（不經建包腳本）：自己起的子 pytest 也要認得這份登記，否則會被下面的守門拒絕
+                reg = _read_lock(intent) or {}
+                os.environ[BUILD_CHILD_ENV] = str(reg.get("pid") or os.getpid())
             return
         held = held or {}
         try:
@@ -1047,6 +1052,54 @@ def pytest_configure(config):
                   % (why, held.get("pid"), held.get("basetemp"), age // 60, (deadline - now) // 60), flush=True)
             announced = now
         time.sleep(min(poll, max(0.05, deadline - now)))
+
+
+#: 建包自己的子行程（含 xdist worker、題目起的子 pytest、偶發重跑）帶這個 = 登記的 pid ⇒ 不被下面的守門拒絕。
+#: 建包腳本設它；utf8_env() **不**剝掉它（剝掉的是 EXCLUSIVE／_OWNER，那兩個會讓子行程去搶獨佔）。
+BUILD_CHILD_ENV = "MOTRIX_PYTEST_BUILD_CHILD"
+#: 設成 0 ⇒ 關掉「建包期間拒絕臨時 pytest」（回到 2026-09-30 之前的行為）
+BUILD_GUARD_ENV = "MOTRIX_PYTEST_BUILD_GUARD"
+
+
+def light_run_block_reason(reg, alive, env, my_pid, collect_only):
+    """建包獨佔期間，一輪**不搶鎖的臨時 pytest** 要不要拒絕 ⇒ 拒絕的原因字串，或 None（放行）。純函式。
+
+    2026-09-30：建包持有獨佔時，其他視窗照樣起 `pytest … --basetemp=…-adhoc`（單程序不搶鎖）⇒ 加負載 ⇒
+    建包的 e2e 靠時序的題偶發紅，整包 35 分鐘重來。重型測試本來就排隊（不跑、不佔 CPU），臨時跑的現在改成直接拒絕。
+    - 沒有登記、登記的持有者已死 ⇒ 放行（一個解不掉的鎖比沒有鎖更糟）。
+    - 登記是自己家的（BUILD_CHILD／EXCLUSIVE_OWNER／自己的 pid ＝ 登記 pid）⇒ 放行。
+    - `--collect-only` ⇒ 放行（數秒、不跑題；modtest 的選題與鎖守門題都靠它）。
+    - `MOTRIX_PYTEST_BUILD_GUARD=0` ⇒ 放行（關掉這道守門）。"""
+    if env.get(BUILD_GUARD_ENV) == "0" or collect_only or not reg or not alive:
+        return None
+    pid = str(reg.get("pid"))
+    if pid in {str(env.get(BUILD_CHILD_ENV) or ""), str(env.get("MOTRIX_PYTEST_EXCLUSIVE_OWNER") or ""), str(my_pid)}:
+        return None
+    return pid
+
+
+def _refuse_light_run_during_build(config):
+    intent = _lock_slots()[0]
+    intent = intent.with_name(intent.name + ".exclusive")
+    reg = _read_lock(intent)          # 只讀不刪：清過期登記是搶鎖那一側的事，臨時跑不動別人的檔
+    try:
+        alive = (bool(reg) and _pid_alive(int(reg.get("pid", -1)))
+                 and time.time() - float(reg.get("started_at", 0)) <= EXCLUSIVE_MAX_AGE_SECONDS)
+    except (TypeError, ValueError, AttributeError):
+        return
+    pid = light_run_block_reason(reg, alive, os.environ, os.getpid(), bool(getattr(config.option, "collectonly", False)))
+    if pid is None:
+        return
+    try:
+        mins = (time.time() - float(reg.get("started_at", 0))) // 60
+    except (TypeError, ValueError):
+        mins = 0
+    raise pytest.UsageError(
+        "【建包獨佔中：不開始臨時 pytest】建包（pid=%s，已 %d 分鐘，%s）正在跑全量。\n"
+        "  建包期間任何額外的 pytest 都會分走 CPU，e2e 靠時序的題會偶發紅，而一紅整包約 35 分鐘重來。\n"
+        "  ⇒ 等建包結束再跑（登記檔：%s；持有者結束後自動失效）。\n"
+        "  真的非跑不可（知道後果）：設 %s=0 再跑。建包自己的子行程帶 %s=<建包 pid>，不受影響。"
+        % (pid, mins, reg.get("basetemp"), intent, BUILD_GUARD_ENV, BUILD_CHILD_ENV))
 
 
 def _create_lock(path, basetemp) -> bool:

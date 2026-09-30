@@ -267,8 +267,8 @@ window.CM_PARTS.push(() => ({
     netReceivedTotal() {
       return this.paymentItems().reduce((s, p, i) => {
         if (!p.received) return s
-        const base = p.actualAmount != null ? +p.actualAmount : this.itemAmountReceivable(i)
-        return s + base - (+p.feeAmount || 0)
+        // 2026-09-30：實收金額＝銀行入帳（已扣客戶內扣手續費）⇒ 淨額＝入帳，不再減手續費；沒填實收才用應收−手續費（同後端 receipt_amounts）
+        return s + (p.actualAmount != null ? +p.actualAmount : this.itemAmountReceivable(i) - (+p.feeAmount || 0))
       }, 0)
     },
     outstandingTotal() {

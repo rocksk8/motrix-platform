@@ -10,7 +10,7 @@
 
 1. 目前版本：`<ROOT>\backend\.deployed_commit.json` 的 `commit` 以 `<舊 commit 前 8 碼>` 開頭；已是 `<新 commit>` ⇒ 回報「已是這一版」結束。
 2. **驗證基準（PLAYBOOK §D-1a）**：讀部署包 `deploy_manifest.json` 的 `verification`：
-   - `mode` 是 `scoped` ⇒ `verification.base`（40 碼完整 SHA）必須等於 `.deployed_commit.json` 的 `commit` 的開頭（`commit` 是完整 SHA 時兩者完全相等）。**不相等 ⇒ 停下回報兩個值**：這一包的範圍驗證是對著另一個基準算的，沒驗到正式機實際的改動範圍。
+   - `mode` 是 `scoped` ⇒ `verification.scoped.base`（40 碼完整 SHA）必須等於 `.deployed_commit.json` 的 `commit` 的開頭（`commit` 是完整 SHA 時兩者完全相等）。**不相等 ⇒ 停下回報兩個值**：這一包的範圍驗證是對著另一個基準算的，沒驗到正式機實際的改動範圍。
    - `mode` 是 `full` ⇒ 記下即可（全量不依基準）。
    - 沒有 `verification` 欄位 ⇒ 停下回報（建包工具版本不對）。
 3. 服務健康：`http://127.0.0.1:666/api/ping` 回 200。
@@ -27,4 +27,4 @@
 
 ## 步驟 5：回報
 
-- 步驟 0 第 2 項：`verification.mode`、`verification.base` 與 `.deployed_commit.json` 的 `commit`（兩個值都寫出來）。
+- 步驟 0 第 2 項：`verification.mode`、`verification.scoped.base` 與 `.deployed_commit.json` 的 `commit`（兩個值都寫出來）。

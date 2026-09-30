@@ -78,7 +78,7 @@ function reportsApp() {
     expensesLoadedFor: null,   // 記錄已載入資料對應的範圍+年+月+季，切換時判斷要不要重打 API
     expensesInflight:  null,   // 飛行中請求對應的同款鍵（避免同一期別被重複請求）
     // `AC2`：認列口徑（accrual＝權責，預設；cash＝現金）與「待補登」清單展開狀態
-    expensesBasis:     'accrual',
+    expensesBasis:     'cash',      // 2026-09-30：預設現金口徑（依收付款日、含稅）；權責在切換裡
     flagOpen:          {},
     expensesFilter:    'all',  // all/contractor/equipment/material/other，支出明細的類別篩選 chip
 
@@ -515,7 +515,7 @@ function reportsApp() {
       // D4-1（2026-09-24）：帶上畫面目前的口徑；原本沒帶 ⇒ 畫面切現金，匯出的仍是權責。
       var url = '/api/reports/financial/' + fmt + '?period=' + this.periodParam +
                 '&expense_month=' + this.expensesMonth +
-                '&basis=' + encodeURIComponent(this.expensesBasis || 'accrual') +
+                '&basis=' + encodeURIComponent(this.expensesBasis || 'cash') +
                 (this.expensesScope === 'quarter' ? '&quarter=' + this.expensesQuarter : '') +
                 (this.departmentId ? '&department_id=' + this.departmentId : '')
       try {
