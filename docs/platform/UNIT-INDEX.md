@@ -26,7 +26,7 @@
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 24 | 8 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
 | `core:cloud_storage` | L1 | Pluggable cloud backup storage backend (2026-09-07, architecture map §6.4).（無單位卡） | 9 | 2 | — |
-| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 93 | — |
+| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 29 | 94 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
 | `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 11 | 0 | — |
 | `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 19 | 15 | — |
@@ -45,7 +45,7 @@
 | `helper:custom_def_review` | L1 | 自訂模組「定義」的送審流程（建構器第三輪 S4，2026-09-30；使用者：定義送審→退回→修改重送，每次 v1→v2…，退回要填原因）。 | 13 | 2 | `tests/test_builder3_def_review_2026_09_30.py` |
 | `helper:custom_fields` | L1 | 自訂欄位命名空間（P4，CUSTOMIZATION-SPEC §3.6）。（無單位卡） | 10 | 2 | — |
 | `helper:custom_files` | L1 | 自訂模組附件（file／image 欄位，建構器第三輪 S2；core migration v4 `custom_record_files`）。 | 16 | 2 | `tests/test_builder3_files_2026_09_30.py` |
-| `helper:custom_finance` | L1 | 自訂模組的金流（收入／支出）串接（建構器第三輪 S2.5；使用者 2026-09-30：「只要有收入、支出項，都需要跟營運報表或是相關模組數據串接」）。 | 9 | 4 | `tests/test_builder3_finance_2026_09_30.py` |
+| `helper:custom_finance` | L1 | 自訂模組的金流（收入／支出）串接（建構器第三輪 S2.5；使用者 2026-09-30：「只要有收入、支出項，都需要跟營運報表或是相關模組數據串接」）。 | 10 | 5 | `tests/test_builder3_finance_2026_09_30.py` |
 | `helper:custom_history` | L1 | 自訂模組單據的送簽修訂紀錄（建構器第三輪 S5，2026-09-30；使用者：單據送簽→退回→修改重送，單號加 -R1、-R2 並保留各版內容，可比對差異）。 | 5 | 2 | `tests/test_builder3_history_2026_09_30.py` |
 | `helper:custom_modules` | L1 | 自訂模組引擎（P8，CUSTOMIZATION-SPEC §1／§3.1／§8.1）：定義是資料，不是程式。（無單位卡） | 52 | 5 | — |
 | `helper:daily_checks` | L1 | L1 每日 08:00 檢查執行器（2026-09-26；取代 routers/daily_tasks.py::schedule_overdue_check）。（無單位卡） | 3 | 1 | — |
@@ -59,7 +59,7 @@
 | `helper:geo` | L1 | 地理查詢：地址 → 座標（OSM／Nominatim），以及兩點間的直線距離。（無單位卡） | 80 | 5 | — |
 | `helper:gl_status` | L1 | [單位] helper:gl_status    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版） | 2 | 3 | `tests/test_gl_source_status_2026_09_30.py` |
 | `helper:google_calendar` | L1 | Google 行事曆整合 — Phase 1（系統 → 行事曆，push only，2026-08-21）。（無單位卡） | 17 | 8 | — |
-| `helper:legal_params` | L1 | L1 法規參數服務（R1；規格 CUSTOMIZATION-SPEC §9.1）。（無單位卡） | 27 | 26 | — |
+| `helper:legal_params` | L1 | L1 法規參數服務（R1；規格 CUSTOMIZATION-SPEC §9.1）。（無單位卡） | 27 | 27 | — |
 | `helper:licensing` | L1 | 授權金鑰核心（2026-09-21，細線 1 第 1、2 步）。（無單位卡） | 13 | 4 | — |
 | `helper:mail_types` | L1 | L1 信件類型登記表（CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）。（無單位卡） | 13 | 9 | — |
 | `helper:map_overlays` | L1 | L1 地圖覆蓋層（串接點 IP-101 `map.overlay`；docs/platform/LODGING-NEARBY.md §3.6.1，D 稽核 LG-M1／LG2-S1～S3）。 | 5 | 2 | `tests/test_map_overlay_contract_2026_09_28.py`、`tests/test_e2e_map_overlay_contract_2026_09_28.py` |
