@@ -1,6 +1,6 @@
 # 附近旅宿 更新紀錄
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
+## 1.2.2 — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
 - 匯出規則（使用者 2026-09-30）：紀錄匯出（CSV／JSON）每次寫稽核（`export.csv`／`export.json`）。
 
 ## 1.2.1 — 2026-09-29 12:20（D 稽核 AUDIT-D-lodging-daily S1～S3）

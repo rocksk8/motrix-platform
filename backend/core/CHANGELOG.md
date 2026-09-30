@@ -2,10 +2,10 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.82 — 2026-09-30（暫用號；wip/w2-open-bind：附件開檔路徑綁單據，安全審查 W3）〔core_bump：暫用 1.99 → 1.82〕
+## 1.87 — 2026-09-30（暫用號；wip/w2-open-bind：附件開檔路徑綁單據，安全審查 W3）〔core_bump：暫用 1.99 → 1.82〕〔train_number：1.82 → 1.87〕
 - L1（新增）：`helpers.uploads.upload_path_key(entry, folder, depth=2)`——metadata 的 `path` 在指定資料夾底下時回單據鍵，否則 None（demo 前綴已去掉）。給 `attachments.catalog` 提供者驗「被提供的檔案屬於這張單據」。`routers/attachments.ATTACHMENTS_OPEN_ENABLED` 重新預設開（緊急開關）。
 
-## 1.82 — 2026-09-30（暫用，列車取號；wip/w3-export-pdf：每個 Excel 匯出都要有 PDF、每次匯出都要留紀錄）
+## 1.86 — 2026-09-30（暫用，列車取號；wip/w3-export-pdf：每個 Excel 匯出都要有 PDF、每次匯出都要留紀錄）〔train_number：1.82 → 1.86〕
 - L1（新增）：`helpers.xlsx_out.export_logged(fmt, module, name, label="")`（匯出端點裝飾器：成功後寫稽核 `export.<fmt>`，detail＝module／篩選摘要／列數，不含個資值）、
   `add_pdf_sibling(router, path, handler, *, module, name, title="", method="GET")`（xlsx 端點的 PDF 姊妹：同一個處理函式、公司資料第二道閘門、Edge headless、PDF 冷卻 30 秒、不吃 Excel 冷卻）、
   `log_export(authorization, fmt, module, name, filters=None, rows=None, label="")`、`summarize_filters(params)`、`xlsx_to_html(data, title="", max_rows=4000)`、`count_xlsx_rows(data)`、常數 `XLSX_MEDIA`／`PDF_MAX_ROWS`。
@@ -13,19 +13,19 @@
   lodging 紀錄與每日工作事項歷史（CSV／JSON）匯出也記稽核。守門：`tests/platform/test_export_pdf_and_audit_2026_09_30.py`（AST）。
 - 稽核畫面：模組標籤「匯出」與四個動作標籤。
 
-## (next) — 2026-09-30（wip/w1-xss：W3 #2 輸出版型儲存型 XSS；wip/w1-defreview-bypass：W3 #3；升版幅度由列車取號）
+## 1.85 — 2026-09-30（wip/w1-xss：W3 #2 輸出版型儲存型 XSS；wip/w1-defreview-bypass：W3 #3；升版幅度由列車取號）
 - L1（安全，行為）：`helpers.doc_template._esc` 加跳脫 `"`／`'`；版型會落進屬性的值改白名單——`class`（英數／底線／連字號）、`width`（數字＋%／px／mm／pt／em）、`colspan`（1～20）、浮水印 `count`（1～60，原本可填任意大數撐爆記憶體）；壞值渲染丟 `TemplateError`、儲存驗證（`problems`）同步回報，存不進去。公開介面不變（快照不動）。
 - L1（安全，行為）W3 #3 定義審核繞過：審核只涵蓋自訂模組定義（company）；其他 kind 直接發布與任何還原（審核未啟用時）**都寫稽核 `definitions.publish_unreviewed`**；自訂模組定義的 draft／publish／restore 只接受 `company` 範圍（其餘 400，引擎本來就只讀 company）。
 - L1（安全，新增）：`helpers.doc_template.esc_quotes／attr_esc`——引號跳脫的單一來源（各 builder 的區域 `esc()` 保留原本的 &<>／換行規則，最後一步交給 `esc_quotes`）；單據抬頭／頁尾（公司名稱、英文名、統編、電話、email）與 `<img src>`（存摺、身分證路徑）一律跳脫；JSON 的 Infinity／NaN 進 colspan／count ⇒ `TemplateError`。
 - L1（安全，新增）W3 #3 補：`core.definitions.DefinitionConflict`（HTTP 409）——這份定義有送審中的版本時，`publish`／`restore` 直接拒絕（寫鎖內判斷）；`custom_def_review`：送審記 `baseVersion`，核可時現行版已變 ⇒ 409「送審已過期」（退回仍可）；有送審中的定義時變更審核模式／審核人 ⇒ 409。
 
-## 1.82 — 2026-09-30（暫用號；wip/w2-gl-warn：已入帳來源的修改提示，MONEY-FLOWS §9 L3）〔core_bump：暫用 1.99 → 1.82〕
+## 1.84 — 2026-09-30（暫用號；wip/w2-gl-warn：已入帳來源的修改提示，MONEY-FLOWS §9 L3）〔core_bump：暫用 1.99 → 1.82〕〔train_number：1.82 → 1.84〕
 - L1（新增）：`helpers.gl_status.gl_posted_warning(conn, source_type, source_key, prefix=False)`——經 `gl.source_status` 提供者（accounting）查來源是否已入總帳，回一句非阻擋提示或 None（沒有提供者／丟例外 ⇒ None）。各來源寫入端點用：成功後把文字放進回應 `glWarning`。
 
-## (next) — 2026-09-30（wip/w1-menu-split：選單拆分；升版幅度由列車取號）
+## 1.83 — 2026-09-30（wip/w1-menu-split：選單拆分；升版幅度由列車取號）
 - L1（資料）：`core/menu_l1.json` 新增固定群組 `analysis`「經營分析」（排在財務之前）；群組 `finance` 標籤「財務」→「財務會計」（key 不變，模組 `menu.group` 仍用 `finance`）。不動權限、不動介面快照。
 
-## (next) — 2026-09-30（wip/w1-pdf-unapproved；升版幅度由列車取號）
+## 1.82 — 2026-09-30（wip/w1-pdf-unapproved；升版幅度由列車取號）
 - L1（新增）：`helpers.doc_template.unapproved_banner／inject_unapproved／UNAPPROVED_TEXT`——尚未核可的單據 PDF／預覽一律顯示紅色「未核可・僅供預覽」橫幅（行內樣式，列印／下載同一份 HTML；`inject_unapproved` 冪等，版型拿掉 banner 積木也擋不掉）。套用：報價單、請款單、開票申請、承攬商匯款申請、出貨單、完工單、會計傳票、自訂模組單據；已核准的輸出不變。
 - L1（新增）：`helpers.tiered_approval.require_reject_reason(note)`——退回／駁回／退回修改／撤銷核准一律要填原因（空白 ⇒ HTTP 400「退回要填原因」；後端強制，前端只是提示）；報價單、請款單、開票申請、承攬商匯款申請、出貨單、完工單、傳票 send-back、自訂模組單據 reject 與各 revoke-approval 都走這一支。
 - 前端共用：`frontend/static/approval-return.js`（`MotrixApprovalReturn.ask／canDecide／loadDelegators`：預覽裡的「退回修改」與各頁退回按鈕共用的原因視窗，原因必填、顯示後端錯誤原文）；`routers/custom_records`：reject 原因必填；自訂模組單據輸出在「尚未核可」狀態（簽核通過後可到達的狀態之外）有紅色警示。

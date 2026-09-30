@@ -1,5 +1,5 @@
 {
- "core_version": "next",
+ "core_version": "1.87",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -486,9 +486,9 @@
    "FORMATS": "const",
    "THEMES": "const",
    "TemplateError": "class",
+   "UNAPPROVED_TEXT": "const",
    "attr_esc": "def(s)",
    "esc_quotes": "def(text)",
-   "UNAPPROVED_TEXT": "const",
    "inject_unapproved": "def(html, status=…, detail=…)",
    "load_default": "def(key)",
    "problems": "def(template, sample_view=…)",

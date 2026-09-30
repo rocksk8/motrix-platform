@@ -1,21 +1,21 @@
 # 案件 更新紀錄
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：附件開檔路徑綁單據（安全審查 W3））
+## 1.0.37 — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：附件開檔路徑綁單據（安全審查 W3））
 - `attachments.py`：`_CaseCatalog.open` 要求檔案路徑在該單據自己的資料夾底下（`_path_bound_to_doc`）；`api/quotations.py`：案件紀錄 PATCH／PUT／POST 只保留資料庫已有的 `files`／`invoiceFiles`（`_strip_foreign_file_entries`，前端夾帶的新路徑一律丟掉；R1 下游效應：只影響附件顯示與開檔，不影響報表／總帳／出納）。
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
+## 1.0.36 — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
 - 匯出規則（使用者 2026-09-30）：案件批次匯出加 PDF 姊妹（`POST /api/case-batch/export/pdf`），每次匯出寫稽核。
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w2-gl-warn：已入帳來源的修改提示（MONEY-FLOWS §9 L3））
+## 1.0.35 — 2026-09-30（暫用號，列車取號；wip/w2-gl-warn：已入帳來源的修改提示（MONEY-FLOWS §9 L3））
 - 改動／取消已入總帳的收款、更換發票號碼時，回應帶 `glWarning`（非阻擋）：案件紀錄整包存與 `mark_payment`；前端 toast／出納頁行內提示「此筆已入總帳：修改後下次引擎執行會產生沖轉草稿」。
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w1-xss）
+## 1.0.34 — 2026-09-30（暫用號，列車取號；wip/w1-xss）
 - 完工單 PDF：區域 `esc()` 補跳脫引號（共用 `helpers.doc_template.esc_quotes`；W3 #2 再查）。
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w1-pdf-unapproved）
+## 1.0.33 — 2026-09-30（暫用號，列車取號；wip/w1-pdf-unapproved）
 - 完工單預覽視窗高度包 `--fz`（字級放大不超出視窗）。
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w1-pdf-unapproved＋退回原因必填）
+## 1.0.32 — 2026-09-30（暫用號，列車取號；wip/w1-pdf-unapproved＋退回原因必填）
 - 完工單 PDF／預覽：未核准時加紅色「未核可・僅供預覽」橫幅（共用 `helpers.doc_template.unapproved_banner`）；已核准輸出不變。（另含退回原因必填，見下）
 - 退回（報價單 reject／reject-final、完工單）與完工單撤銷核准一律要填原因；完工單 `pdf-download` 放行本單簽核人／申請人，`export?mode=preview` 不計次，案件頁完工單預覽改為視窗並可「退回修改」。
 

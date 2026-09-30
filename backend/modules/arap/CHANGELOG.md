@@ -1,18 +1,18 @@
 # 應收應付 更新紀錄
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：附件開檔路徑綁單據（安全審查 W3））
+## 1.0.24 — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：附件開檔路徑綁單據（安全審查 W3））
 - 附件目錄提供者 `open()` 加路徑綁單據檢查（`helpers.uploads.upload_path_key`）：檔案路徑不在這張單據自己的資料夾 ⇒ 當作沒有這個檔。
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
+## 1.0.23 — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
 - 匯出規則（使用者 2026-09-30）：出納執行紀錄 Excel 匯出加 PDF 姊妹（`/api/cashier/export/pdf`），每次匯出寫稽核。
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w2-gl-warn：已入帳來源的修改提示（MONEY-FLOWS §9 L3））
+## 1.0.22 — 2026-09-30（暫用號，列車取號；wip/w2-gl-warn：已入帳來源的修改提示（MONEY-FLOWS §9 L3））
 - 出納頁（`pages/cashier.html`／`js/cashier.js`）：取消或改動已入總帳的收款時，回應帶 `glWarning` ⇒ 頁首行內可關閉提示（不用 alert）。
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w1-menu-split 選單拆分）
+## 1.0.21 — 2026-09-30（暫用號，列車取號；wip/w1-menu-split 選單拆分）
 - 選單：出納排到「財務會計」群組第一項（order 20→10）；perm 不變。
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w1-pdf-unapproved）
+## 1.0.20 — 2026-09-30（暫用號，列車取號；wip/w1-pdf-unapproved）
 - 請款單／開票申請：退回（reject）與撤銷核准（revoke-approval）一律要填原因（400「退回要填原因」，`helpers.tiered_approval.require_reject_reason`）；PDF 預覽未核准時有紅色「未核可・僅供預覽」橫幅，預覽視窗有權決定者可「退回修改」。
 
 ## 1.0.19 — 2026-09-30（暫用號，列車取號；W4 總帳 R12 畫面）
