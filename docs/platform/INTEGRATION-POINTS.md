@@ -680,7 +680,7 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M05 應收應付：`modules/arap/gl_events.py`（銷項發票 E01、客戶收款 E03；2026-09-30 C1）。之後逐批接入：subcontract／payroll／supply／case／建構器 outbox（C2～C7），每接一個在本列加一筆 `modules/<key>/…` |
+| 提供方 | M05 應收應付：`modules/arap/gl_events.py`（銷項發票 E01、客戶收款 E03；2026-09-30 C1）。M04 外包工班：`modules/subcontract/gl_events.py`（承攬商發票 E04、匯款 E05／E05b；2026-09-30 C2）。之後逐批接入：payroll／supply／case／建構器 outbox（C3～C7），每接一個在本列加一筆 `modules/<key>/…` |
 | 使用方 | M06 `modules/accounting/ledger/contract.py::collect`（`GET /api/ledger/events/preview`）與 `modules/accounting/ledger/engine.py::run`（`POST /api/ledger/engine/run`，功能旗標 engine_drafts） |
 | 形式 | provider，多提供者（`registry.providers("gl.events")`，鍵＝來源模組 key） |
 | 語法 | 提供：`ModuleSpec(providers={("gl.events", "<模組key>"): fn})`；`fn(start, end, *, changed_since="") -> {"events": [Event], "notice": str}`<br>Event：`{source_type, source_key(不可變、不含陣列索引), event_code, event_date(YYYY-MM-DD 權責日), doc_no, case_no, party{key,name}, tax_code, mode(snapshot｜cumulative｜append), lines:[{role, side(D｜C), amount(非負整數新臺幣), case_no, party_key, tax_code, memo}], meta}`。來源給**角色**，角色→科目由 M06 設定（`gl_account_roles`） |

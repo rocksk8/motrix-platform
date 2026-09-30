@@ -38,6 +38,9 @@ KNOWN_FOREIGN_READS = {
     MODULE + "/api/voucher_summary.py": {
         "case_extra_expenses": ("case", "case.extra_expenses"),
     },
+    MODULE + "/api/vouchers.py": {
+        "case_extra_expenses": ("case", "case.extra_expenses"),
+    },
 }
 
 #: 2026-09-30（W4 總帳）：vouchers.py 拆檔後，該讀取隨函式搬到 voucher_summary.py（讀取內容不變，仍等 case.extra_expenses）。
