@@ -110,6 +110,8 @@ def test_row_visibility_creator_cashier_admin_yes_stranger_404(client, users):
         listed = client.get(SENT, headers=users[who]).json()["items"]
         if who != "cl_cash":          # 清單另受既有「財務金額可視」規則（can_see_financial）約束；出納走出納頁付款，這裡只驗單列可見（下方 PATCH 403≠404）
             assert (eid in [i["id"] for i in listed]) == ok, who
+        if who in ("cl_form", "cl_admin"):
+            continue                                                                 # 建立者與管理員本來就可改；這題只驗「看得到但不能改／看不到」
         up = client.patch("%s/%d" % (SENT, eid), headers=users[who], json=dict(BODY, description="改"))
         if who == "cl_cash":                          # 出納看得到但不是填寫人／管理員 ⇒ 不能改（403，不是 404）
             assert up.status_code == 403, up.text

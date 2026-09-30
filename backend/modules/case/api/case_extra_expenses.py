@@ -270,13 +270,17 @@ def _recalc(body: ExtraExpenseIn) -> float:
     return round_half_up(qty * unit_cost, 100) / 100   # 元以下兩位（分）四捨五入
 
 
+def _require_desc(body: ExtraExpenseIn):
+    """舊版案件額外支出（kind=''）一定要有品項說明；費用單據由明細摘要衍生，不強制。"""
+    if not (body.description or "").strip():
+        raise HTTPException(400, "請填寫品項說明")
+
+
 def _validate(body: ExtraExpenseIn):
     if body.category and body.category not in CATEGORIES:
         raise HTTPException(400, f"類別必須是：{'／'.join(CATEGORIES)}")
     if float(body.qty or 0) < 0 or float(body.unitCost or 0) < 0:
         raise HTTPException(400, "數量與單位成本不能為負")
-    if not (body.description or "").strip() and not (body.kind or "").strip():
-        raise HTTPException(400, "請填寫品項說明")
     EF.check_kind(body.kind)
     if body.payeeType not in ("", "employee", "vendor"):
         raise HTTPException(400, "收款人類型只能是 employee／vendor")
@@ -351,6 +355,8 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
         _guard_case(conn, quote_no, user)
         now = datetime.now().isoformat(timespec="seconds")
         kind = EF.check_kind(body.kind)
+        if not kind:
+            _require_desc(body)
         if kind:
             begin_write(conn)                                   # 配單號＋寫入要在同一把寫鎖裡
             lines, total = EF.normalize_lines(body.lines)
@@ -404,6 +410,8 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
 
         now = datetime.now().isoformat(timespec="seconds")
         row_kind = _col(row, "kind", "") or ""
+        if not row_kind:
+            _require_desc(body)
         if (body.kind or "") != row_kind and (body.kind or "") != "":
             raise HTTPException(400, "單據類型建立後不可更改")
         if row_kind:
@@ -1066,6 +1074,8 @@ def upsert_change_request(quote_no: str, exp_id: int, body: ExtraExpenseIn = Bod
         row = _load(conn, quote_no, exp_id, user)
         if row["status"] != "已核准":
             raise HTTPException(409, f"「{row['status']}」狀態請直接編輯，不需要提變更申請")
+        if not (_col(row, "kind", "") or ""):
+            _require_desc(body)
         if not _can_modify(row, user):
             raise HTTPException(403, "只有填寫人本人或管理員可以提出變更申請")
         cs = _col(row, "change_status", "") or ""
