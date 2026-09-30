@@ -37,9 +37,9 @@ def _require_closing_super(authorization):
     return user
 
 
-def _run(conn, fn, *args, **kw):
+def _run(conn, fn, *args):
     try:
-        return fn(conn, *args, **kw)
+        return fn(conn, *args)
     except (_closing.ClosingError, _periods.PeriodError) as exc:
         conn.rollback()
         raise HTTPException(400, str(exc))
