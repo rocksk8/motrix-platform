@@ -10,6 +10,7 @@
 白名單要寫理由；次數要一致（多了少了都紅）。
 """
 import ast
+import warnings
 from pathlib import Path
 
 import pytest
@@ -40,7 +41,9 @@ def _shared_vars(fn):
 
 def scan_source(src):
     """⇒ [(函式, 行, 變數.方法)]"""
-    tree = ast.parse(src)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SyntaxWarning)      # 別的檔案裡的非法跳脫序列不是這裡的事
+        tree = ast.parse(src)
     out = []
     for fn in ast.walk(tree):
         if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
