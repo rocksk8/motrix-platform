@@ -7,13 +7,13 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.accounting.api import account_items, accounting_export, ledger_periods, ledger_reports, vouchers
+from modules.accounting.api import account_items, accounting_export, ledger_engine, ledger_periods, ledger_reports, vouchers
 
 _m0001 = importlib.import_module("modules.accounting.migrations.0001_ledger_base")
 
 MODULE = ModuleSpec(
     key="accounting",
-    routers=[accounting_export.router, account_items.router, vouchers.router, ledger_periods.router, ledger_reports.router],
+    routers=[accounting_export.router, account_items.router, vouchers.router, ledger_periods.router, ledger_reports.router, ledger_engine.router],
     migrations=[(1, _m0001.up)],
     providers={
         # IP-2：M07 獎金傳票草稿與科目檢查
