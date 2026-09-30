@@ -9,6 +9,8 @@
 - 不猜：實收與發票含稅不一致、缺開立日期都在 notice 明說，帳上 AR 餘額如實保留（由會計處理），不自行沖差額。
 只讀，不寫資料。
 """
+import json
+
 from db import get_db
 from helpers.legal_params import round_half_up
 from modules.arap.receivables import collect_income_items, collect_tax_invoices
@@ -18,7 +20,8 @@ _DEAL_OK = ("已成案", "已結案")
 
 
 def _deal_ok_quotes(quote_nos):
-    """⇒ 案件狀態（deal_tag，欄位優先、退回 data_json.dealTag）是已成案／已結案的報價單號集合。"""
+    """⇒ 案件狀態（deal_tag，欄位優先、退回 data_json.dealTag）是已成案／已結案的報價單號集合。
+    data_json 在 Python 裡逐列解析（不用 SQL json_extract：一列壞 JSON 會讓整個查詢失敗）。"""
     nos = sorted({q for q in quote_nos if q})
     if not nos:
         return set()
@@ -27,12 +30,19 @@ def _deal_ok_quotes(quote_nos):
         out = set()
         for i in range(0, len(nos), 500):
             chunk = nos[i:i + 500]
-            for r in conn.execute("SELECT quote_no FROM quotations WHERE quote_no IN (%s) AND COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN (%s)"
-                                  % (",".join("?" * len(chunk)), ",".join("?" * len(_DEAL_OK))), chunk + list(_DEAL_OK)):
-                out.add(r["quote_no"])
+            for r in conn.execute("SELECT quote_no, deal_tag, data_json FROM quotations WHERE quote_no IN (%s)" % ",".join("?" * len(chunk)), chunk):
+                tag = (r["deal_tag"] or "").strip()
+                if not tag:
+                    try:
+                        tag = str((json.loads(r["data_json"] or "{}") or {}).get("dealTag") or "")
+                    except (TypeError, ValueError, AttributeError):
+                        tag = ""
+                if tag in _DEAL_OK:
+                    out.add(r["quote_no"])
         return out
     finally:
         conn.close()
+
 
 _TAX_CODE = {"taxable": "OUT-5", "zero": "OUT-0", "exempt": "OUT-EX", "legacy": "OUT-LEGACY"}
 
