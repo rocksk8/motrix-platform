@@ -1,5 +1,8 @@
 # 採購・庫存・出貨 更新紀錄
 
+## 1.0.13 — 2026-09-30（暫用號，列車取號；wip/w1-attach-p3 附件目錄 P3）
+- 附件目錄 P3：`_SupplyCatalog` 加 `search`／`count`（出貨單回簽；權限＝`case_documents_readable`，逐案）。
+
 ## 1.0.12 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
 - 新增 `attachments.py::_SupplyCatalog`（`attachments.catalog`／`supply`，IP-105）：出貨單回簽附件開檔；權限＝出貨單清單規則 `case_documents_readable`。
 

@@ -17,6 +17,7 @@
  *   MotrixFilePreview.kind(item)   // 'image' | 'pdf' | 'sheet' | 'doc' | 'download'（純函式，可單測）
  *   MotrixFilePreview.close() / .refresh() / .setStatus(text) / .isOpen() / .current()
  *   MotrixFilePreview.openFile(item[, extra])  // 一行開單一檔案（預設 byUploadsPath）；withMime(item)：沒有 mime 的白名單儲存補 mime
+ *   MotrixFilePreview.byAttachmentRef(item)  // 附件目錄的取檔轉接器：{sourceType, docNo, fileId} ⇒ /api/attachments/open（搜尋結果沒有 path 時用）
  *   MotrixFilePreview.byUploadsPath(item)  // 預設取檔轉接器：Authorization 標頭打 /api/uploads/{item.path}（不換 photo-token）
  *   MotrixFilePreview.openInNewTab(item, fetchBlob)  // 「另開新分頁」（出納要保留的行為）：在使用者手勢內先開空白分頁再導向 blob
  *
@@ -69,6 +70,16 @@
   function byUploadsPath(item) {
     var rel = String((item && item.path) || '')
     return fetch('/api/uploads/' + rel.split('/').map(encodeURIComponent).join('/'), { headers: authHeader() }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      return r.arrayBuffer()
+    })
+  }
+
+  // 預設取檔轉接器（附件目錄）：項目帶 sourceType／docNo／fileId ⇒ L1 `GET /api/attachments/open`（提供者驗權；看不到＝404）。
+  // 搜尋結果沒有 path，所以檔案中心與案件頁「全部附件」一律用它；一律帶 Authorization 標頭，不用簽章連結。
+  function byAttachmentRef(item) {
+    var qs = 'type=' + encodeURIComponent(item.sourceType) + '&doc=' + encodeURIComponent(item.docNo) + '&file=' + encodeURIComponent(item.fileId)
+    return fetch('/api/attachments/open?' + qs, { headers: authHeader() }).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status)
       return r.arrayBuffer()
     })
@@ -342,6 +353,6 @@
   window.MotrixFilePreview = {
     open: open, close: close, refresh: function () { if (S) render() }, setStatus: setStatus,
     isOpen: function () { return !!S }, current: function () { return item() },
-    kind: kind, fileSize: fileSize, withMime: withMime, openFile: openFile, byUploadsPath: byUploadsPath, openInNewTab: openInNewTab, authHeader: authHeader
+    kind: kind, fileSize: fileSize, withMime: withMime, openFile: openFile, byUploadsPath: byUploadsPath, byAttachmentRef: byAttachmentRef, openInNewTab: openInNewTab, authHeader: authHeader
   }
 })()

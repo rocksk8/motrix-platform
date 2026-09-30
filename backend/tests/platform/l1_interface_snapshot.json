@@ -1,5 +1,5 @@
 {
- "core_version": "1.80",
+ "core_version": "1.82",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -153,6 +153,17 @@
    "file_entries": "def(raw)",
    "snapshot_doc_detail": "def(r)",
    "tier_fields": "def(approval_json_raw)"
+  },
+  "helper:attachment_search": {
+   "CRIT_KEYS": "const",
+   "ITEM_KEYS": "const",
+   "MAX_TAKE": "const",
+   "case_names": "def(conn, quote_nos)",
+   "count_by_type": "def(items, c)",
+   "finish": "def(items, c)",
+   "make_item": "def(source_type, doc_no, doc_label, f, *, quote_no=…, customer=…, project=…, link=…)",
+   "matches": "def(it, c, *, ignore_types=…)",
+   "normalize_crit": "def(raw)"
   },
   "helper:audit": {
    "_audit": "def(token, action, target_type=…, target_id=…, target_label=…, detail=…)",

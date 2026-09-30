@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.32 — 2026-09-30（暫用號，列車取號；wip/w1-attach-p3 附件目錄 P3）
+- 附件目錄 P3：`_CaseCatalog` 加 `search`／`count`（權限沿用各類 `_READ_RULE`／完工單 `case_documents_readable`）；案件管理頁新增「全部附件」頁籤（檔案中心在才出現，呼叫 `/api/filehub/search` 固定本案件，點檔用共用預覽元件）。
+
 ## 1.0.31 — 2026-09-30（暫用號，列車取號；wip/w1-builder3-s25 建構器 S2.5；1.0.26 已被 wip/cal-toggle 取用）
 - `GET /api/quotations/{單號}/finance-summary` 多回 `customFinance`（自訂模組關聯到本案件的入帳金流：`expense.total`／`items`；`income` 因內建報價單已認列而標 `skipped`、累計 `skippedTotal`，不進 total；讀 L1 `helpers.custom_finance`）。案件管理財務 Tab 多兩個標籤（`fin-custom-expense`、`fin-custom-income-skipped`）。
 

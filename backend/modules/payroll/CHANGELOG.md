@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## 1.1.9 — 2026-09-30（暫用號，列車取號；wip/w1-attach-p3 附件目錄 P3）
+- 附件目錄 P3：`_PayrollCatalog` 加 `search`／`count`（勞報單簽回檔；權限＝最高管理者或出納模組，不符一筆都不列）。
+
 ## 1.1.8 — 2026-09-30（暫用號，列車取號；wip/w2-upload-magic：上傳檔頭檢查）
 - 勞報單簽回檔上傳（`POST /api/payslips/{no}/signed-files`）在副檔名檢查之後呼叫 L1 `_check_upload_magic`（檔頭與副檔名不符 ⇒ 400＋稽核）；單據狀態、大小、空檔檢查不變。
 

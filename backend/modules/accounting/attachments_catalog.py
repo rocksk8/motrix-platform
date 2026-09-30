@@ -27,3 +27,32 @@ class _AccountingCatalog:
         if att is None:
             return None
         return opened_upload_file({"path": att["path"], "filename": att["filename"], "mime": att["mime"]})
+
+    # ── 搜尋（附件目錄 P3）：權限＝open() 同一個閘門（cashier／finance 模組或 superadmin），不符 ⇒ 一筆都不列（不回個數）──
+    @staticmethod
+    def _collect(conn, user, crit):
+        from helpers import attachment_search as S
+        if not (user.get("role") == "superadmin" or any(user_has_module(user, k) for k in _VOUCHER_MODULES)):
+            return []
+        rows = conn.execute(
+            "SELECT a.voucher_id, a.file_id, a.filename, a.size, a.mime, a.uploaded_by, a.uploaded_at, a.source_doc_no "
+            "FROM voucher_attachments a JOIN vouchers_all v ON v.id = a.voucher_id WHERE a.deleted_at = ''").fetchall()
+        items = []
+        for r in rows:
+            f = {"id": r["file_id"], "filename": r["filename"], "size": r["size"], "mime": r["mime"],
+                 "uploadedBy": r["uploaded_by"], "uploadedAt": r["uploaded_at"]}
+            items.append(S.make_item("voucher", r["voucher_id"], "傳票 #%s" % r["voucher_id"], f, quote_no=r["source_doc_no"] or "",
+                                     link="voucher.html?id=%s" % r["voucher_id"]))
+        return items
+
+    @staticmethod
+    def search(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.finish(_AccountingCatalog._collect(conn, user, c), c)
+
+    @staticmethod
+    def count(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.count_by_type(_AccountingCatalog._collect(conn, user, c), c)

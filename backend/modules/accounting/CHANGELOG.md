@@ -1,5 +1,8 @@
 # 會計 更新紀錄
 
+## 1.1.15 — 2026-09-30（暫用號，列車取號；wip/w1-attach-p3 附件目錄 P3）
+- 附件目錄 P3：`_AccountingCatalog` 加 `search`／`count`（傳票附件；權限＝cashier／finance 模組或最高管理者，不符一筆都不列）。
+
 ## 1.1.14 — 2026-09-30（wip/host-ledger-chrome：總帳頁面外框）
 - 修正：`ledger-hub／periods／reports／settings／statements.html` 補載 `notif.js`＋`sidebar.js`（第二十五班上線後使用者回報沒有頂列／logo／模組選單）；無權限改顯示平台共用「你沒有這個頁面的權限」。守門 `tests/test_page_shell_scripts_2026_09_30.py`。
 

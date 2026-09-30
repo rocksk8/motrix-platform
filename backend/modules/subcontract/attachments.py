@@ -63,6 +63,48 @@ class _SubcontractCatalog:
         files = files_from_json_column(conn, "contractor_dispatches", "id", int(doc_no), _COLUMNS[source_type])
         return opened_upload_file(pick_file(files, file_id))
 
+    # ── 搜尋（附件目錄 P3）：權限＝open() 同一支 `_SubcontractPathAccess.readable`（逐派工單）──
+    @staticmethod
+    def _collect(conn, user, crit):
+        import json
+        from urllib.parse import quote
+        from helpers import attachment_search as S
+        sql = ("SELECT id, quote_no, files_json, invoice_files_json FROM contractor_dispatches "
+               "WHERE (files_json LIKE ? OR invoice_files_json LIKE ?)")
+        args = ["%\"path\"%", "%\"path\"%"]
+        if crit["quote_no"]:
+            sql += " AND quote_no = ?"
+            args.append(crit["quote_no"])
+        rows = conn.execute(sql, args).fetchall()
+        names = S.case_names(conn, {r["quote_no"] for r in rows})
+        items = []
+        for r in rows:
+            if not _SubcontractPathAccess.readable(conn, "contractor_dispatches", (str(r["id"]), "-"), user):
+                continue
+            cust, proj = names.get(r["quote_no"], ("", ""))
+            for st, col in _COLUMNS.items():
+                try:
+                    files = json.loads(r[col] or "[]") or []
+                except (TypeError, ValueError):
+                    continue
+                for f in files:
+                    items.append(S.make_item(st, r["id"], "%s #%s" % (_SubcontractCatalog.CATEGORIES[st]["doc"], r["id"]), f,
+                                             quote_no=r["quote_no"], customer=cust, project=proj,
+                                             link="case-management.html?q=" + quote(r["quote_no"] or "", safe="")))
+        return items
+
+    @staticmethod
+    def search(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.finish(_SubcontractCatalog._collect(conn, user, c), c)
+
+    @staticmethod
+    def count(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.count_by_type(_SubcontractCatalog._collect(conn, user, c), c)
+
 
 #: 派工單單筆 `GET /api/contractor-dispatches/{did}` 的模組（回應含 files_json／invoice_files_json 的路徑）
 DISPATCH_READ_MODULES = ('procurement', 'case_manage', 'contractor_list', 'quotation')

@@ -75,6 +75,7 @@ MODULES = (
     ("audit_log", "歷史紀錄（全系統操作軌跡）", "系統"),
     ("shipping_export_log", "出貨單歷史紀錄", "系統"),
     ("module_versions", "版本紀錄", "系統"),
+    ("file_center", "檔案中心（全系統上傳檔案搜尋）", "系統"),
 )
 
 #: 建立帳號時依角色預帶的模組（照抄整併前 users.html:719-723）。
