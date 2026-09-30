@@ -149,4 +149,53 @@ def _read(conn, source_type, doc_no):
     raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
 
 
+class _CasePathAccess:
+    """`uploads.path_access`（IP-104，2026-09-30 P0）：M01 存的上傳檔 ⇒ 擁有單據 ⇒ 那張單據自己的讀取規則。
+
+    | 資料夾 | 其餘各段 | 規則 |
+    |---|---|---|
+    | quotations／quotation_payment_items／quotation_materials／quotation_materials_invoices／case_updates／case_extra_expense | `單號/檔名` | 同 `_READ_RULE`（附件提供者；可見範圍＝原單據） |
+    | completion_notes | `完工單號/檔名` | 完工單清單 `guard_case_access(allow_module="case_manage")`＝`case_documents_readable` |
+    | _pending_case_changes | `變更id/案件編號_序號/檔名` | 變更申請存在且屬於該案 ∧（申請人本人 ∨ 案件頁規則 `case_page_readable`） |
+    """
+    _FOLDER_SOURCE = {"quotations": "quotation_signed", "quotation_payment_items": "payment_item",
+                      "quotation_materials": "material", "quotation_materials_invoices": "material_invoice",
+                      "case_updates": "case_update", "case_extra_expense": "extra_expense"}
+    FOLDERS = tuple(_FOLDER_SOURCE) + ("completion_notes", "_pending_case_changes")
+
+    @staticmethod
+    def readable(conn, folder, rest, user):
+        if folder == "_pending_case_changes":
+            if len(rest) != 3 or not rest[0].isdigit():
+                return False
+            quote_no, idx = _quote_and_index(rest[1])
+            row = conn.execute("SELECT quote_no, requested_by FROM case_change_requests WHERE id = ?",
+                               (int(rest[0]),)).fetchone()
+            if idx is None or row is None or row["quote_no"] != quote_no:
+                return False
+            return (bool(row["requested_by"]) and row["requested_by"] == user.get("username")) \
+                or case_page_readable(conn, quote_no, user)
+        if len(rest) != 2:
+            return False
+        key = rest[0]
+        if folder == "completion_notes":
+            row = conn.execute("SELECT quote_no FROM completion_notes WHERE note_no = ?", (key,)).fetchone()
+            return bool(row) and case_documents_readable(conn, row["quote_no"], user)
+        st = _CasePathAccess._FOLDER_SOURCE.get(folder)
+        if st in ("quotation_signed", "case_update"):
+            quote_no = key
+        elif st in _INDEXED:
+            quote_no, idx = _quote_and_index(key)
+            if idx is None:
+                return False
+        elif st == "extra_expense":                       # `{案件編號}_{額外支出 id}`：那一列要真的掛在該案
+            quote_no, eid = _quote_and_index(key)
+            if eid is None or conn.execute("SELECT 1 FROM case_extra_expenses WHERE id = ? AND quote_no = ?",
+                                           (eid, quote_no)).fetchone() is None:
+                return False
+        else:
+            return False
+        return bool(_READ_RULE.get(st, case_documents_readable)(conn, quote_no, user))
+
+
 from core import registry as _registry  # noqa: E402

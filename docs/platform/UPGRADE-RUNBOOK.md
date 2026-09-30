@@ -195,6 +195,7 @@ python <NEW>\tools\platform\upgrade.py verify --root <ROOT> --backup-dir <BK> --
 - 設定頁「雲端備份目標」確認「個資存檔（勞報單）雲端資料夾：已就緒」。
 - 個資資料夾不存在的期間：月備份不寫 `.done`，所以一般的月 JSON 每天都會重新匯出並覆蓋，內容會變成「當月最後一次的資料」；每天一封告警（有上限）。這是設計（資料夾建好後的下一次每日備份就會補齊並標記完成），不是故障（稽核 X-9b O-5）。
 - 個資資料夾在寫入途中消失（雲端同步、刪除、改名）⇒ 程式不會把它建回來（只准在資料夾**底下**建子資料夾），那一輪的個資備份不寫，並發出「個資資料夾在寫入途中消失」告警（稽核 X-9b S-5）。
+- 🔴 **`uploads\` 底下的任何子資料夾不可以是 junction／symbolic link**（2026-09-30 sec-p0，稽核 S4）。附件讀取（`/api/photo-token`、`/api/uploads/…`）會比對「實際路徑＝字面路徑」，子資料夾經過連結 ⇒ 那一整類附件一律 403、畫面上打不開（拒絕服務，不是漏洞）。附件要搬到別的磁碟：**改上傳根目錄 `UPLOADS_ROOT`**（`core/paths.py`，整個 `uploads` 搬過去）；`UPLOADS_ROOT` 在啟動時取 realpath，所以只有「`uploads` 本身」可以是指到新位置的連結，其下各層都不可以。檢查：`Get-ChildItem <ROOT>\uploads -Recurse -Attributes ReparsePoint` 應該沒有任何結果。
 
 ## 8. 新版之後的日常更新（apply_update，platform 套 platform）
 

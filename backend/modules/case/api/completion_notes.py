@@ -238,15 +238,29 @@ def list_completion_notes(quote_no: Optional[str] = None, authorization: str = H
         conn.close()
 
 
+def _readable_note(conn, note_no: str, user: dict, cols: str = "*"):
+    """單張完工單的讀取守門（2026-09-30 P0：單筆 GET 與回簽上傳原本只要求登入 ⇒ 單號可列舉即 IDOR）。
+    規則＝完工單清單帶 quote_no 的那一條：`guard_case_access(allow_module="case_manage")`。
+    查無與看不到回**同一句**「完工單不存在」（不回守門那句「報價單 Y 不存在」：那會洩漏掛在哪一案）。
+    被擋時連線可能已關（guard_case_access 的慣例；呼叫端的 finally 再關一次無妨）。"""
+    row = conn.execute("SELECT %s FROM completion_notes WHERE note_no=?" % cols, (note_no,)).fetchone()
+    if not row:
+        raise HTTPException(404, "完工單不存在")
+    try:
+        guard_case_access(conn, row["quote_no"], user, allow_module="case_manage")
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+        raise HTTPException(404, "完工單不存在")
+    return row
+
+
 @router.get("/api/completion-notes/{note_no}")
 def get_completion_note(note_no: str, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     try:
-        row = conn.execute("SELECT * FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
-        if not row:
-            raise HTTPException(404, "完工單不存在")
-        return _note_public(row)
+        return _note_public(_readable_note(conn, note_no, user))
     finally:
         conn.close()
 
@@ -735,10 +749,8 @@ async def upload_completion_signed_files(note_no: str, files: List[UploadFile] =
     user = _require_user(authorization)
     conn = get_db()
     try:
-        row = conn.execute("SELECT signed_files_json FROM completion_notes WHERE note_no=?",
-                           (note_no,)).fetchone()
-        if not row:
-            raise HTTPException(404, "完工單不存在")
+        # 2026-09-30 P0：原本任何登入者都能對任何完工單上傳 ⇒ 同單筆讀取規則（看不到＝不存在）
+        row = _readable_note(conn, note_no, user, "quote_no, signed_files_json")
         existing = json.loads(row["signed_files_json"] or "[]")
         new_files = await save_document_files("completion_notes", note_no, files,
                                               user.get("display_name") or user["username"])
