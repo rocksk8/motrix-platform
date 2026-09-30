@@ -137,6 +137,39 @@ def _text(data: dict, text: str) -> str:
     return "".join(out)
 
 
+# ── 未核可警示（使用者 2026-09-30 規則：尚未核可的單據，PDF／預覽一律顯示紅色警示）──────────────
+
+#: 警示的固定字樣（e2e／守門用它找）
+UNAPPROVED_TEXT = "未核可・僅供預覽"
+_UNAPPROVED_STYLE = ("background:#FEF2F2;border:2px solid #DC2626;color:#B91C1C;font-weight:700;font-size:13px;"
+                     "padding:8px 12px;margin-bottom:12px;border-radius:5px;letter-spacing:.03em;"
+                     "-webkit-print-color-adjust:exact;print-color-adjust:exact")
+
+
+def unapproved_banner(status="", detail="", cls="preview-banner") -> str:
+    """紅色「未核可・僅供預覽」橫幅（行內樣式：不依賴各主題的 CSS，列印／下載的 PDF 也印得出來）。
+    `cls` 沿用原本的 `preview-banner`（既有選擇器與測試不變）；`data-unapproved` 是新的穩定錨點。
+    已核准的單據不呼叫本函式（PDF 與過去完全相同）。"""
+    st = _esc(status or "草稿")
+    tail = ("　" + _esc(detail)) if detail else ""
+    return ('<div class="%s unapproved-red" data-unapproved="1" style="%s">\u26a0 %s（目前狀態：%s）%s</div>\n'
+            % (cls, _UNAPPROVED_STYLE, UNAPPROVED_TEXT, st, tail))
+
+
+def inject_unapproved(html, status="", detail="") -> str:
+    """把紅色橫幅放進一份已渲染好的 HTML（`<div id="root">` 之後，沒有就放 `<body>` 之後）。
+    已經有 `data-unapproved` ⇒ 原樣回傳（冪等）。版型作者拿掉 banner 積木也擋不掉它（核可狀態由程式決定，不由版型決定）。"""
+    if 'data-unapproved="1"' in html:
+        return html
+    bar = unapproved_banner(status, detail)
+    for anchor in ('<div id="root">\n', '<div id="root">', "<body>\n", "<body>"):
+        i = html.find(anchor)
+        if i >= 0:
+            j = i + len(anchor)
+            return html[:j] + bar + html[j:]
+    return bar + html
+
+
 # ── 積木 ───────────────────────────────────────────────────────────────────
 
 def _b_watermark(b, data, parts):

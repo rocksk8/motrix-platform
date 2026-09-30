@@ -589,32 +589,42 @@ window.CM_PARTS.push(() => ({
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
-    async rejectInvoiceVoucher(v) {
-      const note = (await MotrixUI.prompt(`退回開票申請憑據「${v.voucherNo}」，可填寫退回原因（選填）：`))
-      if (note === null) return
-      try {
-        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/reject`, {
+    // 退回（列表按鈕與預覽裡的「退回修改」同一條路）：原因必填，後端也強制
+    rejectInvoiceVoucher(v) {
+      window.MotrixApprovalReturn.ask({
+        title: `退回修改：開票申請憑據 ${v.voucherNo}`,
+        post: (reason) => fetch(`/api/invoice-vouchers/${v.voucherNo}/reject`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ note })
-        })
-        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '退回失敗', {kind: 'error'}); return }
-        await this.loadInvoiceVouchers(this.selected?.quote_no)
-      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
+          body: JSON.stringify({ note: reason })
+        }),
+        onDone: () => this.loadInvoiceVouchers(this.selected?.quote_no),
+      })
     },
 
-    async revokeInvoiceVoucherApproval(v) {
-      const note = (await MotrixUI.prompt(`撤銷開票申請憑據「${v.voucherNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`))
-      if (note === null) return
-      try {
-        const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/revoke-approval`, {
+    // 預覽裡的「退回修改」要不要顯示：單據還沒核可，而且我是有權決定這一張的人（顯示用；實際權限以後端為準）
+    canReturnDoc(doc) {
+      return !!doc && ['待審核', '簽核中'].includes(doc.status) && window.MotrixApprovalReturn.canDecide(doc.approval, this.session)
+    },
+
+    returnFromInvoiceVoucherPreview() {
+      const v = this.ivPreviewVoucher
+      this.closeInvoiceVoucherPreview()
+      if (v) this.rejectInvoiceVoucher(v)
+    },
+
+    // 撤銷核准（退回草稿）：原因必填，後端也強制
+    revokeInvoiceVoucherApproval(v) {
+      window.MotrixApprovalReturn.ask({
+        title: `撤銷核准：開票申請憑據 ${v.voucherNo}`,
+        hint: '撤銷後單據退回草稿。撤銷原因必填，會寫進稽核並通知申請人。',
+        post: (reason) => fetch(`/api/invoice-vouchers/${v.voucherNo}/revoke-approval`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ note })
-        })
-        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '撤銷失敗', {kind: 'error'}); return }
-        await this.loadInvoiceVouchers(this.selected?.quote_no)
-      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
+          body: JSON.stringify({ note: reason })
+        }),
+        onDone: () => this.loadInvoiceVouchers(this.selected?.quote_no),
+      })
     },
 
     async downloadInvoiceVoucherPdf(v) {
@@ -641,6 +651,7 @@ window.CM_PARTS.push(() => ({
 
     async previewInvoiceVoucherPdf(v) {
       this.ivPreviewFetching = true
+      await window.MotrixApprovalReturn.loadDelegators(this.session.token)   // 代理簽核人也要看得到「退回修改」
       try {
         const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/pdf-download`, {
           headers: { Authorization: 'Bearer ' + this.session.token }

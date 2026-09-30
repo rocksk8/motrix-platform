@@ -210,7 +210,7 @@ def _c_approve(client, h, me):
 def _c_reject_final(client, h, me):
     from tests.test_approval_reassign_history_2026_09_14 import _seed_quote_pending
     _seed_quote_pending("MQ-LU-REJ", me)
-    return None, lambda: client.post("/api/quotations/MQ-LU-REJ/reject-final", headers=h, json={"reason": "探針"}),         lambda d: "reject" in json.dumps(d.get("approval") or {}, ensure_ascii=False).lower() or         "拒絕" in json.dumps(d.get("approval") or {}, ensure_ascii=False)
+    return None, lambda: client.post("/api/quotations/MQ-LU-REJ/reject-final", headers=h, json={"reason": "探針", "note": "探針"}),         lambda d: "reject" in json.dumps(d.get("approval") or {}, ensure_ascii=False).lower() or         "拒絕" in json.dumps(d.get("approval") or {}, ensure_ascii=False)
 
 
 def _c_reassign(client, h, me):

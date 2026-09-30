@@ -60,6 +60,7 @@
    "helper:uploads",
    "helper:xlsx_out",
    "js:static/approval-cascade.js",
+   "js:static/approval-return.js",
    "js:static/auth-guard.js",
    "js:js/module-builder-consts.js",
    "js:js/module-builder-core.js",

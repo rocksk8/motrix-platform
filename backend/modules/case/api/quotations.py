@@ -27,6 +27,7 @@ from db import db_conn  # /api/sales-orders（M08 搬遷移入）
 from modules.case.quotations import payment_item_amounts  # 同上
 from helpers.gl_status import gl_posted_warning
 from helpers import row_access
+from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from helpers.case_access import case_page_readable   # AT-M1c：與報價單上附件的提供者同一支
 from modules.case import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
 from helpers import (
@@ -4828,7 +4829,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
             raise HTTPException(status_code, err_msg)
 
         new_no = _next_revision_no(quote_no)
-        note   = body.note or ""
+        note   = require_reject_reason(body.note)
         now    = datetime.now().isoformat()
 
         # Append to statusLog
@@ -4919,7 +4920,7 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
                 conn.close()
                 raise HTTPException(403, "僅超級管理員可執行此操作")
 
-        note = body.note or ""
+        note = require_reject_reason(body.note)
         now  = datetime.now().isoformat()
         d["rejection"] = {
             "rejectedBy":        user["username"],

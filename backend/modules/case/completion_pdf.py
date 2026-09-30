@@ -125,9 +125,8 @@ def _build_completion_html(n: dict) -> str:
         '<div class="wm">' + ''.join(
             '<div class="wm-item"><b>完工單預覽稿</b><small>尚未正式核准</small></div>'
             for _ in range(12)) + '</div>')
-    banner_html = '' if is_final else (
-        f'<div class="preview-banner">⚠ 此為完工單預覽稿（目前狀態：'
-        f'{esc(n.get("status") or "草稿")}），尚未正式核准，請勿對外提供或引用</div>')
+    banner_html = '' if is_final else _pg._unapproved_banner(
+        n.get("status"), '此為完工單預覽稿，尚未正式核准，請勿對外提供或引用')
 
     return (
         '<!DOCTYPE html>\n'

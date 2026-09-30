@@ -124,7 +124,7 @@ def test_delegate_can_reject_on_behalf_of_delegator(client, make_user):
     _insert_delegate("corbin4", "standin4", _iso(-1), _iso(1))
 
     r = client.post("/api/quotations/MQ-DELEGATE-004/reject", headers=_auth(standin_token),
-                     json={"reason": "測試退回"})
+                     json={"note": "測試退回"})
     assert r.status_code == 200, r.text
 
 

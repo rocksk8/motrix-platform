@@ -124,9 +124,9 @@ def test_superadmin_sends_back_with_reason_and_nothing_executes(live_server, mak
     page.locator("[data-testid=aq-item-%s]" % req["request_no"]).first.click()
     page.wait_for_selector("[data-testid=aq-reject]", state="visible")
     page.locator("[data-testid=aq-reject]").first.click()
-    page.locator("[data-testid=aq-reject-note]").fill("本期還有傳票沒過帳")
+    page.locator("[data-testid=reject-reason]").fill("本期還有傳票沒過帳")
     _shot(page, "requests_5_reject_dialog")
-    page.locator("[data-testid=aq-reject-confirm]").click()
+    page.locator("[data-testid=reject-confirm]").click()
     for _ in range(100):
         if _q("SELECT status FROM gl_action_requests WHERE id=?", req["id"])[0] == "已退回":
             break

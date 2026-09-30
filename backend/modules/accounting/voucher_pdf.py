@@ -176,7 +176,11 @@ def watermark_html(voucher):
     items = "".join(
         "<div class='wm-item'><b>%s</b><small>%s</small></div>" % (e(title), e(sub))
         for _ in range(12))
-    return "<div class='wm'>%s</div>" % items
+    banner = ""
+    if not voucher.get("voided_at"):                     # 作廢優先（印「已作廢」不是「未核可」）；未簽核 ⇒ 紅色警示
+        from helpers.doc_template import unapproved_banner
+        banner = unapproved_banner(voucher.get("status") or "草稿", "傳票尚未簽核完成", cls="wm-banner")
+    return banner + "<div class='wm'>%s</div>" % items
 
 
 def _sign_cells(voucher):

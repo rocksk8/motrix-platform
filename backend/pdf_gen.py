@@ -28,6 +28,8 @@ from db import (
 from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report, run_edge_pdf
 from helpers import receipt_amounts as _receipt_amounts
 from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr
+# 未核可紅色警示（使用者 2026-09-30）：各單據 builder 共用同一個元件與同一個字樣
+from helpers.doc_template import unapproved_banner as _unapproved_banner, inject_unapproved as _inject_unapproved
 
 from core import paths as _paths
 
@@ -107,7 +109,8 @@ def _tax_line_label(q: dict) -> str:
 def _build_quote_html(q: dict, tot: dict, internal: bool = False,
                       show_watermark: bool = False, watermark_text: str = '未成案 · 報價單僅供瀏覽',
                       watermark_font_size: int = 30,
-                      show_notice: bool = False, notice_text: str = '') -> str:
+                      show_notice: bool = False, notice_text: str = '',
+                      unapproved_status: str = None) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
@@ -279,7 +282,8 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         + '</div>\n'
         if show_watermark else '')
         + '<div id="root">\n'
-        '<div class="accent-bar"></div>\n'
+        + (_unapproved_banner(unapproved_status) if unapproved_status is not None else '')
+        + '<div class="accent-bar"></div>\n'
         + (
         f'<div class="notice-bar">'
         f'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">'
@@ -462,6 +466,7 @@ def _quote_watermark_kwargs(status: str, deal_tag: str) -> dict:
         watermark_font_size=18 if is_unsettled else 28,
         show_notice=is_unsettled,
         notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用",
+        unapproved_status=(status or "草稿") if status != "已送出" else None,
     )
 
 
@@ -951,7 +956,8 @@ def _generate_quotation_pdf(quote_no: str, actor: str = '', action_type: str = '
         html_content = _build_quote_html(q, tot, show_watermark=show_wm, watermark_text=wm_text,
                                          watermark_font_size=18 if is_unsettled else 28,
                                          show_notice=is_unsettled,
-                                         notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用")
+                                         notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用",
+                                         unapproved_status=(status or "草稿") if status != "已送出" else None)
 
         # 時間戳到「秒」（2026-09-14 改）——原本只到「日」，靠 `_2`…`_19` 後綴避開
         # 同日同人的第 2～19 次。**第 20 次會靜默覆蓋掉當天的第一份**：迴圈找不到
@@ -1065,10 +1071,8 @@ def _build_shipping_html(n: dict) -> str:
             for _ in range(12)
         ) + '</div>'
     )
-    banner_html = '' if is_final else (
-        f'<div class="preview-banner">⚠ 此為出貨單預覽稿（目前狀態：{esc(n.get("status") or "草稿")}），'
-        f'尚未正式核准，請勿對外提供或引用</div>'
-    )
+    banner_html = '' if is_final else _unapproved_banner(
+        n.get("status"), '此為出貨單預覽稿，尚未正式核准，請勿對外提供或引用')
 
     return (
         '<!DOCTYPE html>\n'
@@ -1443,10 +1447,8 @@ def _build_contractor_voucher_html(v: dict) -> str:
             for _ in range(12)
         ) + '</div>'
     )
-    banner_html = '' if is_final else (
-        f'<div class="preview-banner">⚠ 此為承攬商匯款申請預覽稿（目前狀態：{esc(v.get("status") or "草稿")}），'
-        f'尚未正式核准，請勿提供財務單位辦理匯款</div>'
-    )
+    banner_html = '' if is_final else _unapproved_banner(
+        v.get("status"), '此為承攬商匯款申請預覽稿，尚未正式核准，請勿提供財務單位辦理匯款')
     paid_note = ''
     paid_date = ''
     if v.get('isPaid'):
@@ -1769,7 +1771,9 @@ def _build_invoice_voucher_html(v: dict, template: dict = None) -> str:
         "identity_foot": lambda: _identity_foot(_ident),
         "approval_sign": lambda: _voucher_sign_html(view["approval"]),
     }
-    return _dt.render(template or _published_output_template("invoice_voucher", v), view, parts)
+    html = _dt.render(template or _published_output_template("invoice_voucher", v), view, parts)
+    # 核可狀態由程式決定、不由版型決定：未核准一律有紅色警示（冪等；版型自己的 banner 積木照舊保留）
+    return html if v.get("status") == "已核准" else _inject_unapproved(html, v.get("status"), "此為開票申請預覽稿，尚未正式核准")
 
 
 def _published_output_template(key: str, doc: dict = None) -> dict:
@@ -2051,10 +2055,8 @@ def _build_payment_request_html(v: dict) -> str:
             for _ in range(12)
         ) + '</div>'
     )
-    banner_html = '' if is_final else (
-        f'<div class="preview-banner">⚠ 此為請款單預覽稿（目前狀態：{esc(v.get("status") or "草稿")}），'
-        f'尚未正式核准，請勿提供給客戶辦理請款</div>'
-    )
+    banner_html = '' if is_final else _unapproved_banner(
+        v.get("status"), '此為請款單預覽稿，尚未正式核准，請勿提供給客戶辦理請款')
 
     return (
         '<!DOCTYPE html>\n<html lang="zh-Hant">\n<head>\n<meta charset="UTF-8">\n'
