@@ -678,6 +678,40 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ---
 
+## IP-106　`gl.source_status`：來源是否已入總帳（M06 → L1 `helpers/gl_status` → 各來源寫入端點）
+
+2026-09-30（MONEY-FLOWS §9 L3，主持裁示）：使用者改動／取消**已入總帳**的來源（收款、派工發票日、匯款…）前後，回應帶一句非阻擋提示「此筆已入總帳：修改後下次引擎執行會產生沖轉草稿」。**編號暫定（106），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計：`modules/accounting/ledger/source_status.py::source_status`（`ModuleSpec.providers`，名稱 `accounting`） |
+| 使用方 | L1 `helpers/gl_status.py::gl_posted_warning`；呼叫端：M01 `mark_payment`／案件紀錄整包存（E03、E01）、M04 派工 `invoice-date`（E04）與匯款 `paid-toggle unpay`（E05） |
+| 形式 | provider，單一提供者（名稱 `accounting`） |
+| 語法 | 提供：`("gl.source_status", "accounting"): fn`；取用：`registry.providers("gl.source_status").get("accounting")` ⇒ `fn(conn, source_type, source_key, prefix=False) -> [{event_code, status, voucher_no, event_date}]` |
+| 回傳 | 只回 `posted`（已過帳）與 `drift`（來源已變、舊傳票仍在）；草稿不算入帳（改了引擎會自動重建）。`prefix=True` ⇒ `source_key` 當前綴。表不存在／查詢失敗 ⇒ `[]` |
+| 對方不在時 | 沒有提供者 ⇒ `gl_posted_warning` 回 `None`（沒有總帳就沒有可提示的），寫入照常；提供者丟例外 ⇒ 記 ERROR、回 `None`，不擋寫入 |
+| 契約版本 | 1（2026-09-30） |
+| 守門 | `backend/tests/test_gl_source_status_2026_09_30.py` |
+
+---
+
+## IP-107　`ledger.month_totals`：總帳逐月彙總（M06 → M08 營運分析『與總帳差異』頁）
+
+2026-09-30（MONEY-FLOWS §9 L4 / Part B）：營運報表不讀總帳（F6）；差異頁需要總帳逐月的收入／費用彙總，經提供者取得（L2 不互相 import）。**編號暫定（107），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計：`modules/accounting/ledger/month_totals.py::month_totals` |
+| 使用方 | M08 `modules/analytics/api/ledger_diff.py`：`GET /api/reports/ledger-diff` |
+| 形式 | provider，單一提供者（名稱 `accounting`） |
+| 語法 | 提供：`("ledger.month_totals", "accounting"): fn`；取用：`registry.providers("ledger.month_totals").get("accounting")` ⇒ `fn(conn, year)` |
+| 回傳 | `{available, year, months:{"YYYY-MM":{engine_posted, engine_unposted, bonus_posted, manual_posted: {revenue, expense, tax_out, tax_in}, by_origin_posted:{origin: expense}}}, events:{"YYYY-MM":{drift, orphan, blocked}}}`；不含結轉（`kind='closing'`）與已作廢；表不存在 ⇒ `{available:false, notice}` |
+| 對方不在時 | 提供者不在 ⇒ 差異頁 `glAvailable:false` 並說明，只顯示營運報表欄（不是 0） |
+| 契約版本 | 1（2026-09-30） |
+| 守門 | `backend/tests/test_ledger_diff_2026_09_30.py` |
+
+---
+
 ## IP-100　`payables.pending`：請款待付款（M01 → M05 出納；多提供者）
 
 對應 CORE-SPEC「請款流程（下一版）」（2026-09-27 使用者裁示）：核准而未付款的請款（案件額外支出）進出納待付款；出納登錄付款寫回付款日。
