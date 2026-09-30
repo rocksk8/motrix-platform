@@ -20719,17 +20719,19 @@
   "backend/tests/test_page_shell_scripts_2026_09_30.py": {
    "kind": "audit",
    "units": [
-    "dir:frontend/pages/",
     "js:static/notif.js",
-    "js:static/sidebar.js"
+    "js:static/sidebar.js",
+    "plat:source_tree"
    ],
    "evidence": {
+    "import": [
+     "backend/core/source_tree.py"
+    ],
     "page": [
      "frontend/static/notif.js",
      "frontend/static/sidebar.js"
     ],
     "path": [
-     "frontend/pages/",
      "frontend/static/notif.js",
      "frontend/static/sidebar.js"
     ]

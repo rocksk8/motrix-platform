@@ -553,7 +553,8 @@
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [
-    "quotations"
+    "quotations",
+    "users"
    ],
    "tables_w": [
     "audit_log"
@@ -685,6 +686,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:case_access",
     "helper:custom_builder_support",
     "helper:custom_modules"
    ],
@@ -694,9 +696,7 @@
    "tables_named": [],
    "tables_r": [
     "custom_record_finance_outbox",
-    "custom_records",
-    "quotations",
-    "users"
+    "custom_records"
    ],
    "tables_w": []
   },
@@ -4305,6 +4305,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:case_access",
     "helper:case_roles",
     "helper:company_identity",
     "helper:company_setup",
@@ -4324,6 +4325,7 @@
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:recognition_basis",
+    "helper:row_access",
     "helper:settings",
     "helper:startup",
     "helper:tax_calc",
@@ -13740,6 +13742,7 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
     "helper:custom_builder_support",
@@ -13755,6 +13758,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:row_access",
     "helper:settings",
     "helper:tiered_approval",
     "helper:uploads"
@@ -16492,7 +16496,6 @@
     "helper:audit",
     "helper:case_access",
     "helper:company_identity",
-    "helper:custom_finance",
     "helper:google_calendar",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
@@ -16928,8 +16931,8 @@
     "core:pdf_gen",
     "helper:audit",
     "helper:auth",
+    "helper:case_access",
     "helper:custom_def_review",
-    "helper:custom_finance",
     "helper:email_notify",
     "helper:google_calendar",
     "helper:system_checks",
