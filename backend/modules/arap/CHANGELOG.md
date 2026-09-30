@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## 1.0.17 — 2026-09-30（暫用號，列車取號；wip/w1-file-preview 共用檔案預覽 P1）
+- 出納頁勞報單簽回檔改用 L1 共用預覽元件（頁內預覽，下方保留「另開新分頁」），不再直接 `window.open(blob)`。
+
 ## 1.0.16 — 2026-09-30（暫用號，列車取號；wip/cal-toggle 行事曆推送可選）
 - 行事曆「支出付款」（預設關，事件種類開關在 L1）：出納登錄請款付款（`pending-payables/{來源}/{key}/pay`）commit 之後推 `push_event_for_module('expense_payout', …)`，事件日期＝付款日；名目／受款人取提供者回傳（不讀別的模組的表）。勞報單付款走自己的端點，不推。題 `modules/arap/tests/test_expense_payout_calendar_2026_09_30.py`
 ## 1.0.15 — 2026-09-30（暫用號，列車取號；W4 總帳 C1）

@@ -1,5 +1,8 @@
 # 業務開發 更新紀錄
 
+## 1.0.11 — 2026-09-30（暫用號，列車取號；wip/w1-file-preview 共用檔案預覽 P1）
+- 業務開發頁的附件開啟改用 L1 共用預覽元件（頁內預覽，不再開新分頁／換 photo-token）。
+
 ## 1.0.10 — 2026-09-30（暫用號，列車取號；wip/cal-toggle 行事曆推送可選）
 - 行事曆「業務開發案件更新」（預設關，事件種類開關在 L1）：新增開發紀錄 commit 之後推 `push_event_for_module('dev_case_update', …)` ⇒ 標題「○○案件更新」、說明＝紀錄內容（管道／內容／下一步）、同一案件同一天合併。題 `modules/crm/tests/test_dev_case_update_calendar_2026_09_30.py`
 ## 1.0.9 — 2026-09-30（暫用號，列車取號；wip/sec-p0 安全修正 P0）
