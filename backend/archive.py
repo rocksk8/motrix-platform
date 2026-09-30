@@ -1130,7 +1130,9 @@ def _db_content_fingerprint(path: str):
         rows = conn.execute("PRAGMA quick_check").fetchall()
         if len(rows) != 1 or rows[0][0] != "ok":
             return None
-        conn.execute("BEGIN")
+        # 唯讀的一致性快照：用 SAVEPOINT 開讀取交易（不是 BEGIN——`BEGIN` 只准出現在 core.txn.begin_write，test_begin_only_via_begin_write；
+        # 這裡不寫入、不拿寫鎖，SELECT 之間看到同一個時間點）
+        conn.execute("SAVEPOINT fp_read")
         h = hashlib.sha256()
         for name, sql in conn.execute(
                 "SELECT name, sql FROM sqlite_master WHERE type IN ('table','index','trigger','view') "
@@ -1147,7 +1149,7 @@ def _db_content_fingerprint(path: str):
                     break
                 for r in chunk:
                     h.update(repr(r).encode("utf-8", "surrogatepass"))
-        conn.execute("ROLLBACK")
+        conn.execute("RELEASE fp_read")
         return h.hexdigest()
     except Exception:                                           # noqa: BLE001
         logger.exception("_db_content_fingerprint failed for %s", path)
