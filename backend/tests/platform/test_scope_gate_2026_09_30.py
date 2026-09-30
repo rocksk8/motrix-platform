@@ -241,7 +241,8 @@ def test_m1_scanner_positive_and_negative_controls(tmp_path):
     (t / "test_scan_db.py").write_text("def test_x(c):\n    c.execute(\"SELECT name FROM sqlite_master\")\n", encoding="utf-8")
     (t / "test_scan_manifest.py").write_text(
         "def test_y(root):\n    for p in root.glob('*/module.json'):\n        pass\n", encoding="utf-8")
-    (t / "test_scan_pages.py").write_text("import glob\nF = glob.glob('frontend/pages/*.html')\nG = glob.glob(\"pages\")\n",
+    # 頁面目錄由 PG（core.paths）組出，不寫死（test_page_paths_centralized）
+    (t / "test_scan_pages.py").write_text("import glob\nF = glob.glob(%r)\nG = glob.glob(\"pages\")\n" % (PG + "*.html"),
                                           encoding="utf-8")
     (t / "test_scan_perm.py").write_text("from helpers.module_registry import MODULES\n", encoding="utf-8")
     (tmp_path / "backend" / "modules" / "zeta" / "tests" / "test_z.py").write_text("Q = 'sqlite_master'\n", encoding="utf-8")
