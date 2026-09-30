@@ -287,7 +287,7 @@ def _cell(c, data):
         if c["style"] not in _CELL_STYLES:
             raise TemplateError("未知儲存格樣式：%r（可用：%s）" % (c["style"], "、".join(_CELL_STYLES)))
         attrs += ' style="%s"' % _CELL_STYLES[c["style"]]
-    if c.get("colspan"):
+    if c.get("colspan") is not None:
         attrs += ' colspan="%d"' % _int_in(c["colspan"], 1, _MAX_COLSPAN, "colspan")
     return "<td%s>%s</td>" % (attrs, v)
 
@@ -519,7 +519,7 @@ def _attr_problems(b) -> list:
                 if isinstance(c, dict):
                     if c.get("class"):
                         chk(_css_class, c["class"])
-                    if c.get("colspan"):
+                    if c.get("colspan") is not None:
                         chk(_int_in, c["colspan"], 1, _MAX_COLSPAN, "colspan")
     return out
 
