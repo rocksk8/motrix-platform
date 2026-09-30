@@ -111,9 +111,9 @@ def _edge_creationflags() -> int:
 #   · 拿不到（例外）⇒ 退回舊行為（不帶 --user-data-dir），功能不受影響。
 # ⚠️ 只認這一個位置：`tests/test_edge_profile_2026_09_25.py` 的守門是「產品碼只能在這裡帶 --user-data-dir、且只能指向專屬 profile 根目錄」。
 from core import paths as _core_paths  # noqa: E402（本檔下方另有同名 import；這裡先用到）
-EDGE_PROFILE_ROOT = os.path.join(_core_paths.LOGS_DIR, "edge_profiles")
-EDGE_PROFILE_MAX_BYTES = 300 * 1024 * 1024
-EDGE_PROFILE_CHECK_EVERY = 50
+_EDGE_PROFILE_ROOT = os.path.join(_core_paths.LOGS_DIR, "edge_profiles")
+_EDGE_PROFILE_MAX_BYTES = 300 * 1024 * 1024
+_EDGE_PROFILE_CHECK_EVERY = 50
 _EDGE_PROFILE_LOCK = threading.Lock()
 _EDGE_PROFILE_POOL = []            # 可用的 profile 目錄
 _EDGE_PROFILE_STATE = {"init": False, "runs": 0}
@@ -124,7 +124,7 @@ def _edge_profile_acquire():
     try:
         with _EDGE_PROFILE_LOCK:
             if not _EDGE_PROFILE_STATE["init"]:
-                _EDGE_PROFILE_POOL[:] = [os.path.join(EDGE_PROFILE_ROOT, "p%d" % (i + 1)) for i in range(EDGE_PDF_MAX_CONCURRENCY)]
+                _EDGE_PROFILE_POOL[:] = [os.path.join(_EDGE_PROFILE_ROOT, "p%d" % (i + 1)) for i in range(EDGE_PDF_MAX_CONCURRENCY)]
                 _EDGE_PROFILE_STATE["init"] = True
             if not _EDGE_PROFILE_POOL:
                 return None                                   # 池空（理論上被 semaphore 擋住不會發生）⇒ 退回舊行為
@@ -153,9 +153,9 @@ def _edge_profile_release(d: str, discard: bool) -> None:
     try:
         with _EDGE_PROFILE_LOCK:
             _EDGE_PROFILE_STATE["runs"] += 1
-            check = _EDGE_PROFILE_STATE["runs"] % EDGE_PROFILE_CHECK_EVERY == 0
-        if not discard and check and _dir_size(d) > EDGE_PROFILE_MAX_BYTES:
-            logger.info("Edge 專屬 profile %s 超過 %d MB，重建", d, EDGE_PROFILE_MAX_BYTES // (1024 * 1024))
+            check = _EDGE_PROFILE_STATE["runs"] % _EDGE_PROFILE_CHECK_EVERY == 0
+        if not discard and check and _dir_size(d) > _EDGE_PROFILE_MAX_BYTES:
+            logger.info("Edge 專屬 profile %s 超過 %d MB，重建", d, _EDGE_PROFILE_MAX_BYTES // (1024 * 1024))
             discard = True
         if discard:
             shutil.rmtree(d, ignore_errors=True)

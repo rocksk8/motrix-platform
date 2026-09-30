@@ -1,7 +1,7 @@
 """測試時 Edge 重用 profile（conftest `_install_edge_profile_pool`，PLAN-TEST-PERF §5.3）。
 
 🔑 測試端另有自己的 profile 池（在 tmp 底下）。2026-09-30 起**產品也重用專屬 profile**（helpers/startup.py，見 tests/test_edge_product_profile_2026_09_30.py）：
-   產品碼只有 helpers/startup.py 可以帶 `--user-data-dir`，而且只能指向專屬 profile 根目錄 `EDGE_PROFILE_ROOT`。
+   產品碼只有 helpers/startup.py 可以帶 `--user-data-dir`，而且只能指向專屬 profile 根目錄 `_EDGE_PROFILE_ROOT`。
 🔑 並發：同一份 profile 同時被兩個 Edge 用會被鎖 ⇒ 每個同時在跑的 Edge 各拿一份。
 """
 import threading
@@ -23,13 +23,13 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 def test_product_code_only_passes_the_dedicated_profile_dir():
     """2026-09-30（使用者「盡可能降低硬碟的重複寫入」）：產品碼（tests 以外）只有 `helpers/startup.py` 可以帶 `--user-data-dir`，
-    而且它帶的一定是專屬 profile 根目錄（EDGE_PROFILE_ROOT）底下的路徑——不可以指到使用者自己的 Edge profile。"""
+    而且它帶的一定是專屬 profile 根目錄（_EDGE_PROFILE_ROOT）底下的路徑——不可以指到使用者自己的 Edge profile。"""
     hits = [str(p.relative_to(BACKEND)).replace(chr(92), "/") for p in BACKEND.rglob("*.py")
             if "tests" not in p.relative_to(BACKEND).parts and p.name != "conftest.py"  # conftest.py 在 backend/ 根（2026-09-25 自 tests/ 上移），是測試設定不是產品碼
             and "--user-data-dir" in p.read_text(encoding="utf-8", errors="ignore")]
     assert hits == ["helpers/startup.py"], "產品碼帶了 --user-data-dir 的檔案應該只有 helpers/startup.py：%s" % hits
     src = (BACKEND / "helpers" / "startup.py").read_text(encoding="utf-8")
-    assert src.count('"--user-data-dir=%s" % d') == 1 and "EDGE_PROFILE_ROOT" in src
+    assert src.count('"--user-data-dir=%s" % d') == 1 and "_EDGE_PROFILE_ROOT" in src
 
 
 def _capture(monkeypatch, delay=0.0):
@@ -56,7 +56,7 @@ def test_every_import_site_uses_the_wrapper_and_the_product_function_uses_the_de
              if getattr(m, "run_edge_pdf", None) is w.__wrapped__]
     assert stale == [], "這些模組仍綁著原函式（產 PDF 時會用新 profile）：%s" % stale
     seen = _capture(monkeypatch)
-    monkeypatch.setattr(startup, "EDGE_PROFILE_ROOT", str(tmp_path / "product_profiles"))
+    monkeypatch.setattr(startup, "_EDGE_PROFILE_ROOT", str(tmp_path / "product_profiles"))
     w(["msedge.exe", "--headless", "file:///x.html"])
     w.__wrapped__(["msedge.exe", "--headless", "file:///x.html"])
     assert seen[0][0] == "msedge.exe" and seen[0][1].startswith("--user-data-dir="), seen[0]

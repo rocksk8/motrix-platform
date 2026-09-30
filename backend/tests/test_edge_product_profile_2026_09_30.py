@@ -21,7 +21,7 @@ import helpers.startup as startup
 def prod(monkeypatch, tmp_path):
     """乾淨的產品 profile 池（根目錄導到 tmp）＋假的 subprocess.run（記錄命令、往 profile 寫一個檔模擬快取）。"""
     root = tmp_path / "edge_profiles"
-    monkeypatch.setattr(startup, "EDGE_PROFILE_ROOT", str(root))
+    monkeypatch.setattr(startup, "_EDGE_PROFILE_ROOT", str(root))
     monkeypatch.setattr(startup, "_EDGE_PROFILE_POOL", [])
     monkeypatch.setattr(startup, "_EDGE_PROFILE_STATE", {"init": False, "runs": 0})
     st = {"seen": [], "delay": 0.0, "rc": 0, "raise": None, "lock": threading.Lock()}
@@ -96,8 +96,8 @@ def test_a_nonzero_exit_discards_the_profile(prod):
 
 
 def test_an_oversized_profile_is_rebuilt_on_the_periodic_check(prod, monkeypatch):
-    monkeypatch.setattr(startup, "EDGE_PROFILE_MAX_BYTES", 1500)
-    monkeypatch.setattr(startup, "EDGE_PROFILE_CHECK_EVERY", 1)
+    monkeypatch.setattr(startup, "_EDGE_PROFILE_MAX_BYTES", 1500)
+    monkeypatch.setattr(startup, "_EDGE_PROFILE_CHECK_EVERY", 1)
     _run(["msedge.exe", "--headless", "a"])                # 1 KB：未超過
     d = _dir_of(prod["seen"][0])
     assert os.path.isdir(d)
@@ -122,6 +122,6 @@ def test_a_caller_supplied_user_data_dir_is_left_alone(prod, tmp_path):
 
 
 def test_profile_root_is_separate_from_the_users_own_edge_profile():
-    assert os.path.normcase(startup.EDGE_PROFILE_ROOT).endswith(os.path.normcase(os.path.join("logs", "edge_profiles")))
+    assert os.path.normcase(startup._EDGE_PROFILE_ROOT).endswith(os.path.normcase(os.path.join("logs", "edge_profiles")))
     user_edge = os.path.normcase(os.path.join(os.environ.get("LOCALAPPDATA", "C:\\nowhere"), "Microsoft", "Edge"))
-    assert not os.path.normcase(startup.EDGE_PROFILE_ROOT).startswith(user_edge)
+    assert not os.path.normcase(startup._EDGE_PROFILE_ROOT).startswith(user_edge)

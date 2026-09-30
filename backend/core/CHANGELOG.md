@@ -3,7 +3,7 @@
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
 ## （不升版號：介面不變）— 2026-09-30（wip/w2-edge-profile：Edge PDF 重用專屬 profile）
-- L1（行為，私有）：`helpers/startup.py` 新增 `EDGE_PROFILE_ROOT`（`<LOGS_DIR>/edge_profiles`）、`EDGE_PROFILE_MAX_BYTES`／`EDGE_PROFILE_CHECK_EVERY` 與內部池函式；`run_edge_pdf(cmd)` 簽章不變，命令沒有 `--user-data-dir` 時自動帶專屬 profile（逾時／非 0 結束／過大 ⇒ 整份重建；取不到 ⇒ 退回舊行為）。產品碼只有 `helpers/startup.py` 可以帶 `--user-data-dir`。
+- L1（行為，私有）：`helpers/startup.py` 新增 `_EDGE_PROFILE_ROOT`（`<LOGS_DIR>/edge_profiles`）、`_EDGE_PROFILE_MAX_BYTES`／`_EDGE_PROFILE_CHECK_EVERY` 與內部池函式；`run_edge_pdf(cmd)` 簽章不變，命令沒有 `--user-data-dir` 時自動帶專屬 profile（逾時／非 0 結束／過大 ⇒ 整份重建；取不到 ⇒ 退回舊行為）。產品碼只有 `helpers/startup.py` 可以帶 `--user-data-dir`。
 
 ## 1.71 — 2026-09-30（暫用，列車取號；wip/w2-report-cash）
 - L1（新增）：`helpers.tax_calc.receipt_amounts(receivable, actual, fee)` ⇒ `(bank, gross, fee)`，經 `helpers` 匯出：已收款項的銀行入帳／收入(含稅)／手續費單一定義（實收＝銀行入帳、收入＝入帳＋手續費、淨額＝入帳不再減手續費）。`summarize_payment_items` 的 `netAmount`／`netCollected` 改用它。
