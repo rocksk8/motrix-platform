@@ -68,7 +68,7 @@ from urllib.parse import quote as _url_quote
 import openpyxl
 from openpyxl.utils import get_column_letter
 from fastapi import APIRouter, Header, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from db import get_db
@@ -81,7 +81,7 @@ T100_RECEIVABLES_MISSING = "應收應付模組未安裝：T100 匯出不含收�
 def _collect_tax_invoices(year=None, month=None):
     p = _registry.single_provider("receivables.tax_invoices")
     return [] if p is None else p(year, month)
-from helpers.xlsx_out import check_export_rate, set_row, xl_style
+from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, set_row, xl_style
 from helpers.company_identity import company_heading
 from helpers.part_catalog import PART_CATEGORIES
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
@@ -501,6 +501,7 @@ def _validate_range(start: str, end: str) -> None:
 
 
 @router.get("/api/reports/t100-export/vouchers")
+@export_logged("xlsx", "accounting", "t100-vouchers")
 def t100_export_vouchers(
     start: str = Query(...),
     end: str = Query(...),
@@ -517,8 +518,8 @@ def t100_export_vouchers(
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     xlsx = _build_t100_voucher_excel(rows, start, end, cfg, gen_at)
     fname = f"MOTRIX_T100傳票匯出_{start}_{end}.xlsx"
-    return StreamingResponse(
-        io.BytesIO(xlsx),
+    return Response(
+        content=xlsx,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
     )
@@ -649,3 +650,7 @@ def _provide_accounting_settings() -> dict:
 
 
 # （提供者改由 modules/accounting/__init__.py 的 ModuleSpec.providers 宣告：accounting.settings）
+
+
+# ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
+add_pdf_sibling(router, "/api/reports/t100-export/vouchers/pdf", t100_export_vouchers, module="accounting", name="t100-vouchers", title="T100 傳票匯出")
