@@ -1,24 +1,24 @@
 # 薪資獎金 更新紀錄
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w2-upload-magic：上傳檔頭檢查）
+## 1.1.7 — 2026-09-30（暫用號，列車取號；wip/w2-upload-magic：上傳檔頭檢查）
 - 勞報單簽回檔上傳（`POST /api/payslips/{no}/signed-files`）在副檔名檢查之後呼叫 L1 `_check_upload_magic`（檔頭與副檔名不符 ⇒ 400＋稽核）；單據狀態、大小、空檔檢查不變。
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
+## 1.1.6 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
 - 新增 `attachments.py::_PayrollCatalog`（`attachments.catalog`／`payroll`，IP-105）：勞報單簽回檔開檔（實體檔在封存目錄，宣告 `ROOTS`）；權限＝superadmin 或出納（同簽回檔讀取端點）。
 
-## (next) — 2026-09-30（暫用號，列車取號；W4 總帳 C6／扣繳補齊）
+## 1.1.5 — 2026-09-30（暫用號，列車取號；W4 總帳 C6／扣繳補齊）
 - 獎金發放事件 E07b（native）多帶 `meta.withholding`／`wh_prefix`（發放當下的每人代扣所得稅與補充保費快照），供總帳扣繳清單；作廢的發放傳票也照送，讓總帳移除未繳庫的列。無 migration。
 
-## (next) — 2026-09-30（暫用號，列車取號；W4 總帳 R12 畫面）
+## 1.1.4 — 2026-09-30（暫用號，列車取號；W4 總帳 R12 畫面）
 - `payslip.remit`（IP-105，原暫用 IP-104 與 sec-p0 撞號）新增 `candidates(conn, contractor_id)`：列出該受款人已簽回、未付款的勞報單供匯款單挑選。
 
-## (next) — 2026-09-30（暫用號，列車取號；W4 總帳 R12）
+## 1.1.3 — 2026-09-30（暫用號，列車取號；W4 總帳 R12）
 - 新增提供者 `payslip.remit`（IP-105）：承攬商匯款單驗證、標記、退回勞報單付款；由匯款單付款的勞報單不可單獨 unpay（409，請到匯款單取消），總帳不再另產生其 E06b。無 migration（沿用 data_json.paid_via_remit）。
 
-## (next) — 2026-09-30（暫用號，列車取號；W4 總帳 C3b）
+## 1.1.2 — 2026-09-30（暫用號，列車取號；W4 總帳 C3b）
 - 獎金核准應付／發放傳票開立時帶 `origin`（bonus_accrual／bonus_payment，經 `voucher.draft` 可選參數）；`gl.events` 新增獎金事件 E07a／E07b（mode=native，登記既有傳票，不重複產生）。無 migration、無新欄位。
 
-## (next) — 2026-09-30（暫用號，列車取號；W4 總帳 C3）
+## 1.1.1 — 2026-09-30（暫用號，列車取號；W4 總帳 C3）
 - 新增提供者 `gl.events`（IP-GL1）：勞報單應付（E06，已簽回／已付款，依勞報日或簽回日）與付款（E06b，依付款日）事件，供 M06 總帳引擎產生傳票草稿；唯讀、不寫資料、不改欄位；不帶身分證字號。
 
 ## 1.1.0 — 2026-09-29（暫用號，列車取號；wip/payslip-void-signed）

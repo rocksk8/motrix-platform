@@ -1,6 +1,6 @@
 # 營運分析 更新紀錄
 
-## (next) — 2026-09-30（暫用號，列車取號；wip/w1-builder3 建構器 S2.5）
+## 1.0.15 — 2026-09-30（暫用號，列車取號；wip/w1-builder3 建構器 S2.5）
 - 營運報表併入自訂模組（建構器）的金流：支出走 IP-9 `expense.entries`（提供者 `custom_module`；**現金口徑改用 entries 的選填鍵 `cashDate／cashAmount`**，沒有這兩個鍵的舊提供者行為不變）；收入（`_custom_income`）併進權責／現金兩口徑的收入逐筆，關聯到內建案件的略過（不重複計入）；缺該口徑日期的筆不列入，並在 `unavailable`（支出）與 `incomeNotice`（收入）明說「待補登」。
 
 ## 1.0.14 — 2026-09-30（暫用號，列車取號；wip/w2-report-cash）
