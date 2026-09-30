@@ -2,7 +2,7 @@
 """自訂模組的金流（收入／支出）串接（建構器第三輪 S2.5；使用者 2026-09-30：「只要有收入、支出項，都需要跟營運報表或是相關模組數據串接」）。
 
 [單位] helper:custom_finance    [層] L1    [穩定度] 契約（只增）
-[公開介面] EVENT_POSTED, EVENT_REVERSED, case_finance, dup_skipped, expense_entries, income_items, on_transition, post_states, undated_counts
+[公開介面] EVENT_POSTED, EVENT_REVERSED, case_finance, dup_skipped, expense_entries, gl_lines, income_items, on_transition, post_states, undated_counts
 [不變式]
   - 金額欄位＝欄位屬性 `finance:{kind: income|expense, dateField, cashDateField, caseField, cashAmountField}`；
     入帳狀態＝模組 `finance.postStates`（沒指定 ⇒ 簽核核准後的終態）。**即時算**：單據在入帳狀態就計入、離開就不計，不建分錄表
@@ -99,6 +99,24 @@ def _posted(conn):
             except (TypeError, ValueError):
                 continue
             yield r, body, _lines(body, data)
+
+
+def gl_lines(conn) -> list:
+    """總帳事件提供者（M06 `gl.events`，source＝custom_modules）用：入帳中單據的金流行，含事件所需的全部欄位。
+    ⇒ `[{module, moduleName, recordId, recordNo, createdBy, lines:[{kind, field, label, amount, date, cashDate, cashAmount, case, skipped}]}]`。
+    `skipped`＝收入行關聯到內建案件（由內建報價單認列，總帳 E01 已記，不重複，與營運報表同一判準）。沒有金流行的單據不回。只讀。"""
+    out = []
+    for r, body, lines in _posted(conn):
+        if not lines:
+            continue
+        ls = []
+        for ln in lines:
+            ln = dict(ln)
+            ln["skipped"] = bool(ln["kind"] == "income" and ln["case"] and _ca.case_exists(conn, ln["case"]))
+            ls.append(ln)
+        out.append({"module": r["module_key"], "moduleName": str(body.get("name") or ""), "recordId": r["id"], "recordNo": r["record_no"],
+                    "createdBy": r["created_by"], "lines": ls})
+    return out
 
 
 def _case_dept(conn, case_no):
