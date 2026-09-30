@@ -42,6 +42,7 @@ _MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB／檔
 # 不各自抄一份。不符 ⇒ 400（整批擋下）＋寫一筆稽核 `upload.rejected_magic`（只記檔名、副檔名、資料夾、上傳者，不記內容）。
 # 白名單裡有副檔名、這張表卻沒有它的規則 ⇒ **一律擋**（fail-closed：日後放行新副檔名時忘了補檔頭規則不會變成無檢查）。
 _OLE_SIG = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+_HEIF_BRANDS = (b"heic", b"heix", b"hevc", b"heif", b"mif1", b"msf1")
 _OOXML_ROOT = {'.docx': 'word/', '.xlsx': 'xl/'}
 
 
@@ -56,6 +57,8 @@ def _magic_matches(ext: str, raw: bytes) -> bool:
         return raw[:6] in (b"GIF87a", b"GIF89a")
     if ext == '.webp':
         return raw[:4] == b"RIFF" and raw[8:12] == b"WEBP"
+    if ext in ('.heic', '.heif'):               # ISO-BMFF：offset 4 是 "ftyp"，接著是 brand（iPhone 預設拍出的格式）
+        return raw[4:8] == b"ftyp" and raw[8:12] in _HEIF_BRANDS
     if ext == '.pdf':
         return b"%PDF-" in head                 # PDF 規格允許標頭前有少量雜訊（前 1024 bytes）
     if ext in ('.doc', '.xls'):

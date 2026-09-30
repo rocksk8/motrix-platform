@@ -570,8 +570,9 @@ async def upload_work_log_photos(
     for upload in files:
         raw_bytes = await upload.read()
         ext   = os.path.splitext(upload.filename or 'photo.jpg')[1] or '.jpg'
-        if ext.lower() not in ('.jpg', '.jpeg', '.png', '.gif', '.webp'):
-            raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 jpg/png/gif/webp）")
+        # 白名單＝前端（case-management.html 的 accept＝jpeg/png/pdf）本來就送得出去的東西＋手機常見格式（heic/heif/webp/gif）
+        if ext.lower() not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif', '.pdf'):
+            raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 jpg/png/gif/webp/heic/pdf）")
         _check_upload_magic(upload.filename or 'photo.jpg', ext, raw_bytes, "work_log_photos", user['username'])
         processed, gps_str, wm_str = _process_project_photo(raw_bytes, user['display_name'])
         fname = uuid.uuid4().hex[:14] + ext.lower()
