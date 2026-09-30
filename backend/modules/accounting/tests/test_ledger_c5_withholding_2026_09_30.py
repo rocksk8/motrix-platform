@@ -335,3 +335,20 @@ def test_api_bad_ids_is_400_not_500(client, conn, fake, make_user):
     conn.commit()
     assert client.post("/api/ledger/withholding/remit", headers=h, json={"ids": {"a": 1}, "remitted_at": "2179-04-08"}).status_code == 400
     assert client.post("/api/ledger/withholding/unremit", headers=h, json={"ids": {"a": 1}, "reason": "x"}).status_code == 400
+
+
+def test_report_shows_party_names_and_explains_a_missing_withholding_account(conn, fake):
+    """R3：對象顯示姓名（事件裡的受款人姓名，不是 C1）；沒設定代扣科目時對帳列明說要去哪裡設定。"""
+    ev = _slip()
+    _run(conn, fake, [ev])
+    rep = W.report(conn, "2179-03", today="2179-04-11")
+    assert {i["party_name"] for i in rep["items"] if i["source_key"] == ev["source_key"]} == {"王"}
+    conn.execute("DELETE FROM gl_account_roles WHERE role='WITHHOLD_TAX'")
+    conn.commit()
+    try:
+        rep = W.report(conn, "2179-03", today="2179-04-11")
+        chk = rep["checks"][0]
+        assert chk["ok"] is False and "尚未設定" in chk["label"] and "總帳設定" in chk["note"] and "2252" in chk["note"]
+    finally:
+        ROLES.ensure_default_roles(conn)
+        conn.commit()

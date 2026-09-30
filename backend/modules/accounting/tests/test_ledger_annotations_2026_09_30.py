@@ -128,3 +128,14 @@ def test_pending_ignores_events_with_exact_tax(client, conn, fake, make_user):
     E.run(conn, "2182-03-01", "2182-03-31", "acc")
     conn.commit()
     assert not [i for i in client.get("/api/ledger/annotations/pending", headers=h).json()["items"] if i["source_key"] == ev["source_key"]]
+
+
+def test_pending_items_carry_plain_language_labels(client, conn, fake, make_user):
+    """R3：待補登清單給白話名稱（承攬商派工＋單號、承攬商發票），畫面不必顯示 contractor_dispatch／E04。"""
+    h = _login(client, make_user, "an_lbl")
+    ev = _e04()
+    fake["events"] = [ev]
+    E.run(conn, "2182-03-01", "2182-03-31", "acc")
+    conn.commit()
+    (it,) = [i for i in client.get("/api/ledger/annotations/pending", headers=h).json()["items"] if i["source_key"] == ev["source_key"]]
+    assert it["source_label"] == "承攬商派工 " + ev["source_key"] and it["event_label"] == "承攬商發票"

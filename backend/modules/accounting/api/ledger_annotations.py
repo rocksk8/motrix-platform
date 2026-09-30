@@ -28,6 +28,9 @@ ALLOWED = {
     "case_extra_expense": ("input_tax",),                          # E11 額外支出（未拆稅）
     "case_material_order": ("input_tax",),                         # E12 叫料（未拆稅）
 }
+#: 畫面用名稱（不要讓使用者看到 contractor_dispatch／E04 這種代碼）
+SOURCE_LABEL = {"contractor_dispatch": "承攬商派工", "stock_batch_invoice": "進貨發票", "case_extra_expense": "案件額外支出", "case_material_order": "案件叫料"}
+EVENT_LABEL = {"E04": "承攬商發票", "E08b": "進貨發票進項稅", "E09": "進貨付款", "E11": "額外支出", "E12": "叫料"}
 _MAX_LIST = 500
 
 
@@ -107,6 +110,7 @@ def pending_annotations(authorization: str = Header(None)):
             if st not in ALLOWED or "input_tax" not in ALLOWED[st]:
                 continue
             out.append({"event_id": r["id"], "source_type": st, "source_key": r["source_key"], "event_code": r["event_code"], "event_date": r["event_date"],
+                        "source_label": "%s %s" % (SOURCE_LABEL.get(st, st), r["source_key"]), "event_label": EVENT_LABEL.get(r["event_code"], r["event_code"]),
                         "status": r["status"], "doc_no": ev.get("doc_no") or "", "amount": r["amount"],
                         "kind": "estimated" if meta.get("tax_estimated") else ("unsplit" if meta.get("tax_unsplit") else "annotated"),
                         "input_tax": have.get((st, r["source_key"], "input_tax"), ("", None))[0], "input_tax_id": have.get((st, r["source_key"], "input_tax"), ("", None))[1],
