@@ -1,0 +1,214 @@
+{
+ "key": "leave",
+ "name": "請假單",
+ "category": "人資",
+ "description": "申請人、假別、請假起訖（含時間）、時數、事由與代理人；主管簽核。",
+ "note": "不連動薪資扣款；時數由申請人填寫，簽核人審閱。",
+ "body": {
+  "name": "請假單",
+  "icon": "",
+  "menu": {
+   "group": "人資",
+   "order": 60
+  },
+  "numbering": {
+   "prefix": "LV",
+   "date": "YYYYMMDD",
+   "digits": 4
+  },
+  "fields": [
+   {
+    "key": "applicant",
+    "label": "申請人",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "users",
+    "default": {
+     "$": "requester"
+    },
+    "required": true
+   },
+   {
+    "key": "dept",
+    "label": "部門",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "departments"
+   },
+   {
+    "key": "leave_type",
+    "label": "假別",
+    "type": "select",
+    "dataClass": "T1",
+    "options": [
+     "特休",
+     "事假",
+     "病假",
+     "婚假",
+     "喪假",
+     "產假",
+     "公假",
+     "補休"
+    ],
+    "required": true
+   },
+   {
+    "key": "period",
+    "label": "請假起訖",
+    "type": "daterange",
+    "dataClass": "T1",
+    "withTime": true,
+    "required": true
+   },
+   {
+    "key": "hours",
+    "label": "請假時數",
+    "type": "number",
+    "dataClass": "T1",
+    "min": 0.5,
+    "required": true
+   },
+   {
+    "key": "proxy",
+    "label": "代理人",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "users"
+   },
+   {
+    "key": "reason",
+    "label": "事由",
+    "type": "textarea",
+    "dataClass": "T1",
+    "maxLength": 500
+   }
+  ],
+  "workflow": {
+   "initial": "draft",
+   "states": [
+    {
+     "key": "draft",
+     "label": "草稿"
+    },
+    {
+     "key": "pending",
+     "label": "簽核中",
+     "approval": {
+      "tiers": [
+       {
+        "approvers": [
+         {
+          "sourceType": "submitter_manager"
+         }
+        ]
+       }
+      ],
+      "on_approved": "approved",
+      "on_rejected": "draft"
+     }
+    },
+    {
+     "key": "approved",
+     "label": "已核准",
+     "final": true,
+     "notify": {
+      "requester": true
+     }
+    }
+   ],
+   "transitions": [
+    {
+     "key": "submit",
+     "label": "送審",
+     "from": "draft",
+     "to": "pending"
+    }
+   ]
+  },
+  "ui": {
+   "form": {
+    "groups": [
+     {
+      "title": "申請人",
+      "fields": [
+       "applicant",
+       "dept"
+      ]
+     },
+     {
+      "title": "請假內容",
+      "fields": [
+       "leave_type",
+       "period",
+       "hours",
+       "proxy",
+       "reason"
+      ]
+     }
+    ]
+   },
+   "list": {
+    "columns": [
+     "applicant",
+     "leave_type",
+     "period",
+     "hours"
+    ]
+   }
+  },
+  "output": {
+   "template": {
+    "theme": "voucher_standard",
+    "blocks": [
+     {
+      "type": "identity_header",
+      "title": "請假單"
+     },
+     {
+      "type": "meta",
+      "fields": [
+       {
+        "label": "單號",
+        "path": "recordNo"
+       },
+       {
+        "label": "申請人",
+        "path": "fields.applicant"
+       },
+       {
+        "label": "部門",
+        "path": "fields.dept"
+       },
+       {
+        "label": "假別",
+        "path": "fields.leave_type"
+       },
+       {
+        "label": "請假起訖",
+        "path": "fields.period"
+       },
+       {
+        "label": "時數",
+        "path": "fields.hours"
+       },
+       {
+        "label": "代理人",
+        "path": "fields.proxy"
+       },
+       {
+        "label": "事由",
+        "path": "fields.reason"
+       }
+      ]
+     },
+     {
+      "type": "approval_sign"
+     },
+     {
+      "type": "identity_footer"
+     }
+    ]
+   }
+  }
+ }
+}
