@@ -15,10 +15,19 @@ def test_product_code_has_no_unregistered_company_literals():
     assert not probs, "\n".join(probs)
 
 
-def test_positive_control_the_known_frozen_migration_hit_is_found():
-    hits = L.scan()
-    assert hits.get(("backend/db.py", "統編"), 0) >= 1, (
-        "掃描器沒有掃到凍結 migration _m106 的統編判準——掃描範圍或樣式壞了，其他「沒有」都不可信")
+def test_positive_control_the_known_frozen_migration_hit_is_found(tmp_path):
+    """去識別化段 1 之後 db.py 已經沒有命中（那一筆是它自己），正對照改為兩件事：
+    ① db.py 在掃描範圍內（範圍沒有壞）；② 把「固定舊版 db.py（git 歷史）」的統編判準放進合成的 backend/db.py，掃描器要掃到——
+    值在執行時取自 git 歷史，不寫進這個檔。"""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tools" / "platform"))
+    import own_payload as OP
+    assert ("backend/db.py", "") in _all_scanned_files(), "db.py 不在掃描範圍內——其他「沒有」都不可信"
+    tax_id = OP.extract(OP.pinned_source())[2]["tax_id"]
+    synthetic = _tree(tmp_path, {"backend/db.py": 'if profile.get("tax_id") != "%s":' % tax_id + chr(10) + "    return" + chr(10)})
+    assert L.scan(synthetic).get(("backend/db.py", "統編"), 0) >= 1, "掃描器沒有掃到合成檔裡的統編判準——樣式壞了，其他「沒有」都不可信"
+    assert L.scan().get(("backend/db.py", "統編"), 0) == 0, "db.py 又出現統編字面值了（去識別化段 1 已改成 sha256）"
     # 範圍要含 modules/（§G5 #10）；拿掉所有模組的樹（core-only）沒有模組檔可掃 ⇒ 不驗這一句
     if any((L.REPO / "backend" / "modules").glob("*/module.json")):
         assert any(rel.startswith("backend/modules/") for rel, _ in _all_scanned_files()), "掃描範圍沒有包含 modules/"
