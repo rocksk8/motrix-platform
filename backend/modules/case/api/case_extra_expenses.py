@@ -883,6 +883,16 @@ def _apply_change(conn, row, change: dict, actor_display: str, now: str) -> floa
          json.dumps(merged_files, ensure_ascii=False), now, actor_display,
          json.dumps(appr, ensure_ascii=False), exp_id, quote_no),
     )
+    # MONEY-FLOWS §9 L11：**已付款**的額外支出經變更申請改了金額 ⇒ 實付與新應付不一致，必須重走出納的差額審核，
+    # 不可以讓已付款金額被悄悄改掉（原本不回審核，E11b 用新 total／舊 remit_actual 產生差額行）。
+    # 做法＝沿用既有差額審核：`remit_review='pending'`；核可／退回都在出納頁（核可 ⇒ 報表不變、總帳下次執行才出 E11b；
+    # 退回 ⇒ 回待付款）。下游效應：營運報表現金口徑標「差額待審核」（`remitPending`）；總帳 E11b 待審核期間不產生。
+    _paid = (row["paid_date"] or "") if "paid_date" in row.keys() else ""
+    _actual = row["remit_actual"] if "remit_actual" in row.keys() else None
+    if _paid and _actual is not None and abs(float(_actual) - total) > 0.005 and abs(float(row["total_cost"] or 0) - total) > 0.005:
+        _note = "變更申請改了金額（原應付 %g → %g），實付 %g，請重新審核" % (float(row["total_cost"] or 0), total, float(_actual))
+        conn.execute("UPDATE case_extra_expenses SET remit_review='pending', remit_review_by='', remit_review_at='', "
+                     "remit_review_note=? WHERE id=? AND quote_no=?", (_note, exp_id, quote_no))
     return total
 
 
