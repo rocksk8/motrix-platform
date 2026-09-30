@@ -202,7 +202,12 @@ def ytd_in_motrix(conn, year, *, exclude_award_id=None):
         sql += " AND a.id != ?"
         args.append(exclude_award_id)
     sql += " GROUP BY l.username"
-    return {r["username"]: int(r["s"] or 0) for r in conn.execute(sql, args)}
+    out = {r["username"]: int(r["s"] or 0) for r in conn.execute(sql, args)}
+    # 獎金更正單（R1：後續發放的扣繳／補充保費）：已生效的補發與追回併入全年累計
+    from modules.payroll import bonus_correction
+    for u, d in bonus_correction.ytd_adjustments(conn, year).items():
+        out[u] = out.get(u, 0) + d
+    return out
 
 
 def ytd_before(conn, profiles, year, award_id):

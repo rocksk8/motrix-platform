@@ -976,6 +976,48 @@ def notify_bonus_payout_ready(quote_no: str, customer: str, cashier_usernames: l
     _async_send(to, _mt.subject("bonus_payout_ready", f"獎金分潤待發放：{quote_no}（{customer}）"), html)
 
 
+def notify_bonus_correction_submitted(corr_no: str, quote_no: str, approver_usernames: list) -> None:
+    """獎金更正單送審／換人簽 → 通知現在輪到的簽核人（含代理人）。🔴 信裡不放金額。"""
+    to = _lookup_emails(approver_usernames, "bonus_correction_submitted")
+    if not to:
+        logger.warning("notify_bonus_correction_submitted: 簽核人 %s 皆無設定 email（corr_no=%r）", approver_usernames, corr_no)
+        return
+    html = _build_html("bonus_correction_submitted", "獎金更正單簽核申請", "待您審核", "#2F6FD6",
+                       [("更正單", corr_no), ("原案件單號", quote_no)], "",
+                       f"{_base_url()}/pages/bonus-corrections.html?no={corr_no}",
+                       intro="您好，以下已發放獎金分潤的更正單已送審，敬請於系統中完成審核作業（金額請登入後查看）。",
+                       button_text="前往審核")
+    _async_send(to, _mt.subject("bonus_correction_submitted", f"獎金更正單待審核：{corr_no}"), html)
+
+
+def notify_bonus_correction_approved(corr_no: str, quote_no: str, usernames: list, needs_payout: bool) -> None:
+    """獎金更正單核准 → 通知申請人（有補發時含出納）。🔴 信裡不放金額。"""
+    to = _lookup_emails(usernames, "bonus_correction_approved")
+    if not to:
+        logger.warning("notify_bonus_correction_approved: %s 皆無設定 email（corr_no=%r）", usernames, corr_no)
+        return
+    tail = "其中有需補發的款項，請出納於出納頁「獎金待發放」處理。" if needs_payout else "此更正沒有需要補發的款項。"
+    html = _build_html("bonus_correction_approved", "獎金更正單已核准", "已生效", "#16A34A",
+                       [("更正單", corr_no), ("原案件單號", quote_no)], "",
+                       f"{_base_url()}/pages/bonus-corrections.html?no={corr_no}",
+                       intro="您好，以下獎金更正單已核准，沖轉與重開應付的傳票草稿已產生。" + tail, button_text="前往查看")
+    _async_send(to, _mt.subject("bonus_correction_approved", f"獎金更正單已核准：{corr_no}"), html)
+
+
+def notify_bonus_correction_returned(corr_no: str, quote_no: str, usernames: list, reason: str) -> None:
+    """獎金更正單駁回 → 通知申請人（附駁回原因）。"""
+    to = _lookup_emails(usernames, "bonus_correction_returned")
+    if not to:
+        logger.warning("notify_bonus_correction_returned: %s 皆無設定 email（corr_no=%r）", usernames, corr_no)
+        return
+    html = _build_html("bonus_correction_returned", "獎金更正單已駁回", "請修改後重新送審", "#DC2626",
+                       [("更正單", corr_no), ("原案件單號", quote_no)], "",
+                       f"{_base_url()}/pages/bonus-corrections.html?no={corr_no}",
+                       intro="您好，您送出的獎金更正單經審核後已駁回，請參閱下方原因修改後重新送審。",
+                       note=reason, button_text="前往修改")
+    _async_send(to, _mt.subject("bonus_correction_returned", f"獎金更正單已駁回：{corr_no}"), html)
+
+
 def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_elapsed: int,
                              approver_usernames: list, also_superadmin: bool = False) -> str:
     """簽核逾期催辦（2026-08-21，2026-08-24 補上出貨單，2026-08-25 收斂收件人）：

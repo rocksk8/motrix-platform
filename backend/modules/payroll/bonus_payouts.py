@@ -13,6 +13,7 @@
 import json
 from datetime import date
 
+from modules.payroll import bonus_correction
 
 #: 出納頁與報表的顯示文字
 EXPENSE_CATEGORY = "獎金分潤"
@@ -55,9 +56,11 @@ class _Payouts:
     def pending(conn):
         """待發放：[{quoteNo, customer, project, total, people, approvedAt}]，舊的在前。"""
         rows = _case_rows(conn, "a.status = '待發放' ORDER BY a.updated_at", ())
-        return [{"quoteNo": r["quote_no"], "customer": r["customer_name"], "project": r["project_name"],
-                 "total": int(r["total"] or 0), "people": int(r["people"] or 0),
-                 "approvedAt": (r["updated_at"] or "")[:10]} for r in rows]
+        out = [{"quoteNo": r["quote_no"], "customer": r["customer_name"], "project": r["project_name"],
+                "total": int(r["total"] or 0), "people": int(r["people"] or 0),
+                "approvedAt": (r["updated_at"] or "")[:10]} for r in rows]
+        # 獎金更正單的待補發（kind='correction'；R1：出納）——與原單同一張清單，出納不會漏看
+        return out + bonus_correction.cashier_pending(conn)
 
     @staticmethod
     def paid(conn, start, end):
@@ -75,7 +78,8 @@ class _Payouts:
                         "paidAt": (r["paid_at"] or "")[:10], "paidBy": r["paid_by"] or "",
                         "withholding": tot.get("withholding"), "nhiPremium": tot.get("nhiPremium"),
                         "net": tot.get("net")})
-        return out
+        # 獎金更正單的已補發（kind='correction'；R1：出納發放紀錄）
+        return out + bonus_correction.cashier_paid(conn, start, end)
 
 
 # IP-8 由 modules/payroll/__init__.py 的 ModuleSpec.providers 登記（模組沒載入就沒有登記）

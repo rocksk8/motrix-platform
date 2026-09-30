@@ -435,13 +435,16 @@
                     <tbody>
                       <template x-for="b in bonusQueue.items" :key="b.quoteNo">
                         <tr :data-testid="'cashier-bonus-row-' + b.quoteNo">
-                          <td class="mono"><a :href="'bonus.html?q=' + encodeURIComponent(b.quoteNo)" x-text="b.quoteNo"></a></td>
-                          <td x-text="b.customer"></td>
+                          <td class="mono"><a :href="(b.kind === 'correction' ? 'bonus-corrections.html?no=' : 'bonus.html?q=') + encodeURIComponent(b.quoteNo)" x-text="b.quoteNo"></a></td>
+                          <td x-text="b.kind === 'correction' ? b.project : b.customer"></td>
                           <td class="c mono" x-text="b.people"></td>
                           <td class="r mono" x-text="fmt(b.total)"></td>
                           <td class="c mono" x-text="b.approvedAt"></td>
                           <td class="c">
-                            <button x-show="bonusQueue.canMarkPaid" class="action-btn pay" @click="openBonusPayModal(b)"
+                            <!-- 獎金更正單的補發（kind='correction'）：扣繳試算與銀行選擇在更正單頁，這裡給連結 -->
+                            <a x-show="b.kind === 'correction'" class="action-btn pay" :href="'bonus-corrections.html?no=' + encodeURIComponent(b.quoteNo)"
+                               :data-testid="'cashier-bonus-corr-' + b.quoteNo">前往補發</a>
+                            <button x-show="bonusQueue.canMarkPaid && b.kind !== 'correction'" class="action-btn pay" @click="openBonusPayModal(b)"
                                     :data-testid="'cashier-bonus-pay-' + b.quoteNo">標記已發放</button>
                             <span x-show="!bonusQueue.canMarkPaid" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
                           </td>
@@ -688,7 +691,7 @@
                               <template x-for="b in cashierHistoryBonus" :key="b.quoteNo">
                                 <tr>
                                   <td class="mono" x-text="b.quoteNo"></td>
-                                  <td x-text="b.customer"></td>
+                                  <td x-text="b.kind === 'correction' ? b.project : b.customer"></td>
                                   <td class="c mono" x-text="b.people"></td>
                                   <td class="r mono" x-text="fmt(b.total)"></td>
                                   <!-- null＝發放時沒有計算（法規參數接上前），顯示「未計算」不是 0 -->

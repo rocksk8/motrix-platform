@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-09-30（wip/w2-bonus-correction：獎金更正單的三種通知）
+- L1（新增）：`helpers.email_notify.notify_bonus_correction_submitted／_approved／_returned`——獎金更正單送審／核准／駁回的通知信（信內不放金額）；`helpers/mail_types.py` 登記三個信件類型。只新增，舊呼叫端不受影響。
+
 ## 1.89 — 2026-09-30（wip/w1-t27fix3）
 - 前端共用：`static/approval-return.js` 的 `MotrixApprovalReturn.ask` 在頁面有 `MotrixUI`（案件頁）時改用 `MotrixUI.prompt`（原因必填：空白 toast 後重問、取消不送），沒有才用自己的視窗；案件頁四個退回／撤銷核准的提示用語還原為原本的「退回出貨單「X」…」（test_case_page_p4b_dialogs 釘住的元件與用語）。公開介面不變。
 
