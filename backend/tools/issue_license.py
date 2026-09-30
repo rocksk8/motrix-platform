@@ -14,7 +14,7 @@
 
     # 簽一把授權
     python tools/issue_license.py issue \
-        --customer "第二家公司股份有限公司" --tax-id 87654321 \
+        --customer "範例第二家公司股份有限公司" --tax-id 00000000 \
         --machine 0123456789abcdef --modules tender_radar,case \
         --days 365 --out license.key
 
