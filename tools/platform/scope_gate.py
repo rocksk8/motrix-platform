@@ -257,14 +257,20 @@ def baseline_at(commit, repo=REPO):
 
 
 def trusted_base(repo=REPO):
-    """受信的正式機基準＝最新的 prod/<sha> tag 指向的 commit（依 tag 建立時間）；沒有 ⇒ None。"""
-    out = _git("for-each-ref", "--sort=-creatordate", "--format=%(refname)", PROD_TAG_GLOB, repo=repo, check=False)
+    """受信的正式機基準＝prod/<sha> tag 指向的 commit 中、歷史上最後的那一個（其他全是它的祖先）。
+    沒有 tag ⇒ None；tag 之間不在同一條歷史上（判不出哪個是目前正式機）⇒ None（fail closed）。
+    不用 tag 的建立時間排序：輕量 tag 取的是 commit 時間，同一秒的兩個 commit 會排不出先後。"""
+    out = _git("for-each-ref", "--format=%(refname)", PROD_TAG_GLOB, repo=repo, check=False)
+    commits = set()
     for ref in out.splitlines():
         if ref.strip():
             try:
-                return rev(ref.strip(), repo)
+                commits.add(rev(ref.strip(), repo))
             except RuntimeError:
                 return None
+    for c in commits:
+        if all(o == c or is_ancestor(o, c, repo) for o in commits):
+            return c
     return None
 
 

@@ -594,11 +594,26 @@ def test_build_script_uses_scope_gate_and_records_the_mode():
     s = (REPO / "backend" / "tools" / "build_deploy_package.ps1").read_text(encoding="utf-8-sig")
     assert '_scope_gate.ps1")' in s and "Get-ScopedGateResult -PyExe $pyExe" in s and "-Commit $commit" in s
     assert "if (-not $ForceTests) {\n    . (Join-Path $PSScriptRoot \"_scope_gate.ps1\")" in s.replace("\r\n", "\n")   # -ForceTests ⇒ 不判範圍驗證
-    i_scoped, i_full = s.index("} elseif ($scoped) {"), s.index('Write-Host "`n[測試] 執行 pytest（非 e2e')
+    i_scoped, i_full = s.index("\nif ($scoped) {"), s.index('Write-Host "`n[測試] 執行 pytest（非 e2e')
     assert i_scoped < i_full                                                   # 全量分支仍在，排在 else
     assert '$VerificationMode = "scoped"' in s and "base         = $scoped.base" in s
     assert "verification         = [ordered]@{ mode = $VerificationMode; scoped = $ScopedVerification; stages = $BuildVerification }" in s
     # 優先序：範圍驗證先判，接受就整段（分段沿用／全量）跳過
-    assert s.index("if ($scoped) {") < s.index("} elseif ($reuse) {") < s.index("Acquire-TestExclusive\n$env:MOTRIX_PYTEST_EXCLUSIVE")
+    assert s.index("if ($scoped) {") < s.index("} elseif ($reuse) {") < s.index("\nAcquire-TestExclusive\n")
     seg = s[s.index("if ($scoped) {"):s.index("} elseif ($reuse) {")]
     assert "skipped (scoped)" in seg and "-m pytest" not in seg
+
+
+def test_m4_divergent_prod_tags_mean_full(mini):
+    """prod tag 不在同一條歷史上（Y 與 W 是兄弟）⇒ 判不出目前正式機 ⇒ 全量（fail closed）。"""
+    _g(mini["repo"], "tag", "prod/" + mini["y"][:8], mini["y"])
+    _g(mini["repo"], "tag", "prod/" + mini["w"][:8], mini["w"])
+    a = SG.assess(mini["x"], repo=mini["repo"])
+    assert a["trusted"] is None and a["decision"]["mode"] == "full"
+
+
+def test_m4_newest_is_by_history_not_by_tag_time(mini):
+    """同一秒建立的 commit／tag：以歷史（祖先關係）判最新，不靠建立時間（第一次合併時實際踩到的排序不穩定）。"""
+    for _ in range(3):
+        _g(mini["repo"], "tag", "-f", "prod/" + mini["x"][:8], mini["x"])
+        assert SG.trusted_base(mini["repo"]) == mini["x"]

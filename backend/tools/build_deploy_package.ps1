@@ -951,7 +951,7 @@ if ($e2eGate.Ok) {
     $e2eGate.Message | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
     Fail "e2e 未全數通過（斷言失敗 $($e2eGate.Failures.Count) 題、逾時 $($e2eGate.Timeouts.Count) 題）——逾時也算沒驗，不出包。見上方清單與單獨重跑指令。"
 }
-}   # end: if ($scoped) elseif ($reuse) else
+}   # end: if ($reuse) else（前面另有 if ($scoped)；字串守門以這一行為錨點，不要改）
 
 # 2026-09-15：測試暫存跑完就自己刪。
 #
