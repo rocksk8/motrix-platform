@@ -206,6 +206,9 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
                        "送審 %s 第 %d 版" % (key, r["version"]), {"note": (payload or {}).get("note", "")})
                 return dict(r["definition"], pending=True)
             d = r["definition"]
+            if r.get("unreviewed"):                      # 直接發布而沒有第二人審核 ⇒ 稽核明記（主持裁示 2026-09-30）
+                _audit(_tok(authorization), "definitions.publish_unreviewed", "ui_definition", "%s/%s/%s" % (kind, key, scope),
+                       "發布 %s 第 %d 版：未經第二人審核（%s）" % (key, d["version"], r.get("reason", "")), {"note": d.get("note", "")})
         else:
             d = D.publish(conn, kind, key, scope, (payload or {}).get("note", ""), u["username"])
     except D.DefinitionError as e:
@@ -266,7 +269,7 @@ def restore_definition(kind: str, key: str, version: int, scope: str = Query("co
     try:
         if kind == "custom_module" and scope == "company":
             from helpers import custom_def_review as _defr
-            if _defr.review_enabled():          # S4：審核開啟時，還原＝把舊版放回草稿（再走送審），不直接發布
+            if _defr.review_state(conn, u["username"])["active"]:          # S4：審核啟用時，還原＝把舊版放回草稿（再走送審），不直接發布
                 try:
                     r = _defr.restore_to_draft(conn, key, version, u)
                 except _defr.ReviewError as e:

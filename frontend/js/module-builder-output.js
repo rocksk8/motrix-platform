@@ -177,10 +177,21 @@
           var r = await this.api('GET', this.defUrl())
           if (r.ok) { this.versions = r.data.versions || []; this.latestVersion = r.data.latest ? r.data.latest.version : 0 }
         },
-        async setDefReview(on) {
-          var r = await this.api('PUT', '/api/custom-modules/definition-review', { enabled: !!on })
-          if (r.ok) this.defReview = !!r.data.enabled
+        async saveDefReview(patch) {
+          var r = await this.api('PUT', '/api/custom-modules/definition-review', patch)
+          if (r.ok) this.defReview = r.data
           else this.errMsg = '設定失敗：' + ((r.data && r.data.detail) || r.status)
+        },
+        reviewerHas(u) { return (this.defReview.reviewers || []).some(function (r) { return r.username === u }) },
+        toggleReviewer(u, on) {
+          var cur = (this.defReview.reviewers || []).map(function (r) { return r.username }).filter(function (x) { return x !== u })
+          if (on) cur.push(u)
+          this.saveDefReview({ reviewers: cur })
+        },
+        reviewBadge() {
+          var d = this.defReview || {}
+          return d.active ? ('定義送審：啟用（審核人：' + (d.reviewers || []).map(function (r) { return r.displayName || r.username }).join('、') + '）')
+                          : '定義送審：未啟用（無第二位審核人，發布會記「未經第二人審核」）'
         },
         submittedVersion() { var v = (this.versions || []).find(function (x) { return x.status === 'submitted' }); return v ? v.version : 0 },
         async publish() {

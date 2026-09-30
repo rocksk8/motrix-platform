@@ -342,8 +342,9 @@
    "render_output_for": "def(conn, module_key, record_no, user)"
   },
   "helper:custom_def_review": {
-   "DOC_TYPE": "const",
+   "MODES": "const",
    "QUEUE_TYPE": "const",
+   "REVIEWERS_KEY": "const",
    "ReviewError": "class",
    "ReviewError.__init__": "def(self, message, status=…, problems=…)",
    "SETTING_KEY": "const",
@@ -352,7 +353,8 @@
    "open_view": "def(conn, module_key, user)",
    "queue_items": "def(conn)",
    "restore_to_draft": "def(conn, module_key, version, user)",
-   "review_enabled": "def()",
+   "review_state": "def(conn, submitter=…)",
+   "set_review_settings": "def(conn, mode=…, reviewers=…)",
    "submit": "def(conn, module_key, user, note=…)"
   },
   "helper:custom_fields": {
@@ -396,6 +398,13 @@
    "on_transition": "def(conn, body, rec, frm, to)",
    "post_states": "def(body)",
    "undated_counts": "def(conn, basis)"
+  },
+  "helper:custom_history": {
+   "diff_revisions": "def(conn, rec, body, a, b, user)",
+   "display_no": "def(rec)",
+   "list_revisions": "def(conn, rec, body, user)",
+   "on_decided": "def(conn, rec, result, user, note=…)",
+   "on_submitted": "def(conn, rec, user)"
   },
   "helper:custom_modules": {
    "APPROVER_SOURCES": "const",

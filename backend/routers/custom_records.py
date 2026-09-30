@@ -396,6 +396,16 @@ def custom_finance_summary(basis: str = Query("cash"), authorization: str = Head
 
 # ── 模組定義送審（S4）：審核畫面與核可／退回（送審本身走 POST /api/definitions/custom_module/{key}/publish）──
 
+def _def_review_state(username=""):
+    conn = get_db()
+    try:
+        st = DEFR.review_state(conn, username)
+        return {"mode": st["mode"], "active": st["active"], "reason": st["reason"],
+                "reviewers": [{"username": r["username"], "displayName": r["displayName"]} for r in st["reviewers"]]}
+    finally:
+        conn.close()
+
+
 def _review_err(e):
     return JSONResponse({"detail": str(e), "problems": e.problems}, status_code=e.status)
 
@@ -406,7 +416,7 @@ def custom_definition_review(key: str, authorization: str = Header(None)):
     u = _require_user(authorization)
     conn = get_db()
     try:
-        return {"reviewEnabled": DEFR.review_enabled(), **DEFR.open_view(conn, key, u)}
+        return {"reviewEnabled": DEFR.review_state(conn, u["username"])["active"], **DEFR.open_view(conn, key, u)}
     except DEFR.ReviewError as e:
         return _review_err(e)
     finally:
@@ -441,17 +451,30 @@ def reject_custom_definition(key: str, version: int, payload: dict = Body(defaul
     return out
 
 
+@router.get("/api/custom-modules/definition-review")
+def get_custom_definition_review(authorization: str = Header(None)):
+    """目前的「定義送審」狀態（給建構器標頭顯示）：模式（auto／on／off）、有沒有啟用、審核人、沒啟用的原因。"""
+    u = _require_user(authorization, require_superadmin=True)
+    return _def_review_state(u["username"])
+
+
 @router.put("/api/custom-modules/definition-review")
 def set_custom_definition_review(payload: dict = Body(...), authorization: str = Header(None)):
-    """開／關「定義送審」（預設關；關閉時發布與過去一樣直接發布）。僅超級管理員；寫稽核。"""
-    from helpers.settings import _set_setting
-    _require_user(authorization, require_superadmin=True)
-    on = payload.get("enabled")
-    if not isinstance(on, bool):
-        raise HTTPException(400, "enabled 要是 true／false")
-    _set_setting(DEFR.SETTING_KEY, on)
-    _audit(_tok(authorization), "custom_def.review_toggle", "settings", DEFR.SETTING_KEY, "定義送審：%s" % ("開啟" if on else "關閉"), {})
-    return {"enabled": on}
+    """設定「模組審核人」名單與手動覆寫（`mode`：auto 預設＝依名單、on 強制送審、off 強制直接發布）。僅超級管理員；寫稽核。
+    名單裡有申請人以外至少一人 ⇒ 送審自動啟用；沒有 ⇒ 發布維持直接發布（稽核記「未經第二人審核」）。"""
+    u = _require_user(authorization, require_superadmin=True)
+    if "mode" not in payload and "reviewers" not in payload:
+        raise HTTPException(400, "要帶 mode 或 reviewers")
+    conn = get_db()
+    try:
+        DEFR.set_review_settings(conn, payload.get("mode"), payload.get("reviewers"))
+    except DEFR.ReviewError as e:
+        return _review_err(e)
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "custom_def.review_settings", "settings", DEFR.SETTING_KEY,
+           "定義送審設定：mode=%s reviewers=%s" % (payload.get("mode"), payload.get("reviewers")), {})
+    return _def_review_state(u["username"])
 
 
 # ── 建構器輔助（僅超級管理員）──────────────────────────────────────────────
@@ -459,7 +482,7 @@ def set_custom_definition_review(payload: dict = Body(...), authorization: str =
 @router.get("/api/custom-modules/catalog")
 def custom_module_catalog(authorization: str = Header(None)):
     """能力目錄（建構器只能從這裡挑）：欄位型別、公式函式、參照對象、日期格式、輸出積木。"""
-    _require_user(authorization, require_superadmin=True)
+    cu = _require_user(authorization, require_superadmin=True)
     from helpers import doc_template as dt
     tpls, tpl_gaps = CM.templates(include_gaps=True)
     return {"fieldTypes": list(CM.FIELD_TYPES), "formulaFunctions": list(FX.FUNCTIONS), "refTargets": CM.ref_targets(),
@@ -470,7 +493,7 @@ def custom_module_catalog(authorization: str = Header(None)):
             "outputBlockSpecs": dt.BLOCK_SPECS, "outputBlockItemSpecs": dt.BLOCK_ITEM_SPECS,
             "outputThemes": sorted(dt.THEMES), "outputFormats": ["html", "pdf"], "fieldFormats": list(dt.FORMATS),
             "approverSources": CM.APPROVER_SOURCES, "dataClasses": ["T1"],
-            "roles": list(SUP.VISIBLE_ROLES), "defReviewEnabled": DEFR.review_enabled()}
+            "roles": list(SUP.VISIBLE_ROLES), "defReview": _def_review_state(cu["username"])}
 
 
 @router.get("/api/custom-modules/templates/{tkey}")
