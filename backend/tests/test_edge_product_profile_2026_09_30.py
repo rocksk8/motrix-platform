@@ -103,8 +103,9 @@ def test_an_oversized_profile_is_rebuilt_on_the_periodic_check(prod, monkeypatch
     assert os.path.isdir(d)
     for _ in range(startup.EDGE_PDF_MAX_CONCURRENCY):                      # 輪一圈回到同一份，累積超過上限
         _run(["msedge.exe", "--headless", "b"])
-    sizes = [os.path.getsize(os.path.join(d, "cache.bin"))] if os.path.exists(os.path.join(d, "cache.bin")) else [0]
-    assert sizes[0] <= 1500 + 1024, "過大的 profile 沒有重建（%s）" % sizes
+    # 第 N+1 次又輪到 d：這次寫到 2 KB（> 1500）⇒ 歸還時量到過大 ⇒ 整份刪掉
+    assert _dir_of(prod["seen"][-1]) == d
+    assert not os.path.exists(d), "過大的 profile 沒有重建"
 
 
 def test_falls_back_to_the_old_behaviour_when_the_dedicated_dir_is_unavailable(prod, monkeypatch):
