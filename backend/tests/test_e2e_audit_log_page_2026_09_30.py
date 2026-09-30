@@ -38,12 +38,14 @@ def _shot(page, name):
         f.write(page.screenshot())
 
 
+#: 瀏覽器時區不影響結果（預設視窗與「擴大」的日期都由伺服器給、頁面用 MotrixDate 本地算；2026-10-01 本地日期修正後補這個維度）
 @pytest.mark.e2e
-def test_audit_log_page_window_widen_filters_and_drill(live_server, new_context, make_user):
+@pytest.mark.parametrize("tz", [None, "UTC", "Pacific/Kiritimati", "America/Los_Angeles"])
+def test_audit_log_page_window_widen_filters_and_drill(live_server, new_context, make_user, tz):
     user = make_user(username="alp_sa", role="superadmin", modules=[])
     _seed()
     errors = []
-    page = new_context().new_page()
+    page = (new_context(timezone_id=tz) if tz else new_context()).new_page()
     page.on("pageerror", lambda e: errors.append(str(e)))
     reqs = []
     page.on("request", lambda r: reqs.append(r.url) if "/api/audit-log/tree" in r.url else None)
@@ -70,6 +72,8 @@ def test_audit_log_page_window_widen_filters_and_drill(live_server, new_context,
     # 清除：回到全部、視窗回預設
     page.get_by_text("清除", exact=True).click()
     page.wait_for_function("() => document.querySelector('[data-testid=tree-window]').innerText.includes('預設近')", timeout=10000)
+    # 清除後清單是非同步重新載入的：樹的視窗文字先回預設、清單（只看失敗時只有 1 列）可能還沒換回來 ⇒ 等終點狀態，不要立刻數（2026-10-01 列車 e2e 偶發紅：數到 1）
+    page.wait_for_function("() => document.querySelectorAll('.tl-item').length >= 3 && document.querySelectorAll('.tl-item.is-fail').length < document.querySelectorAll('.tl-item').length", timeout=10000)
     assert page.locator(".tl-item").count() >= 3
     # 下鑽：點模組「傳票」⇒ 麵包屑出現、樹變成案件層
     page.locator(".drill-node", has_text="傳票").first.click()
