@@ -230,7 +230,7 @@ def rebuild(commit, out, product="full", repo=REPO, cfg=None, overlay=None):
 def tree_digest(root, ignore=()):
     h = {}
     for f in list_files(root):
-        if not matches(f, ignore):
+        if "__pycache__/" not in f and not matches(f, ignore):
             h[f] = hashlib.sha256((Path(root) / f).read_bytes()).hexdigest()
     return h
 
