@@ -32,9 +32,13 @@ def _disagree(sets):
 
 
 def test_jv26_the_three_voucher_lines_inserts_write_the_same_columns():
-    sets = _column_sets((ROOT / "backend" / "modules" / "accounting" / "api" / "vouchers.py").read_text(encoding="utf-8"))
+    # 2026-09-30（W4 總帳 P1）：vouchers.py 純搬移拆成 voucher_common／voucher_summary／voucher_providers 與 vouchers；
+    # 寫入點只是換了檔（create 的 insert_draft_voucher 在 voucher_common），數量與欄位一致的要求不變 ⇒ 四個檔合起來掃。
+    api = ROOT / "backend" / "modules" / "accounting" / "api"
+    sets = _column_sets(chr(10).join((api / n).read_text(encoding="utf-8")
+                                  for n in ("vouchers.py", "voucher_common.py", "voucher_summary.py", "voucher_providers.py")))
     assert len(sets) == 3, (
-        "`vouchers.py` 裡 `INSERT INTO voucher_lines` 有 %d 句，規格記的是 3 句" % len(sets)
+        "vouchers.py＋voucher_common／summary／providers 裡 `INSERT INTO voucher_lines` 有 %d 句，規格記的是 3 句" % len(sets)
         + "（create／作廢重開／update）。多了或少了都要先看是哪一支，再更新本題。")
     assert not _disagree(sets), (
         "三個寫入點的欄位不一致：%r\n" % [sorted(s) for s in sets]

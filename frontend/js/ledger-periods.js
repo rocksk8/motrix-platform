@@ -111,13 +111,26 @@ function ledgerPeriodsPage() {
     },
 
     // ── 期初餘額 ─────────────────────────────────────────────────
-    // 貼上格式：每行「科目代號,借方,貸方」（逗號或 Tab 分隔；第一行若是標題會略過；金額可含千分位）
+    // 貼上格式：每行「科目代號,借方,貸方」；Excel 直接複製是 Tab 分隔，CSV 是逗號分隔（金額可用雙引號包住千分位，如 "5,000"）。
+    // 第一個欄位不是數字開頭的行（標題）略過。
+    splitLine(line) {
+      if (line.indexOf('\t') >= 0) return line.split('\t').map(s => s.trim())
+      const out = []
+      let cur = '', q = false
+      for (const ch of line) {
+        if (ch === '"') q = !q
+        else if ((ch === ',' || ch === '，') && !q) { out.push(cur.trim()); cur = '' }
+        else cur += ch
+      }
+      out.push(cur.trim())
+      return out
+    },
     parseRows() {
       const rows = []
       for (const raw of this.op.text.split(/\r?\n/)) {
         const line = raw.trim()
         if (!line) continue
-        const parts = line.split(/[\t,，]/).map(s => s.trim())
+        const parts = this.splitLine(line)
         if (!/^[0-9]/.test(parts[0])) continue        // 標題列
         rows.push({ account_code: parts[0], debit: parts[1] || '', credit: parts[2] || '' })
       }
