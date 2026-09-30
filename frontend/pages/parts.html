@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>料號主檔 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/xlsx-0.18.5.full.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -619,7 +620,7 @@ function app() {
       ws['!cols'] = [12,24,12,20,10,8,12,12,24].map(w=>({wch:w}))
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, '料號')
-      XLSX.writeFile(wb, `MOTRIX_料號_${new Date().toISOString().slice(0,10)}.xlsx`)
+      XLSX.writeFile(wb, `MOTRIX_料號_${MotrixDate.today()}.xlsx`)
     },
 
     async handleImport(event) {

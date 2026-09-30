@@ -71,7 +71,7 @@ function reportsApp() {
     // ── 收支報表（原「月支出」，2026-08-30 重構為《當月收支》/《今年度收支》）──
     expensesScope:     'month', // month/quarter/year — 畫面上目前顯示哪個範圍
     expensesYear:      new Date().getFullYear(),
-    expensesMonth:     new Date().toISOString().slice(0, 7),  // 'YYYY-MM'，當月範圍用
+    expensesMonth:     MotrixDate.thisMonth(),  // 'YYYY-MM'，當月範圍用
     expensesQuarter:   Math.ceil((new Date().getMonth() + 1) / 3),  // 1-4，季範圍用
     expensesData:      null,
     expensesLoading:   false,
@@ -86,7 +86,7 @@ function reportsApp() {
     //    2026-09-10 改回「預設跟隨 period-bar、分頁上的選擇器可臨時覆寫」──
     receivablesScope:     'month', // month/quarter/year
     receivablesYear:      new Date().getFullYear(),
-    receivablesMonth:     new Date().toISOString().slice(0, 7),  // 'YYYY-MM'
+    receivablesMonth:     MotrixDate.thisMonth(),  // 'YYYY-MM'
     receivablesQuarter:   Math.ceil((new Date().getMonth() + 1) / 3),  // 1-4
     receivablesData:      null,
     receivablesLoading:   false,
@@ -416,9 +416,7 @@ function reportsApp() {
     // 本地日期字串（YYYY-MM-DD），不用 toISOString()（UTC，台灣 UTC+8 每天
     // 00:00-08:00 之間會誤判成前一天，比照 case-management.js/cashier.js 同款修法）。
     _localDateStr(d) {
-      d = d || new Date()
-      const tz = d.getTimezoneOffset() * 60000
-      return new Date(d.getTime() - tz).toISOString().slice(0, 10)
+      return MotrixDate.ymd(d)
     },
 
     // ── 期別同步 ──────────────────────────────────────────────────────────────

@@ -22,7 +22,7 @@ window.CM_PARTS.push(() => ({
     newCommentHours: '',
     newCommentContactType: '',
     newCommentContactTypeCustom: '',
-    newCommentLogDate: new Date().toISOString().slice(0, 10),
+    newCommentLogDate: MotrixDate.today(),
     newCommentUserId: '',   // 空字串＝記錄人＝目前登入者，見 postWorkLogEntry()
     postingComment: false,
     _ptCache: {},
@@ -36,7 +36,7 @@ window.CM_PARTS.push(() => ({
       const live = this._selectLive()
       this.caseTasksLoading = true
       try {
-        const today = new Date().toISOString().slice(0, 10)
+        const today = MotrixDate.today()
         const r = await fetch(`/api/daily-tasks?date=${today}&case_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
@@ -165,7 +165,7 @@ window.CM_PARTS.push(() => ({
       // 工作日誌——附件本身跟「這是不是一筆工時記錄」無關，卻悄悄換掉了紀錄
       // 種類，而且換過去就失去「標記為重要」與行事曆同步。case_updates 現在
       // 自己支援附件（DB v82），這個轉向沒有必要了。
-      const isBackdated = this.newCommentLogDate !== new Date().toISOString().slice(0, 10)
+      const isBackdated = this.newCommentLogDate !== MotrixDate.today()
       if (this.newCommentHours || this.newCommentContactType ||
           isBackdated || this.newCommentUserId) {
         await this.postWorkLogEntry(content)
@@ -240,7 +240,7 @@ window.CM_PARTS.push(() => ({
           method: 'POST',
           headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            log_date: this.newCommentLogDate || new Date().toISOString().slice(0, 10),
+            log_date: this.newCommentLogDate || MotrixDate.today(),
             user_id: uid, content,
             hours: this.newCommentHours || 8, case_no: this.selected.quote_no,
             contact_type: this.resolvedContactType(),
@@ -264,7 +264,7 @@ window.CM_PARTS.push(() => ({
         this.newCommentHours = ''
         this.newCommentContactType = ''
         this.newCommentContactTypeCustom = ''
-        this.newCommentLogDate = new Date().toISOString().slice(0, 10)
+        this.newCommentLogDate = MotrixDate.today()
         this.newCommentUserId = ''
         await this.loadCaseUpdates(this.selected.quote_no)
       } catch(e) {
@@ -314,7 +314,7 @@ window.CM_PARTS.push(() => ({
       if (!text) { MotrixUI.toast('請填寫回報內容', {kind: 'error'}); return }
       this.caseTaskEditSubmitting = true
       try {
-        const today = new Date().toISOString().slice(0, 10)
+        const today = MotrixDate.today()
         const r = await fetch(`/api/daily-tasks/${taskId}/complete`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },

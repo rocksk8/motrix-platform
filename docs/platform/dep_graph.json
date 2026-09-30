@@ -2225,6 +2225,17 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:static/motrix-date.js": {
+   "api_calls": [],
+   "api_prefixes": [],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/motrix-date.js",
+   "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:static/notif.js": {
    "api_calls": [
     "/api/",
@@ -6027,415 +6038,415 @@
    "routes": [
     {
      "func": "next_quote_no",
-     "line": 713,
+     "line": 730,
      "method": "GET",
      "path": "/api/next-quote-no"
     },
     {
      "func": "list_quotations",
-     "line": 774,
+     "line": 791,
      "method": "GET",
      "path": "/api/quotations"
     },
     {
      "func": "stage_board",
-     "line": 957,
+     "line": 974,
      "method": "GET",
      "path": "/api/quotations/stage-board"
     },
     {
      "func": "case_activity",
-     "line": 1062,
+     "line": 1079,
      "method": "POST",
      "path": "/api/quotations/case-activity"
     },
     {
      "func": "get_last_received_bank_account",
-     "line": 1103,
+     "line": 1120,
      "method": "GET",
      "path": "/api/quotations/last-received-bank-account"
     },
     {
      "func": "gate_matrix",
-     "line": 1151,
+     "line": 1168,
      "method": "GET",
      "path": "/api/quotations/gate-matrix"
     },
     {
      "func": "get_quotation",
-     "line": 1244,
+     "line": 1261,
      "method": "GET",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_case_assigned_users",
-     "line": 1274,
+     "line": 1291,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/assigned-users"
     },
     {
      "func": "toggle_quotation_signed",
-     "line": 1297,
+     "line": 1314,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-toggle"
     },
     {
      "func": "upload_quotation_signed_files",
-     "line": 1357,
+     "line": 1374,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-files"
     },
     {
      "func": "delete_quotation_signed_file",
-     "line": 1381,
+     "line": 1398,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/signed-files/{file_id}"
     },
     {
      "func": "create_quotation",
-     "line": 1417,
+     "line": 1434,
      "method": "POST",
      "path": "/api/quotations"
     },
     {
      "func": "update_quotation",
-     "line": 1617,
+     "line": 1634,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_status",
-     "line": 1840,
+     "line": 1857,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/status"
     },
     {
      "func": "recall_quotation",
-     "line": 1918,
+     "line": 1935,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/recall"
     },
     {
      "func": "case_bundle",
-     "line": 2200,
+     "line": 2217,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/case-bundle"
     },
     {
      "func": "case_close_gates",
-     "line": 2255,
+     "line": 2272,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/close-gates"
     },
     {
      "func": "update_deal_tag",
-     "line": 2294,
+     "line": 2311,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/deal-tag"
     },
     {
      "func": "delete_quotation",
-     "line": 2373,
+     "line": 2390,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "unlock_case",
-     "line": 2472,
+     "line": 2489,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-unlock"
     },
     {
      "func": "lock_case",
-     "line": 2521,
+     "line": 2538,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-lock"
     },
     {
      "func": "update_case_record",
-     "line": 2695,
+     "line": 2712,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/case-record"
     },
     {
      "func": "get_case_change_request",
-     "line": 3041,
+     "line": 3058,
      "method": "GET",
      "path": "/api/case-changes/{change_id}"
     },
     {
      "func": "approve_case_change",
-     "line": 3064,
+     "line": 3081,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/approve"
     },
     {
      "func": "reject_case_change",
-     "line": 3112,
+     "line": 3129,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/reject"
     },
     {
      "func": "list_case_stages_normalized",
-     "line": 3346,
+     "line": 3363,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "create_case_stage",
-     "line": 3364,
+     "line": 3381,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "update_case_stage",
-     "line": 3393,
+     "line": 3410,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "delete_case_stage",
-     "line": 3447,
+     "line": 3464,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "reorder_case_stages",
-     "line": 3488,
+     "line": 3505,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/stages/reorder"
     },
     {
      "func": "add_stage_assignee",
-     "line": 3512,
+     "line": 3529,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees"
     },
     {
      "func": "remove_stage_assignee",
-     "line": 3540,
+     "line": 3557,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}"
     },
     {
      "func": "toggle_stage_dependency",
-     "line": 3563,
+     "line": 3580,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}"
     },
     {
      "func": "add_stage_visit",
-     "line": 3596,
+     "line": 3613,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits"
     },
     {
      "func": "update_stage_visit",
-     "line": 3622,
+     "line": 3639,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "delete_stage_visit",
-     "line": 3653,
+     "line": 3670,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "record_export",
-     "line": 3676,
+     "line": 3693,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 3765,
+     "line": 3782,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 3895,
+     "line": 3912,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 3938,
+     "line": 3955,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 3978,
+     "line": 3995,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 4017,
+     "line": 4034,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 4042,
+     "line": 4059,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 4083,
+     "line": 4100,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 4108,
+     "line": 4125,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 4140,
+     "line": 4157,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 4169,
+     "line": 4186,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_settlement",
-     "line": 4214,
+     "line": 4231,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/settlement"
     },
     {
      "func": "update_settlement",
-     "line": 4238,
+     "line": 4255,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/settlement"
     },
     {
      "func": "get_finance_summary",
-     "line": 4301,
+     "line": 4318,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "approve_quotation",
-     "line": 4719,
+     "line": 4736,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 4839,
+     "line": 4856,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 4924,
+     "line": 4941,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 4989,
+     "line": 5006,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5135,
+     "line": 5152,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5221,
+     "line": 5238,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5252,
+     "line": 5269,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5283,
+     "line": 5300,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5324,
+     "line": 5341,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5384,
+     "line": 5401,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5449,
+     "line": 5466,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5490,
+     "line": 5507,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5528,
+     "line": 5545,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 5998,
+     "line": 6015,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6118,
+     "line": 6135,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6186,
+     "line": 6203,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6340,
+     "line": 6357,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6354,
+     "line": 6371,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6385,
+     "line": 6402,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -9756,6 +9767,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -9952,6 +9964,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -10027,6 +10040,7 @@
     "js:static/file-preview.js",
     "js:static/legal-round.js",
     "js:static/list-sort.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
     "js:static/sidebar.js",
@@ -10090,6 +10104,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -10122,6 +10137,7 @@
     "js:js/cashier.js",
     "js:static/auth-guard.js",
     "js:static/file-preview.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -10268,6 +10284,7 @@
     "js:static/approval-return.js",
     "js:static/auth-guard.js",
     "js:static/edit-presence.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
     "js:static/sidebar.js"
@@ -10340,6 +10357,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
     "js:static/record-link.js",
@@ -10437,6 +10455,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -10479,6 +10498,7 @@
    "imports": [
     "js:static/auth-guard.js",
     "js:static/gov-lookup.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
     "js:static/record-link.js",
@@ -10526,6 +10546,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -10575,6 +10596,7 @@
     "js:static/auth-guard.js",
     "js:static/file-preview.js",
     "js:static/list-sort.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -10686,6 +10708,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -10861,6 +10884,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -10894,6 +10918,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/record-link.js",
     "js:static/sidebar.js"
@@ -11325,6 +11350,7 @@
    "imports": [
     "js:static/auth-guard.js",
     "js:static/list-sort.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -11578,6 +11604,7 @@
     "js:static/edit-presence.js",
     "js:static/file-preview.js",
     "js:static/legal-round.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
     "js:static/sidebar.js"
@@ -11624,6 +11651,7 @@
    "imports": [
     "js:static/auth-guard.js",
     "js:static/list-sort.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -11674,6 +11702,7 @@
     "js:js/reports.js",
     "js:static/auth-guard.js",
     "js:static/legal-round.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -11759,6 +11788,7 @@
     "js:static/auth-guard.js",
     "js:static/file-preview.js",
     "js:static/legal-round.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -11855,6 +11885,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -11895,6 +11926,7 @@
    "imports": [
     "js:static/auth-guard.js",
     "js:static/gov-lookup.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
     "js:static/record-link.js",
@@ -12069,6 +12101,7 @@
    "imports": [
     "js:static/auth-guard.js",
     "js:static/gov-lookup.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/privacy-notice.js",
     "js:static/record-link.js",
@@ -12167,6 +12200,7 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/motrix-date.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],

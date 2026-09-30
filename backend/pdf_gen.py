@@ -33,6 +33,22 @@ from helpers.doc_template import unapproved_banner as _unapproved_banner, inject
 
 from core import paths as _paths
 
+
+def _local_date_of(ts) -> str:
+    """時間戳字串 ⇒ 伺服器本地的 YYYY-MM-DD。帶時區的（`…Z`／`+00:00`，舊資料：前端曾用 toISOString() 存）先換成本地時區再取日期；
+    不帶時區的（本系統後端存的都是本地時間）照取前 10 碼。讀不懂 ⇒ 前 10 碼。**只改顯示，不改資料。**
+    （台灣 UTC+8：UTC 的 `2026-09-30T17:03:00Z` 是本地 10/01 01:03，直接切前 10 碼會得到 09-30。）"""
+    s = str(ts or "").strip()
+    if not s:
+        return ""
+    try:
+        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return s[:10]
+    if d.tzinfo is not None:
+        d = d.astimezone()
+    return d.strftime("%Y-%m-%d")
+
 logger = logging.getLogger(__name__)
 
 _PDF_BASE_DEFAULT = _paths.PDF_ARCHIVES["quotation"][1]
@@ -1438,7 +1454,7 @@ def _build_contractor_voucher_html(v: dict) -> str:
         )
 
     applicant_name = (v.get('approval') or {}).get('requestedByDisplay') or v.get('createdBy', '')
-    applicant_date = ((v.get('approval') or {}).get('requestedAt') or v.get('createdAt') or '')[:10]
+    applicant_date = _local_date_of((v.get('approval') or {}).get('requestedAt') or v.get('createdAt') or '')
 
     is_final = v.get('status') == '已核准'
     watermark_html = '' if is_final else (
@@ -1747,7 +1763,7 @@ def _invoice_voucher_view(v: dict) -> dict:
         "selectedItems": v.get('selectedItems') or [],
         "quoteItems": v.get('quoteItems') or [],
         "applicantName": appr.get('requestedByDisplay') or v.get('createdBy', ''),
-        "applicantDate": (appr.get('requestedAt') or v.get('createdAt') or '')[:10],
+        "applicantDate": _local_date_of(appr.get('requestedAt') or v.get('createdAt') or ''),
         "approval": appr,
         # R2（營業稅法 §7、§8）：零稅率／免稅要印出依據（款次＋說明）；R2 之前的快照沒有 taxBasis ⇒ 退回 taxNote
         "taxType": v.get('taxType') or "",

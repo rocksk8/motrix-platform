@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 916,
+  "tests": 919,
   "unmapped": 12,
   "kinds": {
    "api": 490,
-   "e2e": 215,
-   "audit": 127,
-   "unit": 84
+   "e2e": 216,
+   "audit": 128,
+   "unit": 85
   },
   "routes": 687
  },
@@ -18119,6 +18119,40 @@
     ]
    }
   },
+  "backend/tests/test_e2e_local_date_2026_10_01.py": {
+   "kind": "e2e",
+   "units": [
+    "js:static/motrix-date.js",
+    "page:pages/case-management.html",
+    "page:pages/cashier.html",
+    "page:pages/daily-tasks.html",
+    "page:pages/legal-params.html",
+    "page:pages/quotation-form.html",
+    "page:pages/reports.html",
+    "page:pages/work-log.html"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/cashier.html",
+     "frontend/pages/daily-tasks.html",
+     "frontend/pages/legal-params.html",
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/reports.html",
+     "frontend/pages/work-log.html",
+     "frontend/static/motrix-date.js"
+    ],
+    "path": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/cashier.html",
+     "frontend/pages/daily-tasks.html",
+     "frontend/pages/legal-params.html",
+     "frontend/pages/quotation-form.html",
+     "frontend/pages/reports.html",
+     "frontend/pages/work-log.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_login_enter_submits_2026_09_25.py": {
    "kind": "e2e",
    "units": [
@@ -19800,6 +19834,22 @@
     ]
    }
   },
+  "backend/tests/test_frontend_local_date_2026_10_01.py": {
+   "kind": "audit",
+   "units": [
+    "js:static/auth-guard.js",
+    "js:static/motrix-date.js"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/static/auth-guard.js",
+     "frontend/static/motrix-date.js"
+    ],
+    "path": [
+     "frontend/static/motrix-date.js"
+    ]
+   }
+  },
   "backend/tests/test_frontend_session_key_2026_09_23.py": {
    "kind": "unit",
    "units": [
@@ -20354,6 +20404,21 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_local_date_of_2026_10_01.py": {
+   "kind": "unit",
+   "units": [
+    "core:pdf_gen",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/pdf_gen.py"
+    ]
+   }
   },
   "backend/tests/test_location_fallback_rules_2026_09_23.py": {
    "kind": "api",

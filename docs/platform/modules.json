@@ -62,6 +62,7 @@
    "js:static/approval-cascade.js",
    "js:static/approval-return.js",
    "js:static/auth-guard.js",
+   "js:static/motrix-date.js",
    "js:js/module-builder-consts.js",
    "js:js/module-builder-core.js",
    "js:js/module-builder-elements.js",

@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>報價單管理 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -603,7 +604,7 @@
       summaryData: { thisMonth: 0, thisMonthTotal: 0, pending: 0, confirmed: 0, avgMargin: '—' },
 
       _computeSummary() {
-        const ym = new Date().toISOString().slice(0,7)
+        const ym = MotrixDate.thisMonth()
         const thisMonthQ         = this.quotes.filter(q => (q.quote_date || q.created_at || '').startsWith(ym))
         const thisMonthConfirmed = thisMonthQ.filter(q => q.deal_tag === '已成案' || q.deal_tag === '已結案')
         const margins            = this.quotes.filter(q => q.direct_margin_pct > 0).map(q => q.direct_margin_pct)
@@ -755,7 +756,7 @@
           const template = {
             ...src,
             quoteNo: newNo,
-            quoteDate: new Date().toISOString().slice(0, 10),
+            quoteDate: MotrixDate.today(),
             status: '草稿',
             approval: null,
             exportCount: 0,

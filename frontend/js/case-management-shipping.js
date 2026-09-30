@@ -48,7 +48,7 @@ window.CM_PARTS.push(() => ({
     },
 
     _blankShippingForm() {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = MotrixDate.today()
       return {
         quote_no: this.selected?.quote_no || '',
         ship_date: today,

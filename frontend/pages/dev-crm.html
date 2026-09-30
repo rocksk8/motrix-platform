@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>業務開發 - MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -1879,7 +1880,7 @@ function devCrmPage() {
     openLogForm() {
       this.editingLogId = null
       this.logForm = {
-        log_date: new Date().toISOString().slice(0, 10),
+        log_date: MotrixDate.today(),
         log_by: this.session.userId || 0,
         channel: '', content: '', next_action: '', status_snapshot: '',
       }

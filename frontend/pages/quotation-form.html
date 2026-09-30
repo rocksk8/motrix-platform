@@ -9,6 +9,7 @@
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
   <script src="../static/legal-round.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -2246,7 +2247,7 @@
         quoteNo: '',
         // QL13：這張單屬於哪一個據點。空字串 = 主要據點（既有安裝的行為）。
         locationId: '',
-        quoteDate: new Date().toISOString().slice(0,10),
+        quoteDate: MotrixDate.today(),
         validDays: 30,
         version: 1,
         status: '草稿',
@@ -3430,7 +3431,7 @@
           requestedBy: this.session.username,
           requestedByDisplay: this.session.displayName || this.session.username,
           requestedByRole: this.session.role,
-          requestedAt: new Date().toISOString(),
+          requestedAt: MotrixDate.nowIso(),      // 本地時間（後端取前 10 碼當送審日；UTC 字串會在 00:00–08:00 變前一天）
           approvedBy: null,
           approvedByDisplay: null,
           approvedAt: null,
@@ -3687,7 +3688,7 @@
         const template = {
           ...this.q,
           quoteNo: newNo || '',
-          quoteDate: new Date().toISOString().slice(0,10),
+          quoteDate: MotrixDate.today(),
           status: '草稿',
           approval: null,
           exportCount: 0,

@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>完工單 - MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -427,7 +428,7 @@
             this.prefilled = !!(this.form.site_address || this.form.recipient)
           }
         } catch {}
-        this.form.completion_date = new Date().toISOString().slice(0, 10)
+        this.form.completion_date = MotrixDate.today()
         this.form.site_manager = this.session.displayName || this.session.username || ''
         this._syncLabels()
       },
@@ -472,7 +473,7 @@
         dt.setDate(1); dt.setMonth(dt.getMonth() + m)
         const last = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate()
         dt.setDate(Math.min(day, last))
-        return dt.toISOString().slice(0, 10)
+        return MotrixDate.ymd(dt)
       },
 
       addItem() { this.form.items.push({ description: '', qty: 1, unit: '式', status: '完成', notes: '' }); this.dirty = true },

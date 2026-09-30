@@ -88,7 +88,7 @@ window.CM_PARTS.push(() => ({
       this.xe.items.push({
         id: null, category: (this.xe.categories[0] || '其他'), description: '',
         qty: 1, unit: '', unitCost: 0, totalCost: 0, note: '',
-        expenseDate: new Date().toISOString().slice(0, 10), docNo: '',
+        expenseDate: MotrixDate.today(), docNo: '',
         payerUsername: '', payerName: '',
         createdByName: this.session.displayName || this.session.username || '',
         createdByInferred: false, createdAt: '', updatedAt: '', updatedByName: '',
