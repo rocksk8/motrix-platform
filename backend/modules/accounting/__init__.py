@@ -9,6 +9,7 @@ from core.registry import ModuleSpec
 
 from modules.accounting import attachments_catalog
 from modules.accounting.ledger import auto_run as _auto_run
+from modules.accounting.ledger import custom_events as _custom_events
 from modules.accounting.ledger import source_status as _source_status
 from modules.accounting.api import account_items, accounting_export, ledger_annotations, ledger_closing, ledger_engine, ledger_periods, ledger_reports, ledger_requests, ledger_settings, ledger_statements, ledger_tax, voucher_providers, vouchers
 
@@ -23,6 +24,8 @@ MODULE = ModuleSpec(
     providers={
         # IP-2：M07 獎金傳票草稿與科目檢查
         ("voucher.draft", "accounting"): voucher_providers._provide_voucher_draft,
+        # IP-GL1：自訂模組單據入帳（C7；來源＝L1 建構器 helpers/custom_finance.gl_lines，鍵 custom_modules）
+        ("gl.events", "custom_modules"): _custom_events.gl_events,
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
         ("attachments.catalog", "accounting"): attachments_catalog._AccountingCatalog,
         ("voucher.account_check", "accounting"): accounting_export.validate_account_code,

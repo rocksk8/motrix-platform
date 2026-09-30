@@ -454,6 +454,7 @@
     "mod:accounting/api/ledger_closing",
     "mod:accounting/ledger/auto_run",
     "mod:accounting/ledger/closing",
+    "mod:accounting/ledger/custom_events",
     "mod:accounting/ledger/export",
     "mod:accounting/api/ledger_settings",
     "mod:accounting/ledger/fs_lines",
