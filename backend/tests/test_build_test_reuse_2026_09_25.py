@@ -132,5 +132,7 @@ def test_every_red_exit_from_the_test_stage_is_recorded_before_it_leaves():
         before = section[:i]
         # 「最後一次跑 pytest」到這個 Fail 之間，必須先記錄過結果
         last_run = before.rfind("-m pytest")
+        if last_run < 0 and any(k in section[i:i + 80] for k in ("測試日期", "收集不決定")):
+            continue        # 2026-10-01：測試階段之前的前置檢查（-ClockDate 格式、收集決定性）——pytest 還沒跑，沒有結果可記
         assert last_run >= 0 and "Record-TestResult" in before[last_run:], \
             "這個 Fail 之前沒有先記錄非綠：…%s" % section[i:i + 60]
