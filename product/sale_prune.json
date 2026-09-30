@@ -8,7 +8,8 @@
     ".gitattributes",
     ".gitignore",
     "backend/pytest.ini",
-    "tools/platform/**"
+    "tools/platform/**",
+    "product/sale_docs/**"
   ],
   "keep": [
     "tools/platform/upgrade.py",
@@ -38,7 +39,8 @@
     "tools/platform/fail_stream.py",
     "tools/platform/modtest.py",
     "tools/platform/*drill*.py",
-    "backend/tests/**"
+    "backend/tests/**",
+    "product/sale_docs/**"
   ],
   "cuts": [
     {
@@ -51,5 +53,15 @@
       "name": "is-our-install",
       "stub": "def _is_our_install(profile: dict) -> bool:\n    return False          # sale 包：沒有「本公司安裝」這回事，一律不回填"
     }
-  ]
+  ],
+  "replace": {
+    "DEPLOY.md": "product/sale_docs/DEPLOY.md",
+    "DR-SOP.md": "product/sale_docs/DR-SOP.md",
+    "HTTPS-DEPLOY-CHECKLIST.md": "product/sale_docs/HTTPS-DEPLOY-CHECKLIST.md"
+  },
+  "require_text": {
+    "DEPLOY.md": "<安裝目錄>",
+    "DR-SOP.md": "<安裝目錄>",
+    "HTTPS-DEPLOY-CHECKLIST.md": "<安裝目錄>"
+  }
 }
