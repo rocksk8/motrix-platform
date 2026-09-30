@@ -75,6 +75,8 @@
     .cr-tier .ok { color: var(--success); }
     .cr-tier .cur { color: var(--accent); font-weight: 700; }
     .cr-ref-q { margin-bottom: 4px; }
+    .cr-ref-list { max-height: 180px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+    .cr-opt { display: flex; gap: 6px; align-items: center; padding: 2px 0; font-size: 13px; }
     .cr-ref-why { font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; line-height: 1.5; }
     .cr-log { font-size: 12px; color: var(--text-secondary); line-height: 1.8; }
     .cr-frame { width: 100%; height: 520px; border: 1px solid var(--border-light); border-radius: 8px; background: #fff; }
@@ -255,7 +257,19 @@
                         <option value="false">否</option>
                       </select>
                     </template>
-                    <template x-if="f.type === 'ref'">
+                    <template x-if="f.type === 'ref' && f.multiple">
+                      <!-- 複選參照（人員／部門）：可搜尋的核取清單；值＝代號陣列 -->
+                      <div class="cr-ref" :data-ref-multi="f.key" :data-ref-state="refState[f.key] || 'loading'">
+                        <input type="search" class="cr-ref-q" :id="'cr-ref-q-' + f.key" :value="refQuery[f.key] || ''" placeholder="搜尋…" @input="searchRef(f.key, $event.target.value)">
+                        <div class="cr-ref-list">
+                          <template x-for="o in refMultiChoices(f.key)" :key="String(o.value)">
+                            <label class="cr-opt"><input type="checkbox" :data-ref-opt="String(o.value)" :checked="refPicked(f, o.value)" @change="toggleRef(f, o.value, $event.target.checked)"> <span x-text="o.label"></span></label>
+                          </template>
+                        </div>
+                        <div class="cr-ferr" x-show="refState[f.key] === 'denied' || refState[f.key] === 'error'" x-text="refState[f.key] === 'denied' ? '您沒有讀取這個清單的權限' : '讀取選項失敗'"></div>
+                      </div>
+                    </template>
+                    <template x-if="f.type === 'ref' && !f.multiple">
                       <!-- 參照欄：選項來自 GET …/ref-options/{欄位}（可搜尋）；403 才退回手動輸入並說明原因 -->
                       <div class="cr-ref" :data-ref-field="f.key" :data-ref-state="refState[f.key] || 'loading'">
                         <template x-if="refState[f.key] === 'denied'">
@@ -330,7 +344,7 @@
                     <template x-for="f in sec.fields" :key="f.key">
                       <div :data-view-field="f.key" :class="{ 'cr-f--wide': f.type === 'table' }">
                         <span x-text="f.label || f.key"></span>
-                        <template x-if="f.type !== 'table'"><b x-text="fmt(record.data[f.key]) || '—'"></b></template>
+                        <template x-if="f.type !== 'table'"><b x-text="fmt(f.type === 'ref' && record.refLabels && record.refLabels[f.key] !== undefined ? record.refLabels[f.key] : record.data[f.key]) || '—'"></b></template>
                         <template x-if="f.type === 'table'">
                           <div class="cr-tbl"><table>
                             <thead><tr><template x-for="c in (f.columns || [])" :key="c.key"><th x-text="c.label || c.key"></th></template></tr></thead>
@@ -613,6 +627,20 @@
           }
           return opts
         },
+        // 複選參照：值是代號陣列；已選但不在這次搜尋結果的仍列出（同 refChoices 的理由）
+        refPicked(f, v) { return (this.values[f.key] || []).some(function (x) { return String(x) === String(v) }) },
+        toggleRef(f, v, on) {
+          var cur = Array.isArray(this.values[f.key]) ? this.values[f.key].filter(function (x) { return String(x) !== String(v) }) : []
+          if (on) cur.push(String(v))
+          this.values[f.key] = cur
+        },
+        refMultiChoices(fk) {
+          var opts = this.refOptions[fk] || []
+          var picked = Array.isArray(this.values[fk]) ? this.values[fk] : []
+          var extra = picked.filter(function (p) { return !opts.some(function (o) { return String(o.value) === String(p) }) })
+                            .map(function (p) { return { value: p, label: String(p) } })
+          return extra.concat(opts)
+        },
         refHint(t) { return t === 'users' ? '輸入帳號' : (t === 'customers' ? '輸入客戶編號' : '輸入單號') },
 
         // ── 新增／編輯 ──
@@ -622,7 +650,7 @@
           ;(def.fields || []).forEach(function (f) {
             if (f.type === 'formula') return
             if (f.type === 'table') { v[f.key] = self.rowsOf(f, null); return }
-            if (f.type === 'checkboxes' || f.type === 'multiselect') { v[f.key] = []; return }
+            if (f.type === 'checkboxes' || f.type === 'multiselect' || (f.type === 'ref' && f.multiple)) { v[f.key] = []; return }
             if (f.type === 'daterange') { v[f.key] = { from: '', to: '' }; return }
             // `default` 是 {"$": token} ⇒ 由伺服器在建立時決定（前端只留空），不當成固定值
             v[f.key] = (f.default !== undefined && f.default !== null && typeof f.default !== 'object') ? f.default : ''

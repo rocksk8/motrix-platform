@@ -35,7 +35,7 @@ FINANCE_KINDS = ("income", "expense")
 DEFAULT_TOKENS = ("today", "now", "requester")
 
 #: 建構器的元件分組（`fieldElements[].group` 用它）
-ELEMENT_GROUPS = [{"id": "basic", "label": "基礎元件"}, {"id": "layout", "label": "版面元件"}, {"id": "advanced", "label": "進階元件"}]
+ELEMENT_GROUPS = [{"id": "basic", "label": "基礎元件"}, {"id": "layout", "label": "版面元件"}, {"id": "org", "label": "組織元件"}, {"id": "advanced", "label": "進階元件"}]
 #: 元件列（建構器左欄）：一個元件＝一個型別＋預設屬性（preset）。型別本身一律要在 FIELD_TYPES 內。
 FIELD_ELEMENTS = [
     {"id": "text", "type": "text", "label": "單行文字", "group": "basic", "preset": {}},
@@ -55,6 +55,10 @@ FIELD_ELEMENTS = [
             {"key": "price", "label": "單價", "type": "number"}, {"key": "amt", "label": "金額", "type": "formula", "formula": "qty * price"}]}},
     {"id": "formula", "type": "formula", "label": "公式（唯讀）", "group": "advanced", "preset": {}},
     {"id": "ref", "type": "ref", "label": "參照", "group": "advanced", "preset": {}},
+    {"id": "user", "type": "ref", "label": "人員（單選）", "group": "org", "preset": {"target": "users"}},
+    {"id": "users", "type": "ref", "label": "人員（複選）", "group": "org", "preset": {"target": "users", "multiple": True}},
+    {"id": "dept", "type": "ref", "label": "部門（單選）", "group": "org", "preset": {"target": "departments"}},
+    {"id": "depts", "type": "ref", "label": "部門（複選）", "group": "org", "preset": {"target": "departments", "multiple": True}},
 ]
 #: 每個型別在屬性面板可設的屬性（面板依它產生；kind：text／int／number／bool／options／columns）
 FIELD_ATTRS = {
@@ -69,7 +73,7 @@ FIELD_ATTRS = {
     "select": [("options", "選項（一行一個）", "options"), ("allowOther", "允許「其他」自己輸入", "bool")],
     "multiselect": [("options", "選項（一行一個）", "options"), ("allowOther", "允許「其他」自己輸入", "bool"),
                     ("minSelect", "至少選幾項", "int"), ("maxSelect", "最多選幾項", "int")],
-    "checkbox": [], "formula": [], "ref": [],
+    "checkbox": [], "formula": [], "ref": [("multiple", "可複選", "bool")],
     "table": [("columns", "欄位", "columns"), ("minRows", "最少列數", "int"), ("maxRows", "最多列數", "int"), ("addLabel", "新增列按鈕文字", "text")],
 }
 
@@ -172,6 +176,7 @@ def ref_targets() -> dict:
 # 與 routers/customers.py 的讀取權限相同：不可以經參照欄讀到自己沒有權限看的客戶清單
 register_ref_target("customers", "customers", "name", modules=("customer", "case_manage", "dev_crm", "procurement"))
 register_ref_target("users", "users", "display_name", "username")
+register_ref_target("departments", "departments", "name")      # 組織元件（部門）：登入即可讀部門名稱
 
 
 # ── 定義驗證（每一項帶位置）────────────────────────────────────────────────
@@ -290,6 +295,8 @@ def _validate_fields(fields):
             target = str(f.get("target") or "")
             if not (target in _REF_TARGETS or (target.startswith("custom:") and KEY_RE.match(target[7:]))):
                 out.append(_p(p + ".target", "不認得的參照對象 %r（可用：%s、custom:<模組>）" % (target, "、".join(sorted(_REF_TARGETS)))))
+            if "multiple" in f and not isinstance(f["multiple"], bool):
+                out.append(_p(p + ".multiple", "multiple 要是 true／false"))
         elif t == "table":
             out += _validate_table(p, f)
         else:
@@ -661,7 +668,9 @@ def clean_values(conn, body: dict, values) -> tuple:
     """回 `(乾淨的值（含公式結果）, 錯誤, 丟掉的鍵)`。公式欄位不收輸入（送了也丟掉並回報）。"""
     values = values if isinstance(values, dict) else {}
     tables = [f for f in _input_fields(body) if f.get("type") == "table"]
-    plain = [dict(f, type="text") if f.get("type") == "ref" else f for f in _input_fields(body) if f.get("type") != "table"]
+    multi_refs = [f for f in _input_fields(body) if f.get("type") == "ref" and f.get("multiple")]
+    plain = [dict(f, type="text") if f.get("type") == "ref" else f for f in _input_fields(body)
+             if f.get("type") != "table" and not (f.get("type") == "ref" and f.get("multiple"))]
     plain = [{k: v for k, v in f.items() if not (k == "default" and isinstance(v, dict))} for f in plain]      # token 預設在 create_record 換掉
     out, errors, dropped = _cf.clean(values, {"fields": plain})
     dropped = [k for k in dropped if k not in {t["key"] for t in tables}]
@@ -670,12 +679,54 @@ def clean_values(conn, body: dict, values) -> tuple:
         errors += terr
         if rows:
             out[t["key"]] = rows
+    for f in multi_refs:
+        picked, rerrs = _clean_multi_ref(conn, f, values.get(f["key"]))
+        errors += rerrs
+        if picked:
+            out[f["key"]] = picked
     for f in _input_fields(body):
-        if f.get("type") == "ref" and out.get(f["key"]) is not None:
+        if f.get("type") == "ref" and not f.get("multiple") and out.get(f["key"]) is not None:
             if not _ref_exists(conn, f["target"], out[f["key"]]):
                 errors.append({"key": f["key"], "message": "%s：參照不到 %s" % (f.get("label") or f["key"], out[f["key"]])})
     computed, ferrors = compute(body, out)
     return computed, errors + ferrors, dropped
+
+
+def _clean_multi_ref(conn, f, raw):
+    """複選參照（人員／部門）⇒ (去重後的代號清單, 錯誤)。每一個都要參照得到；必填＝至少一個；不是清單 ⇒ 錯。"""
+    label = f.get("label") or f["key"]
+    if raw is None or raw == "" or raw == []:
+        return [], ([{"key": f["key"], "message": "%s：必填" % label}] if f.get("required") else [])
+    if not isinstance(raw, list) or any(isinstance(x, (dict, list, bool)) or x is None for x in raw):
+        return [], [{"key": f["key"], "message": "%s：要是代號清單" % label}]
+    seen, picked = set(), []
+    for x in raw:
+        s = str(x).strip()
+        if s and s not in seen:
+            seen.add(s)
+            picked.append(s)
+    errors = [{"key": f["key"], "message": "%s：參照不到 %s" % (label, s)} for s in picked if not _ref_exists(conn, f["target"], s)]
+    return picked, errors
+
+
+def ref_labels(conn, body: dict, data: dict) -> dict:
+    """單據裡參照欄的顯示名稱 `{欄位: 名稱或名稱清單}`（單據檢視用；查不到的代號原樣保留）。"""
+    out = {}
+    for f in body.get("fields", []):
+        if not isinstance(f, dict) or f.get("type") != "ref" or data.get(f["key"]) in (None, "", []):
+            continue
+        v = data[f["key"]]
+        one = lambda x, t=f["target"]: _ref_label(conn, t, x)
+        out[f["key"]] = [one(x) for x in v] if isinstance(v, list) else one(v)
+    return out
+
+
+def _ref_label(conn, target, value):
+    if target.startswith("custom:") or target not in _REF_TARGETS:
+        return str(value)
+    table, label, idc = _REF_TARGETS[target]
+    r = conn.execute("SELECT %s AS l FROM %s WHERE %s=?" % (label, table, idc), (value,)).fetchone()
+    return (r["l"] if r and r["l"] else str(value))
 
 
 def _ref_exists(conn, target, value) -> bool:
@@ -738,6 +789,8 @@ def _sample_of(f):
                 "to": "2026-09-26T18:00" if f.get("withTime") else "2026-09-26"}
     if t == "date" and f.get("withTime"):
         return "2026-09-25T09:00"
+    if t == "ref" and f.get("multiple"):
+        return ["範例"]
     return _SAMPLES.get(t, "範例")
 
 
@@ -973,6 +1026,7 @@ def get_record(conn, module_key, record_no) -> dict:
     rec["view"] = _view(d["body"], rec, rec["data"])
     # 單據凍結在建立時的定義版本 ⇒ 畫面的標籤、欄位與按鈕要用這一版，不是最新版
     rec["definition"] = d["body"]
+    rec["refLabels"] = ref_labels(conn, d["body"], rec["data"])
     rec["log"] = [dict(r) for r in conn.execute("SELECT action, from_state, to_state, by_user, note, at FROM custom_record_log "
                                                  "WHERE record_id=? ORDER BY id", (rec["id"],)).fetchall()]
     return rec

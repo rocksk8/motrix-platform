@@ -87,9 +87,9 @@ def test_palette_groups_search_and_presets(live_server, make_user, new_context):
     page.wait_for_function("() => !document.querySelector('#mb-palette [data-palette-element=\"text\"]')")
     page.click('#mb-palette [data-palette-group="basic"] .mb-pal__g')
     page.wait_for_selector('#mb-palette [data-palette-element="text"]')
-    page.fill("#mb-palette-q", "單選")                                           # 搜尋：單選、下拉單選
+    page.fill("#mb-palette-q", "單選")                                           # 搜尋：單選、下拉單選、人員（單選）、部門（單選）
     els = page.eval_on_selector_all("[data-palette-element]", "els => els.map(e => e.dataset.paletteElement)")
-    assert set(els) == {"radio", "select"}, els
+    assert set(els) == {"radio", "select", "user", "dept"}, els                 # 人員／部門（單選）也含「單選」；複選、文字等不在
     page.fill("#mb-palette-q", "")
     for eid in ("datetime", "radio", "table", "textarea"):
         page.click('#mb-palette [data-palette-element="%s"]' % eid)

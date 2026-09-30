@@ -114,3 +114,47 @@ def test_group_columns_apply_on_the_runtime_form_and_narrow_screens_collapse_to_
     assert "cr-grid--n" not in page.evaluate("() => document.querySelectorAll('#cr-form .cr-grid')[2].className")   # 9 不合法 ⇒ 自動
     page.set_viewport_size({"width": 390, "height": 800})
     assert page.evaluate(tracks, 0) == 1
+
+
+@pytest.mark.e2e
+def test_org_elements_multi_pick_people_and_department_saved_and_shown_by_name(live_server, make_user, new_context, client):
+    """組織元件：人員複選（核取清單、可搜尋）＋部門單選；存檔後 DB 是代號清單、單據檢視顯示名稱；
+    必填的複選不選 ⇒ 擋下（DB 不多一張單）。"""
+    boss = make_user(username="b3o_boss", role="superadmin")
+    make_user(username="b3o_amy", role="user")
+    make_user(username="b3o_bob", role="user")
+    tok = client.post("/api/auth/login", json={"username": boss[0], "password": boss[1]}).json()["token"]
+    h = {"Authorization": "Bearer " + tok}
+    key = "b3org"
+    body = {"name": "組織", "permission": "custom." + key, "numbering": {"prefix": "OG", "period": "none", "digits": 3},
+            "fields": [{"key": "team", "label": "承辦人員", "type": "ref", "target": "users", "multiple": True, "required": True, "dataClass": "T1"},
+                       {"key": "note", "label": "備註", "type": "text", "required": False, "dataClass": "T1"}],
+            "workflow": {"initial": "draft", "states": [{"key": "draft", "label": "草稿"}, {"key": "done", "label": "完成", "final": True}],
+                         "transitions": [{"key": "submit", "label": "送出", "from": "draft", "to": "done"}]}}
+    assert client.put("/api/definitions/custom_module/%s/draft" % key, headers=h, json={"body": body}).json()["problems"] == []
+    assert client.post("/api/definitions/custom_module/%s/publish" % key, headers=h, json={}).status_code == 200
+
+    errors = []
+    page = new_context().new_page()
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    inject_login(page, live_server, boss[0], boss[1])
+    page.goto(live_server + "/pages/custom-records.html?key=" + key)
+    page.click("#cr-new")
+    page.wait_for_selector('[data-ref-multi="team"][data-ref-state="ok"]', timeout=15000)
+    page.click("#cr-save")                                                    # 必填沒選 ⇒ 擋
+    page.wait_for_selector('[data-field-error="team"]', state="visible", timeout=10000)
+    assert _q("SELECT COUNT(*) AS n FROM custom_records WHERE module_key=?", (key,))[0]["n"] == 0
+    page.fill("#cr-ref-q-team", "b3o_")                                       # 搜尋縮小清單
+    page.wait_for_function("() => document.querySelectorAll('[data-ref-multi=\"team\"] [data-ref-opt]').length === 3", timeout=10000)
+    page.check('[data-ref-multi="team"] [data-ref-opt="b3o_amy"]')
+    page.check('[data-ref-multi="team"] [data-ref-opt="b3o_bob"]')
+    page.uncheck('[data-ref-multi="team"] [data-ref-opt="b3o_bob"]')
+    page.check('[data-ref-multi="team"] [data-ref-opt="b3o_bob"]')
+    page.click("#cr-save")
+    page.wait_for_selector("#cr-record", timeout=15000)
+    row = _q("SELECT data_json FROM custom_records WHERE module_key=?", (key,))[0]
+    assert json.loads(row["data_json"])["team"] == ["b3o_amy", "b3o_bob"]
+    names = {r["username"]: r["display_name"] for r in _q("SELECT username, display_name FROM users WHERE username IN ('b3o_amy','b3o_bob')")}
+    text = page.locator("body").inner_text()
+    assert names["b3o_amy"] in text and names["b3o_bob"] in text
+    assert not errors, errors

@@ -381,6 +381,7 @@
    "published_modules": "def(conn)",
    "queue_items": "def(conn)",
    "rebuild_index": "def(conn)",
+   "ref_labels": "def(conn, body, data)",
    "ref_options": "def(conn, target, q=…, limit=…)",
    "ref_target_modules": "def(target)",
    "ref_targets": "def()",
