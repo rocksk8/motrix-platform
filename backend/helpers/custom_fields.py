@@ -54,7 +54,7 @@ def validate_definition(body: dict, key: str = "", core_fields=(), types=TYPES) 
             opts = f.get("options")
             if not isinstance(opts, list) or not opts or not all(isinstance(o, str) and o for o in opts) \
                     or len(set(opts)) != len(opts):
-                problems.append({"path": p + ".options", "message": "必須有至少一個選項（不可空白、不可重複）"})
+                problems.append({"path": p + ".options", "message": "下拉選單必須有至少一個選項" if t == "select" else "選項必須有至少一個（不可空白、不可重複）"})
         if t in ("text", "textarea") and f.get("maxLength") is not None:
             ml = f.get("maxLength")
             if isinstance(ml, bool) or not isinstance(ml, int) or not 1 <= ml <= MAX_TEXT:

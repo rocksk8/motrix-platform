@@ -79,6 +79,8 @@ EXEMPT = {
         "純預覽：用樣本資料產生 HTML，不存檔",
     ("custom_records.py", "POST", "/api/custom-modules/formula/check"):
         "純檢查：公式語法檢查回錯誤位置，不存檔",
+    ("custom_records.py", "POST", "/api/custom/{key}/compute"):
+        "純試算：填單時即時算公式與明細列（與存檔同一套 clean_values），不存檔",
     ("custom_records.py", "POST", "/api/custom-modules/numbering/preview"):
         "純預覽：回編號範例，不佔用流水號、不存檔",
     ("custom_records.py", "POST", "/api/custom-modules/{key}/output/preview"):
