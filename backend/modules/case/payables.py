@@ -93,16 +93,18 @@ class _Payables:
             " WHERE id=? AND status='已核准' AND COALESCE(paid_date, '')=''",
             (paid_date, datetime.now().isoformat(timespec="seconds"),
              user.get("display_name") or user.get("username") or "", rm["actual"], rm["fee"], rm["review"], exp_id))
-        r = conn.execute("SELECT id, quote_no, status, paid_date, total_cost FROM case_extra_expenses WHERE id=?",
-                         (exp_id,)).fetchone()
+        r = conn.execute("SELECT id, quote_no, status, paid_date, total_cost, category, description, payer_name"
+                         " FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
         if cur.rowcount == 0:
             if not r:
                 raise LookupError("找不到這筆請款")
             if r["status"] != "已核准":
                 raise ValueError("這筆請款還沒核准，不能登錄付款")
             raise ValueError("這筆請款已被登錄付款日 %s（可能是另一位出納剛登錄）" % (r["paid_date"] or ""))
+        # title／payee（2026-09-30 加欄位、相容）：出納登錄付款後推行事曆「支出付款」用
         return {"quoteNo": r["quote_no"], "key": str(exp_id), "amount": float(r["total_cost"] or 0), "paidDate": paid_date,
-                "actual": rm["actual"], "fee": rm["fee"], "diff": rm["diff"], "remitReview": rm["review"]}
+                "actual": rm["actual"], "fee": rm["fee"], "diff": rm["diff"], "remitReview": rm["review"],
+                "title": "%s｜%s" % (r["category"] or "其他", r["description"] or ""), "payee": r["payer_name"] or ""}
 
 
 # ── W1（2026-09-30）：匯款實付／手續費／差額審核（規則同 M04 `modules/subcontract/remit.py`，模組之間不互相 import ⇒ 各寫一份）──

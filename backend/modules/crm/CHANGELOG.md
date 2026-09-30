@@ -1,5 +1,7 @@
 # 業務開發 更新紀錄
 
+## 1.0.10 — 2026-09-30（暫用號，列車取號；wip/cal-toggle 行事曆推送可選）
+- 行事曆「業務開發案件更新」（預設關，事件種類開關在 L1）：新增開發紀錄 commit 之後推 `push_event_for_module('dev_case_update', …)` ⇒ 標題「○○案件更新」、說明＝紀錄內容（管道／內容／下一步）、同一案件同一天合併。題 `modules/crm/tests/test_dev_case_update_calendar_2026_09_30.py`
 ## 1.0.9 — 2026-09-30（暫用號，列車取號；wip/sec-p0 安全修正 P0）
 - 安全修正 P0：新增提供者 `uploads.path_access`／`crm`（IP-104，`api._DevLogPathAccess`）：`dev_logs/<案 id>/` 的附件只簽給 `GET /dev-cases/{id}/logs` 放行的人（admin+ 或 dev_crm，且 row_access `dev_case`）。原本任何登入者都拿得到簽章。
 
