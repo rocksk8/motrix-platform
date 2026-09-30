@@ -82,7 +82,8 @@ def test_summary_from_posted_lines_and_calc(conn, fake):
     by = {r["tax_code"]: r for r in s["rows"]}
     assert (by["OUT-5"]["amount"], by["OUT-5"]["tax"]) == (10000, 500) and by["OUT-0"]["zero_amount"] == 3000
     assert (by["IN-5"]["amount"], by["IN-5"]["tax"]) == (2000, 100)
-    assert s["calc"] == {"101": 500, "107": 100, "108": 0, "110": 100, "111": 400, "112": 0, "25": 13000}
+    assert {k: s["calc"][k] for k in ("101", "106", "107", "108", "110", "111", "112", "25")} == {"101": 500, "106": 500, "107": 100, "108": 0, "110": 100, "111": 400, "112": 0, "25": 13000}
+    assert (s["calc"]["21"], s["calc"]["22"], s["calc"]["23"], s["calc"]["44"], s["calc"]["45"]) == (10000, 500, 3000, 2000, 100)     # 官方合計列
     assert s["reconciled"] is True and [c["ok"] for c in s["checks"][:2]] == [True, True]
     assert by["OUT-5"]["field_amt"] == "5" and by["IN-5"]["field_tax"] == "29"
 
@@ -177,3 +178,70 @@ def test_api_flag_gate_summary_export_and_settlement(client, conn, fake, make_us
     s = client.post("/api/ledger/tax401/settlement", headers=h, json={"year": 2178, "period": 1})
     assert s.status_code == 200 and s.json()["payable"] == 400
     assert client.post("/api/ledger/tax401/settlement", headers=h, json={"year": 2178, "period": 4}).status_code == 400
+
+
+# ── 官方欄位代號（財政部《營業稅電子資料申報繳稅作業要點》附件六，113/04/12 令）────────────────────────
+
+OFFICIAL = {   # 代號 → 附件六的欄項名稱（逐字抄自官方檔案格式）
+    "1": "三聯式發票", "2": "三聯式發票", "5": "收銀機發票(三聯式)及電子發票", "6": "收銀機發票(三聯式)及電子發票", "9": "二聯式收銀機(二聯式)發票", "10": "二聯式收銀機(二聯式)發票",
+    "17": "退回及折讓", "18": "退回及折讓", "7": "非經海關出口應附證明文件者", "28": "進貨及費用", "29": "進貨及費用", "30": "固定資產", "31": "固定資產",
+    "40": "進貨及費用", "41": "進貨及費用", "101": "本(期)月銷項稅額合計", "107": "得扣抵進項稅額合計", "108": "上期(月)累積留抵稅額", "110": "小計(7+8+9)",
+    "111": "本期(月)應實繳稅額(6-10)", "112": "本期(月)申報留抵稅額(10-6)",
+}
+
+
+def test_default_map_uses_only_official_codes_in_the_right_columns():
+    by = {(c, k): (a, t, z) for c, k, _side, a, t, z, _n in T.DEFAULT_MAP}
+    assert by[("OUT-5", "einvoice")] == ("5", "6", "") and by[("OUT-5", "triplicate")] == ("1", "2", "") and by[("OUT-5", "duplicate")] == ("9", "10", "")
+    assert by[("OUT-0", "")] == ("", "", "7") and by[("OUT-ADJ", "")] == ("17", "18", "")          # 7＝零稅率(非經海關)；19 是零稅率退回折讓，不可放進應稅退回折讓
+    assert by[("IN-5", "")] == ("28", "29", "") and by[("IN-FA", "")] == ("30", "31", "") and by[("IN-ADJ", "")] == ("40", "41", "")
+    used = {x for v in by.values() for x in v if x}
+    assert used <= set(T.LINE_NAMES), sorted(used - set(T.LINE_NAMES))                             # 每個用到的代號都有官方名稱
+    for code, name in OFFICIAL.items():
+        assert name in T.LINE_NAMES[code], (code, T.LINE_NAMES[code])                              # 名稱與官方欄項名稱一致
+
+
+def test_ensure_map_repairs_early_wrong_seeds_but_keeps_user_edits(conn):
+    conn.execute("DELETE FROM gl_tax401_map")
+    conn.execute("INSERT INTO gl_tax401_map(tax_code, invoice_kind, side, field_amt, field_tax, field_zero, note) VALUES ('OUT-5','einvoice','OUT','5','6','7','舊')")
+    conn.execute("INSERT INTO gl_tax401_map(tax_code, invoice_kind, side, field_amt, field_tax, field_zero, note) VALUES ('OUT-0','einvoice','OUT','','','7','舊')")
+    conn.execute("INSERT INTO gl_tax401_map(tax_code, invoice_kind, side, field_amt, field_tax, field_zero, note) VALUES ('OUT-ADJ','','OUT','17','18','19','舊')")
+    conn.execute("INSERT INTO gl_tax401_map(tax_code, invoice_kind, side, field_amt, field_tax, field_zero, note) VALUES ('IN-5','','IN','88','89','','使用者自訂')")
+    T.ensure_map(conn)
+    conn.commit()
+    got = {(r["tax_code"], r["invoice_kind"]): (r["field_amt"], r["field_tax"], r["field_zero"]) for r in conn.execute("SELECT * FROM gl_tax401_map")}
+    assert got[("OUT-5", "einvoice")] == ("5", "6", "") and ("OUT-0", "einvoice") not in got and got[("OUT-0", "")] == ("", "", "7")
+    assert got[("OUT-ADJ", "")] == ("17", "18", "") and got[("IN-5", "")] == ("88", "89", "")      # 使用者改過的列不動
+
+
+def test_default_invoice_medium_selects_the_row(conn, fake):
+    _run_and_post(conn, fake, [_ev("sale", "2178-01-10")], "2178-01-01", "2178-02-28")
+    conn.execute("INSERT OR REPLACE INTO gl_settings(key, value) VALUES ('default_invoice_medium', 'triplicate')")
+    conn.commit()
+    row = [r for r in T.summarize(conn, 2178, 1)["rows"] if r["tax_code"] == "OUT-5"][0]
+    assert (row["field_amt"], row["field_tax"], row["invoice_kind"]) == ("1", "2", "triplicate")
+    conn.execute("DELETE FROM gl_settings WHERE key='default_invoice_medium'")
+    conn.commit()
+    assert [r for r in T.summarize(conn, 2178, 1)["rows"] if r["tax_code"] == "OUT-5"][0]["field_amt"] == "5"          # 預設＝電子發票
+
+
+def test_adjustments_reduce_sales_and_output_tax_like_the_paper_form(conn, fake):
+    adj = _ev("sale", "2178-01-20", source_type="t_adj")
+    adj["tax_code"] = "OUT-ADJ"
+    adj["lines"] = [{"role": "SALES_RETURN", "side": "D", "amount": 2000}, {"role": "OUTPUT_TAX", "side": "D", "amount": 100}, {"role": "AR", "side": "C", "amount": 2100}]
+    _run_and_post(conn, fake, [_ev("sale", "2178-01-10"), adj], "2178-01-01", "2178-02-28")
+    s = T.summarize(conn, 2178, 1)
+    assert s["calc"]["101"] == 400 and s["calc"]["21"] == 10000 - 2000 and s["calc"]["22"] == 500 - 100     # 退回及折讓為減項（代號17／18）
+
+
+def test_summary_and_export_cite_the_official_source_and_list_only_unverified_items(conn, fake):
+    _run_and_post(conn, fake, [_ev("sale", "2178-01-10")], "2178-01-01", "2178-02-28")
+    s = T.summarize(conn, 2178, 1)
+    assert "附件六" in s["official_source"] and "1130001073" in s["official_source"] and s["line_names"]["101"] == "本(期)月銷項稅額合計"
+    assert len(s["unverified"]) == len(T.UNVERIFIED) and any("代號 115" in u for u in s["unverified"])
+    from modules.accounting.ledger import export as EX
+    import io as _io
+    from openpyxl import load_workbook
+    ws = load_workbook(_io.BytesIO(EX.tax401_workbook(s))).active
+    text = " ".join(str(c.value) for row in ws.iter_rows() for c in row if c.value is not None)
+    assert "5：應稅銷售額—收銀機發票(三聯式)及電子發票" in text and "尚未核實" in text and "附件六" in text
