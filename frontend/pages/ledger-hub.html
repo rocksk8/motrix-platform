@@ -215,8 +215,8 @@
             <template x-for="f in features" :key="f.key">
               <tr :data-testid="'hb-row-' + f.key">
                 <td x-text="f.label"></td><td x-text="f.batch"></td><td x-text="f.description"></td>
-                <td><span class="hb-tag" :class="{on: f.enabled}" x-text="f.enabled ? '已開啟' : '未開啟'"></span></td>
-                <td style="text-align:right"><button class="hb-btn" x-show="isSuper" @click="toggle(f)" x-text="f.enabled ? '關閉' : '開啟'" data-testid="hb-toggle"></button></td>
+                <td><span class="hb-tag" :class="{on: f.enabled}" x-text="f.ready ? (f.enabled ? '已開啟' : '未開啟') : '開發中'" :data-testid="'hb-status-' + f.key"></span></td>
+                <td style="text-align:right"><button class="hb-btn" x-show="isSuper" :disabled="!f.ready && !f.enabled" @click="toggle(f)" x-text="f.enabled ? '關閉' : (f.ready ? '開啟' : '尚未提供')" data-testid="hb-toggle"></button></td>
               </tr>
             </template>
           </tbody>
