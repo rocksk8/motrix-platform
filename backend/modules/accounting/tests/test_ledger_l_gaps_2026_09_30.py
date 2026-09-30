@@ -330,3 +330,13 @@ def test_engine_ignores_a_native_row_after_its_reversal_posts(conn, fake):
     rows = conn.execute("SELECT status, rev FROM gl_source_events WHERE source_key='BON-NAT-1'").fetchall()
     assert [(x[0], x[1]) for x in rows] == [("native", 1)] and res["stats"]["orphans"] == 0 and res["stats"]["drift"] == 0
     assert conn.execute("SELECT COUNT(*) FROM vouchers_all WHERE kind='auto'").fetchone()[0] == n0
+
+
+def test_reversal_draft_keeps_the_line_source_links(conn):
+    """沖轉單的分錄帶著原單的摘要來源（案件連結），案件頁『相關傳票』才列得到它。"""
+    vid, _ = _voucher(conn, status="已過帳", date="2189-10-05")
+    conn.execute("UPDATE voucher_lines SET source_type='case', source_key='MQ-SRC-1' WHERE voucher_id=? AND line_no=1", (vid,))
+    conn.commit()
+    r = _prov()(conn, summary="更正", created_by="w2", now="2189-10-06T00:00:00", reverses_voucher_id=vid, voucher_date="2189-10-06")
+    got = [(l["source_type"], l["source_key"]) for l in conn.execute("SELECT * FROM voucher_lines WHERE voucher_id=? ORDER BY line_no", (r["id"],))]
+    assert got == [("case", "MQ-SRC-1"), ("", "")]
