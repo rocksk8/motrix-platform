@@ -255,3 +255,89 @@ def test_every_registered_provider_has_the_contract_shape(client):
             assert {"label", "doc", "module"} <= set(info) and all(isinstance(v, str) and v for v in info.values())
     # 不含待核准暫存檔（設計 Q6）：沒有任何 category 以 pending 命名
     assert not any("pending" in c for c in seen)
+
+
+# ── ⑥ 單據存在、檔案在，但使用者不在允許範圍（傳票／勞報單簽回檔）────────────────────────
+# 規則（與各自的原端點相同）：傳票＝cashier／finance 模組；勞報單簽回檔＝superadmin 或 cashier。
+# 「存在＋有別的財務類模組但沒有那一個」要 404，而且與不存在同一句；有權限的人要打得開（正對照，否則「全 404」也會綠）。
+
+@pytest.fixture
+def money_docs(client, make_user, tmp_path):
+    """一張有簽回檔的勞報單、兩張各有一個附件的傳票（其中一個附件已刪）。回 (users, info)。"""
+    import db
+    import helpers.uploads as uploads
+    from modules.payroll.api import payslips as ps
+    H = {}
+    for name, role, mods in (("mn_cashier", "sales", ["cashier"]), ("mn_finance", "sales", ["finance"]),
+                             ("mn_super", "superadmin", []),
+                             ("mn_other_fin", "admin", ["payslip", "case_manage", "quotation", "procurement"]),
+                             ("mn_none", "sales", [])):
+        u, p = make_user(username=name, role=role, modules=mods)
+        H[name] = _login(client, u, p)
+    c = db.get_db()
+    try:
+        slip, fid = "PS-202609-777", "0123456789abcdef"
+        c.execute("INSERT INTO payslips (slip_no, contractor_name, income_type, gross_amount, tax_withheld, nhi_supplement,"
+                  " net_amount, slip_date, status, tax_rules_version, data_json, created_at, updated_at, signed_files_json)"
+                  " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                  (slip, "乙", "50", 30000, 0, 0, 30000, "2026-09-01", "已簽回", "2026", "{}", "n", "n",
+                   json.dumps([{"id": fid, "filename": "signed.pdf", "ext": ".pdf"}])))
+        c.commit()
+    finally:
+        c.close()
+    path = ps._signed_path(slip, fid, ".pdf")
+    open(path, "wb").write(b"%PDF-1.4 payslip")
+    vids = []
+    c = db.get_db()
+    try:
+        for n in (1, 2):
+            cur = c.execute("INSERT INTO vouchers_all(voucher_no, voucher_date, category, summary, status, created_by, created_at,"
+                            " updated_at) VALUES (?,?, '轉', 's', '草稿', 't','n','n')", ("20260901-90%d" % n, "2026-09-01"))
+            vid = cur.lastrowid
+            vids.append(vid)
+            d = os.path.join(uploads.UPLOADS_ROOT, "voucher_attachments", str(vid))
+            os.makedirs(d, exist_ok=True)
+            open(os.path.join(d, "a%d.png" % n), "wb").write(PNG)
+            c.execute("INSERT INTO voucher_attachments (voucher_id, file_id, filename, path, size, mime, uploaded_by, uploaded_at)"
+                      " VALUES (?,?,?,?,?,?,?,?)", (vid, "file%d" % n, "a%d.png" % n, "voucher_attachments/%d/a%d.png" % (vid, n),
+                                                    len(PNG), "image/png", "t", "n"))
+        c.execute("INSERT INTO voucher_attachments (voucher_id, file_id, filename, path, size, mime, uploaded_by, uploaded_at, deleted_at)"
+                  " VALUES (?,?,?,?,?,?,?,?,?)", (vids[0], "filedel", "gone.png", "voucher_attachments/%d/a1.png" % vids[0],
+                                                  len(PNG), "image/png", "t", "n", "2026-09-02"))
+        c.commit()
+    finally:
+        c.close()
+    return H, {"slip": slip, "fid": fid, "vids": vids}
+
+
+def test_payslip_signed_file_exists_but_user_not_allowed_is_404(client, money_docs):
+    H, info = money_docs
+    args = ("payslip_signed", info["slip"], info["fid"])
+    for who in ("mn_cashier", "mn_super"):                                     # 正對照：有權限的人打得開
+        r = _open(client, H[who], *args)
+        assert r.status_code == 200 and r.content == b"%PDF-1.4 payslip", (who, r.status_code)
+    missing = _open(client, H["mn_none"], "payslip_signed", "PS-202609-778", "ffffffffffffffff")
+    for who in ("mn_other_fin", "mn_none", "mn_finance"):                      # 文件存在、有別的（財務）模組，但不是 cashier／superadmin
+        r = _open(client, H[who], *args)
+        assert r.status_code == 404 and r.json()["detail"] == "檔案不存在" == missing.json()["detail"], (who, r.status_code)
+        assert "payslip" not in r.text.lower() and "signed.pdf" not in r.text
+
+
+def test_voucher_attachment_exists_but_user_not_allowed_is_404(client, money_docs):
+    H, info = money_docs
+    v1, v2 = info["vids"]
+    for who in ("mn_cashier", "mn_finance", "mn_super"):                      # 正對照：cashier／finance／superadmin
+        r = _open(client, H[who], "voucher", str(v1), "file1")
+        assert r.status_code == 200 and r.content == PNG, (who, r.status_code)
+    for who in ("mn_other_fin", "mn_none"):                                    # 傳票與附件都存在，但沒有 cashier／finance
+        r = _open(client, H[who], "voucher", str(v1), "file1")
+        assert r.status_code == 404 and r.json()["detail"] == "檔案不存在", (who, r.status_code)
+
+
+def test_voucher_attachment_must_belong_to_that_voucher_and_not_be_deleted(client, money_docs):
+    """有權限的人也不能用 A 傳票的 id 配 B 傳票的 file_id，已刪的附件也打不開（同原下載端點的規則）。"""
+    H, info = money_docs
+    v1, v2 = info["vids"]
+    assert _open(client, H["mn_cashier"], "voucher", str(v1), "file2").status_code == 404        # file2 屬於 v2
+    assert _open(client, H["mn_cashier"], "voucher", str(v2), "file2").status_code == 200
+    assert _open(client, H["mn_cashier"], "voucher", str(v1), "filedel").status_code == 404      # 已刪
