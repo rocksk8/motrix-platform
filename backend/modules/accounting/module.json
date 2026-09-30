@@ -1,7 +1,7 @@
 {
   "key": "accounting",
   "name": "會計",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "core": ">=1.0,<2.0",
   "license_key": "accounting",
   "permissions": [
@@ -13,6 +13,7 @@
     "gl_account_meta",
     "gl_account_roles",
     "gl_fiscal_years",
+    "gl_fs_lines",
     "gl_opening_balances",
     "gl_opening_batches",
     "gl_opening_items",
@@ -45,6 +46,10 @@
       },
       {
         "name": "gl_fiscal_years",
+        "class": "T1"
+      },
+      {
+        "name": "gl_fs_lines",
         "class": "T1"
       },
       {
@@ -156,6 +161,18 @@
         "group": "finance",
         "label": "帳簿報表",
         "order": 55,
+        "perm": [
+          "cashier",
+          "finance"
+        ]
+      }
+    },
+    {
+      "path": "ledger-settings.html",
+      "menu": {
+        "group": "finance",
+        "label": "報表設定",
+        "order": 60,
         "perm": [
           "cashier",
           "finance"

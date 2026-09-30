@@ -146,3 +146,50 @@ def test_reports_page_requires_the_ledger_modules(live_server, make_user, e2e_br
     _open(page, live_server, user, pw, "ledger-reports.html")
     page.wait_for_selector("[data-testid=lr-error]", state="visible")
     assert "權限" in page.locator("[data-testid=lr-error]").inner_text()           # 沒權限＝明說，不是空白頁
+
+
+# ── B1：報表設定頁 ──────────────────────────────────────────────────────
+
+@pytest.mark.e2e
+def test_settings_page_renders_check_and_saves_a_cashflow_class(live_server, make_user, e2e_browser):
+    user, pw = make_user(username="e2e_gl_settings", role="superadmin")
+    page = e2e_browser.new_page()
+    bad, errs = _open(page, live_server, user, pw, "ledger-settings.html")
+    page.wait_for_selector("[data-testid=ls-accounts-table]")
+    page.wait_for_selector("[data-testid=ls-check-ok]", state="visible")           # 預設設定完整：綠燈
+    page.fill("[data-testid=ls-search]", "1191")
+    page.wait_for_selector("[data-testid=ls-row-1191]")
+    row = page.locator("[data-testid=ls-row-1191]")
+    assert row.locator("[data-testid=ls-cf-select]").input_value() == "operating"
+
+    row.locator("[data-testid=ls-cf-select]").select_option("investing")
+    page.wait_for_selector("[data-testid=ls-notice]", state="visible")
+    conn = db.get_db()
+    try:                                                                           # 終點狀態：資料庫真的改了
+        assert conn.execute("SELECT cashflow_class FROM gl_account_meta WHERE code='1191'").fetchone()[0] == "investing"
+        conn.execute("UPDATE gl_account_meta SET cashflow_class='operating' WHERE code='1191'")
+        conn.commit()
+    finally:
+        conn.close()
+    assert not bad, "開報表設定頁時有請求失敗：%s" % bad[:4]
+    assert not errs, "頁面丟了例外：%s" % errs[:3]
+
+
+@pytest.mark.e2e
+def test_settings_page_shows_a_problem_account_and_the_warning(live_server, make_user, e2e_browser):
+    user, pw = make_user(username="e2e_gl_settings2", role="superadmin")
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT OR IGNORE INTO account_items(code, level, name, parent_code, source) VALUES ('1998', 4, 'e2e 無群組科目', NULL, 'statutory')")
+        conn.commit()
+    finally:
+        conn.close()
+    page = e2e_browser.new_page()
+    _open(page, live_server, user, pw, "ledger-settings.html")
+    page.wait_for_selector("[data-testid=ls-missing-fs]", state="visible")         # 反向控制：缺歸屬要明說，不是綠燈
+    assert "1998" in page.locator("[data-testid=ls-missing-fs]").inner_text()
+    assert "1998" in page.locator("[data-testid=ls-missing-cf]").inner_text()
+    assert page.locator("[data-testid=ls-check-ok]").count() == 0 or not page.locator("[data-testid=ls-check-ok]").is_visible()
+    page.check("[data-testid=ls-only-problems]")
+    page.wait_for_selector("[data-testid=ls-row-1998]")
+    assert page.locator("[data-testid^=ls-row-]").count() == 1

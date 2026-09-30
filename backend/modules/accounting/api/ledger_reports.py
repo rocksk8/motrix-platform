@@ -9,6 +9,7 @@ from fastapi import APIRouter, Body, Header, HTTPException, Query
 
 from db import get_db
 from helpers import _audit, _require_user, _tok, require_any_module
+from modules.accounting.ledger import fs_lines as _fs
 from modules.accounting.ledger import reports as _reports
 from modules.accounting.ledger import roles as _roles
 
@@ -118,7 +119,7 @@ def accounts(q: str = Query(default=""), only_postable: bool = False, authorizat
         _roles.ensure_default_roles(conn)
         conn.commit()
         sql = ("SELECT m.code, a.name, a.level, a.source, m.acct_type, m.normal_side, m.postable, m.is_contra, m.fs_line,"
-               " m.tax_role, m.display_name, m.is_active FROM gl_account_meta m JOIN account_items a ON a.code=m.code")
+               " m.cashflow_class, m.tax_role, m.display_name, m.is_active FROM gl_account_meta m JOIN account_items a ON a.code=m.code")
         where, args = [], []
         if q:
             where.append("(m.code LIKE ? OR a.name LIKE ?)")
@@ -129,23 +130,33 @@ def accounts(q: str = Query(default=""), only_postable: bool = False, authorizat
         roles = conn.execute("SELECT role, scope_type, scope_key, account_code, effective_from FROM gl_account_roles"
                              " ORDER BY role, scope_type, scope_key, effective_from").fetchall()
         return {"accounts": [dict(r) for r in rows], "roles": [dict(r) for r in roles],
-                "missing_fs_line": _roles.accounts_without_fs_line(conn)}
+                "missing_fs_line": _roles.accounts_without_fs_line(conn),
+                "unclassified_cashflow": _fs.unclassified_cashflow(conn), "unknown_fs_lines": _fs.unknown_fs_lines(conn)}
     finally:
         conn.close()
 
 
 @router.patch("/accounts/{code}")
 def patch_account(code: str, body: dict = Body(...), authorization: str = Header(None)):
-    """可改：fs_line、display_name、is_active（總帳層停用，法定科目也可）、note。類別與方向不開放（改了報表會整批偏）。"""
+    """可改：fs_line（須是 gl_fs_lines 有的列）、cashflow_class（cash／operating／investing／financing）、display_name、
+    is_active（總帳層停用，法定科目也可）、note。類別與方向不開放（改了報表會整批偏）。"""
     _require_write(authorization)
-    fields = {k: body[k] for k in ("fs_line", "display_name", "is_active", "note") if k in (body or {})}
+    fields = {k: body[k] for k in ("fs_line", "cashflow_class", "display_name", "is_active", "note") if k in (body or {})}
     if not fields:
         raise HTTPException(400, "沒有可修改的欄位。")
     conn = get_db()
     try:
         _roles.ensure_meta(conn)
-        if not conn.execute("SELECT 1 FROM gl_account_meta WHERE code=?", (code,)).fetchone():
+        row = conn.execute("SELECT acct_type FROM gl_account_meta WHERE code=?", (code,)).fetchone()
+        if not row:
             raise HTTPException(404, "找不到科目 %s。" % code)
+        if "fs_line" in fields and not conn.execute("SELECT 1 FROM gl_fs_lines WHERE code=?", (fields["fs_line"],)).fetchone():
+            raise HTTPException(400, "報表列 %s 不存在。" % fields["fs_line"])
+        if "cashflow_class" in fields:
+            if fields["cashflow_class"] not in _fs.CASHFLOW_CLASSES:
+                raise HTTPException(400, "現金流量分類只能是：%s。" % "、".join(_fs.CASHFLOW_CLASSES))
+            if row["acct_type"] not in _fs.BS_TYPES:
+                raise HTTPException(400, "損益科目不分類（淨利整體歸營業活動）。")
         sets, args = [], []
         for k, v in fields.items():
             sets.append("%s=?" % k)

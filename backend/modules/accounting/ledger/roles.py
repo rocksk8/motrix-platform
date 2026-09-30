@@ -137,7 +137,12 @@ def ensure_meta(conn):
     # 後來長出子科目的葉節點：postable 隨之變 0（例：1113 加了銀行子科目）。人工設過的不動：只降不升。
     for code in has_kids:
         conn.execute("UPDATE gl_account_meta SET postable = 0 WHERE code = ? AND postable = 1", (code,))
-    del names
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(gl_account_meta)")}
+    if "cashflow_class" in cols:                       # accounting v2（B1）之後：補報表列與現金流量分類預設
+        from modules.accounting.ledger import fs_lines as _fs
+        _fs.ensure_fs_lines(conn)
+        cur = {r[0]: (r[1], r[2]) for r in conn.execute("SELECT code, acct_type, cashflow_class FROM gl_account_meta")}
+        _fs.fill_cashflow_defaults(conn, cur, parents, names)
     return added
 
 
