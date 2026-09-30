@@ -126,20 +126,56 @@ def validate_reason(reason):
 
 # ── 傳票（R1：財務會計／總帳）────────────────────────────────────────────────
 
-def _draft(conn, corr, summary, lines, who, now, origin, kind="", reverses_no=""):
-    lines = [dict(ln, source_type="case", source_key=corr["quote_no"]) for ln in lines]
+def _draft(conn, corr, summary, lines, who, now, origin, reverses_voucher_id=None):
+    """經 `voucher.draft`（IP-2）開草稿；回 (id, voucher_no, blocked)。給 `reverses_voucher_id` ⇒ 由總帳依原傳票分錄組反向草稿
+    （`kind='reversal'`，與總帳引擎的沖轉同一種類）；總帳拒絕時回 `{"blocked": 原因}`，這裡轉成 blocked 字串、不丟例外。"""
     from core import registry
-    extra = {"kind": kind, "reverses_no": reverses_no} if kind else {}
+    extra = {}
+    if reverses_voucher_id is not None:
+        extra["reverses_voucher_id"] = int(reverses_voucher_id)
+    else:
+        lines = [dict(ln, source_type="case", source_key=corr["quote_no"]) for ln in lines]
     v = registry.single_provider("voucher.draft")(
         conn, voucher_date=now[:10], summary=summary, lines=lines, created_by=who, now=now, origin=origin, **extra)
-    return v["id"], v["voucher_no"]
+    if v.get("blocked"):
+        return 0, "", str(v["blocked"])
+    return v["id"], v["voucher_no"], ""
+
+
+#: 追回（差額為負）＝員工應退回的獎金；依使用者規則先記為「其他應收款」，處理方式（薪資扣回／收款／免追）尚待使用者確認
+CLAWBACK_PENDING_LABEL = "追回處理方式待確認"
+CLAWBACK_RECEIVABLE_KEY = "bonus_corr_clawback_receivable_code"
+CLAWBACK_RECEIVABLE_DEFAULT = "1213"   # 其他應收款—其他
+
+
+def clawback_receivable_code(conn):
+    row = conn.execute("SELECT value_json FROM system_settings WHERE key = ?", (CLAWBACK_RECEIVABLE_KEY,)).fetchone()
+    if row is not None:
+        try:
+            v = json.loads(row["value_json"])
+        except (TypeError, ValueError):
+            v = None
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return CLAWBACK_RECEIVABLE_DEFAULT
+
+
+def live_accrual_voucher_id(conn, award):
+    """這張原單「目前有效的應付傳票」：最近一張已核准（待補發／已完成）更正單的重開應付傳票；沒有就是原核准應付傳票。
+    連續更正時沖轉的對象是它（不是原單那張——那張已被前一次更正沖掉）。"""
+    row = conn.execute("SELECT rebook_voucher_id FROM bonus_corrections WHERE award_id = ? AND status IN ('待補發','已完成')"
+                       " AND rebook_voucher_id > 0 ORDER BY seq DESC LIMIT 1", (award["id"],)).fetchone()
+    if row:
+        return int(row["rebook_voucher_id"])
+    return int(award.get("accrual_voucher_id") or 0)
 
 
 def open_vouchers(conn, corr, award, who, now):
     """核准時：沖轉原應付（借 應付／貸 費用，原金額）＋以更正後金額重開應付（借 費用／貸 應付）。兩張都是**草稿**。
 
     R1 下游：財務會計／總帳——傳票自己再走簽核與過帳；營運報表不讀傳票（讀 `expense_entries`）。
-    沖轉傳票用 `kind='reversal'`（與總帳引擎的沖轉同一種類），`reverses_no`＝原核准應付傳票單號。
+    沖轉傳票由總帳依「目前有效的應付傳票」分錄組反向（`reverses_voucher_id`；連續更正時是前一次的重開傳票）。
+    總帳拒絕（原傳票未過帳／已作廢／已被沖轉／期間已鎖）⇒ 沖轉與重開**都不開**（只重開會讓應付重複），回 notice 由會計手動處理。
     回 notice（空字串＝兩張都開了或金額為 0 不需要開）；寫入 corr 的 `*_voucher_id`（呼叫端交易內，不 commit）。"""
     if not bonus_vouchers.accounting_available():
         return bonus_vouchers.ACCOUNTING_MISSING + "（更正單照常往下；沖轉與重開應付請由會計手動開立）。"
@@ -148,34 +184,41 @@ def open_vouchers(conn, corr, award, who, now):
                             bonus_vouchers.account_problem(conn, acc["payable"])) if p]
     if problems:
         return "未產生傳票草稿：%s（請到獎金設定改選科目後，由會計手動開立）。" % "；".join(problems)
-    from core import registry
     text = "獎金分潤更正 %s" % corr["corr_no"]
-    notice = []
     old_total, new_total = int(corr["old_total"]), int(corr["new_total"])
     if old_total > 0:
-        status = registry.single_provider("voucher.status")
-        orig = status(conn, int(award.get("accrual_voucher_id") or 0)) if status and award.get("accrual_voucher_id") else None
-        rid, rno = _draft(conn, corr, "【沖轉】" + text, [
-            {"account_code": acc["payable"], "summary": text + " 沖轉應付", "debit": old_total, "credit": 0},
-            {"account_code": acc["expense"], "summary": text + " 沖轉費用", "debit": 0, "credit": old_total},
-        ], who, now, "bonus_corr_reversal", kind="reversal", reverses_no=(orig or {}).get("voucher_no", ""))
+        target = live_accrual_voucher_id(conn, award)
+        if not target:
+            return "原核准應付傳票查不到（舊資料），未產生沖轉與重開傳票（請由會計手動開立）。"
+        rid, rno, blocked = _draft(conn, corr, "【沖轉】" + text, [], who, now, "bonus_corr_reversal", reverses_voucher_id=target)
+        if blocked:
+            return "未產生沖轉與重開傳票：%s（請由會計手動處理）。" % blocked
         conn.execute("UPDATE bonus_corrections SET reversal_voucher_id = ? WHERE id = ?", (rid, corr["id"]))
-        if orig is None:
-            notice.append("原核准應付傳票查不到（舊資料或會計模組未連結），沖轉傳票 %s 未標註被沖轉的單號。" % rno)
     if new_total > 0:
-        bid, _bno = _draft(conn, corr, text + "（重開應付）", [
+        bid, _bno, _blk = _draft(conn, corr, text + "（重開應付）", [
             {"account_code": acc["expense"], "summary": text + " 重開費用", "debit": new_total, "credit": 0},
             {"account_code": acc["payable"], "summary": text + " 重開應付", "debit": 0, "credit": new_total},
         ], who, now, "bonus_corr_accrual")
         conn.execute("UPDATE bonus_corrections SET rebook_voucher_id = ? WHERE id = ?", (bid, corr["id"]))
-    return "".join(notice)
+    clawback = int(corr["clawback_total"])
+    if clawback > 0:
+        rec = clawback_receivable_code(conn)
+        err = bonus_vouchers.account_problem(conn, rec)
+        if err:
+            return "未產生追回應收傳票：%s（追回處理方式待確認；請由會計手動處理）。" % err
+        cid, _cno, _blk = _draft(conn, corr, text + "（追回＝應收；" + CLAWBACK_PENDING_LABEL + "）", [
+            {"account_code": rec, "summary": text + " 追回（應收員工）", "debit": clawback, "credit": 0},
+            {"account_code": acc["payable"], "summary": text + " 追回（沖減應付）", "debit": 0, "credit": clawback},
+        ], who, now, "bonus_corr_clawback")
+        conn.execute("UPDATE bonus_corrections SET clawback_voucher_id = ? WHERE id = ?", (cid, corr["id"]))
+    return ""
 
 
 def create_supplement_payment(conn, corr, who, now, bank_code, deductions):
     """出納標記補發：借 應付（補發總額）／貸 銀行（實發）＋貸 代扣稅款＋貸 代收補充保費。**草稿**。
 
     R1 下游：財務會計／總帳（支出傳票草稿）、出納（發放紀錄）。追回（差額為負）的部分不在這裡：
-    應付會留借方餘額＝員工應退回的金額，由會計另行沖轉或收款。回 notice；寫入 `supplement_voucher_id`。"""
+    追回（負差額）在核准時另開「應收」傳票（借 其他應收款／貸 應付，標 追回處理方式待確認），這裡不處理。回 notice；寫入 `supplement_voucher_id`。"""
     if not bonus_vouchers.accounting_available():
         return bonus_vouchers.ACCOUNTING_MISSING + "（標記補發照常，不會產生支出傳票）。"
     acc = bonus_vouchers.configured_accounts(conn)
@@ -195,7 +238,7 @@ def create_supplement_payment(conn, corr, who, now, bank_code, deductions):
     ]
     if nhi:
         lines.append({"account_code": acc["nhi"], "summary": text + " 代收二代健保補充保費", "debit": 0, "credit": nhi})
-    vid, _no = _draft(conn, corr, text + "（發放）", lines, who, now, "bonus_corr_payment")
+    vid, _no, _blk = _draft(conn, corr, text + "（發放）", lines, who, now, "bonus_corr_payment")
     conn.execute("UPDATE bonus_corrections SET supplement_voucher_id = ? WHERE id = ?", (vid, corr["id"]))
     return ""
 
@@ -206,7 +249,7 @@ def linked_vouchers(conn, corr):
     status = registry.single_provider("voucher.status")
     out = []
     for kind, col in (("reversal", "reversal_voucher_id"), ("rebook", "rebook_voucher_id"),
-                      ("supplement", "supplement_voucher_id")):
+                      ("supplement", "supplement_voucher_id"), ("clawback", "clawback_voucher_id")):
         vid = int(corr.get(col) or 0)
         if not vid:
             continue

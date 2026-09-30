@@ -64,9 +64,26 @@ def _create_corr(client, people, no, reason="金額更正", **changes):
                        json={"quote_no": no, "reason": reason, "lines": _wanted(cur, **changes)})
 
 
-def _to_pending(client, people, no, **changes):
-    """已發放 → 建立 → 送審 → 核准；回 (corr_no, approve 的回應 json)。"""
-    _paid(client, people, no)
+def _post_live_accrual(no):
+    """模擬會計把「目前有效的應付傳票」送審核准過帳（總帳只沖轉已過帳的傳票；簽核流程本身不是這裡要驗的）。回傳票 id。"""
+    from modules.payroll import bonus_correction as bc
+    c = _db()
+    try:
+        award = dict(c.execute("SELECT * FROM bonus_case_awards WHERE quote_no=?", (no,)).fetchone())
+        vid = bc.live_accrual_voucher_id(c, award)
+        c.execute("UPDATE vouchers_all SET status='已過帳' WHERE id=?", (vid,))
+        c.commit()
+        return vid
+    finally:
+        c.close()
+
+
+def _to_pending(client, people, no, post=True, paid=True, **changes):
+    """已發放 → 建立 → 送審 → 核准；回 (corr_no, approve 的回應 json)。`post`：核准前先把有效應付傳票過帳。"""
+    if paid:
+        _paid(client, people, no)
+    if post:
+        _post_live_accrual(no)
     r = _create_corr(client, people, no, **changes)
     assert r.status_code == 200, r.text
     cn = r.json()["corr_no"]
@@ -200,7 +217,7 @@ def test_reject_needs_reason_returns_to_draft_and_notifies_requester(client, peo
     cn = _create_corr(client, people, "MQ-BCR-006", bc_s1=1).json()["corr_no"]
     assert client.post("%s/%s/reject" % (BASE, cn), headers=_auth(people["bc_sa2"]), json={"reason": "x"}).status_code == 409   # 草稿不能駁回
     assert client.post("%s/%s/submit" % (BASE, cn), headers=_auth(people["bc_sa"])).status_code == 200
-    assert sent[-1][0] == "submitted" and sent[-1][3] == ["bc_sa2"]                      # 輪到的簽核人（申請人自己除外）
+    assert sent[-1][0] == "submitted" and [u for u in sent[-1][3] if u != "demo"] == ["bc_sa2"]    # 輪到的簽核人（申請人自己除外；測試庫內建的 demo 超管也是收件人，不在這題範圍）
     assert client.post("%s/%s/reject" % (BASE, cn), headers=_auth(people["bc_sa2"]), json={"reason": " "}).status_code == 400
     assert _corr(cn)["status"] == "待審核"
     assert client.post("%s/%s/reject" % (BASE, cn), headers=_auth(people["bc_s1"]), json={"reason": "x"}).status_code == 403
@@ -247,9 +264,10 @@ def test_approve_opens_reversal_and_rebook_drafts_and_waits_for_payout(client, p
     rev = _voucher(c["reversal_voucher_id"])
     assert rev["kind"] == "reversal" and rev["reverses_no"] == acc["voucher_no"]         # 與總帳引擎同一種「沖轉」
     assert rev["origin"] == "bonus_corr_reversal" and rev["status"] == "草稿"
-    assert [(l["account_code"], l["debit"], l["credit"]) for l in rev["lines"]] == [
-        ("2191", c["old_total"], 0), ("6111", 0, c["old_total"])]                          # 原應付的鏡像
-    assert all(l["source_type"] == "case" and l["source_key"] == no for l in rev["lines"])
+    assert sorted((l["account_code"], l["debit"], l["credit"]) for l in rev["lines"]) == sorted(
+        (l["account_code"], l["credit"], l["debit"]) for l in acc["lines"])                # 原應付的鏡像（借貸互換）
+    assert sum(l["debit"] for l in rev["lines"]) == c["old_total"]
+    # 沖轉傳票的分錄由總帳依原傳票鏡像組成（不帶案件來源；屬 voucher.draft 的行為，已回報 W4）
     reb = _voucher(c["rebook_voucher_id"])
     assert reb["kind"] != "reversal" and reb["origin"] == "bonus_corr_accrual"
     assert [(l["account_code"], l["debit"], l["credit"]) for l in reb["lines"]] == [
@@ -325,17 +343,20 @@ def test_decrease_only_completes_on_approval_and_reports_negative_expense(client
     assert res["status"] == "已完成"                                                      # 沒有人要補發 ⇒ 核准即完成
     c = _corr(cn)
     assert (c["supplement_total"], c["clawback_total"]) == (0, 4000) and c["supplement_voucher_id"] == 0
-    assert c["reversal_voucher_id"] and c["rebook_voucher_id"]
+    assert c["reversal_voucher_id"] and c["rebook_voucher_id"] and c["clawback_voucher_id"]
+    # 追回＝應收（待使用者確認處理方式）：借 其他應收款 1213／貸 應付 2191，金額＝追回總額
+    cb = _voucher(c["clawback_voucher_id"])
+    assert cb["origin"] == "bonus_corr_clawback" and cb["status"] == "草稿" and "追回處理方式待確認" in cb["summary"]
+    assert sorted((l["account_code"], l["debit"], l["credit"]) for l in cb["lines"]) == [("1213", 4000, 0), ("2191", 0, 4000)]
+    assert all(l["source_type"] == "case" and l["source_key"] == no for l in cb["lines"])
     assert [p for p in registry.single_provider("bonus.payouts").pending(_db()) if p["quoteNo"] == cn] == []
     rows = registry.providers("expense.entries")["bonus_correction"](_db(), "2000-01-01", "2100-01-01")
     assert [(r_["amount"], r_["desc"].split("（")[0]) for r_ in rows] == [(-4000, "獎金分潤 更正追回")]
     assert rows[0]["date"] == c["approved_at"][:10]
     # 營運報表實際加總：原單 +原總額、更正 −4000
     from modules.analytics.api import reports as rp
-    ex = rp._collect_expenses(_db(), c["approved_at"][:4] + "-01-01", c["approved_at"][:4] + "-12-31", "accrual") \
-        if hasattr(rp, "_collect_expenses") else None
-    if ex is not None:
-        assert ex["totals"]["other"] == (c["old_total"] - 4000)
+    ex = rp._collect_expenses(int(c["approved_at"][:4]), None, "accrual", conn=_db())
+    assert ex["totals"]["other"] == c["old_total"] - 4000
 
 
 @needs_accounting
@@ -392,7 +413,7 @@ def test_queue_item_appears_only_while_pending_review(client, people, monkeypatc
     client.post("%s/%s/approve" % (BASE, cn), headers=_auth(people["bc_sa2"]))
     assert q() == []
     # 核准信：申請人＋出納（有補發），不含金額
-    assert sent and sent[-1][0] == cn and set(sent[-1][2]) == {"bc_sa", "bc_cash"} and sent[-1][3] is True
+    assert sent and sent[-1][0] == cn and set(sent[-1][2]) - {"demo"} == {"bc_sa", "bc_cash"} and sent[-1][3] is True
 
 
 def test_decrease_only_approval_mail_goes_to_requester_only(client, people, monkeypatch):
@@ -415,7 +436,7 @@ def test_mail_types_are_registered_and_bodies_carry_no_amounts():
 
 
 def test_audit_rows_carry_ref_no_and_case(client, people):
-    cn, _ = _to_pending(client, people, "MQ-BCR-017", bc_s1=9000)
+    cn, _ = _to_pending(client, people, "MQ-202609-917", bc_s1=9000)
     rows = _q("SELECT action, ref_no, case_no, result FROM audit_log WHERE target_id=? ORDER BY id", cn)
     assert [r["action"] for r in rows] == ["bonus.correction.create", "bonus.correction.submit", "bonus.correction.approve"]
     assert all(r["ref_no"] == cn and r["case_no"] and r["result"] != "fail" for r in rows)
@@ -423,17 +444,79 @@ def test_audit_rows_carry_ref_no_and_case(client, people):
     assert log == ["create", "submit", "approve"]
 
 
-def test_voucher_draft_provider_rejects_unknown_kind(client):
-    if not source_tree.module_installed("modules/accounting/"):
-        pytest.skip("會計不在")
-    from core import registry
-    draft = registry.single_provider("voucher.draft")
-    with pytest.raises(ValueError):
-        draft(_db(), voucher_date="2026-09-30", summary="x", lines=[], created_by="t", now="2026-09-30T00:00:00", kind="auto")
-
-
 def test_unpaid_award_return_rule_is_unchanged(client, people):
     """已發放仍不可退回（更正走更正單）——更正單不改這條。"""
     _paid(client, people, "MQ-BCR-018")
     r = client.post("/api/bonus/cases/MQ-BCR-018/return", headers=_auth(people["bc_sa"]), json={"reason": "x"})
     assert r.status_code == 409 and "不可以退回" in r.json()["detail"]
+
+
+# ── 總帳沖轉的限制、連續更正、與總帳引擎互不衝突 ───────────────────────────────────
+
+@needs_accounting
+def test_reversal_blocked_when_accrual_not_posted_opens_no_vouchers_and_says_why(client, people):
+    """原應付傳票還是草稿 ⇒ 總帳拒絕沖轉（回 blocked）⇒ 沖轉與重開都不開（只重開會讓應付重複），更正單照常核准，畫面有原因。"""
+    cn, res = _to_pending(client, people, "MQ-BCR-020", post=False, bc_s1=9000)
+    assert res["status"] == "待補發"
+    c = _corr(cn)
+    assert (c["reversal_voucher_id"], c["rebook_voucher_id"], c["clawback_voucher_id"]) == (0, 0, 0)
+    assert "只有已過帳" in c["voucher_notice"] and "手動" in c["voucher_notice"]
+    assert _q("SELECT COUNT(*) AS n FROM vouchers_all WHERE origin LIKE 'bonus_corr%'")[0]["n"] == 0
+
+
+@needs_accounting
+def test_chained_correction_reverses_the_previous_rebook_voucher_not_the_original(client, people):
+    no = "MQ-BCR-021"
+    cn1, _ = _to_pending(client, people, no, bc_s1=9000)
+    c1 = _corr(cn1)
+    assert client.post("%s/%s/mark-paid" % (BASE, cn1), headers=_auth(people["bc_cash"]), json={}).status_code == 200
+    orig_id = _q("SELECT accrual_voucher_id FROM bonus_case_awards WHERE quote_no=?", no)[0]["accrual_voucher_id"]
+    # 第一次更正的重開應付傳票過帳後，第二次更正要沖的是它
+    _c = _db()
+    try:
+        _c.execute("UPDATE vouchers_all SET status='已過帳' WHERE id=?", (c1["rebook_voucher_id"],))
+        _c.commit()
+    finally:
+        _c.close()
+    cn2, res = _to_pending(client, people, no, paid=False, post=False, bc_s1=8000)
+    c2 = _corr(cn2)
+    rev2 = _voucher(c2["reversal_voucher_id"])
+    assert rev2["reverses_no"] == _voucher(c1["rebook_voucher_id"])["voucher_no"] != _voucher(orig_id)["voucher_no"]
+    assert rev2["kind"] == "reversal" and sum(l["debit"] for l in rev2["lines"]) == c1["new_total"]
+
+
+@needs_accounting
+def test_engine_leaves_correction_vouchers_alone(client, people, make_user):
+    """W4 約定：核准 → 沖轉傳票過帳 → 引擎掃過沖轉日期區間 ⇒ 不新增草稿、gl_source_events 筆數與狀態不變、E07a/E07b 仍是 native。"""
+    from datetime import date
+    no = "MQ-BCR-022"
+    _paid(client, people, no)
+    name, pw = make_user(username="bc_gl_admin", role="superadmin", modules=["cashier"])
+    tok = client.post("/api/auth/login", json={"username": name, "password": pw}).json()["token"]
+    hdr = {"Authorization": "Bearer " + tok}
+    assert client.put("/api/ledger/features/engine_drafts", headers=hdr, json={"enabled": True}).status_code == 200
+    body = {"start": date.today().replace(day=1).isoformat(), "end": date.today().isoformat()}
+    assert client.post("/api/ledger/engine/run", headers=hdr, json=body).status_code == 200      # 先讓引擎登記原單的 native 事件
+
+    def snap():
+        return (_q("SELECT event_code, source_key, rev, status, voucher_id FROM gl_source_events ORDER BY id"),
+                _q("SELECT COUNT(*) AS n FROM vouchers_all WHERE status='草稿'")[0]["n"])
+    cn, _ = _to_pending(client, people, no, paid=False, bc_s1=9000)
+    c = _corr(cn)
+    rev = c["reversal_voucher_id"]
+    _c = _db()
+    try:
+        _c.execute("UPDATE vouchers_all SET status='已過帳' WHERE id IN (?, ?)", (rev, c["rebook_voucher_id"]))
+        _c.commit()
+    finally:
+        _c.close()
+    before = snap()
+    assert any(r_["event_code"] == "E07a" and r_["status"] == "native" for r_ in before[0])
+    r = client.post("/api/ledger/engine/run", headers=hdr, json=body)
+    assert r.status_code == 200, r.text
+    after = snap()
+    assert after[0] == before[0], "引擎動了 gl_source_events（native 列被改寫／新增事件）"
+    assert after[1] == before[1]                                                                  # 沒有新草稿
+    assert r.json()["stats"].get("created", 0) == 0 and r.json()["stats"].get("orphans", 0) == 0
+    assert _voucher(rev)["kind"] == "reversal" and _voucher(rev)["status"] == "已過帳"             # 沖轉傳票沒被引擎再沖轉或作廢
+    assert not [v for v in _q("SELECT id FROM vouchers_all WHERE reverses_no=? AND COALESCE(voided_at,'')=''", _voucher(rev)["voucher_no"])]

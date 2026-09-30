@@ -128,7 +128,7 @@
                 <button class="bc-btn" :disabled="busy" @click="saveForm()" data-testid="bc-save" x-text="form.corr_no ? '儲存草稿' : '建立草稿'"></button>
                 <button class="bc-btn bc-btn--ghost" :disabled="busy" @click="form = null; msg = ''" data-testid="bc-form-close">取消</button>
               </div>
-              <div class="bc-note" style="margin-top:8px">補發部分由出納發放（扣繳與補充保費依撥付日計算）；追回部分只沖帳，應付會留借方餘額，由會計另行向員工收回。</div>
+              <div class="bc-note" style="margin-top:8px">補發部分由出納發放（扣繳與補充保費依撥付日計算）；追回部分核准時記為「其他應收款」傳票草稿（追回處理方式待確認：薪資扣回／收款／免追，尚未決定）。</div>
             </div>
           </template>
 
@@ -145,7 +145,7 @@
                   <div>更正前合計<b x-text="money(detail.old_total)" data-testid="bc-old-total"></b></div>
                   <div>更正後合計<b x-text="money(detail.new_total)" data-testid="bc-new-total"></b></div>
                   <div>補發<b x-text="money(detail.supplement_total)" data-testid="bc-supplement"></b></div>
-                  <div>追回<b x-text="money(detail.clawback_total)" data-testid="bc-clawback"></b></div>
+                  <div>追回<b x-text="money(detail.clawback_total)" data-testid="bc-clawback"></b><span x-show="detail.clawback_total > 0" data-testid="bc-clawback-pending" style="font-size:11px;color:#b45309;margin-left:6px">追回處理方式待確認</span></div>
                 </div>
                 <div style="margin-top:10px;font-size:12px;font-family:var(--font-zh)">原因：<span x-text="detail.reason" data-testid="bc-detail-reason"></span></div>
                 <div style="margin-top:10px">
@@ -211,7 +211,7 @@
                   <div class="bc-sec">已產生的傳票（草稿，之後走傳票自己的簽核）</div>
                   <template x-for="v in detail.vouchers" :key="v.id">
                     <div class="bc-row">
-                      <span x-text="{reversal: '沖轉原應付', rebook: '重開應付', supplement: '補發支出'}[v.kind] || v.kind"></span>
+                      <span x-text="{reversal: '沖轉原應付', rebook: '重開應付', supplement: '補發支出', clawback: '追回應收（待確認）'}[v.kind] || v.kind"></span>
                       <a x-show="!v.unavailable" :href="'voucher.html?id=' + v.id" x-text="v.voucher_no" style="color:var(--accent);text-decoration:underline"></a>
                       <span x-show="v.unavailable" x-text="v.voucher_no" data-testid="bc-voucher-unavailable"></span>
                       <span x-text="v.voided ? '已作廢' : v.status"></span>

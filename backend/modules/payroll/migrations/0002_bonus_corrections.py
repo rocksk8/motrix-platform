@@ -3,7 +3,7 @@
 
 - 更正單對象＝已發放的獎金分潤單（`bonus_case_awards.status='已發放'`）；原單與原名單**不改**（歷史），更正的每人差額存在更正單自己的 `lines_json`。
 - 狀態：草稿 → 待審核 → 待補發（有人要補發時）／已完成 → 已完成；草稿可作廢。同一張原單同時只有一張未結案的更正單（部分唯一索引）。
-- 連到傳票的三個 id（沖轉、重開應付、補發）預設 0；由程式經 `voucher.draft` 提供者開立草稿，不在這裡碰會計表。
+- 連到傳票的四個 id（沖轉、重開應付、補發、追回應收）預設 0；由程式經 `voucher.draft` 提供者開立草稿，不在這裡碰會計表。
 - 只新增表：回退到舊程式碼時舊程式碼不讀它、照常運作（「只回程式」的回滾相容）。冪等：`IF NOT EXISTS`。
 - 原單表不在（不該發生：V9 建）⇒ 回原因字串＝未完成（版號不前進、下次啟動再補）。
 - 不自己 commit；SQL 寫在這裡，不 import 任何會演進的程式碼（守門 tests/platform/test_module_migrations.py）。
@@ -30,6 +30,7 @@ def up(conn):
         reversal_voucher_id INTEGER NOT NULL DEFAULT 0,
         rebook_voucher_id INTEGER NOT NULL DEFAULT 0,
         supplement_voucher_id INTEGER NOT NULL DEFAULT 0,
+        clawback_voucher_id INTEGER NOT NULL DEFAULT 0,
         voucher_notice TEXT NOT NULL DEFAULT '',
         approved_by TEXT NOT NULL DEFAULT '',
         approved_at TEXT NOT NULL DEFAULT '',
