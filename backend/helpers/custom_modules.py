@@ -1429,17 +1429,9 @@ def render_output(conn, module_key, record_no) -> str:
 
 
 def render_view(body, view) -> str:
-    """版型＋視圖 ⇒ HTML。抬頭／頁尾用公司身分（總公司據點），簽核欄用與財務單據相同的共用元件。"""
-    from helpers import doc_template as dt
-    import pdf_gen
-    ident = pdf_gen.apply_snapshot(pdf_gen.location_identity(pdf_gen._location_of({})), {})
-    parts = {"identity_head": lambda: pdf_gen._identity_head(ident),
-             "identity_foot": lambda: pdf_gen._identity_foot(ident),
-             "approval_sign": lambda: pdf_gen._voucher_sign_html(view.get("approval") or {})}
-    tpl = (body.get("output") or {}).get("template") or default_template(body)
-    html = dt.render(tpl, view, parts)
-    # 核可狀態由程式決定、不由版型決定：單據目前停在「需要簽核」的狀態 ⇒ 紅色警示（冪等）
-    return dt.inject_unapproved(html, view.get("statusLabel") or view.get("status"), "此單據尚未核可", doc_no=str(view.get("recordNo") or "")) if view.get("unapproved") else html
+    """版型＋視圖 ⇒ HTML。公開入口是 `helpers.doc_render.render_document`（A2 費用單據共用）；這裡只負責挑版型。"""
+    from helpers.doc_render import render_document
+    return render_document((body.get("output") or {}).get("template") or default_template(body), view)
 
 
 def default_template(body) -> dict:
