@@ -192,6 +192,11 @@
 
             <!-- 分錄草稿（C1） -->
             <div x-show="current().key === 'engine_drafts'" data-testid="hb-engine">
+              <!-- L1：來源變動橫幅（自上次執行後，來源有多少變動、草稿待更新；自動更新每小時一次，只產生草稿） -->
+              <div x-data="glEngineBanner()" x-init="load(); $watch('eng.notice', () => load())" x-show="text" class="hb-warn" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap" data-testid="hb-eng-banner">
+                <span x-text="text" data-testid="hb-eng-banner-text"></span>
+                <button class="hb-btn" @click="load()" data-testid="hb-eng-banner-refresh">重新檢查</button>
+              </div>
               <div class="hb-err" x-show="eng.error" x-text="eng.error" data-testid="hb-eng-error"></div>
               <div class="hb-ok" x-show="eng.notice" x-text="eng.notice" data-testid="hb-eng-notice"></div>
               <div class="hb-row">
@@ -261,6 +266,29 @@
     </main>
   </div>
   <!-- notif.js 必須與 sidebar.js 成對、放在 sidebar.js 之前（見 account-items.html 註解；守門 test_page_shell_scripts_2026_09_30.py） -->
+  <script>
+    // 引擎橫幅（L1）：讀 GET /api/ledger/engine/status；來源變動數、最近執行、自動更新結果。只讀，不改任何資料。
+    function glEngineBanner() {
+      return {
+        text: '',
+        async load() {
+          try {
+            const tok = (JSON.parse(localStorage.getItem('motrix_session') || '{}')).token || ''
+            const r = await fetch('/api/ledger/engine/status', { headers: { Authorization: 'Bearer ' + tok } })
+            if (!r.ok) { this.text = ''; return }
+            const d = await r.json()
+            const p = d.pending || {}
+            const lines = []
+            if (p.total > 0) lines.push(p.total + ' 個來源已變動，草稿待更新（新增 ' + p.new + '、內容變動 ' + p.changed + '、已消失 ' + p.gone + '）：請按「產生分錄草稿」更新。')
+            if (d.auto_result && d.auto_result.ok === false) lines.push('自動更新失敗：' + (d.auto_result.error || '未知原因') + '（可手動執行看詳情）。')
+            const lr = d.last_run
+            if (!lines.length && lr) lines.push('來源與草稿一致。最近一次' + (lr.started_by === 'auto' ? '自動' : '手動') + '執行：' + String(lr.started_at || '').replace('T', ' ').slice(0, 16) + '。')
+            this.text = lines.join(' ')
+          } catch (e) { this.text = '' }
+        },
+      }
+    }
+  </script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>

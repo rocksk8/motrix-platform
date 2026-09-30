@@ -93,11 +93,13 @@ def _provide_voucher_status(conn, voucher_id):
 def _provide_voucher_by_no(conn, voucher_no):
     """IP-4 追加 `voucher.by_no`（2026-09-29，勞報單付款回填傳票單號用）：以傳票單號查。
     回 {"id", "voucher_no", "status", "voided"}；不存在 ⇒ None。唯讀。"""
-    v = conn.execute("SELECT id, voucher_no, status, voided_at FROM vouchers_all WHERE voucher_no = ?",
+    v = conn.execute("SELECT id, voucher_no, status, voided_at, kind, origin, gl_event_id FROM vouchers_all WHERE voucher_no = ?",
                      (str(voucher_no or "").strip(),)).fetchone()
     if v is None:
         return None
-    return {"id": v["id"], "voucher_no": v["voucher_no"], "status": v["status"], "voided": bool(v["voided_at"])}
+    # `system_generated`（2026-09-30 追加，L6）：總帳引擎／獎金入帳產生的傳票（不是人手開的）；來源模組據此判斷「這張是不是手工傳票」
+    system = (v["kind"] or "") in ("auto", "reversal") or bool(v["gl_event_id"]) or str(v["origin"] or "").startswith("bonus")
+    return {"id": v["id"], "voucher_no": v["voucher_no"], "status": v["status"], "voided": bool(v["voided_at"]), "system_generated": system}
 
 
 # （提供者改由 modules/accounting/__init__.py 的 ModuleSpec.providers 宣告：voucher.void_draft）

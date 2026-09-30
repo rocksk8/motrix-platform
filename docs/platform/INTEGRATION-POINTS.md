@@ -233,6 +233,7 @@ M04 不 import M07，經這一個單一提供者（三個動作，都不 commit�
 | 對方不在時 | 有 `payslipNo` 的人員 ⇒ 匯款被擋並說明「薪資獎金模組未安裝，無法驗證勞報單」；沒有關聯且 `system_settings.remit_require_payslip` 未開 ⇒ 匯款照舊 |
 | 契約版本 | 1（2026-09-30） |
 
+
 ---
 
 
