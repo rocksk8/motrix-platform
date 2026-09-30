@@ -361,7 +361,7 @@
                   <td><textarea x-model="l.summary" :disabled="!canEdit"
                              @focus="focusLine(i)" rows="1"
                              x-effect="l.summary; $nextTick(() => { $el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px' })"
-                             placeholder="3/30 向量圓專 XV15543058"></textarea>
+                             placeholder="例：3/30 某廠商 AB12345678"></textarea>
                     </td>
                   <td class="num"><input class="num" x-model="l.debit"
                              :disabled="!canEdit" inputmode="numeric"></td>
@@ -612,7 +612,7 @@
           <div class="vc-note">
             <label style="color:var(--text-secondary);font-size:12px">備註</label>
             <textarea x-model="note" :disabled="!canEdit"
-                      placeholder="京城凱悅報價單MQ-202608-009工資"></textarea>
+                      placeholder="例：某客戶報價單MQ-YYYYMM-NNN工資"></textarea>
           </div>
 
           <!-- 🔴 三格是**版面上的簽名位**，與狀態機（待審核／簽核中／已核准）
