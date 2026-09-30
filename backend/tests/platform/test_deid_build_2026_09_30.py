@@ -44,6 +44,8 @@ def _tiny_repo(tmp_path):
     files = {
         "product/sale_prune.json": (REPO / "product" / "sale_prune.json").read_text(encoding="utf-8"),
         **_marked_files(),
+        "backend/autostart.bat": "cd /d C:\\srv\\erp\\backend\r\nset MOTRIX_GEO=1\r\n",
+        "product/sale_files/autostart.bat": (REPO / "product" / "sale_files" / "autostart.bat").read_text(encoding="utf-8"),
         **{it["registry"]: '{"version": "v", "sha256": "0"}' for it in P.load_config().get("rehash", [])},
         "backend/version_manifest.json": json.dumps(ENTRIES, ensure_ascii=False),
         "backend/main.py": "print('hi')\n",
