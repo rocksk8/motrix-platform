@@ -22,7 +22,7 @@ _PREFIX = "feature."
 
 #: 這一版真的出貨的功能（有畫面／端點可用）。不在這裡的功能顯示『開發中』、不能開啟（PUT 回 409）——避免使用者開了只看到空白頁籤。
 #: 新批次完成時把它的鍵加進來（守門：test_ledger_c5_ready_2026_09_30）。
-READY = frozenset({"engine_drafts"})            # 2026-09-30 主持裁示：401 與扣繳清單先標開發中（W3 資安複查第 6 項＋401 欄位代號待官方核對），修好後再加回
+READY = frozenset({"engine_drafts", "tax401", "withholding", "source_annotations"})   # 2026-09-30：401（欄位代號已依官方格式核對、W3 第 6 項已修）、扣繳清單、來源憑證補登可開啟（預設仍關，最高管理者自己開；401 仍有 4 項未核實，畫面明列）
 
 
 def flags(conn):
