@@ -18,17 +18,18 @@ from core import migrations
 from tests import _version_slots as VS
 
 
-def _allowed():
-    return VS.placeholders_allowed()
+def forbidden_placeholders(root=VS.ROOT, environ=None):
+    """⇒ (准不准, 理由, 不准時找到的佔位)。真實題與反向控制走同一支（§G5 第 15 項）。"""
+    ok, why = VS.placeholders_allowed(root, environ)
+    return ok, why, ([] if ok else VS.find_placeholders(root))
 
 
-# ── ① 不准的地方一筆都不可以有 ─────────────────────────────────────────────
+# ── ① 不准的地方一筆都不可以有（含 core migration 的 NEXT：它在 runtime 是「每次重跑」，只准在分支上）──
 
 def test_no_placeholders_where_they_are_forbidden():
-    ok, why = _allowed()
-    found = VS.find_placeholders()
+    ok, why, found = forbidden_placeholders()
     if ok:
-        pytest.skip("這裡准有佔位（%s）；現有 %d 筆，列車取號" % (why, len(found)))
+        pytest.skip("這裡准有佔位（%s）；列車取號" % why)
     assert not found, ("這裡不准有版號佔位（%s）⇒ 跑 `python tools/platform/train_number.py assign` 取號：\n  " % why
                        + "\n  ".join(found))
 
@@ -108,6 +109,23 @@ def test_rc_allowed_on_wip_and_forbidden_on_train_platform_tags(grepo, tmp_path)
     nogit = tmp_path / "nogit"
     nogit.mkdir()
     assert VS.placeholders_allowed(nogit, {})[0] is False, "git 查不到 ⇒ 當成不准（寧可紅）"
+
+
+def test_rc_core_migration_next_is_red_on_train_platform_and_prod_tag(grepo):
+    """樹裡只有一支 `register("core", NEXT, …)`：wip ⇒ 准；MOTRIX_TRAIN=1、platform、prod 標籤 ⇒ 找到它（守門紅）。"""
+    (grepo / "backend" / "core").mkdir(parents=True)
+    (grepo / "backend" / "core" / "migrations.py").write_text('register("core", 1, _a)\nregister("core", NEXT, _b)\n',
+                                                             encoding="utf-8")
+    _g(grepo, "add", "-A")
+    _g(grepo, "commit", "-q", "-m", "next")
+    want = ['backend/core/migrations.py：register("core", NEXT,']
+    assert forbidden_placeholders(grepo, {})[::2] == (True, [])
+    assert forbidden_placeholders(grepo, {"MOTRIX_TRAIN": "1"})[::2] == (False, want)
+    _g(grepo, "checkout", "-q", "-b", "platform")
+    assert forbidden_placeholders(grepo, {})[::2] == (False, want)
+    _g(grepo, "checkout", "-q", "--detach")
+    _g(grepo, "tag", "prod/sim")
+    assert forbidden_placeholders(grepo, {})[::2] == (False, want)
 
 
 def test_rc_find_placeholders_sees_all_four_kinds(tmp_path):

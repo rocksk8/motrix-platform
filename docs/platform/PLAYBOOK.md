@@ -312,7 +312,7 @@
   | 模組 CHANGELOG | 最上面 `## (next) — <日期>（<分支>）說明`；新增功能 `(next:minor)`、不相容 `(next:major)`（預設修正號） | `module.json` 的 `version` |
   | CORE CHANGELOG | 最上面 `## (next) — <日期>（<分支>）…`；再跑 `python tools/platform/core_bump.py --pending`（G1 快照介面＝目前、`core_version: "next"`；主／次版號由列車依介面差異判斷） | `registry.CORE_VERSION` |
   | version_manifest | 最上面插入 `{"module": …, "version": "next", "date": "YYYY-MM-DD", "time": …, "content": …}`；同模組這一包已有條目也**另寫一筆**（列車會併；改別人那一筆＝兩包改同一行＝衝突） | 別人的條目 |
-  | core migration | `register("core", NEXT, _fn)`（runtime：排在已編號之後、不記版號、每次啟動重跑 ⇒ 必須冪等） | 已編號的 |
+  | core migration | `register("core", NEXT, _fn)`（runtime：排在已編號之後、不記版號、每次啟動重跑 ⇒ 必須冪等；**只准在分支上**：列車 `assign` 一律換成整數（高於目前檔案／origin/platform／正式機基準已用的號；檔案比它們少 ⇒ 拒絕），列車／platform／prod 標籤上還有 NEXT ⇒ `test_version_slots` 紅） | 已編號的 |
   守門（分支上）：`## (next)` 算「有寫條目」（G4 test_module_changelog_follows_code；寫錯成 `## (Next)` 不算）；佔位格式、manifest 佔位欄位（`test_version_slots`）；快照 `next` ⇔ CORE CHANGELOG 最上面是 `(next)`（`test_l1_interface_snapshot`）。舊式「先取號」的分支照樣可以上車（下面第 3 步只重編撞到的號）。
 - **合併驅動（每個 clone 一次，worktree 共用）**：`D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe tools/platform/setup_merge_drivers.py`；列車長開車前 `--check`（exit 0）。`.gitattributes` 已把 `backend/core/CHANGELOG.md`、`backend/modules/*/CHANGELOG.md`、`backend/version_manifest.json` 指給驅動：兩邊都在最上面插入 ⇒ 兩邊都留（我方在上、完全相同的只留一份）；其他形狀（兩邊改同一段舊內容、兩邊都改了同一筆舊條目、排版看不懂）⇒ 交給 `git merge-file`＝跟沒裝一樣的衝突標記。沒登記的機器 ⇒ 一般衝突，**不會靜默少東西**。不用內建 `merge=union`：實測兩塊之間的空行會被吃掉，兩邊改同一行舊內容時兩行都留（靜默）。merge、rebase、cherry-pick 都走驅動。
 - **列車（主持／列車長）**：§G4 第 2 步疊完所有包之後：

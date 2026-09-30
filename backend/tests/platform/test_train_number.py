@@ -176,6 +176,22 @@ def test_migration_collision_keeps_the_base_line():
     assert "開發庫" in ch[0][3]
 
 
+def test_migration_next_is_numbered_above_base_and_prod_baseline():
+    """NEXT 一律換成整數，且高於 origin/platform 與正式機已用的號碼。"""
+    text = MIG + 'register("core", 3, _p)\nregister("core", NEXT, _c)\n'
+    new, ch = TN.assign_migrations(text, MIG + 'register("core", 3, _p)\n', MIG)
+    assert 'register("core", 4, _c)' in new and "NEXT" not in new
+    assert ch == [("_c", "NEXT", "4", "佔位取號")]
+
+
+def test_rc_migration_file_missing_shipped_numbers_is_refused():
+    """檔案最大號比 platform／正式機小（少了已上線的 migration）⇒ 拒絕，不從較小的號往上給（會與已上線的撞號）。"""
+    with pytest.raises(SystemExit, match="少了已上線"):
+        TN.assign_migrations(MIG + 'register("core", NEXT, _c)\n', MIG + 'register("core", 3, _p)\n')
+    with pytest.raises(SystemExit, match="少了已上線"):
+        TN.assign_migrations(MIG + 'register("core", NEXT, _c)\n', MIG, MIG + 'register("core", 3, _p)\n')
+
+
 def test_rc_docstring_mentions_are_not_rewritten():
     text = '"""register("core", NEXT, fn) 說明"""\n' + MIG
     assert TN.assign_migrations(text) == (text, [])

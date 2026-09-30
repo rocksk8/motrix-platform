@@ -17,7 +17,8 @@
   manifest  `"version": "next"` ⇒ 依 (date, time) 排序，取該日期已用過的最大字母的下一個（z 之後 aa）。
             同一模組這一包已有條目（未出貨）⇒ 佔位條目併進那一筆（VR3「一個模組一筆」）；
             未出貨條目撞號 ⇒ `--base` 就有的保留，其餘重編。已出貨的一律不動。
-  migration backend/core/migrations.py 的 `register("core", NEXT, fn)` ⇒ 依檔案順序接在最大號後面；
+  migration backend/core/migrations.py 的 `register("core", NEXT, fn)` ⇒ 一律換成整數（NEXT 的「每次重跑」只准在分支上）：
+            依檔案順序接在「目前檔案／--base／正式機基準」已用的最大號後面；
             已編號撞號 ⇒ `--base` 就有的保留、其餘重編（⚠ 開發庫若已跑過舊號，要重建開發庫——報表會標出）。
 """
 import argparse
@@ -261,9 +262,21 @@ def assign_manifest(text, shipped, base_entries=()):
 
 # ── core migration ──────────────────────────────────────────────────────
 
-def assign_migrations(text, base_text=""):
-    """⇒ (新全文, [(函式, 舊, 新, 說明)])。"""
+def _mig_numbers(text):
+    return [int(m.group(2)) for m in MIG_LINE.finditer(text or "") if m.group(2) != "NEXT"]
+
+
+def assign_migrations(text, base_text="", shipped_text=""):
+    """⇒ (新全文, [(函式, 舊, 新, 說明)])。
+
+    NEXT 一律換成整數：從「目前檔案、--base（origin/platform）、正式機基準」三者已用的最大號往上（runtime 要連續整數，
+    佔位的「每次重跑」只准存在分支上）。目前檔案的最大號比 base／正式機小＝檔案少了已上線的 migration ⇒ 拒絕（不猜）。"""
     ms = list(MIG_LINE.finditer(text))
+    here = max(_mig_numbers(text) or [0])
+    floor = max([here] + _mig_numbers(base_text) + _mig_numbers(shipped_text))
+    if floor > here:
+        raise SystemExit("core migration：目前檔案最大號 %d 小於 origin/platform 或正式機已用的 %d ⇒ 檔案少了已上線的 migration，先補回再取號"
+                         % (here, floor))
     base_lines = {m.group(0) for m in MIG_LINE.finditer(base_text)}
     nums = {}
     for m in ms:
@@ -274,7 +287,7 @@ def assign_migrations(text, base_text=""):
         if len(group) > 1:
             keep = next((m for m in group if m.group(0) in base_lines), group[0])
             renum += [m for m in group if m is not keep]
-    top = max(nums) if nums else 0
+    top = floor
     new_no = {}
     changes = []
     for m in ms:
@@ -413,7 +426,7 @@ def plan(tree):
     # core migration
     text = tree.read(MIGRATIONS)
     if text is not None:
-        new, ch = assign_migrations(text, tree.show(base_ref, MIGRATIONS) or "")
+        new, ch = assign_migrations(text, tree.show(base_ref, MIGRATIONS) or "", tree.show(bl, MIGRATIONS) or "")
         for fn, old, nv, why in ch:
             rows.append(("migration", fn, old, nv, why))
         if new != text:
