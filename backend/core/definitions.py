@@ -94,14 +94,16 @@ def get(conn, kind, key, scope, version=None):
 
 def versions(conn, kind, key, scope) -> list:
     _check(kind, key, scope)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(ui_definitions)").fetchall()}
+    extra = ", submitted_by, submitted_at, decision_json" if "decision_json" in cols else ""      # core v3 之前的庫（測試只跑 v1）沒有送審欄
     rows = conn.execute("SELECT id, kind, key, scope, version, status, note, created_by, created_at, published_by, "
-                        "published_at, submitted_by, submitted_at, decision_json FROM ui_definitions WHERE kind=? AND key=? AND scope=? "
+                        "published_at" + extra + " FROM ui_definitions WHERE kind=? AND key=? AND scope=? "
                         "ORDER BY version DESC", (kind, key, scope)).fetchall()
     out = []
     for r in rows:
         d = dict(r)
         try:
-            d["decision"] = json.loads(d.pop("decision_json") or "{}") or {}
+            d["decision"] = json.loads(d.pop("decision_json", None) or "{}") or {}
         except (TypeError, ValueError):
             d["decision"] = {}
         out.append(d)
