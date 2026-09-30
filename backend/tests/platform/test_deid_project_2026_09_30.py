@@ -116,7 +116,8 @@ def _mini_pkg(tmp_path):
         "backend/core/upgrade.py": "x = 1\n# sale 包：不含任何公司預設值（升級精靈不回填公司資料；本段在 own 包才有）。\nV9_COMPANY_DEFAULTS = {}\n"
                                    "def _is_our_install(profile: dict) -> bool:\n    return False\n",
         P.MANIFEST_REL: P.dump_manifest([{"module": "m", "version": "2026-09-01", "date": "d", "time": "t", "content": P.GENERIC_CONTENT}]),
-        "backend/main.py": "pass\n"})
+        "backend/main.py": "pass\n",
+        "DEPLOY.md": "客戶版 <安裝目錄>\n", "DR-SOP.md": "客戶版 <安裝目錄>\n", "HTTPS-DEPLOY-CHECKLIST.md": "客戶版 <安裝目錄>\n"})
 
 
 def test_verify_accepts_a_clean_pruned_package(tmp_path):
@@ -130,6 +131,22 @@ def test_verify_rejects_forbidden_paths(tmp_path, extra):
     root = _mini_pkg(tmp_path)
     _write(root, {extra: "x\n"})
     assert any(extra in p for p in P.verify_tree(root, CFG)), extra
+
+
+def test_verify_rejects_the_original_internal_docs_and_missing_customer_docs(tmp_path):
+    root = _mini_pkg(tmp_path)
+    (root / "DEPLOY.md").write_text("這一包新增了標案雷達，路徑寫死在正式機安裝目錄", encoding="utf-8")        # 原檔沒被取代
+    assert any("DEPLOY.md" in p and "不是客戶版" in p for p in P.verify_tree(root, CFG))
+    (root / "DR-SOP.md").unlink()
+    assert any("DR-SOP.md" in p and "不存在" in p for p in P.verify_tree(root, CFG))
+
+
+def test_replace_overwrites_from_the_in_package_source_and_refuses_a_missing_source(tmp_path):
+    root = _write(tmp_path, {"DEPLOY.md": "原檔", "product/sale_docs/DEPLOY.md": "客戶版"})
+    assert P.apply_replacements(root, {"DEPLOY.md": "product/sale_docs/DEPLOY.md"}) == ["DEPLOY.md"]
+    assert (root / "DEPLOY.md").read_text(encoding="utf-8") == "客戶版"
+    with pytest.raises(P.ProjectError):
+        P.apply_replacements(root, {"DEPLOY.md": "product/sale_docs/NOPE.md"})
 
 
 def test_verify_rejects_leftover_own_only_and_unprojected_manifest(tmp_path):
@@ -156,7 +173,10 @@ def sale_tree(tmp_path_factory):
 def test_rebuilt_sale_package_passes_verify_and_has_no_company_literals_in_upgrade(sale_tree):
     root, rep = sale_tree
     assert P.verify_tree(root, CFG) == [], P.verify_tree(root, CFG)
-    assert rep["removed"] > 100 and len(rep["cuts"]) == 2 and rep["manifest_projected"] > 100
+    assert rep["removed"] > 100 and len(rep["cuts"]) == 2 and rep["manifest_projected"] > 100 and len(rep["replaced"]) == 3
+    assert not (root / "product" / "sale_docs").exists(), "客戶版文件的來源目錄不可留在 sale 包"
+    for doc in ("DEPLOY.md", "DR-SOP.md", "HTTPS-DEPLOY-CHECKLIST.md"):
+        assert "<安裝目錄>" in (root / doc).read_text(encoding="utf-8") and [h for h in S.scan(root) if h.path == doc] == [], doc
     hits = [h for h in S.scan(root) if h.path == "backend/core/upgrade.py"]
     assert hits == [], hits
 
