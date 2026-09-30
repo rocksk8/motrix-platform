@@ -1130,7 +1130,12 @@ def _db_content_fingerprint(path: str):
         rows = conn.execute("PRAGMA quick_check").fetchall()
         if len(rows) != 1 or rows[0][0] != "ok":
             return None
-        conn.execute("BEGIN")
+        # 明確的唯讀交易（BEGIN DEFERRED）：指紋要跨「所有表」讀，必須是同一個時間點的一致快照——
+        # WAL 模式下讀交易看到開始那一刻的整庫；不開交易的話每個 SELECT 各看各的時間點，指紋可能是「從未存在過的混合狀態」。
+        # 為什麼不用 core.txn.begin_write：它是 BEGIN IMMEDIATE（拿寫鎖，會擋住正式庫上使用者的寫入）；這裡不寫入，
+        # 只需要讀取快照，用 DEFERRED（不拿寫鎖）。已登記在 tests/test_begin_only_via_begin_write_2026_09_25.py 的白名單，
+        # finally 會 close（連線關閉即結束交易）。
+        conn.execute("BEGIN DEFERRED")
         h = hashlib.sha256()
         for name, sql in conn.execute(
                 "SELECT name, sql FROM sqlite_master WHERE type IN ('table','index','trigger','view') "
@@ -1147,7 +1152,7 @@ def _db_content_fingerprint(path: str):
                     break
                 for r in chunk:
                     h.update(repr(r).encode("utf-8", "surrogatepass"))
-        conn.execute("ROLLBACK")
+        conn.execute("ROLLBACK")                 # 唯讀交易，結束即可
         return h.hexdigest()
     except Exception:                                           # noqa: BLE001
         logger.exception("_db_content_fingerprint failed for %s", path)
