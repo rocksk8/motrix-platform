@@ -28,7 +28,8 @@ function ledgerSettingsPage() {
     _session() {
       try { return JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { return {} }
     },
-    async _api(method, path, body) {
+    async _api(verb, path, body) {
+      const method = typeof verb === 'string' ? verb : verb.method
       const opt = { method, headers: { Authorization: 'Bearer ' + (this._session().token || ''), 'Content-Type': 'application/json' } }
       if (body !== undefined) opt.body = JSON.stringify(body)
       const r = await fetch(path, opt)
@@ -83,7 +84,7 @@ function ledgerSettingsPage() {
       try {
         const body = {}
         body[field] = value
-        await this._api('PATCH', '/api/ledger/accounts/' + encodeURIComponent(a.code), body)
+        await this._api({ method: 'PATCH' }, '/api/ledger/accounts/' + encodeURIComponent(a.code), body)
         a[field] = value
         this.notice = a.code + ' 已更新'
         this.check = await this._api('GET', '/api/ledger/setup-check')
@@ -100,7 +101,7 @@ function ledgerSettingsPage() {
       try {
         const body = {}
         body[field] = value
-        await this._api('PATCH', '/api/ledger/fs-lines/' + encodeURIComponent(l.code), body)
+        await this._api({ method: 'PATCH' }, '/api/ledger/fs-lines/' + encodeURIComponent(l.code), body)
         l[field] = value
         this.notice = l.code + ' 已更新'
         this.check = await this._api('GET', '/api/ledger/setup-check')

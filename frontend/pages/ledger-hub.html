@@ -70,7 +70,7 @@
               <div class="hb-row">
                 <input class="hb-input" type="date" x-model="eng.start" data-testid="hb-eng-start"> ～ <input class="hb-input" type="date" x-model="eng.end" data-testid="hb-eng-end">
                 <button class="hb-btn primary" :disabled="eng.busy" @click="engRun()" data-testid="hb-eng-run">產生分錄草稿</button>
-                <select class="hb-input" x-model="eng.filter" @change="engLoad()" data-testid="hb-eng-filter">
+                <select class="hb-input filter" x-model="eng.filter" @change="engLoad()" data-testid="hb-eng-filter">
                   <option value="">全部狀態</option>
                   <template x-for="st in ['drafted','posted','drift','orphan','blocked_closed','blocked_no_account','superseded','rejected','reversed','native']" :key="st"><option :value="st" x-text="statusLabel(st)"></option></template>
                 </select>

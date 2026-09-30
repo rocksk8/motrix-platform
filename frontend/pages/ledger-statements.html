@@ -67,7 +67,7 @@
             　比較 <input class="st-input" type="date" x-model="compareStart"> ～ <input class="st-input" type="date" x-model="compareEnd"></span>
         </template>
         <label class="st-note" style="margin:0"><input type="checkbox" x-model="drafts" data-testid="st-drafts"> 含未過帳</label>
-        <label class="st-note" style="margin:0"><input type="checkbox" x-model="showZero"> 顯示零列</label>
+        <label class="st-note" style="margin:0"><input type="checkbox" class="filter" x-model="showZero"> 顯示零列</label>
         <button class="st-btn primary" @click="run()" data-testid="st-run">查詢</button>
         <button class="st-btn" @click="exportCsv()" data-testid="st-csv">匯出 CSV</button>
       </div>
