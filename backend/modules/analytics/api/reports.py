@@ -22,7 +22,7 @@ from fastapi.responses import StreamingResponse
 from db import get_db
 from helpers import (
     _require_user, _tok, _audit, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
-    payment_item_amounts, norm_ymd, summarize_payment_items,
+    payment_item_amounts, receipt_amounts, norm_ymd, summarize_payment_items,
     user_has_module, run_edge_pdf,
 )
 from helpers.tax_calc import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts   # T：L1
@@ -48,7 +48,7 @@ def _collect_tax_invoices(year=None, month=None):
     return p(year, month)
 from helpers.xlsx_out import check_export_rate, set_row, xl_style
 from helpers.company_identity import company_heading, contact_line
-from helpers.recognition_basis import normalize_basis, BASIS_NOTES   # `AC2`：口徑的純標籤（L1）
+from helpers.recognition_basis import normalize_basis, BASIS_NOTES, DEFAULT_BASIS   # `AC2`：口徑的純標籤（L1）
 
 #: 收入認列、支出歸月、待補登屬 M01 案件（`case.recognition`，M01-PLAN §3-6）；M01 不在 ⇒ 明說（§B-4），不是 0
 CASE_RECOGNITION_MISSING = "案件模組未安裝：權責口徑收入（依階段完成）不提供"
@@ -288,7 +288,8 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
                 rat  = norm_ymd(pi.get("receivedAt"))
                 aa   = pi.get("actualAmount")
                 fee  = pi.get("feeAmount") or 0
-                net  = ((aa if aa is not None else amt) - fee) if rcvd else None
+                # 2026-09-30：實收＝銀行入帳（已扣客戶內扣手續費）⇒ 淨額＝入帳，不再減手續費（receipt_amounts，L1 單一定義）
+                net  = receipt_amounts(amt, aa, fee)[0] if rcvd else None
 
                 item = {
                     "quoteNo":      row["quote_no"],
@@ -317,7 +318,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
                 elif not rcvd:
                     outstanding.append(item)
                 if rcvd:
-                    recv_amt += (aa if aa is not None else amt)
+                    recv_amt += receipt_amounts(amt, aa, fee)[1]      # 收款率的分子＝含手續費的收入（客戶付的）
 
         settle = {}
         if row["settle_json"]:
@@ -520,10 +521,10 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     tr   = sum(i["amount"] for i in all_items)
     tc   = sum(i["amount"] for i in all_items if i["received"])
     tfee = sum(i["feeAmount"] for i in all_items if i["received"])
-    tact = sum((i["actualAmount"] if i["actualAmount"] is not None else i["amount"]) for i in all_items if i["received"])
+    tact = sum(i["netAmount"] for i in all_items if i["received"])      # 銀行入帳（不再減手續費）
     pr   = sum(i["amount"] for i in period_items)
     pfee = sum(i["feeAmount"] for i in period_items)
-    pact = sum((i["actualAmount"] if i["actualAmount"] is not None else i["amount"]) for i in period_items)
+    pact = sum(i["netAmount"] for i in period_items)
 
     _closed  = sum(1 for c in cases_all if c["dealTag"] == "已結案")
     _settled = sum(1 for c in cases_all if c["settleStatus"] == "finalized")
@@ -534,7 +535,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             "totalCollected":         tc,
             "totalOutstanding":       tr - tc,
             "totalFee":               tfee,
-            "netCollected":           tact - tfee,
+            "netCollected":           tact,
             "collectionRate":         round(tc / tr * 100, 1) if tr > 0 else 0,
             "totalCases":             len(cases_all),
             "activeCases":            sum(1 for c in cases_all if c["dealTag"] == "已成案"),
@@ -542,7 +543,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             "periodCases":            len(cases_period),
             "periodReceived":         pr,
             "periodFee":              pfee,
-            "periodNet":              pact - pfee,
+            "periodNet":              pact,
             "warrantyAlerts":         len(warr),
             "settledCases":           _settled,
             "totalActualGrossProfit": _act_gp,
@@ -987,7 +988,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
             item["type"],
             item["amount"],
             item["receivedAt"],
-            aa if aa is not None else item["amount"],
+            item["netAmount"] if item["netAmount"] is not None else item["amount"],
             item["feeAmount"] or None,
             item["netAmount"],
             item["invoiceNo"] or "",
@@ -1012,7 +1013,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     sr = len(data["periodItems"]) + 3
     sum_vals = ["合計", "", "", "", "",
                 sum(i["amount"] for i in data["periodItems"]), "",
-                sum((i["actualAmount"] if i["actualAmount"] is not None else i["amount"]) for i in data["periodItems"]),
+                sum(i["netAmount"] or 0 for i in data["periodItems"]),
                 sum(i["feeAmount"] or 0 for i in data["periodItems"]),
                 sum(i["netAmount"] or 0 for i in data["periodItems"]),
                 "", "", ""]
@@ -1075,7 +1076,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     exp = data.get("expenses") or {"monthly": [], "totals": {}, "details": {}}
     cat_label = {"contractor": "承攬商派發", "equipment": "設備進貨", "material": "料件進貨", "other": "其他支出"}
     # `AC2`：欄名依口徑寫清楚「未稅」「含稅」（權責＝階段完成月、未稅；現金＝收款日、含稅）
-    if data.get("basis", "accrual") == "accrual":
+    if data.get("basis", DEFAULT_BASIS) == "accrual":
         _inc_cols = ["認列階段", "認列金額（未稅）", "認列日（階段完成）"]
     else:
         _inc_cols = ["款項類型", "應收金額（含稅）", "收款日期"]
@@ -1099,7 +1100,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
             aa = item["actualAmount"]
             set_row(ws, r, [
                 item["quoteNo"], item["customer"], item["project"], item["salesPerson"], item["type"],
-                item["amount"], item["receivedAt"], aa if aa is not None else item["amount"],
+                item["amount"], item["receivedAt"], item["netAmount"] if item["netAmount"] is not None else item["amount"],
                 item["feeAmount"] or None, item["netAmount"], item["invoiceNo"] or "",
             ], font=mk(size=9), fill=fill(C_LGREEN), border=BD,
                aligns=[al("left"), al("left"), al("left"), al("left"), al("center"),
@@ -1110,7 +1111,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
             r += 1
         set_row(ws, r, ["合計（" + str(len(items)) + " 筆）", "", "", "", "",
                           sum(i["amount"] for i in items), "",
-                          sum((i["actualAmount"] if i["actualAmount"] is not None else i["amount"]) for i in items),
+                          sum(i["netAmount"] or 0 for i in items),
                           sum(i["feeAmount"] or 0 for i in items), sum(i["netAmount"] or 0 for i in items), ""],
                  font=mk(bold=True, size=9, color=C_WHITE), fill=fill(C_DARK), border=BD,
                  aligns=[al("left")] + [al("right")] * 10, height=20)
@@ -1716,7 +1717,7 @@ def _pdf_ar_aging(ar: dict, tbl_hdr, fmt) -> str:
 def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
     s = data["summary"]
     # `AC2`：收支明細的收入欄名依口徑（權責＝未稅、階段完成日；現金＝含稅、收款日）
-    _inc_cols = (("認列階段", "認列金額（未稅）", "認列日") if data.get("basis", "accrual") == "accrual"
+    _inc_cols = (("認列階段", "認列金額（未稅）", "認列日") if data.get("basis", DEFAULT_BASIS) == "accrual"
                  else ("款項", "應收金額（含稅）", "收款日"))
 
     import html as _html_mod
@@ -1739,7 +1740,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
     pi_rows = ""
     for it in data["periodItems"]:
         aa  = it["actualAmount"]
-        aa_v = aa if aa is not None else it["amount"]
+        aa_v = int(it["netAmount"] if it["netAmount"] is not None else it["amount"])
         pi_rows += (
             f"<tr><td>{esc(it['quoteNo'])}</td><td>{esc(it['customer'])}</td>"
             f"<td>{esc(it['project'])}</td><td>{esc(it['salesPerson'])}</td>"
@@ -1818,7 +1819,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         out = ""
         for it in items:
             aa = it["actualAmount"]
-            aa_v = aa if aa is not None else it["amount"]
+            aa_v = int(it["netAmount"] if it["netAmount"] is not None else it["amount"])
             out += (
                 f"<tr><td>{esc(it['quoteNo'])}</td><td>{esc(it['customer'])}</td>"
                 f"<td>{esc(it['project'])}</td><td>{esc(it['salesPerson'])}</td>"
@@ -1836,7 +1837,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         return (
             f"<tr class='sum-row'><td colspan='5'>合計（{len(items)} 筆）</td>"
             f"<td class='r'>NT$ {sum(i['amount'] for i in items):,}</td><td></td>"
-            f"<td class='r'>NT$ {sum((i['actualAmount'] if i['actualAmount'] is not None else i['amount']) for i in items):,}</td>"
+            f"<td class='r'>NT$ {int(sum(i['netAmount'] or 0 for i in items)):,}</td>"
             f"<td class='r'>NT$ {sum(i['feeAmount'] or 0 for i in items):,}</td>"
             f"<td class='r'>NT$ {sum(i['netAmount'] or 0 for i in items):,}</td><td></td></tr>"
         )
@@ -2179,7 +2180,7 @@ tr.in-period{{background:#EFF6FF}}
   <td colspan="5">合計（{len(data["periodItems"])} 筆）</td>
   <td class="r">NT$ {sum(i["amount"] for i in data["periodItems"]):,}</td>
   <td></td>
-  <td class="r">NT$ {sum((i["actualAmount"] if i["actualAmount"] is not None else i["amount"]) for i in data["periodItems"]):,}</td>
+  <td class="r">NT$ {int(sum(i["netAmount"] or 0 for i in data["periodItems"])):,}</td>
   <td class="r">NT$ {sum(i["feeAmount"] or 0 for i in data["periodItems"]):,}</td>
   <td class="r">NT$ {int(s["periodNet"]):,}</td>
   <td></td>
@@ -2982,7 +2983,7 @@ def monthly_trend(months: int = 12, authorization: str = Header(None)):
                 aa  = pi.get("actualAmount")
                 rat = norm_ymd(pi.get("receivedAt"))[:7]
                 if rat in month_map:
-                    month_map[rat]["collected"] += int(aa if aa is not None else amt)
+                    month_map[rat]["collected"] += int(receipt_amounts(amt, aa, pi.get("feeAmount"))[1])   # 收入（含手續費）
 
     result = []
     for m in month_list:
@@ -3142,7 +3143,7 @@ def _collect_payment_anomalies(department_id: Optional[int] = None) -> list:
                 "project":     row["project_name"]  or "",
                 "salesPerson": row["sales_person"]  or "",
                 "type":        pi.get("type", f"第{idx+1}期"),
-                "amount":      aa if aa is not None else amounts[idx],
+                "amount":      receipt_amounts(amounts[idx], aa, pi.get("feeAmount"))[1] if aa is not None else amounts[idx],
                 "receivedAt":  rat,
                 "received":    rcvd,
                 "kind":        kind,
@@ -3220,7 +3221,7 @@ def _validate_quarter(quarter):
 
 
 def _build_income_expense_scopes(year: int, month: str, department_id: Optional[int] = None,
-                                 quarter: Optional[int] = None, basis: str = "accrual",
+                                 quarter: Optional[int] = None, basis: str = DEFAULT_BASIS,
                                  money_ok: bool = True) -> dict:
     """組出《當月收支》《今年度收支》兩張報表（2026-08-30 新增）要用的資料，
     直接回傳可攤平進 _build_excel()/_build_report_html() 的 data dict 片段，
@@ -3362,7 +3363,7 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     }
 
 
-def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str = "accrual",
+def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str = DEFAULT_BASIS,
                       conn=None) -> dict:
     """回傳該年度 1~12 月的支出結構（承攬商/設備/料件/其他）＋逐筆明細。
 

@@ -43,7 +43,7 @@ def _auth(token):
 def test_non_admin_forbidden(client, make_user):
     username, password = make_user(role="sales")
     token = _login(client, username, password)
-    r = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
+    r = client.get("/api/reports/expenses-monthly?year=2026&basis=accrual", headers=_auth(token))
     assert r.status_code == 403, r.text
 
 
@@ -86,7 +86,7 @@ def test_stock_purchase_bucketed_by_category(client, make_user):
     finally:
         conn.close()
 
-    r = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
+    r = client.get("/api/reports/expenses-monthly?year=2026&basis=accrual", headers=_auth(token))
     body = r.json()
     may = next(m for m in body["expenses"]["monthly"] if m["month"] == "2026-05")
     assert may["equipment"] == 10000
@@ -122,7 +122,7 @@ def test_settlement_extra_item_counted_as_other(client, make_user):
     finally:
         conn.close()
 
-    r = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
+    r = client.get("/api/reports/expenses-monthly?year=2026&basis=accrual", headers=_auth(token))
     body = r.json()
     july = next(m for m in body["expenses"]["monthly"] if m["month"] == "2026-07")
     assert july["other"] == 2500
@@ -152,7 +152,7 @@ def test_contractor_dispatch_counted(client, make_user):
     finally:
         conn.close()
 
-    r = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
+    r = client.get("/api/reports/expenses-monthly?year=2026&basis=accrual", headers=_auth(token))
     body = r.json()
     march = next(m for m in body["expenses"]["monthly"] if m["month"] == "2026-03")
     # 2026-09-24 AC2（使用者裁示）：預設權責口徑＝未稅（原本 10500 含稅）；沒登錄發票日、

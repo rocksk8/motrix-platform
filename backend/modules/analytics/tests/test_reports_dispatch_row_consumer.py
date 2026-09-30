@@ -34,7 +34,7 @@ def test_report_degrades_when_provider_is_absent(client, monkeypatch):
 
 
 def _reports(client, h):
-    rep = client.get(f"/api/reports/expenses-monthly?year={YEAR}&month={YEAR}-03", headers=h)
+    rep = client.get(f"/api/reports/expenses-monthly?year={YEAR}&month={YEAR}-03&basis=accrual", headers=h)   # 預設已改現金（2026-09-30）；本題比對權責 vs 現金
     cash = client.get(f"/api/reports/expenses-monthly?year={YEAR}&month={YEAR}-03&basis=cash", headers=h)
     for r in (rep, cash):
         assert r.status_code == 200, r.text
