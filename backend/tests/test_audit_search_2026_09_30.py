@@ -313,3 +313,23 @@ def test_perf_100k_rows_filters_and_tree(client, auditor):
     t0 = time.perf_counter()
     assert client.get("/api/audit-log", params={"before_id": 1000, "limit": 50}, headers=auditor).status_code == 200
     assert time.perf_counter() - t0 < 0.3
+
+
+# ── 8. 舊端點 module-counts：權限＋輸入驗證（安全審查 W3）────────────────────────────
+
+def test_module_counts_needs_audit_log_module(client, make_user):
+    u, p = make_user(username="mc_none", role="admin", modules=[])
+    r = client.post("/api/audit-log/module-counts", headers=_login(client, u, p), json={"modules": {"quotation": "2026-01-01"}})
+    assert r.status_code == 403
+    u2, p2 = make_user(username="mc_ok", role="admin", modules=["audit_log"])
+    h2 = _login(client, u2, p2)
+    ok = client.post("/api/audit-log/module-counts", headers=h2, json={"modules": {"quotation": "2026-01-01"}})
+    assert ok.status_code == 200 and "quotation" in ok.json()
+    assert client.post("/api/audit-log/module-counts", json={"modules": {"quotation": "2026-01-01"}}).status_code == 401
+
+
+@pytest.mark.parametrize("bad", [123, {"a": 1}, [1], True])
+def test_module_counts_non_string_since_is_400_not_500(client, make_user, bad):
+    u, p = make_user(username="mc_ok2", role="admin", modules=["audit_log"])
+    r = client.post("/api/audit-log/module-counts", headers=_login(client, u, p), json={"modules": {"quotation": bad}})
+    assert r.status_code == 400, r.text

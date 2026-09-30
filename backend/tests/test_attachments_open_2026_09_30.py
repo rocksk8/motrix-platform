@@ -44,6 +44,15 @@ def _exec(sql, args=()):
         c.close()
 
 
+@pytest.fixture(autouse=True)
+def _open_route_on(request, monkeypatch):
+    """路由在 train 26 預設關閉（`routers.attachments.ATTACHMENTS_OPEN_ENABLED`）；除了驗「關閉」的題，其餘打開來測程式。"""
+    if not request.node.get_closest_marker("route_off"):
+        from routers import attachments as _r
+        monkeypatch.setattr(_r, "ATTACHMENTS_OPEN_ENABLED", True)
+    yield
+
+
 def _open(client, h, type_, doc, file):
     return client.get("/api/attachments/open", headers=h, params={"type": type_, "doc": doc, "file": file})
 
@@ -70,6 +79,18 @@ def world(client, make_user):
     assert up_r.status_code == 201, up_r.text
     f = up_r.json()["files"][0]
     return H, note_no, f
+
+
+@pytest.mark.route_off
+def test_route_is_off_by_default_in_train_26(client, world):
+    """安全審查 W3：`opened_upload_file` 沒把路徑綁單據，train 26 不提供這條路（P3 補完再開）。
+    **反向控制**：把常數改成 True ⇒ 這題紅（有權限的人會打得開）。"""
+    from routers import attachments as r
+    assert r.ATTACHMENTS_OPEN_ENABLED is False
+    H, note_no, f = world
+    for who in ("ct_admin", "ct_owner"):
+        resp = _open(client, H[who], "completion_note", note_no, f["id"])
+        assert resp.status_code == 404 and resp.json()["detail"] == "檔案不存在", who
 
 
 # ── ① 打得開 ─────────────────────────────────────────────────────────────────

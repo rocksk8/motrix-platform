@@ -360,9 +360,15 @@ from helpers.audit import _FAIL_REASON_LABELS as _AUDIT_FAIL_LABELS  # noqa: E40
 def audit_module_counts(body: dict = Body(...), authorization: str = Header(None)):
     """Return per-module count of audit_log entries after given timestamps, excluding the caller's own actions."""
     user = _require_user(authorization)
+    # 安全審查 W3（2026-09-30）：這支直接數 audit_log，原本只要求登入 ⇒ 與歷史紀錄頁同一個權限（模組 audit_log）。
+    # 舊端點，前端已改用 /api/reads/module-counts，沒有活的呼叫端。
+    require_any_module(user, ["audit_log"], "歷史紀錄")
     modules_since = (body.get("modules") or {}) if isinstance(body, dict) else {}
     if not isinstance(modules_since, dict) or not modules_since:
         return {}
+    for _k, _ts in modules_since.items():                      # 非字串（數字、物件…）原本進 SQL 參數 ⇒ 500
+        if _ts is not None and not isinstance(_ts, str):
+            raise HTTPException(400, "since 時間必須是字串（ISO 格式）")
     conn = get_db()
     result = {}
     try:
