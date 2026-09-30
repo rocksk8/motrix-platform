@@ -295,9 +295,10 @@ def test_precheck_refuses_non_flake_shapes():
 
 
 def test_retry_all_stops_at_first_pass_and_caps_attempts():
-    seq = {"a": [1, 0], "b": [1, 1, 0]}
-    res = FR.retry_all(["a", "b"], 2, lambda nid, k: seq[nid][k - 1])
-    assert res == [{"nodeid": "a", "attempts": [1, 0], "passed": True}, {"nodeid": "b", "attempts": [1, 1], "passed": False}]
+    seq = {"a": [1, 0], "b": [1, 1, 0], "c": [0, 1]}
+    res = FR.retry_all(["a", "b", "c"], 2, lambda nid, k: seq[nid][k - 1])
+    assert res == [{"nodeid": "a", "attempts": [1, 0], "passed": True}, {"nodeid": "b", "attempts": [1, 1], "passed": False},
+                   {"nodeid": "c", "attempts": [0], "passed": True}]
 
 
 def _run_retry_main(tmp_path, monkeypatch, registry_entries, runner_codes, exit_code=1):
@@ -411,6 +412,7 @@ def test_orphan_when_the_parent_is_gone():
     idx = PF.index(_procs((100, 99, "python.exe", PY_PYTEST, 50)))
     c = PF.classify(100, idx)
     assert c["orphan"] and c["parent_gone"] and not c["has_live_ancestor"]
+    assert any("父行程已不存在" in r for r in c["reasons"]), c["reasons"]
 
 
 def test_not_orphan_under_a_live_shell_or_claude():
