@@ -35,9 +35,8 @@ def _body():
 def world(client, make_user):
     u, p = make_user("c7boss%d" % id(client), "Custom-Pass-123", role="superadmin")[:2]
     h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
-    if client.get("/api/definitions/custom_module/%s" % KEY, headers=h).status_code != 200:
-        assert client.put("/api/definitions/custom_module/%s/draft" % KEY, headers=h, json={"body": _body()}).json()["problems"] == []
-        assert client.post("/api/definitions/custom_module/%s/publish" % KEY, headers=h, json={}).status_code == 200
+    assert client.put("/api/definitions/custom_module/%s/draft" % KEY, headers=h, json={"body": _body()}).json()["problems"] == []
+    assert client.post("/api/definitions/custom_module/%s/publish" % KEY, headers=h, json={}).status_code == 200
     c = db.get_db()
     ROLES.ensure_meta(c)
     ROLES.ensure_default_roles(c)
