@@ -12,19 +12,22 @@ from modules.accounting.ledger import auto_run as _auto_run
 from modules.accounting.ledger import custom_events as _custom_events
 from modules.accounting.ledger import month_totals as _month_totals
 from modules.accounting.ledger import source_status as _source_status
-from modules.accounting.api import account_items, accounting_export, ledger_annotations, ledger_closing, ledger_engine, ledger_periods, ledger_reports, ledger_requests, ledger_settings, ledger_statements, ledger_tax, voucher_providers, vouchers
+from modules.accounting.api import account_items, accounting_export, ledger_annotations, ledger_category_map, ledger_closing, ledger_engine, ledger_periods, ledger_reports, ledger_requests, ledger_settings, ledger_statements, ledger_tax, voucher_providers, vouchers
 
 _m0001 = importlib.import_module("modules.accounting.migrations.0001_ledger_base")
 _m0002 = importlib.import_module("modules.accounting.migrations.0002_ledger_action_requests")
+_m0003 = importlib.import_module("modules.accounting.migrations.0003_dims_and_categories")
 
 MODULE = ModuleSpec(
     key="accounting",
-    routers=[accounting_export.router, ledger_annotations.router, account_items.router, vouchers.router, ledger_periods.router, ledger_reports.router, ledger_engine.router, ledger_settings.router, ledger_tax.router, ledger_statements.router, ledger_closing.router, ledger_requests.router],
-    migrations=[(1, _m0001.up), (2, _m0002.up)],
+    routers=[accounting_export.router, ledger_annotations.router, ledger_category_map.router, account_items.router, vouchers.router, ledger_periods.router, ledger_reports.router, ledger_engine.router, ledger_settings.router, ledger_tax.router, ledger_statements.router, ledger_closing.router, ledger_requests.router],
+    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up)],
     schedulers=[lambda: _auto_run.schedule()],          # L1：分錄引擎每小時自動產生草稿（旗標 engine_drafts 開著才跑）
     providers={
         # IP-2：M07 獎金傳票草稿與科目檢查
         ("voucher.draft", "accounting"): voucher_providers._provide_voucher_draft,
+        # IP `expense.categories`：啟用中的費用類別（費用單據的下拉選項取用；代碼發布後不可改）
+        ("expense.categories", "accounting"): ledger_category_map.provide_categories,
         # IP-GL1：自訂模組單據入帳（C7；來源＝L1 建構器 helpers/custom_finance.gl_lines，鍵 custom_modules）
         ("gl.events", "custom_modules"): _custom_events.gl_events,
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
