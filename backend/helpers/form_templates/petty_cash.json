@@ -1,0 +1,313 @@
+{
+ "key": "petty_cash",
+ "name": "零用金支付單",
+ "category": "財務",
+ "description": "申請人、部門、支付日期、支付對象、付款方式（零用金／現金／轉帳）、支付明細（科目、摘要、金額、憑證號碼）與合計；合計為支出。",
+ "note": "草稿範本（待使用者回答開放問題後定稿）：核准後合計列入營運報表支出（權責與現金皆依支付日）；不需綁案件，成本歸屬以「費用歸屬單位」表示。付款方式決定總帳貸方（零用金／銀行），此對應在總帳切片實作。",
+ "body": {
+  "name": "零用金支付單",
+  "icon": "",
+  "menu": {
+   "group": "財務",
+   "order": 64
+  },
+  "numbering": {
+   "prefix": "PC",
+   "date": "YYYYMMDD",
+   "digits": 4
+  },
+  "fields": [
+   {
+    "key": "applicant",
+    "label": "申請人",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "users",
+    "default": {
+     "$": "requester"
+    },
+    "required": true
+   },
+   {
+    "key": "dept",
+    "label": "部門",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "departments",
+    "required": true
+   },
+   {
+    "key": "cost_dept",
+    "label": "費用歸屬單位",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "departments",
+    "help": "成本歸屬的部門（沒有綁案件時的成本中心）；空白＝同申請人部門"
+   },
+   {
+    "key": "pay_date",
+    "label": "支付日期",
+    "type": "date",
+    "dataClass": "T1",
+    "default": {
+     "$": "today"
+    },
+    "required": true
+   },
+   {
+    "key": "payee",
+    "label": "支付對象／事由",
+    "type": "text",
+    "dataClass": "T1",
+    "required": true,
+    "maxLength": 200
+   },
+   {
+    "key": "method",
+    "label": "付款方式",
+    "type": "radio",
+    "dataClass": "T1",
+    "options": [
+     "零用金",
+     "現金",
+     "轉帳"
+    ],
+    "default": "零用金",
+    "required": true
+   },
+   {
+    "key": "lines",
+    "label": "支付明細",
+    "type": "table",
+    "dataClass": "T1",
+    "required": true,
+    "minRows": 1,
+    "maxRows": 100,
+    "addLabel": "新增",
+    "columns": [
+     {
+      "key": "item",
+      "label": "科目",
+      "type": "select",
+      "options": [
+       "辦公用品",
+       "郵電費",
+       "交通費",
+       "餐費",
+       "雜支"
+      ],
+      "allowOther": true,
+      "required": true
+     },
+     {
+      "key": "memo",
+      "label": "摘要",
+      "type": "text"
+     },
+     {
+      "key": "amt",
+      "label": "金額",
+      "type": "number",
+      "min": 0,
+      "required": true
+     },
+     {
+      "key": "voucher_no",
+      "label": "憑證號碼",
+      "type": "text"
+     }
+    ]
+   },
+   {
+    "key": "total",
+    "label": "合計",
+    "type": "formula",
+    "dataClass": "T1",
+    "formula": "total(lines, \"amt\")",
+    "finance": {
+     "kind": "expense",
+     "dateField": "pay_date",
+     "cashDateField": "pay_date",
+     "cashAmountField": "total"
+    }
+   },
+   {
+    "key": "notes",
+    "label": "備註",
+    "type": "textarea",
+    "dataClass": "T1",
+    "maxLength": 1000
+   }
+  ],
+  "workflow": {
+   "initial": "draft",
+   "states": [
+    {
+     "key": "draft",
+     "label": "草稿"
+    },
+    {
+     "key": "pending",
+     "label": "簽核中",
+     "approval": {
+      "tiers": [
+       {
+        "approvers": [
+         {
+          "sourceType": "submitter_manager"
+         }
+        ]
+       }
+      ],
+      "on_approved": "approved",
+      "on_rejected": "draft"
+     }
+    },
+    {
+     "key": "approved",
+     "label": "已核准",
+     "final": true,
+     "notify": {
+      "requester": true
+     }
+    }
+   ],
+   "transitions": [
+    {
+     "key": "submit",
+     "label": "送審",
+     "from": "draft",
+     "to": "pending"
+    }
+   ]
+  },
+  "ui": {
+   "form": {
+    "groups": [
+     {
+      "title": "基本資料",
+      "fields": [
+       "applicant",
+       "dept",
+       "cost_dept",
+       "pay_date"
+      ]
+     },
+     {
+      "title": "支付",
+      "fields": [
+       "payee",
+       "method"
+      ]
+     },
+     {
+      "title": "支付明細",
+      "fields": [
+       "lines",
+       "total",
+       "notes"
+      ]
+     }
+    ]
+   },
+   "list": {
+    "columns": [
+     "applicant",
+     "payee",
+     "pay_date",
+     "total"
+    ]
+   }
+  },
+  "output": {
+   "template": {
+    "theme": "voucher_standard",
+    "blocks": [
+     {
+      "type": "identity_header",
+      "title": "零用金支付單"
+     },
+     {
+      "type": "meta",
+      "fields": [
+       {
+        "label": "單號",
+        "path": "recordNo"
+       },
+       {
+        "label": "申請人",
+        "path": "fields.applicant"
+       },
+       {
+        "label": "部門",
+        "path": "fields.dept"
+       },
+       {
+        "label": "費用歸屬單位",
+        "path": "fields.cost_dept"
+       },
+       {
+        "label": "支付日期",
+        "path": "fields.pay_date",
+        "format": "date10"
+       },
+       {
+        "label": "支付對象／事由",
+        "path": "fields.payee"
+       },
+       {
+        "label": "付款方式",
+        "path": "fields.method"
+       }
+      ]
+     },
+     {
+      "type": "items_table",
+      "source": "fields.lines",
+      "label": "支付明細",
+      "columns": [
+       {
+        "title": "#",
+        "format": "index"
+       },
+       {
+        "title": "科目",
+        "path": "item"
+       },
+       {
+        "title": "摘要",
+        "path": "memo"
+       },
+       {
+        "title": "金額",
+        "path": "amt",
+        "format": "money",
+        "align": "right"
+       },
+       {
+        "title": "憑證號碼",
+        "path": "voucher_no"
+       }
+      ]
+     },
+     {
+      "type": "totals",
+      "rows": [
+       {
+        "label": "合計",
+        "path": "fields.total",
+        "grand": true
+       }
+      ]
+     },
+     {
+      "type": "approval_sign"
+     },
+     {
+      "type": "identity_footer"
+     }
+    ]
+   }
+  }
+ }
+}
