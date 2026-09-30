@@ -974,6 +974,25 @@
               </table>
             </template>
 
+            <!-- 依部門（2026-10-01）：無案件的支出以送出者部門／明示部門歸屬，其餘依案件業務；都沒有 ⇒ 未分類 -->
+            <template x-if="!expensesLoading && expenseByDept.length > 0">
+              <div data-testid="expense-by-dept" style="margin-bottom:18px">
+                <div class="cm-section-title" style="margin:0 0 8px;font-size:13px;font-weight:700;font-family:var(--font-zh)" x-text="scopeLabel + '支出・依部門'"></div>
+                <table class="data-table">
+                  <thead><tr><th>部門</th><th class="r">筆數</th><th class="r">金額</th></tr></thead>
+                  <tbody>
+                    <template x-for="b in expenseByDept" :key="b.key">
+                      <tr :data-testid="'expense-dept-' + b.key">
+                        <td x-text="b.name"></td>
+                        <td class="r mono" x-text="b.count"></td>
+                        <td class="r mono" x-text="fmt(b.total)"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+
             <!-- 支出明細 -->
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
               <span class="cm-section-title" style="margin:0;font-size:13px;font-weight:700;font-family:var(--font-zh)"
@@ -990,13 +1009,14 @@
             <template x-if="filteredExpenseItems.length > 0">
               <table class="data-table">
                 <thead><tr>
-                  <th class="c">日期</th><th>類別</th><th>關聯案件</th><th>說明</th><th class="r">金額</th>
+                  <th class="c">日期</th><th>類別</th><th>部門</th><th>關聯案件</th><th>說明</th><th class="r">金額</th>
                 </tr></thead>
                 <tbody>
                   <template x-for="(it, i) in filteredExpenseItems" :key="it.cat + '-' + it.date + '-' + i">
                     <tr>
                       <td class="c mono" x-text="it.date"></td>
                       <td x-text="expensesCatLabel(it.cat)"></td>
+                      <td data-testid="expense-row-dept" x-text="it.deptName || '未分類'"></td>
                       <td class="mono" x-text="it.quoteNo || '—'"></td>
                       <td>
                         <span x-text="it.desc"></span>

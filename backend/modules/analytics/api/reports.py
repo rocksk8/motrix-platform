@@ -3194,7 +3194,8 @@ def _months_expense_slice(expenses: dict, months) -> dict:
             if (it.get("date") or "")[:7] in want:
                 flat.append({**it, "cat": cat})
     flat.sort(key=lambda x: x.get("date") or "", reverse=True)
-    return {"items": flat, "total": sum(it["amount"] for it in flat)}
+    return {"items": flat, "total": sum(it["amount"] for it in flat),
+            "byDepartment": _dept_rollup((it["cat"], it) for it in flat)}
 
 
 def _month_expense_slice(expenses: dict, month: str) -> dict:
@@ -3386,6 +3387,18 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     }
 
 
+def _dept_rollup(pairs) -> list:
+    """(類別, 明細列) → 依部門彙總；未分類（deptId None）排最後。Σ total＝明細金額總和（守恆由測試保證）。"""
+    by_dept: dict = {}
+    for cat, d in pairs:
+        k = d.get("deptId")
+        b = by_dept.setdefault(k, {"deptId": k, "deptName": d.get("deptName") or "未分類", "contractor": 0,
+                                   "equipment": 0, "material": 0, "other": 0, "total": 0})
+        b[cat] += d["amount"]
+        b["total"] += d["amount"]
+    return sorted(by_dept.values(), key=lambda b: (b["deptId"] is None, -b["total"]))
+
+
 def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str = DEFAULT_BASIS,
                       conn=None) -> dict:
     """回傳該年度 1~12 月的支出結構（承攬商/設備/料件/其他）＋逐筆明細。
@@ -3407,18 +3420,28 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     if own_conn:
         conn = get_db()
 
-    dept_by_quote: dict = {}
-    if department_id:
-        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
-        dept_by_quote = {
-            r["quote_no"]: dept_by_user.get(r["sales_person_id"])
-            for r in conn.execute("SELECT quote_no, sales_person_id FROM quotations").fetchall()
-        }
+    # 部門歸屬（2026-10-01 無案件支出）：明示 departmentId（提供者給、送出當下凍結）＞案件業務的部門＞未分類。
+    # 篩選與明細都走同一個解析 ⇒ 篩選開啟時「無案件但有明示部門」的支出屬於該部門，不再一律被排除。
+    dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+    dept_by_quote = {
+        r["quote_no"]: dept_by_user.get(r["sales_person_id"])
+        for r in conn.execute("SELECT quote_no, sales_person_id FROM quotations").fetchall()
+    }
+    dept_names = {r["id"]: r["name"] for r in conn.execute("SELECT id, name FROM departments").fetchall()}
 
-    def _quote_in_department(quote_no: str) -> bool:
+    def _dept_of(quote_no, explicit=None):
+        if explicit is not None:
+            return explicit
+        return dept_by_quote.get(quote_no) if quote_no else None
+
+    def _quote_in_department(quote_no: str, explicit=None) -> bool:
         if not department_id:
             return True
-        return bool(quote_no) and dept_by_quote.get(quote_no) == department_id
+        return _dept_of(quote_no, explicit) == department_id
+
+    def _dept_fields(quote_no, explicit=None) -> dict:
+        did = _dept_of(quote_no, explicit)
+        return {"deptId": did, "deptName": dept_names.get(did, "未分類") if did is not None else "未分類"}
 
     rec = _recognition()                                   # M01 的 case.recognition；不在 ⇒ 下面三類整個缺（unavailable 明說）
     # ── 承攬商派發（`AC2`：口徑由 M01 決定——權責＝發票日、未稅；現金＝已匯款日、含稅）
@@ -3428,6 +3451,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             continue
         monthly[mo]["contractor"] += e["amount"]
         details["contractor"].append({
+            **_dept_fields(e["quoteNo"]),
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round_half_up(e["amount"]),
             "taxNote": e["taxNote"] + ("｜差額待審核" if e.get("remitPending") else ""), "provisional": e["provisional"],
             "pending": bool(e.get("remitPending")),
@@ -3440,6 +3464,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             continue
         monthly[mo]["material"] += e["amount"]
         details["material"].append({
+            **_dept_fields(e["quoteNo"]),
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round_half_up(e["amount"]),
             "taxNote": e["taxNote"], "provisional": e["provisional"],
         })
@@ -3460,9 +3485,10 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         bucket = "equipment" if r["category"] in _EQUIPMENT_PART_CATEGORIES else "material"
         cost = float(r["cost"] or 0)
         monthly[mo][bucket] += cost
-        key = (mo, bucket, r["part_no"], r["batch_no"] or "")
+        dpt = _dept_fields(r["quote_no"])
+        key = (mo, bucket, r["part_no"], r["batch_no"] or "", dpt["deptId"])
         agg = stock_agg.setdefault(key, {
-            "date": r["created_date"] or "", "bucket": bucket,
+            **dpt, "date": r["created_date"] or "", "bucket": bucket,
             "name": r["part_name"] or r["part_no"] or "（未知料號）",
             "batchNo": r["batch_no"] or "", "amount": 0.0, "qty": 0,
         })
@@ -3471,6 +3497,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     for agg in stock_agg.values():
         label = agg["name"] + (f"（批號 {agg['batchNo']}）" if agg["batchNo"] else "")
         details[agg["bucket"]].append({
+            "deptId": agg["deptId"], "deptName": agg["deptName"],
             "date": agg["date"], "quoteNo": "",
             "desc": f"{label} × {agg['qty']}", "amount": round_half_up(agg["amount"]),
         })
@@ -3480,10 +3507,11 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     # `AC2`：歸月改由 helpers.recognition 決定（權責＝發票日→核准日→憑證日；現金＝付款日→憑證日）。
     for e in (rec.extra_entries(conn, basis) if rec is not None else []):
         mo = (e["date"] or "")[:7]
-        if mo not in monthly or not _quote_in_department(e["quoteNo"]):
+        if mo not in monthly or not _quote_in_department(e["quoteNo"], e.get("departmentId")):
             continue
         monthly[mo]["other"] += e["amount"]
         details["other"].append({
+            **_dept_fields(e["quoteNo"], e.get("departmentId")),
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"].strip("｜"),
             "amount": round_half_up(e["amount"]), "files": e["files"],
             # 精算尚未完結：金額還可能變動，前端會標示出來，不要讓使用者
@@ -3502,10 +3530,11 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             if basis != "accrual" and "cashDate" in e:      # 現金口徑：提供者另給現金日與現金金額（選填鍵，舊提供者沒有 ⇒ 沿用 date／amount）
                 date, amount = e["cashDate"], e.get("cashAmount", e["amount"])
             mo = (date or "")[:7]
-            if mo not in monthly or not _quote_in_department(e["quoteNo"]):
+            if mo not in monthly or not _quote_in_department(e["quoteNo"], e.get("departmentId")):
                 continue
             monthly[mo]["other"] += amount
             details["other"].append({
+                **_dept_fields(e["quoteNo"], e.get("departmentId")),
                 "date": date, "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round(amount),
                 "files": [], "pending": bool(e.get("pending")), "taxNote": "差額待審核" if e.get("pending") else "",
                 "provisional": False, "category": e["category"],
@@ -3534,8 +3563,10 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     for cat in details:
         details[cat].sort(key=lambda x: x["date"], reverse=True)
 
+    by_department = _dept_rollup((cat, d) for cat, rows in details.items() for d in rows)   # 與 monthly 同一批明細
+
     # 稽核 X-1：某一類整個沒算（例如 IP-1 提供者不在）⇒ 明說，不可以跟「這期 0 元」長得一樣
-    return {"monthly": monthly_items, "totals": totals, "details": details,
+    return {"monthly": monthly_items, "totals": totals, "details": details, "byDepartment": by_department,
             "unavailable": (rec.dispatch_unavailable(basis) if rec is not None else [dict(CASE_EXPENSES_UNAVAILABLE)])
                            + ([{"category": "custom", "reason": "自訂模組有 %d 筆支出缺%s日期，沒有列入（待補登，不是 0 筆）"
                                 % (_undated["expense"], "現金" if basis != "accrual" else "歸屬")}] if _undated["expense"] else [])}

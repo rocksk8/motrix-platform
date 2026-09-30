@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.46 — 2026-10-01（暫用號，列車取號；wip/w3-dept-dim）
+- `recognition.extra_entries` 每筆多選填鍵 `departmentId`（讀 `case_extra_expenses.department_id`；欄位尚未建立 ⇒ 值為 None，不影響舊資料庫）。營運報表用它歸屬無案件支出的部門。
+
 ## 1.0.45 — 2026-10-01（暫用號，列車取號；wip/w3-local-date-2）
 - 報價表單 FORM_VERSION V3.14（本地日期：報價日期預設值與送審時間改用 static/motrix-date.js）；測試沙盒載入 motrix-date.js。只動前端與測試，後端行為不變。
 

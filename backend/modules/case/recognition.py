@@ -273,10 +273,14 @@ def extra_entries(conn, basis):
     """額外支出 → 逐筆。金額 0 不列；只計 COUNTED_EXTRA_STATUSES（送審中照樣計入、pending 標示；草稿與已駁回不計）。
     現金口徑：有付款日（出納登錄付款，IP-100）⇒ 用付款日、不是暫用；沒有 ⇒ 憑證日、暫用。"""
     out = []
+    # 選填欄 department_id（無案件支出的部門歸屬，送出當下凍結；由請款模組的 migration 加）：欄位還沒有 ⇒ 不帶 departmentId（報表退回案件推導）
+    has_dept = any(c[1] == "department_id" for c in conn.execute("PRAGMA table_info(case_extra_expenses)").fetchall())
     for r in conn.execute(
             "SELECT e.id, e.quote_no, e.category, e.description, e.total_cost, e.expense_date,"
             " e.created_at, e.doc_no, e.files_json, e.status, e.approval_json, e.invoice_date,"
-            " e.paid_date, e.remit_actual, e.remit_review, q.customer_name FROM case_extra_expenses e"
+            " e.paid_date, e.remit_actual, e.remit_review, q.customer_name"
+            + (", e.department_id AS department_id" if has_dept else "") +
+            " FROM case_extra_expenses e"
             " LEFT JOIN quotations q ON q.quote_no = e.quote_no"
             " WHERE e.status IN (%s) ORDER BY e.id" % ",".join("?" * len(COUNTED_EXTRA_STATUSES)),
             COUNTED_EXTRA_STATUSES):
@@ -305,7 +309,9 @@ def extra_entries(conn, basis):
                     "pending": r["status"] != "已核准", "files": files, "expenseId": r["id"],
                     "category": r["category"] or "其他",
                     "remitPending": basis == "cash" and paid != "" and r["remit_review"] == "pending",
-                    "invoiceDate": inv, "paidDate": paid})
+                    "invoiceDate": inv, "paidDate": paid,
+                    # 選填鍵：null／缺 ⇒ 報表依案件推導，再不行才「未分類」；`is None` 判斷，0 不是「沒有」
+                    "departmentId": r["department_id"] if has_dept else None})
     return out
 
 

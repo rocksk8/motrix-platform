@@ -1,5 +1,9 @@
 # 營運分析 更新紀錄
 
+## 1.0.21 — 2026-10-01（暫用號，列車取號；wip/w3-dept-dim）
+- 支出報表的部門維度（A2 無案件支出）：`_collect_expenses` 依「提供者明示的 departmentId（送出當下凍結）＞案件業務的部門＞未分類」解析部門，篩選與明細共用同一解析（篩選開啟時，無案件但明示該部門的支出不再被排除）；明細列多 `deptId`／`deptName`，回傳多 `byDepartment`（Σ＝總額，未分類排最後），各期別切片（`monthExpenseItems`／`quarterExpenseItems`）多 `byDepartment`。`departmentId` 是選填鍵：舊提供者沒有 ⇒ 行為同舊版（無案件＋篩選 ⇒ 排除）。
+- 營運報表「收支」分頁：新增「支出・依部門」表與明細「部門」欄。守門：`tests/test_dept_dimension_2026_10_01.py`（7 題）、`tests/test_e2e_expense_dept_2026_10_01.py`。
+
 ## 1.0.20 — 2026-10-01（暫用號，列車取號；wip/w3-local-date）
 - 本地日期（使用者 2026-10-01：凌晨建的單日期變前一天）：頁面的「今天／當月」預設值改用本地日期（共用 static/motrix-date.js）：台灣 00:00–08:00 不再得到前一天（使用者 2026-10-01 回報）；報表頁、每日任務日報等。
 
