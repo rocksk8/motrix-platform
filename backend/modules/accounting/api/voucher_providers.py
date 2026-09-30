@@ -77,9 +77,13 @@ def _reversal_draft(conn, orig_id, date, summary, created_by, now, origin):
     lock = _ledger_periods.lock_error(conn, date)
     if lock:
         return {"blocked": lock + "請先重開該期間，或改用開放期間的日期。"}
-    rows = conn.execute("SELECT account_code, summary, debit, credit FROM voucher_lines WHERE voucher_id=? ORDER BY line_no", (orig_id,)).fetchall()
-    mirror = [{"account_code": r["account_code"], "summary": r["summary"] or "", "debit": r["credit"] or 0, "credit": r["debit"] or 0} for r in rows]
-    norm = _line_sources(_amount_lines(mirror))
+    rows = conn.execute("SELECT account_code, summary, debit, credit, source_type, source_key FROM voucher_lines WHERE voucher_id=? ORDER BY line_no", (orig_id,)).fetchall()
+    mirror = [{"account_code": r["account_code"], "summary": r["summary"] or "", "debit": r["credit"] or 0, "credit": r["debit"] or 0,
+               "source_type": r["source_type"] or "", "source_key": r["source_key"] or ""} for r in rows]       # 摘要來源（案件連結）一併帶過去：案件頁『相關傳票』才列得到沖轉單
+    try:
+        norm = _line_sources(_amount_lines(mirror))
+    except Exception:                                    # noqa: BLE001  來源不合格（不該發生：原單已驗過）⇒ 退回不帶來源，沖轉照樣建立
+        norm = _line_sources(_amount_lines([dict(m, source_type="", source_key="") for m in mirror]))
     vid, no = insert_draft_voucher(conn, date, summary or ("沖轉 %s" % o["voucher_no"]), norm, created_by, now, classify_category(conn, norm))
     conn.execute("UPDATE vouchers_all SET kind='reversal', reverses_no=?, origin=? WHERE id=?", (o["voucher_no"], str(origin or "")[:40], vid))
     return {"id": vid, "voucher_no": no}
