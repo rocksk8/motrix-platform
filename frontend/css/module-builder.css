@@ -137,7 +137,7 @@
 .mb3__bar { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .mb3__bar .grow { flex: 1; }
 .mb3__grid { display: grid; grid-template-columns: 220px minmax(0, 1fr) 340px; gap: 14px; margin-top: 10px; align-items: start; }
-.mb3__pal, .mb3__side { position: sticky; top: calc(var(--topbar-h) + 62px); max-height: calc(100vh - var(--topbar-h) - 80px); overflow: auto; }
+.mb3__pal, .mb3__side { position: sticky; top: calc(var(--topbar-h) + 62px); max-height: calc(100vh / var(--fz, 1) - var(--topbar-h) - 80px); overflow: auto; }
 .mb3__pal .mb-pal__q { width: 100%; box-sizing: border-box; padding: 6px 8px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12.5px; font-family: inherit; }
 .mb3__pal .mb-pal__g { display: flex; align-items: center; justify-content: space-between; width: 100%; border: 0; background: none; padding: 4px 2px; margin: 6px 0 4px;
   font-size: 11.5px; font-weight: 700; color: var(--text-secondary); cursor: pointer; font-family: inherit; }
