@@ -260,7 +260,7 @@ class TestMirrorUploads:
         assert is_weak_password("a" * (MIN_PASSWORD_LEN - 1))
 
     def test_is_weak_known_passwords(self):
-        assert is_weak_password("rock1125")
+        # 本公司舊預設密碼在 own 資料檔（去識別化）：有檔時的判定見 tests/platform/test_legacy_weak_passwords_2026_09_30.py
         assert is_weak_password("password")
         assert is_weak_password("admin123")
         assert is_weak_password("123456")

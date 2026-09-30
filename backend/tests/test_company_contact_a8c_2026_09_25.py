@@ -27,7 +27,7 @@ def test_no_hardcoded_company_contacts_left(rel):
 
 
 def test_users_page_does_not_show_a_legacy_unlock_password():
-    """X 稽核 C-4：使用者管理頁寫著「預設 miac@60575481」——那是舊的弱密碼（`_LEGACY_WEAK_PASSWORDS`，啟動時清掉），
+    """X 稽核 C-4：使用者管理頁寫著「預設 <本公司舊預設密碼>」——那是舊的弱密碼（`_LEGACY_WEAK_PASSWORDS`，啟動時清掉），
     不是預設值；印在畫面上等於公開一組舊密碼。placeholder 也不用本公司的 email／電話。"""
     from helpers.auth import _LEGACY_WEAK_PASSWORDS
     src = (BACKEND.parent / "frontend" / "pages" / "users.html").read_text(encoding="utf-8")

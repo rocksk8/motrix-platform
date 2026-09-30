@@ -39,15 +39,33 @@ logger = logging.getLogger(__name__)
 from helpers.module_registry import SUPERADMIN_DEFAULT as _SUPERADMIN_DEFAULT
 _SUPERADMIN_MODULES = list(_SUPERADMIN_DEFAULT)
 
-_LEGACY_WEAK_PASSWORDS = (
-    "rock1125",
-    "miac@60575481",
+# 去識別化（使用者裁示 2026-09-30）：本公司的兩個舊預設密碼不進程式庫，放在 own 資料檔（tools/platform/own_payload.py）的
+# `auth.legacy_weak_passwords`；客戶環境沒有那個檔 ⇒ 只有通用弱密碼。**本公司環境的行為完全不變**（有檔時清單與順序同舊版）。
+# 資料檔的 auth 區段綁定下面這個 blob（取自哪一版 auth.py）；不符就忽略（不用錯版本的值）。
+_AUTH_PAYLOAD_SOURCE_BLOB = "43f2afc70a683f0199d2e044d84e33352c8081c2"
+_GENERIC_WEAK_PASSWORDS = (
     "password",
     "123456",
     "admin",
     "motrix",
     "motrix123",
 )
+
+
+def _own_weak_passwords() -> tuple:
+    """own 資料檔裡的舊預設密碼；讀不到／版本不符／格式不對 ⇒ 空（客戶環境本來就沒有）。永不丟例外。"""
+    try:
+        from db import _frozen_own_payload
+        sec = _frozen_own_payload().get("auth")
+        if not isinstance(sec, dict) or sec.get("source_blob") != _AUTH_PAYLOAD_SOURCE_BLOB:
+            return ()
+        v = sec.get("legacy_weak_passwords")
+        return tuple(x for x in v if isinstance(x, str) and x) if isinstance(v, list) else ()
+    except Exception:                                            # noqa: BLE001 — 缺檔（客戶環境）是正常情況
+        return ()
+
+
+_LEGACY_WEAK_PASSWORDS = _own_weak_passwords() + _GENERIC_WEAK_PASSWORDS
 
 from core import paths as _paths
 _CREDENTIALS_FILE = _paths.INITIAL_ADMIN_CREDENTIALS

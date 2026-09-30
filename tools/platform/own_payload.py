@@ -12,6 +12,7 @@ db.py 的凍結 migration 原本把三類值寫成字面值：
   python tools/platform/own_payload.py generate --out D:\\MOTRIX-KEYS\\deid\\own_payload.json [--copy-to backend/migrations_frozen/own_payload.json]
   python tools/platform/own_payload.py hashes        # 印 B 類雜湊常數（只有雜湊，可貼進 db.py）
   python tools/platform/own_payload.py verify <檔>   # 只驗版本綁定與欄位齊全，不印值
+  python tools/platform/own_payload.py add-auth <檔>  # 既有資料檔補上 auth 區段（本公司舊預設密碼；helpers/auth.py 用）
 
 資料檔格式：{"v": 1, "source_blob": "<固定舊版 db.py 的 git blob id>", "m008": {"correct": ..., "email": ...}, "m106": {"company_name_en": ...}}
 `source_blob` 綁定「取自哪一版」——db.py 載入時比對，不符就拒絕（不會用錯版本的值）。
@@ -29,6 +30,10 @@ REPO = Path(__file__).resolve().parents[2]
 PINNED_BLOB = "cb3d1c27f5dfb30527b3554b9a272abaaffa99b4"
 PINNED_SHA256 = "3341bf242e694981b18af4092e01cdfc2db95e0110b07f692aa82acd432b6f00"
 FORMAT = 1
+#: 弱密碼清單的來源：去識別化之前的 helpers/auth.py（git 歷史）。含兩個本公司舊預設密碼；內容雜湊一併釘住。
+PINNED_AUTH_BLOB = "43f2afc70a683f0199d2e044d84e33352c8081c2"
+PINNED_AUTH_SHA256 = "e4ee76e4683fd74c0d31216bd0a11de6526d65fa0914795ec1dc461cf41cf04c"
+GENERIC_WEAK = ("password", "123456", "admin", "motrix", "motrix123")
 
 
 def pinned_source(repo=REPO):
@@ -38,6 +43,30 @@ def pinned_source(repo=REPO):
     if hashlib.sha256(r.stdout).hexdigest() != PINNED_SHA256:
         raise SystemExit("固定的舊版 db.py 內容雜湊不符（blob %s）" % PINNED_BLOB)
     return r.stdout.decode("utf-8")
+
+
+def pinned_auth_source(repo=REPO):
+    r = subprocess.run(["git", "-C", str(repo), "cat-file", "blob", PINNED_AUTH_BLOB], capture_output=True)
+    if r.returncode != 0:
+        raise SystemExit("取不到固定的舊版 auth.py（blob %s）" % PINNED_AUTH_BLOB)
+    if hashlib.sha256(r.stdout).hexdigest() != PINNED_AUTH_SHA256:
+        raise SystemExit("固定的舊版 auth.py 內容雜湊不符（blob %s）" % PINNED_AUTH_BLOB)
+    return r.stdout.decode("utf-8")
+
+
+def extract_auth(text):
+    """⇒ {"source_blob", "legacy_weak_passwords": [本公司舊預設密碼…]}（通用弱密碼留在程式碼裡，這裡只放其餘的）。"""
+    tree = ast.parse(text)
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Assign) and len(n.targets) == 1 and getattr(n.targets[0], "id", "") == "_LEGACY_WEAK_PASSWORDS" and isinstance(n.value, ast.Tuple):
+            vals = [_const_str(e) for e in n.value.elts]
+            if not all(vals):
+                break
+            extra = [v for v in vals if v not in GENERIC_WEAK]
+            if not extra or not set(GENERIC_WEAK) <= set(vals):
+                break
+            return {"source_blob": PINNED_AUTH_BLOB, "legacy_weak_passwords": extra}
+    raise SystemExit("舊版 auth.py 的結構與預期不同，抽不出弱密碼清單（不印細節）")
 
 
 def _func(tree, name):
@@ -79,9 +108,11 @@ def extract(text):
     if not (old_names and all(old_names) and correct and email and owner_user and taxid and name_en):
         raise SystemExit("舊版 db.py 的結構與預期不同，抽不出全部值（不印細節，避免洩漏）")
     h = lambda v: hashlib.sha256(v.encode("utf-8", "surrogatepass")).hexdigest()
-    payload = {"v": FORMAT, "source_blob": PINNED_BLOB, "m008": {"correct": correct, "email": email}, "m106": {"company_name_en": name_en}}
-    hashes = {"m008_old_names": sorted(h(v) for v in old_names), "m008_username": h(owner_user), "m106_tax_id": h(taxid)}
-    values = {"old_names": old_names, "username": owner_user, "tax_id": taxid}
+    payload = {"v": FORMAT, "source_blob": PINNED_BLOB, "m008": {"correct": correct, "email": email}, "m106": {"company_name_en": name_en},
+               "auth": extract_auth(pinned_auth_source())}
+    hashes = {"m008_old_names": sorted(h(v) for v in old_names), "m008_username": h(owner_user), "m106_tax_id": h(taxid),
+              "auth_weak": sorted(h(v) for v in extract_auth(pinned_auth_source())["legacy_weak_passwords"])}
+    values = {"old_names": old_names, "username": owner_user, "tax_id": taxid, "weak_passwords": payload["auth"]["legacy_weak_passwords"]}
     return payload, hashes, values
 
 
@@ -97,7 +128,31 @@ def verify_payload(d):
         for k in keys:
             if not isinstance(s, dict) or not isinstance(s.get(k), str) or not s[k]:
                 probs.append("缺欄位 %s.%s" % (sec, k))
+    a = d.get("auth")
+    if not isinstance(a, dict) or a.get("source_blob") != PINNED_AUTH_BLOB:
+        probs.append("缺 auth 區段或來源版本（source_blob）不符（用 add-auth 補）")
+    elif not (isinstance(a.get("legacy_weak_passwords"), list) and a["legacy_weak_passwords"] and all(isinstance(x, str) and x for x in a["legacy_weak_passwords"])):
+        probs.append("缺欄位 auth.legacy_weak_passwords")
     return probs
+
+
+def add_auth(path):
+    """既有資料檔（沒有 auth 區段）就地補上；原子寫入；已有正確區段 ⇒ 不動。⇒ 訊息。"""
+    p = Path(path)
+    d = json.load(open(p, encoding="utf-8-sig"))
+    if not isinstance(d, dict) or d.get("v") != FORMAT or d.get("source_blob") != PINNED_BLOB:
+        return "OWN_PAYLOAD_REFUSED 不是這一版的資料檔（v／source_blob 不符）"
+    sec = extract_auth(pinned_auth_source())
+    if d.get("auth") == sec:
+        return "OWN_PAYLOAD_UNCHANGED auth 區段已是最新"
+    d["auth"] = sec
+    tmp = p.with_name(p.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(d, f, ensure_ascii=False, indent=1)
+        f.write("\n")
+    import os
+    os.replace(tmp, p)
+    return "OWN_PAYLOAD_UPDATED auth 區段已補上（值不顯示）"
 
 
 def main(argv=None):
@@ -110,7 +165,13 @@ def main(argv=None):
     sub.add_parser("hashes")
     v = sub.add_parser("verify")
     v.add_argument("file")
+    aa = sub.add_parser("add-auth")
+    aa.add_argument("file")
     a = ap.parse_args(argv)
+    if a.cmd == "add-auth":
+        msg = add_auth(a.file)
+        print(msg)
+        return 1 if msg.startswith("OWN_PAYLOAD_REFUSED") else 0
     if a.cmd == "verify":
         try:
             d = json.load(open(a.file, encoding="utf-8-sig"))
