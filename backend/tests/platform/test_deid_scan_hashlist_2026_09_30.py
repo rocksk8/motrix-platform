@@ -261,8 +261,8 @@ def test_fiction_registry_suppresses_only_the_registered_value(tmp_path):
 
 
 def test_allow_registry_requires_exact_counts_and_forbids_company_kinds(tmp_path):
-    root = _tree(tmp_path, {"f.txt": "a@real-a.com.tw\n", "g.txt": "a@real-a.com.tw\na@real-a.com.tw\n"})
-    code = S.value_code("email", "a@real-a.com.tw")
+    root = _tree(tmp_path, {"f.txt": "ab@real-a.com.tw\n", "g.txt": "ab@real-a.com.tw\nab@real-a.com.tw\n"})
+    code = S.value_code("email", "ab@real-a.com.tw")
     ok = S.scan(root, allow=[{"path": "f.txt", "value_id": code, "count": 1, "reason": "x", "expires": "2999-01-01"}])
     assert {h.path for h in ok} == {"g.txt"}
     wrong = S.scan(root, allow=[{"path": "g.txt", "value_id": code, "count": 1, "reason": "x", "expires": "2999-01-01"}])

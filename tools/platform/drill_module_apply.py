@@ -219,7 +219,7 @@ def setup_company(root, port):
     token = b["token"] if s == 200 else None
     tax = next("%08d" % n for n in range(10000000, 10001000) if _ubn_ok("%08d" % n))
     s, b3 = _api(port, "/api/settings/company-profile",
-                 {"name": "演練測試股份有限公司", "tax_id": tax, "contact_info": "Tel: 04-2345-6789",
+                 {"name": "演練測試股份有限公司", "tax_id": tax, "contact_info": "Tel: 02-0000-0000",
                   "confirmIdentity": True}, token=token, method="PUT")
     if s != 200:
         raise DrillError("本公司資料存檔／確認失敗：%s %s" % (s, b3))

@@ -1,0 +1,135 @@
+[
+ {
+  "kind": "address_pattern",
+  "value": "範例市示範區範例路1號",
+  "value_id": "0188f7ee",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "company_pattern",
+  "value": "演練測試股份有限公司",
+  "value_id": "6092755b",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "company_pattern",
+  "value": "示範資料科技股份有限公司",
+  "value_id": "9aa32cba",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "company_pattern",
+  "value": "範例客戶股份有限公司",
+  "value_id": "5a2451cf",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "company_pattern",
+  "value": "範例機械股份有限公司",
+  "value_id": "19e5e57c",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "company_pattern",
+  "value": "範例科技股份有限公司",
+  "value_id": "844e6ee7",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "company_pattern",
+  "value": "範例第二家公司股份有限公司",
+  "value_id": "f71db5c8",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "company_pattern",
+  "value": "範例股份有限公司",
+  "value_id": "67f35d88",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "docno_pattern",
+  "value": "DN-202508-001",
+  "value_id": "11e05f66",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "docno_pattern",
+  "value": "IV-202609-0001",
+  "value_id": "093b0f3c",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "docno_pattern",
+  "value": "MQ-202501-001",
+  "value_id": "7196f9aa",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "docno_pattern",
+  "value": "MQ-202507-001",
+  "value_id": "cb6ecceb",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "docno_pattern",
+  "value": "MQ-202608-001",
+  "value_id": "c3228c04",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "docno_pattern",
+  "value": "PS-202609-0001",
+  "value_id": "f23a3bbf",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "docno_pattern",
+  "value": "PS-202609-001",
+  "value_id": "46434142",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "email",
+  "value": "xxxxx@group.calendar.google.com",
+  "value_id": "34a47d10",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "phone_pattern",
+  "value": "02-0000-0000",
+  "value_id": "8c31b23a",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "phone_pattern",
+  "value": "0900-000-000",
+  "value_id": "54e08acc",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ },
+ {
+  "kind": "taxid_pattern",
+  "value": "00000000",
+  "value_id": "1ea7d50f",
+  "reason": "既有範例值（S3 首次登記；符合 §2.1 取值規則）",
+  "added": "2026-09-30"
+ }
+]

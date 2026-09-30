@@ -197,10 +197,17 @@ def iter_text_views(path: Path):
 
 # ── 樣式層 ──────────────────────────────────────────────────────────────────────
 
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@([A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+)")
+# 網域最後一段必須全是字母（擋 `chart.js@4.4.0`、`Mbps@2.4GHz` 這類「名稱@版本」）；本地部分至少 2 字元（擋字串裡 `\n@router.get` 的 `n@`）
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]{2,}@([A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,})(?![A-Za-z0-9])")
 IP_RE = re.compile(r"(?<![\d.])(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(?![\d.])")
 DEVPATH_RE = re.compile(r"[A-Za-z]:[\\/](?:Users|開發|MOTRIX|Desktop)[\\/][^\s\"'<>|]*|/(?:home|Users)/[a-z0-9_.-]+/", re.I)
-TAX_RE = re.compile(r"(?<!\d)\d{8}(?!\d)")
+# 前後不可緊貼字母數字底線連字號（擋雜湊字串、UUID、`?v=20260828a` 快取參數裡剛好 8 位數字的片段）
+TAX_RE = re.compile(r"(?<![0-9A-Za-z_\-])\d{8}(?![0-9A-Za-z_\-])")
+#: 看起來是日期（20YYMMDD）或已知常數（一天的毫秒數）的 8 位數字：不是統編。本公司自己的統編由雜湊層另抓，不靠這裡。
+DATE_LIKE_RE = re.compile(r"20[2-3]\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])")
+NON_ID_NUMBERS = {"86400000"}
+#: 第三方函式庫（有 PROVENANCE 與雜湊釘住）：壓縮檔裡的數字／版本號會大量誤判樣式層；雜湊層（本公司的值）照掃
+VENDOR_SEG = "/vendor/"
 PHONE_RE = re.compile(r"(?<!\d)(?:\+886[\s-]?|0)(?:9\d{2}[\s-]?\d{3}[\s-]?\d{3}|[2-8][\s-]?\d{3,4}[\s-]?\d{4})(?!\d)")
 ADDR_RE = re.compile(r"[一-鿿]{1,4}[縣市][一-鿿]{1,4}[區鄉鎮市][一-鿿0-9]{1,12}[路街道][一-鿿0-9段巷弄]{0,10}\d{1,4}號")
 PLACEHOLDER_DOMAINS = ("example.com", "example.org", "example.net", "example.invalid", "example.test", "localhost")
@@ -241,6 +248,8 @@ def pattern_hits(line: str):
     for m in DEVPATH_RE.finditer(line):
         out.append(("dev_path", m.group(0)))
     for m in TAX_RE.finditer(line):
+        if m.group(0) in NON_ID_NUMBERS or DATE_LIKE_RE.fullmatch(m.group(0)):
+            continue
         if tw_tax_id_valid(m.group(0)):
             out.append(("taxid_pattern", m.group(0)))
     for m in PHONE_RE.finditer(line):
@@ -384,7 +393,7 @@ def scan(root, hashlist=None, fiction=None, allow=None, skip_dirs=(".git", "__py
             if hashlist is not None:
                 for kind, h in hashlist_hits(hashlist, text):
                     found.append((kind, h[:8], "hash"))
-            for kind, val in pattern_hits(text):
+            for kind, val in ([] if VENDOR_SEG in rel.as_posix() else pattern_hits(text)):
                 found.append((kind, value_code(kind, val), "pattern"))
             cred, in_secret_next = credential_hits(path, text, in_secret if line > 0 else False)
             if line > 0:

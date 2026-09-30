@@ -265,7 +265,7 @@
         <div class="ns-row">
           <div class="ns-field">
             <label>寄件人 Email（Gmail 帳號）</label>
-            <input type="text" x-model="cfg.smtp_user" placeholder="your@gmail.com">
+            <input type="text" x-model="cfg.smtp_user" placeholder="your@example.com">
           </div>
           <div class="ns-field">
             <label>應用程式密碼（App Password）</label>
@@ -444,7 +444,7 @@
             {
               label: 'Gmail 寄件帳號',
               ok: !!(this.cfg.smtp_user && this.cfg.smtp_user.trim()),
-              hint: '請填寫 Gmail 帳號（例：your@gmail.com）',
+              hint: '請填寫 Gmail 帳號（例：your@example.com）',
             },
             {
               label: '應用程式密碼（App Password）',

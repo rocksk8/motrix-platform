@@ -119,7 +119,7 @@ def identity_from_profile(profile: dict, location_id=None) -> dict:
 
 
 def contact_info_parts(profile: dict) -> dict:
-    """設定頁最上方「聯絡方式」（`contact_info`，例 `Tel: 04-1234-5678｜a@b.com`）拆出電話與 email。
+    """設定頁最上方「聯絡方式」（`contact_info`，例 `Tel: 02-0000-0000｜a@example.com`）拆出電話與 email。
 
     只當作**最後的後備**（據點欄、company_profile 的 phone／email 都空時才用）。原本與 db._m106 的拆法相同，
     X 稽核 B-3 改成電話只收以數字為主的片段（m106 是凍結的歷史 migration，不跟著改）。
