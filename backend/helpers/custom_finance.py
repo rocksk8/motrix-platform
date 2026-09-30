@@ -173,15 +173,21 @@ def dup_skipped(conn) -> list:
 
 
 def case_finance(conn, case_no) -> dict:
-    """某案件（關聯案件欄位＝該單號）的入帳金流：`{expense: {total, items}, income: {total, items}}`；金額取權責金額。
-    支出＝案件成本的「自訂模組」一列；收入只列（內建案件的收入由內建報價單認列，這裡列的是被略過的那幾筆供對照）。"""
-    out = {"expense": {"total": 0, "items": []}, "income": {"total": 0, "items": []}}
+    """某案件（關聯案件欄位＝該單號）的入帳金流：`{expense: {total, items}, income: {total, items, skippedTotal}}`；金額取權責金額。
+    支出＝案件成本的「自訂模組」一列；收入：案件是內建案件 ⇒ 由內建報價單認列，這裡的收入行標 `skipped` 並累計 `skippedTotal`（供對照，不進 total）。"""
+    out = {"expense": {"total": 0, "items": []}, "income": {"total": 0, "items": [], "skippedTotal": 0}}
+    builtin = bool(case_no) and conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (case_no,)).fetchone() is not None
     for r, body, lines in _posted(conn):
         for ln in lines:
             if ln["case"] != case_no:
                 continue
             side = out[ln["kind"]]
-            side["items"].append({"module": r["module_key"], "moduleName": body.get("name", ""), "recordNo": r["record_no"], "label": ln["label"],
-                                  "amount": ln["amount"], "date": ln["date"], "cashDate": ln["cashDate"], "cashAmount": ln["cashAmount"]})
-            side["total"] += ln["amount"]
+            item = {"module": r["module_key"], "moduleName": body.get("name", ""), "recordNo": r["record_no"], "label": ln["label"],
+                    "amount": ln["amount"], "date": ln["date"], "cashDate": ln["cashDate"], "cashAmount": ln["cashAmount"]}
+            if ln["kind"] == "income" and builtin:
+                item["skipped"] = True                                   # 內建報價單已認列 ⇒ 不重複計入（與營運報表同一個判準）
+                side["skippedTotal"] += ln["amount"]
+            else:
+                side["total"] += ln["amount"]
+            side["items"].append(item)
     return out

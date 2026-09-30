@@ -311,8 +311,11 @@ def delete_staged_custom_file(key: str, file_id: str, authorization: str = Heade
 def custom_finance_of_case(case_no: str, authorization: str = Header(None)):
     """某案件在自訂模組裡的入帳金流（案件成本用）。看得到案件底下單據的人才能讀（同 `case_documents_readable`）；
     沒有案件模組／案件不存在 ⇒ 403（不洩漏案件是否存在）。"""
+    from helpers import can_see_financial
     from helpers.case_access import case_documents_readable
     u = _require_user(authorization)
+    if not can_see_financial(u):
+        raise HTTPException(403, "沒有查看財務金額的權限")
     conn = get_db()
     try:
         if not case_documents_readable(conn, case_no, u):

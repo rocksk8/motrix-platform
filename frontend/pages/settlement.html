@@ -603,8 +603,11 @@
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.itemActualTotal)"></td>
                 </tr>
                 <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">額外支出<span x-show="summary.remitFeeTotal" style="font-size:11px" x-text="'（含匯款手續費 ' + fmt(summary.remitFeeTotal) + '）'"></span></td>
+                  <td style="padding:5px 0;color:var(--text-secondary)">額外支出<span x-show="summary.remitFeeTotal" style="font-size:11px" x-text="'（含匯款手續費 ' + fmt(summary.remitFeeTotal) + '）'"></span><span x-show="summary.customExpenseTotal" data-testid="settle-custom-expense" style="font-size:11px" x-text="'（含自訂模組支出 ' + fmt(summary.customExpenseTotal) + '）'"></span></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.extraTotal)"></td>
+                </tr>
+                <tr x-show="customIncomeSkipped.length" data-testid="settle-custom-income-skipped">
+                  <td colspan="2" style="padding:2px 0;font-size:11px;color:var(--text-dim)" x-text="'自訂模組有 ' + customIncomeSkipped.length + ' 筆收入（' + customIncomeSkipped.map(i => i.recordNo).join('、') + '）關聯到本案件，因內建報價單已認列而未重複計入'"></td>
                 </tr>
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">承攬商派發成本</td>
@@ -731,6 +734,8 @@ function settlementPage() {
     xeTotal: 0,
     // W1：匯款手續費（公司自付、已匯款者）：額外支出請款的手續費＋承攬商匯款單的手續費；併入「額外支出」成本（十二格鍵名不動）
     remitFeeTotal: 0,
+    customExpenseTotal: 0,        // 建構器（自訂模組）關聯到這個案件的入帳支出；loadCustomFinance() 填
+    customIncomeSkipped: [],      // 關聯到這個案件的自訂模組收入（內建報價單已認列 ⇒ 不重複計入，只列出供對照）
     xePending: 0,
 
     dispatches: [],  // 承攬商派發（唯讀，即時從 /api/contractor-dispatches 讀取，不隨精算存檔凍結）
@@ -853,6 +858,7 @@ function settlementPage() {
         await this.loadDispatches()
         await this.loadExtraExpenseTotals()   // 成本彙總要用到，必須在 calcSummary 之前
         await this.loadVoucherRemitFees()     // W1：承攬商匯款手續費併入額外支出成本
+        await this.loadCustomFinance()        // 建構器：自訂模組支出併入額外支出成本
         this.calcSummary()
       } catch(e) {
         this.toast('載入失敗：' + e.message)
@@ -874,6 +880,22 @@ function settlementPage() {
           this.xeTotal = d.totalAmount || 0
           this.remitFeeTotal = d.remitFeeTotal || 0
           this.xePending = d.totalPending || 0
+        }
+      } catch {}
+    },
+
+    // 自訂模組（建構器）關聯到這個案件的金流（無權限 ⇒ 403 ⇒ 不加，與額外支出同一規則）
+    async loadCustomFinance() {
+      this.customExpenseTotal = 0
+      this.customIncomeSkipped = []
+      try {
+        const r = await fetch(`/api/custom-modules/finance/case/${encodeURIComponent(this.quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          const d = await r.json()
+          this.customExpenseTotal = (d.expense && d.expense.total) || 0
+          this.customIncomeSkipped = ((d.income && d.income.items) || []).filter(i => i.skipped)
         }
       } catch {}
     },
@@ -962,7 +984,7 @@ function settlementPage() {
       // 總額。**不能再用 settlement.extraItems 算**——那份陣列現在只是搬移前的唯讀
       // 備份、不會再更新，拿它算成本會停在搬移當下的舊數字。含送審中的金額
       // （使用者指定：送審中照樣算進成本，但畫面要提醒）。
-      const extraTotal      = this.xeTotal + this.remitFeeTotal   // W1：含匯款手續費（明細見 summary.remitFeeTotal）
+      const extraTotal      = this.xeTotal + this.remitFeeTotal + this.customExpenseTotal   // W1：含匯款手續費（summary.remitFeeTotal）、自訂模組支出（summary.customExpenseTotal）
       const dispatchTotal   = this.dispatchTotal()
       const totalActualCost = itemActualTotal + extraTotal + dispatchTotal
       const grossProfit     = quotedPretax - totalActualCost
@@ -987,7 +1009,7 @@ function settlementPage() {
         origAdminCost, origCharity,
         origNetProfit:    MotrixLegalRound.halfUp(origNetProfit),
         origNetMarginPct: MotrixLegalRound.halfUp(origNetMarginPct, 10) / 10,
-        itemActualTotal, extraTotal, dispatchTotal, totalActualCost, remitFeeTotal: this.remitFeeTotal,
+        itemActualTotal, extraTotal, dispatchTotal, totalActualCost, remitFeeTotal: this.remitFeeTotal, customExpenseTotal: this.customExpenseTotal,
         grossProfit:     MotrixLegalRound.halfUp(grossProfit),
         grossMarginPct:  MotrixLegalRound.halfUp(grossMarginPct, 10) / 10,
         adminCost, charityDonation,
