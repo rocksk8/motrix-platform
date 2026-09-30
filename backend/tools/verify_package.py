@@ -715,7 +715,7 @@ def check_autostart(pkg):
 
     ```
     set MOTRIX_TENDER_RADAR=1                      <= 舊過濾器看得到
-    cd /d "C:\Users\Motrix\Desktop\V9.0\backend"   <= **它看不到**
+    cd /d "<安裝目錄>\backend"   <= **它看不到**
     ```
     🔑 那是〈只留「可執行行」的過濾器〉的極端版：**它只留一種可執行行**，
        而路徑住在另一種。
