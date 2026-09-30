@@ -486,6 +486,8 @@
    "FORMATS": "const",
    "THEMES": "const",
    "TemplateError": "class",
+   "attr_esc": "def(s)",
+   "esc_quotes": "def(text)",
    "load_default": "def(key)",
    "problems": "def(template, sample_view=…)",
    "render": "def(template, data, parts)",
@@ -1051,6 +1053,7 @@
    "validate_manifest": "def(manifest)"
   },
   "plat:definitions": {
+   "DefinitionConflict": "class",
    "DefinitionError": "class",
    "DefinitionError.__init__": "def(self, message, problems=…)",
    "KINDS": "const",

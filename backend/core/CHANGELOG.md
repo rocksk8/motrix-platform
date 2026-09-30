@@ -16,6 +16,8 @@
 ## (next) — 2026-09-30（wip/w1-xss：W3 #2 輸出版型儲存型 XSS；wip/w1-defreview-bypass：W3 #3；升版幅度由列車取號）
 - L1（安全，行為）：`helpers.doc_template._esc` 加跳脫 `"`／`'`；版型會落進屬性的值改白名單——`class`（英數／底線／連字號）、`width`（數字＋%／px／mm／pt／em）、`colspan`（1～20）、浮水印 `count`（1～60，原本可填任意大數撐爆記憶體）；壞值渲染丟 `TemplateError`、儲存驗證（`problems`）同步回報，存不進去。公開介面不變（快照不動）。
 - L1（安全，行為）W3 #3 定義審核繞過：審核只涵蓋自訂模組定義（company）；其他 kind 直接發布與任何還原（審核未啟用時）**都寫稽核 `definitions.publish_unreviewed`**；自訂模組定義的 draft／publish／restore 只接受 `company` 範圍（其餘 400，引擎本來就只讀 company）。
+- L1（安全，新增）：`helpers.doc_template.esc_quotes／attr_esc`——引號跳脫的單一來源（各 builder 的區域 `esc()` 保留原本的 &<>／換行規則，最後一步交給 `esc_quotes`）；單據抬頭／頁尾（公司名稱、英文名、統編、電話、email）與 `<img src>`（存摺、身分證路徑）一律跳脫；JSON 的 Infinity／NaN 進 colspan／count ⇒ `TemplateError`。
+- L1（安全，新增）W3 #3 補：`core.definitions.DefinitionConflict`（HTTP 409）——這份定義有送審中的版本時，`publish`／`restore` 直接拒絕（寫鎖內判斷）；`custom_def_review`：送審記 `baseVersion`，核可時現行版已變 ⇒ 409「送審已過期」（退回仍可）；有送審中的定義時變更審核模式／審核人 ⇒ 409。
 
 ## 1.82 — 2026-09-30（暫用號；wip/w2-gl-warn：已入帳來源的修改提示，MONEY-FLOWS §9 L3）〔core_bump：暫用 1.99 → 1.82〕
 - L1（新增）：`helpers.gl_status.gl_posted_warning(conn, source_type, source_key, prefix=False)`——經 `gl.source_status` 提供者（accounting）查來源是否已入總帳，回一句非阻擋提示或 None（沒有提供者／丟例外 ⇒ None）。各來源寫入端點用：成功後把文字放進回應 `glWarning`。

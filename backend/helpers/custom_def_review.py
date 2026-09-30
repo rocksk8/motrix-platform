@@ -68,11 +68,21 @@ def review_state(conn, submitter="") -> dict:
             "reason": "沒有申請人以外的審核人：發布為直接發布（稽核會記「未經第二人審核」）"}
 
 
+def _open_submission_keys(conn) -> list:
+    return [r["key"] for r in conn.execute(
+        "SELECT DISTINCT key FROM ui_definitions WHERE kind='custom_module' AND scope='company' AND status='submitted' ORDER BY key").fetchall()]
+
+
+def _latest_version(conn, module_key) -> int:
+    return int((D.get(conn, "custom_module", module_key, "company") or {}).get("version") or 0)
+
+
 def set_review_settings(conn, mode=None, reviewers=None) -> dict:
     """設定覆寫模式與審核人名單（只有最高管理者呼叫；呼叫端寫稽核）。帳號必須存在且啟用。回目前狀態。"""
-    from helpers.settings import _set_setting
+    from helpers.settings import _get_setting, _set_setting
     if mode is not None and mode not in MODES:
         raise ReviewError("mode 要是 %s" % "、".join(MODES))
+    rows = []
     if reviewers is not None:
         if not isinstance(reviewers, list) or any(not isinstance(x, str) for x in reviewers):
             raise ReviewError("reviewers 要是帳號清單")
@@ -80,6 +90,14 @@ def set_review_settings(conn, mode=None, reviewers=None) -> dict:
         missing = [x for x in dict.fromkeys(reviewers) if x not in {r["username"] for r in rows}]
         if missing:
             raise ReviewError("找不到（或已停用）的帳號：%s" % "、".join(missing))
+    # 有送審中的定義時不准改審核模式／審核人：送審當下的審核人名單與模式是那一份的依據，中途換掉＝同一份送審被兩套規則審
+    # （W3 #3：先送審 → 關審核 → 直接發布 → 舊送審還能核可）。⇒ 先決定（核可／退回）那一份再改。沒有實際變更（同值）不擋。
+    changed = (mode is not None and mode != _mode()) or (
+        reviewers is not None and [r["username"] for r in rows] != list(_get_setting(REVIEWERS_KEY, []) or []))
+    if changed:
+        opened = _open_submission_keys(conn)
+        if opened:
+            raise ReviewError("有送審中的定義（%s），請先審核（核可或退回）再變更審核模式或審核人" % "、".join(opened), 409)
     if mode is not None:
         _set_setting(SETTING_KEY, True if mode == "on" else (False if mode == "off" else None))
     if reviewers is not None:
@@ -108,14 +126,16 @@ def submit(conn, module_key, user, note=""):
     st = review_state(conn, user["username"])
     try:
         if not st["active"]:
-            d = D.publish(conn, "custom_module", module_key, "company", note, user["username"])
+            d = D.publish(conn, "custom_module", module_key, "company", note, user["username"])       # 有送審中的 ⇒ DefinitionConflict（409）
             return {"published": True, "pending": False, "version": d["version"], "definition": d, "unreviewed": True, "reason": st["reason"]}
         appr = {"requestedBy": user["username"], "requestedByDisplay": _display(conn, user["username"]),
                 "requestedAt": datetime.now().isoformat(timespec="seconds"),
                 "tiers": [{"order": 0, "approvers": [dict(r, status="pending") for r in st["reviewers"]]}], "currentTier": 0}
-        d = D.submit_draft(conn, "custom_module", module_key, "company", note, user["username"], {"approval": appr})
+        # 基準版本＝送審當下的現行版：核可時現行版已經不是它 ⇒ 這份送審過期（409），不能把舊內容蓋回去
+        d = D.submit_draft(conn, "custom_module", module_key, "company", note, user["username"],
+                           {"approval": appr, "baseVersion": _latest_version(conn, module_key)})
     except D.DefinitionError as e:
-        raise ReviewError(str(e), 422 if e.problems else 400, e.problems)
+        raise ReviewError(str(e), 409 if isinstance(e, D.DefinitionConflict) else (422 if e.problems else 400), e.problems)
     _notify(conn, [r["username"] for r in st["reviewers"]], module_key, d["version"],
             "自訂模組「%s」的定義（第 %d 版）待您審核" % (module_key, d["version"]))
     return {"published": False, "pending": True, "version": d["version"], "definition": d}
@@ -157,6 +177,10 @@ def decide(conn, module_key, version, user, approve, note=""):
     note = (note or "").strip()
     if not approve and not note:
         raise ReviewError("退回要填原因", 400)
+    base = _dec(row).get("baseVersion")
+    if approve and base is not None and _latest_version(conn, module_key) != int(base):
+        raise ReviewError("這份送審（第 %d 版）是依據第 %s 版送的，而現行版已是第 %d 版，送審已過期：請退回這一版，從最新版重新送審"
+                          % (row["version"], base, _latest_version(conn, module_key)), 409)
     appr = _dec(row).get("approval") or {}
     try:
         out = D.decide_submitted(conn, "custom_module", module_key, "company", version, bool(approve), user["username"], note,
