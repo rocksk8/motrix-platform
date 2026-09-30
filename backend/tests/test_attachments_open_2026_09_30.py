@@ -129,7 +129,8 @@ def test_catalog_answer_equals_photo_token_answer(client, world):
 
 def test_work_log_photo_follows_path_access(client, world):
     H, _, _ = world
-    r = client.post("/api/work-logs", headers=H["ct_admin"], json={"log_date": "2026-09-30", "content": "x", "hours": 1, "case_no": Q})
+    r = client.post("/api/work-logs", headers=H["ct_admin"], json={"log_date": "2026-09-30", "content": "x", "hours": 1, "case_no": Q,
+                                                                "user_id": _uid("ct_admin")})
     assert r.status_code in (200, 201), r.text
     wid = r.json()["id"]
     pr = client.post(f"/api/work-logs/{wid}/photos", headers=H["ct_admin"], files=[("files", ("a.png", PNG, "image/png"))])
