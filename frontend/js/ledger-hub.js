@@ -168,8 +168,8 @@ function ledgerHubPage() {
       t.busy = true
       try {
         const r = await this._api({ method: 'POST' }, '/api/ledger/tax401/settlement', { year: t.year, period: t.period })
+        await this.taxLoad()          // 先重讀再設訊息：taxLoad() 開頭會清掉訊息
         t.notice = '已產生稅額結轉草稿 ' + r.voucher_no + '（應實繳 ' + this.fmt(r.payable) + '、新留抵 ' + this.fmt(r.carry_new) + '）；請到傳票頁送審過帳。'
-        await this.taxLoad()
       } catch (e) { t.error = e.message }
       t.busy = false
     },

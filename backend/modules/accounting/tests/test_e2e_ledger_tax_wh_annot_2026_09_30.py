@@ -5,6 +5,7 @@
 旗標直接寫進資料庫（READY 只擋 API 開關，頁籤內容不受影響）；資料用遠期年份（2183）避免撞到共用庫。
 """
 import os
+import tempfile
 import subprocess
 import time
 
@@ -24,7 +25,7 @@ def _shots_dir():
                                 cwd=os.path.dirname(__file__)).stdout.strip() or "unknown"
     except Exception:  # noqa: BLE001
         branch = "unknown"
-    d = os.path.join(os.environ.get("MOTRIX_SHOTS_DIR", r"D:\開發測試檔\shots"), branch.replace("/", "_"))
+    d = os.path.join(os.environ.get("MOTRIX_SHOTS_DIR") or os.path.join(tempfile.gettempdir(), "w4-shots"), branch.replace("/", "_"))
     try:
         os.makedirs(d, exist_ok=True)
     except OSError:
@@ -76,7 +77,9 @@ def _voucher(date, lines):
 
 
 @pytest.mark.e2e
-def test_tax401_tab_query_export_and_settlement_buttons(live_server, make_user, e2e_browser):
+def test_tax401_tab_query_export_and_settlement_buttons(live_server, make_user, e2e_browser, monkeypatch):
+    from modules.accounting.api import ledger_tax as _lt
+    monkeypatch.setattr(_lt, "_invoices", lambda: [{"invoiceDate": "2183-01-10", "amountPretax": 10000, "taxAmount": 500}])      # 應收應付的發票明細（與傳票銷項 10000／500 對得上）
     user, pw = make_user(username="e2e_gl_tax", role="superadmin")
     _enable("tax401")
     _voucher("2183-01-10", [("1191", 10500, 0, ""), ("4111", 0, 10000, "OUT-5"), ("2204", 0, 500, "OUT-5")])
@@ -104,7 +107,8 @@ def test_tax401_tab_query_export_and_settlement_buttons(live_server, make_user, 
     assert os.path.getsize(path) > 1000 and open(path, "rb").read(2) == b"PK"
 
     page.locator("[data-testid=hb-tax-settle]").click()                                            # 產生稅額結轉草稿
-    page.wait_for_selector("[data-testid=hb-tax-notice]", state="visible")
+    page.wait_for_selector("[data-testid=hb-tax-notice]", state="visible")                        # 終點：訊息要撐過重讀（曾被 taxLoad 清掉）
+    assert page.locator("[data-testid=hb-tax-error]").is_hidden(), page.locator("[data-testid=hb-tax-error]").inner_text()
     assert "稅額結轉草稿" in page.locator("[data-testid=hb-tax-notice]").inner_text()
     c = db.get_db()
     try:
@@ -189,7 +193,6 @@ def test_annotation_tab_save_and_clear_buttons(live_server, make_user, e2e_brows
           "meta": {"tax_estimated": True}}
     c = db.get_db()
     try:
-        c.execute("DELETE FROM gl_source_events WHERE source_key='E2E-ANN-1'")
         c.execute("DELETE FROM gl_source_annotations WHERE source_key='E2E-ANN-1'")
         c.execute("INSERT INTO gl_source_events(source_module, source_type, source_key, event_code, rev, event_date, content_hash, amount, status, payload_json, first_seen, last_seen)"
                   " VALUES ('subcontract','contractor_dispatch','E2E-ANN-1','E04',1,'2183-03-10','h',10500,'drafted',?, 'n','n')", (json.dumps(ev, ensure_ascii=False),))
@@ -216,11 +219,10 @@ def test_annotation_tab_save_and_clear_buttons(live_server, make_user, e2e_brows
     page.wait_for_selector("[data-testid=hb-an-clear-E2E-ANN-1]", state="visible")
     _shot(page, "annotations_saved")
     page.locator("[data-testid=hb-an-clear-E2E-ANN-1]").click()
-    page.wait_for_function("() => !document.querySelector('[data-testid=hb-an-clear-E2E-ANN-1]')")
+    page.wait_for_selector("[data-testid=hb-an-clear-E2E-ANN-1]", state="hidden")                 # x-show：按鈕還在 DOM 但看不到＝已清除
     c = db.get_db()
     try:
         assert c.execute("SELECT COUNT(*) FROM gl_source_annotations WHERE source_key='E2E-ANN-1'").fetchone()[0] == 0
-        c.execute("DELETE FROM gl_source_events WHERE source_key='E2E-ANN-1'")
         c.commit()
     finally:
         c.close()
