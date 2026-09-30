@@ -17,11 +17,11 @@
 | 匯款差額審核 | IP-102 `remit.reviews`（`contractor_voucher`、`case`） | M04／M01 → M05 | 實付≠應付 ⇒ `remit_review='pending'`，admin 核可／退回 | 退回＝回未匯款並清欄位 | 無 | subcontract／case 的 remit 題 |
 | 傳票草稿 | IP-2 `voucher.draft` | M06 → M07（獎金）、總帳引擎 | `fn(conn, *, voucher_date, summary, lines[{account_code,summary,debit,credit,…}], created_by, now, origin="")` ⇒ `{id, voucher_no}`；不 commit | `origin` 標記產生來源（`bonus_accrual`／`bonus_payment`）；借貸不平即拒 | 無 | `payroll/tests/test_voucher_connectors.py` |
 | 傳票狀態 | IP-4 `voucher.status`／`voucher.by_no`／`voucher.void_draft` | M06 → M07、引擎 | status ⇒ `{id, voucher_no, status, voided, date}`；`void_draft` 只作廢草稿 | 已作廢＝`gone` | 無 | `payroll/tests/test_voucher_status_connectors.py` |
-| **總帳事件** | **IP-GL1 `gl.events`（契約 v1，多提供者，名稱＝來源模組 key）** | arap、subcontract、payroll（已接）；supply、case、custom_modules、fixed_assets（待接）→ M06 `ledger/contract.py::collect`、`ledger/engine.py::run` | 見 §2 | 見 §3 | `engine_drafts`（預設關） | `accounting/tests/test_ledger_a_contract`、`c1_engine`、`c2_subcontract`、`c3_payroll`、`c3b_native`、`r12_remit_payslip` |
+| **總帳事件** | **IP-GL1 `gl.events`（契約 v1，多提供者，名稱＝來源模組 key）** | arap、subcontract、payroll、supply、case（已接）；custom_modules、fixed_assets（待接）→ M06 `ledger/contract.py::collect`、`ledger/engine.py::run` | 見 §2 | 見 §3 | `engine_drafts`（預設關） | `accounting/tests/test_ledger_a_contract`、`c1_engine`、`c2_subcontract`、`c3_payroll`、`c3b_native`、`r12_remit_payslip` |
 | 匯款單 ↔ 勞報單 | IP-105 `payslip.remit`（R12） | M07 payroll → M04 subcontract | `check(conn,slip_no)`；`candidates(conn,contractor_id)`；`mark_paid(conn,slips,remit_no,date,who)`；`unmark_paid(conn,remit_no)`（皆不 commit，與匯款同一交易） | 勞報單 `data_json.paid_via_remit`＝匯款單號；取消匯款一併退回；勞報單自己 unpay 被擋 | `system_settings.remit_require_payslip`（預設開，最高管理者可關、寫稽核） | `accounting/tests/test_ledger_r12_remit_payslip_2026_09_30.py` |
 | 上傳檔權限 | IP-104 `uploads.path_access`（sec-p0，與金流無關，僅編號備忘） | 各單據模組 → L1 | — | — | — | sec-p0 題 |
 | 自訂模組金流 | `custom_record_finance_outbox`（W1 S2.5，`wip/w1-builder3-s25`）＋IP-9 `custom_module` 提供者 | 建構器 L1 `helpers/custom_finance` → 報表（即時）／總帳（C7 消費 outbox） | outbox：`dedupe_key`（唯一）、`event`（入帳／反轉）、`module_key`、`record_id`、`record_no`、`kind`、`payload_json`、`processed_at`；狀態進入／離開入帳時**同一交易**寫入 | `dedupe_key` 唯一＝重送冪等；`processed_at` 空＝待消費；反轉是另一筆事件 | `custom_records`（C7） | W1 的 `test_custom_finance*`；C7 完成後加總帳題 |
-| 補登（不改來源） | `gl_source_annotations`（總帳自有表） | 會計 → 引擎收集 | `(source_type, source_key, field, value)`；目前認得 `input_tax`（整數，覆寫承攬商發票估算稅額） | 補登值不合法 ⇒ 忽略並在事件 `meta.annotation_ignored` 標記；補登改變內容雜湊 ⇒ 已過帳者走 drift | `source_annotations` | `c2_subcontract` |
+| 補登（不改來源） | `gl_source_annotations`（總帳自有表） | 會計 → 引擎收集 | `(source_type, source_key, field, value)`；認得 `input_tax`（非負整數：覆寫承攬商發票 E04／進貨發票 E08b 的估算稅額，E09 跟著調整；把『未拆稅』的額外支出 E11／叫料 E12 拆成成本＋進項稅額）與 `invoice_date`（E04／E08b 的入帳日） | 補登值不合法 ⇒ 忽略並在事件 `meta.annotation_ignored` 標記；補登改變內容雜湊 ⇒ 已過帳者走 drift | `source_annotations` | `c2_subcontract` |
 
 ## 2. `gl.events` 契約 v1（事件形狀）
 
@@ -30,14 +30,14 @@
   - `source_key` **不可變**（表的 id／單號，不用陣列索引）；沒有不可變 id 的舊資料退回索引並標 `meta.weak_key`，notice 說明。
   - 金額一律整數（新臺幣元）；借貸必須相等；用**角色**（`AP`、`AR`、`BANK`、`FEE`、`INPUT_TAX`、`OUTPUT_TAX`、`COST_PROJECT`、`EXP_LABOR`、`OTHER_PAYABLE`、`WITHHOLD_TAX`、`WITHHOLD_NHI`、`ADV_RCPT`、`INVENTORY`、`COGS`…）不寫科目；角色 → 科目在 `gl_account_roles`（可依生效日改）。要指定實際銀行帳戶時該行帶 `account_code`。
   - 不要把使用者資料放進事件：對象只放代碼＋名稱（勞報單用 `C<contractor_id>`，**不帶身分證字號**）。
-- `mode`：`snapshot`（預設；內容整組取代）、`cumulative`、`append`、**`native`**（來源已自行開了傳票：事件只帶 `native_voucher_id`，無 lines；引擎登記狀態 `native`、不產生不改動；傳票作廢或改指向新傳票 ⇒ 舊列 `superseded`、新列 `native`；例：獎金 E07a／E07b）。
+- `mode`：`snapshot`（預設；內容整組取代）、`cumulative`、`append`、**`stock`**（存貨出庫 E10：來源只回 `stock_part_no`、`stock_qty`、案件、日期，無 lines、無金額；引擎依 `ledger/inventory.py` 移動加權平均算金額並組成 借 COGS 依案件／貸 INVENTORY；均價變動不算來源變動；來源消失或數量變動 ⇒ 存貨鏈以原金額回沖；在庫不足 ⇒ 狀態 `blocked_inventory`，補跑進貨事件所在期間後自動重試；同一天進貨先於出庫）、**`native`**（來源已自行開了傳票：事件只帶 `native_voucher_id`，無 lines；引擎登記狀態 `native`、不產生不改動；傳票作廢或改指向新傳票 ⇒ 舊列 `superseded`、新列 `native`；例：獎金 E07a／E07b）。
 - 內容雜湊：入帳日、各行（角色／方向／金額／案件／對象／稅碼／account_code）、案件、對象、稅碼；`meta` 與說明文字不參與。native 只看傳票 id＋日期。
 - **來源缺席一律明說**：提供者未安裝、未接入、丟例外或回 notice ⇒ 出現在引擎回應與『分錄草稿』頁籤，不會顯示成 0 筆。格式不合格的事件列入 `invalid`（含原因），不整批失敗。
 - 事件碼對照：E01／E03 銷項發票與客戶收款（arap）、E04／E05／E05b 承攬商發票／匯款／個人點工補列（subcontract）、E06／E06b 勞報單應付／付款（payroll）、E07a／E07b 獎金核准／發放（payroll，native）、E08～E10 存貨（supply，C4）、E11／E11b／E12 案件額外支出與叫料（case，C4b）、E13 固定資產（C6）、E20／E21 自訂模組（C7）。
 
 ## 3. 引擎的冪等與反轉規則
 
-- 事件以 `(source_type, source_key, event_code, rev)` 為鍵存在 `gl_source_events`；引擎狀態：`drafted`（草稿）、`posted`、`drift`（來源改了而舊傳票已過帳）、`reversed`、`superseded`、`orphan`（來源消失）、`rejected`（草稿被作廢）、`blocked_closed`（期間已結帳）、`blocked_no_account`（缺角色科目）、`native`。
+- 事件以 `(source_type, source_key, event_code, rev)` 為鍵存在 `gl_source_events`；引擎狀態：`drafted`（草稿）、`posted`、`drift`（來源改了而舊傳票已過帳）、`reversed`、`superseded`、`orphan`（來源消失）、`rejected`（草稿被作廢）、`blocked_closed`（期間已結帳）、`blocked_no_account`（缺角色科目）、`blocked_inventory`（存貨在庫不足）、`native`。
 - 同雜湊再跑 ⇒ 什麼都不做（冪等）。雜湊變了：草稿 ⇒ 作廢重建；已過帳 ⇒ **不改舊傳票**，標 drift，另產反向草稿（日期＝今天）與新內容草稿。
 - 來源消失（例：勞報單退回簽回、取消收款）：只在該來源本次回應 ok 時才判 orphan（來源壞掉不可誤判成消失）；草稿作廢，已過帳者產反向草稿。
 - 引擎產生的傳票 `kind='auto'`、走既有簽核（可設 `voucher_auto_approval_flow`）；整批確認只處理 `auto`／`reversal`，手工與獎金傳票不受影響。
