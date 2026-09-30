@@ -2,6 +2,14 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.71 — 2026-09-30（暫用，列車取號；wip/w2-report-cash）
+- L1（新增）：`helpers.tax_calc.receipt_amounts(receivable, actual, fee)` ⇒ `(bank, gross, fee)`，經 `helpers` 匯出：已收款項的銀行入帳／收入(含稅)／手續費單一定義（實收＝銀行入帳、收入＝入帳＋手續費、淨額＝入帳不再減手續費）。`summarize_payment_items` 的 `netAmount`／`netCollected` 改用它。
+- L1（新增）：`helpers.recognition_basis.DEFAULT_BASIS`（營運報表預設口徑＝`cash`）；`normalize_basis(None)` 回它（原為 accrual）。
+
+## （不升版號：介面不變）— 2026-09-29（wip/cloud-startup-timing：T21-1 啟動逐步耗時）
+- L0（行為，私有）：`main.py` 啟動路徑逐段記耗時——每段一行 INFO `STARTUP_STEP <名稱> <毫秒>ms`（距上一段結束），最後一行 `STARTUP_TOTAL <毫秒>ms steps=<段數>`（距 main.py 開始執行；不含 Python／uvicorn 本身載入）。29 段：import_core、import_routers、load_modules、build_info、app_cors、middleware_setup、require_db、init_db_main、init_db_demo、fail_incomplete_modules、integrity_check、company_setup、init_default_admin、init_demo_account、flag_weak_passwords、init_unlock_passwords、cleanup_sessions、schedulers（整個排程閘門區塊，含 GEO 預熱排程）、geo_notice、prune_login_locks、init_rate_limiting、sync_module_versions、include_routers、page_map、mount_modules、module_schedulers、module_states_file、startup_notices、page_and_static_routes。私有 `_startup_step`／`_startup_total`：記錄出錯一律吞掉；`logging.basicConfig` 之前的段先暫存、之後一起印。啟動行為、順序、例外處理不變；排程閘門區塊內部不動（test_geocode_warm_async 逐字執行它）。起因：正式機第二十一班啟動到健檢 14 秒（CORS 行 → GEO 行 11.2 秒）分不出是哪一段。守門 `tests/platform/test_startup_timing_2026_09_29.py`
+## 1.70 — 2026-09-29 14:27（雲端暫用，列車取號；wip/cloud-rowaccess-empty-name：舊計畫「顯示名稱為空的使用者，看得到業務名稱為空的舊案件」）
+- L1（修正）：`helpers.row_access` 的舊資料名稱比對（`legacy_name_col`，案件＝`sales_person`）——使用者顯示名稱為空字串／None 一律不算相符（`visible` 與 `filter_sql` 同一條：SQL 不再產生該項）。原本空對空相等 ⇒ 顯示名稱空的非 admin 使用者看得到所有 `sales_person_id` 為 NULL、`sales_person` 為空的舊案件。其餘規則（本人 id、協作者、建立者、admin／cashier 直通、顯示名稱有值時的名稱比對）不變。公開介面不變。守門 `tests/test_row_access_empty_name_2026_09_29.py`；`tests/test_row_access_2026_09_25.py` 與凍結舊實作的比對扣掉這一格（`_minus_intended_change_2026_09_29f`）。〔補 D 稽核 RA-M1：扣格只扣「只靠空對空才可見」的列，協作者／直通可見的列不扣；資料加入空名稱使用者當協作者的列〕
 ## 1.69 — 2026-09-29（暫用，列車取號；wip/payslip-void-signed）
 - L1（新增）：`helpers.tax_calc.norm_ymd`（款項日期正規化為 YYYY-MM-DD：接受斜線、點、單位數月日、民國年、「年月日」；讀不懂的原樣截 10 碼、不假造）；`helpers` 匯出 `norm_ymd`。收入報表歸月與儲存端共用。
 

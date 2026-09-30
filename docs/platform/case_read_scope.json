@@ -68,6 +68,12 @@
    "scope": "row_access"
   },
   {
+   "file": "modules/subcontract/api/contractor_vouchers.py",
+   "path": "/api/contractor-vouchers/remit-fee-total",
+   "handler": "get_remit_fee_total",
+   "scope": "row_access"
+  },
+  {
    "file": "modules/arap/api/invoice_vouchers.py",
    "path": "/api/invoice-vouchers",
    "handler": "list_invoice_vouchers",

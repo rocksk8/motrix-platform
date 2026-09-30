@@ -130,3 +130,6 @@ backend/.build_commit
 tools/platform/.last_full.json
 tools/platform/.last_full.json.*.tmp
 tools/platform/full_results/
+
+# 失敗先行出 log（tools/platform/fail_stream.py）：每次跑一個 JSONL，本機狀態
+tools/platform/fail_stream/

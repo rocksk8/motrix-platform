@@ -957,8 +957,45 @@ def _check_prod_status() -> dict:
     except Exception:
         pass
 
-    return {"healthy": healthy, "deployed": deployed, "delivered": delivered,
+    system_version = {}
+    try:
+        r3 = requests.get(f"{PROD_BASE_URL}/api/system/version", verify=False, timeout=5)
+        if r3.ok:
+            system_version = r3.json()
+    except Exception:
+        pass
+
+    return {"healthy": healthy, "deployed": deployed, "systemVersion": system_version, "delivered": delivered,
             "checkedAt": time.strftime("%Y-%m-%d %H:%M:%S")}
+
+
+@app.get("/api/module-versions")
+def module_versions():
+    """模組版本對照（唯讀，不需密碼）：開發樹各模組 module.json 版本 ＋ 最新部署包 lock 版本 ＋
+    交付資料夾已套用的單模組包版本。正式機「已安裝」版本需要登入，見 prod-health 表（不在這裡猜）。"""
+    dev = {}
+    mdir = PROJECT_ROOT / "backend" / "modules"
+    for mj in sorted(mdir.glob("*/module.json")) if mdir.exists() else []:
+        try:
+            d = json.loads(mj.read_text(encoding="utf-8-sig"))
+            dev[d.get("key") or mj.parent.name] = d.get("version")
+        except Exception:
+            dev[mj.parent.name] = None
+    pkg = None
+    for p in list_packages():                                   # 新到舊
+        if p.get("lock") and p["lock"].get("modules"):
+            pkg = {"folder": p["folder"], "commit": p.get("commit"), "modules": p["lock"]["modules"]}
+            break
+    overlays = {}
+    try:
+        overlays = _delivered_status().get("moduleOverlays") or {}
+    except Exception:
+        pass
+    rows = []
+    for k in sorted(set(dev) | set((pkg or {}).get("modules") or {}) | set(overlays)):
+        rows.append({"key": k, "dev": dev.get(k), "package": ((pkg or {}).get("modules") or {}).get(k),
+                     "delivered": (overlays.get(k) or {}).get("version")})
+    return {"package": (pkg or {}).get("folder"), "rows": rows}
 
 
 @app.get("/api/prod-status")

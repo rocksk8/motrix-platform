@@ -82,6 +82,24 @@ EDGE_PDF_SEMAPHORE = threading.BoundedSemaphore(EDGE_PDF_MAX_CONCURRENCY)
 EDGE_PDF_TIMEOUT_SECONDS = int(os.environ.get("MOTRIX_EDGE_PDF_TIMEOUT", "120"))
 
 
+#: Windows 的 BELOW_NORMAL_PRIORITY_CLASS。Edge 無頭 PDF 是 2 秒左右的多行程 CPU 工作；背景工作（簽核後自動存的 PDF）
+#: 用低優先權，讓 uvicorn 與使用者當下的請求先拿 CPU。使用者正在等的 PDF（下載）不降。
+#: 環境變數 MOTRIX_EDGE_PDF_PRIORITY=normal 可關掉。量測（開發機 12 核）：Edge 1.96→2.22 秒（+13%），同時間其他請求延遲
+#: p95 2.3→2.1 ms、max 7.9→4.6 ms（在核心很多的機器上差異在雜訊內；核心少的正式機上才有意義）。
+_BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
+
+
+def _edge_creationflags() -> int:
+    """`subprocess.run(creationflags=)`：背景工作＋Windows ⇒ BELOW_NORMAL；其餘 0（POSIX 的 creationflags 只能是 0）。"""
+    if os.name != "nt" or os.environ.get("MOTRIX_EDGE_PDF_PRIORITY", "").lower() == "normal":
+        return 0
+    try:
+        from db import _BACKGROUND_WORK
+        return _BELOW_NORMAL_PRIORITY_CLASS if _BACKGROUND_WORK.get() else 0
+    except Exception:                                        # noqa: BLE001 — 優先權只是加分，取不到就照常
+        return 0
+
+
 def run_edge_pdf(cmd: list) -> None:
     """跑一次 Edge headless 產 PDF：拿 semaphore、限時、逾時不往外丟例外。
 
@@ -98,6 +116,7 @@ def run_edge_pdf(cmd: list) -> None:
             subprocess.run(
                 cmd, timeout=EDGE_PDF_TIMEOUT_SECONDS, check=False,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                creationflags=_edge_creationflags(),
             )
         except subprocess.TimeoutExpired:
             logger.warning(

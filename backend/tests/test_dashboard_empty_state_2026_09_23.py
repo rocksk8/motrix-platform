@@ -280,6 +280,9 @@ Object.assign(raw, {
   followUpQuotes: [],
   analyticsMissing: false,   // index.html 的初始值（M08 首頁在營運分析不在時的明說；第六班列車全量抓到）
   loading: true,
+  // 等我簽核改讀 /approval-queue/count（W2）：讀取失敗情境＝後端不可用 ⇒ /count 也讀不到；成功情境＝/count 回 0。
+  mineLoaded: __MINE__,
+  mineCount: 0,        // 同上：/count 回 0（有待簽的情形另有題）
 });
 
 // ⚠️ Alpine 的作用域：運算式裡寫 `stats.totalQuotes` 而不是 `this.stats…`。
@@ -321,6 +324,7 @@ const scoped = (src) => (new Function('with (this) { return (' + src + ') }'));
 """
     script = (script
               .replace("__RESP__", json.dumps(response, ensure_ascii=False))
+              .replace("__MINE__", "false" if response is None else "true")
               .replace("__LOAD__", load)
               .replace("__HERO__", hero)
               .replace("__OVERDUE__", overdue)

@@ -497,7 +497,13 @@
                 </template>
                 <div class="vc-src__empty"
                      x-show="srcSel.key && !srcState().loading && !srcState().err && !srcFiles().length">
-                  這個來源沒有已上傳檔案。</div>
+                  這個來源沒有已上傳檔案。<span x-show="canEdit && isSaved">可直接從電腦上傳（圖片或 PDF）：
+                <label class="vc-btn" style="cursor:pointer">
+                  ＋ 從電腦上傳檔案
+                  <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf"
+                         data-testid="src-empty-upload" style="display:none"
+                         @change="uploadAttachments($event)">
+                </label></span></div>
               </div>
             </div>
           </div>
@@ -746,6 +752,16 @@
               </div>
             </template>
             <div class="vc-att__empty" x-show="!attachments.length">這張傳票還沒有附件。</div>
+          </div>
+          <!-- 預覽窗裡也要能夾帶檔案（使用者 2026-09-30：預覽後想帶入附件卻無處可按）；草稿才有，與主頁面同一條上傳路徑 -->
+          <div class="vc-att__acts" x-show="canEdit && isSaved" style="margin-top:8px">
+            <label class="vc-btn" style="cursor:pointer">
+                  ＋ 從電腦上傳檔案
+                  <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf"
+                         data-testid="voucher-preview-upload" style="display:none"
+                         @change="uploadAttachments($event)">
+                </label>
+            <span class="vc-att__hint">圖片或 PDF；上傳後立即列在上面，匯出「含附件」會一併輸出。</span>
           </div>
           <!-- `JV19②`：主頁面（395-401 附近）attErr／attMsg 兩個都有
                對應節點，這個 modal 之前只搬了 attErr 那一半——匯出成功時
