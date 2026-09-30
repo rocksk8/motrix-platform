@@ -10,6 +10,8 @@ function ledgerHubPage() {
     tab: '',
     isSuper: false,
 
+    // 營業稅 401（C5：tax401）
+    tax: { year: new Date().getFullYear(), period: Math.ceil((new Date().getMonth() + 1) / 2), data: null, busy: false, error: '', notice: '' },
     // 分錄草稿（C1：engine_drafts）
     eng: { start: '', end: '', events: [], counts: {}, selected: {}, run: null, busy: false, error: '', notice: '', results: null, filter: '' },
 
@@ -46,12 +48,51 @@ function ledgerHubPage() {
         this.features = (await this._api('GET', '/api/ledger/features')).features
         if (!this.enabled.some(f => f.key === this.tab)) this.tab = this.enabled.length ? this.enabled[0].key : ''
         if (this.tab === 'engine_drafts') await this.engLoad()
+        if (this.tab === 'tax401') await this.taxLoad()
       } catch (e) { this.error = e.message }
       this.loaded = true
     },
     async selectTab(key) {
       this.tab = key
       if (key === 'engine_drafts') await this.engLoad()
+      if (key === 'tax401') await this.taxLoad()
+    },
+    async taxLoad() {
+      const t = this.tax
+      t.error = ''
+      t.notice = ''
+      t.busy = true
+      try {
+        t.data = await this._api('GET', '/api/ledger/tax401?year=' + encodeURIComponent(t.year) + '&period=' + encodeURIComponent(t.period))
+      } catch (e) { t.error = e.message; t.data = null }
+      t.busy = false
+    },
+    async taxExport() {
+      const t = this.tax
+      t.error = ''
+      try {
+        const r = await fetch('/api/ledger/tax401/export?year=' + encodeURIComponent(t.year) + '&period=' + encodeURIComponent(t.period),
+          { headers: { Authorization: 'Bearer ' + (this._session().token || '') } })
+        if (!r.ok) { let d = {}; try { d = await r.json() } catch (e) { d = {} } throw new Error(typeof d.detail === 'string' ? d.detail : '匯出失敗（' + r.status + '）') }
+        const url = URL.createObjectURL(await r.blob())
+        const a = document.createElement('a')
+        a.href = url
+        a.download = '營業稅401_' + t.year + '年第' + t.period + '期.xlsx'
+        a.click()
+        URL.revokeObjectURL(url)
+      } catch (e) { t.error = e.message }
+    },
+    async taxSettle() {
+      const t = this.tax
+      t.error = ''
+      t.notice = ''
+      t.busy = true
+      try {
+        const r = await this._api({ method: 'POST' }, '/api/ledger/tax401/settlement', { year: t.year, period: t.period })
+        t.notice = '已產生稅額結轉草稿 ' + r.voucher_no + '（應實繳 ' + this.fmt(r.payable) + '、新留抵 ' + this.fmt(r.carry_new) + '）；請到傳票頁送審過帳。'
+        await this.taxLoad()
+      } catch (e) { t.error = e.message }
+      t.busy = false
     },
     statusLabel(st) {
       return ({ drafted: '草稿待確認', posted: '已過帳', drift: '來源已變動', reversed: '已沖轉', superseded: '已被新版取代', orphan: '來源已消失',
