@@ -1,5 +1,5 @@
 {
- "core_version": "1.71",
+ "core_version": "1.72",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -335,7 +335,11 @@
    "CustomModuleError": "class",
    "CustomModuleError.__init__": "def(self, message, problems=…, status=…)",
    "DATE_FORMATS": "const",
+   "DEFAULT_TOKENS": "const",
+   "ELEMENT_GROUPS": "const",
    "EVENT_TRANSITIONED": "const",
+   "FIELD_ATTRS": "const",
+   "FIELD_ELEMENTS": "const",
    "FIELD_TYPES": "const",
    "FINANCE_KINDS": "const",
    "HELP_MAX": "const",
@@ -347,10 +351,12 @@
    "clean_table": "def(f, raw)",
    "clean_values": "def(conn, body, values)",
    "compute": "def(body, values)",
+   "compute_preview": "def(conn, module_key, values, version=…)",
    "create_record": "def(conn, module_key, values, user)",
    "decide": "def(conn, module_key, record_no, user, approve, note=…)",
    "declare_events": "def()",
    "default_template": "def(body)",
+   "field_type_specs": "def()",
    "format_number": "def(numbering, day, seq)",
    "get_record": "def(conn, module_key, record_no)",
    "list_records": "def(conn, module_key, status=…, field=…, value=…, limit=…)",
@@ -370,7 +376,10 @@
    "sample_values": "def(body)",
    "sample_view": "def(body)",
    "table_columns": "def(fields)",
+   "template_body": "def(key)",
+   "templates": "def(include_gaps=…)",
    "transition": "def(conn, module_key, record_no, tkey, user, note=…)",
+   "unique_errors": "def(conn, module_key, body, vals, exclude_id=…)",
    "update_record": "def(conn, module_key, record_no, values, user)",
    "validate_module": "def(body, key=…)",
    "visible_to": "def(mods, user)"

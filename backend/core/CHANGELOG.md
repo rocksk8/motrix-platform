@@ -2,16 +2,15 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.71 — 2026-09-30（暫用，列車取號；wip/w2-report-cash）
-- L1（新增）：`helpers.tax_calc.receipt_amounts(receivable, actual, fee)` ⇒ `(bank, gross, fee)`，經 `helpers` 匯出：已收款項的銀行入帳／收入(含稅)／手續費單一定義（實收＝銀行入帳、收入＝入帳＋手續費、淨額＝入帳不再減手續費）。`summarize_payment_items` 的 `netAmount`／`netCollected` 改用它。
-- L1（新增）：`helpers.recognition_basis.DEFAULT_BASIS`（營運報表預設口徑＝`cash`）；`normalize_basis(None)` 回它（原為 accrual）。
-
-## （不升版號：介面不變）— 2026-09-29（wip/cloud-startup-timing：T21-1 啟動逐步耗時）
-- L0（行為，私有）：`main.py` 啟動路徑逐段記耗時——每段一行 INFO `STARTUP_STEP <名稱> <毫秒>ms`（距上一段結束），最後一行 `STARTUP_TOTAL <毫秒>ms steps=<段數>`（距 main.py 開始執行；不含 Python／uvicorn 本身載入）。29 段：import_core、import_routers、load_modules、build_info、app_cors、middleware_setup、require_db、init_db_main、init_db_demo、fail_incomplete_modules、integrity_check、company_setup、init_default_admin、init_demo_account、flag_weak_passwords、init_unlock_passwords、cleanup_sessions、schedulers（整個排程閘門區塊，含 GEO 預熱排程）、geo_notice、prune_login_locks、init_rate_limiting、sync_module_versions、include_routers、page_map、mount_modules、module_schedulers、module_states_file、startup_notices、page_and_static_routes。私有 `_startup_step`／`_startup_total`：記錄出錯一律吞掉；`logging.basicConfig` 之前的段先暫存、之後一起印。啟動行為、順序、例外處理不變；排程閘門區塊內部不動（test_geocode_warm_async 逐字執行它）。起因：正式機第二十一班啟動到健檢 14 秒（CORS 行 → GEO 行 11.2 秒）分不出是哪一段。守門 `tests/platform/test_startup_timing_2026_09_29.py`
-## 1.71 — 2026-09-30（W1 建構器第三輪 S1，暫用號；wip/w1-builder3）
+## 1.72 — 2026-09-30（W1 建構器第三輪 S1，暫用號；wip/w1-builder3）
 - L1（新增）：`helpers.custom_fields.EXT_TYPES／MODULE_TYPES／OPTION_TYPES`——自訂模組新欄位型別 `textarea`（多行文字）、`radio`（單選）、`checkboxes`（複選）、`multiselect`（下拉複選）、`daterange`（日期時間區間 `{from,to}`）；`validate_definition(…, types=)` 可傳型別集合（預設仍是 P4 的 5 種，內建單據的 customFields 不受影響）；`_coerce` 支援新型別與屬性 `maxLength／min／max／withTime／allowOther／minSelect／maxSelect`（只增）
 - L1（新增）：`helpers.custom_modules`——欄位型別 `table`（明細表：逐列逐欄驗證、列內公式、列數限制、索引只記列數）、`clean_table`、`table_columns`、`FINANCE_KINDS`、欄位屬性 `finance:{kind,dateField,cashDateField,caseField}` 與模組層 `finance.postStates` 的發布驗證（金流性質，使用者 2026-09-30 規則；提供者與報表整合在後續段）
 - L1（新增）：`helpers.formula`——函式 `total(表,"欄")`、`avg(表,"欄")`、`count(表)`（明細表加總／平均／列數，空值不算 0）、`round_half_up(x[,n])`（與既有 `round` 同為四捨五入的明確別名；`round` 語意不變）；`check(expr, fields, tables=)` 可驗明細表引用
+
+
+## 1.71 — 2026-09-30（暫用，列車取號；wip/w2-report-cash）
+- L1（新增）：`helpers.tax_calc.receipt_amounts(receivable, actual, fee)` ⇒ `(bank, gross, fee)`，經 `helpers` 匯出：已收款項的銀行入帳／收入(含稅)／手續費單一定義（實收＝銀行入帳、收入＝入帳＋手續費、淨額＝入帳不再減手續費）。`summarize_payment_items` 的 `netAmount`／`netCollected` 改用它。
+- L1（新增）：`helpers.recognition_basis.DEFAULT_BASIS`（營運報表預設口徑＝`cash`）；`normalize_basis(None)` 回它（原為 accrual）。
 
 ## （不升版號：介面不變）— 2026-09-29（wip/cloud-startup-timing：T21-1 啟動逐步耗時）
 - L0（行為，私有）：`main.py` 啟動路徑逐段記耗時——每段一行 INFO `STARTUP_STEP <名稱> <毫秒>ms`（距上一段結束），最後一行 `STARTUP_TOTAL <毫秒>ms steps=<段數>`（距 main.py 開始執行；不含 Python／uvicorn 本身載入）。29 段：import_core、import_routers、load_modules、build_info、app_cors、middleware_setup、require_db、init_db_main、init_db_demo、fail_incomplete_modules、integrity_check、company_setup、init_default_admin、init_demo_account、flag_weak_passwords、init_unlock_passwords、cleanup_sessions、schedulers（整個排程閘門區塊，含 GEO 預熱排程）、geo_notice、prune_login_locks、init_rate_limiting、sync_module_versions、include_routers、page_map、mount_modules、module_schedulers、module_states_file、startup_notices、page_and_static_routes。私有 `_startup_step`／`_startup_total`：記錄出錯一律吞掉；`logging.basicConfig` 之前的段先暫存、之後一起印。啟動行為、順序、例外處理不變；排程閘門區塊內部不動（test_geocode_warm_async 逐字執行它）。起因：正式機第二十一班啟動到健檢 14 秒（CORS 行 → GEO 行 11.2 秒）分不出是哪一段。守門 `tests/platform/test_startup_timing_2026_09_29.py`
