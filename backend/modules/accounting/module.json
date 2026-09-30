@@ -236,7 +236,7 @@
       "menu": {
         "group": "finance",
         "label": "傳票",
-        "order": 30,
+        "order": 20,
         "perm": [
           "cashier"
         ]
@@ -247,7 +247,7 @@
       "menu": {
         "group": "finance",
         "label": "會計科目",
-        "order": 40,
+        "order": 30,
         "perm": [
           "cashier"
         ]
@@ -257,7 +257,7 @@
       "path": "ledger-periods.html",
       "menu": {
         "group": "finance",
-        "label": "會計期間",
+        "label": "會計期間與結帳",
         "order": 50,
         "perm": [
           "cashier",
@@ -270,7 +270,7 @@
       "menu": {
         "group": "finance",
         "label": "帳簿報表",
-        "order": 55,
+        "order": 60,
         "perm": [
           "cashier",
           "finance"
@@ -282,7 +282,7 @@
       "menu": {
         "group": "finance",
         "label": "報表設定",
-        "order": 60,
+        "order": 80,
         "perm": [
           "cashier",
           "finance"
@@ -294,7 +294,7 @@
       "menu": {
         "group": "finance",
         "label": "財務報表",
-        "order": 58,
+        "order": 70,
         "perm": [
           "cashier",
           "finance"
@@ -306,7 +306,7 @@
       "menu": {
         "group": "finance",
         "label": "總帳作業",
-        "order": 70,
+        "order": 40,
         "perm": [
           "cashier",
           "finance"

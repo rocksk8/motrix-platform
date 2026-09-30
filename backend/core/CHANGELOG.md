@@ -22,6 +22,9 @@
 ## 1.82 — 2026-09-30（暫用號；wip/w2-gl-warn：已入帳來源的修改提示，MONEY-FLOWS §9 L3）〔core_bump：暫用 1.99 → 1.82〕
 - L1（新增）：`helpers.gl_status.gl_posted_warning(conn, source_type, source_key, prefix=False)`——經 `gl.source_status` 提供者（accounting）查來源是否已入總帳，回一句非阻擋提示或 None（沒有提供者／丟例外 ⇒ None）。各來源寫入端點用：成功後把文字放進回應 `glWarning`。
 
+## (next) — 2026-09-30（wip/w1-menu-split：選單拆分；升版幅度由列車取號）
+- L1（資料）：`core/menu_l1.json` 新增固定群組 `analysis`「經營分析」（排在財務之前）；群組 `finance` 標籤「財務」→「財務會計」（key 不變，模組 `menu.group` 仍用 `finance`）。不動權限、不動介面快照。
+
 ## 1.81 — 2026-09-30（暫用，列車取號；wip/w1-t26fix：列車 26 守門修補）
 - L1（行為，安全）：`GET /api/attachments/open` 本班關閉（`routers/attachments.ATTACHMENTS_OPEN_ENABLED = False`，一律 404；W3 安全檢查：路徑未綁定來源單據，正式修正隨 P3）；`POST /api/audit-log/module-counts` 需 `audit_log` 權限、`since` 非字串 400（wip/w2-t26sec）
 - L1（新增宣告）：`helpers.audit.__l1_public__` 加 `_audit_login_failed`、`_FAIL_REASON_LABELS`、`_MODULE_LABELS`（routers/auth.py、routers/system.py 已在用；wip/w2-t26fix）

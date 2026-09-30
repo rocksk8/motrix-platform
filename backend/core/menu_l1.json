@@ -22,8 +22,12 @@
    "label": "設備"
   },
   {
+   "key": "analysis",
+   "label": "經營分析"
+  },
+  {
    "key": "finance",
-   "label": "財務"
+   "label": "財務會計"
   },
   {
    "key": "payroll",

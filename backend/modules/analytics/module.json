@@ -15,7 +15,7 @@
                "probes": ["/api/dashboard/stats", "/api/devices", "/api/materials-summary", "/api/reports/ar-aging"]},
   "pages": [
     {"path": "reports.html",
-     "menu": {"group": "finance", "label": "營運報表", "order": 10, "perm": ["finance", "reports"], "badge": "sb-mod-finance"}},
+     "menu": {"group": "analysis", "label": "營運報表", "order": 10, "perm": ["finance", "reports"], "badge": "sb-mod-finance"}},
     {"path": "devices.html",
      "menu": {"group": "device", "label": "設備登載", "order": 10, "perm": ["equipment"], "badge": "sb-mod-equipment"}},
     {"path": "warranty.html",

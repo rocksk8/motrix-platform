@@ -28,5 +28,5 @@
                "probes": ["/api/payslips", "/api/tax-rules", "/api/bonus/awards", "/api/bonus/items"]},
   "pages": [{"path": "payslips.html",
      "menu": {"group": "payroll", "label": "勞報單", "order": 20, "perm": ["payslip"], "active": ["payslips.html", "payslip-form.html"]}}, {"path": "payslip-form.html"}, {"path": "bonus.html",
-     "menu": {"group": "finance", "label": "獎金分潤", "order": 50, "perm": "any"}}]
+     "menu": {"group": "finance", "label": "獎金分潤", "order": 90, "perm": "any"}}]
 }
