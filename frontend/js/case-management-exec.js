@@ -152,7 +152,7 @@ window.CM_PARTS.push(() => ({
 
     moOnStatusChange(i) {
       const m = this.materialOrders[i]
-      const today = new Date().toISOString().slice(0, 10)
+      const today = MotrixDate.today()
       if (m.paidStatus === 'pending') { m.paidAmount = 0; m.paidDate = '' }
       else {
         if (!m.paidDate) m.paidDate = today
@@ -405,7 +405,7 @@ window.CM_PARTS.push(() => ({
 
     stageIsOverdue(st) {
       if (st.done || !st.dueDate) return false
-      return st.dueDate < new Date().toISOString().slice(0,10)
+      return st.dueDate < MotrixDate.today()
     },
 
     otherStages(stageId) {
@@ -514,11 +514,11 @@ window.CM_PARTS.push(() => ({
     _ganttTasks() {
       const stages = this.cr.caseRecord?.stages || []
       const byId   = Object.fromEntries(stages.map(s => [String(s.id), s]))
-      const today  = new Date().toISOString().slice(0,10)
+      const today  = MotrixDate.today()
       const addDays = (dateStr, n) => {
         const d = new Date(dateStr + 'T00:00:00')
         d.setDate(d.getDate() + n)
-        return d.toISOString().slice(0,10)
+        return MotrixDate.ymd(d)
       }
       return stages.map(st => {
         // 日期來源優先順序（2026-08-24）：
@@ -615,7 +615,7 @@ window.CM_PARTS.push(() => ({
         on_date_change: (task, start, end) => {
           const st = (this.cr.caseRecord?.stages || []).find(s => String(s.id) === task.id)
           if (!st) return
-          const fmt = d => (d instanceof Date ? d : new Date(d)).toISOString().slice(0,10)
+          const fmt = d => MotrixDate.ymd(d)
           this.updateStage(st, { startDate: fmt(start), dueDate: fmt(end) })
         },
         custom_popup_html: (task) => {
@@ -743,7 +743,7 @@ window.CM_PARTS.push(() => ({
 
         const mime = fmt === 'jpg' ? 'image/jpeg' : 'image/png'
         const blob = await new Promise(r => cv.toBlob(r, mime, 0.92))
-        const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+        const stamp = MotrixDate.today().replace(/-/g, '')
         const a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
         a.download = '甘特圖_' + (sel.quote_no || 'case') + '_' + stamp + '.' + fmt

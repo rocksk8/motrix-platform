@@ -7,6 +7,7 @@
   <title>外包名冊 — MOTRIX ERP</title>
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -604,7 +605,7 @@ function contractorsPage() {
         const blob = await r.blob()
         const a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
-        a.download = `外包名冊_${new Date().toISOString().slice(0, 10)}` + (fmt === 'pdf' ? '.pdf' : '.xlsx')
+        a.download = `外包名冊_${MotrixDate.today()}` + (fmt === 'pdf' ? '.pdf' : '.xlsx')
         a.click()
         setTimeout(() => URL.revokeObjectURL(a.href), 1000)
       } catch (e) { alert('匯出失敗：' + e.message) } finally { this.xlsxBusy = false }

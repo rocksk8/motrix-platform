@@ -8,6 +8,7 @@
   <title>成本精算 — MOTRIX 專案管理系統</title>
   <script src="../static/legal-round.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -725,7 +726,7 @@ function settlementPage() {
 
     settlement: {
       status: 'draft',
-      settlementDate: new Date().toISOString().slice(0, 10),
+      settlementDate: MotrixDate.today(),
       finalizedAt:  '',
       finalizedBy:  '',
       items:      [],
@@ -826,7 +827,7 @@ function settlementPage() {
           // 已有精算資料：合併（保留實際成本欄；原始報價欄以最新報價為準）
           const saved = d.settlement
           this.settlement.status        = saved.status || 'draft'
-          this.settlement.settlementDate= saved.settlementDate || new Date().toISOString().slice(0,10)
+          this.settlement.settlementDate= saved.settlementDate || MotrixDate.today()
           this.settlement.finalizedAt   = saved.finalizedAt || ''
           this.settlement.finalizedBy   = saved.finalizedBy || ''
           this.settlement.memo          = saved.memo || ''

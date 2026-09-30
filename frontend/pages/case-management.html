@@ -21,6 +21,7 @@
   <script src="../js/case-management-fin.js"></script>
   <script src="../js/case-management-xexp.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
@@ -876,7 +877,7 @@
                         <path d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01"/>
                       </svg>
                       <input type="checkbox" x-model="st.done"
-                             @change="updateStage(st, {done: st.done, doneAt: st.done ? (st.doneAt || new Date().toISOString().slice(0,10)) : ''})"
+                             @change="updateStage(st, {done: st.done, doneAt: st.done ? (st.doneAt || MotrixDate.today()) : ''})"
                              style="width:15px;height:15px;flex-shrink:0;accent-color:var(--success)">
                       <input type="text" x-model="st.label" @change="updateStage(st, {label: st.label})"
                              style="flex:1;border:none;outline:none;font-size:13px;font-weight:600;font-family:var(--font-zh);background:transparent"
@@ -1056,7 +1057,7 @@
                         <input class="fi fi--sm" type="date"
                                x-model="mat.expectedDate" @input="setDirty()"
                                title="預計到料日" style="flex:1;min-width:120px;font-size:12px">
-                        <span x-show="mat.ordered && !mat.arrived && mat.expectedDate && mat.expectedDate < new Date().toISOString().slice(0,10)"
+                        <span x-show="mat.ordered && !mat.arrived && mat.expectedDate && mat.expectedDate < MotrixDate.today()"
                               style="font-size:11px;font-weight:700;color:var(--tone-danger-fg);background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);border-radius:4px;padding:2px 6px;white-space:nowrap;flex-shrink:0">交期逾期</span>
                       </div>
 

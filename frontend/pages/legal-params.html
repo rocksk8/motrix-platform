@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>法規參數設定 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -126,7 +127,7 @@
           const d = await r.json()
           this.versions = (d.versions || []).map(v => ({ ...v, _saved: true }))
           this.status = d.status || {}
-          this.today = this.status.today || new Date().toISOString().slice(0, 10)
+          this.today = this.status.today || MotrixDate.today()
         },
         // 已生效（生效日 ≤ 今天）且已存檔的版本不能改（後端同樣擋）
         isFrozen(v) { return !!v._saved && v.effectiveFrom <= this.today },

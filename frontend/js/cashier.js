@@ -155,9 +155,7 @@ function cashierApp() {
       return this.isAdminPlus() || this._modules().includes('cashier')
     },
     _localDateStr(d) {
-      d = d || new Date()
-      const tz = d.getTimezoneOffset() * 60000
-      return new Date(d.getTime() - tz).toISOString().slice(0, 10)
+      return MotrixDate.ymd(d)
     },
     // ── 出納頁籤（2026-08-31 併入本頁，原 frontend/js/cashier.js 內容原封不動
     // 搬過來，只改了跟本檔案既有狀態衝突的名稱，見上方 state 區塊註解）────────
@@ -888,8 +886,8 @@ function cashierApp() {
     // 📌 而它在概念上屬於這裡：`accounting_export.py:8` 逐字寫著
     //    「設計採**現金基礎**：只匯出『錢真的有進出』的事件」
     //    ⇒ **現金基礎就是出納的領域。**
-    t100Start:        new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
-    t100End:          new Date().toISOString().slice(0, 10),
+    t100Start:        MotrixDate.monthStart(),
+    t100End:          MotrixDate.today(),
     t100Exporting:    false,
     t100ConfigOpen:   false,
     t100Config:       null,

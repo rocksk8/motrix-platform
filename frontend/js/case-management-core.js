@@ -675,13 +675,10 @@ window.CM_PARTS.push(() => ({
       return ok
     },
 
-    // 本地日期字串（YYYY-MM-DD），不要用 new Date().toISOString().slice(0,10)——
-    // toISOString() 是 UTC 時間，台灣 UTC+8 在本地每天 00:00–08:00 之間會被
-    // 誤判成前一天（比照 static/sidebar.js::_localISOString() 同款修法）。
+    // 本地日期字串（YYYY-MM-DD）：走共用的 MotrixDate（static/motrix-date.js，本地時區）。
+    // 不要用 toISOString() 取日期——它是 UTC，台灣 UTC+8 在本地每天 00:00–08:00 之間會被誤判成前一天。
     _localDateStr(d) {
-      d = d || new Date()
-      const tz = d.getTimezoneOffset() * 60000
-      return new Date(d.getTime() - tz).toISOString().slice(0, 10)
+      return MotrixDate.ymd(d)
     },
 
     // 2026-08-31（財務/出納權限分工）：是否具備指定模組——session.modules 是

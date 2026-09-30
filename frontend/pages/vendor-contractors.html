@@ -7,6 +7,7 @@
   <title>承攬商管理 — MOTRIX ERP</title>
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script src="../static/gov-lookup.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -895,7 +896,7 @@ function vendorContractorsPage() {
     },
 
     addVisit() {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = MotrixDate.today()
       this.editVisits.push({ id: Date.now() + Math.random(), date: today, note: '' })
     },
     removeVisit(idx) { this.editVisits.splice(idx, 1) },
@@ -931,7 +932,7 @@ function vendorContractorsPage() {
       ws['!cols'] = [22, 12, 10, 12, 14, 22, 24, 16, 20, 8].map(w => ({ wch: w }))
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, '承攬商')
-      XLSX.writeFile(wb, `MOTRIX_承攬商_${new Date().toISOString().slice(0, 10)}.xlsx`)
+      XLSX.writeFile(wb, `MOTRIX_承攬商_${MotrixDate.today()}.xlsx`)
     },
 
     async handleImport(event) {

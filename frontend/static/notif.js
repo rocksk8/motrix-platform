@@ -368,7 +368,8 @@ function notifStore() {
       try {
         const me = this._sess.username
         if (!me) return
-        const today = new Date().toISOString().slice(0, 10)
+        const _d = new Date()                                   // 本地日期（notif.js 每頁都載，不靠 motrix-date.js 有沒有先載）
+        const today = _d.getFullYear() + '-' + String(_d.getMonth() + 1).padStart(2, '0') + '-' + String(_d.getDate()).padStart(2, '0')
         const r = await fetch('/api/daily-tasks?date=' + today + '&username=' + encodeURIComponent(me), {
           headers: { Authorization: 'Bearer ' + this._sess.token }
         })

@@ -21,7 +21,7 @@ window.CM_PARTS.push(() => ({
     gmSort: 'ready',     // 'ready' | 'stuck' | 'amount'
     gmFilter: '',        // '' | 'ready' | 'settling' | 'mine'
     gmDue: '',           // '' | 'overdue' | 'today' | 'week' | 'month' | 'none'
-    today: new Date().toISOString().slice(0, 10),
+    today: MotrixDate.today(),
 
     gateHeads: [
       { key: 'progress',     label: '進度', hint: '階段完成' },

@@ -10,6 +10,7 @@ import sqlite3
 import uuid
 from collections import defaultdict
 from datetime import datetime
+
 import copy
 from typing import List, Optional
 
@@ -17,6 +18,22 @@ from core.txn import begin_write, write_txn
 from urllib.parse import quote as urlquote
 
 logger = logging.getLogger(__name__)
+
+
+def _local_date_of(ts) -> str:
+    """時間戳字串 ⇒ 伺服器本地的 YYYY-MM-DD。帶時區的（`…Z`／`+00:00`，舊資料：前端曾用 toISOString() 存）先換成本地時區再取日期；
+    不帶時區的（本系統後端存的都是本地時間）照取前 10 碼。讀不懂 ⇒ 前 10 碼。**只改顯示，不改資料。**
+    （台灣 UTC+8：UTC 的 `2026-09-30T17:03:00Z` 是本地 10/01 01:03，直接切前 10 碼會得到 09-30。）"""
+    s = str(ts or "").strip()
+    if not s:
+        return ""
+    try:
+        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return s[:10]
+    if d.tzinfo is not None:
+        d = d.astimezone()
+    return d.strftime("%Y-%m-%d")
 
 from fastapi import APIRouter, Body, Form, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
@@ -4592,7 +4609,7 @@ def approval_queue_items(conn) -> list:
             "customer":            r["customer_name"] or "",
             "projectName":         r["description"] or "",
             "total":               r["total_cost"] or 0,
-            "quoteDate":           (f["requestedAt"] or "")[:10],
+            "quoteDate":           _local_date_of(f["requestedAt"]),
             "salesPerson":         "",
             "requestedBy":         f["requestedBy"],
             "requestedByDisplay":  f["requestedByDisplay"],
@@ -4683,7 +4700,7 @@ def approval_queue_items(conn) -> list:
             "projectName":         f"{chg.get('description') or r['description'] or ''}"
                                    f"（原 NT$ {float(r['total_cost'] or 0):,.0f}）",
             "total":               chg.get("totalCost") or 0,
-            "quoteDate":           (f["requestedAt"] or "")[:10],
+            "quoteDate":           _local_date_of(f["requestedAt"]),
             "salesPerson":         "",
             "requestedBy":         f["requestedBy"],
             "requestedByDisplay":  f["requestedByDisplay"],
