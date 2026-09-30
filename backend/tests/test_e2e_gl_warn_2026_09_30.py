@@ -87,3 +87,128 @@ def test_cancelling_a_receipt_not_in_the_ledger_shows_no_notice(live_server, new
     assert _received("MQ-GWE-002") is False
     assert page.locator('[data-testid="gl-notice"]').is_hidden()
     assert not errors, errors
+
+
+# ── 案件管理・承攬商派工：改發票日／取消已匯款（已入帳）⇒ toast ─────────────────────────────
+
+def _save_shot(page, name):
+    os.makedirs(SHOTS, exist_ok=True)
+    png = page.screenshot()
+    with open(os.path.join(SHOTS, name), "wb") as f:
+        f.write(png)
+
+
+def _dispatch_world(client, make_user, qno, vname):
+    import db
+    boss = make_user(username="gwd_boss_" + qno[-3:], role="superadmin")
+    c = db.get_db()
+    try:
+        c.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at,"
+                  " deal_tag, quote_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                  (qno, "已送出", "派工客", "派工專案", 100000, 95238,
+                   json.dumps({"dealTag": "已成案", "caseRecord": {"payment": {"items": []}, "materials": [], "stages": [{"label": "訂單確認"}]}},
+                              ensure_ascii=False), "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案", "2026-08-01"))
+        c.commit()
+    finally:
+        c.close()
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": boss[0], "password": boss[1]}).json()["token"]}
+    v = client.post("/api/vendor-contractors", headers=h, json={"name": vname, "data": {}})
+    assert v.status_code == 201, v.text
+    d = client.post("/api/contractor-dispatches", headers=h, json={
+        "quote_no": qno, "vendor_id": v.json()["id"], "status": "completed", "scope": "既有派工",
+        "items_json": [{"id": "i1", "description": "配線", "qty": 10, "unit": "米", "unitPrice": 100, "amount": 1000}]})
+    assert d.status_code == 201, d.text
+    return boss, h, d.json()["id"]
+
+
+def _event_row(stype, key, code):
+    import db
+    c = db.get_db()
+    try:
+        c.execute("INSERT INTO gl_source_events (source_type, source_key, event_code, rev, event_date, status) VALUES (?,?,?,?,?,?)",
+                  (stype, key, code, 1, "2031-07-03", "posted"))
+        c.commit()
+    finally:
+        c.close()
+
+
+@pytest.mark.e2e
+def test_dispatch_invoice_date_change_on_posted_dispatch_shows_toast(live_server, new_context, make_user, client):
+    qno = "MQ-GWE-101"
+    boss, h, did = _dispatch_world(client, make_user, qno, "GW廠商甲")
+    _event_row("contractor_dispatch", str(did), "E04")
+    errors = []
+    page = new_context().new_page()
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    inject_login(page, live_server, boss[0], boss[1])
+    page.goto(live_server + "/pages/case-management.html?q=%s&tab=dispatch" % qno)
+    inp = page.locator('[data-testid="dispatch-invoice-date"]').first
+    inp.wait_for(state="visible", timeout=20000)
+    inp.fill("2031-08-05")
+    toast = page.locator('[data-testid="ui-toast"]', has_text="已入總帳")
+    toast.wait_for(state="visible", timeout=10000)
+    assert "沖轉草稿" in toast.inner_text()
+    import db
+    c = db.get_db()
+    try:
+        assert c.execute("SELECT invoice_date FROM contractor_dispatches WHERE id=?", (did,)).fetchone()[0] == "2031-08-05"   # 寫入照常完成
+    finally:
+        c.close()
+    _save_shot(page, "dispatch-invoice-date-toast.png")
+    assert not errors, errors
+
+
+@pytest.mark.e2e
+def test_dispatch_invoice_date_change_on_not_posted_dispatch_shows_no_toast(live_server, new_context, make_user, client):
+    qno = "MQ-GWE-102"
+    boss, h, did = _dispatch_world(client, make_user, qno, "GW廠商乙")
+    page = new_context().new_page()
+    inject_login(page, live_server, boss[0], boss[1])
+    page.goto(live_server + "/pages/case-management.html?q=%s&tab=dispatch" % qno)
+    inp = page.locator('[data-testid="dispatch-invoice-date"]').first
+    inp.wait_for(state="visible", timeout=20000)
+    inp.fill("2031-08-06")
+    import db
+    page.wait_for_timeout(1500)
+    c = db.get_db()
+    try:
+        assert c.execute("SELECT invoice_date FROM contractor_dispatches WHERE id=?", (did,)).fetchone()[0] == "2031-08-06"
+    finally:
+        c.close()
+    assert page.locator('[data-testid="ui-toast"]', has_text="已入總帳").count() == 0
+
+
+@pytest.mark.e2e
+def test_unpay_posted_remit_voucher_shows_toast(live_server, new_context, make_user, client):
+    from tests._ui_dialogs import answer_confirm
+    qno = "MQ-GWE-103"
+    boss, h, did = _dispatch_world(client, make_user, qno, "GW廠商丙")
+    cv = client.post("/api/contractor-vouchers", headers=h, json={"dispatch_id": did})
+    assert cv.status_code == 201, cv.text
+    vno = cv.json()["voucher_no"]
+    import db
+    c = db.get_db()
+    try:
+        c.execute("UPDATE contractor_payment_vouchers SET status='已核准', is_paid=1, paid_at='2031-07-03', paid_by='t' WHERE voucher_no=?", (vno,))
+        c.commit()
+    finally:
+        c.close()
+    _event_row("contractor_voucher", vno, "E05")
+    errors = []
+    page = new_context().new_page()
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    inject_login(page, live_server, boss[0], boss[1])
+    page.goto(live_server + "/pages/case-management.html?q=%s&tab=dispatch" % qno)
+    btn = page.locator("button:has-text('取消已匯款')").first
+    btn.wait_for(state="visible", timeout=20000)
+    btn.click()
+    answer_confirm(page, ok=True, expect="取消")
+    toast = page.locator('[data-testid="ui-toast"]', has_text="已入總帳")
+    toast.wait_for(state="visible", timeout=10000)
+    c = db.get_db()
+    try:
+        assert c.execute("SELECT is_paid FROM contractor_payment_vouchers WHERE voucher_no=?", (vno,)).fetchone()[0] == 0     # 取消照常完成
+    finally:
+        c.close()
+    _save_shot(page, "remit-unpay-toast.png")
+    assert not errors, errors
