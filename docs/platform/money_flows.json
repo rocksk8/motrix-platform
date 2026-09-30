@@ -7,6 +7,7 @@
     {"module": "subcontract","capability": "expense.entries",          "name": "remit_fee_contractor", "direction": "expense", "doc": "E2", "what": "承攬商匯款手續費"},
     {"module": "case",       "capability": "expense.entries",          "name": "remit_fee_case",       "direction": "expense", "doc": "E4", "what": "額外支出匯款手續費"},
     {"module": "payroll",    "capability": "expense.entries",          "name": "payslip",              "direction": "expense", "doc": "E7", "what": "勞報單付款"},
-    {"module": "payroll",    "capability": "expense.entries",          "name": "bonus",                "direction": "expense", "doc": "E8", "what": "獎金分潤發放"}
+    {"module": "payroll",    "capability": "expense.entries",          "name": "bonus",                "direction": "expense", "doc": "E8", "what": "獎金分潤發放"},
+    {"module": "payroll",    "capability": "expense.entries",          "name": "bonus_correction",     "direction": "expense", "doc": "E8b", "what": "獎金更正單（補發日＋補發額、追回＝核准日負數）"}
   ]
 }

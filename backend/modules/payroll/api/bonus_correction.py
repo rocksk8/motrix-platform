@@ -12,6 +12,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Body, Header, HTTPException
 
+from core.txn import begin_write
 from db import get_db
 from helpers import _require_user, _audit, _tok
 from helpers.auth import user_has_module
@@ -151,7 +152,7 @@ def create_correction(body: dict = Body(default={}), authorization: str = Header
     who, now = bonus_api._user_name(user), _now()
     conn = get_db()
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        begin_write(conn)
         award = _paid_award(conn, quote_no)
         try:
             reason = bc.validate_reason((body or {}).get("reason"))
@@ -184,7 +185,7 @@ def update_correction(corr_no: str, body: dict = Body(default={}), authorization
     who, now = bonus_api._user_name(user), _now()
     conn = get_db()
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        begin_write(conn)
         c = _row(conn, corr_no)
         if c["status"] != "草稿":
             raise HTTPException(409, "只有草稿可以修改，這一張現在是「%s」。" % c["status"])
@@ -211,7 +212,7 @@ def cancel_correction(corr_no: str, body: dict = Body(default={}), authorization
     who = bonus_api._user_name(user)
     conn = get_db()
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        begin_write(conn)
         c = _row(conn, corr_no)
         if c["status"] != "草稿":
             raise HTTPException(409, "只有草稿可以作廢，這一張現在是「%s」。" % c["status"])
@@ -259,7 +260,7 @@ def submit_correction(corr_no: str, authorization: str = Header(None)):
     who, now = bonus_api._user_name(user), _now()
     conn = get_db()
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        begin_write(conn)
         c = _row(conn, corr_no)
         if c["status"] != "草稿":
             raise HTTPException(409, "只有草稿可以送審，這一張現在是「%s」。" % c["status"])
@@ -284,7 +285,7 @@ def approve_correction(corr_no: str, authorization: str = Header(None)):
     who, now = bonus_api._user_name(user), _now()
     conn = get_db()
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        begin_write(conn)
         c = _row(conn, corr_no)
         if c["status"] != "待審核":
             raise HTTPException(409, "這張更正單不在簽核流程裡（現在是「%s」）。" % c["status"])
@@ -346,7 +347,7 @@ def reject_correction(corr_no: str, body: dict = Body(default={}), authorization
     who, now = bonus_api._user_name(user), _now()
     conn = get_db()
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        begin_write(conn)
         c = _row(conn, corr_no)
         if c["status"] != "待審核":
             raise HTTPException(409, "只有「待審核」的更正單可以駁回（現在是「%s」）。" % c["status"])
@@ -378,7 +379,7 @@ def mark_supplement_paid(corr_no: str, body: dict = Body(default={}), authorizat
     who, now = bonus_api._user_name(user), _now()
     conn = get_db()
     try:
-        conn.execute("BEGIN IMMEDIATE")
+        begin_write(conn)
         c = _row(conn, corr_no)
         if c["status"] != "待補發":
             raise HTTPException(409, "只有「待補發」的更正單可以標記補發（現在是「%s」）。" % c["status"])

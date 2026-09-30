@@ -1,5 +1,9 @@
 # 薪資獎金 更新紀錄
 
+## 1.1.15 — 2026-10-01（暫用號，列車取號；wip/w2-bonus-correction-3：列車 28 紅燈修正）
+- 獎金更正單：寫入交易改用 `core.txn.begin_write`（不再自己 `BEGIN IMMEDIATE`）；沖轉傳票呼叫 `voucher.draft` 改明列關鍵字（不用 `**`）；更正單頁的狀態篩選標 `class="filter"`。
+- 文件：`case_read_scope.json` 歸類更正單的兩條讀取路徑（`list_corrections`、`current_amounts`＝own_rule）；`money_flows.json`／MONEY-FLOWS.md 登記 E8b（IP-9 `bonus_correction`）；三種信件類型加進個人通知設定（`notification_prefs`）。行為不變。
+
 ## 1.1.14 — 2026-10-01（列車 28 整合：獎金更正單頁防重複初始化）
 - 內部：`bonus-corrections.html` 補 `_initDone` 守衛（Alpine 會自動呼叫 `init()`，`<body>` 又寫 `x-init`，不守衛會重複打 API）；行為不變。
 

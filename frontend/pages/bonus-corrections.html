@@ -72,7 +72,7 @@
           </div>
           <div class="bc-list" data-testid="bc-list">
             <div style="padding:10px;border-bottom:1px solid var(--border-light)">
-              <select class="bc-sel" style="width:100%" x-model="statusFilter" @change="loadList()" data-testid="bc-filter">
+              <select class="bc-sel filter" style="width:100%" x-model="statusFilter" @change="loadList()" data-testid="bc-filter">
                 <option value="">全部狀態</option>
                 <template x-for="s in statuses" :key="s"><option :value="s" x-text="s"></option></template>
               </select>

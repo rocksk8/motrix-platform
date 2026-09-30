@@ -44,6 +44,18 @@
    "scope": "own_rule"
   },
   {
+   "file": "modules/payroll/api/bonus_correction.py",
+   "path": "",
+   "handler": "list_corrections",
+   "scope": "own_rule"
+  },
+  {
+   "file": "modules/payroll/api/bonus_correction.py",
+   "path": "/current/{quote_no}",
+   "handler": "current_amounts",
+   "scope": "own_rule"
+  },
+  {
    "file": "modules/case/api/case_action_items.py",
    "path": "/api/quotations/{quote_no}/action-items",
    "handler": "list_case_action_items",

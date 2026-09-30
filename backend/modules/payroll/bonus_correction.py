@@ -130,13 +130,12 @@ def _draft(conn, corr, summary, lines, who, now, origin, reverses_voucher_id=Non
     """經 `voucher.draft`（IP-2）開草稿；回 (id, voucher_no, blocked)。給 `reverses_voucher_id` ⇒ 由總帳依原傳票分錄組反向草稿
     （`kind='reversal'`，與總帳引擎的沖轉同一種類）；總帳拒絕時回 `{"blocked": 原因}`，這裡轉成 blocked 字串、不丟例外。"""
     from core import registry
-    extra = {}
-    if reverses_voucher_id is not None:
-        extra["reverses_voucher_id"] = int(reverses_voucher_id)
-    else:
+    rev_id = int(reverses_voucher_id) if reverses_voucher_id is not None else None
+    if rev_id is None:
         lines = [dict(ln, source_type="case", source_key=corr["quote_no"]) for ln in lines]
-    v = registry.single_provider("voucher.draft")(
-        conn, voucher_date=now[:10], summary=summary, lines=lines, created_by=who, now=now, origin=origin, **extra)
+    v = registry.single_provider("voucher.draft")(       # 明列關鍵字（守門：不准用 ** 傳參數）
+        conn, voucher_date=now[:10], summary=summary, lines=lines, created_by=who, now=now, origin=origin,
+        reverses_voucher_id=rev_id)
     if v.get("blocked"):
         return 0, "", str(v["blocked"])
     return v["id"], v["voucher_no"], ""

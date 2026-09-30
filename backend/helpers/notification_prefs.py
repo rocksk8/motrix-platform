@@ -46,6 +46,9 @@ EVENT_GROUPS = [
         ("custom_def_returned",  "自訂模組定義退回修改（送審人）"),
         ("bonus_submitted",   "獎金分潤待審核通知（輪到我簽，含代理；信中不含金額）"),
         ("bonus_payout_ready","獎金分潤核准待發放（出納；信中不含金額）"),
+        ("bonus_correction_submitted","獎金更正單待審核通知（輪到我簽，含代理；信中不含金額）"),
+        ("bonus_correction_approved", "獎金更正單核准通知（申請人；有補發時含出納；信中不含金額）"),
+        ("bonus_correction_returned", "獎金更正單駁回通知（申請人）"),
         ("approval_reminder", "簽核逾期催辦提醒（工作日 1/3/5 天分級升級，含報價單／匯款申請／開票申請憑據／請款單）"),
     ]),
     ("會計傳票與總帳申請", [
