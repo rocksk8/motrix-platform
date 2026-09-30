@@ -323,3 +323,91 @@ def test_flow_removes_only_its_own_tree(tmp_path):
     assert len(removes) == 1
     target = Path(removes[0]["argv"][-1])
     assert target.parent == tmp_path and target.name.startswith("pre-train-wip-x-")
+
+
+# ── 第二十七班補充：三個守門檔＋--changed-modules 階段 ────────────────────────────────
+
+def test_the_three_train27_guards_are_listed_and_resolve():
+    args, missing = PT.expand_guards(REPO / "backend")
+    assert missing == []
+    for f in ("test_module_keys_consistency_2026_09_13", "test_no_credentials_in_query_2026_09_22", "test_wording_guards_2026_09_23"):
+        assert any(f in a for a in args), "GUARDS 漏了 %s（第二十七班建包紅）" % f
+    assert PT.guard_kind("tests/test_wording_guards_2026_09_23.py::t") == "用語守門"
+    assert PT.guard_kind("tests/test_no_credentials_in_query_2026_09_22.py::t") == "查詢字串不帶憑證"
+    assert PT.guard_kind("tests/test_module_keys_consistency_2026_09_13.py::t") == "模組 key 一致性"
+
+
+def test_touched_modules_and_test_dirs(tmp_path):
+    ch = ["backend/modules/case/api/a.py", "backend/helpers/h.py", "backend/modules/crm/x.py", "backend/modules/case/b.py",
+          "backend/modules/nodir/y.py", "docs/x.md"]
+    assert PT.touched_modules(ch) == ["case", "crm", "nodir"]
+    b = tmp_path / "backend"
+    (b / "modules" / "case" / "tests").mkdir(parents=True)
+    (b / "modules" / "crm").mkdir(parents=True)
+    dirs, none = PT.module_test_dirs(b, ["case", "crm", "nodir"])
+    assert dirs == ["modules/case/tests"] and none == ["crm", "nodir"]
+    assert "-n" in PT.build_pytest_cmd("py", dirs, "bt", 2, platform=False) and "tests/platform" not in         PT.build_pytest_cmd("py", dirs, "bt", 2, platform=False)
+
+
+class _ModRunner(FakeRunner):
+    """第二次 pytest（模組目錄）回自己的結果。"""
+    def __init__(self, mod_rc=0, mod_out="", **kw):
+        super().__init__(**kw)
+        self.mod_rc, self.mod_out = mod_rc, mod_out
+
+    def run(self, argv, cwd, env=None, **kw):
+        a = " ".join(argv)
+        if "-m pytest" in a and "tests/platform" not in a:
+            self.calls.append({"argv": list(argv), "cwd": str(cwd), "env": env or {}, "low": kw.get("low")})
+            return self.mod_rc, self.mod_out
+        return super().run(argv, cwd, env=env, **kw)
+
+
+def test_changed_modules_is_off_by_default(tmp_path):
+    fr = _ModRunner()
+    _run(tmp_path, runner=fr)
+    assert sum("-m pytest" in c for c in _cmds(fr)) == 1, "沒開 --changed-modules 卻多跑了模組測試"
+
+
+def test_changed_modules_runs_module_dirs_separately_reports_runtime_and_groups_reds(tmp_path):
+    # FakeRunner 的 diff 回 backend/modules/case/api/a.py ⇒ 動到 case；樹是假的（沒有 tests 目錄）⇒ 造一個
+    root = tmp_path
+    scratch_holder = {}
+    real = PT.module_test_dirs
+    PT.module_test_dirs = lambda b, keys: (["modules/%s/tests" % k for k in keys], [])
+    try:
+        fr = _ModRunner(mod_rc=1, mod_out="FAILED modules/case/tests/test_jv24_x.py::test_seed - AssertionError\n1 failed, 5 passed in 3s\n",
+                        pytest_out="9 passed in 1s\n")
+        code, rep, _ = _run(root, runner=fr, changed_modules=True)
+    finally:
+        PT.module_test_dirs = real
+    assert code == 1 and "歸屬 case" in rep and "test_jv24_x" in rep
+    assert "✘ pytest（動到的 1 個模組的 tests/）" in rep, "模組階段那一步本身沒標紅"
+    assert "增加" in rep and "模組測試 1 個目錄" in rep, "報告沒有列出模組階段增加的時間"
+    m = [c for c in fr.calls if "-m pytest" in " ".join(c["argv"]) and "modules/case/tests" in " ".join(c["argv"])]
+    assert len(m) == 1 and m[0]["env"].get("MOTRIX_TRAIN") == "1" and m[0]["low"] is True
+    assert "-n" in m[0]["argv"] and m[0]["argv"][m[0]["argv"].index("-n") + 1] == "2"
+    assert "not e2e" in m[0]["argv"]
+
+
+def test_changed_modules_green_and_unidentified_red(tmp_path):
+    real = PT.module_test_dirs
+    PT.module_test_dirs = lambda b, keys: (["modules/%s/tests" % k for k in keys], [])
+    try:
+        code, rep, _ = _run(tmp_path, runner=_ModRunner(mod_rc=0, mod_out="5 passed in 1s\n", pytest_out="9 passed in 1s\n"),
+                            changed_modules=True)
+        assert code == 0 and "結果：無紅" in rep
+        code, rep, _ = _run(tmp_path, runner=_ModRunner(mod_rc=2, mod_out="INTERNALERROR\n", pytest_out="9 passed in 1s\n"),
+                            changed_modules=True)
+        assert code == 1 and "認不出是哪一題" in rep, "模組階段非 0 而沒有 FAILED 行被當成綠"
+    finally:
+        PT.module_test_dirs = real
+
+
+def test_changed_modules_flag_reaches_run_check(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(PT, "run_check", lambda argv, **kw: (seen.update(kw) or (0, "ok")))
+    PT.main(["wip/x", "--changed-modules", "--no-fetch"])
+    assert seen["changed_modules"] is True
+    PT.main(["wip/x", "--no-fetch"])
+    assert seen["changed_modules"] is False
