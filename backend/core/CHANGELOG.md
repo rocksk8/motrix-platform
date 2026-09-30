@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-09-30（wip/w1-pdf-unapproved；升版幅度由列車取號）
+- L1（新增）：`helpers.doc_template.unapproved_banner／inject_unapproved／UNAPPROVED_TEXT`——尚未核可的單據 PDF／預覽一律顯示紅色「未核可・僅供預覽」橫幅（行內樣式，列印／下載同一份 HTML；`inject_unapproved` 冪等，版型拿掉 banner 積木也擋不掉）。套用：報價單、請款單、開票申請、承攬商匯款申請、出貨單、完工單、會計傳票、自訂模組單據；已核准的輸出不變。
+
 ## 1.81 — 2026-09-30（暫用，列車取號；wip/w1-t26fix：列車 26 守門修補）
 - L1（行為，安全）：`GET /api/attachments/open` 本班關閉（`routers/attachments.ATTACHMENTS_OPEN_ENABLED = False`，一律 404；W3 安全檢查：路徑未綁定來源單據，正式修正隨 P3）；`POST /api/audit-log/module-counts` 需 `audit_log` 權限、`since` 非字串 400（wip/w2-t26sec）
 - L1（新增宣告）：`helpers.audit.__l1_public__` 加 `_audit_login_failed`、`_FAIL_REASON_LABELS`、`_MODULE_LABELS`（routers/auth.py、routers/system.py 已在用；wip/w2-t26fix）

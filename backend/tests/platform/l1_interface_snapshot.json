@@ -1,5 +1,5 @@
 {
- "core_version": "1.81",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -486,10 +486,13 @@
    "FORMATS": "const",
    "THEMES": "const",
    "TemplateError": "class",
+   "UNAPPROVED_TEXT": "const",
+   "inject_unapproved": "def(html, status=…, detail=…)",
    "load_default": "def(key)",
    "problems": "def(template, sample_view=…)",
    "render": "def(template, data, parts)",
    "render_blocks": "def(blocks, data, parts)",
+   "unapproved_banner": "def(status=…, detail=…, cls=…)",
    "validate": "def(template, sample_view=…)"
   },
   "helper:edit_log": {

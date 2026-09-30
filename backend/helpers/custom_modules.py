@@ -941,11 +941,34 @@ def preview_output(body: dict) -> tuple:
     return render_view(rb, view), incomplete
 
 
+def _is_unapproved(body, status) -> bool:
+    """單據是否「尚未核可」（輸出紅色警示用）：模組有簽核狀態，而單據的目前狀態不在「簽核通過後可到達」的狀態集合裡
+    （草稿、簽核中、被退回都算未核可；核可後的狀態與其後續狀態不算）。沒有任何簽核的模組 ⇒ False。"""
+    wf = body.get("workflow") or {}
+    states = [s for s in wf.get("states", []) if isinstance(s, dict)]
+    approved = {(s.get("approval") or {}).get("on_approved") for s in states if s.get("approval")} - {None}
+    if not approved:
+        return False
+    nxt = {}
+    for t in wf.get("transitions", []):
+        if isinstance(t, dict):
+            nxt.setdefault(t.get("from"), set()).add(t.get("to"))
+    seen, todo = set(), list(approved)
+    while todo:
+        k = todo.pop()
+        if k in seen:
+            continue
+        seen.add(k)
+        todo.extend(nxt.get(k, ()))
+    return status not in seen
+
+
 def _view(body, rec, vals):
     labels = {s.get("key"): s.get("label") for s in (body.get("workflow") or {}).get("states", []) if isinstance(s, dict)}
     return {"recordNo": rec["record_no"], "status": rec["status"], "statusLabel": labels.get(rec["status"], rec["status"]),
             "createdBy": rec.get("created_by", ""), "createdAt": rec.get("created_at", ""), "moduleName": body.get("name", ""),
-            "fields": vals, "approval": rec.get("approval") or {}, **vals}
+            "fields": vals, "approval": rec.get("approval") or {}, **vals,
+            "unapproved": _is_unapproved(body, rec["status"])}
 
 
 # ── 單據 ────────────────────────────────────────────────────────────────
@@ -1395,7 +1418,9 @@ def render_view(body, view) -> str:
              "identity_foot": lambda: pdf_gen._identity_foot(ident),
              "approval_sign": lambda: pdf_gen._voucher_sign_html(view.get("approval") or {})}
     tpl = (body.get("output") or {}).get("template") or default_template(body)
-    return dt.render(tpl, view, parts)
+    html = dt.render(tpl, view, parts)
+    # 核可狀態由程式決定、不由版型決定：單據目前停在「需要簽核」的狀態 ⇒ 紅色警示（冪等）
+    return dt.inject_unapproved(html, view.get("statusLabel") or view.get("status"), "此單據尚未核可") if view.get("unapproved") else html
 
 
 def default_template(body) -> dict:
