@@ -158,7 +158,9 @@ def _png_text(raw: bytes):
         data = raw[i + 8:i + 8 + ln]
         try:
             if typ == b"tEXt":
-                yield data.replace(b"\x00", b" ").decode("latin-1")
+                raw_txt = data.replace(b"\x00", b" ")
+                yield raw_txt.decode("latin-1")               # 規格是 Latin-1
+                yield raw_txt.decode("utf-8", "replace")      # 實務上常有人直接塞 UTF-8
             elif typ == b"zTXt":
                 k, _, rest = data.partition(b"\x00")
                 yield k.decode("latin-1") + " " + zlib.decompress(rest[1:]).decode("utf-8", "replace")
