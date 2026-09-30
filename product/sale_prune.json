@@ -1,0 +1,55 @@
+{
+  "v": 1,
+  "note": "sale 包剪裁與投影設定（docs/platform/SALE-PACKAGE-DEID.md §2.3；工具 tools/platform/deid_project.py）。own 包不套用本檔。",
+  "manifest_baseline": "2026-09-30g",
+  "remove": [
+    "docs/**",
+    ".claude/**",
+    ".gitattributes",
+    ".gitignore",
+    "backend/pytest.ini",
+    "tools/platform/**"
+  ],
+  "keep": [
+    "tools/platform/upgrade.py",
+    "tools/platform/module_update.py",
+    "tools/platform/product_select.py",
+    "tools/platform/ship_tier.py"
+  ],
+  "forbidden": [
+    "docs/**",
+    ".claude/**",
+    "NEXT-SESSION.md",
+    "MULTIWIN-PROTOCOL.md",
+    "AGENT-HANDOFF-TEMPLATE.md",
+    "CHANGELOG.md",
+    "MOTRIX-ERP-*.md",
+    "*-AUDIT-*.md",
+    "WEEKLY-AUDIT-*.md",
+    "*-PLAN*.md",
+    "*-DESIGN.md",
+    "*-SPEC.md",
+    "GITFLOW.md",
+    "AUTOLOGON-FIX.md",
+    "PASSKEY-CA-ROLLOUT.md",
+    "backend/migrations_frozen/own_payload.json",
+    "tools/platform/deid_*",
+    "tools/platform/own_payload.py",
+    "tools/platform/fail_stream.py",
+    "tools/platform/modtest.py",
+    "tools/platform/*drill*.py",
+    "backend/tests/**"
+  ],
+  "cuts": [
+    {
+      "path": "backend/core/upgrade.py",
+      "name": "v9-company-defaults",
+      "stub": "# sale 包：不含任何公司預設值（升級精靈不回填公司資料；本段在 own 包才有）。\nV9_COMPANY_DEFAULTS = {}"
+    },
+    {
+      "path": "backend/core/upgrade.py",
+      "name": "is-our-install",
+      "stub": "def _is_our_install(profile: dict) -> bool:\n    return False          # sale 包：沒有「本公司安裝」這回事，一律不回填"
+    }
+  ]
+}
