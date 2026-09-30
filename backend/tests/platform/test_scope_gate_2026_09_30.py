@@ -233,7 +233,9 @@ def test_m1_every_tree_scanning_test_is_listed():
 
 
 def test_m1_scanner_positive_and_negative_controls(tmp_path):
-    t = tmp_path / "backend" / "tests"
+    # 全部建在 tmp_path 底下（掃描器指向 tmp_path）。用 joinpath 而不是 `tmp_path / "backend" / "tests"`：
+    # test_no_temp_files_in_shared_tests_dir 的啟發式會把含 "backend"＋"tests" 常數的 `/` 運算當成共用目錄（它自己的題記錄了這個保守行為）
+    t = tmp_path.joinpath("backend", "tests")
     t.mkdir(parents=True)
     (tmp_path / "backend" / "modules" / "zeta" / "tests").mkdir(parents=True)
     (t / "test_scan_db.py").write_text("def test_x(c):\n    c.execute(\"SELECT name FROM sqlite_master\")\n", encoding="utf-8")
