@@ -3,6 +3,7 @@
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
 ## 1.81 — 2026-09-30（暫用，列車取號；wip/w1-t26fix：列車 26 守門修補）
+- L1（行為，安全）：`GET /api/attachments/open` 本班關閉（`routers/attachments.ATTACHMENTS_OPEN_ENABLED = False`，一律 404；W3 安全檢查：路徑未綁定來源單據，正式修正隨 P3）；`POST /api/audit-log/module-counts` 需 `audit_log` 權限、`since` 非字串 400（wip/w2-t26sec）
 - L1（新增宣告）：`helpers.audit.__l1_public__` 加 `_audit_login_failed`、`_FAIL_REASON_LABELS`、`_MODULE_LABELS`（routers/auth.py、routers/system.py 已在用；wip/w2-t26fix）
 - L1（新增）：`helpers.case_access.case_exists(conn, quote_no)`、`case_sales_department(conn, quote_no)`（L1 金流串接 `helpers/custom_finance` 讀 quotations 只准經這個檔，DEPENDENCY-MAP §3.2）。
 - L1（行為）：`GET /api/custom-modules/finance/case/{案件單號}` 看不到案件／查無案件改回 404（走 `case_access.deny_case`，M01-O1 看不到＝不存在；原為 403）；自訂模組定義送審的簽核佇列提供者改用 `approval_json_of` 讀 `decision_json.approval`（壞 JSON 那一筆跳過並記 ERROR）、詳情 `quoteNo` 改回空（沒有掛案件）。
