@@ -11,6 +11,7 @@ from fastapi import APIRouter, Body, Header, HTTPException, Query
 
 from db import get_db
 from helpers import _audit, _require_user, _tok, require_any_module
+from modules.accounting.ledger import auto_run as _auto_run
 from modules.accounting.ledger import contract as _contract
 from modules.accounting.ledger import engine as _engine
 from modules.accounting.ledger import features as _features
@@ -95,6 +96,18 @@ def engine_events(status: str = None, start: str = None, end: str = None, limit:
         for r in rows:
             counts[r["status"]] = counts.get(r["status"], 0) + 1
         return {"events": rows, "counts": counts}
+    finally:
+        conn.close()
+
+
+@router.get("/engine/status")
+def engine_status(authorization: str = Header(None)):
+    """橫幅資料：自上次執行後有多少來源變動（新增／內容變動／已消失）、最近一次執行與自動執行的結果。唯讀，不動任何資料。"""
+    _require_engine_read(authorization)
+    conn = get_db()
+    try:
+        _require_flag(conn)
+        return _auto_run.status(conn)
     finally:
         conn.close()
 

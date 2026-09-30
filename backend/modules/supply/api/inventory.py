@@ -651,7 +651,10 @@ def adjust_stock_item(item_id: int, body: dict = Body(...), authorization: str =
             WHERE id=?
         """, (note or row["note"], now, item_id))
     else:  # edit_note
-        conn.execute("UPDATE stock_items SET note=?, updated_at=? WHERE id=?", (note, now, item_id))
+        if row["status"] == "void":            # 報廢件的 updated_at 就是報廢日（總帳 E10 報廢事件的日期）：改備註不動它
+            conn.execute("UPDATE stock_items SET note=? WHERE id=?", (note, item_id))
+        else:
+            conn.execute("UPDATE stock_items SET note=?, updated_at=? WHERE id=?", (note, now, item_id))
     conn.commit()
     conn.close()
 

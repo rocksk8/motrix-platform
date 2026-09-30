@@ -452,6 +452,7 @@
     "mod:accounting/api/ledger_annotations",
     "mod:accounting/api/ledger_requests",
     "mod:accounting/api/ledger_closing",
+    "mod:accounting/ledger/auto_run",
     "mod:accounting/ledger/closing",
     "mod:accounting/ledger/export",
     "mod:accounting/api/ledger_settings",
