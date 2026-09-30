@@ -1,10 +1,10 @@
 # 薪資獎金 更新紀錄
 
-## 1.1.11 — 2026-09-30（暫用號，列車取號；W4 寫入串接缺口 L1／L2／L6／L8／L9／L10）
-- L6：已付款勞報單的付款事件 E06b——出納填的傳票號指向有效的手工傳票（存在、未作廢、不是系統產生）時不再重複產生（notice 說明）；應付事件 E06 照常。
-
 ## 1.2.0 — 2026-09-30（暫用號，列車取號；wip/w2-bonus-correction）
 新增獎金更正單（已發放獎金的事後更正）：migration 0002（bonus_corrections／bonus_correction_log）、/api/bonus/corrections、bonus-corrections.html、簽核佇列項目、IP-9 expense.entries（bonus_correction）、IP-8 補發列；核准開沖轉＋重開應付傳票草稿、出納補發。
+
+## 1.1.11 — 2026-09-30（暫用號，列車取號；W4 寫入串接缺口 L1／L2／L6／L8／L9／L10）
+- L6：已付款勞報單的付款事件 E06b——出納填的傳票號指向有效的手工傳票（存在、未作廢、不是系統產生）時不再重複產生（notice 說明）；應付事件 E06 照常。
 
 ## 1.1.10 — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：安全審查 W3 sibling gap）
 - 勞報單簽回檔 metadata 的 `ext` 必須在允許集合（.pdf／.jpg／.jpeg／.png），不合法 ⇒ 不拼進路徑（讀取端點 400、附件目錄 404）。
