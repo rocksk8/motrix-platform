@@ -30,6 +30,8 @@ from helpers import (
     _hash_pw, _verify_pw, _require_user, _tok, _audit, is_weak_password, MIN_PASSWORD_LEN, DEMO_TOKEN_PREFIX,
     notify_module_activity)
 
+from helpers.audit import _audit_login_failed
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -409,6 +411,7 @@ def auth_login(body: LoginIn, request: Request):
     if not row or not _verify_pw(body.password, row["password_hash"]):
         conn.close()
         _rl_fail(ip, body.username.strip())
+        _audit_login_failed(body.username.strip(), ip)
         raise HTTPException(401, "帳號或密碼錯誤")
     must_change = bool(row["must_change_password"])
     # Legacy weak password still works once, but forces rotation
