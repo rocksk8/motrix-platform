@@ -235,6 +235,32 @@ def _caseless_visible(conn, row, user) -> bool:
     return bool(is_document_approver(_col(row, "approval_json", ""), user, conn))
 
 
+def _amount_viewer(conn, row, user) -> bool:
+    """費用單據（kind≠''）的金額誰看得到（使用者 2026-10-01 最終裁示）：申請人（建立者／data.applicant）、本單簽核人（含變更申請的簽核鏈與代理）、
+    出納／財務、管理員以上。其他人只看得到狀態（金額、明細、資料、收款人銀行、付款資訊一律遮蔽）。"""
+    if not isinstance(user, dict):
+        return False
+    if user.get("role") in ("superadmin", "admin") or user_has_module(user, "cashier") or user_has_module(user, "finance"):
+        return True
+    me = user.get("username")
+    if (row["created_by"] or "") == me or str(_jcol(row, "data_json").get("applicant") or "") == me:
+        return True
+    return bool(is_document_approver(_col(row, "approval_json", ""), user, conn)
+                or is_document_approver(_col(row, "change_approval_json", ""), user, conn))
+
+
+#: 遮蔽後仍保留的欄位（狀態面）；其餘金額／明細／資料／收款人／付款欄位一律清掉
+_MASKED_KEEP = ("id", "kind", "docCode", "status", "expenseDate", "createdBy", "createdByName", "createdAt",
+                "updatedAt", "departmentId", "changeStatus", "paidDate", "defVersion", "currency")          # 說明／類別也不留（摘要可能就是內容）
+
+
+def _mask_row(d: dict) -> dict:
+    out = {k: d[k] for k in _MASKED_KEEP if k in d}
+    out.update({"masked": True, "totalCost": None, "description": "", "category": "", "lines": [], "lineCount": len(d.get("lines") or []), "data": {}, "files": [],
+                "approval": {}, "change": {}, "changeApproval": {}})
+    return out
+
+
 def _caseless_create_allowed(user) -> bool:
     """誰可以開無案件費用單：管理員以上，或持 `expense_forms` 權限（W1 登記的單一權限 key）。"""
     return user.get("role") in ("superadmin", "admin") or user_has_module(user, "expense_forms")
@@ -315,14 +341,22 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
         if quote_no == "":
             rows = [r for r in rows if _caseless_visible(conn, r, user)]       # 無案件：逐列可見規則
         if not can_see_financial(user):
+            # 舊版列（kind=''）維持原規則（只看自己的／自己簽的）；費用單據（kind≠''）改「看得到列、金額遮蔽」（見 `_amount_viewer`）
             rows = [r for r in rows
-                    if (r["created_by"] or "") == user["username"]
+                    if (_col(r, "kind", "") or "")
+                    or (r["created_by"] or "") == user["username"]
                     or is_document_approver(_col(r, "approval_json", ""), user, conn)]
-        items = [_row_to_dict(r) for r in rows]
-        total = sum(float(i["totalCost"] or 0) for i in items)
-        pending = sum(float(i["totalCost"] or 0) for i in items if i["status"] != "已核准")
+        items = []
+        for r in rows:
+            d = _row_to_dict(r)
+            if (d["kind"] or "") and not _amount_viewer(conn, r, user):
+                d = _mask_row(d)
+            items.append(d)
+        visible = [i for i in items if not i.get("masked")]          # 合計只算看得到金額的列（避免「清單 3 筆、合計卻含別人的金額」）
+        total = sum(float(i["totalCost"] or 0) for i in visible)
+        pending = sum(float(i["totalCost"] or 0) for i in visible if i["status"] != "已核准")
         # W1：手續費（公司自付、已登錄付款者）另計，進案件成本（settlement 的 remitFeeTotal）；不併入 totalAmount
-        fee_total = sum(float(i["remitFee"] or 0) for i in items if i["paidDate"])
+        fee_total = sum(float(i["remitFee"] or 0) for i in visible if i["paidDate"])
         return {
             "quoteNo": quote_no,
             "items": items,

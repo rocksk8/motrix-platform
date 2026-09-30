@@ -4450,10 +4450,19 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
     } for r in conn.execute(
         "SELECT * FROM case_extra_expenses WHERE quote_no=? ORDER BY id", (quote_no,)
     ).fetchall()]
+    # 費用單據（kind≠''）綁了案件時：金額只給申請人／簽核人／出納財務／管理員（使用者 2026-10-01）；其他人（例如只有財務檢視偏好的案件成員）只看到狀態
+    from modules.case.api import case_extra_expenses as _xe
+    _xr = {r["id"]: r for r in conn.execute("SELECT * FROM case_extra_expenses WHERE quote_no=?", (quote_no,)).fetchall()}
+    extras = [({"id": e["id"], "category": "", "description": "", "status": e["status"], "pending": e["pending"],
+                "expenseDate": e["expenseDate"], "masked": True, "totalCost": None, "unitCost": None, "qty": None, "files": []}
+               if (_xr.get(e["id"]) is not None and (_xr[e["id"]]["kind"] or "") and not _xe._amount_viewer(conn, _xr[e["id"]], user)) else e)
+              for e in extras]
     # 2026-09-11：conn 從這裡才關——額外支出改讀 case_extra_expenses 表之後，
     # 上面那段列表推導需要連線，原本在它之前就 close() 會變成 use-after-close
+    _shown = {e["id"] for e in extras if not e.get("masked")}          # 手續費合計只算看得到金額的列
     extras_fee_total = sum(float(r["remit_fee"] or 0) for r in conn.execute(
-        "SELECT remit_fee FROM case_extra_expenses WHERE quote_no=? AND COALESCE(paid_date, '') != ''", (quote_no,)).fetchall())
+        "SELECT id, remit_fee FROM case_extra_expenses WHERE quote_no=? AND COALESCE(paid_date, '') != ''", (quote_no,)).fetchall()
+        if r["id"] in _shown)
     # 建構器（自訂模組）的金流：關聯到這個案件的入帳支出＝案件成本的一列；收入因內建報價單已認列而略過（標 skipped，供對照）
     from helpers import custom_finance as _cfin
     custom_finance = _cfin.case_finance(conn, quote_no)
@@ -4475,7 +4484,7 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
             "paymentRequests": payment_requests,
         },
         "settlementExtras": {
-            "total": sum(e["totalCost"] for e in extras),
+            "total": sum((e["totalCost"] or 0) for e in extras),
             "remitFeeTotal": extras_fee_total,
             "items": extras,
         },
