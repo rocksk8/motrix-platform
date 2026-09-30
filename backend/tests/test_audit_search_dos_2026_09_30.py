@@ -48,6 +48,13 @@ def test_user_prefix_wildcards_are_literal(client, auditor):
     assert [i["username"] for i in r] == ["al_ice"]                                    # `_` 不是單字元萬用
 
 
+def test_text_filters_are_truncated_to_100_chars(client, auditor):
+    """超過 100 字的文字篩選值被截斷（**反向控制**：拿掉截斷 ⇒ 這題紅：200 字的 q 不再匹配前 100 字相同的那一列）。"""
+    _insert_many([_row(0, "a" * 100)])
+    hit = client.get("/api/audit-log", params={"q": "a" * 100 + "zzz"}, headers=auditor).json()["items"]
+    assert [i["target_label"] for i in hit] == ["a" * 100]
+
+
 def test_oversized_inputs_are_truncated_not_crashing(client, auditor):
     big = "x" * 8_000
     for k in ("q", "user", "action", "module", "case_no", "ref_no", "date_from", "date_to"):
