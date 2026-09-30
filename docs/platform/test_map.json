@@ -23594,6 +23594,7 @@
     "helper:company_setup",
     "helper:email_notify",
     "helper:geo",
+    "mod:accounting/notify",
     "mod:tender_radar/notify",
     "plat:__init__",
     "plat:source_tree",
@@ -23609,6 +23610,7 @@
      "backend/helpers/company_setup.py",
      "backend/helpers/email_notify.py",
      "backend/helpers/geo.py",
+     "backend/modules/accounting/notify.py",
      "backend/modules/tender_radar/",
      "backend/modules/tender_radar/notify.py",
      "backend/routers/system.py"

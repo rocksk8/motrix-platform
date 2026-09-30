@@ -5062,31 +5062,31 @@
     },
     {
      "func": "reject_invoice_voucher",
-     "line": 696,
+     "line": 697,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_invoice_voucher_pdf",
-     "line": 742,
+     "line": 744,
      "method": "GET",
      "path": "/api/invoice-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_invoice_voucher_export",
-     "line": 771,
+     "line": 773,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/export"
     },
     {
      "func": "upload_invoice_voucher_issued_files",
-     "line": 799,
+     "line": 801,
      "method": "POST",
      "path": "/api/invoice-vouchers/{voucher_no}/issued-files"
     },
     {
      "func": "delete_invoice_voucher_issued_file",
-     "line": 828,
+     "line": 830,
      "method": "DELETE",
      "path": "/api/invoice-vouchers/{voucher_no}/issued-files/{file_id}"
     }
@@ -5221,19 +5221,19 @@
     },
     {
      "func": "reject_payment_request",
-     "line": 788,
+     "line": 789,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/reject"
     },
     {
      "func": "download_payment_request_pdf",
-     "line": 834,
+     "line": 836,
      "method": "GET",
      "path": "/api/payment-requests/{request_no}/pdf-download"
     },
     {
      "func": "record_payment_request_export",
-     "line": 863,
+     "line": 865,
      "method": "POST",
      "path": "/api/payment-requests/{request_no}/export"
     }
@@ -5730,49 +5730,49 @@
     },
     {
      "func": "revoke_completion_approval",
-     "line": 597,
+     "line": 598,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/revoke-approval"
     },
     {
      "func": "download_completion_pdf",
-     "line": 642,
+     "line": 644,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}/pdf-download"
     },
     {
      "func": "record_completion_export",
-     "line": 669,
+     "line": 671,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/export"
     },
     {
      "func": "toggle_completion_signed",
-     "line": 698,
+     "line": 700,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/signed-toggle"
     },
     {
      "func": "upload_completion_signed_files",
-     "line": 750,
+     "line": 752,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/signed-files"
     },
     {
      "func": "delete_completion_signed_file",
-     "line": 776,
+     "line": 778,
      "method": "DELETE",
      "path": "/api/completion-notes/{note_no}/signed-files/{file_id}"
     },
     {
      "func": "get_completion_privacy_acks",
-     "line": 813,
+     "line": 815,
      "method": "GET",
      "path": "/api/completion-notes/{note_no}/privacy-notice"
     },
     {
      "func": "ack_completion_privacy_notice",
-     "line": 825,
+     "line": 827,
      "method": "POST",
      "path": "/api/completion-notes/{note_no}/privacy-notice/ack"
     }
@@ -8395,61 +8395,61 @@
     },
     {
      "func": "reject_contractor_voucher",
-     "line": 629,
+     "line": 630,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_contractor_voucher_pdf",
-     "line": 676,
+     "line": 678,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_contractor_voucher_export",
-     "line": 706,
+     "line": 708,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/export"
     },
     {
      "func": "get_remit_require_payslip",
-     "line": 774,
+     "line": 776,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "set_remit_require_payslip",
-     "line": 782,
+     "line": 784,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "get_personnel_links",
-     "line": 795,
+     "line": 797,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-links"
     },
     {
      "func": "link_personnel_payslip",
-     "line": 829,
+     "line": 831,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-link"
     },
     {
      "func": "toggle_paid",
-     "line": 884,
+     "line": 886,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/paid-toggle"
     },
     {
      "func": "get_contractor_voucher_approval_flow",
-     "line": 1006,
+     "line": 1008,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     },
     {
      "func": "set_contractor_voucher_approval_flow",
-     "line": 1023,
+     "line": 1025,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     }
@@ -9187,37 +9187,37 @@
     },
     {
      "func": "reject_shipping_note",
-     "line": 615,
+     "line": 616,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/reject"
     },
     {
      "func": "download_shipping_pdf",
-     "line": 659,
+     "line": 661,
      "method": "GET",
      "path": "/api/shipping-notes/{note_no}/pdf-download"
     },
     {
      "func": "record_shipping_export",
-     "line": 689,
+     "line": 691,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/export"
     },
     {
      "func": "toggle_signed",
-     "line": 723,
+     "line": 725,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/signed-toggle"
     },
     {
      "func": "upload_shipping_signed_files",
-     "line": 780,
+     "line": 782,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/signed-files"
     },
     {
      "func": "delete_shipping_signed_file",
-     "line": 802,
+     "line": 804,
      "method": "DELETE",
      "path": "/api/shipping-notes/{note_no}/signed-files/{file_id}"
     }
@@ -12938,169 +12938,169 @@
    "routes": [
     {
      "func": "list_custom_modules",
-     "line": 86,
+     "line": 85,
      "method": "GET",
      "path": "/api/custom-modules"
     },
     {
      "func": "custom_module_meta",
-     "line": 98,
+     "line": 97,
      "method": "GET",
      "path": "/api/custom/{key}/meta"
     },
     {
      "func": "list_custom_records",
-     "line": 115,
+     "line": 114,
      "method": "GET",
      "path": "/api/custom/{key}/records"
     },
     {
      "func": "create_custom_record",
-     "line": 131,
+     "line": 130,
      "method": "POST",
      "path": "/api/custom/{key}/records"
     },
     {
      "func": "compute_custom_record",
-     "line": 150,
+     "line": 149,
      "method": "POST",
      "path": "/api/custom/{key}/compute"
     },
     {
      "func": "get_custom_record",
-     "line": 165,
+     "line": 164,
      "method": "GET",
      "path": "/api/custom/{key}/records/{record_no}"
     },
     {
      "func": "list_custom_record_revisions",
-     "line": 183,
+     "line": 182,
      "method": "GET",
      "path": "/api/custom/{key}/records/{record_no}/revisions"
     },
     {
      "func": "diff_custom_record_revisions",
-     "line": 201,
+     "line": 200,
      "method": "GET",
      "path": "/api/custom/{key}/records/{record_no}/revisions/diff"
     },
     {
      "func": "update_custom_record",
-     "line": 225,
+     "line": 224,
      "method": "PUT",
      "path": "/api/custom/{key}/records/{record_no}"
     },
     {
      "func": "transition_custom_record",
-     "line": 244,
+     "line": 243,
      "method": "POST",
      "path": "/api/custom/{key}/records/{record_no}/transitions/{tkey}"
     },
     {
      "func": "approve_custom_record",
-     "line": 267,
+     "line": 266,
      "method": "POST",
      "path": "/api/custom/{key}/records/{record_no}/approve"
     },
     {
      "func": "reject_custom_record",
-     "line": 282,
+     "line": 281,
      "method": "POST",
      "path": "/api/custom/{key}/records/{record_no}/reject"
     },
     {
      "func": "output_custom_record",
-     "line": 297,
+     "line": 296,
      "method": "GET",
      "path": "/api/custom/{key}/records/{record_no}/output"
     },
     {
      "func": "upload_custom_files",
-     "line": 330,
+     "line": 329,
      "method": "POST",
      "path": "/api/custom/{key}/files/{field}"
     },
     {
      "func": "delete_staged_custom_file",
-     "line": 357,
+     "line": 356,
      "method": "DELETE",
      "path": "/api/custom/{key}/files/{file_id}"
     },
     {
      "func": "custom_finance_of_case",
-     "line": 374,
+     "line": 373,
      "method": "GET",
      "path": "/api/custom-modules/finance/case/{case_no}"
     },
     {
      "func": "custom_finance_summary",
-     "line": 392,
+     "line": 391,
      "method": "GET",
      "path": "/api/custom-modules/finance/summary"
     },
     {
      "func": "custom_definition_review",
-     "line": 419,
+     "line": 418,
      "method": "GET",
      "path": "/api/custom-modules/{key}/definition/review"
     },
     {
      "func": "approve_custom_definition",
-     "line": 432,
+     "line": 431,
      "method": "POST",
      "path": "/api/custom-modules/{key}/definition/{version}/approve"
     },
     {
      "func": "reject_custom_definition",
-     "line": 446,
+     "line": 445,
      "method": "POST",
      "path": "/api/custom-modules/{key}/definition/{version}/reject"
     },
     {
      "func": "get_custom_definition_review",
-     "line": 460,
+     "line": 459,
      "method": "GET",
      "path": "/api/custom-modules/definition-review"
     },
     {
      "func": "set_custom_definition_review",
-     "line": 467,
+     "line": 466,
      "method": "PUT",
      "path": "/api/custom-modules/definition-review"
     },
     {
      "func": "custom_module_catalog",
-     "line": 488,
+     "line": 487,
      "method": "GET",
      "path": "/api/custom-modules/catalog"
     },
     {
      "func": "custom_module_template",
-     "line": 505,
+     "line": 504,
      "method": "GET",
      "path": "/api/custom-modules/templates/{tkey}"
     },
     {
      "func": "check_custom_formula",
-     "line": 515,
+     "line": 514,
      "method": "POST",
      "path": "/api/custom-modules/formula/check"
     },
     {
      "func": "preview_custom_numbering",
-     "line": 526,
+     "line": 525,
      "method": "POST",
      "path": "/api/custom-modules/numbering/preview"
     },
     {
      "func": "custom_ref_options",
-     "line": 536,
+     "line": 535,
      "method": "GET",
      "path": "/api/custom/{key}/ref-options/{field}"
     },
     {
      "func": "preview_custom_output",
-     "line": 560,
+     "line": 559,
      "method": "POST",
      "path": "/api/custom-modules/{key}/output/preview"
     }
