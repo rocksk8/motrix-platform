@@ -217,7 +217,7 @@ def test_case_finance_lists_posted_lines_of_a_case(world):
         cf = FIN.case_finance(c, "CASE-X")
         assert cf["expense"]["total"] == 40 and cf["expense"]["items"][0]["recordNo"] == no
         assert cf["income"]["total"] == 100
-        assert FIN.case_finance(c, "OTHER") == {"expense": {"total": 0, "items": []}, "income": {"total": 0, "items": []}}
+        assert FIN.case_finance(c, "OTHER") == {"expense": {"total": 0, "items": []}, "income": {"total": 0, "items": [], "skippedTotal": 0}}
     finally:
         c.close()
 

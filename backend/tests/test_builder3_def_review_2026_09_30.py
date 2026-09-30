@@ -92,7 +92,7 @@ def test_reviewer_list_with_someone_else_activates_review_automatically(world):
     assert client.get("/api/custom/%s/meta" % KEY, headers=boss).status_code == 404       # 還沒發布 ⇒ 沒有現行版
     assert "definitions.publish_unreviewed" not in _audit_actions()
     q = client.get("/api/approval-queue", headers=appr).json()
-    items = q["items"] if isinstance(q, dict) else q
+    items = [i for g in q["queue"] for i in g["items"]]                          # 佇列依申請人分組
     mine = [i for i in items if i.get("type") == "custom_module_def"]
     assert [(i["moduleKey"], i["definitionVersion"]) for i in mine] == [(KEY, 1)]
     v = client.get("/api/custom-modules/%s/definition/review" % KEY, headers=appr)
@@ -160,13 +160,17 @@ def test_mode_override_off_forces_direct_publish_and_on_forces_review_with_other
     _draft(client, boss, _body())
     r = _publish(client, boss)
     assert r.json()["status"] == "published" and "definitions.publish_unreviewed" in _audit_actions()   # 覆寫關閉：直接發布仍記稽核
-    # on：名單清空、沒有其他最高管理者 ⇒ 沒人可審 ⇒ 仍是直接發布（原因寫明）
+    # on：名單清空 ⇒ 改用「申請人以外的最高管理者」當審核人（測試庫本來就有預設的 admin 最高管理者）
     st = _cfg(client, boss, reviewers=[], mode="on")
-    assert st["mode"] == "on" and st["active"] is False and "沒有申請人以外的審核人" in st["reason"]
-    # 另有一位最高管理者 ⇒ on 會改用他當審核人
+    assert st["mode"] == "on" and st["active"] is True and "b3d_boss" not in [r["username"] for r in st["reviewers"]]
+    # 再多一位最高管理者 ⇒ 也在審核人裡
     _login(client, make_user, "b3d_boss2", role="superadmin")
     st = _cfg(client, boss, mode="on")
-    assert st["active"] is True and [r["username"] for r in st["reviewers"]] == ["b3d_boss2"]
+    assert st["active"] is True and "b3d_boss2" in [r["username"] for r in st["reviewers"]]
+    # auto 且名單空：沒有第二人 ⇒ 未啟用（原因寫明）——on 的備援只在強制送審時才用
+    st = _cfg(client, boss, mode="auto")
+    assert st["active"] is False and "沒有申請人以外的審核人" in st["reason"]
+    _cfg(client, boss, mode="on")
     _draft(client, boss, _body("再改"))
     assert _publish(client, boss).json()["pending"] is True
     tok2 = client.post("/api/auth/login", json={"username": "b3d_boss2", "password": "Custom-Pass-123"}).json()["token"]
@@ -212,3 +216,14 @@ def test_versions_listing_shows_submitted_and_rejected_with_the_decision(world):
     vs = client.get("/api/definitions/custom_module/%s" % KEY, headers=boss).json()["versions"]
     rj = next(v for v in vs if v["version"] == 1)
     assert rj["status"] == "rejected" and rj["decision"]["reason"] == "不行"
+
+
+def test_after_a_decision_the_reviewer_still_reads_history_but_a_stranger_gets_404(world):
+    client, boss, appr, other = world
+    _cfg(client, boss, reviewers=["b3d_appr"])
+    _draft(client, boss, _body())
+    assert _publish(client, boss).json()["version"] == 1
+    client.post("/api/custom-modules/%s/definition/1/reject" % KEY, headers=appr, json={"note": "x"})
+    v = client.get("/api/custom-modules/%s/definition/review" % KEY, headers=appr)
+    assert v.status_code == 200 and v.json()["open"] is None and v.json()["history"][0]["status"] == "rejected"   # 審核人決定後仍讀得到
+    assert client.get("/api/custom-modules/%s/definition/review" % KEY, headers=other).status_code == 404        # 無關的人：不洩漏

@@ -168,6 +168,18 @@ def decide(conn, module_key, version, user, approve, note=""):
     return {"status": out["status"], "version": out["version"], "published": bool(approve)}
 
 
+def _was_involved(conn, module_key, user) -> bool:
+    """這個人是不是這個模組任何一次送審的申請人或審核人（決定完之後仍讀得到「目前沒有送審中」與歷史，不是 404）。"""
+    from helpers.settings import _get_setting
+    if user["username"] in (_get_setting(REVIEWERS_KEY, []) or []):
+        return True
+    for v in D.versions(conn, "custom_module", module_key, "company"):
+        if v["status"] in ("submitted", "rejected", "published") and user["username"] in (
+                [v.get("submitted_by")] + [a.get("username") for t in ((v.get("decision") or {}).get("approval") or {}).get("tiers", []) for a in t.get("approvers", [])]):
+            return True
+    return False
+
+
 def _can_read(conn, row, user) -> bool:
     from helpers.tiered_approval import active_delegators_for
     if user.get("role") == "superadmin" or (row.get("submitted_by") or "") == user["username"]:
@@ -182,7 +194,7 @@ def open_view(conn, module_key, user) -> dict:
     row = D.open_submission(conn, "custom_module", module_key, "company")
     if row is not None and not _can_read(conn, row, user):
         raise ReviewError("沒有審核這份定義的權限", 403)
-    if row is None and user.get("role") != "superadmin":
+    if row is None and user.get("role") != "superadmin" and not _was_involved(conn, module_key, user):
         raise ReviewError("沒有送審中的定義", 404)
     latest = D.get(conn, "custom_module", module_key, "company")
     hist = [{"version": v["version"], "status": v["status"], "submittedBy": v.get("submitted_by") or "", "submittedAt": v.get("submitted_at") or "",
