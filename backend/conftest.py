@@ -502,7 +502,27 @@ def client(_app, _template_db, tmp_path, monkeypatch):
         db.init_db(demo_path)
     else:
         shutil.copyfile(_template_db, real_path)
-        shutil.copyfile(_template_db, demo_path)
+        if os.environ.get("MOTRIX_TEST_EAGER_DEMO") == "1":
+            shutil.copyfile(_template_db, demo_path)
+        else:
+            # 2026-09-30 寫入量（使用者：「盡可能降低硬碟的重複寫入」；PLAN-TEST-PERF §5.1）：demo 庫**到用才複製**——
+            # 多數題不碰 demo，每題白寫 1.3 MB。首次有人 `db._connect(demo_path)`（demo 模式的 get_db、reset_demo_db…）
+            # 才從範本複製（先寫暫存檔再原子 rename，執行緒間用鎖；不會有人讀到寫一半的庫）。
+            # 設 MOTRIX_TEST_EAGER_DEMO=1 ⇒ 回到每題預先複製（A/B 對照用）。守門：tests/test_lazy_demo_db_2026_09_30.py。
+            import threading as _threading
+            _orig_connect = db._connect
+            _lock = _threading.Lock()
+
+            def _lazy_demo_connect(path, *a, **kw):
+                if path == demo_path and not os.path.exists(path):
+                    with _lock:
+                        if not os.path.exists(path):
+                            tmp = path + ".part"
+                            shutil.copyfile(_template_db, tmp)
+                            os.replace(tmp, path)
+                return _orig_connect(path, *a, **kw)
+
+            monkeypatch.setattr(db, "_connect", _lazy_demo_connect)
     monkeypatch.setattr(db, "DB_PATH", real_path)
     monkeypatch.setattr(db, "DEMO_DB_PATH", demo_path)
     # `IA2`：`init_demo_account()` 現在靠 `demo_account_on()` 把關

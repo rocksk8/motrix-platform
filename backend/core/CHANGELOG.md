@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## （不升版號：介面不變）— 2026-09-30（wip/w2-backup-dedup：每日備份同上一份）
+- L0（行為，私有）：`archive.py` 每日備份資料沒變（內容指紋與前一份相同，不含備份自己的稽核／sessions）時：本機快照硬連結前一份、雲端整庫與 41 張表 JSON 只寫 `SAME_AS.json`（月備份不省）；清理不刪被標記引用的日子；新增內部函式與 `backend/tools/find_backup.py`（還原用）。無公開介面變動；DR-SOP §3b。
+## （不升版號：介面不變）— 2026-09-30（wip/w2-disk-quick：降低硬碟重複寫入）
+- L0（行為，私有）：`heartbeat_job.py` 正常時只在狀態改變／每日第一筆／壞的狀態每小時才記 log（狀態記在 `logs/heartbeat_state.json`）；`heartbeat_job.log`、`backup_job.log` 改 RotatingFileHandler（5MB×3）。測試端（conftest）：demo 庫到用才複製；測試暫存目錄不洩漏。無公開介面變動。
+
 ## 1.73 — 2026-09-30（W1 建構器第三輪 S1～S3，暫用號；wip/w1-builder3；1.72 已被 wip/sec-p0 取用）
 - L1（新增）：`helpers.custom_fields.EXT_TYPES／MODULE_TYPES／OPTION_TYPES`——自訂模組新欄位型別 `textarea`（多行文字）、`radio`（單選）、`checkboxes`（複選）、`multiselect`（下拉複選）、`daterange`（日期時間區間 `{from,to}`）；`validate_definition(…, types=)` 可傳型別集合（預設仍是 P4 的 5 種，內建單據的 customFields 不受影響）；`_coerce` 支援新型別與屬性 `maxLength／min／max／withTime／allowOther／minSelect／maxSelect`（只增）
 - L1（新增）：`helpers.custom_modules`——欄位型別 `table`（明細表：逐列逐欄驗證、列內公式、列數限制、索引只記列數）、`clean_table`、`table_columns`、`FINANCE_KINDS`、欄位屬性 `finance:{kind,dateField,cashDateField,caseField}` 與模組層 `finance.postStates` 的發布驗證（金流性質，使用者 2026-09-30 規則；提供者與報表整合在後續段）
