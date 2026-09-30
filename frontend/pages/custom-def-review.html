@@ -130,13 +130,16 @@
   <script>
     function defReviewPage() {
       return {
-        key: '', view: null, err: '', done: '', note: '', busy: false,
+        key: '', view: null, err: '', done: '', note: '', busy: false, _initDone: false,
         _hdr() {
           var s = {}
           try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
           return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
         },
         async init() {
+          // Alpine 3 會自動呼叫資料物件的 init()，而 <body> 又寫了 x-init="init()" ⇒ 不守衛會跑兩遍（重複打 API）
+          if (this._initDone) return
+          this._initDone = true
           this.key = new URLSearchParams(location.search).get('key') || ''
           if (!this.key) { this.err = '網址少了模組代號（?key=）'; return }
           await this.load()
