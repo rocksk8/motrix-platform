@@ -1,5 +1,8 @@
 # 會計 更新紀錄
 
+## 1.1.3 — 2026-09-30（暫用號，列車取號；W4 總帳 C4）
+- 分錄引擎 C4：來源憑證補登（`gl_source_annotations`）新增 `invoice_date`（覆寫 E04／進貨發票 E08b 的入帳日），`input_tax` 同時適用進貨發票 E08b，進貨付款 E09 跟著 E08b 的補登調整應付與銀行金額；接入 supply 提供者（E08／E08b／E09）。
+
 ## 1.1.2 — 2026-09-30（暫用號，列車取號；W4 總帳 C3b）
 - 分錄引擎 C3b：事件契約加 `mode=native`（來源模組已自行開立傳票：事件只登記 `native_voucher_id`，引擎不重複產生、不改動；狀態 `native`；作廢或改指向新傳票 ⇒ 舊列 superseded、新列 native）；提供者 `voucher.status` 回傳多帶 `date`（傳票日期，additive）；總帳作業『分錄草稿』頁籤顯示『既有傳票』、不可被整批勾選。
 

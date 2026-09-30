@@ -292,6 +292,7 @@
     "page:pages/supplier-log.html",
     "page:pages/suppliers.html",
     "mod:supply/__init__",
+    "mod:supply/gl_events",
     "mod:supply/api/inventory",
     "mod:supply/api/shipping_notes",
     "mod:supply/api/suppliers"
