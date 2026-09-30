@@ -124,8 +124,9 @@ def test_tax401_tab_query_export_and_settlement_buttons(live_server, make_user, 
     page.select_option("[data-testid=hb-tax-period]", "4")                                         # 沒有稅額的期別：仍可按（對帳相符時按鈕可用），後端明說沒有稅額所以不產生
     page.locator("[data-testid=hb-tax-load]").click()
     page.locator("[data-testid=hb-tax-settle]").click()
-    page.wait_for_selector("[data-testid=hb-tax-error]", state="visible")
-    assert "沒有銷項與進項稅額" in page.locator("[data-testid=hb-tax-error]").inner_text()         # 終點：明說原因
+    page.wait_for_selector("[data-testid=hb-tax-info]", state="visible")
+    assert "沒有銷項與進項稅額" in page.locator("[data-testid=hb-tax-info]").inner_text()         # 終點：明說原因，用中性提示（不是紅色錯誤）
+    assert page.locator("[data-testid=hb-tax-error]").is_hidden()
     _shot(page, "tax401_no_tax_period")
     assert not [b for b in bad if b[0] != 400], "請求失敗：%s" % [b for b in bad if b[0] != 400][:4]         # 400 只有『沒有稅額的期別』那次預期的拒絕
     assert not errs, errs[:3]

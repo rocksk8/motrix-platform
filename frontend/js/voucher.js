@@ -84,6 +84,7 @@ function voucherPage() {
     //: 回的**整份 HTML 文件**，塞進 `<iframe srcdoc>`，不是 innerHTML。
     previewOpen: false,
     approval: {},
+    myActions: {},        // 後端算的『我現在可以按哪些鍵、不能的原因』（GET /api/vouchers/{id}.my_actions；判準只有後端一份）
     previewLoading: false,
     previewHtml: '',
     //: 帶入要寫到**哪一行**。預設第一行；使用者點過哪一格的摘要就換到那一行。
@@ -113,6 +114,14 @@ function voucherPage() {
     // 只有草稿可編輯（`SPEC-VOUCHER.md §一`）。
     // ⚠️ 這裡是**畫面的方便**，不是防線：真正的擋關在後端 `can_edit(status)`。
     get canEdit() { return this.status === '草稿' && !this.voidedAt },
+    // 不能按的鍵：畫面停用並把原因寫在按鈕下面（不是按下去才被拒絕，也不是讓人猜）
+    actionAllowed(k) { const a = this.myActions && this.myActions[k]; return !a || a.allowed !== false },
+    actionReason(k) { const a = this.myActions && this.myActions[k]; return a && a.allowed === false ? a.reason : '' },
+    get blockedReasons() {
+      const out = []
+      for (const k of ['approve', 'send_back', 'void']) { const r = this.actionReason(k); if (r && out.indexOf(r) < 0) out.push(r) }
+      return out
+    },
 
     //: 這張單存過了沒。**新單與既有單能做的事不同**，而畫面上要看得出來。
     get isSaved() { return this.id > 0 },
@@ -819,6 +828,7 @@ function voucherPage() {
       this.categoryManual = !!d.category_manual
       this.status = d.status || '草稿'
       this.approval = d.approval || {}
+      this.myActions = d.my_actions || {}
       this.note = d.summary || ''
       this.voidedAt = d.voided_at || ''
       // ⚠️ 後端沒有分錄時給三行空的，讓畫面不是一片空白；

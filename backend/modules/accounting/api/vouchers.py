@@ -65,6 +65,38 @@ from modules.accounting.voucher import (
 _log = logging.getLogger(__name__)
 
 
+def _my_actions(conn, v, appr, user):
+    """目前登入者對這張傳票的簽核／退回／作廢，各自 `{allowed, reason}`；reason 是給人看的一句話（不能按才有）。
+    判準與動作端點同一套：簽核／退回＝當層簽核人或其代理人（沒設流程的內建兩層：第二層只有最高管理者）；
+    作廢＝已過帳只有最高管理者、系統產生的傳票不可作廢。狀態不對的動作不列（畫面本來就不顯示）。"""
+    out = {}
+    status = v.get("status")
+    is_super = (user or {}).get("role") == "superadmin"
+    has_super = bool(conn.execute("SELECT 1 FROM users WHERE role='superadmin' AND active=1 LIMIT 1").fetchone())
+
+    def check(action):
+        try:
+            _require_voucher_actor(conn, appr, user, action)
+            if action == "approve" and not (appr.get("tiers") or []) and status == "簽核中" and has_super and not is_super:
+                raise HTTPException(403, "最後一層由最高管理者（會計主管，系統規定）核准，您不是這一層的簽核人。")
+            return {"allowed": True, "reason": ""}
+        except HTTPException as exc:
+            return {"allowed": False, "reason": str(exc.detail)}
+    if status in ("待審核", "簽核中"):
+        out["approve"] = check("approve")
+    if status in ("待審核", "簽核中", "已核准"):
+        out["send_back"] = check("send_back")
+    if not v.get("voided_at"):
+        why = _system_generated_reason(v)
+        if why:
+            out["void"] = {"allowed": False, "reason": why}
+        elif status == "已過帳" and not is_super:
+            out["void"] = {"allowed": False, "reason": "只有最高管理者（會計主管）可以作廢已過帳的傳票。"}
+        else:
+            out["void"] = {"allowed": True, "reason": ""}
+    return out
+
+
 def _system_generated_reason(v):
     """系統產生的傳票（總帳引擎的自動草稿 `kind='auto'`、反向傳票 `kind='reversal'`、獎金入帳 `origin='bonus_*'`）不可以從傳票頁直接作廢：
     直接作廢會讓它和來源單據脫鉤（來源還在、帳上沒了，引擎又會依來源再產生一次，或永遠對不上）。
@@ -520,7 +552,8 @@ def line_source_file_endpoint(source_type: str = "", ref: str = "",
 @router.get("/{voucher_id}")
 def read_voucher(voucher_id: int, authorization: str = Header(None)):
     """讀一張傳票（含分錄）。科目名稱依 `status` 決定取凍結值或現值。"""
-    _require_voucher_access(_require_user(authorization))
+    _user = _require_user(authorization)
+    _require_voucher_access(_user)
     conn = get_db()
     try:
         data = get_voucher(conn, voucher_id)
@@ -545,6 +578,8 @@ def read_voucher(voucher_id: int, authorization: str = Header(None)):
                 appr = parse_approval_json(dict(row))
             except VoucherChainUnreadable:
                 appr = _UNREADABLE_APPR
+        # R3（W1 非工程師視角）：這個人現在可以按哪些鍵、不能按的原因——由後端用**同一套判準**算（不是前端自己再判一份）
+        data["my_actions"] = _my_actions(conn, data, appr, _user) if data is not None else {}
     finally:
         conn.close()
     if data is None:
