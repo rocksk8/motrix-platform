@@ -31,11 +31,19 @@ def _git(root, *a):
     subprocess.run(["git", "-C", str(root), "-c", "user.email=t@example.com", "-c", "user.name=t", *a], check=True, capture_output=True)
 
 
+def _marked_files():
+    """設定裡每個剪段的檔 ⇒ 每段用 OWN-ONLY 標記圍起一行原始內容（模擬 repo 裡的自用寫法）。"""
+    files = {}
+    for c in P.load_config()["cuts"]:
+        files[c["path"]] = files.get(c["path"], "") + "# >>> OWN-ONLY:%s\nORIGINAL_%s = 1\n# <<< OWN-ONLY:%s\n" % (c["name"], c["name"].replace("-", "_"), c["name"])
+    return files
+
+
 def _tiny_repo(tmp_path):
     r = tmp_path / "repo"
     files = {
         "product/sale_prune.json": (REPO / "product" / "sale_prune.json").read_text(encoding="utf-8"),
-        "backend/core/upgrade.py": UPGRADE,
+        **_marked_files(),
         "backend/version_manifest.json": json.dumps(ENTRIES, ensure_ascii=False),
         "backend/main.py": "print('hi')\n",
         "DEPLOY.md": "原檔（內部）\n", "DR-SOP.md": "原檔（內部）\n", "HTTPS-DEPLOY-CHECKLIST.md": "原檔（內部）\n",
@@ -146,6 +154,7 @@ def test_sale_happy_path_prunes_projects_verifies_rebuild_and_scans_clean(tmp_pa
     assert str(tmp_path) not in json.dumps(blk, ensure_ascii=False), "sale 的 deid 區塊不可含開發機路徑"
     assert not (pkg / "docs").exists() and (pkg / "DEPLOY.md").read_text(encoding="utf-8").startswith("客戶版")
     assert "V9_COMPANY_DEFAULTS = {}" in (pkg / "backend/core/upgrade.py").read_text(encoding="utf-8")
+    assert "ORIGINAL_" not in (pkg / "backend/tools/apply_update.ps1").read_text(encoding="utf-8"), "自用寫法要被剪掉"
 
 
 def test_sale_refuses_without_key_or_list(tmp_path):

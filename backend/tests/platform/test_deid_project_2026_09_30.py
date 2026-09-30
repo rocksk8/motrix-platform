@@ -111,10 +111,17 @@ def test_the_committed_baseline_is_not_ahead_of_the_manifest():
 
 # ── verify 的反向控制 ─────────────────────────────────────────────────────────────────
 
+def _stub_files():
+    """設定裡每個剪段的檔 ⇒ 內容是該檔所有剪段的替身文字（模擬「已剪完」的包）。"""
+    files = {}
+    for c in CFG["cuts"]:
+        files[c["path"]] = files.get(c["path"], "") + c["stub"] + "\n"
+    return files
+
+
 def _mini_pkg(tmp_path):
     return _write(tmp_path / "pkg", {
-        "backend/core/upgrade.py": "x = 1\n# sale 包：不含任何公司預設值（升級精靈不回填公司資料；本段在 own 包才有）。\nV9_COMPANY_DEFAULTS = {}\n"
-                                   "def _is_our_install(profile: dict) -> bool:\n    return False\n",
+        **_stub_files(),
         P.MANIFEST_REL: P.dump_manifest([{"module": "m", "version": "2026-09-01", "date": "d", "time": "t", "content": P.GENERIC_CONTENT}]),
         "backend/main.py": "pass\n",
         "DEPLOY.md": "客戶版 <安裝目錄>\n", "DR-SOP.md": "客戶版 <安裝目錄>\n", "HTTPS-DEPLOY-CHECKLIST.md": "客戶版 <安裝目錄>\n"})
@@ -173,7 +180,7 @@ def sale_tree(tmp_path_factory):
 def test_rebuilt_sale_package_passes_verify_and_has_no_company_literals_in_upgrade(sale_tree):
     root, rep = sale_tree
     assert P.verify_tree(root, CFG) == [], P.verify_tree(root, CFG)
-    assert rep["removed"] > 100 and len(rep["cuts"]) == 2 and rep["manifest_projected"] > 100 and len(rep["replaced"]) == 3
+    assert rep["removed"] > 100 and len(rep["cuts"]) == len(CFG["cuts"]) and rep["manifest_projected"] > 100 and len(rep["replaced"]) == 3
     assert not (root / "product" / "sale_docs").exists(), "客戶版文件的來源目錄不可留在 sale 包"
     for doc in ("DEPLOY.md", "DR-SOP.md", "HTTPS-DEPLOY-CHECKLIST.md"):
         assert "<安裝目錄>" in (root / doc).read_text(encoding="utf-8") and [h for h in S.scan(root) if h.path == doc] == [], doc
