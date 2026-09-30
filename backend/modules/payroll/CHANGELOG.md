@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## 1.1.1 — 2026-09-30（暫用號，列車取號；wip/w2-upload-magic：上傳檔頭檢查）
+- 勞報單簽回檔上傳（`POST /api/payslips/{no}/signed-files`）在副檔名檢查之後呼叫 L1 `_check_upload_magic`（檔頭與副檔名不符 ⇒ 400＋稽核）；單據狀態、大小、空檔檢查不變。
+
 ## 1.1.0 — 2026-09-29（暫用號，列車取號；wip/payslip-void-signed）
 - 勞報單作廢（新功能）：`POST /api/payslips/{單號}/void`，只准從「已匯出」、原因必填，終結狀態（不可改／刪／再匯出）；PDF 對已作廢單加斜向「已作廢」浮水印與頂端紅色橫幅（作廢時間、人、原因；`pdf_gen._payslip_apply_void_mark`，版型沒有 <body> 也不漏）。
 - 勞報單簽回（新功能）：上傳對方簽回檔 `POST /api/payslips/{單號}/signed-files`（已匯出 → 已簽回；pdf／jpg／png、單檔 20MB），實體檔放勞報單存檔目錄（F2，鏡像流程照走）；讀取 `GET …/signed-files/{id}`（最高管理者或出納）；`DELETE` 只准已簽回、刪光退回已匯出；`POST …/unsign` 退回簽回（才可作廢）。
