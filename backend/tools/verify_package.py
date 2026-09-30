@@ -722,7 +722,7 @@ def _check_autostart_sale(path, text):
             R.fail("autostart 開關", "sale 包的 autostart.bat 不可預設開啟 %s（出貨承諾：裝好之後不會自己對外連線）" % sw)
     cds = [m.group(1).strip() for m in (_CD_RE.match(ln) for ln in lines) if m]
     if not cds or not cds[-1].lower().startswith("%~dp0"):
-        R.fail("autostart 路徑", "sale 包的 autostart.bat 必須 cd 到 %~dp0（腳本所在資料夾），而不是寫死路徑（目前 %r）" % (cds[-1] if cds else None))
+        R.fail("autostart 路徑", "sale 包的 autostart.bat 必須 cd 到 %%~dp0（腳本所在資料夾），而不是寫死路徑（目前 %r）" % (cds[-1] if cds else None))
     if re.search(r"[A-Za-z]:" + _BS + _BS + r"Users" + _BS + _BS, text, re.IGNORECASE):
         R.fail("autostart 路徑", "sale 包的 autostart.bat 含使用者家目錄路徑（本公司環境資訊）")
     print("  autostart.bat（sale 範本）  %s" % path)
