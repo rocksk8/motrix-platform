@@ -47,7 +47,7 @@ _MODULE_LABELS = {
 #: target_type 屬於「單據」類 ⇒ `ref_no`＝target_id（其餘 ref_no 留空）
 _DOC_TARGET_TYPES = frozenset({
     "vouchers", "contractor_dispatch", "shipping_note", "payslip", "completion_note", "invoice_voucher", "payment_request",
-    "bonus_awards", "bonus_case_awards", "contractor_payment_voucher", "custom_record", "stock_batch", "network_plan",
+    "bonus_awards", "bonus_case_awards", "bonus_corrections", "contractor_payment_voucher", "custom_record", "stock_batch", "network_plan",
     "case_action_item", "case_update",
 })
 #: 失敗列的原因碼（固定詞彙：不放自由文字，PII 安全）⇒ 中文標籤

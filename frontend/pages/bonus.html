@@ -361,6 +361,13 @@
                   </div>
                 </template>
 
+                <!-- 獎金更正單入口（2026-09-30）：已發放的事後更正只能走更正單（原單不可退回） -->
+                <div class="bn-card" x-show="isSuper && detail.status === '已發放'" data-testid="bn-correction-card">
+                  <div class="bn-sec">發放後更正</div>
+                  <a class="bn-btn bn-btn--ghost" style="text-decoration:none;display:inline-block" :href="'bonus-corrections.html?q=' + encodeURIComponent(selectedNo)" data-testid="bn-open-correction">開獎金更正單</a>
+                  <span class="bn-note">已發放的不可退回；金額有誤請開更正單，核准後自動沖轉並補發。</span>
+                </div>
+
                 <div class="bn-card" x-show="msg"><span :class="/失敗|錯誤|請|不|只有/.test(msg) ? 'bn-err' : 'bn-ok'" x-text="msg" data-testid="bn-msg"></span></div>
 
                 <!-- `AC3`：這張獎金分潤產生的傳票草稿（後端只回給最高管理者／出納） -->
