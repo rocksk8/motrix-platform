@@ -1,5 +1,8 @@
 # 會計 更新紀錄
 
+## 1.1.34 — 2026-09-30（暫用號，列車取號；wip/w3-t27fix2）
+- 匯出 PDF 姊妹的歸屬區改用常數 `_EXPORT_AREA`（不寫 module 等號字串字面量：test_module_keys_consistency 的後端掃描器會把它當權限 key）；只動寫法，行為與稽核內容不變。
+
 ## 1.1.33 — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：安全審查 W3 sibling gap）
 - 傳票來源檔預覽（`line-source-file`）與帶入（`resolve_picks`）也要求檔案路徑在該來源單據自己的資料夾底下（`_path_belongs_to_doc`）：否則 404、不複製。
 
