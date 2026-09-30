@@ -268,3 +268,59 @@ def test_dev_log_path_must_be_its_own_folder(client, make_user):
     assert _open(client, h, "dev_log", str(lid), "l1").status_code == 200
     assert _open(client, h, "dev_log", str(lid), "l2").status_code == 404
     assert _open(client, h, "dev_log", str(lid), "l3").status_code == 404
+
+
+# ── 傳票：來源檔預覽（line-source-file）與帶入（picks）同樣只信「在該單據自己資料夾」的路徑（W3 sibling gap）────────────
+
+def _voucher_user(client, make_user, name):
+    u, p = make_user(username=name, role="superadmin", modules=["cashier"])
+    return _login(client, u, p)
+
+
+def test_voucher_preview_and_bring_in_reject_a_planted_foreign_path(client, make_user):
+    """**重現**：案件材料 files 的 path 被塞成別張傳票的資料夾 `voucher_attachments/77/…` ⇒ 預覽與帶入都 404，且不複製。
+    **反向控制**：拿掉 `resolve_picks` 的路徑綁單據 ⇒ 這題紅（預覽會回出別人的檔、帶入會複製它）。"""
+    h = _voucher_user(client, make_user, "bd_vp")
+    qno = "MQ-BND-VP"
+    mine = "quotation_materials/%s_0/ok.png" % qno
+    foreign = "voucher_attachments/77/secret.png"
+    for rel in (mine, foreign):
+        _put(rel, PNG + (b"SECRET" if rel == foreign else b""))
+    cr = {"materials": [{"name": "m", "files": [{"id": "ok1", "filename": "ok.png", "path": mine, "size": 1},
+                                                 {"id": "bad1", "filename": "s.png", "path": foreign, "size": 1}]}]}
+    _exec("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at, deal_tag)"
+          " VALUES (?,?,?,?,?,?,?,?,?,?)", (qno, "已送出", "客戶", "工程", 1, 1, json.dumps({"dealTag": "已成案", "caseRecord": cr}), "n", "n", "已成案"))
+    lst = client.get("/api/vouchers/line-source-files", headers=h, params={"source_type": "case", "ref": qno})
+    assert lst.status_code == 200, lst.text
+    by = {f["fileId"]: f for f in lst.json()["files"]}
+    assert {"ok1", "bad1"} <= set(by)
+    ok = client.get("/api/vouchers/line-source-file", headers=h, params={"source_type": "case", "ref": qno, "file_id": "ok1"})
+    assert ok.status_code == 200 and ok.content == PNG
+    bad = client.get("/api/vouchers/line-source-file", headers=h, params={"source_type": "case", "ref": qno, "file_id": "bad1"})
+    assert bad.status_code == 404 and b"SECRET" not in bad.content, (bad.status_code, bad.text[:200])
+    vid = client.post("/api/vouchers", headers=h, json={"summary": "x", "lines": [
+        {"account_code": "6111", "debit": 10, "credit": 0}, {"account_code": "1113", "debit": 0, "credit": 10}]}).json()["id"]
+    r = client.post("/api/vouchers/%d/attachments" % vid, headers=h, json={"picks": [{"type": by["bad1"]["type"], "docNo": by["bad1"]["docNo"], "fileId": "bad1"}]})
+    assert r.status_code == 404, r.text[:200]
+    assert _q("SELECT COUNT(*) AS n FROM voucher_attachments WHERE voucher_id=?", (vid,))[0]["n"] == 0            # 沒有複製
+    good = client.post("/api/vouchers/%d/attachments" % vid, headers=h, json={"picks": [{"type": by["ok1"]["type"], "docNo": by["ok1"]["docNo"], "fileId": "ok1"}]})
+    assert good.status_code == 200 and good.json()["added"] == 1, good.text[:200]
+
+
+def test_payslip_signed_file_with_a_hostile_ext_is_refused(client, make_user):
+    """勞報單簽回檔 metadata 的 `ext` 來自 JSON 欄：不在允許集合（.pdf／.jpg／.jpeg／.png）⇒ 不拼進路徑、讀取端點 400／目錄 404。
+    **反向控制**：拿掉 `_signed_path` 的 ext 檢查 ⇒ 這題紅。"""
+    from modules.payroll.api import payslips as ps
+    u, p = make_user(username="bd_ps", role="superadmin", modules=["cashier"])
+    h = _login(client, u, p)
+    slip, fid = "PS-202609-778", "0123456789abcdef"
+    _exec("INSERT INTO payslips (slip_no, contractor_name, income_type, gross_amount, tax_withheld, nhi_supplement, net_amount, slip_date,"
+          " status, tax_rules_version, data_json, created_at, updated_at, signed_files_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          (slip, "乙", "50", 1, 0, 0, 1, "2026-09-01", "已簽回", "2026", "{}", "n", "n",
+           json.dumps([{"id": fid, "filename": "x.pdf", "ext": "/../../secret.pdf"}])))
+    with pytest.raises(ValueError):
+        ps._signed_path(slip, fid, "/../../secret.pdf")
+    r = client.get("/api/payslips/%s/signed-files/%s" % (slip, fid), headers=h)
+    assert r.status_code == 400, (r.status_code, r.text[:160])
+    assert _open(client, h, "payslip_signed", slip, fid).status_code == 404
+    assert ps._signed_path(slip, fid, ".pdf").endswith("_signed_%s.pdf" % fid)                                    # 正常副檔名照常

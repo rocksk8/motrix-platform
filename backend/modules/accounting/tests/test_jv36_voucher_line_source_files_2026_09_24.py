@@ -47,9 +47,7 @@ def _put_file(rel, data):
 def _seed(seed_extra_expense):
     """一個案件（回簽檔 1 個）＋兩筆額外支出（各有 1 張單據）。回 `(exp1_id, exp2_id)`。"""
     import db
-    _put_file("jv36/signed.png", _png())
-    _put_file("jv36/exp1.png", _png())
-    _put_file("jv36/exp2.png", _png())
+    _put_file("quotations/%s/signed.png" % QUOTE, _png())
     conn = db.get_db()
     try:
         conn.execute(
@@ -57,19 +55,25 @@ def _seed(seed_extra_expense):
             " data_json, created_at, updated_at, signed_files_json) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (QUOTE, "已結案", "JV36客戶", "JV36案", 1000, 952, "{}",
              "2026-09-01T00:00:00", "2026-09-01T00:00:00",
-             json.dumps([{"id": "sig1", "filename": "回簽.png", "path": "jv36/signed.png",
+             json.dumps([{"id": "sig1", "filename": "回簽.png", "path": "quotations/%s/signed.png" % QUOTE,
                           "mime": "image/png"}])))
         conn.commit()
     finally:
         conn.close()
     e1 = seed_extra_expense(QUOTE, total_cost=5000, category="運費", description="吊車運費",
-                            expense_date="2026-09-10", doc_no="AB12345678",
-                            files=[{"id": "f1", "filename": "吊車單據.png", "path": "jv36/exp1.png",
-                                    "mime": "image/png"}])
+                            expense_date="2026-09-10", doc_no="AB12345678", files=[])
     e2 = seed_extra_expense(QUOTE, total_cost=800, category="其他", description="雜支",
-                            expense_date="2026-09-11",
-                            files=[{"id": "f2", "filename": "雜支單據.png", "path": "jv36/exp2.png",
-                                    "mime": "image/png"}])
+                            expense_date="2026-09-11", files=[])
+    for eid, fid, name, fname in ((e1, "f1", "吊車單據.png", "exp1.png"), (e2, "f2", "雜支單據.png", "exp2.png")):
+        rel = "case_extra_expense/%s_%s/%s" % (QUOTE, eid, fname)            # 真實配置（W3：路徑必須在該支出自己的資料夾）
+        _put_file(rel, _png())
+        c2 = db.get_db()
+        try:
+            c2.execute("UPDATE case_extra_expenses SET files_json=? WHERE id=?",
+                       (json.dumps([{"id": fid, "filename": name, "path": rel, "mime": "image/png"}]), eid))
+            c2.commit()
+        finally:
+            c2.close()
     return e1, e2
 
 
@@ -147,9 +151,9 @@ def test_jv36_a_path_escaping_uploads_is_refused(client, make_user, seed_extra_e
         r = client.get(VOUCHERS + "/line-source-file", headers=hdr,
                        params={"source_type": "extra_expense", "ref": str(evil), "file_id": "ev"})
         assert b"JV36-SECRET" not in r.content, "路徑穿越沒有擋：%s %s" % (r.status_code, r.content[:60])
-        assert r.status_code == 400 and r.json().get("detail") == PATH_REFUSED, (
-            "擋下的不是路徑守門（可能是模組未安裝、查無檔案等別的原因 ⇒ 這一題沒驗到守門）：%s %s"
-            % (r.status_code, r.text[:200]))
+        # W3：多了「路徑必須在該單據自己的資料夾」這一層（先於 abs_path），`../` 在那一層就被當作沒有這個檔 ⇒ 404；
+        # abs_path 的穿越守門另有單元題（test_abs_path_still_refuses_traversal）
+        assert r.status_code == 404, ("擋下的不是預期那一層：%s %s" % (r.status_code, r.text[:200]))
     finally:
         os.remove(secret)
 
@@ -447,3 +451,13 @@ def test_o13_focus_still_returns_to_the_summary_when_the_user_stays(
     page.wait_for_function("() => window.__slowPending === 0", timeout=10000)     # 延後的回呼執行完（終點）
     assert page.evaluate("() => document.activeElement && document.activeElement.getAttribute('x-model')") == "l.summary"
 
+
+
+def test_abs_path_still_refuses_traversal():
+    """`abs_path()` 的穿越守門（第二層）：就算資料到得了這裡也擋（原 jv36 路徑穿越題現在先被路徑綁單據擋下，這一層改單元題保留）。"""
+    import pytest as _pt
+    from fastapi import HTTPException
+    from modules.accounting import voucher_attachments as va
+    with _pt.raises(HTTPException) as e:
+        va.abs_path("../jv36_secret.txt")
+    assert e.value.status_code == 400

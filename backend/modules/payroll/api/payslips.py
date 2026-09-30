@@ -608,6 +608,8 @@ def void_payslip(slip_no: str, body: VoidIn, authorization: str = Header(None)):
 def _signed_path(slip_no: str, fid: str, ext: str) -> str:
     if not _SLIP_NO_RE.match(slip_no) or not re.fullmatch(r"[0-9a-f]{16}", fid):
         raise ValueError("invalid signed file name")
+    if ext not in _SIGNED_EXTS:                       # 安全審查 W3：`ext` 來自 signed_files_json 的 metadata，不可以把任意字串拼進檔案路徑
+        raise ValueError("invalid signed file extension")
     archive_dir = _archive_dir()
     os.makedirs(archive_dir, exist_ok=True)
     return os.path.join(archive_dir, f"{slip_no}_signed_{fid}{ext}")
