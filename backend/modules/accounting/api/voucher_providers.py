@@ -82,11 +82,12 @@ def _provide_voucher_void_draft(conn, voucher_id, *, voided_by, now, reason):
 
 def _provide_voucher_status(conn, voucher_id):
     """回 {"id", "voucher_no", "status", "voided"}；不存在 ⇒ None。"""
-    v = conn.execute("SELECT id, voucher_no, status, voided_at FROM vouchers_all WHERE id = ?",
+    v = conn.execute("SELECT id, voucher_no, status, voided_at, voucher_date FROM vouchers_all WHERE id = ?",
                      (voucher_id,)).fetchone()
     if v is None:
         return None
-    return {"id": v["id"], "voucher_no": v["voucher_no"], "status": v["status"], "voided": bool(v["voided_at"])}
+    return {"id": v["id"], "voucher_no": v["voucher_no"], "status": v["status"], "voided": bool(v["voided_at"]),
+            "date": (v["voucher_date"] or "")[:10]}
 
 
 def _provide_voucher_by_no(conn, voucher_no):

@@ -18,7 +18,12 @@ CAPABILITY = "gl.events"
 #: 事件行的角色名（帳務角色，不是使用者角色）；用常數比對，避免被「使用者角色字串」掃描誤判（test_system_audit）
 _ROLE_AP = "AP"
 _ROLE_INPUT_TAX = "INPUT_TAX"
-MODES = ("snapshot", "cumulative", "append")
+_ROLE_BANK = "BANK"
+MODES = ("snapshot", "cumulative", "append", "native", "stock")
+#: mode=native：來源模組**已經自己開了傳票**（例：獎金核准／發放），事件只登記「這張傳票就是這個事件」，引擎不重複產生、不改動它。
+#: 事件帶 `native_voucher_id`（正整數），不帶 lines。
+#: mode=stock：存貨出庫（E10）。來源只回『哪個料號、出庫幾件、哪個案件、哪天』（`stock_part_no`、`stock_qty`，不帶 lines、不帶金額）；
+#: 金額由引擎依移動加權平均（`ledger/inventory.py`）在產生草稿時算出，來源不知道也不該知道成本。
 SIDES = ("D", "C")
 
 #: 已知的事件來源模組與它們負責的事件（缺席時的說明用；順序＝畫面順序）。
@@ -61,6 +66,18 @@ def validate_event(ev, roles=None):
             p.append("event_date 格式要是 YYYY-MM-DD（%r）" % d)
     if ev.get("mode", "snapshot") not in MODES:
         p.append("mode 只能是 %s" % "、".join(MODES))
+    if ev.get("mode") == "stock":
+        qty = ev.get("stock_qty")
+        if not isinstance(ev.get("stock_part_no"), str) or not ev.get("stock_part_no").strip():
+            p.append("mode=stock 需要 stock_part_no")
+        if not (isinstance(qty, int) and not isinstance(qty, bool) and qty > 0):
+            p.append("mode=stock 需要正整數 stock_qty")
+        return p
+    if ev.get("mode") == "native":
+        nv = ev.get("native_voucher_id")
+        if not (isinstance(nv, int) and not isinstance(nv, bool) and nv > 0):
+            p.append("mode=native 需要正整數 native_voucher_id")
+        return p
     lines = ev.get("lines")
     if not isinstance(lines, list) or not lines:
         p.append("lines 必須是非空清單")
@@ -90,6 +107,11 @@ def validate_event(ev, roles=None):
 
 def canonical_hash(ev):
     """內容雜湊：入帳日、各行（角色／方向／金額／維度）、案件、對象、稅碼。`meta` 與說明文字不參與（診斷用，改了不算內容變）。"""
+    if ev.get("mode") == "stock":       # 不含金額：均價變動不算來源變動
+        return hashlib.sha256(json.dumps({"stock": [ev.get("stock_part_no"), ev.get("stock_qty")], "date": ev.get("event_date"),
+                                          "case": ev.get("case_no") or ""}, sort_keys=True).encode("utf-8")).hexdigest()
+    if ev.get("mode") == "native":
+        return hashlib.sha256(json.dumps({"native": ev.get("native_voucher_id"), "date": ev.get("event_date")}, sort_keys=True).encode("utf-8")).hexdigest()
     core = {
         "date": ev.get("event_date"), "case": ev.get("case_no") or "", "party": (ev.get("party") or {}).get("key") or "",
         "tax": ev.get("tax_code") or "",
@@ -99,35 +121,104 @@ def canonical_hash(ev):
     return hashlib.sha256(json.dumps(core, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
+#: 補登值沿用別的事件的來源鍵：進貨付款（E09）的稅額跟著進貨發票（E08b）的補登走
+_ANNOT_ALIAS = {"stock_batch_payment": "stock_batch_invoice"}
+
+
+def _annotation(conn, ev, field):
+    st = _ANNOT_ALIAS.get(ev.get("source_type"), ev.get("source_type"))
+    row = conn.execute("SELECT value FROM gl_source_annotations WHERE source_type=? AND source_key=? AND field=?",
+                       (st, ev.get("source_key"), field)).fetchone()
+    return None if row is None else row[0]
+
+
 def apply_annotations(conn, ev):
-    """會計在 `gl_source_annotations` 補登的來源憑證資料覆寫來源值（不改來源模組）。目前認得：field=input_tax（進項稅額整數）。
-    只作用在同時有『借 INPUT_TAX 或無稅額』與『貸 AP』的事件（E04）；補登值不是非負整數 ⇒ 忽略並在 meta 記 annotation_ignored。"""
-    row = conn.execute("SELECT value FROM gl_source_annotations WHERE source_type=? AND source_key=? AND field='input_tax'",
-                       (ev.get("source_type"), ev.get("source_key"))).fetchone()
-    if row is None:
-        return ev
+    """會計在 `gl_source_annotations` 補登的來源憑證資料覆寫來源值（不改來源模組）。認得：
+    - field=input_tax（非負整數）：承攬商發票 E04、進貨發票 E08b 的進項稅額；進貨付款 E09 跟著 E08b 的補登（應付與銀行金額同步調整）。
+    - field=invoice_date（YYYY-MM-DD）：E04／E08b 的入帳日。
+    補登值不合法 ⇒ 忽略並在事件 meta 記 annotation_ignored。"""
+    code = ev.get("event_code")
+    if code == "E09" and ev.get("source_type") == "stock_batch_payment":
+        return _apply_payment_tax(conn, ev)
     lines = ev.get("lines") or []
     ap = [ln for ln in lines if ln.get("role") == _ROLE_AP and ln.get("side") == "C"]
     if len(ap) != 1:
         return ev
+    raw_date = _annotation(conn, ev, "invoice_date")
+    if raw_date is not None:
+        import datetime as _dt
+        try:
+            ev["event_date"] = _dt.date.fromisoformat(str(raw_date).strip()).isoformat()
+            ev.setdefault("meta", {})["date_estimated"] = False
+        except ValueError:
+            ev.setdefault("meta", {})["annotation_ignored"] = "invoice_date=%r" % raw_date
+    raw = _annotation(conn, ev, "input_tax")
+    if raw is None:
+        return ev
     try:
-        tax = int(str(row[0]).strip())
+        tax = int(str(raw).strip())
         if tax < 0:
             raise ValueError
     except ValueError:
-        ev.setdefault("meta", {})["annotation_ignored"] = "input_tax=%r" % row[0]
+        ev.setdefault("meta", {})["annotation_ignored"] = "input_tax=%r" % raw
         return ev
     old_tax = sum(ln["amount"] for ln in lines if ln.get("role") == _ROLE_INPUT_TAX)
+    if old_tax == 0 and (ev.get("meta") or {}).get("tax_unsplit"):
+        return _split_unsplit_tax(ev, lines, tax)
     keep = [ln for ln in lines if ln.get("role") != _ROLE_INPUT_TAX]
-    code = ev.get("tax_code") or "IN-5"
+    code_ = ev.get("tax_code") or "IN-5"
     if tax:
-        keep.insert(len(keep) - 1, {"role": "INPUT_TAX", "side": "D", "amount": tax, "memo": "進項稅額（會計補登）", "tax_code": code})
+        keep.insert(len(keep) - 1, {"role": "INPUT_TAX", "side": "D", "amount": tax, "memo": "進項稅額（會計補登）", "tax_code": code_})
     for ln in keep:
         if ln is ap[0]:
             ln["amount"] = ln["amount"] - old_tax + tax
     ev["lines"] = keep
-    ev["tax_code"] = code if tax else "IN-EX"
+    ev["tax_code"] = code_ if tax else "IN-EX"
     m = ev.setdefault("meta", {})
+    m["tax_estimated"] = False
+    m["tax_annotated"] = True
+    return ev
+
+
+def _split_unsplit_tax(ev, lines, tax):
+    """來源金額是含稅未拆稅（額外支出、叫料）：補登進項稅額 ⇒ 成本改為 全額－稅額，另加一行進項稅額，應付不變。稅額 0 或不小於成本 ⇒ 忽略並標記。"""
+    cost = [ln for ln in lines if ln.get("side") == "D" and ln.get("role") != _ROLE_INPUT_TAX]
+    if tax <= 0 or len(cost) != 1 or tax >= cost[0]["amount"]:
+        ev.setdefault("meta", {})["annotation_ignored"] = "input_tax=%r（需為大於 0 且小於成本的整數）" % tax
+        return ev
+    cost[0]["amount"] -= tax
+    code_ = ev.get("tax_code") or "IN-5"
+    cost[0]["tax_code"] = code_
+    new = []
+    for ln in lines:
+        new.append(ln)
+        if ln is cost[0]:
+            new.append({"role": _ROLE_INPUT_TAX, "side": "D", "amount": tax, "memo": "進項稅額（會計補登）", "tax_code": code_})
+    ev["lines"] = new
+    ev["tax_code"] = code_
+    m = ev.setdefault("meta", {})
+    m["tax_unsplit"] = False
+    m["tax_annotated"] = True
+    return ev
+
+
+def _apply_payment_tax(conn, ev):
+    raw = _annotation(conn, ev, "input_tax")
+    if raw is None:
+        return ev
+    try:
+        tax = int(str(raw).strip())
+        if tax < 0:
+            raise ValueError
+    except ValueError:
+        ev.setdefault("meta", {})["annotation_ignored"] = "input_tax=%r" % raw
+        return ev
+    m = ev.setdefault("meta", {})
+    delta = tax - int(m.get("est_tax") or 0)
+    if delta:
+        for ln in ev["lines"]:
+            if (ln.get("role") == _ROLE_AP and ln.get("side") == "D") or (ln.get("role") == _ROLE_BANK and ln.get("side") == "C"):
+                ln["amount"] += delta
     m["tax_estimated"] = False
     m["tax_annotated"] = True
     return ev

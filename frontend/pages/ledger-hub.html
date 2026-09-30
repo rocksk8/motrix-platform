@@ -61,7 +61,98 @@
           <div>
             <div class="hb-title" style="font-size:16px" x-text="current().label"></div>
             <div class="hb-note" x-text="current().description"></div>
-            <div class="hb-note" x-show="current().key !== 'engine_drafts'">這項功能已開啟，畫面隨批次 <b x-text="current().batch"></b> 完成後出現在這裡；目前尚未提供內容。</div>
+            <div class="hb-note" x-show="['engine_drafts', 'tax401', 'withholding'].indexOf(current().key) < 0">這項功能已開啟，畫面隨批次 <b x-text="current().batch"></b> 完成後出現在這裡；目前尚未提供內容。</div>
+
+            <!-- 扣繳清單（C5） -->
+            <div x-show="current().key === 'withholding'" data-testid="hb-wh">
+              <div class="hb-err" x-show="wh.error" x-text="wh.error" data-testid="hb-wh-error"></div>
+              <div class="hb-ok" x-show="wh.notice" x-text="wh.notice" data-testid="hb-wh-notice"></div>
+              <div class="hb-row">
+                <input class="hb-input filter" type="month" x-model="wh.ym" data-testid="hb-wh-ym">
+                <button class="hb-btn primary" :disabled="wh.busy" @click="whLoad()" data-testid="hb-wh-load">查詢</button>
+                <input class="hb-input" type="date" x-model="wh.date" data-saved-field data-testid="hb-wh-date"> 繳庫日
+                <input class="hb-input" type="text" x-model="wh.voucherNo" data-saved-field placeholder="繳庫傳票單號（選填）" data-testid="hb-wh-voucher">
+                <button class="hb-btn" :disabled="wh.busy" @click="whRemit()" data-testid="hb-wh-remit">登記繳庫</button>
+              </div>
+              <template x-if="wh.data">
+                <div>
+                  <template x-for="c in wh.data.checks" :key="c.key">
+                    <div :class="c.ok ? 'hb-ok' : 'hb-warn'" :data-testid="'hb-wh-check-' + c.key"
+                         x-text="c.label + '：清單 ' + fmt(c.left) + ' ／ 帳上 ' + fmt(c.right) + (c.ok ? '（相符）' : '（不符：' + c.note + '）')"></div>
+                  </template>
+                  <table class="hb-table" data-testid="hb-wh-groups">
+                    <thead><tr><th>所屬月</th><th>種類</th><th>繳庫期限</th><th class="hb-num">筆數</th><th class="hb-num">合計</th><th class="hb-num">未繳庫</th><th>狀態</th></tr></thead>
+                    <tbody>
+                      <template x-for="g in wh.data.groups" :key="g.period_ym + g.kind">
+                        <tr :class="{bad: g.overdue}"><td x-text="g.period_ym"></td><td x-text="g.label"></td><td x-text="g.due"></td><td class="hb-num" x-text="g.count"></td>
+                          <td class="hb-num" x-text="fmt(g.total)"></td><td class="hb-num" x-text="fmt(g.unremitted)"></td><td x-text="g.overdue ? '已逾期未繳庫' : (g.unremitted ? '待繳庫' : '已繳庫')"></td></tr>
+                      </template>
+                    </tbody>
+                  </table>
+                  <table class="hb-table" style="margin-top:12px" data-testid="hb-wh-items">
+                    <thead><tr><th></th><th>所屬月</th><th>種類</th><th>來源</th><th>對象</th><th>所得類別</th><th class="hb-num">給付總額</th><th class="hb-num">代扣金額</th><th>繳庫日</th></tr></thead>
+                    <tbody>
+                      <template x-for="i in wh.data.items" :key="i.id">
+                        <tr><td><input type="checkbox" :disabled="!!i.remitted_at" x-model="wh.selected[i.id]"></td><td x-text="i.period_ym"></td><td x-text="whKindLabel(i.kind)"></td>
+                          <td x-text="i.source_key"></td><td x-text="i.party_key"></td><td x-text="i.income_type"></td><td class="hb-num" x-text="fmt(i.gross)"></td><td class="hb-num" x-text="fmt(i.amount)"></td>
+                          <td><span x-text="i.remitted_at"></span> <button class="hb-btn" x-show="i.remitted_at" @click="whUnremit(i)">取消</button></td></tr>
+                      </template>
+                    </tbody>
+                  </table>
+                  <div class="hb-note" x-show="!wh.data.items.length" data-testid="hb-wh-empty">目前沒有扣繳項目。勞報單簽回後，於『分錄草稿』執行引擎產生草稿時會記入這裡。</div>
+                </div>
+              </template>
+            </div>
+
+            <!-- 營業稅 401（C5） -->
+            <div x-show="current().key === 'tax401'" data-testid="hb-tax">
+              <div class="hb-err" x-show="tax.error" x-text="tax.error" data-testid="hb-tax-error"></div>
+              <div class="hb-ok" x-show="tax.notice" x-text="tax.notice" data-testid="hb-tax-notice"></div>
+              <div class="hb-row">
+                <input class="hb-input filter" type="number" x-model.number="tax.year" style="width:90px" data-testid="hb-tax-year"> 年
+                <select class="hb-input filter" x-model.number="tax.period" data-testid="hb-tax-period">
+                  <template x-for="n in [1,2,3,4,5,6]" :key="n"><option :value="n" x-text="'第 ' + n + ' 期（' + (2*n-1) + '～' + (2*n) + ' 月）'"></option></template>
+                </select>
+                <button class="hb-btn primary" :disabled="tax.busy" @click="taxLoad()" data-testid="hb-tax-load">查詢</button>
+                <button class="hb-btn" :disabled="tax.busy || !tax.data" @click="taxExport()" data-testid="hb-tax-export">匯出 Excel 工作底稿</button>
+                <button class="hb-btn" :disabled="tax.busy || !tax.data || !tax.data.reconciled" @click="taxSettle()" data-testid="hb-tax-settle">產生稅額結轉草稿</button>
+              </div>
+              <div class="hb-warn" data-testid="hb-tax-legal">欄位代號待官方格式核對：401 欄位代號取自財政部空白表的二手轉載（可在欄位對照表設定），申報前請以當期官方格式逐欄核對；含免稅銷售者應使用 403 表。</div>
+              <template x-if="tax.data">
+                <div>
+                  <template x-for="w in tax.data.warnings" :key="w.key"><div class="hb-warn" x-text="w.text" :data-testid="'hb-tax-warn-' + w.key"></div></template>
+                  <table class="hb-table" data-testid="hb-tax-rows">
+                    <thead><tr><th>稅碼</th><th>說明</th><th>欄位（金額／稅額／零稅率）</th><th class="hb-num">金額</th><th class="hb-num">稅額</th><th class="hb-num">零稅率銷售額</th></tr></thead>
+                    <tbody>
+                      <template x-for="r in tax.data.rows" :key="r.tax_code">
+                        <tr><td x-text="r.tax_code"></td><td x-text="r.note"></td><td x-text="[r.field_amt, r.field_tax, r.field_zero].join(' / ')"></td>
+                          <td class="hb-num" x-text="fmt(r.amount)"></td><td class="hb-num" x-text="fmt(r.tax)"></td><td class="hb-num" x-text="fmt(r.zero_amount)"></td></tr>
+                      </template>
+                    </tbody>
+                  </table>
+                  <table class="hb-table" style="margin-top:12px" data-testid="hb-tax-calc">
+                    <tbody>
+                      <tr><td>101 銷項稅額合計</td><td class="hb-num" x-text="fmt(tax.data.calc['101'])"></td></tr>
+                      <tr><td>107 得扣抵進項稅額合計</td><td class="hb-num" x-text="fmt(tax.data.calc['107'])"></td></tr>
+                      <tr><td>108 上期累積留抵稅額</td><td class="hb-num" x-text="fmt(tax.data.calc['108'])"></td></tr>
+                      <tr><td>110 小計</td><td class="hb-num" x-text="fmt(tax.data.calc['110'])"></td></tr>
+                      <tr><td><b>111 本期應實繳稅額</b></td><td class="hb-num"><b x-text="fmt(tax.data.calc['111'])"></b></td></tr>
+                      <tr><td><b>112 本期申報留抵稅額</b></td><td class="hb-num"><b x-text="fmt(tax.data.calc['112'])"></b></td></tr>
+                    </tbody>
+                  </table>
+                  <table class="hb-table" style="margin-top:12px" data-testid="hb-tax-checks">
+                    <thead><tr><th>對帳</th><th>結果</th><th class="hb-num">左</th><th class="hb-num">右</th></tr></thead>
+                    <tbody>
+                      <template x-for="c in tax.data.checks" :key="c.key">
+                        <tr :class="{bad: c.ok === false}"><td x-text="c.label"></td><td x-text="c.ok === true ? '相符' : (c.ok === false ? '不符' : (c.note || '未對比'))"></td>
+                          <td class="hb-num" x-text="c.left == null ? '' : fmt(c.left)"></td><td class="hb-num" x-text="c.right == null ? '' : fmt(c.right)"></td></tr>
+                      </template>
+                    </tbody>
+                  </table>
+                  <div class="hb-note" x-show="tax.data.settlement" x-text="tax.data.settlement ? ('稅額結轉：應實繳 ' + fmt(tax.data.settlement.payable) + '、新留抵 ' + fmt(tax.data.settlement.carry_new) + '（' + tax.data.settlement.status + '）') : ''"></div>
+                </div>
+              </template>
+            </div>
 
             <!-- 分錄草稿（C1） -->
             <div x-show="current().key === 'engine_drafts'" data-testid="hb-engine">
@@ -72,7 +163,7 @@
                 <button class="hb-btn primary" :disabled="eng.busy" @click="engRun()" data-testid="hb-eng-run">產生分錄草稿</button>
                 <select class="hb-input filter" x-model="eng.filter" @change="engLoad()" data-testid="hb-eng-filter">
                   <option value="">全部狀態</option>
-                  <template x-for="st in ['drafted','posted','drift','orphan','blocked_closed','blocked_no_account','superseded','rejected','reversed']" :key="st"><option :value="st" x-text="statusLabel(st)"></option></template>
+                  <template x-for="st in ['drafted','posted','drift','orphan','blocked_closed','blocked_no_account','blocked_inventory','superseded','rejected','reversed','native']" :key="st"><option :value="st" x-text="statusLabel(st)"></option></template>
                 </select>
                 <span class="hb-note" style="margin:0" x-text="Object.keys(eng.counts).map(k => statusLabel(k) + ' ' + eng.counts[k]).join('　')" data-testid="hb-eng-counts"></span>
               </div>
@@ -95,7 +186,7 @@
                 <tbody>
                   <template x-for="e in eng.events" :key="e.id">
                     <tr :class="{bad: engBad(e)}" :data-testid="'hb-eng-row-' + e.id">
-                      <td><input type="checkbox" :disabled="!e.voucher_id || e.voucher_status === '已過帳'" x-model="eng.selected[e.id]"></td>
+                      <td><input type="checkbox" :disabled="!e.voucher_id || e.status === 'native' || e.voucher_status === '已過帳'" x-model="eng.selected[e.id]"></td>
                       <td x-text="e.event_date"></td><td x-text="e.event_code + (e.rev > 1 ? ' v' + e.rev : '')"></td><td x-text="e.source_key"></td>
                       <td class="hb-num" x-text="fmt(e.amount)"></td><td x-text="statusLabel(e.status)"></td>
                       <td x-text="(e.voucher_no || '') + (e.voucher_status ? '（' + e.voucher_status + '）' : '')"></td>
@@ -124,8 +215,8 @@
             <template x-for="f in features" :key="f.key">
               <tr :data-testid="'hb-row-' + f.key">
                 <td x-text="f.label"></td><td x-text="f.batch"></td><td x-text="f.description"></td>
-                <td><span class="hb-tag" :class="{on: f.enabled}" x-text="f.enabled ? '已開啟' : '未開啟'"></span></td>
-                <td style="text-align:right"><button class="hb-btn" x-show="isSuper" @click="toggle(f)" x-text="f.enabled ? '關閉' : '開啟'" data-testid="hb-toggle"></button></td>
+                <td><span class="hb-tag" :class="{on: f.enabled}" x-text="f.ready ? (f.enabled ? '已開啟' : '未開啟') : '開發中'" :data-testid="'hb-status-' + f.key"></span></td>
+                <td style="text-align:right"><button class="hb-btn" x-show="isSuper" :disabled="!f.ready && !f.enabled" @click="toggle(f)" x-text="f.enabled ? '關閉' : (f.ready ? '開啟' : '尚未提供')" data-testid="hb-toggle"></button></td>
               </tr>
             </template>
           </tbody>

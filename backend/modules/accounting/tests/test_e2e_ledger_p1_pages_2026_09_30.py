@@ -257,27 +257,42 @@ def test_hub_page_lists_features_and_toggle_shows_and_hides_the_tab(live_server,
     page = e2e_browser.new_page()
     bad, errs = _open(page, live_server, user, pw, "ledger-hub.html")
     page.wait_for_selector("[data-testid=hb-features]")
-    page.wait_for_selector("[data-testid=hb-row-tax401]")
+    page.wait_for_selector("[data-testid=hb-row-withholding]")
     assert page.locator("[data-testid=hb-none]").is_visible()                       # 預設全關：明說「沒有已開啟的功能」
-    assert page.locator("[data-testid=hb-tab-tax401]").count() == 0
+    assert page.locator("[data-testid=hb-tab-withholding]").count() == 0
 
-    page.locator("[data-testid=hb-row-tax401] [data-testid=hb-toggle]").click()
-    page.wait_for_selector("[data-testid=hb-tab-tax401]", state="visible")           # 開啟 ⇒ 頁籤出現
+    page.locator("[data-testid=hb-row-withholding] [data-testid=hb-toggle]").click()
+    page.wait_for_selector("[data-testid=hb-tab-withholding]", state="visible")           # 開啟 ⇒ 頁籤出現
     page.wait_for_selector("[data-testid=hb-body]", state="visible")
-    assert "C5" in page.locator("[data-testid=hb-body]").inner_text()
+    page.wait_for_selector("[data-testid=hb-wh]", state="visible")                       # 扣繳清單頁籤有自己的內容
     conn = db.get_db()
     try:
-        assert conn.execute("SELECT value FROM gl_settings WHERE key='feature.tax401'").fetchone()[0] == "1"
+        assert conn.execute("SELECT value FROM gl_settings WHERE key='feature.withholding'").fetchone()[0] == "1"
     finally:
         conn.close()
 
-    page.locator("[data-testid=hb-row-tax401] [data-testid=hb-toggle]").click()
-    page.wait_for_function("() => !document.querySelector('[data-testid=hb-tab-tax401]')")
+    page.locator("[data-testid=hb-row-withholding] [data-testid=hb-toggle]").click()
+    page.wait_for_function("() => !document.querySelector('[data-testid=hb-tab-withholding]')")
     assert not bad, "開總帳作業頁時有請求失敗：%s" % bad[:4]
     assert not errs, "頁面丟了例外：%s" % errs[:3]
 
 
 # ── B5：年度結轉與決算 ────────────────────────────────────────────────────
+
+@pytest.mark.e2e
+def test_hub_unbuilt_features_show_in_development_and_cannot_be_enabled(live_server, make_user, e2e_browser):
+    user, pw = make_user(username="e2e_gl_hub_ready", role="superadmin")
+    page = e2e_browser.new_page()
+    bad, errs = _open(page, live_server, user, pw, "ledger-hub.html")
+    page.wait_for_selector("[data-testid=hb-features]")
+    for key in ("fixed_assets", "invoice_adjustments", "custom_records", "backfill", "inventory_cost", "source_annotations"):
+        assert page.locator("[data-testid=hb-status-%s]" % key).inner_text() == "開發中", key
+        assert page.locator("[data-testid=hb-row-%s] [data-testid=hb-toggle]" % key).is_disabled(), key
+    for key in ("engine_drafts", "tax401", "withholding"):
+        assert page.locator("[data-testid=hb-status-%s]" % key).inner_text() in ("未開啟", "已開啟"), key
+        assert page.locator("[data-testid=hb-row-%s] [data-testid=hb-toggle]" % key).is_enabled(), key
+    assert not bad and not errs
+
 
 @pytest.mark.e2e
 def test_periods_page_year_closing_generate_close_and_reopen(live_server, make_user, e2e_browser):

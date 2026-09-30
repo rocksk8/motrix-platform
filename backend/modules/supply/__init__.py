@@ -3,6 +3,7 @@
 from core.registry import ModuleSpec
 
 from modules.supply import attachments
+from modules.supply import gl_events
 from modules.supply.api import inventory, shipping_notes, suppliers
 
 MODULE = ModuleSpec(
@@ -17,6 +18,8 @@ MODULE = ModuleSpec(
         ("stock.serial", "supply"): inventory._StockSerials,
         # IP-20：M06 T100 付款傳票的料件進貨段
         ("inventory.paid_batches", "supply"): inventory.paid_batches,
+        # IP-GL1（W4 總帳 C4）：進貨批次入庫 E08、進貨發票進項稅額 E08b、進貨付款 E09；唯讀
+        ("gl.events", "supply"): gl_events.gl_events,
         # IP-10／approval.reassign（M01-PLAN §3-7）：M01「待我簽核」佇列與轉簽的出貨單
         ("approval.queue_items", "shipping_note"): shipping_notes._queue_items,
         ("approval.reassign", "shipping_note"): shipping_notes.REASSIGN,

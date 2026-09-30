@@ -26,6 +26,8 @@ window.CM_PARTS.push(() => ({
     // ── 標記已匯款 Modal（2026-08-31 新增，原本用 prompt() 只能填備註，
     // 沒有地方填實際匯款日期，一律誤記成操作當下的系統時間）
     payVoucherModal: false,
+    payLinks: null,          // R12：個人外包人員 ↔ 勞報單（同出納頁）
+    payLinksError: '',
     payVoucherTarget: null,
     payVoucherDate: '',
     payVoucherNote: '',
@@ -450,7 +452,10 @@ window.CM_PARTS.push(() => ({
         this.payRemit = { actual: v.grandTotal != null ? String(v.grandTotal) : '', hasFee: false, fee: '' }
         this.payVoucherBankAcctCode = ''
         this._payVoucherBankName = ''
+        this.payLinks = null
+        this.payLinksError = ''
         this.payVoucherModal = true
+        await this.loadPayLinks()
         await this.loadT100BankAccounts()
         const url = v.vendorId ? `/api/contractor-vouchers/last-paid-bank-account?vendor_id=${v.vendorId}` : ''
         this.payVoucherBankAcctCode = await this._resolveDefaultBankAccount(url)
@@ -470,9 +475,37 @@ window.CM_PARTS.push(() => ({
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
+    async loadPayLinks() {
+      const v = this.payVoucherTarget
+      if (!v) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${encodeURIComponent(v.voucherNo)}/personnel-links`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) { this.payLinksError = (await r.json().catch(() => ({}))).detail || '讀取勞報單關聯失敗'; return }
+        const d = await r.json()
+        this.payLinks = d.lines.length ? d : null
+        this.payLinksError = ''
+      } catch (e) { this.payLinksError = '讀取勞報單關聯失敗：' + e.message }
+    },
+
+    payLinksBlocked() { return !!(this.payLinks && !this.payLinks.canPay) },
+
+    async linkPayslip(line, slipNo) {
+      const v = this.payVoucherTarget
+      if (!v) return
+      this.payLinksError = ''
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${encodeURIComponent(v.voucherNo)}/personnel-link`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ personId: line.id, payslipNo: slipNo || '' })
+        })
+        if (!r.ok) this.payLinksError = (await r.json().catch(() => ({}))).detail || '關聯失敗'
+      } catch (e) { this.payLinksError = '關聯失敗：' + e.message }
+      await this.loadPayLinks()
+    },
+
     async confirmPayVoucher() {
       const v = this.payVoucherTarget
-      if (!v || !this.payVoucherDate || this.remitError(this.payRemit)) return
+      if (!v || !this.payVoucherDate || this.remitError(this.payRemit) || this.payLinksBlocked()) return
       this.payVoucherSaving = true
       try {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {

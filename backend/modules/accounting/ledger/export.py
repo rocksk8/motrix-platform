@@ -75,3 +75,41 @@ def statements_workbook(stm, year, source="live", title="財務報表"):
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def tax401_workbook(s):
+    """營業稅 401 工作底稿（Excel）。抬頭含公司名 ⇒ 經第二道（COMPANY-SETUP-GATE §5）。欄位代號二手轉載，申報前以當期官方格式核對。"""
+    from helpers.company_identity import company_name
+    company = company_name()
+    wb = Workbook()
+    f, fill, border, al = xl_style(wb)
+    head_font, head_fill = f(bold=True, size=10), fill("F0EEE9")
+    ws = wb.active
+    ws.title = "401 彙總"
+    title = "%s　營業稅 401 工作底稿　%s 年第 %s 期（%s～%s）" % (company, s["year"], s["period"], s["start"], s["end"])
+    set_row(ws, 1, [title.strip()], font=f(bold=True, size=12))
+    set_row(ws, 2, ["欄位代號為二手轉載，申報前請以當期官方格式核對；含免稅銷售者應使用 403 表。"], font=f(size=9))
+    set_row(ws, 4, ["稅碼", "說明", "金額欄位", "稅額欄位", "零稅率欄位", "金額／銷售額", "稅額", "零稅率銷售額"], font=head_font, fill=head_fill, border=border())
+    r = 5
+    for row in s["rows"]:
+        set_row(ws, r, [row["tax_code"], row["note"], row["field_amt"] or None, row["field_tax"] or None, row["field_zero"] or None,
+                        row["amount"], row["tax"], row["zero_amount"]], font=f(), border=border())
+        r += 1
+    r += 1
+    labels = (("101", "銷項稅額合計"), ("107", "得扣抵進項稅額合計"), ("108", "上期累積留抵稅額"), ("110", "小計"), ("111", "本期應實繳稅額"), ("112", "本期申報留抵稅額"), ("25", "銷售額總計"))
+    for code, name in labels:
+        set_row(ws, r, [code, name, s["calc"][code]], font=f(bold=code in ("111", "112")), border=border())
+        r += 1
+    r += 1
+    set_row(ws, r, ["對帳", "結果", "左", "右"], font=head_font, fill=head_fill, border=border())
+    for c in s["checks"]:
+        r += 1
+        set_row(ws, r, [c["label"], "相符" if c["ok"] else ("未對比" if c["ok"] is None else "不符"), c.get("left"), c.get("right")], font=f(), border=border())
+    for w in s["warnings"]:
+        r += 1
+        set_row(ws, r, ["警示", w["text"]], font=f(bold=True))
+    ws.column_dimensions["A"].width = 44
+    ws.column_dimensions["B"].width = 48
+    bio = io.BytesIO()
+    wb.save(bio)
+    return bio.getvalue()

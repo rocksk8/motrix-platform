@@ -95,7 +95,7 @@ M06 的 `vouchers_all`。
 | 使用方 | M07 `modules/payroll/bonus_vouchers.py`：`withdraw_accrual`（獎金退回 ⇒ 作廢未送審的轉帳草稿）、`linked_vouchers`（明細列出連結的傳票）、`create_accrual`（殘留草稿防護） |
 | 形式 | provider，單一提供者（同 IP-2） |
 | 語法 | 提供：`_registry.provide("voucher.void_draft", "accounting", _provide_voucher_void_draft)`、`_registry.provide("voucher.status", "accounting", _provide_voucher_status)`<br>取用：`registry.single_provider("voucher.void_draft")(conn, voucher_id, voided_by=…, now=…, reason=…)`；`registry.single_provider("voucher.status")(conn, voucher_id)` |
-| 回傳 | void_draft：`{"result": "voided"｜"not_draft"｜"gone", "voucher_no", "status"}`——只作廢「草稿」；已送審 ⇒ `not_draft` 不動；不存在或早已作廢 ⇒ `gone`。status：`{"id", "voucher_no", "status", "voided"}`，不存在 ⇒ `None`。兩者都在呼叫端的交易裡，**不 commit** |
+| 回傳 | void_draft：`{"result": "voided"｜"not_draft"｜"gone", "voucher_no", "status"}`——只作廢「草稿」；已送審 ⇒ `not_draft` 不動；不存在或早已作廢 ⇒ `gone`。status：`{"id", "voucher_no", "status", "voided", "date"}`（`date`＝傳票日期，2026-09-30 總帳 C3b 加，additive；舊取用端不讀），不存在 ⇒ `None`。兩者都在呼叫端的交易裡，**不 commit** |
 | 對方不在時 | **退回照常**成立；不作廢、**保留連結**（之後查得到是哪一張），回傳 `notice`＝「未作廢傳票（#id）：會計模組未安裝；退回照常，請會計另行處理那一張傳票」。明細仍列出每一張連結的傳票，標 `unavailable` 與「會計模組未安裝，無法查詢狀態」，頁面不給連結（不讓傳票從畫面消失）。<br>**M06 回來後**：再次進入待發放時，若舊連結仍是未作廢的草稿 ⇒ 不另開、不覆蓋，notice 明說「上一張轉帳傳票草稿 … 尚未作廢」；舊連結已送審 ⇒ 照原行為另開新草稿 |
 | 契約版本 | 1（2026-09-25） |
 | 追加：以單號查（2026-09-29，`voucher.by_no`） | 提供方 `modules/accounting/api/vouchers.py::_provide_voucher_by_no`；使用方 M07 `modules/payroll/api/payslips.py::payslip_mark_paid`（勞報單出納付款回填**既有**傳票單號時驗證）。`fn(conn, voucher_no) -> {"id", "voucher_no", "status", "voided"} \| None`，唯讀。對方不在時：**拒絕標記付款並說明**（409「會計模組未安裝，無法驗證傳票單號，暫不能標記付款」），不猜、不放行。契約版本 1。守門：`backend/modules/payroll/tests/test_payslip_void_signed_paid_2026_09_29.py::test_mark_paid_needs_real_voucher_and_valid_date`、`::test_mark_paid_refuses_and_says_so_without_accounting`（反向控制） |
@@ -215,6 +215,26 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 守門 | `backend/modules/payroll/tests/test_payslip_void_signed_paid_2026_09_29.py`：`test_cashier_queue_lists_signed_only_and_hides_from_finance`（只列已簽回、不含個資欄位、財務看不到）、`test_cashier_queue_says_so_when_payroll_provider_missing`（**反向控制**）；`test_cashier_can_pay_but_plain_user_cannot`（付款權限）。突變：M07 不在時默默略過、財務看得到 ⇒ 轉紅 |
 
 ---
+
+---
+
+## IP-105　`payslip.remit`：承攬商匯款單關聯勞報單、匯款時一併記為已付款（M04 → M07）
+
+對應使用者 2026-09-30 裁示 R12：個人（無統編）外包人員匯款前必須關聯勞報單，匯款金額＝勞報單實付（扣繳留在勞報單）；匯款標記時勞報單一併記為已付款，避免重複付款與重複入帳。
+M04 不 import M07，經這一個單一提供者（三個動作，都不 commit，與匯款單同一個交易）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M07 薪資獎金：`modules/payroll/remit_link.py::_Remit`（`check`／`mark_paid`／`unmark_paid`） |
+| 使用方 | M04 `modules/subcontract/api/contractor_vouchers.py`：`POST /api/contractor-vouchers/{單號}/personnel-link`（關聯／解除）、`paid-toggle`（匯款前驗證＋一併標記；取消匯款一併退回） |
+| 形式 | provider，單一提供者（`core.registry`；`ModuleSpec.providers` 宣告） |
+| 語法 | 提供：`("payslip.remit", "payroll"): remit_link._Remit`<br>取用：`p = registry.single_provider("payslip.remit")`；`None` ⇒ 退化。`p.check(conn, slip_no)`、`p.mark_paid(conn, slip_nos, remit_no, payment_date, who)`、`p.unmark_paid(conn, remit_no)` |
+| 回傳 | `check`：`{slipNo, status, contractorId, contractorName, net, paidViaRemit}`（不含身分證字號等個資）；不存在 ⇒ None。`mark_paid`／`unmark_paid`：更新筆數 |
+| 對方不在時 | 有 `payslipNo` 的人員 ⇒ 匯款被擋並說明「薪資獎金模組未安裝，無法驗證勞報單」；沒有關聯且 `system_settings.remit_require_payslip` 未開 ⇒ 匯款照舊 |
+| 契約版本 | 1（2026-09-30） |
+
+---
+
 
 ## IP-15　`dispatch.list_for_case`＋`dispatch.cost_for_case`：案件整包的承攬派工段（M04 → M01）；派工成本檢視（M04 → M06 傳票）
 
@@ -722,7 +742,7 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M05 應收應付：`modules/arap/gl_events.py`（銷項發票 E01、客戶收款 E03；2026-09-30 C1）。M04 外包工班：`modules/subcontract/gl_events.py`（承攬商發票 E04、匯款 E05／E05b；2026-09-30 C2）。之後逐批接入：payroll／supply／case／建構器 outbox（C3～C7），每接一個在本列加一筆 `modules/<key>/…` |
+| 提供方 | M05 應收應付：`modules/arap/gl_events.py`（銷項發票 E01、客戶收款 E03；2026-09-30 C1）。M04 外包工班：`modules/subcontract/gl_events.py`（承攬商發票 E04、匯款 E05／E05b；2026-09-30 C2）。M07 薪資獎金：`modules/payroll/gl_events.py`（勞報單應付 E06、付款 E06b；2026-09-30 C3）。M03 採購・庫存：`modules/supply/gl_events.py`（進貨入庫 E08、進貨發票進項稅 E08b、進貨付款 E09；2026-09-30 C4）。M01 案件：`modules/case/gl_events.py`（額外支出 E11／E11b、叫料 E12／E12b；2026-09-30 C4b）。之後逐批接入：建構器 outbox（C7），每接一個在本列加一筆 `modules/<key>/…` |
 | 使用方 | M06 `modules/accounting/ledger/contract.py::collect`（`GET /api/ledger/events/preview`）與 `modules/accounting/ledger/engine.py::run`（`POST /api/ledger/engine/run`，功能旗標 engine_drafts） |
 | 形式 | provider，多提供者（`registry.providers("gl.events")`，鍵＝來源模組 key） |
 | 語法 | 提供：`ModuleSpec(providers={("gl.events", "<模組key>"): fn})`；`fn(start, end, *, changed_since="") -> {"events": [Event], "notice": str}`<br>Event：`{source_type, source_key(不可變、不含陣列索引), event_code, event_date(YYYY-MM-DD 權責日), doc_no, case_no, party{key,name}, tax_code, mode(snapshot｜cumulative｜append), lines:[{role, side(D｜C), amount(非負整數新臺幣), case_no, party_key, tax_code, memo}], meta}`。來源給**角色**，角色→科目由 M06 設定（`gl_account_roles`） |

@@ -85,7 +85,7 @@ def _make(conn, award, kind, lines, summary, who, now):
     # JV36：每一行掛案件來源 ⇒ 案件頁的相關傳票（vouchers_by_case）找得到獎金傳票
     lines = [dict(ln, source_type="case", source_key=award["quote_no"]) for ln in lines]
     v = registry.single_provider("voucher.draft")(
-        conn, voucher_date=now[:10], summary=summary, lines=lines, created_by=who, now=now)
+        conn, voucher_date=now[:10], summary=summary, lines=lines, created_by=who, now=now, origin="bonus_" + kind)
     vid, no = v["id"], v["voucher_no"]
     conn.execute("UPDATE bonus_case_awards SET %s_voucher_id = ? WHERE id = ?" % kind, (vid, award["id"]))
     return {"id": vid, "voucher_no": no, "status": "草稿"}, ""

@@ -8,7 +8,7 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.case import attachments, case_deadlines, payables, quotations
+from modules.case import attachments, case_deadlines, gl_events, payables, quotations
 # ⚠️ router 一律用別名：`from modules.case.api import quotations` 會把套件屬性 `modules.case.quotations`
 #    （報價單 helper）蓋成 api 那一支，`from modules.case import quotations` 就拿錯檔
 from modules.case.api import (case_action_items as _api_action_items, case_extra_expenses as _api_extra_expenses,
@@ -62,6 +62,8 @@ MODULE = ModuleSpec(
         ("attachments.catalog", "case"): attachments._CaseCatalog,
         # IP-100：請款待付款（已核准、未登錄付款日的額外支出 ⇒ M05 出納；登錄付款寫回付款日）
         ("payables.pending", "case"): payables._Payables,
+        # IP-GL1（W4 總帳 C4b）：額外支出 E11／E11b、叫料 E12／E12b；唯讀
+        ("gl.events", "case"): gl_events.gl_events,
         # IP-102（W1）：匯款差額審核；IP-9：額外支出的匯款手續費列營運報表支出
         ("remit.reviews", "case"): payables._RemitReviews,
         ("expense.entries", "remit_fee_case"): payables._expense_entries,

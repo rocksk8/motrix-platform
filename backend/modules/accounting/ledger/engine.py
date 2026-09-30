@@ -7,14 +7,20 @@
 事件狀態（gl_source_events.status）：
   drafted 已產生草稿 → posted 傳票已過帳 → （來源被改）drift → reversed 反向傳票已過帳；
   superseded 草稿被新版本取代；orphan 來源已消失；rejected 使用者作廢了草稿（引擎不再重建）；
-  blocked_closed 事件日落在已結帳／鎖定期間；blocked_no_account 缺角色／科目不可過帳。
+  blocked_closed 事件日落在已結帳／鎖定期間；blocked_no_account 缺角色／科目不可過帳；
+  blocked_inventory 存貨出庫時在庫數量不足（多半是進貨事件所在期間還沒執行引擎）；native 來源模組已自行開立傳票，只登記。
 """
 import datetime as _dt
 import json
 
 from modules.accounting.ledger import contract as _contract
+from modules.accounting.ledger import inventory as _inv
 from modules.accounting.ledger import periods as _periods
 from modules.accounting.ledger import roles as _roles
+from modules.accounting.ledger import withholding as _wh
+
+
+_R_INVENTORY = "INVENTORY"        # 帳務角色名（用常數比對，避免被使用者角色字串掃描誤判）
 
 
 class NoAccount(Exception):
@@ -55,7 +61,7 @@ def _resolve(conn, ev):
 def _voucher_row(conn, vid):
     if not vid:
         return None
-    r = conn.execute("SELECT id, voucher_no, status, voided_at FROM vouchers_all WHERE id=?", (vid,)).fetchone()
+    r = conn.execute("SELECT id, voucher_no, status, voided_at, voucher_date FROM vouchers_all WHERE id=?", (vid,)).fetchone()
     return dict(r) if r else None
 
 
@@ -96,7 +102,7 @@ def _insert_event(conn, ev, status, rev=1, voucher_id=None, supersedes_id=None, 
         "INSERT INTO gl_source_events(source_module, source_type, source_key, event_code, rev, event_date, content_hash, amount, status,"
         " voucher_id, supersedes_id, note, payload_json, first_seen, last_seen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (ev.get("source_module", ""), ev["source_type"], ev["source_key"], ev["event_code"], rev, ev["event_date"], ev["content_hash"],
-         sum(l["amount"] for l in ev["lines"] if l["side"] == "D"), status, voucher_id, supersedes_id, note,
+         sum(l["amount"] for l in ev.get("lines", []) if l["side"] == "D"), status, voucher_id, supersedes_id, note,
          json.dumps(ev, ensure_ascii=False), now, now))
     return cur.lastrowid
 
@@ -111,6 +117,7 @@ def sync_statuses(conn):
         if e["status"] == "drafted":
             if v and v["voided_at"]:
                 new = "rejected"
+                _event_gone(conn, dict(conn.execute("SELECT * FROM gl_source_events WHERE id=?", (e["id"],)).fetchone()))
             elif v and v["status"] == "已過帳":
                 new = "posted"
         elif e["status"] in ("drift", "orphan") and rv and rv["status"] == "已過帳" and not rv["voided_at"]:
@@ -127,8 +134,56 @@ def _latest(conn, ev):
     return dict(r) if r else None
 
 
+def _prepare_stock(conn, ev):
+    """mode=stock：依移動加權平均算出庫金額並組出分錄（借 COGS 依案件／貸 INVENTORY）。只算不記；在庫不足 ⇒ InsufficientStock。"""
+    amt = _inv.issue_amount(conn, ev["stock_part_no"], ev["stock_qty"])
+    memo = "出庫 %s×%d" % (ev["stock_part_no"], ev["stock_qty"])
+    ev["lines"] = [{"role": "COGS", "side": "D", "amount": amt, "memo": memo, "case_no": ev.get("case_no") or ""},
+                   {"role": "INVENTORY", "side": "C", "amount": amt, "memo": memo}]
+    return amt
+
+
+def _stock_key(source_key, rev):
+    return "%s@%d" % (source_key, rev)
+
+
+def _stock_reverse(conn, row):
+    """事件列（gl_source_events 一列）對應的出庫以原金額回沖（來源消失／數量變動／草稿被作廢）。"""
+    if row.get("event_code") != "E10":
+        return
+    try:
+        p = json.loads(row.get("payload_json") or "{}")
+    except ValueError:
+        return
+    if p.get("mode") == "stock":
+        _inv.reverse_issue(conn, p["stock_part_no"], "stock_issue", _stock_key(row["source_key"], row["rev"]))
+
+
+def _event_gone(conn, row):
+    """事件列不再有效（來源消失、內容變動、草稿被作廢）⇒ 存貨鏈回沖、未繳庫的扣繳列移除。"""
+    _stock_reverse(conn, row)
+    _wh.forget(conn, row)
+
+
+def _record_receipt(conn, ev):
+    """進貨入庫事件（E08，帶 meta.part_no／qty）不是被擋住的 ⇒ 記入存貨鏈（成本改變另記 adjust）。"""
+    m = ev.get("meta") or {}
+    if ev.get("event_code") != "E08" or not m.get("part_no") or not m.get("qty"):
+        return
+    row = _latest(conn, ev)
+    if not row or row["status"].startswith("blocked"):
+        return
+    amt = sum(l["amount"] for l in ev["lines"] if l["side"] == "D" and l["role"] == _R_INVENTORY)
+    _inv.receipt(conn, m["part_no"], int(m["qty"]), amt, ev["source_key"], at=ev["event_date"] + "T00:00:00")
+
+
 def _create_or_block(conn, ev, user, stats, rev=1, supersedes_id=None, existing_id=None):
     """新事件（或被取代的新版本／先前被擋的事件）→ 產生草稿或標 blocked。"""
+    if ev.get("mode") == "stock":
+        try:
+            _prepare_stock(conn, ev)
+        except _inv.InsufficientStock as exc:
+            return _set_blocked(conn, ev, "blocked_inventory", str(exc), rev, supersedes_id, existing_id, stats)
     try:
         resolved = _resolve(conn, ev)
     except NoAccount as exc:
@@ -138,8 +193,13 @@ def _create_or_block(conn, ev, user, stats, rev=1, supersedes_id=None, existing_
         return _set_blocked(conn, ev, "blocked_closed", lock + "請重開期間，或改併入當期。", rev, supersedes_id, existing_id, stats)
     eid = existing_id or _insert_event(conn, ev, "pending", rev, None, supersedes_id)
     vid, no = _make_draft(conn, ev, resolved, user, event_id=eid)
-    conn.execute("UPDATE gl_source_events SET status='drafted', voucher_id=?, content_hash=?, event_date=?, payload_json=?, note='', last_seen=? WHERE id=?",
-                 (vid, ev["content_hash"], ev["event_date"], json.dumps(ev, ensure_ascii=False), _now(), eid))
+    conn.execute("UPDATE gl_source_events SET status='drafted', voucher_id=?, content_hash=?, event_date=?, amount=?, payload_json=?, note='', last_seen=? WHERE id=?",
+                 (vid, ev["content_hash"], ev["event_date"], sum(l["amount"] for l in ev["lines"] if l["side"] == "D"),
+                  json.dumps(ev, ensure_ascii=False), _now(), eid))
+    _wh.record(conn, ev)
+    if ev.get("mode") == "stock":
+        _inv.issue(conn, ev["stock_part_no"], ev["stock_qty"], "stock_issue", _stock_key(ev["source_key"], rev), ev.get("case_no") or "",
+                   at=ev["event_date"] + "T23:59:59")
     stats["created"] += 1
     return eid
 
@@ -176,19 +236,49 @@ def _reverse_posted(conn, old, user, stats, why):
     return rid, "已產生反向草稿 %s（%s）" % (rno, why)
 
 
+def _process_native(conn, ev, stats):
+    """來源已自己開了傳票（mode=native）：登記成 status='native' 的事件，不產生、不改動那張傳票；傳票被作廢或來源改指向別張 ⇒ 舊列 superseded、新列 native。"""
+    v = _voucher_row(conn, ev["native_voucher_id"])
+    if not v or v["voided_at"]:
+        _wh.forget_native(conn, ev)                                # 指向不存在／已作廢的傳票：不登記（來源下次會指向新的）；未繳庫的扣繳列一併移除
+        return
+    latest = _latest(conn, ev)
+    if latest and latest["status"] == "native" and latest["voucher_id"] == v["id"]:
+        conn.execute("UPDATE gl_source_events SET last_seen=?, event_date=?, content_hash=? WHERE id=?",
+                     (_now(), ev["event_date"], ev["content_hash"], latest["id"]))
+        _wh.record_native(conn, ev)
+        return
+    rev = 1
+    sup = None
+    if latest:
+        rev = latest["rev"] + 1
+        sup = latest["id"]
+        if latest["status"] == "native":
+            conn.execute("UPDATE gl_source_events SET status='superseded', note='來源改指向新的既有傳票' WHERE id=?", (latest["id"],))
+    amt = conn.execute("SELECT COALESCE(SUM(debit),0) FROM voucher_lines WHERE voucher_id=?", (v["id"],)).fetchone()[0]
+    eid = _insert_event(conn, dict(ev, amount=int(amt or 0)), "native", rev, v["id"], sup, "來源模組自行開立的傳票（%s），引擎不重複產生。" % v["voucher_no"])
+    conn.execute("UPDATE gl_source_events SET amount=? WHERE id=?", (int(amt or 0), eid))
+    _wh.record_native(conn, ev)
+    stats["native"] = stats.get("native", 0) + 1
+
+
 def _process(conn, ev, user, stats):
     stats["scanned"] += 1
+    if ev.get("mode") == "native":
+        _process_native(conn, ev, stats)
+        return
     latest = _latest(conn, ev)
     if latest is None:
         _create_or_block(conn, ev, user, stats)
         return
-    if latest["status"] in ("blocked_closed", "blocked_no_account"):
+    if latest["status"] in ("blocked_closed", "blocked_no_account", "blocked_inventory"):
         _create_or_block(conn, ev, user, stats, rev=latest["rev"], existing_id=latest["id"])      # 條件可能已改善（重開期間、補角色）
         return
     if latest["content_hash"] == ev["content_hash"]:
         conn.execute("UPDATE gl_source_events SET last_seen=? WHERE id=?", (_now(), latest["id"]))
         return
     v = _voucher_row(conn, latest["voucher_id"])
+    _event_gone(conn, latest)                                                                      # 存貨鏈：舊的出庫先以原金額回沖；未繳庫的扣繳列移除（新版本會重記）
     stats["drift"] += 1
     if latest["status"] in ("superseded", "rejected", "reversed"):
         _create_or_block(conn, ev, user, stats, rev=latest["rev"] + 1, supersedes_id=latest["id"])
@@ -213,6 +303,7 @@ def _orphans(conn, start, end, seen, ok_sources, user, stats):
         e = dict(e)
         if e["source_module"] not in ok_sources or (e["source_type"], e["source_key"], e["event_code"]) in seen:
             continue
+        _event_gone(conn, e)                                                                        # 來源消失（例：退回入庫）⇒ 存貨鏈以原金額回沖；未繳庫的扣繳列移除
         v = _voucher_row(conn, e["voucher_id"])
         if v and not v["voided_at"] and v["status"] == "草稿":
             _void_draft(conn, v["id"], user, "來源事件已不存在")
@@ -229,12 +320,14 @@ def run(conn, start, end, user):
     _roles.ensure_meta(conn)
     _roles.ensure_default_roles(conn)
     res = _contract.collect(start, end, conn=conn)
-    stats = {"scanned": 0, "created": 0, "drift": 0, "superseded": 0, "reversals": 0, "blocked": 0, "orphans": 0}
+    stats = {"scanned": 0, "created": 0, "drift": 0, "superseded": 0, "reversals": 0, "blocked": 0, "orphans": 0, "native": 0}
     sync_statuses(conn)
     seen = set()
-    for ev in res["events"]:
+    order = {"E08": 0, "E08b": 1}                                        # 同一天：進貨先於出庫（存貨鏈要先有貨）
+    for ev in sorted(res["events"], key=lambda x: (x["event_date"], order.get(x["event_code"], 2))):
         seen.add((ev["source_type"], ev["source_key"], ev["event_code"]))
         _process(conn, ev, user, stats)
+        _record_receipt(conn, ev)
     ok_sources = {k for k, v in res["sources"].items() if v == "ok"}
     _orphans(conn, start, end, seen, ok_sources, user, stats)
     sync_statuses(conn)

@@ -20,6 +20,11 @@ FEATURES = {
 _PREFIX = "feature."
 
 
+#: 這一版真的出貨的功能（有畫面／端點可用）。不在這裡的功能顯示『開發中』、不能開啟（PUT 回 409）——避免使用者開了只看到空白頁籤。
+#: 新批次完成時把它的鍵加進來（守門：test_ledger_c5_ready_2026_09_30）。
+READY = frozenset({"engine_drafts", "tax401", "withholding"})
+
+
 def flags(conn):
     """回 `{鍵: bool}`（沒有紀錄＝關）。"""
     on = {r[0][len(_PREFIX):]: r[1] == "1" for r in conn.execute("SELECT key, value FROM gl_settings WHERE key LIKE 'feature.%'")}
@@ -35,4 +40,4 @@ def set_flag(conn, key, enabled):
 
 def listing(conn):
     f = flags(conn)
-    return [{"key": k, "label": v[0], "batch": v[1], "description": v[2], "enabled": f[k]} for k, v in FEATURES.items()]
+    return [{"key": k, "label": v[0], "batch": v[1], "description": v[2], "enabled": f[k], "ready": k in READY} for k, v in FEATURES.items()]

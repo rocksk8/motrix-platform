@@ -798,6 +798,13 @@ def payslip_unpay(slip_no: str, authorization: str = Header(None)):
             raise HTTPException(404, "找不到此勞報單")
         if row["status"] != "已付款":
             raise HTTPException(409, "只有已付款的勞報單可以退回")
+        via = conn.execute("SELECT data_json FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()["data_json"]
+        try:
+            via = (json.loads(via or "{}") or {}).get("paid_via_remit") or ""
+        except (TypeError, ValueError):
+            via = ""
+        if via:
+            raise HTTPException(409, "此勞報單由承攬商匯款單 %s 付款，請到該匯款單取消已匯款" % via)
         conn.execute("UPDATE payslips SET status='已簽回', payment_date='', voucher_no='', "
                      "paid_by='', paid_at='', updated_at=? WHERE slip_no=?",
                      (datetime.now().isoformat(), slip_no))

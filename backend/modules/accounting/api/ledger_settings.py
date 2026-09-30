@@ -114,6 +114,8 @@ def put_feature(key: str, body: dict = Body(...), authorization: str = Header(No
     if key not in _features.FEATURES:
         raise HTTPException(404, "沒有這個功能：%s。" % key)
     enabled = bool((body or {}).get("enabled"))
+    if enabled and key not in _features.READY:
+        raise HTTPException(409, "這項功能還在開發中，這一版尚未提供，不能開啟。")
     conn = get_db()
     try:
         _features.set_flag(conn, key, enabled)

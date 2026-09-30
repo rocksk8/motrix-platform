@@ -61,6 +61,8 @@ function cashierApp() {
     payVoucherNote:    '',
     payVoucherBankAcctCode: '',
     payVoucherSaving:  false,
+    payLinks:          null,    // R12：個人外包人員 ↔ 勞報單 { required, providerAvailable, lines:[{id,name,amount,payslipNo,candidates,error,ok}], canPay }
+    payLinksError:     '',
 
     receiveModal:         false,
     receiveTarget:        null,
@@ -481,15 +483,46 @@ function cashierApp() {
       this.payVoucherDate = v.payableDate || this._localDateStr()
       this.payVoucherNote = ''
       this.payRemit = this._newRemit(v.grandTotal)
+      this.payLinks = null
+      this.payLinksError = ''
       this.payVoucherModal = true
+      await this.loadPayLinks()
       await this.loadT100BankAccounts()
       const url = v.vendorId ? `/api/contractor-vouchers/last-paid-bank-account?vendor_id=${v.vendorId}` : ''
       this.payVoucherBankAcctCode = await this._resolveDefaultBankAccount(url)
     },
 
+    async loadPayLinks() {
+      const v = this.payVoucherTarget
+      if (!v) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${encodeURIComponent(v.voucherNo)}/personnel-links`, { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (!r.ok) { this.payLinksError = (await r.json().catch(() => ({}))).detail || '讀取勞報單關聯失敗'; return }
+        const d = await r.json()
+        this.payLinks = d.lines.length ? d : null
+        this.payLinksError = ''
+      } catch (e) { this.payLinksError = '讀取勞報單關聯失敗：' + e.message }
+    },
+
+    payLinksBlocked() { return !!(this.payLinks && !this.payLinks.canPay) },
+
+    async linkPayslip(line, slipNo) {
+      const v = this.payVoucherTarget
+      if (!v) return
+      this.payLinksError = ''
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${encodeURIComponent(v.voucherNo)}/personnel-link`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ personId: line.id, payslipNo: slipNo || '' })
+        })
+        if (!r.ok) this.payLinksError = (await r.json().catch(() => ({}))).detail || '關聯失敗'
+      } catch (e) { this.payLinksError = '關聯失敗：' + e.message }
+      await this.loadPayLinks()
+    },
+
     async confirmPayVoucher() {
       const v = this.payVoucherTarget
-      if (!v || !this.payVoucherDate || this.remitError(this.payRemit)) return
+      if (!v || !this.payVoucherDate || this.remitError(this.payRemit) || this.payLinksBlocked()) return
       this.payVoucherSaving = true
       try {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {

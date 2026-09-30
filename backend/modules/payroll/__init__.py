@@ -5,7 +5,7 @@ from core.registry import ModuleSpec
 
 import importlib
 
-from modules.payroll import bonus, bonus_payouts, bonus_queue, payslip_payouts
+from modules.payroll import bonus, bonus_payouts, bonus_queue, gl_events, payslip_payouts, remit_link
 from modules.payroll.api import bonus as bonus_api, payslips as payslips_api
 from modules.payroll import attachments   # 要在 api 之後：提供者用 payslips 的 _signed_path／_archive_dir
 
@@ -25,8 +25,12 @@ MODULE = ModuleSpec(
         # IP-103：出納頁的勞報單待付款（M05）；IP-9：已付款勞報單列入營運報表與月支出（M08，名稱 payslip）
         ("payslip.payables", "payroll"): payslip_payouts._Payables,
         ("expense.entries", "payslip"): payslip_payouts._expense_entries,
+        # IP-105（R12）：承攬商匯款單關聯勞報單、匯款時一併記為已付款
+        ("payslip.remit", "payroll"): remit_link._Remit,
         # IP-16：L1 /api/system/bonus-module-status
         ("bonus.module_status", "payroll"): bonus.bonus_module_on,
+        # IP-GL1（W4 總帳 C3）：勞報單應付（E06）與付款（E06b）事件；唯讀
+        ("gl.events", "payroll"): gl_events.gl_events,
         # IP-10（M01-PLAN §3-7）：M01「待我簽核」佇列的獎金分潤單與案件獎金分潤
         ("approval.queue_items", "payroll"): bonus_queue.queue_items,
     },
