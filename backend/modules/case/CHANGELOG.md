@@ -1,8 +1,9 @@
 # 案件 更新紀錄
 
-## 1.0.46 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2：費用單據 A2 第一段）
+## 1.0.47 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2：費用單據 A2 前兩段）
 - migration 0003（`0003_expense_forms.py`）：`case_extra_expenses` 一次加齊通用欄位（kind／doc_code／data_json／lines_json／def_version／department_id／payee_*／pay_terms／remit_date／pay_method／pay_account_code／paid_by／pretax／tax／currency／void_*）；只新增欄位與索引、冪等、舊列維持原值（kind=''）。
 - 無案件單據：哨兵路徑段 `/api/quotations/-/extra-expenses/...`（`-`＝`quote_no=''`；17 支端點共用同一個 `_qn()`）。建立需管理員以上或 `expense_forms` 權限；逐列可見＝建立者／本單簽核鏈成員（含代理）／admin／出納／財務（看不到＝404，不用 `case_owner_readable`）；稽核 target 改為 `case_extra_expense`＋單據 id（不留空 target_id）；「我的請款」列得出自己的無案件列。有案件的舊路徑行為不變。下游效應（R1）：營運報表／總帳／出納對無案件列的處理另由後續切片接（本段只開路徑與守門，不改金流計算）。
+- 第二段（W1 契約 §7）：新增 `modules/case/expense_forms.py`（類型 purchase_req／purchase_order／travel／petty_cash、單號 `{PR|PO|TE|PC}-YYYYMMDD-NNNN`、明細金額後端重算、data 合併、未知鍵保留、`payable_sql`）；新欄位帶進建立／編輯（類型建立後不可改）／讀出／已核准後的變更申請（前後值進歷史）／簽核詳情／簽核佇列（無案件項目帶 `caseless`、`typeLabel`、核准／駁回網址）／出納待付款項目。請購單核准後不進出納、營運報表支出、總帳（E11）。舊版列（kind=''）行為不變；舊版變更申請不動新欄位。下游效應（R1）：營運報表與總帳只讀 `total_cost`（＝Σ 明細，整數 TWD）。
 
 ## 1.0.45 — 2026-10-01（暫用號，列車取號；wip/w3-local-date-2）
 - 報價表單 FORM_VERSION V3.14（本地日期：報價日期預設值與送審時間改用 static/motrix-date.js）；測試沙盒載入 motrix-date.js。只動前端與測試，後端行為不變。
