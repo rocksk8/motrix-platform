@@ -1,0 +1,225 @@
+{
+ "key": "headcount",
+ "name": "人員增補申請",
+ "category": "人資",
+ "description": "需求部門、職稱、人數、增補原因、期望到職日、條件說明與預估月薪範圍；主管簽核。",
+ "note": "預估月薪僅供參考，不計入營運報表。",
+ "body": {
+  "name": "人員增補申請",
+  "icon": "",
+  "menu": {
+   "group": "人資",
+   "order": 63
+  },
+  "numbering": {
+   "prefix": "HC",
+   "date": "YYYYMMDD",
+   "digits": 4
+  },
+  "fields": [
+   {
+    "key": "applicant",
+    "label": "申請人",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "users",
+    "default": {
+     "$": "requester"
+    },
+    "required": true
+   },
+   {
+    "key": "dept",
+    "label": "需求部門",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "departments",
+    "required": true
+   },
+   {
+    "key": "position",
+    "label": "職稱",
+    "type": "text",
+    "dataClass": "T1",
+    "required": true
+   },
+   {
+    "key": "headcount",
+    "label": "增補人數",
+    "type": "number",
+    "dataClass": "T1",
+    "min": 1,
+    "required": true
+   },
+   {
+    "key": "why",
+    "label": "增補原因",
+    "type": "radio",
+    "dataClass": "T1",
+    "options": [
+     "新增編制",
+     "離職補缺",
+     "專案需求"
+    ],
+    "required": true
+   },
+   {
+    "key": "expected",
+    "label": "期望到職日",
+    "type": "date",
+    "dataClass": "T1"
+   },
+   {
+    "key": "salary_min",
+    "label": "預估月薪（下限）",
+    "type": "number",
+    "dataClass": "T1",
+    "min": 0
+   },
+   {
+    "key": "salary_max",
+    "label": "預估月薪（上限）",
+    "type": "number",
+    "dataClass": "T1",
+    "min": 0
+   },
+   {
+    "key": "requirements",
+    "label": "條件說明",
+    "type": "textarea",
+    "dataClass": "T1",
+    "maxLength": 1000
+   }
+  ],
+  "workflow": {
+   "initial": "draft",
+   "states": [
+    {
+     "key": "draft",
+     "label": "草稿"
+    },
+    {
+     "key": "pending",
+     "label": "簽核中",
+     "approval": {
+      "tiers": [
+       {
+        "approvers": [
+         {
+          "sourceType": "submitter_manager"
+         }
+        ]
+       }
+      ],
+      "on_approved": "approved",
+      "on_rejected": "draft"
+     }
+    },
+    {
+     "key": "approved",
+     "label": "已核准",
+     "final": true,
+     "notify": {
+      "requester": true
+     }
+    }
+   ],
+   "transitions": [
+    {
+     "key": "submit",
+     "label": "送審",
+     "from": "draft",
+     "to": "pending"
+    }
+   ]
+  },
+  "ui": {
+   "form": {
+    "groups": [
+     {
+      "title": "需求",
+      "fields": [
+       "applicant",
+       "dept",
+       "position",
+       "headcount",
+       "why",
+       "expected"
+      ]
+     },
+     {
+      "title": "條件",
+      "fields": [
+       "salary_min",
+       "salary_max",
+       "requirements"
+      ]
+     }
+    ]
+   },
+   "list": {
+    "columns": [
+     "dept",
+     "position",
+     "headcount",
+     "why"
+    ]
+   }
+  },
+  "output": {
+   "template": {
+    "theme": "voucher_standard",
+    "blocks": [
+     {
+      "type": "identity_header",
+      "title": "人員增補申請"
+     },
+     {
+      "type": "meta",
+      "fields": [
+       {
+        "label": "單號",
+        "path": "recordNo"
+       },
+       {
+        "label": "申請人",
+        "path": "fields.applicant"
+       },
+       {
+        "label": "需求部門",
+        "path": "fields.dept"
+       },
+       {
+        "label": "職稱",
+        "path": "fields.position"
+       },
+       {
+        "label": "人數",
+        "path": "fields.headcount"
+       },
+       {
+        "label": "增補原因",
+        "path": "fields.why"
+       },
+       {
+        "label": "期望到職日",
+        "path": "fields.expected",
+        "format": "date10"
+       },
+       {
+        "label": "條件說明",
+        "path": "fields.requirements"
+       }
+      ]
+     },
+     {
+      "type": "approval_sign"
+     },
+     {
+      "type": "identity_footer"
+     }
+    ]
+   }
+  }
+ }
+}

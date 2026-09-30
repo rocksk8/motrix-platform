@@ -31,6 +31,15 @@
 
   /** 表單分組：[{title, fields:[欄位物件…]}]。沒有分到組的欄位依欄位順序放在最後一組「其他」
    *  （完全沒設分組 ⇒ 一組、沒有標題）。已刪除的欄位 key 自動略過。 */
+  /** 區塊欄數：1～4 的整數，其他（沒設、0、亂值）＝0（自動）。 */
+  function colsOf(g) {
+    var n = g && g.columns
+    return (typeof n === 'number' && n >= 1 && n <= 4 && Math.floor(n) === n) ? n : 0
+  }
+
+  /** 區塊網格的 inline style（欄數 0＝自動排：不加，用 .cr-grid 預設）；窄螢幕由 CSS 收成 1 欄。 */
+  function gridStyle(columns) { return columns ? '--cr-cols:' + columns : '' }
+
   function formSections(def) {
     var fields = fieldsOf(def)
     var byKey = {}
@@ -40,7 +49,7 @@
     var out = []
     groups.forEach(function (g) {
       var fs = (g.fields || []).filter(function (k) { return byKey[k] && !used[k] }).map(function (k) { used[k] = true; return byKey[k] })
-      out.push({ title: g.title || '', fields: fs })
+      out.push({ title: g.title || '', fields: fs, columns: colsOf(g) })
     })
     var rest = fields.filter(function (f) { return !used[f.key] })
     if (rest.length) out.push({ title: out.length ? '其他' : '', fields: rest })
@@ -69,11 +78,20 @@
     if (key === '$status') return (stateLabels && stateLabels[rec.status]) || rec.status || ''
     if (key === '$createdBy') return rec.created_by || ''
     if (key === '$createdAt') return (rec.created_at || '').slice(0, 16).replace('T', ' ')
-    var v = (rec.data || {})[key]
+    return formatValue((rec.data || {})[key])
+  }
+
+  /** 值的顯示文字（列表、單據檢視共用）：布林 是／否、多選 用「、」串、區間「起 ～ 迄」、明細表「N 筆」、日期時間去掉 T。 */
+  function formatValue(v) {
     if (v === null || v === undefined) return ''
     if (v === true) return '是'
     if (v === false) return '否'
-    return String(v)
+    if (Array.isArray(v)) {
+      if (v.length && typeof v[0] === 'object') return v.length + ' 筆'
+      return v.join('、')
+    }
+    if (typeof v === 'object') return [v.from, v.to].filter(function (x) { return x }).map(function (x) { return String(x).replace('T', ' ') }).join(' ～ ')
+    return String(v).replace(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/, '$1 $2')
   }
 
   /** 陣列內移動一格（dir＝-1 上移、+1 下移）；超出邊界就不動。回傳新陣列。 */
@@ -565,8 +583,10 @@
     clone: _clone,
     SYSTEM_COLUMNS: SYSTEM_COLUMNS,
     formSections: formSections,
+    gridStyle: gridStyle,
     listColumns: listColumns,
     cellValue: cellValue,
+    formatValue: formatValue,
     move: move,
     // 編輯操作
     addGroup: addGroup,

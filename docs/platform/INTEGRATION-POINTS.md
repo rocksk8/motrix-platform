@@ -238,7 +238,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M01 案件：`modules/case/api/quotations.py::_append_items_to_quotation` |
+| 提供方 | M01 案件：`modules/case/api/quotations.py::_append_items_to_quotation`；L1 自訂模組附件：`helpers/custom_files.py::CustomFilesAccess`（`custom_records`；2026-09-30 建構器第三輪 S2，登記在 `routers/custom_records.py` 匯入時：暫存檔＝上傳者、已綁單＝有該模組權限者／引用該檔的單據簽核人，且看得到該欄位 `access.visibleTo`） |
 | 使用方 | M04 `modules/subcontract/api/vendor_contractors.py::import_dispatch_to_quote`（`POST /api/contractor-dispatches/{did}/import-to-quote`） |
 | 形式 | provider，單一提供者；要與呼叫端同一筆交易（呼叫端已拿寫鎖）⇒ 不用事件 |
 | 語法 | 提供：`_registry.provide("quotation.append_items", "quotations", _append_items_to_quotation)`<br>取用：`append = registry.single_provider("quotation.append_items")`；`None` ⇒ 退化。`append(conn, quote_no, header, items, now) -> now`；`items`＝`[{description, qty, unit, cost, note}]` |

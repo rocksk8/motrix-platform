@@ -13,6 +13,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests._e2e_login import inject_login  # noqa: E402
+from tests._builder_nav import go_step, start_blank  # noqa: E402
 
 KEY = "dnd_probe"
 SAVED = """() => { const e = document.getElementById('mb-save-state');
@@ -39,10 +40,8 @@ def _open(new_context, base, make_user, name):
     page.on("pageerror", lambda e: errors.append(str(e)))
     inject_login(page, base, user[0], user[1])
     page.goto(base + "/pages/module-builder.html")
-    page.fill("#mb-key", KEY)
-    page.click("#mb-open")
-    page.wait_for_selector("#mb-step-1", state="visible")
-    page.click('.mb-step[data-step="2"]')
+    start_blank(page, KEY)                       # 第三輪：新模組先出「從範本開始」，選空白
+    go_step(page, 2)
     page.wait_for_selector("#mb-step-2", state="visible")
     return page, errors
 
@@ -63,12 +62,14 @@ def test_palette_is_icon_and_text_for_every_catalog_type_and_enter_adds(live_ser
     u, pw = make_user(username="dnd_pal_api", role="superadmin")
     tok = client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]
     catalog = client.get("/api/custom-modules/catalog", headers={"Authorization": "Bearer " + tok}).json()
-    assert types == catalog["fieldTypes"], (types, catalog["fieldTypes"])     # 只來自 catalog，順序照舊
-    for t in types:
-        btn = page.locator('#mb-palette [data-palette-type="%s"]' % t)
-        assert btn.locator("svg").count() == 1, "型別 %s 沒有 icon" % t
-        assert btn.inner_text().strip(), "型別 %s 沒有文字" % t
-    page.locator('#mb-palette [data-palette-type="date"]').focus()
+    # 〔改題 2026-09-30〕第三輪元件列依目錄分組，一個型別可有多個元件（單選／下拉都是選項型）⇒ 比集合，順序不再等於 fieldTypes
+    assert set(types) == set(catalog["fieldTypes"]), (types, catalog["fieldTypes"])
+    btns = page.locator('#mb-palette [data-palette-element]')
+    for i in range(btns.count()):
+        btn = btns.nth(i)
+        assert btn.locator("svg").count() == 1, "元件 %s 沒有 icon" % btn.get_attribute("data-palette-element")
+        assert btn.inner_text().strip(), "元件 %s 沒有文字" % btn.get_attribute("data-palette-element")
+    page.locator('#mb-palette [data-palette-element="date"]').first.focus()
     page.keyboard.press("Enter")
     page.wait_for_selector('.mb-fc[data-field-index="0"]')
     _saved(page)
@@ -107,7 +108,7 @@ def test_in_place_label_and_required_land_in_the_draft(live_server, make_user, n
     page.click('#mb-palette [data-palette-type="text"]')
     page.click('#mb-palette [data-palette-type="number"]')
     page.click('.mb-fc[data-field-index="0"]')
-    page.wait_for_selector('.mb-fc[data-field-index="0"] #mb-f-label')
+    page.wait_for_selector('#mb-props-pane #mb-f-label')          # 第三輪：屬性在右欄屬性面板（id 不變）
     page.fill("#mb-f-label", "設備名稱")
     page.select_option("#mb-f-required", "true")
     page.locator('.mb-fc[data-field-index="1"] [data-quick-required="1"]').check()
@@ -119,27 +120,30 @@ def test_in_place_label_and_required_land_in_the_draft(live_server, make_user, n
 
 
 @pytest.mark.e2e
-def test_nav_has_seven_thumbnails_and_the_three_workflow_ones_scroll_within_step_4(live_server, make_user, new_context):
-    """〔改題 2026-09-27 第二輪：使用者把「欄位」「版面」合成「表單」一步 ⇒ 8 格變 7 格、沒有第 3 步〕
-    縮圖導覽 7 格；`.mb-step[data-step="4"]` 只有一個（既有 e2e 的選擇器不多抓）；簽核／通知兩格 ⇒ 第 4 步、捲到對應區塊；
-    有問題的步驟縮圖帶 data-has-problems=1（參照欄沒選對象）。"""
+def test_three_tabs_replace_the_seven_thumbnails_and_publish_is_a_drawer(live_server, make_user, new_context):
+    """〔改題 2026-09-30 建構器第三輪：使用者要求「三頁籤（作業資訊／表單設計／流程設計）＋發布獨立為主按鈕」，
+    取代 2026-09-27 第二輪的七格縮圖；內部步驟號 1、2、4、5、6 與 #mb-step-N 保留（沒有第 3 步）〕
+    頂列三個頁籤；作業資訊＝步驟 1＋5、表單設計＝2、流程設計＝4；「發布」是頂列主按鈕、開同頁抽屜（步驟 6）、Esc 關閉；
+    有問題的頁籤帶 data-has-problems=1（參照欄沒選對象 ⇒ 表單設計頁籤）；舊縮圖導覽已不存在。"""
     page, errors = _open(new_context, live_server, make_user, "dnd_nav")
-    assert page.locator("#mb-nav [data-nav]").count() == 7
-    assert page.locator('#mb-nav [data-step="3"]').count() == 0 and page.locator("#mb-step-3").count() == 0
-    assert page.locator('.mb-step[data-step="4"]').count() == 1
-    assert page.locator('#mb-nav [data-step="4"]').count() == 1, "簽核／通知兩格不可以帶 data-step（用 data-step-alias）"
-    assert page.locator('#mb-nav [data-step-alias="4"]').count() == 2
-    assert page.locator("#mb-nav [data-nav] .mb-nav__thumb").count() == 7
-    for nav, anchor in (("approval", "mb-sec-approval"), ("notify", "mb-sec-notify")):
-        page.click('#mb-nav [data-nav="%s"]' % nav)
-        page.wait_for_selector("#mb-step-4", state="visible")
-        page.wait_for_function("(n) => document.querySelector('#mb-nav [data-nav=\"' + n + '\"]').classList.contains('is-on')", arg=nav)
-        page.wait_for_function("(a) => { const r = document.getElementById(a).getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight }",
-                               arg=anchor)
-    page.click('.mb-step[data-step="2"]')
+    assert page.locator(".mb-tab").count() == 3 and page.locator("#mb-nav").count() == 0
+    assert page.locator('#mb-step-3').count() == 0 and page.locator('.mb-step').count() == 0
+    go_step(page, 1)
+    assert page.locator("#mb-step-5").is_visible() and not page.locator("#mb-step-2").is_visible()      # 作業資訊 ＝ 基本＋輸出
+    go_step(page, 4)
+    assert page.locator("#mb-step-4").is_visible() and not page.locator("#mb-step-1").is_visible()
+    assert page.locator("#mb-sec-workflow").is_visible() and page.locator("#mb-sec-approval").count() == 1
+    go_step(page, 2)
     page.click('#mb-palette [data-palette-type="ref"]')
     _saved(page)
-    page.wait_for_function("() => document.querySelector('.mb-step[data-step=\"2\"]').dataset.hasProblems === '1'")
+    page.wait_for_function("() => document.querySelector('.mb-tab[data-tab=\"form\"]').dataset.hasProblems === '1'")
+    # 發布：同頁抽屜，不跳頁、不開彈窗
+    url = page.url
+    page.click("#mb-publish-open")
+    page.wait_for_selector("#mb-drawer #mb-step-6", state="visible")
+    assert page.url == url and len(page.context.pages) == 1
+    page.keyboard.press("Escape")
+    page.wait_for_selector("#mb-drawer", state="hidden")
     assert not errors, errors
 
 
@@ -173,16 +177,20 @@ def test_output_and_list_previews_follow_the_canvas_on_the_same_screen(live_serv
     page.locator("#mb-f-label").click()
     page.keyboard.type("設備名稱甲", delay=40)
     _saved(page)
-    out = page.frame_locator("#mb-output-host iframe")
-    lst = page.frame_locator("#mb-list-host iframe")
-    out.locator("body:has-text('設備名稱甲')").wait_for(state="attached", timeout=15000)
-    lst.locator("body:has-text('設備名稱甲')").wait_for(state="attached", timeout=15000)
-    assert page.locator("#mb-output-host iframe").is_visible() and page.locator("#mb-list-host iframe").is_visible()
     assert page.evaluate("() => document.activeElement && document.activeElement.id") == "mb-f-label"
     page.fill("#mb-f-label", "設備名稱乙")
+    _saved(page)
+    # 〔改題 2026-09-30 建構器第三輪：輸出預覽與列表預覽改成右欄同頁頁籤（屬性｜輸出預覽｜列表預覽），不再同時顯示；
+    # 仍不跳頁、不開彈窗。預覽只在該頁籤開著時渲染 ⇒ 切過去再等內容跟上最新名稱〕
+    page.click("#mb-side-output")
+    out = page.frame_locator("#mb-output-host iframe")
     out.locator("body:has-text('設備名稱乙')").wait_for(state="attached", timeout=15000)
+    assert page.locator("#mb-output-host iframe").is_visible() and not page.locator("#mb-list-host iframe").is_visible()
+    page.click("#mb-side-list")
+    lst = page.frame_locator("#mb-list-host iframe")
     lst.locator("body:has-text('設備名稱乙')").wait_for(state="attached", timeout=15000)
-    assert page.locator("#mb-output-host iframe").count() == 1 and page.locator("#mb-list-host iframe").count() == 1   # 不重建
+    assert page.locator("#mb-list-host iframe").is_visible() and not page.locator("#mb-output-host iframe").is_visible()
+    assert page.locator("#mb-output-host iframe").count() == 1 and page.locator("#mb-list-host iframe").count() == 1   # 不重建（原斷言保留）
     assert not errors, errors
 
 
@@ -216,7 +224,7 @@ def test_formula_readable_swaps_keys_for_labels_and_operators_for_math_signs(new
 
 def _label(page, i, text):
     page.click('.mb-fc[data-field-index="%d"]' % i)
-    page.wait_for_selector('.mb-fc[data-field-index="%d"] #mb-f-label' % i)
+    page.wait_for_selector('#mb-props-pane [data-props-for="%d"] #mb-f-label' % i)
     page.fill("#mb-f-label", text)
 
 

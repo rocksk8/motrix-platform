@@ -13,6 +13,7 @@
 本檔不碰 FastAPI；HTTP 由 `routers/custom_records.py` 包。寫入的函式吃呼叫端的連線、自己 commit。
 """
 import json
+import os
 import math
 import re
 from datetime import date, datetime
@@ -24,7 +25,116 @@ KEY_RE = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
 STATE_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,29}$")
 PREFIX_RE = re.compile(r"^[A-Z][A-Z0-9]{0,5}$")
 #: 欄位型別目錄：自訂欄位的型別＋公式（唯讀、由公式算出）＋參照（指到其他資料）
-FIELD_TYPES = _cf.TYPES + ("formula", "ref")
+FIELD_TYPES = _cf.MODULE_TYPES + ("formula", "ref", "table", "file", "image")
+#: 明細表（`table`）的限制與可用欄型別（W1 建構器第三輪，2026-09-30）
+TABLE_MAX_ROWS, TABLE_MAX_COLS = 200, 12
+TABLE_COL_TYPES = ("text", "number", "date", "select", "checkbox", "formula")
+#: 金流性質（附錄 B）：欄位 `finance.kind`；缺／none ＝不計
+FINANCE_KINDS = ("income", "expense")
+#: 預設值 token（伺服器在建立單據時決定，不信前端）：`{"$": "today"｜"now"｜"requester"}`
+DEFAULT_TOKENS = ("today", "now", "requester")
+
+#: 建構器的元件分組（`fieldElements[].group` 用它）
+ELEMENT_GROUPS = [{"id": "basic", "label": "基礎元件"}, {"id": "layout", "label": "版面元件"}, {"id": "org", "label": "組織元件"}, {"id": "advanced", "label": "進階元件"}]
+#: 元件列（建構器左欄）：一個元件＝一個型別＋預設屬性（preset）。型別本身一律要在 FIELD_TYPES 內。
+FIELD_ELEMENTS = [
+    {"id": "text", "type": "text", "label": "單行文字", "group": "basic", "preset": {}},
+    {"id": "textarea", "type": "textarea", "label": "多行文字", "group": "basic", "preset": {}},
+    {"id": "datetime", "type": "date", "label": "日期時間", "group": "basic", "preset": {"withTime": True}},
+    {"id": "date", "type": "date", "label": "日期", "group": "basic", "preset": {}},
+    {"id": "daterange", "type": "daterange", "label": "日期時間區間", "group": "basic", "preset": {"withTime": True}},
+    {"id": "number", "type": "number", "label": "數字", "group": "basic", "preset": {}},
+    {"id": "radio", "type": "radio", "label": "單選", "group": "basic", "preset": {"options": ["選項一", "選項二"]}},
+    {"id": "checkboxes", "type": "checkboxes", "label": "複選", "group": "basic", "preset": {"options": ["選項一", "選項二"]}},
+    {"id": "select", "type": "select", "label": "下拉單選", "group": "basic", "preset": {"options": ["選項一", "選項二"]}},
+    {"id": "multiselect", "type": "multiselect", "label": "下拉複選", "group": "basic", "preset": {"options": ["選項一", "選項二"]}},
+    {"id": "checkbox", "type": "checkbox", "label": "勾選（是／否）", "group": "basic", "preset": {}},
+    {"id": "table", "type": "table", "label": "明細表", "group": "layout", "preset": {
+        "minRows": 0, "maxRows": 200, "addLabel": "新增一列", "columns": [
+            {"key": "item", "label": "項目", "type": "text"}, {"key": "qty", "label": "數量", "type": "number"},
+            {"key": "price", "label": "單價", "type": "number"}, {"key": "amt", "label": "金額", "type": "formula", "formula": "qty * price"}]}},
+    {"id": "formula", "type": "formula", "label": "公式（唯讀）", "group": "advanced", "preset": {}},
+    {"id": "ref", "type": "ref", "label": "參照", "group": "advanced", "preset": {}},
+    {"id": "file", "type": "file", "label": "附件（檔案）", "group": "advanced", "preset": {}},
+    {"id": "image", "type": "image", "label": "圖片", "group": "advanced", "preset": {}},
+    {"id": "user", "type": "ref", "label": "人員（單選）", "group": "org", "preset": {"target": "users"}},
+    {"id": "users", "type": "ref", "label": "人員（複選）", "group": "org", "preset": {"target": "users", "multiple": True}},
+    {"id": "dept", "type": "ref", "label": "部門（單選）", "group": "org", "preset": {"target": "departments"}},
+    {"id": "depts", "type": "ref", "label": "部門（複選）", "group": "org", "preset": {"target": "departments", "multiple": True}},
+]
+#: 每個型別在屬性面板可設的屬性（面板依它產生；kind：text／int／number／bool／options／columns／exts）
+FIELD_ATTRS = {
+    "text": [("placeholder", "提示語", "text"), ("default", "預設值", "text"), ("maxLength", "最大長度", "int"), ("unique", "不可重複", "bool")],
+    "textarea": [("placeholder", "提示語", "text"), ("maxLength", "最大長度", "int")],
+    "number": [("placeholder", "提示語", "text"), ("min", "最小值", "number"), ("max", "最大值", "number"), ("unique", "不可重複", "bool")],
+    "date": [("withTime", "包含時間", "bool")],
+    "daterange": [("withTime", "包含時間", "bool")],
+    "radio": [("options", "選項（一行一個）", "options"), ("allowOther", "允許「其他」自己輸入", "bool")],
+    "checkboxes": [("options", "選項（一行一個）", "options"), ("allowOther", "允許「其他」自己輸入", "bool"),
+                   ("minSelect", "至少選幾項", "int"), ("maxSelect", "最多選幾項", "int")],
+    "select": [("options", "選項（一行一個）", "options"), ("allowOther", "允許「其他」自己輸入", "bool")],
+    "multiselect": [("options", "選項（一行一個）", "options"), ("allowOther", "允許「其他」自己輸入", "bool"),
+                    ("minSelect", "至少選幾項", "int"), ("maxSelect", "最多選幾項", "int")],
+    "checkbox": [], "formula": [], "ref": [("multiple", "可複選", "bool")],
+    "file": [("accept", "允許的檔案類型（不勾＝全部）", "exts"), ("maxFiles", "最多幾個檔", "int")],
+    "image": [("maxFiles", "最多幾張圖", "int")],
+    "table": [("columns", "欄位", "columns"), ("minRows", "最少列數", "int"), ("maxRows", "最多列數", "int"), ("addLabel", "新增列按鈕文字", "text")],
+}
+
+
+def field_type_specs() -> dict:
+    """給建構器的型別規格：`{型別: {attrs: [{key, label, kind}]}}`（型別清單與屬性面板都由這裡產生，頁面不寫死）。"""
+    return {t: {"attrs": [{"key": k, "label": l, "kind": kd} for k, l, kd in FIELD_ATTRS.get(t, [])]} for t in FIELD_TYPES}
+
+
+# ── 範本（W1 建構器第三輪）：`helpers/form_templates/*.json`，程式出貨的資料；載入時驗證，壞的不列 ─────────────
+_TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "form_templates")
+
+
+def templates(include_gaps: bool = False):
+    """⇒ `[{key, name, category, description, note, requires}]`（要整份內容用 `template_body`）。
+    每個範本載入時用 `validate_module` 驗一次；驗不過或檔案壞掉 ⇒ 不列，`include_gaps=True` 時另回 `[{key, reason}]`。
+    `requires`＝範本用到的欄位型別（含明細表欄型別）；有任何型別不在 `FIELD_TYPES` ⇒ 不列（型別就緒的才出現）。"""
+    out, gaps = [], []
+    for name in sorted(os.listdir(_TEMPLATE_DIR)) if os.path.isdir(_TEMPLATE_DIR) else []:
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(_TEMPLATE_DIR, name), encoding="utf-8") as fh:
+                t = json.load(fh)
+            key, body = t["key"], t["body"]
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            gaps.append({"key": name, "reason": "範本檔讀不出來：%s" % e})
+            continue
+        types = sorted({f.get("type") for f in body.get("fields", []) if isinstance(f, dict)} |
+                       {c.get("type") for f in body.get("fields", []) if isinstance(f, dict) and f.get("type") == "table"
+                        for c in f.get("columns", []) if isinstance(c, dict)})
+        if any(x not in FIELD_TYPES + ("formula",) for x in types):
+            gaps.append({"key": key, "reason": "用到還沒就緒的型別：%s" % "、".join(x for x in types if x not in FIELD_TYPES)})
+            continue
+        probs = validate_module(dict(body, permission="custom.%s" % key), key if KEY_RE.match(key) else "")
+        if probs:
+            gaps.append({"key": key, "reason": "驗證不過：%s" % probs[0]["message"]})
+            continue
+        out.append({"key": key, "name": t.get("name") or key, "category": t.get("category", ""), "description": t.get("description", ""),
+                    "note": t.get("note", ""), "requires": types})
+    return (out, gaps) if include_gaps else out
+
+
+def template_body(key: str):
+    """範本的整份定義（深拷貝）；不存在或沒通過載入驗證 ⇒ None。"""
+    if not any(t["key"] == key for t in templates()):
+        return None
+    for name in sorted(os.listdir(_TEMPLATE_DIR)):
+        if name.endswith(".json"):
+            try:
+                with open(os.path.join(_TEMPLATE_DIR, name), encoding="utf-8") as fh:
+                    t = json.load(fh)
+            except (OSError, ValueError):
+                continue
+            if isinstance(t, dict) and t.get("key") == key:
+                return t["body"]
+    return None
 DATE_FORMATS = {"YYYYMMDD": "%Y%m%d", "YYYYMM": "%Y%m", "": ""}
 EVENT_TRANSITIONED = "custom_module.transitioned"
 
@@ -70,6 +180,7 @@ def ref_targets() -> dict:
 # 與 routers/customers.py 的讀取權限相同：不可以經參照欄讀到自己沒有權限看的客戶清單
 register_ref_target("customers", "customers", "name", modules=("customer", "case_manage", "dev_crm", "procurement"))
 register_ref_target("users", "users", "display_name", "username")
+register_ref_target("departments", "departments", "name")      # 組織元件（部門）：登入即可讀部門名稱
 
 
 # ── 定義驗證（每一項帶位置）────────────────────────────────────────────────
@@ -103,6 +214,10 @@ def validate_module(body: dict, key: str = "") -> list:
     out += _validate_fields(fields)
     keys = [f.get("key") for f in fields if isinstance(f, dict)]
     out += _validate_workflow(body.get("workflow"), keys)
+    out += _validate_finance([f for f in fields if isinstance(f, dict)], body)
+    if not out:
+        from . import custom_builder_support as _S       # 可見設定：形狀＋公式洩漏（只在前面都對時才算，公式才解析得了）
+        out += _S.access_problems(body) + _S.leaking_formulas(body)
     if not out:
         out += _validate_by_sample(body)
     out += _validate_output(body)
@@ -174,7 +289,7 @@ def _validate_fields(fields):
                 out.append(_p(p + ".key", "key 只能用小寫英文、數字與底線，英文開頭，最長 40 字：%r" % (k,)))
             if not str(f.get("label") or "").strip():
                 out.append(_p(p + ".label", "必須有顯示名稱"))
-            for prob in _fx.check(f.get("formula"), [x for x in keys if x != k]):
+            for prob in _fx.check(f.get("formula"), [x for x in keys if x != k], table_columns(fields)):
                 out.append(_p(p + ".formula", "第 %d 字：%s" % (prob["pos"] + 1, prob["message"])))
         elif t == "ref":
             if not _cf.KEY_RE.match(str(k or "")):
@@ -184,8 +299,18 @@ def _validate_fields(fields):
             target = str(f.get("target") or "")
             if not (target in _REF_TARGETS or (target.startswith("custom:") and KEY_RE.match(target[7:]))):
                 out.append(_p(p + ".target", "不認得的參照對象 %r（可用：%s、custom:<模組>）" % (target, "、".join(sorted(_REF_TARGETS)))))
+            if "multiple" in f and not isinstance(f["multiple"], bool):
+                out.append(_p(p + ".multiple", "multiple 要是 true／false"))
+        elif t == "table":
+            out += _validate_table(p, f)
+        elif t in ("file", "image"):
+            out += _validate_file_field(p, f)
         else:
-            for prob in _cf.validate_definition({"fields": [f]}):
+            tok = _default_token(f)
+            if tok is not None:
+                out += _validate_token(p, f, tok)
+                f = {k: v for k, v in f.items() if k != "default"}       # token 由伺服器決定，型別驗證不看它
+            for prob in _cf.validate_definition({"fields": [f]}, types=_cf.MODULE_TYPES):
                 out.append(_p(prob["path"].replace("fields[0]", p, 1), prob["message"]))
     formulas = {f["key"]: f.get("formula") for f in fields if isinstance(f, dict) and f.get("type") == "formula" and f.get("key")}
     try:
@@ -193,6 +318,165 @@ def _validate_fields(fields):
     except _fx.FormulaError as e:
         out.append(_p("fields", str(e)))
     return out
+
+
+def _validate_file_field(p, f):
+    """附件欄：key／label；`accept` 只能是白名單（jpg／png／pdf）的子集（image 型別只有 jpg／png）；`maxFiles` 1～50。"""
+    from . import custom_files as _cfiles
+    out = []
+    if not _cf.KEY_RE.match(str(f.get("key") or "")):
+        out.append(_p(p + ".key", "key 只能用小寫英文、數字與底線，英文開頭，最長 40 字：%r" % (f.get("key"),)))
+    if not str(f.get("label") or "").strip():
+        out.append(_p(p + ".label", "必須有顯示名稱"))
+    acc = f.get("accept")
+    if acc is not None:
+        base = _cfiles.IMAGE_EXTS if f.get("type") == "image" else _cfiles.ALLOWED_EXTS
+        if not isinstance(acc, list) or any(not isinstance(x, str) for x in acc):
+            out.append(_p(p + ".accept", "accept 要是副檔名清單"))
+        else:
+            bad = [x for x in acc if x.strip().lower().lstrip(".") not in base and x.strip()]
+            if bad:
+                out.append(_p(p + ".accept", "不允許的副檔名：%s（可用：%s）" % ("、".join(bad), "、".join(sorted(set(e for e in base if e != "jpeg"))))))
+    mx = f.get("maxFiles")
+    if mx is not None and (isinstance(mx, bool) or not isinstance(mx, int) or not 1 <= mx <= 50):
+        out.append(_p(p + ".maxFiles", "最多檔數要是 1～50 的整數"))
+    if f.get("default") is not None:
+        out.append(_p(p + ".default", "附件欄不能設預設值"))
+    return out
+
+
+def _default_token(f):
+    """欄位的 `default` 是 `{"$": token}` ⇒ token 字串（可能不合法）；不是 ⇒ None。"""
+    d = f.get("default")
+    return d.get("$", "") if isinstance(d, dict) else None
+
+
+def _validate_token(p, f, tok):
+    """token 只准用在對應型別：today→date、now→date（含時間）、requester→ref(users)。"""
+    ok = {"today": f.get("type") == "date", "now": f.get("type") == "date" and bool(f.get("withTime")),
+          "requester": f.get("type") == "ref" and f.get("target") == "users"}.get(tok)
+    if tok not in DEFAULT_TOKENS:
+        return [_p(p + ".default", "預設值只認得 %s：%r" % ("、".join(DEFAULT_TOKENS), tok))]
+    if not ok:
+        return [_p(p + ".default", "預設值「%s」不能用在這個型別的欄位" % tok)]
+    return []
+
+
+def _with_default_tokens(body, values, user):
+    """建立單據時，把沒填的欄位的 token 預設值換成伺服器當下的值（不信前端）。"""
+    values = dict(values) if isinstance(values, dict) else {}
+    now = datetime.now()
+    for f in body.get("fields", []):
+        tok = _default_token(f) if isinstance(f, dict) else None
+        if tok is None or values.get(f["key"]) not in (None, ""):
+            continue
+        if tok == "today":
+            values[f["key"]] = now.strftime("%Y-%m-%dT%H:%M") if f.get("withTime") else now.date().isoformat()
+        elif tok == "now":
+            values[f["key"]] = now.strftime("%Y-%m-%dT%H:%M")
+        elif tok == "requester":
+            values[f["key"]] = user.get("username")
+    return values
+
+
+def table_columns(fields) -> dict:
+    """`{明細表 key: [可加總的數值欄 key…]}`（number 欄與列內公式欄；供公式檢查用）。"""
+    out = {}
+    for f in fields or []:
+        if isinstance(f, dict) and f.get("type") == "table" and f.get("key"):
+            out[f["key"]] = [c.get("key") for c in (f.get("columns") or [])
+                             if isinstance(c, dict) and c.get("type") in ("number", "formula") and c.get("key")]
+    return out
+
+
+def _validate_table(p, f):
+    """明細表欄位：key／label、欄（型別白名單、key 唯一、列內公式只能引用同表的欄）、列數範圍。"""
+    out = []
+    if not _cf.KEY_RE.match(str(f.get("key") or "")):
+        out.append(_p(p + ".key", "key 只能用小寫英文、數字與底線，英文開頭，最長 40 字：%r" % (f.get("key"),)))
+    if not str(f.get("label") or "").strip():
+        out.append(_p(p + ".label", "必須有顯示名稱"))
+    cols = f.get("columns")
+    if not isinstance(cols, list) or not cols:
+        return out + [_p(p + ".columns", "明細表至少要有一欄")]
+    if len(cols) > TABLE_MAX_COLS:
+        out.append(_p(p + ".columns", "明細表最多 %d 欄" % TABLE_MAX_COLS))
+    seen, ckeys = set(), [c.get("key") for c in cols if isinstance(c, dict)]
+    for j, c in enumerate(cols):
+        cp = "%s.columns[%d]" % (p, j)
+        if not isinstance(c, dict):
+            out.append(_p(cp, "欄必須是物件"))
+            continue
+        ck, ct = c.get("key"), c.get("type")
+        if not _cf.KEY_RE.match(str(ck or "")):
+            out.append(_p(cp + ".key", "key 只能用小寫英文、數字與底線，英文開頭，最長 40 字：%r" % (ck,)))
+        elif ck in seen:
+            out.append(_p(cp + ".key", "欄 key 重複：%s" % ck))
+        seen.add(ck)
+        if not str(c.get("label") or "").strip():
+            out.append(_p(cp + ".label", "必須有顯示名稱"))
+        if ct not in TABLE_COL_TYPES:
+            out.append(_p(cp + ".type", "明細表的欄只能是：%s" % "、".join(TABLE_COL_TYPES)))
+        elif ct == "formula":
+            for prob in _fx.check(c.get("formula"), [x for x in ckeys if x != ck]):
+                out.append(_p(cp + ".formula", "第 %d 字：%s" % (prob["pos"] + 1, prob["message"])))
+        else:
+            for prob in _cf.validate_definition({"fields": [c]}, types=TABLE_COL_TYPES):
+                out.append(_p(prob["path"].replace("fields[0]", cp, 1), prob["message"]))
+    forms = {c["key"]: c.get("formula") for c in cols if isinstance(c, dict) and c.get("type") == "formula" and c.get("key")}
+    try:
+        _fx.evaluation_order(forms)
+    except _fx.FormulaError as e:
+        out.append(_p(p + ".columns", str(e)))
+    for bound, dflt in (("minRows", 0), ("maxRows", TABLE_MAX_ROWS)):
+        v = f.get(bound, dflt)
+        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= TABLE_MAX_ROWS:
+            out.append(_p(p + "." + bound, "列數必須是 0～%d 的整數" % TABLE_MAX_ROWS))
+    if isinstance(f.get("minRows"), int) and isinstance(f.get("maxRows"), int) and f["minRows"] > f["maxRows"]:
+        out.append(_p(p + ".minRows", "最少列數不可大於最多列數"))
+    return out
+
+
+def _validate_finance(fields, body):
+    """金流性質（附錄 B）：`finance.kind` 只能掛在 number／formula；日期欄引用 date；案件欄引用 text／ref；要有入帳狀態。"""
+    out = []
+    by_key = {f.get("key"): f for f in fields if isinstance(f, dict)}
+    any_finance = False
+    for i, f in enumerate(fields):
+        fin = f.get("finance") if isinstance(f, dict) else None
+        if fin is None or (isinstance(fin, dict) and fin.get("kind") in (None, "", "none")):
+            continue
+        p = "fields[%d].finance" % i
+        if not isinstance(fin, dict) or fin.get("kind") not in FINANCE_KINDS:
+            out.append(_p(p + ".kind", "金流性質只能是 %s 或不計" % "、".join(FINANCE_KINDS)))
+            continue
+        any_finance = True
+        if f.get("type") not in ("number", "formula"):
+            out.append(_p(p, "只有數字或公式欄位可以設金流性質"))
+        for name, types in (("dateField", ("date",)), ("cashDateField", ("date",)), ("caseField", ("text", "ref")),
+                            ("cashAmountField", ("number", "formula"))):
+            ref = fin.get(name)
+            if ref in (None, ""):
+                continue
+            tgt = by_key.get(ref)
+            if tgt is None or tgt.get("type") not in types:
+                out.append(_p(p + "." + name, "%s 必須是%s欄位：%r" % (
+                    {"dateField": "歸屬日期", "cashDateField": "現金日期", "caseField": "關聯案件", "cashAmountField": "現金口徑金額"}[name],
+                    "日期" if types == ("date",) else ("數字或公式" if name == "cashAmountField" else "文字或參照"), ref)))
+    if any_finance:
+        states = {s.get("key") for s in (body.get("workflow") or {}).get("states", []) if isinstance(s, dict)}
+        ps = (body.get("finance") or {}).get("postStates")
+        if ps is not None and (not isinstance(ps, list) or not ps or not set(ps) <= states):
+            out.append(_p("finance.postStates", "入帳狀態必須是流程裡存在的狀態"))
+        elif ps is None and not _derive_post_states(body):
+            out.append(_p("finance.postStates", "有金流欄位，但流程沒有簽核核准後的終態可推導入帳狀態：請指定入帳狀態"))
+    return out
+
+
+def _derive_post_states(body):
+    """入帳狀態的預設推導：簽核 `on_approved` 指向的狀態（沒有簽核的模組 ⇒ 空，需指定）。"""
+    return sorted({(s.get("approval") or {}).get("on_approved") for s in (body.get("workflow") or {}).get("states", [])
+                   if isinstance(s, dict) and (s.get("approval") or {}).get("on_approved")})
 
 
 def _validate_workflow(wf, field_keys):
@@ -340,17 +624,147 @@ def _input_fields(body):
     return [f for f in body.get("fields", []) if f.get("type") not in ("formula",)]
 
 
+def unique_errors(conn, module_key, body, vals, exclude_id=None) -> list:
+    """欄位屬性 `unique`（不可重複）：同一模組其他單據已有相同的值 ⇒ 錯誤。只比 text／number，靠欄位索引。"""
+    out = []
+    for f in body.get("fields", []):
+        if not (isinstance(f, dict) and f.get("unique") and f.get("type") in ("text", "number")):
+            continue
+        v = vals.get(f["key"])
+        if v is None:
+            continue
+        row = conn.execute("SELECT 1 FROM custom_record_values WHERE module_key=? AND field=? AND value_text=? AND record_id != ? LIMIT 1",
+                           (module_key, f["key"], v if isinstance(v, str) else json.dumps(v, ensure_ascii=False),
+                            exclude_id if exclude_id is not None else -1)).fetchone()
+        if row:
+            out.append({"key": f["key"], "message": "%s：已有其他單據使用「%s」" % (f.get("label") or f["key"], v)})
+    return out
+
+
+def clean_table(f: dict, raw) -> tuple:
+    """明細表的值 ⇒ `(rows, errors)`。逐列逐欄用同一套 `_coerce`；列內公式在欄位清理後、依引用順序算；
+    整列全空的列丟掉；錯誤帶路徑 key（`tbl[3].col`）。"""
+    cols = [c for c in f.get("columns") or [] if isinstance(c, dict)]
+    label = f.get("label") or f["key"]
+    if raw is None or raw == "":
+        raw = []
+    if not isinstance(raw, list):
+        return None, [{"key": f["key"], "message": "%s：必須是列的清單" % label}]
+    errors, rows = [], []
+    forms = {c["key"]: c["formula"] for c in cols if c.get("type") == "formula"}
+    order = _fx.evaluation_order(forms) if forms else []
+    for i, r in enumerate(raw):
+        if not isinstance(r, dict):
+            errors.append({"key": "%s[%d]" % (f["key"], i), "message": "%s 第 %d 列：必須是物件" % (label, i + 1)})
+            continue
+        row = {}
+        for c in cols:
+            if c.get("type") == "formula":
+                continue
+            v = r.get(c["key"])
+            if (v is None or v == "") and "default" in c:
+                v = c["default"]
+            ok, val, msg = _cf._coerce(c, v)
+            if not ok:
+                errors.append({"key": "%s[%d].%s" % (f["key"], i, c["key"]),
+                               "message": "%s 第 %d 列 %s：%s" % (label, i + 1, c.get("label") or c["key"], msg)})
+            elif val is None:
+                if c.get("required") and any(x not in (None, "") for x in r.values()):
+                    errors.append({"key": "%s[%d].%s" % (f["key"], i, c["key"]),
+                                   "message": "%s 第 %d 列 %s：必填" % (label, i + 1, c.get("label") or c["key"])})
+            else:
+                row[c["key"]] = val
+        if not row:
+            continue                                             # 整列空白 ⇒ 不收
+        for k in order:
+            try:
+                row[k] = _fx.evaluate(forms[k], row)
+                if isinstance(row[k], float) and not math.isfinite(row[k]):
+                    raise _fx.FormulaError("結果不是有限的數字")
+            except _fx.FormulaError as e:
+                row[k] = None
+                errors.append({"key": "%s[%d].%s" % (f["key"], i, k),
+                               "message": "%s 第 %d 列：公式無法計算（%s）" % (label, i + 1, e)})
+        rows.append(row)
+    mx = f.get("maxRows", TABLE_MAX_ROWS)
+    mn = f.get("minRows", 0) or (1 if f.get("required") else 0)
+    if len(rows) > mx:
+        errors.append({"key": f["key"], "message": "%s：最多 %d 列" % (label, mx)})
+    if len(rows) < mn:
+        errors.append({"key": f["key"], "message": "%s：至少 %d 列" % (label, mn)})
+    return rows, errors
+
+
 def clean_values(conn, body: dict, values) -> tuple:
     """回 `(乾淨的值（含公式結果）, 錯誤, 丟掉的鍵)`。公式欄位不收輸入（送了也丟掉並回報）。"""
     values = values if isinstance(values, dict) else {}
-    plain = [dict(f, type="text") if f.get("type") == "ref" else f for f in _input_fields(body)]
+    tables = [f for f in _input_fields(body) if f.get("type") == "table"]
+    multi_refs = [f for f in _input_fields(body) if f.get("type") == "ref" and f.get("multiple")]
+    file_fields = [f for f in _input_fields(body) if f.get("type") in ("file", "image")]
+    plain = [dict(f, type="text") if f.get("type") == "ref" else f for f in _input_fields(body)
+             if f.get("type") not in ("table", "file", "image") and not (f.get("type") == "ref" and f.get("multiple"))]
+    plain = [{k: v for k, v in f.items() if not (k == "default" and isinstance(v, dict))} for f in plain]      # token 預設在 create_record 換掉
     out, errors, dropped = _cf.clean(values, {"fields": plain})
+    dropped = [k for k in dropped if k not in {t["key"] for t in tables}]
+    for t in tables:
+        rows, terr = clean_table(t, values.get(t["key"]))
+        errors += terr
+        if rows:
+            out[t["key"]] = rows
+    from . import custom_files as _cfiles
+    for f in file_fields:
+        ids, ferrs = _cfiles.clean_ids(f, values.get(f["key"]))
+        errors += ferrs
+        if ids:
+            out[f["key"]] = ids
+    for f in multi_refs:
+        picked, rerrs = _clean_multi_ref(conn, f, values.get(f["key"]))
+        errors += rerrs
+        if picked:
+            out[f["key"]] = picked
     for f in _input_fields(body):
-        if f.get("type") == "ref" and out.get(f["key"]) is not None:
+        if f.get("type") == "ref" and not f.get("multiple") and out.get(f["key"]) is not None:
             if not _ref_exists(conn, f["target"], out[f["key"]]):
                 errors.append({"key": f["key"], "message": "%s：參照不到 %s" % (f.get("label") or f["key"], out[f["key"]])})
     computed, ferrors = compute(body, out)
     return computed, errors + ferrors, dropped
+
+
+def _clean_multi_ref(conn, f, raw):
+    """複選參照（人員／部門）⇒ (去重後的代號清單, 錯誤)。每一個都要參照得到；必填＝至少一個；不是清單 ⇒ 錯。"""
+    label = f.get("label") or f["key"]
+    if raw is None or raw == "" or raw == []:
+        return [], ([{"key": f["key"], "message": "%s：必填" % label}] if f.get("required") else [])
+    if not isinstance(raw, list) or any(isinstance(x, (dict, list, bool)) or x is None for x in raw):
+        return [], [{"key": f["key"], "message": "%s：要是代號清單" % label}]
+    seen, picked = set(), []
+    for x in raw:
+        s = str(x).strip()
+        if s and s not in seen:
+            seen.add(s)
+            picked.append(s)
+    errors = [{"key": f["key"], "message": "%s：參照不到 %s" % (label, s)} for s in picked if not _ref_exists(conn, f["target"], s)]
+    return picked, errors
+
+
+def ref_labels(conn, body: dict, data: dict) -> dict:
+    """單據裡參照欄的顯示名稱 `{欄位: 名稱或名稱清單}`（單據檢視用；查不到的代號原樣保留）。"""
+    out = {}
+    for f in body.get("fields", []):
+        if not isinstance(f, dict) or f.get("type") != "ref" or data.get(f["key"]) in (None, "", []):
+            continue
+        v = data[f["key"]]
+        one = lambda x, t=f["target"]: _ref_label(conn, t, x)
+        out[f["key"]] = [one(x) for x in v] if isinstance(v, list) else one(v)
+    return out
+
+
+def _ref_label(conn, target, value):
+    if target.startswith("custom:") or target not in _REF_TARGETS:
+        return str(value)
+    table, label, idc = _REF_TARGETS[target]
+    r = conn.execute("SELECT %s AS l FROM %s WHERE %s=?" % (label, table, idc), (value,)).fetchone()
+    return (r["l"] if r and r["l"] else str(value))
 
 
 def _ref_exists(conn, target, value) -> bool:
@@ -399,15 +813,37 @@ def compute(body: dict, values: dict) -> tuple:
     return out, errors
 
 
-_SAMPLES = {"text": "範例文字", "number": 1, "date": "2026-09-25", "checkbox": True}
+_SAMPLES = {"text": "範例文字", "textarea": "範例文字", "number": 1, "date": "2026-09-25", "checkbox": True}
+
+
+def _sample_of(f):
+    t = f.get("type")
+    if t in ("select", "radio"):
+        return (f.get("options") or ["選項"])[0]
+    if t in ("checkboxes", "multiselect"):
+        return [(f.get("options") or ["選項"])[0]]
+    if t == "daterange":
+        return {"from": "2026-09-25T09:00" if f.get("withTime") else "2026-09-25",
+                "to": "2026-09-26T18:00" if f.get("withTime") else "2026-09-26"}
+    if t == "date" and f.get("withTime"):
+        return "2026-09-25T09:00"
+    if t == "ref" and f.get("multiple"):
+        return ["範例"]
+    if t in ("file", "image"):
+        return []
+    return _SAMPLES.get(t, "範例")
 
 
 def sample_values(body: dict) -> dict:
-    """每個輸入欄位一個樣本值（依型別）＋公式算出的值。"""
+    """每個輸入欄位一個樣本值（依型別）＋公式算出的值。明細表給一列樣本（列內公式也算）。"""
     vals = {}
     for f in _input_fields(body):
-        t = f.get("type")
-        vals[f["key"]] = (f.get("options") or ["選項"])[0] if t == "select" else _SAMPLES.get(t, "範例")
+        if f.get("type") == "table":
+            row = {c["key"]: _sample_of(c) for c in f.get("columns") or [] if isinstance(c, dict) and c.get("type") != "formula"}
+            rows, _e = clean_table(dict(f, required=False, minRows=0), [row])
+            vals[f["key"]] = rows or []
+        else:
+            vals[f["key"]] = _sample_of(f)
     vals, _e = compute(body, vals)
     return vals
 
@@ -537,11 +973,12 @@ def visible_to(mods, user) -> list:
     唯一一份：`GET /api/custom-modules` 與 `GET /api/platform/menu`（C4 選單）共用。"""
     if user.get("role") == "superadmin":
         return list(mods)
+    from .custom_builder_support import can_see_menu       # menu.visibleTo（角色／帳號，後端強制）
     try:
         mine = set(json.loads(user.get("modules") or "[]"))
     except (TypeError, ValueError):
         mine = set()
-    return [m for m in mods if m.get("permission") in mine]
+    return [m for m in mods if m.get("permission") in mine and can_see_menu(m.get("menu"), user)]
 
 
 def permission_of(module_key, body) -> str:
@@ -586,8 +1023,11 @@ def _write_index(conn, rec_id, module_key, vals):
         if v is None:
             continue
         num = v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+        text = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
+        if isinstance(v, list) and v and isinstance(v[0], dict):     # 明細表：索引只記列數，不把整份 JSON 放進 value_text
+            num, text = len(v), "%d 筆" % len(v)
         conn.execute("INSERT INTO custom_record_values (record_id, module_key, field, value_text, value_num) VALUES (?,?,?,?,?)",
-                     (rec_id, module_key, k, v if isinstance(v, str) else json.dumps(v, ensure_ascii=False), num))
+                     (rec_id, module_key, k, text, num))
 
 
 def rebuild_index(conn) -> int:
@@ -608,12 +1048,30 @@ def _log(conn, rec_id, action, from_state, to_state, user, note=""):
                                             datetime.now().isoformat(timespec="seconds")))
 
 
+def compute_preview(conn, module_key, values, version=None) -> dict:
+    """填單時即時算：同一套 `clean_values`（所以與存檔算出來的一定一樣），但**不存檔、不查必填**。
+    回 `{computed: {公式欄: 值}, tables: {明細表: 算好列內公式的列}, errors: [公式相關錯誤]}`；
+    公式無法算（缺欄位、除以 0）⇒ 該欄為空並回報，不丟例外。"""
+    body = _load_def(conn, module_key, version)["body"]
+    vals, errors, _dropped = clean_values(conn, body, values)
+    formulas = {f["key"] for f in body.get("fields", []) if isinstance(f, dict) and f.get("type") == "formula"}
+    tables = {f["key"] for f in body.get("fields", []) if isinstance(f, dict) and f.get("type") == "table"}
+    return {"computed": {k: vals.get(k) for k in formulas}, "tables": {k: vals.get(k) or [] for k in tables},
+            "errors": [e for e in errors if "公式" in e["message"]]}
+
+
 def get_record(conn, module_key, record_no) -> dict:
     rec = _row(conn, module_key, record_no)
     d = _load_def(conn, module_key, rec["def_version"])
     rec["view"] = _view(d["body"], rec, rec["data"])
     # 單據凍結在建立時的定義版本 ⇒ 畫面的標籤、欄位與按鈕要用這一版，不是最新版
     rec["definition"] = d["body"]
+    rec["refLabels"] = ref_labels(conn, d["body"], rec["data"])
+    from . import custom_files as _cfiles
+    rec["fileMeta"] = _cfiles.files_of_field(conn, module_key, d["body"], rec["data"])
+    if rec["fileMeta"]:                              # 輸出／視圖只放檔名（不放路徑與連結）
+        names = _cfiles.view_names(d["body"], rec["fileMeta"])
+        rec["view"] = dict(rec["view"], fields=dict(rec["view"]["fields"], **names), **names)
     rec["log"] = [dict(r) for r in conn.execute("SELECT action, from_state, to_state, by_user, note, at FROM custom_record_log "
                                                  "WHERE record_id=? ORDER BY id", (rec["id"],)).fetchall()]
     return rec
@@ -646,7 +1104,11 @@ def create_record(conn, module_key, values, user) -> dict:
     from core.txn import write_txn
     d = _load_def(conn, module_key)
     body = d["body"]
+    values = _with_default_tokens(body, values, user)
     vals, errors, dropped = clean_values(conn, body, values)
+    errors = errors + unique_errors(conn, module_key, body, vals)
+    from . import custom_files as _cfiles
+    errors = errors + _cfiles.check_files(conn, module_key, body, vals, user["username"])
     if errors:
         raise CustomModuleError("有 %d 個欄位不對" % len(errors), errors)
     now = datetime.now().isoformat(timespec="seconds")
@@ -657,6 +1119,7 @@ def create_record(conn, module_key, values, user) -> dict:
                            (module_key, no, d["version"], body["workflow"]["initial"], _dump_values(vals),
                             "{}", user["username"], now, user["username"], now))
         _write_index(conn, cur.lastrowid, module_key, vals)
+        _cfiles.bind_files(conn, module_key, body, vals, cur.lastrowid)
         _log(conn, cur.lastrowid, "create", "", body["workflow"]["initial"], user["username"])
         conn.commit()
     rec = get_record(conn, module_key, no)
@@ -686,14 +1149,19 @@ def update_record(conn, module_key, record_no, values, user) -> dict:
             raise CustomModuleError("單據已送出（%s），不能再修改內容" % rec["status"], status=409)
         _require_draft_owner(rec, body, user)
         vals, errors, dropped = clean_values(conn, body, values)
+        errors = errors + unique_errors(conn, module_key, body, vals, exclude_id=rec["id"])
+        from . import custom_files as _cfiles
+        errors = errors + _cfiles.check_files(conn, module_key, body, vals, user["username"], rec["id"])
         if errors:
             raise CustomModuleError("有 %d 個欄位不對" % len(errors), errors)
         now = datetime.now().isoformat(timespec="seconds")
         conn.execute("UPDATE custom_records SET data_json=?, updated_by=?, updated_at=? WHERE id=?",
                      (_dump_values(vals), user["username"], now, rec["id"]))
         _write_index(conn, rec["id"], module_key, vals)
+        doomed = _cfiles.bind_files(conn, module_key, body, vals, rec["id"], previous=rec["data"])
         _log(conn, rec["id"], "update", rec["status"], rec["status"], user["username"])
         conn.commit()
+    _cfiles.remove_files(doomed)
     out = get_record(conn, module_key, record_no)
     out["dropped"] = dropped
     return out

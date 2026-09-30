@@ -8,12 +8,18 @@
 import json
 from datetime import date
 
-from fastapi import APIRouter, Body, Header, HTTPException, Query
+from typing import List
+
+from fastapi import APIRouter, Body, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from db import get_db
 from helpers import _require_user, _tok, _audit
 from helpers import custom_modules as CM
+from helpers import custom_builder_support as SUP
+from helpers import custom_files as CFILES
+from helpers import uploads as _uploads
+from core import registry as _registry
 from helpers import formula as FX
 from core import definitions as D
 
@@ -106,7 +112,8 @@ def list_custom_records(key: str, status: str = Query(None), field: str = Query(
     conn = get_db()
     try:
         _can_use(conn, u, key)
-        return CM.list_records(conn, key, status=status, field=field, value=value)
+        rows = CM.list_records(conn, key, status=status, field=field, value=value)
+        return SUP.mask_records(rows, _can_use(conn, u, key)["body"], u)
     finally:
         conn.close()
 
@@ -117,13 +124,29 @@ def create_custom_record(key: str, payload: dict = Body(...), authorization: str
     conn = get_db()
     try:
         _can_use(conn, u, key)
-        rec = CM.create_record(conn, key, payload.get("values"), u)
+        d = _can_use(conn, u, key)
+        rec = CM.create_record(conn, key, SUP.keep_hidden_values(d["body"], payload.get("values"), None, u), u)
     except CM.CustomModuleError as e:
         return _err(e)
     finally:
         conn.close()
     _audit(_tok(authorization), "custom.create", "custom_record", rec["record_no"], "建立 %s" % rec["record_no"], {"module": key})
-    return rec
+    return SUP.mask_record(rec, u)
+
+
+@router.post("/api/custom/{key}/compute")
+def compute_custom_record(key: str, payload: dict = Body(...), version: int = Query(None), authorization: str = Header(None)):
+    """填單時即時算公式與明細列（不存檔；權限同建立單據）。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        _can_use(conn, u, key)
+        d = _can_use(conn, u, key)
+        return SUP.mask_compute(CM.compute_preview(conn, key, payload.get("values"), version), d["body"], u)
+    except CM.CustomModuleError as e:
+        return _err(e)
+    finally:
+        conn.close()
 
 
 @router.get("/api/custom/{key}/records/{record_no}")
@@ -139,7 +162,7 @@ def get_custom_record(key: str, record_no: str, authorization: str = Header(None
             _can_use(conn, u, key)
         # U14：前端依這個欄位決定要不要顯示「修改」「送出」（後端另外擋 403）
         rec["canEdit"] = CM.can_edit_draft(rec, rec["definition"], u)
-        return rec
+        return SUP.mask_record(rec, u)
     finally:
         conn.close()
 
@@ -150,13 +173,14 @@ def update_custom_record(key: str, record_no: str, payload: dict = Body(...), au
     conn = get_db()
     try:
         _can_use(conn, u, key)
-        rec = CM.update_record(conn, key, record_no, payload.get("values"), u)
+        cur = CM.get_record(conn, key, record_no)
+        rec = CM.update_record(conn, key, record_no, SUP.keep_hidden_values(cur["definition"], payload.get("values"), cur["data"], u), u)
     except CM.CustomModuleError as e:
         return _err(e)
     finally:
         conn.close()
     _audit(_tok(authorization), "custom.update", "custom_record", record_no, "修改 %s" % record_no, {"module": key})
-    return rec
+    return SUP.mask_record(rec, u)
 
 
 @router.post("/api/custom/{key}/records/{record_no}/transitions/{tkey}")
@@ -172,7 +196,7 @@ def transition_custom_record(key: str, record_no: str, tkey: str, payload: dict 
     finally:
         conn.close()
     _audit(_tok(authorization), "custom.transition", "custom_record", record_no, "%s：%s" % (record_no, tkey), {"module": key})
-    return rec
+    return SUP.mask_record(rec, u)
 
 
 def _decide(conn, u, key, record_no, approve, note):
@@ -193,6 +217,7 @@ def approve_custom_record(key: str, record_no: str, payload: dict = Body(default
         conn.close()
     if isinstance(rec, dict):
         _audit(_tok(authorization), "custom.approve", "custom_record", record_no, "核准 %s" % record_no, {"module": key, "note": note})
+        return SUP.mask_record(rec, u)
     return rec
 
 
@@ -207,6 +232,7 @@ def reject_custom_record(key: str, record_no: str, payload: dict = Body(default=
         conn.close()
     if isinstance(rec, dict):
         _audit(_tok(authorization), "custom.reject", "custom_record", record_no, "退回 %s" % record_no, {"module": key, "note": note})
+        return SUP.mask_record(rec, u)
     return rec
 
 
@@ -222,7 +248,7 @@ def output_custom_record(key: str, record_no: str, format: str = Query("html"), 
             return _err(e)
         if not _is_approver(rec, u["username"], conn):
             _can_use(conn, u, key)
-        html = CM.render_output(conn, key, record_no)
+        html = SUP.render_output_for(conn, key, record_no, u)
     finally:
         conn.close()
     if format == "pdf":
@@ -232,6 +258,50 @@ def output_custom_record(key: str, record_no: str, format: str = Query("html"), 
     return HTMLResponse(html)
 
 
+# ── 附件（file／image 欄位）：先傳後綁單 ─────────────────────────────────────
+
+# L1 沒有 ModuleSpec ⇒ 匯入時登記讀檔權限提供者（IP-104；同 routers/system 的工作日誌照片）
+_registry.provide(_uploads.PATH_ACCESS, CFILES.PROVIDER, CFILES.CustomFilesAccess)
+
+
+@router.post("/api/custom/{key}/files/{field}")
+async def upload_custom_files(key: str, field: str, files: List[UploadFile] = File(...), authorization: str = Header(None)):
+    """上傳附件到暫存（record_id＝0，只有自己讀得到）；存單時才綁到單據。副檔名＝欄位 accept ∩ uploads 白名單。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        d = _can_use(conn, u, key)
+        f = next((x for x in d["body"].get("fields", []) if isinstance(x, dict) and x.get("key") == field and x.get("type") in ("file", "image")), None)
+        if f is None:
+            raise HTTPException(404, "沒有這個附件欄位")
+        if not SUP.can_see_field(f, u):
+            raise HTTPException(403, "沒有這個欄位的權限")
+        ok = CFILES.accepted_exts(f)
+        for up in files:
+            ext = (up.filename or "").rsplit(".", 1)[-1].lower() if "." in (up.filename or "") else ""
+            if ext not in ok:
+                raise HTTPException(400, "「%s」不接受 %s 檔（可用：%s）" % (f.get("label") or field, ext or "沒有副檔名", "、".join(sorted(set(e for e in ok if e != "jpeg")))))
+        CFILES.purge_stale_staged(conn)
+        saved = await _uploads.save_document_files("custom_records", key, files, u["username"])
+        return CFILES.register_staged(conn, key, field, saved, u["username"])
+    finally:
+        conn.close()
+
+
+@router.delete("/api/custom/{key}/files/{file_id}")
+def delete_staged_custom_file(key: str, file_id: str, authorization: str = Header(None)):
+    """刪自己暫存、還沒綁單的檔（已綁單的要改單據內容才會移除；已送出的單據內容凍結 ⇒ 開修訂版）。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        _can_use(conn, u, key)
+        if not CFILES.remove_staged(conn, key, file_id, u["username"]):
+            raise HTTPException(404, "找不到這個暫存檔（只能刪自己上傳、尚未存進單據的檔）")
+        return {"ok": True}
+    finally:
+        conn.close()
+
+
 # ── 建構器輔助（僅超級管理員）──────────────────────────────────────────────
 
 @router.get("/api/custom-modules/catalog")
@@ -239,19 +309,36 @@ def custom_module_catalog(authorization: str = Header(None)):
     """能力目錄（建構器只能從這裡挑）：欄位型別、公式函式、參照對象、日期格式、輸出積木。"""
     _require_user(authorization, require_superadmin=True)
     from helpers import doc_template as dt
+    tpls, tpl_gaps = CM.templates(include_gaps=True)
     return {"fieldTypes": list(CM.FIELD_TYPES), "formulaFunctions": list(FX.FUNCTIONS), "refTargets": CM.ref_targets(),
+            "fieldTypeSpecs": CM.field_type_specs(), "fieldElements": CM.FIELD_ELEMENTS, "elementGroups": CM.ELEMENT_GROUPS,
+            "financeKinds": list(CM.FINANCE_KINDS), "templates": tpls, "templateGaps": tpl_gaps,
+            "tableColumnTypes": list(CM.TABLE_COL_TYPES), "tableFunctions": list(FX.TABLE_FUNCTIONS),
             "numberingDateFormats": [k for k in CM.DATE_FORMATS], "outputBlocks": sorted(dt.BLOCKS),
             "outputBlockSpecs": dt.BLOCK_SPECS, "outputBlockItemSpecs": dt.BLOCK_ITEM_SPECS,
             "outputThemes": sorted(dt.THEMES), "outputFormats": ["html", "pdf"], "fieldFormats": list(dt.FORMATS),
             "approverSources": CM.APPROVER_SOURCES, "dataClasses": ["T1"]}
 
 
+@router.get("/api/custom-modules/templates/{tkey}")
+def custom_module_template(tkey: str, authorization: str = Header(None)):
+    """範本的整份定義（新建模組時「從範本開始」用；套用後與範本脫鉤）。僅超級管理員。"""
+    _require_user(authorization, require_superadmin=True)
+    body = CM.template_body(tkey)
+    if body is None:
+        raise HTTPException(404, "沒有這個範本（或範本沒通過載入驗證）")
+    return {"key": tkey, "body": body}
+
+
 @router.post("/api/custom-modules/formula/check")
 def check_custom_formula(payload: dict = Body(...), authorization: str = Header(None)):
-    """公式語法檢查：`{"formula": "qty * price", "fields": ["qty", "price"]}` ⇒ `{"problems": [{"pos", "message"}]}`。"""
+    """公式語法檢查：`{"formula": "qty * price", "fields": ["qty", "price"], "tables": {"lines": ["amt"]}}`
+    ⇒ `{"problems": [{"pos", "message"}]}`（`tables`＝明細表 key ⇒ 可加總的數值欄，選填）。"""
     _require_user(authorization, require_superadmin=True)
     fields = payload.get("fields")
-    return {"problems": FX.check(payload.get("formula"), fields if isinstance(fields, list) else None)}
+    tables = payload.get("tables")
+    return {"problems": FX.check(payload.get("formula"), fields if isinstance(fields, list) else None,
+                                 tables if isinstance(tables, dict) else None)}
 
 
 @router.post("/api/custom-modules/numbering/preview")

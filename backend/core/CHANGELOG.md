@@ -2,6 +2,16 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.73 — 2026-09-30（W1 建構器第三輪 S1～S3，暫用號；wip/w1-builder3；1.72 已被 wip/sec-p0 取用）
+- L1（新增）：`helpers.custom_fields.EXT_TYPES／MODULE_TYPES／OPTION_TYPES`——自訂模組新欄位型別 `textarea`（多行文字）、`radio`（單選）、`checkboxes`（複選）、`multiselect`（下拉複選）、`daterange`（日期時間區間 `{from,to}`）；`validate_definition(…, types=)` 可傳型別集合（預設仍是 P4 的 5 種，內建單據的 customFields 不受影響）；`_coerce` 支援新型別與屬性 `maxLength／min／max／withTime／allowOther／minSelect／maxSelect`（只增）
+- L1（新增）：`helpers.custom_modules`——欄位型別 `table`（明細表：逐列逐欄驗證、列內公式、列數限制、索引只記列數）、`clean_table`、`table_columns`、`FINANCE_KINDS`、欄位屬性 `finance:{kind,dateField,cashDateField,caseField}` 與模組層 `finance.postStates` 的發布驗證（金流性質，使用者 2026-09-30 規則；提供者與報表整合在後續段）
+- L1（新增）：`helpers.formula`——函式 `total(表,"欄")`、`avg(表,"欄")`、`count(表)`（明細表加總／平均／列數，空值不算 0）、`round_half_up(x[,n])`（與既有 `round` 同為四捨五入的明確別名；`round` 語意不變）；`check(expr, fields, tables=)` 可驗明細表引用
+- L1（新增）：core migration v3（建構器 S1～S5 底層，只增）——`ui_definitions` 加 `submitted_by／submitted_at／decision_json`（定義送審／退回）；`custom_records` 加 `base_no／rev／supersedes_id` 與表 `custom_record_revisions`（單據 -R 修訂）；表 `custom_record_finance_outbox`（金流事件，`dedupe_key` 唯一，供 W4 總帳）。明細表值、欄位／選單可見設定、選單群組都在定義／單據 JSON 內，不另建表
+- L1（新增）：`helpers.custom_builder_support`——`mask_for／can_see_field／can_see_menu／access_problems／leaking_formulas`（欄位 `access.visibleTo`、選單 `menu.visibleTo` 的後端強制與發布驗證，公式引用受限欄位而可見範圍較大＝洩漏，發布拒絕）；`emit_finance_event／pending_finance_events／mark_finance_processed`（金流 outbox，`EVENT_FINANCE_POSTED／REVERSED`）；`create_revision`（單據 -R 修訂）。`custom_modules.visible_to` 依 `menu.visibleTo` 過濾（沒設＝不變）；`validate_module` 加可見設定驗證
+- L1（新增）：組織元件（S2）——`helpers.custom_modules.ref_labels(conn, body, data)`（單據參照欄的顯示名稱）；`ref` 欄位屬性 `multiple`（複選，值＝去重代號清單，逐一驗證存在）；參照對象 `departments`；元件群組 `org` 與元件 `user／users／dept／depts`（都是 `ref` 的預設屬性組）；`get_record` 回傳多 `refLabels`（只增）
+- L1（新增）：`helpers.custom_builder_support`（S3）——`hidden_keys／mask_record／mask_records／mask_compute／keep_hidden_values／render_output_for`（欄位可見的後端強制：讀取、列表、寫入回應、即時計算、輸出都拿掉看不到的欄位；受限使用者存檔不會清掉看不到的欄位）；`access_problems` 加「必填欄位不可設成部分人才看得到」。`routers.custom_records` 全部單據端點改走這些函式
+- L1（新增）：附件欄（S2）——core migration v4 `custom_record_files`（先傳後綁單；T1，實體檔在 `uploads/custom_records/<模組>/`）；`helpers/custom_files`（`accepted_exts／clean_ids／check_files／bind_files／remove_files／remove_staged／purge_stale_staged／register_staged／file_meta／files_of_field／view_names／CustomFilesAccess`，`uploads.path_access` 提供者 `custom_files` 認領資料夾 `custom_records`，IP-104）；欄位型別 `file`／`image`（屬性 `accept`＝白名單子集、`maxFiles`）；端點 `POST /api/custom/{key}/files/{欄位}`、`DELETE /api/custom/{key}/files/{id}`；`get_record` 多 `fileMeta`；`mask_record` 一併拿掉看不到欄位的 `fileMeta`；`db.py`／`archive.py` 登記 v3／v4 新表（demo 重置清單、每日匯出）
+
 ## （不升版號：介面不變）— 2026-09-30（wip/w2-voucher-office：傳票附件開放 Word／Excel）
 - L1（行為，私有）：`helpers/uploads.py` 新增私有表 `_EXTRA_EXTS_BY_SUBFOLDER`（個別單據類型另外放行的副檔名；目前只有 `voucher_attachments`：docx／xlsx／doc／xls）；`save_document_files` 簽章與其他呼叫端的白名單（jpg／png／pdf）不變。
 
