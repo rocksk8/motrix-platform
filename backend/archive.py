@@ -1105,7 +1105,7 @@ def _snapshot_health(path: str, summary: dict = None, day: str = None,
 # （假日／休息日）三份都是同一份內容的重複寫入。改成：先算**內容指紋**，與**前一份快照**相同 ⇒
 #   本機   ⇒ 用 NTFS 硬連結指向前一份（寫入 0；每一天的資料夾裡仍然有一個真的 motrix_erp.db，還原與清理都不用改）
 #   雲端   ⇒ 不重寫整庫與 JSON，改寫一個小的 `SAME_AS.json`（指向那一天）＋當日 `彙總.json`；月備份**照常完整寫**
-# 🔑 「沒變」的定義：內容指紋相同，**不含備份程式自己的紀錄**（audit_log 的 backup.* 列、pii_archive_state 設定）——
+# 🔑 「沒變」的定義：內容指紋相同，**不含備份程式自己的紀錄與連線狀態**（audit_log 的 backup.* 列、pii_archive_state／archive_instance_id 設定、sessions 表）——
 #    否則備份每天寫進去的稽核會讓資料庫每天都「有變」，這個功能永遠不會觸發。還原到「同上一份」的那一天，會少幾筆備份自己的稽核。
 # ☠️ 損毀的庫不可以被當成「沒變」（S-CD02）：指紋前先 `PRAGMA quick_check`，不是 ok ⇒ 不做「同上一份」，走原本的完整快照
 #    （快照健檢會擋下並告警）。
@@ -1113,7 +1113,11 @@ def _snapshot_health(path: str, summary: dict = None, day: str = None,
 SAME_AS_FILE = "SAME_AS.json"
 FINGERPRINT_FILE = "fingerprint.txt"
 #: 指紋要略過的列（備份程式自己每天寫的東西）：表名 ⇒ WHERE 條件（符合的列不進指紋）
-_FP_SKIP_ROWS = {"audit_log": "action LIKE 'backup.%'", "system_settings": "key = 'pii_archive_state'"}
+_FP_SKIP_ROWS = {
+    "audit_log": "action LIKE 'backup.%'",
+    "system_settings": "key IN ('pii_archive_state', 'archive_instance_id')",      # 備份程式自己記的狀態／第一次備份時建的實例 ID
+    "sessions": "1 = 1",                                                          # 登入連線（每日清理過期列）：不是業務資料
+}
 
 
 def _db_content_fingerprint(path: str):
