@@ -51,7 +51,7 @@ def _create(client, headers, **over):
     payload = {
         "status": "草稿",
         "data": {
-            "customerName": over.get("customerName", "京城凱悅"),
+            "customerName": over.get("customerName", "海天大飯店"),
             "projectName":  over.get("projectName", "影視對講機"),
             "quoteDate":    "2026-09-14",
             "validDays":    30,
@@ -199,7 +199,7 @@ def test_normal_edit_records_changed_fields(client, su, pdf_jobs):
     fields = {c["field"] for c in entry["changes"]}
     assert "客戶名稱" in fields and "含稅總額" in fields
     change = next(c for c in entry["changes"] if c["field"] == "客戶名稱")
-    assert change["from"] == "京城凱悅" and change["to"] == "台北凱悅"
+    assert change["from"] == "海天大飯店" and change["to"] == "台北凱悅"
 
 
 @needs_m01
