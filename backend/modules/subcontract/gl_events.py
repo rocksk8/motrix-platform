@@ -8,6 +8,7 @@
 - E05b 個人點工（歷史未關聯勞報單）：匯款單快照 personnelTotal 與 E05 同日認列「借 專案成本／貸 應付帳款」，`meta.no_withholding=true`，notice 提醒未扣繳。
   （使用者裁示 2026-09-30：新資料個人點工一律走勞報單 E06；此列只讓歷史匯款的應付帳款帳平。）
 只讀，不寫資料。
+⚠ 提示（notice）字串是 `%` 格式字串：字面的百分比要寫 `%%`。寫壞會丟 TypeError ⇒ 整個提供者失敗、所有承攬商事件消失（引擎只在 notices 記『讀取失敗』）——`test_ledger_acceptance` 斷言每個事件來源都讀取成功。
 """
 import json
 
