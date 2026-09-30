@@ -328,35 +328,8 @@ def test_integration_unreadable_baseline_means_full(mini):
     assert a["decision"]["mode"] == "full" and a["base"] is None
 
 
-# ── 儀表板閘門與建包腳本 ─────────────────────────────────────────────────────
-
-def test_dashboard_gate_accepts_scoped_only_when_scope_gate_accepts(monkeypatch, tmp_path):
-    sys.path.insert(0, str(REPO / "backend" / "tools"))
-    import deploy_dashboard as dd
-    monkeypatch.setattr(dd, "FULL_RESULTS_DIR", tmp_path / "full_results")
-    monkeypatch.setattr(dd, "_head_full_sha", lambda: C)
-    monkeypatch.setattr(dd, "_scoped_gate", lambda h: {"accepted": True, "record_present": True, "detail": "範圍 ok"})
-    g = dd.build_gate()
-    assert (g["state"], g["mode"]) == ("ok", "scoped")
-    monkeypatch.setattr(dd, "_scoped_gate", lambda h: {"accepted": False, "record_present": True, "detail": "動到底層"})
-    g = dd.build_gate()
-    assert g["state"] == "missing" and g["mode"] is None and "動到底層" in g["detail"]
-    # 全量綠 ⇒ mode=full，不看範圍驗證
-    (tmp_path / "full_results").mkdir()
-    (tmp_path / "full_results" / (C + ".json")).write_text(json.dumps({"commit": C, "ok": True}), encoding="utf-8")
-    monkeypatch.setattr(dd, "_scoped_gate", lambda h: pytest.fail("全量綠時不可以再判範圍驗證"))
-    g = dd.build_gate()
-    assert (g["state"], g["mode"]) == ("ok", "full")
-
-
-def test_dashboard_scoped_gate_errors_fail_closed(monkeypatch, tmp_path):
-    sys.path.insert(0, str(REPO / "backend" / "tools"))
-    import deploy_dashboard as dd
-    monkeypatch.setattr(dd, "FULL_RESULTS_DIR", tmp_path / "full_results")
-    monkeypatch.setattr(dd, "_head_full_sha", lambda: C)       # repo 裡沒有這個 commit ⇒ rev() 丟例外
-    g = dd.build_gate()
-    assert g["state"] != "ok" and g["mode"] is None
-
+# ── 建包腳本（儀表板閘門的題在 test_deploy_dashboard_scope_gate_2026_09_30.py：
+#    只有 test_deploy_dashboard* 檔可以 import 部署儀表板，HC1c）─────────────────────────
 
 def test_build_script_uses_scope_gate_and_records_the_mode():
     s = (REPO / "backend" / "tools" / "build_deploy_package.ps1").read_text(encoding="utf-8-sig")
