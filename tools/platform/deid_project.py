@@ -9,7 +9,8 @@
 ① 剪檔：`remove` 的 glob 減掉 `keep` 的 glob（不用 export-ignore：own 包仍需要這些檔，而 export-ignore 對兩種對象一體適用）。
 ② 剪段：`cuts`——原始碼裡以 `# >>> OWN-ONLY:<名>` ／ `# <<< OWN-ONLY:<名>` 圍起來的整段（含標記行），換成設定裡的替身文字。
    標記不是恰好一組 ⇒ 丟 ProjectError（不猜）。own 包不剪，程式碼照舊（標記只是註解）。
-③ 投影 `backend/version_manifest.json`：版本 ≤ `manifest_baseline` 的條目 `content` 換成固定字串（保留 module／version／date／time，
+③ 客戶版文件：`replace` 用 `product/sale_docs/` 的檔取代 DEPLOY／DR-SOP／HTTPS 清單（來源隨後被剪掉）；`require_text` 是驗證用的標記。
+④ 投影 `backend/version_manifest.json`：版本 ≤ `manifest_baseline` 的條目 `content` 換成固定字串（保留 module／version／date／time，
    `_sync_module_versions()` 與登入頁版號要用版本鍵）；之後的條目照原文，但 `version_manifest_sale_overlay.json` 有 `module|version` 就以覆蓋內文取代。
    **repo 裡的 version_manifest 一字不改**（已出貨條目不可改寫），投影只存在包裡。
 重算：`rebuild` 由 commit＋設定＋overlay 產出相同的檔案樹，出貨前逐檔驗證「除投影檔外其餘等於 blob、被剪的檔不在、投影檔等於重算結果」。
@@ -167,9 +168,23 @@ def load_overlay(path=DEFAULT_OVERLAY):
 
 # ── 主流程 ────────────────────────────────────────────────────────────────────────
 
+def apply_replacements(root, replace):
+    """`replace`：{包內路徑: 包內來源路徑}。用客戶版文件覆蓋原檔（來源本身之後由 remove 清掉）。來源不存在 ⇒ 丟例外（不猜）。"""
+    done = []
+    for dst, src in sorted((replace or {}).items()):
+        sp, dp = Path(root) / src, Path(root) / dst
+        if not sp.is_file():
+            raise ProjectError("客戶版文件來源不存在：%s（要取代 %s）" % (src, dst))
+        dp.parent.mkdir(parents=True, exist_ok=True)
+        dp.write_bytes(sp.read_bytes())
+        done.append(dst)
+    return done
+
+
 def prune_tree(root, cfg=None, overlay=None):
     cfg = cfg or load_config()
     root = Path(root)
+    replaced = apply_replacements(root, cfg.get("replace"))
     rm = plan_remove(list_files(root), cfg)
     for rel in rm:
         (root / rel).unlink()
@@ -180,7 +195,7 @@ def prune_tree(root, cfg=None, overlay=None):
             pass
     cuts = apply_cuts(root, cfg["cuts"])
     changed = project_manifest(root, cfg, overlay if overlay is not None else load_overlay())
-    return {"removed": len(rm), "cuts": cuts, "manifest_projected": changed}
+    return {"removed": len(rm), "cuts": cuts, "manifest_projected": changed, "replaced": replaced}
 
 
 def verify_tree(root, cfg=None):
@@ -192,6 +207,12 @@ def verify_tree(root, cfg=None):
     for f in files:
         if matches(f, cfg["forbidden"]):
             probs.append("sale 包內不得有：%s" % f)
+    for rel, token in sorted((cfg.get("require_text") or {}).items()):
+        p = root / rel
+        if not p.is_file():
+            probs.append("客戶版文件不存在：%s" % rel)
+        elif token not in p.read_text(encoding="utf-8"):
+            probs.append("%s 不是客戶版（找不到標記 %s）——原檔沒被取代？" % (rel, token))
     for c in cfg["cuts"]:
         p = root / c["path"]
         if not p.is_file():
