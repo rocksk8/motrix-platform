@@ -1,5 +1,8 @@
 # 採購・庫存・出貨 更新紀錄
 
+## 1.0.13 — 2026-09-30（暫用號，列車取號；wip/w1-pdf-unapproved）
+- 出貨單：退回與撤銷核准一律要填原因；`pdf-download` 放行本單簽核人／申請人（含代理），不再限管理員；`export?mode=preview` 不計匯出次數；PDF 預覽未核准時有紅色警示、預覽可「退回修改」。
+
 ## 1.0.12 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
 - 新增 `attachments.py::_SupplyCatalog`（`attachments.catalog`／`supply`，IP-105）：出貨單回簽附件開檔；權限＝出貨單清單規則 `case_documents_readable`。
 

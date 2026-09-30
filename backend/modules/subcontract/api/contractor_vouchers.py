@@ -36,6 +36,7 @@ from helpers import (
 
     can_see_financial, is_document_approver, push_event_for_module,
 )
+from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from pdf_gen import generate_contractor_voucher_pdf_bytes, _generate_contractor_voucher_pdf
 from helpers.errors import trace_id
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
@@ -587,7 +588,7 @@ def revoke_contractor_voucher_approval(voucher_no: str, body: dict = Body(defaul
     比照出貨單「已回簽不可撤銷」的規則，錢已經實際匯出就不應該讓系統這邊反悔。"""
     user = _require_user(authorization)
     _require_admin(user)
-    note = (body or {}).get("note", "")
+    note = require_reject_reason((body or {}).get("note", ""))
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, snapshot_json, is_paid FROM contractor_payment_vouchers "
@@ -627,7 +628,7 @@ def revoke_contractor_voucher_approval(voucher_no: str, body: dict = Body(defaul
 def reject_contractor_voucher(voucher_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
     # 比照 quotations.py：退回權限由當層簽核人員判斷，不額外要求 admin 角色
     user = _require_user(authorization)
-    note = (body or {}).get("note", "")
+    note = require_reject_reason((body or {}).get("note", ""))
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, snapshot_json FROM contractor_payment_vouchers "

@@ -295,32 +295,37 @@ window.CM_PARTS.push(() => ({
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
-    async rejectShippingNote(n) {
-      const note = (await MotrixUI.prompt(`退回出貨單「${n.noteNo}」，可填寫退回原因（選填）：`))
-      if (note === null) return
-      try {
-        const r = await fetch(`/api/shipping-notes/${n.noteNo}/reject`, {
+    // 退回（列表按鈕與預覽裡的「退回修改」同一條路）：原因必填，後端也強制
+    rejectShippingNote(n) {
+      window.MotrixApprovalReturn.ask({
+        title: `退回修改：出貨單 ${n.noteNo}`,
+        post: (reason) => fetch(`/api/shipping-notes/${n.noteNo}/reject`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ note })
-        })
-        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '退回失敗', {kind: 'error'}); return }
-        await this.loadShippingNotes(this.selected?.quote_no)
-      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
+          body: JSON.stringify({ note: reason })
+        }),
+        onDone: () => this.loadShippingNotes(this.selected?.quote_no),
+      })
     },
 
-    async revokeShippingApproval(n) {
-      const note = (await MotrixUI.prompt(`撤銷出貨單「${n.noteNo}」的核准？將退回草稿，且已扣的庫存序號會自動歸還可出貨狀態。\n\n可填寫撤銷原因（選填）：`))
-      if (note === null) return
-      try {
-        const r = await fetch(`/api/shipping-notes/${n.noteNo}/revoke-approval`, {
+    returnFromShippingPreview() {
+      const n = this.shippingPreviewNote
+      this.closeShippingPreview()
+      if (n) this.rejectShippingNote(n)
+    },
+
+    // 撤銷核准（退回草稿）：原因必填，後端也強制
+    revokeShippingApproval(n) {
+      window.MotrixApprovalReturn.ask({
+        title: `撤銷核准：出貨單 ${n.noteNo}`,
+        hint: '撤銷後單據退回草稿。已扣的庫存序號會自動歸還可出貨狀態。撤銷原因必填，會寫進稽核並通知申請人。',
+        post: (reason) => fetch(`/api/shipping-notes/${n.noteNo}/revoke-approval`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ note })
-        })
-        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '撤銷失敗', {kind: 'error'}); return }
-        await this.loadShippingNotes(this.selected?.quote_no)
-      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
+          body: JSON.stringify({ note: reason })
+        }),
+        onDone: () => this.loadShippingNotes(this.selected?.quote_no),
+      })
     },
 
     async toggleSigned(n, action) {
@@ -366,6 +371,7 @@ window.CM_PARTS.push(() => ({
 
     async previewShippingPdf(n) {
       this.shippingPreviewFetching = true
+      await window.MotrixApprovalReturn.loadDelegators(this.session.token)   // 代理簽核人也要看得到「退回修改」
       try {
         const r = await fetch(`/api/shipping-notes/${n.noteNo}/pdf-download`, {
           headers: { Authorization: 'Bearer ' + this.session.token }

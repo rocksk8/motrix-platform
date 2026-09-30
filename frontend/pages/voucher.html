@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>傳票 - MOTRIX 專案管理系統</title>
+  <script src="../static/approval-return.js"></script>
   <script src="../js/voucher.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -777,6 +778,8 @@
         </div>
       </div>
       <div class="modal-foot">
+        <button class="btn btn-sm" x-show="canReturnPreview()" data-testid="preview-return" @click="returnFromPreview()"
+                style="border-color:#FCA5A5;background:#FEF2F2;color:#B91C1C;font-weight:600">退回修改</button>
         <button class="btn btn-ghost btn-sm" @click="previewOpen=false">關閉</button>
         <!-- 「預覽後匯出」：不必關掉 modal 再回去找按鈕，這裡直接匯出。
              ⚠️ 匯出仍然走 exportPdf()，簽核未完成一樣會被後端擋下——

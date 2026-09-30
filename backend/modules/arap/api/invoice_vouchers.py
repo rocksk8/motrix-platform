@@ -42,6 +42,7 @@ from helpers import (
 
     can_see_financial, is_document_approver,
 )
+from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from pdf_gen import generate_invoice_voucher_pdf_bytes, _generate_invoice_voucher_pdf
 from helpers.errors import trace_id
 from helpers.tax_calc import quote_tax_type, tax_split, LEGACY_TAX_NOTE   # T：L1
@@ -656,7 +657,7 @@ def revoke_invoice_voucher_approval(voucher_no: str, body: dict = Body(default={
                                     authorization: str = Header(None)):
     user = _require_user(authorization)
     _require_admin(user)
-    note = (body or {}).get("note", "")
+    note = require_reject_reason((body or {}).get("note", ""))
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, snapshot_json, export_count FROM invoice_vouchers WHERE voucher_no=? AND status='已核准'",
@@ -695,7 +696,7 @@ def revoke_invoice_voucher_approval(voucher_no: str, body: dict = Body(default={
 def reject_invoice_voucher(voucher_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
     # 比照 quotations.py：退回權限由當層簽核人員判斷，不額外要求 admin 角色
     user = _require_user(authorization)
-    note = (body or {}).get("note", "")
+    note = require_reject_reason((body or {}).get("note", ""))
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, snapshot_json FROM invoice_vouchers WHERE voucher_no=? AND status IN ('待審核','簽核中')",

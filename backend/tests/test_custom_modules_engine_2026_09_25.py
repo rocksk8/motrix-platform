@@ -308,7 +308,7 @@ def test_custom_module_permissions(loan):
     assert client.get("/api/custom/%s/records/%s" % (KEY, rec["record_no"]), headers=h["mgr"]).status_code == 403
     client.post("/api/custom/%s/records/%s/transitions/submit" % (KEY, rec["record_no"]), headers=h["req"], json={})
     assert client.get("/api/custom/%s/records/%s" % (KEY, rec["record_no"]), headers=h["mgr"]).status_code == 200  # 簽核人看得到
-    assert client.post("/api/custom/%s/records/%s/reject" % (KEY, rec["record_no"]), headers=h["other"], json={}).status_code == 403
+    assert client.post("/api/custom/%s/records/%s/reject" % (KEY, rec["record_no"]), headers=h["other"], json={"note": "x"}).status_code == 403
     assert [m["key"] for m in client.get("/api/custom-modules", headers=h["req"]).json()] == [KEY]
     assert client.get("/api/custom-modules", headers=h["other"]).json() == []
     assert client.get("/api/custom-modules/catalog", headers=h["req"]).status_code == 403

@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## 1.0.20 — 2026-09-30（暫用號，列車取號；wip/w1-pdf-unapproved）
+- 請款單／開票申請：退回（reject）與撤銷核准（revoke-approval）一律要填原因（400「退回要填原因」，`helpers.tiered_approval.require_reject_reason`）；PDF 預覽未核准時有紅色「未核可・僅供預覽」橫幅，預覽視窗有權決定者可「退回修改」。
+
 ## 1.0.19 — 2026-09-30（暫用號，列車取號；W4 總帳 R12 畫面）
 - 出納頁『標記已匯款』視窗：個人外包人員逐位挑選勞報單（R12，經承攬商匯款單的 `personnel-links`／`personnel-link` 端點），顯示勞報單實付與匯款金額差異；未通過驗證時按鈕停用並顯示原因。純畫面，無新端點、無 migration。
 

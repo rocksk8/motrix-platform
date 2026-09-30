@@ -27,8 +27,9 @@ from helpers import (
     cascade_self_tiers, notify_org_chain_notice,
     UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
-    guard_case_access, require_any_module,
+    guard_case_access, require_any_module, is_document_approver,
 )
+from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from pdf_gen import generate_shipping_pdf_bytes, _generate_shipping_pdf
 from helpers.errors import trace_id
 
@@ -565,7 +566,7 @@ def revoke_shipping_note_approval(note_no: str, body: dict = Body(default={}), a
     """
     user = _require_user(authorization)
     _require_admin(user)
-    note = (body or {}).get("note", "")
+    note = require_reject_reason((body or {}).get("note", ""))
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, customer_name, is_signed FROM shipping_notes WHERE note_no=? AND status='已核准'",
@@ -615,7 +616,7 @@ def reject_shipping_note(note_no: str, body: dict = Body(default={}), authorizat
     # 比照 quotations.py：退回權限由當層簽核人員判斷，不額外要求 admin 角色
     # （2026-08-22 架構複查發現此檔案先前漏套用這個修正，這裡補上）
     user = _require_user(authorization)
-    note = (body or {}).get("note", "")
+    note = require_reject_reason((body or {}).get("note", ""))
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, customer_name FROM shipping_notes WHERE note_no=? AND status IN ('待審核','簽核中')",
@@ -657,12 +658,15 @@ def reject_shipping_note(note_no: str, body: dict = Body(default={}), authorizat
 @router.get("/api/shipping-notes/{note_no}/pdf-download")
 def download_shipping_pdf(note_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
-    _require_admin(user)
     conn = get_db()
-    row = conn.execute("SELECT note_no FROM shipping_notes WHERE note_no=?", (note_no,)).fetchone()
+    row = conn.execute("SELECT note_no, data_json FROM shipping_notes WHERE note_no=?", (note_no,)).fetchone()
+    # 閘門＝管理員，或本單簽核人／申請人（含有效代理人）：簽核人要看得到預覽稿（紅色「未核可」警示）才能判斷退回或核准
+    allowed = bool(row) and (user.get("role") in ("admin", "superadmin") or is_document_approver(row["data_json"], user, conn))
     conn.close()
     if not row:
         raise HTTPException(404, "出貨單不存在")
+    if not allowed:
+        _require_admin(user)
     try:
         pdf_bytes = generate_shipping_pdf_bytes(note_no)
     except ValueError as e:
@@ -692,6 +696,9 @@ def record_shipping_export(note_no: str, mode: str = "external", authorization: 
     if not row:
         conn.close()
         raise HTTPException(404, f"出貨單 {note_no} 不存在")
+    if mode == "preview":                       # 預覽不是匯出：不計次、不寫紀錄（使用者 2026-09-30）
+        conn.close()
+        return {"export_count": row["export_count"] or 0, "log": json.loads(row["export_log"] or "[]")}
     log   = json.loads(row["export_log"] or "[]")
     count = (row["export_count"] or 0) + 1
     log.append({

@@ -83,6 +83,7 @@ function voucherPage() {
     //: `JV10`：原視窗預覽（`§228`）。previewHtml 是後端 `/preview` 端點
     //: 回的**整份 HTML 文件**，塞進 `<iframe srcdoc>`，不是 innerHTML。
     previewOpen: false,
+    approval: {},
     previewLoading: false,
     previewHtml: '',
     //: 帶入要寫到**哪一行**。預設第一行；使用者點過哪一格的摘要就換到那一行。
@@ -546,6 +547,7 @@ function voucherPage() {
     //    穿不過去也不必穿，它本來就對所有狀態開放）。
     async openPreview() {
       if (!this.id || this.previewLoading) return
+      await window.MotrixApprovalReturn.loadDelegators(this._token())
       this.previewOpen = true
       this.previewLoading = true
       this.previewHtml = ''
@@ -816,6 +818,7 @@ function voucherPage() {
       this.category = d.category || '轉'
       this.categoryManual = !!d.category_manual
       this.status = d.status || '草稿'
+      this.approval = d.approval || {}
       this.note = d.summary || ''
       this.voidedAt = d.voided_at || ''
       // ⚠️ 後端沒有分錄時給三行空的，讓畫面不是一片空白；
@@ -1128,6 +1131,29 @@ function voucherPage() {
       // 🔴 借貸平不平衡由後端 `describe_balance()` 判。
       //    ☠️ 前端先擋的話，兩份判準會在某天分岔。
       return this._act('/post', {}, function () { return '已過帳。' })
+    },
+
+    // 預覽裡的「退回修改」：還沒簽核完成、而且我是有權決定的人才顯示（顯示用；權限以後端 _require_voucher_actor 為準）。
+    // 走同一支 /send-back（狀態回草稿＋清簽核＋單號升版），原因必填（後端 400）。
+    canReturnPreview() {
+      return !this.voidedAt && (this.status === '待審核' || this.status === '簽核中')
+        && window.MotrixApprovalReturn.canDecide(this.approval, JSON.parse(localStorage.getItem('motrix_session') || '{}'), null, { superadminBypass: false })
+    },
+
+    returnFromPreview() {
+      const self = this
+      window.MotrixApprovalReturn.ask({
+        title: '退回修改：傳票 ' + this.voucherNo,
+        post: function (reason) {
+          return fetch('/api/vouchers/' + self.id + '/send-back', { method: 'POST', headers: self._jsonAuth(), body: JSON.stringify({ reason: reason }) })
+        },
+        onDone: async function () {
+          self.previewOpen = false
+          self.actionMsg = '已退回修改。'
+          await self.open(self.id, true)
+          await self.loadList()
+        },
+      })
     },
 
     sendBack() {

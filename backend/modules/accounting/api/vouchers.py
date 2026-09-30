@@ -36,6 +36,7 @@ from modules.accounting.api.accounting_export import validate_account_code
 # ⚠️ **不要自己重算**：`total_amount` 少了稅、也少了外包人員費用，`ACC-BN6 §3` 已經踩過這個坑。
 from core import registry as _registry
 from helpers import _require_user, _tok, _audit, require_any_module
+from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from helpers.edit_log import append_edit_log, MissingOldValue
 from helpers.tiered_approval import (
     approval_flow_setting_key, setting_to_active_tiers,
@@ -775,7 +776,7 @@ def send_back_voucher(voucher_id: int, body: dict = Body(default={}),
         _require_voucher_actor(conn, _appr_of(v), user, "send_back")
         new_no = next_revision_no(v.get("voucher_no"))
         now = _dt.datetime.now().isoformat()
-        reason = str((body or {}).get("reason") or "").strip()
+        reason = require_reject_reason((body or {}).get("reason"))
         conn.execute(
             "UPDATE vouchers_all SET status='草稿', voucher_no=?,"
             " submitted_by='', submitted_at='', checked_by='', checked_at='',"

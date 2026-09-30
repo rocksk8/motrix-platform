@@ -3945,6 +3945,8 @@
     </div>
     <!-- Footer -->
     <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
+      <button x-show="canReturnDoc(shippingPreviewNote)" data-testid="preview-return" @click="returnFromShippingPreview()"
+              style="padding:7px 16px;border:1px solid var(--tone-danger-border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--tone-danger-bg);color:var(--tone-danger-fg);font-weight:600;cursor:pointer">退回修改</button>
       <button @click="closeShippingPreview()"
               style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--surface);cursor:pointer">關閉</button>
     </div>
@@ -3966,6 +3968,8 @@
       <iframe :src="cvPreviewBlobUrl" style="width:100%;height:100%;border:none;display:block"></iframe>
     </div>
     <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
+      <button x-show="canReturnDoc(cvPreviewVoucher)" data-testid="preview-return" @click="returnFromContractorVoucherPreview()"
+              style="padding:7px 16px;border:1px solid var(--tone-danger-border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--tone-danger-bg);color:var(--tone-danger-fg);font-weight:600;cursor:pointer">退回修改</button>
       <button @click="closeContractorVoucherPreview()"
               style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--surface);cursor:pointer">關閉</button>
     </div>
@@ -4195,6 +4199,29 @@
   </div>
 </div>
 
+<!-- ── 完工單 PDF 預覽 Modal（原本是 window.open 新分頁；改成視窗才放得下「退回修改」）── -->
+<div x-show="completionPreviewModal" x-cloak
+     style="position:fixed;inset:0;background:var(--overlay-backdrop);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
+     @click.self="closeCompletionPreview()"
+     @keydown.escape.window="closeCompletionPreview()">
+  <div style="background:var(--surface);border-radius:12px;width:100%;max-width:820px;height:calc(90vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:var(--shadow-popover)">
+    <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
+      <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
+            x-text="'預覽完工單' + (completionPreviewNote ? '　' + completionPreviewNote.noteNo : '')"></span>
+      <button @click="closeCompletionPreview()" style="width:28px;height:28px;border:none;background:var(--surface-sunken);border-radius:5px;cursor:pointer;font-size:16px">×</button>
+    </div>
+    <div style="flex:1;background:var(--surface-sunken);overflow:hidden">
+      <iframe :src="completionPreviewBlobUrl" style="width:100%;height:100%;border:none;display:block"></iframe>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
+      <button x-show="canReturnDoc(completionPreviewNote)" data-testid="preview-return" @click="returnFromCompletionPreview()"
+              style="padding:7px 16px;border:1px solid var(--tone-danger-border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--tone-danger-bg);color:var(--tone-danger-fg);font-weight:600;cursor:pointer">退回修改</button>
+      <button @click="closeCompletionPreview()"
+              style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--surface);cursor:pointer">關閉</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── 開票申請憑據 PDF 預覽 Modal ── -->
 <div x-show="ivPreviewModal" x-cloak
      style="position:fixed;inset:0;background:var(--overlay-backdrop);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
@@ -4210,6 +4237,8 @@
       <iframe :src="ivPreviewBlobUrl" style="width:100%;height:100%;border:none;display:block"></iframe>
     </div>
     <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
+      <button x-show="canReturnDoc(ivPreviewVoucher)" data-testid="preview-return" @click="returnFromInvoiceVoucherPreview()"
+              style="padding:7px 16px;border:1px solid var(--tone-danger-border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--tone-danger-bg);color:var(--tone-danger-fg);font-weight:600;cursor:pointer">退回修改</button>
       <button @click="closeInvoiceVoucherPreview()"
               style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--surface);cursor:pointer">關閉</button>
     </div>
@@ -4272,6 +4301,7 @@
 void 0
 </script>
   <script src="../static/approval-cascade.js"></script>
+  <script src="../static/approval-return.js"></script>
   <script src="../static/file-preview.js"></script>
   <script src="../static/notif.js"></script>
 

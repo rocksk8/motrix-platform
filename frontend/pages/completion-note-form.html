@@ -67,6 +67,26 @@
     </button>
   </div>
 
+  <!-- PDF 預覽視窗（原本 window.open 新分頁；改成視窗才放得下「退回修改」）。未核可的單據 PDF 上有紅色「未核可・僅供預覽」 -->
+  <div x-show="previewOpen" x-cloak data-testid="cnf-preview-modal"
+       style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
+       @click.self="closePreview()" @keydown.escape.window="closePreview()">
+    <div style="background:#fff;border-radius:12px;width:100%;max-width:820px;height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+      <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid #EDEAE4;gap:10px">
+        <span style="font-size:14px;font-weight:700;flex:1" x-text="'預覽完工單　' + noteNo"></span>
+        <button @click="closePreview()" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
+      </div>
+      <div style="flex:1;background:#F0EEE9;overflow:hidden">
+        <iframe :src="previewUrl" style="width:100%;height:100%;border:none;display:block"></iframe>
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid #EDEAE4;display:flex;justify-content:flex-end;gap:10px">
+        <button x-show="canReturnPreview()" data-testid="preview-return" @click="returnFromPreview()"
+                style="padding:7px 16px;border:1px solid #FCA5A5;border-radius:7px;font-size:13px;background:#FEF2F2;color:#B91C1C;font-weight:600;cursor:pointer">退回修改</button>
+        <button @click="closePreview()" style="padding:7px 16px;border:1px solid #D4D4D4;border-radius:7px;font-size:13px;background:#fff;cursor:pointer">關閉</button>
+      </div>
+    </div>
+  </div>
+
   <div class="cnf-body">
     <div x-show="loading" style="padding:40px;text-align:center;color:var(--text-dim);font-size:13px">載入中…</div>
 
@@ -272,6 +292,7 @@
   function completionNoteForm() {
     return {
       session: {}, loading: true, busy: false, dirty: false,
+      approval: {}, previewOpen: false, previewUrl: '',
       msg: '', msgError: false, prefilled: false,
       noteNo: '',
       status: '草稿',
@@ -369,6 +390,7 @@
           if (!r.ok) { this._fail('讀取失敗'); return }
           const d = await r.json()
           this.status = d.status
+          this.approval = d.approval || {}
           // 樂觀鎖（2026-09-14）：記住載入當下的版本，存檔時送回去比對；
           // 中間被別人改過就會收到 409，而不是無聲蓋掉對方的內容
           this._lastUpdatedAt = d.updatedAt || d.updated_at || ''
@@ -532,17 +554,40 @@
         try {
           const r = await fetch(`/api/completion-notes/${this.noteNo}/pdf-download`, { headers: this._auth() })
           if (!r.ok) { this._fail('PDF 產生失敗'); return }
-          const url = URL.createObjectURL(await r.blob())
-          window.open(url, '_blank')
-          setTimeout(() => URL.revokeObjectURL(url), 60000)
-          fetch(`/api/completion-notes/${this.noteNo}/export?mode=preview`,
-                { method: 'POST', headers: this._auth() }).catch(() => {})
+          await window.MotrixApprovalReturn.loadDelegators(this.session.token)   // 代理簽核人也要看得到「退回修改」
+          if (this.previewUrl) URL.revokeObjectURL(this.previewUrl)
+          this.previewUrl = URL.createObjectURL(await r.blob())
+          this.previewOpen = true                    // 預覽不是匯出：不再呼叫 /export（不計次、不寫紀錄）
         } catch (e) { this._fail('網路錯誤：' + e.message); return }
         this.busy = false
+      },
+
+      closePreview() {
+        if (this.previewUrl) URL.revokeObjectURL(this.previewUrl)
+        this.previewUrl = ''
+        this.previewOpen = false
+      },
+
+      // 預覽裡的「退回修改」：還沒核可、而且我是有權決定的人才顯示（顯示用；權限以後端為準）；原因必填（後端也強制）
+      canReturnPreview() {
+        return ['待審核', '簽核中'].includes(this.status) && window.MotrixApprovalReturn.canDecide(this.approval, this.session)
+      },
+
+      returnFromPreview() {
+        window.MotrixApprovalReturn.ask({
+          title: `退回修改：完工單 ${this.noteNo}`,
+          post: (reason) => fetch(`/api/completion-notes/${this.noteNo}/reject`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ note: reason })
+          }),
+          onDone: async () => { this.closePreview(); this.msgError = false; this.msg = '已退回修改'; await this.load() },
+        })
       },
     }
   }
   </script>
+  <script src="../static/approval-return.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/edit-presence.js"></script>
   <script src="../static/sidebar.js"></script>

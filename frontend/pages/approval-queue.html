@@ -977,6 +977,8 @@
         <iframe :src="previewBlobUrl" style="width:100%;height:100%;border:none;display:block"></iframe>
       </div>
       <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
+        <button x-show="previewItemData && canApprove(previewItemData)" data-testid="preview-return" @click="returnFromPreview()"
+                style="padding:7px 16px;border:1px solid #FCA5A5;border-radius:7px;font-size:13px;font-family:var(--font-zh);background:#FEF2F2;color:#B91C1C;font-weight:600;cursor:pointer">退回修改</button>
         <button @click="closePreview()"
                 style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">關閉</button>
       </div>
@@ -993,10 +995,10 @@
       <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" x-show="selected?.type === 'case_change'">
         此變更申請將被拒絕、不會套用到案件資料（暫存的上傳檔案會一併刪除），申請人會收到通知。
       </p>
-      <textarea x-model="rejectNote" placeholder="退回原因（選填，供申請人參考）"></textarea>
+      <textarea x-model="rejectNote" data-testid="reject-reason" placeholder="退回原因（必填，供申請人參考）"></textarea>
       <div class="reject-modal-footer">
         <button class="btn btn-ghost btn-sm" @click="rejectModalOpen=false">取消</button>
-        <button class="btn btn-reject btn-sm" @click="doReject()" :disabled="actioning" x-text="selected?.type === 'case_change' ? '確認拒絕' : '確認退回'"></button>
+        <button class="btn btn-reject btn-sm" data-testid="reject-confirm" @click="doReject()" :disabled="actioning" x-text="selected?.type === 'case_change' ? '確認拒絕' : '確認退回'"></button>
       </div>
     </div>
   </div>
@@ -1351,7 +1353,9 @@
               || item.type === 'extra_expense_change' || item.type === 'bonus_case_award') return
           this.previewFetching = true
           try {
-            const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(this.itemPathId(item))}/pdf-download`, {
+            // 傳票：pdf-download 只給簽核完成的（400）；待簽核要看的是「預覽稿」（/preview，HTML，含紅色「未核可・僅供預覽」）
+            const tail = item.type === 'voucher' ? '/preview' : '/pdf-download'
+            const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(this.itemPathId(item))}${tail}`, {
               headers: { Authorization: 'Bearer ' + this.session.token }
             })
             if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); this.previewFetching = false; return }
@@ -1384,6 +1388,15 @@
               },
             })
           } catch (e) { alert('開啟檔案失敗：' + e.message) }
+        },
+
+        // 預覽裡的「退回修改」：關掉預覽、對同一張開原本的退回視窗（原因必填）
+        returnFromPreview() {
+          const item = this.previewItemData
+          if (!item) return
+          this.closePreview()
+          this.selected = item
+          this.openRejectModal()
         },
 
         closePreview() {
@@ -1763,6 +1776,7 @@
 
         async doReject() {
           if (!this.selected) return
+          if (!(this.rejectNote || '').trim()) { alert('退回要填原因'); return }   // 後端也強制（400）；這裡先擋，不白跑一趟
           const item = this.selected
           if (item.type === 'case_change') {
             this.actioning = true

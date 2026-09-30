@@ -463,6 +463,17 @@ def sign_first_pending(tier: dict, user: dict, now: str, conn=None) -> bool:
     return all(a.get("status") == "approved" for a in approvers)
 
 
+def require_reject_reason(note) -> str:
+    """退回／駁回／退回修改一律要填原因（使用者 2026-09-30 規則；後端強制，前端只是提示）。
+    回傳去掉前後空白的原因；空白 ⇒ HTTP 400「退回要填原因」。各單據的 reject／send-back 端點都走這一支，
+    原因會進各自的稽核（audit_log／編修紀錄／通知）。"""
+    from fastapi import HTTPException
+    text = ("" if note is None else str(note)).strip()
+    if not text:
+        raise HTTPException(400, "退回要填原因")
+    return text
+
+
 def check_reject_permission(tiers: list, ct_idx: int, user: dict, conn=None):
     """reject 用的寬鬆版：當層任一簽核人（或其目前有效的簽核代理人，見
     check_approve_permission() 同一段說明）或 superadmin 皆可退回（不要求排序，

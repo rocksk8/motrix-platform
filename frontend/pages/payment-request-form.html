@@ -331,6 +331,8 @@
         <span x-show="exportLog.length > 0">已匯出 <strong x-text="exportLog.length"></strong> 次</span>
       </div>
       <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" x-show="canReturnPreview()" data-testid="preview-return" @click="returnFromPreview()"
+                style="border-color:var(--tone-danger-border);background:var(--tone-danger-bg);color:var(--tone-danger-fg);font-weight:600">退回修改</button>
         <button class="btn btn-ghost" @click="closePreview()">關閉</button>
         <button class="btn btn-primary" @click="confirmExport()" :disabled="!previewIframeReady">確認匯出（下載 PDF）</button>
       </div>
@@ -339,6 +341,7 @@
 </div>
 
 <script src="../static/approval-cascade.js"></script>
+<script src="../static/approval-return.js"></script>
 <script src="../static/notif.js"></script>
 <script src="../static/edit-presence.js"></script>
   <script src="../static/sidebar.js"></script>
@@ -650,32 +653,37 @@ function paymentRequestForm() {
       } catch (e) { alert('網路錯誤：' + e.message) }
     },
 
-    async rejectReq() {
-      const note = prompt('退回原因（選填）：')
-      if (note === null) return
-      try {
-        const r = await fetch(`${API}/payment-requests/${this.q.requestNo}/reject`, {
+    // 退回（頁面按鈕與預覽裡的「退回修改」同一條路）：原因必填，後端也強制
+    rejectReq() {
+      window.MotrixApprovalReturn.ask({
+        title: `退回修改：請款單 ${this.q.requestNo}`,
+        post: (reason) => fetch(`${API}/payment-requests/${this.q.requestNo}/reject`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ note })
-        })
-        if (!r.ok) { alert((await r.json()).detail || '退回失敗'); return }
-        await this.reload()
-      } catch (e) { alert('網路錯誤：' + e.message) }
+          body: JSON.stringify({ note: reason })
+        }),
+        onDone: async () => { this.closePreview(); await this.reload() },
+      })
     },
 
-    async revokeReq() {
-      const note = prompt('撤銷核准？將退回草稿。可填寫原因（選填）：')
-      if (note === null) return
-      try {
-        const r = await fetch(`${API}/payment-requests/${this.q.requestNo}/revoke-approval`, {
+    // 預覽裡的「退回修改」要不要顯示：還沒核可、而且我是有權決定的人（顯示用；實際權限以後端為準）
+    canReturnPreview() {
+      return ['待審核', '簽核中'].includes(this.q.status) && window.MotrixApprovalReturn.canDecide(this.approval, this.session)
+    },
+    returnFromPreview() { this.rejectReq() },
+
+    // 撤銷核准（退回草稿）：原因必填，後端也強制
+    revokeReq() {
+      window.MotrixApprovalReturn.ask({
+        title: `撤銷核准：請款單 ${this.q.requestNo}`,
+        hint: '撤銷後單據退回草稿。撤銷原因必填，會寫進稽核並通知申請人。',
+        post: (reason) => fetch(`${API}/payment-requests/${this.q.requestNo}/revoke-approval`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ note })
-        })
-        if (!r.ok) { alert((await r.json()).detail || '撤銷失敗'); return }
-        await this.reload()
-      } catch (e) { alert('網路錯誤：' + e.message) }
+          body: JSON.stringify({ note: reason })
+        }),
+        onDone: async () => { await this.reload() },
+      })
     },
 
     async deleteReq() {
@@ -694,6 +702,7 @@ function paymentRequestForm() {
       if (this.isDirty) { await this.save(); if (this.errMsg) return }
       this.previewFetching = true
       this.errMsg = ''
+      await window.MotrixApprovalReturn.loadDelegators(this.session.token)   // 代理簽核人也要看得到「退回修改」
       try {
         const r = await fetch(`${API}/payment-requests/${this.q.requestNo}/pdf-download`, {
           headers: { Authorization: 'Bearer ' + this.session.token }

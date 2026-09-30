@@ -421,7 +421,7 @@
               <textarea class="cr-note-in" id="cr-decide-note" rows="2" x-model="note" placeholder="備註（退回時請說明原因）"></textarea>
               <div class="cr-actions">
                 <button class="btn btn-approve" id="cr-approve" @click="decide(true)" :disabled="busy">核准</button>
-                <button class="btn btn-reject" id="cr-reject" @click="decide(false)" :disabled="busy">退回</button>
+                <button class="btn btn-reject" id="cr-reject" data-testid="preview-return" @click="decide(false)" :disabled="busy">退回</button>
               </div>
             </div>
           </template>

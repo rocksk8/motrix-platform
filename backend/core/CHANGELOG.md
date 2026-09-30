@@ -4,6 +4,8 @@
 
 ## (next) — 2026-09-30（wip/w1-pdf-unapproved；升版幅度由列車取號）
 - L1（新增）：`helpers.doc_template.unapproved_banner／inject_unapproved／UNAPPROVED_TEXT`——尚未核可的單據 PDF／預覽一律顯示紅色「未核可・僅供預覽」橫幅（行內樣式，列印／下載同一份 HTML；`inject_unapproved` 冪等，版型拿掉 banner 積木也擋不掉）。套用：報價單、請款單、開票申請、承攬商匯款申請、出貨單、完工單、會計傳票、自訂模組單據；已核准的輸出不變。
+- L1（新增）：`helpers.tiered_approval.require_reject_reason(note)`——退回／駁回／退回修改／撤銷核准一律要填原因（空白 ⇒ HTTP 400「退回要填原因」；後端強制，前端只是提示）；報價單、請款單、開票申請、承攬商匯款申請、出貨單、完工單、傳票 send-back、自訂模組單據 reject 與各 revoke-approval 都走這一支。
+- 前端共用：`frontend/static/approval-return.js`（`MotrixApprovalReturn.ask／canDecide／loadDelegators`：預覽裡的「退回修改」與各頁退回按鈕共用的原因視窗，原因必填、顯示後端錯誤原文）；`routers/custom_records`：reject 原因必填；自訂模組單據輸出在「尚未核可」狀態（簽核通過後可到達的狀態之外）有紅色警示。
 
 ## 1.81 — 2026-09-30（暫用，列車取號；wip/w1-t26fix：列車 26 守門修補）
 - L1（行為，安全）：`GET /api/attachments/open` 本班關閉（`routers/attachments.ATTACHMENTS_OPEN_ENABLED = False`，一律 404；W3 安全檢查：路徑未綁定來源單據，正式修正隨 P3）；`POST /api/audit-log/module-counts` 需 `audit_log` 權限、`since` 非字串 400（wip/w2-t26sec）

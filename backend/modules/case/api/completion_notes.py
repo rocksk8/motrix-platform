@@ -29,6 +29,8 @@ from pydantic import BaseModel
 
 from db import get_db, next_entity_code
 from helpers.errors import trace_id
+from helpers.case_access import is_document_approver
+from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_module_activity,
@@ -555,7 +557,7 @@ def reject_completion_note(note_no: str, body: dict = Body(default={}),
                            authorization: str = Header(None)):
     """退回草稿。權限由當層簽核人員判斷，不額外要求 admin 角色。"""
     user = _require_user(authorization)
-    note = (body or {}).get("note", "")
+    note = require_reject_reason((body or {}).get("note", ""))
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, customer_name FROM completion_notes "
@@ -603,7 +605,7 @@ def revoke_completion_approval(note_no: str, body: dict = Body(default={}),
     """
     user = _require_user(authorization)
     _require_admin(user)
-    note = (body or {}).get("note", "")
+    note = require_reject_reason((body or {}).get("note", ""))
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, customer_name, is_signed FROM completion_notes "
@@ -639,12 +641,15 @@ def revoke_completion_approval(note_no: str, body: dict = Body(default={}),
 @router.get("/api/completion-notes/{note_no}/pdf-download")
 def download_completion_pdf(note_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
-    _require_admin(user)
     conn = get_db()
-    row = conn.execute("SELECT note_no FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
+    row = conn.execute("SELECT note_no, data_json FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
+    # 閘門＝管理員，或本單簽核人／申請人（含有效代理人）：簽核人要看得到預覽稿（紅色「未核可」警示）才能判斷退回或核准
+    allowed = bool(row) and (user.get("role") in ("admin", "superadmin") or is_document_approver(row["data_json"], user, conn))
     conn.close()
     if not row:
         raise HTTPException(404, "完工單不存在")
+    if not allowed:
+        _require_admin(user)
     try:
         pdf_bytes = generate_completion_pdf_bytes(note_no)
     except ValueError as e:
@@ -672,6 +677,8 @@ def record_completion_export(note_no: str, mode: str = "external", authorization
         if not row:
             raise HTTPException(404, f"完工單 {note_no} 不存在")
         log   = json.loads(row["export_log"] or "[]")
+        if mode == "preview":                   # 預覽不是匯出：不計次、不寫紀錄（使用者 2026-09-30）
+            return {"export_count": row["export_count"] or 0, "log": log}
         count = (row["export_count"] or 0) + 1
         log.append({"at": datetime.now().isoformat(), "mode": mode, "user": user["username"],
                     "userDisplay": user.get("display_name") or user["username"], "count": count})
