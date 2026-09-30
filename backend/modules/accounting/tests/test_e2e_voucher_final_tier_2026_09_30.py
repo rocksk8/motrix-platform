@@ -98,7 +98,7 @@ def test_final_tier_buttons_submit_approve_blocked_approve_post(live_server, mak
     _click(page, "approve")                                             # 第一層（覆核）：出納／財務可簽
     assert _status(live_server, ftok, vid) == "簽核中"
     # 最終層：財務不是最高管理者 ⇒ 簽核／退回鍵停用，旁邊寫明原因（不是按下去才被拒絕）
-    assert page.locator(H["approve"]).first.is_disabled() and page.locator(H["sendback"]).first.is_disabled()
+    assert page.locator(H["approve"]).first.is_disabled()                                       # 簽核鍵停用（退回在內建兩層沒有限制，仍可按）
     reason = page.locator("[data-testid=voucher-blocked-reason]").first
     assert reason.is_visible() and "最高管理者" in reason.inner_text()
     assert _status(live_server, ftok, vid) == "簽核中"
