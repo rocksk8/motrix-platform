@@ -200,7 +200,7 @@ def iter_text_views(path: Path):
 # 網域最後一段必須全是字母（擋 `chart.js@4.4.0`、`Mbps@2.4GHz` 這類「名稱@版本」）；本地部分至少 2 字元（擋字串裡 `\n@router.get` 的 `n@`）
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]{2,}@([A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,})(?![A-Za-z0-9])")
 IP_RE = re.compile(r"(?<![\d.])(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(?![\d.])")
-DEVPATH_RE = re.compile(r"[A-Za-z]:[\\/](?:Users|開發|MOTRIX|Desktop)[\\/][^\s\"'<>|]*|/(?:home|Users)/[a-z0-9_.-]+/", re.I)
+DEVPATH_RE = re.compile(r"[A-Za-z]:[\\/](?:Users|開發|MOTRIX|Desktop)[\\/][^\s\"'<>|]*|(?<![A-Za-z0-9._~\-])/(?:home|Users)/[a-z0-9_.-]+/", re.I)      # Unix 家目錄要從路徑開頭起算（擋網址中段的 `/se/home/mobile/`）
 # 前後不可緊貼字母數字底線連字號（擋雜湊字串、UUID、`?v=20260828a` 快取參數裡剛好 8 位數字的片段）
 TAX_RE = re.compile(r"(?<![0-9A-Za-z_\-])\d{8}(?![0-9A-Za-z_\-])")
 #: 看起來是日期（20YYMMDD）或已知常數（一天的毫秒數）的 8 位數字：不是統編。本公司自己的統編由雜湊層另抓，不靠這裡。
