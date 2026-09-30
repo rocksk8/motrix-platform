@@ -142,7 +142,7 @@
               <thead><tr><template x-for="c in columns" :key="c.key"><th x-text="c.label"></th></template></tr></thead>
               <tbody>
                 <template x-for="r in records" :key="r.record_no">
-                  <tr :data-record-no="r.record_no" @click="openRecord(r.record_no)">
+                  <tr :data-record-no="r.record_no" :data-display-no="r.displayNo || r.record_no" @click="openRecord(r.record_no)">
                     <template x-for="c in columns" :key="c.key">
                       <td :data-label="c.label">
                         <span :class="c.key === '$status' ? 'cr-status' : ''" x-text="cell(r, c.key)"></span>
@@ -341,7 +341,7 @@
       <template x-if="mode === 'view' && record">
         <section class="cr-panel" id="cr-record" :data-record-no="record.record_no" :data-status="record.status" :data-busy="busy ? '1' : '0'">
           <h2>
-            <span x-text="record.record_no"></span>
+            <span id="cr-record-no" :data-base-no="record.record_no" x-text="record.displayNo || record.record_no"></span>
             <span class="cr-status" id="cr-record-status" x-text="record.view.statusLabel"></span>
           </h2>
           <div class="cr-sub">
@@ -429,6 +429,42 @@
           <div class="cr-sec">
             <div class="cr-sec__t">依建立時版本的輸出</div>
             <iframe class="cr-frame" id="cr-output-frame" sandbox="" :srcdoc="outputHtml" title="單據輸出"></iframe>
+          </div>
+
+          <div class="cr-sec" id="cr-revisions" x-show="revs && revs.revisions && revs.revisions.length">
+            <div class="cr-sec__t">送簽修訂紀錄（目前 <span x-text="revs ? revs.current.displayNo : ''"></span>）</div>
+            <table class="cr-table" style="margin-top:6px">
+              <thead><tr><th>修訂</th><th>送簽</th><th>結果</th><th>定義</th><th></th></tr></thead>
+              <tbody>
+                <template x-for="rv in ((revs && revs.revisions) || [])" :key="rv.revision">
+                  <tr :data-revision="rv.revision" style="cursor:default">
+                    <td x-text="rv.displayNo"></td>
+                    <td x-text="(rv.submittedAt || '').replace('T', ' ').slice(0, 16) + '　' + rv.submittedBy"></td>
+                    <td x-text="rv.decision === 'rejected' ? ('退回' + (rv.note ? '：' + rv.note : '')) : (rv.decision === 'approved' ? '核可' : '簽核中')"></td>
+                    <td x-text="'第 ' + rv.defVersion + ' 版'"></td>
+                    <td>
+                      <a href="javascript:void(0)" :data-diff-current="rv.revision" @click="showDiff(rv.revision, 'current')">與目前比對</a>
+                      <a href="javascript:void(0)" x-show="rv.revision > 0" :data-diff-prev="rv.revision" style="margin-left:8px" @click="showDiff(rv.revision - 1, rv.revision)">與上一版比對</a>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <div id="cr-rev-diff" x-show="revDiff" style="margin-top:8px">
+              <div class="cr-sub" x-text="revDiff ? (revDiff.a + ' → ' + revDiff.b + '（' + revDiff.changes.length + ' 處不同）') : ''"></div>
+              <table class="cr-table" x-show="revDiff && revDiff.changes.length">
+                <thead><tr><th>欄位</th><th>原本</th><th>改成</th></tr></thead>
+                <tbody>
+                  <template x-for="c in (revDiff ? revDiff.changes : [])" :key="c.key">
+                    <tr :data-diff-field="c.key" style="cursor:default">
+                      <td x-text="c.label"></td>
+                      <td x-text="c.rows ? rowsText(c.rows, 'old') : fmt(c.old)"></td>
+                      <td x-text="c.rows ? rowsText(c.rows, 'new') : fmt(c.new)"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div class="cr-sec" x-show="(record.log || []).length">
@@ -666,6 +702,25 @@
                             .map(function (p) { return { value: p, label: String(p) } })
           return extra.concat(opts)
         },
+        // ── 送簽修訂紀錄（-R1、-R2…）──
+        revs: null, revDiff: null,
+        async loadRevisions(no) {
+          var r = await this.api('GET', this.base() + '/records/' + encodeURIComponent(no) + '/revisions')
+          if (r.ok && this.record && this.record.record_no === no) this.revs = r.data
+        },
+        async showDiff(a, b) {
+          var no = this.record.record_no
+          var r = await this.api('GET', this.base() + '/records/' + encodeURIComponent(no) + '/revisions/diff?a=' + encodeURIComponent(a) + '&b=' + encodeURIComponent(b))
+          if (r.ok) this.revDiff = r.data
+          else this.errMsg = '比對失敗：' + this.detail(r)
+        },
+        rowsText(rows, side) {
+          var self = this
+          return (rows || []).map(function (r) {
+            var cols = Object.keys(r.cols || {}).map(function (k) { return k + '＝' + self.fmt(r.cols[k][side]) }).join('，')
+            return '第 ' + (r.index + 1) + ' 列' + ({ add: '（新增）', remove: '（刪除）', change: '' }[r.op] || '') + '：' + cols
+          }).join('；') || '—'
+        },
         // ── 附件 ──
         uploading: {}, _staged: {},
         fileAccept(f) {
@@ -897,6 +952,8 @@
         },
         async showRecord(rec) {
           this.record = rec
+          this.revs = null; this.revDiff = null
+          this.loadRevisions(rec.record_no)
           this.recDef = await this.defFor(rec.def_version, rec)
           this.note = ''
           this.mode = 'view'

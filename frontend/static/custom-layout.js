@@ -74,7 +74,7 @@
   /** 列表儲存格的值：系統欄取單據本身，其餘取 data。 */
   function cellValue(rec, key, stateLabels) {
     if (!rec) return ''
-    if (key === '$recordNo') return rec.record_no || ''
+    if (key === '$recordNo') return rec.displayNo || rec.record_no || ''      // 送簽修訂後帶 -R<n>（S5）；沒有 displayNo 的舊回應 ⇒ 原單號
     if (key === '$status') return (stateLabels && stateLabels[rec.status]) || rec.status || ''
     if (key === '$createdBy') return rec.created_by || ''
     if (key === '$createdAt') return (rec.created_at || '').slice(0, 16).replace('T', ' ')

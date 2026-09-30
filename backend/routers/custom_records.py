@@ -20,6 +20,7 @@ from helpers import custom_builder_support as SUP
 from helpers import custom_files as CFILES
 from helpers import custom_finance as CFIN
 from helpers import custom_def_review as DEFR
+from helpers import custom_history as HIST
 from helpers import uploads as _uploads
 from core import registry as _registry
 from helpers import formula as FX
@@ -173,6 +174,48 @@ def get_custom_record(key: str, record_no: str, authorization: str = Header(None
         # U14：前端依這個欄位決定要不要顯示「修改」「送出」（後端另外擋 403）
         rec["canEdit"] = CM.can_edit_draft(rec, rec["definition"], u)
         return SUP.mask_record(rec, u)
+    finally:
+        conn.close()
+
+
+@router.get("/api/custom/{key}/records/{record_no}/revisions")
+def list_custom_record_revisions(key: str, record_no: str, authorization: str = Header(None)):
+    """送簽修訂紀錄（-R1、-R2…）：每次送簽一列（誰、何時、用哪一版定義、核可／退回與原因）。與讀單同權限。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        try:
+            rec = CM.get_record(conn, key, record_no)
+        except CM.CustomModuleError as e:
+            return _err(e)
+        if not _is_approver(rec, u["username"], conn):
+            _can_use(conn, u, key)
+        return {"current": {"revision": rec.get("revision") or 0, "displayNo": rec["displayNo"], "status": rec["status"]},
+                "revisions": HIST.list_revisions(conn, rec, rec["definition"], u)}
+    finally:
+        conn.close()
+
+
+@router.get("/api/custom/{key}/records/{record_no}/revisions/diff")
+def diff_custom_record_revisions(key: str, record_no: str, a: str = Query("0"), b: str = Query("current"),
+                                 authorization: str = Header(None)):
+    """兩個修訂的逐欄位差異（`a`／`b`＝修訂號或 `current`）；看不到的欄位不出現（與讀單同一個遮蔽）。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        try:
+            rec = CM.get_record(conn, key, record_no)
+        except CM.CustomModuleError as e:
+            return _err(e)
+        if not _is_approver(rec, u["username"], conn):
+            _can_use(conn, u, key)
+        for x in (a, b):
+            if x != "current" and not x.isdigit():
+                raise HTTPException(400, "a／b 要是修訂號或 current")
+        try:
+            return HIST.diff_revisions(conn, rec, rec["definition"], a, b, u)
+        except ValueError as e:
+            raise HTTPException(404, str(e))
     finally:
         conn.close()
 

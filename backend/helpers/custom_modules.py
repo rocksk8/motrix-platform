@@ -1068,6 +1068,10 @@ def get_record(conn, module_key, record_no) -> dict:
     # 單據凍結在建立時的定義版本 ⇒ 畫面的標籤、欄位與按鈕要用這一版，不是最新版
     rec["definition"] = d["body"]
     rec["refLabels"] = ref_labels(conn, d["body"], rec["data"])
+    from . import custom_history as _hist
+    rec["displayNo"] = _hist.display_no(rec)
+    if rec["displayNo"] != rec["record_no"]:                   # 輸出／視圖的單號帶 -R<n>（record_no 本身不變）
+        rec["view"] = dict(rec["view"], recordNo=rec["displayNo"], baseRecordNo=rec["record_no"])
     from . import custom_files as _cfiles
     rec["fileMeta"] = _cfiles.files_of_field(conn, module_key, d["body"], rec["data"])
     if rec["fileMeta"]:                              # 輸出／視圖只放檔名（不放路徑與連結）
@@ -1079,7 +1083,7 @@ def get_record(conn, module_key, record_no) -> dict:
 
 
 def list_records(conn, module_key, status=None, field=None, value=None, limit=200) -> list:
-    sql = "SELECT r.record_no, r.status, r.def_version, r.created_by, r.created_at, r.updated_at, r.data_json FROM custom_records r"
+    sql = "SELECT r.record_no, r.status, r.def_version, r.created_by, r.created_at, r.updated_at, r.data_json, r.revision FROM custom_records r"
     args, where = [], ["r.module_key=?"]
     args.append(module_key)
     if field:
@@ -1097,6 +1101,7 @@ def list_records(conn, module_key, status=None, field=None, value=None, limit=20
     for r in conn.execute(sql, args).fetchall():
         d = dict(r)
         d["data"] = _finite(json.loads(d.pop("data_json") or "{}"))
+        d["displayNo"] = d["record_no"] + ("-R%d" % d["revision"] if d.get("revision") else "")
         out.append(d)
     return out
 
@@ -1223,8 +1228,11 @@ _MAX_AUTO_HOPS = 20
 def _enter_state(conn, body, rec, to_state, user, action, note, notices, _hops=0):
     """改狀態：寫紀錄、進入有簽核的狀態就展開簽核層；所有層的條件都不成立 ⇒ 直接當作通過。"""
     from helpers import tiered_approval as ta
+    from . import custom_history as _hist
     frm = rec["status"]
     st = _state(body, to_state)
+    if action in ("approve", "reject", "auto_approve") and _state(body, frm).get("approval"):
+        _hist.on_decided(conn, rec, "rejected" if action == "reject" else "approved", user, note)      # 送簽修訂紀錄：回填這次送簽的決定
     # 沒有簽核的狀態：保留上一次的簽核紀錄（核准後的輸出要印得出誰簽過）；進入有簽核的狀態才換成新的一輪
     approval = rec.get("approval") or {}
     if st.get("approval"):
@@ -1254,6 +1262,8 @@ def _enter_state(conn, body, rec, to_state, user, action, note, notices, _hops=0
                   datetime.now().isoformat(timespec="seconds"), rec["id"]))
     _log(conn, rec["id"], action, frm, to_state, user["username"], note)
     rec["status"], rec["approval"] = to_state, approval
+    if st.get("approval") and approval.get("tiers"):
+        _hist.on_submitted(conn, rec, user)                    # 送簽：寫快照、修訂號＝已送簽次數−1（首次不帶 -R）
     _published(body, rec, frm, to_state, action, user, notices)
     _finance_hook(conn, body, rec, frm, to_state)
     _notify_state(body, rec, st, approval if st.get("approval") else {}, notices)   # 保留的舊紀錄不再通知簽核人
