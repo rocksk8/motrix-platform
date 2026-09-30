@@ -175,7 +175,7 @@ def test_case_record_patch_cannot_smuggle_a_foreign_path(client, world):
     cr = json.loads(_q("SELECT data_json FROM quotations WHERE quote_no=?", (Q,))[0]["data_json"])["caseRecord"]
     cr["materials"][0]["files"] = [
         {"id": "mine1", "filename": "RENAMED.png", "path": paths["mine"], "size": 1},
-        {"id": "smuggle", "filename": "s.png", "path": "completion_notes/CN-OTHER-1/secret2.png", "size": 1}]
+        {"id": "smuggle", "filename": "s.png", "path": "completion_notes/CN-NEW-77/brand-new.png", "size": 1}]
     r = client.patch("/api/quotations/%s/case-record" % Q, headers=h, json={"case_record": cr})
     assert r.status_code == 200, r.text
     saved = json.loads(_q("SELECT data_json FROM quotations WHERE quote_no=?", (Q,))[0]["data_json"])["caseRecord"]
@@ -188,11 +188,67 @@ def test_new_quotation_create_drops_client_supplied_files(client, make_user):
     """POST 新建：沒有既有檔案，前端帶的 files／invoiceFiles 路徑一律不收（複製案件也不帶別案的檔）。"""
     u, p = make_user(username="bd_new", role="admin", modules=None)
     h = _login(client, u, p)
-    data = {"customerName": "c", "projectName": "p", "tot": {"total": 1, "pretax": 1}, "taxType": "應稅",
+    data = {"customerName": "京城凱悅", "projectName": "影視對講機", "quoteDate": "2026-09-14", "validDays": 30, "salesPerson": "高晟耀",
+            "items": [], "tot": {"total": 1000, "pretax": 952},
             "caseRecord": {"materials": [{"name": "m", "files": [{"id": "e", "path": "completion_notes/CN-1/secret.png"}]}]}}
     r = client.post("/api/quotations", headers=h, json={"data": data, "status": "草稿"})
-    if r.status_code not in (200, 201):
-        pytest.skip("建立報價單的最小 body 與此基底不符：%s" % r.text[:120])
-    no = r.json().get("quoteNo") or r.json().get("quote_no")
+    assert r.status_code == 201, r.text
+    no = r.json()["quote_no"]
     saved = json.loads(_q("SELECT data_json FROM quotations WHERE quote_no=?", (no,))[0]["data_json"])
     assert saved["caseRecord"]["materials"][0]["files"] == []
+
+
+# ── 其他提供者：每一個都驗「路徑不在自己單據的資料夾 ⇒ 404」（變異時各自紅）──────────────────
+
+def _admin_h(client, make_user, name):
+    u, p = make_user(username=name, role="superadmin", modules=[])
+    return _login(client, u, p)
+
+
+def _case_row(qno):
+    _exec("INSERT OR IGNORE INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at,"
+          " updated_at, deal_tag) VALUES (?,?,?,?,?,?,?,?,?,?)",
+          (qno, "已送出", "客戶", "工程", 1, 1, json.dumps({"dealTag": "已成案"}), "n", "n", "已成案"))
+
+
+def test_shipping_note_path_must_be_its_own_folder(client, make_user):
+    h = _admin_h(client, make_user, "bd_sh")
+    _case_row("MQ-BND-SH")
+    _put("shipping_notes/SN-BND-1/ok.png")
+    _put("shipping_notes/SN-OTHER-2/secret.png")
+    files = [{"id": "s1", "filename": "ok.png", "path": "shipping_notes/SN-BND-1/ok.png"},
+             {"id": "s2", "filename": "x.png", "path": "shipping_notes/SN-OTHER-2/secret.png"}]
+    _exec("INSERT INTO shipping_notes (note_no, quote_no, signed_files_json) VALUES (?,?,?)", ("SN-BND-1", "MQ-BND-SH", json.dumps(files)))
+    assert _open(client, h, "shipping_note", "SN-BND-1", "s1").status_code == 200
+    assert _open(client, h, "shipping_note", "SN-BND-1", "s2").status_code == 404
+
+
+def test_invoice_voucher_path_must_be_its_own_folder(client, make_user):
+    h = _admin_h(client, make_user, "bd_iv")
+    _case_row("MQ-BND-IV")
+    _put("invoice_vouchers/IV-BND-1/ok.png")
+    _put("invoice_vouchers/IV-OTHER-2/secret.png")
+    files = [{"id": "i1", "filename": "ok.png", "path": "invoice_vouchers/IV-BND-1/ok.png"},
+             {"id": "i2", "filename": "x.png", "path": "invoice_vouchers/IV-OTHER-2/secret.png"}]
+    _exec("INSERT INTO invoice_vouchers (voucher_no, quote_no, issued_files_json) VALUES (?,?,?)", ("IV-BND-1", "MQ-BND-IV", json.dumps(files)))
+    assert _open(client, h, "invoice_voucher", "IV-BND-1", "i1").status_code == 200
+    assert _open(client, h, "invoice_voucher", "IV-BND-1", "i2").status_code == 404
+
+
+@pytest.mark.parametrize("stype,col,folder", [("contractor_dispatch", "files_json", "contractor_dispatches"),
+                                               ("contractor_invoice", "invoice_files_json", "contractor_dispatch_invoices")])
+def test_dispatch_paths_must_be_their_own_folder(client, make_user, stype, col, folder):
+    h = _admin_h(client, make_user, "bd_dp_" + stype)
+    _case_row("MQ-BND-DP")
+    vid = _exec("INSERT INTO vendor_contractors (name) VALUES (?)", ("測試廠商",))
+    did = _exec("INSERT INTO contractor_dispatches (quote_no, vendor_id) VALUES (?,?)", ("MQ-BND-DP", vid))
+    _put("%s/%d/ok.png" % (folder, did))
+    _put("%s/99999/secret.png" % folder)
+    _put("completion_notes/CN-OTHER-3/secret.png")
+    files = [{"id": "d1", "filename": "ok.png", "path": "%s/%d/ok.png" % (folder, did)},
+             {"id": "d2", "filename": "x.png", "path": "%s/99999/secret.png" % folder},
+             {"id": "d3", "filename": "y.png", "path": "completion_notes/CN-OTHER-3/secret.png"}]
+    _exec("UPDATE contractor_dispatches SET %s=? WHERE id=?" % col, (json.dumps(files), did))
+    assert _open(client, h, stype, str(did), "d1").status_code == 200
+    assert _open(client, h, stype, str(did), "d2").status_code == 404
+    assert _open(client, h, stype, str(did), "d3").status_code == 404
