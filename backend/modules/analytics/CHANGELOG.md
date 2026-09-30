@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## 1.0.16 — 2026-09-30（暫用號，列車取號；wip/w2-recon：與總帳差異（Part B））
+- 新增 `api/ledger_diff.py`：`GET /api/reports/ledger-diff?year=&basis=`（唯讀）：逐月、逐類別 營運報表 vs 總帳已過帳金額、差額與原因分桶（未過帳草稿／稅額／手工傳票／獎金傳票／其餘）；總帳模組不在 ⇒ `glAvailable:false` 說明。營運報表頁新增「與總帳差異」頁籤。
+
 ## 1.0.15 — 2026-09-30（暫用號，列車取號；wip/w1-builder3 建構器 S2.5）
 - 營運報表併入自訂模組（建構器）的金流：支出走 IP-9 `expense.entries`（提供者 `custom_module`；**現金口徑改用 entries 的選填鍵 `cashDate／cashAmount`**，沒有這兩個鍵的舊提供者行為不變）；收入（`_custom_income`）併進權責／現金兩口徑的收入逐筆，關聯到內建案件的略過（不重複計入）；缺該口徑日期的筆不列入，並在 `unavailable`（支出）與 `incomeNotice`（收入）明說「待補登」。
 
