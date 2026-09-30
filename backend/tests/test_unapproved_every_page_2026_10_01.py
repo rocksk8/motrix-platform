@@ -16,7 +16,7 @@ import pytest
 from helpers import doc_template as dt
 
 DOC_NO = "MQ-202610-002"
-RED_RE = re.compile(rb"0\.77\d* 0\.15\d* 0\.15\d* (?:rg|RG)")          # #C62828 ＝ (198,40,40)
+RED_RE = re.compile(rb"\.77\d* \.15\d* \.15\d* (?:rg|RG)")          # #C62828 ＝ (198,40,40)
 
 
 @pytest.fixture()
@@ -47,9 +47,9 @@ def _pages(pdf):
 
 
 def _marks_ok(page):
-    """一頁上的標示是否齊全：頁首紅條字、頁尾單號、浮水印／頁尾／頁首的「未核可」至少 3 處、有紅色繪製。"""
+    """一頁上的標示是否齊全：頁首紅條字、頁尾單號、頁首＋頁尾的「未核可」、浮水印字樣「報價單預覽稿」、有紅色繪製。"""
     t = page["text"]
-    return ("不可作為正式文件" in t and DOC_NO in t and t.count("未核可") >= 3 and page["reds"] >= 2)
+    return ("不可作為正式文件" in t and DOC_NO in t and t.count("未核可") >= 2 and "報價單預覽稿" in t and page["reds"] >= 2)
 
 
 def test_every_printed_page_of_an_unapproved_quotation_is_marked(company):
@@ -60,7 +60,7 @@ def test_every_printed_page_of_an_unapproved_quotation_is_marked(company):
     bad = [i + 1 for i, p in enumerate(pages) if not _marks_ok(p)]
     assert not bad, "這些頁的未核可標示不齊全：%s" % bad
     for i, p in enumerate(pages):
-        assert "第 %d 頁" % (i + 1) in re.sub(r"\s+", " ", p["text"]), "第 %d 頁的頁尾頁碼不對" % (i + 1)
+        assert re.search(r"第 %d [頁⾴]" % (i + 1), re.sub(r"\s+", " ", p["text"])), "第 %d 頁的頁尾頁碼不對" % (i + 1)    # 文字抽取會把「頁」變成康熙部首「⾴」
 
 
 def test_approved_quotation_has_no_marks_at_all(company):
@@ -74,7 +74,7 @@ def test_approved_quotation_has_no_marks_at_all(company):
 
 
 @pytest.mark.parametrize("mutation,needle", [
-    ("remove_watermark", "未核可"),          # 拿掉 fixed 浮水印 ⇒ 每頁「未核可」少一處
+    ("remove_watermark", "報價單預覽稿"),    # 拿掉 fixed 浮水印 ⇒ 每頁浮水印字樣消失
     ("remove_margin_boxes", "不可作為正式文件"),   # 拿掉 @page 邊界框 ⇒ 頁首／頁尾消失
 ])
 def test_mutations_make_the_per_page_check_red(company, mutation, needle):
