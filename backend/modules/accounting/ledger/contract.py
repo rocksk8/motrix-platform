@@ -116,7 +116,8 @@ def canonical_hash(ev):
         "date": ev.get("event_date"), "case": ev.get("case_no") or "", "party": (ev.get("party") or {}).get("key") or "",
         "tax": ev.get("tax_code") or "",
         "lines": sorted([ln.get("role"), ln.get("side"), ln.get("amount"), ln.get("case_no") or "", ln.get("party_key") or "",
-                         ln.get("tax_code") or "", ln.get("account_code") or ""] for ln in ev.get("lines", [])),
+                         ln.get("tax_code") or "", ln.get("account_code") or ""] + ([json.dumps(ln["dims"], sort_keys=True, ensure_ascii=False)] if ln.get("dims") else [])
+                        for ln in ev.get("lines", [])),       # dims 只在有值時才進雜湊 ⇒ 舊事件雜湊不變
     }
     return hashlib.sha256(json.dumps(core, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
@@ -130,6 +131,11 @@ def _annotation(conn, ev, field):
     row = conn.execute("SELECT value FROM gl_source_annotations WHERE source_type=? AND source_key=? AND field=?",
                        (st, ev.get("source_key"), field)).fetchone()
     return None if row is None else row[0]
+
+
+def _apply_category_map(conn, ev):
+    from modules.accounting.ledger import category_map as _cm          # 晚 import：避免載入循環
+    return _cm.apply_category_map(conn, ev)
 
 
 def apply_annotations(conn, ev):
@@ -265,6 +271,7 @@ def collect(start, end, changed_since="", conn=None):
             e = dict(ev)
             if conn is not None:
                 e = apply_annotations(conn, e)
+                e = _apply_category_map(conn, e)            # 費用類別代碼 → 科目與拆稅（來源模組只回類別代碼）
             e["source_module"] = src
             e["mode"] = e.get("mode", "snapshot")
             e["content_hash"] = canonical_hash(e)

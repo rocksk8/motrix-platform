@@ -65,6 +65,13 @@ def _voucher_row(conn, vid):
     return dict(r) if r else None
 
 
+def _dims_json(ln):
+    """事件行選填 `dims`（維度代碼→字串，例 department）⇒ `voucher_lines.dim_json`（migration 0003）；沒有 ⇒ '{}'。"""
+    import json
+    d = ln.get("dims") or {}
+    return json.dumps({str(k): str(v) for k, v in d.items() if v not in (None, "")}, ensure_ascii=False, sort_keys=True) if isinstance(d, dict) else "{}"
+
+
 def _make_draft(conn, ev, resolved, user, kind="auto", reverse=False, reverses_no="", date=None, event_id=0, code_hint=None):
     """寫一張草稿傳票（含維度欄位）。`reverse=True` 借貸對調。回 (voucher_id, voucher_no)。"""
     from modules.accounting.api.voucher_common import _amount_lines, insert_draft_voucher
@@ -85,9 +92,9 @@ def _make_draft(conn, ev, resolved, user, kind="auto", reverse=False, reverses_n
     conn.execute("UPDATE vouchers_all SET kind=?, origin=?, reverses_no=?, gl_event_id=?, is_backfill=? WHERE id=?",
                  (kind, "gl:%s" % ev["event_code"], reverses_no, event_id, 1 if ev.get("backfill") else 0, vid))
     for i, ln in enumerate(resolved, start=1):
-        conn.execute("UPDATE voucher_lines SET case_no=?, party_key=?, tax_code=?, doc_no=? WHERE voucher_id=? AND line_no=?",
+        conn.execute("UPDATE voucher_lines SET case_no=?, party_key=?, tax_code=?, doc_no=?, dim_json=? WHERE voucher_id=? AND line_no=?",
                      (ln.get("case_no") or ev.get("case_no") or "", ln.get("party_key") or (ev.get("party") or {}).get("key") or "",
-                      ln.get("tax_code") or ev.get("tax_code") or "", ev.get("doc_no") or "", vid, i))
+                      ln.get("tax_code") or ev.get("tax_code") or "", ev.get("doc_no") or "", _dims_json(ln), vid, i))
     return vid, no
 
 

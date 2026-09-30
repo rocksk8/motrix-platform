@@ -451,6 +451,8 @@
     "mod:accounting/notify",
     "mod:accounting/ledger/inventory",
     "mod:accounting/api/ledger_annotations",
+    "mod:accounting/api/ledger_category_map",
+    "mod:accounting/ledger/category_map",
     "mod:accounting/api/ledger_requests",
     "mod:accounting/api/ledger_closing",
     "mod:accounting/ledger/auto_run",
@@ -516,7 +518,9 @@
     "gl_statement_snapshots",
     "gl_tax401_map",
     "gl_tax_settlements",
-    "gl_withholding_items"
+    "gl_withholding_items",
+    "expense_categories",
+    "gl_dimensions"
    ],
    "api_prefixes": [
     "/api/account-items",

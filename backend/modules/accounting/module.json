@@ -10,6 +10,7 @@
   ],
   "tables": [
     "account_items",
+    "expense_categories",
     "fa_assets",
     "fa_categories",
     "fa_depr_lines",
@@ -24,6 +25,7 @@
     "gl_confirm_batches",
     "gl_cursors",
     "gl_custom_field_map",
+    "gl_dimensions",
     "gl_engine_runs",
     "gl_fiscal_years",
     "gl_fs_lines",
@@ -56,6 +58,10 @@
     "tables": [
       {
         "name": "account_items",
+        "class": "T1"
+      },
+      {
+        "name": "expense_categories",
         "class": "T1"
       },
       {
@@ -112,6 +118,10 @@
       },
       {
         "name": "gl_custom_field_map",
+        "class": "T1"
+      },
+      {
+        "name": "gl_dimensions",
         "class": "T1"
       },
       {

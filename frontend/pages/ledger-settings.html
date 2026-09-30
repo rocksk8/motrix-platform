@@ -59,6 +59,7 @@
       <div class="ls-tabs">
         <button class="ls-tab" :class="{on: tab==='accounts'}" @click="tab='accounts'" data-testid="ls-tab-accounts">科目歸屬與分類</button>
         <button class="ls-tab" :class="{on: tab==='lines'}" @click="tab='lines'" data-testid="ls-tab-lines">報表列</button>
+        <button class="ls-tab" :class="{on: tab==='catmap'}" @click="tab='catmap'" data-testid="ls-tab-catmap">費用類別科目對應</button>
       </div>
 
       <template x-if="tab==='accounts'">
@@ -123,9 +124,102 @@
           </template>
         </div>
       </template>
+
+      <template x-if="tab==='catmap'">
+        <div x-data="glCategoryMap()" x-init="load()" data-testid="ls-catmap">
+          <div class="ls-note">費用單據（額外支出、請款）只記「費用類別」，入哪個會計科目由這裡決定；類別清單由會計維護、單據只能選用。沒有對應的類別：有案件＝專案成本，<b>沒有案件＝其他營業費用</b>（不會誤入專案成本）。只有最高管理者可以修改。</div>
+          <div class="ls-err" x-show="error" x-text="error" data-testid="ls-catmap-error"></div>
+          <div class="ls-ok" x-show="notice" x-text="notice" data-testid="ls-catmap-notice"></div>
+          <div class="ls-warn" x-show="unmapped.length" x-text="'尚未設定對應的類別：' + unmapped.join('、')" data-testid="ls-catmap-unmapped"></div>
+          <table class="ls-table">
+            <thead><tr><th>代碼</th><th>名稱</th><th>預設稅別</th><th>會計科目</th><th>不得扣抵進項稅額</th><th></th></tr></thead>
+            <tbody>
+              <template x-for="c in rows" :key="c.code">
+                <tr :data-testid="'ls-catmap-row-' + c.code" :class="{bad: !c.mapped}">
+                  <td class="ls-code" x-text="c.code"></td>
+                  <td x-text="c.name"></td>
+                  <td x-text="({taxable:'應稅', exempt:'免稅', none:'無'})[c.default_tax] || '（未指定）'"></td>
+                  <td>
+                    <select class="ls-select" :disabled="!canWrite" x-model="c.account_code" data-testid="ls-catmap-account">
+                      <option value="">（未設定）</option>
+                      <template x-for="a in accounts" :key="a.code"><option :value="a.code" x-text="a.code + ' ' + a.name"></option></template>
+                    </select>
+                  </td>
+                  <td><input type="checkbox" :disabled="!canWrite" x-model="c.nondeductible" data-testid="ls-catmap-nd"></td>
+                  <td>
+                    <button class="ls-tab" style="border:1px solid var(--border-light)" :disabled="!canWrite || !c.account_code" @click="save(c)" data-testid="ls-catmap-save">儲存</button>
+                    <button class="ls-tab" style="border:1px solid var(--border-light)" :disabled="!canWrite || !c.mapped" @click="remove(c)" data-testid="ls-catmap-del">移除對應</button>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="!rows.length"><td colspan="6" data-testid="ls-catmap-empty">尚未建立任何費用類別。</td></tr>
+            </tbody>
+          </table>
+          <div class="ls-bar" style="margin-top:12px" x-show="canWrite">
+            <input class="ls-input" type="text" placeholder="代碼（英數字，發布後不可改）" x-model="nc.code" data-testid="ls-catmap-new-code">
+            <input class="ls-input" type="text" placeholder="名稱" x-model="nc.name" data-testid="ls-catmap-new-name">
+            <select class="ls-select" x-model="nc.default_tax" data-testid="ls-catmap-new-tax"><option value="">（未指定）</option><option value="taxable">應稅</option><option value="exempt">免稅</option><option value="none">無</option></select>
+            <button class="ls-tab" style="border:1px solid var(--border-light)" @click="addCategory()" data-testid="ls-catmap-add">新增費用類別</button>
+          </div>
+        </div>
+      </template>
     </main>
   </div>
   <!-- notif.js 必須與 sidebar.js 成對、放在 sidebar.js 之前（見 account-items.html 註解；守門 test_page_shell_scripts_2026_09_30.py） -->
+  <script>
+    // 費用類別科目對應（G1；行內元件，只打 /api/ledger/category-map 與 /api/ledger/expense-categories；判斷都在後端）
+    function glCategoryMap() {
+      return {
+        rows: [], accounts: [], error: '', notice: '', canWrite: false, nc: { code: '', name: '', default_tax: '' },
+        get unmapped() { return this.rows.filter(r => !r.mapped).map(r => r.code) },
+        _s() { try { return JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { return {} } },
+        async _api(method, path, body) {
+          const opt = { method, headers: { Authorization: 'Bearer ' + (this._s().token || ''), 'Content-Type': 'application/json' } }
+          if (body !== undefined) opt.body = JSON.stringify(body)
+          const r = await fetch(path, opt)
+          let d = {}
+          try { d = await r.json() } catch (e) { d = {} }
+          if (!r.ok) throw new Error(typeof d.detail === 'string' ? d.detail : '操作失敗（' + r.status + '）')
+          return d
+        },
+        async load() {
+          this.canWrite = this._s().role === 'superadmin'
+          try {
+            const d = await this._api('GET', '/api/ledger/category-map')
+            this.accounts = d.accounts || []
+            const cat = {}
+            ;(d.categories || []).forEach(c => { cat[c.code] = c })
+            this.rows = (d.coverage || []).map(c => Object.assign({}, c, { default_tax: (cat[c.code] || {}).default_tax || '' }))
+          } catch (e) { this.error = e.message }
+        },
+        async save(c) {
+          this.error = ''; this.notice = ''
+          try {
+            await this._api('PUT', '/api/ledger/category-map', { category: c.code, account_code: c.account_code, nondeductible: !!c.nondeductible })
+            this.notice = '已儲存「' + c.name + '」的科目對應。'
+            await this.load()
+          } catch (e) { this.error = e.message }
+        },
+        async remove(c) {
+          this.error = ''; this.notice = ''
+          try {
+            await this._api('DELETE', '/api/ledger/category-map/' + encodeURIComponent(c.code))
+            this.notice = '已移除「' + c.name + '」的對應（之後會依有無案件走預設科目）。'
+            await this.load()
+          } catch (e) { this.error = e.message }
+        },
+        async addCategory() {
+          this.error = ''; this.notice = ''
+          try {
+            await this._api('PUT', '/api/ledger/expense-categories', { code: this.nc.code, name: this.nc.name, default_tax: this.nc.default_tax })
+            this.notice = '已新增費用類別「' + this.nc.name + '」，請接著設定會計科目。'
+            this.nc = { code: '', name: '', default_tax: '' }
+            await this.load()
+          } catch (e) { this.error = e.message }
+        },
+      }
+    }
+  </script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>
