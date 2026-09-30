@@ -25,6 +25,8 @@
 > **總帳不消費 outbox**（主持裁示 2026-09-30）：C7 以『拉取式提供者』讀目前處於入帳狀態的自訂單據（即時集合），事件由引擎冪等產生、單據離開入帳狀態 ⇒ 事件消失 ⇒ 引擎反轉；outbox 只作稽核軌跡。金額欄位 → 科目靠會計維護的 `gl_custom_field_map`，未對應的欄位 ⇒ 事件標 `blocked_no_account` 並說明。
 | 補登（不改來源） | `gl_source_annotations`（總帳自有表） | 會計 → 引擎收集 | `(source_type, source_key, field, value)`；認得 `input_tax`（非負整數：覆寫承攬商發票 E04／進貨發票 E08b 的估算稅額，E09 跟著調整；把『未拆稅』的額外支出 E11／叫料 E12 拆成成本＋進項稅額）與 `invoice_date`（E04／E08b 的入帳日） | 補登值不合法 ⇒ 忽略並在事件 `meta.annotation_ignored` 標記；補登改變內容雜湊 ⇒ 已過帳者走 drift | `source_annotations` | `c2_subcontract` |
 
+> **寫入連動（來源寫入 ⇒ 報表／總帳；總帳寫入 ⇒ 報表）**：逐動作矩陣與缺口清單 L1～L12 見 [`MONEY-FLOWS.md` §9](MONEY-FLOWS.md)。重點：引擎只能手動執行、來源寫入沒有 hook／訊號、drift／orphan 只掃執行區間內；營運報表完全不讀總帳。
+
 ## 2. `gl.events` 契約 v1（事件形狀）
 
 - 提供者：`registry.provide("gl.events", <模組 key>, fn)`；`fn(start, end, *, changed_since="") -> {"events": [...], "notice": "文字"}`；只讀、不寫資料、不 commit。
