@@ -14,6 +14,9 @@
 """
 import calendar
 import datetime as _dt
+import sqlite3
+
+from core.txn import begin_write
 
 from modules.accounting.ledger import periods as _periods
 from modules.accounting.ledger import roles as _roles
@@ -61,6 +64,10 @@ _CARRY_ORIGIN = "gl:E14"
 
 class TaxError(ValueError):
     pass
+
+
+class TaxConflict(TaxError):
+    """狀態衝突（前期未過帳、並行重建）⇒ API 回 409，不是 400。"""
 
 
 def ensure_map(conn):
@@ -163,6 +170,8 @@ def summarize(conn, year, n, invoices=None):
             unmapped.append(code)
             continue
         m = _pick(mp, medium)
+        if code.endswith("-ADJ"):
+            v = dict(v, amount=-v["amount"], tax=-v["tax"])                  # 分錄方向相反 ⇒ 淨額為負；填表用正數、彙總時當減項
         zero = v["amount"] if m["field_zero"] and not m["field_amt"] else 0
         rows.append({"tax_code": code, "invoice_kind": m["invoice_kind"], "side": m["side"], "note": m["note"],
                      "field_amt": m["field_amt"], "field_tax": m["field_tax"], "field_zero": m["field_zero"],
@@ -207,6 +216,12 @@ def summarize(conn, year, n, invoices=None):
                        "AND payload_json LIKE '%\"tax_estimated\": true%'", (lo, hi)).fetchone()[0]
     if est:
         warnings.append({"key": "estimated", "level": "amber", "text": "%d 筆進項稅額是估計值（發票稅額未補登）：請到來源憑證補登實際稅額，否則 107 不可靠。" % est})
+    if carry_prev == 0 and conn.execute(
+            "SELECT 1 FROM voucher_lines l JOIN vouchers_all v ON v.id=l.voucher_id WHERE v.status='已過帳' AND v.voided_at='' AND l.tax_code<>'' AND v.origin<>? "
+            "AND substr(v.voucher_date,1,10) < ? LIMIT 1", (_CARRY_ORIGIN, lo)).fetchone() and not conn.execute(
+            "SELECT 1 FROM gl_tax_settlements WHERE period_end < ? LIMIT 1", (lo,)).fetchone():
+        warnings.append({"key": "no_prev_settlement", "level": "amber",
+                         "text": "本期以前已有稅碼分錄，卻沒有任何期別的稅額結轉紀錄：上期累積留抵稅額（108）沒有被承接。若前期已在他處申報，請確認 108 是否應有金額再申報。"})
     if unmapped:
         warnings.append({"key": "unmapped", "level": "red", "text": "稅碼 %s 沒有 401 欄位對照（gl_tax401_map）：未列入彙總。" % "、".join(unmapped)})
     return {"year": year, "period": n, "start": lo, "end": hi, "rows": rows, "calc": calc, "checks": checks, "warnings": warnings,
@@ -224,6 +239,7 @@ def generate_settlement(conn, year, n, user, invoices=None):
     """期末稅額結轉草稿（E14）：借銷項稅額／貸進項稅額，應實繳貸應付營業稅、留抵借（貸）留抵稅額。
     對帳不平不可產生（先修帳）；已有草稿 ⇒ 作廢重建；已過帳 ⇒ 拒絕（請先沖轉）。"""
     from modules.accounting.ledger import engine as _engine
+    begin_write(conn)                                                # 寫鎖：兩個同時重建同一期會互相等待，後者讀到前者的結果（D2）
     s = summarize(conn, year, n, invoices)
     if not s["reconciled"]:
         bad = [c["label"] for c in s["checks"] if c["ok"] is False]
@@ -233,8 +249,16 @@ def generate_settlement(conn, year, n, user, invoices=None):
     if lock:
         raise TaxError(lock)
     S, I, C = s["calc"]["101"], s["calc"]["107"], s["calc"]["108"]
+    if S < 0 or I < 0:
+        raise TaxError("本期銷項稅額（101）%d 或進項稅額（107）%d 的淨額是負的（多半是只有退回折讓的期間）：稅額結轉不處理負的淨額，請先確認折讓證明單與進項憑證。" % (S, I))
     if S == 0 and I == 0:
         raise TaxError("本期沒有銷項與進項稅額，不需要結轉。")
+    prev = conn.execute(
+        "SELECT s.period_start, s.period_end, s.voucher_id, v.status AS vstatus, v.voided_at AS vvoid FROM gl_tax_settlements s LEFT JOIN vouchers_all v ON v.id=s.voucher_id"
+        " WHERE s.period_end < ? ORDER BY s.period_end DESC LIMIT 1", (lo,)).fetchone()
+    if prev and (prev["voucher_id"] is None or prev["vvoid"] or prev["vstatus"] != "已過帳"):
+        raise TaxConflict("前一期（%s～%s）的稅額結轉傳票還沒過帳（或已作廢）：請先過帳再產生本期，否則上期留抵不會被承接、本期應實繳稅額會被高估。"
+                          % (prev["period_start"], prev["period_end"]))
     X = S - I - C
     lines = []
     if S:
@@ -258,7 +282,7 @@ def generate_settlement(conn, year, n, user, invoices=None):
         v = conn.execute("SELECT status, voided_at FROM vouchers_all WHERE id=?", (old["voucher_id"],)).fetchone()
         if v and not v["voided_at"]:
             if v["status"] != "草稿":
-                raise TaxError("這一期的稅額結轉傳票已過帳／審核中；要重做請先沖轉或退回。")
+                raise TaxConflict("這一期的稅額結轉傳票已過帳／審核中；要重做請先沖轉或退回。")
             _engine._void_draft(conn, old["voucher_id"], user, "重新產生稅額結轉")
     ev = {"source_module": "accounting", "source_type": "tax_settlement", "source_key": "%s:%d" % (year, n), "event_code": "E14",
           "event_date": hi, "doc_no": "營業稅%04d年第%d期" % (year, n), "case_no": "", "party": {"key": "", "name": ""}, "tax_code": "",
@@ -267,10 +291,17 @@ def generate_settlement(conn, year, n, user, invoices=None):
     vid, no = _engine._make_draft(conn, ev, resolved, user, event_id=0)
     conn.execute("UPDATE vouchers_all SET origin=? WHERE id=?", (_CARRY_ORIGIN, vid))
     now = _dt.datetime.now().isoformat(timespec="seconds")
+    try:
+        _write_settlement(conn, old, lo, hi, S, I, C, X, new_carry, vid, user, now)
+    except sqlite3.IntegrityError:
+        raise TaxConflict("這一期的稅額結轉剛被另一個操作建立，請重新整理後再試。")
+    return {"voucher_id": vid, "voucher_no": no, "output_tax": S, "input_tax": I, "carry_prev": C, "payable": max(0, X), "carry_new": new_carry}
+
+
+def _write_settlement(conn, old, lo, hi, S, I, C, X, new_carry, vid, user, now):
     if old:
         conn.execute("UPDATE gl_tax_settlements SET output_tax=?, input_tax=?, carry_prev=?, payable=?, carry_new=?, voucher_id=?, status='draft', created_by=?, created_at=? WHERE id=?",
                      (S, I, C, max(0, X), new_carry, vid, user, now, old["id"]))
     else:
         conn.execute("INSERT INTO gl_tax_settlements(period_start, period_end, output_tax, input_tax, carry_prev, payable, carry_new, refund_amount, voucher_id, status, created_by, created_at)"
                      " VALUES (?,?,?,?,?,?,?,0,?,'draft',?,?)", (lo, hi, S, I, C, max(0, X), new_carry, vid, user, now))
-    return {"voucher_id": vid, "voucher_no": no, "output_tax": S, "input_tax": I, "carry_prev": C, "payable": max(0, X), "carry_new": new_carry}

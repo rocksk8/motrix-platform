@@ -73,6 +73,7 @@
                 <input class="hb-input" type="date" x-model="wh.date" data-saved-field data-testid="hb-wh-date"> 繳庫日
                 <input class="hb-input" type="text" x-model="wh.voucherNo" data-saved-field placeholder="繳庫傳票單號（選填）" data-testid="hb-wh-voucher">
                 <button class="hb-btn" :disabled="wh.busy" @click="whRemit()" data-testid="hb-wh-remit">登記繳庫</button>
+                <input class="hb-input" type="text" x-model="wh.unremitReason" data-saved-field placeholder="取消繳庫的原因（取消時必填）" data-testid="hb-wh-reason">
               </div>
               <template x-if="wh.data">
                 <div>
@@ -99,6 +100,7 @@
                       </template>
                     </tbody>
                   </table>
+                  <div class="hb-warn" x-show="wh.data.truncated" data-testid="hb-wh-truncated">未指定月份時最多顯示 2000 筆，請選擇月份縮小範圍。</div>
                   <div class="hb-note" x-show="!wh.data.items.length" data-testid="hb-wh-empty">目前沒有扣繳項目。勞報單簽回後，於『分錄草稿』執行引擎產生草稿時會記入這裡。</div>
                 </div>
               </template>

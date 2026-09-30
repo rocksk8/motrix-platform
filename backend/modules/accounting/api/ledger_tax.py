@@ -92,6 +92,9 @@ def tax401_settlement(body: dict = Body(...), authorization: str = Header(None))
         _flag(conn)
         try:
             res = _tax.generate_settlement(conn, int(b.get("year")), int(b.get("period")), (user or {}).get("username") or "", _invoices())
+        except _tax.TaxConflict as exc:
+            conn.rollback()
+            raise HTTPException(409, str(exc))
         except (_tax.TaxError, ValueError, TypeError) as exc:
             conn.rollback()
             raise HTTPException(400, str(exc))
@@ -134,32 +137,34 @@ def withholding_remit(body: dict = Body(...), authorization: str = Header(None))
     try:
         _wh_flag(conn)
         try:
-            n = _wh.mark_remitted(conn, b.get("ids") or [], b.get("remitted_at"), str(b.get("voucher_no") or ""))
+            n = _wh.mark_remitted(conn, b.get("ids"), b.get("remitted_at"), str(b.get("voucher_no") or ""))
         except (_wh.WithholdingError, ValueError, TypeError) as exc:
             conn.rollback()
             raise HTTPException(400, str(exc))
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), "ledger.withholding.remit", "gl_withholding_items", ",".join(str(i) for i in (b.get("ids") or [])[:20]),
-           "登記繳庫 %d 筆（%s）" % (n, b.get("remitted_at")))
+    _audit(_tok(authorization), "ledger.withholding.remit", "gl_withholding_items", "%d 筆" % len(b["ids"]),
+           "登記繳庫 %d 筆（繳庫日 %s，傳票 %s；項目 %s）" % (n, b.get("remitted_at"), b.get("voucher_no") or "未連結", ",".join(str(i) for i in b["ids"])))
     return {"updated": n}
 
 
 @router.post("/withholding/unremit")
 def withholding_unremit(body: dict = Body(...), authorization: str = Header(None)):
     user = _require_tax_write(authorization)
-    ids = (body or {}).get("ids") or []
+    ids = (body or {}).get("ids")
+    reason = str((body or {}).get("reason") or "")
     conn = get_db()
     try:
         _wh_flag(conn)
         try:
-            n = _wh.unmark_remitted(conn, ids)
-        except (ValueError, TypeError) as exc:
+            res = _wh.unmark_remitted(conn, ids, reason)
+        except (_wh.WithholdingError, ValueError, TypeError) as exc:
             conn.rollback()
             raise HTTPException(400, str(exc))
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), "ledger.withholding.unremit", "gl_withholding_items", ",".join(str(i) for i in ids[:20]), "取消繳庫登記 %d 筆" % n)
-    return {"updated": n}
+    _audit(_tok(authorization), "ledger.withholding.unremit", "gl_withholding_items", "%d 筆" % len(ids),
+           "取消繳庫登記 %d 筆，原因：%s；原狀態（項目、繳庫日、傳票id）：%s" % (res["updated"], reason.strip()[:80], res["previous"]))
+    return {"updated": res["updated"]}
