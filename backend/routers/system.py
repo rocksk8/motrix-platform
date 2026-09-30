@@ -424,7 +424,7 @@ def _audit_filters(module, case_no, ref_no, user_q, action, date_from, date_to, 
     return where, params
 
 
-def _audit_view_guard(authorization):
+def _require_audit_view(authorization):
     # 2026-09-14 使用者裁示：這頁原本沒有對應的模組 key，只能靠角色寫死（`admin` 以上）。
     # 建了 key（`audit_log`）後跟其他模組一樣可逐帳號勾選；列表、樹、失敗摘要同一個權限。
     user = _require_user(authorization)
@@ -450,7 +450,7 @@ def list_audit_log(
 ):
     """使用者 2026-09-30：「人員的紀錄或是操作紀錄可以分層依模組、案件等搜尋，或是紀錄中有失敗能快速查詢」。
     分頁：`before_id`（keyset，走索引，深頁不掃描）；舊的 `offset` 仍可用。`limit` 上限 200。"""
-    _audit_view_guard(authorization)
+    _require_audit_view(authorization)
     limit = max(1, min(int(limit), 200))
     conn = get_db()
     try:
@@ -489,7 +489,7 @@ def audit_log_tree(
 ):
     """分層下鑽：module（模組）→ case（案件，需 module）→ ref（單據，需 module／case_no）。每層回
     `[{key, label, count, failCount, lastAt}]`；事件層用 `GET /api/audit-log` 帶同一組篩選。"""
-    _audit_view_guard(authorization)
+    _require_audit_view(authorization)
     col = {"module": "module", "case": "case_no", "ref": "ref_no"}.get(level)
     if col is None:
         raise HTTPException(400, "level 只能是 module／case／ref")
@@ -516,7 +516,7 @@ def audit_log_tree(
 @router.get("/api/audit-log/failures/summary")
 def audit_log_failure_summary(date_from: str = None, date_to: str = None, authorization: str = Header(None)):
     """失敗紀錄摘要：總數＋原因碼／模組／人員前 10。"""
-    _audit_view_guard(authorization)
+    _require_audit_view(authorization)
     conn = get_db()
     try:
         where, params = _audit_filters(None, None, None, None, None, date_from, date_to, "fail", None)

@@ -333,3 +333,4 @@ def test_module_counts_non_string_since_is_400_not_500(client, make_user, bad):
     u, p = make_user(username="mc_ok2", role="admin", modules=["audit_log"])
     r = client.post("/api/audit-log/module-counts", headers=_login(client, u, p), json={"modules": {"quotation": bad}})
     assert r.status_code == 400, r.text
+
