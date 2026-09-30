@@ -107,9 +107,10 @@ def test_falls_back_to_the_old_behaviour_when_the_dedicated_dir_is_unavailable(p
     assert prod["seen"][0] == ["msedge.exe", "--headless", "a"], "拿不到專屬目錄時應退回原命令（不帶旗標），功能不受影響"
 
 
-def test_a_caller_supplied_user_data_dir_is_left_alone(prod):
-    startup.run_edge_pdf(["msedge.exe", "--user-data-dir=C:/somewhere/else", "--headless", "a"])
-    assert prod["seen"][0] == ["msedge.exe", "--user-data-dir=C:/somewhere/else", "--headless", "a"]
+def test_a_caller_supplied_user_data_dir_is_left_alone(prod, tmp_path):
+    other = "--user-data-dir=%s" % (tmp_path / "caller_profile")
+    startup.run_edge_pdf(["msedge.exe", other, "--headless", "a"])
+    assert prod["seen"][0] == ["msedge.exe", other, "--headless", "a"]
     assert not prod["root"].exists(), "呼叫端已指定 ⇒ 不該再開專屬目錄"
 
 

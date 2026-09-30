@@ -110,7 +110,8 @@ def _edge_creationflags() -> int:
 #   · 每用 50 次量一次大小，超過上限（300 MB）也刪掉重建（快取不會無限長）；
 #   · 拿不到（例外）⇒ 退回舊行為（不帶 --user-data-dir），功能不受影響。
 # ⚠️ 只認這一個位置：`tests/test_edge_profile_2026_09_25.py` 的守門是「產品碼只能在這裡帶 --user-data-dir、且只能指向專屬 profile 根目錄」。
-EDGE_PROFILE_ROOT = os.path.join(_paths.LOGS_DIR, "edge_profiles")
+from core import paths as _core_paths  # noqa: E402（本檔下方另有同名 import；這裡先用到）
+EDGE_PROFILE_ROOT = os.path.join(_core_paths.LOGS_DIR, "edge_profiles")
 EDGE_PROFILE_MAX_BYTES = 300 * 1024 * 1024
 EDGE_PROFILE_CHECK_EVERY = 50
 _EDGE_PROFILE_LOCK = threading.Lock()
