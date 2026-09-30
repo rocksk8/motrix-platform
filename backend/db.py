@@ -4,6 +4,7 @@
 #: L1 以外只可以用這裡列出的底線名稱（守門：test_l1_interface_snapshot::test_l2_uses_only_declared_l1_underscore_names）。
 __l1_public__ = (
     "_MIGRATIONS",
+    "_frozen_own_payload",
 )
 
 import sqlite3

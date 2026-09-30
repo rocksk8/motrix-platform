@@ -1,5 +1,8 @@
 # 採購・庫存・出貨 更新紀錄
 
+## 1.0.13 — 2026-09-30（暫用號，列車取號；wip/w3-prodroot 去識別化 S3）
+- 去識別化：註解／範例文字裡的真實資料改為泛稱；只動文字，行為不變。
+
 ## 1.0.12 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
 - 新增 `attachments.py::_SupplyCatalog`（`attachments.catalog`／`supply`，IP-105）：出貨單回簽附件開檔；權限＝出貨單清單規則 `case_documents_readable`。
 

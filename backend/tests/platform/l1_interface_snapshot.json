@@ -1,5 +1,5 @@
 {
- "core_version": "1.81",
+ "core_version": "1.83",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -60,6 +60,7 @@
    "SchemaNewerThanBaseline": "class",
    "V9_BASELINE": "const",
    "_MIGRATIONS": "const",
+   "_frozen_own_payload": "def()",
    "db_conn": "def()",
    "demo_module_tables": "def()",
    "get_db": "def()",
