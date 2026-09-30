@@ -128,3 +128,9 @@ def test_vendor_files_skip_the_pattern_layer_only(tmp_path):
     root = _tree(tmp_path, {"frontend/static/vendor/lib/min.js": "var a=%s;var b='x@y-corp.co';\n" % valid,
                             "frontend/static/app.js": "var a=%s;\n" % valid})
     assert [(h.path, h.kind) for h in S.scan(root)] == [("frontend/static/app.js", "taxid_pattern")]
+
+
+def test_unix_home_paths_are_matched_only_from_the_path_start(tmp_path):
+    root = _tree(tmp_path, {"a.py": 'u = "https://www.example.org/se/home/mobile/x"\np = "/home/alice/proj"\n'})
+    hits = S.scan(root)
+    assert [(h.line, h.kind) for h in hits] == [(2, "dev_path")]
