@@ -723,7 +723,6 @@
    "dynamic_sql": true,
    "imports": [
     "core:db",
-    "core:pdf_gen",
     "helper:approval_queue",
     "helper:audit",
     "helper:custom_builder_support",
@@ -731,6 +730,7 @@
     "helper:custom_files",
     "helper:custom_finance",
     "helper:custom_history",
+    "helper:doc_render",
     "helper:doc_template",
     "helper:email_notify",
     "helper:formula",
@@ -780,6 +780,20 @@
    "imports": [],
    "kind": "helper",
    "path": "backend/helpers/dates.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:doc_render": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:pdf_gen",
+    "helper:doc_template"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/doc_render.py",
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
@@ -957,7 +971,9 @@
   "helper:mail_types": {
    "api_prefixes": [],
    "dynamic_sql": false,
-   "imports": [],
+   "imports": [
+    "helper:notification_prefs"
+   ],
    "kind": "helper",
    "path": "backend/helpers/mail_types.py",
    "tables_ddl": [],
@@ -1692,6 +1708,26 @@
     "mod:payroll/api/bonus",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "js:js/expense-types.js": {
+   "api_calls": [
+    "/api/definitions/",
+    "/api/settings/approval-doc-types"
+   ],
+   "api_prefixes": [
+    "/api/definitions",
+    "/api/settings"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/js/expense-types.js",
+   "routers_called": [
+    "router:definitions",
+    "router:system"
    ],
    "tables_r": [],
    "tables_w": []
@@ -4776,6 +4812,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:doc_render",
     "helper:doc_template",
     "helper:email_notify",
     "helper:financial_mask",
@@ -6056,6 +6093,7 @@
     "helper:custom_history",
     "helper:custom_modules",
     "helper:dates",
+    "helper:doc_render",
     "helper:doc_template",
     "helper:email_notify",
     "helper:errors",
@@ -10172,6 +10210,7 @@
   "page:pages/approval-settings.html": {
    "api_calls": [
     "/api/org/tree",
+    "/api/settings/approval-doc-types",
     "/api/settings/approval-flow",
     "/api/settings/approval-flow-scope",
     "/api/settings/approval-flow/{}",
@@ -10938,6 +10977,34 @@
    "routers_called_effective": [
     "mod:analytics/api/dashboard",
     "router:auth",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "page:pages/expense-types.html": {
+   "api_calls": [
+    "/api/system/branding/favicon"
+   ],
+   "api_prefixes": [
+    "/api/system"
+   ],
+   "api_unmatched": [],
+   "imports": [
+    "js:js/expense-types.js",
+    "js:static/auth-guard.js",
+    "js:static/form-preview.js",
+    "js:static/notif.js",
+    "js:static/sidebar.js",
+    "js:static/ui.js"
+   ],
+   "kind": "page",
+   "path": "frontend/pages/expense-types.html",
+   "routers_called": [
+    "router:system"
+   ],
+   "routers_called_effective": [
+    "router:definitions",
     "router:system"
    ],
    "tables_r": [],
@@ -12795,25 +12862,25 @@
    "routes": [
     {
      "func": "get_approval_queue",
-     "line": 160,
+     "line": 164,
      "method": "GET",
      "path": "/api/approval-queue"
     },
     {
      "func": "get_approval_queue_count",
-     "line": 216,
+     "line": 222,
      "method": "GET",
      "path": "/api/approval-queue/count"
     },
     {
      "func": "approval_queue_detail",
-     "line": 364,
+     "line": 370,
      "method": "GET",
      "path": "/api/approval-queue/detail"
     },
     {
      "func": "reassign_approval",
-     "line": 409,
+     "line": 415,
      "method": "POST",
      "path": "/api/approval-queue/reassign"
     }
@@ -13270,6 +13337,7 @@
     "helper:custom_finance",
     "helper:custom_history",
     "helper:custom_modules",
+    "helper:doc_render",
     "helper:doc_template",
     "helper:email_notify",
     "helper:formula",
@@ -13617,6 +13685,7 @@
   },
   "router:definitions": {
    "api_prefixes": [
+    "/api/definition-kinds",
     "/api/definitions",
     "/api/layout"
    ],
@@ -13652,74 +13721,80 @@
    "registered": true,
    "routes": [
     {
-     "func": "list_definitions",
+     "func": "list_definition_kinds",
      "line": 144,
+     "method": "GET",
+     "path": "/api/definition-kinds"
+    },
+    {
+     "func": "list_definitions",
+     "line": 151,
      "method": "GET",
      "path": "/api/definitions/{kind}"
     },
     {
      "func": "delete_definition_draft",
-     "line": 157,
+     "line": 164,
      "method": "DELETE",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "get_definition",
-     "line": 175,
+     "line": 182,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "save_definition_draft",
-     "line": 188,
+     "line": 195,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 205,
+     "line": 212,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 213,
+     "line": 220,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 247,
+     "line": 254,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 263,
+     "line": 270,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 288,
+     "line": 295,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 319,
+     "line": 326,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 332,
+     "line": 339,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 358,
+     "line": 365,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
@@ -14494,6 +14569,7 @@
     "helper:custom_finance",
     "helper:custom_history",
     "helper:custom_modules",
+    "helper:doc_render",
     "helper:doc_template",
     "helper:email_notify",
     "helper:formula",
@@ -14696,458 +14772,464 @@
      "path": "/api/settings/approval-flow"
     },
     {
+     "func": "get_approval_doc_types",
+     "line": 162,
+     "method": "GET",
+     "path": "/api/settings/approval-doc-types"
+    },
+    {
      "func": "get_approval_flow_scope",
-     "line": 198,
+     "line": 169,
      "method": "GET",
      "path": "/api/settings/approval-flow-scope"
     },
     {
      "func": "set_approval_flow_scope",
-     "line": 205,
+     "line": 176,
      "method": "PUT",
      "path": "/api/settings/approval-flow-scope"
     },
     {
      "func": "get_approval_flow_for_doc_type",
-     "line": 233,
+     "line": 204,
      "method": "GET",
      "path": "/api/settings/approval-flow/{doc_type}"
     },
     {
      "func": "set_approval_flow_for_doc_type",
-     "line": 244,
+     "line": 215,
      "method": "PUT",
      "path": "/api/settings/approval-flow/{doc_type}"
     },
     {
      "func": "get_operating_targets",
-     "line": 266,
+     "line": 237,
      "method": "GET",
      "path": "/api/settings/operating-targets"
     },
     {
      "func": "put_operating_targets",
-     "line": 274,
+     "line": 245,
      "method": "PUT",
      "path": "/api/settings/operating-targets"
     },
     {
      "func": "get_monthly_report_recipients",
-     "line": 290,
+     "line": 261,
      "method": "GET",
      "path": "/api/settings/monthly-report-recipients"
     },
     {
      "func": "put_monthly_report_recipients",
-     "line": 296,
+     "line": 267,
      "method": "PUT",
      "path": "/api/settings/monthly-report-recipients"
     },
     {
      "func": "get_my_notifications",
-     "line": 308,
+     "line": 279,
      "method": "GET",
      "path": "/api/notifications/mine"
     },
     {
      "func": "mark_notification_read",
-     "line": 324,
+     "line": 295,
      "method": "PATCH",
      "path": "/api/notifications/{notif_id}/read"
     },
     {
      "func": "mark_all_notifications_read",
-     "line": 337,
+     "line": 308,
      "method": "PATCH",
      "path": "/api/notifications/read-all"
     },
     {
      "func": "audit_module_counts",
-     "line": 367,
+     "line": 338,
      "method": "POST",
      "path": "/api/audit-log/module-counts"
     },
     {
      "func": "list_audit_log",
-     "line": 466,
+     "line": 437,
      "method": "GET",
      "path": "/api/audit-log"
     },
     {
      "func": "audit_log_tree",
-     "line": 530,
+     "line": 501,
      "method": "GET",
      "path": "/api/audit-log/tree"
     },
     {
      "func": "audit_log_failure_summary",
-     "line": 579,
+     "line": 550,
      "method": "GET",
      "path": "/api/audit-log/failures/summary"
     },
     {
      "func": "list_work_logs",
-     "line": 606,
+     "line": 577,
      "method": "GET",
      "path": "/api/work-logs"
     },
     {
      "func": "create_work_log",
-     "line": 648,
+     "line": 619,
      "method": "POST",
      "path": "/api/work-logs"
     },
     {
      "func": "update_work_log",
-     "line": 675,
+     "line": 646,
      "method": "PUT",
      "path": "/api/work-logs/{wid}"
     },
     {
      "func": "delete_work_log",
-     "line": 702,
+     "line": 673,
      "method": "DELETE",
      "path": "/api/work-logs/{wid}"
     },
     {
      "func": "upload_work_log_photos",
-     "line": 728,
+     "line": 699,
      "method": "POST",
      "path": "/api/work-logs/{wid}/photos"
     },
     {
      "func": "delete_work_log_photo",
-     "line": 782,
+     "line": 753,
      "method": "DELETE",
      "path": "/api/work-logs/{wid}/photos/{photo_id}"
     },
     {
      "func": "get_runtime_switches",
-     "line": 907,
+     "line": 878,
      "method": "GET",
      "path": "/api/system/runtime-switches"
     },
     {
      "func": "list_system_modules",
-     "line": 1007,
+     "line": 978,
      "method": "GET",
      "path": "/api/system/modules"
     },
     {
      "func": "toggle_system_module",
-     "line": 1021,
+     "line": 992,
      "method": "PUT",
      "path": "/api/system/modules/{key}"
     },
     {
      "func": "module_availability",
-     "line": 1041,
+     "line": 1012,
      "method": "GET",
      "path": "/api/system/modules/availability"
     },
     {
      "func": "unavailable_module_pages",
-     "line": 1053,
+     "line": 1024,
      "method": "GET",
      "path": "/api/system/modules/unavailable-pages"
     },
     {
      "func": "get_bonus_module_status",
-     "line": 1063,
+     "line": 1034,
      "method": "GET",
      "path": "/api/system/bonus-module-status"
     },
     {
      "func": "get_company_profile",
-     "line": 1524,
+     "line": 1495,
      "method": "GET",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "set_company_profile",
-     "line": 1625,
+     "line": 1596,
      "method": "PUT",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "company_setup_status",
-     "line": 1770,
+     "line": 1741,
      "method": "GET",
      "path": "/api/settings/company-setup/status"
     },
     {
      "func": "get_default_payment_terms",
-     "line": 1821,
+     "line": 1792,
      "method": "GET",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "set_default_payment_terms",
-     "line": 1828,
+     "line": 1799,
      "method": "PUT",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "get_edge_path_setting",
-     "line": 1839,
+     "line": 1810,
      "method": "GET",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "set_edge_path_setting",
-     "line": 1850,
+     "line": 1821,
      "method": "PATCH",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "get_pdf_base_path_setting",
-     "line": 1866,
+     "line": 1837,
      "method": "GET",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "set_pdf_base_path_setting",
-     "line": 1874,
+     "line": 1845,
      "method": "PATCH",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "get_webauthn_config",
-     "line": 1958,
+     "line": 1929,
      "method": "GET",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "set_webauthn_config",
-     "line": 1974,
+     "line": 1945,
      "method": "PATCH",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "get_google_quota_setting",
-     "line": 2044,
+     "line": 2015,
      "method": "GET",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "set_google_quota_setting",
-     "line": 2067,
+     "line": 2038,
      "method": "PUT",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "get_storage_locations",
-     "line": 2129,
+     "line": 2100,
      "method": "GET",
      "path": "/api/settings/storage-locations"
     },
     {
      "func": "set_storage_locations",
-     "line": 2139,
+     "line": 2110,
      "method": "PUT",
      "path": "/api/settings/storage-locations"
     },
     {
      "func": "create_storage_location",
-     "line": 2159,
+     "line": 2130,
      "method": "POST",
      "path": "/api/settings/storage-locations/create"
     },
     {
      "func": "get_backup_retention_setting",
-     "line": 2192,
+     "line": 2163,
      "method": "GET",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "set_backup_retention_setting",
-     "line": 2199,
+     "line": 2170,
      "method": "PATCH",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "get_quote_terms_defaults",
-     "line": 2308,
+     "line": 2279,
      "method": "GET",
      "path": "/api/settings/quote-terms-defaults"
     },
     {
      "func": "get_quote_terms_presets",
-     "line": 2319,
+     "line": 2290,
      "method": "GET",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "set_quote_terms_presets",
-     "line": 2326,
+     "line": 2297,
      "method": "PUT",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "get_cloud_backup_target_setting",
-     "line": 2404,
+     "line": 2375,
      "method": "GET",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_pii_archive_status",
-     "line": 2411,
+     "line": 2382,
      "method": "GET",
      "path": "/api/settings/pii-archive-status"
     },
     {
      "func": "set_cloud_backup_target_setting",
-     "line": 2423,
+     "line": 2394,
      "method": "PUT",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_email_notify",
-     "line": 2459,
+     "line": 2430,
      "method": "GET",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "set_email_notify",
-     "line": 2472,
+     "line": 2443,
      "method": "PUT",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "get_google_calendar",
-     "line": 2497,
+     "line": 2468,
      "method": "GET",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "set_google_calendar",
-     "line": 2535,
+     "line": 2506,
      "method": "PUT",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "test_google_calendar",
-     "line": 2561,
+     "line": 2532,
      "method": "POST",
      "path": "/api/settings/google-calendar/test"
     },
     {
      "func": "test_email_notify",
-     "line": 2577,
+     "line": 2548,
      "method": "POST",
      "path": "/api/settings/email-notify/test"
     },
     {
      "func": "get_custom_roles",
-     "line": 2605,
+     "line": 2576,
      "method": "GET",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "create_custom_role",
-     "line": 2611,
+     "line": 2582,
      "method": "POST",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "update_custom_role",
-     "line": 2638,
+     "line": 2609,
      "method": "PUT",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "delete_custom_role",
-     "line": 2662,
+     "line": 2633,
      "method": "DELETE",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "get_schema_status",
-     "line": 2686,
+     "line": 2657,
      "method": "GET",
      "path": "/api/system/schema-status"
     },
     {
      "func": "get_role_labels",
-     "line": 2716,
+     "line": 2687,
      "method": "GET",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "put_role_labels",
-     "line": 2731,
+     "line": 2702,
      "method": "PUT",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "get_webauthn_config_status",
-     "line": 2746,
+     "line": 2717,
      "method": "GET",
      "path": "/api/system/webauthn-config-status"
     },
     {
      "func": "list_online_users",
-     "line": 2779,
+     "line": 2750,
      "method": "GET",
      "path": "/api/online-users"
     },
     {
      "func": "user_activity_stats",
-     "line": 2823,
+     "line": 2794,
      "method": "GET",
      "path": "/api/user-activity"
     },
     {
      "func": "user_activity_trail",
-     "line": 2897,
+     "line": 2868,
      "method": "GET",
      "path": "/api/user-activity/trail"
     },
     {
      "func": "edit_presence_heartbeat",
-     "line": 3032,
+     "line": 3003,
      "method": "POST",
      "path": "/api/edit-presence"
     },
     {
      "func": "edit_presence_release",
-     "line": 3063,
+     "line": 3034,
      "method": "DELETE",
      "path": "/api/edit-presence"
     },
     {
      "func": "case_roles_unmapped",
-     "line": 3079,
+     "line": 3050,
      "method": "GET",
      "path": "/api/system/case-roles-unmapped"
     },
     {
      "func": "get_reminder_send_failures",
-     "line": 3120,
+     "line": 3091,
      "method": "GET",
      "path": "/api/settings/reminder-send-failures"
     },
     {
      "func": "get_branding_asset",
-     "line": 3149,
+     "line": 3120,
      "method": "GET",
      "path": "/api/system/branding/{kind}"
     },
     {
      "func": "get_branding_settings",
-     "line": 3188,
+     "line": 3159,
      "method": "GET",
      "path": "/api/settings/branding"
     },
     {
      "func": "upload_branding_asset",
-     "line": 3197,
+     "line": 3168,
      "method": "PUT",
      "path": "/api/settings/branding/{kind}"
     },
     {
      "func": "reset_branding_asset",
-     "line": 3214,
+     "line": 3185,
      "method": "DELETE",
      "path": "/api/settings/branding/{kind}"
     }

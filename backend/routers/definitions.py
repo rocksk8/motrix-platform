@@ -211,7 +211,7 @@ def save_definition_draft(kind: str, key: str, scope: str = Query("company"), pa
 @router.post("/api/definitions/{kind}/{key}/validate")
 def validate_definition(kind: str, key: str, payload: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
-    if kind not in D.KINDS:
+    if kind not in D.kinds():
         raise HTTPException(400, "未知的定義種類")
     return {"problems": D.validate(kind, key, payload.get("body"))}
 

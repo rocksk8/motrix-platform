@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 928,
+  "tests": 933,
   "unmapped": 12,
   "kinds": {
-   "api": 497,
+   "api": 500,
    "e2e": 218,
    "audit": 128,
-   "unit": 85
+   "unit": 87
   },
-  "routes": 698
+  "routes": 700
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -8354,6 +8354,7 @@
     "router:company_lookup",
     "router:custom_records",
     "router:customers",
+    "router:definitions",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
@@ -8391,6 +8392,7 @@
      "backend/routers/company_lookup.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
+     "backend/routers/definitions.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
@@ -9803,6 +9805,33 @@
     ]
    }
   },
+  "backend/tests/platform/test_approval_queue_item_contract_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/routers/__init__.py",
+    "helper:approval_queue",
+    "plat:__init__",
+    "plat:registry",
+    "router:approval_queue"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/helpers/approval_queue.py",
+     "backend/routers/__init__.py",
+     "backend/routers/approval_queue.py"
+    ],
+    "api": [
+     "backend/routers/approval_queue.py"
+    ]
+   },
+   "unresolved_api": [
+    "/api/x/1/approve",
+    "/api/x/1/reject"
+   ],
+   "login_fixture": true
+  },
   "backend/tests/platform/test_approval_queue_l1.py": {
    "kind": "api",
    "units": [
@@ -10960,6 +10989,23 @@
    },
    "login_fixture": true
   },
+  "backend/tests/platform/test_doc_render_2026_10_01.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:custom_modules",
+    "helper:doc_render",
+    "helper:doc_template"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/custom_modules.py",
+     "backend/helpers/doc_render.py",
+     "backend/helpers/doc_template.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_drill_module_apply_2026_09_28.py": {
    "kind": "audit",
    "units": [
@@ -11601,6 +11647,25 @@
     ]
    }
   },
+  "backend/tests/platform/test_mail_send_registered_2026_10_01.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/platform/test_mail_registry.py",
+    "helper:email_notify",
+    "helper:mail_types",
+    "helper:notification_prefs"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/mail_types.py",
+     "backend/helpers/notification_prefs.py",
+     "backend/tests/platform/test_mail_registry.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_menu.py": {
    "kind": "api",
    "units": [
@@ -12162,6 +12227,7 @@
     "router:company_lookup",
     "router:custom_records",
     "router:customers",
+    "router:definitions",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
@@ -12206,6 +12272,7 @@
      "backend/routers/company_lookup.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
+     "backend/routers/definitions.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
@@ -13639,6 +13706,24 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_approval_doc_type_registry_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:tiered_approval",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/tiered_approval.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_approval_flow_scope.py": {
    "kind": "api",
    "units": [
@@ -14099,6 +14184,7 @@
     "router:company_lookup",
     "router:custom_records",
     "router:customers",
+    "router:definitions",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
@@ -14138,6 +14224,7 @@
      "backend/routers/company_lookup.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
+     "backend/routers/definitions.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
@@ -16432,6 +16519,26 @@
     ],
     "api": [
      "backend/routers/custom_records.py",
+     "backend/routers/definitions.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_definition_kinds_registry_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "plat:__init__",
+    "plat:definitions",
+    "plat:migrations",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/core/migrations.py"
+    ],
+    "api": [
      "backend/routers/definitions.py"
     ]
    },
@@ -21208,6 +21315,7 @@
     "router:company_lookup",
     "router:custom_records",
     "router:customers",
+    "router:definitions",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
@@ -21247,6 +21355,7 @@
      "backend/routers/company_lookup.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
+     "backend/routers/definitions.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
