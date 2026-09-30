@@ -252,3 +252,19 @@ def test_dispatch_paths_must_be_their_own_folder(client, make_user, stype, col, 
     assert _open(client, h, stype, str(did), "d1").status_code == 200
     assert _open(client, h, stype, str(did), "d2").status_code == 404
     assert _open(client, h, stype, str(did), "d3").status_code == 404
+
+
+def test_dev_log_path_must_be_its_own_folder(client, make_user):
+    h = _admin_h(client, make_user, "bd_dl")
+    uid = _q("SELECT id FROM users WHERE username='bd_dl'")[0]["id"]
+    cid = _exec("INSERT INTO dev_cases (case_name, created_at, updated_at) VALUES (?,?,?)", ("開發案", "n", "n"))
+    _put("dev_logs/%d/ok.png" % cid)
+    _put("dev_logs/99999/secret.png")
+    _put("completion_notes/CN-OTHER-4/secret.png")
+    files = [{"id": "l1", "filename": "ok.png", "path": "dev_logs/%d/ok.png" % cid},
+             {"id": "l2", "filename": "x.png", "path": "dev_logs/99999/secret.png"},
+             {"id": "l3", "filename": "y.png", "path": "completion_notes/CN-OTHER-4/secret.png"}]
+    lid = _exec("INSERT INTO dev_logs (case_id, log_date, log_by, files_json, created_at) VALUES (?,?,?,?,?)", (cid, "2026-09-30", uid, json.dumps(files), "n"))
+    assert _open(client, h, "dev_log", str(lid), "l1").status_code == 200
+    assert _open(client, h, "dev_log", str(lid), "l2").status_code == 404
+    assert _open(client, h, "dev_log", str(lid), "l3").status_code == 404
