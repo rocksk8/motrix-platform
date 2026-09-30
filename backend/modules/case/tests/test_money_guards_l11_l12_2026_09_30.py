@@ -80,6 +80,26 @@ def test_first_registration_and_unchanged_number_stay_open(client, make_user):
     assert client.patch("/api/quotations/%s/payment/0" % Q, headers=h, json={"invoiceNo": "CD87654321"}).status_code == 403
 
 
+def test_case_record_bulk_save_denied_for_a_plain_case_member(client, make_user):
+    """**反向控制（G2）**：案件成員（業務本人、沒有 cashier／finance）用整包存更換已登錄號碼 ⇒ 403、什麼都沒寫；
+    拿掉整包存路徑的檢查 ⇒ 這題紅。"""
+    import db
+    u, p = make_user(username="mg_member", role="sales", modules=[])
+    h = _login(client, u, p)
+    _seed("AB12345678")
+    c = db.get_db()
+    try:
+        uid = c.execute("SELECT id FROM users WHERE username=?", (u,)).fetchone()["id"]
+        c.execute("UPDATE quotations SET sales_person_id=?, sales_person=? WHERE quote_no=?", (uid, u, Q))
+        c.commit()
+    finally:
+        c.close()
+    item = {"id": "it1", "type": "訂金款", "pct": 30, "amount": 30000, "received": False, "invoiceNo": "CD87654321"}
+    r = client.patch("/api/quotations/%s/case-record" % Q, headers=h, json={"case_record": {"payment": {"items": [item]}}})
+    assert r.status_code == 403, r.text
+    assert _inv() == "AB12345678" and _audits() == []
+
+
 def test_case_record_bulk_save_path_has_the_same_rule(client, make_user):
     """整包存（案件管理財務 Tab 實際走的路徑）也一樣：非授權者更換已登錄號碼 ⇒ 403，什麼都沒寫。"""
     _seed("AB12345678")
