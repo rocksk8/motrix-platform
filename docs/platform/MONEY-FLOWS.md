@@ -126,6 +126,8 @@ L2 模組**不互相 import**，一律經 provider；提供者不在 ⇒ 少那�
 | W-3 | M05 arap（出納）→ M01 case | IP-100 `payables.pending`（`mark_paid`） | `case_extra_expenses.paid_date`（＋W1 `remit_actual`／`remit_fee`／`remit_review`） | 呼叫端連線、呼叫端 commit | `arap/api/cashier.py`（pending-payables/{來源}/{key}/pay） | 待補（arap／case 線） | `arap/tests/test_cashier_pending_payables_2026_09_27.py` |
 | W-4 | M05 arap（出納）→ M04／M01 | IP-102 `remit.reviews`（`decide`） | `contractor_payment_vouchers.remit_review*`、`case_extra_expenses.remit_review*`（核可＝記錄；退回＝回未匯款並清欄位） | 條件式 UPDATE＋rowcount | `arap/api/cashier.py`（remit-reviews/…/decision） | 待補 | subcontract／case 的 remit 題 |
 | W-5 | M01 case → M03 supply | IP-19 `stock.serial`（`claim`／`release`） | `stock_items.status`（in_stock⇄installed）、`quote_no`、`case_device_id`、`consumed_at` | 呼叫端連線、與案件資料同一次 commit | `case/api/quotations.py`（設備序號認領／釋放） | 待補（case 線） | supply／case 的序號題 |
+| W-6 | M07 payroll → M06 accounting | IP-2 `voucher.draft`（`kind="reversal"`＋`reverses_no` 選填，獎金更正單加） | `vouchers_all`（kind／reverses_no／origin＝`bonus_corr_reversal`／`bonus_corr_accrual`／`bonus_corr_payment`）、`voucher_lines`（沖轉原應付＋重開應付＋補發支出，皆草稿） | 核准與標記補發各在自己的交易內、呼叫端 commit；更正單不可退回（已開沖轉傳票）；補發傳票不自動作廢 | `payroll/bonus_correction.py::open_vouchers`、`create_supplement_payment` | ✅ | `payroll/tests/test_bonus_correction_2026_09_30.py` |
+| W-7 | M07 payroll → M08 analytics（讀取面） | IP-9 `expense.entries`（名稱 `bonus_correction`） | （只讀）補發＝補發日 +金額、追回＝核准日 −金額；原單 `bonus` 那筆不動 | 無寫入；狀態生效即讀得到 | `payroll/bonus_correction.py::expense_entries` | ✅ | 同上 |
 
 新增或改動跨模組寫入時：同一個 commit 補註解＋更新本表。
 

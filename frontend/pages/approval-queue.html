@@ -592,13 +592,14 @@
             <a :href="selected?.type === 'voucher' ? ('voucher.html?id=' + (selected?.voucherId||''))
                     : selected?.type === 'ledger_action' ? 'ledger-periods.html'
                     : selected?.type === 'bonus_case_award' ? ('bonus.html?q=' + encodeURIComponent(selected?.quoteNo||''))
+                    : selected?.type === 'bonus_correction' ? ('bonus-corrections.html?no=' + encodeURIComponent(selected?.quoteNo||''))
                     : isVoucher(selected) ? ('case-management.html?no=' + (selected?.linkedQuoteNo||''))
                     : ('quotation-form.html?id=' + (selected?.quoteNo||''))" target="_blank"
                style="font-size:12px;color:var(--accent);text-decoration:none;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);display:inline-flex;align-items:center;gap:5px">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-              <span x-text="selected?.type === 'voucher' ? '開啟傳票' : selected?.type === 'ledger_action' ? '開啟期間與結帳' : selected?.type === 'bonus_case_award' ? '開啟獎金分潤' : (isVoucher(selected) ? '開啟案件管理' : '開啟報價單')"></span>
+              <span x-text="selected?.type === 'voucher' ? '開啟傳票' : selected?.type === 'ledger_action' ? '開啟期間與結帳' : selected?.type === 'bonus_case_award' ? '開啟獎金分潤' : selected?.type === 'bonus_correction' ? '開啟獎金更正單' : (isVoucher(selected) ? '開啟案件管理' : '開啟報價單')"></span>
             </a>
-            <button class="btn btn-sm" x-show="selected?.type !== 'case_change' && selected?.type !== 'bonus_case_award'" @click="previewItem(selected)" :disabled="previewFetching"
+            <button class="btn btn-sm" x-show="selected?.type !== 'case_change' && selected?.type !== 'bonus_case_award' && selected?.type !== 'bonus_correction'" @click="previewItem(selected)" :disabled="previewFetching"
                     style="font-size:12px;color:var(--accent);background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;display:inline-flex;align-items:center;gap:5px;cursor:pointer">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               預覽
@@ -1249,6 +1250,7 @@
           // SPEC-BONUS §十一（2026-09-24）：以案件為中心的獎金分潤
           if (item.type === 'bonus_award') return '獎金'   // 之前漏了 ⇒ 落到最後一行被標成「報價單」
           if (item.type === 'bonus_case_award') return '獎金分潤'
+          if (item.type === 'bonus_correction') return '獎金更正單'
           // P8（IP-10）：自訂模組單據，標籤用模組名稱
           if (item.type === 'custom_record') return item.moduleName || item.moduleKey || '自訂模組'
           if (item.type === 'custom_module_def') return '自訂模組定義'     // S4：模組定義送審
@@ -1277,7 +1279,7 @@
           if (item?.type === 'case_change') return 'cc'
           if (item?.type === 'dispatch_file_delete') return 'cv'
           if (item?.type === 'voucher' || item?.type === 'ledger_action') return 'vo'
-          if (item?.type === 'bonus_case_award') return 'pr'
+          if (item?.type === 'bonus_case_award' || item?.type === 'bonus_correction') return 'pr'
           if (item?.type === 'custom_record' || item?.type === 'custom_module_def') return 'cm'
           return 'quotation'
         },
@@ -1292,6 +1294,8 @@
           if (item?.type === 'ledger_action') return '/api/ledger/action-requests'
           // 吃案件單號：/api/bonus/cases/{quote_no}/approve|reject
           if (item?.type === 'bonus_case_award') return '/api/bonus/cases'
+          // 吃更正單號：/api/bonus/corrections/{corr_no}/approve|reject
+          if (item?.type === 'bonus_correction') return '/api/bonus/corrections'
           return '/api/quotations'
         },
 
@@ -1353,7 +1357,7 @@
         async previewItem(item) {
           // 額外支出跟已結案變更一樣沒有 PDF 可預覽
           if (!item || item.type === 'case_change' || item.type === 'dispatch_file_delete' || item.type === 'extra_expense'
-              || item.type === 'extra_expense_change' || item.type === 'bonus_case_award') return
+              || item.type === 'extra_expense_change' || item.type === 'bonus_case_award' || item.type === 'bonus_correction') return
           this.previewFetching = true
           try {
             // 傳票：pdf-download 只給簽核完成的（400）；待簽核要看的是「預覽稿」（/preview，HTML，含紅色「未核可・僅供預覽」）
@@ -1549,7 +1553,7 @@
           this.fileUrls = {}
           if (!item) return
           // 獎金分潤沒有佇列詳情端點：明細到獎金分潤頁看（抽屜裡有連結）
-          if (item.type === 'bonus_case_award') return
+          if (item.type === 'bonus_case_award' || item.type === 'bonus_correction') return
           const id = item.type === 'case_change' ? item.changeRequestId
                    : item.type === 'extra_expense' ? item.extraExpenseId
                    : item.quoteNo
@@ -1700,11 +1704,12 @@
           const isLastTier  = isMultiTier && (item.currentTier ?? 0) === tiers.length - 1
           const willFinish  = !isMultiTier || isLastTier
           const finalStatus = item.type === 'bonus_case_award' ? '待發放'
+                            : item.type === 'bonus_correction' ? '生效（沖轉傳票＋補發）'
                             : this.isVoucher(item) ? '已核准' : '已送出'
           // 同一人連任多層：一次問清楚、一次簽完（2026-09-15）
           // ⚠ 獎金分潤的後端簽核不做連簽（approve_case_bonus 不處理 cascade）⇒ 不預告「一次簽完」，
           //   否則確認視窗說一併完成兩層、實際只簽一層（2026-09-25 hichan-0a 裁：只修預告、不改獎金簽核）
-          const cascadeNos = item.type === 'bonus_case_award' ? [] : window.MotrixApproval.selfCascadeTiers(
+          const cascadeNos = (item.type === 'bonus_case_award' || item.type === 'bonus_correction') ? [] : window.MotrixApproval.selfCascadeTiers(
             tiers, item.currentTier ?? 0, this.session.username, this.myDelegatedFor)
           // 2026-09-25：拿掉額外支出／獎金分潤的 completesOnFirst（「當層任一人簽即通過」）——
           // 使用者裁示同層每一位都要依序簽完，連簽不可以替同層的別人簽（與後端 cascade_self_tiers 一致）
@@ -1822,7 +1827,7 @@
             //    不是 `/reject`。body 的欄位名也是 `reason`，跟額外支出同形狀。
             const isVoucherType = item.type === 'voucher' || item.type === 'ledger_action'     // 總帳申請的退回端點與傳票同形狀（/send-back、body.reason）
             // 獎金分潤的駁回端點是 /reject，body 欄位名是 reason（同額外支出）
-            const isBonusCase = item.type === 'bonus_case_award'
+            const isBonusCase = item.type === 'bonus_case_award' || item.type === 'bonus_correction'
             const rejectUrl = isXEC
               ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/change-request/reject`
               : item.type === 'extra_expense'

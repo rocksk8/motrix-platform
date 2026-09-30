@@ -5,16 +5,17 @@ from core.registry import ModuleSpec
 
 import importlib
 
-from modules.payroll import bonus, bonus_payouts, bonus_queue, gl_events, payslip_payouts, remit_link
-from modules.payroll.api import bonus as bonus_api, payslips as payslips_api
+from modules.payroll import bonus, bonus_correction, bonus_payouts, bonus_queue, gl_events, payslip_payouts, remit_link
+from modules.payroll.api import bonus as bonus_api, bonus_correction as bonus_correction_api, payslips as payslips_api
 from modules.payroll import attachments   # 要在 api 之後：提供者用 payslips 的 _signed_path／_archive_dir
 
 _m0001 = importlib.import_module("modules.payroll.migrations.0001_payslip_void_signed_paid")
+_m0002 = importlib.import_module("modules.payroll.migrations.0002_bonus_corrections")
 
 MODULE = ModuleSpec(
     key="payroll",
-    routers=[payslips_api.router, bonus_api.router],
-    migrations=[(1, _m0001.up)],
+    routers=[payslips_api.router, bonus_correction_api.router, bonus_api.router],
+    migrations=[(1, _m0001.up), (2, _m0002.up)],
     providers={
         # IP-8：出納頁的獎金待發放與發放紀錄（M05）
         ("bonus.payouts", "payroll"): bonus_payouts._Payouts,
@@ -22,6 +23,8 @@ MODULE = ModuleSpec(
         ("attachments.catalog", "payroll"): attachments._PayrollCatalog,
         # IP-9：已發放的獎金列入營運報表與月支出（M08）
         ("expense.entries", "bonus"): bonus_payouts._expense_entries,
+        # IP-9：獎金更正單的補發（補發日）與追回（核准日）列入營運報表與月支出（M08，名稱 bonus_correction）
+        ("expense.entries", "bonus_correction"): bonus_correction.expense_entries,
         # IP-103：出納頁的勞報單待付款（M05）；IP-9：已付款勞報單列入營運報表與月支出（M08，名稱 payslip）
         ("payslip.payables", "payroll"): payslip_payouts._Payables,
         ("expense.entries", "payslip"): payslip_payouts._expense_entries,

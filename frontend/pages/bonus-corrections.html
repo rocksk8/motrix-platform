@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>獎金更正單 - MOTRIX 專案管理系統</title>
+  <script src="../static/ui.js"></script>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:24px 28px;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));background:var(--white)}
+    .bc-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+    .bc-title{font-size:20px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary)}
+    .bc-layout{display:grid;grid-template-columns:300px 1fr;gap:18px;align-items:start}
+    .bc-list{border:1px solid var(--border-light);border-radius:8px;background:#fff;overflow:hidden}
+    .bc-item{padding:10px 12px;border-bottom:1px solid var(--border-light);cursor:pointer;font-family:var(--font-zh)}
+    .bc-item:hover{background:#FAFAF8}.bc-item.selected{background:#EFF6FF}
+    .bc-item-no{font-size:12px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif}
+    .bc-badge{display:inline-block;font-size:10px;padding:1px 7px;border-radius:9px;font-family:var(--font-zh);margin-left:6px}
+    .st-gray{background:#F3F4F6;color:#6B7280}.st-amber{background:#FEF3C7;color:#92400E}.st-orange{background:#FFEDD5;color:#C2410C}
+    .st-green{background:#DCFCE7;color:#15803D}.st-purple{background:#EDE9FE;color:#6D28D9}
+    .bc-card{border:1px solid var(--border-light);border-radius:8px;background:#fff;padding:16px 18px;margin-bottom:14px}
+    .bc-sec{font-size:12px;font-weight:700;color:var(--text-secondary);margin:0 0 10px;font-family:var(--font-zh)}
+    .bc-kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;font-size:12px;font-family:var(--font-zh)}
+    .bc-kv b{display:block;font-size:15px;font-family:LINE Seed TW_OTF, sans-serif;margin-top:2px}
+    .bc-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;font-family:var(--font-zh)}
+    .bc-row .who{flex:1}.bc-row .num{min-width:90px;text-align:right;font-family:LINE Seed TW_OTF, sans-serif}
+    .bc-in{width:110px;padding:4px 6px;border:1px solid var(--border-light);border-radius:4px;font-size:12px;text-align:right}
+    .bc-sel,.bc-txt{padding:4px 6px;border:1px solid var(--border-light);border-radius:4px;font-size:12px;font-family:var(--font-zh)}
+    .bc-err{font-size:12px;color:var(--danger);font-family:var(--font-zh)}
+    .bc-ok{font-size:12px;color:#15803D;font-family:var(--font-zh)}
+    .bc-note{font-size:11px;color:#92400E;font-family:var(--font-zh)}
+    .bc-btn{padding:6px 14px;border-radius:6px;border:1px solid transparent;font-size:12px;cursor:pointer;font-family:var(--font-zh);background:var(--black,#0A0A0A);color:#fff}
+    .bc-btn--ghost{background:#fff;color:var(--text-primary);border-color:var(--border-light)}
+    .bc-btn--danger{background:#fff;color:var(--danger);border-color:#FECACA}
+    .bc-btn:disabled{opacity:.5;cursor:not-allowed}
+    .bc-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+    .bc-empty{padding:30px;text-align:center;color:var(--text-dim);font-size:12px;font-family:var(--font-zh)}
+    .bc-log{font-size:11px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.8}
+    .bc-neg{color:var(--danger)}.bc-pos{color:#15803D}
+    @media (max-width:767px){.page-main{margin-left:0;padding:16px}.bc-layout{grid-template-columns:1fr}}
+  </style>
+</head>
+<body x-data="bonusCorrectionPage()" x-init="init()" x-cloak>
+
+  <header id="app-topbar" class="topbar"></header>
+  <div id="sidebar-root"></div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div>
+    <main class="page-main">
+      <div class="bc-head">
+        <div class="bc-title">獎金更正單</div>
+        <span class="bc-note">已發放的獎金分潤事後更正：核准後自動沖轉原應付、以更正後金額重開應付；有人要補發時交出納發放。原單不改。</span>
+        <a href="bonus.html" style="margin-left:auto;font-size:12px;color:var(--accent);text-decoration:underline">回獎金分潤</a>
+      </div>
+
+      <div class="bc-layout">
+        <!-- 左：清單＋開新單 -->
+        <div>
+          <div class="bc-card" x-show="isSuper" data-testid="bc-new">
+            <div class="bc-sec">開新更正單</div>
+            <div class="bc-row">
+              <input class="bc-txt" style="flex:1" x-model="newQuote" placeholder="原案件單號（已發放）" data-testid="bc-new-quote" @keydown.enter="loadCurrent()">
+              <button class="bc-btn" :disabled="busy || !newQuote.trim()" @click="loadCurrent()" data-testid="bc-load-current">載入</button>
+            </div>
+            <div class="bc-err" x-show="newError" x-text="newError" data-testid="bc-new-error"></div>
+          </div>
+          <div class="bc-list" data-testid="bc-list">
+            <div style="padding:10px;border-bottom:1px solid var(--border-light)">
+              <select class="bc-sel" style="width:100%" x-model="statusFilter" @change="loadList()" data-testid="bc-filter">
+                <option value="">全部狀態</option>
+                <template x-for="s in statuses" :key="s"><option :value="s" x-text="s"></option></template>
+              </select>
+            </div>
+            <template x-for="it in items" :key="it.corr_no">
+              <div class="bc-item" :class="{selected: selectedNo === it.corr_no}" @click="select(it.corr_no)" :data-testid="'bc-item-' + it.corr_no">
+                <span class="bc-item-no" x-text="it.corr_no"></span>
+                <span class="bc-badge" :class="badge(it.status)" x-text="it.status"></span>
+                <div style="font-size:11px;color:var(--text-secondary);margin-top:2px" x-text="'原單 ' + it.quote_no"></div>
+              </div>
+            </template>
+            <div class="bc-empty" x-show="loaded && !items.length" data-testid="bc-empty">沒有更正單</div>
+            <div class="bc-err" style="padding:10px" x-show="loadError" x-text="loadError"></div>
+          </div>
+        </div>
+
+        <!-- 右：表單（新建／草稿修改）或明細 -->
+        <div>
+          <div class="bc-card" x-show="msg"><span :class="/失敗|錯誤|請|不|只有|無法/.test(msg) ? 'bc-err' : 'bc-ok'" x-text="msg" data-testid="bc-msg"></span></div>
+
+          <!-- 表單 -->
+          <template x-if="form">
+            <div class="bc-card" data-testid="bc-form">
+              <div class="bc-sec" x-text="form.corr_no ? ('修改草稿 ' + form.corr_no) : ('新更正單：原單 ' + form.quote_no)"></div>
+              <div class="bc-row" style="font-weight:600"><span class="who">人員</span><span class="num">目前金額</span><span class="num">更正後</span><span class="num">差額</span><span style="width:60px"></span></div>
+              <template x-for="(l, i) in form.lines" :key="l.username">
+                <div class="bc-row" :data-testid="'bc-line-' + l.username">
+                  <span class="who" x-text="l.name + '（' + l.username + '）'"></span>
+                  <span class="num" x-text="money(l.old)"></span>
+                  <span class="num"><input class="bc-in" inputmode="numeric" x-model="l.newText" :data-testid="'bc-new-amt-' + l.username"></span>
+                  <span class="num" :class="diffOf(l) < 0 ? 'bc-neg' : (diffOf(l) > 0 ? 'bc-pos' : '')" x-text="signed(diffOf(l))" :data-testid="'bc-diff-' + l.username"></span>
+                  <span style="width:60px"><button class="bc-btn bc-btn--danger" x-show="l.old === 0" @click="form.lines.splice(i, 1)" :data-testid="'bc-remove-' + l.username">移除</button></span>
+                </div>
+              </template>
+              <div class="bc-row">
+                <select class="bc-sel" x-model="addPick" data-testid="bc-add-pick">
+                  <option value="">加入原名單以外的人…</option>
+                  <template x-for="u in addableUsers()" :key="u.username"><option :value="u.username" x-text="(u.display_name || u.username) + '（' + u.username + '）'"></option></template>
+                </select>
+                <button class="bc-btn bc-btn--ghost" :disabled="!addPick" @click="addPerson()" data-testid="bc-add">加入</button>
+              </div>
+              <div class="bc-kv" style="margin-top:10px" data-testid="bc-form-totals">
+                <div>目前合計<b x-text="money(formTotals().old)"></b></div>
+                <div>更正後合計<b x-text="money(formTotals().new)"></b></div>
+                <div>需補發<b x-text="money(formTotals().supplement)" data-testid="bc-form-supplement"></b></div>
+                <div>需追回<b x-text="money(formTotals().clawback)" data-testid="bc-form-clawback"></b></div>
+              </div>
+              <div style="margin-top:10px">
+                <div class="bc-sec">更正原因（必填，最多 200 字）</div>
+                <textarea class="bc-txt" style="width:100%;min-height:60px" maxlength="200" x-model="form.reason" data-testid="bc-reason"></textarea>
+              </div>
+              <div class="bc-actions">
+                <button class="bc-btn" :disabled="busy" @click="saveForm()" data-testid="bc-save" x-text="form.corr_no ? '儲存草稿' : '建立草稿'"></button>
+                <button class="bc-btn bc-btn--ghost" :disabled="busy" @click="form = null; msg = ''" data-testid="bc-form-close">取消</button>
+              </div>
+              <div class="bc-note" style="margin-top:8px">補發部分由出納發放（扣繳與補充保費依撥付日計算）；追回部分核准時記為「其他應收款」傳票草稿（追回處理方式待確認：薪資扣回／收款／免追，尚未決定）。</div>
+            </div>
+          </template>
+
+          <!-- 明細 -->
+          <template x-if="detail && !form">
+            <div data-testid="bc-detail">
+              <div class="bc-card">
+                <div class="bc-sec">
+                  <span x-text="detail.corr_no"></span>
+                  <span class="bc-badge" :class="badge(detail.status)" x-text="detail.status" data-testid="bc-status"></span>
+                  <a :href="'bonus.html?q=' + encodeURIComponent(detail.quote_no)" style="margin-left:8px;color:var(--accent);text-decoration:underline" x-text="'原單 ' + detail.quote_no"></a>
+                </div>
+                <div class="bc-kv">
+                  <div>更正前合計<b x-text="money(detail.old_total)" data-testid="bc-old-total"></b></div>
+                  <div>更正後合計<b x-text="money(detail.new_total)" data-testid="bc-new-total"></b></div>
+                  <div>補發<b x-text="money(detail.supplement_total)" data-testid="bc-supplement"></b></div>
+                  <div>追回<b x-text="money(detail.clawback_total)" data-testid="bc-clawback"></b><span x-show="detail.clawback_total > 0" data-testid="bc-clawback-pending" style="font-size:11px;color:#b45309;margin-left:6px">追回處理方式待確認</span></div>
+                </div>
+                <div style="margin-top:10px;font-size:12px;font-family:var(--font-zh)">原因：<span x-text="detail.reason" data-testid="bc-detail-reason"></span></div>
+                <div style="margin-top:10px">
+                  <template x-for="l in detail.lines" :key="l.username">
+                    <div class="bc-row" :data-testid="'bc-view-' + l.username">
+                      <span class="who" x-text="l.name + '（' + l.username + '）'"></span>
+                      <span class="num" x-text="money(l.old)"></span>
+                      <span class="num" x-text="money(l.new)"></span>
+                      <span class="num" :class="l.delta < 0 ? 'bc-neg' : (l.delta > 0 ? 'bc-pos' : '')" x-text="signed(l.delta)"></span>
+                    </div>
+                  </template>
+                </div>
+                <div class="bc-note" x-show="detail.voucher_notice" x-text="detail.voucher_notice" data-testid="bc-voucher-notice"></div>
+
+                <!-- 補發：扣繳試算＋銀行 -->
+                <template x-if="detail.status === '待補發'">
+                  <div style="margin-top:12px" data-testid="bc-pay">
+                    <div class="bc-sec">補發扣繳與補充保費（依今天撥付日試算）</div>
+                    <div class="bc-err" x-show="detail.deductionNotice" x-text="detail.deductionNotice" data-testid="bc-deduction-notice"></div>
+                    <template x-if="detail.deductions && detail.deductions.lines">
+                      <div>
+                        <template x-for="d in detail.deductions.lines" :key="d.username">
+                          <div class="bc-row" :data-testid="'bc-ded-' + d.username">
+                            <span class="who" x-text="d.displayName || d.username"></span>
+                            <span class="num" x-text="'補發 ' + money(d.gross)"></span>
+                            <span class="num" x-text="'扣繳 ' + money(d.withholding)"></span>
+                            <span class="num" x-text="'補充保費 ' + money(d.nhiPremium)"></span>
+                            <span class="num" x-text="'實發 ' + money(d.net)"></span>
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+                    <div class="bc-row" x-show="canPay">
+                      <select class="bc-sel" x-model="payBank" data-testid="bc-pay-bank">
+                        <option value="">預設銀行科目</option>
+                        <template x-for="b in (detail.bankAccounts || [])" :key="b.acctCode"><option :value="b.acctCode" x-text="b.name + '（' + b.acctCode + '）'"></option></template>
+                      </select>
+                      <button class="bc-btn" :disabled="busy || !detail.deductions || (detail.deductions.missing || []).length > 0" @click="act('mark-paid', {bank_account_code: payBank})" data-testid="bc-mark-paid">標記補發</button>
+                    </div>
+                  </div>
+                </template>
+
+                <div class="bc-actions" x-show="isSuper">
+                  <template x-if="detail.status === '草稿'">
+                    <span style="display:contents">
+                      <button class="bc-btn bc-btn--ghost" :disabled="busy" @click="startEdit()" data-testid="bc-edit">修改</button>
+                      <button class="bc-btn" :disabled="busy" @click="act('submit')" data-testid="bc-submit">送審</button>
+                      <button class="bc-btn bc-btn--danger" :disabled="busy" @click="act('cancel', {reason: rejectReason})" data-testid="bc-cancel">作廢草稿</button>
+                    </span>
+                  </template>
+                  <template x-if="detail.status === '待審核'">
+                    <span style="display:contents">
+                      <button class="bc-btn" :disabled="busy" @click="act('approve')" data-testid="bc-approve">核准</button>
+                      <input class="bc-txt" placeholder="駁回原因" x-model="rejectReason" style="width:180px" data-testid="bc-reject-reason">
+                      <button class="bc-btn bc-btn--danger" :disabled="busy" @click="act('reject', {reason: rejectReason})" data-testid="bc-reject">駁回</button>
+                    </span>
+                  </template>
+                </div>
+              </div>
+
+              <template x-if="(detail.vouchers || []).length">
+                <div class="bc-card" data-testid="bc-vouchers">
+                  <div class="bc-sec">已產生的傳票（草稿，之後走傳票自己的簽核）</div>
+                  <template x-for="v in detail.vouchers" :key="v.id">
+                    <div class="bc-row">
+                      <span x-text="{reversal: '沖轉原應付', rebook: '重開應付', supplement: '補發支出', clawback: '追回應收（待確認）'}[v.kind] || v.kind"></span>
+                      <a x-show="!v.unavailable" :href="'voucher.html?id=' + v.id" x-text="v.voucher_no" style="color:var(--accent);text-decoration:underline"></a>
+                      <span x-show="v.unavailable" x-text="v.voucher_no" data-testid="bc-voucher-unavailable"></span>
+                      <span x-text="v.voided ? '已作廢' : v.status"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+
+              <template x-if="detail.log && detail.log.length">
+                <div class="bc-card">
+                  <div class="bc-sec">編寫紀錄</div>
+                  <template x-for="(g, i) in detail.log" :key="i">
+                    <div class="bc-log" :data-testid="'bc-log-' + g.action"
+                         x-text="(g.changed_at || '').replace('T', ' ').slice(0, 16) + '　' + g.changed_by + '　' + (logLabels[g.action] || g.action)"></div>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <div class="bc-empty" x-show="!form && !detail">從左邊選一張更正單，或輸入已發放的案件單號開新單。</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+  function bonusCorrectionPage() {
+    return {
+      isSuper: false, canPay: false, loaded: false, loadError: '', items: [], statuses: ['草稿', '待審核', '待補發', '已完成', '已作廢'],
+      statusFilter: '', selectedNo: '', detail: null, form: null, busy: false, msg: '', newQuote: '', newError: '',
+      users: [], addPick: '', rejectReason: '', payBank: '',
+      logLabels: { create: '建立草稿', update: '修改草稿', submit: '送審', approve: '簽核', reject: '駁回', cancel: '作廢草稿', mark_paid: '標記補發' },
+      _token() { try { return (JSON.parse(localStorage.getItem('motrix_session') || '{}')).token || '' } catch (e) { return '' } },
+      _h(json) { const h = { Authorization: 'Bearer ' + this._token() }; if (json) h['Content-Type'] = 'application/json'; return h },
+      money(n) { return 'NT$ ' + Number(n || 0).toLocaleString() },
+      signed(n) { n = Number(n || 0); return (n > 0 ? '+' : '') + n.toLocaleString() },
+      badge(st) { return { '草稿': 'st-amber', '待審核': 'st-orange', '待補發': 'st-green', '已完成': 'st-purple', '已作廢': 'st-gray' }[st] || 'st-gray' },
+      async _err(r) { try { const d = await r.json(); return typeof d.detail === 'string' ? d.detail : ('HTTP ' + r.status) } catch (e) { return 'HTTP ' + r.status } },
+
+      async init() {
+        try {
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}') || {}
+          this.isSuper = s.role === 'superadmin'
+          this.canPay = this.isSuper || (Array.isArray(s.modules) && s.modules.indexOf('cashier') >= 0)
+        } catch (e) {}
+        await this.loadList()
+        if (this.isSuper) this.loadUsers()
+        const qs = new URLSearchParams(location.search)
+        if (qs.get('no')) await this.select(qs.get('no'))
+        else if (qs.get('q') && this.isSuper) { this.newQuote = qs.get('q'); await this.loadCurrent() }
+      },
+      async loadUsers() {
+        try { const r = await fetch('/api/users', { headers: this._h() }); if (r.ok) { const d = await r.json(); this.users = Array.isArray(d) ? d : (d.items || d.users || []) } } catch (e) {}
+      },
+      async loadList() {
+        this.loadError = ''
+        try {
+          const r = await fetch('/api/bonus/corrections' + (this.statusFilter ? '?status=' + encodeURIComponent(this.statusFilter) : ''), { headers: this._h() })
+          if (!r.ok) throw new Error(await this._err(r))
+          this.items = (await r.json()).items || []
+        } catch (e) { this.loadError = '更正單清單載入失敗（' + e.message + '）' }
+        this.loaded = true
+      },
+      async select(no) {
+        this.selectedNo = no; this.form = null; this.msg = ''; this.detail = null; this.payBank = ''
+        try {
+          const r = await fetch('/api/bonus/corrections/' + encodeURIComponent(no), { headers: this._h() })
+          if (!r.ok) { this.msg = '無法開啟更正單：' + await this._err(r); return }
+          this.detail = await r.json()
+        } catch (e) { this.msg = '無法開啟更正單：' + e.message }
+      },
+      async loadCurrent() {
+        this.newError = ''; this.msg = ''
+        const q = this.newQuote.trim()
+        if (!q) return
+        try {
+          const r = await fetch('/api/bonus/corrections/current/' + encodeURIComponent(q), { headers: this._h() })
+          if (!r.ok) { this.newError = await this._err(r); return }
+          const d = await r.json()
+          if (!d.canCreate) { this.newError = d.open ? ('這張原單已有未結案的更正單 ' + d.open.corr_no + '（' + d.open.status + '）。') : ('只有「已發放」的獎金分潤可以開更正單（現在是「' + d.awardStatus + '」）。'); return }
+          this.detail = null; this.selectedNo = ''
+          this.form = { corr_no: '', quote_no: q, reason: '', lines: d.people.map(p => ({ username: p.username, name: p.name, old: p.amount, newText: String(p.amount) })) }
+        } catch (e) { this.newError = '載入失敗：' + e.message }
+      },
+      startEdit() {
+        const d = this.detail
+        this.form = { corr_no: d.corr_no, quote_no: d.quote_no, reason: d.reason, lines: d.lines.map(l => ({ username: l.username, name: l.name, old: l.old, newText: String(l.new) })) }
+      },
+      newOf(l) { const s = String(l.newText == null ? '' : l.newText).trim(); return /^\d+$/.test(s) ? parseInt(s, 10) : null },
+      diffOf(l) { const n = this.newOf(l); return n === null ? 0 : n - l.old },
+      formTotals() {
+        let o = 0, n = 0, s = 0, c = 0
+        for (const l of (this.form ? this.form.lines : [])) { const v = this.newOf(l); const nv = v === null ? l.old : v; o += l.old; n += nv; if (nv - l.old > 0) s += nv - l.old; else c += l.old - nv }
+        return { old: o, new: n, supplement: s, clawback: c }
+      },
+      addableUsers() {
+        const have = new Set((this.form ? this.form.lines : []).map(l => l.username))
+        return (this.users || []).filter(u => u.username && !have.has(u.username) && u.active !== 0 && u.active !== false)
+      },
+      addPerson() {
+        const u = this.users.find(x => x.username === this.addPick)
+        if (!u) return
+        this.form.lines.push({ username: u.username, name: u.display_name || u.username, old: 0, newText: '0' })
+        this.addPick = ''
+      },
+      async saveForm() {
+        const f = this.form
+        const lines = []
+        for (const l of f.lines) { const v = this.newOf(l); if (v === null) { this.msg = '請確認 ' + l.name + ' 的更正後金額是整數。'; return } lines.push({ username: l.username, amount: v }) }
+        this.busy = true; this.msg = ''
+        try {
+          const r = await fetch('/api/bonus/corrections' + (f.corr_no ? '/' + encodeURIComponent(f.corr_no) : ''), {
+            method: f.corr_no ? 'PUT' : 'POST', headers: this._h(true), body: JSON.stringify({ quote_no: f.quote_no, reason: f.reason, lines }) })
+          if (!r.ok) { this.msg = '儲存失敗：' + await this._err(r); return }
+          const d = await r.json()
+          const no = f.corr_no || d.corr_no
+          this.form = null; this.newQuote = ''
+          await this.loadList(); await this.select(no)
+          this.msg = f.corr_no ? '已儲存草稿。' : '已建立草稿 ' + no + '。'
+        } catch (e) { this.msg = '儲存失敗：' + e.message } finally { this.busy = false }
+      },
+      async act(path, body) {
+        this.busy = true; this.msg = ''
+        const no = this.selectedNo
+        try {
+          const r = await fetch('/api/bonus/corrections/' + encodeURIComponent(no) + '/' + path, { method: 'POST', headers: this._h(true), body: JSON.stringify(body || {}) })
+          if (!r.ok) { this.msg = '失敗：' + await this._err(r); return }
+          const d = await r.json()
+          this.rejectReason = ''
+          await this.loadList(); await this.select(no)
+          this.msg = { submit: '已送審。', approve: d.status === '待審核' ? '已簽核本層，等待下一層。' : '已核准，狀態：' + d.status + '。', reject: '已駁回，回到草稿。', cancel: '已作廢。', 'mark-paid': '已標記補發。' }[path] + (d.notice ? ' ' + d.notice : '')
+        } catch (e) { this.msg = '失敗：' + e.message } finally { this.busy = false }
+      },
+    }
+  }
+  </script>
+  <!-- ⚠️ `notif.js` 必須與 `sidebar.js` 成對出現（同 bonus.html） -->
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

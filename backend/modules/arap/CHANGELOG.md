@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## 1.0.30 — 2026-09-30（暫用號，列車取號；wip/w2-bonus-correction：獎金更正單）
+出納「獎金待發放」與發放紀錄納入獎金更正單的補發列（kind=correction）：連結（testid `cashier-bonus-corr-<更正單號>`）到更正單頁處理，不在出納頁直接標記。
+
 ## 1.0.29 — 2026-09-30（wip/w4-l-gaps-4：E01 deal_tag 篩選改逐筆解析）
 - 內部：`gl_events._deal_ok_quotes` 不再用資料庫 JSON 函式，改為取出每筆 `data_json` 後在程式內逐筆解析（壞 JSON 視為沒有標籤）；判斷語意不變（欄位優先，其次 data_json.dealTag；已成案／已結案）。
 

@@ -196,6 +196,8 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 契約版本 | 1（2026-09-25） |
 | 守門 | 同上測試檔：`test_report_counts_bonus_on_paid_date`（待發放不算、發放後出現在發放月、月合計差額＝發放總額）、`test_reverse_without_payroll_report_still_works`（**反向控制**）。突變：報表不讀提供者 ⇒ 轉紅 |
 
+**獎金更正單（2026-09-30，使用者核准）**：同名稱空間再登記一個提供者 `bonus_correction`（`payroll/bonus_correction.py::expense_entries`）——已完成更正單的**補發**以補發日（paid_at）列 +補發總額、**追回**以核准日列 −追回總額（`category` 同樣是 `"獎金分潤"`，`desc` 帶更正單號）；原單那一筆不動。回傳形狀不變、`amount` 可為負（報表加總本來就支援）。IP-8 `bonus.payouts` 的 `pending`／`paid` 多帶 `kind="correction"` 與 `originQuoteNo` 的補發列（選填鍵，既有欄位不變）。IP-2 `voucher.draft` 多兩個選填參數 `kind`（只接受 `"reversal"`）與 `reverses_no`（契約版本仍 1）。守門：`payroll/tests/test_bonus_correction_2026_09_30.py`。
+
 **案件頁相關傳票（同一項裁示）**：不新增串接點。獎金產生的兩張傳票草稿，每一行都帶摘要來源 `source_type="case"`、`source_key=案件單號`（JV36），經 IP-2 `voucher.draft` 寫入；案件頁的 `GET /api/vouchers/by-case/{單號}` 本來就依這個來源找。IP-2 的 `lines` 因此多了兩個**選填**欄位（只加不改，契約版本不變）。守門：`test_case_page_related_vouchers_show_bonus_vouchers`；突變：拿掉來源 ⇒ 轉紅。⚠ 這次之前已產生的獎金傳票沒有來源、不回填（開發機測試資料）。
 
 ---
