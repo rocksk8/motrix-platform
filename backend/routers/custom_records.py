@@ -61,6 +61,8 @@ def _can_use(conn, user, key) -> dict:
     mods = json.loads(user.get("modules") or "[]")
     if CM.permission_of(key, d["body"]) not in mods:
         raise HTTPException(403, "沒有「%s」的權限" % d["body"].get("name", key))
+    if not SUP.can_see_menu(d["body"].get("menu"), user):        # menu.visibleTo：直接打 API 也一樣（不只藏選單；404 不洩漏模組存在）
+        raise HTTPException(404, "沒有這個模組")
     return d
 
 
@@ -126,7 +128,10 @@ def create_custom_record(key: str, payload: dict = Body(...), authorization: str
     try:
         _can_use(conn, u, key)
         d = _can_use(conn, u, key)
-        rec = CM.create_record(conn, key, SUP.keep_hidden_values(d["body"], payload.get("values"), None, u), u)
+        vals, forbidden = SUP.guard_writes(d["body"], payload.get("values"), None, u)
+        if forbidden:
+            raise HTTPException(403, "有欄位你沒有修改權限：" + "；".join(x["message"] for x in forbidden))
+        rec = CM.create_record(conn, key, vals, u)
     except CM.CustomModuleError as e:
         return _err(e)
     finally:
@@ -175,7 +180,10 @@ def update_custom_record(key: str, record_no: str, payload: dict = Body(...), au
     try:
         _can_use(conn, u, key)
         cur = CM.get_record(conn, key, record_no)
-        rec = CM.update_record(conn, key, record_no, SUP.keep_hidden_values(cur["definition"], payload.get("values"), cur["data"], u), u)
+        vals, forbidden = SUP.guard_writes(cur["definition"], payload.get("values"), cur["data"], u)
+        if forbidden:
+            raise HTTPException(403, "有欄位你沒有修改權限：" + "；".join(x["message"] for x in forbidden))
+        rec = CM.update_record(conn, key, record_no, vals, u)
     except CM.CustomModuleError as e:
         return _err(e)
     finally:

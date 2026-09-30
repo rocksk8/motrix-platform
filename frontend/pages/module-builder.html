@@ -533,6 +533,22 @@
                   </div>
                 </details>
               </div>
+                      <div class="mb-f" data-vis="field-edit">
+                <label>誰改得到</label>
+                <div class="mb-hint" data-vis-summary x-text="visSummary(sel, 'editableTo')"></div>
+                <div class="cr-opts">
+                  <template x-for="r in (catalog.roles || [])" :key="r">
+                    <label><input type="checkbox" style="width:auto" :data-vis-role-edit="r" :checked="visHas(sel, 'roles', r, 'editableTo')" @change="toggleVis(sel, 'roles', r, $event.target.checked, 'editableTo')"><span x-text="roleLabel(r)"></span></label>
+                  </template>
+                </div>
+                <details style="margin-top:4px"><summary class="mb-hint" style="cursor:pointer">指定人員</summary>
+                  <div class="cr-opts" style="max-height:150px;overflow:auto">
+                    <template x-for="u in users" :key="u.username">
+                      <label><input type="checkbox" style="width:auto" :data-vis-user-edit="u.username" :checked="visHas(sel, 'users', u.username, 'editableTo')" @change="toggleVis(sel, 'users', u.username, $event.target.checked, 'editableTo')"><span x-text="u.displayName || u.username"></span></label>
+                    </template>
+                  </div>
+                </details>
+              </div>
                       <!-- 金流性質（數字／公式欄；含明細合計）：進營運報表與案件成本 -->
                       <template x-if="canFinance(def.fields[sel])">
                         <div class="mb-f mb-fin" data-finance>
