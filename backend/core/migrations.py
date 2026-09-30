@@ -257,7 +257,8 @@ def _core_v3_audit_search(conn):
                       ("reason_code", "TEXT NOT NULL DEFAULT ''"), ("status_code", "INTEGER NOT NULL DEFAULT 0")):
         if name not in cols:
             conn.execute("ALTER TABLE audit_log ADD COLUMN %s %s" % (name, ddl))
-    for idx, cols_ in (("idx_audit_module", "module, id"), ("idx_audit_case", "case_no, id"), ("idx_audit_ref", "ref_no, id"),
+    for idx, cols_ in (("idx_audit_module", "module, result, id"), ("idx_audit_case", "case_no, result, id"),
+                       ("idx_audit_ref", "ref_no, result, id"),   # 含 result＝分層樹的 GROUP BY 只掃索引（不回表）
                        ("idx_audit_result", "result, id"), ("idx_audit_user", "username, id"), ("idx_audit_at", "at"),
                        ("idx_audit_action", "action, id")):
         conn.execute("CREATE INDEX IF NOT EXISTS %s ON audit_log(%s)" % (idx, cols_))

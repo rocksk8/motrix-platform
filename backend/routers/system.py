@@ -491,8 +491,10 @@ def audit_log_tree(
         where, params = _audit_filters(module, case_no, ref_no, user, action, date_from, date_to, result, None)
         cond = ("WHERE " + " AND ".join(where)) if where else ""
         rows = conn.execute(
-            f"SELECT {col} AS k, COUNT(*) AS n, SUM(result='fail') AS f, MAX(at) AS last_at "
+            f"SELECT {col} AS k, COUNT(*) AS n, SUM(result='fail') AS f, MAX(id) AS last_id "
             f"FROM audit_log {cond} GROUP BY {col} ORDER BY MAX(id) DESC LIMIT 500", params).fetchall()
+        last_at = {r["last_id"]: (conn.execute("SELECT at FROM audit_log WHERE id=?", (r["last_id"],)).fetchone() or [None])[0]
+                   for r in rows}
     finally:
         conn.close()
     out = []
@@ -500,7 +502,7 @@ def audit_log_tree(
         k = r["k"] or ""
         label = (_AUDIT_MODULE_LABELS.get(k, k) if level == "module" else k) or "其他"
         out.append({"key": k or ("other" if level == "module" else ""), "label": label, "count": r["n"],
-                    "failCount": r["f"] or 0, "lastAt": r["last_at"]})
+                    "failCount": r["f"] or 0, "lastAt": last_at.get(r["last_id"])})
     return {"level": level, "items": out}
 
 
