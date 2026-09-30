@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## 1.1.3 — 2026-09-30（暫用號，列車取號；W4 總帳 R12）
+- 新增提供者 `payslip.remit`（IP-104）：承攬商匯款單驗證、標記、退回勞報單付款；由匯款單付款的勞報單不可單獨 unpay（409，請到匯款單取消），總帳不再另產生其 E06b。無 migration（沿用 data_json.paid_via_remit）。
+
 ## 1.1.2 — 2026-09-30（暫用號，列車取號；W4 總帳 C3b）
 - 獎金核准應付／發放傳票開立時帶 `origin`（bonus_accrual／bonus_payment，經 `voucher.draft` 可選參數）；`gl.events` 新增獎金事件 E07a／E07b（mode=native，登記既有傳票，不重複產生）。無 migration、無新欄位。
 

@@ -13,6 +13,8 @@
 只讀，不寫資料。
 """
 from core import registry
+import json
+
 from db import get_db
 from helpers.legal_params import round_half_up
 
@@ -21,12 +23,19 @@ def _i(x):
     return int(round_half_up(x or 0))
 
 
+def _paid_via_remit(raw):
+    try:
+        return bool((json.loads(raw or "{}") or {}).get("paid_via_remit"))
+    except (TypeError, ValueError):
+        return False
+
+
 def gl_events(start, end, *, changed_since=""):
     conn = get_db()
     try:
         rows = conn.execute(
             "SELECT slip_no, contractor_id, contractor_name, income_type, gross_amount, tax_withheld, nhi_supplement, net_amount, "
-            "slip_date, status, tax_rules_version, signed_at, payment_date FROM payslips "
+            "slip_date, status, tax_rules_version, signed_at, payment_date, data_json FROM payslips "
             "WHERE status IN ('已簽回','已付款') ORDER BY slip_no").fetchall()
     finally:
         conn.close()
@@ -58,7 +67,7 @@ def gl_events(start, end, *, changed_since=""):
                 "source_type": "payslip", "source_key": r["slip_no"], "event_code": "E06", "event_date": d,
                 "doc_no": r["slip_no"], "case_no": "", "party": party, "tax_code": "", "mode": "snapshot", "lines": lines,
                 "meta": {"income_type": r["income_type"], "tax_rules_version": r["tax_rules_version"], "date_from_signed": not (r["slip_date"] or "")[:10]}})
-        if r["status"] == "已付款":
+        if r["status"] == "已付款" and not _paid_via_remit(r["data_json"]):        # 由承攬商匯款單付款者，付款分錄是匯款單的 E05（不重複）
             pd = (r["payment_date"] or "")[:10]
             if not pd:
                 nopay += 1

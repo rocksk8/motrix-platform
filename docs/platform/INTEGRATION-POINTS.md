@@ -214,6 +214,26 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
+---
+
+## IP-104　`payslip.remit`：承攬商匯款單關聯勞報單、匯款時一併記為已付款（M04 → M07）
+
+對應使用者 2026-09-30 裁示 R12：個人（無統編）外包人員匯款前必須關聯勞報單，匯款金額＝勞報單實付（扣繳留在勞報單）；匯款標記時勞報單一併記為已付款，避免重複付款與重複入帳。
+M04 不 import M07，經這一個單一提供者（三個動作，都不 commit，與匯款單同一個交易）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M07 薪資獎金：`modules/payroll/remit_link.py::_Remit`（`check`／`mark_paid`／`unmark_paid`） |
+| 使用方 | M04 `modules/subcontract/api/contractor_vouchers.py`：`POST /api/contractor-vouchers/{單號}/personnel-link`（關聯／解除）、`paid-toggle`（匯款前驗證＋一併標記；取消匯款一併退回） |
+| 形式 | provider，單一提供者（`core.registry`；`ModuleSpec.providers` 宣告） |
+| 語法 | 提供：`("payslip.remit", "payroll"): remit_link._Remit`<br>取用：`p = registry.single_provider("payslip.remit")`；`None` ⇒ 退化。`p.check(conn, slip_no)`、`p.mark_paid(conn, slip_nos, remit_no, payment_date, who)`、`p.unmark_paid(conn, remit_no)` |
+| 回傳 | `check`：`{slipNo, status, contractorId, contractorName, net, paidViaRemit}`（不含身分證字號等個資）；不存在 ⇒ None。`mark_paid`／`unmark_paid`：更新筆數 |
+| 對方不在時 | 有 `payslipNo` 的人員 ⇒ 匯款被擋並說明「薪資獎金模組未安裝，無法驗證勞報單」；沒有關聯且 `system_settings.remit_require_payslip` 未開 ⇒ 匯款照舊 |
+| 契約版本 | 1（2026-09-30） |
+
+---
+
+
 ## IP-15　`dispatch.list_for_case`＋`dispatch.cost_for_case`：案件整包的承攬派工段（M04 → M01）；派工成本檢視（M04 → M06 傳票）
 
 對應 l2_import_baseline `M01 router:quotations -> M04 router:vendor_contractors`（M04 搬遷，2026-09-26）。原本 M01 案件整包（`/api/quotations/{no}/case-bundle`）直接 import `routers.vendor_contractors.list_dispatches`。編號為暫定（同時期 C 的 approval.queue_items、crm.quote_deleted 與 A 的 daily.check 也在暫用 IP-10、IP-11），由列車依合回順序定號。〔第六班列車定號（2026-09-26）：dispatch.list_for_case 暫用 IP-12→IP-15、quotation.append_items 暫用 IP-13→IP-17、contractor_voucher.public 維持 IP-14（origin 已用 IP-12 case.access、IP-13 crm.quote_deleted；IP-16＝M07 bonus.module_status）〕

@@ -21,6 +21,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, model_validator
 
 from db import get_db, next_entity_code, spawn_bg_thread
+from core import registry
 from core.txn import begin_write, write_txn
 from helpers import (
     _require_user, _tok, _audit, _notify, _get_setting, _set_setting, _purge_notifications,
@@ -725,6 +726,88 @@ def record_contractor_voucher_export(voucher_no: str, mode: str = "external", au
     return {"export_count": count, "log": log}
 
 
+# ── 個人外包人員 ↔ 勞報單（R12，使用者 2026-09-30 裁示 (b)；IP-104 `payslip.remit`）──────────────────────
+# 匯款單快照的 personnel[] 每位個人可帶 payslipNo（additive，不需 migration）：匯款金額必須等於該勞報單實付、勞報單已簽回、受款人相符。
+# `system_settings.remit_require_payslip`＝"1" ⇒ 標記已匯款時**每位個人都必須**已關聯（預設關閉，畫面補上關聯入口後由最高管理者開啟）；
+# 已帶 payslipNo 的一律驗證，與設定無關。匯款標記成功 ⇒ 連結的勞報單一併記為已付款（同一個交易）；取消匯款 ⇒ 一併退回。
+
+def _personnel_link_errors(conn, snapshot_json, require_all):
+    """⇒ (錯誤訊息清單, 已驗證可標記付款的勞報單號清單)。純讀。"""
+    try:
+        snap = json.loads(snapshot_json or "{}") or {}
+    except (TypeError, ValueError):
+        snap = {}
+    people = [p for p in (snap.get("personnel") or []) if str((p or {}).get("name") or "").strip()]
+    errs, ok = [], []
+    provider = registry.single_provider("payslip.remit")
+    for p in people:
+        name, no = str(p.get("name") or ""), str(p.get("payslipNo") or "").strip()
+        if not no:
+            if require_all:
+                errs.append("%s 尚未關聯勞報單（個人外包匯款前必須先關聯勞報單）" % name)
+            continue
+        if provider is None:
+            errs.append("%s：薪資獎金模組未安裝，無法驗證勞報單 %s" % (name, no))
+            continue
+        c = provider.check(conn, no)
+        if c is None:
+            errs.append("%s：查無勞報單 %s" % (name, no))
+        elif c["status"] != "已簽回":
+            errs.append("%s：勞報單 %s 狀態是「%s」，須為已簽回%s" % (name, no, c["status"], "（已由匯款單 %s 付款）" % c["paidViaRemit"] if c["paidViaRemit"] else ""))
+        elif p.get("id") and c["contractorId"] and int(p["id"]) != int(c["contractorId"]):
+            errs.append("%s：勞報單 %s 的受款人是 %s，不符" % (name, no, c["contractorName"]))
+        elif round(float(p.get("amount") or 0), 2) != round(c["net"], 2):
+            errs.append("%s：匯款金額 %g 必須等於勞報單 %s 的實付 %g" % (name, float(p.get("amount") or 0), no, c["net"]))
+        else:
+            ok.append(no)
+    return errs, ok
+
+
+class PersonnelLinkIn(BaseModel):
+    personId: Optional[int] = None
+    personName: Optional[str] = ""
+    payslipNo: str = ""
+
+
+@router.post("/api/contractor-vouchers/{voucher_no}/personnel-link")
+def link_personnel_payslip(voucher_no: str, body: PersonnelLinkIn, authorization: str = Header(None)):
+    """把匯款單裡的一位個人外包人員關聯到勞報單（payslipNo 給空字串＝解除）。只限尚未匯款的匯款單；關聯時即驗證（已簽回、受款人、金額）。"""
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
+        raise HTTPException(403, "需要管理員或出納權限")
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT is_paid, snapshot_json FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+        if not row:
+            raise HTTPException(404, "申請不存在")
+        if row["is_paid"]:
+            raise HTTPException(409, "已匯款的申請不能更動勞報單關聯（請先取消已匯款）")
+        snap = json.loads(row["snapshot_json"] or "{}")
+        target = None
+        for p in snap.get("personnel") or []:
+            if (body.personId and p.get("id") == body.personId) or (not body.personId and body.personName and p.get("name") == body.personName):
+                target = p
+                break
+        if target is None:
+            raise HTTPException(404, "匯款單裡找不到這位外包人員")
+        no = (body.payslipNo or "").strip()
+        if no:
+            target["payslipNo"] = no
+            errs, _ok = _personnel_link_errors(conn, json.dumps({"personnel": [target]}, ensure_ascii=False), False)
+            if errs:
+                raise HTTPException(409, "；".join(errs))
+        else:
+            target.pop("payslipNo", None)
+        conn.execute("UPDATE contractor_payment_vouchers SET snapshot_json=?, updated_at=? WHERE voucher_no=?",
+                     (json.dumps(snap, ensure_ascii=False), datetime.now().isoformat(), voucher_no))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "contractor_voucher.personnel_link", "contractor_payment_voucher", voucher_no, voucher_no,
+           {"person": target.get("name"), "payslipNo": no})
+    return {"ok": True, "person": target.get("name"), "payslipNo": no}
+
+
 # ── 財務已匯款 toggle ─────────────────────────────────────────────────────────
 
 @router.post("/api/contractor-vouchers/{voucher_no}/paid-toggle")
@@ -781,6 +864,12 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
     if action == "unpay" and not is_paid:
         conn.close()
         raise HTTPException(409, "尚未標記匯款")
+    linked_slips = []
+    if action == "pay":
+        errs, linked_slips = _personnel_link_errors(conn, row["snapshot_json"], str(_get_setting("remit_require_payslip", "0")) == "1")
+        if errs:
+            conn.close()
+            raise HTTPException(409, "不能標記已匯款：" + "；".join(errs))
 
     now = datetime.now().isoformat()
     log = json.loads(row["paid_log"] or "[]")
@@ -801,12 +890,18 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
              json.dumps(log, ensure_ascii=False), bank_name, bank_code, now,
              rm["actual"], rm["fee"], rm["review"], voucher_no)
         )
+        if linked_slips:                                   # R12：連結的勞報單一併記為已付款（同一個交易）
+            registry.single_provider("payslip.remit").mark_paid(conn, linked_slips, voucher_no, paid_at_value,
+                                                                user.get("display_name") or user["username"])
     else:
         conn.execute(
             "UPDATE contractor_payment_vouchers SET is_paid=0, paid_by='', paid_at='', paid_log=?, "
             "paid_bank_account_name='', paid_bank_account_code='', updated_at=?, " + _remit.CLEAR_SQL + " WHERE voucher_no=?",
             (json.dumps(log, ensure_ascii=False), now, voucher_no)
         )
+        prov = registry.single_provider("payslip.remit")
+        if prov is not None:                               # R12：由這張匯款單付款的勞報單一併退回已簽回
+            prov.unmark_paid(conn, voucher_no)
     conn.commit()
     conn.close()
     _audit(_tok(authorization), f"contractor_voucher.{action}", "contractor_payment_voucher", voucher_no,

@@ -492,6 +492,7 @@
     "js:js/bonus.js",
     "mod:payroll/__init__",
     "mod:payroll/gl_events",
+    "mod:payroll/remit_link",
     "mod:payroll/api/bonus",
     "mod:payroll/api/payslips",
     "mod:payroll/bonus",

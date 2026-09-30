@@ -81,7 +81,11 @@ def gl_events(start, end, *, changed_since=""):
         bank = {"role": "BANK", "side": "C", "amount": actual + fee, "memo": memo}
         if v["paid_bank_account_code"]:
             bank["account_code"] = v["paid_bank_account_code"]
-        lines = [{"role": "AP", "side": "D", "amount": payable, "memo": memo}]
+        people = [q for q in (s.get("personnel") or []) if str((q or {}).get("name") or "").strip()]
+        linked = sum(_i(q.get("amount")) for q in people if str(q.get("payslipNo") or "").strip())      # 已關聯勞報單的個人：付的是勞報單的應付
+        lines = [{"role": "AP", "side": "D", "amount": payable - linked, "memo": memo}] if payable - linked > 0 else []
+        if linked:
+            lines.append({"role": "OTHER_PAYABLE", "side": "D", "amount": linked, "memo": "個人外包（勞報單）"})
         if fee:
             lines.append({"role": "FEE", "side": "D", "amount": fee, "memo": "匯款手續費（公司自付）"})
         if actual > payable:
@@ -96,7 +100,7 @@ def gl_events(start, end, *, changed_since=""):
             "meta": {"dispatch_invoiced": v["dispatch_id"] in invoiced}})
         if v["dispatch_id"] not in invoiced:
             uninvoiced += 1
-        person = _i(s.get("personnelTotal"))
+        person = _i(s.get("personnelTotal")) - linked
         if person > 0:
             no_withhold += 1
             pm = "%s 個人點工（未關聯勞報單）" % v["voucher_no"]
