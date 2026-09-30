@@ -252,7 +252,11 @@
       badge(st) { return { '草稿': 'st-amber', '待審核': 'st-orange', '待補發': 'st-green', '已完成': 'st-purple', '已作廢': 'st-gray' }[st] || 'st-gray' },
       async _err(r) { try { const d = await r.json(); return typeof d.detail === 'string' ? d.detail : ('HTTP ' + r.status) } catch (e) { return 'HTTP ' + r.status } },
 
+      _initDone: false,
       async init() {
+        // Alpine 3 會自動呼叫資料物件的 init()，<body> 又寫 x-init="init()" ⇒ 不守衛會跑兩遍（重複打 API）
+        if (this._initDone) return
+        this._initDone = true
         try {
           const s = JSON.parse(localStorage.getItem('motrix_session') || '{}') || {}
           this.isSuper = s.role === 'superadmin'
