@@ -27,7 +27,8 @@ def _zip(*names):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         for n in names:
-            z.writestr(n, "x")
+            # 固定時間戳：writestr(name,…) 會用「現在時間」，位元組會混進 pytest 參數 id，xdist 各 worker 收集到不同 id（2026-10-01 建包卡在這）
+            z.writestr(zipfile.ZipInfo(n, date_time=(2020, 1, 1, 0, 0, 0)), "x")
     return buf.getvalue()
 
 
