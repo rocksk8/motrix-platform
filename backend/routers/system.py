@@ -546,10 +546,18 @@ def audit_log_tree(
     if col is None:
         raise HTTPException(400, "level 只能是 module／case／ref")
     window = _audit_tree_window(date_from, date_to)
-    date_from, date_to = window["from"], window["to"]
     conn = get_db()
     try:
-        where, params = _audit_filters(module, case_no, ref_no, user, action, date_from, date_to, result, None)
+        where, params = _audit_filters(module, case_no, ref_no, user, action, window["from"], window["to"], result, None)
+        # 加一個 **id 範圍**收窄掃描：`at` 條件單獨會讓 SQLite 走 idx_audit_at 再逐列回表（100 萬列 1.7～4.7 秒）。
+        # id 上下界各一次索引查詢取得：窗內每一列的 id 必定落在 [MIN(id where at>=起), MAX(id where at<迄)] 之內（與資料是否依時間遞增無關），
+        # `at` 條件仍保留 ⇒ 結果恆正確；稽核列依寫入順序遞增（正式機如此）時掃描量就是窗內那一段，不是全表。
+        lo = conn.execute("SELECT MIN(id) FROM audit_log WHERE at >= ?", (window["from"],)).fetchone()[0]
+        hi = conn.execute("SELECT MAX(id) FROM audit_log WHERE at < ?", (window["to"] + "T99",)).fetchone()[0]
+        if lo is None or hi is None or lo > hi:
+            return {"level": level, "items": [], "window": window}
+        where += ["id>=?", "id<=?"]
+        params += [lo, hi]
         cond = ("WHERE " + " AND ".join(where)) if where else ""
         rows = conn.execute(
             f"SELECT {col} AS k, COUNT(*) AS n, SUM(result='fail') AS f, MAX(id) AS last_id "
