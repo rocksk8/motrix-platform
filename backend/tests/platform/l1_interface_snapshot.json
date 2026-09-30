@@ -1,5 +1,5 @@
 {
- "core_version": "1.70",
+ "core_version": "1.71",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -320,10 +320,15 @@
   },
   "helper:custom_fields": {
    "DATA_CLASSES": "const",
+   "EXT_TYPES": "const",
    "KEY_RE": "const",
+   "MAX_TEXT": "const",
+   "MODULE_TYPES": "const",
+   "OPTION_TYPES": "const",
+   "OTHER_MAX": "const",
    "TYPES": "const",
    "clean": "def(values, definition)",
-   "validate_definition": "def(body, key=…, core_fields=…)"
+   "validate_definition": "def(body, key=…, core_fields=…, types=…)"
   },
   "helper:custom_modules": {
    "APPROVER_SOURCES": "const",
@@ -332,11 +337,14 @@
    "DATE_FORMATS": "const",
    "EVENT_TRANSITIONED": "const",
    "FIELD_TYPES": "const",
+   "FINANCE_KINDS": "const",
    "HELP_MAX": "const",
    "KEY_RE": "const",
    "PREFIX_RE": "const",
    "STATE_KEY_RE": "const",
+   "TABLE_COL_TYPES": "const",
    "can_edit_draft": "def(rec, body, user)",
+   "clean_table": "def(f, raw)",
    "clean_values": "def(conn, body, values)",
    "compute": "def(body, values)",
    "create_record": "def(conn, module_key, values, user)",
@@ -361,6 +369,7 @@
    "render_view": "def(body, view)",
    "sample_values": "def(body)",
    "sample_view": "def(body)",
+   "table_columns": "def(fields)",
    "transition": "def(conn, module_key, record_no, tkey, user, note=…)",
    "update_record": "def(conn, module_key, record_no, values, user)",
    "validate_module": "def(body, key=…)",
@@ -486,7 +495,8 @@
    "FormulaError.__init__": "def(self, message, pos=…)",
    "MAX_DEPTH": "const",
    "MAX_LENGTH": "const",
-   "check": "def(expr, fields=…)",
+   "TABLE_FUNCTIONS": "const",
+   "check": "def(expr, fields=…, tables=…)",
    "evaluate": "def(expr, values)",
    "evaluation_order": "def(formulas)",
    "references": "def(expr)"

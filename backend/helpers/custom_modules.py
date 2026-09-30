@@ -24,7 +24,12 @@ KEY_RE = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
 STATE_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,29}$")
 PREFIX_RE = re.compile(r"^[A-Z][A-Z0-9]{0,5}$")
 #: 欄位型別目錄：自訂欄位的型別＋公式（唯讀、由公式算出）＋參照（指到其他資料）
-FIELD_TYPES = _cf.TYPES + ("formula", "ref")
+FIELD_TYPES = _cf.MODULE_TYPES + ("formula", "ref", "table")
+#: 明細表（`table`）的限制與可用欄型別（W1 建構器第三輪，2026-09-30）
+TABLE_MAX_ROWS, TABLE_MAX_COLS = 200, 12
+TABLE_COL_TYPES = ("text", "number", "date", "select", "checkbox", "formula")
+#: 金流性質（附錄 B）：欄位 `finance.kind`；缺／none ＝不計
+FINANCE_KINDS = ("income", "expense")
 DATE_FORMATS = {"YYYYMMDD": "%Y%m%d", "YYYYMM": "%Y%m", "": ""}
 EVENT_TRANSITIONED = "custom_module.transitioned"
 
@@ -103,6 +108,7 @@ def validate_module(body: dict, key: str = "") -> list:
     out += _validate_fields(fields)
     keys = [f.get("key") for f in fields if isinstance(f, dict)]
     out += _validate_workflow(body.get("workflow"), keys)
+    out += _validate_finance([f for f in fields if isinstance(f, dict)], body)
     if not out:
         out += _validate_by_sample(body)
     out += _validate_output(body)
@@ -174,7 +180,7 @@ def _validate_fields(fields):
                 out.append(_p(p + ".key", "key 只能用小寫英文、數字與底線，英文開頭，最長 40 字：%r" % (k,)))
             if not str(f.get("label") or "").strip():
                 out.append(_p(p + ".label", "必須有顯示名稱"))
-            for prob in _fx.check(f.get("formula"), [x for x in keys if x != k]):
+            for prob in _fx.check(f.get("formula"), [x for x in keys if x != k], table_columns(fields)):
                 out.append(_p(p + ".formula", "第 %d 字：%s" % (prob["pos"] + 1, prob["message"])))
         elif t == "ref":
             if not _cf.KEY_RE.match(str(k or "")):
@@ -184,8 +190,10 @@ def _validate_fields(fields):
             target = str(f.get("target") or "")
             if not (target in _REF_TARGETS or (target.startswith("custom:") and KEY_RE.match(target[7:]))):
                 out.append(_p(p + ".target", "不認得的參照對象 %r（可用：%s、custom:<模組>）" % (target, "、".join(sorted(_REF_TARGETS)))))
+        elif t == "table":
+            out += _validate_table(p, f)
         else:
-            for prob in _cf.validate_definition({"fields": [f]}):
+            for prob in _cf.validate_definition({"fields": [f]}, types=_cf.MODULE_TYPES):
                 out.append(_p(prob["path"].replace("fields[0]", p, 1), prob["message"]))
     formulas = {f["key"]: f.get("formula") for f in fields if isinstance(f, dict) and f.get("type") == "formula" and f.get("key")}
     try:
@@ -193,6 +201,105 @@ def _validate_fields(fields):
     except _fx.FormulaError as e:
         out.append(_p("fields", str(e)))
     return out
+
+
+def table_columns(fields) -> dict:
+    """`{明細表 key: [可加總的數值欄 key…]}`（number 欄與列內公式欄；供公式檢查用）。"""
+    out = {}
+    for f in fields or []:
+        if isinstance(f, dict) and f.get("type") == "table" and f.get("key"):
+            out[f["key"]] = [c.get("key") for c in (f.get("columns") or [])
+                             if isinstance(c, dict) and c.get("type") in ("number", "formula") and c.get("key")]
+    return out
+
+
+def _validate_table(p, f):
+    """明細表欄位：key／label、欄（型別白名單、key 唯一、列內公式只能引用同表的欄）、列數範圍。"""
+    out = []
+    if not _cf.KEY_RE.match(str(f.get("key") or "")):
+        out.append(_p(p + ".key", "key 只能用小寫英文、數字與底線，英文開頭，最長 40 字：%r" % (f.get("key"),)))
+    if not str(f.get("label") or "").strip():
+        out.append(_p(p + ".label", "必須有顯示名稱"))
+    cols = f.get("columns")
+    if not isinstance(cols, list) or not cols:
+        return out + [_p(p + ".columns", "明細表至少要有一欄")]
+    if len(cols) > TABLE_MAX_COLS:
+        out.append(_p(p + ".columns", "明細表最多 %d 欄" % TABLE_MAX_COLS))
+    seen, ckeys = set(), [c.get("key") for c in cols if isinstance(c, dict)]
+    for j, c in enumerate(cols):
+        cp = "%s.columns[%d]" % (p, j)
+        if not isinstance(c, dict):
+            out.append(_p(cp, "欄必須是物件"))
+            continue
+        ck, ct = c.get("key"), c.get("type")
+        if not _cf.KEY_RE.match(str(ck or "")):
+            out.append(_p(cp + ".key", "key 只能用小寫英文、數字與底線，英文開頭，最長 40 字：%r" % (ck,)))
+        elif ck in seen:
+            out.append(_p(cp + ".key", "欄 key 重複：%s" % ck))
+        seen.add(ck)
+        if not str(c.get("label") or "").strip():
+            out.append(_p(cp + ".label", "必須有顯示名稱"))
+        if ct not in TABLE_COL_TYPES:
+            out.append(_p(cp + ".type", "明細表的欄只能是：%s" % "、".join(TABLE_COL_TYPES)))
+        elif ct == "formula":
+            for prob in _fx.check(c.get("formula"), [x for x in ckeys if x != ck]):
+                out.append(_p(cp + ".formula", "第 %d 字：%s" % (prob["pos"] + 1, prob["message"])))
+        else:
+            for prob in _cf.validate_definition({"fields": [c]}, types=TABLE_COL_TYPES):
+                out.append(_p(prob["path"].replace("fields[0]", cp, 1), prob["message"]))
+    forms = {c["key"]: c.get("formula") for c in cols if isinstance(c, dict) and c.get("type") == "formula" and c.get("key")}
+    try:
+        _fx.evaluation_order(forms)
+    except _fx.FormulaError as e:
+        out.append(_p(p + ".columns", str(e)))
+    for bound, dflt in (("minRows", 0), ("maxRows", TABLE_MAX_ROWS)):
+        v = f.get(bound, dflt)
+        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= TABLE_MAX_ROWS:
+            out.append(_p(p + "." + bound, "列數必須是 0～%d 的整數" % TABLE_MAX_ROWS))
+    if isinstance(f.get("minRows"), int) and isinstance(f.get("maxRows"), int) and f["minRows"] > f["maxRows"]:
+        out.append(_p(p + ".minRows", "最少列數不可大於最多列數"))
+    return out
+
+
+def _validate_finance(fields, body):
+    """金流性質（附錄 B）：`finance.kind` 只能掛在 number／formula；日期欄引用 date；案件欄引用 text／ref；要有入帳狀態。"""
+    out = []
+    by_key = {f.get("key"): f for f in fields if isinstance(f, dict)}
+    any_finance = False
+    for i, f in enumerate(fields):
+        fin = f.get("finance") if isinstance(f, dict) else None
+        if fin is None or (isinstance(fin, dict) and fin.get("kind") in (None, "", "none")):
+            continue
+        p = "fields[%d].finance" % i
+        if not isinstance(fin, dict) or fin.get("kind") not in FINANCE_KINDS:
+            out.append(_p(p + ".kind", "金流性質只能是 %s 或不計" % "、".join(FINANCE_KINDS)))
+            continue
+        any_finance = True
+        if f.get("type") not in ("number", "formula"):
+            out.append(_p(p, "只有數字或公式欄位可以設金流性質"))
+        for name, types in (("dateField", ("date",)), ("cashDateField", ("date",)), ("caseField", ("text", "ref"))):
+            ref = fin.get(name)
+            if ref in (None, ""):
+                continue
+            tgt = by_key.get(ref)
+            if tgt is None or tgt.get("type") not in types:
+                out.append(_p(p + "." + name, "%s 必須是%s欄位：%r" % (
+                    {"dateField": "歸屬日期", "cashDateField": "現金日期", "caseField": "關聯案件"}[name],
+                    "日期" if types == ("date",) else "文字或參照", ref)))
+    if any_finance:
+        states = {s.get("key") for s in (body.get("workflow") or {}).get("states", []) if isinstance(s, dict)}
+        ps = (body.get("finance") or {}).get("postStates")
+        if ps is not None and (not isinstance(ps, list) or not ps or not set(ps) <= states):
+            out.append(_p("finance.postStates", "入帳狀態必須是流程裡存在的狀態"))
+        elif ps is None and not _derive_post_states(body):
+            out.append(_p("finance.postStates", "有金流欄位，但流程沒有簽核核准後的終態可推導入帳狀態：請指定入帳狀態"))
+    return out
+
+
+def _derive_post_states(body):
+    """入帳狀態的預設推導：簽核 `on_approved` 指向的狀態（沒有簽核的模組 ⇒ 空，需指定）。"""
+    return sorted({(s.get("approval") or {}).get("on_approved") for s in (body.get("workflow") or {}).get("states", [])
+                   if isinstance(s, dict) and (s.get("approval") or {}).get("on_approved")})
 
 
 def _validate_workflow(wf, field_keys):
@@ -340,11 +447,72 @@ def _input_fields(body):
     return [f for f in body.get("fields", []) if f.get("type") not in ("formula",)]
 
 
+def clean_table(f: dict, raw) -> tuple:
+    """明細表的值 ⇒ `(rows, errors)`。逐列逐欄用同一套 `_coerce`；列內公式在欄位清理後、依引用順序算；
+    整列全空的列丟掉；錯誤帶路徑 key（`tbl[3].col`）。"""
+    cols = [c for c in f.get("columns") or [] if isinstance(c, dict)]
+    label = f.get("label") or f["key"]
+    if raw is None or raw == "":
+        raw = []
+    if not isinstance(raw, list):
+        return None, [{"key": f["key"], "message": "%s：必須是列的清單" % label}]
+    errors, rows = [], []
+    forms = {c["key"]: c["formula"] for c in cols if c.get("type") == "formula"}
+    order = _fx.evaluation_order(forms) if forms else []
+    for i, r in enumerate(raw):
+        if not isinstance(r, dict):
+            errors.append({"key": "%s[%d]" % (f["key"], i), "message": "%s 第 %d 列：必須是物件" % (label, i + 1)})
+            continue
+        row = {}
+        for c in cols:
+            if c.get("type") == "formula":
+                continue
+            v = r.get(c["key"])
+            if (v is None or v == "") and "default" in c:
+                v = c["default"]
+            ok, val, msg = _cf._coerce(c, v)
+            if not ok:
+                errors.append({"key": "%s[%d].%s" % (f["key"], i, c["key"]),
+                               "message": "%s 第 %d 列 %s：%s" % (label, i + 1, c.get("label") or c["key"], msg)})
+            elif val is None:
+                if c.get("required") and any(x not in (None, "") for x in r.values()):
+                    errors.append({"key": "%s[%d].%s" % (f["key"], i, c["key"]),
+                                   "message": "%s 第 %d 列 %s：必填" % (label, i + 1, c.get("label") or c["key"])})
+            else:
+                row[c["key"]] = val
+        if not row:
+            continue                                             # 整列空白 ⇒ 不收
+        for k in order:
+            try:
+                row[k] = _fx.evaluate(forms[k], row)
+                if isinstance(row[k], float) and not math.isfinite(row[k]):
+                    raise _fx.FormulaError("結果不是有限的數字")
+            except _fx.FormulaError as e:
+                row[k] = None
+                errors.append({"key": "%s[%d].%s" % (f["key"], i, k),
+                               "message": "%s 第 %d 列：公式無法計算（%s）" % (label, i + 1, e)})
+        rows.append(row)
+    mx = f.get("maxRows", TABLE_MAX_ROWS)
+    mn = f.get("minRows", 0) or (1 if f.get("required") else 0)
+    if len(rows) > mx:
+        errors.append({"key": f["key"], "message": "%s：最多 %d 列" % (label, mx)})
+    if len(rows) < mn:
+        errors.append({"key": f["key"], "message": "%s：至少 %d 列" % (label, mn)})
+    return rows, errors
+
+
 def clean_values(conn, body: dict, values) -> tuple:
     """回 `(乾淨的值（含公式結果）, 錯誤, 丟掉的鍵)`。公式欄位不收輸入（送了也丟掉並回報）。"""
     values = values if isinstance(values, dict) else {}
-    plain = [dict(f, type="text") if f.get("type") == "ref" else f for f in _input_fields(body)]
+    tables = [f for f in _input_fields(body) if f.get("type") == "table"]
+    plain = [dict(f, type="text") if f.get("type") == "ref" else f for f in _input_fields(body) if f.get("type") != "table"]
     out, errors, dropped = _cf.clean(values, {"fields": plain})
+    dropped = [k for k in dropped if k not in {t["key"] for t in tables}]
+    for t in tables:
+        rows, terr = clean_table(t, values.get(t["key"]))
+        errors += terr
+        if rows:
+            out[t["key"]] = rows
     for f in _input_fields(body):
         if f.get("type") == "ref" and out.get(f["key"]) is not None:
             if not _ref_exists(conn, f["target"], out[f["key"]]):
@@ -399,15 +567,33 @@ def compute(body: dict, values: dict) -> tuple:
     return out, errors
 
 
-_SAMPLES = {"text": "範例文字", "number": 1, "date": "2026-09-25", "checkbox": True}
+_SAMPLES = {"text": "範例文字", "textarea": "範例文字", "number": 1, "date": "2026-09-25", "checkbox": True}
+
+
+def _sample_of(f):
+    t = f.get("type")
+    if t in ("select", "radio"):
+        return (f.get("options") or ["選項"])[0]
+    if t in ("checkboxes", "multiselect"):
+        return [(f.get("options") or ["選項"])[0]]
+    if t == "daterange":
+        return {"from": "2026-09-25T09:00" if f.get("withTime") else "2026-09-25",
+                "to": "2026-09-26T18:00" if f.get("withTime") else "2026-09-26"}
+    if t == "date" and f.get("withTime"):
+        return "2026-09-25T09:00"
+    return _SAMPLES.get(t, "範例")
 
 
 def sample_values(body: dict) -> dict:
-    """每個輸入欄位一個樣本值（依型別）＋公式算出的值。"""
+    """每個輸入欄位一個樣本值（依型別）＋公式算出的值。明細表給一列樣本（列內公式也算）。"""
     vals = {}
     for f in _input_fields(body):
-        t = f.get("type")
-        vals[f["key"]] = (f.get("options") or ["選項"])[0] if t == "select" else _SAMPLES.get(t, "範例")
+        if f.get("type") == "table":
+            row = {c["key"]: _sample_of(c) for c in f.get("columns") or [] if isinstance(c, dict) and c.get("type") != "formula"}
+            rows, _e = clean_table(dict(f, required=False, minRows=0), [row])
+            vals[f["key"]] = rows or []
+        else:
+            vals[f["key"]] = _sample_of(f)
     vals, _e = compute(body, vals)
     return vals
 
@@ -586,8 +772,11 @@ def _write_index(conn, rec_id, module_key, vals):
         if v is None:
             continue
         num = v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+        text = v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)
+        if isinstance(v, list) and v and isinstance(v[0], dict):     # 明細表：索引只記列數，不把整份 JSON 放進 value_text
+            num, text = len(v), "%d 筆" % len(v)
         conn.execute("INSERT INTO custom_record_values (record_id, module_key, field, value_text, value_num) VALUES (?,?,?,?,?)",
-                     (rec_id, module_key, k, v if isinstance(v, str) else json.dumps(v, ensure_ascii=False), num))
+                     (rec_id, module_key, k, text, num))
 
 
 def rebuild_index(conn) -> int:
