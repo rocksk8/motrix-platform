@@ -233,13 +233,16 @@ def test_m1_every_tree_scanning_test_is_listed():
 
 
 def test_m1_scanner_positive_and_negative_controls(tmp_path):
-    t = tmp_path / "backend" / "tests"
+    # 全部建在 tmp_path 底下（掃描器指向 tmp_path）。用 joinpath 而不是 `tmp_path / "backend" / "tests"`：
+    # test_no_temp_files_in_shared_tests_dir 的啟發式會把含 "backend"＋"tests" 常數的 `/` 運算當成共用目錄（它自己的題記錄了這個保守行為）
+    t = tmp_path.joinpath("backend", "tests")
     t.mkdir(parents=True)
     (tmp_path / "backend" / "modules" / "zeta" / "tests").mkdir(parents=True)
     (t / "test_scan_db.py").write_text("def test_x(c):\n    c.execute(\"SELECT name FROM sqlite_master\")\n", encoding="utf-8")
     (t / "test_scan_manifest.py").write_text(
         "def test_y(root):\n    for p in root.glob('*/module.json'):\n        pass\n", encoding="utf-8")
-    (t / "test_scan_pages.py").write_text("import glob\nF = glob.glob('frontend/pages/*.html')\nG = glob.glob(\"pages\")\n",
+    # 頁面目錄由 PG（core.paths）組出，不寫死（test_page_paths_centralized）
+    (t / "test_scan_pages.py").write_text("import glob\nF = glob.glob(%r)\nG = glob.glob(\"pages\")\n" % (PG + "*.html"),
                                           encoding="utf-8")
     (t / "test_scan_perm.py").write_text("from helpers.module_registry import MODULES\n", encoding="utf-8")
     (tmp_path / "backend" / "modules" / "zeta" / "tests" / "test_z.py").write_text("Q = 'sqlite_master'\n", encoding="utf-8")

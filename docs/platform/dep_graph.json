@@ -662,6 +662,7 @@
     "helper:tiered_approval",
     "plat:definitions",
     "plat:events",
+    "plat:paths",
     "plat:registry",
     "plat:txn"
    ],
@@ -2258,6 +2259,7 @@
     "mod:accounting/api/ledger_reports",
     "mod:accounting/api/ledger_settings",
     "mod:accounting/api/ledger_statements",
+    "mod:accounting/api/voucher_providers",
     "mod:accounting/api/vouchers",
     "plat:registry"
    ],
@@ -2454,7 +2456,12 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:company_identity",
+    "helper:company_setup",
+    "helper:email_notify",
+    "helper:mail_types",
     "helper:module_registry",
+    "helper:notification_prefs",
     "helper:settings",
     "helper:tiered_approval",
     "helper:xlsx_out",
@@ -2741,55 +2748,55 @@
     },
     {
      "func": "checklist",
-     "line": 108,
+     "line": 109,
      "method": "GET",
      "path": "/api/ledger/periods/{period_id}/checklist"
     },
     {
      "func": "close",
-     "line": 121,
+     "line": 122,
      "method": "POST",
      "path": "/api/ledger/periods/{period_id}/close"
     },
     {
      "func": "reopen",
-     "line": 135,
+     "line": 136,
      "method": "POST",
      "path": "/api/ledger/periods/{period_id}/reopen"
     },
     {
      "func": "lock",
-     "line": 149,
+     "line": 150,
      "method": "POST",
      "path": "/api/ledger/periods/{period_id}/lock"
     },
     {
      "func": "unlock",
-     "line": 162,
+     "line": 163,
      "method": "POST",
      "path": "/api/ledger/periods/{period_id}/unlock"
     },
     {
      "func": "period_log",
-     "line": 176,
+     "line": 177,
      "method": "GET",
      "path": "/api/ledger/period-log"
     },
     {
      "func": "opening_preview",
-     "line": 188,
+     "line": 189,
      "method": "POST",
      "path": "/api/ledger/opening/preview"
     },
     {
      "func": "opening_create",
-     "line": 198,
+     "line": 199,
      "method": "POST",
      "path": "/api/ledger/opening"
     },
     {
      "func": "opening_undo",
-     "line": 214,
+     "line": 215,
      "method": "POST",
      "path": "/api/ledger/opening/{batch_id}/undo"
     }
@@ -2798,7 +2805,8 @@
    "tables_named": [
     "gl_fiscal_years",
     "gl_opening_batches",
-    "gl_periods"
+    "gl_periods",
+    "gl_settings"
    ],
    "tables_r": [
     "gl_fiscal_years",
@@ -3569,6 +3577,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:company_identity",
     "helper:xlsx_out",
     "mod:accounting/ledger/closing"
    ],
@@ -11952,43 +11961,43 @@
     },
     {
      "func": "delete_staged_custom_file",
-     "line": 292,
+     "line": 295,
      "method": "DELETE",
      "path": "/api/custom/{key}/files/{file_id}"
     },
     {
      "func": "custom_module_catalog",
-     "line": 308,
+     "line": 312,
      "method": "GET",
      "path": "/api/custom-modules/catalog"
     },
     {
      "func": "custom_module_template",
-     "line": 325,
+     "line": 329,
      "method": "GET",
      "path": "/api/custom-modules/templates/{tkey}"
     },
     {
      "func": "check_custom_formula",
-     "line": 335,
+     "line": 339,
      "method": "POST",
      "path": "/api/custom-modules/formula/check"
     },
     {
      "func": "preview_custom_numbering",
-     "line": 346,
+     "line": 350,
      "method": "POST",
      "path": "/api/custom-modules/numbering/preview"
     },
     {
      "func": "custom_ref_options",
-     "line": 356,
+     "line": 360,
      "method": "GET",
      "path": "/api/custom/{key}/ref-options/{field}"
     },
     {
      "func": "preview_custom_output",
-     "line": 380,
+     "line": 384,
      "method": "POST",
      "path": "/api/custom-modules/{key}/output/preview"
     }
@@ -15132,6 +15141,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [
+    "mod:accounting/api/ledger_periods",
     "mod:accounting/api/ledger_settings"
    ],
    "path": "backend/modules/accounting/migrations/0001_ledger_base.py:20",

@@ -42,10 +42,10 @@ def _require_superadmin(authorization):
     return user
 
 
-def _run(conn, fn, *args, **kw):
+def _run(conn, fn, *args):
     """把服務層的中文錯誤轉成 400；DB 觸發器的 ABORT 轉成 409（不讓它變 500）。"""
     try:
-        return fn(conn, *args, **kw)
+        return fn(conn, *args)
     except (_periods.PeriodError, _opening.OpeningError) as exc:
         conn.rollback()
         raise HTTPException(400, str(exc))
@@ -101,6 +101,7 @@ def put_settings(body: dict = Body(...), authorization: str = Header(None)):
         conn.commit()
     finally:
         conn.close()
+    _audit(_tok(authorization), "ledger.settings.update", "gl_settings", "fiscal_year_start_month", "更新總帳設定：%s" % ", ".join(sorted((body or {}).keys())))
     return {"ok": True}
 
 

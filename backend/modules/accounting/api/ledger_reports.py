@@ -61,13 +61,13 @@ def trial_balance(start: str, end: str, include_drafts: bool = False, include_ze
 
 @router.get("/general-ledger")
 def general_ledger(account: str, start: str, end: str, include_drafts: bool = False,
-                   dimension: str = None, key: str = None, authorization: str = Header(None)):
+                   dimension: str = None, dimension_value: str = None, authorization: str = Header(None)):
     _require_read(authorization)
     s, e = _range(start, end)
     conn = get_db()
     try:
         try:
-            res = _reports.general_ledger(conn, account, s, e, include_drafts=include_drafts, dimension=dimension, key=key)
+            res = _reports.general_ledger(conn, account, s, e, include_drafts=include_drafts, dimension=dimension, key=dimension_value)
         except ValueError as exc:
             raise HTTPException(400, str(exc))
         if res is None:

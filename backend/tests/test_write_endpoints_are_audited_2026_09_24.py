@@ -33,6 +33,8 @@ AUDIT_WRAPPERS = {
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
+    ("modules/accounting/api/ledger_periods.py", "POST", "/opening/preview"):
+        "純試算：期初餘額匯入前的預覽（逐列檢查借貸與科目），不寫任何資料表；建立批次的 POST /opening 有稽核",
     # ── 用 POST 的純查詢／試算（不改任何資料）────────────────────────────
     ("modules/case/api/quotations.py", "POST", "/api/quotations/case-activity"):
         "純查詢：回傳各案件最後動態時間，POST 只是為了帶一長串單號",
@@ -52,6 +54,8 @@ EXEMPT = {
         "純試算：分潤方案預覽，送審與核准才寫入（那些端點有稽核）",
     ("item_reads.py", "POST", "/api/reads/unread"):
         "純查詢：伺服器判斷哪些項目未讀，POST 只是為了帶一長串鍵",
+    ("uploads.py", "POST", "/api/photo-token/batch"):
+        "純讀取授權：換附件檢視簽章，不寫任何資料表；POST 只是為了帶一串路徑，同單張的 GET /api/photo-token（不稽核、trail 也略過）；被拒時由簽核詳情守門另記 audit（sec-p0 S1）",
     # ── 使用者自己的畫面偏好／已讀／心跳（不是業務資料）──────────────────
     ("list_prefs.py", "PUT", "/api/list-prefs/{list_key}"):
         "個人清單排序偏好，只影響自己的畫面",

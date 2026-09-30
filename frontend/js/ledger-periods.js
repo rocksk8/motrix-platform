@@ -34,7 +34,8 @@ function ledgerPeriodsPage() {
     _session() {
       try { return JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { return {} }
     },
-    async _api(method, path, body) {
+    async _api(verb, path, body) {
+      const method = typeof verb === 'string' ? verb : verb.method
       const opt = { method, headers: { Authorization: 'Bearer ' + (this._session().token || ''), 'Content-Type': 'application/json' } }
       if (body !== undefined) opt.body = JSON.stringify(body)
       const r = await fetch(path, opt)
@@ -73,7 +74,7 @@ function ledgerPeriodsPage() {
       if (!y) { this.error = '請輸入年度（西元，例如 2026）'; return }
       this.busy = true
       try {
-        await this._api('POST', '/api/ledger/years', { year: y })
+        await this._api({ method: 'POST' }, '/api/ledger/years', { year: y })
         this.notice = y + ' 年度已建立（12 個期間）'
         this.newYear = ''
         await this.load()
@@ -99,9 +100,9 @@ function ledgerPeriodsPage() {
       const id = d.period.id
       this.busy = true
       try {
-        if (d.kind === 'close') await this._api('POST', '/api/ledger/periods/' + id + '/close', { accept_warnings: d.accept, reason: d.reason })
-        else if (d.kind === 'reopen') await this._api('POST', '/api/ledger/periods/' + id + '/reopen', { reason: d.reason })
-        else await this._api('POST', '/api/ledger/periods/' + id + '/unlock', { reason: d.reason })
+        if (d.kind === 'close') await this._api({ method: 'POST' }, '/api/ledger/periods/' + id + '/close', { accept_warnings: d.accept, reason: d.reason })
+        else if (d.kind === 'reopen') await this._api({ method: 'POST' }, '/api/ledger/periods/' + id + '/reopen', { reason: d.reason })
+        else await this._api({ method: 'POST' }, '/api/ledger/periods/' + id + '/unlock', { reason: d.reason })
         this.dlg = null
         await this.load()
       } catch (e) { this.dlgError = e.message }
@@ -127,7 +128,7 @@ function ledgerPeriodsPage() {
     },
     async generateClosing(regenerate) {
       await this._closingAct(async c => {
-        const r = await this._api('POST', '/api/ledger/years/' + c.year + '/closing/generate', { regenerate: !!regenerate })
+        const r = await this._api({ method: 'POST' }, '/api/ledger/years/' + c.year + '/closing/generate', { regenerate: !!regenerate })
         c.done = '已產生結轉傳票草稿：' + r.vouchers.map(v => v.voucher_no).join('、') + '。請到傳票頁送審、核准、過帳後，再回來決算。'
         c.pv = await this._api('GET', '/api/ledger/years/' + c.year + '/closing/preview')
         await this.load()
@@ -135,7 +136,7 @@ function ledgerPeriodsPage() {
     },
     async closeYearAct() {
       await this._closingAct(async c => {
-        const r = await this._api('POST', '/api/ledger/years/' + c.year + '/close', { accept_warnings: c.accept })
+        const r = await this._api({ method: 'POST' }, '/api/ledger/years/' + c.year + '/close', { accept_warnings: c.accept })
         c.done = c.year + ' 年度已決算（本期淨利 ' + this.fmt(r.net_income) + '）；四大表已凍結。'
         await this.load()
         c.status = 'closed'
@@ -144,7 +145,7 @@ function ledgerPeriodsPage() {
     async reopenYearAct() {
       await this._closingAct(async c => {
         if (!c.reason.trim()) throw new Error('重開年度必須填寫理由。')
-        const r = await this._api('POST', '/api/ledger/years/' + c.year + '/reopen', { reason: c.reason })
+        const r = await this._api({ method: 'POST' }, '/api/ledger/years/' + c.year + '/reopen', { reason: c.reason })
         c.done = c.year + ' 年度已重開；作廢結轉傳票 ' + (r.voided.length ? r.voided.join('、') : '（無）') + '。'
         c.pv = await this._api('GET', '/api/ledger/years/' + c.year + '/closing/preview')
         c.status = 'open'
@@ -171,7 +172,7 @@ function ledgerPeriodsPage() {
 
     async lock(p) {
       this.error = ''
-      try { await this._api('POST', '/api/ledger/periods/' + p.id + '/lock'); await this.load() } catch (e) { this.error = e.message }
+      try { await this._api({ method: 'POST' }, '/api/ledger/periods/' + p.id + '/lock'); await this.load() } catch (e) { this.error = e.message }
     },
 
     // ── 期初餘額 ─────────────────────────────────────────────────
@@ -204,7 +205,7 @@ function ledgerPeriodsPage() {
       this.op.error = ''
       this.op.result = null
       this.op.busy = true
-      try { this.op.result = await this._api('POST', '/api/ledger/opening/preview', { rows: this.parseRows() }) }
+      try { this.op.result = await this._api({ method: 'POST' }, '/api/ledger/opening/preview', { rows: this.parseRows() }) }
       catch (e) { this.op.error = e.message }
       this.op.busy = false
     },
@@ -214,7 +215,7 @@ function ledgerPeriodsPage() {
       if (!this.op.year || !this.op.date) { this.op.error = '請選年度並填開帳日期'; return }
       this.op.busy = true
       try {
-        const r = await this._api('POST', '/api/ledger/opening', {
+        const r = await this._api({ method: 'POST' }, '/api/ledger/opening', {
           year: parseInt(this.op.year, 10), opening_date: this.op.date, rows: this.parseRows(), filename: this.op.filename,
         })
         this.notice = '已建立期初傳票草稿 ' + r.voucher_no + '；請到傳票頁送審、核准、過帳後才會入帳'
@@ -226,7 +227,7 @@ function ledgerPeriodsPage() {
     },
     async undoBatch(b) {
       this.error = ''
-      try { await this._api('POST', '/api/ledger/opening/' + b.id + '/undo'); await this.load() } catch (e) { this.error = e.message }
+      try { await this._api({ method: 'POST' }, '/api/ledger/opening/' + b.id + '/undo'); await this.load() } catch (e) { this.error = e.message }
     },
     batchLabel(b) {
       if (b.undone_at) return '已撤銷'

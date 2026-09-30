@@ -103,7 +103,8 @@ def test_pdf_export_with_attachments_lists_office_files_by_name(client, make_use
 
 
 def test_every_upload_input_on_the_page_accepts_office_types():
-    page = pathlib.Path(__file__).resolve().parents[4] / "frontend" / "pages" / "voucher.html"
+    from core import source_tree
+    page = source_tree.page_file("voucher.html")            # 頁面路徑集中在 source_tree（模組搬家也找得到）
     html = page.read_text(encoding="utf-8")
     inputs = [ln for ln in html.splitlines() if 'type="file"' in ln]
     assert len(inputs) >= 3, inputs
