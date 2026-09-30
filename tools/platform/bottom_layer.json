@@ -30,6 +30,7 @@
   "backend/tests/test_module_keys_consistency_2026_09_13.py",
   "backend/tests/test_module_no_admin_bypass_2026_09_14.py",
   "backend/tests/test_module_registry_2026_09_24.py",
+  "backend/tests/test_page_shell_scripts_2026_09_30.py",
   "backend/tests/test_passkey_disabled_2026_09_16.py",
   "backend/tests/test_quote_location_2026_09_22.py",
   "backend/tests/test_spec_coverage_2026_09_21.py",

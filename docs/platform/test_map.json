@@ -13127,6 +13127,7 @@
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
     "helper:uploads",
     "mod:case/api/completion_notes",
     "mod:case/api/quotations",
@@ -13146,7 +13147,9 @@
      "backend/helpers/__init__.py",
      "backend/helpers/uploads.py",
      "backend/modules/payroll/api/__init__.py",
-     "backend/modules/payroll/api/payslips.py"
+     "backend/modules/payroll/api/payslips.py",
+     "backend/routers/__init__.py",
+     "backend/routers/attachments.py"
     ],
     "api": [
      "backend/modules/case/api/completion_notes.py",
