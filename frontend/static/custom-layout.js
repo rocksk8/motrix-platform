@@ -31,6 +31,15 @@
 
   /** 表單分組：[{title, fields:[欄位物件…]}]。沒有分到組的欄位依欄位順序放在最後一組「其他」
    *  （完全沒設分組 ⇒ 一組、沒有標題）。已刪除的欄位 key 自動略過。 */
+  /** 區塊欄數：1～4 的整數，其他（沒設、0、亂值）＝0（自動）。 */
+  function colsOf(g) {
+    var n = g && g.columns
+    return (typeof n === 'number' && n >= 1 && n <= 4 && Math.floor(n) === n) ? n : 0
+  }
+
+  /** 區塊網格的 inline style（欄數 0＝自動排：不加，用 .cr-grid 預設）；窄螢幕由 CSS 收成 1 欄。 */
+  function gridStyle(columns) { return columns ? '--cr-cols:' + columns : '' }
+
   function formSections(def) {
     var fields = fieldsOf(def)
     var byKey = {}
@@ -40,7 +49,7 @@
     var out = []
     groups.forEach(function (g) {
       var fs = (g.fields || []).filter(function (k) { return byKey[k] && !used[k] }).map(function (k) { used[k] = true; return byKey[k] })
-      out.push({ title: g.title || '', fields: fs })
+      out.push({ title: g.title || '', fields: fs, columns: colsOf(g) })
     })
     var rest = fields.filter(function (f) { return !used[f.key] })
     if (rest.length) out.push({ title: out.length ? '其他' : '', fields: rest })
@@ -574,6 +583,7 @@
     clone: _clone,
     SYSTEM_COLUMNS: SYSTEM_COLUMNS,
     formSections: formSections,
+    gridStyle: gridStyle,
     listColumns: listColumns,
     cellValue: cellValue,
     formatValue: formatValue,

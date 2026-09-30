@@ -251,7 +251,7 @@
                         </div>
                       </template>
                       <div class="cr-sec__t" x-show="(sec.gi < 0 || formMode === 'preview') && sec.title" x-text="sec.title"></div>
-                      <div class="cr-grid" :style="gridStyle(sec.gi)">
+                      <div class="cr-grid" :class="{ 'cr-grid--n': groupColumns(sec.gi) }" :style="gridStyle(sec.gi)">
                         <template x-for="it in sec.items" :key="it.key + ':' + it.index">
                           <div class="cr-f mb-fc" :class="{ 'is-sel': sel === it.index && formMode === 'edit', 'is-bad': hasProblem('fields[' + it.index + ']'),
                                                             'cr-f--wide': it.f.type === 'table' || it.f.type === 'textarea' }"

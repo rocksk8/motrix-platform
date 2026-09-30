@@ -160,7 +160,7 @@
           <template x-for="(sec, si) in sections(formDef)" :key="si">
             <div class="cr-sec">
               <div class="cr-sec__t" x-show="sec.title" x-text="sec.title"></div>
-              <div class="cr-grid">
+              <div class="cr-grid" :class="{ 'cr-grid--n': sec.columns }" :style="gridStyle(sec)">
                 <template x-for="f in sec.fields" :key="f.key">
                   <div class="cr-f" :class="{ 'is-bad': fieldErr[f.key], 'cr-f--wide': f.type === 'table' || f.type === 'textarea' }" :data-field="f.key">
                     <label :for="'cr-in-' + f.key"><span x-text="f.label || f.key"></span><span class="req" x-show="f.required">*</span></label>
@@ -552,6 +552,7 @@
         },
         cell(r, k) { return L.cellValue(r, k, this.stateLabels(this.def)) },
         sections(def) { return L.formSections(def || {}) },
+        gridStyle(sec) { return L.gridStyle(sec.columns) },
         // 使用者 2026-09-27：公式欄位顯示可讀式子（與建構器同一支 L.formulaReadable）；說明（help）顯示在欄位下方
         fxReadable(f) { return L.formulaReadable(this.formDef || {}, f) },
         async setFilter(st) { this.statusFilter = st; await this.loadList() },

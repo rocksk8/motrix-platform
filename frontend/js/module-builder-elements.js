@@ -208,7 +208,7 @@
         if (Number(n) >= 1 && Number(n) <= 4) g.columns = Number(n); else delete g.columns
         this.def.ui = ui
       },
-      gridStyle(gi) { var n = this.groupColumns(gi); return n ? 'grid-template-columns:repeat(' + n + ',minmax(0,1fr))' : '' },
+      gridStyle(gi) { return this.L.gridStyle(this.groupColumns(gi)) },
 
       // ── 金流性質（附錄 B）──
       fin(f) { return f.finance && typeof f.finance === 'object' ? f.finance : {} },

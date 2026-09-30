@@ -80,3 +80,37 @@ def test_quotation_template_module_fill_form_live_totals_and_save(live_server, m
     assert d["sales"] == "b3e_boss" and d["qdate"]                                # 申請人與填單當下由伺服器決定
     # 列表：明細表欄顯示筆數（不是 [object Object]）
     assert not errors, errors
+
+
+@pytest.mark.e2e
+def test_group_columns_apply_on_the_runtime_form_and_narrow_screens_collapse_to_one(live_server, make_user, new_context, client):
+    """區塊欄數（ui.form.groups[].columns）：執行頁的表單照設定排（3 欄 ⇒ 該區塊網格 3 軌）；沒設的區塊維持自動排（反向控制）；
+    亂值（9、0、字串）視同自動；窄螢幕收成 1 欄。"""
+    boss = make_user(username="b3c_boss", role="superadmin")
+    tok = client.post("/api/auth/login", json={"username": boss[0], "password": boss[1]}).json()["token"]
+    h = {"Authorization": "Bearer " + tok}
+    key = "b3cols"
+    fields = [{"key": k, "label": k.upper(), "type": "text", "required": False, "dataClass": "T1"} for k in ("a", "b", "c", "d", "e", "f")]
+    body = {"name": "欄數", "permission": "custom." + key, "numbering": {"prefix": "CL", "period": "none", "digits": 3},
+            "fields": fields,
+            "ui": {"form": {"groups": [{"title": "三欄", "fields": ["a", "b", "c"], "columns": 3},
+                                       {"title": "自動", "fields": ["d"]},
+                                       {"title": "亂值", "fields": ["e", "f"], "columns": 9}]}},
+            "workflow": {"initial": "draft", "states": [{"key": "draft", "label": "草稿"}, {"key": "done", "label": "完成", "final": True}],
+                 "transitions": [{"key": "submit", "label": "送出", "from": "draft", "to": "done"}]}}
+    r = client.put("/api/definitions/custom_module/%s/draft" % key, headers=h, json={"body": body}).json()
+    assert r["problems"] == [], r["problems"]
+    assert client.post("/api/definitions/custom_module/%s/publish" % key, headers=h, json={}).status_code == 200
+
+    page = new_context().new_page()
+    inject_login(page, live_server, boss[0], boss[1])
+    page.set_viewport_size({"width": 1200, "height": 900})
+    page.goto(live_server + "/pages/custom-records.html?key=" + key)
+    page.click("#cr-new")
+    page.wait_for_selector("#cr-form", timeout=15000)
+    tracks = "(i) => getComputedStyle(document.querySelectorAll('#cr-form .cr-grid')[i]).gridTemplateColumns.split(' ').length"
+    assert page.evaluate(tracks, 0) == 3
+    assert "cr-grid--n" not in page.evaluate("() => document.querySelectorAll('#cr-form .cr-grid')[1].className")
+    assert "cr-grid--n" not in page.evaluate("() => document.querySelectorAll('#cr-form .cr-grid')[2].className")   # 9 不合法 ⇒ 自動
+    page.set_viewport_size({"width": 390, "height": 800})
+    assert page.evaluate(tracks, 0) == 1

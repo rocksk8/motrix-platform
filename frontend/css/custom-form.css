@@ -5,6 +5,7 @@
   display: flex; align-items: center; gap: 8px; }
 .cr-sec__t::after { content: ""; flex: 1; height: 1px; background: var(--border-light); }
 .cr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px 16px; }
+.cr-grid.cr-grid--n { grid-template-columns: repeat(var(--cr-cols, 2), minmax(0, 1fr)); }   /* 區塊欄數（ui.form.groups[].columns）：建構器畫布與執行頁共用 */
 .cr-f label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
 .cr-f label .req { color: var(--danger); margin-left: 2px; }
 .cr-f input, .cr-f select { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--border);
@@ -16,7 +17,7 @@
 .cr-fx { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
 .cr-help { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; white-space: pre-wrap; line-height: 1.5; }
 @media (max-width: 767px) {
-  .cr-grid { grid-template-columns: 1fr; }
+  .cr-grid, .cr-grid.cr-grid--n { grid-template-columns: 1fr; }
 }
 /* W1 建構器第三輪：新型別（單選／複選／區間／明細表）——執行頁與建構器畫布共用 */
 .cr-f textarea { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
