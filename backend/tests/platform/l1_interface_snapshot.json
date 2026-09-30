@@ -1,5 +1,5 @@
 {
- "core_version": "1.75",
+ "core_version": "1.76",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
