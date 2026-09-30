@@ -1,0 +1,37 @@
+[
+ {
+  "path": "backend/helpers/auth.py",
+  "value_id": "1c73709f",
+  "count": 1,
+  "reason": "通用弱密碼黑名單（is_weak_password／啟動時比對用，產品功能需要明文；不是任何人的密碼）",
+  "expires": "2027-03-31"
+ },
+ {
+  "path": "backend/helpers/auth.py",
+  "value_id": "8fc0419a",
+  "count": 1,
+  "reason": "通用弱密碼黑名單（is_weak_password／啟動時比對用，產品功能需要明文；不是任何人的密碼）",
+  "expires": "2027-03-31"
+ },
+ {
+  "path": "backend/helpers/auth.py",
+  "value_id": "2f14f07c",
+  "count": 1,
+  "reason": "通用弱密碼黑名單（is_weak_password／啟動時比對用，產品功能需要明文；不是任何人的密碼）",
+  "expires": "2027-03-31"
+ },
+ {
+  "path": "backend/helpers/auth.py",
+  "value_id": "4ebc7dcc",
+  "count": 1,
+  "reason": "通用弱密碼黑名單（is_weak_password／啟動時比對用，產品功能需要明文；不是任何人的密碼）",
+  "expires": "2027-03-31"
+ },
+ {
+  "path": "backend/helpers/auth.py",
+  "value_id": "d9df4e62",
+  "count": 1,
+  "reason": "通用弱密碼黑名單（is_weak_password／啟動時比對用，產品功能需要明文；不是任何人的密碼）",
+  "expires": "2027-03-31"
+ }
+]

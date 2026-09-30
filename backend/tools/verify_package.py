@@ -504,6 +504,10 @@ def main():
 
     print("### (7) 產品選配：modules.lock.json ＝ 包內模組、L0／L1 必要檔齊全（🔴 擋關，CORE-SPEC §9c①）")
     check_product_selection(pkg)
+    print()
+
+    print("### (8) 去識別化：deploy_manifest 的 audience／deid 與包內容一致（🔴 擋關，S6）")
+    check_deid(pkg)
 
     sys.exit(R.finish())
 
@@ -561,6 +565,105 @@ def check_version_manifest(pkg):
                % (len(bad), "/".join(MANIFEST_FIELDS), bad[0]))
         return
     print("  版本紀錄 OK：%d 筆，皆含 %s" % (len(entries), "/".join(MANIFEST_FIELDS)))
+
+
+def _glob_re(pat):
+    """`**` 跨目錄、`*`／`?` 不跨目錄（與 tools/platform/deid_project.py 相同語意；正式機沒有那支工具，所以這裡自帶一份）。"""
+    out, i = [], 0
+    while i < len(pat):
+        if pat.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif pat.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif pat[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        elif pat[i] == "?":
+            out.append("[^/]")
+            i += 1
+        else:
+            out.append(re.escape(pat[i]))
+            i += 1
+    return re.compile("^" + "".join(out) + "$")
+
+
+def check_deid(pkg):
+    """`S6`：deploy_manifest.json 的去識別化欄位（audience／deid）與包內容一致（🔴 擋關）。
+
+    - 沒有 audience 欄位 ⇒ 舊格式（S6 之前的包）：只警告，不擋。
+    - audience 不是 own／sale、或有 audience 卻沒有 deid 區塊、或兩邊不一致 ⇒ FAIL。
+    - own：包內必須有本公司資料檔（migration 與弱密碼清單在正式機都要它）。
+    - sale：包內不得有本公司資料檔、不得有 product/sale_prune.json 的 forbidden 路徑、deid.hits 必須是 0 且金絲雀通過、
+      manifest 不得記開發機路徑（env.python 空）；開發機上另跑一次樣式層（不需金鑰）當第二道（正式機／客戶機沒有掃描器 ⇒ 略過並說明）。
+    """
+    import json as _json
+    mpath = os.path.join(pkg, "deploy_manifest.json")
+    if not os.path.isfile(mpath):
+        print("  ⚠️ 沒有 deploy_manifest.json：略過去識別化檢查")
+        return
+    try:
+        with io.open(mpath, encoding="utf-8-sig") as fh:
+            man = _json.load(fh)
+    except Exception as exc:
+        R.fail("去識別化", "deploy_manifest.json 讀不出來：%s" % exc)
+        return
+    aud = man.get("audience")
+    if aud is None:
+        print("  ⚠️ deploy_manifest.json 沒有 audience 欄位（S6 之前的舊格式）：不檢查")
+        return
+    deid = man.get("deid")
+    if aud not in ("own", "sale"):
+        R.fail("去識別化", "audience=%r 不合法（只能是 own 或 sale）" % (aud,))
+        return
+    if not isinstance(deid, dict) or deid.get("audience") != aud:
+        R.fail("去識別化", "有 audience=%s 卻沒有對應的 deid 區塊（或兩邊不一致）" % aud)
+        return
+    payload = os.path.join(pkg, "backend", "migrations_frozen", "own_payload.json")
+    if aud == "own":
+        if not os.path.isfile(payload):
+            R.fail("去識別化", "own 包缺本公司資料檔 backend/migrations_frozen/own_payload.json（正式機的凍結 migration 與弱密碼清單需要它）")
+            return
+        print("  去識別化 OK：audience=own，本公司資料檔在包裡")
+        return
+    problems = []
+    if os.path.exists(payload):
+        problems.append("sale 包內有本公司資料檔")
+    if deid.get("hits") != 0 or deid.get("canary") is not True:
+        problems.append("deid.hits=%r canary=%r（sale 必須是 0 命中且金絲雀通過）" % (deid.get("hits"), deid.get("canary")))
+    if (man.get("env") or {}).get("python"):
+        problems.append("deploy_manifest 記了開發機的直譯器路徑")
+    cfg_path = os.path.join(pkg, "product", "sale_prune.json")
+    if os.path.isfile(cfg_path):
+        with io.open(cfg_path, encoding="utf-8-sig") as fh:
+            forbidden = [_glob_re(g) for g in _json.load(fh).get("forbidden", [])]
+        for root, _dirs, files in os.walk(pkg):
+            for fn in files:
+                rel = os.path.relpath(os.path.join(root, fn), pkg).replace(os.sep, "/")
+                if any(r.match(rel) for r in forbidden):
+                    problems.append("sale 包內不得有：%s" % rel)
+    else:
+        problems.append("sale 包缺 product/sale_prune.json（無法核對禁止路徑）")
+    scanner = os.path.join(WT, "tools", "platform", "deid_scan.py")
+    if os.path.isfile(scanner):
+        import importlib.util as _iu
+        sp = _iu.spec_from_file_location("_deid_scan_vp", scanner)
+        mod = _iu.module_from_spec(sp)
+        sp.loader.exec_module(mod)
+        fic = os.path.join(WT, "tools", "platform", "deid_fiction.json")
+        alw = os.path.join(WT, "tools", "platform", "deid_allow.json")
+        hits = mod.scan(pkg, None, mod.load_json_list(fic) if os.path.isfile(fic) else [], mod.load_json_list(alw) if os.path.isfile(alw) else [])
+        if hits:
+            problems.append("樣式層第二道掃描有 %d 筆命中，例如 %s:%d:%s" % (len(hits), hits[0].path, hits[0].line, hits[0].kind))
+        print("  （開發機：樣式層第二道掃描已跑，%d 筆命中）" % len(hits))
+    else:
+        print("  （這台機器沒有掃描器：略過樣式層第二道；建包時已掃過）")
+    if problems:
+        for pr in problems:
+            R.fail("去識別化", pr)
+        return
+    print("  去識別化 OK：audience=sale，0 命中、金絲雀通過、沒有禁止路徑")
 
 
 #: `autostart.bat` 必須帶的兩個開關。
