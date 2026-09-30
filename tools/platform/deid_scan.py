@@ -204,6 +204,17 @@ TAX_RE = re.compile(r"(?<!\d)\d{8}(?!\d)")
 PHONE_RE = re.compile(r"(?<!\d)(?:\+886[\s-]?|0)(?:9\d{2}[\s-]?\d{3}[\s-]?\d{3}|[2-8][\s-]?\d{3,4}[\s-]?\d{4})(?!\d)")
 ADDR_RE = re.compile(r"[一-鿿]{1,4}[縣市][一-鿿]{1,4}[區鄉鎮市][一-鿿0-9]{1,12}[路街道][一-鿿0-9段巷弄]{0,10}\d{1,4}號")
 PLACEHOLDER_DOMAINS = ("example.com", "example.org", "example.net", "example.invalid", "example.test", "localhost")
+#: W4 出貨稽核（2026-09-30）補的三類——原本只有雜湊層（要金鑰＋清單）才抓得到，而簡稱、單據號、密碼不會逐字等於資料庫裡的值：
+#: 單據編號（MQ-202608-009）＝真實案件的指紋；公司全名樣式（不需清單）；密碼陳述與「密碼」集合常數。
+DOCNO_RE = re.compile(r"(?<![A-Za-z0-9])[A-Z]{2,3}-20\d{4}-\d{3,4}(?!\d)")
+COMPANY_RE = re.compile(r"([一-鿿]{2,10})(股份有限公司|有限公司|企業社|工程行|實業社)")
+#: 「公司」前面不是名稱的泛稱（文件裡談「股份有限公司」這個類型，不是某一家）
+COMPANY_GENERIC_PREFIX = {"股份", "本", "貴", "該", "各", "某", "甲", "乙", "丙", "一般", "私人", "有限", "本公司", "貴公司", "他"}
+CRED_RE = re.compile(r"(?i)(?:密碼|password|passwd|pwd)[\"'`]?\s*[:：=＝]\s*[\"'`]?([A-Za-z0-9!@#^&_+=~\-]{4,})(?![.\w(])")   # 值只收 ASCII 且後面不接「.」「(」——擋 `password: this.form.pw` 這類程式碼
+#: 只在這些副檔名看「密碼陳述」（程式碼裡 `password = request.password` 是變數，不是值）
+CRED_SUFFIXES = {".md", ".txt", ".json", ".html", ".htm", ".ps1", ".bat", ".cmd", ".ini", ".cfg", ".csv", ".yml", ".yaml", ".env", ".toml"}
+SECRET_NAME_RE = re.compile(r"^\s*_?[A-Z][A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|CREDENTIAL)[A-Z0-9_]*\s*(?::[^=]+)?=\s*[\(\[{]")
+STRING_LIT_RE = re.compile(r"[\"']([^\"'\\]{4,})[\"']")
 
 
 def tw_tax_id_valid(s: str) -> bool:
@@ -236,7 +247,38 @@ def pattern_hits(line: str):
         out.append(("phone_pattern", m.group(0)))
     for m in ADDR_RE.finditer(line):
         out.append(("address_pattern", m.group(0)))
+    for m in DOCNO_RE.finditer(line):
+        out.append(("docno_pattern", m.group(0)))
+    for m in COMPANY_RE.finditer(line):
+        name = m.group(1)[:-2] if m.group(1).endswith("股份") else m.group(1)      # 「…股份有限公司」的「股份」屬於類型
+        if len(name) >= 2 and name not in COMPANY_GENERIC_PREFIX and not re.search(r"[為是的在或]", name):      # 帶連接詞＝一句話，不是名稱
+            out.append(("company_pattern", m.group(0)))
     return out
+
+
+def credential_hits(path: Path, line: str, in_secret_block: bool):
+    """需要檔案層級脈絡的兩類：⇒ ([(kind, 值)], 是否仍在「密碼集合常數」裡)。
+    ① 文件／設定檔的「密碼：xxx」陳述；② .py 裡 `*_PASSWORD*／*_SECRET*／*_CREDENTIAL* = ( … )` 集合常數內的每個字串字面值。"""
+    out, suffix = [], path.suffix.lower()
+    if suffix in CRED_SUFFIXES:
+        for m in CRED_RE.finditer(line):
+            v = m.group(1)
+            if not re.fullmatch(r"[x*•·]+|changeme|your[-_]?password", v, re.I):
+                out.append(("credential_pattern", v))
+    if suffix == ".py":
+        starts = bool(SECRET_NAME_RE.match(line))
+        if starts:
+            in_secret_block = True
+        if in_secret_block:
+            for m in STRING_LIT_RE.finditer(line):
+                out.append(("secret_literal", m.group(1)))
+            opened = len(re.findall(r"[\(\[{]", line))
+            closed = len(re.findall(r"[\)\]}]", line))
+            if starts:
+                in_secret_block = opened > closed
+            elif closed > opened or re.match(r"^\s*[\)\]}]", line):
+                in_secret_block = False
+    return out, in_secret_block
 
 
 # ── 雜湊層比對 ──────────────────────────────────────────────────────────────────
@@ -336,12 +378,18 @@ def scan(root, hashlist=None, fiction=None, allow=None, skip_dirs=(".git", "__py
         if any(part in skip_dirs for part in rel.parts):
             continue
         seen, raw_codes = set(), set()
+        in_secret = False
         for line, text in iter_text_views(path):
             found = []
             if hashlist is not None:
                 for kind, h in hashlist_hits(hashlist, text):
                     found.append((kind, h[:8], "hash"))
             for kind, val in pattern_hits(text):
+                found.append((kind, value_code(kind, val), "pattern"))
+            cred, in_secret_next = credential_hits(path, text, in_secret if line > 0 else False)
+            if line > 0:
+                in_secret = in_secret_next
+            for kind, val in cred:
                 found.append((kind, value_code(kind, val), "pattern"))
             for kind, code, layer in found:
                 if code in fiction_set:
