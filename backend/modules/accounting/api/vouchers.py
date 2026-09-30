@@ -158,6 +158,7 @@ from modules.accounting.api.voucher_common import (  # noqa: F401  純搬移後�
     _check_account_codes,
     _appr_of,
     _require_voucher_actor,
+    with_final_superadmin_tier,
     _UNREADABLE_APPR,
     insert_draft_voucher,
 )
@@ -616,6 +617,7 @@ def submit_voucher(voucher_id: int, body: dict = Body(default={}),
             except UnresolvedManagerError as exc:
                 # 📌 主管解析不出來要**說得出是哪一層**，那一支已經寫好訊息了。
                 raise HTTPException(400, str(exc))
+        tiers = with_final_superadmin_tier(conn, tiers)          # 最終關卡：最高管理者（會計主管），系統規定、不改儲存的流程設定
         now = _dt.datetime.now().isoformat()
         # 🔴 `AS3`：其餘七種文件類型的 approval JSON 都嵌著
         #    `requestedBy`／`requestedByDisplay`／`requestedAt`（簽核佇列

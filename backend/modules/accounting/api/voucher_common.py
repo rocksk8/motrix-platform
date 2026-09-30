@@ -167,6 +167,28 @@ def _appr_of(row):
         raise HTTPException(400, "這張傳票的簽核資料格式不正確，無法繼續簽核。")
 
 
+def with_final_superadmin_tier(conn, tiers):
+    """會計傳票的最終關卡（使用者規則 2026-09-30，主持核准）：**不論設定成什麼流程，最後一層一律是最高管理者（會計主管）**。
+    - 流程設定（system_settings voucher_approval_flow／voucher_auto_approval_flow）**一個字都不改**，在送審建立簽核層時才補上這一層；
+    - 設定裡最後一層本來就全是在職最高管理者 ⇒ 不重複補；沒有設定流程（內建兩格）⇒ 只有這一層；
+    - 這一層的簽核人＝目前所有在職最高管理者（同一層任一人核准即可，與其他層規則相同）；製票人是最高管理者可自簽（使用者 2026-09-24 裁示）。
+    - 沒有任何在職最高管理者（不會發生）⇒ 不補，避免傳票永遠送不出去。
+    過帳仍要求狀態＝已核准，所以沒經過這一層核准的傳票不可能過帳。"""
+    rows = conn.execute("SELECT id, username, display_name FROM users WHERE role='superadmin' AND active=1 ORDER BY id").fetchall()
+    if not rows:
+        return tiers
+    supers = {r["username"] for r in rows}
+    tiers = list(tiers or [])
+    if tiers:
+        last = tiers[-1].get("approvers") or []
+        if last and all(a.get("username") in supers for a in last):
+            return tiers
+    approvers = [{"userId": r["id"], "username": r["username"], "displayName": r["display_name"] or r["username"],
+                  "orgRole": "accounting_head", "orgUnit": "會計主管（系統規定）", "selfApproval": False, "status": "pending", "approvedAt": None}
+                 for r in rows]
+    return tiers + [{"order": len(tiers), "approvers": approvers, "system": True}]
+
+
 def _require_voucher_actor(conn, appr, user, action):
     """`JV30`：誰可以對這張傳票按核准／退回（商業會計法 §35、電子辦法 §5）。
 
