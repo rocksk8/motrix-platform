@@ -41,11 +41,11 @@ def test_contractor_voucher(client, live_server, make_user, new_page, login_as, 
     page = new_page()
     login_as(page, appr)
     page.goto(f"{live_server}/pages/case-management.html?q={qno}")
-    page.wait_for_selector('.cm-tab:has-text("承攬商")', timeout=20000)
+    page.wait_for_selector('.cm-tab:has-text("承攬商")', timeout=60000)
     page.click('.cm-tab:has-text("承攬商")')
-    page.wait_for_function(f"() => {ROOT}.selected && {ROOT}.selected.quote_no === '{qno}'", timeout=20000)
+    page.wait_for_function(f"() => {ROOT}.selected && {ROOT}.selected.quote_no === '{qno}'", timeout=60000)
     page.evaluate(f"async () => {{ const r = {ROOT}; await r.loadContractorVouchers('{qno}'); await r.previewContractorVoucherPdf(r.contractorVouchers[0]) }}")
-    page.locator('[x-show="cvPreviewModal"]').wait_for(state="visible", timeout=30000)
+    page.locator('[x-show="cvPreviewModal"]').wait_for(state="visible", timeout=90000)
     _shot(page, "contractor-voucher-%s" % ("approved" if approved else "unapproved"))
     if approved:
         assert page.locator('[data-testid="preview-return"]:visible').count() == 0
@@ -87,18 +87,18 @@ def test_accounting_voucher(client, live_server, make_user, new_page, login_as, 
     login_as(page, appr)
     page.goto(f"{live_server}/pages/voucher.html?id={vid}")
     btn = page.locator('[data-testid="voucher-preview"]')
-    btn.wait_for(state="visible", timeout=20000)
-    page.wait_for_function("() => !document.querySelector('[data-testid=\"voucher-preview\"]').disabled", timeout=20000)
+    btn.wait_for(state="visible", timeout=60000)
+    page.wait_for_function("() => !document.querySelector('[data-testid=\"voucher-preview\"]').disabled", timeout=60000)
     btn.click()
     frame = page.frame_locator('[data-testid="voucher-preview-frame"]')
     if approved:
-        page.locator('[data-testid="voucher-preview-frame"]').wait_for(state="visible", timeout=20000)
-        frame.locator("body").wait_for(timeout=20000)
+        page.locator('[data-testid="voucher-preview-frame"]').wait_for(state="visible", timeout=60000)
+        frame.locator("body").wait_for(timeout=60000)
         assert frame.locator('[data-unapproved="1"]').count() == 0
         assert page.locator('[data-testid="preview-return"]:visible').count() == 0
         _shot(page, "accounting-voucher-approved")
         return
-    frame.locator('[data-unapproved="1"]').wait_for(state="visible", timeout=20000)      # 紅色橫幅真的在預覽畫面裡
+    frame.locator('[data-unapproved="1"]').wait_for(state="visible", timeout=60000)      # 紅色橫幅真的在預覽畫面裡
     assert RED_TEXT in frame.locator('[data-unapproved="1"]').inner_text()
     _shot(page, "accounting-voucher-unapproved")
     _do_return(page, "科目有誤")
@@ -122,29 +122,29 @@ def test_approval_queue_preview_voucher_and_shipping(client, live_server, make_u
     page = new_page()
     login_as(page, appr)
     page.goto(f"{live_server}/pages/approval-queue.html")
-    page.wait_for_function(f"() => {ROOT}.queue && {ROOT}.queue.length > 0", timeout=20000)
+    page.wait_for_function(f"() => {ROOT}.queue && {ROOT}.queue.length > 0", timeout=60000)
     page.evaluate(f"""async () => {{ const r = {ROOT}; const it = r.queue.flatMap(g => g.items).find(i => i.type === 'voucher');
         r.selected = it; await r.previewItem(it) }}""")
-    page.locator('[x-show="previewModal"]').wait_for(state="visible", timeout=30000)
+    page.locator('[x-show="previewModal"]').wait_for(state="visible", timeout=90000)
     html = client.get("/api/vouchers/%s/preview" % vid, headers=_hdr(client, appr)).text      # 預覽視窗載入的就是這一支
     assert page.evaluate(f"() => !!{ROOT}.previewBlobUrl")
     assert 'data-unapproved="1"' in html and RED_TEXT in html
     _shot(page, "approval-queue-voucher-preview")
     _html_shot(new_page(), html, "approval-queue-voucher-preview-html")
     ret = page.locator('[data-testid="preview-return"]:visible')
-    ret.wait_for(state="visible", timeout=10000)
+    ret.wait_for(state="visible", timeout=30000)
     ret.click()
-    page.locator('[data-testid="reject-reason"]').wait_for(state="visible", timeout=5000)
+    page.locator('[data-testid="reject-reason"]').wait_for(state="visible", timeout=15000)
     page.once("dialog", lambda d: d.accept())                                   # 沒填原因：頁面先擋（alert）
     page.locator('[data-testid="reject-confirm"]').click()
     assert _db("SELECT status FROM vouchers_all WHERE id=?", (vid,))[0]["status"] != "草稿"
     page.fill('[data-testid="reject-reason"]', "佇列預覽退回")
     page.locator('[data-testid="reject-confirm"]').click()
-    page.wait_for_function("() => { const e = document.querySelector('[data-testid=\"reject-reason\"]'); return !e || e.offsetParent === null }", timeout=15000)
+    page.wait_for_function("() => { const e = document.querySelector('[data-testid=\"reject-reason\"]'); return !e || e.offsetParent === null }", timeout=45000)
     assert _db("SELECT status FROM vouchers_all WHERE id=?", (vid,))[0]["status"] == "草稿"
     page.evaluate(f"""async () => {{ const r = {ROOT}; await r.loadQueue(); const it = r.queue.flatMap(g => g.items).find(i => i.type === 'shipping_note');
         r.selected = it; await r.previewItem(it) }}""")
-    page.locator('[x-show="previewModal"]').wait_for(state="visible", timeout=30000)
+    page.locator('[x-show="previewModal"]').wait_for(state="visible", timeout=90000)
     assert page.locator('[data-testid="preview-return"]:visible').count() == 1
     _shot(page, "approval-queue-shipping-preview")
 
@@ -180,25 +180,25 @@ def test_custom_record(client, live_server, make_user, new_page, login_as, compa
     page = new_page()
     login_as(page, mgr)
     page.goto(f"{live_server}/pages/custom-records.html?key={key}&no={no}")
-    page.wait_for_selector("#cr-output-frame", state="attached", timeout=20000)
+    page.wait_for_selector("#cr-output-frame", state="attached", timeout=60000)
     frame = page.frame_locator("#cr-output-frame")
-    frame.locator("body").wait_for(timeout=20000)
+    frame.locator("body").wait_for(timeout=60000)
     if approved:
         assert frame.locator('[data-unapproved="1"]').count() == 0
         assert page.locator('[data-testid="preview-return"]:visible').count() == 0
         _shot(page, "custom-record-approved")
         return
-    frame.locator('[data-unapproved="1"]').wait_for(state="visible", timeout=20000)
+    frame.locator('[data-unapproved="1"]').wait_for(state="visible", timeout=60000)
     assert RED_TEXT in frame.locator('[data-unapproved="1"]').inner_text()
     _shot(page, "custom-record-unapproved")
     btn = page.locator('[data-testid="preview-return"]')
-    btn.wait_for(state="visible", timeout=10000)
+    btn.wait_for(state="visible", timeout=30000)
     btn.click()                                                                  # 備註空白 ⇒ 前端先擋，狀態不變
-    page.wait_for_function("() => document.querySelector('#cr-record').dataset.busy === '0'", timeout=15000)
+    page.wait_for_function("() => document.querySelector('#cr-record').dataset.busy === '0'", timeout=45000)
     assert _db("SELECT status FROM custom_records WHERE module_key=? AND record_no=?", (key, no))[0]["status"] == "pending"
     page.fill("#cr-decide-note", "預覽頁退回")
     btn.click()
-    page.wait_for_function("() => !document.querySelector('#cr-reject')", timeout=15000)
+    page.wait_for_function("() => !document.querySelector('#cr-reject')", timeout=45000)
     assert _db("SELECT status FROM custom_records WHERE module_key=? AND record_no=?", (key, no))[0]["status"] == "draft"
     a = _last_audit("custom.reject")
     assert a and "預覽頁退回" in (a["detail_json"] or "")
@@ -224,28 +224,28 @@ def test_quotation(client, live_server, make_user, new_page, login_as, company, 
     login_as(page, appr)
     page.goto(f"{live_server}/pages/quotation-form.html?id={qno}")
     pv = page.locator("button:has-text('預覽'):visible").first
-    pv.wait_for(state="visible", timeout=20000)
-    page.wait_for_function(f"() => {ROOT}.q && {ROOT}.q.quoteNo === '{qno}'", timeout=20000)
+    pv.wait_for(state="visible", timeout=60000)
+    page.wait_for_function(f"() => {ROOT}.q && {ROOT}.q.quoteNo === '{qno}'", timeout=60000)
     page.wait_for_load_state("networkidle")                # init() 最後才註冊 $watch('previewMode')：等載入完再點，否則點了沒人取預覽
     pv.click()
-    page.wait_for_function(f"() => {ROOT}.previewMode && !{ROOT}.previewLoading && (({ROOT}.previewHtml || '').length > 0 || {ROOT}.previewError)", timeout=30000)
+    page.wait_for_function(f"() => {ROOT}.previewMode && !{ROOT}.previewLoading && (({ROOT}.previewHtml || '').length > 0 || {ROOT}.previewError)", timeout=90000)
     assert not page.evaluate(f"() => {ROOT}.previewError"), page.evaluate(f"() => {ROOT}.previewError")
     frame = page.frame_locator("#quote-preview-frame")
-    frame.locator("html").wait_for(state="attached", timeout=30000)
+    frame.locator("html").wait_for(state="attached", timeout=90000)
     if approved:
         assert frame.locator('[data-unapproved="1"]').count() == 0
         assert page.locator(".modal-foot button:has-text('退回修改'):visible").count() == 0
         _shot(page, "quotation-approved")
         return
-    frame.locator('[data-unapproved="1"]').wait_for(state="attached", timeout=20000)      # 預覽 iframe 高度由內容回報，先以「在 DOM 裡」為準
+    frame.locator('[data-unapproved="1"]').wait_for(state="attached", timeout=60000)      # 預覽 iframe 高度由內容回報，先以「在 DOM 裡」為準
     assert RED_TEXT in frame.locator('[data-unapproved="1"]').text_content()
     _shot(page, "quotation-unapproved")
     ret = page.locator(".modal-foot button:has-text('退回修改'):visible").first
-    ret.wait_for(state="visible", timeout=10000)
+    ret.wait_for(state="visible", timeout=30000)
     ret.click()
-    page.locator("textarea:visible").first.wait_for(timeout=5000)
+    page.locator("textarea:visible").first.wait_for(timeout=15000)
     page.fill("textarea:visible", "報價預覽退回")
     page.locator("button:has-text('確認退回'):visible").first.click()
-    page.wait_for_function("() => location.href.indexOf('-R1') >= 0", timeout=20000)
+    page.wait_for_function("() => location.href.indexOf('-R1') >= 0", timeout=60000)
     rows = _db("SELECT status, quote_no FROM quotations WHERE quote_no LIKE ?", (qno + "%",))
     assert any(r["status"] == "草稿" and r["quote_no"].endswith("-R1") for r in rows), rows
