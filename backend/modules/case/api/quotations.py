@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from db import get_db, spawn_bg_thread
 from db import db_conn  # /api/sales-orders（M08 搬遷移入）
 from modules.case.quotations import payment_item_amounts  # 同上
+from helpers.gl_status import gl_posted_warning
 from helpers import row_access
 from helpers.case_access import case_page_readable   # AT-M1c：與報價單上附件的提供者同一支
 from modules.case import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
@@ -3729,6 +3730,15 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         if "received" in body:
             body["receivedBy"] = received_by
         invoice_changed_from = None
+        # MONEY-FLOWS §9 L3：改動**已入帳**的收款（取消收款、改收款日／實收／手續費）或更換已登錄的發票號碼 ⇒ 下次引擎執行時
+        # E03／E01 drift（沖轉草稿＋新草稿）或 orphan。下游效應：營運報表現金收入立即變；總帳要手動執行才反映。只提示、不擋。
+        gl_warn = None
+        if any(k in body for k in ("received", "receivedAt", "actualAmount", "feeAmount")):
+            _iid = pits[idx].get("id")
+            gl_warn = (gl_posted_warning(conn, "quotation_receipt", "%s::%s" % (no, _iid)) if _iid is not None
+                       else gl_posted_warning(conn, "quotation_receipt", no + "::", prefix=True))
+        if "invoiceNo" in body and (pits[idx].get("invoiceNo") or "").strip() and (body["invoiceNo"] or "").strip() != (pits[idx].get("invoiceNo") or "").strip():
+            gl_warn = gl_warn or gl_posted_warning(conn, "quotation_invoice", "%s::%s" % (no, (pits[idx].get("invoiceNo") or "").strip()))
         if "invoiceNo" in body:
             _old_inv = (pits[idx].get("invoiceNo") or "").strip()
             if _old_inv and (body["invoiceNo"] or "").strip() != _old_inv:
@@ -3776,7 +3786,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
                f"{no} {label} 發票號碼 {invoice_changed_from} → {body.get('invoiceNo')}（總帳 E01 將在下次引擎執行時沖轉並重建）")
     notify_module_activity("報價單", action_detail, user.get("display_name") or user["username"],
                             f"{no} {label}", "quotations.html")
-    return {"ok": True, "updated_at": now}
+    return {"ok": True, "updated_at": now, **({"glWarning": gl_warn} if gl_warn else {})}
 
 
 def _locate_item(arr: list, idx: int, item_id, range_msg: str) -> int:

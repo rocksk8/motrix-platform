@@ -8,6 +8,7 @@ from fastapi import APIRouter, Body, File, HTTPException, Header, UploadFile
 from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, next_entity_code
+from helpers.gl_status import gl_posted_warning
 from helpers import (_require_user, _tok, _audit, _notify, notify_module_activity, require_any_module,
                      check_approve_permission, resolve_active_flow_setting, UnresolvedManagerError,
                      setting_to_active_tiers)
@@ -1008,13 +1009,16 @@ def set_dispatch_invoice_date(did: int, body: dict = Body(...), authorization: s
         if not row:
             raise HTTPException(404, "派發紀錄不存在")
         now = datetime.now().isoformat()
+        # MONEY-FLOWS §9 L3／L3-B6：發票日進 E04 雜湊；已入帳的 E04 會在下次引擎執行時 drift（沖轉草稿＋新草稿）。
+        # 下游效應：營運報表權責口徑立即換月；總帳要手動執行才反映。這裡只提示、不擋（註解：發票日刻意不擋）。
+        gl_warn = gl_posted_warning(conn, "contractor_dispatch", str(did)) if inv != (row["invoice_date"] or "") else None
         conn.execute("UPDATE contractor_dispatches SET invoice_date=?, updated_at=? WHERE id=?", (inv, now, did))
         conn.commit()
     finally:
         conn.close()
     _audit(_tok(authorization), "vendor.dispatch.invoice_date", "contractor_dispatch", str(did),
            "%s 發票日期：%s → %s" % (row["quote_no"], row["invoice_date"] or "（未登錄）", inv or "（未登錄）"))
-    return {"ok": True, "invoiceDate": inv, "updated_at": now}
+    return {"ok": True, "invoiceDate": inv, "updated_at": now, **({"glWarning": gl_warn} if gl_warn else {})}
 
 
 # ── 驗收流程節點 ──────────────────────────────────────────────────────────────

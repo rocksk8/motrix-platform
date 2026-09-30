@@ -8,6 +8,7 @@ import importlib
 from core.registry import ModuleSpec
 
 from modules.accounting import attachments_catalog
+from modules.accounting.ledger import source_status as _source_status
 from modules.accounting.api import account_items, accounting_export, ledger_closing, ledger_engine, ledger_periods, ledger_reports, ledger_settings, ledger_statements, ledger_tax, voucher_providers, vouchers
 
 _m0001 = importlib.import_module("modules.accounting.migrations.0001_ledger_base")
@@ -22,6 +23,8 @@ MODULE = ModuleSpec(
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
         ("attachments.catalog", "accounting"): attachments_catalog._AccountingCatalog,
         ("voucher.account_check", "accounting"): accounting_export.validate_account_code,
+        # IP-106（暫定號）：來源是否已入帳（各來源寫入端點的非阻擋提示；MONEY-FLOWS §9 L3）
+        ("gl.source_status", "accounting"): _source_status.source_status,
         # IP-3：M07 撥付銀行選項
         ("accounting.settings", "accounting"): accounting_export._provide_accounting_settings,
         # IP-4：M07 作廢草稿、查傳票狀態
