@@ -726,7 +726,7 @@ def record_contractor_voucher_export(voucher_no: str, mode: str = "external", au
     return {"export_count": count, "log": log}
 
 
-# ── 個人外包人員 ↔ 勞報單（R12，使用者 2026-09-30 裁示 (b)；IP-104 `payslip.remit`）──────────────────────
+# ── 個人外包人員 ↔ 勞報單（R12，使用者 2026-09-30 裁示 (b)；IP-105 `payslip.remit`）──────────────────────
 # 匯款單快照的 personnel[] 每位個人可帶 payslipNo（additive，不需 migration）：匯款金額必須等於該勞報單實付、勞報單已簽回、受款人相符。
 # `system_settings.remit_require_payslip`＝"1" ⇒ 標記已匯款時**每位個人都必須**已關聯（預設關閉，畫面補上關聯入口後由最高管理者開啟）；
 # 已帶 payslipNo 的一律驗證，與設定無關。匯款標記成功 ⇒ 連結的勞報單一併記為已付款（同一個交易）；取消匯款 ⇒ 一併退回。
@@ -761,6 +761,60 @@ def _personnel_link_errors(conn, snapshot_json, require_all):
         else:
             ok.append(no)
     return errs, ok
+
+
+def _require_payslip_on():
+    """`system_settings.remit_require_payslip`：預設開啟（使用者規則：個人外包匯款前必須關聯勞報單）；"0"＝緊急關閉開關（僅最高管理者、有稽核紀錄）。"""
+    return str(_get_setting("remit_require_payslip", "1")) != "0"
+
+
+@router.get("/api/contractor-vouchers/settings/remit-require-payslip")
+def get_remit_require_payslip(authorization: str = Header(None)):
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "需要管理員權限")
+    return {"enabled": _require_payslip_on()}
+
+
+@router.put("/api/contractor-vouchers/settings/remit-require-payslip")
+def set_remit_require_payslip(body: dict = Body(...), authorization: str = Header(None)):
+    """緊急開關：關閉＝個人外包匯款不強制關聯勞報單（已關聯者仍照樣驗證）。只有最高管理者，寫稽核。"""
+    user = _require_user(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "只有最高管理者可以更動")
+    on = bool((body or {}).get("enabled"))
+    _set_setting("remit_require_payslip", "1" if on else "0")
+    _audit(_tok(authorization), "contractor_voucher.remit_require_payslip", "system_settings", "remit_require_payslip", "remit_require_payslip",
+           {"enabled": on, "reason": str((body or {}).get("reason") or "")[:200]})
+    return {"enabled": on}
+
+
+@router.get("/api/contractor-vouchers/{voucher_no}/personnel-links")
+def get_personnel_links(voucher_no: str, authorization: str = Header(None)):
+    """匯款單的個人外包人員與勞報單關聯現況（出納頁挑選用）：每人的匯款金額、已關聯勞報單、可挑選的勞報單、這一行現在能不能匯款。"""
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
+        raise HTTPException(403, "需要管理員或出納權限")
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT snapshot_json FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+        if not row:
+            raise HTTPException(404, "申請不存在")
+        snap = json.loads(row["snapshot_json"] or "{}")
+        prov = registry.single_provider("payslip.remit")
+        lines = []
+        for p in snap.get("personnel") or []:
+            if not str((p or {}).get("name") or "").strip():
+                continue
+            one = json.dumps({"personnel": [p]}, ensure_ascii=False)
+            errs, _ok = _personnel_link_errors(conn, one, _require_payslip_on())
+            cands = prov.candidates(conn, p["id"]) if (prov is not None and p.get("id")) else []
+            lines.append({"id": p.get("id"), "name": p.get("name"), "amount": float(p.get("amount") or 0),
+                          "payslipNo": p.get("payslipNo") or "", "candidates": cands, "error": "；".join(errs), "ok": not errs})
+        return {"required": _require_payslip_on(), "providerAvailable": prov is not None, "lines": lines,
+                "canPay": all(l["ok"] for l in lines)}
+    finally:
+        conn.close()
 
 
 class PersonnelLinkIn(BaseModel):
@@ -866,7 +920,7 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
         raise HTTPException(409, "尚未標記匯款")
     linked_slips = []
     if action == "pay":
-        errs, linked_slips = _personnel_link_errors(conn, row["snapshot_json"], str(_get_setting("remit_require_payslip", "0")) == "1")
+        errs, linked_slips = _personnel_link_errors(conn, row["snapshot_json"], _require_payslip_on())
         if errs:
             conn.close()
             raise HTTPException(409, "不能標記已匯款：" + "；".join(errs))

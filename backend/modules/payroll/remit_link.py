@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-"""IP-104 `payslip.remit`：承攬商匯款單（M04）與勞報單（M07）的連結（R12，使用者 2026-09-30 裁示 (b)）。
+"""IP-105 `payslip.remit`：承攬商匯款單（M04）與勞報單（M07）的連結（R12，使用者 2026-09-30 裁示 (b)）。
 
 [規則] 承攬商派工的個人（外包人員）匯款前必須關聯一張勞報單，匯款金額＝該勞報單實付（扣繳留在勞報單）；匯款單標記已匯款時，
   連結的勞報單一併記為已付款（付款日＝匯款日、`data_json.paid_via_remit`＝匯款單號），總帳不再另產生該勞報單的 E06b；取消匯款則一併退回。
 [三個動作，都不 commit（呼叫端與匯款單同一個交易）]
 - `check(conn, slip_no)`：唯讀，回付款前要驗的欄位（不含個資）；不存在 ⇒ None。
+- `candidates(conn, contractor_id)`：該受款人已簽回、未付款的勞報單清單（{slipNo, net, slipDate, incomeType}）。
 - `mark_paid(conn, slip_nos, remit_no, payment_date, who)`：已簽回 → 已付款；回實際更新筆數。
 - `unmark_paid(conn, remit_no)`：把 `paid_via_remit == remit_no` 的勞報單退回已簽回；回筆數。
 """
@@ -27,6 +28,13 @@ def check(conn, slip_no):
         return None
     return {"slipNo": r["slip_no"], "status": r["status"], "contractorId": r["contractor_id"], "contractorName": r["contractor_name"] or "",
             "net": float(r["net_amount"] or 0), "paidViaRemit": _data(r["data_json"]).get("paid_via_remit") or ""}
+
+
+def candidates(conn, contractor_id):
+    """該受款人『已簽回、尚未付款』的勞報單（供匯款單挑選）；不含個資。"""
+    return [{"slipNo": r["slip_no"], "net": float(r["net_amount"] or 0), "slipDate": r["slip_date"] or "", "incomeType": r["income_type"] or ""}
+            for r in conn.execute("SELECT slip_no, net_amount, slip_date, income_type FROM payslips WHERE contractor_id=? AND status='已簽回' "
+                                  "ORDER BY slip_date DESC, slip_no DESC", (contractor_id,)).fetchall()]
 
 
 def mark_paid(conn, slip_nos, remit_no, payment_date, who):
@@ -60,5 +68,6 @@ def unmark_paid(conn, remit_no):
 
 class _Remit:
     check = staticmethod(check)
+    candidates = staticmethod(candidates)
     mark_paid = staticmethod(mark_paid)
     unmark_paid = staticmethod(unmark_paid)

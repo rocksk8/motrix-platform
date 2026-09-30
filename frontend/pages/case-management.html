@@ -3985,6 +3985,24 @@
       <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">匯款日期（必填）</label>
       <input type="date" x-model="payVoucherDate" required data-testid="cm-pay-date"
              style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;margin-bottom:14px">
+      <!-- R12：個人外包人員匯款前必須關聯勞報單，匯款金額須等於勞報單實付（扣繳留在勞報單） -->
+      <div x-show="payLinks" style="margin-bottom:12px;font-family:var(--font-zh);font-size:12px" data-testid="cm-pay-links">
+        <div style="font-size:11px;font-weight:500;color:var(--text-secondary);margin-bottom:4px">個人外包人員 ↔ 勞報單<span x-show="payLinks && payLinks.required">（必須先關聯）</span></div>
+        <template x-for="l in (payLinks ? payLinks.lines : [])" :key="l.name + l.id">
+          <div style="border:1px solid var(--border-light);border-radius:6px;padding:6px 8px;margin-bottom:6px" :data-testid="'cm-pay-link-row-' + l.id">
+            <div style="display:flex;justify-content:space-between"><b x-text="l.name"></b><span x-text="'匯款 NT$ ' + Number(l.amount).toLocaleString()"></span></div>
+            <select :value="l.payslipNo" @change="linkPayslip(l, $event.target.value)" :data-testid="'cm-pay-link-select-' + l.id"
+                    style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;margin-top:4px">
+              <option value="">— 未關聯 —</option>
+              <template x-if="l.payslipNo && !l.candidates.some(c => c.slipNo === l.payslipNo)"><option :value="l.payslipNo" selected x-text="l.payslipNo + '（已關聯）'"></option></template>
+              <template x-for="c in l.candidates" :key="c.slipNo"><option :value="c.slipNo" :selected="c.slipNo === l.payslipNo" x-text="c.slipNo + '　實付 ' + Number(c.net).toLocaleString() + (Math.abs(c.net - l.amount) > 0.005 ? '　⚠ 與匯款金額不符' : '')"></option></template>
+            </select>
+            <div x-show="l.error" x-text="l.error" style="color:var(--danger);margin-top:4px" :data-testid="'cm-pay-link-error-' + l.id"></div>
+            <div x-show="l.ok && l.payslipNo" style="color:var(--success);margin-top:4px">✓ 金額相符，匯款時勞報單一併記為已付款</div>
+          </div>
+        </template>
+      </div>
+      <div x-show="payLinksError" x-text="payLinksError" style="color:var(--danger);font-size:12px;margin-bottom:8px" data-testid="cm-pay-links-error"></div>
       <div style="display:flex;gap:10px;margin-bottom:8px;font-family:var(--font-zh);font-size:12px">
         <div style="flex:1"><div style="font-size:11px;color:var(--text-secondary);margin-bottom:4px">應付金額</div>
           <div style="padding:7px 0;font-family:'LINE Seed TW_OTF',sans-serif" x-text="'NT$ ' + Number(payVoucherTarget ? payVoucherTarget.grandTotal : 0).toLocaleString()"></div></div>
@@ -4013,7 +4031,7 @@
     <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
       <button @click="payVoucherModal=false" :disabled="payVoucherSaving"
               style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--surface);cursor:pointer">取消</button>
-      <button @click="confirmPayVoucher()" :disabled="payVoucherSaving || !payVoucherDate || !!remitError(payRemit)"
+      <button @click="confirmPayVoucher()" :disabled="payVoucherSaving || !payVoucherDate || !!remitError(payRemit) || payLinksBlocked()"
               style="padding:7px 16px;border:none;border-radius:7px;font-size:13px;font-weight:600;font-family:var(--font-zh);background:var(--tone-success-solid);color:var(--surface);cursor:pointer"
               x-text="payVoucherSaving ? '處理中…' : '確認標記已匯款'"></button>
     </div>

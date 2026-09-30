@@ -22,7 +22,7 @@ MODULE = ModuleSpec(
         # IP-103：出納頁的勞報單待付款（M05）；IP-9：已付款勞報單列入營運報表與月支出（M08，名稱 payslip）
         ("payslip.payables", "payroll"): payslip_payouts._Payables,
         ("expense.entries", "payslip"): payslip_payouts._expense_entries,
-        # IP-104（R12）：承攬商匯款單關聯勞報單、匯款時一併記為已付款
+        # IP-105（R12）：承攬商匯款單關聯勞報單、匯款時一併記為已付款
         ("payslip.remit", "payroll"): remit_link._Remit,
         # IP-16：L1 /api/system/bonus-module-status
         ("bonus.module_status", "payroll"): bonus.bonus_module_on,

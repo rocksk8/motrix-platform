@@ -34,7 +34,7 @@ def tok(client, make_user):
     c.commit()
     c.close()
     yield r.json()["token"]
-    _set_setting("remit_require_payslip", "0")
+    _set_setting("remit_require_payslip", "1")               # 還原成預設（開啟）
 
 
 def _contractor(name="李外包"):
@@ -110,8 +110,7 @@ def test_link_validates_amount_status_and_payee(client, tok):
     assert _link(client, tok, vno, cid, "").status_code == 200                                           # 解除
 
 
-def test_pay_requires_link_when_setting_on_and_marks_payslip_paid(client, tok):
-    _set_setting("remit_require_payslip", "1")
+def test_pay_requires_link_by_default_and_marks_payslip_paid(client, tok):
     cid = _contractor()
     net = 8789
     slip = _slip(cid, "李外包")
@@ -132,6 +131,7 @@ def test_pay_requires_link_when_setting_on_and_marks_payslip_paid(client, tok):
 
 
 def test_setting_off_keeps_old_behaviour_but_linked_lines_still_validated(client, tok):
+    _set_setting("remit_require_payslip", "0")
     cid = _contractor()
     vno = _voucher(client, tok, cid, "李外包", 8789)
     assert _pay(client, tok, vno).status_code == 200                                                     # 設定關閉、沒關聯 ⇒ 照舊可匯款
@@ -165,6 +165,7 @@ def test_ledger_e05_uses_other_payable_and_no_double_payment(client, tok):
 
 
 def test_unlinked_legacy_personnel_still_get_e05b(client, tok):
+    _set_setting("remit_require_payslip", "0")
     cid = _contractor()
     vno = _voucher(client, tok, cid, "李外包", 5000)
     assert _pay(client, tok, vno).status_code == 200                                                     # 設定關閉、未關聯
@@ -172,3 +173,35 @@ def test_unlinked_legacy_personnel_still_get_e05b(client, tok):
     assert [e for e in sub["events"] if e["event_code"] == "E05b" and e["source_key"] == vno]
     (e05,) = [e for e in sub["events"] if e["event_code"] == "E05" and e["source_key"] == vno]
     assert [l["role"] for l in e05["lines"]] == ["AP", "BANK"]
+
+
+def test_links_endpoint_lists_candidates_and_blocks(client, tok):
+    cid = _contractor()
+    good, wrong = _slip(cid, "李外包"), _slip(cid, "李外包", gross=20000)
+    vno = _voucher(client, tok, cid, "李外包", 8789)
+    r = client.get("/api/contractor-vouchers/%s/personnel-links" % vno, headers=_auth(tok))
+    d = r.json()
+    assert r.status_code == 200 and d["required"] is True and d["canPay"] is False
+    (line,) = d["lines"]
+    assert {c["slipNo"] for c in line["candidates"]} >= {good, wrong} and "尚未關聯" in line["error"]
+    assert _link(client, tok, vno, cid, good).status_code == 200
+    d = client.get("/api/contractor-vouchers/%s/personnel-links" % vno, headers=_auth(tok)).json()
+    assert d["canPay"] is True and d["lines"][0]["payslipNo"] == good and d["lines"][0]["ok"] is True
+
+
+def test_emergency_switch_is_superadmin_only_and_audited(client, tok, make_user):
+    u, p = make_user(username="r12_plain%d" % id(client), role="admin")
+    other = client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]
+    url = "/api/contractor-vouchers/settings/remit-require-payslip"
+    assert client.get(url, headers=_auth(tok)).json() == {"enabled": True}                                # 預設開啟
+    assert client.put(url, headers=_auth(other), json={"enabled": False}).status_code == 403
+    assert client.put(url, headers=_auth(tok), json={"enabled": False, "reason": "演練"}).json() == {"enabled": False}
+    cid = _contractor()
+    vno = _voucher(client, tok, cid, "李外包", 8789)
+    assert _pay(client, tok, vno).status_code == 200                                                     # 關閉後未關聯也可匯款
+    c = db.get_db()
+    try:
+        n = c.execute("SELECT COUNT(*) FROM audit_log WHERE action='contractor_voucher.remit_require_payslip'").fetchone()[0]
+    finally:
+        c.close()
+    assert n >= 1

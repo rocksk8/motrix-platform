@@ -1040,6 +1040,23 @@
       <div class="modal-body">
         <label class="field-label">匯款日期（必填）</label>
         <input type="date" class="field-input" x-model="payVoucherDate" required data-testid="pay-date">
+        <!-- R12：個人外包人員匯款前必須關聯勞報單，匯款金額須等於勞報單實付（扣繳留在勞報單） -->
+        <div x-show="payLinks" style="margin:8px 0" data-testid="pay-links">
+          <div class="field-label">個人外包人員 ↔ 勞報單<span x-show="payLinks && payLinks.required">（必須先關聯）</span></div>
+          <template x-for="l in (payLinks ? payLinks.lines : [])" :key="l.name + l.id">
+            <div style="border:1px solid var(--border-light);border-radius:var(--radius);padding:6px 8px;margin-bottom:6px" :data-testid="'pay-link-row-' + l.id">
+              <div style="display:flex;justify-content:space-between;font-size:12px"><b x-text="l.name"></b><span class="mono" x-text="'匯款 ' + fmt(l.amount)"></span></div>
+              <select class="field-input" :value="l.payslipNo" @change="linkPayslip(l, $event.target.value)" :data-testid="'pay-link-select-' + l.id">
+                <option value="">— 未關聯 —</option>
+                <template x-if="l.payslipNo && !l.candidates.some(c => c.slipNo === l.payslipNo)"><option :value="l.payslipNo" selected x-text="l.payslipNo + '（已關聯）'"></option></template>
+                <template x-for="c in l.candidates" :key="c.slipNo"><option :value="c.slipNo" :selected="c.slipNo === l.payslipNo" x-text="c.slipNo + '　實付 ' + fmt(c.net) + (Math.abs(c.net - l.amount) > 0.005 ? '　⚠ 與匯款金額不符' : '')"></option></template>
+              </select>
+              <div class="alert-bar" x-show="l.error" x-text="l.error" :data-testid="'pay-link-error-' + l.id"></div>
+              <div style="font-size:11px;color:var(--success)" x-show="l.ok && l.payslipNo">✓ 金額相符，匯款時勞報單一併記為已付款</div>
+            </div>
+          </template>
+        </div>
+        <div class="alert-bar" x-show="payLinksError" x-text="payLinksError" data-testid="pay-links-error"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
           <div><label class="field-label">應付金額</label><div class="mono" style="padding:6px 0" x-text="fmt((payVoucherTarget ? payVoucherTarget.grandTotal : 0))"></div></div>
           <div><label class="field-label">實付金額</label><input type="number" min="0" step="0.01" class="field-input" x-model="payRemit.actual" data-testid="pay-remit-actual"></div>
@@ -1060,7 +1077,7 @@
         <div style="display:flex;justify-content:flex-end;gap:8px">
           <button @click="payVoucherModal=false" :disabled="payVoucherSaving"
                   style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
-          <button @click="confirmPayVoucher()" :disabled="payVoucherSaving || !payVoucherDate || !!remitError(payRemit)"
+          <button @click="confirmPayVoucher()" :disabled="payVoucherSaving || !payVoucherDate || !!remitError(payRemit) || payLinksBlocked()"
                   style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
                   x-text="payVoucherSaving ? '處理中…' : '確認標記已匯款'"></button>
         </div>
