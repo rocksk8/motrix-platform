@@ -5678,67 +5678,67 @@
     },
     {
      "func": "approve_extra_expense",
-     "line": 678,
+     "line": 683,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/approve"
     },
     {
      "func": "reject_extra_expense",
-     "line": 761,
+     "line": 766,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/reject"
     },
     {
      "func": "upload_extra_expense_files",
-     "line": 845,
+     "line": 850,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files"
     },
     {
      "func": "delete_extra_expense_file",
-     "line": 891,
+     "line": 896,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}"
     },
     {
      "func": "upsert_change_request",
-     "line": 1064,
+     "line": 1069,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "cancel_change_request",
-     "line": 1103,
+     "line": 1108,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "upload_change_request_files",
-     "line": 1129,
+     "line": 1134,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files"
     },
     {
      "func": "delete_change_request_file",
-     "line": 1161,
+     "line": 1166,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}"
     },
     {
      "func": "submit_change_request",
-     "line": 1188,
+     "line": 1193,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/submit"
     },
     {
      "func": "approve_change_request",
-     "line": 1253,
+     "line": 1262,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/approve"
     },
     {
      "func": "reject_change_request",
-     "line": 1341,
+     "line": 1350,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/reject"
     }
@@ -6728,7 +6728,8 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
-    "helper:legal_params"
+    "helper:legal_params",
+    "plat:registry"
    ],
    "kind": "mod",
    "module_key": "case",

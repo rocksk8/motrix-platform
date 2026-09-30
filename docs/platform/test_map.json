@@ -5094,10 +5094,14 @@
     "mod:case/api/quotations",
     "mod:case/expense_forms",
     "mod:case/gl_events",
-    "mod:case/recognition"
+    "mod:case/recognition",
+    "plat:__init__",
+    "plat:registry"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
      "backend/db.py",
      "backend/modules/case/__init__.py",
      "backend/modules/case/api/__init__.py",
