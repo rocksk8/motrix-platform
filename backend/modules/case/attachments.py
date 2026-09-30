@@ -198,6 +198,28 @@ class _CasePathAccess:
         return bool(_READ_RULE.get(st, case_documents_readable)(conn, quote_no, user))
 
 
+#: 各類檔案存檔時的資料夾（`save_document_files` 第一個參數；路徑 `<資料夾>/<單據鍵>/<檔名>`）
+_CATALOG_FOLDER = {"quotation_signed": "quotations", "case_update": "case_updates", "payment_item": "quotation_payment_items",
+                   "material": "quotation_materials", "material_invoice": "quotation_materials_invoices",
+                   "extra_expense": "case_extra_expense", "completion_note": "completion_notes"}
+
+
+def _path_bound_to_doc(conn, source_type, doc_no, entry):
+    """被提供的檔案路徑必須屬於這張單據自己的資料夾（W3：不信 JSON 欄裡的路徑）。
+    報價單回簽、案件動態、完工單＝單號全等；收付款／材料／材料發票＝同一案件（索引可能因刪除項目而位移，只比案件）；
+    額外支出＝`<案件>_<id>` 全等。"""
+    from helpers.uploads import upload_path_key
+    key = upload_path_key(entry, _CATALOG_FOLDER[source_type])
+    if key is None:
+        return False
+    if source_type in ("quotation_signed", "case_update", "completion_note"):
+        return key == str(doc_no)
+    quote_no = _quote_of(conn, source_type, doc_no)
+    if source_type == "extra_expense":
+        return quote_no is not None and key == "%s_%s" % (quote_no, doc_no)
+    return quote_no is not None and _quote_and_index(key)[0] == quote_no
+
+
 class _CaseCatalog:
     """`attachments.catalog`（契約 v1，2026-09-30 P2）：M01 的文件類附件。權限＝擁有單據自己的讀取規則
     （同 `_CaseAttachments` 的 `_READ_RULE`／完工單清單規則 `case_documents_readable`），不另寫第二份。
@@ -228,7 +250,10 @@ class _CaseCatalog:
                 raise AttachmentSourceError("完工單「%s」的附件資料格式不正確。" % doc_no)
         else:
             files = _CaseAttachments.files(conn, source_type, doc_no, user)      # 看不到 ⇒ AttachmentNotVisible
-        return opened_upload_file(pick_file(files, file_id))
+        entry = pick_file(files, file_id)
+        if entry is None or not _path_bound_to_doc(conn, source_type, doc_no, entry):
+            return None                                          # 路徑不屬於這張單據 ⇒ 當作沒有這個檔
+        return opened_upload_file(entry)
 
 
 from core import registry as _registry  # noqa: E402

@@ -82,12 +82,14 @@ def world(client, make_user):
 
 
 @pytest.mark.route_off
-def test_route_is_off_by_default_in_train_26(client, world):
-    """安全審查 W3：`opened_upload_file` 沒把路徑綁單據，train 26 不提供這條路（P3 補完再開）。
-    **反向控制**：把常數改成 True ⇒ 這題紅（有權限的人會打得開）。"""
+def test_route_is_on_by_default_and_kill_switch_works(client, world, monkeypatch):
+    """路徑綁單據（test_attachments_bind_2026_09_30.py）補完後預設開；緊急開關關掉 ⇒ 一律 404。
+    **反向控制**：把常數預設改回 False ⇒ 第一個斷言紅。"""
     from routers import attachments as r
-    assert r.ATTACHMENTS_OPEN_ENABLED is False
+    assert r.ATTACHMENTS_OPEN_ENABLED is True
     H, note_no, f = world
+    assert _open(client, H["ct_owner"], "completion_note", note_no, f["id"]).status_code == 200
+    monkeypatch.setattr(r, "ATTACHMENTS_OPEN_ENABLED", False)
     for who in ("ct_admin", "ct_owner"):
         resp = _open(client, H[who], "completion_note", note_no, f["id"])
         assert resp.status_code == 404 and resp.json()["detail"] == "檔案不存在", who

@@ -21,11 +21,13 @@ from helpers import uploads as _uploads
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-#: 🔒 train 26 關閉（安全審查 W3，2026-09-30）：`opened_upload_file` 只驗「在 uploads 底下且存在」，沒驗該路徑屬於這張單據；
-#: 案件紀錄 PATCH 接受前端帶的 files／invoiceFiles 路徑 ⇒ 打開後可借別人的單據讀 uploads 任一檔。目前沒有 UI 呼叫端（P3 才有）。
-#: 真正的修補（路徑綁單據：經 `uploads.path_access` 驗證／拒絕前端帶路徑）隨 P3 一起做，做完才把這個常數打開。
-#: 關閉時路由照掛、一律 404（與「沒有提供者」同一句），程式與測試保留（測試夾具把它打開）。
-ATTACHMENTS_OPEN_ENABLED = False
+#: 緊急開關（安全審查 W3，2026-09-30）。train 26 曾關閉，因為 `opened_upload_file` 只驗「在 uploads 底下且存在」，
+#: 而案件紀錄 PATCH 接受前端帶的 files／invoiceFiles 路徑 ⇒ 可借別人的單據讀 uploads 任一檔。
+#: 已補兩道（train 27，wip/w2-open-bind）：① 各提供者 `open()` 要求檔案路徑屬於**那張單據自己的資料夾**
+#: （`helpers.uploads.upload_path_key`）；② 案件紀錄 PATCH／PUT／POST 剝掉資料庫裡本來沒有的檔案路徑
+#: （`quotations._strip_foreign_file_entries`）。兩道都有反向控制測試，才把這個常數打開。
+#: 要緊急關掉：改 False ⇒ 路由照掛、一律 404（同「沒有提供者」那一句）。
+ATTACHMENTS_OPEN_ENABLED = True
 
 _NOT_FOUND = "檔案不存在"
 

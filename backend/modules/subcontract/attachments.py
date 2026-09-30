@@ -50,7 +50,7 @@ class _SubcontractCatalog:
 
     @staticmethod
     def open(conn, user, source_type, doc_no, file_id):
-        from helpers.uploads import opened_upload_file, pick_file
+        from helpers.uploads import opened_upload_file, pick_file, upload_path_key
         if source_type not in _COLUMNS:
             raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
         if not str(doc_no).isdigit():
@@ -61,7 +61,11 @@ class _SubcontractCatalog:
         if not _SubcontractPathAccess.readable(conn, "contractor_dispatches", (str(int(doc_no)), "-"), user):
             raise AttachmentNotVisible()
         files = files_from_json_column(conn, "contractor_dispatches", "id", int(doc_no), _COLUMNS[source_type])
-        return opened_upload_file(pick_file(files, file_id))
+        entry = pick_file(files, file_id)
+        folder = "contractor_dispatches" if source_type == "contractor_dispatch" else "contractor_dispatch_invoices"
+        if entry is None or upload_path_key(entry, folder) != str(int(doc_no)):
+            return None                                          # 路徑不屬於這張派工單 ⇒ 當作沒有這個檔（W3）
+        return opened_upload_file(entry)
 
 
 #: 派工單單筆 `GET /api/contractor-dispatches/{did}` 的模組（回應含 files_json／invoice_files_json 的路徑）

@@ -4,7 +4,7 @@
 直接用 `_DevLogPathAccess`（同一支判斷，不寫第二份）。"""
 import json
 
-from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, opened_upload_file, pick_file
+from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, opened_upload_file, pick_file, upload_path_key
 from modules.crm.api import _DevLogPathAccess
 
 
@@ -28,4 +28,7 @@ class _CrmCatalog:
             files = json.loads(row["files_json"] or "[]") or []
         except (TypeError, ValueError):
             raise AttachmentSourceError("開發記錄「%s」的附件資料格式不正確。" % doc_no)
-        return opened_upload_file(pick_file(files, file_id))
+        entry = pick_file(files, file_id)
+        if entry is None or upload_path_key(entry, "dev_logs") != str(row["case_id"]):
+            return None                                          # 路徑不屬於這個開發案 ⇒ 當作沒有這個檔（W3）
+        return opened_upload_file(entry)

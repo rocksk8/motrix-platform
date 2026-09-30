@@ -4,7 +4,7 @@
 import json
 
 from helpers.case_access import case_documents_readable
-from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, opened_upload_file, pick_file
+from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, opened_upload_file, pick_file, upload_path_key
 
 
 class _SupplyCatalog:
@@ -25,4 +25,7 @@ class _SupplyCatalog:
             files = json.loads(row["signed_files_json"] or "[]") or []
         except (TypeError, ValueError):
             raise AttachmentSourceError("出貨單「%s」的附件資料格式不正確。" % doc_no)
-        return opened_upload_file(pick_file(files, file_id))
+        entry = pick_file(files, file_id)
+        if entry is None or upload_path_key(entry, "shipping_notes") != str(doc_no):
+            return None                                          # 路徑不屬於這張出貨單 ⇒ 當作沒有這個檔（W3）
+        return opened_upload_file(entry)
