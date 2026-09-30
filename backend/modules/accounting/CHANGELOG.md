@@ -1,5 +1,8 @@
 # 會計 更新紀錄
 
+## 1.1.2 — 2026-09-30（暫用號，列車取號；W4 總帳 列車修補）
+- 修補：四大表匯出經公司資料第二道；傳票提供者／佇列登記改自 voucher_providers.py；`general-ledger` 查詢參數 `key` 改 `dimension_value`；設定更新寫稽核；`_run` 不再用非字面值 `**kw`；期初餘額試算端點登記為純試算。純修補，無 migration。
+
 ## 1.1.1 — 2026-09-30（暫用號，列車取號；W4 總帳 C2）
 - 分錄引擎 C2：事件收集可套用會計在 `gl_source_annotations` 補登的來源憑證資料（目前認得 field=input_tax，覆寫承攬商發票的估算進項稅額；補登值壞掉則忽略並在事件 meta 標記）；`GET /api/ledger/events/preview` 與引擎共用；接入 subcontract 提供者（E04／E05／E05b）。
 

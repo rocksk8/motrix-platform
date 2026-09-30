@@ -33,6 +33,8 @@ AUDIT_WRAPPERS = {
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
+    ("modules/accounting/api/ledger_periods.py", "POST", "/opening/preview"):
+        "純試算：期初餘額匯入前的預覽（逐列檢查借貸與科目），不寫任何資料表；建立批次的 POST /opening 有稽核",
     # ── 用 POST 的純查詢／試算（不改任何資料）────────────────────────────
     ("modules/case/api/quotations.py", "POST", "/api/quotations/case-activity"):
         "純查詢：回傳各案件最後動態時間，POST 只是為了帶一長串單號",

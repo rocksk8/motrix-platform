@@ -42,10 +42,10 @@ def _require_superadmin(authorization):
     return user
 
 
-def _run(conn, fn, *args, **kw):
+def _run(conn, fn, *args):
     """把服務層的中文錯誤轉成 400；DB 觸發器的 ABORT 轉成 409（不讓它變 500）。"""
     try:
-        return fn(conn, *args, **kw)
+        return fn(conn, *args)
     except (_periods.PeriodError, _opening.OpeningError) as exc:
         conn.rollback()
         raise HTTPException(400, str(exc))
