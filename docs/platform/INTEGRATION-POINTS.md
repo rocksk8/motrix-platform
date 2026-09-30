@@ -65,6 +65,9 @@ grandTotal（直接讀 `contractor_dispatches`，沒有經過 `_dispatch_row`）
 行為不會壞，但屬 M07 直接寫 M06 的表（DEPENDENCY-MAP §4）；應由 M06 再公開「作廢草稿」「查傳票狀態」兩個連接器，另開題。
 ➡ 2026-09-25 已處理：見 IP-4。
 
+
+**2026-09-30 追加（契約仍是版本 1，選填參數）：`reverses_voucher_id`**（獎金更正單）——給了 ⇒ 依該張**已過帳**傳票存的分錄組出反向草稿（借貸互換）、`kind='reversal'`、`reverses_no`＝原單號、`origin` 照傳入；`voucher_date` 沒給用今天，`lines` 忽略。不能做時**不丟例外**，回 `{"blocked": "<原因>"}`（原傳票不存在／未過帳／已作廢／已被未作廢的反向傳票沖過／日期落在已結帳或鎖定期間）；呼叫端先檢查 `res.get("blocked")`。反向傳票是系統產生的傳票：不可從傳票頁作廢（L9）；草稿階段要撤回走 IP-4 `voucher.void_draft`。
+
 ---
 
 ## IP-3　`accounting.settings`：會計設定（付款銀行）（M06 → M07）
