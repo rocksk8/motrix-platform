@@ -1835,14 +1835,17 @@
    "kind": "api",
    "units": [
     "dir:backend/modules/accounting/",
-    "dir:frontend/pages/",
     "helper:uploads",
     "mod:accounting/api/vouchers",
     "mod:accounting/tests/test_voucher_pdf_export_2026_09_23",
-    "page:pages/voucher.html"
+    "page:pages/voucher.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/uploads.py",
      "backend/modules/accounting/tests/test_voucher_pdf_export_2026_09_23.py"
     ],
@@ -1850,10 +1853,6 @@
      "backend/modules/accounting/api/vouchers.py"
     ],
     "page": [
-     "frontend/pages/voucher.html"
-    ],
-    "path": [
-     "frontend/pages/",
      "frontend/pages/voucher.html"
     ],
     "module_dir": [
@@ -8654,7 +8653,7 @@
     "file:docs/platform/modules.json",
     "helper:tiered_approval",
     "mod:accounting/__init__",
-    "mod:accounting/api/vouchers",
+    "mod:accounting/api/voucher_providers",
     "mod:accounting/voucher",
     "mod:case/api/quotations",
     "mod:case/quotations",
@@ -8675,7 +8674,7 @@
      "backend/helpers/tiered_approval.py",
      "backend/modules/accounting/",
      "backend/modules/accounting/api/",
-     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/accounting/api/voucher_providers.py",
      "backend/modules/case/",
      "backend/modules/case/api/",
      "backend/modules/case/api/quotations.py",
@@ -9345,6 +9344,7 @@
   "backend/tests/platform/test_core_paths.py": {
    "kind": "unit",
    "units": [
+    "dir:backend/helpers/form_templates/",
     "dir:frontend/pages/",
     "file:backend/autostart.bat",
     "file:backend/version_manifest.json",
@@ -9358,6 +9358,7 @@
     ],
     "path": [
      "backend/autostart.bat",
+     "backend/helpers/form_templates/",
      "backend/version_manifest.json",
      "frontend/pages/"
     ]
@@ -11713,7 +11714,6 @@
     "core:db",
     "core:main",
     "dir:backend/modules/",
-    "dir:backend/tests/",
     "dir:backend/tools/",
     "dir:tools/platform/",
     "file:backend/conftest.py",
@@ -11763,7 +11763,6 @@
      "backend/requirements.txt",
      "backend/routers/approval_queue.py",
      "backend/start.bat",
-     "backend/tests/",
      "backend/tests/_prod_baseline.py",
      "backend/tests/platform/child_module_gate.py",
      "backend/tests/test_system_audit_2026_09_14.py",
@@ -12149,6 +12148,8 @@
     "page:pages/approval-history.html",
     "page:pages/approval-settings.html",
     "page:pages/contractor-voucher-approval-settings.html",
+    "page:pages/ledger-reports.html",
+    "page:pages/ledger-statements.html",
     "page:pages/map.html",
     "page:pages/online-stats.html",
     "page:pages/receivables.html",
@@ -12161,6 +12162,8 @@
      "frontend/pages/approval-history.html",
      "frontend/pages/approval-settings.html",
      "frontend/pages/contractor-voucher-approval-settings.html",
+     "frontend/pages/ledger-reports.html",
+     "frontend/pages/ledger-statements.html",
      "frontend/pages/map.html",
      "frontend/pages/online-stats.html",
      "frontend/pages/receivables.html",
@@ -12393,7 +12396,7 @@
     "file:backend/tests/_requires.py",
     "helper:custom_modules",
     "helper:tiered_approval",
-    "mod:accounting/api/vouchers",
+    "mod:accounting/api/voucher_providers",
     "mod:case/api/quotations",
     "plat:__init__",
     "plat:source_tree"
@@ -12407,7 +12410,7 @@
     ],
     "path": [
      "backend/helpers/custom_modules.py",
-     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/accounting/api/voucher_providers.py",
      "backend/modules/case/api/quotations.py"
     ]
    }
@@ -21279,6 +21282,7 @@
     "plat:source_tree",
     "router:auth",
     "router:company_lookup",
+    "router:custom_records",
     "router:system"
    ],
    "evidence": {
@@ -21292,6 +21296,7 @@
      "backend/modules/case/api/quotations.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
+     "backend/routers/custom_records.py",
      "backend/routers/system.py"
     ],
     "path": [
@@ -21939,7 +21944,8 @@
     "router:definitions",
     "router:item_reads",
     "router:list_prefs",
-    "router:system"
+    "router:system",
+    "router:uploads"
    ],
    "evidence": {
     "import": [
@@ -21956,7 +21962,8 @@
      "backend/routers/definitions.py",
      "backend/routers/item_reads.py",
      "backend/routers/list_prefs.py",
-     "backend/routers/system.py"
+     "backend/routers/system.py",
+     "backend/routers/uploads.py"
     ],
     "path": [
      "backend/modules/case/api/quotations.py",

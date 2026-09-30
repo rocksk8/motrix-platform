@@ -18,7 +18,7 @@
 | `plat:menu` | L0 | 選單由登錄表產生（階段 C／C3，docs/platform/STAGE-C-DESIGN.md §4）。 | 14 | 1 | `tests/platform/test_menu.py` |
 | `plat:migrations` | L0 | 每模組獨立版本的 migration（CORE-SPEC §6）。 | 5 | 3 | `tests/test_definitions_store_2026_09_25.py`、`tests/platform/test_migration_incomplete.py` |
 | `plat:pages` | L0 | 頁面對照與提供（階段 C／C1，docs/platform/STAGE-C-DESIGN.md §3）：`/pages/<檔名>` ⇒ 實體檔、提示頁或 404。 | 15 | 2 | `tests/platform/test_core_pages.py` |
-| `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 44 | 23 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
+| `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 44 | 24 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
 | `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 21 | 55 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
 | `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 11 | 0 | `tests/platform/test_core_loader.py` |
 | `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 modules/case/quotations.py 下沉）。 | 7 | 19 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
@@ -39,7 +39,7 @@
 | `helper:build_info` | L1 | 這個**行程**載入的是哪一份程式碼（`BR1`）。（無單位卡） | 3 | 2 | — |
 | `helper:case_access` | L1 | L1 案件存取守門（主持裁示 2026-09-26，DEPENDENCY-MAP §3 #2「案件可見性規則 → L1 權限」）。（無單位卡） | 17 | 16 | — |
 | `helper:case_roles` | L1 | 案件角色（caseRecord.roles 的 filler／sales／executor）的兩種形狀（CM3，2026-09-24）。（無單位卡） | 5 | 3 | — |
-| `helper:company_identity` | L1 | §9 QL · 一份單據要印的「公司身分」。（無單位卡） | 19 | 11 | — |
+| `helper:company_identity` | L1 | §9 QL · 一份單據要印的「公司身分」。（無單位卡） | 19 | 12 | — |
 | `helper:company_setup` | L1 | 本公司資料設定閘門：「這個安裝的本公司資料有沒有人確認過」（docs/platform/COMPANY-SETUP-GATE.md §3、§4.3、§6）。 | 66 | 7 | `tests/test_company_setup_core_2026_09_28.py`、`tests/test_company_setup_cli_2026_09_28.py`、`tests/test_company_setup_gate_2026_09_28.py`、`tests/test_company_setup_output_gate_2026_09_28.py` |
 | `helper:custom_builder_support` | L1 | 建構器底層支援（建構器第三輪 S2.5／S3／S5，CORE 1.72，只增）。 | 19 | 3 | `tests/test_builder_support_2026_09_30.py` |
 | `helper:custom_fields` | L1 | 自訂欄位命名空間（P4，CUSTOMIZATION-SPEC §3.6）。（無單位卡） | 10 | 2 | — |
