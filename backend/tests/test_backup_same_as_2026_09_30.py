@@ -190,7 +190,13 @@ def test_a_corrupt_database_is_never_treated_as_unchanged(arch, tmp_path):
     # 「壞了、但整張表照樣讀得出來」：只有 quick_check 抓得到（而不是雜湊時丟例外）——這才是 S-CD02 要守的縫
     bad = tmp_path / "bad.db"
     raw = bytearray(good.read_bytes())
-    raw[-4092:-4088] = struct.pack(">I", 0xFFFFFFF0)                 # 改最後一頁的頁首
+    for pg in range(1, len(raw) // 4096):                            # 找一個有 freeblock 的資料頁，把 freeblock 指標改成頁首內
+        o = pg * 4096
+        if raw[o] == 0x0D and struct.unpack(">H", raw[o + 1:o + 3])[0]:
+            raw[o + 1:o + 3] = struct.pack(">H", 5)
+            break
+    else:
+        pytest.fail("造不出測試用的壞庫（沒有含 freeblock 的資料頁）")
     bad.write_bytes(bytes(raw))
     c = sqlite3.connect(str(bad))
     try:
