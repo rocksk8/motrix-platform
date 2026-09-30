@@ -356,6 +356,13 @@ from helpers.audit import _MODULE_LABELS as _AUDIT_MODULE_LABELS  # noqa: E402
 from helpers.audit import _FAIL_REASON_LABELS as _AUDIT_FAIL_LABELS  # noqa: E402
 
 
+def _audit_counts_since(since_ts: str) -> str:
+    """module-counts 的 `since`（ISO 字串）不可早於今天往前 `_AUDIT_COUNTS_MAX_DAYS` 天（更早的一律當作那一天）。"""
+    from datetime import datetime, timedelta
+    floor = (datetime.now() - timedelta(days=_AUDIT_COUNTS_MAX_DAYS)).isoformat()
+    return since_ts if since_ts >= floor else floor
+
+
 @router.post("/api/audit-log/module-counts")
 def audit_module_counts(body: dict = Body(...), authorization: str = Header(None)):
     """Return per-module count of audit_log entries after given timestamps, excluding the caller's own actions."""
@@ -377,8 +384,11 @@ def audit_module_counts(body: dict = Body(...), authorization: str = Header(None
             if not prefixes or not since_ts:
                 result[mod_key] = 0
                 continue
-            conds = " OR ".join("action LIKE ?" for _ in prefixes)
-            params = [p + "%" for p in prefixes] + [since_ts, user["username"]]
+            # 前綴比對改「範圍」（action >= 前綴 AND action < 前綴+1）：LIKE 前綴在預設大小寫不敏感下用不到索引（百萬列 11 秒）
+            conds = " OR ".join("(action >= ? AND action < ?)" for _ in prefixes)
+            params = [x for p in prefixes for x in (p, p[:-1] + chr(ord(p[-1]) + 1))]
+            since_ts = _audit_counts_since(since_ts)                # 最多往前 90 天：避免無界掃描
+            params += [since_ts, user["username"]]
             excl = _MODULE_EXCLUDE_ACTIONS.get(mod_key, ())
             if excl:
                 excl_ph = ", ".join("?" for _ in excl)
@@ -400,6 +410,9 @@ def audit_module_counts(body: dict = Body(...), authorization: str = Header(None
 _AUDIT_TEXT_MAX = 100          # 每個文字篩選值最多 100 字（超過截斷，不報錯）
 _AUDIT_OFFSET_MAX = 10000      # 舊的 offset 分頁最多跳 1 萬列（＝總數上限）；更深請用 before_id（keyset）
 _AUDIT_COUNT_CAP = 10000       # 「總數」最多數到 1 萬（超過回 10000＋totalCapped），不對全表 COUNT(*)
+_AUDIT_TREE_DEFAULT_DAYS = 90  # 分層樹沒給日期 ⇒ 預設看近 90 天（百萬列時無日期的 GROUP BY 要 10 秒以上）
+_AUDIT_TREE_MAX_DAYS = 366     # 分層樹的時間窗最長 366 天；超過就截成最近 366 天並在回應標 clamped
+_AUDIT_COUNTS_MAX_DAYS = 90    # module-counts 的 since 最多往前 90 天
 
 
 def _like_escape(s: str) -> str:
@@ -493,6 +506,26 @@ def list_audit_log(
             "next_before_id": items[-1]["id"] if len(items) == limit else None}
 
 
+def _audit_tree_window(date_from, date_to):
+    """分層樹的時間窗（YYYY-MM-DD，含頭尾）：沒給日期 ⇒ 近 `_AUDIT_TREE_DEFAULT_DAYS` 天；日期格式錯 ⇒ 400；
+    跨度超過 `_AUDIT_TREE_MAX_DAYS` ⇒ 只取最近那段並 `clamped: true`（畫面據此提示「已縮到上限」）。"""
+    from datetime import date, timedelta
+    def _d(v, name):
+        try:
+            return date.fromisoformat((v or "")[:10])
+        except ValueError:
+            raise HTTPException(400, "%s 格式錯誤，需為 YYYY-MM-DD" % name)
+    end = _d(date_to, "date_to") if date_to else date.today()
+    start = _d(date_from, "date_from") if date_from else end - timedelta(days=_AUDIT_TREE_DEFAULT_DAYS)
+    if start > end:
+        raise HTTPException(400, "date_from 不可晚於 date_to")
+    clamped = (end - start).days > _AUDIT_TREE_MAX_DAYS
+    if clamped:
+        start = end - timedelta(days=_AUDIT_TREE_MAX_DAYS)
+    return {"from": start.isoformat(), "to": end.isoformat(), "defaultDays": _AUDIT_TREE_DEFAULT_DAYS,
+            "maxDays": _AUDIT_TREE_MAX_DAYS, "clamped": clamped, "defaulted": not (date_from or date_to)}
+
+
 @router.get("/api/audit-log/tree")
 def audit_log_tree(
     level: str = "module",
@@ -512,9 +545,19 @@ def audit_log_tree(
     col = {"module": "module", "case": "case_no", "ref": "ref_no"}.get(level)
     if col is None:
         raise HTTPException(400, "level 只能是 module／case／ref")
+    window = _audit_tree_window(date_from, date_to)
     conn = get_db()
     try:
-        where, params = _audit_filters(module, case_no, ref_no, user, action, date_from, date_to, result, None)
+        where, params = _audit_filters(module, case_no, ref_no, user, action, window["from"], window["to"], result, None)
+        # 加一個 **id 範圍**收窄掃描：`at` 條件單獨會讓 SQLite 走 idx_audit_at 再逐列回表（100 萬列 1.7～4.7 秒）。
+        # id 上下界各一次索引查詢取得：窗內每一列的 id 必定落在 [MIN(id where at>=起), MAX(id where at<迄)] 之內（與資料是否依時間遞增無關），
+        # `at` 條件仍保留 ⇒ 結果恆正確；稽核列依寫入順序遞增（正式機如此）時掃描量就是窗內那一段，不是全表。
+        lo = conn.execute("SELECT MIN(id) FROM audit_log WHERE at >= ?", (window["from"],)).fetchone()[0]
+        hi = conn.execute("SELECT MAX(id) FROM audit_log WHERE at < ?", (window["to"] + "T99",)).fetchone()[0]
+        if lo is None or hi is None or lo > hi:
+            return {"level": level, "items": [], "window": window}
+        where += ["id>=?", "id<=?"]
+        params += [lo, hi]
         cond = ("WHERE " + " AND ".join(where)) if where else ""
         rows = conn.execute(
             f"SELECT {col} AS k, COUNT(*) AS n, SUM(result='fail') AS f, MAX(id) AS last_id "
@@ -529,7 +572,7 @@ def audit_log_tree(
         label = (_AUDIT_MODULE_LABELS.get(k, k) if level == "module" else k) or "其他"
         out.append({"key": k or ("other" if level == "module" else ""), "label": label, "count": r["n"],
                     "failCount": r["f"] or 0, "lastAt": last_at.get(r["last_id"])})
-    return {"level": level, "items": out}
+    return {"level": level, "items": out, "window": window}
 
 
 @router.get("/api/audit-log/failures/summary")
