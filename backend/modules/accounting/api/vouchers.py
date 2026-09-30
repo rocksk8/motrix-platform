@@ -65,6 +65,18 @@ from modules.accounting.voucher import (
 _log = logging.getLogger(__name__)
 
 
+def _system_generated_reason(v):
+    """系統產生的傳票（總帳引擎的自動草稿 `kind='auto'`、反向傳票 `kind='reversal'`、獎金入帳 `origin='bonus_*'`）不可以從傳票頁直接作廢：
+    直接作廢會讓它和來源單據脫鉤（來源還在、帳上沒了，引擎又會依來源再產生一次，或永遠對不上）。
+    更正的路：回到來源單據修改（引擎偵測來源變動，已過帳的產生反向草稿與新草稿），或在『總帳作業』處理該事件。⇒ 回傳說明字串；一般傳票回 ''。"""
+    kind, origin = (v.get("kind") or ""), str(v.get("origin") or "")
+    if kind == "auto" or kind == "reversal" or origin.startswith("bonus"):
+        label = {"auto": "總帳引擎產生的自動傳票", "reversal": "總帳引擎產生的反向傳票"}.get(kind, "獎金入帳產生的傳票")
+        return ("這張是%s，不能從傳票頁直接作廢（作廢後會和來源單據脫鉤）。"
+                "要更正請回到來源單據修改，系統會自動產生反向傳票與新草稿；或到「總帳作業」處理對應的事件。" % label)
+    return ""
+
+
 def _mail_safe(fn, *args):
     """通知信是附帶動作：任何例外只記 log，不可以讓簽核動作失敗。"""
     try:
@@ -878,6 +890,9 @@ def void_voucher(voucher_id: int, body: dict = Body(default={}),
     conn = get_db()
     try:
         cur = _load(conn, voucher_id)    # 已作廢的會在這裡被擋掉
+        why = _system_generated_reason(cur)
+        if why:                          # L9（W2 寫入串接矩陣）：系統產生的傳票不能從傳票頁作廢，要回來源或走反向
+            raise HTTPException(409, why)
         # 總帳 P1：已過帳傳票落在已結帳／鎖定期間 ⇒ 不可作廢，改開沖轉傳票或先重開期間（DB 觸發器是第三層）
         if cur["status"] == "已過帳":
             if user.get("role") != "superadmin":       # B：已過帳傳票的作廢只有最高管理者（未過帳的照舊）

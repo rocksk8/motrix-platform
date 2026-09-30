@@ -58,17 +58,18 @@
 
       <div class="lp-card" x-show="requests.length" data-testid="lp-requests">
         <div class="lp-h">總帳申請</div>
-        <div class="lp-note">結帳、重開期間、年度決算、期初批次由財務人員送申請，最高管理者（會計主管）到「待我簽核」核准後自動執行；申請人可在核准前撤回。</div>
+        <div class="lp-note">結帳、重開期間、年度決算、期初批次由財務人員送申請，最高管理者（會計主管）到「待我簽核」簽核，核准後自動執行；申請人可在簽核前撤回。被退回的申請可以修改內容後重新申請（回到上面的期間列再按一次）。</div>
         <table class="lp-table">
-          <thead><tr><th>申請號</th><th>內容</th><th>申請人</th><th>狀態</th><th>說明</th><th></th></tr></thead>
+          <thead><tr style="white-space:nowrap"><th>申請號</th><th>內容</th><th>申請人／時間</th><th>狀態</th><th>決定人／時間</th><th>說明</th><th></th></tr></thead>
           <tbody>
             <template x-for="r in requests" :key="r.id">
               <tr :data-testid="'lp-req-' + r.request_no">
                 <td x-text="r.request_no"></td>
                 <td x-text="r.label"></td>
-                <td x-text="r.requested_by_display || r.requested_by"></td>
+                <td x-text="(r.requested_by_display || r.requested_by) + '　' + String(r.requested_at || '').replace('T', ' ').slice(0, 16)"></td>
                 <td x-text="r.status_label" :data-testid="'lp-req-status-' + r.request_no"></td>
-                <td x-text="r.decision_note || (r.decided_by ? r.decided_by : '')"></td>
+                <td x-text="r.decided_by ? (r.decided_by + '　' + String(r.decided_at || '').replace('T', ' ').slice(0, 16)) : ''"></td>
+                <td x-text="r.status === '已撤回' ? '申請人撤回' : (r.status === '已退回' ? ((r.decision_note || '') + '（可修改後重新申請）') : (r.status === '已核准' ? '已自動執行' : (r.decision_note || '')))"></td>
                 <td><button class="lp-btn" x-show="canWithdraw(r)" @click="withdrawReq(r)" :data-testid="'lp-req-withdraw-' + r.request_no">撤回</button></td>
               </tr>
             </template>
@@ -108,8 +109,8 @@
                   </td>
                   <td x-text="p.closed_by ? (p.closed_by + '　' + (p.closed_at || '').slice(0, 16).replace('T', ' ')) : ''"></td>
                   <td style="text-align:right">
-                    <button class="lp-btn" x-show="p.status === 'open'" @click="openClose(p)" data-testid="lp-close">結帳</button>
-                    <button class="lp-btn" x-show="p.status === 'closed'" @click="openReopen(p)" data-testid="lp-reopen">重開</button>
+                    <button class="lp-btn" x-show="p.status === 'open'" :disabled="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id)" @click="openClose(p)" x-text="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id) ? '申請審核中' : '結帳'" data-testid="lp-close">結帳</button>
+                    <button class="lp-btn" x-show="p.status === 'closed'" :disabled="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id)" @click="openReopen(p)" x-text="requests.some(r => r.status === '待審核' && r.params && r.params.period_id === p.id) ? '申請審核中' : '重開'" data-testid="lp-reopen">重開</button>
                     <button class="lp-btn" x-show="p.status === 'closed' && isSuper()" @click="lock(p)" data-testid="lp-lock">鎖定</button>
                     <button class="lp-btn" x-show="p.status === 'locked' && isSuper()" @click="openUnlock(p)" data-testid="lp-unlock">解鎖</button>
                   </td>

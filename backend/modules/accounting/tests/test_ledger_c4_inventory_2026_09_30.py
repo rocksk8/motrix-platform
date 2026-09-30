@@ -121,12 +121,30 @@ def test_provider_emits_stock_out_events_without_amounts(conn):
     assert not [e for e in G.gl_events("2176-04-01", "2176-04-30")["events"] if e["event_code"] == "E10" and e["stock_part_no"] == p]
 
 
-def test_provider_reports_void_items_instead_of_silently_skipping(conn):
+def test_provider_emits_scrap_events_for_void_items(conn):
+    """L10：報廢（void，終態）不再只是 notice——產生 E10 報廢事件（借存貨盤損、依移動加權平均減存貨）。"""
+    p = _part()
+    ids = _stock(conn, p, 2, 100, "PO-" + p)
+    conn.execute("UPDATE stock_items SET status='void', updated_at='2176-03-15T00:00:00' WHERE id=?", (ids[0],))
+    conn.commit()
+    res = G.gl_events("2176-03-01", "2176-03-31")
+    (ev,) = [e for e in res["events"] if e["source_type"] == "stock_scrap" and e["stock_part_no"] == p]
+    assert (ev["event_code"], ev["mode"], ev["stock_qty"], ev["event_date"], ev["meta"]["via"]) == ("E10", "stock", 1, "2176-03-15", "scrap") and "lines" not in ev
+    assert C.validate_event(ev) == []
+    assert not [e for e in G.gl_events("2176-04-01", "2176-04-30")["events"] if e["source_type"] == "stock_scrap" and e["stock_part_no"] == p]
+    assert "尚未自動入帳" not in res["notice"]
+
+
+def test_editing_a_scrapped_items_note_does_not_move_its_scrap_date(client, make_user, conn):
     p = _part()
     ids = _stock(conn, p, 1, 100, "PO-" + p)
     conn.execute("UPDATE stock_items SET status='void', updated_at='2176-03-15T00:00:00' WHERE id=?", (ids[0],))
     conn.commit()
-    assert "作廢" in G.gl_events("2176-03-01", "2176-03-31")["notice"]
+    u, pw = make_user(username="l10note%d" % id(client), role="superadmin")
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
+    r = client.post("/api/inventory/stock-items/%d/adjust" % ids[0], headers=h, json={"action": "edit_note", "note": "補註記"})
+    assert r.status_code == 200
+    assert conn.execute("SELECT updated_at FROM stock_items WHERE id=?", (ids[0],)).fetchone()[0].startswith("2176-03-15")
 
 
 # ── 引擎整合 ────────────────────────────────────────────────────────────
@@ -218,3 +236,23 @@ def test_voiding_the_engine_draft_releases_the_chain(conn):
     conn.commit()
     (row,) = _e10_rows(conn, p)
     assert row["status"] == "rejected" and INV.state(conn, p) == (2, 200)             # 傳票被作廢 ⇒ 存貨鏈不留下沒有分錄的出庫
+
+
+def test_engine_scrap_reduces_inventory_and_debits_the_loss_role(conn):
+    p = _part()
+    ids = _stock(conn, p, 4, 100, "PO-" + p)                              # 4 件、400
+    conn.execute("UPDATE stock_items SET status='void', updated_at='2176-03-20T00:00:00' WHERE id=?", (ids[0],))
+    conn.commit()
+    E.run(conn, "2176-03-01", "2176-03-31", "acc")
+    conn.commit()
+    (row,) = [r for r in _e10_rows(conn, p) if "stock_scrap" in r["source_type"]]
+    assert row["status"] == "drafted" and row["amount"] == 100
+    lines = _voucher_lines(conn, row["voucher_id"])
+    from modules.accounting.ledger import roles as ROLES
+    loss = ROLES.resolve_role(conn, "INV_LOSS")
+    loss = loss["code"] if isinstance(loss, dict) else loss
+    assert lines[0][1] == 100 and lines[1][2] == 100 and lines[0][0] == loss                       # 借存貨盤損、貸存貨
+    assert INV.state(conn, p) == (3, 300)
+    again = E.run(conn, "2176-03-01", "2176-03-31", "acc")
+    conn.commit()
+    assert again["stats"]["created"] == 0 and INV.state(conn, p) == (3, 300)                       # 冪等

@@ -68,7 +68,8 @@ def test_finance_requests_withdraws_then_superadmin_approves_and_it_executes(liv
     req = _q("SELECT id, request_no, status FROM gl_action_requests WHERE requested_by=? ORDER BY id DESC", fu)
     assert req["status"] == "待審核" and _q("SELECT status FROM gl_periods WHERE id=?", pid)[0] == "open"      # 終點：申請成立、期間沒動
     page.wait_for_selector("[data-testid=lp-req-%s]" % req["request_no"], state="visible")
-    assert "待核准" in page.locator("[data-testid=lp-req-status-%s]" % req["request_no"]).inner_text()
+    assert "待簽核" in page.locator("[data-testid=lp-req-status-%s]" % req["request_no"]).inner_text()
+    assert page.locator("[data-testid=lp-close]").first.is_disabled() and "申請審核中" in page.locator("[data-testid=lp-close]").first.inner_text()      # 有待簽核的申請 ⇒ 該期間不能再按結帳
     _shot(page, "requests_1_finance_pending")
 
     page.locator("[data-testid=lp-req-withdraw-%s]" % req["request_no"]).click()                              # 撤回

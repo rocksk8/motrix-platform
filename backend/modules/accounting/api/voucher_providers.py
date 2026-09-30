@@ -50,14 +50,38 @@ from modules.accounting.api.voucher_common import _amount_lines, _line_sources, 
 # ── 連接器 IP-2 voucher.draft（docs/platform/INTEGRATION-POINTS.md，契約版本 1）───────────
 # 別組（例：M07 獎金）要開傳票草稿時走這裡，不 import 本檔的私有函式。
 # 在呼叫端的交易裡寫入，**不 commit**；科目有效性由呼叫端先用 voucher.account_check 檢查。
-def _provide_voucher_draft(conn, *, voucher_date, summary, lines, created_by, now, origin=""):
+def _provide_voucher_draft(conn, *, voucher_date="", summary, lines=None, created_by, now, origin="", reverses_voucher_id=None):
     """lines：[{account_code, summary, debit, credit}]。回 {"id", "voucher_no"}。
-    `origin`（選填，總帳 P1 加，契約仍是版本 1）：產生來源標記（例 bonus_accrual），總帳引擎據此辨識既有自動傳票、不重複產生。"""
+    `origin`（選填，總帳 P1 加，契約仍是版本 1）：產生來源標記（例 bonus_accrual），總帳引擎據此辨識既有自動傳票、不重複產生。
+    `reverses_voucher_id`（選填，2026-09-30 加，契約仍是版本 1；獎金更正單）：給了 ⇒ 依那張**已過帳**傳票存的分錄組出反向草稿
+    （借貸互換），`kind='reversal'`、`reverses_no`＝原單號；`voucher_date` 沒給就用今天；`lines` 忽略。
+    不能做時**不丟例外**，回 `{"blocked": "<原因>"}`：原傳票不存在／未過帳／已作廢／已被未作廢的反向傳票沖過，或日期落在已結帳／鎖定期間。"""
+    if reverses_voucher_id is not None:
+        return _reversal_draft(conn, int(reverses_voucher_id), voucher_date or str(now)[:10], summary, created_by, now, origin)
     norm = _line_sources(_amount_lines(lines))
     vid, no = insert_draft_voucher(conn, voucher_date, summary, norm, created_by, now,
                                    classify_category(conn, norm))
     if origin:
         conn.execute("UPDATE vouchers_all SET origin=? WHERE id=?", (str(origin)[:40], vid))
+    return {"id": vid, "voucher_no": no}
+
+
+def _reversal_draft(conn, orig_id, date, summary, created_by, now, origin):
+    o = conn.execute("SELECT id, voucher_no, status, voided_at FROM vouchers_all WHERE id=?", (orig_id,)).fetchone()
+    if o is None or o["voided_at"]:
+        return {"blocked": "原傳票不存在或已作廢，不能沖轉。"}
+    if o["status"] != "已過帳":
+        return {"blocked": "原傳票 %s 目前是「%s」，只有已過帳的傳票才能沖轉。" % (o["voucher_no"], o["status"])}
+    if conn.execute("SELECT 1 FROM vouchers_all WHERE reverses_no=? AND kind='reversal' AND COALESCE(voided_at,'')=''", (o["voucher_no"],)).fetchone():
+        return {"blocked": "原傳票 %s 已經有沖轉傳票了。" % o["voucher_no"]}
+    lock = _ledger_periods.lock_error(conn, date)
+    if lock:
+        return {"blocked": lock + "請先重開該期間，或改用開放期間的日期。"}
+    rows = conn.execute("SELECT account_code, summary, debit, credit FROM voucher_lines WHERE voucher_id=? ORDER BY line_no", (orig_id,)).fetchall()
+    mirror = [{"account_code": r["account_code"], "summary": r["summary"] or "", "debit": r["credit"] or 0, "credit": r["debit"] or 0} for r in rows]
+    norm = _line_sources(_amount_lines(mirror))
+    vid, no = insert_draft_voucher(conn, date, summary or ("沖轉 %s" % o["voucher_no"]), norm, created_by, now, classify_category(conn, norm))
+    conn.execute("UPDATE vouchers_all SET kind='reversal', reverses_no=?, origin=? WHERE id=?", (o["voucher_no"], str(origin or "")[:40], vid))
     return {"id": vid, "voucher_no": no}
 
 
@@ -93,11 +117,13 @@ def _provide_voucher_status(conn, voucher_id):
 def _provide_voucher_by_no(conn, voucher_no):
     """IP-4 追加 `voucher.by_no`（2026-09-29，勞報單付款回填傳票單號用）：以傳票單號查。
     回 {"id", "voucher_no", "status", "voided"}；不存在 ⇒ None。唯讀。"""
-    v = conn.execute("SELECT id, voucher_no, status, voided_at FROM vouchers_all WHERE voucher_no = ?",
+    v = conn.execute("SELECT id, voucher_no, status, voided_at, kind, origin, gl_event_id FROM vouchers_all WHERE voucher_no = ?",
                      (str(voucher_no or "").strip(),)).fetchone()
     if v is None:
         return None
-    return {"id": v["id"], "voucher_no": v["voucher_no"], "status": v["status"], "voided": bool(v["voided_at"])}
+    # `system_generated`（2026-09-30 追加，L6）：總帳引擎／獎金入帳產生的傳票（不是人手開的）；來源模組據此判斷「這張是不是手工傳票」
+    system = (v["kind"] or "") in ("auto", "reversal") or bool(v["gl_event_id"]) or str(v["origin"] or "").startswith("bonus")
+    return {"id": v["id"], "voucher_no": v["voucher_no"], "status": v["status"], "voided": bool(v["voided_at"]), "system_generated": system}
 
 
 # （提供者改由 modules/accounting/__init__.py 的 ModuleSpec.providers 宣告：voucher.void_draft）

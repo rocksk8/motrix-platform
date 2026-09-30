@@ -70,7 +70,7 @@ def submit(user, action, params, authorization):
     _audit(_tok(authorization), "ledger.request.create", "gl_action_requests", row["request_no"], "送出總帳申請：%s" % row["label"])
     _mail(_notify.notify_ledger_action_submitted, row["request_no"], row["label"], row["requested_by_display"], supers)
     return {"ok": True, "pending": True, "request_no": row["request_no"], "request_id": row["id"],
-            "message": "已送出申請 %s（%s），待最高管理者（會計主管）核准後自動執行。" % (row["request_no"], row["label"])}
+            "message": "已送出申請 %s（%s），待簽核：由最高管理者（會計主管）核准後自動執行。" % (row["request_no"], row["label"])}
 
 
 @router.get("")
@@ -109,7 +109,7 @@ def approve(request_id: int, authorization: str = Header(None)):
             raise _http(exc)
         except Exception as exc:  # noqa: BLE001  服務層的資料庫錯誤（例如觸發器）⇒ 說明原因，申請維持待核准
             conn.rollback()
-            raise HTTPException(409, "執行失敗，申請仍待核准：%s" % exc)
+            raise HTTPException(409, "執行失敗，申請仍是待簽核：%s" % exc)
         conn.commit()
     finally:
         conn.close()
@@ -155,7 +155,7 @@ def withdraw(request_id: int, authorization: str = Header(None)):
 
 
 def queue_items(conn) -> list:
-    """`approval.queue_items`：待核准的總帳申請（`type`＝`ledger_action`）。簽核層＝單層、全部在職最高管理者。"""
+    """`approval.queue_items`：待簽核的總帳申請（`type`＝`ledger_action`）。簽核層＝單層、全部在職最高管理者。"""
     from helpers import approval_queue as _aq
     supers = [{"username": r["username"], "displayName": r["display_name"] or r["username"], "status": "pending"}
               for r in conn.execute("SELECT username, display_name FROM users WHERE role='superadmin' AND active=1 ORDER BY id")]

@@ -10,7 +10,8 @@
 只讀，不寫資料。
 - E10 出庫成本（出貨單核准 shipped、案件序號認領 installed）：來源只回『料號、件數、案件、日期』（mode=stock，不帶金額）；
   金額由引擎依移動加權平均（`ledger/inventory.py`）算出並組成 借營業成本（依案件）／貸存貨。退回入庫（狀態回 in_stock）⇒ 事件消失 ⇒ 引擎以原金額回沖。
-  報廢／盤損（void）尚未入帳：notice 提醒手工傳票。
+  報廢（void，終態）＝出庫的一種：同樣依移動加權平均算金額，但借 存貨盤損（`INV_LOSS`）不借營業成本（來源鍵＝料號＋報廢日，`meta.via='scrap'`，L10）。
+  ⚠️ 報廢日取 `stock_items.updated_at`（來源沒有獨立的報廢時間欄）；報廢後不會再被改備註動到日期（inventory.py 對 void 件不更新時間）。
 """
 from db import get_db
 from helpers.legal_params import round_half_up
@@ -39,7 +40,7 @@ def gl_events(start, end, *, changed_since=""):
         conn.close()
     events, notices = [], []
     zero = est = 0
-    scrap_n, out_events = _stock_out(start, end)
+    out_events = _stock_out(start, end)
     events += out_events
     for r in rows:
         cost = _i(r["total"])
@@ -77,8 +78,6 @@ def gl_events(start, end, *, changed_since=""):
                 "source_type": "stock_batch_payment", "source_key": r["batch_no"], "event_code": "E09", "event_date": pd, "doc_no": r["batch_no"],
                 "case_no": "", "party": party, "tax_code": "", "mode": "snapshot",
                 "lines": [{"role": "AP", "side": "D", "amount": pay, "memo": memo}, bank], "meta": {"tax_estimated": bool(tax), "est_tax": tax}})
-    if scrap_n:
-        notices.append("%d 件庫存於期間內被標為作廢（報廢／盤損）：尚未自動入帳，請會計以手工傳票（借存貨損失／貸存貨）處理。" % scrap_n)
     if zero:
         notices.append("%d 個進貨批次的成本合計為 0：不產生分錄（請補成本）。" % zero)
     if est:
@@ -87,7 +86,7 @@ def gl_events(start, end, *, changed_since=""):
 
 
 def _stock_out(start, end):
-    """出庫事件（mode=stock）與期間內被標為作廢的件數。"""
+    """出庫事件（mode=stock）：出貨單核准、案件序號認領、報廢（L10）。"""
     conn = get_db()
     try:
         shipped = conn.execute(
@@ -96,7 +95,8 @@ def _stock_out(start, end):
         claimed = conn.execute(
             "SELECT quote_no, part_no, substr(consumed_at,1,10) AS d, COUNT(*) AS qty FROM stock_items "
             "WHERE status='installed' AND consumed_at<>'' GROUP BY quote_no, part_no, substr(consumed_at,1,10)").fetchall()
-        scrap = conn.execute("SELECT COUNT(*) FROM stock_items WHERE status='void' AND substr(updated_at,1,10) BETWEEN ? AND ?", (start, end)).fetchone()[0]
+        scrapped = conn.execute(
+            "SELECT part_no, substr(updated_at,1,10) AS d, COUNT(*) AS qty FROM stock_items WHERE status='void' AND updated_at<>'' GROUP BY part_no, substr(updated_at,1,10)").fetchall()
     finally:
         conn.close()
     out = []
@@ -112,4 +112,10 @@ def _stock_out(start, end):
             out.append({"source_type": "stock_issue_claim", "source_key": "%s::%s::%s" % (r["quote_no"], r["part_no"], d), "event_code": "E10",
                         "event_date": d, "doc_no": r["quote_no"] or "", "case_no": r["quote_no"] or "", "party": {"key": "", "name": ""},
                         "tax_code": "", "mode": "stock", "stock_part_no": r["part_no"], "stock_qty": int(r["qty"]), "meta": {"via": "claim"}})
-    return int(scrap or 0), out
+    for r in scrapped:                                                  # L10：報廢（void，終態）⇒ 依移動加權平均把存貨減下來，借存貨盤損（INV_LOSS）
+        d = r["d"] or ""
+        if d and start <= d <= end:
+            out.append({"source_type": "stock_scrap", "source_key": "%s::%s" % (r["part_no"], d), "event_code": "E10", "event_date": d,
+                        "doc_no": r["part_no"], "case_no": "", "party": {"key": "", "name": ""}, "tax_code": "", "mode": "stock",
+                        "stock_part_no": r["part_no"], "stock_qty": int(r["qty"]), "meta": {"via": "scrap"}})
+    return out
