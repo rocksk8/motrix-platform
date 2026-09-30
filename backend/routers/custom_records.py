@@ -115,8 +115,11 @@ def list_custom_records(key: str, status: str = Query(None), field: str = Query(
     conn = get_db()
     try:
         _can_use(conn, u, key)
+        body = _can_use(conn, u, key)["body"]
+        if field and field in SUP.hidden_keys(body, u):        # 用看不到的欄位篩選＝可以反推它的值 ⇒ 擋（不洩漏欄位存在，與不存在的欄位同一句）
+            raise HTTPException(400, "沒有這個欄位可以篩選：%s" % field)
         rows = CM.list_records(conn, key, status=status, field=field, value=value)
-        return SUP.mask_records(rows, _can_use(conn, u, key)["body"], u)
+        return SUP.mask_records(rows, body, u)
     finally:
         conn.close()
 

@@ -113,3 +113,16 @@ def test_menu_visible_to_also_blocks_direct_api_calls_but_not_the_approver_path(
     b2 = _body()
     assert _publish(client, hb, b2) == []
     assert client.get("/api/custom/%s/meta" % KEY, headers=hs).status_code == 200
+
+
+def test_filtering_by_a_hidden_field_is_refused_so_its_value_cannot_be_probed(client, make_user):
+    hb = _login(client, make_user, "b3e_boss", role="superadmin")
+    hs = _login(client, make_user, "b3e_staff", modules=["custom." + KEY])
+    assert _publish(client, hb, _body()) == []
+    client.post("/api/custom/%s/records" % KEY, headers=hb, json={"values": {"title": "T", "secret": "needle"}})
+    hit = client.get("/api/custom/%s/records" % KEY, headers=hb, params={"field": "secret", "value": "needle"})
+    assert hit.status_code == 200 and len(hit.json()) == 1                       # 看得到的人照常能篩
+    miss = client.get("/api/custom/%s/records" % KEY, headers=hs, params={"field": "secret", "value": "needle"})
+    assert miss.status_code == 400 and "needle" not in miss.text                  # 看不到的人不能拿它當探針
+    ok = client.get("/api/custom/%s/records" % KEY, headers=hs, params={"field": "title", "value": "T"})
+    assert ok.status_code == 200 and len(ok.json()) == 1
