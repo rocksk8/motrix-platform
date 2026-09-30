@@ -2,20 +2,21 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 803,
-  "unmapped": 10,
+  "tests": 841,
+  "unmapped": 11,
   "kinds": {
-   "api": 424,
-   "e2e": 190,
-   "audit": 113,
-   "unit": 76
+   "api": 448,
+   "e2e": 195,
+   "audit": 119,
+   "unit": 79
   },
-  "routes": 610
+  "routes": 655
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
   "backend/tests/platform/test_deploy_dashboard_health.py",
   "backend/tests/platform/test_deploy_dashboard_jobs.py",
+  "backend/tests/platform/test_deploy_dashboard_scope_gate_2026_09_30.py",
   "backend/tests/platform/test_stepfile_drill_2026_09_30.py",
   "backend/tests/test_approval_queue_extra_types_2026_09_30.py",
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py",
@@ -332,6 +333,54 @@
     ]
    },
    "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_ledger_p1_pages_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:accounting/api/ledger_closing",
+    "mod:accounting/api/ledger_engine",
+    "mod:accounting/api/ledger_periods",
+    "mod:accounting/api/ledger_reports",
+    "mod:accounting/api/ledger_settings",
+    "mod:accounting/api/ledger_statements",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/periods",
+    "page:pages/ledger-hub.html",
+    "page:pages/ledger-periods.html",
+    "page:pages/ledger-reports.html",
+    "page:pages/ledger-settings.html",
+    "page:pages/ledger-statements.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/periods.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_closing.py",
+     "backend/modules/accounting/api/ledger_engine.py",
+     "backend/modules/accounting/api/ledger_periods.py",
+     "backend/modules/accounting/api/ledger_reports.py",
+     "backend/modules/accounting/api/ledger_settings.py",
+     "backend/modules/accounting/api/ledger_statements.py"
+    ],
+    "page": [
+     "frontend/pages/ledger-hub.html",
+     "frontend/pages/ledger-periods.html",
+     "frontend/pages/ledger-reports.html",
+     "frontend/pages/ledger-settings.html",
+     "frontend/pages/ledger-statements.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
    "module": "accounting"
   },
   "backend/modules/accounting/tests/test_e2e_t100_unconfirm_2026_09_10.py": {
@@ -691,15 +740,13 @@
    "units": [
     "dir:backend/modules/",
     "dir:backend/modules/accounting/",
-    "dir:backend/modules/accounting/api/",
-    "mod:accounting/api/vouchers"
+    "dir:backend/modules/accounting/api/"
    ],
    "evidence": {
     "path": [
      "backend/modules/",
      "backend/modules/accounting/",
-     "backend/modules/accounting/api/",
-     "backend/modules/accounting/api/vouchers.py"
+     "backend/modules/accounting/api/"
     ],
     "module_dir": [
      "backend/modules/accounting/"
@@ -1009,6 +1056,342 @@
      "backend/modules/accounting/"
     ]
    },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_a_contract_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_engine",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/contract",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/contract.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_engine.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_b1_settings_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_reports",
+    "mod:accounting/api/ledger_settings",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/fs_lines",
+    "mod:accounting/ledger/roles"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/fs_lines.py",
+     "backend/modules/accounting/ledger/roles.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_reports.py",
+     "backend/modules/accounting/api/ledger_settings.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_b2_statements_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_statements",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/roles",
+    "mod:accounting/ledger/statements"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/roles.py",
+     "backend/modules/accounting/ledger/statements.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_statements.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_b3_equity_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_statements",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/equity",
+    "mod:accounting/ledger/opening",
+    "mod:accounting/ledger/periods",
+    "mod:accounting/ledger/roles"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/equity.py",
+     "backend/modules/accounting/ledger/opening.py",
+     "backend/modules/accounting/ledger/periods.py",
+     "backend/modules/accounting/ledger/roles.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_statements.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_b4_cashflow_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_statements",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/cashflow",
+    "mod:accounting/ledger/opening",
+    "mod:accounting/ledger/periods",
+    "mod:accounting/ledger/roles"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/cashflow.py",
+     "backend/modules/accounting/ledger/opening.py",
+     "backend/modules/accounting/ledger/periods.py",
+     "backend/modules/accounting/ledger/roles.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_statements.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_b5_closing_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_closing",
+    "mod:accounting/api/ledger_periods",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/closing",
+    "mod:accounting/ledger/export",
+    "mod:accounting/ledger/periods",
+    "mod:accounting/ledger/roles",
+    "mod:accounting/ledger/statements"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/closing.py",
+     "backend/modules/accounting/ledger/export.py",
+     "backend/modules/accounting/ledger/periods.py",
+     "backend/modules/accounting/ledger/roles.py",
+     "backend/modules/accounting/ledger/statements.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_closing.py",
+     "backend/modules/accounting/api/ledger_periods.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_base_schema_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_settings"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_settings.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_c1_engine_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_engine",
+    "mod:accounting/api/ledger_settings",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/contract",
+    "mod:accounting/ledger/engine",
+    "mod:accounting/ledger/periods",
+    "mod:accounting/ledger/reports",
+    "mod:accounting/ledger/roles",
+    "mod:arap/gl_events",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/contract.py",
+     "backend/modules/accounting/ledger/engine.py",
+     "backend/modules/accounting/ledger/periods.py",
+     "backend/modules/accounting/ledger/reports.py",
+     "backend/modules/accounting/ledger/roles.py",
+     "backend/modules/arap/gl_events.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_engine.py",
+     "backend/modules/accounting/api/ledger_settings.py",
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_c2_subcontract_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/contract",
+    "mod:accounting/ledger/engine",
+    "mod:accounting/ledger/roles",
+    "mod:subcontract/__init__",
+    "mod:subcontract/gl_events"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/contract.py",
+     "backend/modules/accounting/ledger/engine.py",
+     "backend/modules/accounting/ledger/roles.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/gl_events.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_p1_periods_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_periods",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/periods"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/periods.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_periods.py",
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_p1_reports_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_periods",
+    "mod:accounting/api/ledger_reports",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/opening",
+    "mod:accounting/ledger/periods",
+    "mod:accounting/ledger/reports",
+    "mod:accounting/ledger/roles",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/opening.py",
+     "backend/modules/accounting/ledger/periods.py",
+     "backend/modules/accounting/ledger/reports.py",
+     "backend/modules/accounting/ledger/roles.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_periods.py",
+     "backend/modules/accounting/api/ledger_reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
    "module": "accounting"
   },
   "backend/modules/accounting/tests/test_module_history_2026_09_23.py": {
@@ -1445,6 +1828,37 @@
     ]
    },
    "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_office_attachments_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "dir:frontend/pages/",
+    "helper:uploads",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/tests/test_voucher_pdf_export_2026_09_23",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/uploads.py",
+     "backend/modules/accounting/tests/test_voucher_pdf_export_2026_09_23.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "path": [
+     "frontend/pages/",
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
    "module": "accounting"
   },
   "backend/modules/accounting/tests/test_voucher_pdf_export_2026_09_23.py": {
@@ -3129,6 +3543,29 @@
    "login_fixture": true,
    "module": "arap"
   },
+  "backend/modules/arap/tests/test_invoice_voucher_upload_access_p0_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "file:backend/tests/_requires.py",
+    "router:uploads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/routers/uploads.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
   "backend/modules/arap/tests/test_module_permission_fixes_2026_09_13.py": {
    "kind": "api",
    "units": [
@@ -3554,6 +3991,38 @@
    },
    "module": "case"
   },
+  "backend/modules/case/tests/test_e2e_approval_queue_attachment_p0_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/tests/_e2e_login.py",
+    "helper:uploads",
+    "page:pages/approval-queue.html",
+    "router:uploads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/uploads.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/routers/uploads.py"
+    ],
+    "page": [
+     "frontend/pages/approval-queue.html"
+    ],
+    "path": [
+     "frontend/pages/approval-queue.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
   "backend/modules/case/tests/test_payreq_2026_09_27.py": {
    "kind": "api",
    "units": [
@@ -3585,6 +4054,35 @@
      "backend/modules/analytics/api/reports.py",
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_upload_access_p0_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/routers/__init__.py",
+    "helper:uploads",
+    "mod:case/api/completion_notes",
+    "router:approval_queue",
+    "router:uploads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/uploads.py",
+     "backend/routers/__init__.py",
+     "backend/routers/approval_queue.py"
+    ],
+    "api": [
+     "backend/modules/case/api/completion_notes.py",
+     "backend/routers/uploads.py"
     ],
     "module_dir": [
      "backend/modules/case/"
@@ -3764,6 +4262,27 @@
     ],
     "api": [
      "backend/modules/crm/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_dev_log_upload_access_p0_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "router:uploads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/routers/uploads.py"
     ],
     "module_dir": [
      "backend/modules/crm/"
@@ -6197,6 +6716,29 @@
    "login_fixture": true,
    "module": "subcontract"
   },
+  "backend/modules/subcontract/tests/test_dispatch_upload_access_p0_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
+    "router:uploads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/routers/uploads.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
   "backend/modules/subcontract/tests/test_e2e_case_open_requests_2026_09_24.py": {
    "kind": "e2e",
    "units": [
@@ -7069,6 +7611,33 @@
    "login_fixture": true,
    "module": "supply"
   },
+  "backend/modules/supply/tests/test_shipping_note_access_p0_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/supply/",
+    "file:backend/tests/_requires.py",
+    "helper:uploads",
+    "mod:supply/api/shipping_notes",
+    "router:uploads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/uploads.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/supply/api/shipping_notes.py",
+     "backend/routers/uploads.py"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "supply"
+  },
   "backend/modules/supply/tests/test_stock_batch_payment.py": {
    "kind": "api",
    "units": [
@@ -7839,6 +8408,7 @@
     ]
    },
    "unresolved_api": [
+    "/api/voucher_summary.py",
     "/api/vouchers.py"
    ]
   },
@@ -8146,6 +8716,58 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/platform/test_build_opt_2026_09_30.py": {
+   "kind": "audit",
+   "units": [
+    "dir:tools/platform/",
+    "file:backend/conftest.py",
+    "file:backend/tests/_subproc.py",
+    "file:backend/tests/test_version_manifest_unique_version_2026_09_25.py",
+    "file:backend/tools/build_deploy_package.ps1",
+    "file:backend/tools/build_test_reuse.py",
+    "file:tools/platform/build_preflight.py",
+    "file:tools/platform/flaky_retry.py",
+    "file:tools/platform/known_flakes.json",
+    "file:tools/platform/known_flakes.py",
+    "file:tools/platform/modtest.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/conftest.py",
+     "backend/tests/_subproc.py",
+     "backend/tools/build_test_reuse.py"
+    ],
+    "path": [
+     "backend/tests/test_version_manifest_unique_version_2026_09_25.py",
+     "backend/tools/build_deploy_package.ps1",
+     "tools/platform/",
+     "tools/platform/build_preflight.py",
+     "tools/platform/flaky_retry.py",
+     "tools/platform/known_flakes.json",
+     "tools/platform/known_flakes.py",
+     "tools/platform/modtest.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_cache_index_fresh.py": {
+   "kind": "audit",
+   "units": [
+    "dir:docs/platform/",
+    "file:docs/platform/CACHE-INDEX.md",
+    "file:docs/platform/CORE-SPEC.md",
+    "file:docs/platform/MODULE-GUIDE.md",
+    "file:docs/platform/PLAYBOOK.md"
+   ],
+   "evidence": {
+    "path": [
+     "docs/platform/",
+     "docs/platform/CACHE-INDEX.md",
+     "docs/platform/CORE-SPEC.md",
+     "docs/platform/MODULE-GUIDE.md",
+     "docs/platform/PLAYBOOK.md"
+    ]
+   }
   },
   "backend/tests/platform/test_case404.py": {
    "kind": "api",
@@ -8994,6 +9616,11 @@
     "/api/products"
    ]
   },
+  "backend/tests/platform/test_deploy_dashboard_scope_gate_2026_09_30.py": {
+   "kind": "unit",
+   "units": [],
+   "evidence": {}
+  },
   "backend/tests/platform/test_deploy_dashboard_upgrade.py": {
    "kind": "api",
    "units": [
@@ -9185,6 +9812,7 @@
   "backend/tests/platform/test_env_and_load_guards.py": {
    "kind": "audit",
    "units": [
+    "core:main",
     "dir:backend/tests/",
     "dir:backend/tests/platform/",
     "dir:backend/tools/",
@@ -9194,6 +9822,7 @@
    ],
    "evidence": {
     "path": [
+     "backend/main.py",
      "backend/tests/",
      "backend/tests/platform/",
      "backend/tools/",
@@ -9219,6 +9848,21 @@
      "tools/platform/",
      "tools/platform/fail_stream.py",
      "tools/platform/modtest.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_fail_stream_aborted_2026_09_30.py": {
+   "kind": "audit",
+   "units": [
+    "dir:tools/platform/",
+    "file:backend/pytest.ini",
+    "file:tools/platform/fail_stream.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/pytest.ini",
+     "tools/platform/",
+     "tools/platform/fail_stream.py"
     ]
    }
   },
@@ -10372,6 +11016,29 @@
     ]
    }
   },
+  "backend/tests/platform/test_money_flows_registered.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/",
+    "dir:docs/platform/",
+    "file:docs/platform/MONEY-FLOWS.md",
+    "file:docs/platform/money_flows.json",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "path": [
+     "backend/modules/",
+     "docs/platform/",
+     "docs/platform/MONEY-FLOWS.md",
+     "docs/platform/money_flows.json"
+    ]
+   }
+  },
   "backend/tests/platform/test_mustfix_closure_scan.py": {
    "kind": "unit",
    "units": [
@@ -10449,6 +11116,18 @@
      "backend/conftest.py",
      "backend/db.py",
      "backend/modules/"
+    ]
+   }
+  },
+  "backend/tests/platform/test_no_temp_files_in_shared_tests_dir_2026_09_30.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/tests/test_exception_detail_leak_2026_09_23.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/tests/platform/test_no_temp_files_in_shared_tests_dir_2026_09_30.py",
+     "backend/tests/test_exception_detail_leak_2026_09_23.py"
     ]
    }
   },
@@ -10648,6 +11327,23 @@
     "/api/zz-probe-rc/other_user",
     "/api/zz-someone-else"
    ]
+  },
+  "backend/tests/platform/test_prod_status_snapshot_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/tools/",
+    "file:backend/tools/prod_status_snapshot.py",
+    "router:auth"
+   ],
+   "evidence": {
+    "api": [
+     "backend/routers/auth.py"
+    ],
+    "path": [
+     "backend/tools/",
+     "backend/tools/prod_status_snapshot.py"
+    ]
+   }
   },
   "backend/tests/platform/test_product_drill_probes.py": {
    "kind": "api",
@@ -10890,6 +11586,84 @@
     "/api/reports/t100-typo",
     "/api/settings/misc"
    ]
+  },
+  "backend/tests/platform/test_scope_gate_2026_09_30.py": {
+   "kind": "audit",
+   "units": [
+    "core:backup_job",
+    "core:db",
+    "core:main",
+    "dir:backend/modules/",
+    "dir:backend/tests/",
+    "dir:backend/tools/",
+    "dir:tools/platform/",
+    "file:backend/conftest.py",
+    "file:backend/core/CHANGELOG.md",
+    "file:backend/pytest.ini",
+    "file:backend/requirements-dev.txt",
+    "file:backend/requirements.txt",
+    "file:backend/start.bat",
+    "file:backend/tests/_prod_baseline.py",
+    "file:backend/tests/platform/child_module_gate.py",
+    "file:backend/tests/test_system_audit_2026_09_14.py",
+    "file:backend/tools/_scope_gate.ps1",
+    "file:backend/tools/build_deploy_package.ps1",
+    "file:backend/tools/deploy_dashboard.py",
+    "file:backend/version_manifest.json",
+    "file:docs/platform/RUN-PLAN.md",
+    "file:product/full.json",
+    "file:tools/platform/bottom_layer.json",
+    "file:tools/platform/modtest.py",
+    "file:tools/platform/scope_gate.py",
+    "helper:auth",
+    "js:js/voucher.js",
+    "js:static/auth-guard.js",
+    "mod:arap/api/cashier",
+    "page:index.html",
+    "plat:registry",
+    "router:approval_queue"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/index.html",
+     "frontend/js/voucher.js",
+     "frontend/static/auth-guard.js"
+    ],
+    "path": [
+     "backend/backup_job.py",
+     "backend/conftest.py",
+     "backend/core/CHANGELOG.md",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/auth.py",
+     "backend/main.py",
+     "backend/modules/",
+     "backend/modules/arap/api/cashier.py",
+     "backend/pytest.ini",
+     "backend/requirements-dev.txt",
+     "backend/requirements.txt",
+     "backend/routers/approval_queue.py",
+     "backend/start.bat",
+     "backend/tests/",
+     "backend/tests/_prod_baseline.py",
+     "backend/tests/platform/child_module_gate.py",
+     "backend/tests/test_system_audit_2026_09_14.py",
+     "backend/tools/",
+     "backend/tools/_scope_gate.ps1",
+     "backend/tools/build_deploy_package.ps1",
+     "backend/tools/deploy_dashboard.py",
+     "backend/version_manifest.json",
+     "docs/platform/RUN-PLAN.md",
+     "frontend/index.html",
+     "frontend/js/voucher.js",
+     "frontend/static/auth-guard.js",
+     "product/full.json",
+     "tools/platform/",
+     "tools/platform/bottom_layer.json",
+     "tools/platform/modtest.py",
+     "tools/platform/scope_gate.py"
+    ]
+   }
   },
   "backend/tests/platform/test_scope_names.py": {
    "kind": "unit",
@@ -11208,6 +11982,29 @@
      "backend/routers/__init__.py",
      "backend/routers/auth.py",
      "backend/tests/platform/test_core_upgrade.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_upload_folders_claimed_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "helper:uploads",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/uploads.py"
+    ],
+    "path": [
+     "backend/modules/case/"
     ]
    }
   },
@@ -12028,6 +12825,113 @@
     ]
    }
   },
+  "backend/tests/test_builder3_access_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "router:custom_records",
+    "router:definitions"
+   ],
+   "evidence": {
+    "api": [
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_builder3_files_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:uploads",
+    "plat:__init__",
+    "plat:registry",
+    "router:custom_records",
+    "router:definitions",
+    "router:uploads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/uploads.py"
+    ],
+    "api": [
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py",
+     "backend/routers/uploads.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_builder3_org_elements_2026_09_30.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:custom_modules"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/custom_modules.py"
+    ]
+   }
+  },
+  "backend/tests/test_builder3_templates_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:custom_modules",
+    "router:custom_records",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/custom_modules.py"
+    ],
+    "api": [
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_builder3_types_table_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/helpers/form_templates/quotation.json",
+    "helper:custom_fields",
+    "helper:custom_modules",
+    "helper:formula",
+    "router:custom_records",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/custom_fields.py",
+     "backend/helpers/custom_modules.py",
+     "backend/helpers/formula.py"
+    ],
+    "api": [
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py"
+    ],
+    "path": [
+     "backend/helpers/form_templates/quotation.json"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_builder_output_preview_2026_09_27.py": {
    "kind": "api",
    "units": [
@@ -12081,6 +12985,23 @@
      "frontend/static/form-preview.js",
      "frontend/static/notif.js",
      "frontend/static/sidebar.js"
+    ]
+   }
+  },
+  "backend/tests/test_builder_support_2026_09_30.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:custom_builder_support",
+    "plat:__init__",
+    "plat:migrations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/migrations.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/custom_builder_support.py"
     ]
    }
   },
@@ -13971,11 +14892,94 @@
     ]
    }
   },
+  "backend/tests/test_e2e_builder3_files_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_builder_nav.py",
+    "file:backend/tests/_e2e_login.py",
+    "helper:uploads",
+    "page:pages/custom-records.html",
+    "page:pages/module-builder.html",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/uploads.py",
+     "backend/tests/_builder_nav.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/pages/custom-records.html",
+     "frontend/pages/module-builder.html"
+    ],
+    "path": [
+     "frontend/pages/module-builder.html"
+    ]
+   },
+   "unresolved_api": [
+    "/api/uploads/custom_records/{}"
+   ],
+   "login_fixture": true
+  },
+  "backend/tests/test_e2e_builder3_runtime_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/custom-records.html",
+    "router:custom_records",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/pages/custom-records.html"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_e2e_builder3_singlepage_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_builder_nav.py",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/module-builder.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_builder_nav.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/module-builder.html"
+    ],
+    "path": [
+     "frontend/pages/module-builder.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_builder_dnd_2026_09_27.py": {
    "kind": "e2e",
    "units": [
     "core:db",
     "dir:frontend/static/",
+    "file:backend/tests/_builder_nav.py",
     "file:backend/tests/_e2e_login.py",
     "js:static/custom-layout.js",
     "js:static/form-preview.js",
@@ -13985,6 +14989,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_builder_nav.py",
      "backend/tests/_e2e_login.py"
     ],
     "api": [
@@ -14009,6 +15014,7 @@
    "units": [
     "core:db",
     "dir:frontend/static/",
+    "file:backend/tests/_builder_nav.py",
     "file:backend/tests/_e2e_login.py",
     "js:static/form-preview.js",
     "page:pages/module-builder.html",
@@ -14017,6 +15023,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_builder_nav.py",
      "backend/tests/_e2e_login.py"
     ],
     "api": [
@@ -15701,6 +16708,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_builder_nav.py",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_requires.py",
     "page:pages/approval-queue.html",
@@ -15713,6 +16721,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_builder_nav.py",
      "backend/tests/_e2e_login.py",
      "backend/tests/_requires.py"
     ],
@@ -15738,6 +16747,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_builder_nav.py",
     "file:backend/tests/_e2e_login.py",
     "page:pages/custom-records.html",
     "page:pages/module-builder.html",
@@ -15749,6 +16759,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_builder_nav.py",
      "backend/tests/_e2e_login.py"
     ],
     "api": [
@@ -16806,6 +17817,7 @@
     "file:backend/tests/_requires.py",
     "helper:uploads",
     "mod:crm/api",
+    "router:system",
     "router:uploads"
    ],
    "evidence": {
@@ -16816,6 +17828,7 @@
     ],
     "api": [
      "backend/modules/crm/api.py",
+     "backend/routers/system.py",
      "backend/routers/uploads.py"
     ]
    },
@@ -18887,6 +19900,10 @@
     "helper:privacy_notice",
     "mod:accounting/api/account_items",
     "mod:accounting/api/accounting_export",
+    "mod:accounting/api/ledger_periods",
+    "mod:accounting/api/ledger_reports",
+    "mod:accounting/api/ledger_settings",
+    "mod:accounting/api/ledger_statements",
     "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
@@ -18947,6 +19964,10 @@
     "api": [
      "backend/modules/accounting/api/account_items.py",
      "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/accounting/api/ledger_periods.py",
+     "backend/modules/accounting/api/ledger_reports.py",
+     "backend/modules/accounting/api/ledger_settings.py",
+     "backend/modules/accounting/api/ledger_statements.py",
      "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/dashboard.py",
      "backend/modules/analytics/api/reports.py",
@@ -20250,6 +21271,38 @@
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_upload_path_access_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:main",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
+    "helper:uploads",
+    "plat:__init__",
+    "plat:registry",
+    "router:system",
+    "router:uploads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/uploads.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/routers/system.py",
+     "backend/routers/uploads.py"
+    ],
+    "path": [
+     "backend/main.py"
     ]
    },
    "login_fixture": true
