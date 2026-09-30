@@ -1179,6 +1179,8 @@ def resolve_same_as(day_dir: str) -> str:
     m = _read_json_file(os.path.join(day_dir, SAME_AS_FILE))
     if not isinstance(m, dict) or not m.get("same_as"):
         return day_dir
+    if m.get("linked") and os.path.isfile(os.path.join(day_dir, "motrix_erp.db")):
+        return day_dir                          # 本機：硬連結，這一天自己就有完整的檔（指向的那天被清掉也無妨）
     real = os.path.join(os.path.dirname(os.path.abspath(day_dir)), str(m["same_as"]))
     return real if os.path.isdir(real) else ""
 
@@ -1904,10 +1906,10 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
 
     cutoff_daily = date.today().toordinal() - daily_keep_days
     try:
-        for name in _prune_select(_cloud_list_top_level(_daily_dir(), "每日備份"),
+        for name in _protect_referenced(_prune_select(_cloud_list_top_level(_daily_dir(), "每日備份"),
                                   _parse_day, cutoff_daily, "雲端每日備份",
                                   os.path.join(_daily_dir(), _PRUNE_HOLD_NAME), f"每日備份/{_PRUNE_HOLD_NAME}",
-                                  gap_days=_PRUNE_GAP_DAYS_DAILY):
+                                  gap_days=_PRUNE_GAP_DAYS_DAILY), _daily_dir(), "雲端每日備份"):
             try:
                 d = date.fromisoformat(name)
             except ValueError:
@@ -1924,11 +1926,11 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
         _pii = pii_archive_status()
         if _pii["state"] == "ready":
             _pii_daily = os.path.join(_pii["path"], "每日備份")
-            for name in _prune_select(_cloud_list_top_level(_pii_daily, f"{_PII_ARCHIVE_DIRNAME}/每日備份"),
+            for name in _protect_referenced(_prune_select(_cloud_list_top_level(_pii_daily, f"{_PII_ARCHIVE_DIRNAME}/每日備份"),
                                       _parse_day, cutoff_daily, "個資每日備份",
                                       os.path.join(_pii_daily, _PRUNE_HOLD_NAME),
                                       f"{_PII_ARCHIVE_DIRNAME}/每日備份/{_PRUNE_HOLD_NAME}",
-                                      gap_days=_PRUNE_GAP_DAYS_DAILY):
+                                      gap_days=_PRUNE_GAP_DAYS_DAILY), _pii_daily, "個資每日備份"):
                 try:
                     d = date.fromisoformat(name)
                 except ValueError:
@@ -2843,19 +2845,36 @@ def _daily_backup():
                 logger.exception("_monthly_backup retry failed")
             _check_previous_month_backup()
             return
-        conn = get_db()
         now  = datetime.now().isoformat()
 
-        summary: dict = _daily_backup_summary_header(today_label, now)
-        summary.update(_export_table_json_set(
-            conn, day_dir, f"每日備份/{today_label}", now))
-        try:
-            _pii_daily_json_export(conn, today_label, now)
-        except Exception:
-            logger.exception("_pii_daily_json_export failed")
-            _write_backup_alert("個資每日匯出失敗，詳見 server.log", level="ERROR")
+        # 資料沒變（本機快照是「同上一份」）且前一份的雲端 JSON 是完整的 ⇒ 不重寫 41 張表 JSON，只留 SAME_AS.json＋當日彙總
+        # （使用者 2026-09-30「盡可能降低硬碟的重複寫入」；月備份不走這裡，照常完整寫）。S3 後端不做。
+        same_ref = ""
+        if _cloud_dedupe_ok():
+            _sd = _local_same_as_day(today_label)
+            if _sd:
+                _r = _real_day_in(_daily_dir(), _sd, "彙總.json")
+                if _r and os.path.isfile(os.path.join(_daily_dir(), _r, ".done")):
+                    same_ref = _r
 
-        conn.close()
+        summary: dict = _daily_backup_summary_header(today_label, now)
+        if same_ref:
+            for _k, _v in (_read_json_file(os.path.join(_daily_dir(), same_ref, "彙總.json")) or {}).items():
+                summary.setdefault(_k, _v)                 # 各表筆數沿用前一份（內容相同）
+            summary["same_as"] = same_ref
+            _write_same_marker(day_dir, same_ref, "*.json（41 張表）")
+            logger.info("Daily JSON export same as %s: wrote %s only", same_ref, SAME_AS_FILE)
+        else:
+            conn = get_db()
+            summary.update(_export_table_json_set(
+                conn, day_dir, f"每日備份/{today_label}", now))
+            try:
+                _pii_daily_json_export(conn, today_label, now)
+            except Exception:
+                logger.exception("_pii_daily_json_export failed")
+                _write_backup_alert("個資每日匯出失敗，詳見 server.log", level="ERROR")
+
+            conn.close()
         _cloud_write_json(os.path.join(day_dir, '彙總.json'), f"每日備份/{today_label}/彙總.json", summary)
 
         # 🔴🔴 BK10 身分對照 —— **這一關才是抓 08-30／08-31／09-03 的那一關。**
@@ -2879,7 +2898,8 @@ def _daily_backup():
         _snap_today = os.path.join(_LOCAL_DB_BACKUP, today_label, "motrix_erp.db")
         _snap_ok, _snap_reasons, _snap_counts = (True, [], {})
         # 🔴 前提見 `_summary_is_comparable()`：兩邊要來自同一個資料庫。
-        if _summary_is_comparable() and os.path.isfile(_snap_today):
+        # 同上一份：內容與前一份相同（已在那一天通過身分對照），彙總又是沿用它的 ⇒ 這一天不再比一次
+        if not same_ref and _summary_is_comparable() and os.path.isfile(_snap_today):
             # 🔴 T11：彙總是在快照**之後**匯出的 ⇒ 快照之後寫的列（至少有備份自己那筆
             #    backup.sqlite_snapshot）會讓彙總比快照多。那一段要算出來再比。
             _snap_allow = _rows_written_after_snapshot(_snap_today)
