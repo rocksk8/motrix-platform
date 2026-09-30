@@ -55,7 +55,7 @@ def extract(text):
     """⇒ (payload dict（含明文，只給寫檔用）, hashes dict（只有雜湊）, values dict（明文，**只給契約題在記憶體內造夾具用**，不寫檔不印））。"""
     tree = ast.parse(text)
     f8 = _func(tree, "_m008_fix_legacy_owner_names")
-    old_names, correct, email, jeff_user = None, None, None, None
+    old_names, correct, email, owner_user = None, None, None, None
     for n in ast.walk(f8):
         if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
             if n.targets[0].id == "old_names" and isinstance(n.value, ast.Tuple):
@@ -68,7 +68,7 @@ def extract(text):
         if s and s.startswith("UPDATE users SET email="):
             m = re.match(r"UPDATE users SET email='([^']*)' WHERE username='([^']*)'", s)
             if m:
-                email, jeff_user = m.group(1), m.group(2)
+                email, owner_user = m.group(1), m.group(2)
     f106 = _func(tree, "_m106_company_profile_identity_backfill")
     taxid, name_en = None, None
     for n in ast.walk(f106):
@@ -76,12 +76,12 @@ def extract(text):
             taxid = _const_str(n.comparators[0])
         if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "_backfill" and len(n.args) == 2 and _const_str(n.args[0]) == "company_name_en":
             name_en = _const_str(n.args[1])
-    if not (old_names and all(old_names) and correct and email and jeff_user and taxid and name_en):
+    if not (old_names and all(old_names) and correct and email and owner_user and taxid and name_en):
         raise SystemExit("舊版 db.py 的結構與預期不同，抽不出全部值（不印細節，避免洩漏）")
     h = lambda v: hashlib.sha256(v.encode("utf-8", "surrogatepass")).hexdigest()
     payload = {"v": FORMAT, "source_blob": PINNED_BLOB, "m008": {"correct": correct, "email": email}, "m106": {"company_name_en": name_en}}
-    hashes = {"m008_old_names": sorted(h(v) for v in old_names), "m008_username": h(jeff_user), "m106_tax_id": h(taxid)}
-    values = {"old_names": old_names, "username": jeff_user, "tax_id": taxid}
+    hashes = {"m008_old_names": sorted(h(v) for v in old_names), "m008_username": h(owner_user), "m106_tax_id": h(taxid)}
+    values = {"old_names": old_names, "username": owner_user, "tax_id": taxid}
     return payload, hashes, values
 
 
