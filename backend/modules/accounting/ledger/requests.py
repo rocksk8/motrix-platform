@@ -153,7 +153,15 @@ def pending_rows(conn):
     return list_requests(conn, status=PENDING, limit=500)
 
 
+def _decide(conn, sql, args):
+    """條件式更新（狀態必須仍是待審核）：rowcount != 1 ⇒ 被別人先處理了 ⇒ RequestConflict（呼叫端 rollback，已執行的動作一併撤銷）。"""
+    if conn.execute(sql, args).rowcount != 1:
+        raise RequestConflict("這張申請剛被其他人處理過，請重新整理。")
+
+
 def _load_pending(conn, rid):
+    from core.txn import begin_write
+    begin_write(conn)          # 先拿寫鎖再讀狀態：並行核准／撤回同一張，第二個看到新狀態（不會把期初批次建兩次）
     row = conn.execute("SELECT * FROM gl_action_requests WHERE id=?", (rid,)).fetchone()
     if not row:
         raise RequestError("找不到這張申請。")
@@ -182,8 +190,8 @@ def approve(conn, rid, approver):
     row = _load_pending(conn, rid)
     result = _execute(conn, row)
     now = _dt.datetime.now().isoformat(timespec="seconds")
-    conn.execute("UPDATE gl_action_requests SET status=?, decided_by=?, decided_at=?, result_json=? WHERE id=?",
-                 (APPROVED, (approver or {}).get("username") or "", now, json.dumps(result, ensure_ascii=False, default=str), rid))
+    _decide(conn, "UPDATE gl_action_requests SET status=?, decided_by=?, decided_at=?, result_json=? WHERE id=? AND status=?",
+            (APPROVED, (approver or {}).get("username") or "", now, json.dumps(result, ensure_ascii=False, default=str), rid, PENDING))
     return get(conn, rid)
 
 
@@ -192,8 +200,8 @@ def send_back(conn, rid, approver, note):
     if not (note or "").strip():
         raise RequestError("退回要填寫原因。")
     now = _dt.datetime.now().isoformat(timespec="seconds")
-    conn.execute("UPDATE gl_action_requests SET status=?, decided_by=?, decided_at=?, decision_note=? WHERE id=?",
-                 (RETURNED, (approver or {}).get("username") or "", now, note.strip()[:500], rid))
+    _decide(conn, "UPDATE gl_action_requests SET status=?, decided_by=?, decided_at=?, decision_note=? WHERE id=? AND status=?",
+            (RETURNED, (approver or {}).get("username") or "", now, note.strip()[:500], rid, PENDING))
     return get(conn, row["id"])
 
 
@@ -202,6 +210,6 @@ def withdraw(conn, rid, user):
     if row["requested_by"] != ((user or {}).get("username") or ""):
         raise RequestError("只有申請人可以撤回自己的申請。")
     now = _dt.datetime.now().isoformat(timespec="seconds")
-    conn.execute("UPDATE gl_action_requests SET status=?, decided_by=?, decided_at=? WHERE id=?",
-                 (WITHDRAWN, row["requested_by"], now, rid))
+    _decide(conn, "UPDATE gl_action_requests SET status=?, decided_by=?, decided_at=? WHERE id=? AND status=?",
+            (WITHDRAWN, row["requested_by"], now, rid, PENDING))
     return get(conn, rid)

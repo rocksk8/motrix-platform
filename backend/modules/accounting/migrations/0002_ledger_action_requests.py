@@ -29,5 +29,11 @@ _INDEXES = (
 
 
 def up(conn):
-    for ddl in _TABLES + _INDEXES:
+    for ddl in _TABLES:
+        conn.execute(ddl)
+    # 防禦：表在較早的半成品版本建立過（少欄位）⇒ 補欄位，再建索引（每一步都可重跑）
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(gl_action_requests)")}
+    if "approval_json" not in cols:
+        conn.execute("ALTER TABLE gl_action_requests ADD COLUMN approval_json TEXT NOT NULL DEFAULT '{}'")
+    for ddl in _INDEXES:
         conn.execute(ddl)

@@ -150,3 +150,82 @@ def test_migration_0002_is_idempotent(client):
         assert cols.count("request_no") == 1 and "approval_json" in cols
     finally:
         c.close()
+
+
+def test_executes_as_the_requester_not_the_approver(client, world):
+    rid = client.post("/api/ledger/periods/%d/close" % world["pid"], headers=world["fin"], json={}).json()["request_id"]
+    client.post("/api/ledger/action-requests/%d/approve" % rid, headers=world["sup"])
+    c = db.get_db()
+    try:
+        by = c.execute("SELECT closed_by FROM gl_periods WHERE id=?", (world["pid"],)).fetchone()[0]
+        who = c.execute("SELECT decided_by FROM gl_action_requests WHERE id=?", (rid,)).fetchone()[0]
+    finally:
+        c.close()
+    assert by == world["fu"] and who == world["su"]                     # 帳上結帳人＝申請人；核准人記在申請上
+
+
+def test_concurrent_approves_execute_once_and_only_one_wins(client, world):
+    import threading
+    from starlette.testclient import TestClient
+    rid = client.post("/api/ledger/opening", headers=world["fin"], json={"year": world["year"], "opening_date": "%d-01-01" % world["year"],
+                                                                       "rows": [{"account_code": "1113", "debit": 100, "credit": 0}, {"account_code": "3111", "debit": 0, "credit": 100}]}).json()["request_id"]
+    codes, gate = [], threading.Barrier(5)
+
+    def go():
+        with TestClient(client.app) as c:
+            gate.wait(timeout=20)
+            codes.append(c.post("/api/ledger/action-requests/%d/approve" % rid, headers=world["sup"]).status_code)
+    ts = [threading.Thread(target=go) for _ in range(5)]
+    [t.start() for t in ts]
+    [t.join(60) for t in ts]
+    assert codes.count(200) == 1 and all(c in (400, 409) for c in codes if c != 200), codes
+    c = db.get_db()
+    try:
+        n = c.execute("SELECT COUNT(*) FROM gl_opening_batches WHERE year=?", (world["year"],)).fetchone()[0]
+    finally:
+        c.close()
+    assert n == 1                                                       # 期初批次只建一次（不是每個並行核准都建一次）
+
+
+def test_migration_0002_recovers_from_a_partial_earlier_shape(client):
+    import importlib
+    m = importlib.import_module("modules.accounting.migrations.0002_ledger_action_requests")
+    c = db.get_db()
+    try:
+        c.execute("DROP TABLE gl_action_requests")                       # 模擬半成品：少 approval_json 欄、沒索引
+        c.execute("CREATE TABLE gl_action_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, request_no TEXT NOT NULL UNIQUE, action TEXT NOT NULL,"
+                  " label TEXT NOT NULL DEFAULT '', params_json TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT '待審核',"
+                  " requested_by TEXT NOT NULL DEFAULT '', requested_by_display TEXT NOT NULL DEFAULT '', requested_at TEXT NOT NULL DEFAULT '',"
+                  " decided_by TEXT NOT NULL DEFAULT '', decided_at TEXT NOT NULL DEFAULT '', decision_note TEXT NOT NULL DEFAULT '', result_json TEXT NOT NULL DEFAULT '{}')")
+        c.execute("INSERT INTO gl_action_requests(request_no, action) VALUES ('LA-OLD-1','year_close')")
+        m.up(c)
+        m.up(c)                                                          # 再跑一次也不變
+        cols = [r[1] for r in c.execute("PRAGMA table_info(gl_action_requests)")]
+        idx = [r[1] for r in c.execute("PRAGMA index_list(gl_action_requests)")]
+        assert "approval_json" in cols and any("status" in i for i in idx) and any("user" in i for i in idx)
+        assert c.execute("SELECT COUNT(*) FROM gl_action_requests").fetchone()[0] == 1          # 舊資料還在
+        c.commit()
+    finally:
+        c.close()
+
+
+def test_decision_is_a_conditional_update_and_takes_the_write_lock(client, world, monkeypatch):
+    """決定寫入要條件式（狀態仍是待審核才寫），且讀狀態前先拿寫鎖——用『執行過程中狀態被改走』與『讀完後在寫交易裡』兩個確定的觀測證明。"""
+    from modules.accounting.ledger import requests as R
+    rid = client.post("/api/ledger/periods/%d/close" % world["pid"], headers=world["fin"], json={}).json()["request_id"]
+    c = db.get_db()
+    try:
+        assert c.in_transaction is False
+        R._load_pending(c, rid)
+        assert c.in_transaction is True                                   # 讀之前先 BEGIN IMMEDIATE（寫鎖）
+        c.rollback()
+        def flip(conn, row):
+            conn.execute("UPDATE gl_action_requests SET status='已撤回' WHERE id=?", (row["id"],))          # 執行當中，申請被別人撤回了
+            return {}
+        monkeypatch.setattr(R, "_execute", flip)
+        with pytest.raises(R.RequestConflict):
+            R.approve(c, rid, {"username": world["su"]})                  # 條件式更新 rowcount==0 ⇒ 衝突（不會把已撤回蓋成已核准）
+        c.rollback()
+        assert c.execute("SELECT status FROM gl_action_requests WHERE id=?", (rid,)).fetchone()[0] == "待審核"
+    finally:
+        c.close()
