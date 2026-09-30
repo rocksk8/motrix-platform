@@ -21933,6 +21933,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "mod:accounting/api/ledger_periods",
     "mod:case/api/quotations",
     "mod:netplan/api",
     "mod:payroll/api/bonus",
@@ -21966,6 +21967,7 @@
      "backend/routers/uploads.py"
     ],
     "path": [
+     "backend/modules/accounting/api/ledger_periods.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/netplan/api.py",
      "backend/modules/payroll/api/bonus.py",
