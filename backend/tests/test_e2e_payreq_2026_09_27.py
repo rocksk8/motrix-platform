@@ -156,3 +156,8 @@ def test_payment_request_end_to_end(live_server, make_user, new_context, client,
     assert _other(client, h, int(day[:4]), "accrual") == [(day, 4500, False, True)]
     assert not [a for y in (2031, int(day[:4])) for b in ("cash", "accrual") for _d, a, _p, _v in _other(client, h, y, b) if a == 999]
     assert not errors, errors
+
+
+# 上傳檔頭：這支用真的檢查（conftest 預設把 _magic_matches 換成一律符合；上傳的 e2e 要走真的，2026-09-30）
+import pytest as _pt_magic
+pytestmark = (list(pytestmark) if isinstance(pytestmark, (list, tuple)) else [pytestmark]) + [_pt_magic.mark.upload_magic]

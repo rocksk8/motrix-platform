@@ -119,3 +119,8 @@ def test_builder_palette_has_file_and_image_and_accept_lands_in_the_draft(live_s
     page.wait_for_selector('#mb-props-pane [data-attr="maxFiles"]')
     assert page.locator('#mb-props-pane [data-attr="accept"]').count() == 0       # 圖片型別沒有「允許類型」（固定 jpg／png）
     assert not errors, errors
+
+
+# 上傳檔頭：這支用真的檢查（conftest 預設把 _magic_matches 換成一律符合；上傳的 e2e 要走真的，2026-09-30）
+import pytest as _pt_magic
+pytestmark = [_pt_magic.mark.upload_magic]

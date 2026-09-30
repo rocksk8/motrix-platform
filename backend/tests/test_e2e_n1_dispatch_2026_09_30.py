@@ -172,3 +172,8 @@ def test_quotation_cost_pick_vendor_quote_and_diff(live_server, make_user, new_c
     page2.wait_for_timeout(1500)
     assert page2.locator('[data-testid="vq-pick"]').count() == 0
     assert not errors, errors
+
+
+# 上傳檔頭：這支用真的檢查（conftest 預設把 _magic_matches 換成一律符合；上傳的 e2e 要走真的，2026-09-30）
+import pytest as _pt_magic
+pytestmark = (list(pytestmark) if isinstance(pytestmark, (list, tuple)) else [pytestmark]) + [_pt_magic.mark.upload_magic]

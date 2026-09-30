@@ -115,3 +115,8 @@ def test_after_submit_no_bring_or_upload_entry_is_offered(live_server, make_user
     page.wait_for_function(f"() => {{ try {{ return {D}.id == {vid} && {D}.status !== '草稿' }} catch (e) {{ return false }} }}", timeout=20000)
     assert not page.locator('[data-testid="src-block"]').is_visible()
     assert not page.locator('[data-testid="voucher-att-upload"]').is_visible()
+
+
+# 上傳檔頭：這支用真的檢查（conftest 預設把 _magic_matches 換成一律符合；上傳的 e2e 要走真的，2026-09-30）
+import pytest as _pt_magic
+pytestmark = (list(pytestmark) if isinstance(pytestmark, (list, tuple)) else [pytestmark]) + [_pt_magic.mark.upload_magic]
