@@ -95,3 +95,23 @@ def test_case_record_save_changing_a_posted_receipt_returns_glwarning(client, co
     r = client.patch("/api/quotations/MQ-GW-003/case-record", headers=h, json={"case_record": {"payment": {"items": [item]}}})
     assert r.status_code == 200, r.text
     assert "已入總帳" in (r.json().get("glWarning") or "")
+
+
+def test_dispatch_invoice_date_change_on_a_posted_dispatch_returns_glwarning(client, conn, make_user):
+    """派工改發票日（E04 已入帳）⇒ 回應帶 glWarning；沒入帳／日期沒變 ⇒ 沒有。**反向控制**：拿掉 invoice-date 端點的呼叫 ⇒ 紅。"""
+    u, p = make_user(username="gw_disp", role="superadmin", modules=[])
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    h = {"Authorization": "Bearer " + r.json()["token"]}
+    conn.execute("INSERT OR IGNORE INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at, deal_tag)"
+                 " VALUES ('MQ-GW-D1','已送出','客戶','專案','{}','n','n','已成案')")
+    vid = conn.execute("INSERT INTO vendor_contractors (name) VALUES ('廠商')").lastrowid
+    did = conn.execute("INSERT INTO contractor_dispatches (quote_no, vendor_id) VALUES ('MQ-GW-D1', ?)", (vid,)).lastrowid
+    conn.commit()
+    url = "/api/contractor-dispatches/%d/invoice-date" % did
+    ok = client.patch(url, headers=h, json={"invoiceDate": "2200-02-01"})
+    assert ok.status_code == 200 and "glWarning" not in ok.json()                     # 還沒入帳
+    _event(conn, "contractor_dispatch", str(did), "posted", code="E04")
+    same = client.patch(url, headers=h, json={"invoiceDate": "2200-02-01"})
+    assert same.status_code == 200 and "glWarning" not in same.json()                 # 日期沒變 ⇒ 不提示
+    changed = client.patch(url, headers=h, json={"invoiceDate": "2200-03-01"})
+    assert changed.status_code == 200 and "已入總帳" in (changed.json().get("glWarning") or "")
