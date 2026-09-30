@@ -566,7 +566,7 @@ def revoke_shipping_note_approval(note_no: str, body: dict = Body(default={}), a
     """
     user = _require_user(authorization)
     _require_admin(user)
-    note = require_reject_reason((body or {}).get("note", ""))
+    note = (body or {}).get("note", "")
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, customer_name, is_signed FROM shipping_notes WHERE note_no=? AND status='已核准'",
@@ -578,6 +578,7 @@ def revoke_shipping_note_approval(note_no: str, body: dict = Body(default={}), a
     if row["is_signed"]:
         conn.close()
         raise HTTPException(409, "已回簽（客戶確認收貨）的出貨單不可撤銷核准，請先取消回簽")
+    note = require_reject_reason(note, conn=conn)
     cname = row["customer_name"] or ""
     d = json.loads(row["data_json"] or "{}")
     appr = d.get("approval") or {}
@@ -616,7 +617,7 @@ def reject_shipping_note(note_no: str, body: dict = Body(default={}), authorizat
     # 比照 quotations.py：退回權限由當層簽核人員判斷，不額外要求 admin 角色
     # （2026-08-22 架構複查發現此檔案先前漏套用這個修正，這裡補上）
     user = _require_user(authorization)
-    note = require_reject_reason((body or {}).get("note", ""))
+    note = (body or {}).get("note", "")
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, customer_name FROM shipping_notes WHERE note_no=? AND status IN ('待審核','簽核中')",
@@ -635,6 +636,7 @@ def reject_shipping_note(note_no: str, body: dict = Body(default={}), authorizat
     if not ok:
         conn.close()
         raise HTTPException(status_code, err_msg)
+    note = require_reject_reason(note, conn=conn)
 
     now       = datetime.now().isoformat()
     requester = appr.get("requestedBy")

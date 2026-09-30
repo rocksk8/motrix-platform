@@ -557,7 +557,7 @@ def reject_completion_note(note_no: str, body: dict = Body(default={}),
                            authorization: str = Header(None)):
     """退回草稿。權限由當層簽核人員判斷，不額外要求 admin 角色。"""
     user = _require_user(authorization)
-    note = require_reject_reason((body or {}).get("note", ""))
+    note = (body or {}).get("note", "")
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, customer_name FROM completion_notes "
@@ -575,6 +575,7 @@ def reject_completion_note(note_no: str, body: dict = Body(default={}),
     if not ok:
         conn.close()
         raise HTTPException(status_code, err_msg)
+    note = require_reject_reason(note, conn=conn)
 
     now       = datetime.now().isoformat()
     requester = appr.get("requestedBy")
@@ -605,7 +606,7 @@ def revoke_completion_approval(note_no: str, body: dict = Body(default={}),
     """
     user = _require_user(authorization)
     _require_admin(user)
-    note = require_reject_reason((body or {}).get("note", ""))
+    note = (body or {}).get("note", "")
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, customer_name, is_signed FROM completion_notes "
@@ -617,6 +618,7 @@ def revoke_completion_approval(note_no: str, body: dict = Body(default={}),
     if row["is_signed"]:
         conn.close()
         raise HTTPException(409, "已回簽（客戶已驗收）的完工單不可撤銷核准，請先取消回簽")
+    note = require_reject_reason(note, conn=conn)
     cname = row["customer_name"] or ""
     d = json.loads(row["data_json"] or "{}")
     requester = (d.get("approval") or {}).get("requestedBy")

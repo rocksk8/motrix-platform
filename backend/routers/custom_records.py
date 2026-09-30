@@ -15,7 +15,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from db import get_db
 from helpers import _require_user, _tok, _audit
-from helpers.tiered_approval import require_reject_reason as _require_reject_reason  # noqa: E402  退回一律要填原因
 from helpers import custom_modules as CM
 from helpers import custom_builder_support as SUP
 from helpers import custom_files as CFILES
@@ -281,7 +280,7 @@ def approve_custom_record(key: str, record_no: str, payload: dict = Body(default
 @router.post("/api/custom/{key}/records/{record_no}/reject")
 def reject_custom_record(key: str, record_no: str, payload: dict = Body(default={}), authorization: str = Header(None)):
     u = _require_user(authorization)
-    note = _require_reject_reason((payload or {}).get("note", ""))
+    note = (payload or {}).get("note", "")
     conn = get_db()
     try:
         rec = _decide(conn, u, key, record_no, False, note)

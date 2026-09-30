@@ -463,13 +463,19 @@ def sign_first_pending(tier: dict, user: dict, now: str, conn=None) -> bool:
     return all(a.get("status") == "approved" for a in approvers)
 
 
-def require_reject_reason(note) -> str:
+def require_reject_reason(note, conn=None) -> str:
     """退回／駁回／退回修改一律要填原因（使用者 2026-09-30 規則；後端強制，前端只是提示）。
-    回傳去掉前後空白的原因；空白 ⇒ HTTP 400「退回要填原因」。各單據的 reject／send-back 端點都走這一支，
+    回傳去掉前後空白的原因；空白 ⇒ HTTP 400「退回要填原因」。各單據的 reject／send-back／revoke-approval 端點都走這一支，
+    ⚠️ 順序：**先狀態與權限（404／403／409），最後才檢查原因（400）**——否則「已回簽不可撤銷」這類 409 會被 400 蓋掉（第 27 班 build 紅燈）。
     原因會進各自的稽核（audit_log／編修紀錄／通知）。"""
     from fastapi import HTTPException
     text = ("" if note is None else str(note)).strip()
     if not text:
+        if conn is not None:                       # 呼叫端已開連線：丟錯前關掉（各端點的慣例）
+            try:
+                conn.close()
+            except Exception:                      # noqa: BLE001
+                pass
         raise HTTPException(400, "退回要填原因")
     return text
 

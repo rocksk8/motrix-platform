@@ -138,18 +138,23 @@ def submit(conn, module_key, user, note=""):
         raise ReviewError(str(e), 409 if isinstance(e, D.DefinitionConflict) else (422 if e.problems else 400), e.problems)
     _notify(conn, [r["username"] for r in st["reviewers"]], module_key, d["version"],
             "自訂模組「%s」的定義（第 %d 版）待您審核" % (module_key, d["version"]))
-    _mail("notify_custom_def_submitted", module_key, d["version"], user["username"], [r["username"] for r in st["reviewers"]])
+    _mail(lambda: _email().notify_custom_def_submitted(module_key, d["version"], user["username"], [r["username"] for r in st["reviewers"]]))
     return {"published": False, "pending": True, "version": d["version"], "definition": d}
 
 
-def _mail(fn_name, *args):
-    """信件：與站內通知同一原則——寄不出去不可以讓送審／決定失敗（email_notify 內部已是非同步寄送並記 WARNING）。"""
+def _mail(send):
+    """信件：與站內通知同一原則——寄不出去不可以讓送審／決定失敗（email_notify 內部已是非同步寄送並記 WARNING）。
+    `send`＝呼叫 email_notify 某支函式的無參數函式（以名稱明寫，不用動態 getattr——test_wording_guards）。"""
     try:
-        from helpers import email_notify as _en
-        getattr(_en, fn_name)(*args)
+        send()
     except Exception:                                                           # noqa: BLE001
         import logging
-        logging.getLogger(__name__).exception("自訂模組定義送審信件失敗 %s", fn_name)
+        logging.getLogger(__name__).exception("自訂模組定義送審信件失敗")
+
+
+def _email():
+    from helpers import email_notify
+    return email_notify
 
 
 def _with_superadmins(conn, tiers, submitter):
@@ -215,9 +220,9 @@ def decide(conn, module_key, version, user, approve, note=""):
     _notify(conn, [row.get("submitted_by") or ""], module_key, row["version"],
             "自訂模組「%s」的定義（第 %d 版）已%s%s" % (module_key, row["version"], "核可並發布" if approve else "退回", "：" + note if note else ""))
     if approve:
-        _mail("notify_custom_def_approved", module_key, row["version"], user["username"], row.get("submitted_by") or "")
+        _mail(lambda: _email().notify_custom_def_approved(module_key, row["version"], user["username"], row.get("submitted_by") or ""))
     else:
-        _mail("notify_custom_def_returned", module_key, row["version"], note, row.get("submitted_by") or "")
+        _mail(lambda: _email().notify_custom_def_returned(module_key, row["version"], note, row.get("submitted_by") or ""))
     return {"status": out["status"], "version": out["version"], "published": bool(approve)}
 
 
