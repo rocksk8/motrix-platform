@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## （不升版號：介面不變）— 2026-09-30（wip/w1-file-preview：共用檔案預覽元件 P1）
+- L1（新增，前端，不在 Python 介面快照內）：`frontend/static/file-preview.js`（`window.MotrixFilePreview`：`open／openFile／kind／withMime／byUploadsPath／openInNewTab／close／refresh／setStatus`）——從傳票頁 JV28 抽出的頁內預覽窗（副檔名＋mime 雙重符合才內嵌 image／pdf、其餘檔案卡＋下載、blob 指定 type、關閉或切換 revoke、競態丟棄、鍵盤與焦點規則照 JV28）。傳票頁改用（data-testid 沿用舊名）；出納勞報單簽回檔（保留「另開新分頁」）、勞報單頁、案件管理、報價單、成本精算、業務開發、簽核佇列、自訂模組單據的附件開啟都改用它，不再 `window.open`／換 photo-token。
+
 ## 1.75 — 2026-09-30（列車 25 合併補號；wip/w1-builder3 c98f5bcc 的 L1 新增，原寫在 1.73 段但 1.74 已被行事曆開關取用）
 - L1（新增）：`core.paths.FORM_TEMPLATES_DIR`（自訂模組內建範本資料夾；原本用 `__file__` 算，違反 core.paths 守門）
 

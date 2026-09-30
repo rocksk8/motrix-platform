@@ -703,6 +703,8 @@
   </template>
 </div>
 
+<script src="../static/file-preview.js"></script>
+
 <script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
 <script>
@@ -1004,14 +1006,8 @@ function settlementPage() {
     // 定位，見 routers/case_extra_expenses.py。
 
     async previewAttachmentFile(file) {
-      try {
-        const r = await fetch(`${API}/photo-token?path=${encodeURIComponent(file.path)}`, {
-          headers: { Authorization: 'Bearer ' + this.session.token },
-        })
-        if (!r.ok) { this.toast('取得檔案連結失敗'); return }
-        const { token } = await r.json()
-        window.open(`${API}/uploads/${file.path}?pt=${encodeURIComponent(token)}`, '_blank')
-      } catch (e) { this.toast('開啟檔案失敗：' + e.message) }
+      // 共用預覽元件（static/file-preview.js）：頁內預覽窗
+      try { await MotrixFilePreview.openFile(file) } catch (e) { this.toast('開啟檔案失敗：' + e.message) }
     },
 
     buildPayload() {

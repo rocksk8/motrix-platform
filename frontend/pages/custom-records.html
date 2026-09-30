@@ -444,6 +444,7 @@
     </div>
   </main>
 
+  <script src="../static/file-preview.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/ui.js"></script>
   <script src="../static/custom-layout.js"></script>
@@ -710,9 +711,8 @@
           }
         },
         async openFile(m) {
-          var r = await this.api('GET', '/api/photo-token?path=' + encodeURIComponent(m.path))
-          if (!r.ok) { this.errMsg = '取得檔案連結失敗：' + this.detail(r); return }
-          window.open('/api/uploads/' + m.path + '?pt=' + encodeURIComponent(r.data.token), '_blank')
+          // 共用預覽元件（static/file-preview.js）：頁內預覽窗；圖片／PDF 內嵌，其他類型給下載
+          try { await window.MotrixFilePreview.openFile(m) } catch (e) { this.errMsg = '開啟檔案失敗：' + e.message }
         },
         refHint(t) { return t === 'users' ? '輸入帳號' : (t === 'customers' ? '輸入客戶編號' : '輸入單號') },
 

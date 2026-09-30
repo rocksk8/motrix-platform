@@ -1293,6 +1293,8 @@
   </main>
 </div><!-- /app-shell -->
 
+<script src="../static/file-preview.js"></script>
+
 <script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
 <script src="../static/list-sort.js"></script>
@@ -1934,12 +1936,8 @@ function devCrmPage() {
       return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBTAA7'
     },
     async previewAttachmentFile(f) {
-      try {
-        const r = await fetch(`/api/photo-token?path=${encodeURIComponent(f.path)}`, { headers: this._h() })
-        if (!r.ok) { this._toast('取得檔案連結失敗'); return }
-        const { token } = await r.json()
-        window.open(`/api/uploads/${f.path}?pt=${encodeURIComponent(token)}`, '_blank')
-      } catch (e) { this._toast('開啟檔案失敗：' + e.message) }
+      // 共用預覽元件（static/file-preview.js）：頁內預覽窗
+      try { await MotrixFilePreview.openFile(f) } catch (e) { this._toast('開啟檔案失敗：' + e.message) }
     },
     isLogImage(f) { return /\.(jpe?g|png)$/i.test(f.filename || f.path || '') },
 

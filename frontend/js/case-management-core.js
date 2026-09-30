@@ -729,17 +729,10 @@ window.CM_PARTS.push(() => ({
     },
 
     // ── 附件（回簽/已開立檔案）共用 helper ──────────────────────────────────
-    // 點擊即時在新分頁開啟（瀏覽器原生顯示圖片/PDF），不用另外刻預覽元件；
-    // 連結需要簽名短效 token 才能通過 /api/uploads 的存取檢查。
+    // 頁內預覽窗（共用元件 MotrixFilePreview）：圖片／PDF 內嵌，其他類型給下載；取檔走 /api/uploads（標頭帶 Authorization）。
     async previewAttachmentFile(file) {
-      try {
-        const r = await fetch(`/api/photo-token?path=${encodeURIComponent(file.path)}`, {
-          headers: { Authorization: 'Bearer ' + this.session.token }
-        })
-        if (!r.ok) { MotrixUI.toast('取得檔案連結失敗', {kind: 'error'}); return }
-        const { token } = await r.json()
-        window.open(`/api/uploads/${file.path}?pt=${encodeURIComponent(token)}`, '_blank')
-      } catch (e) { MotrixUI.toast('開啟檔案失敗：' + e.message, {kind: 'error'}) }
+      // 共用預覽元件（static/file-preview.js）：頁內預覽窗，不再開新分頁／換 photo-token
+      try { await MotrixFilePreview.openFile(file) } catch (e) { MotrixUI.toast('開啟檔案失敗：' + e.message, {kind: 'error'}) }
     },
 
     logout() {

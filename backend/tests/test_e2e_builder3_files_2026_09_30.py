@@ -81,14 +81,16 @@ def test_runtime_upload_list_remove_save_and_view_link(live_server, make_user, n
     rec = _q("SELECT id, data_json FROM custom_records WHERE module_key=?", (KEY,))[0]
     assert json.loads(rec["data_json"])["pics"] == [keep["id"]]
     assert _q("SELECT record_id FROM custom_record_files WHERE id=?", (keep["id"],))[0]["record_id"] == rec["id"]
-    # 單據檢視：檔名連結；點開得到簽章連結（新分頁）
+    # 單據檢視：檔名連結；點開＝頁內預覽窗（共用元件），不開新分頁、圖片內嵌
     link = page.locator('[data-file-link="%s"]' % keep["id"])
     assert link.inner_text().strip() == "b.png"
-    with page.context.expect_page() as newp:
-        link.click()
-    np_ = newp.value
-    np_.wait_for_load_state()
-    assert "/api/uploads/custom_records/%s/" % KEY in np_.url and "pt=" in np_.url
+    popups = []
+    page.on("popup", lambda p: popups.append(p))
+    link.click()
+    page.wait_for_selector('[data-testid="file-preview-img"]', state="visible", timeout=15000)
+    assert popups == [] and "b.png" in page.locator('[data-testid="file-preview"] .modal-head__title').inner_text()
+    page.keyboard.press("Escape")
+    page.wait_for_selector('[data-testid="file-preview"]', state="detached", timeout=5000)
     assert not errors, errors
 
 

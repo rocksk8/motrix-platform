@@ -3586,14 +3586,8 @@
       },
 
       async previewAttachmentFile(file) {
-        try {
-          const r = await fetch(`/api/photo-token?path=${encodeURIComponent(file.path)}`, {
-            headers: { Authorization: 'Bearer ' + this.session.token }
-          })
-          if (!r.ok) { alert('取得檔案連結失敗'); return }
-          const { token } = await r.json()
-          window.open(`/api/uploads/${file.path}?pt=${encodeURIComponent(token)}`, '_blank')
-        } catch (e) { alert('開啟檔案失敗：' + e.message) }
+        // 共用預覽元件（static/file-preview.js）：頁內預覽窗
+        try { await MotrixFilePreview.openFile(file) } catch (e) { alert('開啟檔案失敗：' + e.message) }
       },
 
       async patchStatus(newStatus, sel) {
@@ -4066,6 +4060,7 @@
   }
   </script>
   <script src="../static/approval-cascade.js"></script>
+  <script src="../static/file-preview.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/edit-presence.js"></script>
   <script src="../static/sidebar.js"></script>

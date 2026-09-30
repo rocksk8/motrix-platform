@@ -366,19 +366,33 @@ function voucherPage() {
       const list = this.srcFiles().map(f => Object.assign({}, f, { _url: this._srcFileUrl(f) }))
       if (!list[i]) return
       this.attErr = ''
-      this.attPv.mode = 'src'
-      this.attPv.list = list
-      this.attPv.ext = null
-      this.attPv.open = true
-      this._focusAttPv()
-      await this._loadAttPv(i)
+      const P = window.MotrixFilePreview
+      return P.open({
+        items: list, index: i, download: false, testids: this._PV_IDS,
+        fetchBlob: (it, type) => this._fetchAttBlob(it, type),
+        // 視窗下方：來源檔寫「案件單號・上傳日期」
+        meta: (it) => {
+          const at = String(it.uploadedAt || '').slice(0, 10)
+          const who = this.srcSel.type === 'case' ? '案件 ' + this.srcSel.key : this.srcSel.label
+          return who + (at ? '　上傳 ' + at : '')
+        },
+        actions: [
+          { label: '取消', testid: 'att-pv-cancel', ghost: true, run: () => P.close() },
+          { label: (it) => it && this.isBrought(it) ? '已帶入' : (this.uploading ? '帶入中…' : '帶入附件'), testid: 'att-pv-bring',
+            enabled: (it) => !(this.uploading || !it || this.isBrought(it) || it.exists === false),
+            run: () => this.bringFromPreview() },
+        ],
+      })
     },
 
     async bringFromPreview() {
-      const f = this.attPvItem()
+      const P = window.MotrixFilePreview
+      const f = P.current()
       if (!f || this.isBrought(f)) return
+      P.refresh()                                   // 「帶入中…」
       await this.bringIn(f)
-      if (this.isBrought(f)) this.closeAttPv()      // 失敗就留在視窗裡，錯誤顯示在下方
+      if (this.isBrought(f)) P.close()              // 失敗就留在視窗裡，錯誤顯示在下方
+      else { P.refresh(); if (this.attErr) P.setStatus(this.attErr) }
     },
 
     // ── `JV36`：各行來源的已上傳檔案（只列出；勾選才帶入）─────────────
@@ -646,13 +660,9 @@ function voucherPage() {
     _ATT_PDF: { '.pdf': 'application/pdf' },
 
     attKind(a) {
-      const name = String((a && a.filename) || '').toLowerCase()
-      const dot = name.lastIndexOf('.')
-      const ext = dot >= 0 ? name.slice(dot) : ''
-      const mime = String((a && a.mime) || '').toLowerCase().split(';')[0].trim()
-      if (this._ATT_IMAGE[ext] && this._ATT_IMAGE[ext] === mime) return 'image'
-      if (this._ATT_PDF[ext] && this._ATT_PDF[ext] === mime) return 'pdf'
-      return 'download'
+      // 判斷規則在共用元件（static/file-preview.js：副檔名＋mime 雙重符合才內嵌）；傳票頁縮圖與清單只需要 image／pdf／其他
+      const k = window.MotrixFilePreview.kind(a)
+      return (k === 'image' || k === 'pdf') ? k : 'download'
     },
 
     async _fetchAttBlob(a, type) {
@@ -664,10 +674,10 @@ function voucherPage() {
       return new Blob([await r.arrayBuffer()], { type: type })
     },
 
-    // 預覽 modal 的狀態。`url` 只在 image／pdf 時才有；關閉或切換時 revoke。
-    // mode：'att'＝本傳票附件（只看）、'src'＝分錄下方的來源檔（可帶入，list 是那一案的檔案）、
-    //       'ext'＝JV36 單一來源檔（每行的勾選清單）。
-    attPv: { open: false, idx: -1, kind: '', url: '', err: '', loading: false, ext: null, mode: 'att', list: null },
+    // 預覽窗＝共用元件 MotrixFilePreview（static/file-preview.js，P1 從這裡抽出）。本頁只負責三件事：取檔（_fetchAttBlob）、
+    // 視窗下方的說明（meta）、來源檔的「取消／帶入附件」按鈕。內嵌規則、鍵盤、blob 管理都在元件裡。
+    _PV_IDS: { overlay: 'voucher-att-preview', close: 'voucher-att-close', prev: 'att-pv-prev', next: 'att-pv-next',
+               img: 'voucher-att-preview-img', pdf: 'voucher-att-preview-pdf', meta: 'att-pv-meta', download: 'voucher-att-download' },
 
     openAttachment(a) {
       // `JV16` 那份清單（預覽窗內）與編輯頁清單**共用同一個頁內預覽窗**，不再 window.open。
@@ -675,114 +685,23 @@ function voucherPage() {
     },
 
     async openAttPreview(a) {
-      const idx = this.attachments.indexOf(a)
+      const items = this.attachments || []
+      const idx = items.indexOf(a)
       if (idx < 0) return
-      this.attPv.mode = 'att'
-      this.attPv.list = null
-      this.attPv.ext = null
-      this.attPv.open = true
-      this._focusAttPv()
-      await this._loadAttPv(idx)
-    },
-
-    // `JV36`：預覽一個還沒帶入的來源檔（同一個預覽窗、同一套內嵌規則）。
-    async openExtPreview(item) {
-      this.attPv.mode = 'ext'
-      this.attPv.list = null
-      this.attPv.ext = item
-      this.attPv.open = true
-      this._focusAttPv()
-      await this._loadAttPv(-1)
-    },
-
-    attPvItems() { return this.attPv.list || this.attachments || [] },
-
-    // 視窗下方：來源檔寫「案件單號・上傳日期」；附件寫來源與大小。
-    attPvMeta() {
-      const it = this.attPvItem()
-      if (!it) return ''
-      if (this.attPv.mode === 'src') {
-        const at = String(it.uploadedAt || '').slice(0, 10)
-        const who = this.srcSel.type === 'case' ? '案件 ' + this.srcSel.key : this.srcSel.label
-        return who + (at ? '　上傳 ' + at : '')
-      }
-      return this.attPv.mode === 'att' ? (this.fileSize(it.size) || '') : ''
-    },
-
-    // MotrixUI 的鍵盤規則：打開時焦點進視窗、Tab 鎖在視窗內、關閉後焦點回到原位。
-    _attPvOpener: null,
-
-    _focusAttPv() {
-      this._attPvOpener = document.activeElement
-      this.$nextTick(() => {
-        const box = this.$refs.attPvBox
-        const first = box && (box.querySelector('[data-testid="att-pv-cancel"]')
-                              || box.querySelector('[data-testid="voucher-att-close"]'))
-        if (first) first.focus()
+      return window.MotrixFilePreview.open({
+        items: items, index: idx, testids: this._PV_IDS,
+        fetchBlob: (it, type) => this._fetchAttBlob(it, type),
+        meta: (it) => this.fileSize(it.size) || '',
       })
     },
 
-    trapAttPvTab(ev) {
-      const box = this.$refs.attPvBox
-      if (!box) return
-      const f = Array.from(box.querySelectorAll('button, [href], iframe, [tabindex]:not([tabindex="-1"])'))
-        .filter(el => !el.disabled && el.offsetParent !== null)
-      if (!f.length) { ev.preventDefault(); return }
-      const first = f[0], last = f[f.length - 1]
-      const inside = box.contains(document.activeElement)
-      if (ev.shiftKey && (document.activeElement === first || !inside)) { ev.preventDefault(); last.focus() }
-      else if (!ev.shiftKey && (document.activeElement === last || !inside)) { ev.preventDefault(); first.focus() }
-    },
-
-    _revokeAttPv() {
-      if (this.attPv.url) URL.revokeObjectURL(this.attPv.url)
-      this.attPv.url = ''
-    },
-
-    async _loadAttPv(idx) {
-      this._revokeAttPv()
-      const a = this.attPv.ext || this.attPvItems()[idx]
-      if (!a) return
-      this.attPv.idx = idx
-      this.attPv.err = ''
-      this.attPv.kind = this.attKind(a)
-      if (this.attPv.kind === 'download') return
-      this.attPv.loading = true
-      try {
-        const type = this.attPv.kind === 'image'
-          ? this._ATT_IMAGE[a.filename.toLowerCase().slice(a.filename.lastIndexOf('.'))]
-          : 'application/pdf'
-        const blob = await this._fetchAttBlob(a, type)
-        // 回來時若已經切到別的附件或關掉了，丟掉這一份（先渲染再非同步載入的競態）。
-        if (!this.attPv.open || this.attPv.idx !== idx) return
-        this.attPv.url = URL.createObjectURL(blob)
-      } catch (e) {
-        this.attPv.err = '取得附件失敗（' + e.message + '）。'
-      } finally {
-        this.attPv.loading = false
-      }
-    },
-
-    attPvItem() { return this.attPv.ext || this.attPvItems()[this.attPv.idx] || null },
-
-    stepAttPv(d) {
-      const n = this.attPvItems().length
-      if (!this.attPv.open || !n || this.attPv.ext) return
-      return this._loadAttPv((this.attPv.idx + d + n) % n)
-    },
-
-    closeAttPv() {
-      if (!this.attPv.open) return
-      this._revokeAttPv()
-      this.attPv.open = false
-      this.attPv.ext = null
-      this.attPv.list = null
-      this.attPv.mode = 'att'
-      this.attPv.idx = -1
-      this.attPv.kind = ''
-      const back = this._attPvOpener
-      this._attPvOpener = null
-      if (back && back.focus && document.contains(back)) this.$nextTick(() => back.focus({ preventScroll: true }))
+    // `JV36`：預覽一個還沒帶入的來源檔（同一個預覽窗、同一套內嵌規則）。單檔：沒有 ◀ ▶。
+    async openExtPreview(item) {
+      return window.MotrixFilePreview.open({
+        items: [item], index: 0, nav: false, testids: this._PV_IDS,
+        fetchBlob: (it, type) => this._fetchAttBlob(it, type),
+        meta: () => '',
+      })
     },
 
     async downloadAttachment(a) {
@@ -799,7 +718,7 @@ function voucherPage() {
         document.body.removeChild(link)
         setTimeout(function () { URL.revokeObjectURL(url) }, 1000)
       } catch (e) {
-        this.attPv.err = '下載失敗（' + e.message + '）。'
+        this.attErr = '下載失敗（' + e.message + '）。'
       }
     },
 
