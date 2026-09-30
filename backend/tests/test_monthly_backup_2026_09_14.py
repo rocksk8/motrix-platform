@@ -165,3 +165,40 @@ def test_monthly_snapshot_check_still_rejects_a_foreign_or_empty_database(isolat
     summary = json.load(open(os.path.join(md, "彙總.json"), encoding="utf-8"))
     assert summary["db_snapshot"] is False
     assert not os.path.isfile(os.path.join(_pii_root(isolated_archive), "月備份", date.today().strftime("%Y-%m"), "motrix_erp.db"))
+
+
+def test_allowance_counts_rows_written_since_a_snapshot_taken_hours_ago(isolated_archive, monkeypatch):
+    """正式機 2026-10-01 02:50 再次告警：快照（沿用 00:00 的每日快照）audit_log 3319／彙總 3326（多 7 列）。
+    `_rows_written_after_snapshot` 以**快照檔自己的 mtime**起算（往前推 cushion）：快照是幾小時前拍的 ⇒ 之後寫的 7 列都算進寬容量
+    ⇒ 合格；同一份資料寬容量 0（舊行為）⇒ 不合格。"""
+    import sqlite3
+    import time
+    from datetime import datetime, timedelta
+    import archive
+    import db
+    monkeypatch.setattr(archive, "DB_PATH", db.DB_PATH)
+    snap = os.path.join(isolated_archive, "snap.db")
+    src = sqlite3.connect(db.DB_PATH)
+    dst = sqlite3.connect(snap)
+    src.backup(dst)
+    dst.close()
+    src.close()
+    hours_ago = time.time() - 4 * 3600
+    os.utime(snap, (hours_ago, hours_ago))                                           # 快照是 4 小時前拍的（沿用早上的）
+    conn = db.get_db()
+    try:
+        base = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+        for i in range(7):                                                            # 快照之後寫的 7 列（時間＝現在）
+            conn.execute("INSERT INTO audit_log (at, user_id, username, display_name, action, target_type, target_id, target_label, detail)"
+                         " VALUES (?,?,?,?,?,?,?,?,?)", (datetime.now().isoformat(timespec="seconds"), 1, "u", "u", "x.y", "t", str(i), "l", "{}"))
+        conn.commit()
+    finally:
+        conn.close()
+    allow = archive._rows_written_after_snapshot(snap)
+    assert allow["稽核紀錄"] >= 7, allow
+    names, counts = archive._snapshot_row_counts(snap)
+    summary = dict(counts, 稽核紀錄=counts["稽核紀錄"] + 7)                            # 彙總比快照多 7
+    assert archive.snapshot_content_ok(counts, summary, allowance=allow) is True
+    assert archive.snapshot_content_ok(counts, summary, allowance={}) is False         # 舊行為（沒帶寬容量）
+    assert archive.snapshot_content_ok(counts, dict(summary, 稽核紀錄=counts["稽核紀錄"] + 7 + 500), allowance=allow) is False   # 差距遠超寫入量仍擋
+    assert counts["稽核紀錄"] == base
