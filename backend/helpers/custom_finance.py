@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """自訂模組的金流（收入／支出）串接（建構器第三輪 S2.5；使用者 2026-09-30：「只要有收入、支出項，都需要跟營運報表或是相關模組數據串接」）。
 
-[單位] plat:custom-finance    [層] L1    [穩定度] 契約（只增）
-[公開介面] EVENT_POSTED, EVENT_REVERSED, case_finance, expense_entries, income_items, on_transition, post_states, undated_counts
+[單位] helper:custom_finance    [層] L1    [穩定度] 契約（只增）
+[公開介面] EVENT_POSTED, EVENT_REVERSED, case_finance, dup_skipped, expense_entries, income_items, on_transition, post_states, undated_counts
 [不變式]
   - 金額欄位＝欄位屬性 `finance:{kind: income|expense, dateField, cashDateField, caseField, cashAmountField}`；
     入帳狀態＝模組 `finance.postStates`（沒指定 ⇒ 簽核核准後的終態）。**即時算**：單據在入帳狀態就計入、離開就不計，不建分錄表
@@ -17,6 +17,7 @@
 """
 import json
 
+from . import case_access as _ca                 # L1 讀 quotations 只准經這個檔（DEPENDENCY-MAP §3.2）
 from . import custom_builder_support as _S
 
 EVENT_POSTED = _S.EVENT_FINANCE_POSTED
@@ -101,9 +102,7 @@ def _posted(conn):
 
 
 def _case_dept(conn, case_no):
-    r = conn.execute("SELECT u.department_id AS d FROM quotations q LEFT JOIN users u ON u.id=q.sales_person_id WHERE q.quote_no=?",
-                     (case_no,)).fetchone()
-    return r["d"] if r else None
+    return _ca.case_sales_department(conn, case_no)
 
 
 def expense_entries(conn, start, end) -> list:
@@ -138,7 +137,7 @@ def income_items(conn, start, end, basis, department_id=None) -> list:
             d = ln["cashDate"] if cash else ln["date"]
             if not d or not (start <= d <= end):
                 continue
-            if ln["case"] and conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (ln["case"],)).fetchone():
+            if ln["case"] and _ca.case_exists(conn, ln["case"]):
                 continue                                                    # dupSkipped：內建案件自己認列
             if department_id and (not ln["case"] or _case_dept(conn, ln["case"]) != department_id):
                 continue
@@ -167,7 +166,7 @@ def dup_skipped(conn) -> list:
     out = []
     for r, _body, lines in _posted(conn):
         for ln in lines:
-            if ln["kind"] == "income" and ln["case"] and conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (ln["case"],)).fetchone():
+            if ln["kind"] == "income" and ln["case"] and _ca.case_exists(conn, ln["case"]):
                 out.append({"module": r["module_key"], "recordNo": r["record_no"], "case": ln["case"], "amount": ln["amount"]})
     return out
 
@@ -176,7 +175,7 @@ def case_finance(conn, case_no) -> dict:
     """某案件（關聯案件欄位＝該單號）的入帳金流：`{expense: {total, items}, income: {total, items, skippedTotal}}`；金額取權責金額。
     支出＝案件成本的「自訂模組」一列；收入：案件是內建案件 ⇒ 由內建報價單認列，這裡的收入行標 `skipped` 並累計 `skippedTotal`（供對照，不進 total）。"""
     out = {"expense": {"total": 0, "items": []}, "income": {"total": 0, "items": [], "skippedTotal": 0}}
-    builtin = bool(case_no) and conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (case_no,)).fetchone() is not None
+    builtin = _ca.case_exists(conn, case_no)
     for r, body, lines in _posted(conn):
         for ln in lines:
             if ln["case"] != case_no:

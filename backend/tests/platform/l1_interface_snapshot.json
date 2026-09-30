@@ -1,5 +1,5 @@
 {
- "core_version": "1.80",
+ "core_version": "1.81",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -211,10 +211,12 @@
    "SYSTEM": "const",
    "case_access_allowed": "def(conn, q, user, *, allow_approver=…, allow_module=…)",
    "case_documents_readable": "def(conn, quote_no, user)",
+   "case_exists": "def(conn, quote_no)",
    "case_module_present": "def()",
    "case_not_found_message": "def(quote_no)",
    "case_owner_readable": "def(conn, quote_no, user)",
    "case_page_readable": "def(conn, quote_no, user)",
+   "case_sales_department": "def(conn, quote_no)",
    "case_summary_scope": "def(user, purpose=…)",
    "deny_case": "def(conn, quote_no, user, reason)",
    "guard_case_access": "def(conn, quote_no, user, *, allow_approver=…, allow_module=…)",

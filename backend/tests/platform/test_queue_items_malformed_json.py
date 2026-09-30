@@ -26,11 +26,16 @@ from core import registry, source_tree
 
 GOOD, BAD, NOFLOW = "AQJ-GOOD", "AQJ-BAD", "AQJ-NOFLOW"
 APPROVAL_COLS = ("approval_json", "change_approval_json")
+#: 簽核鏈在 JSON 物件的 `approval` 鍵裡的欄位（同 data_json 的形狀）：data_json；定義庫 ui_definitions 的 decision_json（S4 定義送審）
+DATA_COLS = ("data_json", "decision_json")
+#: 通用種資料填不出來的「這張表哪一列才算待簽」條件：表名 → {欄位: 值}（定義庫的待簽＝kind／scope／status 三個固定值）
+SEED_OVERRIDES = {"ui_definitions": {"kind": "custom_module", "scope": "company", "status": "submitted"}}
 APPR = {"requestedBy": "aqj_req", "requestedByDisplay": "aqj_req", "requestedAt": "2026-09-27T09:00:00", "currentTier": 0,
         "tiers": [{"approvers": [{"username": "aqj_x", "displayName": "aqj_x", "status": "pending"}]}]}
 #: 已知的提供者（名稱 → 擁有模組；None＝L1）。正對照：少了就是掃描壞了
 EXPECTED = {"case": "case", "invoice_voucher": "arap", "payment_request": "arap", "subcontract": "subcontract",
-            "shipping_note": "supply", "payroll": "payroll", "voucher": "accounting", "custom_modules": None}
+            "shipping_note": "supply", "payroll": "payroll", "voucher": "accounting", "custom_modules": None,
+            "custom_module_def": None}
 
 
 def _tables(fn):
@@ -48,7 +53,8 @@ def _mode(conn, fn, t):
         return None
     if set(APPROVAL_COLS) & cols:
         return "column"
-    if "data_json" in cols and "data_json" in inspect.getsource(fn):
+    src = inspect.getsource(fn)
+    if any(c in cols and c in src for c in DATA_COLS):
         return "data"
     return None
 
@@ -67,6 +73,11 @@ def _seed(conn, table, token, mode, kind):
         if pk and "INT" in typ:
             continue
         if name == "data_json":
+            v = {"good": json.dumps({"approval": APPR}, ensure_ascii=False), "bad": "{not json",
+                 "noflow": '{"x": 1}'}[kind] if mode == "data" else "{}"
+        elif name in SEED_OVERRIDES.get(table, {}):
+            v = SEED_OVERRIDES[table][name]
+        elif name in DATA_COLS:
             v = {"good": json.dumps({"approval": APPR}, ensure_ascii=False), "bad": "{not json",
                  "noflow": '{"x": 1}'}[kind] if mode == "data" else "{}"
         elif name in APPROVAL_COLS:

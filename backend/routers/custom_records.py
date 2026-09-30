@@ -372,16 +372,16 @@ def delete_staged_custom_file(key: str, file_id: str, authorization: str = Heade
 @router.get("/api/custom-modules/finance/case/{case_no}")
 def custom_finance_of_case(case_no: str, authorization: str = Header(None)):
     """某案件在自訂模組裡的入帳金流（案件成本用）。看得到案件底下單據的人才能讀（同 `case_documents_readable`）；
-    沒有案件模組／案件不存在 ⇒ 403（不洩漏案件是否存在）。"""
+    沒有案件模組／案件不存在／看不到 ⇒ 同一個 404（M01-O1：看不到＝不存在，不洩漏案件是否存在）。沒有查看財務金額權限 ⇒ 403（非逐案判定）。"""
     from helpers import can_see_financial
-    from helpers.case_access import case_documents_readable
+    from helpers.case_access import case_documents_readable, deny_case
     u = _require_user(authorization)
     if not can_see_financial(u):
         raise HTTPException(403, "沒有查看財務金額的權限")
     conn = get_db()
     try:
         if not case_documents_readable(conn, case_no, u):
-            raise HTTPException(403, "沒有這個案件的讀取權限")
+            deny_case(conn, case_no, u, "denied")            # 404（訊息同查無）＋audit 真正原因；同時關連線
         return CFIN.case_finance(conn, case_no)
     finally:
         conn.close()
