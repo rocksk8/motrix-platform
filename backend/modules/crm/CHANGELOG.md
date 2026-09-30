@@ -3,6 +3,9 @@
 ## 1.0.13 — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：附件開檔路徑綁單據（安全審查 W3））
 - 附件目錄提供者 `open()` 加路徑綁單據檢查（`helpers.uploads.upload_path_key`）：檔案路徑不在這張單據自己的資料夾 ⇒ 當作沒有這個檔。
 
+## 1.0.13 — 2026-09-30（暫用號，列車取號；wip/w2-referrer：業務開發新增「介紹人」）
+- 新增案件欄位「介紹人」（`dev_cases.referrer`，自由文字、選填、去頭尾空白、最多 60 字；超過或型別不對 400）：由本模組自己的 migration（`migrations/0001_dev_cases_referrer.py`，只新增一欄、冪等）建立；新增／編輯視窗、列表卡片、詳情、搜尋框（也搜介紹人）、編輯稽核 old→new；備份匯出的 `SELECT *` 自動含此欄。不帶到轉建的報價單（報價單沒有對應的自由「來源」欄位）。
+
 ## 1.0.12 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
 - 新增 `attachments.py::_CrmCatalog`（`attachments.catalog`／`crm`，IP-105）：開發記錄附件開檔；權限＝`_DevLogPathAccess`（模組規則＋row_access dev_case）。
 
