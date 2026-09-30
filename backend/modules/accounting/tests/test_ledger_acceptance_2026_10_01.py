@@ -174,6 +174,7 @@ def test_ledger_acceptance_end_to_end(client, make_user):
     T = Table()
     sup = _login(client, make_user, "acc_sup")
     conn = db.get_db()
+    conn.isolation_level = None          # 自動提交：測試自己的連線不可以握著寫入交易（否則 API 端的寫鎖會等不到）
     try:
         ROLES.ensure_meta(conn)
         ROLES.ensure_default_roles(conn)
