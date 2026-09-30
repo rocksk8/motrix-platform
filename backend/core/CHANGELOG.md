@@ -2,8 +2,8 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## （不升版號：介面不變）— 上傳檔頭檢查
-helpers/uploads.py 新增私有 _magic_matches／_check_upload_magic（唯一關卡；save_document_files 自動套用，勞報單回簽檔與工作日誌照片呼叫同一支）；save_document_files 簽章不變；白名單副檔名沒有檔頭規則 ⇒ 一律擋（fail-closed）。工作日誌照片新增副檔名白名單 jpg／png／gif／webp。
+## 1.76 — 2026-09-30（暫用號；wip/w2-upload-magic：上傳檔頭檢查）
+- L1（新增）：`helpers.uploads._check_upload_magic`（列入 `__l1_public__`）——副檔名白名單之外的檔頭（magic bytes）檢查，唯一關卡；`save_document_files` 自動套用，自有存檔邏輯的 L2（勞報單回簽檔）與 L1 工作日誌照片呼叫同一支。不符 ⇒ 400＋稽核 `upload.rejected_magic`。白名單裡沒有檔頭規則的副檔名一律擋（fail-closed）。`save_document_files` 簽章不變。
 
 ## 1.75 — 2026-09-30（列車 25 合併補號；wip/w1-builder3 c98f5bcc 的 L1 新增，原寫在 1.73 段但 1.74 已被行事曆開關取用）
 - L1（新增）：`core.paths.FORM_TEMPLATES_DIR`（自訂模組內建範本資料夾；原本用 `__file__` 算，違反 core.paths 守門）
