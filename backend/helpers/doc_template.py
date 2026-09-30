@@ -146,22 +146,66 @@ _UNAPPROVED_STYLE = ("background:#FEF2F2;border:2px solid #DC2626;color:#B91C1C;
                      "-webkit-print-color-adjust:exact;print-color-adjust:exact")
 
 
-def unapproved_banner(status="", detail="", cls="preview-banner") -> str:
-    """紅色「未核可・僅供預覽」橫幅（行內樣式：不依賴各主題的 CSS，列印／下載的 PDF 也印得出來）。
+#: 紅色（Material red 800）：浮水印、頁首條、頁尾都用它
+UNAPPROVED_RED = "#C62828"
+#: 每一頁頂端的紅條白字（@page 邊界框，列印／PDF 每一頁都有）
+UNAPPROVED_HEADER_TEXT = "未核可預覽稿 – 不可作為正式文件"
+_SVG_TILE = ("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='500'>"
+             "<text x='300' y='250' transform='rotate(-30 300 250)' text-anchor='middle' font-size='60' font-weight='900' "
+             "font-family='Microsoft JhengHei,PMingLiU,Arial,sans-serif' fill='%23C62828' fill-opacity='.11'>" + UNAPPROVED_TEXT + "</text></svg>")
+
+
+def _unapproved_css(doc_no: str) -> str:
+    """未核可單據的**每一頁**標示（使用者 2026-10-01：舊的灰色浮水印太淡、第 2 頁以後幾乎沒有）：
+    ① `position:fixed` 的大斜角紅色浮水印——Chromium／Edge 列印時 fixed 元素每一頁重畫一次（實測 3 頁 PDF 每頁都有）；
+    ② `@page` 邊界框：每一頁頂端整條紅底白字、頁尾單號＋頁碼（邊界框在內容之外，不會蓋到內文；fixed 的 top/bottom 會蓋到）；
+    ③ body 背景平鋪斜字（連續長頁的螢幕預覽、fixed 失效時的後備）；
+    ④ 舊的灰色 `.wm`／`.wm-overlay` 浮水印在未核可時一律隱藏——**同一套機制，不是兩套疊在一起**。
+    `@page` 的邊界只在本段加上頁首頁尾所需的上下 12mm；已核准的單據不走這裡（輸出與過去完全相同）。"""
+    foot = _esc(doc_no)
+    foot_text = ('"%s ｜ %s ｜ 第 " counter(page) " 頁"' % (foot.replace('"', ""), UNAPPROVED_TEXT)) if doc_no else (
+        '"%s ｜ 第 " counter(page) " 頁"' % UNAPPROVED_TEXT)
+    red = UNAPPROVED_RED
+    bar = "background:%s" % red
+    return (
+        "<style data-unapproved-style=\"1\">\n"
+        "@page{margin-top:12mm;margin-bottom:12mm;\n"
+        "  @top-left-corner{content:\"\";%(bar)s}\n  @top-left{content:\"\";%(bar)s}\n"
+        "  @top-center{content:\"%(head)s\";%(bar)s;color:#fff;font:700 12px \"Microsoft JhengHei\",Arial,sans-serif;width:120mm;white-space:nowrap}\n"
+        "  @top-right{content:\"\";%(bar)s}\n  @top-right-corner{content:\"\";%(bar)s}\n"
+        "  @bottom-left{content:\"\"}\n  @bottom-right{content:\"\"}\n"
+        "  @bottom-center{content:%(foot)s;color:%(red)s;font:700 11px \"Microsoft JhengHei\",Arial,sans-serif;white-space:nowrap}}\n"
+        ".wm,.wm-overlay{display:none!important}\n"
+        "html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}\n"
+        "body{background-image:url(\"%(tile)s\")}\n"
+        ".uw-wm{position:fixed;left:0;top:0;width:100%%;height:100%%;display:flex;align-items:center;justify-content:center;"
+        "pointer-events:none;z-index:2147483000;overflow:hidden}\n"
+        ".uw-wm span{display:block;text-align:center;transform:rotate(-32deg);white-space:nowrap;font:900 96px/1.15 \"Microsoft JhengHei\",\"PMingLiU\",Arial,sans-serif;"
+        "letter-spacing:.04em;color:%(red)s;opacity:.2;-webkit-print-color-adjust:exact;print-color-adjust:exact}\n"
+        "</style>\n" % {"bar": bar, "head": UNAPPROVED_HEADER_TEXT, "foot": foot_text, "red": red, "tile": _SVG_TILE})
+
+
+def unapproved_overlay(doc_no="", wm_text=None) -> str:
+    """每頁標示：樣式（頁首紅條、頁尾單號頁碼、背景平鋪、隱藏舊浮水印）＋ fixed 大斜角紅色浮水印。`wm_text` 可含換行（兩行）。"""
+    return _unapproved_css(doc_no) + '<div class="uw-wm" data-unapproved-wm="1"><span>%s</span></div>\n' % _esc(wm_text or UNAPPROVED_TEXT)
+
+
+def unapproved_banner(status="", detail="", cls="preview-banner", doc_no="", wm_text=None) -> str:
+    """紅色「未核可・僅供預覽」橫幅（行內樣式：不依賴各主題的 CSS，列印／下載的 PDF 也印得出來）＋每頁標示（`unapproved_overlay`）。
     `cls` 沿用原本的 `preview-banner`（既有選擇器與測試不變）；`data-unapproved` 是新的穩定錨點。
     已核准的單據不呼叫本函式（PDF 與過去完全相同）。"""
     st = _esc(status or "草稿")
     tail = ("　" + _esc(detail)) if detail else ""
     return ('<div class="%s unapproved-red" data-unapproved="1" style="%s">\u26a0 %s（目前狀態：%s）%s</div>\n'
-            % (cls, _UNAPPROVED_STYLE, UNAPPROVED_TEXT, st, tail))
+            % (cls, _UNAPPROVED_STYLE, UNAPPROVED_TEXT, st, tail)) + unapproved_overlay(doc_no, wm_text)
 
 
-def inject_unapproved(html, status="", detail="") -> str:
+def inject_unapproved(html, status="", detail="", doc_no="", wm_text=None) -> str:
     """把紅色橫幅放進一份已渲染好的 HTML（`<div id="root">` 之後，沒有就放 `<body>` 之後）。
     已經有 `data-unapproved` ⇒ 原樣回傳（冪等）。版型作者拿掉 banner 積木也擋不掉它（核可狀態由程式決定，不由版型決定）。"""
     if 'data-unapproved="1"' in html:
         return html
-    bar = unapproved_banner(status, detail)
+    bar = unapproved_banner(status, detail, doc_no=doc_no, wm_text=wm_text)
     for anchor in ('<div id="root">\n', '<div id="root">', "<body>\n", "<body>"):
         i = html.find(anchor)
         if i >= 0:
