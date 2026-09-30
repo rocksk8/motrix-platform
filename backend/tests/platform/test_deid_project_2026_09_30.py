@@ -134,6 +134,7 @@ def _mini_pkg(tmp_path):
         **_stub_files(),
         P.MANIFEST_REL: P.dump_manifest([{"module": "m", "version": "2026-09-01", "date": "d", "time": "t", "content": P.GENERIC_CONTENT}]),
         "backend/main.py": "pass\n",
+        "backend/autostart.bat": "cd /d \"%~dp0\"\n",
         "DEPLOY.md": "客戶版 <安裝目錄>\n", "DR-SOP.md": "客戶版 <安裝目錄>\n", "HTTPS-DEPLOY-CHECKLIST.md": "客戶版 <安裝目錄>\n"})
 
 
@@ -215,6 +216,8 @@ def test_rebuilt_sale_package_passes_verify_and_has_no_company_literals_in_upgra
     assert P.verify_tree(root, CFG) == [], P.verify_tree(root, CFG)
     assert rep["removed"] > 100 and len(rep["cuts"]) == len(CFG["cuts"]) and rep["manifest_projected"] > 100 and len(rep["replaced"]) == 3
     assert not (root / "product" / "sale_docs").exists(), "客戶版文件的來源目錄不可留在 sale 包"
+    assert "%~dp0" in (root / "backend" / "autostart.bat").read_text(encoding="utf-8") and not (root / "product" / "sale_files").exists()
+    assert [h for h in S.scan(root) if h.path == "backend/autostart.bat"] == []
     for doc in ("DEPLOY.md", "DR-SOP.md", "HTTPS-DEPLOY-CHECKLIST.md"):
         assert "<安裝目錄>" in (root / doc).read_text(encoding="utf-8") and [h for h in S.scan(root) if h.path == doc] == [], doc
     hits = [h for h in S.scan(root) if h.path == "backend/core/upgrade.py"]
