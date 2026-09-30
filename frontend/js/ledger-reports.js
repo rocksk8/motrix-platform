@@ -52,6 +52,7 @@ function ledgerReportsPage() {
     async run() {
       const seq = ++this._seq
       this.error = ''
+      if (this.start && this.end && this.start > this.end) { this.error = '起日不可晚於迄日。'; return }   // 使用者改到一半的日期不送出（後端也會擋，但不必多打一個 400）
       this.loading = true
       try {
         if (this.tab === 'tb') {

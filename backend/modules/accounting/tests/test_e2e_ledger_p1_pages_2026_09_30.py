@@ -112,10 +112,12 @@ def test_reports_page_trial_balance_drill_down_and_unbalanced_banner(live_server
     page = e2e_browser.new_page()
     bad, errs = _open(page, live_server, user, pw, "ledger-reports.html")
     page.wait_for_selector("[data-testid=lr-start]")
+    page.wait_for_selector("[data-testid=lr-tb-table]")            # 先等頁面初次自動載入完成，再輸入條件（否則初次載入會拿到輸入到一半的日期）
     page.fill("[data-testid=lr-start]", "2162-04-01")
     page.fill("[data-testid=lr-end]", "2162-04-30")
     page.click("[data-testid=lr-run]")
-    page.wait_for_selector("[data-testid=lr-tb-table]")
+    # 等終點狀態（新條件的數字出現）；頁面初次載入的空試算表也有這張 table，不能只等它存在
+    page.wait_for_function("() => { const t = document.querySelector('[data-testid=lr-tb-table]'); return t && t.innerText.includes('1,234') }")
     tb = page.locator("[data-testid=lr-tb-table]").inner_text()
     assert "銀行存款" in tb and "1,234" in tb                                     # 正對照：已知傳票在試算表出現
     assert not page.locator("[data-testid=lr-unbalanced]").is_visible()
