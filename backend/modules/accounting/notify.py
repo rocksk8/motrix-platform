@@ -33,6 +33,17 @@ _mt.register("ledger_action_returned", "總帳申請被退回", "approval", "non
              "申請已退回，動作沒有執行；修改後可重新申請。", _RETURN, owner="accounting")
 
 
+_INTRO = {
+    'voucher_submitted': "您好，以下會計傳票已進入簽核流程，敬請於系統中完成審核。",
+    'voucher_next_tier': "您好，前層審核已完成，傳票現已進入第 %d 層審核階段。",
+    'voucher_approved': "您好，以下會計傳票已完成審核並核准，可以過帳。",
+    'voucher_returned': "您好，您送審的會計傳票經審核後退回，請參閱下方說明修改後重新送審。",
+    'ledger_action_submitted': "您好，以下總帳動作需要最高管理者核准後才會執行。",
+    'ledger_action_approved': "您好，您申請的總帳動作已核准並執行。",
+    'ledger_action_returned': "您好，您申請的總帳動作經審核後退回，沒有執行。",
+}
+
+
 def _page(name):
     return "%s/pages/%s" % (_en._base_url(), name)
 
@@ -44,7 +55,7 @@ def notify_voucher_submitted(voucher_no, summary, approver_usernames):
         return
     html = _en._build_html("voucher_submitted", "會計傳票簽核申請", "待您審核", "#2F6FD6",
                            [("傳票號碼", voucher_no), ("摘要", summary or "—")],
-                           "", _page("approval-queue.html"), intro="您好，以下會計傳票已進入簽核流程，敬請於系統中完成審核。", button_text="前往審核")
+                           "", _page("approval-queue.html"), intro=_INTRO["voucher_submitted"], button_text="前往審核")
     _en._async_send(to, _mt.subject("voucher_submitted", "會計傳票待審核：%s" % voucher_no), html)
 
 
@@ -55,7 +66,7 @@ def notify_voucher_next_tier(voucher_no, summary, tier_no, total_tiers, approver
         return
     html = _en._build_html("voucher_next_tier", "會計傳票簽核流程通知", "輪到您審核", "#2F6FD6",
                            [("傳票號碼", voucher_no), ("摘要", summary or "—"), ("目前進度", "第 %d 層審核（共 %d 層）" % (tier_no, total_tiers))],
-                           "", _page("approval-queue.html"), intro="您好，前層審核已完成，傳票現已進入第 %d 層審核階段。" % tier_no, button_text="前往審核")
+                           "", _page("approval-queue.html"), intro=_INTRO["voucher_next_tier"] % tier_no, button_text="前往審核")
     _en._async_send(to, _mt.subject("voucher_next_tier", "會計傳票審核通知（第 %d/%d 層）：%s" % (tier_no, total_tiers, voucher_no)), html)
 
 
@@ -66,7 +77,7 @@ def notify_voucher_approved(voucher_no, summary, approved_by, requester_username
         return
     html = _en._build_html("voucher_approved", "會計傳票審核完成", "已核准", "#16A34A",
                            [("傳票號碼", voucher_no), ("摘要", summary or "—"), ("最後核准人", approved_by)],
-                           "", _page("voucher.html"), intro="您好，以下會計傳票已完成審核並核准，可以過帳。", button_text="前往查看")
+                           "", _page("voucher.html"), intro=_INTRO["voucher_approved"], button_text="前往查看")
     _en._async_send(to, _mt.subject("voucher_approved", "會計傳票已核准：%s" % voucher_no), html)
 
 
@@ -77,7 +88,7 @@ def notify_voucher_returned(voucher_no, summary, note, requester_username):
         return
     html = _en._build_html("voucher_returned", "會計傳票退回通知", "請修改後重新送審", "#DC2626",
                            [("傳票號碼", voucher_no), ("摘要", summary or "—")],
-                           "", _page("voucher.html"), intro="您好，您送審的會計傳票經審核後退回，請參閱下方說明修改後重新送審。", note=note or "", button_text="前往修改")
+                           "", _page("voucher.html"), intro=_INTRO["voucher_returned"], note=note or "", button_text="前往修改")
     _en._async_send(to, _mt.subject("voucher_returned", "會計傳票已退回：%s" % voucher_no), html)
 
 
@@ -88,7 +99,7 @@ def notify_ledger_action_submitted(request_no, action_label, requester, approver
         return
     html = _en._build_html("ledger_action_submitted", "總帳申請簽核", "待您審核", "#2F6FD6",
                            [("申請號", request_no), ("申請內容", action_label), ("申請人", requester)],
-                           "", _page("approval-queue.html"), intro="您好，以下總帳動作需要最高管理者核准後才會執行。", button_text="前往審核")
+                           "", _page("approval-queue.html"), intro=_INTRO["ledger_action_submitted"], button_text="前往審核")
     _en._async_send(to, _mt.subject("ledger_action_submitted", "總帳申請待審核：%s（%s）" % (request_no, action_label)), html)
 
 
@@ -99,7 +110,7 @@ def notify_ledger_action_approved(request_no, action_label, approved_by, request
         return
     html = _en._build_html("ledger_action_approved", "總帳申請已核准", "已核准並執行", "#16A34A",
                            [("申請號", request_no), ("申請內容", action_label), ("核准人", approved_by)],
-                           "", _page("ledger-hub.html"), intro="您好，您申請的總帳動作已核准並執行。", button_text="前往查看")
+                           "", _page("ledger-hub.html"), intro=_INTRO["ledger_action_approved"], button_text="前往查看")
     _en._async_send(to, _mt.subject("ledger_action_approved", "總帳申請已核准並執行：%s（%s）" % (request_no, action_label)), html)
 
 
@@ -110,5 +121,5 @@ def notify_ledger_action_returned(request_no, action_label, note, requester_user
         return
     html = _en._build_html("ledger_action_returned", "總帳申請退回通知", "動作未執行", "#DC2626",
                            [("申請號", request_no), ("申請內容", action_label)],
-                           "", _page("ledger-hub.html"), intro="您好，您申請的總帳動作經審核後退回，沒有執行。", note=note or "", button_text="前往查看")
+                           "", _page("ledger-hub.html"), intro=_INTRO["ledger_action_returned"], note=note or "", button_text="前往查看")
     _en._async_send(to, _mt.subject("ledger_action_returned", "總帳申請已退回：%s（%s）" % (request_no, action_label)), html)

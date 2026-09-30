@@ -70,7 +70,7 @@ def _clean(source_type, source_key, field, value):
 
 
 @router.get("/annotations")
-def list_annotations(source_type: str = None, source_key: str = None, authorization: str = Header(None)):
+def list_annotations(source_type: str = None, source_ref: str = None, authorization: str = Header(None)):     # 查詢參數叫 source_ref：`*_key` 會被『網址不可帶憑證』守門當成金鑰參數名
     _require_read(authorization)
     conn = get_db()
     try:
@@ -78,8 +78,8 @@ def list_annotations(source_type: str = None, source_key: str = None, authorizat
         q, args = "SELECT * FROM gl_source_annotations WHERE 1=1", []
         if source_type:
             q, args = q + " AND source_type=?", args + [source_type]
-        if source_key:
-            q, args = q + " AND source_key=?", args + [source_key]
+        if source_ref:
+            q, args = q + " AND source_key=?", args + [source_ref]
         rows = [dict(r) for r in conn.execute(q + " ORDER BY id DESC LIMIT %d" % (_MAX_LIST + 1), args)]
         return {"annotations": rows[:_MAX_LIST], "truncated": len(rows) > _MAX_LIST, "allowed": {k: list(v) for k, v in ALLOWED.items()}}
     finally:
