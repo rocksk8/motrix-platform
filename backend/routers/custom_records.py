@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from db import get_db
 from helpers import _require_user, _tok, _audit
 from helpers import custom_modules as CM
+from helpers import custom_builder_support as SUP
 from helpers import formula as FX
 from core import definitions as D
 
@@ -106,7 +107,8 @@ def list_custom_records(key: str, status: str = Query(None), field: str = Query(
     conn = get_db()
     try:
         _can_use(conn, u, key)
-        return CM.list_records(conn, key, status=status, field=field, value=value)
+        rows = CM.list_records(conn, key, status=status, field=field, value=value)
+        return SUP.mask_records(rows, _can_use(conn, u, key)["body"], u)
     finally:
         conn.close()
 
@@ -117,13 +119,14 @@ def create_custom_record(key: str, payload: dict = Body(...), authorization: str
     conn = get_db()
     try:
         _can_use(conn, u, key)
-        rec = CM.create_record(conn, key, payload.get("values"), u)
+        d = _can_use(conn, u, key)
+        rec = CM.create_record(conn, key, SUP.keep_hidden_values(d["body"], payload.get("values"), None, u), u)
     except CM.CustomModuleError as e:
         return _err(e)
     finally:
         conn.close()
     _audit(_tok(authorization), "custom.create", "custom_record", rec["record_no"], "建立 %s" % rec["record_no"], {"module": key})
-    return rec
+    return SUP.mask_record(rec, u)
 
 
 @router.post("/api/custom/{key}/compute")
@@ -133,7 +136,8 @@ def compute_custom_record(key: str, payload: dict = Body(...), version: int = Qu
     conn = get_db()
     try:
         _can_use(conn, u, key)
-        return CM.compute_preview(conn, key, payload.get("values"), version)
+        d = _can_use(conn, u, key)
+        return SUP.mask_compute(CM.compute_preview(conn, key, payload.get("values"), version), d["body"], u)
     except CM.CustomModuleError as e:
         return _err(e)
     finally:
@@ -153,7 +157,7 @@ def get_custom_record(key: str, record_no: str, authorization: str = Header(None
             _can_use(conn, u, key)
         # U14：前端依這個欄位決定要不要顯示「修改」「送出」（後端另外擋 403）
         rec["canEdit"] = CM.can_edit_draft(rec, rec["definition"], u)
-        return rec
+        return SUP.mask_record(rec, u)
     finally:
         conn.close()
 
@@ -164,13 +168,14 @@ def update_custom_record(key: str, record_no: str, payload: dict = Body(...), au
     conn = get_db()
     try:
         _can_use(conn, u, key)
-        rec = CM.update_record(conn, key, record_no, payload.get("values"), u)
+        cur = CM.get_record(conn, key, record_no)
+        rec = CM.update_record(conn, key, record_no, SUP.keep_hidden_values(cur["definition"], payload.get("values"), cur["data"], u), u)
     except CM.CustomModuleError as e:
         return _err(e)
     finally:
         conn.close()
     _audit(_tok(authorization), "custom.update", "custom_record", record_no, "修改 %s" % record_no, {"module": key})
-    return rec
+    return SUP.mask_record(rec, u)
 
 
 @router.post("/api/custom/{key}/records/{record_no}/transitions/{tkey}")
@@ -186,7 +191,7 @@ def transition_custom_record(key: str, record_no: str, tkey: str, payload: dict 
     finally:
         conn.close()
     _audit(_tok(authorization), "custom.transition", "custom_record", record_no, "%s：%s" % (record_no, tkey), {"module": key})
-    return rec
+    return SUP.mask_record(rec, u)
 
 
 def _decide(conn, u, key, record_no, approve, note):
@@ -207,6 +212,7 @@ def approve_custom_record(key: str, record_no: str, payload: dict = Body(default
         conn.close()
     if isinstance(rec, dict):
         _audit(_tok(authorization), "custom.approve", "custom_record", record_no, "核准 %s" % record_no, {"module": key, "note": note})
+        return SUP.mask_record(rec, u)
     return rec
 
 
@@ -221,6 +227,7 @@ def reject_custom_record(key: str, record_no: str, payload: dict = Body(default=
         conn.close()
     if isinstance(rec, dict):
         _audit(_tok(authorization), "custom.reject", "custom_record", record_no, "退回 %s" % record_no, {"module": key, "note": note})
+        return SUP.mask_record(rec, u)
     return rec
 
 
@@ -236,7 +243,7 @@ def output_custom_record(key: str, record_no: str, format: str = Query("html"), 
             return _err(e)
         if not _is_approver(rec, u["username"], conn):
             _can_use(conn, u, key)
-        html = CM.render_output(conn, key, record_no)
+        html = SUP.render_output_for(conn, key, record_no, u)
     finally:
         conn.close()
     if format == "pdf":

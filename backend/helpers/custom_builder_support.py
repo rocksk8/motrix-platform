@@ -2,7 +2,7 @@
 """建構器底層支援（建構器第三輪 S2.5／S3／S5，CORE 1.72，只增）。
 
 [單位] plat:custom-builder-support    [層] L1    [穩定度] 契約（只增）
-[公開介面] ACCESS_KEYS, EVENT_FINANCE_POSTED, EVENT_FINANCE_REVERSED, access_problems, can_see_field, can_see_menu,
+[公開介面] ACCESS_KEYS, hidden_keys, keep_hidden_values, mask_compute, mask_record, mask_records, render_output_for, EVENT_FINANCE_POSTED, EVENT_FINANCE_REVERSED, access_problems, can_see_field, can_see_menu,
     create_revision, emit_finance_event, leaking_formulas, mark_finance_processed, mask_for, pending_finance_events
 [不變式]
   - 欄位／選單可見設定存在定義 JSON（`fields[].access.visibleTo`、`menu.visibleTo`，形狀 `{roles:[…], users:[…]}`，
@@ -56,6 +56,77 @@ def mask_for(body, values, user) -> dict:
     return {k: v for k, v in (values or {}).items() if k not in hidden}
 
 
+def hidden_keys(body, user) -> set:
+    """這位使用者看不到的欄位 key。"""
+    return {f["key"] for f in body.get("fields", []) if isinstance(f, dict) and f.get("key") and not can_see_field(f, user)}
+
+
+def _mask_view(view, hidden):
+    v = dict(view)
+    v["fields"] = {k: x for k, x in (view.get("fields") or {}).items() if k not in hidden}
+    for k in hidden:
+        v.pop(k, None)
+    return v
+
+
+def mask_record(rec, user) -> dict:
+    """單據（get_record 形狀）⇒ 拿掉使用者看不到的欄位（data、view、refLabels）。新的 dict；沒有受限欄位 ⇒ 原樣。
+    定義（definition）本身不動——只有值被藏起來；後端強制，前端不需（也不能）自己再藏。"""
+    body = rec.get("definition") or {}
+    hidden = hidden_keys(body, user)
+    if not hidden:
+        return rec
+    out = dict(rec)
+    out["data"] = {k: v for k, v in (rec.get("data") or {}).items() if k not in hidden}
+    if isinstance(rec.get("view"), dict):
+        out["view"] = _mask_view(rec["view"], hidden)
+    if isinstance(rec.get("refLabels"), dict):
+        out["refLabels"] = {k: v for k, v in rec["refLabels"].items() if k not in hidden}
+    out["hiddenFields"] = sorted(hidden)
+    return out
+
+
+def mask_records(rows, body, user) -> list:
+    """列表列（data 在每列裡）⇒ 拿掉看不到的欄位。"""
+    hidden = hidden_keys(body, user)
+    if not hidden:
+        return rows
+    return [dict(r, data={k: v for k, v in (r.get("data") or {}).items() if k not in hidden}) for r in rows]
+
+
+def mask_compute(result, body, user) -> dict:
+    """即時計算結果（computed／tables）拿掉看不到的欄位。"""
+    hidden = hidden_keys(body, user)
+    if not hidden:
+        return result
+    out = dict(result)
+    for k in ("computed", "tables"):
+        if isinstance(out.get(k), dict):
+            out[k] = {x: v for x, v in out[k].items() if x not in hidden}
+    return out
+
+
+def keep_hidden_values(body, values, existing, user) -> dict:
+    """寫入前：使用者看不到的欄位——不接受他送來的值（丟掉），改用單據既有的值（新單沒有既有值 ⇒ 不填）。
+    否則他一存檔，看不到的欄位就被清空（或被亂填）。"""
+    hidden = hidden_keys(body, user)
+    if not hidden:
+        return values
+    out = {k: v for k, v in (values or {}).items() if k not in hidden}
+    for k in hidden:
+        if existing and existing.get(k) is not None:
+            out[k] = existing[k]
+    return out
+
+
+def render_output_for(conn, module_key, record_no, user) -> str:
+    """單據輸出（HTML）但看不到的欄位不進版型（版型引用到＝空白）。"""
+    from . import custom_modules as CM
+    rec = mask_record(CM.get_record(conn, module_key, record_no), user)
+    body = CM._load_def(conn, module_key, rec["def_version"])["body"]
+    return CM.render_view(body, rec["view"])
+
+
 def access_problems(body) -> list:
     """定義的可見設定有問題 ⇒ [{key,message}]（發布驗證用）：未知鍵、形狀不對、角色／帳號不是字串清單。"""
     out = []
@@ -71,6 +142,8 @@ def access_problems(body) -> list:
         if v is not None and (not isinstance(v, dict) or set(v) - {"roles", "users"}
                               or not all(isinstance(v.get(k, []), list) for k in ("roles", "users"))):
             out.append({"path": "fields.%s.access" % key, "message": "visibleTo 要是 {roles:[…], users:[…]}"})
+        if f.get("required") and _spec((acc.get("visibleTo") if isinstance(acc, dict) else None)) is not None:
+            out.append({"path": "fields.%s.required" % key, "message": "必填欄位不可以設成只有部分人看得到（其他人填不了就存不了）"})
     menu = body.get("menu")
     v = menu.get("visibleTo") if isinstance(menu, dict) else None
     if v is not None and (not isinstance(v, dict) or set(v) - {"roles", "users"}

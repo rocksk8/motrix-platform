@@ -327,10 +327,16 @@
    "can_see_menu": "def(menu, user)",
    "create_revision": "def(conn, module_key, record_no, reason, user)",
    "emit_finance_event": "def(conn, event, module_key, record_id, record_no, kind, payload, dedupe_key=…)",
+   "hidden_keys": "def(body, user)",
+   "keep_hidden_values": "def(body, values, existing, user)",
    "leaking_formulas": "def(body)",
    "mark_finance_processed": "def(conn, ids)",
+   "mask_compute": "def(result, body, user)",
    "mask_for": "def(body, values, user)",
-   "pending_finance_events": "def(conn, limit=…)"
+   "mask_record": "def(rec, user)",
+   "mask_records": "def(rows, body, user)",
+   "pending_finance_events": "def(conn, limit=…)",
+   "render_output_for": "def(conn, module_key, record_no, user)"
   },
   "helper:custom_fields": {
    "DATA_CLASSES": "const",
