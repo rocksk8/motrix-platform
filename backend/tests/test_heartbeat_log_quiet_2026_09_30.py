@@ -44,15 +44,15 @@ def _set_time(monkeypatch, mod, when):
 def test_should_log_truth_table(hb):
     h = hb          # 用 fixture：import heartbeat_job 會在 LOGS_DIR 開 log 檔，必須先導到 tmp
     t = datetime(2026, 9, 30, 10, 5)
-    assert h.should_log({}, "ok", t)                                                   # 第一筆
+    assert h._should_log({}, "ok", t)                                                   # 第一筆
     same_day = {"status": "ok", "day": "2026-09-30", "hour": "2026-09-30 09"}
-    assert not h.should_log(same_day, "ok", t)                                         # 正常＋同一天 ⇒ 不記
-    assert h.should_log(same_day, "ok", datetime(2026, 10, 1, 0, 5))                   # 每天第一筆
-    assert h.should_log(same_day, "local_down", t)                                     # 狀態改變
+    assert not h._should_log(same_day, "ok", t)                                         # 正常＋同一天 ⇒ 不記
+    assert h._should_log(same_day, "ok", datetime(2026, 10, 1, 0, 5))                   # 每天第一筆
+    assert h._should_log(same_day, "local_down", t)                                     # 狀態改變
     down = {"status": "local_down", "day": "2026-09-30", "hour": "2026-09-30 10"}
-    assert not h.should_log(down, "local_down", t)                                     # 壞的持續、同一小時 ⇒ 不記
-    assert h.should_log(down, "local_down", datetime(2026, 9, 30, 11, 0))              # 每小時一筆
-    assert h.should_log(down, "ok", t)                                                 # 壞→好要記
+    assert not h._should_log(down, "local_down", t)                                     # 壞的持續、同一小時 ⇒ 不記
+    assert h._should_log(down, "local_down", datetime(2026, 9, 30, 11, 0))              # 每小時一筆
+    assert h._should_log(down, "ok", t)                                                 # 壞→好要記
 
 
 def test_normal_runs_write_one_log_line_per_day_and_one_state_write(hb, monkeypatch, tmp_path):
@@ -101,4 +101,4 @@ def test_logs_have_a_size_cap(hb):
         assert "RotatingFileHandler" in src and "maxBytes" in src, name + " 的 log 要有大小上限"
         assert "logging.FileHandler(" not in src and "filename=_LOG_PATH" not in src, name + " 不可退回無上限的 FileHandler"
     h = hb
-    assert h.LOG_MAX_BYTES <= 10 * 1024 * 1024 and h.LOG_BACKUPS <= 5
+    assert h._LOG_MAX_BYTES <= 10 * 1024 * 1024 and h._LOG_BACKUPS <= 5

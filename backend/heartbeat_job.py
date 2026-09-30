@@ -19,21 +19,21 @@ _LOG_PATH    = os.path.join(_paths.LOGS_DIR, "heartbeat_job.log")
 _STATE_PATH  = os.path.join(_paths.LOGS_DIR, "heartbeat_state.json")
 _LOCAL_PING  = "http://127.0.0.1:666/api/ping"
 _TIMEOUT     = 10
-LOG_MAX_BYTES = 5 * 1024 * 1024      # 單檔上限；加 backupCount 共 3 份（≤ 15MB）
-LOG_BACKUPS   = 2
+_LOG_MAX_BYTES = 5 * 1024 * 1024      # 單檔上限；加 backupCount 共 3 份（≤ 15MB）
+_LOG_BACKUPS   = 2
 
 os.makedirs(os.path.dirname(_LOG_PATH), exist_ok=True)
 # 2026-09-30 寫入量（使用者：「盡可能降低硬碟的重複寫入」）：log 加大小上限（5MB×3 代，總量 ≤ 20MB）；
 # 正常時只在「狀態改變」或「每天第一筆」才記（原本每 5 分鐘 2 行、永不輪替）。
 logging.basicConfig(
-    handlers=[logging.handlers.RotatingFileHandler(_LOG_PATH, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUPS, encoding="utf-8")],
+    handlers=[logging.handlers.RotatingFileHandler(_LOG_PATH, maxBytes=_LOG_MAX_BYTES, backupCount=_LOG_BACKUPS, encoding="utf-8")],
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
 )
 logger = logging.getLogger(__name__)
 
 
-def should_log(prev: dict, status: str, now: datetime) -> bool:
+def _should_log(prev: dict, status: str, now: datetime) -> bool:
     """這一次要不要寫一筆「結果」log。狀態＝ok／local_down／ext_fail／ext_unset。
     - 狀態和上次不同 ⇒ 記（含從壞回好）
     - 正常（ok／ext_unset）：同一天只記第一筆
@@ -91,7 +91,7 @@ def main() -> None:
         status = "local_down"
         if ping_url:
             _http_get(ping_url.rstrip("/") + "/fail")
-        if should_log(prev, status, now):
+        if _should_log(prev, status, now):
             logger.error("本機 /api/ping 未回應，ERP 服務可能已停止")
             _save_state(status, now)
         return
@@ -102,7 +102,7 @@ def main() -> None:
         status, msg, level = "ok", "本機 /api/ping 正常；外部心跳打卡成功", logging.INFO
     else:
         status, msg, level = "ext_fail", "本機 /api/ping 正常；外部心跳打卡失敗（本機服務正常，可能是本機對外網路異常）", logging.WARNING
-    if should_log(prev, status, now):
+    if _should_log(prev, status, now):
         logger.log(level, msg)
         _save_state(status, now)
 
