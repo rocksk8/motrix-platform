@@ -8,14 +8,15 @@ import importlib
 from core.registry import ModuleSpec
 
 from modules.accounting import attachments_catalog
-from modules.accounting.api import account_items, accounting_export, ledger_annotations, ledger_closing, ledger_engine, ledger_periods, ledger_reports, ledger_settings, ledger_statements, ledger_tax, voucher_providers, vouchers
+from modules.accounting.api import account_items, accounting_export, ledger_annotations, ledger_closing, ledger_engine, ledger_periods, ledger_reports, ledger_requests, ledger_settings, ledger_statements, ledger_tax, voucher_providers, vouchers
 
 _m0001 = importlib.import_module("modules.accounting.migrations.0001_ledger_base")
+_m0002 = importlib.import_module("modules.accounting.migrations.0002_ledger_action_requests")
 
 MODULE = ModuleSpec(
     key="accounting",
-    routers=[accounting_export.router, ledger_annotations.router, account_items.router, vouchers.router, ledger_periods.router, ledger_reports.router, ledger_engine.router, ledger_settings.router, ledger_tax.router, ledger_statements.router, ledger_closing.router],
-    migrations=[(1, _m0001.up)],
+    routers=[accounting_export.router, ledger_annotations.router, account_items.router, vouchers.router, ledger_periods.router, ledger_reports.router, ledger_engine.router, ledger_settings.router, ledger_tax.router, ledger_statements.router, ledger_closing.router, ledger_requests.router],
+    migrations=[(1, _m0001.up), (2, _m0002.up)],
     providers={
         # IP-2：M07 獎金傳票草稿與科目檢查
         ("voucher.draft", "accounting"): voucher_providers._provide_voucher_draft,
@@ -32,6 +33,7 @@ MODULE = ModuleSpec(
         ("voucher.by_case", "accounting"): vouchers.vouchers_by_case,
         # M01-PLAN §3-7（C）：待我簽核的傳票項目、轉簽的簽核鏈讀寫（M01 佇列只彙整）
         ("approval.queue_items", "voucher"): voucher_providers._queue_items,
+        ("approval.queue_items", "ledger_action"): ledger_requests.queue_items,
         ("approval.reassign", "voucher"): voucher_providers._VoucherReassign,
     },
 )

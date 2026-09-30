@@ -278,7 +278,10 @@ def test_api_permissions(client, make_user, conn):
     assert client.get("/api/ledger/years", headers=cash).status_code == 200            # cashier 可讀
     assert client.post("/api/ledger/periods/%d/close" % pid, headers=cash, json={"accept_warnings": True}).status_code == 403
     r = client.post("/api/ledger/periods/%d/close" % pid, headers=fin, json={"accept_warnings": True})
-    assert r.status_code == 200, r.text
+    assert r.status_code == 200 and r.json()["pending"] is True, r.text                          # C：財務人員送申請，不直接結帳
+    assert _period(conn, y, 12)["status"] == "open"
+    r = client.post("/api/ledger/periods/%d/close" % pid, headers=sup, json={"accept_warnings": True})
+    assert r.status_code == 200 and r.json().get("pending") is None, r.text                      # 最高管理者直接執行
     assert client.post("/api/ledger/periods/%d/lock" % pid, headers=fin).status_code == 403   # 鎖定只有 superadmin
     assert client.post("/api/ledger/periods/%d/lock" % pid, headers=sup).status_code == 200
     r = client.post("/api/ledger/periods/%d/reopen" % pid, headers=fin, json={"reason": "x"})

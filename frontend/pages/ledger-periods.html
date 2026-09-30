@@ -56,6 +56,26 @@
       <div class="lp-err" x-show="error" x-text="error" data-testid="lp-error"></div>
       <div class="lp-ok" x-show="notice" x-text="notice" data-testid="lp-notice"></div>
 
+      <div class="lp-card" x-show="requests.length" data-testid="lp-requests">
+        <div class="lp-h">總帳申請</div>
+        <div class="lp-note">結帳、重開期間、年度決算、期初批次由財務人員送申請，最高管理者（會計主管）到「待我簽核」核准後自動執行；申請人可在核准前撤回。</div>
+        <table class="lp-table">
+          <thead><tr><th>申請號</th><th>內容</th><th>申請人</th><th>狀態</th><th>說明</th><th></th></tr></thead>
+          <tbody>
+            <template x-for="r in requests" :key="r.id">
+              <tr :data-testid="'lp-req-' + r.request_no">
+                <td x-text="r.request_no"></td>
+                <td x-text="r.label"></td>
+                <td x-text="r.requested_by_display || r.requested_by"></td>
+                <td x-text="r.status_label" :data-testid="'lp-req-status-' + r.request_no"></td>
+                <td x-text="r.decision_note || (r.decided_by ? r.decided_by : '')"></td>
+                <td><button class="lp-btn" x-show="canWithdraw(r)" @click="withdrawReq(r)" :data-testid="'lp-req-withdraw-' + r.request_no">撤回</button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
       <div class="lp-card">
         <div class="lp-h">建立會計年度</div>
         <div class="lp-row">
@@ -143,7 +163,7 @@
               <tr>
                 <td x-text="b.year"></td><td x-text="b.opening_date"></td><td x-text="b.voucher_no || ''"></td>
                 <td x-text="batchLabel(b)"></td><td class="lp-num" x-text="fmt(b.debit)"></td>
-                <td style="text-align:right"><button class="lp-btn" x-show="!b.undone_at && b.voucher_status === '草稿'" @click="undoBatch(b)" data-testid="lp-op-undo">撤銷</button></td>
+                <td style="text-align:right"><button class="lp-btn" x-show="!b.undone_at && b.voucher_status === '草稿' && isSuper()" @click="undoBatch(b)" data-testid="lp-op-undo">撤銷</button></td>
               </tr>
             </template>
           </tbody>

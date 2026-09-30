@@ -1,7 +1,7 @@
 {
   "key": "accounting",
   "name": "會計",
-  "version": "1.1.22",
+  "version": "1.1.23",
   "core": ">=1.0,<2.0",
   "license_key": "accounting",
   "permissions": [
@@ -17,6 +17,7 @@
     "fa_revisions",
     "gl_account_meta",
     "gl_account_roles",
+    "gl_action_requests",
     "gl_backfill_runs",
     "gl_balance_snapshot",
     "gl_category_map",
@@ -83,6 +84,10 @@
       },
       {
         "name": "gl_account_roles",
+        "class": "T1"
+      },
+      {
+        "name": "gl_action_requests",
         "class": "T1"
       },
       {

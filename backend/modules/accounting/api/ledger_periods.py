@@ -10,6 +10,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 
 from db import get_db
 from helpers import _audit, _require_user, _tok, require_any_module
+from modules.accounting.api import ledger_requests as _requests
 from modules.accounting.ledger import opening as _opening
 from modules.accounting.ledger import periods as _periods
 
@@ -121,6 +122,8 @@ def checklist(period_id: int, authorization: str = Header(None)):
 @router.post("/periods/{period_id}/close")
 def close(period_id: int, body: dict = Body(default={}), authorization: str = Header(None)):
     user = _require_write(authorization)
+    if user.get("role") != "superadmin":                # C：一般財務人員送申請，最高管理者核准後自動執行
+        return _requests.submit(user, "period_close", dict(body or {}, period_id=period_id), authorization)
     conn = get_db()
     try:
         h = _run(conn, _periods.close_period, period_id, _who(user), bool((body or {}).get("accept_warnings")),
@@ -135,6 +138,8 @@ def close(period_id: int, body: dict = Body(default={}), authorization: str = He
 @router.post("/periods/{period_id}/reopen")
 def reopen(period_id: int, body: dict = Body(default={}), authorization: str = Header(None)):
     user = _require_write(authorization)
+    if user.get("role") != "superadmin":                # C
+        return _requests.submit(user, "period_reopen", dict(body or {}, period_id=period_id), authorization)
     conn = get_db()
     try:
         stale = _run(conn, _periods.reopen_period, period_id, _who(user), str((body or {}).get("reason") or ""))
@@ -199,6 +204,8 @@ def opening_preview(body: dict = Body(...), authorization: str = Header(None)):
 def opening_create(body: dict = Body(...), authorization: str = Header(None)):
     user = _require_write(authorization)
     body = body or {}
+    if user.get("role") != "superadmin":                # C
+        return _requests.submit(user, "opening_create", body, authorization)
     conn = get_db()
     try:
         res = _run(conn, _opening.create_batch, body.get("year"), str(body.get("opening_date") or ""),

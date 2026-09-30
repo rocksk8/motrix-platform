@@ -322,9 +322,11 @@ def test_api_flow_permissions_and_export(client, make_user, conn):
     r = client.post(base + "/closing/generate", headers=fin, json={})
     assert r.status_code == 200 and len(r.json()["vouchers"]) == 2, r.text
     assert client.post(base + "/closing/generate", headers=fin, json={}).status_code == 400          # 已有草稿：要明說
-    assert client.post(base + "/close", headers=fin, json={"accept_warnings": True}).status_code == 400   # 結轉傳票還沒過帳
+    assert client.post(base + "/close", headers=sup, json={"accept_warnings": True}).status_code == 400   # 結轉傳票還沒過帳
     _post_closing(conn, y)
-    r = client.post(base + "/close", headers=fin, json={"accept_warnings": True})
+    pend = client.post(base + "/close", headers=fin, json={"accept_warnings": True})
+    assert pend.status_code == 200 and pend.json()["pending"] is True                                    # C：財務人員送申請，不直接決算
+    r = client.post(base + "/close", headers=sup, json={"accept_warnings": True})
     assert r.status_code == 200 and r.json()["net_income"] == 5000, r.text
     assert client.post(base + "/reopen", headers=fin, json={"reason": "x"}).status_code == 403     # 重開只有 superadmin
     r = client.get(base + "/statements", headers=cash).json()
