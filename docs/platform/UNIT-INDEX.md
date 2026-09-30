@@ -41,7 +41,7 @@
 | `helper:case_roles` | L1 | 案件角色（caseRecord.roles 的 filler／sales／executor）的兩種形狀（CM3，2026-09-24）。（無單位卡） | 5 | 3 | — |
 | `helper:company_identity` | L1 | §9 QL · 一份單據要印的「公司身分」。（無單位卡） | 19 | 11 | — |
 | `helper:company_setup` | L1 | 本公司資料設定閘門：「這個安裝的本公司資料有沒有人確認過」（docs/platform/COMPANY-SETUP-GATE.md §3、§4.3、§6）。 | 66 | 7 | `tests/test_company_setup_core_2026_09_28.py`、`tests/test_company_setup_cli_2026_09_28.py`、`tests/test_company_setup_gate_2026_09_28.py`、`tests/test_company_setup_output_gate_2026_09_28.py` |
-| `helper:custom_builder_support` | L1 | 建構器底層支援（建構器第三輪 S2.5／S3／S5，CORE 1.72，只增）。 | 18 | 3 | `tests/test_builder_support_2026_09_30.py` |
+| `helper:custom_builder_support` | L1 | 建構器底層支援（建構器第三輪 S2.5／S3／S5，CORE 1.72，只增）。 | 19 | 3 | `tests/test_builder_support_2026_09_30.py` |
 | `helper:custom_fields` | L1 | 自訂欄位命名空間（P4，CUSTOMIZATION-SPEC §3.6）。（無單位卡） | 10 | 2 | — |
 | `helper:custom_files` | L1 | 自訂模組附件（file／image 欄位，建構器第三輪 S2；core migration v4 `custom_record_files`）。 | 16 | 2 | `tests/test_builder3_files_2026_09_30.py` |
 | `helper:custom_modules` | L1 | 自訂模組引擎（P8，CUSTOMIZATION-SPEC §1／§3.1／§8.1）：定義是資料，不是程式。（無單位卡） | 52 | 4 | — |
@@ -54,7 +54,7 @@
 | `helper:financial_mask` | L1 | 案件金額欄位遮蔽（CM13，2026-09-24 使用者裁示「要，後端移除金額欄位」）。（無單位卡） | 13 | 3 | — |
 | `helper:formula` | L1 | 安全的公式（CUSTOMIZATION-SPEC §1「積木式、不能寫程式」、§8.1 ②「公式語法檢查回傳錯誤位置」）。（無單位卡） | 9 | 3 | — |
 | `helper:geo` | L1 | 地理查詢：地址 → 座標（OSM／Nominatim），以及兩點間的直線距離。（無單位卡） | 80 | 5 | — |
-| `helper:google_calendar` | L1 | Google 行事曆整合 — Phase 1（系統 → 行事曆，push only，2026-08-21）。（無單位卡） | 11 | 6 | — |
+| `helper:google_calendar` | L1 | Google 行事曆整合 — Phase 1（系統 → 行事曆，push only，2026-08-21）。（無單位卡） | 17 | 8 | — |
 | `helper:legal_params` | L1 | L1 法規參數服務（R1；規格 CUSTOMIZATION-SPEC §9.1）。（無單位卡） | 27 | 22 | — |
 | `helper:licensing` | L1 | 授權金鑰核心（2026-09-21，細線 1 第 1、2 步）。（無單位卡） | 13 | 4 | — |
 | `helper:mail_types` | L1 | L1 信件類型登記表（CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）。（無單位卡） | 13 | 8 | — |

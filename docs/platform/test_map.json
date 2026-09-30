@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 841,
-  "unmapped": 11,
+  "tests": 853,
+  "unmapped": 12,
   "kinds": {
-   "api": 448,
-   "e2e": 195,
+   "api": 454,
+   "e2e": 197,
    "audit": 119,
-   "unit": 79
+   "unit": 83
   },
   "routes": 655
  },
@@ -17,6 +17,7 @@
   "backend/tests/platform/test_deploy_dashboard_health.py",
   "backend/tests/platform/test_deploy_dashboard_jobs.py",
   "backend/tests/platform/test_deploy_dashboard_scope_gate_2026_09_30.py",
+  "backend/tests/platform/test_no_leaky_tempdirs.py",
   "backend/tests/platform/test_stepfile_drill_2026_09_30.py",
   "backend/tests/test_approval_queue_extra_types_2026_09_30.py",
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py",
@@ -3501,6 +3502,36 @@
    },
    "module": "arap"
   },
+  "backend/modules/arap/tests/test_expense_payout_calendar_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_fake_gcal.py",
+    "file:backend/tests/_requires.py",
+    "mod:arap/api/__init__",
+    "mod:arap/api/cashier"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/arap/api/__init__.py",
+     "backend/modules/arap/api/cashier.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_fake_gcal.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
   "backend/modules/arap/tests/test_finance_advisory_2026_08_28.py": {
    "kind": "api",
    "units": [
@@ -3991,6 +4022,34 @@
    },
    "module": "case"
   },
+  "backend/modules/case/tests/test_case_update_calendar_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_fake_gcal.py",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_fake_gcal.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
   "backend/modules/case/tests/test_e2e_approval_queue_attachment_p0_2026_09_30.py": {
    "kind": "e2e",
    "units": [
@@ -4239,6 +4298,34 @@
     "mod:crm/api"
    ],
    "evidence": {
+    "api": [
+     "backend/modules/crm/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_dev_case_update_calendar_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_fake_gcal.py",
+    "mod:crm/__init__",
+    "mod:crm/api"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/crm/__init__.py",
+     "backend/modules/crm/api.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_fake_gcal.py"
+    ],
     "api": [
      "backend/modules/crm/api.py"
     ],
@@ -7057,6 +7144,33 @@
     ]
    },
    "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_payout_calendar_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_fake_gcal.py",
+    "mod:subcontract/api/__init__",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/tests/test_contractor_voucher_paid_date_2026_08_31"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/subcontract/api/__init__.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/tests/test_contractor_voucher_paid_date_2026_08_31.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_fake_gcal.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
    "module": "subcontract"
   },
   "backend/modules/subcontract/tests/test_pii_archive_mirror_2026_09_25.py": {
@@ -11098,6 +11212,11 @@
     ]
    }
   },
+  "backend/tests/platform/test_no_leaky_tempdirs.py": {
+   "kind": "unit",
+   "units": [],
+   "evidence": {}
+  },
   "backend/tests/platform/test_no_our_company_literals.py": {
    "kind": "unit",
    "units": [
@@ -12629,6 +12748,21 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_backup_same_as_2026_09_30.py": {
+   "kind": "unit",
+   "units": [
+    "core:archive",
+    "core:db",
+    "file:backend/tools/find_backup.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/archive.py",
+     "backend/db.py",
+     "backend/tools/find_backup.py"
+    ]
+   }
+  },
   "backend/tests/test_backup_stale_alert_2026_09_21.py": {
    "kind": "api",
    "units": [
@@ -13004,6 +13138,36 @@
      "backend/helpers/custom_builder_support.py"
     ]
    }
+  },
+  "backend/tests/test_calendar_event_toggles_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:tools/platform/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_fake_gcal.py",
+    "file:tools/platform/write_txn_scan.py",
+    "helper:google_calendar",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/google_calendar.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_fake_gcal.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ],
+    "path": [
+     "tools/platform/",
+     "tools/platform/write_txn_scan.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_cascade_self_tiers_records_signer_2026_09_25.py": {
    "kind": "api",
@@ -14974,6 +15138,28 @@
     ]
    }
   },
+  "backend/tests/test_e2e_builder3_visibility_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_builder_nav.py",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/module-builder.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_builder_nav.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/module-builder.html"
+    ],
+    "path": [
+     "frontend/pages/module-builder.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_builder_dnd_2026_09_27.py": {
    "kind": "e2e",
    "units": [
@@ -15096,6 +15282,26 @@
    "unresolved_api": [
     "/api/system/branding/favicon/x"
    ]
+  },
+  "backend/tests/test_e2e_calendar_event_toggles_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/google-calendar-settings.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/google-calendar-settings.html"
+    ],
+    "path": [
+     "frontend/pages/google-calendar-settings.html"
+    ]
+   }
   },
   "backend/tests/test_e2e_case_all_done_inline_2026_09_24.py": {
    "kind": "e2e",
@@ -17543,6 +17749,17 @@
     ]
    }
   },
+  "backend/tests/test_edge_product_profile_2026_09_30.py": {
+   "kind": "unit",
+   "units": [
+    "helper:startup"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/startup.py"
+    ]
+   }
+  },
   "backend/tests/test_edge_profile_2026_09_25.py": {
    "kind": "api",
    "units": [
@@ -17564,6 +17781,7 @@
      "backend/pdf_gen.py"
     ],
     "path": [
+     "backend/helpers/startup.py",
      "backend/modules/accounting/"
     ]
    }
@@ -18216,6 +18434,19 @@
     ]
    }
   },
+  "backend/tests/test_heartbeat_log_quiet_2026_09_30.py": {
+   "kind": "unit",
+   "units": [
+    "plat:__init__",
+    "plat:paths"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/paths.py"
+    ]
+   }
+  },
   "backend/tests/test_high_risk_routes_2026_09_22.py": {
    "kind": "api",
    "units": [
@@ -18329,6 +18560,23 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_lazy_demo_db_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/tests/test_template_db_2026_09_25.py",
+    "router:auth"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/test_template_db_2026_09_25.py"
+    ],
+    "api": [
+     "backend/routers/auth.py"
+    ]
+   }
   },
   "backend/tests/test_legal_audit_d_r1_r3_2026_09_26.py": {
    "kind": "api",
