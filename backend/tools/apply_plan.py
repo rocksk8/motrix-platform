@@ -45,7 +45,10 @@ PROGRAM_SCOPES = ("backend/", "frontend/", "tools/", "product/")
 #: 部署工具自己的狀態檔：不列進包清單、不刪
 BASELINE_REL = "backend/.deployed_files.json"
 #: .apply.lock（UPDATE-DELIVERY §9.2；D 稽核 DO1）：套用中一定存在，不可被列進候選、被快照寫回或被刪
-STATE_FILES = (BASELINE_REL, "backend/.apply.lock")
+#: 本公司資料檔（去識別化）：own 包帶它、套用時會被覆蓋更新，但**新包沒有它時不可以被當成「舊包有、新包沒有」的程式檔刪掉**
+#: （不列進包清單、不進刪除候選；回滾清單同樣不動它——它不是程式）。
+OWN_PAYLOAD_REL = "backend/migrations_frozen/own_payload.json"
+STATE_FILES = (BASELINE_REL, "backend/.apply.lock", OWN_PAYLOAD_REL)
 #: 執行期狀態檔（檔名結尾）：停用清單快取 `<主庫>.modules_disabled.json`（core.paths.modules_disabled_cache）
 STATE_SUFFIXES = (".modules_disabled.json",)
 LOCK_REL = "backend/modules.lock.json"

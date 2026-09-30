@@ -754,6 +754,13 @@ if _db_for_guard.DB_PATH == _paths.DB_PATH:
 _startup_step("require_db")
 init_db()
 _startup_step("init_db_main")
+# 去識別化：本公司伺服器位址存進系統設定（庫裡沒有時才寫；缺資料檔的本公司安裝只告警、不擋啟動）。見 helpers/own_values.py
+try:
+    from helpers.own_values import ensure_own_network as _ensure_own_network
+    _ensure_own_network()
+except Exception as _e:                                  # noqa: BLE001
+    logger.warning("own_network 檢查失敗（不擋啟動）：%s", type(_e).__name__)
+_startup_step("own_network")
 init_db(DEMO_DB_PATH)
 _startup_step("init_db_demo")
 # 模組 migration 沒完成（回原因）的模組：改記 failed、路由不掛（稽核 A AB-S3；要在 mount_modules 之前）
