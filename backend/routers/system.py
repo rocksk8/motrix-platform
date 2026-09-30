@@ -18,6 +18,7 @@ from helpers import (
     _filter_live_notifications, notify_module_activity, APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES,
     APPROVAL_DOC_TYPE_LABELS, require_any_module)
 from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers   # M01-PLAN §3-2：L1
+from helpers.uploads import _check_upload_magic
 from helpers.errors import trace_id
 from photos import _process_project_photo, _photo_root
 import trail
@@ -679,8 +680,12 @@ async def upload_work_log_photos(
     new_photos = []
     for upload in files:
         raw_bytes = await upload.read()
-        processed, gps_str, wm_str = _process_project_photo(raw_bytes, user['display_name'])
         ext   = os.path.splitext(upload.filename or 'photo.jpg')[1] or '.jpg'
+        # 白名單＝前端（case-management.html 的 accept＝jpeg/png/pdf）本來就送得出去的東西＋手機常見格式（heic/heif/webp/gif）
+        if ext.lower() not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif', '.pdf'):
+            raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 jpg/png/gif/webp/heic/pdf）")
+        _check_upload_magic(upload.filename or 'photo.jpg', ext, raw_bytes, "work_log_photos", user['username'])
+        processed, gps_str, wm_str = _process_project_photo(raw_bytes, user['display_name'])
         fname = uuid.uuid4().hex[:14] + ext.lower()
         with open(os.path.join(save_dir, fname), 'wb') as f:
             f.write(processed)

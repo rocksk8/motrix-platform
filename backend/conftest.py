@@ -752,6 +752,18 @@ def _company_setup_gate_default(request, monkeypatch):
     _cs.reset_cache()
 
 
+@pytest.fixture(autouse=True)
+def _upload_magic_default(request, monkeypatch):
+    """上傳檔頭檢查（helpers.uploads._check_upload_magic，2026-09-30）：既有的上傳題用的是 b"x"／b"fake" 之類的假內容，
+    測的是各單據的業務流程，不是檔頭 ⇒ 一般的題把**判定函式** `_magic_matches` 換成「一律符合」。
+    **只換判定，不換守門**（呼叫點、稽核、400 照舊）；驗檔頭本身的題標 `@pytest.mark.upload_magic` ⇒ 用真的判定
+    （tests/test_upload_magic_2026_09_30.py）。"""
+    if not request.node.get_closest_marker("upload_magic"):
+        from helpers import uploads as _up
+        monkeypatch.setattr(_up, "_magic_matches", lambda ext, raw: True)
+    yield
+
+
 @pytest.fixture()
 def make_user():
     """Insert a user directly into the (already-isolated) real DB and return

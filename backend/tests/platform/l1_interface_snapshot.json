@@ -977,6 +977,7 @@
    "AttachmentSourceError": "class",
    "PATH_ACCESS": "const",
    "UPLOADS_ROOT": "const",
+   "_check_upload_magic": "def(filename, ext, raw, subfolder=…, uploaded_by=…)",
    "_effective_subfolder": "def(subfolder)",
    "canonical_upload_path": "def(raw)",
    "delete_document_file": "def(subfolder, doc_no, existing_files, file_id)",

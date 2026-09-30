@@ -96,3 +96,8 @@ def test_case_feed_attachment_thumbnail_actually_loads(live_server, client, make
         f"{upload_responses or '完全沒有發出請求'}"
     )
     assert all(s == 200 for s, _ in upload_responses), upload_responses
+
+
+# 上傳檔頭：這支用真的檢查（conftest 預設把 _magic_matches 換成一律符合；上傳的 e2e 要走真的，2026-09-30）
+import pytest as _pt_magic
+pytestmark = (list(pytestmark) if isinstance(pytestmark, (list, tuple)) else [pytestmark]) + [_pt_magic.mark.upload_magic]
