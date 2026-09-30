@@ -197,9 +197,9 @@
             <!-- 分錄草稿（C1） -->
             <div x-show="current().key === 'engine_drafts'" data-testid="hb-engine">
               <!-- L1：來源變動橫幅（自上次執行後，來源有多少變動、草稿待更新；自動更新每小時一次，只產生草稿） -->
-              <div x-data="glEngineBanner()" x-init="load(); $watch('eng.notice', () => load())" x-show="text" class="hb-warn" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap" data-testid="hb-eng-banner">
+              <div x-data="glEngineBanner()" x-init="load(enabled.some(f => f.key === 'engine_drafts')); $watch('eng.notice', () => load(enabled.some(f => f.key === 'engine_drafts')))" x-show="text" class="hb-warn" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap" data-testid="hb-eng-banner">
                 <span x-text="text" data-testid="hb-eng-banner-text"></span>
-                <button class="hb-btn" @click="load()" data-testid="hb-eng-banner-refresh">重新檢查</button>
+                <button class="hb-btn" @click="load(true)" data-testid="hb-eng-banner-refresh">重新檢查</button>
               </div>
               <div class="hb-err" x-show="eng.error" x-text="eng.error" data-testid="hb-eng-error"></div>
               <div class="hb-ok" x-show="eng.notice" x-text="eng.notice" data-testid="hb-eng-notice"></div>
@@ -275,7 +275,8 @@
     function glEngineBanner() {
       return {
         text: '',
-        async load() {
+        async load(on) {
+          if (!on) { this.text = ''; return }          // 功能沒開：不打 API（會回 409），橫幅不出現
           try {
             const tok = (JSON.parse(localStorage.getItem('motrix_session') || '{}')).token || ''
             const r = await fetch('/api/ledger/engine/status', { headers: { Authorization: 'Bearer ' + tok } })
