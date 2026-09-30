@@ -467,3 +467,32 @@ A 類：除 `_m008`／`_m106` 外每個函式位元組碼（`co_code`＋排除 d
 
 ### 10.5 未做（依 §3 步驟表）
 S1～S4、S6、S7（掃描器、清單產生器 `deid_hashlist.py`、虛構登記、剪裁投影、建包接線、文件規則）；正式機 export（草稿：`prod-tasks` 指示檔待定稿）。
+
+
+## 11. 段 2 實作紀錄（2026-09-30，wip/w3-deid-s4）
+
+**已做**（測試與反向控制在各自的 `tests/platform/test_deid_*`、`test_legacy_weak_passwords_*`、`test_verify_package_deid_*`）：
+
+| 項 | 檔 | 說明 |
+|---|---|---|
+| S1 掃描器 | `tools/platform/deid_scan.py` | 雜湊層＋樣式層；新增 `docno_pattern`／`company_pattern`／`credential_pattern`／`secret_literal`；誤判收斂（日期／版本／UUID／vendor／Unix 路徑起點） |
+| S2 清單 | `tools/platform/deid_hashlist.py` | 唯讀開庫、只輸出 HMAC；金絲雀；30 天有效 |
+| S3 虛構登記 | `tools/platform/deid_fiction.py`／`deid_fiction.json`／`deid_allow.json` | 登記檔是明文虛構值 ⇒ 每筆過取值規則；誤判登記（通用弱密碼）要理由與到期日 |
+| S4 剪裁投影 | `product/sale_prune.json`、`tools/platform/deid_project.py`、`product/sale_docs/*` | 剪檔／剪段（`OWN-ONLY` 標記）／客戶版 DEPLOY·DR-SOP·HTTPS 清單取代原檔／manifest 投影＋overlay；`rebuild` 由 git 重算 |
+| S5 一部分 | `helpers/auth.py`、`tools/platform/own_payload.py` | 兩個本公司舊預設密碼移到 own 資料檔的 `auth` 區段（`add-auth` 補既有檔） |
+| S6 建包接線 | `backend/tools/build_deploy_package.ps1 -Audience`、`tools/platform/deid_build.py`、`verify_package.py` (8) | 見下 |
+
+**own 包與資料檔（主持提問 (a)(b) 的答案）**
+- (a) **own 包一定帶 `own_payload.json`**（進包內 `backend/migrations_frozen/own_payload.json`）：正式機的凍結 migration（`_m008`／`_m106`）與弱密碼清單都要它；**缺檔或驗不過 ⇒ 建包中止**（不是降級成通用清單）。使用者已確認兩個舊密碼只在開發／測試環境用過、不需更換，但「正式機少判兩個舊密碼」不是我們要去承擔的行為差異，所以照帶。客戶（sale）包不含資料檔，弱密碼清單只有通用五個，其餘行為相同。
+- (b) 建包機取得資料檔的方式：`-OwnPayload <路徑>` 參數，或環境變數 `MOTRIX_OWN_PAYLOAD`（`deid_build.py` 兩者擇一，參數優先）。開發者的主本放離線位置（`D:\MOTRIX-KEYS\deid\own_payload.json`＋隨身碟），不進 repo（`.gitignore` 已擋 `backend/migrations_frozen/own_payload.json`）。產生：`own_payload.py generate`；舊檔補 `auth`：`own_payload.py add-auth <檔>`。
+- 金鑰／清單：sale 建包必給 `-DeidKey`、`-DeidHashlist`（清單 30 天有效；金鑰離線保管，Claude 不讀內容）；own 建包給了就掃描並記命中數、不擋。
+
+**sale 建包的閘門順序**（`deid_build.apply`）：包內不得有資料檔 → 剪裁＋剪段＋客戶版文件＋manifest 投影 → `verify_tree`（禁止路徑、OWN-ONLY 殘留、未投影）→ 與 git 重算逐檔比對（建包才產生的檔略過，manifest 比解析後內容）→ 清單新鮮／金絲雀／登記檔合規 → 掃描必須 0 命中。任一失敗 ⇒ 建包中止（只印 路徑:行號:類別:值代碼）。`deploy_manifest.json` 多 `audience`、`deid`（含投影輸入的 blob 雜湊，不含開發機路徑；sale 的 `env.python` 為空）。
+
+**sale 包一律不含**（`forbidden`，`verify_package` (8) 與 `deid_project verify` 都擋）：`docs/**`、`.claude/**`、`NEXT-SESSION.md` 與各類交接／稽核／設計文件、`tools/platform` 的 modtest／drill／deid_*／own_payload／fail_stream、`backend/tests/**`、本公司資料檔、`product/sale_docs/**`（來源目錄，取代完就剪掉）。`git archive` 本來就排除的（`docs/windows/**`、`NEXT-SESSION.md`、根目錄交接文件）靠 export-ignore；守門同時擋，避免有人改動 `.gitattributes` 後靜默流出。
+
+**尚未做／另案**
+- 套用端 `apply_update.ps1` 的 audience 檢查（依賴 E4 簽章確認檔；見 §2.2 H2-S4）。
+- 部署腳本的 `$ProdRoot` 寫死值與 `172.16.10.177` 預設值（sale 掃描殘留約 32 筆的主要來源）：設計見 `docs/platform/PRODROOT-GUARD-DESIGN.md`；IP 預設值另案（改讀設定、預設留空，migration 把正式機現值寫進設定）。
+- 正式機 export 清單／金鑰步驟（草稿在 `prod-tasks`，待使用者排時間）；使用者需提供簡稱補充檔（kind＝company）與其他真實值。
+- `core/upgrade.py` 的 OWN-ONLY 段只在 sale 剪掉；own 包照舊帶（升級精靈回填本公司資料）。
