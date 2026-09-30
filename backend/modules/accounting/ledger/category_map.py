@@ -94,6 +94,24 @@ def coverage(conn):
             for c in list_categories(conn, only_active=True)]
 
 
+def category_account(conn, key):
+    """IP `gl.category_account`（唯讀）：費用類別（代碼；找不到再以**啟用中**類別名稱全等）→ 會計科目代號；沒有對應／類別不存在／停用 ⇒ None。
+    對應只指定角色時回該角色的預設科目。⚠ 只是**顯示用快照**：入帳時引擎依事件行的 `category` 重新解析（`apply_category_map`），對應之後改了以入帳當下為準。"""
+    k = str(key or "").strip()
+    if not k:
+        return None
+    row = conn.execute("SELECT code FROM expense_categories WHERE code=? AND active=1", (k,)).fetchone()         or conn.execute("SELECT code FROM expense_categories WHERE name=? AND active=1 ORDER BY code LIMIT 1", (k,)).fetchone()
+    if row is None:
+        return None
+    m = conn.execute("SELECT role, account_code FROM gl_category_map WHERE source=? AND category=?", (SOURCE_EXPENSE, row[0])).fetchone()
+    if m is None:
+        return None
+    if m[1]:
+        return m[1]
+    from modules.accounting.ledger.roles import DEFAULT_ROLES
+    return DEFAULT_ROLES.get(m[0]) or None
+
+
 # ── 引擎收集時套用（來源模組不知道科目）────────────────────────────────
 
 def apply_category_map(conn, ev):

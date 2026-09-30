@@ -809,3 +809,16 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 守門 | `backend/modules/accounting/tests/test_category_map_g1_2026_10_01.py` |
 
 另預留兩個能力名稱（尚未實作，不在本表登記；實作時各開一節）：進項憑證來源（多提供者，`fn(start, end) -> [{invoiceNo, invoiceDate, pretax, tax, deductible, source}]`，401 進項彙總讀所有提供者）、逐月類別彙總（帶維度篩選 `dims`，對應 `voucher_lines.dim_json`）。事件契約 v1 的行另有選填 `dims`（`{維度代碼: 字串}`）：引擎寫入 `voucher_lines.dim_json`；有值才進內容雜湊。
+
+## IP-109　`gl.category_account`：費用類別 → 科目代號（M06 → 費用單據；暫定號，列車定號；2026-10-01，W4）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計：`modules/accounting/api/ledger_category_map.py::provide_category_account` |
+| 使用方 | 尚無（M01 費用單據 A2 送審時寫唯讀科目快照；接入時補） |
+| 形式 | provider，單一提供者（名稱 `accounting`） |
+| 語法 | 提供：`("gl.category_account", "accounting"): fn`；取用：`registry.providers("gl.category_account").get("accounting")` ⇒ `fn(conn, category_code_or_name)` |
+| 回傳 | 科目代號字串；沒有對應、類別不存在或已停用 ⇒ `None`（入帳時走預設：有案件＝專案成本、無案件＝其他營業費用）。先比代碼，再比**啟用中**類別名稱全等。**只是顯示用快照**：入帳時引擎依事件行的 `category` 重新解析 |
+| 對方不在時 | 提供者不在 ⇒ 呼叫端視同 `None` |
+| 契約版本 | 1（2026-10-01） |
+| 守門 | `backend/modules/accounting/tests/test_category_map_g1_2026_10_01.py::test_category_account_resolver` |

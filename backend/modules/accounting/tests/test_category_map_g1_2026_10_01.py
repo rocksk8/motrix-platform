@@ -148,3 +148,22 @@ def test_provider_lists_active_categories_only(conn):
     CM.upsert_category(conn, "a2", "乙", "", 2, active=False)
     conn.commit()
     assert [c["code"] for c in provide_categories(conn)] == ["a1"]
+
+
+def test_category_account_resolver(conn):
+    from core import registry
+    CM.upsert_category(conn, "meal", "餐費", "taxable", 1)
+    CM.upsert_category(conn, "old", "停用類別", "", 2, active=False)
+    CM.upsert_category(conn, "rolecat", "角色類別", "", 3)
+    CM.upsert_map(conn, "meal", account_code="6134")
+    CM.upsert_map(conn, "old", account_code="6134")
+    CM.upsert_map(conn, "rolecat", role="EXP_OTHER")
+    assert CM.category_account(conn, "meal") == "6134"               # 代碼
+    assert CM.category_account(conn, "餐費") == "6134"               # 啟用中的名稱全等
+    assert CM.category_account(conn, "old") is None                  # 停用 ⇒ None
+    assert CM.category_account(conn, "停用類別") is None
+    assert CM.category_account(conn, "rolecat") == "6134"            # 只指定角色 ⇒ 角色預設科目
+    assert CM.category_account(conn, "nope") is None and CM.category_account(conn, "") is None
+    CM.upsert_category(conn, "unmapped", "未對應", "", 4)
+    assert CM.category_account(conn, "unmapped") is None
+    assert registry.providers("gl.category_account").get("accounting") is not None

@@ -28,6 +28,8 @@ MODULE = ModuleSpec(
         ("voucher.draft", "accounting"): voucher_providers._provide_voucher_draft,
         # IP `expense.categories`：啟用中的費用類別（費用單據的下拉選項取用；代碼發布後不可改）
         ("expense.categories", "accounting"): ledger_category_map.provide_categories,
+        # IP `gl.category_account`：費用類別 → 科目代號（唯讀，顯示用快照）
+        ("gl.category_account", "accounting"): ledger_category_map.provide_category_account,
         # IP-GL1：自訂模組單據入帳（C7；來源＝L1 建構器 helpers/custom_finance.gl_lines，鍵 custom_modules）
         ("gl.events", "custom_modules"): _custom_events.gl_events,
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）

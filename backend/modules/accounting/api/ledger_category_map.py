@@ -96,3 +96,8 @@ def put_expense_category(body: dict = Body(...), authorization: str = Header(Non
     _audit(_tok(authorization), "ledger.expense_category.put", "expense_categories", str(b.get("code")),
            "費用類別 %s＝%s（原名稱：%s）" % (b.get("code"), b.get("name"), res["previous_name"] or "無"))
     return {"ok": True, **res}
+
+
+def provide_category_account(conn, key):
+    """IP `gl.category_account`：`fn(conn, category_code_or_name) -> account_code | None`（唯讀；None＝沒對應，入帳時走預設科目）。"""
+    return _cm.category_account(conn, key)
