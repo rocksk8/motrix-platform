@@ -33,6 +33,9 @@
 ## 1.1.3 — 2026-09-30（暫用號，列車取號；W4 總帳 C3b）
 - 分錄引擎 C3b：事件契約加 `mode=native`（來源模組已自行開立傳票：事件只登記 `native_voucher_id`，引擎不重複產生、不改動；狀態 `native`；作廢或改指向新傳票 ⇒ 舊列 superseded、新列 native）；提供者 `voucher.status` 回傳多帶 `date`（傳票日期，additive）；總帳作業『分錄草稿』頁籤顯示『既有傳票』、不可被整批勾選。
 
+## 1.1.3 — 2026-09-30（暫用號，列車取號；wip/w1-file-preview 共用檔案預覽 P1）
+- 傳票頁附件預覽窗抽成 L1 共用元件 `static/file-preview.js`（`MotrixFilePreview`）：規則不變（副檔名＋mime 雙重符合才內嵌 image／pdf、blob 指定 type、關閉 revoke、競態丟棄、鍵盤與焦點規則），`data-testid` 沿用舊名。
+
 ## 1.1.2 — 2026-09-30（暫用號，列車取號；W4 總帳 列車修補）
 - 修補：四大表匯出經公司資料第二道；傳票提供者／佇列登記改自 voucher_providers.py；`general-ledger` 查詢參數 `key` 改 `dimension_value`；設定更新寫稽核；`_run` 不再用非字面值 `**kw`；期初餘額試算端點登記為純試算。純修補，無 migration。
 

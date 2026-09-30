@@ -1371,13 +1371,18 @@
         },
 
         async previewFile(file) {
+          // 共用預覽元件（static/file-preview.js）頁內預覽；取檔仍用帶詳情情境 (type,id) 的簽章（簽核人常常不是案件的人）
           try {
-            const r = await fetch(this._photoTokenUrl(file.path), {
-              headers: { Authorization: 'Bearer ' + this.session.token }
+            await MotrixFilePreview.openFile(file, {
+              fetchBlob: async (it) => {
+                const r = await fetch(this._photoTokenUrl(it.path), { headers: { Authorization: 'Bearer ' + this.session.token } })
+                if (!r.ok) throw new Error('取得檔案連結失敗（HTTP ' + r.status + '）')
+                const { token } = await r.json()
+                const f = await fetch(`${API}/api/uploads/${it.path}?pt=${encodeURIComponent(token)}`)
+                if (!f.ok) throw new Error('HTTP ' + f.status)
+                return f.arrayBuffer()
+              },
             })
-            if (!r.ok) { alert('取得檔案連結失敗'); return }
-            const { token } = await r.json()
-            window.open(`${API}/api/uploads/${file.path}?pt=${encodeURIComponent(token)}`, '_blank')
           } catch (e) { alert('開啟檔案失敗：' + e.message) }
         },
 
@@ -1879,6 +1884,7 @@
   </div>
 
   <script src="../static/approval-cascade.js"></script>
+  <script src="../static/file-preview.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>

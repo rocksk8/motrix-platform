@@ -361,11 +361,22 @@ function cashierApp() {
       f.saving = false
     },
 
+    // 勞報單簽回檔：頁內預覽（共用元件 static/file-preview.js），下方保留「另開新分頁」（出納要看大圖或並排比對時用）
     async openPayslipSigned(p, file) {
-      try {
-        const r = await fetch('/api/payslips/' + encodeURIComponent(p.slipNo) + '/signed-files/' + encodeURIComponent(file.id), {
+      const P = window.MotrixFilePreview
+      const items = (p.files || [file]).map(f => P.withMime({ id: f.id, filename: f.filename, size: f.size }))
+      const fetchBlob = async (it) => {
+        const r = await fetch('/api/payslips/' + encodeURIComponent(p.slipNo) + '/signed-files/' + encodeURIComponent(it.id), {
           headers: { Authorization: 'Bearer ' + this._token() } })
-        if (r.ok) window.open(URL.createObjectURL(await r.blob()), '_blank')
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        return r.arrayBuffer()
+      }
+      try {
+        await P.open({ items, index: Math.max(0, (p.files || []).findIndex(f => f.id === file.id)), fetchBlob,
+          meta: (it) => P.fileSize(it.size) || '',
+          actions: [{ label: '另開新分頁', testid: 'file-preview-newtab', ghost: true,
+                      enabled: (it) => P.kind(it) === 'image' || P.kind(it) === 'pdf',
+                      run: (it) => P.openInNewTab(it, fetchBlob) }] })
       } catch (e) { console.error(e) }
     },
 
