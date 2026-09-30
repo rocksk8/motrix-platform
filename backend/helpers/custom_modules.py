@@ -207,6 +207,9 @@ def validate_module(body: dict, key: str = "") -> list:
     out += _validate_workflow(body.get("workflow"), keys)
     out += _validate_finance([f for f in fields if isinstance(f, dict)], body)
     if not out:
+        from . import custom_builder_support as _S       # 可見設定：形狀＋公式洩漏（只在前面都對時才算，公式才解析得了）
+        out += _S.access_problems(body) + _S.leaking_formulas(body)
+    if not out:
         out += _validate_by_sample(body)
     out += _validate_output(body)
     return out
@@ -877,11 +880,12 @@ def visible_to(mods, user) -> list:
     唯一一份：`GET /api/custom-modules` 與 `GET /api/platform/menu`（C4 選單）共用。"""
     if user.get("role") == "superadmin":
         return list(mods)
+    from .custom_builder_support import can_see_menu       # menu.visibleTo（角色／帳號，後端強制）
     try:
         mine = set(json.loads(user.get("modules") or "[]"))
     except (TypeError, ValueError):
         mine = set()
-    return [m for m in mods if m.get("permission") in mine]
+    return [m for m in mods if m.get("permission") in mine and can_see_menu(m.get("menu"), user)]
 
 
 def permission_of(module_key, body) -> str:

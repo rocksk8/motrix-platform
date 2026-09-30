@@ -21,6 +21,7 @@
    "helper:company_identity",
    "helper:company_setup",
    "helper:daily_checks",
+   "helper:custom_builder_support",
    "helper:custom_fields",
    "helper:custom_modules",
    "helper:formula",
