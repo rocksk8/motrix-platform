@@ -20,6 +20,8 @@
       E06 借 勞務費用 6133 6,000／貸 代扣 2252 600＋127、其他應付 2206 5,273（不產生 E06b：付款已在 C 的匯款單）
   E 勞報單 ACC-SLIP-2（直接付款）：給付 10,000、所得稅 1,000、二代健保 211、實付 8,789（03-18），03-25 付款
       E06 借 6133 10,000／貸 2252 1,000＋211、2206 8,789；E06b 借 2206 8,789／貸 銀行 8,789
+  E2 勞報單 PS-219503-001（**經勞報單 API 由系統計算扣繳**，給付 25,050 ≥ 法定門檻 20,010／20,000）：所得稅 10%＝2,505、二代健保 2.11%×25,050＝528.555⇒529、實付 22,016；03-19 簽回、03-27 付款
+      E06 借 6133 25,050／貸 2252 2,505＋529、2206 22,016；E06b 借 2206 22,016／貸 銀行 22,016
   F 獎金（既有傳票登記為 native）：03-22 核准應付 借 薪資 6111 5,000／貸 應付薪資 2191 5,000；03-28 發放 借 2191 5,000／貸 銀行 5,000
   G 案件額外支出 1,050（03-11 發票、已核准、未拆稅、未付款）：E11 借 5811 1,050／貸 應付 1,050
   H 叫料 2,100（03-05 發票、03-20 付款）：E12 借 5811 2,100／貸 應付；E12b 借 應付 2,100／貸 銀行 2,100
@@ -27,14 +29,14 @@
       E08 借 存貨 1231 400／貸 應付 400；E09 借 應付 400／貸 銀行 400；E10 借 營業成本 5111 100／貸 存貨 100（移動加權平均：100）
   （固定資產 C6 尚未合入主線、自訂模組入帳 C7 尚未出貨 ⇒ 不在本情境；見 docs/platform/LEDGER-ACCEPTANCE.md）
 
-推導（每個科目的借方／貸方合計，手算）見 EXPECTED_TB；合計借方＝貸方＝630,212。
-  期末 銀行 1113 ＝ 500,000＋10,485 − (21,000＋15,773＋8,789＋5,000＋400＋2,100) ＝ 457,423
+推導（每個科目的借方／貸方合計，手算）見 EXPECTED_TB；合計借方＝貸方＝677,278（原 630,212＋E2 的 47,066）。
+  期末 銀行 1113 ＝ 500,000＋10,485 − (21,000＋15,773＋8,789＋22,016＋5,000＋400＋2,100) ＝ 435,407
   應付 2171：貸 21,000＋10,500＋400＋1,050＋2,100 ＝ 35,050、借 21,000＋10,500＋400＋2,100 ＝ 34,000 ⇒ 貸方餘額 1,050（未付的額外支出）
-  損益：收入 10,000；成本費用 COGS 100＋專案成本 (20,000＋10,000＋1,050＋2,100)＝33,150＋薪資 5,000＋勞務 16,000＋手續費 15 ⇒ 淨損 −44,265
-  資產負債表：資產 457,423＋存貨 300＋進項稅額 1,500 ＝ 459,223；負債 應付 1,050＋銷項稅額 500＋代扣 1,938 ＝ 3,488；權益 500,000−44,265 ＝ 455,735；3,488＋455,735＝459,223
-  現金流量（2195-01-01～03-31）：現金淨變動＝期末現金 457,423
-  營業稅 401（第 2 期 3～4 月）：銷項 500、進項 1,500 ⇒ 小計 1,500、應實繳 0、留抵 1,000
-  扣繳（2195-03）：所得稅 600＋1,000＝1,600、二代健保 127＋211＝338，合計 1,938 ＝ 科目 2252 當月貸方
+  損益：收入 10,000；成本費用 COGS 100＋專案成本 (20,000＋10,000＋1,050＋2,100)＝33,150＋薪資 5,000＋勞務 (6,000＋10,000＋25,050)＝41,050＋手續費 15 ⇒ 淨損 10,000 − (100＋33,150＋5,000＋41,050＋15) ＝ −69,315
+  資產負債表：資產 435,407＋存貨 300＋進項稅額 1,500 ＝ 437,207；負債 應付 1,050＋銷項稅額 500＋代扣 4,972 ＝ 6,522；權益 500,000−69,315 ＝ 430,685；6,522＋430,685＝437,207
+  現金流量（2195-01-01～03-31）：現金淨變動＝期末現金 435,407
+  營業稅 401（第 2 期 3～4 月）：銷項 500、進項 1,500（**進項是估計稅額**：承攬派工的發票稅額來源沒有，依派工稅率 5%×未稅估計，`tax_estimated`；派工沒填稅率也以 5% 估計） ⇒ 小計 1,500、應實繳 0、留抵 1,000
+  扣繳（2195-03）：所得稅 600＋1,000＋2,505＝4,105、二代健保 127＋211＋529＝867，合計 4,972 ＝ 科目 2252 當月貸方
 """
 import json
 from datetime import datetime
@@ -55,14 +57,14 @@ START, END, MAR1, MAR31 = "%d-01-01" % Y, "%d-03-31" % Y, "%d-03-01" % Y, "%d-03
 
 #: 每個科目（借方合計, 貸方合計）——手算，見模組說明的情境與推導
 EXPECTED_TB = {
-    "1113": (510485, 53062), "1191": (10500, 10500), "1231": (400, 100), "1268": (1500, 0),
-    "2171": (34000, 35050), "2191": (5000, 5000), "2204": (0, 500), "2206": (14062, 14062), "2252": (0, 1938),
+    "1113": (510485, 75078), "1191": (10500, 10500), "1231": (400, 100), "1268": (1500, 0),
+    "2171": (34000, 35050), "2191": (5000, 5000), "2204": (0, 500), "2206": (36078, 36078), "2252": (0, 4972),
     "3111": (0, 500000), "4111": (0, 10000),
-    "5111": (100, 0), "5811": (33150, 0), "6111": (5000, 0), "6133": (16000, 0), "7243": (15, 0),
+    "5111": (100, 0), "5811": (33150, 0), "6111": (5000, 0), "6133": (41050, 0), "7243": (15, 0),
 }
-EXPECTED_TOTAL = 630212
-EXPECTED_CLOSING_NET = {"1113": 457423, "1231": 300, "1268": 1500, "2171": -1050, "2204": -500, "2252": -1938, "3111": -500000, "4111": -10000,
-                        "5111": 100, "5811": 33150, "6111": 5000, "6133": 16000, "7243": 15, "1191": 0, "2191": 0, "2206": 0}
+EXPECTED_TOTAL = 677278
+EXPECTED_CLOSING_NET = {"1113": 435407, "1231": 300, "1268": 1500, "2171": -1050, "2204": -500, "2252": -4972, "3111": -500000, "4111": -10000,
+                        "5111": 100, "5811": 33150, "6111": 5000, "6133": 41050, "7243": 15, "1191": 0, "2191": 0, "2206": 0}
 
 
 class Table:
@@ -130,7 +132,7 @@ def _seed_contractors(conn, qn):
     return a
 
 
-def _seed_payslips(conn):
+def _seed_payslips(conn, client, sup):
     def slip(no, gross, tax, nhi, net, slip_date, status, pay, data):
         cid = conn.execute("INSERT INTO contractors(name, id_number) VALUES (?,?)", ("王小明", "A123456789")).lastrowid
         conn.execute("INSERT INTO payslips(slip_no, contractor_id, contractor_name, income_type, gross_amount, tax_withheld, nhi_supplement, net_amount,"
@@ -138,6 +140,13 @@ def _seed_payslips(conn):
                      (no, cid, "王小明", "9A", gross, tax, nhi, net, slip_date, status, slip_date + "T09:00:00", pay, json.dumps(data)))
     slip("ACC-SLIP-1", 6000, 600, 127, 5273, "%d-03-16" % Y, "已付款", "%d-03-22" % Y, {"paid_via_remit": True})
     slip("ACC-SLIP-2", 10000, 1000, 211, 8789, "%d-03-18" % Y, "已付款", "%d-03-25" % Y, {})
+    # ACC-SLIP-3：給付 25,050（≥ 法定扣繳門檻 20,010／健保門檻 20,000）——**經勞報單 API 由系統計算**扣繳；手算：所得稅 10%＝2,505、
+    # 二代健保 2.11% × 25,050 ＝ 528.555 ⇒ 四捨五入 529、實付 25,050 − 2,505 − 529 ＝ 22,016
+    cid = conn.execute("INSERT INTO contractors(name, id_number) VALUES (?,?)", ("陳大文", "B123456789")).lastrowid
+    r = client.post("/api/payslips", headers=sup, json={"contractor_id": cid, "slip_no": "PS-%d03-001" % Y, "data": {
+        "contractorName": "陳大文", "incomeType": "9A", "grossAmount": 25050, "slipDate": "%d-03-19" % Y, "status": "草稿", "paymentMethod": "匯款"}})
+    assert r.status_code == 201, r.text
+    return r.json()["calc"]
 
 
 def _seed_stock(conn, qn):
@@ -184,9 +193,14 @@ def test_ledger_acceptance_end_to_end(client, make_user):
         F.set_flag(conn, "withholding", True)
         qn = _seed_case(conn)
         dispatch_a = _seed_contractors(conn, qn)
-        _seed_payslips(conn)
+        slip3_calc = _seed_payslips(conn, client, sup)
+        conn.execute("UPDATE payslips SET status='已付款', signed_at=?, payment_date=? WHERE slip_no=?", ("2195-03-19T09:00:00", "2195-03-27", "PS-219503-001"))
         _seed_stock(conn, qn)
         conn.commit()
+
+        T.check("勞報單 API 算的所得稅（25,050 × 10%）", 2505, slip3_calc["taxWithheld"])
+        T.check("勞報單 API 算的二代健保（25,050 × 2.11% ＝ 528.555 ⇒ 529）", 529, slip3_calc["nhiSupplement"])
+        T.check("勞報單 API 算的實付", 22016, slip3_calc["netAmount"])
 
         # ── 1 期初餘額（平衡）→ 草稿 → 送審 → 最高管理者核准 → 過帳 ──
         r = client.post("/api/ledger/opening", headers=sup, json={"year": Y, "opening_date": START, "rows": [
@@ -204,7 +218,7 @@ def test_ledger_acceptance_end_to_end(client, make_user):
         counts = {}
         for r in conn.execute("SELECT status, COUNT(*) n FROM gl_source_events WHERE event_date BETWEEN ? AND ? GROUP BY status", (MAR1, MAR31)):
             counts[r["status"]] = r["n"]
-        T.check("事件：草稿 15（E01,E03,E04×2,E05×2,E06×2,E06b,E08,E09,E10,E11,E12,E12b）", 15, counts.get("drafted", 0))
+        T.check("事件：草稿 17（E01,E03,E04×2,E05×2,E06×3,E06b×2,E08,E09,E10,E11,E12,E12b）", 17, counts.get("drafted", 0))
         T.check("事件：native 2（獎金核准／發放既有傳票）", 2, counts.get("native", 0))
         T.check("事件：被擋／缺科目／在庫不足", 0, sum(counts.get(k, 0) for k in ("blocked_closed", "blocked_no_account", "blocked_inventory")))
         T.check("草稿傳票不計入已過帳試算表（借方合計仍只有期初）", 500000, _tb(conn)["1113"]["period_debit"] + 0)
@@ -214,8 +228,8 @@ def test_ledger_acceptance_end_to_end(client, make_user):
         b = client.post("/api/ledger/engine/batch", headers=sup, json={"voucher_ids": ids, "action": "all"})
         T.check("一鍵確認到過帳（HTTP）", 200, b.status_code)
         res = b.json()["results"] if b.status_code == 200 else []
-        T.check("一鍵確認：15 張全部成功", 15, sum(1 for x in res if x.get("ok")))
-        T.check("傳票狀態：15 張全部已過帳", 15, conn.execute("SELECT COUNT(*) FROM vouchers_all WHERE id IN (%s) AND status='已過帳'" % ",".join(map(str, ids))).fetchone()[0])
+        T.check("一鍵確認：17 張全部成功", 17, sum(1 for x in res if x.get("ok")))
+        T.check("傳票狀態：17 張全部已過帳", 17, conn.execute("SELECT COUNT(*) FROM vouchers_all WHERE id IN (%s) AND status='已過帳'" % ",".join(map(str, ids))).fetchone()[0])
 
         # ── 4 試算表：逐科目借貸合計＝手算；總計借＝貸 ──
         tb = RP.trial_balance(conn, START, END)
@@ -233,27 +247,27 @@ def test_ledger_acceptance_end_to_end(client, make_user):
 
         # ── 5 總帳（分類帳）：逐筆餘額、期末 ──
         gl = RP.general_ledger(conn, "1113", START, END)
-        T.check("總帳 1113 期末餘額", 457423, gl["closing"])
-        T.check("總帳 1113 期間借方／貸方", (510485, 53062), (gl["period_debit"], gl["period_credit"]))
-        T.check("總帳 1113 最後一筆的累計餘額＝期末", 457423, gl["lines"][-1]["balance"])
+        T.check("總帳 1113 期末餘額", 435407, gl["closing"])
+        T.check("總帳 1113 期間借方／貸方", (510485, 75078), (gl["period_debit"], gl["period_credit"]))
+        T.check("總帳 1113 最後一筆的累計餘額＝期末", 435407, gl["lines"][-1]["balance"])
         gl2 = RP.general_ledger(conn, "2171", START, END)
         T.check("總帳 2171 期末（貸方 1,050＝未付的額外支出）", -1050, gl2["closing"])
 
         # ── 6 資產負債表／損益表／現金流量表 ──
         bs = ST.balance_sheet(conn, END)
-        T.check("資產負債表 資產", 459223, bs["totals"]["assets"])
-        T.check("資產負債表 負債", 3488, bs["totals"]["liabilities"])
-        T.check("資產負債表 權益（股本 500,000＋本期損益 −44,265）", 455735, bs["totals"]["equity"])
+        T.check("資產負債表 資產", 437207, bs["totals"]["assets"])
+        T.check("資產負債表 負債", 6522, bs["totals"]["liabilities"])
+        T.check("資產負債表 權益（股本 500,000＋本期損益 −69,315）", 430685, bs["totals"]["equity"])
         T.check("資產負債表 A＝L＋E", True, bs["totals"]["assets"] == bs["totals"]["liabilities"] + bs["totals"]["equity"] and bs["checks"]["balanced"])
         inc = ST.income_statement(conn, START, END)
-        T.check("損益表 本期淨利（淨損）", -44265, inc["net_income"]["period"])
-        T.check("損益表 年初至今淨利", -44265, inc["net_income"]["ytd"])
+        T.check("損益表 本期淨利（淨損）", -69315, inc["net_income"]["period"])
+        T.check("損益表 年初至今淨利", -69315, inc["net_income"]["ytd"])
         T.check("損益表 與試算表相符", True, inc["checks"]["balanced"])
         from modules.accounting.ledger import cashflow as CF
         cf = CF.cash_flow_statement(conn, START, END, False)
-        T.check("現金流量表 現金淨變動＝銀行科目變動", 457423, cf["cash_change"])
-        T.check("現金流量表 期末現金", 457423, cf["cash_closing"])
-        T.check("現金流量表 三大活動合計＝現金淨變動", 457423, cf["net_change"])
+        T.check("現金流量表 現金淨變動＝銀行科目變動", 435407, cf["cash_change"])
+        T.check("現金流量表 期末現金", 435407, cf["cash_closing"])
+        T.check("現金流量表 三大活動合計＝現金淨變動", 435407, cf["net_change"])
         T.check("現金流量表 自檢平衡", True, cf["checks"].get("balanced"))
 
         # ── 7 營業稅 401（第 2 期 3～4 月）──
@@ -272,14 +286,14 @@ def test_ledger_acceptance_end_to_end(client, make_user):
         # ── 8 扣繳清單（2195-03）──
         w = WH.report(conn, "%d-03" % Y, today="%d-04-01" % Y)
         g = {x["kind"]: x for x in w["groups"]}
-        T.check("扣繳 所得稅 筆數／合計", (2, 1600), (g["income_tax"]["count"], g["income_tax"]["total"]))
-        T.check("扣繳 二代健保 筆數／合計", (2, 338), (g["nhi"]["count"], g["nhi"]["total"]))
-        T.check("扣繳 清單合計＝代扣科目 2252 當月貸方", (1938, 1938, True), (w["checks"][0]["left"], w["checks"][0]["right"], w["checks"][0]["ok"]))
+        T.check("扣繳 所得稅 筆數／合計", (3, 4105), (g["income_tax"]["count"], g["income_tax"]["total"]))
+        T.check("扣繳 二代健保 筆數／合計", (3, 867), (g["nhi"]["count"], g["nhi"]["total"]))
+        T.check("扣繳 清單合計＝代扣科目 2252 當月貸方", (4972, 4972, True), (w["checks"][0]["left"], w["checks"][0]["right"], w["checks"][0]["ok"]))
 
         # ── 9 與來源資料獨立對照（來源端的數字，不經總帳）──
         T.check("收入：報價單未稅 10,000＝總帳 4111", 10000, rows["4111"]["period_credit"])
         T.check("銷項稅額：報價單 500＝總帳 2204", 500, rows["2204"]["period_credit"])
-        T.check("代扣：勞報單 (600+127+1000+211)＝總帳 2252", 1938, rows["2252"]["period_credit"])
+        T.check("代扣：勞報單 (600+127+1000+211+2505+529)＝總帳 2252", 4972, rows["2252"]["period_credit"])
         T.check("承攬成本：派工 20,000＋10,000＝專案成本裡的派工部分（5811 另含額外支出 1,050＋叫料 2,100）", 30000 + 1050 + 2100, rows["5811"]["period_debit"])
         T.check("存貨：進 4 件×100 − 出 1 件×100＝300", 300, rows["1231"]["period_debit"] - rows["1231"]["period_credit"])
 
