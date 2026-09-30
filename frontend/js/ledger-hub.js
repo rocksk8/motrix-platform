@@ -11,7 +11,7 @@ function ledgerHubPage() {
     isSuper: false,
 
     // 扣繳清單（C5：withholding）
-    wh: { ym: '', data: null, selected: {}, date: '', voucherNo: '', busy: false, error: '', notice: '' },
+    wh: { ym: '', data: null, selected: {}, date: '', voucherNo: '', unremitReason: '', busy: false, error: '', notice: '' },
     // 營業稅 401（C5：tax401）
     tax: { year: new Date().getFullYear(), period: Math.ceil((new Date().getMonth() + 1) / 2), data: null, busy: false, error: '', notice: '' },
     // 分錄草稿（C1：engine_drafts）
@@ -91,7 +91,8 @@ function ledgerHubPage() {
     async whUnremit(i) {
       const w = this.wh
       w.error = ''
-      try { await this._api({ method: 'POST' }, '/api/ledger/withholding/unremit', { ids: [i.id] }); await this.whLoad() } catch (e) { w.error = e.message }
+      if (!(w.unremitReason || '').trim()) { w.error = '取消繳庫要先在上方填原因'; return }
+      try { await this._api({ method: 'POST' }, '/api/ledger/withholding/unremit', { ids: [i.id], reason: w.unremitReason }); await this.whLoad() } catch (e) { w.error = e.message }
     },
     async taxLoad() {
       const t = this.tax

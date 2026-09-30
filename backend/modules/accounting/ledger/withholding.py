@@ -11,6 +11,7 @@
 import calendar
 import datetime as _dt
 
+from modules.accounting.ledger import periods as _periods
 from modules.accounting.ledger import roles as _roles
 
 _KIND_BY_ROLE = {"WITHHOLD_TAX": "income_tax", "WITHHOLD_NHI": "nhi"}
@@ -21,6 +22,23 @@ _SOURCE_EVENT = "E06"
 
 class WithholdingError(ValueError):
     pass
+
+
+MAX_IDS = 500                         # 一次登記／取消的上限
+REPORT_LIMIT = 2000                   # 不指定月份時報表最多列數（超過標 truncated）
+_today = lambda: _dt.date.today()     # noqa: E731  測試可換掉
+
+
+def _ids(ids):
+    if not isinstance(ids, list) or not ids or len(ids) > MAX_IDS:
+        raise WithholdingError("請選擇 1～%d 筆項目（ids 要是整數清單）。" % MAX_IDS)
+    try:
+        out = [int(i) for i in ids]
+    except (TypeError, ValueError):
+        raise WithholdingError("ids 要是整數清單。")
+    if any(isinstance(i, bool) for i in ids):
+        raise WithholdingError("ids 要是整數清單。")
+    return out
 
 
 def due_date(kind, period_ym):
@@ -99,7 +117,9 @@ def report(conn, ym=None, kind=None, today=None):
         q, args = q + " AND period_ym=?", args + [ym]
     if kind:
         q, args = q + " AND kind=?", args + [kind]
-    items = [dict(r) for r in conn.execute(q + " ORDER BY period_ym, kind, id", args)]
+    items = [dict(r) for r in conn.execute(q + " ORDER BY period_ym, kind, id" + ("" if ym else " LIMIT %d" % (REPORT_LIMIT + 1)), args)]
+    truncated = len(items) > REPORT_LIMIT and not ym
+    items = items[:REPORT_LIMIT] if truncated else items
     groups = {}
     for it in items:
         g = groups.setdefault((it["period_ym"], it["kind"]), {"period_ym": it["period_ym"], "kind": it["kind"], "label": KIND_LABEL.get(it["kind"], it["kind"]),
@@ -110,7 +130,7 @@ def report(conn, ym=None, kind=None, today=None):
             g["unremitted"] += it["amount"]
     for g in groups.values():
         g["overdue"] = bool(g["unremitted"] and today > g["due"])
-    out = {"items": items, "groups": sorted(groups.values(), key=lambda x: (x["period_ym"], x["kind"])), "checks": []}
+    out = {"items": items, "groups": sorted(groups.values(), key=lambda x: (x["period_ym"], x["kind"])), "checks": [], "truncated": truncated}
     if ym:
         code = _roles.resolve_role(conn, "WITHHOLD_TAX", on_date=ym + "-28") or ""
         lo, hi = ym + "-01", "%s-%02d" % (ym, calendar.monthrange(int(ym[:4]), int(ym[5:7]))[1])
@@ -125,25 +145,50 @@ def report(conn, ym=None, kind=None, today=None):
 
 
 def mark_remitted(conn, ids, remitted_at, voucher_no=""):
+    """登記繳庫。驗證（D4）：繳庫日不可在未來、不可早於該筆所屬月、不可落在已結帳／鎖定期間；連了傳票單號就必須是已過帳、未作廢、
+    且有借記代扣科目（2252）的傳票。"""
     try:
-        _dt.date.fromisoformat(str(remitted_at))
+        d = _dt.date.fromisoformat(str(remitted_at)).isoformat()
     except ValueError:
         raise WithholdingError("繳庫日要是 YYYY-MM-DD。")
-    ids = [int(i) for i in ids]
-    if not ids:
-        raise WithholdingError("請選擇要登記繳庫的項目。")
+    ids = _ids(ids)
+    if d > _today().isoformat():
+        raise WithholdingError("繳庫日 %s 在未來：只能登記已經發生的繳庫。" % d)
+    lock = _periods.lock_error(conn, d)
+    if lock:
+        raise WithholdingError(lock + "繳庫日落在已結帳期間，請重開期間或改用當期日期。")
+    rows = conn.execute("SELECT id, period_ym, remitted_at FROM gl_withholding_items WHERE id IN (%s)" % ",".join("?" * len(ids)), ids).fetchall()
+    early = [r["id"] for r in rows if d < r["period_ym"] + "-01"]
+    if early:
+        raise WithholdingError("繳庫日 %s 早於所屬月份（項目 %s）。" % (d, "、".join(str(x) for x in early[:5])))
     vid = None
     if voucher_no:
-        r = conn.execute("SELECT id, voided_at FROM vouchers_all WHERE voucher_no=?", (voucher_no,)).fetchone()
+        r = conn.execute("SELECT id, status, voided_at FROM vouchers_all WHERE voucher_no=?", (voucher_no,)).fetchone()
         if r is None or r["voided_at"]:
             raise WithholdingError("查無有效的傳票單號 %s。" % voucher_no)
+        if r["status"] != "已過帳":
+            raise WithholdingError("傳票 %s 尚未過帳（%s）：繳庫要連到已過帳的付款傳票。" % (voucher_no, r["status"]))
+        codes = {c for c in (_roles.resolve_role(conn, "WITHHOLD_TAX", on_date=d), _roles.resolve_role(conn, "WITHHOLD_NHI", on_date=d)) if c}
+        if not codes or not conn.execute("SELECT 1 FROM voucher_lines WHERE voucher_id=? AND debit>0 AND account_code IN (%s) LIMIT 1" % ",".join("?" * len(codes)),
+                                         [r["id"]] + sorted(codes)).fetchone():
+            raise WithholdingError("傳票 %s 沒有借記代扣科目（%s）：這不是繳庫傳票。" % (voucher_no, "、".join(sorted(codes)) or "未設定"))
         vid = r["id"]
     n = 0
     for i in ids:
-        n += conn.execute("UPDATE gl_withholding_items SET remitted_at=?, remit_voucher_id=? WHERE id=? AND remitted_at=''", (str(remitted_at), vid, i)).rowcount
+        n += conn.execute("UPDATE gl_withholding_items SET remitted_at=?, remit_voucher_id=? WHERE id=? AND remitted_at=''", (d, vid, i)).rowcount
     return n
 
 
-def unmark_remitted(conn, ids):
-    ids = [int(i) for i in ids]
-    return sum(conn.execute("UPDATE gl_withholding_items SET remitted_at='', remit_voucher_id=NULL WHERE id=? AND remitted_at<>''", (i,)).rowcount for i in ids)
+def unmark_remitted(conn, ids, reason=""):
+    """取消繳庫登記：必填原因；該筆原繳庫日落在已結帳／鎖定期間 ⇒ 拒絕。回 `{"updated": n, "previous": [(id, 原繳庫日, 原傳票id)]}`（給稽核記舊狀態）。"""
+    if not str(reason or "").strip():
+        raise WithholdingError("取消繳庫要填原因。")
+    ids = _ids(ids)
+    prev = [(r["id"], r["remitted_at"], r["remit_voucher_id"]) for r in conn.execute(
+        "SELECT id, remitted_at, remit_voucher_id FROM gl_withholding_items WHERE id IN (%s) AND remitted_at<>''" % ",".join("?" * len(ids)), ids)]
+    for _id, at, _v in prev:
+        lock = _periods.lock_error(conn, at)
+        if lock:
+            raise WithholdingError("項目 %d 的繳庫日 %s 落在已結帳期間：%s" % (_id, at, lock))
+    n = sum(conn.execute("UPDATE gl_withholding_items SET remitted_at='', remit_voucher_id=NULL WHERE id=? AND remitted_at<>''", (i,)).rowcount for i in ids)
+    return {"updated": n, "previous": prev}

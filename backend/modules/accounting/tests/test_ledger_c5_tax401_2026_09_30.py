@@ -63,8 +63,8 @@ def _ev(kind, date, **kw):
 def _run_and_post(conn, fake, events, start, end, post=True):
     fake["events"] = events
     E.run(conn, start, end, "acc")
-    if post:
-        conn.execute("UPDATE vouchers_all SET status='已過帳' WHERE kind='auto' AND status='草稿' AND voided_at=''")
+    if post:                                                       # 只過帳來源事件的傳票；稅額結轉草稿（origin gl:E14）留著，測『前期未過帳』用
+        conn.execute("UPDATE vouchers_all SET status='已過帳' WHERE kind='auto' AND status='草稿' AND voided_at='' AND origin<>'gl:E14'")
     conn.commit()
 
 
@@ -174,7 +174,7 @@ def test_api_flag_gate_summary_export_and_settlement(client, conn, fake, make_us
     x = client.get("/api/ledger/tax401/export?year=2178&period=1", headers=h)
     assert x.status_code == 200
     ws = load_workbook(io.BytesIO(x.content)).active
-    assert any(c.value == "本期應實繳稅額" for row in ws.iter_rows() for c in row)
+    assert any(c.value == "本期(月)應實繳稅額(6-10)" for row in ws.iter_rows() for c in row)      # 官方欄項名稱
     s = client.post("/api/ledger/tax401/settlement", headers=h, json={"year": 2178, "period": 1})
     assert s.status_code == 200 and s.json()["payable"] == 400
     assert client.post("/api/ledger/tax401/settlement", headers=h, json={"year": 2178, "period": 4}).status_code == 400
@@ -245,3 +245,67 @@ def test_summary_and_export_cite_the_official_source_and_list_only_unverified_it
     ws = load_workbook(_io.BytesIO(EX.tax401_workbook(s))).active
     text = " ".join(str(c.value) for row in ws.iter_rows() for c in row if c.value is not None)
     assert "5：應稅銷售額—收銀機發票(三聯式)及電子發票" in text and "尚未核實" in text and "附件六" in text
+
+
+# ── W3 資安複查 D1／D2／D3：前期未過帳、並行重建、負淨額 ─────────────────────────────────────────
+
+def test_next_period_settlement_is_refused_while_previous_is_still_draft(conn, fake):
+    _run_and_post(conn, fake, [_ev("bigbuy", "2178-03-10")], "2178-03-01", "2178-04-30")
+    r1 = _settle(conn, 2178, 2)                                                       # 期 2：有留抵，草稿
+    _run_and_post(conn, fake, [_ev("sale", "2178-05-10")], "2178-05-01", "2178-06-30")
+    with pytest.raises(T.TaxConflict, match="還沒過帳"):
+        T.generate_settlement(conn, 2178, 3, "acc")
+    conn.execute("UPDATE vouchers_all SET status='已過帳' WHERE id=?", (r1["voucher_id"],))
+    conn.commit()
+    r2 = _settle(conn, 2178, 3)                                                       # 前期過帳後承接留抵
+    assert (r2["carry_prev"], r2["payable"]) == (200, 300)
+    conn.execute("UPDATE vouchers_all SET voided_at='2178-07-01T00:00:00' WHERE id=?", (r1["voucher_id"],))     # 前期結轉傳票被作廢 ⇒ 也擋
+    conn.commit()
+    with pytest.raises(T.TaxConflict):
+        T.generate_settlement(conn, 2178, 3, "acc")
+
+
+def test_summary_warns_when_earlier_activity_has_no_settlement(conn, fake):
+    _run_and_post(conn, fake, [_ev("sale", "2178-01-10")], "2178-01-01", "2178-02-28")
+    _run_and_post(conn, fake, [_ev("sale", "2178-03-10")], "2178-03-01", "2178-04-30")
+    assert "no_prev_settlement" in {w["key"] for w in T.summarize(conn, 2178, 2)["warnings"]}
+    assert "no_prev_settlement" not in {w["key"] for w in T.summarize(conn, 2178, 1)["warnings"]}
+
+
+def test_negative_net_tax_is_refused_with_an_explanation(conn, fake):
+    adj = _ev("sale", "2178-01-20", source_type="t_adj")
+    adj["tax_code"] = "OUT-ADJ"
+    adj["lines"] = [{"role": "SALES_RETURN", "side": "D", "amount": 2000}, {"role": "OUTPUT_TAX", "side": "D", "amount": 100}, {"role": "AR", "side": "C", "amount": 2100}]
+    _run_and_post(conn, fake, [adj], "2178-01-01", "2178-02-28")
+    with pytest.raises(T.TaxError, match="負的"):
+        T.generate_settlement(conn, 2178, 1, "acc")
+
+
+def test_concurrent_create_conflict_is_a_409_and_the_write_lock_is_taken(conn, fake, monkeypatch):
+    _run_and_post(conn, fake, [_ev("sale", "2178-01-10")], "2178-01-01", "2178-02-28")
+    import sqlite3
+
+    def boom(*a, **k):
+        raise sqlite3.IntegrityError("UNIQUE")
+    monkeypatch.setattr(T, "_write_settlement", boom)
+    with pytest.raises(T.TaxConflict, match="剛被另一個操作建立"):
+        T.generate_settlement(conn, 2178, 1, "acc")
+    conn.rollback()
+    monkeypatch.undo()
+    called = []
+    orig = T.begin_write
+    monkeypatch.setattr(T, "begin_write", lambda c: called.append(1) or orig(c))
+    _settle(conn, 2178, 1)
+    assert called, "產生／重建稅額結轉前必須先拿寫鎖（D2）"
+
+
+def test_api_previous_unposted_is_409(client, conn, fake, make_user):
+    u, p = make_user(username="t401_409%d" % id(client), role="superadmin")
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
+    F.set_flag(conn, "tax401", True)
+    conn.commit()
+    _run_and_post(conn, fake, [_ev("bigbuy", "2178-03-10")], "2178-03-01", "2178-04-30")
+    assert client.post("/api/ledger/tax401/settlement", headers=h, json={"year": 2178, "period": 2}).status_code == 200
+    _run_and_post(conn, fake, [_ev("sale", "2178-05-10")], "2178-05-01", "2178-06-30")
+    r = client.post("/api/ledger/tax401/settlement", headers=h, json={"year": 2178, "period": 3})
+    assert r.status_code == 409 and "還沒過帳" in r.json()["detail"]
