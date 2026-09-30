@@ -5,7 +5,7 @@
 import json
 import logging
 from datetime import datetime, timedelta, date
-from typing import Optional, List
+from typing import Any, Optional, List
 
 from fastapi import APIRouter, File, Form, HTTPException, Header, UploadFile
 from pydantic import BaseModel, Field, ConfigDict
@@ -38,6 +38,8 @@ class DevCaseIn(BaseModel):
     status: Optional[str] = '洽談中'
     sales_persons: Optional[List[int]] = []
     planners: Optional[List[int]] = []
+    # 介紹人（2026-09-30；自由文字、選填）。型別用 Any 由 `_clean_referrer` 自己驗：型別不對／太長回 400（不是 422）
+    referrer: Optional[Any] = ''
     # 樂觀鎖（選填，見 update_dev_case）——比照 customers.py/suppliers.py/
     # vendor_contractors.py 的 expectedUpdatedAt 慣例，camelCase 對外、
     # snake_case 對內
@@ -212,6 +214,25 @@ def _user_map(conn) -> dict:
     return {r["id"]: (r["display_name"] or r["username"]) for r in rows}
 
 
+REFERRER_MAX = 60
+
+
+def _clean_referrer(v) -> str:
+    """介紹人：None／缺 ⇒ 空字串；必須是字串（否則 400）；去頭尾空白後最多 60 字（超過 400，不截斷：使用者要知道沒存進去）。"""
+    if v is None:
+        return ""
+    if not isinstance(v, str):
+        raise HTTPException(400, "介紹人必須是文字")
+    v = v.strip()
+    if len(v) > REFERRER_MAX:
+        raise HTTPException(400, "介紹人最多 %d 個字（目前 %d 字）" % (REFERRER_MAX, len(v)))
+    return v
+
+
+def _like_esc(s: str) -> str:
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _case_row(row, umap: dict) -> dict:
     try:
         sp = json.loads(row["sales_persons"] or "[]")
@@ -223,6 +244,7 @@ def _case_row(row, umap: dict) -> dict:
         pl = []
     return {
         "id": row["id"],
+        "referrer": (row["referrer"] if "referrer" in row.keys() else "") or "",
         "caseName": row["case_name"],
         "customerName": row["customer_name"] or "",
         "customerId": row["customer_id"],
@@ -298,8 +320,9 @@ def list_dev_cases(
             clauses.append("status = ?")
             params.append(status)
         if q:
-            clauses.append("(case_name LIKE ? OR customer_name LIKE ?)")
-            params += [f"%{q}%", f"%{q}%"]
+            clauses.append("(case_name LIKE ? ESCAPE '\\' OR customer_name LIKE ? ESCAPE '\\' OR referrer LIKE ? ESCAPE '\\')")
+            like = f"%{_like_esc(q)}%"
+            params += [like, like, like]
         where = "WHERE " + " AND ".join(clauses)
         rows = conn.execute(
             f"SELECT * FROM dev_cases {where} ORDER BY updated_at DESC",
@@ -315,14 +338,15 @@ def list_dev_cases(
 @router.post("/dev-cases", status_code=201)
 def create_dev_case(body: DevCaseIn, authorization: str = Header("")):
     user = _require_dev(authorization)
+    referrer = _clean_referrer(body.referrer)
     now = _TW_NOW()
     conn = get_db()
     try:
         cur = conn.execute("""
             INSERT INTO dev_cases
               (case_name, customer_name, customer_id, status,
-               sales_persons, planners, converted_quote_no, created_by, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
+               sales_persons, planners, converted_quote_no, created_by, created_at, updated_at, referrer)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
         """, (
             body.case_name.strip(),
             (body.customer_name or "").strip(),
@@ -333,12 +357,13 @@ def create_dev_case(body: DevCaseIn, authorization: str = Header("")):
             "",
             user["id"],
             now, now,
+            referrer,
         ))
         conn.commit()
         row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (cur.lastrowid,)).fetchone()
         umap = _user_map(conn)
         _audit(_tok(authorization), "dev_case.create", "dev_case",
-               str(cur.lastrowid), body.case_name.strip())
+               str(cur.lastrowid), body.case_name.strip(), {"referrer": referrer} if referrer else None)
         notify_module_activity(
             "業務開發", "新增案件",
             user.get("display_name") or user["username"],
@@ -367,6 +392,7 @@ def get_dev_case(case_id: int, authorization: str = Header("")):
 @router.put("/dev-cases/{case_id}")
 def update_dev_case(case_id: int, body: DevCaseIn, authorization: str = Header("")):
     user = _require_dev(authorization)
+    referrer = _clean_referrer(body.referrer)
     now = _TW_NOW()
     conn = get_db()
     try:
@@ -382,7 +408,7 @@ def update_dev_case(case_id: int, body: DevCaseIn, authorization: str = Header("
         conn.execute("""
             UPDATE dev_cases
                SET case_name=?, customer_name=?, customer_id=?,
-                   status=?, sales_persons=?, planners=?, updated_at=?
+                   status=?, sales_persons=?, planners=?, updated_at=?, referrer=?
              WHERE id=?
         """, (
             body.case_name.strip(),
@@ -392,12 +418,15 @@ def update_dev_case(case_id: int, body: DevCaseIn, authorization: str = Header("
             json.dumps(body.sales_persons or []),
             json.dumps(body.planners or []),
             now,
+            referrer,
             case_id,
         ))
         conn.commit()
         updated = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
+        old_ref = (row["referrer"] if "referrer" in row.keys() else "") or ""
         _audit(_tok(authorization), "dev_case.update", "dev_case",
-               str(case_id), body.case_name.strip())
+               str(case_id), body.case_name.strip(),
+               {"referrer": {"from": old_ref, "to": referrer}} if old_ref != referrer else None)
         return _case_row(updated, _user_map(conn))
     finally:
         conn.close()

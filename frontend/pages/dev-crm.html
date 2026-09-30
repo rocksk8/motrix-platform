@@ -514,7 +514,7 @@
             新增案件
           </button>
         </div>
-        <input class="dc-search" type="text" placeholder="搜尋案件或客戶…"
+        <input class="dc-search" type="text" placeholder="搜尋案件、客戶或介紹人…"
                x-model="searchQ" @input.debounce.400ms="loadCases()">
         <!-- 2026-09-14：狀態 chips 移除——上方漏斗帶的每一段就是狀態篩選器，
              兩個控制項綁同一個 filterStatus，而且 chips 那組沒有數字、資訊量
@@ -609,6 +609,7 @@
             </template>
             <div class="dc-case-card__name" x-text="c.caseName"></div>
             <div class="dc-case-card__sub" x-text="c.customerName || '（未指定客戶）'"></div>
+            <div class="dc-case-card__sub" data-testid="card-referrer" x-show="c.referrer" x-text="'介紹人：' + c.referrer"></div>
             <div class="dc-case-card__people" x-show="c.salesPersonNames.length || c.plannerNames.length">
               <span x-show="c.salesPersonNames.length" x-text="'業務：' + c.salesPersonNames.join('、')"></span>
               <span x-show="c.salesPersonNames.length && c.plannerNames.length"> ｜ </span>
@@ -862,6 +863,10 @@
               <span class="dc-info-lbl">客戶</span>
               <span class="dc-info-val" x-text="selectedCase.customerName"></span>
             </div>
+            <div x-show="selectedCase.referrer" data-testid="detail-referrer">
+              <span class="dc-info-lbl">介紹人</span>
+              <span class="dc-info-val" x-text="selectedCase.referrer"></span>
+            </div>
             <div>
               <span class="dc-info-lbl">最後更新</span>
               <span class="dc-info-val" x-text="selectedCase.updatedAt ? selectedCase.updatedAt.slice(0,16) : '—'"></span>
@@ -1036,6 +1041,11 @@
             <label>案件名稱 <span style="color:var(--danger)">*</span></label>
             <input class="dc-input" type="text" x-model="caseForm.case_name"
               placeholder="例：XX公司辦公室弱電整合">
+          </div>
+          <div class="dc-form-group">
+            <label>介紹人 <span style="color:var(--text-dim);font-weight:400">（選填）</span></label>
+            <input class="dc-input" type="text" data-testid="case-referrer" x-model="caseForm.referrer" maxlength="60"
+              placeholder="例：客戶或同業介紹">
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div class="dc-form-group">
@@ -1706,7 +1716,7 @@ function devCrmPage() {
     // ── Case modal ──
     openNewCase() {
       this.editingCaseId = null
-      this.caseForm = { case_name: '', customer_name: '', customer_id: null, status: '洽談中', sales_persons: [], planners: [] }
+      this.caseForm = { case_name: '', customer_name: '', customer_id: null, status: '洽談中', sales_persons: [], planners: [], referrer: '' }
       this.caseError = ''
       this.customerSuggestions = []
       this.showCustomerDrop = false
@@ -1719,7 +1729,7 @@ function devCrmPage() {
       const c = this.selectedCase
       this.editingCaseId = c.id
       this.caseForm = {
-        case_name: c.caseName, customer_name: c.customerName,
+        case_name: c.caseName, customer_name: c.customerName, referrer: c.referrer || '',
         customer_id: c.customerId, status: c.status,
         sales_persons: [...(c.salesPersonIds || [])],
         planners: [...(c.plannerIds || [])],
@@ -1780,7 +1790,7 @@ function devCrmPage() {
           method: this.editingCaseId ? 'PUT' : 'POST',
           headers: this._h(), body: JSON.stringify(body),
         })
-        if (!r.ok) { const d = await r.json(); this.caseError = d.detail || '儲存失敗'; return }
+        if (!r.ok) { const d = await r.json(); this.caseError = (typeof d.detail === 'string' ? d.detail : '') || '儲存失敗'; return }
         const saved = await r.json()
         if (this.editingCaseId) {
           const idx = this.cases.findIndex(c => c.id === this.editingCaseId)
