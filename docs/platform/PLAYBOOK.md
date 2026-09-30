@@ -257,6 +257,7 @@
 | 16 | 題目讀頁面路徑 | 新題出現 `"pages"`／`FRONT / "pages"` 寫死路徑 ⇒ 改 `core.source_tree.page_file(...)` | test_page_paths_only_decrease（第十五班 core-only RC，B 題檔） |
 | 17 | 新規格編號要宣告 | 新題名帶模組規格編號（例 S6）⇒ grep 該模組 SPEC 已宣告；送測清單加 `test_spec_coverage` | test_spec_coverage（第十六班 --train，B54） |
 | 18 | 新增頁／表／權限 key | 送測前跑全域釘子（modtest 模組選題選不到）：test_alpine_double_init（頁母體）、test_demo_reset dm1（表分類）、test_module_registry＋test_module_keys_consistency（權限目錄）、test_system_audit＋test_module_data_classes（備份分類） | 第十八班 --train 6 紅（E lodging） |
+| 19 | 預演列車（合併後才紅的守門） | **改到 L1（helpers／core）、frontend、routers 的分支，push 前跑** `python tools/platform/pre_train_check.py <分支>`（Python 用 .venv312；約 10～25 分，-n 2、低優先權、走全機測試鎖）：在 `D:\開發測試檔\pre-train-*` 拋棄式樹把分支合進 origin/platform（不 push、不寫 rerere）→ `train_number assign`＋`--check` → 重產 dep_graph／UNIT-INDEX／test_map → `MOTRIX_TRAIN=1` 跑 tests/platform＋GUARDS 列的非 platform 守門（spec_coverage、alpine double-init、公司設定輸出點、system_audit、raw-vh 靜態題、簽核提供者、頁面殼腳本），紅的題依歸屬（模組／core）分組並列出本分支動到的相關檔。exit 0＝綠；1＝有紅（先修再 push）；2＝合併衝突（先 rebase）。單一分支單獨看是綠、合上 platform 才紅的那批（C_OWNED、modules.json 歸屬、page_paths 棘輪、scope_gate global_tests、單位卡、L1 底線名稱、簽核提供者集合、產生檔）由它一次抓出，不必等列車逐個退回。**列車上又抓到「合併後才紅」的守門 ⇒ 加進 `pre_train_check.GUARDS`**。| 第二十六班重建 3 次（reds 只在合併＋MOTRIX_TRAIN=1 出現）；wip/pre-train-check |
 
 清單會長大：列車或稽核抓到「讀碼就看得出來」的紅，當輪加一列（寫出處）。
 
