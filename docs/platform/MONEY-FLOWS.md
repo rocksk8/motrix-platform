@@ -33,13 +33,13 @@ L2 模組**不互相 import**，一律經 provider；提供者不在 ⇒ 少那�
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | E1 | 承攬商派工／匯款申請 `contractor_payment_vouchers`（`is_paid`、`remit_actual`） | `case/recognition.py::dispatch_entries`；`subcontract/api/contractor_vouchers.py` | ✅ 已匯款日、含稅、實付 | ✅ 發票日、未稅 | ✅ 派工金額（精算 dispatchTotal） | ✅ 待匯款／已匯款 | ✅ `contractor_voucher.paid_between` | — | E04 承攬商發票、E05 匯款、E05b 個人點工（subcontract） | E04：借 COST_PROJECT＋INPUT_TAX／貸 AP（稅額可經 `source_annotations` 補登實際值）；E05：借 AP＋FEE／貸 BANK；實付≠應付且已核可⇒差額入 EXP_OTHER | ✅ 已上線（train 25，C2）；E05b 為歷史未關聯勞報單的補列 | `engine_drafts`（稅額補登另需 `source_annotations`） |
 | E2 | 承攬商匯款手續費（`remit_fee`，公司自付） | `subcontract/remit.py::_expense_entries`（IP-9 `remit_fee_contractor`） | ✅ | ✅ | ✅ 精算頁 `remitFeeTotal` | ✅ | ✅ `remitFeeAccount` | 案件管理「財務彙總」（`loadFinanceSummary`）是否含手續費＝🟡 待驗（稽核 S1） | E05 的 FEE 行（subcontract） | 借 FEE（匯款手續費，公司自付）／貸 BANK | ✅ 已上線（train 25，C2） | `engine_drafts` |
-| E3 | 案件額外支出 `case_extra_expenses`（`total_cost`、`paid_date`） | `case/recognition.py::extra_entries`；`case/payables.py` | ✅ 付款日 | ✅ 發票日→核准日→憑證日 | ✅ 精算 xeTotal | ✅ `payables.pending` | 🔴 T100 沒有額外支出付款事件 | 缺口 G2 | E11／E11b 額外支出與付款（case） | 借 COST_*／INPUT_TAX 貸 AP；付款借 AP 貸 BANK（設計見 proposal-gl 02 §4） | 🔴 未做（批次待排） | `engine_drafts` |
-| E4 | 額外支出匯款手續費（`remit_fee`） | `case/payables.py::_expense_entries`（IP-9 `remit_fee_case`） | ✅ | ✅ | ✅ | ✅ | 🔴 同 E3 | 缺口 G2 | E11b 的 FEE 行（case） | 借 FEE／貸 BANK | 🔴 未做（同 E3） | `engine_drafts` |
-| E5 | 叫料（材料訂單） | `case/recognition.py::material_entries` | ✅ 付款日 | ✅ 發票日 | 🟡 精算的「材料」是否含叫料＝待驗 | 🟡 叫料付款是否走出納＝待驗 | 🔴 無 | 缺口 G3 | E12 叫料（case） | 借 COST_*／INPUT_TAX 貸 AP（設計見 proposal-gl 02 §4） | 🔴 未做（批次待排） | `engine_drafts` |
+| E3 | 案件額外支出 `case_extra_expenses`（`total_cost`、`paid_date`） | `case/recognition.py::extra_entries`；`case/payables.py` | ✅ 付款日 | ✅ 發票日→核准日→憑證日 | ✅ 精算 xeTotal | ✅ `payables.pending` | 🔴 T100 沒有額外支出付款事件 | 缺口 G2 | E11／E11b 額外支出與付款（case） | 借 COST_*／INPUT_TAX 貸 AP；付款借 AP 貸 BANK（設計見 proposal-gl 02 §4） | 🟡 已排程（C4b，與存貨同批） | `engine_drafts` |
+| E4 | 額外支出匯款手續費（`remit_fee`） | `case/payables.py::_expense_entries`（IP-9 `remit_fee_case`） | ✅ | ✅ | ✅ | ✅ | 🔴 同 E3 | 缺口 G2 | E11b 的 FEE 行（case） | 借 FEE／貸 BANK | 🟡 已排程（C4b，同 E3） | `engine_drafts` |
+| E5 | 叫料（材料訂單） | `case/recognition.py::material_entries` | ✅ 付款日 | ✅ 發票日 | 🟡 精算的「材料」是否含叫料＝待驗 | 🟡 叫料付款是否走出納＝待驗 | 🔴 無 | 缺口 G3 | E12 叫料（case） | 借 COST_*／INPUT_TAX 貸 AP（設計見 proposal-gl 02 §4） | 🟡 已排程（C4b，與存貨同批） | `engine_drafts` |
 | E6 | 進貨批次／料件成本 `stock_batches`、`stock_items.cost` | `analytics/api/reports.py::_collect_expenses`（stock_items 段）；`accounting/api/accounting_export.py::_collect_paid_stock_batches` | 🟡 依批次日歸月，**不分口徑**（兩口徑同一數字） | 🟡 同左 | ✅ `stock_items.quote_no` | 🟡 進貨付款 `paid-toggle` 在庫存頁，不在出納頁 | ✅ 已付款批次 | 口徑差異記在 §4 G4 | E08 進貨、E08b 進貨發票、E09 進貨付款、E10 出貨成本（supply） | E08：借 INVENTORY／貸 AP；E08b：借 INPUT_TAX／貸 AP；E09：借 AP／貸 BANK；E10：借 COGS／貸 INVENTORY（移動加權平均） | 🟡 規劃中（C4） | `engine_drafts`＋`inventory_cost` |
 | E7 | 勞報單 `payslips`（已付款、`gross_amount`） | `payroll/payslip_payouts.py::_expense_entries`（IP-9 `payslip`） | ✅ 付款日、應付總額 | ✅ 同（付款日；不分口徑） | ⚪ 勞報單不掛案件（若有掛案件才會進案件成本＝🟡 待驗） | ✅ `payslip.payables` | 🔴 T100 無勞報單付款事件 | 缺口 G2 | E06 勞報單應付、E06b 勞報單付款（payroll） | E06：借 EXP_LABOR／貸 WITHHOLD_TAX＋WITHHOLD_NHI＋OTHER_PAYABLE；E06b：借 OTHER_PAYABLE／貸 BANK（由匯款單付款者不產生，見 E10） | ✅ 已接受（train 26，C3） | `engine_drafts`（扣繳報表另需 `withholding`） |
 | E8 | 獎金分潤發放 | `payroll/bonus_payouts.py::_expense_entries`（IP-9 `bonus`） | ✅ 發放日、案件合計 | ✅ 同 | 🟡 獎金是否列入案件毛利＝待驗 | ✅ `bonus.payouts` | 🔴 T100 無獎金發放事件（`bonus_vouchers.py` 有獎金傳票：權責／發放，可作為總帳來源＝🟡 待接） | 缺口 G2 | E07a 核准應付、E07b 發放（payroll，**native**） | 不由引擎產生：登記獎金模組已開立的傳票（核准：借 6111／貸 2191；發放：借 2191／貸銀行＋代扣 2252）；引擎狀態 `native`，不重複、不改動 | ✅ 已接受（train 26，C3b） | `engine_drafts` |
-| E9 | 自訂模組的金額欄（`number`／`formula` 欄位） | `helpers/custom_modules.py`（欄位型別 `number`、`formula`） | 🔴 沒有「這個欄位是金額、是收入還是支出」的宣告，所以**不可能**進報表 | 🔴 | 🔴 | 🔴 | 🔴 | 缺口 G5：需要欄位型別 `money`（含方向、日期欄）＋提供者 | E20／E21 自訂模組入帳（custom_modules） | 由建構器 outbox 的入帳對應決定（角色＋維度）；需 `finance_settled` 事件與稅額拆分欄位（R8） | 🔴 未做（C7） | `custom_records`（入帳）＋`engine_drafts` |
+| E9 | 自訂模組的金額欄（`number`／`formula` 欄位） | `helpers/custom_modules.py`（欄位型別 `number`、`formula`） | 🔴 沒有「這個欄位是金額、是收入還是支出」的宣告，所以**不可能**進報表 | 🔴 | 🔴 | 🔴 | 🔴 | 缺口 G5：需要欄位型別 `money`（含方向、日期欄）＋提供者 | E20／E21 自訂模組入帳（custom_modules） | 由建構器 outbox 的入帳對應決定（角色＋維度）；來源＝W1 S2.5 的 `custom_record_finance_outbox`（交易內 emit，含 finance_settled 與稅額拆分，R8 已滿足） | 🟡 已排程（C7；W1 S2.5 outbox `custom_record_finance_outbox` 已完成於 wip/w1-builder3-s25，前置解除） | `custom_records`（入帳）＋`engine_drafts` |
 | E10 | 承攬商匯款單關聯勞報單（R12：個人外包匯款前必須關聯勞報單，匯款金額＝勞報單實付） | `payroll/remit_link.py`（IP-105 `payslip.remit`）；`subcontract/api/contractor_vouchers.py` | ✅ 同 E1／E7（匯款日；勞報單由匯款單一併記為已付款） | ✅ 同 | ⚪ 勞報單不掛案件 | ✅ 出納頁／案件頁「標記已匯款」視窗挑選勞報單 | 🔴 同 G2 | 匯款標記與勞報單付款同一個交易；取消匯款一併退回；勞報單自己的 unpay 被擋。設定 `remit_require_payslip`（預設開、僅最高管理者可關、寫稽核） | E05（該行借 OTHER_PAYABLE）；該勞報單不產生 E06b | 借 AP（其餘）＋OTHER_PAYABLE（已關聯個人）＋FEE／貸 BANK | 🔧 開發中（train 26 待測試） | `engine_drafts`＋設定 `remit_require_payslip` |
 
 ## 3. 不是金流（⚪，附理由）
@@ -79,7 +79,7 @@ L2 模組**不互相 import**，一律經 provider；提供者不在 ⇒ 少那�
 ## 7. 總帳串接（欄位說明與班次）
 
 - **總帳事件碼**：`gl.events`（IP-GL1，契約 v1）事件的代碼。E01～E03 銷項與收款、E04～E05b 承攬商、E06～E06b 勞報單、E07a／E07b 獎金、E08～E10 存貨、
-  E11～E12 案件支出、E20／E21 自訂模組。**native**＝來源模組已自行開立傳票，事件只登記（`mode=native`，引擎不產生、不改動）；其餘由引擎產生 `kind=auto` 草稿走既有簽核。
+  E11～E12 案件支出、E20／E21 自訂模組。批次：C4＝存貨（E08～E10）；C4b＝案件額外支出與叫料（E11／E11b／E12，與存貨同批）；C7＝自訂模組（E20／E21，W1 outbox 已完成）與折讓。**native**＝來源模組已自行開立傳票，事件只登記（`mode=native`，引擎不產生、不改動）；其餘由引擎產生 `kind=auto` 草稿走既有簽核。
 - **分錄（借／貸 角色）**：事件用「角色」不用科目；角色 → 科目在總帳設定（`gl_account_roles`，可依生效日改）。缺角色 ⇒ 標 `blocked_no_account` 並說明，不猜。
 - **總帳狀態**：✅ 已上線／已接受（寫明班次與批次）、🔧 開發中、🟡 規劃中（有批次編號）、🔴 未做。班次：train 25＝總帳 A＋B1～B5＋C1＋C2；train 26＝C3（勞報單）、C3b（獎金 native）、R12（匯款↔勞報單）。
 - **功能旗標**：總帳作業（`ledger-hub`）的 `gl_settings` 鍵 `feature.<名稱>`，預設全關，最高管理者開啟。`engine_drafts` 關閉時，引擎與各來源提供者對現有手工傳票沒有任何副作用。
@@ -103,9 +103,9 @@ L2 模組**不互相 import**，一律經 provider；提供者不在 ⇒ 少那�
   勞報單（M07 payslips）──────────────────────────────────┬─→ 營運報表（付款日）  ├─→ 出納（payslip.payables）
                                                             └─→ 總帳 E06／E06b（由匯款單付款者只有 E05）
   獎金分潤（M07 bonus）──→ bonus_vouchers 開傳票（origin=bonus_*）──→ 總帳 E07a／E07b（native：登記既有傳票）；營運報表／出納照舊
-  額外支出、叫料（M01 case）─→ 營運報表、案件成本、出納 ；總帳 E11／E12 未做
+  額外支出、叫料（M01 case）─→ 營運報表、案件成本、出納 ；總帳 E11／E12 已排程（C4b）
   進貨／存貨（M03 supply）───→ 營運報表（近似）；總帳 E08～E10 規劃中（C4，旗標 inventory_cost）
-  自訂模組金額欄（建構器）───→ 尚不進報表；總帳 E20／E21 未做（C7，需 R8 outbox 補 finance_settled／稅額拆分）
+  自訂模組金額欄（建構器）───→ 尚不進報表；總帳 E20／E21 已排程（C7；W1 S2.5 outbox custom_record_finance_outbox 已完成，前置解除）
 總帳內部
   gl.events（各提供者，contract.collect）→ 補登覆寫（gl_source_annotations）→ 引擎（冪等、drift、orphan、期間鎖）→ 傳票（voucher_lines）
   → 試算表／總分類帳／明細分類帳／日記帳 → 資產負債表／損益表／權益變動表／現金流量表 → 年度結轉與決算（凍結快照）
