@@ -56,9 +56,11 @@
        popup 要點才看得到，而使用者要的是「看一眼就知道哪幾個是自己的廠商」。 */
     /* 2026-09-30 使用者：Google 底圖上我們的圖釘被滿地 POI 淹掉（截圖：34px 紅圓＋「標」，旁邊是一堆橘藍水滴）。
        ⇒ 形狀跟 Google 的水滴／圓形分開：**圓角方塊**、粗白框＋深色外環＋陰影，尺寸隨縮放放大（--mp-pin，
-       由 `_syncPinSize()` 依縮放寫在 #mp-canvas 上：≤12 → 44px、13–15 → 50px、≥16 → 56px）。
+       由 `_syncPinSize()` 依縮放寫在 #mp-canvas 上：≤7 → 24px、8–9 → 30px、10–12 → 38px、13–15 → 46px、≥16 → 54px；
+       2026-10-01 使用者：全國視野（z7）44px＋標籤太大、互相蓋住 ⇒ 縮小、並依縮放分三種標籤模式 data-mp-chip：
+       none（≤9：只有圖釘，名稱在滑過／點開彈窗）、compact（10–12：單行、名稱 ≤10 字＋…）、full（≥13：兩行、≤16 字＋…））。
        圖例用同一個 class，容器把 --mp-pin 設成 28px ⇒ 圖例與地圖上的形狀完全一致。 */
-    #mp-canvas { --mp-pin:44px; }
+    #mp-canvas { --mp-pin:38px; }
     .mp-pin { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box;
               width:var(--mp-pin,28px); height:var(--mp-pin,28px); border-radius:28%; color:#fff;
               font-size:max(14px, calc(var(--mp-pin,28px) * .5)); font-weight:800; line-height:1;
@@ -82,6 +84,12 @@
                box-shadow:0 1px 5px rgba(0,0,0,.4); }
     .mp-chip small { display:block; font-size:11px; font-weight:500; color:#374151; }
     .mp-chip--off { display:none; }
+    .mp-chip .mp-chip-c { display:none; }
+    #mp-canvas[data-mp-chip="compact"] .mp-chip .mp-chip-t, #mp-canvas[data-mp-chip="none"] .mp-chip .mp-chip-t { display:none; }
+    #mp-canvas[data-mp-chip="compact"] .mp-chip .mp-chip-c, #mp-canvas[data-mp-chip="none"] .mp-chip .mp-chip-c { display:inline; }
+    #mp-canvas[data-mp-chip="compact"] .mp-chip small, #mp-canvas[data-mp-chip="none"] .mp-chip small { display:none; }
+    #mp-canvas[data-mp-chip="none"] .mp-chip { display:none; }
+    #mp-canvas[data-mp-chip="none"] .mp-mk:hover .mp-chip { display:block; }   /* 只有圖釘的縮放層級：滑過才看名稱 */
     .mp-mk:hover { z-index:5; }
     .mp-mk:hover .mp-chip--off { display:block; }
     .mp-chip--static { position:static; transform:none; display:inline-block; vertical-align:middle; }
@@ -1293,9 +1301,10 @@ function mapPage() {
     //  🔴 **標記本身就要分得出來**：一個字＋顏色（要點開才知道類別的話，地圖就沒有回答「哪幾個是我的廠商」）。
     //  2026-09-30：根元素 `.mp-mk`（圖釘＋名稱標籤）。名稱標籤＝標案名稱／客戶名稱最多 16 字（`_chipTitle`），
     //  第二行「機關 · 截止日」；全部逐段跳脫（名稱是使用者／政府資料）。
-    _chipTitle(text) {
+    _chipTitle(text, max) {
+      max = max || 16
       const a = Array.from(String(text == null ? '' : text).trim())
-      return a.length > 16 ? a.slice(0, 16).join('') + '…' : a.join('')
+      return a.length > max ? a.slice(0, max).join('') + '…' : a.join('')
     },
     //  重疊時誰留下：截止最近的標案優先（未截止的照日期由近到遠，已截止的殿後，日期不明再後面），其他種類最後。
     _pinPrio(p) {
@@ -1313,18 +1322,22 @@ function mapPage() {
       const sub = [p.org, p.dataset === 'tenders' ? p.deadline : ''].filter(Boolean).join(' · ')
       const chip = title
         ? ('<span class="mp-chip" title="' + this._esc(p.name) + '"><span class="mp-chip-t">' + this._esc(title) + '</span>'
+           + '<span class="mp-chip-c">' + this._esc(this._chipTitle(p.name, 10)) + '</span>'
            + (sub ? '<small>' + this._esc(sub) + '</small>' : '') + '</span>')
         : ''
       return '<span class="mp-mk" data-chip="' + (title ? '1' : '') + '" data-prio="' + this._pinPrio(p) + '" style="--pin:' + color + '">'
         + '<span class="mp-pin' + (coarse ? ' mp-pin--coarse' : '') + '"' + (coarse ? '' : ' style="background:' + color + '"') + '>'
         + this._esc(d.mark) + '</span>' + chip + '</span>'
     },
-    //: 圖釘尺寸隨縮放（≤12 → 44px、13–15 → 50px、≥16 → 56px），寫成 #mp-canvas 上的 --mp-pin；兩種底圖共用。
-    _pinSizeFor(z) { return z >= 16 ? 56 : (z >= 13 ? 50 : 44) },
+    //: 圖釘尺寸與標籤模式隨縮放（≤7 → 24px、8–9 → 30、10–12 → 38、13–15 → 46、≥16 → 54；標籤 none／compact／full），寫成 #mp-canvas 上的 --mp-pin 與 data-mp-chip；兩種底圖共用。
+    _pinSizeFor(z) { return z >= 16 ? 54 : (z >= 13 ? 46 : (z >= 10 ? 38 : (z >= 8 ? 30 : 24))) },
+    _chipModeFor(z) { return z >= 13 ? 'full' : (z >= 10 ? 'compact' : 'none') },
     _syncPinSize() {
       const cv = document.getElementById('mp-canvas')
       if (!cv || !this._map || !this._map.getZoom) return
-      cv.style.setProperty('--mp-pin', this._pinSizeFor(this._map.getZoom()) + 'px')
+      const z = this._map.getZoom()
+      cv.style.setProperty('--mp-pin', this._pinSizeFor(z) + 'px')
+      cv.setAttribute('data-mp-chip', this._chipModeFor(z))
     },
     //: 名稱標籤重疊時只留一個（優先序 `data-prio`）；被藏的滑過圖釘才顯示，全文在彈窗。
     _declutterChips() {
@@ -1336,6 +1349,12 @@ function mapPage() {
       const hits = (a, b) => !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom)
       // 障礙物：所有圖釘（別人的圖釘蓋住標籤＝標籤讀不到）＋已留下的標籤
       const pins = Array.from(cv.querySelectorAll('.mp-mk > .mp-pin')).map(e => ({ el: e, r: e.getBoundingClientRect() }))
+      // 群聚泡泡也是障礙物：標籤不可畫在群聚上（Leaflet：.marker-cluster；Google：不含 .mp-mk／.mp-me／.mp-site 的 gmp-advanced-marker）
+      Array.from(cv.querySelectorAll('.marker-cluster, gmp-advanced-marker')).forEach(e => {
+        if (e.querySelector && e.querySelector('.mp-mk, .mp-me, .mp-site, .mp-ov-pin')) return
+        const r = e.getBoundingClientRect()
+        if (r.width) pins.push({ el: e, r })
+      })
       const kept = []
       mks.forEach(m => {
         const c = m.querySelector('.mp-chip')
