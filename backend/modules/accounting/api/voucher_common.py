@@ -189,6 +189,14 @@ def with_final_superadmin_tier(conn, tiers):
     return tiers + [{"order": len(tiers), "approvers": approvers, "system": True}]
 
 
+def require_final_superadmin(conn, user):
+    """內建兩層（沒設定流程）的最終關卡：第二層（主管）只有最高管理者能核准；沒有任何在職最高管理者 ⇒ 放行（不卡死）。"""
+    if (user or {}).get("role") == "superadmin":
+        return
+    if conn.execute("SELECT 1 FROM users WHERE role='superadmin' AND active=1 LIMIT 1").fetchone():
+        raise HTTPException(403, "最後一層由最高管理者（會計主管，系統規定）核准，你不是這一層的簽核人。")
+
+
 def _require_voucher_actor(conn, appr, user, action):
     """`JV30`：誰可以對這張傳票按核准／退回（商業會計法 §35、電子辦法 §5）。
 

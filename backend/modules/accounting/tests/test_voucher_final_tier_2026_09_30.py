@@ -55,27 +55,20 @@ def _reset_flow():
     yield
 
 
-def test_no_flow_configured_gets_exactly_one_superadmin_tier(client, make_user):
+def test_no_flow_configured_keeps_two_builtin_slots_and_the_second_is_superadmin_only(client, make_user):
     _, fin = _login(client, make_user, "ft_fin")
-    su, sup = _login(client, make_user, "ft_sup", role="superadmin")
+    _, sup = _login(client, make_user, "ft_sup", role="superadmin")
     vid = _draft(client, fin)
     assert client.post("/api/vouchers/%d/submit" % vid, headers=fin, json={}).status_code == 200
-    tiers = _appr(vid)["tiers"]
-    assert len(tiers) == 1 and tiers[0].get("system") is True and su in {a["username"] for a in tiers[0]["approvers"]}
-    assert all(a["orgUnit"] == "會計主管（系統規定）" for a in tiers[0]["approvers"])
-
-
-def test_finance_cannot_approve_and_cannot_post_before_the_final_tier_approves(client, make_user):
-    _, fin = _login(client, make_user, "ft_fin2")
-    _, sup = _login(client, make_user, "ft_sup2", role="superadmin")
-    vid = _draft(client, fin)
-    client.post("/api/vouchers/%d/submit" % vid, headers=fin, json={})
+    assert (_appr(vid).get("tiers") or []) == []                                                             # 沒設定流程 ⇒ 不寫鏈，維持內建兩層
+    assert client.post("/api/vouchers/%d/approve" % vid, headers=fin, json={}).status_code == 200            # 第一層：覆核，出納／財務即可
+    assert _status(vid) == "簽核中"
     r = client.post("/api/vouchers/%d/approve" % vid, headers=fin, json={})
-    assert r.status_code == 403 and "不是這一層的簽核人" in r.json()["detail"]
-    assert client.post("/api/vouchers/%d/post" % vid, headers=fin, json={}).status_code >= 400          # 未核准不能過帳
+    assert r.status_code == 403 and "最高管理者" in r.json()["detail"] and _status(vid) == "簽核中"
+    assert client.post("/api/vouchers/%d/post" % vid, headers=fin, json={}).status_code >= 400               # 未核准不能過帳
     assert client.post("/api/vouchers/%d/approve" % vid, headers=sup, json={}).status_code == 200
     assert _status(vid) == "已核准"
-    assert client.post("/api/vouchers/%d/post" % vid, headers=fin, json={}).status_code == 200            # 核准後 finance 可以過帳
+    assert client.post("/api/vouchers/%d/post" % vid, headers=fin, json={}).status_code == 200               # 核准後 finance 可以過帳
     assert _status(vid) == "已過帳"
 
 
@@ -84,7 +77,6 @@ def test_superadmin_can_send_back_with_reason(client, make_user):
     _, sup = _login(client, make_user, "ft_sup3", role="superadmin")
     vid = _draft(client, fin)
     client.post("/api/vouchers/%d/submit" % vid, headers=fin, json={})
-    assert client.post("/api/vouchers/%d/send-back" % vid, headers=fin, json={"reason": "我自己退"}).status_code == 403     # 非最終關卡簽核人不能退回
     assert client.post("/api/vouchers/%d/send-back" % vid, headers=sup, json={"reason": "科目要改"}).status_code == 200
     assert _status(vid) == "草稿"
 
@@ -121,7 +113,7 @@ def test_flow_already_ending_with_superadmin_is_not_duplicated(client, make_user
     assert len(tiers) == 1 and not tiers[0].get("system")
 
 
-def test_auto_vouchers_use_the_same_final_tier_and_batch_all_stops_for_non_superadmin(client, make_user):
+def test_batch_all_on_engine_drafts_stops_at_the_superadmin_slot_for_non_superadmin(client, make_user):
     _, fin = _login(client, make_user, "ft_fin6")
     _, sup = _login(client, make_user, "ft_sup6", role="superadmin")
     c = db.get_db()
@@ -138,7 +130,7 @@ def test_auto_vouchers_use_the_same_final_tier_and_batch_all_stops_for_non_super
     c.commit()
     c.close()
     r = client.post("/api/ledger/engine/batch", headers=fin, json={"voucher_ids": [v["id"]], "action": "all"}).json()
-    assert r["results"][0]["ok"] is False and "簽核人" in r["results"][0]["error"] and _status(v["id"]) == "待審核"
+    assert r["results"][0]["ok"] is False and "簽核人" in r["results"][0]["error"] and _status(v["id"]) == "簽核中"
     r2 = client.post("/api/ledger/engine/batch", headers=sup, json={"voucher_ids": [v["id"]], "action": "all"}).json()
     assert r2["results"][0]["ok"] is True and _status(v["id"]) == "已過帳"
 

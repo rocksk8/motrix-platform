@@ -158,6 +158,7 @@ from modules.accounting.api.voucher_common import (  # noqa: F401  純搬移後�
     _check_account_codes,
     _appr_of,
     _require_voucher_actor,
+    require_final_superadmin,
     with_final_superadmin_tier,
     _UNREADABLE_APPR,
     insert_draft_voucher,
@@ -617,7 +618,8 @@ def submit_voucher(voucher_id: int, body: dict = Body(default={}),
             except UnresolvedManagerError as exc:
                 # 📌 主管解析不出來要**說得出是哪一層**，那一支已經寫好訊息了。
                 raise HTTPException(400, str(exc))
-        tiers = with_final_superadmin_tier(conn, tiers)          # 最終關卡：最高管理者（會計主管），系統規定、不改儲存的流程設定
+        if tiers:          # 有設定流程 ⇒ 補最終關卡；沒設定（內建兩層）⇒ 第二層在 approve 時要求最高管理者
+            tiers = with_final_superadmin_tier(conn, tiers)          # 最終關卡：最高管理者（會計主管），系統規定、不改儲存的流程設定
         now = _dt.datetime.now().isoformat()
         # 🔴 `AS3`：其餘七種文件類型的 approval JSON 都嵌著
         #    `requestedBy`／`requestedByDisplay`／`requestedAt`（簽核佇列
@@ -713,6 +715,8 @@ def approve_voucher(voucher_id: int, body: dict = Body(default={}),
         else:
             # ⚠️ 沒有設定簽核流程 ⇒ 維持 `§161` 的內建兩層。
             slot, nxt = ("checked", "簽核中") if status == "待審核"                 else ("manager", "已核准")
+            if slot == "manager":
+                require_final_superadmin(conn, user)        # 最終關卡：內建兩層的第二層（主管）一律最高管理者（系統規定）
             # 🔑 只寫**這一格**的兩欄 —— 另一格的時間戳完全不碰。
             conn.execute(
                 "UPDATE vouchers_all SET status=?, %s_by=?, %s_at=?, updated_at=?"
