@@ -2,7 +2,7 @@
 """M02 業務開發（crm）。只 import core／helpers／db（L1），不 import 其他 L2 模組。"""
 from core.registry import ModuleSpec
 
-from modules.crm import api
+from modules.crm import api, attachments
 
 MODULE = ModuleSpec(
     key="crm",
@@ -14,5 +14,7 @@ MODULE = ModuleSpec(
         ("crm.quote_deleted", "crm"): api.unlink_deleted_quote,
         # IP-104：上傳檔的讀取權限（開發記錄附件；2026-09-30 P0）
         ("uploads.path_access", "crm"): api._DevLogPathAccess,
+        # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
+        ("attachments.catalog", "crm"): attachments._CrmCatalog,
     },
 )

@@ -76,7 +76,7 @@ from core import loader as module_loader, pages as module_pages, registry as mod
 _startup_step("import_core")
 # L1：GCIS 與 /api/now（M08 搬遷 ②）；註解不寫在 import 行尾（test_router_registration 以行解析 import，第六班列車全量抓到）
 from routers import company_lookup
-from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, approval_delegates, approval_queue, licensing, map_points
+from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, attachments, approval_delegates, approval_queue, licensing, map_points
 from routers import item_reads
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
 from routers import definitions, custom_records
@@ -889,6 +889,7 @@ app.include_router(search.router)
 app.include_router(org_structure.router)
 app.include_router(list_prefs.router)
 app.include_router(uploads.router)
+app.include_router(attachments.router)   # 附件開檔（attachments.catalog 提供者；2026-09-30 P2）
 app.include_router(definitions.router)
 app.include_router(custom_records.router)
 app.include_router(approval_delegates.router)

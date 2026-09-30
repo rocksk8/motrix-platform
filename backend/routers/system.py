@@ -658,6 +658,39 @@ from core import registry as _registry  # noqa: E402
 _registry.provide("uploads.path_access", "work_log", _WorkLogPhotoAccess)
 
 
+class _WorkLogCatalog:
+    """`attachments.catalog`（契約 v1，2026-09-30 P2）：工作日誌照片（`work_logs.photos`）。`doc_no`＝日誌 id。
+    權限＝`_WorkLogPhotoAccess` 同一支（`work_log`／`case_manage` 模組 ∨ 日誌掛的案件動態看得到）。"""
+    CATEGORIES = {
+        "work_log_photo": {"label": "工作日誌照片", "doc": "工作日誌", "module": "工作日誌"},
+    }
+
+    @staticmethod
+    def open(conn, user, source_type, doc_no, file_id):
+        from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, opened_upload_file, pick_file, upload_owner
+        if source_type != "work_log_photo":
+            raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
+        if not str(doc_no).isdigit():
+            return None
+        row = conn.execute("SELECT case_no, photos FROM work_logs WHERE id = ?", (int(doc_no),)).fetchone()
+        if row is None:
+            return None
+        try:
+            photos = json.loads(row["photos"] or "[]") or []
+        except (TypeError, ValueError):
+            raise AttachmentSourceError("工作日誌「%s」的照片資料格式不正確。" % doc_no)
+        entry = pick_file(photos, file_id)
+        if entry is None:
+            return None
+        owner = upload_owner(entry.get("path") or "")
+        if owner is None or not _WorkLogPhotoAccess.readable(conn, owner[0], owner[1], user):
+            raise AttachmentNotVisible()
+        return opened_upload_file(entry)
+
+
+_registry.provide("attachments.catalog", "work_log", _WorkLogCatalog)
+
+
 # ── 執行時的開關（2026-09-22 §8 FX1a）─────────────────────────────────────────
 
 #: 這台機器上「會不會對外連線」的兩個總開關。

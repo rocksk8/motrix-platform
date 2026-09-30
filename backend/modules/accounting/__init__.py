@@ -7,6 +7,7 @@ import importlib
 
 from core.registry import ModuleSpec
 
+from modules.accounting import attachments_catalog
 from modules.accounting.api import account_items, accounting_export, ledger_closing, ledger_engine, ledger_periods, ledger_reports, ledger_settings, ledger_statements, voucher_providers, vouchers
 
 _m0001 = importlib.import_module("modules.accounting.migrations.0001_ledger_base")
@@ -18,6 +19,8 @@ MODULE = ModuleSpec(
     providers={
         # IP-2：M07 獎金傳票草稿與科目檢查
         ("voucher.draft", "accounting"): voucher_providers._provide_voucher_draft,
+        # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
+        ("attachments.catalog", "accounting"): attachments_catalog._AccountingCatalog,
         ("voucher.account_check", "accounting"): accounting_export.validate_account_code,
         # IP-3：M07 撥付銀行選項
         ("accounting.settings", "accounting"): accounting_export._provide_accounting_settings,

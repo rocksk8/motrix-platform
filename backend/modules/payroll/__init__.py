@@ -5,7 +5,7 @@ from core.registry import ModuleSpec
 
 import importlib
 
-from modules.payroll import bonus, bonus_payouts, bonus_queue, payslip_payouts
+from modules.payroll import attachments, bonus, bonus_payouts, bonus_queue, payslip_payouts
 from modules.payroll.api import bonus as bonus_api, payslips as payslips_api
 
 _m0001 = importlib.import_module("modules.payroll.migrations.0001_payslip_void_signed_paid")
@@ -17,6 +17,8 @@ MODULE = ModuleSpec(
     providers={
         # IP-8：出納頁的獎金待發放與發放紀錄（M05）
         ("bonus.payouts", "payroll"): bonus_payouts._Payouts,
+        # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
+        ("attachments.catalog", "payroll"): attachments._PayrollCatalog,
         # IP-9：已發放的獎金列入營運報表與月支出（M08）
         ("expense.entries", "bonus"): bonus_payouts._expense_entries,
         # IP-103：出納頁的勞報單待付款（M05）；IP-9：已付款勞報單列入營運報表與月支出（M08，名稱 payslip）
