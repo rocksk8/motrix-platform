@@ -1,5 +1,5 @@
 {
  "_說明": "apply_module_update.ps1 的內容雜湊（去 BOM、CRLF→LF）與 $ApplyModuleScriptVersion 的對應（同 apply_update.version.json，AH-O7）。改了腳本就要決定：行為有變 ⇒ 升版本；只改註解／排版 ⇒ 版本不動。兩種都要更新這裡的 sha256。模組更新包的 min_apply_module_script 比的是 version。",
  "version": "2026-09-29a",
- "sha256": "ab02f608862ca6dbf5553ce9fd8ffa697b557825b34809fe21386b416a28280b"
+ "sha256": "3dde0004ec2c47e2e9e003b07cde571fb9c4333a478d5641afd74672f37a860d"
 }
