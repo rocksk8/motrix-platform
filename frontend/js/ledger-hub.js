@@ -54,7 +54,7 @@ function ledgerHubPage() {
     },
     statusLabel(st) {
       return ({ drafted: '草稿待確認', posted: '已過帳', drift: '來源已變動', reversed: '已沖轉', superseded: '已被新版取代', orphan: '來源已消失',
-        rejected: '已被作廢', blocked_closed: '期間已結帳（擋下）', blocked_no_account: '缺科目（擋下）' })[st] || st
+        rejected: '已被作廢', native: '既有傳票（不重複產生）', blocked_closed: '期間已結帳（擋下）', blocked_no_account: '缺科目（擋下）' })[st] || st
     },
     fmt(n) { return (n || 0).toLocaleString('zh-TW') },
     engBad(e) { return ['drift', 'orphan', 'blocked_closed', 'blocked_no_account'].indexOf(e.status) >= 0 },
@@ -87,7 +87,7 @@ function ledgerHubPage() {
     engToggleAll(on) {
       const g = this.eng
       const sel = {}
-      if (on) g.events.forEach(e => { if (e.voucher_id && e.voucher_status && e.voucher_status !== '已過帳') sel[e.id] = true })
+      if (on) g.events.forEach(e => { if (e.voucher_id && e.status !== 'native' && e.voucher_status && e.voucher_status !== '已過帳') sel[e.id] = true })
       g.selected = sel
     },
     async engBatch(action) {

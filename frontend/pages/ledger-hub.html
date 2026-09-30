@@ -72,7 +72,7 @@
                 <button class="hb-btn primary" :disabled="eng.busy" @click="engRun()" data-testid="hb-eng-run">產生分錄草稿</button>
                 <select class="hb-input" x-model="eng.filter" @change="engLoad()" data-testid="hb-eng-filter">
                   <option value="">全部狀態</option>
-                  <template x-for="st in ['drafted','posted','drift','orphan','blocked_closed','blocked_no_account','superseded','rejected','reversed']" :key="st"><option :value="st" x-text="statusLabel(st)"></option></template>
+                  <template x-for="st in ['drafted','posted','drift','orphan','blocked_closed','blocked_no_account','superseded','rejected','reversed','native']" :key="st"><option :value="st" x-text="statusLabel(st)"></option></template>
                 </select>
                 <span class="hb-note" style="margin:0" x-text="Object.keys(eng.counts).map(k => statusLabel(k) + ' ' + eng.counts[k]).join('　')" data-testid="hb-eng-counts"></span>
               </div>
@@ -95,7 +95,7 @@
                 <tbody>
                   <template x-for="e in eng.events" :key="e.id">
                     <tr :class="{bad: engBad(e)}" :data-testid="'hb-eng-row-' + e.id">
-                      <td><input type="checkbox" :disabled="!e.voucher_id || e.voucher_status === '已過帳'" x-model="eng.selected[e.id]"></td>
+                      <td><input type="checkbox" :disabled="!e.voucher_id || e.status === 'native' || e.voucher_status === '已過帳'" x-model="eng.selected[e.id]"></td>
                       <td x-text="e.event_date"></td><td x-text="e.event_code + (e.rev > 1 ? ' v' + e.rev : '')"></td><td x-text="e.source_key"></td>
                       <td class="hb-num" x-text="fmt(e.amount)"></td><td x-text="statusLabel(e.status)"></td>
                       <td x-text="(e.voucher_no || '') + (e.voucher_status ? '（' + e.voucher_status + '）' : '')"></td>

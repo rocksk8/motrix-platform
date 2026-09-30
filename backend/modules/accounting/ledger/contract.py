@@ -15,7 +15,9 @@ from core import registry
 
 CONTRACT_VERSION = 1
 CAPABILITY = "gl.events"
-MODES = ("snapshot", "cumulative", "append")
+MODES = ("snapshot", "cumulative", "append", "native")
+#: mode=native：來源模組**已經自己開了傳票**（例：獎金核准／發放），事件只登記「這張傳票就是這個事件」，引擎不重複產生、不改動它。
+#: 事件帶 `native_voucher_id`（正整數），不帶 lines。
 SIDES = ("D", "C")
 
 #: 已知的事件來源模組與它們負責的事件（缺席時的說明用；順序＝畫面順序）。
@@ -58,6 +60,11 @@ def validate_event(ev, roles=None):
             p.append("event_date 格式要是 YYYY-MM-DD（%r）" % d)
     if ev.get("mode", "snapshot") not in MODES:
         p.append("mode 只能是 %s" % "、".join(MODES))
+    if ev.get("mode") == "native":
+        nv = ev.get("native_voucher_id")
+        if not (isinstance(nv, int) and not isinstance(nv, bool) and nv > 0):
+            p.append("mode=native 需要正整數 native_voucher_id")
+        return p
     lines = ev.get("lines")
     if not isinstance(lines, list) or not lines:
         p.append("lines 必須是非空清單")
@@ -87,6 +94,8 @@ def validate_event(ev, roles=None):
 
 def canonical_hash(ev):
     """內容雜湊：入帳日、各行（角色／方向／金額／維度）、案件、對象、稅碼。`meta` 與說明文字不參與（診斷用，改了不算內容變）。"""
+    if ev.get("mode") == "native":
+        return hashlib.sha256(json.dumps({"native": ev.get("native_voucher_id"), "date": ev.get("event_date")}, sort_keys=True).encode("utf-8")).hexdigest()
     core = {
         "date": ev.get("event_date"), "case": ev.get("case_no") or "", "party": (ev.get("party") or {}).get("key") or "",
         "tax": ev.get("tax_code") or "",

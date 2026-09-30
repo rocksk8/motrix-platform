@@ -55,7 +55,7 @@ def _resolve(conn, ev):
 def _voucher_row(conn, vid):
     if not vid:
         return None
-    r = conn.execute("SELECT id, voucher_no, status, voided_at FROM vouchers_all WHERE id=?", (vid,)).fetchone()
+    r = conn.execute("SELECT id, voucher_no, status, voided_at, voucher_date FROM vouchers_all WHERE id=?", (vid,)).fetchone()
     return dict(r) if r else None
 
 
@@ -96,7 +96,7 @@ def _insert_event(conn, ev, status, rev=1, voucher_id=None, supersedes_id=None, 
         "INSERT INTO gl_source_events(source_module, source_type, source_key, event_code, rev, event_date, content_hash, amount, status,"
         " voucher_id, supersedes_id, note, payload_json, first_seen, last_seen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (ev.get("source_module", ""), ev["source_type"], ev["source_key"], ev["event_code"], rev, ev["event_date"], ev["content_hash"],
-         sum(l["amount"] for l in ev["lines"] if l["side"] == "D"), status, voucher_id, supersedes_id, note,
+         sum(l["amount"] for l in ev.get("lines", []) if l["side"] == "D"), status, voucher_id, supersedes_id, note,
          json.dumps(ev, ensure_ascii=False), now, now))
     return cur.lastrowid
 
@@ -176,8 +176,34 @@ def _reverse_posted(conn, old, user, stats, why):
     return rid, "已產生反向草稿 %s（%s）" % (rno, why)
 
 
+def _process_native(conn, ev, stats):
+    """來源已自己開了傳票（mode=native）：登記成 status='native' 的事件，不產生、不改動那張傳票；傳票被作廢或來源改指向別張 ⇒ 舊列 superseded、新列 native。"""
+    v = _voucher_row(conn, ev["native_voucher_id"])
+    if not v or v["voided_at"]:
+        return                                                     # 指向不存在／已作廢的傳票：不登記（來源下次會指向新的）
+    latest = _latest(conn, ev)
+    if latest and latest["status"] == "native" and latest["voucher_id"] == v["id"]:
+        conn.execute("UPDATE gl_source_events SET last_seen=?, event_date=?, content_hash=? WHERE id=?",
+                     (_now(), ev["event_date"], ev["content_hash"], latest["id"]))
+        return
+    rev = 1
+    sup = None
+    if latest:
+        rev = latest["rev"] + 1
+        sup = latest["id"]
+        if latest["status"] == "native":
+            conn.execute("UPDATE gl_source_events SET status='superseded', note='來源改指向新的既有傳票' WHERE id=?", (latest["id"],))
+    amt = conn.execute("SELECT COALESCE(SUM(debit),0) FROM voucher_lines WHERE voucher_id=?", (v["id"],)).fetchone()[0]
+    eid = _insert_event(conn, dict(ev, amount=int(amt or 0)), "native", rev, v["id"], sup, "來源模組自行開立的傳票（%s），引擎不重複產生。" % v["voucher_no"])
+    conn.execute("UPDATE gl_source_events SET amount=? WHERE id=?", (int(amt or 0), eid))
+    stats["native"] = stats.get("native", 0) + 1
+
+
 def _process(conn, ev, user, stats):
     stats["scanned"] += 1
+    if ev.get("mode") == "native":
+        _process_native(conn, ev, stats)
+        return
     latest = _latest(conn, ev)
     if latest is None:
         _create_or_block(conn, ev, user, stats)
@@ -229,7 +255,7 @@ def run(conn, start, end, user):
     _roles.ensure_meta(conn)
     _roles.ensure_default_roles(conn)
     res = _contract.collect(start, end, conn=conn)
-    stats = {"scanned": 0, "created": 0, "drift": 0, "superseded": 0, "reversals": 0, "blocked": 0, "orphans": 0}
+    stats = {"scanned": 0, "created": 0, "drift": 0, "superseded": 0, "reversals": 0, "blocked": 0, "orphans": 0, "native": 0}
     sync_statuses(conn)
     seen = set()
     for ev in res["events"]:

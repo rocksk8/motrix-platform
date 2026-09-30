@@ -80,7 +80,7 @@ def test_contract_void_draft_and_status(client, people):
     conn = _db()
     try:
         s = status(conn, vid)
-        assert set(s) == {"id", "voucher_no", "status", "voided"} and s["status"] == "草稿" and not s["voided"]
+        assert set(s) == {"id", "voucher_no", "status", "voided", "date"} and s["status"] == "草稿" and not s["voided"]
         assert status(conn, 99999999) is None
         assert void(conn, 99999999, voided_by="t", now="n", reason="r")["result"] == "gone"
         conn.execute("UPDATE vouchers_all SET status='待審核' WHERE id=?", (vid,))

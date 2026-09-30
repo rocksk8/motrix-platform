@@ -8,8 +8,11 @@
   手工付款傳票，會計改用「補登」擋掉重複——本批不自動偵測）。
 - 對象：以受款人編號（`C<contractor_id>`）與姓名為對象，**不帶身分證字號**進總帳。
 - 退回簽回（unsign）⇒ 狀態離開已簽回 ⇒ 事件消失 ⇒ 引擎判來源消失、產生反向草稿；作廢僅在簽回前，尚無分錄。
+- E07 獎金（既有 `bonus_vouchers` 開的核准應付傳票與發放傳票）：以 `mode=native` 登記「這張傳票就是這個事件」（`bonus_case_awards.accrual_voucher_id`／
+  `payment_voucher_id`，日期＝傳票日期），引擎不重複產生、不改動；傳票作廢或重開後指向新傳票 ⇒ 舊列 superseded、新列 native。
 只讀，不寫資料。
 """
+from core import registry
 from db import get_db
 from helpers.legal_params import round_half_up
 
@@ -71,4 +74,39 @@ def gl_events(start, end, *, changed_since=""):
         notices.append("%d 張勞報單沒有勞報日期：暫以簽回日認列。" % nodate)
     if nopay:
         notices.append("%d 張已付款勞報單沒有付款日期：不產生付款分錄。" % nopay)
+    native = _bonus_native(start, end, notices)
+    events += native
     return {"events": events, "notice": " ".join(notices)}
+
+
+def _bonus_native(start, end, notices):
+    """獎金核准／發放已開的傳票 ⇒ mode=native 事件。會計模組不在（讀不到傳票）⇒ 不登記並 notice。"""
+    status = registry.single_provider("voucher.status")
+    conn = get_db()
+    try:
+        try:
+            rows = conn.execute("SELECT id, quote_no, accrual_voucher_id, payment_voucher_id FROM bonus_case_awards "
+                                "WHERE accrual_voucher_id>0 OR payment_voucher_id>0 ORDER BY id").fetchall()
+        except Exception:                                                          # noqa: BLE001  獎金表不存在（舊庫）
+            return []
+        if rows and status is None:
+            notices.append("會計模組未提供傳票狀態：獎金既有傳票不登記。")
+            return []
+        out, gone = [], 0
+        for r in rows:
+            for kind, code, vid in (("accrual", "E07a", r["accrual_voucher_id"]), ("payment", "E07b", r["payment_voucher_id"])):
+                if not vid:
+                    continue
+                v = status(conn, vid)
+                if v is None or v.get("voided"):
+                    gone += 1
+                    continue
+                d = v.get("date") or ""
+                if not d or not (start <= d <= end):
+                    continue
+                out.append({"source_type": "bonus_" + kind, "source_key": str(r["id"]), "event_code": code, "event_date": d,
+                            "doc_no": v["voucher_no"], "case_no": r["quote_no"], "party": {"key": "", "name": ""}, "tax_code": "",
+                            "mode": "native", "native_voucher_id": int(vid), "meta": {"award_id": r["id"]}})
+        return out
+    finally:
+        conn.close()

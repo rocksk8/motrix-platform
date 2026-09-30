@@ -1,5 +1,8 @@
 # 會計 更新紀錄
 
+## 1.1.2 — 2026-09-30（暫用號，列車取號；W4 總帳 C3b）
+- 分錄引擎 C3b：事件契約加 `mode=native`（來源模組已自行開立傳票：事件只登記 `native_voucher_id`，引擎不重複產生、不改動；狀態 `native`；作廢或改指向新傳票 ⇒ 舊列 superseded、新列 native）；提供者 `voucher.status` 回傳多帶 `date`（傳票日期，additive）；總帳作業『分錄草稿』頁籤顯示『既有傳票』、不可被整批勾選。
+
 ## 1.1.1 — 2026-09-30（暫用號，列車取號；W4 總帳 C2）
 - 分錄引擎 C2：事件收集可套用會計在 `gl_source_annotations` 補登的來源憑證資料（目前認得 field=input_tax，覆寫承攬商發票的估算進項稅額；補登值壞掉則忽略並在事件 meta 標記）；`GET /api/ledger/events/preview` 與引擎共用；接入 subcontract 提供者（E04／E05／E05b）。
 
