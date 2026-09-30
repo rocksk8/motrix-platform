@@ -1443,11 +1443,11 @@ function reportsApp() {
 
 
 
-    async exportTaxInvoices() {
+    async exportTaxInvoices(fmt) {
       this.taxExporting = true
       try {
         var qs = 'year=' + this.taxExportYear + (this.taxExportMonth ? '&month=' + this.taxExportMonth : '')
-        var res = await fetch('/api/reports/tax-export?' + qs, {
+        var res = await fetch('/api/reports/tax-export' + (fmt === 'pdf' ? '/pdf' : '') + '?' + qs, {
           headers: { Authorization: 'Bearer ' + this._token() }
         })
         if (!res.ok) {
@@ -1458,7 +1458,7 @@ function reportsApp() {
         var label = this.taxExportYear + (this.taxExportMonth ? ('_' + String(this.taxExportMonth).padStart(2, '0')) : '')
         var a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
-        a.download = 'MOTRIX_銷項發票清單_' + label + '.xlsx'
+        a.download = 'MOTRIX_銷項發票清單_' + label + (fmt === 'pdf' ? '.pdf' : '.xlsx')
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)

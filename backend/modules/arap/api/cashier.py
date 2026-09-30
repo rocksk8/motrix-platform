@@ -24,7 +24,7 @@ import csv
 from typing import Optional
 
 from fastapi import APIRouter, Body, Header, HTTPException, Query, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 import io
 from urllib.parse import quote as _url_quote
 
@@ -34,7 +34,7 @@ from helpers import _require_user, user_has_module, payment_item_amounts, notify
 from modules.arap.receivables import collect_income_items as _collect_income_items  # 本模組（ROADMAP A8b 已收回）
 from helpers.legal_params import round_half_up          # bank-reconcile（金額四捨五入唯一來源）
 from helpers import _audit, _tok                         # bank-reconcile 的稽核
-from helpers.xlsx_out import check_export_rate, set_row, xl_style
+from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, set_row, xl_style
 
 router = APIRouter()
 
@@ -418,6 +418,7 @@ def get_execution_history(start: str = Query(None), end: str = Query(None), auth
 
 
 @router.get("/api/cashier/export")
+@export_logged("xlsx", "arap", "cashier-history")
 def export_execution_history(start: str = Query(None), end: str = Query(None), authorization: str = Header(None)):
     """出納執行紀錄 Excel 匯出（已匯款／已收款明細，預設本月），沿用
     reports.py 既有的 Excel 樣式 helper，不重新發明一套。"""
@@ -556,8 +557,8 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
     wb.save(buf)
     buf.seek(0)
     fname = f"MOTRIX_出納執行紀錄_{start}_{end}.xlsx"
-    return StreamingResponse(
-        buf,
+    return Response(
+        content=buf.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
     )
@@ -693,3 +694,7 @@ async def bank_reconcile(file: UploadFile = File(...), authorization: str = Head
         "note": "僅依金額比對，且同金額只配對一次，屬建議配對供人工複核；請核對案件號/"
                 "承攬商名稱後再手動標記已匯款，系統不會自動標記。",
     }
+
+
+# ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
+add_pdf_sibling(router, "/api/cashier/export/pdf", export_execution_history, module="arap", name="cashier-history", title="出納執行紀錄")

@@ -1,5 +1,7 @@
 # 附近旅宿 更新紀錄
 
+## 1.2.2 — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
+- 匯出規則（使用者 2026-09-30）：紀錄匯出（CSV／JSON）每次寫稽核（`export.csv`／`export.json`）。
 ## 1.2.1 — 2026-09-29 12:20（D 稽核 AUDIT-D-lodging-daily S1～S3）
 - 修改：每日自動更新當天失敗累計 `DAILY_MAX_FAILURES`（3）次就不再試，隔天歸零重來；來源長期故障時不再每小時連線＋記 WARNING（計數記在 `lodging_fetch_state` 的 `daily_fail_day`／`daily_fail_count`）。手動更新不受影響
 - 文件：LODGING-NEARBY 測試計畫「不自動連線」註明排程第一輪除外；兩處殘留舊名「附近旅宿紀錄」改為新名

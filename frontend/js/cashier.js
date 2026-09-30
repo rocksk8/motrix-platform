@@ -437,16 +437,16 @@ function cashierApp() {
       finally { this.bonusPay.saving = false }
     },
 
-    async exportCashierHistory() {
+    async exportCashierHistory(fmt) {      // fmt：'pdf' ⇒ 走 /pdf 姊妹端點（2026-09-30：每個 Excel 匯出都要有 PDF）
       this.cashierExporting = true
       try {
         const qs = `?start=${this.cashierHistoryStart}&end=${this.cashierHistoryEnd}`
-        const r = await fetch('/api/cashier/export' + qs, { headers: { Authorization: 'Bearer ' + this._token() } })
+        const r = await fetch('/api/cashier/export' + (fmt === 'pdf' ? '/pdf' : '') + qs, { headers: { Authorization: 'Bearer ' + this._token() } })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '匯出失敗'); this.cashierExporting = false; return }
         const blob = await r.blob()
         const a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
-        a.download = `MOTRIX_出納執行紀錄_${this.cashierHistoryStart}_${this.cashierHistoryEnd}.xlsx`
+        a.download = `MOTRIX_出納執行紀錄_${this.cashierHistoryStart}_${this.cashierHistoryEnd}` + (fmt === 'pdf' ? '.pdf' : '.xlsx')
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
@@ -761,7 +761,7 @@ function cashierApp() {
       }
     },
 
-    async exportT100Vouchers() {
+    async exportT100Vouchers(fmt) {
       if (!this.t100Start || !this.t100End || this.t100Start > this.t100End) {
         alert('請確認起訖日期區間正確')
         return
@@ -769,7 +769,7 @@ function cashierApp() {
       this.t100Exporting = true
       try {
         var qs = 'start=' + this.t100Start + '&end=' + this.t100End
-        var res = await fetch('/api/reports/t100-export/vouchers?' + qs, {
+        var res = await fetch('/api/reports/t100-export/vouchers' + (fmt === 'pdf' ? '/pdf' : '') + '?' + qs, {
           headers: { Authorization: 'Bearer ' + this._token() }
         })
         if (!res.ok) {
@@ -779,7 +779,7 @@ function cashierApp() {
         var blob = await res.blob()
         var a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
-        a.download = 'MOTRIX_T100傳票匯出_' + this.t100Start + '_' + this.t100End + '.xlsx'
+        a.download = 'MOTRIX_T100傳票匯出_' + this.t100Start + '_' + this.t100End + (fmt === 'pdf' ? '.pdf' : '.xlsx')
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
