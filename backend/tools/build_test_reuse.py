@@ -62,13 +62,19 @@ def current_env():
         pw = None
     root = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or Path(os.environ.get("LOCALAPPDATA", "")) / "ms-playwright")
     browsers = sorted(p.name for p in root.iterdir()) if root.is_dir() else []
-    return {
+    env = {
         "python": sys.version,
         "pip_freeze": "\n".join(sorted(freeze.splitlines())),
         "playwright": pw,
         "browsers": browsers,
         "motrix_env": {k: v for k, v in sorted(os.environ.items()) if k.startswith("MOTRIX_") and k not in _ENV_IGNORE},
     }
+    # 稽核 W4：PYTEST_ADDOPTS 會悄悄改變跑哪些題（-k／-m／--deselect 縮小範圍）與怎麼跑 ⇒ 進指紋。
+    # 只在有設時才加這個鍵：沒設的環境指紋與之前相同（既有紀錄照樣可沿用）。
+    addopts = os.environ.get("PYTEST_ADDOPTS")
+    if addopts is not None:
+        env["pytest_addopts"] = addopts
+    return env
 
 
 def fingerprint(repo, env=None):

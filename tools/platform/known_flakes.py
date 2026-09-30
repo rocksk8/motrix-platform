@@ -11,6 +11,8 @@
 用法：
   python tools/platform/known_flakes.py check                 → 列出；有過期或格式錯 ⇒ exit 1
   python tools/platform/known_flakes.py add --nodeid N --owner O --ticket T [--days 14] [--note ...]
+      同一 nodeid 再 add＝延期（含 remove 之後再登記）：每次 ≤14 天、要 --reason；第 2 次延期要換原因＋--root-cause-link；
+      第 3 次一律拒絕（稽核 W4）。延期紀錄存在條目的 extensions 與檔案的 removed。
   python tools/platform/known_flakes.py remove --nodeid N
 """
 import argparse
@@ -108,10 +110,51 @@ def decide(results, entries, today):
     return ok, (flaky if ok else []), msgs
 
 
-def _write(path, entries):
+#: 延期規則（稽核 W4，2026-09-30）：每次延期最多 EXTEND_MAX_DAYS 天；第 1 次延期要寫原因；
+#: 第 2 次（最後一次）要換一個原因＋附根因追蹤連結；再之後一律拒絕——只能修掉根因後 remove。
+EXTEND_MAX_DAYS = 14
+MAX_EXTENSIONS = 2
+
+
+def extension_decision(history, days, reason, link, today):
+    """同一 nodeid 再登記＝延期 ⇒ (ok, 訊息, 新的 extensions 清單)。純函式。history＝現有條目或 removed 裡的紀錄（沒有＝首次登記）。"""
+    if not history:
+        return True, "", []
+    exts = list(history.get("extensions") or [])
+    n = len(exts) + 1
+    reason = (reason or "").strip()
+    if n > MAX_EXTENSIONS:
+        return False, "已延期 %d 次，不再接受延期——修掉根因後 remove" % len(exts), exts
+    if days > EXTEND_MAX_DAYS:
+        return False, "延期每次最多 %d 天（給了 %d）" % (EXTEND_MAX_DAYS, days), exts
+    if not reason:
+        return False, "延期要寫 --reason（為什麼還沒修好）", exts
+    if n == MAX_EXTENSIONS:
+        if any(reason == (e.get("reason") or "").strip() for e in exts):
+            return False, "第 %d 次延期必須換一個原因（與前次相同）" % n, exts
+        if not (link or "").strip():
+            return False, "第 %d 次延期必須附 --root-cause-link（根因追蹤連結）" % n, exts
+    rec = {"date": today.isoformat(), "days": days, "reason": reason}
+    if (link or "").strip():
+        rec["root_cause_link"] = link.strip()
+    return True, "", exts + [rec]
+
+
+def _removed(path=None):
+    try:
+        data = json.loads(Path(path or DEFAULT_PATH).read_text(encoding="utf-8-sig"))
+        r = data.get("removed") if isinstance(data, dict) else None
+        return r if isinstance(r, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def _write(path, entries, removed=None):
     p = Path(path or DEFAULT_PATH)
     body = {"_說明": "建包偶發重跑登記簿；見 tools/platform/known_flakes.py 與 PLAYBOOK §D-建包。過期的條目會讓建包失敗。",
             "flakes": entries}
+    if removed:
+        body["removed"] = removed
     tmp = p.with_name(p.name + ".tmp")
     tmp.write_text(json.dumps(body, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     tmp.replace(p)
@@ -133,6 +176,8 @@ def main(argv=None):
     ad.add_argument("--ticket", required=True)
     ad.add_argument("--days", type=int, default=14)
     ad.add_argument("--note", default="")
+    ad.add_argument("--reason", default="", help="延期（同一 nodeid 已登記過）時必填：為什麼還沒修好")
+    ad.add_argument("--root-cause-link", default="", help="第 2 次延期必填：根因追蹤的連結（commit／稽核檔／RUN-PLAN 條目）")
     rm = sub.add_parser("remove")
     rm.add_argument("--nodeid", required=True)
     a = ap.parse_args(argv)
@@ -149,23 +194,38 @@ def main(argv=None):
     if problems:
         print("\n".join("[known_flakes] " + m for m in problems))
         return 1
+    removed = _removed(a.path)
     if a.cmd == "add":
         if not 1 <= a.days <= MAX_DAYS:
             print("[known_flakes] --days 要 1～%d（登記是限期查根因，不是永久豁免）" % MAX_DAYS)
             return 2
         prev = [e for e in entries if e.get("nodeid") == a.nodeid]
+        # 移除後重新登記也算延期（延期紀錄保留在 removed，不可以用「刪掉再登記」歸零）
+        history = prev[0] if prev else next((r for r in reversed(removed) if r.get("nodeid") == a.nodeid), None)
+        ok, msg, exts = extension_decision(history, a.days, a.reason, a.root_cause_link, today)
+        if not ok:
+            print("[known_flakes] 拒絕：" + msg)
+            return 2
         entries = [e for e in entries if e.get("nodeid") != a.nodeid]
-        first = prev[0]["first_seen"] if prev else today.isoformat()     # 延期不改首次出現日
-        entries.append({"nodeid": a.nodeid, "first_seen": first, "owner": a.owner, "ticket": a.ticket,
-                        "expires": (today + timedelta(days=a.days)).isoformat(), **({"note": a.note} if a.note else {})})
-        _write(a.path, entries)
-        print("[known_flakes] 已登記 %s（到期 %s）" % (a.nodeid, entries[-1]["expires"]))
+        first = history["first_seen"] if history and history.get("first_seen") else today.isoformat()   # 延期不改首次出現日
+        entry = {"nodeid": a.nodeid, "first_seen": first, "owner": a.owner, "ticket": a.ticket,
+                 "expires": (today + timedelta(days=a.days)).isoformat()}
+        if a.note:
+            entry["note"] = a.note
+        if exts:
+            entry["extensions"] = exts
+        entries.append(entry)
+        _write(a.path, entries, removed)
+        print("[known_flakes] 已登記 %s（到期 %s%s）" % (a.nodeid, entry["expires"], "，第 %d 次延期" % len(exts) if exts else ""))
         return 0
     left = [e for e in entries if e.get("nodeid") != a.nodeid]
     if len(left) == len(entries):
         print("[known_flakes] 沒有這一筆：%s" % a.nodeid)
         return 1
-    _write(a.path, left)
+    gone = [e for e in entries if e.get("nodeid") == a.nodeid][0]
+    removed = removed + [{"nodeid": a.nodeid, "first_seen": gone.get("first_seen"), "removed": today.isoformat(),
+                          "extensions": gone.get("extensions") or []}]
+    _write(a.path, left, removed)
     print("[known_flakes] 已移除 %s" % a.nodeid)
     return 0
 

@@ -270,11 +270,56 @@ def test_registry_file_is_well_formed_and_cli_round_trip(tmp_path):
     assert KF.main(["--path", str(reg), "--today", "2026-09-30", "add", "--nodeid", NID, "--owner", "H", "--ticket", "T", "--days", "7"]) == 0
     assert KF.main(["--path", str(reg), "--today", "2026-10-06", "check"]) == 0
     assert KF.main(["--path", str(reg), "--today", "2026-10-08", "check"]) == 1, "過期後 check 仍通過"
-    assert KF.main(["--path", str(reg), "--today", "2026-10-08", "add", "--nodeid", NID, "--owner", "H", "--ticket", "T", "--days", "7"]) == 0
+    assert KF.main(["--path", str(reg), "--today", "2026-10-08", "add", "--nodeid", NID, "--owner", "H", "--ticket", "T", "--days", "7",
+                    "--reason", "還在查"]) == 0
     assert KF.load(reg)[0][0]["first_seen"] == "2026-09-30", "延期改掉了首次出現日"
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps({"flakes": [{"nodeid": NID}]}), encoding="utf-8")
     assert KF.load(bad)[1], "缺欄位的條目沒有被判成問題"
+
+
+def test_the_committed_registry_is_empty_after_o7_was_fixed():
+    """主持裁示（W3 修掉 O7 根因）：登記簿維持空；O7 留在 removed（延期紀錄不因移除而歸零）。"""
+    entries, problems = KF.load()
+    assert problems == [] and entries == []
+    assert any("test_layout_editor_role_override_and_restore" in r["nodeid"] for r in KF._removed())
+
+
+def test_extension_rules():
+    """稽核 W4：延期每次 ≤14 天、要原因；第 2 次要換原因＋根因連結；第 3 次一律拒絕。"""
+    f = KF.extension_decision
+    assert f(None, 30, "", "", TODAY)[0] is True, "首次登記被當成延期"
+    h0 = _entry()
+    assert f(h0, 15, "還在查", "", TODAY)[0] is False, "延期超過 14 天被接受"
+    assert f(h0, 14, "", "", TODAY)[0] is False, "延期沒寫原因被接受"
+    ok, _, exts = f(h0, 14, "還在查", "", TODAY)
+    assert ok and len(exts) == 1
+    h1 = dict(h0, extensions=exts)
+    assert f(h1, 14, "還在查", "https://x/1", TODAY)[0] is False, "第 2 次延期沿用同一個原因被接受"
+    assert f(h1, 14, "換了原因", "", TODAY)[0] is False, "第 2 次延期沒附根因連結被接受"
+    ok, _, exts2 = f(h1, 14, "換了原因", "https://x/1", TODAY)
+    assert ok and exts2[-1]["root_cause_link"] == "https://x/1"
+    assert f(dict(h0, extensions=exts2), 7, "第三個原因", "https://x/2", TODAY)[0] is False, "第 3 次延期被接受"
+
+
+def test_remove_then_readd_does_not_reset_the_extension_count(tmp_path):
+    reg = tmp_path / "kf.json"
+    base = ["--path", str(reg), "--today", "2026-09-30"]
+    add = ["add", "--nodeid", NID, "--owner", "H", "--ticket", "T", "--days", "7"]
+    assert KF.main(base + add) == 0
+    assert KF.main(base + add + ["--reason", "a"]) == 0
+    assert KF.main(base + ["remove", "--nodeid", NID]) == 0
+    assert KF.main(base + add + ["--reason", "a"]) == 2, "刪掉再登記把延期次數歸零（第 2 次延期沒換原因、沒附連結也過）"
+    assert KF.main(base + add + ["--reason", "b", "--root-cause-link", "RUN-PLAN O99"]) == 0
+    assert KF.main(base + add + ["--reason", "c", "--root-cause-link", "x"]) == 2
+
+
+def test_pytest_addopts_is_part_of_the_fingerprint(monkeypatch):
+    """稽核 W4：PYTEST_ADDOPTS（可含 -k／-m 縮小範圍）要進指紋；沒設時不加鍵（既有紀錄照樣可沿用）。"""
+    monkeypatch.delenv("PYTEST_ADDOPTS", raising=False)
+    assert "pytest_addopts" not in tr.current_env()
+    monkeypatch.setenv("PYTEST_ADDOPTS", "-k smoke")
+    assert tr.current_env().get("pytest_addopts") == "-k smoke", "PYTEST_ADDOPTS 沒進指紋 ⇒ 縮小範圍的綠會被建包沿用"
 
 
 def test_failed_nodeids_from_stream_and_output():
