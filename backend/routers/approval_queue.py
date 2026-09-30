@@ -201,6 +201,7 @@ _ITEM_TYPE_LABELS = {
     "completion_note": "完工單", "payment_request": "請款單", "case_change": "已結案案件變更",
     "extra_expense": "案件額外支出", "extra_expense_change": "額外支出變更", "voucher": "傳票（會計）",
     "bonus_award": "獎金", "bonus_case_award": "獎金分潤", "dispatch_file_delete": "報價單附件刪除",
+    "custom_module_def": "自訂模組定義",
 }
 
 

@@ -103,6 +103,7 @@
             <span class="mb-top__name" x-text="def.name || '（未命名）'"></span>
             <span class="mb-top__key" x-text="key"></span>
             <span class="mb-badge" :class="{ 'is-pub': latestVersion }" x-text="latestVersion ? '已發布 v' + latestVersion : '設計中'"></span>
+            <span class="mb-badge" id="mb-review-badge" :class="{ 'is-pub': defReview.active }" :title="defReview.active ? '' : defReview.reason" x-text="defReview.active ? '送審：啟用' : '送審：未啟用'"></span>
             <a class="mb-chipbtn" x-show="latestVersion" :href="'custom-records.html?key=' + encodeURIComponent(key)">開啟執行頁</a>
             <nav class="mb-tabs" role="tablist" aria-label="建構頁籤" id="mb-tabs">
               <template x-for="t in [{ id: 'info', l: '作業資訊' }, { id: 'form', l: '表單設計' }, { id: 'flow', l: '流程設計' }]" :key="t.id">
@@ -529,6 +530,22 @@
                   <div class="cr-opts" style="max-height:150px;overflow:auto">
                     <template x-for="u in users" :key="u.username">
                       <label><input type="checkbox" style="width:auto" :data-vis-user="u.username" :checked="visHas(sel, 'users', u.username)" @change="toggleVis(sel, 'users', u.username, $event.target.checked)"><span x-text="u.displayName || u.username"></span></label>
+                    </template>
+                  </div>
+                </details>
+              </div>
+                      <div class="mb-f" data-vis="field-edit">
+                <label>誰改得到</label>
+                <div class="mb-hint" data-vis-summary x-text="visSummary(sel, 'editableTo')"></div>
+                <div class="cr-opts">
+                  <template x-for="r in (catalog.roles || [])" :key="r">
+                    <label><input type="checkbox" style="width:auto" :data-vis-role-edit="r" :checked="visHas(sel, 'roles', r, 'editableTo')" @change="toggleVis(sel, 'roles', r, $event.target.checked, 'editableTo')"><span x-text="roleLabel(r)"></span></label>
+                  </template>
+                </div>
+                <details style="margin-top:4px"><summary class="mb-hint" style="cursor:pointer">指定人員</summary>
+                  <div class="cr-opts" style="max-height:150px;overflow:auto">
+                    <template x-for="u in users" :key="u.username">
+                      <label><input type="checkbox" style="width:auto" :data-vis-user-edit="u.username" :checked="visHas(sel, 'users', u.username, 'editableTo')" @change="toggleVis(sel, 'users', u.username, $event.target.checked, 'editableTo')"><span x-text="u.displayName || u.username"></span></label>
                     </template>
                   </div>
                 </details>
@@ -1030,8 +1047,26 @@
                 <input id="mb-publish-note" class="mb-in" x-model="publishNote" placeholder="這一版改了什麼">
               </div>
               <div class="mb-row" style="margin-top:10px">
-                <button class="btn btn-primary" id="mb-publish" @click="publish()" :disabled="busy">發布</button>
+                <button class="btn btn-primary" id="mb-publish" @click="publish()" :disabled="busy" x-text="defReview.active ? '送審' : '發布'">發布</button>
                 <span class="mb-hint">已建立的單據維持它建立時的版本；新單據用新版。</span>
+              </div>
+              <div class="mb-f" style="margin-top:8px" id="mb-review-box">
+                <div class="mb-hint" id="mb-review-state" x-text="reviewBadge()"></div>
+                <div class="mb-hint" x-show="!defReview.active" x-text="defReview.reason"></div>
+                <details style="margin-top:4px"><summary class="mb-hint" style="cursor:pointer">模組審核人與模式</summary>
+                  <div class="mb-hint">名單裡有你以外至少一人 ⇒ 送審自動啟用；審核人任一位核可即發布，退回要填原因、版號不回收。</div>
+                  <div class="cr-opts" style="max-height:150px;overflow:auto">
+                    <template x-for="u in users" :key="u.username">
+                      <label><input type="checkbox" style="width:auto" :data-reviewer="u.username" :checked="reviewerHas(u.username)" @change="toggleReviewer(u.username, $event.target.checked)"><span x-text="u.displayName || u.username"></span></label>
+                    </template>
+                  </div>
+                  <label style="display:flex;gap:6px;align-items:center;margin-top:6px">模式
+                    <select id="mb-review-mode" class="mb-in mb-in-s" :value="defReview.mode" @change="saveDefReview({ mode: $event.target.value })">
+                      <option value="auto">自動（依審核人名單）</option><option value="on">強制送審</option><option value="off">關閉（直接發布）</option>
+                    </select>
+                  </label>
+                </details>
+                <div class="mb-hint" x-show="submittedVersion()">第 <span x-text="submittedVersion()"></span> 版送審中，<a :href="'custom-def-review.html?key=' + encodeURIComponent(key)" id="mb-review-link">前往審核頁</a>。</div>
               </div>
               <template x-if="publishProblems.length">
                 <div class="mb-err mb-probs" id="mb-publish-problems">
@@ -1053,7 +1088,7 @@
                   <template x-for="v in versions" :key="v.version">
                     <tr :data-version="v.version">
                       <td x-text="v.version === 0 ? '草稿' : '第 ' + v.version + ' 版'"></td>
-                      <td x-text="v.status === 'draft' ? '草稿' : '已發布'"></td>
+                      <td :data-status="v.status" x-text="({ draft: '草稿', published: '已發布', submitted: '送審中', rejected: '已退回' }[v.status] || v.status) + (v.status === 'rejected' && v.decision && v.decision.reason ? '：' + v.decision.reason : '')"></td>
                       <td x-text="v.note || ''"></td>
                       <td x-text="v.published_by || v.created_by || ''"></td>
                       <td x-text="(v.published_at || v.created_at || '').replace('T', ' ').slice(0, 16)"></td>

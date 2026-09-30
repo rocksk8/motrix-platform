@@ -2170,6 +2170,8 @@
                         <span>開票申請 <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="finRelatedDocs().invoiceVouchers.length"></span> 張</span>
                         <span>請款單 <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="finRelatedDocs().paymentRequests.length"></span> 張</span>
                         <span>精算額外支出 <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="caseSettleFmt(finExtrasTotal())"></span>（未計入應付）</span>
+                        <span x-show="(financeSummary?.customFinance?.expense?.total || 0) > 0" data-testid="fin-custom-expense">自訂模組支出（列入成本） <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="caseSettleFmt(financeSummary?.customFinance?.expense?.total || 0)"></span></span>
+                        <span x-show="(financeSummary?.customFinance?.income?.skippedTotal || 0) > 0" data-testid="fin-custom-income-skipped" title="內建報價單已認列這個案件的收入，自訂模組的收入行不重複計入">自訂模組收入（未重複計入） <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="caseSettleFmt(financeSummary?.customFinance?.income?.skippedTotal || 0)"></span></span>
                         <span x-show="(financeSummary?.payable?.remitFeeTotal || 0) + (financeSummary?.settlementExtras?.remitFeeTotal || 0) > 0" data-testid="fin-remit-fee">匯款手續費（已匯款，列入成本） <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="caseSettleFmt((financeSummary?.payable?.remitFeeTotal || 0) + (financeSummary?.settlementExtras?.remitFeeTotal || 0))"></span></span>
                       </div>
 

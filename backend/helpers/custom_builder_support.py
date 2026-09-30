@@ -2,7 +2,7 @@
 """建構器底層支援（建構器第三輪 S2.5／S3／S5，CORE 1.72，只增）。
 
 [單位] helper:custom_builder_support    [層] L1    [穩定度] 契約（只增）
-[公開介面] ACCESS_KEYS, VISIBLE_ROLES, hidden_keys, keep_hidden_values, mask_compute, mask_record, mask_records, render_output_for, EVENT_FINANCE_POSTED, EVENT_FINANCE_REVERSED, access_problems, can_see_field, can_see_menu,
+[公開介面] ACCESS_KEYS, VISIBLE_ROLES, can_edit_field, guard_writes, hidden_keys, keep_hidden_values, mask_compute, mask_record, mask_records, render_output_for, EVENT_FINANCE_POSTED, EVENT_FINANCE_REVERSED, access_problems, can_see_field, can_see_menu,
     create_revision, emit_finance_event, leaking_formulas, mark_finance_processed, mask_for, pending_finance_events
 [不變式]
   - 欄位／選單可見設定存在定義 JSON（`fields[].access.visibleTo`、`menu.visibleTo`，形狀 `{roles:[…], users:[…]}`，
@@ -18,7 +18,7 @@ from datetime import datetime
 
 from . import formula
 
-ACCESS_KEYS = {"visibleTo"}
+ACCESS_KEYS = {"visibleTo", "editableTo"}
 #: 可見設定可選的角色（同 helpers.auth 的基本角色；建構器面板只列這些）
 VISIBLE_ROLES = ("superadmin", "admin", "sales", "engineer", "viewer")
 EVENT_FINANCE_POSTED = "custom_record.finance_posted"
@@ -43,9 +43,24 @@ def _allowed(spec, user) -> bool:
     return (user or {}).get("role") in roles or (user or {}).get("username") in users
 
 
-def can_see_field(field, user) -> bool:
+def _acc(field, key):
     access = field.get("access") if isinstance(field, dict) else None
-    return _allowed(_spec((access or {}).get("visibleTo") if isinstance(access, dict) else None), user)
+    return _spec((access or {}).get(key) if isinstance(access, dict) else None)
+
+
+def can_see_field(field, user) -> bool:
+    """看得到：`visibleTo` 命中（沒設＝所有人）；改得到蘊含看得到（`editableTo` 命中的人一定看得到）。"""
+    if _allowed(_acc(field, "visibleTo"), user):
+        return True
+    ed = _acc(field, "editableTo")
+    return ed is not None and _allowed(ed, user)
+
+
+def can_edit_field(field, user) -> bool:
+    """改得到：`editableTo` 命中（沒設＝看得到的人都改得到）。看不到的人當然改不到。"""
+    if not can_see_field(field, user):
+        return False
+    return _allowed(_acc(field, "editableTo"), user)
 
 
 def can_see_menu(menu, user) -> bool:
@@ -123,6 +138,33 @@ def keep_hidden_values(body, values, existing, user) -> dict:
     return out
 
 
+def _same(a, b) -> bool:
+    return json.dumps(a, sort_keys=True, ensure_ascii=False) == json.dumps(b, sort_keys=True, ensure_ascii=False)
+
+
+def guard_writes(body, values, existing, user) -> tuple:
+    """寫入前：`(乾淨的值, 不可改的欄位清單 [{key, message}])`。
+    - 看不到的欄位：丟掉他送來的值、沿用單據既有值（同 keep_hidden_values；他連這個欄位存在都不必知道）
+    - 看得到但改不到的欄位（`editableTo` 限制）：送來的值與既有值**相同（或空對空）＝沒動**，照常；**不同 ⇒ 列入清單**（呼叫端回 403，
+      不靜默丟掉，避免「以為存成功」）
+    公式欄不收輸入，不在這裡處理。"""
+    vals = keep_hidden_values(body, values, existing, user)
+    forbidden = []
+    existing = existing or {}
+    for f in body.get("fields", []):
+        if not isinstance(f, dict) or not f.get("key") or f.get("type") == "formula":
+            continue
+        k = f["key"]
+        if not can_see_field(f, user) or can_edit_field(f, user) or k not in (vals or {}):
+            continue
+        new, old = vals.get(k), existing.get(k)
+        empty = lambda v: v in (None, "", [], {})
+        if (empty(new) and empty(old)) or _same(new, old):
+            continue
+        forbidden.append({"key": k, "message": "%s：你沒有修改這個欄位的權限" % (f.get("label") or k)})
+    return vals, forbidden
+
+
 def render_output_for(conn, module_key, record_no, user) -> str:
     """單據輸出（HTML）但看不到的欄位不進版型（版型引用到＝空白）。"""
     from . import custom_modules as CM
@@ -152,13 +194,18 @@ def access_problems(body) -> list:
         if not isinstance(acc, dict) or set(acc) - ACCESS_KEYS:
             out.append({"path": p, "message": "欄位可見設定只認得 visibleTo"})
             continue
-        v = acc.get("visibleTo")
-        if v is not None and not _shape_ok(v):
-            out.append({"path": p, "message": "visibleTo 要是 {roles:[…], users:[…]}"})
+        bad = False
+        for key in ("visibleTo", "editableTo"):
+            v = acc.get(key)
+            if v is not None and not _shape_ok(v):
+                out.append({"path": p, "message": "%s 要是 {roles:[…], users:[…]}" % key})
+                bad = True
+            elif v is not None:
+                out += _role_problem(p, v)
+        if bad:
             continue
-        out += _role_problem(p, v)
-        if f.get("required") and _spec(v) is not None:
-            out.append({"path": "fields[%d].required" % i, "message": "必填欄位不可以設成只有部分人看得到（其他人填不了就存不了）"})
+        if f.get("required") and (_spec(acc.get("visibleTo")) is not None or _spec(acc.get("editableTo")) is not None):
+            out.append({"path": "fields[%d].required" % i, "message": "必填欄位不可以設成只有部分人看得到或改得到（其他人填不了就存不了）"})
     menu = body.get("menu")
     v = menu.get("visibleTo") if isinstance(menu, dict) else None
     if v is not None:

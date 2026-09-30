@@ -2262,6 +2262,7 @@ def _daily_backup_tables() -> dict:
         "自訂模組單據修訂": "SELECT * FROM custom_record_revisions ORDER BY id",
         "自訂模組金流事件": "SELECT * FROM custom_record_finance_outbox ORDER BY id",
         "自訂模組附件":     "SELECT * FROM custom_record_files ORDER BY uploaded_at, id",
+        "自訂模組送簽快照": "SELECT * FROM custom_record_snapshots ORDER BY id",
         "協力廠商":         "SELECT * FROM vendor_contractors ORDER BY id",
         "T100匯出確認":     "SELECT * FROM t100_export_confirmations ORDER BY id",
         # ── 業務開發 ──

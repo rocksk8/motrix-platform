@@ -36,6 +36,13 @@ from core import registry as _registry
 RECEIVABLES_MISSING = "應收應付模組未安裝：收款與銷項發票資料不提供（現金口徑收入、銷項發票匯出需要它）"
 
 
+def _custom_income(conn, d0, d1, basis, department_id=None):
+    """自訂模組（建構器）的收入逐筆（L1 `helpers.custom_finance`；沒有入帳單據 ⇒ []）。
+    關聯到內建案件的略過（內建報價單自己認列，不重複計入）。"""
+    from helpers import custom_finance
+    return custom_finance.income_items(conn, d0, d1, basis, department_id)
+
+
 def _collect_income_items(d0, d1, department_id=None):
     p = _registry.single_provider("receivables.income_items")
     return [] if p is None else p(d0, d1, department_id)
@@ -3241,19 +3248,32 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     rec = _recognition()
     if basis == "accrual":
         def _income(a, b, dept):
-            if rec is None:
-                return []                                   # M01 不在 ⇒ 權責口徑收入沒有資料來源（incomeNotice 明說）
             conn = get_db()
             try:
-                return rec.accrual_income_items(conn, a, b, dept)
+                base = [] if rec is None else rec.accrual_income_items(conn, a, b, dept)   # M01 不在 ⇒ 權責口徑收入沒有資料來源（incomeNotice 明說）
+                return base + _custom_income(conn, a, b, basis, dept)
             finally:
                 conn.close()
     else:
-        _income = _collect_income_items
+        def _income(a, b, dept):
+            conn = get_db()
+            try:
+                return _collect_income_items(a, b, dept) + _custom_income(conn, a, b, basis, dept)
+            finally:
+                conn.close()
     if basis == "accrual":
         income_notice = "" if rec is not None else CASE_RECOGNITION_MISSING
     else:
         income_notice = "" if _registry.single_provider("receivables.income_items") else RECEIVABLES_MISSING
+    from helpers import custom_finance
+    _c = get_db()
+    try:
+        _und = custom_finance.undated_counts(_c, basis)
+    finally:
+        _c.close()
+    if _und["income"]:                                       # 自訂模組入帳但缺該口徑日期的收入 ⇒ 明說（待補登），不靜默少列
+        income_notice = (income_notice + "；" if income_notice else "") + "自訂模組有 %d 筆收入缺%s日期，沒有列入（待補登）" % (
+            _und["income"], "歸屬" if basis == "accrual" else "現金")
     expenses_annual = _collect_expenses(year, department_id, basis)
     if month[:4] == str(year):
         month_slice = _month_expense_slice(expenses_annual, month)
@@ -3475,16 +3495,21 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     from core import registry
     for _name, fn in sorted(registry.providers("expense.entries").items()):
         for e in fn(conn, d0, d1):
-            mo = (e["date"] or "")[:7]
+            date, amount = e["date"], e["amount"]
+            if basis != "accrual" and "cashDate" in e:      # 現金口徑：提供者另給現金日與現金金額（選填鍵，舊提供者沒有 ⇒ 沿用 date／amount）
+                date, amount = e["cashDate"], e.get("cashAmount", e["amount"])
+            mo = (date or "")[:7]
             if mo not in monthly or not _quote_in_department(e["quoteNo"]):
                 continue
-            monthly[mo]["other"] += e["amount"]
+            monthly[mo]["other"] += amount
             details["other"].append({
-                "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round(e["amount"]),
+                "date": date, "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round(amount),
                 "files": [], "pending": bool(e.get("pending")), "taxNote": "差額待審核" if e.get("pending") else "",
                 "provisional": False, "category": e["category"],
             })
 
+    from helpers import custom_finance
+    _undated = custom_finance.undated_counts(conn, basis)        # 自訂模組入帳但缺該口徑日期 ⇒ 明說「待補登」，不靜默少列
     if own_conn:
         conn.close()
 
@@ -3508,7 +3533,9 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
 
     # 稽核 X-1：某一類整個沒算（例如 IP-1 提供者不在）⇒ 明說，不可以跟「這期 0 元」長得一樣
     return {"monthly": monthly_items, "totals": totals, "details": details,
-            "unavailable": rec.dispatch_unavailable(basis) if rec is not None else [dict(CASE_EXPENSES_UNAVAILABLE)]}
+            "unavailable": (rec.dispatch_unavailable(basis) if rec is not None else [dict(CASE_EXPENSES_UNAVAILABLE)])
+                           + ([{"category": "custom", "reason": "自訂模組有 %d 筆支出缺%s日期，沒有列入（待補登，不是 0 筆）"
+                                % (_undated["expense"], "現金" if basis != "accrual" else "歸屬")}] if _undated["expense"] else [])}
 
 
 @router.get("/api/reports/expenses-monthly")

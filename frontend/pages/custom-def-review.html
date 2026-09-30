@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>模組定義審核 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!--
+    自訂模組「定義」的審核頁（建構器第三輪 S4）：送審中的那一版與現行版的差異、簽核進度、核可／退回（退回要填原因）。
+    簽核鏈上的人不一定是最高管理者，所以審核不放在建構器頁（那頁只給最高管理者）；「待我簽核」卡片直接開這一頁。
+    資料：GET /api/custom-modules/{key}/definition/review；動作：POST …/definition/{版}/approve|reject。
+    差異的路徑（fields[2].label…）以「欄位／區塊」的白話顯示；看不懂的路徑照原樣列出（不吞）。
+  -->
+  <style>
+    .dr-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 28px 36px 60px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .dr-wrap { max-width: 980px; }
+    .dr-err { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: var(--tone-danger-bg);
+      border: 1px solid var(--tone-danger-border); color: var(--tone-danger-fg); font-size: 13px; }
+    .dr-panel { margin-top: 18px; border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; background: var(--surface, #fff); }
+    .dr-panel h2 { font-size: 15px; margin: 0 0 8px; }
+    .dr-sub { font-size: 12.5px; color: var(--text-secondary); line-height: 1.7; }
+    .dr-tiers { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+    .dr-tier { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
+    .dr-tier.is-cur { border-color: var(--accent, #2563EB); }
+    .dr-diff { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+    .dr-diff th, .dr-diff td { padding: 6px 10px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; word-break: break-all; }
+    .dr-op { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--border-light); }
+    .dr-note { width: 100%; box-sizing: border-box; margin-top: 8px; }
+    .dr-actions { display: flex; gap: 8px; margin-top: 10px; }
+  </style>
+</head>
+<body x-data="defReviewPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="dr-main">
+    <div class="dr-wrap">
+      <div class="pg">
+        <div class="pg__l">
+          <div class="pg__eyebrow">自訂模組定義審核</div>
+          <h1 class="pg__t" id="dr-title" x-text="key ? ('模組 ' + key) : '模組定義審核'"></h1>
+        </div>
+      </div>
+
+      <div class="dr-err" id="dr-error" x-show="err" x-text="err"></div>
+      <div class="dr-err" id="dr-done" x-show="done" style="background:var(--tone-info-bg);border-color:var(--tone-info-border);color:var(--tone-info-fg)" x-text="done"></div>
+
+      <template x-if="view && view.open">
+        <div class="dr-panel" id="dr-open" :data-version="view.open.version">
+          <h2>第 <span x-text="view.open.version"></span> 版　送審中</h2>
+          <div class="dr-sub">
+            申請人 <b x-text="view.open.approval.requestedByDisplay || view.open.submittedBy"></b>
+            · <span x-text="(view.open.submittedAt || '').replace('T', ' ').slice(0, 16)"></span>
+            <span x-show="view.open.note">· 說明：<span x-text="view.open.note"></span></span>
+          </div>
+          <div class="dr-tiers" x-show="(view.open.approval.tiers || []).length">
+            <template x-for="(t, ti) in (view.open.approval.tiers || [])" :key="ti">
+              <div class="dr-tier" :class="{ 'is-cur': ti === (view.open.approval.currentTier || 0) }">
+                第 <span x-text="ti + 1"></span> 層：
+                <template x-for="a in (t.approvers || [])" :key="a.username">
+                  <span><span x-text="a.displayName || a.username"></span><span x-show="a.status === 'approved'"> ✓</span> </span>
+                </template>
+              </div>
+            </template>
+          </div>
+          <div class="dr-sub" x-show="!(view.open.approval.tiers || []).length">沒有簽核層：由最高管理者審核。</div>
+
+          <h2 style="margin-top:14px">與現行版的差異（<span x-text="view.open.changes.length"></span> 處）</h2>
+          <table class="dr-diff" id="dr-diff" x-show="view.open.changes.length">
+            <thead><tr><th style="width:70px">動作</th><th>位置</th><th>原本</th><th>改成</th></tr></thead>
+            <tbody>
+              <template x-for="(c, ci) in view.open.changes" :key="ci">
+                <tr :data-op="c.op">
+                  <td><span class="dr-op" x-text="opLabel(c.op)"></span></td>
+                  <td x-text="c.path || '（整份）'"></td>
+                  <td x-text="show(c.old)"></td>
+                  <td x-text="show(c.new)"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div class="dr-sub" x-show="!view.open.changes.length">和現行版沒有差異。</div>
+
+          <template x-if="view.open.canDecide">
+            <div>
+              <textarea class="dr-note" id="dr-note" rows="2" x-model="note" placeholder="備註（退回時必填：說明原因）"></textarea>
+              <div class="dr-actions">
+                <button class="btn btn-approve" id="dr-approve" :disabled="busy" @click="decide(true)">核可</button>
+                <button class="btn btn-reject" id="dr-reject" :disabled="busy" @click="decide(false)">退回</button>
+              </div>
+            </div>
+          </template>
+          <div class="dr-sub" id="dr-why" x-show="!view.open.canDecide" x-text="view.open.whyNot || '還沒輪到你審核。'"></div>
+        </div>
+      </template>
+
+      <div class="dr-panel" id="dr-none" x-show="view && !view.open">
+        <div class="dr-sub">目前沒有送審中的定義。</div>
+      </div>
+
+      <div class="dr-panel" id="dr-history" x-show="view && view.history && view.history.length">
+        <h2>送審歷史（版號不回收）</h2>
+        <table class="dr-diff">
+          <thead><tr><th>版</th><th>狀態</th><th>申請人</th><th>時間</th><th>原因／說明</th></tr></thead>
+          <tbody>
+            <template x-for="h in (view ? view.history : [])" :key="h.version">
+              <tr :data-hist-version="h.version">
+                <td x-text="'v' + h.version"></td>
+                <td x-text="h.status === 'rejected' ? '已退回' : '送審中'"></td>
+                <td x-text="h.submittedBy"></td>
+                <td x-text="(h.submittedAt || '').replace('T', ' ').slice(0, 16)"></td>
+                <td x-text="h.status === 'rejected' ? ('退回：' + h.reason + (h.decidedBy ? '（' + h.decidedBy + '）' : '')) : (h.note || '')"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="dr-sub" style="margin-top:16px" x-show="view && view.reviewEnabled === false">
+        目前系統設定沒有開啟「定義送審」；發布仍是直接發布。
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function defReviewPage() {
+      return {
+        key: '', view: null, err: '', done: '', note: '', busy: false,
+        _hdr() {
+          var s = {}
+          try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
+          return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
+        },
+        async init() {
+          this.key = new URLSearchParams(location.search).get('key') || ''
+          if (!this.key) { this.err = '網址少了模組代號（?key=）'; return }
+          await this.load()
+        },
+        async load() {
+          try {
+            var r = await fetch('/api/custom-modules/' + encodeURIComponent(this.key) + '/definition/review', { headers: this._hdr() })
+            var d = await r.json().catch(function () { return null })
+            if (!r.ok) { this.err = (d && d.detail) ? String(d.detail) : ('讀取失敗（' + r.status + '）'); this.view = null; return }
+            this.err = ''
+            this.view = d
+          } catch (e) { this.err = '網路連線失敗，請重新整理' }
+        },
+        opLabel(op) { return { add: '新增', remove: '刪除', change: '修改' }[op] || op },
+        show(v) {
+          if (v === undefined) return '—'
+          if (v === null) return '（空）'
+          return typeof v === 'object' ? JSON.stringify(v) : String(v)
+        },
+        async decide(approve) {
+          if (this.busy || !this.view || !this.view.open) return
+          if (!approve && !this.note.trim()) { this.err = '退回要填原因'; return }
+          this.busy = true
+          try {
+            var r = await fetch('/api/custom-modules/' + encodeURIComponent(this.key) + '/definition/' + this.view.open.version + '/' + (approve ? 'approve' : 'reject'),
+                                { method: 'POST', headers: this._hdr(), body: JSON.stringify({ note: this.note }) })
+            var d = await r.json().catch(function () { return null })
+            if (!r.ok) { this.err = (d && d.detail) ? String(d.detail) : ('失敗（' + r.status + '）'); return }
+            this.err = ''
+            this.done = approve ? (d.published ? '已核可並發布。' : '已簽核，換下一層審核。') : '已退回，申請人會收到通知。'
+            this.note = ''
+            await this.load()
+          } catch (e) { this.err = '網路連線失敗，請確認後再按一次' } finally { this.busy = false }
+        }
+      }
+    }
+  </script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/ui.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

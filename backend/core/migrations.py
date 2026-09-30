@@ -312,5 +312,32 @@ def _core_v4_custom_record_files(conn):
     conn.commit()
 
 
+def _core_v5_custom_record_snapshots(conn):
+    """單據送簽修訂紀錄（建構器 S5）：每次送簽一列不可變快照（欄位值＋定義版本），決定（核可／退回＋原因）回填同一列；
+    `custom_records.revision`＝目前修訂號（0＝首次送簽或還沒送簽；-R<n> 顯示尾碼）。與 v3 的 `custom_record_revisions`（修訂已核准單據＝另開新單）是兩件事。
+    T1（欄位值快照＝單據內容的複本，跟著每日 JSON 匯出）。"""
+    _add_col(conn, "custom_records", "revision", "INTEGER NOT NULL DEFAULT 0")
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS custom_record_snapshots (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_id    INTEGER NOT NULL,
+            module_key   TEXT    NOT NULL,
+            revision     INTEGER NOT NULL,
+            data_json    TEXT    NOT NULL DEFAULT '{}',
+            def_version  INTEGER NOT NULL DEFAULT 0,
+            submitted_by TEXT    NOT NULL DEFAULT '',
+            submitted_at TEXT    NOT NULL DEFAULT '',
+            decision     TEXT    NOT NULL DEFAULT '',
+            decided_by   TEXT    NOT NULL DEFAULT '',
+            decided_at   TEXT    NOT NULL DEFAULT '',
+            note         TEXT    NOT NULL DEFAULT '',
+            UNIQUE(record_id, revision)
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_record_snapshots_module ON custom_record_snapshots(module_key, record_id);
+    """)
+    conn.commit()
+
+
 register("core", 3, _core_v3_builder_foundation)
 register("core", 4, _core_v4_custom_record_files)
+register("core", 5, _core_v5_custom_record_snapshots)

@@ -4328,6 +4328,9 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
     # 上面那段列表推導需要連線，原本在它之前就 close() 會變成 use-after-close
     extras_fee_total = sum(float(r["remit_fee"] or 0) for r in conn.execute(
         "SELECT remit_fee FROM case_extra_expenses WHERE quote_no=? AND COALESCE(paid_date, '') != ''", (quote_no,)).fetchall())
+    # 建構器（自訂模組）的金流：關聯到這個案件的入帳支出＝案件成本的一列；收入因內建報價單已認列而略過（標 skipped，供對照）
+    from helpers import custom_finance as _cfin
+    custom_finance = _cfin.case_finance(conn, quote_no)
     conn.close()
 
     return {
@@ -4350,6 +4353,7 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
             "remitFeeTotal": extras_fee_total,
             "items": extras,
         },
+        "customFinance": custom_finance,
     }
 
 
