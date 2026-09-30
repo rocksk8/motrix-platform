@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>總帳作業 - MOTRIX 專案管理系統</title>
+  <script src="../js/ledger-hub.js"></script>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    [x-cloak]{display:none!important}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));background:var(--white)}
+    .hb-title{font-size:20px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary);margin-bottom:6px}
+    .hb-note{font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);line-height:1.7;margin-bottom:14px;max-width:920px}
+    .hb-tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border-light);flex-wrap:wrap}
+    .hb-tab{padding:8px 16px;border:none;background:none;font-size:13px;font-family:var(--font-zh);color:var(--text-secondary);cursor:pointer;border-bottom:2px solid transparent}
+    .hb-tab.on{color:var(--text-primary);font-weight:700;border-bottom-color:var(--accent)}
+    .hb-card{background:var(--surface);border:1px solid var(--border-light);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px;max-width:920px}
+    .hb-table{width:100%;border-collapse:collapse;font-size:13px;font-family:var(--font-zh)}
+    .hb-table th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border-light);color:var(--text-secondary)}
+    .hb-table td{padding:6px 8px;border-bottom:1px solid var(--line)}
+    .hb-btn{padding:4px 12px;border-radius:var(--radius);border:1px solid var(--border-light);background:var(--surface);font-size:12px;font-family:var(--font-zh);cursor:pointer;color:var(--text-primary)}
+    .hb-btn:hover{background:var(--surface-sunken)}
+    .hb-tag{font-size:11px;padding:1px 8px;border-radius:9px;border:1px solid var(--border-light)}
+    .hb-tag.on{background:var(--success-light);color:var(--success);border-color:var(--success-border)}
+    .hb-err{color:var(--tone-danger-fg);background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px}
+    .hb-ok{color:var(--success);background:var(--success-light);border:1px solid var(--success-border);border-radius:var(--radius);padding:8px 12px;font-size:13px;font-family:var(--font-zh);margin-bottom:12px}
+  </style>
+</head>
+<body x-data="ledgerHubPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div id="sidebar-root"></div>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div>
+    <main class="page-main">
+      <div class="hb-title">總帳作業</div>
+      <div class="hb-note">總帳的各項功能陸續上線：完成一項、開啟一項，頁籤才會出現。尚未開啟的功能不影響現有的傳票與報表。開關只有最高管理者可以操作。</div>
+
+      <div class="hb-err" x-show="error" x-text="error" data-testid="hb-error"></div>
+      <div class="hb-ok" x-show="notice" x-text="notice" data-testid="hb-notice"></div>
+
+      <div class="hb-tabs" x-show="enabled.length" data-testid="hb-tabs">
+        <template x-for="f in enabled" :key="f.key">
+          <button class="hb-tab" :class="{on: tab === f.key}" @click="tab = f.key" x-text="f.label" :data-testid="'hb-tab-' + f.key"></button>
+        </template>
+      </div>
+
+      <div class="hb-card" x-show="current()" data-testid="hb-body">
+        <template x-if="current()">
+          <div>
+            <div class="hb-title" style="font-size:16px" x-text="current().label"></div>
+            <div class="hb-note" x-text="current().description"></div>
+            <div class="hb-note">這項功能已開啟，畫面隨批次 <b x-text="current().batch"></b> 完成後出現在這裡；目前尚未提供內容。</div>
+          </div>
+        </template>
+      </div>
+      <div class="hb-note" x-show="loaded && !enabled.length" data-testid="hb-none">目前沒有已開啟的功能。</div>
+
+      <div class="hb-card">
+        <div class="hb-title" style="font-size:14px">功能清單</div>
+        <table class="hb-table" data-testid="hb-features">
+          <thead><tr><th>功能</th><th>批次</th><th>說明</th><th>狀態</th><th></th></tr></thead>
+          <tbody>
+            <template x-for="f in features" :key="f.key">
+              <tr :data-testid="'hb-row-' + f.key">
+                <td x-text="f.label"></td><td x-text="f.batch"></td><td x-text="f.description"></td>
+                <td><span class="hb-tag" :class="{on: f.enabled}" x-text="f.enabled ? '已開啟' : '未開啟'"></span></td>
+                <td style="text-align:right"><button class="hb-btn" x-show="isSuper" @click="toggle(f)" x-text="f.enabled ? '關閉' : '開啟'" data-testid="hb-toggle"></button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

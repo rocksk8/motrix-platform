@@ -241,7 +241,7 @@ def test_migration_is_idempotent_and_no_op_when_run_twice(conn):
     m = importlib.import_module("modules.accounting.migrations.0001_ledger_base")
     assert m.up(conn) is None and m.up(conn) is None
     n = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name LIKE 'gl_%'").fetchone()[0]
-    assert n == 8, "重跑不可重複建觸發器：%d" % n
+    assert n == len(m.TRIGGER_NAMES), "重跑不可重複建觸發器：%d／%d" % (n, len(m.TRIGGER_NAMES))
 
 
 # ── API：訊息、權限 ───────────────────────────────────────────────────────

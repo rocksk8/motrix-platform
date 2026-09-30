@@ -243,3 +243,31 @@ def test_statements_page_balance_sheet_income_statement_and_unmapped_banner(live
         conn.close()
     assert not bad, "開財務報表頁時有請求失敗：%s" % bad[:4]
     assert not errs, "頁面丟了例外：%s" % errs[:3]
+
+
+# ── 底層一次到位：總帳作業（功能旗標中樞）────────────────────────────────
+
+@pytest.mark.e2e
+def test_hub_page_lists_features_and_toggle_shows_and_hides_the_tab(live_server, make_user, e2e_browser):
+    user, pw = make_user(username="e2e_gl_hub", role="superadmin")
+    page = e2e_browser.new_page()
+    bad, errs = _open(page, live_server, user, pw, "ledger-hub.html")
+    page.wait_for_selector("[data-testid=hb-features]")
+    page.wait_for_selector("[data-testid=hb-row-tax401]")
+    assert page.locator("[data-testid=hb-none]").is_visible()                       # 預設全關：明說「沒有已開啟的功能」
+    assert page.locator("[data-testid=hb-tab-tax401]").count() == 0
+
+    page.locator("[data-testid=hb-row-tax401] [data-testid=hb-toggle]").click()
+    page.wait_for_selector("[data-testid=hb-tab-tax401]", state="visible")           # 開啟 ⇒ 頁籤出現
+    page.wait_for_selector("[data-testid=hb-body]", state="visible")
+    assert "C5" in page.locator("[data-testid=hb-body]").inner_text()
+    conn = db.get_db()
+    try:
+        assert conn.execute("SELECT value FROM gl_settings WHERE key='feature.tax401'").fetchone()[0] == "1"
+    finally:
+        conn.close()
+
+    page.locator("[data-testid=hb-row-tax401] [data-testid=hb-toggle]").click()
+    page.wait_for_function("() => !document.querySelector('[data-testid=hb-tab-tax401]')")
+    assert not bad, "開總帳作業頁時有請求失敗：%s" % bad[:4]
+    assert not errs, "頁面丟了例外：%s" % errs[:3]

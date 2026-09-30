@@ -115,8 +115,8 @@ def test_custom_child_inherits_cashflow_class_and_hand_edits_survive(conn):
     conn.commit()
 
 
-def test_migration_v2_is_idempotent(conn):
-    m = importlib.import_module("modules.accounting.migrations.0002_fs_lines_cashflow")
+def test_migration_is_idempotent_and_has_cashflow_column(conn):
+    m = importlib.import_module("modules.accounting.migrations.0001_ledger_base")
     assert m.up(conn) is None and m.up(conn) is None
     assert "cashflow_class" in {r[1] for r in conn.execute("PRAGMA table_info(gl_account_meta)")}
 

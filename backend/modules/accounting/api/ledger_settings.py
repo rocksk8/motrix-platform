@@ -8,6 +8,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 
 from db import get_db
 from helpers import _audit, _require_user, _tok, require_any_module
+from modules.accounting.ledger import features as _features
 from modules.accounting.ledger import fs_lines as _fs
 from modules.accounting.ledger import roles as _roles
 
@@ -90,3 +91,34 @@ def setup_check(authorization: str = Header(None)):
         return res
     finally:
         conn.close()
+
+
+# ── 功能旗標（未完成的功能以旗標關閉；「總帳作業」頁據此顯示頁籤）──────────────────
+
+@router.get("/features")
+def features(authorization: str = Header(None)):
+    _require_settings_read(authorization)
+    conn = get_db()
+    try:
+        return {"features": _features.listing(conn)}
+    finally:
+        conn.close()
+
+
+@router.put("/features/{key}")
+def put_feature(key: str, body: dict = Body(...), authorization: str = Header(None)):
+    """開關一項功能：只有 superadmin（開關是上線動作，留稽核紀錄）。"""
+    user = _require_user(authorization)
+    if user.get("role") != "superadmin":
+        raise HTTPException(403, "只有最高管理者可以開關總帳功能。")
+    if key not in _features.FEATURES:
+        raise HTTPException(404, "沒有這個功能：%s。" % key)
+    enabled = bool((body or {}).get("enabled"))
+    conn = get_db()
+    try:
+        _features.set_flag(conn, key, enabled)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "ledger.feature", "gl_settings", key, "%s總帳功能：%s" % ("開啟" if enabled else "關閉", key))
+    return {"ok": True, "key": key, "enabled": enabled}

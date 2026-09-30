@@ -10,12 +10,11 @@ from core.registry import ModuleSpec
 from modules.accounting.api import account_items, accounting_export, ledger_engine, ledger_periods, ledger_reports, ledger_settings, ledger_statements, vouchers
 
 _m0001 = importlib.import_module("modules.accounting.migrations.0001_ledger_base")
-_m0002 = importlib.import_module("modules.accounting.migrations.0002_fs_lines_cashflow")
 
 MODULE = ModuleSpec(
     key="accounting",
     routers=[accounting_export.router, account_items.router, vouchers.router, ledger_periods.router, ledger_reports.router, ledger_engine.router, ledger_settings.router, ledger_statements.router],
-    migrations=[(1, _m0001.up), (2, _m0002.up)],
+    migrations=[(1, _m0001.up)],
     providers={
         # IP-2：M07 獎金傳票草稿與科目檢查
         ("voucher.draft", "accounting"): vouchers._provide_voucher_draft,
