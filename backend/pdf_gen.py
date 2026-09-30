@@ -27,6 +27,7 @@ from db import (
 )
 from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report, run_edge_pdf
 from helpers import receipt_amounts as _receipt_amounts
+from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr
 
 from core import paths as _paths
 
@@ -118,7 +119,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
     #    版型沒有匯款帳號欄位，`QL10` 管的是請款單那幾支，原封不動）。
     _ident = apply_snapshot(location_identity(_location_of(q)), q)
     def esc(s):
-        return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
     ps = q.get('pdfShow') or {}
 
     items = q.get('items', [])
@@ -581,13 +582,13 @@ def _identity_head(ident: dict) -> str:
     ☠️ 換成半形的話所有既有單據的那一行都會變，而沒有人會說得出是哪一次改的。
     """
     third = "統一編號：%s　｜　電話：%s　｜　%s" % (
-        ident.get("tax_id", ""), ident.get("phone", ""), ident.get("email", ""))
+        _attr(ident.get("tax_id", "")), _attr(ident.get("phone", "")), _attr(ident.get("email", "")))
     require_for_output()                  # 第二道（COMPANY-SETUP-GATE §5）：未設定／判定失敗 ⇒ 428，文件不產生
     return _demo_watermark() + (
         '    <div class="co-name">%s</div>\n'
         '    <div class="co-sub">%s</div>\n'
         '    <div class="co-sub" style="margin-top:4px">%s</div>\n'
-        % (ident.get("company_name", ""), ident.get("company_name_en", ""),
+        % (_attr(ident.get("company_name", "")), _attr(ident.get("company_name_en", "")),
            third))
 
 
@@ -595,20 +596,20 @@ def _identity_foot(ident: dict) -> str:
     """頁尾那一行（完整版：英文名 ＋ 中文名 ｜ email ｜ Tel ｜ 統編）。"""
     require_for_output()
     return "  %s %s ｜ %s ｜ Tel: %s ｜ 統一編號: %s\n" % (
-        ident.get("company_name_en", ""),
+        _attr(ident.get("company_name_en", "")),
         # ⚠️ 頁尾用的是**不含「股份有限公司」的短名**。改版前寫死的是本公司名稱的短名，
         # 🔑 而那是 `company_name` 去掉尾綴 —— 這裡只去掉既有那幾種尾綴，
         #    使用者自己填的名字原樣印出去，不要替他猜。
-        _short_name(ident.get("company_name", "")),
-        ident.get("email", ""), ident.get("phone", ""), ident.get("tax_id", ""))
+        _attr(_short_name(ident.get("company_name", ""))),
+        _attr(ident.get("email", "")), _attr(ident.get("phone", "")), _attr(ident.get("tax_id", "")))
 
 
 def _identity_foot_short(ident: dict) -> str:
     """頁尾那一行（短版：只有英文名與中文短名）。"""
     require_for_output()
     return "%s %s\n</div>\n" % (
-        ident.get("company_name_en", ""),
-        _short_name(ident.get("company_name", "")))
+        _attr(ident.get("company_name_en", "")),
+        _attr(_short_name(ident.get("company_name", ""))))
 
 
 #: 頁尾短名（2026-09-25 A8c：移到 helpers/company_identity.short_name，唯一來源）
@@ -616,7 +617,7 @@ from helpers.company_identity import short_name as _short_name  # noqa: E402
 
 
 def _payslip_esc(s):
-    return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+    return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
 
 
 def _payslip_view(d: dict) -> dict:
@@ -703,7 +704,7 @@ def _payslip_reprint_note(view) -> str:
 
 def _payslip_passbook_html(d: dict) -> str:
     """附件：乙方銀行存簿影本（照抄改版前的 HTML；沒有影本 ⇒ 空字串）。"""
-    def esc(s): return (s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>')
+    def esc(s): return _esc_q((s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>'))
     cname, slip_no = d.get('contractorName', ''), d.get('slipNo', '')
     bank_code, bank_name, bank_bran, bank_no = d.get('bankCode', ''), d.get('bankName', ''), d.get('bankBranch', ''), d.get('bankAccountNumber', '')
     bank_passbook = d.get('_bank_passbook', '')
@@ -738,7 +739,7 @@ def _payslip_passbook_html(d: dict) -> str:
     </tr>
   </table>
   <div style="text-align:center">
-    <img src="{bank_passbook}" style="max-width:100%;max-height:340px;
+    <img src="{_attr(bank_passbook)}" style="max-width:100%;max-height:340px;
          object-fit:contain;border:1px solid #ccc;border-radius:4px">
   </div>
   <div style="text-align:center;font-size:8pt;color:#888;margin-top:8px">
@@ -751,7 +752,7 @@ def _payslip_passbook_html(d: dict) -> str:
 
 def _payslip_id_card_html(d: dict) -> str:
     """附件：乙方身分證影本（照抄改版前的 HTML；沒有影本 ⇒ 空字串）。"""
-    def esc(s): return (s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>')
+    def esc(s): return _esc_q((s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>'))
     cname, cid_no, slip_no = d.get('contractorName', ''), d.get('contractorIdNumber', ''), d.get('slipNo', '')
     id_card_front, id_card_back = d.get('_id_card_front', ''), d.get('_id_card_back', '')
     id_card_section = ''
@@ -760,11 +761,11 @@ def _payslip_id_card_html(d: dict) -> str:
             images_html = (
                 '<div style="display:flex;gap:14px">'
                 f'<div style="flex:1;text-align:center">'
-                f'<img src="{id_card_front}" style="max-width:100%;max-height:220px;'
+                f'<img src="{_attr(id_card_front)}" style="max-width:100%;max-height:220px;'
                 f'object-fit:contain;border:1px solid #ccc;border-radius:4px">'
                 f'<div style="font-size:9pt;color:#666;margin-top:4px">正面</div></div>'
                 f'<div style="flex:1;text-align:center">'
-                f'<img src="{id_card_back}" style="max-width:100%;max-height:220px;'
+                f'<img src="{_attr(id_card_back)}" style="max-width:100%;max-height:220px;'
                 f'object-fit:contain;border:1px solid #ccc;border-radius:4px">'
                 f'<div style="font-size:9pt;color:#666;margin-top:4px">反面</div></div>'
                 '</div>'
@@ -773,7 +774,7 @@ def _payslip_id_card_html(d: dict) -> str:
             img = id_card_front or id_card_back
             images_html = (
                 f'<div style="text-align:center">'
-                f'<img src="{img}" style="max-width:100%;max-height:300px;'
+                f'<img src="{_attr(img)}" style="max-width:100%;max-height:300px;'
                 f'object-fit:contain;border:1px solid #ccc;border-radius:4px">'
                 f'</div>'
             )
@@ -1017,7 +1018,7 @@ def _build_shipping_html(n: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(n)), n)
     def esc(s):
-        return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
 
     items = n.get('items', [])
     item_rows = ''
@@ -1346,7 +1347,7 @@ def _voucher_sign_html(appr: dict) -> str:
     """簽核歷程 HTML 區塊，出貨單 PDF 沒有這段（出貨單簽核歷程只存在系統內），
     但財務申請需要在紙本上就能看到完整簽核歷程，故獨立為共用小工具。"""
     def esc(s):
-        return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
     tiers = (appr or {}).get('tiers') or []
     if not tiers:
         return ''
@@ -1377,7 +1378,7 @@ def _build_contractor_voucher_html(v: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(v)), v)
     def esc(s):
-        return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
     def money(n):
         return f'{n:,.0f}' if isinstance(n, (int, float)) else '0'
 
@@ -1934,7 +1935,7 @@ def _build_payment_request_html(v: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(v)), v)
     def esc(s):
-        return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
     def money(n):
         return f'{n:,.0f}' if isinstance(n, (int, float)) else '0'
 
@@ -2442,7 +2443,7 @@ def _build_case_closing_html(data: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(data)), data)
     def esc(s):
-        return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+        return _esc_q((str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
 
     def money(n):
         return f'{n:,.0f}' if isinstance(n, (int, float)) else '0'
@@ -2954,7 +2955,7 @@ def _build_project_execution_report_html(data: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(data)), data)
     def esc(s):
-        return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+        return _esc_q((str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
 
     def _stage_period(st):
         if st["visitStart"] or st["visitEnd"]:
