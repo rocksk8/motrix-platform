@@ -10,6 +10,8 @@ function ledgerHubPage() {
     tab: '',
     isSuper: false,
 
+    // 來源憑證補登（source_annotations）
+    an: { items: [], truncated: false, drafts: {}, busy: false, error: '', notice: '' },
     // 扣繳清單（C5：withholding）
     wh: { ym: '', data: null, selected: {}, date: '', voucherNo: '', unremitReason: '', busy: false, error: '', notice: '' },
     // 營業稅 401（C5：tax401）
@@ -52,6 +54,7 @@ function ledgerHubPage() {
         if (this.tab === 'engine_drafts') await this.engLoad()
         if (this.tab === 'tax401') await this.taxLoad()
         if (this.tab === 'withholding') await this.whLoad()
+        if (this.tab === 'source_annotations') await this.anLoad()
       } catch (e) { this.error = e.message }
       this.loaded = true
     },
@@ -60,6 +63,45 @@ function ledgerHubPage() {
       if (key === 'engine_drafts') await this.engLoad()
       if (key === 'tax401') await this.taxLoad()
       if (key === 'withholding') await this.whLoad()
+      if (key === 'source_annotations') await this.anLoad()
+    },
+    async anLoad() {
+      const a = this.an
+      a.error = ''
+      a.busy = true
+      try {
+        const d = await this._api('GET', '/api/ledger/annotations/pending')
+        a.items = d.items
+        a.truncated = d.truncated
+        const dr = {}
+        d.items.forEach(i => { dr[i.source_type + '|' + i.source_key] = { tax: i.input_tax, date: i.invoice_date } })
+        a.drafts = dr
+      } catch (e) { a.error = e.message; a.items = [] }
+      a.busy = false
+    },
+    anKey(i) { return i.source_type + '|' + i.source_key },
+    anKind(k) { return ({ estimated: '稅額為估計', unsplit: '來源未拆稅', annotated: '已補登' })[k] || k },
+    async anSave(i) {
+      const a = this.an
+      a.error = ''
+      a.notice = ''
+      const d = a.drafts[this.anKey(i)] || {}
+      try {
+        if (String(d.tax === undefined ? '' : d.tax).trim() !== '') await this._api({ method: 'PUT' }, '/api/ledger/annotations', { source_type: i.source_type, source_key: i.source_key, field: 'input_tax', value: String(d.tax) })
+        if (i.can_date && String(d.date || '').trim() !== '') await this._api({ method: 'PUT' }, '/api/ledger/annotations', { source_type: i.source_type, source_key: i.source_key, field: 'invoice_date', value: d.date })
+        a.notice = '已補登 ' + i.source_key + '；下次執行「分錄草稿」時套用（草稿會重建，已過帳的會產生反向草稿與新草稿）。'
+        await this.anLoad()
+      } catch (e) { a.error = e.message }
+    },
+    async anClear(i) {
+      const a = this.an
+      a.error = ''
+      a.notice = ''
+      try {
+        for (const id of [i.input_tax_id, i.invoice_date_id]) { if (id) await this._api({ method: 'DELETE' }, '/api/ledger/annotations/' + id) }
+        a.notice = '已清除 ' + i.source_key + ' 的補登，之後回到來源值。'
+        await this.anLoad()
+      } catch (e) { a.error = e.message }
     },
     async whLoad() {
       const w = this.wh

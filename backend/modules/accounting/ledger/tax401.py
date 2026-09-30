@@ -142,6 +142,8 @@ def carry_before(conn, start):
 def summarize(conn, year, n, invoices=None):
     """401 彙總＋對帳＋警示。`invoices`＝應收應付模組的發票明細（None ⇒ 不做發票對比並說明）。回 dict。"""
     ensure_map(conn)
+    _roles.ensure_meta(conn)                                    # 全新安裝還沒跑過引擎時，科目屬性與預設角色可能尚未種入 ⇒ 銷進項稅額科目對不上
+    _roles.ensure_default_roles(conn)
     lo, hi = bimonthly(year, n)
     out_acct, in_acct = _acct(conn, _R_OUT, hi), _acct(conn, _R_IN, hi)
     maps = {(r["tax_code"], r["invoice_kind"]): dict(r) for r in conn.execute("SELECT * FROM gl_tax401_map")}

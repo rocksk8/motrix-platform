@@ -61,7 +61,32 @@
           <div>
             <div class="hb-title" style="font-size:16px" x-text="current().label"></div>
             <div class="hb-note" x-text="current().description"></div>
-            <div class="hb-note" x-show="['engine_drafts', 'tax401', 'withholding'].indexOf(current().key) < 0">這項功能已開啟，畫面隨批次 <b x-text="current().batch"></b> 完成後出現在這裡；目前尚未提供內容。</div>
+            <div class="hb-note" x-show="['engine_drafts', 'tax401', 'withholding', 'source_annotations'].indexOf(current().key) < 0">這項功能已開啟，畫面隨批次 <b x-text="current().batch"></b> 完成後出現在這裡；目前尚未提供內容。</div>
+
+            <!-- 來源憑證補登 -->
+            <div x-show="current().key === 'source_annotations'" data-testid="hb-an">
+              <div class="hb-err" x-show="an.error" x-text="an.error" data-testid="hb-an-error"></div>
+              <div class="hb-ok" x-show="an.notice" x-text="an.notice" data-testid="hb-an-notice"></div>
+              <div class="hb-note">來源模組沒有的憑證資料（實際進項稅額、發票日期）在這裡補登，補登值優先於來源值。下面列出稅額是估計或來源未拆稅的分錄事件。</div>
+              <div class="hb-row"><button class="hb-btn" :disabled="an.busy" @click="anLoad()" data-testid="hb-an-load">重新整理</button></div>
+              <table class="hb-table" data-testid="hb-an-table">
+                <thead><tr><th>事件日</th><th>事件</th><th>來源</th><th>單據</th><th class="hb-num">金額</th><th>狀況</th><th>實際進項稅額</th><th>發票日期</th><th></th></tr></thead>
+                <tbody>
+                  <template x-for="i in an.items" :key="anKey(i)">
+                    <tr :data-testid="'hb-an-row-' + i.source_key">
+                      <td x-text="i.event_date"></td><td x-text="i.event_code"></td><td x-text="i.source_type + ' ' + i.source_key"></td><td x-text="i.doc_no"></td>
+                      <td class="hb-num" x-text="fmt(i.amount)"></td><td x-text="anKind(i.kind)"></td>
+                      <td><input class="hb-input" type="number" min="0" style="width:110px" x-model="an.drafts[anKey(i)].tax" data-saved-field :data-testid="'hb-an-tax-' + i.source_key"></td>
+                      <td><input class="hb-input" type="date" x-show="i.can_date" x-model="an.drafts[anKey(i)].date" data-saved-field :data-testid="'hb-an-date-' + i.source_key"></td>
+                      <td><button class="hb-btn primary" @click="anSave(i)" :data-testid="'hb-an-save-' + i.source_key">儲存</button>
+                        <button class="hb-btn" x-show="i.input_tax_id || i.invoice_date_id" @click="anClear(i)" :data-testid="'hb-an-clear-' + i.source_key">清除</button></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+              <div class="hb-note" x-show="!an.items.length" data-testid="hb-an-empty">目前沒有需要補登的事件（稅額估計或未拆稅的分錄事件會出現在這裡）。</div>
+              <div class="hb-warn" x-show="an.truncated">最多顯示 500 筆。</div>
+            </div>
 
             <!-- 扣繳清單（C5） -->
             <div x-show="current().key === 'withholding'" data-testid="hb-wh">
