@@ -33,7 +33,7 @@ def test_component_shape():
     assert _marked(h) and "待審核" in h and "&lt;b&gt;" in h and "print-color-adjust:exact" in h
     assert dt.inject_unapproved(h, "x") == h                                    # 冪等
     out = dt.inject_unapproved('<html><body>\n<div id="root">\n<p>x</p></div></body></html>', "草稿")
-    assert out.index("data-unapproved") < out.index("<p>x</p>") and out.count("data-unapproved") == 1
+    assert out.index("data-unapproved") < out.index("<p>x</p>") and out.count('data-unapproved="1"') == 1
 
 
 STATUSES = [("草稿", True), ("待審核", True), ("簽核中", True), ("已核准", False)]

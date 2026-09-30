@@ -298,7 +298,8 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         + '</div>\n'
         if show_watermark else '')
         + '<div id="root">\n'
-        + (_unapproved_banner(unapproved_status) if unapproved_status is not None else '')
+        + (_unapproved_banner(unapproved_status, doc_no=(q.get('quoteNo') or ''), wm_text='報價單預覽稿・\n尚未正式生效')
+           if unapproved_status is not None else '')
         + '<div class="accent-bar"></div>\n'
         + (
         f'<div class="notice-bar">'
@@ -1088,7 +1089,7 @@ def _build_shipping_html(n: dict) -> str:
         ) + '</div>'
     )
     banner_html = '' if is_final else _unapproved_banner(
-        n.get("status"), '此為出貨單預覽稿，尚未正式核准，請勿對外提供或引用')
+        n.get("status"), '此為出貨單預覽稿，尚未正式核准，請勿對外提供或引用', doc_no=n.get("noteNo", ""))
 
     return (
         '<!DOCTYPE html>\n'
@@ -1464,7 +1465,7 @@ def _build_contractor_voucher_html(v: dict) -> str:
         ) + '</div>'
     )
     banner_html = '' if is_final else _unapproved_banner(
-        v.get("status"), '此為承攬商匯款申請預覽稿，尚未正式核准，請勿提供財務單位辦理匯款')
+        v.get("status"), '此為承攬商匯款申請預覽稿，尚未正式核准，請勿提供財務單位辦理匯款', doc_no=v.get("voucherNo", ""))
     paid_note = ''
     paid_date = ''
     if v.get('isPaid'):
@@ -1789,7 +1790,7 @@ def _build_invoice_voucher_html(v: dict, template: dict = None) -> str:
     }
     html = _dt.render(template or _published_output_template("invoice_voucher", v), view, parts)
     # 核可狀態由程式決定、不由版型決定：未核准一律有紅色警示（冪等；版型自己的 banner 積木照舊保留）
-    return html if v.get("status") == "已核准" else _inject_unapproved(html, v.get("status"), "此為開票申請預覽稿，尚未正式核准")
+    return html if v.get("status") == "已核准" else _inject_unapproved(html, v.get("status"), "此為開票申請預覽稿，尚未正式核准", doc_no=v.get("voucherNo", ""))
 
 
 def _published_output_template(key: str, doc: dict = None) -> dict:
@@ -2072,7 +2073,7 @@ def _build_payment_request_html(v: dict) -> str:
         ) + '</div>'
     )
     banner_html = '' if is_final else _unapproved_banner(
-        v.get("status"), '此為請款單預覽稿，尚未正式核准，請勿提供給客戶辦理請款')
+        v.get("status"), '此為請款單預覽稿，尚未正式核准，請勿提供給客戶辦理請款', doc_no=v.get("requestNo", ""))
 
     return (
         '<!DOCTYPE html>\n<html lang="zh-Hant">\n<head>\n<meta charset="UTF-8">\n'
