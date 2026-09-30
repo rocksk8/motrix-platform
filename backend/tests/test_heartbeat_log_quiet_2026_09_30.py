@@ -41,8 +41,8 @@ def _set_time(monkeypatch, mod, when):
     monkeypatch.setattr(mod, "datetime", _DT)
 
 
-def test_should_log_truth_table():
-    import heartbeat_job as h
+def test_should_log_truth_table(hb):
+    h = hb          # 用 fixture：import heartbeat_job 會在 LOGS_DIR 開 log 檔，必須先導到 tmp
     t = datetime(2026, 9, 30, 10, 5)
     assert h.should_log({}, "ok", t)                                                   # 第一筆
     same_day = {"status": "ok", "day": "2026-09-30", "hour": "2026-09-30 09"}
@@ -95,10 +95,10 @@ def test_failure_and_recovery_are_logged_and_a_long_outage_is_hourly(hb, monkeyp
     assert hb._lines[-1][0] == "log" and "外部心跳打卡成功" in hb._lines[-1][1]          # 壞→好要記
 
 
-def test_logs_have_a_size_cap():
+def test_logs_have_a_size_cap(hb):
     for name in ("heartbeat_job.py", "backup_job.py"):
         src = (BACKEND / name).read_text(encoding="utf-8")
         assert "RotatingFileHandler" in src and "maxBytes" in src, name + " 的 log 要有大小上限"
         assert "logging.FileHandler(" not in src and "filename=_LOG_PATH" not in src, name + " 不可退回無上限的 FileHandler"
-    import heartbeat_job as h
+    h = hb
     assert h.LOG_MAX_BYTES <= 10 * 1024 * 1024 and h.LOG_BACKUPS <= 5
