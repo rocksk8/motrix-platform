@@ -12,6 +12,7 @@
 """
 from db import get_db
 from helpers.legal_params import round_half_up
+from modules.case import expense_forms as _EF
 from modules.case import recognition as _rec
 
 
@@ -25,7 +26,7 @@ def gl_events(start, end, *, changed_since=""):
     try:
         extra_rows = conn.execute(
             "SELECT id, quote_no, category, description, total_cost, expense_date, created_at, doc_no, invoice_no, invoice_date, approval_json,"
-            " paid_date, remit_actual, remit_fee, remit_review FROM case_extra_expenses WHERE status='已核准' ORDER BY id").fetchall()
+            " paid_date, remit_actual, remit_fee, remit_review FROM case_extra_expenses WHERE status='已核准' AND " + _EF.payable_sql() + " ORDER BY id").fetchall()
         mat_accrual = _rec.material_entries(conn, "accrual")
         mat_cash = _rec.material_entries(conn, "cash")
     finally:

@@ -32,17 +32,19 @@
 """
 import json
 from datetime import datetime
-from typing import List
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Body, File, Form, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
+from core.txn import begin_write
 from db import get_db
 from helpers.case_access import deny_case, require_case   # M01-O1：逐案拒絕＝查無（同一個 404）
 from helpers import row_access
 from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供者同一支
 from helpers.auth import user_has_module
 from modules.case.recognition import normalize_date  # `AC2`
+from modules.case import expense_forms as EF   # 費用單據（A2）：類型／明細金額／data 合併
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 from helpers import (
@@ -96,6 +98,15 @@ class ExtraExpenseIn(BaseModel):
     # payerUsername 有值才做得了「某人代墊多少」這類彙總
     payerUsername: str = ""
     payerName:     str = ""
+    # ── 費用單據（A2，2026-10-01）：kind＝''（舊版案件額外支出，行為不變）或 EF.KINDS；建立後 kind 不可改 ──
+    kind:          str = ""
+    data:          Optional[Any] = None       # 定義欄位值（物件；與既有值合併，None 值＝刪除該鍵）；型別由 EF 驗，不是 pydantic 422
+    lines:         Optional[Any] = None       # 明細列（陣列；金額以後端重算為準）
+    departmentId:  Optional[int] = None
+    payeeType:     str = ""                   # employee／vendor／''
+    payeeName:     str = ""
+    payeeBank:     str = ""                   # 手填快照；銀行資料權威來源是 payroll 銀行資料表（A2-3）
+    payeeAccount:  str = ""
 
 
 def _row_to_dict(r) -> dict:
@@ -144,6 +155,28 @@ def _row_to_dict(r) -> dict:
         "changeStatus":   _col(r, "change_status", ""),
         "change":         _jcol(r, "change_json"),
         "changeApproval": _jcol(r, "change_approval_json"),
+        # 費用單據（A2；migration 0003）。舊列＝kind ''、其餘空值
+        "kind":          _col(r, "kind", "") or "",
+        "docCode":       _col(r, "doc_code", "") or "",
+        "data":          _jcol(r, "data_json"),
+        "lines":         _jlist(r, "lines_json"),
+        "defVersion":    int(_col(r, "def_version", 0) or 0),
+        "departmentId":  _col(r, "department_id", None),
+        "payeeType":     _col(r, "payee_type", "") or "",
+        "payeeName":     _col(r, "payee_name", "") or "",
+        "payeeBank":     _col(r, "payee_bank", "") or "",
+        "payeeAccount":  _col(r, "payee_account", "") or "",
+        "payTerms":      _col(r, "pay_terms", "") or "",
+        "remitDate":     _col(r, "remit_date", "") or "",
+        "payMethod":     _col(r, "pay_method", "") or "",
+        "payAccountCode": _col(r, "pay_account_code", "") or "",
+        "paidBy":        _col(r, "paid_by", "") or "",
+        "pretax":        float(_col(r, "pretax", 0) or 0),
+        "tax":           float(_col(r, "tax", 0) or 0),
+        "currency":      _col(r, "currency", "TWD") or "TWD",
+        "voidReason":    _col(r, "void_reason", "") or "",
+        "voidedBy":      _col(r, "voided_by", "") or "",
+        "voidedAt":      _col(r, "voided_at", "") or "",
     }
 
 
@@ -153,6 +186,14 @@ def _col(r, name, default=None):
         return r[name]
     except (IndexError, KeyError):
         return default
+
+
+def _jlist(r, name) -> list:
+    try:
+        v = json.loads(_col(r, name) or "[]")
+        return v if isinstance(v, list) else []
+    except Exception:
+        return []
 
 
 def _jcol(r, name) -> dict:
@@ -234,8 +275,14 @@ def _validate(body: ExtraExpenseIn):
         raise HTTPException(400, f"類別必須是：{'／'.join(CATEGORIES)}")
     if float(body.qty or 0) < 0 or float(body.unitCost or 0) < 0:
         raise HTTPException(400, "數量與單位成本不能為負")
-    if not (body.description or "").strip():
+    if not (body.description or "").strip() and not (body.kind or "").strip():
         raise HTTPException(400, "請填寫品項說明")
+    EF.check_kind(body.kind)
+    if body.payeeType not in ("", "employee", "vendor"):
+        raise HTTPException(400, "收款人類型只能是 employee／vendor")
+    for _k in ("payeeName", "payeeBank", "payeeAccount"):
+        if len(getattr(body, _k) or "") > EF.MAX_TEXT:
+            raise HTTPException(400, "%s 太長（上限 %d 字）" % (_k, EF.MAX_TEXT))
 
 
 @router.get("/api/quotations/{quote_no}/extra-expenses")
@@ -303,26 +350,38 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
     try:
         _guard_case(conn, quote_no, user)
         now = datetime.now().isoformat(timespec="seconds")
-        total = _recalc(body)
+        kind = EF.check_kind(body.kind)
+        if kind:
+            begin_write(conn)                                   # 配單號＋寫入要在同一把寫鎖裡
+            lines, total = EF.normalize_lines(body.lines)
+            data = EF.normalize_data(body.data)
+            doc_code = EF.next_doc_code(conn, kind, now[:10])
+            desc = (body.description or "").strip() or next((l.get("summary") for l in lines if l.get("summary")), "") or "（%s）" % doc_code
+        else:
+            lines, total, data, doc_code = [], _recalc(body), {}, ""
+            desc = (body.description or "").strip()
         display = user.get("display_name") or user["username"]
         cur = conn.execute(
             "INSERT INTO case_extra_expenses "
             "(quote_no, category, description, qty, unit, unit_cost, total_cost, note, "
             " expense_date, doc_no, files_json, created_by, created_by_name, created_by_inferred, "
-            " payer_username, payer_name, created_at, updated_at, updated_by_name, status, approval_json) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?,?,0,?,?,?,?,?,'草稿','{}')",
-            (quote_no, body.category or "其他", (body.description or "").strip(),
+            " payer_username, payer_name, created_at, updated_at, updated_by_name, status, approval_json,"
+            " kind, doc_code, data_json, lines_json, department_id, payee_type, payee_name, payee_bank, payee_account) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?,?,0,?,?,?,?,?,'草稿','{}',?,?,?,?,?,?,?,?,?)",
+            (quote_no, body.category or "其他", desc,
              float(body.qty or 0), (body.unit or "").strip(), float(body.unitCost or 0), total,
              (body.note or "").strip(), (body.expenseDate or "").strip(), (body.docNo or "").strip(),
              user["username"], display,
              (body.payerUsername or "").strip(), (body.payerName or "").strip(),
-             now, now, display),
+             now, now, display,
+             kind, doc_code, json.dumps(data, ensure_ascii=False), EF.dumps_lines(lines), EF.department_of(data, body.departmentId),
+             body.payeeType, (body.payeeName or "").strip(), (body.payeeBank or "").strip(), (body.payeeAccount or "").strip()),
         )
         conn.commit()
         exp_id = cur.lastrowid
         _audit(_tok(authorization), "extra_expense.create", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 新增額外支出「{(body.description or '').strip()}」 NT$ {total:,.0f}")
-        return {"ok": True, "id": exp_id, "status": "草稿", "totalCost": total}
+        return {"ok": True, "id": exp_id, "status": "草稿", "totalCost": total, "docCode": doc_code, "kind": kind}
     finally:
         conn.close()
 
@@ -344,17 +403,34 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
             raise HTTPException(403, "只有填寫人本人或管理員可以修改這筆額外支出")
 
         now = datetime.now().isoformat(timespec="seconds")
-        total = _recalc(body)
+        row_kind = _col(row, "kind", "") or ""
+        if (body.kind or "") != row_kind and (body.kind or "") != "":
+            raise HTTPException(400, "單據類型建立後不可更改")
+        if row_kind:
+            begin_write(conn)
+            lines, total = EF.normalize_lines(body.lines if body.lines is not None else _jlist(row, "lines_json"))
+            data = EF.normalize_data(body.data, _jcol(row, "data_json"))       # 與既有值合併：沒送的鍵不會被丟掉
+            desc = (body.description or "").strip() or row["description"]
+        else:
+            lines, total, data, desc = _jlist(row, "lines_json"), _recalc(body), _jcol(row, "data_json"), (body.description or "").strip()
         conn.execute(
             "UPDATE case_extra_expenses SET category=?, description=?, qty=?, unit=?, "
             " unit_cost=?, total_cost=?, note=?, expense_date=?, doc_no=?, "
-            " payer_username=?, payer_name=?, updated_at=?, updated_by_name=? "
+            " payer_username=?, payer_name=?, updated_at=?, updated_by_name=?, "
+            " data_json=?, lines_json=?, department_id=?, payee_type=?, payee_name=?, payee_bank=?, payee_account=? "
             "WHERE id=? AND quote_no=?",
-            (body.category or "其他", (body.description or "").strip(), float(body.qty or 0),
+            (body.category or "其他", desc, float(body.qty or 0),
              (body.unit or "").strip(), float(body.unitCost or 0), total,
              (body.note or "").strip(), (body.expenseDate or "").strip(), (body.docNo or "").strip(),
              (body.payerUsername or "").strip(), (body.payerName or "").strip(),
-             now, user.get("display_name") or user["username"], exp_id, quote_no),
+             now, user.get("display_name") or user["username"],
+             json.dumps(data, ensure_ascii=False), EF.dumps_lines(lines),
+             EF.department_of(data, body.departmentId) if row_kind else _col(row, "department_id", None),
+             body.payeeType if row_kind else (_col(row, "payee_type", "") or ""),
+             (body.payeeName or "").strip() if row_kind else (_col(row, "payee_name", "") or ""),
+             (body.payeeBank or "").strip() if row_kind else (_col(row, "payee_bank", "") or ""),
+             (body.payeeAccount or "").strip() if row_kind else (_col(row, "payee_account", "") or ""),
+             exp_id, quote_no),
         )
         conn.commit()
         _audit(_tok(authorization), "extra_expense.update", *_audit_target(quote_no, exp_id),
@@ -859,15 +935,26 @@ def _change_of(row) -> dict:
     return _jcol(row, "change_json")
 
 
-def _proposal_from(body: ExtraExpenseIn, keep_files: list) -> dict:
-    """把送進來的欄位組成提議內容。金額一律後端算（同 `_recalc()` 的理由）。"""
-    return {
+def _proposal_from(body: ExtraExpenseIn, keep_files: list, row=None) -> dict:
+    """把送進來的欄位組成提議內容。金額一律後端算（同 `_recalc()` 的理由）。
+
+    費用單據（kind≠''）：明細／data／部門／收款人也進提議（否則已核准後的變更申請會**靜默丟掉**這些欄位）；
+    金額＝Σ 明細（後端重算）。舊版列（kind=''）提議不帶這些鍵 ⇒ 套用時不動它們。"""
+    extra = {}
+    if row is not None and (_col(row, "kind", "") or ""):
+        lines, total = EF.normalize_lines(body.lines if body.lines is not None else _jlist(row, "lines_json"))
+        data = EF.normalize_data(body.data, _jcol(row, "data_json"))
+        extra = {"lines": lines, "data": data, "departmentId": EF.department_of(data, body.departmentId),
+                 "payeeType": body.payeeType, "payeeName": (body.payeeName or "").strip(),
+                 "payeeBank": (body.payeeBank or "").strip(), "payeeAccount": (body.payeeAccount or "").strip(),
+                 "totalFromLines": total}
+    return {**extra,
         "category":      body.category or "其他",
-        "description":   (body.description or "").strip(),
+        "description":   (body.description or "").strip() or (row["description"] if extra else ""),
         "qty":           float(body.qty or 0),
         "unit":          (body.unit or "").strip(),
         "unitCost":      float(body.unitCost or 0),
-        "totalCost":     _recalc(body),
+        "totalCost":     extra["totalFromLines"] if extra else _recalc(body),
         "note":          (body.note or "").strip(),
         "expenseDate":   (body.expenseDate or "").strip(),
         "docNo":         (body.docNo or "").strip(),
@@ -903,6 +990,9 @@ def _apply_change(conn, row, change: dict, actor_display: str, now: str) -> floa
     exp_id, quote_no = row["id"], row["quote_no"]
     total = round_half_up(max(0.0, float(change.get("qty") or 0)) *
                           max(0.0, float(change.get("unitCost") or 0)), 100) / 100
+    _has_lines = "lines" in change                      # 費用單據的提議才有；舊版提議沒有 ⇒ 不動明細／data／收款人
+    if _has_lines:
+        clean_lines, total = EF.normalize_lines(change.get("lines"))          # 金額以明細後端重算為準，不信提議裡存的 totalCost
     merged_files = _files_of(row) + (change.get("addFiles") or [])
 
     appr = _jcol(row, "approval_json")
@@ -913,12 +1003,18 @@ def _apply_change(conn, row, change: dict, actor_display: str, now: str) -> floa
                  "qty": row["qty"], "unitCost": row["unit_cost"],
                  "category": row["category"], "expenseDate": row["expense_date"],
                  "docNo": row["doc_no"], "note": row["note"],
-                 "payerName": row["payer_name"]},
+                 "payerName": row["payer_name"],
+                 **({"lines": _jlist(row, "lines_json"), "data": _jcol(row, "data_json"),
+                     "payeeName": _col(row, "payee_name", ""), "departmentId": _col(row, "department_id", None)}
+                    if _has_lines else {})},
         "to":   {"description": change.get("description"), "totalCost": total,
                  "qty": change.get("qty"), "unitCost": change.get("unitCost"),
                  "category": change.get("category"), "expenseDate": change.get("expenseDate"),
                  "docNo": change.get("docNo"), "note": change.get("note"),
-                 "payerName": change.get("payerName")},
+                 "payerName": change.get("payerName"),
+                 **({"lines": clean_lines, "data": change.get("data"),
+                     "payeeName": change.get("payeeName"), "departmentId": change.get("departmentId")}
+                    if _has_lines else {})},
         "addedFiles": [f.get("filename") for f in (change.get("addFiles") or [])],
     })
 
@@ -936,6 +1032,13 @@ def _apply_change(conn, row, change: dict, actor_display: str, now: str) -> floa
          json.dumps(merged_files, ensure_ascii=False), now, actor_display,
          json.dumps(appr, ensure_ascii=False), exp_id, quote_no),
     )
+    if _has_lines:                                      # 費用單據：明細／data／部門／收款人一併覆寫（未知鍵原樣保留）
+        conn.execute(
+            "UPDATE case_extra_expenses SET lines_json=?, data_json=?, department_id=?, "
+            " payee_type=?, payee_name=?, payee_bank=?, payee_account=? WHERE id=? AND quote_no=?",
+            (EF.dumps_lines(clean_lines), json.dumps(EF.normalize_data(change.get("data"), {}), ensure_ascii=False),
+             change.get("departmentId"), change.get("payeeType") or "", change.get("payeeName") or "",
+             change.get("payeeBank") or "", change.get("payeeAccount") or "", exp_id, quote_no))
     # MONEY-FLOWS §9 L11：**已付款**的額外支出經變更申請改了金額 ⇒ 實付與新應付不一致，必須重走出納的差額審核，
     # 不可以讓已付款金額被悄悄改掉（原本不回審核，E11b 用新 total／舊 remit_actual 產生差額行）。
     # 做法＝沿用既有差額審核：`remit_review='pending'`；核可／退回都在出納頁（核可 ⇒ 報表不變、總帳下次執行才出 E11b；
@@ -970,7 +1073,7 @@ def upsert_change_request(quote_no: str, exp_id: int, body: ExtraExpenseIn = Bod
             raise HTTPException(409, f"已有一筆變更申請在「{cs}」，請先完成或撤銷它")
 
         # 已駁回後再修改：沿用同一批待核准附件，不要讓使用者重傳一次
-        proposal = _proposal_from(body, (_change_of(row).get("addFiles") or []))
+        proposal = _proposal_from(body, (_change_of(row).get("addFiles") or []), row)
         now = datetime.now().isoformat(timespec="seconds")
         conn.execute(
             "UPDATE case_extra_expenses SET change_status='草稿', change_json=?, "

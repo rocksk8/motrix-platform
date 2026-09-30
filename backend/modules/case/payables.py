@@ -15,6 +15,7 @@ import json
 import math
 from datetime import datetime
 
+from modules.case import expense_forms as _EF
 from modules.case.recognition import _approved_at
 
 SOURCE_LABEL = "案件額外支出（請款）"
@@ -42,7 +43,10 @@ def _item(r):
         "quoteNo": r["quote_no"] or "", "customerName": _col(r, "customer_name") or "", "projectName": _col(r, "project_name") or "",
         "title": "%s｜%s" % (r["category"] or "其他", r["description"] or ""),
         "amount": float(r["total_cost"] or 0),
-        "payee": r["payer_name"] or r["created_by_name"] or "", "requestedBy": r["created_by_name"] or "",
+        "payee": _col(r, "payee_name") or r["payer_name"] or r["created_by_name"] or "", "requestedBy": r["created_by_name"] or "",
+        # 費用單據（A2）：類型、單號、收款人類型、付款條件／匯款日（採購單由出納核准後填）；舊列＝kind ''
+        "kind": _col(r, "kind") or "", "docCode": _col(r, "doc_code") or "", "payeeType": _col(r, "payee_type") or "",
+        "payTerms": _col(r, "pay_terms") or "", "remitDate": _col(r, "remit_date") or "",
         "expenseDate": (r["expense_date"] or "")[:10], "approvedAt": _approved_at(r["approval_json"]) or "",
         "invoiceDate": (_col(r, "invoice_date") or "")[:10], "invoiceNo": _col(r, "invoice_no") or "",
         "invoiceFiles": sum(1 for f in files if isinstance(f, dict) and f.get("kind") == "invoice"),
@@ -58,7 +62,7 @@ class _Payables:
         rows = conn.execute(
             "SELECT e.*, q.customer_name, q.project_name FROM case_extra_expenses e"
             " LEFT JOIN quotations q ON q.quote_no = e.quote_no"
-            " WHERE e.status = '已核准' AND COALESCE(e.paid_date, '') = '' ORDER BY e.id").fetchall()
+            " WHERE e.status = '已核准' AND COALESCE(e.paid_date, '') = '' AND " + _EF.payable_sql("e") + " ORDER BY e.id").fetchall()
         return [_item(r) for r in rows]
 
     @staticmethod
@@ -71,6 +75,7 @@ class _Payables:
                  "fee": float(r["remit_fee"] or 0), "paidAt": (r["paid_date"] or "")[:10], "review": r["remit_review"] or ""}
                 for r in conn.execute(
                     "SELECT * FROM case_extra_expenses WHERE status='已核准' AND substr(paid_date, 1, 10) BETWEEN ? AND ?"
+                    " AND " + _EF.payable_sql() +
                     " ORDER BY paid_date, id", (start, end)).fetchall()]
 
     @staticmethod

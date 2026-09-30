@@ -264,7 +264,8 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
     "mod:case/api/material_orders",
-    "mod:case/api/quotations"
+    "mod:case/api/quotations",
+    "mod:case/expense_forms"
    ],
    "tables": [
     "case_action_items",
