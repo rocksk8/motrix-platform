@@ -153,7 +153,7 @@ def test_an_own_style_autostart_passes_own_and_fails_sale(tmp_path):
     (lambda t: t + "set MOTRIX_TENDER_RADAR=1\n", "autostart 開關"),
     (lambda t: t.replace('cd /d "%~dp0"', 'cd /d "C:\srv\erp\backend"'), "autostart 路徑"),
     (lambda t: t.replace('cd /d "%~dp0"', "rem no cd"), "autostart 路徑"),
-    (lambda t: t + 'echo C:\Users\someone\Desktop\erp\n', "autostart 路徑"),
+    (lambda t: t + 'echo C:' + chr(92) + 'Users' + chr(92) + 'someone' + chr(92) + 'Desktop' + chr(10), "autostart 路徑"),
 ])
 def test_sale_check_reverse_controls(tmp_path, mutate, expect):
     assert expect in _autostart_gates(tmp_path, "sale", mutate(TEMPLATE.read_text(encoding="utf-8")))

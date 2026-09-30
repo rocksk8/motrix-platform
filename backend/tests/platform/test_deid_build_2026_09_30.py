@@ -99,6 +99,7 @@ def _payload(tmp_path, good=True):
     d = {"v": 1, "source_blob": OP.PINNED_BLOB, "m008": {"correct": "a", "email": "b"}, "m106": {"company_name_en": "c"}}
     if good:
         d["auth"] = {"source_blob": OP.PINNED_AUTH_BLOB, "legacy_weak_passwords": ["Fict-x-1"]}
+        d["network"] = {"source_blob": OP.PINNED_NET_BLOB, "server_ip": "192.0.2.9"}
     p = tmp_path / "own_payload.json"
     p.write_text(json.dumps(d), encoding="utf-8")
     return p
@@ -151,7 +152,7 @@ def test_sale_happy_path_prunes_projects_verifies_rebuild_and_scans_clean(tmp_pa
     repo, commit, pkg, kw = _sale(tmp_path)
     blk = B.apply(pkg, "sale", commit, "", repo, **kw)
     assert blk["audience"] == "sale" and blk["hits"] == 0 and blk["canary"] is True and blk["own_payload"] is False
-    assert blk["prune"]["removed"] >= 3 and blk["prune"]["manifest_projected"] == 2 and len(blk["prune"]["replaced"]) == 3
+    assert blk["prune"]["removed"] >= 3 and blk["prune"]["manifest_projected"] == 2 and len(blk["prune"]["replaced"]) == 4
     assert all(blk["projection_inputs"][k] for k in ("sale_prune_blob", "overlay_blob"))
     assert blk["projection_inputs"]["manifest_baseline"] == P.load_config()["manifest_baseline"]
     assert str(tmp_path) not in json.dumps(blk, ensure_ascii=False), "sale 的 deid 區塊不可含開發機路徑"

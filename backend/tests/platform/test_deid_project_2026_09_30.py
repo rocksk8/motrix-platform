@@ -214,7 +214,7 @@ def sale_tree(tmp_path_factory):
 def test_rebuilt_sale_package_passes_verify_and_has_no_company_literals_in_upgrade(sale_tree):
     root, rep = sale_tree
     assert P.verify_tree(root, CFG) == [], P.verify_tree(root, CFG)
-    assert rep["removed"] > 100 and len(rep["cuts"]) == len(CFG["cuts"]) and rep["manifest_projected"] > 100 and len(rep["replaced"]) == 3
+    assert rep["removed"] > 100 and len(rep["cuts"]) == len(CFG["cuts"]) and rep["manifest_projected"] > 100 and len(rep["replaced"]) == 4
     assert not (root / "product" / "sale_docs").exists(), "客戶版文件的來源目錄不可留在 sale 包"
     assert "%~dp0" in (root / "backend" / "autostart.bat").read_text(encoding="utf-8") and not (root / "product" / "sale_files").exists()
     assert [h for h in S.scan(root) if h.path == "backend/autostart.bat"] == []

@@ -110,7 +110,8 @@ def test_extract_auth_rejects_a_source_that_lost_the_generic_entries_or_the_tupl
 
 def test_verify_payload_requires_the_auth_section():
     ok = {"v": 1, "source_blob": OP.PINNED_BLOB, "m008": {"correct": "a", "email": "b"}, "m106": {"company_name_en": "c"},
-          "auth": {"source_blob": OP.PINNED_AUTH_BLOB, "legacy_weak_passwords": ["x1"]}}
+          "auth": {"source_blob": OP.PINNED_AUTH_BLOB, "legacy_weak_passwords": ["x1"]},
+          "network": {"source_blob": OP.PINNED_NET_BLOB, "server_ip": "192.0.2.9"}}
     assert OP.verify_payload(ok) == []
     no_auth = {k: v for k, v in ok.items() if k != "auth"}
     assert any("auth" in p for p in OP.verify_payload(no_auth))
