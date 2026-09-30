@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## 1.1.14 — 2026-10-01（列車 28 整合：獎金更正單頁防重複初始化）
+- 內部：`bonus-corrections.html` 補 `_initDone` 守衛（Alpine 會自動呼叫 `init()`，`<body>` 又寫 `x-init`，不守衛會重複打 API）；行為不變。
+
 ## 1.1.13 — 2026-09-30（暫用號，列車取號；wip/w2-bonus-correction：獎金更正單）
 沖轉改用總帳 `voucher.draft(reverses_voucher_id=…)`（連續更正時沖轉前一次的重開傳票；總帳拒絕時沖轉與重開都不開、畫面寫原因）；追回＝「其他應收款」傳票（設定鍵 bonus_corr_clawback_receivable_code，預設 1213），標「追回處理方式待確認」。
 新增獎金更正單（已發放獎金的事後更正）：migration 0002（bonus_corrections／bonus_correction_log）、/api/bonus/corrections、bonus-corrections.html、簽核佇列項目、IP-9 expense.entries（bonus_correction）、IP-8 補發列；核准開沖轉＋重開應付傳票草稿、出納補發。
