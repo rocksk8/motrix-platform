@@ -35,10 +35,10 @@ def _require_write(authorization):
     return user
 
 
-def _require_superadmin(authorization):
+def _require_superadmin(authorization, what="鎖定或解鎖期間"):
     user = _require_user(authorization)
     if user.get("role") != "superadmin":
-        raise HTTPException(403, "只有 superadmin 可以鎖定或解鎖期間。")
+        raise HTTPException(403, "只有最高管理者（會計主管）可以%s。" % what)
     return user
 
 
@@ -213,7 +213,7 @@ def opening_create(body: dict = Body(...), authorization: str = Header(None)):
 
 @router.post("/opening/{batch_id}/undo")
 def opening_undo(batch_id: int, authorization: str = Header(None)):
-    user = _require_write(authorization)
+    user = _require_superadmin(authorization, "撤銷期初批次")          # B：期初撤銷只有最高管理者直接做（一般人走申請）
     conn = get_db()
     try:
         _run(conn, _opening.undo_batch, batch_id, _who(user))

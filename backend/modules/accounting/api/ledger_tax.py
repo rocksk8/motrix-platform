@@ -152,6 +152,8 @@ def withholding_remit(body: dict = Body(...), authorization: str = Header(None))
 @router.post("/withholding/unremit")
 def withholding_unremit(body: dict = Body(...), authorization: str = Header(None)):
     user = _require_tax_write(authorization)
+    if user.get("role") != "superadmin":              # B：取消繳庫登記只有最高管理者（登記繳庫本身不需簽核）
+        raise HTTPException(403, "只有最高管理者（會計主管）可以取消扣繳繳庫登記。")
     ids = (body or {}).get("ids")
     reason = str((body or {}).get("reason") or "")
     conn = get_db()
