@@ -96,7 +96,41 @@ def canonical_hash(ev):
     return hashlib.sha256(json.dumps(core, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def collect(start, end, changed_since=""):
+def apply_annotations(conn, ev):
+    """會計在 `gl_source_annotations` 補登的來源憑證資料覆寫來源值（不改來源模組）。目前認得：field=input_tax（進項稅額整數）。
+    只作用在同時有『借 INPUT_TAX 或無稅額』與『貸 AP』的事件（E04）；補登值不是非負整數 ⇒ 忽略並在 meta 記 annotation_ignored。"""
+    row = conn.execute("SELECT value FROM gl_source_annotations WHERE source_type=? AND source_key=? AND field='input_tax'",
+                       (ev.get("source_type"), ev.get("source_key"))).fetchone()
+    if row is None:
+        return ev
+    lines = ev.get("lines") or []
+    ap = [ln for ln in lines if ln.get("role") == "AP" and ln.get("side") == "C"]
+    if len(ap) != 1:
+        return ev
+    try:
+        tax = int(str(row[0]).strip())
+        if tax < 0:
+            raise ValueError
+    except ValueError:
+        ev.setdefault("meta", {})["annotation_ignored"] = "input_tax=%r" % row[0]
+        return ev
+    old_tax = sum(ln["amount"] for ln in lines if ln.get("role") == "INPUT_TAX")
+    keep = [ln for ln in lines if ln.get("role") != "INPUT_TAX"]
+    code = ev.get("tax_code") or "IN-5"
+    if tax:
+        keep.insert(len(keep) - 1, {"role": "INPUT_TAX", "side": "D", "amount": tax, "memo": "進項稅額（會計補登）", "tax_code": code})
+    for ln in keep:
+        if ln is ap[0]:
+            ln["amount"] = ln["amount"] - old_tax + tax
+    ev["lines"] = keep
+    ev["tax_code"] = code if tax else "IN-EX"
+    m = ev.setdefault("meta", {})
+    m["tax_estimated"] = False
+    m["tax_annotated"] = True
+    return ev
+
+
+def collect(start, end, changed_since="", conn=None):
     """向所有提供者收集事件。回 `{"events": [...已驗證＋content_hash], "invalid": [{"source","event","problems"}],
     "notices": [...], "sources": {模組: "ok"|"not_connected"|"not_installed"|"error"}}`。
 
@@ -111,7 +145,7 @@ def collect(start, end, changed_since=""):
         if fn is None:
             if registry.is_loaded(src):
                 out["sources"][src] = "not_connected"
-                out["notices"].append("%s 尚未接入總帳（未提供 %s）：不含%s。" % (src, CAPABILITY, label))
+                out["notices"].append("%s 尚未接入總帳事件契約（未提供事件提供者）：不含%s。" % (src, label))
             else:
                 out["sources"][src] = "not_installed"
                 out["notices"].append("%s 模組未安裝：不含%s。" % (src, label))
@@ -135,6 +169,8 @@ def collect(start, end, changed_since=""):
                 continue
             seen.add(key)
             e = dict(ev)
+            if conn is not None:
+                e = apply_annotations(conn, e)
             e["source_module"] = src
             e["mode"] = e.get("mode", "snapshot")
             e["content_hash"] = canonical_hash(e)

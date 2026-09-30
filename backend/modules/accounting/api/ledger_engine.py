@@ -33,7 +33,11 @@ def events_preview(start: str, end: str, authorization: str = Header(None)):
         raise HTTPException(400, "日期格式要是 YYYY-MM-DD。")
     if s > e:
         raise HTTPException(400, "起日不可晚於迄日。")
-    res = _contract.collect(s.isoformat(), e.isoformat())
+    conn = get_db()
+    try:
+        res = _contract.collect(s.isoformat(), e.isoformat(), conn=conn)
+    finally:
+        conn.close()
     return {"contract_version": _contract.CONTRACT_VERSION, "count": len(res["events"]), "sources": res["sources"],
             "notices": res["notices"], "invalid": res["invalid"][:50], "invalid_count": len(res["invalid"]),
             "events": res["events"][:200]}

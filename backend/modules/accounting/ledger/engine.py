@@ -228,7 +228,7 @@ def run(conn, start, end, user):
     started = _now()
     _roles.ensure_meta(conn)
     _roles.ensure_default_roles(conn)
-    res = _contract.collect(start, end)
+    res = _contract.collect(start, end, conn=conn)
     stats = {"scanned": 0, "created": 0, "drift": 0, "superseded": 0, "reversals": 0, "blocked": 0, "orphans": 0}
     sync_statuses(conn)
     seen = set()

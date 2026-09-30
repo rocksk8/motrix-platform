@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.20 — 2026-09-30（暫用號，列車取號；W4 總帳 C2）
+- 新增提供者 `gl.events`（IP-GL1）：承攬商發票（E04，依發票日、稅額依派工稅率估算並標 tax_estimated，會計可在總帳補登實際稅額）、匯款（E05，含手續費；實付≠應付且已核可才入帳，待審核不產生並 notice）、個人點工未關聯勞報單（E05b，標未扣繳）。唯讀、不寫資料、不改欄位。
+
 ## 1.0.19 — 2026-09-30（暫用號，列車取號；N1 承攬商派工，接在 W1 之後）
 - N1 稽核補修：刪除申請進簽核佇列（`approval.queue_items` 名稱 `subcontract_dispatch_file`、`approval.detail` `dispatch_file_delete`；佇列頁可直接核可／退回）；申請人不能核可／退回自己的申請；核可端點簽核人防呆
 - W1 稽核補修：`paid-toggle` 標記已匯款不帶 `paid_at` ⇒ 400（不再默認今天）；待審核差額（實付≠應付）標記匯款者不能自己核可／退回（403）；手續費 `expense.entries` 帶 `pending`；`_voucher_public` 帶 remitReview

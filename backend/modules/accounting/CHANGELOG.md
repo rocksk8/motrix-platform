@@ -5,6 +5,7 @@
 - **行為變化（請寫進使用者說明）**：①已結帳／鎖定期間**不可過帳**、**不可作廢已過帳傳票**（要更正請開沖轉傳票，或由具權限者先「重開期間」並填理由）；之前已過帳傳票可隨時作廢重開。②已過帳傳票的日期與分錄在資料庫層也不可修改。未建立任何期間資料的部署，行為與舊版相同（沒有期間＝全部開放）。
 - 自有 migration v1（modules/accounting/migrations/0001_ledger_base.py，**上線後凍結**）：一次涵蓋後續各批會用到的 31 張表（gl_*、fa_*）、`voucher_lines`（case_no／party_key／tax_code／doc_no）與 `vouchers_all`（kind／reverses_no／is_backfill／origin／gl_event_id）新欄位、15 個觸發器；全部只新增、冪等。之後若欄位不夠一律新增下一支 migration，不改 0001。
 - 提供者 `voucher.draft`（IP-2）加**可選**參數 `origin`（契約仍是版本 1，舊呼叫端不受影響）；新增 `gl.events` 契約 v1 的收集與驗證（`ledger/contract.py`、`GET /api/ledger/events/preview`，目前無來源提供者，回應明說「未安裝／尚未接入」，不產生傳票）。
+- 分錄引擎 C2：事件收集可套用會計在 `gl_source_annotations` 補登的來源憑證資料（目前認得 field=input_tax，覆寫承攬商發票的估算進項稅額；補登值壞掉則忽略並在事件 meta 標記）；`GET /api/ledger/events/preview` 與引擎共用；接入 subcontract 提供者（E04／E05／E05b）。
 - 年度結轉與決算（B5）：產生兩張結轉傳票草稿（損益結轉入 3353、3353 轉 3351；kind=closing，日期＝年度末日，走一般簽核過帳）；決算要「1～11 期已結帳＋結轉傳票已過帳＋損益科目歸零＋四大表對帳全過」才成立，並寫入凍結快照；年度重開（最高管理者＋理由）把期間、結轉傳票復原並留稽核軌跡；四大表 Excel 匯出（決算後匯出凍結版）。財務報表新增權益變動表、現金流量表（間接法）。
 - `api/vouchers.py` 純搬移拆檔（voucher_common／voucher_summary／voucher_providers；行為不變，名稱重新匯入）。
 - 權限：讀＝cashier／finance；結帳、重開、期初、科目設定＝finance；鎖定／解鎖、功能旗標＝superadmin（未新增權限鍵）。
