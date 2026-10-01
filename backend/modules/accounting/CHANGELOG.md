@@ -5,6 +5,9 @@
 - 修正：有比較期時，資產／負債／權益／負債及權益**總計列與小計列的比較欄是空白**（只有科目列有數字）；現在補上（後端本來就回 `compare.totals／sections`，純前端修正）。匯出 CSV 在有比較期時多一欄比較數字。
 - 下游效應（R1）：後端、對帳規則與數字不變，只影響預設查詢條件與畫面（進頁面會多打一次含比較期的查詢）。
 
+## (next) — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
+- 附件目錄 P3：`_AccountingCatalog` 加 `search`／`count`（傳票附件；權限＝cashier／finance 模組或最高管理者，不符一筆都不列）。
+
 ## 1.1.46 — 2026-10-01（wip/w4-g1）W4 G1：費用類別 → 科目對應與維度欄位（底層一次預留）
 - migration 0003（加法、可重跑）：`voucher_lines.dim_json`（維度，預設 '{}'）、`gl_dimensions`、`expense_categories`（費用類別清單，代碼發布後不可改）。
 - 新 `ledger/category_map.py`：`apply_category_map`（引擎收集時，比照 `apply_annotations`）——事件行帶 `category` 時：有對應用對應科目；沒對應＝有案件 COST_PROJECT、**無案件 EXP_OTHER（絕不用專案成本）**並記 `meta.category_unmapped`；有 `tax` 且 `doc_type=invoice` 且類別可扣抵 ⇒ 拆進項稅額（1268、IN-5），否則稅額併入費用；沒有 `tax` ⇒ 含稅全額。舊式事件（無 category）完全不變。

@@ -12,6 +12,7 @@
    "core:photos",
    "core:trail",
    "helper:approval_queue",
+   "helper:attachment_search",
    "helper:audit",
    "helper:auth",
    "helper:branding",
@@ -736,6 +737,19 @@
    ],
    "api_prefixes": [
     "/api/lodging"
+   ]
+  },
+"M14": {
+   "key": "filehub",
+   "name": "檔案中心",
+   "units": [
+    "mod:filehub/__init__",
+    "mod:filehub/api",
+    "page:pages/file-center.html"
+   ],
+   "tables": [],
+   "api_prefixes": [
+    "/api/filehub"
    ]
   }
  },

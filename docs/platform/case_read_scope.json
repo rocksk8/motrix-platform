@@ -68,6 +68,12 @@
    "scope": "row_access"
   },
   {
+   "file": "modules/filehub/api.py",
+   "path": "/api/filehub/search",
+   "handler": "search",
+   "scope": "own_rule"
+  },
+  {
    "file": "modules/case/api/expense_form_pdf.py",
    "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/document",
    "handler": "expense_document",

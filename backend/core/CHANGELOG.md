@@ -5,6 +5,11 @@
 ## (next:minor) — 2026-10-01（fix/contractor-bank-mask：承攬商收款帳號遮蔽）
 - L0（新增，向下相容）：`pdf_gen.generate_contractor_voucher_pdf_bytes(voucher_no, mask_bank=True)` 加選填參數 `mask_bank`（預設遮蔽＝fail closed；只有最高管理者下載才傳 False）；`_build_contractor_voucher_html(v, mask_bank=False)`。`routers/approval_queue.py`：非最高管理者的佇列項目與詳情，帳號遮成 `****末四碼`、存簿封面拿掉。
 
+## (next) — 2026-10-01（wip/w1-attach-p3-a3：檔案中心／附件目錄 P3）
+- L1（新增）：`helpers/attachment_search`（`normalize_crit／make_item／matches／finish／count_by_type／case_names／CRIT_KEYS／ITEM_KEYS`）——`attachments.catalog` 提供者的 `search`／`count` 共用件（項目鍵固定、沒有 path；看不到的不列也不回個數）；`preview 元件` 新增 `MotrixFilePreview.byAttachmentRef`（前端）。提供者契約 IP-105 加 `search`／`count`（同契約版次只增）。
+- L1（新增）：`attachment_search.owned(entry, 資料夾, 單據鍵)`——搜尋與各提供者 `open()` 共用的「路徑綁單據」判斷（`upload_path_key`）。
+- 工作日誌照片提供者（`routers/system.py::_WorkLogCatalog`）補 `search`／`count`（權限與路徑綁日誌同 `open()`；GPS／浮水印不外帶）。
+
 ## (next) — 2026-10-01（wip/w1-a2-2：A2-2 費用單據類型定義）
 - L1（新增）頁面：`expense-types.html`（請款類型定義編輯頁，超級管理員；`l1_pages.json`）＋選單項「請款類型」（`menu_l1.json`，system 群組、perm＝superadmin）。編輯頁列出程式預設的四個類型（定義庫沒有列時以目前生效的預設為起點），改了走既有 `/api/definitions/expense_type` 草稿→驗證→發布；單據仍釘在自己的 `def_version`。
 - L1（新增）：`helpers.expense_types`（費用單據類型定義 `expense_type`：`validate_expense_type／get_type／list_types／cashier_field_keys／normalize_lines／validate_values`，明細金額唯一實作）＋四個預設定義（purchase_req／purchase_order／travel／petty_cash，欄位為草稿待使用者確認）；路由 `GET /api/expense-types`、`GET /api/expense-types/{code}`；`POST /api/definitions/{kind}/{key}/validate` 改用 `D.kinds()`（登記的種類不再 400）。

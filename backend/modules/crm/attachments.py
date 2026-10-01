@@ -32,3 +32,43 @@ class _CrmCatalog:
         if entry is None or upload_path_key(entry, "dev_logs") != str(row["case_id"]):
             return None                                          # 路徑不屬於這個開發案 ⇒ 當作沒有這個檔（W3）
         return opened_upload_file(entry)
+
+    # ── 搜尋（附件目錄 P3）：權限＝open() 同一支 `_DevLogPathAccess.readable`（逐開發案，快取）──
+    @staticmethod
+    def _collect(conn, user, crit):
+        from helpers import attachment_search as S
+        sql = ("SELECT l.id, l.case_id, l.files_json, c.case_name, c.customer_name FROM dev_logs l "
+               "JOIN dev_cases c ON c.id = l.case_id WHERE l.files_json LIKE ?")
+        args = ["%\"path\"%"]
+        if crit["quote_no"]:
+            sql += " AND c.converted_quote_no = ?"
+            args.append(crit["quote_no"])
+        ok, items = {}, []
+        for r in conn.execute(sql, args).fetchall():
+            cid = r["case_id"]
+            if cid not in ok:
+                ok[cid] = bool(_DevLogPathAccess.readable(conn, "dev_logs", (str(cid), "-"), user))
+            if not ok[cid]:
+                continue
+            try:
+                files = json.loads(r["files_json"] or "[]") or []
+            except (TypeError, ValueError):
+                continue
+            for f in files:
+                if not S.owned(f, "dev_logs", cid):
+                    continue                                         # 與 open() 同一道：路徑不在這個開發案的資料夾 ⇒ 不列
+                items.append(S.make_item("dev_log", r["id"], "業務開發記錄 #%s" % r["id"], f, quote_no=crit["quote_no"],
+                                         customer=r["customer_name"], project=r["case_name"], link="dev-crm.html?case=%s" % cid))
+        return items
+
+    @staticmethod
+    def search(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.finish(_CrmCatalog._collect(conn, user, c), c)
+
+    @staticmethod
+    def count(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.count_by_type(_CrmCatalog._collect(conn, user, c), c)

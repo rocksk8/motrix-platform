@@ -596,6 +596,8 @@
               <button class="cm-tab" :class="{active: activeTab==='completion'}"
                       @click="activeTab='completion'; loadCompletionNotes(selected.quote_no)">完工單<span class="cm-tab__n" x-show="completionNotes.length > 0" x-text="completionNotes.length"></span></button>
               <button class="cm-tab" :class="{active: activeTab==='feed'}" @click="activeTab='feed'; loadCaseUpdates(selected.quote_no)">動態<span class="cm-tab__n" x-show="caseUpdates.length > 0" x-text="caseUpdates.length"></span></button>
+              <!-- 附件目錄 P3：檔案中心（filehub）在才出現；不在就不顯示頁籤（不是空表）。同一支 /api/filehub/search、固定本案件 -->
+              <button class="cm-tab" x-show="fileCenterOn" data-testid="cm-tab-allfiles" :class="{active: activeTab==='allfiles'}" @click="activeTab='allfiles'">全部附件<span class="cm-tab__n" x-show="caseFilesFor === selected.quote_no && caseFiles.length > 0" x-text="caseFiles.length"></span></button>
               <!-- CU5：收款搬進財務分頁 ⇒ 分頁本身人人看得到（收款以外的財務區塊仍只給 canSeeFinancial） -->
               <button class="cm-tab" :class="{active: activeTab==='fin'}" @click="activeTab='fin'">財務</button>
               <!-- 額外支出（2026-09-11）：從精算頁搬過來，獨立成一個分頁而不是塞進財務
@@ -3107,6 +3109,27 @@
                   </div>
                 </template>
 </fieldset><!-- /CM14b -->
+              </div>
+
+              <div x-show="activeTab==='allfiles'" data-testid="cm-allfiles" style="padding:4px 2px">
+                <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">本案件在全系統的上傳檔案（報價單回簽、動態、收付款發票、材料、額外支出、完工單、出貨單、派工單、開票申請…）。只列出你在原單據頁打得開的檔案。</div>
+                <template x-for="u in caseFilesUnavail" :key="u.category + u.reason">
+                  <div class="cm-note" data-testid="cm-allfiles-unavailable" style="color:#7F1D1D" x-text="u.reason"></div>
+                </template>
+                <div style="font-size:12px;color:#7F1D1D" data-testid="cm-allfiles-err" x-show="caseFilesErr" x-text="caseFilesErr"></div>
+                <div style="padding:14px;color:var(--text-dim)" x-show="caseFilesLoading">載入中…</div>
+                <table class="cm-tbl" style="width:100%;border-collapse:collapse;font-size:13px" x-show="caseFilesFor === selected.quote_no && caseFiles.length">
+                  <thead><tr><th style="text-align:left">檔名</th><th style="text-align:left">類別</th><th style="text-align:left">單號</th><th style="text-align:left">上傳者</th><th style="text-align:left">上傳日</th><th style="text-align:left">大小</th></tr></thead>
+                  <tbody>
+                    <template x-for="(it, i) in caseFiles" :key="it.sourceType + '|' + it.docNo + '|' + it.fileId">
+                      <tr :data-allfiles-row="i" style="cursor:pointer" @click="previewCaseFile(i)">
+                        <td x-text="it.filename"></td><td x-text="it.docLabel.split(' ')[0]"></td><td x-text="it.docLabel"></td>
+                        <td x-text="it.uploadedBy"></td><td x-text="(it.uploadedAt || '').slice(0, 10)"></td><td x-text="MotrixFilePreview.fileSize(it.size)"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <div style="padding:14px;color:var(--text-dim)" data-testid="cm-allfiles-empty" x-show="caseFilesFor === selected.quote_no && !caseFilesLoading && !caseFiles.length && !caseFilesErr">這個案件沒有你看得到的上傳檔案。</div>
               </div>
 
               <div x-show="activeTab==='feed'" class="feed-wrap">

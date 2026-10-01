@@ -663,7 +663,7 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ## IP-105　`attachments.catalog`：附件目錄（各單據模組＋L1 工作日誌 → L1 `GET /api/attachments/open`；多提供者）
 
-2026-09-30 附件目錄 P2（設計 `proposal-attachments-search-preview` §4；使用者：「所有上傳的檔案都要參照出納裡面有預覽的功能」＋分類搜尋）。開檔走一支 L1 端點，權限由**擁有那張單據的模組**判斷；P3 再在同一契約加 `search`／`count`（檔案中心）。**編號暫定（105），列車定號。**與 IP-21 `attachments.for_document`（會計憑證來源政策）分開：範圍不同。
+2026-09-30 附件目錄 P2（設計 `proposal-attachments-search-preview` §4；使用者：「所有上傳的檔案都要參照出納裡面有預覽的功能」＋分類搜尋）。開檔走一支 L1 端點，權限由**擁有那張單據的模組**判斷；P3（2026-09-30）在同一契約加 `search`／`count`（檔案中心 `modules/filehub`）。**編號暫定（105），列車定號。**與 IP-21 `attachments.for_document`（會計憑證來源政策）分開：範圍不同。
 
 | 欄位 | 內容 |
 |---|---|
@@ -675,7 +675,8 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 權限 | **不另寫第二份規則**：多數類別直接用擁有單據已有的判斷（`uploads.path_access` 的 `readable`、IP-21 `for_document` 的 `files`、傳票／勞報單各自端點的閘門）；守門題驗「對每個使用者，`open` 成功 ⇔ `photo-token` 成功」 |
 | 不收 | 待核准暫存檔（`_pending_case_changes`、額外支出變更申請）：未核准不是正式檔案（設計 Q6）；PII（身分證、存簿）；暫存匯入檔；設定圖檔——登記在 `docs/platform/upload_points.json` 的 `excluded` |
 | 對方不在時 | 沒有提供者認領該 type ⇒ 404；P3 搜尋頁回 `unavailable=[{category, reason}]` 明說（屆時補契約） |
-| 契約版本 | 1（2026-09-30；只有 `CATEGORIES`＋`open`，`search`／`count` 留 P3） |
+| 契約版本 | 1（2026-09-30；P2 `CATEGORIES`＋`open`；P3 加 `search`／`count`，同版次只增：舊提供者沒有這兩個方法 ⇒ 檔案中心不列它那一類並在 `unavailable` 明說） |
+| P3 搜尋 | `Obj.search(conn, user, crit) -> [item]`：已套權限、已依條件篩、`uploadedAt` 由新到舊、最多 `crit["take"]` 筆；`Obj.count(conn, user, crit) -> {source_type: n}`（已套權限、不套 `types`）。`crit` 鍵：`q／types／exts／date_from／date_to／uploader／quote_no／doc_no／customer／take`（`helpers.attachment_search.normalize_crit`）。項目鍵固定 `sourceType／docNo／docLabel／quoteNo／customerName／projectName／fileId／filename／ext／size／mime／uploadedBy／uploadedAt／link`（**沒有 path**）。**看不到的不列、也不回個數**（設計 Q3）。共用件 `helpers/attachment_search.py`（篩選、排序、項目形狀）；使用方 `GET /api/filehub/search`（合併、分頁 ≤20 頁、`facets`、`categories`、`unavailable`）與案件頁「全部附件」 |
 | 守門 | `backend/tests/platform/test_upload_points_registered.py`（每個上傳端點必須分類；`catalog` 必須有提供者認領、每個 category 有上傳點餵它、兩兩不重疊；反向控制：合成未登記端點、死列、重疊、沒人認領、沒人餵）；`backend/tests/test_attachments_open_2026_09_30.py`（打得開且位元組相同、看不到＝查無同一句 404、與 photo-token 同答案、根目錄檢查、提供者例外 fail closed、資料壞 400、沒有提供者 404、契約形狀） |
 
 > 🔒 **路徑綁單據（安全審查 W3，train 27）**：`open()` 回的檔案路徑必須在**那張單據自己的資料夾**底下（`helpers.uploads.upload_path_key`：資料夾＋單據鍵比對；收付款／材料類因索引可位移只比案件；工作日誌照片 `projects/worklog_<id>/<日期>/<檔>`）；案件紀錄 PATCH／PUT／POST 只接受資料庫裡本來就有的 `files`／`invoiceFiles`（`quotations._strip_foreign_file_entries`）。緊急開關 `routers/attachments.ATTACHMENTS_OPEN_ENABLED`（False ⇒ 一律 404）。守門：`backend/tests/test_attachments_bind_2026_09_30.py`。

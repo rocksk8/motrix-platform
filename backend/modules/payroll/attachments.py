@@ -44,3 +44,33 @@ class _PayrollCatalog:
             return None
         name = str(meta.get("filename") or os.path.basename(path))
         return OpenedFile(path, name, mimetypes.guess_type(name)[0] or "application/octet-stream", os.path.getsize(path))
+
+    # ── 搜尋（附件目錄 P3）：權限＝open() 同一個閘門（superadmin 或 cashier 模組），不符 ⇒ 一筆都不列（不回個數）──
+    @staticmethod
+    def _collect(conn, user, crit):
+        from helpers import attachment_search as S
+        if user.get("role") != "superadmin" and not user_has_module(user, "cashier"):
+            return []
+        items = []
+        for r in conn.execute("SELECT slip_no, signed_files_json FROM payslips WHERE signed_files_json LIKE ?", ("%\"id\"%",)).fetchall():
+            try:
+                files = json.loads(r["signed_files_json"] or "[]") or []
+            except (TypeError, ValueError):
+                continue
+            for f in files:
+                mime = f.get("mime") or mimetypes.guess_type(str(f.get("filename") or ""))[0] or ""
+                items.append(S.make_item("payslip_signed", r["slip_no"], "勞報單 %s" % r["slip_no"], dict(f, mime=mime),
+                                         link="payslips.html?no=%s" % r["slip_no"]))
+        return items
+
+    @staticmethod
+    def search(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.finish(_PayrollCatalog._collect(conn, user, c), c)
+
+    @staticmethod
+    def count(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.count_by_type(_PayrollCatalog._collect(conn, user, c), c)

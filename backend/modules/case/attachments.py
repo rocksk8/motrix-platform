@@ -19,6 +19,7 @@ M01 搬遷時改寫進 `ModuleSpec.providers`（M01-PLAN，同 CA-O3）。
 看不到 ⇒ raise `AttachmentNotVisible`（取用方：列清單時不列、帶入／預覽 403）。
 """
 import json
+from urllib.parse import quote
 
 from helpers.case_access import case_documents_readable, case_owner_readable, case_page_readable
 from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, files_from_json_column
@@ -76,6 +77,21 @@ _READ_RULE = {"extra_expense": case_owner_readable,
               "material": case_page_readable, "material_invoice": case_page_readable}
 
 
+def _typed_expense_masked(conn, doc_no, user) -> bool:
+    """費用單據（kind≠''）的金額遮蔽（使用者 2026-10-01：只有申請人、簽核人、出納／財務、管理員以上看得到金額）：
+    案件的一般讀者讀不到它的附件（發票／收據影像與檔名就是金額）。舊版額外支出（kind=''）不受影響。
+    開檔（`files`）、路徑存取（`_CasePathAccess`）、搜尋／計數（P3）三處共用這一支，避免「搜得到卻開不了」或反過來。"""
+    try:
+        eid = int(doc_no)
+    except (TypeError, ValueError):
+        return False
+    row = conn.execute("SELECT * FROM case_extra_expenses WHERE id = ?", (eid,)).fetchone()
+    if row is None or not (row["kind"] or ""):
+        return False
+    from modules.case.api import case_extra_expenses as _xe          # 延後載入：避免 import 循環
+    return not _xe._amount_viewer(conn, row, user)
+
+
 def _require_readable(conn, source_type, quote_no, user):
     if not _READ_RULE.get(source_type, case_documents_readable)(conn, quote_no, user):
         raise AttachmentNotVisible()
@@ -112,6 +128,8 @@ class _CaseAttachments:
         if quote_no is None or conn.execute("SELECT 1 FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone() is None:
             return []                                     # 來源不存在（契約：[]）
         _require_readable(conn, source_type, quote_no, user)
+        if source_type == "extra_expense" and _typed_expense_masked(conn, doc_no, user):
+            raise AttachmentNotVisible()                  # 費用單據的附件＝金額：非申請人／簽核人／出納財務／管理員看不到
         return _read(conn, source_type, doc_no)
 
 
@@ -218,6 +236,8 @@ class _CasePathAccess:
             if eid is None or conn.execute("SELECT 1 FROM case_extra_expenses WHERE id = ? AND quote_no = ?",
                                            (eid, quote_no)).fetchone() is None:
                 return False
+            if _typed_expense_masked(conn, eid, user):
+                return False                              # 費用單據的附件＝金額（同 `_CaseAttachments.files`）
         else:
             return False
         return bool(_READ_RULE.get(st, case_documents_readable)(conn, quote_no, user))
@@ -286,6 +306,81 @@ class _CaseCatalog:
         if entry is None or not _path_bound_to_doc(conn, source_type, doc_no, entry):
             return None                                          # 路徑不屬於這張單據 ⇒ 當作沒有這個檔
         return opened_upload_file(entry)
+
+    # ── 搜尋（附件目錄 P3）：權限沿用上面 open() 同一批規則（doc_nos_for_case＝各類 _READ_RULE；完工單＝case_documents_readable）──
+    _LIKE = "%\"path\"%"
+
+    @staticmethod
+    def _candidates(conn, crit):
+        """有檔案的案件單號（SQL 只做「有沒有 path」的粗篩；篩檔名／日期等在 Python）。指定 quote_no ⇒ 只那一案。"""
+        if crit["quote_no"]:
+            return [crit["quote_no"]]
+        like = _CaseCatalog._LIKE
+        qs = set()
+        for sql in ("SELECT quote_no FROM quotations WHERE signed_files_json LIKE ? OR data_json LIKE ?",
+                    "SELECT DISTINCT quote_no FROM case_updates WHERE files_json LIKE ?",
+                    "SELECT DISTINCT quote_no FROM case_extra_expenses WHERE files_json LIKE ?",
+                    "SELECT DISTINCT quote_no FROM completion_notes WHERE signed_files_json LIKE ?"):
+            n = sql.count("?")
+            qs.update(r[0] for r in conn.execute(sql, (like,) * n).fetchall() if r[0])
+        return sorted(qs)
+
+    @staticmethod
+    def _collect(conn, user, crit):
+        from helpers import attachment_search as S
+        cands = _CaseCatalog._candidates(conn, crit)
+        names = S.case_names(conn, cands)
+        items = []
+        for qn in cands:
+            cust, proj = names.get(qn, ("", ""))
+            if crit["customer"] and crit["customer"].lower() not in cust.lower():
+                continue
+            link = "case-management.html?q=" + quote(qn, safe="")
+            for st, meta in _CaseCatalog.CATEGORIES.items():
+                if st == "completion_note":
+                    if not case_documents_readable(conn, qn, user):
+                        continue
+                    for row in conn.execute("SELECT note_no, signed_files_json FROM completion_notes WHERE quote_no = ?", (qn,)).fetchall():
+                        try:
+                            files = json.loads(row["signed_files_json"] or "[]") or []
+                        except (TypeError, ValueError):
+                            continue
+                        for f in files:
+                            if not _path_bound_to_doc(conn, st, row["note_no"], f):
+                                continue                   # 與 open() 同一道：路徑綁單據
+                            items.append(S.make_item(st, row["note_no"], "%s %s" % (meta["doc"], row["note_no"]), f,
+                                                     quote_no=qn, customer=cust, project=proj, link=link))
+                    continue
+                try:
+                    docs = _CaseAttachments.doc_nos_for_case(conn, st, qn, user)
+                except AttachmentNotVisible:
+                    continue                                   # 看不到的不列、也不回個數（設計 §8 Q3）
+                except AttachmentSourceError:
+                    continue                                   # 壞資料：搜尋略過（開檔端點會說出原因）
+                for d in docs:
+                    if st == "extra_expense" and _typed_expense_masked(conn, d, user):
+                        continue                           # 與 open() 同一道：費用單據的附件對遮蔽金額的人不列、不計數
+                    try:
+                        files = _read(conn, st, d)
+                    except AttachmentSourceError:
+                        continue
+                    for f in files or []:
+                        if not _path_bound_to_doc(conn, st, d, f):
+                            continue                       # 與 open() 同一道：路徑綁單據
+                        items.append(S.make_item(st, d, "%s %s" % (meta["doc"], d), f, quote_no=qn, customer=cust, project=proj, link=link))
+        return items
+
+    @staticmethod
+    def search(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.finish(_CaseCatalog._collect(conn, user, c), c)
+
+    @staticmethod
+    def count(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.count_by_type(_CaseCatalog._collect(conn, user, c), c)
 
 
 from core import registry as _registry  # noqa: E402

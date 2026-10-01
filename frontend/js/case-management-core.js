@@ -45,6 +45,8 @@ window.CM_PARTS.push(() => ({
     },
     selected: null,
     activeTab: 'biz',
+    // 附件目錄 P3「全部附件」頁籤：檔案中心（filehub）在才有；資料依案件單號標記（換案件時舊資料不顯示）
+    fileCenterOn: false, caseFiles: [], caseFilesFor: '', caseFilesLoading: false, caseFilesErr: '', caseFilesUnavail: [],
     execSubTab: 'progress',
     cr: { dealTag: '已成案', caseRecord: null },
     dirty: false,
@@ -76,7 +78,7 @@ window.CM_PARTS.push(() => ({
     _pendingUrlTab: null,
     _initTabFromUrl() {
       var t = new URLSearchParams(location.search).get('tab')
-      var valid = ['biz','exec','dispatch','shipping','completion','feed','fin','xexp']
+      var valid = ['biz','exec','dispatch','shipping','completion','feed','fin','xexp','allfiles']
       // 只記下來，不直接套：選案件時會把 activeTab 重設成 'biz'（那行是刻意的，
       // 見 selectCase 的註解），所以要在重設之後才套，而且只套第一次。
       if (t && valid.indexOf(t) >= 0) this._pendingUrlTab = t
@@ -97,6 +99,7 @@ window.CM_PARTS.push(() => ({
       // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，
       // 而這一頁的主體（案件矩陣）不應該等它。
       this.loadLocations()
+      this.detectFileCenter()
       // Alpine 3 會自動呼叫資料物件上的 init()，而 case-management.html 的
       // <body> 又寫了一次 x-init="init()"，所以整個 init() 每次開頁都跑兩遍：
       // 所有 API 都發兩次，並且第二次 selectCase() 會把第一次已經載好的狀態
@@ -233,10 +236,42 @@ window.CM_PARTS.push(() => ({
         fin: () => { this.loadFinanceSummary(no); this.loadInvoiceVouchers(no); this.loadPaymentRequests(no); this.loadMaterialOrders(no) },
         dispatch: () => { this.loadContractorVouchers(no) },
         feed: () => { this._loadCaseTasks(no) },
+        allfiles: () => { this.loadCaseFiles(no) },
       }
       if (!loaders[tab]) return
       this._tabLoaded = { ...this._tabLoaded, [tab]: no }
       loaders[tab]()
+    },
+
+    // ── 附件目錄 P3：案件頁「全部附件」（檔案中心在才出現；同一支 /api/filehub/search 固定本案件）──
+    async detectFileCenter() {
+      try {
+        const r = await fetch('/api/system/modules/availability', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) return
+        const d = await r.json()
+        this.fileCenterOn = !!(d && d.filehub && d.filehub.state === 'loaded')
+      } catch (e) { /* 偵測不到就當沒裝：頁籤不出現 */ }
+    },
+
+    async loadCaseFiles(no) {
+      this.caseFilesLoading = true; this.caseFilesErr = ''
+      try {
+        const r = await fetch('/api/filehub/search?quote_no=' + encodeURIComponent(no) + '&size=50', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        const d = await r.json().catch(() => null)
+        if (this.selected?.quote_no !== no) return                  // 已換案件：這一份作廢
+        if (!r.ok) { this.caseFiles = []; this.caseFilesErr = (d && d.detail) ? String(d.detail) : '讀取附件失敗（' + r.status + '）'; return }
+        this.caseFiles = d.items || []
+        this.caseFilesUnavail = d.unavailable || []
+        this.caseFilesFor = no
+      } catch (e) { this.caseFilesErr = '網路連線失敗，請重新整理' } finally { this.caseFilesLoading = false }
+    },
+
+    previewCaseFile(i) {
+      const P = window.MotrixFilePreview
+      if (!P || !this.caseFiles[i]) return
+      P.open({ items: this.caseFiles.map(P.withMime), index: i, fetchBlob: P.byAttachmentRef,
+               meta: (it) => [it.docLabel, (it.uploadedAt || '').slice(0, 10), it.uploadedBy].filter(Boolean).join('　'),
+               opener: document.activeElement })
     },
 
     // CM12 P2（2026-09-24）：案件層級狀態的重設集中在各模組的 _reset_<模組>(phase, data)。
