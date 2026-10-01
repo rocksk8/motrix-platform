@@ -108,6 +108,7 @@ def _wait_popup(page, pop, refocus, *, tries=3, each_ms=10000):
             refocus()
 
 
+@pytest.mark.e2e
 def test_wait_popup_reverse_controls(new_context):
     """反向控制：彈窗晚到（第二次 focus 才出現）要等得到；一直不出現要丟斷言失敗、且不超過 tries 次重點。"""
     page = new_context().new_page()
