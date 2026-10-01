@@ -242,6 +242,9 @@ def test_marker_scanner_finds_known_violations_and_real_tree_is_clean():
             mans[d] = json.load(open(f, encoding="utf-8"))
 
     def real(mkey, page):
-        f = os.path.join(root, "frontend", "pages", page)
-        return open(f, encoding="utf-8").read() if os.path.isfile(f) else None
+        from core import source_tree                      # 頁面路徑只准經 source_tree（守門 test_page_paths_centralized）
+        try:
+            return source_tree.page_file(page).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return None
     assert mount_marker_problems(mans, real) == []

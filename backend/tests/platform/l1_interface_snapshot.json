@@ -1192,6 +1192,14 @@
    "registered": "def()",
    "run_all": "def(conn)"
   },
+  "plat:mounts": {
+   "KINDS": "const",
+   "MAX_TABS_PER_POINT": "const",
+   "declared_points": "def(manifests)",
+   "point_id": "def(module_key, key)",
+   "validate_mount_points": "def(manifest)",
+   "visible_point": "def(point, modules, superadmin)"
+  },
   "plat:pages": {
    "L1_PAGES_FILE": "const",
    "NOTICE": "const",
