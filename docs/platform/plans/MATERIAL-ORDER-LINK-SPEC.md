@@ -134,5 +134,10 @@
 合計約 8 天（單人序列；與 31-C 的前端有重疊處，需同一人或明確分工以免衝突）。
 **測試／守門重點**：單一歸屬（精算／報表／總帳各只算一次）、`material_link_status` 三態與失效情境、`remaining` 兩邊（採購單挑選與叫料挑選）同一份數字、舊單與未連結資料數字不變、突變：連結叫料仍計金額 ⇒ 紅、`usage()` 重複計 ⇒ 紅、`poDocCode` 可繞過互斥 ⇒ 紅。
 
-## 8. 與 d7 對齊事項（需短問 31-C 資料表）
-- 31-C 的 `material_guard._valid_order`、`content_hash` 是否可擴欄位（本規格 §2.3）；`approval.detail` 提供者可否加欄位（§3.5）；叫料頁前端 31-C 已動到哪些區塊（避免 S4d 衝突）；`material_payment.create` 互斥條件的欄位名（`poDocCode`，已對齊）。
+## 8. 與 d7 對齊結果（2026-10-02；d7 回覆，31-C＝`wip/t31-material-d7@73e82a57`，尚未進 platform）
+1. **接縫＝回呼**：d7 在 `material_guard` 加三個鍵（`quoteItemId` str、`poDocCode` str、`poLine` int），並以**一個模組層級掛鉤 `MG.LINK_VALIDATOR`**（預設 None＝只收形狀）呼叫 2e 提供的 `purchase_items.material_link_status`；拒絕時進 `rejected[]`，代碼 `bad_link`（與其他逐列拒絕同形）。**不需要第二個送審驗證路徑**；2e 只提供函式（本規格 §3.4）。未知鍵目前本來就以「非實質欄位」通過守門。
+2. **`MA.SUBSTANTIVE_KEYS` 加入三鍵**（同一次改動；`content_hash` 缺值正規化為 `''`、`poLine` 取整數）。`substantive_changed()` 比的是新舊 dict（不是存的雜湊）⇒ **既有已核准、沒有這三鍵的列不會因此被送回草稿**。
+3. **核准詳情**（`modules/case/api/material_approvals.py::detail` 的 `fields[]`）可追加兩欄「採購單連結」「超出計畫」；佇列項目 `tags[]`（L1 選填、純加法）d7 無異議（他不消費佇列項目）。
+4. **31-C 前端已動的區塊**（避免 S4d 衝突）：`case-management.html #fin-material-orders` 每列——(a) 第一列：進行中輸入鎖定、新增供應商下拉（`mo-supplier`）；(b) 第二列：已付狀態下拉換成唯讀文字（`mo-paid-readonly`）＋備註；(c) 審核列（`mo-ap-status/code`、送審／撤回／取消、到貨）；(d) 叫料匯款區塊（`mo-pay-*`）；叫料管控 `materials` 卡：連結下拉（`mat-order-link`）與受閘的已叫／已到勾選。JS：`js/case-management-exec.js`（`moApprovals`、`moPay`、`moSuppliers`、`moPayForm` 與 `mo*`／`matCan*`）與 `case-management-core.js` 的 `rejected[]` 掛鉤。**S4d 作法：連結 UI 做成獨立一列、放在叫料匯款區塊之後，不碰第一列；先 rebase 在 31-C 上。**
+5. **互斥守門 d7 做**（欄位名 `poDocCode`）：`material_payment.create` 對有 `poDocCode` 的叫料回 409；守門在 `MP.has_live_payments` 時拒絕設 `poDocCode`（代碼 `has_payments`，與擋實質欄位同一個檢查）；叫料頁對連結的叫料隱藏「開匯款申請」鈕。測試與突變隨 31-C 的下一個列車切片；等本規格裁示後開工（已裁示）。
+**2e 要做的對應項**（S4a）：提供 `purchase_items.material_link_status(order, case_po_rows)` 並在 31-C 併入後把它掛到 `MG.LINK_VALIDATOR`；`usage()` 擴充叫料列。
