@@ -68,6 +68,12 @@
    "scope": "row_access"
   },
   {
+   "file": "modules/case/api/expense_form_pdf.py",
+   "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/document",
+   "handler": "expense_document",
+   "scope": "row_access"
+  },
+  {
    "file": "modules/case/api/completion_notes.py",
    "path": "/api/completion-notes",
    "handler": "list_completion_notes",
