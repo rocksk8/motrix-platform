@@ -175,7 +175,12 @@
   function nudge(d, key, dir) {
     var view = groupsOf(d), w = findKey(view, key); if (!w) return false
     var to = w.i + dir
-    if (to < 0 || to >= view[w.g].keys.length) return false
+    if (to < 0 || to >= view[w.g].keys.length) {      // 到區塊邊緣 ⇒ 跨到相鄰的（明確）區塊
+      var ng = view[w.g + dir]
+      if (!ng || ng.other || view[w.g].virtual) return false
+      placeKey(d, key, w.g + dir, dir > 0 ? 0 : ng.keys.length)
+      return true
+    }
     placeKey(d, key, w.g, dir > 0 ? to + 1 : to)
     return true
   }

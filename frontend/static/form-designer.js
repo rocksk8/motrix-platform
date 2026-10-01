@@ -130,7 +130,7 @@
   proto._remap = function () { this.map = (this.def.fields || []).map(function (f) { return f.key }) }
   proto.setDef = function (def) { this.def = M.clone(def || { fields: [] }); this.hist = [JSON.stringify(this.def)]; this.at = 0; if (!M.fieldByKey(this.def, this.sel)) this.sel = ''; this._remap(); this.localProblems = M.localProblems(this.def, this.caps); this.renderAll() }
   proto.getFieldIndexMap = function () { return this.map.slice() }
-  proto.setProblems = function (list) { this.problems = (list || []).map(function (p) { return { path: p.path, message: p.message } }); this.renderCenter(); this.renderRight() }
+  proto.setProblems = function (list) { this.problems = (list || []).map(function (p) { return { path: p.path, message: p.message } }); this.renderBar(); this.renderCenter(); this.renderRight() }
   proto.destroy = function () { clearTimeout(this.typeTimer); this.root.innerHTML = ''; this.root.classList.remove('fd') }
   proto.focus = function (key) {
     if (!M.fieldByKey(this.def, key)) return false
@@ -722,7 +722,7 @@
   proto._onKey = function (e) {
     var inp = e.target.closest('[data-item]'); if (!inp) return
     var p = inp.dataset.item.split(':'), arr = this._itemArr(p[0]), i = +p[1]; if (!arr) return
-    if (e.key === 'Enter') { e.preventDefault(); if (e.isComposing) return; this._addItem(p[0], i + 1, '') }
+    if (e.key === 'Enter') { if (e.isComposing) return; e.preventDefault(); this._addItem(p[0], i + 1, '') }
     else if (e.key === 'Backspace' && inp.value === '' && arr.length > 1) { e.preventDefault(); arr.splice(i, 1); this.commit(); this.renderCenter(); this.renderRight(); var pv = $('[data-item="' + p[0] + ':' + Math.max(0, i - 1) + '"]', this.els.right); if (pv) pv.focus() }
     else if (e.key === 'ArrowDown') { var n = $('[data-item="' + p[0] + ':' + (i + 1) + '"]', this.els.right); if (n) { e.preventDefault(); n.focus() } }
     else if (e.key === 'ArrowUp') { var u = $('[data-item="' + p[0] + ':' + (i - 1) + '"]', this.els.right); if (u) { e.preventDefault(); u.focus() } }
