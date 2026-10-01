@@ -77,6 +77,7 @@
 - **開關**（環境變數）：`MOTRIX_FAILFAST=1`（N 預設 10、`MOTRIX_FAILFAST_QUIET_MIN` 預設 4 分、已登記且未過期的偶發紅不計）；`MOTRIX_FAILFIRST=1`（最近 fail_stream 紅過的題 → `MOTRIX_FAILFIRST_BASE` 起 diff 動到的測試檔 → tests/platform → 其餘原順序；只改順序、集合不同就放棄重排）。
 - **回答 §開放問題 #4**：xdist 下 `session.shouldstop` 沒有作用（DSession 看自己的 `shouldstop` 屬性）；plugin 設 `dsession.shouldstop`，pytest 會以 `xdist.dsession.Interrupted`（KeyboardInterrupt 子類）收尾、**exit code = 2（INTERRUPTED）**——這會被 fail_stream／建包當成「外部中斷」。因此 plugin 在 sessionfinish 把 exitstatus 改回 **1**，且 fail_stream 看到 `_failfast_reason` 就不記 aborted（summary 帶 `aborted_by: failfast`）。單程序（無 xdist）用 `session.shouldfail`，exit 1。
 - **反向控制（已跑，全部 RED 後還原）**：stop 條件拿掉／exit code 不改回 1／登記的偶發也計入／重排丟一題／quiet 立即停／預設就開——6 個突變都被測試台抓到；全綠 run 不被截斷（60 綠、exit 0）；重排前後 `--collect-only` 題集合相同（72＝72）。
+- **R1-e 部分重放（只有每段「第一個紅／最後一個紅」時間，沒有逐題時間戳）[實測＋推算]**：t30b 非 e2e（段長 25:40）第一紅 +5:21、最後紅 +14:22 ⇒ Q=4 分會在 +18:22 停，省 **7:18**（Q=2 分省 9:18），9 個紅全數涵蓋；t30c e2e（段長 11:13）第一紅 +2:32、最後紅 +5:34 ⇒ Q=4 分在 +9:34 停，只省 **1:39**（Q=2 分省 3:39）；t30d e2e（2 個紅，+3:39～+11:19）Q=4 分幾乎省不到。⇒ **前文「每個紅的建包省 15～20 分」過於樂觀**：單靠停止條件，實測型態只省約 2～9 分；**真正的大頭是『先跑最可能紅的』（把紅集中到段首）與項 3（增量）**。N／Q 預設改為先 N=10、Q=2 再以逐題時間戳重放校準（需要 fail_stream JSONL 的逐題 `t`，下一輪建包就會有）。
 - **還沒做**：R1-e（用 t29#1／t30b／t30c 的紅題集重放，驗「stop 時已涵蓋 ≥90% 的紅」）；把 plugin 接進 `build_deploy_package.ps1`（`-p failfast` ＋環境變數；等使用者套用第 30 包後、在分支上做，並用 dry-run 台驗證 exit code 與 Record-Stage 仍記紅）；非 e2e 與 e2e 兩段各自的 N／Q 調校。
 
 ### 項 2　段結果以「樹雜湊」計，獨立跑的也算（不重跑兩次）
