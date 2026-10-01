@@ -20843,7 +20843,8 @@
     "mod:accounting/ledger/roles",
     "mod:analytics/api/__init__",
     "mod:analytics/api/ledger_diff",
-    "mod:analytics/api/reports"
+    "mod:analytics/api/reports",
+    "page:pages/reports.html"
    ],
    "evidence": {
     "import": [
@@ -20857,6 +20858,12 @@
     ],
     "api": [
      "backend/modules/analytics/api/ledger_diff.py"
+    ],
+    "page": [
+     "frontend/pages/reports.html"
+    ],
+    "path": [
+     "frontend/pages/reports.html"
     ]
    },
    "login_fixture": true
