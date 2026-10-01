@@ -104,7 +104,12 @@ def test_reverse_control_the_old_expression_gives_yesterday(live_server, make_us
     ("/pages/reports.html", [("expensesMonth", "2026-10"), ("receivablesMonth", "2026-10")]),
     ("/pages/legal-params.html", [("today", "2026-10-01")]),
 ])
-def test_other_pages_default_to_the_local_today(live_server, make_user, new_page, login_as, path, keys):
+def test_other_pages_default_to_the_local_today(live_server, make_user, new_page, login_as, path, keys, monkeypatch):
+    if path.endswith("legal-params.html"):
+        # 這頁的「今天」以伺服器為準（後端同樣依它擋已生效版本）；page.clock 只固定瀏覽器 ⇒ 伺服器的今天也要固定在同一天，
+        # 否則測試只在「真實日期＝FIXED 那天」才會綠（2026-10-02 起紅）。
+        from helpers import legal_params as _lp
+        monkeypatch.setattr(_lp, "today", lambda: FIXED.date())
     u = make_user(username="ld_%s" % abs(hash(path)), role="superadmin")
     page = _page(new_page, login_as, u, path, live_server)
     for key, want in keys:
