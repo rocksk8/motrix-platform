@@ -1,6 +1,6 @@
 # 採購・庫存・出貨 更新紀錄
 
-## (next) — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
+## 1.0.18 — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
 - 附件目錄 P3：`_SupplyCatalog` 加 `search`／`count`（出貨單回簽；權限＝`case_documents_readable`，逐案）。
 
 ## 1.0.17 — 2026-10-01（暫用號，列車取號；wip/w3-local-date）

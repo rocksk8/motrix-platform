@@ -1,6 +1,6 @@
 # 營運分析 更新紀錄
 
-## (next) — 2026-10-01（暫用號，列車取號；fix/dept-follows-sales-owner：案件部門跟業務負責人）
+## 1.0.22 — 2026-10-01（暫用號，列車取號；fix/dept-follows-sales-owner：案件部門跟業務負責人）
 - 案件部門改跟業務負責人（`caseRecord.roles.sales`），不是開單者（使用者裁示 2026-10-01）：新增 `reports._case_dept／_load_user_index／_row_cr`；部門績效、部門篩選、未收款項、收款異常、支出彙總、月趨勢與首頁（stats、月趨勢、最新動態留言）同口徑。負責人只有名字或查無帳號 ⇒ 「未分類」；未填業務負責 ⇒ 開單者部門（同舊行為）。新查詢不用 json_extract（Python 逐筆解析）。
 
 ## 1.0.21 — 2026-10-01（暫用號，列車取號；wip/w3-dept-dim）

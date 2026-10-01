@@ -1,12 +1,12 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-01（暫用號，列車取號；fix/contractor-bank-mask-2：外包名冊帳號遮蔽更正）
+## 1.0.39 — 2026-10-01（暫用號，列車取號；fix/contractor-bank-mask-2：外包名冊帳號遮蔽更正）
 - 見下方前一筆的「更正」：外包名冊（`/api/contractors*`）列表／詳情／存簿影本端點（`/id-card`）／匯出一律對非最高管理者遮蔽 `****末四碼`；編輯（PUT）與匯入遇遮蔽值保留原帳號。測試 `test_contractor_roster_bank_mask_2026_10_01.py`、`test_e2e_bank_mask_roster_page_2026_10_01.py`（含反向控制）。
 
-## (next) — 2026-10-01（暫用號，列車取號；fix/contractor-bank-mask）
+## 1.0.38 — 2026-10-01（暫用號，列車取號；fix/contractor-bank-mask）
 - 承攬商／匯款申請收款帳號遮蔽（使用者裁示 2026-10-01：只有最高管理者看得到完整帳號）：新增 `bank_mask.py`；承攬商列表／詳情、存簿影本端點、匯款申請列表／詳情（含快照與外包人員）、IP-14 提供者形狀（無檢視者＝遮蔽）、匯款申請 PDF 下載一律 `****末四碼`、存簿影本拿掉；承攬商編輯時遮蔽值原樣送回＝保留原帳號。**更正（2026-10-01）**：外包名冊（`/api/contractors*`）守門其實放行「持 contractor_list 模組的非最高管理者」，原先判斷為「僅最高管理者」是錯的——列表／詳情／存簿影本／匯出一併改為非最高管理者遮蔽 `****末四碼`，編輯與匯入遇遮蔽值保留原帳號（`test_contractor_roster_bank_mask_2026_10_01.py`）。勞報單頁從名冊挑人不再帶入遮蔽帳號。
 
-## (next) — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
+## 1.0.37 — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
 - 附件目錄 P3：`_SubcontractCatalog` 加 `search`／`count`（派工單附件、承攬商發票；權限＝`_SubcontractPathAccess.readable` 逐派工單）。
 
 ## 1.0.36 — 2026-10-01（wip/w4-acceptance-2）

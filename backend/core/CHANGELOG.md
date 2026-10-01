@@ -2,22 +2,22 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — 2026-10-01（fix/upload-path-guard：自訂單據附件的實體刪除只准在 uploads 之內，稽核探針 Q4）
+## 1.100 — 2026-10-01（fix/upload-path-guard：自訂單據附件的實體刪除只准在 uploads 之內，稽核探針 Q4）
 - L1（行為）：`helpers.custom_files._remove_physical`／`helpers.custom_module_delete.delete_module` 刪實體檔前先過路徑守門（`custom_files._safe_physical_path`：絕對路徑、`..`、`..\`、磁碟機代號／UNC、NTFS 資料流、符號連結／接合點穿出 uploads ⇒ 略過並記 log，不刪、不丟例外）。介面不變。
 
-## (next:minor) — 2026-10-01（fix/contractor-bank-mask：承攬商收款帳號遮蔽）
+## 1.99 — 2026-10-01（fix/contractor-bank-mask：承攬商收款帳號遮蔽）
 - L0（新增，向下相容）：`pdf_gen.generate_contractor_voucher_pdf_bytes(voucher_no, mask_bank=True)` 加選填參數 `mask_bank`（預設遮蔽＝fail closed；只有最高管理者下載才傳 False）；`_build_contractor_voucher_html(v, mask_bank=False)`。`routers/approval_queue.py`：非最高管理者的佇列項目與詳情，帳號遮成 `****末四碼`、存簿封面拿掉。
 
-## (next) — 2026-10-01（wip/w1-attach-p3-a3：檔案中心／附件目錄 P3）
+## 1.98 — 2026-10-01（wip/w1-attach-p3-a3：檔案中心／附件目錄 P3）
 - L1（新增）：`helpers/attachment_search`（`normalize_crit／make_item／matches／finish／count_by_type／case_names／CRIT_KEYS／ITEM_KEYS`）——`attachments.catalog` 提供者的 `search`／`count` 共用件（項目鍵固定、沒有 path；看不到的不列也不回個數）；`preview 元件` 新增 `MotrixFilePreview.byAttachmentRef`（前端）。提供者契約 IP-105 加 `search`／`count`（同契約版次只增）。
 - L1（新增）：`attachment_search.owned(entry, 資料夾, 單據鍵)`——搜尋與各提供者 `open()` 共用的「路徑綁單據」判斷（`upload_path_key`）。
 - 工作日誌照片提供者（`routers/system.py::_WorkLogCatalog`）補 `search`／`count`（權限與路徑綁日誌同 `open()`；GPS／浮水印不外帶）。
 
-## (next) — 2026-10-01（wip/w1-a2-2：A2-2 費用單據類型定義）
+## 1.97 — 2026-10-01（wip/w1-a2-2：A2-2 費用單據類型定義）
 - L1（新增）頁面：`expense-types.html`（請款類型定義編輯頁，超級管理員；`l1_pages.json`）＋選單項「請款類型」（`menu_l1.json`，system 群組、perm＝superadmin）。編輯頁列出程式預設的四個類型（定義庫沒有列時以目前生效的預設為起點），改了走既有 `/api/definitions/expense_type` 草稿→驗證→發布；單據仍釘在自己的 `def_version`。
 - L1（新增）：`helpers.expense_types`（費用單據類型定義 `expense_type`：`validate_expense_type／get_type／list_types／cashier_field_keys／normalize_lines／validate_values`，明細金額唯一實作）＋四個預設定義（purchase_req／purchase_order／travel／petty_cash，欄位為草稿待使用者確認）；路由 `GET /api/expense-types`、`GET /api/expense-types/{code}`；`POST /api/definitions/{kind}/{key}/validate` 改用 `D.kinds()`（登記的種類不再 400）。
 
-## 1.92 — 2026-10-01（wip/w1-a2-0：A2 費用單據的底層預留切片，一次到位；之後各類型只動模組）
+## 1.96 — 2026-10-01（wip/w1-a2-0：A2 費用單據的底層預留切片，一次到位；之後各類型只動模組）〔train_number：1.92 → 1.96〕
 - L0（新增）：`core.definitions.register_kind(kind, label="", validator=None, default=None)`／`kinds()`／`kinds_meta()`——定義種類可登記（內建四種不變；重複登記或覆寫內建 ⇒ ValueError）；`save_draft／publish／list_definitions／…` 認得登記的種類。路由 `GET /api/definition-kinds`（超級管理員）。
 - L1（新增）：`helpers.tiered_approval.register_doc_type(code, label, unified=False)`／`doc_types_meta()`（就地擴充 `APPROVAL_DOC_TYPES／DEFAULT_UNIFIED_DOC_TYPES／APPROVAL_DOC_TYPE_LABELS`）；路由 `GET /api/settings/approval-doc-types`。`PUT /api/settings/approval-flow-scope` 由固定欄位模型改成依登記表驗證（鍵＝目前全部單據類型、值＝布林；缺／多／非布林 ⇒ 422，與原行為一致）；簽核設定頁接上登記的類型。
 - L1（新增）簽核佇列項目契約（選用欄位，舊項目不變）：`typeLabel`（未知 type 自帶標籤；內建不被覆寫）、`openUrl／approveUrl／rejectUrl／rejectField`（前端優先使用）、`caseless: True`（不掛案件的單據：簽核鏈上的人與送審人＋超級管理員可開，其餘 404；項目與 `approval.detail` 同一個判斷 `_access_step(caseless=)`）。
@@ -25,17 +25,17 @@
 - L1（新增）：`helpers.doc_render.render_document(template, view)`（版型＋單據視圖 ⇒ HTML，未核可由程式補標示）；`custom_modules.render_view` 改為委派。
 - L1（新增）權限目錄 `expense_forms`（費用單據；A2-1 起由無案件新增端點讀取；目前列在 `UNREAD_BY_DESIGN`，有人讀它時守門會要求刪掉那一筆）。
 
-## (next) — 2026-10-01（wip/w4-g2-5：自訂模組金流屬性原樣傳給總帳）
+## 1.95 — 2026-10-01（wip/w4-g2-5：自訂模組金流屬性原樣傳給總帳）
 - L1（新增回傳鍵）：`helpers.custom_finance.gl_lines` 每個金流行多帶 `finance`（該欄位的整個 `finance` 屬性字典，唯讀副本），每張單據多帶 `data`（單據資料唯讀副本）。之後新增金流屬性（例 `taxField`／`docTypeField`）由總帳提供者解讀，不必再改 helper。只新增鍵，舊消費端忽略。
 
-## (next) — 2026-10-01（wip/w2-expense-a2-w2b：費用單據收款人帳號列入 F2 個資備份）
+## 1.94 — 2026-10-01（wip/w2-expense-a2-w2b：費用單據收款人帳號列入 F2 個資備份）
 - L1（行為，不改介面）：`archive._F2_FIELDS` 新增 `案件額外支出`（`case_extra_expenses.payee_account`）。A2 的 migration 0003 讓額外支出表存了收款人銀行帳號，而該表走一般每日 JSON（`SELECT *`）⇒ 帳號會原樣進一般備份／雲端「系統存檔」；現在一般份拿掉該欄、完整列只進 `系統存檔_個資/每日備份/{date}/`，還原用既有 `merge_general_and_pii` 合回。收款人姓名與銀行名稱不列入（同承攬人員界線）。下游效應（R1）：一般備份的「案件額外支出.json」少一欄 `payee_account`（還原需個資份；個資資料夾未建時該欄在還原後為空——與其他 F2 表相同）。
 - L1 前端（`pages/approval-queue.html`）：`extra_expense` 類型的卡片標籤改用佇列項目自帶的 `typeLabel`（A2-0 #2 契約）——費用單據（請購單／採購單／差旅費用請款單／零用金支付單）原本一律顯示「案件額外支出」；舊版額外支出沒有 `typeLabel`，仍顯示「案件額外支出」。只改畫面文字，不改任何介面或資料。
 
-## (next:minor) — 2026-10-01（fix/module-delete-ownership：刪除自訂模組）
+## 1.93 — 2026-10-01（fix/module-delete-ownership：刪除自訂模組）
 - L1（新增）：`helpers.custom_module_delete`（`delete_module`／`record_count`／`ModuleDeleteError`）——建構器「刪除模組」：整個自訂模組（所有版本＋草稿）一起刪；有單據拒絕（409＋單據數），`with_records` 才連單據刪，已有金流 outbox 或送審中一律拒絕。只新增；`DELETE /api/definitions/custom_module/{key}`（routers/definitions.py）呼叫它。modules.json 登記為 L1 單位。
 
-## (next:minor) — 2026-10-01（fix/login-approval-popup：簽核處理掉 ⇒ 待簽核通知標已讀）
+## 1.92 — 2026-10-01（fix/login-approval-popup：簽核處理掉 ⇒ 待簽核通知標已讀）
 - L1（新增）：`helpers.audit._mark_notifications_read(ref_id, types, username=None)`（列入 `__l1_public__`）——簽核已處理（核准只標自己那筆、退回／拒絕標整張單）時把對應通知列標已讀。只新增。報價單核准／退回／拒絕結案已呼叫；登入橫幅改用 `/api/approval-queue/count`（`static/notif.js`）。
 
 ## 1.91 — 2026-09-30（wip/w2-bonus-correction：獎金更正單的三種通知）

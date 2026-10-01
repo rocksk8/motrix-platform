@@ -1,6 +1,6 @@
 # 業務開發 更新紀錄
 
-## (next) — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
+## 1.0.16 — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
 - 附件目錄 P3：`_CrmCatalog` 加 `search`／`count`（開發記錄附件；權限＝`_DevLogPathAccess.readable` 逐開發案）。
 
 ## 1.0.15 — 2026-10-01（暫用號，列車取號；wip/w3-local-date）

@@ -1,6 +1,6 @@
 # 應收應付 更新紀錄
 
-## (next) — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
+## 1.0.33 — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
 - 附件目錄 P3：`_ArapCatalog` 加 `search`／`count`（開票申請已開立檔案；權限＝`_voucher_readable` 逐張）。
 
 ## 1.0.32 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2：A2-3 出納頁）
