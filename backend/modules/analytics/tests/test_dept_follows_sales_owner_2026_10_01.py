@@ -144,3 +144,41 @@ def test_positive_control_opener_rule_would_break_reconciliation(world, monkeypa
 
     monkeypatch.setattr(R, "_case_dept", opener_rule)
     assert _dept_totals(R._collect(*PERIOD)) != {"部門A": 100000, "未分類": 20000, "部門B": 3000}
+
+
+def test_department_filter_survives_opener_without_account_or_name(client, make_user):
+    """回歸：開單者沒有帳號（sales_person_id 為空）且沒填業務負責 ⇒ `_case_sales_owner` 會讀 sales_person；各彙總查詢都得選出這欄（缺欄＝IndexError）。"""
+    import db
+    from modules.analytics.api import reports as R
+    h, a, b, _alice, _bob = _setup(client, make_user)
+    _case("DSO-9", None, None, 5000)
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE quotations SET sales_person='' WHERE quote_no='DSO-9'")
+        conn.commit()
+    finally:
+        conn.close()
+    assert R._collect_expenses(2026, a)["monthly"] is not None
+    assert client.get("/api/dashboard/monthly", headers=h, params={"department_id": a}).status_code == 200
+    assert client.get("/api/dashboard/stats", headers=h, params={"department_id": a}).status_code == 200
+
+
+def test_activity_feed_department_filter_uses_sales_owner(world):
+    """首頁最新動態的部門篩選（案件留言）也跟業務負責人：DSO-1 的留言屬部門 A、不屬開單者的部門 B。"""
+    import db
+    client, h, a, b = world
+    conn = db.get_db()
+    try:
+        for no in ("DSO-1", "DSO-2", "DSO-3"):
+            conn.execute("INSERT INTO case_updates (quote_no, author, content, created_at) VALUES (?,?,?,?)",
+                         (no, "dso_admin", "留言 " + no, "2026-03-01T09:00:00"))
+        conn.commit()
+    finally:
+        conn.close()
+
+    def comments(dept):
+        r = client.get("/api/dashboard/activity-feed", headers=h, params={"department_id": dept})
+        assert r.status_code == 200, r.text
+        return {i["id"] for i in r.json().get("items", []) if i.get("source") == "comment"}
+
+    assert len(comments(a)) == 1 and len(comments(b)) == 1 and comments(a) != comments(b)

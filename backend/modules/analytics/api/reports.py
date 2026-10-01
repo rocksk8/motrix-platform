@@ -3429,7 +3429,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         user_by_id, name_index = _load_user_index(conn)
         dept_by_quote = {
             r["quote_no"]: _case_dept(_row_cr(r), r, name_index, user_by_id)[0]
-            for r in conn.execute("SELECT quote_no, sales_person_id, json_extract(data_json,'$.caseRecord') AS cr_json "
+            for r in conn.execute("SELECT quote_no, sales_person_id, sales_person, json_extract(data_json,'$.caseRecord') AS cr_json "
                                   "FROM quotations").fetchall()
         }
 

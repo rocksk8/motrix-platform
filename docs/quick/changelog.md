@@ -33,7 +33,7 @@
 
 - 新增 `reports.py::_case_dept()`／`_load_user_index()`／`_row_cr()`；`_row_dept`、`_collect_unreceived_items`、`_collect_payment_anomalies`、`_collect_expenses`、月趨勢類彙總與 `dashboard.py`（stats、月趨勢）改用它。規則：負責人是帳號 ⇒ 該帳號部門；名字型／查無帳號 ⇒ 未分類；未填 ⇒ 開單者。
 - 測試 `modules/analytics/tests/test_dept_follows_sales_owner_2026_10_01.py`（6 題：部門合計、與業務員績效對帳、無帳號⇒未分類、首頁篩選、收款異常、正向控制）。
-- 未動：首頁「最新動態」部門篩選仍依開單者。§11 三列同步更新（部門彙總⇒完成；financial_view⇒部分修復；16 模組⇒已修復）。
+- 首頁「最新動態」（案件留言）部門篩選同日補上同規則；順手補齊 `_collect_expenses`／月趨勢查詢缺的 `sales_person` 欄（缺欄會在「開單者無帳號且未填業務負責」時 IndexError，已加回歸題）。§11 三列同步更新（部門彙總⇒完成；financial_view⇒部分修復；16 模組⇒已修復）。
 
 ---
 
