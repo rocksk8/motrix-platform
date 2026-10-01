@@ -27,3 +27,4 @@
 - 上傳路徑守衛（同類第二階，需 DB 寫入才能利用）：`helpers/uploads.py:215`（delete_document_file）、`modules/case/api/quotations.py:2902`（_cleanup_staged_files）、`:2922-2927`（_move_staged_files src/dest）、`:5290`（案件更新留言刪檔）、`modules/crm/api.py:1011`（開發紀錄刪檔）仍用 `os.path.join(UPLOADS_ROOT, path)`。第 29 班只修 `custom_files._remove_physical` 與 `custom_module_delete`（fix/upload-path-guard）。做法：L1 uploads 加共用 `safe_upload_path`（拒絕空／絕對／`:`／`..`／`\`段、realpath+commonpath 須在 UPLOADS_ROOT 內且非根本身），一次替換全部；每處加「外部檔案不被刪」測試＋反向對照。
 - 勞報單後端未驗證帳號欄位（自由 dict）：應拒絕看起來是遮罩值（含 `****`）的銀行帳號，避免遮罩值被存進勞報單（fix/contractor-bank-mask-2 已在前端 payslip-form.html 避免，後端仍待）。
 - 既有紅：`tests/test_e2e_pdf_unapproved_more_2026_09_30.py::test_quotation[False]`（點擊逾時）在 platform d4c43792 未改動樹上同樣失敗（a3 驗證）；非第 29 班引入，下班查根因。
+- 出貨內容衛生（d7 檢視第29班包）：`docs/platform/plans/HANDOFF-*`、expense-a2 設計文件含本機路徑與簽章金鑰「路徑」字串（無金鑰內容）隨包出貨；`tools/platform/*`（34 檔，第28班起就隨包）也在酬載。下班評估把 plans/HANDOFF-*、expense-a2/ 加入 backend/export_ignore.json，並決定 tools/platform 是否該隨包。
