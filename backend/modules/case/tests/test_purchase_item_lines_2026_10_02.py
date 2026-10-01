@@ -197,3 +197,11 @@ def test_change_request_cannot_bypass_the_cap(W):
     r = c.put("%s/%d/change-request" % (BASE, po), headers=h, json=_body("purchase_order", [_ln("a", 12, overPlanReason="追加")]))
     assert r.status_code == 200
     assert c.post("%s/%d/change-request/submit" % (BASE, po), headers=h).status_code == 200
+
+
+def test_over_plan_reason_is_dropped_when_the_line_is_not_over_plan(W):
+    c, h = W
+    r = _mk(c, h, "purchase_order", [_ln("a", 3, overPlanReason="其實沒超")])
+    assert r.status_code == 201 and "overPlan" not in r.json()
+    l = _stored(r.json()["id"])[0]
+    assert "overPlanReason" not in l and "overPlanQty" not in l
