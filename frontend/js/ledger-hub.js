@@ -12,6 +12,9 @@ function ledgerHubPage() {
 
     // 來源憑證補登（source_annotations）
     an: { items: [], truncated: false, drafts: {}, busy: false, error: '', notice: '' },
+    // 固定資產（C6：fixed_assets）
+    fa: { assets: [], categories: [], form: { name: '', category: 'computer', acquired_on: '', in_service_on: '', cost: '', input_tax: 0, life_years: '', salvage: '', invoice_no: '' },
+          ym: '', sched: null, busy: false, error: '', notice: '' },
     // 扣繳清單（C5：withholding）
     wh: { ym: '', data: null, selected: {}, date: '', voucherNo: '', unremitReason: '', busy: false, error: '', notice: '' },
     // 營業稅 401（C5：tax401）
@@ -55,6 +58,7 @@ function ledgerHubPage() {
         if (this.tab === 'tax401') await this.taxLoad()
         if (this.tab === 'withholding') await this.whLoad()
         if (this.tab === 'source_annotations') await this.anLoad()
+        if (this.tab === 'fixed_assets') await this.faLoad()
       } catch (e) { this.error = e.message }
       this.loaded = true
     },
@@ -64,6 +68,7 @@ function ledgerHubPage() {
       if (key === 'tax401') await this.taxLoad()
       if (key === 'withholding') await this.whLoad()
       if (key === 'source_annotations') await this.anLoad()
+      if (key === 'fixed_assets') await this.faLoad()
     },
     async anLoad() {
       const a = this.an
@@ -110,6 +115,47 @@ function ledgerHubPage() {
         a.notice = '已清除 ' + i.source_key + ' 的補登，之後回到來源值。'
         await this.anLoad()
       } catch (e) { a.error = e.message }
+    },
+    async faLoad() {
+      const f = this.fa
+      f.error = ''
+      try {
+        const d = await this._api('GET', '/api/ledger/assets')
+        f.assets = d.assets
+        f.categories = d.categories
+      } catch (e) { f.error = e.message }
+    },
+    faStatusLabel(s) { return ({ draft: '草稿', active: '使用中', fully_depreciated: '已提足', disposed: '已處分' })[s] || s },
+    async faCreate() {
+      const f = this.fa
+      f.error = ''
+      f.notice = ''
+      f.busy = true
+      try {
+        const b = Object.assign({}, f.form)
+        if (b.salvage === '') delete b.salvage
+        if (b.life_years === '') delete b.life_years
+        const r = await this._api({ method: 'POST' }, '/api/ledger/assets', b)
+        f.notice = '已新增資產卡片 ' + r.asset_no + '（草稿；殘值 ' + this.fmt(r.salvage) + '）。確認後按「啟用」才會產生取得與折舊分錄草稿。'
+        await this.faLoad()
+      } catch (e) { f.error = e.message }
+      f.busy = false
+    },
+    async faActivate(a) {
+      const f = this.fa
+      f.error = ''
+      f.notice = ''
+      try {
+        await this._api({ method: 'POST' }, '/api/ledger/assets/' + a.id + '/activate')
+        f.notice = '已啟用 ' + a.asset_no + '；到「分錄草稿」執行引擎會產生取得與每月折舊分錄草稿。'
+        await this.faLoad()
+      } catch (e) { f.error = e.message }
+    },
+    async faSchedule() {
+      const f = this.fa
+      f.error = ''
+      if (!f.ym) { f.error = '請選擇月份'; return }
+      try { f.sched = await this._api('GET', '/api/ledger/assets/schedule?ym=' + encodeURIComponent(f.ym)) } catch (e) { f.error = e.message; f.sched = null }
     },
     async whLoad() {
       const w = this.wh

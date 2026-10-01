@@ -10,9 +10,10 @@ from core.registry import ModuleSpec
 from modules.accounting import attachments_catalog
 from modules.accounting.ledger import auto_run as _auto_run
 from modules.accounting.ledger import custom_events as _custom_events
+from modules.accounting.ledger import fixed_assets as _fixed_assets
 from modules.accounting.ledger import month_totals as _month_totals
 from modules.accounting.ledger import source_status as _source_status
-from modules.accounting.api import account_items, accounting_export, ledger_annotations, ledger_category_map, ledger_closing, ledger_engine, ledger_periods, ledger_reports, ledger_requests, ledger_settings, ledger_statements, ledger_tax, voucher_providers, vouchers
+from modules.accounting.api import account_items, accounting_export, ledger_annotations, ledger_assets, ledger_category_map, ledger_closing, ledger_engine, ledger_periods, ledger_reports, ledger_requests, ledger_settings, ledger_statements, ledger_tax, voucher_providers, vouchers
 
 _m0001 = importlib.import_module("modules.accounting.migrations.0001_ledger_base")
 _m0002 = importlib.import_module("modules.accounting.migrations.0002_ledger_action_requests")
@@ -20,7 +21,7 @@ _m0003 = importlib.import_module("modules.accounting.migrations.0003_dims_and_ca
 
 MODULE = ModuleSpec(
     key="accounting",
-    routers=[accounting_export.router, ledger_annotations.router, ledger_category_map.router, ledger_category_map.list_router, account_items.router, vouchers.router, ledger_periods.router, ledger_reports.router, ledger_engine.router, ledger_settings.router, ledger_tax.router, ledger_statements.router, ledger_closing.router, ledger_requests.router],
+    routers=[accounting_export.router, ledger_annotations.router, ledger_category_map.router, ledger_category_map.list_router, account_items.router, vouchers.router, ledger_periods.router, ledger_reports.router, ledger_engine.router, ledger_settings.router, ledger_assets.router, ledger_tax.router, ledger_statements.router, ledger_closing.router, ledger_requests.router],
     migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up)],
     schedulers=[lambda: _auto_run.schedule()],          # L1：分錄引擎每小時自動產生草稿（旗標 engine_drafts 開著才跑）
     providers={
@@ -45,6 +46,8 @@ MODULE = ModuleSpec(
         ("voucher.void_draft", "accounting"): voucher_providers._provide_voucher_void_draft,
         ("voucher.status", "accounting"): voucher_providers._provide_voucher_status,
         ("voucher.by_no", "accounting"): voucher_providers._provide_voucher_by_no,
+        # IP-GL1（W4 總帳 C6）：固定資產取得 E13a、每月折舊 E13b（來源 fixed_assets，由總帳自己提供）；唯讀
+        ("gl.events", "fixed_assets"): _fixed_assets.gl_events,
         # IP-22（暫定號）：M01 案件整包的傳票段
         ("voucher.by_case", "accounting"): vouchers.vouchers_by_case,
         # M01-PLAN §3-7（C）：待我簽核的傳票項目、轉簽的簽核鏈讀寫（M01 佇列只彙整）

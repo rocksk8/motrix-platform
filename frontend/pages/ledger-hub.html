@@ -61,7 +61,7 @@
           <div>
             <div class="hb-title" style="font-size:16px" x-text="current().label"></div>
             <div class="hb-note" x-text="current().description"></div>
-            <div class="hb-note" x-show="['engine_drafts', 'tax401', 'withholding', 'source_annotations'].indexOf(current().key) < 0">這項功能已開啟，但畫面還在準備中，目前尚未提供內容。</div>
+            <div class="hb-note" x-show="['engine_drafts', 'tax401', 'withholding', 'source_annotations', 'fixed_assets'].indexOf(current().key) < 0">這項功能已開啟，但畫面還在準備中，目前尚未提供內容。</div>
 
             <!-- 來源憑證補登 -->
             <div x-show="current().key === 'source_annotations'" data-testid="hb-an">
@@ -89,6 +89,59 @@
               <div class="hb-note" x-show="an.items.length" data-testid="hb-an-hint">填實際進項稅額（元）與發票日期後按「儲存」；欄位留空並儲存＝不補登；要拿掉已補登的值、回到來源值，請按該列的「清除」。</div>
               <div class="hb-note" x-show="!an.items.length" data-testid="hb-an-empty">目前沒有需要補登的事件（稅額估計或未拆稅的分錄事件會出現在這裡）。</div>
               <div class="hb-warn" x-show="an.truncated">最多顯示 500 筆。</div>
+            </div>
+
+            <!-- 固定資產（C6） -->
+            <div x-show="current().key === 'fixed_assets'" data-testid="hb-fa">
+              <div class="hb-err" x-show="fa.error" x-text="fa.error" data-testid="hb-fa-error"></div>
+              <div class="hb-ok" x-show="fa.notice" x-text="fa.notice" data-testid="hb-fa-notice"></div>
+              <div class="hb-row">
+                <input class="hb-input" placeholder="資產名稱" x-model="fa.form.name" data-saved-field data-testid="hb-fa-name">
+                <select class="hb-input" x-model="fa.form.category" data-saved-field data-testid="hb-fa-category">
+                  <template x-for="c in fa.categories" :key="c.code"><option :value="c.code" x-text="c.name + '（' + c.default_life_years + ' 年）'"></option></template>
+                </select>
+                <input class="hb-input" type="date" x-model="fa.form.acquired_on" data-saved-field data-testid="hb-fa-acq"> 取得日
+                <input class="hb-input" type="date" x-model="fa.form.in_service_on" data-saved-field data-testid="hb-fa-svc"> 開始使用日
+                <input class="hb-input" type="number" placeholder="未稅成本" x-model.number="fa.form.cost" data-saved-field data-testid="hb-fa-cost">
+                <input class="hb-input" type="number" placeholder="進項稅額" x-model.number="fa.form.input_tax" data-saved-field data-testid="hb-fa-tax">
+                <input class="hb-input" type="number" placeholder="耐用年數（空＝類別預設）" x-model="fa.form.life_years" data-saved-field data-testid="hb-fa-life">
+                <input class="hb-input" type="number" placeholder="殘值（空＝成本÷(年數+1)）" x-model="fa.form.salvage" data-saved-field data-testid="hb-fa-salvage">
+                <input class="hb-input" placeholder="發票號碼" x-model="fa.form.invoice_no" data-saved-field data-testid="hb-fa-inv">
+                <button class="hb-btn primary" :disabled="fa.busy" @click="faCreate()" data-testid="hb-fa-create">新增資產卡片</button>
+              </div>
+              <table class="hb-table" data-testid="hb-fa-table">
+                <thead><tr><th>資產編號</th><th>名稱</th><th>類別</th><th>取得日</th><th>開始使用</th><th class="hb-num">成本</th><th class="hb-num">耐用年數</th><th class="hb-num">殘值</th><th>狀態</th><th></th></tr></thead>
+                <tbody>
+                  <template x-for="a in fa.assets" :key="a.id">
+                    <tr><td x-text="a.asset_no"></td><td x-text="a.name"></td><td x-text="a.category"></td><td x-text="a.acquired_on"></td><td x-text="a.in_service_on"></td>
+                      <td class="hb-num" x-text="fmt(a.cost)"></td><td class="hb-num" x-text="a.life_years"></td><td class="hb-num" x-text="fmt(a.salvage)"></td><td x-text="faStatusLabel(a.status)"></td>
+                      <td><button class="hb-btn" x-show="a.status === 'draft'" @click="faActivate(a)" :data-testid="'hb-fa-activate-' + a.id">啟用</button></td></tr>
+                  </template>
+                </tbody>
+              </table>
+              <div class="hb-note" x-show="!fa.assets.length" data-testid="hb-fa-empty">目前沒有資產卡片。</div>
+              <div class="hb-row" style="margin-top:14px">
+                <input class="hb-input filter" type="month" x-model="fa.ym" data-testid="hb-fa-ym">
+                <button class="hb-btn" @click="faSchedule()" data-testid="hb-fa-sched">折舊表</button>
+              </div>
+              <template x-if="fa.sched">
+                <div>
+                  <template x-for="c in fa.sched.checks" :key="c.key">
+                    <div :class="c.ok ? 'hb-ok' : 'hb-warn'" x-text="c.label + '：卡片 ' + fmt(c.left) + ' ／ 帳上 ' + fmt(c.right) + (c.ok ? '（相符）' : '（不符：' + c.note + '）')"></div>
+                  </template>
+                  <table class="hb-table" data-testid="hb-fa-sched-table">
+                    <thead><tr><th>資產編號</th><th>名稱</th><th>耐用年數表號</th><th class="hb-num">成本</th><th class="hb-num">本期折舊</th><th class="hb-num">累計折舊</th><th class="hb-num">帳面價值</th></tr></thead>
+                    <tbody>
+                      <template x-for="r in fa.sched.rows" :key="r.id">
+                        <tr><td x-text="r.asset_no"></td><td x-text="r.name"></td><td x-text="r.life_table_ref"></td><td class="hb-num" x-text="fmt(r.cost)"></td>
+                          <td class="hb-num" x-text="fmt(r.period)"></td><td class="hb-num" x-text="fmt(r.accum)"></td><td class="hb-num" x-text="fmt(r.book)"></td></tr>
+                      </template>
+                      <tr><td colspan="3"><b>合計</b></td><td class="hb-num" x-text="fmt(fa.sched.totals.cost)"></td><td class="hb-num" x-text="fmt(fa.sched.totals.period)"></td>
+                        <td class="hb-num" x-text="fmt(fa.sched.totals.accum)"></td><td class="hb-num" x-text="fmt(fa.sched.totals.book)"></td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
             </div>
 
             <!-- 扣繳清單（C5） -->
