@@ -1,4 +1,28 @@
-/* form-designer.css — 共用表單設計器（static/form-designer.js）。只用站內語意 token（--surface／--line／--ink-*／--accent／--tone-*），淺色深色各自解析；不寫死色碼。 */
+/* form-designer.css — 共用表單設計器（static/form-designer.js）。只用站內語意 token（--surface／--line／--ink-*／--accent／--tone-*）。
+ *
+ * 🔴 深色主題＝整頁 invert 濾鏡（style.css：`:root[data-theme="dark"] body > *:not(.topbar)… { filter: invert(1) hue-rotate(180deg) }`）：
+ *    頁面要用「淺色版」token，濾鏡才會把它反轉成深色；style.css 的 `:root[data-theme="dark"]` 深色 token 只給不經濾鏡的頁面用，
+ *    設計器放在經濾鏡的頁面裡直接吃它，會被反轉回淺灰（窗格淺灰、頁面深色，2026-10-02 截圖發現）。
+ *    所以 .fd 自己把會用到的 token 無條件固定成淺色值（＝淺色主題下本來的值）；--accent 系列不在這裡固定：深色時 style.css 已把它們
+ *    換成「前置補償值」（濾鏡後才是對的紅），照繼承即可。
+ *    例外：`<dialog>`（確認視窗、用語檢查表）在最上層（top layer），祖先的濾鏡不作用在它身上，所以它另外用深色 token（.fd-dlg 區塊）。
+ *    守門：backend/tests/test_e2e_form_designer_dark_2026_10_02.py。 */
+.fd {
+  --surface: #FFFFFF; --surface-muted: #FAFAF9; --surface-sunken: #F0EEE9;
+  --line: #E5E7EB; --line-strong: #D1D5DB;
+  --ink-strong: #1A1D21; --ink-secondary: #6B7280; --ink-muted: #9CA3AF;
+  --overlay-backdrop: rgba(0, 0, 0, .45); --shadow-popover: 0 8px 24px rgba(0, 0, 0, .22);
+  --tone-danger-fg: #B91C1C; --tone-danger-bg: #FEF2F2; --tone-danger-border: #FECACA;
+  --tone-warning-fg: #92400E; --tone-warning-solid: #D97706; --tone-warning-bg: #FFFBEB; --tone-warning-border: #FDE68A;
+  --tone-success-fg: #15803D; --tone-success-solid: #059669; --tone-success-bg: #F0FDF4; --tone-success-border: #86EFAC;
+}
+:root[data-theme="dark"] .fd-dlg {
+  --surface: #1C1C1E; --surface-muted: #232326; --surface-sunken: #2A2A2D; --line: #3A3A3F; --line-strong: #4B4B52;
+  --ink-strong: #F2F2F0; --ink-secondary: #B4B7BD; --ink-muted: #8E929A; --overlay-backdrop: rgba(0, 0, 0, .65);
+  --tone-danger-fg: #FCA5A5; --tone-danger-bg: #3B1618; --tone-danger-border: #7F1D1D;
+  --tone-warning-fg: #FCD34D; --tone-warning-bg: #332508; --tone-warning-border: #78520F;
+  --accent: #FF6B6B; --accent-light: #3A2226;
+}
 .fd { --fd-tap: 44px; display: flex; flex-direction: column; height: 100%; min-height: 560px; color: var(--ink-strong); background: var(--surface-muted); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; font-size: 14px; line-height: 1.55; position: relative; }
 .fd *, .fd *::before, .fd *::after { box-sizing: border-box; }
 .fd button, .fd input, .fd select, .fd textarea { font: inherit; color: inherit; }
@@ -172,7 +196,7 @@
 .fd-toasts { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 50; }
 .fd-toast { display: flex; align-items: center; gap: 14px; background: var(--ink-strong); color: var(--surface); padding: 10px 14px; border-radius: var(--radius); box-shadow: var(--shadow-popover); min-height: var(--fd-tap); }
 .fd-toast button { background: transparent; border: 1.5px solid var(--surface); color: var(--surface); border-radius: var(--radius); min-height: 34px; padding: 0 12px; font-weight: 600; }
-.fd-dlg { border: 0; border-radius: var(--radius-lg); padding: 18px 20px; width: min(460px, 92vw); background: var(--surface); color: var(--ink-strong); box-shadow: var(--shadow-popover); }
+.fd-dlg { margin: auto; border: 0; border-radius: var(--radius-lg); padding: 18px 20px; width: min(460px, 92vw); background: var(--surface); color: var(--ink-strong); box-shadow: var(--shadow-popover); }
 .fd-dlg::backdrop { background: var(--overlay-backdrop); }
 .fd-dlg h3 { margin: 0 0 8px; font-size: 16px; }
 .fd-dlg__b { font-size: 14px; color: var(--ink-secondary); }
