@@ -74,6 +74,7 @@
    "js:static/custom-layout.js",
    "js:static/file-preview.js",
    "js:static/form-preview.js",
+   "js:static/definition-form.js",
    "js:static/map-google.js",
    "js:static/map-overlay.js",
    "js:static/edit-presence.js",
@@ -266,10 +267,12 @@
     "mod:case/gl_events",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/completion_notes",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
-    "mod:case/expense_forms"
+    "mod:case/expense_forms",
+    "mod:case/expense_notify"
    ],
    "tables": [
     "case_action_items",

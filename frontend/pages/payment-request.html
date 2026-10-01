@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>新增請款 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/definition-form.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <!--
@@ -60,8 +61,20 @@
 
       <!-- 新增 -->
       <section x-show="tab === 'new'" id="pr-new" :data-busy="busy ? '1' : '0'">
+        <div class="pr-card" id="pr-type-card" x-show="types.length">
+          <h3>請款類型</h3>
+          <div class="pr-f">
+            <label for="pr-type">類型</label>
+            <select id="pr-type" x-model="typeCode" @change="selectType()">
+              <option value="">一般（案件額外支出）</option>
+              <template x-for="t in types" :key="t.code"><option :value="t.code" x-text="t.name + '（' + t.prefix + '）'"></option></template>
+            </select>
+          </div>
+          <div class="pr-hint" x-show="typeCode" x-text="typeCode ? '依「' + typeName() + '」的定義填寫；案件為選填，綁案件的支出會算入案件成本。' : ''"></div>
+        </div>
+
         <div class="pr-card">
-          <h3>① 挑案件</h3>
+          <h3 x-text="typeCode ? '案件（選填）' : '① 挑案件'"></h3>
           <div class="pr-f">
             <label for="pr-case-q">搜尋案件（單號、客戶或專案）</label>
             <input id="pr-case-q" type="search" x-model="caseQ" @input="queueCaseSearch()" placeholder="例：MQ-2026 或客戶名稱">
@@ -76,7 +89,7 @@
           </div>
         </div>
 
-        <div class="pr-card" x-show="picked" id="pr-form">
+        <div class="pr-card" x-show="picked && !typeCode" id="pr-form">
           <h3 x-text="'② 請款內容　' + (picked ? picked.quoteNo + '　' + (picked.customerName || '') : '')"></h3>
           <div class="pr-grid">
             <div class="pr-f">
@@ -120,6 +133,25 @@
           <div style="display:flex;gap:8px;margin-top:14px">
             <button class="btn btn-secondary" id="pr-save-draft" :disabled="busy" @click="save(false)">存成草稿</button>
             <button class="btn btn-primary" id="pr-submit" :disabled="busy" @click="save(true)">送審</button>
+          </div>
+        </div>
+        <div class="pr-card" x-show="typeCode" id="pr-typed-form">
+          <h3 x-text="'填寫' + typeName() + (picked ? '　' + picked.quoteNo : '　（不綁案件）')"></h3>
+          <div id="pr-df" x-ref="df"></div>
+          <div class="pr-grid" style="margin-top:12px">
+            <div class="pr-f">
+              <label for="pr-t-files">附件（收據、照片…）</label>
+              <input id="pr-t-files" type="file" multiple accept=".jpg,.jpeg,.png,.pdf" @change="form.files = [...$event.target.files]">
+            </div>
+            <div class="pr-f">
+              <label for="pr-t-invoice-files">發票（可以核准後再補）</label>
+              <input id="pr-t-invoice-files" type="file" multiple accept=".jpg,.jpeg,.png,.pdf" @change="form.invoiceFiles = [...$event.target.files]">
+            </div>
+          </div>
+          <div class="pr-err" id="pr-t-error" x-show="err" x-text="err"></div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="btn btn-secondary" id="pr-t-save-draft" :disabled="busy" @click="saveTyped(false)">存成草稿</button>
+            <button class="btn btn-primary" id="pr-t-submit" :disabled="busy" @click="saveTyped(true)">送審</button>
           </div>
         </div>
         <div class="pr-ok" id="pr-result" x-show="result" :data-status="result ? result.status : ''" x-text="result ? result.text : ''"></div>
@@ -172,11 +204,12 @@
         session: JSON.parse(localStorage.getItem('motrix_session') || '{}'),
         tab: 'new', busy: false, err: '', result: null,
         caseQ: '', cases: [], casesLoaded: false, picked: null, categories: [], _caseTimer: null,
+        types: [], typeCode: '', typeDef: null, _df: null,
         form: blank(),
         mine: [], mineLoaded: false, mineErr: '', mineMsg: '', invoiceDraft: {}, invoiceNoDraft: {},
 
         init() {
-          this.searchCases()
+          this.searchCases(); this.loadTypes()
           try { if (new URLSearchParams(location.search).get('tab') === 'mine') { this.tab = 'mine'; this.loadMine() } } catch (e) {}
         },
         _h(json) { var h = { Authorization: 'Bearer ' + (this.session.token || '') }; if (json) h['Content-Type'] = 'application/json'; return h },
@@ -237,6 +270,72 @@
             this.result = { status: status, id: id, text: (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + no + ' #' + id + '，可以在「我的請款」看進度' }
             this.form = blank()
             ;['pr-files', 'pr-invoice-files'].forEach(function (x) { var el = document.getElementById(x); if (el) el.value = '' })
+          } catch (e) { this.err = e.message }
+          finally { this.busy = false }
+        },
+
+        // ── 費用單據類型（A2-4）：定義來自 GET /api/expense-types；表單由 static/definition-form.js 依定義渲染 ──
+        typeName() { var t = this.types.find((x) => x.code === this.typeCode); return t ? t.name : '' },
+        async loadTypes() {
+          try { var r = await fetch('/api/expense-types', { headers: this._h() }); this.types = r.ok ? await r.json() : [] } catch (e) { this.types = [] }
+        },
+        async selectType() {
+          this.err = ''; this.result = null
+          if (this._df) { this._df.destroy(); this._df = null }
+          this.typeDef = null
+          if (!this.typeCode) return
+          try {
+            var h = this._h()
+            var rs = await Promise.all([
+              fetch('/api/expense-types/' + encodeURIComponent(this.typeCode), { headers: h }),
+              fetch('/api/expense-categories', { headers: h }),
+              fetch('/api/users/selectable', { headers: h }),
+              fetch('/api/org/tree', { headers: h })])
+            if (!rs[0].ok) throw new Error('讀不到類型定義（HTTP ' + rs[0].status + '）')
+            var def = await rs[0].json()
+            var cats = rs[1].ok ? ((await rs[1].json()).categories || []) : []
+            var users = rs[2].ok ? await rs[2].json() : []
+            var tree = rs[3].ok ? await rs[3].json() : []
+            var depts = []
+            tree.forEach(function (dv) { (dv.departments || []).forEach(function (d) { depts.push({ id: d.id, name: dv.name + '／' + d.name }) }) })
+            this.typeDef = def
+            var me = this.session.user || this.session || {}
+            this._df = window.MotrixDefinitionForm.mount(this.$refs.df, {
+              definition: def.definition || def, viewer: { username: me.username || '', isCashier: false },
+              categories: cats, users: users, departments: depts })
+          } catch (e) { this.err = e.message }
+        },
+        async saveTyped(submit) {
+          this.err = ''; this.result = null
+          if (!this._df) { this.err = '請先選擇類型'; return }
+          var problems = this._df.validate()
+          if (problems.length) { this.err = problems[0].message + (problems.length > 1 ? '（還有 ' + (problems.length - 1) + ' 項）' : ''); return }
+          var v = this._df.getValue()
+          var no = this.picked ? this.picked.quoteNo : '-'                       // 哨兵「-」＝無案件（W2 路徑）
+          var base = '/api/quotations/' + encodeURIComponent(no) + '/extra-expenses'
+          var dep = v.data.cost_dept || v.data.dept
+          this.busy = true
+          try {
+            var r = await fetch(base, { method: 'POST', headers: this._h(true), body: JSON.stringify({
+              kind: this.typeCode, data: v.data, lines: v.lines, departmentId: dep ? Number(dep) : null,
+              expenseDate: v.data.req_date || '' }) })
+            var d = await this._json(r)
+            if (!r.ok) throw new Error(d.detail || ('建立失敗（HTTP ' + r.status + '）'))
+            var id = d.id
+            await this._upload(no, id, this.form.files, 'other')
+            await this._upload(no, id, this.form.invoiceFiles, 'invoice')
+            var status = '草稿'
+            if (submit) {
+              var rs = await fetch(base + '/' + id + '/submit', { method: 'POST', headers: this._h() })
+              var ds = await this._json(rs)
+              if (!rs.ok) throw new Error('已存成草稿（' + (d.docCode || '') + '），但送審失敗：' + (ds.detail || ('HTTP ' + rs.status)))
+              status = ds.status || '待審核'
+            }
+            var text = (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + (d.docCode || (no + ' #' + id)) + '，可以在「我的請款」看進度'
+            this.form = blank()
+            ;['pr-t-files', 'pr-t-invoice-files'].forEach(function (x) { var el = document.getElementById(x); if (el) el.value = '' })
+            await this.selectType()                                              // 重新渲染空白表單（它會清掉結果訊息 ⇒ 先渲染再放結果）
+            this.result = { status: status, id: id, text: text }
           } catch (e) { this.err = e.message }
           finally { this.busy = false }
         },
