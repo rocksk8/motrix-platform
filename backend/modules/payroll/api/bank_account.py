@@ -31,14 +31,18 @@ def _body(body):
         raise HTTPException(400, str(e))
 
 
-def _save(conn, target, fields, actor, authorization, *, by_admin):
+def _save(conn, target, fields, actor, *, by_admin):
+    """寫入並 commit；稽核由**呼叫的端點自己**寫（`_audit_update`；寫入端點稽核守門 `test_write_endpoints_are_audited` 只認端點本體直接呼叫 `_audit`，不認內部 helper）。"""
     res = ba.save(conn, target["id"], target["username"], fields, actor["username"])
-    if res["noop"]:
-        return res
-    conn.commit()
-    _audit(_tok(authorization), "user.bank_account.update", "user", target["username"], target["display_name"] or target["username"],
-           {"fields": res["changed"], "before_last4": res["before_last4"], "after_last4": res["after_last4"], "byAdmin": by_admin})
+    if not res["noop"]:
+        conn.commit()
     return res
+
+
+def _audit_detail(res, target, actor, *, by_admin):
+    """稽核內容：誰改誰、改了哪些欄位、前後**末四碼**；**永不放帳號全碼、戶名**。"""
+    return {"fields": res["changed"], "before_last4": res["before_last4"], "after_last4": res["after_last4"],
+            "byAdmin": by_admin, "userId": target["id"], "changedBy": actor["username"]}
 
 
 @router.get("/api/me/bank-account")
@@ -58,7 +62,10 @@ def put_my_account(body: dict = Body(...), authorization: str = Header(None)):
     conn = get_db()
     try:
         target = _user_row(conn, user["id"])
-        res = _save(conn, target, fields, user, authorization, by_admin=False)
+        res = _save(conn, target, fields, user, by_admin=False)
+        if not res["noop"]:
+            _audit(_tok(authorization), "user.bank_account.update", "user", target["username"], target["display_name"] or target["username"],
+                   _audit_detail(res, target, user, by_admin=False))
         return {"ok": True, "changed": res["changed"], "account": ba.profile(conn, ba.get_active_by_username(conn, user["username"]), user, user["username"])}
     finally:
         conn.close()
@@ -107,7 +114,10 @@ def put_account(user_id: int, body: dict = Body(...), authorization: str = Heade
         if not own and not ba.may_edit_others(user):
             raise HTTPException(404, "Not Found")
         fields = _body(body)
-        res = _save(conn, target, fields, user, authorization, by_admin=not own)
+        res = _save(conn, target, fields, user, by_admin=not own)
+        if not res["noop"]:
+            _audit(_tok(authorization), "user.bank_account.update", "user", target["username"], target["display_name"] or target["username"],
+                   _audit_detail(res, target, user, by_admin=not own))
         return {"ok": True, "changed": res["changed"]}
     finally:
         conn.close()
