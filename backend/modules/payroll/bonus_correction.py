@@ -174,6 +174,7 @@ def open_vouchers(conn, corr, award, who, now):
 
     R1 下游：財務會計／總帳——傳票自己再走簽核與過帳；營運報表不讀傳票（讀 `expense_entries`）。
     沖轉傳票由總帳依「目前有效的應付傳票」分錄組反向（`reverses_voucher_id`；連續更正時是前一次的重開傳票）。
+    追回應收科目無效（有追回額時先檢查）⇒ 沖轉、重開、追回**整組都不開**（否則應付少一個追回額）。
     總帳拒絕（原傳票未過帳／已作廢／已被沖轉／期間已鎖）⇒ 沖轉與重開**都不開**（只重開會讓應付重複），回 notice 由會計手動處理。
     回 notice（空字串＝兩張都開了或金額為 0 不需要開）；寫入 corr 的 `*_voucher_id`（呼叫端交易內，不 commit）。"""
     if not bonus_vouchers.accounting_available():

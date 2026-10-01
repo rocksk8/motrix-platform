@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 934,
+  "tests": 935,
   "unmapped": 12,
   "kinds": {
-   "api": 501,
+   "api": 502,
    "e2e": 219,
    "audit": 129,
    "unit": 85
@@ -6693,6 +6693,26 @@
     "/api/cashier/bonus-payouts"
    ],
    "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_correction_clawback_account_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "mod:payroll/__init__",
+    "mod:payroll/bonus_correction",
+    "mod:payroll/tests/test_bonus_correction_2026_09_30"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/bonus_correction.py",
+     "backend/modules/payroll/tests/test_bonus_correction_2026_09_30.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
    "module": "payroll"
   },
   "backend/modules/payroll/tests/test_bonus_empty_state_2026_09_23.py": {
