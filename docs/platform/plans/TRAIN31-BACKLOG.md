@@ -46,3 +46,8 @@
 - S-2（should-fix，31班）：待審核中取消 → approval_status 仍 待審核、紅點不消、/approve 對已取消回 200。修：取消時同交易關閉待審階段；/approve 對 cancelled 回 409。
 - O-1 自核准屬流程設定；O-2 approved_hash 只寫不驗；O-3 PUT 鎖序理論競態；O-4 結案閘不看派發核准狀態。
 - 報告：docs/platform/audit/AUDIT-C7-train30-dispatch.md（探針檔含刻意紅的 F2，不進列車）。
+
+## 進度 2026-10-02（主持核對 ls-remote）
+- 2e：wip/t31-prefill-sources-2e@0bf4ccc6（合併時 l1 snapshot 衝突→取 platform 版再 core_bump --pending）；wip/t32-prpo-s1-2e@80c3532d（Q6 額外支出合計對齊 + purchase-items picker；公告：有 PR/草稿/退回列的案件合計會變）。待做 S2（itemId 驗證／上限／overPlanReason）、S3（入帳）、額外支出頁 uncountedAmount 提示。
+- c7：wip/t31-form-designer-c7@d9569b3a（切片1–3；預設關閉；真滑鼠拖放需人工驗）。
+- a3：wip/t31-expense-designer-a3@99e14769（請款類型接線；預設改關閉）。
