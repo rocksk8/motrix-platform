@@ -32,7 +32,8 @@ import known_flakes  # noqa: E402
 
 BACKEND = HERE.parents[1] / "backend"
 ATTEMPT_TIMEOUT = 15 * 60
-_LINE_RE = re.compile(r"^(FAILED|ERROR)\s+(\S+)")
+# pytest -rfE 摘要行只長 `FAILED path.py::t - msg`／`ERROR path.py - msg`；日誌行 `ERROR    logger:file.py:200 msg` 不是（2026-10-01 第29班：被當成收集錯誤，擋掉偶發重跑）
+_LINE_RE = re.compile(r"^(FAILED|ERROR)\s+([\w./\-]+\.py(?:::\S+)?)(?:\s+-\s.*)?$")
 
 
 def read_stream(path, stage):

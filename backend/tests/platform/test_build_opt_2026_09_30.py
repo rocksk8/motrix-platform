@@ -563,3 +563,16 @@ def test_fail_stream_is_loaded_only_when_flake_retry_is_on():
     guard = sec.index("if (-not $NoFlakeRetry) {")
     assert sec.index('$fsArgs = @("-p", "fail_stream")') > guard
     assert sec.count("@fsArgs") == 2
+
+
+def test_log_lines_starting_with_error_are_not_collection_errors():
+    """日誌行 `ERROR    logger:file.py:200 msg` 曾被當成收集錯誤而擋掉偶發重跑（第29班建包）。"""
+    out = "\n".join([
+        "ERROR    helpers.email_notify:email_notify.py:200 信件類型 'backup_error'：不寄",
+        "ERROR    archive:archive.py:521 備份告警信寄不出去",
+        "FAILED tests/test_e2e_x.py::test_smoke - TimeoutError",
+    ])
+    ids, blockers = FR.failed_nodeids([], out)
+    assert ids == ["tests/test_e2e_x.py::test_smoke"] and blockers == []
+    _, blockers = FR.failed_nodeids([], "ERROR tests/test_bad.py - ImportError")   # 真的收集錯誤仍擋下
+    assert blockers == ["收集錯誤：tests/test_bad.py"]
