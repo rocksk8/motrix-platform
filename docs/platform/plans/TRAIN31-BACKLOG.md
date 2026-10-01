@@ -55,3 +55,4 @@
 - a3：wip/t31-expense-designer-a3@fc610fb3（預設舊 UI，?designer=1 開新）；c7：wip/t31-form-designer-c7@3268466c（fixedOptions；待補 modules.json 登記 3 檔）。
 - 請款類型預覽截圖（a3 e0d830c1，docs/platform/plans/expense-types-designer-shots/）發現：(2) 出貨定義 applicant 欄位 help 含術語「把 locked 改成 false」→ 動 helpers/expense_type_defs/*.json 影響 def_version，待使用者裁示措辭；(3) 深色面板標題低對比（頁面原有樣式）。(1) 簽核單據類型「undefined（未登記）」僅顯示修正，a3 處理。
 - 真滑鼠拖放（設計器）需人工瀏覽器驗，列入使用者預覽清單。
+- 2e：wip/t32-prpo-s1-2e@167f208b（S2 完成：itemId／累計上限／overPlanReason／fromPr；14 題＋16 突變 15 殺，1 等價）；S3 入帳進行中（GL E11、結算欄、itemLinkedAmount）。
