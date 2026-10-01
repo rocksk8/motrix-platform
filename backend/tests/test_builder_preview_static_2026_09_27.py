@@ -30,10 +30,23 @@ def test_only_the_runtime_page_sets_the_preview_flag():
     assert src.index("window.MOTRIX_PREVIEW = true") < src.index('src="../static/auth-guard.js"'), "旗標要在 auth-guard 之前設好"
 
 
+#: 預覽時共用腳本要讓位：`if (window.MOTRIX_PREVIEW) return`；允許再 OR 上嵌入旗標（`|| window.MOTRIX_EMBED`，方案 B 的嵌入頁也讓位），
+#: 但一定要有 PREVIEW 這個條件（不能只剩 EMBED，否則建構器預覽會載入通知／側欄）。
+STAND_DOWN = re.compile(r"if \(window\.MOTRIX_PREVIEW(?: \|\| window\.MOTRIX_EMBED)?\) return")
+
+
 def test_shared_scripts_stand_down_in_preview():
     for rel in ("static/auth-guard.js", "static/notif.js", "static/sidebar.js"):
         src = (FRONT / rel).read_text(encoding="utf-8")
-        assert re.search(r"if \(window\.MOTRIX_PREVIEW\) return", src), rel
+        assert STAND_DOWN.search(src), rel
+
+
+def test_stand_down_reverse_controls():
+    assert STAND_DOWN.search("if (window.MOTRIX_PREVIEW) return;")                                    # 正對照：舊寫法
+    assert STAND_DOWN.search("if (window.MOTRIX_PREVIEW || window.MOTRIX_EMBED) return   // x")        # 正對照：加嵌入旗標
+    assert not STAND_DOWN.search("var a = 1")                                                          # 沒有讓位
+    assert not STAND_DOWN.search("if (window.MOTRIX_EMBED) return")                                    # 只剩 EMBED：預覽沒讓位
+    assert not STAND_DOWN.search("if (window.MOTRIX_EMBED || window.MOTRIX_PREVIEW) return")           # 條件順序不同＝沒被明確釘住，要改就要連同測試
 
 
 def test_the_page_refuses_api_calls_through_one_flag():
