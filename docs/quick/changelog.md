@@ -28,6 +28,13 @@
 - `module-builder-core.js:readMenuGroups` 改讀 `window.MOTRIX_MENU.groups`（伺服器宣告，與使用者版面／側欄渲染時機無關）＋已發布自訂模組的分組；新增 `groupOptions()`／`groupMissing()`：已存分組不在清單時保留並提醒。頁面補說明：這是選單項目，不是頁內頁籤。e2e：`test_e2e_builder_menu_group_2026_10_01.py`。
 - 取捨：頁內頁籤掛載（方案 B）**延後、未捨棄**，見 `docs/platform/plans/BUILDER-ATTACH-EXISTING-MODULE-SPEC.md`。
 
+
+## 2026-10-01 營運報表：案件部門跟業務負責人
+
+- 新增 `reports.py::_case_dept()`／`_load_user_index()`／`_row_cr()`；`_row_dept`、`_collect_unreceived_items`、`_collect_payment_anomalies`、`_collect_expenses`、月趨勢類彙總與 `dashboard.py`（stats、月趨勢）改用它。規則：負責人是帳號 ⇒ 該帳號部門；名字型／查無帳號 ⇒ 未分類；未填 ⇒ 開單者。
+- 測試 `modules/analytics/tests/test_dept_follows_sales_owner_2026_10_01.py`（6 題：部門合計、與業務員績效對帳、無帳號⇒未分類、首頁篩選、收款異常、正向控制）。
+- 未動：首頁「最新動態」部門篩選仍依開單者。§11 三列同步更新（部門彙總⇒完成；financial_view⇒部分修復；16 模組⇒已修復）。
+
 ---
 
 ### 2026-09-30 — 排版器：重開時編輯被自己稍後的載入蓋掉（O7 第三次；`frontend/static/layout-editor.js`，DB 無異動）
