@@ -43,8 +43,9 @@ from helpers.case_access import deny_case, require_case   # M01-O1：逐案拒�
 from helpers import row_access
 from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供者同一支
 from helpers.auth import user_has_module
-from modules.case.recognition import normalize_date  # `AC2`
+from modules.case.recognition import normalize_date, COUNTED_EXTRA_STATUSES  # `AC2`；後者＝合計與營運報表同一條規則（32-Q6）
 from modules.case import expense_forms as EF   # 費用單據（A2）：類型／明細金額／data 合併
+from modules.case import purchase_items as PI    # 請購／採購單連結案件品項（32-S1）
 from modules.case import expense_notify as XN  # 費用單據的信件（A2-7）；kind='' 一律不寄
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
@@ -372,8 +373,12 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
             items.append(d)
         # 合計只算看得到金額的列（避免「清單 3 筆、合計卻含別人的金額」）；已作廢的列照列出（稽核／申請人查詢）但不進任何合計
         visible = [i for i in items if not i.get("masked") and i["status"] != VOIDED_STATUS]
-        total = sum(float(i["totalCost"] or 0) for i in visible)
-        pending = sum(float(i["totalCost"] or 0) for i in visible if i["status"] != "已核准")
+        # 32-Q6（使用者裁示 2026-10-02）：合計與營運報表同一條規則——只計 COUNTED_EXTRA_STATUSES（待審核／簽核中／已核准）、
+        # 且類型要進金流（kind='' 或 payable）：**請購單、草稿、已駁回不計**。（原本只排除作廢與被遮蔽的列，精算的額外支出因此比報表多。）
+        counted = [i for i in visible if i["status"] in COUNTED_EXTRA_STATUSES and EF.is_payable_kind(i["kind"] or "")]
+        total = sum(float(i["totalCost"] or 0) for i in counted)
+        pending = sum(float(i["totalCost"] or 0) for i in counted if i["status"] != "已核准")
+        uncounted = sum(float(i["totalCost"] or 0) for i in visible if i not in counted)      # 資訊：沒有計入的金額（請購單、草稿、已駁回）
         # W1：手續費（公司自付、已登錄付款者）另計，進案件成本（settlement 的 remitFeeTotal）；不併入 totalAmount
         fee_total = sum(float(i["remitFee"] or 0) for i in visible if i["paidDate"])
         return {
@@ -382,11 +387,35 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
             "remitFeeTotal": fee_total,
             "totalAmount": total,
             "totalPending": pending,
+            "uncountedAmount": uncounted,
             # 對這位使用者遮蔽金額的列數（不含已作廢）：> 0 ⇒ totalAmount 不是完整成本，精算頁據此擋存檔／完結（否則會把殘缺的總額寫進精算）
             "maskedCount": sum(1 for i in items if i.get("masked") and i["status"] != VOIDED_STATUS),
             "pendingCount": sum(1 for i in items if i["status"] not in ("已核准", "草稿", VOIDED_STATUS)),
             "categories": CATEGORIES,
         }
+    finally:
+        conn.close()
+
+
+@router.get("/api/quotations/{quote_no}/purchase-items")
+def list_purchase_items(quote_no: str, authorization: str = Header(None)):
+    """請購單／採購單的「從案件品項帶入」挑選器（32-S1）：報價品項＋計畫量／已請購／已採購／剩餘可採購量。
+    權限＝與案件額外支出清單同一條（登入＋案件可見）；看不到財務金額的人不回 `planUnitCost`。無案件（哨兵 `-`）⇒ 400。"""
+    quote_no = _qn(quote_no)
+    user = _require_user(authorization)
+    if quote_no == "":
+        raise HTTPException(400, "無案件的單據沒有案件品項可挑")
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        q = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        try:
+            data = json.loads((q["data_json"] if q else "") or "{}")
+        except (TypeError, ValueError):
+            data = {}
+        rows = conn.execute("SELECT id, kind, status, lines_json FROM case_extra_expenses WHERE quote_no=? AND kind IN (?,?)",
+                            (quote_no, PI.REQ, PI.ORD)).fetchall()
+        return {"quoteNo": quote_no, "items": PI.picker(data, rows, show_cost=can_see_financial(user))}
     finally:
         conn.close()
 
