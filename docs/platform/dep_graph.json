@@ -781,6 +781,7 @@
     "helper:tiered_approval",
     "plat:definitions",
     "plat:events",
+    "plat:mounts",
     "plat:paths",
     "plat:registry",
     "plat:txn"
@@ -13328,7 +13329,9 @@
   "plat:customization": {
    "api_prefixes": [],
    "dynamic_sql": false,
-   "imports": [],
+   "imports": [
+    "plat:mounts"
+   ],
    "kind": "plat",
    "path": "backend/core/customization.py",
    "tables_ddl": [],
@@ -13411,6 +13414,19 @@
     "audit_log",
     "module_schema_versions"
    ]
+  },
+  "plat:mounts": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "plat:menu"
+   ],
+   "kind": "plat",
+   "path": "backend/core/mounts.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
   },
   "plat:pages": {
    "api_prefixes": [],
@@ -15364,6 +15380,7 @@
     "helper:custom_modules",
     "plat:catalog",
     "plat:menu",
+    "plat:mounts",
     "plat:registry"
    ],
    "kind": "router",
@@ -15375,6 +15392,18 @@
      "line": 141,
      "method": "GET",
      "path": "/api/platform/menu"
+    },
+    {
+     "func": "platform_mounts",
+     "line": 166,
+     "method": "GET",
+     "path": "/api/platform/mounts"
+    },
+    {
+     "func": "platform_mount_points",
+     "line": 182,
+     "method": "GET",
+     "path": "/api/platform/mount-points"
     }
    ],
    "tables_ddl": [],

@@ -128,6 +128,7 @@
    "plat:loader",
    "plat:menu",
    "plat:migrations",
+   "plat:mounts",
    "plat:pages",
    "plat:paths",
    "plat:registry",
