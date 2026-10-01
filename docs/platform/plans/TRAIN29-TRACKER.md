@@ -4,8 +4,8 @@
 
 | 視窗 | 工作 | 分支 | sha | 狀態 | 下一步 |
 |---|---|---|---|---|---|
-| hichan-2e | W2 線：A2 作廢／稽核匯出／四型 e2e | wip/w2-expense-a2-w2b | 0b9e1857（12:20） | S0、S1 完成；S2 進行（稽核/匯出遮罩、備份 F2）；S2.5 取消 | S2→S3 |
-| hichan-a3 | W1 線：A2-2 類型定義 → A2-4 → A2-7（最後合併） | wip/w1-a2-2、wip/w1-a2-4 | b8ae49cb／ab8a808c（12:26） | A2-2、A2-4 完成；A2-7 通知信已首提交 | A2-7 完成→e2e |
+| hichan-2e | W2 線：A2 作廢／稽核匯出／四型 e2e | wip/w2-expense-a2-w2b | efc0ea79（12:38） | S0、S1、S2、def_version 釘版本完成；S2.5 取消 | S3 四型 e2e（ETA ~14:40） |
+| hichan-a3 | W1 線：A2-2 類型定義 → A2-4 → A2-7（最後合併） | wip/w1-a2-2、wip/w1-a2-4 | b8ae49cb／8f57800d（12:36） | A2-2、A2-4、A2-7 完成；預檢 13:00 | HANDOFF 附錄、合併 |
 | hichan-c7 | 模組建構器（已併 platform ad418e88）；部門彙總跟業務負責人 | fix/dept-follows-sales-owner | 422078dd | 完成（8 題綠）、待合併；待待命 | 與 wip/w3-dept-dim 合併時 reports.py _collect_expenses 一處衝突，解法：w3 區塊保留、dept_by_quote 改用 _case_dept（SELECT 要含 sales_person）|
 | 未派 | W3：dept-dim／etype-editor／map-zoom／bank 收尾 | wip/w3-* | 見 HANDOFF-HOST | 預檢未完 | 等 W1/W2 進度再派 |
 | 未派 | W4：g2-5（含 A5 疑慮單獨 revert）、G4/G5、稽核 | wip/w4-g2-5 | 10f6cbdd | 未完 | 同上 |
@@ -21,5 +21,5 @@
 - financial_view：後端已強制（helpers/auth.py can_see_financial；financial_mask.py），known-limits 過時。
 - 16 模組後端不讀：已修，僅 dashboard／map 後端不讀（前端有讀）。
 
-| hichan-d7 | W4b 收尾（派工單 DISPATCH-W4B） | wip/w4-g2-5b | 未推 | 12:30 起 | A5 驗證→G3 閘門… |
+| hichan-d7 | W4b 收尾（派工單 DISPATCH-W4B） | wip/w4-g2-5b | 73e606c6（12:36） | 1 A5 已撤、3 G4 文件、繼承紅燈已修 | 13:00 排預檢；4 G5 |
 | hichan-c7 補充 | 補 modules.json 登記（custom_module_delete）→W3 dept-dim 收尾 | 未推 | — | 預計 13:00 | |
