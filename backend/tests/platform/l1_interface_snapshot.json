@@ -1,5 +1,5 @@
 {
- "core_version": "1.100",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -873,6 +873,16 @@
   "helper:part_catalog": {
    "PART_CATEGORIES": "const",
    "PART_CATEGORY_PREFIX": "const"
+  },
+  "helper:prefill_sources": {
+   "PREFILL_SOURCES": "const",
+   "check_field": "def(field, *, mount_has_case=…, locked=…, path=…)",
+   "default_token": "def(field)",
+   "fill_defaults": "def(body, values, ctx, *, prior=…)",
+   "get": "def(token)",
+   "list_sources": "def()",
+   "make_ctx": "def(conn, viewer, *, requester=…, case=…, module_key=…, last_value=…, now=…)",
+   "resolve_field": "def(field, ctx)"
   },
   "helper:privacy_notice": {
    "ACKS_KEY": "const",

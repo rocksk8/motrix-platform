@@ -31,6 +31,7 @@
    "helper:custom_modules",
    "helper:custom_module_delete",
    "helper:formula",
+   "helper:prefill_sources",
    "helper:dates",
    "helper:doc_template",
    "helper:doc_render",
