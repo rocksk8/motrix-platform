@@ -150,3 +150,17 @@ def test_designer_clicking_a_problem_selects_that_field(live_server, make_user, 
     key = page.evaluate("() => Alpine.$data(document.body).body.fields[1].key")
     page.click("[data-testid=et-problems] li")
     page.wait_for_selector('.fd-center .fd-fld.is-sel[data-key="%s"]' % key, timeout=5000)
+
+
+@pytest.mark.e2e
+def test_doctype_select_shows_the_default_for_a_definition_without_docType_and_does_not_write_it_back(live_server, make_user, e2e_browser):
+    u = make_user(username="etd_dt", role="superadmin", modules=[])
+    page = _open(e2e_browser, live_server, u, query="")
+    page.click("[data-testid=et-open-travel]")
+    page.wait_for_selector("[data-testid=et-edit]", timeout=20000)
+    shown = page.evaluate("() => { const s = document.querySelector('[data-testid=et-doctype]'); return s.options[s.selectedIndex].text }")
+    assert "undefined" not in shown and "額外支出" in shown, shown
+    assert page.evaluate("() => Alpine.$data(document.body).body.docType") is None            # 沒有寫回定義
+    opts = page.eval_on_selector_all("[data-testid=et-doctype] option", "els => els.map(e => e.value).filter(v => v && v !== '__default')")
+    page.select_option("[data-testid=et-doctype]", opts[0])
+    assert page.evaluate("() => Alpine.$data(document.body).body.docType") == opts[0]         # 使用者選了才寫入

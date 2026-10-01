@@ -46,6 +46,10 @@
     .et-keys { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 12.5px; }
     .et-keys label { display: flex; align-items: center; gap: 4px; }
     #et-preview { margin-top: 10px; min-height: 40px; }
+    /* 深色主題＝整頁 invert 濾鏡（style.css）：頁面要用「淺色版」token，濾鏡才會把它反轉成深色；
+       :root[data-theme=dark] 的深色 token 只給不經濾鏡的頁面用，直接用會被反轉成淺底（面板標題與底色對比不足）。 */
+    :root[data-theme="dark"] .et-main { --surface: #FFFFFF; --tone-danger-fg: #B91C1C; --tone-danger-bg: #FEF2F2; --tone-danger-border: #FECACA;
+      --tone-info-fg: #1D4ED8; --tone-info-bg: #EEF2FF; --tone-info-border: #BFDBFE; }
     @media (max-width: 720px) { .et-main { margin-left: 0; padding: 20px 16px 60px; } }
   </style>
 </head>
@@ -109,10 +113,11 @@
                 <input type="text" data-testid="et-prefix" x-model="body.numbering.prefix" maxlength="4" @input="body.numbering.prefix = body.numbering.prefix.toUpperCase()">
               </label>
               <label>簽核單據類型
-                <select data-testid="et-doctype" x-model="body.docType">
-                  <option value="">（請選擇）</option>
-                  <template x-for="d in docTypes" :key="d.code"><option :value="d.code" x-text="d.label + '（' + d.code + '）'"></option></template>
-                  <option x-show="body.docType && !docTypes.some(d => d.code===body.docType)" :value="body.docType" x-text="body.docType + '（未登記）'"></option>
+                <select data-testid="et-doctype" @change="body.docType = $event.target.value === '__default' ? undefined : $event.target.value">
+                  <template x-if="body.docType === undefined"><option value="__default" selected>額外支出（預設）</option></template>
+                  <option value="" :selected="body.docType === ''">（請選擇）</option>
+                  <template x-for="d in docTypes" :key="d.code"><option :value="d.code" :selected="body.docType === d.code" x-text="d.label + '（' + d.code + '）'"></option></template>
+                  <option x-show="body.docType && !docTypes.some(d => d.code===body.docType)" :value="body.docType" selected x-text="body.docType + '（未登記）'"></option>
                 </select>
               </label>
               <label class="et-chk"><input type="checkbox" data-testid="et-payable" x-model="body.payable"> 核准後進出納（付款）</label>
