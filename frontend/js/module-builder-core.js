@@ -103,14 +103,25 @@
           }
         },
         readMenuGroups() {
-          // 選單位置只能選目前主選單已有的分組（程式提供的），或另開「自訂模組」
+          // 選單位置＝既有分組的顯示名稱（core/menu.py merge_custom 以名稱併組）。來源：伺服器宣告的 MOTRIX_MENU.groups
+          // （與使用者版面無關、不等側欄渲染），再補側欄 DOM、已發布自訂模組用到的分組；最後一定有「自訂模組」。
           var out = []
-          document.querySelectorAll('#app-mainnav .mnav__in > .mnav__grp > .mnav__top').forEach(function (el) {
-            var t = el.textContent.trim()
-            if (t && out.indexOf(t) < 0) out.push(t)
-          })
-          if (out.indexOf(this.DEFAULT_GROUP) < 0) out.push(this.DEFAULT_GROUP)
+          var add = function (t) { t = (t || '').trim(); if (t && out.indexOf(t) < 0) out.push(t) }
+          var decl = (window.MOTRIX_MENU && window.MOTRIX_MENU.groups) || []
+          decl.forEach(function (g) { add(g.label) })
+          document.querySelectorAll('#app-mainnav .mnav__in > .mnav__grp > .mnav__top').forEach(function (el) { add(el.textContent) })
+          ;(this.published || []).forEach(function (m) { add((m.menu || {}).group) })
+          add(this.DEFAULT_GROUP)
           return out
+        },
+        // 下拉選項：目前模組已存的分組若已不在清單（分組改名／停用）仍要列出並標示，不可悄悄變成別組
+        groupOptions() {
+          var cur = ((this.def && this.def.menu) || {}).group || this.DEFAULT_GROUP
+          return this.menuGroups.indexOf(cur) < 0 ? this.menuGroups.concat([cur]) : this.menuGroups
+        },
+        groupMissing() {
+          var cur = ((this.def && this.def.menu) || {}).group || this.DEFAULT_GROUP
+          return this.menuGroups.indexOf(cur) < 0
         },
 
         // ── 開啟模組 ──

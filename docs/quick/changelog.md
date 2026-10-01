@@ -22,6 +22,12 @@
 - 取捨：「已發布版本不可刪」不變式只在此一處例外（整模組刪）。
 - 待辦：「把功能加進既有模組（而非新增獨立模組）」尚未做，見對話裁示。
 
+
+## 2026-10-01 模組建構器：選單位置清單修正（方案 A）
+
+- `module-builder-core.js:readMenuGroups` 改讀 `window.MOTRIX_MENU.groups`（伺服器宣告，與使用者版面／側欄渲染時機無關）＋已發布自訂模組的分組；新增 `groupOptions()`／`groupMissing()`：已存分組不在清單時保留並提醒。頁面補說明：這是選單項目，不是頁內頁籤。e2e：`test_e2e_builder_menu_group_2026_10_01.py`。
+- 取捨：頁內頁籤掛載（方案 B）**延後、未捨棄**，見 `docs/platform/plans/BUILDER-ATTACH-EXISTING-MODULE-SPEC.md`。
+
 ---
 
 ### 2026-09-30 — 排版器：重開時編輯被自己稍後的載入蓋掉（O7 第三次；`frontend/static/layout-editor.js`，DB 無異動）

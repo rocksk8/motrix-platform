@@ -145,9 +145,10 @@
               <div class="mb-f">
                 <label for="mb-menu-group">選單位置（主選單分組）</label>
                 <select id="mb-menu-group" :value="(def.menu || {}).group || DEFAULT_GROUP" @change="setMenu('group', $event.target.value)">
-                  <template x-for="g in menuGroups" :key="g"><option :value="g" x-text="g" :selected="g === ((def.menu || {}).group || DEFAULT_GROUP)"></option></template>
+                  <template x-for="g in groupOptions()" :key="g"><option :value="g" x-text="g" :selected="g === ((def.menu || {}).group || DEFAULT_GROUP)"></option></template>
                 </select>
-                <div class="mb-hint">分組取自目前的主選單；選「自訂模組」會另開一組。</div>
+                <div class="mb-hint" id="mb-menu-group-hint">選既有分組（例：我的工作）＝這個模組會成為該分組下的一個選單項目（不是頁面內的頁籤）；選「自訂模組」會另開一組。</div>
+                <div class="mb-bad" id="mb-menu-group-missing" x-show="groupMissing()">這個分組目前的主選單找不到，儲存後會另開一組同名分組。</div>
               </div>
               <div class="mb-f">
                 <label for="mb-menu-order">選單排序（小的在前）</label>
