@@ -9,8 +9,12 @@
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/form-preview.js"></script>
+  <script src="../js/expense-types-designer.js"></script>
   <script src="../js/expense-types.js"></script>
+  <script src="../static/form-designer-model.js"></script>
+  <script src="../static/form-designer.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <link rel="stylesheet" href="../css/form-designer.css">
   <!--
     請款類型定義編輯頁 v1（A2-2；只給最高管理者）：請購單／採購單／差旅費用／零用金等類型的欄位、明細欄、必填、鎖定、
     僅出納可改、簽核單據類型、單號前綴、是否進出納、版面與啟用。資料全走既有定義庫路由 /api/definitions/expense_type；
@@ -117,7 +121,14 @@
             <div class="et-sub" style="margin-top:8px">簽核流程（誰簽、幾層）在「簽核設定」頁依上面的單據類型設定。</div>
           </div>
 
-          <div class="et-panel">
+          <div class="et-panel" x-show="useFD">
+            <h2>表單設計</h2>
+            <div class="et-sub">中間就是請款單的樣子；左邊加欄位，右邊改設定。<a href="javascript:void(0)" data-testid="et-old-ui" @click="toggleFD()">改用舊的表格畫面</a></div>
+            <div id="et-fd-host" data-testid="et-fd-host" style="min-height:560px"></div>
+          </div>
+          <div class="et-sub" x-show="!useFD"><a href="javascript:void(0)" data-testid="et-new-ui" @click="toggleFD()">改用新的設計畫面</a></div>
+
+          <div class="et-panel" x-show="!useFD">
             <h2>表單欄位</h2>
             <div class="et-sub">每個欄位的代碼（key）是資料的名字，建立後請不要改。平台保留欄位（申請人、部門、日期…）從下拉加入，型別已固定。</div>
             <div class="et-actions">
@@ -167,7 +178,7 @@
             </div>
           </div>
 
-          <div class="et-panel">
+          <div class="et-panel" x-show="!useFD">
             <h2>明細欄（<span class="mono">lines</span>）</h2>
             <div class="et-sub">金額要嘛有「數量＋單價」（金額由後端算），要嘛只有「金額」。費用類別下拉取自費用類別清單。</div>
             <div x-show="!linesField" class="et-actions"><button class="btn" data-testid="et-add-lines" @click="addLinesField()">加入明細表</button></div>
@@ -212,7 +223,7 @@
             </template>
           </div>
 
-          <div class="et-panel">
+          <div class="et-panel" x-show="!useFD">
             <h2>版面</h2>
             <div class="et-sub">表單分組（沒設＝全部欄位依序一組）與列表欄位。</div>
             <div class="et-actions">
