@@ -12,8 +12,9 @@ from modules.case import attachments, case_deadlines, gl_events, payables, quota
 # ⚠️ router 一律用別名：`from modules.case.api import quotations` 會把套件屬性 `modules.case.quotations`
 #    （報價單 helper）蓋成 api 那一支，`from modules.case import quotations` 就拿錯檔
 from modules.case.api import (case_action_items as _api_action_items, case_extra_expenses as _api_extra_expenses,
-                              completion_notes as _api_completion_notes, material_orders as _api_material_orders,
-                              quotations as _api_quotations)
+                              completion_notes as _api_completion_notes, expense_form_pdf as _api_expense_form_pdf,
+                              material_orders as _api_material_orders, quotations as _api_quotations)
+from modules.case import expense_notify as _expense_notify     # noqa: F401 — 載入時登記費用單據的信件類型
 
 #: 模組自己的 migration（檔名以版號開頭，不是合法的 import 名稱 ⇒ importlib）
 _m0001 = importlib.import_module("modules.case.migrations.0001_extra_expense_invoice_no")
@@ -25,7 +26,7 @@ MODULE = ModuleSpec(
     # v1：case_extra_expenses.invoice_no（請款流程，2026-09-27）；v2：匯款實付／手續費／差額審核欄位（W1，2026-09-30）
     migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up)],
     # 與搬遷前 main.py 的掛載順序相同（路由比對順序不變）
-    routers=[_api_quotations.router, _api_material_orders.router, _api_extra_expenses.router,
+    routers=[_api_quotations.router, _api_material_orders.router, _api_extra_expenses.router, _api_expense_form_pdf.router,
              _api_completion_notes.router, _api_action_items.router],
     providers={
         # IP-12：逐案權限與摘要（也是「M01 在不在」的唯一訊號，helpers.case_access.CASE_PRESENT）

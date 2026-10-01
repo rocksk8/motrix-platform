@@ -860,6 +860,26 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:expense_types": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:custom_modules",
+    "helper:legal_params",
+    "helper:tiered_approval",
+    "plat:definitions",
+    "plat:paths"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/expense_types.py",
+   "tables_ddl": [],
+   "tables_named": [
+    "departments",
+    "users"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:financial_mask": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -1366,6 +1386,7 @@
     "mod:accounting/api/vouchers",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
@@ -1417,6 +1438,7 @@
    "routers_called": [
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
@@ -1655,7 +1677,8 @@
    "kind": "js",
    "path": "frontend/js/case-management-xexp.js",
    "routers_called": [
-    "mod:case/api/case_extra_expenses"
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf"
    ],
    "tables_r": [],
    "tables_w": []
@@ -1982,6 +2005,7 @@
     "mod:arap/api/cashier",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
@@ -2071,6 +2095,17 @@
    "imports": [],
    "kind": "js",
    "path": "frontend/static/custom-layout.js",
+   "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "js:static/definition-form.js": {
+   "api_calls": [],
+   "api_prefixes": [],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/definition-form.js",
    "routers_called": [],
    "tables_r": [],
    "tables_w": []
@@ -2305,6 +2340,7 @@
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:crm/api",
@@ -5604,10 +5640,12 @@
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:case/attachments",
     "mod:case/case_deadlines",
+    "mod:case/expense_notify",
     "mod:case/gl_events",
     "mod:case/payables",
     "mod:case/quotations",
@@ -5722,11 +5760,22 @@
    ],
    "dynamic_sql": true,
    "helpers_transitive": [
+    "helper:approval_queue",
     "helper:audit",
     "helper:auth",
     "helper:case_access",
+    "helper:custom_builder_support",
+    "helper:custom_fields",
+    "helper:custom_files",
+    "helper:custom_finance",
+    "helper:custom_history",
+    "helper:custom_modules",
     "helper:dates",
+    "helper:doc_render",
+    "helper:doc_template",
     "helper:email_notify",
+    "helper:expense_types",
+    "helper:formula",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
@@ -5738,6 +5787,7 @@
     "helper:tiered_approval",
     "helper:uploads",
     "mod:case/expense_forms",
+    "mod:case/expense_notify",
     "mod:case/quotations",
     "mod:case/quote_terms",
     "mod:case/recognition"
@@ -5753,6 +5803,7 @@
     "helper:tiered_approval",
     "helper:uploads",
     "mod:case/expense_forms",
+    "mod:case/expense_notify",
     "mod:case/recognition",
     "plat:txn"
    ],
@@ -5764,115 +5815,115 @@
    "routes": [
     {
      "func": "list_extra_expenses",
-     "line": 293,
+     "line": 294,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/extra-expenses"
     },
     {
      "func": "create_extra_expense",
-     "line": 340,
+     "line": 341,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses"
     },
     {
      "func": "update_extra_expense",
-     "line": 396,
+     "line": 397,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "payreq_cases",
-     "line": 465,
+     "line": 466,
      "method": "GET",
      "path": "/api/extra-expenses/cases"
     },
     {
      "func": "payreq_mine",
-     "line": 491,
+     "line": 492,
      "method": "GET",
      "path": "/api/extra-expenses/mine"
     },
     {
      "func": "set_extra_expense_dates",
-     "line": 513,
+     "line": 514,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/dates"
     },
     {
      "func": "delete_extra_expense",
-     "line": 581,
+     "line": 582,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "submit_extra_expense",
-     "line": 604,
+     "line": 605,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/submit"
     },
     {
      "func": "approve_extra_expense",
-     "line": 683,
+     "line": 686,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/approve"
     },
     {
      "func": "reject_extra_expense",
-     "line": 766,
+     "line": 772,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/reject"
     },
     {
      "func": "upload_extra_expense_files",
-     "line": 850,
+     "line": 857,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files"
     },
     {
      "func": "delete_extra_expense_file",
-     "line": 896,
+     "line": 903,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}"
     },
     {
      "func": "upsert_change_request",
-     "line": 1069,
+     "line": 1076,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "cancel_change_request",
-     "line": 1108,
+     "line": 1115,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "upload_change_request_files",
-     "line": 1134,
+     "line": 1141,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files"
     },
     {
      "func": "delete_change_request_file",
-     "line": 1166,
+     "line": 1173,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}"
     },
     {
      "func": "submit_change_request",
-     "line": 1193,
+     "line": 1200,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/submit"
     },
     {
      "func": "approve_change_request",
-     "line": 1262,
+     "line": 1269,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/approve"
     },
     {
      "func": "reject_change_request",
-     "line": 1350,
+     "line": 1357,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/reject"
     }
@@ -5889,6 +5940,8 @@
     "case_stages",
     "contractor_dispatches",
     "contractor_payment_vouchers",
+    "custom_record_finance_outbox",
+    "custom_records",
     "daily_tasks",
     "departments",
     "dev_cases",
@@ -5897,6 +5950,7 @@
     "quotations",
     "sessions",
     "shipping_notes",
+    "ui_definitions",
     "users",
     "vendor_contractors"
    ],
@@ -5906,6 +5960,14 @@
    "tables_w_transitive": [
     "audit_log",
     "case_extra_expenses",
+    "custom_record_counters",
+    "custom_record_files",
+    "custom_record_finance_outbox",
+    "custom_record_log",
+    "custom_record_revisions",
+    "custom_record_snapshots",
+    "custom_record_values",
+    "custom_records",
     "notifications",
     "quotations",
     "system_settings"
@@ -6083,6 +6145,96 @@
     "sessions",
     "system_settings",
     "users"
+   ]
+  },
+  "mod:case/api/expense_form_pdf": {
+   "api_prefixes": [
+    "/api/quotations"
+   ],
+   "dynamic_sql": true,
+   "helpers_transitive": [
+    "helper:approval_queue",
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:custom_builder_support",
+    "helper:custom_fields",
+    "helper:custom_files",
+    "helper:custom_finance",
+    "helper:custom_history",
+    "helper:custom_modules",
+    "helper:doc_render",
+    "helper:doc_template",
+    "helper:email_notify",
+    "helper:expense_types",
+    "helper:formula",
+    "helper:legal_params",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:row_access",
+    "helper:settings",
+    "helper:tiered_approval",
+    "helper:uploads"
+   ],
+   "imports": [
+    "core:db",
+    "core:pdf_gen",
+    "helper:auth",
+    "helper:doc_render",
+    "helper:expense_types",
+    "mod:case/api/case_extra_expenses"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/api/expense_form_pdf.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "expense_document",
+     "line": 66,
+     "method": "GET",
+     "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/document"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [
+    "departments",
+    "users"
+   ],
+   "tables_r": [
+    "case_extra_expenses"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "case_extra_expenses",
+    "custom_record_finance_outbox",
+    "custom_records",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "ui_definitions",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "custom_record_counters",
+    "custom_record_files",
+    "custom_record_finance_outbox",
+    "custom_record_log",
+    "custom_record_revisions",
+    "custom_record_snapshots",
+    "custom_record_values",
+    "custom_records",
+    "notifications",
+    "system_settings"
    ]
   },
   "mod:case/api/material_orders": {
@@ -6877,6 +7029,25 @@
    ],
    "tables_w": []
   },
+  "mod:case/expense_notify": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:email_notify",
+    "helper:expense_types",
+    "helper:mail_types"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/expense_notify.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "users"
+   ],
+   "tables_w": []
+  },
   "mod:case/gl_events": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -6902,6 +7073,7 @@
    "dynamic_sql": false,
    "imports": [
     "mod:case/expense_forms",
+    "mod:case/expense_notify",
     "mod:case/recognition"
    ],
    "kind": "mod",
@@ -10655,6 +10827,7 @@
    "routers_called": [
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
@@ -10669,6 +10842,7 @@
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:daily_tasks/api",
@@ -10899,6 +11073,7 @@
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
@@ -10908,6 +11083,7 @@
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
@@ -12016,6 +12192,7 @@
     "mod:arap/api/payment_requests",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
@@ -12025,6 +12202,7 @@
     "mod:arap/api/payment_requests",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
@@ -12035,20 +12213,32 @@
   },
   "page:pages/payment-request.html": {
    "api_calls": [
+    "/api/expense-categories",
+    "/api/expense-types",
+    "/api/expense-types/",
     "/api/extra-expenses/cases",
     "/api/extra-expenses/mine",
+    "/api/org/tree",
     "/api/quotations/",
     "/api/quotations//",
-    "/api/system/branding/favicon"
+    "/api/system/branding/favicon",
+    "/api/users/selectable"
    ],
    "api_prefixes": [
+    "/api/expense-categories",
+    "/api/expense-types",
     "/api/extra-expenses",
+    "/api/org",
     "/api/quotations",
-    "/api/system"
+    "/api/system",
+    "/api/users"
    ],
-   "api_unmatched": [],
+   "api_unmatched": [
+    "/api/expense-categories"
+   ],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/definition-form.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -12057,17 +12247,25 @@
    "routers_called": [
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
+    "router:auth",
+    "router:definitions",
+    "router:org_structure",
     "router:system"
    ],
    "routers_called_effective": [
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
+    "router:auth",
+    "router:definitions",
+    "router:org_structure",
     "router:system"
    ],
    "tables_r": [],
@@ -12224,6 +12422,7 @@
    "routers_called": [
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
@@ -12233,6 +12432,7 @@
    "routers_called_effective": [
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
@@ -12270,6 +12470,7 @@
    "routers_called": [
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
@@ -12279,6 +12480,7 @@
    "routers_called_effective": [
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
@@ -12330,6 +12532,7 @@
     "mod:arap/api/cashier",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:netplan/api",
@@ -13938,6 +14141,7 @@
    "api_prefixes": [
     "/api/definition-kinds",
     "/api/definitions",
+    "/api/expense-types",
     "/api/layout"
    ],
    "dynamic_sql": false,
@@ -13945,15 +14149,27 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:case_access",
+    "helper:custom_builder_support",
     "helper:custom_def_review",
     "helper:custom_fields",
+    "helper:custom_files",
+    "helper:custom_finance",
+    "helper:custom_history",
+    "helper:custom_modules",
+    "helper:doc_render",
     "helper:doc_template",
     "helper:email_notify",
+    "helper:expense_types",
+    "helper:formula",
+    "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:row_access",
     "helper:settings",
-    "helper:tiered_approval"
+    "helper:tiered_approval",
+    "helper:uploads"
    ],
    "imports": [
     "core:db",
@@ -13963,6 +14179,7 @@
     "helper:custom_def_review",
     "helper:custom_fields",
     "helper:doc_template",
+    "helper:expense_types",
     "plat:catalog",
     "plat:definitions",
     "plat:registry"
@@ -13973,79 +14190,91 @@
    "routes": [
     {
      "func": "list_definition_kinds",
-     "line": 144,
+     "line": 145,
      "method": "GET",
      "path": "/api/definition-kinds"
     },
     {
+     "func": "list_expense_types",
+     "line": 152,
+     "method": "GET",
+     "path": "/api/expense-types"
+    },
+    {
+     "func": "get_expense_type",
+     "line": 164,
+     "method": "GET",
+     "path": "/api/expense-types/{code}"
+    },
+    {
      "func": "list_definitions",
-     "line": 151,
+     "line": 179,
      "method": "GET",
      "path": "/api/definitions/{kind}"
     },
     {
      "func": "delete_definition_draft",
-     "line": 164,
+     "line": 192,
      "method": "DELETE",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "get_definition",
-     "line": 182,
+     "line": 210,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "save_definition_draft",
-     "line": 195,
+     "line": 223,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 212,
+     "line": 240,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 220,
+     "line": 248,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 254,
+     "line": 282,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 270,
+     "line": 298,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 295,
+     "line": 323,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 326,
+     "line": 354,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 339,
+     "line": 367,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 365,
+     "line": 393,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
@@ -14057,6 +14286,8 @@
    "tables_r": [],
    "tables_r_transitive": [
     "approval_delegates",
+    "custom_record_finance_outbox",
+    "custom_records",
     "daily_tasks",
     "departments",
     "dev_cases",
@@ -14071,6 +14302,14 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "custom_record_counters",
+    "custom_record_files",
+    "custom_record_finance_outbox",
+    "custom_record_log",
+    "custom_record_revisions",
+    "custom_record_snapshots",
+    "custom_record_values",
+    "custom_records",
     "notifications",
     "system_settings"
    ]
@@ -16087,6 +16326,7 @@
     "core:pdf_gen",
     "mod:accounting/api/voucher_summary",
     "mod:accounting/api/vouchers",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/quotations",
     "mod:case/attachments",
     "mod:case/expense_forms",
@@ -16495,7 +16735,9 @@
    "named_by": [
     "core:db",
     "core:trail",
-    "helper:custom_modules"
+    "helper:custom_modules",
+    "helper:expense_types",
+    "mod:case/api/expense_form_pdf"
    ],
    "path": "backend/db.py:1682",
    "readers": [
@@ -18121,6 +18363,8 @@
     "helper:custom_builder_support",
     "helper:custom_modules",
     "helper:email_notify",
+    "helper:expense_types",
+    "mod:case/api/expense_form_pdf",
     "mod:payroll/api/bank_account",
     "router:mail_settings",
     "router:system"
@@ -18148,6 +18392,7 @@
     "mod:case/api/case_action_items",
     "mod:case/api/quotations",
     "mod:case/case_deadlines",
+    "mod:case/expense_notify",
     "mod:case/recognition",
     "mod:crm/api",
     "mod:daily_tasks/api",

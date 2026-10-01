@@ -144,6 +144,14 @@ class _Payables:
             if r["status"] != "已核准":
                 raise ValueError("這筆請款還沒核准，不能登錄付款")
             raise ValueError("這筆請款已被登錄付款日 %s（可能是另一位出納剛登錄）" % (r["paid_date"] or ""))
+        _full = conn.execute("SELECT kind, doc_code, created_by, approval_json FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
+        if _full is not None and (_full["kind"] or ""):                      # 費用單據（A2-7）：通知申請人已付款；kind='' 不寄
+            from modules.case import expense_notify as _XN
+            try:
+                _req = (json.loads(_full["approval_json"] or "{}") or {}).get("requestedBy") or _full["created_by"] or ""
+            except (TypeError, ValueError):
+                _req = _full["created_by"] or ""
+            _XN.fire("paid", conn, _full, requester=_req)
         # title／payee（2026-09-30 加欄位、相容）：出納登錄付款後推行事曆「支出付款」用
         return {"quoteNo": r["quote_no"], "key": str(exp_id), "amount": float(r["total_cost"] or 0), "paidDate": paid_date,
                 "actual": rm["actual"], "fee": rm["fee"], "diff": rm["diff"], "remitReview": rm["review"],

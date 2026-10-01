@@ -45,6 +45,7 @@ from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供
 from helpers.auth import user_has_module
 from modules.case.recognition import normalize_date  # `AC2`
 from modules.case import expense_forms as EF   # 費用單據（A2）：類型／明細金額／data 合併
+from modules.case import expense_notify as XN  # 費用單據的信件（A2-7）；kind='' 一律不寄
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 from helpers import (
@@ -647,6 +648,7 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
             conn.commit()
             _audit(_tok(authorization), "extra_expense.auto_approve", *_audit_target(quote_no, exp_id),
                    f"{quote_no or '無案件'} 額外支出 #{exp_id} {label}：未設定簽核層，直接核准")
+            XN.fire("approved", conn, row, requester=user["username"], payable=EF.is_payable_kind(_col(row, "kind", "") or ""))
             return {"ok": True, "status": "已核准", "autoApproved": True}
 
         approval = {
@@ -672,6 +674,7 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
                                 f"{_subj(quote_no)} 的額外支出 {label} 由 "
                                 f"{user.get('display_name') or user['username']} 依組織職權自行簽核，知會您",
                                 type_="extra_expense_approval_notice")
+        XN.fire("submitted", conn, row, approvers=[a["username"] for a in (tiers[0].get("approvers") or [])])
         _audit(_tok(authorization), "extra_expense.submit", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 額外支出 #{exp_id} {label} 送審", {"tierCount": len(tiers)})
         return {"ok": True, "status": "待審核", "tierCount": len(tiers)}
@@ -748,11 +751,14 @@ def approve_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default=
             for a in (tiers[appr["currentTier"]].get("approvers") or []):
                 _notify(a["username"], "extra_expense_approval_request", str(exp_id), quote_no or "無案件",
                         f"{_subj(quote_no)} 的額外支出 {label} 需要您簽核")
+            XN.fire("next_tier", conn, row, tier_no=appr["currentTier"] + 1, total_tiers=len(tiers),
+                    approvers=[a["username"] for a in (tiers[appr["currentTier"]].get("approvers") or [])])
         else:
             requester = appr.get("requestedBy")
             if requester:
                 _notify(requester, "extra_expense_approved", str(exp_id), quote_no or "無案件",
                         f"{_subj(quote_no)} 的額外支出 {label} 已核准")
+            XN.fire("approved", conn, row, requester=requester or "", payable=EF.is_payable_kind(_col(row, "kind", "") or ""))
             notify_module_activity("案件管理", "額外支出核准", display, f"{quote_no or '無案件'}｜{label}",
                                    f"case-management.html?q={quote_no}")
         _audit(_tok(authorization), "extra_expense.approve", *_audit_target(quote_no, exp_id),
@@ -810,6 +816,7 @@ def reject_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={
             _notify(requester, "extra_expense_rejected", str(exp_id), quote_no or "無案件",
                     f"{_subj(quote_no)} 的額外支出 {label} 已被駁回"
                     + (f"：{reason}" if reason else ""))
+        XN.fire("returned", conn, row, requester=requester or "", reason=reason)
         _audit(_tok(authorization), "extra_expense.reject", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 額外支出 #{exp_id} {label} 被駁回" + (f"：{reason}" if reason else ""))
         return {"ok": True, "status": "已駁回"}
