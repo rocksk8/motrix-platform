@@ -263,3 +263,56 @@ def test_my_requests_document_buttons(live_server, make_user, new_context, clien
     p2.goto(live_server + "/pages/payment-request.html?tab=mine")
     p2.wait_for_selector("#pr-mine[data-loaded='1']", timeout=15000)
     assert p2.locator('[data-doc-actions="%d"]' % row["id"]).count() == 0
+
+
+@pytest.mark.e2e
+def test_form_shows_a_published_edit_of_a_default_type(live_server, make_user, new_context, client):
+    """超級管理員改預設類型（差旅：加一個欄位）→ 發布 v1 → 請款表單立刻依新定義渲染該欄位；送出的單據釘 v1、欄位值存進 data_json。
+    發布前先開的一張單（v0）不受影響。"""
+    _seed()
+    su = make_user(username="a24_ui_su", role="superadmin")
+    emp = make_user(username="a24_ui_emp", role="admin")
+    mgr = make_user(username="a24_ui_mgr", role="admin")
+    _join_dept(emp[0], mgr[0])
+
+    def tok(u):
+        return {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u[0], "password": u[1]}).json()["token"]}
+    # 發布前：表單沒有這個欄位
+    page = new_context().new_page()
+    inject_login(page, live_server, emp[0], emp[1])
+    page.goto(live_server + "/pages/payment-request.html")
+    page.wait_for_selector("#pr-type-card", state="visible", timeout=15000)
+    page.select_option("#pr-type", "travel")
+    page.wait_for_selector("#pr-df .df-root", timeout=15000)
+    assert page.locator('#pr-df [data-field="trip_purpose"]').count() == 0
+    # 超級管理員改定義：加「出差事由」欄位（放進第一組版面）→ 草稿 → 驗證 → 發布
+    h = tok(su)
+    body = client.get("/api/expense-types/travel", headers=h).json()["definition"]
+    body["fields"].insert(len(body["fields"]) - 1, {"key": "trip_purpose", "label": "出差事由（測試新增）", "type": "text", "required": True, "maxLength": 100})
+    body["ui"]["form"]["groups"][0]["fields"].append("trip_purpose")
+    assert client.post("/api/definitions/expense_type/travel/validate", headers=h, json={"body": body}).json()["problems"] == []
+    assert client.put("/api/definitions/expense_type/travel/draft", headers=h, json={"body": body}).status_code == 200
+    pub = client.post("/api/definitions/expense_type/travel/publish", headers=h, json={"note": "加出差事由"})
+    assert pub.status_code == 200 and pub.json()["version"] == 1, pub.text
+    # 發布後：重新選類型 ⇒ 表單依新定義渲染（含必填標示）；不填就送會被前端擋
+    page.goto(live_server + "/pages/payment-request.html")
+    page.wait_for_selector("#pr-type-card", state="visible", timeout=15000)
+    page.select_option("#pr-type", "travel")
+    page.wait_for_selector('#pr-df [data-field="trip_purpose"]', timeout=15000)
+    assert "出差事由（測試新增）" in page.inner_text('#pr-df [data-field="trip_purpose"] label')
+    assert page.locator('#pr-df [data-field="trip_purpose"] .req').count() == 1
+    _fill(page)                                                   # _fill 會填 trip_purpose（文字欄預設填「測試<key>」）
+    page.fill('#pr-df [data-field="trip_purpose"] input', "客戶現場安裝")
+    _shot(page, "form-travel-edited-definition")
+    page.click("#pr-t-submit")
+    _wait_done(page)
+    row = _q("SELECT def_version, data_json, status FROM case_extra_expenses WHERE kind='travel' ORDER BY id DESC LIMIT 1")[0]
+    assert row["def_version"] == 1 and json.loads(row["data_json"])["trip_purpose"] == "客戶現場安裝"
+    # 必填：清空後送審被前端擋下（沒有新增單據）
+    n0 = _q("SELECT COUNT(*) AS n FROM case_extra_expenses WHERE kind='travel'")[0]["n"]
+    _fill(page)                                                   # 送出後表單重新渲染成空白 ⇒ 重填，再只清掉必填的新欄位
+    page.fill('#pr-df [data-field="trip_purpose"] input', "")
+    page.click("#pr-t-save-draft")
+    page.wait_for_selector("#pr-t-error", state="visible")
+    assert "出差事由" in page.locator("#pr-t-error").text_content()
+    assert _q("SELECT COUNT(*) AS n FROM case_extra_expenses WHERE kind='travel'")[0]["n"] == n0

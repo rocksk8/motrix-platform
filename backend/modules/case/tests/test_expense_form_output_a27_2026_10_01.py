@@ -194,3 +194,16 @@ def test_document_visual_defects_regression(client, world):
     assert pay.status_code == 200, pay.text
     after = client.get(url, headers=H["xo_req"]).text
     assert "月結30天" in after and "2026-10-02" in after                                           # ③ 出納填的欄位印得出來
+
+
+def test_document_visibility_follows_the_amount_viewer_rule(client, world):
+    """單據含金額 ⇒ 與列表同一條規則：申請人（data.applicant，不一定是建立者）看得到；無關者 404；建立者（管理員）看得到。"""
+    H = world["H"]
+    _flow([])
+    mine = _q("SELECT username FROM users WHERE username LIKE '%xo_req'")[0]["username"]
+    r = client.post(SENT, headers=H["xo_mgr"], json={"kind": "travel", "data": dict(DATA, applicant=mine), "lines": LINES})   # 管理員代開
+    assert r.status_code == 201, r.text
+    url = "%s/%d/document" % (SENT, r.json()["id"])
+    assert client.get(url, headers=H["xo_req"]).status_code == 200          # 申請人（data.applicant，不是建立者）
+    assert client.get(url, headers=H["xo_mgr"]).status_code == 200          # 建立者／管理員
+    assert client.get(url, headers=H["xo_other"]).status_code == 404        # 無關者：看不到＝不存在
