@@ -106,6 +106,9 @@ READ_ONLY_PAGES = {
         "`equity-statement`、`cash-flow`（GET），年度決算與凍結在期間頁 ⇒ 頁面唯讀與後端一致。",
     "sales-orders.html": "銷貨單清單：純查詢，建立與修改在報價單那一邊。",
     "shipping-export-history.html": "出貨匯出歷程：純查詢，匯出動作在出貨單那一頁。",
+    "file-center.html":
+        "檔案中心（附件目錄 P3）：只呼叫 `GET /api/filehub/search`（各擁有模組 `attachments.catalog` 提供者的 `search`／`count` 合併結果）；"
+        "沒有任何寫入端點——上傳與刪除都在原單據頁（報價單、出貨單、傳票…）、開檔走 L1 `GET /api/attachments/open` ⇒ 頁面唯讀與後端一致。",
 }
 
 #: ⚠️ 罐頭理由 —— 登記表最容易腐爛的形狀是「理由等於重述結論」。

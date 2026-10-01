@@ -129,7 +129,9 @@ BUILDERS = {
                    "_build_invoice_voucher_html", "_build_quote_html"],
     "modules/case/completion_pdf.py": ["_build_completion_html"],
     "modules/accounting/voucher_pdf.py": ["watermark_html"],
-    "helpers/custom_modules.py": ["render_view"],
+    # 2026-10-01（A2-0 #7，769d65a7）：自訂單據與 A2 費用單據的輸出都經 L1 `helpers.doc_render.render_document`——警示元件現在在這裡；
+    # `custom_modules.render_view` 只是委派（見下方 test_render_view_still_goes_through_the_guarded_component），不再自己呼叫元件。
+    "helpers/doc_render.py": ["render_document"],
 }
 #: 沒有簽核流程（不是核可文件）或舊流程已退役，不加警示——寫在這裡是「有人決定過」，不是漏掉
 EXEMPT = {
@@ -157,6 +159,13 @@ def test_every_approvable_builder_uses_the_shared_component(rel, fn):
     seg = _src_of(rel, fn)
     assert seg is not None, "%s 找不到 %s —— 登記表過期或 builder 被改名" % (rel, fn)
     assert any(u in seg for u in _USES), "%s::%s 沒有用未核可警示元件（helpers.doc_template.unapproved_banner／inject_unapproved）" % (rel, fn)
+
+
+def test_render_view_still_goes_through_the_guarded_component():
+    """`render_view`（自訂單據輸出）已改成委派 `doc_render.render_document`：它必須真的委派，不能又長出一條沒有警示的輸出路徑。
+    （行為面另有 120 行上下那兩題：未核可的視圖輸出一定帶警示、已核可的不帶——委派斷了或元件被繞過都會紅。）"""
+    seg = _src_of("helpers/custom_modules.py", "render_view")
+    assert seg is not None and "render_document(" in seg, "render_view 沒有委派 doc_render.render_document"
 
 
 def test_registry_is_not_stale_and_exempt_functions_exist():

@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>檔案中心 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <!--
@@ -154,7 +155,7 @@
           if (!location.search.replace('?', '').trim()) { this.f.date_from = this.daysAgo(90); this.defaultRange = true }
           this.fetch()
         },
-        daysAgo(n) { const d = new Date(Date.now() - n * 86400000); return d.toISOString().slice(0, 10) },
+        daysAgo(n) { return MotrixDate.addDays(MotrixDate.today(), -n) },       // 本地日期（台灣 00:00–08:00 用 UTC 會得到前一天）
         params() {
           const p = new URLSearchParams()
           Object.keys(this.f).forEach(k => { const v = this.f[k]; const s = Array.isArray(v) ? v.join(',') : v; if (s) p.set(k, s) })
