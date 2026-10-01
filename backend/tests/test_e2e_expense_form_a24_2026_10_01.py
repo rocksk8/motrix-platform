@@ -106,7 +106,8 @@ def _fill(page):
         col = c.get_attribute("data-col")
         sel = c.locator("select")
         if sel.count():
-            sel.first.select_option("TRAVEL")
+            if "TRAVEL" in sel.first.evaluate("e => Array.from(e.options).map(o => o.value)"):      # 類別清單是空的時沒有可選項
+                sel.first.select_option("TRAVEL")
         elif col == "qty":
             c.locator("input").fill("3")
         elif col == "unitCost":
@@ -316,3 +317,87 @@ def test_form_shows_a_published_edit_of_a_default_type(live_server, make_user, n
     page.wait_for_selector("#pr-t-error", state="visible")
     assert "出差事由" in page.locator("#pr-t-error").text_content()
     assert _q("SELECT COUNT(*) AS n FROM case_extra_expenses WHERE kind='travel'")[0]["n"] == n0
+
+
+def _clear_categories():
+    _x("DELETE FROM expense_categories")
+
+
+@pytest.mark.e2e
+def test_empty_category_list_means_not_configured_and_does_not_block(live_server, make_user, new_context):
+    """使用者裁示（選項 A）：費用類別清單是空的＝「尚未設定」，不擋人——表單顯示一行說明、類別欄不必填，草稿與送審都放行、金額照算；
+    後端同樣放行（空清單不驗證）。反向控制見 test_with_categories_the_category_is_required_again。"""
+    _seed()
+    _clear_categories()
+    adm = make_user(username="a24_ec_adm", role="admin")
+    mgr = make_user(username="a24_ec_mgr", role="admin")
+    _join_dept(adm[0], mgr[0])
+    page = new_context().new_page()
+    inject_login(page, live_server, adm[0], adm[1])
+    page.goto(live_server + "/pages/payment-request.html")
+    page.wait_for_selector("#pr-type-card", state="visible", timeout=15000)
+    page.select_option("#pr-type", "petty_cash")
+    page.wait_for_selector("#pr-df .df-root", timeout=15000)
+    hint = page.locator("[data-empty-cat-hint]")
+    assert hint.count() == 1 and hint.inner_text() == "尚未設定費用類別，入帳將列預設費用科目；請會計主管至「報表設定」新增類別"
+    _fill(page)
+    shown = int(page.locator("[data-lines-total]").text_content().replace(",", ""))
+    assert shown > 0
+    _shot(page, "empty-categories-form")
+    page.click("#pr-t-save-draft")                                   # 草稿放行
+    _wait_done(page)
+    d = _q("SELECT status, total_cost, lines_json FROM case_extra_expenses WHERE kind='petty_cash' ORDER BY id DESC LIMIT 1")[0]
+    assert d["status"] == "草稿" and int(d["total_cost"]) == shown
+    _fill(page)                                                      # 表單送出後重新渲染 ⇒ 再填一張，這次送審
+    page.click("#pr-t-submit")
+    page.wait_for_function("() => document.getElementById('pr-result').innerText.includes('已送審') || "
+                           "(document.getElementById('pr-t-error').offsetParent !== null && document.getElementById('pr-t-error').innerText.trim())",
+                           timeout=20000)                        # 上一張草稿的成功訊息還在畫面上 ⇒ 要等「這一次」的結果
+    assert not page.locator("#pr-t-error").is_visible(), page.locator("#pr-t-error").text_content()
+    s2 = _q("SELECT status, total_cost, lines_json FROM case_extra_expenses WHERE kind='petty_cash' ORDER BY id DESC LIMIT 1")[0]
+    assert s2["status"] != "草稿" and int(s2["total_cost"]) == shown, s2          # 送審成功、合計對
+    assert [l.get("category", "") for l in json.loads(s2["lines_json"])] == [""]       # 沒有類別就是沒有類別（不編造、不丟列）
+
+
+@pytest.mark.e2e
+def test_with_categories_the_category_is_required_again(live_server, make_user, new_context):
+    """反向控制：一有 ≥1 個啟用類別，費用類別恢復必填（前端擋下、沒有說明那一行、不新增單據）。"""
+    _seed()
+    adm = make_user(username="a24_ec2_adm", role="admin")
+    mgr = make_user(username="a24_ec2_mgr", role="admin")
+    _join_dept(adm[0], mgr[0])
+    page = new_context().new_page()
+    inject_login(page, live_server, adm[0], adm[1])
+    page.goto(live_server + "/pages/payment-request.html")
+    page.wait_for_selector("#pr-type-card", state="visible", timeout=15000)
+    page.select_option("#pr-type", "petty_cash")
+    page.wait_for_selector("#pr-df .df-root", timeout=15000)
+    assert page.locator("[data-empty-cat-hint]").count() == 0
+    _fill(page)
+    n0 = _q("SELECT COUNT(*) AS n FROM case_extra_expenses WHERE kind='petty_cash'")[0]["n"]
+    page.locator('#pr-df [data-table="lines"] tbody tr').first.locator('td[data-col="category"] select').select_option("")
+    page.click("#pr-t-save-draft")
+    page.wait_for_selector("#pr-t-error", state="visible")
+    assert "費用類別必填" in page.locator("#pr-t-error").text_content()
+    assert _q("SELECT COUNT(*) AS n FROM case_extra_expenses WHERE kind='petty_cash'")[0]["n"] == n0
+
+
+@pytest.mark.e2e
+def test_category_list_that_failed_to_load_is_not_treated_as_empty(live_server, make_user, new_context):
+    """抓不到類別清單（例如該使用者被擋）≠ 空清單：維持必填（失敗要往嚴格那邊倒）。"""
+    _seed()
+    adm = make_user(username="a24_ec3_adm", role="admin")
+    mgr = make_user(username="a24_ec3_mgr", role="admin")
+    _join_dept(adm[0], mgr[0])
+    page = new_context().new_page()
+    inject_login(page, live_server, adm[0], adm[1])
+    page.route("**/api/expense-categories", lambda r: r.fulfill(status=403, body='{"detail":"x"}', content_type="application/json"))
+    page.goto(live_server + "/pages/payment-request.html")
+    page.wait_for_selector("#pr-type-card", state="visible", timeout=15000)
+    page.select_option("#pr-type", "petty_cash")
+    page.wait_for_selector("#pr-df .df-root", timeout=15000)
+    assert page.locator("[data-empty-cat-hint]").count() == 0
+    _fill(page)
+    page.click("#pr-t-save-draft")
+    page.wait_for_selector("#pr-t-error", state="visible")
+    assert "費用類別必填" in page.locator("#pr-t-error").text_content()

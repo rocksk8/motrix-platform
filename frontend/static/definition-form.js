@@ -63,8 +63,13 @@
   }
   function isCashierOnly(f) { return f.editableBy === 'cashier' }
 
-  /** 前端檢查（只做體驗用；伺服器端 validate_values 才是權威）⇒ [{path,message}] */
-  function validate(def, data, lines, viewer) {
+  var EMPTY_CAT_HINT = '尚未設定費用類別，入帳將列預設費用科目；請會計主管至「報表設定」新增類別'
+
+  /** 前端檢查（只做體驗用；伺服器端 validate_values 才是權威）⇒ [{path,message}]
+   *  ctx.categoriesEmpty：費用類別清單是空的（公司還沒設定）＝「未設定」，費用類別欄不是必填（草稿、送審都放行；使用者裁示 2026-10-01 選項 A）；
+   *  一有 ≥1 個類別就恢復必填。清單抓不到（null，例如 403）不算空 ⇒ 維持必填。 */
+  function validate(def, data, lines, viewer, ctx) {
+    ctx = ctx || {}
     var out = []
     ;((def && def.fields) || []).forEach(function (f) {
       if (f.type === 'table' || f.type === 'formula' || f.type === 'file') return
@@ -87,6 +92,7 @@
       rows.forEach(function (r, i) {
         ;(lf.columns || []).forEach(function (c) {
           if (c.type === 'formula' || !c.required) return
+          if (ctx.categoriesEmpty && c.optionsFrom === 'expense_categories') return
           var v = r[c.key]
           if (v === undefined || v === null || v === '') out.push({ path: 'lines.' + i + '.' + c.key, message: '第 ' + (i + 1) + ' 列：' + (c.label || c.key) + '必填' })
         })
@@ -95,7 +101,7 @@
     return out
   }
 
-  var calc = { roundHalfUp: roundHalfUp, lineAmount: lineAmount, totalOf: totalOf, defaultValue: defaultValue, validate: validate, formatMoney: formatMoney }
+  var calc = { EMPTY_CAT_HINT: EMPTY_CAT_HINT, roundHalfUp: roundHalfUp, lineAmount: lineAmount, totalOf: totalOf, defaultValue: defaultValue, validate: validate, formatMoney: formatMoney }
 
   if (typeof document === 'undefined') {            // node（單元測）：只匯出純函式
     if (typeof module !== 'undefined' && module.exports) module.exports = { calc: calc }
@@ -157,6 +163,7 @@
     var def = opts.definition || {}
     var viewer = opts.viewer || {}
     var readOnly = !!opts.readOnly
+    var categoriesEmpty = Array.isArray(opts.categories) && opts.categories.length === 0      // null／undefined（沒抓到）不算空
     var fields = def.fields || []
     var lf = linesField(def)
     var data = {}
@@ -300,6 +307,9 @@
           lines.push(blankRow()); renderRows(f); changed()
         })
       }
+      if (categoriesEmpty && cols.some(function (c) { return c.optionsFrom === 'expense_categories' })) {
+        box.appendChild(el('div', { class: CLS + 'help', 'data-empty-cat-hint': '1', text: EMPTY_CAT_HINT }))
+      }
       box.appendChild(el('div', { class: CLS + 'total' }, [el('span', { text: '合計' }), el('span', { 'data-lines-total': '1', text: '0' })]))
       renderRows(f)
       return box
@@ -426,7 +436,7 @@
       setValue: function (v) { init((v && v.data) || {}, (v && v.lines) || []); render() },
       validate: function () {
         var v = api.getValue()
-        var problems = validate(def, v.data, v.lines, viewer)
+        var problems = validate(def, v.data, v.lines, viewer, { categoriesEmpty: categoriesEmpty })
         showErrors(problems)
         return problems
       },
