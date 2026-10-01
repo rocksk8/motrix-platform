@@ -208,7 +208,7 @@
             <div class="detail-row" x-show="selectedVendor.bankName"><span class="detail-label">銀行名稱</span><span class="detail-val" x-text="selectedVendor.bankName"></span></div>
             <div class="detail-row" x-show="selectedVendor.bankBranch"><span class="detail-label">分行</span><span class="detail-val" x-text="selectedVendor.bankBranch"></span></div>
             <div class="detail-row" x-show="selectedVendor.bankAccountName"><span class="detail-label">戶名</span><span class="detail-val" x-text="selectedVendor.bankAccountName"></span></div>
-            <div class="detail-row" x-show="selectedVendor.bankAccountNumber"><span class="detail-label">帳號</span><span class="detail-val" x-text="selectedVendor.bankAccountNumber"></span></div>
+            <div class="detail-row" x-show="selectedVendor.bankAccountNumber"><span class="detail-label">帳號</span><span class="detail-val" data-testid="vendor-bank-number" x-text="selectedVendor.bankAccountNumber"></span></div>
             <div style="font-size:12px;color:var(--success);margin-top:4px" x-show="selectedVendor.hasPassbook">● 銀行存簿已上傳</div>
           </div>
         </template>
@@ -454,6 +454,7 @@
           <div class="form-group" style="grid-column:span 2">
             <label class="form-label">帳號</label>
             <input class="form-input" type="text" x-model="form.bank_account_number">
+            <div class="form-hint" data-testid="bank-masked-hint" x-show="(form.bank_account_number || '').startsWith('****')" style="font-size:12px;color:var(--text-dim)">帳號已遮蔽（僅最高管理者可見完整帳號）；不修改就會保留原帳號，輸入新帳號才會更換。</div>
           </div>
         </div>
       </div>

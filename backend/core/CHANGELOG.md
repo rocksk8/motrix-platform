@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next:minor) — 2026-10-01（fix/contractor-bank-mask：承攬商收款帳號遮蔽）
+- L0（新增，向下相容）：`pdf_gen.generate_contractor_voucher_pdf_bytes(voucher_no, mask_bank=True)` 加選填參數 `mask_bank`（預設遮蔽＝fail closed；只有最高管理者下載才傳 False）；`_build_contractor_voucher_html(v, mask_bank=False)`。`routers/approval_queue.py`：非最高管理者的佇列項目與詳情，帳號遮成 `****末四碼`、存簿封面拿掉。
+
 ## (next) — 2026-10-01（wip/w1-a2-2：A2-2 費用單據類型定義）
 - L1（新增）：`helpers.expense_types`（費用單據類型定義 `expense_type`：`validate_expense_type／get_type／list_types／cashier_field_keys／normalize_lines／validate_values`，明細金額唯一實作）＋四個預設定義（purchase_req／purchase_order／travel／petty_cash，欄位為草稿待使用者確認）；路由 `GET /api/expense-types`、`GET /api/expense-types/{code}`；`POST /api/definitions/{kind}/{key}/validate` 改用 `D.kinds()`（登記的種類不再 400）。
 

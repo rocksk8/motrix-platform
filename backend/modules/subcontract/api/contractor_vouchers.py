@@ -39,6 +39,7 @@ from helpers import (
 )
 from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from pdf_gen import generate_contractor_voucher_pdf_bytes, _generate_contractor_voucher_pdf
+from modules.subcontract import bank_mask as _bm
 from helpers.errors import trace_id
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
@@ -144,7 +145,7 @@ def _paid_between(start: str, end: str) -> list:
         conn.close()
 
 
-def _voucher_public(row, include_snapshot: bool = True) -> dict:
+def _voucher_public(row, include_snapshot: bool = True, viewer=None) -> dict:
     """一張承攬商匯款申請的對外形狀。IP-14 `contractor_voucher.public`（M05 出納、M06 會計匯出）也用這一支。"""
     d = dict(row)
     snap = json.loads(d.get("snapshot_json") or "{}")
@@ -181,7 +182,19 @@ def _voucher_public(row, include_snapshot: bool = True) -> dict:
     }
     if include_snapshot:
         out["snapshot"] = snap
+    # 帳號遮蔽（使用者裁示 2026-10-01）：viewer 不是最高管理者（含沒帶 viewer 的提供者呼叫）⇒ ****末四碼、存簿影本拿掉
+    if not _bm.can_see_full(viewer):
+        _bm.mask_record(viewer, out)
+        if include_snapshot:
+            out["snapshot"] = _mask_snapshot(snap)
     return out
+
+
+def _mask_snapshot(snap: dict) -> dict:
+    s = dict(snap)
+    _bm.mask_record(None, s)
+    s["personnel"] = [_bm.mask_record(None, dict(p)) if isinstance(p, dict) else p for p in (s.get("personnel") or [])]
+    return s
 
 
 # ── 銀行帳戶預設值（2026-09-02 新增，見 accounting_export.py 檔頭「標記已付款/
@@ -248,7 +261,7 @@ def list_contractor_vouchers(quote_no: Optional[str] = None, authorization: str 
         ).fetchall()
     rows = _visible_rows(rows, user, conn)
     conn.close()
-    return [_voucher_public(r, include_snapshot=False) for r in rows]
+    return [_voucher_public(r, include_snapshot=False, viewer=user) for r in rows]
 
 
 @router.get("/api/contractor-vouchers/{voucher_no}")
@@ -261,7 +274,7 @@ def get_contractor_voucher(voucher_no: str, authorization: str = Header(None)):
         raise HTTPException(404, f"申請 {voucher_no} 不存在")
     _guard_voucher(conn, row, user)
     conn.close()
-    return _voucher_public(row)
+    return _voucher_public(row, viewer=user)
 
 
 @router.post("/api/contractor-vouchers", status_code=201)
@@ -688,7 +701,7 @@ def download_contractor_voucher_pdf(voucher_no: str, authorization: str = Header
     if not row:
         raise HTTPException(404, "申請不存在")
     try:
-        pdf_bytes = generate_contractor_voucher_pdf_bytes(voucher_no)
+        pdf_bytes = generate_contractor_voucher_pdf_bytes(voucher_no, mask_bank=not _bm.can_see_full(user))
     except (ValueError, RuntimeError) as e:
         raise HTTPException(503, str(e))
     except HTTPException:          # 第二道 428（COMPANY-SETUP-GATE §5）不可以被下面的 except Exception 吞成 500
