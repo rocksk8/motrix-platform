@@ -845,6 +845,55 @@ class _WorkLogCatalog:
             raise AttachmentNotVisible()
         return opened_upload_file(entry)
 
+    # ── 搜尋（附件目錄 P3）：權限＝open() 同一支 `_WorkLogPhotoAccess.readable`，路徑綁日誌（同 open()）；
+    #    只取檔案 metadata——照片的 GPS／浮水印欄位不進搜尋項目 ──
+    @staticmethod
+    def _collect(conn, user, crit):
+        import mimetypes
+        from helpers import attachment_search as S
+        from helpers.uploads import upload_owner, upload_path_key
+        sql, args = "SELECT id, case_no, photos FROM work_logs WHERE photos LIKE ?", ["%\"path\"%"]
+        if crit["quote_no"]:
+            sql += " AND case_no = ?"
+            args.append(crit["quote_no"])
+        rows = conn.execute(sql, args).fetchall()
+        names = S.case_names(conn, {r["case_no"] for r in rows if r["case_no"]})
+        ok, items = {}, []
+        for r in rows:
+            try:
+                photos = json.loads(r["photos"] or "[]") or []
+            except (TypeError, ValueError):
+                continue
+            cust, proj = names.get(r["case_no"], ("", ""))
+            for p in photos:
+                if not isinstance(p, dict) or upload_path_key(p, "projects", depth=3) != "worklog_%d" % int(r["id"]):
+                    continue                                     # 與 open() 同一道：路徑不在這則日誌的資料夾 ⇒ 不列
+                owner = upload_owner(p.get("path") or "")
+                if owner is None:
+                    continue
+                if owner not in ok:
+                    ok[owner] = bool(_WorkLogPhotoAccess.readable(conn, owner[0], owner[1], user))
+                if not ok[owner]:
+                    continue
+                f = {"id": p.get("id"), "filename": p.get("filename"), "size": p.get("size") or 0,
+                     "mime": mimetypes.guess_type(str(p.get("filename") or ""))[0] or "",
+                     "uploadedBy": p.get("uploaded_by"), "uploadedAt": p.get("uploaded_at")}
+                items.append(S.make_item("work_log_photo", r["id"], "工作日誌 #%s" % r["id"], f, quote_no=r["case_no"] or "",
+                                         customer=cust, project=proj, link="work-log.html"))
+        return items
+
+    @staticmethod
+    def search(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.finish(_WorkLogCatalog._collect(conn, user, c), c)
+
+    @staticmethod
+    def count(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.count_by_type(_WorkLogCatalog._collect(conn, user, c), c)
+
 
 _registry.provide("attachments.catalog", "work_log", _WorkLogCatalog)
 
