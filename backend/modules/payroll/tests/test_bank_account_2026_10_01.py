@@ -113,6 +113,7 @@ def test_owner_saves_and_reads_own_full_account_and_history_keeps_old_rows(clien
     assert len(upd) == 2
     d = json.loads(upd[1]["detail"])
     assert d["before_last4"] == "4556" and d["after_last4"] == "7766" and d["fields"] == ["accountNumber"] and d["byAdmin"] is False
+    assert d["changedBy"] == "ba_a" and isinstance(d["userId"], int)                           # 誰改誰（只有 id／帳號名，沒有帳號全碼）
     _no_full_number_anywhere()
 
 
