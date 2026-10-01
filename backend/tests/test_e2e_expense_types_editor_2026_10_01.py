@@ -2,8 +2,8 @@
 """請款類型定義編輯頁（`expense-types.html`）v1：新增類型 → 驗證紅字 → 修正 → 存草稿 → 發布 → 改動 → 差異 → 還原；
 非超級管理員進不了定義 API。終點狀態＝畫面＋資料庫（ui_definitions.body_json）。
 
-`expense_type` 種類由 W1 的 A2-2 登記；本題在沒有登記時自己登記一個最小驗證器（契約形狀：name／numbering.prefix／payable／
-docType／含 `lines` 表格欄位），登記好之後（A2-2 合進來）`register_kind` 會丟 ValueError ⇒ 用正式的。
+`expense_type` 種類與驗證器由 W1 的 A2-2（`helpers.expense_types`）登記；四個預設類型在定義庫裡沒有列，編輯頁要把它們併進清單、
+開得起來（以目前生效的預設當起點），改了發布成新版；已送審的單據仍釘在自己的 def_version。
 截圖（預設暫存目錄；設 MOTRIX_SHOTS_DIR 才寫共用資料夾）。"""
 import json
 import os
@@ -24,29 +24,6 @@ def _shot(page, name):
         page.screenshot(path=str(SHOTS / (name + ".png")), full_page=True)
     except Exception:                                            # noqa: BLE001 — 截圖失敗（含 BK19 護欄）不影響判定
         pass
-
-
-def _ensure_kind():
-    from core import definitions as D
-    if "expense_type" in D.kinds():
-        return
-
-    def _validator(body, key):
-        out = []
-        if not isinstance(body, dict):
-            return [{"path": "", "message": "定義必須是物件"}]
-        if not str(body.get("name") or "").strip():
-            out.append({"path": "name", "message": "必須有名稱"})
-        if not str((body.get("numbering") or {}).get("prefix") or "").strip():
-            out.append({"path": "numbering.prefix", "message": "必須有單號前綴"})
-        if not isinstance(body.get("payable"), bool):
-            out.append({"path": "payable", "message": "payable 必須是 true／false"})
-        if not str(body.get("docType") or "").strip():
-            out.append({"path": "docType", "message": "必須選簽核單據類型"})
-        if not any(isinstance(f, dict) and f.get("key") == "lines" and f.get("type") == "table" for f in body.get("fields") or []):
-            out.append({"path": "fields", "message": "必須有 lines 明細表"})
-        return out
-    D.register_kind("expense_type", "請款類型", validator=_validator)
 
 
 def _db(sql, args=()):
@@ -70,16 +47,17 @@ def _open(e2e_browser, base, user, width=1280):
 
 @pytest.mark.e2e
 def test_superadmin_creates_validates_publishes_and_restores_a_type(live_server, make_user, e2e_browser):
-    _ensure_kind()
     u = make_user(username="et_admin", role="superadmin", modules=[])
     page = _open(e2e_browser, live_server, u)
-    assert page.locator("[data-testid=et-empty]").is_visible()
-    _shot(page, "1_list_empty")
+    for code in ("purchase_req", "purchase_order", "travel", "petty_cash"):                # 程式預設的四個類型一開始就在清單
+        assert page.locator("[data-testid=et-row-%s]" % code).count() == 1
+        assert "程式預設" in page.inner_text("[data-testid=et-row-%s]" % code)
+    _shot(page, "1_list_defaults")
     page.click("[data-testid=et-new]")
     page.wait_for_selector("[data-testid=et-edit]")
     # 新類型：預設有 applicant／req_date／lines；先填代碼與名稱，故意不選簽核類型、不填前綴 ⇒ 驗證紅字
-    page.fill("[data-testid=et-key]", "purchase_req")
-    page.fill("[data-testid=et-name]", "請購單")
+    page.fill("[data-testid=et-key]", "visit_fee")
+    page.fill("[data-testid=et-name]", "訪視單")
     page.click("[data-testid=et-validate]")
     try:
         page.wait_for_selector("[data-testid=et-problems] li", timeout=8000)
@@ -90,8 +68,8 @@ def test_superadmin_creates_validates_publishes_and_restores_a_type(live_server,
     assert "單號前綴" in txt and "簽核單據類型" in txt, txt
     _shot(page, "2_problems")
     # 修正：前綴（小寫輸入自動轉大寫）、簽核單據類型、不進出納；加保留欄位 dept、明細欄 invoiceNo；全部放一組
-    page.fill("[data-testid=et-prefix]", "pr")
-    assert page.input_value("[data-testid=et-prefix]") == "PR"
+    page.fill("[data-testid=et-prefix]", "vf")
+    assert page.input_value("[data-testid=et-prefix]") == "VF"
     opts = page.eval_on_selector_all("[data-testid=et-doctype] option", "els => els.map(e => e.value).filter(Boolean)")
     assert opts, "簽核單據類型清單不該是空的"
     page.select_option("[data-testid=et-doctype]", opts[0])
@@ -111,10 +89,10 @@ def test_superadmin_creates_validates_publishes_and_restores_a_type(live_server,
     # 存草稿 ⇒ DB 有草稿列、內容是契約形狀
     page.click("[data-testid=et-save]")
     page.wait_for_function("() => document.querySelector('[data-testid=et-msg]').innerText.includes('草稿已儲存')", timeout=10000)
-    row = _db("SELECT status, version, body_json FROM ui_definitions WHERE kind='expense_type' AND key='purchase_req'")
+    row = _db("SELECT status, version, body_json FROM ui_definitions WHERE kind='expense_type' AND key='visit_fee'")
     assert len(row) == 1 and row[0]["status"] == "draft"
     body = json.loads(row[0]["body_json"])
-    assert body["name"] == "請購單" and body["numbering"]["prefix"] == "PR" and body["payable"] is False and body["docType"] == opts[0]
+    assert body["name"] == "訪視單" and body["numbering"]["prefix"] == "VF" and body["payable"] is False and body["docType"] == opts[0]
     lines = next(f for f in body["fields"] if f["key"] == "lines")
     assert lines["type"] == "table" and [c["key"] for c in lines["columns"]] == ["category", "summary", "amount", "invoiceNo"]
     assert next(f for f in body["fields"] if f["key"] == "applicant")["default"] == {"$": "requester"}
@@ -123,10 +101,10 @@ def test_superadmin_creates_validates_publishes_and_restores_a_type(live_server,
     page.fill("[data-testid=et-note]", "首版")
     page.click("[data-testid=et-publish]")
     page.wait_for_function("() => document.querySelector('[data-testid=et-msg]').innerText.includes('已發布第 1 版')", timeout=10000)
-    pub = _db("SELECT version, status, note FROM ui_definitions WHERE kind='expense_type' AND key='purchase_req' AND status='published'")
+    pub = _db("SELECT version, status, note FROM ui_definitions WHERE kind='expense_type' AND key='visit_fee' AND status='published'")
     assert pub == [{"version": 1, "status": "published", "note": "首版"}]
     # 改名（存草稿）⇒ 與已發布版的差異 1 處以上；再發布 v2；還原 v1 ⇒ v3 內容＝v1
-    page.fill("[data-testid=et-name]", "請購單（改）")
+    page.fill("[data-testid=et-name]", "訪視單（改）")
     page.click("[data-testid=et-save]")
     page.wait_for_function("() => document.querySelector('[data-testid=et-msg]').innerText.includes('草稿已儲存')", timeout=10000)
     page.click("[data-testid=et-changes]")
@@ -138,19 +116,18 @@ def test_superadmin_creates_validates_publishes_and_restores_a_type(live_server,
     _shot(page, "4_versions")
     page.click("[data-testid=et-restore-1]")
     page.wait_for_function("() => document.querySelector('[data-testid=et-msg]').innerText.includes('還原為第 3 版')", timeout=10000)
-    v3 = _db("SELECT body_json FROM ui_definitions WHERE kind='expense_type' AND key='purchase_req' AND version=3")
-    assert json.loads(v3[0]["body_json"])["name"] == "請購單"
+    v3 = _db("SELECT body_json FROM ui_definitions WHERE kind='expense_type' AND key='visit_fee' AND version=3")
+    assert json.loads(v3[0]["body_json"])["name"] == "訪視單"
     # 清單：回清單看得到名稱／前綴／版本
     page.click("[data-testid=et-back]")
-    page.wait_for_selector("[data-testid=et-row-purchase_req]")
-    t = page.inner_text("[data-testid=et-row-purchase_req]")
-    assert "請購單" in t and "PR" in t and "v3" in t and "否" in t, t
+    page.wait_for_selector("[data-testid=et-row-visit_fee]")
+    t = page.inner_text("[data-testid=et-row-visit_fee]")
+    assert "訪視單" in t and "VF" in t and "v3" in t and "否" in t, t
     _shot(page, "5_list")
 
 
 @pytest.mark.e2e
 def test_new_type_key_must_be_valid_and_unique_and_narrow_fits(live_server, make_user, e2e_browser):
-    _ensure_kind()
     u = make_user(username="et_admin2", role="superadmin", modules=[])
     page = _open(e2e_browser, live_server, u, width=390)
     assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1"), "窄螢幕頁面本身不可橫向捲動（表格在自己的捲動區內）"
@@ -160,13 +137,12 @@ def test_new_type_key_must_be_valid_and_unique_and_narrow_fits(live_server, make
     page.click("[data-testid=et-save]")
     page.wait_for_selector("[data-testid=et-error]", state="visible")
     assert "小寫英文" in page.inner_text("[data-testid=et-error]")
-    assert _db("SELECT 1 FROM ui_definitions WHERE kind='expense_type'") == []
+    assert _db("SELECT 1 FROM ui_definitions WHERE kind='expense_type'") == []          # 壞代碼沒有寫進庫
     _shot(page, "6_narrow_bad_key")
 
 
 @pytest.mark.e2e
 def test_non_superadmin_cannot_use_the_definition_api_or_see_data(live_server, make_user, e2e_browser):
-    _ensure_kind()
     u = make_user(username="et_user", role="viewer", modules=[])
     page = _open_noguard(e2e_browser, live_server, u)
     status = page.evaluate("""async () => {
@@ -184,3 +160,55 @@ def _open_noguard(e2e_browser, base, user):
     page.goto(base + "/pages/expense-types.html")
     page.wait_for_load_state("domcontentloaded")
     return page
+
+
+@pytest.mark.e2e
+def test_edit_a_default_type_publish_new_version_and_old_documents_keep_their_version(live_server, make_user, e2e_browser, client):
+    """改預設類型（差旅）：清單開得起來、起點是目前生效的預設（不是空白）→ 改名發布成 v1 →
+    新版出現在表單取用的 API（`/api/expense-types`）、新單據釘 v1；發布前就送審的單據仍釘 v0、依舊版驗證與輸出。"""
+    su = make_user(username="et_edit_su", role="superadmin", modules=[])
+    emp = make_user(username="et_edit_emp", role="admin", modules=[])
+
+    def tok(u):
+        return {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u[0], "password": u[1]}).json()["token"]}
+    import db as _db_mod
+    c = _db_mod.get_db()
+    try:
+        c.execute("INSERT OR IGNORE INTO expense_categories (code, name, default_tax, active, sort, note) VALUES ('TRAVEL','差旅','',1,0,'')")
+        c.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+                  ("unified_approval_flow", json.dumps({"tiers": [], "includeSubmitterManagerTier": False}), "2026-01-01T00:00:00"))
+        c.commit()
+    finally:
+        c.close()
+    body = {"kind": "travel", "data": {"applicant": emp[0], "req_date": "2026-10-01"}, "lines": [{"category": "TRAVEL", "summary": "高鐵", "amount": 1000}]}
+    old = client.post("/api/quotations/-/extra-expenses", headers=tok(emp), json=body)
+    assert old.status_code == 201, old.text
+    old_id = old.json()["id"]
+    assert client.post("/api/quotations/-/extra-expenses/%d/submit" % old_id, headers=tok(emp)).status_code == 200
+    assert _db("SELECT def_version FROM case_extra_expenses WHERE id=?", (old_id,))[0]["def_version"] == 0
+
+    page = _open(e2e_browser, live_server, su)
+    page.click("[data-testid=et-open-travel]")                                                          # 清單列的「編輯」
+    page.wait_for_selector("[data-testid=et-edit]")
+    assert page.input_value("[data-testid=et-name]") == "差旅費用請款單"                           # 起點＝目前生效的預設，不是空白
+    assert page.input_value("[data-testid=et-prefix]") == "TE"
+    page.fill("[data-testid=et-name]", "差旅費用請款單（新版）")
+    page.fill("[data-testid=et-note]", "改名")
+    page.click("[data-testid=et-publish]")
+    page.wait_for_function("() => document.querySelector('[data-testid=et-msg]').innerText.includes('已發布第 1 版')", timeout=10000)
+    _shot(page, "7_default_edited")
+
+    types = {t["code"]: t for t in client.get("/api/expense-types", headers=tok(emp)).json()}          # 表單取用的清單與定義
+    assert types["travel"]["name"] == "差旅費用請款單（新版）" and types["travel"]["defVersion"] == 1
+    assert client.get("/api/expense-types/travel", headers=tok(emp)).json()["definition"]["name"] == "差旅費用請款單（新版）"
+    assert client.get("/api/expense-types/travel?version=0", headers=tok(emp)).json()["definition"]["name"] == "差旅費用請款單"
+
+    new = client.post("/api/quotations/-/extra-expenses", headers=tok(emp), json=body)
+    assert new.status_code == 201, new.text
+    assert _db("SELECT def_version FROM case_extra_expenses WHERE id=?", (new.json()["id"],))[0]["def_version"] == 1
+    assert _db("SELECT def_version FROM case_extra_expenses WHERE id=?", (old_id,))[0]["def_version"] == 0      # 舊單據仍釘 v0
+    pinned = client.get("/api/expense-types/travel?version=%d" % _db("SELECT def_version FROM case_extra_expenses WHERE id=?", (old_id,))[0]["def_version"],
+                        headers=tok(emp)).json()
+    assert pinned["definition"]["name"] == "差旅費用請款單"                                          # 舊單據用自己的版本取到舊定義
+    # 其他三個預設沒被動到
+    assert types["purchase_req"]["defVersion"] == 0 and types["petty_cash"]["defVersion"] == 0

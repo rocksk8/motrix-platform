@@ -3,6 +3,7 @@
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
 ## (next) — 2026-10-01（wip/w1-a2-2：A2-2 費用單據類型定義）
+- L1（新增）頁面：`expense-types.html`（請款類型定義編輯頁，超級管理員；`l1_pages.json`）＋選單項「請款類型」（`menu_l1.json`，system 群組、perm＝superadmin）。編輯頁列出程式預設的四個類型（定義庫沒有列時以目前生效的預設為起點），改了走既有 `/api/definitions/expense_type` 草稿→驗證→發布；單據仍釘在自己的 `def_version`。
 - L1（新增）：`helpers.expense_types`（費用單據類型定義 `expense_type`：`validate_expense_type／get_type／list_types／cashier_field_keys／normalize_lines／validate_values`，明細金額唯一實作）＋四個預設定義（purchase_req／purchase_order／travel／petty_cash，欄位為草稿待使用者確認）；路由 `GET /api/expense-types`、`GET /api/expense-types/{code}`；`POST /api/definitions/{kind}/{key}/validate` 改用 `D.kinds()`（登記的種類不再 400）。
 
 ## 1.92 — 2026-10-01（wip/w1-a2-0：A2 費用單據的底層預留切片，一次到位；之後各類型只動模組）

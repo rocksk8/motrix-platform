@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 966,
+  "tests": 965,
   "unmapped": 12,
   "kinds": {
    "api": 521,
-   "e2e": 229,
+   "e2e": 228,
    "audit": 129,
    "unit": 87
   },
@@ -18921,11 +18921,13 @@
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_requires.py",
     "mod:accounting/api/ledger_category_map",
+    "mod:accounting/api/ledger_engine",
     "mod:accounting/api/ledger_settings",
     "mod:accounting/ledger/__init__",
     "mod:accounting/ledger/category_map",
     "mod:accounting/ledger/roles",
     "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
     "mod:case/api/case_extra_expenses",
     "page:pages/approval-queue.html",
     "page:pages/cashier.html",
@@ -18943,8 +18945,10 @@
     ],
     "api": [
      "backend/modules/accounting/api/ledger_category_map.py",
+     "backend/modules/accounting/api/ledger_engine.py",
      "backend/modules/accounting/api/ledger_settings.py",
      "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py",
      "backend/modules/case/api/case_extra_expenses.py"
     ],
     "page": [
@@ -18969,6 +18973,7 @@
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_requires.py",
     "js:static/definition-form.js",
+    "mod:case/api/expense_form_pdf",
     "page:pages/payment-request.html"
    ],
    "evidence": {
@@ -18977,6 +18982,9 @@
      "backend/tests/_e2e_login.py",
      "backend/tests/_requires.py"
     ],
+    "api": [
+     "backend/modules/case/api/expense_form_pdf.py"
+    ],
     "page": [
      "frontend/pages/payment-request.html",
      "frontend/static/definition-form.js"
@@ -18984,31 +18992,8 @@
     "path": [
      "frontend/pages/payment-request.html"
     ]
-   }
-  },
-  "backend/tests/test_e2e_expense_types_editor_2026_10_01.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/_e2e_login.py",
-    "page:pages/expense-types.html",
-    "plat:__init__",
-    "plat:definitions"
-   ],
-   "evidence": {
-    "import": [
-     "backend/core/__init__.py",
-     "backend/core/definitions.py",
-     "backend/db.py",
-     "backend/tests/_e2e_login.py"
-    ],
-    "page": [
-     "frontend/pages/expense-types.html"
-    ],
-    "path": [
-     "frontend/pages/expense-types.html"
-    ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_export_pdf_2026_09_30.py": {
    "kind": "e2e",

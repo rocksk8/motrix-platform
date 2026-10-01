@@ -85,6 +85,16 @@ function expenseTypesPage() {
           row.payable = b.payable
           row.enabled = b.enabled !== false
         }))
+        // 程式預設的四個類型在定義庫裡沒有列（還沒人改過）⇒ 併入清單，否則「改預設類型」無從開始
+        var t = await this._call('GET', '/api/expense-types')
+        if (t.ok && Array.isArray(t.data)) {
+          var have = {}
+          rows.forEach(function (x) { have[x.key] = true })
+          t.data.forEach(function (x) {
+            if (!have[x.code]) rows.push({ key: x.code, name: x.name, prefix: x.prefix, payable: x.payable, enabled: true,
+                                           latestVersion: 0, hasDraft: false, isDefault: true })
+          })
+        }
         this.err = ''
         this.rows = rows
       } catch (e) { this.err = '網路連線失敗，請重新整理' } finally { this.loading = false }
@@ -99,6 +109,10 @@ function expenseTypesPage() {
       if (!r.ok) { this._fail(r, '讀取失敗'); return }
       this.meta = r.data
       var src = (r.data.draft || r.data.latest || {}).body
+      if (!src) {                                   // 庫裡沒有（程式預設還沒人改）⇒ 以目前生效的預設當起點，不要開空白
+        var cur = await this._call('GET', '/api/expense-types/' + encodeURIComponent(key))
+        if (cur.ok && cur.data && cur.data.definition) src = cur.data.definition
+      }
       this.isNew = false; this.key = key
       this.body = src ? clone(src) : newBody()
       if (!this.body.fields) this.body.fields = []
@@ -257,7 +271,7 @@ function expenseTypesPage() {
       } finally { this.busy = false }
     },
     get hasDraft() { return !!(this.meta && this.meta.draft) },
-    statusLabel: function (r) { return (r.latestVersion ? 'v' + r.latestVersion : '未發布') + (r.hasDraft ? '（有草稿）' : '') },
+    statusLabel: function (r) { return (r.latestVersion ? 'v' + r.latestVersion : (r.isDefault ? '程式預設（草稿欄位待確認）' : '未發布')) + (r.hasDraft ? '（有草稿）' : '') },
 
     // ── 預覽：與建構器同一個元件（執行頁本身當預覽）
     showPreview() {

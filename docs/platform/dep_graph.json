@@ -1764,26 +1764,6 @@
    "tables_r": [],
    "tables_w": []
   },
-  "js:js/expense-types.js": {
-   "api_calls": [
-    "/api/definitions/",
-    "/api/settings/approval-doc-types"
-   ],
-   "api_prefixes": [
-    "/api/definitions",
-    "/api/settings"
-   ],
-   "api_unmatched": [],
-   "imports": [],
-   "kind": "js",
-   "path": "frontend/js/expense-types.js",
-   "routers_called": [
-    "router:definitions",
-    "router:system"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
   "js:js/ledger-hub.js": {
    "api_calls": [
     "/api/ledger/annotations",
@@ -6247,7 +6227,7 @@
    "routes": [
     {
      "func": "expense_document",
-     "line": 66,
+     "line": 78,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/document"
     }
@@ -6258,7 +6238,8 @@
     "users"
    ],
    "tables_r": [
-    "case_extra_expenses"
+    "case_extra_expenses",
+    "expense_categories"
    ],
    "tables_r_transitive": [
     "approval_delegates",
@@ -6269,6 +6250,7 @@
     "departments",
     "dev_cases",
     "divisions",
+    "expense_categories",
     "projects",
     "quotations",
     "sessions",
@@ -11508,34 +11490,6 @@
    "routers_called_effective": [
     "mod:analytics/api/dashboard",
     "router:auth",
-    "router:system"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "page:pages/expense-types.html": {
-   "api_calls": [
-    "/api/system/branding/favicon"
-   ],
-   "api_prefixes": [
-    "/api/system"
-   ],
-   "api_unmatched": [],
-   "imports": [
-    "js:js/expense-types.js",
-    "js:static/auth-guard.js",
-    "js:static/form-preview.js",
-    "js:static/notif.js",
-    "js:static/sidebar.js",
-    "js:static/ui.js"
-   ],
-   "kind": "page",
-   "path": "frontend/pages/expense-types.html",
-   "routers_called": [
-    "router:system"
-   ],
-   "routers_called_effective": [
-    "router:definitions",
     "router:system"
    ],
    "tables_r": [],
@@ -17023,7 +16977,9 @@
     "mod:accounting/api/ledger_category_map"
    ],
    "path": "backend/modules/accounting/migrations/0003_dims_and_categories.py:12",
-   "readers": [],
+   "readers": [
+    "mod:case/api/expense_form_pdf"
+   ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
