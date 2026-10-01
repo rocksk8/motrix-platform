@@ -28,7 +28,7 @@
       border: 1px solid var(--tone-danger-border); color: var(--tone-danger-fg); font-size: 13px; }
     .et-ok { margin-top: 14px; padding: 10px 16px; border-radius: 8px; background: var(--tone-info-bg);
       border: 1px solid var(--tone-info-border); color: var(--tone-info-fg); font-size: 13px; }
-    .et-panel { margin-top: 18px; border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; background: var(--surface, #fff); }
+    .et-panel { margin-top: 18px; border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; background: #fff; }
     .et-panel h2 { font-size: 15px; margin: 0 0 8px; }
     .et-sub { font-size: 12.5px; color: var(--text-secondary); line-height: 1.7; }
     .et-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 16px; margin-top: 10px; }
@@ -47,8 +47,9 @@
     .et-keys label { display: flex; align-items: center; gap: 4px; }
     #et-preview { margin-top: 10px; min-height: 40px; }
     /* 深色主題＝整頁 invert 濾鏡（style.css）：頁面要用「淺色版」token，濾鏡才會把它反轉成深色；
-       :root[data-theme=dark] 的深色 token 只給不經濾鏡的頁面用，直接用會被反轉成淺底（面板標題與底色對比不足）。 */
-    :root[data-theme="dark"] .et-main { --surface: #FFFFFF; --tone-danger-fg: #B91C1C; --tone-danger-bg: #FEF2F2; --tone-danger-border: #FECACA;
+       style.css 的深色 token 只給不經濾鏡的頁面用，直接用會被反轉成淺底（面板標題與底色對比不足）。
+       這裡的面板底色與提示條 token 無條件固定成淺色值（淺色主題下本來就是這些值），所以不需要寫深色選擇器；設計器元件有自己的色票，不能被這裡覆蓋。 */
+    .et-err, .et-ok { --tone-danger-fg: #B91C1C; --tone-danger-bg: #FEF2F2; --tone-danger-border: #FECACA;
       --tone-info-fg: #1D4ED8; --tone-info-bg: #EEF2FF; --tone-info-border: #BFDBFE; }
     @media (max-width: 720px) { .et-main { margin-left: 0; padding: 20px 16px 60px; } }
   </style>
