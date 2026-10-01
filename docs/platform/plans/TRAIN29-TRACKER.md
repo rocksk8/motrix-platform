@@ -23,3 +23,8 @@
 
 | hichan-d7 | W4b 收尾（派工單 DISPATCH-W4B） | wip/w4-g2-5b | 73e606c6（12:36） | 1 A5 已撤、3 G4 文件、繼承紅燈已修 | 13:00 排預檢；4 G5 |
 | hichan-c7 補充 | 補 modules.json 登記（custom_module_delete）→W3 dept-dim 收尾 | 未推 | — | 預計 13:00 | |
+
+## 13:12 巡檢
+- 整合樹 wip/train-29-int1@436749d2（d7）：已合 w4-g2-5b、w1-a2-2/a2-4、w2-w2b(9d0cee5a)、fix/module-delete-ownership；待合 wip/w3-dept-dim-c7@037ed829、補 W3 個資種子列。
+- 裁示：費用類別清單為空視為未設定（方案 A，2e 實作中）；W4 低風險#3 採(a)；etype-editor／map-zoom／prodroot 不納入本班。
+- a3：列印按鈕＋PDF 版面檢查；c7 待命；預檢排在 2e 新版與 d7 合併完成後（整合樹一次跑）。
