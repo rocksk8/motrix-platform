@@ -1,7 +1,7 @@
 {
   "key": "filehub",
   "name": "檔案中心",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "core": ">=1.0,<2.0",
   "license_key": "file_center",
   "permissions": [

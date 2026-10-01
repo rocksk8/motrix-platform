@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.61 — 2026-10-01（fix/t29-w1／fix/t29-w3：建包全量關卡）
+- 案件頁「全部附件」頁籤的兩處寫死色碼改用語意 token；`quotation-form.html` FORM_VERSION V3.14→V3.15（客戶回簽單區塊）；模組目錄 `file_center` 登記；未核可橫幅守門改登記 `doc_render.render_document`。產品行為不變。
+
 ## 1.0.60 — 2026-10-01（wip/w1-quote-signed-back：客戶回簽單上傳）
 - 報價單「客戶回簽單」（使用者：「報價單成案要能上傳客戶報價回簽單」）：沿用既有 `POST/DELETE /api/quotations/{no}/signed-files`（`quotations.signed_files_json`，不新增表／migration），補規則——
   - **狀態閘**：報價單完成簽核（狀態「已送出」）之後才能上傳（成案前客戶剛簽回、成案、已結案、成案撤回都可傳；草稿／待審核／簽核中／已退回／已作廢 ⇒ 400「…已送出之後才能上傳…」並寫稽核 `quotation.upload_signed_files_denied`）。

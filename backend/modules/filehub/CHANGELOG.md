@@ -1,5 +1,8 @@
 # 檔案中心 更新紀錄
 
+## 1.0.2 — 2026-10-01（fix/t29-w1：建包全量關卡三紅）
+- `file-center.html`：登記為唯讀頁（理由：只有 `GET /api/filehub/search`；上傳與刪除在來源單據）；`daysAgo` 改用 `MotrixDate`（不以 UTC 切日期，台北 00:00–08:00 不會變前一天）並補 `motrix-date.js`。介面不變。
+
 ## 1.0.1 — 2026-10-01（fix/filehub-guards：守門三紅）
 - `api.py`：類別清單合併改用 `{"type": t, **meta}`（不以 `**` 當呼叫引數，守門 `test_case_summary_purpose`）；補 `SPEC.md`（FHB1～FHB8，模組檔案齊全守門）。行為與介面不變。
 
