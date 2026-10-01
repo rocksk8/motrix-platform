@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-02 00:59（fix/t31-build-2e）：派發審核的稽核包裝函式改名
+## 1.1.2 — 2026-10-02 00:59（fix/t31-build-2e）：派發審核的稽核包裝函式改名
 - 內部：兩段審核端點共用的 `do_*` 改名 `dispatch_review_submit／approve／reject／withdraw`、`_apply_status` 改名 `dispatch_status_audited`（名稱登記進寫入端點稽核掃描器的 AUDIT_WRAPPERS，需全域唯一）；行為不變。
 
 ## 1.1.1 — 2026-10-01（wip/t31-payslip-mask-a3：稽核 G1／G2）
