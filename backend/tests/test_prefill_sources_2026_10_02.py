@@ -188,7 +188,9 @@ def test_company_name_comes_from_settings_and_blank_is_none(client, monkeypatch)
     assert PS.resolve_field(_tok("company"), PS.make_ctx(None, {"username": "u"})) == "○○機械"
     monkeypatch.setattr(CI, "location_identity", lambda *a, **k: {"company_name": ""})
     assert PS.resolve_field(_tok("company"), PS.make_ctx(None, {"username": "u"})) is None
-    monkeypatch.setattr(CI, "location_identity", lambda *a, **k: 1 / 0)       # 失敗 ⇒ None，不外拋
+    def boom(*a, **k):
+        raise RuntimeError("db down")                                           # 任何型別的例外 ⇒ None，不外拋
+    monkeypatch.setattr(CI, "location_identity", boom)
     assert PS.resolve_field(_tok("company"), PS.make_ctx(None, {"username": "u"})) is None
 
 
@@ -248,6 +250,15 @@ def test_fill_on_create_fills_empty_keeps_supplied_and_overwrites_locked(monkeyp
     src = {"co": "偽造"}
     PS.fill_defaults(BODY, src, ctx)
     assert src == {"co": "偽造"}                                                     # 不改傳入的 dict
+
+
+def test_locked_field_with_unresolvable_token_is_blanked_not_left_to_the_client(monkeypatch):
+    """locked＝以伺服器為準：解析不到（None）也要把前端送的值清掉，不能留著偽造值（反向：未鎖的才保留前端值）。"""
+    from helpers import company_identity as CI
+    monkeypatch.setattr(CI, "location_identity", lambda *a, **k: {"company_name": ""})
+    ctx = PS.make_ctx(None, {"username": "alice"}, now=NOW)
+    out = PS.fill_defaults({"fields": [_tok("company", key="co", locked=True), _tok("company", key="co2")]}, {"co": "偽造", "co2": "自填"}, ctx)
+    assert out["co"] is None and out["co2"] == "自填"
 
 
 def test_update_never_re_resolves_and_locked_keeps_the_stored_value(monkeypatch):
