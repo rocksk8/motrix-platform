@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 965,
+  "tests": 966,
   "unmapped": 12,
   "kinds": {
    "api": 521,
-   "e2e": 228,
+   "e2e": 229,
    "audit": 129,
    "unit": 87
   },
@@ -369,6 +369,26 @@
     ]
    },
    "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_ledger_bs_default_compare_2026_10_01.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/tests/test_e2e_ledger_p1_pages_2026_09_30",
+    "page:pages/ledger-statements.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/accounting/tests/test_e2e_ledger_p1_pages_2026_09_30.py"
+    ],
+    "page": [
+     "frontend/pages/ledger-statements.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
    "module": "accounting"
   },
   "backend/modules/accounting/tests/test_e2e_ledger_c5_ready_2026_09_30.py": {
