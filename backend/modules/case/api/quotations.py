@@ -60,6 +60,7 @@ from helpers import (
 )
 from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E402  CA-O4：L1
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
+from modules.case import material_guard as MG  # 叫料審核的寫入閘（31-C）
 from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
 from modules.case.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
 from modules.case.quotations import validate_tax_basis
@@ -1525,6 +1526,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
 
     def _do_insert(no: str):
         q["quoteNo"] = no
+        MG.enforce(conn, no, q, actor=user)        # 叫料審核（31-C）：新建報價單帶來的叫料也要過閘（被拒的項目直接丟掉）
         conn.execute("""
             INSERT INTO quotations
               (quote_no, status, customer_name, project_name,
@@ -1835,6 +1837,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     elif new_status == "草稿":
         q.pop(SNAPSHOT_KEY, None)
 
+    MG.enforce(conn, quote_no, q, actor=user)   # 叫料審核（31-C）：整份存檔也要過閘（以資料庫現值為準；被拒的項目維持原值）
     conn.execute("""
         UPDATE quotations SET
           status=?, customer_name=?, project_name=?,
@@ -2911,10 +2914,13 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         new_case_record = body.case_record or {}
         new_case_record["stages"] = (data.get("caseRecord") or {}).get("stages") or []
         data["caseRecord"] = new_case_record
+        # 叫料審核（31-C）：叫料列與物流旗標一律過閘（以資料庫現值為準，只拒有問題的項目，其餘照存；被拒的逐項回報）
+        mat_rejected = MG.enforce(conn, quote_no, data, actor=user)
+        new_devices = (data["caseRecord"] or {}).get("devices") or []       # 閘可能把被拒的到料項目的序號改回現值
         stock_conflicts, stock_notice = [], None
         if new_devices != old_devices:
             stock_conflicts, stock_notice = _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
-        now = save_quotation_json(conn, quote_no, data)
+        now = save_quotation_json(conn, quote_no, data, actor=user)
         conn.commit()
         conn.close()
         spawn_bg_thread(_backup_quotation, args=(quote_no,))
@@ -2923,6 +2929,8 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', quote_no,
                    f"{quote_no} 發票號碼 {_o} → {_n}（總帳 E01 將在下次引擎執行時沖轉並重建）")
         out = {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts, "adopted": adopted}
+        if mat_rejected:
+            out["rejected"] = mat_rejected          # 叫料審核（31-C）：被拒的項目（itemId／field／code／message），其餘已存
         if gl_warn:
             out["glWarning"] = gl_warn
         if stock_notice:

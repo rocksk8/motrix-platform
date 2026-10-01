@@ -306,12 +306,17 @@ def save_quotation_json(
     data: dict,
     status: str = None,
     updated_at: str = None,
+    actor: dict = None,
 ) -> str:
     """Persist data_json and keep deal_tag / settle_status columns in sync.
 
     Optionally updates status. Returns the updated_at timestamp used.
     """
     _check_read_under_write_lock(conn, quote_no)
+    # 叫料審核的後盾（31-C）：所有寫 caseRecord.materialOrders／materials 物流旗標的路徑最後都走到這裡；冪等（端點層已過閘的資料不會再有改動）。
+    # actor＝呼叫端有給才檢查「誰能改」；沒給（系統／已結案變更核准套用）＝只強制不變式。
+    from modules.case import material_guard as _mg
+    _mg.enforce(conn, quote_no, data, actor)
     now = updated_at or datetime.now().isoformat()
     deal_tag, settle_status = quote_hot_fields(data)
     if status is not None:
