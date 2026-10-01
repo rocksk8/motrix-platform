@@ -28,3 +28,5 @@
 - 勞報單後端未驗證帳號欄位（自由 dict）：應拒絕看起來是遮罩值（含 `****`）的銀行帳號，避免遮罩值被存進勞報單（fix/contractor-bank-mask-2 已在前端 payslip-form.html 避免，後端仍待）。
 - 既有紅：`tests/test_e2e_pdf_unapproved_more_2026_09_30.py::test_quotation[False]`（點擊逾時）在 platform d4c43792 未改動樹上同樣失敗（a3 驗證）；非第 29 班引入，下班查根因。
 - 出貨內容衛生（d7 檢視第29班包）：`docs/platform/plans/HANDOFF-*`、expense-a2 設計文件含本機路徑與簽章金鑰「路徑」字串（無金鑰內容）隨包出貨；`tools/platform/*`（34 檔，第28班起就隨包）也在酬載。下班評估把 plans/HANDOFF-*、expense-a2/ 加入 backend/export_ignore.json，並決定 tools/platform 是否該隨包。
+- 【A29-B F1，使用者裁示延到第31班】勞報單詳情 `GET /api/payslips/{slip_no}` 與 `/pdf-download`（payroll/api/payslips.py ~l.326／~l.539）對有勞報單模組的 admin 顯示個人完整銀行帳號（正式機現況，非迴歸）。做法：admin 顯示 ****末四碼，遮罩值回傳視為保留原值，仍只有最高管理者看全號。
+- 【A29-B G1】`test_bank_account_mask_2026_10_01` 抓不到憑據 PDF 未遮罩（突變 mask_bank=False 仍綠）→ 加 pypdf 文字斷言。【G2】`bank_mask.keep_if_masked` 是死碼（突變仍綠；真正的守門在 vendor_contractors 內聯 is_masked_value）→ 刪或接上並加測試。
