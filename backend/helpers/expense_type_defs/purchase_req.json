@@ -250,8 +250,7 @@
       },
       {
        "title": "單價",
-       "path": "unitCost",
-       "format": "money",
+       "path": "unitCostText",
        "align": "right"
       },
       {

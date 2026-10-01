@@ -170,3 +170,27 @@ def test_document_pdf(client, world):
     r = client.get("%s/%d/document?format=pdf" % (SENT, eid), headers=H["xo_req"])
     assert r.status_code == 200, r.text[:200]            # 這台沒有 Edge 時 PDF 端點回 503 ⇒ 題會紅（不 skip：skip 會遮蔽「PDF 出不來」）
     assert r.content[:5] == b"%PDF-" and len(r.content) > 1000
+
+
+def test_document_visual_defects_regression(client, world):
+    """視覺檢查（A2-7）找到的三個缺陷：草稿的類別顯示代碼、只填金額的列單價印 0、出納事後填的付款條件／匯款日印不出來。"""
+    import re
+    H = world["H"]
+    _flow([])
+    lines = [{"category": "TRAVEL", "summary": "高鐵", "qty": 2, "unitCost": 745},
+             {"category": "TRAVEL", "summary": "只填金額的列", "amount": 3200}]
+    r = client.post(SENT, headers=H["xo_req"], json={"kind": "purchase_order", "data": DATA, "lines": lines})
+    eid = r.json()["id"]
+    url = "%s/%d/document" % (SENT, eid)
+    html = client.get(url, headers=H["xo_req"]).text
+    assert "差旅" in html and ">TRAVEL<" not in html                                              # ① 草稿也顯示類別名稱
+    row2 = re.search(r"只填金額的列.*?</tr>", html, re.S).group(0)
+    cells = re.findall(r"<td[^>]*>(.*?)</td>", row2, re.S)
+    assert "0" not in [c.strip() for c in cells]                                                  # ② 單價空白，不是 0
+    assert "3,200" in row2
+    assert client.post("%s/%d/submit" % (SENT, eid), headers=H["xo_req"]).status_code == 200
+    pay = client.post("/api/cashier/pending-payables/case/%d/pay" % eid, headers=H["xo_cash"],
+                      json={"paidDate": "2026-10-02", "payTerms": "月結30天", "remitDate": "2026-10-02"})
+    assert pay.status_code == 200, pay.text
+    after = client.get(url, headers=H["xo_req"]).text
+    assert "月結30天" in after and "2026-10-02" in after                                           # ③ 出納填的欄位印得出來

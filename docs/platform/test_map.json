@@ -18405,6 +18405,7 @@
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_requires.py",
     "js:static/definition-form.js",
+    "mod:case/api/expense_form_pdf",
     "page:pages/payment-request.html"
    ],
    "evidence": {
@@ -18413,6 +18414,9 @@
      "backend/tests/_e2e_login.py",
      "backend/tests/_requires.py"
     ],
+    "api": [
+     "backend/modules/case/api/expense_form_pdf.py"
+    ],
     "page": [
      "frontend/pages/payment-request.html",
      "frontend/static/definition-form.js"
@@ -18420,7 +18424,8 @@
     "path": [
      "frontend/pages/payment-request.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_export_pdf_2026_09_30.py": {
    "kind": "e2e",
