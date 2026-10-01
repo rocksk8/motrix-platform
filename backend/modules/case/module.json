@@ -1,7 +1,7 @@
 {
   "key": "case",
   "name": "案件",
-  "version": "1.0.61",
+  "version": "next",
   "core": ">=1.0,<2.0",
   "license_key": "case",
   "permissions": [
@@ -17,6 +17,7 @@
     "case_action_items",
     "case_change_requests",
     "case_extra_expenses",
+    "case_material_approvals",
     "completion_notes"
   ],
   "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration。其他模組讀這些表的地方見 M01-PLAN §2-B（讀取連接器另案）",
@@ -52,6 +53,10 @@
       },
       {
         "name": "case_extra_expenses",
+        "class": "T1"
+      },
+      {
+        "name": "case_material_approvals",
         "class": "T1"
       },
       {

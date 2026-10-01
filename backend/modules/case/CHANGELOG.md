@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — wip/t31-material-d7（31-C：叫料審核，切片 S1：核心與 migration）
+- 新疊加審核表 `case_material_approvals`（migration 0004，只加不改、冪等）：叫料（`caseRecord.materialOrders[]`）以 (quote_no, item_id) 疊加審核狀態；**沒有疊加列＝舊單**（不溯及既往）。
+- 新 `modules/case/material_approval.py`：審核狀態機（草稿／待審核／簽核中／已核准／已退回／已取消；重用分層簽核原語）、實質欄位雜湊、到貨確認（只記日期與確認人）、簽核單據類型 `material_order`（叫料）登記。本切片尚無端點、無畫面、不影響現有行為。
+- 設計：docs/platform/plans/MATERIAL-ORDER-APPROVAL-DESIGN.md。
+
 ## 1.0.61 — 2026-10-01（fix/t29-w1／fix/t29-w3：建包全量關卡）
 - 案件頁「全部附件」頁籤的兩處寫死色碼改用語意 token；`quotation-form.html` FORM_VERSION V3.14→V3.15（客戶回簽單區塊）；模組目錄 `file_center` 登記；未核可橫幅守門改登記 `doc_render.render_document`。產品行為不變。
 
