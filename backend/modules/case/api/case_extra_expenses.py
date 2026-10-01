@@ -445,10 +445,12 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
             begin_write(conn)                                   # 配單號＋寫入要在同一把寫鎖裡
             lines, total = EF.normalize_lines(body.lines)
             data = EF.normalize_data(body.data)
+            lines, over_plan = PI.check_lines(conn, quote_no, kind, lines)          # 32-S2：明細連案件品項（沒有 itemId ⇒ 原樣）
+            PI.check_from_pr(conn, quote_no, kind, data)
             doc_code = EF.next_doc_code(conn, kind, now[:10])
             desc = (body.description or "").strip() or next((l.get("summary") for l in lines if l.get("summary")), "") or "（%s）" % doc_code
         else:
-            lines, total, data, doc_code = [], _recalc(body), {}, ""
+            lines, total, data, doc_code, over_plan = [], _recalc(body), {}, "", []
             desc = (body.description or "").strip()
         display = user.get("display_name") or user["username"]
         cur = conn.execute(
@@ -473,7 +475,8 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
         _audit(_tok(authorization), "extra_expense.create", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 新增額外支出「{(body.description or '').strip()}」 NT$ {total:,.0f}",
                _asum(conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()))
-        return {"ok": True, "id": exp_id, "status": "草稿", "totalCost": total, "docCode": doc_code, "kind": kind}
+        return {"ok": True, "id": exp_id, "status": "草稿", "totalCost": total, "docCode": doc_code, "kind": kind,
+                **({"overPlan": over_plan} if over_plan else {})}
     finally:
         conn.close()
 
@@ -504,9 +507,12 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
             begin_write(conn)
             lines, total = EF.normalize_lines(body.lines if body.lines is not None else _jlist(row, "lines_json"))
             data = EF.normalize_data(body.data, _jcol(row, "data_json"))       # 與既有值合併：沒送的鍵不會被丟掉
+            lines, over_plan = PI.check_lines(conn, quote_no, row_kind, lines, exclude_id=exp_id)      # 32-S2
+            PI.check_from_pr(conn, quote_no, row_kind, data)
             desc = (body.description or "").strip() or row["description"]
         else:
             lines, total, data, desc = _jlist(row, "lines_json"), _recalc(body), _jcol(row, "data_json"), (body.description or "").strip()
+            over_plan = []
         conn.execute(
             "UPDATE case_extra_expenses SET category=?, description=?, qty=?, unit=?, "
             " unit_cost=?, total_cost=?, note=?, expense_date=?, doc_no=?, "
@@ -531,7 +537,7 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
                f"{quote_no or '無案件'} 修改額外支出 #{exp_id}「{(body.description or '').strip()}」 NT$ {total:,.0f}",
                {**_asum(conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()),
                 "before": {"totalCost": float(row["total_cost"] or 0)}})
-        return {"ok": True, "totalCost": total, "updatedAt": now}
+        return {"ok": True, "totalCost": total, "updatedAt": now, **({"overPlan": over_plan} if over_plan else {})}
     finally:
         conn.close()
 
@@ -775,6 +781,9 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
         if _col(row, "kind", "") or "":
             # 送審當下：費用類別驗證（不在啟用清單 ⇒ 400，狀態不變）＋類別代碼／科目快照寫進明細（W4 合約）
             _new_lines = EF.prepare_submit(conn, _jlist(row, "lines_json"))
+            begin_write(conn)                                   # 32-S2：累計上限在寫鎖內驗（兩人同時對同一品項送審不會一起通過）
+            _new_lines, _over = PI.check_lines(conn, quote_no, row["kind"], _new_lines, exclude_id=exp_id, require_reason=True)
+            PI.check_from_pr(conn, quote_no, row["kind"], _jcol(row, "data_json"))
             conn.execute("UPDATE case_extra_expenses SET lines_json=?, def_version=? WHERE id=? AND quote_no=?",
                          (EF.dumps_lines(_new_lines), EF.current_def_version(conn, row["kind"]), exp_id, quote_no))     # 送審當下釘定義版本
 
@@ -1239,6 +1248,8 @@ def upsert_change_request(quote_no: str, exp_id: int, body: ExtraExpenseIn = Bod
 
         # 已駁回後再修改：沿用同一批待核准附件，不要讓使用者重傳一次
         proposal = _proposal_from(body, (_change_of(row).get("addFiles") or []), row)
+        if "lines" in proposal:                                 # 32-S2：變更申請的明細同樣驗品項連結（核准後的單據不能繞過）
+            proposal["lines"], _ = PI.check_lines(conn, quote_no, row["kind"], proposal["lines"], exclude_id=exp_id)
         now = datetime.now().isoformat(timespec="seconds")
         conn.execute(
             "UPDATE case_extra_expenses SET change_status='草稿', change_json=?, "
@@ -1372,6 +1383,8 @@ def submit_change_request(quote_no: str, exp_id: int, authorization: str = Heade
         new_total = float(change.get("totalCost") or 0)
         if "lines" in change:                                   # 費用單據的變更申請：同樣在送審當下驗類別、寫代碼／科目快照
             change["lines"] = EF.prepare_submit(conn, change["lines"])
+            begin_write(conn)
+            change["lines"], _ = PI.check_lines(conn, quote_no, row["kind"], change["lines"], exclude_id=exp_id, require_reason=True)
             conn.execute("UPDATE case_extra_expenses SET change_json=? WHERE id=? AND quote_no=?",
                          (json.dumps(change, ensure_ascii=False), exp_id, quote_no))
         label = f"{change.get('description')}（NT$ {old_total:,.0f} → NT$ {new_total:,.0f}）"

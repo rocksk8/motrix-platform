@@ -96,3 +96,93 @@ def overplan(kind, lines, quotation_data, rows, *, exclude_id=None) -> list:
                         "lineQty": _num(l.get("qty")), "over": total - cap,
                         "reason": str(l.get("overPlanReason") or "").strip()})
     return out
+
+
+# ── 寫入時的驗證（S2）：明細列的 itemId 與累計上限 ─────────────────────────────
+
+LINK_KEYS = ("itemId", "itemQtyPlan", "itemCostPlan", "overPlanReason", "overPlanQty")
+MAX_REASON = 500
+
+
+def _bad(msg):
+    from fastapi import HTTPException
+    return HTTPException(400, msg)
+
+
+def _case_state(conn, quote_no):
+    """案件的報價資料與其請購／採購單列（讀；呼叫端在寫鎖內時就是一致的快照）。"""
+    q = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    try:
+        data = json.loads((q["data_json"] if q else "") or "{}")
+    except (TypeError, ValueError):
+        data = {}
+    rows = conn.execute("SELECT id, kind, status, lines_json FROM case_extra_expenses WHERE quote_no=? AND kind IN (?,?)",
+                        (quote_no, REQ, ORD)).fetchall()
+    return data, rows
+
+
+def check_lines(conn, quote_no, kind, lines, *, exclude_id=None, require_reason=False):
+    """寫入前處理明細的品項連結 ⇒ `(新的明細列, 超計畫警示清單)`；不合法 ⇒ HTTPException(400)。
+    - 沒有任何 `itemId` ⇒ 原樣回傳（只拿掉保留鍵；**與沒有這個功能時完全相同**）。
+    - 有 `itemId`：只准「有案件的請購單／採購單」；品項必須在報價內；`qty` 必須是大於 0 的數字。
+    - 計畫量／計畫成本快照由伺服器依報價寫入（前端送的不採用）；`overPlanQty` 是伺服器算的超出量。
+    - 超計畫：`overPlanReason` 只在超出時保留；`require_reason`（送審）且是採購單 ⇒ 超出的列沒有原因 ⇒ 400（Q2）。請購單只警示（Q3）。"""
+    lines = [dict(l) if isinstance(l, dict) else l for l in (lines or [])]
+    linked = [l for l in lines if isinstance(l, dict) and str(l.get("itemId") or "").strip()]
+    for l in lines:
+        if isinstance(l, dict) and not str(l.get("itemId") or "").strip():
+            for k in LINK_KEYS:
+                l.pop(k, None)
+    if not linked:
+        return lines, []
+    if not (quote_no or "") or kind not in (REQ, ORD):
+        raise _bad("只有掛在案件底下的請購單／採購單，明細才能連到案件品項")
+    data, rows = _case_state(conn, quote_no)
+    plan = {p["itemId"]: p for p in plan_items(data)}
+    for i, l in enumerate(lines, 1):
+        if not isinstance(l, dict) or not str(l.get("itemId") or "").strip():
+            continue
+        iid = str(l["itemId"]).strip()
+        if iid not in plan:
+            raise _bad("第 %d 列連到的品項不在這張報價單內（可能已被刪除），請重新選擇" % i)
+        qty = l.get("qty")
+        if isinstance(qty, bool) or not isinstance(qty, (int, float)) or not qty > 0:
+            raise _bad("第 %d 列連到案件品項，數量必須是大於 0 的數字" % i)
+        l["itemId"] = iid
+        l["itemQtyPlan"], l["itemCostPlan"] = plan[iid]["planQty"], plan[iid]["planUnitCost"]
+        reason = str(l.get("overPlanReason") or "").strip()
+        if len(reason) > MAX_REASON:
+            raise _bad("第 %d 列的超出原因太長（上限 %d 字）" % (i, MAX_REASON))
+        l["overPlanReason"] = reason
+        l.pop("overPlanQty", None)
+    over = overplan(kind, lines, data, rows, exclude_id=exclude_id)
+    over_idx = {o["index"]: o for o in over}
+    warnings = []
+    for i, l in enumerate(lines):
+        if not isinstance(l, dict) or not str(l.get("itemId") or "").strip():
+            continue
+        o = over_idx.get(i)
+        if o is None:
+            l.pop("overPlanReason", None)
+            continue
+        l["overPlanQty"] = o["over"]
+        warnings.append({"line": i + 1, "itemId": o["itemId"], "over": o["over"], "planQty": o["planQty"], "usedQty": o["usedQty"],
+                         "reason": l["overPlanReason"]})
+        if require_reason and kind == ORD and not l["overPlanReason"]:
+            raise _bad("第 %d 列超出報價計畫量 %g（計畫 %g、已採購 %g），請填寫超出原因後再送審"
+                       % (i + 1, o["over"], o["planQty"], o["usedQty"]))
+    return lines, warnings
+
+
+def check_from_pr(conn, quote_no, kind, data):
+    """採購單的 `data.fromPr`（來源請購單單號）⇒ 必須是同案件、已核准的請購單；只有採購單可以帶；不合法 ⇒ 400。沒帶 ⇒ 不檢查。"""
+    pr = (data or {}).get("fromPr")
+    if pr in (None, ""):
+        return
+    if kind != ORD or not (quote_no or ""):
+        raise _bad("只有掛在案件底下的採購單可以指定來源請購單")
+    row = conn.execute("SELECT kind, status FROM case_extra_expenses WHERE doc_code=? AND quote_no=?", (str(pr), quote_no)).fetchone()
+    if not row or row["kind"] != REQ:
+        raise _bad("來源請購單 %s 不存在、不是請購單，或不屬於這個案件" % str(pr)[:30])
+    if row["status"] != "已核准":
+        raise _bad("來源請購單 %s 還沒有核准（目前：%s）" % (str(pr)[:30], row["status"]))
