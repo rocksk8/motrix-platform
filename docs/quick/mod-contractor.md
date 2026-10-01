@@ -19,10 +19,28 @@
 任意非終態 → 已取消(cancelled)
 ```
 
+> **2026-10-01 起（31-A）以本節下方「派發兩段審核」為準**：作業狀態只能經操作按鈕改（`dispatch_flow.set_status`，唯一寫入口），
+> 「狀態亦可透過 Modal 下拉直接設定」與 `completed` 可直接設定的舊行為已**廢止**（建立一律 draft、編輯不能改狀態、完工只經完工審核通過）。
+
 - 狀態轉換：`PATCH /api/contractor-dispatches/{id}/accept`（`action=pending_acceptance` 或 `action=accepted`）
 - 流程違規（如跳過待驗收直接已驗收）→ **409**
 - 已驗收後：卡片底部顯示綠色橫條，含驗收人姓名 + 時間
-- 狀態亦可透過 Modal 下拉直接設定（彈性操作，不走 `/accept` endpoint）
+- ~~狀態亦可透過 Modal 下拉直接設定~~〔廢止 2026-10-01，31-A：Modal 已拿掉狀態下拉；`/accept` 保留（相容）但內部走 `set_status`〕
+- **派發兩段審核（31-A，2026-10-01；migration `subcontract/0003`，只加不改）**
+  - 兩段審核與作業狀態分開：`approval_status`（派發審核：`''`＝舊單／草稿／待審核／簽核中／已核准／已退回）與
+    `completion_status`（完工審核：`''`／待審核／簽核中／已核准／已退回），各自有 `approval_json`／`completion_approval_json`
+    （tiers＋歷程＋版本）。作業狀態（draft…completed）仍是 `status`，下游讀者不必改。
+  - 流程：新增＝draft＋草稿 → 送審（`POST …/{id}/submit`；沒設簽核層＝直接核准）→ 分層簽核（`/approve`、`/reject` 理由必填、`/withdraw` 只限待審核）→ 已核准後才能
+    送出／確認／待驗收／已驗收（`POST …/{id}/status` 或舊 `/accept`；舊單 `''` 照舊）→ 已驗收後「申請完工」（`…/completion/request|approve|reject|withdraw`）→ 完工審核通過才設 `completed`
+    （舊單也要）。簽核類型 `contractor_dispatch`（預設跟統一流程；簽核設定頁可改獨立）；兩段簽核人可相同。
+  - 規則：確認驗收人≠建立者（最高管理者例外，稽核標註）；取消已核准或已進入驗收的派發要理由，已有匯款申請者只有最高管理者可取消；審核中（任一段）整筆不可編輯、不可刪除；
+    核准當下釘住實質欄位雜湊（`approved_hash`＝承攬商／品項／人員／稅率），之後改這些（含舊單）⇒ 回草稿要重新送審（備註、日期、發票欄位不算）。
+  - 單號 `DP-YYYYMMDD-NNNN`（`doc_code`，唯一）；舊單 `doc_code=''`。靜態守門 G-D1：模組內只准 `dispatch_flow.set_status` 寫 `status`。
+  - 下游：匯款申請另要求 `approval_status IN ('','已核准')`；總帳 E04 同；營運報表應計成本／成本檢視 `dispatch.cost_for_case`／精算比對總額：已取消、草稿、已退回不計，
+    待審核／簽核中計入並標示（`approvalPending`），已核准與舊單照舊（應計用未稅、成本檢視用含稅，**納入的派發集合相同**）。
+  - 簽核佇列：`contractor_dispatch`／`contractor_dispatch_completion`（單號＝doc_code），詳情與轉簽各自提供；信件八種 `dispatch_*`（信內不放金額）；稽核 `vendor.dispatch.*`。
+  - 前端：卡片按鈕（送審／撤回送審／已送出／已確認／待驗收／確認驗收／申請完工／撤回完工申請／取消）、合併人話狀態（派發審核中、完工審核中…）、「舊單（未經審核）」徽章、外包總成本旁「含待審核 N 筆」。
+  - 測試：`modules/subcontract/tests/test_dispatch_approval_s1…s6_2026_10_01.py`、e2e `test_e2e_dispatch_approval_2026_10_01.py`；設計＝`docs/platform/plans/DISPATCH-APPROVAL-DESIGN.md`。
 - **外包名單人員（DB v36，2026-08-03e）**：新增派發 Modal 內可從外包名冊（`contractors` 表，
   `GET /api/contractors/selectable`，比照 `vendor-contractors/selectable` 慣例，任何登入者可讀）
   多選人員並各自填金額，存為 `personnel_json` 快照 `[{id,name,amount,note}]`（不隨 `contractors`

@@ -3,6 +3,10 @@
 ## (next) — 2026-10-01（暫用號，列車取號；wip/t31-builder-b-c7：稽核補洞）
 - `set_extra_expense_dates` 文件對齊（第 29 班稽核 O2）：出納也要看得到該案（`_guard_case`），沒有案件讀權的出納得 404；行為不變。補測試 `test_expense_visibility_gaps_2026_10_01.py`（`_caseless_visible` 對未知使用者 fail-closed、舊版額外支出附件對無案件權限者隱藏）。
 
+## (next) — 2026-10-01 23:40（wip/t31-dispatch-approval-2e）：派發審核對應計成本與案件頁的影響（31-A）
+- 應計承攬商成本（`recognition.dispatch_entries`）：派發審核狀態為草稿／已退回者不計入；待審核／簽核中計入並帶 `approvalPending`；已核准與舊單照舊。
+- 案件頁承攬商分頁：拿掉新增視窗的狀態下拉（狀態只由卡片按鈕改）；卡片依狀態顯示送審／撤回送審／已送出／已確認／申請完工／撤回完工申請／取消；狀態顯示合併人話（派發審核中、完工審核中…）、舊單徽章；外包總成本與精算頁（`settlement.html`）的派發合計與營運報表同一規則，並標「含待審核 N 筆」。
+
 ## 1.0.61 — 2026-10-01（fix/t29-w1／fix/t29-w3：建包全量關卡）
 - 案件頁「全部附件」頁籤的兩處寫死色碼改用語意 token；`quotation-form.html` FORM_VERSION V3.14→V3.15（客戶回簽單區塊）；模組目錄 `file_center` 登記；未核可橫幅守門改登記 `doc_render.render_document`。產品行為不變。
 

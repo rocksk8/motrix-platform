@@ -4,18 +4,19 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.subcontract import attachments, gl_events, remit
-from modules.subcontract.api import contractor_vouchers, contractors, vendor_contractors
+from modules.subcontract import attachments, dispatch_notify, gl_events, remit  # noqa: F401（dispatch_notify：載入時登記信件類型）
+from modules.subcontract.api import contractor_vouchers, contractors, dispatch_approval, vendor_contractors
 
 #: 模組自己的 migration（檔名以版號開頭，不是合法的 import 名稱 ⇒ importlib）
 _m0001 = importlib.import_module("modules.subcontract.migrations.0001_remit_fee")
 _m0002 = importlib.import_module("modules.subcontract.migrations.0002_dispatch_file_delete_requests")
+_m0003 = importlib.import_module("modules.subcontract.migrations.0003_dispatch_approval")
 
 MODULE = ModuleSpec(
     key="subcontract",
-    # v1：contractor_payment_vouchers 匯款實付／手續費／差額審核欄位（W1）；v2：dispatch_file_delete_requests（N1，報價單附件刪除申請）
-    migrations=[(1, _m0001.up), (2, _m0002.up)],
-    routers=[contractors.router, vendor_contractors.router, contractor_vouchers.router],
+    # v1：contractor_payment_vouchers 匯款實付／手續費／差額審核欄位（W1）；v2：dispatch_file_delete_requests（N1，報價單附件刪除申請）；v3：contractor_dispatches 兩段審核欄位（31-A，派發審核）
+    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up)],
+    routers=[contractors.router, vendor_contractors.router, dispatch_approval.router, contractor_vouchers.router],
     providers={
         # IP-1：派工單列序列化（M01 應計派工成本、M06 傳票摘要來源）
         ("dispatch.row", "subcontract"): vendor_contractors._dispatch_row,
@@ -35,6 +36,12 @@ MODULE = ModuleSpec(
         ("remit.reviews", "contractor_voucher"): remit._RemitReviews,
         ("expense.entries", "remit_fee_contractor"): remit._expense_entries,
         # IP-10（N1）：承攬商報價單附件的刪除申請進簽核佇列（type＝dispatch_file_delete），核可／退回打派工的 delete-approve／delete-reject
+        # 31-A：派發審核／完工審核進簽核佇列（type＝contractor_dispatch／contractor_dispatch_completion；單號＝doc_code）
+        ("approval.queue_items", "subcontract_dispatch"): dispatch_approval.queue_items,
+        ("approval.detail", "contractor_dispatch"): dispatch_approval.detail_dispatch,
+        ("approval.detail", "contractor_dispatch_completion"): dispatch_approval.detail_completion,
+        ("approval.reassign", "contractor_dispatch"): dispatch_approval.REASSIGN_DISPATCH,
+        ("approval.reassign", "contractor_dispatch_completion"): dispatch_approval.REASSIGN_COMPLETION,
         ("approval.queue_items", "subcontract_dispatch_file"): vendor_contractors.delete_queue_items,
         ("approval.detail", "dispatch_file_delete"): vendor_contractors.delete_queue_detail,
         # IP-GL1（W4 總帳 C2）：承攬商發票（E04）與匯款（E05／E05b）事件，供 M06 總帳引擎產生傳票草稿；唯讀

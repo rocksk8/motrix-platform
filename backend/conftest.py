@@ -2236,3 +2236,47 @@ def pytest_probe_leak_sessionfinish(session, exitstatus):
         print(msg)
     if session.exitstatus == 0:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+# ══════════════════════════════════════════════════════════════════════════
+# 31-A 相容殼：舊測試用 API 建立／編輯「帶 status 的派發」（例如直接 completed）來造「既有資料」。
+# 第 31 班起 API 忽略建立時的 status、編輯不可改狀態（寫入口的閘，見 modules/subcontract/dispatch_flow.py）；
+# 這個 autouse fixture 把那種呼叫還原成它本來代表的東西——**舊單**（approval_status=''、無單號、指定的作業狀態）。
+# 要測真正的閘的測試用 `@pytest.mark.no_dispatch_shim`（或 pytestmark）關掉它，否則會拿到被改過形狀的資料。
+# ══════════════════════════════════════════════════════════════════════════
+@pytest.fixture(autouse=True)
+def _legacy_dispatch_shim(request):
+    if request.node.get_closest_marker("no_dispatch_shim"):
+        yield
+        return
+    import re as _re
+    from starlette.testclient import TestClient as _TC
+    real = _TC.request
+
+    def _shim(self, method, url, *args, **kwargs):
+        u = str(url).split("?")[0]
+        m = _re.match(r"^/api/contractor-dispatches(?:/(\d+))?$", u)
+        body = kwargs.get("json")
+        want = None
+        if m and method in ("POST", "PUT") and isinstance(body, dict) and body.get("status") and body.get("status") != "draft":
+            want = body["status"]
+            if method == "PUT":                       # 編輯不可改狀態：先拿掉，成功後再把狀態還原成舊測試要的值
+                kwargs["json"] = {k: v for k, v in body.items() if k != "status"}
+        resp = real(self, method, url, *args, **kwargs)
+        if want and resp.status_code in (200, 201):
+            try:
+                did = int(m.group(1)) if m.group(1) else resp.json().get("id")
+                import db as _db
+                c = _db.get_db()
+                try:
+                    c.execute("UPDATE contractor_dispatches SET status=?, approval_status='', doc_code='' WHERE id=?", (want, did))   # noqa: G-D1 測試殼
+                    c.commit()
+                finally:
+                    c.close()
+            except Exception:                         # 殼壞掉不可讓測試靜默通過：留給後面的斷言去紅
+                pass
+        return resp
+    _TC.request = _shim
+    try:
+        yield
+    finally:
+        _TC.request = real
