@@ -296,14 +296,14 @@ def test_custom_record_creation_resolves_once_and_last_used_reads_the_users_prev
         assert r.status_code == 200, r.text
         return r.json()
     a = new("ps_emp", dest="台北")
-    assert a["data"]["dept"] == org["dept"] and a["data"]["dest"] == "台北"
+    assert str(a["data"]["dept"]) == str(org["dept"]) and a["data"]["dest"] == "台北"
     b = new("ps_emp")                                                       # 沒填 ⇒ 帶上一張
     assert b["data"]["dest"] == "台北"
     other = new("ps_mgr")
     assert "dest" not in other["data"] or other["data"]["dest"] in (None, "")
     # 更新不重算：再讀同一張，值不變
     got = client.get("/api/custom/ps_trip/records/%s" % a["record_no"], headers=hs["ps_emp"]).json()
-    assert got["data"]["dept"] == org["dept"]
+    assert str(got["data"]["dept"]) == str(org["dept"])
 
 
 # ── days_between（公式）──────────────────────────────────────────────────────

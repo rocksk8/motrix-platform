@@ -23,11 +23,13 @@
 `coalesce(qty, 0)` 才把它當 0。除以 0 ⇒ 空值並回報，不丟到呼叫端。
 """
 import ast
+import re
 from datetime import date
 from decimal import Decimal
 
 from helpers.legal_params import round_half_up
 
+_ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MAX_LENGTH = 500
 MAX_DEPTH = 30
 FUNCTIONS = ("if", "round", "round_half_up", "min", "max", "sum", "abs", "coalesce", "days_between",
@@ -292,6 +294,9 @@ def evaluate(expr, values: dict):
                 return next((a for a in args if a is not None and a != ""), None)
             if name == "days_between":
                 try:
+                    # 只認 YYYY-MM-DD：`date.fromisoformat` 在 Python 3.11 起也收 `20261001`（3.10 不收）⇒ 先擋，行為不隨直譯器版本變
+                    if any(a and not _ISO_DAY.match(str(a)[:10]) for a in args):
+                        raise ValueError(args)
                     d1, d2 = (date.fromisoformat(str(a)[:10]) if a else None for a in args)
                 except ValueError:
                     raise FormulaError("days_between 需要日期（YYYY-MM-DD）", _pos(expr, node))
