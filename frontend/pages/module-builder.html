@@ -87,6 +87,7 @@
                     <td style="white-space:nowrap">
                       <button class="mb-chipbtn" :data-open-module="m.key" @click="openKey(m.key)">開啟</button>
                       <button class="mb-chipbtn" x-show="m.hasDraft" :data-delete-draft="m.key" @click="deleteDraft(m)" :disabled="busy">刪除草稿</button>
+                      <button class="mb-chipbtn" :data-delete-module="m.key" @click="deleteModule(m)" :disabled="busy">刪除模組</button>
                     </td>
                   </tr>
                 </template>
