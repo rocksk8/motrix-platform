@@ -193,3 +193,19 @@ def test_picker_actual_amount_only_counts_counted_po_lines_and_is_hidden_without
     got = {i["itemId"]: i for i in r.json()["items"]}
     assert got["a"]["actualAmount"] == 3000 and got["b"]["actualAmount"] == 500                 # PR、駁回的 a 不計
     assert got["a"]["orderedQty"] == 3 and got["a"]["requestedQty"] == 4
+
+
+def test_only_purchase_orders_can_be_item_cost_even_if_other_kinds_carry_an_item_id_in_storage(W):
+    """防線：其他類型的明細就算（資料庫被直接寫入）帶了 itemId，也不當品項實際成本——報表來源、E11、清單都不認。"""
+    c, h = W
+    po = _approved(c, h, "travel", [_ln(None, 1, unitCost=700)])
+    cn = db.get_db()
+    cn.execute("UPDATE case_extra_expenses SET lines_json=? WHERE id=?",
+               (json.dumps([{"category": "雜項", "summary": "x", "qty": 1, "unitCost": 700, "amount": 700, "itemId": "a"}]), po))
+    cn.commit()
+    cn.close()
+    assert not any(e.get("linkedItem") for e in _entries())
+    d = _list(c, h)
+    assert d["itemLinkedAmount"] == 0 and d["totalAmount"] == 700
+    e11 = next(e for e in _e11() if e["source_key"] == str(po))
+    assert not any("dims" in l for l in e11["lines"])

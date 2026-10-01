@@ -129,6 +129,7 @@ def test_endpoint_hides_plan_cost_without_financial_view_and_guards_case_and_cas
     c, h = W
     r = c.get("/api/quotations/%s/purchase-items" % NO, headers=h["pi_eng"])
     assert r.status_code == 200 and all("planUnitCost" not in i for i in r.json()["items"]) and r.json()["items"][0]["planQty"] == 10.0
+    assert all("actualAmount" not in i for i in r.json()["items"])                                     # 實際成本金額同樣不給看不到財務金額的人
     assert c.get("/api/quotations/%s/purchase-items" % NO, headers=h["pi_out"]).status_code == 404        # 看不到的案件＝查無
     assert c.get("/api/quotations/NOPE/purchase-items", headers=h["pi_sa"]).status_code == 404
     assert c.get("/api/quotations/-/purchase-items", headers=h["pi_sa"]).status_code == 400              # 無案件沒有品項
