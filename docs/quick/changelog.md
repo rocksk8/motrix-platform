@@ -28,6 +28,13 @@
 - `module-builder-core.js:readMenuGroups` 改讀 `window.MOTRIX_MENU.groups`（伺服器宣告，與使用者版面／側欄渲染時機無關）＋已發布自訂模組的分組；新增 `groupOptions()`／`groupMissing()`：已存分組不在清單時保留並提醒。頁面補說明：這是選單項目，不是頁內頁籤。e2e：`test_e2e_builder_menu_group_2026_10_01.py`。
 - 取捨：頁內頁籤掛載（方案 B）**延後、未捨棄**，見 `docs/platform/plans/BUILDER-ATTACH-EXISTING-MODULE-SPEC.md`。
 
+
+## 2026-10-01 簽核：登入橫幅每次都跳（已簽過）
+
+- 根因（程式碼＋重現測試）：`static/notif.js` 橫幅數字＝未讀 `approval_request` 通知列；報價單核准／退回／拒絕從不標已讀 ⇒ 簽過的項目永遠「待簽」，每次登入（登出清 sessionStorage 旗標）再跳。
+- 修：①橫幅改取 `/api/approval-queue/count`（與角標同一份），0 件不彈；②報價單三條路徑標通知已讀（`helpers.audit._mark_notifications_read`）。測試 `test_approval_notice_after_signing_2026_10_01.py`、`test_e2e_login_approval_banner_2026_10_01.py`（含反向控制）。
+- 後續（未做）：出貨／匯款申請／發票開立／承攬商憑證／完工單的簽核通知同樣缺標已讀；橫幅已不受影響（改看真實待簽數），但通知中心未讀數仍會殘留。
+
 ---
 
 ### 2026-09-30 — 排版器：重開時編輯被自己稍後的載入蓋掉（O7 第三次；`frontend/static/layout-editor.js`，DB 無異動）

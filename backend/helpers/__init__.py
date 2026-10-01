@@ -27,7 +27,7 @@ from .auth import (
     user_has_module, can_see_financial, require_any_module,
 )
 from .settings import _get_setting, _set_setting
-from .audit import (_notify, _audit, _filter_live_notifications, _purge_notifications,
+from .audit import (_notify, _audit, _filter_live_notifications, _purge_notifications, _mark_notifications_read,
                     notify_org_chain_notice)
 # M01 的 modules.case.quotations／case_stage_tasks 不再從這裡再匯出（M01-PLAN §3-8 CA-O4：`import helpers` 不可以載入 M01）。
 # 純函式已在 L1：norm_at（dates，§3-2）、summarize_payment_items（tax_calc，CA-O4）、steps_to_tiers（tiered_approval，§3-2；直接 import 那裡）。
@@ -130,7 +130,7 @@ __all__ = [
     # settings
     "_get_setting", "_set_setting",
     # audit
-    "_notify", "_audit", "_filter_live_notifications", "_purge_notifications",
+    "_notify", "_audit", "_filter_live_notifications", "_purge_notifications", "_mark_notifications_read",
     # 稅額／日期純函式（L1）、案件權限（L1 case_access）
     "payment_item_amounts", "norm_ymd", "receipt_amounts", "summarize_payment_items", "norm_at",
     "guard_case_access", "is_document_approver",

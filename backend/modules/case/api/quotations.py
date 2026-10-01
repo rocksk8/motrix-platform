@@ -48,7 +48,7 @@ from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回�
 from helpers.case_access import case_page_readable   # AT-M1c：與報價單上附件的提供者同一支
 from modules.case import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
 from helpers import (
-    _require_user, _tok, _audit, _notify, _purge_notifications, notify_approval_request,
+    _require_user, _tok, _audit, _notify, _purge_notifications, _mark_notifications_read, notify_approval_request,
     notify_next_tier, notify_approved, notify_returned, notify_resubmit_requester,
     notify_settlement_finalized, notify_module_activity, push_event_for_quotation_won,
     push_event_for_important_comment, push_event_for_case_stage_due, push_event_delete_for_case_stage,
@@ -4849,6 +4849,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         _audit(_tok(authorization), "quotation.approve", "quotation", quote_no,
                f"{quote_no}（{cname}）", {"allDone": all_done, "status": detail_status})
         _run_after_commit(after_commit)
+        _mark_notifications_read(quote_no, ["approval_request"], user["username"])     # 我簽過了：自己那筆「待簽核」通知失效
         return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}
 
 
@@ -4934,6 +4935,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
         conn.close()
         _audit(_tok(authorization), "quotation.return", "quotation", new_no,
                f"{new_no}（原 {quote_no}，{cname}）", {"note": note, "previous_no": quote_no})
+        _mark_notifications_read(quote_no, ["approval_request"])           # 簽核作廢：所有人的待簽核通知失效
         return {"ok": True, "new_quote_no": new_no}
 
 
@@ -4997,6 +4999,7 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
         conn.close()
         _audit(_tok(authorization), "quotation.reject_final", "quotation", quote_no,
                f"{quote_no}（{cname}）", {"note": note})
+        _mark_notifications_read(quote_no, ["approval_request"])           # 拒絕結案：所有人的待簽核通知失效
         return {"ok": True}
 
 

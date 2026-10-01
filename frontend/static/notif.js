@@ -297,15 +297,8 @@ function notifStore() {
         // 否則數字與清單對不起來。
         this.items = items.filter(i => i.type !== 'approval_request')
         this.unread = this.items.filter(i => !i.is_read).length
-
-        // Banner 每個 browser session（tab）最多顯示一次，避免每換頁都彈出
-        const pending = items.filter(i => !i.is_read && i.type === 'approval_request')
-        const ssKey = 'motrix_approval_banner_shown'
-        if (pending.length > 0 && !this._popupShown && !sessionStorage.getItem(ssKey)) {
-          this._popupShown = true
-          sessionStorage.setItem(ssKey, '1')
-          setTimeout(() => this._showApprovalBanner(pending.length, queueHref), 900)
-        }
+        // 「待簽核」橫幅不在這裡判斷：未讀通知列不代表「現在還輪到我簽」（簽過、被別人簽掉、退回後通知列仍未讀），
+        // 用它數會讓已簽過的項目每次登入再跳一次（2026-10-01 使用者回報）⇒ 改由 _fetchApprovalCount 用真實待簽數決定。
       } catch(e) {}
     },
 
@@ -350,7 +343,18 @@ function notifStore() {
         if (!r.ok) return
         const d = await r.json()
         this._updateApprovalBadge(d.count || 0)
+        this._maybeShowApprovalBanner(d.count || 0)
       } catch(e) {}
+    },
+
+    /** 登入後的「待簽核」橫幅：數字＝/api/approval-queue/count（與角標、簽核佇列同一份）；每個分頁最多彈一次；0 件不彈。 */
+    _maybeShowApprovalBanner(count) {
+      const ssKey = 'motrix_approval_banner_shown'
+      if (!(count > 0) || this._popupShown) return
+      try { if (sessionStorage.getItem(ssKey)) return; sessionStorage.setItem(ssKey, '1') } catch (e) {}
+      this._popupShown = true
+      const isPages = window.location.pathname.includes('/pages/')
+      setTimeout(() => this._showApprovalBanner(count, isPages ? 'approval-queue.html' : 'pages/approval-queue.html'), 900)
     },
 
     _updateApprovalBadge(count) {
@@ -574,7 +578,7 @@ function notifStore() {
       msg.style.cssText = 'font-size:12px;color:#4338CA;line-height:1.5'
       const b = document.createElement('b')
       b.textContent = String(Number(count))
-      msg.append('您有 ', b, ' 份報價單等待您簽核')
+      msg.append('您有 ', b, ' 件待您簽核')
 
       const link = document.createElement('a')
       link.href = href

@@ -1,5 +1,5 @@
 {
- "core_version": "1.91",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -160,6 +160,7 @@
    "_audit": "def(token, action, target_type=…, target_id=…, target_label=…, detail=…)",
    "_audit_login_failed": "def(username, ip=…, now=…)",
    "_filter_live_notifications": "def(conn, rows)",
+   "_mark_notifications_read": "def(ref_id, types, username=…)",
    "_notify": "def(username, type_, ref_id, ref_label, message)",
    "_purge_notifications": "def(ref_id, types)",
    "notify_org_chain_notice": "def(conn, tiers, requester_username, ref_id, ref_label, message, type_=…)"

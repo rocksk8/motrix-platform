@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-01（暫用號，列車取號；fix/login-approval-popup：簽過的待簽核通知標已讀）
+- 報價單核准（只標自己那筆）、退回修改、拒絕結案（標整張單）時，對應的 `approval_request` 通知列標已讀（`helpers.audit._mark_notifications_read`）；原本永遠未讀，造成登入橫幅每次再跳（使用者 2026-10-01 回報）。其他簽核流程（出貨／匯款／發票開立／承攬商憑證／完工單）同樣缺這一步，列為後續。
+
 ## 1.0.45 — 2026-10-01（暫用號，列車取號；wip/w3-local-date-2）
 - 報價表單 FORM_VERSION V3.14（本地日期：報價日期預設值與送審時間改用 static/motrix-date.js）；測試沙盒載入 motrix-date.js。只動前端與測試，後端行為不變。
 

@@ -8,6 +8,7 @@ __l1_public__ = (
     "_FAIL_REASON_LABELS",                # 失敗原因碼 ⇒ 中文（routers/system.py）
     "_MODULE_LABELS",                     # 動作第一段 ⇒ 模組中文名（routers/system.py）
     "_filter_live_notifications",
+    "_mark_notifications_read",           # 簽核處理掉 ⇒ 對應通知列標已讀（modules/case 報價單核准／退回／拒絕）
     "_notify",
     "_purge_notifications",
 )
@@ -175,6 +176,28 @@ def _purge_notifications(ref_id: str, types: list) -> None:
         conn.commit()
     except Exception as e:
         logger.warning("_purge_notifications failed: %s", e)
+    finally:
+        conn.close()
+
+
+def _mark_notifications_read(ref_id: str, types: list, username: str = None) -> None:
+    """簽核已經處理掉（簽過、退回、拒絕）⇒ 對應的「待簽核」通知列標已讀（不刪：留作紀錄）。
+    username＝只標這個人的（核准：只有自己的那一筆失效，同層／下層的人還在等）；None＝這張單所有人的（退回／拒絕：整條簽核作廢）。
+    不標已讀的後果：橫幅／未讀計數永遠留著已簽過的項目，每次登入再跳一次（2026-10-01 使用者回報）。"""
+    if not ref_id or not types:
+        return
+    conn = get_db()
+    try:
+        ph = ",".join("?" * len(types))
+        sql = f"UPDATE notifications SET is_read=1 WHERE ref_id=? AND type IN ({ph}) AND is_read=0"
+        args = [ref_id, *types]
+        if username:
+            sql += " AND username=?"
+            args.append(username)
+        conn.execute(sql, args)
+        conn.commit()
+    except Exception as e:
+        logger.warning("_mark_notifications_read failed: %s", e)
     finally:
         conn.close()
 
