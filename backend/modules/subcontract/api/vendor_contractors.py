@@ -80,6 +80,7 @@ class DispatchIn(BaseModel):
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 from modules.subcontract import bank_mask as _bm  # noqa: E402
+from modules.subcontract import dispatch_flow as _flow  # noqa: E402
 
 
 def _vendor_row(row, user=None) -> dict:
@@ -172,6 +173,19 @@ def _dispatch_row(row) -> dict:
         "updatedAt": row["updated_at"] or "",
         "acceptedAt": (row["accepted_at"] if "accepted_at" in keys else "") or "",
         "acceptedBy": (row["accepted_by"] if "accepted_by" in keys else "") or "",
+        # 31-A 派發審核（只新增鍵；契約 IP-1 只准加不准改）：兩段審核狀態、單號、舊單旗標、合併後的人話狀態
+        "approvalStatus": (row["approval_status"] if "approval_status" in keys else "") or "",
+        "completionStatus": (row["completion_status"] if "completion_status" in keys else "") or "",
+        "docCode": (row["doc_code"] if "doc_code" in keys else "") or "",
+        "legacy": _flow.is_legacy(row),
+        "displayStatus": _flow.display_status(row),
+        "submittedBy": (row["submitted_by"] if "submitted_by" in keys else "") or "",
+        "submittedAt": (row["submitted_at"] if "submitted_at" in keys else "") or "",
+        "approvedAt": (row["approved_at"] if "approved_at" in keys else "") or "",
+        "completionRequestedBy": (row["completion_requested_by"] if "completion_requested_by" in keys else "") or "",
+        "completionRequestedAt": (row["completion_requested_at"] if "completion_requested_at" in keys else "") or "",
+        "completionApprovedAt": (row["completion_approved_at"] if "completion_approved_at" in keys else "") or "",
+        "cancelReason": (row["cancel_reason"] if "cancel_reason" in keys else "") or "",
     }
 
 
