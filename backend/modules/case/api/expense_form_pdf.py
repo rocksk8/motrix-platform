@@ -3,7 +3,7 @@
 
 版型來自單據**釘住的定義版本**（`def_version`；定義之後改版，舊單據仍用自己的版型）的 `output.template`；
 渲染走 L1 `helpers.doc_render.render_document`（公司抬頭／頁尾／簽核欄／未核可每頁紅色標示都由它負責，版型不能關掉標示）。
-可見性＝本單的建立者、簽核鏈成員、admin／superadmin、出納／財務（單據含金額，其他人看不到——與列表可見規則一致）。
+可見性＝金額可見規則 `_amount_viewer`（申請人〔建立者或 data.applicant〕、本單簽核人〔含變更申請簽核鏈與代理〕、出納／財務、admin／superadmin）；其他人 404（單據含金額）。
 `kind=''` 的舊額外支出沒有版型 ⇒ 404（維持今天的行為）。
 """
 import json
@@ -82,7 +82,7 @@ def expense_document(quote_no: str, exp_id: int, format: str = Query("html"), au
     try:
         X._guard_case(conn, qn, user)
         row = conn.execute("SELECT * FROM case_extra_expenses WHERE id=? AND quote_no=?", (exp_id, qn)).fetchone()
-        if not row or not (row["kind"] or "") or not X._caseless_visible(conn, row, user):      # 看不到＝不存在
+        if not row or not (row["kind"] or "") or not X._amount_viewer(conn, row, user):      # 看不到＝不存在
             raise HTTPException(404, "找不到這張費用單據")
         from helpers import expense_types as ET
         dv = int(row["def_version"] or 0)
