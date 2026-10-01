@@ -2,7 +2,7 @@
 """費用單據的「類型定義」（A2-2）：請購單／採購單／差旅費用請款單／零用金支付單各是一份 `expense_type` 定義。
 
 [單位] helper:expense_types    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] CODE_RE, DEFAULT_KINDS, KIND, MAX_LINES, MAX_TEXT, PREFIX_RE, RESERVED_KEYS, cashier_field_keys, get_type, list_types, normalize_lines, validate_expense_type, validate_values
+[公開介面] CODE_RE, DEFAULT_KINDS, KIND, MAX_LINES, MAX_TEXT, PREFIX_RE, RESERVED_KEYS, cashier_field_keys, get_type, last_value_hook, list_types, normalize_lines, validate_expense_type, validate_values
 [不變式] 明細金額與合計只在 `normalize_lines` 算一次（W1 §7.1；整數 TWD、每列 round_half_up）；`validate_values` 不丟任何未知的明細鍵
 [契約題] tests/platform/test_expense_types_2026_10_01.py
 
@@ -161,6 +161,35 @@ def _bank_field_problems(fields, prefix="fields") -> list:
     return out
 
 
+# ── 自動帶入來源（helpers/prefill_sources，2e）──────────────────────────────────────
+#: 註冊表尚未上線時為 None ⇒ 沿用舊行為（只認 requester／today，驗證由建構器的通用驗證負責）；
+#: 測試用 `_PREFILL_OVERRIDE` 注入替身（鍵：check_field／make_ctx／fill_defaults）
+_PREFILL_OVERRIDE = None
+
+
+def _prefill():
+    if _PREFILL_OVERRIDE is not None:
+        return _PREFILL_OVERRIDE
+    try:
+        from helpers import prefill_sources as PS
+        return PS
+    except ImportError:
+        return None
+
+
+def _prefill_problems(fields) -> list:
+    """每個帶 `default: {"$": token}` 的欄位交給註冊表檢查（未知來源、種類不符、不可鎖定的來源配 locked、要案件情境的來源）。
+    請款單可以掛案件（`quote_no`），所以 `mount_has_case=True`；沒掛案件時來源解出 None ⇒ 欄位留空。"""
+    PS = _prefill()
+    if PS is None:
+        return []
+    out = []
+    for i, f in enumerate(fields):
+        if isinstance(f, dict) and isinstance(f.get("default"), dict):
+            out += [_p(x["path"], x["message"]) for x in PS.check_field(f, mount_has_case=True, locked=bool(f.get("locked")), path="fields[%d]" % i)]
+    return out
+
+
 def validate_expense_type(body, key: str = "") -> list:
     """類型定義 ⇒ `[{"path","message"}]`（空＝可以發布）。形狀同建構器的驗證結果。"""
     from helpers import custom_modules as CM
@@ -197,6 +226,7 @@ def validate_expense_type(body, key: str = "") -> list:
     out += [_p(x["path"], _camel_text(x["message"])) for x in CM._validate_fields(g["fields"])]
     out += _field_problems(fields)
     out += _bank_field_problems(fields)
+    out += _prefill_problems(fields)
     keys = {f.get("key") for f in fields if isinstance(f, dict)}
     ui = body.get("ui")
     if ui is not None:
@@ -321,9 +351,54 @@ def _is_cashier(viewer) -> bool:
     return "cashier" in mods
 
 
-def validate_values(conn, defn: dict, data, lines, *, viewer: dict) -> tuple:
+def last_value_hook(type_code: str):
+    """「我上一次填過的內容」（`lastUsed`）：回 `fn(conn, viewer, field_key) -> value|None`——該使用者在這個類型最近一張單據的欄位值。
+    只查自己的表（`case_extra_expenses`）、在 Python 裡解 JSON（不用 json_extract）；最多看最近 20 張；任何錯誤 ⇒ None。"""
+    def _fn(conn, viewer, field_key):
+        try:
+            who = (viewer or {}).get("username")
+            if not who or not type_code or not field_key:
+                return None
+            for r in conn.execute("SELECT data_json FROM case_extra_expenses WHERE created_by=? AND kind=? ORDER BY id DESC LIMIT 20", (who, type_code)).fetchall():
+                try:
+                    v = (json.loads(r[0] or "{}") or {}).get(field_key)
+                except (TypeError, ValueError):
+                    continue
+                if v not in (None, ""):
+                    return v
+        except Exception:                                      # noqa: BLE001 — 帶入失敗不可擋住開單
+            return None
+        return None
+    return _fn
+
+
+def _fill_defaults(conn, g, filled, viewer, case, prior, type_code):
+    """預填：建立（`prior is None`）＝空欄位換成來源值，`locked` 的一律以伺服器值為準；修改（`prior` 是舊單的 data）＝**不重新解析任何來源**，
+    `locked` 的欄位沿用舊值、其餘保留送來的值（別人改單不可以讓「申請人的主管」之類跟著變）。有註冊表走註冊表，沒有走舊規則（requester／today）。"""
+    PS = _prefill()
+    if PS is not None:
+        ctx = PS.make_ctx(conn, viewer or {}, case=case, last_value=last_value_hook(type_code))
+        return PS.fill_defaults(g, filled, ctx, prior=prior)
+    from helpers import custom_modules as CM
+    if prior is not None:
+        out = dict(filled)
+        for f in g.get("fields") or []:
+            if isinstance(f, dict) and f.get("locked") and f.get("key") and f["key"] in prior:
+                out[f["key"]] = prior[f["key"]]
+        return out
+    out = CM._with_default_tokens(g, dict(filled), viewer or {})
+    tok_vals = None
+    for f in g.get("fields") or []:
+        if isinstance(f, dict) and f.get("locked") and f.get("key") and CM._default_token(f) is not None:
+            tok_vals = tok_vals if tok_vals is not None else CM._with_default_tokens(g, {}, viewer or {})
+            out[f["key"]] = tok_vals.get(f["key"])
+    return out
+
+
+def validate_values(conn, defn: dict, data, lines, *, viewer: dict, prior=None, case=None, type_code: str = "") -> tuple:
     """`(clean_data, clean_lines, total_cost, problems)`；`problems`＝`[{"key","message"}]`（空＝通過）。
-    - 預設值 token（requester／today）由伺服器換；`locked` 的欄位一律以伺服器預填為準（前端送什麼都不採用）
+    - 預設值 token 由伺服器換（來源見 helpers/prefill_sources；註冊表未上線時只有 requester／today）；`locked` 的欄位建立時一律以伺服器預填為準（前端送什麼都不採用）
+    - `prior`＝修改時舊單的 data：不重新解析任何來源，`locked` 的欄位沿用舊值；`case`＝`{"customer","project"}` 或 None；`type_code`＝「我上一次填過的內容」要查的類型
     - `editableBy:"cashier"` 的欄位：不是出納／超級管理員送來的值 ⇒ 丟掉並回報
     - 定義沒有的鍵 ⇒ 回報（不靜默丟）；欄位型別／必填／公式／參照沿用建構器（`custom_modules.clean_values`）
     - 明細：逐列逐欄驗證（必填、型別、列數），儲存用的列由 `normalize_lines` 算（保留所有未知鍵）；`total_cost` 是唯一來源
@@ -342,12 +417,8 @@ def validate_values(conn, defn: dict, data, lines, *, viewer: dict) -> tuple:
         for k in cashier_field_keys(defn):
             if data.pop(k, None) not in (None, ""):
                 problems.append({"key": k, "message": "這個欄位只有出納可以填寫"})
-    # 預填與鎖定：locked 的欄位用伺服器值蓋掉
-    filled = CM._with_default_tokens(g, {k: v for k, v in data.items()}, viewer or {})
-    for f in fields:
-        if f.get("locked") and f.get("key") and CM._default_token(f) is not None:
-            tok_vals = CM._with_default_tokens(g, {}, viewer or {})
-            filled[f["key"]] = tok_vals.get(f["key"])
+    # 預填與鎖定：建立時 locked 的欄位用伺服器值蓋掉；修改時（prior）不重新解析、locked 沿用舊值（見 _fill_defaults）
+    filled = _fill_defaults(conn, defn, {k: v for k, v in data.items()}, viewer, case, prior, type_code)       # 用原定義（locked 在這裡；_generic 已拿掉）
     try:
         clean_lines, total = normalize_lines(lines)
     except ValueError as e:

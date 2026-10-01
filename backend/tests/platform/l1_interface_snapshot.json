@@ -1,5 +1,5 @@
 {
- "core_version": "1.102",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -621,10 +621,11 @@
    "RESERVED_KEYS": "const",
    "cashier_field_keys": "def(body)",
    "get_type": "def(conn, code, version=…)",
+   "last_value_hook": "def(type_code)",
    "list_types": "def(conn)",
    "normalize_lines": "def(lines)",
    "validate_expense_type": "def(body, key=…)",
-   "validate_values": "def(conn, defn, data, lines, *, viewer)"
+   "validate_values": "def(conn, defn, data, lines, *, viewer, prior=…, case=…, type_code=…)"
   },
   "helper:financial_mask": {
    "HISTORY_MONEY_FIELDS": "const",
