@@ -16,6 +16,10 @@
 ## (next) — 2026-10-01（wip/w4-g2-5：自訂模組金流屬性原樣傳給總帳）
 - L1（新增回傳鍵）：`helpers.custom_finance.gl_lines` 每個金流行多帶 `finance`（該欄位的整個 `finance` 屬性字典，唯讀副本），每張單據多帶 `data`（單據資料唯讀副本）。之後新增金流屬性（例 `taxField`／`docTypeField`）由總帳提供者解讀，不必再改 helper。只新增鍵，舊消費端忽略。
 
+## (next) — 2026-10-01（wip/w2-expense-a2-w2b：費用單據收款人帳號列入 F2 個資備份）
+- L1（行為，不改介面）：`archive._F2_FIELDS` 新增 `案件額外支出`（`case_extra_expenses.payee_account`）。A2 的 migration 0003 讓額外支出表存了收款人銀行帳號，而該表走一般每日 JSON（`SELECT *`）⇒ 帳號會原樣進一般備份／雲端「系統存檔」；現在一般份拿掉該欄、完整列只進 `系統存檔_個資/每日備份/{date}/`，還原用既有 `merge_general_and_pii` 合回。收款人姓名與銀行名稱不列入（同承攬人員界線）。下游效應（R1）：一般備份的「案件額外支出.json」少一欄 `payee_account`（還原需個資份；個資資料夾未建時該欄在還原後為空——與其他 F2 表相同）。
+- L1 前端（`pages/approval-queue.html`）：`extra_expense` 類型的卡片標籤改用佇列項目自帶的 `typeLabel`（A2-0 #2 契約）——費用單據（請購單／採購單／差旅費用請款單／零用金支付單）原本一律顯示「案件額外支出」；舊版額外支出沒有 `typeLabel`，仍顯示「案件額外支出」。只改畫面文字，不改任何介面或資料。
+
 ## 1.91 — 2026-09-30（wip/w2-bonus-correction：獎金更正單的三種通知）
 - L1（新增）：`helpers.email_notify.notify_bonus_correction_submitted／_approved／_returned`——獎金更正單送審／核准／駁回的通知信（信內不放金額）；`helpers/mail_types.py` 登記三個信件類型。只新增，舊呼叫端不受影響。
 

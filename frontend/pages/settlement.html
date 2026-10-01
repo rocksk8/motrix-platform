@@ -205,15 +205,16 @@
     </template>
   </div>
   <div class="stl-toolbar__right">
+    <span x-show="xeMasked > 0" data-testid="stl-masked-warning" style="font-size:11px;color:#B45309;max-width:320px">⚠️ 有 <b x-text="xeMasked"></b> 筆費用單據的金額對你遮蔽，額外支出總額不完整：不能儲存或完結精算（請由申請人／簽核人／出納／財務／管理員處理）</span>
     <span x-show="saving" style="font-size:11px;color:var(--text-dim)">儲存中…</span>
     <template x-if="settlement.status !== 'finalized'">
-      <button class="btn btn-ghost btn-sm" @click="saveDraft()" :disabled="saving">
+      <button class="btn btn-ghost btn-sm" @click="saveDraft()" :disabled="saving || xeMasked > 0" data-testid="stl-save-draft">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
         儲存草稿
       </button>
     </template>
     <template x-if="settlement.status !== 'finalized'">
-      <button class="btn btn-success btn-sm" @click="showFinalizeModal=true">
+      <button class="btn btn-success btn-sm" @click="showFinalizeModal=true" :disabled="xeMasked > 0" data-testid="stl-finalize">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         完結精算
       </button>
@@ -740,6 +741,7 @@ function settlementPage() {
     customExpenseTotal: 0,        // 建構器（自訂模組）關聯到這個案件的入帳支出；loadCustomFinance() 填
     customIncomeSkipped: [],      // 關聯到這個案件的自訂模組收入（內建報價單已認列 ⇒ 不重複計入，只列出供對照）
     xePending: 0,
+    xeMasked: 0,                 // 費用單據金額對本人遮蔽的列數（>0 ⇒ 額外支出總額不完整，不可存精算）
 
     dispatches: [],  // 承攬商派發（唯讀，即時從 /api/contractor-dispatches 讀取，不隨精算存檔凍結）
     _frozenSummary: null,  // 精算完結當下寫入 data_json 的 summary 快照，供比對是否已過期
@@ -883,6 +885,7 @@ function settlementPage() {
           this.xeTotal = d.totalAmount || 0
           this.remitFeeTotal = d.remitFeeTotal || 0
           this.xePending = d.totalPending || 0
+          this.xeMasked = d.maskedCount || 0
         }
       } catch {}
     },
@@ -1072,6 +1075,7 @@ function settlementPage() {
     },
 
     async saveDraft() {
+      if (this.xeMasked > 0) { this.toast('有 ' + this.xeMasked + ' 筆費用單據的金額對你遮蔽，額外支出總額不完整，不能儲存精算'); return }
       this.saving = true
       try {
         await this._putSettlement()
@@ -1081,6 +1085,7 @@ function settlementPage() {
     },
 
     async finalize() {
+      if (this.xeMasked > 0) { this.toast('額外支出總額不完整（有金額對你遮蔽的費用單據），不能完結精算'); this.showFinalizeModal = false; return }
       this.saving = true
       this.settlement.status      = 'finalized'
       this.settlement.finalizedAt = new Date().toISOString()

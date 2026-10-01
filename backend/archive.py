@@ -2545,6 +2545,9 @@ _F2_FIELDS = {
     # 銀行代碼／名稱／分行是機構資訊，不列入（同外包人員）。
     "協力廠商": {"table": "vendor_contractors",
                  "json": ("data_json", _VENDOR_ACCOUNT_KEYS)},
+    # A2 費用單據（2026-10-01）：收款人（員工或廠商）的銀行帳號存在 case_extra_expenses.payee_account（migration 0003）。
+    # 帳號＝個人帳戶 ⇒ 一般份拿掉、完整列只進個資資料夾。收款人姓名／銀行名稱是識別與機構資訊，沿用承攬人員的界線不列入。
+    "案件額外支出": {"table": "case_extra_expenses", "columns": ("payee_account",)},
     # 2026-10-01（A2 收款人）：員工收款帳號（payroll 模組表 `user_bank_accounts`，模組宣告 T1 ⇒ 自動進每日 JSON，鍵＝`模組-payroll-…`）。
     # 戶名與帳號是個資 ⇒ 一般份拿掉、完整列只進個資資料夾；銀行代碼／名稱／分行是機構資訊，不列入。
     # ⚠️ 模組未載入時這張表不在 `_daily_backup_tables()`：`_export_pii_json_set` 對不在的表略過（不算 error）。

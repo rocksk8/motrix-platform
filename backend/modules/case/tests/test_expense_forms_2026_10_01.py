@@ -311,3 +311,104 @@ def test_gl_events_legacy_row_unchanged(client, H, seed_extra_expense):
     evs = [e for e in G.gl_events(d, d)["events"] if e["source_key"] == str(eid) and e["event_code"] == "E11"]
     assert evs and [(l["role"], l["side"], l["amount"]) for l in evs[0]["lines"]] == [("COST_PROJECT", "D", 300), ("AP", "C", 300)]
     assert all("category" not in l for l in evs[0]["lines"])
+
+
+# ── 簽核詳情：變更申請的「改後」要看得到單價／小計／附件（修正：原本讀錯鍵，永遠是空的）──────
+
+def test_detail_shows_change_request_after_values(client, H):
+    from modules.case.api import quotations as Q
+    eid = _create(client, H["ef_form"])["id"]
+    _approve_now(client, H["ef_form"], eid)
+    new_lines = [{"category": "交通費", "summary": "改後", "amount": 777}]
+    r = client.put("%s/%d/change-request" % (SENT, eid), headers=H["ef_form"], json={"description": "改", "lines": new_lines, "payeeName": "李四"})
+    assert r.status_code == 200, r.text
+    import db
+    c = db.get_db()
+    try:
+        d = Q.detail_extra_expense(c, eid)
+    finally:
+        c.close()
+    ch = d["changes"]
+    assert ch["after"]["小計"] == 777 and ch["after"]["項目"] == "改" and ch["after"]["收款人"] == "李四"            # 修正前：小計永遠 None
+    assert ch["before"]["小計"] == 3501 and ch["before"]["明細列數"] == 2 and ch["after"]["明細列數"] == 1
+    assert ch["afterLines"] == [{"description": "改後", "amount": 777}]
+
+
+def test_detail_shows_legacy_change_request_unit_cost_and_total(client, H, seed_extra_expense):
+    from modules.case.api import quotations as Q
+    import db
+    c = db.get_db()
+    try:
+        c.execute("INSERT OR IGNORE INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at, deal_tag)"
+                  " VALUES ('MQ-DET-LEG','已送出','c','p',1,1,'{}','2026-01-01','2026-01-01','已成案')")
+        c.commit()
+    finally:
+        c.close()
+    eid = seed_extra_expense("MQ-DET-LEG", total_cost=100, category="其他", description="舊", expense_date="2026-09-10")
+    h = H["ef_admin"]
+    assert client.put("/api/quotations/MQ-DET-LEG/extra-expenses/%d/change-request" % eid, headers=h,
+                      json={"description": "舊改", "qty": 2, "unitCost": 150}).status_code == 200
+    c = db.get_db()
+    try:
+        d = Q.detail_extra_expense(c, eid)
+    finally:
+        c.close()
+    assert d["changes"]["after"]["單價"] == 150 and d["changes"]["after"]["小計"] == 300 and "明細列數" not in d["changes"]["after"]
+
+
+# ── 營運報表（recognition.extra_entries）：費用單據逐類別一筆、帶 departmentId／kind／docCode；舊版列不變 ──────
+
+def _entries(basis):
+    from modules.case import recognition as R
+    import db
+    c = db.get_db()
+    try:
+        return R.extra_entries(c, basis)
+    finally:
+        c.close()
+
+
+def test_report_entries_per_category_with_department_and_kind(client, H):
+    eid = _create(client, H["ef_form"], kind="travel", lines=[{"category": "交通費", "amount": 100}, {"category": "交通費", "amount": 50}, {"category": "住宿費", "amount": 200}],
+                  departmentId=7)["id"]
+    _approve_now(client, H["ef_form"], eid)
+    ents = [e for e in _entries("accrual") if e["expenseId"] == eid]
+    assert {e["category"]: e["amount"] for e in ents} == {"住宿費": 200, "交通費": 150}
+    assert all(e["departmentId"] == 7 and e["kind"] == "travel" and e["docCode"].startswith("TE-") and e["quoteNo"] == "" for e in ents)
+    assert sum(e["amount"] for e in ents) == 350
+
+
+def test_report_entries_cash_basis_adds_payment_difference_and_total_equals_actual(client, H):
+    eid = _create(client, H["ef_form"], kind="travel", lines=[{"category": "交通費", "amount": 300}])["id"]
+    _approve_now(client, H["ef_form"], eid)
+    import db
+    c = db.get_db()
+    try:
+        c.execute("UPDATE case_extra_expenses SET paid_date='2026-10-02', remit_actual=280 WHERE id=?", (eid,))
+        c.commit()
+    finally:
+        c.close()
+    ents = [e for e in _entries("cash") if e["expenseId"] == eid]
+    assert sum(e["amount"] for e in ents) == 280 and {e["category"] for e in ents} == {"交通費", "付款差額"}
+    assert [e for e in ents if e["category"] == "付款差額"][0]["amount"] == -20
+
+
+def test_report_entries_legacy_row_one_entry_no_new_keys(client, H, seed_extra_expense):
+    import db
+    c = db.get_db()
+    try:
+        c.execute("INSERT OR IGNORE INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at, deal_tag)"
+                  " VALUES ('MQ-RPT-LEG','已送出','c','p',1,1,'{}','2026-01-01','2026-01-01','已成案')")
+        c.execute("UPDATE case_extra_expenses SET lines_json='[]' WHERE 0")
+        c.commit()
+    finally:
+        c.close()
+    eid = seed_extra_expense("MQ-RPT-LEG", total_cost=300, category="運費", description="舊", expense_date="2026-09-10")
+    c = db.get_db()
+    try:
+        c.execute("UPDATE case_extra_expenses SET lines_json=? WHERE id=?", (json.dumps([{"category": "A", "amount": 100}, {"category": "B", "amount": 200}]), eid))
+        c.commit()
+    finally:
+        c.close()
+    ents = [e for e in _entries("accrual") if e["expenseId"] == eid]
+    assert len(ents) == 1 and ents[0]["amount"] == 300 and "departmentId" not in ents[0] and "kind" not in ents[0]

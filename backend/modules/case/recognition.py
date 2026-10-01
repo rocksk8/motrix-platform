@@ -277,7 +277,7 @@ def extra_entries(conn, basis):
     for r in conn.execute(
             "SELECT e.id, e.quote_no, e.category, e.description, e.total_cost, e.expense_date,"
             " e.created_at, e.doc_no, e.files_json, e.status, e.approval_json, e.invoice_date,"
-            " e.paid_date, e.remit_actual, e.remit_review, q.customer_name FROM case_extra_expenses e"
+            " e.paid_date, e.remit_actual, e.remit_review, e.kind, e.doc_code, e.department_id, e.lines_json, q.customer_name FROM case_extra_expenses e"
             " LEFT JOIN quotations q ON q.quote_no = e.quote_no"
             " WHERE e.status IN (%s) AND %s ORDER BY e.id" % (",".join("?" * len(COUNTED_EXTRA_STATUSES)), _EF.payable_sql("e")),
             COUNTED_EXTRA_STATUSES):
@@ -300,13 +300,47 @@ def extra_entries(conn, basis):
             files = json.loads(r["files_json"] or "[]")
         except (TypeError, ValueError):
             files = []
-        out.append({"date": use, "quoteNo": r["quote_no"] or "",
-                    "desc": "%s｜%s｜%s" % (r["customer_name"] or "", r["category"] or "其他", desc),
-                    "amount": cost, "taxNote": "未拆稅", "provisional": provisional,
-                    "pending": r["status"] != "已核准", "files": files, "expenseId": r["id"],
-                    "category": r["category"] or "其他",
-                    "remitPending": basis == "cash" and paid != "" and r["remit_review"] == "pending",
-                    "invoiceDate": inv, "paidDate": paid})
+        base = {"date": use, "quoteNo": r["quote_no"] or "",
+                "desc": "%s｜%s｜%s" % (r["customer_name"] or "", r["category"] or "其他", desc),
+                "amount": cost, "taxNote": "未拆稅", "provisional": provisional,
+                "pending": r["status"] != "已核准", "files": files, "expenseId": r["id"],
+                "category": r["category"] or "其他",
+                "remitPending": basis == "cash" and paid != "" and r["remit_review"] == "pending",
+                "invoiceDate": inv, "paidDate": paid}
+        if not (r["kind"] or ""):
+            out.append(base)                                     # 舊版列：一列一筆，**行為不變**
+            continue
+        out.extend(_typed_entries(r, base, cost, basis, paid))
+    return out
+
+
+def _typed_entries(r, base, cost, basis, paid) -> list:
+    """費用單據（kind≠''）的營運報表列（A2）：依**費用類別逐類**一筆（讓「支出結構」看得出差旅／住宿…）、帶 `departmentId`（費用歸屬單位；
+    無案件時部門維度靠它）、`kind`、`docCode`。明細加總對不上單據金額（不該發生）⇒ 退回一列（類別＝單據類別）；
+    現金口徑實付≠應付 ⇒ 另加一筆「付款差額」（實付−應付），合計＝實付（與舊版現金口徑一致）。
+    下游效應（R1）：營運報表支出＝Σ 這些列；總額仍等於 `total_cost`（現金口徑為實付）。"""
+    try:
+        lines = json.loads(r["lines_json"] or "[]")
+    except (TypeError, ValueError):
+        lines = []
+    total = float(r["total_cost"] or 0)
+    by_cat = {}
+    for l in lines if isinstance(lines, list) else []:
+        if isinstance(l, dict):
+            k = l.get("categoryName") or l.get("category") or "其他"
+            by_cat[k] = by_cat.get(k, 0) + float(l.get("amount") or 0)
+    common = {"departmentId": r["department_id"], "kind": r["kind"], "docCode": r["doc_code"] or ""}
+    if not by_cat or abs(sum(by_cat.values()) - total) > 0.005:
+        by_cat = {r["category"] or "其他": total}
+    out = []
+    for cat, amt in by_cat.items():
+        if not amt:
+            continue
+        out.append({**base, **common, "amount": amt, "category": cat,
+                    "desc": "%s｜%s｜%s" % (r["doc_code"] or "", cat, r["description"] or "")})
+    if basis == "cash" and cost != total:
+        out.append({**base, **common, "amount": cost - total, "category": "付款差額",
+                    "desc": "%s｜付款差額（實付 %g／應付 %g）" % (r["doc_code"] or "", cost, total)})
     return out
 
 

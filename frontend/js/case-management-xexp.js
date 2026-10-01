@@ -60,7 +60,7 @@ window.CM_PARTS.push(() => ({
     xeStatusStyle(status) {
       if (status === '已核准') return 'background:var(--tone-success-bg-strong);color:var(--tone-success-fg)'
       if (status === '已駁回') return 'background:var(--tone-danger-bg-strong);color:var(--tone-danger-fg)'
-      if (status === '草稿')   return 'background:var(--surface-neutral);color:var(--ink-secondary)'
+      if (status === '草稿' || status === '已作廢') return 'background:var(--surface-neutral);color:var(--ink-secondary)'
       return 'background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg)'   // 待審核／簽核中
     },
 
@@ -209,6 +209,31 @@ window.CM_PARTS.push(() => ({
       await this.loadExtraExpenses(this.selected.quote_no)
     },
 
+    // 作廢（僅最高管理員；已核准且尚未付款；理由必填）。列保留（已作廢）、不計入合計／出納／報表；總帳由引擎自動沖轉
+    xeCanVoid(x) { return this.session.role === 'superadmin' && x.status === '已核准' && !x.paidDate && !!x.id },
+
+    async xeVoid(i) {
+      const x = this.xe.items[i]
+      if (!this.xeCanVoid(x)) return
+      const reason = await MotrixUI.prompt(`作廢「${x.description || x.docCode || '額外支出'}」（金額不再計入成本、應付與報表），請填寫作廢理由：`,
+        {title: '作廢額外支出', required: true, okText: '確定作廢'})
+      if (!reason) return
+      const quoteNo = this.selected?.quote_no
+      this.xe.busy = true; this.xe.msg = ''
+      try {
+        const r = await fetch(
+          `/api/quotations/${encodeURIComponent(quoteNo)}/extra-expenses/${x.id}/void`,
+          { method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason }) })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this._xeFail('作廢失敗：' + (d.detail || r.status)); return
+        }
+      } catch (e) { this._xeFail('網路錯誤：' + e.message); return }
+      this.xe.busy = false
+      await this.loadExtraExpenses(quoteNo)
+    },
+
     async xeDelete(i) {
       const x = this.xe.items[i]
       if (!x.id) { this.xe.items.splice(i, 1); return }   // 還沒存過，直接移除
@@ -242,7 +267,7 @@ window.CM_PARTS.push(() => ({
     },
 
     // 附件上鎖：已核准就不能再上傳/刪除。要補憑證請走變更申請的「待核准附件」
-    xeFilesLocked(x) { return x.status === '已核准' },
+    xeFilesLocked(x) { return x.status === '已核准' || x.status === '已作廢' },
 
     xeInChange(x)        { return !!x._editing || !!x.changeStatus },
     xeChangeEditable(x)  { return !x.changeStatus || x.changeStatus === '草稿' || x.changeStatus === '已駁回' },

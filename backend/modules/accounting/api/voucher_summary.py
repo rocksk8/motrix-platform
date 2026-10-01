@@ -227,7 +227,7 @@ def _case_expense_sources(conn, quote_no, authorization=None):
     for d in costs:
         out.append(_dispatch_expense_entry(d))
     for row in conn.execute(
-            "SELECT * FROM case_extra_expenses WHERE quote_no=? ORDER BY id",
+            "SELECT * FROM case_extra_expenses WHERE quote_no=? AND status <> '已作廢' ORDER BY id",
             (quote_no,)):
         out.append(_extra_expense_entry(row))
     return out

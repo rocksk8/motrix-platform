@@ -2049,7 +2049,7 @@ def _close_gate_facts(conn, quote_nos: list) -> dict:
             ph = ",".join("?" * len(ch))
             for r in conn.execute(
                     f"SELECT quote_no, COUNT(*) c, SUM(CASE WHEN status='待審核' THEN 1 ELSE 0 END) p "
-                    f"FROM case_extra_expenses WHERE quote_no IN ({ph}) GROUP BY quote_no", ch):
+                    f"FROM case_extra_expenses WHERE quote_no IN ({ph}) AND status <> '已作廢' GROUP BY quote_no", ch):
                 xe[r["quote_no"]] = (r["c"] or 0, r["p"] or 0)
         for no in nos:
             facts[no]["xe"] = xe.get(no, (0, 0))
@@ -4445,15 +4445,25 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
         "createdByInferred": bool(r["created_by_inferred"]),
         "payerName":   r["payer_name"] or "",
         "status":      r["status"],
-        "pending":     r["status"] != "已核准",
+        "pending":     r["status"] not in ("已核准", "已作廢"),
+        "voided":      r["status"] == "已作廢",          # 已作廢：列照列（稽核／申請人），不進合計
         "files":       json.loads(r["files_json"] or "[]"),
     } for r in conn.execute(
         "SELECT * FROM case_extra_expenses WHERE quote_no=? ORDER BY id", (quote_no,)
     ).fetchall()]
+    # 費用單據（kind≠''）綁了案件時：金額只給申請人／簽核人／出納財務／管理員（使用者 2026-10-01）；其他人（例如只有財務檢視偏好的案件成員）只看到狀態
+    from modules.case.api import case_extra_expenses as _xe
+    _xr = {r["id"]: r for r in conn.execute("SELECT * FROM case_extra_expenses WHERE quote_no=?", (quote_no,)).fetchall()}
+    extras = [({"id": e["id"], "category": "", "description": "", "status": e["status"], "pending": e["pending"],
+                "expenseDate": e["expenseDate"], "voided": e["voided"], "masked": True, "totalCost": None, "unitCost": None, "qty": None, "files": []}
+               if (_xr.get(e["id"]) is not None and (_xr[e["id"]]["kind"] or "") and not _xe._amount_viewer(conn, _xr[e["id"]], user)) else e)
+              for e in extras]
     # 2026-09-11：conn 從這裡才關——額外支出改讀 case_extra_expenses 表之後，
     # 上面那段列表推導需要連線，原本在它之前就 close() 會變成 use-after-close
+    _shown = {e["id"] for e in extras if not e.get("masked")}          # 手續費合計只算看得到金額的列
     extras_fee_total = sum(float(r["remit_fee"] or 0) for r in conn.execute(
-        "SELECT remit_fee FROM case_extra_expenses WHERE quote_no=? AND COALESCE(paid_date, '') != ''", (quote_no,)).fetchall())
+        "SELECT id, remit_fee FROM case_extra_expenses WHERE quote_no=? AND COALESCE(paid_date, '') != ''", (quote_no,)).fetchall()
+        if r["id"] in _shown)
     # 建構器（自訂模組）的金流：關聯到這個案件的入帳支出＝案件成本的一列；收入因內建報價單已認列而略過（標 skipped，供對照）
     from helpers import custom_finance as _cfin
     custom_finance = _cfin.case_finance(conn, quote_no)
@@ -4475,7 +4485,7 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
             "paymentRequests": payment_requests,
         },
         "settlementExtras": {
-            "total": sum(e["totalCost"] for e in extras),
+            "total": sum((e["totalCost"] or 0) for e in extras if not e["voided"]),
             "remitFeeTotal": extras_fee_total,
             "items": extras,
         },
@@ -5861,6 +5871,14 @@ def detail_completion_note(conn, doc_no):
     }
 
 
+def _lines_of_row(r) -> list:
+    try:
+        v = json.loads(r["lines_json"] or "[]")
+        return v if isinstance(v, list) else []
+    except Exception:
+        return []
+
+
 def detail_extra_expense(conn, doc_no):
     r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (doc_no,)).fetchone()
     if not r:
@@ -5911,11 +5929,18 @@ def detail_extra_expense(conn, doc_no):
                 "before": {"項目": r["description"], "數量": r["qty"],
                            "單價": r["unit_cost"], "小計": r["total_cost"],
                            "備註": r["note"]},
+                # 修正（A2）：提議內容的鍵是 camelCase（`unitCost`／`totalCost`／`addFiles`，見 `_proposal_from`）；原本讀 snake_case 鍵，
+                # 簽核人看到的「改後單價／小計」永遠是空的、待核准附件也列不出來
                 "after": {"項目": chg.get("description"), "數量": chg.get("qty"),
-                          "單價": chg.get("unit_cost"), "小計": chg.get("total_cost"),
+                          "單價": chg.get("unitCost"), "小計": chg.get("totalCost"),
                           "備註": chg.get("note")},
-                "files": _file_entries(json.dumps(chg.get("files") or [])),
+                "files": _file_entries(json.dumps(chg.get("addFiles") or [])),
             }
+            if "lines" in chg:               # 費用單據：明細與收款人也要讓簽核人看到前後對照
+                out["changes"]["before"].update({"明細列數": len(_lines_of_row(r)), "收款人": r["payee_name"] or ""})
+                out["changes"]["after"].update({"明細列數": len(chg.get("lines") or []), "收款人": chg.get("payeeName") or ""})
+                out["changes"]["afterLines"] = [{"description": (l.get("summary") or l.get("category") or ""), "amount": l.get("amount", 0)}
+                                                for l in (chg.get("lines") or []) if isinstance(l, dict)]
     return out
 
 

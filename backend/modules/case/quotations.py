@@ -145,7 +145,7 @@ def case_extra_expenses(conn, quote_no: str) -> list:
     rows = conn.execute(
         "SELECT category, description, total_cost, expense_date, created_at, doc_no, "
         "       files_json, status "
-        "FROM case_extra_expenses WHERE quote_no=? ORDER BY id", (quote_no,)
+        "FROM case_extra_expenses WHERE quote_no=? AND status <> '已作廢' ORDER BY id", (quote_no,)
     ).fetchall()
 
     out = []
