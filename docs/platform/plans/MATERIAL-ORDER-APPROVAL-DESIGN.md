@@ -1,10 +1,21 @@
-# 叫料管控的審核機制——設計（第 31 班；2026-10-01 草擬，唯讀分析，**未跑任何測試**）
+# 叫料管控的審核機制——設計（第 31 班；2026-10-01；**狀態：已裁示、可開工（尚有 6 題待回答，見 §6、§8）**；唯讀分析，**未跑任何測試**）
 
 使用者原話（2026-10-01）：「叫料管控也需要審核跟派工一樣」。基底：包 47db5613。引用格式 `檔:行`＝該 commit 的行號。
 對照文件：`origin/wip/dispatch-approval-2e:docs/platform/plans/DISPATCH-APPROVAL-DESIGN.md`（承攬商派發；下稱「派發設計」）。
-標記：**【已讀】**＝讀過程式；**【推論】**＝由程式推得、沒執行；**【問】**＝需要使用者裁示（§6）。
+標記：**【已讀】**＝讀過程式；**【推論】**＝由程式推得、沒執行；**【未驗】**＝沒查證。
 
-> **先講最重要的一件事：「叫料」在系統裡是兩份互不相連的資料。** 不先決定審核的對象是哪一份（或兩份），設計無從談起（§6 問 1）。
+> **「叫料」在系統裡是兩份互不相連的資料**（§0 表）；使用者已裁示審核對象＝金額那份（`materialOrders`）。
+
+## A. 已裁示（使用者 2026-10-01，經主持轉達）
+| # | 項目 | 決定 |
+|---|---|---|
+| Q1 | 審核對象 | **金額那份（`materialOrders`）**；物流旗標（`ordered／arrived`）**只能對著「已核准的叫料單」勾** |
+| Q5 | 實作方式 | **疊加審核表（方案 X，`case_material_approvals`）**，**不**改走 A2 請購／採購單 |
+| Q8 | `case-record` 後門 | **關閉：所有寫入都過閘**；上線前列出誰在依賴（無正式機存取 ⇒ §7 給使用者自己跑的唯讀查詢） |
+| 付款 | 叫料付款 | **比照派發：匯款申請單＋出納流程**，不是單純「登記已付」 |
+| 共用機制 | `approval_gate` | **選配的第二階段重構**；先各自出貨（疊加＋派發），除非 hichan-2e 同意共用 `GateSubject`（§4） |
+| 沿用派發的裁示 | 簽核／完工／舊單／報表 | 分層簽核（部門主管→組織鏈→最高管理者；無簽核層＝自動核准；不能自核）；**建立與完成（到料）兩個步驟都要審**；進行中舊單寬限（灰徽章、實質編輯後重新送審）；報表：草稿與退回不計、待審核計入並標示；送審者＝創建者／負責人／協作者／admin 以上；取消已核准＝admin 以上＋理由；單號格式 |
+
 
 ## 0. 兩份「叫料」資料（事實）
 
@@ -54,139 +65,139 @@
 - 叫料沒有單據編號、沒有佇列提供者、沒有信件類型（派發設計要新建的東西，這裡全要新建）。
 
 ## 2. 「完成」對叫料是什麼（回答要點 2）
-派發的完成＝驗收→完工；叫料沒有對應狀態。依資料推得三個候選的「完成」節點（**【推論】**；使用者要選 **【問 3】**）：
+派發的完成＝驗收→完工；叫料沒有對應狀態。依資料推得三個候選的「完成」節點（**【推論】**；已依派發「建立與完成都要審」解讀，細節見 §6 問 3）：
 1. **到料（`arrived`）**：物流上「叫的料到了」；會觸發設備序號登載與庫存認領（1.2）。**最像派發的「驗收」**。
 2. **已付（`paidStatus=paid`）**：財務上結清；目前無付款流程。
 3. **發票日登錄（`invoiceDate`）**：權責認列的日期來源（決定成本歸月與 E12 日期）。
 **審核前已被動到的東西**：成本（建立當下就計入）、總帳草稿（E12 見 1.3）、庫存序號（到料登載後存檔當下，若序號對得上）、應付／付款登記（`paidStatus`）——**四項都在沒有審核下發生**。
+**（已裁示後的解讀）**：叫料的「完成」＝**到料**（對應派發「驗收／完工也要審」）；付款是另一道（叫料匯款申請）。
 
-## 3. 建議流程（**【建議】**，仿派發，差異處標明）
+## 3. 實作設計（方案 X：疊加審核表；已依裁示改寫）
 
-### 3.0 審核的對象——建議：以「叫料單（金額列）」為審核單位，物流旗標跟著它
-- **建議**：審核單位＝`materialOrders[]` 的一列（金額承諾，對應派發的「新增派發」）。`materials[]` 的 `ordered`／`arrived` 旗標**不單獨審核**，而是**受閘**：沒有核准的叫料單，不得把對應料件標「已叫料」（見 3.3）。
-- 需要把兩份資料**關起來**：在 `materials[]` 項目加選填 `orderItemId`（指向 `materialOrders[].itemId`）；沒關聯的物流項目維持現狀（不審，無金額）。**【問 1、2】**
-- 替代（不建議）：只審物流 `materials[]`（沒有金額 ⇒ 審核人看不到要核什麼）；或兩份合併成一份（資料遷移大，違反「只增不改」）。
+### 3.0 審核的對象與物流旗標的閘（裁示 Q1）
+- **審核單位＝`materialOrders[]` 的一列（金額承諾；叫料單）**。
+- **物流旗標只能對著「已核准的叫料單」勾**：`materials[]` 項目新增選填鍵 `orderItemId`（指向 `materialOrders[].itemId`）；**`ordered`＝true 要求 `orderItemId` 指到一張「叫料核准」已通過的單**（舊單不算；例外見 §6 問 4）。**`arrived`＝true** 要求同一張單，且（依派發「完工也要審」的同一原則）**到料審核通過**後才生效（見 3.2）。沒有 `orderItemId` 的既有物流項目維持現狀（不溯及既往），但**不能再把狀態往前推**（`ordered／arrived` 由 false→true 一律要連結）。
 
-### 3.1 儲存：用「核准疊加表」，不動 `data_json` 的形狀
-`materialOrders` 住在 `data_json`，沒有資料表，直接把審核欄位塞進每列有三個問題：①佇列要掃全部案件的 JSON（`json_each`，慢且脆）②整包覆蓋會把審核狀態一起蓋掉 ③沒有單據編號可引用。**建議新增一張薄表**（migration `case/0004`，只加不改）：
-
+### 3.1 儲存：疊加審核表（裁示 Q5：方案 X）
+`materialOrders` 住在 `data_json`、沒有資料表；審核欄位**不塞進每列**（佇列要掃全部案件 JSON、整包覆蓋會蓋掉審核狀態、沒有單號可引用）。新增薄表（case migration `0004`，只加不改）：
 ```
 case_material_approvals(
-  quote_no TEXT, item_id TEXT,                 -- 鍵＝(案件, materialOrders.itemId)
-  doc_code TEXT UNIQUE,                         -- 叫料單號 MO-YYYYMMDD-NNNN（next_entity_code；與 TE-/PR-/PO-/PC- 同格式）
-  stage TEXT,                                   -- 'order'（叫料）／'receipt'（到料）
-  status TEXT,                                  -- 草稿／待審核／簽核中／已核准／已退回
-  approval_json TEXT, submitted_by, submitted_at, approved_at,
-  content_hash TEXT,                            -- 核准當時的實質欄位雜湊（品名、數量、單位、單價、小計、關聯料件）
-  version INTEGER, created_at,
+  quote_no TEXT, item_id TEXT, stage TEXT,       -- 'order'（叫料核准）／'receipt'（到料審核）
+  doc_code TEXT,                                  -- 叫料單號 MO-YYYYMMDD-NNNN（next_entity_code；兩階段同號）
+  status TEXT,                                    -- 草稿／待審核／簽核中／已核准／已退回
+  approval_json TEXT, submitted_by TEXT, submitted_at TEXT, approved_at TEXT,
+  content_hash TEXT,                              -- 核准當時的實質欄位雜湊（品名、數量、單位、單價、小計、supplierId）
+  version INTEGER, created_at TEXT,
   PRIMARY KEY(quote_no, item_id, stage))
 ```
-- **沒有疊加列＝舊單**（自動寬限，不必回填、不必標記遷移）；舊單的畫面標「舊單（未經審核）」灰徽章（同派發 §2.5）。
-- 核准時存實質欄位雜湊；之後任何寫入口若使實質欄位與雜湊不符 ⇒ 該單**自動回到「待重新送審」**（見 3.3），這樣即使有人繞過專屬端點也留下痕跡。**【風險】**雜湊的欄位清單要與前端一致（小計用浮點，需正規化）。
+- **沒有疊加列＝舊單**（自動寬限；不回填、不標記遷移）；畫面標灰色「舊單（未經審核）」徽章。實質欄位被改 ⇒ 該單視為新規則適用，**要先送審**（同派發 Q5）。
+- 實質欄位雜湊：核准時存；之後任何寫入使實質欄位與雜湊不符 ⇒ 自動回「待重新送審」。**風險**：雜湊欄位清單要與前端一致，數字要正規化（浮點）。
 
-### 3.2 狀態圖（兩階段，對應使用者「建立與完成都要審」）
+### 3.2 狀態與兩階段（沿用派發裁示：建立與完成都要審；分層簽核；不能自簽）
 ```
-新增叫料單（金額列，預設不得標已叫／已到／已付）
-  └送審（創建者／負責業務／協作者／admin+）→ 待審核 → 簽核中 → 已核准（叫料核准） ─┐
-                │                         └退回（任一層，必填理由）→ 已退回 →（修改後再送）
-                │                                                                        ▼
-        已核准後才可：標「已叫料」（materials[].ordered）→ 到貨後送「到料審核」（stage=receipt）→ 已核准 → 才可標「已到料」＋ 登載序號／認領庫存 → 才可登記付款／發票日
+新增叫料單（不得標已叫／已到／已付）
+  └送審→ 待審核 → 簽核中 → 已核准（階段 order）
+                 └退回（必填理由）→ 已退回 →（修改後再送）
+已核准後：連結物流項目標「已叫料」→ 到貨 → 勾「已到料」＝送「到料審核」（階段 receipt）→ 分層簽核 → 通過才生效
+          （生效＝arrived 成立＋devices[] 序號才會被存檔流程認領庫存）→ 付款走 3.4 的匯款申請
 ```
-- 階段 1「叫料核准」＝核准這筆**採購承諾**（金額、數量、供應商由審核人看）。
-- 階段 2「到料審核」＝確認**實際到貨**（數量、品項、必要時序號與到貨憑證）；通過後 `arrived` 才能被設成真，`devices[]` 序號才會被存檔流程認領庫存。
-- 簽核流程：重用 `helpers/tiered_approval.py`（派發設計同）：**申請人部門主管→組織鏈→最高管理者；沒設簽核層＝直接核准；不能自己簽自己**（`check_no_tier_self_approval`）。
-- 提交者／取消／文件編號／舊單：全部照派發的使用者決定（§7 對照表）。
+- 簽核流程：重用 `helpers/tiered_approval.py` 既有原語：**申請人部門主管→組織鏈→最高管理者；沒設簽核層＝直接核准；不能自己簽自己**（派發 Q1）；**不設金額門檻**（派發決定）。`register_doc_type('material_order', '叫料')`；預設跟統一流程。
+- 預設（沿用派發的授權預設，未再問）：送審者＝創建者／該案負責業務／協作者／admin 以上；核准後實質欄位變動 ⇒ 重新送審（備註、日期、發票欄位免審）；取消已核准＝admin 以上＋必填理由＋稽核，**已有匯款申請者限 superadmin**。
+- 到料審核人：與叫料核准**同一條簽核鏈**（預設；§6 問 3 可改）。
 
-### 3.3 寫入口的閘（真正的修補；比派發更重要，因為洞在 `data_json` 整包覆蓋）
-1. **新增一支共用驗證 `material_orders_guard(old_list, new_list, user)`**，三個寫入口（`material_orders` PATCH、`case-record` PATCH、`PUT/POST quotations`）**一律呼叫**：
-   - 新列（舊清單沒有的 `itemId`）：**強制**為未核准——`paidStatus` 必須 `pending`、已付金額／日期清空（否則 400「請先送審」）。
-   - 既有列：實質欄位變更 ⇒ 該單狀態回「待重新送審」並**凍結**（不可標已叫／已付），除非是 admin+ 且帶理由。
-   - 非實質欄位（備註、發票日）：可改；**發票日登錄**維持現行權限，但**只有已核准的單才進成本**（見 3.5）。
-2. `case-record` PATCH：`materialOrders` 與 `materials[].ordered／arrived／devices` 不再信任 body——**以資料庫現值為準，只接受「閘函式」放行的差異**（比照 `restore_case_record` 對金額的處理方式，已有先例）。
-3. **靜態守門 G-M1**：掃 `modules/case` 內所有對 `caseRecord.materialOrders`／`materials` 的寫入，只准經 `material_orders_guard`（突變：在別處加一條直接寫入 ⇒ 紅）。
-4. 前端：叫料列新增「送審／撤回／核准狀態徽章」；「已叫料」「已到料」勾選在未核准時 disabled 並顯示原因；付款欄位同。
+### 3.3 寫入口的閘——**關掉 `case-record` 後門（裁示 Q8）：所有寫入都過閘**
+一支共用驗證 `material_orders_guard(conn, quote_no, old_cr, new_cr, user)` 於**四個**寫入口一律呼叫（突變測試逐一拿掉）：
+1. `PATCH /material-orders`（`material_orders.py:58`）：保留既有驗證；新增：新列強制未核准（`paidStatus` 必須 `pending`、已付金額／日期清空）；**`paidStatus／paidAmount／paidDate` 不再由此端點寫入**（只有 3.4 的 `mark_paid` 能寫）；實質欄位變更 ⇒ 待重新送審。
+2. **`PATCH /case-record`（`quotations.py:2750`，真正的洞）**：`materialOrders` 與 `materials[]` 的 `ordered／arrived／orderItemId／devices` 以**資料庫現值為準**（比照 `restore_case_record` 對金額的處理，`financial_mask.py:112/142` 已有先例）；body 帶的差異只有「閘函式放行的」才寫入，被拒的**逐項回報在回應 `rejected[]`**（不整筆拒絕，避免擋住同一次存檔裡的其他欄位——這與 `payment` 的「整筆拒絕」不同，見 §6 問 6）。分段存（`segments`）同樣過閘。已結案半解鎖的 `_gate_case_edit` 路徑不變（閘在它之前執行）。
+3. `PUT／POST /api/quotations`（`:1671／:1471`）：同上，剝掉 body 的 `caseRecord.materialOrders` 與物流旗標變更（以現值為準）。
+4. 發票日端點 `…/invoice-date`（`:166`）：只動發票日；若該單**待審核／簽核中**則拒（避免審核中改日期），其他維持現行權限（含已結案）。
+- **靜態守門 G-M1**：掃 `modules/case` 內所有對 `caseRecord.materialOrders`／`.materials` 的寫入，只准在 `material_orders_guard` 與 `mark_paid` 內出現（突變：別處加一條 ⇒ 紅）。
+- **誰在依賴後門**：沒有正式機存取，無法由我查；§7 給唯讀查詢供使用者自己跑（找出「叫料列不是由專屬端點建立」的案件與帳號）。上線公告要列影響面。
 
-### 3.4 付款（派發沒有、叫料必須回答）
-叫料的「已付」目前是**登記**，沒有出納、沒有付款申請。**【問 4】**：維持登記（只加「已核准才能登記已付」）？還是比照派發改成「付款申請→簽核→出納」（可重用 A2 的採購單／請款流程，見 §3.6）？後者範圍大很多。
+### 3.4 付款：比照派發＝「叫料匯款申請」＋出納（裁示）
+現況「已付」只是登記（§1.1），E12b 直接由它產生。改成**與承攬商匯款申請同一套模式**（`contractor_payment_vouchers`：申請→分層簽核→出納「已匯款」→實付／手續費／差額審核）：
+- 新表 `case_material_payments`（case `0004` 同一支 migration）：`id、doc_code（MP-YYYYMMDD-NNNN）、quote_no、item_id、supplier_id、amount_pretax、tax_amount、total、snapshot_json（凍結叫料單與供應商資料）、status、approval_json、is_paid、paid_at、paid_by、remit_actual、remit_fee、remit_review、created_by、created_at`。**doc type `material_payment`（叫料匯款）**另登記，簽核鏈同上。
+- **建立門檻**：對應叫料單「叫料核准」已通過（舊單：見 §6 問 5）；**不要求到料審核通過**（沿用派發「完工審核不是匯款前置」的預設，避免付款卡死；訂金／貨到付款的區別見 §6 問 1）。同單累計申請額不得超過叫料單小計（鎖額度，同發票開立單作法；superadmin 可覆寫＋理由）。
+- **出納整合走 IP-100／IP-102 現成名稱空間**（`INTEGRATION-POINTS.md` IP-100：「之後其他模組的請款可登記同一個名稱空間，出納不用改」）：`("payables.pending","case_material")`、`("remit.reviews","case_material")` 兩個提供者（owner＝case，`modules/case/payables.py` 旁新檔）；出納頁「請款待付款」頁籤自動出現，`mark_paid` 寫回**申請列**，並**經單一內部寫入函式**同步寫回 `materialOrders[].paidStatus／paidAmount／paidDate`（營運報表現金口徑 `recognition.py:281-288` 與 E12b `gl_events.py:118-126` **不用改讀法**）。實付≠應付走既有「差額待審核」。
+- **供應商**：`materialOrders` 現在**沒有供應商欄位**（只有 `materials[].supplier` 文字）；匯款申請需要收款人與帳戶 ⇒ 新增選填 `materialOrders[].supplierId`（指向 `suppliers`，`db.py:553`：`id／name／tax_id／phone／data_json`；銀行資料是否在 `data_json` **【未驗：我沒查 `suppliers.data_json` 的欄位】**）。匯款申請要求 `supplierId` 必填（§6 問 2）。F2（個資）規則：供應商帳戶比照 `bank_mask`／A2 收款人遮蔽，不進佇列詳情與信件。
 
-### 3.5 報表／總帳（使用者對派發的決定，原樣套用）
+### 3.5 報表／總帳（派發 Q6 決定，原樣套用）
 | 面向 | 規則 |
 |---|---|
-| 營運報表成本 | **草稿與已退回不計；待審核／簽核中計入並標「待審核」；已核准正常；舊單（無疊加列）照舊**。位置：`recognition.py:276-296`（權責與現金兩個分支都要改；取疊加表狀態）。 |
-| 總帳 E12／E12b | 只在 `已核准` **或舊單**才產生事件（`case/gl_events.py:100-125`）；未核准不入帳；E12b 另需已核准。 |
-| 首頁／採購頁叫料進度 | 未核准的不顯示為「叫料中」（`dashboard.py:694` 讀 `ordered` 前先看閘）。 |
-| 與總帳差異頁 | 「待審核」差額應能對上報表標示（現有分桶 `unposted`／`residual`；必要時新增一桶，另案）。 |
+| 營運報表成本 | **草稿與已退回不計；待審核／簽核中計入並標「待審核」；已核准正常；舊單照舊**。位置：`recognition.py:276-296`（權責與現金兩個分支；讀疊加表狀態）。**上線公告數字變動**（派發同）。 |
+| 總帳 E12／E12b | 只在「叫料核准已通過」或舊單才產生事件（`case/gl_events.py:100-125`）；E12b 付款事件來源不變（仍由 `paidAmount` 衍生，但現在只有 `mark_paid` 能寫）。 |
+| 首頁／採購頁叫料進度 | `dashboard.py:694` 讀 `ordered／arrived` 前先看閘：未核准的不顯示為「叫料中／到料」。 |
+| 庫存 | `_sync_device_stock`（`quotations.py:2472`）只對「到料審核已通過」的物流項目的序號認領；其餘跳過並回 notice。 |
 
-### 3.6 與 A2 的重疊（**【問 5】**——這可能讓整個設計換方向）
-A2 已有「請購單 PR → 採購單 PO」類型的費用單據（`helpers/expense_types.py`、`modules/case/expense_forms.py`；各自有送審、分層簽核、佇列、信件、總帳 E11、營運報表、PDF）。**叫料本質上就是案件採購。** 兩個方向：
-- **(X) 沿用現有叫料列＋疊加審核表**（本文 3.1–3.5）：改動小、使用者畫面不變、舊單自然寬限；缺點：又一套審核碼（雖由共用閘分攤，見 §4）。
-- **(Y) 叫料改走 A2 的 PR/PO**：一套審核、一套信件與報表；缺點：使用者要換入口、`materials[]` 物流旗標與 PO 如何關聯需另設計、既有叫料資料遷移或並存、工量大（估 3+ 班）。
-**建議先做 (X)，不排斥日後 (Y)**；但要使用者決定。
+## 4. 共用機制 `approval_gate`：**選配的第二階段重構**（裁示）
+- **不阻擋、不綁在一起**：先**各自出貨**——派發（2e，`wip/dispatch-approval-2e`，subcontract）與叫料疊加（本文，case）各寫各的，**沿用既有 `tiered_approval` 原語**，不新增 L1 共用檔。理由：派發尚未動工、兩邊資料形狀不同（資料表 vs 疊加表＋JSON），過早抽象的風險大於收益；而且共用檔屬 L1，需全量班與兩個消費者同步。
+- **為了日後重構「機械式」**：兩邊遵守同一組慣例（寫進兩份設計）：①審核狀態值固定 `''(舊單)／草稿／待審核／簽核中／已核准／已退回`；②`approval_json` 形狀＝既有 tiers 歷程格式；③單號欄 `doc_code`＋`next_entity_code`；④佇列項目鍵（`type／typeLabel／quoteNo／docCode／subject／total／openUrl／approveUrl／rejectUrl／rejectField／caseless`）；⑤信件類型命名 `<doc>_submitted／_next_tier／_approved／_returned`（信內不放金額）；⑥稽核動作 `<owner>.<doc>.<submit|approve|reject|withdraw|cancel>`；⑦「只有閘函式寫狀態」的靜態守門命名 G-D1／G-M1。
+- **何時才抽**：兩邊上線後各自穩定、第三個需求出現時，再抽 `helpers/approval_gate.py`（`GateSubject` 描述＋一致性測試台，見先前提案）；**與 hichan-2e 協調**：若 2e 同意在派發實作時直接寫成 `GateSubject`，叫料班就當第二個消費者（共用檔由派發班落地）；否則維持各自出貨。**【請主持向 2e 確認】**（證據：分層簽核邏輯已手抄約 13 處——`case_extra_expenses.py:740/840/1336/1422`、`completion_notes.py:415/508`、`contractor_vouchers.py:450/551`、`shipping_notes.py:365/469`、`invoice_vouchers.py:507/607`、`payment_requests.py:600/699`、`vouchers.py:687`、`bonus.py:1187/2218`、`quotations.py:539/4880`、`custom_modules.py:1281/1388`、`vendor_contractors.py:760`）。
 
-## 4. 共用機制「審核閘」（**【建議，含風險】**；回答要點 3）
+## 5. 佇列、信件、稽核、金額、測試、工量
+- **佇列**：`approval.queue_items` 新提供者（owner＝case）：`material_order`（叫料）、`material_order_receipt`（到料審核）、`material_payment`（叫料匯款）；`routers/approval_queue.py:203` 的 `_ITEM_TYPE_LABELS` 與 `approval-queue.html` 的 `docTypeLabel` 同步（守門 `test_approval_labels_match` 抓）。
+- **信件**：`mail_types.register`（owner＝case）三組各四種＋個人通知偏好；**信內不放金額**；站內通知照舊。
+- **稽核**：`material_orders.submit／approve／reject／withdraw／cancel`、`material_payment.*`（detail 帶 tier、理由、品名／單號，不含帳號與完整金額）；既有 `material_orders.update／.invoice_date` 保留；寫入端點稽核守門（`tests/test_write_endpoints_are_audited_2026_09_24.py`）涵蓋新端點。
+- **金額可見**：簽核人在佇列看得到金額（共用 `routers/approval_queue.py:302` `_can_see_queue_money`）；沒有財務檢視者沿用 CM13 遮蔽，且**無法建立／送審有金額的叫料列**（`material_orders.py:104`，並補到 `case-record` 路徑）；供應商帳戶不進佇列詳情。
+- **測試（不跑；計畫）**：四個寫入口矩陣（新列強制未核准、直送 `paidStatus=paid` 被拒、整包覆蓋不能蓋掉審核狀態與物流旗標）；狀態逐格；簽核（單層／多層／自簽層／無簽核層／退回重送／撤回）；到料審核與庫存認領時機；匯款申請（額度鎖、舊單、差額審核、`mark_paid` 唯一寫入點）；出納提供者（列出／登錄後消失／反向控制＝移除模組）；報表三態與總帳（核准或舊單才產生 E12）；**`case-record` 後門關閉**（有財務檢視的成員送 `materialOrders` 差異被拒並回 `rejected[]`）。
+- **守門**：G-M1；`approval labels match`；`case_read_scope`（新端點帶案件號）；頁面守門（前端動到時）。
+- **突變（固定守門題，比照 G5，每項含正向控制）**：拿掉四個入口任一的 guard 呼叫、guard 放行新列帶 `paid`、`mark_paid` 以外的路徑可寫 `paid*`、疊加表不影響報表、`gl_events` 不看核准、`orderItemId` 閘拿掉、雜湊比對拿掉、自簽檢查拿掉、庫存認領不看到料審核。
+- **e2e（瀏覽器＋截圖）**：新增叫料（核准前「已叫料」「已付」disabled）→送審→簽核人核准→連結物流項目標已叫料→勾已到料→到料審核通過→序號認領→開叫料匯款申請→簽核→出納登錄付款→報表與總帳數字；反向：API 直送 `paidStatus=paid`／`case-record` 直改 ⇒ 被拒；退回→修改→再送；核准後改金額 ⇒ 待重新送審；舊單徽章；金額遮蔽帳號。
+- **工量（粗估，【推論】）**：疊加表＋閘＋四入口＋佇列／信件／稽核（後端）約 **2 班**；物流旗標與連結（`orderItemId`）、庫存時機、前端徽章／按鈕／供應商欄約 **1 班**；叫料匯款申請（表、簽核、出納提供者、`mark_paid` 同步）約 **1～1.5 班**；測試＋e2e＋突變約 **1 班**；合計約 **5～5.5 班**。層級：case（L2）＋前端；arap 出納**不改**（走既有名稱空間）⇒ **全量班**；不動 L0、**不新增 L1 共用檔**（`approval_gate` 為選配第二階段）。
 
-**證據：同一套分層簽核邏輯已被手抄約 13 處**（`setting_to_active_tiers`／`sign_first_pending` 在 `case_extra_expenses.py:740/840/1336/1422`、`completion_notes.py:415/508`、`contractor_vouchers.py:450/551`、`shipping_notes.py:365/469`、`invoice_vouchers.py:507/607`、`payment_requests.py:600/699`、`vouchers.py:687`、`bonus.py:1187/2218`、`quotations.py:539/4880`、`custom_modules.py:1281/1388`、`vendor_contractors.py:760`）。派發與叫料是第 14、15 份——這就是該抽共用的時機。
+## 6. 尚待使用者回答（只列裁示與派發決定都沒回答的；共 6 題）
+1. **付款款別與分期**：派發的匯款申請有「訂金／進度／完工／驗收」款別與自動算稅（派發設計附錄 A，使用者尚在回答）。叫料匯款要**同樣的款別**嗎？還是一張叫料單一張匯款申請（全額）、需要分期時再開多張？是否允許部分付款（目前 `partial` 狀態）？
+2. **供應商與收款帳戶**：叫料單現在沒有供應商欄位。建議新增 `supplierId`（連到供應商主檔）並在開匯款申請時必填；使用者的供應商主檔目前有沒有維護銀行帳戶？沒有的話是否在匯款申請時臨時填（比照 A2 的收款人帳號）？
+3. **到料審核要不要真的另走一次簽核**：本設計依派發「完工也要審」的原則設為第二階段（同一條簽核鏈）。使用者是否同意，還是到料只需要「勾選時要有已核准的叫料單」＋職責分離（勾的人≠建單者）就好？
+4. **沒有金額列的物流項目**（客供料、庫存領用、免採購的料）：既然「ordered／arrived 只能對著已核准的叫料單勾」，這類料怎麼辦？(a) 一律不能勾（要建一張金額為 0 的叫料單走審核）；(b) 允許標註「客供／庫存領用」類別免連結；請選。
+5. **上線後既有未付的叫料列**（舊單，沒有核准疊加列）：付款是 (a) 一律走新的叫料匯款申請（舊單免叫料核准，但付款要申請＋簽核＋出納）；(b) 仍可用舊的「登記已付」直到結清。已付的歷史不動。建議 (a)（否則舊路徑就是永久後門）。
+6. **後門關閉的呈現方式**：`case-record` 存檔時叫料／物流旗標的差異被拒，建議「其餘欄位照存、被拒的逐項在回應與畫面提示」（不整筆拒絕）。使用者是否接受，還是比照款項期別「整筆拒絕」？
 
-### 4.1 建議形狀：`helpers/approval_gate.py`（L1）＋「受審單位描述」
+## 7. 唯讀盤點查詢（給使用者在正式機自己執行；**不連線、不寫入**；以 `sqlite3 -readonly` 或「唯讀」開啟資料庫檔）
+目的：看影響面，以及誰「不是經叫料專屬端點」建立／修改叫料（後門依賴的線索；稽核表只記到動作層級，無法精確證明，僅作線索）。
+```sql
+-- A. 叫料列總覽：案件數、列數、金額、已付
+SELECT COUNT(DISTINCT q.quote_no) AS cases, COUNT(*) AS rows_,
+       ROUND(SUM(COALESCE(json_extract(m.value,'$.totalPrice'),0))) AS total_amount,
+       ROUND(SUM(COALESCE(json_extract(m.value,'$.paidAmount'),0))) AS paid_amount
+FROM quotations q, json_each(COALESCE(json_extract(q.data_json,'$.caseRecord.materialOrders'),'[]')) m;
+
+SELECT json_extract(m.value,'$.paidStatus') AS paid_status, COUNT(*) AS n
+FROM quotations q, json_each(COALESCE(json_extract(q.data_json,'$.caseRecord.materialOrders'),'[]')) m GROUP BY 1;
+
+-- B. 有叫料列、但稽核表從沒有「專屬端點」更新紀錄的案件（線索：叫料可能是經案件存檔或報價單存檔寫入）
+SELECT q.quote_no,
+       json_array_length(COALESCE(json_extract(q.data_json,'$.caseRecord.materialOrders'),'[]')) AS n_rows,
+       (SELECT COUNT(*) FROM audit_log a WHERE a.action='material_orders.update' AND a.target_id=q.quote_no) AS via_endpoint
+FROM quotations q
+WHERE json_array_length(COALESCE(json_extract(q.data_json,'$.caseRecord.materialOrders'),'[]')) > 0
+ORDER BY via_endpoint, n_rows DESC;
+
+-- C. 誰用過專屬端點；以及誰存過案件記錄（後門的潛在使用者，範圍很大，僅看分布）
+SELECT username, COUNT(*) AS n, MIN(at) AS first_at, MAX(at) AS last_at FROM audit_log
+WHERE action IN ('material_orders.update','material_orders.invoice_date') GROUP BY username;
+SELECT username, COUNT(*) AS n FROM audit_log WHERE action='case.update' GROUP BY username ORDER BY n DESC LIMIT 30;
+
+-- D. 物流旗標現況：已叫料／已到料筆數（目前沒有任何連結鍵，全部都「沒連結」）
+SELECT SUM(COALESCE(json_extract(m.value,'$.ordered'),0)) AS ordered, SUM(COALESCE(json_extract(m.value,'$.arrived'),0)) AS arrived, COUNT(*) AS items
+FROM quotations q, json_each(COALESCE(json_extract(q.data_json,'$.caseRecord.materials'),'[]')) m;
 ```
-class GateSubject:                       # 每種單據一個，只描述「怎麼讀寫」，不含簽核邏輯
-    doc_type            # 已 register_doc_type 的代碼（'contractor_dispatch'／'material_order'）
-    label, code_prefix  # 「承攬商派發」DP-／「叫料」MO-
-    load(conn, key, lock)            -> row（含 approval 狀態、擁有者、案件、金額摘要）
-    save_approval(conn, key, status, approval_json, ...)    # 寫自己的疊加欄位／表
-    can_submit(user, row) / can_cancel(user, row)           # 派發與叫料的 submit/cancel 規則（使用者已決定）
-    summary(row) -> {subject, total, caseNo, docCode}       # 佇列、稽核、信件用
-    on_transition(conn, row, old, new, user)                # 狀態變更後的掛鉤（例：核准後放行作業狀態）
-```
-提供：`submit／approve／reject／withdraw`（內部用 `tiered_approval` 既有原語：`resolve_active_flow_setting`、`setting_to_active_tiers`、`check_approve_permission`、`cascade_self_tiers`、`sign_first_pending`、`check_no_tier_self_approval`，**不改它們**）、`gate_state(row)`（回 `legacy／draft／pending／approved／returned`，供下游「只算核准或舊單」的統一判斷）、`queue_items(subject, user)`（`approval.queue_items` 提供者的共用實作）、信件類型批次登記（`mail_types.register`，信內不放金額）、稽核動作命名 `<owner>.<doc>.<submit|approve|reject|withdraw>`。
-- 配套「**一致性測試台**」：給任何 `GateSubject` 跑同一組情境矩陣（單層／多層／自簽層／沒設簽核層＝直接核准／退回重送／撤回／不能自己簽自己／舊單／重複核准冪等／權限矩陣）。**第三、第四個需求只要寫 Subject＋通過測試台**。
+**【未驗】** 這些查詢我沒有執行（沒有資料庫、也不跑測試）；欄位名稱取自程式（`audit_log.action／target_id／username／at`、`quotations.data_json`），上線前請先在開發庫上確認語法。
 
-### 4.2 風險（誠實列出）
-1. **L1 改動 ⇒ 全量班**（動 `helpers/`＝底層；列車全量＋預演）。派發本來也要全量（subcontract＋mail_types＋前端），多出的是新 L1 檔，**不改既有 L1 檔** ⇒ 對既有行為零影響（加法）。
-2. **兩個消費者同班上線**：若同時做、同時改共用抽象，容易互相牽制。建議**先從派發實作抽出**（派發是第一個、已有設計），叫料是第二個使用者；共用檔由派發班落地，叫料班只寫 Subject。**這與派發設計（尚未動工）需要 2e 同意**。
-3. **不要一次把既有 13 處遷移進來**——只服務新單據；既有單據保持原樣（遷移是另案、逐個有回歸風險）。
-4. **抽象過早**：兩個消費者（派發＝資料表、叫料＝疊加表＋JSON）差異不小；`GateSubject` 的 `load／save_approval` 要夠薄。若兩邊寫完發現沒什麼可共用，退回「共用工具函式（佇列與信件的樣板）」而不是框架。
-5. **簽核設定頁**：兩種新單據類型都要 `register_doc_type`（`tiered_approval.py:86`，A2 已示範），預設是否跟統一流程（**【問 6】**）。
+## 8. 狀態：已裁示、可開工（等 §6 六題中影響範圍的回答）
+- **可立刻開工、不受 §6 影響**：疊加表與 migration、`material_orders_guard` 與四個寫入口、`case-record` 後門關閉（§3.3）、叫料核准階段（含佇列／信件／稽核）、報表與總帳閘（§3.5）、靜態守門與突變。
+- **等回答**：問 1（款別與分期）、問 2（供應商欄位）、問 5（舊單付款路徑）⇒ 影響「叫料匯款申請」；問 3（到料審核）⇒ 影響階段二；問 4（無金額列物流項目）⇒ 影響 `orderItemId` 閘的例外；問 6 ⇒ 影響 `case-record` 回應格式。
+- 與派發的接點：派發設計仍有附錄 A（款別）待使用者回答；叫料匯款若採同樣款別，**共用「計算稅額與比例」的函式**宜與派發一起設計（由 2e 與本案共同決定）。
 
-## 5. 佇列、信件、稽核、金額可見、測試、工量（回答要點 4、5）
-
-### 5.1 佇列／信件／稽核／金額
-- **佇列**：新增 `approval.queue_items` 提供者（owner＝case）：`type:"material_order"`、`typeLabel:"叫料"`（到料階段 `"到料審核"`）、`quoteNo`、`docCode`（MO-…）、`subject`（品名＋案件名）、`total`、`openUrl`＝案件管理頁該叫料列、`approveUrl／rejectUrl`、`rejectField`＝`reason`。`routers/approval_queue.py:_ITEM_TYPE_LABELS`（`:203`）與簽核佇列頁 `docTypeLabel`（`approval-queue.html`）兩邊要同步（守門 `test_approval_labels_match` 會抓）。
-- **信件**：`mail_types.register`（owner＝case）四種＋個人通知偏好：`material_submitted／_next_tier／_approved／_returned`；**信內不放金額**；站內通知照舊。
-- **稽核**：`material_orders.submit／approve／reject／withdraw／cancel`（detail 帶 tier、理由、品名／單號，**不含帳號與完整金額**）；既有 `material_orders.update` 與 `.invoice_date` 保留。**靜態守門**：寫入端點必有稽核（既有 `tests/test_write_endpoints_are_audited_2026_09_24.py` 涵蓋新端點）。
-- **金額可見**：簽核人在佇列看得到金額（共用 `routers/approval_queue.py:302` 的 `_can_see_queue_money`，與憑證流規則一致）；沒有財務檢視的帳號沿用 CM13 遮蔽；佇列詳情不含供應商帳戶資料。**注意**：沒有財務檢視權的案件成員**無法**建立／送審有金額的叫料列（`material_orders.py:104` 已擋，且 `case-record` 路徑要補同樣的拒絕，見 3.3）。
-
-### 5.2 測試／守門／突變（不跑；列計畫）
-- **API**：寫入口矩陣（三個入口各自：新列強制未核准、`paidStatus=paid` 被拒、整包覆蓋不能蓋掉審核狀態）；狀態轉換逐格；簽核流程（單層／多層／自簽層／無簽核層／退回重送／撤回）；階段 2（到料）；舊單寬限（無疊加列＝照舊、實質編輯後要求送審）；報表三態（草稿與退回不計、待審核計入並標示、核准正常）；`gl_events` 只對核准或舊單產生 E12／E12b；`_sync_device_stock` 在 `arrived` 未核准時不認領序號。
-- **守門**：G-M1（只有 `material_orders_guard` 寫叫料）；`approval_gate` 一致性測試台；`approval labels match`；`case_read_scope`（新端點帶案件號）；頁面路徑／alpine 守門若動到前端。
-- **突變（固定守門題，比照 G5）**：拿掉三個入口任一的 guard 呼叫、guard 放行新列帶 `paid`、疊加表不影響報表、`gl_events` 不看核准、雜湊比對拿掉、自簽檢查拿掉；每項需有正向控制。
-- **e2e（瀏覽器＋截圖）**：新增叫料（核准前「已叫料」「已付」disabled）→ 送審 → 簽核人在佇列核准 → 標已叫料 → 到料送審 → 核准 → 登載序號；反向：API 直送 `paidStatus=paid` ⇒ 400；退回→修改→再送；核准後改金額 ⇒ 待重新送審；舊單徽章；金額遮蔽帳號行為。
-- **工量（粗估，【推論】）**：(X) 方案——後端（migration、`approval_gate`＋`GateSubject`、三入口 guard、提供者、閘到報表／總帳／庫存／首頁）**1.5～2 班**；前端（叫料列徽章與按鈕、物流旗標受閘、佇列文字）**0.5～1 班**；測試＋e2e＋突變＋守門 **1 班**；合計約 **3～4 班**，其中「共用審核閘」若由派發班先落地則叫料班少 ~0.5 班。層級：case 模組（L2）＋L1 `helpers/approval_gate.py`／`mail_types`／`register_doc_type`＋前端 ⇒ **全量班**；不動 L0。(Y) 方案 3+ 班且需另案設計。
-
-## 6. 待使用者裁示（**只列派發決定沒有回答的**）
-派發已決定的（不再問）：分層簽核（部門主管→組織鏈→最高管理者；無簽核層＝自動核准；不能自核）；建立與完成兩個步驟都要審；既有進行中資料寬限（舊單徽章、實質編輯後重新送審）；報表（草稿／退回不計、待審核計入並標示）；送審者＝創建者／負責人／協作者／admin 以上；已核准取消＝admin 以上加理由；單號格式。
-
-1. **審核對象是哪一份？** (a)「叫料」金額列 `materialOrders`（建議，§3.0）；(b)「叫料管控」物流 `materials[]`（沒有金額）；(c) 兩份都要，並**把兩份關聯起來**（物流項目指向金額列）。目前兩者互不相連，使用者平常是只用物流那份、還是兩份都填？
-2. **要不要強制兩份關聯？** 建議：標「已叫料」之前必須先有一筆已核准的叫料單。使用者是否接受「沒有金額列就不能標已叫料」？（會改變只用物流頁、不填財務頁的人的工作方式。）
-3. **叫料的「完成」是哪一步要審？** 候選：到料（`arrived`，建議）、已付、發票日登錄；或「到料」審核後才能登載序號並認領庫存？
-4. **付款**：目前「已付」只是登記、沒有出納流程。維持登記（加「已核准才能登記」）？還是改走付款申請＋出納（較大）？
-5. **是否改走 A2 的請購單／採購單**（§3.6 方案 Y）？若是，現有叫料畫面如何處理？
-6. **簽核設定**：叫料審核預設跟「統一流程」，還是獨立流程？要不要金額門檻（小額免審）與門檻金額？（派發若已有門檻決定可沿用；目前派發設計把門檻列為待問。）
-7. **到料審核的審核人**：與叫料核准同一條鏈，還是由「案件執行負責人／倉管」到料確認即可（不走多層）？
-8. **沒有財務檢視權的案件成員**今天可經 `case-record` 改叫料（金額遮蔽帳號會被蓋回現值，有財務檢視者不會）。上線後這條一律關閉（建議）；是否有人依賴它？
-9. **舊資料盤點**：上線前要不要唯讀盤點正式機現有叫料列數、已付金額總計、涉及案件數，讓使用者看影響面？
-10. **叫料單號**：用 `MO-YYYYMMDD-NNNN`？到料審核是否另開單號（建議同號、兩階段）？
-
-## 7. 與派發設計的對照（只列差異）
+## 9. 與派發設計的差異（只列差異）
 | 項目 | 派發 | 叫料（本文） |
 |---|---|---|
-| 資料位置 | 資料表 `contractor_dispatches` | `data_json` 陣列（無表）⇒ 加疊加表 |
+| 資料位置 | 資料表 `contractor_dispatches`（加欄位） | `data_json` 陣列 ⇒ **疊加審核表**（無疊加列＝舊單） |
 | 現有狀態機 | 有（`/accept`） | 無（兩個布林＋`paidStatus`） |
-| 洞 | `POST／PUT` 寫 `status` | **`case-record` 整包覆蓋**＋`material-orders` PATCH 可直接標已付 |
-| 付款閘 | 有（匯款申請） | **無**（需另決定，問 4） |
-| 庫存 | 無 | `arrived`＋序號 ⇒ 認領庫存序號 |
-| 舊單 | 欄位 `''` | 無疊加列＝舊單 |
-| 共用機制 | 第一個使用者 | 第二個使用者 |
+| 洞 | `POST／PUT` 寫 `status` | **`case-record` 整包覆蓋**＋`material-orders` 可直接標已付 ⇒ 四個入口一律過閘 |
+| 付款閘 | 已有（匯款申請） | **新建**（叫料匯款申請＋出納，走 IP-100／IP-102 現成名稱空間） |
+| 庫存 | 無 | 到料審核通過才認領序號 |
+| 共用機制 | — | 各自出貨，慣例對齊，`approval_gate` 為選配第二階段 |
 
-## 8. 不做（本期）
-金額門檻分流的複雜規則、跨案件批次送審、叫料範本、行動版簽核、把既有 13 處簽核遷入 `approval_gate`、(Y) 方案的資料遷移。
+## 10. 不做（本期）
+金額門檻分流、跨案件批次送審、叫料範本、行動版簽核、把既有 13 處簽核遷入共用閘、改走 A2 請購／採購單（方案 Y，已裁示不採）。
