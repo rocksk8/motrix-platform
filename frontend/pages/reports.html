@@ -1940,6 +1940,16 @@
                         <template x-for="(v, k) in m.income.buckets" :key="'i' + k"><span x-show="v" style="margin-right:8px" x-text="bucketLabel(k) + ' ' + fmt(v)"></span></template>
                         <span style="margin-left:10px">支出：</span>
                         <template x-for="(v, k) in m.expense.buckets" :key="'e' + k"><span x-show="v" style="margin-right:8px" x-text="bucketLabel(k) + ' ' + fmt(v)"></span></template>
+                        <!-- 類別層級（承攬商／設備／料件／其他）：差額＝各桶加總＋其餘；只列有差額的類別 -->
+                        <div style="margin:3px 0 0 14px;color:var(--text-secondary)" :data-cat-buckets="m.month">
+                          <template x-for="(cat, ck) in (m.expense.categories || {})" :key="'c' + ck">
+                            <div x-show="cat.diff" :data-cat="ck" style="margin-bottom:2px">
+                              <b x-text="cat.label"></b>
+                              <span x-text="'　報表 ' + fmt(cat.report) + '　總帳 ' + fmt(cat.gl) + '　差額 ' + fmt(cat.diff) + '：'"></span>
+                              <template x-for="(cv, cb) in (cat.buckets || {})" :key="'cb' + ck + cb"><span x-show="cv" style="margin-right:8px" :data-bucket="cb" x-text="bucketLabel(cb) + ' ' + fmt(cv)"></span></template>
+                            </div>
+                          </template>
+                        </div>
                       </div>
                     </template>
                   </div>
@@ -2350,7 +2360,7 @@ function glDiffPanel() {
     glDiffYear: new Date().getFullYear(), glDiffBasis: 'cash',
     _tok() { try { return (JSON.parse(localStorage.getItem('motrix_session') || '{}')).token || '' } catch (e) { return '' } },
     bucketLabel(k) {
-      return { unposted: '總帳未過帳草稿', tax: '稅額（報表含稅）', manual: '手工傳票', bonus: '獎金傳票', residual: '其餘（口徑／時點）' }[k] || k
+      return { unposted: '總帳未過帳草稿', tax: '稅額（報表含稅）', individual: '個人外包（報表算承攬商、總帳記其他）', manual: '手工傳票', bonus: '獎金傳票', residual: '其餘（口徑／時點）' }[k] || k
     },
     async load() {
       this.glDiffLoading = true
