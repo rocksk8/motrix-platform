@@ -77,6 +77,21 @@ _READ_RULE = {"extra_expense": case_owner_readable,
               "material": case_page_readable, "material_invoice": case_page_readable}
 
 
+def _typed_expense_masked(conn, doc_no, user) -> bool:
+    """費用單據（kind≠''）的金額遮蔽（使用者 2026-10-01：只有申請人、簽核人、出納／財務、管理員以上看得到金額）：
+    案件的一般讀者讀不到它的附件（發票／收據影像與檔名就是金額）。舊版額外支出（kind=''）不受影響。
+    開檔（`files`）、路徑存取（`_CasePathAccess`）、搜尋／計數（P3）三處共用這一支，避免「搜得到卻開不了」或反過來。"""
+    try:
+        eid = int(doc_no)
+    except (TypeError, ValueError):
+        return False
+    row = conn.execute("SELECT * FROM case_extra_expenses WHERE id = ?", (eid,)).fetchone()
+    if row is None or not (row["kind"] or ""):
+        return False
+    from modules.case.api import case_extra_expenses as _xe          # 延後載入：避免 import 循環
+    return not _xe._amount_viewer(conn, row, user)
+
+
 def _require_readable(conn, source_type, quote_no, user):
     if not _READ_RULE.get(source_type, case_documents_readable)(conn, quote_no, user):
         raise AttachmentNotVisible()
@@ -113,6 +128,8 @@ class _CaseAttachments:
         if quote_no is None or conn.execute("SELECT 1 FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone() is None:
             return []                                     # 來源不存在（契約：[]）
         _require_readable(conn, source_type, quote_no, user)
+        if source_type == "extra_expense" and _typed_expense_masked(conn, doc_no, user):
+            raise AttachmentNotVisible()                  # 費用單據的附件＝金額：非申請人／簽核人／出納財務／管理員看不到
         return _read(conn, source_type, doc_no)
 
 
@@ -219,6 +236,8 @@ class _CasePathAccess:
             if eid is None or conn.execute("SELECT 1 FROM case_extra_expenses WHERE id = ? AND quote_no = ?",
                                            (eid, quote_no)).fetchone() is None:
                 return False
+            if _typed_expense_masked(conn, eid, user):
+                return False                              # 費用單據的附件＝金額（同 `_CaseAttachments.files`）
         else:
             return False
         return bool(_READ_RULE.get(st, case_documents_readable)(conn, quote_no, user))
@@ -339,6 +358,8 @@ class _CaseCatalog:
                 except AttachmentSourceError:
                     continue                                   # 壞資料：搜尋略過（開檔端點會說出原因）
                 for d in docs:
+                    if st == "extra_expense" and _typed_expense_masked(conn, d, user):
+                        continue                           # 與 open() 同一道：費用單據的附件對遮蔽金額的人不列、不計數
                     try:
                         files = _read(conn, st, d)
                     except AttachmentSourceError:

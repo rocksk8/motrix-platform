@@ -265,3 +265,39 @@ def test_work_log_photo_search_equals_open_for_every_user_and_hides_gps(client, 
         c.close()
     ids = {i["fileId"] for i in _search(client, H["ct_admin"], quote_no=Q, types="work_log_photo", size=50).json()["items"]}
     assert pid in ids and "forged1" not in ids
+
+
+# ── 費用單據（kind≠''）的附件＝金額：案件的一般讀者（業務）看不到；舊版額外支出不受影響 ──────────────────────
+
+def _make_expense(client, h, kind):
+    body = {"description": "舊式" if not kind else "", "category": "差旅", "qty": 1, "unitCost": 100}
+    if kind:
+        body.update({"kind": kind, "data": {"applicant": "ct_admin"}, "lines": [{"category": "差旅", "summary": "高鐵", "amount": 4321}]})
+    r = client.post(f"/api/quotations/{Q}/extra-expenses", headers=h, json=body)
+    assert r.status_code == 201, r.text
+    eid = r.json()["id"]
+    f = client.post(f"/api/quotations/{Q}/extra-expenses/{eid}/files", headers=h, files=[("files", ("receipt-4321.png", PNG, "image/png"))],
+                    data={"kind": "invoice"})
+    assert f.status_code == 201, f.text
+    return eid, f.json()["files"][-1]["id"]
+
+
+def test_typed_expense_attachments_are_hidden_from_ordinary_case_readers_but_legacy_ones_are_not(client, world):
+    H, _, _ = world
+    typed, tfid = _make_expense(client, H["ct_admin"], "travel")
+    legacy, lfid = _make_expense(client, H["ct_admin"], "")
+    owner = H["ct_owner"]                                                                  # 該案業務：案件讀者，但不是申請人／簽核人
+    names = lambda h: {i["filename"] for i in _search(client, h, quote_no=Q, types="extra_expense", size=50).json()["items"]}
+    # 舊版額外支出：維持原行為（案件讀者看得到、打得開）
+    assert _open(client, owner, "extra_expense", str(legacy), lfid).status_code == 200
+    assert "receipt-4321.png" in names(owner)
+    # 費用單據：業務不列、不計數、打不開、檔名不外露
+    body = _search(client, owner, quote_no=Q, types="extra_expense", size=50).json()
+    assert _open(client, owner, "extra_expense", str(typed), tfid).status_code == 404
+    typed_items = [i for i in body["items"] if i["docNo"] == str(typed)]
+    assert typed_items == [], typed_items
+    allc = _search(client, owner, quote_no=Q, size=50).json()
+    assert allc["facets"]["byType"].get("extra_expense", 0) == 1, allc["facets"]["byType"]        # 只剩舊式那一筆（不洩漏費用單據的存在）
+    # 正對照：申請人／管理員打得開也列得出來
+    assert _open(client, H["ct_admin"], "extra_expense", str(typed), tfid).status_code == 200
+    assert any(i["docNo"] == str(typed) for i in _search(client, H["ct_admin"], quote_no=Q, types="extra_expense", size=50).json()["items"])
