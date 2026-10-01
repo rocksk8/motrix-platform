@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-10-01（暫用號，列車取號；fix/contractor-bank-mask-2）
+- 勞報單頁（`payslip-form.html`）從外包名冊挑人時不再帶入遮蔽的帳號（`****末四碼`，非最高管理者從名冊拿到的值），避免存成假帳號；留空由有權限者補。勞報單 API／PDF 的帳號遮蔽仍在 TRAIN31 backlog。
+
 ## (next) — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
 - 附件目錄 P3：`_PayrollCatalog` 加 `search`／`count`（勞報單簽回檔；權限＝最高管理者或出納模組，不符一筆都不列）。
 
