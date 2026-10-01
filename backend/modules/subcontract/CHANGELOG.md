@@ -1,5 +1,13 @@
 # 外包工班 更新紀錄
 
+## (next:minor) — 2026-10-01 23:40（wip/t31-dispatch-approval-2e）：承攬商派發兩段審核（31-A）
+- 新增：派發審核（第一段）與完工審核（第二段）——`POST /api/contractor-dispatches/{id}/submit|approve|reject|withdraw` 與 `.../completion/request|approve|reject|withdraw`；分層簽核重用 `helpers/tiered_approval`，簽核類型 `contractor_dispatch`（預設跟統一流程），沒設簽核層＝送審即核准；核准當下釘住實質欄位雜湊（`approved_hash`），之後改承攬商／品項／人員／稅率要重新送審。
+- 新增：作業狀態唯一寫入口 `dispatch_flow.set_status`（靜態守門 G-D1：模組內只准它寫 `contractor_dispatches.status`）；建立一律 draft（忽略 body.status）、編輯不能改狀態、`completed` 只能由完工審核通過設定（舊單也要）、確認驗收人≠建立者（最高管理者例外並標註）、取消已核准或已進入驗收者要理由、已有匯款申請者只有最高管理者可取消、審核中不可編輯／刪除。新端點 `POST /api/contractor-dispatches/{id}/status`（卡片操作按鈕）。
+- 新增：migration 0003（只加不改：15 欄與 `idx_dispatch_doc_code`／`idx_dispatch_approval`；既有列 `approval_status=''`＝舊單，不補審、行為照舊）；派發單號 `DP-YYYYMMDD-NNNN`。
+- 新增：簽核佇列（`contractor_dispatch`／`contractor_dispatch_completion` 兩種 type，單號＝doc_code）、詳情、轉簽提供者；八種信件類型（`dispatch_*`，owner＝subcontract，信內不放金額）；稽核 `vendor.dispatch.<submit|approve|reject|withdraw|…>`。
+- 修正（下游閘）：匯款申請另要求派發已核准（舊單照舊；既有「已驗收／完工」閘不變）；總帳 E04 只取已核准與舊單；成本檢視 `dispatch.cost_for_case` 與營運報表同一條規則（已取消／草稿／已退回不計，待審核／簽核中計入並標 `approvalPending`）。
+- `dispatch.row`（IP-1）只新增鍵：`approvalStatus`／`completionStatus`／`docCode`／`legacy`／`displayStatus` 等。
+
 ## 1.0.39 — 2026-10-01（暫用號，列車取號；fix/contractor-bank-mask-2：外包名冊帳號遮蔽更正）
 - 見下方前一筆的「更正」：外包名冊（`/api/contractors*`）列表／詳情／存簿影本端點（`/id-card`）／匯出一律對非最高管理者遮蔽 `****末四碼`；編輯（PUT）與匯入遇遮蔽值保留原帳號。測試 `test_contractor_roster_bank_mask_2026_10_01.py`、`test_e2e_bank_mask_roster_page_2026_10_01.py`（含反向控制）。
 
