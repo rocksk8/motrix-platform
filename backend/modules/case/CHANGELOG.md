@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-02 00:59（fix/t31-build-2e）：案件頁承攬商卡片字級
+- 派發卡片的「舊單」徽章與單號字級由 10px 改 11px（案件頁字級下限）。
+
 ## 1.0.63 — 2026-10-01（暫用號，列車取號；wip/t31-builder-b-c7：稽核補洞）
 - `set_extra_expense_dates` 文件對齊（第 29 班稽核 O2）：出納也要看得到該案（`_guard_case`），沒有案件讀權的出納得 404；行為不變。補測試 `test_expense_visibility_gaps_2026_10_01.py`（`_caseless_visible` 對未知使用者 fail-closed、舊版額外支出附件對無案件權限者隱藏）。
 

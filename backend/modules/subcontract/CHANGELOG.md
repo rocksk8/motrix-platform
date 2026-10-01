@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-02 00:59（fix/t31-build-2e）：派發審核的稽核包裝函式改名
+- 內部：兩段審核端點共用的 `do_*` 改名 `dispatch_review_submit／approve／reject／withdraw`、`_apply_status` 改名 `dispatch_status_audited`（名稱登記進寫入端點稽核掃描器的 AUDIT_WRAPPERS，需全域唯一）；行為不變。
+
 ## 1.1.1 — 2026-10-01（wip/t31-payslip-mask-a3：稽核 G1／G2）
 - `bank_mask.keep_if_masked` 刪除（死碼：各端點直接用 `is_masked_value`，沒有呼叫者）；匯款申請 PDF 補「PDF 文字層級」遮蔽測試（pypdf 抽文字；突變 `mask_bank=False` 會紅）。
 
