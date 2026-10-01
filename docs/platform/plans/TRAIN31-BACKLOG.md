@@ -7,3 +7,19 @@
 1. **勞報單（payslip，payroll）乙方帳號**：`GET /api/payslips*` 回傳乙方 `bankAccountNumber`／存簿影本；勞報單 PDF（`pdf_gen._build_payslip_html`／`_payslip_passbook_html`、`generate_payslip_pdf_bytes`）印完整帳號與存簿影本頁。做法比照 `modules/subcontract/bank_mask.py`（`****末四碼`、存簿影本只給最高管理者、編輯時遮蔽值保留原值）。注意勞報單簽回流程與出納付款是否依賴完整帳號。
 2. **核准後伺服器端存檔的匯款申請 PDF**：`pdf_gen._generate_contractor_voucher_pdf`（背景產生、寫入 `_get_contractor_voucher_pdf_base()` 資料夾，內含完整帳號與存簿影本，稽核留存副本）。需決定：存檔副本是否也遮蔽，或限制該資料夾的讀取權限（目前非使用者端點可達，但備份會帶走）。
 3. 驗收：兩處都加「一般管理員遮蔽／最高管理者完整」測試與反向控制；`test_approval_providers` 類既有正對照改最高管理者。
+
+## 第 31 班主軸（使用者 2026-10-01：以下為主要功能）
+
+| 項目 | 現況 | 前置 |
+|---|---|---|
+| 固定資產 C6 | `wip/w4-gl-c6`（16af580e）有實作：卡片、折舊、E13a/E13b、對帳、API、頁籤；基底舊、未跑完整閘門 | rebase 到 platform；跑 pre_train_check |
+| 建構器分頁掛載 B | 規格 `BUILDER-ATTACH-EXISTING-MODULE-SPEC.md`；需 module.json 掛載點宣告＋權限 | 使用者定先掛哪頁（建議「我的工作」） |
+| 401 媒體檔（附件六 112 欄） | 規格已查：`TAX401-RESEARCH-20261001.md`（注意附件五＝進銷項明細、附件七＝縣市代碼，舊文件寫反） | 公司登記資料（稅籍編號等） |
+| 401 公式 113–115 | 僅有 403 表轉載推定，**未經會計確認** | 會計師對照 401 實際表單確認＋取整＋108 取 115 或 112 |
+| 總帳開帳 | 程式面等期初資料 | 會計師期初試算表 |
+
+## 其他待辦
+- 時鐘守門 `wip/clock-gates-2`（596f9ae0）：先修 4 個檔的收集期日期呼叫（analytics test_e2e_ledger_diff_tab、case test_expense_forms／test_expense_void、tests/test_e2e_expense_chain_a2）再收。
+- 登入「待簽核」通知：其他單據流程（出貨、付款、發票、承攬、完工、額外支出、自訂模組）簽核後仍未把自己的通知標已讀（彈窗已免疫，僅通知中心未讀數）。
+- 時鐘守門、去識別化 prodroot（wip/w3-prodroot-2）、`/api/expenses` 別名（可選）。
+- 殘留風險：結算頁信任前端送來的合計；`users.email/phone` 不在個資備份。
