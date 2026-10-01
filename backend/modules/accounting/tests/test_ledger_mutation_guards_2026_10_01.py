@@ -15,7 +15,11 @@ from pathlib import Path
 
 import pytest
 
-BACKEND = Path(__file__).resolve().parents[2]
+# 突變的對象檔在這裡 import：模組測試選題（modtest／test_map）靠 import 連結「改了哪個檔 ⇒ 跑哪些題」；不 import 就不會在改到這些檔時被選到。
+from modules.accounting.api import ledger_category_map  # noqa: F401
+from modules.accounting.ledger import category_map, contract, engine  # noqa: F401
+
+BACKEND = Path(__file__).resolve().parents[3]
 DETECTORS = [
     "modules/accounting/tests/test_category_map_g1_2026_10_01.py",
     "modules/accounting/tests/test_engine_line_account_code_2026_10_01.py",

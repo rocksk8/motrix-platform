@@ -2093,6 +2093,42 @@
    "login_fixture": true,
    "module": "accounting"
   },
+  "backend/modules/accounting/tests/test_ledger_mutation_guards_2026_10_01.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/ledger_category_map",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/category_map",
+    "mod:accounting/ledger/contract",
+    "mod:accounting/ledger/engine",
+    "mod:accounting/tests/test_category_map_g1_2026_10_01",
+    "mod:accounting/tests/test_engine_line_account_code_2026_10_01"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/ledger_category_map.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/category_map.py",
+     "backend/modules/accounting/ledger/contract.py",
+     "backend/modules/accounting/ledger/engine.py"
+    ],
+    "path": [
+     "backend/modules/accounting/api/ledger_category_map.py",
+     "backend/modules/accounting/ledger/category_map.py",
+     "backend/modules/accounting/ledger/contract.py",
+     "backend/modules/accounting/ledger/engine.py",
+     "backend/modules/accounting/tests/test_category_map_g1_2026_10_01.py",
+     "backend/modules/accounting/tests/test_engine_line_account_code_2026_10_01.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
   "backend/modules/accounting/tests/test_ledger_p1_periods_2026_09_30.py": {
    "kind": "api",
    "units": [
@@ -11566,27 +11602,6 @@
      "backend/helpers/__init__.py",
      "docs/platform/",
      "docs/platform/MODULE-GUIDE.md"
-    ]
-   }
-  },
-  "backend/tests/platform/test_ledger_mutation_guards_2026_10_01.py": {
-   "kind": "audit",
-   "units": [
-    "mod:accounting/api/ledger_category_map",
-    "mod:accounting/ledger/category_map",
-    "mod:accounting/ledger/contract",
-    "mod:accounting/ledger/engine",
-    "mod:accounting/tests/test_category_map_g1_2026_10_01",
-    "mod:accounting/tests/test_engine_line_account_code_2026_10_01"
-   ],
-   "evidence": {
-    "path": [
-     "backend/modules/accounting/api/ledger_category_map.py",
-     "backend/modules/accounting/ledger/category_map.py",
-     "backend/modules/accounting/ledger/contract.py",
-     "backend/modules/accounting/ledger/engine.py",
-     "backend/modules/accounting/tests/test_category_map_g1_2026_10_01.py",
-     "backend/modules/accounting/tests/test_engine_line_account_code_2026_10_01.py"
     ]
    }
   },
