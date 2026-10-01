@@ -53,3 +53,5 @@
 - a3：wip/t31-expense-designer-a3@99e14769（請款類型接線；預設改關閉）。
 - d7：wip/t31-material-d7@73e82a57（31-C 叫料付款/匯款切片完成，含 merge 第30班；PAID_VIA_REMITTANCE_ONLY=True；M1–M18 突變全紅）。整合注意：case CHANGELOG「(next)」需編號、analytics changelog 守門紅（非 d7）。poDocCode/poLine seam 待 2e 設計。
 - a3：wip/t31-expense-designer-a3@fc610fb3（預設舊 UI，?designer=1 開新）；c7：wip/t31-form-designer-c7@3268466c（fixedOptions；待補 modules.json 登記 3 檔）。
+- 請款類型預覽截圖（a3 e0d830c1，docs/platform/plans/expense-types-designer-shots/）發現：(2) 出貨定義 applicant 欄位 help 含術語「把 locked 改成 false」→ 動 helpers/expense_type_defs/*.json 影響 def_version，待使用者裁示措辭；(3) 深色面板標題低對比（頁面原有樣式）。(1) 簽核單據類型「undefined（未登記）」僅顯示修正，a3 處理。
+- 真滑鼠拖放（設計器）需人工瀏覽器驗，列入使用者預覽清單。
