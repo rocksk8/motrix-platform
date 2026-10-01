@@ -1,6 +1,13 @@
 # 外包工班 更新紀錄
 
+<<<<<<< ours
+## 1.1.4 — 2026-10-02 00:59（fix/t31-build-2e）：派發審核的稽核包裝函式改名〔train_number：1.1.2 → 1.1.4〕
+=======
+## 1.1.3 — 2026-10-02 01:08（fix/t31-build2-2e）：派發佇列提供者的 type 寫成字面值
+- `dispatch_approval.queue_items` 呼叫 `_queue_for` 時直接寫 `"contractor_dispatch"`／`"contractor_dispatch_completion"`（原本用常數）：佇列覆蓋檢查是靜態讀提供者原始碼找 type 字面值，用常數會在「模組已載入」的測試順序下紅（單獨跑因為類型尚未登記而假綠）；行為不變。
+
 ## 1.1.2 — 2026-10-02 00:59（fix/t31-build-2e）：派發審核的稽核包裝函式改名
+>>>>>>> theirs
 - 內部：兩段審核端點共用的 `do_*` 改名 `dispatch_review_submit／approve／reject／withdraw`、`_apply_status` 改名 `dispatch_status_audited`（名稱登記進寫入端點稽核掃描器的 AUDIT_WRAPPERS，需全域唯一）；行為不變。
 
 ## 1.1.1 — 2026-10-01（wip/t31-payslip-mask-a3：稽核 G1／G2）
