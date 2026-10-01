@@ -1813,6 +1813,9 @@
     "/api/ledger/annotations",
     "/api/ledger/annotations/",
     "/api/ledger/annotations/pending",
+    "/api/ledger/assets",
+    "/api/ledger/assets/",
+    "/api/ledger/assets/schedule",
     "/api/ledger/engine/batch",
     "/api/ledger/engine/events",
     "/api/ledger/engine/run",
@@ -1834,6 +1837,7 @@
    "path": "frontend/js/ledger-hub.js",
    "routers_called": [
     "mod:accounting/api/ledger_annotations",
+    "mod:accounting/api/ledger_assets",
     "mod:accounting/api/ledger_engine",
     "mod:accounting/api/ledger_settings",
     "mod:accounting/api/ledger_tax"
@@ -2396,6 +2400,7 @@
     "mod:accounting/api/account_items",
     "mod:accounting/api/accounting_export",
     "mod:accounting/api/ledger_annotations",
+    "mod:accounting/api/ledger_assets",
     "mod:accounting/api/ledger_category_map",
     "mod:accounting/api/ledger_closing",
     "mod:accounting/api/ledger_engine",
@@ -2546,6 +2551,7 @@
     "mod:accounting/api/account_items",
     "mod:accounting/api/accounting_export",
     "mod:accounting/api/ledger_annotations",
+    "mod:accounting/api/ledger_assets",
     "mod:accounting/api/ledger_category_map",
     "mod:accounting/api/ledger_closing",
     "mod:accounting/api/ledger_engine",
@@ -2560,6 +2566,7 @@
     "mod:accounting/attachments_catalog",
     "mod:accounting/ledger/auto_run",
     "mod:accounting/ledger/custom_events",
+    "mod:accounting/ledger/fixed_assets",
     "mod:accounting/ledger/month_totals",
     "mod:accounting/ledger/source_status",
     "plat:registry"
@@ -2824,6 +2831,107 @@
     "audit_log",
     "gl_settings",
     "gl_source_annotations",
+    "notifications",
+    "system_settings"
+   ]
+  },
+  "mod:accounting/api/ledger_assets": {
+   "api_prefixes": [
+    "/api/ledger"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:legal_params",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:accounting/ledger/features",
+    "mod:accounting/ledger/fixed_assets"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "mod:accounting/ledger/features",
+    "mod:accounting/ledger/fixed_assets"
+   ],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/api/ledger_assets.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "assets",
+     "line": 41,
+     "method": "GET",
+     "path": "/api/ledger/assets"
+    },
+    {
+     "func": "create_asset",
+     "line": 56,
+     "method": "POST",
+     "path": "/api/ledger/assets"
+    },
+    {
+     "func": "update_asset",
+     "line": 74,
+     "method": "PATCH",
+     "path": "/api/ledger/assets/{asset_id}"
+    },
+    {
+     "func": "activate_asset",
+     "line": 92,
+     "method": "POST",
+     "path": "/api/ledger/assets/{asset_id}/activate"
+    },
+    {
+     "func": "revise_asset",
+     "line": 110,
+     "method": "POST",
+     "path": "/api/ledger/assets/{asset_id}/revision"
+    },
+    {
+     "func": "asset_schedule",
+     "line": 130,
+     "method": "GET",
+     "path": "/api/ledger/assets/schedule"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [
+    "fa_assets"
+   ],
+   "tables_r": [
+    "fa_assets",
+    "fa_categories"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "fa_assets",
+    "fa_categories",
+    "gl_source_events",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users",
+    "voucher_lines",
+    "vouchers_all"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "fa_assets",
+    "fa_categories",
+    "fa_revisions",
+    "gl_settings",
     "notifications",
     "system_settings"
    ]
@@ -4468,6 +4576,30 @@
    "tables_r": [],
    "tables_w": [
     "gl_settings"
+   ]
+  },
+  "mod:accounting/ledger/fixed_assets": {
+   "api_prefixes": [],
+   "dynamic_sql": true,
+   "imports": [
+    "core:db",
+    "helper:legal_params"
+   ],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/ledger/fixed_assets.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "gl_source_events",
+    "voucher_lines",
+    "vouchers_all"
+   ],
+   "tables_w": [
+    "fa_assets",
+    "fa_categories",
+    "fa_revisions"
    ]
   },
   "mod:accounting/ledger/fs_lines": {
@@ -11812,6 +11944,7 @@
    ],
    "routers_called_effective": [
     "mod:accounting/api/ledger_annotations",
+    "mod:accounting/api/ledger_assets",
     "mod:accounting/api/ledger_engine",
     "mod:accounting/api/ledger_settings",
     "mod:accounting/api/ledger_tax",
@@ -17204,12 +17337,18 @@
    "api_prefixes": [],
    "imports": [],
    "kind": "table",
-   "named_by": [],
+   "named_by": [
+    "mod:accounting/api/ledger_assets"
+   ],
    "path": "backend/modules/accounting/migrations/0001_ledger_base.py:148",
-   "readers": [],
+   "readers": [
+    "mod:accounting/api/ledger_assets"
+   ],
    "tables_r": [],
    "tables_w": [],
-   "writers": []
+   "writers": [
+    "mod:accounting/ledger/fixed_assets"
+   ]
   },
   "table:fa_categories": {
    "api_prefixes": [],
@@ -17217,10 +17356,14 @@
    "kind": "table",
    "named_by": [],
    "path": "backend/modules/accounting/migrations/0001_ledger_base.py:144",
-   "readers": [],
+   "readers": [
+    "mod:accounting/api/ledger_assets"
+   ],
    "tables_r": [],
    "tables_w": [],
-   "writers": []
+   "writers": [
+    "mod:accounting/ledger/fixed_assets"
+   ]
   },
   "table:fa_depr_lines": {
    "api_prefixes": [],
@@ -17253,7 +17396,9 @@
    "readers": [],
    "tables_r": [],
    "tables_w": [],
-   "writers": []
+   "writers": [
+    "mod:accounting/ledger/fixed_assets"
+   ]
   },
   "table:gateway_categories": {
    "api_prefixes": [],
@@ -17697,6 +17842,7 @@
    "path": "backend/modules/accounting/migrations/0001_ledger_base.py:77",
    "readers": [
     "mod:accounting/api/ledger_annotations",
+    "mod:accounting/ledger/fixed_assets",
     "mod:accounting/ledger/month_totals",
     "mod:accounting/ledger/source_status",
     "mod:accounting/ledger/tax401",
@@ -18794,6 +18940,7 @@
     "mod:accounting/api/voucher_providers",
     "mod:accounting/ledger/cashflow",
     "mod:accounting/ledger/equity",
+    "mod:accounting/ledger/fixed_assets",
     "mod:accounting/ledger/month_totals",
     "mod:accounting/ledger/periods",
     "mod:accounting/ledger/reports",
@@ -18877,6 +19024,7 @@
     "mod:accounting/attachments_catalog",
     "mod:accounting/ledger/cashflow",
     "mod:accounting/ledger/equity",
+    "mod:accounting/ledger/fixed_assets",
     "mod:accounting/ledger/month_totals",
     "mod:accounting/ledger/periods",
     "mod:accounting/ledger/reports",

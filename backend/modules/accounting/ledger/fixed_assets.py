@@ -133,7 +133,7 @@ def create_asset(conn, b, user):
     try:
         cost = int(b.get("cost"))
         tax = int(b.get("input_tax") or 0)
-        life = int(b.get("life_years") or cat["default_life_years"])
+        life = int(cat["default_life_years"]) if b.get("life_years") in (None, "") else int(b.get("life_years"))          # 0 要被擋（不是退回類別預設）
     except (TypeError, ValueError):
         raise AssetError("成本、進項稅額、耐用年數要是整數。")
     if cost <= 0 or tax < 0 or life < 1 or life > 50:
@@ -258,8 +258,8 @@ def gl_events(start, end, *, changed_since=""):
     from db import get_db
     conn = get_db()
     try:
-        ensure_categories(conn)
-        conn.commit()
+        # 提供者必須唯讀：引擎收集時已持有寫入交易，這裡另開連線寫入會 OperationalError（database is locked）。
+        # 類別預設在建卡片／列表時已種（create_asset／categories），有卡片就有類別。
         cats, revs, assets = _cats(conn), _revisions(conn), _assets(conn)
         all_active = assets
     finally:
