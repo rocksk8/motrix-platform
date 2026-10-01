@@ -56,3 +56,7 @@
 - 請款類型預覽截圖（a3 e0d830c1，docs/platform/plans/expense-types-designer-shots/）發現：(2) 出貨定義 applicant 欄位 help 含術語「把 locked 改成 false」→ 動 helpers/expense_type_defs/*.json 影響 def_version，待使用者裁示措辭；(3) 深色面板標題低對比（頁面原有樣式）。(1) 簽核單據類型「undefined（未登記）」僅顯示修正，a3 處理。
 - 真滑鼠拖放（設計器）需人工瀏覽器驗，列入使用者預覽清單。
 - 2e：wip/t32-prpo-s1-2e@167f208b（S2 完成：itemId／累計上限／overPlanReason／fromPr；14 題＋16 突變 15 殺，1 等價）；S3 入帳進行中（GL E11、結算欄、itemLinkedAmount）。
+- 使用者裁示 2026-10-02：連案件品項的 PO 明細，營運報表算「料件」欄（recognition.ITEM_COST_BUCKET；不新增第5欄）。
+- 2e：wip/t32-prpo-s1-2e@d9c38a97（S1+S2+S3）。S3 保留 totalAmount 含連品項列（新欄 itemLinkedAmount/extraOnlyAmount）；結算頁改用 extraOnlyAmount+品項系統帶入屬 S5，**S3 與 S5 必須同班出**（S3 單獨出安全）。S4（叫料連結）等 31-C 併入。
+- d7：wip/build-opt2-d7@82844b9b（failfast 外掛，opt-in，未改 build script；實測單靠停損只省 2–9 分，主力是 failure-first 排序與 item 3 依賴增量）。3 日複查：cron `17 9 */3 * *`。
+- a3：wip/t31-expense-designer-a3@67ac7c65（docType 顯示、深色面板修）；c7 須查設計器深色主題是否被全域 invert filter 反轉成淺灰。
