@@ -331,10 +331,11 @@
               if (!rs.ok) throw new Error('已存成草稿（' + (d.docCode || '') + '），但送審失敗：' + (ds.detail || ('HTTP ' + rs.status)))
               status = ds.status || '待審核'
             }
-            this.result = { status: status, id: id, text: (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + (d.docCode || (no + ' #' + id)) + '，可以在「我的請款」看進度' }
+            var text = (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + (d.docCode || (no + ' #' + id)) + '，可以在「我的請款」看進度'
             this.form = blank()
             ;['pr-t-files', 'pr-t-invoice-files'].forEach(function (x) { var el = document.getElementById(x); if (el) el.value = '' })
-            await this.selectType()                                              // 重新渲染空白表單
+            await this.selectType()                                              // 重新渲染空白表單（它會清掉結果訊息 ⇒ 先渲染再放結果）
+            this.result = { status: status, id: id, text: text }
           } catch (e) { this.err = e.message }
           finally { this.busy = false }
         },
