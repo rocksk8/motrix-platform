@@ -284,3 +284,51 @@ def reject_dispatch(did: int, body: dict = Body(default={}), authorization: str 
 def withdraw_dispatch(did: int, authorization: str = Header(None)):
     user = _require_dispatch_user(authorization)
     return do_withdraw(did, user, authorization, STAGE1, back_to=_flow.DRAFT)
+
+
+# ── 第二段（完工審核）端點：作業狀態維持 accepted，全部簽完才由 set_status(via_completion=True) 設 completed ──
+
+STAGE2 = Stage(key="completion", status_col="completion_status", json_col="completion_approval_json",
+               by_col="completion_requested_by", at_col="completion_requested_at", done_col="completion_approved_at",
+               label="派發完工", audit_prefix="vendor.dispatch.completion", notify_type="dispatch_completion_request")
+
+
+def _need_accepted(row):
+    if row["status"] != "accepted":
+        raise HTTPException(409, "只有「已驗收」的派發可以申請完工（目前：%s）" % row["status"])
+    if (row["approval_status"] or "") not in ("", _flow.APPROVED):
+        raise HTTPException(409, "派發審核尚未核准")
+
+
+def _complete(conn, row, user):
+    """完工審核通過的唯一事件：把作業狀態推到 completed（寫入口仍是 dispatch_flow.set_status）。"""
+    fresh = conn.execute("SELECT * FROM contractor_dispatches WHERE id=?", (row["id"],)).fetchone()
+    try:
+        _flow.set_status(conn, fresh, "completed", user, via_completion=True)
+    except _flow.FlowError as e:
+        raise HTTPException(e.status_code, str(e))
+
+
+@router.post("/api/contractor-dispatches/{did}/completion/request")
+def request_completion(did: int, authorization: str = Header(None)):
+    user = _require_dispatch_user(authorization)
+    return do_submit(did, user, authorization, STAGE2, allowed_from=("", _flow.RETURNED),
+                     extra_check=_need_accepted, on_auto_approved=_complete)
+
+
+@router.post("/api/contractor-dispatches/{did}/completion/approve")
+def approve_completion(did: int, body: dict = Body(default={}), authorization: str = Header(None)):
+    user = _require_user(authorization)
+    return do_approve(did, body, user, authorization, STAGE2, on_done=_complete)
+
+
+@router.post("/api/contractor-dispatches/{did}/completion/reject")
+def reject_completion(did: int, body: dict = Body(default={}), authorization: str = Header(None)):
+    user = _require_user(authorization)
+    return do_reject(did, body, user, authorization, STAGE2)
+
+
+@router.post("/api/contractor-dispatches/{did}/completion/withdraw")
+def withdraw_completion(did: int, authorization: str = Header(None)):
+    user = _require_dispatch_user(authorization)
+    return do_withdraw(did, user, authorization, STAGE2, back_to="")
