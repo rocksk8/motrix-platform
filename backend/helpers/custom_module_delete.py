@@ -5,9 +5,7 @@
 且**只有在沒有任何單據時**才允許。有單據 ⇒ 拒絕並回單據數（單據可能已入帳、已簽核，不能悄悄消失）。
 測試用的模組若要連單據清掉，須明確 `with_records=True`，且該模組不得有金流 outbox 紀錄（已入帳 ⇒ 一律拒絕）。
 """
-import os
-
-from . import uploads as _up
+from . import custom_files as _cf
 
 #: 以 module_key 欄位綁模組的單據表（刪單據時一併清）
 _BY_MODULE_KEY = ("custom_record_values", "custom_record_snapshots", "custom_record_revisions", "custom_record_files")
@@ -51,10 +49,5 @@ def delete_module(conn, key, with_records=False) -> dict:
     conn.execute("DELETE FROM ui_definitions WHERE kind='custom_module' AND scope='company' AND key=?", (key,))
     conn.commit()
     for p in paths:                       # 實體檔在 commit 之後才刪：資料庫失敗時不會留下指向已刪檔的列
-        try:
-            full = os.path.join(_up.UPLOADS_ROOT, p)
-            if os.path.isfile(full):
-                os.remove(full)
-        except OSError:
-            pass
+        _cf._remove_physical(p)           # 路徑守門（只准 uploads 之內；其餘略過並記 log）統一在 custom_files
     return {"versions": n_def, "records": n_rec}
