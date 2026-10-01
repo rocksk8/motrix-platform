@@ -11,7 +11,7 @@
   MOTRIX_FAILFAST_FLAKES=路徑  偶發登記簿（預設 tools/platform/known_flakes.json）：**已登記且未過期的紅不計入**（交 flaky_retry 照舊處理）
   MOTRIX_FAILFIRST=1           開「先跑最可能紅的」：⒜最近的 fail_stream 紅過的題 ⒝自 MOTRIX_FAILFIRST_BASE 起 diff 動到的測試檔
                                ⒞tests/platform 的守門題 ⒟其餘照原順序。**只改順序、不刪不增題**（集合不同就放棄重排並印警告）。
-  MOTRIX_FAILFIRST_BASE=<ref>  ⒝的比較基準（沒設＝不做 ⒝）
+  MOTRIX_FAILFIRST_BASE=<ref>  ⒝的比較基準（沒設＝不做 ⒝；`auto`＝該段最近一次綠的 commit，讀 test_results.jsonl）
   MOTRIX_FAILFIRST_HISTORY=10  ⒜讀最近幾份 fail_stream JSONL
 
 ## 不吞資訊、不放水（反向控制見 backend/tests/platform/test_failfast_2026_10_02.py）
@@ -92,8 +92,33 @@ def recent_red_nodeids(history, exclude_run=""):
     return list(dict.fromkeys(out))
 
 
+def auto_base(stage="", records=None):
+    """MOTRIX_FAILFIRST_BASE=auto：最近一次「該段綠」的建包／modtest 紀錄的 commit（讀 build 共用的 test_results.jsonl）；沒有 ⇒ ''（不做 ⒝）。"""
+    try:
+        path = records or os.environ.get("MOTRIX_FAILFIRST_RECORDS")
+        if not path:
+            sys.path.insert(0, str(REPO / "backend" / "tools"))
+            import build_test_reuse as btr
+            path = btr.default_records()
+        last = ""
+        for ln in Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                r = json.loads(ln)
+            except ValueError:
+                continue
+            st = (r.get("stages") or {}).get(stage) if stage else None
+            ok = bool(st.get("green")) if isinstance(st, dict) else (bool(r.get("green")) if not stage else False)
+            if ok and r.get("commit"):
+                last = str(r["commit"])
+        return last
+    except Exception:                                           # noqa: BLE001
+        return ""
+
+
 def changed_files(base):
-    """`git diff --name-only <base>`（含未提交）⇒ 正規化後的路徑清單；任何錯誤 ⇒ 空。"""
+    """`git diff --name-only <base>`（含未提交）⇒ 正規化後的路徑清單；任何錯誤 ⇒ 空。base＝auto ⇒ 見 auto_base。"""
+    if base == "auto":
+        base = auto_base(os.environ.get("MOTRIX_FAIL_STREAM_STAGE", ""))
     if not base:
         return []
     try:
