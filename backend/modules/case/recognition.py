@@ -304,6 +304,9 @@ def material_entries(conn, basis, department_id=None):
 #: 月支出計入的額外支出狀態（2026-09-27 使用者裁示請款流程）：送審中（待審核／簽核中，標 pending＝待定）與已核准；
 #: 草稿與已駁回**不計**（原本「只要填了就算」）。權責與現金兩種口徑都走 extra_entries ⇒ 同一處決定。
 COUNTED_EXTRA_STATUSES = ("待審核", "簽核中", "已核准")
+#: 連到案件品項的採購單列在營運報表落哪一個支出桶（32-S3；使用者原話「不再額外支出，而是案件的實際支出」）。
+#: 報價品項沒有分類（設備／料件）⇒ 一律「料件」；要拆設備需要品項分類欄位（另案）。
+ITEM_COST_BUCKET = "material"
 
 
 def extra_entries(conn, basis):
@@ -364,16 +367,21 @@ def _typed_entries(r, base, cost, basis, paid) -> list:
     for l in lines if isinstance(lines, list) else []:
         if isinstance(l, dict):
             k = l.get("categoryName") or l.get("category") or "其他"
-            by_cat[k] = by_cat.get(k, 0) + float(l.get("amount") or 0)
+            # 32-S3：採購單明細連到案件品項的列＝品項實際成本，獨立成列（帶 itemId／linkedItem；金額守恆：Σ 列＝單據金額）
+            iid = str(l.get("itemId") or "").strip() if (r["kind"] or "") == "purchase_order" else ""
+            by_cat[(k, iid)] = by_cat.get((k, iid), 0) + float(l.get("amount") or 0)
     common = {"departmentId": r["department_id"], "kind": r["kind"], "docCode": r["doc_code"] or ""}
     if not by_cat or abs(sum(by_cat.values()) - total) > 0.005:
-        by_cat = {r["category"] or "其他": total}
+        by_cat = {(r["category"] or "其他", ""): total}
     out = []
-    for cat, amt in by_cat.items():
+    for (cat, iid), amt in by_cat.items():
         if not amt:
             continue
-        out.append({**base, **common, "amount": amt, "category": cat,
-                    "desc": "%s｜%s｜%s" % (r["doc_code"] or "", cat, r["description"] or "")})
+        ent = {**base, **common, "amount": amt, "category": cat,
+               "desc": "%s｜%s｜%s" % (r["doc_code"] or "", cat, r["description"] or "")}
+        if iid:
+            ent.update(itemId=iid, linkedItem=True, bucket=ITEM_COST_BUCKET)
+        out.append(ent)
     if basis == "cash" and cost != total:
         out.append({**base, **common, "amount": cost - total, "category": "付款差額",
                     "desc": "%s｜付款差額（實付 %g／應付 %g）" % (r["doc_code"] or "", cost, total)})

@@ -376,8 +376,15 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
         # 32-Q6（使用者裁示 2026-10-02）：合計與營運報表同一條規則——只計 COUNTED_EXTRA_STATUSES（待審核／簽核中／已核准）、
         # 且類型要進金流（kind='' 或 payable）：**請購單、草稿、已駁回不計**。（原本只排除作廢與被遮蔽的列，精算的額外支出因此比報表多。）
         counted = [i for i in visible if i["status"] in COUNTED_EXTRA_STATUSES and EF.is_payable_kind(i["kind"] or "")]
+        # 32-S3（Q1）：採購單明細連到案件品項的列＝該品項的**實際成本**，不再算額外支出。
+        # 過渡安全：`totalAmount`／`totalPending` 先**維持含連結列**（既有精算頁照舊看到全部金額，不會有錢憑空消失）；
+        # 另給 `itemLinkedAmount`（連結列金額）與 `extraOnlyAmount`（＝totalAmount−itemLinkedAmount，真正的額外支出）。
+        # 精算頁改版（S5）時改讀 extraOnlyAmount＋品項「系統帶入實際」，兩邊一起切，才不會漏算或重複。
+        for i in counted:
+            i["linkedAmount"] = PI.linked_split(i.get("lines"))[0] if i["kind"] == PI.ORD else 0.0
         total = sum(float(i["totalCost"] or 0) for i in counted)
         pending = sum(float(i["totalCost"] or 0) for i in counted if i["status"] != "已核准")
+        item_linked = sum(i["linkedAmount"] for i in counted)
         uncounted = sum(float(i["totalCost"] or 0) for i in visible if i not in counted)      # 資訊：沒有計入的金額（請購單、草稿、已駁回）
         # W1：手續費（公司自付、已登錄付款者）另計，進案件成本（settlement 的 remitFeeTotal）；不併入 totalAmount
         fee_total = sum(float(i["remitFee"] or 0) for i in visible if i["paidDate"])
@@ -388,6 +395,8 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
             "totalAmount": total,
             "totalPending": pending,
             "uncountedAmount": uncounted,
+            "itemLinkedAmount": item_linked,
+            "extraOnlyAmount": total - item_linked,
             # 對這位使用者遮蔽金額的列數（不含已作廢）：> 0 ⇒ totalAmount 不是完整成本，精算頁據此擋存檔／完結（否則會把殘缺的總額寫進精算）
             "maskedCount": sum(1 for i in items if i.get("masked") and i["status"] != VOIDED_STATUS),
             "pendingCount": sum(1 for i in items if i["status"] not in ("已核准", "草稿", VOIDED_STATUS)),

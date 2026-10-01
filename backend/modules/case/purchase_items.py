@@ -60,16 +60,46 @@ def usage(rows, *, exclude_id=None) -> dict:
     return out
 
 
+def linked_split(lines):
+    """明細列 ⇒ `(連到品項的金額合計, {itemId: 金額})`；金額＝列上 `amount`（`normalize_lines` 已重算）。沒有 `itemId` 的列不算。"""
+    per = {}
+    for l in lines if isinstance(lines, list) else []:
+        if isinstance(l, dict) and str(l.get("itemId") or "").strip():
+            iid = str(l["itemId"]).strip()
+            per[iid] = per.get(iid, 0.0) + _num(l.get("amount"))
+    return sum(per.values()), per
+
+
+def item_actuals(rows, *, exclude_id=None) -> dict:
+    """`{itemId: 已認列的品項實際成本}`：只計 COUNTED 狀態的**採購單**連結列（請購單永遠不計成本）。"""
+    out = {}
+    for r in rows:
+        if (r["kind"] or "") != ORD or (r["status"] or "") not in COUNTED_EXTRA_STATUSES:
+            continue
+        if exclude_id is not None and r["id"] == exclude_id:
+            continue
+        try:
+            lines = json.loads(r["lines_json"] or "[]")
+        except (TypeError, ValueError):
+            continue
+        for iid, amt in linked_split(lines)[1].items():
+            out[iid] = out.get(iid, 0.0) + amt
+    return out
+
+
 def picker(quotation_data, rows, *, show_cost=True, exclude_id=None) -> list:
     """挑選器清單：計畫量、已請購、已採購、剩餘可採購量（＝計畫量−已採購；請購只提示不扣）。
     `show_cost=False`（看不到財務金額）⇒ 不給 `planUnitCost`。"""
     used = usage(rows, exclude_id=exclude_id)
+    actual = item_actuals(rows, exclude_id=exclude_id)
     out = []
     for p in plan_items(quotation_data):
         u = used.get(p["itemId"], {"requestedQty": 0.0, "orderedQty": 0.0})
         row = {k: v for k, v in p.items() if show_cost or k != "planUnitCost"}
         row.update(requestedQty=u["requestedQty"], orderedQty=u["orderedQty"],
                    remainingQty=max(p["planQty"] - u["orderedQty"], 0.0))
+        if show_cost:                                               # 金額：看不到財務金額的人不給
+            row["actualAmount"] = actual.get(p["itemId"], 0.0)
         out.append(row)
     return out
 
