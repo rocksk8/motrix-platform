@@ -90,6 +90,8 @@
       "/api/case-changes",
       "/api/completion-notes",
       "/api/extra-expenses",
+      "/api/material-payments",
+      "/api/material-suppliers",
       "/api/next-quote-no",
       "/api/quotations",
       "/api/sales-orders"
