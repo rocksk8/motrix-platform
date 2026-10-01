@@ -40,3 +40,9 @@
 - 稽核：c7(audit/train29@af0d4280，審 W1–W4/d7)、2e(audit/train29-b@97dd2bcf，審 c7 的線)；演練 a3(drill/train29@0f11a195)；建包步驟 d7(build/train29-steps@45df568c)；套用步驟 2e(wip/train-29-apply-draft@c8c3c8bb)。
 - 已修稽核發現：Q1 名冊帳號洩漏(mask-2)、Q4 路徑逃逸(upload-path-guard@91c474d2)、空類別表單(emptycat@4fd54996)、w2b eb762b2f 漏合已補。
 - 後續待辦：TRAIN31-BACKLOG.md。
+
+## 15:15 巡檢
+- platform = d4c43792（ff，使用者指示由主持推）；int1 = d4c43792（train 29 assign 已提交）。建包暫停：加「客戶回簽單入口」（a3，wip/w1-quote-signed-back，16:15）。
+- 回簽單既有功能（signed-files, quotation-form 已送出時才顯示）；改：已送出+ 可傳、刪除限上傳者或 admin+、案件管理頁區塊、成案 modal 選擇性上傳。
+- 稽核 §9.11 就緒（audit/train29@76ce5893）；演練工具就緒（drill/train29@ff8fcce7）。
+- 權限：使用者「我人不在，決策給你」；正式機 Claude 已加權限；platform 推送經使用者明確指示。
