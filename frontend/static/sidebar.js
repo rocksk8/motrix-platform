@@ -50,7 +50,7 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 ;(function () {
-  if (window.MOTRIX_PREVIEW) return   // 模組建構器的即時預覽：不畫側欄、不打 API（BUILDER-UX §3.3）
+  if (window.MOTRIX_PREVIEW || window.MOTRIX_EMBED) return   // 建構器即時預覽（BUILDER-UX §3.3）／被嵌入的頁面（方案 B）：不畫側欄、不打 API
   // ── Session & path ──────────────────────────────────────────────────────────
   var raw  = localStorage.getItem('motrix_session')
   var s    = raw ? JSON.parse(raw) : {}

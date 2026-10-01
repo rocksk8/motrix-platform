@@ -1787,6 +1787,8 @@
             </div>
           </template>
 
+          <!-- 掛載點（建構器方案 B）：發布時選了「每日工作事項頁籤」的自訂模組會出現在這一排；元件 static/mount-tabs.js（頁面不自己呼叫 /api/platform/mounts） -->
+          <div x-data="motrixMountTabs('daily_tasks.daily-tasks')" data-mount-point="daily_tasks.daily-tasks" style="display:contents">
           <!-- Tab bar -->
           <div class="dt-tab-bar">
             <button class="dt-tab-btn" :class="{active: activeTab==='detail'}" @click="setTab('detail')">
@@ -1800,6 +1802,10 @@
                 <span class="dt-tab-count" x-text="history.total + ' 筆'"></span>
               </template>
             </button>
+            <template x-for="t in mtTabs" :key="t.key">
+              <button class="dt-tab-btn" :class="{active: activeTab === 'mount:' + t.key}" :data-mount-tab="t.key"
+                      @click="setTab('mount:' + t.key); mtSelect(t.key)" x-text="t.label"></button>
+            </template>
             <div class="dt-tab-spacer"></div>
             <template x-if="activeTab === 'history'">
               <button class="btn btn-ghost btn-sm" @click="exportHistory()" style="font-size:11px;margin:4px 0">
@@ -2218,6 +2224,22 @@
 
           </div><!-- history tab -->
 
+          <!-- 掛載頁籤面板（方案 B）：被點到才建立同源 iframe；8 秒沒載入 ⇒ 改顯示「從選單開啟」連結（失效保護） -->
+          <template x-for="t in mtTabs" :key="'p-' + t.key">
+            <div x-show="activeTab === 'mount:' + t.key" :data-mount-panel="t.key">
+              <template x-if="mtOpened[t.key]">
+                <div>
+                  <iframe :data-mt-key="t.key" :src="mtSrc(t)" :style="'width:100%;border:0;display:block;height:' + mtHeight(t.key)"
+                          :title="t.label" @load="mtOnLoad(t.key)"></iframe>
+                  <div x-show="mtFailed[t.key]" style="padding:12px;font-size:13px;color:var(--text-secondary)" data-mount-failed>
+                    載入失敗，請從選單開啟：<a :href="mtFallbackHref(t)" x-text="t.label"></a>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+          </div><!-- 掛載點 motrixMountTabs -->
+
         </div>
       </template>
     </div><!-- .dt-right -->
@@ -2427,6 +2449,7 @@
   </div>
 </div>
 
+<script src="../static/mount-tabs.js"></script>
 <script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
 <script>

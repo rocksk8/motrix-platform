@@ -75,6 +75,7 @@
    "js:js/module-builder-output.js",
    "js:js/expense-types.js",
    "js:static/custom-layout.js",
+   "js:static/mount-tabs.js",
    "js:static/file-preview.js",
    "js:static/form-preview.js",
    "js:static/definition-form.js",
