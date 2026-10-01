@@ -2117,6 +2117,8 @@
    "units": [
     "core:db",
     "dir:backend/modules/accounting/",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/voucher_summary",
     "mod:accounting/ledger/__init__",
     "mod:accounting/ledger/engine",
     "mod:accounting/ledger/roles",
@@ -2126,6 +2128,8 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/voucher_summary.py",
      "backend/modules/accounting/ledger/__init__.py",
      "backend/modules/accounting/ledger/engine.py",
      "backend/modules/accounting/ledger/roles.py",
@@ -5221,6 +5225,7 @@
      "backend/db.py",
      "backend/modules/case/__init__.py",
      "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/gl_events.py",
      "backend/modules/case/quotations.py",

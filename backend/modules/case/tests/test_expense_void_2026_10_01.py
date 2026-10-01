@@ -90,13 +90,31 @@ def test_only_approved_unpaid_rows_can_be_voided(client, H):
     eid = _approved(client, H)
     assert client.post("/api/cashier/pending-payables/case/%d/pay" % eid, headers=H["vd_cash"], json={"paidDate": TODAY, "payMethod": "transfer"}).status_code == 200
     r = _void(client, H["vd_sa"], eid)
-    assert r.status_code == 409 and "付款" in r.text                                   # 已付款不可直接作廢
+    assert r.status_code == 409 and "更正付款日" in r.text                              # 已付款不可直接作廢（前置檢查的訊息，不是搶先付款的那句）
     assert _q("SELECT status FROM case_extra_expenses WHERE id=?", (eid,))[0]["status"] == "已核准"
     # 付款日被管理員更正清除（退回待付款）後才可作廢
     c = client.patch("%s/%d/dates" % (SENT, eid), headers=H["vd_admin"], json={"paidDate": ""})
     assert c.status_code == 200, c.text
     assert _void(client, H["vd_sa"], eid).status_code == 200
     assert _void(client, H["vd_sa"], eid).status_code == 409                          # 重複作廢
+
+
+def test_void_loses_the_race_against_a_payment_that_lands_after_the_precheck(client, H, monkeypatch):
+    """前置檢查讀到的是舊資料（付款在檢查之後才寫入）⇒ 帶條件的 UPDATE 擋下（rowcount 0 ⇒ 409），付款日與狀態不被蓋掉。"""
+    eid = _approved(client, H)
+    assert client.post("/api/cashier/pending-payables/case/%d/pay" % eid, headers=H["vd_cash"], json={"paidDate": TODAY}).status_code == 200
+    from modules.case.api import case_extra_expenses as X
+    real = X._load
+
+    def stale(conn, quote_no, exp_id, user=None):
+        d = dict(real(conn, quote_no, exp_id, user))
+        d["paid_date"] = ""                                   # 檢查當下還沒付款
+        return d
+    monkeypatch.setattr(X, "_load", stale)
+    r = _void(client, H["vd_sa"], eid)
+    assert r.status_code == 409, r.text
+    row = _q("SELECT status, paid_date, void_reason FROM case_extra_expenses WHERE id=?", (eid,))[0]
+    assert row["status"] == "已核准" and row["paid_date"] == TODAY and row["void_reason"] == ""
 
 
 def test_void_not_found_and_caseless_visibility(client, H):

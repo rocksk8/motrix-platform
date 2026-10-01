@@ -120,3 +120,13 @@ def test_reverse_control_if_void_did_not_leave_approved_the_voucher_would_stay(c
     assert r.status_code in (200, 409)
     r2 = _run(conn)
     assert r2["stats"]["orphans"] == 0 and _ev(conn, eid)[0]["status"] == "drafted" and _v(conn, vid)["voided_at"] == ""
+
+
+def test_voucher_summary_sources_skip_voided_rows(client, conn, sa):
+    """傳票「摘要來源」列案件的額外支出：已作廢的不可再被拿來當來源（正對照：沒作廢的照列）。"""
+    from modules.accounting.api import voucher_summary as VS
+    _quote(conn, "MQ-GLV-4")
+    gone, keep = _extra(conn, "MQ-GLV-4", 1050), _extra(conn, "MQ-GLV-4", 2100)
+    assert {e["id"] for e in VS._case_expense_sources(conn, "MQ-GLV-4", sa["Authorization"]) if e["kind"] == "extra_expense"} == {gone, keep}
+    assert _void(client, sa, "MQ-GLV-4", gone).status_code == 200
+    assert {e["id"] for e in VS._case_expense_sources(conn, "MQ-GLV-4", sa["Authorization"]) if e["kind"] == "extra_expense"} == {keep}
