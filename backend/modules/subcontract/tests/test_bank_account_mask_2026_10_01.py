@@ -187,3 +187,36 @@ def test_reverse_control_without_the_mask_admin_would_see_the_full_number(world,
     from modules.subcontract import bank_mask
     monkeypatch.setattr(bank_mask, "can_see_full", lambda user: True)
     assert client.get("/api/vendor-contractors/%d" % vid, headers=h_ad).json()["bankAccountNumber"] == FULL
+
+
+# ── G1（稽核）：匯款申請 PDF 在「PDF 文字」層級也遮蔽（不只 HTML 版面）──────────────────────────────
+
+def _pdf_text(pdf_bytes):
+    import io
+    import pypdf
+    return "".join((p.extract_text() or "") for p in pypdf.PdfReader(io.BytesIO(pdf_bytes)).pages)
+
+
+def test_g1_voucher_pdf_download_text_is_masked_for_admin_and_full_for_superadmin(world):
+    client, h_sa, h_ad, _vid = world
+    _seed_voucher()
+    ad = client.get("/api/contractor-vouchers/CV-BM-001/pdf-download", headers=h_ad)
+    assert ad.status_code == 200 and ad.content[:5] == b"%PDF-", ad.text[:200]
+    t_ad = _pdf_text(ad.content)
+    assert FULL not in t_ad and "99887766554433" not in t_ad and "8901" in t_ad          # 一般管理員：PDF 文字裡找不到全碼、有末四碼
+    sa = client.get("/api/contractor-vouchers/CV-BM-001/pdf-download", headers=h_sa)
+    assert sa.status_code == 200
+    t_sa = _pdf_text(sa.content)
+    assert FULL in t_sa                                                                  # 正對照：最高管理者的 PDF 看得到全碼（證明抽文字有效）
+
+
+def test_g1_mutation_mask_bank_false_turns_the_pdf_assertion_red(world, monkeypatch):
+    """突變：端點對一般管理員也傳 mask_bank=False ⇒ PDF 文字出現全碼 ⇒ 上一題的斷言會紅（偵測器本身有被驗過）。"""
+    client, _h_sa, h_ad, _vid = world
+    _seed_voucher()
+    import modules.subcontract.api.contractor_vouchers as CV
+    real = CV.generate_contractor_voucher_pdf_bytes
+    monkeypatch.setattr(CV, "generate_contractor_voucher_pdf_bytes", lambda no, mask_bank=True: real(no, mask_bank=False))
+    r = client.get("/api/contractor-vouchers/CV-BM-001/pdf-download", headers=h_ad)
+    assert r.status_code == 200
+    assert FULL in _pdf_text(r.content), "突變沒讓 PDF 洩漏 ⇒ 偵測器壞了"

@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-01（wip/t31-payslip-mask-a3：勞報單 PDF 帳號遮蔽）
+- L0（新增選填參數，向下相容）：`pdf_gen.generate_payslip_pdf_bytes(slip_no, mask_bank=True)`——預設 fail closed：收款帳號 ⇒ `****末四碼`、不帶存簿影本；只有最高管理者下載、或匯出存檔（F2 法定紀錄）才傳 `False`。
+
 ## 1.100 — 2026-10-01（fix/upload-path-guard：自訂單據附件的實體刪除只准在 uploads 之內，稽核探針 Q4）
 - L1（行為）：`helpers.custom_files._remove_physical`／`helpers.custom_module_delete.delete_module` 刪實體檔前先過路徑守門（`custom_files._safe_physical_path`：絕對路徑、`..`、`..\`、磁碟機代號／UNC、NTFS 資料流、符號連結／接合點穿出 uploads ⇒ 略過並記 log，不刪、不丟例外）。介面不變。
 

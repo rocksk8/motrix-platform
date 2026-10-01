@@ -557,6 +557,7 @@
     "mod:payroll/api/payslips",
     "mod:payroll/api/bank_account",
     "mod:payroll/bank_account",
+    "mod:payroll/payslip_bank",
     "mod:payroll/bonus",
     "mod:payroll/bonus_case",
     "mod:payroll/bonus_deductions",

@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-01（wip/t31-payslip-mask-a3：稽核 G1／G2）
+- `bank_mask.keep_if_masked` 刪除（死碼：各端點直接用 `is_masked_value`，沒有呼叫者）；匯款申請 PDF 補「PDF 文字層級」遮蔽測試（pypdf 抽文字；突變 `mask_bank=False` 會紅）。
+
 ## 1.0.39 — 2026-10-01（暫用號，列車取號；fix/contractor-bank-mask-2：外包名冊帳號遮蔽更正）
 - 見下方前一筆的「更正」：外包名冊（`/api/contractors*`）列表／詳情／存簿影本端點（`/id-card`）／匯出一律對非最高管理者遮蔽 `****末四碼`；編輯（PUT）與匯入遇遮蔽值保留原帳號。測試 `test_contractor_roster_bank_mask_2026_10_01.py`、`test_e2e_bank_mask_roster_page_2026_10_01.py`（含反向控制）。
 
