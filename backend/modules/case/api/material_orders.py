@@ -50,6 +50,7 @@ class MaterialOrder(BaseModel):
     paidDate: Optional[str]        # 已付日期（YYYY-MM-DD，paidStatus≠'pending'時）
     notes: Optional[str] = ""      # 備註
     invoiceDate: Optional[str] = ""  # `AC2`：廠商發票日期（''＝未登錄；權責口徑依它歸月）
+    supplierId: Optional[int] = None  # 31-C：供應商主檔 id（叫料審核的實質欄位；匯款申請的收款對象）。整份覆寫的端點：沒帶就會被抹掉，前端要原樣帶回
 
 
 class MaterialOrderUpdateIn(BaseModel):

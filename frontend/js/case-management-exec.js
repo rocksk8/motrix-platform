@@ -46,6 +46,9 @@ window.CM_PARTS.push(() => ({
     moDirty: false,
     moMsg: '',
     moMsgError: false,
+    // 叫料審核（31-C）：itemId → 審核摘要 {status, legacy, docCode, currentApprovers, rejectReason, receivedOn, receivedBy…}
+    moApprovals: {},
+    moBusy: '',
 
     // ── 叫料（材料訂購）────────────────────────────────────────────────────
     async loadMaterialOrders(quoteNo) {
@@ -85,11 +88,93 @@ window.CM_PARTS.push(() => ({
             paidAmount: Number(o.paidAmount) || 0,
             paidDate:   o.paidDate || '',
             notes:      o.notes || '',
-            invoiceDate: o.invoiceDate || ''   // `AC2`
+            invoiceDate: o.invoiceDate || '',  // `AC2`
+            supplierId: o.supplierId ?? null,  // 31-C：整份覆寫的端點——少帶這一鍵，已指定的供應商會在下次存檔被抹掉
+            _saved: true,                      // 伺服器上已有這一列（才能送審）
+            _recvDate: ''
           }))
+          await this.loadMoApprovals(quoteNo)
         }
       } catch {}
       this.moLoading = false
+    },
+
+    // ── 叫料審核（31-C）──────────────────────────────────────────────
+    async loadMoApprovals(quoteNo) {
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-order-approvals`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok && this._moReqFor === quoteNo) this.moApprovals = (await r.json()).approvals || {}
+      } catch {}
+    },
+    moAp(m) { return (m && this.moApprovals[m.itemId]) || { status: '', legacy: true } },
+    moApLabel(m) {
+      const a = this.moAp(m)
+      if (m && m._saved === false) return '尚未儲存'
+      return a.legacy ? '舊單（未經審核）' : a.status
+    },
+    moApTone(m) {
+      const s = this.moAp(m).status
+      if (m && m._saved === false) return 'color:var(--text-dim)'
+      if (s === '已核准') return 'color:var(--success)'
+      if (s === '已退回' || s === '已取消') return 'color:var(--tone-danger-fg)'
+      if (s === '待審核' || s === '簽核中') return 'color:var(--tone-warning-fg)'
+      return 'color:var(--text-dim)'
+    },
+    // 審核中、已取消：實質欄位不能改（後端閘也會擋；這裡先反灰並說明原因）
+    moLocked(m) { return ['待審核', '簽核中', '已取消'].includes(this.moAp(m).status) },
+    moShowSubmit(m) { return !!m && m._saved !== false && !this.moDirty && ['', '草稿', '已退回'].includes(this.moAp(m).status) && !(this.caseReadOnly && this.caseReadOnly()) },
+    moShowWithdraw(m) { return ['待審核', '簽核中'].includes(this.moAp(m).status) },
+    moShowCancel(m) { return this.moAp(m).status === '已核准' && ['superadmin', 'admin'].includes(this.session.role) },
+    async _moPost(m, action, body, okMsg) {
+      const quoteNo = this.selected?.quote_no
+      if (!quoteNo || !m.itemId || this.moBusy) return false
+      this.moBusy = m.itemId
+      this.moMsg = ''
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders/${encodeURIComponent(m.itemId)}/${action === 'receive-undo' ? 'receive' : action}`, {
+          method: action === 'receive-undo' ? 'DELETE' : 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: action === 'receive-undo' ? undefined : JSON.stringify(body || {})
+        })
+        const d = await r.json().catch(() => ({}))
+        this.moMsgError = !r.ok
+        this.moMsg = r.ok ? okMsg(d) : String((d.detail && (d.detail.message || d.detail)) || r.status)
+        await this.loadMoApprovals(quoteNo)
+        this.moBusy = ''
+        return r.ok
+      } catch (e) {
+        this.moMsgError = true
+        this.moMsg = '網路錯誤：' + e.message
+        this.moBusy = ''
+        return false
+      }
+    },
+    async moSubmit(m) { await this._moPost(m, 'submit', {}, d => d.autoApproved ? `已核准（未設定簽核層）：${d.docCode}` : `已送審：${d.docCode}`) },
+    async moWithdraw(m) { await this._moPost(m, 'withdraw', {}, () => '已撤回（回草稿）') },
+    async moCancel(m) {
+      const reason = await MotrixUI.prompt('取消已核准的叫料單需要填原因（會留稽核紀錄）：', { title: '取消叫料單', required: true })
+      if (!reason || !String(reason).trim()) return
+      await this._moPost(m, 'cancel', { reason: String(reason).trim() }, () => '叫料單已取消')
+    },
+    async moReceive(m) {
+      const day = m._recvDate || MotrixDate.today()
+      await this._moPost(m, 'receive', { receivedOn: day }, d => `已確認到貨：${d.receivedOn}`)
+    },
+    async moUndoReceive(m) { await this._moPost(m, 'receive-undo', null, () => '已撤銷到貨確認') },
+    // 物流旗標只能對著「已核准的叫料單」勾；已勾的可以取消勾選（後端閘同規則，這裡先反灰並說明）
+    matCanTick(mat, flag) {
+      if (mat[flag]) return true
+      const a = this.moApprovals[mat.orderItemId || '']
+      if (!a || a.status !== '已核准') return false
+      return flag === 'ordered' || !!a.receivedOn
+    },
+    matTickHint(mat, flag) {
+      if (this.matCanTick(mat, flag)) return ''
+      const a = this.moApprovals[mat.orderItemId || '']
+      if (!a || a.status !== '已核准') return '需先連結一張已核准的叫料單'
+      return '需先在叫料單上確認到貨（日期與確認人）'
     },
 
     // crypto.randomUUID() 在 HTTP 明文頁面下不存在（非安全上下文），正式機是
@@ -119,7 +204,7 @@ window.CM_PARTS.push(() => ({
     moAddItem() {
       this.materialOrders.push({
         itemId: this._moNewId(), itemName: '', quantity: 1, unit: '', unitPrice: 0,
-        totalPrice: 0, paidStatus: 'pending', paidAmount: 0, paidDate: '', notes: '', invoiceDate: ''
+        totalPrice: 0, paidStatus: 'pending', paidAmount: 0, paidDate: '', notes: '', invoiceDate: '', supplierId: null, _saved: false, _recvDate: ''
       })
       this.moDirty = true
       this.moMsg = ''
@@ -215,7 +300,8 @@ window.CM_PARTS.push(() => ({
           paidDate: m.paidStatus === 'pending' ? null : paidDate,
           notes: (m.notes || '').trim(),
           // `AC2`：整份覆寫的端點——少帶這一鍵，已登錄的發票日期就會在下次存檔時被抹掉
-          invoiceDate: m.invoiceDate || ''
+          invoiceDate: m.invoiceDate || '',
+          supplierId: m.supplierId ?? null
         })
       }
 
@@ -229,9 +315,17 @@ window.CM_PARTS.push(() => ({
         })
         if (r.ok) {
           this.moDirty = false
-          this.moMsgError = false
-          this.moMsg = '已儲存'
-          setTimeout(() => { if (!this.moDirty) this.moMsg = '' }, 2500)
+          const d = await r.json().catch(() => ({}))
+          if (d.rejected && d.rejected.length) {
+            // 叫料審核（31-C）：只拒有問題的項目，其餘已存——逐項說明，並重新載入以顯示伺服器現值
+            this.moMsgError = true
+            this.moMsg = '部分項目沒有儲存：' + [...new Set(d.rejected.map(x => x.message))].join('；')
+          } else {
+            this.moMsgError = false
+            this.moMsg = '已儲存'
+            setTimeout(() => { if (!this.moDirty) this.moMsg = '' }, 2500)
+          }
+          await this.loadMaterialOrders(quoteNo)
         } else {
           const d = await r.json().catch(() => ({}))
           this.moMsgError = true

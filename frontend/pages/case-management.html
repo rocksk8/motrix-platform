@@ -810,7 +810,7 @@
               <div x-show="activeTab==='exec'">
                 <div class="cm-subtabs">
                   <button class="cm-tab" :class="{active: execSubTab==='progress'}"  @click="execSubTab='progress'">執行進度</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='materials'}" @click="execSubTab='materials'">叫料管控</button>
+                  <button class="cm-tab" :class="{active: execSubTab==='materials'}" @click="execSubTab='materials'; loadMaterialOrders(selected && selected.quote_no)">叫料管控</button>
                   <button class="cm-tab" :class="{active: execSubTab==='devices'}"   @click="execSubTab='devices'">設備登錄</button>
                   <button class="cm-tab" :class="{active: execSubTab==='warranty'}"  @click="execSubTab='warranty'">保固備註</button>
                   <button class="cm-tab" :class="{active: execSubTab==='todos'}"     @click="execSubTab='todos'; loadCaseActionItems()">待辦事項</button>
@@ -1062,13 +1062,27 @@
                       <button class="btn-del" @click="removeMaterial(idx)">×</button>
                     </div>
                     <div class="mat-card__body">
+                      <!-- 叫料審核（31-C）：「已叫料」「已到料」只能對著一張已核准的叫料單勾 -->
+                      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;font-size:11px;font-family:var(--font-zh)">
+                        <span style="color:var(--text-dim)">對應叫料單</span>
+                        <select class="fi fi--sm" style="min-width:220px" x-model="mat.orderItemId" @change="setDirty()" data-testid="mat-order-link">
+                          <option value="">（未連結）</option>
+                          <template x-for="o in materialOrders" :key="o.itemId">
+                            <option :value="o.itemId" x-text="(moAp(o).docCode || '未送審') + '｜' + (o.itemName || '未命名') + '（' + moApLabel(o) + '）'"></option>
+                          </template>
+                        </select>
+                      </div>
                       <div style="display:flex;gap:16px;margin-bottom:6px">
-                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer">
-                          <input type="checkbox" x-model="mat.ordered" @change="setDirty()">已叫料
+                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer"
+                               :style="matCanTick(mat, 'ordered') ? '' : 'opacity:.55;cursor:not-allowed'" :title="matTickHint(mat, 'ordered')">
+                          <input type="checkbox" x-model="mat.ordered" :disabled="!matCanTick(mat, 'ordered')" @change="setDirty()" data-testid="mat-ordered">已叫料
                         </label>
-                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer">
-                          <input type="checkbox" x-model="mat.arrived" @change="onMaterialArrived(mat)">已到料
+                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer"
+                               :style="matCanTick(mat, 'arrived') ? '' : 'opacity:.55;cursor:not-allowed'" :title="matTickHint(mat, 'arrived')">
+                          <input type="checkbox" x-model="mat.arrived" :disabled="!matCanTick(mat, 'arrived')" @change="onMaterialArrived(mat)" data-testid="mat-arrived">已到料
                         </label>
+                        <span x-show="!matCanTick(mat, 'ordered') || !matCanTick(mat, 'arrived')" style="font-size:11px;color:var(--text-dim)"
+                              x-text="matTickHint(mat, mat.ordered ? 'arrived' : 'ordered')"></span>
                         <template x-if="mat.arrived">
                           <span style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-left:auto" x-text="'共 ' + (mat.qty||1) + ' ' + (mat.unit||'台')"></span>
                         </template>
@@ -2359,16 +2373,16 @@
                            後端會用 abs(totalPrice - 數量×單價) > 0.01 擋回來） -->
                       <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:7px">
                         <input class="fi fi--sm" type="text" placeholder="項目名稱（如：交換器）" style="flex:1;min-width:130px"
-                               x-model="m.itemName" :disabled="!moCanEdit()" @input="moDirty = true">
+                               x-model="m.itemName" :disabled="!moCanEdit() || moLocked(m)" @input="moDirty = true">
                         <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="數量" style="width:74px"
-                               x-model="m.quantity" :disabled="!moCanEdit()" @input="moRecalc(mi)">
+                               x-model="m.quantity" :disabled="!moCanEdit() || moLocked(m)" @input="moRecalc(mi)">
                         <input class="fi fi--sm" type="text" placeholder="單位" style="width:56px"
-                               x-model="m.unit" :disabled="!moCanEdit()" @input="moDirty = true">
+                               x-model="m.unit" :disabled="!moCanEdit() || moLocked(m)" @input="moDirty = true">
                         <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="單價" style="width:96px"
-                               x-model="m.unitPrice" :disabled="!moCanEdit()" @input="moRecalc(mi)">
+                               x-model="m.unitPrice" :disabled="!moCanEdit() || moLocked(m)" @input="moRecalc(mi)">
                         <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:var(--tone-warning-fg);min-width:96px;text-align:right;font-size:12px"
                               x-text="caseSettleFmt(m.totalPrice)"></span>
-                        <button x-show="moCanEdit()" @click="moRemoveItem(mi)" title="刪除這一項"
+                        <button x-show="moCanEdit() && !moLocked(m) && moAp(m).status !== '已核准'" @click="moRemoveItem(mi)" title="刪除這一項"
                                 style="border:none;background:none;color:var(--tone-danger-fg);cursor:pointer;font-size:15px;line-height:1;padding:0 4px">×</button>
                       </div>
                       <!-- 第二列：付款狀態。三種狀態的欄位規則由後端強制
@@ -2398,6 +2412,42 @@
                                x-model="m.invoiceDate" @change="moSetInvoiceDate(m)">
                         <span x-show="!m.invoiceDate" style="color:var(--tone-warning-fg)">未登錄（報表暫用付款月）</span>
                         <span class="save-mode__ok" x-show="savedFlash['mo-' + m.itemId]" x-transition.opacity>✓ 已存</span>
+                      </div>
+                      <!-- 叫料審核（31-C）：狀態、送審／撤回／取消、到貨確認（不簽核，只記日期與確認人） -->
+                      <div style="display:flex;align-items:center;gap:7px;margin-top:6px;font-size:11px;font-family:var(--font-zh);flex-wrap:wrap"
+                           :data-testid="'mo-approval-' + m.itemId">
+                        <span style="font-weight:600" :style="moApTone(m)" data-testid="mo-ap-status" x-text="moApLabel(m)"></span>
+                        <span x-show="moAp(m).docCode" style="color:var(--text-dim)" data-testid="mo-ap-code" x-text="moAp(m).docCode"></span>
+                        <span x-show="['待審核','簽核中'].includes(moAp(m).status)" style="color:var(--text-dim)"
+                              x-text="'待簽：' + ((moAp(m).currentApprovers || []).join('、') || '—')"></span>
+                        <span x-show="moAp(m).status === '已退回' && moAp(m).rejectReason" style="color:var(--tone-danger-fg)"
+                              x-text="'退回原因：' + moAp(m).rejectReason"></span>
+                        <span x-show="moLocked(m)" style="color:var(--text-dim)">（審核中不可修改內容；要改請先撤回）</span>
+                        <button type="button" x-show="moShowSubmit(m)" @click="moSubmit(m)" :disabled="moBusy === m.itemId" data-testid="mo-submit"
+                                style="font-size:11px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">送審</button>
+                        <button type="button" x-show="moShowWithdraw(m)" @click="moWithdraw(m)" :disabled="moBusy === m.itemId" data-testid="mo-withdraw"
+                                style="font-size:11px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">撤回</button>
+                        <button type="button" x-show="moShowCancel(m)" @click="moCancel(m)" :disabled="moBusy === m.itemId" data-testid="mo-cancel"
+                                style="font-size:11px;padding:2px 10px;border:1px solid var(--tone-danger-border);border-radius:5px;background:var(--surface);color:var(--tone-danger-fg);cursor:pointer">取消叫料單</button>
+                        <template x-if="moAp(m).status === '已核准'">
+                          <span style="display:inline-flex;align-items:center;gap:6px;margin-left:8px">
+                            <template x-if="!moAp(m).receivedOn">
+                              <span style="display:inline-flex;align-items:center;gap:5px">
+                                <span style="color:var(--text-dim)">到貨日期</span>
+                                <input class="fi fi--sm" type="date" style="width:132px" x-model="m._recvDate" data-testid="mo-recv-date">
+                                <button type="button" @click="moReceive(m)" :disabled="moBusy === m.itemId" data-testid="mo-recv"
+                                        style="font-size:11px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">確認到貨</button>
+                              </span>
+                            </template>
+                            <template x-if="moAp(m).receivedOn">
+                              <span style="display:inline-flex;align-items:center;gap:6px" data-testid="mo-recv-done">
+                                <span style="color:var(--success)" x-text="'✓ 已到貨 ' + moAp(m).receivedOn + '（' + moAp(m).receivedBy + '）'"></span>
+                                <button type="button" @click="moUndoReceive(m)" :disabled="moBusy === m.itemId" data-testid="mo-recv-undo"
+                                        style="font-size:11px;padding:2px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">撤銷</button>
+                              </span>
+                            </template>
+                          </span>
+                        </template>
                       </div>
                     </div>
                   </template>
