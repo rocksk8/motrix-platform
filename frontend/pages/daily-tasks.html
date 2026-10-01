@@ -1787,7 +1787,7 @@
             </div>
           </template>
 
-          <!-- 掛載點（建構器方案 B）：發布時選了「每日工作事項頁籤」的自訂模組會出現在這一排；元件 static/mount-tabs.js（頁面不自己呼叫 /api/platform/mounts） -->
+          <!-- 掛載點（建構器方案 B）：發布時選了「每日工作事項頁籤」的自訂模組會出現在這一排；元件 static/mount-tabs.js（頁面不自己呼叫掛載 API，守門 G-M2） -->
           <div x-data="motrixMountTabs('daily_tasks.daily-tasks')" data-mount-point="daily_tasks.daily-tasks" style="display:contents">
           <!-- Tab bar -->
           <div class="dt-tab-bar">
