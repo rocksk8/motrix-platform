@@ -16,6 +16,12 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-01 財務報表：預設比較期與總計列比較欄
+
+- `ledger-statements.js`：資產負債表預設比較＝上一年度期末、綜合損益表預設比較＝去年同期間（頁面建立時填一次；使用者改或清空以使用者的為準）。進頁面即自動查詢（原本就會），現在連比較欄一併帶出。
+- 修正總計／小計列比較欄空白（`bsRows()` 的 cmp 原為 null）；CSV 匯出含比較欄。
+- 測試 `modules/accounting/tests/test_e2e_ledger_bs_default_compare_2026_10_01.py`（4 題 e2e；5 條突變皆紅）。
+
 ## 2026-10-01 模組建構器：刪除模組
 
 - 新增 `DELETE /api/definitions/custom_module/{key}`（`helpers/custom_module_delete.py`）：無單據直接刪；有單據 409＋單據數；`?with_records=1` 連單據刪，已入帳（金流 outbox 有紀錄）或送審中一律拒絕。前端首頁每列「刪除模組」。測試 `test_delete_custom_module_2026_10_01.py`。
