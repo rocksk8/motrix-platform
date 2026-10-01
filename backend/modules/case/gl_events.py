@@ -99,10 +99,14 @@ def gl_events(start, end, *, changed_since=""):
                 "source_type": "case_extra_expense_payment", "source_key": str(r["id"]), "event_code": "E11b", "event_date": paid, "doc_no": doc,
                 "case_no": r["quote_no"] or "", "party": {"key": "", "name": ""}, "tax_code": "", "mode": "snapshot", "lines": lines, "meta": {}})
 
+    mat_pending = 0
     for m in mat_accrual:
         amt = _i(m["amount"])
         d = (m["date"] or "")[:10]
         if amt <= 0:
+            continue
+        if m.get("pending"):                                                       # 叫料審核（31-C）：審核中的叫料單不入帳，核准後再執行
+            mat_pending += 1
             continue
         if not d:
             nodate += 1
@@ -132,4 +136,6 @@ def gl_events(start, end, *, changed_since=""):
         notices.append("%d 筆額外支出付款的實付與應付有差額且尚未核可：暫不產生付款分錄，核可後再執行。" % pending)
     if nodate:
         notices.append("%d 筆叫料沒有發票日也沒有付款日：不產生分錄（請補日期）。" % nodate)
+    if mat_pending:
+        notices.append("%d 筆叫料單審核中（待審核／簽核中）：暫不產生應付分錄，核准後再執行。" % mat_pending)
     return {"events": events, "notice": " ".join(notices)}
