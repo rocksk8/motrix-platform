@@ -236,9 +236,16 @@ def _load_user_index(conn):
 
 
 def _row_cr(row) -> dict:
-    """quotations 列的 `cr_json`（caseRecord）⇒ dict；缺或壞 ⇒ {}。"""
+    """quotations 列的 caseRecord ⇒ dict；缺或壞 ⇒ {}。列有 `cr_json` 用它；只有 `data_json` 就在 Python 逐筆解析
+    （新程式不寫 `json_extract(`：壞的一筆只影響那一筆，見 tests/platform/test_json_extract_ratchet.py）。"""
     try:
-        v = json.loads(row["cr_json"]) if row["cr_json"] else {}
+        keys = row.keys()
+        if "cr_json" in keys:
+            v = json.loads(row["cr_json"]) if row["cr_json"] else {}
+        elif "data_json" in keys:
+            v = (json.loads(row["data_json"] or "{}") or {}).get("caseRecord") or {}
+        else:
+            v = {}
     except Exception:
         return {}
     return v if isinstance(v, dict) else {}
@@ -3429,7 +3436,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         user_by_id, name_index = _load_user_index(conn)
         dept_by_quote = {
             r["quote_no"]: _case_dept(_row_cr(r), r, name_index, user_by_id)[0]
-            for r in conn.execute("SELECT quote_no, sales_person_id, sales_person, json_extract(data_json,'$.caseRecord') AS cr_json "
+            for r in conn.execute("SELECT quote_no, sales_person_id, sales_person, data_json "
                                   "FROM quotations").fetchall()
         }
 

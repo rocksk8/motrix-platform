@@ -296,13 +296,8 @@ def dashboard_monthly(department_id: Optional[int] = Query(None), authorization:
         monthly_amount, monthly_count, monthly_fee = {}, {}, {}
         for r in rows:
             # 部門篩選
-            if department_id:
-                try:
-                    _cr = (json.loads(r["data_json"] or "{}") or {}).get("caseRecord") or {}
-                except Exception:
-                    _cr = {}
-                if R._case_dept(_cr, r, name_index, user_by_id)[0] != department_id:
-                    continue
+            if department_id and R._case_dept(R._row_cr(r), r, name_index, user_by_id)[0] != department_id:
+                continue
             try:
                 data = json.loads(r["data_json"] or "{}")
             except Exception:
@@ -797,8 +792,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
             rows = conn.execute("""
                 SELECT cu.id, cu.quote_no, cu.author, cu.content, cu.created_at,
                        q.customer_name, q.sales_person_id, q.sales_person, q.assigned_user_ids,
-                       json_extract(q.data_json,'$.caseRecord') AS cr_json,
-                       du.display_name
+                       q.data_json, du.display_name
                 FROM case_updates cu
                 LEFT JOIN quotations q ON q.quote_no = cu.quote_no
                 LEFT JOIN users du ON du.username = cu.author

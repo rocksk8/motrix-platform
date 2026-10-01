@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next:minor) — 2026-10-01（fix/module-delete-ownership：刪除自訂模組）
+- L1（新增）：`helpers.custom_module_delete`（`delete_module`／`record_count`／`ModuleDeleteError`）——建構器「刪除模組」：整個自訂模組（所有版本＋草稿）一起刪；有單據拒絕（409＋單據數），`with_records` 才連單據刪，已有金流 outbox 或送審中一律拒絕。只新增；`DELETE /api/definitions/custom_module/{key}`（routers/definitions.py）呼叫它。modules.json 登記為 L1 單位。
+
 ## 1.91 — 2026-09-30（wip/w2-bonus-correction：獎金更正單的三種通知）
 - L1（新增）：`helpers.email_notify.notify_bonus_correction_submitted／_approved／_returned`——獎金更正單送審／核准／駁回的通知信（信內不放金額）；`helpers/mail_types.py` 登記三個信件類型。只新增，舊呼叫端不受影響。
 
