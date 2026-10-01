@@ -2,7 +2,7 @@
 """費用單據的「類型定義」（A2-2）：請購單／採購單／差旅費用請款單／零用金支付單各是一份 `expense_type` 定義。
 
 [單位] helper:expense_types    [層] L1    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] DEFAULT_KINDS, KIND, RESERVED_KEYS, cashier_field_keys, get_type, list_types, normalize_lines, validate_expense_type, validate_values
+[公開介面] CODE_RE, DEFAULT_KINDS, KIND, MAX_LINES, MAX_TEXT, PREFIX_RE, RESERVED_KEYS, cashier_field_keys, get_type, list_types, normalize_lines, validate_expense_type, validate_values
 [不變式] 明細金額與合計只在 `normalize_lines` 算一次（W1 §7.1；整數 TWD、每列 round_half_up）；`validate_values` 不丟任何未知的明細鍵
 [契約題] tests/platform/test_expense_types_2026_10_01.py
 
