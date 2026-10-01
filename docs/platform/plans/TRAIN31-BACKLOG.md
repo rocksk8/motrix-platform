@@ -31,3 +31,4 @@
 - 【A29-B F1，使用者裁示延到第31班】勞報單詳情 `GET /api/payslips/{slip_no}` 與 `/pdf-download`（payroll/api/payslips.py ~l.326／~l.539）對有勞報單模組的 admin 顯示個人完整銀行帳號（正式機現況，非迴歸）。做法：admin 顯示 ****末四碼，遮罩值回傳視為保留原值，仍只有最高管理者看全號。
 - 【A29-B G1】`test_bank_account_mask_2026_10_01` 抓不到憑據 PDF 未遮罩（突變 mask_bank=False 仍綠）→ 加 pypdf 文字斷言。【G2】`bank_mask.keep_if_masked` 是死碼（突變仍綠；真正的守門在 vendor_contractors 內聯 is_masked_value）→ 刪或接上並加測試。
 - 【使用者新需求 2026-10-01 21:4x】承攬商派發管理的新增派發要有審核機制：目前派發後手動選狀態，沒有審核就能完結。設計中：docs/platform/plans/DISPATCH-APPROVAL-DESIGN.md（wip/dispatch-approval-2e）。第 31 班主軸之一。
+- 【派發審核 使用者裁示 2026-10-01】審核鏈＝既有分層簽核；完工也要簽核（兩段：新增派發、完工申請）；既有進行中派發不溯及既往（舊單標記）；報表成本：草稿與被退回不算、待審核算並標註。預設（主持代決）：送審＝建立人／報價單擁有者與協作者／admin+；核准後實質欄位修改需重送審；取消已核准派發＝admin+ 必填原因（有憑據則 superadmin）；單號 DP-。
