@@ -47,6 +47,7 @@
           this.published = res[2].ok ? (res[2].data || []) : []
           this.menuGroups = this.readMenuGroups()
           this.$watch('def', () => this.onDefChange())
+          this.fdInitSwitch()
           window.addEventListener('beforeunload', () => { if (this.dirty) this.saveDraft(true) })
           this.ready = true
           var k = new URLSearchParams(location.search).get('key')
@@ -160,6 +161,7 @@
           this.latestVersion = r.data.latest ? r.data.latest.version : 0
           this.versions = r.data.versions || []
           var body = r.data.draft ? r.data.draft.body : r.data.latest.body
+          this._publishedKeys = r.data.latest ? ((r.data.latest.body || {}).fields || []).map(function (f) { return f.key }) : []
           this.destroyPreviews()
           this.def = this.normalize(clone(body))
           this.sel = null; this.step = 1; this.tab = 'info'; this.drawer = false; this.formMode = 'edit'; this.sideTab = 'props'
@@ -297,6 +299,7 @@
           if (this.tab === 'form') this.sideTab = 'props'
           var m = /^fields\[(\d+)\]/.exec(path || '')
           if (m) this.sel = Number(m[1])
+          if (m && this.useFD && this._fd) this.$nextTick(() => this._fd.focus(this._fd.keyOfPath(path)))
           this.$nextTick(() => {
             var sel = null
             var fm = /^fields\[(\d+)\]/.exec(path || ''), sm = /^workflow\.states\[(\d+)\]/.exec(path || ''), tm = /^workflow\.transitions\[(\d+)\]/.exec(path || '')
