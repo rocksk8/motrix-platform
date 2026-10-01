@@ -254,10 +254,15 @@ def test_orders_with_applications_are_frozen_and_void_releases(client, world):
     cr["materialOrders"][0].update({"unitPrice": 6000, "totalPrice": 12000})
     r = client.patch("/api/quotations/%s/case-record" % NO, json={"case_record": cr}, headers=w["adm"])
     assert [x["code"] for x in r.json()["rejected"]] == ["has_payments"] and _order_json()["totalPrice"] == 10000   # 有申請時不可改金額
+    assert client.post("/api/quotations/%s/material-orders/%s/cancel" % (NO, ITEM), json={"reason": "x"}, headers=w["adm"]).status_code == 409
     cr["materialOrders"] = []
     r = client.patch("/api/quotations/%s/case-record" % NO, json={"case_record": cr}, headers=w["adm"])
-    assert [x["code"] for x in r.json()["rejected"]] == ["delete_blocked"]                                           # 也不可刪
-    assert client.post("/api/quotations/%s/material-orders/%s/cancel" % (NO, ITEM), json={"reason": "x"}, headers=w["adm"]).status_code == 409
+    assert [x["code"] for x in r.json()["rejected"]] == ["delete_blocked"]                                           # 已核准的也不可刪
+    _x("DELETE FROM case_material_approvals WHERE quote_no=?", (NO,))                                                 # 舊單（沒有審核單）：刪除本來可以，但有匯款申請紀錄就不行
+    r = client.patch("/api/quotations/%s/case-record" % NO, json={"case_record": cr}, headers=w["adm"])
+    assert [x["code"] for x in r.json()["rejected"]] == ["delete_blocked"] and _order_json()["itemId"] == ITEM
+    _x("INSERT INTO case_material_approvals (quote_no, item_id, doc_code, status, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+       (NO, ITEM, "MO-20310101-0001", "已核准", "2031-01-01", "2031-01-01"))                                             # 還原審核單，後面的題照常
     assert client.post("/api/material-payments/%d/void" % p["id"], json={}, headers=w["adm"]).status_code == 400    # 理由必填
     assert client.post("/api/material-payments/%d/void" % p["id"], json={"reason": "改下次"}, headers=w["adm"]).json()["status"] == "作廢"
     g = client.get("/api/quotations/%s/material-payments" % NO, headers=w["adm"]).json()["orders"][ITEM]
