@@ -60,3 +60,4 @@
 - 2e：wip/t32-prpo-s1-2e@d9c38a97（S1+S2+S3）。S3 保留 totalAmount 含連品項列（新欄 itemLinkedAmount/extraOnlyAmount）；結算頁改用 extraOnlyAmount+品項系統帶入屬 S5，**S3 與 S5 必須同班出**（S3 單獨出安全）。S4（叫料連結）等 31-C 併入。
 - d7：wip/build-opt2-d7@82844b9b（failfast 外掛，opt-in，未改 build script；實測單靠停損只省 2–9 分，主力是 failure-first 排序與 item 3 依賴增量）。3 日複查：cron `17 9 */3 * *`。
 - a3：wip/t31-expense-designer-a3@67ac7c65（docType 顯示、深色面板修）；c7 須查設計器深色主題是否被全域 invert filter 反轉成淺灰。
+- a3：wip/t31-expense-designer-a3@83da4b4a（併入 c7 f9958ab5 深色修；8 張截圖重拍）；wip/t31-expense-prefill-a3@3aa22930（請款側 prefill 驗證，registry 未到前行為不變，stub 對齊 2e 簽名）。整合順序：2e registry 先，a3 prefill 後。
