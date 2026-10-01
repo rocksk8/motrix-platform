@@ -114,7 +114,7 @@
     html[data-preview="1"] .cr-main { margin-left: 0; margin-top: 0; padding: 12px 16px 16px; }
     html[data-embed="1"] #app-topbar, html[data-embed="1"] #app-sidebar, html[data-embed="1"] .sidebar-overlay, html[data-embed="1"] .pg { display: none !important; }
     html[data-embed="1"] .cr-main { margin: 0; padding: 8px 4px 12px; }
-    html[data-embed="1"] body { background: transparent; }
+    html[data-embed="1"] body { background: transparent; min-height: 0; height: auto; }
   </style>
 </head>
 <body x-data="customRecordsPage()" x-init="init()" x-cloak>
@@ -1121,7 +1121,7 @@
       if (!window.MOTRIX_EMBED) return
       var last = 0
       function send() {
-        var h = Math.ceil(document.body.scrollHeight)
+        var h = Math.ceil(document.body.getBoundingClientRect().height)      // body 自己的高度（不是 scrollHeight：後者會跟著 iframe 視窗高度走、造成回報互相放大／縮小）
         if (!h || h === last) return
         last = h
         try { parent.postMessage({ type: 'motrix-embed-height', height: h }, location.origin) } catch (e) {}
