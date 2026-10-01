@@ -79,7 +79,11 @@ class DispatchIn(BaseModel):
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _vendor_row(row) -> dict:
+from modules.subcontract import bank_mask as _bm  # noqa: E402
+
+
+def _vendor_row(row, user=None) -> dict:
+    """user＝檢視者；帳號遮蔽規則見 modules/subcontract/bank_mask.py（沒帶 user ⇒ 一律遮蔽，fail closed）。"""
     d = {}
     try:
         d = json.loads(row["data_json"] or "{}")
@@ -89,6 +93,7 @@ def _vendor_row(row) -> dict:
     # 實際影像走專屬的 GET/PUT .../passbook 端點（比照 contractors.py 的 has_passbook 慣例）
     has_passbook = bool(d.pop("bankPassbookImage", None))
     keys = row.keys() if hasattr(row, 'keys') else []
+    _bm.mask_record(user, d)
     return {
         "id": row["id"],
         "code": (row["code"] if "code" in keys else "") or "",
@@ -203,7 +208,7 @@ def list_vendor_contractors(
     sql += " ORDER BY name"
     rows = conn.execute(sql, params).fetchall()
     conn.close()
-    return [_vendor_row(r) for r in rows]
+    return [_vendor_row(r, user) for r in rows]
 
 
 @router.get("/api/vendor-contractors/selectable")
@@ -229,7 +234,7 @@ def get_vendor_contractor(vid: int, authorization: str = Header(None)):
     conn.close()
     if not row:
         raise HTTPException(404, "找不到此承攬商")
-    return _vendor_row(row)
+    return _vendor_row(row, user)
 
 
 @router.post("/api/vendor-contractors", status_code=201)
@@ -285,6 +290,9 @@ def update_vendor_contractor(vid: int, body: VendorContractorIn, authorization: 
         "visits", "bankPassbookImage",
         "bankCode", "bankName", "bankBranch", "bankAccountName", "bankAccountNumber",
     )
+    # 遮蔽值原樣送回（編輯表單載入的是 ****1234）⇒ 保留原帳號，不可覆蓋成遮蔽字串
+    if _bm.is_masked_value(new_data.get("bankAccountNumber")):
+        new_data = {**new_data, "bankAccountNumber": existing_data.get("bankAccountNumber", "")}
     for key in _preserve_keys:
         if key not in new_data:
             default = [] if key == "visits" else ""
@@ -371,6 +379,8 @@ def get_vendor_passbook(vid: int, authorization: str = Header(None)):
         data = json.loads(row["data_json"] or "{}")
     except Exception:
         data = {}
+    if not _bm.can_see_full(user):         # 存簿影像上印著完整帳號 ⇒ 只有最高管理者
+        return {"bank_passbook": "", "masked": bool(data.get("bankPassbookImage"))}
     return {"bank_passbook": data.get("bankPassbookImage", "")}
 
 

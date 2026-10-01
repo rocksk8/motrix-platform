@@ -100,7 +100,7 @@
    "build_quote_preview_html": "def(q, status, deal_tag, internal=…)",
    "fmt_money_blank_zero": "def(n)",
    "generate_case_closing_pdf_bytes": "def(quote_no)",
-   "generate_contractor_voucher_pdf_bytes": "def(voucher_no)",
+   "generate_contractor_voucher_pdf_bytes": "def(voucher_no, mask_bank=…)",
    "generate_invoice_voucher_pdf_bytes": "def(voucher_no)",
    "generate_payment_request_pdf_bytes": "def(request_no)",
    "generate_payslip_pdf_bytes": "def(slip_no)",

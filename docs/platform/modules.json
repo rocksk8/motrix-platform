@@ -353,6 +353,7 @@
     "mod:subcontract/__init__",
     "mod:subcontract/gl_events",
     "mod:subcontract/attachments",
+    "mod:subcontract/bank_mask",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/vendor_contractors",

@@ -180,6 +180,9 @@ def get_approval_queue(authorization: str = Header(None)):
     # 權限過濾（2026-09-15）：過濾在分組**之前**——分組之後才過濾會留下「某某人 0 件」的空群組。
     items = [it for it in items if _queue_visible_to(user, it, my_delegated_for)]
 
+    if user.get("role") != "superadmin":          # 收款帳號：只有最高管理者看得到完整（使用者裁示 2026-10-01）
+        items = [_mask_bank_deep(it) for it in items]
+
     groups: dict = defaultdict(list)
     for item in items:
         groups[item["requestedBy"]].append(item)
@@ -197,6 +200,28 @@ def get_approval_queue(authorization: str = Header(None)):
 
     return {"queue": queue, "total": len(items), "myDelegatedFor": my_delegated_for,
             "reassignTypes": _reassign_types()}
+
+
+_BANK_NUMBER_KEYS = ("bankAccountNumber", "bank_account_number")
+_BANK_IMAGE_KEYS = ("bankPassbookImage", "bank_passbook_image")
+
+
+def _mask_bank_deep(obj):
+    """佇列項目裡任何深度的收款帳號 ⇒ ****末四碼、存簿影像清空（回新物件，不改原值）。"""
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if k in _BANK_NUMBER_KEYS:
+                n = str(v or "")
+                out[k] = "" if not n else ("****" + n[-4:] if len(n) > 4 else "****")
+            elif k in _BANK_IMAGE_KEYS:
+                out[k] = ""
+            else:
+                out[k] = _mask_bank_deep(v)
+        return out
+    if isinstance(obj, list):
+        return [_mask_bank_deep(x) for x in obj]
+    return obj
 
 
 #: 與 approval-queue.html 的 `docTypeLabel()` 同一份對照（兩處標籤要一致）。
@@ -382,6 +407,8 @@ def approval_queue_detail(type: str, id: str, authorization: str = Header(None))
                "files": list(d.get("files") or []), "changes": d.get("changes"),
                "case": _case_header(conn, d["quoteNo"])}
         # 金額遮蔽：規則與憑證流一致（見 _can_see_queue_money）
+        if user.get("role") != "superadmin":           # 存簿封面影像上印著完整帳號 ⇒ 只有最高管理者（使用者裁示 2026-10-01）
+            out["files"] = [f for f in out["files"] if not f.get("dataUrl") and f.get("id") != "passbook"]
         if not _can_see_queue_money(conn, user, approval_raw):
             _mask_money(out)
             # 內嵌影像（dataUrl：存簿封面）一律拿掉——看的是「有沒有內嵌內容」，不只看 id 字串（稽核 D AP-M2）
