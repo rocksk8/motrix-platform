@@ -4,6 +4,9 @@
 - 支出報表的部門維度（A2 無案件支出）：`_collect_expenses` 依「提供者明示的 departmentId（送出當下凍結）＞案件業務的部門＞未分類」解析部門，篩選與明細共用同一解析（篩選開啟時，無案件但明示該部門的支出不再被排除）；明細列多 `deptId`／`deptName`，回傳多 `byDepartment`（Σ＝總額，未分類排最後），各期別切片（`monthExpenseItems`／`quarterExpenseItems`）多 `byDepartment`。`departmentId` 是選填鍵：舊提供者沒有 ⇒ 行為同舊版（無案件＋篩選 ⇒ 排除）。
 - 營運報表「收支」分頁：新增「支出・依部門」表與明細「部門」欄。守門：`tests/test_dept_dimension_2026_10_01.py`（7 題）、`tests/test_e2e_expense_dept_2026_10_01.py`。
 
+## (next) — 2026-10-01（暫用號，列車取號；fix/dept-follows-sales-owner：案件部門跟業務負責人）
+- 案件部門改跟業務負責人（`caseRecord.roles.sales`），不是開單者（使用者裁示 2026-10-01）：新增 `reports._case_dept／_load_user_index／_row_cr`；部門績效、部門篩選、未收款項、收款異常、支出彙總、月趨勢與首頁（stats、月趨勢、最新動態留言）同口徑。負責人只有名字或查無帳號 ⇒ 「未分類」；未填業務負責 ⇒ 開單者部門（同舊行為）。新查詢不用 json_extract（Python 逐筆解析）。
+
 ## 1.0.20 — 2026-10-01（暫用號，列車取號；wip/w3-local-date）
 - 本地日期（使用者 2026-10-01：凌晨建的單日期變前一天）：頁面的「今天／當月」預設值改用本地日期（共用 static/motrix-date.js）：台灣 00:00–08:00 不再得到前一天（使用者 2026-10-01 回報）；報表頁、每日任務日報等。
 
