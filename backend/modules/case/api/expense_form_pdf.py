@@ -46,11 +46,23 @@ def build_view(conn, row, body: dict) -> dict:
         elif f.get("type") == "daterange" and isinstance(fields.get(k), dict):
             v = fields[k]
             fields[k] = "%s ～ %s" % (v.get("from", ""), v.get("to", ""))
+    # 草稿還沒有送審快照（categoryName） ⇒ 以類別清單把代碼換成名稱；清單不在或查不到 ⇒ 原值
+    try:
+        cat_names = {r["code"]: r["name"] for r in conn.execute("SELECT code, name FROM expense_categories")}
+    except Exception:                                            # noqa: BLE001 — accounting 模組不在
+        cat_names = {}
     rows = []
     for l in lines:
         r = dict(l)
-        r["category"] = l.get("categoryName") or l.get("category") or ""
+        raw = l.get("categoryCode") or l.get("category") or ""
+        r["category"] = l.get("categoryName") or cat_names.get(raw) or l.get("category") or ""
+        uc = l.get("unitCost")                                   # 單價沒填（只填金額的列）⇒ 空白，不是 0
+        r["unitCostText"] = "{:,.0f}".format(uc) if isinstance(uc, (int, float)) and not isinstance(uc, bool) else ""
         rows.append(r)
+    keys = row.keys()
+    for col in ("pay_terms", "remit_date"):                      # 出納事後填的欄位存在欄位上、不在 data_json
+        if col in keys and (row[col] or "") and not fields.get(col):
+            fields[col] = row[col]
     fields["lines"] = rows
     fields["total"] = int(round(float(row["total_cost"] or 0)))
     try:

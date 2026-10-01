@@ -206,3 +206,60 @@ def test_general_flow_unchanged(live_server, make_user, new_context):
     page.wait_for_selector("#pr-typed-form", state="visible")
     page.select_option("#pr-type", "")
     page.wait_for_selector("#pr-typed-form", state="hidden", timeout=5000)
+
+
+@pytest.mark.e2e
+def test_my_requests_document_buttons(live_server, make_user, new_context, client):
+    """我的請款：類型單據才有「預覽單據／PDF」鈕（舊額外支出沒有）；按下去開新分頁、內容是自己的單據；別人的看不到（端點 404、列表不出現）。"""
+    _seed()
+    adm = make_user(username="a24_doc_adm", role="admin")
+    mgr = make_user(username="a24_doc_mgr", role="admin")
+    oth = make_user(username="a24_doc_oth", role="sales")
+    _join_dept(adm[0], mgr[0])
+    ctx = new_context()
+    page = ctx.new_page()
+    inject_login(page, live_server, adm[0], adm[1])
+    page.goto(live_server + "/pages/payment-request.html")
+    page.wait_for_selector("#pr-type-card", state="visible", timeout=15000)
+    page.select_option("#pr-type", "petty_cash")
+    _fill(page)
+    page.click("#pr-t-save-draft")
+    _wait_done(page)
+    row = _q("SELECT id, doc_code FROM case_extra_expenses WHERE kind='petty_cash' ORDER BY id DESC LIMIT 1")[0]
+    # 舊流程的一筆（沒有 kind）
+    _x("INSERT INTO case_extra_expenses (quote_no, category, description, qty, unit, unit_cost, total_cost, status, created_by, created_by_name,"
+       " created_at, updated_at) VALUES ('', '其他', '舊式', 1, '', 10, 10, '草稿', ?, ?, '2026-01-01T00:00:00', '2026-01-01T00:00:00')",
+       (adm[0], adm[0]))
+    legacy = _q("SELECT id FROM case_extra_expenses WHERE description='舊式'")[0]["id"]
+
+    page.click("#pr-tab-mine")
+    page.wait_for_selector("#pr-mine[data-loaded='1']", timeout=15000)
+    assert page.locator('[data-doc-html="%d"]' % row["id"]).count() == 1
+    assert page.locator('[data-doc-pdf="%d"]' % row["id"]).count() == 1
+    assert page.locator('[data-payreq-row="%d"]' % legacy).count() == 1                       # 舊列有列出…
+    assert page.locator('[data-doc-actions="%d"]' % legacy).count() == 0                       # …但沒有單據鈕
+
+    with ctx.expect_page() as pop:
+        page.click('[data-doc-html="%d"]' % row["id"])
+    doc = pop.value
+    doc.wait_for_load_state()
+    doc.wait_for_function("(c) => document.body && document.body.innerText.includes(c)", arg=row["doc_code"], timeout=15000)
+    assert "尚未核可" in doc.inner_text("body")                                                # 草稿：未核可標示
+    _shot(doc, "document-petty_cash-draft")
+    doc.close()
+
+    with ctx.expect_page() as pop2:
+        page.click('[data-doc-pdf="%d"]' % row["id"])
+    pdf = pop2.value
+    pdf.wait_for_load_state()
+    assert not page.locator("#pr-mine-error").is_visible()
+    pdf.close()
+
+    # 別人：端點 404、自己的列表看不到
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": oth[0], "password": oth[1]}).json()["token"]}
+    assert client.get("/api/quotations/-/extra-expenses/%d/document" % row["id"], headers=h).status_code == 404
+    p2 = new_context().new_page()
+    inject_login(p2, live_server, oth[0], oth[1])
+    p2.goto(live_server + "/pages/payment-request.html?tab=mine")
+    p2.wait_for_selector("#pr-mine[data-loaded='1']", timeout=15000)
+    assert p2.locator('[data-doc-actions="%d"]' % row["id"]).count() == 0

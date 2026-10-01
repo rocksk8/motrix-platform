@@ -162,7 +162,7 @@
         <div class="pr-card">
           <div class="pr-hint" x-show="mineLoaded && !mine.length">還沒有請款</div>
           <table class="pr-table" x-show="mine.length">
-            <thead><tr><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>付款日</th><th></th></tr></thead>
+            <thead><tr><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>付款日</th><th>單據</th><th></th></tr></thead>
             <tbody>
               <template x-for="e in mine" :key="e.id">
                 <tr :data-payreq-row="e.id" :data-status="e.status">
@@ -174,6 +174,14 @@
                     <div x-text="(e.invoiceNo || '—') + '（' + invoiceCount(e) + ' 檔）'" :data-invoice-count="invoiceCount(e)"></div>
                   </td>
                   <td :data-paid-date="e.paidDate" x-text="e.paidDate || '未付款'"></td>
+                  <td>
+                    <template x-if="e.kind">
+                      <div :data-doc-actions="e.id" style="display:flex;gap:4px;flex-wrap:wrap">
+                        <button class="btn btn-ghost btn-sm" :data-doc-html="e.id" :disabled="busy" @click="openDoc(e, 'html')">預覽單據</button>
+                        <button class="btn btn-ghost btn-sm" :data-doc-pdf="e.id" :disabled="busy" @click="openDoc(e, 'pdf')">PDF</button>
+                      </div>
+                    </template>
+                  </td>
                   <td>
                     <template x-if="e.status === '已核准'">
                       <div :data-invoice-form="e.id">
@@ -338,6 +346,20 @@
             this.result = { status: status, id: id, text: text }
           } catch (e) { this.err = e.message }
           finally { this.busy = false }
+        },
+
+        // 單據輸出（A2-7）：端點要 Bearer ⇒ 不能用一般連結，改 fetch → blob → 新分頁（HTML 預覽或 PDF）
+        async openDoc(e, fmt) {
+          this.mineErr = ''
+          var win = window.open('', '_blank')                                  // 先開分頁（點擊當下，避免被擋彈窗），拿到內容再導過去
+          try {
+            var r = await fetch('/api/quotations/' + encodeURIComponent(e.quoteNo || '-') + '/extra-expenses/' + e.id + '/document?format=' + fmt, { headers: this._h() })
+            if (!r.ok) throw new Error((await this._json(r)).detail || ('開啟失敗（HTTP ' + r.status + '）'))
+            var blob = await r.blob()
+            var url = URL.createObjectURL(blob)
+            if (win) win.location.href = url; else window.location.href = url
+            setTimeout(function () { URL.revokeObjectURL(url) }, 120000)
+          } catch (err) { if (win) win.close(); this.mineErr = err.message }
         },
 
         invoiceCount(e) { return (e.files || []).filter(function (f) { return f && f.kind === 'invoice' }).length },
