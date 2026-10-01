@@ -411,6 +411,11 @@ if (typeof module !== 'undefined' && module.exports) {
       + '<a :href="auditHref" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看操作紀錄 →</a>'
       + '</div>'
       + '</div>'
+    } else {
+      // 一般使用者沒有通知鈴鐺，但**資料元件 notifStore 一定要掛**：選單的待簽紅點與數字徽章（簽核佇列、每日工作…）、登入的待簽橫幅
+      // 全都由它的 init() 抓資料；原本它只掛在鈴鐺裡 ⇒ 非管理員（一般簽核人）永遠沒有紅點與徽章（2026-10-01 使用者：「輪到簽核，我的工作上要有紅點，目前沒有」）。
+      // 這裡掛一個看不見的實例，不畫任何畫面。
+      bell = '<div x-data="notifStore()" x-init="init()" style="display:none" data-testid="notif-headless" aria-hidden="true"></div>'
     } // end if (ad)
 
     el.innerHTML =
