@@ -1,8 +1,11 @@
 # 案件 更新紀錄
 
-## (next) — wip/t31-material-d7（31-C：叫料審核，切片 S1：核心與 migration）
-- 新疊加審核表 `case_material_approvals`（migration 0004，只加不改、冪等）：叫料（`caseRecord.materialOrders[]`）以 (quote_no, item_id) 疊加審核狀態；**沒有疊加列＝舊單**（不溯及既往）。
-- 新 `modules/case/material_approval.py`：審核狀態機（草稿／待審核／簽核中／已核准／已退回／已取消；重用分層簽核原語）、實質欄位雜湊、到貨確認（只記日期與確認人）、簽核單據類型 `material_order`（叫料）登記。本切片尚無端點、無畫面、不影響現有行為。
+## (next) — wip/t31-material-d7（31-C：叫料審核；S1–S4：核心、端點、寫入閘、報表／總帳閘）
+- **疊加審核表** `case_material_approvals`（migration 0004，只加不改、冪等）：叫料（`caseRecord.materialOrders[]`）以 (quote_no, item_id) 疊加審核狀態；**沒有疊加列＝舊單**（不溯及既往，行為與今天相同）。
+- **審核狀態機** `modules/case/material_approval.py`：草稿／待審核／簽核中／已核准／已退回（＋終態已取消）；重用分層簽核原語（申請人部門主管→組織鏈→最高管理者；沒設簽核層＝送審即核准；不能自簽）；核准後實質欄位（品名、數量、單位、單價、小計、供應商）變更 ⇒ 回草稿重送審；**到貨確認不簽核**，只記日期＋確認人＋時間。單號 `MO-YYYYMMDD-NNNN`（與 A2 費用單據同格式）。簽核單據類型 `material_order`（叫料）已登記。
+- **端點**：`POST /api/quotations/{no}/material-orders/{itemId}/submit|approve|reject|withdraw|cancel|receive`、`DELETE …/receive`、`GET /api/quotations/{no}/material-order-approvals`；寫入先 commit 再通知；稽核 `material_orders.submit／approve／reject／withdraw／cancel／receive／receive_undo`；簽核佇列提供者與詳情（`approval.queue_items`／`approval.detail`）、通知信四種（信內不放金額）。
+- **寫入閘（關掉 `case-record` 後門）** `modules/case/material_guard.py`：叫料列與物流旗標的**所有**寫入路徑（專屬 PATCH、`PATCH /case-record`、報價單整份存檔／建立、已結案變更核准套用）都過閘，且寫入漏斗 `save_quotation_json` 內另有同一個閘作後盾（冪等）。**只拒有問題的項目，其餘照存**，回應 `rejected[]`（itemId／field／code／message）。規則：新列建審核單；既有列實質變更依審核狀態處理（舊單→草稿、已核准→草稿、審核中／已取消 ⇒ 拒）；刪除只限舊單／草稿／已退回；誰能新增／修改叫料列沿用專屬端點（admin 以上或 `project_manage`＋財務檢視）；**物流旗標 `ordered`／`arrived` 由 false→true 必須連結（`orderItemId`）一張已核准的叫料單，`arrived` 另要已記錄到貨確認**，被拒時連帶 `devices` 序號維持原值（不讓序號在沒核准時認領庫存）；$0 叫料單走同一流程。已付欄位只能經匯款申請寫入的閘已寫好但**暫時關著**（`PAID_VIA_REMITTANCE_ONLY=False`，匯款申請切片落地時翻成 True；本班出貨前必須翻）。
+- **營運報表／總帳**：權責口徑草稿、已退回、已取消的叫料**不計**；待審核／簽核中**計入並標「待審核」**；已核准與舊單照舊；現金口徑付出去的錢照計（只標待審核）。總帳 E12 只有已核准與舊單入帳，審核中的不入帳並在 notice 說明。**上線時報表數字可能變動（舊單被實質編輯後回草稿者不再計入權責成本），需公告。**
 - 設計：docs/platform/plans/MATERIAL-ORDER-APPROVAL-DESIGN.md。
 
 ## 1.0.61 — 2026-10-01（fix/t29-w1／fix/t29-w3：建包全量關卡）
