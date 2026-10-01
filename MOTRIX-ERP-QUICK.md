@@ -1,5 +1,20 @@
 # MOTRIX ERP — 開發快速參考
 
+> ## 🧠 開工先讀記憶（2026-10-01 使用者指示，最高優先）
+>
+> 先讀 AI 記憶，再讀本檔。記憶存使用者偏好、踩坑教訓、多視窗協作規則、待辦與交接；本檔只是索引。
+>
+> | 順序 | 讀什麼 | 位置 |
+> |---|---|---|
+> | 1 | 記憶索引（每個 session 自動載入；沒載入就手動讀） | `C:\Users\hichan\.claude\projects\C--Users-hichan\memory\MEMORY.md` |
+> | 2 | 索引「🔔 開工先看」「🔴」項目，逐檔讀完 | 同目錄 `feedback_*.md`／`project_*.md` |
+> | 3 | 多視窗規則（子視窗轉主持、回報格式、佔用宣告） | [`MULTIWIN-PROTOCOL.md`](MULTIWIN-PROTOCOL.md) |
+> | 4 | 當班交接 | `docs/platform/plans/HANDOFF-*.md`、`docs/platform/RUN-PLAN.md` |
+>
+> - ⚠ 記憶綁 CLI 啟動目錄：從別的目錄開的視窗讀不到上述記憶，**核心規則以 `MULTIWIN-PROTOCOL.md` 與本檔「維護規則」為準**，不可只靠記憶。
+> - 記憶是提出假設用的，不是回答問題用的：講 repo／系統狀態前先查實際程式碼與 git。
+> - 溝通一律精簡、結論先行（見下方「維護規則 §溝通與撰寫風格」）。
+
 > 允碩整合集創（統編 60575481）｜ Tel: 04-3610-6566 ｜ info@miactw.com  
 > 文件版本：**2026-09-16**（通行金鑰備份失敗修復＋Passkey 功能暫緩，DB 無異動，見 §12 最新兩則）
 >
