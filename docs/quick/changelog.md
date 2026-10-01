@@ -16,6 +16,12 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-01 財務報表：預設比較期與總計列比較欄
+
+- `ledger-statements.js`：資產負債表預設比較＝上一年度期末、綜合損益表預設比較＝去年同期間（頁面建立時填一次；使用者改或清空以使用者的為準）。進頁面即自動查詢（原本就會），現在連比較欄一併帶出。
+- 修正總計／小計列比較欄空白（`bsRows()` 的 cmp 原為 null）；CSV 匯出含比較欄。
+- 測試 `modules/accounting/tests/test_e2e_ledger_bs_default_compare_2026_10_01.py`（4 題 e2e；5 條突變皆紅）。
+
 ## 2026-10-01 模組建構器：刪除模組
 
 - 新增 `DELETE /api/definitions/custom_module/{key}`（`helpers/custom_module_delete.py`）：無單據直接刪；有單據 409＋單據數；`?with_records=1` 連單據刪，已入帳（金流 outbox 有紀錄）或送審中一律拒絕。前端首頁每列「刪除模組」。測試 `test_delete_custom_module_2026_10_01.py`。
@@ -34,6 +40,18 @@
 - 新增 `reports.py::_case_dept()`／`_load_user_index()`／`_row_cr()`；`_row_dept`、`_collect_unreceived_items`、`_collect_payment_anomalies`、`_collect_expenses`、月趨勢類彙總與 `dashboard.py`（stats、月趨勢）改用它。規則：負責人是帳號 ⇒ 該帳號部門；名字型／查無帳號 ⇒ 未分類；未填 ⇒ 開單者。
 - 測試 `modules/analytics/tests/test_dept_follows_sales_owner_2026_10_01.py`（6 題：部門合計、與業務員績效對帳、無帳號⇒未分類、首頁篩選、收款異常、正向控制）。
 - 首頁「最新動態」（案件留言）部門篩選同日補上同規則；順手補齊 `_collect_expenses`／月趨勢查詢缺的 `sales_person` 欄（缺欄會在「開單者無帳號且未填業務負責」時 IndexError，已加回歸題）。§11 三列同步更新（部門彙總⇒完成；financial_view⇒部分修復；16 模組⇒已修復）。
+
+## 2026-10-01 簽核：登入橫幅每次都跳（已簽過）
+
+- 根因（程式碼＋重現測試）：`static/notif.js` 橫幅數字＝未讀 `approval_request` 通知列；報價單核准／退回／拒絕從不標已讀 ⇒ 簽過的項目永遠「待簽」，每次登入（登出清 sessionStorage 旗標）再跳。
+- 修：①橫幅改取 `/api/approval-queue/count`（與角標同一份），0 件不彈；②報價單三條路徑標通知已讀（`helpers.audit._mark_notifications_read`）。測試 `test_approval_notice_after_signing_2026_10_01.py`、`test_e2e_login_approval_banner_2026_10_01.py`（含反向控制）。
+- 後續（未做）：出貨／匯款申請／發票開立／承攬商憑證／完工單的簽核通知同樣缺標已讀；橫幅已不受影響（改看真實待簽數），但通知中心未讀數仍會殘留。
+
+
+## 2026-10-01 承攬商收款帳號遮蔽
+
+- 使用者裁示：只有最高管理者看得到完整帳號，其餘一律遮蔽。範圍：承攬商列表／詳情／存簿影本、匯款申請列表／詳情／提供者形狀、簽核佇列（列表與詳情封面）、匯款申請 PDF 下載。遮蔽＝`****末四碼`（換字串、不拿欄位）；編輯時遮蔽值送回＝保留原值。測試 `test_bank_account_mask_2026_10_01.py`、`test_e2e_bank_mask_vendor_page_2026_10_01.py`（含反向控制）；兩題既有簽核詳情題的正對照改為最高管理者。
+- 取捨／風險：出納、財務、一般管理員不再看得到完整帳號（含 PDF）；若出納要用匯款 PDF 付款，需最高管理者下載或另行裁示例外。未動：勞報單（payroll）乙方帳號、伺服器端核准後存檔的 PDF（稽核存檔副本）、外包名冊（本來就僅最高管理者）。
 
 ---
 

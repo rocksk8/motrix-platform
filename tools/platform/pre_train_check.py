@@ -8,6 +8,7 @@ L1 底線名稱、alpine double-init 頁母體、簽核提供者集合、產生�
 
 用法（在任何一棵 MOTRIX-PLATFORM 樹，Python 一律 D:\\MOTRIX-PLATFORM\\.venv312\\Scripts\\python.exe）：
   python tools/platform/pre_train_check.py <分支或 SHA> [--base origin/platform] [--workers 2] [--keep] [--no-fetch]
+  python tools/platform/pre_train_check.py <分支> --changed-modules 另跑分支動到的每個模組的 tests/ 目錄（內容相依的模組題：夾具被別支改到才紅）
   python tools/platform/pre_train_check.py <分支> --skip-tests     只做「合併＋取號＋重產產生檔＋檢查」，不跑 pytest
 退出碼：0 全綠；1 有紅（報告依歸屬分組）；2 合併衝突或工具本身出錯（不是守門紅）。
 
@@ -54,6 +55,10 @@ GUARDS = [
     ("字級縮放 raw-vh 靜態題", "tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py::test_fz_no_raw_vh_is_left_in_the_frontend"),
     ("簽核提供者集合", "modules/*/tests/test_approval_providers*.py"),
     ("頁面殼腳本", "tests/test_page_shell_scripts_2026_09_30.py"),
+    # 第二十七班建包紅（node-bb 2026-09-30）：都在 tests/platform 之外，模組選題也選不到
+    ("模組 key 一致性", "tests/test_module_keys_consistency_2026_09_13.py"),
+    ("查詢字串不帶憑證", "tests/test_no_credentials_in_query_2026_09_22.py"),
+    ("用語守門", "tests/test_wording_guards_2026_09_23.py"),
 ]
 #: 依測試檔名判斷「這是哪一種守門」（報告分組用；順序＝先比先中）
 GUARD_KINDS = [
@@ -71,6 +76,9 @@ GUARD_KINDS = [
     ("test_alpine_double_init", "alpine double-init"),
     ("approval_provider", "簽核提供者集合"),
     ("test_page_shell", "頁面殼腳本"),
+    ("test_module_keys_consistency", "模組 key 一致性"),
+    ("test_no_credentials_in_query", "查詢字串不帶憑證"),
+    ("test_wording_guards", "用語守門"),
     ("test_company_setup", "公司設定輸出點"),
     ("test_system_audit", "表分類"),
     ("test_module_", "modules.json／模組登記"),
@@ -154,8 +162,27 @@ def expand_guards(backend, guards=GUARDS):
     return args, missing
 
 
-def build_pytest_cmd(python, guard_args, basetemp, workers=2):
-    return [python, "-m", "pytest", "tests/platform", *guard_args, "-q", "-rfE", "--tb=short", "-m", "not e2e",
+def touched_modules(changed):
+    """分支改到的檔 ⇒ 動到的模組 key（依出現順序、去重）。"""
+    keys = []
+    for f in changed:
+        m = re.match(r"(?:backend/)?modules/([^/]+)/", f.replace("\\", "/"))
+        if m and m.group(1) not in keys:
+            keys.append(m.group(1))
+    return keys
+
+
+def module_test_dirs(backend, keys):
+    """⇒ (存在 tests/ 目錄的模組測試目錄 modules/<key>/tests, 沒有測試目錄的 key)。"""
+    dirs, none = [], []
+    for k in keys:
+        d = Path(backend) / "modules" / k / "tests"
+        (dirs if d.is_dir() else none).append("modules/%s/tests" % k if d.is_dir() else k)
+    return dirs, none
+
+
+def build_pytest_cmd(python, guard_args, basetemp, workers=2, platform=True):
+    return [python, "-m", "pytest", *(["tests/platform"] if platform else []), *guard_args, "-q", "-rfE", "--tb=short", "-m", "not e2e",
             "-n", str(workers), "-p", "no:cacheprovider", "--basetemp=%s" % basetemp]
 
 
@@ -270,7 +297,7 @@ def commit_if_dirty(runner, tree, message):
 
 
 def run_check(argv, runner=None, root_repo=None, scratch_root=None, keep=False, fetch=True, workers=2, skip_tests=False,
-              python=None, out=print):
+              python=None, out=print, changed_modules=False):
     """主流程。⇒ (exit code, 報告文字)。"""
     runner = runner or Runner()
     root_repo = Path(root_repo or REPO)
@@ -343,9 +370,35 @@ def run_check(argv, runner=None, root_repo=None, scratch_root=None, keep=False, 
                  "" if rc == 0 else "exit %d，紅 %d 題" % (rc, len(fails)))
             if rc != 0 and not fails:
                 step("紅但認不出是哪一題", False, "輸出被截斷／行程被殺／收集錯誤 ⇒ 不可當綠；看上方輸出")
+            allfails = list(fails)
+            if changed_modules:
+                keys = touched_modules(changed)
+                mdirs, nodir = module_test_dirs(tree / "backend", keys)
+                if not mdirs:
+                    step("動到模組的測試目錄", True, "沒有動到模組（或沒有 tests/）：%s" % ("、".join(keys) or "無"))
+                else:
+                    t1 = time.time()
+                    bt2 = os.path.join(tempfile.gettempdir(), "motrix-pytest-pretrain-m-%s-%s" % (slug(branch), time.strftime("%H%M%S")))
+                    cmd2 = build_pytest_cmd(py, mdirs, bt2, workers, platform=False)
+                    out("[pytest 模組] %s" % " ".join(cmd2[3:]))
+                    try:
+                        rc2, o2 = runner.run(cmd2, tree / "backend", env={"MOTRIX_TRAIN": "1"}, stream=True, low=True)
+                    finally:
+                        rmtree_force(bt2)
+                    f2 = parse_failures(o2)
+                    allfails += [f for f in f2 if f["nodeid"] not in {x["nodeid"] for x in allfails}]
+                    tail2 = [l for l in o2.splitlines() if re.search(r"\d+ (passed|failed|error)", l)]
+                    mod_line = tail2[-1].strip() if tail2 else ""
+                    passed_line += "；模組測試 %d 個目錄：%s（增加 %.0f 秒）" % (len(mdirs), mod_line, time.time() - t1)
+                    step("pytest（動到的 %d 個模組的 tests/）" % len(mdirs), rc2 == 0 and not f2,
+                         "" if rc2 == 0 else "exit %d，紅 %d 題" % (rc2, len(f2)))
+                    if rc2 != 0 and not f2:
+                        step("模組測試紅但認不出是哪一題", False, "輸出被截斷／行程被殺／收集錯誤 ⇒ 不可當綠")
+                    if nodir:
+                        out("[略過] 沒有 tests/ 的模組：%s" % "、".join(nodir))
             fs = load_fail_stream(tree)
-            groups = group_reds(fails, changed, getattr(fs, "modules_of", None))
-            total = len(fails)
+            groups = group_reds(allfails, changed, getattr(fs, "modules_of", None))
+            total = len(allfails)
         rep = format_report(branch, sha, base, steps, groups, missing, time.time() - t0, total, passed_line)
         return (0 if all(ok for _, ok, _ in steps) and not groups else 1), rep
     finally:
@@ -368,12 +421,14 @@ def main(argv=None):
     ap.add_argument("--keep", action="store_true", help="保留拋棄式樹（查紅用；用完自己 git worktree remove）")
     ap.add_argument("--no-fetch", action="store_true")
     ap.add_argument("--skip-tests", action="store_true")
+    ap.add_argument("--changed-modules", action="store_true",
+                    help="另跑分支動到的每個模組的 backend/modules/<key>/tests（-m 'not e2e'、-n 2）；會增加執行時間，報告列出增加的秒數")
     ap.add_argument("--scratch-root", default=SCRATCH_ROOT_DEFAULT)
     ap.add_argument("--python", default=sys.executable)
     a = ap.parse_args(argv)
     workers = max(1, min(a.workers, 2))
     code, rep = run_check({"branch": a.branch, "base": a.base}, scratch_root=a.scratch_root, keep=a.keep, fetch=not a.no_fetch,
-                          workers=workers, skip_tests=a.skip_tests, python=a.python)
+                          workers=workers, skip_tests=a.skip_tests, python=a.python, changed_modules=a.changed_modules)
     print(rep)
     return code
 

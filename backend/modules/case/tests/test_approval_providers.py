@@ -246,8 +246,12 @@ def test_case_sales_without_money_rights_gets_no_passbook(client, make_user):
     assert sales.status_code == 200, sales.text
     assert sales.json().get("moneyMasked") is True
     assert not [f for f in sales.json()["files"] if f.get("id") == "passbook" or f.get("dataUrl")], sales.json()["files"]
+    # 2026-10-01 使用者裁示：存簿封面只有最高管理者；非最高管理者的簽核人也拿不到
     appr = client.get(url, headers=_login(client, au, ap)).json()
-    assert [f for f in appr["files"] if f.get("id") == "passbook" and f.get("dataUrl", "").startswith("data:image/")]
+    assert not [f for f in appr["files"] if f.get("id") == "passbook" or f.get("dataUrl")], appr["files"]
+    sau, sap = make_user(username="apm2_sa", role="superadmin")[:2]
+    sa = client.get(url, headers=_login(client, sau, sap)).json()
+    assert [f for f in sa["files"] if f.get("id") == "passbook" and f.get("dataUrl", "").startswith("data:image/")]   # 正對照
 
 
 def test_unreadable_chain_is_refused(client, iv_setup):

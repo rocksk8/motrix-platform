@@ -2,7 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next:minor) — 2026-10-01（fix/contractor-bank-mask：承攬商收款帳號遮蔽）
+- L0（新增，向下相容）：`pdf_gen.generate_contractor_voucher_pdf_bytes(voucher_no, mask_bank=True)` 加選填參數 `mask_bank`（預設遮蔽＝fail closed；只有最高管理者下載才傳 False）；`_build_contractor_voucher_html(v, mask_bank=False)`。`routers/approval_queue.py`：非最高管理者的佇列項目與詳情，帳號遮成 `****末四碼`、存簿封面拿掉。
+
 ## (next) — 2026-10-01（wip/w1-a2-2：A2-2 費用單據類型定義）
+- L1（新增）頁面：`expense-types.html`（請款類型定義編輯頁，超級管理員；`l1_pages.json`）＋選單項「請款類型」（`menu_l1.json`，system 群組、perm＝superadmin）。編輯頁列出程式預設的四個類型（定義庫沒有列時以目前生效的預設為起點），改了走既有 `/api/definitions/expense_type` 草稿→驗證→發布；單據仍釘在自己的 `def_version`。
 - L1（新增）：`helpers.expense_types`（費用單據類型定義 `expense_type`：`validate_expense_type／get_type／list_types／cashier_field_keys／normalize_lines／validate_values`，明細金額唯一實作）＋四個預設定義（purchase_req／purchase_order／travel／petty_cash，欄位為草稿待使用者確認）；路由 `GET /api/expense-types`、`GET /api/expense-types/{code}`；`POST /api/definitions/{kind}/{key}/validate` 改用 `D.kinds()`（登記的種類不再 400）。
 
 ## 1.92 — 2026-10-01（wip/w1-a2-0：A2 費用單據的底層預留切片，一次到位；之後各類型只動模組）
@@ -22,6 +26,9 @@
 
 ## (next:minor) — 2026-10-01（fix/module-delete-ownership：刪除自訂模組）
 - L1（新增）：`helpers.custom_module_delete`（`delete_module`／`record_count`／`ModuleDeleteError`）——建構器「刪除模組」：整個自訂模組（所有版本＋草稿）一起刪；有單據拒絕（409＋單據數），`with_records` 才連單據刪，已有金流 outbox 或送審中一律拒絕。只新增；`DELETE /api/definitions/custom_module/{key}`（routers/definitions.py）呼叫它。modules.json 登記為 L1 單位。
+
+## (next:minor) — 2026-10-01（fix/login-approval-popup：簽核處理掉 ⇒ 待簽核通知標已讀）
+- L1（新增）：`helpers.audit._mark_notifications_read(ref_id, types, username=None)`（列入 `__l1_public__`）——簽核已處理（核准只標自己那筆、退回／拒絕標整張單）時把對應通知列標已讀。只新增。報價單核准／退回／拒絕結案已呼叫；登入橫幅改用 `/api/approval-queue/count`（`static/notif.js`）。
 
 ## 1.91 — 2026-09-30（wip/w2-bonus-correction：獎金更正單的三種通知）
 - L1（新增）：`helpers.email_notify.notify_bonus_correction_submitted／_approved／_returned`——獎金更正單送審／核准／駁回的通知信（信內不放金額）；`helpers/mail_types.py` 登記三個信件類型。只新增，舊呼叫端不受影響。

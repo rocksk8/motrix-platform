@@ -1389,7 +1389,22 @@ def _voucher_sign_html(appr: dict) -> str:
     )
 
 
-def _build_contractor_voucher_html(v: dict) -> str:
+def _mask_voucher_bank(v: dict) -> dict:
+    """匯款申請 PDF 的帳號遮蔽（使用者裁示 2026-10-01：只有最高管理者看得到完整帳號）：帳號 ⇒ ****末四碼，存簿影本拿掉。回新 dict。"""
+    def m(n):
+        n = str(n or "")
+        return "" if not n else ("****" + n[-4:] if len(n) > 4 else "****")
+    out = dict(v)
+    out["bankAccountNumber"] = m(out.get("bankAccountNumber"))
+    out["bankPassbookImage"] = ""
+    out["personnel"] = [dict(p, bankAccountNumber=m(p.get("bankAccountNumber")), bankPassbookImage="")
+                        if isinstance(p, dict) else p for p in (out.get("personnel") or [])]
+    return out
+
+
+def _build_contractor_voucher_html(v: dict, mask_bank: bool = False) -> str:
+    if mask_bank:
+        v = _mask_voucher_bank(v)
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
@@ -1638,8 +1653,9 @@ def _contractor_voucher_dict(row) -> dict:
     return out
 
 
-def generate_contractor_voucher_pdf_bytes(voucher_no: str) -> bytes:
-    """Edge Headless 產生承攬商匯款申請 PDF 並以 bytes 回傳（供 API 下載使用）。"""
+def generate_contractor_voucher_pdf_bytes(voucher_no: str, mask_bank: bool = True) -> bytes:
+    """Edge Headless 產生承攬商匯款申請 PDF 並以 bytes 回傳（供 API 下載使用）。
+    mask_bank 預設 True（fail closed）：只有最高管理者下載時才傳 False（見 modules/subcontract/bank_mask.py）。"""
     edge = _get_edge_path()
     conn = get_db()
     row = conn.execute(
@@ -1649,7 +1665,7 @@ def generate_contractor_voucher_pdf_bytes(voucher_no: str) -> bytes:
     if not row:
         raise ValueError("申請不存在")
     v = _contractor_voucher_dict(row)
-    html_content = _build_contractor_voucher_html(v)
+    html_content = _build_contractor_voucher_html(v, mask_bank=mask_bank)
     tmp_html = tmp_pdf = None
     try:
         with tempfile.NamedTemporaryFile(mode='w', suffix='.html', encoding='utf-8', delete=False) as f:
