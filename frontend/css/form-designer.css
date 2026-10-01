@@ -74,7 +74,7 @@
 .fd-chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; margin-left: 6px; background: var(--tone-warning-bg); color: var(--tone-warning-fg); vertical-align: 1px; }
 .fd-chip--bad { background: var(--tone-danger-bg); color: var(--tone-danger-fg); }
 .fd-help { font-size: 12.5px; color: var(--ink-secondary); margin-top: 4px; }
-.fd-fbar { position: absolute; right: 8px; top: -18px; display: none; background: var(--ink-strong); color: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-popover); padding: 2px; z-index: 3; }
+.fd-fbar { position: absolute; right: 8px; top: -40px; display: none; background: var(--ink-strong); color: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-popover); padding: 2px; z-index: 3; }
 .fd-fld.is-sel .fd-fbar { display: inline-flex; }
 .fd-fbar .fd-mini { color: var(--surface); min-width: 34px; height: 34px; }
 .fd-fbar .fd-mini:hover:not(:disabled) { background: rgba(128, 128, 128, .35); color: var(--surface); }

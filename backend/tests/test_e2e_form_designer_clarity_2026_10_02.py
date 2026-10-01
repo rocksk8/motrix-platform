@@ -48,8 +48,8 @@ def _body():
                        _field("f1", "檔案", "file"), _field("i1", "圖片", "image"), _field("fx", "計算", "formula", formula=""),
                        _field("lines", "明細", "table", minRows=0, maxRows=200, addLabel="新增一列",
                               columns=[{"key": "item", "label": "項目", "type": "text"}, {"key": "kind", "label": "類別", "type": "select", "options": ["甲"]},
-                                       {"key": "qty", "label": "數量", "type": "number"}, {"key": "unitCost", "label": "單價", "type": "number"},
-                                       {"key": "amount", "label": "小計", "type": "formula", "formula": "round_half_up(qty * unitCost)"}])],
+                                       {"key": "qty", "label": "數量", "type": "number"}, {"key": "unit_cost", "label": "單價", "type": "number"},
+                                       {"key": "amount", "label": "小計", "type": "formula", "formula": "round_half_up(qty * unit_cost)"}])],
             "workflow": {"initial": "draft", "states": [{"key": "draft", "label": "草稿", "final": True}], "transitions": []},
             "ui": {"form": {"groups": []}, "list": {"columns": []}}}
 

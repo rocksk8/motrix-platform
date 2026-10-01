@@ -34,8 +34,8 @@ def _draft():
 def _body():
     lines = {"key": "lines", "label": "費用明細", "type": "table", "dataClass": "T1", "minRows": 0, "maxRows": 200, "addLabel": "新增一列",
              "columns": [{"key": "item", "label": "項目", "type": "text"}, {"key": "qty", "label": "數量", "type": "number"},
-                         {"key": "unitCost", "label": "單價", "type": "number"},
-                         {"key": "amount", "label": "小計", "type": "formula", "formula": "round_half_up(qty * unitCost)"}]}
+                         {"key": "unit_cost", "label": "單價", "type": "number"},
+                         {"key": "amount", "label": "小計", "type": "formula", "formula": "round_half_up(qty * unit_cost)"}]}
     return {"name": "設計器測試", "icon": "", "permission": "custom." + KEY,
             "numbering": {"prefix": "FD", "date": "YYYYMMDD", "digits": 4},
             "fields": [{"key": "place", "label": "地點", "type": "text", "dataClass": "T1", "required": True},
@@ -122,8 +122,15 @@ def test_task3_move_amount_to_the_last_section(designer):
 @pytest.mark.e2e
 def test_task3b_drag_amount_to_the_last_section(designer):
     page = designer
+    # 🔴 Playwright 的 drag_to 在這個環境只會送出 dragstart（真滑鼠按下去也會，實測），之後的 dragenter／dragover／drop 不會產生；
+    #    所以用同一個 DataTransfer 依序送出整串拖放事件——驗的是設計器自己的處理（落在哪條插入線），不是瀏覽器的拖放啟動。
     last_slot = page.locator('.fd-sec').last.locator('.fd-slot').last
-    page.locator('.fd-fld[data-key="amount"]').drag_to(last_slot)
+    src = page.locator('.fd-fld[data-key="amount"]')
+    dt = page.evaluate_handle("() => new DataTransfer()")
+    src.dispatch_event("dragstart", {"dataTransfer": dt})
+    last_slot.dispatch_event("dragover", {"dataTransfer": dt})
+    last_slot.dispatch_event("drop", {"dataTransfer": dt})
+    src.dispatch_event("dragend", {"dataTransfer": dt})
     _saved(page)
     groups = _draft()["ui"]["form"]["groups"]
     assert "amount" in groups[-1]["fields"]
@@ -163,9 +170,10 @@ def test_options_enter_adds_the_next_row_and_paste_splits_lines(designer):
     page.keyboard.press("Enter")                               # 在最後一格按 Enter ⇒ 下一格，游標跟過去
     page.keyboard.type("第三個")
     assert page.locator('.fd-right [data-items="opt"] li').count() == 3
+    # 貼上多行：游標所在格有字 ⇒ 多行接在它後面（2 + Enter 的 1 + 貼上的 3 ＝ 6 格）；所在格是空的 ⇒ 第一行填進該格
     page.evaluate("""() => { const i = document.querySelector('.fd-right [data-item="opt:2"]'); i.focus();
         const dt = new DataTransfer(); dt.setData('text', 'A\\nB\\nC'); i.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })) }""")
-    page.wait_for_function("() => document.querySelectorAll('.fd-right [data-items=\"opt\"] li').length === 5")
+    page.wait_for_function("() => document.querySelectorAll('.fd-right [data-items=\"opt\"] li').length === 6")
     _saved(page)
     assert _label_of(_draft(), "place")["options"][-3:] == ["A", "B", "C"]
 
