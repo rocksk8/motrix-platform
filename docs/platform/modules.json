@@ -273,11 +273,13 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/completion_notes",
+    "mod:case/api/material_approvals",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:case/expense_forms",
     "mod:case/expense_notify",
-    "mod:case/material_approval"
+    "mod:case/material_approval",
+    "mod:case/material_notify"
    ],
    "tables": [
     "case_action_items",

@@ -116,6 +116,12 @@
    "scope": "row_access"
   },
   {
+   "file": "modules/case/api/material_approvals.py",
+   "path": "/api/quotations/{quote_no}/material-order-approvals",
+   "handler": "get_approvals",
+   "scope": "row_access"
+  },
+  {
    "file": "modules/netplan/api.py",
    "path": "/api/quotations/{quote_no}/network-plan",
    "handler": "get_network_plan_by_case",
