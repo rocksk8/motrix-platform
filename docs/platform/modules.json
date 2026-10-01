@@ -74,6 +74,7 @@
    "js:static/custom-layout.js",
    "js:static/file-preview.js",
    "js:static/form-preview.js",
+   "js:static/definition-form.js",
    "js:static/map-google.js",
    "js:static/map-overlay.js",
    "js:static/edit-presence.js",

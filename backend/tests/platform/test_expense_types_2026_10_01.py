@@ -247,3 +247,21 @@ def test_api_read_and_definition_editing(client, make_user):
     got = client.get("/api/expense-types/petty_cash", headers=user).json()
     assert got["defVersion"] == 1 and got["definition"]["name"] == "零用金（改名）"
     assert client.get("/api/expense-types/petty_cash?version=0", headers=user).json()["definition"]["name"] == "零用金支付單"
+
+
+def test_definition_may_not_carry_bank_or_account_fields():
+    """data_json／lines_json 不在備份個資分流（F2）內 ⇒ 定義不可放收款銀行／帳號類欄位（收款資料走 payee_* 專用欄）。"""
+    base = ET._default_for("travel")
+    assert not [p for p in ET.validate_expense_type(base, "travel") if "銀行" in p["message"]]       # 正對照：預設四型無此類欄位
+    for key, label in (("bank_no", "備註"), ("note2", "匯款帳號"), ("acct", "銀行戶名"), ("iban", "x")):
+        b = copy.deepcopy(base)
+        b["fields"].append({"key": key, "label": label, "type": "text"})
+        probs = ET.validate_expense_type(b, "travel")
+        assert any("收款銀行" in p["message"] for p in probs), (key, label, probs)
+    b = copy.deepcopy(base)                                                                         # 明細欄也擋；系統科目快照 accountCode 放行
+    lf = next(f for f in b["fields"] if f["key"] == "lines")
+    lf["columns"].append({"key": "bankAccount", "label": "帳號", "type": "text"})
+    assert any("收款銀行" in p["message"] for p in ET.validate_expense_type(b, "travel"))
+    b = copy.deepcopy(base)
+    next(f for f in b["fields"] if f["key"] == "lines")["columns"].append({"key": "accountCode", "label": "科目", "type": "text"})
+    assert not any("收款銀行" in p["message"] for p in ET.validate_expense_type(b, "travel"))

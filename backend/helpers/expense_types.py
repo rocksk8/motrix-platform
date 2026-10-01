@@ -143,6 +143,24 @@ def _field_problems(fields):
     return out
 
 
+_BANK_RE = re.compile(r"bank|account|iban|swift|帳號|帳戶|銀行|戶名", re.I)
+
+
+def _bank_field_problems(fields, prefix="fields") -> list:
+    """`data_json`／`lines_json` 是自由欄位，備份的個資分流（F2）不認得它 ⇒ 定義不可以放收款銀行／帳號類欄位；
+    收款資料一律走單據的 `payee_*` 專用欄（已宣告個資）。系統自己寫的科目快照 `accountCode` 不是個資，放行。"""
+    out = []
+    for i, f in enumerate(fields):
+        if not isinstance(f, dict):
+            continue
+        k, lab = str(f.get("key") or ""), str(f.get("label") or "")
+        if k != "accountCode" and (_BANK_RE.search(k) or _BANK_RE.search(lab)):
+            out.append(_p("%s[%d]" % (prefix, i), "欄位「%s」看起來是收款銀行／帳號：不可放在定義裡（備份的個資分流不會處理它）；收款資料請用單據的收款人專用欄位" % (lab or k)))
+        if isinstance(f.get("columns"), list):
+            out += _bank_field_problems(f["columns"], "%s[%d].columns" % (prefix, i))
+    return out
+
+
 def validate_expense_type(body, key: str = "") -> list:
     """類型定義 ⇒ `[{"path","message"}]`（空＝可以發布）。形狀同建構器的驗證結果。"""
     from helpers import custom_modules as CM
@@ -178,6 +196,7 @@ def validate_expense_type(body, key: str = "") -> list:
     g = _generic(body)
     out += [_p(x["path"], _camel_text(x["message"])) for x in CM._validate_fields(g["fields"])]
     out += _field_problems(fields)
+    out += _bank_field_problems(fields)
     keys = {f.get("key") for f in fields if isinstance(f, dict)}
     ui = body.get("ui")
     if ui is not None:
