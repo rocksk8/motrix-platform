@@ -71,7 +71,7 @@
    "file": "modules/filehub/api.py",
    "path": "/api/filehub/search",
    "handler": "search",
-   "scope": "row_access"
+   "scope": "own_rule"
   },
   {
    "file": "modules/case/api/expense_form_pdf.py",
