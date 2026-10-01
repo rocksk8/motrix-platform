@@ -18921,11 +18921,13 @@
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_requires.py",
     "mod:accounting/api/ledger_category_map",
+    "mod:accounting/api/ledger_engine",
     "mod:accounting/api/ledger_settings",
     "mod:accounting/ledger/__init__",
     "mod:accounting/ledger/category_map",
     "mod:accounting/ledger/roles",
     "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
     "mod:case/api/case_extra_expenses",
     "page:pages/approval-queue.html",
     "page:pages/cashier.html",
@@ -18943,8 +18945,10 @@
     ],
     "api": [
      "backend/modules/accounting/api/ledger_category_map.py",
+     "backend/modules/accounting/api/ledger_engine.py",
      "backend/modules/accounting/api/ledger_settings.py",
      "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py",
      "backend/modules/case/api/case_extra_expenses.py"
     ],
     "page": [
