@@ -141,7 +141,7 @@ def current_def_version(conn, kind: str) -> int:
 def prepare_submit(conn, lines: list) -> list:
     """送審當下處理明細的費用類別（W4 合約 2026-10-01）：
     1. 提供者 `expense.categories` 在 ⇒ 每列的 `category`（代碼或名稱）必須是**啟用中**的類別，否則 400（狀態不變）；
-       通過的列寫入 `categoryCode`（代碼，改名不會壞）＋`categoryName`（顯示快照）。提供者不在 ⇒ 不驗證、不加。
+       通過的列寫入 `categoryCode`（代碼，改名不會壞）＋`categoryName`（顯示快照）。提供者不在，或提供者回**空清單**（尚未設定任何費用類別）⇒ 不驗證、不加。
     2. 提供者 `gl.category_account` 在 ⇒ 寫入唯讀的 `accountCode` 快照（**只供顯示**：過帳時總帳從事件行的 category 重新解，之後改對照表以新的為準）；
        解不出來（None）⇒ 空字串。提供者不在 ⇒ 不動。
     草稿可以放任何類別；只有送審擋。回新的明細列（不改傳入的）。"""
@@ -153,7 +153,7 @@ def prepare_submit(conn, lines: list) -> list:
         cats = cats_fn(conn) or []
         by_code = {c["code"]: c["name"] for c in cats}
         by_name = {c["name"]: c["code"] for c in cats}
-        for i, l in enumerate(out, 1):
+        for i, l in (enumerate(out, 1) if cats else ()):      # 清單是空的＝公司還沒設定費用類別 ⇒ 不驗證（不擋人；總帳以既有 category_unmapped 備註落到預設科目）；有 ≥1 個啟用類別就嚴格驗證
             v = (l.get("categoryCode") or l.get("category") or "").strip()
             if v in by_code:
                 code = v

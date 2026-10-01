@@ -412,3 +412,16 @@ def test_report_entries_legacy_row_one_entry_no_new_keys(client, H, seed_extra_e
         c.close()
     ents = [e for e in _entries("accrual") if e["expenseId"] == eid]
     assert len(ents) == 1 and ents[0]["amount"] == 300 and "departmentId" not in ents[0] and "kind" not in ents[0]
+
+
+def test_empty_category_list_means_not_configured_and_does_not_block(client, H, providers):
+    """使用者裁示 A：提供者在但沒有任何啟用類別 ⇒ 不驗證（送審照過、不寫 categoryCode）；一有啟用類別就嚴格（上一題）。"""
+    _no_tiers()
+    providers["expense.categories"]["accounting"] = lambda conn: []
+    eid = _draft(client, H["ef_form"], [{"category": "任何文字", "amount": 100}])
+    assert client.post("%s/%d/submit" % (SENT, eid), headers=H["ef_form"]).json()["status"] == "已核准"
+    lines = json.loads(_q("SELECT lines_json FROM case_extra_expenses WHERE id=?", (eid,))[0]["lines_json"])
+    assert "categoryCode" not in lines[0] and lines[0]["category"] == "任何文字"
+    providers["expense.categories"]["accounting"] = lambda conn: CATS                          # 正對照：有類別後同樣的明細被擋
+    eid2 = _draft(client, H["ef_form"], [{"category": "任何文字", "amount": 100}])
+    assert client.post("%s/%d/submit" % (SENT, eid2), headers=H["ef_form"]).status_code == 400
