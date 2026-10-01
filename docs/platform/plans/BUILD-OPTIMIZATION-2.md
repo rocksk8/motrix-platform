@@ -72,6 +72,13 @@
 - R1-d 重排不刪題：`--collect-only` 的 nodeid 集合在重排前後 sha 相同。
 - R1-e 重放：把 t29#1、t30b、t30c 的紅題集當輸入，模擬「第一個紅＋Q」時機，確認 stop 發生時**已涵蓋 ≥ 90% 的紅**（其餘在下一輪必現）。
 
+#### 項 1 實作狀態（2026-10-02，wip/build-opt2-d7；**尚未接進建包腳本**——使用者套用第 30 包前不動 `build_deploy_package.ps1`）
+- **已做**：`tools/platform/failfast.py`（pytest plugin，**預設關**）＋ `fail_stream.py` 認得它（停止不記成 aborted）＋ dry-run 測試台 `backend/tests/platform/test_failfast_2026_10_02.py`（自造 72 題小專案、巢狀 pytest，9 題全綠；`fail_stream` 既有 15＋9 題照綠）。
+- **開關**（環境變數）：`MOTRIX_FAILFAST=1`（N 預設 10、`MOTRIX_FAILFAST_QUIET_MIN` 預設 4 分、已登記且未過期的偶發紅不計）；`MOTRIX_FAILFIRST=1`（最近 fail_stream 紅過的題 → `MOTRIX_FAILFIRST_BASE` 起 diff 動到的測試檔 → tests/platform → 其餘原順序；只改順序、集合不同就放棄重排）。
+- **回答 §開放問題 #4**：xdist 下 `session.shouldstop` 沒有作用（DSession 看自己的 `shouldstop` 屬性）；plugin 設 `dsession.shouldstop`，pytest 會以 `xdist.dsession.Interrupted`（KeyboardInterrupt 子類）收尾、**exit code = 2（INTERRUPTED）**——這會被 fail_stream／建包當成「外部中斷」。因此 plugin 在 sessionfinish 把 exitstatus 改回 **1**，且 fail_stream 看到 `_failfast_reason` 就不記 aborted（summary 帶 `aborted_by: failfast`）。單程序（無 xdist）用 `session.shouldfail`，exit 1。
+- **反向控制（已跑，全部 RED 後還原）**：stop 條件拿掉／exit code 不改回 1／登記的偶發也計入／重排丟一題／quiet 立即停／預設就開——6 個突變都被測試台抓到；全綠 run 不被截斷（60 綠、exit 0）；重排前後 `--collect-only` 題集合相同（72＝72）。
+- **還沒做**：R1-e（用 t29#1／t30b／t30c 的紅題集重放，驗「stop 時已涵蓋 ≥90% 的紅」）；把 plugin 接進 `build_deploy_package.ps1`（`-p failfast` ＋環境變數；等使用者套用第 30 包後、在分支上做，並用 dry-run 台驗證 exit code 與 Record-Stage 仍記紅）；非 e2e 與 e2e 兩段各自的 N／Q 調校。
+
 ### 項 2　段結果以「樹雜湊」計，獨立跑的也算（不重跑兩次）
 
 **現況**：沿用紀錄只有 build 與 `modtest --full`（兩者都要乾淨樹、無縮小參數）寫入（build_test_reuse.py:231-250）；指紋含環境，任何 `MOTRIX_*` 差異（`_ENV_IGNORE` 只排除少數）都會讓兩邊不相等。使用者描述的「e2e 單獨跑 19 分，建包又跑一次」在 9 份 log 內**沒有留下 `沿用` 一行**，**真正的不相等原因無法從 log 判定** [實測]。可能原因 [推論]：⒜獨立跑用原生 `pytest -m e2e`／縮小參數，不寫紀錄；⒝兩個 shell 的 `MOTRIX_*`／`PYTEST_ADDOPTS`／pip freeze 不同；⒞中間 commit 變了。
@@ -255,6 +262,12 @@ D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe tools\platform\build_log_report.p
 5. 閘門沒變弱的證據：各項反向控制守門題都在、全綠；`selected ∪ carried ⊇ collected`；影子全量（R3-e）差異＝0。
 6. 偶發登記簿：本期新登記幾題、到期日（known_flakes.json）。
 7. 把這 6 項寫進 RUN-LOG，超標者排下一個實作。
+
+**排程（每 3 天；使用者指令：建包優化要定期複查）**
+- 主持視窗用 session cron：`CronCreate`，cron 表示式 `17 9 */3 * *`（每 3 天 09:17；避開整點），prompt＝「跑 §6 一行指令、逐項核對 6 條複查清單、把結果寫進 RUN-LOG、超標者開下一個實作項」。session cron 只活在當次工作階段內 ⇒ 每次開新工作階段先 `CronList` 確認還在，不在就重建。
+- 不依賴工作階段的備援：Windows 工作排程器（登入使用者、每 3 天）執行上面那行 `build_log_report.py --last 3 --top 20 --budget --json > <RUN-LOG 資料夾>uild-report-<日期>.json`；腳本唯讀，不吃 CPU，可與建包並行。
+- 複查結果的**落地位置**：`docs/platform/RUN-LOG`（日期＋六項各一行＋超標項的處置）；連續兩次「乾淨全量 > 30:00」＝升級給主持排實作。
+
 
 ---
 
