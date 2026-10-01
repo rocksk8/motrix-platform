@@ -81,7 +81,8 @@ def test_cost_state_table():
 def test_draft_gets_a_document_code_and_codes_are_unique(conn):
     d1 = MA.create_draft(conn, NO, "it-1", ENG)
     d2 = MA.create_draft(conn, NO, "it-2", ENG)
-    assert re.fullmatch(r"MO-\d{6}-\d{3}", d1["doc_code"]) and d1["doc_code"] != d2["doc_code"]
+    assert re.fullmatch(r"MO-\d{8}-\d{4}", d1["doc_code"]) and d1["doc_code"] != d2["doc_code"]
+    assert (d1["doc_code"][-4:], d2["doc_code"][-4:]) == ("0001", "0002") and d1["doc_code"][:-4] == d2["doc_code"][:-4]       # 同一天依序
     assert d1["status"] == MA.S_DRAFT and MA.create_draft(conn, NO, "it-1", ENG)["doc_code"] == d1["doc_code"]       # 重複建立回既有
 
 

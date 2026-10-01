@@ -12,9 +12,8 @@
 """
 import hashlib
 import json
-from datetime import datetime
+from datetime import date, datetime
 
-from db import next_entity_code
 from helpers.dates import normalize_date
 from helpers.tiered_approval import (
     APPROVAL_DOC_TYPES, UnresolvedManagerError, active_tiers, check_approve_permission, check_no_tier_self_approval,
@@ -112,6 +111,19 @@ def cost_state(status: str) -> str:
     return "counted"
 
 
+# ── 單號 ─────────────────────────────────────────────────────────────
+
+def next_doc_code(conn, today: str = "") -> str:
+    """`MO-YYYYMMDD-NNNN`（與 A2 費用單據同一個格式：`{前綴}-{YYYYMMDD}-{NNNN}`；`expense_forms.next_doc_code` 的同型寫法）。
+    呼叫端要已持有寫鎖（begin_write），否則兩個人同時開單會撞號（doc_code 另有唯一索引擋底）。"""
+    day = (today or date.today().isoformat()).replace("-", "")
+    stem = "%s-%s-" % (DOC_PREFIX, day)
+    row = conn.execute("SELECT MAX(doc_code) FROM case_material_approvals WHERE doc_code LIKE ? AND LENGTH(doc_code)=?",
+                       (stem + "%", len(stem) + 4)).fetchone()
+    last = int(row[0][-4:]) if row and row[0] else 0
+    return "%s%04d" % (stem, last + 1)
+
+
 # ── 建立草稿 ─────────────────────────────────────────────────────────
 
 def create_draft(conn, quote_no: str, item_id: str, user: dict, reason: str = ""):
@@ -120,7 +132,7 @@ def create_draft(conn, quote_no: str, item_id: str, user: dict, reason: str = ""
     if cur:
         return cur
     now = _now()
-    code = next_entity_code(conn, "case_material_approvals", DOC_PREFIX, "doc_code")
+    code = next_doc_code(conn)
     appr = {"history": [{"at": now, "by": user["username"], "byDisplay": _display(user), "action": "create", "tier": 0, "comment": reason}]}
     conn.execute(
         "INSERT INTO case_material_approvals (quote_no, item_id, doc_code, status, approval_json, version, created_by, created_at, updated_at)"
