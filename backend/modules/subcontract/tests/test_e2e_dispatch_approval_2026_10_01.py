@@ -55,6 +55,7 @@ def _reload(page, want=1):
         page.wait_for_function(f"() => !{DATA_JS}.dispatchesLoading", timeout=10000)
         page.evaluate(f"async () => await {DATA_JS}.loadDispatches('{NO}')")
         if page.evaluate(f"() => {DATA_JS}.dispatches.length") >= want:
+            page.wait_for_load_state("networkidle")
             return
         page.wait_for_timeout(300)
     raise AssertionError("派發清單載不到 %d 筆" % want)
@@ -84,6 +85,7 @@ def test_dispatch_card_review_flow(live_server, make_user, e2e_browser):
     page.goto(f"{live_server}/pages/case-management.html?q={NO}")
     page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'", timeout=20000)
     page.evaluate(f"() => {{ {DATA_JS}.activeTab = 'dispatch' }}")
+    page.wait_for_load_state("networkidle")          # 頁面自己的案件整包載入（含第一次派發清單）先落地，之後才動資料
 
     # 建一筆草稿（走 API：建立時狀態一律 draft；UI 建立流程由其他 e2e 蓋）
     r = _api(page, "POST", "/api/contractor-dispatches",
@@ -98,6 +100,13 @@ def test_dispatch_card_review_flow(live_server, make_user, e2e_browser):
     assert page.locator('[data-testid="dispatch-submit"]').first.is_visible()
     assert not page.locator('[data-testid="dispatch-sent"]').first.is_visible()                      # 未核准：不能往下推
     assert not page.locator('[data-testid="dispatch-legacy-badge"]').first.is_visible()
+    # 回歸（2026-10-02 建包 e2e 偶發 detached）：同一案件重新載入不可以把卡片換掉——量「卡片元素重新載入後仍在 DOM、期間沒有被移除過」
+    page.evaluate("""() => {
+        const el = document.querySelector('[data-testid="dispatch-submit"]'); window.__card = el; window.__detached = 0
+        new MutationObserver(() => { if (!window.__card.isConnected) window.__detached++ }).observe(document.body, {childList: true, subtree: true})
+    }""")
+    _reload(page)
+    assert page.evaluate("() => window.__card.isConnected") is True and page.evaluate("() => window.__detached") == 0, "重新載入把卡片換掉了（清單先清空再填）"
     _shot(page, "1-draft")
 
     # 新增視窗：沒有狀態下拉
