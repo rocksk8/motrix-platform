@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 972,
+  "tests": 975,
   "unmapped": 12,
   "kinds": {
-   "api": 524,
-   "e2e": 232,
+   "api": 526,
+   "e2e": 233,
    "audit": 129,
    "unit": 87
   },
-  "routes": 717
+  "routes": 718
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -19271,6 +19271,32 @@
     ]
    }
   },
+  "backend/tests/test_e2e_filehub_2026_09_30.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/test_attachments_open_2026_09_30.py",
+    "mod:case/api/quotations",
+    "page:pages/case-management.html",
+    "page:pages/file-center.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/test_attachments_open_2026_09_30.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/file-center.html"
+    ],
+    "path": [
+     "frontend/pages/file-center.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_filter_fields_no_leave_warning_2026_09_25.py": {
    "kind": "e2e",
    "units": [
@@ -21294,6 +21320,72 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_filehub_leak_a3_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_attachments_open_2026_09_30.py",
+    "helper:attachment_search",
+    "helper:uploads",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/quotations",
+    "mod:filehub/api",
+    "mod:supply/attachments",
+    "plat:__init__",
+    "plat:registry",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/attachment_search.py",
+     "backend/helpers/uploads.py",
+     "backend/modules/supply/attachments.py",
+     "backend/tests/test_attachments_open_2026_09_30.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/filehub/api.py",
+     "backend/routers/system.py"
+    ]
+   }
+  },
+  "backend/tests/test_filehub_search_2026_09_30.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_attachments_open_2026_09_30.py",
+    "helper:attachment_search",
+    "helper:uploads",
+    "mod:case/api/quotations",
+    "mod:filehub/api",
+    "page:pages/case-management.html",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/attachment_search.py",
+     "backend/helpers/uploads.py",
+     "backend/tests/test_attachments_open_2026_09_30.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/filehub/api.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ]
+   }
   },
   "backend/tests/test_font_cache_headers_2026_09_26.py": {
    "kind": "api",
@@ -23510,6 +23602,7 @@
     "mod:case/api/quotations",
     "mod:crm/api",
     "mod:daily_tasks/api",
+    "mod:filehub/api",
     "mod:lodging/api",
     "mod:lodging/api_records",
     "mod:netplan/api",
@@ -23582,6 +23675,7 @@
      "backend/modules/case/api/quotations.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
+     "backend/modules/filehub/api.py",
      "backend/modules/lodging/api.py",
      "backend/modules/lodging/api_records.py",
      "backend/modules/netplan/api.py",

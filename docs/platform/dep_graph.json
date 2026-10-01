@@ -457,6 +457,21 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:attachment_search": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:case_access",
+    "helper:uploads",
+    "plat:registry"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/attachment_search.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:audit": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -1447,15 +1462,19 @@
    "api_calls": [
     "/api/auth/logout",
     "/api/auth/me",
+    "/api/filehub/search",
     "/api/quotations",
     "/api/quotations/",
     "/api/quotations/{}/project-report-pdf",
     "/api/quotations/{}/stages",
+    "/api/system/modules/availability",
     "/api/users/selectable"
    ],
    "api_prefixes": [
     "/api/auth",
+    "/api/filehub",
     "/api/quotations",
+    "/api/system",
     "/api/users"
    ],
    "api_unmatched": [],
@@ -1468,8 +1487,10 @@
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
+    "mod:filehub/api",
     "mod:netplan/api",
-    "router:auth"
+    "router:auth",
+    "router:system"
    ],
    "tables_r": [],
    "tables_w": []
@@ -2180,9 +2201,11 @@
   },
   "js:static/file-preview.js": {
    "api_calls": [
+    "/api/attachments/open",
     "/api/uploads/"
    ],
    "api_prefixes": [
+    "/api/attachments",
     "/api/uploads"
    ],
    "api_unmatched": [],
@@ -2190,6 +2213,7 @@
    "kind": "js",
    "path": "frontend/static/file-preview.js",
    "routers_called": [
+    "router:attachments",
     "router:uploads"
    ],
    "tables_r": [],
@@ -2396,6 +2420,7 @@
     "mod:case/api/quotations",
     "mod:crm/api",
     "mod:daily_tasks/api",
+    "mod:filehub/api",
     "mod:lodging/api",
     "mod:lodging/api_records",
     "mod:netplan/api",
@@ -4208,6 +4233,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:attachment_search",
     "helper:auth",
     "helper:uploads"
    ],
@@ -5631,6 +5657,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:attachment_search",
     "helper:uploads",
     "mod:arap/api/invoice_vouchers"
    ],
@@ -5642,7 +5669,9 @@
    "tables_named": [
     "invoice_vouchers"
    ],
-   "tables_r": [],
+   "tables_r": [
+    "invoice_vouchers"
+   ],
    "tables_w": []
   },
   "mod:arap/gl_events": {
@@ -7005,8 +7034,10 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:attachment_search",
     "helper:case_access",
     "helper:uploads",
+    "mod:case/api/case_extra_expenses",
     "plat:registry"
    ],
    "kind": "mod",
@@ -7462,6 +7493,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:attachment_search",
     "helper:uploads",
     "mod:crm/api"
    ],
@@ -7474,6 +7506,7 @@
     "dev_logs"
    ],
    "tables_r": [
+    "dev_cases",
     "dev_logs"
    ],
    "tables_w": []
@@ -7613,6 +7646,80 @@
     "daily_task_completions",
     "daily_task_edit_log",
     "daily_tasks",
+    "notifications",
+    "system_settings"
+   ]
+  },
+  "mod:filehub/__init__": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:filehub/api",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "filehub",
+   "path": "backend/modules/filehub/__init__.py",
+   "role": "init",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:filehub/api": {
+   "api_prefixes": [
+    "/api/filehub"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:attachment_search",
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:module_registry",
+    "helper:row_access",
+    "helper:settings",
+    "helper:tiered_approval",
+    "helper:uploads"
+   ],
+   "imports": [
+    "core:db",
+    "helper:attachment_search",
+    "helper:auth",
+    "helper:uploads",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "filehub",
+   "path": "backend/modules/filehub/api.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "search",
+     "line": 48,
+     "method": "GET",
+     "path": "/api/filehub/search"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
     "notifications",
     "system_settings"
    ]
@@ -8871,6 +8978,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:attachment_search",
     "helper:auth",
     "helper:uploads",
     "mod:payroll/api/payslips"
@@ -9705,6 +9813,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:attachment_search",
     "helper:auth",
     "helper:case_access",
     "helper:uploads"
@@ -10218,6 +10327,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:attachment_search",
     "helper:case_access",
     "helper:uploads"
    ],
@@ -10950,6 +11060,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:daily_tasks/api",
+    "mod:filehub/api",
     "mod:netplan/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
@@ -11558,6 +11669,36 @@
    ],
    "routers_called_effective": [
     "router:definitions",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "page:pages/file-center.html": {
+   "api_calls": [
+    "/api/filehub/search",
+    "/api/system/branding/favicon"
+   ],
+   "api_prefixes": [
+    "/api/filehub",
+    "/api/system"
+   ],
+   "api_unmatched": [],
+   "imports": [
+    "js:static/auth-guard.js",
+    "js:static/file-preview.js",
+    "js:static/notif.js",
+    "js:static/sidebar.js",
+    "js:static/ui.js"
+   ],
+   "kind": "page",
+   "path": "frontend/pages/file-center.html",
+   "routers_called": [
+    "mod:filehub/api",
+    "router:system"
+   ],
+   "routers_called_effective": [
+    "mod:filehub/api",
     "router:system"
    ],
    "tables_r": [],
@@ -15332,6 +15473,7 @@
    ],
    "dynamic_sql": true,
    "helpers_transitive": [
+    "helper:attachment_search",
     "helper:audit",
     "helper:auth",
     "helper:branding",
@@ -15364,6 +15506,7 @@
     "core:pdf_gen",
     "core:photos",
     "core:trail",
+    "helper:attachment_search",
     "helper:audit",
     "helper:auth",
     "helper:branding",
@@ -15537,331 +15680,331 @@
     },
     {
      "func": "get_runtime_switches",
-     "line": 878,
+     "line": 927,
      "method": "GET",
      "path": "/api/system/runtime-switches"
     },
     {
      "func": "list_system_modules",
-     "line": 978,
+     "line": 1027,
      "method": "GET",
      "path": "/api/system/modules"
     },
     {
      "func": "toggle_system_module",
-     "line": 992,
+     "line": 1041,
      "method": "PUT",
      "path": "/api/system/modules/{key}"
     },
     {
      "func": "module_availability",
-     "line": 1012,
+     "line": 1061,
      "method": "GET",
      "path": "/api/system/modules/availability"
     },
     {
      "func": "unavailable_module_pages",
-     "line": 1024,
+     "line": 1073,
      "method": "GET",
      "path": "/api/system/modules/unavailable-pages"
     },
     {
      "func": "get_bonus_module_status",
-     "line": 1034,
+     "line": 1083,
      "method": "GET",
      "path": "/api/system/bonus-module-status"
     },
     {
      "func": "get_company_profile",
-     "line": 1495,
+     "line": 1544,
      "method": "GET",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "set_company_profile",
-     "line": 1596,
+     "line": 1645,
      "method": "PUT",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "company_setup_status",
-     "line": 1741,
+     "line": 1790,
      "method": "GET",
      "path": "/api/settings/company-setup/status"
     },
     {
      "func": "get_default_payment_terms",
-     "line": 1792,
+     "line": 1841,
      "method": "GET",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "set_default_payment_terms",
-     "line": 1799,
+     "line": 1848,
      "method": "PUT",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "get_edge_path_setting",
-     "line": 1810,
+     "line": 1859,
      "method": "GET",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "set_edge_path_setting",
-     "line": 1821,
+     "line": 1870,
      "method": "PATCH",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "get_pdf_base_path_setting",
-     "line": 1837,
+     "line": 1886,
      "method": "GET",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "set_pdf_base_path_setting",
-     "line": 1845,
+     "line": 1894,
      "method": "PATCH",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "get_webauthn_config",
-     "line": 1929,
+     "line": 1978,
      "method": "GET",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "set_webauthn_config",
-     "line": 1945,
+     "line": 1994,
      "method": "PATCH",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "get_google_quota_setting",
-     "line": 2015,
+     "line": 2064,
      "method": "GET",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "set_google_quota_setting",
-     "line": 2038,
+     "line": 2087,
      "method": "PUT",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "get_storage_locations",
-     "line": 2100,
+     "line": 2149,
      "method": "GET",
      "path": "/api/settings/storage-locations"
     },
     {
      "func": "set_storage_locations",
-     "line": 2110,
+     "line": 2159,
      "method": "PUT",
      "path": "/api/settings/storage-locations"
     },
     {
      "func": "create_storage_location",
-     "line": 2130,
+     "line": 2179,
      "method": "POST",
      "path": "/api/settings/storage-locations/create"
     },
     {
      "func": "get_backup_retention_setting",
-     "line": 2163,
+     "line": 2212,
      "method": "GET",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "set_backup_retention_setting",
-     "line": 2170,
+     "line": 2219,
      "method": "PATCH",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "get_quote_terms_defaults",
-     "line": 2279,
+     "line": 2328,
      "method": "GET",
      "path": "/api/settings/quote-terms-defaults"
     },
     {
      "func": "get_quote_terms_presets",
-     "line": 2290,
+     "line": 2339,
      "method": "GET",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "set_quote_terms_presets",
-     "line": 2297,
+     "line": 2346,
      "method": "PUT",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "get_cloud_backup_target_setting",
-     "line": 2375,
+     "line": 2424,
      "method": "GET",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_pii_archive_status",
-     "line": 2382,
+     "line": 2431,
      "method": "GET",
      "path": "/api/settings/pii-archive-status"
     },
     {
      "func": "set_cloud_backup_target_setting",
-     "line": 2394,
+     "line": 2443,
      "method": "PUT",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_email_notify",
-     "line": 2430,
+     "line": 2479,
      "method": "GET",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "set_email_notify",
-     "line": 2443,
+     "line": 2492,
      "method": "PUT",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "get_google_calendar",
-     "line": 2468,
+     "line": 2517,
      "method": "GET",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "set_google_calendar",
-     "line": 2506,
+     "line": 2555,
      "method": "PUT",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "test_google_calendar",
-     "line": 2532,
+     "line": 2581,
      "method": "POST",
      "path": "/api/settings/google-calendar/test"
     },
     {
      "func": "test_email_notify",
-     "line": 2548,
+     "line": 2597,
      "method": "POST",
      "path": "/api/settings/email-notify/test"
     },
     {
      "func": "get_custom_roles",
-     "line": 2576,
+     "line": 2625,
      "method": "GET",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "create_custom_role",
-     "line": 2582,
+     "line": 2631,
      "method": "POST",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "update_custom_role",
-     "line": 2609,
+     "line": 2658,
      "method": "PUT",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "delete_custom_role",
-     "line": 2633,
+     "line": 2682,
      "method": "DELETE",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "get_schema_status",
-     "line": 2657,
+     "line": 2706,
      "method": "GET",
      "path": "/api/system/schema-status"
     },
     {
      "func": "get_role_labels",
-     "line": 2687,
+     "line": 2736,
      "method": "GET",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "put_role_labels",
-     "line": 2702,
+     "line": 2751,
      "method": "PUT",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "get_webauthn_config_status",
-     "line": 2717,
+     "line": 2766,
      "method": "GET",
      "path": "/api/system/webauthn-config-status"
     },
     {
      "func": "list_online_users",
-     "line": 2750,
+     "line": 2799,
      "method": "GET",
      "path": "/api/online-users"
     },
     {
      "func": "user_activity_stats",
-     "line": 2794,
+     "line": 2843,
      "method": "GET",
      "path": "/api/user-activity"
     },
     {
      "func": "user_activity_trail",
-     "line": 2868,
+     "line": 2917,
      "method": "GET",
      "path": "/api/user-activity/trail"
     },
     {
      "func": "edit_presence_heartbeat",
-     "line": 3003,
+     "line": 3052,
      "method": "POST",
      "path": "/api/edit-presence"
     },
     {
      "func": "edit_presence_release",
-     "line": 3034,
+     "line": 3083,
      "method": "DELETE",
      "path": "/api/edit-presence"
     },
     {
      "func": "case_roles_unmapped",
-     "line": 3050,
+     "line": 3099,
      "method": "GET",
      "path": "/api/system/case-roles-unmapped"
     },
     {
      "func": "get_reminder_send_failures",
-     "line": 3091,
+     "line": 3140,
      "method": "GET",
      "path": "/api/settings/reminder-send-failures"
     },
     {
      "func": "get_branding_asset",
-     "line": 3120,
+     "line": 3169,
      "method": "GET",
      "path": "/api/system/branding/{kind}"
     },
     {
      "func": "get_branding_settings",
-     "line": 3159,
+     "line": 3208,
      "method": "GET",
      "path": "/api/settings/branding"
     },
     {
      "func": "upload_branding_asset",
-     "line": 3168,
+     "line": 3217,
      "method": "PUT",
      "path": "/api/settings/branding/{kind}"
     },
     {
      "func": "reset_branding_asset",
-     "line": 3185,
+     "line": 3234,
      "method": "DELETE",
      "path": "/api/settings/branding/{kind}"
     }
@@ -16920,6 +17063,7 @@
     "helper:google_calendar",
     "mod:analytics/api/dashboard",
     "mod:case/api/quotations",
+    "mod:crm/attachments",
     "router:item_reads",
     "router:search"
    ],
@@ -17636,6 +17780,7 @@
     "core:archive",
     "core:pdf_gen",
     "helper:google_calendar",
+    "mod:arap/attachments",
     "mod:case/api/quotations"
    ],
    "tables_r": [],

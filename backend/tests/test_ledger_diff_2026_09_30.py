@@ -156,6 +156,7 @@ def test_category_level_has_buckets_and_the_note_says_which(client, conn, sa, mo
     _patch_report(monkeypatch, income={"%d-02" % Y: 1250}, expenses={"%d-02" % Y: {"contractor": 525, "other": 100}})
     j = client.get("/api/reports/ledger-diff", params={"year": Y}, headers=sa).json()
     assert any("類別" in n and "個人外包" in n and "稅額" in n for n in j["notes"]), j["notes"]
+    assert any("權責口徑是近似值" in n and "現金口徑是精確值" in n for n in j["notes"]), j["notes"]        # 應計個人外包桶是近似值（匯款單關聯、派工報表日期歸月）要明說
     feb = next(m for m in j["months"] if m["month"] == "%d-02" % Y)
     for k, cat in feb["expense"]["categories"].items():
         assert set(cat["buckets"]) == {"tax", "individual", "manual", "bonus", "residual"}, k
