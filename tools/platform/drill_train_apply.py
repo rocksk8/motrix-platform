@@ -42,6 +42,8 @@ PORT = 6760
 BASE_COMMIT = "0bb4834e"
 RESULT_RE = DM.RESULT_RE
 SEED_TAG = "DRILL-"
+#: 第 29 班專屬判準的檢查鍵前綴（--rehearsal 時只記錄）
+SPECIFIC = ("9a_", "9b_", "10_", "6_modules", "9_schema", "9c_legacy_defaults")
 
 
 # ── 小工具 ────────────────────────────────────────────────────────────────────
@@ -109,6 +111,30 @@ def login(root, port):
     return user, b["token"]
 
 
+AUTOSTART = r"""@echo off
+chcp 65001 >nul
+set PYTHONUTF8=1
+set MOTRIX_GEO=0
+set MOTRIX_CREATE_NEW_DB=1
+cd /d "{backend}"
+if not exist logs mkdir logs
+:loop
+echo [%date% %time%] MOTRIX ERP starting... >> logs\server.log
+"{python}" -m uvicorn main:app --port {port} --host 127.0.0.1 --log-level info >> logs\server.log 2>&1
+echo [%date% %time%] MOTRIX ERP stopped (exit code %errorlevel%). restart in 5s... >> logs\server.log
+timeout /t 5 /nobreak >nul
+goto loop
+"""
+
+
+def write_autostart(root, port):
+    """演練的 autostart.bat：log 一律用**相對路徑**（cd 之後）重新導向。
+    ⚠ 絕對路徑含中文（D:\開發測試檔 底下）時 `>>` 會建不出 server.log（實測：server 起得來但 log 不見，除錯全盲）；`cd /d` 則正常。
+    正式機的路徑是 ASCII，沒有這個問題——這只是演練環境為了遵守「演練檔放 D:\開發測試檔」的取捨。MOTRIX_GEO 關（演練不連外）。"""
+    (Path(root) / "backend" / "autostart.bat").write_text(
+        AUTOSTART.format(backend=Path(root) / "backend", python=sys.executable, port=port), encoding="utf-8")
+
+
 # ── 重新改寫套用腳本（只動 $ProdRoot／$Port 兩行）──────────────────────────────
 
 def rewrite_tools(root, port, names=("apply_update.ps1", "rollback_update.ps1")):
@@ -119,7 +145,12 @@ def rewrite_tools(root, port, names=("apply_update.ps1", "rollback_update.ps1"))
             continue
         raw = p.read_bytes()
         bom = raw.startswith(b"\xef\xbb\xbf")
-        new, changed = DM.rewrite_ps1(raw.decode("utf-8-sig"), root, port)
+        text = raw.decode("utf-8-sig")
+        root_line = '$ProdRoot = "%s"' % str(root).replace("$", "`$")
+        if root_line in text and re.search(r"^\$Port = %d\s*$" % int(port), text, re.M):
+            done[n] = "already"                     # 已經是演練副本（冪等）
+            continue
+        new, changed = DM.rewrite_ps1(text, root, port)
         p.write_bytes((b"\xef\xbb\xbf" if bom else b"") + new.encode("utf-8"))
         done[n] = changed
     return done
@@ -131,7 +162,7 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"DRILL" * 20
 
 
 def _put(root, rel, data=PNG):
-    full = Path(root) / "backend" / "uploads" / Path(*rel.split("/"))
+    full = Path(root) / "uploads" / Path(*rel.split("/"))            # UPLOADS_ROOT＝安裝根目錄\uploads（不是 backend\uploads）
     full.parent.mkdir(parents=True, exist_ok=True)
     full.write_bytes(data)
     return sha256_file(full)
@@ -169,20 +200,13 @@ def seed(root, port):
         if len(acct) < 2:
             out["errors"].append("account_items 不足 2 筆：傳票分錄種子略過")
         else:
-            lines = 0
             for i in range(1, 65):
                 cur = c.execute("INSERT INTO vouchers_all(voucher_no, voucher_date, category, summary, status, created_by, created_at, updated_at)"
                                 " VALUES (?,?,?,?,?,?,?,?)", ("DRILL-V%04d" % i, "2026-09-%02d" % (1 + i % 28), "轉", "DRILL傳票%d" % i, "草稿", "drill", now, now))
                 vid = cur.lastrowid
-                n = 3 if lines < 151 - 2 * (64 - i) else 2
-                for k in range(n):
+                for k in range(3 if i <= 23 else 2):                      # 23×3 + 41×2 = 151 分錄
                     c.execute("INSERT INTO voucher_lines (voucher_id, line_no, account_code, summary, debit, credit) VALUES (?,?,?,?,?,?)",
                               (vid, k + 1, acct[k % 2], "DRILL分錄", 100 if k == 0 else 0, 100 if k else 0))
-                    lines += 1
-                    if lines >= 151:
-                        break
-                if lines >= 151:
-                    break
         # 舊版案件額外支出 12 筆：不同狀態；4 筆有附件（2 筆用舊資料夾 quotation_settlement_extra）
         qn = "%sMQ-001" % SEED_TAG
         for i, st in enumerate(["草稿", "待審核", "已核准", "已駁回", "已核准", "草稿", "待審核", "已核准", "已駁回", "已核准", "草稿", "已核准"], 1):
@@ -198,7 +222,7 @@ def seed(root, port):
                             " created_by, created_by_name, created_at, updated_at, files_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                             (qn, "差旅", "DRILL舊式支出%d" % i, 1, "", 100 * i, 100 * i, st, "drill", "drill", now, now, json.dumps(files)))
             out["legacy_expenses"].append({"id": cur.lastrowid, "status": st, "total_cost": 100 * i, "files": files,
-                                           "files_sha": [sha256_file(Path(root) / "backend" / "uploads" / Path(*f["path"].split("/"))) for f in files]})
+                                           "files_sha": [sha256_file(Path(root) / "uploads" / Path(*f["path"].split("/"))) for f in files]})
         # 稽核紀錄到 ≈3350
         have = count(c, "audit_log") or 0
         c.executemany("INSERT INTO audit_log (at, username, action, target_type, target_id, detail) VALUES (?,?,?,?,?,?)",
@@ -237,7 +261,7 @@ def record(root, seeded=None):
         rec = {
             "counts": {t: count(c, t) for t in COUNT_TABLES},
             "tables_new": {t: table_exists(c, t) for t in WATCH_TABLES},
-            "user_version": c.execute("PRAGMA user_version").fetchone()[0],
+            "db_version": (c.execute("SELECT version FROM schema_version WHERE id=1").fetchone() or [None])[0],
             "schema_versions": {r[0]: r[1] for r in c.execute("SELECT module, version FROM module_schema_versions")} if table_exists(c, "module_schema_versions") else {},
             "extra_cols": columns(c, "case_extra_expenses"),
             "voucher_line_cols": columns(c, "voucher_lines"),
@@ -282,12 +306,14 @@ def apply_package(root, port, payload):
     shutil.copytree(Path(payload) / "backend" / "tools", Path(root) / "backend" / "tools", dirs_exist_ok=True)
     rewritten = rewrite_tools(root, port)
     rec = run_ps(root, "apply_update.ps1", ["-PackagePath", str(payload), "-Yes"])
+    rewrite_tools(root, port)            # 套用步驟自己又把包內 tools（$ProdRoot＝正式機路徑）複製進來 ⇒ 之後的回滾／重套前要再改寫一次
     ts, rj = latest_result_json(root)
     rec.update(rewritten=rewritten, timestamp=ts, result_json=rj)
     return rec
 
 
-def rollback(root, ts, include_db=False):
+def rollback(root, ts, include_db=False, port=PORT):
+    rewrite_tools(root, port)
     extra = ["-SnapshotTimestamp", ts, "-Yes"]
     if include_db:
         extra += ["-IncludeDatabase", "-ConfirmDatabaseOverwrite"]
@@ -349,7 +375,7 @@ def checks_after_apply(root, port, base_rec, new_rec, t0, package_modules):
     pids = listening_pids(port)
     res["8_one_listener"] = (len(pids) == 1, pids)
     sv = new_rec["schema_versions"]
-    res["9a_schema"] = (sv.get("case") == 3 and sv.get("accounting") == 3 and sv.get("payroll") == 3 and sv.get("core") == 6 and new_rec["user_version"] == 116, sv)
+    res["9a_schema"] = (sv.get("case") == 3 and sv.get("accounting") == 3 and sv.get("payroll") == 3 and sv.get("core") == 6 and new_rec["db_version"] == 116, sv)
     res["9b_new_tables"] = (all(new_rec["tables_new"].values()) and "dim_json" in new_rec["voucher_line_cols"], new_rec["tables_new"])
     need = ["kind", "doc_code", "data_json", "lines_json", "def_version", "department_id", "payee_type", "payee_name", "payee_bank", "payee_account",
             "pay_terms", "remit_date", "pay_method", "pay_account_code", "paid_by", "pretax", "tax", "currency", "void_reason", "voided_by", "voided_at"]
@@ -363,10 +389,15 @@ def checks_after_apply(root, port, base_rec, new_rec, t0, package_modules):
     res["9d_gl_features"] = (base_rec["gl_features"] == new_rec["gl_features"], new_rec["gl_features"])
     c = ro(root)
     try:
+        if "kind" not in new_rec["extra_cols"]:
+            raise sqlite3.OperationalError("no such column: kind（新 schema 還沒套上）")
         legacy_defaults = c.execute("SELECT COUNT(*) FROM case_extra_expenses WHERE description LIKE 'DRILL舊式支出%' AND kind='' AND doc_code='' "
                                     "AND data_json='{}' AND lines_json='[]' AND def_version=0").fetchone()[0]
         idx = {r[1] for r in c.execute("PRAGMA index_list(case_extra_expenses)")}
         dim = c.execute("SELECT COUNT(*) FROM voucher_lines WHERE dim_json<>'{}'").fetchone()[0]
+    except sqlite3.OperationalError as e:
+        legacy_defaults, idx, dim = -1, set(), -1
+        res["9_schema_error"] = (False, str(e))
     finally:
         c.close()
     res["9c_legacy_defaults"] = (legacy_defaults == len(new_rec["legacy_digest"]), legacy_defaults)
@@ -408,16 +439,84 @@ def legacy_flow(port, token):
     return s2 == 200, {"create": (s, {k: d.get(k) for k in ("id", "status")}), "submit": (s2, d2 if isinstance(d2, dict) else str(d2)[:120])}
 
 
+def first_login_checks(root, port):
+    """計畫 §5 A′：升級後「費用類別清單是空的」的首次使用（使用者裁示選項 A：空清單＝尚未設定，不擋人）。全部走 API，回 {項: (bool, 證據)}。"""
+    user, token = login(root, port)
+    out = {}
+    s1, d1 = api(port, "/api/expense-categories", token=token)
+    out["A1_categories_empty_200"] = (s1 == 200 and isinstance(d1, dict) and d1.get("categories") == [], (s1, d1))
+    # 讓演練管理員有部門（送審的簽核鏈需要申請人歸屬部門）；演練庫是合成資料
+    c = rw(root)
+    try:
+        c.execute("INSERT OR IGNORE INTO divisions (id, name, sort_order, created_at) VALUES (1, 'DRILL處', 0, '2026-01-01T00:00:00')")
+        c.execute("INSERT OR IGNORE INTO departments (id, division_id, name, sort_order, created_at) VALUES (1, 1, 'DRILL部', 0, '2026-01-01T00:00:00')")
+        c.execute("UPDATE users SET department_id=1 WHERE username=?", (user,))
+        c.execute("UPDATE departments SET manager_user_id=(SELECT id FROM users WHERE username=?) WHERE id=1", (user,))
+        c.commit()
+    finally:
+        c.close()
+    body = {"kind": "petty_cash", "data": {"applicant": user, "req_date": "2026-10-01", "dept": 1, "cost_dept": 1},
+            "lines": [{"category": "", "summary": "DRILL零用金", "amount": 321}]}
+    s2, d2 = api(port, "/api/quotations/-/extra-expenses", body, token)
+    ok2 = s2 == 201
+    out["A2a_typed_draft_with_empty_category"] = (ok2, (s2, d2 if not ok2 else {k: d2.get(k) for k in ("id", "docCode", "status", "totalCost")}))
+    if ok2:
+        s3, d3 = api(port, "/api/quotations/-/extra-expenses/%d/submit" % d2["id"], None, token, method="POST")
+        out["A2b_submit_with_empty_category"] = (s3 == 200, (s3, d3 if not isinstance(d3, dict) else {k: d3.get(k) for k in ("ok", "status", "autoApproved", "tierCount")}))
+    # 新增一個類別 ⇒ 清單有、再送審成功（嚴格驗證恢復）
+    s4, d4 = api(port, "/api/ledger/expense-categories", {"code": "DRILL_TRAVEL", "name": "DRILL差旅"}, token, method="PUT")
+    s5, d5 = api(port, "/api/expense-categories", token=token)
+    out["A3a_add_category"] = (s4 == 200 and [x["code"] for x in (d5.get("categories") if isinstance(d5, dict) else [])] == ["DRILL_TRAVEL"], (s4, d5))
+    body2 = dict(body, lines=[{"category": "DRILL_TRAVEL", "summary": "DRILL零用金2", "amount": 100}])
+    s6, d6 = api(port, "/api/quotations/-/extra-expenses", body2, token)
+    if s6 == 201:
+        s7, d7 = api(port, "/api/quotations/-/extra-expenses/%d/submit" % d6["id"], None, token, method="POST")
+        c = ro(root)
+        try:
+            lj = c.execute("SELECT lines_json FROM case_extra_expenses WHERE id=?", (d6["id"],)).fetchone()[0]
+        finally:
+            c.close()
+        l0 = json.loads(lj)[0]
+        out["A3b_submit_with_category"] = (s7 == 200 and l0.get("categoryCode") == "DRILL_TRAVEL" and l0.get("categoryName") == "DRILL差旅", (s7, l0))
+    else:
+        out["A3b_submit_with_category"] = (False, (s6, d6))
+    # 嚴格驗證恢復：有類別後，一個不在清單的類別送審被擋（後端 400）
+    s8, d8 = api(port, "/api/quotations/-/extra-expenses", dict(body, lines=[{"category": "NOPE", "summary": "x", "amount": 1}]), token)
+    if s8 == 201:
+        s9, d9 = api(port, "/api/quotations/-/extra-expenses/%d/submit" % d8["id"], None, token, method="POST")
+        out["A3c_unknown_category_blocked"] = (s9 == 400, (s9, str(d9)[:160]))
+    # 對照：未登入打新端點一律 401／403（計畫 §5 A 第 10 項已涵蓋，這裡只記 file_center 閘門）
+    s10, _d10 = api(port, "/api/filehub/search", token=token)
+    out["A5_superadmin_global_browse"] = (s10 == 200, s10)
+    return out
+
+
 # ── 主程式 ────────────────────────────────────────────────────────────────────
 
 def make_baseline(base, port, base_commit):
     root = base / "install"
     DM.make_install(base_commit, root, port)
+    write_autostart(root, port)
     rewrite_log = rewrite_tools(root, port)
+    # built_at ＝ 基線 commit 的時間（不是「現在」）：否則真的新包會被判成「比目前安裝的舊（退版）」
+    ct = DM._git("show", "-s", "--format=%ci", base_commit)[:19]
+    dc = Path(root) / "backend" / ".deployed_commit.json"
+    meta = json.loads(dc.read_text(encoding="utf-8-sig"))
+    meta["built_at"] = ct
+    dc.write_text(json.dumps(meta), encoding="utf-8")
     first = DM.start(root, port)
     DM.setup_company(root, port)
     DM.stop(root, port)
     seeded = seed(root, port)
+    c = rw(root)                                   # 演練管理員歸屬一個部門（送審的簽核鏈需要；沒有它舊流程送審會 400）
+    try:
+        c.execute("INSERT OR IGNORE INTO divisions (id, name, sort_order, created_at) VALUES (1, 'DRILL處', 0, '2026-01-01T00:00:00')")
+        c.execute("INSERT OR IGNORE INTO departments (id, division_id, name, sort_order, created_at) VALUES (1, 1, 'DRILL部', 0, '2026-01-01T00:00:00')")
+        c.execute("UPDATE users SET department_id=1")
+        c.execute("UPDATE departments SET manager_user_id=(SELECT MIN(id) FROM users) WHERE id=1")
+        c.commit()
+    finally:
+        c.close()
     restart = DM.start(root, port)
     return root, {"first_start_s": round(first, 1), "restart_s": round(restart, 1), "rewrite": rewrite_log, "seed": seeded}
 
@@ -430,19 +529,21 @@ def main(argv=None):
     ap.add_argument("--new-commit")
     ap.add_argument("--base-commit", default=BASE_COMMIT)
     ap.add_argument("--port", type=int, default=PORT)
-    ap.add_argument("--runs", default="A,B,C,E")
+    ap.add_argument("--runs", default="A,C,E,B", help="執行順序固定為 A→C→E→B（C 需要 A 的快照；B 需要 E 之後已 migrate 的庫）")
     ap.add_argument("--keep", action="store_true")
+    ap.add_argument("--rehearsal", action="store_true", help="工具本身的排練（例如第 27→28 班的真包）：第 29 班專屬判準（schema 3／新表／新端點／A′）只記錄、不判紅")
     a = ap.parse_args(argv)
     if not a.seed_only and not (a.delivery_root and a.name and a.new_commit):
         ap.error("需要 --delivery-root --name --new-commit（或 --seed-only）")
     DM.refuse_if_task_exists()
     DRILL_ROOT.mkdir(parents=True, exist_ok=True)
-    base = DRILL_ROOT / time.strftime("%Y%m%d_%H%M%S")
-    if "V9.0" in str(base):
+    base_real = DRILL_ROOT / time.strftime("%Y%m%d_%H%M%S")
+    if "V9.0" in str(base_real):
         raise DrillError("演練路徑不可以含 V9.0")
-    base.mkdir()
+    base_real.mkdir()
+    base = base_real
     root = base / "install"
-    report = {"base": str(base), "base_commit": a.base_commit, "runs": {}}
+    report = {"base": str(base_real), "base_commit": a.base_commit, "runs": {}}
     try:
         root, info = make_baseline(base, a.port, a.base_commit)
         report["baseline_setup"] = info
@@ -477,22 +578,47 @@ def main(argv=None):
                 again = DM.start(root, a.port)                               # 13 冪等：重啟
                 rec["checks"]["13_restart_idempotent"] = (record(root)["schema_versions"] == new_rec["schema_versions"] and
                                                          server_log_tracebacks(root).get("traceback") == 0, {"restart_s": round(again, 1)})
-                rec["ok"] = bool(ok_result) and all(v[0] for v in rec["checks"].values())
+                rec["ok"] = bool(ok_result) and all(v[0] for k, v in rec["checks"].items() if not (a.rehearsal and k.startswith(SPECIFIC)))
                 ts_a = rec["timestamp"]
                 report["runs"]["A"] = rec
-            if "B" in runs and ts_a:
+            if "A" in runs and ts_a and not a.rehearsal:
+                report["runs"]["A"]["first_login"] = first_login_checks(root, a.port)
+            if "C" in runs and ts_a:                                          # 資料庫回滾（僅演練）：回到套用前的庫與程式
                 DM.stop(root, a.port)
-                rb = rollback(root, ts_a)
+                rc = rollback(root, ts_a, include_db=True, port=a.port)
+                DM.start(root, a.port)
+                rec_c = record(root)
+                rc["after"] = {"commit": rec_c["commit"], "commit_is_base": str(rec_c["commit"]).startswith(a.base_commit), "ping": DM.ping(a.port),
+                               "schema_versions": rec_c["schema_versions"], "schema_is_base": rec_c["schema_versions"] == base_rec["schema_versions"],
+                               "tables_new": rec_c["tables_new"], "extra_cols_is_base": rec_c["extra_cols"] == base_rec["extra_cols"],
+                               "counts_is_base": rec_c["counts"] == base_rec["counts"] or {t: (base_rec["counts"][t], rec_c["counts"][t]) for t in COUNT_TABLES},
+                               "legacy_same": rec_c["legacy_digest"] == base_rec["legacy_digest"], "log": server_log_tracebacks(root)}
+                rc["ok"] = bool(rc["after"]["commit_is_base"] and rc["after"]["ping"] and rc["after"]["schema_is_base"] and rc["after"]["legacy_same"]
+                                and (a.rehearsal or not any(rc["after"]["tables_new"].values())))
+                report["runs"]["C"] = rc
+            ts_e = ts_a
+            if "E" in runs and ts_a:                                          # 回滾後重套：migration 重跑無錯
+                rec = apply_package(root, a.port, payload)
+                new_rec = record(root)
+                rec["checks"] = checks_after_apply(root, a.port, base_rec, new_rec, rec["t0"], pkg_changed)
+                rec["ok"] = bool(rec["result"] and rec["result"]["status"] == "success") and all(v[0] for k, v in rec["checks"].items() if not (a.rehearsal and k.startswith(SPECIFIC)))
+                ts_e = rec["timestamp"]
+                report["runs"]["E"] = rec
+            if "B" in runs and ts_e:                                          # 只回程式：舊程式對已 migrate 的庫
+                migrated = record(root)
+                DM.stop(root, a.port)
+                rb = rollback(root, ts_e, port=a.port)
                 DM.start(root, a.port)
                 rec_b = record(root)
-                rb["after"] = {"commit": rec_b["commit"], "ping": DM.ping(a.port), "schema_versions": rec_b["schema_versions"],
-                               "tables_new": rec_b["tables_new"], "legacy_same": rec_b["legacy_digest"] == base_rec["legacy_digest"]}
+                rb["after"] = {"commit": rec_b["commit"], "commit_is_base": str(rec_b["commit"]).startswith(a.base_commit), "ping": DM.ping(a.port),
+                               "schema_versions": rec_b["schema_versions"], "tables_new": rec_b["tables_new"],
+                               "migrated_before": migrated["tables_new"], "legacy_same": rec_b["legacy_digest"] == migrated["legacy_digest"]}
                 _u, tk = login(root, a.port)
                 rb["after"]["legacy_flow"] = legacy_flow(a.port, tk)
                 rb["after"]["log"] = server_log_tracebacks(root)
+                rb["ok"] = bool(rb["after"]["commit_is_base"] and rb["after"]["ping"] and rb["after"]["legacy_flow"][0]
+                                and rb["after"]["log"].get("traceback") == 0 and (a.rehearsal or all(rb["after"]["tables_new"].values())))
                 report["runs"]["B"] = rb
-            if "E" in runs or "C" in runs:
-                pass                                                          # C／E：下一版補完（需要在 B 之後再套一次並做庫回滾）
     finally:
         report["stop"] = DM.stop(root, a.port) if root.exists() else None
         outdir = Path(tempfile.gettempdir()) / "motrix-drill-t29"
@@ -502,7 +628,7 @@ def main(argv=None):
         print(json.dumps({k: report[k] for k in report if k in ("base", "base_commit", "stopped")}, ensure_ascii=False))
         print("report:", out)
         if not a.keep:
-            report["cleanup"] = DM.cleanup(base)
+            report["cleanup"] = DM.cleanup(base_real)
     return 0
 
 
