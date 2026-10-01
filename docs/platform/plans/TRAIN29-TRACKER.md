@@ -34,3 +34,9 @@
 - 裁示：已付款不可作廢、付款覆寫僅 superadmin；今晚套用；去識別化／建構器B／401／開帳／C6 不入本班（第31班主軸）；BS 預設比較＝上一年年底。
 - 不入本班：clock-gates-2（4 檔紅，下班）。
 - 凍結預計 ~21:00 → ptc 21:45 → 建包 22:30 → 稽核 00:30 → 套用 ~01:00。
+
+## 14:50 巡檢
+- int1 wip/train-29-int1@25179adb；GO 已發：合 mask-2@6be93619 + filehub-guards@c1dca101 → 最後完整 ptc（d7）。
+- 稽核：c7(audit/train29@af0d4280，審 W1–W4/d7)、2e(audit/train29-b@97dd2bcf，審 c7 的線)；演練 a3(drill/train29@0f11a195)；建包步驟 d7(build/train29-steps@45df568c)；套用步驟 2e(wip/train-29-apply-draft@c8c3c8bb)。
+- 已修稽核發現：Q1 名冊帳號洩漏(mask-2)、Q4 路徑逃逸(upload-path-guard@91c474d2)、空類別表單(emptycat@4fd54996)、w2b eb762b2f 漏合已補。
+- 後續待辦：TRAIN31-BACKLOG.md。
