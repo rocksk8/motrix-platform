@@ -120,3 +120,15 @@ def test_legacy_rows_keep_the_old_rule_and_caseless_rows_stay_hidden(client, wor
     cl = client.post("/api/quotations/-/extra-expenses", headers=H["mk_app"], json={"kind": "petty_cash", "lines": [{"amount": 500}]})
     assert cl.status_code == 201
     assert cl.json()["id"] not in [i["id"] for i in client.get("/api/quotations/-/extra-expenses", headers=H["mk_col"]).json()["items"]]
+
+
+def test_list_reports_masked_count_so_settlement_can_refuse_an_incomplete_total(client, world):
+    """精算頁用 `maskedCount` 擋存檔／完結：對本人遮蔽的列數 > 0 ⇒ totalAmount 不是完整成本。看得到金額的人是 0。"""
+    H, eid = world
+    for who in ("mk_col", "mk_fv"):
+        d = _list(client, H[who]).json()
+        assert d["maskedCount"] == 1 and d["totalAmount"] == 0, who
+    for who in ("mk_app", "mk_apr", "mk_fin", "mk_cash"):
+        assert _list(client, H[who]).json()["maskedCount"] == 0, who
+    _x("UPDATE case_extra_expenses SET status='已作廢', void_reason='x' WHERE id=?", (eid,))      # 作廢列不算「殘缺」
+    assert _list(client, H["mk_fv"]).json()["maskedCount"] == 0

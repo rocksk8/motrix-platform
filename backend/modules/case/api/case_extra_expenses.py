@@ -225,6 +225,21 @@ def _audit_target(quote_no: str, exp_id) -> tuple:
     return ("quotation", quote_no) if quote_no else ("case_extra_expense", str(exp_id))
 
 
+def _asum(r) -> dict:
+    """稽核 detail 的單據摘要（A2 S2）：類型／單號／金額／明細列數／歸屬部門／收款人類型／付款方式。
+    **永遠不放**收款人姓名、銀行、帳號、明細列內容、data（個資與內容留在單據本身，稽核只留「發生了什麼」）。
+    例外（既有作法，不變）：稽核標題文字沿用單據說明（費用單據的說明＝第一列摘要，使用者自己填的品項名稱）。舊版列（kind=''）只帶金額。"""
+    out = {"totalCost": float(_col(r, "total_cost", 0) or 0)}
+    kind = _col(r, "kind", "") or ""
+    if kind:
+        out.update({"kind": kind, "docCode": _col(r, "doc_code", "") or "", "lineCount": len(_jlist(r, "lines_json")),
+                    "departmentId": _col(r, "department_id", None), "payeeType": _col(r, "payee_type", "") or "",
+                    "currency": _col(r, "currency", "") or "TWD"})
+        if _col(r, "pay_method", ""):
+            out["payMethod"] = _col(r, "pay_method", "")
+    return out
+
+
 def _caseless_visible(conn, row, user) -> bool:
     """無案件單據的逐列可見規則（不用 `case_owner_readable`：沒有案件可以查）：建立者本人、本單簽核鏈成員（含代理）、
     admin／superadmin、出納／財務模組。user 為 None ⇒ False（fail closed）。"""
@@ -366,6 +381,8 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
             "remitFeeTotal": fee_total,
             "totalAmount": total,
             "totalPending": pending,
+            # 對這位使用者遮蔽金額的列數（不含已作廢）：> 0 ⇒ totalAmount 不是完整成本，精算頁據此擋存檔／完結（否則會把殘缺的總額寫進精算）
+            "maskedCount": sum(1 for i in items if i.get("masked") and i["status"] != VOIDED_STATUS),
             "pendingCount": sum(1 for i in items if i["status"] not in ("已核准", "草稿", VOIDED_STATUS)),
             "categories": CATEGORIES,
         }
@@ -423,7 +440,8 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
         conn.commit()
         exp_id = cur.lastrowid
         _audit(_tok(authorization), "extra_expense.create", *_audit_target(quote_no, exp_id),
-               f"{quote_no or '無案件'} 新增額外支出「{(body.description or '').strip()}」 NT$ {total:,.0f}")
+               f"{quote_no or '無案件'} 新增額外支出「{(body.description or '').strip()}」 NT$ {total:,.0f}",
+               _asum(conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()))
         return {"ok": True, "id": exp_id, "status": "草稿", "totalCost": total, "docCode": doc_code, "kind": kind}
     finally:
         conn.close()
@@ -479,7 +497,9 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
         )
         conn.commit()
         _audit(_tok(authorization), "extra_expense.update", *_audit_target(quote_no, exp_id),
-               f"{quote_no or '無案件'} 修改額外支出 #{exp_id}「{(body.description or '').strip()}」 NT$ {total:,.0f}")
+               f"{quote_no or '無案件'} 修改額外支出 #{exp_id}「{(body.description or '').strip()}」 NT$ {total:,.0f}",
+               {**_asum(conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()),
+                "before": {"totalCost": float(row["total_cost"] or 0)}})
         return {"ok": True, "totalCost": total, "updatedAt": now}
     finally:
         conn.close()
@@ -633,7 +653,7 @@ def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
         conn.execute("DELETE FROM case_extra_expenses WHERE id=? AND quote_no=?", (exp_id, quote_no))
         conn.commit()
         _audit(_tok(authorization), "extra_expense.delete", *_audit_target(quote_no, exp_id),
-               f"{quote_no or '無案件'} 刪除額外支出 #{exp_id}「{row['description']}」")
+               f"{quote_no or '無案件'} 刪除額外支出 #{exp_id}「{row['description']}」", _asum(row))
         return {"ok": True}
     finally:
         conn.close()
@@ -685,7 +705,7 @@ def void_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={})
             _notify(requester, "extra_expense_voided", str(exp_id), quote_no or "無案件",
                     "%s 的額外支出 %s 已被作廢：%s" % (_subj(quote_no), label, reason))
         _audit(_tok(authorization), "extra_expense.void", *_audit_target(quote_no, exp_id),
-               "%s 作廢額外支出 #%s %s：%s" % (quote_no or "無案件", exp_id, label, reason), {"reason": reason, "totalCost": float(row["total_cost"] or 0)})
+               "%s 作廢額外支出 #%s %s：%s" % (quote_no or "無案件", exp_id, label, reason), {"reason": reason, **_asum(row)})
         return {"ok": True, "status": VOIDED_STATUS, "voidedAt": now}
     finally:
         conn.close()
@@ -737,7 +757,7 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
             )
             conn.commit()
             _audit(_tok(authorization), "extra_expense.auto_approve", *_audit_target(quote_no, exp_id),
-                   f"{quote_no or '無案件'} 額外支出 #{exp_id} {label}：未設定簽核層，直接核准")
+                   f"{quote_no or '無案件'} 額外支出 #{exp_id} {label}：未設定簽核層，直接核准", _asum(row))
             return {"ok": True, "status": "已核准", "autoApproved": True}
 
         approval = {
@@ -764,7 +784,7 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
                                 f"{user.get('display_name') or user['username']} 依組織職權自行簽核，知會您",
                                 type_="extra_expense_approval_notice")
         _audit(_tok(authorization), "extra_expense.submit", *_audit_target(quote_no, exp_id),
-               f"{quote_no or '無案件'} 額外支出 #{exp_id} {label} 送審", {"tierCount": len(tiers)})
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} {label} 送審", {"tierCount": len(tiers), **_asum(row)})
         return {"ok": True, "status": "待審核", "tierCount": len(tiers)}
     finally:
         conn.close()
@@ -847,7 +867,7 @@ def approve_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default=
             notify_module_activity("案件管理", "額外支出核准", display, f"{quote_no or '無案件'}｜{label}",
                                    f"case-management.html?q={quote_no}")
         _audit(_tok(authorization), "extra_expense.approve", *_audit_target(quote_no, exp_id),
-               f"{quote_no or '無案件'} 額外支出 #{exp_id} {label} 第 {ct + 1} 層核准 → {status}")
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} {label} 第 {ct + 1} 層核准 → {status}", {"tier": ct + 1, "status": status, **_asum(row)})
         return {"ok": True, "status": status, "currentTier": appr["currentTier"]}
     finally:
         conn.close()
@@ -902,7 +922,7 @@ def reject_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={
                     f"{_subj(quote_no)} 的額外支出 {label} 已被駁回"
                     + (f"：{reason}" if reason else ""))
         _audit(_tok(authorization), "extra_expense.reject", *_audit_target(quote_no, exp_id),
-               f"{quote_no or '無案件'} 額外支出 #{exp_id} {label} 被駁回" + (f"：{reason}" if reason else ""))
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} {label} 被駁回" + (f"：{reason}" if reason else ""), {"reason": reason, **_asum(row)})
         return {"ok": True, "status": "已駁回"}
     finally:
         conn.close()
@@ -1324,7 +1344,7 @@ def submit_change_request(quote_no: str, exp_id: int, authorization: str = Heade
             total = _apply_change(conn, row, change, display, now)
             conn.commit()
             _audit(_tok(authorization), "extra_expense.change_auto_apply", *_audit_target(quote_no, exp_id),
-                   f"{quote_no or '無案件'} 額外支出 #{exp_id} {label}：未設定簽核層，變更直接生效")
+                   f"{quote_no or '無案件'} 額外支出 #{exp_id} {label}：未設定簽核層，變更直接生效", _asum(row))
             return {"ok": True, "changeStatus": "", "applied": True,
                     "autoApproved": True, "totalCost": total}
 
@@ -1345,7 +1365,7 @@ def submit_change_request(quote_no: str, exp_id: int, authorization: str = Heade
             _notify(a["username"], "extra_expense_change_request", str(exp_id), quote_no or "無案件",
                     f"{_subj(quote_no)} 的額外支出變更申請 {label} 需要您簽核")
         _audit(_tok(authorization), "extra_expense.change_submit", *_audit_target(quote_no, exp_id),
-               f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更申請 {label} 送審", {"tierCount": len(tiers)})
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更申請 {label} 送審", {"tierCount": len(tiers), **_asum(row)})
         return {"ok": True, "changeStatus": "待審核", "tierCount": len(tiers)}
     finally:
         conn.close()
@@ -1421,7 +1441,7 @@ def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default
             notify_module_activity("案件管理", "額外支出變更核准", display, f"{quote_no or '無案件'}｜{label}",
                                    f"case-management.html?q={quote_no}")
             _audit(_tok(authorization), "extra_expense.change_approve", *_audit_target(quote_no, exp_id),
-                   f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更 {label} 第 {ct + 1} 層核准 → 已生效")
+                   f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更 {label} 第 {ct + 1} 層核准 → 已生效", {"tier": ct + 1, "applied": True, **_asum(row)})
             return {"ok": True, "changeStatus": "", "applied": True, "totalCost": applied_total}
 
         conn.execute(
@@ -1433,7 +1453,7 @@ def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default
             _notify(a["username"], "extra_expense_change_request", str(exp_id), quote_no or "無案件",
                     f"{_subj(quote_no)} 的額外支出變更申請 {label} 需要您簽核")
         _audit(_tok(authorization), "extra_expense.change_approve", *_audit_target(quote_no, exp_id),
-               f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更 {label} 第 {ct + 1} 層核准 → 簽核中")
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更 {label} 第 {ct + 1} 層核准 → 簽核中", {"tier": ct + 1, "applied": False, **_asum(row)})
         return {"ok": True, "changeStatus": "簽核中", "currentTier": appr["currentTier"]}
     finally:
         conn.close()
@@ -1487,7 +1507,7 @@ def reject_change_request(quote_no: str, exp_id: int, body: dict = Body(default=
                     f"{_subj(quote_no)} 的額外支出變更申請 {label} 已被駁回"
                     + (f"：{reason}" if reason else ""))
         _audit(_tok(authorization), "extra_expense.change_reject", *_audit_target(quote_no, exp_id),
-               f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更申請 {label} 被駁回" + (f"：{reason}" if reason else ""))
+               f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更申請 {label} 被駁回" + (f"：{reason}" if reason else ""), {"reason": reason, **_asum(row)})
         return {"ok": True, "changeStatus": "已駁回"}
     finally:
         conn.close()
