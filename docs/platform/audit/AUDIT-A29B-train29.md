@@ -27,4 +27,6 @@
 | 突變（遮蔽線）| 6 條：4 紅、2 綠 | 綠＝G1、G2（見上）；其餘 M-A1／A2／A5／A7 紅 |
 
 ## 判定
-**A29-B VERDICT: CONDITIONAL — FAIL until F1 is fixed or ruled out of scope（其餘四條線＋Q1／Q4 PASS；G1／G2 為測試缺口，建議同批補）。**
+**A29-B VERDICT: PASS WITH ACCEPTED RISK (user ruling 2026-10-01: F1 deferred to train 31)**
+- F1（勞報單詳情／PDF 對 admin 回完整帳號）＝現行正式機行為、非本班回歸；使用者裁示本班照出，第 31 班修（遮蔽詳情與 PDF；admin 看 `****末四碼`；遮蔽值送回＝保留舊值）。
+- 其餘四條線＋Q1／Q4 PASS；G1（PDF 遮蔽斷言用 pypdf）、G2（`keep_if_masked` 死碼）已登記 TRAIN31-BACKLOG。
