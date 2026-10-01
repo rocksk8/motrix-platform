@@ -52,6 +52,7 @@ GOLDEN_MODULES = [
     ("audit_log", "歷史紀錄（全系統操作軌跡）", "系統"),
     ("shipping_export_log", "出貨單歷史紀錄", "系統"),
     ("module_versions", "版本紀錄", "系統"),
+    ("file_center", "檔案中心（全系統上傳檔案搜尋）", "系統"),      # 2026-10-01 附件目錄 P3 新增（末尾追加，既有順序不變）
 ]
 
 GOLDEN_ROLE_TEMPLATES = {
