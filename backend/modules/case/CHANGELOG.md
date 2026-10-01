@@ -1,9 +1,11 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-02 04:45（wip/t32-prpo-s1-2e）：請購/採購單明細連案件品項——驗證與累計上限（32-S2）
+- 新增（S2）：請購單／採購單**明細列可帶 `itemId`（報價品項）**：只准有案件的請購單／採購單；品項必須在報價內、數量＞0；伺服器依報價寫入 `itemQtyPlan`／`itemCostPlan` 快照（前端送的不採用）。累計上限：已採購（核准＋送審中的採購單列）＋本單 ＞ 計畫量 ⇒ 超計畫；**採購單送審（含已核准後的變更申請送審）必須在該列填 `overPlanReason`，否則 400（狀態不變）；請購單只警示**（建立／更新回應帶 `overPlan` 清單）；超出量由伺服器寫入 `overPlanQty`。草稿不佔量、駁回／作廢釋放；送審在寫鎖內驗。採購單 `data.fromPr` 必須是同案件、已核准的請購單。沒有 `itemId` 的明細與以前完全相同（保留鍵 `itemId`／`itemQtyPlan`／`itemCostPlan`／`overPlanReason`／`overPlanQty` 不可由未連結的列攜帶）。
+
 ## (next) — 2026-10-02 04:33（wip/t32-prpo-s1-2e）：額外支出合計對齊營運報表規則＋請購/採購品項挑選器（32-S1）
 - ⚠️ 行為變更（使用者裁示 2026-10-02，Q6）：`GET /api/quotations/{案件}/extra-expenses` 的 `totalAmount`／`totalPending` 只計待審核／簽核中／已核准、且類型要進金流（kind='' 或採購單／差旅／零用金）——**請購單、草稿、已駁回不再計入**（與營運報表 `extra_entries` 同一條規則；原本只排除作廢與被遮蔽的列，精算的額外支出因此比報表多）；新增 `uncountedAmount`（沒計入的金額，資訊用）。精算頁、案件頁額外支出分頁的合計隨之變。
 - 新增：`modules/case/purchase_items.py`（品項計畫量、已請購／已採購量、剩餘量、超計畫判定；純函式）與 `GET /api/quotations/{案件}/purchase-items`（請購單／採購單「從案件品項帶入」挑選器；看不到財務金額者不回 `planUnitCost`；無案件 400）。明細列的 `itemId` 驗證與上限見 S2。
-- 新增（S2）：請購單／採購單**明細列可帶 `itemId`（報價品項）**：只准有案件的請購單／採購單；品項必須在報價內、數量＞0；伺服器依報價寫入 `itemQtyPlan`／`itemCostPlan` 快照（前端送的不採用）。累計上限：已採購（核准＋送審中的採購單列）＋本單 ＞ 計畫量 ⇒ 超計畫；**採購單送審（含已核准後的變更申請送審）必須在該列填 `overPlanReason`，否則 400（狀態不變）；請購單只警示**（建立／更新回應帶 `overPlan` 清單）；超出量由伺服器寫入 `overPlanQty`。草稿不佔量、駁回／作廢釋放；送審在寫鎖內驗。採購單 `data.fromPr` 必須是同案件、已核准的請購單。沒有 `itemId` 的明細與以前完全相同（保留鍵 `itemId`／`itemQtyPlan`／`itemCostPlan`／`overPlanReason`／`overPlanQty` 不可由未連結的列攜帶）。
 
 ## 1.0.64 — 2026-10-02 00:59（fix/t31-build-2e）：案件頁承攬商卡片字級
 - 派發卡片的「舊單」徽章與單號字級由 10px 改 11px（案件頁字級下限）。
