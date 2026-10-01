@@ -229,6 +229,11 @@ def test_dedicated_endpoint_reports_rejections_and_invoice_date_is_frozen_in_app
     assert _cr()["materialOrders"][0]["unitPrice"] == 1500
     r = client.patch("/api/quotations/%s/material-orders/L1/invoice-date" % NO, json={"invoiceDate": "2031-04-01"}, headers=world["adm"])
     assert r.status_code == 409
+    rows = _cr()["materialOrders"]
+    rows[0]["invoiceDate"] = "2031-04-01"                                                    # 案件存檔路徑也一樣：審核中不可改發票日
+    r = _put_cr(client, world["adm"], materialOrders=rows)
+    assert [(x["itemId"], x["field"], x["code"]) for x in r.json()["rejected"]] == [("L1", "invoiceDate", "in_approval")]
+    assert _cr()["materialOrders"][0].get("invoiceDate", "") == ""
     r = client.patch("/api/quotations/%s/material-orders/L2/invoice-date" % NO, json={"invoiceDate": "2031-04-01"}, headers=world["adm"])
     assert r.status_code == 200                                                              # 舊單的發票日照舊可登
 

@@ -279,6 +279,7 @@
     "mod:case/expense_forms",
     "mod:case/expense_notify",
     "mod:case/material_approval",
+    "mod:case/material_guard",
     "mod:case/material_notify"
    ],
    "tables": [
