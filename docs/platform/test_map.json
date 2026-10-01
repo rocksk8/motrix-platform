@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 930,
+  "tests": 928,
   "unmapped": 12,
   "kinds": {
-   "api": 498,
-   "e2e": 219,
+   "api": 497,
+   "e2e": 218,
    "audit": 128,
    "unit": 85
   },
@@ -3106,61 +3106,6 @@
     ]
    },
    "login_fixture": true,
-   "module": "analytics"
-  },
-  "backend/modules/analytics/tests/test_dept_dimension_2026_10_01.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:backend/modules/analytics/",
-    "file:backend/tests/test_money_round_half_up_2026_09_26.py",
-    "mod:analytics/api/reports",
-    "mod:case/__init__",
-    "mod:case/recognition",
-    "plat:__init__",
-    "plat:registry"
-   ],
-   "evidence": {
-    "import": [
-     "backend/core/__init__.py",
-     "backend/core/registry.py",
-     "backend/db.py",
-     "backend/modules/analytics/api/reports.py",
-     "backend/modules/case/__init__.py",
-     "backend/modules/case/recognition.py",
-     "backend/tests/test_money_round_half_up_2026_09_26.py"
-    ],
-    "module_dir": [
-     "backend/modules/analytics/"
-    ]
-   },
-   "module": "analytics"
-  },
-  "backend/modules/analytics/tests/test_e2e_expense_dept_2026_10_01.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "dir:backend/modules/analytics/",
-    "file:backend/tests/_e2e_login.py",
-    "mod:analytics/tests/test_dept_dimension_2026_10_01",
-    "page:pages/reports.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/modules/analytics/tests/test_dept_dimension_2026_10_01.py",
-     "backend/tests/_e2e_login.py"
-    ],
-    "page": [
-     "frontend/pages/reports.html"
-    ],
-    "path": [
-     "frontend/pages/reports.html"
-    ],
-    "module_dir": [
-     "backend/modules/analytics/"
-    ]
-   },
    "module": "analytics"
   },
   "backend/modules/analytics/tests/test_e2e_index_without_analytics_2026_09_26.py": {

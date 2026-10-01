@@ -4874,13 +4874,13 @@
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3576,
+     "line": 3545,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 3763,
+     "line": 3732,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -6812,6 +6812,7 @@
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [
+    "case_extra_expenses",
     "case_stages",
     "contractor_dispatches",
     "contractor_payment_vouchers",
@@ -15756,7 +15757,8 @@
     "mod:case/api/quotations",
     "mod:case/attachments",
     "mod:case/gl_events",
-    "mod:case/quotations"
+    "mod:case/quotations",
+    "mod:case/recognition"
    ],
    "tables_r": [],
    "tables_w": [],
