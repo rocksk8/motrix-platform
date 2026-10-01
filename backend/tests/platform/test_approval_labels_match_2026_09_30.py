@@ -7,7 +7,7 @@ from pathlib import Path
 from core import source_tree
 from routers import approval_queue as aq
 
-_RE = re.compile(r"item\.type === '([a-z_]+)'\) return '([^']+)'")
+_RE = re.compile(r"item\.type === '([a-z_]+)'\) return (?:item\.typeLabel \|\| )?'([^']+)'")      # 費用單據（A2）卡片：`item.typeLabel || '案件額外支出'`，後者是預設標籤
 
 
 def _html_labels():
