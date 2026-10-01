@@ -8542,14 +8542,15 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
-    "dir:frontend/pages/",
     "mod:subcontract/__init__",
     "mod:subcontract/api/contractors",
     "mod:subcontract/bank_mask",
-    "page:pages/payslip-form.html"
+    "page:pages/payslip-form.html",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/subcontract/__init__.py",
      "backend/modules/subcontract/bank_mask.py"
@@ -8558,10 +8559,6 @@
      "backend/modules/subcontract/api/contractors.py"
     ],
     "page": [
-     "frontend/pages/payslip-form.html"
-    ],
-    "path": [
-     "frontend/pages/",
      "frontend/pages/payslip-form.html"
     ],
     "module_dir": [
