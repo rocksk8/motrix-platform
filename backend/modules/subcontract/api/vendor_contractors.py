@@ -1212,6 +1212,7 @@ def dispatch_cost_view(d: dict) -> dict:
         "invoiceDate": d.get("invoiceDate") or "",
         "payableDate": d.get("payableDate") or "",
         "amount": d.get("grandTotal") or 0,
+        "approvalPending": (d.get("approvalStatus") or "") in (_flow.PENDING, _flow.IN_PROGRESS),     # 31-A：待審核仍計入、但標示
         "totalWithTax": d.get("totalWithTax") or 0,
         "personnelTotal": d.get("personnelTotal") or 0,
         "personnelCount": sum(1 for p in personnel if str((p or {}).get("name") or "").strip()),
@@ -1234,4 +1235,6 @@ def dispatch_cost_for_case(quote_no: str, authorization: str) -> list:
             "WHERE d.quote_no=? ORDER BY d.id", (quote_no,)).fetchall()
     finally:
         conn.close()
-    return [dispatch_cost_view(_dispatch_row(r)) for r in rows]
+    # 31-A（使用者裁示一條報表規則，所有成本檢視一致）：已取消、草稿、已退回不計；待審核／簽核中計入並標示；已核准與舊單（''）照舊
+    return [dispatch_cost_view(d) for d in (_dispatch_row(r) for r in rows)
+            if (d.get("status") or "") != "cancelled" and (d.get("approvalStatus") or "") not in (_flow.DRAFT, _flow.RETURNED)]

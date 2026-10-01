@@ -352,9 +352,14 @@ TYPE1, TYPE2 = "contractor_dispatch", "contractor_dispatch_completion"
 _TYPE_STAGE = {TYPE1: (STAGE1, "承攬商派發", "dispatch"), TYPE2: (STAGE2, "承攬商派發完工", "completion")}
 
 
+def _row_view(row) -> dict:
+    """派工列的公開形狀：走 IP-1 `dispatch.row` 提供者（與其他模組同一條路，不 import 私有函式）。"""
+    from core import registry
+    return registry.single_provider("dispatch.row")(row)
+
+
 def _grand_total(row) -> float:
-    from modules.subcontract.api.vendor_contractors import _dispatch_row
-    return _dispatch_row(row).get("grandTotal", 0)
+    return _row_view(row).get("grandTotal", 0)
 
 
 def _queue_for(conn, type_, rows):
@@ -391,8 +396,7 @@ def _detail(conn, doc_code, type_):
     r = conn.execute("SELECT * FROM contractor_dispatches WHERE doc_code=?", (doc_code,)).fetchone()
     if not r:
         return None
-    from modules.subcontract.api.vendor_contractors import _dispatch_row
-    d = _dispatch_row(r)
+    d = _row_view(r)
     fields = [{"label": "承攬商", "value": _subject(conn, r)},
               {"label": "派發單號", "value": r["doc_code"]},
               {"label": "派發日期", "value": r["dispatch_date"] or "—"},

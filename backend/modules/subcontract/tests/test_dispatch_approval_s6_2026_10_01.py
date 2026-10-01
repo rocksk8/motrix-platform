@@ -117,3 +117,38 @@ def test_live_totals_follow_the_same_rule(W):                                   
     per = 1000 * 1.05 + 100                                                                        # 每筆 grandTotal（含稅承攬商＋外包人員）
     # 舊單、已核准、待審核、簽核中＝4 筆；草稿、已退回不計
     assert tot == pytest.approx(per * 4)
+
+
+# ── 成本檢視（傳票摘要來源 dispatch.cost_for_case）：同一條報表規則，且與應計成本對得起來 ──────────
+
+def _cost_view(h):
+    from core import registry
+    return registry.single_provider("dispatch.cost_for_case")("MQ-DA-1", h["da_sa"]["Authorization"])
+
+
+def test_cost_view_rule_matrix_including_legacy_and_cancelled(W):                                  # noqa: F811
+    c, h = W
+    ids = {ap: _mk(status="accepted", approval=ap) for ap in STATES}
+    gone = _mk(status="cancelled", approval=F.APPROVED)
+    got = {r["id"]: r for r in _cost_view(h)}
+    assert ids[F.DRAFT] not in got and ids[F.RETURNED] not in got and gone not in got
+    for ap in (F.PENDING, F.IN_PROGRESS):
+        assert got[ids[ap]]["approvalPending"] is True
+    for ap in ("", F.APPROVED):
+        assert got[ids[ap]]["approvalPending"] is False
+
+
+def test_reconcile_accrual_and_cost_view_cover_the_same_dispatches(W):                             # noqa: F811
+    """使用者裁示一條報表規則：同一組資料，應計成本與傳票摘要成本檢視納入的派發完全相同
+    （金額口徑本來就不同：應計＝未稅［AC2］、成本檢視＝含稅 grandTotal，所以對「集合」與「各列金額換算」，不對合計）。"""
+    c, h = W
+    for ap in STATES:
+        _mk(status="accepted", approval=ap)
+    _mk(status="cancelled", approval=F.APPROVED)
+    _mk(status="draft", approval=F.PENDING)
+    acc = _entries()
+    cost = {r["id"]: r for r in _cost_view(h)}
+    assert set(acc) == set(cost) and len(acc) == 5                                                 # 舊單、已核准、待審核、簽核中、草稿狀態的 pending 單
+    for did, e in acc.items():
+        assert e["amount"] == pytest.approx(cost[did]["amount"] - (cost[did]["totalWithTax"] - 1000))   # 去掉稅額＝未稅＋人員
+        assert e["approvalPending"] == cost[did]["approvalPending"]
