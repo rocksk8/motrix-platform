@@ -55,7 +55,7 @@
         return {
           elements: els, specs: cat.fieldTypeSpecs || {}, prefillSources: this.fdSources, hasCase: false, isSuper: true,
           fixedTypeKeys: FIXED_KEYS, onlyOneTable: 'lines', requiredColumns: ['category', 'summary', 'amount'], pairColumns: ['qty', 'unitCost'],
-          cashierKeys: CASHIER_KEYS, bannedWords: BANNED, maxRows: 200, publishedKeys: published, titleFallback: '（未命名的請款單）',
+          fixedOptions: { urgency: URGENCY }, cashierKeys: CASHIER_KEYS, bannedWords: BANNED, maxRows: 200, publishedKeys: published, titleFallback: '（未命名的請款單）',
           columnPresets: [
             { label: '數量＋單價', desc: '金額由「數量×單價」自動算出', cols: [{ key: 'qty', label: '數量', type: 'number' }, { key: 'unitCost', label: '單價', type: 'number' }] },
             { label: '發票號碼', desc: '每一列可填發票號碼', cols: [{ key: 'invoiceNo', label: '發票號碼', type: 'text' }] }
@@ -88,21 +88,8 @@
       },
       fdChanged: function (d) {
         if (!this.body || this._fdBusy) return
-        var fields = clone(d.fields || [])
-        // 急迫性的選項固定（設計器不強制）：被改掉就改回去並讓設計器重載
-        var fixed = false
-        fields.forEach(function (f) {
-          if (f.key === 'urgency' && f.type === 'select' && JSON.stringify(f.options || []) !== JSON.stringify(URGENCY)) { f.options = URGENCY.slice(); fixed = true }
-        })
-        this.body.fields = fields
+        this.body.fields = clone(d.fields || [])
         this.body.ui = Object.assign({}, this.body.ui || {}, clone(d.ui || {}))
-        if (fixed && this._fd) {
-          var self = this
-          this._fdBusy = true
-          try { this._fd.setDef(clone(this.body)) } finally { this._fdBusy = false }
-          this.msg = '急迫性的選項是固定的（一般、急件、特急），已改回。'
-          self.fdSyncProblems()
-        }
       }
     }
   }

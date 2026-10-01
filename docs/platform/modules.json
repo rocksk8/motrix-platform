@@ -74,6 +74,7 @@
    "js:js/module-builder-form.js",
    "js:js/module-builder-output.js",
    "js:js/expense-types.js",
+   "js:js/expense-types-designer.js",
    "js:static/custom-layout.js",
    "js:static/file-preview.js",
    "js:static/form-preview.js",

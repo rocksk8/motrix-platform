@@ -84,20 +84,18 @@ def test_designer_new_type_with_reserved_preset_validates_and_saves_a_contract_s
 
 
 @pytest.mark.e2e
-def test_designer_adapter_forces_the_urgency_options_back(live_server, make_user, e2e_browser):
+def test_designer_urgency_options_are_read_only_and_a_bad_list_is_flagged_not_rewritten(live_server, make_user, e2e_browser):
     u = make_user(username="etd_urg", role="superadmin", modules=[])
     page = _open(e2e_browser, live_server, u)
     page.click("[data-testid=et-open-purchase_req]")
     page.wait_for_selector(".fd .fd-paper", state="visible", timeout=20000)
-    res = page.evaluate("""() => {
-      const d = Alpine.$data(document.body)
-      const def = JSON.parse(JSON.stringify(d.body))
-      def.fields = def.fields.filter(f => f.key !== 'urgency')
-      def.fields.splice(0, 0, { key: 'urgency', label: '急迫性', type: 'select', options: ['隨便', '亂改'] })
-      d.fdChanged(def)
-      return d.body.fields.find(f => f.key === 'urgency').options
-    }""")
-    assert res == ["一般", "急件", "特急"], res
+    page.click('.fd-center .fd-fld[data-key="urgency"]')
+    page.wait_for_selector(".fd-right", state="visible")
+    assert "固定" in page.inner_text(".fd-right"), "急迫性的選項應顯示為固定清單"
+    assert page.locator('.fd-right [data-fd-fixedopts] li').count() == 3 and page.locator('.fd-right [data-fd-fixedopts] input').count() == 0
+    before = page.evaluate("() => JSON.stringify(Alpine.$data(document.body).body)")
+    page.wait_for_timeout(1000)
+    assert page.evaluate("() => JSON.stringify(Alpine.$data(document.body).body)") == before
 
 
 @pytest.mark.e2e
