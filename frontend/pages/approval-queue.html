@@ -1456,6 +1456,7 @@
             const d = await r.json()
             this.queue = d.queue || []
             this.totalPending = d.total || 0
+            try { window.dispatchEvent(new CustomEvent('motrix:approval-changed')) } catch (e) {}      // 選單紅點／數字跟著重抓（簽核處理完不會停在舊值）
             this.myDelegatedFor = d.myDelegatedFor || []
             this.reassignTypes = Array.isArray(d.reassignTypes) ? d.reassignTypes : []
             // Keep selection in sync
