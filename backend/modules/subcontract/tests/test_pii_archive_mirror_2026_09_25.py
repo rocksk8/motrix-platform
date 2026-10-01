@@ -63,7 +63,7 @@ def _seed_pii(conn):
                                         "2026-09-25", "2026-09-25"))
     conn.execute("INSERT INTO case_extra_expenses (quote_no, category, description, total_cost, status, kind, doc_code, payee_type, payee_name, payee_bank, payee_account, created_at) "
                  "VALUES ('', '其他', '差旅', 1200, '已核准', 'travel', 'TE-20260925-0001', 'employee', '哨兵員工', '玉山銀行', ?, '2026-09-25T00:00:00')", (_E_ACCT,))
-    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_bank_accounts'").fetchone():     # payroll 模組在（W3 員工收款帳號）
+    if conn.execute("PRAGMA table_info(user_bank_accounts)").fetchall():     # payroll 模組在（W3 員工收款帳號）
         conn.execute("INSERT INTO user_bank_accounts (user_id, username, bank_code, bank_name, account_name, account_number, active, created_at) "
                      "SELECT MIN(id), MIN(username), '808', '玉山銀行', ?, ?, 1, '2026-10-01' FROM users", (_U_ACCT_NAME, _U_ACCT_NO))
     conn.execute("UPDATE users SET totp_secret=? WHERE id=(SELECT MIN(id) FROM users)", (_TOTP,))

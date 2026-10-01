@@ -21653,10 +21653,14 @@
     "mod:analytics/api/__init__",
     "mod:analytics/api/ledger_diff",
     "mod:analytics/api/reports",
-    "page:pages/reports.html"
+    "page:pages/reports.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/accounting/ledger/__init__.py",
      "backend/modules/accounting/ledger/month_totals.py",
@@ -21669,9 +21673,6 @@
      "backend/modules/analytics/api/ledger_diff.py"
     ],
     "page": [
-     "frontend/pages/reports.html"
-    ],
-    "path": [
      "frontend/pages/reports.html"
     ]
    },

@@ -154,5 +154,5 @@ def test_category_level_has_no_buckets_and_the_page_says_so(client, sa, monkeypa
     assert any("類別" in n and "沒有分桶" in n for n in j["notes"]), j["notes"]
     feb = next(m for m in j["months"] if m["month"] == "%d-02" % Y)
     assert all("buckets" not in c for c in feb["expense"]["categories"].values())       # 說的與事實一致：類別真的沒有分桶
-    html = (LD.__file__.replace("\\", "/").split("/backend/")[0] + "/frontend/pages/reports.html")
-    assert 'x-for="n in glDiff.notes"' in open(html, encoding="utf-8").read()
+    from core import source_tree
+    assert 'x-for="n in glDiff.notes"' in source_tree.page_file("reports.html").read_text(encoding="utf-8")
