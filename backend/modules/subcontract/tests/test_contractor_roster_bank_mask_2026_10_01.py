@@ -123,6 +123,6 @@ def test_reverse_control_without_the_mask_module_holder_would_see_the_full_numbe
 
 def test_payslip_form_never_copies_a_masked_account_into_the_payslip():
     """勞報單頁從外包名冊挑人會帶入帳號；非最高管理者拿到的是遮蔽值，不可存進勞報單（會變成假帳號）。"""
-    import pathlib
-    html = (pathlib.Path(__file__).resolve().parents[4] / "frontend" / "pages" / "payslip-form.html").read_text(encoding="utf-8")
+    from core.source_tree import page_file
+    html = page_file("payslip-form.html").read_text(encoding="utf-8")
     assert "startsWith('****') ? ''" in html
