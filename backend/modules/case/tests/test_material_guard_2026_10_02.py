@@ -49,7 +49,7 @@ def _uid(username):
 
 def _order(item, name="交換器", qty=2, price=1500, **kw):
     o = {"itemId": item, "itemName": name, "quantity": qty, "unit": "台", "unitPrice": price, "totalPrice": qty * price,
-         "paidStatus": "pending", "paidAmount": 0, "paidDate": "", "notes": ""}
+         "paidStatus": "pending", "paidAmount": 0, "paidDate": "", "notes": "", "supplierId": 1}
     o.update(kw)
     return o
 
@@ -190,6 +190,20 @@ def test_physical_flags_tick_only_against_an_approved_order_and_arrival_needs_a_
     mats = _cr()["materials"]
     mats[1]["orderItemId"] = "NOPE"
     assert [(x["field"], x["code"]) for x in _put_cr(client, world["eng"], materials=mats).json()["rejected"]] == [("orderItemId", "bad_link")]
+
+
+def test_new_orders_must_name_a_supplier_but_legacy_rows_are_not_forced(client, world, monkeypatch):
+    """設計 §3.4／Q2：新建的叫料單必填 `supplierId`（匯款申請憑它帶出供應商）；舊單不溯及既往（開匯款申請時再選）。旗標關掉時不擋。"""
+    from modules.case import material_approval as MA
+    assert MA.SUPPLIER_REQUIRED_ON_NEW is True
+    new = _cr()["materialOrders"] + [_order("S1", "有供應商", 1, 100), _order("S2", "沒供應商", 1, 100, supplierId=None), _order("S3", "壞供應商", 1, 100, supplierId="x")]
+    r = _put_cr(client, world["adm"], materialOrders=new)
+    assert sorted((x["itemId"], x["field"], x["code"]) for x in r.json()["rejected"]) == [("S2", "supplierId", "supplier_required"), ("S3", "supplierId", "supplier_required")]
+    assert [o["itemId"] for o in _cr()["materialOrders"]] == ["L1", "L2", "S1"]               # 只拒有問題的；既有的列不重新檢查供應商
+    assert _status("S1") == "草稿" and _status("S2") == ""                                      # 被拒的沒有留審核單
+    monkeypatch.setattr(MA, "SUPPLIER_REQUIRED_ON_NEW", False)
+    new = _cr()["materialOrders"] + [_order("S4", "旗標關", 1, 100, supplierId=None)]
+    assert "rejected" not in _put_cr(client, world["adm"], materialOrders=new).json()
 
 
 def test_zero_amount_order_goes_through_the_same_flow(client, world):

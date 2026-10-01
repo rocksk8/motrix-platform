@@ -69,6 +69,16 @@ def _rej(out, item_id, field, code, message):
     out.append({"itemId": str(item_id), "field": field, "code": code, "message": message})
 
 
+def _valid_supplier_id(v) -> bool:
+    """供應商 id＝正整數（存在與否在開匯款申請時才查——供應商主檔是別的模組維護的）。"""
+    if isinstance(v, bool) or v in (None, ""):
+        return False
+    try:
+        return int(v) > 0
+    except (TypeError, ValueError):
+        return False
+
+
 def _valid_order(o: dict):
     """基本驗證（與專屬端點同一組）；回 None＝合法，否則回錯誤訊息。"""
     name = o.get("itemName") or o.get("itemId")
@@ -146,6 +156,9 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
             msg = _valid_order(no)
             if msg:
                 _rej(rejected, iid, "*", "invalid", msg)
+                continue
+            if MA.SUPPLIER_REQUIRED_ON_NEW and actor is not None and not _valid_supplier_id(no.get("supplierId")):
+                _rej(rejected, iid, "supplierId", "supplier_required", "新增叫料必須選擇供應商")
                 continue
             row = dict(no)
             if paid_only and ((row.get("paidStatus") or "pending") != "pending" or float(row.get("paidAmount") or 0) or row.get("paidDate")):

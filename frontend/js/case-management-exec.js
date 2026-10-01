@@ -99,6 +99,7 @@ window.CM_PARTS.push(() => ({
           }))
           await this.loadMoApprovals(quoteNo)
           await this.loadMoPayments(quoteNo)
+          if (this.moCanEdit()) await this.moLoadSuppliers()
         }
       } catch {}
       this.moLoading = false
@@ -136,13 +137,16 @@ window.CM_PARTS.push(() => ({
       if (s === '待審核' || s === '簽核中') return 'color:var(--tone-warning-fg)'
       return 'color:var(--text-dim)'
     },
+    // 供應商選單（只回 id／code／name；`GET /api/suppliers` 對非 admin 回空，所以走這支）
+    async moLoadSuppliers() {
+      if (this.moSuppliers.length) return
+      try {
+        const r = await fetch('/api/material-suppliers', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) this.moSuppliers = (await r.json()).suppliers || []
+      } catch {}
+    },
     async moOpenPayForm(m) {
-      if (!this.moSuppliers.length) {
-        try {
-          const r = await fetch('/api/material-suppliers', { headers: { Authorization: 'Bearer ' + this.session.token } })
-          if (r.ok) this.moSuppliers = (await r.json()).suppliers || []
-        } catch {}
-      }
+      await this.moLoadSuppliers()
       const q = this.moPayOf(m).quota
       this.moPayForm = { itemId: m.itemId, amount: q ? q.remaining : 0, supplierId: m.supplierId ?? '', bankCode: '', bankName: '', bankAccountName: '', bankAccountNumber: '', overCapReason: '' }
     },
@@ -336,6 +340,7 @@ window.CM_PARTS.push(() => ({
       for (const m of this.materialOrders) {
         const name = (m.itemName || '').trim()
         if (!name) { this.moMsgError = true; this.moMsg = '有項目還沒填名稱'; return }
+        if (m._saved === false && !m.supplierId) { this.moMsgError = true; this.moMsg = `「${name}」還沒選供應商（新增叫料必填）`; return }
         const quantity  = Math.max(0, Number(m.quantity) || 0)
         const unitPrice = Math.max(0, Number(m.unitPrice) || 0)
         const totalPrice = MotrixLegalRound.halfUp(quantity * unitPrice, 100) / 100
@@ -348,7 +353,7 @@ window.CM_PARTS.push(() => ({
           notes: (m.notes || '').trim(),
           // `AC2`：整份覆寫的端點——少帶這一鍵，已登錄的發票日期就會在下次存檔時被抹掉
           invoiceDate: m.invoiceDate || '',
-          supplierId: m.supplierId ?? null
+          supplierId: m.supplierId ? Number(m.supplierId) : null
         })
       }
 

@@ -2380,6 +2380,11 @@
                                x-model="m.unit" :disabled="!moCanEdit() || moLocked(m)" @input="moDirty = true">
                         <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="單價" style="width:96px"
                                x-model="m.unitPrice" :disabled="!moCanEdit() || moLocked(m)" @input="moRecalc(mi)">
+                        <select class="fi fi--sm" style="width:150px" x-model="m.supplierId" data-testid="mo-supplier"
+                                :disabled="!moCanEdit() || moLocked(m) || (m._saved !== false && moPayOf(m).payments.length > 0)" @change="moDirty = true">
+                          <option value="">供應商…</option>
+                          <template x-for="s in moSuppliers" :key="s.id"><option :value="s.id" x-text="(s.code ? s.code + ' ' : '') + s.name"></option></template>
+                        </select>
                         <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:var(--tone-warning-fg);min-width:96px;text-align:right;font-size:12px"
                               x-text="caseSettleFmt(m.totalPrice)"></span>
                         <button x-show="moCanEdit() && !moLocked(m) && moAp(m).status !== '已核准'" @click="moRemoveItem(mi)" title="刪除這一項"

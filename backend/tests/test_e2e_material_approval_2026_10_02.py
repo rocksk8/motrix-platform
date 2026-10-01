@@ -87,6 +87,7 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
         conn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
                      ("unified_approval_flow", json.dumps({"tiers": [{"order": 0, "approvers": [{"username": boss, "displayName": "主管"}]}],
                                                             "includeSubmitterManagerTier": False}), "2026-01-01T00:00:00"))
+        conn.execute("INSERT INTO suppliers (name, code, created_at, updated_at) VALUES (?,?,?,?)", ("甲供應商", "S-001", "2026-01-01", "2026-01-01"))
         conn.commit()
     finally:
         conn.close()
@@ -103,6 +104,8 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     page.fill(f'{PANEL} input[placeholder="項目名稱（如：交換器）"]', "交換器")
     page.fill(f'{PANEL} input[placeholder="數量"]', "2")
     page.fill(f'{PANEL} input[placeholder="單價"]', "1500")
+    page.wait_for_function("() => document.querySelectorAll('#fin-material-orders [data-testid=mo-supplier] option').length >= 2", timeout=15000)
+    page.select_option(f'{PANEL} [data-testid="mo-supplier"]', label="S-001 甲供應商")        # 31-C：新增叫料必選供應商
     assert _status_text(page) == "尚未儲存"
     page.click(f'{PANEL} button:has-text("儲存叫料")')
     page.wait_for_function("() => document.querySelector('#fin-material-orders [data-testid=mo-ap-status]')?.innerText === '草稿'", timeout=15000)

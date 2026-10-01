@@ -38,6 +38,9 @@ _NUMERIC = ("quantity", "unitPrice", "totalPrice")
 #: （主持裁示：半關的金流控制比沒有更糟，31-C 不能帶著 False 出貨）。守門題兩個值都測。
 PAID_VIA_REMITTANCE_ONLY = True
 
+#: 新建的叫料單必須指定供應商（`materialOrders[].supplierId`；設計 §3.4 / Q2）：匯款申請要憑它帶出供應商。舊單不溯及既往（開匯款申請時再選）。
+SUPPLIER_REQUIRED_ON_NEW = True
+
 # 簽核單據類型：預設跟統一流程（與額外支出同）。重複登記（模組重載）不報錯。
 if DOC_TYPE not in APPROVAL_DOC_TYPES:
     register_doc_type(DOC_TYPE, DOC_LABEL, unified=True)
