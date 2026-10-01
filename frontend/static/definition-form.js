@@ -135,7 +135,8 @@
       '.df-f .df-err{font-size:11px;color:var(--danger,#c0392b)}',
       '.df-f .df-help{font-size:11px;color:var(--text-secondary)}',
       '.df-ro{padding:6px 8px;font-size:13px;color:var(--text-primary);background:var(--border-light);border-radius:6px;min-height:20px}',
-      '.df-range{display:flex;gap:6px;align-items:center}',
+      '.df-range{display:flex;gap:6px;align-items:center;flex-wrap:wrap}',
+      '.df-range input{min-width:150px}',
       '.df-opts{display:flex;gap:12px;flex-wrap:wrap}',
       '.df-opts label{display:flex;gap:4px;align-items:center;font-size:13px;color:var(--text-primary)}',
       '.df-tbl{overflow-x:auto}',
@@ -214,7 +215,7 @@
 
     // ── 單一欄位 ──
     function renderField(f) {
-      var wrap = el('div', { class: CLS + 'f' + (f.type === 'table' || f.type === 'textarea' ? ' ' + CLS + 'f--wide' : ''), 'data-field': f.key })
+      var wrap = el('div', { class: CLS + 'f' + (f.type === 'table' || f.type === 'textarea' || f.type === 'daterange' ? ' ' + CLS + 'f--wide' : ''), 'data-field': f.key })
       var id = 'df-in-' + f.key
       wrap.appendChild(el('label', { for: id }, [f.label || f.key, f.required ? el('span', { class: 'req', text: '*' }) : null]))
       var editable = fieldEditable(f)
