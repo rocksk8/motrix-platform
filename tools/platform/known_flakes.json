@@ -1,15 +1,6 @@
 {
  "_說明": "建包偶發重跑登記簿；見 tools/platform/known_flakes.py 與 PLAYBOOK §D-建包。過期的條目會讓建包失敗。",
- "flakes": [
-  {
-   "nodeid": "tests/test_e2e_playwright_2026_09_07.py::test_login_create_submit_approve_smoke",
-   "first_seen": "2026-10-01",
-   "owner": "host-bin-1c",
-   "ticket": "T29-E2E-LOAD-FLAKE",
-   "expires": "2026-10-15",
-   "note": "第29班建包 e2e -n 2 逾時一次(wait_for_function 45s)；單獨重跑 3/3 綠(12.9/14.3/15.2s)；負載造成，根因待查（第31班），不放寬逾時"
-  }
- ],
+ "flakes": [],
  "removed": [
   {
    "nodeid": "modules/tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26.py::test_layout_editor_role_override_and_restore",
