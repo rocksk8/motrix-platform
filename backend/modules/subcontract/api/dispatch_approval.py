@@ -388,7 +388,8 @@ def queue_items(conn) -> list:
     """`approval.queue_items`（subcontract_dispatch）：派發審核＋完工審核兩種待簽項目。"""
     rows = conn.execute("SELECT * FROM contractor_dispatches WHERE approval_status IN ('待審核','簽核中') "
                         "OR completion_status IN ('待審核','簽核中') ORDER BY id DESC").fetchall()
-    return _queue_for(conn, TYPE1, rows) + _queue_for(conn, TYPE2, rows)
+    # 型別寫成字面值：覆蓋檢查（tools/check_approval_queue_coverage.py）是靜態讀提供者函式原始碼找 type 字面值
+    return _queue_for(conn, "contractor_dispatch", rows) + _queue_for(conn, "contractor_dispatch_completion", rows)
 
 
 def _detail(conn, doc_code, type_):
