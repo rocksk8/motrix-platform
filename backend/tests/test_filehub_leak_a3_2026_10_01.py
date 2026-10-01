@@ -96,7 +96,7 @@ def test_positive_control_owner_side_lists_each_providers_own_file_and_can_open_
     assert set(info["own_names"]) <= names, names                              # 正對照：有權的人四種來源的檔都列得出來
 
 
-def test_planted_paths_are_neither_listed_nor_openable(client, lk):
+def test_fhb3_planted_paths_are_neither_listed_nor_openable(client, lk):
     H, info = lk
     body = _hits(client, H["lk_admin"])
     assert not set(info["planted"]) & {i["filename"] for i in body["items"]}, "被塞進別張單據資料夾的檔不可以被列出來"
@@ -118,7 +118,7 @@ def _leaks(client, h, names):
     return shown, body
 
 
-def test_users_without_access_get_zero_hits_zero_counts_and_no_filenames(client, lk):
+def test_fhb2_users_without_access_get_zero_hits_zero_counts_and_no_filenames(client, lk):
     H, info = lk
     for who in ("lk_none", "lk_otherfin"):            # 有「檔案中心」模組，但不是這些單據的讀者（含只有別的財務模組的人）
         shown, body = _leaks(client, H[who], info["own_names"] + info["planted"])
@@ -194,7 +194,7 @@ def test_voucher_attachment_with_a_planted_path_is_not_listed(client, money_docs
 
 # ── ③ 項目不帶收款銀行／帳號 ───────────────────────────────────────────────────────────────
 
-def test_items_never_carry_payee_bank_or_account(client, lk, make_user):
+def test_fhb8_items_never_carry_payee_bank_or_account(client, lk, make_user):
     H, info = lk
     assert not any(k for k in S.ITEM_KEYS if any(w in k.lower() for w in ("bank", "account", "payee", "path")))
     u, p = make_user(username="lk_xe", role="admin", modules=None)
@@ -213,7 +213,7 @@ def test_items_never_carry_payee_bank_or_account(client, lk, make_user):
 
 # ── 工作日誌照片（P3 原本沒有的第八個提供者）與「每個提供者都有 search／count」的契約 ──────────────
 
-def test_every_registered_catalog_provider_has_search_and_count():
+def test_fhb5_every_registered_catalog_provider_has_search_and_count():
     from core import registry
     missing = [k for k, p in registry.providers(up.ATTACHMENTS_CATALOG).items() if not (hasattr(p, "search") and hasattr(p, "count"))]
     assert missing == [], "這些提供者沒有 search／count（檔案中心會說『這一類沒有列入』）：%s" % missing
@@ -282,7 +282,7 @@ def _make_expense(client, h, kind):
     return eid, f.json()["files"][-1]["id"]
 
 
-def test_typed_expense_attachments_are_hidden_from_ordinary_case_readers_but_legacy_ones_are_not(client, world):
+def test_fhb4_typed_expense_attachments_are_hidden_from_ordinary_case_readers_but_legacy_ones_are_not(client, world):
     H, _, _ = world
     typed, tfid = _make_expense(client, H["ct_admin"], "travel")
     legacy, lfid = _make_expense(client, H["ct_admin"], "")

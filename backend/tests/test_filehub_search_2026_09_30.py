@@ -99,7 +99,7 @@ def test_hidden_files_are_not_listed_not_counted_and_no_hidden_count_field(clien
     assert {i["sourceType"] for i in mine["items"]} >= {"quotation_signed"}
 
 
-def test_items_have_only_the_fixed_keys_and_never_a_path(client, world):
+def test_fhb1_items_have_only_the_fixed_keys_and_never_a_path(client, world):
     H, note_no, f = world
     _upload_quotation_signed(client, H)
     body = _search(client, H["ct_admin"], quote_no=Q).json()
@@ -148,7 +148,7 @@ def test_uploader_and_date_filters(client, world):
 
 # ── 權限與缺席 ──────────────────────────────────────────────────────────
 
-def test_global_browse_needs_the_file_center_module_but_a_case_filter_does_not(client, world, make_user):
+def test_fhb7_global_browse_needs_the_file_center_module_but_a_case_filter_does_not(client, world, make_user):
     H, _, _ = world
     assert _search(client, H["ct_owner"]).status_code == 403                          # 沒有檔案中心模組：不能全域瀏覽
     assert _search(client, H["ct_owner"], quote_no=Q).status_code == 200
@@ -159,7 +159,7 @@ def test_global_browse_needs_the_file_center_module_but_a_case_filter_does_not(c
     assert client.get("/api/filehub/search").status_code == 401
 
 
-def test_a_missing_owner_module_is_reported_not_silent(client, world, monkeypatch):
+def test_fhb6_a_missing_owner_module_is_reported_not_silent(client, world, monkeypatch):
     """**反向控制**：把 unavailable 吞掉 ⇒ 這題紅（缺席長得跟『沒有檔案』一樣）。"""
     H, _, _ = world
     real = registry.module_states

@@ -59,7 +59,7 @@ def search(q: str = Query(""), types: str = Query(""), exts: str = Query(""), da
     try:
         pool, counts, cats, failed = [], {}, [], []
         for name, prov in sorted(registry.providers(ATTACHMENTS_CATALOG).items()):
-            cats += [dict(type=t, **meta) for t, meta in (getattr(prov, "CATEGORIES", None) or {}).items()]
+            cats += [{"type": t, **meta} for t, meta in (getattr(prov, "CATEGORIES", None) or {}).items()]
             try:
                 pool += prov.search(conn, u, crit)
                 for t, n in prov.count(conn, u, crit).items():
