@@ -14487,6 +14487,7 @@
     "page:pages/approval-history.html",
     "page:pages/approval-settings.html",
     "page:pages/contractor-voucher-approval-settings.html",
+    "page:pages/file-center.html",
     "page:pages/ledger-reports.html",
     "page:pages/ledger-statements.html",
     "page:pages/map.html",
@@ -14501,6 +14502,7 @@
      "frontend/pages/approval-history.html",
      "frontend/pages/approval-settings.html",
      "frontend/pages/contractor-voucher-approval-settings.html",
+     "frontend/pages/file-center.html",
      "frontend/pages/ledger-reports.html",
      "frontend/pages/ledger-statements.html",
      "frontend/pages/map.html",
@@ -25074,6 +25076,7 @@
     "file:backend/helpers/__init__.py",
     "helper:company_setup",
     "helper:custom_modules",
+    "helper:doc_render",
     "helper:doc_template",
     "helper:settings",
     "mod:accounting/__init__",
@@ -25096,6 +25099,7 @@
     ],
     "path": [
      "backend/helpers/custom_modules.py",
+     "backend/helpers/doc_render.py",
      "backend/modules/accounting/voucher_pdf.py",
      "backend/modules/case/completion_pdf.py"
     ]
