@@ -8257,37 +8257,37 @@
    "routes": [
     {
      "func": "get_my_account",
-     "line": 45,
+     "line": 49,
      "method": "GET",
      "path": "/api/me/bank-account"
     },
     {
      "func": "put_my_account",
-     "line": 55,
+     "line": 59,
      "method": "PUT",
      "path": "/api/me/bank-account"
     },
     {
      "func": "list_accounts",
-     "line": 68,
+     "line": 75,
      "method": "GET",
      "path": "/api/bank-accounts"
     },
     {
      "func": "get_account",
-     "line": 85,
+     "line": 92,
      "method": "GET",
      "path": "/api/bank-accounts/{user_id}"
     },
     {
      "func": "put_account",
-     "line": 101,
+     "line": 108,
      "method": "PUT",
      "path": "/api/bank-accounts/{user_id}"
     },
     {
      "func": "get_history",
-     "line": 117,
+     "line": 127,
      "method": "GET",
      "path": "/api/bank-accounts/{user_id}/history"
     }
