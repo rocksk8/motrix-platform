@@ -9,6 +9,7 @@ window.CM_PARTS.push(() => ({
     dispatches: [],
     dispatchesLoading: false,
     showDispatchModal: false,
+    _dispatchesFor: '',
     editDispatchId: null,
     dispatchSaving: false,
     dispatchForm: {},
@@ -68,7 +69,10 @@ window.CM_PARTS.push(() => ({
       if (!quoteNo) return
       const live = this._selectLive()
       this.dispatchesLoading = true
-      this.dispatches = []
+      // 同一個案件重新載入（按鈕操作後、頁面自己的二次載入）不先清空清單：清空再填會讓整張卡片被換掉（x-for 重建），
+      // 使用者正要按的按鈕在點擊瞬間脫離 DOM（e2e 偶發 detached）。換案件才清空，避免短暫顯示別案的派發。
+      if (this._dispatchesFor !== quoteNo) this.dispatches = []
+      this._dispatchesFor = quoteNo
       try {
         const r = pre ? this._preResp(pre) : await fetch(`/api/contractor-dispatches?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -800,6 +804,7 @@ window.CM_PARTS.push(() => ({
     // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）
     _reset_dispatch(phase, data) {
       if (phase === 'early') {
+        this._dispatchesFor = ''
         this.contractorVouchers = []
         this.contractorVouchersLoading = true
       }
