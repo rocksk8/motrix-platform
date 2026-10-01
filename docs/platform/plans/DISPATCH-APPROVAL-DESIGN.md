@@ -206,3 +206,86 @@ cancelled：任一非終態；已核准者需理由（見 §0）
 4. **舊式全額申請**：保留（相容，款別留空）？新建申請是否一律必選款別（建議：新建一律必選，舊的留著）？
 5. **扣繳**：承攬商本身（公司）不扣繳、個人外包走勞報單，沿用現行規則？承攬商若是**個人**（無統編）需不需要在匯款申請內扣繳（目前系統沒有此功能，會是新增項目，建議本期不做、列第 32 班）。
 6. **發票**：每一期（每張申請）各自登錄發票號／日期／檔案（建議），總帳進項稅額估計依每張發票日認列？還是整個派發只有一張發票（現行）？若只有一張，分期付款時成本認列日仍是同一天。
+
+
+## 附錄 B　31-A 實作後的驗證與上線公告項目（2026-10-01）
+
+### B.1 舊測試保護（conftest 的 `_legacy_dispatch_shim`）
+- autouse 夾具把「測試直接以 API 建立派發並指定 status」的列還原成**舊單形狀**（`approval_status=''`），讓舊測試在新規則下維持原本語意；**新行為的測試一律掛 `@pytest.mark.no_dispatch_shim`**（31-A 的 S1–S6 與 e2e 全數如此，不經過夾具，所以夾具蓋不到新行為）。
+- 一次性序列驗證（單一 pytest 程序、無 -n、basetemp 在系統 TEMP）：凡檔內含 `contractor_dispatches`／`contractor-dispatches` 的測試檔共 67 個（不含 31-A 新檔），**456 通過、3 失敗**；3 個失敗都是**測試端預期值要更新**（沒有產品行為退化）：
+  - `modules/case/tests/test_approval_providers.py` 兩題：預期的 reassign／detail 類型清單加入 `contractor_dispatch`、`contractor_dispatch_completion`。
+  - `tests/test_e2e_case_page_golden_2026_09_24.py`：案件頁承攬商分頁文字多了「舊單（未經審核）」徽章與「取消」按鈕（舊單照舊，畫面新增項目）；golden 重錄，差異僅此兩處。
+- 檔案清單：
+  - `modules/accounting/tests/test_case_attachments_scope_2026_09_23.py`
+  - `modules/accounting/tests/test_ledger_acceptance_2026_10_01.py`
+  - `modules/accounting/tests/test_ledger_c2_subcontract_2026_09_30.py`
+  - `modules/accounting/tests/test_ledger_r12_remit_payslip_2026_09_30.py`
+  - `modules/accounting/tests/test_report_remit_payslip_no_double_count_2026_09_30.py`
+  - `modules/accounting/tests/test_t100_export_2026_09_01.py`
+  - `modules/analytics/tests/test_finance_advisory_2026_08_28.py`
+  - `modules/analytics/tests/test_report_recognition_basis_2026_09_24.py`
+  - `modules/analytics/tests/test_reports_expenses.py`
+  - `modules/analytics/tests/test_reports_export_expenses.py`
+  - `modules/analytics/tests/test_reports_logic_fixes_2026_08_28.py`
+  - `modules/analytics/tests/test_visual_management_2026_08_28.py`
+  - `modules/arap/tests/test_cashier_execution_history_2026_08_31.py`
+  - `modules/arap/tests/test_cashier_module_2026_08_31.py`
+  - `modules/arap/tests/test_e2e_cashier_remit_payslip_link_2026_09_30.py`
+  - `modules/arap/tests/test_finance_advisory_2026_08_28.py`
+  - `modules/arap/tests/test_money_round_half_up_2026_09_26.py`
+  - `modules/arap/tests/test_money_round_half_up_2026_09_26_from_tests.py`
+  - `modules/arap/tests/test_subcontract_connectors.py`
+  - `modules/case/tests/test_approval_providers.py`
+  - `modules/crm/tests/test_crm_api_integration.py`
+  - `modules/payroll/tests/test_payroll_money_round_half_up_2026_09_26.py`
+  - `modules/subcontract/tests/test_api_integration.py`
+  - `modules/subcontract/tests/test_bank_account_mask_2026_10_01.py`
+  - `modules/subcontract/tests/test_case_finance_summary_2026_09_09.py`
+  - `modules/subcontract/tests/test_cashier_execution_history_2026_08_31.py`
+  - `modules/subcontract/tests/test_cashier_module_2026_08_31.py`
+  - `modules/subcontract/tests/test_contractor_bank_branch_2026_09_24.py`
+  - `modules/subcontract/tests/test_contractor_voucher_paid_date_2026_08_31.py`
+  - `modules/subcontract/tests/test_dispatch_cost_view.py`
+  - `modules/subcontract/tests/test_dispatch_edit_guard_2026_08_28.py`
+  - `modules/subcontract/tests/test_dispatch_file_delete_review_2026_09_30.py`
+  - `modules/subcontract/tests/test_dispatch_file_uploads.py`
+  - `modules/subcontract/tests/test_dispatch_import_to_quote_persists_2026_09_23.py`
+  - `modules/subcontract/tests/test_dispatch_invoice_payable_date_2026_08_30.py`
+  - `modules/subcontract/tests/test_dispatch_row_provider.py`
+  - `modules/subcontract/tests/test_dispatch_upload_access_p0_2026_09_30.py`
+  - `modules/subcontract/tests/test_e2e_case_open_requests_2026_09_24.py`
+  - `modules/subcontract/tests/test_e2e_report_recognition_2026_09_24.py`
+  - `modules/subcontract/tests/test_money_round_half_up_2026_09_26.py`
+  - `modules/subcontract/tests/test_pii_archive_mirror_2026_09_25.py`
+  - `modules/subcontract/tests/test_report_recognition_basis_2026_09_24.py`
+  - `modules/subcontract/tests/test_subcontract_attachments_provider.py`
+  - `modules/subcontract/tests/test_subcontract_providers.py`
+  - `modules/subcontract/tests/test_t100_export_2026_09_01.py`
+  - `tests/platform/test_attachments_providers.py`
+  - `tests/platform/test_dispatch_connector.py`
+  - `tests/platform/test_queue_items_malformed_json.py`
+  - `tests/platform/test_subcontract_connectors.py`
+  - `tests/test_api_integration.py`
+  - `tests/test_approval_queue_detail_authz_2026_09_14.py`
+  - `tests/test_attachments_bind_2026_09_30.py`
+  - `tests/test_case_bundle_2026_09_24.py`
+  - `tests/test_case_finance_summary_2026_09_09.py`
+  - `tests/test_e2e_case_open_requests_2026_09_24.py`
+  - `tests/test_e2e_case_page_golden_2026_09_24.py`
+  - `tests/test_e2e_gl_warn_2026_09_30.py`
+  - `tests/test_e2e_n1_dispatch_2026_09_30.py`
+  - `tests/test_e2e_pdf_unapproved_more_2026_09_30.py`
+  - `tests/test_filehub_leak_a3_2026_10_01.py`
+  - `tests/test_gl_source_status_2026_09_30.py`
+  - `tests/test_money_round_half_up_2026_09_26.py`
+  - `tests/test_pii_archive_mirror_2026_09_25.py`
+  - `tests/test_quote_json_lost_update_2026_09_25.py`
+  - `tests/test_quote_location_2026_09_22.py`
+  - `tests/test_report_recognition_basis_2026_09_24.py`
+  - `tests/test_scan_attachment_paths_2026_09_30.py`
+
+### B.2 上線公告項目（使用者可感知的差異）
+1. 營運報表應計成本：草稿與已退回的派發不再計入、待審核者計入並標「派發待審核」（與上一版報表會有差異；上線前提供「受影響派發數與金額」唯讀清單）。
+2. **成本檢視（傳票摘要的承攬商支出來源 `dispatch.cost_for_case`）不再列出已取消的派發**——舊版會列出（與應計成本口徑不一致的既有缺陷）；同時套用草稿／已退回不計、待審核計入並標示。
+3. 匯款申請與總帳 E04：需派發已核准（舊單不受影響）。
+4. `completed` 只能由完工審核通過設定；新增派發視窗不再有狀態下拉。
