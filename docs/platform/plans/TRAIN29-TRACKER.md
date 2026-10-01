@@ -6,7 +6,7 @@
 |---|---|---|---|---|---|
 | hichan-2e | W2 線：A2 作廢／稽核匯出／四型 e2e | wip/w2-expense-a2-w2b（基底 ab5e2ec4） | 未推 | S0 完成（308 過）；S1 作廢進行（僅 superadmin） | S1→S2→S3 |
 | hichan-a3 | W1 線：A2-2 類型定義 → A2-4 → A2-7（最後合併） | origin/wip/w1-a2-2 | bc4d25bc（基底） | A2-2 守門修正中，預估約 1.5h 變綠 | A2-4、A2-7 |
-| hichan-c7 | 模組建構器（刪除、選單群組）；部門彙總跟業務負責人 | platform／新分支 | ad418e88 | 建構器兩項完成；部門彙總進行中 | 回報後 |
+| hichan-c7 | 模組建構器（已併 platform ad418e88）；部門彙總跟業務負責人 | fix/dept-follows-sales-owner | 422078dd | 完成（8 題綠）、待合併；待待命 | 與 wip/w3-dept-dim 合併時 reports.py _collect_expenses 一處衝突，解法：w3 區塊保留、dept_by_quote 改用 _case_dept（SELECT 要含 sales_person）|
 | 未派 | W3：dept-dim／etype-editor／map-zoom／bank 收尾 | wip/w3-* | 見 HANDOFF-HOST | 預檢未完 | 等 W1/W2 進度再派 |
 | 未派 | W4：g2-5（含 A5 疑慮單獨 revert）、G4/G5、稽核 | wip/w4-g2-5 | 10f6cbdd | 未完 | 同上 |
 
