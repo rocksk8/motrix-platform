@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 941,
+  "tests": 946,
   "unmapped": 12,
   "kinds": {
-   "api": 505,
+   "api": 509,
    "e2e": 221,
-   "audit": 128,
+   "audit": 129,
    "unit": 87
   },
-  "routes": 711
+  "routes": 712
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -235,6 +235,9 @@
      "backend/modules/accounting/"
     ]
    },
+   "unresolved_api": [
+    "/api/expense-categories"
+   ],
    "login_fixture": true,
    "module": "accounting"
   },
@@ -850,6 +853,69 @@
     ],
     "api": [
      "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_engine_line_account_code_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/category_map",
+    "mod:accounting/ledger/contract",
+    "mod:accounting/ledger/engine",
+    "mod:accounting/ledger/roles",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/category_map.py",
+     "backend/modules/accounting/ledger/contract.py",
+     "backend/modules/accounting/ledger/engine.py",
+     "backend/modules/accounting/ledger/roles.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_expense_forms_gl_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_engine",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/category_map",
+    "mod:accounting/ledger/features",
+    "mod:accounting/ledger/periods",
+    "mod:accounting/ledger/reports",
+    "mod:accounting/ledger/roles"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/category_map.py",
+     "backend/modules/accounting/ledger/features.py",
+     "backend/modules/accounting/ledger/periods.py",
+     "backend/modules/accounting/ledger/reports.py",
+     "backend/modules/accounting/ledger/roles.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_engine.py"
     ],
     "module_dir": [
      "backend/modules/accounting/"
@@ -1945,6 +2011,41 @@
    "login_fixture": true,
    "module": "accounting"
   },
+  "backend/modules/accounting/tests/test_ledger_c7_tax_g3_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/helpers/__init__.py",
+    "helper:custom_finance",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/contract",
+    "mod:accounting/ledger/custom_events",
+    "mod:accounting/ledger/roles",
+    "router:custom_records",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/custom_finance.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/contract.py",
+     "backend/modules/accounting/ledger/custom_events.py",
+     "backend/modules/accounting/ledger/roles.py"
+    ],
+    "api": [
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
   "backend/modules/accounting/tests/test_ledger_l_gaps_2026_09_30.py": {
    "kind": "api",
    "units": [
@@ -1990,6 +2091,42 @@
     ]
    },
    "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_mutation_guards_2026_10_01.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/ledger_category_map",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/category_map",
+    "mod:accounting/ledger/contract",
+    "mod:accounting/ledger/engine",
+    "mod:accounting/tests/test_category_map_g1_2026_10_01",
+    "mod:accounting/tests/test_engine_line_account_code_2026_10_01"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/ledger_category_map.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/category_map.py",
+     "backend/modules/accounting/ledger/contract.py",
+     "backend/modules/accounting/ledger/engine.py"
+    ],
+    "path": [
+     "backend/modules/accounting/api/ledger_category_map.py",
+     "backend/modules/accounting/ledger/category_map.py",
+     "backend/modules/accounting/ledger/contract.py",
+     "backend/modules/accounting/ledger/engine.py",
+     "backend/modules/accounting/tests/test_category_map_g1_2026_10_01.py",
+     "backend/modules/accounting/tests/test_engine_line_account_code_2026_10_01.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
    "module": "accounting"
   },
   "backend/modules/accounting/tests/test_ledger_p1_periods_2026_09_30.py": {
@@ -6702,6 +6839,26 @@
     "/api/cashier/bonus-payouts"
    ],
    "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_correction_clawback_account_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "mod:payroll/__init__",
+    "mod:payroll/bonus_correction",
+    "mod:payroll/tests/test_bonus_correction_2026_09_30"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/bonus_correction.py",
+     "backend/modules/payroll/tests/test_bonus_correction_2026_09_30.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
    "module": "payroll"
   },
   "backend/modules/payroll/tests/test_bonus_empty_state_2026_09_23.py": {
@@ -20972,7 +21129,8 @@
     "mod:accounting/ledger/roles",
     "mod:analytics/api/__init__",
     "mod:analytics/api/ledger_diff",
-    "mod:analytics/api/reports"
+    "mod:analytics/api/reports",
+    "page:pages/reports.html"
    ],
    "evidence": {
     "import": [
@@ -20986,6 +21144,12 @@
     ],
     "api": [
      "backend/modules/analytics/api/ledger_diff.py"
+    ],
+    "page": [
+     "frontend/pages/reports.html"
+    ],
+    "path": [
+     "frontend/pages/reports.html"
     ]
    },
    "login_fixture": true

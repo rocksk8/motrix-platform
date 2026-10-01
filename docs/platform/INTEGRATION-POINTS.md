@@ -820,6 +820,7 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 提供方 | M06 會計：`modules/accounting/api/ledger_category_map.py::provide_categories` |
 | 使用方 | 尚無（M01 費用單據 A2 接入時補；目前只有總帳自己的對應頁） |
 | 形式 | provider，單一提供者（名稱 `accounting`） |
+| HTTP | `GET /api/expense-categories`（任何登入者；只讀啟用中；`{categories:[…]}`，給費用單據下拉選單）；維護：`PUT /api/ledger/expense-categories`（最高管理者） |
 | 語法 | 提供：`("expense.categories", "accounting"): fn`；取用：`registry.providers("expense.categories").get("accounting")` ⇒ `fn(conn)` |
 | 回傳 | `[{code, name, default_tax}]`，只含啟用中的類別；**代碼發布後不可改**（單據存代碼；改名只改 name、停用用 active=0）；消費端忽略未知鍵 |
 | 對方不在時 | 提供者不在 ⇒ 費用單據退回自己的固定類別清單（不阻擋） |

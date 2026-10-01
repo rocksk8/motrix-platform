@@ -78,7 +78,7 @@ def test_income_and_expense_events_accrual_and_cash(world):
     assert _pairs(by[("E20b", "income")]) == [("BANK", "D", 10500), ("AR", "C", 10500)]              # 現金金額用 cashAmountField
     assert _pairs(by[("E20b", "expense")]) == [("AP", "D", 4000), ("BANK", "C", 4000)]               # 沒設現金金額 ⇒ 同權責金額
     assert all(C.validate_event(e) == [] and e["source_type"].startswith("custom_record") for e in evs)
-    assert "不拆稅" in notice
+    assert "含稅總額" in notice and "其餘含稅全額入帳" in notice                    # G3：措辭改為含稅總額；沒有稅額欄位時行為不變
     assert not [e for e in CE.gl_events("2031-06-01", "2031-06-30")["events"] if e["doc_no"] == no]      # 日期窗
 
 

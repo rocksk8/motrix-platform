@@ -144,3 +144,15 @@ def test_gl_provider_absent_says_so_and_shows_report_only(client, sa, monkeypatc
     feb = next(m for m in j["months"] if m["month"] == "%d-02" % Y)
     assert feb["income"]["report"] == 1250 and "gl" not in feb["income"] and "buckets" not in feb["income"]
     assert j["totals"]["income"]["diff"] is None                                          # 沒有總帳 ⇒ 不是 0，是沒有
+
+
+def test_category_level_has_no_buckets_and_the_page_says_so(client, sa, monkeypatch):
+    """低風險 #3（選 a）：類別層級沒有原因分桶 ⇒ notes 明說，畫面（reports.html 的 glDiff.notes 迴圈）逐條顯示。"""
+    from modules.analytics.api import ledger_diff as LD
+    _patch_report(monkeypatch, income={"%d-02" % Y: 1250}, expenses={})
+    j = client.get("/api/reports/ledger-diff", params={"year": Y}, headers=sa).json()
+    assert any("類別" in n and "沒有分桶" in n for n in j["notes"]), j["notes"]
+    feb = next(m for m in j["months"] if m["month"] == "%d-02" % Y)
+    assert all("buckets" not in c for c in feb["expense"]["categories"].values())       # 說的與事實一致：類別真的沒有分桶
+    html = (LD.__file__.replace("\\", "/").split("/backend/")[0] + "/frontend/pages/reports.html")
+    assert 'x-for="n in glDiff.notes"' in open(html, encoding="utf-8").read()

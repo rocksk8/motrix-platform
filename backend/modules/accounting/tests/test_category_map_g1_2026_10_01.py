@@ -167,3 +167,17 @@ def test_category_account_resolver(conn):
     CM.upsert_category(conn, "unmapped", "未對應", "", 4)
     assert CM.category_account(conn, "unmapped") is None
     assert registry.providers("gl.category_account").get("accounting") is not None
+
+
+def test_expense_categories_list_for_any_logged_in_user(client, make_user, conn):
+    sa = _login(client, make_user, "g1lsa", "superadmin")
+    plain = _login(client, make_user, "g1lpl", "engineer")            # 沒有出納／財務權限的一般使用者（填費用單據的人）
+    CM.upsert_category(conn, "l1", "甲", "taxable", 1)
+    CM.upsert_category(conn, "l2", "乙", "", 2, active=False)
+    CM.upsert_map(conn, "l1", account_code="6134")
+    conn.commit()
+    assert client.get("/api/expense-categories").status_code == 401
+    r = client.get("/api/expense-categories", headers=plain)
+    assert r.status_code == 200 and r.json()["categories"] == [{"code": "l1", "name": "甲", "default_tax": "taxable"}]      # 只有啟用中、不含科目
+    assert client.get("/api/ledger/category-map", headers=plain).status_code == 403                                          # 對應表仍只給財務
+    assert "account_code" not in r.text

@@ -2745,25 +2745,25 @@
    "routes": [
     {
      "func": "get_category_map",
-     "line": 36,
+     "line": 37,
      "method": "GET",
      "path": "/api/ledger/category-map"
     },
     {
      "func": "put_category_map",
-     "line": 47,
+     "line": 48,
      "method": "PUT",
      "path": "/api/ledger/category-map"
     },
     {
      "func": "delete_category_map",
-     "line": 66,
+     "line": 67,
      "method": "DELETE",
      "path": "/api/ledger/category-map/{category}"
     },
     {
      "func": "put_expense_category",
-     "line": 83,
+     "line": 84,
      "method": "PUT",
      "path": "/api/ledger/expense-categories"
     }
@@ -4874,7 +4874,7 @@
    "routes": [
     {
      "func": "report_ledger_diff",
-     "line": 107,
+     "line": 109,
      "method": "GET",
      "path": "/api/reports/ledger-diff"
     }

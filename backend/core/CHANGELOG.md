@@ -10,6 +10,9 @@
 - L1（新增）：`helpers.doc_render.render_document(template, view)`（版型＋單據視圖 ⇒ HTML，未核可由程式補標示）；`custom_modules.render_view` 改為委派。
 - L1（新增）權限目錄 `expense_forms`（費用單據；A2-1 起由無案件新增端點讀取；目前列在 `UNREAD_BY_DESIGN`，有人讀它時守門會要求刪掉那一筆）。
 
+## (next) — 2026-10-01（wip/w4-g2-5：自訂模組金流屬性原樣傳給總帳）
+- L1（新增回傳鍵）：`helpers.custom_finance.gl_lines` 每個金流行多帶 `finance`（該欄位的整個 `finance` 屬性字典，唯讀副本），每張單據多帶 `data`（單據資料唯讀副本）。之後新增金流屬性（例 `taxField`／`docTypeField`）由總帳提供者解讀，不必再改 helper。只新增鍵，舊消費端忽略。
+
 ## 1.91 — 2026-09-30（wip/w2-bonus-correction：獎金更正單的三種通知）
 - L1（新增）：`helpers.email_notify.notify_bonus_correction_submitted／_approved／_returned`——獎金更正單送審／核准／駁回的通知信（信內不放金額）；`helpers/mail_types.py` 登記三個信件類型。只新增，舊呼叫端不受影響。
 

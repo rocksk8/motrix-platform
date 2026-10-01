@@ -174,6 +174,7 @@ def open_vouchers(conn, corr, award, who, now):
 
     R1 下游：財務會計／總帳——傳票自己再走簽核與過帳；營運報表不讀傳票（讀 `expense_entries`）。
     沖轉傳票由總帳依「目前有效的應付傳票」分錄組反向（`reverses_voucher_id`；連續更正時是前一次的重開傳票）。
+    追回應收科目無效（有追回額時先檢查）⇒ 沖轉、重開、追回**整組都不開**（否則應付少一個追回額）。
     總帳拒絕（原傳票未過帳／已作廢／已被沖轉／期間已鎖）⇒ 沖轉與重開**都不開**（只重開會讓應付重複），回 notice 由會計手動處理。
     回 notice（空字串＝兩張都開了或金額為 0 不需要開）；寫入 corr 的 `*_voucher_id`（呼叫端交易內，不 commit）。"""
     if not bonus_vouchers.accounting_available():
@@ -183,6 +184,12 @@ def open_vouchers(conn, corr, award, who, now):
                             bonus_vouchers.account_problem(conn, acc["payable"])) if p]
     if problems:
         return "未產生傳票草稿：%s（請到獎金設定改選科目後，由會計手動開立）。" % "；".join(problems)
+    clawback = int(corr["clawback_total"])
+    rec = clawback_receivable_code(conn)
+    if clawback > 0:
+        err = bonus_vouchers.account_problem(conn, rec)
+        if err:        # 追回傳票開不出來 ⇒ 整組都不開（只開沖轉＋重開會讓應付少一個追回額）；回 notice 由會計手動處理
+            return "未產生沖轉、重開與追回傳票：追回應收科目有問題：%s（追回處理方式待確認；請由會計手動處理整組）。" % err
     text = "獎金分潤更正 %s" % corr["corr_no"]
     old_total, new_total = int(corr["old_total"]), int(corr["new_total"])
     if old_total > 0:
@@ -199,12 +206,7 @@ def open_vouchers(conn, corr, award, who, now):
             {"account_code": acc["payable"], "summary": text + " 重開應付", "debit": 0, "credit": new_total},
         ], who, now, "bonus_corr_accrual")
         conn.execute("UPDATE bonus_corrections SET rebook_voucher_id = ? WHERE id = ?", (bid, corr["id"]))
-    clawback = int(corr["clawback_total"])
     if clawback > 0:
-        rec = clawback_receivable_code(conn)
-        err = bonus_vouchers.account_problem(conn, rec)
-        if err:
-            return "未產生追回應收傳票：%s（追回處理方式待確認；請由會計手動處理）。" % err
         cid, _cno, _blk = _draft(conn, corr, text + "（追回＝應收；" + CLAWBACK_PENDING_LABEL + "）", [
             {"account_code": rec, "summary": text + " 追回（應收員工）", "debit": clawback, "credit": 0},
             {"account_code": acc["payable"], "summary": text + " 追回（沖減應付）", "debit": 0, "credit": clawback},
