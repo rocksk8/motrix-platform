@@ -243,9 +243,8 @@ def test_material_orders_paid_fields_are_read_only_in_ui(live_server, make_user,
     try:
         page.wait_for_selector(f'{MO_PANEL} :text("已儲存")', timeout=45000)
     except Exception as exc:                      # noqa: BLE001
-        raise AssertionError("等不到「已儲存」。面板當下內容：
-" + page.locator(MO_PANEL).inner_text() + "
-失敗的請求／頁面錯誤：" + repr(bad)) from exc
+        raise AssertionError("等不到「已儲存」。面板當下內容：\n" + page.locator(MO_PANEL).inner_text()
+                             + "\n失敗的請求／頁面錯誤：" + repr(bad)) from exc
 
     saved = _read_material_orders(quote_no)
     assert saved[0]["notes"] == "只改備註"
