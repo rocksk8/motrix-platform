@@ -5,6 +5,7 @@
 [公開介面] KINDS, MAX_TABS_PER_POINT, declared_points, point_id, validate_mount_points, visible_point
 [不變式] 掛載點只來自已載入模組 module.json 的 `mount_points`；`page` 必須是同一份 `pages[].path`；perm 與選單項同一種格式、同一個判準
     （core.menu.visible）；格式錯誤 ⇒ 問題清單（loader 不載入該模組，同 customization）
+[契約題] tests/test_builder_b_mounts_2026_10_01.py
 [注意] 只用標準函式庫（loader 在 import 模組前驗 module.json）。「隱藏頁籤」不是存取控制——嵌入的自訂模組各端點仍各自驗權限。
 
 `module.json`：
