@@ -262,3 +262,19 @@ def test_table_column_presets_add_fixed_key_columns(designer):
     _saved(page)
     assert "invoice_no" in [c["key"] for c in _label_of(_draft(), "lines")["columns"]]
     assert page.locator('.fd-right [data-col-preset]').count() == 0
+
+
+@pytest.mark.e2e
+def test_fixed_options_are_read_only_and_a_mismatch_is_flagged_without_changing_the_draft(designer):
+    page = designer
+    _field(page, "地點").click()
+    page.select_option('.fd-right [data-fd="conv"]', "select")            # 選項 選項一／選項二
+    _saved(page)
+    before = _draft()
+    page.evaluate("() => { const f = Alpine.$data(document.body)._fd; f.caps.fixedOptions = { place: ['國內', '國外'] }; f.setDef(f.getDef()); f.select('place') }")
+    page.wait_for_selector('.fd-right [data-fd-fixedopts]')
+    assert page.locator('.fd-right [data-item]').count() == 0, "固定選項不可編輯（沒有輸入格）"
+    assert "固定" in page.inner_text('.fd-right [data-fd-fixedopts]') and "國內、國外" in page.inner_text('.fd-right [data-fd-fixedopts]')
+    assert "必須固定為：國內、國外" in page.inner_text(".fd-right")       # 與固定值不一致 ⇒ 右欄列為要修改（工具列的計數也會增加）
+    page.wait_for_timeout(1200)
+    assert _draft() == before, "只回報不偷改：草稿不變"

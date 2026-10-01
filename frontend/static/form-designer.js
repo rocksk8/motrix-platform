@@ -15,6 +15,7 @@
 //   fixedTypeKeys  {key: type}：保留字欄位，種類固定、刪除前要確認
 //   extraPalette   [{title, items:[{id,label,desc,icon,field:{…整個欄位物件}}]}]：額外的現成欄位（請款常用欄位）
 //   onlyOneTable   'lines'：明細表只能有一個且代碼固定
+//   fixedOptions   {key: [選項…]}：選項固定的欄位（例如 急迫性＝一般／急件／特急）；右欄只讀、不一致時列為「要修改」，不會偷偷改資料
 //   columnPresets  [{label, desc, cols:[完整欄物件]}]：明細表「加入常用欄」（欄代碼固定的欄，例如 數量＋單價、發票號碼）
 //   requiredColumns / pairColumns / cashierKeys / bannedWords(RegExp) / maxRows / publishedKeys / titleEditable / titleFallback
 (function () {
@@ -390,7 +391,9 @@
     h += '<div class="fd-row"><label for="' + this.id('help') + '">說明文字（選填）</label><input class="fd-in" id="' + this.id('help') + '" data-fd="help" value="' + esc(f.help || '') + '" placeholder="例如：請填發票上的金額"><div class="fd-why">會用小字顯示在欄位下面。例：欄位下方出現灰色小字「請填發票上的金額」。</div></div>'
     if (f.type !== 'formula' && f.type !== 'table') h += sw('required', !!f.required, '一定要填', '開起來，使用者沒填就不能送出。', '「地點」開起來 ⇒ 沒填地點，按送出會跳出提醒。')
     h += '</div>'
-    if (M.OPTION_TYPES[f.type]) h += '<div class="fd-box"><h3>選項（使用者可以選哪些）</h3>' + this.itemList(f.options || [], 'opt', '新增一個選項') + '<div class="fd-why">打字後按 Enter 就會多一格；也可以一次貼上很多行。例：「國內」Enter「國外」⇒ 兩個選項。</div></div>'
+    var fixedOpts = this.caps.fixedOptions && this.caps.fixedOptions[f.key]
+    if (M.OPTION_TYPES[f.type] && fixedOpts) h += '<div class="fd-box" data-fd-fixedopts="1"><h3>選項（固定）</h3><ul class="fd-fixedlist">' + fixedOpts.map(function (o) { return '<li>' + esc(o) + '</li>' }).join('') + '</ul><div class="fd-why">這個欄位的選項是固定的，系統其他地方會用到，所以不能改。例：' + esc(fixedOpts.join('、')) + '。</div></div>'
+    else if (M.OPTION_TYPES[f.type]) h += '<div class="fd-box"><h3>選項（使用者可以選哪些）</h3>' + this.itemList(f.options || [], 'opt', '新增一個選項') + '<div class="fd-why">打字後按 Enter 就會多一格；也可以一次貼上很多行。例：「國內」Enter「國外」⇒ 兩個選項。</div></div>'
     if (f.type === 'formula') h += '<div class="fd-box"><h3>自動計算</h3>' + this.calcUI(f, f) + '</div>'
     if (f.type === 'table') h += this.tableUI(f)
     h += this.fillUI(f)

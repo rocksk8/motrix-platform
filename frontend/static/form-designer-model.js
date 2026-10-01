@@ -344,7 +344,7 @@
   }
 
   // ───────────────────────── 本機檢查（發布前、輸入時；伺服器 validate 另做）─────────────────────────
-  /** caps：{bannedWords: RegExp, requiredColumns:[], pairColumns:[a,b], onlyOneTable:'lines', cashierKeys:[], fixedTypeKeys:{key:type}} */
+  /** caps：{fixedOptions:{key:[…]}, bannedWords: RegExp, requiredColumns:[], pairColumns:[a,b], onlyOneTable:'lines', cashierKeys:[], fixedTypeKeys:{key:type}} */
   function localProblems(d, caps) {
     caps = caps || {}
     var out = []
@@ -353,6 +353,8 @@
       if (!f.label || !String(f.label).trim()) out.push({ path: p + '.label', message: '欄位還沒有名稱。', key: f.key })
       if (caps.bannedWords && (caps.bannedWords.test(f.key) || caps.bannedWords.test(f.label || ''))) out.push({ path: p + '.label', message: '這個名稱含有不能使用的字眼（銀行、帳號等）。', key: f.key })
       if (OPTION_TYPES[f.type] && !(f.options || []).some(function (o) { return String(o).trim() })) out.push({ path: p + '.options', message: '還沒有任何選項。', key: f.key })
+      var fo = caps.fixedOptions && caps.fixedOptions[f.key]
+      if (fo && OPTION_TYPES[f.type] && JSON.stringify(f.options || []) !== JSON.stringify(fo)) out.push({ path: p + '.options', message: '這個欄位的選項必須固定為：' + fo.join('、') + '。', key: f.key })
       if (f.type === 'formula' && !String(f.formula || '').trim()) out.push({ path: p + '.formula', message: '還沒選要算什麼。', key: f.key })
       if (f.locked && fillSelection(f) === '') out.push({ path: p + '.locked', message: '要先選好「自動帶入」才能設「不能改」。', key: f.key })
       if (f.type === 'table') {
