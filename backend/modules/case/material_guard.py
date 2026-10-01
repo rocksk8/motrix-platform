@@ -24,6 +24,7 @@ from helpers.auth import user_has_module
 from helpers.dates import normalize_date
 from helpers.financial_mask import money_visible
 from modules.case import material_approval as MA
+from modules.case import material_payment as MP
 
 # 已付欄位（付款只能經匯款申請寫入）
 _PAID_KEYS = ("paidStatus", "paidAmount", "paidDate")
@@ -46,6 +47,15 @@ def _canon(v):
     if isinstance(v, float) and v.is_integer():
         return int(v)
     return v
+
+
+def _same(key, new, old) -> bool:
+    """欄位值相同？已付欄位把 None／空字串／0 視為同一個「沒有」（前端未付款時送 null，資料庫存 ''）。"""
+    if key in _PAID_KEYS and new in (None, "", 0) and old in (None, "", 0):
+        return True
+    if key == "paidStatus" and new in (None, "", "pending") and old in (None, "", "pending"):
+        return True
+    return _canon(new) == _canon(old)
 
 
 def can_edit_orders(actor) -> bool:
@@ -145,7 +155,7 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
             out.append(row)
             continue
         merged = dict(old)                                                               # ── 既有列：以現值為底
-        diff = {k: v for k, v in no.items() if _canon(v) != _canon(old.get(k))}
+        diff = {k: v for k, v in no.items() if not _same(k, v, old.get(k))}
         if not diff:
             out.append(merged)
             continue
@@ -162,6 +172,10 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
             out.append(merged)
             continue
         if MA.substantive_changed(old, cand):
+            if MP.has_live_payments(conn, quote_no, iid):                                # 已有匯款申請：金額／品名等變動會讓申請與額度對不上
+                _rej(rejected, iid, "*", "has_payments", "這張叫料單已有匯款申請，請先作廢申請再修改內容")
+                out.append(merged)
+                continue
             r = MA.on_substantive_change(conn, quote_no, iid, user)
             if not r["allowed"]:
                 _rej(rejected, iid, "*", r["reason"], "「%s」狀態的叫料單不可修改內容（請先撤回，或已取消的單不可再改）" % st if r["reason"] == "in_approval" else "已取消的叫料單不可修改")
@@ -187,6 +201,9 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
         st = MA.status_of(conn, quote_no, iid)
         if not allow:
             _rej(rejected, iid, "*", "no_permission", "只有管理員或專案經理（且有財務檢視權）可以刪除叫料")
+            out.append(old)
+        elif MP.has_any_payments(conn, quote_no, iid):
+            _rej(rejected, iid, "*", "delete_blocked", "這張叫料單有匯款申請紀錄，不可刪除")
             out.append(old)
         elif st in MA.IN_FLIGHT or st in (MA.S_APPROVED, MA.S_CANCELLED):
             _rej(rejected, iid, "*", "delete_blocked", "審核中或已核准的叫料單不可刪除（請先撤回，或改用取消）")

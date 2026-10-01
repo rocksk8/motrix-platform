@@ -34,9 +34,9 @@ EDITABLE = (S_DRAFT, S_RETURNED)                 # 可以修改並（重新）�
 SUBSTANTIVE_KEYS = ("itemName", "quantity", "unit", "unitPrice", "totalPrice", "supplierId")
 _NUMERIC = ("quantity", "unitPrice", "totalPrice")
 
-#: 付款只能經匯款申請寫入（paid* 的閘）。**暫時 False**：匯款申請切片落地前，使用者仍需能登記已付；
-#: 31-C 出貨前必須翻成 True（主持裁示：半關的金流控制比沒有更糟）。守門題兩個值都測。
-PAID_VIA_REMITTANCE_ONLY = False
+#: 付款只能經匯款申請寫入（paid* 的閘；`material_payment.sync_order_paid` 是唯一寫入點）。匯款切片已落地 ⇒ True
+#: （主持裁示：半關的金流控制比沒有更糟，31-C 不能帶著 False 出貨）。守門題兩個值都測。
+PAID_VIA_REMITTANCE_ONLY = True
 
 # 簽核單據類型：預設跟統一流程（與額外支出同）。重複登記（模組重載）不報錯。
 if DOC_TYPE not in APPROVAL_DOC_TYPES:
@@ -269,7 +269,7 @@ def withdraw(conn, quote_no: str, item_id: str, user: dict) -> dict:
 
 def cancel(conn, quote_no: str, item_id: str, user: dict, reason: str) -> dict:
     """取消已核准的叫料單：admin 以上＋必填理由（終態「已取消」；成本與總帳不再計入）。
-    已有匯款申請者的限制（限 superadmin）在匯款申請切片加上（目前沒有匯款申請）。"""
+    還有沒作廢的匯款申請 ⇒ 拒絕（先作廢申請；已有付款明細的申請不能作廢 ⇒ 該叫料單不能取消）。"""
     row = get(conn, quote_no, item_id)
     if row is None:
         raise MaterialApprovalError(404, "找不到這筆叫料的審核單")
@@ -280,6 +280,9 @@ def cancel(conn, quote_no: str, item_id: str, user: dict, reason: str) -> dict:
     text = (reason or "").strip()
     if not text:
         raise MaterialApprovalError(400, "取消要填原因")
+    from modules.case import material_payment as _mp                                  # 延遲 import：material_payment 也 import 本檔
+    if _mp.has_live_payments(conn, quote_no, item_id):
+        raise MaterialApprovalError(409, "這張叫料單還有匯款申請，請先作廢申請（已有付款明細者不能取消叫料單）")
     now = _now()
     appr = _appr(row)
     appr.setdefault("history", []).append({"at": now, "by": user["username"], "byDisplay": _display(user), "action": "cancel", "tier": 0, "comment": text})

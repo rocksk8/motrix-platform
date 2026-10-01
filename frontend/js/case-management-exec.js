@@ -49,6 +49,10 @@ window.CM_PARTS.push(() => ({
     // 叫料審核（31-C）：itemId → 審核摘要 {status, legacy, docCode, currentApprovers, rejectReason, receivedOn, receivedBy…}
     moApprovals: {},
     moBusy: '',
+    // 叫料匯款申請（31-C）：itemId → {quota:{total,legacyPaid,committed,remaining}, payments:[…]}；供應商選單；開單表單（一次只開一張）
+    moPay: {},
+    moSuppliers: [],
+    moPayForm: null,
 
     // ── 叫料（材料訂購）────────────────────────────────────────────────────
     async loadMaterialOrders(quoteNo) {
@@ -94,6 +98,7 @@ window.CM_PARTS.push(() => ({
             _recvDate: ''
           }))
           await this.loadMoApprovals(quoteNo)
+          await this.loadMoPayments(quoteNo)
         }
       } catch {}
       this.moLoading = false
@@ -107,6 +112,73 @@ window.CM_PARTS.push(() => ({
         })
         if (r.ok && this._moReqFor === quoteNo) this.moApprovals = (await r.json()).approvals || {}
       } catch {}
+    },
+    // ── 叫料匯款申請（31-C 匯款切片）：已付金額不再手填，只能經匯款申請（簽核→出納）登錄 ──
+    async loadMoPayments(quoteNo) {
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-payments`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok && this._moReqFor === quoteNo) this.moPay = (await r.json()).orders || {}
+      } catch {}
+    },
+    moPayOf(m) { return (m && this.moPay[m.itemId]) || { quota: null, payments: [] } },
+    // 可以開匯款申請：已存檔、$0 以外、舊單或已核准、還有額度
+    moCanRequestPay(m) {
+      if (!m || m._saved === false || this.moDirty || !this.moCanEdit()) return false
+      if (!['', '已核准'].includes(this.moAp(m).status)) return false
+      const q = this.moPayOf(m).quota
+      return !!q && Number(m.totalPrice) > 0 && q.remaining > 0
+    },
+    moPayTone(s) {
+      if (s === '已核准') return 'color:var(--success)'
+      if (s === '已退回' || s === '作廢') return 'color:var(--tone-danger-fg)'
+      if (s === '待審核' || s === '簽核中') return 'color:var(--tone-warning-fg)'
+      return 'color:var(--text-dim)'
+    },
+    async moOpenPayForm(m) {
+      if (!this.moSuppliers.length) {
+        try {
+          const r = await fetch('/api/material-suppliers', { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.ok) this.moSuppliers = (await r.json()).suppliers || []
+        } catch {}
+      }
+      const q = this.moPayOf(m).quota
+      this.moPayForm = { itemId: m.itemId, amount: q ? q.remaining : 0, supplierId: m.supplierId ?? '', bankCode: '', bankName: '', bankAccountName: '', bankAccountNumber: '', overCapReason: '' }
+    },
+    async _moPayCall(url, method, body, okMsg) {
+      this.moMsg = ''
+      try {
+        const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify(body || {}) })
+        const d = await r.json().catch(() => ({}))
+        this.moMsgError = !r.ok
+        this.moMsg = r.ok ? okMsg(d) : String((d.detail && (d.detail.message || d.detail)) || r.status)
+        if (r.ok) await this.loadMoPayments(this.selected?.quote_no)
+        return r.ok
+      } catch (e) {
+        this.moMsgError = true
+        this.moMsg = '網路錯誤：' + e.message
+        return false
+      }
+    },
+    async moCreatePay(m) {
+      const f = this.moPayForm
+      if (!f || f.itemId !== m.itemId) return
+      const body = { amount: Number(f.amount) || 0, supplierId: f.supplierId === '' ? null : Number(f.supplierId), bankCode: f.bankCode, bankName: f.bankName,
+                     bankAccountName: f.bankAccountName, bankAccountNumber: f.bankAccountNumber }
+      if (f.overCapReason) body.overCapReason = f.overCapReason
+      const ok = await this._moPayCall(`/api/quotations/${encodeURIComponent(this.selected.quote_no)}/material-orders/${encodeURIComponent(m.itemId)}/payments`, 'POST', body,
+                                         d => `已建立匯款申請：${d.payment.docCode}（草稿，請送審）`)
+      if (ok) this.moPayForm = null
+    },
+    async moPayAct(p, action) {
+      let body = {}
+      if (action === 'void') {
+        const reason = await MotrixUI.prompt('作廢匯款申請需要填原因（額度會釋出，並留稽核紀錄）：', { title: '作廢匯款申請', required: true })
+        if (!reason || !String(reason).trim()) return
+        body = { reason: String(reason).trim() }
+      }
+      await this._moPayCall(`/api/material-payments/${p.id}/${action}`, 'POST', body, d => ({ submit: d.autoApproved ? '已核准（未設定簽核層）' : '已送審', withdraw: '已撤回（回草稿）', void: '已作廢' }[action] || '完成'))
     },
     moAp(m) { return (m && this.moApprovals[m.itemId]) || { status: '', legacy: true } },
     moApLabel(m) {
@@ -230,20 +302,7 @@ window.CM_PARTS.push(() => ({
       const p = Number(m.unitPrice) || 0
       // X-VAT（2026-09-26）：金額（元以下兩位）一律 static/legal-round.js 四捨五入
       m.totalPrice = MotrixLegalRound.halfUp(q * p, 100) / 100
-      if (m.paidStatus === 'paid') m.paidAmount = m.totalPrice
-      else if (m.paidStatus === 'pending') { m.paidAmount = 0; m.paidDate = '' }
-      this.moDirty = true
-    },
-
-    moOnStatusChange(i) {
-      const m = this.materialOrders[i]
-      const today = MotrixDate.today()
-      if (m.paidStatus === 'pending') { m.paidAmount = 0; m.paidDate = '' }
-      else {
-        if (!m.paidDate) m.paidDate = today
-        if (m.paidStatus === 'paid') m.paidAmount = Number(m.totalPrice) || 0
-      }
-      this.moDirty = true
+      this.moDirty = true    // 31-C：已付金額／日期是匯款申請付款明細的投影，不再隨小計連動，也不能在這裡改
     },
 
     // `AC2`：只登一筆叫料的發票日期（專用端點；任何案件狀態都可以，不動金額）
@@ -280,24 +339,12 @@ window.CM_PARTS.push(() => ({
         const quantity  = Math.max(0, Number(m.quantity) || 0)
         const unitPrice = Math.max(0, Number(m.unitPrice) || 0)
         const totalPrice = MotrixLegalRound.halfUp(quantity * unitPrice, 100) / 100
-        let paidAmount = 0
-        let paidDate = null
-        if (m.paidStatus === 'paid') {
-          paidAmount = totalPrice
-          paidDate = m.paidDate || ''
-        } else if (m.paidStatus === 'partial') {
-          paidAmount = MotrixLegalRound.halfUp(Number(m.paidAmount) || 0, 100) / 100
-          paidDate = m.paidDate || ''
-          if (paidAmount > totalPrice) { this.moMsgError = true; this.moMsg = `「${name}」的已付金額大於小計`; return }
-        }
-        if (m.paidStatus !== 'pending' && !paidDate) {
-          this.moMsgError = true; this.moMsg = `「${name}」標為已付，必須填已付日期`; return
-        }
         payload.push({
           itemId: m.itemId || this._moNewId(), itemName: name,
           quantity, unit: (m.unit || '').trim(), unitPrice, totalPrice,
-          paidStatus: m.paidStatus, paidAmount,
-          paidDate: m.paidStatus === 'pending' ? null : paidDate,
+          // 31-C：已付欄位唯讀（匯款申請付款明細的投影）——原值帶回，後端閘不接受這裡改它
+          paidStatus: m.paidStatus, paidAmount: Number(m.paidAmount) || 0,
+          paidDate: m.paidStatus === 'pending' ? null : (m.paidDate || ''),
           notes: (m.notes || '').trim(),
           // `AC2`：整份覆寫的端點——少帶這一鍵，已登錄的發票日期就會在下次存檔時被抹掉
           invoiceDate: m.invoiceDate || '',

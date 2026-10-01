@@ -219,7 +219,7 @@ function cashierApp() {
       return b
     },
     remitReviewLabel(s) { return s === 'pending' ? '差額待審核' : (s === 'approved' ? '差額已核可' : '') },
-    kindLabel(k) { return { purchase_req: '請購單', purchase_order: '採購單', travel: '差旅費用請款單', petty_cash: '零用金支付單' }[k] || '' },
+    kindLabel(k) { return { purchase_req: '請購單', purchase_order: '採購單', travel: '差旅費用請款單', petty_cash: '零用金支付單', material_payment: '叫料匯款（可分次付款：實付填本次金額）' }[k] || '' },
     payreqExtra(it) {
       const k = it.source + ':' + it.key
       if (!this.payreqExtras[k]) this.payreqExtras[k] = { payMethod: '', payTerms: it.payTerms || '', remitDate: it.remitDate || '', bank: null, bankBusy: false, bankErr: '' }

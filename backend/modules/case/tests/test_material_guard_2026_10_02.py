@@ -200,11 +200,14 @@ def test_zero_amount_order_goes_through_the_same_flow(client, world):
     assert client.post("/api/quotations/%s/material-orders/Z0/submit" % NO, headers=world["adm"]).json()["status"] == "已核准"
 
 
-def test_paid_fields_interim_open_and_locked_when_remittance_only(client, world, monkeypatch):
+def test_paid_fields_are_locked_by_default_and_open_only_when_the_flag_is_off(client, world, monkeypatch):
+    """匯款切片落地後預設鎖（`PAID_VIA_REMITTANCE_ONLY=True`）；旗標關掉時才照舊可登記（守門題兩個值都測，並釘死預設值）。"""
     from modules.case import material_approval as MA
+    assert MA.PAID_VIA_REMITTANCE_ONLY is True                                               # 31-C 不能帶著 False 出貨
+    monkeypatch.setattr(MA, "PAID_VIA_REMITTANCE_ONLY", False)
     edit = _cr()["materialOrders"]
     edit[1].update({"paidStatus": "paid", "paidAmount": 5000, "paidDate": "2031-03-05"})
-    assert "rejected" not in _put_cr(client, world["adm"], materialOrders=edit).json()      # 過渡期（旗標 False）：照舊可登記
+    assert "rejected" not in _put_cr(client, world["adm"], materialOrders=edit).json()      # 旗標關：照舊可登記
     assert _cr()["materialOrders"][1]["paidStatus"] == "paid"
     monkeypatch.setattr(MA, "PAID_VIA_REMITTANCE_ONLY", True)
     edit = _cr()["materialOrders"]
@@ -216,6 +219,17 @@ def test_paid_fields_interim_open_and_locked_when_remittance_only(client, world,
     cr = _cr()["materialOrders"]
     assert cr[0]["paidStatus"] == "pending" and [o for o in cr if o["itemId"] == "N9"][0]["paidStatus"] == "pending"
     assert cr[1]["paidStatus"] == "paid"                                                     # 已付的歷史不動
+
+
+def test_unpaid_rows_saved_back_with_null_paid_fields_are_not_a_paid_edit(client, world):
+    """前端存檔時未付款的 paidDate 送 null、資料庫存空字串：這不是「改已付欄位」，不可被旗標誤擋。"""
+    edit = _cr()["materialOrders"]
+    for o in edit:
+        o["paidDate"] = None
+    edit[0]["notes"] = "只改備註"
+    r = _put_cr(client, world["adm"], materialOrders=edit)
+    assert r.status_code == 200 and "rejected" not in r.json(), r.text
+    assert _cr()["materialOrders"][0]["notes"] == "只改備註"
 
 
 def test_dedicated_endpoint_reports_rejections_and_invoice_date_is_frozen_in_approval(client, world):

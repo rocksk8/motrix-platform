@@ -18,6 +18,8 @@
     "case_change_requests",
     "case_extra_expenses",
     "case_material_approvals",
+    "case_material_payment_lines",
+    "case_material_payments",
     "completion_notes"
   ],
   "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration。其他模組讀這些表的地方見 M01-PLAN §2-B（讀取連接器另案）",
@@ -57,6 +59,14 @@
       },
       {
         "name": "case_material_approvals",
+        "class": "T1"
+      },
+      {
+        "name": "case_material_payment_lines",
+        "class": "T1"
+      },
+      {
+        "name": "case_material_payments",
         "class": "T1"
       },
       {
