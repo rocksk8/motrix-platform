@@ -425,3 +425,14 @@ def test_empty_category_list_means_not_configured_and_does_not_block(client, H, 
     providers["expense.categories"]["accounting"] = lambda conn: CATS                          # 正對照：有類別後同樣的明細被擋
     eid2 = _draft(client, H["ef_form"], [{"category": "任何文字", "amount": 100}])
     assert client.post("%s/%d/submit" % (SENT, eid2), headers=H["ef_form"]).status_code == 400
+
+
+def test_gl_notice_does_not_call_typed_documents_project_cost(client, H, providers):
+    """費用單據的未拆稅備註不可說「專案成本」；舊版列的備註不變。"""
+    from modules.case import gl_events as G
+    _no_tiers()
+    eid = _draft(client, H["ef_form"], [{"category": "TRAVEL", "amount": 100}], kind="petty_cash")
+    client.post("%s/%d/submit" % (SENT, eid), headers=H["ef_form"])
+    d = date.today().isoformat()
+    notice = G.gl_events(d, d)["notice"]
+    assert "費用單據" in notice and "未拆稅" in notice and "專案成本" not in notice
