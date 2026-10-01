@@ -301,7 +301,7 @@
               fetch('/api/org/tree', { headers: h })])
             if (!rs[0].ok) throw new Error('讀不到類型定義（HTTP ' + rs[0].status + '）')
             var def = await rs[0].json()
-            var cats = rs[1].ok ? ((await rs[1].json()).categories || []) : []
+            var cats = rs[1].ok ? ((await rs[1].json()).categories || []) : null        // null＝沒抓到（不當成「空清單」放行必填）
             var users = rs[2].ok ? await rs[2].json() : []
             var tree = rs[3].ok ? await rs[3].json() : []
             var depts = []
