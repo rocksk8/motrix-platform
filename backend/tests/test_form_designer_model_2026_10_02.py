@@ -137,3 +137,13 @@ def test_prefill_sources_filtering_and_the_lock_rule(M):
     assert can({"type": "text", "default": {"$": "lastUsed"}})["ok"] is False             # 不可鎖
     assert can({"type": "ref", "target": "users", "default": {"$": "requester"}})["ok"] is True
     assert can({"type": "text", "default": "固定"})["ok"] is True
+
+
+def test_fixed_options_mismatch_is_a_local_problem_and_never_rewrites_the_data(M):
+    caps = {"fixedOptions": {"urgency": ["一般", "急件", "特急"]}}
+    d = {"fields": [{"key": "urgency", "label": "急迫性", "type": "select", "options": ["一般", "急件"]}]}
+    probs = M.call("M.localProblems(a.d, a.c)", {"d": d, "c": caps})
+    assert [p["path"] for p in probs] == ["fields[0].options"] and "一般、急件、特急" in probs[0]["message"]
+    assert M.call("M.strip(a)", d) == d, "只回報、不偷改資料（載入不動就輸出）"
+    d["fields"][0]["options"] = ["一般", "急件", "特急"]
+    assert M.call("M.localProblems(a.d, a.c)", {"d": d, "c": caps}) == []
