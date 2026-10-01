@@ -2545,6 +2545,9 @@ _F2_FIELDS = {
     # 銀行代碼／名稱／分行是機構資訊，不列入（同外包人員）。
     "協力廠商": {"table": "vendor_contractors",
                  "json": ("data_json", _VENDOR_ACCOUNT_KEYS)},
+    # A2 費用單據（2026-10-01）：收款人（員工或廠商）的銀行帳號存在 case_extra_expenses.payee_account（migration 0003）。
+    # 帳號＝個人帳戶 ⇒ 一般份拿掉、完整列只進個資資料夾。收款人姓名／銀行名稱是識別與機構資訊，沿用承攬人員的界線不列入。
+    "案件額外支出": {"table": "case_extra_expenses", "columns": ("payee_account",)},
 }
 #: data_json 解析不了時一般份放這個——**不可以原樣照放**（那等於把個資原樣帶進一般份）
 _F2_UNPARSEABLE = "<含個資欄位且無法解析，僅收錄於個資備份>"

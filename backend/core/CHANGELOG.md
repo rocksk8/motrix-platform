@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-01（wip/w2-expense-a2-w2b：費用單據收款人帳號列入 F2 個資備份）
+- L1（行為，不改介面）：`archive._F2_FIELDS` 新增 `案件額外支出`（`case_extra_expenses.payee_account`）。A2 的 migration 0003 讓額外支出表存了收款人銀行帳號，而該表走一般每日 JSON（`SELECT *`）⇒ 帳號會原樣進一般備份／雲端「系統存檔」；現在一般份拿掉該欄、完整列只進 `系統存檔_個資/每日備份/{date}/`，還原用既有 `merge_general_and_pii` 合回。收款人姓名與銀行名稱不列入（同承攬人員界線）。下游效應（R1）：一般備份的「案件額外支出.json」少一欄 `payee_account`（還原需個資份；個資資料夾未建時該欄在還原後為空——與其他 F2 表相同）。
+
 ## 1.91 — 2026-09-30（wip/w2-bonus-correction：獎金更正單的三種通知）
 - L1（新增）：`helpers.email_notify.notify_bonus_correction_submitted／_approved／_returned`——獎金更正單送審／核准／駁回的通知信（信內不放金額）；`helpers/mail_types.py` 登記三個信件類型。只新增，舊呼叫端不受影響。
 
