@@ -123,6 +123,7 @@ def set_status(conn, row, target, user, *, reason="", via_completion=False, now=
     username = user.get("username") or ""
     display = user.get("display_name") or username
     note = ""
+    closed = []
     if target == "accepted":
         if username and username == (_g(row, "created_by") or ""):
             if user.get("role") != "superadmin":
@@ -142,8 +143,24 @@ def set_status(conn, row, target, user, *, reason="", via_completion=False, now=
             raise FlowError("此派發已產生匯款申請，只有最高管理者可以取消（請先處理該申請）", 403)
         conn.execute("UPDATE contractor_dispatches SET status='cancelled', cancel_reason=?, cancelled_by=?, cancelled_at=?, updated_at=? WHERE id=?",
                      (reason, display, now, now, row["id"]))
+        # 取消時**同一個交易**關閉還在審的階段（稽核 S-2）：待審核／簽核中 ⇒ 已退回（歷程記一筆 cancelled），
+        # 否則簽核佇列／紅點還掛著一張已取消的派發、簽核人還能核准它。已核准／已退回的階段不動。
+        for col, jcol, stage in (("approval_status", "approval_json", "approval"), ("completion_status", "completion_approval_json", "completion")):
+            if _g(row, col) in (PENDING, IN_PROGRESS):
+                try:
+                    appr = json.loads(_g(row, jcol) or "{}")
+                except ValueError:
+                    appr = {}
+                if not isinstance(appr, dict):
+                    appr = {}
+                appr.setdefault("history", []).append({"at": now, "by": username, "byDisplay": display, "action": "cancelled",
+                                                       "tier": appr.get("currentTier") or 0, "comment": reason or "派發已取消"})
+                appr["closedByCancel"] = now
+                conn.execute("UPDATE contractor_dispatches SET %s=?, %s=? WHERE id=?" % (col, jcol),
+                             (RETURNED, json.dumps(appr, ensure_ascii=False), row["id"]))
+                closed.append({"stage": stage, "requestedBy": appr.get("requestedBy") or ""})
     elif target == "completed":
         conn.execute("UPDATE contractor_dispatches SET status='completed', completion_approved_at=?, updated_at=? WHERE id=?", (now, now, row["id"]))
     else:
         conn.execute("UPDATE contractor_dispatches SET status=?, updated_at=? WHERE id=?", (target, now, row["id"]))
-    return {"prev": cur, "new": target, "note": note}
+    return {"prev": cur, "new": target, "note": note, "closed": closed}
