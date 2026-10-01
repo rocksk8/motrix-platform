@@ -739,7 +739,7 @@
    "api_prefixes": [],
    "dynamic_sql": true,
    "imports": [
-    "helper:uploads"
+    "helper:custom_files"
    ],
    "kind": "helper",
    "path": "backend/helpers/custom_module_delete.py",
@@ -9458,7 +9458,8 @@
     "helper:privacy_notice",
     "helper:settings",
     "helper:tiered_approval",
-    "helper:xlsx_out"
+    "helper:xlsx_out",
+    "mod:subcontract/bank_mask"
    ],
    "imports": [
     "core:db",
@@ -9466,7 +9467,8 @@
     "helper:auth",
     "helper:email_notify",
     "helper:privacy_notice",
-    "helper:xlsx_out"
+    "helper:xlsx_out",
+    "mod:subcontract/bank_mask"
    ],
    "kind": "mod",
    "module_key": "subcontract",
@@ -9476,73 +9478,73 @@
    "routes": [
     {
      "func": "list_contractors_selectable",
-     "line": 153,
+     "line": 157,
      "method": "GET",
      "path": "/api/contractors/selectable"
     },
     {
      "func": "list_contractors",
-     "line": 166,
+     "line": 170,
      "method": "GET",
      "path": "/api/contractors"
     },
     {
      "func": "create_contractor",
-     "line": 187,
+     "line": 191,
      "method": "POST",
      "path": "/api/contractors"
     },
     {
      "func": "export_contractors",
-     "line": 233,
+     "line": 239,
      "method": "GET",
      "path": "/api/contractors/export"
     },
     {
      "func": "import_contractors",
-     "line": 276,
+     "line": 284,
      "method": "POST",
      "path": "/api/contractors/import"
     },
     {
      "func": "get_contractor",
-     "line": 363,
+     "line": 373,
      "method": "GET",
      "path": "/api/contractors/{cid}"
     },
     {
      "func": "update_contractor",
-     "line": 374,
+     "line": 384,
      "method": "PUT",
      "path": "/api/contractors/{cid}"
     },
     {
      "func": "get_contractor_privacy_ack",
-     "line": 401,
+     "line": 414,
      "method": "GET",
      "path": "/api/contractors/{cid}/privacy-notice"
     },
     {
      "func": "ack_contractor_privacy_notice",
-     "line": 412,
+     "line": 425,
      "method": "POST",
      "path": "/api/contractors/{cid}/privacy-notice/ack"
     },
     {
      "func": "toggle_contractor_active",
-     "line": 432,
+     "line": 445,
      "method": "PATCH",
      "path": "/api/contractors/{cid}/active"
     },
     {
      "func": "get_id_card",
-     "line": 452,
+     "line": 465,
      "method": "GET",
      "path": "/api/contractors/{cid}/id-card"
     },
     {
      "func": "upload_id_card",
-     "line": 468,
+     "line": 483,
      "method": "PUT",
      "path": "/api/contractors/{cid}/id-card"
     }
