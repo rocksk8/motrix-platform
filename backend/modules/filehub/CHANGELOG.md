@@ -1,6 +1,6 @@
 # 檔案中心 更新紀錄
 
-## (next) — 2026-10-01（fix/filehub-guards：守門三紅）
+## 1.0.1 — 2026-10-01（fix/filehub-guards：守門三紅）
 - `api.py`：類別清單合併改用 `{"type": t, **meta}`（不以 `**` 當呼叫引數，守門 `test_case_summary_purpose`）；補 `SPEC.md`（FHB1～FHB8，模組檔案齊全守門）。行為與介面不變。
 
 ## 1.0.0 — 2026-09-30（暫用號，列車取號；wip/w1-attach-p3 附件目錄 P3）
