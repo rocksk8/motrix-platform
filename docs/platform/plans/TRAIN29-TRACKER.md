@@ -28,3 +28,9 @@
 - 整合樹 wip/train-29-int1@436749d2（d7）：已合 w4-g2-5b、w1-a2-2/a2-4、w2-w2b(9d0cee5a)、fix/module-delete-ownership；待合 wip/w3-dept-dim-c7@037ed829、補 W3 個資種子列。
 - 裁示：費用類別清單為空視為未設定（方案 A，2e 實作中）；W4 低風險#3 採(a)；etype-editor／map-zoom／prodroot 不納入本班。
 - a3：列印按鈕＋PDF 版面檢查；c7 待命；預檢排在 2e 新版與 d7 合併完成後（整合樹一次跑）。
+
+## 13:42 巡檢（29+30 合併班）
+- int1 wip/train-29-int1@a4939253（ptc 2290 過；3 測試端紅已修）。待合：預檢工具(d7 本輪)、etype-editor-a3@8052bb75、map-zoom-2e@f29993cb、fix/login-approval-popup@2fcb4fa0、BS 預設比較(2e, fix/bs-autoload，15:30)、外包銀行遮罩(c7，16:30)、P3(a3 wip/w1-attach-p3-a3@c222c6b0，20:00)、差異分桶(d7 wip/w4-diff-buckets，20:00)。
+- 裁示：已付款不可作廢、付款覆寫僅 superadmin；今晚套用；去識別化／建構器B／401／開帳／C6 不入本班（第31班主軸）；BS 預設比較＝上一年年底。
+- 不入本班：clock-gates-2（4 檔紅，下班）。
+- 凍結預計 ~21:00 → ptc 21:45 → 建包 22:30 → 稽核 00:30 → 套用 ~01:00。
