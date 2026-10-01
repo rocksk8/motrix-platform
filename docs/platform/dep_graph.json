@@ -5072,13 +5072,13 @@
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3570,
+     "line": 3600,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 3754,
+     "line": 3784,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }

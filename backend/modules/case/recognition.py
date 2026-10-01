@@ -306,7 +306,7 @@ def extra_entries(conn, basis):
                 "pending": r["status"] != "已核准", "files": files, "expenseId": r["id"],
                 "category": r["category"] or "其他",
                 "remitPending": basis == "cash" and paid != "" and r["remit_review"] == "pending",
-                "invoiceDate": inv, "paidDate": paid}
+                "invoiceDate": inv, "paidDate": paid}      # 舊版列不帶 departmentId（缺＝報表依案件推導；與 A2 前相同）；單據列在 _typed_entries 帶
         if not (r["kind"] or ""):
             out.append(base)                                     # 舊版列：一列一筆，**行為不變**
             continue

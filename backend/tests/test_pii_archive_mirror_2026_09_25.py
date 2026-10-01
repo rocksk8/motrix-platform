@@ -117,9 +117,10 @@ _SMTP_PW = "smtp-sentinel-password"
 _C_IDNO, _C_PHONE, _C_MAIL = "B987654321_SENTINEL", "0911-CPHONE", "c-sentinel@example.invalid"
 _C_ADDR, _C_LINE, _C_ACCT = "承攬哨兵地址", "line-sentinel", "000123456789SENTINEL"
 _E_ACCT = "EXPENSE-PAYEE-ACCT-SENTINEL"          # A2 費用單據收款人帳號（case_extra_expenses.payee_account）
+_U_ACCT_NAME, _U_ACCT_NO = "員工哨兵戶名", "EMPLOYEE-BANK-ACCT-SENTINEL"          # 員工收款帳號（payroll user_bank_accounts：account_name／account_number；W3 的 F2 項目）
 #: 一般份（去個資）不可以出現的值——承攬人員與勞報單兩張表的全部 F2 欄位
 _F2_SENTINELS = (_IMG, "data:image", _IDNO, "哨兵地址", "0900-SENTINEL", "sentinel@example.invalid",
-                 _C_IDNO, _C_PHONE, _C_MAIL, _C_ADDR, _C_LINE, _C_ACCT, "哨兵戶名", _E_ACCT)
+                 _C_IDNO, _C_PHONE, _C_MAIL, _C_ADDR, _C_LINE, _C_ACCT, "哨兵戶名", _E_ACCT, _U_ACCT_NAME, _U_ACCT_NO)
 
 
 def _seed_pii(conn):
@@ -138,6 +139,9 @@ def _seed_pii(conn):
                                         "2026-09-25", "2026-09-25"))
     conn.execute("INSERT INTO case_extra_expenses (quote_no, category, description, total_cost, status, kind, doc_code, payee_type, payee_name, payee_bank, payee_account, created_at) "
                  "VALUES ('', '其他', '差旅', 1200, '已核准', 'travel', 'TE-20260925-0001', 'employee', '哨兵員工', '玉山銀行', ?, '2026-09-25T00:00:00')", (_E_ACCT,))
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_bank_accounts'").fetchone():     # payroll 模組在（W3 員工收款帳號）
+        conn.execute("INSERT INTO user_bank_accounts (user_id, username, bank_code, bank_name, account_name, account_number, active, created_at) "
+                     "SELECT MIN(id), MIN(username), '808', '玉山銀行', ?, ?, 1, '2026-10-01' FROM users", (_U_ACCT_NAME, _U_ACCT_NO))
     conn.execute("UPDATE users SET totp_secret=? WHERE id=(SELECT MIN(id) FROM users)", (_TOTP,))
     conn.commit()
 

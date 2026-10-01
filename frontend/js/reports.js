@@ -270,6 +270,21 @@ function reportsApp() {
       if (this.expensesFilter === 'all') return items
       return items.filter(function(x) { return x.cat === this.expensesFilter }, this)
     },
+    // 依部門彙總（2026-10-01）：用目前期別的全部類別明細（不受類別按鈕影響）；無案件且沒有明示部門 ⇒「未分類」排最後
+    get expenseByDept() {
+      var items = this._scopePick(this.expensesScope, this.monthExpenseItems, this.quarterExpenseItems, this.yearExpenseItemsAll)
+      var m = {}
+      items.forEach(function(x) {
+        var k = x.deptId == null ? 'none' : String(x.deptId)
+        var b = m[k] || (m[k] = { key: k, deptId: x.deptId == null ? null : x.deptId, name: x.deptName || '未分類', total: 0, count: 0 })
+        b.total += x.amount || 0
+        b.count += 1
+      })
+      return Object.keys(m).map(function(k) { return m[k] }).sort(function(a, b) {
+        if ((a.deptId == null) !== (b.deptId == null)) return a.deptId == null ? 1 : -1
+        return b.total - a.total
+      })
+    },
     get netScopeAmount() {
       return this.activeIncomeTotal - this.activeExpenseTotal
     },

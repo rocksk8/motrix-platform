@@ -191,7 +191,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 使用方 | M08 `modules/analytics/api/reports.py::_collect_expenses`（⇒ `/api/reports/expenses-monthly`、`/api/reports/financial`（JSON／Excel／PDF）、每月營運報表信、首頁儀表板支出） |
 | 形式 | provider，**多提供者、以名稱區分**（`registry.providers("expense.entries")`；依名稱排序逐一呼叫）。之後其他模組的支出（例：勞報單）可登記同一個名稱空間，報表不用改 |
 | 語法 | 提供：`registry.provide("expense.entries", "bonus", _expense_entries)`<br>取用：`for name, fn in sorted(registry.providers("expense.entries").items()): fn(conn, d0, d1)` |
-| 回傳 | `[{date, quoteNo, desc, amount, category}]`；`date`＝發放日（權責與現金兩種口徑相同），`category`＝`"獎金分潤"`。一案一筆，`desc`＝「獎金分潤（N 人）」，**不列個人**。報表把它併進「其他支出」（`details.other[].category` 區分；首頁 otherBreakdown 依 category 自動多一塊），部門篩選照 `quoteNo` 歸屬 |
+| 回傳 | `[{date, quoteNo, desc, amount, category}]`；**選填鍵 `departmentId`（2026-10-01，契約版本不變）**：提供者明示的部門（無案件支出於送出當下凍結；`None`／缺 ⇒ 報表依案件業務部門推導，再不行歸「未分類」；0 視為真的部門 id）。M01 `recognition.extra_entries` 同樣多此選填鍵。`date`＝發放日（權責與現金兩種口徑相同），`category`＝`"獎金分潤"`。一案一筆，`desc`＝「獎金分潤（N 人）」，**不列個人**。報表把它併進「其他支出」（`details.other[].category` 區分；首頁 otherBreakdown 依 category 自動多一塊），部門篩選照 `quoteNo` 歸屬 |
 | 對方不在時 | 沒有提供者 ⇒ 支出少了獎金這一類，其餘照常，不丟例外。**不另加提示**：M07 不在時獎金分潤這個功能不存在，沒有應列而未列的支出（⚠ 例外：M07 曾經安裝、之後被停用而資料還在 ⇒ 報表少列那些已發放的獎金。觀察項，見 RUN-PLAN §6 本項回報） |
 | 契約版本 | 1（2026-09-25） |
 | 守門 | 同上測試檔：`test_report_counts_bonus_on_paid_date`（待發放不算、發放後出現在發放月、月合計差額＝發放總額）、`test_reverse_without_payroll_report_still_works`（**反向控制**）。突變：報表不讀提供者 ⇒ 轉紅 |
