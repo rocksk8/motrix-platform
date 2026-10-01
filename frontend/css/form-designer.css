@@ -118,6 +118,7 @@
 .fd-row:last-child { margin-bottom: 0; }
 .fd-row > label, .fd-lbl { display: block; font-size: 14px; font-weight: 600; margin-bottom: 5px; }
 .fd-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fd-span { grid-column: 1 / -1; }
 .fd-why { font-size: 12.5px; color: var(--ink-secondary); margin-top: 4px; }
 .fd-strong { font-weight: 700; color: var(--ink-strong); margin-top: 10px; }
 .fd-exbox { background: var(--surface-muted); border-left: 3px solid var(--accent); padding: 8px 10px; border-radius: 0 var(--radius) var(--radius) 0; margin-top: 8px; font-size: 13px; color: var(--ink-secondary); }
