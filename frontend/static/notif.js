@@ -214,6 +214,10 @@ window.MotrixReads = (function () {
   }
 })()
 
+// 待簽數上次抓取的時間（回到前景的節流用）。放在模組層、不進元件狀態：元件狀態會被頁面狀態比對（case 切換＝重開同狀態）
+// 與序列化看到，時間戳每次都不同，放進去就是無謂的差異。
+var _approvalFetchedAt = 0
+
 function notifStore() {
   const isPages = window.location.pathname.includes('/pages/')
   const auditHref = isPages ? 'audit-log.html' : 'pages/audit-log.html'
@@ -246,7 +250,7 @@ function notifStore() {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return
         const now = Date.now()
-        if (now - (this._approvalAt || 0) < 60000) return
+        if (now - _approvalFetchedAt < 60000) return
         this._fetchApprovalCount()
       })
       // 跨分頁即時（使用者：「選單紅點數字與鈴鐺也跨分頁即時更新」）：
@@ -351,7 +355,7 @@ function notifStore() {
         })
         if (!r.ok) return
         const d = await r.json()
-        this._approvalAt = Date.now()
+        _approvalFetchedAt = Date.now()
         this._updateApprovalBadge(d.count || 0)
         this._maybeShowApprovalBanner(d.count || 0)
       } catch(e) {}
