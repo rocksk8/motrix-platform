@@ -226,10 +226,8 @@ def test_m1_every_tree_scanning_test_is_listed():
     listed = set(raw["global_tests"])
     found = SG.global_test_candidates()
     assert all(any(n in f for f in found) for n in GLOBAL_SIX), "正對照：稽核點名的 6 檔要被掃描器認出"
-    # 慣例發現（GL-BASE-HOOKS A5）：掃描器認出的檔由 `load_rules` 自動算進全域釘子，不必再手列；這裡只驗「自動算進去了」
-    auto = {f for r in SG.load_rules() for f in r["tests"]}
-    unlisted = sorted(set(found) - listed - auto)
-    assert unlisted == [], "掃描器認出的全域釘子沒被算進規則的 tests：%s" % unlisted
+    unlisted = sorted(set(found) - listed)
+    assert unlisted == [], "這些測試掃整個母體，要加進 bottom_layer.json 的 global_tests：%s" % unlisted
     gone = sorted(t for t in listed if not (REPO / t).is_file())
     assert gone == [], "global_tests 裡的檔不存在（改名／刪除）：%s" % gone
 

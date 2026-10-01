@@ -89,9 +89,7 @@ def load_rules(path=None, pages=None, text=None):
     """bottom_layer.json ⇒ [{"pattern", "layer", "why", "tests", "re"}]（照檔案順序）。格式不對 ⇒ ValueError（不猜）。
     tests 裡的 "@global_tests" 展開成最上層 global_tests 清單。"""
     raw = parse_config(text if text is not None else Path(path or CONFIG).read_text(encoding="utf-8"))
-    glob_tests = list(raw.get("global_tests") or [])
-    if path is None:           # 慣例發現（GL-BASE-HOOKS A5）：掃描器認出的全域釘子自動算進去，不必再人工列（手列的保留、去重）
-        glob_tests += [f for f in global_test_candidates() if f not in glob_tests]
+    glob_tests = raw.get("global_tests") or []
     pages = pages if pages is not None else pages_rel()
     rules = []
     for r in raw["rules"]:

@@ -63,14 +63,6 @@ SCAN_FILES = ("helpers/email_notify.py", "modules/tender_radar/notify.py",
               "helpers/geo.py",        # 地理編碼告警信
               "helpers/company_setup.py")   # 本公司資料設定狀態告警信（寄客戶端最高管理員）
 
-#: 🔑 慣例發現（2026-10-01，GL-BASE-HOOKS A5）：`modules/*/notify.py` 是模組自己的送信檔＝自動入掃描，新增的模組通知檔不必再回來改這份清單
-#:    （過去每新增一支 notify.py 就紅一次列車）。上面的靜態清單保留給「不叫 notify.py 的送信檔」。
-def _discovered_notify_files(root=ROOT):
-    return tuple(sorted(p.relative_to(root).as_posix() for p in (root / "modules").glob("*/notify.py")))
-
-
-SCAN_FILES = tuple(dict.fromkeys(SCAN_FILES + _discovered_notify_files()))
-
 #: 有送信、而**刻意不掃**的檔：`{路徑: 理由}`。理由不可以空白；清單裡的檔必須仍是送信檔（過期要刪）。
 #: 📌 與 SCAN_FILES 合起來＝「送信檔都有人決定過」（`test_every_mail_sender_is_classified`）。
 NOT_SCANNED = {
@@ -458,14 +450,3 @@ def test_the_sender_scan_sees_aliases_and_constant_getattr(tmp_path):
     assert senders == {"alias.py", "const_getattr.py"}, senders
     assert _dynamic_getattr_on_mail_modules([alias, const, dyn, other], name) == [
         ("dyn_getattr.py", 4), ("dyn_getattr.py", 6)]
-
-
-def test_module_notify_files_are_discovered_by_convention(tmp_path):
-    """慣例發現（GL-BASE-HOOKS A5）：`modules/*/notify.py` 自動入掃描。正對照：真實樹裡的 accounting／tender_radar 被找到；
-    反向控制：合成樹多一支 `modules/zz/notify.py` ⇒ 被找到，`modules/zz/other.py` 不會。"""
-    real = _discovered_notify_files()
-    assert "modules/accounting/notify.py" in real and set(real) <= set(SCAN_FILES)
-    (tmp_path / "modules" / "zz").mkdir(parents=True)
-    (tmp_path / "modules" / "zz" / "notify.py").write_text("x = 1"+chr(10), encoding="utf-8")
-    (tmp_path / "modules" / "zz" / "other.py").write_text("x = 1"+chr(10), encoding="utf-8")
-    assert _discovered_notify_files(tmp_path) == ("modules/zz/notify.py",)
