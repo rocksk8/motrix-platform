@@ -4,7 +4,7 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.subcontract import attachments, gl_events, remit
+from modules.subcontract import attachments, dispatch_notify, gl_events, remit  # noqa: F401（dispatch_notify：載入時登記信件類型）
 from modules.subcontract.api import contractor_vouchers, contractors, dispatch_approval, vendor_contractors
 
 #: 模組自己的 migration（檔名以版號開頭，不是合法的 import 名稱 ⇒ importlib）
@@ -36,6 +36,12 @@ MODULE = ModuleSpec(
         ("remit.reviews", "contractor_voucher"): remit._RemitReviews,
         ("expense.entries", "remit_fee_contractor"): remit._expense_entries,
         # IP-10（N1）：承攬商報價單附件的刪除申請進簽核佇列（type＝dispatch_file_delete），核可／退回打派工的 delete-approve／delete-reject
+        # 31-A：派發審核／完工審核進簽核佇列（type＝contractor_dispatch／contractor_dispatch_completion；單號＝doc_code）
+        ("approval.queue_items", "subcontract_dispatch"): dispatch_approval.queue_items,
+        ("approval.detail", "contractor_dispatch"): dispatch_approval.detail_dispatch,
+        ("approval.detail", "contractor_dispatch_completion"): dispatch_approval.detail_completion,
+        ("approval.reassign", "contractor_dispatch"): dispatch_approval.REASSIGN_DISPATCH,
+        ("approval.reassign", "contractor_dispatch_completion"): dispatch_approval.REASSIGN_COMPLETION,
         ("approval.queue_items", "subcontract_dispatch_file"): vendor_contractors.delete_queue_items,
         ("approval.detail", "dispatch_file_delete"): vendor_contractors.delete_queue_detail,
         # IP-GL1（W4 總帳 C2）：承攬商發票（E04）與匯款（E05／E05b）事件，供 M06 總帳引擎產生傳票草稿；唯讀

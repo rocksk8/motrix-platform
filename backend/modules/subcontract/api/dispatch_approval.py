@@ -18,6 +18,7 @@ from helpers import (_require_user, _tok, _audit, _notify, require_any_module,
                      APPROVAL_DOC_TYPES, register_doc_type)
 from helpers.tiered_approval import cascade_self_tiers, sign_first_pending
 from modules.subcontract import dispatch_flow as _flow
+from modules.subcontract import dispatch_notify as _dn
 
 DOC_TYPE = "contractor_dispatch"
 if DOC_TYPE not in APPROVAL_DOC_TYPES:                     # 重複 import（測試重載）不重登
@@ -133,10 +134,15 @@ def do_submit(did, user, authorization, st: Stage, *, allowed_from, extra_check=
         conn.commit()
         label = _label(conn, row)
         first = _approvers(tiers[0]) if tiers else []
+        subject = _subject(conn, row)
     finally:
         conn.close()
     for u in first:
         _notify(u, st.notify_type, str(did), row["quote_no"], "%s %s 需要您簽核" % (st.label, label))
+    if first:
+        _dn.fire(st.key, "submitted", row, subject, approvers=first)
+    elif result.get("autoApproved"):
+        _dn.fire(st.key, "approved", row, subject, requester=user["username"])
     _audit(_tok(authorization), "%s.submit" % st.audit_prefix, "contractor_dispatch", str(did), row["quote_no"],
            _audit_detail(row, tierCount=tier_count, autoApproved=bool(result.get("autoApproved")), version=version))
     return result
@@ -186,13 +192,16 @@ def do_approve(did, body, user, authorization, st: Stage, *, on_done=None):
         label = _label(conn, row)
         nxt = _approvers(tiers[appr["currentTier"]]) if not done else []
         requester = appr.get("requestedBy")
+        subject = _subject(conn, row)
     finally:
         conn.close()
     if not done:
         for u in nxt:
             _notify(u, st.notify_type, str(did), row["quote_no"], "%s %s 需要您簽核" % (st.label, label))
+        _dn.fire(st.key, "next_tier", row, subject, approvers=nxt, tier_no=appr["currentTier"] + 1, total_tiers=len(tiers))
     elif requester:
         _notify(requester, "dispatch_approved", str(did), row["quote_no"], "%s %s 已核准" % (st.label, label))
+        _dn.fire(st.key, "approved", row, subject, requester=requester)
     _audit(_tok(authorization), "%s.approve" % st.audit_prefix, "contractor_dispatch", str(did), row["quote_no"],
            _audit_detail(row, tier=ct + 1, status=new_status))
     return {"ok": True, "approvalStatus": new_status, "currentTier": appr["currentTier"]}
@@ -224,10 +233,12 @@ def do_reject(did, body, user, authorization, st: Stage):
         conn.commit()
         label = _label(conn, row)
         requester = appr.get("requestedBy")
+        subject = _subject(conn, row)
     finally:
         conn.close()
     if requester:
         _notify(requester, "dispatch_returned", str(did), row["quote_no"], "%s %s 被退回：%s" % (st.label, label, reason))
+        _dn.fire(st.key, "returned", row, subject, requester=requester, reason=reason)
     _audit(_tok(authorization), "%s.reject" % st.audit_prefix, "contractor_dispatch", str(did), row["quote_no"],
            _audit_detail(row, tier=ct + 1, reason=reason))
     return {"ok": True, "approvalStatus": _flow.RETURNED}
@@ -332,3 +343,104 @@ def reject_completion(did: int, body: dict = Body(default={}), authorization: st
 def withdraw_completion(did: int, authorization: str = Header(None)):
     user = _require_dispatch_user(authorization)
     return do_withdraw(did, user, authorization, STAGE2, back_to="")
+
+
+# ── 待我簽核佇列（IP-10）／詳情／轉簽：兩種 type，各讀自己那一段的欄位 ─────────────────────
+from helpers import approval_queue as _aq  # noqa: E402
+
+TYPE1, TYPE2 = "contractor_dispatch", "contractor_dispatch_completion"
+_TYPE_STAGE = {TYPE1: (STAGE1, "承攬商派發", "dispatch"), TYPE2: (STAGE2, "承攬商派發完工", "completion")}
+
+
+def _grand_total(row) -> float:
+    from modules.subcontract.api.vendor_contractors import _dispatch_row
+    return _dispatch_row(row).get("grandTotal", 0)
+
+
+def _queue_for(conn, type_, rows):
+    st, label, seg = _TYPE_STAGE[type_]
+    out = []
+    for r in rows:
+        if r[st.status_col] not in (_flow.PENDING, _flow.IN_PROGRESS):
+            continue
+        raw = _aq.approval_raw_of(r[st.json_col], type_, r["doc_code"])
+        if raw is None or not r["doc_code"]:                  # 壞資料只跳過那一筆
+            continue
+        f = _aq.tier_fields(raw)
+        base = "/api/contractor-dispatches/%d" % r["id"] + ("/completion" if seg == "completion" else "")
+        out.append(_aq.base_item(
+            type_, r["doc_code"], f,
+            customer=_subject(conn, r), projectName="關聯案件 %s" % r["quote_no"], total=_grand_total(r),
+            quoteDate=(r[st.at_col] or r["created_at"] or "")[:10], linkedQuoteNo=r["quote_no"],
+            typeLabel=label, docCode=r["doc_code"], dispatchId=r["id"],
+            openUrl="case-management.html?q=%s&tab=dispatch" % r["quote_no"],
+            approveUrl=base + "/approve", rejectUrl=base + "/reject", rejectField="reason",
+            dispatchVersion=int(f["appr"].get("version") or 1)))
+    return out
+
+
+def queue_items(conn) -> list:
+    """`approval.queue_items`（subcontract_dispatch）：派發審核＋完工審核兩種待簽項目。"""
+    rows = conn.execute("SELECT * FROM contractor_dispatches WHERE approval_status IN ('待審核','簽核中') "
+                        "OR completion_status IN ('待審核','簽核中') ORDER BY id DESC").fetchall()
+    return _queue_for(conn, TYPE1, rows) + _queue_for(conn, TYPE2, rows)
+
+
+def _detail(conn, doc_code, type_):
+    st, label, seg = _TYPE_STAGE[type_]
+    r = conn.execute("SELECT * FROM contractor_dispatches WHERE doc_code=?", (doc_code,)).fetchone()
+    if not r:
+        return None
+    from modules.subcontract.api.vendor_contractors import _dispatch_row
+    d = _dispatch_row(r)
+    fields = [{"label": "承攬商", "value": _subject(conn, r)},
+              {"label": "派發單號", "value": r["doc_code"]},
+              {"label": "派發日期", "value": r["dispatch_date"] or "—"},
+              {"label": "範圍", "value": r["scope"] or "—"},
+              {"label": "稅率", "value": "%g%%" % round(float(d.get("taxRate") or 0) * 100, 4)},
+              {"label": "金額", "value": format(d.get("grandTotal") or 0, ",.0f")},
+              {"label": "建立者", "value": r["created_by"] or "—"}]
+    if seg == "completion":
+        fields += [{"label": "驗收人", "value": r["accepted_by"] or "—"},
+                   {"label": "驗收時間", "value": (r["accepted_at"] or "—")[:16].replace("T", " ")}]
+    pers = [{"description": "外包人員：%s" % (p.get("name") or ""), "amount": p.get("amount") or 0}
+            for p in (d.get("personnel") or []) if isinstance(p, dict)]
+    return {"quoteNo": r["quote_no"], "title": "%s %s" % (label, r["doc_code"]),
+            "approvalRaw": r[st.json_col] or "{}", "fields": fields,
+            "items": [x for x in (d.get("items") or []) if isinstance(x, dict)] + pers, "files": []}
+
+
+def detail_dispatch(conn, doc_code):
+    return _detail(conn, doc_code, TYPE1)
+
+
+def detail_completion(conn, doc_code):
+    return _detail(conn, doc_code, TYPE2)
+
+
+class _ColumnApproval:
+    """`approval.reassign`：簽核鏈存在 contractor_dispatches 的獨立欄位（兩段各一欄），以 doc_code 為單號。"""
+
+    def __init__(self, stage: Stage):
+        self.st = stage
+
+    def load(self, conn, doc_no):
+        r = conn.execute("SELECT doc_code, quote_no, %s AS s, %s AS j FROM contractor_dispatches WHERE doc_code=?"
+                         % (self.st.status_col, self.st.json_col), (doc_no,)).fetchone()
+        if not r:
+            return None
+        try:
+            a = json.loads(r["j"] or "{}")
+        except (TypeError, ValueError):
+            raise _aq.ApprovalUnreadable(doc_no)
+        if not isinstance(a, dict):
+            raise _aq.ApprovalUnreadable(doc_no)
+        return {"docNo": r["doc_code"], "quoteNo": r["quote_no"], "status": r["s"], "approval": a}
+
+    def save(self, conn, doc, approval, now):
+        conn.execute("UPDATE contractor_dispatches SET %s=?, updated_at=? WHERE doc_code=?" % self.st.json_col,
+                     (json.dumps(approval, ensure_ascii=False), now, doc["docNo"]))
+
+
+REASSIGN_DISPATCH = _ColumnApproval(STAGE1)
+REASSIGN_COMPLETION = _ColumnApproval(STAGE2)
