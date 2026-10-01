@@ -167,7 +167,10 @@ def test_api_preview_reports_source_status_and_permissions(client, make_user):
     r = client.get(url, headers=hdr)
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["contract_version"] == 1 and body["count"] == 0 and body["notices"], "A 階段所有來源都還沒接入：必須明說，不可只回空清單"
+    assert body["contract_version"] == 1 and body["count"] == 0
     assert set(body["sources"]) == set(C.SOURCES)
+    # 缺席要明說、不可只回空清單：每個不是 ok 的來源都必須有一條說明（原本寫死「全部還沒接入⇒有說明」；固定資產 C6 接入後所有來源都 ok ⇒ notices 可以是空的）
+    for src, st in body["sources"].items():
+        assert st == "ok" or any(src in n for n in body["notices"]), (src, st, body["notices"])
     assert client.get("/api/ledger/events/preview?start=2026-10-31&end=2026-10-01", headers=hdr).status_code == 400
     assert client.get("/api/ledger/events/preview?start=x&end=y", headers=hdr).status_code == 400
