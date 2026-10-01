@@ -86,9 +86,16 @@ def _eventually(sql, args, want, what, timeout=10.0):
     raise AssertionError("%s：狀態是 %r，預期 %r" % (what, got, want))
 
 
-def _last_audit(action):
-    r = _db("SELECT target_label, detail AS detail_json FROM audit_log WHERE action=? ORDER BY id DESC LIMIT 1", (action,))
-    return r[0] if r else None
+def _last_audit(action, timeout=15.0):
+    """最後一筆該動作的稽核列。🔴 狀態改成草稿（_eventually 等到的終點）與稽核列不是同一個提交：高負載下狀態先到、稽核列晚一步，
+    單次讀取會得到 None（建包 e2e 偶發：`assert (None)`）。所以輪詢到有為止（上限 timeout 秒）；真的沒有才回 None。"""
+    import time
+    end = time.time() + timeout
+    while True:
+        r = _db("SELECT target_label, detail AS detail_json FROM audit_log WHERE action=? ORDER BY id DESC LIMIT 1", (action,))
+        if r or time.time() >= end:
+            return r[0] if r else None
+        time.sleep(0.2)
 
 
 def _users(make_user, tag, extra_modules=()):

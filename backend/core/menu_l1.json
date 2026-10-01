@@ -111,7 +111,7 @@
    ],
    "extra_badge": {
     "id": "sb-approval-badge",
-    "color": "#DC2626"
+    "color": "var(--danger)"
    }
   },
   {

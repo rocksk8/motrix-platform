@@ -218,6 +218,9 @@ def dispatch_entries(conn, basis):
             "SELECT cd.*, vc.name AS vendor_name FROM contractor_dispatches cd"
             " LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id WHERE cd.status != 'cancelled'"):
         d = dispatch_row(r)
+        ap = d.get("approvalStatus") or ""
+        if ap in ("草稿", "已退回"):        # 31-A（Q6）：尚未承諾的支出不計入應計成本；待審核／簽核中照計並標示；已核准與舊單（''）照舊
+            continue
         inv = (r["invoice_date"] or "")[:10]
         fallback = (d.get("acceptedAt") or "")[:10] or (r["dispatch_date"] or "")[:10]
         use = inv if inv != "" else fallback
@@ -229,7 +232,8 @@ def dispatch_entries(conn, basis):
         note = "未稅" if not personnel else ("外包人員未拆稅" if not pretax else "承攬商未稅＋外包人員未拆稅")
         out.append({"date": use, "quoteNo": r["quote_no"] or "",
                     "desc": d["vendorName"] or "（外包人員點工）", "amount": amount, "taxNote": note,
-                    "provisional": inv == "", "dispatchId": r["id"], "invoiceDate": inv})
+                    "provisional": inv == "", "dispatchId": r["id"], "invoiceDate": inv,
+                    "approvalPending": ap in ("待審核", "簽核中")})
     return out
 
 

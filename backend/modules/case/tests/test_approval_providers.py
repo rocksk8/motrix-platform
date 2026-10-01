@@ -52,7 +52,7 @@ def _expected_reassign_types():
     if source_tree.module_installed("modules/supply/"):
         out.add("shipping_note")
     if source_tree.module_installed("modules/subcontract/"):
-        out.add("contractor_voucher")
+        out |= {"contractor_voucher", "contractor_dispatch", "contractor_dispatch_completion"}      # 31-A：派發審核／完工審核
     if source_tree.module_installed("modules/arap/"):
         out |= {"invoice_voucher", "payment_request"}
     return out
@@ -73,6 +73,7 @@ def test_every_detail_type_has_one_provider(client):
         want.add("shipping_note")
     if source_tree.module_installed("modules/subcontract/"):
         want.add("contractor_voucher")
+        want |= {"contractor_dispatch", "contractor_dispatch_completion"}      # 31-A
         want.add("dispatch_file_delete")     # W1／N1（承攬商報價單附件刪除審核）由外包工班提供
     if source_tree.module_installed("modules/arap/"):
         want |= {"invoice_voucher", "payment_request"}

@@ -43,8 +43,3 @@ def mask_record(user, rec: dict, number_keys=("bankAccountNumber", "bank_account
         if k in rec and rec[k]:
             rec[k] = ""
     return rec
-
-
-def keep_if_masked(new_value, old_value):
-    """寫入用：送來的是遮蔽值（或空白且舊值存在而送的人看不到全碼時的回送）⇒ 沿用舊值。"""
-    return old_value if is_masked_value(new_value) else new_value

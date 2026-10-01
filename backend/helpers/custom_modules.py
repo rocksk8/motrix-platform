@@ -223,7 +223,59 @@ def validate_module(body: dict, key: str = "") -> list:
     if not out:
         out += _validate_by_sample(body)
     out += _validate_output(body)
+    out += _validate_mount(body)
     return out
+
+
+def _loaded_manifests():
+    """{模組key: manifest}：**已載入**的內建模組（掛載點只認已載入的）。registry 還沒起來（單元情境）⇒ 空。"""
+    try:
+        from core import registry
+        return {m.key: m.manifest for m in registry.loaded()}
+    except Exception:                                        # noqa: BLE001
+        return {}
+
+
+def _validate_mount(body, manifests=None):
+    """`mount: {point, label?, contextField?}`（方案 B；沒有＝獨立模組，不檢查）。目標點必須存在於**已載入**模組（缺席要明說，不靜默略過）。"""
+    m = body.get("mount") if isinstance(body, dict) else None
+    if m is None:
+        return []
+    if not isinstance(m, dict):
+        return [_p("mount", "必須是物件 {point, label, contextField}")]
+    out = []
+    for k in m:
+        if k not in ("point", "label", "contextField"):
+            out.append(_p("mount.%s" % k, "不認得的鍵（可用：point、label、contextField）"))
+    from core import mounts as _mt
+    pts = _mt.declared_points(manifests if manifests is not None else _loaded_manifests())
+    pt = pts.get(m.get("point"))
+    if pt is None:
+        out.append(_p("mount.point", "掛載目標不存在或其模組未載入：%r" % (m.get("point"),)))
+        return out
+    if "label" in m and (not isinstance(m["label"], str) or not m["label"].strip() or len(m["label"]) > 40):
+        out.append(_p("mount.label", "頁籤文字必須是 1～40 字的非空字串"))
+    cf = m.get("contextField", "")
+    if not isinstance(cf, str):
+        out.append(_p("mount.contextField", "必須是字串（本模組的欄位 key；沒有上下文就留空）"))
+    elif cf:
+        if not pt["context"]:
+            out.append(_p("mount.contextField", "這個掛載點沒有提供上下文，contextField 必須留空"))
+        elif not any(isinstance(f, dict) and f.get("key") == cf for f in (body.get("fields") or [])):
+            out.append(_p("mount.contextField", "contextField 必須是本模組的欄位 key：%r" % cf))
+    return out
+
+
+def mount_cap_problems(conn, key, body, manifests=None):
+    """發布前的容量檢查（要連線，所以不放在 validate_module）：同一個掛載點最多 MAX_TABS_PER_POINT 個**已發布**自訂模組（本模組自己不算）。"""
+    from core import mounts as _mt
+    pt = ((body or {}).get("mount") or {}).get("point") if isinstance((body or {}).get("mount"), dict) else None
+    if not pt:
+        return []
+    others = [m for m in published_modules(conn) if m["key"] != key and (m.get("mount") or {}).get("point") == pt]
+    if len(others) >= _mt.MAX_TABS_PER_POINT:
+        return [_p("mount.point", "這個掛載點已有 %d 個頁籤（上限 %d）" % (len(others), _mt.MAX_TABS_PER_POINT))]
+    return []
 
 
 def _validate_by_sample(body):
@@ -989,6 +1041,7 @@ def published_modules(conn) -> list:
         d = _load_def(conn, r["key"], r["v"])
         out.append({"key": r["key"], "version": d["version"], "name": d["body"].get("name"),
                     "icon": d["body"].get("icon", ""), "menu": d["body"].get("menu") or {},
+                    "mount": d["body"].get("mount") if isinstance(d["body"].get("mount"), dict) else {},
                     "permission": permission_of(r["key"], d["body"])})
     return out
 
@@ -1004,6 +1057,39 @@ def visible_to(mods, user) -> list:
     except (TypeError, ValueError):
         mine = set()
     return [m for m in mods if m.get("permission") in mine and can_see_menu(m.get("menu"), user)]
+
+
+class MountError(ValueError):
+    def __init__(self, message, status=404):
+        super().__init__(message)
+        self.status = status
+
+
+def visible_mounts(conn, user, point, manifests=None) -> list:
+    """掛載點 ⇒ 這位使用者看得到的頁籤 `[{key, label, icon, href}]`（**唯一一份**：`GET /api/platform/mounts` 呼叫它，頁面不自己判斷）。
+    可見 ＝ 自訂模組可見（`visible_to`：`custom.<key>` 權限＋`menu.visibleTo`，最高管理者全部）∧ 掛載點自己的 perm（與選單項同一個判準）。
+    點不存在（或所屬內建模組沒載入）⇒ MountError(404)——缺席不可以長得像「沒有頁籤」；沒人掛 ⇒ `[]`。
+    注意：隱藏頁籤**不是**存取控制，嵌入的模組各端點仍各自驗 `custom.<key>`。"""
+    from urllib.parse import quote
+    from core import mounts as _mt
+    pts = _mt.declared_points(manifests if manifests is not None else _loaded_manifests())
+    pt = pts.get(point)
+    if pt is None:
+        raise MountError("沒有這個掛載點（或所屬模組未載入）：%s" % (point,))
+    sa = user.get("role") == "superadmin"
+    try:
+        mine = set(json.loads(user.get("modules") or "[]"))
+    except (TypeError, ValueError):
+        mine = set()
+    if not _mt.visible_point(pt, mine, sa):
+        return []
+    mods = [m for m in published_modules(conn) if (m.get("mount") or {}).get("point") == point]
+    out = []
+    for m in visible_to(mods, user)[:_mt.MAX_TABS_PER_POINT]:
+        out.append({"key": m["key"], "label": str((m.get("mount") or {}).get("label") or m.get("name") or m["key"]),
+                    "icon": m.get("icon") or "", "href": "custom-records.html?key=%s&embed=1" % quote(str(m["key"]), safe="")})
+    out.sort(key=lambda t: (t["label"], t["key"]))
+    return out
 
 
 def permission_of(module_key, body) -> str:

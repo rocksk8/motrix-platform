@@ -29,7 +29,8 @@ APPROVAL_COLS = ("approval_json", "change_approval_json")
 #: 簽核鏈在 JSON 物件的 `approval` 鍵裡的欄位（同 data_json 的形狀）：data_json；定義庫 ui_definitions 的 decision_json（S4 定義送審）
 DATA_COLS = ("data_json", "decision_json")
 #: 通用種資料填不出來的「這張表哪一列才算待簽」條件：表名 → {欄位: 值}（定義庫的待簽＝kind／scope／status 三個固定值）
-SEED_OVERRIDES = {"ui_definitions": {"kind": "custom_module", "scope": "company", "status": "submitted"}}
+SEED_OVERRIDES = {"ui_definitions": {"kind": "custom_module", "scope": "company", "status": "submitted"},
+                  "contractor_dispatches": {"approval_status": "待審核"}}      # 派發審核（31-A）：待簽＝approval_status；完工段 completion_status 維持 token（非待簽）
 APPR = {"requestedBy": "aqj_req", "requestedByDisplay": "aqj_req", "requestedAt": "2026-09-27T09:00:00", "currentTier": 0,
         "tiers": [{"approvers": [{"username": "aqj_x", "displayName": "aqj_x", "status": "pending"}]}]}
 #: 已知的提供者（名稱 → 擁有模組；None＝L1）。正對照：少了就是掃描壞了

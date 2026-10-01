@@ -29,6 +29,13 @@ WRITE_METHODS = {"post", "put", "patch", "delete"}
 #: 第三題會驗它真的直接呼叫 `_audit`／`_system_audit`。
 AUDIT_WRAPPERS = {
     "_issue_session": ("routers/auth.py", "登入成功發 session 時寫 auth.login"),
+    # 31-A 承攬商派發審核：兩段審核的八支端點共用這四支（成功才走到最後的 `_audit`；拒絕都在前面 raise）
+    "dispatch_review_submit": ("modules/subcontract/api/dispatch_approval.py", "送審成功寫 vendor.dispatch[.completion].submit"),
+    "dispatch_review_approve": ("modules/subcontract/api/dispatch_approval.py", "核准成功寫 …approve"),
+    "dispatch_review_reject": ("modules/subcontract/api/dispatch_approval.py", "退回成功寫 …reject"),
+    "dispatch_review_withdraw": ("modules/subcontract/api/dispatch_approval.py", "撤回成功寫 …withdraw"),
+    # `/accept` 與 `/status`：作業狀態改變成功才寫 vendor.dispatch.<target>
+    "dispatch_status_audited": ("modules/subcontract/api/vendor_contractors.py", "作業狀態改變成功寫 vendor.dispatch.<target>"),
 }
 
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
@@ -175,6 +182,15 @@ def test_audit_wrappers_really_call_audit_directly():
                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == name]
         assert fns, "AUDIT_WRAPPERS 的 %s 在 %s 找不到" % (name, rel)
         assert _called(fns[0]) & AUDIT_CALLS, "%s 沒有直接呼叫 _audit／_system_audit" % name
+
+
+def test_a_wrapper_that_does_not_call_audit_is_caught_by_the_direct_call_check():
+    """反向控制（31-A）：把包裝函式裡的 `_audit` 拿掉 ⇒ 「直接呼叫」檢查必須紅（檢查本身不是空的）。"""
+    good = "def dispatch_review_submit(x):\n    do()\n    _audit(t, 'a')\n"
+    bad = "def dispatch_review_submit(x):\n    do()\n"
+    for src, expect in ((good, True), (bad, False)):
+        fn = [n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.FunctionDef)][0]
+        assert bool(_called(fn) & AUDIT_CALLS) is expect
 
 
 def test_refusal_only_audit_helper_does_not_count():

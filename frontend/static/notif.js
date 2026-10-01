@@ -1,5 +1,5 @@
 ;(function () {
-  if (window.MOTRIX_PREVIEW) return   // 模組建構器的即時預覽：不打 API（BUILDER-UX §3.3）
+  if (window.MOTRIX_PREVIEW || window.MOTRIX_EMBED) return   // 建構器即時預覽（BUILDER-UX §3.3）／被嵌入的頁面（方案 B）：不打 API、不彈橫幅
   var _origFetch = window.fetch
   var _redirecting = false
   // ── 本公司資料設定閘門（COMPANY-SETUP-GATE §3.6、§4.2）──────────────────────────
@@ -214,6 +214,10 @@ window.MotrixReads = (function () {
   }
 })()
 
+// 待簽數上次抓取的時間（回到前景的節流用）。放在模組層、不進元件狀態：元件狀態會被頁面狀態比對（case 切換＝重開同狀態）
+// 與序列化看到，時間戳每次都不同，放進去就是無謂的差異。
+var _approvalFetchedAt = 0
+
 function notifStore() {
   const isPages = window.location.pathname.includes('/pages/')
   const auditHref = isPages ? 'audit-log.html' : 'pages/audit-log.html'
@@ -240,6 +244,15 @@ function notifStore() {
       if (!this._sess.token) return
       if (this._sess.mustChangePassword) return
       window.addEventListener('motrix:reads-changed', () => this.refresh())
+      // 簽核處理完（簽核佇列頁每次重載清單後發出）／分頁回到前景 ⇒ 重抓待簽數，紅點不會停在舊值；
+      // 不另開輪詢：回到前景最多每 60 秒抓一次，與頁面載入時的那一次共用 _fetchApprovalCount。
+      window.addEventListener('motrix:approval-changed', () => this._fetchApprovalCount())
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') return
+        const now = Date.now()
+        if (now - _approvalFetchedAt < 60000) return
+        this._fetchApprovalCount()
+      })
       // 跨分頁即時（使用者：「選單紅點數字與鈴鐺也跨分頁即時更新」）：
       //   已讀 ⇒ 只改那一個模組／那一則通知；伺服器拒絕 ⇒ 重抓伺服器的數字。
       window.addEventListener('motrix:item-read', e => {
@@ -342,6 +355,7 @@ function notifStore() {
         })
         if (!r.ok) return
         const d = await r.json()
+        _approvalFetchedAt = Date.now()
         this._updateApprovalBadge(d.count || 0)
         this._maybeShowApprovalBanner(d.count || 0)
       } catch(e) {}
@@ -360,6 +374,10 @@ function notifStore() {
     _updateApprovalBadge(count) {
       const badge = document.getElementById('sb-approval-badge')
       if (!badge) return
+      // 群組標題的紅點（sidebar.js 為每個有 key 的群組畫一顆）：跟面板內的數字徽章同一個 count、同一次更新
+      const grp = badge.closest('.mnav__grp')
+      const dot = grp && grp.querySelector('.mnav__dot')
+      if (dot) dot.style.display = count > 0 ? 'inline-block' : 'none'
       if (count > 0) {
         badge.textContent = count > 9 ? '9+' : String(count)
         badge.style.display = 'inline-block'

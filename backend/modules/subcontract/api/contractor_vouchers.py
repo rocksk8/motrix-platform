@@ -297,6 +297,9 @@ def create_contractor_voucher(body: VoucherCreateIn, authorization: str = Header
         if dispatch["status"] not in ("accepted", "completed"):
             conn.close()
             raise HTTPException(409, "僅「已驗收」或「完工」狀態的派發可產生匯款申請")
+        if (dispatch["approval_status"] or "") not in ("", "已核准"):        # 31-A：派發審核未核准不得請款（舊單 '' 照舊）
+            conn.close()
+            raise HTTPException(409, "派發尚未核准（審核狀態：%s），不能產生匯款申請" % dispatch["approval_status"])
         existing = conn.execute(
             "SELECT voucher_no, quote_no, data_json FROM contractor_payment_vouchers WHERE dispatch_id=?", (body.dispatch_id,)
         ).fetchone()

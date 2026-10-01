@@ -154,6 +154,30 @@
                 <label for="mb-menu-order">選單排序（小的在前）</label>
                 <input id="mb-menu-order" type="number" :value="(def.menu || {}).order" @input="setMenu('order', $event.target.value === '' ? null : Number($event.target.value))">
               </div>
+<div class="mb-f" id="mb-mount" :class="{ 'is-bad': hasProblem('mount') }">
+                <label for="mb-mount-point">掛載到內建頁面（選填；建構器方案 B）</label>
+                <select id="mb-mount-point" data-testid="mb-mount-point" :value="mountPointId()" @change="setMountPoint($event.target.value)">
+                  <option value="">（不掛載：只用獨立選單項目）</option>
+                  <template x-for="p in mountOptions()" :key="p.id"><option :value="p.id" x-text="p.label + '（' + p.id + '）'" :selected="p.id === mountPointId()"></option></template>
+                </select>
+                <div class="mb-hint">掛載＝這個模組同時成為該頁面裡的一個頁籤（資料仍是同一份、原本的選單項目照樣保留）。看得到頁籤的人＝有這個模組權限、且看得到那一頁的人；<b>隱藏頁籤不是存取控制</b>，各端點仍各自驗權限。每個掛載點最多 <span x-text="mountMax"></span> 個頁籤。</div>
+                <div class="mb-bad" id="mb-mount-missing" data-testid="mb-mount-missing" x-show="mountMissing()">這個掛載目標目前不存在，或其所屬模組未載入：頁籤不會顯示（模組與單據資料不受影響，也不會被自動刪除）。</div>
+                <template x-if="mountPointId()">
+                  <div style="margin-top:8px">
+                    <label for="mb-mount-label">頁籤文字（留空＝用模組名稱）</label>
+                    <input id="mb-mount-label" maxlength="40" :value="(def.mount || {}).label || ''" @input="setMount('label', $event.target.value)" placeholder="例：請款單">
+                    <template x-if="(mountDef() || {}).context && mountDef().context.length">
+                      <div style="margin-top:8px">
+                        <label for="mb-mount-context">接收上下文的欄位（頁面會把「<span x-text="mountDef().context.join('、')"></span>」帶進這個欄位並篩選列表）</label>
+                        <select id="mb-mount-context" :value="(def.mount || {}).contextField || ''" @change="setMount('contextField', $event.target.value)">
+                          <option value="">（不使用上下文）</option>
+                          <template x-for="f in (def.fields || [])" :key="f.key"><option :value="f.key" x-text="(f.label || f.key) + '（' + f.key + '）'" :selected="f.key === ((def.mount || {}).contextField || '')"></option></template>
+                        </select>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+              </div>
 <div class="mb-f" data-vis="menu">
                 <label>誰看得到</label>
                 <div class="mb-hint" data-vis-summary x-text="visSummary('menu')"></div>

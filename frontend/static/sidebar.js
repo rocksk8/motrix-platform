@@ -50,7 +50,7 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 ;(function () {
-  if (window.MOTRIX_PREVIEW) return   // 模組建構器的即時預覽：不畫側欄、不打 API（BUILDER-UX §3.3）
+  if (window.MOTRIX_PREVIEW || window.MOTRIX_EMBED) return   // 建構器即時預覽（BUILDER-UX §3.3）／被嵌入的頁面（方案 B）：不畫側欄、不打 API
   // ── Session & path ──────────────────────────────────────────────────────────
   var raw  = localStorage.getItem('motrix_session')
   var s    = raw ? JSON.parse(raw) : {}
@@ -376,10 +376,13 @@ if (typeof module !== 'undefined' && module.exports) {
     var cpHref = inPg ? 'change-password.html' : 'pages/change-password.html'
 
     // Notification bell — admin/superadmin only
+    // notifStore 的宣告只有這一處（管理員的鈴鐺／一般使用者的隱形資料元件兩種外殼共用）：兩個分支互斥，不是兩個實例；
+    // 掃描器（check_double_init／AL1 共用母體）按「宣告點」計數，寫成兩處字面會被算成兩個共用 store。
+    var notifOpen = function (attrs) { return '<div x-data="notifStore()" x-init="init()" ' + attrs + '>' }
     var bell = ''
     if (ad) {
     bell =
-      '<div x-data="notifStore()" x-init="init()" style="position:relative">'
+      notifOpen('style="position:relative"')
       + '<button class="topbar__btn" @click="toggle()" style="position:relative">'
       + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>'
       + '通知'
@@ -411,6 +414,11 @@ if (typeof module !== 'undefined' && module.exports) {
       + '<a :href="auditHref" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看操作紀錄 →</a>'
       + '</div>'
       + '</div>'
+    } else {
+      // 一般使用者沒有通知鈴鐺，但**資料元件 notifStore 一定要掛**：選單的待簽紅點與數字徽章（簽核佇列、每日工作…）、登入的待簽橫幅
+      // 全都由它的 init() 抓資料；原本它只掛在鈴鐺裡 ⇒ 非管理員（一般簽核人）永遠沒有紅點與徽章（2026-10-01 使用者：「輪到簽核，我的工作上要有紅點，目前沒有」）。
+      // 這裡掛一個看不見的實例，不畫任何畫面。
+      bell = notifOpen('style="display:none" data-testid="notif-headless" aria-hidden="true"') + '</div>'
     } // end if (ad)
 
     el.innerHTML =
@@ -614,9 +622,9 @@ if (typeof module !== 'undefined' && module.exports) {
     return ''
   }
 
-  function sec(label, show) {
+  function sec(label, show, key) {
     if (show === false) { _curGroup = { label: label, items: [], hidden: true }; return '' }
-    _curGroup = { label: label, items: [] }
+    _curGroup = { label: label, key: key || '', items: [] }
     _navGroups.push(_curGroup)
     return ''
   }
@@ -654,8 +662,13 @@ if (typeof module !== 'undefined' && module.exports) {
             + '</a>'
         }).join('') + '</div>'
       }).join('') + '</div></div>'
+      // 群組標題的紅點（2026-10-01 使用者：「如果輪到簽核，我的工作上要有紅點」）：下拉收起時看不到面板裡的數字徽章，
+      // 所以群組標題自己要有一顆；顯示與否由 notif.js 依 /api/approval-queue/count 決定（同一份來源，跟面板內的徽章一起動）。
+      // id 以群組 key 命名，_rebuildMenu 會依 id 還原顯示狀態。
+      var dotId = g.key ? 'sb-dot-' + String(g.key).replace(/[^A-Za-z0-9_-]/g, '_') : ''
       return '<div class="mnav__grp' + (anyActive ? ' is-on' : '') + '" tabindex="0">'
         + '<span class="mnav__top">' + esc(g.label)
+        + (dotId ? '<i class="mnav__dot" id="' + dotId + '" role="status" aria-label="有待處理項目" style="display:none"></i>' : '')
         + '<svg viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
         + '</span>' + panel + '</div>'
     }).join('') + '</div>'
@@ -723,11 +736,11 @@ if (typeof module !== 'undefined' && module.exports) {
       })
     })
     var groups = _layoutGroups || decl.map(function (g) {
-      return { label: g.label, items: g.items.filter(function (it) { return _permOk(it.perm) }) }
+      return { key: g.key, label: g.label, items: g.items.filter(function (it) { return _permOk(it.perm) }) }       // key：群組標題紅點的 id 要靠它（宣告版與角色版面兩條路都要有）
     })
     groups.forEach(function (g) {
       if (!g.items || !g.items.length) return          // 群組顯示＝底下至少一項可見（不留空標題）
-      sec(g.label, true)
+      sec(g.label, true, g.key)
       g.items.forEach(function (it) {
         ni(_hrefOf(it.href), '', it.label, it.custom ? [] : (it.active || []), true, it.badge || '', _extraBadge(it.extra_badge))
         if (it.custom) {

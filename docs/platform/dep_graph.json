@@ -781,6 +781,7 @@
     "helper:tiered_approval",
     "plat:definitions",
     "plat:events",
+    "plat:mounts",
     "plat:paths",
     "plat:registry",
     "plat:txn"
@@ -1507,6 +1508,7 @@
     "/api/contractor-dispatches/{}/invoice-date",
     "/api/contractor-dispatches/{}/invoice-files",
     "/api/contractor-dispatches/{}/invoice-files/{}",
+    "/api/contractor-dispatches/{}{}",
     "/api/contractor-vouchers",
     "/api/contractor-vouchers/last-paid-bank-account",
     "/api/contractor-vouchers/{}",
@@ -1538,6 +1540,7 @@
     "mod:accounting/api/accounting_export",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
+    "mod:subcontract/api/dispatch_approval",
     "mod:subcontract/api/vendor_contractors"
    ],
    "tables_r": [],
@@ -1950,12 +1953,14 @@
     "/api/definitions/custom_module",
     "/api/definitions/custom_module/",
     "/api/org/tree",
+    "/api/platform/mount-points",
     "/api/users"
    ],
    "api_prefixes": [
     "/api/custom-modules",
     "/api/definitions",
     "/api/org",
+    "/api/platform",
     "/api/users"
    ],
    "api_unmatched": [],
@@ -1966,7 +1971,8 @@
     "router:auth",
     "router:custom_records",
     "router:definitions",
-    "router:org_structure"
+    "router:org_structure",
+    "router:platform_menu"
    ],
    "tables_r": [],
    "tables_w": []
@@ -2364,6 +2370,23 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:static/mount-tabs.js": {
+   "api_calls": [
+    "/api/platform/mounts"
+   ],
+   "api_prefixes": [
+    "/api/platform"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/mount-tabs.js",
+   "routers_called": [
+    "router:platform_menu"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:static/notif.js": {
    "api_calls": [
     "/api/",
@@ -2430,6 +2453,7 @@
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
+    "mod:subcontract/api/dispatch_approval",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/inventory",
     "mod:supply/api/shipping_notes",
@@ -4704,6 +4728,19 @@
     "vouchers_all"
    ]
   },
+  "mod:accounting/ledger/tax401_media": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/ledger/tax401_media.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "mod:accounting/ledger/withholding": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -5067,67 +5104,67 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2358,
+     "line": 2360,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2372,
+     "line": 2374,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2408,
+     "line": 2410,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2527,
+     "line": 2529,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2588,
+     "line": 2590,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2656,
+     "line": 2658,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
      "func": "customer_history",
-     "line": 2690,
+     "line": 2692,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 2965,
+     "line": 2967,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3191,
+     "line": 3193,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3600,
+     "line": 3602,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 3784,
+     "line": 3786,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -8815,7 +8852,8 @@
     "helper:privacy_notice",
     "helper:settings",
     "helper:tiered_approval",
-    "helper:uploads"
+    "helper:uploads",
+    "mod:payroll/payslip_bank"
    ],
    "imports": [
     "core:db",
@@ -8828,6 +8866,7 @@
     "helper:privacy_notice",
     "helper:settings",
     "helper:uploads",
+    "mod:payroll/payslip_bank",
     "plat:paths",
     "plat:registry",
     "plat:txn"
@@ -8840,109 +8879,109 @@
    "routes": [
     {
      "func": "get_tax_rules",
-     "line": 183,
+     "line": 184,
      "method": "GET",
      "path": "/api/tax-rules"
     },
     {
      "func": "next_slip_no",
-     "line": 203,
+     "line": 204,
      "method": "GET",
      "path": "/api/next-slip-no"
     },
     {
      "func": "list_payslips",
-     "line": 216,
+     "line": 217,
      "method": "GET",
      "path": "/api/payslips"
     },
     {
      "func": "create_payslip",
-     "line": 249,
+     "line": 250,
      "method": "POST",
      "path": "/api/payslips"
     },
     {
      "func": "get_payslip",
-     "line": 327,
+     "line": 334,
      "method": "GET",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "update_payslip",
-     "line": 340,
+     "line": 348,
      "method": "PUT",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "delete_payslip",
-     "line": 413,
+     "line": 425,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "record_export",
-     "line": 432,
+     "line": 444,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/export"
     },
     {
      "func": "record_archive_download",
-     "line": 475,
+     "line": 487,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/archive/{orig_idx}/record"
     },
     {
      "func": "get_archive_pdf",
-     "line": 504,
+     "line": 516,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/archive/{idx}"
     },
     {
      "func": "pdf_download",
-     "line": 540,
+     "line": 552,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/pdf-download"
     },
     {
      "func": "void_payslip",
-     "line": 577,
+     "line": 589,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/void"
     },
     {
      "func": "upload_signed_files",
-     "line": 619,
+     "line": 631,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/signed-files"
     },
     {
      "func": "get_signed_file",
-     "line": 670,
+     "line": 682,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "delete_signed_file",
-     "line": 698,
+     "line": 710,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "unsign_payslip",
-     "line": 727,
+     "line": 739,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unsign"
     },
     {
      "func": "payslip_mark_paid",
-     "line": 752,
+     "line": 764,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/mark-paid"
     },
     {
      "func": "payslip_unpay",
-     "line": 793,
+     "line": 805,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unpay"
     }
@@ -8952,6 +8991,7 @@
    "tables_r": [],
    "tables_r_transitive": [
     "approval_delegates",
+    "contractors",
     "daily_tasks",
     "departments",
     "dev_cases",
@@ -9188,6 +9228,21 @@
    ],
    "tables_w": []
   },
+  "mod:payroll/payslip_bank": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "mod",
+   "module_key": "payroll",
+   "path": "backend/modules/payroll/payslip_bank.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "contractors"
+   ],
+   "tables_w": []
+  },
   "mod:payroll/payslip_payouts": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -9224,8 +9279,10 @@
    "imports": [
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
+    "mod:subcontract/api/dispatch_approval",
     "mod:subcontract/api/vendor_contractors",
     "mod:subcontract/attachments",
+    "mod:subcontract/dispatch_notify",
     "mod:subcontract/gl_events",
     "mod:subcontract/remit",
     "plat:registry"
@@ -9320,85 +9377,85 @@
     },
     {
      "func": "delete_contractor_voucher",
-     "line": 403,
+     "line": 406,
      "method": "DELETE",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "submit_contractor_voucher",
-     "line": 428,
+     "line": 431,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/submit"
     },
     {
      "func": "approve_contractor_voucher",
-     "line": 490,
+     "line": 493,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/approve"
     },
     {
      "func": "revoke_contractor_voucher_approval",
-     "line": 599,
+     "line": 602,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/revoke-approval"
     },
     {
      "func": "reject_contractor_voucher",
-     "line": 643,
+     "line": 646,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_contractor_voucher_pdf",
-     "line": 691,
+     "line": 694,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_contractor_voucher_export",
-     "line": 721,
+     "line": 724,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/export"
     },
     {
      "func": "get_remit_require_payslip",
-     "line": 789,
+     "line": 792,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "set_remit_require_payslip",
-     "line": 797,
+     "line": 800,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "get_personnel_links",
-     "line": 810,
+     "line": 813,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-links"
     },
     {
      "func": "link_personnel_payslip",
-     "line": 844,
+     "line": 847,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-link"
     },
     {
      "func": "toggle_paid",
-     "line": 899,
+     "line": 902,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/paid-toggle"
     },
     {
      "func": "get_contractor_voucher_approval_flow",
-     "line": 1021,
+     "line": 1024,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     },
     {
      "func": "set_contractor_voucher_approval_flow",
-     "line": 1038,
+     "line": 1041,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     }
@@ -9574,6 +9631,119 @@
     "system_settings"
    ]
   },
+  "mod:subcontract/api/dispatch_approval": {
+   "api_prefixes": [
+    "/api/contractor-dispatches"
+   ],
+   "dynamic_sql": true,
+   "helpers_transitive": [
+    "helper:approval_queue",
+    "helper:audit",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:subcontract/dispatch_flow",
+    "mod:subcontract/dispatch_notify"
+   ],
+   "imports": [
+    "core:db",
+    "helper:approval_queue",
+    "helper:audit",
+    "helper:auth",
+    "helper:tiered_approval",
+    "mod:subcontract/dispatch_flow",
+    "mod:subcontract/dispatch_notify",
+    "plat:registry",
+    "plat:txn"
+   ],
+   "kind": "mod",
+   "module_key": "subcontract",
+   "path": "backend/modules/subcontract/api/dispatch_approval.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "submit_dispatch",
+     "line": 277,
+     "method": "POST",
+     "path": "/api/contractor-dispatches/{did}/submit"
+    },
+    {
+     "func": "approve_dispatch",
+     "line": 283,
+     "method": "POST",
+     "path": "/api/contractor-dispatches/{did}/approve"
+    },
+    {
+     "func": "reject_dispatch",
+     "line": 289,
+     "method": "POST",
+     "path": "/api/contractor-dispatches/{did}/reject"
+    },
+    {
+     "func": "withdraw_dispatch",
+     "line": 295,
+     "method": "POST",
+     "path": "/api/contractor-dispatches/{did}/withdraw"
+    },
+    {
+     "func": "request_completion",
+     "line": 324,
+     "method": "POST",
+     "path": "/api/contractor-dispatches/{did}/completion/request"
+    },
+    {
+     "func": "approve_completion",
+     "line": 331,
+     "method": "POST",
+     "path": "/api/contractor-dispatches/{did}/completion/approve"
+    },
+    {
+     "func": "reject_completion",
+     "line": 337,
+     "method": "POST",
+     "path": "/api/contractor-dispatches/{did}/completion/reject"
+    },
+    {
+     "func": "withdraw_completion",
+     "line": 343,
+     "method": "POST",
+     "path": "/api/contractor-dispatches/{did}/completion/withdraw"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "vendor_contractors"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "contractor_payment_vouchers",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users",
+    "vendor_contractors"
+   ],
+   "tables_w": [
+    "contractor_dispatches"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "contractor_dispatches",
+    "notifications",
+    "system_settings"
+   ]
+  },
   "mod:subcontract/api/vendor_contractors": {
    "api_prefixes": [
     "/api/contractor-dispatches",
@@ -9597,7 +9767,8 @@
     "helper:settings",
     "helper:tiered_approval",
     "helper:uploads",
-    "mod:subcontract/bank_mask"
+    "mod:subcontract/bank_mask",
+    "mod:subcontract/dispatch_flow"
    ],
    "imports": [
     "core:db",
@@ -9613,6 +9784,7 @@
     "helper:uploads",
     "mod:subcontract/api/contractors",
     "mod:subcontract/bank_mask",
+    "mod:subcontract/dispatch_flow",
     "plat:registry",
     "plat:txn"
    ],
@@ -9624,157 +9796,163 @@
    "routes": [
     {
      "func": "list_vendor_contractors",
-     "line": 187,
+     "line": 202,
      "method": "GET",
      "path": "/api/vendor-contractors"
     },
     {
      "func": "list_vendors_selectable",
-     "line": 215,
+     "line": 230,
      "method": "GET",
      "path": "/api/vendor-contractors/selectable"
     },
     {
      "func": "get_vendor_contractor",
-     "line": 229,
+     "line": 244,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "create_vendor_contractor",
-     "line": 241,
+     "line": 256,
      "method": "POST",
      "path": "/api/vendor-contractors"
     },
     {
      "func": "update_vendor_contractor",
-     "line": 269,
+     "line": 284,
      "method": "PUT",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "get_vendor_privacy_ack",
-     "line": 317,
+     "line": 332,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}/privacy-notice"
     },
     {
      "func": "ack_vendor_privacy_notice",
-     "line": 327,
+     "line": 342,
      "method": "POST",
      "path": "/api/vendor-contractors/{vid}/privacy-notice/ack"
     },
     {
      "func": "toggle_vendor_active",
-     "line": 347,
+     "line": 362,
      "method": "PATCH",
      "path": "/api/vendor-contractors/{vid}/active"
     },
     {
      "func": "get_vendor_passbook",
-     "line": 370,
+     "line": 385,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}/passbook"
     },
     {
      "func": "upload_vendor_passbook",
-     "line": 388,
+     "line": 403,
      "method": "PUT",
      "path": "/api/vendor-contractors/{vid}/passbook"
     },
     {
      "func": "delete_vendor_contractor",
-     "line": 421,
+     "line": 436,
      "method": "DELETE",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "update_vendor_visits",
-     "line": 448,
+     "line": 463,
      "method": "PATCH",
      "path": "/api/vendor-contractors/{vid}/visits"
     },
     {
      "func": "list_dispatches",
-     "line": 483,
+     "line": 498,
      "method": "GET",
      "path": "/api/contractor-dispatches"
     },
     {
      "func": "get_dispatch",
-     "line": 506,
+     "line": 521,
      "method": "GET",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "create_dispatch",
-     "line": 523,
+     "line": 538,
      "method": "POST",
      "path": "/api/contractor-dispatches"
     },
     {
      "func": "update_dispatch",
-     "line": 565,
+     "line": 584,
      "method": "PUT",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "delete_dispatch",
-     "line": 620,
+     "line": 654,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "upload_dispatch_files",
-     "line": 648,
+     "line": 686,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files"
     },
     {
      "func": "delete_dispatch_file",
-     "line": 743,
+     "line": 781,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}"
     },
     {
      "func": "approve_dispatch_file_delete",
-     "line": 809,
+     "line": 847,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}/delete-approve"
     },
     {
      "func": "reject_dispatch_file_delete",
-     "line": 865,
+     "line": 903,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}/delete-reject"
     },
     {
      "func": "upload_dispatch_invoice_files",
-     "line": 940,
+     "line": 978,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/invoice-files"
     },
     {
      "func": "delete_dispatch_invoice_file",
-     "line": 977,
+     "line": 1015,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}/invoice-files/{file_id}"
     },
     {
      "func": "set_dispatch_invoice_date",
-     "line": 1006,
+     "line": 1044,
      "method": "PATCH",
      "path": "/api/contractor-dispatches/{did}/invoice-date"
     },
     {
      "func": "accept_dispatch",
-     "line": 1043,
+     "line": 1081,
      "method": "PATCH",
      "path": "/api/contractor-dispatches/{did}/accept"
     },
     {
+     "func": "set_dispatch_status",
+     "line": 1124,
+     "method": "POST",
+     "path": "/api/contractor-dispatches/{did}/status"
+    },
+    {
      "func": "import_dispatch_to_quote",
-     "line": 1089,
+     "line": 1140,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/import-to-quote"
     }
@@ -9840,6 +10018,39 @@
    "kind": "mod",
    "module_key": "subcontract",
    "path": "backend/modules/subcontract/bank_mask.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:subcontract/dispatch_flow": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "mod",
+   "module_key": "subcontract",
+   "path": "backend/modules/subcontract/dispatch_flow.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "contractor_payment_vouchers"
+   ],
+   "tables_w": [
+    "contractor_dispatches"
+   ]
+  },
+  "mod:subcontract/dispatch_notify": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:email_notify",
+    "helper:mail_types"
+   ],
+   "kind": "mod",
+   "module_key": "subcontract",
+   "path": "backend/modules/subcontract/dispatch_notify.py",
    "role": "helper",
    "tables_ddl": [],
    "tables_named": [],
@@ -11066,6 +11277,7 @@
     "mod:netplan/api",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
+    "mod:subcontract/api/dispatch_approval",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/inventory",
     "mod:supply/api/shipping_notes",
@@ -11544,6 +11756,7 @@
    "imports": [
     "js:static/auth-guard.js",
     "js:static/motrix-date.js",
+    "js:static/mount-tabs.js",
     "js:static/notif.js",
     "js:static/sidebar.js"
    ],
@@ -12156,6 +12369,7 @@
     "router:custom_records",
     "router:definitions",
     "router:org_structure",
+    "router:platform_menu",
     "router:system"
    ],
    "tables_r": [],
@@ -13329,7 +13543,9 @@
   "plat:customization": {
    "api_prefixes": [],
    "dynamic_sql": false,
-   "imports": [],
+   "imports": [
+    "plat:mounts"
+   ],
    "kind": "plat",
    "path": "backend/core/customization.py",
    "tables_ddl": [],
@@ -13412,6 +13628,19 @@
     "audit_log",
     "module_schema_versions"
    ]
+  },
+  "plat:mounts": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "plat:menu"
+   ],
+   "kind": "plat",
+   "path": "backend/core/mounts.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
   },
   "plat:pages": {
    "api_prefixes": [],
@@ -14456,6 +14685,7 @@
     "helper:custom_def_review",
     "helper:custom_fields",
     "helper:custom_module_delete",
+    "helper:custom_modules",
     "helper:doc_template",
     "helper:expense_types",
     "plat:catalog",
@@ -14528,37 +14758,37 @@
     },
     {
      "func": "get_definition_version",
-     "line": 299,
+     "line": 305,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 315,
+     "line": 321,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 340,
+     "line": 346,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 371,
+     "line": 377,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 384,
+     "line": 390,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 410,
+     "line": 416,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
@@ -15365,6 +15595,7 @@
     "helper:custom_modules",
     "plat:catalog",
     "plat:menu",
+    "plat:mounts",
     "plat:registry"
    ],
    "kind": "router",
@@ -15376,6 +15607,18 @@
      "line": 141,
      "method": "GET",
      "path": "/api/platform/menu"
+    },
+    {
+     "func": "platform_mounts",
+     "line": 166,
+     "method": "GET",
+     "path": "/api/platform/mounts"
+    },
+    {
+     "func": "platform_mount_points",
+     "line": 182,
+     "method": "GET",
+     "path": "/api/platform/mount-points"
     }
    ],
    "tables_ddl": [],
@@ -16737,7 +16980,9 @@
    "tables_w": [],
    "writers": [
     "mod:subcontract/api/contractor_vouchers",
-    "mod:subcontract/api/vendor_contractors"
+    "mod:subcontract/api/dispatch_approval",
+    "mod:subcontract/api/vendor_contractors",
+    "mod:subcontract/dispatch_flow"
    ]
   },
   "table:contractor_payment_vouchers": {
@@ -16758,6 +17003,7 @@
     "mod:case/api/quotations",
     "mod:case/recognition",
     "mod:subcontract/api/vendor_contractors",
+    "mod:subcontract/dispatch_flow",
     "mod:subcontract/gl_events"
    ],
    "tables_r": [],
@@ -16781,6 +17027,7 @@
    "readers": [
     "core:archive",
     "core:pdf_gen",
+    "mod:payroll/payslip_bank",
     "mod:subcontract/api/contractor_vouchers"
    ],
    "tables_r": [],
@@ -18735,6 +18982,7 @@
     "mod:analytics/api/reports",
     "mod:case/recognition",
     "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/dispatch_approval",
     "mod:subcontract/gl_events"
    ],
    "tables_r": [],

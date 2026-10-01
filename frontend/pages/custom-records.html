@@ -28,6 +28,19 @@
       document.documentElement.setAttribute('data-preview', '1')
     })()
   </script>
+  <script>
+    /* 嵌入模式（建構器方案 B：自訂模組掛成內建頁面的頁籤；docs/platform/plans/BUILDER-B-DESIGN.md §5.3）。
+     * ?embed=1 ⇒ 本頁被同源 iframe 嵌在別的頁裡：不畫頂欄／側欄、不跑通知腳本（旗標 window.MOTRIX_EMBED，sidebar.js／notif.js 看到就不執行），
+     * 並把頁面高度用 postMessage 回報給外層（mount-tabs.js 檢查 origin 與 source）。**不改任何權限判斷**：登入檢查（auth-guard）照跑、各端點照驗。 */
+    (function () {
+      try {
+        if (new URLSearchParams(location.search).get('embed') === '1') {
+          window.MOTRIX_EMBED = true
+          document.documentElement.setAttribute('data-embed', '1')
+        }
+      } catch (e) {}
+    })()
+  </script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -99,6 +112,9 @@
     .cr-f.is-preview-hl { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 6px; }
     .cr-f .cr-ph { color: var(--text-secondary); font-size: 13px; padding: 8px 0; }
     html[data-preview="1"] .cr-main { margin-left: 0; margin-top: 0; padding: 12px 16px 16px; }
+    html[data-embed="1"] #app-topbar, html[data-embed="1"] #app-sidebar, html[data-embed="1"] .sidebar-overlay, html[data-embed="1"] .pg { display: none !important; }
+    html[data-embed="1"] .cr-main { margin: 0; padding: 8px 4px 12px; }
+    html[data-embed="1"] body { background: transparent; min-height: 0; height: auto; }
   </style>
 </head>
 <body x-data="customRecordsPage()" x-init="init()" x-cloak>
@@ -497,6 +513,8 @@
         preview: !!window.MOTRIX_PREVIEW, previewHl: null,
         KNOWN_TYPES: ['text', 'textarea', 'number', 'date', 'daterange', 'select', 'radio', 'checkboxes', 'multiselect', 'checkbox', 'ref', 'formula', 'table', 'file', 'image'],
         computed: {}, computedTables: {}, _cmpTimer: null, _cmpSeq: 0, _rowSeq: 0,
+        //: 嵌入模式的上下文（方案 B）：外層頁面帶 `ctx.<鍵>=<值>`；欄位對應取自本模組定義的 mount.contextField；沒有 ⇒ 空（不篩選、不預填）
+        embed: !!window.MOTRIX_EMBED, embedCtx: { field: '', value: '' },
         retry: null,     // 網路失敗時錯誤列上的按鈕：{label, run, msg}（msg≠目前的 errMsg ⇒ 不顯示）
 
         _hdr() {
@@ -553,6 +571,12 @@
             this.def = m.data.definition
             this.metaVersion = m.data.version
             this._defCache[m.data.version] = m.data.definition
+            if (this.embed) {                                  // 方案 B：上下文值＝第一個 ctx.* 參數；欄位＝mount.contextField
+              var cf = ((this.def.mount || {}).contextField) || ''
+              var cv = ''
+              q.forEach(function (v, k) { if (cv === '' && k.indexOf('ctx.') === 0) cv = v })
+              this.embedCtx = { field: cf, value: cf ? cv : '' }
+            }
             document.title = (this.def.name || this.key) + ' — MOTRIX 專案管理系統'
             this.loadRefOptions(this.def)
             await this.loadList()
@@ -635,7 +659,10 @@
         async loadList() {
           this.listLoading = true
           try {
-            var url = this.base() + '/records' + (this.statusFilter ? '?status=' + encodeURIComponent(this.statusFilter) : '')
+            var qs = []
+            if (this.statusFilter) qs.push('status=' + encodeURIComponent(this.statusFilter))
+            if (this.embedCtx.field && this.embedCtx.value !== '') qs.push('field=' + encodeURIComponent(this.embedCtx.field) + '&value=' + encodeURIComponent(this.embedCtx.value))
+            var url = this.base() + '/records' + (qs.length ? '?' + qs.join('&') : '')
             var r = await this.api('GET', url)
             if (r.ok) this.records = r.data || []
             else this.fail('讀取列表失敗', r, { label: '重試', run: () => this.loadList() })
@@ -834,6 +861,7 @@
           this.formDef = this.def
           this.values = this.blankValues(this.def)
           this.fieldErr = {}; this.dropped = []
+          if (this.embedCtx.field && this.embedCtx.value !== '') this.values[this.embedCtx.field] = this.embedCtx.value     // 嵌入：預填上下文欄位
           this.computed = {}; this.computedTables = {}
           this.loadRefOptions(this.def)
           this.mode = 'new'
@@ -1086,6 +1114,22 @@
         fmt(v) { return L.formatValue(v) },
       }
     }
+  </script>
+  <script>
+    /* 嵌入模式：回報頁面高度給外層（同源，targetOrigin＝本頁 origin；外層收到時再驗 origin 與 source）。 */
+    (function () {
+      if (!window.MOTRIX_EMBED) return
+      var last = 0
+      function send() {
+        var h = Math.ceil(document.body.getBoundingClientRect().height)      // body 自己的高度（不是 scrollHeight：後者會跟著 iframe 視窗高度走、造成回報互相放大／縮小）
+        if (!h || h === last) return
+        last = h
+        try { parent.postMessage({ type: 'motrix-embed-height', height: h }, location.origin) } catch (e) {}
+      }
+      window.addEventListener('load', send)
+      if (window.ResizeObserver) new ResizeObserver(send).observe(document.body)
+      setInterval(send, 1000)
+    })()
   </script>
 </body>
 </html>

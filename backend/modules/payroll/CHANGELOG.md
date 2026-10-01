@@ -1,5 +1,9 @@
 # 薪資獎金 更新紀錄
 
+## 1.1.20 — 2026-10-01（wip/t31-payslip-mask-a3：勞報單收款帳號遮蔽，稽核 F1）
+- ⚠️ 行為變更（使用者裁示：只有最高管理者看得到完整帳號，沒有例外）：`GET /api/payslips/{no}` 對非最高管理者（持 payslip 模組）回 `data.bankAccountNumber`＝`****末四碼`＋`bankMasked=true`；`pdf-download` 的 PDF 文字只有末四碼、不帶存簿影本；匯出存檔（F2 法定紀錄）仍是完整版（不論誰按匯出），存檔讀取（`/archive/{idx}`）對非最高管理者改回傳遮蔽的重新產生版。
+- 寫入：遮蔽值原樣送回 ⇒ 沿用舊單的帳號；沒有舊值可沿用 ⇒ 400；非最高管理者建單／改單沒有帳號時，伺服器從外包名冊取值填入（真值不經過前端）。新增 `payslip_bank.py`（規則同 subcontract/bank_mask.py，模組之間不互相 import，測試逐案對照）；勞報單表單在帳號為遮蔽值時顯示「僅最高管理者可見完整帳號」。
+
 ## 1.1.19 — 2026-10-01（暫用號，列車取號；fix/t29-w2）員工收款帳號：寫入端點的稽核改由端點本體呼叫
 - `PUT /api/me/bank-account`、`PUT /api/bank-accounts/{user_id}`：稽核（`user.bank_account.update`）原本藏在內部 helper `_save` 裡，寫入端點稽核守門（`test_write_endpoints_are_audited`，只認端點本體直接呼叫 `_audit`）判為沒稽核而擋下全量測試；改成端點自己呼叫 `_audit`。稽核內容照舊（欄位、前後**末四碼**、byAdmin），另加 `userId`、`changedBy`；**不含帳號全碼與戶名**；沒有變更（noop）不寫稽核。下游效應（R1）：只多兩個稽核欄位，API 回應與資料不變。
 

@@ -2747,6 +2747,8 @@
                     外包總成本：
                     <strong style="color:var(--text-main);font-family:LINE Seed TW_OTF, sans-serif"
                             x-text="'NT$ ' + dispatchTotalCost().toLocaleString()"></strong>
+                    <span x-show="dispatchPendingNote()" x-text="'（' + dispatchPendingNote() + '）'" data-testid="dispatch-pending-note"
+                          style="color:var(--tone-warning-fg);font-size:11px"></span>
                   </div>
                   <button class="btn-add" @click="openNewDispatch()" style="padding:5px 12px;font-size:12px">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
@@ -2778,28 +2780,47 @@
                           <span x-show="d.scope" x-text="d.scope" style="font-style:italic"></span>
                         </div>
                       </div>
-                      <span :class="'badge ' + _dispatchStatusClass(d.status)" x-text="d.statusLabel"
+                      <span :class="'badge ' + _dispatchStatusClass(d.status)" x-text="d.displayStatus || d.statusLabel" data-testid="dispatch-status"
                             style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
+                      <span x-show="d.legacy" class="badge badge--draft" data-testid="dispatch-legacy-badge" title="此派發在審核機制上線前建立，未經審核"
+                            style="font-size:11px;padding:2px 6px;border-radius:4px;opacity:.8">舊單（未經審核）</span>
+                      <span x-show="d.docCode" x-text="d.docCode" style="font-size:11px;color:var(--text-dim)"></span>
                       <div style="font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-main)">
                         NT$ <span x-text="(d.grandTotal||0).toLocaleString()"></span>
                       </div>
+                      <!-- 31-A：審核與作業狀態操作（狀態只由這些按鈕改） -->
+                      <button x-show="d.status!=='cancelled' && ['草稿','已退回'].includes(d.approvalStatus)" @click="submitDispatch(d)" data-testid="dispatch-submit"
+                              style="padding:4px 10px;font-size:11px;border:none;background:var(--accent);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送審</button>
+                      <button x-show="d.approvalStatus==='待審核'" @click="withdrawDispatch(d)" data-testid="dispatch-withdraw"
+                              style="padding:4px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap">撤回送審</button>
+                      <button x-show="_dispatchCanAdvance(d) && d.status==='draft'" @click="setDispatchStatus(d,'sent','已送出')" data-testid="dispatch-sent"
+                              style="padding:4px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap">已送出</button>
+                      <button x-show="_dispatchCanAdvance(d) && d.status==='sent'" @click="setDispatchStatus(d,'confirmed','已確認')" data-testid="dispatch-confirmed"
+                              style="padding:4px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap">已確認</button>
+                      <button x-show="d.status==='accepted' && (d.legacy || d.approvalStatus==='已核准') && ['','已退回'].includes(d.completionStatus)" @click="requestDispatchCompletion(d)" data-testid="dispatch-completion-request"
+                              style="padding:4px 10px;font-size:11px;border:none;background:var(--accent);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">申請完工</button>
+                      <button x-show="d.completionStatus==='待審核'" @click="withdrawDispatchCompletion(d)" data-testid="dispatch-completion-withdraw"
+                              style="padding:4px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap">撤回完工申請</button>
                       <!-- 驗收快速操作 -->
-                      <button x-show="d.status==='confirmed' || d.status==='sent'"
+                      <button x-show="_dispatchCanAdvance(d) && (d.status==='confirmed' || d.status==='sent')"
                               @click="markPendingAcceptance(d)"
                               style="padding:4px 10px;font-size:11px;border:1px solid var(--tone-success-border);background:var(--tone-success-bg);color:var(--tone-success-fg);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">
                         待驗收
                       </button>
-                      <button x-show="d.status==='pending_acceptance'"
+                      <button x-show="d.status==='pending_acceptance' && _dispatchCanAdvance(d)"
                               @click="acceptDispatch(d)"
                               style="padding:4px 10px;font-size:11px;border:none;background:var(--tone-success-solid);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">
                         ✓ 確認驗收
                       </button>
-                      <button @click="openEditDispatch(d)" style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer">編輯</button>
+                      <button @click="openEditDispatch(d)" :disabled="_dispatchReviewing(d)" :title="_dispatchReviewing(d) ? '審核中不能編輯（請先撤回或等審核結果）' : ''" data-testid="dispatch-edit"
+                              style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer" :style="_dispatchReviewing(d) ? 'opacity:.45;cursor:not-allowed' : ''">編輯</button>
+                      <button x-show="!['cancelled','completed'].includes(d.status)" @click="cancelDispatch(d)" data-testid="dispatch-cancel"
+                              style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer;color:var(--danger)">取消</button>
                       <button @click="importDispatchToQuote(d)" title="匯入品項至報價單"
                               style="padding:4px 8px;font-size:11px;border:1px solid var(--tone-info-border);background:var(--accent-light);color:var(--accent-hover);border-radius:5px;cursor:pointer;white-space:nowrap">
                         ↩ 回推報價單
                       </button>
-                      <button @click="deleteDispatch(d)" style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer;color:var(--danger)">刪</button>
+                      <button x-show="!['待審核','簽核中','已核准'].includes(d.approvalStatus)" @click="deleteDispatch(d)" style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer;color:var(--danger)">刪</button>
                     </div>
                     <!-- Items list -->
                     <div x-show="d.items && d.items.length > 0" style="padding:10px 16px">
@@ -3634,19 +3655,6 @@
           <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">派發日期</label>
           <input type="date" x-model="dispatchForm.dispatch_date"
                  style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
-        </div>
-        <div>
-          <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">狀態</label>
-          <select data-saved-field x-model="dispatchForm.status"
-                  style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
-            <option value="draft">草稿</option>
-            <option value="sent">已送出</option>
-            <option value="confirmed">已確認</option>
-            <option value="pending_acceptance">待驗收</option>
-            <option value="accepted">已驗收</option>
-            <option value="completed">完工</option>
-            <option value="cancelled">已取消</option>
-          </select>
         </div>
         <div style="grid-column:1 / -1">
           <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">派工內容（工作範圍）</label>
