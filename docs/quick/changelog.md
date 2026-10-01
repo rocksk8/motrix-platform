@@ -35,6 +35,12 @@
 - 測試 `modules/analytics/tests/test_dept_follows_sales_owner_2026_10_01.py`（6 題：部門合計、與業務員績效對帳、無帳號⇒未分類、首頁篩選、收款異常、正向控制）。
 - 首頁「最新動態」（案件留言）部門篩選同日補上同規則；順手補齊 `_collect_expenses`／月趨勢查詢缺的 `sales_person` 欄（缺欄會在「開單者無帳號且未填業務負責」時 IndexError，已加回歸題）。§11 三列同步更新（部門彙總⇒完成；financial_view⇒部分修復；16 模組⇒已修復）。
 
+## 2026-10-01 簽核：登入橫幅每次都跳（已簽過）
+
+- 根因（程式碼＋重現測試）：`static/notif.js` 橫幅數字＝未讀 `approval_request` 通知列；報價單核准／退回／拒絕從不標已讀 ⇒ 簽過的項目永遠「待簽」，每次登入（登出清 sessionStorage 旗標）再跳。
+- 修：①橫幅改取 `/api/approval-queue/count`（與角標同一份），0 件不彈；②報價單三條路徑標通知已讀（`helpers.audit._mark_notifications_read`）。測試 `test_approval_notice_after_signing_2026_10_01.py`、`test_e2e_login_approval_banner_2026_10_01.py`（含反向控制）。
+- 後續（未做）：出貨／匯款申請／發票開立／承攬商憑證／完工單的簽核通知同樣缺標已讀；橫幅已不受影響（改看真實待簽數），但通知中心未讀數仍會殘留。
+
 ---
 
 ### 2026-09-30 — 排版器：重開時編輯被自己稍後的載入蓋掉（O7 第三次；`frontend/static/layout-editor.js`，DB 無異動）

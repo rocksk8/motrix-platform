@@ -24,6 +24,9 @@
 ## (next:minor) — 2026-10-01（fix/module-delete-ownership：刪除自訂模組）
 - L1（新增）：`helpers.custom_module_delete`（`delete_module`／`record_count`／`ModuleDeleteError`）——建構器「刪除模組」：整個自訂模組（所有版本＋草稿）一起刪；有單據拒絕（409＋單據數），`with_records` 才連單據刪，已有金流 outbox 或送審中一律拒絕。只新增；`DELETE /api/definitions/custom_module/{key}`（routers/definitions.py）呼叫它。modules.json 登記為 L1 單位。
 
+## (next:minor) — 2026-10-01（fix/login-approval-popup：簽核處理掉 ⇒ 待簽核通知標已讀）
+- L1（新增）：`helpers.audit._mark_notifications_read(ref_id, types, username=None)`（列入 `__l1_public__`）——簽核已處理（核准只標自己那筆、退回／拒絕標整張單）時把對應通知列標已讀。只新增。報價單核准／退回／拒絕結案已呼叫；登入橫幅改用 `/api/approval-queue/count`（`static/notif.js`）。
+
 ## 1.91 — 2026-09-30（wip/w2-bonus-correction：獎金更正單的三種通知）
 - L1（新增）：`helpers.email_notify.notify_bonus_correction_submitted／_approved／_returned`——獎金更正單送審／核准／駁回的通知信（信內不放金額）；`helpers/mail_types.py` 登記三個信件類型。只新增，舊呼叫端不受影響。
 

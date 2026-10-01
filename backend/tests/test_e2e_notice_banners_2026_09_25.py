@@ -52,9 +52,16 @@ def _session_only(client, context, user):
 
 
 def _pending_approval(username):
+    """一張真的輪到 username 簽的報價單（橫幅數字取自 /api/approval-queue/count；2026-10-01 起不再數未讀通知列）＋通知列。"""
     import db
     conn = db.get_db()
     try:
+        appr = {"requestedBy": "nb_requester", "requestedByDisplay": "申請人", "requestedAt": "2026-10-01T01:00:00",
+                "currentTier": 0, "tiers": [{"approvers": [{"username": username, "displayName": username, "status": "pending"}]}]}
+        conn.execute("INSERT OR REPLACE INTO quotations (quote_no, status, customer_name, project_name, total, data_json, created_at, updated_at)"
+                     " VALUES (?,?,?,?,?,?,?,?)",
+                     ("MQ-NB-PEND-" + username, "待審核", "客戶", "專案", 1000, json.dumps({"approval": appr}, ensure_ascii=False),
+                      "2026-10-01", "2026-10-01"))
         conn.execute("INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at)"
                      " VALUES (?,?,?,?,?,0,?)",
                      (username, "approval_request", NO, NO, "待簽核", datetime.now().isoformat()))
