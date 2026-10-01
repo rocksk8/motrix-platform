@@ -1437,7 +1437,7 @@
                 <div x-show="!xe.loading && xe.items.length > 0" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">
                   <div class="cm-kpi__pill">
                     <span class="cm-kpi__val" x-text="caseSettleFmt(xe.totalAmount)"></span>
-                    <span class="cm-kpi__lbl">支出總額（<span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="xe.items.length"></span> 筆）</span>
+                    <span class="cm-kpi__lbl">支出總額（<span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="xe.items.filter(i => i.status !== '已作廢').length"></span> 筆）</span>
                   </div>
                   <div class="cm-kpi__pill" :class="xe.totalPending > 0 ? 'warning' : ''">
                     <span class="cm-kpi__val" x-text="caseSettleFmt(xe.totalPending)"></span>
@@ -1478,6 +1478,7 @@
                         <span x-show="x.updatedByName" x-text="'（' + x.updatedByName + '）'"></span>
                       </span>
                       <span style="margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;color:var(--tone-warning-fg);font-size:13px"
+                            :style="x.status === '已作廢' ? 'text-decoration:line-through;opacity:.5' : ''"
                             x-text="caseSettleFmt(x.totalCost)"></span>
                     </div>
 
