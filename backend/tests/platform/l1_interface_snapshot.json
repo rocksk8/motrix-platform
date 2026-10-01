@@ -588,6 +588,21 @@
   "helper:errors": {
    "trace_id": "def()"
   },
+  "helper:expense_types": {
+   "CODE_RE": "const",
+   "DEFAULT_KINDS": "const",
+   "KIND": "const",
+   "MAX_LINES": "const",
+   "MAX_TEXT": "const",
+   "PREFIX_RE": "const",
+   "RESERVED_KEYS": "const",
+   "cashier_field_keys": "def(body)",
+   "get_type": "def(conn, code, version=…)",
+   "list_types": "def(conn)",
+   "normalize_lines": "def(lines)",
+   "validate_expense_type": "def(body, key=…)",
+   "validate_values": "def(conn, defn, data, lines, *, viewer)"
+  },
   "helper:financial_mask": {
    "HISTORY_MONEY_FIELDS": "const",
    "ITEM_MONEY_KEYS": "const",

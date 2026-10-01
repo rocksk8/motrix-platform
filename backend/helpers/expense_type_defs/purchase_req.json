@@ -1,0 +1,288 @@
+{
+ "name": "請購單",
+ "numbering": {
+  "prefix": "PR"
+ },
+ "payable": false,
+ "enabled": true,
+ "note": "請購單只是核准文件：不產生付款、不列入營運報表支出；採購單以請購單號引用。欄位待使用者確認後調整。",
+ "fields": [
+  {
+   "key": "applicant",
+   "label": "申請人",
+   "type": "ref",
+   "target": "users",
+   "dataClass": "T1",
+   "default": {
+    "$": "requester"
+   },
+   "required": true,
+   "locked": true,
+   "help": "預設為登入者；超級管理員可在定義中把 locked 改成 false 讓它可編輯"
+  },
+  {
+   "key": "dept",
+   "label": "部門",
+   "type": "ref",
+   "target": "departments",
+   "dataClass": "T1",
+   "required": true
+  },
+  {
+   "key": "req_date",
+   "label": "填表日期",
+   "type": "date",
+   "dataClass": "T1",
+   "default": {
+    "$": "today"
+   },
+   "required": true
+  },
+  {
+   "key": "ptype",
+   "label": "採購類型",
+   "type": "select",
+   "dataClass": "T1",
+   "options": [
+    "測試用設備",
+    "案件追加設備、零件",
+    "辦公庶務用品",
+    "其他"
+   ],
+   "default": "測試用設備",
+   "required": true
+  },
+  {
+   "key": "remark",
+   "label": "採購備註說明",
+   "type": "textarea",
+   "dataClass": "T1",
+   "maxLength": 1000,
+   "required": true
+  },
+  {
+   "key": "urgency",
+   "label": "緊急程度",
+   "type": "select",
+   "dataClass": "T1",
+   "options": [
+    "一般",
+    "急件",
+    "特急"
+   ],
+   "default": "一般",
+   "required": true
+  },
+  {
+   "key": "need_period",
+   "label": "需求日期",
+   "type": "daterange",
+   "dataClass": "T1",
+   "required": true
+  },
+  {
+   "key": "lines",
+   "label": "請購明細",
+   "type": "table",
+   "dataClass": "T1",
+   "required": true,
+   "minRows": 1,
+   "maxRows": 200,
+   "addLabel": "新增一列",
+   "columns": [
+    {
+     "key": "category",
+     "label": "費用類別",
+     "type": "select",
+     "optionsFrom": "expense_categories",
+     "required": true
+    },
+    {
+     "key": "summary",
+     "label": "品名／摘要",
+     "type": "text",
+     "required": true
+    },
+    {
+     "key": "qty",
+     "label": "數量",
+     "type": "number",
+     "min": 0,
+     "required": true
+    },
+    {
+     "key": "unitCost",
+     "label": "單價",
+     "type": "number",
+     "min": 0,
+     "required": true
+    },
+    {
+     "key": "amount",
+     "label": "小計",
+     "type": "formula",
+     "formula": "round_half_up(qty * unitCost)"
+    },
+    {
+     "key": "invoiceNo",
+     "label": "發票／憑證號碼",
+     "type": "text"
+    }
+   ]
+  },
+  {
+   "key": "total",
+   "label": "總計",
+   "type": "formula",
+   "dataClass": "T1",
+   "formula": "total(lines, \"amount\")"
+  }
+ ],
+ "ui": {
+  "form": {
+   "groups": [
+    {
+     "title": "基本資料",
+     "fields": [
+      "applicant",
+      "dept",
+      "req_date"
+     ]
+    },
+    {
+     "title": "採購資訊",
+     "fields": [
+      "ptype",
+      "remark",
+      "urgency",
+      "need_period"
+     ]
+    },
+    {
+     "title": "請購明細",
+     "fields": [
+      "lines"
+     ]
+    },
+    {
+     "title": "金額",
+     "fields": [
+      "total"
+     ]
+    }
+   ]
+  },
+  "list": {
+   "columns": [
+    "applicant",
+    "dept",
+    "ptype",
+    "total"
+   ]
+  }
+ },
+ "output": {
+  "template": {
+   "theme": "voucher_standard",
+   "blocks": [
+    {
+     "type": "identity_header",
+     "title": "請購單"
+    },
+    {
+     "type": "meta",
+     "fields": [
+      {
+       "label": "單號",
+       "path": "recordNo"
+      },
+      {
+       "label": "申請人",
+       "path": "fields.applicant"
+      },
+      {
+       "label": "部門",
+       "path": "fields.dept"
+      },
+      {
+       "label": "填表日期",
+       "path": "fields.req_date"
+      },
+      {
+       "label": "採購類型",
+       "path": "fields.ptype"
+      },
+      {
+       "label": "緊急程度",
+       "path": "fields.urgency"
+      },
+      {
+       "label": "需求日期",
+       "path": "fields.need_period"
+      },
+      {
+       "label": "採購備註",
+       "path": "fields.remark"
+      }
+     ]
+    },
+    {
+     "type": "items_table",
+     "source": "fields.lines",
+     "label": "明細",
+     "columns": [
+      {
+       "title": "#",
+       "format": "index"
+      },
+      {
+       "title": "費用類別",
+       "path": "category"
+      },
+      {
+       "title": "摘要",
+       "path": "summary"
+      },
+      {
+       "title": "數量",
+       "path": "qty",
+       "align": "right"
+      },
+      {
+       "title": "單價",
+       "path": "unitCost",
+       "format": "money",
+       "align": "right"
+      },
+      {
+       "title": "金額",
+       "path": "amount",
+       "format": "money",
+       "align": "right"
+      },
+      {
+       "title": "發票／憑證",
+       "path": "invoiceNo"
+      }
+     ]
+    },
+    {
+     "type": "totals",
+     "rows": [
+      {
+       "label": "合計",
+       "path": "fields.total",
+       "grand": true
+      }
+     ]
+    },
+    {
+     "type": "approval_sign"
+    },
+    {
+     "type": "identity_footer"
+    }
+   ]
+  }
+ }
+}
