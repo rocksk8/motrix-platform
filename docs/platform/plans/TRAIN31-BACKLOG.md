@@ -23,3 +23,4 @@
 - 登入「待簽核」通知：其他單據流程（出貨、付款、發票、承攬、完工、額外支出、自訂模組）簽核後仍未把自己的通知標已讀（彈窗已免疫，僅通知中心未讀數）。
 - 時鐘守門、去識別化 prodroot（wip/w3-prodroot-2）、`/api/expenses` 別名（可選）。
 - 殘留風險：結算頁信任前端送來的合計；`users.email/phone` 不在個資備份。
+- 簽核角標／登入橫幅的「待我簽核」數字只算「當層第一位未簽的人」（A29-B Q6，使用者已接受本班不改）：後端 `routers/approval_queue.py::_counts_for_me`（約 149–160 行）目前算當層**任一**未簽核人，但簽核本身是循序（`approve` 端點與前端 `canApprove`），同層第二位會看到「1 件待您簽核」卻按不下去（探針：tier [x,y]，y 的 `/count`＝1、y 核准＝403「請等待 x 先完成簽核」）。修法＝只算當層第一位未簽者；例外：系統關卡（`tiers[cur].system`）與 `custom_module_def` 同層任一人可簽、且後者排除申請人（對齊前端 `canApprove`）。影響：角標與橫幅數字變小（正確）；測試＝同層雙簽核人兩人各打 `/count`（x=1,y=0）＋核准後 y 變 1＋系統關卡／自訂模組定義例外＋突變（改回 any）。探針檔 `audit/train29-b` 的 `backend/tests/_probes/test_probe_q5_q6.py`。
