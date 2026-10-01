@@ -28,6 +28,7 @@
    "helper:custom_history",
    "helper:custom_fields",
    "helper:custom_modules",
+   "helper:custom_module_delete",
    "helper:formula",
    "helper:dates",
    "helper:doc_template",

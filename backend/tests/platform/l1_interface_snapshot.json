@@ -412,6 +412,12 @@
    "on_decided": "def(conn, rec, result, user, note=…)",
    "on_submitted": "def(conn, rec, user)"
   },
+  "helper:custom_module_delete": {
+   "ModuleDeleteError": "class",
+   "ModuleDeleteError.__init__": "def(self, message, status=…, records=…)",
+   "delete_module": "def(conn, key, with_records=…)",
+   "record_count": "def(conn, key)"
+  },
   "helper:custom_modules": {
    "APPROVER_SOURCES": "const",
    "CustomModuleError": "class",

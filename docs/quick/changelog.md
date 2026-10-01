@@ -15,6 +15,26 @@
 - [`changelog-2026-09-08_2026-09-14.md`](changelog-2026-09-08_2026-09-14.md)：2026-09-08 ～ 2026-09-14，65 則
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
+
+## 2026-10-01 模組建構器：刪除模組
+
+- 新增 `DELETE /api/definitions/custom_module/{key}`（`helpers/custom_module_delete.py`）：無單據直接刪；有單據 409＋單據數；`?with_records=1` 連單據刪，已入帳（金流 outbox 有紀錄）或送審中一律拒絕。前端首頁每列「刪除模組」。測試 `test_delete_custom_module_2026_10_01.py`。
+- 取捨：「已發布版本不可刪」不變式只在此一處例外（整模組刪）。
+- 待辦：「把功能加進既有模組（而非新增獨立模組）」尚未做，見對話裁示。
+
+
+## 2026-10-01 模組建構器：選單位置清單修正（方案 A）
+
+- `module-builder-core.js:readMenuGroups` 改讀 `window.MOTRIX_MENU.groups`（伺服器宣告，與使用者版面／側欄渲染時機無關）＋已發布自訂模組的分組；新增 `groupOptions()`／`groupMissing()`：已存分組不在清單時保留並提醒。頁面補說明：這是選單項目，不是頁內頁籤。e2e：`test_e2e_builder_menu_group_2026_10_01.py`。
+- 取捨：頁內頁籤掛載（方案 B）**延後、未捨棄**，見 `docs/platform/plans/BUILDER-ATTACH-EXISTING-MODULE-SPEC.md`。
+
+
+## 2026-10-01 營運報表：案件部門跟業務負責人
+
+- 新增 `reports.py::_case_dept()`／`_load_user_index()`／`_row_cr()`；`_row_dept`、`_collect_unreceived_items`、`_collect_payment_anomalies`、`_collect_expenses`、月趨勢類彙總與 `dashboard.py`（stats、月趨勢）改用它。規則：負責人是帳號 ⇒ 該帳號部門；名字型／查無帳號 ⇒ 未分類；未填 ⇒ 開單者。
+- 測試 `modules/analytics/tests/test_dept_follows_sales_owner_2026_10_01.py`（6 題：部門合計、與業務員績效對帳、無帳號⇒未分類、首頁篩選、收款異常、正向控制）。
+- 首頁「最新動態」（案件留言）部門篩選同日補上同規則；順手補齊 `_collect_expenses`／月趨勢查詢缺的 `sales_person` 欄（缺欄會在「開單者無帳號且未填業務負責」時 IndexError，已加回歸題）。§11 三列同步更新（部門彙總⇒完成；financial_view⇒部分修復；16 模組⇒已修復）。
+
 ---
 
 ### 2026-09-30 — 排版器：重開時編輯被自己稍後的載入蓋掉（O7 第三次；`frontend/static/layout-editor.js`，DB 無異動）

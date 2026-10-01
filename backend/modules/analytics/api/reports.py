@@ -198,9 +198,7 @@ def _case_sales_owner(cr: dict, row, name_index: dict, user_by_id: dict):
          `sales_person_id` / `sales_person`。舊案件不回填是刻意的：那個欄位
          當初沒人填，補一個猜測值只會製造假資料。
 
-    ⚠️ **部門彙總仍然依 `sales_person_id`**，沒有跟著改（見 `_row_dept()`）。
-    那是另一條線：部門篩選會影響整份報表的取數範圍，改動面遠大於這次交辦，
-    而且要先決定「案件的部門是跟著開單者還是跟著業務負責」。已記在 §11。
+    部門歸屬 2026-10-01 起同樣跟著這個歸屬（見 `_case_dept()`）。
     """
     raw = (cr.get("roles") or {}).get("sales") if isinstance(cr, dict) else None
     # CM3（2026-09-24）：物件形狀直接用帳號定位（改名、同名都不影響）；未轉換的舊字串照舊反查
@@ -224,6 +222,46 @@ def _case_sales_owner(cr: dict, row, name_index: dict, user_by_id: dict):
     return ("name", label), label
 
 
+def _load_user_index(conn):
+    """users ⇒ (user_by_id, name_index)：部門歸屬與業務負責反查共用（`_case_sales_owner`／`_case_dept` 的輸入）。"""
+    user_by_id = {
+        r["id"]: {"deptId": r["department_id"], "deptName": r["dept_name"], "displayName": r["display_name"],
+                  "username": r["username"]}
+        for r in conn.execute("""
+            SELECT u.id, u.username, u.department_id, u.display_name, d.name AS dept_name
+            FROM users u LEFT JOIN departments d ON d.id = u.department_id
+        """).fetchall()
+    }
+    return user_by_id, _build_name_index(user_by_id)
+
+
+def _row_cr(row) -> dict:
+    """quotations 列的 caseRecord ⇒ dict；缺或壞 ⇒ {}。列有 `cr_json` 用它；只有 `data_json` 就在 Python 逐筆解析
+    （新程式不寫 `json_extract(`：壞的一筆只影響那一筆，見 tests/platform/test_json_extract_ratchet.py）。"""
+    try:
+        keys = row.keys()
+        if "cr_json" in keys:
+            v = json.loads(row["cr_json"]) if row["cr_json"] else {}
+        elif "data_json" in keys:
+            v = (json.loads(row["data_json"] or "{}") or {}).get("caseRecord") or {}
+        else:
+            v = {}
+    except Exception:
+        return {}
+    return v if isinstance(v, dict) else {}
+
+
+def _case_dept(cr: dict, row, name_index: dict, user_by_id: dict):
+    """案件的部門 ⇒ (department_id, department_name)：**跟著業績歸屬的業務負責人**（`_case_sales_owner`），不是開單者。
+
+    2026-10-01 使用者裁示：案件部門跟 `caseRecord.roles.sales`。規則與業務員績效表同一份（兩表並排看，必須對得起來）：
+    歸屬是帳號（key＝("id", uid)）⇒ 該帳號的部門；只有名字、查無帳號、同名無法唯一 ⇒ 「未分類」，**不**悄悄退回開單者的部門。
+    例外：`roles.sales` 沒填時 `_case_sales_owner` 本來就退回 `sales_person_id`（開單者），部門照舊跟開單者。"""
+    key, _label = _case_sales_owner(cr, row, name_index, user_by_id)
+    info = user_by_id.get(key[1]) if key[0] == "id" else None
+    return (info["deptId"], info["deptName"]) if info else (None, "未分類")
+
+
 def _collect(period_start: str, period_end: str, department_id: Optional[int] = None) -> dict:
     conn = get_db()
     rows = conn.execute("""
@@ -245,29 +283,20 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     # 直接存部門），displayName 則供下方業務員績效/目標達成率用 id 比對、
     # 但顯示「目前」名稱（不受 quotations.sales_person 這個建立當下快照字串
     # 影響，見 case["salesPersonId"] 的說明）。
-    user_by_id = {
-        r["id"]: {"deptId": r["department_id"], "deptName": r["dept_name"], "displayName": r["display_name"],
-                  "username": r["username"]}
-        for r in conn.execute("""
-            SELECT u.id, u.username, u.department_id, u.display_name, d.name AS dept_name
-            FROM users u LEFT JOIN departments d ON d.id = u.department_id
-        """).fetchall()
-    }
+    user_by_id, name_index = _load_user_index(conn)
     # 案件實際「成案」的月份（見 helpers/quotations.py::quote_won_month_map()
     # docstring）——優先 quote_date，quote_date 缺漏或誤填未來日期才退回
     # audit_log 實際成案時間戳；monthly_trend() 已經用這個避開「舊案件補登/
     # 業務員手誤填未來日期，被歸錯月份甚至整筆從近N月報表消失」的坑，這裡
     # 一併存進每個 case，讓 _compute_achievement()（年度目標達成率）也能用
     # 同一套邏輯判斷案件算哪一年，不要各自用一半的日期判斷邏輯。
-    name_index = _build_name_index(user_by_id)
     won_month = quote_won_month_map(conn)
     live_dispatch_totals = _live_dispatch_totals_by_quote(conn)
     conn.close()
 
     def _row_dept(row):
         """回傳 (department_id, department_name) 或 (None, '未分類')。"""
-        info = user_by_id.get(row["sales_person_id"])
-        return (info["deptId"], info["deptName"]) if info else (None, "未分類")
+        return _case_dept(_row_cr(row), row, name_index, user_by_id)
 
     if department_id:
         rows = [r for r in rows if _row_dept(r)[0] == department_id]
@@ -413,7 +442,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     sales.sort(key=lambda x: x["totalAmount"], reverse=True)
 
     # dept perf（依部門彙總，跟上面「依業務員」同樣算法，多一層部門分組；
-    # 查無 sales_person_id 對應部門的案件歸類「未分類」）
+    # 業務負責人查無帳號／部門的案件歸類「未分類」）
     for c in cases_all:
         k = c["deptName"] or "未分類"
         dm.setdefault(k, {"deptId": c["deptId"], "deptName": k, "cases": 0, "total": 0, "received": 0,
@@ -3029,14 +3058,12 @@ def _collect_unreceived_items(d0: str, d1: str, department_id: Optional[int] = N
         FROM quotations
         WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
     """).fetchall()
-    dept_by_user = {}
-    if department_id:
-        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+    user_by_id, name_index = _load_user_index(conn) if department_id else ({}, {})
     conn.close()
 
     items = []
     for row in rows:
-        if department_id and dept_by_user.get(row["sales_person_id"]) != department_id:
+        if department_id and _case_dept(_row_cr(row), row, name_index, user_by_id)[0] != department_id:
             continue
         cr = {}
         if row["cr_json"]:
@@ -3101,15 +3128,12 @@ def _collect_payment_anomalies(department_id: Optional[int] = None) -> list:
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag_eff
         FROM quotations
     """).fetchall()
-    dept_by_user = {}
-    if department_id:
-        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute(
-            "SELECT id, department_id FROM users").fetchall()}
+    user_by_id, name_index = _load_user_index(conn) if department_id else ({}, {})
     conn.close()
 
     items = []
     for row in rows:
-        if department_id and dept_by_user.get(row["sales_person_id"]) != department_id:
+        if department_id and _case_dept(_row_cr(row), row, name_index, user_by_id)[0] != department_id:
             continue
         cr = {}
         if row["cr_json"]:
@@ -3392,7 +3416,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
 
     department_id（2026-08-28 新增）：承攬商派發／料件進貨／其他支出三類都只透過
     quote_no 間接連結案件，不像 dashboard.py 的案件列表本身就有 sales_person_id
-    可直接篩——這裡改用 quote_no → sales_person_id → department_id 兩段查表比對。
+    可直接篩——這裡改用 quote_no → 案件業務負責人（`_case_dept`）→ department_id 兩段查表比對。
     設備進貨若料號批次沒有掛在任何案件（quote_no 為空，例如尚未出貨的常備庫存
     先行進貨），department_id 篩選開啟時會被排除，因為無法歸屬到任何部門，這點
     與 dashboard.py「案件沒有 sales_person_id 就被篩掉」的既有落差一致。"""
@@ -3409,10 +3433,11 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
 
     dept_by_quote: dict = {}
     if department_id:
-        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+        user_by_id, name_index = _load_user_index(conn)
         dept_by_quote = {
-            r["quote_no"]: dept_by_user.get(r["sales_person_id"])
-            for r in conn.execute("SELECT quote_no, sales_person_id FROM quotations").fetchall()
+            r["quote_no"]: _case_dept(_row_cr(r), r, name_index, user_by_id)[0]
+            for r in conn.execute("SELECT quote_no, sales_person_id, sales_person, data_json "
+                                  "FROM quotations").fetchall()
         }
 
     def _quote_in_department(quote_no: str) -> bool:
@@ -3577,10 +3602,7 @@ def _collect_receivable_items(department_id: Optional[int] = None) -> list:
   _collect() L161/L249 已經驗證過該防呆邏輯。"""
   conn = get_db()
 
-  dept_by_user = {}
-  if department_id:
-    dept_by_user = {r["id"]: r["department_id"]
-                    for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+  user_by_id, name_index = _load_user_index(conn) if department_id else ({}, {})
 
   won_month = quote_won_month_map(conn)
 
@@ -3594,7 +3616,7 @@ def _collect_receivable_items(department_id: Optional[int] = None) -> list:
          WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')
                IN ('已成案','已結案')"""
   ).fetchall():
-    if department_id and dept_by_user.get(row["sales_person_id"]) != department_id:
+    if department_id and _case_dept(_row_cr(row), row, name_index, user_by_id)[0] != department_id:
       continue
 
     try:

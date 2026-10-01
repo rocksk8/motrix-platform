@@ -206,6 +206,23 @@ def delete_definition_draft(kind: str, key: str, scope: str = Query("company"), 
     return {"ok": True}
 
 
+@router.delete("/api/definitions/custom_module/{key}")
+def delete_custom_module(key: str, with_records: bool = Query(False), authorization: str = Header(None)):
+    """刪整個自訂模組（所有版本＋草稿）。有單據 ⇒ 409（帶單據數）；`with_records=1` 才連單據一起刪（已入帳的一律拒絕）。"""
+    from helpers import custom_module_delete as MD
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        r = MD.delete_module(conn, key, with_records)
+    except MD.ModuleDeleteError as e:
+        return JSONResponse(status_code=e.status, content={"detail": str(e), "records": e.records})
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "definitions.delete_module", "ui_definition", "custom_module/%s/company" % key,
+           "刪自訂模組 %s（%d 個版本、%d 筆單據）" % (key, r["versions"], r["records"]), r)
+    return dict(r, ok=True)
+
+
 @router.get("/api/definitions/{kind}/{key}")
 def get_definition(kind: str, key: str, scope: str = Query("company"), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
