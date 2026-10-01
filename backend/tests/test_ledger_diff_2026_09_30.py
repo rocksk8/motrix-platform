@@ -126,6 +126,8 @@ def test_accrual_basis_has_no_tax_bucket(client, conn, sa, monkeypatch):
     feb = next(m for m in j["months"] if m["month"] == "%d-02" % Y)
     assert feb["income"]["buckets"]["tax"] == 0 and feb["expense"]["buckets"]["tax"] == 0
     assert sum(feb["expense"]["buckets"].values()) == feb["expense"]["diff"]
+    ctr = feb["expense"]["categories"]["contractor"]                      # 類別層級（#3(b)）：應計＝未稅 ⇒ 稅額桶 0；這個替身沒有個人外包 ⇒ 0；差額 500−500＝0 全在 residual 之外
+    assert (ctr["buckets"]["tax"], ctr["buckets"]["individual"]) == (0, 0) and ctr["diff"] == sum(ctr["buckets"].values())
 
 
 def test_permissions_and_validation(client, make_user, sa):
@@ -146,13 +148,18 @@ def test_gl_provider_absent_says_so_and_shows_report_only(client, sa, monkeypatc
     assert j["totals"]["income"]["diff"] is None                                          # 沒有總帳 ⇒ 不是 0，是沒有
 
 
-def test_category_level_has_no_buckets_and_the_page_says_so(client, sa, monkeypatch):
-    """低風險 #3（選 a）：類別層級沒有原因分桶 ⇒ notes 明說，畫面（reports.html 的 glDiff.notes 迴圈）逐條顯示。"""
-    from modules.analytics.api import ledger_diff as LD
-    _patch_report(monkeypatch, income={"%d-02" % Y: 1250}, expenses={})
-    j = client.get("/api/reports/ledger-diff", params={"year": Y}, headers=sa).json()
-    assert any("類別" in n and "沒有分桶" in n for n in j["notes"]), j["notes"]
-    feb = next(m for m in j["months"] if m["month"] == "%d-02" % Y)
-    assert all("buckets" not in c for c in feb["expense"]["categories"].values())       # 說的與事實一致：類別真的沒有分桶
+def test_category_level_has_buckets_and_the_note_says_which(client, conn, sa, monkeypatch):
+    """低風險 #3(b)：類別層級有原因分桶（tax／individual／manual／bonus＋residual）；notes 說明各桶的意思；畫面逐條顯示 notes。
+    （期望值的手算驗證在 accounting/tests/test_ledger_diff_category_buckets_2026_10_01.py）"""
     from core import source_tree
+    _book(conn)
+    _patch_report(monkeypatch, income={"%d-02" % Y: 1250}, expenses={"%d-02" % Y: {"contractor": 525, "other": 100}})
+    j = client.get("/api/reports/ledger-diff", params={"year": Y}, headers=sa).json()
+    assert any("類別" in n and "個人外包" in n and "稅額" in n for n in j["notes"]), j["notes"]
+    feb = next(m for m in j["months"] if m["month"] == "%d-02" % Y)
+    for k, cat in feb["expense"]["categories"].items():
+        assert set(cat["buckets"]) == {"tax", "individual", "manual", "bonus", "residual"}, k
+        assert cat["diff"] == sum(cat["buckets"].values()), (k, cat)
+    assert feb["expense"]["categories"]["contractor"]["buckets"]["tax"] == 25          # 現金口徑：E04 進項稅 25（_book）
+    assert feb["expense"]["categories"]["other"]["buckets"]["manual"] == -100          # 手工傳票費用 100：只在總帳
     assert 'x-for="n in glDiff.notes"' in source_tree.page_file("reports.html").read_text(encoding="utf-8")

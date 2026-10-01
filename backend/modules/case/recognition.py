@@ -233,6 +233,38 @@ def dispatch_entries(conn, basis):
     return out
 
 
+def individual_linked_entries(conn, basis):
+    """匯款單裡『已關聯勞報單』的個人外包金額 → [{date, dispatchId, amount}]（給『與總帳差異』頁的類別分桶）。
+
+    為什麼要單獨列：營運報表的「承攬商派發」把個人外包（匯款單 personnel）算在承攬商裡；總帳對已關聯勞報單的個人改記勞報單（E06＝勞務費用，歸「其他」，
+    見 subcontract/gl_events.py 的 `linked`：同一條規則——姓名非空且帶 payslipNo 者）。這兩邊的類別差就是這個金額。
+    日期與 `dispatch_entries` 的報表口徑相同：現金＝匯款已付日（只算已付匯款單）；應計＝派工的認列日（取該派工**已付**匯款單上關聯的個人；
+    應計派工本身沒有 payslipNo，關聯只存在匯款單快照）。只增函式，不改任何既有回傳。"""
+    def _linked(snap):
+        total = 0
+        for q in (snap.get("personnel") or []):
+            if isinstance(q, dict) and str(q.get("name") or "").strip() and str(q.get("payslipNo") or "").strip():
+                total += int(round_half_up(q.get("amount") or 0))
+        return total
+    rows = conn.execute("SELECT dispatch_id, snapshot_json, paid_at FROM contractor_payment_vouchers WHERE is_paid = 1").fetchall()
+    per_dispatch, out = {}, []
+    for r in rows:
+        try:
+            amt = _linked(json.loads(r["snapshot_json"] or "{}"))
+        except (TypeError, ValueError):
+            continue
+        if not amt:
+            continue
+        per_dispatch[r["dispatch_id"]] = per_dispatch.get(r["dispatch_id"], 0) + amt
+        paid = (r["paid_at"] or "")[:10]
+        if basis == "cash" and paid:
+            out.append({"date": paid, "dispatchId": r["dispatch_id"], "amount": amt})
+    if basis == "cash":
+        return out
+    return [{"date": e["date"], "dispatchId": e["dispatchId"], "amount": per_dispatch[e["dispatchId"]]}
+            for e in dispatch_entries(conn, basis) if per_dispatch.get(e["dispatchId"])]
+
+
 def material_entries(conn, basis, department_id=None):
     """叫料（案件 data_json）→ 逐筆。沒有稅欄位 ⇒ 一律「未拆稅」。"""
     out = []
