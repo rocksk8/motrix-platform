@@ -87,7 +87,7 @@ def _now():
     return datetime.now().isoformat(timespec="seconds")
 
 
-def do_submit(did, user, authorization, st: Stage, *, allowed_from, extra_check=None, on_auto_approved=None):
+def dispatch_review_submit(did, user, authorization, st: Stage, *, allowed_from, extra_check=None, on_auto_approved=None):
     """送審：解析流程 → 沒設層直接核准，否則進第一層。回傳 dict。"""
     conn = get_db()
     try:
@@ -148,7 +148,7 @@ def do_submit(did, user, authorization, st: Stage, *, allowed_from, extra_check=
     return result
 
 
-def do_approve(did, body, user, authorization, st: Stage, *, on_done=None):
+def dispatch_review_approve(did, body, user, authorization, st: Stage, *, on_done=None):
     conn = get_db()
     try:
         begin_write(conn)
@@ -207,7 +207,7 @@ def do_approve(did, body, user, authorization, st: Stage, *, on_done=None):
     return {"ok": True, "approvalStatus": new_status, "currentTier": appr["currentTier"]}
 
 
-def do_reject(did, body, user, authorization, st: Stage):
+def dispatch_review_reject(did, body, user, authorization, st: Stage):
     reason = str((body or {}).get("reason") or "").strip()
     if not reason:
         raise HTTPException(400, "退回必須填寫理由")
@@ -244,7 +244,7 @@ def do_reject(did, body, user, authorization, st: Stage):
     return {"ok": True, "approvalStatus": _flow.RETURNED}
 
 
-def do_withdraw(did, user, authorization, st: Stage, *, back_to):
+def dispatch_review_withdraw(did, user, authorization, st: Stage, *, back_to):
     """撤回：只有送審人本人或最高管理者；只有「待審核」（第一層還沒人簽）可撤回。"""
     conn = get_db()
     try:
@@ -276,25 +276,25 @@ def do_withdraw(did, user, authorization, st: Stage, *, back_to):
 @router.post("/api/contractor-dispatches/{did}/submit")
 def submit_dispatch(did: int, authorization: str = Header(None)):
     user = _require_dispatch_user(authorization)
-    return do_submit(did, user, authorization, STAGE1, allowed_from=(_flow.DRAFT, _flow.RETURNED))
+    return dispatch_review_submit(did, user, authorization, STAGE1, allowed_from=(_flow.DRAFT, _flow.RETURNED))
 
 
 @router.post("/api/contractor-dispatches/{did}/approve")
 def approve_dispatch(did: int, body: dict = Body(default={}), authorization: str = Header(None)):
     user = _require_user(authorization)          # 簽核人不一定是 admin／有承攬商模組：能不能簽只看「是否當層簽核人」
-    return do_approve(did, body, user, authorization, STAGE1)
+    return dispatch_review_approve(did, body, user, authorization, STAGE1)
 
 
 @router.post("/api/contractor-dispatches/{did}/reject")
 def reject_dispatch(did: int, body: dict = Body(default={}), authorization: str = Header(None)):
     user = _require_user(authorization)
-    return do_reject(did, body, user, authorization, STAGE1)
+    return dispatch_review_reject(did, body, user, authorization, STAGE1)
 
 
 @router.post("/api/contractor-dispatches/{did}/withdraw")
 def withdraw_dispatch(did: int, authorization: str = Header(None)):
     user = _require_dispatch_user(authorization)
-    return do_withdraw(did, user, authorization, STAGE1, back_to=_flow.DRAFT)
+    return dispatch_review_withdraw(did, user, authorization, STAGE1, back_to=_flow.DRAFT)
 
 
 # ── 第二段（完工審核）端點：作業狀態維持 accepted，全部簽完才由 set_status(via_completion=True) 設 completed ──
@@ -323,26 +323,26 @@ def _complete(conn, row, user):
 @router.post("/api/contractor-dispatches/{did}/completion/request")
 def request_completion(did: int, authorization: str = Header(None)):
     user = _require_dispatch_user(authorization)
-    return do_submit(did, user, authorization, STAGE2, allowed_from=("", _flow.RETURNED),
+    return dispatch_review_submit(did, user, authorization, STAGE2, allowed_from=("", _flow.RETURNED),
                      extra_check=_need_accepted, on_auto_approved=_complete)
 
 
 @router.post("/api/contractor-dispatches/{did}/completion/approve")
 def approve_completion(did: int, body: dict = Body(default={}), authorization: str = Header(None)):
     user = _require_user(authorization)
-    return do_approve(did, body, user, authorization, STAGE2, on_done=_complete)
+    return dispatch_review_approve(did, body, user, authorization, STAGE2, on_done=_complete)
 
 
 @router.post("/api/contractor-dispatches/{did}/completion/reject")
 def reject_completion(did: int, body: dict = Body(default={}), authorization: str = Header(None)):
     user = _require_user(authorization)
-    return do_reject(did, body, user, authorization, STAGE2)
+    return dispatch_review_reject(did, body, user, authorization, STAGE2)
 
 
 @router.post("/api/contractor-dispatches/{did}/completion/withdraw")
 def withdraw_completion(did: int, authorization: str = Header(None)):
     user = _require_dispatch_user(authorization)
-    return do_withdraw(did, user, authorization, STAGE2, back_to="")
+    return dispatch_review_withdraw(did, user, authorization, STAGE2, back_to="")
 
 
 # ── 待我簽核佇列（IP-10）／詳情／轉簽：兩種 type，各讀自己那一段的欄位 ─────────────────────

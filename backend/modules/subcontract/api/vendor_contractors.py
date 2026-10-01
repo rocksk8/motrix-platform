@@ -1090,10 +1090,10 @@ def accept_dispatch(did: int, body: dict, authorization: str = Header(None)):
     action = body.get("action", "")
     if action not in _ACCEPT_ALLOWED_FROM:
         raise HTTPException(400, "不支援的驗收操作：請使用派工列上的「待驗收」或「確認驗收」按鈕。")
-    return _apply_status(did, action, user, authorization, reason="", legacy_action=True)
+    return dispatch_status_audited(did, action, user, authorization, reason="", legacy_action=True)
 
 
-def _apply_status(did, target, user, authorization, *, reason="", legacy_action=False):
+def dispatch_status_audited(did, target, user, authorization, *, reason="", legacy_action=False):
     """所有「改作業狀態」的端點共用：讀列 → `dispatch_flow.set_status`（唯一寫入口）→ commit → 稽核／通知。"""
     conn = get_db()
     try:
@@ -1131,7 +1131,7 @@ def set_dispatch_status(did: int, body: dict, authorization: str = Header(None))
     target = str((body or {}).get("target") or "")
     if target not in _flow.STATUSES:
         raise HTTPException(400, "不認得的狀態")
-    return _apply_status(did, target, user, authorization, reason=str((body or {}).get("reason") or ""))
+    return dispatch_status_audited(did, target, user, authorization, reason=str((body or {}).get("reason") or ""))
 
 
 # ── 回推報價單品項 ────────────────────────────────────────────────────────────

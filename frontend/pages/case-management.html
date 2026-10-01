@@ -2691,8 +2691,8 @@
                       <span :class="'badge ' + _dispatchStatusClass(d.status)" x-text="d.displayStatus || d.statusLabel" data-testid="dispatch-status"
                             style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
                       <span x-show="d.legacy" class="badge badge--draft" data-testid="dispatch-legacy-badge" title="此派發在審核機制上線前建立，未經審核"
-                            style="font-size:10px;padding:2px 6px;border-radius:4px;opacity:.8">舊單（未經審核）</span>
-                      <span x-show="d.docCode" x-text="d.docCode" style="font-size:10px;color:var(--text-dim)"></span>
+                            style="font-size:11px;padding:2px 6px;border-radius:4px;opacity:.8">舊單（未經審核）</span>
+                      <span x-show="d.docCode" x-text="d.docCode" style="font-size:11px;color:var(--text-dim)"></span>
                       <div style="font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-main)">
                         NT$ <span x-text="(d.grandTotal||0).toLocaleString()"></span>
                       </div>
