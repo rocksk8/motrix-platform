@@ -243,8 +243,13 @@ def test_quotation(client, live_server, make_user, new_page, login_as, company, 
     ret = page.locator(".modal-foot button:has-text('退回修改'):visible").first
     ret.wait_for(state="visible", timeout=30000)
     ret.click()
-    page.locator("textarea:visible").first.wait_for(timeout=15000)
-    page.fill("textarea:visible", "報價預覽退回")
+    # 🔴 不可用 `textarea:visible`：報價單頁背後的表單（品名、付款條件…）本來就有可見的 textarea，而退回視窗的 textarea 要等
+    # x-show 顯示出來才算「可見」——點下去到顯示之間（機器忙時更久），`:visible` 會先命中表單的 textarea ⇒ 原因被填進品名、
+    # rejectNote 仍是空的 ⇒「確認退回」disabled ⇒ 點了逾時。依賴的是機器負載（競態），不是日期或資料。
+    # 鎖定退回視窗自己的 textarea（x-model=rejectNote，quotation-form.html）並等它真的可見才填。
+    reject_box = page.locator('textarea[x-model="rejectNote"]')
+    reject_box.wait_for(state="visible", timeout=15000)
+    reject_box.fill("報價預覽退回")
     page.locator("button:has-text('確認退回'):visible").first.click()
     page.wait_for_function("() => location.href.indexOf('-R1') >= 0", timeout=60000)
     rows = _db("SELECT status, quote_no FROM quotations WHERE quote_no LIKE ?", (qno + "%",))
