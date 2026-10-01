@@ -15,7 +15,9 @@
 [契約題] tests/test_builder3_files_2026_09_30.py
 """
 import json
+import logging
 import os
+import re
 from datetime import datetime
 
 from . import custom_builder_support as _S
@@ -53,9 +55,36 @@ def register_staged(conn, module_key, field, saved, username) -> list:
     return out
 
 
-def _remove_physical(path):
+_logger = logging.getLogger(__name__)
+
+
+def _safe_physical_path(rel):
+    """資料庫存的相對路徑 ⇒ 實體檔的真實路徑；**只准在 UPLOADS_ROOT 底下**，否則 None（呼叫端略過、不刪、不丟例外）。
+    `custom_record_files.path` 是資料庫欄位，不是可信輸入：絕對路徑、`..`、磁碟機代號／UNC、符號連結繞出去都不算。
+    做法同 `uploads.upload_path_key`／`doc_dir`：realpath 後 commonpath（Windows 用 normcase）必須等於根，且不能就是根本身。"""
+    s = str(rel or "")
+    if not s or os.path.isabs(s) or s[0] in "/\\" or ":" in s:
+        return None
+    segs = re.split("[" + re.escape(chr(92)) + "/]", s)          # 反斜線與斜線都當分隔
+    if any(x in ("", ".", "..") for x in segs):
+        return None
+    root = os.path.realpath(_up.UPLOADS_ROOT)
+    real = os.path.realpath(os.path.join(root, *segs))
     try:
-        full = os.path.join(_up.UPLOADS_ROOT, path)
+        inside = os.path.commonpath([os.path.normcase(root), os.path.normcase(real)]) == os.path.normcase(root)
+    except ValueError:                                   # 不同磁碟機
+        return None
+    if not inside or os.path.normcase(real) == os.path.normcase(root):
+        return None
+    return real
+
+
+def _remove_physical(path):
+    full = _safe_physical_path(path)
+    if full is None:
+        _logger.warning("custom_record_files.path 不在 uploads 之內，略過刪除：%r", str(path)[:120])
+        return
+    try:
         if os.path.isfile(full):
             os.remove(full)
     except OSError:

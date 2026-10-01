@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-01（fix/upload-path-guard：自訂單據附件的實體刪除只准在 uploads 之內，稽核探針 Q4）
+- L1（行為）：`helpers.custom_files._remove_physical`／`helpers.custom_module_delete.delete_module` 刪實體檔前先過路徑守門（`custom_files._safe_physical_path`：絕對路徑、`..`、`..\`、磁碟機代號／UNC、NTFS 資料流、符號連結／接合點穿出 uploads ⇒ 略過並記 log，不刪、不丟例外）。介面不變。
+
 ## (next:minor) — 2026-10-01（fix/contractor-bank-mask：承攬商收款帳號遮蔽）
 - L0（新增，向下相容）：`pdf_gen.generate_contractor_voucher_pdf_bytes(voucher_no, mask_bank=True)` 加選填參數 `mask_bank`（預設遮蔽＝fail closed；只有最高管理者下載才傳 False）；`_build_contractor_voucher_html(v, mask_bank=False)`。`routers/approval_queue.py`：非最高管理者的佇列項目與詳情，帳號遮成 `****末四碼`、存簿封面拿掉。
 
