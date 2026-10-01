@@ -254,3 +254,21 @@ def test_quotation(client, live_server, make_user, new_page, login_as, company, 
     page.wait_for_function("() => location.href.indexOf('-R1') >= 0", timeout=60000)
     rows = _db("SELECT status, quote_no FROM quotations WHERE quote_no LIKE ?", (qno + "%",))
     assert any(r["status"] == "草稿" and r["quote_no"].endswith("-R1") for r in rows), rows
+
+
+def test_last_audit_waits_for_a_late_row_and_gives_up_with_none(client):
+    """反向控制：稽核列晚一步才寫入 ⇒ _last_audit 要等到；真的沒有 ⇒ 到時間回 None（不是無限等、也不是假的有）。"""
+    import threading
+    import time
+    action = "zz.late_probe"
+    assert _last_audit(action, timeout=0.4) is None
+    def late():
+        time.sleep(0.6)
+        _db("INSERT INTO audit_log (at, action, target_label, detail) VALUES (?,?,?,?)", ("2026-10-02T00:00:00", action, "t", "延遲寫入"), write=True)
+    th = threading.Thread(target=late)
+    th.start()
+    try:
+        got = _last_audit(action, timeout=8)
+    finally:
+        th.join()
+    assert got and got["detail_json"] == "延遲寫入"
