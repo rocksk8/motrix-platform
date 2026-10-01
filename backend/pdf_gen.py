@@ -872,7 +872,9 @@ def _payslip_apply_void_mark(html_content: str, info: dict) -> str:
     return mark + html_content
 
 
-def generate_payslip_pdf_bytes(slip_no: str) -> bytes:
+def generate_payslip_pdf_bytes(slip_no: str, mask_bank: bool = True) -> bytes:
+    """勞報單 PDF。`mask_bank` 預設 True（fail closed）：收款帳號 ⇒ ****末四碼、不帶存簿影本（影像上印著帳號）；
+    只有最高管理者下載、或匯出存檔（F2 法定紀錄）才傳 False。"""
     edge = _get_edge_path()
     conn = get_db()
     row = conn.execute(
@@ -898,6 +900,10 @@ def generate_payslip_pdf_bytes(slip_no: str) -> bytes:
     d["_id_card_front"] = id_card_front
     d["_id_card_back"]  = id_card_back
     d["_bank_passbook"] = bank_passbook
+    if mask_bank:
+        n = str(d.get("bankAccountNumber") or "")
+        d["bankAccountNumber"] = "" if not n else ("****" + n[-4:] if len(n) > 4 else "****")
+        d["_bank_passbook"] = ""
     html_content = _build_payslip_html(d)
     if row["status"] == "已作廢":
         html_content = _payslip_apply_void_mark(html_content, {

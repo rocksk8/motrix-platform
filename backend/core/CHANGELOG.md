@@ -6,6 +6,9 @@
 - L0（新增）：`core.mounts`（`validate_mount_points／declared_points／visible_point／point_id`、`KINDS`、`MAX_TABS_PER_POINT`）——內建模組 `module.json` 可選填 `mount_points`（key／page／kind＝tab／label／perm／context），`core.customization.validate_manifest` 一併驗證（格式錯 ⇒ loader 不載入，同 customization）。沒有 `mount_points` 的模組完全不受影響。
 - L1（新增）：`helpers.custom_modules.visible_mounts`（掛載點的可見頁籤＝自訂模組可見 ∧ 點 perm，唯一一份）、`mount_cap_problems`、`MountError`；`validate_module` 檢查 `mount`；`published_modules()` 每項多一個 `mount` 鍵。路由 `GET /api/platform/mounts?point=`（點不存在／模組未載入 ⇒ 404）、`GET /api/platform/mount-points`（只有最高管理者）。只新增；前端（`mount-tabs.js`、`custom-records.html?embed=1`、首批 `daily-tasks.html`）與建構器欄位隨後出貨。設計 `docs/platform/plans/BUILDER-B-DESIGN.md`。
 
+## (next) — 2026-10-01（wip/t31-payslip-mask-a3：勞報單 PDF 帳號遮蔽）
+- L0（新增選填參數，向下相容）：`pdf_gen.generate_payslip_pdf_bytes(slip_no, mask_bank=True)`——預設 fail closed：收款帳號 ⇒ `****末四碼`、不帶存簿影本；只有最高管理者下載、或匯出存檔（F2 法定紀錄）才傳 `False`。
+
 ## 1.100 — 2026-10-01（fix/upload-path-guard：自訂單據附件的實體刪除只准在 uploads 之內，稽核探針 Q4）
 - L1（行為）：`helpers.custom_files._remove_physical`／`helpers.custom_module_delete.delete_module` 刪實體檔前先過路徑守門（`custom_files._safe_physical_path`：絕對路徑、`..`、`..\`、磁碟機代號／UNC、NTFS 資料流、符號連結／接合點穿出 uploads ⇒ 略過並記 log，不刪、不丟例外）。介面不變。
 

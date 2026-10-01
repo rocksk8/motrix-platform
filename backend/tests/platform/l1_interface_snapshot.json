@@ -103,7 +103,7 @@
    "generate_contractor_voucher_pdf_bytes": "def(voucher_no, mask_bank=…)",
    "generate_invoice_voucher_pdf_bytes": "def(voucher_no)",
    "generate_payment_request_pdf_bytes": "def(request_no)",
-   "generate_payslip_pdf_bytes": "def(slip_no)",
+   "generate_payslip_pdf_bytes": "def(slip_no, mask_bank=…)",
    "generate_pdf_bytes": "def(quote_no, internal=…)",
    "generate_project_execution_report_pdf_bytes": "def(quote_no)",
    "generate_shipping_pdf_bytes": "def(note_no)",

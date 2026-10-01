@@ -327,6 +327,9 @@
             <div class="form-group">
               <label>帳號</label>
               <input type="text" x-model="q.bankAccountNumber" @input="dirty()">
+              <div data-testid="ps-bank-masked-hint" x-show="String(q.bankAccountNumber || '').startsWith('****')"
+                   style="font-size:11px;color:var(--text-dim);margin-top:2px"
+                   x-text="q.bankAccountNumber + '（僅最高管理者可見完整帳號；沒改這一欄，儲存時會沿用原帳號）'"></div>
             </div>
           </div>
         </div>
