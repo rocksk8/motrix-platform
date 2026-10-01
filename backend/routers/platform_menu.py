@@ -18,7 +18,7 @@ L1 項目（core/menu_l1.json）＋**已載入**模組的 module.json `pages[].m
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, HTTPException, Query
 
 from core import catalog, registry
 from core import menu as core_menu
@@ -160,3 +160,28 @@ def platform_menu(authorization: str = Header(None)):
             "layout": layout,
             # 完整的頁面⇒模組（含已安裝未載入；登入後才給，C4-O3）：前端藏頁內連結、直接打網址的後備提示用
             "pageModules": _page_modules(PAGE_MAP)}
+
+
+@router.get("/api/platform/mounts")
+def platform_mounts(point: str = Query(...), authorization: str = Header(None)):
+    """掛載點的頁籤（建構器方案 B）：這位使用者看得到、掛在 `point`（`<模組key>.<key>`）上的自訂模組。
+    點不存在／所屬模組未載入 ⇒ 404（缺席不可長得像「沒有頁籤」）；沒人掛 ⇒ `tabs: []`。可見性唯一一份：`CM.visible_mounts`。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        try:
+            tabs = CM.visible_mounts(conn, user, point)
+        except CM.MountError as e:
+            raise HTTPException(e.status, str(e))
+    finally:
+        conn.close()
+    return {"point": point, "tabs": tabs}
+
+
+@router.get("/api/platform/mount-points")
+def platform_mount_points(authorization: str = Header(None)):
+    """所有已載入模組宣告的掛載點（建構器「掛載目標」下拉用；只有最高管理者）。"""
+    _require_user(authorization, require_superadmin=True)
+    from core import mounts as core_mounts
+    pts = core_mounts.declared_points({m.key: m.manifest for m in registry.loaded()})
+    return {"points": [dict(v, id=k) for k, v in sorted(pts.items())], "maxTabs": core_mounts.MAX_TABS_PER_POINT}

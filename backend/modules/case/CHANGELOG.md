@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-01（暫用號，列車取號；wip/t31-builder-b-c7：稽核補洞）
+- `set_extra_expense_dates` 文件對齊（第 29 班稽核 O2）：出納也要看得到該案（`_guard_case`），沒有案件讀權的出納得 404；行為不變。補測試 `test_expense_visibility_gaps_2026_10_01.py`（`_caseless_visible` 對未知使用者 fail-closed、舊版額外支出附件對無案件權限者隱藏）。
+
 ## 1.0.61 — 2026-10-01（fix/t29-w1／fix/t29-w3：建包全量關卡）
 - 案件頁「全部附件」頁籤的兩處寫死色碼改用語意 token；`quotation-form.html` FORM_VERSION V3.14→V3.15（客戶回簽單區塊）；模組目錄 `file_center` 登記；未核可橫幅守門改登記 `doc_render.render_document`。產品行為不變。
 
