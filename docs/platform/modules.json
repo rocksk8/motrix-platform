@@ -278,6 +278,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:case/expense_forms",
+    "mod:case/purchase_items",
     "mod:case/expense_notify"
    ],
    "tables": [
