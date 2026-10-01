@@ -245,3 +245,41 @@ def test_four_types_end_to_end(world, live_server, e2e_browser):
             by_doc.setdefault(i["desc"].split("｜")[0], {})[i["category"]] = i["amount"]
         assert by_doc == {code["PO"]: {"運費": 3000}, code["TE"]: {"差旅": 1200, "郵電": 300}, code["PC"]: {"郵電": 450}}, (basis, by_doc)
         assert sum(i["amount"] for i in mine) == gl_expense == 4950                                 # 報表（權責／現金）＝總帳費用科目借方
+
+
+def test_no_categories_defined_still_submits_and_posts_with_the_default_account(live_server, make_user, e2e_browser):
+    """使用者裁示 A：公司尚未設定任何費用類別 ⇒ 送審不擋；核准、出納付款後總帳照樣出分錄（類別未對應 ⇒ 預設費用科目），借貸平衡。"""
+    import db
+    from modules.accounting.ledger import roles as ROLES
+    users = {n: make_user(username=n, role=r, modules=m) for n, r, m in (
+        ("nc_form", "sales", ["expense_forms"]), ("nc_cash", "engineer", ["cashier"]), ("nc_sa", "superadmin", None))}
+    ctx = e2e_browser.new_context().request
+    api = {}
+    for n in users:
+        r = ctx.post(f"{live_server}/api/auth/login", data={"username": n, "password": users[n][1]})
+        api[n] = Api(ctx, live_server, r.json()["token"])
+    c = db.get_db()
+    try:
+        ROLES.ensure_meta(c)
+        ROLES.ensure_default_roles(c)
+        c.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+                  ("unified_approval_flow", json.dumps({"tiers": [], "includeSubmitterManagerTier": False}), "2026-01-01T00:00:00"))
+        c.commit()
+        assert not [r for r in c.execute("SELECT 1 FROM expense_categories")]                      # 前提：真的沒有任何類別
+    finally:
+        c.close()
+    assert api["nc_sa"].call("put", "/api/ledger/features/engine_drafts", {"enabled": True})[0] == 200
+    st, d = api["nc_form"].call("post", SENT, {"kind": "travel", "lines": [{"category": "隨便寫", "summary": "高鐵", "amount": 1200}],
+                                                "data": {"applicant": "nc_form"}, "payeeType": "employee", "payeeName": "王小明"})
+    assert st == 201, d
+    eid = d["id"]
+    st, d = api["nc_form"].call("post", "%s/%d/submit" % (SENT, eid))
+    assert st == 200 and d["status"] == "已核准", d                                                  # 沒設類別 ⇒ 不擋（無簽核層 ⇒ 直接核准）
+    assert api["nc_cash"].call("post", "/api/cashier/pending-payables/case/%d/pay" % eid, {"paidDate": TODAY})[0] == 200
+    st, run = api["nc_sa"].call("post", "/api/ledger/engine/run", {"start": MONTH0, "end": TODAY})
+    assert st == 200 and run["stats"]["created"] >= 2, run
+    evs = _q("SELECT event_code, voucher_id FROM gl_source_events WHERE source_type LIKE 'case_extra_expense%' AND source_key=?", (str(eid),))
+    assert sorted(e["event_code"] for e in evs) == ["E11", "E11b"]
+    for e in evs:
+        s = _q("SELECT SUM(debit) AS d, SUM(credit) AS c FROM voucher_lines WHERE voucher_id=?", (e["voucher_id"],))[0]
+        assert s["d"] == s["c"] == 1200

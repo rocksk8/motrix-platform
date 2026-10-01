@@ -4,6 +4,9 @@
 - 通知信（`expense_notify.py`；信件類型 `owner="case"`，自動併入個人通知偏好）：`expense_form_submitted／next_tier／approved／returned／payout_pending／paid`。送審→當層簽核人；下一層→新一層簽核人；核准→申請人（需付款的類型另寄出納「待撥款」）；退回→申請人（含原因）；出納登錄付款→申請人。**信內不放金額**；`kind=''` 的舊額外支出一律不寄；寄信失敗只記 log、不影響簽核／付款。掛點：`case_extra_expenses.py` 的 submit（含無簽核層的自動核准）／approve／reject 與 `payables.mark_paid`。
 - 單據輸出：`GET /api/quotations/{quote_no}/extra-expenses/{id}/document?format=html|pdf`（無案件用 `-`）。版型取自單據釘住的定義版本的 `output.template`（`def_version=0` ⇒ 目前生效版），走 L1 `render_document`（公司抬頭／簽核欄／未核可每頁紅色標示）；可見性＝建立者、簽核鏈成員、admin／superadmin、出納／財務，看不到回 404；`kind=''` 回 404。
 
+## 1.0.56 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2-w2b：費用類別清單為空時不擋送審）
+- 使用者裁示 A：`expense.categories` 提供者在、但**沒有任何啟用類別**（公司尚未設定）⇒ 送審不驗證類別（不寫 `categoryCode`／`categoryName`），總帳以既有 `category_unmapped` 備註落到預設科目；一旦有 ≥1 個啟用類別，立刻恢復嚴格驗證（不在清單 ⇒ 400、狀態不變）。原本整合後的全新環境所有費用單據都送不出去（清單空 ⇒ 每個類別都「不是啟用中」）。下游效應（R1）：營運報表／出納不變；總帳未設類別的單據走預設科目並有備註。
+
 ## 1.0.55 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2-w2b：單據釘住類型定義版本）
 - 費用單據（kind≠''）在**建立**與**送審**當下把目前生效的類型定義版本寫進 `def_version`（`expense_forms.current_def_version` → W1 `helpers.expense_types.get_type`；W1 模組不在或沒發布過 ⇒ 0＝程式預設）；之後定義改版、編輯草稿、變更申請、讀取都不動它——已送審的單據輸出／驗證仍依自己的版本，不被改定義牽動（W1 A2-7 回報：不釘則列印依「目前」定義）。舊版列（kind=''）不查定義、維持 0。下游效應（R1）：營運報表／總帳／出納不讀此欄，不變。
 

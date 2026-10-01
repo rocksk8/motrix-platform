@@ -142,7 +142,7 @@ def test_change_request_carries_lines_data_and_payee(client, H):
     s = client.post("%s/%d/change-request/submit" % (SENT, eid), headers=H["ef_form"])
     assert s.status_code == 200, s.text                                   # 沒簽核層 ⇒ 直接套用
     row = _q("SELECT * FROM case_extra_expenses WHERE id=?", (eid,))[0]
-    assert row["total_cost"] == 500 and json.loads(row["lines_json"]) == [dict(new_lines[0], amount=500)]
+    assert row["total_cost"] == 500 and [{k: v for k, v in l.items() if k != "accountCode"} for l in json.loads(row["lines_json"])] == [dict(new_lines[0], amount=500)]
     assert json.loads(row["data_json"])["freeKey"] == "y" and row["payee_name"] == "李四" and row["payee_type"] == "vendor"
     hist = json.loads(row["approval_json"])["changeHistory"][-1]
     assert hist["from"]["lines"][0]["summary"] == "停車費" and hist["to"]["lines"][0]["summary"] == "改"     # 前後值都留
@@ -264,7 +264,7 @@ def test_without_providers_nothing_is_validated_or_added(client, H):
     eid = _draft(client, H["ef_form"], [{"category": "隨便", "amount": 100}])
     assert client.post("%s/%d/submit" % (SENT, eid), headers=H["ef_form"]).json()["status"] == "已核准"
     (l,) = json.loads(_q("SELECT lines_json FROM case_extra_expenses WHERE id=?", (eid,))[0]["lines_json"])
-    assert "categoryCode" not in l and "accountCode" not in l
+    assert "categoryCode" not in l and (l.get("accountCode") or "") == ""                              # 提供者不在：不加；整合環境（提供者在、沒類別）：科目快照為空字串
 
 
 def test_gl_events_per_category_lines_and_payment_leg(client, H, providers):
@@ -412,3 +412,16 @@ def test_report_entries_legacy_row_one_entry_no_new_keys(client, H, seed_extra_e
         c.close()
     ents = [e for e in _entries("accrual") if e["expenseId"] == eid]
     assert len(ents) == 1 and ents[0]["amount"] == 300 and "departmentId" not in ents[0] and "kind" not in ents[0]
+
+
+def test_empty_category_list_means_not_configured_and_does_not_block(client, H, providers):
+    """使用者裁示 A：提供者在但沒有任何啟用類別 ⇒ 不驗證（送審照過、不寫 categoryCode）；一有啟用類別就嚴格（上一題）。"""
+    _no_tiers()
+    providers["expense.categories"]["accounting"] = lambda conn: []
+    eid = _draft(client, H["ef_form"], [{"category": "任何文字", "amount": 100}])
+    assert client.post("%s/%d/submit" % (SENT, eid), headers=H["ef_form"]).json()["status"] == "已核准"
+    lines = json.loads(_q("SELECT lines_json FROM case_extra_expenses WHERE id=?", (eid,))[0]["lines_json"])
+    assert "categoryCode" not in lines[0] and lines[0]["category"] == "任何文字"
+    providers["expense.categories"]["accounting"] = lambda conn: CATS                          # 正對照：有類別後同樣的明細被擋
+    eid2 = _draft(client, H["ef_form"], [{"category": "任何文字", "amount": 100}])
+    assert client.post("%s/%d/submit" % (SENT, eid2), headers=H["ef_form"]).status_code == 400
