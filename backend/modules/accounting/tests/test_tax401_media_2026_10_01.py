@@ -195,7 +195,7 @@ def test_hand_built_record_matches_field_by_field():
 
 # ── 規則 ─────────────────────────────────────────────────────────────────
 
-def test_s9_sign_map_exhaustive():
+def test_signed_digit_sign_map_exhaustive():
     for d in range(1, 10):
         assert M.encode_s9(d, 3) == "00" + "{ABCDEFGHI"[d]                         # 正 1-9
         assert M.encode_s9(-d, 3) == "00" + "}JKLMNOPQR"[d]                        # 負 1-9
@@ -204,7 +204,7 @@ def test_s9_sign_map_exhaustive():
     assert M.encode_s9(0, 12) == "00000000000{" and M.encode_s9(-123, 12) == "00000000012L" and M.encode_s9(123, 10) == "000000012C"
 
 
-def test_s9_overflow_and_non_integers_are_errors_not_truncation():
+def test_signed_digit_overflow_and_non_integers_are_errors_not_truncation():
     for bad in (10 ** 12, -(10 ** 12), "12", 1.5, None, True):
         with pytest.raises(M.Tax401MediaError):
             M.encode_s9(bad, 12)
