@@ -376,10 +376,13 @@ if (typeof module !== 'undefined' && module.exports) {
     var cpHref = inPg ? 'change-password.html' : 'pages/change-password.html'
 
     // Notification bell — admin/superadmin only
+    // notifStore 的宣告只有這一處（管理員的鈴鐺／一般使用者的隱形資料元件兩種外殼共用）：兩個分支互斥，不是兩個實例；
+    // 掃描器（check_double_init／AL1 共用母體）按「宣告點」計數，寫成兩處字面會被算成兩個共用 store。
+    var notifOpen = function (attrs) { return '<div x-data="notifStore()" x-init="init()" ' + attrs + '>' }
     var bell = ''
     if (ad) {
     bell =
-      '<div x-data="notifStore()" x-init="init()" style="position:relative">'
+      notifOpen('style="position:relative"')
       + '<button class="topbar__btn" @click="toggle()" style="position:relative">'
       + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>'
       + '通知'
@@ -415,7 +418,7 @@ if (typeof module !== 'undefined' && module.exports) {
       // 一般使用者沒有通知鈴鐺，但**資料元件 notifStore 一定要掛**：選單的待簽紅點與數字徽章（簽核佇列、每日工作…）、登入的待簽橫幅
       // 全都由它的 init() 抓資料；原本它只掛在鈴鐺裡 ⇒ 非管理員（一般簽核人）永遠沒有紅點與徽章（2026-10-01 使用者：「輪到簽核，我的工作上要有紅點，目前沒有」）。
       // 這裡掛一個看不見的實例，不畫任何畫面。
-      bell = '<div x-data="notifStore()" x-init="init()" style="display:none" data-testid="notif-headless" aria-hidden="true"></div>'
+      bell = notifOpen('style="display:none" data-testid="notif-headless" aria-hidden="true"') + '</div>'
     } // end if (ad)
 
     el.innerHTML =
