@@ -56,7 +56,7 @@ def gl_events(start, end, *, changed_since=""):
         mat_cash = _rec.material_entries(conn, "cash")
     finally:
         conn.close()
-    unsplit = pending = nodate = 0
+    unsplit = typed_unsplit = pending = nodate = 0
 
     for r in extra_rows:
         total = _i(r["total_cost"])
@@ -67,7 +67,10 @@ def gl_events(start, end, *, changed_since=""):
         memo = "%s %s" % (r["category"] or "額外支出", (r["description"] or "")[:30])
         doc = r["invoice_no"] or r["doc_no"] or ""
         if d and start <= d <= end:
-            unsplit += 1
+            if r["kind"]:
+                typed_unsplit += 1                                  # 費用單據：不是「專案成本」，另列說明
+            else:
+                unsplit += 1
             events.append({
                 "source_type": "case_extra_expense", "source_key": str(r["id"]), "event_code": "E11", "event_date": d, "doc_no": doc,
                 "case_no": r["quote_no"] or "", "party": {"key": "", "name": ""}, "tax_code": "", "mode": "snapshot",
@@ -123,6 +126,8 @@ def gl_events(start, end, *, changed_since=""):
 
     if unsplit:
         notices.append("%d 筆額外支出／叫料的來源金額是未拆稅（含稅）：以全額列專案成本；有進項稅額請在來源憑證補登（input_tax）。" % unsplit)
+    if typed_unsplit:
+        notices.append("%d 筆費用單據的來源金額是未拆稅（含稅）：以全額列費用（依費用類別對應的科目；未設定對應者列預設費用科目並標註）；有進項稅額請在來源憑證補登（input_tax）。" % typed_unsplit)
     if pending:
         notices.append("%d 筆額外支出付款的實付與應付有差額且尚未核可：暫不產生付款分錄，核可後再執行。" % pending)
     if nodate:

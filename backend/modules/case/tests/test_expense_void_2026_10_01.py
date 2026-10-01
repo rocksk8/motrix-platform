@@ -93,7 +93,7 @@ def test_only_approved_unpaid_rows_can_be_voided(client, H):
     assert r.status_code == 409 and "更正付款日" in r.text                              # 已付款不可直接作廢（前置檢查的訊息，不是搶先付款的那句）
     assert _q("SELECT status FROM case_extra_expenses WHERE id=?", (eid,))[0]["status"] == "已核准"
     # 付款日被管理員更正清除（退回待付款）後才可作廢
-    c = client.patch("%s/%d/dates" % (SENT, eid), headers=H["vd_admin"], json={"paidDate": ""})
+    c = client.patch("%s/%d/dates" % (SENT, eid), headers=H["vd_sa"], json={"paidDate": ""})
     assert c.status_code == 200, c.text
     assert _void(client, H["vd_sa"], eid).status_code == 200
     assert _void(client, H["vd_sa"], eid).status_code == 409                          # 重複作廢

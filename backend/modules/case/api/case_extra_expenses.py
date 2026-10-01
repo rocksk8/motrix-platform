@@ -613,8 +613,8 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
             if changes["paid_date"] and row["status"] != "已核准":    # AB-S8（使用者裁示）：出納、admin 都一樣
                 raise HTTPException(409, "這筆請款還沒核准（目前「%s」），不能登錄付款日；核准後再登錄" % row["status"])
             if old_paid and changes["paid_date"] != old_paid:
-                if not is_admin:
-                    raise HTTPException(403, "這筆已登錄付款日 %s，清除或更改只限管理員" % old_paid)
+                if user.get("role") != "superadmin":                     # 使用者 2026-10-01：推翻／覆寫已付款狀態一律最高管理員（admin 只是主管等級）
+                    raise HTTPException(403, "這筆已登錄付款日 %s，清除或更改只限最高管理員" % old_paid)
                 override = True
         now = datetime.now().isoformat(timespec="seconds")
         sets = ", ".join("%s=?" % k for k in changes)
@@ -632,7 +632,7 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
                "%s %s" % (label[k], v or "（清除）") for k, v in changes.items())))
     if override:                                          # AB-M1：已付的付款日被清除或更改 ⇒ 另一個查得到的動作
         _audit(_tok(authorization), "extra_expense.paid_date_override", *_audit_target(quote_no, exp_id),
-               "%s 額外支出 #%s 付款日 %s → %s（管理員更正）" % (quote_no, exp_id, old_paid, changes["paid_date"] or "（清除，重回待付款）"))
+               "%s 額外支出 #%s 付款日 %s → %s（最高管理員更正）" % (quote_no, exp_id, old_paid, changes["paid_date"] or "（清除，重回待付款）"))
     return {"ok": True, "updatedAt": now,
             **{_DATE_KEYS[k]: v for k, v in changes.items()}}
 
@@ -685,7 +685,7 @@ def void_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={})
         if row["status"] != "已核准":
             raise HTTPException(409, "「%s」狀態不可作廢（草稿與已駁回請直接刪除；送審中請先駁回）" % row["status"])
         if (row["paid_date"] or "").strip():
-            raise HTTPException(409, "已登錄付款（%s），不可直接作廢：請先由管理員更正付款日（退回待付款）再作廢" % row["paid_date"][:10])
+            raise HTTPException(409, "已登錄付款（%s），不可直接作廢：請先由最高管理員更正付款日（退回待付款）再作廢" % row["paid_date"][:10])
         change = _change_of(row)
         now = datetime.now().isoformat(timespec="seconds")
         begin_write(conn)
