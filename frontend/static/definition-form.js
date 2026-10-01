@@ -174,7 +174,7 @@
       }
       if (f.optionsFrom === 'expense_categories') {
         return (opts.categories || []).map(function (c) {
-          return typeof c === 'string' ? { value: c, label: c } : { value: c.name || c.category || c.code, label: c.name || c.category || c.code }
+          return typeof c === 'string' ? { value: c, label: c } : { value: c.code || c.name || c.category, label: c.name || c.category || c.code }   // 存代碼（改名不壞）、顯示名稱
         })
       }
       return (f.options || []).map(function (o) { return typeof o === 'string' ? { value: o, label: o } : { value: o.value, label: o.label || o.value } })
