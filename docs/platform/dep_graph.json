@@ -1764,6 +1764,29 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:js/expense-types.js": {
+   "api_calls": [
+    "/api/definitions/",
+    "/api/expense-types",
+    "/api/expense-types/",
+    "/api/settings/approval-doc-types"
+   ],
+   "api_prefixes": [
+    "/api/definitions",
+    "/api/expense-types",
+    "/api/settings"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/js/expense-types.js",
+   "routers_called": [
+    "router:definitions",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:js/ledger-hub.js": {
    "api_calls": [
     "/api/ledger/annotations",
@@ -6791,109 +6814,109 @@
     },
     {
      "func": "reject_quotation",
-     "line": 4889,
+     "line": 4890,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 4974,
+     "line": 4976,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5039,
+     "line": 5042,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5185,
+     "line": 5188,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5271,
+     "line": 5274,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5302,
+     "line": 5305,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5333,
+     "line": 5336,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5374,
+     "line": 5377,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5434,
+     "line": 5437,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5499,
+     "line": 5502,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5540,
+     "line": 5543,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5578,
+     "line": 5581,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 6079,
+     "line": 6082,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6199,
+     "line": 6202,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6267,
+     "line": 6270,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6421,
+     "line": 6424,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6435,
+     "line": 6438,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6466,
+     "line": 6469,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -9129,6 +9152,7 @@
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval",
+    "mod:subcontract/bank_mask",
     "mod:subcontract/remit"
    ],
    "imports": [
@@ -9145,6 +9169,7 @@
     "helper:legal_params",
     "helper:settings",
     "helper:tiered_approval",
+    "mod:subcontract/bank_mask",
     "mod:subcontract/remit",
     "plat:registry",
     "plat:txn"
@@ -9157,115 +9182,115 @@
    "routes": [
     {
      "func": "get_remit_fee_total",
-     "line": 191,
+     "line": 204,
      "method": "GET",
      "path": "/api/contractor-vouchers/remit-fee-total"
     },
     {
      "func": "get_last_paid_bank_account",
-     "line": 206,
+     "line": 219,
      "method": "GET",
      "path": "/api/contractor-vouchers/last-paid-bank-account"
     },
     {
      "func": "list_contractor_vouchers",
-     "line": 229,
+     "line": 242,
      "method": "GET",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "get_contractor_voucher",
-     "line": 255,
+     "line": 268,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "create_contractor_voucher",
-     "line": 268,
+     "line": 281,
      "method": "POST",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "delete_contractor_voucher",
-     "line": 390,
+     "line": 403,
      "method": "DELETE",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "submit_contractor_voucher",
-     "line": 415,
+     "line": 428,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/submit"
     },
     {
      "func": "approve_contractor_voucher",
-     "line": 477,
+     "line": 490,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/approve"
     },
     {
      "func": "revoke_contractor_voucher_approval",
-     "line": 586,
+     "line": 599,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/revoke-approval"
     },
     {
      "func": "reject_contractor_voucher",
-     "line": 630,
+     "line": 643,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_contractor_voucher_pdf",
-     "line": 678,
+     "line": 691,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_contractor_voucher_export",
-     "line": 708,
+     "line": 721,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/export"
     },
     {
      "func": "get_remit_require_payslip",
-     "line": 776,
+     "line": 789,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "set_remit_require_payslip",
-     "line": 784,
+     "line": 797,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "get_personnel_links",
-     "line": 797,
+     "line": 810,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-links"
     },
     {
      "func": "link_personnel_payslip",
-     "line": 831,
+     "line": 844,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-link"
     },
     {
      "func": "toggle_paid",
-     "line": 886,
+     "line": 899,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/paid-toggle"
     },
     {
      "func": "get_contractor_voucher_approval_flow",
-     "line": 1008,
+     "line": 1021,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     },
     {
      "func": "set_contractor_voucher_approval_flow",
-     "line": 1025,
+     "line": 1038,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     }
@@ -9461,7 +9486,8 @@
     "helper:privacy_notice",
     "helper:settings",
     "helper:tiered_approval",
-    "helper:uploads"
+    "helper:uploads",
+    "mod:subcontract/bank_mask"
    ],
    "imports": [
     "core:db",
@@ -9476,6 +9502,7 @@
     "helper:tiered_approval",
     "helper:uploads",
     "mod:subcontract/api/contractors",
+    "mod:subcontract/bank_mask",
     "plat:registry",
     "plat:txn"
    ],
@@ -9487,157 +9514,157 @@
    "routes": [
     {
      "func": "list_vendor_contractors",
-     "line": 182,
+     "line": 187,
      "method": "GET",
      "path": "/api/vendor-contractors"
     },
     {
      "func": "list_vendors_selectable",
-     "line": 210,
+     "line": 215,
      "method": "GET",
      "path": "/api/vendor-contractors/selectable"
     },
     {
      "func": "get_vendor_contractor",
-     "line": 224,
+     "line": 229,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "create_vendor_contractor",
-     "line": 236,
+     "line": 241,
      "method": "POST",
      "path": "/api/vendor-contractors"
     },
     {
      "func": "update_vendor_contractor",
-     "line": 264,
+     "line": 269,
      "method": "PUT",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "get_vendor_privacy_ack",
-     "line": 309,
+     "line": 317,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}/privacy-notice"
     },
     {
      "func": "ack_vendor_privacy_notice",
-     "line": 319,
+     "line": 327,
      "method": "POST",
      "path": "/api/vendor-contractors/{vid}/privacy-notice/ack"
     },
     {
      "func": "toggle_vendor_active",
-     "line": 339,
+     "line": 347,
      "method": "PATCH",
      "path": "/api/vendor-contractors/{vid}/active"
     },
     {
      "func": "get_vendor_passbook",
-     "line": 362,
+     "line": 370,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}/passbook"
     },
     {
      "func": "upload_vendor_passbook",
-     "line": 378,
+     "line": 388,
      "method": "PUT",
      "path": "/api/vendor-contractors/{vid}/passbook"
     },
     {
      "func": "delete_vendor_contractor",
-     "line": 411,
+     "line": 421,
      "method": "DELETE",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "update_vendor_visits",
-     "line": 438,
+     "line": 448,
      "method": "PATCH",
      "path": "/api/vendor-contractors/{vid}/visits"
     },
     {
      "func": "list_dispatches",
-     "line": 473,
+     "line": 483,
      "method": "GET",
      "path": "/api/contractor-dispatches"
     },
     {
      "func": "get_dispatch",
-     "line": 496,
+     "line": 506,
      "method": "GET",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "create_dispatch",
-     "line": 513,
+     "line": 523,
      "method": "POST",
      "path": "/api/contractor-dispatches"
     },
     {
      "func": "update_dispatch",
-     "line": 555,
+     "line": 565,
      "method": "PUT",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "delete_dispatch",
-     "line": 610,
+     "line": 620,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "upload_dispatch_files",
-     "line": 638,
+     "line": 648,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files"
     },
     {
      "func": "delete_dispatch_file",
-     "line": 733,
+     "line": 743,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}"
     },
     {
      "func": "approve_dispatch_file_delete",
-     "line": 799,
+     "line": 809,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}/delete-approve"
     },
     {
      "func": "reject_dispatch_file_delete",
-     "line": 855,
+     "line": 865,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}/delete-reject"
     },
     {
      "func": "upload_dispatch_invoice_files",
-     "line": 930,
+     "line": 940,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/invoice-files"
     },
     {
      "func": "delete_dispatch_invoice_file",
-     "line": 967,
+     "line": 977,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}/invoice-files/{file_id}"
     },
     {
      "func": "set_dispatch_invoice_date",
-     "line": 996,
+     "line": 1006,
      "method": "PATCH",
      "path": "/api/contractor-dispatches/{did}/invoice-date"
     },
     {
      "func": "accept_dispatch",
-     "line": 1033,
+     "line": 1043,
      "method": "PATCH",
      "path": "/api/contractor-dispatches/{did}/accept"
     },
     {
      "func": "import_dispatch_to_quote",
-     "line": 1079,
+     "line": 1089,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/import-to-quote"
     }
@@ -9693,6 +9720,19 @@
    "tables_r": [
     "contractor_dispatches"
    ],
+   "tables_w": []
+  },
+  "mod:subcontract/bank_mask": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "mod",
+   "module_key": "subcontract",
+   "path": "backend/modules/subcontract/bank_mask.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
    "tables_w": []
   },
   "mod:subcontract/gl_events": {
@@ -11490,6 +11530,34 @@
    "routers_called_effective": [
     "mod:analytics/api/dashboard",
     "router:auth",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "page:pages/expense-types.html": {
+   "api_calls": [
+    "/api/system/branding/favicon"
+   ],
+   "api_prefixes": [
+    "/api/system"
+   ],
+   "api_unmatched": [],
+   "imports": [
+    "js:js/expense-types.js",
+    "js:static/auth-guard.js",
+    "js:static/form-preview.js",
+    "js:static/notif.js",
+    "js:static/sidebar.js",
+    "js:static/ui.js"
+   ],
+   "kind": "page",
+   "path": "frontend/pages/expense-types.html",
+   "routers_called": [
+    "router:system"
+   ],
+   "routers_called_effective": [
+    "router:definitions",
     "router:system"
    ],
    "tables_r": [],
@@ -13386,19 +13454,19 @@
     },
     {
      "func": "get_approval_queue_count",
-     "line": 222,
+     "line": 247,
      "method": "GET",
      "path": "/api/approval-queue/count"
     },
     {
      "func": "approval_queue_detail",
-     "line": 370,
+     "line": 395,
      "method": "GET",
      "path": "/api/approval-queue/detail"
     },
     {
      "func": "reassign_approval",
-     "line": 415,
+     "line": 442,
      "method": "POST",
      "path": "/api/approval-queue/reassign"
     }
