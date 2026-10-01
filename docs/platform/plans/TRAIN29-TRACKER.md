@@ -46,3 +46,7 @@
 - 回簽單既有功能（signed-files, quotation-form 已送出時才顯示）；改：已送出+ 可傳、刪除限上傳者或 admin+、案件管理頁區塊、成案 modal 選擇性上傳。
 - 稽核 §9.11 就緒（audit/train29@76ce5893）；演練工具就緒（drill/train29@ff8fcce7）。
 - 權限：使用者「我人不在，決策給你」；正式機 Claude 已加權限；platform 推送經使用者明確指示。
+
+## 18:30 檢討
+- platform=int1=fca93b04（含回簽單；使用者指示「推 platform」）。建包由主持接手（d7 卡等待），17:5x 開跑，測試段 80%。
+- 待：簽章發布 → c7/2e 稽核、a3 演練 → 正式機 Claude 套用。
