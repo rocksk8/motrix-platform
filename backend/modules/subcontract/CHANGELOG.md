@@ -1,9 +1,9 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-01（wip/t31-payslip-mask-a3：稽核 G1／G2）
+## 1.1.1 — 2026-10-01（wip/t31-payslip-mask-a3：稽核 G1／G2）
 - `bank_mask.keep_if_masked` 刪除（死碼：各端點直接用 `is_masked_value`，沒有呼叫者）；匯款申請 PDF 補「PDF 文字層級」遮蔽測試（pypdf 抽文字；突變 `mask_bank=False` 會紅）。
 
-## (next:minor) — 2026-10-01 23:40（wip/t31-dispatch-approval-2e）：承攬商派發兩段審核（31-A）
+## 1.1.0 — 2026-10-01 23:40（wip/t31-dispatch-approval-2e）：承攬商派發兩段審核（31-A）
 - 新增：派發審核（第一段）與完工審核（第二段）——`POST /api/contractor-dispatches/{id}/submit|approve|reject|withdraw` 與 `.../completion/request|approve|reject|withdraw`；分層簽核重用 `helpers/tiered_approval`，簽核類型 `contractor_dispatch`（預設跟統一流程），沒設簽核層＝送審即核准；核准當下釘住實質欄位雜湊（`approved_hash`），之後改承攬商／品項／人員／稅率要重新送審。
 - 新增：作業狀態唯一寫入口 `dispatch_flow.set_status`（靜態守門 G-D1：模組內只准它寫 `contractor_dispatches.status`）；建立一律 draft（忽略 body.status）、編輯不能改狀態、`completed` 只能由完工審核通過設定（舊單也要）、確認驗收人≠建立者（最高管理者例外並標註）、取消已核准或已進入驗收者要理由、已有匯款申請者只有最高管理者可取消、審核中不可編輯／刪除。新端點 `POST /api/contractor-dispatches/{id}/status`（卡片操作按鈕）。
 - 新增：migration 0003（只加不改：15 欄與 `idx_dispatch_doc_code`／`idx_dispatch_approval`；既有列 `approval_status=''`＝舊單，不補審、行為照舊）；派發單號 `DP-YYYYMMDD-NNNN`。

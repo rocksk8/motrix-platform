@@ -1,6 +1,6 @@
 # 每日任務 更新紀錄
 
-## (next) — 2026-10-01（暫用號，列車取號；wip/t31-builder-b-c7：掛載點）
+## 1.0.8 — 2026-10-01（暫用號，列車取號；wip/t31-builder-b-c7：掛載點）
 - `module.json` 新增 `mount_points`：`daily-tasks`（頁面 daily-tasks.html、kind=tab、perm any）——自訂模組（建構器方案 B）可掛成「工作事項詳情頁籤列」的頁籤；頁面加掛載元件容器（`data-mount-point="daily_tasks.daily-tasks"`）與 `static/mount-tabs.js`。沒有自訂模組掛上去時頁面行為不變。
 
 ## 1.0.7 — 2026-10-01（暫用號，列車取號；wip/w3-local-date）
