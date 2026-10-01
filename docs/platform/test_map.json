@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 936,
+  "tests": 939,
   "unmapped": 12,
   "kinds": {
-   "api": 503,
-   "e2e": 220,
+   "api": 505,
+   "e2e": 221,
    "audit": 128,
    "unit": 85
   },
@@ -5095,6 +5095,33 @@
    "login_fixture": true,
    "module": "case"
   },
+  "backend/modules/case/tests/test_e2e_expense_settlement_guard_2026_10_01.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:case/api/quotations",
+    "page:pages/settlement.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/settlement.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
   "backend/modules/case/tests/test_e2e_expense_void_2026_10_01.py": {
    "kind": "e2e",
    "units": [
@@ -5117,6 +5144,27 @@
      "backend/modules/case/"
     ]
    },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_expense_audit_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/api/case_extra_expenses"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
    "module": "case"
   },
   "backend/modules/case/tests/test_expense_caseless_2026_10_01.py": {
@@ -5204,6 +5252,24 @@
     ]
    },
    "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_expense_payee_account_pii_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:archive",
+    "core:db",
+    "dir:backend/modules/case/"
+   ],
+   "evidence": {
+    "import": [
+     "backend/archive.py",
+     "backend/db.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
    "module": "case"
   },
   "backend/modules/case/tests/test_expense_void_2026_10_01.py": {
