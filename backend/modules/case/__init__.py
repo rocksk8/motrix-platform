@@ -13,9 +13,11 @@ from modules.case import attachments, case_deadlines, gl_events, payables, quota
 #    （報價單 helper）蓋成 api 那一支，`from modules.case import quotations` 就拿錯檔
 from modules.case.api import (case_action_items as _api_action_items, case_extra_expenses as _api_extra_expenses,
                               completion_notes as _api_completion_notes, expense_form_pdf as _api_expense_form_pdf,
-                              material_orders as _api_material_orders, quotations as _api_quotations)
+                              material_approvals as _api_material_approvals, material_orders as _api_material_orders,
+                              quotations as _api_quotations)
 from modules.case import expense_notify as _expense_notify     # noqa: F401 — 載入時登記費用單據的信件類型
 from modules.case import material_approval as _material_approval  # noqa: F401 — 載入時登記簽核單據類型 material_order（叫料）
+from modules.case import material_notify as _material_notify      # noqa: F401 — 載入時登記叫料審核的信件類型
 
 #: 模組自己的 migration（檔名以版號開頭，不是合法的 import 名稱 ⇒ importlib）
 _m0001 = importlib.import_module("modules.case.migrations.0001_extra_expense_invoice_no")
@@ -28,7 +30,7 @@ MODULE = ModuleSpec(
     # v1：case_extra_expenses.invoice_no（請款流程，2026-09-27）；v2：匯款實付／手續費／差額審核欄位（W1，2026-09-30）
     migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up)],
     # 與搬遷前 main.py 的掛載順序相同（路由比對順序不變）
-    routers=[_api_quotations.router, _api_material_orders.router, _api_extra_expenses.router, _api_expense_form_pdf.router,
+    routers=[_api_quotations.router, _api_material_orders.router, _api_material_approvals.router, _api_extra_expenses.router, _api_expense_form_pdf.router,
              _api_completion_notes.router, _api_action_items.router],
     providers={
         # IP-12：逐案權限與摘要（也是「M01 在不在」的唯一訊號，helpers.case_access.CASE_PRESENT）
@@ -50,6 +52,9 @@ MODULE = ModuleSpec(
         ("approval.detail", "completion_note"): _api_quotations.detail_completion_note,
         ("approval.detail", "extra_expense"): _api_quotations.detail_extra_expense,
         ("approval.detail", "case_change"): _api_quotations.detail_case_change,
+        # 31-C：叫料審核（疊加表 case_material_approvals）：待簽項目與詳情
+        ("approval.queue_items", "case_material"): _api_material_approvals.queue_items,
+        ("approval.detail", "material_order"): _api_material_approvals.detail,
         # IP-94：轉簽時的簽核鏈讀寫（M01 自己的兩種單據）
         ("approval.reassign", "quotation"): _api_quotations._QuotationReassign,
         ("approval.reassign", "completion_note"): _api_quotations.COMPLETION_NOTE_REASSIGN,
