@@ -1,5 +1,8 @@
 # 檔案中心 更新紀錄
 
+## (next) — 2026-10-01（wip/t31-filecenter-open-a3：開啟檔案）
+- `file-center.html`：結果列主動作改為「開啟檔案」（圖片／PDF 於新分頁開上傳的檔，其他類型走預覽窗；已刪除／無權限顯示明確訊息、不留空白分頁）；原「開啟原單據」降為次要連結「前往原單據」。取檔仍是 `attachments/open`，API 與權限不變。
+
 ## 1.0.2 — 2026-10-01（fix/t29-w1：建包全量關卡三紅）
 - `file-center.html`：登記為唯讀頁（理由：只有 `GET /api/filehub/search`；上傳與刪除在來源單據）；`daysAgo` 改用 `MotrixDate`（不以 UTC 切日期，台北 00:00–08:00 不會變前一天）並補 `motrix-date.js`。介面不變。
 
