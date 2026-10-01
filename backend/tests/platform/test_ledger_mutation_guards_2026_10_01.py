@@ -45,7 +45,10 @@ MUTATIONS = [
 
 
 def _copy_backend(dst: Path) -> Path:
-    shutil.copytree(BACKEND, dst, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "data", "db_backups", ".pytest_cache"))
+    """dst＝<複本根>/backend；frontend 一併複製（模組宣告的頁面要在安裝根的 frontend/ 底下，否則整批啟動警告而題目紅）。"""
+    ign = shutil.ignore_patterns("__pycache__", "*.pyc", "db_backups", ".pytest_cache")
+    shutil.copytree(BACKEND, dst, ignore=ign)
+    shutil.copytree(BACKEND.parent / "frontend", dst.parent / "frontend", ignore=ign)
     return dst
 
 
@@ -80,10 +83,8 @@ def _mutate_and_run(tmp_path, rel, old, new):
 def test_mutation_is_caught_by_detectors(pristine, tmp_path, mid, rel, old, new, why):
     r = _mutate_and_run(tmp_path, rel, old, new)
     out = (r.stdout + r.stderr)[-1500:]
-    assert r.returncode == 1, "%s（%s）：突變後 returncode=%s（0＝沒有題目守住；2＝收集／編譯錯，不算偵測到）
-%s" % (mid, why, r.returncode, out)
-    assert "failed" in r.stdout, "%s：returncode=1 但沒有 failed 摘要（不是題目紅）
-%s" % (mid, out)
+    assert r.returncode == 1, "%s（%s）：突變後 returncode=%s（0＝沒有題目守住；2＝收集／編譯錯，不算偵測到）\n%s" % (mid, why, r.returncode, out)
+    assert "failed" in r.stdout, "%s：returncode=1 但沒有 failed 摘要（不是題目紅）\n%s" % (mid, out)
 
 
 def test_rc_harmless_mutation_stays_green(pristine, tmp_path):
