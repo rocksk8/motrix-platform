@@ -1497,7 +1497,8 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         orig_margin   = float(s.get("origMarginPct", 0) or 0)
         orig_net_pct  = float(s.get("origNetMarginPct", 0) or 0)
         orig_net_prof = int(s.get("origNetProfit", 0) or 0)
-        item_cost     = int(s.get("itemActualTotal", 0) or 0)
+        # 32-S5：未採用的採購單連結金額＝該品項的實際成本（只是還沒按「採用」）⇒ Excel 固定欄位併進「品項實際成本」，分項加總才等於實際總成本
+        item_cost     = int(s.get("itemActualTotal", 0) or 0) + int(s.get("itemPoUnadopted", 0) or 0)
         extra_cost    = int(s.get("extraTotal", 0) or 0)
         total_cost    = int(s.get("totalActualCost", 0) or 0)
         gross_pct     = float(s.get("grossMarginPct", 0) or 0)
@@ -1530,7 +1531,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         tot_pretax    = sum(mc["pretax"] or 0 for mc in data["marginCases"])
         tot_orig_cost = sum(int((mc.get("settleSummary") or {}).get("origTotalCost",0) or 0) for mc in data["marginCases"])
         tot_orig_np   = sum(int((mc.get("settleSummary") or {}).get("origNetProfit",0) or 0) for mc in data["marginCases"])
-        tot_item      = sum(int((mc.get("settleSummary") or {}).get("itemActualTotal",0) or 0) for mc in data["marginCases"])
+        tot_item      = sum(int((mc.get("settleSummary") or {}).get("itemActualTotal",0) or 0) + int((mc.get("settleSummary") or {}).get("itemPoUnadopted",0) or 0) for mc in data["marginCases"])
         tot_extra     = sum(int((mc.get("settleSummary") or {}).get("extraTotal",0) or 0) for mc in data["marginCases"])
         tot_total     = sum(int((mc.get("settleSummary") or {}).get("totalActualCost",0) or 0) for mc in data["marginCases"])
         tot_net_prof  = sum(int((mc.get("settleSummary") or {}).get("netProfit",0) or 0) for mc in data["marginCases"])
@@ -2046,6 +2047,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
       <tbody>
         <tr><td>報價稅前收入</td><td class="r">{_fn(ss.get("quotedPretax"))}</td></tr>
         <tr><td>品項實際成本</td><td class="r orange">{_fn(ss.get("itemActualTotal"))}</td></tr>
+        {('<tr><td>採購單（品項尚未採用）</td><td class="r orange">' + _fn(ss.get("itemPoUnadopted")) + '</td></tr>') if (ss.get("itemPoUnadopted") or 0) > 0 else ''}
         <tr><td>額外支出</td><td class="r orange">{_fn(ss.get("extraTotal"))}</td></tr>
         <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{_fn(ss.get("totalActualCost"))}</td></tr>
         <tr><td>真實毛利</td><td class="r {'green' if int(ss.get('grossProfit',0) or 0)>=0 else 'red'}">{_fn(ss.get("grossProfit"))}</td></tr>

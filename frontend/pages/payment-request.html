@@ -241,7 +241,7 @@
         session: JSON.parse(localStorage.getItem('motrix_session') || '{}'),
         tab: 'new', busy: false, err: '', result: null,
         caseQ: '', cases: [], casesLoaded: false, picked: null, categories: [], _caseTimer: null,
-        types: [], typeCode: '', typeDef: null, _df: null,
+        types: [], typeCode: '', typeDef: null, _df: null, _draft: null,
         prItems: [], prSel: {}, prReasons: {}, linkedIds: [], lineTick: 0,      // 32-S5：請購／採購單「從案件品項帶入」
         form: blank(),
         mine: [], mineLoaded: false, mineErr: '', mineMsg: '', invoiceDraft: {}, invoiceNoDraft: {},
@@ -307,7 +307,7 @@
           this._syncLinked()
         },
         async pickCase(c) {
-          this.picked = c; this.err = ''; this.result = null
+          this.picked = c; this.err = ''; this.result = null; this._draft = null
           this.loadPrItems()
           var r = await fetch('/api/quotations/' + encodeURIComponent(c.quoteNo) + '/extra-expenses', { headers: this._h() })
           var d = await this._json(r)
@@ -364,7 +364,7 @@
           try { var r = await fetch('/api/expense-types', { headers: this._h() }); this.types = r.ok ? await r.json() : [] } catch (e) { this.types = [] }
         },
         async selectType() {
-          this.err = ''; this.result = null
+          this.err = ''; this.result = null; this._draft = null
           if (this._df) { this._df.destroy(); this._df = null }
           this.typeDef = null
           if (!this.typeCode) return
@@ -407,14 +407,21 @@
           var dep = v.data.cost_dept || v.data.dept
           this.busy = true
           try {
-            var r = await fetch(base, { method: 'POST', headers: this._h(true), body: JSON.stringify({
-              kind: this.typeCode, data: v.data, lines: v.lines, departmentId: dep ? Number(dep) : null,
-              expenseDate: v.data.req_date || '' }) })
+            // 同一次操作重按（例如送審被擋：缺超出原因）要沿用已建立的草稿，不再多建一份：有草稿 ⇒ PATCH 它，附件只傳一次
+            var dr = this._draft && this._draft.no === no && this._draft.kind === this.typeCode ? this._draft : null
+            var body = JSON.stringify({ kind: this.typeCode, data: v.data, lines: v.lines, departmentId: dep ? Number(dep) : null,
+              expenseDate: v.data.req_date || '' })
+            var r = await fetch(dr ? base + '/' + dr.id : base, { method: dr ? 'PATCH' : 'POST', headers: this._h(true), body: body })
             var d = await this._json(r)
-            if (!r.ok) throw new Error(d.detail || ('建立失敗（HTTP ' + r.status + '）'))
-            var id = d.id
-            await this._upload(no, id, this.form.files, 'other')
-            await this._upload(no, id, this.form.invoiceFiles, 'invoice')
+            if (!r.ok) throw new Error(d.detail || ((dr ? '更新草稿失敗' : '建立失敗') + '（HTTP ' + r.status + '）'))
+            var id = dr ? dr.id : d.id
+            if (!dr) { this._draft = { no: no, kind: this.typeCode, id: id, code: d.docCode || '', filesDone: false }; dr = this._draft }
+            d.docCode = d.docCode || dr.code
+            if (!dr.filesDone) {
+              await this._upload(no, id, this.form.files, 'other')
+              await this._upload(no, id, this.form.invoiceFiles, 'invoice')
+              dr.filesDone = true
+            }
             var status = '草稿'
             if (submit) {
               var rs = await fetch(base + '/' + id + '/submit', { method: 'POST', headers: this._h() })
@@ -423,7 +430,7 @@
               status = ds.status || '待審核'
             }
             var text = (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + (d.docCode || (no + ' #' + id)) + '，可以在「我的請款」看進度'
-            this.form = blank()
+            this.form = blank(); this._draft = null
             ;['pr-t-files', 'pr-t-invoice-files'].forEach(function (x) { var el = document.getElementById(x); if (el) el.value = '' })
             await this.selectType()                                              // 重新渲染空白表單（它會清掉結果訊息 ⇒ 先渲染再放結果）
             this.result = { status: status, id: id, text: text }

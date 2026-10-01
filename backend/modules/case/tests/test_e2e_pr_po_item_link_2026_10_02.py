@@ -95,15 +95,16 @@ def test_pick_items_raise_po_and_settlement_follows(live_server, make_user, e2e_
     # 不填原因就送審 ⇒ 伺服器擋（草稿留著、訊息說明）
     page.locator("#pr-t-submit").click()
     page.wait_for_function("() => document.querySelector('#pr-t-error') && document.querySelector('#pr-t-error').innerText.includes('超出')", timeout=15000)
-    drafts = _q("SELECT status FROM case_extra_expenses WHERE kind='purchase_order' AND quote_no=?", (NO,))
+    drafts = _q("SELECT id, status FROM case_extra_expenses WHERE kind='purchase_order' AND quote_no=?", (NO,))
     assert [d["status"] for d in drafts] == ["草稿"]
+    drafts_id = drafts[0]["id"]
     # 填原因再送 ⇒ 核准（沒設簽核層）
     page.locator("#pr-reason-a").fill("客戶加購")
     page.locator("#pr-t-submit").click()
     page.wait_for_function("() => document.querySelector('#pr-result') && document.querySelector('#pr-result').innerText.includes('已送審')", timeout=15000)
-    rows = _q("SELECT status, lines_json FROM case_extra_expenses WHERE kind='purchase_order' AND quote_no=? ORDER BY id", (NO,))
-    assert [r["status"] for r in rows] == ["草稿", "已核准"]
-    line = json.loads(rows[1]["lines_json"])[0]
+    rows = _q("SELECT id, status, lines_json FROM case_extra_expenses WHERE kind='purchase_order' AND quote_no=? ORDER BY id", (NO,))
+    assert [r["status"] for r in rows] == ["已核准"] and rows[0]["id"] == drafts_id           # 重按沿用同一份草稿：DB 只有一份單據
+    line = json.loads(rows[0]["lines_json"])[0]
     assert (line["itemId"], line["qty"], line["amount"], line["overPlanQty"], line["overPlanReason"]) == ("a", 12, 12000, 2.0, "客戶加購"), line
     _shot(page, "3-submitted")
 
