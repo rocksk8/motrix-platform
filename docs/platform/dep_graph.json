@@ -720,6 +720,32 @@
     "custom_records"
    ]
   },
+  "helper:custom_module_delete": {
+   "api_prefixes": [],
+   "dynamic_sql": true,
+   "imports": [
+    "helper:uploads"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/custom_module_delete.py",
+   "tables_ddl": [],
+   "tables_named": [
+    "custom_record_files",
+    "custom_record_revisions",
+    "custom_record_snapshots",
+    "custom_record_values"
+   ],
+   "tables_r": [
+    "custom_record_files",
+    "custom_record_finance_outbox"
+   ],
+   "tables_w": [
+    "custom_record_counters",
+    "custom_record_log",
+    "custom_records",
+    "ui_definitions"
+   ]
+  },
   "helper:custom_modules": {
    "api_prefixes": [],
    "dynamic_sql": true,
@@ -4805,49 +4831,49 @@
    "routes": [
     {
      "func": "dashboard_stats",
-     "line": 25,
+     "line": 26,
      "method": "GET",
      "path": "/api/dashboard/stats"
     },
     {
      "func": "dashboard_monthly",
-     "line": 269,
+     "line": 272,
      "method": "GET",
      "path": "/api/dashboard/monthly"
     },
     {
      "func": "dashboard_expenses_monthly",
-     "line": 350,
+     "line": 351,
      "method": "GET",
      "path": "/api/dashboard/expenses-monthly"
     },
     {
      "func": "list_devices",
-     "line": 415,
+     "line": 416,
      "method": "GET",
      "path": "/api/devices"
     },
     {
      "func": "dashboard_funnel",
-     "line": 488,
+     "line": 489,
      "method": "GET",
      "path": "/api/dashboard/funnel"
     },
     {
      "func": "dashboard_ops_alerts",
-     "line": 581,
+     "line": 582,
      "method": "GET",
      "path": "/api/dashboard/ops-alerts"
     },
     {
      "func": "list_materials_summary",
-     "line": 668,
+     "line": 669,
      "method": "GET",
      "path": "/api/materials-summary"
     },
     {
      "func": "dashboard_activity_feed",
-     "line": 757,
+     "line": 758,
      "method": "GET",
      "path": "/api/dashboard/activity-feed"
     }
@@ -4992,67 +5018,67 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2329,
+     "line": 2358,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2343,
+     "line": 2372,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2379,
+     "line": 2408,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2498,
+     "line": 2527,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2559,
+     "line": 2588,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2627,
+     "line": 2656,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
      "func": "customer_history",
-     "line": 2661,
+     "line": 2690,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 2936,
+     "line": 2965,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3167,
+     "line": 3191,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3545,
+     "line": 3570,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 3732,
+     "line": 3754,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -14192,6 +14218,7 @@
     "helper:custom_files",
     "helper:custom_finance",
     "helper:custom_history",
+    "helper:custom_module_delete",
     "helper:custom_modules",
     "helper:doc_render",
     "helper:doc_template",
@@ -14214,6 +14241,7 @@
     "helper:auth",
     "helper:custom_def_review",
     "helper:custom_fields",
+    "helper:custom_module_delete",
     "helper:doc_template",
     "helper:expense_types",
     "plat:catalog",
@@ -14255,62 +14283,68 @@
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
-     "func": "get_definition",
+     "func": "delete_custom_module",
      "line": 210,
+     "method": "DELETE",
+     "path": "/api/definitions/custom_module/{key}"
+    },
+    {
+     "func": "get_definition",
+     "line": 227,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "save_definition_draft",
-     "line": 223,
+     "line": 240,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 240,
+     "line": 257,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 248,
+     "line": 265,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 282,
+     "line": 299,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 298,
+     "line": 315,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 323,
+     "line": 340,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 354,
+     "line": 371,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 367,
+     "line": 384,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 393,
+     "line": 410,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
@@ -14322,6 +14356,7 @@
    "tables_r": [],
    "tables_r_transitive": [
     "approval_delegates",
+    "custom_record_files",
     "custom_record_finance_outbox",
     "custom_records",
     "daily_tasks",
@@ -14347,7 +14382,8 @@
     "custom_record_values",
     "custom_records",
     "notifications",
-    "system_settings"
+    "system_settings",
+    "ui_definitions"
    ]
   },
   "router:item_reads": {
@@ -16551,6 +16587,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
+    "helper:custom_module_delete",
     "helper:custom_modules"
    ]
   },
@@ -16559,11 +16596,13 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "core:db"
+    "core:db",
+    "helper:custom_module_delete"
    ],
    "path": "backend/core/migrations.py:296",
    "readers": [
-    "core:archive"
+    "core:archive",
+    "helper:custom_module_delete"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -16581,7 +16620,8 @@
    "path": "backend/core/migrations.py:271",
    "readers": [
     "core:archive",
-    "helper:custom_finance"
+    "helper:custom_finance",
+    "helper:custom_module_delete"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -16603,6 +16643,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
+    "helper:custom_module_delete",
     "helper:custom_modules"
    ]
   },
@@ -16611,7 +16652,8 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "core:db"
+    "core:db",
+    "helper:custom_module_delete"
    ],
    "path": "backend/core/migrations.py:259",
    "readers": [
@@ -16628,7 +16670,8 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "core:db"
+    "core:db",
+    "helper:custom_module_delete"
    ],
    "path": "backend/core/migrations.py:321",
    "readers": [
@@ -16645,7 +16688,8 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "core:db"
+    "core:db",
+    "helper:custom_module_delete"
    ],
    "path": "backend/core/migrations.py:205",
    "readers": [],
@@ -16677,6 +16721,7 @@
    "writers": [
     "helper:custom_builder_support",
     "helper:custom_history",
+    "helper:custom_module_delete",
     "helper:custom_modules"
    ]
   },
@@ -18319,6 +18364,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
+    "helper:custom_module_delete",
     "plat:definitions"
    ]
   },

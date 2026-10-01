@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 959,
+  "tests": 963,
   "unmapped": 12,
   "kinds": {
-   "api": 518,
-   "e2e": 225,
+   "api": 520,
+   "e2e": 227,
    "audit": 129,
    "unit": 87
   },
-  "routes": 716
+  "routes": 717
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -3324,6 +3324,31 @@
    "evidence": {
     "import": [
      "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/dashboard.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_dept_follows_sales_owner_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/__init__",
+    "mod:analytics/api/dashboard",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/analytics/api/__init__.py",
+     "backend/modules/analytics/api/reports.py"
     ],
     "api": [
      "backend/modules/analytics/api/dashboard.py"
@@ -17241,6 +17266,25 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_delete_custom_module_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/tests/test_custom_modules_engine_2026_09_25.py",
+    "router:custom_records",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/test_custom_modules_engine_2026_09_25.py"
+    ],
+    "api": [
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py"
+    ]
+   }
+  },
   "backend/tests/test_delete_user_referenced_guard_2026_08_28.py": {
    "kind": "api",
    "units": [
@@ -17674,6 +17718,28 @@
     ]
    }
   },
+  "backend/tests/test_e2e_builder_delete_module_2026_10_01.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/test_e2e_p8_gaps_2026_09_26.py",
+    "page:pages/module-builder.html",
+    "router:custom_records"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/test_e2e_p8_gaps_2026_09_26.py"
+    ],
+    "api": [
+     "backend/routers/custom_records.py"
+    ],
+    "page": [
+     "frontend/pages/module-builder.html"
+    ],
+    "path": [
+     "frontend/pages/module-builder.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_builder_dnd_2026_09_27.py": {
    "kind": "e2e",
    "units": [
@@ -17739,6 +17805,27 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_e2e_builder_menu_group_2026_10_01.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/test_e2e_p8_gaps_2026_09_26.py",
+    "page:pages/module-builder.html",
+    "router:definitions",
+    "router:platform_menu"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/test_e2e_p8_gaps_2026_09_26.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py",
+     "backend/routers/platform_menu.py"
+    ],
+    "page": [
+     "frontend/pages/module-builder.html"
+    ]
+   }
   },
   "backend/tests/test_e2e_builder_output_preview_2026_09_27.py": {
    "kind": "e2e",
