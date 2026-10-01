@@ -205,4 +205,4 @@ def test_general_flow_unchanged(live_server, make_user, new_context):
     page.select_option("#pr-type", "petty_cash")
     page.wait_for_selector("#pr-typed-form", state="visible")
     page.select_option("#pr-type", "")
-    assert not page.locator("#pr-typed-form").is_visible()
+    page.wait_for_selector("#pr-typed-form", state="hidden", timeout=5000)
