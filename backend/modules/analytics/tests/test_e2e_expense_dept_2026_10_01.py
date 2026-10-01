@@ -30,13 +30,18 @@ def _seed_expenses(dept_a, dept_b):
         cols = [c[1] for c in conn.execute("PRAGMA table_info(case_extra_expenses)").fetchall()]
         if "department_id" not in cols:                          # 請款模組的 migration 會加；這裡補上才有「明示部門」可驗
             conn.execute("ALTER TABLE case_extra_expenses ADD COLUMN department_id INTEGER")
-        for qn, dept, amt, desc in (("MQ-D1", None, 1000, "案件A支出"),      # 案件業務部門＝工程部
-                                    ("", dept_b, 700, "無案件業務部門支出"),  # 無案件、送出者＝業務部
-                                    ("", None, 40, "無案件未分類")):
+        # 整合後（W2 A2）：只有**費用單據列（kind≠''）**的提供者（case/recognition._typed_entries）會帶 `departmentId`；
+        # 舊版列（kind=''）刻意不帶（「行為不變」，缺＝報表依案件推導）。所以「明示部門」的列要用單據型別播種——
+        # 舊版列根本不會有 department_id（部門欄只有費用單據表單會寫），原本拿舊版列塞部門＝不真實的種子。
+        for qn, dept, amt, desc, kind in (("MQ-D1", None, 1000, "案件A支出", ""),      # 案件業務部門＝工程部（舊版列）
+                                          ("", dept_b, 700, "無案件業務部門支出", "travel"),  # 無案件、明示業務部（費用單據）
+                                          ("", None, 40, "無案件未分類", "")):
             conn.execute(
                 "INSERT INTO case_extra_expenses (quote_no, category, description, total_cost, expense_date, status,"
-                " invoice_date, created_at, updated_at, department_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (qn, "交通", desc, amt, "2026-03-10", "已核准", "2026-03-10", "2026-03-10T00:00:00", "2026-03-10T00:00:00", dept))
+                " invoice_date, created_at, updated_at, department_id, kind, doc_code, lines_json)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (qn, "交通", desc, amt, "2026-03-10", "已核准", "2026-03-10", "2026-03-10T00:00:00", "2026-03-10T00:00:00", dept,
+                 kind, "TE-D2" if kind else "", "[]"))
         conn.commit()
     finally:
         conn.close()
