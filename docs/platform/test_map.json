@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 999,
+  "tests": 1000,
   "unmapped": 12,
   "kinds": {
    "api": 541,
    "e2e": 241,
-   "audit": 129,
+   "audit": 130,
    "unit": 88
   },
   "routes": 729
@@ -20237,6 +20237,8 @@
   "backend/tests/test_e2e_local_date_2026_10_01.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:legal_params",
     "js:static/motrix-date.js",
     "page:pages/case-management.html",
     "page:pages/cashier.html",
@@ -20247,6 +20249,10 @@
     "page:pages/work-log.html"
    ],
    "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/legal_params.py"
+    ],
     "page": [
      "frontend/pages/case-management.html",
      "frontend/pages/cashier.html",
@@ -23875,6 +23881,22 @@
    "unresolved_api": [
     "/api/fine"
    ]
+  },
+  "backend/tests/test_notif_state_no_timestamp_2026_10_02.py": {
+   "kind": "audit",
+   "units": [
+    "dir:frontend/static/",
+    "js:static/notif.js"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/static/notif.js"
+    ],
+    "path": [
+     "frontend/static/",
+     "frontend/static/notif.js"
+    ]
+   }
   },
   "backend/tests/test_notification_prefs_coverage.py": {
    "kind": "api",
