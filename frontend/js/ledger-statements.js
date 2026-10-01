@@ -101,7 +101,7 @@ function ledgerStatementsPage() {
             rows.push({ type: 'item', label: i.label, amount: i.amount, cmp: this.compareAmount(i.code, i.label), indent: 28, key, testid: 'st-bs-line-' + (i.code || 'pl') })
             if (this.open[key]) for (const a of i.accounts) rows.push({ type: 'acct', label: a.code + ' ' + a.name, amount: a.amount, cmp: null, indent: 52 })
           }
-          if (g.parts.length > 1) rows.push({ type: 'sub', label: p.title + '合計', amount: p.total, cmp: sub(g.pk[pi]), indent: 10 })
+          if (g.parts.length > 1) rows.push({ type: 'sub', label: p.title + '合計', amount: p.total, cmp: sub(g.pk[pi]), indent: 10, testid: 'st-bs-sub-' + g.pk[pi] })
         }
         rows.push({ type: 'total', label: g.totalLabel, amount: g.total, cmp: g.cmpTotal, indent: 10, testid: 'st-bs-total-' + g.key })
       }

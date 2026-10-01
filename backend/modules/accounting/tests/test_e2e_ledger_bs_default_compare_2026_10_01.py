@@ -42,6 +42,8 @@ def test_entry_shows_both_columns_with_totals_compare_without_any_click(live_ser
     for tid in ("st-bs-total-liab", "st-bs-total-eq", "st-bs-total-le"):
         assert page.evaluate("(t) => Array.from(document.querySelectorAll('[data-testid=' + t + '] td.num')).filter(e => e.offsetParent !== null).every(e => e.textContent.trim() !== '')", tid)
     assert page.locator("[data-testid=st-bs-line-BS_CA_AR] td.num").nth(1).inner_text().strip() == "10,500"   # 科目列的比較欄也在
+    assert page.locator("[data-testid=st-bs-sub-current_assets] td.num").nth(1).inner_text().strip() == "10,500"   # 小計列的比較欄也在
+    assert page.locator("[data-testid=st-bs-sub-current_assets] td.num").nth(0).inner_text().strip() == "15,500"
 
 
 @pytest.mark.e2e
