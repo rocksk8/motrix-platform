@@ -16,6 +16,7 @@
   "backend/tests/test_alpine_double_init_2026_09_23.py",
   "backend/tests/test_backup_table_count_2026_09_23.py",
   "backend/tests/test_backup_table_names_2026_09_23.py",
+  "backend/tests/test_builder_b_mounts_2026_10_01.py",
   "backend/tests/test_builder_output_preview_2026_09_27.py",
   "backend/tests/test_builder_support_2026_09_30.py",
   "backend/tests/test_comment_reintroduces_guarded_literal_2026_09_23.py",
