@@ -183,6 +183,7 @@
 .fd-chk table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .fd-chk th, .fd-chk td { text-align: left; vertical-align: top; padding: 6px 9px; border-bottom: 1px solid var(--line); }
 .fd-chk th { background: var(--surface-muted); position: sticky; top: 0; }
+.fd-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .fd-tabs { display: none; }
 
 /* 窄螢幕：三欄改一次一欄＋底部切換列 */

@@ -15,6 +15,7 @@
 //   fixedTypeKeys  {key: type}：保留字欄位，種類固定、刪除前要確認
 //   extraPalette   [{title, items:[{id,label,desc,icon,field:{…整個欄位物件}}]}]：額外的現成欄位（請款常用欄位）
 //   onlyOneTable   'lines'：明細表只能有一個且代碼固定
+//   columnPresets  [{label, desc, cols:[完整欄物件]}]：明細表「加入常用欄」（欄代碼固定的欄，例如 數量＋單價、發票號碼）
 //   requiredColumns / pairColumns / cashierKeys / bannedWords(RegExp) / maxRows / publishedKeys / titleEditable / titleFallback
 (function () {
   'use strict'
@@ -513,8 +514,17 @@
       return '<li class="' + (open ? 'is-open' : '') + '"><div class="fd-colhead"><button type="button" class="fd-colname" data-col-open="' + i + '" aria-expanded="' + open + '">' + esc(c.label) + (must ? '<span class="fd-chip">必要</span>' : '') + '<span class="fd-dim">' + esc((COL_TYPES.find(function (t) { return t[0] === c.type }) || [0, c.type])[1]) + '</span></button>' +
         '<button type="button" class="fd-mini" data-col-up="' + i + '" aria-label="往上移"' + (i === 0 ? ' disabled' : '') + '>' + ic('up') + '</button><button type="button" class="fd-mini" data-col-down="' + i + '" aria-label="往下移"' + (i === cols.length - 1 ? ' disabled' : '') + '>' + ic('down') + '</button>' +
         '<button type="button" class="fd-mini fd-del" data-col-del="' + i + '" aria-label="刪除這一欄"' + (must ? ' disabled title="這一欄是必要的"' : '') + '>✕</button></div>' + body + '</li>'
-    }).join('') + '</ul><button type="button" class="fd-additem" data-col-add="1">＋ 新增一欄</button><div class="fd-why">點欄名展開它的設定。標「必要」的欄不能刪。</div></div>'
+    }).join('') + '</ul><button type="button" class="fd-additem" data-col-add="1">＋ 新增一欄</button>' + this.colPresetUI(f) + '<div class="fd-why">點欄名展開它的設定。標「必要」的欄不能刪。例：「數量」「單價」「發票號碼」。</div></div>'
     return h
+  }
+  // 常用欄（呼叫端用 caps.columnPresets 提供：[{label, desc, cols:[完整的欄物件…]}]；欄代碼固定，所以從這裡加）
+  proto.colPresetUI = function (f) {
+    var list = this.caps.columnPresets || [], have = (f.columns || []).map(function (c) { return c.key })
+    var todo = list.map(function (p, i) { return { p: p, i: i } }).filter(function (x) { return x.p.cols.some(function (c) { return have.indexOf(c.key) < 0 }) })
+    if (!todo.length) return ''
+    return '<div class="fd-lbl fd-mt6">加入常用欄</div><div class="fd-presets">' + todo.map(function (x) {
+      return '<button type="button" class="fd-btn" data-col-preset="' + x.i + '" title="' + esc(x.p.desc || '') + '">＋ ' + esc(x.p.label) + '</button>'
+    }).join('') + '</div>'
   }
   proto.moreUI = function (f) {
     var specs = ((this.caps.specs || {})[f.type] || {}).attrs || [], h = ''
@@ -731,6 +741,12 @@
     var del = t.closest('[data-item-del]'); if (del) { var q = del.dataset.itemDel.split(':'), arr = this._itemArr(q[0]); if (arr) { arr.splice(+q[1], 1); this.commit(); this.renderCenter(); this.renderRight() } return }
     var add = t.closest('[data-item-add]'); if (add) { this._addItem(add.dataset.itemAdd, null, ''); return }
     var co = t.closest('[data-col-open]'); if (co) { var key = f.key + ':' + co.dataset.colOpen; this._colOpen = this._colOpen === key ? '' : key; this.renderRight(); return }
+    var cp = t.closest('[data-col-preset]')
+    if (cp) {
+      var pr = (this.caps.columnPresets || [])[+cp.dataset.colPreset]
+      if (pr) { pr.cols.forEach(function (c) { if (!f.columns.some(function (x) { return x.key === c.key })) f.columns.push(M.clone(c)) }); this.commit(); this.renderCenter(); this.renderRight() }
+      return
+    }
     var cu = t.closest('[data-col-up]'), cd = t.closest('[data-col-down]'), cx = t.closest('[data-col-del]'), ca = t.closest('[data-col-add]')
     if (cu || cd) { var i = +(cu || cd).dataset[cu ? 'colUp' : 'colDown'], j = i + (cu ? -1 : 1), cols = f.columns; var tmp = cols[i]; cols[i] = cols[j]; cols[j] = tmp; this._colOpen = ''; this.commit(); this.renderCenter(); this.renderRight(); return }
     if (cx && !cx.disabled) {

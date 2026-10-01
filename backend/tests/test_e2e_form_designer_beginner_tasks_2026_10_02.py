@@ -243,3 +243,22 @@ def test_deleting_a_published_or_fixed_field_asks_first_and_cancel_keeps_it(desi
     page.wait_for_selector("dialog.fd-dlg[open]")
     assert "固定欄位" in page.inner_text("dialog.fd-dlg")
     page.click('dialog.fd-dlg [data-r="0"]')
+
+
+@pytest.mark.e2e
+def test_table_column_presets_add_fixed_key_columns(designer):
+    """caps.columnPresets：欄代碼固定的常用欄（請款單明細的 數量＋單價、發票號碼）從按鈕加入，已有的不重複加。"""
+    page = designer
+    page.evaluate("""() => { Alpine.$data(document.body)._fd.caps.columnPresets = [
+        { label: '數量＋單價', desc: '兩欄一起加', cols: [{ key: 'qty2', label: '數量', type: 'number' }, { key: 'unit_cost2', label: '單價', type: 'number' }] },
+        { label: '發票號碼', cols: [{ key: 'invoice_no', label: '發票號碼', type: 'text' }] }] }""")
+    _field(page, "費用明細").click()
+    page.click('.fd-right [data-col-preset="0"]')
+    _saved(page)
+    keys = [c["key"] for c in _label_of(_draft(), "lines")["columns"]]
+    assert keys.count("qty2") == 1 and keys.count("unit_cost2") == 1, keys
+    assert page.locator('.fd-right [data-col-preset]').count() == 1, "加過的組合不再出現"
+    page.click('.fd-right [data-col-preset]')
+    _saved(page)
+    assert "invoice_no" in [c["key"] for c in _label_of(_draft(), "lines")["columns"]]
+    assert page.locator('.fd-right [data-col-preset]').count() == 0
