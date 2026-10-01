@@ -781,6 +781,29 @@
                 </div>
                 </fieldset><!-- /CM14b -->
                 <div x-show="caseReadOnly()" class="fi-label" style="margin-bottom:10px;color:var(--tone-warning-fg)">您不是這個案件的成員，以出納身分開啟：只能登錄收款（在「財務」分頁），其他內容唯讀。</div>
+                <!-- 客戶回簽單（報價單回簽附件）：報價單已送出之後才能上傳；看得到案件的人可列出／預覽，上傳者本人或管理員可刪。不是結案條件。 -->
+                <div data-testid="cm-signed-back" x-show="selected && (signedBackFiles().length || canUploadSignedBack())"
+                     style="border:1px solid var(--border-light);border-radius:8px;padding:10px 12px;margin-bottom:14px">
+                  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <span style="font-size:12px;font-weight:700">客戶回簽單</span>
+                    <span style="font-size:11px;color:var(--text-dim)" x-text="signedBackFiles().length ? signedBackFiles().length + ' 個檔案' : '尚未上傳'"></span>
+                    <span style="flex:1"></span>
+                    <label x-show="canUploadSignedBack()" data-testid="cm-signed-back-upload" class="btn btn-ghost btn-sm" style="cursor:pointer">
+                      ＋ 上傳回簽單
+                      <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" :disabled="signedBackBusy" @change="uploadSignedBack($event)">
+                    </label>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
+                    <template x-for="f in signedBackFiles()" :key="f.id">
+                      <div data-testid="cm-signed-back-file" :data-file-id="f.id" style="display:flex;align-items:center;gap:8px;font-size:12px;flex-wrap:wrap">
+                        <a href="javascript:void(0)" style="color:var(--accent);text-decoration:underline" @click="previewAttachmentFile(f)" x-text="f.filename"></a>
+                        <span style="color:var(--text-dim)" x-text="(f.uploadedBy || '') + '　' + (f.uploadedAt || '').slice(0, 16).replace('T', ' ')"></span>
+                        <button type="button" x-show="canDeleteSignedBack(f)" data-testid="cm-signed-back-delete" class="btn btn-ghost btn-sm" style="color:var(--danger)" @click="deleteSignedBack(f)">刪除</button>
+                      </div>
+                    </template>
+                  </div>
+                  <div data-testid="cm-signed-back-err" x-show="signedBackErr" style="font-size:12px;color:var(--danger);margin-top:6px" x-text="signedBackErr"></div>
+                </div>
               </div><!-- /biz -->
 
               <!-- ══ 執行管理 Tab（進度／叫料／設備／保固 子分頁） ══ -->

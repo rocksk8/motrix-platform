@@ -1,5 +1,14 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-01（wip/w1-quote-signed-back：客戶回簽單上傳）
+- 報價單「客戶回簽單」（使用者：「報價單成案要能上傳客戶報價回簽單」）：沿用既有 `POST/DELETE /api/quotations/{no}/signed-files`（`quotations.signed_files_json`，不新增表／migration），補規則——
+  - **狀態閘**：報價單完成簽核（狀態「已送出」）之後才能上傳（成案前客戶剛簽回、成案、已結案、成案撤回都可傳；草稿／待審核／簽核中／已退回／已作廢 ⇒ 400「…已送出之後才能上傳…」並寫稽核 `quotation.upload_signed_files_denied`）。
+  - **權限**：能讀該報價單的人（業務、協作者 `assigned_user_ids`、admin+）可傳可看；外人與唯讀角色 ⇒ 404（看不到＝不存在）。
+  - ⚠️ **行為變更（刪除收緊）**：原本任何看得到報價單的人都能刪；現在**上傳者本人或 admin+**（舊檔沒有 `uploaderUsername` ⇒ 只有 admin+）；清單裡沒有該 id ⇒ 404；檔案路徑不在這張報價單自己的資料夾（資料被竄改）⇒ 409 且不碰磁碟；被擋寫稽核 `quotation.delete_signed_file_denied`。
+  - 每個新檔記錄上傳者帳號（`uploaderUsername`）與時間；上傳稽核內含檔名（不含伺服器路徑）。
+  - **案件管理頁**「案件資訊」分頁最上方新增「客戶回簽單」區塊（列出／預覽／上傳／刪除；上傳鈕只在可上傳時出現）；**報價單表單**每檔顯示上傳者與時間、刪除鈕只給有權的人、案件進度旁新增選填的「客戶回簽單 ＋上傳」入口（不影響標記成案）。
+  - 檔案中心（P3）既有的 `quotation_signed` 類別沿用同一可見性；不是結案條件。
+
 ## 1.0.59 — 2026-10-01（wip/w1-a2-4：A2-7 費用單據的通知信與單據輸出）
 - 通知信（`expense_notify.py`；信件類型 `owner="case"`，自動併入個人通知偏好）：`expense_form_submitted／next_tier／approved／returned／payout_pending／paid`。送審→當層簽核人；下一層→新一層簽核人；核准→申請人（需付款的類型另寄出納「待撥款」）；退回→申請人（含原因）；出納登錄付款→申請人。**信內不放金額**；`kind=''` 的舊額外支出一律不寄；寄信失敗只記 log、不影響簽核／付款。掛點：`case_extra_expenses.py` 的 submit（含無簽核層的自動核准）／approve／reject 與 `payables.mark_paid`。
 - 單據輸出：`GET /api/quotations/{quote_no}/extra-expenses/{id}/document?format=html|pdf`（無案件用 `-`）。版型取自單據釘住的定義版本的 `output.template`（`def_version=0` ⇒ 目前生效版），走 L1 `render_document`（公司抬頭／簽核欄／未核可每頁紅色標示）；可見性＝建立者、簽核鏈成員、admin／superadmin、出納／財務，看不到回 404；`kind=''` 回 404。

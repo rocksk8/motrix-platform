@@ -46,6 +46,7 @@ window.CM_PARTS.push(() => ({
     selected: null,
     activeTab: 'biz',
     // 附件目錄 P3「全部附件」頁籤：檔案中心（filehub）在才有；資料依案件單號標記（換案件時舊資料不顯示）
+    signedBackBusy: false, signedBackErr: '',
     fileCenterOn: false, caseFiles: [], caseFilesFor: '', caseFilesLoading: false, caseFilesErr: '', caseFilesUnavail: [],
     execSubTab: 'progress',
     cr: { dealTag: '已成案', caseRecord: null },
@@ -244,6 +245,42 @@ window.CM_PARTS.push(() => ({
     },
 
     // ── 附件目錄 P3：案件頁「全部附件」（檔案中心在才出現；同一支 /api/filehub/search 固定本案件）──
+    // ── 客戶回簽單（報價單回簽附件）：案件頁的列出／上傳／刪除，打既有 /api/quotations/{no}/signed-files ──
+    signedBackFiles() { return (this.selected && this.selected.signed_files) || [] },
+    canUploadSignedBack() { return !!this.selected && this.selected.status === '已送出' && !this.caseReadOnly() },
+    canDeleteSignedBack(f) {
+      const role = this.session && this.session.role
+      return ['admin', 'superadmin'].includes(role) || (!!f.uploaderUsername && f.uploaderUsername === (this.session && this.session.username))
+    },
+    async _refreshSignedBack() {
+      const no = this.selected && this.selected.quote_no
+      if (!no) return
+      const r = await fetch('/api/quotations/' + encodeURIComponent(no), { headers: { Authorization: 'Bearer ' + this.session.token } })
+      if (r.ok && this.selected && this.selected.quote_no === no) this.selected.signed_files = (await r.json()).signed_files || []
+    },
+    async uploadSignedBack(evt) {
+      const files = evt && evt.target && evt.target.files
+      if (!files || !files.length || !this.selected) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      this.signedBackBusy = true; this.signedBackErr = ''
+      try {
+        const r = await fetch('/api/quotations/' + encodeURIComponent(this.selected.quote_no) + '/signed-files', {
+          method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }, body: fd })
+        if (!r.ok) { this.signedBackErr = (await r.json().catch(() => ({}))).detail || '上傳失敗'; return }
+        await this._refreshSignedBack()
+        MotrixUI.toast('已上傳客戶回簽單')
+      } catch (e) { this.signedBackErr = '上傳失敗：' + e.message } finally { this.signedBackBusy = false; evt.target.value = '' }
+    },
+    async deleteSignedBack(f) {
+      if (!(await MotrixUI.confirm('確定刪除「' + f.filename + '」？刪除後無法復原。'))) return
+      this.signedBackErr = ''
+      const r = await fetch('/api/quotations/' + encodeURIComponent(this.selected.quote_no) + '/signed-files/' + encodeURIComponent(f.id), {
+        method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+      if (!r.ok) { this.signedBackErr = (await r.json().catch(() => ({}))).detail || '刪除失敗'; return }
+      await this._refreshSignedBack()
+    },
+
     async detectFileCenter() {
       try {
         const r = await fetch('/api/system/modules/availability', { headers: { Authorization: 'Bearer ' + this.session.token } })

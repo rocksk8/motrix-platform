@@ -865,6 +865,12 @@
           </span>
         </template>
       </div>
+      <!-- 成案處的選填入口：客戶簽回的報價單隨時可傳（報價單已送出之後）；不影響標記成案，也不是結案條件 -->
+      <label x-show="q.quoteNo && q.status === '已送出'" data-testid="qf-signed-upload-deal" title="上傳客戶簽回的報價單（選填）"
+             style="font-size:11px;color:var(--text-secondary);border:1px solid var(--border-light);border-radius:4px;padding:4px 8px;cursor:pointer;white-space:nowrap;background:#fff">
+        <span x-text="'客戶回簽單' + ((q.signedFiles||[]).length ? '（' + q.signedFiles.length + '）' : '') + ' ＋上傳'"></span>
+        <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadQuotationSignedFiles($event)">
+      </label>
       <template x-if="q.dealTag==='已成案'||q.dealTag==='已結案'">
         <a :href="'case-management.html' + (q.quoteNo ? '?q=' + encodeURIComponent(q.quoteNo) : '')" style="font-size:11px;color:#15803D;text-decoration:none;display:flex;align-items:center;gap:4px;padding:4px 8px;border:1px solid #86EFAC;border-radius:4px;white-space:nowrap;font-family:LINE Seed TW_OTF, sans-serif">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
@@ -1093,10 +1099,11 @@
           <template x-for="f in (q.signedFiles||[])" :key="f.id">
             <span style="display:flex;align-items:center;gap:4px;font-size:11px;background:#F3F4F6;border-radius:4px;padding:2px 6px">
               <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
-              <button @click="deleteQuotationSignedFile(f.id)" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:11px;padding:0 2px">×</button>
+              <span style="color:var(--text-dim)" x-text="(f.uploadedBy || '') + ' ' + (f.uploadedAt || '').slice(5, 16).replace('T', ' ')"></span>
+              <button x-show="canDeleteQuotationSignedFile(f)" data-testid="qf-signed-delete" @click="deleteQuotationSignedFile(f.id)" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:11px;padding:0 2px">×</button>
             </span>
           </template>
-          <label style="padding:4px 10px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">
+          <label data-testid="qf-signed-upload" style="padding:4px 10px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">
             + 上傳附件
             <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadQuotationSignedFiles($event)">
           </label>
@@ -3575,6 +3582,11 @@
         evt.target.value = ''
       },
 
+      canDeleteQuotationSignedFile(f) {
+        // 與後端同一條規則：上傳者本人或 admin+（沒有 uploaderUsername 的舊檔只有 admin+）
+        return ['admin', 'superadmin'].includes(this.session?.role) || (!!f.uploaderUsername && f.uploaderUsername === this.session?.username)
+      },
+
       async deleteQuotationSignedFile(fileId) {
         if (!confirm('確定刪除此附件？')) return
         try {
@@ -3952,6 +3964,13 @@
               this._fillMissingTerms(row.data)
               this.q.quoteNo = editNo
               this._prevDealTag = this.q.dealTag || ''
+              // 回簽相關欄位是 SQL 熱欄位，不在 data_json 裡（同 loadQuote()）：開啟既有報價單時一併帶入，
+              // 否則「客戶回簽單」清單與「已回簽」狀態要等到上傳／重載之後才看得到（既有缺陷，客戶回簽單功能補上）
+              this.q.isSigned = !!row.is_signed
+              this.q.signedBy = row.signed_by || ''
+              this.q.signedAt = row.signed_at || ''
+              this.q.signedLog = row.signed_log || []
+              this.q.signedFiles = row.signed_files || []
               // 舊報價單若 salesPerson 是過期硬編碼預設值，改用當前登入者
               const _OLD = ['Corbin Chang', 'corbin chang', '']
               if (_OLD.includes((this.q.salesPerson || '').trim()) && this._me) {

@@ -1370,32 +1370,57 @@ def toggle_quotation_signed(quote_no: str, body: dict = Body(...), authorization
     return {"ok": True, "is_signed": action == "sign", "signed_log": log}
 
 
-@router.post("/api/quotations/{quote_no}/signed-files", status_code=201)
-async def upload_quotation_signed_files(quote_no: str, files: List[UploadFile] = File(...),
-                                        authorization: str = Header(None)):
-    """報價單回簽附件上傳（多檔）——任何登入使用者皆可補傳。"""
-    user = _require_user(authorization)
-    conn = get_db()
+#: 客戶回簽單（報價單回簽附件）可上傳的報價單狀態：完成簽核（已送出）之後——客戶把簽回的報價單寄回，通常在標記「已成案」之前或當下。
+#: 草稿／待審核／簽核中／已退回／已作廢一律擋（4xx，不是 200 後靜默丟檔）。成案撤回、已結案不改狀態 ⇒ 仍可補傳，既有檔不動。
+SIGNED_BACK_STATUSES = ("已送出",)
+
+
+def _signed_back_gate(conn, quote_no: str, user: dict, authorization) -> dict:
+    """上傳前的共用檢查 ⇒ 回報價單列。擁有者規則（`_guard_case`：業務／協作者／admin+）→ 狀態閘（`SIGNED_BACK_STATUSES`）。
+    被狀態閘擋下也寫一筆稽核（`quotation.upload_signed_files_denied`），與被擁有者規則擋下（`deny_case` 的稽核）對稱。"""
     _guard_case(conn, quote_no, user)
-    row = conn.execute("SELECT signed_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    row = conn.execute("SELECT status, signed_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "報價單不存在")
+    if row["status"] not in SIGNED_BACK_STATUSES:
+        st = row["status"]
+        conn.close()
+        _audit(_tok(authorization), "quotation.upload_signed_files_denied", "quotation", quote_no, "%s 狀態「%s」不可上傳客戶回簽單" % (quote_no, st))
+        raise HTTPException(400, "報價單完成簽核（狀態為「已送出」）之後才能上傳客戶回簽單；目前狀態：「%s」" % st)
+    return row
+
+
+@router.post("/api/quotations/{quote_no}/signed-files", status_code=201)
+async def upload_quotation_signed_files(quote_no: str, files: List[UploadFile] = File(...),
+                                        authorization: str = Header(None)):
+    """客戶回簽單（報價單回簽附件）上傳（多檔；pdf／jpg／png，大小上限同其他附件）。
+    誰：能讀這張報價單的人（業務／協作者／admin+；`_guard_case`，外人看到的是 404）。何時：報價單已送出（`SIGNED_BACK_STATUSES`）之後。
+    每個檔記錄上傳者（顯示名＋帳號 `uploaderUsername`）與時間；刪除規則見 `delete_quotation_signed_file`。**不是**結案條件。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    row = _signed_back_gate(conn, quote_no, user, authorization)
     existing = json.loads(row["signed_files_json"] or "[]")
     new_files = await save_document_files("quotations", quote_no, files, user.get("display_name") or user["username"])
+    for f in new_files:
+        f["uploaderUsername"] = user["username"]          # 刪除規則（上傳者本人或 admin+）要靠帳號；顯示名可能重複
     all_files = existing + new_files
     now = datetime.now().isoformat()
     conn.execute("UPDATE quotations SET signed_files_json=?, updated_at=? WHERE quote_no=?",
                  (json.dumps(all_files, ensure_ascii=False), now, quote_no))
     conn.commit()
     conn.close()
+    names = "、".join(str(f.get("filename") or "")[:60] for f in new_files)[:300]
     _audit(_tok(authorization), "quotation.upload_signed_files", "quotation", quote_no,
-           f"{quote_no}（{len(new_files)} 個檔案）")
+           f"{quote_no}（{len(new_files)} 個檔案：{names}）")
     return {"ok": True, "added": len(new_files), "files": new_files}
 
 
 @router.delete("/api/quotations/{quote_no}/signed-files/{file_id}")
 def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str = Header(None)):
+    """刪除客戶回簽單：上傳者本人或 admin+（實體刪除：檔＋清單列，寫稽核）。
+    行為變更（2026-10-01，第 29 班）：原本任何看得到報價單的人都能刪；沒有 `uploaderUsername` 的舊檔只有 admin+ 刪得掉。
+    清單裡沒有這個 id ⇒ 404；檔案路徑不在這張報價單自己的資料夾（資料被竄改）⇒ 409 且不碰磁碟。"""
     user = _require_user(authorization)
     conn = get_db()
     _guard_case(conn, quote_no, user)
@@ -1404,13 +1429,26 @@ def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str
         conn.close()
         raise HTTPException(404, "報價單不存在")
     existing = json.loads(row["signed_files_json"] or "[]")
+    target = next((f for f in existing if isinstance(f, dict) and f.get("id") == file_id), None)
+    if target is None:
+        conn.close()
+        raise HTTPException(404, "找不到這個回簽附件")
+    is_admin = user.get("role") in ("admin", "superadmin")
+    if not is_admin and not (target.get("uploaderUsername") and target.get("uploaderUsername") == user.get("username")):
+        conn.close()
+        _audit(_tok(authorization), "quotation.delete_signed_file_denied", "quotation", quote_no, "%s 無權刪除回簽附件" % quote_no)
+        raise HTTPException(403, "只有上傳者本人或管理員可以刪除客戶回簽單")
+    if _uploads_mod.upload_path_key(target, "quotations") != quote_no:
+        conn.close()
+        raise HTTPException(409, "這個附件的檔案位置不正確，無法刪除；請洽管理員")
     remaining = delete_document_file("quotations", quote_no, existing, file_id)
     now = datetime.now().isoformat()
     conn.execute("UPDATE quotations SET signed_files_json=?, updated_at=? WHERE quote_no=?",
                  (json.dumps(remaining, ensure_ascii=False), now, quote_no))
     conn.commit()
     conn.close()
-    _audit(_tok(authorization), "quotation.delete_signed_file", "quotation", quote_no, quote_no)
+    _audit(_tok(authorization), "quotation.delete_signed_file", "quotation", quote_no,
+           f"{quote_no}（{str(target.get('filename') or '')[:60]}）")
     return {"ok": True}
 
 
