@@ -12,7 +12,7 @@ from helpers import _audit, _require_user, _tok, require_any_module
 from modules.accounting.ledger import category_map as _cm
 
 router = APIRouter(prefix="/api/ledger", tags=["ledger"])
-list_router = APIRouter(prefix="/api", tags=["ledger"])        # 費用單據下拉選單用：任何登入者可讀（只讀啟用中的類別）
+list_router = APIRouter(tags=["ledger"])        # 費用單據下拉選單用：任何登入者可讀（只讀啟用中的類別）。不設 prefix：掃描器取檔內最後一個 APIRouter 的 prefix 當 router 的，會把上面的路由算成 /api/…
 
 
 def _require_read(authorization):
@@ -104,7 +104,7 @@ def provide_category_account(conn, key):
     return _cm.category_account(conn, key)
 
 
-@list_router.get("/expense-categories")
+@list_router.get("/api/expense-categories")
 def list_active_expense_categories(authorization: str = Header(None)):
     """費用單據的類別下拉選單（任何登入者；只回啟用中的 `[{code, name, default_tax}]`，不含科目）。"""
     _require_user(authorization)

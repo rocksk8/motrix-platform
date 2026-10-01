@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 928,
+  "tests": 932,
   "unmapped": 12,
   "kinds": {
-   "api": 497,
-   "e2e": 218,
+   "api": 500,
+   "e2e": 219,
    "audit": 128,
    "unit": 85
   },
-  "routes": 698
+  "routes": 703
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -206,6 +206,41 @@
    },
    "module": "accounting"
   },
+  "backend/modules/accounting/tests/test_category_map_g1_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_category_map",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/category_map",
+    "mod:accounting/ledger/roles",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/accounting/api/ledger_category_map.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/category_map.py",
+     "backend/modules/accounting/ledger/roles.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_category_map.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "unresolved_api": [
+    "/api/expense-categories"
+   ],
+   "login_fixture": true,
+   "module": "accounting"
+  },
   "backend/modules/accounting/tests/test_custom_account_items_2026_09_23.py": {
    "kind": "api",
    "units": [
@@ -362,6 +397,28 @@
    },
    "module": "accounting"
   },
+  "backend/modules/accounting/tests/test_e2e_ledger_category_map_2026_10_01.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/ledger-settings.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/ledger-settings.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
   "backend/modules/accounting/tests/test_e2e_ledger_export_pdf_2026_09_30.py": {
    "kind": "e2e",
    "units": [
@@ -429,6 +486,7 @@
     "dir:backend/modules/accounting/",
     "file:backend/tests/_e2e_login.py",
     "mod:accounting/api/ledger_annotations",
+    "mod:accounting/api/ledger_category_map",
     "mod:accounting/api/ledger_closing",
     "mod:accounting/api/ledger_engine",
     "mod:accounting/api/ledger_periods",
@@ -454,6 +512,7 @@
     ],
     "api": [
      "backend/modules/accounting/api/ledger_annotations.py",
+     "backend/modules/accounting/api/ledger_category_map.py",
      "backend/modules/accounting/api/ledger_closing.py",
      "backend/modules/accounting/api/ledger_engine.py",
      "backend/modules/accounting/api/ledger_periods.py",
@@ -794,6 +853,39 @@
     ],
     "api": [
      "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_expense_forms_gl_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_engine",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/category_map",
+    "mod:accounting/ledger/features",
+    "mod:accounting/ledger/periods",
+    "mod:accounting/ledger/reports",
+    "mod:accounting/ledger/roles"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/category_map.py",
+     "backend/modules/accounting/ledger/features.py",
+     "backend/modules/accounting/ledger/periods.py",
+     "backend/modules/accounting/ledger/reports.py",
+     "backend/modules/accounting/ledger/roles.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_engine.py"
     ],
     "module_dir": [
      "backend/modules/accounting/"
@@ -1876,6 +1968,41 @@
      "backend/modules/accounting/ledger/contract.py",
      "backend/modules/accounting/ledger/custom_events.py",
      "backend/modules/accounting/ledger/engine.py",
+     "backend/modules/accounting/ledger/roles.py"
+    ],
+    "api": [
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_c7_tax_g3_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/helpers/__init__.py",
+    "helper:custom_finance",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/contract",
+    "mod:accounting/ledger/custom_events",
+    "mod:accounting/ledger/roles",
+    "router:custom_records",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/custom_finance.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/contract.py",
+     "backend/modules/accounting/ledger/custom_events.py",
      "backend/modules/accounting/ledger/roles.py"
     ],
     "api": [
@@ -22255,6 +22382,7 @@
     "mod:accounting/api/account_items",
     "mod:accounting/api/accounting_export",
     "mod:accounting/api/ledger_annotations",
+    "mod:accounting/api/ledger_category_map",
     "mod:accounting/api/ledger_periods",
     "mod:accounting/api/ledger_reports",
     "mod:accounting/api/ledger_requests",
@@ -22325,6 +22453,7 @@
      "backend/modules/accounting/api/account_items.py",
      "backend/modules/accounting/api/accounting_export.py",
      "backend/modules/accounting/api/ledger_annotations.py",
+     "backend/modules/accounting/api/ledger_category_map.py",
      "backend/modules/accounting/api/ledger_periods.py",
      "backend/modules/accounting/api/ledger_reports.py",
      "backend/modules/accounting/api/ledger_requests.py",

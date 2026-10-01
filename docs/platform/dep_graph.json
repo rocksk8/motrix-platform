@@ -2269,6 +2269,7 @@
     "mod:accounting/api/account_items",
     "mod:accounting/api/accounting_export",
     "mod:accounting/api/ledger_annotations",
+    "mod:accounting/api/ledger_category_map",
     "mod:accounting/api/ledger_closing",
     "mod:accounting/api/ledger_engine",
     "mod:accounting/api/ledger_periods",
@@ -2415,6 +2416,7 @@
     "mod:accounting/api/account_items",
     "mod:accounting/api/accounting_export",
     "mod:accounting/api/ledger_annotations",
+    "mod:accounting/api/ledger_category_map",
     "mod:accounting/api/ledger_closing",
     "mod:accounting/api/ledger_engine",
     "mod:accounting/api/ledger_periods",
@@ -2696,6 +2698,92 @@
     "system_settings"
    ]
   },
+  "mod:accounting/api/ledger_category_map": {
+   "api_prefixes": [
+    "/api/ledger"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:accounting/ledger/category_map",
+    "mod:accounting/ledger/fs_lines",
+    "mod:accounting/ledger/roles"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "mod:accounting/ledger/category_map"
+   ],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/api/ledger_category_map.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "get_category_map",
+     "line": 37,
+     "method": "GET",
+     "path": "/api/ledger/category-map"
+    },
+    {
+     "func": "put_category_map",
+     "line": 48,
+     "method": "PUT",
+     "path": "/api/ledger/category-map"
+    },
+    {
+     "func": "delete_category_map",
+     "line": 67,
+     "method": "DELETE",
+     "path": "/api/ledger/category-map/{category}"
+    },
+    {
+     "func": "put_expense_category",
+     "line": 84,
+     "method": "PUT",
+     "path": "/api/ledger/expense-categories"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [
+    "expense_categories",
+    "gl_category_map"
+   ],
+   "tables_r": [
+    "gl_account_meta"
+   ],
+   "tables_r_transitive": [
+    "account_items",
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "gl_account_meta",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "expense_categories",
+    "gl_account_meta",
+    "gl_account_roles",
+    "gl_category_map",
+    "gl_fs_lines",
+    "notifications",
+    "system_settings"
+   ]
+  },
   "mod:accounting/api/ledger_closing": {
    "api_prefixes": [
     "/api/ledger"
@@ -2843,6 +2931,7 @@
     "helper:uploads",
     "mod:accounting/api/voucher_common",
     "mod:accounting/ledger/auto_run",
+    "mod:accounting/ledger/category_map",
     "mod:accounting/ledger/contract",
     "mod:accounting/ledger/engine",
     "mod:accounting/ledger/features",
@@ -2942,8 +3031,10 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "expense_categories",
     "gl_account_meta",
     "gl_account_roles",
+    "gl_category_map",
     "gl_confirm_batches",
     "gl_engine_runs",
     "gl_fiscal_years",
@@ -3556,6 +3647,7 @@
     "helper:xlsx_out",
     "mod:accounting/api/voucher_common",
     "mod:accounting/ledger/cashflow",
+    "mod:accounting/ledger/category_map",
     "mod:accounting/ledger/closing",
     "mod:accounting/ledger/contract",
     "mod:accounting/ledger/engine",
@@ -3661,8 +3753,10 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "expense_categories",
     "gl_account_meta",
     "gl_account_roles",
+    "gl_category_map",
     "gl_engine_runs",
     "gl_fiscal_years",
     "gl_fs_lines",
@@ -4071,6 +4165,26 @@
    ],
    "tables_w": []
   },
+  "mod:accounting/ledger/category_map": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:accounting/ledger/roles"
+   ],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/ledger/category_map.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "gl_account_meta"
+   ],
+   "tables_w": [
+    "expense_categories",
+    "gl_category_map"
+   ]
+  },
   "mod:accounting/ledger/closing": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -4105,6 +4219,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "mod:accounting/ledger/category_map",
     "mod:accounting/ledger/roles",
     "plat:registry"
    ],
@@ -11113,9 +11228,13 @@
   },
   "page:pages/ledger-settings.html": {
    "api_calls": [
+    "/api/ledger/category-map",
+    "/api/ledger/category-map/",
+    "/api/ledger/expense-categories",
     "/api/system/branding/favicon"
    ],
    "api_prefixes": [
+    "/api/ledger",
     "/api/system"
    ],
    "api_unmatched": [],
@@ -11128,9 +11247,11 @@
    "kind": "page",
    "path": "frontend/pages/ledger-settings.html",
    "routers_called": [
+    "mod:accounting/api/ledger_category_map",
     "router:system"
    ],
    "routers_called_effective": [
+    "mod:accounting/api/ledger_category_map",
     "mod:accounting/api/ledger_reports",
     "mod:accounting/api/ledger_settings",
     "router:system"
@@ -16309,6 +16430,21 @@
     "core:db"
    ]
   },
+  "table:expense_categories": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [
+    "mod:accounting/api/ledger_category_map"
+   ],
+   "path": "backend/modules/accounting/migrations/0003_dims_and_categories.py:12",
+   "readers": [],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:accounting/ledger/category_map"
+   ]
+  },
   "table:fa_assets": {
    "api_prefixes": [],
    "imports": [],
@@ -16457,8 +16593,10 @@
    "named_by": [],
    "path": "backend/modules/accounting/migrations/0001_ledger_base.py:22",
    "readers": [
+    "mod:accounting/api/ledger_category_map",
     "mod:accounting/api/ledger_settings",
     "mod:accounting/ledger/cashflow",
+    "mod:accounting/ledger/category_map",
     "mod:accounting/ledger/closing",
     "mod:accounting/ledger/engine",
     "mod:accounting/ledger/equity",
@@ -16532,12 +16670,16 @@
    "api_prefixes": [],
    "imports": [],
    "kind": "table",
-   "named_by": [],
+   "named_by": [
+    "mod:accounting/api/ledger_category_map"
+   ],
    "path": "backend/modules/accounting/migrations/0001_ledger_base.py:95",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
-   "writers": []
+   "writers": [
+    "mod:accounting/ledger/category_map"
+   ]
   },
   "table:gl_confirm_batches": {
    "api_prefixes": [],
@@ -16572,6 +16714,17 @@
    "readers": [
     "mod:accounting/ledger/custom_events"
    ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": []
+  },
+  "table:gl_dimensions": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/accounting/migrations/0003_dims_and_categories.py:10",
+   "readers": [],
    "tables_r": [],
    "tables_w": [],
    "writers": []
