@@ -1,6 +1,6 @@
 # 薪資獎金 更新紀錄
 
-## (next) — 2026-10-01（暫用號，列車取號；fix/t29-w2）員工收款帳號：寫入端點的稽核改由端點本體呼叫
+## 1.1.19 — 2026-10-01（暫用號，列車取號；fix/t29-w2）員工收款帳號：寫入端點的稽核改由端點本體呼叫
 - `PUT /api/me/bank-account`、`PUT /api/bank-accounts/{user_id}`：稽核（`user.bank_account.update`）原本藏在內部 helper `_save` 裡，寫入端點稽核守門（`test_write_endpoints_are_audited`，只認端點本體直接呼叫 `_audit`）判為沒稽核而擋下全量測試；改成端點自己呼叫 `_audit`。稽核內容照舊（欄位、前後**末四碼**、byAdmin），另加 `userId`、`changedBy`；**不含帳號全碼與戶名**；沒有變更（noop）不寫稽核。下游效應（R1）：只多兩個稽核欄位，API 回應與資料不變。
 
 ## 1.1.18 — 2026-10-01（暫用號，列車取號；fix/contractor-bank-mask-2）
