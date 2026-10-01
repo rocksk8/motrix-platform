@@ -6,7 +6,8 @@
 - `engine_posted`／`engine_unposted`：總帳引擎產生的傳票（`origin LIKE 'gl:%'`，含反向傳票）已過帳／尚未過帳（草稿、待審、簽核中、已核准）
 - `bonus_posted`：獎金模組開立的傳票（`origin LIKE 'bonus%'`）已過帳
 - `manual_posted`：其餘（手工）傳票已過帳
-另有 `by_origin_posted`：`{origin: expense}`（已過帳、費用類科目行、依傳票來源），給報表分類對照。
+另有 `by_origin_posted`：`{origin: expense}`（已過帳、費用類科目行、依傳票來源），給報表分類對照；
+`tax_in_by_origin_posted`：`{origin: 進項稅額}`（已過帳、只含總帳引擎傳票 `gl:…`），給類別層級的稅額分桶（只增鍵，舊使用者不受影響）。
 收入＝收入類科目（revenue／other_income）貸方−借方；費用＝cost／expense／other_expense 借方−貸方；`tax_out`＝銷項稅額科目貸−借；
 `tax_in`＝進項稅額科目借−貸（科目 `tax_role` 是 `output_tax`／`input_tax`）。不含 `kind='closing'` 結轉傳票、不含已作廢。
 只讀、不寫、不 commit；表不存在 ⇒ `available: False` 並說明，不是 0。"""
@@ -60,6 +61,9 @@ def month_totals(conn, year):
         if r["posted"] and r["t"] in _EXP:
             bo = months[r["mo"]].setdefault("by_origin_posted", {})
             bo[r["origin"] or ""] = bo.get(r["origin"] or "", 0) + (d - c)
+        if r["posted"] and r["tr"] == "input_tax" and g == "engine_posted":
+            ti = months[r["mo"]].setdefault("tax_in_by_origin_posted", {})
+            ti[r["origin"] or ""] = ti.get(r["origin"] or "", 0) + (d - c)
     events = {}
     for r in ev:
         e = events.setdefault(r["mo"], {"drift": 0, "orphan": 0, "blocked": 0})

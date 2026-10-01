@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 971,
+  "tests": 972,
   "unmapped": 12,
   "kinds": {
-   "api": 523,
+   "api": 524,
    "e2e": 232,
    "audit": 129,
    "unit": 87
@@ -2064,6 +2064,42 @@
     ]
    },
    "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_diff_category_buckets_2026_10_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/ledger_engine",
+    "mod:accounting/api/ledger_periods",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/features",
+    "mod:accounting/ledger/periods",
+    "mod:accounting/ledger/roles",
+    "mod:accounting/tests/test_ledger_acceptance_2026_10_01",
+    "mod:analytics/api/ledger_diff"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/features.py",
+     "backend/modules/accounting/ledger/periods.py",
+     "backend/modules/accounting/ledger/roles.py",
+     "backend/modules/accounting/tests/test_ledger_acceptance_2026_10_01.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_engine.py",
+     "backend/modules/accounting/api/ledger_periods.py",
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/analytics/api/ledger_diff.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
    "module": "accounting"
   },
   "backend/modules/accounting/tests/test_ledger_l_gaps_2026_09_30.py": {

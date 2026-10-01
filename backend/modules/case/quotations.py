@@ -495,6 +495,11 @@ class _CaseRecognition:
         return r.dispatch_entries(conn, basis)
 
     @staticmethod
+    def individual_linked_entries(conn, basis):
+        from modules.case import recognition as r
+        return r.individual_linked_entries(conn, basis)
+
+    @staticmethod
     def material_entries(conn, basis, department_id=None):
         from modules.case import recognition as r
         return r.material_entries(conn, basis, department_id)

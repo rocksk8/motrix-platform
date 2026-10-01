@@ -32,8 +32,9 @@ NOTES = [
     "報表與總帳本來就有口徑差異：差額待審核（報表現金已用實付、總帳核可後才入帳）、額外支出送審中（報表計入、總帳要已核准）、"
     "權責口徑含草稿派工（總帳要驗收＋發票日）、進貨以採購日計費用（總帳進貨為存貨，費用在出貨成本）、進貨報廢（報表少、總帳存貨不減）。",
     "尚未接總帳的來源不會出現在總帳欄：自訂模組金額欄（E20／E21 排程中）等；見 MONEY-FLOWS §2。",
-    "差額原因分桶只算在每月的收入／支出合計；類別（承攬商／設備／料件／其他）只有報表、總帳、差額，沒有分桶："
-    "例如承攬商類別的差額含稅額（進項稅）與個人外包（總帳歸『其他』），要對照合計的原因說明，不能把類別差額當成單一原因。",
+    "類別（承攬商／設備／料件／其他）的差額原因分桶：稅額（現金口徑報表含稅、總帳不含；依總帳進項稅額的傳票來源歸類）、個人外包（匯款單裡已關聯勞報單的個人："
+    "報表算在承攬商，總帳改記勞報單歸『其他』，兩邊各差這個金額）、手工傳票與獎金（只在總帳，歸『其他』）；其餘歸『其餘（時點／口徑）』，"
+    "例如勞報單代扣的所得稅與二代健保（報表只算實付）、未入帳草稿（類別層級不拆）。",
     "總帳引擎只能手動執行：來源剛改過、尚未執行引擎時，報表已變而總帳還沒變（『未入帳草稿』與『待處理事件』會顯示）。",
 ]
 
@@ -55,6 +56,33 @@ def _month_income(basis, y, m):
     return round(sum(float(i.get("amount") or 0) for i in items)), ""
 
 
+def _individual_by_month(basis):
+    """匯款單已關聯勞報單的個人外包金額（報表算在承攬商、總帳記在其他）：{月份: 金額}。來源 case.recognition.individual_linked_entries。"""
+    rec = R._recognition()
+    if rec is None or not hasattr(rec, "individual_linked_entries"):          # 案件模組不在／舊版沒有這個函式 ⇒ 沒有個人外包桶（residual 兜底），不是錯誤
+        return {}
+    conn = R.get_db()
+    try:
+        out = {}
+        for e in rec.individual_linked_entries(conn, basis):
+            mo = (e["date"] or "")[:7]
+            out[mo] = out.get(mo, 0) + int(e["amount"])
+        return out
+    finally:
+        conn.close()
+
+
+def _category_buckets(c, rep, gl, g, basis, indiv):
+    """類別層級原因分桶（報表 − 總帳；各桶相加＋residual＝差額）：tax（現金口徑）／individual（承攬商 +、其他 −）／manual／bonus（只在其他）。"""
+    tax = 0
+    if basis == "cash":
+        tax = sum(int(v) for o, v in (g.get("tax_in_by_origin_posted") or {}).items() if _ORIGIN_CAT.get(o, "other") == c)
+    b = {"tax": tax, "individual": indiv if c == "contractor" else -indiv if c == "other" else 0,
+         "manual": -(g.get("manual_posted") or {}).get("expense", 0) if c == "other" else 0,
+         "bonus": -(g.get("bonus_posted") or {}).get("expense", 0) if c == "other" else 0}
+    return dict(b, residual=rep - gl - sum(b.values()))
+
+
 def build(year, basis):
     basis = normalize_basis(basis)
     prov = _registry.providers("ledger.month_totals").get("accounting")
@@ -67,6 +95,7 @@ def build(year, basis):
     else:
         gl = {"available": False, "notice": "會計模組未安裝，沒有總帳可比對"}
     exp = {x["month"]: x for x in R._collect_expenses(year, None, basis)["monthly"]}          # 報表的 monthly 是清單（每月一筆）
+    indiv = _individual_by_month(basis)
     rows, income_notice = [], ""
     totals = {"income": {"report": 0, "gl": 0}, "expense": {"report": 0, "gl": 0}}
     for m in range(1, 13):
@@ -92,7 +121,8 @@ def build(year, basis):
             for origin, amt in (g.get("by_origin_posted") or {}).items():
                 by_cat[_ORIGIN_CAT.get(origin, "other")] += int(amt)
             for c in _CATS:
-                row["expense"]["categories"][c].update({"gl": by_cat[c], "diff": rep_exp[c] - by_cat[c]})
+                row["expense"]["categories"][c].update({"gl": by_cat[c], "diff": rep_exp[c] - by_cat[c],
+                                                        "buckets": _category_buckets(c, rep_exp[c], by_cat[c], g, basis, indiv.get(mo, 0))})
             row["pendingEvents"] = (gl.get("events") or {}).get(mo) or {"drift": 0, "orphan": 0, "blocked": 0}
             totals["income"]["gl"] += gl_rev
             totals["expense"]["gl"] += gl_exp

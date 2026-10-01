@@ -17,6 +17,7 @@ from tests._e2e_login import inject_login  # noqa: E402
 
 Y = date.today().year
 _SEQ = [0]
+_LINKED = []          # 個人外包（已關聯勞報單）金額替身；預設空 ⇒ 其餘題不受影響
 
 
 def _shot(page, name):
@@ -73,6 +74,10 @@ def _patch_report(monkeypatch):
         @staticmethod
         def accrual_income_items(c, a, b, d):
             return [{"amount": 1000}] if a[:7] == "%d-02" % Y else []
+
+        @staticmethod
+        def individual_linked_entries(c, basis):
+            return list(_LINKED)
 
     class _Proxy:
         _collect_income_items = staticmethod(_income)
@@ -188,3 +193,50 @@ def test_user_without_finance_view_sees_an_error_not_an_empty_table(live_server,
     assert "與總帳差異載入失敗" in page.inner_text('[data-testid="gldiff-error"]')
     assert page.locator('[data-testid="gldiff-table"]').count() == 0
     _shot(page, "05-no-permission")
+
+
+@pytest.mark.e2e
+def test_category_level_buckets_are_shown_with_the_computed_numbers(live_server, make_user, e2e_browser, monkeypatch):
+    """低風險 #3(b)：類別層級原因分桶畫在頁上。手算（現金口徑，二月；報表側固定：承攬商 525、其他 140；總帳側種：E04 500＋進項稅 25、手工費用 100）：
+      承攬商 報表 525／總帳 500／差額 25：稅額 25＋個人外包 40（替身：已關聯勞報單 40）＋其餘 −40（25−25−40）
+      其他   報表 140／總帳 100／差額 40：個人外包 −40＋手工傳票 −100＋其餘 180（40−(−40−100)）
+    畫面數字逐項對。"""
+    _seed_gl()
+    _patch_report(monkeypatch)
+    import sys
+    monkeypatch.setattr(sys.modules[__name__], "_LINKED", [{"date": "%d-02-10" % Y, "dispatchId": 1, "amount": 40}])
+    u = make_user(username="e2ld_sa4", role="superadmin", modules=[])
+    page = e2e_browser.new_context().new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    inject_login(page, live_server, u[0], u[1])
+    _open(page, live_server)
+    page.locator('[data-testid="tab-gldiff"]').click()
+    block = page.locator('[data-cat-buckets="%d-02"]' % Y)
+    block.wait_for(timeout=15000)
+    ctr = block.locator('[data-cat="contractor"]')
+    oth = block.locator('[data-cat="other"]')
+    ctr.wait_for(timeout=10000)
+    oth.wait_for(timeout=10000)
+
+    def buckets(loc):
+        out = {}
+        for i in range(loc.locator("[data-bucket]").count()):
+            sp = loc.locator("[data-bucket]").nth(i)
+            if not sp.is_visible():              # 0 的桶 x-show 隱藏（與月合計列同規則）
+                continue
+            out[sp.get_attribute("data-bucket")] = _num(sp.inner_text().rsplit(" ", 1)[-1])
+        return out
+    assert _num(ctr.inner_text().split("差額")[1]) == 25
+    assert buckets(ctr) == {"tax": 25, "individual": 40, "residual": -40}
+    assert _num(oth.inner_text().split("差額")[1]) == 40
+    assert buckets(oth) == {"individual": -40, "manual": -100, "residual": 180}
+    assert block.locator('[data-cat="equipment"]').count() == 0 or block.locator('[data-cat="equipment"]').is_hidden()     # 沒有差額的類別不列
+    _shot(page, "06-category-buckets")
+    # 權責（未稅）：稅額桶消失，個人外包仍在
+    page.locator('[data-testid="gldiff-basis-accrual"]').click()
+    page.wait_for_function("() => { const s = n => document.querySelector('[data-cat=contractor] [data-bucket=' + n + ']');"
+                           " return s('individual') && s('individual').offsetParent !== null && (!s('tax') || s('tax').offsetParent === null) }", timeout=10000)   # 稅額桶（現金時可見）消失＝這次切換的終點
+    assert buckets(block.locator('[data-cat="contractor"]')).get("individual") == 40
+    assert buckets(block.locator('[data-cat="contractor"]')) == {"individual": 40, "residual": -15}          # 應計未稅：差額 25＝個人外包 40＋其餘 −15
+    assert not errors, errors
