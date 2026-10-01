@@ -123,3 +123,21 @@ def test_the_audit_catches_a_setting_without_an_example_reverse_control(designer
     assert page.evaluate(AUDIT_JS) == []
     page.evaluate("() => { const r = document.querySelector('.fd-right .fd-row'); r.querySelectorAll('.fd-why').forEach(n => n.remove()) }")
     assert page.evaluate(AUDIT_JS) != [], "拿掉說明與例子後檢查要抓到"
+
+
+@pytest.mark.e2e
+def test_in_page_checklist_lists_every_setting_with_title_one_liner_and_example(designer):
+    page = designer
+    page.click('.fd-bar [data-fd-act="check"]')
+    page.wait_for_selector("dialog[data-fd-checklist][open]")
+    rows = page.evaluate("() => [...document.querySelectorAll('dialog[data-fd-checklist] tbody tr')].map(tr => [...tr.children].map(td => td.innerText.trim()))")
+    assert len(rows) >= 30, len(rows)
+    titles = [r[1] for r in rows]
+    for must in ("欄位名稱", "一定要填", "自動帶入", "只有出納能修改", "在清單中顯示", "稅額計算", "加總明細", "日期相差幾天", "最多幾個字", "今天日期", "申請人本人"):
+        assert any(must in t for t in titles), must
+    assert all(r[2] for r in rows), "每一列都要有一句說明"
+    blanks = [r[1] for r in rows if r[3] in ("", "—")]
+    assert set(blanks) <= {"看成品", "復原／重做"}, blanks
+    assert not BANNED.search(" ".join(" ".join(r) for r in rows)), BANNED.search(" ".join(" ".join(r) for r in rows))
+    page.click("dialog[data-fd-checklist] [data-r]")
+    page.wait_for_selector("dialog[data-fd-checklist]", state="detached")

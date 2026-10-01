@@ -178,6 +178,11 @@
 .fd-dlg__b { font-size: 14px; color: var(--ink-secondary); }
 .fd-dlg__b ul { margin: 6px 0 0; padding-left: 20px; }
 .fd-dlg__f { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.fd-dlg--wide { width: min(900px, 94vw); }
+.fd-chk { max-height: 60vh; overflow: auto; }
+.fd-chk table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.fd-chk th, .fd-chk td { text-align: left; vertical-align: top; padding: 6px 9px; border-bottom: 1px solid var(--line); }
+.fd-chk th { background: var(--surface-muted); position: sticky; top: 0; }
 .fd-tabs { display: none; }
 
 /* 窄螢幕：三欄改一次一欄＋底部切換列 */

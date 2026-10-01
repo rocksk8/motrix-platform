@@ -212,3 +212,34 @@ def test_opening_the_designer_and_switching_back_does_not_change_the_draft(desig
     page.wait_for_selector(".fd .fd-paper", state="visible")
     page.wait_for_timeout(1200)                                 # 沒有改動就不會有存檔（要證明「沒發生」只能等）
     assert _draft() == before
+
+
+@pytest.mark.e2e
+def test_deleting_a_published_or_fixed_field_asks_first_and_cancel_keeps_it(designer):
+    """已發布版本有的欄位（舊單據用得到）與固定欄位：刪除前一律確認（復原不跨重新整理）；取消＝不動；確定才刪（並仍可按復原）。"""
+    page = designer
+    page.evaluate("() => { Alpine.$data(document.body)._fd.caps.publishedKeys = ['memo'] }")
+    _field(page, "備忘").click()
+    page.click('.fd-right [data-fd-act="delsel"]')
+    page.wait_for_selector("dialog.fd-dlg[open]")
+    assert "已經在發布的版本" in page.inner_text("dialog.fd-dlg") and "重新整理" in page.inner_text("dialog.fd-dlg")
+    page.click('dialog.fd-dlg [data-r="0"]')                          # 取消
+    page.wait_for_selector("dialog.fd-dlg", state="detached")
+    assert page.locator(".fd-fld", has=page.locator("label", has_text="備忘")).count() == 1
+    page.click('.fd-right [data-fd-act="delsel"]')
+    page.wait_for_selector("dialog.fd-dlg[open]")
+    page.click('dialog.fd-dlg [data-r="1"]')                          # 確定刪除
+    page.wait_for_selector(".fd-toast")
+    _saved(page)
+    assert all(f["key"] != "memo" for f in _draft()["fields"])
+    page.click(".fd-toast button")                                    # 仍可復原
+    _saved(page)
+    assert any(f["key"] == "memo" for f in _draft()["fields"])
+    # 固定欄位（請款類型的保留欄位）：同樣要確認
+    page.evaluate("() => { Alpine.$data(document.body)._fd.caps.fixedTypeKeys = { place: 'text' } }")
+    _field(page, "地點").click()
+    assert page.locator('.fd-right [data-fd="conv"]').count() == 0, "固定欄位不能改種類"
+    page.click('.fd-right [data-fd-act="delsel"]')
+    page.wait_for_selector("dialog.fd-dlg[open]")
+    assert "固定欄位" in page.inner_text("dialog.fd-dlg")
+    page.click('dialog.fd-dlg [data-r="0"]')

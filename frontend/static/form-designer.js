@@ -241,7 +241,7 @@
     var n = this.allProblems().length
     this.els.bar.innerHTML = '<button type="button" class="fd-btn fd-btn--icon" data-fd-act="undo" title="復原（Ctrl+Z）" aria-label="復原"' + (this.at <= 0 ? ' disabled' : '') + '>' + ic('undo') + '</button>' +
       '<button type="button" class="fd-btn fd-btn--icon" data-fd-act="redo" title="重做（Ctrl+Y）" aria-label="重做"' + (this.at >= this.hist.length - 1 ? ' disabled' : '') + '>' + ic('redo') + '</button>' +
-      '<span class="fd-grow"></span>' + (n ? '<button type="button" class="fd-btn fd-btn--warn" data-fd-act="problems">' + ic('warn') + n + ' 個地方要改</button>' : '<span class="fd-ok">' + ic('done') + '目前沒有要改的地方</span>') +
+      '<span class="fd-grow"></span><button type="button" class="fd-btn" data-fd-act="check" title="把每個設定的白話標題、一句說明和例子列成一張表，方便檢查字句">用語檢查表</button>' + (n ? '<button type="button" class="fd-btn fd-btn--warn" data-fd-act="problems">' + ic('warn') + n + ' 個地方要改</button>' : '<span class="fd-ok">' + ic('done') + '目前沒有要改的地方</span>') +
       '<div class="fd-seg" role="group" aria-label="檢視"><button type="button" data-fd-mode="edit" aria-pressed="' + (this.mode === 'edit') + '">編輯</button><button type="button" data-fd-mode="final" aria-pressed="' + (this.mode === 'final') + '">看成品</button></div>'
   }
   proto.renderLeft = function () {
@@ -530,6 +530,37 @@
     return '<div class="fd-box"><h3>更多設定</h3>' + h + '</div>'
   }
 
+  // ───────────── 用語檢查表：每個設定的白話標題＋一句說明＋例子（計算器、自動帶入、目錄屬性取自畫面實際用的資料，改字就同步）─────────────
+  var GENERAL_COPY = [
+    ['欄位名稱', '表單上顯示給使用者看的字。', '「出差地點」'], ['說明文字（選填）', '會用小字顯示在欄位下面。', '「請填發票上的金額」'],
+    ['一定要填', '開起來，使用者沒填就不能送出。', '「地點」開起來 ⇒ 沒填地點，按送出會跳出提醒。'],
+    ['想改成', '把這個欄位換成相近的種類。', '文字 ⇒ 單選選單'],
+    ['選項（使用者可以選哪些）', '一格一個；Enter 新增下一格，可貼多行、拖曳排序、✕ 刪除。', '「國內」Enter「國外」⇒ 兩個選項'],
+    ['自動帶入', '使用者打開表單時，這一格已經填好什麼。', '申請人本人 ⇒ 王小明'],
+    ['「○○」不能改', '自動帶入的內容使用者看得到但不能自己改。', '「申請人本人」不能改'],
+    ['只有出納能修改', '其他人看得到，但不能填；只有出納可以改。', '「付款日」'],
+    ['在清單中顯示', '開起來，這個欄位會出現在「單據清單」的表格裡。', '清單多一欄「地點」'],
+    ['明細表的設定', '最少／最多幾列、新增按鈕的字；每一欄可展開設定種類、是否必填、選項、計算。', '最少 1 列、最多 20 列'],
+    ['區塊名稱／＋ 新增區塊', '把欄位分成幾段；區塊可上下移、刪除。', '基本資料、出差資訊'],
+    ['看成品', '隱藏編輯用的框線，看使用者實際看到的樣子。', '—'],
+    ['復原／重做', '做錯可以回上一步（Ctrl+Z／Ctrl+Y）；刪除後 6 秒內也可按「復原」。', '—']
+  ]
+  proto.showChecklist = function () {
+    var rows = GENERAL_COPY.map(function (r) { return ['一般設定', r[0], r[1], r[2]] })
+    Object.keys(ATTR_COPY).forEach(function (k) { var c = ATTR_COPY[k]; rows.push(['更多設定', c[0], c[1], c[2]]) })
+    M.CALCS.forEach(function (c) { rows.push(['自動計算', c.name, c.why, c.ex]) })
+    this.registry().forEach(function (f) { rows.push(['自動帶入的選擇', f.label, f.why, f.example]) })
+    var body = '<div class="fd-chk"><table><thead><tr><th>類別</th><th>白話標題</th><th>一句說明</th><th>例子</th></tr></thead><tbody>' + rows.map(function (r) {
+      return '<tr><td>' + esc(r[0]) + '</td><td><b>' + esc(r[1]) + '</b></td><td>' + esc(r[2]) + '</td><td>' + esc(r[3] || '—') + '</td></tr>'
+    }).join('') + '</tbody></table></div>'
+    var d = document.createElement('dialog'); d.className = 'fd-dlg fd-dlg--wide'; d.setAttribute('data-fd-checklist', '1')
+    d.innerHTML = '<h3>用語檢查表（共 ' + rows.length + ' 項）</h3><div class="fd-dlg__b">' + body + '</div><div class="fd-dlg__f"><button type="button" class="fd-btn fd-btn--primary" data-r="0">關閉</button></div>'
+    this.root.appendChild(d)
+    d.addEventListener('click', function (e) { if (e.target.closest('[data-r]')) { d.close(); d.remove() } })
+    d.addEventListener('cancel', function () { d.remove() })
+    d.showModal()
+  }
+
   // ───────────── 事件 ─────────────
   proto._bind = function () {
     var self = this, L = this.els.left, C = this.els.center, R = this.els.right, B = this.els.bar
@@ -538,6 +569,7 @@
       var a = e.target.closest('[data-fd-act]'); if (!a) return
       if (a.dataset.fdAct === 'undo') self.undo(); else if (a.dataset.fdAct === 'redo') self.redo()
       else if (a.dataset.fdAct === 'problems') { self.select(''); self.showPane('right-if-narrow') }
+      else if (a.dataset.fdAct === 'check') self.showChecklist()
     })
     this.els.tabs.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) self.showPane(b.dataset.pane) })
     L.addEventListener('click', function (e) { var b = e.target.closest('[data-add]'); if (b && !b.disabled) { var en = self._entries[b.dataset.add]; if (en && en.field && M.fieldByKey(self.def, en.field.key)) self.focus(en.field.key); else if (en) self.addEntry(en) } })
