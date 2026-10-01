@@ -276,12 +276,14 @@
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
     "mod:case/expense_forms",
-    "mod:case/expense_notify"
+    "mod:case/expense_notify",
+    "mod:case/material_approval"
    ],
    "tables": [
     "case_action_items",
     "case_change_requests",
     "case_extra_expenses",
+    "case_material_approvals",
     "case_stage_visits",
     "case_stages",
     "case_updates",
