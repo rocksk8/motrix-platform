@@ -200,3 +200,18 @@ def test_plain_role_users_cannot_drive_the_flow(S, who, code):
         assert r.status_code != 200
     r = c.post("/api/contractor-dispatches/%d/status" % did, json={"target": "sent"}, headers=h[who])
     assert r.status_code == 403
+
+
+def test_admin_without_contractor_modules_vs_queue_detail(S):
+    """同一個 admin：直接讀派發清單被模組守門擋下嗎？經簽核佇列詳情（doc_code 有序可猜）又如何？"""
+    c, h = S
+    _tiers(["da_u1"])
+    did = _mk()
+    _post(c, h, "da_a", did, "submit")
+    code = _row(did)["doc_code"]
+    lst = c.get("/api/contractor-dispatches", params={"quote_no": "MQ-DA-1"}, headers=h["da_b"])
+    det = c.get("/api/approval-queue/detail", params={"type": "contractor_dispatch", "id": code}, headers=h["da_b"])
+    conn = db.get_db()
+    mods = conn.execute("SELECT modules FROM users WHERE username='da_b'").fetchone()
+    conn.close()
+    print("da_b modules=%r list→%s detail→%s" % (mods and mods[0], lst.status_code, det.status_code))
