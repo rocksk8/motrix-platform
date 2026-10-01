@@ -19121,7 +19121,8 @@
     "file:backend/tests/_requires.py",
     "js:static/definition-form.js",
     "mod:case/api/expense_form_pdf",
-    "page:pages/payment-request.html"
+    "page:pages/payment-request.html",
+    "router:definitions"
    ],
    "evidence": {
     "import": [
@@ -19130,7 +19131,8 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/expense_form_pdf.py"
+     "backend/modules/case/api/expense_form_pdf.py",
+     "backend/routers/definitions.py"
     ],
     "page": [
      "frontend/pages/payment-request.html",
