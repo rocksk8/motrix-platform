@@ -163,6 +163,8 @@ def _live_dispatch_totals_by_quote(conn):
             "SELECT cd.*, vc.name AS vendor_name FROM contractor_dispatches cd"
             " LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id WHERE cd.status != 'cancelled'"):
         d = dispatch_row(r)
+        if (d.get("approvalStatus") or "") in ("草稿", "已退回"):      # 31-A（Q6）：與應計成本同一條規則
+            continue
         totals[r["quote_no"]] = totals.get(r["quote_no"], 0) + float(d["grandTotal"] or 0)
     return totals
 
@@ -3477,8 +3479,8 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         details["contractor"].append({
             **_dept_fields(e["quoteNo"]),
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round_half_up(e["amount"]),
-            "taxNote": e["taxNote"] + ("｜差額待審核" if e.get("remitPending") else ""), "provisional": e["provisional"],
-            "pending": bool(e.get("remitPending")),
+            "taxNote": e["taxNote"] + ("｜差額待審核" if e.get("remitPending") else "") + ("｜派發待審核" if e.get("approvalPending") else ""),
+            "provisional": e["provisional"], "pending": bool(e.get("remitPending") or e.get("approvalPending")),
         })
 
     # ── 叫料（`AC2`：原本完全沒算進支出；併入「料件」類，不會寫入 stock_items ⇒ 不重複）
