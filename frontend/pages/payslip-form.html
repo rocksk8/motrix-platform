@@ -688,7 +688,8 @@ function payslipForm() {
       this.q.bankName                   = c.bank_name || ''
       this.q.bankBranch                 = c.bank_branch || ''
       this.q.bankAccountName            = c.bank_account_name || ''
-      this.q.bankAccountNumber          = c.bank_account_number || ''
+      // 非最高管理者從外包名冊拿到的帳號是遮蔽值（****末四碼，使用者裁示 2026-10-01）⇒ 不可帶進勞報單（會存成假帳號）；留空由有權限者補
+      this.q.bankAccountNumber          = String(c.bank_account_number || '').startsWith('****') ? '' : (c.bank_account_number || '')
       this.conSearch = c.name
       this.showConDrop = false
       this.calc()
