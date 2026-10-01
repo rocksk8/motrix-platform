@@ -3,7 +3,7 @@
 設計 proposal-attachments-search-preview §4-2、§4-4）。
 
 [單位] helper:attachment_search    [層] L1    [穩定度] 契約（只增）
-[公開介面] CRIT_KEYS, ITEM_KEYS, case_names, count_by_type, finish, make_item, matches, normalize_crit, owned
+[公開介面] CRIT_KEYS, ITEM_KEYS, MAX_TAKE, case_names, count_by_type, finish, make_item, matches, normalize_crit, owned
 [不變式]
   - 提供者 `search(conn, user, crit)` ⇒ 已套權限、已依 crit 篩過、`uploadedAt` 由新到舊、最多 `crit["take"]` 筆；
     項目鍵**固定**為 `ITEM_KEYS`（**沒有 path**：搜尋結果不可以把「猜不到的路徑」變成「列得出來」；開檔一律走 `/api/attachments/open`）
@@ -126,4 +126,4 @@ def case_names(conn, quote_nos) -> dict:
     return {q: by.get(q, ("", "")) for q in qs}
 
 
-__all__ = ["CRIT_KEYS", "ITEM_KEYS", "case_names", "count_by_type", "finish", "make_item", "matches", "normalize_crit", "owned"]
+__all__ = ["CRIT_KEYS", "ITEM_KEYS", "MAX_TAKE", "case_names", "count_by_type", "finish", "make_item", "matches", "normalize_crit", "owned"]

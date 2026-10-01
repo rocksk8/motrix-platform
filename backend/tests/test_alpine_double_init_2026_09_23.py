@@ -85,7 +85,8 @@ SHARED_FILES = ("auth-guard.js", "notif.js", "sidebar.js", "edit-presence.js",
 #: 2026-09-30（W4，底層一次到位）55 -> 56：新增 ledger-hub.html（總帳作業，功能旗標中樞），Alpine，有 _initDone 守衛。
 #: 2026-09-30（W1，定義送審）56 -> 57：新增 custom-def-review.html（定義審核頁），Alpine，有 _initDone 守衛。
 #: 2026-10-01（W3，wip/w3-bank-profile）+1：新增 bank-account.html（收款帳號），Alpine，有 _initDone 守衛。
-PAGE_POPULATION = 49 + 1 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 1                 # +1：bonus-corrections.html（2026-10-01 獎金更正單，已加 _initDone 守衛）；+1：bank-account.html
+#: 2026-10-01（W1，wip/w1-attach-p3-a3）+1：新增 file-center.html（檔案中心），Alpine，有 _initDone 守衛。
+PAGE_POPULATION = 49 + 1 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1                 # +1：bonus-corrections.html（2026-10-01 獎金更正單，已加 _initDone 守衛）；+1：bank-account.html
 SHARED_POPULATION = 2
 ALREADY_GUARDED = 2
 

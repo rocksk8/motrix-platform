@@ -133,6 +133,7 @@
     function fileCenterPage() {
       const EMPTY = () => ({ q: '', types: [], exts: [], date_from: '', date_to: '', uploader: '', quote_no: '', doc_no: '', customer: '' })
       return {
+        _initDone: false,
         f: EMPTY(), items: [], categories: [], unavailable: [], facets: {}, page: 1, hasMore: false, loading: false, loaded: false, err: '',
         defaultRange: false, _seq: 0,
         _hdr() {
@@ -141,6 +142,8 @@
           return { Authorization: 'Bearer ' + (s.token || '') }
         },
         init() {
+          if (this._initDone) return                    // <body> 的 x-init 與 Alpine 自動呼叫 ⇒ 不守衛會跑兩遍
+          this._initDone = true
           // 條件來自網址（可分享）；沒有任何條件 ⇒ 預設近 90 天
           const q = new URLSearchParams(location.search)
           const list = (k) => (q.get(k) || '').split(',').map(x => x.trim()).filter(Boolean)
