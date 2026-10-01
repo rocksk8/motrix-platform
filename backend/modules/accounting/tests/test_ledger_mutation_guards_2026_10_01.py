@@ -56,9 +56,18 @@ def _copy_backend(dst: Path) -> Path:
     return dst
 
 
-def _run(root: Path):
-    env = {k: v for k, v in os.environ.items() if k not in ("MOTRIX_TRAIN", "PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER")}
+def _child_env():
+    # MOTRIX_PYTEST_EXCLUSIVE 也要拿掉：建包（獨佔登記）時它被子行程繼承 ⇒ 子 pytest 也當「重型獨佔」去搶全機所有格子，
+    # 而格子正被建包自己的 pytest 佔著 ⇒ 排隊到逾時（全量建包 2026-10-01 第 29 班 7 題 ERROR）。拿掉之後子行程是單檔輕量跑；
+    # MOTRIX_PYTEST_EXCLUSIVE_OWNER／_BUILD_CHILD 留著，建包期間輕量跑的守門認得它是「自己家的」而放行。
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("MOTRIX_TRAIN", "PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER", "MOTRIX_PYTEST_EXCLUSIVE")}
     env.update(PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1")
+    return env
+
+
+def _run(root: Path):
+    env = _child_env()
     tmp = root.parent / "bt"
     return subprocess.run([sys.executable, "-m", "pytest", *DETECTORS, "-q", "-x", "-p", "no:cacheprovider", "-W", "ignore",
                            "--basetemp", str(tmp)], cwd=str(root), env=env, capture_output=True, text=True, encoding="utf-8",
@@ -96,3 +105,13 @@ def test_rc_harmless_mutation_stays_green(pristine, tmp_path):
     r = _mutate_and_run(tmp_path, "modules/accounting/api/ledger_category_map.py",
                         "IP `expense.categories`：啟用中的費用類別", "IP `expense.categories`：啟用中的費用類別（註解改字）")
     assert r.returncode == 0, (r.stdout + r.stderr)[-1500:]
+
+
+def test_child_env_drops_the_build_exclusive_flag_but_keeps_the_owner(monkeypatch):
+    """回歸（建包 2026-10-01 第 29 班）：子 pytest 不可繼承 MOTRIX_PYTEST_EXCLUSIVE（否則排隊等建包自己佔著的格子到逾時），
+    但 OWNER／BUILD_CHILD 要留著（建包期間輕量跑的守門靠它放行）。"""
+    for k, v in (("MOTRIX_PYTEST_EXCLUSIVE", "1"), ("MOTRIX_PYTEST_EXCLUSIVE_OWNER", "4711"), ("MOTRIX_PYTEST_BUILD_CHILD", "4711"), ("MOTRIX_TRAIN", "1")):
+        monkeypatch.setenv(k, v)
+    env = _child_env()
+    assert "MOTRIX_PYTEST_EXCLUSIVE" not in env and "MOTRIX_TRAIN" not in env
+    assert env["MOTRIX_PYTEST_EXCLUSIVE_OWNER"] == "4711" and env["MOTRIX_PYTEST_BUILD_CHILD"] == "4711"
