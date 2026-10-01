@@ -16,6 +16,9 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-02 側欄通知元件單一宣告
+- `frontend/static/sidebar.js`：通知鈴鐺（管理員）與無頭掛載（一般使用者）兩個互斥分支改走同一個輔助函式 `notifOpen(attrs)`，`x-data="notifStore()"` 只剩一個宣告，重複初始化守門的共用母體回到 2。畫面與行為不變。
+
 ## 2026-10-01 承攬商派發兩段審核（31-A）
 
 - 派發審核（第一段）＋完工審核（第二段）：分層簽核重用 `helpers/tiered_approval`，類型 `contractor_dispatch`；`completed` 只能由完工審核通過設定（舊單也要）；作業狀態唯一寫入口 `dispatch_flow.set_status`（G-D1）；migration `subcontract/0003`（只加不改，既有列＝舊單、不補審）。
