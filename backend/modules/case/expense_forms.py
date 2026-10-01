@@ -121,6 +121,23 @@ def normalize_data(data, existing: dict = None) -> dict:
     return merged
 
 
+def current_def_version(conn, kind: str) -> int:
+    """目前生效的類型定義版本（W1 `helpers.expense_types.get_type`；公司發布版的版本號，沒發布過＝程式預設＝0）。
+    單據在**建立**與**送審**當下把它釘在列上（`def_version`）：之後定義改了，這張單據的輸出／驗證仍依它自己的版本，不被改版牽動。
+    W1 的模組不在（舊環境）或查無此類型 ⇒ 0（＝程式預設），不擋流程。"""
+    if not kind:
+        return 0
+    try:
+        from helpers import expense_types as _ET
+    except ImportError:
+        return 0
+    t = _ET.get_type(conn, kind)
+    try:
+        return int(t["version"]) if t else 0
+    except (TypeError, ValueError, KeyError):
+        return 0
+
+
 def prepare_submit(conn, lines: list) -> list:
     """送審當下處理明細的費用類別（W4 合約 2026-10-01）：
     1. 提供者 `expense.categories` 在 ⇒ 每列的 `category`（代碼或名稱）必須是**啟用中**的類別，否則 400（狀態不變）；

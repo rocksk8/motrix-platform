@@ -426,8 +426,8 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
             "(quote_no, category, description, qty, unit, unit_cost, total_cost, note, "
             " expense_date, doc_no, files_json, created_by, created_by_name, created_by_inferred, "
             " payer_username, payer_name, created_at, updated_at, updated_by_name, status, approval_json,"
-            " kind, doc_code, data_json, lines_json, department_id, payee_type, payee_name, payee_bank, payee_account) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?,?,0,?,?,?,?,?,'草稿','{}',?,?,?,?,?,?,?,?,?)",
+            " kind, doc_code, data_json, lines_json, department_id, payee_type, payee_name, payee_bank, payee_account, def_version) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?,?,0,?,?,?,?,?,'草稿','{}',?,?,?,?,?,?,?,?,?,?)",
             (quote_no, body.category or "其他", desc,
              float(body.qty or 0), (body.unit or "").strip(), float(body.unitCost or 0), total,
              (body.note or "").strip(), (body.expenseDate or "").strip(), (body.docNo or "").strip(),
@@ -435,7 +435,8 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
              (body.payerUsername or "").strip(), (body.payerName or "").strip(),
              now, now, display,
              kind, doc_code, json.dumps(data, ensure_ascii=False), EF.dumps_lines(lines), EF.department_of(data, body.departmentId),
-             body.payeeType, (body.payeeName or "").strip(), (body.payeeBank or "").strip(), (body.payeeAccount or "").strip()),
+             body.payeeType, (body.payeeName or "").strip(), (body.payeeBank or "").strip(), (body.payeeAccount or "").strip(),
+             EF.current_def_version(conn, kind)),               # 建立當下的類型定義版本（送審時再釘一次）
         )
         conn.commit()
         exp_id = cur.lastrowid
@@ -744,8 +745,8 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
         if _col(row, "kind", "") or "":
             # 送審當下：費用類別驗證（不在啟用清單 ⇒ 400，狀態不變）＋類別代碼／科目快照寫進明細（W4 合約）
             _new_lines = EF.prepare_submit(conn, _jlist(row, "lines_json"))
-            conn.execute("UPDATE case_extra_expenses SET lines_json=? WHERE id=? AND quote_no=?",
-                         (EF.dumps_lines(_new_lines), exp_id, quote_no))
+            conn.execute("UPDATE case_extra_expenses SET lines_json=?, def_version=? WHERE id=? AND quote_no=?",
+                         (EF.dumps_lines(_new_lines), EF.current_def_version(conn, row["kind"]), exp_id, quote_no))     # 送審當下釘定義版本
 
         if not tiers:
             conn.execute(
