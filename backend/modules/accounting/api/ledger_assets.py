@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """總帳：固定資產（資產卡片、折舊表、估計變動）API（C6；proposal-gl/06-fixed-assets.md）。功能旗標 `fixed_assets`（預設關）。
 
-只讀＝cashier／finance；新增、修改、啟用、估計變動＝finance（都寫稽核）。啟用後的資產卡片會由引擎產生取得（E13a）與每月折舊（E13b）分錄草稿。
+只讀＝cashier／finance；新增、修改、啟用、估計變動＝**只有最高管理者**（規則 B，與費用類別對應一致；主持裁示 2026-10-01；都寫稽核）。啟用後的資產卡片會由引擎產生取得（E13a）與每月折舊（E13b）分錄草稿。
 """
 from fastapi import APIRouter, Body, Header, HTTPException
 
@@ -13,7 +13,6 @@ from modules.accounting.ledger import fixed_assets as _fa
 router = APIRouter(prefix="/api/ledger", tags=["ledger"])
 
 _READ = ("cashier", "finance")
-_WRITE = ("finance",)
 
 
 def _require_fa_read(authorization):
@@ -24,7 +23,8 @@ def _require_fa_read(authorization):
 
 def _require_fa_write(authorization):
     user = _require_user(authorization)
-    require_any_module(user, _WRITE, "總帳結帳")
+    if user.get("role") != "superadmin":
+        raise HTTPException(403, "只有最高管理者（會計主管）可以新增或變更固定資產。")
     return user
 
 

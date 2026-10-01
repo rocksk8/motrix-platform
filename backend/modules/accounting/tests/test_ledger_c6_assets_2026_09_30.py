@@ -156,3 +156,21 @@ def test_api_flag_permissions_and_audit(client, conn, make_user):
     finally:
         c2.close()
     assert n >= 4
+
+
+def test_write_endpoints_are_superadmin_only_but_finance_can_read(client, conn, make_user):
+    """主持裁示 2026-10-01：寫入＝只有最高管理者（規則 B）；讀＝cashier／finance。"""
+    sa, sp = make_user(username="fa_sa%d" % id(client), role="superadmin")
+    fin, fp = make_user(username="fa_fin%d" % id(client), role="staff", modules=["finance"])
+    hs = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": sa, "password": sp}).json()["token"]}
+    hf = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": fin, "password": fp}).json()["token"]}
+    F.set_flag(conn, "fixed_assets", True)
+    conn.commit()
+    body = {"name": "伺服器", "category": "computer", "acquired_on": "2180-05-02", "cost": 90000, "life_years": 3}
+    assert client.post("/api/ledger/assets", headers=hf, json=body).status_code == 403
+    aid = client.post("/api/ledger/assets", headers=hs, json=body).json()["id"]
+    assert client.get("/api/ledger/assets", headers=hf).status_code == 200                       # 讀：財務可以
+    assert client.get("/api/ledger/assets/schedule?ym=2180-06", headers=hf).status_code == 200
+    for method, url, kw in (("patch", "/api/ledger/assets/%d" % aid, {"json": {"note": "x"}}), ("post", "/api/ledger/assets/%d/activate" % aid, {}),
+                            ("post", "/api/ledger/assets/%d/revision" % aid, {"json": {"effective_month": "2181-06", "life_years": 5, "salvage": 1, "reason": "x"}})):
+        assert getattr(client, method)(url, headers=hf, **kw).status_code == 403, url
