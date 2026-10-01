@@ -51,3 +51,5 @@
 - 2e：wip/t31-prefill-sources-2e@0bf4ccc6（合併時 l1 snapshot 衝突→取 platform 版再 core_bump --pending）；wip/t32-prpo-s1-2e@80c3532d（Q6 額外支出合計對齊 + purchase-items picker；公告：有 PR/草稿/退回列的案件合計會變）。待做 S2（itemId 驗證／上限／overPlanReason）、S3（入帳）、額外支出頁 uncountedAmount 提示。
 - c7：wip/t31-form-designer-c7@d9569b3a（切片1–3；預設關閉；真滑鼠拖放需人工驗）。
 - a3：wip/t31-expense-designer-a3@99e14769（請款類型接線；預設改關閉）。
+- d7：wip/t31-material-d7@73e82a57（31-C 叫料付款/匯款切片完成，含 merge 第30班；PAID_VIA_REMITTANCE_ONLY=True；M1–M18 突變全紅）。整合注意：case CHANGELOG「(next)」需編號、analytics changelog 守門紅（非 d7）。poDocCode/poLine seam 待 2e 設計。
+- a3：wip/t31-expense-designer-a3@fc610fb3（預設舊 UI，?designer=1 開新）；c7：wip/t31-form-designer-c7@3268466c（fixedOptions；待補 modules.json 登記 3 檔）。
