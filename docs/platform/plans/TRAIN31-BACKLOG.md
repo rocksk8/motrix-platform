@@ -62,3 +62,8 @@
 - a3：wip/t31-expense-designer-a3@67ac7c65（docType 顯示、深色面板修）；c7 須查設計器深色主題是否被全域 invert filter 反轉成淺灰。
 - a3：wip/t31-expense-designer-a3@83da4b4a（併入 c7 f9958ab5 深色修；8 張截圖重拍）；wip/t31-expense-prefill-a3@3aa22930（請款側 prefill 驗證，registry 未到前行為不變，stub 對齊 2e 簽名）。整合順序：2e registry 先，a3 prefill 後。
 - 2e S5：wip/t32-prpo-s1-2e@1245cd27（前端選擇器＋結算採用）。待修：①PO 送審被拒時草稿殘留、再按產生第二份；②結算 PDF/匯出的分項加總與 totalActualCost 差 itemPoUnadopted。S3+S5 同班出。
+
+## 使用者新需求 2026-10-02（叫料管控 × 報價單 × 請購／採購）
+原話：叫料管控也需要審核；叫料頁面選單與選項優化；可從報價單匯入、預先扣除已匯入完成的商品；可與請購單、採購單連動；以走流程簽核過的叫料為主；報價單沒有的品項或未走請購／採購連動的，保留彈性可申請，但旁邊要標註「該叫料未申請採購單」。
+- 已有：叫料審核（d7 31-C，case_material_approvals 疊加表、四路徑閘，wip/t31-material-d7@73e82a57）；PR/PO 連品項（2e S1–S3/S5，S4＝叫料連結待 31-C 併入）。
+- 缺口（待 2e 規格）：①叫料從報價單品項匯入＋扣除已匯入量（remaining）；②選單／選項 UX；③叫料與 PR/PO 連動；④無報價品項／未連 PR·PO 的叫料可申請但顯示「未申請採購單」標註（審核頁、列表、報表）。
