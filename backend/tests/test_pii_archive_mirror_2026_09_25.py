@@ -123,6 +123,9 @@ _F2_SENTINELS = (_IMG, "data:image", _IDNO, "哨兵地址", "0900-SENTINEL", "se
                  _C_IDNO, _C_PHONE, _C_MAIL, _C_ADDR, _C_LINE, _C_ACCT, "哨兵戶名", _E_ACCT, _U_ACCT_NAME, _U_ACCT_NO)
 
 
+_SEEDED_ELSEWHERE = ("承攬付款憑據", "協力廠商")
+
+
 def _seed_pii(conn):
     conn.execute("INSERT INTO contractors (name, id_number, phone, email, address, line_id, "
                  "bank_code, bank_account_name, bank_account_number, id_card_image, id_card_image_back, "
@@ -158,6 +161,8 @@ def test_general_rows_drop_f2_fields_and_merge_restores_the_original(client):
         tables = archive._daily_backup_tables()
         for fname in archive._F2_FIELDS:
             original = _rows(conn, tables[fname])
+            if fname not in _SEEDED_ELSEWHERE:       # 這兩張由 API 建立（見 subcontract 那份）；其餘都要由 _seed_pii 種到
+                assert original, "%s：_seed_pii 沒有種到這張表（空表＝這一輪對它什麼也沒驗）" % fname
             general = [archive._general_row(fname, dict(r)) for r in original]
             blob = str(general)
             for bad in _F2_SENTINELS:
