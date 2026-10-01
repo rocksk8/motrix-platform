@@ -1462,7 +1462,7 @@
                 </template>
 
                 <template x-for="(x, xi) in xe.items" :key="x.id">
-                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;margin-bottom:8px;background:var(--surface-muted)">
+                  <div :data-xe-card="x.id" style="border:1px solid var(--line);border-radius:6px;padding:10px;margin-bottom:8px;background:var(--surface-muted)">
                     <!-- 第一列：狀態、填寫人、日期 -->
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">
                       <span style="padding:2px 8px;border-radius:4px;font-weight:600"
@@ -1580,7 +1580,16 @@
                         ✎ 編輯（需審核）
                       </button>
                     </div>
-                    <div x-show="!xeEditable(x) && x.status !== '已核准'" style="margin-top:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">簽核中，不可修改</div>
+                    <div x-show="!xeEditable(x) && x.status !== '已核准' && x.status !== '已作廢'" style="margin-top:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">簽核中，不可修改</div>
+                    <!-- 作廢：僅最高管理員、已核准且未付款；已作廢的列保留供查詢，不計入合計 -->
+                    <div x-show="xeCanVoid(x) && !xeInChange(x)" style="margin-top:6px">
+                      <button @click="xeVoid(xi)" :disabled="xe.busy" data-testid="xe-void-btn"
+                              style="font-size:11px;padding:4px 10px;background:var(--surface);color:var(--tone-danger-fg);border:1px solid var(--tone-danger-border);border-radius:6px;cursor:pointer;font-family:var(--font-zh)">作廢</button>
+                    </div>
+                    <div x-show="x.status === '已作廢'" data-testid="xe-voided-note" style="margin-top:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">
+                      已作廢（不計入成本與報表）：<span x-text="x.voidReason"></span>
+                      <span x-text="x.voidedAt ? '｜' + x.voidedAt.slice(0,10) : ''"></span>
+                    </div>
                     <!-- ══ 變更申請面板（2026-09-11）══
                          已核准的項目要改內容就開這一塊。**刻意不是直接在上面那排欄位
                          上改**：使用者指定「原核准金額不動，核准後才生效」，若在原欄位
@@ -2222,7 +2231,8 @@
                             <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
                               <span style="font-size:11px;background:var(--surface-neutral);color:var(--ink-secondary);padding:2px 6px;border-radius:3px;font-family:var(--font-zh);white-space:nowrap;font-weight:500" x-text="ex.category || '—'"></span>
                               <span style="font-family:var(--font-zh);color:var(--text-primary);flex:1;font-size:12px;font-weight:500" x-text="ex.description || '—'"></span>
-                              <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:var(--tone-warning-fg);text-align:right;min-width:80px" x-text="caseSettleFmt(ex.totalCost)"></span>
+                              <span x-show="ex.voided" style="font-size:11px;background:var(--surface-neutral);color:var(--ink-secondary);padding:2px 6px;border-radius:3px;font-family:var(--font-zh)">已作廢（不計入）</span>
+                              <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:var(--tone-warning-fg);text-align:right;min-width:80px" :style="ex.voided ? 'text-decoration:line-through;opacity:.5' : ''" x-text="caseSettleFmt(ex.totalCost)"></span>
                             </div>
                             <!-- 第二列：填寫人、填單日期、單號 -->
                             <div style="display:flex;align-items:center;gap:12px;font-size:11px;color:var(--text-dim);margin-bottom:4px;font-family:var(--font-zh)">

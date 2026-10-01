@@ -2049,7 +2049,7 @@ def _close_gate_facts(conn, quote_nos: list) -> dict:
             ph = ",".join("?" * len(ch))
             for r in conn.execute(
                     f"SELECT quote_no, COUNT(*) c, SUM(CASE WHEN status='待審核' THEN 1 ELSE 0 END) p "
-                    f"FROM case_extra_expenses WHERE quote_no IN ({ph}) GROUP BY quote_no", ch):
+                    f"FROM case_extra_expenses WHERE quote_no IN ({ph}) AND status <> '已作廢' GROUP BY quote_no", ch):
                 xe[r["quote_no"]] = (r["c"] or 0, r["p"] or 0)
         for no in nos:
             facts[no]["xe"] = xe.get(no, (0, 0))
@@ -4445,7 +4445,8 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
         "createdByInferred": bool(r["created_by_inferred"]),
         "payerName":   r["payer_name"] or "",
         "status":      r["status"],
-        "pending":     r["status"] != "已核准",
+        "pending":     r["status"] not in ("已核准", "已作廢"),
+        "voided":      r["status"] == "已作廢",          # 已作廢：列照列（稽核／申請人），不進合計
         "files":       json.loads(r["files_json"] or "[]"),
     } for r in conn.execute(
         "SELECT * FROM case_extra_expenses WHERE quote_no=? ORDER BY id", (quote_no,)
@@ -4454,7 +4455,7 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
     from modules.case.api import case_extra_expenses as _xe
     _xr = {r["id"]: r for r in conn.execute("SELECT * FROM case_extra_expenses WHERE quote_no=?", (quote_no,)).fetchall()}
     extras = [({"id": e["id"], "category": "", "description": "", "status": e["status"], "pending": e["pending"],
-                "expenseDate": e["expenseDate"], "masked": True, "totalCost": None, "unitCost": None, "qty": None, "files": []}
+                "expenseDate": e["expenseDate"], "voided": e["voided"], "masked": True, "totalCost": None, "unitCost": None, "qty": None, "files": []}
                if (_xr.get(e["id"]) is not None and (_xr[e["id"]]["kind"] or "") and not _xe._amount_viewer(conn, _xr[e["id"]], user)) else e)
               for e in extras]
     # 2026-09-11：conn 從這裡才關——額外支出改讀 case_extra_expenses 表之後，
@@ -4484,7 +4485,7 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
             "paymentRequests": payment_requests,
         },
         "settlementExtras": {
-            "total": sum((e["totalCost"] or 0) for e in extras),
+            "total": sum((e["totalCost"] or 0) for e in extras if not e["voided"]),
             "remitFeeTotal": extras_fee_total,
             "items": extras,
         },

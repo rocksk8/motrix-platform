@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## 1.0.53 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2-w2b：A2 S1 作廢路徑）
+- 新增 `POST /api/quotations/{案件|-}/extra-expenses/{id}/void`（含按鈕，同一片）：**僅 superadmin**、僅「已核准且尚未付款」、理由必填；狀態改「已作廢」並記 `void_reason／voided_by／voided_at`、清掉待核准的變更申請（待核准附件一併丟棄）、通知申請人、稽核 `extra_expense.void`（detail 帶理由與金額）。已付款的列回 409（先由管理員更正付款日退回待付款再作廢）；作廢後不可再編輯／刪除／送審／變更申請／改日期發票／動附件（409）。
+- 排除（列照列、不計入）：案件額外支出清單合計與 `pendingCount`、案件財務總覽 `settlementExtras.total`（項目帶 `voided`）、`case_extra_expenses()` 逐筆彙總、案件清單的待審計數、出納待付款／已付款、營運報表認列、總帳 E11／E11b 來源、簽核佇列（狀態白名單本來就不含）。申請人「我的請款」與稽核照列（標已作廢）。前端：案件額外支出頁加「作廢」鈕（僅 superadmin、已核准未付款列）、已作廢標示與理由、財務總覽明細標「已作廢（不計入）」。
+- 下游效應（R1）：總帳**不另寫反向分錄**——E11／E11b 只對 status='已核准' 產生，來源消失後引擎自動作廢草稿傳票或對已過帳傳票產生借貸對調的反向草稿（`ledger/engine.py::_orphans`；accounting 測試用真提供者＋真 API 驗證，含反向控制）。營運報表支出總額因此少該筆（預期）。
+
 ## 1.0.52 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2：A2-6 營運報表逐類別列＋詳情修正）
 - 營運報表（`recognition.extra_entries`）：費用單據（kind≠''）依費用類別**逐類**一筆，帶 `departmentId`（費用歸屬單位）、`kind`、`docCode`；現金口徑實付≠應付另加「付款差額」列（合計＝實付）；明細對不上金額 ⇒ 退回一列。舊版列（kind=''）一列一筆、不帶新鍵，行為不變。下游效應（R1）：營運報表支出總額不變（仍為 total_cost／現金口徑實付），只是結構（類別、部門）可看；部門篩選對無案件列改看 `departmentId` 由 W3 接。
 - 修正：簽核詳情（`detail_extra_expense`）變更申請的「改後單價／小計」原本讀 snake_case 鍵（`unit_cost`／`total_cost`）而永遠是空的、待核准附件（`addFiles`）也列不出來；改讀提議真正的鍵（`unitCost`／`totalCost`／`addFiles`），費用單據另顯示明細列數與收款人前後對照。加測試。

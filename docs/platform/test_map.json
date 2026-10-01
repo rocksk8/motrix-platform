@@ -10,7 +10,7 @@
    "audit": 128,
    "unit": 85
   },
-  "routes": 699
+  "routes": 700
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",

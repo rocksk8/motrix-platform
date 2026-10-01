@@ -1628,7 +1628,8 @@
     "/api/quotations/{}/extra-expenses/{}/dates",
     "/api/quotations/{}/extra-expenses/{}/files",
     "/api/quotations/{}/extra-expenses/{}/files/{}",
-    "/api/quotations/{}/extra-expenses/{}/submit"
+    "/api/quotations/{}/extra-expenses/{}/submit",
+    "/api/quotations/{}/extra-expenses/{}/void"
    ],
    "api_prefixes": [
     "/api/quotations"
@@ -5630,115 +5631,121 @@
    "routes": [
     {
      "func": "list_extra_expenses",
-     "line": 319,
+     "line": 321,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/extra-expenses"
     },
     {
      "func": "create_extra_expense",
-     "line": 374,
+     "line": 377,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses"
     },
     {
      "func": "update_extra_expense",
-     "line": 430,
+     "line": 433,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "payreq_cases",
-     "line": 499,
+     "line": 502,
      "method": "GET",
      "path": "/api/extra-expenses/cases"
     },
     {
      "func": "payreq_mine",
-     "line": 525,
+     "line": 528,
      "method": "GET",
      "path": "/api/extra-expenses/mine"
     },
     {
      "func": "set_extra_expense_dates",
-     "line": 547,
+     "line": 550,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/dates"
     },
     {
      "func": "delete_extra_expense",
-     "line": 615,
+     "line": 620,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
+     "func": "void_extra_expense",
+     "line": 643,
+     "method": "POST",
+     "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/void"
+    },
+    {
      "func": "submit_extra_expense",
-     "line": 638,
+     "line": 695,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/submit"
     },
     {
      "func": "approve_extra_expense",
-     "line": 717,
+     "line": 774,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/approve"
     },
     {
      "func": "reject_extra_expense",
-     "line": 800,
+     "line": 857,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/reject"
     },
     {
      "func": "upload_extra_expense_files",
-     "line": 884,
+     "line": 943,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files"
     },
     {
      "func": "delete_extra_expense_file",
-     "line": 930,
+     "line": 989,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}"
     },
     {
      "func": "upsert_change_request",
-     "line": 1103,
+     "line": 1162,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "cancel_change_request",
-     "line": 1142,
+     "line": 1201,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "upload_change_request_files",
-     "line": 1168,
+     "line": 1227,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files"
     },
     {
      "func": "delete_change_request_file",
-     "line": 1200,
+     "line": 1259,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}"
     },
     {
      "func": "submit_change_request",
-     "line": 1227,
+     "line": 1286,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/submit"
     },
     {
      "func": "approve_change_request",
-     "line": 1296,
+     "line": 1355,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/approve"
     },
     {
      "func": "reject_change_request",
-     "line": 1384,
+     "line": 1443,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/reject"
     }
@@ -6435,115 +6442,115 @@
     },
     {
      "func": "approve_quotation",
-     "line": 4768,
+     "line": 4769,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 4888,
+     "line": 4889,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 4973,
+     "line": 4974,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5038,
+     "line": 5039,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5184,
+     "line": 5185,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5270,
+     "line": 5271,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5301,
+     "line": 5302,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5332,
+     "line": 5333,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5373,
+     "line": 5374,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5433,
+     "line": 5434,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5498,
+     "line": 5499,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5539,
+     "line": 5540,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5577,
+     "line": 5578,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 6078,
+     "line": 6079,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6198,
+     "line": 6199,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6266,
+     "line": 6267,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6420,
+     "line": 6421,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6434,
+     "line": 6435,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6465,
+     "line": 6466,
      "method": "GET",
      "path": "/api/sales-orders"
     }

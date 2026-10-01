@@ -73,6 +73,8 @@ def _qn(quote_no: str) -> str:
 
 # 可編輯／可刪除的狀態。送審中或已核准的不給改——改了簽核就失去意義
 EDITABLE_STATUSES = ("草稿", "已駁回")
+#: 作廢（管理員、已核准未付款）：列保留供稽核／申請人查詢，所有合計／應付／出納／報表／總帳來源一律排除（狀態過濾都是白名單，這個值不在內）
+VOIDED_STATUS = "已作廢"
 #: 請款流程（2026-09-27）：發票號碼長度上限；附件分類（沒有 kind 的舊附件一律視為 other，不回填猜測）
 INVOICE_NO_MAX = 40
 FILE_KINDS = ("invoice", "other")
@@ -352,7 +354,8 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
             if (d["kind"] or "") and not _amount_viewer(conn, r, user):
                 d = _mask_row(d)
             items.append(d)
-        visible = [i for i in items if not i.get("masked")]          # 合計只算看得到金額的列（避免「清單 3 筆、合計卻含別人的金額」）
+        # 合計只算看得到金額的列（避免「清單 3 筆、合計卻含別人的金額」）；已作廢的列照列出（稽核／申請人查詢）但不進任何合計
+        visible = [i for i in items if not i.get("masked") and i["status"] != VOIDED_STATUS]
         total = sum(float(i["totalCost"] or 0) for i in visible)
         pending = sum(float(i["totalCost"] or 0) for i in visible if i["status"] != "已核准")
         # W1：手續費（公司自付、已登錄付款者）另計，進案件成本（settlement 的 remitFeeTotal）；不併入 totalAmount
@@ -363,7 +366,7 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
             "remitFeeTotal": fee_total,
             "totalAmount": total,
             "totalPending": pending,
-            "pendingCount": sum(1 for i in items if i["status"] not in ("已核准", "草稿")),
+            "pendingCount": sum(1 for i in items if i["status"] not in ("已核准", "草稿", VOIDED_STATUS)),
             "categories": CATEGORIES,
         }
     finally:
@@ -576,6 +579,8 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
     try:
         _guard_case(conn, quote_no, user)
         row = _load(conn, quote_no, exp_id, user)
+        if row["status"] == VOIDED_STATUS:
+            raise HTTPException(409, "這筆額外支出已作廢，不能再登錄日期或發票")
         if not (_can_modify(row, user) or user_has_module(user, "cashier")):
             raise HTTPException(403, "只有填寫人本人、管理員或出納可以登錄這筆額外支出的日期")
         is_admin = user.get("role") in ("superadmin", "admin")
@@ -630,6 +635,58 @@ def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
         _audit(_tok(authorization), "extra_expense.delete", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 刪除額外支出 #{exp_id}「{row['description']}」")
         return {"ok": True}
+    finally:
+        conn.close()
+
+
+@router.post("/api/quotations/{quote_no}/extra-expenses/{exp_id}/void")
+def void_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={}),
+                       authorization: str = Header(None)):
+    """作廢（僅最高管理員 superadmin；僅「已核准且尚未付款」；理由必填）。列保留（狀態＝已作廢）供稽核與申請人查詢，不計入任何合計／應付／出納／營運報表。
+
+    GL 不另寫反向分錄：E11／E11b 只對 status='已核准' 的列產生，狀態離開後來源事件消失 ⇒ 總帳引擎自動作廢草稿或對已過帳傳票產生反向草稿
+    （`ledger/engine.py::_orphans`；有測試）。已付款的列不可直接作廢：付款已是現金事件，請管理員先更正付款日（退回待付款）再作廢。"""
+    quote_no = _qn(quote_no)        # 哨兵路徑段「-」＝無案件（quote_no 欄位存 ''）
+    user = _require_user(authorization)
+    if user["role"] != "superadmin":
+        raise HTTPException(403, "只有最高管理員可以作廢已核准的額外支出")
+    reason = ((body or {}).get("reason") or "").strip()
+    if not reason:
+        raise HTTPException(400, "請填寫作廢理由")
+    if len(reason) > EF.MAX_TEXT:
+        raise HTTPException(400, "作廢理由太長（上限 %d 字）" % EF.MAX_TEXT)
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        row = _load(conn, quote_no, exp_id, user)
+        if row["status"] == VOIDED_STATUS:
+            raise HTTPException(409, "這筆額外支出已作廢")
+        if row["status"] != "已核准":
+            raise HTTPException(409, "「%s」狀態不可作廢（草稿與已駁回請直接刪除；送審中請先駁回）" % row["status"])
+        if (row["paid_date"] or "").strip():
+            raise HTTPException(409, "已登錄付款（%s），不可直接作廢：請先由管理員更正付款日（退回待付款）再作廢" % row["paid_date"][:10])
+        change = _change_of(row)
+        now = datetime.now().isoformat(timespec="seconds")
+        begin_write(conn)
+        cur = conn.execute(
+            "UPDATE case_extra_expenses SET status=?, void_reason=?, voided_by=?, voided_at=?, updated_at=?,"
+            " change_status='', change_json='{}', change_approval_json='{}'"
+            " WHERE id=? AND quote_no=? AND status='已核准' AND COALESCE(paid_date, '')=''",
+            (VOIDED_STATUS, reason, user["username"], now, now, exp_id, quote_no))
+        if cur.rowcount == 0:                                    # 同時有人付款／作廢 ⇒ 後到的人不覆蓋
+            conn.rollback()
+            raise HTTPException(409, "這筆額外支出剛被付款或作廢，請重新整理")
+        conn.commit()
+        if change:
+            _discard_pending_files(quote_no, exp_id, change)
+        label = "%s（NT$ %s）" % (row["description"] or "額外支出", format(float(row["total_cost"] or 0), ",.0f"))
+        requester = _jcol(row, "approval_json").get("requestedBy") or row["created_by"]
+        if requester:
+            _notify(requester, "extra_expense_voided", str(exp_id), quote_no or "無案件",
+                    "%s 的額外支出 %s 已被作廢：%s" % (_subj(quote_no), label, reason))
+        _audit(_tok(authorization), "extra_expense.void", *_audit_target(quote_no, exp_id),
+               "%s 作廢額外支出 #%s %s：%s" % (quote_no or "無案件", exp_id, label, reason), {"reason": reason, "totalCost": float(row["total_cost"] or 0)})
+        return {"ok": True, "status": VOIDED_STATUS, "voidedAt": now}
     finally:
         conn.close()
 
@@ -874,6 +931,8 @@ def _guard_files_editable(row, kind=None):
     """附件是否還能動。已核准就一律擋，訊息要明確指向變更申請這條路——
     只回一句「不可修改」的話，使用者只會以為系統壞了。
     例外（2026-09-27 使用者裁示請款流程）：已核准後**只有「發票」類可以直接補上傳**（留稽核紀錄）；刪除與其他類照舊上鎖。"""
+    if row["status"] == VOIDED_STATUS:
+        raise HTTPException(409, "這筆額外支出已作廢，附件不可再更動")
     if row["status"] == "已核准" and kind != "invoice":
         raise HTTPException(
             409, "這筆額外支出已核准，附件已上鎖。發票可由填寫人、管理員或出納補上傳；要補其他憑證請按「編輯」提出變更申請，"
