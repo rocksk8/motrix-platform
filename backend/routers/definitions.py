@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from db import get_db
 from helpers import _require_user, _tok, _audit
 from core import definitions as D
+from helpers import expense_types as _expense_types  # noqa: F401  匯入即登記 expense_type 定義種類（A2-2）
 
 router = APIRouter()
 
@@ -147,6 +148,33 @@ def list_definition_kinds(authorization: str = Header(None)):
     return {"kinds": D.kinds_meta()}
 
 
+@router.get("/api/expense-types")
+def list_expense_types(authorization: str = Header(None)):
+    """費用單據類型清單（已啟用；任何登入者——新增表單的下拉用）。定義的編輯走 `/api/definitions/expense_type`（超級管理員）。"""
+    _require_user(authorization)
+    from helpers import expense_types as ET
+    conn = get_db()
+    try:
+        return ET.list_types(conn)
+    finally:
+        conn.close()
+
+
+@router.get("/api/expense-types/{code}")
+def get_expense_type(code: str, version: int = Query(None, ge=0), authorization: str = Header(None)):
+    """類型定義（預設＝目前生效版；`version`＝單據釘住的版本，0＝程式預設）。任何登入者（表單要依定義渲染）。"""
+    _require_user(authorization)
+    from helpers import expense_types as ET
+    conn = get_db()
+    try:
+        t = ET.get_type(conn, code, version)
+    finally:
+        conn.close()
+    if t is None:
+        raise HTTPException(404, "查無這個單據類型")
+    return {"code": t["code"], "defVersion": t["version"], "definition": t["body"]}
+
+
 @router.get("/api/definitions/{kind}")
 def list_definitions(kind: str, authorization: str = Header(None)):
     """同一 kind 的所有定義（含只有草稿的）——建構器的模組清單（主持 P8 缺口 #5）。"""
@@ -211,7 +239,7 @@ def save_definition_draft(kind: str, key: str, scope: str = Query("company"), pa
 @router.post("/api/definitions/{kind}/{key}/validate")
 def validate_definition(kind: str, key: str, payload: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
-    if kind not in D.KINDS:
+    if kind not in D.kinds():
         raise HTTPException(400, "未知的定義種類")
     return {"problems": D.validate(kind, key, payload.get("body"))}
 

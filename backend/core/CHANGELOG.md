@@ -7,6 +7,7 @@
 - L1（新增）：`helpers.tiered_approval.register_doc_type(code, label, unified=False)`／`doc_types_meta()`（就地擴充 `APPROVAL_DOC_TYPES／DEFAULT_UNIFIED_DOC_TYPES／APPROVAL_DOC_TYPE_LABELS`）；路由 `GET /api/settings/approval-doc-types`。`PUT /api/settings/approval-flow-scope` 由固定欄位模型改成依登記表驗證（鍵＝目前全部單據類型、值＝布林；缺／多／非布林 ⇒ 422，與原行為一致）；簽核設定頁接上登記的類型。
 - L1（新增）簽核佇列項目契約（選用欄位，舊項目不變）：`typeLabel`（未知 type 自帶標籤；內建不被覆寫）、`openUrl／approveUrl／rejectUrl／rejectField`（前端優先使用）、`caseless: True`（不掛案件的單據：簽核鏈上的人與送審人＋超級管理員可開，其餘 404；項目與 `approval.detail` 同一個判斷 `_access_step(caseless=)`）。
 - L1（新增）：`helpers.notification_prefs.ensure_event(key, desc)`＋`MODULE_GROUP_LABEL`；`mail_types.register`（owner≠core）自動把新類型併進個人通知偏好「其他模組通知」組。`helpers.email_notify.send_registered(event_key, *, title, rows, usernames=None, to_group=False, reason="", …)`（模組通用寄信入口；字面 key 由 `test_mail_registry` 的掃描核對已登記）。
+- L1（新增）：`helpers.expense_types`（費用單據類型定義 `expense_type`：`validate_expense_type／get_type／list_types／cashier_field_keys／normalize_lines／validate_values`，明細金額唯一實作）＋四個預設定義（purchase_req／purchase_order／travel／petty_cash，欄位為草稿待使用者確認）；路由 `GET /api/expense-types`、`GET /api/expense-types/{code}`；`POST /api/definitions/{kind}/{key}/validate` 改用 `D.kinds()`（登記的種類不再 400）。
 - L1（新增）：`helpers.doc_render.render_document(template, view)`（版型＋單據視圖 ⇒ HTML，未核可由程式補標示）；`custom_modules.render_view` 改為委派。
 - L1（新增）權限目錄 `expense_forms`（費用單據；A2-1 起由無案件新增端點讀取；目前列在 `UNREAD_BY_DESIGN`，有人讀它時守門會要求刪掉那一筆）。
 

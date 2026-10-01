@@ -860,6 +860,26 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:expense_types": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:custom_modules",
+    "helper:legal_params",
+    "helper:tiered_approval",
+    "plat:definitions",
+    "plat:paths"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/expense_types.py",
+   "tables_ddl": [],
+   "tables_named": [
+    "departments",
+    "users"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:financial_mask": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -13938,6 +13958,7 @@
    "api_prefixes": [
     "/api/definition-kinds",
     "/api/definitions",
+    "/api/expense-types",
     "/api/layout"
    ],
    "dynamic_sql": false,
@@ -13945,15 +13966,27 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:case_access",
+    "helper:custom_builder_support",
     "helper:custom_def_review",
     "helper:custom_fields",
+    "helper:custom_files",
+    "helper:custom_finance",
+    "helper:custom_history",
+    "helper:custom_modules",
+    "helper:doc_render",
     "helper:doc_template",
     "helper:email_notify",
+    "helper:expense_types",
+    "helper:formula",
+    "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:row_access",
     "helper:settings",
-    "helper:tiered_approval"
+    "helper:tiered_approval",
+    "helper:uploads"
    ],
    "imports": [
     "core:db",
@@ -13963,6 +13996,7 @@
     "helper:custom_def_review",
     "helper:custom_fields",
     "helper:doc_template",
+    "helper:expense_types",
     "plat:catalog",
     "plat:definitions",
     "plat:registry"
@@ -13973,79 +14007,91 @@
    "routes": [
     {
      "func": "list_definition_kinds",
-     "line": 144,
+     "line": 145,
      "method": "GET",
      "path": "/api/definition-kinds"
     },
     {
+     "func": "list_expense_types",
+     "line": 152,
+     "method": "GET",
+     "path": "/api/expense-types"
+    },
+    {
+     "func": "get_expense_type",
+     "line": 164,
+     "method": "GET",
+     "path": "/api/expense-types/{code}"
+    },
+    {
      "func": "list_definitions",
-     "line": 151,
+     "line": 179,
      "method": "GET",
      "path": "/api/definitions/{kind}"
     },
     {
      "func": "delete_definition_draft",
-     "line": 164,
+     "line": 192,
      "method": "DELETE",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "get_definition",
-     "line": 182,
+     "line": 210,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "save_definition_draft",
-     "line": 195,
+     "line": 223,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 212,
+     "line": 240,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 220,
+     "line": 248,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 254,
+     "line": 282,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 270,
+     "line": 298,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 295,
+     "line": 323,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 326,
+     "line": 354,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 339,
+     "line": 367,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 365,
+     "line": 393,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
@@ -14057,6 +14103,8 @@
    "tables_r": [],
    "tables_r_transitive": [
     "approval_delegates",
+    "custom_record_finance_outbox",
+    "custom_records",
     "daily_tasks",
     "departments",
     "dev_cases",
@@ -14071,6 +14119,14 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "custom_record_counters",
+    "custom_record_files",
+    "custom_record_finance_outbox",
+    "custom_record_log",
+    "custom_record_revisions",
+    "custom_record_snapshots",
+    "custom_record_values",
+    "custom_records",
     "notifications",
     "system_settings"
    ]
@@ -16495,7 +16551,8 @@
    "named_by": [
     "core:db",
     "core:trail",
-    "helper:custom_modules"
+    "helper:custom_modules",
+    "helper:expense_types"
    ],
    "path": "backend/db.py:1682",
    "readers": [
@@ -18121,6 +18178,7 @@
     "helper:custom_builder_support",
     "helper:custom_modules",
     "helper:email_notify",
+    "helper:expense_types",
     "mod:payroll/api/bank_account",
     "router:mail_settings",
     "router:system"
