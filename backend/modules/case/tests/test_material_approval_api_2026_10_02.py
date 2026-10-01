@@ -65,6 +65,16 @@ def _one_tier(boss):
     _flow([{"order": 0, "approvers": [{"username": boss, "displayName": "主管"}]}])
 
 
+def _queue_codes():
+    from core import registry
+    import db
+    conn = db.get_db()
+    try:
+        return [i["docCode"] for i in registry.providers("approval.queue_items")["case_material"](conn)]
+    finally:
+        conn.close()
+
+
 def _audit_actions():
     return [r["action"] for r in _q("SELECT action FROM audit_log WHERE target_id=? ORDER BY id", (NO,))]
 
@@ -158,6 +168,7 @@ def test_one_tier_flow_queue_approve_and_reject(client, world):
     for need in ("material_orders.submit", "material_orders.reject", "material_orders.approve"):
         assert need in acts, (need, acts)
     assert client.post(BASE + "/approve", headers=world["boss"]).status_code == 409           # 已核准不可再核
+    assert _queue_codes() == []                                                               # 已核准：離開佇列
 
 
 def test_withdraw_and_cancel_rules(client, world):
@@ -165,8 +176,10 @@ def test_withdraw_and_cancel_rules(client, world):
     client.post(BASE + "/submit", headers=world["eng"])
     assert client.post(BASE + "/withdraw", headers=world["peer"]).status_code == 403          # 別的成員不能撤回
     assert _approval(client, world["eng"])["status"] == "待審核"
+    assert len(_queue_codes()) == 1                                                            # 待審核：在佇列
     r = client.post(BASE + "/withdraw", headers=world["eng"])
     assert r.status_code == 200 and r.json()["status"] == "草稿"
+    assert _queue_codes() == []                                                                # 草稿：不在佇列
     assert client.post(BASE + "/cancel", json={"reason": "x"}, headers=world["adm"]).status_code == 409      # 草稿不可取消
     _flow([])
     assert client.post(BASE + "/submit", headers=world["eng"]).json()["status"] == "已核准"
