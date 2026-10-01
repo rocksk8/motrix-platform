@@ -6,7 +6,7 @@
     return {
         L: window.MotrixCustomLayout, STEPS: STEPS, NAV: NAV, DEFAULT_GROUP: '自訂模組',
         navAnchor: '', thumbTick: 0, previewMissing: false, liveMsg: '',
-        ready: false, errMsg: '', me: {}, catalog: {}, users: [], orgTree: [], published: [], menuGroups: ['自訂模組'],
+        ready: false, errMsg: '', me: {}, catalog: {}, users: [], orgTree: [], published: [], menuGroups: ['自訂模組'], mountPoints: [], mountMax: 8,
         keyInput: '', keyErr: '', key: '', def: null, latestVersion: 0, versions: [],
         step: 1, tab: 'info', drawer: false, sel: null, dragOver: false,
         dirty: false, saving: false, saveState: 'idle', savedAt: '', _saveTimer: null, _loading: false, _inflight: null, flushLimitMs: 10000,
@@ -46,6 +46,8 @@
           this.orgTree = res[1].ok ? (res[1].data || []) : []
           this.published = res[2].ok ? (res[2].data || []) : []
           this.menuGroups = this.readMenuGroups()
+          var mp = await this.api('GET', '/api/platform/mount-points')       // 掛載目標下拉；失敗＝清單空（欄位仍可用於已存的目標）
+          if (mp.ok && mp.data) { this.mountPoints = mp.data.points || []; this.mountMax = mp.data.maxTabs || 8 }
           this.$watch('def', () => this.onDefChange())
           window.addEventListener('beforeunload', () => { if (this.dirty) this.saveDraft(true) })
           this.ready = true
@@ -325,6 +327,31 @@
         totalProblemCount() { return this.allProblems().length },
 
         // ── ① 基本 ──
+        // ── 掛載到內建頁面（方案 B）：掛載點清單來自 GET /api/platform/mount-points（只有最高管理者；已載入模組宣告的點）──
+        mountPointId() { return ((this.def && this.def.mount) || {}).point || '' },
+        mountDef() { var id = this.mountPointId(); return this.mountPoints.find(function (p) { return p.id === id }) || null },
+        mountMissing() { return !!this.mountPointId() && !this.mountDef() },
+        mountOptions() {
+          // 已存的目標不在清單（模組停用／點被移除）⇒ 仍列出並標示，不悄悄換掉或清掉
+          var id = this.mountPointId()
+          return id && !this.mountDef() ? this.mountPoints.concat([{ id: id, label: '（目標不存在）', context: [] }]) : this.mountPoints
+        },
+        setMountPoint(id) {
+          if (!id) { this.def.mount = undefined; return }
+          var old = this.def.mount || {}
+          var pt = this.mountPoints.find(function (p) { return p.id === id })
+          // 換目標時 contextField 不一定仍適用 ⇒ 清空（label 沿用）
+          var m = { point: id }
+          if (old.label) m.label = old.label
+          if (pt && pt.context && pt.context.length && old.contextField) m.contextField = old.contextField
+          this.def.mount = m
+        },
+        setMount(k, v) {
+          var m = Object.assign({}, this.def.mount || {}); m[k] = v
+          if (k === 'label' && !v) delete m.label
+          if (k === 'contextField' && !v) delete m.contextField
+          this.def.mount = m
+        },
         setMenu(k, v) { var m = Object.assign({}, this.def.menu || {}); m[k] = v; this.def.menu = m },
         dateLabel(d) { return d === '' ? '不分期（不含日期）' : (d === 'YYYYMM' ? '年月（每月重新計）' : (d === 'YYYYMMDD' ? '年月日（每日重新計）' : d)) },
         queueNumbering() {
