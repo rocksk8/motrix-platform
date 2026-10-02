@@ -7,6 +7,7 @@
 - `MaterialOrder` 存檔模型加選填 `quoteItemId`／`poDocCode`／`poLine`／`overPlanReason`；空值不寫入（沒用連結的舊單形狀不變）。前端載入與存檔原樣帶回這四鍵（整份覆寫端點）。
 - S4 新增的使用者可見字串改照 `MATERIAL-REQUEST-WORDING.md`：`NO_PO_TEXT`＝「該材料申請未申請採購單」；送審檢查訊息、無案件訊息同改。鍵名不動。
 - 材料申請的佇列提供者（`material_approvals.queue_items`）帶 `tags`：未申請採購單者加一個 warn 標註（`purchase_items.queue_tags`）。瀏覽器 e2e（32-S4e）：帶入扣量→超計畫原因→標註出現／消失／失效回來→佇列卡片標註。
+- 修正（e2e 階段回報）：連結判定端點改名 `GET /api/quotations/{案件}/material-link-status`（原路徑含 `/material-orders`，與「開案件不打材料申請端點」契約測試的子字串比對撞名）；切換案件時重設 mlink 的畫面狀態（`_reset_mlink`，core 的重設清單加 `mlink`）。
 - 預設分頁＝「已核准／舊單／尚未送審」（草稿帶「尚未送審」徽章，未進報表／總帳、不佔額度、不在簽核佇列）；其餘分頁：審核中、已退回、已取消、全部，各分頁 chip 顯示筆數。送審檢查加 `po_line_taken`：一個採購單行只能對應一筆活的（非草稿／已退回／已取消）材料申請。
 - 簽核佇列項目加 `tags: []`（`helpers/approval_queue.base_item`；前端卡片畫出，tone `warn`／`info`）。
 

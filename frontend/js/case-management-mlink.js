@@ -16,6 +16,13 @@ window.CM_PARTS.push(() => ({
     _mlTabOfRow: {},      // 上一次載入時各列所在的頁籤：列的狀態變了（送審、核准、撤回…）就讓目前頁籤跟著它走，不然操作完那一列會憑空消失
     mlTick: 0,            // 讓 Alpine 在清單重載後重新計算（比照 moBusy 類計數器）
 
+    // 切換案件時重設（core 的 _resetCaseScoped 依模組清單呼叫 _reset_<模組>）；不重設就會殘留前一件的清單／頁籤／筆數
+    _reset_mlink(phase) {
+      if (phase !== 'early') return
+      this.mlStatus = {}; this.mlItems = []; this.mlPoLines = []; this.mlPanel = ''; this.mlPick = {}
+      this.mlLoadingList = false; this.mlMsg = ''; this.mlTab = 'approved'; this._mlTabOfRow = {}; this.mlTick = 0
+    },
+
     _mlHeaders() { return { Authorization: 'Bearer ' + this.session.token } },
     _mlBase() { return `/api/quotations/${encodeURIComponent(this.selected?.quote_no || '')}` },
 
@@ -23,7 +30,7 @@ window.CM_PARTS.push(() => ({
     async mlLoadStatus(quoteNo) {
       if (!quoteNo) return
       try {
-        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders/link-status`, { headers: this._mlHeaders() })
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-link-status`, { headers: this._mlHeaders() })
         if (r.ok && this.selected?.quote_no === quoteNo) this.mlStatus = (await r.json()).statuses || {}
       } catch {}
       this._mlFollowMovedRow()

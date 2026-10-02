@@ -112,7 +112,7 @@ def test_link_status_endpoint_marks_legacy_zero_none_linked_and_stale(W):
         {"itemId": "K", "itemName": "已連", "quantity": 3, "unit": "式", "unitPrice": 10, "totalPrice": 30, "poDocCode": po["docCode"], "poLine": 1},
         {"itemId": "S", "itemName": "失效", "quantity": 1, "unit": "式", "unitPrice": 10, "totalPrice": 10, "poDocCode": "PO-GONE"},
     ], {"Z": "已核准", "N": "已核准", "K": "已核准", "S": "已核准"})
-    r = c.get("/api/quotations/%s/material-orders/link-status" % NO, headers=h)
+    r = c.get("/api/quotations/%s/material-link-status" % NO, headers=h)
     assert r.status_code == 200, r.text
     st = r.json()["statuses"]
     assert st["L"]["state"] == "exempt" and st["L"]["reason"] == "legacy" and st["L"]["text"] == ""
@@ -122,7 +122,7 @@ def test_link_status_endpoint_marks_legacy_zero_none_linked_and_stale(W):
     assert st["S"]["state"] == "none" and st["S"]["stale"] is True and st["S"]["text"].endswith("（原連結採購單已失效）")
     # 採購單被作廢 ⇒ 已連的變失效
     _status(po["id"], "已作廢")
-    st2 = c.get("/api/quotations/%s/material-orders/link-status" % NO, headers=h).json()["statuses"]
+    st2 = c.get("/api/quotations/%s/material-link-status" % NO, headers=h).json()["statuses"]
     assert st2["K"]["state"] == "none" and st2["K"]["reason"] == "po_inactive"
 
 
