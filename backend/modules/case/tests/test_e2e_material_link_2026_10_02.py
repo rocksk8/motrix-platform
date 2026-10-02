@@ -166,6 +166,8 @@ def test_material_request_link_flow_in_the_browser(live_server, make_user, e2e_b
     card = page.locator(f'[data-testid="mo-card-{new_id}"]')
     card.locator('[data-testid="mo-submit"]').click()
     _wait_db(page, lambda: _status_of(new_id) == "待審核", "送審後待審核")
+    page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]')).mlTab === 'review'", timeout=10000)      # 狀態變了，頁籤跟著該列走（不讓剛送審的列憑空消失）
+    assert card.is_visible()
     bpage = ctx.browser.new_context(viewport={"width": 1400, "height": 1000}).new_page()
     inject_login(bpage, live_server, boss, bp)
     bpage.goto(f"{live_server}/pages/approval-queue.html")
