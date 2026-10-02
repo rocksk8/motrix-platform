@@ -56,8 +56,33 @@ def seed_stuck(root, port):
     _u, token = T.login(root, port)
     s, d = T.api(port, "/api/contractor-dispatches/%d/completion/request" % STUCK_ID, {}, token, "POST")
     row = _row(root, STUCK_ID)
-    return {"request_status": s, "request_body": str(d)[:200], "row": row,
+    review = seed_material_review(root, port, token)
+    return {"review_seed": review, "request_status": s, "request_body": str(d)[:200], "row": row,
             "stuck": bool(row and row["completion_status"] in ("待審核", "簽核中") and (row["doc_code"] or "") == "")}
+
+
+REVIEW_FEE, REVIEW_PAID = 15.0, "2026-10-01"
+
+
+def seed_material_review(root, port, token):
+    """基線：一張已核准的材料申請匯款（核准 1000）＋一筆多付的付款明細（實付 1200、手續費 15、待差額審核）——
+    第 32 包要驗出納『差額審核』項目的 fee／paidAt 有值（修正前兩欄被行內註解吞掉）。直接寫表（只用有預設值的欄位）。"""
+    now = "2026-10-01T10:00:00"
+    c = T.rw(root)
+    try:
+        sn = json.dumps({"supplierName": "DRILL供應商", "bankCode": "700", "bankName": "中華郵政", "bankAccountNumber": "00012345678901"}, ensure_ascii=False)
+        cur = c.execute("INSERT INTO case_material_payments (doc_code, quote_no, item_id, seq, amount_approved, snapshot_json, status, approved_at, created_by, created_at, updated_at)"
+                        " VALUES ('DRILL-MP-0001', ?, 'drill-item-1', 1, 1000, ?, '已核准', ?, 'drill', ?, ?)", ("%sMQ-001" % T.SEED_TAG, sn, now, now, now))
+        pid = cur.lastrowid
+        cur = c.execute("INSERT INTO case_material_payment_lines (payment_id, paid_at, amount, fee, remit_review, paid_by, created_at) VALUES (?,?,?,?, 'pending','drill',?)",
+                        (pid, REVIEW_PAID + "T10:00:00", 1200, REVIEW_FEE, now))
+        lid = cur.lastrowid
+        c.commit()
+    finally:
+        c.close()
+    s, d = T.api(port, "/api/cashier/remit-reviews", token=token)
+    items = [i for i in ((d or {}).get("items") or []) if isinstance(i, dict) and str(i.get("key")) == str(lid)] if isinstance(d, dict) else []
+    return {"line_id": lid, "baseline_status": s, "baseline_item": {k: items[0].get(k) for k in ("fee", "paidAt", "source", "actual", "payable")} if items else None}
 
 
 def add32(rec, root):
@@ -81,8 +106,8 @@ def _queue_items(port, token):
 
 def checks32(root, port, base_rec, new_rec, t0, package_modules):
     res = T31.checks31(root, port, base_rec, new_rec, t0, package_modules)
-    for k in ("16_subcontract_schema_stays_3", "9c_legacy_dispatch_untouched"):
-        res.pop(k, None)                          # 第 32 班：subcontract 3→4；舊單判準改成下面的 17b
+    for k in ("16_subcontract_schema_stays_3", "9c_legacy_dispatch_untouched", "16_material_tables_exist_and_empty"):
+        res.pop(k, None)                          # 第 32 班：subcontract 3→4；舊單判準改成下面的 17b；材料表改成『筆數＝基線（種子 1 筆申請＋1 筆明細）』
     stuck = getattr(T, "_STUCK", None) or {}
     before = (stuck.get("row") or {})
     after = new_rec.get("dispatch_rows", {}).get(STUCK_ID) or {}
@@ -104,6 +129,20 @@ def checks32(root, port, base_rec, new_rec, t0, package_modules):
     s, items = _queue_items(port, token)
     hit = [i for i in items if isinstance(i, dict) and i.get("typeLabel") == "承攬商派發完工" and i.get("docCode") == code]
     res["17c_queue_shows_completion_with_the_backfilled_code"] = (bool(code) and len(hit) == 1, {"status": s, "items": len(items), "hit": len(hit)})
+    # 18：出納差額審核項目的 fee／paidAt（修正：材料申請匯款的兩欄被行內註解吞掉而為空）
+    seed = stuck.get("review_seed") or {}
+    s3, d3 = T.api(port, "/api/cashier/remit-reviews", token=token)
+    its = [i for i in ((d3 or {}).get("items") or []) if isinstance(i, dict) and str(i.get("key")) == str(seed.get("line_id"))] if isinstance(d3, dict) else []
+    it = its[0] if its else {}
+    res["18_remit_review_item_has_fee_and_paidAt"] = (
+        s3 == 200 and len(its) == 1 and it.get("fee") == REVIEW_FEE and it.get("paidAt") == REVIEW_PAID and it.get("source") == "case_material",
+        {"status": s3, "item": {k: it.get(k) for k in ("source", "key", "fee", "paidAt", "actual", "payable", "diff")}, "baseline_item": seed.get("baseline_item")})
+    c = T.ro(root)
+    try:
+        tabs = {t: (T.table_exists(c, t), T.count(c, t)) for t in ("case_material_approvals", "case_material_payments", "case_material_payment_lines")}
+    finally:
+        c.close()
+    res["16_material_tables_exist_with_the_seeded_rows_only"] = (tabs == {"case_material_approvals": (True, 0), "case_material_payments": (True, 1), "case_material_payment_lines": (True, 1)}, tabs)
     # 17d：套用後對另一筆舊單申請完工
     sr, dr = T.api(port, "/api/contractor-dispatches/%d/completion/request" % LATER_ID, {}, token, "POST")
     later = _row(root, LATER_ID) or {}
