@@ -70,3 +70,9 @@
 - 叫料管控擴充規格（2e，wip/t32-material-link-spec-2e@3ecc5652，docs/platform/plans/MATERIAL-ORDER-LINK-SPEC.md）：使用者裁示 2026-10-02：**直接套用不設開關**；**無財務檢視者只看數量不看金額**。主持採納 2e 建議：$0 叫料單無標註、舊列無標註、不強制連 PR/PO、僅連 PR 不算、PO 作廢/退回只標記失敗不自動退回、不入待補登旗標、佇列卡片顯示標籤（L1 佇列項加選填 tags[]，加法不破壞）、已全數匯入的品項隱藏並顯示剩餘量。預估 S4a–S4e 約 8 天，在 31-C 併入後；不進第31包，排第32班。
 - 2e：fix/t32-dispatch-cancel-2e@77e3c0d0（稽核 S-2 修正；6 題＋9 突變全殺；待跑 changelog 守門）。S5 缺口測試待跑。
 - d7 e2e sleep 隱患稽核（wip/build-opt2-d7@7edfe729，E2E-SLEEP-HAZARD-AUDIT.md）：H1–H4 四檔 5 處同風險（quote_number_input、cashier_receive_amount、cashier_remit_payslip_link、case_close_checklist）+ 兩個負向斷言假綠風險（quote_number_input:103,175、case_data_loss:162）。第31包建完後做（僅測試端，轉 wait_for_timeout 輪詢，前後各5次）；Q1 route/sync-dispatch 對照需 10 分鐘窗口；全域靜態守門待 Q1。
+
+## 使用者裁示 2026-10-02（選單）→ 第32班
+- S-1 舊派發列編輯：**維持舊單狀態（approval_status=''）不重設為草稿，寫稽核列並在畫面警示「舊單已修改」**。成本／總帳不掉。（2e，派發模組）
+- applicant 欄位說明：**改成白話一句**：「這一欄會自動帶入申請人；管理者可在設計器解除鎖定」（動出貨定義 helpers/expense_type_defs/*.json ⇒ def_version 變更，隨第32班）。（a3）
+- 建構器分頁掛載：**先掛「我的工作」**（規格 BUILDER-ATTACH-EXISTING-MODULE-SPEC.md；daily_tasks.daily-tasks 掛載點已在第30班出貨）。
+- 第32班優先：**叫料管控擴充**（S4a–S4e，約8天；規格 wip/t32-material-link-spec-2e）。設計器預設開關待使用者預覽後裁示。
