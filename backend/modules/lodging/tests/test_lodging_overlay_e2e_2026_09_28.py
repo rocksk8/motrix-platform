@@ -80,6 +80,23 @@ def _wait_items(page, panel, n, tmp_path):
         raise AssertionError("清單第 %d 筆沒出現；面板訊息=%r；紀錄=%r；截圖=%s" % (n, msg, page._lodging_log, shot))
 
 
+_MP = "Alpine.$data(document.querySelector('.mp-wrap'))"
+
+
+def _close_map_for_good(page, rounds=8, quiet_ms=1500):
+    """把地圖收起來並確認**不會再被建回來**（第三十二班偶發紅：closeMap 之後 `_map` 又出現 ⇒ 等它清空逾時）。
+    成因：自動開圖排在 `refresh()` 之後，負載下可能晚於覆蓋層按鈕觸發的開圖 ⇒ 測試 closeMap 後被自動開圖建回來。
+    作法：收 ⇒ 靜默一段時間（用 page.wait_for_timeout，不阻塞頁面事件）⇒ 還有地圖或載入中就再收；連續一段靜默都沒被建回才算數。
+    不放寬任何產品斷言；收不乾淨（一直被建回）⇒ 失敗並說出次數。"""
+    for i in range(rounds):
+        page.wait_for_function("() => !%s.mapLoading" % _MP, timeout=30000)
+        page.evaluate("() => %s.closeMap()" % _MP)
+        page.wait_for_timeout(quiet_ms)
+        if page.evaluate("() => !%s._map && !%s.mapOpen && !%s.mapLoading" % (_MP, _MP, _MP)):
+            return i
+    raise AssertionError("地圖收起來 %d 次都被建回來（自動開圖沒停）" % rounds)
+
+
 def _search_by_address(page):
     panel = page.locator("[data-map-overlay-panel=lodging]")
     panel.locator("[data-lodging-address]").fill("測試市測試路1號")
@@ -157,8 +174,7 @@ def test_results_arriving_before_the_map_is_ready_still_list_and_draw_later(live
     # 先等開頁自動開圖完成，再收起來（否則自動開圖晚一步完成會把地圖建回來）
     page.wait_for_function("() => { const d = Alpine.$data(document.querySelector('.mp-wrap')); return d._map && !d.mapLoading }",
                            timeout=30000)
-    page.evaluate("() => Alpine.$data(document.querySelector('.mp-wrap')).closeMap()")
-    page.wait_for_function("() => !Alpine.$data(document.querySelector('.mp-wrap'))._map", timeout=10000)
+    _close_map_for_good(page)
     # 收圖會卸下覆蓋層 ⇒ 重新掛上（地圖此時沒有開）
     page.evaluate("() => window.MotrixMapOverlay._mount('lodging', '附近旅宿')")
     panel = _search_by_address(page)
@@ -169,3 +185,21 @@ def test_results_arriving_before_the_map_is_ready_still_list_and_draw_later(live
     page.evaluate("() => Alpine.$data(document.querySelector('.mp-wrap')).openMap()")
     page.wait_for_function("() => document.querySelectorAll('#mp-canvas .mp-ov-pin, #mp-canvas .marker-cluster').length > 0",
                            timeout=20000)
+
+
+@pytest.mark.e2e
+def test_close_map_for_good_recloses_a_late_rebuild_and_gives_up_on_endless_rebuilds(live_server, make_user, e2e_browser):
+    """反向控制（上面那題的收圖輔助）：①收圖後 400ms 地圖被晚到的開圖建回來 ⇒ 輔助再收一次、最後確實是收著的；
+    ②地圖每 300ms 就被建回來 ⇒ 輔助必須失敗（不是靜默放行）。"""
+    user = make_user(username="e2e_lov_e", role="sales", modules=["lodging", "map"])
+    page = _open(e2e_browser, live_server, user)
+    page.wait_for_function("() => { const d = %s; return d._map && !d.mapLoading }" % _MP, timeout=30000)
+    page.evaluate("() => { const d = %s; window.__late = 0; setTimeout(() => { window.__late++; d.openMap() }, 400) }" % _MP)
+    rounds = _close_map_for_good(page)
+    assert rounds >= 1, "晚到的開圖要讓輔助多收一輪（沒有 ⇒ 這個反向控制沒打到）"
+    assert page.evaluate("() => window.__late") == 1
+    assert page.evaluate("() => { const d = %s; return !d._map && !d.mapOpen }" % _MP)
+    page.evaluate("() => { const d = %s; window.__t = setInterval(() => d.openMap(), 300) }" % _MP)
+    with pytest.raises(AssertionError, match="都被建回來"):
+        _close_map_for_good(page, rounds=3, quiet_ms=1000)
+    page.evaluate("() => clearInterval(window.__t)")
