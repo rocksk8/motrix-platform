@@ -4308,8 +4308,8 @@
     <div style="padding:18px 20px">
       <!-- 31-B：整筆（舊流程）或分期（款別＋比例／固定金額；試算由後端算） -->
       <div x-show="createVoucherDispatch && !_dispatchOpenVouchers(createVoucherDispatch).some(x => x.kind) && (createVoucherDispatch.status==='completed' || createVoucherDispatch.status==='accepted')" style="display:flex;gap:14px;margin-bottom:12px;font-size:12px;font-family:var(--font-zh)">
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" value="whole" x-model="cvForm.mode" @change="cvPlanSchedule()" data-testid="cv-mode-whole"> 整筆</label>
-        <label x-show="_cvKindsFor(createVoucherDispatch).length" style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" value="kind" x-model="cvForm.mode" @change="cvPlanSchedule()" data-testid="cv-mode-kind"> 分期（款別）</label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" data-saved-field value="whole" x-model="cvForm.mode" @change="cvPlanSchedule()" data-testid="cv-mode-whole"> 整筆</label>
+        <label x-show="_cvKindsFor(createVoucherDispatch).length" style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" data-saved-field value="kind" x-model="cvForm.mode" @change="cvPlanSchedule()" data-testid="cv-mode-kind"> 分期（款別）</label>
       </div>
       <div x-show="cvForm.mode==='kind'" style="margin-bottom:12px">
         <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">款別</label>

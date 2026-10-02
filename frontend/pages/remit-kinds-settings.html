@@ -90,7 +90,7 @@
                       <div class="rk-bad" x-show="codeProblem(k)" x-text="codeProblem(k)"></div>
                     </td>
                     <td><input type="checkbox" x-model="k.active" data-testid="rk-active"></td>
-                    <td><input type="number" x-model.number="k.sort" data-testid="rk-sort"></td>
+                    <td><input type="number" data-saved-field x-model.number="k.sort" data-testid="rk-sort"></td>
                     <td>
                       <div class="rk-chips">
                         <template x-for="s in stages" :key="s.key">
