@@ -309,3 +309,29 @@ def test_payee_privacy_notice_is_required_recorded_and_audited(client, world):
     assert again.status_code == 200 and again.json()["created"] is False and again.json()["ack"]["at"] == ack["at"]        # 已記錄的不覆蓋
     assert _audit_actions().count("material_payment.privacy_notice_ack") == 1
     assert client.post("/api/material-payments/%d/privacy-notice/ack" % pay["id"], headers=w["eng"]).status_code == 403     # 沒有編輯叫料權限的人不能補記
+
+
+def test_privacy_ack_write_failure_is_fail_closed_no_request_is_left_and_submit_needs_the_record(client, world, monkeypatch):
+    """32 班：個資告知紀錄寫不進去 ⇒ 申請不留（503）；沒有（或讀不到）告知紀錄的申請不能送審（409）。
+    （用 `monkeypatch.context()`：不能 `undo()` 整個 fixture——conftest 也用同一個 monkeypatch 設了 session 時間等東西。）"""
+    from helpers import privacy_notice as pn
+    _flow([])
+    before = _q("SELECT COUNT(*) AS n FROM case_material_payments")[0]["n"]
+
+    def boom(*a, **k):
+        raise RuntimeError("設定庫寫入失敗")
+    with monkeypatch.context() as m:
+        m.setattr(pn, "record_purpose_ack", boom)
+        r = _create(client, world, 1000)
+    assert r.status_code == 503 and "沒有建立" in r.text, r.text
+    assert _q("SELECT COUNT(*) AS n FROM case_material_payments")[0]["n"] == before, "寫入失敗不得留下申請"
+    assert "material_payment.create_rolled_back" in _audit_actions()
+    r = _create(client, world, 1000)                                        # 正常建立 ⇒ 有紀錄
+    assert r.status_code == 200, r.text
+    pid = r.json()["payment"]["id"]
+    with monkeypatch.context() as m:                                        # 紀錄讀不到（None）⇒ 送審 409，申請仍是草稿
+        m.setattr(pn, "get_ack", lambda kind, key: None)
+        s = client.post("/api/material-payments/%d/submit" % pid, headers=world["adm"])
+    assert s.status_code == 409 and "個資告知" in s.text, s.text
+    assert _q("SELECT status FROM case_material_payments WHERE id=?", (pid,))[0]["status"] == "草稿"
+    assert client.post("/api/material-payments/%d/submit" % pid, headers=world["adm"]).status_code == 200
