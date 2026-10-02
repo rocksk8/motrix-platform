@@ -78,3 +78,7 @@
 - 第32班優先：**叫料管控擴充**（S4a–S4e，約8天；規格 wip/t32-material-link-spec-2e）。設計器預設開關待使用者預覽後裁示。
 - 第31包套用步驟 0 請正式機 Claude 加一條唯讀查詢並回報：SELECT key, version, status, published_at FROM ui_definitions WHERE kind='expense_type' ORDER BY key, version;（判斷公司是否已發布請款類型副本，影響 applicant 說明改字是否需通知重新發布）。
 - 第31包稽核：2e 探針 CLEAN（probe/t31-2e@db8d9316，PR/PO 7 題＋結算匯出＋勞報單遮蔽；探的是 commit 樹，非解包 payload）。待：c7（31-C）、d7（設計器＋包完整性）、a3（演練）、正式機暫存驗證。
+
+## 第31包 c7 稽核（31-C，audit/train31c-report-c7@bc46eb27）：PASS，must-fix 0
+- 使用者裁示 2026-10-02：**收款人完整帳號端點照現狀上線（最高管理者／管理員／出納可見），第32班收緊為最高管理者與出納，管理員看遮罩**。
+- 第32班修（d7）：①收款人個資告知 ack 寫入失敗須 fail-closed（現在 _record_payee_ack 吞例外，匯款仍建立）；②出納手續費無上限且不進覆核（fee=1e12 回 200、remit_review=''；該機制為既有出納機制，需查其他來源）；③完整帳號端點收緊；④O-1：已全額付款的舊叫料單改價後掉成本直到重核（CHANGELOG 已警告）；⑤O-3 自核准屬流程設定。
