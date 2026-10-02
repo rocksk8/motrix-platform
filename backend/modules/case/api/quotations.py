@@ -4331,7 +4331,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
             if bad:
                 conn.close()
                 raise HTTPException(422, bad)
-        if body.settlement.get("status") == "finalized":       # 33-A5（D10）：完結前後端用同一來源重算，與頁面送上的 summary 比對；差異超過進位誤差就拒絕
+        if body.settlement.get("status") == "finalized" and existing_settlement.get("status") != "finalized":       # 33-A5（D10；只在「非完結 → 完結」轉換時比對，已完結的再存＝凍結快照不隨之後單據變動，da）：完結前後端用同一來源重算，與頁面送上的 summary 比對；差異超過進位誤差就拒絕
             from modules.case import settlement_actuals as _SA
             diffs = _SA.check_finalize(conn, quote_no, body.settlement)
             if diffs:

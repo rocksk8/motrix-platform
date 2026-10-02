@@ -129,3 +129,12 @@ def test_the_request_body_is_what_gets_checked_not_the_older_saved_draft(W):
     final = {"status": "finalized", "items": [{"id": "a", "adoptSystem": True, "actualTotalCost": 3000}, {"id": "b", "adoptSystem": True, "actualTotalCost": 525}], "offsets": [],
              "summary": {"itemActualTotal": 3525, "itemPoUnadopted": 0, "extraTotal": 0, "remitFeeTotal": 0, "customExpenseTotal": 0, "purchasedTotal": 3000}}
     assert _finalize(c, h, final).status_code == 200                                         # 使用者後來改採用、完結：以這次送上的為準（不是資料庫裡舊草稿的 9000）
+
+
+def test_resaving_an_already_finalized_settlement_is_not_rechecked(W):
+    c, h = W
+    assert _finalize(c, h, _page_payload(c, h)).status_code == 200
+    _approved_po(c, h, [_ln("a", 3, unitCost=1000)])                                         # 完結後才核准的採購單
+    again = _page_payload(c, h)
+    again["summary"]["itemActualTotal"] = 1                                                  # 與重算差很多，但這是已完結的再存（超級管理員改備註）：不比對
+    assert _finalize(c, h, again).status_code == 200
