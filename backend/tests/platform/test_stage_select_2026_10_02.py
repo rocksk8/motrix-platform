@@ -47,7 +47,7 @@ TESTS = {
     "backend/tests/test_global_pin.py": ("api", ["file:backend/data/g.json"]),
     "backend/tests/test_orphan.py": ("api", []),
     "backend/tests/test_scan_dirs.py": ("api", ["file:backend/data/s.json"]),
-    "backend/tests/test_scan_with_dir.py": ("api", ["dir:frontend/pages/"]),
+    "backend/tests/test_scan_with_dir.py": ("api", ["dir:frontend/assets/"]),
     "backend/tests/test_e2e_flow.py": ("e2e", ["mod:alpha/api/foo"]),
     "backend/tests/test_e2e_other.py": ("e2e", ["file:backend/data/o.json"]),
     "backend/tests/test_e2e_playwright_2026_09_07.py": ("e2e", ["file:backend/data/p.json"]),
