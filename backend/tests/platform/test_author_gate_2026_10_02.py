@@ -101,7 +101,7 @@ def test_quick_drops_the_platform_floor_and_cuts_to_the_changed_modules_own_test
     tree = ["backend/tests/platform/test_a.py", "backend/modules/accounting/tests/test_x.py", "backend/modules/subcontract/tests/test_s.py",
             "backend/modules/subcontract/tests/test_s2.py", "backend/modules/subcontract/tests/test_e2e_sub.py", "backend/modules/accounting/tests/test_e2e_acc.py",
             "backend/modules/accounting/tests/test_voucher_page.py", "backend/modules/accounting/tests/test_other_page.py", "backend/modules/case/tests/test_e2e_case_page.py"]
-    changed = ["backend/modules/subcontract/gl_events.py", "frontend/pages/voucher.html", "frontend/js/case-management-dispatch.js"]
+    changed = ["backend/modules/subcontract/gl_events.py", "backend/modules/case/pages/voucher.html", "frontend/js/case-management-dispatch.js"]
     q = AG.build_selection(plan_n, plan_e, tree, changed, quick=True)
     assert q["A1"] == [] and "backend/tests/platform/test_a.py" not in q["non_e2e"] and q["quick_cut"] is True
     assert q["A3"] == ["backend/modules/accounting/tests/test_voucher_page.py", "backend/modules/subcontract/tests/test_s.py", "backend/modules/subcontract/tests/test_s2.py"]
