@@ -74,6 +74,7 @@ _QUEUE_TYPE_FOR_DOC_TYPE = {
     # 31-C：叫料審核與叫料匯款申請（疊加表／申請表；佇列提供者 `approval.queue_items`／case_material、case_material_payment）
     "material_order":     ("material_order",     "case_material_approvals"),
     "material_payment":   ("material_payment",   "case_material_payments"),
+    "material_change":    ("material_change",    "case_material_changes"),          # 33-M2b：材料申請變更（覆核表）
 }
 
 
@@ -92,6 +93,7 @@ _OWNER_MODULE = {
     "completion":         "case",
     "material_order":     "case",
     "material_payment":   "case",
+    "material_change":    "case",
     "voucher":            "accounting",     # M06（2026-09-26 搬進 modules/accounting）
 }
 

@@ -146,6 +146,18 @@
    "scope": "row_access"
   },
   {
+   "file": "modules/case/api/material_changes.py",
+   "path": "/api/quotations/{quote_no}/material-orders/{item_id}/changes",
+   "handler": "list_changes",
+   "scope": "row_access"
+  },
+  {
+   "file": "modules/case/api/material_changes.py",
+   "path": "/api/quotations/{quote_no}/material-orders/{item_id}/change-proposal",
+   "handler": "preview_proposal",
+   "scope": "row_access"
+  },
+  {
    "file": "modules/case/api/material_payments.py",
    "path": "/api/quotations/{quote_no}/material-payments",
    "handler": "list_payments",

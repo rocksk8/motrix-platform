@@ -33,6 +33,7 @@ EXPECTED = {
     # 31-C 叫料審核與匯款申請（2026-10-02）：佇列／詳情；出納待付（IP-100）與差額審核（IP-102）沿用既有名稱空間；手續費列報表支出（IP-9）
     ("approval.queue_items", "case_material"), ("approval.detail", "material_order"),
     ("approval.queue_items", "case_material_payment"), ("approval.detail", "material_payment"),
+    ("approval.queue_items", "case_material_change"), ("approval.detail", "material_change"),       # 33-M2b 材料申請變更
     ("payables.pending", "case_material"), ("remit.reviews", "case_material"), ("expense.entries", "remit_fee_case_material"),
 }
 

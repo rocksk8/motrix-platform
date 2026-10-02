@@ -260,6 +260,13 @@ def test_orders_with_applications_are_frozen_and_void_releases(client, world):
     cr = json.loads(_q("SELECT data_json FROM quotations WHERE quote_no=?", (NO,))[0]["data_json"])["caseRecord"]
     cr["materialOrders"][0].update({"unitPrice": 6000, "totalPrice": 12000})
     r = client.patch("/api/quotations/%s/case-record" % NO, json={"case_record": cr}, headers=w["adm"])
+    assert [x["code"] for x in r.json()["rejected"]] == ["use_change_request"] and _order_json()["totalPrice"] == 10000   # 強制採購單之後的已核准單：直接改被拒（33-M2b）
+    import db                                                                                                  # grandfather 的單維持原本的 has_payments 守門
+    cn = db.get_db()
+    cn.execute("UPDATE case_material_approvals SET created_at='2026-09-20T00:00:00' WHERE quote_no=?", (NO,))
+    cn.commit()
+    cn.close()
+    r = client.patch("/api/quotations/%s/case-record" % NO, json={"case_record": cr}, headers=w["adm"])
     assert [x["code"] for x in r.json()["rejected"]] == ["has_payments"] and _order_json()["totalPrice"] == 10000   # 有申請時不可改金額
     assert client.post("/api/quotations/%s/material-orders/%s/cancel" % (NO, ITEM), json={"reason": "x"}, headers=w["adm"]).status_code == 409
     cr["materialOrders"] = []

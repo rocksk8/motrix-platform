@@ -93,8 +93,9 @@ def test_new_row_with_a_valid_link_is_saved_and_the_po_line_is_an_int(W):
     assert _ap("n1")["status"] == "草稿"
 
 
-def test_changing_the_link_of_an_approved_request_goes_back_to_draft_and_a_bad_change_is_refused(W, monkeypatch):
-    """強制規則上線後建立的單（不在 grandfather 範圍）：核准後連結變動＝實質變動 ⇒ 回草稿重送審。"""
+def test_changing_the_link_of_an_approved_request_is_refused_and_must_go_through_a_change_request(W, monkeypatch):
+    """強制規則上線後建立的單（不在 grandfather 範圍）：核准後連結變動＝實質變動 ⇒ 直接修改被拒（`use_change_request`），改走變更申請（33-M2b）；
+    舊單／grandfather 單維持舊行為（只增連結鍵＝補對應，不重簽；改別的欄位回草稿，見 test_material_change_api 的 grandfathered 題）。"""
     from modules.case import material_approval as _MA
     monkeypatch.setattr(_MA, "PO_REQUIRED", True)
     c, h = W
@@ -104,12 +105,19 @@ def test_changing_the_link_of_an_approved_request_goes_back_to_draft_and_a_bad_c
     cn.execute("UPDATE case_material_approvals SET created_at='2026-10-05T00:00:00' WHERE quote_no=? AND item_id='m1'", (NO,))
     cn.commit()
     cn.close()
+    for link in ({"poDocCode": "PO-NOPE"}, {"poDocCode": code, "poLine": 1}):                       # 壞連結與好連結都一樣：已核准的單不能直接改
+        res = _patch(c, h, [_mo("m1", quoteItemId="a", **link)])
+        assert [x["code"] for x in res["rejected"]] == ["use_change_request"], res
+        assert _orders()[0].get("poDocCode") in (None, "") and _ap("m1")["status"] == "已核准"      # 被拒：值與狀態都沒變
+    cn = db.get_db()                                                                                  # grandfather 的單維持舊行為：壞連結照樣被連結檢查擋、好連結＝補對應
+    cn.execute("UPDATE case_material_approvals SET created_at='2026-09-20T00:00:00' WHERE quote_no=? AND item_id='m1'", (NO,))
+    cn.commit()
+    cn.close()
     bad = _patch(c, h, [_mo("m1", quoteItemId="a", poDocCode="PO-NOPE")])
     assert [x["code"] for x in bad["rejected"]] == ["bad_link"]
-    assert _orders()[0].get("poDocCode") in (None, "") and _ap("m1")["status"] == "已核准"          # 被拒：值與狀態都沒變
     ok = _patch(c, h, [_mo("m1", quoteItemId="a", poDocCode=code, poLine=1)])
     assert not ok.get("rejected"), ok
-    assert _orders()[0]["poDocCode"] == code and _ap("m1")["status"] == "草稿"                       # 實質欄位變動 ⇒ 回草稿重送審
+    assert _orders()[0]["poDocCode"] == code and _ap("m1")["status"] == "已核准"                     # grandfather 的單只增連結鍵＝補對應：不重簽、狀態不變（M1）
 
 
 def test_the_link_cannot_change_while_there_are_live_remittances(W, monkeypatch):

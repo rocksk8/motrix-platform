@@ -1,5 +1,17 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-03（wip/t33-m2b-d7：33-M2b 材料申請變更申請，端點、簽核整合與守門調整）
+- 端點：`GET /api/quotations/{q}/material-orders/{item}/changes`、`GET …/change-proposal`（預覽）、`POST …/changes`（建立；body 只收 `reason／quantity／notes`，金額與涵蓋行由已核准採購單決定）、`POST /api/quotations/{q}/material-changes/{id}/revise|submit|approve|reject|withdraw`。看不到財務檢視者不給金額。核准最後一層 ⇒ 同一交易內套用，套不了回 409 且什麼都不改。
+- 簽核整合：登記簽核單據類型 `material_change`（材料申請變更，預設跟統一流程）、簽核佇列與詳情（差異表：數量／單價／小計／涵蓋採購單行／備註 原→新）、站內通知與四種信件（送審／輪到您／核准／退回，信內不放金額）、稽核動作 `material_changes.*`。
+- 守門：強制採購單之後建立的已核准材料申請，直接改內容被拒（`use_change_request`，訊息指向變更申請）；舊單與 grandfather 單維持「改了回草稿」。提案內容來自案件側 `material_coverage.change_proposal`，尚未上線時建立／預覽回 501。已核准後直接改內容改為被拒之後，舊測試（連結變動、匯款申請凍結）改依新規則斷言，並保留 grandfather 單舊行為的覆蓋；佇列提供者以字面值 `material_change` 通過佇列覆蓋守門。
+
+## (next) — 2026-10-03（wip/t33-m2a-d7：33-M2a 材料申請變更申請，狀態機層）
+- 新增覆核表 `case_material_changes`（migration 0006；單號 `MC-YYYYMMDD-NNNN`；部分唯一索引：一筆材料申請同時最多一張進行中的變更）與 `modules/case/material_change.py`：建立／修改／送審／核准／退回／撤回、驗證（數量／小計／已付鎖 `paid_in_full`、`below_paid`／不得低於已申請匯款額度／出貨下限提供者）、同一交易內原子套用（核准前原版本完全不動；核准後內容、審核列版本＋1、`content_hash`、涵蓋快照一併切換，已確認到貨不重置）。
+- 本版**沒有端點、沒有畫面、不登記簽核單據類型**（屬 M2b）；舊單／規則上線前建立的單不走變更申請（`use_direct_edit`）。
+
+## (next) — 2026-10-03（wip/t33-d7lock-d7-r2）：已全額付款的材料申請不可改金額（D7）
+- 守門：已付總額（舊單歷史已付＋所有付款明細）≥ 小計的材料申請，數量／單價／小計不可修改（`paid_in_full`，訊息「已全額付款，金額不能修改；要調整請另開一筆材料申請…」）；其他欄位照舊；新小計低於已付由既有驗證擋下。新增 `material_payment.paid_so_far`。
+
 ## 1.0.107 — 2026-10-03（wip/t33-settlement-a5b-2e）：精算頁手填實際成本 0 ＝沒填、完結失敗提示延長（c7 二審）
 - 精算頁摘要把手填實際成本 0／空視為沒填、用估計（與重新載入存檔、後端 `manual_actual` 同一規則）：同一次編輯中清成 0 再完結不再被 409「頁面少一筆估計」。新增 e2e（輸入 0 ⇒ 摘要用估計 ⇒ 完結成功；移除修正即紅）。
 - 完結被拒的提示（含伺服器說明，約 100 字）顯示 10 秒（原 3.5 秒）。
