@@ -1,0 +1,96 @@
+{
+ "_doc": "第 31 班整合各輪紅燈的回放表：fix＝修掉該紅燈的 commit；fix^ 的樹必須被作者閘門抓到（離線：預期檔在選題聯集內；實跑：預期檔在 fix^ 紅、fix 綠）。",
+ "cases": [
+  {
+   "name": "r1-e2e-marker",
+   "fix": "fa64e2c4",
+   "group": "A1",
+   "expect_files": [
+    "backend/tests/platform/test_e2e_classification.py"
+   ],
+   "note": "瀏覽器測試沒帶 e2e marker（分類守門）"
+  },
+  {
+   "name": "r2-31c-json-extract",
+   "fix": "620390ba",
+   "group": "A1",
+   "expect_files": [
+    "backend/tests/platform/test_json_extract_ratchet.py",
+    "backend/tests/platform/test_module_migrations.py"
+   ],
+   "note": "31-C 棘輪：json_extract／** 呼叫／遷移登記"
+  },
+  {
+   "name": "r2-31c-approval-scope",
+   "fix": "620390ba",
+   "group": "A2",
+   "expect_files": [
+    "backend/tests/test_approval_flow_scope.py"
+   ],
+   "note": "簽核套用範圍（*approval*）"
+  },
+  {
+   "name": "r2-31c-queue-literal",
+   "fix": "d539a7e6",
+   "group": "A2",
+   "expect_files": [
+    "backend/tests/test_approval_queue_covers_every_doc_type_2026_09_24.py"
+   ],
+   "note": "佇列覆蓋守門讀提供者原始碼的字面值（*queue*／*approval*）"
+  },
+  {
+   "name": "r3-changelog-order",
+   "fix": "09d13fdf",
+   "group": "A1",
+   "expect_files": [
+    "backend/tests/platform/test_module_changelog_follows_code.py"
+   ],
+   "note": "CHANGELOG 要在最後一次程式改動之後"
+  },
+  {
+   "name": "r4-font-vh",
+   "fix": "26bd438d",
+   "group": "A2",
+   "expect_files": [
+    "backend/tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py"
+   ],
+   "note": "raw vh 字級放大靜態題"
+  },
+  {
+   "name": "r5-money-roundtrip",
+   "fix": "edc107e9",
+   "group": "A2",
+   "expect_files": [
+    "backend/tests/test_money_round_half_up_2026_09_26.py"
+   ],
+   "note": "金額往返／四捨五入"
+  },
+  {
+   "name": "r6-spec-owner-map",
+   "fix": "a2d15918",
+   "group": "A2",
+   "expect_files": [
+    "backend/tests/test_spec_coverage_2026_09_21.py"
+   ],
+   "note": "spec owner map 重產"
+  },
+  {
+   "name": "r7a-approval-detail-providers",
+   "fix": "70db060a",
+   "group": "A2",
+   "expect_files": [
+    "backend/modules/case/tests/test_approval_providers.py"
+   ],
+   "note": "approval.detail 提供者清單"
+  },
+  {
+   "name": "r7b-pii-archive-mirror",
+   "fix": "05e7eaaf",
+   "group": "A2",
+   "expect_files": [
+    "backend/modules/subcontract/tests/test_pii_archive_mirror_2026_09_25.py"
+   ],
+   "note": "個資備份鏡像（子模組版，跨 modules/*/tests）"
+  }
+ ]
+}
