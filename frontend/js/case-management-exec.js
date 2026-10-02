@@ -94,11 +94,13 @@ window.CM_PARTS.push(() => ({
             notes:      o.notes || '',
             invoiceDate: o.invoiceDate || '',  // `AC2`
             supplierId: o.supplierId ?? null,  // 31-C：整份覆寫的端點——少帶這一鍵，已指定的供應商會在下次存檔被抹掉
+            quoteItemId: o.quoteItemId || '', poDocCode: o.poDocCode || '', poLine: o.poLine || null, overPlanReason: o.overPlanReason || '',  // 32-S4：連結鍵同理（case-management-mlink.js）
             _saved: true,                      // 伺服器上已有這一列（才能送審）
             _recvDate: ''
           }))
           await this.loadMoApprovals(quoteNo)
           await this.loadMoPayments(quoteNo)
+          if (this.mlLoadStatus) this.mlLoadStatus(quoteNo)     // 32-S4：連結徽章
           if (this.moCanEdit()) await this.moLoadSuppliers()
         }
       } catch {}
@@ -354,7 +356,10 @@ window.CM_PARTS.push(() => ({
           notes: (m.notes || '').trim(),
           // `AC2`：整份覆寫的端點——少帶這一鍵，已登錄的發票日期就會在下次存檔時被抹掉
           invoiceDate: m.invoiceDate || '',
-          supplierId: m.supplierId ? Number(m.supplierId) : null
+          supplierId: m.supplierId ? Number(m.supplierId) : null,
+          // 32-S4：連結鍵（空值後端不寫入；整份覆寫的端點，少帶就會被抹掉）
+          quoteItemId: m.quoteItemId || null, poDocCode: m.poDocCode || null, poLine: m.poLine ? Number(m.poLine) : null,
+          overPlanReason: (m.overPlanReason || '').trim() || null
         })
       }
 

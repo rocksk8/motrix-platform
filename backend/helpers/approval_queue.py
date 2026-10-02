@@ -134,6 +134,7 @@ def base_item(type_: str, doc_no: str, f: dict, **fields) -> dict:
         "currentTier":        f["currentTier"],
         "tierCount":          f["tierCount"],
         "currentApprovers":   f["currentApprovers"],
+        "tags":               [],      # 32-S4d：卡片小標註 [{text, tone}]（tone: warn|info）；由各單據模組的提供者經 `fields` 帶入，前端只負責畫
     }
     item.update(fields)
     return item

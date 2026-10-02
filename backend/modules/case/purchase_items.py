@@ -246,7 +246,7 @@ def check_from_pr(conn, quote_no, kind, data):
 
 # ── 叫料連結（S4a；規格 docs/platform/plans/MATERIAL-ORDER-LINK-SPEC.md §2／§3）────────────────────────
 
-NO_PO_TEXT = "該叫料未申請採購單"
+NO_PO_TEXT = "該材料申請未申請採購單"
 STALE_PO_TEXT = "（原連結採購單已失效）"
 
 
@@ -353,10 +353,10 @@ def material_submit_check(conn, quote_no, order, *, exclude_item_id=None) -> dic
     plan = {p["itemId"]: p for p in plan_items(data)}
     qid = str(order.get("quoteItemId") or "").strip()
     if qid and qid not in plan:
-        problems.append({"code": "bad_quote_item", "message": "叫料連到的品項不在這張報價單內（可能已被刪除），請重新選擇"})
+        problems.append({"code": "bad_quote_item", "message": "材料申請連到的品項不在這張報價單內（可能已被刪除），請重新選擇"})
     link_ok, link_reason = _link_check(order, po_rows)
     if str(order.get("poDocCode") or "").strip() and not link_ok:
-        problems.append({"code": "bad_link", "message": "叫料連到的採購單無效（%s）：必須是同案件、待審核／簽核中／已核准的採購單" % link_reason})
+        problems.append({"code": "bad_link", "message": "材料申請連到的採購單無效（%s）：必須是同案件、待審核／簽核中／已核准的採購單" % link_reason})
     over, reason = 0.0, str(order.get("overPlanReason") or "").strip()
     if qid in plan and not link_ok:
         others = [(o, st) for o, st in load_material_orders(conn, quote_no, data) if str(o.get("itemId")) != str(exclude_item_id or order.get("itemId"))]
@@ -364,7 +364,7 @@ def material_submit_check(conn, quote_no, order, *, exclude_item_id=None) -> dic
         over = max(used + _num(order.get("quantity")) - plan[qid]["planQty"], 0.0)
         if over > 1e-9 and not reason:
             problems.append({"code": "over_plan_reason_required",
-                             "message": "叫料超出報價計畫量 %g（計畫 %g、已訂 %g），請填寫超出原因後再送審" % (over, plan[qid]["planQty"], used)})
+                             "message": "材料申請超出報價計畫量 %g（計畫 %g、已訂 %g），請填寫超出原因後再送審" % (over, plan[qid]["planQty"], used)})
     state = material_link_status(order, po_rows)
     return {"problems": problems,
             "snapshot": {"linkState": state["state"], "linkReason": state["reason"], "overPlanQty": over if over > 1e-9 else 0,

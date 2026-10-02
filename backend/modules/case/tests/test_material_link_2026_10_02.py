@@ -32,7 +32,7 @@ def test_status_exempt_for_legacy_and_zero_amount_whatever_the_link():
 
 def test_status_none_without_link_has_the_fixed_text_and_is_not_stale():
     st = PI.material_link_status(_o(), [_po("PO-1")])
-    assert st == {"state": "none", "reason": "no_link", "stale": False, "text": "該叫料未申請採購單"}
+    assert st == {"state": "none", "reason": "no_link", "stale": False, "text": "該材料申請未申請採購單"}
 
 
 def test_status_linked_requires_an_active_po_of_the_case_and_valid_line():
@@ -57,7 +57,7 @@ def test_status_linked_requires_an_active_po_of_the_case_and_valid_line():
 def test_status_none_and_stale_when_the_link_is_not_valid(po, order, reason):
     st = PI.material_link_status(_o(**order), [po])
     assert st["state"] == "none" and st["reason"] == reason and st["stale"] is True
-    assert st["text"] == "該叫料未申請採購單（原連結採購單已失效）"
+    assert st["text"] == "該材料申請未申請採購單（原連結採購單已失效）"
 
 
 def test_status_line_without_item_id_or_order_without_quote_item_does_not_mismatch():

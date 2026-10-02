@@ -17,7 +17,7 @@ router = APIRouter()
 
 def _case(quote_no):
     if not quote_no or quote_no == "-":
-        raise HTTPException(400, "無案件的單據沒有叫料")
+        raise HTTPException(400, "無案件的單據沒有材料申請")
     return quote_no
 
 

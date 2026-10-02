@@ -51,11 +51,27 @@ class MaterialOrder(BaseModel):
     notes: Optional[str] = ""      # 備註
     invoiceDate: Optional[str] = ""  # `AC2`：廠商發票日期（''＝未登錄；權責口徑依它歸月）
     supplierId: Optional[int] = None  # 31-C：供應商主檔 id（叫料審核的實質欄位；匯款申請的收款對象）。整份覆寫的端點：沒帶就會被抹掉，前端要原樣帶回
+    quoteItemId: Optional[str] = None   # 32-S4：連到的報價單品項 id（沒帶／空 ⇒ 存檔時略過，舊單形狀不變）
+    poDocCode: Optional[str] = None     # 32-S4：連到的採購單單號
+    poLine: Optional[int] = None        # 32-S4：採購單明細列序（1 起算）
+    overPlanReason: Optional[str] = None  # 32-S4：超出報價計畫量的原因
 
 
 class MaterialOrderUpdateIn(BaseModel):
     """叫料更新請求。"""
     materialOrders: List[MaterialOrder]
+
+
+_LINK_KEYS = ("quoteItemId", "poDocCode", "poLine", "overPlanReason")
+
+
+def _dump_order(mo):
+    """model_dump；連結鍵（S4）空值一律不寫入，沒用連結的舊單存檔形狀與以前完全相同。"""
+    d = mo.model_dump()
+    for k in _LINK_KEYS:
+        if d.get(k) in (None, "", 0):
+            d.pop(k, None)
+    return d
 
 
 @router.patch("/api/quotations/{quote_no}/material-orders")
@@ -143,7 +159,7 @@ def update_material_orders(quote_no: str,
         if not data.get("caseRecord"):
             data["caseRecord"] = {}
 
-        data["caseRecord"]["materialOrders"] = [mo.model_dump() for mo in body.materialOrders]
+        data["caseRecord"]["materialOrders"] = [_dump_order(mo) for mo in body.materialOrders]
         # 叫料審核（31-C）：整份覆蓋也要過閘（新列建審核單、實質欄位變更依審核狀態處理、被拒的項目維持原值並逐項回報）
         rejected = MG.enforce(conn, quote_no, data, actor=user)
 

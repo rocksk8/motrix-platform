@@ -73,7 +73,7 @@ def test_detail_fields_show_link_and_over_plan():
     f = {x["label"]: x["value"] for x in PI.material_detail_fields({"totalPrice": 5, "poDocCode": "PO-1"}, po)}
     assert f == {"採購單連結": "已連採購單 PO-1", "超出計畫": "—"}
     g = {x["label"]: x["value"] for x in PI.material_detail_fields({"totalPrice": 5}, po, snapshot={"overPlanQty": 2, "overPlanReason": "加購"})}
-    assert g["採購單連結"] == "該叫料未申請採購單" and g["超出計畫"] == "超出 2（加購）"
+    assert g["採購單連結"] == "該材料申請未申請採購單" and g["超出計畫"] == "超出 2（加購）"
     legacy = {x["label"]: x["value"] for x in PI.material_detail_fields({"totalPrice": 5}, po, legacy=True)}
     assert legacy["採購單連結"] == "不適用"
 
@@ -117,7 +117,7 @@ def test_link_status_endpoint_marks_legacy_zero_none_linked_and_stale(W):
     st = r.json()["statuses"]
     assert st["L"]["state"] == "exempt" and st["L"]["reason"] == "legacy" and st["L"]["text"] == ""
     assert st["Z"]["state"] == "exempt" and st["Z"]["reason"] == "zero_amount"
-    assert st["N"] == {"state": "none", "reason": "no_link", "stale": False, "text": "該叫料未申請採購單"}
+    assert st["N"] == {"state": "none", "reason": "no_link", "stale": False, "text": "該材料申請未申請採購單"}
     assert st["K"]["state"] == "linked"
     assert st["S"]["state"] == "none" and st["S"]["stale"] is True and st["S"]["text"].endswith("（原連結採購單已失效）")
     # 採購單被作廢 ⇒ 已連的變失效
