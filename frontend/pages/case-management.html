@@ -2862,6 +2862,9 @@
                             style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
                       <span x-show="d.legacy" class="badge badge--draft" data-testid="dispatch-legacy-badge" title="此派發在審核機制上線前建立，未經審核"
                             style="font-size:11px;padding:2px 6px;border-radius:4px;opacity:.8">舊單（未經審核）</span>
+                      <span x-show="d.legacy && d.legacyModified" class="badge badge--pending" data-testid="dispatch-legacy-modified-badge"
+                            :title="'此舊單在審核機制上線後被修改過（' + (d.legacyModifiedAt || '').slice(0, 16).replace('T', ' ') + '），修改內容未經審核；稽核已記錄'"
+                            style="font-size:11px;padding:2px 6px;border-radius:4px">舊單已修改</span>
                       <span x-show="d.docCode" x-text="d.docCode" style="font-size:11px;color:var(--text-dim)"></span>
                       <div style="font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-main)">
                         NT$ <span x-text="(d.grandTotal||0).toLocaleString()"></span>

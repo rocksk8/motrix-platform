@@ -113,6 +113,18 @@ def _vendor_row(row, user=None) -> dict:
     }
 
 
+def _legacy_modified_at(row) -> str:
+    """舊單（approval_status=''）被實質修改過 ⇒ 最後修改時間；沒有 ⇒ ''。"""
+    try:
+        if "approval_json" not in row.keys() or (row["approval_status"] or "") != "":
+            return ""
+        m = json.loads(row["approval_json"] or "{}")
+        lm = m.get("legacyModified") if isinstance(m, dict) else None
+        return str(lm.get("at") or "") if isinstance(lm, dict) else ""
+    except (ValueError, TypeError, KeyError):
+        return ""
+
+
 def _dispatch_row(row) -> dict:
     items = []
     try:
@@ -179,6 +191,8 @@ def _dispatch_row(row) -> dict:
         "completionStatus": (row["completion_status"] if "completion_status" in keys else "") or "",
         "docCode": (row["doc_code"] if "doc_code" in keys else "") or "",
         "legacy": _flow.is_legacy(row),
+        "legacyModified": _legacy_modified_at(row) != "",
+        "legacyModifiedAt": _legacy_modified_at(row),
         "displayStatus": _flow.display_status(row),
         "submittedBy": (row["submitted_by"] if "submitted_by" in keys else "") or "",
         "submittedAt": (row["submitted_at"] if "submitted_at" in keys else "") or "",
@@ -627,7 +641,11 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
     # 實質欄位（承攬商、品項、人員、稅率）有變：已核准的與舊單都要重新送審（審核狀態回「草稿」、清掉核准紀錄）；沒變的欄位（備註、日期、發票）照舊可改
     new_rate = body.tax_rate if body.tax_rate is not None else 0.05
     changed = _flow.substantive_hash(existing["vendor_id"], existing["items_json"], existing["personnel_json"], existing["tax_rate"]) !=         _flow.substantive_hash(body.vendor_id, items, personnel, new_rate)
-    reset = changed and (existing["approval_status"] in ("", _flow.APPROVED))
+    # 使用者裁示（第 32 班 S-1）：只有「已核准」的派發實質編輯後回草稿重新送審；**舊單（approval_status=''）維持舊單**——
+    # 不重設、成本與總帳不掉，改為寫稽核列並在畫面警示「舊單已修改」（approval_json 記修改人與時間）。
+    reset = changed and existing["approval_status"] == _flow.APPROVED
+    legacy_modified = changed and existing["approval_status"] == ""
+    old_total = float(existing["total_amount"] or 0)
     conn.execute(
         "UPDATE contractor_dispatches SET vendor_id=?, dispatch_date=?, scope=?, items_json=?, "
         "personnel_json=?, total_amount=?, tax_rate=?, notes=?, invoice_no=?, payable_date=?, invoice_date=?, updated_at=? WHERE id=?",
@@ -644,10 +662,25 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
         code = existing["doc_code"] or _flow.next_dispatch_code(conn)
         conn.execute("UPDATE contractor_dispatches SET approval_status=?, approval_json='{}', approved_hash='', approved_at='', doc_code=? WHERE id=?",
                      (_flow.DRAFT, code, did))
+    if legacy_modified:
+        try:
+            marker = json.loads(existing["approval_json"] or "{}")
+        except ValueError:
+            marker = {}
+        if not isinstance(marker, dict):
+            marker = {}
+        prev = marker.get("legacyModified") if isinstance(marker.get("legacyModified"), dict) else {}
+        marker["legacyModified"] = {"at": now, "by": user["username"], "count": int(prev.get("count") or 0) + 1,
+                                    "firstAt": prev.get("firstAt") or now}
+        conn.execute("UPDATE contractor_dispatches SET approval_json=? WHERE id=?", (json.dumps(marker, ensure_ascii=False), did))
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'vendor.dispatch.update', 'contractor_dispatch', str(did), body.quote_no)
-    return {"ok": True, "updated_at": now, "total_amount": total, "needsResubmit": bool(reset)}
+    if legacy_modified:                                           # 舊單被實質修改：獨立一筆稽核（前後金額），不重設審核狀態
+        _audit(_tok(authorization), 'vendor.dispatch.legacy_edit', 'contractor_dispatch', str(did), body.quote_no,
+               {"docCode": existing["doc_code"] or "", "totalBefore": old_total, "totalAfter": total})
+    return {"ok": True, "updated_at": now, "total_amount": total, "needsResubmit": bool(reset),
+            **({"legacyModified": True} if legacy_modified else {})}
 
 
 @router.delete("/api/contractor-dispatches/{did}")

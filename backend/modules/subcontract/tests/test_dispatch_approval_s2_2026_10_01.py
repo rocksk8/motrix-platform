@@ -105,8 +105,8 @@ def test_put_is_blocked_while_any_stage_is_under_review(W, approval, completion)
     assert _row(did)["notes"] != "x"
 
 
-@pytest.mark.parametrize("approval", ["已核准", ""])        # 已核准的與舊單：實質欄位有變 ⇒ 重新送審；舊單同樣適用（不是後門）
-def test_substantive_edit_requires_resubmit_but_notes_do_not(W, approval):
+def test_substantive_edit_requires_resubmit_but_notes_do_not(W, approval="已核准"):
+    """已核准的派發：實質欄位有變 ⇒ 重新送審（回草稿）。舊單（''）不重設——使用者裁示 S-1，見 test_dispatch_legacy_edit_2026_10_02。"""
     client, h = W
     did = _mk(status="sent", approval=approval)
     r = client.put("/api/contractor-dispatches/%d" % did, headers=h["da_a"], json=_body(status="sent", notes="只改備註", invoice_no="AB12345678"))

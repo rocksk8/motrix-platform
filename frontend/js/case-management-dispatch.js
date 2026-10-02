@@ -245,8 +245,10 @@ window.CM_PARTS.push(() => ({
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify(body)
         })
-        if (!r.ok) { this.dispatchMsg = (await r.json()).detail || '儲存失敗'; this.dispatchSaving = false; return }
+        const saved = await r.json().catch(() => ({}))
+        if (!r.ok) { this.dispatchMsg = saved.detail || '儲存失敗'; this.dispatchSaving = false; return }
         this.showDispatchModal = false
+        if (saved.legacyModified) MotrixUI.toast('舊單已修改：內容未經審核，成本與總帳照舊計入；稽核已記錄這次修改', {kind: 'warning'})
         await this.loadDispatches(this.selected?.quote_no)
       } catch(e) { this.dispatchMsg = '網路錯誤：' + e.message }
       this.dispatchSaving = false
