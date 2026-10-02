@@ -227,6 +227,8 @@ def submit(conn, quote_no: str, order: dict, user: dict, snapshot: dict = None) 
         return {"status": S_APPROVED, "tierCount": 0, "firstApprovers": [], "autoApproved": True}
     appr = {"requestedBy": user["username"], "requestedByDisplay": _display(user), "requestedAt": now, "tiers": tiers, "currentTier": 0,
             "history": hist + [{"at": now, "by": user["username"], "byDisplay": _display(user), "action": "submit", "tier": 0, "comment": ""}], **link_snap}
+    if _appr(row).get("grandfathered"):                                              # 重建 approval_json 不可丟掉「舊單不適用強制採購單」的標記（退回重送／核准後改都要認得）
+        appr["grandfathered"] = True
     _save(conn, quote_no, item_id, S_PENDING, appr, now, submitted_by=user["username"], submitted_at=now)
     return {"status": S_PENDING, "tierCount": len(tiers), "firstApprovers": [a["username"] for a in (tiers[0].get("approvers") or [])],
             "autoApproved": False}
