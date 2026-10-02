@@ -208,7 +208,8 @@
           this.dirty = true
           this.saveState = 'dirty'
           clearTimeout(this._saveTimer)
-          this._saveTimer = setTimeout(() => this.saveDraft(), 700)
+          // 新版設計器開著時打字很密 ⇒ 閒置 4 秒才存（每次存檔寫一筆稽核；設計 §12-7）；舊畫面維持 0.7 秒
+          this._saveTimer = setTimeout(() => this.saveDraft(), this.useFD ? 4000 : 700)
           this.queueNumbering()
           if (this.tab === 'info') this.queuePreview()
           if (this.drawer) this.diffLoaded = false
