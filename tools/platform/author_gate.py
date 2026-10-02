@@ -38,6 +38,7 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 
 import guard_patterns as GP  # noqa: E402
+import nowindow  # noqa: E402
 
 #: A2：檔名樣式（比對 basename；跨所有測試根）——唯一一份在 tools/platform/guard_patterns.json（負責人 a3；增量選題底板共用）
 PATTERNS = GP.patterns()
@@ -262,7 +263,7 @@ def venv_warning(repo=REPO, exe=None):
 def run_pytest(argv, cwd, env, stream=True):
     e = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
     e.update(env or {})
-    flags = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) if os.name == "nt" else 0
+    flags = (getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) | nowindow.CREATE_NO_WINDOW) if os.name == "nt" else 0       # 低優先權、不跳視窗
     proc = subprocess.Popen(argv, cwd=str(cwd), env=e, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=flags)
     lines = []
     for raw in proc.stdout:
@@ -311,6 +312,7 @@ def main(argv=None):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
         pass
+    nowindow.install()                                   # 預設不跳視窗（MOTRIX_SHOW_WINDOWS=1 可關掉）
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "replay":
         return replay_main(argv[1:])
