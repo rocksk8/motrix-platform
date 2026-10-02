@@ -10,7 +10,6 @@
 from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
-import time
 
 import pytest
 
@@ -57,6 +56,23 @@ def _seed():
         conn.close()
 
 
+def _watch_writes(page):
+    """記錄頁面送出的存檔請求（PUT／PATCH／POST /api/quotations…）。⚠️ 負向斷言（「標紅時不可以存檔」）要看「請求有沒有送出」，
+    不能只看資料庫：`time.sleep` 睡著時 sync Playwright 不處理事件，請求若卡在瀏覽器裡，資料庫當然沒變 ⇒ 假綠（e2e 睡覺等待稽核 2026-10-02）。"""
+    writes = []
+    page.on("request", lambda r: writes.append((r.method, r.url)) if r.method in ("PUT", "PATCH", "POST") and "/api/quotations" in r.url else None)
+    return writes
+
+
+def _wait_dialog(page, dialogs, ms=5000):
+    """等對話框訊息出現（用 Playwright 的等待，才會處理事件）；回傳訊息清單。"""
+    waited = 0
+    while not dialogs and waited < ms:
+        page.wait_for_timeout(100)
+        waited += 100
+    return dialogs
+
+
 def _saved_item():
     import db
     conn = db.get_db()
@@ -99,9 +115,11 @@ def test_amount_accepts_thousand_separators_and_fullwidth(live_server, make_user
     page.fill(PRICE, "12a")
     assert "num-bad" in (page.get_attribute(PRICE, "class") or "")
     assert page.evaluate(f"{DATA}.q.items[0].unitPrice") == 12500
+    writes = _watch_writes(page)
     page.click('button:has-text("儲存草稿")')
-    time.sleep(1.0)
-    assert any("無法辨識" in m for m in dialogs), dialogs
+    assert any("無法辨識" in m for m in _wait_dialog(page, dialogs)), dialogs
+    page.wait_for_timeout(1000)                                                             # 給「若有送出」的請求時間出現（Playwright 等待，會處理事件）
+    assert writes == [], "標紅時不可以送出任何存檔請求：%s" % writes                        # 負向斷言看請求，不只看資料庫
     assert _saved_item()["unitPrice"] == 1650, "標紅時不可以存檔"
 
     # 修正後可以存
@@ -111,8 +129,9 @@ def test_amount_accepts_thousand_separators_and_fullwidth(live_server, make_user
     for _ in range(100):
         if _saved_item().get("unitPrice") == 12500:
             break
-        time.sleep(0.1)
+        page.wait_for_timeout(100)
     assert _saved_item()["unitPrice"] == 12500
+    assert writes, "正對照：修正後的存檔請求有被記錄到（否則上面的『沒有請求』沒有意義）"
 
 
 @pytest.mark.e2e
@@ -171,9 +190,11 @@ def test_internal_cost_inputs_accept_separators_and_block_bad_values(live_server
     page.fill(OTHER, "35oo")
     assert "num-bad" in (page.get_attribute(OTHER, "class") or "")
     assert page.evaluate(f"{DATA}.q.indirectOther") == 3500
+    writes = _watch_writes(page)
     page.click('button:has-text("儲存草稿")')
-    time.sleep(1.0)
-    assert any("無法辨識" in m for m in dialogs), dialogs
+    assert any("無法辨識" in m for m in _wait_dialog(page, dialogs)), dialogs
+    page.wait_for_timeout(1000)
+    assert writes == [], "標紅時不可以送出任何存檔請求：%s" % writes
     assert "indirectLogistics" not in _saved_data() or _saved_data().get("indirectLogistics") != 12000, \
         "標紅時不可以存檔"
 
@@ -182,6 +203,7 @@ def test_internal_cost_inputs_accept_separators_and_block_bad_values(live_server
     for _ in range(100):
         if _saved_data().get("indirectLogistics") == 12000:
             break
-        time.sleep(0.1)
+        page.wait_for_timeout(100)
     d = _saved_data()
     assert d["indirectLogistics"] == 12000 and d["indirectOther"] == 3500
+    assert writes, "正對照：修正後的存檔請求有被記錄到"

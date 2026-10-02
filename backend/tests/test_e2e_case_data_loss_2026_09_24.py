@@ -157,14 +157,18 @@ def test_deleting_payment_item_asks_first(live_server, make_user, e2e_browser):
     first_del = page.locator(
         "xpath=(//label[.//span[normalize-space()='未收']]"
         "/following-sibling::button[contains(@class,'btn-del')])[1]")
+    writes = []                                                          # 負向斷言看「請求有沒有送出」，不只看資料庫（睡著時 sync Playwright 不處理事件 ⇒ 卡住的請求會讓資料庫斷言假綠）
+    page.on("request", lambda r: writes.append(r.url) if r.method in ("PATCH", "PUT", "POST") and "/case-record" in r.url else None)
     first_del.click()
     answer_confirm(page, ok=False, expect="訂金款")
-    time.sleep(2.0)   # 超過 1.5 秒防抖：若沒有確認就刪，這時已經存進去了
+    page.wait_for_timeout(3000)   # 超過 1.5 秒防抖（餘裕 1.5 秒：負載下計時器稍晚觸發也看得到）：若沒有確認就刪，這時已經存進去了（Playwright 等待：會處理事件）
+    assert writes == [], "取消之後不可以送出任何存檔請求：%s" % writes
     assert [it["id"] for it in _items("MQ-E2ELOSS-D")] == [1, 2], "取消之後不可以刪"
 
     first_del.click()
     answer_confirm(page, ok=True, expect="訂金款")
     _wait_saved(page)
+    assert writes, "正對照：確認刪除後的存檔請求有被記錄到（否則上面的『沒有請求』沒有意義）"
     assert natives == [], natives
     assert [it["id"] for it in _items("MQ-E2ELOSS-D")] == [2]
 
