@@ -1,5 +1,11 @@
 # 外包工班 更新紀錄
 
+## 1.1.9 — 2026-10-02（wip/t33-remit-s2-a3：31-B S2 分期匯款申請的建立與試算）
+- `POST /api/contractor-vouchers` 新增選填 `kind`＋（`ratio_percent` 或 `amount`）：帶 `kind` 即開分期申請，款別／狀態規則走款別設定，金額走 `remit_split.plan`，快照改為本期金額、個人點工只掛最後一期（使用者裁示 D5）；不帶 `kind` 的舊式整筆申請行為與回傳形狀不變。
+- 新增 `POST /api/contractor-vouchers/preview`（管理員以上）：試算，不寫入，與建立同一支 `remit_create.kinded_context`，數字一致。
+- 分期與舊式整筆在同一派發互斥；前期只看未作廢的，序號不回頭重用；匯款申請回傳新增 `kind/kindName/seq/ratio/pretaxAmount`。
+- 測試：`test_remit_kinded_create_2026_10_02.py`（10 題，含 `previous_periods` 失效的反向控制）。
+
 ## 1.1.8 — 2026-10-02（wip/t33-remit-s1-a3：31-B S1 匯款申請表重建與分期金額規則）
 - 遷移 `0005_remit_kinds_voucher_rebuild`（subcontract schema 4→5）——重建 `contractor_payment_vouchers`：拿掉 `dispatch_id` 單欄 UNIQUE（內嵌 UNIQUE 無法 DROP，故建新表→逐列比對搬資料→換名）、新增 `kind／kind_name／kinds_version／seq／ratio／pretax_amount／inv_no／inv_date／inv_files_json／void_reason／voided_at／voided_by`（全有預設值，舊列＝舊式整筆申請 `kind=''`）；唯一性改成部分唯一索引（`kind=''` 且未作廢：同派發最多一張，與舊行為一致；`kind<>''` 且未作廢：同派發同款別同期不重複）。冪等；搬資料前後不一致 ⇒ 丟例外、loader 撤回整支（舊表不動）；保留手工加過的欄位與 `sqlite_sequence`。現有匯款申請流程**行為不變**（新欄不被任何現有程式讀寫）。
 - 新增 `remit_split.py`（`plan()` 純函式）——分期金額規則：比例或固定金額；最後一期取剩餘額（補尾差）；稅額逐期算、最後一期補到與整筆稅額一致（各期稅額合計恆等於整筆稅額）、補差明列；超出剩餘額度／累計超過 100%／非整數元一律拒絕。尚未被任何流程呼叫（S2 接建立 API 與試算端點）。

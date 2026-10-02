@@ -10057,7 +10057,10 @@
     "helper:settings",
     "helper:tiered_approval",
     "mod:subcontract/bank_mask",
-    "mod:subcontract/remit"
+    "mod:subcontract/remit",
+    "mod:subcontract/remit_create",
+    "mod:subcontract/remit_kinds",
+    "mod:subcontract/remit_split"
    ],
    "imports": [
     "core:db",
@@ -10075,6 +10078,7 @@
     "helper:tiered_approval",
     "mod:subcontract/bank_mask",
     "mod:subcontract/remit",
+    "mod:subcontract/remit_create",
     "plat:registry",
     "plat:txn"
    ],
@@ -10086,115 +10090,121 @@
    "routes": [
     {
      "func": "get_remit_fee_total",
-     "line": 204,
+     "line": 222,
      "method": "GET",
      "path": "/api/contractor-vouchers/remit-fee-total"
     },
     {
      "func": "get_last_paid_bank_account",
-     "line": 219,
+     "line": 237,
      "method": "GET",
      "path": "/api/contractor-vouchers/last-paid-bank-account"
     },
     {
      "func": "list_contractor_vouchers",
-     "line": 242,
+     "line": 260,
      "method": "GET",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "get_contractor_voucher",
-     "line": 268,
+     "line": 286,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "create_contractor_voucher",
-     "line": 281,
+     "line": 299,
      "method": "POST",
      "path": "/api/contractor-vouchers"
     },
     {
+     "func": "preview_contractor_voucher",
+     "line": 449,
+     "method": "POST",
+     "path": "/api/contractor-vouchers/preview"
+    },
+    {
      "func": "delete_contractor_voucher",
-     "line": 406,
+     "line": 473,
      "method": "DELETE",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "submit_contractor_voucher",
-     "line": 431,
+     "line": 498,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/submit"
     },
     {
      "func": "approve_contractor_voucher",
-     "line": 493,
+     "line": 560,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/approve"
     },
     {
      "func": "revoke_contractor_voucher_approval",
-     "line": 602,
+     "line": 669,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/revoke-approval"
     },
     {
      "func": "reject_contractor_voucher",
-     "line": 646,
+     "line": 713,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_contractor_voucher_pdf",
-     "line": 694,
+     "line": 761,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_contractor_voucher_export",
-     "line": 724,
+     "line": 791,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/export"
     },
     {
      "func": "get_remit_require_payslip",
-     "line": 792,
+     "line": 859,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "set_remit_require_payslip",
-     "line": 800,
+     "line": 867,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "get_personnel_links",
-     "line": 813,
+     "line": 880,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-links"
     },
     {
      "func": "link_personnel_payslip",
-     "line": 847,
+     "line": 914,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-link"
     },
     {
      "func": "toggle_paid",
-     "line": 902,
+     "line": 969,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/paid-toggle"
     },
     {
      "func": "get_contractor_voucher_approval_flow",
-     "line": 1024,
+     "line": 1091,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     },
     {
      "func": "set_contractor_voucher_approval_flow",
-     "line": 1041,
+     "line": 1108,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     }
@@ -10211,6 +10221,7 @@
    "tables_r_transitive": [
     "approval_delegates",
     "case_stages",
+    "contractor_payment_vouchers",
     "contractors",
     "daily_tasks",
     "departments",
@@ -10222,6 +10233,7 @@
     "quotations",
     "sessions",
     "shipping_notes",
+    "ui_definitions",
     "users",
     "vendor_contractors"
    ],
@@ -10878,6 +10890,24 @@
    "tables_w": [
     "contractor_payment_vouchers"
    ]
+  },
+  "mod:subcontract/remit_create": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:subcontract/remit_kinds",
+    "mod:subcontract/remit_split"
+   ],
+   "kind": "mod",
+   "module_key": "subcontract",
+   "path": "backend/modules/subcontract/remit_create.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "contractor_payment_vouchers"
+   ],
+   "tables_w": []
   },
   "mod:subcontract/remit_kinds": {
    "api_prefixes": [],
@@ -17989,6 +18019,7 @@
     "mod:subcontract/api/vendor_contractors",
     "mod:subcontract/dispatch_flow",
     "mod:subcontract/gl_events",
+    "mod:subcontract/remit_create",
     "mod:subcontract/remit_kinds"
    ],
    "tables_r": [],

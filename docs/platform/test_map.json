@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1052,
+  "tests": 1053,
   "unmapped": 13,
   "kinds": {
-   "api": 566,
+   "api": 567,
    "e2e": 256,
    "audit": 135,
    "unit": 95
   },
-  "routes": 747
+  "routes": 748
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -10553,6 +10553,35 @@
    "unresolved_api": [
     "/api/cashier/remit-reviews/contractor_voucher"
    ],
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_remit_kinded_create_2026_10_02.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/__init__",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/remit_create",
+    "mod:subcontract/remit_kinds",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/remit_create.py",
+     "backend/modules/subcontract/remit_kinds.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/routers/definitions.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
    "module": "subcontract"
   },
   "backend/modules/subcontract/tests/test_remit_kinds_2026_10_02.py": {
