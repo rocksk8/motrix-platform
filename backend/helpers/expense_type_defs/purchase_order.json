@@ -18,7 +18,7 @@
    },
    "required": true,
    "locked": true,
-   "help": "預設為登入者；超級管理員可在定義中把 locked 改成 false 讓它可編輯"
+   "help": "這一欄會自動帶入申請人；管理者可在設計器解除鎖定"
   },
   {
    "key": "dept",

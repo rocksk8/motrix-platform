@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-02（wip/t32-applicant-help-a3：出貨請款類型「申請人」欄位說明改白話）
+- L1（出貨資料，介面不變）：`helpers/expense_type_defs/*.json` 四個預設類型的 `applicant.help` 改為「這一欄會自動帶入申請人；管理者可在設計器解除鎖定」（原文含 locked 等工程用語）。只動這一個字串；仍釘在版本 0（程式預設）的舊單據只是顯示文字不同，驗證與輸出不變；公司已發布的版本（≥1）是發布當時的副本，不受影響。
+
 ## 1.105 — 2026-10-02（wip/t31-expense-prefill-a3：請款單自動帶入的接線）
 - L1（新增選填參數，向下相容）：`helpers.expense_types.validate_values(…, prior=None, case=None, type_code="")`——`prior`＝修改時舊單的 data：不重新解析任何自動帶入來源、`locked` 欄位沿用舊值（建立時行為不變）；`case`＝`{customer, project}`；`type_code` 供「我上一次填過的內容」查詢。
 - L1（新增）：`helpers.expense_types.last_value_hook(type_code)`（`lastUsed` 來源的查詢鉤子：本人在該類型最近一張單據的欄位值；只查 `case_extra_expenses`）。`validate_expense_type` 在 `helpers.prefill_sources` 上線後，逐欄把 `default: {"$": …}` 交給 `check_field` 檢查（上線前行為不變）。
