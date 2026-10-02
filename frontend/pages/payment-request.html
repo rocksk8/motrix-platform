@@ -138,6 +138,35 @@
         <div class="pr-card" x-show="typeCode" id="pr-typed-form">
           <h3 x-text="'填寫' + typeName() + (picked ? '　' + picked.quoteNo : '　（不綁案件）')"></h3>
           <div id="pr-df" x-ref="df"></div>
+          <div id="pr-item-picker" x-show="prItems.length" style="margin-top:12px;border:1px solid var(--border-light,#e5e7eb);border-radius:8px;padding:10px 12px">
+            <div style="font-weight:600;margin-bottom:4px">從案件品項帶入</div>
+            <div class="pr-hint" style="margin-bottom:6px">連到品項的明細，算該品項的<b>實際成本</b>，不是額外支出；已請購／已採購量依已送審或核准的單據累計。</div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead><tr style="text-align:left;color:var(--text-dim)"><th></th><th>品項</th><th>計畫量</th><th>已請購</th><th>已採購</th><th>剩餘可採購</th></tr></thead>
+              <tbody>
+                <template x-for="it in prItems" :key="it.itemId">
+                  <tr :data-pick-item="it.itemId">
+                    <td><input type="checkbox" x-model="prSel[it.itemId]" :aria-label="'選 ' + it.description"></td>
+                    <td x-text="it.description"></td>
+                    <td x-text="it.planQty + (it.unit || '')"></td>
+                    <td x-text="it.requestedQty"></td>
+                    <td x-text="it.orderedQty"></td>
+                    <td x-text="it.remainingQty"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <button type="button" class="btn btn-secondary" id="pr-item-add" style="margin-top:8px" @click="addSelectedItems()">帶入選取的品項</button>
+          </div>
+          <div id="pr-item-reasons" x-show="linkedIds.length" style="margin-top:8px">
+            <template x-for="id in linkedIds" :key="id">
+              <div class="pr-f" :data-linked-item="id" style="margin-bottom:6px">
+                <label x-text="itemName(id) + (overOf(id) > 0 ? '　⚠ 超出報價計畫量 ' + overOf(id) : '')"></label>
+                <input type="text" :id="'pr-reason-' + id" x-model="prReasons[id]" maxlength="500"
+                       :placeholder="typeCode === 'purchase_order' ? '超出報價計畫量時必填（送審時伺服器會檢查）' : '超出報價計畫量的原因（請購單只提示，可不填）'">
+              </div>
+            </template>
+          </div>
           <div class="pr-grid" style="margin-top:12px">
             <div class="pr-f">
               <label for="pr-t-files">附件（收據、照片…）</label>
@@ -213,6 +242,7 @@
         tab: 'new', busy: false, err: '', result: null,
         caseQ: '', cases: [], casesLoaded: false, picked: null, categories: [], _caseTimer: null,
         types: [], typeCode: '', typeDef: null, _df: null,
+        prItems: [], prSel: {}, prReasons: {}, linkedIds: [], lineTick: 0,      // 32-S5：請購／採購單「從案件品項帶入」
         form: blank(),
         mine: [], mineLoaded: false, mineErr: '', mineMsg: '', invoiceDraft: {}, invoiceNoDraft: {},
 
@@ -231,8 +261,54 @@
           this.cases = r.ok ? await r.json() : []
           this.casesLoaded = true
         },
+        isPrPo() { return this.typeCode === 'purchase_req' || this.typeCode === 'purchase_order' },
+        async loadPrItems() {
+          this.prItems = []; this.prSel = {}
+          if (!this.picked || !this.isPrPo()) return
+          try {
+            var r = await fetch('/api/quotations/' + encodeURIComponent(this.picked.quoteNo) + '/purchase-items', { headers: this._h() })
+            if (r.ok) this.prItems = (await r.json()).items || []
+          } catch (e) { this.prItems = [] }
+        },
+        itemName(id) { var it = this.prItems.find(function (x) { return x.itemId === id }); return it ? it.description : id },
+        _lineQty(id) {
+          if (!this._df) return 0
+          return (this._df.getValue().lines || []).reduce(function (s, l) { return s + (l.itemId === id ? (Number(l.qty) || 0) : 0) }, 0)
+        },
+        // 超出計畫量（只做畫面提示；真正的上限與必填原因由伺服器在建立／送審驗）：採購看剩餘可採購量，請購看計畫量減已請購
+        overOf(id) {
+          void this.lineTick                                              // 明細數量變動時重算（_syncLinked 會推進它）
+          var it = this.prItems.find(function (x) { return x.itemId === id }); if (!it) return 0
+          var cap = this.typeCode === 'purchase_order' ? it.remainingQty : Math.max(it.planQty - it.requestedQty, 0)
+          var over = this._lineQty(id) - cap
+          return over > 0 ? Math.round(over * 100) / 100 : 0
+        },
+        _syncLinked(v) {
+          v = v || (this._df && this._df.getValue()) || { lines: [] }
+          var ids = []
+          ;(v.lines || []).forEach(function (l) { if (l.itemId && ids.indexOf(l.itemId) < 0) ids.push(l.itemId) })
+          this.linkedIds = ids
+          this.lineTick++
+        },
+        addSelectedItems() {
+          if (!this._df) return
+          var self = this
+          var v = this._df.getValue()
+          var have = {}
+          var lines = (v.lines || []).filter(function (l) { return l.itemId || l.summary || l.qty || l.unitCost })      // 拿掉空白列
+          lines.forEach(function (l) { if (l.itemId) have[l.itemId] = true })
+          this.prItems.forEach(function (it) {
+            if (!self.prSel[it.itemId] || have[it.itemId]) return
+            lines.push({ category: '', summary: it.description, qty: it.remainingQty > 0 ? it.remainingQty : 1,
+                         unitCost: it.planUnitCost !== undefined ? it.planUnitCost : '', itemId: it.itemId })
+          })
+          this._df.setValue({ data: v.data, lines: lines })
+          this.prSel = {}
+          this._syncLinked()
+        },
         async pickCase(c) {
           this.picked = c; this.err = ''; this.result = null
+          this.loadPrItems()
           var r = await fetch('/api/quotations/' + encodeURIComponent(c.quoteNo) + '/extra-expenses', { headers: this._h() })
           var d = await this._json(r)
           this.categories = r.ok ? (d.categories || []) : []
@@ -310,7 +386,9 @@
             var me = this.session.user || this.session || {}
             this._df = window.MotrixDefinitionForm.mount(this.$refs.df, {
               definition: def.definition || def, viewer: { username: me.username || '', isCashier: false },
-              categories: cats, users: users, departments: depts })
+              categories: cats, users: users, departments: depts, onChange: (v) => this._syncLinked(v) })
+            this.linkedIds = []; this.prReasons = {}
+            await this.loadPrItems()
           } catch (e) { this.err = e.message }
         },
         async saveTyped(submit) {
@@ -319,6 +397,11 @@
           var problems = this._df.validate()
           if (problems.length) { this.err = problems[0].message + (problems.length > 1 ? '（還有 ' + (problems.length - 1) + ' 項）' : ''); return }
           var v = this._df.getValue()
+          var reasons = this.prReasons
+          v.lines = (v.lines || []).map(function (l) {
+            var r = l.itemId ? String(reasons[l.itemId] || '').trim() : ''
+            return r ? Object.assign({}, l, { overPlanReason: r }) : l
+          })
           var no = this.picked ? this.picked.quoteNo : '-'                       // 哨兵「-」＝無案件（W2 路徑）
           var base = '/api/quotations/' + encodeURIComponent(no) + '/extra-expenses'
           var dep = v.data.cost_dept || v.data.dept

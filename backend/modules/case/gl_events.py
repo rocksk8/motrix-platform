@@ -38,10 +38,13 @@ def _accrual_lines(r, total, memo) -> list:
     for l in lines if isinstance(lines, list) else []:
         if isinstance(l, dict):
             key = l.get("categoryCode") or l.get("category") or ""
-            by_cat[key] = by_cat.get(key, 0) + _i(l.get("amount"))
+            # 32-S3：採購單連到案件品項的列另成借方行並帶 `dims={"item": 品項id}`（金額、角色、類別都不變；沒有 itemId ⇒ 與以前逐行相同）
+            iid = str(l.get("itemId") or "").strip() if (r["kind"] or "") == "purchase_order" and r["quote_no"] else ""
+            by_cat[(key, iid)] = by_cat.get((key, iid), 0) + _i(l.get("amount"))
     if not by_cat or sum(by_cat.values()) != total or any(v <= 0 for v in by_cat.values()):
         return [{"role": role, "side": "D", "amount": total, "memo": memo}, ap]
-    return [{"role": role, "side": "D", "amount": v, "memo": memo, **({"category": k} if k else {})} for k, v in by_cat.items()] + [ap]
+    return [{"role": role, "side": "D", "amount": v, "memo": memo, **({"category": k} if k else {}), **({"dims": {"item": iid}} if iid else {})}
+            for (k, iid), v in by_cat.items()] + [ap]
 
 
 def gl_events(start, end, *, changed_since=""):

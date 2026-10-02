@@ -3536,8 +3536,9 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         mo = (e["date"] or "")[:7]
         if mo not in monthly or not _quote_in_department(e["quoteNo"], e.get("departmentId")):
             continue
-        monthly[mo]["other"] += e["amount"]
-        details["other"].append({
+        bucket = e.get("bucket") or "other"          # 32-S3：連到案件品項的採購單列＝案件的實際支出，落「料件」桶（recognition.ITEM_COST_BUCKET），不再是「其他」
+        monthly[mo][bucket] += e["amount"]
+        details[bucket].append({
             **_dept_fields(e["quoteNo"], e.get("departmentId")),
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"].strip("｜"),
             "amount": round_half_up(e["amount"]), "files": e["files"],

@@ -285,7 +285,8 @@
     "mod:case/material_guard",
     "mod:case/material_notify",
     "mod:case/material_payment",
-    "mod:case/material_payment_cashier"
+    "mod:case/material_payment_cashier",
+    "mod:case/purchase_items"
    ],
    "tables": [
     "case_action_items",

@@ -68,6 +68,12 @@
    "scope": "row_access"
   },
   {
+   "file": "modules/case/api/case_extra_expenses.py",
+   "path": "/api/quotations/{quote_no}/purchase-items",
+   "handler": "list_purchase_items",
+   "scope": "row_access"
+  },
+  {
    "file": "modules/filehub/api.py",
    "path": "/api/filehub/search",
    "handler": "search",

@@ -43,8 +43,9 @@ from helpers.case_access import deny_case, require_case   # M01-O1：逐案拒�
 from helpers import row_access
 from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供者同一支
 from helpers.auth import user_has_module
-from modules.case.recognition import normalize_date  # `AC2`
+from modules.case.recognition import normalize_date, COUNTED_EXTRA_STATUSES  # `AC2`；後者＝合計與營運報表同一條規則（32-Q6）
 from modules.case import expense_forms as EF   # 費用單據（A2）：類型／明細金額／data 合併
+from modules.case import purchase_items as PI    # 請購／採購單連結案件品項（32-S1）
 from modules.case import expense_notify as XN  # 費用單據的信件（A2-7）；kind='' 一律不寄
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
@@ -372,8 +373,19 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
             items.append(d)
         # 合計只算看得到金額的列（避免「清單 3 筆、合計卻含別人的金額」）；已作廢的列照列出（稽核／申請人查詢）但不進任何合計
         visible = [i for i in items if not i.get("masked") and i["status"] != VOIDED_STATUS]
-        total = sum(float(i["totalCost"] or 0) for i in visible)
-        pending = sum(float(i["totalCost"] or 0) for i in visible if i["status"] != "已核准")
+        # 32-Q6（使用者裁示 2026-10-02）：合計與營運報表同一條規則——只計 COUNTED_EXTRA_STATUSES（待審核／簽核中／已核准）、
+        # 且類型要進金流（kind='' 或 payable）：**請購單、草稿、已駁回不計**。（原本只排除作廢與被遮蔽的列，精算的額外支出因此比報表多。）
+        counted = [i for i in visible if i["status"] in COUNTED_EXTRA_STATUSES and EF.is_payable_kind(i["kind"] or "")]
+        # 32-S3（Q1）：採購單明細連到案件品項的列＝該品項的**實際成本**，不再算額外支出。
+        # 過渡安全：`totalAmount`／`totalPending` 先**維持含連結列**（既有精算頁照舊看到全部金額，不會有錢憑空消失）；
+        # 另給 `itemLinkedAmount`（連結列金額）與 `extraOnlyAmount`（＝totalAmount−itemLinkedAmount，真正的額外支出）。
+        # 精算頁改版（S5）時改讀 extraOnlyAmount＋品項「系統帶入實際」，兩邊一起切，才不會漏算或重複。
+        for i in counted:
+            i["linkedAmount"] = PI.linked_split(i.get("lines"))[0] if i["kind"] == PI.ORD else 0.0
+        total = sum(float(i["totalCost"] or 0) for i in counted)
+        pending = sum(float(i["totalCost"] or 0) for i in counted if i["status"] != "已核准")
+        item_linked = sum(i["linkedAmount"] for i in counted)
+        uncounted = sum(float(i["totalCost"] or 0) for i in visible if i not in counted)      # 資訊：沒有計入的金額（請購單、草稿、已駁回）
         # W1：手續費（公司自付、已登錄付款者）另計，進案件成本（settlement 的 remitFeeTotal）；不併入 totalAmount
         fee_total = sum(float(i["remitFee"] or 0) for i in visible if i["paidDate"])
         return {
@@ -382,11 +394,37 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
             "remitFeeTotal": fee_total,
             "totalAmount": total,
             "totalPending": pending,
+            "uncountedAmount": uncounted,
+            "itemLinkedAmount": item_linked,
+            "extraOnlyAmount": total - item_linked,
             # 對這位使用者遮蔽金額的列數（不含已作廢）：> 0 ⇒ totalAmount 不是完整成本，精算頁據此擋存檔／完結（否則會把殘缺的總額寫進精算）
             "maskedCount": sum(1 for i in items if i.get("masked") and i["status"] != VOIDED_STATUS),
             "pendingCount": sum(1 for i in items if i["status"] not in ("已核准", "草稿", VOIDED_STATUS)),
             "categories": CATEGORIES,
         }
+    finally:
+        conn.close()
+
+
+@router.get("/api/quotations/{quote_no}/purchase-items")
+def list_purchase_items(quote_no: str, authorization: str = Header(None)):
+    """請購單／採購單的「從案件品項帶入」挑選器（32-S1）：報價品項＋計畫量／已請購／已採購／剩餘可採購量。
+    權限＝與案件額外支出清單同一條（登入＋案件可見）；看不到財務金額的人不回 `planUnitCost`。無案件（哨兵 `-`）⇒ 400。"""
+    quote_no = _qn(quote_no)
+    user = _require_user(authorization)
+    if quote_no == "":
+        raise HTTPException(400, "無案件的單據沒有案件品項可挑")
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        q = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        try:
+            data = json.loads((q["data_json"] if q else "") or "{}")
+        except (TypeError, ValueError):
+            data = {}
+        rows = conn.execute("SELECT id, kind, status, lines_json FROM case_extra_expenses WHERE quote_no=? AND kind IN (?,?)",
+                            (quote_no, PI.REQ, PI.ORD)).fetchall()
+        return {"quoteNo": quote_no, "items": PI.picker(data, rows, show_cost=can_see_financial(user))}
     finally:
         conn.close()
 
@@ -416,10 +454,12 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
             begin_write(conn)                                   # 配單號＋寫入要在同一把寫鎖裡
             lines, total = EF.normalize_lines(body.lines)
             data = EF.normalize_data(body.data)
+            lines, over_plan = PI.check_lines(conn, quote_no, kind, lines)          # 32-S2：明細連案件品項（沒有 itemId ⇒ 原樣）
+            PI.check_from_pr(conn, quote_no, kind, data)
             doc_code = EF.next_doc_code(conn, kind, now[:10])
             desc = (body.description or "").strip() or next((l.get("summary") for l in lines if l.get("summary")), "") or "（%s）" % doc_code
         else:
-            lines, total, data, doc_code = [], _recalc(body), {}, ""
+            lines, total, data, doc_code, over_plan = [], _recalc(body), {}, "", []
             desc = (body.description or "").strip()
         display = user.get("display_name") or user["username"]
         cur = conn.execute(
@@ -444,7 +484,8 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
         _audit(_tok(authorization), "extra_expense.create", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 新增額外支出「{(body.description or '').strip()}」 NT$ {total:,.0f}",
                _asum(conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()))
-        return {"ok": True, "id": exp_id, "status": "草稿", "totalCost": total, "docCode": doc_code, "kind": kind}
+        return {"ok": True, "id": exp_id, "status": "草稿", "totalCost": total, "docCode": doc_code, "kind": kind,
+                **({"overPlan": over_plan} if over_plan else {})}
     finally:
         conn.close()
 
@@ -475,9 +516,12 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
             begin_write(conn)
             lines, total = EF.normalize_lines(body.lines if body.lines is not None else _jlist(row, "lines_json"))
             data = EF.normalize_data(body.data, _jcol(row, "data_json"))       # 與既有值合併：沒送的鍵不會被丟掉
+            lines, over_plan = PI.check_lines(conn, quote_no, row_kind, lines, exclude_id=exp_id)      # 32-S2
+            PI.check_from_pr(conn, quote_no, row_kind, data)
             desc = (body.description or "").strip() or row["description"]
         else:
             lines, total, data, desc = _jlist(row, "lines_json"), _recalc(body), _jcol(row, "data_json"), (body.description or "").strip()
+            over_plan = []
         conn.execute(
             "UPDATE case_extra_expenses SET category=?, description=?, qty=?, unit=?, "
             " unit_cost=?, total_cost=?, note=?, expense_date=?, doc_no=?, "
@@ -502,7 +546,7 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
                f"{quote_no or '無案件'} 修改額外支出 #{exp_id}「{(body.description or '').strip()}」 NT$ {total:,.0f}",
                {**_asum(conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()),
                 "before": {"totalCost": float(row["total_cost"] or 0)}})
-        return {"ok": True, "totalCost": total, "updatedAt": now}
+        return {"ok": True, "totalCost": total, "updatedAt": now, **({"overPlan": over_plan} if over_plan else {})}
     finally:
         conn.close()
 
@@ -746,6 +790,9 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
         if _col(row, "kind", "") or "":
             # 送審當下：費用類別驗證（不在啟用清單 ⇒ 400，狀態不變）＋類別代碼／科目快照寫進明細（W4 合約）
             _new_lines = EF.prepare_submit(conn, _jlist(row, "lines_json"))
+            begin_write(conn)                                   # 32-S2：累計上限在寫鎖內驗（兩人同時對同一品項送審不會一起通過）
+            _new_lines, _over = PI.check_lines(conn, quote_no, row["kind"], _new_lines, exclude_id=exp_id, require_reason=True)
+            PI.check_from_pr(conn, quote_no, row["kind"], _jcol(row, "data_json"))
             conn.execute("UPDATE case_extra_expenses SET lines_json=?, def_version=? WHERE id=? AND quote_no=?",
                          (EF.dumps_lines(_new_lines), EF.current_def_version(conn, row["kind"]), exp_id, quote_no))     # 送審當下釘定義版本
 
@@ -1210,6 +1257,8 @@ def upsert_change_request(quote_no: str, exp_id: int, body: ExtraExpenseIn = Bod
 
         # 已駁回後再修改：沿用同一批待核准附件，不要讓使用者重傳一次
         proposal = _proposal_from(body, (_change_of(row).get("addFiles") or []), row)
+        if "lines" in proposal:                                 # 32-S2：變更申請的明細同樣驗品項連結（核准後的單據不能繞過）
+            proposal["lines"], _ = PI.check_lines(conn, quote_no, row["kind"], proposal["lines"], exclude_id=exp_id)
         now = datetime.now().isoformat(timespec="seconds")
         conn.execute(
             "UPDATE case_extra_expenses SET change_status='草稿', change_json=?, "
@@ -1343,6 +1392,8 @@ def submit_change_request(quote_no: str, exp_id: int, authorization: str = Heade
         new_total = float(change.get("totalCost") or 0)
         if "lines" in change:                                   # 費用單據的變更申請：同樣在送審當下驗類別、寫代碼／科目快照
             change["lines"] = EF.prepare_submit(conn, change["lines"])
+            begin_write(conn)
+            change["lines"], _ = PI.check_lines(conn, quote_no, row["kind"], change["lines"], exclude_id=exp_id, require_reason=True)
             conn.execute("UPDATE case_extra_expenses SET change_json=? WHERE id=? AND quote_no=?",
                          (json.dumps(change, ensure_ascii=False), exp_id, quote_no))
         label = f"{change.get('description')}（NT$ {old_total:,.0f} → NT$ {new_total:,.0f}）"
