@@ -5992,6 +5992,7 @@
     "file:backend/helpers/__init__.py",
     "file:backend/tests/_requires.py",
     "helper:mail_types",
+    "mod:case/__init__",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
@@ -6001,6 +6002,7 @@
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
     "mod:case/api/settlement_actuals",
+    "mod:case/material_approval",
     "mod:netplan/api",
     "plat:__init__",
     "plat:registry",
@@ -6013,6 +6015,8 @@
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/mail_types.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/material_approval.py",
      "backend/tests/_requires.py"
     ],
     "api": [
@@ -6429,10 +6433,9 @@
    },
    "module": "case"
   },
-  "backend/modules/case/tests/test_material_po_default_off_2026_10_03.py": {
+  "backend/modules/case/tests/test_material_po_default_2026_10_03.py": {
    "kind": "unit",
    "units": [
-    "core:db",
     "dir:backend/modules/case/",
     "mod:case/__init__",
     "mod:case/material_approval",
@@ -6441,7 +6444,6 @@
    ],
    "evidence": {
     "import": [
-     "backend/db.py",
      "backend/modules/case/__init__.py",
      "backend/modules/case/material_approval.py",
      "backend/modules/case/tests/test_material_po_required_2026_10_03.py",
@@ -26656,8 +26658,10 @@
     "file:backend/tests/test_approval_reassign_history_2026_09_14.py",
     "file:backend/tests/test_case_change_approve_deadlock_2026_09_15.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
+    "mod:case/__init__",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
+    "mod:case/material_approval",
     "mod:subcontract/api/vendor_contractors",
     "mod:subcontract/tests/test_dispatch_import_to_quote_persists_2026_09_23",
     "plat:__init__",
@@ -26671,8 +26675,10 @@
      "backend/core/source_tree.py",
      "backend/core/txn.py",
      "backend/db.py",
+     "backend/modules/case/__init__.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/quotations.py",
+     "backend/modules/case/material_approval.py",
      "backend/modules/subcontract/tests/test_dispatch_import_to_quote_persists_2026_09_23.py",
      "backend/tests/_requires.py",
      "backend/tests/test_approval_reassign_history_2026_09_14.py",
