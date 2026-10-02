@@ -1,5 +1,11 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-02（wip/t33-remit-s2b-a3：31-B S2b 分期匯款申請作廢）
+- 新增 `POST /api/contractor-vouchers/{voucher_no}/void`（管理員以上、必填原因）：只能作廢該派發最新一張未作廢的分期申請（後進先出，`remit_create.void_blocker`）；已付款先撤銷付款；舊式整筆不可。作廢後狀態＝`已作廢`、記 `voided_at／voided_by／void_reason`，不佔累計額度、序號不回頭重用、不進出納待付款與簽核佇列。
+- 分期草稿的 `DELETE` 同樣守後進先出；已送審的分期申請只能作廢。
+- 派發編輯／取消／刪除的「已有匯款申請」檢查改只看未作廢的申請；案件應付彙總不計作廢申請；申請對外形狀（IP-14 `contractor_voucher.public`）加 `voidedAt／voidReason`。
+- 測試：`test_remit_void_2026_10_02.py`（7 題，含 `void_blocker` 被拿掉的反向控制）。
+
 ## (next) — 2026-10-02（wip/t33-remit-s2-a3：31-B S2 稽核 should-fix）
 - `remit_split.plan`：前期逐期進位使稅額合計超過整筆稅額時，最後一期不再拒絕，稅額取 0 並警示「待會計確認」（原本會卡死、剩餘額度用不掉）。
 - 派發金額（REAL 欄）帶角分時，分期以四捨五入（half-up）後的整數元計算並警示，不再回 400。
