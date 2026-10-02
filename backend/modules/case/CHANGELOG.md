@@ -3,7 +3,7 @@
 ## (next) — 2026-10-03（wip/t33-m2b-d7：33-M2b 材料申請變更申請，端點與簽核整合）
 - 端點：`GET /api/quotations/{q}/material-orders/{item}/changes`、`GET …/change-proposal`（預覽）、`POST …/changes`（建立；body 只收 `reason／quantity／notes`，金額與涵蓋行由已核准採購單決定）、`POST /api/quotations/{q}/material-changes/{id}/revise|submit|approve|reject|withdraw`。看不到財務檢視者不給金額。核准最後一層 ⇒ 同一交易內套用，套不了回 409 且什麼都不改。
 - 簽核整合：登記簽核單據類型 `material_change`（材料申請變更，預設跟統一流程）、簽核佇列與詳情（差異表：數量／單價／小計／涵蓋採購單行／備註 原→新）、站內通知與四種信件（送審／輪到您／核准／退回，信內不放金額）、稽核動作 `material_changes.*`。
-- 守門：強制採購單之後建立的已核准材料申請，直接改內容被拒（`use_change_request`，訊息指向變更申請）；舊單與 grandfather 單維持「改了回草稿」。提案內容來自案件側 `material_coverage.change_proposal`，尚未上線時建立／預覽回 501。
+- 守門：強制採購單之後建立的已核准材料申請，直接改內容被拒（`use_change_request`，訊息指向變更申請）；舊單與 grandfather 單維持「改了回草稿」。提案內容來自案件側 `material_coverage.change_proposal`，尚未上線時建立／預覽回 501。已核准後直接改內容改為被拒之後，舊測試（連結變動、匯款申請凍結）改依新規則斷言，並保留 grandfather 單舊行為的覆蓋；佇列提供者以字面值 `material_change` 通過佇列覆蓋守門。
 
 ## (next) — 2026-10-03（wip/t33-grandfather-flag-d7）：舊單送審後被退回，重送不再被「需先申請請購單」擋住
 - 修正：舊單（grandfathered）以有簽核層的流程送審時，重建審核內容把「舊單不適用強制採購單」標記丟掉；退回後重送、或核准後修改再送，會被當成上線後的新單擋下。現在送審保留該標記（測試補退回重送；反向控制：拿掉修正即紅）。
