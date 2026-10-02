@@ -87,6 +87,29 @@ def test_build_selection_unions_groups_dedups_and_keeps_e2e_separate():
     assert "backend/tests/platform/test_a.py" in sel["non_e2e"]
 
 
+def test_quick_drops_the_platform_floor_and_cuts_to_the_changed_modules_own_tests_when_the_selector_goes_full():
+    """--quick（bin-1c 2026-10-02）：不含 A1（整個 tests/platform、工具演練）；diff 讓選題器整段全量時，A3／e2e 縮成『改動模組自己的測試』，
+    不然 A3 會膨脹成幾百檔。沒有全量觸發時，A3 照 diff 選到的檔。反向控制：不帶 quick ⇒ A1 與全量選到的檔都在。"""
+    plan_n = {"floor": {"backend/tests/platform/test_a.py": ["F0a:契約目錄"]},
+              "selected": {"backend/modules/accounting/tests/test_x.py": ["全量"], "backend/modules/subcontract/tests/test_s.py": ["全量"]},
+              "forced_full": ["硬底層／fixture 層改動：backend/tests/spec_impl_modules.json"]}
+    plan_e = {"selected": {"backend/modules/accounting/tests/test_e2e_acc.py": ["全量"]}, "collected": ["backend/modules/accounting/tests/test_e2e_acc.py",
+              "backend/modules/subcontract/tests/test_e2e_sub.py"], "forced_full": []}
+    tree = ["backend/tests/platform/test_a.py", "backend/modules/accounting/tests/test_x.py", "backend/modules/subcontract/tests/test_s.py",
+            "backend/modules/subcontract/tests/test_s2.py", "backend/modules/subcontract/tests/test_e2e_sub.py", "backend/modules/accounting/tests/test_e2e_acc.py"]
+    changed = ["backend/modules/subcontract/gl_events.py", "backend/tests/spec_impl_modules.json"]
+    q = AG.build_selection(plan_n, plan_e, tree, changed, quick=True)
+    assert q["A1"] == [] and "backend/tests/platform/test_a.py" not in q["non_e2e"] and q["quick_cut"] is True
+    assert q["A3"] == ["backend/modules/subcontract/tests/test_s.py", "backend/modules/subcontract/tests/test_s2.py"]            # 只有 subcontract 自己的
+    assert q["E"] == ["backend/modules/subcontract/tests/test_e2e_sub.py"]
+    full = AG.build_selection(plan_n, plan_e, tree, changed)
+    assert "backend/tests/platform/test_a.py" in full["A1"] and "backend/modules/accounting/tests/test_x.py" in full["A3"] and not full["quick_cut"]
+    # 沒有全量觸發：A3 照 diff 選到的檔，只是仍不含 A1
+    plan_n2 = dict(plan_n, forced_full=[])
+    q2 = AG.build_selection(plan_n2, plan_e, tree, changed, quick=True)
+    assert q2["A1"] == [] and q2["quick_cut"] is False and q2["A3"] == sorted(plan_n2["selected"])
+
+
 def test_build_selection_survives_missing_plans():
     sel = AG.build_selection(None, None, [], [])
     assert sel["non_e2e"] == [] and sel["E"] == [] and sel["forced_full"] == []

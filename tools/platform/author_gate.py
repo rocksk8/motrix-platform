@@ -6,7 +6,9 @@
 
 用法（repo 根目錄；工作樹必須乾淨，含未追蹤檔）：
   python tools/platform/author_gate.py [--base <ref>] [--head HEAD] [--workers 2] [--budget-min 12] [--json-out <路徑>]
-                                       [--dry-run] [--skip-e2e] [--known-red <json>]
+                                       [--dry-run] [--skip-e2e] [--quick] [--known-red <json>]
+  --quick：約 10 分鐘的快速版——只跑 A2 樣式守門檔＋A3／A4（依 diff 與本分支改動的測試檔），不含 A1（整個 tests/platform、工具演練）；
+           輸出與結果檔都標 quick，整包由階段測試涵蓋。每片推 sha 前用它；完整版留給獨佔窗口。
   python tools/platform/author_gate.py replay [--cases <json>] [--run] [--case <名稱> ...]
 
 選題（去重取聯集）：
@@ -60,7 +62,13 @@ def pattern_files(tree_files, patterns=PATTERNS):
     return GP.match_files(tree_files, pats=patterns)
 
 
-def build_selection(plan_n, plan_e, tree_files, changed, guard_args=(), patterns=PATTERNS, full_floor=False):
+def module_own_tests(changed, tree_files):
+    """--quick 用：這次改動碰到的模組（backend/modules/<m>/…）自己的測試檔（modules/<m>/tests/ 底下，含 e2e）。"""
+    mods = sorted({f.split("/")[2] for f in changed if f.startswith("backend/modules/") and f.count("/") >= 3})
+    return sorted(f for f in tree_files if is_test_file(f) and any(f.startswith("backend/modules/%s/tests/" % m) for m in mods))
+
+
+def build_selection(plan_n, plan_e, tree_files, changed, guard_args=(), patterns=PATTERNS, full_floor=False, quick=False):
     """⇒ {"A1": [...], "A2": [...], "A3": [...], "A4": [...], "E": [...], "non_e2e": [...聯集...], "forced_full": [...]}
     全部是 repo 相對路徑（backend/…）。plan_*＝stage_select 的計畫 dict（floor／selected 一律取用，即使 mode=full——
     mode=full 只代表「建包會整段跑」，作者端仍只跑底板＋選題，並把原因印出來）。"""
@@ -71,7 +79,16 @@ def build_selection(plan_n, plan_e, tree_files, changed, guard_args=(), patterns
     a1x = sorted(set(floor) - set(a1))
     if full_floor:
         a1 = sorted(set(a1) | set(a1x))
+    quick_cut = False
+    if quick:
+        a1 = []                                   # --quick：不含整個 tests/platform 與依 diff 觸發的工具演練（整包由階段測試涵蓋）
+        forced_any = ((plan_n or {}).get("forced_full") or []) + ((plan_e or {}).get("forced_full") or [])
+        if forced_any:                            # 這個 diff 會讓選題器整段全量（硬底層／fixture 層／選題器自己改了）：作者端快速版改跑「改動模組自己的測試」
+            quick_cut = True
     a3 = sorted((plan_n or {}).get("selected") or {})
+    own = module_own_tests(changed, tree_files) if quick_cut else []
+    if quick_cut:
+        a3 = []
     a2 = pattern_files(tree_files, patterns)
     guard_files = sorted({"backend/" + g.split("::", 1)[0] for g in guard_args})
     a2 = sorted(set(a2) | set(guard_files))
@@ -80,9 +97,12 @@ def build_selection(plan_n, plan_e, tree_files, changed, guard_args=(), patterns
     e2e_collected = set((plan_e or {}).get("collected") or [])
     a4 = [f for f in changed_tests if f not in e2e_sel and f not in e2e_collected]        # e2e 類的測試檔改動 ⇒ 進 e2e 那一段
     e2e_files = sorted(e2e_sel | {f for f in changed_tests if f in e2e_collected})
+    if quick_cut:
+        e2e_files = sorted({f for f in own if "test_e2e_" in f.rsplit("/", 1)[-1]} | {f for f in changed_tests if f in e2e_collected})
+        a3 = sorted(f for f in own if "test_e2e_" not in f.rsplit("/", 1)[-1] and f not in a4)
     non_e2e = sorted(set(a1) | set(a2) | set(a3) | set(a4))
     forced = list(dict.fromkeys(((plan_n or {}).get("forced_full") or []) + ((plan_e or {}).get("forced_full") or [])))
-    return {"A1": a1, "A1x": a1x, "A2": a2, "A3": a3, "A4": a4, "E": e2e_files, "non_e2e": non_e2e, "forced_full": forced}
+    return {"A1": a1, "A1x": a1x, "A2": a2, "A3": a3, "A4": a4, "E": e2e_files, "non_e2e": non_e2e, "forced_full": forced, "quick_cut": quick_cut}
 
 
 def load_times(path=TIMES_FILE):
@@ -158,13 +178,13 @@ def classify_failures(failures, known_red):
 
 
 def make_result(*, head, base, tree_sha, selector_sha, groups, counts, failures_new, failures_known, duration_s, estimate_s,
-                workers, stopped_by_failfast, forced_full, started, finished, e2e=None):
+                workers, stopped_by_failfast, forced_full, started, finished, e2e=None, quick=False):
     """結果 JSON（綠＝沒有任何「新的紅」且確實有題被收集；紅了不可能寫 green:true）。"""
     ran_any = counts.get("passed", 0) + counts.get("failed", 0) + counts.get("errors", 0) > 0
     green = bool(ran_any and not failures_new and counts.get("failed", 0) + counts.get("errors", 0) == len(failures_known)
                  and (e2e is None or e2e.get("green")))
     return {"version": RESULT_VERSION, "head": head, "base": base, "tree_sha": tree_sha, "selector_sha": selector_sha,
-            "partial_evidence_only": True, "workers": workers,
+            "partial_evidence_only": True, "quick": bool(quick), "workers": workers,
             "groups": {k: {"files": len(v)} for k, v in groups.items() if k in ("A1", "A2", "A3", "A4", "E")},
             "ran": counts, "failed_new": [f["nodeid"] for f in failures_new], "failed_known": [f["nodeid"] for f in failures_known],
             "green": green, "duration_s": round(duration_s, 1), "estimate_s": round(estimate_s, 1),
@@ -323,13 +343,13 @@ def strip_backend(paths):
 
 # ── 主流程 ───────────────────────────────────────────────────────────────
 
-def select_for(base, head, repo=REPO, full_floor=False):
+def select_for(base, head, repo=REPO, full_floor=False, quick=False):
     import stage_select as SS
     from pre_train_check import GUARDS, expand_guards
     plan_n = SS.plan_stage("not_e2e", base, head, str(repo))
     plan_e = SS.plan_stage("e2e", base, head, str(repo))
     guard_args, missing = expand_guards(Path(repo) / "backend", GUARDS)
-    sel = build_selection(plan_n, plan_e, tree_files_at(head, repo), changed_files(base, head, repo), guard_args, full_floor=full_floor)
+    sel = build_selection(plan_n, plan_e, tree_files_at(head, repo), changed_files(base, head, repo), guard_args, full_floor=full_floor, quick=quick)
     sel["guard_args"], sel["guards_missing"] = guard_args, missing
     return sel, plan_n, plan_e
 
@@ -352,9 +372,13 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--skip-e2e", action="store_true")
     ap.add_argument("--full-floor", action="store_true", help="連建包底板的 F0b／F0c／F0d（global_tests、unmapped、掃目錄型）也跑；預設不含")
+    ap.add_argument("--quick", action="store_true", help="快速版（約 10 分鐘）：只跑 A2 樣式守門檔＋A3／A4 依 diff 選到的檔＋本分支改動的測試檔，不含 A1（整個 tests/platform、工具演練）；整包由階段測試涵蓋")
     ap.add_argument("--known-red", help="已登記的既有紅（JSON：{\"nodeids\": [...]}）；只准縮短，列出但不計入")
     ap.add_argument("--repo", default=str(REPO))
     a = ap.parse_args(argv)
+    if a.quick and a.full_floor:
+        print("作者閘門：--quick 與 --full-floor 互斥")
+        return 2
     repo = Path(a.repo)
     try:
         dirty = dirty_files(repo)
@@ -363,7 +387,7 @@ def main(argv=None):
             return 2
         head = resolve(a.head, repo)
         base = resolve(a.base, repo) if a.base else default_base(head, repo)
-        sel, plan_n, plan_e = select_for(base, head, repo, a.full_floor)
+        sel, plan_n, plan_e = select_for(base, head, repo, a.full_floor, a.quick)
     except RuntimeError as e:
         print("作者閘門：%s" % e)
         return 2
@@ -374,6 +398,10 @@ def main(argv=None):
     print("  A1 底板 %d 檔（不含建包才需要的底板 %d 檔，--full-floor 加入）｜A2 樣式守門 %d 檔｜A3 受影響 %d 檔｜A4 改動測試 %d 檔｜不含 e2e 共 %d 檔｜e2e %d 檔（單獨一段）" % (
         len(sel["A1"]), len(sel["A1x"]), len(sel["A2"]), len(sel["A3"]), len(sel["A4"]), len(sel["non_e2e"]), len(sel["E"])))
     print("  預估 %.1f 分鐘（workers=%d）；預算 %d 分鐘" % (est / 60, workers, a.budget_min))
+    if a.quick:
+        print("  quick：不含整個 tests/platform（A1）與工具演練，整包由階段測試涵蓋；只當部分證據")
+        if sel.get("quick_cut"):
+            print("  quick：這個 diff 讓選題器整段全量（見下），A3／e2e 改為「改動模組自己的測試」；其餘由階段測試涵蓋")
     if sel["guards_missing"]:
         print("  ⚠ GUARDS 找不到檔（被改名？）：" + "、".join(sel["guards_missing"]))
     if sel["forced_full"]:
@@ -422,7 +450,7 @@ def main(argv=None):
     import stage_select as SS
     res = make_result(head=head, base=base, tree_sha=tree_sha_of(head, repo), selector_sha=SS.selector_sha(SS.GitReader(str(repo), head)),
                       groups=sel, counts=counts, failures_new=new, failures_known=kn, duration_s=dur, estimate_s=est, workers=workers,
-                      stopped_by_failfast=stopped, forced_full=sel["forced_full"], started=started, finished=time.strftime("%Y-%m-%dT%H:%M:%S"), e2e=e2e)
+                      stopped_by_failfast=stopped, forced_full=sel["forced_full"], started=started, finished=time.strftime("%Y-%m-%dT%H:%M:%S"), e2e=e2e, quick=a.quick)
     outp = Path(a.json_out) if a.json_out else RESULT_DIR / (head[:12] + ".json")
     outp.parent.mkdir(parents=True, exist_ok=True)
     outp.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -432,7 +460,7 @@ def main(argv=None):
         print("紅（新）：" + "\n  ".join(f["nodeid"] for f in new[:30]))
     if kn:
         print("紅（已登記）：" + "\n  ".join(f["nodeid"] for f in kn[:30]))
-    print("提醒：這只是作者端預檢；建包仍整段跑，不會因為這份結果略過任何題。")
+    print("提醒：這只是作者端預檢%s；建包仍整段跑，不會因為這份結果略過任何題。" % ("（quick：不含整個 tests/platform，整包由階段測試涵蓋）" if a.quick else ""))
     return 0 if res["green"] else 1
 
 
