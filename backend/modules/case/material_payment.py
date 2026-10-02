@@ -143,6 +143,12 @@ def legacy_paid(conn, quote_no, item_id, order=None):
     return _money(o.get("paidAmount")), str(o.get("paidDate") or "")[:10]
 
 
+def paid_so_far(conn, quote_no, item_id, order=None) -> float:
+    """這張叫料單已付的總額＝舊單歷史已付＋所有申請的付款明細合計（與 `sync_order_paid` 同一口徑；D7 金額鎖定用，不封頂在小計）。"""
+    leg, _d = legacy_paid(conn, quote_no, item_id, order)
+    return _money(leg + sum(float(ln["amount"] or 0) for pay in list_for_order(conn, quote_no, item_id) for ln in lines_of(conn, pay["id"])))
+
+
 def room_for(conn, quote_no, order, exclude_id=None) -> float:
     """還能申請的額度＝叫料單小計 − 舊單歷史已付 − 其他申請已鎖額度。"""
     leg, _d = legacy_paid(conn, quote_no, order.get("itemId"), order)
