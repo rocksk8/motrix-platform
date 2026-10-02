@@ -73,17 +73,19 @@ def test_run_only_failed_with_empty_stream_or_gone_files_does_not_claim_green(tm
     assert rc == 2
 
 
-def test_green_quick_confirm_never_lets_lookup_stage_hit(tmp_path):
+def test_green_quick_confirm_never_lets_lookup_stage_hit(tmp_path, monkeypatch):
     """反向控制：同指紋的階段是紅的；快速確認這批題綠了——lookup-stage 仍不得命中，紀錄檔一個位元都不能變。"""
     repo = _tree(tmp_path)
     records = tmp_path / "records.jsonl"
     tr.record(records, FP, False, "abc1234", stages={"not_e2e": tr.stage_entry(False)}, source="standalone")
     before = records.read_bytes()
+    def boom(*a, **k):                                                                                # 任何寫紀錄的嘗試（record／_append／default_records）都直接失敗
+        raise AssertionError("快速確認不得寫沿用紀錄")
+    for fn in ("record", "_append", "default_records"):
+        monkeypatch.setattr(tr, fn, boom)
     p = _stream(tmp_path, [{"type": "fail", "nodeid": "tests/x/test_a.py::test_ok", "stage": "not_e2e"}])
     rc, _ = tr.run_only_failed(repo, "not_e2e", p, runner=lambda *a: 0, note=lambda s: None)
     assert rc == 0
     assert tr.lookup_stage(records, FP, "not_e2e", datetime.now()) is None
     assert records.read_bytes() == before
-    fresh = tmp_path / "no_records.jsonl"                                                              # 沒有任何紀錄時也不會憑空生出紀錄檔
     tr.run_only_failed(repo, "e2e", _stream(tmp_path, [{"type": "fail", "nodeid": "tests/x/test_a.py::test_ok"}]), runner=lambda *a: 0, note=lambda s: None)
-    assert not fresh.exists()
