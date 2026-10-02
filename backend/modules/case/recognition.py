@@ -284,9 +284,18 @@ def material_entries(conn, basis, department_id=None):
     **現金口徑**——付出去的錢是事實，不因審核狀態排除（只標 `pending`）。每筆帶 `approval`（'' ＝ 舊單）。"""
     from modules.case import material_approval as _ma
     from modules.case import material_payment as _mp
+    from modules.case import purchase_items as _pi
     states = _material_states(conn)
     pay_lines, pay_legacy = (_mp.lines_by_order(conn), _mp.legacy_by_order(conn)) if basis == "cash" else ({}, {})
     out = []
+    no_po = {}                                    # (案件, 叫料 itemId) ⇒ 該叫料是否「未申請採購單」（S4c；只加備註，不改金額）
+    _po_cache = {}
+
+    def po_rows_of(quote_no):
+        if quote_no not in _po_cache:
+            _po_cache[quote_no] = conn.execute(
+                "SELECT id, kind, status, lines_json, doc_code FROM case_extra_expenses WHERE quote_no=? AND kind='purchase_order'", (quote_no,)).fetchall()
+        return _po_cache[quote_no]
     for row in _case_rows(conn, department_id):
         try:
             cr = (json.loads(row["data_json"] or "{}") or {}).get("caseRecord") or {}
@@ -299,6 +308,10 @@ def material_entries(conn, basis, department_id=None):
             paid = (mo.get("paidDate") or "")[:10]
             st = states.get((row["quote_no"], str(mo.get("itemId"))), "")
             cs = _ma.cost_state(st)
+            prs = po_rows_of(row["quote_no"])
+            if _pi._link_check(mo, prs)[0]:
+                continue        # 32-S4c：連到有效採購單 ⇒ 金額由採購單負責（成本進品項實際成本／額外支出的採購單列），叫料只是已叫／已到追蹤——權責與現金都不重複計
+            no_po[(row["quote_no"], str(mo.get("itemId")))] = _pi.material_link_status(mo, prs, legacy=(st == ""))["state"] == "none"
             if basis != "cash" and cs == "excluded":
                 continue                                                           # 權責：草稿／已退回／已取消不計
             if basis == "cash":
@@ -332,6 +345,8 @@ def material_entries(conn, basis, department_id=None):
                         "desc": "叫料｜" + name, "amount": amt, "taxNote": "未拆稅",
                         "provisional": inv == "", "itemId": mo.get("itemId") or "", "invoiceDate": inv,
                         "approval": st, "pending": cs == "pending"})
+    for e in out:
+        e["noPo"] = bool(no_po.get((e["quoteNo"], str(e.get("itemId") or ""))))
     return out
 
 

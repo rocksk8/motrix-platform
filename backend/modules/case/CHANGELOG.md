@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-02 13:49（wip/t32-s4a-2e）：連到採購單的叫料不重複計金額＋「未申請採購單」備註（32-S4c）
+- `recognition.material_entries`（營運報表來源與總帳 E12／E12b 共用）：叫料列帶**有效 `poDocCode`**（同案件、待審核／簽核中／已核准的採購單，列序／品項對得上）⇒ **權責與現金都略過其金額**——那筆採購的金額由採購單負責（品項實際成本／額外支出），一筆採購只算一次；連結失效（採購單作廢／駁回）⇒ 叫料金額自動回來。每筆叫料來源列新增 `noPo`（`material_link_status` 為 none：沒有連結或連結失效）；舊單與 $0 不標。沒有連結資料的歷史叫料金額與以前相同。
+
 ## (next) — 2026-10-02 11:44（wip/t32-s4a-2e）：叫料連結送審檢查接縫與唯讀端點（32-S4b）
 - 新增接縫函式 `purchase_items.material_submit_check`（叫料送審時驗：報價品項存在、`poDocCode` 有效、累計上限與超出原因〔裁示 Q2：超出必填〕，回 `snapshot` 供寫進 `approval_json`）與 `material_detail_fields`（核准詳情追加「採購單連結」「超出計畫」）；31-C 的守門／送審路徑由 d7 接線（`MG.LINK_VALIDATOR`）。
 - 新增唯讀端點（案件可見，金額只給有財務檢視者）：`GET /api/quotations/{案件}/material-po-lines`（「從採購單帶入」清單：待審核／簽核中／已核准採購單中尚未被有效連結的叫料用掉的明細列）、`GET /api/quotations/{案件}/material-orders/link-status`（每列叫料的連結判定：linked／none／exempt，含失效註記）；`case_read_scope.json` 登記為 row_access。
