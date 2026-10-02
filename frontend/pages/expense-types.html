@@ -10,6 +10,7 @@
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/form-preview.js"></script>
   <script src="../js/expense-types-designer.js"></script>
+  <script src="../js/expense-type-refresh.js"></script>
   <script src="../js/expense-types.js"></script>
   <script src="../static/form-designer-model.js"></script>
   <script src="../static/form-designer.js"></script>
@@ -80,6 +81,34 @@
         <button class="btn btn-sm" type="button" data-testid="et-conflict-copy" @click="conflictCopy()">複製我的內容（JSON）</button>
         <button class="btn btn-sm btn-primary" type="button" data-testid="et-conflict-force" @click="conflictForce()">用我的覆蓋</button>
         <button class="btn btn-sm" type="button" data-testid="et-conflict-hold" @click="conflictHold()">先不處理</button>
+      </div>
+
+      <!-- D14／D15：出貨範本（只改畫面上的草稿；存草稿與發布仍由你按） -->
+      <div class="et-panel" data-testid="et-refresh" x-show="view==='edit' && !isNew && defBody && refreshList.length" x-cloak>
+        <div>出貨範本與目前內容有 <b data-testid="et-refresh-count" x-text="refreshList.length"></b> 項差異
+          <span class="et-sub">（可能是出貨範本更新，也可能是你自己改過的地方）</span>
+          <button class="btn btn-sm" type="button" data-testid="et-refresh-toggle" @click="refreshOpen = !refreshOpen" x-text="refreshOpen ? '收起' : '逐項比較'"></button>
+        </div>
+        <div x-show="refreshOpen" style="margin-top:8px">
+          <div class="et-sub">「採用出貨的」只改這個畫面上的草稿，要按「儲存草稿」才寫入、按「發布」才生效；「保留我的」只是這次不再列出。已開出的單據固定使用開單當時的版本。</div>
+          <table class="data-table" style="width:100%;margin-top:6px">
+            <thead><tr><th>類別</th><th>項目</th><th>我的</th><th>出貨範本</th><th></th></tr></thead>
+            <tbody>
+              <template x-for="(it, ri) in refreshList" :key="it.id">
+                <tr :data-testid="'et-rf-row-' + ri">
+                  <td x-text="it.group"></td>
+                  <td x-text="it.label"></td>
+                  <td><code x-text="rfPreview(it.mine)"></code></td>
+                  <td><code x-text="rfPreview(it.def)"></code></td>
+                  <td style="white-space:nowrap">
+                    <button class="btn btn-sm btn-primary" type="button" :data-testid="'et-rf-adopt-' + ri" @click="rfAdopt(it)">採用出貨的</button>
+                    <button class="btn btn-sm" type="button" :data-testid="'et-rf-keep-' + ri" @click="rfKeep(it)">保留我的</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- 清單 -->
@@ -271,6 +300,7 @@
               <button class="btn" data-testid="et-validate" @click="validate()">驗證</button>
               <button class="btn" data-testid="et-preview-btn" @click="showPreview()">預覽表單</button>
               <button class="btn" data-testid="et-save" :disabled="busy" @click="saveDraft()">儲存草稿</button>
+              <button class="btn" data-testid="et-copy-default" x-show="!isNew && defBody" :disabled="busy" @click="copyDefault()" title="用出貨範本取代目前內容並存成草稿（不自動發布）">複製出貨範本到草稿</button>
               <button class="btn" data-testid="et-changes" x-show="!isNew && meta && meta.latest && hasDraft" @click="showChanges()">與已發布版的差異</button>
               <button class="btn btn-danger" data-testid="et-discard" x-show="!isNew && hasDraft" @click="discardDraft()">丟棄草稿</button>
             </div>
