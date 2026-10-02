@@ -16,7 +16,8 @@ function remitKindsPage() {
       try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
       return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
     },
-    async _call(method, url, payload) {
+    async _call(m, url, payload) {
+      var method = typeof m === 'string' ? m : m.method        // 會寫的呼叫一律寫成 this._call({ method: 'PUT' }, …)（頁面寫入動作守門 AC1 靠字面辨認）
       var r = await fetch(url, { method: method, headers: this._hdr(), body: payload === undefined ? undefined : JSON.stringify(payload) })
       var d = await r.json().catch(function () { return null })
       return { ok: r.ok, status: r.status, data: d }
@@ -81,7 +82,7 @@ function remitKindsPage() {
     },
     async validate() {
       this.err = ''; this.msg = ''
-      var r = await this._call('POST', BASE + '/validate', { body: this.body })
+      var r = await this._call({ method: 'POST' }, BASE + '/validate', { body: this.body })
       if (!r.ok) { this._fail(r, '驗證失敗'); return false }
       this.problems = ((r.data || {}).problems || []).map(function (p) { return typeof p === 'string' ? { path: '', message: p } : p })
       this.msg = this.problems.length ? '' : '驗證通過'
@@ -91,7 +92,7 @@ function remitKindsPage() {
       if (this.busy) return
       this.err = ''; this.msg = ''; this.busy = true
       try {
-        var r = await this._call('PUT', BASE + '/draft', { body: this.body })
+        var r = await this._call({ method: 'PUT' }, BASE + '/draft', { body: this.body })
         if (!r.ok) { this._fail(r, '儲存失敗'); return }
         var probs = ((r.data || {}).problems || []).map(function (p) { return typeof p === 'string' ? { path: '', message: p } : p })
         await this.reload()
@@ -103,9 +104,9 @@ function remitKindsPage() {
       if (this.busy) return
       this.err = ''; this.msg = ''; this.busy = true
       try {
-        var s = await this._call('PUT', BASE + '/draft', { body: this.body })
+        var s = await this._call({ method: 'PUT' }, BASE + '/draft', { body: this.body })
         if (!s.ok) { this._fail(s, '儲存失敗'); return }
-        var r = await this._call('POST', BASE + '/publish', { note: this.note })
+        var r = await this._call({ method: 'POST' }, BASE + '/publish', { note: this.note })
         if (!r.ok) { this._fail(r, '發布失敗'); return }
         this.note = ''
         await this.reload()
@@ -116,7 +117,7 @@ function remitKindsPage() {
       if (this.busy || !this.hasDraft) return
       this.busy = true
       try {
-        var r = await this._call('DELETE', BASE + '/draft')
+        var r = await this._call({ method: 'DELETE' }, BASE + '/draft')
         if (!r.ok) { this._fail(r, '丟棄草稿失敗'); return }
         await this.reload()
         this.msg = '草稿已丟棄，回到目前生效的版本'
@@ -133,7 +134,7 @@ function remitKindsPage() {
       if (this.busy) return
       this.busy = true; this.err = ''
       try {
-        var r = await this._call('POST', BASE + '/restore/' + v, { note: '還原第 ' + v + ' 版' })
+        var r = await this._call({ method: 'POST' }, BASE + '/restore/' + v, { note: '還原第 ' + v + ' 版' })
         if (!r.ok) { this._fail(r, '還原失敗'); return }
         await this.reload()
         this.msg = '已把第 ' + v + ' 版還原為第 ' + r.data.version + ' 版'
