@@ -82,5 +82,5 @@ def test_pay_modal_requires_payslip_link_then_marks_both_paid(live_server, make_
     for _ in range(100):
         if _state()[0] == 1:
             break
-        time.sleep(0.1)
+        page.wait_for_timeout(100)
     assert _state() == (1, "已付款"), "匯款成功時勞報單要一併記為已付款"

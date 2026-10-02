@@ -188,7 +188,7 @@ def test_all_gates_passed_confirm_closes_the_case(live_server, make_user, e2e_br
     for _ in range(100):
         if _deal_tag() == "已結案":
             break
-        time.sleep(0.1)
+        page.wait_for_timeout(100)
     assert _deal_tag() == "已結案"
 
 

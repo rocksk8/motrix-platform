@@ -86,7 +86,7 @@ def test_receive_modal_blocks_empty_actual_amount(live_server, make_user, e2e_br
     for _ in range(100):
         if _item().get("received"):
             break
-        time.sleep(0.1)
+        page.wait_for_timeout(100)
     it = _item()
     assert it["received"] is True
     assert it["actualAmount"] == 49800
