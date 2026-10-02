@@ -14,7 +14,7 @@ pytest.importorskip("playwright.sync_api")
 from tests._requires import requires_module  # noqa: E402
 from tests._e2e_login import inject_login  # noqa: E402
 
-pytestmark = requires_module("case", "本檔讀寫 M01（案件）的資料與頁面")
+pytestmark = [pytest.mark.e2e, requires_module("case", "本檔讀寫 M01（案件）的資料與頁面")]
 
 NO = "MQ-M1UI-1"
 PANEL = "#fin-material-orders"
