@@ -1517,6 +1517,7 @@ window.CM_PARTS.push(() => ({
         // 「尚無材料申請項目」，接著才跳成「載入中…」。全套測試偶發的紅燈就是它
         // （test_e2e_material_orders_2026_09_11.py，約 1/5 機率）。
         this.materialOrders = []
+        this.moApprovals = {}; this.moPay = {}        // 31-C：審核摘要與匯款額度也是案件層級（沒重置會把前一件的狀態帶進這一件；c7 預審）
         this.moDirty = false
         this.moMsg = ''
         this.moLoading = true

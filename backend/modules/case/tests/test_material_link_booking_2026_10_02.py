@@ -75,11 +75,27 @@ def test_linked_order_money_is_skipped_everywhere_and_counted_once_via_the_po(W)
 def test_cash_basis_also_skips_linked_orders(W):
     c, h = W
     po = _approved_po(c, h, [_ln("a", 3, unitCost=1000)])
-    _put_materials([_order("K", 3, 3000, quoteItemId="a", poDocCode=po["docCode"], paidStatus="paid", paidAmount=3000, paidDate=TODAY),
+    _put_materials([_order("K", 3, 3000, quoteItemId="a", poDocCode=po["docCode"]),                       # 連結、沒付款紀錄 ⇒ 金額由採購單負責
                     _order("N", 2, 800, paidStatus="paid", paidAmount=800, paidDate=TODAY)], {"K": "已核准", "N": "已核准"})
     cash = _mat("cash")
     assert [(e["itemId"], e["amount"]) for e in cash] == [("N", 800.0)]
     assert [e["source_key"] for e in _gl() if e["event_code"] == "E12b"] == ["%s::N" % NO]
+
+
+def test_order_with_paid_history_is_never_treated_as_po_linked_so_paid_money_stays_in_cash(W):
+    """c7 預審：舊單有已付歷史（3000，2026-08-01），之後才連到有效採購單 ⇒ 不視為連結，已付的錢仍在現金口徑（不消失）。"""
+    c, h = W
+    po = _approved_po(c, h, [_ln("a", 3, unitCost=1000)])
+    _put_materials([_order("K", 3, 3000, quoteItemId="a", poDocCode=po["docCode"], poLine=1, paidStatus="paid", paidAmount=3000, paidDate="2026-08-01")], {})
+    assert [(e["itemId"], e["amount"]) for e in _mat("cash")] == [("K", 3000.0)]
+    from modules.case import purchase_items as PI
+    cn = db.get_db()
+    try:
+        rows = cn.execute("SELECT id, kind, status, lines_json, doc_code FROM case_extra_expenses WHERE quote_no=?", (NO,)).fetchall()
+        assert PI._link_check(_order("K", 3, 3000, poDocCode=po["docCode"], paidStatus="paid", paidAmount=3000, paidDate="2026-08-01"), rows) == (False, "has_payment")
+        assert PI._link_check(_order("K", 3, 3000, poDocCode=po["docCode"]), rows)[0] is True              # 沒付款紀錄才算連結
+    finally:
+        cn.close()
 
 
 def test_link_that_becomes_invalid_brings_the_order_amount_back(W):
@@ -112,5 +128,5 @@ def test_operating_report_marks_unlinked_material_and_amounts_are_unchanged(W):
     month = date.today().strftime("%Y-%m")
     r = c.get("/api/reports/expenses-monthly", params={"year": date.today().year, "month": month, "basis": "accrual"}, headers=h)
     assert r.status_code == 200, r.text
-    mat = [x for x in r.json()["expenses"]["details"]["material"] if x.get("quoteNo") == NO and "叫料" in x["desc"]]
+    mat = [x for x in r.json()["expenses"]["details"]["material"] if x.get("quoteNo") == NO and "材料申請" in x["desc"]]
     assert len(mat) == 1 and mat[0]["amount"] == 800 and "｜未申請採購單" in mat[0]["taxNote"] and mat[0]["noPo"] is True

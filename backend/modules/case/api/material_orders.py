@@ -130,7 +130,10 @@ def update_material_orders(quote_no: str,
             raise HTTPException(400, "已結案案件無法修改材料申請")
 
         # 5. 驗證叫料邏輯
+        prior_link = {str(o.get("itemId")): str(o.get("poDocCode") or "") for o in ((data.get("caseRecord") or {}).get("materialOrders") or []) if isinstance(o, dict)}
         for mo in body.materialOrders:
+            if (mo.poDocCode or "").strip() and (mo.paidAmount > 0 or mo.paidStatus != "pending") and prior_link.get(str(mo.itemId), "") != mo.poDocCode.strip():
+                raise HTTPException(400, f"「{mo.itemName}」已有付款紀錄，不可再對應採購單（付款已記在這筆材料申請上，再對應會重複計算）")
             if mo.quantity < 0 or mo.unitPrice < 0 or mo.totalPrice < 0:
                 raise HTTPException(400, f"數量、單價、小計不能為負 ({mo.itemName})")
 

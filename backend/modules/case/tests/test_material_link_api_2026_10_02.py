@@ -180,3 +180,22 @@ def test_po_line_claim_is_per_line_and_only_valid_claims_count(W):
     cn.commit()
     cn.close()
     assert _codes(_check(dict(other_line, poLine=1))) == []
+
+
+def test_queue_tags_reads_the_case_once_per_queue_call_when_given_a_cache(W, monkeypatch):
+    """c7 預審：簽核佇列／紅點是熱路徑，queue_tags 同案件的多筆待審只查一次（傳入快取）；不傳快取＝逐筆查（舊行為）。"""
+    calls = []
+    real = PI._case_state
+    monkeypatch.setattr(PI, "_case_state", lambda conn, qn: (calls.append(qn), real(conn, qn))[1])
+    cn = db.get_db()
+    try:
+        cache = {}
+        for _ in range(3):
+            assert PI.queue_tags(cn, NO, {"itemId": "m", "totalPrice": 100}, cache)[0]["tone"] == "warn"
+        assert calls == [NO]
+        calls.clear()
+        for _ in range(2):
+            PI.queue_tags(cn, NO, {"itemId": "m", "totalPrice": 100})
+        assert calls == [NO, NO]
+    finally:
+        cn.close()

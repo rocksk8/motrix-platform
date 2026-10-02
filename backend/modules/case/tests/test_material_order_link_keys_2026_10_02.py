@@ -57,3 +57,19 @@ def test_queue_items_carry_an_empty_tags_list_by_default_and_providers_can_set_i
     f = {"requestedBy": "u", "requestedByDisplay": "U", "requestedAt": "2026-10-02", "tiers": [], "currentTier": 1, "tierCount": 1, "currentApprovers": []}
     assert base_item("x", "N1", f)["tags"] == []
     assert base_item("x", "N1", f, tags=[{"text": "該材料申請未申請採購單", "tone": "warn"}])["tags"][0]["tone"] == "warn"
+
+
+def test_adding_a_po_link_to_an_order_that_already_has_payments_is_rejected_but_resaving_an_existing_link_is_not(W):
+    c, h = W
+    paid = _order("P1", paidStatus="paid", paidAmount=200, paidDate="2026-08-01")
+    assert _patch(c, h, [paid]).status_code == 200 and "P1" in _saved()
+    r = _patch(c, h, [dict(paid, poDocCode="PO-X")])                                   # 已有付款紀錄 ⇒ 不可新增採購單連結
+    assert r.status_code == 400 and "已有付款紀錄" in r.text
+    assert "poDocCode" not in _saved()["P1"]
+    cn = db.get_db()                                                                    # 既有連結（先連、後付款）原樣存回不受影響
+    d = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+    d["caseRecord"]["materialOrders"][0]["poDocCode"] = "PO-X"
+    cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+    cn.commit()
+    cn.close()
+    assert _patch(c, h, [dict(paid, poDocCode="PO-X")]).status_code == 200

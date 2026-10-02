@@ -314,6 +314,7 @@ def queue_items(conn) -> list:
     """待簽核的叫料單（待審核／簽核中）。新單據類型自帶 `typeLabel／openUrl／approveUrl／rejectUrl／rejectField`（A2-0 #2），佇列頁不必改。
     佇列上的「單號」＝叫料單號（`doc_code`，全域唯一）；詳情也以它查。"""
     out = []
+    tag_cache = {}
     rows = conn.execute("SELECT a.*, q.customer_name, q.project_name, q.data_json FROM case_material_approvals a"
                         " LEFT JOIN quotations q ON q.quote_no = a.quote_no WHERE a.status IN ('待審核','簽核中') ORDER BY a.rowid DESC").fetchall()
     for r in rows:
@@ -336,7 +337,7 @@ def queue_items(conn) -> list:
             "quoteDate": (f["requestedAt"] or "")[:10], "salesPerson": "", "requestedBy": f["requestedBy"],
             "requestedByDisplay": f["requestedByDisplay"], "requestedAt": f["requestedAt"], "isEditApproval": False, "reasons": [],
             "tiers": f["tiers"], "currentTier": f["currentTier"], "tierCount": f["tierCount"], "currentApprovers": f["currentApprovers"],
-            "tags": _PI.queue_tags(conn, r["quote_no"], order),            # 32-S4d：「該材料申請未申請採購單」小標註（L1 tags[]）
+            "tags": _PI.queue_tags(conn, r["quote_no"], order, tag_cache),            # 32-S4d：「該材料申請未申請採購單」小標註（L1 tags[]）
             "linkedQuoteNo": r["quote_no"], "openUrl": "case-management.html?q=%s" % r["quote_no"],
             "approveUrl": base + "/approve", "rejectUrl": base + "/reject", "rejectField": "reason",
         })

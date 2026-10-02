@@ -13,6 +13,7 @@ window.CM_PARTS.push(() => ({
     mlMsg: '',
     // 清單頁籤：approved＝已核准＋舊單＋尚未送審的草稿（預設）／review／returned／cancelled／all
     mlTab: 'approved',
+    _mlReq: 0,            // mlOpen 的請求代號（只有最新一次、且仍是同一案件的回應才落地）
     _mlTabOfRow: {},      // 上一次載入時各列所在的頁籤：列的狀態變了（送審、核准、撤回…）就讓目前頁籤跟著它走，不然操作完那一列會憑空消失
     mlTick: 0,            // 讓 Alpine 在清單重載後重新計算（比照 moBusy 類計數器）
 
@@ -21,6 +22,7 @@ window.CM_PARTS.push(() => ({
       if (phase !== 'early') return
       this.mlStatus = {}; this.mlItems = []; this.mlPoLines = []; this.mlPanel = ''; this.mlPick = {}
       this.mlLoadingList = false; this.mlMsg = ''; this.mlTab = 'approved'; this._mlTabOfRow = {}; this.mlTick = 0
+      this._mlReq = 0                                               // 切換前還在路上的 mlOpen 回應：代號對不上（且案件不同）⇒ 丟掉
     },
 
     _mlHeaders() { return { Authorization: 'Bearer ' + this.session.token } },
@@ -45,17 +47,24 @@ window.CM_PARTS.push(() => ({
       this.mlMsg = ''
       this.mlLoadingList = true
       const base = this._mlBase()
+      const quoteNo = this.selected?.quote_no
+      const token = this._mlReq = this._mlReq + 1       // 只有最新一次開啟的回應算數；切換案件後晚到的回應也丟掉（c7 預審）
+      const live = () => this._mlReq === token && this.selected?.quote_no === quoteNo
       try {
         if (kind === 'quote') {
           const r = await fetch(base + '/purchase-items', { headers: this._mlHeaders() })
-          if (r.ok) this.mlItems = (await r.json()).items || []
+          const d = r.ok ? await r.json() : null
+          if (!live()) return
+          if (d) this.mlItems = d.items || []
           else this.mlMsg = '無法讀取報價單品項'
         } else {
           const r = await fetch(base + '/material-po-lines', { headers: this._mlHeaders() })
-          if (r.ok) this.mlPoLines = (await r.json()).lines || []
+          const d = r.ok ? await r.json() : null
+          if (!live()) return
+          if (d) this.mlPoLines = d.lines || []
           else this.mlMsg = '無法讀取採購單明細'
         }
-      } catch { this.mlMsg = '讀取失敗，請稍後再試' }
+      } catch { if (!live()) return; this.mlMsg = '讀取失敗，請稍後再試' }
       this.mlLoadingList = false
     },
 
