@@ -13,6 +13,12 @@
 ## 1.101 — 2026-10-01（wip/t31-payslip-mask-a3：勞報單 PDF 帳號遮蔽）
 - L0（新增選填參數，向下相容）：`pdf_gen.generate_payslip_pdf_bytes(slip_no, mask_bank=True)`——預設 fail closed：收款帳號 ⇒ `****末四碼`、不帶存簿影本；只有最高管理者下載、或匯出存檔（F2 法定紀錄）才傳 `False`。
 
+## (next:minor) — 2026-10-02 00:07（wip/t31-prefill-sources-2e）：表單自動帶入來源登記處
+- L1（新增）：`helpers/prefill_sources`（`PREFILL_SOURCES`／`list_sources`／`get`／`default_token`／`check_field`／`make_ctx`／`resolve_field`／`fill_defaults`）——預設值 token（`{"$": …}`）的唯一登記處，定義驗證與伺服器取值共用：`requester`／`currentUser`／`requesterDept`／`requesterManager`／`today`／`now`／`company`／`caseCustomer`／`caseProject`／`lastUsed`；每個來源有 label／why／example（文字只在這裡改）、`applies_to`、`lockable`、`needs_context`；resolve 永不丟例外、解析不到＝留白；只在建立當下解析一次，更新（給 `prior`）不重算、locked 欄保留舊值。
+- L1（行為）：`helpers.custom_modules` 的 token 驗證改走登記處（ref 欄位的 token 原本沒檢查，現在檢查；案件類 token 在沒有案件脈絡的自訂單據被擋）；`_validate_fields` 加選填 `mount_has_case`、`_validate_token` 加選填 `mount_has_case`、`_with_default_tokens` 加選填 `ctx`／`prior`（相容擴充，舊呼叫不變）；`DEFAULT_TOKENS` 由登記處衍生。
+- L1（端點，不入快照）：`GET /api/platform/prefill-sources`（登入即可）回登記處清單，表單設計器的下拉只讀這支。
+- 公式 `days_between(起, 迄)`：**只認 `YYYY-MM-DD`**（Python 3.11 的 `date.fromisoformat` 也收 `20261001`、3.10 不收 ⇒ 行為隨直譯器版本變；現在一律拒絕並回公式錯誤）；補上天數規則文件（迄 − 起、不含起算日、同日 0、反向為負、只看前 10 碼）與邊界測試。
+
 ## 1.100 — 2026-10-01（fix/upload-path-guard：自訂單據附件的實體刪除只准在 uploads 之內，稽核探針 Q4）
 - L1（行為）：`helpers.custom_files._remove_physical`／`helpers.custom_module_delete.delete_module` 刪實體檔前先過路徑守門（`custom_files._safe_physical_path`：絕對路徑、`..`、`..\`、磁碟機代號／UNC、NTFS 資料流、符號連結／接合點穿出 uploads ⇒ 略過並記 log，不刪、不丟例外）。介面不變。
 

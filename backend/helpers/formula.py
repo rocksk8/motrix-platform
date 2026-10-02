@@ -7,6 +7,8 @@
 - 四則運算 `+ - * /`、取餘數 `%`；比較 `== != < <= > >=`；`and`／`or`／`not`
 - 函式：`if(條件, 是, 否)`、`round(x[, 位數])`、`round_half_up(x[, 位數])`、`min(…)`、`max(…)`、`sum(…)`、`abs(x)`、
   `coalesce(a, b, …)`（第一個不是空值的）、`days_between(起, 迄)`（日期字串 YYYY-MM-DD）
+  **天數規則**：`迄 − 起`，**不含起算日**——同一天＝0、隔天＝1、迄早於起＝負數；只取字串前 10 碼（帶時間的 `2026-10-01T23:59` 也只看日期）；
+  任一邊空白 ⇒ 空值；格式錯（`2026-02-30`、`昨天`）⇒ 公式錯誤。要「含頭含尾」（例：請假 10/1～10/3 算 3 天）寫 `days_between(起, 迄) + 1`。
 - 明細表（W1 建構器第三輪，2026-09-30）：`total(表, "欄")` 加總、`avg(表, "欄")` 平均、`count(表)` 列數。
   第一個參數是明細表欄位的 key（不加引號），第二個是該表某個數值欄的 key（字串）；空值不算 0：
   沒有任何數字 ⇒ `total` 回 0、`avg` 回空值；`count` 是列數（含空白列）。
@@ -21,11 +23,13 @@
 `coalesce(qty, 0)` 才把它當 0。除以 0 ⇒ 空值並回報，不丟到呼叫端。
 """
 import ast
+import re
 from datetime import date
 from decimal import Decimal
 
 from helpers.legal_params import round_half_up
 
+_ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MAX_LENGTH = 500
 MAX_DEPTH = 30
 FUNCTIONS = ("if", "round", "round_half_up", "min", "max", "sum", "abs", "coalesce", "days_between",
@@ -290,6 +294,9 @@ def evaluate(expr, values: dict):
                 return next((a for a in args if a is not None and a != ""), None)
             if name == "days_between":
                 try:
+                    # 只認 YYYY-MM-DD：`date.fromisoformat` 在 Python 3.11 起也收 `20261001`（3.10 不收）⇒ 先擋，行為不隨直譯器版本變
+                    if any(a and not _ISO_DAY.match(str(a)[:10]) for a in args):
+                        raise ValueError(args)
                     d1, d2 = (date.fromisoformat(str(a)[:10]) if a else None for a in args)
                 except ValueError:
                     raise FormulaError("days_between 需要日期（YYYY-MM-DD）", _pos(expr, node))
