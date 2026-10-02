@@ -91,3 +91,8 @@
 - 2e S4d：wip/t32-s4a-2e@8581d3a8（前端 case-management-mlink.js、佇列 tags[] L1 加法、用字已照材料申請）；S4e（e2e 連續流程＋截圖）待窗口。d7 的 31-C 字串與旗標提示（_moFlagBlockReason）由 d7 改；case-management.html 卡片 div 一行重疊點需協調。
 - 2e S4e：wip/t32-s4a-2e@316bb108（e2e 連續流程 17s、4 突變全殺、6 截圖；佇列 tags 提供者一行）；規格 wip/t32-material-link-spec-2e@323c351b。S4 全部完成，待 d7 seam（LINK_VALIDATOR／SUBSTANTIVE_KEYS）與改字後整合。
 - d7：wip/t32-wording-d7@1f43a895（材料申請改字27檔＋掃描守門；case 1.0.75/accounting 1.1.51/analytics 1.0.26）；wip/t32-sleep-fix-d7@d3a3dc1a（負向斷言＋H1–H4 修正，5檔A/B各5輪全綠，c7 審查取用）。
+
+## 班次範圍裁示 2026-10-02（使用者）
+- **第32班**：照現有規劃（材料申請連結／改字／尚未送審、S-1、申請人說明、睡眠修正、d7 修正項、設計器收尾）。
+- **第33班只做**：①匯款款別（31-B）②新表單設計器（預設開關、K-2 並行戳等）③建包優化（step 3、author_gate）④已發布的請購單類型範本（公司已發布 purchase_req v1–v4 的副本如何更新到新說明／新範本）。
+- **財務其餘全部停止不做**：固定資產 C6、401 媒體檔與公式、總帳開帳（a3 的 wip/w4-gl-c6-realign-a3 保留不丟，不再推進）。
