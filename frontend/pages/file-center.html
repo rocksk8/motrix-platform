@@ -13,6 +13,7 @@
   <!--
     檔案中心（附件目錄 P3，L2 模組 filehub）：全系統上傳檔案的分類搜尋。
     - 資料：GET /api/filehub/search（各模組 attachments.catalog 提供者已套原單據的讀取規則；結果沒有路徑；看不到的不列、不回個數）
+    - 「開啟檔案」＝同一條開檔路徑在新分頁開啟（圖片／PDF；失敗明說）；「前往原單據」＝舊的跳轉。
     - 開檔：GET /api/attachments/open?type&doc&file（L1，提供者驗權）⇒ 共用預覽元件 MotrixFilePreview（◀ ▶ 在目前這一頁結果內切換）
     - 條件寫進網址（?q=&types=&exts=&date_from=&…），可分享；網址不含任何憑證
     - 預設只查近 90 天（畫面標出、可改）；模組不在／提供者失敗 ⇒ 顯示 unavailable，不可以跟「沒有檔案」長一樣
@@ -62,6 +63,7 @@
       </div>
 
       <div class="fc-warn" id="fc-error" x-show="err" x-text="err"></div>
+      <div class="fc-warn" id="fc-open-msg" data-fc-open-msg x-show="openMsg" x-text="openMsg"></div>
       <template x-for="u in unavailable" :key="u.category + u.reason">
         <div class="fc-warn" data-fc-unavailable x-text="u.reason"></div>
       </template>
@@ -113,7 +115,10 @@
                   <td x-text="it.uploadedBy"></td>
                   <td x-text="(it.uploadedAt || '').slice(0, 10)"></td>
                   <td x-text="size(it.size)"></td>
-                  <td><a :href="it.link" @click.stop x-show="it.link" data-fc-origin>開啟原單據</a></td>
+                  <td style="white-space:nowrap">
+                    <button class="btn btn-primary btn-sm" data-fc-open @click.stop="openFile(i)">開啟檔案</button>
+                    <a :href="it.link" @click.stop x-show="it.link" data-fc-origin style="font-size:11.5px;margin-left:6px">前往原單據</a>
+                  </td>
                 </tr>
               </template>
             </tbody>
@@ -135,7 +140,7 @@
       const EMPTY = () => ({ q: '', types: [], exts: [], date_from: '', date_to: '', uploader: '', quote_no: '', doc_no: '', customer: '' })
       return {
         _initDone: false,
-        f: EMPTY(), items: [], categories: [], unavailable: [], facets: {}, page: 1, hasMore: false, loading: false, loaded: false, err: '',
+        f: EMPTY(), items: [], categories: [], unavailable: [], facets: {}, page: 1, hasMore: false, loading: false, loaded: false, err: '', openMsg: '',
         defaultRange: false, _seq: 0,
         _hdr() {
           let s = {}
@@ -194,6 +199,23 @@
         totalCount() { return Object.values((this.facets && this.facets.byType) || {}).reduce((a, b) => a + b, 0) },
         label(t) { const c = this.categories.find(x => x.type === t); return c ? c.label : t },
         size(n) { return window.MotrixFilePreview ? window.MotrixFilePreview.fileSize(n) : String(n || '') },
+        // 「開啟檔案」：圖片／PDF 直接在新分頁開檔（Authorization 標頭取檔 ⇒ blob，與預覽共用 L1 attachments/open 的驗權，不另開取檔路徑）；
+        // 其他類型走預覽窗（可下載）。取不到（已刪除／無權限）⇒ 明確訊息，不留空白分頁。
+        async openFile(i) {
+          const P = window.MotrixFilePreview
+          const it = this.items[i]
+          this.openMsg = ''
+          if (!P || !it) return
+          const m = P.withMime(it)
+          const k = P.kind(m)
+          if (k !== 'image' && k !== 'pdf') { this.preview(i); return }
+          try { await P.openInNewTab(m, P.byAttachmentRef) }
+          catch (e) {
+            const msg = String((e && e.message) || '')
+            this.openMsg = /HTTP (403|404)/.test(msg) ? '無法開啟「' + it.filename + '」：檔案已被刪除，或你沒有開啟這個檔案的權限。'
+              : '無法開啟「' + it.filename + '」，請稍後再試（' + msg + '）。'
+          }
+        },
         preview(i) {
           const P = window.MotrixFilePreview
           if (!P || !this.items[i]) return

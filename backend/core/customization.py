@@ -129,7 +129,8 @@ def endpoint_parts(spec):
 def validate_manifest(manifest) -> list:
     """`module.json` 的 `customization` ⇒ 問題清單（空＝合格）。沒有 `customization` 鍵 ⇒ 空清單
     （載入器不擋；「每個模組都要登記」由 G2 守門在 repo 層擋，不在客戶現場擋啟動）。"""
-    out = []
+    from core import mounts as _mounts          # 掛載點宣告（方案 B）：與 customization 各自獨立，但同一次驗證、同一個「loader 拒載」出口
+    out = list(_mounts.validate_mount_points(manifest))
     if not isinstance(manifest, dict) or "customization" not in manifest:
         return out
     c = manifest["customization"]

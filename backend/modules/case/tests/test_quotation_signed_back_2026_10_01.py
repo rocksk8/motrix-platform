@@ -277,3 +277,16 @@ def test_file_center_follows_case_visibility_and_forgets_deleted_files(client, w
     assert client.delete("/api/quotations/%s/signed-files/%s" % (Q, f["id"]), headers=world["sb_admin"]).status_code == 200
     assert search("sb_owner").json()["items"] == []                                    # 刪除後立刻消失
     assert client.get("/api/attachments/open", headers=world["sb_admin"], params={"type": "quotation_signed", "doc": Q, "file": f["id"]}).status_code == 404
+
+
+def test_r3_uploader_identity_is_the_username_not_the_display_name(client, world):
+    """稽核 R-3：刪除規則比對的是帳號（uploaderUsername），顯示名可以重複或被改——兩個人顯示名相同也不能互刪；上傳者改名後仍能刪自己的。"""
+    _x("UPDATE users SET display_name='王小明' WHERE username IN ('sb_owner','sb_collab')")           # 兩個不同帳號、同一個顯示名
+    f = _up(client, world["sb_owner"], name="r3.png").json()["files"][0]
+    assert f["uploadedBy"] == "王小明" and f["uploaderUsername"] == "sb_owner"
+    url = "/api/quotations/%s/signed-files/%s" % (Q, f["id"])
+    assert client.delete(url, headers=world["sb_collab"]).status_code == 403                        # 顯示名相同但不是上傳者 ⇒ 擋
+    assert len(_files()) == 1
+    _x("UPDATE users SET display_name='王大明' WHERE username='sb_owner'")                           # 上傳者之後改名
+    assert client.delete(url, headers=world["sb_owner"]).status_code == 200                         # 顯示名變了仍認得（比對帳號）
+    assert _files() == []

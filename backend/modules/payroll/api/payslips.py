@@ -16,6 +16,7 @@ from helpers import _require_user, _tok, _audit, _get_setting, notify_module_act
 from helpers.uploads import _check_upload_magic
 from helpers.errors import trace_id
 from core.txn import write_txn
+from modules.payroll import payslip_bank as _pb
 from core import registry
 
 router = APIRouter()
@@ -264,6 +265,12 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
         conn.close()
         raise
 
+    try:
+        _pb.resolve_on_write(conn, user, d, None, body.contractor_id, creating=True)
+    except ValueError as e:
+        conn.rollback()
+        conn.close()
+        raise HTTPException(400, str(e))
     slip_no = body.slip_no or d.get("slipNo") or _peek_next_slip_no(conn, month)
     if not _SLIP_NO_RE.match(slip_no):
         conn.close()
@@ -325,14 +332,15 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
 
 @router.get("/api/payslips/{slip_no}")
 def get_payslip(slip_no: str, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization, require_superadmin=True, module='payslip')
     conn = get_db()
     row = conn.execute("SELECT * FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
     conn.close()
     if not row:
         raise HTTPException(404, "找不到此勞報單")
     r = dict(row)
-    r["data"] = json.loads(r.pop("data_json") or "{}")
+    r["data"] = _pb.mask_data(user, json.loads(r.pop("data_json") or "{}"))      # F1：非最高管理者只看 ****末四碼
+    r["bankMasked"] = not _pb.can_see_full(user)
     return r
 
 
@@ -374,6 +382,10 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
                     raise HTTPException(409, f"本單建立時的法規參數版本「{ver}」已不存在；"
                                              "請勾選「依給付日重新套用規則」後再存檔")
         _apply_privacy_ack(d, old, user, conn)
+        try:
+            _pb.resolve_on_write(conn, user, d, old, body.contractor_id, creating=False)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
 
         gross       = int(d.get("grossAmount", 0))
         income_type = d.get("incomeType", "9A")
@@ -448,7 +460,7 @@ def record_export(slip_no: str, authorization: str = Header(None)):
     archived = False
     try:
         from pdf_gen import generate_payslip_pdf_bytes
-        pdf_bytes = generate_payslip_pdf_bytes(slip_no)
+        pdf_bytes = generate_payslip_pdf_bytes(slip_no, mask_bank=False)       # 存檔（F2 資料夾）是完整的法定紀錄；誰按匯出都一樣
         with open(_archive_path(slip_no, new_count), "wb") as f:
             f.write(pdf_bytes)
         archived = True
@@ -502,7 +514,7 @@ def record_archive_download(slip_no: str, orig_idx: int, authorization: str = He
 
 @router.get("/api/payslips/{slip_no}/archive/{idx}")
 def get_archive_pdf(slip_no: str, idx: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization, require_superadmin=True, module='payslip')
     # 先確認 DB 裡真的有這張勞報單，避免 slip_no 被拿來做路徑穿越讀取任意檔案
     # （_archive_path 本身也有格式檢查，這裡是第二層防禦：即使格式合法，也必須
     # 對應到真實存在的勞報單）。
@@ -515,14 +527,14 @@ def get_archive_pdf(slip_no: str, idx: int, authorization: str = Header(None)):
         path = _archive_path(slip_no, idx)
     except ValueError:
         raise HTTPException(400, "勞報單號碼格式錯誤")
-    if os.path.exists(path):
+    if os.path.exists(path) and _pb.can_see_full(user):
         with open(path, "rb") as f:
             pdf_bytes = f.read()
     else:
-        # 無存檔（舊記錄）→ 以當前資料重新產生
+        # 無存檔（舊記錄）→ 以當前資料重新產生；非最高管理者一律重新產生遮蔽版（存檔的那份帶完整帳號，只給最高管理者）
         from pdf_gen import generate_payslip_pdf_bytes
         try:
-            pdf_bytes = generate_payslip_pdf_bytes(slip_no)
+            pdf_bytes = generate_payslip_pdf_bytes(slip_no, mask_bank=not _pb.can_see_full(user))
         except ValueError as e:
             raise HTTPException(400, str(e))
         except Exception as e:
@@ -538,10 +550,10 @@ def get_archive_pdf(slip_no: str, idx: int, authorization: str = Header(None)):
 
 @router.get("/api/payslips/{slip_no}/pdf-download")
 def pdf_download(slip_no: str, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization, require_superadmin=True, module='payslip')
     from pdf_gen import generate_payslip_pdf_bytes
     try:
-        pdf_bytes = generate_payslip_pdf_bytes(slip_no)
+        pdf_bytes = generate_payslip_pdf_bytes(slip_no, mask_bank=not _pb.can_see_full(user))      # F1：非最高管理者 ****末四碼、不帶存簿影本
     except ValueError as e:
         raise HTTPException(400, str(e))
     except HTTPException:          # 第二道 428（COMPANY-SETUP-GATE §5）不可以被下面的 except Exception 吞成 500

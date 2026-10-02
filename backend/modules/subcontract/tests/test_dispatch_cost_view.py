@@ -15,7 +15,7 @@ from core import registry
 QNO = "MQ-202609-C15"
 SECRET_NAMES = ("王小明", "陳大華")
 ALLOWED = {"id", "quoteNo", "vendorName", "scope", "invoiceNo", "dispatchDate", "invoiceDate", "payableDate", "amount", "totalWithTax",
-           "personnelTotal", "personnelCount", "items"}
+           "personnelTotal", "personnelCount", "items", "approvalPending"}
 
 
 def _login(client, make_user, name, role="user", modules=None):

@@ -269,6 +269,12 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
     conn = get_db()
     try:
         if kind == "custom_module" and scope == "company":
+            # 方案 B：掛載點頁籤數上限（要連線，所以不在 validate_module 裡）——發布／送審之前擋下
+            from helpers import custom_modules as _cm
+            _dr = D.get(conn, kind, key, scope, 0)
+            _cap = _cm.mount_cap_problems(conn, key, (_dr or {}).get("body") or {}) if _dr else []
+            if _cap:
+                return JSONResponse({"detail": "這個掛載點的頁籤數已達上限", "problems": _cap}, status_code=422)
             # S4：審核開啟且有簽核層 ⇒ 送審（回 pending）；否則與過去一樣直接發布
             from helpers import custom_def_review as _defr
             try:

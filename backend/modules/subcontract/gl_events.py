@@ -33,7 +33,7 @@ def gl_events(start, end, *, changed_since=""):
         disp = conn.execute(
             "SELECT d.*, v.name AS vendor_name, v.tax_id AS vendor_tax_id FROM contractor_dispatches d "
             "LEFT JOIN vendor_contractors v ON v.id=d.vendor_id "
-            "WHERE d.status IN ('accepted','completed') AND d.invoice_date IS NOT NULL AND d.invoice_date<>'' "
+            "WHERE d.status IN ('accepted','completed') AND d.approval_status IN ('','已核准') AND d.invoice_date IS NOT NULL AND d.invoice_date<>'' "
             "AND d.invoice_date BETWEEN ? AND ? ORDER BY d.id", (start, end)).fetchall()
         vouchers = conn.execute(
             "SELECT * FROM contractor_payment_vouchers WHERE is_paid=1 AND substr(paid_at,1,10) BETWEEN ? AND ? ORDER BY voucher_no",

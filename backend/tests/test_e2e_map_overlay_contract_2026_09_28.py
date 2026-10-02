@@ -93,6 +93,41 @@ def _strip_internals(page):
                   " d._markerByKey = undefined }")
 
 
+def _wait_popup(page, pop, refocus, *, tries=3, each_ms=10000):
+    """等 focus 開出來的彈窗（終點狀態）。🔴 focus 發生在 onBasemapReady 裡，緊接著 fitTo／群聚重畫會讓 Leaflet 把剛開的彈窗關掉
+    ——地圖忙（xdist 負載）時，那一次的 focus 可能落在重畫之前而被蓋掉，單次等 10 秒就逾時（建包 e2e 偶發）。
+    所以：等不到就再 focus 一次（同一個呼叫、同一個 id），最多 tries 次；每次都等到彈窗「可見」才算。斷言內容不放寬。"""
+    from playwright.sync_api import TimeoutError as PWTimeout
+    for i in range(tries):
+        try:
+            pop.wait_for(state="visible", timeout=each_ms)
+            return
+        except PWTimeout:
+            if i == tries - 1:
+                raise AssertionError("focus 之後彈窗沒有出現（已重點 %d 次、每次等 %d 秒）" % (tries - 1, each_ms // 1000))
+            refocus()
+
+
+@pytest.mark.e2e
+def test_wait_popup_reverse_controls(new_context):
+    """反向控制：彈窗晚到（第二次 focus 才出現）要等得到；一直不出現要丟斷言失敗、且不超過 tries 次重點。"""
+    page = new_context().new_page()
+    page.set_content("<div id='h'></div>")
+    calls = []
+
+    def late():
+        calls.append(1)
+        page.evaluate("() => { const d = document.createElement('div'); d.className = 'pop'; d.textContent = 'x'; document.body.appendChild(d) }")
+    _wait_popup(page, page.locator(".pop"), late, tries=3, each_ms=300)
+    assert calls == [1], "第一次沒等到 ⇒ 重點一次後出現"
+    calls.clear()
+    page2 = new_context().new_page()
+    page2.set_content("<div></div>")
+    with pytest.raises(AssertionError, match="彈窗沒有出現"):
+        _wait_popup(page2, page2.locator(".never"), lambda: calls.append(1), tries=3, each_ms=200)
+    assert len(calls) == 2
+
+
 @pytest.mark.e2e
 def test_overlay_contract_on_leaflet(live_server, make_user, e2e_browser):
     _keys("")
@@ -104,7 +139,7 @@ def test_overlay_contract_on_leaflet(live_server, make_user, e2e_browser):
     assert page.evaluate("() => document.querySelectorAll('#mp-canvas .mp-ov-pin').length") < 500
     # ⑦ focus 開的彈窗：標題是文字、壞連結不成連結
     pop = page.locator(".leaflet-popup-content .mp-ov-pop")
-    pop.wait_for(state="visible", timeout=10000)
+    _wait_popup(page, pop, lambda: page.evaluate("() => window.__zz.api.focus(window.__zz.box.h, 'p3')"))
     assert '<img src=x onerror="window.__xss=1">點3' in pop.inner_text()
     hrefs = page.evaluate("() => [...document.querySelectorAll('.leaflet-popup-content a')].map(a => a.getAttribute('href'))")
     assert hrefs == ["/pages/map.html"]

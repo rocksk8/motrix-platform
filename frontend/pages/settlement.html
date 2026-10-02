@@ -921,7 +921,7 @@ function settlementPage() {
         const r = await fetch(`${API}/contractor-dispatches?quote_no=${encodeURIComponent(this.quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok) this.dispatches = (await r.json()).filter(d => d.status !== 'cancelled')
+        if (r.ok) this.dispatches = (await r.json()).filter(d => d.status !== 'cancelled' && !['草稿', '已退回'].includes(d.approvalStatus || ''))   // 31-A：與營運報表同一條規則（待審核計入）
       } catch {}
     },
 
