@@ -2,7 +2,7 @@
 """定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。
 
 [單位] plat:definitions    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] DefinitionConflict, DefinitionError, KINDS, decide_submitted, delete_draft, diff, get, kinds, kinds_meta, list_definitions, open_submission, publish,
+[公開介面] DefinitionConflict, DefinitionError, KINDS, decide_submitted, default_for, delete_draft, diff, get, kinds, kinds_meta, list_definitions, open_submission, publish,
     register_default, register_kind, register_validator, resolve, restore, save_decision, save_draft, submit_draft, validate, versions
 [不變式] 每個 (kind, key, scope) 最多一份草稿；已發布的版本不可改、不可刪；還原＝把舊版再發布成新的一版；發布前驗證不過就不發布
 [契約題] tests/test_definitions_store_2026_09_25.py
@@ -332,6 +332,13 @@ def _restore_locked(conn, kind, key, scope, version, note, user) -> dict:
     return out
 
 
+def default_for(kind, key):
+    """程式出貨的預設內容（v0）：`register_default` 登記的函式回的 body；沒有登記或該 key 沒有預設 ⇒ None。**不看資料庫**——
+    與 `resolve` 不同：公司已發布過也一樣回出貨預設（用於「公司版 vs 出貨預設」的比較）。"""
+    fn = _DEFAULTS.get(kind)
+    return fn(key) if fn else None
+
+
 def resolve(conn, kind, key, role=None) -> tuple:
     """套用順序：role:<角色> 最新發布 ＞ company 最新發布 ＞ 程式預設。回 `(body, 來源描述)`；都沒有 ⇒ (None, "none")。"""
     if role:
@@ -341,8 +348,7 @@ def resolve(conn, kind, key, role=None) -> tuple:
     r = get(conn, kind, key, "company")
     if r:
         return r["body"], "company v%d" % r["version"]
-    fn = _DEFAULTS.get(kind)
-    body = fn(key) if fn else None
+    body = default_for(kind, key)
     return (body, "default") if body is not None else (None, "none")
 
 
