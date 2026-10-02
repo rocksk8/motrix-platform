@@ -14,6 +14,8 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
+pytestmark = pytest.mark.e2e  # 用瀏覽器 ⇒ 必須帶 e2e marker（tests/platform/test_e2e_classification.py）
+
 ROOT = Path(__file__).resolve().parents[2]
 MODEL = ROOT / "frontend" / "static" / "form-designer-model.js"
 DEFS = ROOT / "backend" / "helpers" / "expense_type_defs"
