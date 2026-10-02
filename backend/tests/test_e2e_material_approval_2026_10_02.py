@@ -118,7 +118,7 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
             break
         page.wait_for_timeout(100)
     assert _approval_row() and _approval_row()["status"] == "草稿"
-    page.wait_for_function("() => !document.querySelector('#fin-material-orders [data-testid=mo-ap-status]')?.innerText.includes('尚未儲存')", timeout=15000)
+    page.wait_for_function("() => (document.querySelector('#fin-material-orders [data-testid=mo-ap-code]')?.innerText || '').startsWith('MO-')", timeout=15000)   # 畫面重新載入後才有單號
     row = _approval_row()
     assert row["status"] == "草稿" and row["doc_code"].startswith("MO-")
     code = row["doc_code"]
