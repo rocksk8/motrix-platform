@@ -35,12 +35,6 @@ ITEM_NAME_PH = "項目名稱（如：交換器）"
 
 
 
-@pytest.fixture(autouse=True)
-def _po_rule_off(monkeypatch):
-    """33-M1 後端強制採購單已上線；這個檔的畫面流程（手動新增列）等前端「從採購單帶入」改版時再改寫。規則本身的題在 test_material_po_required_2026_10_03.py。"""
-    from modules.case import material_approval as _MA
-    monkeypatch.setattr(_MA, "PO_REQUIRED", False)
-
 def _login(page, base_url, username, password):
     return inject_login(page, base_url, username, password)
 
@@ -138,7 +132,7 @@ def test_material_orders_panel_round_trip(live_server, make_user, e2e_browser):
     api_calls = []
     page.on("request", lambda r: api_calls.append(r.method + " " + r.url)
             if "/api/" in r.url else None)
-    _login(page, live_server, username, password)
+    sess = _login(page, live_server, username, password)
     _open_finance_tab(page, live_server, quote_no)
 
     # 空狀態：沒有項目時要看得到引導文字，不是一片空白
@@ -160,18 +154,24 @@ def test_material_orders_panel_round_trip(live_server, make_user, e2e_browser):
     assert len(case_list_calls) == 1, (
         f"init() 應該只跑一次，但案件清單 API 被呼叫了 {len(case_list_calls)} 次")
 
-    page.click(f'{MO_PANEL} button:has-text("＋ 新增項目")')
+    # 33-M1：新申請只能從已核准的採購單明細帶入（沒有「＋ 新增項目」）
+    assert page.locator(f'{MO_PANEL} button:has-text("＋ 新增項目")').count() == 0
+    from tests._material_po import approved_po
+    approved_po(page.context, live_server, {"Authorization": "Bearer " + sess["token"]}, quote_no, "24埠 PoE 交換器", 3, 12500, username)
+    page.click('[data-testid="ml-open-po"]')
+    page.locator('[data-testid^="ml-p-"]').first.wait_for(state="visible", timeout=15000)
+    page.locator('[data-testid^="ml-p-"] input').first.check()
+    page.click('[data-testid="ml-import"]')
     try:
-        page.fill(f'{MO_PANEL} input[placeholder="{ITEM_NAME_PH}"]', "24埠 PoE 交換器")
+        page.wait_for_selector(f'{MO_PANEL} input[placeholder="{ITEM_NAME_PH}"]', timeout=10000)
     except Exception as exc:                      # noqa: BLE001 — 只為了補上下文
         raise AssertionError(
-            "按了「新增項目」卻等不到輸入框。案件清單 API "
+            "從採購單帶入後等不到輸入框。案件清單 API "
             + str(len(case_list_calls)) + " 次、叫料 API " + str(len(mo_calls))
             + " 次；面板內容："
             + page.locator(MO_PANEL).inner_text()) from exc
-    page.fill(f'{MO_PANEL} input[placeholder="數量"]', "3")
-    page.fill(f'{MO_PANEL} input[placeholder="單位"]', "台")
-    page.fill(f'{MO_PANEL} input[placeholder="單價"]', "12500")
+    assert page.input_value(f'{MO_PANEL} input[placeholder="{ITEM_NAME_PH}"]') == "24埠 PoE 交換器"
+    assert page.input_value(f'{MO_PANEL} input[placeholder="數量"]') == "3"
     # 31-C：新增叫料必須選供應商（選單來自 GET /api/material-suppliers）
     page.wait_for_function("() => document.querySelectorAll('#fin-material-orders [data-testid=mo-supplier] option').length >= 2", timeout=15000)
     page.select_option(f'{MO_PANEL} [data-testid="mo-supplier"]', label="S-001 甲供應商")
@@ -196,7 +196,7 @@ def test_material_orders_panel_round_trip(live_server, make_user, e2e_browser):
     # 落地檢查：不只看畫面，直接回頭查 data_json
     saved = _read_material_orders(quote_no)
     assert len(saved) == 1, f"data_json 裡應該有 1 筆材料申請，實際 {len(saved)}"
-    assert saved[0]["itemName"] == "24埠 PoE 交換器"
+    assert saved[0]["itemName"] == "24埠 PoE 交換器" and saved[0]["poDocCode"] and saved[0]["poLine"] == 1
     assert saved[0]["quantity"] == 3
     assert saved[0]["unitPrice"] == 12500
     assert saved[0]["totalPrice"] == 37500
