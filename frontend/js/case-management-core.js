@@ -94,7 +94,9 @@ window.CM_PARTS.push(() => ({
     async init() {
       // 2026-09-24：離頁警告（sidebar.js）跟著主表單的 dirty 走：setDirty() 設 true，
       // 存檔成功（dirty 轉 false）時清掉。
-      this.$watch('dirty', v => { window.motrixIsDirty = !!v })
+      window.motrixDirtyProbe = () => !!this.moDirty     // sidebar.js 的「任一請求成功就清離頁警告」不得清掉材料申請的未存列
+      this.$watch('dirty', v => { window.motrixIsDirty = !!v || !!this.moDirty })
+      this.$watch('moDirty', v => { window.motrixIsDirty = !!v || !!this.dirty })   // 材料申請有未儲存的新增／修改：離頁（beforeunload）與站內切換都提示
       this.$watch('activeTab', v => this.ensureTabData(v))      // CM8：分頁延後載入
       this._initTabFromUrl()
       // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，
@@ -335,6 +337,7 @@ window.CM_PARTS.push(() => ({
       // 2026-09-24：有未存的變更時先存完再切換。原本這裡直接取消待存計時器、
       // 下面再 dirty=false ⇒ 打完字 1.5 秒內切換案件，剛打的內容就消失。
       clearTimeout(this._autoSaveTimer)
+      if (this.moDirty && this.selected && !(await MotrixUI.confirm('材料申請有尚未儲存的項目（顯示為「尚未送審」），切換案件會遺失。\n\n仍要切換嗎？', {danger: true}))) return
       if (this.dirty && this.selected) {
         while (this.saving) await new Promise(res => setTimeout(res, 50))
         if (this.dirty) await this.saveCaseRecord()

@@ -962,7 +962,8 @@ if (typeof module !== 'undefined' && module.exports) {
           var path = typeof url === 'string' ? url : ((url && url.url) || '')
           var isPresence = path.indexOf('/api/edit-presence') === 0
           if (!isPresence && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE')) {
-            window.motrixIsDirty = false
+            // 頁面可掛 window.motrixDirtyProbe：回傳 true ⇒ 該頁還有別的未存內容（例如案件頁的材料申請清單），不被其他請求的成功清掉
+            window.motrixIsDirty = !!(typeof window.motrixDirtyProbe === 'function' && window.motrixDirtyProbe())
           }
         }
         return resp
