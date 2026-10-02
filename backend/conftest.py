@@ -19,6 +19,16 @@ import importlib
 import os as _bk19_os
 import sys
 
+# 背景（無主控台）執行測試時，每個 git／python／powershell 子行程都會彈一個主控台視窗（本機是 Windows Terminal）。
+# 預設全部加 CREATE_NO_WINDOW＋SW_HIDE（tools/platform/nowindow.py；呼叫端自己指定 DETACHED／NEW_CONSOLE 的不動；
+# 要看視窗除錯 ⇒ MOTRIX_SHOW_WINDOWS=1）。xdist worker 各自載入 conftest，所以一處涵蓋。
+try:
+    sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1] / "tools" / "platform"))
+    import nowindow as _nowindow
+    _nowindow.install()
+except ImportError:                                                   # 部署包沒有 tools/platform：測試本來就不在包內
+    pass
+
 # 資料庫結構守門（modules.case.quotations._strict_db_guards）：產品預設只記 ERROR 照寫（不擋客戶存檔），
 # 測試一律嚴格——漏網之魚在題目裡就紅。子行程（_subproc 起的 pytest／伺服器）也會繼承。
 _bk19_os.environ.setdefault("MOTRIX_STRICT_DB_GUARDS", "1")
