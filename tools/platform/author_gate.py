@@ -73,7 +73,7 @@ def changed_page_tests(plans, changed):
     不含因 core／router／mod 相依而連帶選到的（那些在 d7 的實測會膨脹成六百多檔）。"""
     names = set()
     for f in changed:
-        if f.startswith("frontend/pages/") and f.endswith(".html"):
+        if f.endswith(".html") and "/pages/" in f:                       # 頁面在哪個目錄不重要（全域頁或模組自己的 pages/）：理由字串只認檔名
             names.add("page:pages/" + f.rsplit("/", 1)[-1])
         elif f.startswith("frontend/js/"):
             names.add("js:" + f.rsplit("/", 1)[-1])
