@@ -226,6 +226,12 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
                 out.append(merged)
                 continue
             if any(not _same(k, cand.get(k), old.get(k)) for k in _LINK_KEYS):
+                from modules.case import purchase_items as _PIg
+                new_po, old_po = str(cand.get("poDocCode") or "").strip(), str(old.get("poDocCode") or "").strip()
+                if new_po and new_po != old_po and _PIg.has_paid_history(old):          # 已有付款紀錄不可新增／改連採購單（與專屬端點同規則；link_validator 對既有連結存回放行）
+                    _rej(rejected, iid, "poDocCode", "bad_link", "這筆材料申請已有付款紀錄，不可對應採購單")
+                    out.append(merged)
+                    continue
                 lmsg = _link_problem(conn, quote_no, cand)
                 if lmsg:
                     _rej(rejected, iid, "poDocCode", "bad_link", lmsg)
