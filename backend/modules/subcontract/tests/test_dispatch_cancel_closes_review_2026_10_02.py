@@ -104,3 +104,20 @@ def test_audit_records_closed_stages_and_the_requester_is_notified(S):
         cn.close()
     assert det and det[-1].get("closedStages") == ["approval"]
     assert notif >= 1
+
+
+def test_residual_cancelled_rows_still_pending_from_before_the_fix_cannot_be_approved_or_listed(S):
+    """防線（深度防禦）：修正前取消、審核階段還掛著的列（歷史殘留）——不進佇列、/approve 與 /reject 回 409、紅點不計。"""
+    c, h = S
+    _tiers(["da_u1"])
+    did = _mk(status="cancelled", approval=F.PENDING)
+    cn = db.get_db()
+    cn.execute("UPDATE contractor_dispatches SET approval_json=? WHERE id=?",
+               (json.dumps({"requestedBy": "da_a", "requestedByDisplay": "a", "requestedAt": "2026-10-02T00:00:00", "currentTier": 0,
+                            "tiers": [{"approvers": [{"username": "da_u1", "displayName": "u1", "status": "pending"}]}]}), did))
+    cn.commit()
+    cn.close()
+    assert _queue_ids(c, h, "da_u1") == [] and _count(c, h, "da_u1") == 0
+    assert _post(c, h, "da_u1", did, "approve").status_code == 409
+    assert _post(c, h, "da_u1", did, "reject", {"reason": "x"}).status_code == 409
+    assert _row(did)["approval_status"] == F.PENDING                      # 沒有任何狀態被動到（只是不能再簽）
