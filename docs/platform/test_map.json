@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1042,
-  "unmapped": 12,
+  "tests": 1052,
+  "unmapped": 13,
   "kinds": {
-   "api": 563,
-   "e2e": 255,
-   "audit": 134,
-   "unit": 90
+   "api": 566,
+   "e2e": 256,
+   "audit": 135,
+   "unit": 95
   },
-  "routes": 745
+  "routes": 747
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -18,6 +18,7 @@
   "backend/tests/platform/test_deploy_dashboard_jobs.py",
   "backend/tests/platform/test_deploy_dashboard_scope_gate_2026_09_30.py",
   "backend/tests/platform/test_no_leaky_tempdirs.py",
+  "backend/tests/platform/test_no_swallowed_dict_keys_2026_10_03.py",
   "backend/tests/platform/test_stepfile_drill_2026_09_30.py",
   "backend/tests/test_approval_queue_extra_types_2026_09_30.py",
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py",
@@ -10125,6 +10126,37 @@
    "login_fixture": true,
    "module": "subcontract"
   },
+  "backend/modules/subcontract/tests/test_e2e_remit_kinds_settings_2026_10_02.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:subcontract/api/remit_kinds",
+    "page:pages/remit-kinds-settings.html",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/remit_kinds.py",
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/pages/remit-kinds-settings.html"
+    ],
+    "path": [
+     "frontend/pages/remit-kinds-settings.html"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "module": "subcontract"
+  },
   "backend/modules/subcontract/tests/test_e2e_report_recognition_2026_09_24.py": {
    "kind": "e2e",
    "units": [
@@ -10354,6 +10386,7 @@
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
+    "mod:subcontract/api/remit_kinds",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/shipping_notes",
     "mod:supply/api/suppliers",
@@ -10394,6 +10427,7 @@
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/subcontract/api/remit_kinds.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/modules/supply/api/shipping_notes.py",
      "backend/modules/supply/api/suppliers.py",
@@ -10519,6 +10553,77 @@
    "unresolved_api": [
     "/api/cashier/remit-reviews/contractor_voucher"
    ],
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_remit_kinds_2026_10_02.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/__init__",
+    "mod:subcontract/api/remit_kinds",
+    "mod:subcontract/remit_kinds",
+    "plat:__init__",
+    "plat:definitions",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/db.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/remit_kinds.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/remit_kinds.py",
+     "backend/routers/definitions.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_remit_kinds_migration_2026_10_02.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "plat:__init__",
+    "plat:migrations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/migrations.py",
+     "backend/db.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_remit_split_2026_10_02.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/subcontract/",
+    "helper:legal_params",
+    "mod:subcontract/__init__",
+    "mod:subcontract/remit_split"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/legal_params.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/remit_split.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
    "module": "subcontract"
   },
   "backend/modules/subcontract/tests/test_report_recognition_basis_2026_09_24.py": {
@@ -11962,6 +12067,23 @@
     ]
    }
   },
+  "backend/tests/platform/test_author_gate_2026_10_02.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/tests/platform/",
+    "dir:tools/platform/",
+    "file:backend/tests/test_money_round_half_up_2026_09_26.py",
+    "file:backend/tests/test_spec_coverage_2026_09_21.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/tests/platform/",
+     "backend/tests/test_money_round_half_up_2026_09_26.py",
+     "backend/tests/test_spec_coverage_2026_09_21.py",
+     "tools/platform/"
+    ]
+   }
+  },
   "backend/tests/platform/test_bonus_module_status_connector.py": {
    "kind": "api",
    "units": [
@@ -13323,6 +13445,7 @@
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
+    "mod:subcontract/api/remit_kinds",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/shipping_notes",
     "mod:supply/api/suppliers",
@@ -13363,6 +13486,7 @@
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/subcontract/api/remit_kinds.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/modules/supply/api/shipping_notes.py",
      "backend/modules/supply/api/suppliers.py",
@@ -13450,6 +13574,19 @@
      "docs/platform/UNIT-INDEX.md",
      "docs/platform/dep_graph.json",
      "docs/platform/test_map.json",
+     "tools/platform/"
+    ]
+   }
+  },
+  "backend/tests/platform/test_guard_patterns_2026_10_02.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/tests/",
+    "dir:tools/platform/"
+   ],
+   "evidence": {
+    "path": [
+     "backend/tests/",
      "tools/platform/"
     ]
    }
@@ -14334,6 +14471,7 @@
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
+    "mod:subcontract/api/remit_kinds",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/shipping_notes",
     "mod:supply/api/suppliers",
@@ -14385,6 +14523,7 @@
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/subcontract/api/remit_kinds.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/modules/supply/api/shipping_notes.py",
      "backend/modules/supply/api/suppliers.py",
@@ -14650,6 +14789,11 @@
     ]
    }
   },
+  "backend/tests/platform/test_no_swallowed_dict_keys_2026_10_03.py": {
+   "kind": "unit",
+   "units": [],
+   "evidence": {}
+  },
   "backend/tests/platform/test_no_temp_files_in_shared_tests_dir_2026_09_30.py": {
    "kind": "audit",
    "units": [
@@ -14659,6 +14803,17 @@
     "path": [
      "backend/tests/platform/test_no_temp_files_in_shared_tests_dir_2026_09_30.py",
      "backend/tests/test_exception_detail_leak_2026_09_23.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_nowindow_2026_10_02.py": {
+   "kind": "unit",
+   "units": [
+    "dir:tools/platform/"
+   ],
+   "evidence": {
+    "path": [
+     "tools/platform/"
     ]
    }
   },
@@ -15316,6 +15471,37 @@
      "tools/platform/",
      "tools/platform/modtest.py",
      "tools/platform/ship_tier.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_stage_select_2026_10_02.py": {
+   "kind": "audit",
+   "units": [
+    "dir:tools/platform/",
+    "file:backend/conftest.py",
+    "file:backend/tests/platform/test_modtest_scope.py",
+    "file:backend/tests/test_e2e_playwright_2026_09_07.py",
+    "file:backend/tools/build_test_reuse.py",
+    "file:docs/platform/dep_graph.json",
+    "file:docs/platform/test_map.json",
+    "file:tools/platform/bottom_layer.json",
+    "file:tools/platform/modtest.py",
+    "file:tools/platform/scope_gate.py",
+    "file:tools/platform/stage_select.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/conftest.py",
+     "backend/tests/platform/test_modtest_scope.py",
+     "backend/tests/test_e2e_playwright_2026_09_07.py",
+     "backend/tools/build_test_reuse.py",
+     "docs/platform/dep_graph.json",
+     "docs/platform/test_map.json",
+     "tools/platform/",
+     "tools/platform/bottom_layer.json",
+     "tools/platform/modtest.py",
+     "tools/platform/scope_gate.py",
+     "tools/platform/stage_select.py"
     ]
    }
   },
@@ -16385,6 +16571,7 @@
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
+    "mod:subcontract/api/remit_kinds",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/shipping_notes",
     "mod:supply/api/suppliers",
@@ -16429,6 +16616,7 @@
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/subcontract/api/remit_kinds.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/modules/supply/api/shipping_notes.py",
      "backend/modules/supply/api/suppliers.py",
@@ -18807,6 +18995,24 @@
      "backend/core/__init__.py",
      "backend/core/definitions.py",
      "backend/core/migrations.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_definitions_diff_default_2026_10_02.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:expense_types",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/expense_types.py"
     ],
     "api": [
      "backend/routers/definitions.py"
@@ -24290,6 +24496,7 @@
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
+    "mod:subcontract/api/remit_kinds",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/shipping_notes",
     "mod:supply/api/suppliers",
@@ -24337,6 +24544,7 @@
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/subcontract/api/remit_kinds.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/modules/supply/api/shipping_notes.py",
      "backend/modules/supply/api/suppliers.py",
@@ -25431,6 +25639,7 @@
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
+    "mod:subcontract/api/remit_kinds",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/inventory",
     "mod:supply/api/shipping_notes",
@@ -25505,6 +25714,7 @@
      "backend/modules/payroll/api/payslips.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/subcontract/api/remit_kinds.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/modules/supply/api/inventory.py",
      "backend/modules/supply/api/shipping_notes.py",

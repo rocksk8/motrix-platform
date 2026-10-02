@@ -1,11 +1,11 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-02（wip/t33-remit-s1-a3：31-B S1 匯款申請表重建與分期金額規則）
+## 1.1.8 — 2026-10-02（wip/t33-remit-s1-a3：31-B S1 匯款申請表重建與分期金額規則）
 - 遷移 `0005_remit_kinds_voucher_rebuild`（subcontract schema 4→5）——重建 `contractor_payment_vouchers`：拿掉 `dispatch_id` 單欄 UNIQUE（內嵌 UNIQUE 無法 DROP，故建新表→逐列比對搬資料→換名）、新增 `kind／kind_name／kinds_version／seq／ratio／pretax_amount／inv_no／inv_date／inv_files_json／void_reason／voided_at／voided_by`（全有預設值，舊列＝舊式整筆申請 `kind=''`）；唯一性改成部分唯一索引（`kind=''` 且未作廢：同派發最多一張，與舊行為一致；`kind<>''` 且未作廢：同派發同款別同期不重複）。冪等；搬資料前後不一致 ⇒ 丟例外、loader 撤回整支（舊表不動）；保留手工加過的欄位與 `sqlite_sequence`。現有匯款申請流程**行為不變**（新欄不被任何現有程式讀寫）。
 - 新增 `remit_split.py`（`plan()` 純函式）——分期金額規則：比例或固定金額；最後一期取剩餘額（補尾差）；稅額逐期算、最後一期補到與整筆稅額一致（各期稅額合計恆等於整筆稅額）、補差明列；超出剩餘額度／累計超過 100%／非整數元一律拒絕。尚未被任何流程呼叫（S2 接建立 API 與試算端點）。
 - 測試：`test_remit_kinds_migration_2026_10_02.py`（合成資料演練 9 題，含搬資料被竄改的反向控制）、`test_remit_split_2026_10_02.py`（25 題，含 500 組隨機排程的合計性質）。
 
-## (next) — 2026-10-02（wip/t33-remit-s0-a3：31-B S0 匯款款別設定）
+## 1.1.7 — 2026-10-02（wip/t33-remit-s0-a3：31-B S0 匯款款別設定）
 - 新增 `remit_kinds.py`：匯款款別放在定義文件庫（kind＝`remit_kinds`、key＝`default`、company scope）——草稿、驗證、發布、版本、差異、還原沿用 `core.definitions`；沒有發布版＝出貨預設（版本 0：訂金款／進度款／完工款／驗收款，預設派發狀態對應照使用者確認：訂金＝已確認～完工、進度＝已確認～已驗收、完工款與驗收款＝已驗收／完工）。驗證器：代碼（小寫英數底線、不重複）、名稱、active 布林、sort 整數、stages 必須是派發狀態且啟用中的款別至少一個、至少一個啟用中款別；**已發布過（或之後被匯款申請使用）的代碼不能移除，只能停用**。
 - 新增 API：`GET /api/remit-kinds`（管理員以上；啟用中的款別、可開立的派發狀態、生效版本，供開匯款申請的下拉）、`GET /api/remit-kinds/definition`（最高管理者；完整定義含停用）。設定走既有 `/api/definitions/remit_kinds/default/…`（最高管理者）。
 - 新增頁面 `remit-kinds-settings.html`（系統群組「匯款款別設定」，僅最高管理者）：款別表格（名稱、代碼、啟用、排序、可開立的派發狀態、備註）＋驗證／儲存草稿／發布／比較／丟棄草稿／版本還原。

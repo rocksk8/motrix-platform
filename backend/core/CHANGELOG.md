@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — wip/t33-diff-default-c7：定義 diff 的 `default` ＝出貨預設
+## 1.108 — wip/t33-diff-default-c7：定義 diff 的 `default` ＝出貨預設
 - L0（新增，向下相容）：`core.definitions.default_for(kind, key) -> body|None`——程式出貨的預設（v0），**不看資料庫**；`resolve` 內部改呼叫它（行為不變：role ＞ company ＞ default）。
 - L0（行為修正，路由）：`GET /api/definitions/{kind}/{key}/diff?a|b=default` 原本呼叫 `resolve`，公司發布過就回公司最新版（`default` 對 `latest` 恆為空、無法比較公司版 vs 出貨預設）；現在回出貨預設（沒有預設 ⇒ 空內容）。編輯頁的 `latest`／`draft`／版本號比較不受影響。
 - 測試：`tests/test_definitions_diff_default_2026_10_02.py`（6 題）、`test_definitions_store_2026_09_25.py::test_definitions_default_for_…`。L1 介面快照 `--update --pending`（新增 `plat:definitions::default_for`）。
