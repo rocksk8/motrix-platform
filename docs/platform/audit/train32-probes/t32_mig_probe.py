@@ -16,7 +16,7 @@ import tempfile
 
 PY = r"D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe"
 BASE = r"D:\開發測試檔\wt-prod-a5de\backend"
-CUR = sys.argv[1] if len(sys.argv) > 1 else r"D:\開發測試檔\wt-t32int\backend"
+CUR = sys.argv[1] if len(sys.argv) > 1 else r"D:\開發測試檔\wt-t32pkg\backend"
 tmp = os.path.join(tempfile.gettempdir(), "c7-t32-mig")
 os.makedirs(tmp, exist_ok=True)
 db = os.path.join(tmp, "base.db")
@@ -67,6 +67,16 @@ c.execute("INSERT INTO contractor_dispatches (quote_no, vendor_id, status, total
           ("MQ-A5-1", vid, "accepted", 3000, json.dumps([{"description": "x", "amount": 3000}]), "old", now, now, ""))
 c.execute("INSERT INTO contractor_dispatches (quote_no, vendor_id, status, total_amount, items_json, created_by, created_at, updated_at, approval_status, doc_code) VALUES (?,?,?,?,?,?,?,?,?,?)",
           ("MQ-A5-1", vid, "draft", 500, json.dumps([{"description": "y", "amount": 500}]), "new", now, now, "草稿", "DP-20261002-0001"))
+# 卡住列（0004 的對象）：舊單申請完工待審核、doc_code=''；另放未卡住的舊單與已完成舊單
+cols_cd = [r[1] for r in c.execute("PRAGMA table_info(contractor_dispatches)")]
+def _cd(status, comp, approval, code, req):
+    c.execute("INSERT INTO contractor_dispatches (quote_no, vendor_id, status, total_amount, items_json, created_by, created_at, updated_at, approval_status, doc_code, completion_status, completion_requested_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+              ("MQ-A5-1", vid, status, 700, "[]", "old", now, now, approval, code, comp, req))
+    return c.execute("SELECT last_insert_rowid()").fetchone()[0]
+stuck_id = _cd("accepted", "待審核", "", "", "2026-09-20T09:00:00")
+stuck2_id = _cd("accepted", "簽核中", "", "", "")
+plain_id = _cd("completed", "", "", "", "")
+c.commit()
 # 已發布的請款類型（公司版，內含舊 help 英文字串）＋一份草稿
 travel = json.loads(open(os.path.join(BASE, "helpers", "expense_type_defs", "travel.json"), encoding="utf-8").read())
 c.execute("INSERT INTO ui_definitions (kind, key, scope, version, status, body_json, created_by, created_at, published_by, published_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -75,6 +85,7 @@ c.execute("INSERT INTO ui_definitions (kind, key, scope, version, status, body_j
           ("expense_type", "travel", "company", 0, "draft", json.dumps(dict(travel, name="草稿名"), ensure_ascii=False), "sa", now))
 c.commit()
 before = digests(c)
+cd_before = {r[0]: dict(zip(cols_cd, r)) for r in c.execute("SELECT * FROM contractor_dispatches")}
 print("baseline tables:", len(before))
 c.close()
 
@@ -84,10 +95,13 @@ for i in (1, 2):
     print("upgrade", i, run(CUR, "import db; from core import loader; loader.load_all(); db.init_db(%r); print('init ok')" % db).strip())
     c = sqlite3.connect(db)
     after[i] = digests(c)
-    changed = [t for t in before if t in after[i] and before[t][1:] != after[i][t][1:]]
+    changed = [t for t in before if t in after[i] and before[t][1:] != after[i][t][1:] and t != "module_schema_versions"]
     newtabs = sorted(set(after[i]) - set(before))
     cols_changed = [t for t in before if t in after[i] and before[t][0] != after[i][t][0]]
     print(" changed pre-existing tables (rows):", changed, "| column set changed:", cols_changed, "| new tables:", newtabs)
+    cd_after = {r[0]: dict(zip(cols_cd, r)) for r in c.execute("SELECT * FROM contractor_dispatches")}
+    diffs = {k: sorted(f for f in cd_before[k] if cd_before[k][f] != cd_after[k][f]) for k in cd_before}
+    print(" dispatch rows with changed fields:", {k: v for k, v in diffs.items() if v}, "| stuck codes:", cd_after[stuck_id]["doc_code"], cd_after[stuck2_id]["doc_code"], "| plain code:", repr(cd_after[plain_id]["doc_code"]))
     pub = c.execute("SELECT body_json FROM ui_definitions WHERE kind='expense_type' AND key='travel' AND version=1").fetchone()[0]
     print(" published travel v1 byte-identical:", pub == json.dumps(travel, ensure_ascii=False))
     print(" integrity:", c.execute("PRAGMA integrity_check").fetchone()[0], "| fk violations:", len(c.execute("PRAGMA foreign_key_check").fetchall()))
