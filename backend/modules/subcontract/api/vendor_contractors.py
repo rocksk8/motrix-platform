@@ -1089,6 +1089,8 @@ def set_dispatch_invoice_date(did: int, body: dict = Body(...), authorization: s
         row = conn.execute("SELECT quote_no, invoice_date FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
         if not row:
             raise HTTPException(404, "派發紀錄不存在")
+        if inv and conn.execute("SELECT 1 FROM contractor_payment_vouchers WHERE dispatch_id=? AND kind<>'' AND voided_at=''", (did,)).fetchone():
+            raise HTTPException(409, "這張派發已改用分期匯款申請：發票請登在各期的匯款申請上（總帳逐張認列，派發層不再認列）")
         now = datetime.now().isoformat()
         # MONEY-FLOWS §9 L3：發票日進 E04 雜湊；已入帳的 E04 會在下次引擎執行時 drift（沖轉草稿＋新草稿）。
         # 下游效應：營運報表權責口徑立即換月；總帳要手動執行才反映。這裡只提示、不擋（註解：發票日刻意不擋）。

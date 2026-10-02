@@ -85,6 +85,9 @@ def kinded_context(conn, dispatch, kind_code, ratio_percent=None, amount=None):
     if legacy:
         raise RemitCreateError(409, "此派發已用整筆方式產生匯款申請（%s），不能再改用分期；請先處理該申請" % legacy[0])
     prev = previous_periods(conn, dispatch["id"])
+    if not prev and (dispatch["invoice_date"] if "invoice_date" in dispatch.keys() else ""):
+        # 派發層的發票日（整筆發票）已登錄：總帳 E04 以派發為單位認列；再開分期會變成派發層＋各期各認一次（成本翻倍）
+        raise RemitCreateError(409, "這張派發已登錄整筆發票日（%s），不能改開分期；請改用整筆匯款申請，或先清除派發的發票日期" % dispatch["invoice_date"])
     total, rounded = _whole_yuan(_dispatch_total(dispatch))
     rate = float(dispatch["tax_rate"]) if "tax_rate" in dispatch.keys() and dispatch["tax_rate"] is not None else 0.05
     if amount is not None:

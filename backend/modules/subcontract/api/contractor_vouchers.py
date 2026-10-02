@@ -23,6 +23,7 @@ from pydantic import BaseModel, model_validator
 from db import get_db, next_entity_code, spawn_bg_thread
 from core import registry
 from core.txn import begin_write, write_txn
+from helpers.dates import normalize_date
 from helpers.gl_status import gl_posted_warning
 from helpers import (
     _require_user, _tok, _audit, _notify, _get_setting, _set_setting, _purge_notifications,
@@ -177,6 +178,8 @@ def _voucher_public(row, include_snapshot: bool = True, viewer=None) -> dict:
         "seq":           d.get("seq") or 0,
         "ratio":         d.get("ratio"),
         "pretaxAmount":  d.get("pretax_amount"),
+        "invNo":         d.get("inv_no") or "",
+        "invDate":       d.get("inv_date") or "",
         "voidedAt":      d.get("voided_at") or "",
         "voidReason":    d.get("void_reason") or "",
         "payableDate":   snap.get("payableDate", ""),
@@ -498,6 +501,38 @@ def delete_contractor_voucher(voucher_no: str, authorization: str = Header(None)
     notify_module_activity("承攬商匯款申請", "刪除", user.get("display_name") or user["username"],
                             voucher_no, "case-management.html")
     return {"ok": True}
+
+
+@router.patch("/api/contractor-vouchers/{voucher_no}/invoice")
+def set_voucher_invoice(voucher_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """31-B S4：登錄分期申請自己的發票（號碼＋日期；''＝清除）。D11：發票可事後補——沒有發票日就不產生該期的應付認列分錄（E04）。
+    只給分期申請（舊式整筆的發票在派發上，走 `PATCH /api/contractor-dispatches/{id}/invoice-date`）；作廢的不能登。
+    不影響金額；已入帳的 E04 發票日被改 ⇒ 回提示（總帳下次執行時沖轉重開，不在這裡擋）。"""
+    user = _require_user(authorization)
+    _require_admin(user)
+    inv_no = str((body or {}).get("invNo") or "").strip()
+    if len(inv_no) > 40:
+        raise HTTPException(400, "發票號碼太長（上限 40 字）")
+    inv_date = normalize_date((body or {}).get("invDate"), "發票日期")
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT voucher_no, kind, voided_at, inv_no, inv_date FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+        if not row:
+            raise HTTPException(404, "申請不存在")
+        if not row["kind"]:
+            raise HTTPException(409, "舊式整筆申請的發票登在派發上（派發的「發票日期」），不在這裡登")
+        if row["voided_at"]:
+            raise HTTPException(409, "這張申請已作廢，不能登錄發票")
+        now = datetime.now().isoformat()
+        changed = (inv_no, inv_date) != (row["inv_no"] or "", row["inv_date"] or "")
+        gl_warn = gl_posted_warning(conn, "contractor_voucher_invoice", voucher_no) if changed else None
+        conn.execute("UPDATE contractor_payment_vouchers SET inv_no=?, inv_date=?, updated_at=? WHERE voucher_no=?", (inv_no, inv_date, now, voucher_no))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "contractor_voucher.invoice", "contractor_payment_voucher", voucher_no,
+           "%s 發票：%s %s → %s %s" % (voucher_no, row["inv_no"] or "（無號碼）", row["inv_date"] or "（未登錄）", inv_no or "（無號碼）", inv_date or "（未登錄）"))
+    return {"ok": True, "invNo": inv_no, "invDate": inv_date, "updated_at": now, **({"glWarning": gl_warn} if gl_warn else {})}
 
 
 class VoucherVoidIn(BaseModel):
