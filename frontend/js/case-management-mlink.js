@@ -13,6 +13,7 @@ window.CM_PARTS.push(() => ({
     mlMsg: '',
     // 清單頁籤：approved＝已核准＋舊單（預設）／review／draft／cancelled／all
     mlTab: 'approved',
+    _mlJustImported: false,   // 帶入後尚未儲存；儲存重載後切到「草稿與退回」，剛存的草稿才看得到
     mlTick: 0,            // 讓 Alpine 在清單重載後重新計算（比照 moBusy 類計數器）
 
     _mlHeaders() { return { Authorization: 'Bearer ' + this.session.token } },
@@ -25,6 +26,7 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders/link-status`, { headers: this._mlHeaders() })
         if (r.ok && this.selected?.quote_no === quoteNo) this.mlStatus = (await r.json()).statuses || {}
       } catch {}
+      if (this._mlJustImported && this.mlTab === 'approved' && !this.moDirty) { this.mlTab = 'draft'; this._mlJustImported = false }
       this.mlTick++
     },
 
@@ -90,6 +92,7 @@ window.CM_PARTS.push(() => ({
       this.mlPick = {}
       this.mlPanel = ''
       this.mlTab = 'approved'
+      this._mlJustImported = true
       this.mlMsg = `已帶入 ${n} 筆（草稿）：請選供應商後儲存，再送審`
     },
     _mlPush(o) {

@@ -371,6 +371,14 @@ def material_submit_check(conn, quote_no, order, *, exclude_item_id=None) -> dic
                          "overPlanReason": reason if over > 1e-9 else ""}}
 
 
+def queue_tags(conn, quote_no, order) -> list:
+    """簽核佇列卡片的小標註（L1 `tags[]`；接縫：材料申請的佇列提供者呼叫）⇒ 「未申請採購單」才有一個 warn 標註，其餘 []。
+    正在簽核的單一定有審核列（非舊單），所以 `legacy=False`；$0 仍免標。"""
+    _, rows = _case_state(conn, quote_no)
+    st = material_link_status(order, [r for r in rows if (r["kind"] or "") == ORD], legacy=False)
+    return [{"text": st["text"], "tone": "warn"}] if st["state"] == "none" else []
+
+
 def material_detail_fields(order, po_rows, *, snapshot=None, legacy=False) -> list:
     """核准詳情（`approval.detail` 的 `fields[]`）要追加的兩欄：「採購單連結」「超出計畫」（接縫：d7 的 material_approvals.detail 呼叫）。"""
     st = material_link_status(order, po_rows, legacy=legacy)

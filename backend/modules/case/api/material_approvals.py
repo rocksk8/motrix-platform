@@ -19,6 +19,7 @@ from core.txn import begin_write
 from db import get_db
 from helpers import _audit, _notify, _require_user, _tok, notify_org_chain_notice
 from helpers.approval_queue import approval_raw_of as _approval_raw_of, tier_fields as _queue_tier_fields
+from modules.case import purchase_items as _PI
 from helpers.case_access import require_case
 from helpers.financial_mask import money_visible
 from modules.case import material_approval as MA
@@ -335,6 +336,7 @@ def queue_items(conn) -> list:
             "quoteDate": (f["requestedAt"] or "")[:10], "salesPerson": "", "requestedBy": f["requestedBy"],
             "requestedByDisplay": f["requestedByDisplay"], "requestedAt": f["requestedAt"], "isEditApproval": False, "reasons": [],
             "tiers": f["tiers"], "currentTier": f["currentTier"], "tierCount": f["tierCount"], "currentApprovers": f["currentApprovers"],
+            "tags": _PI.queue_tags(conn, r["quote_no"], order),            # 32-S4d：「該材料申請未申請採購單」小標註（L1 tags[]）
             "linkedQuoteNo": r["quote_no"], "openUrl": "case-management.html?q=%s" % r["quote_no"],
             "approveUrl": base + "/approve", "rejectUrl": base + "/reject", "rejectField": "reason",
         })
