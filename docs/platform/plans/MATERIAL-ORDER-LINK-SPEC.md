@@ -147,3 +147,6 @@
 - S4a 判定與累計（`purchase_items.py`）、S4b 唯讀端點與送審檢查接縫、S4c 金額只算一次與報表／總帳備註、S4d 前端（`js/case-management-mlink.js`；存檔模型四個選填連結鍵；佇列 `tags[]`）、S4e 瀏覽器 e2e（一條連續流程＋截圖；突變四項皆被抓到）——皆完成。
 - 佇列標註：材料申請的佇列提供者 `material_approvals.queue_items` 帶 `tags`（來源 `purchase_items.queue_tags`）；L1 `tags[]` 只是畫面層，沒有權限語意。
 - 尚待 d7 接線（接縫）：`MG.LINK_VALIDATOR`、`SUBSTANTIVE_KEYS` 加 `quoteItemId／poDocCode／poLine`、送審路徑呼叫 `material_submit_check`、`approval.detail` 加 `material_detail_fields`、匯款與連結互斥。接上前 UI 不擋超計畫送審（只顯示原因欄並存檔）。
+
+## 第 33 班修訂（2026-10-02，使用者裁示）
+§6 的「保留彈性（不強制連結）＋標註」**由強制規則取代**：材料申請送審必須對應已核准的採購單；新增路徑改為「從採購單明細帶入」。詳見 `MATERIAL-FORCE-PO-AND-SHIPPING-SPEC.md`（強制規則、五金另料多採購單、出貨單連動）。第 32 班已實作的 S4a–e 在第 33 班上線前維持現狀。
