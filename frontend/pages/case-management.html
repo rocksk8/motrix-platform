@@ -2339,44 +2339,26 @@
                   <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
                     <span class="cm-section-title" style="margin-bottom:0">材料申請</span><span class="save-mode save-mode--manual" data-save-mode="manual" title="修改後按「儲存材料申請」；發票日期例外，改了就自動存">按儲存</span>
                     <span x-show="moLoading" style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">載入中…</span>
-                    <button x-show="moCanEdit()" @click="moAddItem()"
-                            style="font-size:11px;padding:4px 10px;background:var(--accent-light);color:var(--accent-hover);border:1px solid var(--tone-info-border);border-radius:6px;cursor:pointer;font-family:var(--font-zh);font-weight:500;white-space:nowrap">
-                      ＋ 新增項目
-                    </button>
+                    <span x-show="moCanEdit()" data-testid="mo-po-only-note" style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">新增材料申請：請從已核准的採購單明細帶入（需先申請請購單、再申請採購單）</span>
                   </div>
 
-                  <!-- 32-S4d：材料申請連結（case-management-mlink.js）。三種來源：報價單品項／採購單明細／手動（上方「＋ 新增項目」） -->
+                  <!-- 32-S4d／33-M1：材料申請連結（case-management-mlink.js）。新申請只能從「已核准的採購單明細」帶入（E1／E2）；沒有手動新增、沒有報價品項入口 -->
                   <div data-testid="ml-bar" style="margin-bottom:10px">
                     <div x-show="moCanEdit()" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-                      <button type="button" data-testid="ml-open-quote" @click="mlOpen('quote')" :style="mlPanel === 'quote' ? 'font-weight:700' : ''"
-                              style="font-size:11px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer;font-family:var(--font-zh)">從報價單品項帶入</button>
                       <button type="button" data-testid="ml-open-po" @click="mlOpen('po')" :style="mlPanel === 'po' ? 'font-weight:700' : ''"
                               style="font-size:11px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer;font-family:var(--font-zh)">從採購單明細帶入</button>
                       <span x-show="mlMsg" data-testid="ml-msg" x-text="mlMsg" style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)"></span>
                     </div>
                     <div x-show="mlPanel" x-cloak data-testid="ml-panel" style="border:1px solid var(--line);border-radius:6px;padding:9px;background:var(--surface);margin-bottom:8px;font-family:var(--font-zh);font-size:12px">
                       <div x-show="mlLoadingList" style="color:var(--text-dim)">載入中…</div>
-                      <template x-if="mlPanel === 'quote' && !mlLoadingList">
-                        <div>
-                          <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">已申請完成（剩餘 0）的品項不會列出；數量預設帶剩餘量。</div>
-                          <template x-for="i in mlQuoteChoices()" :key="i.itemId">
-                            <label style="display:flex;gap:8px;align-items:center;padding:3px 0;cursor:pointer" :data-testid="'ml-q-' + i.itemId">
-                              <input type="checkbox" style="width:auto" x-model="mlPick['q:' + i.itemId]">
-                              <span x-text="i.description" style="flex:1"></span>
-                              <span style="color:var(--text-dim)" x-text="'計畫 ' + i.planQty + '／剩餘 ' + i.left + (i.unit ? ' ' + i.unit : '')"></span>
-                            </label>
-                          </template>
-                          <div x-show="mlQuoteChoices().length === 0" style="color:var(--text-dim)">沒有可帶入的品項</div>
-                        </div>
-                      </template>
                       <template x-if="mlPanel === 'po' && !mlLoadingList">
                         <div>
-                          <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">只列待審核／簽核中／已核准的採購單明細，且尚未對應其他材料申請。</div>
+                          <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">只有「已核准」的採購單明細可以帶入；尚在審核中的列出但不能勾選（通過後再帶入）。已對應其他材料申請的不會列出。</div>
                           <template x-for="l in mlPoChoices()" :key="l.poDocCode + '#' + l.poLine">
-                            <label style="display:flex;gap:8px;align-items:center;padding:3px 0;cursor:pointer" :data-testid="'ml-p-' + l.poDocCode + '-' + l.poLine">
-                              <input type="checkbox" style="width:auto" x-model="mlPick['p:' + l.poDocCode + '#' + l.poLine]">
+                            <label style="display:flex;gap:8px;align-items:center;padding:3px 0" :style="mlPoApproved(l) ? 'cursor:pointer' : 'cursor:not-allowed;opacity:.55'" :data-testid="'ml-p-' + l.poDocCode + '-' + l.poLine">
+                              <input type="checkbox" style="width:auto" x-model="mlPick['p:' + l.poDocCode + '#' + l.poLine]" :disabled="!mlPoApproved(l)">
                               <span x-text="l.poDocCode + ' 第' + l.poLine + '列　' + l.summary" style="flex:1"></span>
-                              <span style="color:var(--text-dim)" x-text="l.qty + (l.unit ? ' ' + l.unit : '') + (l.vendor ? '｜' + l.vendor : '') + '｜' + l.status"></span>
+                              <span style="color:var(--text-dim)" x-text="l.qty + (l.unit ? ' ' + l.unit : '') + (l.vendor ? '｜' + l.vendor : '') + '｜' + l.status + (mlPoApproved(l) ? '' : '（採購單尚未通過）')"></span>
                             </label>
                           </template>
                           <div x-show="mlPoChoices().length === 0" style="color:var(--text-dim)">沒有可帶入的採購單明細</div>
@@ -2416,7 +2398,7 @@
 
                   <template x-if="!moLoading && materialOrders.length === 0">
                     <div style="text-align:center;padding:28px 20px;color:var(--text-dim);font-family:var(--font-zh);font-size:12px;border:1px dashed var(--border-light);border-radius:8px;background:var(--surface-muted)">
-                      <span x-show="moCanEdit()">尚無材料申請項目，按上方「＋ 新增項目」開始登記</span>
+                      <span x-show="moCanEdit()">尚無材料申請項目：請先申請請購單、再申請採購單，採購單通過後從上方「從採購單明細帶入」開始</span>
                       <span x-show="!moCanEdit()">尚無材料申請項目</span>
                     </div>
                   </template>
@@ -2429,11 +2411,11 @@
                         <input class="fi fi--sm" type="text" placeholder="項目名稱（如：交換器）" style="flex:1;min-width:130px"
                                x-model="m.itemName" :disabled="!moCanEdit() || moLocked(m)" @input="moDirty = true">
                         <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="數量" style="width:74px"
-                               x-model="m.quantity" :disabled="!moCanEdit() || moLocked(m)" @input="moRecalc(mi)">
+                               x-model="m.quantity" :disabled="!moCanEdit() || moLocked(m) || moPaidFull(m)" :title="moPaidFull(m) ? moPaidFullHint : ''" @input="moRecalc(mi)">
                         <input class="fi fi--sm" type="text" placeholder="單位" style="width:56px"
                                x-model="m.unit" :disabled="!moCanEdit() || moLocked(m)" @input="moDirty = true">
                         <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="單價" style="width:96px"
-                               x-model="m.unitPrice" :disabled="!moCanEdit() || moLocked(m)" @input="moRecalc(mi)">
+                               x-model="m.unitPrice" :disabled="!moCanEdit() || moLocked(m) || moPaidFull(m)" :title="moPaidFull(m) ? moPaidFullHint : ''" @input="moRecalc(mi)">
                         <select class="fi fi--sm" style="width:150px" x-model="m.supplierId" data-testid="mo-supplier"
                                 :disabled="!moCanEdit() || moLocked(m) || (m._saved !== false && moPayOf(m).payments.length > 0)" @change="moDirty = true">
                           <option value="">供應商…</option>
@@ -2471,6 +2453,8 @@
                         <span x-show="moAp(m).status === '已退回' && moAp(m).rejectReason" style="color:var(--tone-danger-fg)"
                               x-text="'退回原因：' + moAp(m).rejectReason"></span>
                         <span x-show="moLocked(m)" style="color:var(--text-dim)">（審核中不可修改內容；要改請先撤回）</span>
+                        <span x-show="moPaidFull(m)" data-testid="mo-paid-full-hint" style="color:var(--text-dim)" x-text="moPaidFullHint"></span>
+                        <span x-show="mlSubmitHint(m)" data-testid="mo-po-hint" style="color:var(--tone-warning-fg)" x-text="mlSubmitHint(m)"></span>
                         <button type="button" x-show="moShowSubmit(m)" @click="moSubmit(m)" :disabled="moBusy === m.itemId" data-testid="mo-submit"
                                 style="font-size:11px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">送審</button>
                         <button type="button" x-show="moShowWithdraw(m)" @click="moWithdraw(m)" :disabled="moBusy === m.itemId" data-testid="mo-withdraw"

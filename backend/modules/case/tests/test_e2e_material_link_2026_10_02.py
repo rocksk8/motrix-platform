@@ -1,7 +1,7 @@
-"""32-S4e 瀏覽器端對端（一個檔、一個瀏覽器、一題連續流程）：材料申請連結。
-從報價單品項帶入（已申請的先扣量、剩餘 0 的不列）→ 超出計畫量要填原因 → 儲存 ⇒ 標註「該材料申請未申請採購單」出現 →
-從採購單明細帶入另一筆 ⇒ 沒有標註、顯示對應的採購單 → 採購單作廢後重新載入 ⇒ 標註回來 → 送審 ⇒ 簽核人的佇列卡片帶同一個標註（tags）。
-終點以資料庫與頁面狀態為準；截圖存 logs/e2e-shots/wip-t32-s4a-2e。用字照 MATERIAL-REQUEST-WORDING.md（本檔不依賴既有 31-C 字串）。"""
+"""32-S4e／33-M1 瀏覽器端對端（一個檔、一個瀏覽器、一題連續流程）：材料申請只能從「已核准的採購單明細」帶入。
+入口：沒有「＋ 新增項目」、沒有「從報價單品項帶入」；審核中的採購單明細列出但不能勾（採購單尚未通過）→ 已核准的明細帶入 ⇒ 顯示對應的採購單、
+沒有標註、同一明細不會再被帶入 → 沒選供應商存檔被擋 → 選供應商存檔 → 採購單作廢後重新載入 ⇒ 標註「已失效」回來 → 送審被後端擋下（需先申請請購單、再申請採購單…）、
+狀態仍是草稿。舊單（已核准、沒有採購單連結）不受影響。終點以資料庫與頁面狀態為準；截圖存 logs/e2e-shots/wip-t32-s4a-2e。"""
 import json
 import os
 
@@ -24,12 +24,6 @@ Q = {"items": [
 ]}
 
 
-
-@pytest.fixture(autouse=True)
-def _po_rule_off(monkeypatch):
-    """33-M1 後端強制採購單已上線；這個檔的畫面流程（手動新增列）等前端「從採購單帶入」改版時再改寫。規則本身的題在 test_material_po_required_2026_10_03.py。"""
-    from modules.case import material_approval as _MA
-    monkeypatch.setattr(_MA, "PO_REQUIRED", False)
 
 def _shot(page, name):
     os.makedirs(SHOTS, exist_ok=True)
@@ -97,65 +91,58 @@ def test_material_request_link_flow_in_the_browser(live_server, make_user, e2e_b
     page.wait_for_function("() => document.querySelector('[data-testid=mo-card-K]') && !(document.querySelector('#fin-material-orders').innerText.includes('載入中'))", timeout=20000)
     page.wait_for_function("() => document.querySelector('[data-testid=ml-tab-approved]')", timeout=10000)
 
-    # ── 1 從報價單品項帶入：K 已申請 4 ⇒ 交換器剩 6；線材已申請完 ⇒ 不列 ──
-    page.click('[data-testid="ml-open-quote"]')
-    page.locator('[data-testid="ml-q-a"]').wait_for(state="visible", timeout=15000)
-    assert "剩餘 6" in page.locator('[data-testid="ml-q-a"]').inner_text()
-    assert page.locator('[data-testid="ml-q-b"]').count() == 0
-    _shot(page, "01-import-panel")
-    page.locator('[data-testid="ml-q-a"] input').check()
-    page.click('[data-testid="ml-import"]')
-    page.wait_for_function("() => document.querySelectorAll('#fin-material-orders [data-testid^=ml-row-]').length === 3", timeout=10000)
-    new_card = page.locator('[data-testid^="mo-card-"]').last
-    assert new_card.locator('input[placeholder="數量"]').input_value() == "6"
-    assert new_card.locator('[data-testid^="ml-badge-"]').inner_text() == NOPO                  # 沒連採購單 ⇒ 標註（未儲存也即時顯示）
+    # ── 0 沒有手動新增、沒有報價品項入口；空白提示指向採購單 ──
+    assert page.locator('[data-testid="ml-open-quote"]').count() == 0
+    assert page.locator(f'{PANEL} button:has-text("＋ 新增項目")').count() == 0
+    assert "已核准的採購單明細" in page.locator('[data-testid="mo-po-only-note"]').inner_text()
 
-    # ── 2 數量改成 8（超出剩餘 6）⇒ 超出原因欄出現；選供應商、填原因、儲存 ──
-    new_card.locator('input[placeholder="數量"]').fill("8")
-    new_card.locator('[data-testid^="ml-reason-"]').wait_for(state="visible", timeout=5000)
-    new_card.locator('[data-testid^="ml-reason-"]').fill("客戶追加兩台")
-    page.wait_for_function("() => document.querySelectorAll('#fin-material-orders [data-testid=mo-supplier] option').length >= 2", timeout=15000)
-    new_card.locator('[data-testid="mo-supplier"]').select_option(label="S-001 甲供應商")
-    _shot(page, "02-over-plan-reason")
-    page.locator(f'{PANEL} button[\\@click="moSave()"]').click()
-    _wait_db(page, lambda: len(_orders()) == 3, "三筆材料申請已存")
-    saved = [o for k, o in _orders().items() if k not in ("K", "Z")][0]
-    assert saved["quoteItemId"] == "a" and saved["overPlanReason"] == "客戶追加兩台" and "poDocCode" not in saved   # 連結鍵原樣存下；沒連採購單的不寫 poDocCode
-    new_id = saved["itemId"]
-    page.wait_for_function("(id) => { const b = document.querySelector('[data-testid=mo-card-' + id + '] [data-testid=mo-ap-status]'); return b && b.offsetParent !== null && b.innerText === '尚未送審' }", arg=new_id, timeout=15000)   # 預設分頁直接看到「尚未送審」
-    page.wait_for_function("(id) => { const b = document.querySelector('[data-testid=ml-badge-' + id + ']'); return b && b.offsetParent !== null && b.innerText.includes('未申請採購單') }", arg=new_id, timeout=15000)
-    assert "尚未送審" in page.locator('[data-testid="ml-tab-approved"]').inner_text()
-    _shot(page, "03-saved-badge")
-
-    # ── 3 採購單：用 API 開一張交換器採購單並送審（核准）⇒ 從採購單明細帶入 ──
+    # ── 1 採購單：A 已核准（送審即核准）、B 審核中（有簽核人、還沒簽） ──
     from modules.case.tests.test_purchase_item_lines_2026_10_02 import _body, _ln
     r = ctx.request.post(f"{live_server}/api/quotations/{NO}/extra-expenses", headers=H, data=_body("purchase_order", [_ln("a", 3, unitCost=1000, summary="交換器（採購單）")]))
     assert r.status == 201, r.text()
     eid, doc = r.json()["id"], r.json()["docCode"]
     assert ctx.request.post(f"{live_server}/api/quotations/{NO}/extra-expenses/{eid}/submit", headers=H).status == 200
+    _set_setting("unified_approval_flow", {"includeSubmitterManagerTier": False, "tiers": [{"order": 0, "approvers": [{"username": boss, "displayName": "主管"}]}]})
+    r = ctx.request.post(f"{live_server}/api/quotations/{NO}/extra-expenses", headers=H, data=_body("purchase_order", [_ln("a", 2, unitCost=1000, summary="交換器二號（採購單）")]))
+    assert r.status == 201, r.text()
+    eid2, doc2 = r.json()["id"], r.json()["docCode"]
+    rs = ctx.request.post(f"{live_server}/api/quotations/{NO}/extra-expenses/{eid2}/submit", headers=H)
+    assert rs.status == 200, rs.text()
+
     page.click('[data-testid="ml-open-po"]')
-    row = page.locator(f'[data-testid="ml-p-{doc}-1"]')
+    row, row2 = page.locator(f'[data-testid="ml-p-{doc}-1"]'), page.locator(f'[data-testid="ml-p-{doc2}-1"]')
     row.wait_for(state="visible", timeout=15000)
+    row2.wait_for(state="visible", timeout=15000)
+    assert row2.locator("input").is_disabled() and "採購單尚未通過" in row2.inner_text()          # 審核中：列出但不能勾
+    assert row.locator("input").is_enabled()
+    _shot(page, "01-po-panel")
     row.locator("input").check()
     page.click('[data-testid="ml-import"]')
-    page.wait_for_function("() => document.querySelectorAll('#fin-material-orders [data-testid^=ml-row-]').length === 4", timeout=10000)
+    page.wait_for_function("() => document.querySelectorAll('#fin-material-orders [data-testid^=ml-row-]').length === 3", timeout=10000)
     po_card = page.locator('[data-testid^="mo-card-"]').last
     assert po_card.locator('[data-testid^="ml-badge-"]').is_hidden()                                 # 連到採購單 ⇒ 沒有標註
+    assert po_card.locator('[data-testid="mo-po-hint"]').is_hidden()                                 # 有採購單 ⇒ 沒有送審前提示
+
+    # ── 2 沒選供應商存檔被擋；選了才存 ──
+    page.locator(f'{PANEL} button[\@click="moSave()"]').click()
+    page.wait_for_function("() => /供應商/.test(document.querySelector('#fin-material-orders').innerText)", timeout=10000)
+    assert not any(o.get("poDocCode") == doc for o in _orders().values())
+    page.wait_for_function("() => document.querySelectorAll('#fin-material-orders [data-testid=mo-supplier] option').length >= 2", timeout=15000)
     po_card.locator('[data-testid="mo-supplier"]').select_option(label="S-001 甲供應商")
-    page.locator(f'{PANEL} button[\\@click="moSave()"]').click()
+    page.locator(f'{PANEL} button[\@click="moSave()"]').click()
     _wait_db(page, lambda: any(o.get("poDocCode") == doc for o in _orders().values()), "採購單連結已存")
     po_id = [k for k, o in _orders().items() if o.get("poDocCode") == doc][0]
     page.wait_for_function("(id) => { const e = document.querySelector('[data-testid=ml-linked-' + id + ']'); return e && e.offsetParent !== null }", arg=po_id, timeout=15000)
     assert doc in page.locator(f'[data-testid="ml-linked-{po_id}"]').inner_text()
     assert page.locator(f'[data-testid="ml-badge-{po_id}"]').is_hidden()
-    _shot(page, "04-linked-no-badge")
+    _shot(page, "02-linked-no-badge")
     # 同一明細不能被第二筆材料申請再帶入
     page.click('[data-testid="ml-open-po"]')
     page.wait_for_function("() => !document.querySelector('[data-testid=ml-panel]').innerText.includes('載入中')", timeout=10000)
     assert page.locator(f'[data-testid="ml-p-{doc}-1"]').count() == 0
     page.click('[data-testid="ml-open-po"]')
 
-    # ── 4 採購單作廢 ⇒ 連結失效 ⇒ 重新載入後標註回來（錢不消失；後端 S4c 已驗） ──
+    # ── 3 採購單作廢 ⇒ 連結失效 ⇒ 重新載入後標註回來；送審被擋、仍是草稿 ──
     c = db.get_db()
     c.execute("UPDATE case_extra_expenses SET status='已作廢' WHERE id=?", (eid,))
     c.commit()
@@ -166,23 +153,13 @@ def test_material_request_link_flow_in_the_browser(live_server, make_user, e2e_b
     page.click('[data-testid="ml-tab-all"]')
     page.wait_for_function("(id) => { const b = document.querySelector('[data-testid=ml-badge-' + id + ']'); return b && b.offsetParent !== null }", arg=po_id, timeout=20000)
     assert "已失效" in page.locator(f'[data-testid="ml-badge-{po_id}"]').inner_text()
-    _shot(page, "05-link-went-stale")
-
-    # ── 5 送審新建的那筆 ⇒ 簽核人的佇列卡片帶同一個標註 ──
-    _set_setting("unified_approval_flow", {"includeSubmitterManagerTier": False, "tiers": [{"order": 0, "approvers": [{"username": boss, "displayName": "主管"}]}]})
-    page.click('[data-testid="ml-tab-approved"]')                                                    # 預設分頁（草稿＝尚未送審在這裡）；「全部」不跳轉
-    card = page.locator(f'[data-testid="mo-card-{new_id}"]')
+    _shot(page, "03-link-went-stale")
+    card = page.locator(f'[data-testid="mo-card-{po_id}"]')
     card.locator('[data-testid="mo-submit"]').click()
-    _wait_db(page, lambda: _status_of(new_id) == "待審核", "送審後待審核")
-    page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]')).mlTab === 'review'", timeout=10000)      # 狀態變了，頁籤跟著該列走（不讓剛送審的列憑空消失）
-    assert card.is_visible()
-    bpage = ctx.browser.new_context(viewport={"width": 1400, "height": 1000}).new_page()
-    inject_login(bpage, live_server, boss, bp)
-    bpage.goto(f"{live_server}/pages/approval-queue.html")
-    tag = bpage.locator('[data-testid="aq-tag"]').first
-    tag.wait_for(state="visible", timeout=20000)
-    assert tag.inner_text() == NOPO
-    _shot(bpage, "06-queue-card-tag")
+    page.wait_for_function("() => /請款單|採購單/.test(document.querySelector('#fin-material-orders').innerText) && /退回|無效|請重新申請|需先申請/.test(document.querySelector('#fin-material-orders').innerText)", timeout=15000)
+    assert _status_of(po_id) in (None, "草稿")                                                      # 沒送成
+    # 舊單 K（已核准、沒有採購單連結）不受影響：沒有送審前提示
+    assert page.locator('[data-testid="mo-card-K"] [data-testid="mo-po-hint"]').is_hidden()
     assert not errors, errors
 
 

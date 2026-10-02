@@ -25,12 +25,6 @@ PANEL = "#fin-material-orders"
 
 
 
-@pytest.fixture(autouse=True)
-def _po_rule_off(monkeypatch):
-    """33-M1 後端強制採購單已上線；這個檔的畫面流程（手動新增列）等前端「從採購單帶入」改版時再改寫。規則本身的題在 test_material_po_required_2026_10_03.py。"""
-    from modules.case import material_approval as _MA
-    monkeypatch.setattr(_MA, "PO_REQUIRED", False)
-
 def _shot(page, name):
     try:
         d = os.path.join(os.environ.get("MOTRIX_SHOTS_DIR") or os.path.join(tempfile.gettempdir(), "w4-shots"), "t31-material")
@@ -107,15 +101,18 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     page = e2e_browser.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    inject_login(page, live_server, adm, ap)
+    sess = inject_login(page, live_server, adm, ap)
     _open_finance(page, live_server)
     page.wait_for_function("() => { const t = document.querySelector('#fin-material-orders')?.innerText || ''; return t.includes('尚無材料申請項目') && !t.includes('載入中') }", timeout=20000)
 
-    # 1 新增並儲存 ⇒ 建審核單（草稿）
-    page.click(f'{PANEL} button:has-text("新增項目")')
-    page.fill(f'{PANEL} input[placeholder="項目名稱（如：交換器）"]', "交換器")
-    page.fill(f'{PANEL} input[placeholder="數量"]', "2")
-    page.fill(f'{PANEL} input[placeholder="單價"]', "1500")
+    # 1 從已核准採購單帶入並儲存 ⇒ 建審核單（草稿）
+    from tests._material_po import approved_po                                              # 33-M1：新申請只能從已核准的採購單明細帶入
+    approved_po(page.context, live_server, {"Authorization": "Bearer " + sess["token"]}, NO, "交換器", 2, 1500, adm)
+    page.click('[data-testid="ml-open-po"]')
+    page.locator('[data-testid^="ml-p-"]').first.wait_for(state="visible", timeout=15000)
+    page.locator('[data-testid^="ml-p-"] input').first.check()
+    page.click('[data-testid="ml-import"]')
+    page.wait_for_selector(f'{PANEL} input[placeholder="項目名稱（如：交換器）"]', timeout=10000)
     page.wait_for_function("() => document.querySelectorAll('#fin-material-orders [data-testid=mo-supplier] option').length >= 2", timeout=15000)
     page.select_option(f'{PANEL} [data-testid="mo-supplier"]', label="S-001 甲供應商")        # 31-C：新增叫料必選供應商
     assert _status_text(page) == "尚未送審"
