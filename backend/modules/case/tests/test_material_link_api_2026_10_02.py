@@ -164,3 +164,19 @@ def test_submit_check_rejects_a_po_line_already_claimed_by_a_live_request_but_no
     assert _codes(res) == ["po_line_taken"] and "先到的" in res["problems"][0]["message"]   # 另一筆活的（待審核）占了同一行
     assert _codes(_check(dict(first, itemId="m1"), exclude="m1")) == []                # 自己不算占用自己
     assert _codes(_check(dict(mine, poLine=2))) == ["bad_link"]                          # 別的行不受影響（這張採購單只有一行 ⇒ 行號超出另算 bad_link）
+
+
+def test_po_line_claim_is_per_line_and_only_valid_claims_count(W):
+    c, h = W
+    po = _approved_po(c, h, [_ln("a", 2, unitCost=1000), _ln("a", 1, unitCost=1000)])             # 兩行
+    base = {"itemName": "x", "unit": "台", "unitPrice": 1000, "totalPrice": 1000, "quantity": 1}
+    _put_materials([dict(base, itemId="m1", quoteItemId="a", poDocCode=po["docCode"], poLine=1)], {"m1": "已核准"})
+    other_line = {"itemId": "m2", "quoteItemId": "a", "quantity": 1, "totalPrice": 1000, "poDocCode": po["docCode"], "poLine": 2}
+    assert _codes(_check(other_line)) == []                                                     # 同一張採購單的另一行不受影響
+    cn = db.get_db()                                                                            # m1 的連結失效（品項對不上該行）⇒ 它不再占用第 1 行
+    d = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+    d["caseRecord"]["materialOrders"][0]["quoteItemId"] = "b"
+    cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+    cn.commit()
+    cn.close()
+    assert _codes(_check(dict(other_line, poLine=1))) == []
