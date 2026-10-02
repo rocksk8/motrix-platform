@@ -164,3 +164,4 @@
 - 六視窗分工：開發＝2e（精算 A2–A5/B1/B2、M1 案件側）、d7（M1 守門側、D7 鎖定、M2 屬 33B）、a3（31-B S2 補守門、S3–S5、drill_train33 參數化）、c7（K-2 單一分支、D14/D15 範本、D12 程式面屬 33B）；**ea＝整合與階段測試**（擁有 wip/train-33-int1、取號、重產生成檔、夜間約每3小時階段、綠後 build 通知主持）；**da＝獨立稽核與探針**（滾動稽核＋包級完整性／升級探針／演練執行／payload 比對）。作者每片推 sha 前跑 author_gate，並**直接**通知 ea 與 da。
 - 時程：開發截止 12:00（之後的片進 33B）→ 整合與階段 14:00 前 → build＋發布 15:30 前 → 包級驗證＋正式機暫存 17:00 前 → 套用（常設授權）18:00 前。D12 真滑鼠拖放需使用者人工驗，列 33B／上線前條件。
 - 已刪 D 槽舊目錄（DRILLS、FINAL-DRILL、_pt_B17_m08）。
+- 正式機唯讀查詢（派發金額角分，20261002_205000）：contractor_dispatches 11 筆 total_amount 全為整數（0～762300，tax 0.0×1／0.05×10）；匯款申請 4 筆 remit_fee 全 0、snapshot 金額全整數（grandTotal 3500～27300）。**更正先前 B6**：4 筆（含 2 筆已付）remit_actual 全為 NULL，所以先前『remit_actual≠grandTotal 為 0』是空洞（沒有資料可比），不是『相等』⇒ 31-B／E05 設計須處理 remit_actual 為 NULL 的已付申請（以 grandTotal 視為實付、不得當 0）。
