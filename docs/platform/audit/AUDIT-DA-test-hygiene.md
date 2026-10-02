@@ -77,3 +77,6 @@
 - **`ledger_mutation_guards`（8 題，平均 163s、最大 607s）**：讀碼結論——這是「突變守門的守門」：每一題都 `shutil.copytree` 整個 backend＋frontend 到暫存、植入一處突變、再起子 pytest 跑偵測檔；題數 9（8 突變＋1 反向控制）＝**9 次完整複製＋9 次子行程**。變異大（607s）主因是複製（磁碟／防毒掃描）與子行程隨機器負載。**可拆／可省**：①複製只做一次（module 範圍 fixture），之後「就地改一個檔→跑→還原」（我本班的突變做法）——預估 163s→約 60s；②它已因 `import` 目標檔而被依賴選題選中（改 ledger 檔才選），不需另做降頻。這是效能優化，不是刪守門；風險＝就地還原失敗會污染複本（用 try/finally＋對複本內容雜湊驗證）。建議由 accounting 模組作者（非我）改，我可覆審。
 - **重複覆蓋（d7 §3-6 請我判斷）**：`author_gate` 與 `stage_select` 的測試**不重複**——前者測「作者端守門集的選題組裝／預算／結果 JSON／髒樹拒絕／回放」，後者測「增量段選題計畫與反向控制」，共用的只是 guard_patterns.json 的載入；`module_update_delivery`（21 題：模組 RC 包被拒的各種條件——簽章／基底／授權／同內容）與 `upgrade_drill`（2 題：V9→新版端到端轉換與回滾）**測不同事**，不是重複；兩者都只該在 `core/`、`tools/platform/`、`delivery`、`module_update` 相關改動或建包時跑。
 - **增量選題偏粗（d7 §2）**：我同意是最大的可省項，但這屬選題器（stage_select／dep_scan）的設計，**不是測試本身的問題**；`core:db` 傳遞閉包過寬（改 case 一個檔就選 476/835 題）值得 a3 確認。我沒有讀 dep_scan，不下結論。
+
+## 補充 2（d7 更正，2026-10-03）
+d7 更正其統計：「紅燈後白跑 56%」主要發生在 fail-fast 上線前——`build_deploy_package.ps1` 於 2026-10-02 07:10 加上 `MOTRIX_FAILFAST=1`，fail_stream 中 15 次建包紅燈全在其前。啟用 fail-fast 後（17 次紅燈）：第一個紅之後平均再跑 4.3 分（最大 8.7）、首紅出現平均 6.7 分（中位 5.4、最大 19.3）。「紅→紅出現新紅檔」也不能歸因於 fail-fast 截斷。**本盤點補充 1 引用 56% 之處以此更正為準**（我補充 1 並未引用該數字，僅引 top-30 慢檔占比與工具類占比，兩者不受影響）。d7 的提案頁：`wip/t33-failfast-proposal-d7`@577129f4（`docs/platform/plans/PROPOSAL-FAILFAST-AND-SELECTOR-D7.md`），我未審其內容。
