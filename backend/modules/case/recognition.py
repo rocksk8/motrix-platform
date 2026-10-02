@@ -313,6 +313,13 @@ def extra_entries(conn, basis):
     """額外支出 → 逐筆。金額 0 不列；只計 COUNTED_EXTRA_STATUSES（送審中照樣計入、pending 標示；草稿與已駁回不計）。
     現金口徑：有付款日（出納登錄付款，IP-100）⇒ 用付款日、不是暫用；沒有 ⇒ 憑證日、暫用。"""
     out = []
+    _live = {}
+
+    def live_of(quote_no):
+        if quote_no not in _live:
+            from modules.case import purchase_items as _PI
+            _live[quote_no] = _PI.load_live_item_ids(conn, quote_no) if quote_no else set()
+        return _live[quote_no]
     for r in conn.execute(
             "SELECT e.id, e.quote_no, e.category, e.description, e.total_cost, e.expense_date,"
             " e.created_at, e.doc_no, e.files_json, e.status, e.approval_json, e.invoice_date,"
@@ -349,11 +356,11 @@ def extra_entries(conn, basis):
         if not (r["kind"] or ""):
             out.append(base)                                     # 舊版列：一列一筆，**行為不變**
             continue
-        out.extend(_typed_entries(r, base, cost, basis, paid))
+        out.extend(_typed_entries(r, base, cost, basis, paid, live_of))
     return out
 
 
-def _typed_entries(r, base, cost, basis, paid) -> list:
+def _typed_entries(r, base, cost, basis, paid, live_of=None) -> list:
     """費用單據（kind≠''）的營運報表列（A2）：依**費用類別逐類**一筆（讓「支出結構」看得出差旅／住宿…）、帶 `departmentId`（費用歸屬單位；
     無案件時部門維度靠它）、`kind`、`docCode`。明細加總對不上單據金額（不該發生）⇒ 退回一列（類別＝單據類別）；
     現金口徑實付≠應付 ⇒ 另加一筆「付款差額」（實付−應付），合計＝實付（與舊版現金口徑一致）。
@@ -369,6 +376,8 @@ def _typed_entries(r, base, cost, basis, paid) -> list:
             k = l.get("categoryName") or l.get("category") or "其他"
             # 32-S3：採購單明細連到案件品項的列＝品項實際成本，獨立成列（帶 itemId／linkedItem；金額守恆：Σ 列＝單據金額）
             iid = str(l.get("itemId") or "").strip() if (r["kind"] or "") == "purchase_order" else ""
+            if iid and live_of is not None and iid not in live_of(r["quote_no"]):
+                iid = ""                                   # 品項已不在報價內 ⇒ 回到一般額外支出（錢不消失）
             by_cat[(k, iid)] = by_cat.get((k, iid), 0) + float(l.get("amount") or 0)
     common = {"departmentId": r["department_id"], "kind": r["kind"], "docCode": r["doc_code"] or ""}
     if not by_cat or abs(sum(by_cat.values()) - total) > 0.005:

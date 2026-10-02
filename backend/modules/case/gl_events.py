@@ -22,7 +22,7 @@ def _i(x):
     return int(round_half_up(x or 0))
 
 
-def _accrual_lines(r, total, memo) -> list:
+def _accrual_lines(r, total, memo, live=None) -> list:
     """E11 應付認列的分錄行。舊版列（kind=''）＝單一借方（案件成本）——**行為不變**。
     費用單據（kind≠''）且明細金額加總＝單據金額 ⇒ 依費用類別**逐類**借方（行上帶 `category`＝類別代碼，W4 引擎據此重新解科目；
     有案件 COST_PROJECT、無案件 EXP_OTHER），貸方 AP 合計。明細對不上金額（不該發生）⇒ 退回單一借方，不猜。"""
@@ -40,6 +40,8 @@ def _accrual_lines(r, total, memo) -> list:
             key = l.get("categoryCode") or l.get("category") or ""
             # 32-S3：採購單連到案件品項的列另成借方行並帶 `dims={"item": 品項id}`（金額、角色、類別都不變；沒有 itemId ⇒ 與以前逐行相同）
             iid = str(l.get("itemId") or "").strip() if (r["kind"] or "") == "purchase_order" and r["quote_no"] else ""
+            if iid and (live is None or iid not in live):
+                iid = ""                                   # 品項已不在報價內（或查不到）⇒ 不帶 item 維度
             by_cat[(key, iid)] = by_cat.get((key, iid), 0) + _i(l.get("amount"))
     if not by_cat or sum(by_cat.values()) != total or any(v <= 0 for v in by_cat.values()):
         return [{"role": role, "side": "D", "amount": total, "memo": memo}, ap]
@@ -55,6 +57,9 @@ def gl_events(start, end, *, changed_since=""):
             "SELECT id, quote_no, category, description, total_cost, expense_date, created_at, doc_no, invoice_no, invoice_date, approval_json,"
             " paid_date, remit_actual, remit_fee, remit_review, kind, lines_json, pay_method, pay_account_code"
             " FROM case_extra_expenses WHERE status='已核准' AND " + _EF.payable_sql() + " ORDER BY id").fetchall()
+        from modules.case import purchase_items as _PI
+        live_by_quote = {q: _PI.load_live_item_ids(conn, q) for q in {r["quote_no"] for r in extra_rows
+                                                                  if (r["kind"] or "") == "purchase_order" and r["quote_no"] and "itemId" in (r["lines_json"] or "")}}
         mat_accrual = _rec.material_entries(conn, "accrual")
         mat_cash = _rec.material_entries(conn, "cash")
     finally:
@@ -77,7 +82,7 @@ def gl_events(start, end, *, changed_since=""):
             events.append({
                 "source_type": "case_extra_expense", "source_key": str(r["id"]), "event_code": "E11", "event_date": d, "doc_no": doc,
                 "case_no": r["quote_no"] or "", "party": {"key": "", "name": ""}, "tax_code": "", "mode": "snapshot",
-                "lines": _accrual_lines(r, total, memo),
+                "lines": _accrual_lines(r, total, memo, live_by_quote.get(r["quote_no"])),
                 "meta": {"category": r["category"] or "其他", "tax_unsplit": True, "date_estimated": not inv}})
         paid = (r["paid_date"] or "")[:10]
         if paid and start <= paid <= end:

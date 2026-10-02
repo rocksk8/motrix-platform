@@ -380,8 +380,9 @@ def list_extra_expenses(quote_no: str, authorization: str = Header(None)):
         # 過渡安全：`totalAmount`／`totalPending` 先**維持含連結列**（既有精算頁照舊看到全部金額，不會有錢憑空消失）；
         # 另給 `itemLinkedAmount`（連結列金額）與 `extraOnlyAmount`（＝totalAmount−itemLinkedAmount，真正的額外支出）。
         # 精算頁改版（S5）時改讀 extraOnlyAmount＋品項「系統帶入實際」，兩邊一起切，才不會漏算或重複。
+        live = PI.load_live_item_ids(conn, quote_no) if quote_no else set()        # 品項已不在報價內的連結列回到額外支出（錢不消失）
         for i in counted:
-            i["linkedAmount"] = PI.linked_split(i.get("lines"))[0] if i["kind"] == PI.ORD else 0.0
+            i["linkedAmount"] = PI.linked_split(i.get("lines"), live)[0] if i["kind"] == PI.ORD else 0.0
         total = sum(float(i["totalCost"] or 0) for i in counted)
         pending = sum(float(i["totalCost"] or 0) for i in counted if i["status"] != "已核准")
         item_linked = sum(i["linkedAmount"] for i in counted)

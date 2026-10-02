@@ -60,17 +60,35 @@ def usage(rows, *, exclude_id=None) -> dict:
     return out
 
 
-def linked_split(lines):
-    """明細列 ⇒ `(連到品項的金額合計, {itemId: 金額})`；金額＝列上 `amount`（`normalize_lines` 已重算）。沒有 `itemId` 的列不算。"""
+def live_item_ids(quotation_data) -> set:
+    """報價單**現在**還有的品項 id（品項被刪／改版後不在了 ⇒ 連到它的列視為一般額外支出，錢不會消失；設計 §2.4）。"""
+    return {p["itemId"] for p in plan_items(quotation_data)}
+
+
+def load_live_item_ids(conn, quote_no) -> set:
+    """讀報價單的現有品項 id；查無報價單 ⇒ 空集合（全部視為額外支出）。"""
+    q = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    try:
+        data = json.loads((q["data_json"] if q else "") or "{}")
+    except (TypeError, ValueError):
+        data = {}
+    return live_item_ids(data)
+
+
+def linked_split(lines, live=None):
+    """明細列 ⇒ `(連到品項的金額合計, {itemId: 金額})`；金額＝列上 `amount`（`normalize_lines` 已重算）。沒有 `itemId` 的列不算。
+    `live`（現有品項 id 集合）給了 ⇒ 連到已不存在品項的列也不算（回到額外支出）；沒給 ⇒ 不過濾（寫入時的檢查用）。"""
     per = {}
     for l in lines if isinstance(lines, list) else []:
         if isinstance(l, dict) and str(l.get("itemId") or "").strip():
             iid = str(l["itemId"]).strip()
+            if live is not None and iid not in live:
+                continue
             per[iid] = per.get(iid, 0.0) + _num(l.get("amount"))
     return sum(per.values()), per
 
 
-def item_actuals(rows, *, exclude_id=None) -> dict:
+def item_actuals(rows, *, exclude_id=None, live=None) -> dict:
     """`{itemId: 已認列的品項實際成本}`：只計 COUNTED 狀態的**採購單**連結列（請購單永遠不計成本）。"""
     out = {}
     for r in rows:
@@ -82,7 +100,7 @@ def item_actuals(rows, *, exclude_id=None) -> dict:
             lines = json.loads(r["lines_json"] or "[]")
         except (TypeError, ValueError):
             continue
-        for iid, amt in linked_split(lines)[1].items():
+        for iid, amt in linked_split(lines, live)[1].items():
             out[iid] = out.get(iid, 0.0) + amt
     return out
 

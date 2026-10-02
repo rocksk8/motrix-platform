@@ -209,3 +209,43 @@ def test_only_purchase_orders_can_be_item_cost_even_if_other_kinds_carry_an_item
     assert d["itemLinkedAmount"] == 0 and d["totalAmount"] == 700
     e11 = next(e for e in _e11() if e["source_key"] == str(po))
     assert not any("dims" in l for l in e11["lines"])
+
+
+# ── 品項被刪／改版後（錢不可以消失）──────────────────────────────────────────
+
+def _drop_item(item_id):
+    cn = db.get_db()
+    try:
+        q = cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()
+        d = json.loads(q["data_json"])
+        d["items"] = [i for i in d["items"] if i["id"] != item_id]
+        cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+        cn.commit()
+    finally:
+        cn.close()
+
+
+def test_money_is_conserved_when_a_linked_item_is_later_removed_from_the_quotation(W):
+    """連到的品項後來不在報價內：該列回到一般額外支出（清單、報表來源、E11 都不再當品項成本）；
+    守恆：extraOnly ＋ 挑選器各品項實際金額（精算系統帶入的來源）＝ totalAmount，不多不少。"""
+    c, h = W
+    ids = _world(c, h)
+
+    def conserved():
+        d = _list(c, h)
+        picker = c.get("/api/quotations/%s/purchase-items" % NO, headers=h).json()["items"]
+        assert d["extraOnlyAmount"] + sum(i["actualAmount"] for i in picker) == d["totalAmount"], (d, picker)
+        return d, picker
+    d0, _p0 = conserved()
+    assert d0["itemLinkedAmount"] == 3500
+    _drop_item("a")                                              # PO1 的 3000 連到 a；a 被刪
+    d1, p1 = conserved()
+    assert d1["totalAmount"] == d0["totalAmount"] and d1["itemLinkedAmount"] == 500 and [i["itemId"] for i in p1] == ["b"]
+    ent = _entries()
+    assert sorted(e["itemId"] for e in ent if e.get("linkedItem")) == ["b"]
+    assert sum(e["amount"] for e in ent) == d1["totalAmount"]
+    po1 = next(e for e in _e11() if e["source_key"] == str(ids["po1"]))
+    assert not any("dims" in l for l in po1["lines"] if l["side"] == "D") and sum(l["amount"] for l in po1["lines"] if l["side"] == "D") == 3500
+    _drop_item("b")
+    d2, p2 = conserved()
+    assert d2["itemLinkedAmount"] == 0 and d2["extraOnlyAmount"] == d2["totalAmount"] == d0["totalAmount"] and p2 == []
