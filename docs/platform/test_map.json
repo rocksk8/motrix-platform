@@ -28228,6 +28228,7 @@
     "mod:case/api/quotations",
     "mod:netplan/api",
     "mod:payroll/api/bonus",
+    "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/dispatch_approval",
     "mod:subcontract/api/vendor_contractors",
     "plat:__init__",
@@ -28250,6 +28251,7 @@
     "api": [
      "backend/modules/case/api/quotations.py",
      "backend/modules/netplan/api.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/custom_records.py",
@@ -28264,6 +28266,7 @@
      "backend/modules/case/api/quotations.py",
      "backend/modules/netplan/api.py",
      "backend/modules/payroll/api/bonus.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/dispatch_approval.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/auth.py"
