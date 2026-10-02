@@ -116,6 +116,14 @@
           "ack_api": ["/api/shipping-notes/{note_no}/privacy-notice", "/api/shipping-notes/{note_no}/privacy-notice/ack"],
           "api_module": "supply",
           "fields": ["shippingForm.delivery_address", "shippingForm.recipient"]
+        },
+        {
+          "subject": "material_payee",
+          "purpose": "contact",
+          "ack_kind": "material_payment:<匯款申請單號>",
+          "ack_api": ["/api/material-payments/{pid}/privacy-notice", "/api/material-payments/{pid}/privacy-notice/ack"],
+          "api_module": "case",
+          "fields": ["moPayForm.bankAccountNumber"]
         }
       ],
       "since": "2026-09-26",

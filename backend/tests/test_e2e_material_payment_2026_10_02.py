@@ -105,6 +105,10 @@ def test_material_payment_round_trip_in_the_browser(live_server, make_user, e2e_
     page.fill(f'{PANEL} [data-testid="mo-pay-bankcode"]', "812")
     page.fill(f'{PANEL} [data-testid="mo-pay-acctname"]', "甲供應商有限公司")
     page.fill(f'{PANEL} [data-testid="mo-pay-acctno"]', ACCT)
+    page.click(f'{PANEL} [data-testid="mo-pay-create"]')                                      # 沒勾「已告知收款人」⇒ 前端擋下、不建立
+    page.wait_for_function("() => (document.querySelector('#fin-material-orders')?.innerText || '').includes('請先勾選「已告知收款人」')", timeout=15000)
+    assert _q("SELECT COUNT(*) AS n FROM case_material_payments")[0]["n"] == 0
+    page.check(f'{PANEL} [data-testid="mo-pay-ack"]')
     page.click(f'{PANEL} [data-testid="mo-pay-create"]')
     page.wait_for_function("() => document.querySelector('#fin-material-orders [data-testid=mo-pay-status]')?.innerText === '草稿'", timeout=15000)
     rows = _q("SELECT id, status, amount_approved, doc_code FROM case_material_payments")

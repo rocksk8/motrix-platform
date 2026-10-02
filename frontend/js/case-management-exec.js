@@ -148,7 +148,7 @@ window.CM_PARTS.push(() => ({
     async moOpenPayForm(m) {
       await this.moLoadSuppliers()
       const q = this.moPayOf(m).quota
-      this.moPayForm = { itemId: m.itemId, amount: q ? q.remaining : 0, supplierId: m.supplierId ?? '', bankCode: '', bankName: '', bankAccountName: '', bankAccountNumber: '', overCapReason: '' }
+      this.moPayForm = { itemId: m.itemId, amount: q ? q.remaining : 0, supplierId: m.supplierId ?? '', bankCode: '', bankName: '', bankAccountName: '', bankAccountNumber: '', overCapReason: '', payeeNoticeAcked: false }
     },
     async _moPayCall(url, method, body, okMsg) {
       this.moMsg = ''
@@ -168,7 +168,8 @@ window.CM_PARTS.push(() => ({
     async moCreatePay(m) {
       const f = this.moPayForm
       if (!f || f.itemId !== m.itemId) return
-      const body = { amount: Number(f.amount) || 0, supplierId: f.supplierId === '' ? null : Number(f.supplierId), bankCode: f.bankCode, bankName: f.bankName,
+      if (!f.payeeNoticeAcked) { this.moMsgError = true; this.moMsg = '請先勾選「已告知收款人」（收款人戶名與帳號屬個人資料，須先告知蒐集目的）'; return }
+      const body = { payeeNoticeAcked: true, amount: Number(f.amount) || 0, supplierId: f.supplierId === '' ? null : Number(f.supplierId), bankCode: f.bankCode, bankName: f.bankName,
                      bankAccountName: f.bankAccountName, bankAccountNumber: f.bankAccountNumber }
       if (f.overCapReason) body.overCapReason = f.overCapReason
       const ok = await this._moPayCall(`/api/quotations/${encodeURIComponent(this.selected.quote_no)}/material-orders/${encodeURIComponent(m.itemId)}/payments`, 'POST', body,

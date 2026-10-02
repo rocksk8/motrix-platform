@@ -92,6 +92,63 @@ def _info(row, q, quote_no):
     return {"docCode": row["doc_code"], "quoteNo": quote_no, "itemName": sn.get("itemName") or ""}
 
 
+# ── 收款人個資告知（供應商可能是自然人：戶名與銀行帳號屬個資；CUSTOMIZATION-SPEC §9.3）──────────────
+# 告知對象＝收款人（供應商）；紀錄存在 L1 設定鍵 `privacy_notice_acks`（`material_payment:<匯款申請單號>`），伺服器蓋時間與人員，已記錄的不覆蓋。
+# 建立申請時必須勾選「已告知收款人」（伺服器強制）；也提供讀取與補記端點（頁面登記表 docs/platform/pii_forms.json 的 ack_api）。
+
+def _payee_ack(doc_code):
+    from helpers import privacy_notice as _pn
+    try:
+        return _pn.get_ack("material_payment", doc_code)
+    except Exception:                                                                              # noqa: BLE001 — 紀錄壞了／讀不到：回 None，不擋畫面
+        return None
+
+
+def _record_payee_ack(user, authorization, doc_code, quote_no):
+    from helpers import privacy_notice as _pn
+    try:
+        rec, created = _pn.record_purpose_ack("material_payment", doc_code, user, "contact")
+    except Exception:                                                                              # noqa: BLE001
+        return None
+    if created:
+        _audit(_tok(authorization), "material_payment.privacy_notice_ack", "quotation", quote_no, "叫料匯款申請 %s 收款人個資告知" % doc_code,
+               {"docCode": doc_code, "noticeHash": rec.get("noticeHash")})
+    return rec
+
+
+@router.get("/api/material-payments/{pid}/privacy-notice")
+def get_payee_privacy_ack(pid: int, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        row, q = _row_and_case(conn, pid)
+        require_case(user, q, row["quote_no"])
+        if not money_visible(user):
+            raise HTTPException(403, "此帳號沒有財務檢視權限")
+    finally:
+        conn.close()
+    return {"ack": _payee_ack(row["doc_code"])}
+
+
+@router.post("/api/material-payments/{pid}/privacy-notice/ack")
+def ack_payee_privacy_notice(pid: int, authorization: str = Header(None)):
+    """補記「已告知收款人」（已記錄的不覆蓋）；時間與人員由伺服器決定。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        row, q = _row_and_case(conn, pid)
+        require_case(user, q, row["quote_no"])
+        _need_edit(user)
+    finally:
+        conn.close()
+    from helpers import privacy_notice as _pn
+    rec, created = _pn.record_purpose_ack("material_payment", row["doc_code"], user, "contact")
+    if created:
+        _audit(_tok(authorization), "material_payment.privacy_notice_ack", "quotation", row["quote_no"], "叫料匯款申請 %s 收款人個資告知" % row["doc_code"],
+               {"docCode": row["doc_code"], "noticeHash": rec.get("noticeHash")})
+    return {"ack": rec, "created": created}
+
+
 # ── 讀 ───────────────────────────────────────────────────────────────
 
 @router.get("/api/quotations/{quote_no}/material-payments")
@@ -161,6 +218,8 @@ def create_payment(quote_no: str, item_id: str, body: dict = Body(default={}), a
         q = _load_case(conn, quote_no)
         require_case(user, q, quote_no)
         _need_edit(user)
+        if (body or {}).get("payeeNoticeAcked") is not True:                                       # 個資告知（使用者裁示 A，2026-10-02）：必須確認已告知收款人
+            raise HTTPException(400, "請先確認已向收款人（供應商）說明個資蒐集目的並完成告知（勾選「已告知收款人」）")
         order = _order(q, item_id)
         try:
             row = MP.create(conn, quote_no, order, user, body or {})
@@ -173,6 +232,8 @@ def create_payment(quote_no: str, item_id: str, body: dict = Body(default={}), a
     _audit(_tok(authorization), "material_payment.create", "quotation", quote_no,
            "叫料匯款申請 %s（%s）建立（第 %d 張）" % (res["docCode"], order.get("itemName") or "", res["seq"]),
            {"docCode": res["docCode"], "seq": res["seq"], "overCap": bool(res["overCapReason"])})
+    _record_payee_ack(user, authorization, res["docCode"], quote_no)                              # 寫入已告知紀錄（伺服器蓋時間與人員；失敗不影響已建立的申請，但會在回應標示）
+    res["payeeNotice"] = _payee_ack(res["docCode"])
     return {"ok": True, "payment": res}
 
 

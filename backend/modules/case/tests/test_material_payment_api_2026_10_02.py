@@ -88,7 +88,7 @@ def world(client, make_user):
 
 
 def _create(client, w, amount=None, who="adm", **kw):
-    body = dict(BODY, supplierId=w["sid"], **kw)
+    body = dict(BODY, supplierId=w["sid"], payeeNoticeAcked=True, **kw)
     if amount is not None:
         body["amount"] = amount
     return client.post("/api/quotations/%s/material-orders/%s/payments" % (NO, ITEM), json=body, headers=w[who])
@@ -282,3 +282,30 @@ def test_update_payment_edits_draft_only(client, world):
     assert client.post("/api/material-payments/%d/submit" % p["id"], headers=w["adm"]).json()["status"] == "已核准"
     assert client.patch("/api/material-payments/%d" % p["id"], json={"amount": 100}, headers=w["adm"]).status_code == 409        # 已核准不可改
     assert "material_payment.update" in _audit_actions()
+
+
+def test_payee_privacy_notice_is_required_recorded_and_audited(client, world):
+    """收款人（供應商可能是自然人）的個資告知（使用者裁示 A）：沒有勾「已告知收款人」不能建立申請（400、不留任何申請）；
+    建立時伺服器記錄告知（時間與人員）並寫稽核；讀取端點只給有權的人；補記端點冪等（已記錄的不覆蓋）。"""
+    from helpers import privacy_notice as pn
+    w = world
+    url = "/api/quotations/%s/material-orders/%s/payments" % (NO, ITEM)
+    for extra in ({}, {"payeeNoticeAcked": False}, {"payeeNoticeAcked": "yes"}):
+        r = client.post(url, json=dict(BODY, supplierId=w["sid"], amount=1000, **extra), headers=w["adm"])
+        assert r.status_code == 400 and "告知" in r.text, (extra, r.text)
+    assert _q("SELECT COUNT(*) AS n FROM case_material_payments")[0]["n"] == 0
+    r = _create(client, w, 1000)
+    assert r.status_code == 200, r.text
+    pay = r.json()["payment"]
+    ack = pn.get_ack("material_payment", pay["docCode"])
+    assert ack and ack.get("at") and ack.get("by"), ack
+    assert r.json()["payment"]["payeeNotice"]["at"] == ack["at"]
+    assert _audit_actions().count("material_payment.privacy_notice_ack") == 1
+    g = client.get("/api/material-payments/%d/privacy-notice" % pay["id"], headers=w["adm"])
+    assert g.status_code == 200 and g.json()["ack"]["at"] == ack["at"] and ACCT not in g.text
+    assert client.get("/api/material-payments/%d/privacy-notice" % pay["id"], headers=w["out"]).status_code == 404       # 非案件成員＝看不到
+    assert client.get("/api/material-payments/%d/privacy-notice" % pay["id"]).status_code in (401, 403)                   # 未登入
+    again = client.post("/api/material-payments/%d/privacy-notice/ack" % pay["id"], headers=w["adm"])
+    assert again.status_code == 200 and again.json()["created"] is False and again.json()["ack"]["at"] == ack["at"]        # 已記錄的不覆蓋
+    assert _audit_actions().count("material_payment.privacy_notice_ack") == 1
+    assert client.post("/api/material-payments/%d/privacy-notice/ack" % pay["id"], headers=w["eng"]).status_code == 403     # 沒有編輯叫料權限的人不能補記

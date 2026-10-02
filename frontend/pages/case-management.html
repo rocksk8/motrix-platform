@@ -2485,6 +2485,18 @@
                             <input class="fi fi--sm" type="text" placeholder="戶名" style="width:120px" x-model="moPayForm.bankAccountName" data-testid="mo-pay-acctname">
                             <input class="fi fi--sm" type="text" placeholder="帳號" style="width:150px" x-model="moPayForm.bankAccountNumber" data-testid="mo-pay-acctno">
                             <input x-show="session.role === 'superadmin'" class="fi fi--sm" type="text" placeholder="超額覆寫理由（最高管理員）" style="width:170px" x-model="moPayForm.overCapReason">
+                            <!-- 個資蒐集告知（收款人＝供應商，可能是自然人；使用者裁示 2026-10-02）：勾選必填，建立時伺服器記錄時間與人員 -->
+                            <div data-privacy-card data-privacy-subject="material_payee" style="flex-basis:100%;margin-top:4px;padding:6px 8px;border:1px solid var(--border-light);border-radius:6px">
+                              <div style="font-size:11px;color:var(--text-dim);line-height:1.6">
+                                個資蒐集告知（收款人）：收款人的戶名與銀行帳號可能屬個人資料。蒐集目的＝辦理叫料貨款匯款；類別＝戶名、銀行代碼與帳號；利用範圍＝本公司財務與出納於付款作業所需範圍；
+                                當事人得依個人資料保護法請求查詢、閱覽、更正、停止蒐集或刪除。請先向收款人說明並確認其知悉。
+                              </div>
+                              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:4px 0 0">
+                                <input type="checkbox" data-privacy-ack data-testid="mo-pay-ack" x-model="moPayForm.payeeNoticeAcked" style="width:auto">
+                                已告知收款人（必填；建立時記錄時間與人員）
+                              </label>
+                              <div x-show="!moPayForm.payeeNoticeAcked" data-privacy-missing style="margin-top:4px;font-size:11px;color:var(--warning)">尚未確認告知收款人，無法建立申請</div>
+                            </div>
                             <button type="button" @click="moCreatePay(m)" data-testid="mo-pay-create"
                                     style="font-size:11px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--accent-hover);color:var(--surface);cursor:pointer">建立草稿</button>
                             <button type="button" @click="moPayForm = null" style="font-size:11px;padding:2px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">取消</button>
