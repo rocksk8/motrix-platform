@@ -373,7 +373,7 @@
    "restore_to_draft": "def(conn, module_key, version, user)",
    "review_state": "def(conn, submitter=…)",
    "set_review_settings": "def(conn, mode=…, reviewers=…)",
-   "submit": "def(conn, module_key, user, note=…)"
+   "submit": "def(conn, module_key, user, note=…, base_etag=…)"
   },
   "helper:custom_fields": {
    "DATA_CLASSES": "const",
@@ -1152,7 +1152,7 @@
    "restore": "def(conn, kind, key, scope, version, note=…, user=…)",
    "save_decision": "def(conn, kind, key, scope, version, decision)",
    "save_draft": "def(conn, kind, key, scope, body, user=…, base_etag=…, force=…)",
-   "submit_draft": "def(conn, kind, key, scope, note=…, user=…, decision=…)",
+   "submit_draft": "def(conn, kind, key, scope, note=…, user=…, decision=…, base_etag=…)",
    "validate": "def(kind, key, body)",
    "versions": "def(conn, kind, key, scope)"
   },

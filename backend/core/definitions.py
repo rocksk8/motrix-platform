@@ -248,16 +248,20 @@ def open_submission(conn, kind, key, scope):
                              "ORDER BY version DESC LIMIT 1", (kind, key, scope)).fetchone())
 
 
-def submit_draft(conn, kind, key, scope, note="", user="", decision=None) -> dict:
+def submit_draft(conn, kind, key, scope, note="", user="", decision=None, base_etag=None) -> dict:
     """把草稿凍結成不可變快照（status='submitted'，取 max(version)+1）；草稿保留（送審期間還能繼續改下一版）。
-    驗證不過、沒有草稿、已有送審中的 ⇒ DefinitionError。`decision`＝簽核鏈等（寫進 decision_json）。"""
+    驗證不過、沒有草稿、已有送審中的 ⇒ DefinitionError。`decision`＝簽核鏈等（寫進 decision_json）。
+    K-2：帶 `base_etag` ⇒ 寫鎖內比對草稿戳，不同 ⇒ `DraftConflict`（不送審）；`None`＝照舊。"""
     from core.txn import begin_write
     _check(kind, key, scope)
+    _check_base_etag(base_etag)
     began = begin_write(conn)
     try:
         draft = get(conn, kind, key, scope, 0)
         if draft is None:
             raise DefinitionError("沒有草稿可以送審")
+        if base_etag is not None and draft["etag"] != base_etag:
+            raise DraftConflict("這份草稿在你載入之後被別人改過，未送審", draft)
         if open_submission(conn, kind, key, scope) is not None:
             raise DefinitionError("已有送審中的版本，請等審核結果（或請審核人退回）再送")
         problems = validate(kind, key, draft["body"])

@@ -8,6 +8,7 @@
 - 測試：`tests/test_definitions_diff_default_2026_10_02.py`（6 題）、`test_definitions_store_2026_09_25.py::test_definitions_default_for_…`。L1 介面快照 `--update --pending`（新增 `plat:definitions::default_for`）。
 - L0（新增選填參數與名稱，向下相容；K-2，設計 DRAFT-CONCURRENCY-DESIGN.md 選項 C）：草稿內容戳＋409。`core.definitions.etag_of(body_json) -> str`（資料庫原字串 sha256 前 16 碼；沒有 ⇒ ""）；`get(…, 0)` 的草稿物件多 `etag`；`save_draft(…, base_etag=None, force=False)`、`publish(…, base_etag=None)`——帶 `base_etag` 時在**寫鎖內**比對目前草稿的戳，不同 ⇒ 新例外 `DraftConflict(DefinitionConflict)`（`.current={etag, created_by, created_at}`，HTTP 409、`code=draft_conflict`），不寫入；`force=True` ⇒ 照存並在回傳多 `overridden`（被覆蓋者）。不帶 `base_etag`＝舊行為（後寫者勝；router 稽核標 `unguarded:true` 以盤點）。無 migration。
 - L1（router，新增選填欄位）：`PUT /api/definitions/{kind}/{key}/draft` 與 `POST …/publish` body 可帶 `base_etag`（字串）；PUT 另可帶 `force:true`；回應 `etag`；稽核 `definitions.save_draft_override`。測試：`tests/test_definitions_draft_etag_2026_10_02.py`。
+- L0（新增選填參數，向下相容；K-2 補強）：`core.definitions.submit_draft(…, base_etag=None)`——寫鎖內比對草稿戳，不同 ⇒ `DraftConflict`；`helpers.custom_def_review.submit(…, base_etag=None)` 轉傳給 `publish`／`submit_draft`，`DraftConflict` 不轉成 ReviewError（路由回 409 `draft_conflict`＋`current`）。custom_module 發布路徑的比對因此也在寫鎖內。測試 `tests/test_definitions_draft_etag_custom_module_2026_10_03.py`（3 題）。
 
 ## 1.107 — 2026-10-02（wip/t32-s4a-2e：簽核佇列卡片小標註）
 - L1（新增選填鍵，向下相容）：簽核佇列項目多一個 `tags: []`（`helpers.approval_queue.base_item`；項目格式 `[{text, tone}]`，tone＝`warn`／`info`）。各單據模組的佇列提供者經 `fields` 帶入；沒帶＝空陣列，既有項目與前端不受影響。前端卡片與列表列在類型標籤旁畫出（`approval-queue.html`）。

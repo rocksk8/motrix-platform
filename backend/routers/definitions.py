@@ -287,7 +287,7 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
             # 方案 B：掛載點頁籤數上限（要連線，所以不在 validate_module 裡）——發布／送審之前擋下
             from helpers import custom_modules as _cm
             _dr = D.get(conn, kind, key, scope, 0)
-            if base_etag is not None and _dr is not None and _dr.get("etag") != base_etag:       # K-2：送審／發布的是「我看到的那份草稿」（此路徑的比對不在寫鎖內＝盡力而為；直接發布分支在鎖內）
+            if base_etag is not None and _dr is not None and _dr.get("etag") != base_etag:       # K-2：送審／發布的是「我看到的那份草稿」（先擋＝快速失敗；真正的比對在 D.publish／D.submit_draft 的寫鎖內）
                 return _err(D.DraftConflict("這份草稿在你載入之後被別人改過，未發布",
                                             {"etag": _dr.get("etag", ""), "created_by": _dr.get("created_by", ""), "created_at": _dr.get("created_at", "")}))
             _cap = _cm.mount_cap_problems(conn, key, (_dr or {}).get("body") or {}) if _dr else []
@@ -296,7 +296,7 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
             # S4：審核開啟且有簽核層 ⇒ 送審（回 pending）；否則與過去一樣直接發布
             from helpers import custom_def_review as _defr
             try:
-                r = _defr.submit(conn, key, u, (payload or {}).get("note", ""))
+                r = _defr.submit(conn, key, u, (payload or {}).get("note", ""), base_etag=base_etag)
             except _defr.ReviewError as e:
                 return JSONResponse({"detail": str(e), "problems": e.problems}, status_code=e.status)
             if r["pending"]:
