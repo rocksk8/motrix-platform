@@ -2560,7 +2560,6 @@
 
                       <!-- 32-S4d：連結列（報價單品項／採購單明細／未申請採購單標註）；獨立一列，不與匯款區塊混在一起 -->
                       <div :data-testid="'ml-row-' + m.itemId" style="margin-top:6px;font-size:11px;font-family:var(--font-zh);display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-                        <span x-show="mlDraftBadge(m)" :data-testid="'ml-draft-' + m.itemId" x-text="mlDraftBadge(m)" style="padding:1px 8px;border-radius:10px;border:1px solid var(--line);color:var(--text-dim)"></span>
                         <span x-show="m.quoteItemId" :data-testid="'ml-item-' + m.itemId" x-text="'報價品項：' + mlQuoteName(m.quoteItemId)" style="color:var(--text-dim)"></span>
                         <span x-show="mlLinkedText(m)" :data-testid="'ml-linked-' + m.itemId" x-text="mlLinkedText(m)" style="color:var(--success)"></span>
                         <span x-show="mlBadge(m)" :data-testid="'ml-badge-' + m.itemId" x-text="mlBadge(m)"

@@ -115,7 +115,7 @@ def test_material_request_link_flow_in_the_browser(live_server, make_user, e2e_b
     saved = [o for k, o in _orders().items() if k not in ("K", "Z")][0]
     assert saved["quoteItemId"] == "a" and saved["overPlanReason"] == "客戶追加兩台" and "poDocCode" not in saved   # 連結鍵原樣存下；沒連採購單的不寫 poDocCode
     new_id = saved["itemId"]
-    page.wait_for_function("(id) => { const b = document.querySelector('[data-testid=ml-draft-' + id + ']'); return b && b.offsetParent !== null && b.innerText === '尚未送審' }", arg=new_id, timeout=15000)   # 預設分頁直接看到「尚未送審」
+    page.wait_for_function("(id) => { const b = document.querySelector('[data-testid=mo-card-' + id + '] [data-testid=mo-ap-status]'); return b && b.offsetParent !== null && b.innerText === '尚未送審' }", arg=new_id, timeout=15000)   # 預設分頁直接看到「尚未送審」
     page.wait_for_function("(id) => { const b = document.querySelector('[data-testid=ml-badge-' + id + ']'); return b && b.offsetParent !== null && b.innerText.includes('未申請採購單') }", arg=new_id, timeout=15000)
     assert "尚未送審" in page.locator('[data-testid="ml-tab-approved"]').inner_text()
     _shot(page, "03-saved-badge")
