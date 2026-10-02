@@ -1114,7 +1114,12 @@ def dispatch_status_audited(did, target, user, authorization, *, reason="", lega
     finally:
         conn.close()
     _audit(_tok(authorization), f'vendor.dispatch.{target}', 'contractor_dispatch', str(did), row["quote_no"],
-           {"from": res["prev"], "to": res["new"], "reason": reason, "note": res["note"], "docCode": row["doc_code"] or ""})
+           {"from": res["prev"], "to": res["new"], "reason": reason, "note": res["note"], "docCode": row["doc_code"] or "",
+            **({"closedStages": [c["stage"] for c in res["closed"]]} if res.get("closed") else {})})
+    for c in res.get("closed") or []:                              # 通知送審人：派發已取消、審核已關閉（不放金額）
+        if c["requestedBy"]:
+            _notify(c["requestedBy"], "dispatch_returned", str(did), row["quote_no"],
+                    "派發 %s 已取消，%s已關閉" % (row["doc_code"] or ("#%s" % did), "完工審核" if c["stage"] == "completion" else "派發審核"))
     notify_module_activity("承攬商派發", _STATUS_LABELS.get(target, target),
                             user.get("display_name") or user["username"], row["quote_no"], "vendor-contractors.html")
     return {"ok": True, "status": target, "updated_at": datetime.now().isoformat()}

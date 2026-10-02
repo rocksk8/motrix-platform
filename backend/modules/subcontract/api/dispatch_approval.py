@@ -153,6 +153,8 @@ def dispatch_review_approve(did, body, user, authorization, st: Stage, *, on_don
     try:
         begin_write(conn)
         row = _load(conn, did)
+        if row["status"] == "cancelled":
+            raise HTTPException(409, "這筆派發已取消，不能再簽核")
         if row[st.status_col] not in (_flow.PENDING, _flow.IN_PROGRESS):
             raise HTTPException(409, "「%s」狀態不在簽核中" % (row[st.status_col] or "舊單"))
         appr = _jdict(row[st.json_col])
@@ -215,6 +217,8 @@ def dispatch_review_reject(did, body, user, authorization, st: Stage):
     try:
         begin_write(conn)
         row = _load(conn, did)
+        if row["status"] == "cancelled":
+            raise HTTPException(409, "這筆派發已取消，不能再簽核")
         if row[st.status_col] not in (_flow.PENDING, _flow.IN_PROGRESS):
             raise HTTPException(409, "「%s」狀態不在簽核中" % (row[st.status_col] or "舊單"))
         appr = _jdict(row[st.json_col])
@@ -366,8 +370,8 @@ def _queue_for(conn, type_, rows):
     st, label, seg = _TYPE_STAGE[type_]
     out = []
     for r in rows:
-        if r[st.status_col] not in (_flow.PENDING, _flow.IN_PROGRESS):
-            continue
+        if r[st.status_col] not in (_flow.PENDING, _flow.IN_PROGRESS) or r["status"] == "cancelled":
+            continue                                          # 已取消的派發不進佇列（歷史資料或取消後殘留也不列）
         raw = _aq.approval_raw_of(r[st.json_col], type_, r["doc_code"])
         if raw is None or not r["doc_code"]:                  # 壞資料只跳過那一筆
             continue
