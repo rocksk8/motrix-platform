@@ -21,6 +21,13 @@ PANEL = "#fin-material-orders"
 HINT = "需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。"
 
 
+@pytest.fixture(autouse=True)
+def _po_rule_on(monkeypatch):
+    """33-M1 畫面：本檔驗「強制採購單」之下的畫面流程，明確設成開（不依賴 material_approval.PO_REQUIRED 的出貨預設）。"""
+    from modules.case import material_approval as _MA
+    monkeypatch.setattr(_MA, "PO_REQUIRED", True)
+
+
 def _order(iid, name, **kw):
     d = {"itemId": iid, "itemName": name, "quantity": 2, "unit": "台", "unitPrice": 1000, "totalPrice": 2000, "paidStatus": "pending", "paidAmount": 0,
          "paidDate": "", "notes": "", "invoiceDate": "", "supplierId": 1}
