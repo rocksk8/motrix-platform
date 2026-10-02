@@ -11,11 +11,12 @@ from modules.subcontract.api import contractor_vouchers, contractors, dispatch_a
 _m0001 = importlib.import_module("modules.subcontract.migrations.0001_remit_fee")
 _m0002 = importlib.import_module("modules.subcontract.migrations.0002_dispatch_file_delete_requests")
 _m0003 = importlib.import_module("modules.subcontract.migrations.0003_dispatch_approval")
+_m0004 = importlib.import_module("modules.subcontract.migrations.0004_dispatch_doc_code_backfill")
 
 MODULE = ModuleSpec(
     key="subcontract",
-    # v1：contractor_payment_vouchers 匯款實付／手續費／差額審核欄位（W1）；v2：dispatch_file_delete_requests（N1，報價單附件刪除申請）；v3：contractor_dispatches 兩段審核欄位（31-A，派發審核）
-    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up)],
+    # v1：contractor_payment_vouchers 匯款實付／手續費／差額審核欄位（W1）；v2：dispatch_file_delete_requests（N1，報價單附件刪除申請）；v3：contractor_dispatches 兩段審核欄位（31-A，派發審核）；v4：已卡住的審核中派發補單號 doc_code（舊單申請完工進不了佇列的資料修復，只補單號）
+    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up)],
     routers=[contractors.router, vendor_contractors.router, dispatch_approval.router, contractor_vouchers.router],
     providers={
         # IP-1：派工單列序列化（M01 應計派工成本、M06 傳票摘要來源）

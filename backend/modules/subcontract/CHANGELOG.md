@@ -1,5 +1,10 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-02（fix/t32-legacy-completion-c7）：舊單申請完工進得了簽核佇列（正式機回報）
+- 修正：舊單（第 31-A 之前建立，`doc_code=''`）申請完工後，完工審核**不顯示在簽核佇列**（也點不開詳情、轉不了簽）。成因：佇列提供者對空單號略過，而申請完工只改 `completion_status`、沒補單號。現在 `dispatch_review_submit` 在送審當下（持寫鎖）幫空單號補 `DP-YYYYMMDD-NNNN`（兩段共用；只補單號，舊單身分 `approval_status=''` 與其他欄位不變；通知／稽核文字改用單號而非 `#id`）。
+- 資料修復：migration `0004_dispatch_doc_code_backfill`——任一段在待審核／簽核中而 `doc_code=''` 的列補單號（日期取該筆送審日期，流水號接同日最大號）；**只動 `doc_code`**，冪等，沒卡住的舊單不動。正式機升級後，已卡住的完工審核會自己出現在簽核佇列。
+- 測試：`test_dispatch_legacy_completion_queue_2026_10_02.py`（重現＋流程＋修復＋反向控制）。
+
 ## (next) — 2026-10-02 11:41（fix/t32-dispatch-s1-2e）：舊單實質編輯維持舊單（使用者裁示 S-1）
 - ⚠️ 行為變更：舊單（`approval_status=''`）的**實質欄位**（承攬商、品項、人員、稅率）被編輯後，**不再**回草稿重新送審——維持舊單，成本（營運報表應計）、總帳 E04、匯款申請照舊不掉；改為①`approval_json` 記 `legacyModified`（修改人、最後時間、次數、第一次時間）②獨立稽核 `vendor.dispatch.legacy_edit`（前後金額）③`dispatch.row` 新增 `legacyModified`／`legacyModifiedAt`，畫面出現「舊單已修改」警示徽章與存檔提示。已核准的派發實質編輯仍回草稿重審（不變）；非實質欄位（備註、日期、發票）不受影響。
 
