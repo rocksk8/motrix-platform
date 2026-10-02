@@ -271,10 +271,45 @@ def test_hub_page_lists_features_and_toggle_shows_and_hides_the_tab(live_server,
     finally:
         conn.close()
 
+    # 頁籤一出現，頁面就同時送出 GET /engine/events 與 GET /engine/status（x-if 才建立的橫幅 x-init＋engLoad）。這兩個請求還在路上時就關掉功能，
+    # 伺服器處理它們的當下功能已經是關的 ⇒ 409（請求是合法的、只是比關閉晚到）。所以要先等開啟那一刻的載入都落地，再關；
+    # 不放寬下面的「沒有 4xx」斷言（見 test_turning_the_feature_off_with_initial_loads_in_flight_is_the_only_source_of_409）。
+    page.wait_for_load_state("networkidle")
     page.locator("[data-testid=hb-row-engine_drafts] [data-testid=hb-toggle]").click()
     page.wait_for_function("() => !document.querySelector('[data-testid=hb-tab-engine_drafts]')")
     assert not bad, "開總帳作業頁時有請求失敗：%s" % bad[:4]
     assert not errs, "頁面丟了例外：%s" % errs[:3]
+
+
+@pytest.mark.e2e
+def test_turning_the_feature_off_with_initial_loads_in_flight_is_the_only_source_of_409(live_server, make_user, e2e_browser):
+    """反向控制／成因重現：開啟時送出的 events／status 被攔住不放行，功能先關掉，再放行 ⇒ 伺服器回 409（偵測器 `bad` 抓得到）。
+    證明 409 只來自「關得比載入快」的時序，不是頁面在功能關閉後主動再請求：放行前 `bad` 為空，且關閉後頁面沒有新發任何 engine 請求。"""
+    user, pw = make_user(username="e2e_gl_hub_race", role="superadmin")
+    page = e2e_browser.new_page()
+    bad, errs = _open(page, live_server, user, pw, "ledger-hub.html")
+    page.wait_for_selector("[data-testid=hb-features]")
+    held, issued = [], []
+    page.route("**/api/ledger/engine/events*", lambda r: (issued.append(r.request.url), held.append(r)))
+    page.route("**/api/ledger/engine/status*", lambda r: (issued.append(r.request.url), held.append(r)))
+    page.locator("[data-testid=hb-row-engine_drafts] [data-testid=hb-toggle]").click()
+    page.wait_for_selector("[data-testid=hb-tab-engine_drafts]", state="visible")
+    page.wait_for_function("() => true")
+    for _ in range(100):                                                   # 兩個初始載入都已送出（被攔住）
+        if len(held) >= 2:
+            break
+        page.wait_for_timeout(50)
+    assert len(held) == 2, issued
+    page.locator("[data-testid=hb-row-engine_drafts] [data-testid=hb-toggle]").click()
+    page.wait_for_function("() => !document.querySelector('[data-testid=hb-tab-engine_drafts]')")
+    assert not bad, bad
+    n_before = len(issued)
+    for r in held:
+        r.continue_()
+    page.wait_for_load_state("networkidle")
+    assert sorted(code for code, url in bad if "/engine/" in url) == [409, 409], bad          # 關得比載入快 ⇒ 兩個 409
+    assert len(issued) == n_before, "功能關閉後頁面不可以再發 engine 請求：%s" % issued
+    assert not errs, errs
 
 
 # ── B5：年度結轉與決算 ────────────────────────────────────────────────────
