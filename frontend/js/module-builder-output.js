@@ -199,7 +199,14 @@
           this.busy = true; this.publishProblems = []; this.errMsg = ''
           try {
             if (!(await this.flushSave())) { this.errMsg = '未發布：' + (this.errMsg || '草稿存檔失敗'); return }
-            var r = await this.api('POST', this.defUrl() + '/publish', { note: this.publishNote })
+            var pub = { note: this.publishNote }
+            if (this.draftEtag !== null) pub.base_etag = this.draftEtag            // K-2：發布的是「我看到的那份草稿」
+            var r = await this.api('POST', this.defUrl() + '/publish', pub)
+            if (r.status === 409 && r.data && r.data.code === 'draft_conflict') {
+              this.conflict = r.data.current || {}; this.conflictHeld = false; this.saveState = 'conflict'
+              this.errMsg = '未發布：草稿在你載入之後被別人改過，請先處理上方的提示'
+              return
+            }
             if (r.status === 422) {
               this.publishProblems = (r.data && r.data.problems) || []
               return
@@ -210,6 +217,7 @@
             this.saveState = 'idle'
             window.MotrixUI && window.MotrixUI.toast(r.data.pending ? ('已送審第 ' + r.data.version + ' 版，等待審核') : ('已發布第 ' + r.data.version + ' 版'), { kind: 'ok' })
             await this.reloadVersions()
+            await this.refreshEtag()
             await this.loadDiff()
             var p = await this.api('GET', '/api/custom-modules')
             if (p.ok) this.published = p.data || []
@@ -235,6 +243,7 @@
             this._loading = true
             this.def = this.normalize(clone(r.data.body))
             this.$nextTick(() => { this._loading = false })
+            await this.refreshEtag()
             await this.saveDraft()
             await this.reloadVersions()
             await this.loadDiff()

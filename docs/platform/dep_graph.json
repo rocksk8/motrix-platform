@@ -2153,6 +2153,31 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:js/remit-kinds-settings.js": {
+   "api_calls": [
+    "/api/definitions/",
+    "/api/definitions//diff",
+    "/api/definitions//draft",
+    "/api/definitions//publish",
+    "/api/definitions//restore/",
+    "/api/definitions//validate",
+    "/api/remit-kinds/definition"
+   ],
+   "api_prefixes": [
+    "/api/definitions",
+    "/api/remit-kinds"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/js/remit-kinds-settings.js",
+   "routers_called": [
+    "mod:subcontract/api/remit_kinds",
+    "router:definitions"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:js/reports.js": {
    "api_calls": [
     "/api/cashier/execution-history",
@@ -2588,6 +2613,7 @@
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/dispatch_approval",
+    "mod:subcontract/api/remit_kinds",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/inventory",
     "mod:supply/api/shipping_notes",
@@ -9991,11 +10017,13 @@
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/dispatch_approval",
+    "mod:subcontract/api/remit_kinds",
     "mod:subcontract/api/vendor_contractors",
     "mod:subcontract/attachments",
     "mod:subcontract/dispatch_notify",
     "mod:subcontract/gl_events",
     "mod:subcontract/remit",
+    "mod:subcontract/remit_kinds",
     "plat:registry"
    ],
    "kind": "mod",
@@ -10029,7 +10057,10 @@
     "helper:settings",
     "helper:tiered_approval",
     "mod:subcontract/bank_mask",
-    "mod:subcontract/remit"
+    "mod:subcontract/remit",
+    "mod:subcontract/remit_create",
+    "mod:subcontract/remit_kinds",
+    "mod:subcontract/remit_split"
    ],
    "imports": [
     "core:db",
@@ -10047,6 +10078,7 @@
     "helper:tiered_approval",
     "mod:subcontract/bank_mask",
     "mod:subcontract/remit",
+    "mod:subcontract/remit_create",
     "plat:registry",
     "plat:txn"
    ],
@@ -10058,115 +10090,121 @@
    "routes": [
     {
      "func": "get_remit_fee_total",
-     "line": 204,
+     "line": 222,
      "method": "GET",
      "path": "/api/contractor-vouchers/remit-fee-total"
     },
     {
      "func": "get_last_paid_bank_account",
-     "line": 219,
+     "line": 237,
      "method": "GET",
      "path": "/api/contractor-vouchers/last-paid-bank-account"
     },
     {
      "func": "list_contractor_vouchers",
-     "line": 242,
+     "line": 260,
      "method": "GET",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "get_contractor_voucher",
-     "line": 268,
+     "line": 286,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "create_contractor_voucher",
-     "line": 281,
+     "line": 299,
      "method": "POST",
      "path": "/api/contractor-vouchers"
     },
     {
+     "func": "preview_contractor_voucher",
+     "line": 449,
+     "method": "POST",
+     "path": "/api/contractor-vouchers/preview"
+    },
+    {
      "func": "delete_contractor_voucher",
-     "line": 406,
+     "line": 473,
      "method": "DELETE",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "submit_contractor_voucher",
-     "line": 431,
+     "line": 498,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/submit"
     },
     {
      "func": "approve_contractor_voucher",
-     "line": 493,
+     "line": 560,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/approve"
     },
     {
      "func": "revoke_contractor_voucher_approval",
-     "line": 602,
+     "line": 669,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/revoke-approval"
     },
     {
      "func": "reject_contractor_voucher",
-     "line": 646,
+     "line": 713,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_contractor_voucher_pdf",
-     "line": 694,
+     "line": 761,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_contractor_voucher_export",
-     "line": 724,
+     "line": 791,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/export"
     },
     {
      "func": "get_remit_require_payslip",
-     "line": 792,
+     "line": 859,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "set_remit_require_payslip",
-     "line": 800,
+     "line": 867,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "get_personnel_links",
-     "line": 813,
+     "line": 880,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-links"
     },
     {
      "func": "link_personnel_payslip",
-     "line": 847,
+     "line": 914,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-link"
     },
     {
      "func": "toggle_paid",
-     "line": 902,
+     "line": 969,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/paid-toggle"
     },
     {
      "func": "get_contractor_voucher_approval_flow",
-     "line": 1024,
+     "line": 1091,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     },
     {
      "func": "set_contractor_voucher_approval_flow",
-     "line": 1041,
+     "line": 1108,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     }
@@ -10183,6 +10221,7 @@
    "tables_r_transitive": [
     "approval_delegates",
     "case_stages",
+    "contractor_payment_vouchers",
     "contractors",
     "daily_tasks",
     "departments",
@@ -10194,6 +10233,7 @@
     "quotations",
     "sessions",
     "shipping_notes",
+    "ui_definitions",
     "users",
     "vendor_contractors"
    ],
@@ -10454,6 +10494,52 @@
     "notifications",
     "system_settings"
    ]
+  },
+  "mod:subcontract/api/remit_kinds": {
+   "api_prefixes": [
+    "/api/remit-kinds"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:auth",
+    "helper:module_registry",
+    "mod:subcontract/remit_kinds"
+   ],
+   "imports": [
+    "core:db",
+    "helper:auth",
+    "mod:subcontract/remit_kinds"
+   ],
+   "kind": "mod",
+   "module_key": "subcontract",
+   "path": "backend/modules/subcontract/api/remit_kinds.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_remit_kinds",
+     "line": 14,
+     "method": "GET",
+     "path": "/api/remit-kinds"
+    },
+    {
+     "func": "remit_kinds_definition",
+     "line": 28,
+     "method": "GET",
+     "path": "/api/remit-kinds/definition"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "contractor_payment_vouchers",
+    "sessions",
+    "ui_definitions",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": []
   },
   "mod:subcontract/api/vendor_contractors": {
    "api_prefixes": [
@@ -10804,6 +10890,59 @@
    "tables_w": [
     "contractor_payment_vouchers"
    ]
+  },
+  "mod:subcontract/remit_create": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:legal_params",
+    "mod:subcontract/remit_kinds",
+    "mod:subcontract/remit_split"
+   ],
+   "kind": "mod",
+   "module_key": "subcontract",
+   "path": "backend/modules/subcontract/remit_create.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "contractor_payment_vouchers"
+   ],
+   "tables_w": []
+  },
+  "mod:subcontract/remit_kinds": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "plat:definitions"
+   ],
+   "kind": "mod",
+   "module_key": "subcontract",
+   "path": "backend/modules/subcontract/remit_kinds.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "contractor_payment_vouchers",
+    "ui_definitions"
+   ],
+   "tables_w": []
+  },
+  "mod:subcontract/remit_split": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:legal_params"
+   ],
+   "kind": "mod",
+   "module_key": "subcontract",
+   "path": "backend/modules/subcontract/remit_split.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
   },
   "mod:supply/__init__": {
    "api_prefixes": [],
@@ -13749,6 +13888,34 @@
    "tables_r": [],
    "tables_w": []
   },
+  "page:pages/remit-kinds-settings.html": {
+   "api_calls": [
+    "/api/system/branding/favicon"
+   ],
+   "api_prefixes": [
+    "/api/system"
+   ],
+   "api_unmatched": [],
+   "imports": [
+    "js:js/remit-kinds-settings.js",
+    "js:static/auth-guard.js",
+    "js:static/notif.js",
+    "js:static/sidebar.js",
+    "js:static/ui.js"
+   ],
+   "kind": "page",
+   "path": "frontend/pages/remit-kinds-settings.html",
+   "routers_called": [
+    "router:system"
+   ],
+   "routers_called_effective": [
+    "mod:subcontract/api/remit_kinds",
+    "router:definitions",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "page:pages/reports.html": {
    "api_calls": [
     "/api/reports/ledger-diff",
@@ -15466,97 +15633,97 @@
    "routes": [
     {
      "func": "list_definition_kinds",
-     "line": 145,
+     "line": 149,
      "method": "GET",
      "path": "/api/definition-kinds"
     },
     {
      "func": "list_expense_types",
-     "line": 152,
+     "line": 156,
      "method": "GET",
      "path": "/api/expense-types"
     },
     {
      "func": "get_expense_type",
-     "line": 164,
+     "line": 168,
      "method": "GET",
      "path": "/api/expense-types/{code}"
     },
     {
      "func": "list_definitions",
-     "line": 179,
+     "line": 183,
      "method": "GET",
      "path": "/api/definitions/{kind}"
     },
     {
      "func": "delete_definition_draft",
-     "line": 192,
+     "line": 196,
      "method": "DELETE",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "delete_custom_module",
-     "line": 210,
+     "line": 214,
      "method": "DELETE",
      "path": "/api/definitions/custom_module/{key}"
     },
     {
      "func": "get_definition",
-     "line": 227,
+     "line": 231,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "save_definition_draft",
-     "line": 240,
+     "line": 244,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 257,
+     "line": 269,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 265,
+     "line": 277,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 305,
+     "line": 323,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 321,
+     "line": 339,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 346,
+     "line": 363,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 377,
+     "line": 394,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 390,
+     "line": 407,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 416,
+     "line": 433,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
@@ -17852,7 +18019,9 @@
     "mod:case/recognition",
     "mod:subcontract/api/vendor_contractors",
     "mod:subcontract/dispatch_flow",
-    "mod:subcontract/gl_events"
+    "mod:subcontract/gl_events",
+    "mod:subcontract/remit_create",
+    "mod:subcontract/remit_kinds"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -19689,7 +19858,8 @@
    "readers": [
     "core:archive",
     "helper:custom_def_review",
-    "helper:custom_modules"
+    "helper:custom_modules",
+    "mod:subcontract/remit_kinds"
    ],
    "tables_r": [],
    "tables_w": [],

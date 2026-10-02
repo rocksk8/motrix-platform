@@ -41,6 +41,16 @@
       </div>
 
       <div class="mb-err" id="mb-error" x-show="errMsg" x-text="errMsg"></div>
+      <div class="mb-err" id="mb-conflict" x-show="conflict" x-cloak role="alert" data-testid="mb-conflict">
+        <b>別人剛改過這份草稿</b>（<span data-testid="mb-conflict-who" x-text="conflictWho()"></span>）。自動存檔已停止，你這邊未存的修改還在畫面上。
+        <span x-show="!conflictHeld">
+          <button class="btn btn-sm" type="button" data-testid="mb-conflict-reload" @click="conflictReload()">重新載入（我的修改會消失）</button>
+          <button class="btn btn-sm" type="button" data-testid="mb-conflict-copy" @click="conflictCopy()">複製我的內容（JSON）</button>
+          <button class="btn btn-sm btn-primary" type="button" data-testid="mb-conflict-force" @click="conflictForce()">用我的覆蓋</button>
+          <button class="btn btn-sm" type="button" data-testid="mb-conflict-hold" @click="conflictHold()">先不處理</button>
+        </span>
+        <span x-show="conflictHeld"><button class="btn btn-sm" type="button" data-testid="mb-conflict-reopen" @click="conflictHeld = false">處理衝突</button></span>
+      </div>
 
       <!-- 選擇模組 -->
       <!-- 新模組：先從範本開始（也可空白）；套用後與範本脫鉤，可自由修改 -->

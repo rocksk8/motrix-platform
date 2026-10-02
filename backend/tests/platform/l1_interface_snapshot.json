@@ -1,5 +1,5 @@
 {
- "core_version": "1.107",
+ "core_version": "1.109",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -373,7 +373,7 @@
    "restore_to_draft": "def(conn, module_key, version, user)",
    "review_state": "def(conn, submitter=…)",
    "set_review_settings": "def(conn, mode=…, reviewers=…)",
-   "submit": "def(conn, module_key, user, note=…)"
+   "submit": "def(conn, module_key, user, note=…, base_etag=…)"
   },
   "helper:custom_fields": {
    "DATA_CLASSES": "const",
@@ -1131,24 +1131,28 @@
    "DefinitionConflict": "class",
    "DefinitionError": "class",
    "DefinitionError.__init__": "def(self, message, problems=…)",
+   "DraftConflict": "class",
+   "DraftConflict.__init__": "def(self, message, current=…)",
    "KINDS": "const",
    "decide_submitted": "def(conn, kind, key, scope, version, approve, user=…, note=…, decision=…)",
+   "default_for": "def(kind, key)",
    "delete_draft": "def(conn, kind, key, scope)",
    "diff": "def(a, b, path=…)",
+   "etag_of": "def(body_json)",
    "get": "def(conn, kind, key, scope, version=…)",
    "kinds": "def()",
    "kinds_meta": "def()",
    "list_definitions": "def(conn, kind)",
    "open_submission": "def(conn, kind, key, scope)",
-   "publish": "def(conn, kind, key, scope, note=…, user=…)",
+   "publish": "def(conn, kind, key, scope, note=…, user=…, base_etag=…)",
    "register_default": "def(kind, fn)",
    "register_kind": "def(kind, label=…, validator=…, default=…)",
    "register_validator": "def(kind, fn)",
    "resolve": "def(conn, kind, key, role=…)",
    "restore": "def(conn, kind, key, scope, version, note=…, user=…)",
    "save_decision": "def(conn, kind, key, scope, version, decision)",
-   "save_draft": "def(conn, kind, key, scope, body, user=…)",
-   "submit_draft": "def(conn, kind, key, scope, note=…, user=…, decision=…)",
+   "save_draft": "def(conn, kind, key, scope, body, user=…, base_etag=…, force=…)",
+   "submit_draft": "def(conn, kind, key, scope, note=…, user=…, decision=…, base_etag=…)",
    "validate": "def(kind, key, body)",
    "versions": "def(conn, kind, key, scope)"
   },

@@ -40,7 +40,7 @@ function expenseTypesPage() {
     FIELD_TYPES: FIELD_TYPES, COL_TYPES: COL_TYPES,
     view: 'list', rows: [], docTypes: [], loading: true,
     key: '', isNew: false, newKey: '', body: null, meta: null,
-    problems: [], msg: '', err: '', busy: false, note: '', changes: null, _initDone: false, _prev: null,
+    problems: [], msg: '', err: '', busy: false, draftEtag: null, conflict: null, note: '', changes: null, _initDone: false, _prev: null,
 
     _hdr: function () {
       var s = {}
@@ -103,6 +103,7 @@ function expenseTypesPage() {
     startNew() {
       this.msg = ''; this.err = ''; this.problems = []; this.changes = null
       this.isNew = true; this.newKey = ''; this.key = ''; this.meta = { versions: [] }; this.body = newBody(); this.view = 'edit'
+      this.draftEtag = ''; this.conflict = null
       if (this.fdMount) this.fdMount()
     },
     async open(key) {
@@ -110,6 +111,8 @@ function expenseTypesPage() {
       var r = await this._call('GET', '/api/definitions/' + KIND + '/' + encodeURIComponent(key))
       if (!r.ok) { this._fail(r, '讀取失敗'); return }
       this.meta = r.data
+      this.draftEtag = (r.data.draft && typeof r.data.draft.etag === 'string') ? r.data.draft.etag : (r.data.draft === null ? '' : null)     // K-2：沒有草稿＝''；伺服器舊版沒給戳＝null（不帶 base_etag）
+      this.conflict = null
       var src = (r.data.draft || r.data.latest || {}).body
       if (!src) {                                   // 庫裡沒有（程式預設還沒人改）⇒ 以目前生效的預設當起點，不要開空白
         var cur = await this._call('GET', '/api/expense-types/' + encodeURIComponent(key))
@@ -216,13 +219,38 @@ function expenseTypesPage() {
       this.msg = this.problems.length ? '' : '驗證通過'
       return this.problems.length === 0
     },
+    // K-2 草稿並行保護：存草稿帶載入時的 base_etag；409 draft_conflict ⇒ 顯示「別人剛改過」提示（重新載入／複製我的內容／用我的覆蓋／先不處理）
+    _etagBody(extra) { var p = { body: this.body }; if (this.draftEtag !== null) p.base_etag = this.draftEtag; return Object.assign(p, extra || {}) },
+    _isConflict(r) { return r.status === 409 && r.data && r.data.code === 'draft_conflict' },
+    _onConflict(r) { this.conflict = r.data.current || {}; this.err = ''; this.msg = '' },
+    conflictWho() { var c = this.conflict || {}; return (c.created_by || '另一位使用者') + (c.created_at ? '，' + String(c.created_at).replace('T', ' ').slice(0, 16) : '') },
+    async conflictCopy() {
+      try { await navigator.clipboard.writeText(JSON.stringify(this.body, null, 2)); window.MotrixUI && window.MotrixUI.toast('已複製你的內容（JSON）', { kind: 'ok' }) }
+      catch (e) { this.err = '無法複製到剪貼簿，請先按「用我的覆蓋」或自行備份' }
+    },
+    async conflictReload() { var k = this._k(); this.conflict = null; await this.open(k) },
+    async conflictForce() {
+      var ok = window.MotrixUI ? await window.MotrixUI.confirm('這會覆蓋 ' + this.conflictWho() + ' 存的草稿，對方的修改會消失（稽核會記錄）。確定？', { okText: '用我的覆蓋', danger: true }) : true
+      if (!ok || this.busy) return
+      this.busy = true
+      try {
+        var r = await this._call('PUT', '/api/definitions/' + KIND + '/' + encodeURIComponent(this._k()) + '/draft', this._etagBody({ force: true }))
+        if (!r.ok) { this._fail(r, '儲存失敗'); return }
+        var k = this._k()
+        this.conflict = null
+        await this.open(k)
+        this.msg = '已用你的內容覆蓋草稿'
+      } catch (e) { this.err = '網路連線失敗，請確認後再按一次' } finally { this.busy = false }
+    },
+    conflictHold() { this.conflict = null; this.err = '草稿被別人改過，你的修改還沒存；要存請再按「儲存草稿」並選擇處理方式' },
     async saveDraft() {
       if (this.busy) return
       this.err = ''; this.msg = ''
       if (!this._keyOk()) return
       this.busy = true
       try {
-        var r = await this._call('PUT', '/api/definitions/' + KIND + '/' + encodeURIComponent(this._k()) + '/draft', { body: this.body })
+        var r = await this._call('PUT', '/api/definitions/' + KIND + '/' + encodeURIComponent(this._k()) + '/draft', this._etagBody())
+        if (this._isConflict(r)) { this._onConflict(r); return }
         if (!r.ok) { this._fail(r, '儲存失敗'); return }
         this.problems = ((r.data || {}).problems || []).map(function (p) { return typeof p === 'string' ? { path: '', message: p } : p })
         var k = this._k()
@@ -237,9 +265,14 @@ function expenseTypesPage() {
       this.busy = true
       try {
         var k = this._k()
-        var s = await this._call('PUT', '/api/definitions/' + KIND + '/' + encodeURIComponent(k) + '/draft', { body: this.body })
+        var s = await this._call('PUT', '/api/definitions/' + KIND + '/' + encodeURIComponent(k) + '/draft', this._etagBody())
+        if (this._isConflict(s)) { this._onConflict(s); return }
         if (!s.ok) { this._fail(s, '儲存失敗'); return }
-        var r = await this._call('POST', '/api/definitions/' + KIND + '/' + encodeURIComponent(k) + '/publish', { note: this.note })
+        if (s.data && typeof s.data.etag === 'string') this.draftEtag = s.data.etag
+        var pub = { note: this.note }
+        if (this.draftEtag !== null) pub.base_etag = this.draftEtag                 // 發布的是剛存的那份
+        var r = await this._call('POST', '/api/definitions/' + KIND + '/' + encodeURIComponent(k) + '/publish', pub)
+        if (this._isConflict(r)) { this._onConflict(r); return }
         if (!r.ok) { this._fail(r, '發布失敗'); return }
         this.note = ''
         await this.open(k)

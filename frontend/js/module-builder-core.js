@@ -9,7 +9,7 @@
         ready: false, errMsg: '', me: {}, catalog: {}, users: [], orgTree: [], published: [], menuGroups: ['自訂模組'], mountPoints: [], mountMax: 8,
         keyInput: '', keyErr: '', key: '', def: null, latestVersion: 0, versions: [],
         step: 1, tab: 'info', drawer: false, sel: null, dragOver: false,
-        dirty: false, saving: false, saveState: 'idle', savedAt: '', _saveTimer: null, _loading: false, _inflight: null, flushLimitMs: 10000,
+        dirty: false, saving: false, saveState: 'idle', draftEtag: null, conflict: null, conflictHeld: false, savedAt: '', _saveTimer: null, _loading: false, _inflight: null, flushLimitMs: 10000,
         draftProblems: [], publishProblems: [],
         numExample: '', numProblems: [], _numTimer: null,
         fxProblems: {}, fxState: {}, _fxTimers: {}, whenProblems: {}, whenState: {}, _whenTimers: {},
@@ -169,6 +169,7 @@
           this.sel = null; this.step = 1; this.tab = 'info'; this.drawer = false; this.formMode = 'edit'; this.sideTab = 'props'
           this.draftProblems = []; this.publishProblems = []; this.fxProblems = {}; this.whenProblems = {}
           this.dirty = false; this.saveState = r.data.draft ? 'saved' : 'idle'
+          this.setEtagFrom(r.data); this.conflict = null; this.conflictHeld = false
           try { var q = new URLSearchParams(location.search); q.set('key', k); history.replaceState(null, '', location.pathname + '?' + q.toString()) } catch (e) {}
           this.$nextTick(() => { this._loading = false; this.queueNumbering(); this.checkAllFormulas() })
           if (r.data.draft) this.validateNow()
@@ -185,6 +186,7 @@
           this.sel = null; this.step = 1; this.tab = 'info'; this.drawer = false; this.formMode = 'edit'; this.sideTab = 'props'
           this.draftProblems = []; this.publishProblems = []; this.fxProblems = {}; this.whenProblems = {}
           this.dirty = false; this.saveState = 'idle'
+          this.draftEtag = ''; this.conflict = null; this.conflictHeld = false             // 新模組：還沒有草稿
           try { var q = new URLSearchParams(location.search); q.set('key', k); history.replaceState(null, '', location.pathname + '?' + q.toString()) } catch (e) {}
           this.$nextTick(() => {
             this._loading = false; this.queueNumbering(); this.checkAllFormulas()
@@ -218,21 +220,30 @@
         saveDraft(keepalive) {
           if (!this.def || !this.key) return Promise.resolve()
           clearTimeout(this._saveTimer)
+          if (this.conflict) return Promise.resolve()                       // K-2：草稿被別人改過 ⇒ 停止自動存檔，等使用者選擇（不洗稽核、不蓋掉別人的）
           if (this._inflight) { this._saveTimer = setTimeout(() => this.saveDraft(), 300); return this._inflight }
           var p = this._putDraft(keepalive)
           this._inflight = p
           p.then(() => { if (this._inflight === p) this._inflight = null })
           return p
         },
-        async _putDraft(keepalive) {
+        async _putDraft(keepalive, force) {
           var snapshot = JSON.stringify(this.def)
           this.saving = true
           try {
-            var r = await fetch(this.defUrl() + '/draft', { method: 'PUT', headers: this._hdr(), keepalive: !!keepalive,
-                                                            body: JSON.stringify({ body: JSON.parse(snapshot) }) })
+            var payload = { body: JSON.parse(snapshot) }
+            if (this.draftEtag !== null) payload.base_etag = this.draftEtag      // K-2：載入時拿到的草稿戳（null＝伺服器舊版沒給 ⇒ 不帶，照舊後寫者勝）
+            if (force) payload.force = true
+            var r = await fetch(this.defUrl() + '/draft', { method: 'PUT', headers: this._hdr(), keepalive: !!keepalive, body: JSON.stringify(payload) })
             var d = null
             try { d = await r.json() } catch (e) {}
+            if (r.status === 409 && d && d.code === 'draft_conflict') {
+              this.conflict = d.current || {}; this.conflictHeld = false; this.saveState = 'conflict'; this.errMsg = ''
+              return
+            }
             if (!r.ok) { this.saveState = 'error'; this.errMsg = '草稿存檔失敗：' + ((d && d.detail) || r.status); return }
+            if (d && typeof d.etag === 'string') this.draftEtag = d.etag
+            this.conflict = null; this.conflictHeld = false
             this.draftProblems = (d && d.problems) || []
             this.savedAt = new Date().toTimeString().slice(0, 8)
             // 存檔期間又改了 ⇒ 仍是 dirty，再排一次
@@ -257,15 +268,41 @@
             var timer = null
             await Promise.race([p, new Promise(function (res) { timer = setTimeout(res, left) })])
             clearTimeout(timer)
-            if (this.saveState === 'error') return false
+            if (this.saveState === 'error' || this.conflict) return false
           }
-          return this.saveState !== 'error'
+          return this.saveState !== 'error' && !this.conflict
         },
+        // ── K-2 草稿並行保護 ──
+        setEtagFrom(data) {
+          if (data && data.draft && typeof data.draft.etag === 'string') this.draftEtag = data.draft.etag
+          else this.draftEtag = (data && data.draft === null) ? '' : null              // 沒有草稿＝''；伺服器舊版沒給戳＝null（不帶 base_etag）
+        },
+        async refreshEtag() {              // 發布／還原之後草稿可能被刪或重建 ⇒ 重讀戳（讀不到＝維持原值，下一次存檔若不符會走 409 流程）
+          var r = await this.api('GET', this.defUrl())
+          if (r.ok) this.setEtagFrom(r.data)
+        },
+        conflictWho() { var c = this.conflict || {}; return (c.created_by || '另一位使用者') + (c.created_at ? '，' + String(c.created_at).replace('T', ' ').slice(0, 16) : '') },
+        async conflictCopy() {
+          try { await navigator.clipboard.writeText(JSON.stringify(this.def, null, 2)); window.MotrixUI && window.MotrixUI.toast('已複製你的內容（JSON）', { kind: 'ok' }) }
+          catch (e) { this.errMsg = '無法複製到剪貼簿，請先按「用我的覆蓋」或自行備份' }
+        },
+        async conflictReload() {           // 丟掉我這幾分鐘的修改，載入最新草稿
+          var k = this.key
+          this.conflict = null; this.conflictHeld = false; this.dirty = false; this.errMsg = ''
+          await this.openKey(k)
+        },
+        async conflictForce() {            // 用我的覆蓋（二次確認：說明會覆蓋誰、什麼時候的內容）
+          var ok = window.MotrixUI ? await window.MotrixUI.confirm('這會覆蓋 ' + this.conflictWho() + ' 存的草稿，對方的修改會消失（稽核會記錄）。確定？', { okText: '用我的覆蓋', danger: true }) : true
+          if (!ok) return
+          await this._putDraft(false, true)
+        },
+        conflictHold() { this.conflictHeld = true },
         async validateNow() {
           var r = await this.api('POST', this.defUrl() + '/validate', { body: this.def })
           if (r.ok) this.draftProblems = r.data.problems || []
         },
         saveLabel() {
+          if (this.conflict) return '未存：草稿被別人改過'
           if (this.saveState === 'error') return '草稿存檔失敗'
           if (this.saving) return '存檔中…'
           if (this.dirty) return '有未存的修改'

@@ -44,6 +44,7 @@ from helpers.errors import trace_id
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 from modules.subcontract import remit as _remit
+from modules.subcontract import remit_create as _rc
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -93,6 +94,17 @@ def _visible_rows(rows, user, conn):
 class VoucherCreateIn(BaseModel):
     dispatch_id: int
     payable_date: Optional[str] = None
+    #: 31-B：分期（款別）申請。`kind` 不給＝舊式整筆申請（行為不變）；給了就要擇一填 `ratio_percent`（例 30＝30%）或 `amount`（本期稅前整數元）
+    kind: Optional[str] = None
+    ratio_percent: Optional[float] = None
+    amount: Optional[int] = None
+
+
+class VoucherPreviewIn(BaseModel):
+    dispatch_id: int
+    kind: Optional[str] = None
+    ratio_percent: Optional[float] = None
+    amount: Optional[int] = None
 
 
 class ApprovalFlowApprover(BaseModel):
@@ -159,6 +171,12 @@ def _voucher_public(row, include_snapshot: bool = True, viewer=None) -> dict:
         "vendorName":    snap.get("vendorName", ""),
         "status":        d["status"] or "草稿",
         "grandTotal":    snap.get("grandTotal", 0),
+        # 31-B：款別／分期（舊式整筆申請＝空字串／0／None）
+        "kind":          d.get("kind") or "",
+        "kindName":      d.get("kind_name") or "",
+        "seq":           d.get("seq") or 0,
+        "ratio":         d.get("ratio"),
+        "pretaxAmount":  d.get("pretax_amount"),
         "payableDate":   snap.get("payableDate", ""),
         "bankAccountName":   snap.get("bankAccountName", ""),
         "bankAccountNumber": snap.get("bankAccountNumber", ""),
@@ -294,18 +312,27 @@ def create_contractor_voucher(body: VoucherCreateIn, authorization: str = Header
         if not dispatch:
             conn.close()
             raise HTTPException(404, "找不到對應的承攬商派發紀錄")
-        if dispatch["status"] not in ("accepted", "completed"):
+        if not body.kind and dispatch["status"] not in ("accepted", "completed"):          # 分期申請（kind）的狀態規則在款別設定（kinded_context）
             conn.close()
             raise HTTPException(409, "僅「已驗收」或「完工」狀態的派發可產生匯款申請")
         if (dispatch["approval_status"] or "") not in ("", "已核准"):        # 31-A：派發審核未核准不得請款（舊單 '' 照舊）
             conn.close()
             raise HTTPException(409, "派發尚未核准（審核狀態：%s），不能產生匯款申請" % dispatch["approval_status"])
         existing = conn.execute(
-            "SELECT voucher_no, quote_no, data_json FROM contractor_payment_vouchers WHERE dispatch_id=?", (body.dispatch_id,)
+            "SELECT voucher_no, quote_no, data_json, kind FROM contractor_payment_vouchers WHERE dispatch_id=? AND voided_at=''", (body.dispatch_id,)
         ).fetchone()
-        if existing:
+        if existing and not body.kind:
             conn.close()
+            if existing["kind"]:
+                raise HTTPException(409, f"此派發已改用分期（款別）方式產生匯款申請（{existing['voucher_no']}），請選擇款別再開立")
             raise HTTPException(409, f"此派發已產生匯款申請（{existing['voucher_no']}）")
+        kctx = None
+        if body.kind:                                           # 31-B：分期申請——款別／狀態／金額規則全在 remit_create（與試算同一支）
+            try:
+                kctx = _rc.kinded_context(conn, dispatch, body.kind, body.ratio_percent, body.amount)
+            except _rc.RemitCreateError as e:
+                conn.close()
+                raise HTTPException(e.status, e.message)
 
         # 2026-08-31：使用者要求產生匯款申請當下就能直接填/改應付款日期，不用先
         # 跳去編輯派發紀錄。有帶就順便寫回派發本身（維持派發跟申請快照的日期
@@ -386,20 +413,60 @@ def create_contractor_voucher(body: VoucherCreateIn, authorization: str = Header
 
         now = datetime.now().isoformat()
         voucher_no = next_entity_code(conn, "contractor_payment_vouchers", "PV", code_col="voucher_no")
-        conn.execute(
-            "INSERT INTO contractor_payment_vouchers "
-            "(voucher_no, dispatch_id, quote_no, vendor_id, status, snapshot_json, data_json, "
-            "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (voucher_no, body.dispatch_id, dispatch["quote_no"], dispatch["vendor_id"], "草稿",
-             json.dumps(snapshot, ensure_ascii=False), "{}", user["username"], now, now)
-        )
+        if kctx is None:
+            conn.execute(
+                "INSERT INTO contractor_payment_vouchers "
+                "(voucher_no, dispatch_id, quote_no, vendor_id, status, snapshot_json, data_json, "
+                "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (voucher_no, body.dispatch_id, dispatch["quote_no"], dispatch["vendor_id"], "草稿",
+                 json.dumps(snapshot, ensure_ascii=False), "{}", user["username"], now, now)
+            )
+            label = ""
+        else:
+            snapshot = _rc.kinded_snapshot(snapshot, kctx, personnel_snapshot, personnel_total)
+            conn.execute(
+                "INSERT INTO contractor_payment_vouchers "
+                "(voucher_no, dispatch_id, quote_no, vendor_id, status, snapshot_json, data_json, created_by, created_at, updated_at, "
+                "kind, kind_name, kinds_version, seq, ratio, pretax_amount) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (voucher_no, body.dispatch_id, dispatch["quote_no"], dispatch["vendor_id"], "草稿",
+                 json.dumps(snapshot, ensure_ascii=False), "{}", user["username"], now, now,
+                 kctx["kind"]["code"], kctx["kind"]["name"], kctx["kinds_version"], kctx["seq"], kctx["ratio"], kctx["plan"]["pretax"])
+            )
+            label = "　%s 第 %d 期 稅前 %d" % (kctx["kind"]["name"], kctx["seq"], kctx["plan"]["pretax"])
         conn.commit()
         conn.close()
         _audit(_tok(authorization), "contractor_voucher.create", "contractor_payment_voucher", voucher_no,
-               f"{voucher_no}（{snapshot['vendorName'] or '外包人員點工'}）")
+               f"{voucher_no}（{snapshot['vendorName'] or '外包人員點工'}）{label}")
         notify_module_activity("承攬商匯款申請", "建立", user.get("display_name") or user["username"],
-                                f"{voucher_no}（{snapshot['vendorName']}）", "case-management.html")
-        return {"voucher_no": voucher_no, "created_at": now}
+                                f"{voucher_no}（{snapshot['vendorName']}）{label}", "case-management.html")
+        out = {"voucher_no": voucher_no, "created_at": now}
+        if kctx is not None:
+            out.update(kind=kctx["kind"]["code"], kindName=kctx["kind"]["name"], seq=kctx["seq"], plan=kctx["plan"], warnings=kctx["warnings"])
+        return out
+
+
+@router.post("/api/contractor-vouchers/preview")
+def preview_contractor_voucher(body: VoucherPreviewIn, authorization: str = Header(None)):
+    """31-B：分期申請的試算（不寫任何東西）——與建立同一支 `remit_create.kinded_context`，所以畫面預覽的數字就是建立時會存的數字。
+    回本期稅前／稅額／是否最後一期／補差／剩餘額度／前期清單／警示。"""
+    user = _require_user(authorization)
+    _require_admin(user)
+    conn = get_db()
+    try:
+        dispatch = conn.execute("SELECT * FROM contractor_dispatches WHERE id=?", (body.dispatch_id,)).fetchone()
+        if not dispatch:
+            raise HTTPException(404, "找不到對應的承攬商派發紀錄")
+        if (dispatch["approval_status"] or "") not in ("", "已核准"):
+            raise HTTPException(409, "派發尚未核准（審核狀態：%s），不能產生匯款申請" % dispatch["approval_status"])
+        try:
+            ctx = _rc.kinded_context(conn, dispatch, body.kind, body.ratio_percent, body.amount)
+        except _rc.RemitCreateError as e:
+            raise HTTPException(e.status, e.message)
+    finally:
+        conn.close()
+    return {"kind": ctx["kind"]["code"], "kindName": ctx["kind"]["name"], "kindsVersion": ctx["kinds_version"], "seq": ctx["seq"], "mode": ctx["mode"],
+            "plan": ctx["plan"], "dispatchTotal": ctx["total"], "taxRate": ctx["rate"], "warnings": ctx["warnings"],
+            "previous": [{"voucherNo": p["voucher_no"], "kind": p["kind"], "seq": p["seq"], "pretax": p["pretax"], "tax": p["tax"], "isPaid": p["is_paid"]} for p in ctx["previous"]]}
 
 
 @router.delete("/api/contractor-vouchers/{voucher_no}")
