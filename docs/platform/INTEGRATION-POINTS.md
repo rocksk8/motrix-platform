@@ -842,3 +842,29 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 對方不在時 | 提供者不在 ⇒ 呼叫端視同 `None` |
 | 契約版本 | 1（2026-10-01） |
 | 守門 | `backend/modules/accounting/tests/test_category_map_g1_2026_10_01.py::test_category_account_resolver` |
+
+## IP-SH1　`material.shippable`：已核准且已到貨的材料申請與到貨量（M01 → M03 出貨單連動；暫定號，列車定號；2026-10-03，c7）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`modules/case/material_shippable.py::material_shippable` |
+| 使用方 | M03 供應：`modules/supply/material_link.py`（出貨單送審／核准檢查、E6 警示） |
+| 形式 | provider，單一提供者（名稱 `case`） |
+| 語法 | 提供：`("material.shippable", "case"): fn`；取用：`registry.single_provider("material.shippable")` ⇒ `fn(conn, quote_no)` |
+| 回傳 | `[{materialItemId, docCode, name, unit, quoteItemId, appliedQty, arrivedQty, status:'已核准'}]`；只含疊加列 `已核准` 且已確認到貨者；`arrivedQty`＝實收數量（E5，選填）否則全數。唯讀、不 commit |
+| 對方不在時 | 提供者不在 ⇒ 出貨單帶材料申請連結時 400 `ship_link_module_off`；沒有連結的出貨單完全不受影響 |
+| 契約版本 | 1（2026-10-03） |
+| 守門 | `backend/modules/supply/tests/test_shipping_material_link_2026_10_03.py` |
+
+## IP-SH2　`shipping.material_shipped`：材料申請的出貨占用量（M03 → M01）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 供應：`modules/supply/material_link.py::material_shipped` |
+| 使用方 | 尚無（33-S3：材料申請頁三格數量、取消阻擋；接入時補） |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("shipping.material_shipped", "supply"): fn`；取用：`registry.providers("shipping.material_shipped").get("supply")` ⇒ `fn(conn, quote_no, exclude_note_no=None)` |
+| 回傳 | `{materialItemId: {"reserved": 數量（待審核／簽核中）, "shipped": 數量（已核准）, "notes": [出貨單號…]}}`；草稿、已退回不計 |
+| 對方不在時 | 提供者不在 ⇒ 呼叫端視同 0 |
+| 契約版本 | 1（2026-10-03） |
+| 守門 | `backend/modules/supply/tests/test_shipping_material_link_2026_10_03.py` |

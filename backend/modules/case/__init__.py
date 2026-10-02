@@ -20,6 +20,7 @@ from modules.case.api import (case_action_items as _api_action_items, case_extra
 from modules.case import expense_notify as _expense_notify     # noqa: F401 — 載入時登記費用單據的信件類型
 from modules.case import material_approval as _material_approval  # noqa: F401 — 載入時登記簽核單據類型 material_order（叫料）
 from modules.case import material_notify as _material_notify      # noqa: F401 — 載入時登記叫料審核的信件類型
+from modules.case import material_shippable as _material_shippable    # noqa: F401 — 33-S1 提供者 material.shippable
 from modules.case import material_payment as _material_payment    # noqa: F401 — 載入時登記簽核單據類型 material_payment（叫料匯款）
 
 #: 模組自己的 migration（檔名以版號開頭，不是合法的 import 名稱 ⇒ importlib）
@@ -59,6 +60,8 @@ MODULE = ModuleSpec(
         # 31-C：叫料審核（疊加表 case_material_approvals）：待簽項目與詳情
         ("approval.queue_items", "case_material"): _api_material_approvals.queue_items,
         ("approval.detail", "material_order"): _api_material_approvals.detail,
+        # 33-S1：出貨單連動材料申請——已核准且已到貨的材料申請與到貨量（M03 出貨檢查用；唯讀）
+        ("material.shippable", "case"): _material_shippable.material_shippable,
         # 31-C 匯款切片：叫料匯款申請（每單多張、各自簽核）：待簽項目與詳情；出納與差額審核走既有名稱空間（IP-100／IP-102），手續費列報表支出（IP-9）
         ("approval.queue_items", "case_material_payment"): _api_material_payments.queue_items,
         ("approval.detail", "material_payment"): _api_material_payments.detail,
