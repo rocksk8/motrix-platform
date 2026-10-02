@@ -114,13 +114,13 @@ def stage_revenue(pretax, stages):
     return {"entries": [], "flags": flags, "unrecognized": round_half_up(pretax)}
 
 
-def _case_rows(conn, department_id=None):
+def _case_rows(conn, department_id=None, quote_no=None):
     rows = conn.execute("""
         SELECT quote_no, customer_name, project_name, sales_person, sales_person_id, total, pretax,
                data_json
         FROM quotations
         WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
-    """).fetchall()
+    """ + (" AND quote_no=?" if quote_no else ""), (quote_no,) if quote_no else ()).fetchall()
     if department_id:
         dept = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users")}
         rows = [r for r in rows if dept.get(r["sales_person_id"]) == department_id]
@@ -277,26 +277,26 @@ def _material_states(conn) -> dict:
         return {}
 
 
-def material_entries(conn, basis, department_id=None):
-    """叫料（案件 data_json）→ 逐筆。沒有稅欄位 ⇒ 一律「未拆稅」。
+def material_money_rows(conn, department_id=None, quote_no=None):
+    """材料申請逐筆判定（**不分口徑**；營運報表、總帳 E12／E12b、完結精算共用的唯一原語，33-A1）。
 
-    審核規則（31-C，與承攬商派發同一組）：**權責口徑**——草稿／已退回／已取消**不計**；待審核／簽核中**計入並標 `pending`**；已核准與舊單（沒有審核單）照舊。
-    **現金口徑**——付出去的錢是事實，不因審核狀態排除（只標 `pending`）。每筆帶 `approval`（'' ＝ 舊單）。"""
+    每筆 `{quoteNo, itemId, key, order, name, state, cost, linked, noPo, total}`：
+    - `state`＝審核狀態（疊加表；'' ＝ 舊單）；`cost`＝`material_approval.cost_state`（excluded／pending／counted）。
+    - `linked`＝連到**有效**採購單（`purchase_items._link_check`）⇒ 金額由採購單負責（單一歸屬，32-S4c）。
+    - `noPo`＝沒連採購單且連結判定為 none（舊單、$0 不標）。`total`＝列上的 `totalPrice`。
+    只含「已成案／已結案」案件（`_case_rows`）；`quote_no` 給了只取那一案。口徑（權責／現金）與日期由呼叫端決定。"""
     from modules.case import material_approval as _ma
-    from modules.case import material_payment as _mp
     from modules.case import purchase_items as _pi
     states = _material_states(conn)
-    pay_lines, pay_legacy = (_mp.lines_by_order(conn), _mp.legacy_by_order(conn)) if basis == "cash" else ({}, {})
     out = []
-    no_po = {}                                    # (案件, 叫料 itemId) ⇒ 該叫料是否「未申請採購單」（S4c；只加備註，不改金額）
     _po_cache = {}
 
-    def po_rows_of(quote_no):
-        if quote_no not in _po_cache:
-            _po_cache[quote_no] = conn.execute(
-                "SELECT id, kind, status, lines_json, doc_code FROM case_extra_expenses WHERE quote_no=? AND kind='purchase_order'", (quote_no,)).fetchall()
-        return _po_cache[quote_no]
-    for row in _case_rows(conn, department_id):
+    def po_rows_of(qn):
+        if qn not in _po_cache:
+            _po_cache[qn] = conn.execute(
+                "SELECT id, kind, status, lines_json, doc_code FROM case_extra_expenses WHERE quote_no=? AND kind='purchase_order'", (qn,)).fetchall()
+        return _po_cache[qn]
+    for row in _case_rows(conn, department_id, quote_no):
         try:
             cr = (json.loads(row["data_json"] or "{}") or {}).get("caseRecord") or {}
         except (TypeError, ValueError):
@@ -304,47 +304,67 @@ def material_entries(conn, basis, department_id=None):
         for mo in cr.get("materialOrders") or []:
             if not isinstance(mo, dict):
                 continue
-            name = mo.get("itemName") or "材料申請"
-            paid = (mo.get("paidDate") or "")[:10]
-            st = states.get((row["quote_no"], str(mo.get("itemId"))), "")
-            cs = _ma.cost_state(st)
-            prs = po_rows_of(row["quote_no"])
-            if _pi._link_check(mo, prs)[0]:
-                continue        # 32-S4c：連到有效採購單 ⇒ 金額由採購單負責（成本進品項實際成本／額外支出的採購單列），叫料只是已叫／已到追蹤——權責與現金都不重複計
-            no_po[(row["quote_no"], str(mo.get("itemId")))] = _pi.material_link_status(mo, prs, legacy=(st == ""))["state"] == "none"
-            if basis != "cash" and cs == "excluded":
-                continue                                                           # 權責：草稿／已退回／已取消不計
-            if basis == "cash":
-                key = (row["quote_no"], str(mo.get("itemId")))
-                if key in pay_legacy:                                              # 有匯款申請 ⇒ 讀付款明細（每筆一列）＋舊單歷史已付；不讀 JSON 的 paid*（那是投影）
-                    la, ld = pay_legacy[key]
-                    if la and ld:
-                        out.append({"date": ld, "quoteNo": row["quote_no"], "desc": "材料申請｜" + name, "amount": la, "taxNote": "未拆稅", "provisional": False,
-                                    "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending", "lineId": "", "fee": 0.0,
-                                    "remitPending": False, "payMethod": "", "payAccountCode": ""})
-                    for ln in pay_lines.get(key, []):
-                        if ln["amount"] and ln["paid_at"]:
-                            out.append({"date": ln["paid_at"], "quoteNo": row["quote_no"], "desc": "材料申請｜" + name, "amount": ln["amount"], "taxNote": "未拆稅",
-                                        "provisional": False, "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending",
-                                        "lineId": str(ln["id"]), "fee": ln["fee"], "remitPending": ln["review"] == "pending",
-                                        "payMethod": ln["pay_method"], "payAccountCode": ln["pay_account_code"], "paymentCode": ln["doc_code"]})
-                    continue
-                if (mo.get("paidStatus") or "pending") == "pending" or paid == "":
-                    continue
-                amt = float(mo.get("paidAmount") or 0)
-                if amt:
-                    out.append({"date": paid, "quoteNo": row["quote_no"], "desc": "材料申請｜" + name,
-                                "amount": amt, "taxNote": "未拆稅", "provisional": False,
-                                "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending"})
+            qn = row["quote_no"]
+            st = states.get((qn, str(mo.get("itemId"))), "")
+            prs = po_rows_of(qn)
+            linked = _pi._link_check(mo, prs)[0]
+            out.append({"quoteNo": qn, "itemId": mo.get("itemId") or "", "key": (qn, str(mo.get("itemId"))), "order": mo,
+                        "name": mo.get("itemName") or "材料申請", "state": st, "cost": _ma.cost_state(st), "linked": linked,
+                        "noPo": (not linked) and _pi.material_link_status(mo, prs, legacy=(st == ""))["state"] == "none",
+                        "total": float(mo.get("totalPrice") or 0)})
+    return out
+
+
+def material_entries(conn, basis, department_id=None):
+    """叫料（案件 data_json）→ 逐筆。沒有稅欄位 ⇒ 一律「未拆稅」。
+
+    審核規則（31-C，與承攬商派發同一組）：**權責口徑**——草稿／已退回／已取消**不計**；待審核／簽核中**計入並標 `pending`**；已核准與舊單（沒有審核單
+    **現金口徑**——付出去的錢是事實，不因審核狀態排除（只標 `pending`）。每筆帶 `approval`（'' ＝ 舊單）。
+    逐筆判定來自 `material_money_rows`（33-A1 抽出；與完結精算共用）。"""
+    from modules.case import material_payment as _mp
+    pay_lines, pay_legacy = (_mp.lines_by_order(conn), _mp.legacy_by_order(conn)) if basis == "cash" else ({}, {})
+    out = []
+    no_po = {}                                    # (案件, 叫料 itemId) ⇒ 該叫料是否「未申請採購單」（S4c；只加備註，不改金額）
+    for r in material_money_rows(conn, department_id):
+        mo, name, st, cs = r["order"], r["name"], r["state"], r["cost"]
+        row = {"quote_no": r["quoteNo"]}
+        paid = (mo.get("paidDate") or "")[:10]
+        if r["linked"]:
+            continue        # 32-S4c：連到有效採購單 ⇒ 金額由採購單負責（成本進品項實際成本／額外支出的採購單列），叫料只是已叫／已到追蹤——權責與現金都不重複計
+        no_po[r["key"]] = r["noPo"]
+        if basis != "cash" and cs == "excluded":
+            continue                                                           # 權責：草稿／已退回／已取消不計
+        if basis == "cash":
+            key = r["key"]
+            if key in pay_legacy:                                              # 有匯款申請 ⇒ 讀付款明細（每筆一列）＋舊單歷史已付；不讀 JSON 的 paid*（那是投影）
+                la, ld = pay_legacy[key]
+                if la and ld:
+                    out.append({"date": ld, "quoteNo": row["quote_no"], "desc": "材料申請｜" + name, "amount": la, "taxNote": "未拆稅", "provisional": False,
+                                "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending", "lineId": "", "fee": 0.0,
+                                "remitPending": False, "payMethod": "", "payAccountCode": ""})
+                for ln in pay_lines.get(key, []):
+                    if ln["amount"] and ln["paid_at"]:
+                        out.append({"date": ln["paid_at"], "quoteNo": row["quote_no"], "desc": "材料申請｜" + name, "amount": ln["amount"], "taxNote": "未拆稅",
+                                    "provisional": False, "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending",
+                                    "lineId": str(ln["id"]), "fee": ln["fee"], "remitPending": ln["review"] == "pending",
+                                    "payMethod": ln["pay_method"], "payAccountCode": ln["pay_account_code"], "paymentCode": ln["doc_code"]})
                 continue
-            amt = float(mo.get("totalPrice") or 0)
-            if not amt:
+            if (mo.get("paidStatus") or "pending") == "pending" or paid == "":
                 continue
-            inv = (mo.get("invoiceDate") or "")[:10]
-            out.append({"date": inv if inv != "" else paid, "quoteNo": row["quote_no"],
-                        "desc": "材料申請｜" + name, "amount": amt, "taxNote": "未拆稅",
-                        "provisional": inv == "", "itemId": mo.get("itemId") or "", "invoiceDate": inv,
-                        "approval": st, "pending": cs == "pending"})
+            amt = float(mo.get("paidAmount") or 0)
+            if amt:
+                out.append({"date": paid, "quoteNo": row["quote_no"], "desc": "材料申請｜" + name,
+                            "amount": amt, "taxNote": "未拆稅", "provisional": False,
+                            "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending"})
+            continue
+        amt = r["total"]
+        if not amt:
+            continue
+        inv = (mo.get("invoiceDate") or "")[:10]
+        out.append({"date": inv if inv != "" else paid, "quoteNo": row["quote_no"],
+                    "desc": "材料申請｜" + name, "amount": amt, "taxNote": "未拆稅",
+                    "provisional": inv == "", "itemId": mo.get("itemId") or "", "invoiceDate": inv,
+                    "approval": st, "pending": cs == "pending"})
     for e in out:
         e["noPo"] = bool(no_po.get((e["quoteNo"], str(e.get("itemId") or ""))))
     return out
