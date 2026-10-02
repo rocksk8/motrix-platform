@@ -30,7 +30,7 @@ def legacy_item_total(quotation_items, saved_items):
         if it.get("type") == "header":
             continue
         s = saved.get(str(it.get("id")))
-        if s is not None and s.get("actualTotalCost") not in (None, ""):
+        if s is not None and s.get("actualTotalCost"):                   # 頁面載入存檔：si.actualTotalCost || oi.actualTotalCost（0／空＝沒填 ⇒ 預設估計）
             tot += s["actualTotalCost"]
         else:
             tot += round_half_up((it.get("qty") or 0) * (it.get("cost") or 0), 1.05)
@@ -110,3 +110,36 @@ def test_finalized_case_keeps_the_frozen_numbers(W):
     _put_settlement({"status": "finalized", "items": saved, "summary": {"itemActualTotal": 12422, "extraTotal": 0, "purchasedTotal": 0}})
     d = _get(c, h)
     assert d["frozen"] is True and d["totals"]["itemActualTotal"] == 12422 == legacy_item_total(_quotation_items(), saved)
+
+
+@pytest.mark.parametrize("zero", [0, "", None, 0.0])
+def test_saved_actual_of_zero_or_blank_means_not_filled_like_the_page(W, zero):
+    c, h = W
+    saved = [{"id": "a", "adoptSystem": False, "actualTotalCost": zero}, {"id": "b", "adoptSystem": False, "actualTotalCost": 525}]
+    _put_settlement({"status": "draft", "items": saved})
+    d = _assert_parity(c, h, saved)
+    a = [i for i in d["items"] if i["itemId"] == "a"][0]
+    assert a["actual"] == {"amount": 10500, "source": "estimate", "replacedEstimate": False}     # 0 ⇒ 估計（今天頁面的 `||` 語意）；正對照：b 的 525 照用
+
+
+def test_finalized_frozen_with_a_zero_item_uses_the_same_rule(W):
+    c, h = W
+    saved = [{"id": "a", "adoptSystem": False, "actualTotalCost": 0}, {"id": "b", "adoptSystem": False, "actualTotalCost": 525}]
+    _put_settlement({"status": "finalized", "items": saved, "summary": {"itemActualTotal": 11025}})
+    d = _get(c, h)
+    assert d["frozen"] is True and [i for i in d["items"] if i["itemId"] == "a"][0]["actual"]["amount"] == 10500
+
+
+@pytest.mark.parametrize("fields,expect_a", [
+    ({"actualQty": 0, "actualUnitCost": 1000, "actualTotalCost": 777}, 777),      # 頁面載入只讀 actualTotalCost；數量／單價為 0 不影響已存的總額
+    ({"actualQty": 10, "actualUnitCost": 0, "actualTotalCost": 777}, 777),
+    ({"actualQty": 0, "actualUnitCost": 0, "actualTotalCost": 0}, 10500),          # 全 0 ⇒ 沒填 ⇒ 估計
+    ({"actualQty": 10, "actualUnitCost": 0, "actualTotalCost": 0}, 10500),
+    ({"actualQty": 0, "actualUnitCost": 1000, "actualTotalCost": 0}, 10500),
+])
+def test_zero_qty_or_unit_cost_in_saved_items_follow_the_pages_total_only_rule(W, fields, expect_a):
+    c, h = W
+    saved = [dict({"id": "a", "adoptSystem": False, "actualCostTaxMode": "taxed_gross"}, **fields)]
+    _put_settlement({"status": "draft", "items": saved})
+    d = _assert_parity(c, h, saved)
+    assert [i for i in d["items"] if i["itemId"] == "a"][0]["actual"]["amount"] == expect_a
