@@ -111,9 +111,14 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     page.fill(f'{PANEL} input[placeholder="單價"]', "1500")
     page.wait_for_function("() => document.querySelectorAll('#fin-material-orders [data-testid=mo-supplier] option').length >= 2", timeout=15000)
     page.select_option(f'{PANEL} [data-testid="mo-supplier"]', label="S-001 甲供應商")        # 31-C：新增叫料必選供應商
-    assert _status_text(page) == "尚未儲存"
+    assert _status_text(page) == "尚未送審"
     page.click(f'{PANEL} button:has-text("儲存材料申請")')
-    page.wait_for_function("() => document.querySelector('#fin-material-orders [data-testid=mo-ap-status]')?.innerText === '草稿'", timeout=15000)
+    for _ in range(150):                                                                   # 等**資料庫**真的建出審核單（畫面標籤存檔前後都是「尚未送審」，不能拿它當終點）
+        if _approval_row():
+            break
+        page.wait_for_timeout(100)
+    assert _approval_row() and _approval_row()["status"] == "草稿"
+    page.wait_for_function("() => !document.querySelector('#fin-material-orders [data-testid=mo-ap-status]')?.innerText.includes('尚未儲存')", timeout=15000)
     row = _approval_row()
     assert row["status"] == "草稿" and row["doc_code"].startswith("MO-")
     code = row["doc_code"]

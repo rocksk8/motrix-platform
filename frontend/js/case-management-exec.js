@@ -188,12 +188,14 @@ window.CM_PARTS.push(() => ({
     moAp(m) { return (m && this.moApprovals[m.itemId]) || { status: '', legacy: true } },
     moApLabel(m) {
       const a = this.moAp(m)
-      if (m && m._saved === false) return '尚未儲存'
+      if (this.moIsUnsent(m)) return '尚未送審'
       return a.legacy ? '舊單（未經審核）' : a.status
     },
+    // 尚未送審＝畫面上新增但還沒存的列，或已存成草稿的列（不計入報表／額度／簽核佇列）；舊單與已退回不算
+    moIsUnsent(m) { return !!m && (m._saved === false || (!this.moAp(m).legacy && this.moAp(m).status === '草稿')) },
     moApTone(m) {
       const s = this.moAp(m).status
-      if (m && m._saved === false) return 'color:var(--text-dim)'
+      if (this.moIsUnsent(m)) return 'color:var(--text-dim)'
       if (s === '已核准') return 'color:var(--success)'
       if (s === '已退回' || s === '已取消') return 'color:var(--tone-danger-fg)'
       if (s === '待審核' || s === '簽核中') return 'color:var(--tone-warning-fg)'
@@ -201,7 +203,7 @@ window.CM_PARTS.push(() => ({
     },
     // 審核中、已取消：實質欄位不能改（後端閘也會擋；這裡先反灰並說明原因）
     moLocked(m) { return ['待審核', '簽核中', '已取消'].includes(this.moAp(m).status) },
-    moShowSubmit(m) { return !!m && m._saved !== false && !this.moDirty && ['', '草稿', '已退回'].includes(this.moAp(m).status) && !(this.caseReadOnly && this.caseReadOnly()) },
+    moShowSubmit(m) { return !!m && (m._saved === false || ['', '草稿', '已退回'].includes(this.moAp(m).status)) && !this.moLocked(m) && !(m._saved !== false && this.moAp(m).legacy && !this.moDirty) && !(this.caseReadOnly && this.caseReadOnly()) },
     moShowWithdraw(m) { return ['待審核', '簽核中'].includes(this.moAp(m).status) },
     moShowCancel(m) { return this.moAp(m).status === '已核准' && ['superadmin', 'admin'].includes(this.session.role) },
     async _moPost(m, action, body, okMsg) {
@@ -228,7 +230,17 @@ window.CM_PARTS.push(() => ({
         return false
       }
     },
-    async moSubmit(m) { await this._moPost(m, 'submit', {}, d => d.autoApproved ? `已核准（未設定簽核層）：${d.docCode}` : `已送審：${d.docCode}`) },
+    // 一鍵＝先儲存再送審：儲存被守門拒絕（或沒存成）就停，不送審；被拒的列由重新載入還原，不留殘列
+    async moSubmit(m) {
+      const id = m.itemId
+      if (m._saved === false || this.moDirty) {
+        if (!(await this.moSave(true))) return
+        m = this.materialOrders.find(x => x.itemId === id)
+        if (!m) return
+      }
+      await this._moSubmitPost(m)
+    },
+    async _moSubmitPost(m) { await this._moPost(m, 'submit', {}, d => d.autoApproved ? `已核准（未設定簽核層）：${d.docCode}` : `已送審：${d.docCode}`) },
     async moWithdraw(m) { await this._moPost(m, 'withdraw', {}, () => '已撤回（回草稿）') },
     async moCancel(m) {
       const reason = await MotrixUI.prompt('取消已核准的材料申請需要填原因（會留稽核紀錄）：', { title: '取消材料申請', required: true })
@@ -271,12 +283,13 @@ window.CM_PARTS.push(() => ({
     },
 
     moTotals() {
-      let total = 0, paid = 0
+      let total = 0, paid = 0, unsent = 0
       for (const m of this.materialOrders) {
+        if (this.moIsUnsent(m)) { unsent++; continue }     // 尚未送審的不計入
         total += Number(m.totalPrice) || 0
         paid  += Number(m.paidAmount) || 0
       }
-      return { total, paid, unpaid: total - paid }
+      return { total, paid, unpaid: total - paid, unsent }
     },
 
     moAddItem() {
@@ -331,18 +344,18 @@ window.CM_PARTS.push(() => ({
       }
     },
 
-    async moSave() {
-      if (this.moSaving) return
+    async moSave(forSubmit = false) {
+      if (this.moSaving) return false
       const quoteNo = this.selected?.quote_no
-      if (!quoteNo) return
+      if (!quoteNo) return false
 
       // 送出前正規化＋先擋一次。後端這些規則都會再驗一次，這裡擋只是為了
       // 給看得懂的中文訊息（後端回的 detail 會指名項目，但撞到才看到）
       const payload = []
       for (const m of this.materialOrders) {
         const name = (m.itemName || '').trim()
-        if (!name) { this.moMsgError = true; this.moMsg = '有項目還沒填名稱'; return }
-        if (m._saved === false && !m.supplierId) { this.moMsgError = true; this.moMsg = `「${name}」還沒選供應商（新增材料申請必填）`; return }
+        if (!name) { this.moMsgError = true; this.moMsg = '有項目還沒填名稱'; return false }
+        if (m._saved === false && !m.supplierId) { this.moMsgError = true; this.moMsg = `「${name}」還沒選供應商（新增材料申請必填）`; return false }
         const quantity  = Math.max(0, Number(m.quantity) || 0)
         const unitPrice = Math.max(0, Number(m.unitPrice) || 0)
         const totalPrice = MotrixLegalRound.halfUp(quantity * unitPrice, 100) / 100
@@ -361,6 +374,7 @@ window.CM_PARTS.push(() => ({
 
       this.moSaving = true
       this.moMsg = ''
+      let ok = false
       try {
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders`, {
           method: 'PATCH',
@@ -375,6 +389,7 @@ window.CM_PARTS.push(() => ({
             this.moMsgError = true
             this.moMsg = '部分項目沒有儲存：' + [...new Set(d.rejected.map(x => x.message))].join('；')
           } else {
+            ok = true
             this.moMsgError = false
             this.moMsg = '已儲存'
             setTimeout(() => { if (!this.moDirty) this.moMsg = '' }, 2500)
@@ -390,6 +405,7 @@ window.CM_PARTS.push(() => ({
         this.moMsg = '網路錯誤：' + e.message
       }
       this.moSaving = false
+      return ok
     },
 
     // ── 待辦事項（2026-08-26 專案管理併入案件管理，取代原本跳去 projects.html

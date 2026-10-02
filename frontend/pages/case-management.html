@@ -2348,7 +2348,8 @@
                   <div x-show="materialOrders.length > 0" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
                     <div class="cm-kpi__pill">
                       <span class="cm-kpi__val" x-text="caseSettleFmt(moTotals().total)"></span>
-                      <span class="cm-kpi__lbl">材料申請總額（<span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="materialOrders.length"></span> 項）</span>
+                      <span class="cm-kpi__lbl">材料申請總額（<span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="materialOrders.length - moTotals().unsent"></span> 項）</span>
+                      <span class="cm-kpi__lbl" x-show="moTotals().unsent > 0" data-testid="mo-unsent-note" x-text="'不含尚未送審 ' + moTotals().unsent + ' 項'"></span>
                     </div>
                     <div class="cm-kpi__pill success">
                       <span class="cm-kpi__val" x-text="caseSettleFmt(moTotals().paid)"></span>
@@ -2410,7 +2411,7 @@
                       <!-- 材料申請審核（31-C）：狀態、送審／撤回／取消、到貨確認（不簽核，只記日期與確認人） -->
                       <div style="display:flex;align-items:center;gap:7px;margin-top:6px;font-size:11px;font-family:var(--font-zh);flex-wrap:wrap"
                            :data-testid="'mo-approval-' + m.itemId">
-                        <span style="font-weight:600" :style="moApTone(m)" data-testid="mo-ap-status" x-text="moApLabel(m)"></span>
+                        <span style="font-weight:600" :style="moApTone(m)" data-testid="mo-ap-status" x-text="moApLabel(m)" :title="moIsUnsent(m) ? '尚未送審，不計入報表與額度，也不會出現在簽核佇列。' : ''"></span>
                         <span x-show="moAp(m).docCode" style="color:var(--text-dim)" data-testid="mo-ap-code" x-text="moAp(m).docCode"></span>
                         <span x-show="['待審核','簽核中'].includes(moAp(m).status)" style="color:var(--text-dim)"
                               x-text="'待簽：' + ((moAp(m).currentApprovers || []).join('、') || '—')"></span>
