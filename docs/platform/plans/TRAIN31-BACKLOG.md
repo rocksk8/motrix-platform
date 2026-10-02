@@ -166,3 +166,4 @@
 - 已刪 D 槽舊目錄（DRILLS、FINAL-DRILL、_pt_B17_m08）。
 - 正式機唯讀查詢（派發金額角分，20261002_205000）：contractor_dispatches 11 筆 total_amount 全為整數（0～762300，tax 0.0×1／0.05×10）；匯款申請 4 筆 remit_fee 全 0、snapshot 金額全整數（grandTotal 3500～27300）。**更正先前 B6**：4 筆（含 2 筆已付）remit_actual 全為 NULL，所以先前『remit_actual≠grandTotal 為 0』是空洞（沒有資料可比），不是『相等』⇒ 31-B／E05 設計須處理 remit_actual 為 NULL 的已付申請（以 grandTotal 視為實付、不得當 0）。
 - 正式機精算品項查詢（20261002_231000）：209 個非標題報價品項中 1 個缺說明（缺 id 0）、涉及 1 張報價單；有精算草稿且品項缺 adoptSystem 的 3 張；報價單共 40、已完結精算 10、有精算物件 13（3 張未完結）。⇒ 2e 的 S2（缺鍵＝未採用）影響 3 張草稿，S3（暫時鍵納入）影響 1 個品項，皆小。
+- 正式機 Q3（20261002_233500）：settlement.items[] 56 個已存品項（13 張報價單）；actualTotalCost=0 的 13 個（6 張）、actualUnitCost=0 的 13 個（5 張）、actualQty=0 的 9 個（3 張）、origCost=0 的 11 個（4 張）。⇒ 『存檔實際成本＝0』在正式機真實存在（6 張報價單），端點／頁面必須維持今天語意（0＝沒填⇒用估計），否則這 6 張的精算金額會跳動。
