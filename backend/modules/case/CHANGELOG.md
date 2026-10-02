@@ -4,6 +4,7 @@
 - 材料申請新增只能從「已核准的採購單明細」帶入（E1／E2）：移除「＋ 新增項目」與「從報價單品項帶入」；審核中的採購單明細列出但不能勾；送審前提示「需先申請請購單，再申請採購單…」；已全額付款的列數量／單價反灰並說明。
 - `material_approval.PO_REQUIRED` 預設 `True`（先前一版預設關；運維要回退舊流程設成 False）。
 - `PO_REQUIRED_FROM` 改 `2026-10-04`：上線日（10-03）前在舊畫面建立的草稿都算規則前建立（grandfather），不會被擋送審（da 建議）。
+- 回退開關題 `test_material_po_default_off_2026_10_03.py` 保留（明確設 False 驗舊流程）；預設值題在 `test_material_po_default_2026_10_03.py`。
 - 測試：`test_material_po_default_2026_10_03.py`（預設值、預設強制、關閉時舊流程）；畫面 e2e `test_e2e_material_po_ui_2026_10_03.py`；`test_e2e_material_link`／`orders`／`approval`／`unsent` 改走採購單帶入（移除 `_po_rule_off`）。
 
 ## 1.0.105 — 2026-10-03（wip/t33-m1-ui-c7）：材料申請畫面改為只能從已核准採購單帶入〔train_number：1.0.104 → 1.0.105〕
