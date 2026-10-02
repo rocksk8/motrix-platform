@@ -1,5 +1,36 @@
 # 案件 更新紀錄
 
+## 1.0.98 — 2026-10-02（wip/t33-remit-s4-a3）：承攬商分頁分期申請的發票欄位；試算顯示防過期
+- 案件管理頁「承攬商」分頁：分期匯款申請列顯示該期發票（號碼／日期；未登錄顯示「未登錄發票（尚不認列）」）並可登錄／更正（31-B S4）；產生匯款申請視窗的試算改輸入時作廢在途請求（不會把舊輸入的金額蓋回畫面）、剩餘額度以四捨五入整數元比較（用 `MotrixLegalRound.halfUp`，金額進位守門；da 稽核 S3 兩項）。
+
+## 1.0.97 — 2026-10-02（wip/t33-remit-s2b-a3、s3-a3）：案件應付彙總不計作廢的分期匯款申請；承攬商分頁支援分期匯款申請畫面
+- 案件詳情的應付彙總（承攬商匯款申請）略過已作廢的分期申請（31-B S2b）；其餘不變。
+- 案件管理頁「承攬商」分頁：派發卡片支援多張分期匯款申請（款別／期別／試算／作廢，31-B S3；規格見 subcontract 模組 SPEC RK10）。
+
+## 1.0.96 — 2026-10-03（wip/t33-settlement-a5-2e）：完結精算後端重算比對（33-A5，D10）
+- `PUT /api/quotations/{no}/settlement` 在 `status=finalized` 時用同一來源（`settlement_actuals.compute`，以請求本文的品項／offsets 計算、不套凍結）重算，與頁面送上的 `summary` 比對：品項實際成本、品項未採用採購（新規則恆 0）、額外支出（扣掉頁面加的手續費與自訂模組支出，含未對應材料申請）、採購類總額（頁面有送才比）；差異超過進位誤差（每品項 ±1 元）⇒ 409 並說明差異、不存檔，頁面需重新整理。只在「非完結 → 完結」的轉換時比對（已完結的再存是凍結快照，不重算）；草稿不比對；summary 沒有 `itemActualTotal`（非精算頁的呼叫）無從比對、放行。
+
+## 1.0.95 — 2026-10-03（wip/t33-settlement-b1-2e）：精算頁改接後端單一來源（33-B1）
+- 精算頁（`settlement.html`）載入改打 `GET settlement-actuals`：品項「採購」＝採購單連結金額＋材料申請（連品項或沖銷對應）＋沖銷的額外支出；規則 A——有採購的品項**預設採用**（實際取代估計）；取消採用＝回手填值、採購金額不另加（D8，只在彙總區警示「採購金額未採用」）。已存草稿以存的 `adoptSystem` 為準（缺鍵＝不採用，歷史相容）。
+- 新區塊「二之一、未對應品項的材料申請與額外支出」：每筆可選一個報價品項（寫進 `settlement.offsets`，不改原單據；預覽用 `?offsets=`，不存檔），取消＝選回「不對應」；未對應的材料申請併入「額外支出」顯示行（含未對應材料申請）。
+- 已完結：額外支出／手續費／自訂模組支出取完結當下凍結的 `summary`；`summary` 新增 `purchasedTotal`、`materialUnassignedTotal`（鍵名其餘不動，報表／獎金／PDF 照讀）。端點失敗或無財務檢視 ⇒ 退回 32-S5 舊路徑。
+- `GET settlement-actuals` 新增選填 `offsets`（JSON，預覽）；完結凍結的 `extraTotal` 扣掉頁面加的手續費與自訂模組支出，與端點同義。更新 e2e `test_e2e_pr_po_item_link`（預設採用）、新增 `test_e2e_settlement_actuals`。
+
+## 1.0.94 — 2026-10-03（wip/t33-settlement-a3-2e）：精算漂移守門＋歷史語料對照（33-A3，只加測試）
+- `test_settlement_actuals_conservation`：10 個情境（採購單連品項／額外支出、材料申請連／不連採購單／無品項、狀態矩陣、$0 與舊單、品項被刪、待審核採購單、offsets 搬家、現金口徑）逐一斷言精算 `purchasedTotal`＝營運報表＝總帳 E11＋E12（扣待審核）；任何一邊改規則而另一邊沒跟即紅。
+- `test_settlement_actuals_legacy_parity`：逐字照搬 `calcSummary()` 的參考實作對照語料（預設估計、含稅三種手填、額外支出各狀態、第 32 班前草稿缺 `adoptSystem`、缺說明／缺 id 舊品項、完結凍結）；`itemActualTotal`／`extraTotal` 逐位相同。
+- 存檔實際成本＝0（正式機 13 個品項／6 張報價單真實存在）：與今天頁面載入存檔的 `si.actualTotalCost || oi.actualTotalCost` 同語意——0、空字串、null 視為沒填 ⇒ 用估計（`settlement_actuals.manual_actual`；da A3 S1）。頁面只讀 `actualTotalCost`，`actualQty`／`actualUnitCost` 為 0 不影響已存的總額；語料新增 0／空／null／0.0 與數量、單價為 0 的案例。0 元實際成本是否算缺陷：列第 34 班待裁示。
+
+## 1.0.93 — 2026-10-02（wip/t33-settlement-a4-2e）：精算沖銷驗證（33-A4）＋A2 稽核修正（da S1–S3）
+- `PUT /api/quotations/{no}/settlement` 對 `settlement.offsets` 驗證（422、不存檔）：kind 合法、品項必須在報價單內（缺 id／說明的舊品項不可當去處）、同一 (kind, ref) 只能一個去處、ref 必須在目前未對應清單；上次存檔原樣未改的列放行（材料申請事後取消不卡舊草稿）。完結後僅超級管理員可改（沿用）。
+- `settlement-actuals`：已完結精算回凍結快照（`frozen`、品項金額取存檔 `actualTotalCost`、三個總額取存檔 `summary`，現算值放 `live`），不隨完結後核准的採購單漂移（S1）；舊存檔品項沒有 `adoptSystem` 鍵＝不採用（歷史相容，與今天頁面同；`legacySave`），品項沒存過＝採用（S2）；缺 id／說明的舊品項以暫時鍵納入並標 `unkeyed`＋警示，估計照算（S3）。唯讀計數 SQL：docs/platform/plans/SETTLEMENT-ACTUALS-PROBE.sql。
+
+## 1.0.92 — 2026-10-02 21:08（wip/t33-settlement-a2-2e）：完結精算實際金額端點（33-A2）
+- 新增 `GET /api/quotations/{no}/settlement-actuals`（案件可見＋財務檢視，否則 403／404）：`settlement_actuals.compute(conn, quote_no, offsets=None, unadopted="ignore")`，規則 A（有實際採購 ⇒ 實際取代該品項估計）、三態 adopt、沖銷（offsets）、未對應清單、sources／totals；金額與營運報表同源（`recognition.material_money_rows`、`extra_entries(quote_no=)`）。8 題測試。
+
+## 1.0.91 — 2026-10-02 20:25（wip/t33-settlement-2e）：材料申請逐筆判定抽成共用原語（33-A1，行為零變化）
+- `recognition.material_money_rows(conn, department_id=None, quote_no=None)`：每筆材料申請一列（審核狀態、`cost_state`、是否連到有效採購單、`noPo`、`total`），**不分口徑**；`material_entries`（營運報表／總帳 E12／E12b）改成它的投影，輸出與抽出前逐筆相同（測試把抽出前的實作凍結為參考、對 9 種情境的權責與現金口徑整份比對）。完結精算的後端端點（33-A2）將使用同一原語，三處金額不會漂。`_case_rows` 加選填 `quote_no`。
+
 ## 1.0.90 — 2026-10-03（wip/t33-m1-d7：33-M1 守門側，強制採購單）
 - 新申請必須帶採購單連結（`po_required`，E1：後端面；沒有 `poDocCode` 的新列被拒、不留列、不建草稿）；`material_submit_check(po_required=…)`：送審必須連到「已核准」的採購單（三句提示：沒有／尚未通過／已退回或作廢），待審核／簽核中不算（E2）。
 - 不溯及既往：舊單（沒有審核列）、規則上線前建立（`MA.PO_REQUIRED_FROM`）、舊單被編輯而建的審核列（`grandfathered`）不受約束，可「補對應」——只增連結鍵、不重簽、狀態不變，審核歷程與稽核各記一筆；有付款紀錄／匯款申請者不可補。
@@ -10,37 +41,6 @@
 
 ## 1.0.88 — 2026-10-02（wip/t33-link-guard-d7）
 - 守門：已有付款紀錄的材料申請，經 case-record 整包存檔也不可新增／改連採購單（`bad_link`「已有付款紀錄，不可對應採購單」）；`link_validator` 對 has_payment 放行（既有連結存回）後，這條擋在守門自己做，與專屬端點同規則。
-
-## (next) — 2026-10-02（wip/t33-remit-s4-a3）：承攬商分頁分期申請的發票欄位；試算顯示防過期
-- 案件管理頁「承攬商」分頁：分期匯款申請列顯示該期發票（號碼／日期；未登錄顯示「未登錄發票（尚不認列）」）並可登錄／更正（31-B S4）；產生匯款申請視窗的試算改輸入時作廢在途請求（不會把舊輸入的金額蓋回畫面）、剩餘額度以四捨五入整數元比較（用 `MotrixLegalRound.halfUp`，金額進位守門；da 稽核 S3 兩項）。
-
-## (next) — 2026-10-02（wip/t33-remit-s2b-a3、s3-a3）：案件應付彙總不計作廢的分期匯款申請；承攬商分頁支援分期匯款申請畫面
-- 案件詳情的應付彙總（承攬商匯款申請）略過已作廢的分期申請（31-B S2b）；其餘不變。
-- 案件管理頁「承攬商」分頁：派發卡片支援多張分期匯款申請（款別／期別／試算／作廢，31-B S3；規格見 subcontract 模組 SPEC RK10）。
-
-## (next) — 2026-10-03（wip/t33-settlement-a5-2e）：完結精算後端重算比對（33-A5，D10）
-- `PUT /api/quotations/{no}/settlement` 在 `status=finalized` 時用同一來源（`settlement_actuals.compute`，以請求本文的品項／offsets 計算、不套凍結）重算，與頁面送上的 `summary` 比對：品項實際成本、品項未採用採購（新規則恆 0）、額外支出（扣掉頁面加的手續費與自訂模組支出，含未對應材料申請）、採購類總額（頁面有送才比）；差異超過進位誤差（每品項 ±1 元）⇒ 409 並說明差異、不存檔，頁面需重新整理。只在「非完結 → 完結」的轉換時比對（已完結的再存是凍結快照，不重算）；草稿不比對；summary 沒有 `itemActualTotal`（非精算頁的呼叫）無從比對、放行。
-
-## (next) — 2026-10-03（wip/t33-settlement-b1-2e）：精算頁改接後端單一來源（33-B1）
-- 精算頁（`settlement.html`）載入改打 `GET settlement-actuals`：品項「採購」＝採購單連結金額＋材料申請（連品項或沖銷對應）＋沖銷的額外支出；規則 A——有採購的品項**預設採用**（實際取代估計）；取消採用＝回手填值、採購金額不另加（D8，只在彙總區警示「採購金額未採用」）。已存草稿以存的 `adoptSystem` 為準（缺鍵＝不採用，歷史相容）。
-- 新區塊「二之一、未對應品項的材料申請與額外支出」：每筆可選一個報價品項（寫進 `settlement.offsets`，不改原單據；預覽用 `?offsets=`，不存檔），取消＝選回「不對應」；未對應的材料申請併入「額外支出」顯示行（含未對應材料申請）。
-- 已完結：額外支出／手續費／自訂模組支出取完結當下凍結的 `summary`；`summary` 新增 `purchasedTotal`、`materialUnassignedTotal`（鍵名其餘不動，報表／獎金／PDF 照讀）。端點失敗或無財務檢視 ⇒ 退回 32-S5 舊路徑。
-- `GET settlement-actuals` 新增選填 `offsets`（JSON，預覽）；完結凍結的 `extraTotal` 扣掉頁面加的手續費與自訂模組支出，與端點同義。更新 e2e `test_e2e_pr_po_item_link`（預設採用）、新增 `test_e2e_settlement_actuals`。
-
-## (next) — 2026-10-03（wip/t33-settlement-a3-2e）：精算漂移守門＋歷史語料對照（33-A3，只加測試）
-- `test_settlement_actuals_conservation`：10 個情境（採購單連品項／額外支出、材料申請連／不連採購單／無品項、狀態矩陣、$0 與舊單、品項被刪、待審核採購單、offsets 搬家、現金口徑）逐一斷言精算 `purchasedTotal`＝營運報表＝總帳 E11＋E12（扣待審核）；任何一邊改規則而另一邊沒跟即紅。
-- `test_settlement_actuals_legacy_parity`：逐字照搬 `calcSummary()` 的參考實作對照語料（預設估計、含稅三種手填、額外支出各狀態、第 32 班前草稿缺 `adoptSystem`、缺說明／缺 id 舊品項、完結凍結）；`itemActualTotal`／`extraTotal` 逐位相同。
-- 存檔實際成本＝0（正式機 13 個品項／6 張報價單真實存在）：與今天頁面載入存檔的 `si.actualTotalCost || oi.actualTotalCost` 同語意——0、空字串、null 視為沒填 ⇒ 用估計（`settlement_actuals.manual_actual`；da A3 S1）。頁面只讀 `actualTotalCost`，`actualQty`／`actualUnitCost` 為 0 不影響已存的總額；語料新增 0／空／null／0.0 與數量、單價為 0 的案例。0 元實際成本是否算缺陷：列第 34 班待裁示。
-
-## (next) — 2026-10-02（wip/t33-settlement-a4-2e）：精算沖銷驗證（33-A4）＋A2 稽核修正（da S1–S3）
-- `PUT /api/quotations/{no}/settlement` 對 `settlement.offsets` 驗證（422、不存檔）：kind 合法、品項必須在報價單內（缺 id／說明的舊品項不可當去處）、同一 (kind, ref) 只能一個去處、ref 必須在目前未對應清單；上次存檔原樣未改的列放行（材料申請事後取消不卡舊草稿）。完結後僅超級管理員可改（沿用）。
-- `settlement-actuals`：已完結精算回凍結快照（`frozen`、品項金額取存檔 `actualTotalCost`、三個總額取存檔 `summary`，現算值放 `live`），不隨完結後核准的採購單漂移（S1）；舊存檔品項沒有 `adoptSystem` 鍵＝不採用（歷史相容，與今天頁面同；`legacySave`），品項沒存過＝採用（S2）；缺 id／說明的舊品項以暫時鍵納入並標 `unkeyed`＋警示，估計照算（S3）。唯讀計數 SQL：docs/platform/plans/SETTLEMENT-ACTUALS-PROBE.sql。
-
-## (next) — 2026-10-02 21:08（wip/t33-settlement-a2-2e）：完結精算實際金額端點（33-A2）
-- 新增 `GET /api/quotations/{no}/settlement-actuals`（案件可見＋財務檢視，否則 403／404）：`settlement_actuals.compute(conn, quote_no, offsets=None, unadopted="ignore")`，規則 A（有實際採購 ⇒ 實際取代該品項估計）、三態 adopt、沖銷（offsets）、未對應清單、sources／totals；金額與營運報表同源（`recognition.material_money_rows`、`extra_entries(quote_no=)`）。8 題測試。
-
-## (next) — 2026-10-02 20:25（wip/t33-settlement-2e）：材料申請逐筆判定抽成共用原語（33-A1，行為零變化）
-- `recognition.material_money_rows(conn, department_id=None, quote_no=None)`：每筆材料申請一列（審核狀態、`cost_state`、是否連到有效採購單、`noPo`、`total`），**不分口徑**；`material_entries`（營運報表／總帳 E12／E12b）改成它的投影，輸出與抽出前逐筆相同（測試把抽出前的實作凍結為參考、對 9 種情境的權責與現金口徑整份比對）。完結精算的後端端點（33-A2）將使用同一原語，三處金額不會漂。`_case_rows` 加選填 `quote_no`。
 
 ## 1.0.87 — 2026-10-02（c7 第32包稽核 M-1）：出納差額審核表的手續費與付款日補回
 - 修正：材料申請匯款在出納「差額審核」項目（`/api/cashier/remit-reviews`）的 `fee`、`paidAt` 兩欄被一段行內註解吞掉而為空（表格手續費／付款日空白，「手續費偏高」的覆核看不到手續費金額）；註解移到行首、補回兩欄，測試斷言兩欄有值。

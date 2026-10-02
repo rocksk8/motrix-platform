@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1059,
+  "tests": 1073,
   "unmapped": 13,
   "kinds": {
-   "api": 570,
-   "e2e": 258,
+   "api": 579,
+   "e2e": 261,
    "audit": 136,
-   "unit": 95
+   "unit": 97
   },
-  "routes": 748
+  "routes": 752
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -1479,6 +1479,42 @@
      "backend/core/__init__.py",
      "backend/core/registry.py",
      "backend/db.py",
+     "backend/modules/accounting/ledger/__init__.py",
+     "backend/modules/accounting/ledger/engine.py",
+     "backend/modules/accounting/ledger/features.py",
+     "backend/modules/accounting/ledger/roles.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/ledger_annotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_ledger_annotations_voucher_invoice_2026_10_02.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/ledger_annotations",
+    "mod:accounting/ledger/__init__",
+    "mod:accounting/ledger/engine",
+    "mod:accounting/ledger/features",
+    "mod:accounting/ledger/roles",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/ledger_annotations.py",
      "backend/modules/accounting/ledger/__init__.py",
      "backend/modules/accounting/ledger/engine.py",
      "backend/modules/accounting/ledger/features.py",
@@ -5566,6 +5602,30 @@
    },
    "module": "case"
   },
+  "backend/modules/case/tests/test_e2e_settlement_actuals_2026_10_03.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
+    "page:pages/settlement.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_requires.py",
+     "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
+    ],
+    "page": [
+     "frontend/pages/settlement.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
   "backend/modules/case/tests/test_expense_audit_2026_10_01.py": {
    "kind": "api",
    "units": [
@@ -5885,6 +5945,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
+    "mod:case/api/settlement_actuals",
     "mod:netplan/api",
     "plat:__init__",
     "plat:registry",
@@ -5908,6 +5969,7 @@
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
      "backend/modules/case/api/quotations.py",
+     "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/netplan/api.py",
      "backend/routers/approval_queue.py"
     ],
@@ -5962,6 +6024,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
+    "mod:case/api/settlement_actuals",
     "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/quotations",
@@ -5987,6 +6050,7 @@
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
      "backend/modules/case/api/quotations.py",
+     "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/netplan/api.py"
     ],
     "path": [
@@ -6101,6 +6165,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
+    "mod:case/api/settlement_actuals",
     "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/material_payment",
@@ -6131,8 +6196,41 @@
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
      "backend/modules/case/api/quotations.py",
+     "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/netplan/api.py",
      "backend/routers/approval_queue.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_material_money_rows_2026_10_03.py": {
+   "kind": "unit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/material_approval",
+    "mod:case/material_payment",
+    "mod:case/purchase_items",
+    "mod:case/recognition",
+    "mod:case/tests/test_material_link_2026_10_02",
+    "mod:case/tests/test_material_link_booking_2026_10_02",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/material_approval.py",
+     "backend/modules/case/material_payment.py",
+     "backend/modules/case/purchase_items.py",
+     "backend/modules/case/recognition.py",
+     "backend/modules/case/tests/test_material_link_2026_10_02.py",
+     "backend/modules/case/tests/test_material_link_booking_2026_10_02.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
     ],
     "module_dir": [
      "backend/modules/case/"
@@ -6185,6 +6283,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
+    "mod:case/api/settlement_actuals",
     "mod:netplan/api",
     "plat:__init__",
     "plat:registry"
@@ -6208,6 +6307,7 @@
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
      "backend/modules/case/api/quotations.py",
+     "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/netplan/api.py"
     ],
     "module_dir": [
@@ -6288,6 +6388,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
+    "mod:case/api/settlement_actuals",
     "mod:case/material_approval",
     "mod:case/tests/test_material_link_2026_10_02",
     "mod:case/tests/test_purchase_item_lines_2026_10_02",
@@ -6310,6 +6411,7 @@
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
      "backend/modules/case/api/quotations.py",
+     "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/netplan/api.py"
     ],
     "module_dir": [
@@ -6560,6 +6662,98 @@
    "login_fixture": true,
    "module": "case"
   },
+  "backend/modules/case/tests/test_settlement_actuals_2026_10_03.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/api/settlement_actuals",
+    "mod:case/recognition",
+    "mod:case/settlement_actuals",
+    "mod:case/tests/test_material_link_2026_10_02",
+    "mod:case/tests/test_material_link_booking_2026_10_02",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/recognition.py",
+     "backend/modules/case/settlement_actuals.py",
+     "backend/modules/case/tests/test_material_link_2026_10_02.py",
+     "backend/modules/case/tests/test_material_link_booking_2026_10_02.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
+    ],
+    "api": [
+     "backend/modules/case/api/settlement_actuals.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_settlement_actuals_conservation_2026_10_03.py": {
+   "kind": "unit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/gl_events",
+    "mod:case/recognition",
+    "mod:case/tests/test_material_link_2026_10_02",
+    "mod:case/tests/test_material_link_booking_2026_10_02",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02",
+    "mod:case/tests/test_settlement_actuals_2026_10_03"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/gl_events.py",
+     "backend/modules/case/recognition.py",
+     "backend/modules/case/tests/test_material_link_2026_10_02.py",
+     "backend/modules/case/tests/test_material_link_booking_2026_10_02.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py",
+     "backend/modules/case/tests/test_settlement_actuals_2026_10_03.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_settlement_actuals_legacy_parity_2026_10_03.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "helper:legal_params",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02",
+    "mod:case/tests/test_settlement_actuals_2026_10_03",
+    "page:pages/settlement.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/legal_params.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py",
+     "backend/modules/case/tests/test_settlement_actuals_2026_10_03.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py"
+    ],
+    "page": [
+     "frontend/pages/settlement.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
   "backend/modules/case/tests/test_settlement_export_breakdown_2026_10_02.py": {
    "kind": "api",
    "units": [
@@ -6577,6 +6771,62 @@
      "backend/modules/payroll/__init__.py",
      "backend/modules/payroll/bonus_pdf.py",
      "backend/pdf_gen.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_settlement_finalize_recheck_2026_10_03.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/api/quotations",
+    "mod:case/tests/test_material_link_2026_10_02",
+    "mod:case/tests/test_material_link_booking_2026_10_02",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02",
+    "mod:case/tests/test_settlement_actuals_2026_10_03"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/tests/test_material_link_2026_10_02.py",
+     "backend/modules/case/tests/test_material_link_booking_2026_10_02.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py",
+     "backend/modules/case/tests/test_settlement_actuals_2026_10_03.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_settlement_offsets_validation_2026_10_03.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/api/quotations",
+    "mod:case/tests/test_material_link_2026_10_02",
+    "mod:case/tests/test_material_link_booking_2026_10_02",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02",
+    "mod:case/tests/test_settlement_actuals_2026_10_03"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/tests/test_material_link_2026_10_02.py",
+     "backend/modules/case/tests/test_material_link_booking_2026_10_02.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py",
+     "backend/modules/case/tests/test_settlement_actuals_2026_10_03.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
     ],
     "module_dir": [
      "backend/modules/case/"
@@ -10180,6 +10430,30 @@
    "login_fixture": true,
    "module": "subcontract"
   },
+  "backend/modules/subcontract/tests/test_e2e_remit_installments_2026_10_02.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
+    "page:pages/case-management.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_requires.py",
+     "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "module": "subcontract"
+  },
   "backend/modules/subcontract/tests/test_e2e_remit_kinds_settings_2026_10_02.py": {
    "kind": "e2e",
    "units": [
@@ -10609,6 +10883,33 @@
    ],
    "module": "subcontract"
   },
+  "backend/modules/subcontract/tests/test_remit_invoice_e04_2026_10_02.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/__init__",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
+    "mod:subcontract/gl_events"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/gl_events.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
   "backend/modules/subcontract/tests/test_remit_kinded_create_2026_10_02.py": {
    "kind": "api",
    "units": [
@@ -10689,6 +10990,22 @@
    },
    "module": "subcontract"
   },
+  "backend/modules/subcontract/tests/test_remit_pdf_kind_2026_10_02.py": {
+   "kind": "api",
+   "units": [
+    "core:pdf_gen",
+    "dir:backend/modules/subcontract/"
+   ],
+   "evidence": {
+    "import": [
+     "backend/pdf_gen.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "module": "subcontract"
+  },
   "backend/modules/subcontract/tests/test_remit_split_2026_10_02.py": {
    "kind": "unit",
    "units": [
@@ -10707,6 +11024,35 @@
      "backend/modules/subcontract/"
     ]
    },
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_remit_void_2026_10_02.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:case/api/quotations",
+    "mod:subcontract/__init__",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/dispatch_flow",
+    "mod:subcontract/remit_create"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/dispatch_flow.py",
+     "backend/modules/subcontract/remit_create.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
    "module": "subcontract"
   },
   "backend/modules/subcontract/tests/test_report_recognition_basis_2026_09_24.py": {
@@ -19118,6 +19464,26 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_definitions_default_endpoint_2026_10_03.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/helpers/expense_type_defs/",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py"
+    ],
+    "path": [
+     "backend/helpers/expense_type_defs/"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_definitions_diff_default_2026_10_02.py": {
    "kind": "api",
    "units": [
@@ -21055,6 +21421,31 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_e2e_expense_type_refresh_2026_10_03.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/helpers/expense_type_defs/",
+    "file:backend/helpers/expense_type_defs/travel.json",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ui_dialogs.py",
+    "page:pages/expense-types.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ui_dialogs.py"
+    ],
+    "page": [
+     "frontend/pages/expense-types.html"
+    ],
+    "path": [
+     "backend/helpers/expense_type_defs/",
+     "backend/helpers/expense_type_defs/travel.json"
+    ]
+   }
   },
   "backend/tests/test_e2e_expense_types_designer_2026_10_02.py": {
    "kind": "e2e",
@@ -26351,6 +26742,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
+    "mod:case/api/settlement_actuals",
     "mod:netplan/api",
     "page:pages/quotation-form.html"
    ],
@@ -26368,6 +26760,7 @@
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
      "backend/modules/case/api/quotations.py",
+     "backend/modules/case/api/settlement_actuals.py",
      "backend/modules/netplan/api.py"
     ],
     "page": [
