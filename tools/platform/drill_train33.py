@@ -19,7 +19,9 @@ A 套用 → C 資料庫回滾 → E 回滾後重套 → B 只回程式。第 31
   19d 分期流程：試算不寫入 → 訂金 300 → 進度款 700（最後一期）→ 再開被拒（額度用完）→ 作廢只能從最新一期（第 1 期 409、第 2 期 200）→ 重開可行（序號 2）
   19e 舊式整筆申請：在另一張派發建立仍可行（kind=''）；同派發再開分期 409（互斥）
   19f 發票：分期申請可登錄發票（PATCH …/invoice）；舊式整筆申請 409（發票在派發上）
-  19g 舊申請列表形狀不變（kind=''、發票欄位空）；`PRAGMA integrity_check`＝ok、`foreign_key_check` 無違規
+  19h E04 逐張：核准＋登發票的分期申請在事件預覽出現 `contractor_voucher_invoice` 的 E04，派發層 E04 不重複（派發本身也有發票日時）
+  C 回滾後 voucher 表回到舊形狀（有 dispatch_id 單欄 UNIQUE、沒有 kind 欄），寫在報告 rc["train33_voucher_shape_after_C"]；E 重套後 19a–19h 再判一次（＝新形狀與 A 相同）
+  19g 舊申請列表形狀（kind=''、發票欄位空）；`PRAGMA integrity_check`＝ok、`foreign_key_check` 無違規
 紅線同 TRAIN29-DRILL：不碰正式機／金鑰；全合成資料；埠 6760 只綁 127.0.0.1；跑完清。
 """
 import argparse
@@ -35,7 +37,8 @@ import drill_train31 as T31  # noqa: E402
 T = T30.T
 
 #: 班別參數：下一班只改這裡與 CHECKS
-TRAIN = {"number": 33, "base": "52033606", "schema": {"subcontract": 5}}
+TRAIN = {"number": 33, "base": "52033606", "schema": {"subcontract": 5, "case": 5}, "db_version": 116}
+_FAILED = []          # C 回滾後的形狀檢查失敗記錄（寫在報告 rc["train33_voucher_shape_after_C"]，也讓整支工具的結束碼非 0）
 
 SEED_QUOTE = "%sMQ-001" % T.SEED_TAG
 LEGACY_VOUCHER_DISPATCHES = (1, 2, 3, 4)        # seed30 建的四筆派發：各配一張舊式匯款申請
@@ -70,9 +73,26 @@ def seed33(root, port):
     return {"vouchers": len(rows), "kind_dispatch": KIND_DID, "whole_dispatch": WHOLE_DID}
 
 
+def _dispatch_unique(c):
+    """voucher 表上「只含 dispatch_id、非部分」的 UNIQUE 索引名（含內嵌 UNIQUE 產生的自動索引）。與遷移 0005 的 _has_dispatch_unique 同法。"""
+    out = []
+    for r in c.execute("PRAGMA index_list(contractor_payment_vouchers)").fetchall():
+        name, unique, partial = r[1], r[2], (r[4] if len(r) > 4 else 0)
+        if unique and not partial and [x[2] for x in c.execute("PRAGMA index_info(%s)" % name).fetchall()] == ["dispatch_id"]:
+            out.append(name)
+    return out
+
+
+def _partial_unique_names(c):
+    return sorted(r[1] for r in c.execute("PRAGMA index_list(contractor_payment_vouchers)").fetchall() if r[2] and len(r) > 4 and r[4])
+
+
 def record33(rec, root):
     c = T.ro(root)
     try:
+        rec["voucher_dispatch_unique"] = _dispatch_unique(c)
+        rec["voucher_partial_unique"] = _partial_unique_names(c)
+        rec["voucher_has_kind_col"] = "kind" in T.columns(c, "contractor_payment_vouchers")
         rec["voucher_rows"] = {r["id"]: dict(r) for r in c.execute("SELECT * FROM contractor_payment_vouchers ORDER BY id")}
         rec["voucher_table_sql"] = (c.execute("SELECT sql FROM sqlite_master WHERE name='contractor_payment_vouchers'").fetchone() or [""])[0] or ""
         rec["voucher_index_sql"] = [r[0] or "" for r in c.execute("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='contractor_payment_vouchers'")]
@@ -100,11 +120,12 @@ def checks33(root, port, base_rec, new_rec, t0, package_modules):
     res["19a_old_vouchers_unchanged_new_columns_default"] = (bool(base_rows) and set(base_rows) <= set(new_rows) and not diff and defaults_ok,
                                                            {"rows": len(base_rows), "changed_columns": diff, "defaults_ok": defaults_ok})
     # 19b 單欄 UNIQUE 拿掉、分期的部分唯一索引在
-    tsql = (new_rec.get("voucher_table_sql") or "").replace("\n", " ")
-    idx = " ".join(new_rec.get("voucher_index_sql") or [])
-    inline_unique = "dispatch_id" in tsql.split("UNIQUE")[1][:40] if "UNIQUE" in tsql else False
-    res["19b_dispatch_unique_gone_partial_indexes_present"] = (not inline_unique and "kind" in idx and "WHERE" in idx.upper(),
-                                                               {"inline_unique_on_dispatch": inline_unique, "indexes": new_rec.get("voucher_index_sql")})
+    # 正對照：基線一定有 dispatch_id 單欄 UNIQUE（否則這題沒有鑑別力）；套用後沒有，且兩條部分唯一索引都在
+    want_partial = {"idx_cpv_dispatch_legacy", "idx_cpv_dispatch_kind_seq"}
+    res["19b_dispatch_unique_gone_partial_indexes_present"] = (
+        bool(base_rec.get("voucher_dispatch_unique")) and not new_rec.get("voucher_dispatch_unique") and want_partial <= set(new_rec.get("voucher_partial_unique") or []),
+        {"baseline_dispatch_unique": base_rec.get("voucher_dispatch_unique"), "new_dispatch_unique": new_rec.get("voucher_dispatch_unique"),
+         "partial_unique": new_rec.get("voucher_partial_unique")})
     # 19c 款別下拉
     s401, _b = T.api(port, "/api/remit-kinds", None, None, "GET")
     s200, body = T.api(port, "/api/remit-kinds", None, token, "GET")
@@ -142,6 +163,20 @@ def checks33(root, port, base_rec, new_rec, t0, package_modules):
     si, di = T.api(port, "/api/contractor-vouchers/%s/invoice" % (d4 or {}).get("voucher_no"), {"invNo": "DR-001", "invDate": "2026-10-05"}, token, "PATCH")
     sl, _b = T.api(port, "/api/contractor-vouchers/%s/invoice" % (dw or {}).get("voucher_no"), {"invNo": "DR-002", "invDate": "2026-10-05"}, token, "PATCH")
     res["19f_installment_invoice_ok_whole_voucher_409"] = (si == 200 and (di or {}).get("invDate") == "2026-10-05" and sl == 409, {"installment": si, "whole": sl})
+    # 19h E04 逐張：KIND_DID 的第 2 期（重開的 d4）核准＋已登發票；派發本身也登發票日（模擬兩邊都有）⇒ 事件預覽只剩分期層 E04、沒有派發層
+    c = T.rw(root)
+    try:
+        c.execute("UPDATE contractor_payment_vouchers SET status='已核准' WHERE voucher_no=?", ((d4 or {}).get("voucher_no"),))
+        c.execute("UPDATE contractor_dispatches SET invoice_date='2026-10-04', invoice_no='DR-DISP' WHERE id=?", (KIND_DID,))
+        c.commit()
+    finally:
+        c.close()
+    se, de = T.api(port, "/api/ledger/events/preview?start=2000-01-01&end=2999-12-31", None, token, "GET")
+    evs = [e for e in ((de or {}).get("events") or []) if isinstance(e, dict) and e.get("event_code") == "E04"] if isinstance(de, dict) else []
+    inst = [e for e in evs if e.get("source_type") == "contractor_voucher_invoice" and e.get("source_key") == (d4 or {}).get("voucher_no")]
+    disp = [e for e in evs if e.get("source_type") == "contractor_dispatch" and str(e.get("source_key")) == str(KIND_DID)]
+    res["19h_e04_per_installment_and_no_dispatch_level_duplicate"] = (se == 200 and len(inst) == 1 and not disp and (inst[0].get("doc_no") == "DR-001" if inst else False),
+                                                                     {"status": se, "installment_e04": len(inst), "dispatch_e04": len(disp), "doc_no": (inst[0].get("doc_no") if inst else None)})
     # 19g 舊申請列表形狀、庫完整性
     sg, lst = T.api(port, "/api/contractor-vouchers?quote_no=%s" % SEED_QUOTE, None, token, "GET")
     legacy = [v for v in (lst if isinstance(lst, list) else []) if v.get("voucherNo", "").startswith("DRILL-PV-")]
@@ -160,19 +195,41 @@ def checks33(root, port, base_rec, new_rec, t0, package_modules):
 CHECKS = checks33
 
 
+def _wrap_rollback():
+    """C（資料庫回滾）之後：voucher 表必須回到舊形狀（有 dispatch_id 單欄 UNIQUE、沒有 kind 欄、筆數＝基線）；結果寫進 rc["train33_voucher_shape_after_C"]。"""
+    orig = T.rollback
+
+    def rollback(root, ts, include_db=False, port=T.PORT):
+        rc = orig(root, ts, include_db=include_db, port=port)
+        if include_db:
+            c = T.ro(root)
+            try:
+                info = {"dispatch_unique": _dispatch_unique(c), "has_kind_col": "kind" in T.columns(c, "contractor_payment_vouchers"),
+                        "rows": T.count(c, "contractor_payment_vouchers")}
+            finally:
+                c.close()
+            info["ok"] = bool(info["dispatch_unique"]) and not info["has_kind_col"]
+            rc["train33_voucher_shape_after_C"] = info
+            if not info["ok"]:
+                _FAILED.append(("C 回滾後 voucher 表沒有回到舊形狀", info))
+        return rc
+    T.rollback = rollback
+
+
 def main(argv=None):
     argv = list(argv if argv is not None else sys.argv[1:])
     ap = argparse.ArgumentParser(add_help=False)
     ap.add_argument("--expect-db-version", type=int)
     ap.add_argument("--expect-schema", action="append", default=[])
     known, rest = ap.parse_known_args(argv)
-    T31._EXPECT["db_version"] = known.expect_db_version
+    T31._EXPECT["db_version"] = known.expect_db_version if known.expect_db_version is not None else TRAIN.get("db_version")
     schema = dict(TRAIN["schema"])
     for kv in known.expect_schema:
         k, v = kv.split("=")
         schema[k] = int(v)
     T31._EXPECT["schema"].update(schema)
     T.deliver = T31.deliver31
+    _wrap_rollback()
     orig_main = T.main
 
     def main_with_hooks(a):
@@ -191,7 +248,10 @@ def main(argv=None):
     T.main = main_with_hooks
     if "--base-commit" not in rest:
         rest += ["--base-commit", TRAIN["base"]]
-    return T30.main(rest)
+    rc = T30.main(rest)
+    for why, info in _FAILED:
+        print("FAIL:", why, json.dumps(info, ensure_ascii=False))
+    return 1 if _FAILED else rc
 
 
 if __name__ == "__main__":
