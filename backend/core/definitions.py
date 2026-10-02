@@ -261,7 +261,7 @@ def submit_draft(conn, kind, key, scope, note="", user="", decision=None, base_e
         if draft is None:
             raise DefinitionError("沒有草稿可以送審")
         if base_etag is not None and draft["etag"] != base_etag:
-            raise DraftConflict("這份草稿在你載入之後被別人改過，未送審", draft)
+            raise DraftConflict("這份草稿在你載入之後被別人改過，未送審", {"etag": draft["etag"], "created_by": draft.get("created_by", ""), "created_at": draft.get("created_at", "")})
         if open_submission(conn, kind, key, scope) is not None:
             raise DefinitionError("已有送審中的版本，請等審核結果（或請審核人退回）再送")
         problems = validate(kind, key, draft["body"])
