@@ -1554,13 +1554,15 @@ def _build_contractor_voucher_html(v: dict, mask_bank: bool = False) -> str:
         f'  <div><span>申請單號：</span><strong style="font-family:Arial,sans-serif">{esc(v.get("voucherNo",""))}</strong></div>\n'
         f'  <div><span>建立日期：</span>{esc((v.get("createdAt") or "")[:10])}</div>\n'
         f'  <div><span>關聯案件：</span>{esc(v.get("quoteNo",""))}</div>\n'
+        + (f'  <div><span>款別／期別：</span><strong>{esc(v.get("kindName") or v.get("kind"))}　第 {esc(str(v.get("seq") or ""))} 期</strong>'
+           f'（本期稅前 {esc(format(int(v.get("pretaxAmount") or 0), ","))}）</div>\n' if v.get("kind") else '') +
         '</div>\n'
         f'{banner_html}\n'
         '<div class="boxes">\n'
         '  <div class="box">\n    <div class="box-title">一、承攬商資訊</div>\n'
         f'    <div class="row"><span class="label">名稱</span><span class="val">{esc(v.get("vendorName","") or "（無承攬商，純外包人員）")}</span></div>\n'
         f'    <div class="row"><span class="label">統一編號</span><span class="val">{esc(v.get("vendorTaxId",""))}</span></div>\n'
-        f'    <div class="row"><span class="label">發票號碼</span><span class="val">{esc(v.get("invoiceNo",""))}</span></div>\n'
+        f'    <div class="row"><span class="label">發票號碼</span><span class="val">{esc((v.get("invNo") or "") if v.get("kind") else v.get("invoiceNo",""))}</span></div>\n'
         f'    <div class="row"><span class="label">應付款日期</span><span class="val">{esc(v.get("payableDate","") or "未指定")}</span></div>\n'
         + (f'    <div class="row"><span class="label">廠商發票</span><span class="val">'
            f'{esc("、".join(f.get("filename","") for f in (v.get("invoiceFiles") or [])))}</span></div>\n'
@@ -1656,6 +1658,13 @@ def _contractor_voucher_dict(row) -> dict:
     out["createdBy"] = _display_name_for_username(d.get("created_by", ""))
     out["createdAt"] = d.get("created_at", "")
     out["approval"] = appr
+    # 31-B：款別／期別／該期發票（舊式整筆＝空；發票仍讀快照的派發發票號碼）
+    out["kind"] = d.get("kind") or ""
+    out["kindName"] = d.get("kind_name") or ""
+    out["seq"] = d.get("seq") or 0
+    out["pretaxAmount"] = d.get("pretax_amount")
+    out["invNo"] = d.get("inv_no") or ""
+    out["invDate"] = d.get("inv_date") or ""
     return out
 
 

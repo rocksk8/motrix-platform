@@ -24,12 +24,13 @@ _WRITE = ("finance",)
 #: 可補登的來源類型 ⇒ 允許的欄位（與 contract.apply_annotations 認得的一致）
 ALLOWED = {
     "contractor_dispatch": ("input_tax", "invoice_date"),          # E04 承攬商發票
+    "contractor_voucher_invoice": ("input_tax", "invoice_date"),    # E04 承攬商分期申請逐張發票（31-B S4；來源鍵＝匯款申請單號）
     "stock_batch_invoice": ("input_tax", "invoice_date"),          # E08b 進貨發票（E09 付款跟著調整）
     "case_extra_expense": ("input_tax",),                          # E11 額外支出（未拆稅）
     "case_material_order": ("input_tax",),                         # E12 叫料（未拆稅）
 }
 #: 畫面用名稱（不要讓使用者看到 contractor_dispatch／E04 這種代碼）
-SOURCE_LABEL = {"contractor_dispatch": "承攬商派工", "stock_batch_invoice": "進貨發票", "case_extra_expense": "案件額外支出", "case_material_order": "案件材料申請"}
+SOURCE_LABEL = {"contractor_dispatch": "承攬商派工", "contractor_voucher_invoice": "承攬商分期申請", "stock_batch_invoice": "進貨發票", "case_extra_expense": "案件額外支出", "case_material_order": "案件材料申請"}
 EVENT_LABEL = {"E04": "承攬商發票", "E08b": "進貨發票進項稅", "E09": "進貨付款", "E11": "額外支出", "E12": "材料申請"}
 _MAX_LIST = 500
 
