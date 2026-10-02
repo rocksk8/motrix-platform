@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1040,
+  "tests": 1042,
   "unmapped": 12,
   "kinds": {
    "api": 563,
-   "e2e": 254,
+   "e2e": 255,
    "audit": 134,
-   "unit": 89
+   "unit": 90
   },
   "routes": 745
  },
@@ -5872,8 +5872,15 @@
     "file:backend/helpers/__init__.py",
     "file:backend/tests/_requires.py",
     "helper:mail_types",
+    "mod:case/api/case_action_items",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
     "mod:case/api/material_links",
+    "mod:case/api/material_orders",
+    "mod:case/api/material_payments",
+    "mod:case/api/quotations",
+    "mod:netplan/api",
     "plat:__init__",
     "plat:registry",
     "router:approval_queue"
@@ -5888,8 +5895,15 @@
      "backend/tests/_requires.py"
     ],
     "api": [
+     "backend/modules/case/api/case_action_items.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/expense_form_pdf.py",
      "backend/modules/case/api/material_approvals.py",
      "backend/modules/case/api/material_links.py",
+     "backend/modules/case/api/material_orders.py",
+     "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/netplan/api.py",
      "backend/routers/approval_queue.py"
     ],
     "module_dir": [
@@ -6042,6 +6056,7 @@
     "mod:analytics/api/reports",
     "mod:case/__init__",
     "mod:case/gl_events",
+    "mod:case/purchase_items",
     "mod:case/recognition",
     "mod:case/tests/test_material_link_2026_10_02",
     "mod:case/tests/test_purchase_item_lines_2026_10_02"
@@ -6051,6 +6066,7 @@
      "backend/db.py",
      "backend/modules/case/__init__.py",
      "backend/modules/case/gl_events.py",
+     "backend/modules/case/purchase_items.py",
      "backend/modules/case/recognition.py",
      "backend/modules/case/tests/test_material_link_2026_10_02.py",
      "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
@@ -6339,6 +6355,50 @@
     ]
    },
    "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_probe_t32_mlink_leak_c7.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "js:js/case-management-mlink.js",
+    "page:pages/case-management.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "page": [
+     "frontend/js/case-management-mlink.js",
+     "frontend/pages/case-management.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_probe_t32_s4c_cash_c7.py": {
+   "kind": "unit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/tests/test_material_link_booking_2026_10_02"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/tests/test_material_link_booking_2026_10_02.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
    "module": "case"
   },
   "backend/modules/case/tests/test_purchase_item_booking_2026_10_02.py": {

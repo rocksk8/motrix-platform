@@ -1719,7 +1719,7 @@
   "js:js/case-management-mlink.js": {
    "api_calls": [
     "/api/quotations/",
-    "/api/quotations/{}/material-orders/link-status"
+    "/api/quotations/{}/material-link-status"
    ],
    "api_prefixes": [
     "/api/quotations"
@@ -6718,7 +6718,7 @@
      "func": "material_link_statuses",
      "line": 37,
      "method": "GET",
-     "path": "/api/quotations/{quote_no}/material-orders/link-status"
+     "path": "/api/quotations/{quote_no}/material-link-status"
     }
    ],
    "tables_ddl": [],
@@ -6839,13 +6839,13 @@
     },
     {
      "func": "set_material_order_invoice_date",
-     "line": 191,
+     "line": 194,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/material-orders/{item_id}/invoice-date"
     },
     {
      "func": "get_material_orders",
-     "line": 233,
+     "line": 236,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-orders"
     }
