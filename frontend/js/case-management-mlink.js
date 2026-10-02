@@ -157,6 +157,7 @@ window.CM_PARTS.push(() => ({
     mlSubmitHint(m) {
       if (!m || String(m.poDocCode || '').trim()) return ''
       const a = (this.moApprovals || {})[m.itemId] || {}
+      if (m._saved !== false && !(m.itemId in (this.moApprovals || {}))) return ''      // 審核狀態還沒載入：不判斷（避免舊單閃一下提示）
       if (m._saved !== false && a.legacy) return ''                                    // 舊單不受影響
       if (!['', '草稿', '已退回'].includes(a.status || '')) return ''
       return '需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。'

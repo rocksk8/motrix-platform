@@ -67,6 +67,7 @@ def page(live_server, make_user, new_context):
     pg.wait_for_selector('.cm-tab:has-text("財務")', timeout=20000)
     pg.click('.cm-tab:has-text("財務")')
     pg.wait_for_selector('[data-testid="mo-card-NEW"]', timeout=20000)
+    pg.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return !!d.moApprovals && 'NEW' in d.moApprovals && 'LEG' in d.moApprovals }", timeout=20000)   # 審核狀態載完才判斷提示
     pg.click('[data-testid="ml-tab-all"]')
     yield pg
     assert not errors, errors
