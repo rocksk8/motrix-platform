@@ -4,6 +4,7 @@
 - 前端 `js/case-management-mlink.js`（新檔，獨立於 31-C 區塊）：「從報價單品項帶入」（已申請完成、剩餘 0 者不列，數量預設剩餘量）、「從採購單明細帶入」（只列尚未被有效連結用掉者）、頁籤（已核准／舊單〔預設〕、審核中、草稿與退回、已取消、全部；未儲存的新列每個頁籤都顯示）、徽章「該材料申請未申請採購單」（讀後端判定；舊單與 $0 不標）、超出計畫量原因欄。
 - `MaterialOrder` 存檔模型加選填 `quoteItemId`／`poDocCode`／`poLine`／`overPlanReason`；空值不寫入（沒用連結的舊單形狀不變）。前端載入與存檔原樣帶回這四鍵（整份覆寫端點）。
 - S4 新增的使用者可見字串改照 `MATERIAL-REQUEST-WORDING.md`：`NO_PO_TEXT`＝「該材料申請未申請採購單」；送審檢查訊息、無案件訊息同改。鍵名不動。
+- 材料申請的佇列提供者（`material_approvals.queue_items`）帶 `tags`：未申請採購單者加一個 warn 標註（`purchase_items.queue_tags`）。瀏覽器 e2e（32-S4e）：帶入扣量→超計畫原因→標註出現／消失／失效回來→佇列卡片標註。
 - 簽核佇列項目加 `tags: []`（`helpers/approval_queue.base_item`；前端卡片畫出，tone `warn`／`info`）。
 
 ## (next) — 2026-10-02 13:49（wip/t32-s4a-2e）：連到採購單的叫料不重複計金額＋「未申請採購單」備註（32-S4c）
