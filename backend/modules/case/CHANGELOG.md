@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-02 21:08（wip/t33-settlement-a2-2e）：完結精算實際金額端點（33-A2）
+- 新增 `GET /api/quotations/{no}/settlement-actuals`（案件可見＋財務檢視，否則 403／404）：`settlement_actuals.compute(conn, quote_no, offsets=None, unadopted="ignore")`，規則 A（有實際採購 ⇒ 實際取代該品項估計）、三態 adopt、沖銷（offsets）、未對應清單、sources／totals；金額與營運報表同源（`recognition.material_money_rows`、`extra_entries(quote_no=)`）。8 題測試。
+
 ## (next) — 2026-10-02 20:25（wip/t33-settlement-2e）：材料申請逐筆判定抽成共用原語（33-A1，行為零變化）
 - `recognition.material_money_rows(conn, department_id=None, quote_no=None)`：每筆材料申請一列（審核狀態、`cost_state`、是否連到有效採購單、`noPo`、`total`），**不分口徑**；`material_entries`（營運報表／總帳 E12／E12b）改成它的投影，輸出與抽出前逐筆相同（測試把抽出前的實作凍結為參考、對 9 種情境的權責與現金口徑整份比對）。完結精算的後端端點（33-A2）將使用同一原語，三處金額不會漂。`_case_rows` 加選填 `quote_no`。
 
