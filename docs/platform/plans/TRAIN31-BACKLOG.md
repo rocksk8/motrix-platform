@@ -130,3 +130,8 @@
 ## 第32包稽核／演練／探針進度（2026-10-02 晚）
 - d7 包完整性 PASS（audit/train32-pkg-d7@367b1194）；a3 演練 PASS（drill/train32@b90a9276；派發 schema 3→4、case 5、卡住列補單號且只動 doc_code）；2e 探針 CLEAN（probe/t32-pkg-2e@3579f36a；payload 837 檔：807 逐位相同、25 僅換行、1 為 version_manifest 建包重產）。正式機已暫存驗證（#9 卡住列 0 筆）。待 c7 稽核。
 - 2e 探針發現（第33班，不擋第32包）：①MEDIUM 連結的採購單被作廢後，材料申請金額正確回到材料申請（權責 3000），但開匯款申請仍回 409「已對應採購單」（material_payment.create 只檢查 poDocCode 非空，應改用有效連結 _link_check）；已核准列的連結鍵屬實質欄位不能編輯 ⇒ 卡住，可取消重建當暫行辦法；併入第33班強制採購單規格 A.5。②LOW version_manifest 沒有第32班使用者公告條目（材料申請改名、尚未送審、舊單完工進佇列）⇒ 第33班補。
+
+## 第33班規模估計（2026-10-02 晚；2e 規格已在 wip/t32-material-link-spec-2e@b4a2b32a）
+- MATERIAL-FORCE-PO-AND-SHIPPING-SPEC.md：強制採購單＋多採購單組成一品項（poLinks[]，按品項群組）＋出貨單連動（L1 提供者 case material.shippable／supply shipping.material_shipped，materialLinks[]，數量對照已申請／到料／已出貨／保留）約 **12.5 天**，12 題待使用者（§D）。
+- SETTLEMENT-ACTUALS-SPEC.md（精算頁重做）約 6 天；31-B 匯款款別（含款別設定）約 5～6 天（S0–S5）；K-2 並行戳 0.5–1 天；已發布請購類型範本重發約 1 天；建包優化（無視窗、author_gate、step 3 影子）並行不卡出貨。
+- 合計遠超一班：第33班建議切兩批——33A：材料申請強制採購單＋精算頁重做（案件模組一條線）、31-B 款別（派發／應付一條線）；33B：出貨單連動、設計器 K-2、範本重發。待使用者回來時裁示。
