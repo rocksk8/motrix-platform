@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1076,
+  "tests": 1077,
   "unmapped": 13,
   "kinds": {
    "api": 579,
    "e2e": 263,
    "audit": 136,
-   "unit": 98
+   "unit": 99
   },
   "routes": 752
  },
@@ -6444,6 +6444,30 @@
    ],
    "evidence": {
     "import": [
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/material_approval.py",
+     "backend/modules/case/tests/test_material_po_required_2026_10_03.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_material_po_default_off_2026_10_03.py": {
+   "kind": "unit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/material_approval",
+    "mod:case/tests/test_material_po_required_2026_10_03",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
      "backend/modules/case/__init__.py",
      "backend/modules/case/material_approval.py",
      "backend/modules/case/tests/test_material_po_required_2026_10_03.py",
