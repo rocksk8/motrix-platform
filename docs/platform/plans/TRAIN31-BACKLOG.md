@@ -100,3 +100,4 @@
 - 使用者裁示 2026-10-02：31-B 向正式機要資料；維持第32班／第33班分班。資料要求原則：唯讀統計優先；演練副本須去識別化（姓名、帳號、統編、聯絡方式遮蔽），不得把正式個資放進開發庫；清單由 a3 的 31-B 設計提案產出後由主持轉正式機 Claude。
 - 2e：wip/t32-s4a-2e@3bdb45bc（已併 d7 尚未送審 99a542e0、拿掉重複徽章；gate 跑中）。d7 seam 請基於此 sha。
 - a3 設計：wip/t33-remit-kinds-design-a3@d8aeabc7（REMIT-KINDS-31B-DESIGN.md：裁示題 Q1–Q8、分片 S1–S5；PUBLISHED-TYPE-REFRESH-DESIGN.md：建議 A+C 並列版本逐項採用；發現 /api/definitions/.../diff a|b=default 回的是公司最新而非出貨預設的 bug）。已將唯讀查詢清單（31-B 的 A1–A5、B1–B8、請款類型 P1–P4）放雲端交付資料夾並通知正式機 Claude；B9 待使用者口述。
+- 正式機唯讀查詢結果（20261002_150000_唯讀查詢_31B與請款類型）：contractor_payment_vouchers 僅 4 筆、dispatch_id UNIQUE NOT NULL；11 派發中 4 有匯款申請；E04/E05 草稿各 2 筆未過帳（origin='gl:E04'／'gl:E05'／'gl:E05b'）；purchase_req v1–v4（10-01 22:38–22:44 發布）、1 筆單據釘 v2。⇒ 31-B 演練用合成資料即可，不需去識別化副本。B9 待使用者口述。
