@@ -1,5 +1,23 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-02（wip/t33-remit-s2-a3：31-B S2 分期匯款申請的建立與試算）
+- `POST /api/contractor-vouchers` 新增選填 `kind`＋（`ratio_percent` 或 `amount`）：帶 `kind` 即開分期申請，款別／狀態規則走款別設定，金額走 `remit_split.plan`，快照改為本期金額、個人點工只掛最後一期（使用者裁示 D5）；不帶 `kind` 的舊式整筆申請行為與回傳形狀不變。
+- 新增 `POST /api/contractor-vouchers/preview`（管理員以上）：試算，不寫入，與建立同一支 `remit_create.kinded_context`，數字一致。
+- 分期與舊式整筆在同一派發互斥；前期只看未作廢的，序號不回頭重用；匯款申請回傳新增 `kind/kindName/seq/ratio/pretaxAmount`。
+- 測試：`test_remit_kinded_create_2026_10_02.py`（10 題，含 `previous_periods` 失效的反向控制）。
+
+## (next) — 2026-10-02（wip/t33-remit-s1-a3：31-B S1 匯款申請表重建與分期金額規則）
+- 遷移 `0005_remit_kinds_voucher_rebuild`（subcontract schema 4→5）——重建 `contractor_payment_vouchers`：拿掉 `dispatch_id` 單欄 UNIQUE（內嵌 UNIQUE 無法 DROP，故建新表→逐列比對搬資料→換名）、新增 `kind／kind_name／kinds_version／seq／ratio／pretax_amount／inv_no／inv_date／inv_files_json／void_reason／voided_at／voided_by`（全有預設值，舊列＝舊式整筆申請 `kind=''`）；唯一性改成部分唯一索引（`kind=''` 且未作廢：同派發最多一張，與舊行為一致；`kind<>''` 且未作廢：同派發同款別同期不重複）。冪等；搬資料前後不一致 ⇒ 丟例外、loader 撤回整支（舊表不動）；保留手工加過的欄位與 `sqlite_sequence`。現有匯款申請流程**行為不變**（新欄不被任何現有程式讀寫）。
+- 新增 `remit_split.py`（`plan()` 純函式）——分期金額規則：比例或固定金額；最後一期取剩餘額（補尾差）；稅額逐期算、最後一期補到與整筆稅額一致（各期稅額合計恆等於整筆稅額）、補差明列；超出剩餘額度／累計超過 100%／非整數元一律拒絕。尚未被任何流程呼叫（S2 接建立 API 與試算端點）。
+- 測試：`test_remit_kinds_migration_2026_10_02.py`（合成資料演練 9 題，含搬資料被竄改的反向控制）、`test_remit_split_2026_10_02.py`（25 題，含 500 組隨機排程的合計性質）。
+
+## (next) — 2026-10-02（wip/t33-remit-s0-a3：31-B S0 匯款款別設定）
+- 新增 `remit_kinds.py`：匯款款別放在定義文件庫（kind＝`remit_kinds`、key＝`default`、company scope）——草稿、驗證、發布、版本、差異、還原沿用 `core.definitions`；沒有發布版＝出貨預設（版本 0：訂金款／進度款／完工款／驗收款，預設派發狀態對應照使用者確認：訂金＝已確認～完工、進度＝已確認～已驗收、完工款與驗收款＝已驗收／完工）。驗證器：代碼（小寫英數底線、不重複）、名稱、active 布林、sort 整數、stages 必須是派發狀態且啟用中的款別至少一個、至少一個啟用中款別；**已發布過（或之後被匯款申請使用）的代碼不能移除，只能停用**。
+- 新增 API：`GET /api/remit-kinds`（管理員以上；啟用中的款別、可開立的派發狀態、生效版本，供開匯款申請的下拉）、`GET /api/remit-kinds/definition`（最高管理者；完整定義含停用）。設定走既有 `/api/definitions/remit_kinds/default/…`（最高管理者）。
+- 新增頁面 `remit-kinds-settings.html`（系統群組「匯款款別設定」，僅最高管理者）：款別表格（名稱、代碼、啟用、排序、可開立的派發狀態、備註）＋驗證／儲存草稿／發布／比較／丟棄草稿／版本還原。
+- 這一片**只是設定與資料來源**：匯款申請本身（`kind` 欄、分期金額規則、E04 逐張）在後續切片（S1 起）；現有匯款申請流程完全不變。
+- 測試：`test_remit_kinds_2026_10_02.py`（預設與對應、驗證器、不可移除＋反向控制、API 權限與內容、發布後版本、開立規則）；`test_e2e_remit_kinds_settings_2026_10_02.py`。
+
 ## 1.1.6 — 2026-10-02（fix/t32-legacy-completion-c7）：舊單申請完工進得了簽核佇列（正式機回報）
 - 修正：舊單（第 31-A 之前建立，`doc_code=''`）申請完工後，完工審核**不顯示在簽核佇列**（也點不開詳情、轉不了簽）。成因：佇列提供者對空單號略過，而申請完工只改 `completion_status`、沒補單號。現在 `dispatch_review_submit` 在送審當下（持寫鎖）幫空單號補 `DP-YYYYMMDD-NNNN`（兩段共用；只補單號，舊單身分 `approval_status=''` 與其他欄位不變；通知／稽核文字改用單號而非 `#id`）。
 - 資料修復：migration `0004_dispatch_doc_code_backfill`——任一段在待審核／簽核中而 `doc_code=''` 的列補單號（日期取該筆送審日期，流水號接同日最大號）；**只動 `doc_code`**，冪等，沒卡住的舊單不動。正式機升級後，已卡住的完工審核會自己出現在簽核佇列。
