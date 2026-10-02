@@ -48,12 +48,13 @@ def _order_json():
     return json.loads(_q("SELECT data_json FROM quotations WHERE quote_no=?", (NO,))[0]["data_json"])["caseRecord"]["materialOrders"][0]
 
 
-def _wait(pred, what, timeout=20):
+def _wait(page, pred, what, timeout=20):
+    """等資料庫狀態。用 `page.wait_for_timeout`（讓 sync Playwright 處理事件、放行 route 攔下的請求），不用 `time.sleep`（見 test_e2e_material_approval 的說明）。"""
     t0 = time.time()
     while time.time() - t0 < timeout:
         if pred():
             return
-        time.sleep(0.4)
+        page.wait_for_timeout(400)
     raise AssertionError("資料庫沒有達到預期狀態：" + what)
 
 
@@ -128,7 +129,7 @@ def test_material_payment_round_trip_in_the_browser(live_server, make_user, e2e_
     assert r.status == 200 and r.json()["remaining"] == 3500, r.text()
     r = ctx.request.post(f"{live_server}/api/cashier/pending-payables/case_material/{pid}/pay", headers=hdr, data={"paidDate": "2031-03-09"})
     assert r.status == 200 and r.json()["settled"] is True, r.text()
-    _wait(lambda: len(_q("SELECT id FROM case_material_payment_lines")) == 2, "兩筆付款明細")
+    _wait(page, lambda: len(_q("SELECT id FROM case_material_payment_lines")) == 2, "兩筆付款明細")
     o = _order_json()
     assert (o["paidStatus"], o["paidAmount"], o["paidDate"]) == ("partial", 6000, "2031-03-09")      # 6,000 ＜ 小計 10,000
 

@@ -42,12 +42,17 @@ def _cr():
         conn.close()
 
 
-def _wait_db(pred, what, timeout=20):
+def _wait_db(page, pred, what, timeout=20):
+    """等**資料庫**到達預期狀態。⚠️ 必須用 `page.wait_for_timeout`（Playwright 的等待）而不是 `time.sleep`：
+    sync Playwright 只在呼叫它的 API 時才處理瀏覽器事件，而 conftest 的 `context.route(...)` 會讓**每個請求**先停下來等 Python 端放行——
+    測試執行緒睡著時，頁面的自動存檔 PATCH 就卡在瀏覽器裡（伺服器完全沒收到），等到下一次 Playwright 呼叫才放出去
+    （實測：約 40～50 秒後；整合樹 e2e 紅 1 題「已到料已存」＝這個）。
+    """
     t0 = time.time()
     while time.time() - t0 < timeout:
         if pred(_cr()):
             return
-        time.sleep(0.4)
+        page.wait_for_timeout(400)
     raise AssertionError("資料庫沒有達到預期狀態：" + what + "；目前 " + json.dumps(_cr(), ensure_ascii=False)[:400])
 
 
@@ -145,7 +150,7 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     page.wait_for_function("() => !document.querySelector('[data-testid=mat-ordered]').disabled", timeout=10000)
     assert page.locator('[data-testid="mat-arrived"]').first.is_disabled()
     page.check('[data-testid="mat-ordered"]')
-    _wait_db(lambda c: c["materials"][0].get("ordered") is True and c["materials"][0].get("orderItemId") == item_id, "已叫料＋連結已存")
+    _wait_db(page, lambda c: c["materials"][0].get("ordered") is True and c["materials"][0].get("orderItemId") == item_id, "已叫料＋連結已存")
     _shot(page, "04-ordered")
 
     # 5 回財務分頁確認到貨（日期＋確認人）⇒ 叫料管控可勾「已到料」
@@ -162,6 +167,6 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     page.click('.cm-tab:has-text("叫料管控")')
     page.wait_for_function("() => !document.querySelector('[data-testid=mat-arrived]').disabled", timeout=10000)
     page.check('[data-testid="mat-arrived"]')
-    _wait_db(lambda c: c["materials"][0].get("arrived") is True, "已到料已存")
+    _wait_db(page, lambda c: c["materials"][0].get("arrived") is True, "已到料已存")
     _shot(page, "06-arrived")
     assert not errors, errors
