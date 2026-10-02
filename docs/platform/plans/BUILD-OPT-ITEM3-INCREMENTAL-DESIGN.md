@@ -228,3 +228,9 @@ stages.not_e2e = {
 
 **合計**：寫碼＋測試台 ~4～5 工作日，影子期 2 週；**阻塞**：①`build_deploy_package.ps1` 與儀表板（使用者令）；②`tools/**`／`backend/tools/**`／`bottom_layer.json` 的任何 commit 都是底層、會使第 30 包的指紋與範圍驗證失效 ⇒ **不得合進 `platform`，直到第 30 包上機（打 `prod/` tag）**；③真實逐題耗時資料要等 failfast 接上後的建包。
 **建議順序**：5（重放工具，產生可重複的證據）→ 1＋2（選題＋指紋）→ 4（底板與掃目錄補丁，先把召回補到 100%）→ 6（測試台）→（第 30 包後）3＋7＋8。**若影子期召回有任何一次漏，退回只做項 1（fail-fast）＋項 2（樹雜湊）。**
+
+### 7.1 實作狀態（2026-10-02，分支 wip/build-opt2-d7；**僅 dry-run，未接進建包**）
+- **已有**：①`tools/platform/stage_select.py`（步驟 1＋4 的底板／掃目錄偵測；`plan --stage --base [--head] [--json]`，只算不跑；`selector_sha`、集合守恆 `check_invariant`、強制全量原因逐條列出、任何例外⇒全量）；②`tools/platform/replay_incremental.py`＋`replay_rows_t29_t30.json`（步驟 5；t29／t30 兩班 28 列＝A、B 兩種基準各 14 段）；③`backend/tests/platform/test_stage_select_2026_10_02.py`（步驟 6；自造 git repo＋假 test_map，含 5 個突變反向控制）。
+- **重放對照本文 §3／§4**（`replay_incremental.py`，兩班 296.1 分）：A·M 省 76.6（文件 76.5）、B·M 省 93.0（91.8）、B·S 37.2（34.8）、出貨包強制全量 51.7（52.1）；`--legacy-floor`（§3.1 舊底板）B·M 90.6、召回 24／26；新底板（含 F0d 掃目錄、扣 F1）召回 25／26，唯一漏的是 `test_audit_search` perf 偶發。**差異來源**：新底板扣掉 F1 演練（依賴鍵控）、加 F0d；一個檔同時有 e2e 與非 e2e 題（33 個 e2e 類檔，如 `test_module_registry`）改為兩段都收（本文 §3 把它們只算 e2e 段，會漏 t29#1 的 `test_module_registry` 紅）。
+- **仍阻塞**：①接進建包（`build_deploy_package.ps1` Step 3、manifest `verification.stages` 欄位、儀表板顯示）＝步驟 7，等使用者套用第 30 包；②影子全量 2 週（R3-e）與參數校準（6 小時／N=3）＝步驟 8；③`dep_fp` 與兩條推導互證（步驟 2）、`lookup-stage --incremental`／紀錄擴充（步驟 3）尚未做；④逐題耗時（fail_stream 逐題 `t`）仍用 §3.1 的估算模型（slowest_files 60 檔實測＋0.60 s／題）。
+- **合進 `platform` 的條件不變**：本分支動了 `tools/**`、`backend/tools/**` 之外的新檔（`tools/platform/stage_select.py` 本身屬 `tools/**` 底層），第 30 包上機並打 `prod/` tag 前不得合入。
