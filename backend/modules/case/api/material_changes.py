@@ -88,7 +88,7 @@ def _change_for(conn, quote_no, change_id):
 
 # ── 讀 ──────────────────────────────────────────────────────────────
 
-@router.get(_BASE + "/changes")
+@router.get("/api/quotations/{quote_no}/material-orders/{item_id}/changes")             # 字面路徑：case_read_scope 的掃描只認字串常數
 def list_changes(quote_no: str, item_id: str, authorization: str = Header(None)):
     """這筆材料申請的變更申請（新到舊）。"""
     user = _require_user(authorization)
@@ -102,7 +102,7 @@ def list_changes(quote_no: str, item_id: str, authorization: str = Header(None))
         conn.close()
 
 
-@router.get(_BASE + "/change-proposal")
+@router.get("/api/quotations/{quote_no}/material-orders/{item_id}/change-proposal")
 def preview_proposal(quote_no: str, item_id: str, quantity: float = None, notes: str = None, authorization: str = Header(None)):
     """變更提案預覽（唯讀；內容由案件側 `change_proposal` 組成）：`{before, after, diff, uncoveredLines, problems}`。"""
     user = _require_user(authorization)
