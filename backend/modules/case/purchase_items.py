@@ -258,11 +258,21 @@ def _po_lines(row):
     return v if isinstance(v, list) else []
 
 
+def has_paid_history(order) -> bool:
+    """材料申請自己已有付款紀錄（舊「登記已付」或 31-C 匯款明細的投影：已付金額 > 0／狀態不是 pending）。"""
+    o = order or {}
+    return _num(o.get("paidAmount")) > 0 or str(o.get("paidStatus") or "pending") != "pending"
+
+
 def _link_check(order, po_rows):
-    """`poDocCode` 的有效性 ⇒ `(ok, reason)`；沒有 `poDocCode` ⇒ `(False, "no_link")`。"""
+    """`poDocCode` 的有效性 ⇒ `(ok, reason)`；沒有 `poDocCode` ⇒ `(False, "no_link")`。
+    已有付款紀錄的材料申請**不視為連結**（`has_payment`）：它付出去的錢已經記在材料申請上（現金口徑看得到），
+    若事後再連到採購單就會被「連到採購單＝金額由採購單負責」略過、已付的錢從現金報表消失（c7 預審）。"""
     code = str((order or {}).get("poDocCode") or "").strip()
     if not code:
         return False, "no_link"
+    if has_paid_history(order):
+        return False, "has_payment"
     po = next((r for r in po_rows if (r["doc_code"] or "") == code), None)
     if po is None or (po["kind"] or "") != ORD:
         return False, "po_missing"
@@ -403,11 +413,16 @@ def link_validator(conn, quote_no, order):
     return None
 
 
-def queue_tags(conn, quote_no, order) -> list:
+def queue_tags(conn, quote_no, order, cache=None) -> list:
     """簽核佇列卡片的小標註（L1 `tags[]`；接縫：材料申請的佇列提供者呼叫）⇒ 「未申請採購單」才有一個 warn 標註，其餘 []。
     正在簽核的單一定有審核列（非舊單），所以 `legacy=False`；$0 仍免標。"""
-    _, rows = _case_state(conn, quote_no)
-    st = material_link_status(order, [r for r in rows if (r["kind"] or "") == ORD], legacy=False)
+    if cache is not None and quote_no in cache:                                  # 佇列一次呼叫內同案件只查一次（紅點熱路徑，c7 預審）
+        po_rows = cache[quote_no]
+    else:
+        po_rows = [r for r in _case_state(conn, quote_no)[1] if (r["kind"] or "") == ORD]
+        if cache is not None:
+            cache[quote_no] = po_rows
+    st = material_link_status(order, po_rows, legacy=False)
     return [{"text": st["text"], "tone": "warn"}] if st["state"] == "none" else []
 
 

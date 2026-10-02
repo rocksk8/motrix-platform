@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """叫料連結的唯讀端點（32-S4b；規格 docs/platform/plans/MATERIAL-ORDER-LINK-SPEC.md §3／§5）。
 - `GET /api/quotations/{案件}/material-po-lines`：「從採購單帶入」清單（尚未被有效連結用掉的採購單明細列）。
-- `GET /api/quotations/{案件}/material-orders/link-status`：每一列叫料的連結判定（`{itemId: {state, reason, stale, text}}`），畫面徽章用。
+- `GET /api/quotations/{案件}/material-link-status`：每一列叫料的連結判定（`{itemId: {state, reason, stale, text}}`），畫面徽章用。
 權限＝案件可見（同額外支出清單）；金額（單價、小計）只給有財務檢視者（裁示 10）。只讀、不寫。"""
 import json
 
@@ -33,7 +33,7 @@ def material_po_lines(quote_no: str, authorization: str = Header(None)):
         conn.close()
 
 
-@router.get("/api/quotations/{quote_no}/material-orders/link-status")
+@router.get("/api/quotations/{quote_no}/material-link-status")
 def material_link_statuses(quote_no: str, authorization: str = Header(None)):
     quote_no = _case(quote_no)
     user = _require_user(authorization)

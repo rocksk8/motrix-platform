@@ -81,7 +81,7 @@
   },
   {
    "file": "modules/case/api/material_links.py",
-   "path": "/api/quotations/{quote_no}/material-orders/link-status",
+   "path": "/api/quotations/{quote_no}/material-link-status",
    "handler": "material_link_statuses",
    "scope": "row_access"
   },

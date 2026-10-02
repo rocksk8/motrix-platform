@@ -318,7 +318,7 @@ window.CM_PARTS.push(() => ({
     //        'late'＝建立預設階段之後（dirty 等要在 ensureCaseRecord 之後才清）。
     // 新增案件層級的狀態時，把重設寫進自己模組的 _reset_，不要寫回 selectCase。
     _resetCaseScoped(phase, data) {
-      for (const m of ['core', 'list', 'close', 'biz', 'exec', 'dispatch', 'shipping', 'completion', 'feed', 'fin', 'xexp']) {
+      for (const m of ['core', 'list', 'close', 'biz', 'exec', 'dispatch', 'shipping', 'completion', 'feed', 'fin', 'xexp', 'mlink']) {
         const f = this['_reset_' + m]
         if (typeof f === 'function') f.call(this, phase, data)
       }

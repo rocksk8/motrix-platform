@@ -112,7 +112,7 @@ def test_link_status_endpoint_marks_legacy_zero_none_linked_and_stale(W):
         {"itemId": "K", "itemName": "已連", "quantity": 3, "unit": "式", "unitPrice": 10, "totalPrice": 30, "poDocCode": po["docCode"], "poLine": 1},
         {"itemId": "S", "itemName": "失效", "quantity": 1, "unit": "式", "unitPrice": 10, "totalPrice": 10, "poDocCode": "PO-GONE"},
     ], {"Z": "已核准", "N": "已核准", "K": "已核准", "S": "已核准"})
-    r = c.get("/api/quotations/%s/material-orders/link-status" % NO, headers=h)
+    r = c.get("/api/quotations/%s/material-link-status" % NO, headers=h)
     assert r.status_code == 200, r.text
     st = r.json()["statuses"]
     assert st["L"]["state"] == "exempt" and st["L"]["reason"] == "legacy" and st["L"]["text"] == ""
@@ -122,7 +122,7 @@ def test_link_status_endpoint_marks_legacy_zero_none_linked_and_stale(W):
     assert st["S"]["state"] == "none" and st["S"]["stale"] is True and st["S"]["text"].endswith("（原連結採購單已失效）")
     # 採購單被作廢 ⇒ 已連的變失效
     _status(po["id"], "已作廢")
-    st2 = c.get("/api/quotations/%s/material-orders/link-status" % NO, headers=h).json()["statuses"]
+    st2 = c.get("/api/quotations/%s/material-link-status" % NO, headers=h).json()["statuses"]
     assert st2["K"]["state"] == "none" and st2["K"]["reason"] == "po_inactive"
 
 
@@ -180,3 +180,22 @@ def test_po_line_claim_is_per_line_and_only_valid_claims_count(W):
     cn.commit()
     cn.close()
     assert _codes(_check(dict(other_line, poLine=1))) == []
+
+
+def test_queue_tags_reads_the_case_once_per_queue_call_when_given_a_cache(W, monkeypatch):
+    """c7 預審：簽核佇列／紅點是熱路徑，queue_tags 同案件的多筆待審只查一次（傳入快取）；不傳快取＝逐筆查（舊行為）。"""
+    calls = []
+    real = PI._case_state
+    monkeypatch.setattr(PI, "_case_state", lambda conn, qn: (calls.append(qn), real(conn, qn))[1])
+    cn = db.get_db()
+    try:
+        cache = {}
+        for _ in range(3):
+            assert PI.queue_tags(cn, NO, {"itemId": "m", "totalPrice": 100}, cache)[0]["tone"] == "warn"
+        assert calls == [NO]
+        calls.clear()
+        for _ in range(2):
+            PI.queue_tags(cn, NO, {"itemId": "m", "totalPrice": 100})
+        assert calls == [NO, NO]
+    finally:
+        cn.close()
