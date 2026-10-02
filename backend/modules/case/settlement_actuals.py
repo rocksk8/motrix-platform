@@ -28,6 +28,13 @@ def _num(v):
         return 0.0
 
 
+def manual_actual(saved_item):
+    """精算存檔品項的手填實際成本；沒填＝None。語意與今天頁面載入存檔時的 `si.actualTotalCost || oi.actualTotalCost` 相同：
+    0、空字串、null 一律視為「沒填」（⇒ 用估計）——0 元實際成本在頁面上本來就無法持久（da A3 S1；歷史相容，不自行改語意；是否算缺陷列第 34 班待裁示）。"""
+    v = saved_item.get("actualTotalCost") if isinstance(saved_item, dict) else None
+    return _num(v) if v else None
+
+
 def normalize_offsets(raw) -> list:
     """精算存的 `offsets`（容錯：壞列略過）⇒ `[{kind: material|extra, ref: str, itemId: str}]`；同一 (kind, ref) 只留第一個。"""
     out, seen = [], set()
@@ -118,7 +125,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE) -> dict
         purchased = po_amt + mat_amt + ex_amt
         est = estimate_amount(p["planQty"], p["planUnitCost"])
         s = saved_items.get(iid)
-        manual = _num(s.get("actualTotalCost")) if isinstance(s, dict) and s.get("actualTotalCost") not in (None, "") else None
+        manual = manual_actual(s)
         # 三態：新存檔有 adoptSystem（採用／不採用）；品項沒存過＝預設開；舊存檔（品項有存但沒有 adoptSystem 鍵，第 32 班前）＝今天頁面的行為（不採用，歷史相容；da S2）
         adopt = bool(s.get("adoptSystem")) if isinstance(s, dict) and "adoptSystem" in s else (not isinstance(s, dict))
         has = purchased > 0
@@ -170,9 +177,9 @@ def _freeze(out, saved, saved_items):
     total = 0.0
     for it in out["items"]:
         s = saved_items.get(it["itemId"])
-        v = s.get("actualTotalCost") if isinstance(s, dict) else None
-        if v not in (None, ""):
-            it["actual"] = {"amount": _num(v), "source": "frozen", "replacedEstimate": False}
+        v = manual_actual(s)
+        if v is not None:
+            it["actual"] = {"amount": v, "source": "frozen", "replacedEstimate": False}
         total += it["actual"]["amount"]
     out["totals"]["itemActualTotal"] = _num(summ["itemActualTotal"]) if "itemActualTotal" in summ else total
     for k in ("extraTotal", "purchasedTotal"):
