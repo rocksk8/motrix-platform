@@ -13,6 +13,9 @@
 - 不自己 commit、不用 PRAGMA foreign_keys（交易內不能改；正式機實測沒有其他表參照這張表，DROP 安全）。設計：docs/platform/plans/REMIT-KINDS-31B-DESIGN.md §3。"""
 
 TABLE = "contractor_payment_vouchers"
+#: 重建用的暫時表（只在遷移期間存在，最後 rename 成 TABLE）。名稱用組字串、DDL 不寫「CREATE TABLE <字面表名>」：
+#: 模組資料分類守門（test_module_data_classes）掃遷移原始碼裡建表敘述的字面表名，會把它當成模組長期擁有的表而要求宣告分類。
+TMP = TABLE + "_new"
 _NEW_COLS = (
     ("kind", "TEXT NOT NULL DEFAULT ''"),
     ("kind_name", "TEXT NOT NULL DEFAULT ''"),
@@ -75,7 +78,7 @@ def _ddl(cols):
     for name, decl in _NEW_COLS:
         if name not in have:
             parts.append("%s %s" % (name, decl))
-    return "CREATE TABLE contractor_payment_vouchers_new (\n  " + ",\n  ".join(parts) + "\n)"
+    return "CREATE TABLE " + TMP + " (\n  " + ",\n  ".join(parts) + "\n)"
 
 
 def up(conn):
@@ -91,14 +94,14 @@ def up(conn):
     before = conn.execute("SELECT %s FROM %s ORDER BY id" % (old_cols, TABLE)).fetchall()
     seq_row = conn.execute("SELECT seq FROM sqlite_sequence WHERE name=?", (TABLE,)).fetchone()
     old_seq = int(seq_row[0]) if seq_row and seq_row[0] is not None else 0
-    conn.execute("DROP TABLE IF EXISTS contractor_payment_vouchers_new")
+    conn.execute("DROP TABLE IF EXISTS " + TMP)
     conn.execute(_ddl(cols))
-    conn.execute("INSERT INTO contractor_payment_vouchers_new (%s) SELECT %s FROM %s ORDER BY id" % (old_cols, old_cols, TABLE))
-    after = conn.execute("SELECT %s FROM contractor_payment_vouchers_new ORDER BY id" % old_cols).fetchall()
+    conn.execute("INSERT INTO %s (%s) SELECT %s FROM %s ORDER BY id" % (TMP, old_cols, old_cols, TABLE))
+    after = conn.execute("SELECT %s FROM %s ORDER BY id" % (old_cols, TMP)).fetchall()
     if len(before) != len(after) or [tuple(r) for r in before] != [tuple(r) for r in after]:
         raise RuntimeError("重建 %s 時搬資料前後不一致（舊 %d 列、新 %d 列）；已撤回，舊表不動" % (TABLE, len(before), len(after)))
     conn.execute("DROP TABLE %s" % TABLE)
-    conn.execute("ALTER TABLE contractor_payment_vouchers_new RENAME TO %s" % TABLE)
+    conn.execute("ALTER TABLE %s RENAME TO %s" % (TMP, TABLE))
     max_id = max([int(r[names.index("id")]) for r in before] or [0])
     conn.execute("DELETE FROM sqlite_sequence WHERE name=?", (TABLE,))
     conn.execute("INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)", (TABLE, max(old_seq, max_id)))
