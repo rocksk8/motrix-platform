@@ -18,6 +18,7 @@
     "case_change_requests",
     "case_extra_expenses",
     "case_material_approvals",
+    "case_material_changes",
     "case_material_payment_lines",
     "case_material_payments",
     "completion_notes"
@@ -59,6 +60,10 @@
       },
       {
         "name": "case_material_approvals",
+        "class": "T1"
+      },
+      {
+        "name": "case_material_changes",
         "class": "T1"
       },
       {
