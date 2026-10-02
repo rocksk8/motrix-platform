@@ -97,7 +97,8 @@ class _RemitReviews:
             payable = MP.r2(float(r["amount_approved"] or 0) - before)                       # 這一筆登錄時的剩餘應付
             out.append({"key": str(r["id"]), "sourceLabel": MP.SOURCE_LABEL, "quoteNo": r["quote_no"] or "", "customerName": r["customer_name"] or "",
                         "payee": sn.get("supplierName") or "", "payable": payable, "actual": float(r["amount"] or 0),
-                        "diff": max(0.0, MP.r2(float(r["amount"] or 0) - payable)),          # 只有多付才有差額；手續費偏高的覆核是 0 "fee": float(r["fee"] or 0), "paidAt": (r["paid_at"] or "")[:10],
+                        # 只有多付才有差額；手續費偏高的覆核是 0（註解要放在行首，別放在同一行的 dict 項目中間）
+                        "diff": max(0.0, MP.r2(float(r["amount"] or 0) - payable)), "fee": float(r["fee"] or 0), "paidAt": (r["paid_at"] or "")[:10],
                         "paidBy": r["paid_by"] or "",
                         "reason": "手續費偏高（超過 %g）" % MP.FEE_REVIEW_OVER if float(r["fee"] or 0) > MP.FEE_REVIEW_OVER and float(r["amount"] or 0) <= payable + 0.005 else ""})
         return out
