@@ -156,7 +156,7 @@ def ping(port, timeout=3):
 
 def start(root, port, wait=90):
     """同 ps1 的 Start-InstallService 後備路徑：cmd /c autostart.bat（沒有排程工作）。"""
-    flags = 0x00000008 | 0x00000200                          # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    flags = 0x08000000 | 0x00000200                          # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP（原 DETACHED_PROCESS 會讓 cmd 自己開一個可見的主控台）
     subprocess.Popen([os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "System32", "cmd.exe"), "/c",
                       str(Path(root) / "backend" / "autostart.bat")], cwd=str(Path(root) / "backend"),
                      creationflags=flags, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

@@ -522,6 +522,8 @@ def make_baseline(base, port, base_commit):
 
 
 def main(argv=None):
+    import nowindow
+    nowindow.install()                      # 預設不跳視窗（MOTRIX_SHOW_WINDOWS=1 可關）；起合成安裝伺服器改用 CREATE_NO_WINDOW
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--seed-only", action="store_true")
     ap.add_argument("--delivery-root")
