@@ -258,6 +258,13 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
                     merged[k] = no[k]
             MA.record_link_supplement(conn, quote_no, iid, user, str(cand.get("poDocCode")).strip())
         elif MA.substantive_changed(old, cand):
+            amt_keys = [k for k in ("quantity", "unitPrice", "totalPrice") if not _same(k, cand.get(k), old.get(k))]
+            if amt_keys:                                                                 # D7（A）：已付清不可改金額（B：新小計不得低於已付＝`_valid_order` 的「已付金額必須 0 ~ 小計」，已擋）
+                paid = MP.paid_so_far(conn, quote_no, iid, old)
+                if paid > 0 and paid >= MP.order_total(old) - 0.005:
+                    _rej(rejected, iid, amt_keys[0], "paid_in_full", "這筆材料申請已全額付款，金額不能修改；要調整請另開一筆材料申請，或請管理員取消後重開。")
+                    out.append(merged)
+                    continue
             if MP.has_live_payments(conn, quote_no, iid):                                # 已有匯款申請：金額／品名等變動會讓申請與額度對不上
                 _rej(rejected, iid, "*", "has_payments", "這張材料申請已有匯款申請，請先作廢申請再修改內容")
                 out.append(merged)
