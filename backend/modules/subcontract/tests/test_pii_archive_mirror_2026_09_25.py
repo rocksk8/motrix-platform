@@ -41,10 +41,11 @@ _SMTP_PW = "smtp-sentinel-password"
 _C_IDNO, _C_PHONE, _C_MAIL = "B987654321_SENTINEL", "0911-CPHONE", "c-sentinel@example.invalid"
 _C_ADDR, _C_LINE, _C_ACCT = "承攬哨兵地址", "line-sentinel", "000123456789SENTINEL"
 _E_ACCT = "EXPENSE-PAYEE-ACCT-SENTINEL"          # A2 費用單據收款人帳號（case_extra_expenses.payee_account）
+_M_ACCT_NAME, _M_ACCT_NO = "供應商哨兵戶名", "SUPPLIER-BANK-ACCT-SENTINEL"          # 叫料匯款申請的供應商收款帳戶（case_material_payments.snapshot_json；31-C 的 F2 項目）
 _U_ACCT_NAME, _U_ACCT_NO = "員工哨兵戶名", "EMPLOYEE-BANK-ACCT-SENTINEL"          # 員工收款帳號（payroll user_bank_accounts：account_name／account_number；W3 的 F2 項目）
 #: 一般份（去個資）不可以出現的值——承攬人員與勞報單兩張表的全部 F2 欄位
 _F2_SENTINELS = (_IMG, "data:image", _IDNO, "哨兵地址", "0900-SENTINEL", "sentinel@example.invalid",
-                 _C_IDNO, _C_PHONE, _C_MAIL, _C_ADDR, _C_LINE, _C_ACCT, "哨兵戶名", _E_ACCT, _U_ACCT_NAME, _U_ACCT_NO)
+                 _C_IDNO, _C_PHONE, _C_MAIL, _C_ADDR, _C_LINE, _C_ACCT, "哨兵戶名", _E_ACCT, _U_ACCT_NAME, _U_ACCT_NO, _M_ACCT_NAME, _M_ACCT_NO)
 
 
 def _seed_pii(conn):
@@ -66,6 +67,11 @@ def _seed_pii(conn):
     if conn.execute("PRAGMA table_info(user_bank_accounts)").fetchall():     # payroll 模組在（W3 員工收款帳號）
         conn.execute("INSERT INTO user_bank_accounts (user_id, username, bank_code, bank_name, account_name, account_number, active, created_at) "
                      "SELECT MIN(id), MIN(username), '808', '玉山銀行', ?, ?, 1, '2026-10-01' FROM users", (_U_ACCT_NAME, _U_ACCT_NO))
+    if conn.execute("PRAGMA table_info(case_material_payments)").fetchall():     # case 模組在（31-C 叫料匯款申請：供應商收款帳戶凍結在 snapshot_json）
+        conn.execute("INSERT INTO case_material_payments (doc_code, quote_no, item_id, seq, amount_approved, snapshot_json, status, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                     ("MP-20260925-0001", "", "x", 1, 1000,
+                      _j.dumps({"supplierName": "哨兵供應商", "bankCode": "812", "bankName": "台新銀行", "bankAccountName": _M_ACCT_NAME, "bankAccountNumber": _M_ACCT_NO,
+                                "itemName": "交換器"}, ensure_ascii=False), "已核准", "2026-09-25"))
     conn.execute("UPDATE users SET totp_secret=? WHERE id=(SELECT MIN(id) FROM users)", (_TOTP,))
     conn.commit()
 
