@@ -156,3 +156,14 @@ def test_case_record_back_door_normalizes_the_po_line_too(W):
     assert r.status_code == 200 and not r.json().get("rejected"), r.text
     o = _orders()[0]
     assert o["poLine"] == 1 and isinstance(o["poLine"], int)
+
+
+def test_case_record_back_door_cannot_add_a_po_link_to_a_paid_order(W):
+    """33：link_validator 對「已有付款紀錄」放行（讓既有連結存回）⇒ 新增／改連結的擋要在守門自己做（專屬端點另有同規則）。"""
+    c, h = W
+    code = _po(c, h)
+    _put_materials([_mo("m1", quoteItemId="a", paidStatus="paid", paidAmount=2000, paidDate="2026-08-01")], {})
+    cr = {"materialOrders": [_mo("m1", quoteItemId="a", poDocCode=code, poLine=1, paidStatus="paid", paidAmount=2000, paidDate="2026-08-01")]}
+    r = c.patch("/api/quotations/%s/case-record" % NO, headers=h, json={"case_record": cr})
+    assert r.status_code == 200 and [x["code"] for x in r.json().get("rejected", [])] == ["bad_link"], r.text
+    assert _orders()[0].get("poDocCode") in (None, "")
