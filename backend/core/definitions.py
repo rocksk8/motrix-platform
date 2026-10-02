@@ -2,7 +2,7 @@
 """定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。
 
 [單位] plat:definitions    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] DefinitionConflict, DefinitionError, KINDS, decide_submitted, default_for, delete_draft, diff, get, kinds, kinds_meta, list_definitions, open_submission, publish,
+[公開介面] DefinitionConflict, DefinitionError, DraftConflict, KINDS, decide_submitted, default_for, delete_draft, diff, etag_of, get, kinds, kinds_meta, list_definitions, open_submission, publish,
     register_default, register_kind, register_validator, resolve, restore, save_decision, save_draft, submit_draft, validate, versions
 [不變式] 每個 (kind, key, scope) 最多一份草稿；已發布的版本不可改、不可刪；還原＝把舊版再發布成新的一版；發布前驗證不過就不發布
 [契約題] tests/test_definitions_store_2026_09_25.py
@@ -39,6 +39,23 @@ class DefinitionError(ValueError):
 
 class DefinitionConflict(DefinitionError):
     """與目前狀態衝突（HTTP 409）：例如這份定義有送審中的版本時，直接發布／還原會讓那份送審變成過期的（W3 #3）。"""
+
+
+class DraftConflict(DefinitionConflict):
+    """草稿在呼叫端載入之後被別人改過（K-2，樂觀並行控制）；`current`＝`{etag, created_by, created_at}`（目前資料庫裡那份）。"""
+
+    def __init__(self, message, current=None):
+        super().__init__(message)
+        self.current = current or {}
+
+
+def etag_of(body_json) -> str:
+    """草稿內容戳：資料庫存的 `body_json` 原字串的 sha256 前 16 碼；`None`／空 ⇒ ""（沒有草稿）。
+    用原字串、不重新序列化（避免鍵序／空白造成假衝突）；前端只當不透明字串。內容相同＝戳相同（別人存了一樣的內容不算衝突）。"""
+    if not body_json:
+        return ""
+    import hashlib
+    return hashlib.sha256(str(body_json).encode("utf-8")).hexdigest()[:16]
 
 
 def _open_blocks_direct(conn, kind, key, scope, what):
@@ -96,7 +113,10 @@ def _row(r):
     if r is None:
         return None
     d = dict(r)
-    d["body"] = json.loads(d.pop("body_json") or "{}")
+    raw = d.pop("body_json") or "{}"
+    d["body"] = json.loads(raw)
+    if d.get("status") == "draft":
+        d["etag"] = etag_of(raw)               # K-2：草稿內容戳（只有草稿有）
     return d
 
 
@@ -107,10 +127,46 @@ def validate(kind: str, key: str, body) -> list:
     return list(fn(body, key)) if fn else []
 
 
-def save_draft(conn, kind, key, scope, body, user="") -> dict:
+def _draft_meta(conn, kind, key, scope):
+    r = conn.execute("SELECT body_json, created_by, created_at FROM ui_definitions WHERE kind=? AND key=? AND scope=? AND version=0 AND status='draft'",
+                     (kind, key, scope)).fetchone()
+    return None if r is None else {"etag": etag_of(r[0]), "created_by": r[1] or "", "created_at": r[2] or ""}
+
+
+def _check_base_etag(base_etag):
+    if base_etag is not None and not isinstance(base_etag, str):
+        raise DefinitionError("base_etag 必須是字串")
+
+
+def save_draft(conn, kind, key, scope, body, user="", base_etag=None, force=False) -> dict:
+    """存草稿（每個 (kind,key,scope) 一份，覆寫）。K-2 並行保護（選填，向下相容）：
+    - `base_etag=None`（舊呼叫端）⇒ 照舊、後寫者勝（呼叫端可據此稽核 `unguarded`）。
+    - 帶 `base_etag`（載入時拿到的 `draft.etag`；沒有草稿＝""）：在寫鎖內比對目前草稿的戳，不同 ⇒ `DraftConflict`（不寫入）；
+      `force=True`（使用者選「用我的覆蓋」）⇒ 不比對照存，回傳多一個 `overridden`＝被覆蓋的 `{etag, created_by, created_at}`（內容真的不同才有）。"""
     _check(kind, key, scope)
     if not isinstance(body, dict):
         raise DefinitionError("定義必須是 JSON 物件")
+    _check_base_etag(base_etag)
+    overridden = None
+    if base_etag is not None:
+        from core.txn import begin_write
+        began = begin_write(conn)
+        try:
+            cur = _draft_meta(conn, kind, key, scope)
+            cur_etag = cur["etag"] if cur else ""
+            if cur_etag != base_etag:
+                if not force:
+                    raise DraftConflict("這份草稿在你載入之後被別人改過", cur or {"etag": "", "created_by": "", "created_at": ""})
+                overridden = cur
+            return _save_draft_locked(conn, kind, key, scope, body, user, overridden)
+        except Exception:
+            if began and conn.in_transaction:
+                conn.rollback()
+            raise
+    return _save_draft_locked(conn, kind, key, scope, body, user, None)
+
+
+def _save_draft_locked(conn, kind, key, scope, body, user, overridden) -> dict:
     now = datetime.now().isoformat(timespec="seconds")
     conn.execute(
         "INSERT INTO ui_definitions (kind, key, scope, version, status, body_json, created_by, created_at) "
@@ -118,7 +174,10 @@ def save_draft(conn, kind, key, scope, body, user="") -> dict:
         "body_json=excluded.body_json, created_by=excluded.created_by, created_at=excluded.created_at",
         (kind, key, scope, json.dumps(body, ensure_ascii=False), user, now))
     conn.commit()
-    return get(conn, kind, key, scope, 0)
+    out = get(conn, kind, key, scope, 0)
+    if overridden:
+        out["overridden"] = overridden
+    return out
 
 
 def get(conn, kind, key, scope, version=None):
@@ -276,12 +335,18 @@ def _insert_published(conn, kind, key, scope, body, note, user) -> dict:
     return get(conn, kind, key, scope, v)
 
 
-def publish(conn, kind, key, scope, note="", user="") -> dict:
-    """稽核 D C-S5：讀草稿之前先拿寫鎖 ⇒ 兩人同時發布不會 UNIQUE 衝突、發布時的自動存檔不會被刪掉。"""
+def publish(conn, kind, key, scope, note="", user="", base_etag=None) -> dict:
+    """稽核 D C-S5：讀草稿之前先拿寫鎖 ⇒ 兩人同時發布不會 UNIQUE 衝突、發布時的自動存檔不會被刪掉。
+    K-2：帶 `base_etag`（我看到的那份草稿的戳）⇒ 寫鎖內比對，不同 ⇒ `DraftConflict`（不發布）；`None`＝照舊。"""
     from core.txn import begin_write
     _check(kind, key, scope)
+    _check_base_etag(base_etag)
     began = begin_write(conn)
     try:
+        if base_etag is not None:
+            cur = _draft_meta(conn, kind, key, scope)
+            if cur is not None and cur["etag"] != base_etag:
+                raise DraftConflict("這份草稿在你載入之後被別人改過，未發布", cur)
         return _publish_locked(conn, kind, key, scope, note, user)
     except Exception:
         if began:
