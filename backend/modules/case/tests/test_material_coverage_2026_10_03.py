@@ -17,8 +17,8 @@ def _conn():
 def _row(item_id, status="已核准", snapshot=None, doc="MO-X"):
     cn = _conn()
     try:
-        cn.execute("UPDATE case_material_approvals SET status=?, doc_code=?, approval_json=? WHERE quote_no=? AND item_id=?",
-                   (status, doc, json.dumps({"snapshot": {"poSnapshot": snapshot or []}}), NO, item_id))
+        cn.execute("UPDATE case_material_approvals SET status=?, doc_code=?, approval_json=?, created_at=? WHERE quote_no=? AND item_id=?",
+                   (status, doc, json.dumps({"snapshot": {"poSnapshot": snapshot or []}}), "2026-10-03T09:00:00", NO, item_id))   # 規則上線後建立（非 grandfather）
         cn.commit()
     finally:
         cn.close()
@@ -129,3 +129,20 @@ def test_coverage_that_loses_an_approved_line_is_a_problem(W):
     cn.close()
     codes = [x["code"] for x in _call(MC.change_proposal, "M1")["problems"]]
     assert "coverage_shrinks" in codes and "no_coverage" in codes
+
+
+def test_grandfathered_rows_use_direct_edit_not_a_change_request(W):
+    c, h = W
+    _approved_request(c, h)
+    cn = _conn()
+    cn.execute("UPDATE case_material_approvals SET approval_json=? WHERE quote_no=? AND item_id='M1'", (json.dumps({"grandfathered": True, "snapshot": {"poSnapshot": []}}), NO))
+    cn.commit()
+    cn.close()
+    assert "use_direct_edit" in [x["code"] for x in _call(MC.change_proposal, "M1")["problems"]]
+
+
+def test_unit_price_after_a_quantity_change_is_rounded_to_four_places(W):
+    c, h = W
+    _approved_request(c, h, qty=3, amount=1000)
+    p = _call(MC.change_proposal, "M1", {"quantity": 3})
+    assert p["after"]["unitPrice"] == round(1000 / 3, 4) == 333.3333

@@ -112,6 +112,9 @@ def change_proposal(conn, quote_no, item_id, proposed=None):
     problems = []
     if order is None or row is None:
         return {"itemId": str(item_id), "before": {}, "after": {}, "diff": [], "uncoveredLines": [], "problems": [{"code": "not_found", "message": "找不到這筆材料申請（舊單沒有變更申請，直接修改即可）"}]}
+    from modules.case import material_approval as MA
+    if not MA.po_required_for(row):                                       # grandfather／規則上線前的單：維持 31-C「核准後改＝回草稿」，不走變更申請（d7 設計 §5）
+        problems.append({"code": "use_direct_edit", "message": "這筆材料申請是規則上線前建立（沒有採購單涵蓋快照），請直接修改後重新送審，不走變更申請"})
     if row["status"] != "已核准":
         problems.append({"code": "not_approved", "message": "只有已核准的材料申請可以提變更申請（草稿或已退回的直接修改後送審）"})
     qid = str(order.get("quoteItemId") or "").strip()
@@ -135,7 +138,7 @@ def change_proposal(conn, quote_no, item_id, proposed=None):
         if after["quantity"] <= 0:
             problems.append({"code": "bad_quantity", "message": "數量必須大於 0"})
         if "quantity" in (proposed or {}):                                    # 數量改了：單價＝金額 ÷ 數量（金額來源在採購單，不讓人手改）
-            after["unitPrice"] = (after["totalPrice"] / after["quantity"]) if after["quantity"] else 0.0
+            after["unitPrice"] = round(after["totalPrice"] / after["quantity"], 4) if after["quantity"] else 0.0
     dropped = [l for l in snap if _line_key(l) not in {_line_key(x) for x in fresh["poSnapshot"]}]
     if dropped:
         problems.append({"code": "coverage_shrinks", "message": "原本涵蓋的採購單行不再是已核准（%s），請先處理採購單" % "、".join("%s 第 %s 列" % _line_key(l) for l in dropped)})
