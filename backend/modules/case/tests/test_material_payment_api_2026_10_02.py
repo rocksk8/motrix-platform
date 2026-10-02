@@ -182,6 +182,12 @@ def test_cashier_pays_in_two_steps_and_the_order_paid_fields_follow(client, worl
     assert pb.status_code == 200 and pb.json()["account"] == ACCT and pb.json()["accountName"] == "" and pb.json()["bank"].startswith("812")   # 出納專用端點才有完整帳號
     assert "cashier.payee_bank_view" in [r["action"] for r in _q("SELECT action FROM audit_log")]
     assert client.get("/api/cashier/pending-payables/case_material/%d/payee-bank" % pid, headers=w["eng"]).status_code == 403
+    # 32 班：完整帳號只給最高管理者與出納；一般管理員（能付款但不是出納）只看遮罩
+    ad = client.get("/api/cashier/pending-payables/case_material/%d/payee-bank" % pid, headers=w["adm"])
+    assert ad.status_code == 200 and ad.json()["account"] == "****7890" and ACCT not in ad.text, ad.text
+    sa = client.get("/api/cashier/pending-payables/case_material/%d/payee-bank" % pid, headers=w["sa"])
+    assert sa.status_code == 200 and sa.json()["account"] == ACCT, sa.text
+    assert any("遮罩" in (r["target_label"] or "") for r in _q("SELECT target_label FROM audit_log WHERE action='cashier.payee_bank_view'"))
     r = client.post("/api/cashier/pending-payables/case_material/%d/pay" % pid, json={"paidDate": "2031-03-05", "actualAmount": 2500}, headers=w["cash"])
     assert r.status_code == 200 and (r.json()["actual"], r.json()["remaining"], r.json()["settled"]) == (2500.0, 3500.0, False), r.text
     assert [(i["key"], i["amount"], i["paid"]) for i in _pending_items(client, w)] == [(str(pid), 3500.0, 2500.0)]       # 未結清留在待付款，顯示剩餘

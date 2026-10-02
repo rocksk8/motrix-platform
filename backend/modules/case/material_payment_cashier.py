@@ -27,6 +27,9 @@ def _title(snap, code) -> str:
 class _Payables:
     """IP-100 提供者（名稱 `case_material`）。"""
 
+    #: 出納端點 `payee-bank`：完整帳號只給最高管理者與出納（`cashier` 模組）；一般管理員只看遮罩（32 班；其他請款來源未啟用此規則）
+    FULL_ACCOUNT_STRICT = True
+
     @staticmethod
     def payee_info(conn, key) -> dict:
         """出納付款前看收款人資料（完整，只給出納端點）。查無或不是已核准 ⇒ LookupError。"""

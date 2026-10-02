@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## 1.0.78 — 2026-10-02（wip/t32-fixes-d7）
+- 收款人個資告知 **fail-closed**：告知紀錄寫入失敗 ⇒ 匯款申請不留（503＋稽核 `create_rolled_back`）；沒有（或讀不到）告知紀錄的申請不能送審（409）。
+- 材料申請匯款：單筆手續費 > NT$ 500 ⇒ 該筆付款明細進「差額審核」（與多付同一條覆核路徑，原因欄顯示「手續費偏高」）；手續費不可大於實付。**只管材料申請匯款**，其他請款來源沒有此規則。
+- 出納 `payee-bank`：材料申請的完整帳號只給最高管理者與出納（有 `cashier` 模組且角色不是 admin）；一般管理員只看遮罩（稽核註記「遮罩」）。
+
 ## 1.0.77 — 2026-10-02（wip/t32-seam-d7：材料申請連結接縫，接 32-S4）
 - `quoteItemId`／`poDocCode`／`poLine` 列為實質欄位（核准後改連結 ⇒ 回草稿重送審；`overPlanReason` 是說明，不算）；`poLine` 一律轉整數（專屬端點與 case-record 整包存檔同）。
 - 儲存時連結檢查：`material_guard.LINK_VALIDATOR`（預設 None，由 `api/material_approvals.py` 掛上 `purchase_items.link_validator`）；無效連結 ⇒ 該列（或該次變更）被拒，code `bad_link`，不留殘列、不建草稿。

@@ -127,7 +127,13 @@ def get_payee_bank(source: str, key: str, authorization: str = Header(None)):
             out["notice"] = "尚未登錄收款人銀行資料" + ("（員工請先到個人設定登錄）" if info.get("payeeUsername") else "")
     finally:
         conn.close()
-    _audit(_tok(authorization), "cashier.payee_bank_view", source, key, "出納查看收款人銀行資料（來源：%s）" % out["source"])
+    masked = False
+    if getattr(p, "FULL_ACCOUNT_STRICT", False) and out["account"] and not (user.get("role") == "superadmin" or (user.get("role") != "admin" and user_has_module(user, "cashier"))):   # admin 的角色樣板也含 cashier 模組，所以 admin 要明確排除
+        acct = str(out["account"])                                                  # 提供者要求嚴格：一般管理員只看末 4 碼
+        out["account"] = "****" + acct[-4:] if len(acct) > 4 else "****"
+        out["notice"] = "完整帳號僅限最高管理者與出納；管理員只看到遮罩"
+        masked = True
+    _audit(_tok(authorization), "cashier.payee_bank_view", source, key, "出納查看收款人銀行資料（來源：%s%s）" % (out["source"], "；遮罩" if masked else ""))
     return out
 
 
