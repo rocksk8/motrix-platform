@@ -1,0 +1,149 @@
+# 31-B 匯款款別（訂金／進度／完工／驗收款）— 設計提案
+
+> 2026-10-02，W1/a3，**設計提案，未實作**。依據：`TRAIN31-BACKLOG.md` 31-B 一行（訂金／進度／完工／驗收款、比例＋稅金自動算、累計上限、移除 `dispatch_id UNIQUE` 需正式機資料副本演練、E04 逐張、每期發票）與使用者 2026-10-02 裁示（向正式機要資料；32／33 班分班；33 班要做）。
+> 所有「現況」都來自 origin/platform `a5dea50c` 的程式（附檔案：行號）；「推論」另標。
+> 注意：主持提到的 `DISPATCH-W4B-20261001.md` 是 W4 總帳的派工單，與本題無關；本文只用 BACKLOG 的 31-B 條目。
+
+## 1. 現況（已查證）
+
+**一張派發 ⇄ 一張匯款申請（硬約束）**
+- 表 `contractor_payment_vouchers`（`db.py:1567`，`_m045`）：`dispatch_id INTEGER UNIQUE NOT NULL`——**欄位內嵌的 UNIQUE**（SQLite 沒有 `DROP CONSTRAINT`，只能重建表）。
+- 建立：`POST /api/contractor-vouchers`（`modules/subcontract/api/contractor_vouchers.py:280`），body 只有 `dispatch_id`、`payable_date`；僅 admin／superadmin；派發狀態必須 `accepted`／`completed`、`approval_status ∈ ('','已核准')`（31-A）；已有申請 ⇒ 409「此派發已產生匯款申請」（`:300–308`）；`BEGIN IMMEDIATE` 包住「查有無＋寫入」。
+- 金額＝派發整筆：`total_amount`（沒填就加總 `items_json`）、`tax_rate`（派發欄位，預設 5%）、`tax_amount = round_half_up(total × rate)`、`grandTotal = total + tax + personnelTotal`，全部**快照**進 `snapshot_json`（`:329–349`）。個人點工 `personnel_json` 的金額另算、不含稅。
+- 發票資料在**派發**上（`invoice_no`、`invoice_date`、`invoice_files_json`、`payable_date`），不是在匯款申請上。
+
+**會計分錄**（`modules/subcontract/gl_events.py`）
+- **E04（應付認列）以派發為單位**：`source_type=contractor_dispatch, source_key=str(派發id)`，條件＝派發已驗收／完工、`invoice_date` 有值；金額＝派發 `total_amount`＋依 `tax_rate` 估算稅額（進項稅額是**估計**，會寫 notice）。
+- **E05（付款）以匯款申請為單位**：`source_type=contractor_voucher, source_key=voucher_no`；借 AP＝`snapshot.grandTotal`（扣掉已關聯勞報單的個人金額）、貸銀行；`meta.dispatch_invoiced` 用 `dispatch_id` 判斷「對應派發有沒有登錄發票日」。
+- ⇒ 一派發多申請之後，**E04 與 E05 的對應關係要重新定義**（見 §4）。
+
+**讀 `dispatch_id` 唯一性的下游（改成一對多會變的地方）**
+| 位置 | 假設 |
+|---|---|
+| `modules/case/recognition.py:253` | 已付申請依 `dispatch_id` 累加個人關聯金額——已是累加寫法，**可能不用改**（要測） |
+| `modules/case/recognition.py:197–200` | 已付申請成本認列（現金基礎） |
+| `modules/analytics/api/reports.py:2555` | 應付帳款：已核准未付申請（逐申請，不依派發） |
+| `modules/arap/api/cashier.py:258、416、690` | 出納：逐申請 |
+| `modules/subcontract/api/vendor_contractors.py:616、665` | 派發**有申請就不能編輯**（`WHERE dispatch_id=?` 取第一筆） |
+| `modules/subcontract/dispatch_flow.py:141` | 取消派發：有申請就只有最高管理者能取消 |
+| `modules/subcontract/gl_events.py:41` | `invoiced` 集合（派發是否有申請且有發票日） |
+| `archive.py:2252、2540`、`helpers/system_checks.py:478` | 備份／完整性檢查（表層級，不依唯一性） |
+| 前端：案件管理頁「承攬商」分頁、派發卡片「產生匯款申請」按鈕 | 假設「已產生」＝有一張（待查前端細節，屬 S3） |
+
+## 2. 要解決的需求（使用者語彙）
+1. 同一派發可開**多張**匯款申請，每張有**款別**：訂金／進度款／完工款／驗收款（款別清單是否可自訂見 §9）。
+2. 每張以**比例**（或定額）決定本期金額；**稅金自動算**。
+3. **累計上限**：同一派發所有未作廢申請的稅前金額合計 ≤ 派發稅前總額（並發安全）。
+4. **每期發票**：每張申請可有自己的發票號碼／日期／檔案。
+5. **E04 逐張**：應付認列隨「期發票」逐張，不是整筆派發一次。
+6. 移除 `dispatch_id UNIQUE`（**要正式機資料副本做遷移演練**）。
+
+## 3. 資料模型（建議）
+
+沿用表 `contractor_payment_vouchers`（不新增表；匯款申請的簽核、出納、PDF、佇列全部以此表為準，新表要重做一遍）。
+
+新增欄位（subcontract 遷移 `0004_remit_kinds`，全部有預設值、舊列不動）：
+| 欄位 | 型別／預設 | 說明 |
+|---|---|---|
+| `kind` | TEXT `''` | `''`＝舊式整筆（舊列、以及沒選款別的新列）；`deposit`／`progress`／`completion`／`acceptance`（清單見 §9-Q1） |
+| `seq` | INTEGER `0` | 同派發同款別的第幾期（進度款可能多期）；`0`＝舊式 |
+| `ratio` | REAL NULL | 本期比例（0–1）；定額申請為 NULL |
+| `pretax_amount` | INTEGER NULL | 本期稅前金額（元，整數）；舊列 NULL ⇒ 讀快照 `totalAmount` |
+| `inv_no`／`inv_date`／`inv_files_json` | TEXT／TEXT／TEXT `'[]'` | 本期發票（見 §5）；舊列留空、仍讀派發上的發票欄位 |
+| `void_reason`／`voided_at`／`voided_by` | TEXT `''` | 作廢（見 §6），作廢的不佔累計上限 |
+
+唯一性：移除 `dispatch_id UNIQUE` 後改用
+- 部分唯一索引 `UNIQUE(dispatch_id, kind, seq) WHERE kind <> '' AND voided_at = ''`（同派發同款別同期不重複）；
+- `kind=''` 的舊式列：**同派發最多一張未作廢**（應用層＋部分唯一索引 `WHERE kind='' AND voided_at=''`），行為與現在一致。
+
+快照仍是真相來源（`snapshot_json` 凍結當下金額）；`pretax_amount`／`ratio` 只是可查詢的衍生欄位（寫入時與快照同交易）。
+
+**遷移方式（重建表）**：SQLite 的內嵌 `UNIQUE` 無法拿掉 ⇒ 以標準 12 步重建：建新表（無 UNIQUE、多新欄）→ `INSERT … SELECT`（舊欄位原樣、新欄位用預設）→ 比對筆數與逐欄雜湊 → 換名 → 重建索引（`idx_cpv_quote_no`、`idx_cpv_status`、`voucher_no UNIQUE`）。同一交易、失敗回滾；`PRAGMA foreign_keys` 在重建期間要關再開（備份分流 `archive.py` 與 FK 到 `contractor_dispatches` 要一併確認）。**演練必須在去識別化的正式機資料副本上做**（表大小、實際索引名稱、是否曾經有人手工改過表結構都以正式機為準，見 §8）。
+
+## 4. 金額規則（口徑待裁示，見 §9）
+
+輸入：派發稅前總額 `T`（`total_amount`）、稅率 `r`（派發的 `tax_rate`）、本期比例 `p`。
+- 本期稅前 `A = round_half_up(T × p)`；**最後一期用「剩餘額」**（`T − 前期合計`）避免比例四捨五入累積誤差（例：三期各 33.33%）。
+- 稅額兩種口徑：(a) **逐期**：`tax_i = round_half_up(A_i × r)`——每張發票各自四捨五入，與每期開一張發票的實務一致，但各期稅額加總可能與整筆 `round_half_up(T × r)` 差 1～2 元；(b) **整筆分攤**：先算整筆稅額 `X`，各期分攤、末期補差——加總恆等，但單期稅額可能與該期發票上的稅額不同。**建議 (a)＋末期不補差**（發票是法律文件，以逐期發票為準），並在畫面顯示「各期稅額合計與整筆差 N 元」。
+- 累計上限：`Σ(未作廢申請稅前) + 本期稅前 ≤ T`（稅前口徑；稅額不單獨設上限）。檢查與寫入在同一個 `BEGIN IMMEDIATE`（沿用 `:288–308` 的做法），並以測試的並發雙請求驗證（反向控制：拿掉鎖 ⇒ 雙寫可超額）。
+- 個人點工（`personnel_json`，不含稅）：**只能掛在一張申請上**（建議：完工款／最後一期；或第一期），不按比例拆——避免個人金額被稅率與比例雙重處理。待裁示（§9-Q4）。
+- 派發金額事後被改（31-A 規定核准後實質欄位改要重送審）：已有未作廢申請的派發，金額下修不得低於已申請稅前合計（驗證）。
+
+## 5. 發票與 E04 逐張
+
+- **每期發票**：申請上有自己的 `inv_no／inv_date／inv_files`（建立時可空，付款前必填？見 Q5）。`kind=''` 舊式申請照舊讀派發上的發票欄位。
+- **E04 逐張**（`gl_events` 改寫）：
+  - 有 `kind<>''` 申請的派發，**不再**產生派發層級的 E04（否則整筆派發＋各期各認一次 ⇒ 重複認列）；改為**每張有 `inv_date` 的申請一筆 E04**：`source_type=contractor_voucher_invoice, source_key=voucher_no`，金額＝該張 `pretax_amount`＋逐期稅額，`doc_no`＝該張發票號，`event_date`＝該張發票日。
+  - 沒有任何分期申請的派發（含全部舊資料）E04 維持派發層級，**位元組不變**（回歸測試：舊資料產出的事件與改動前逐筆相等）。
+  - 同一派發**混用**（先有舊式整筆申請、又加分期）不允許：`kind=''` 與 `kind<>''` 互斥（應用層驗證＋測試）。
+  - 稅額仍是估計 vs 實際：每期若有實際發票稅額欄位，可覆寫估計（是否要收實際稅額 ⇒ Q5）。
+- **E05（付款）**：維持逐申請；`meta.dispatch_invoiced` 改為「該申請自己有 `inv_date`（分期）／派發有（舊式）」。
+- 對帳：一派發的 E04 合計 = 該派發全部分期申請稅前＋稅額；到全部開完後與派發總額差額為 0（顯示在派發卡片「已申請 X% ／已開票 Y%」）。
+
+## 6. 作廢／刪除／審核
+- 申請現況可 `DELETE`（草稿，`:405`）。分期後：草稿可刪；已送審／已核准／已付款者**不可刪**，只能「作廢」（填原因，admin+；已付款者需先撤銷付款）——作廢的不佔累計上限、E04／E05 要有沖銷規則（沿用總帳既有「來源作廢」處理，待與 W4 對）。
+- 簽核鏈、出納匯款、手續費、個資告知（payee ack）、PDF、佇列：全部逐申請，**不改**；PDF 與列表加上「款別／期別／比例」顯示。
+
+## 7. 分片（約 2.5–3 班，與 BACKLOG 一致）
+| 片 | 內容 | 重點測試 |
+|---|---|---|
+| S1 | 遷移 `0004`（重建表、新欄、部分唯一索引）＋**去識別化正式機副本演練**＋回滾演練 | 舊列逐欄不變（雜湊）；UNIQUE 拿掉；並發雙寫；`PRAGMA integrity_check`；回滾還原 |
+| S2 | 建立 API（款別／比例／定額、金額規則、累計上限、互斥、作廢）＋快照 | 規則表（§4）逐案；上限並發反向控制；舊 API 呼叫行為不變 |
+| S3 | UI：派發卡片「新增匯款申請」對話框（款別、比例、預覽金額與稅額、已申請／已開票進度條）、申請列表顯示款別 | e2e 終點狀態＋截圖；舊整筆申請流程不變 |
+| S4 | 下游：E04 逐張、E05 meta、recognition／analytics／cashier 回歸、案件成本 | 舊資料事件逐筆相等；分期合計對得上；重複認列守門 |
+| S5 | PDF／列表／佇列／通知字樣；文件；drill（依 `drill_train31.py` 擴充：遷移 case 外加 subcontract 0004） | 演練 A/C/E/B 全過 |
+
+## 8. 風險
+1. **重建表遷移**（最高）：正式機表可能與程式預設不同（手工加欄、索引名稱）；FK／備份分流／觸發器；大表耗時。→ 用正式機統計（§10）＋去識別化副本演練，遷移失敗必須完整回滾且不留半個表。
+2. **重複認列**：分期 E04 與派發層級 E04 並存 ⇒ 成本翻倍。→ 互斥規則＋S4 守門題（同一派發只會有一種層級的 E04）。
+3. **稅額口徑**：逐期 vs 分攤的 1～2 元差異會被會計看到。→ 需會計裁示（Q3）。
+4. **累計上限並發**：兩人同時開不同款別。→ `BEGIN IMMEDIATE`＋測試。
+5. **下游假設**：任何用 `dispatch_id` 取「唯一一筆」的程式（§1 表）。→ S4 逐一加測試；`fetchone()` 改為彙總。
+6. **個人點工**不含稅且可能已關聯勞報單（E05b／扣繳）：拆期會讓關聯錯位。→ Q4。
+7. 舊列（`kind=''`）永遠存在：兩套口徑長期並行，報表要同時處理。→ 不做資料轉換（不把舊列改成「完工款 100%」），除非使用者裁示。
+
+## 9. 需要使用者裁示的口徑（AskUserQuestion 選項寫法）
+- **Q1 款別清單**：A 固定四種（訂金／進度款／完工款／驗收款）〔建議〕；B 公司可自訂款別（要設定頁、版本管理）；C 固定四種＋「其他」。
+- **Q2 金額輸入方式**：A 比例為主（輸入 %，系統算金額）〔建議〕；B 比例與定額都可；C 只能定額。
+- **Q3 稅額口徑**：A 逐期四捨五入、不補差〔建議〕；B 整筆算稅額後分攤、末期補差；C 先逐期，最後一期補到與整筆一致。
+- **Q4 個人點工（不含稅）**：A 只掛在最後一期（完工款）〔建議〕；B 只掛第一期；C 可手動指定掛哪一期。
+- **Q5 發票時點**：A 付款前必填該期發票號碼與日期；B 可事後補，但沒有發票日就不產生 E04（現況行為）〔建議，與現況一致〕；C 另外收「實際稅額」覆寫估計稅額（會計需求待問）。
+- **Q6 舊整筆申請**：A 維持原樣（`kind=''`），不轉換〔建議〕；B 遷移時一律轉成「完工款 100%」。
+- **Q7 作廢權限**：A admin+，已付款先撤銷付款〔建議〕；B 僅最高管理者。
+- **Q8 上線範圍**：A 先只開放新派發（上線後建立的派發才能分期）；B 全部派發（含進行中的）〔建議，否則進行中的案件用不到〕。
+
+## 10. 需要正式機提供的資料（唯讀統計優先；每項註明回答哪個設計問題）
+
+**原則**：先用唯讀統計查詢（只回數字與分布，不回姓名／帳號／統編）；只有 §10-C 的遷移演練需要資料副本，且必須去識別化，由正式機端產出放雲端交付資料夾，**不得含完整收款帳號／個資**。
+
+### A. 結構與約束（回答：遷移要怎麼寫、會不會失敗）
+| # | 查詢（唯讀） | 為了回答 |
+|---|---|---|
+| A1 | `SELECT sql FROM sqlite_master WHERE name='contractor_payment_vouchers';` 與 `PRAGMA index_list(contractor_payment_vouchers);` `PRAGMA table_info(contractor_payment_vouchers);` | `dispatch_id UNIQUE` 實際長相（內嵌 UNIQUE？自動索引名？有沒有人手工改過表？）→ 決定重建表腳本與回滾 |
+| A2 | `SELECT name, sql FROM sqlite_master WHERE tbl_name IN ('contractor_payment_vouchers','contractor_dispatches') AND type IN ('index','trigger','view');` | 有無觸發器／檢視依賴這張表；重建後要重建哪些索引 |
+| A3 | `PRAGMA foreign_key_list(contractor_payment_vouchers);` 及 `SELECT name FROM sqlite_master WHERE sql LIKE '%contractor_payment_vouchers%';`（哪些物件參照它） | 重建表期間的 FK／參照處理 |
+| A4 | `SELECT * FROM module_schema_versions WHERE module='subcontract';` 與 `PRAGMA user_version;` | 遷移編號銜接（目前 subcontract=3 ⇒ 新遷移 0004） |
+| A5 | 該表筆數、`page_count*page_size`（庫大小）、`PRAGMA integrity_check;` 結果 | 重建耗時估計、演練前提 |
+
+### B. 資料分布（回答：口徑與邊界案例）
+| # | 查詢（只回聚合） | 為了回答 |
+|---|---|---|
+| B1 | 派發總數、有匯款申請的派發數、每派發的申請數分布（正常應全為 0／1） | 現況是否真的一對一；有沒有違反的歷史資料 |
+| B2 | 申請狀態分布（草稿／待審核／已核准／已付款／…）、`is_paid` 分布 | 遷移時要保護哪些狀態；作廢規則（Q7）影響面 |
+| B3 | 申請金額分布：`snapshot_json.totalAmount`、`taxRate` 值分布（0／0.05／其他各幾筆）、`personnelTotal>0` 的筆數與占比 | 稅額口徑（Q3）影響多大、個人點工（Q4）是否常見 |
+| B4 | 派發 `total_amount` 與申請 `totalAmount` 不相等的筆數（派發被改過） | 「金額事後被改」的處理規則 |
+| B5 | 派發有 `invoice_date` 的筆數 vs 有申請的筆數 vs 兩者皆有；`invoice_no` 空白但有 `invoice_date` 的筆數 | E04 逐張與發票時點（Q5）；現況 `dispatch_invoiced` 提示頻率 |
+| B6 | 已付款申請中 `remit_actual ≠ grandTotal`、`remit_fee>0`、`remit_review` 各值的筆數 | E05 的差額／手續費路徑是否常用，分期後要不要特別處理 |
+| B7 | 分錄現況：`gl_` 相關表中來源為 `contractor_dispatch`（E04）與 `contractor_voucher`（E05）的筆數、已過帳 vs 草稿、期間分布 | E04 逐張改寫會動到多少已過帳資料（**已過帳的 E04 不可被改寫**） |
+| B8 | 有「進行中」派發（尚未產生申請且狀態 accepted／completed 之前）的筆數 | Q8 上線範圍；有多少案件需要分期 |
+| B9 | 業務現況（請使用者／會計口述，不是查詢）：實務上有沒有已經在用「訂金／進度款」的案件（用備註或多張派發硬拆）？大約幾件？ | 是否需要資料轉換（Q6）；款別清單（Q1） |
+
+### C. 遷移演練用的去識別化副本（**只有 A、B 看過後才要**）
+- 範圍：僅 `contractor_payment_vouchers`、`contractor_dispatches`、`vendor_contractors`（只保留 id／`tax_id` 雜湊）、`contractors`（只保留 id，不要帳號）、`module_schema_versions`、`schema_version`，以及 B7 的總帳來源表。
+- 去識別化：姓名、帳號（`bank_*`）、統編、電話、Email、地址、存簿影本、`snapshot_json` 內的收款資料 ⇒ 遮蔽或穩定雜湊（同值同雜湊以保留關聯）；**金額、日期、狀態、id 與外鍵、`data_json` 結構與簽核歷程的鍵**保留。
+- 產出與交付：正式機端產出，放雲端交付資料夾，附筆數與雜湊清單；不經任何通訊軟體傳輸；開發端只放 `D:\開發測試檔` 的拋棄式目錄，演練完刪除。
+- 若 A1–A5 與程式預設完全一致（內嵌 UNIQUE、無觸發器、無額外索引）且表很小，**可以改用 A 的統計＋合成資料演練，不索取副本**。
+
+## 11. 不在本提案範圍
+- 款別對應的科目／預算分類（若要依款別分科目 ⇒ 會計）；訂金退還／保固金（retention）——BACKLOG 沒列，若使用者要，另開。
+- 前端細節（S3）等裁示後再出畫面稿。
