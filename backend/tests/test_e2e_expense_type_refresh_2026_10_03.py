@@ -11,6 +11,8 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
+pytestmark = pytest.mark.e2e
+
 from tests._e2e_login import inject_login  # noqa: E402
 from tests._ui_dialogs import answer_confirm  # noqa: E402
 
