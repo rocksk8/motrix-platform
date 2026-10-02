@@ -126,3 +126,7 @@
 - 建包優化 step 3（d7，wip/build-opt2-d7@bf534ca4）：dry-run 回放 18 個紅燈檔召回 15/18（83%），未達 0 漏；漏的 3 個屬「跨模組守門家族」（font_zoom e2e marker、money_round、pii_archive_mirror），加進保底樣式後 18/18（樣本內）。結論：維持影子模式，需 ≥2 班 0 漏後才可略過任何測試；與 a3 author_gate 共用一份 guard_patterns.json。
 - D2 裁示（使用者 2026-10-02）：匯款款別「會依據案件狀態調整付款，最好是能調整，像是既有這樣」⇒ 採公司可維護的款別清單＋隨案件階段的規則（預設出貨四種：訂金／進度款／完工款／驗收款；設定方式參照既有可調整的案件階段設定）；多 1～2 天。
 - 2e 發現（第33班修）：link_validator 呼叫 _link_check 在有付款歷史時回 (False,'has_payment')，若對『已連結＋已付款』的列重存會被誤擋；目前不可達（連結只能加在無付款的單、連了就不能開匯款），不為此重跑第32班階段。修法：link_validator 對 has_payment 視為有效；material_submit_check 對 has_payment 回『這筆材料申請已有付款紀錄，不可對應採購單』。
+
+## 第32包稽核／演練／探針進度（2026-10-02 晚）
+- d7 包完整性 PASS（audit/train32-pkg-d7@367b1194）；a3 演練 PASS（drill/train32@b90a9276；派發 schema 3→4、case 5、卡住列補單號且只動 doc_code）；2e 探針 CLEAN（probe/t32-pkg-2e@3579f36a；payload 837 檔：807 逐位相同、25 僅換行、1 為 version_manifest 建包重產）。正式機已暫存驗證（#9 卡住列 0 筆）。待 c7 稽核。
+- 2e 探針發現（第33班，不擋第32包）：①MEDIUM 連結的採購單被作廢後，材料申請金額正確回到材料申請（權責 3000），但開匯款申請仍回 409「已對應採購單」（material_payment.create 只檢查 poDocCode 非空，應改用有效連結 _link_check）；已核准列的連結鍵屬實質欄位不能編輯 ⇒ 卡住，可取消重建當暫行辦法；併入第33班強制採購單規格 A.5。②LOW version_manifest 沒有第32班使用者公告條目（材料申請改名、尚未送審、舊單完工進佇列）⇒ 第33班補。
