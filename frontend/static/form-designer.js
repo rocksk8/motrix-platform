@@ -763,8 +763,12 @@
       var li = $('.fd-colbody', this.els.right); if (li) li.scrollIntoView({ block: 'nearest' })
     }
   }
+  // 一個選項清單最多幾個（防誤貼整份檔案；caps.maxItems 可調）：貼上超過就只收前面的並提示，按 Enter／「新增」到了上限也提示
+  var MAX_ITEMS = 500
+  proto.maxItems = function () { return +this.caps.maxItems > 0 ? +this.caps.maxItems : MAX_ITEMS }
   proto._addItem = function (id, at, text) {
     var arr = this._itemArr(id); if (!arr) return
+    if (arr.length >= this.maxItems()) { this.toast('最多只能有 ' + this.maxItems() + ' 個選項，不能再新增了。'); return }
     var idx = at == null ? arr.length : at
     arr.splice(idx, 0, text)
     this.commit(); this.renderCenter(); this.renderRight()
@@ -784,8 +788,13 @@
     e.preventDefault()
     var lines = text.split(/\r?\n/).map(function (s) { return s.trim() }).filter(Boolean); if (!lines.length) return
     var p = inp.dataset.item.split(':'), arr = this._itemArr(p[0]), i = +p[1]; if (!arr) return
-    if (arr[i] === '' || arr[i] === undefined) { arr.splice.apply(arr, [i, 1].concat(lines)) } else arr.splice.apply(arr, [i + 1, 0].concat(lines))
-    this.commit(); this.renderCenter(); this.renderRight(); this.toast('已貼上，拆成 ' + lines.length + ' 個項目')
+    var replacing = arr[i] === '' || arr[i] === undefined
+    var room = this.maxItems() - arr.length + (replacing ? 1 : 0), total = lines.length
+    if (room <= 0) { this.toast('最多只能有 ' + this.maxItems() + ' 個選項，沒有貼上。'); return }
+    if (lines.length > room) lines = lines.slice(0, room)
+    if (replacing) { arr.splice.apply(arr, [i, 1].concat(lines)) } else arr.splice.apply(arr, [i + 1, 0].concat(lines))
+    this.commit(); this.renderCenter(); this.renderRight()
+    this.toast(lines.length < total ? '最多只能有 ' + this.maxItems() + ' 個選項：已貼上前 ' + lines.length + ' 行，略過 ' + (total - lines.length) + ' 行。' : '已貼上，拆成 ' + lines.length + ' 個項目')
   }
 
   window.FormDesigner = { init: function (el, opts) { return new FD(el, opts) }, FRIENDLY: FRIENDLY, ATTR_COPY: ATTR_COPY, DEFAULT_ELEMENTS: DEFAULT_ELEMENTS }

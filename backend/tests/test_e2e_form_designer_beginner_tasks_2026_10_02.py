@@ -278,3 +278,23 @@ def test_fixed_options_are_read_only_and_a_mismatch_is_flagged_without_changing_
     assert "必須固定為：國內、國外" in page.inner_text(".fd-right")       # 與固定值不一致 ⇒ 右欄列為要修改（工具列的計數也會增加）
     page.wait_for_timeout(1200)
     assert _draft() == before, "只回報不偷改：草稿不變"
+
+
+@pytest.mark.e2e
+def test_pasting_ten_thousand_lines_is_capped_at_500_options_with_a_notice(designer):
+    """貼 10,000 行不再產生 10,002 格：上限 500，只收前面的並提示；到上限後 Enter／新增也提示、不再增加。"""
+    page = designer
+    _field(page, "地點").click()
+    page.select_option('.fd-right [data-fd="conv"]', "radio")
+    page.wait_for_selector('.fd-right [data-item="opt:1"]')
+    page.evaluate("""() => { const i = document.querySelector('.fd-right [data-item="opt:1"]'); i.focus();
+        const dt = new DataTransfer(); dt.setData('text', Array.from({length: 10000}, (_, k) => '選項' + k).join(String.fromCharCode(10)));
+        i.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })) }""")
+    page.wait_for_selector(".fd-toast")
+    assert page.locator('.fd-right [data-items="opt"] li').count() == 500
+    assert "最多只能有 500 個選項" in page.inner_text(".fd-toasts") and "略過" in page.inner_text(".fd-toasts")
+    page.click('.fd-right [data-item-add="opt"]')                                  # 已在上限：不再新增
+    assert page.locator('.fd-right [data-items="opt"] li').count() == 500
+    page.wait_for_function("() => document.querySelectorAll('.fd-toast').length >= 2")
+    _saved(page)
+    assert len(_label_of(_draft(), "place")["options"]) == 500
