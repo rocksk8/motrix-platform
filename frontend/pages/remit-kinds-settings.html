@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>匯款款別設定 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <script src="../js/remit-kinds-settings.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!--
+    匯款款別設定（31-B S0；只給最高管理者）：開承攬商匯款申請時可以選的款別（訂金款、進度款、完工款、驗收款…），以及每個款別在派發的哪些狀態可以開。
+    資料在定義文件庫（kind＝remit_kinds、key＝default）：草稿／驗證／發布／差異／版本／還原沿用請款類型頁的做法；伺服器端驗證為準。
+    規則：代碼建立後不能改；款別不能刪，只能停用；改了只影響之後新開的匯款申請（舊申請照常顯示當時的款別名稱）。
+    設計：docs/platform/plans/REMIT-KINDS-31B-DESIGN.md §3b。
+  -->
+  <style>
+    .rk-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 28px 36px 60px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .rk-wrap { max-width: 1120px; }
+    .rk-err, .rk-ok { --tone-danger-fg: #B91C1C; --tone-danger-bg: #FEF2F2; --tone-danger-border: #FECACA;
+      --tone-info-fg: #1D4ED8; --tone-info-bg: #EEF2FF; --tone-info-border: #BFDBFE; }
+    .rk-err { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: var(--tone-danger-bg);
+      border: 1px solid var(--tone-danger-border); color: var(--tone-danger-fg); font-size: 13px; }
+    .rk-ok { margin-top: 14px; padding: 10px 16px; border-radius: 8px; background: var(--tone-info-bg);
+      border: 1px solid var(--tone-info-border); color: var(--tone-info-fg); font-size: 13px; }
+    .rk-panel { margin-top: 18px; border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; background: #fff; }
+    .rk-panel h2 { font-size: 15px; margin: 0 0 8px; }
+    .rk-sub { font-size: 12.5px; color: var(--text-secondary); line-height: 1.7; }
+    .rk-scroll { overflow-x: auto; }
+    .rk-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; min-width: 900px; }
+    .rk-tbl th, .rk-tbl td { padding: 8px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
+    .rk-tbl th small { display: block; font-weight: 400; color: var(--text-secondary); }
+    .rk-tbl input[type=text], .rk-tbl input[type=number] { width: 100%; box-sizing: border-box; font-size: 12.5px; }
+    .rk-chips { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+    .rk-chips label { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .rk-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+    .rk-prob { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--tone-danger-fg); }
+    .rk-tag { font-size: 11px; padding: 1px 7px; border-radius: 8px; background: var(--border-light); }
+    .rk-bad { color: var(--tone-danger-fg); font-size: 11.5px; }
+    @media (max-width: 720px) { .rk-main { margin-left: 0; padding: 20px 16px 60px; } }
+  </style>
+</head>
+<body x-data="remitKindsPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="rk-main">
+    <div class="rk-wrap">
+      <div class="pg">
+        <div class="pg__l">
+          <div class="pg__eyebrow">系統設定</div>
+          <h1 class="pg__t">匯款款別設定</h1>
+          <p class="pg__s">開承攬商匯款申請時可以選哪些款別，以及每種款別在派發的哪個狀態可以開。改了只影響之後新開的申請，舊申請不變。</p>
+        </div>
+        <div class="pg__a">
+          <span class="rk-tag" data-testid="rk-version" x-text="isDefault ? '目前使用：出貨預設' : '目前使用：第 ' + version + ' 版'"></span>
+        </div>
+      </div>
+
+      <div class="rk-err" data-testid="rk-error" x-show="err" x-text="err"></div>
+      <div class="rk-ok" data-testid="rk-msg" x-show="msg" x-text="msg"></div>
+
+      <div class="rk-sub" data-testid="rk-loading" x-show="loading" style="margin-top:14px">載入中…</div>
+
+      <div x-show="!loading && body.kinds.length" data-testid="rk-edit">
+        <div class="rk-panel">
+          <h2>款別</h2>
+          <div class="rk-sub">
+            <b>名稱</b>：開申請時看到的字，例：「訂金款」。
+            <b>啟用</b>：關掉後不能再開新的申請，舊申請照常顯示，例：不再使用「進度款」就停用它。
+            <b>可以開立的派發狀態</b>：派發在勾選的狀態時才能開這個款別，例：「完工款」勾「已驗收」「完工」，派發還在「已送出」就開不了。
+            <b>代碼</b>是系統用的名字，建立後不能改，款別也不能刪，只能停用。
+          </div>
+          <div class="rk-scroll">
+            <table class="rk-tbl" data-testid="rk-table">
+              <thead><tr>
+                <th style="width:140px">名稱</th><th style="width:130px">代碼<small>建立後不能改</small></th><th style="width:60px">啟用</th>
+                <th style="width:70px">排序<small>小的在前</small></th><th>可以開立的派發狀態</th><th style="width:170px">備註</th><th style="width:70px"></th>
+              </tr></thead>
+              <tbody>
+                <template x-for="(k, ki) in body.kinds" :key="ki">
+                  <tr data-testid="rk-row" :data-code="k.code">
+                    <td><input type="text" x-model="k.name" maxlength="20" data-testid="rk-name"></td>
+                    <td>
+                      <span class="mono" x-show="isSaved(k)" x-text="k.code" data-testid="rk-code-fixed"></span>
+                      <input type="text" x-show="!isSaved(k)" x-model="k.code" maxlength="40" placeholder="例：retention" data-testid="rk-code">
+                      <div class="rk-bad" x-show="codeProblem(k)" x-text="codeProblem(k)"></div>
+                    </td>
+                    <td><input type="checkbox" x-model="k.active" data-testid="rk-active"></td>
+                    <td><input type="number" x-model.number="k.sort" data-testid="rk-sort"></td>
+                    <td>
+                      <div class="rk-chips">
+                        <template x-for="s in stages" :key="s.key">
+                          <label><input type="checkbox" :checked="stageOn(k, s.key)" @change="toggleStage(k, s.key)" :data-testid="'rk-stage-' + s.key"> <span x-text="s.label"></span></label>
+                        </template>
+                      </div>
+                    </td>
+                    <td><input type="text" x-model="k.note" maxlength="200" data-testid="rk-note-field"></td>
+                    <td><button class="btn btn-danger" x-show="!isSaved(k)" @click="removeNew(k)" data-testid="rk-remove-new">移除</button></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <div class="rk-actions"><button class="btn" data-testid="rk-add" @click="addKind()">＋ 新增款別</button></div>
+        </div>
+
+        <div class="rk-panel">
+          <h2>檢查與發布</h2>
+          <div class="rk-actions">
+            <button class="btn" data-testid="rk-validate" @click="validate()">驗證</button>
+            <button class="btn" data-testid="rk-save" :disabled="busy" @click="saveDraft()">儲存草稿</button>
+            <button class="btn" data-testid="rk-changes" x-show="hasDraft" @click="showChanges()">與目前使用的版本比較</button>
+            <button class="btn btn-danger" data-testid="rk-discard" x-show="hasDraft" @click="discardDraft()">丟棄草稿</button>
+          </div>
+          <div data-testid="rk-problems" x-show="problems.length">
+            <ul class="rk-prob">
+              <template x-for="(p, pi) in problems" :key="pi"><li><b x-text="pathLabel(p.path)"></b>：<span x-text="p.message"></span></li></template>
+            </ul>
+          </div>
+          <div data-testid="rk-changes-list" x-show="changes !== null" class="rk-sub" style="margin-top:8px">
+            <span x-text="'與目前使用的版本差 ' + (changes ? changes.length : 0) + ' 處'"></span>
+            <ul><template x-for="(c, ci) in (changes || [])" :key="ci"><li><span class="rk-tag" x-text="c.op"></span> <span x-text="c.path"></span></li></template></ul>
+          </div>
+          <div class="rk-actions" style="margin-top:14px">
+            <input type="text" data-testid="rk-note" x-model="note" placeholder="發布說明（選填）" style="min-width:260px">
+            <button class="btn btn-primary" data-testid="rk-publish" :disabled="busy" @click="publish()">發布</button>
+          </div>
+          <div class="rk-sub" style="margin-top:6px">發布前伺服器會再驗證一次，有問題不會發布。發布後只影響之後新開的匯款申請；已發布過的款別不能移除，只能停用。</div>
+        </div>
+
+        <div class="rk-panel" x-show="meta && meta.versions && meta.versions.length">
+          <h2>版本</h2>
+          <table class="data-table" data-testid="rk-versions" style="width:100%">
+            <thead><tr><th>版本</th><th>狀態</th><th>發布者</th><th>時間</th><th>說明</th><th></th></tr></thead>
+            <tbody>
+              <template x-for="v in ((meta && meta.versions) || [])" :key="v.version">
+                <tr>
+                  <td x-text="v.version === 0 ? '草稿' : 'v' + v.version"></td>
+                  <td x-text="v.status === 'published' ? '已發布' : '草稿'"></td>
+                  <td x-text="v.published_by || v.created_by || ''"></td>
+                  <td x-text="(v.published_at || v.created_at || '').replace('T', ' ').slice(0, 16)"></td>
+                  <td x-text="v.note || ''"></td>
+                  <td><button class="btn" :data-testid="'rk-restore-' + v.version" x-show="v.status==='published'" @click="restore(v.version)">還原為新版本</button></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script src="../static/notif.js"></script>
+  <script src="../static/ui.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

@@ -4,8 +4,9 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.subcontract import attachments, dispatch_notify, gl_events, remit  # noqa: F401（dispatch_notify：載入時登記信件類型）
+from modules.subcontract import attachments, dispatch_notify, gl_events, remit, remit_kinds  # noqa: F401（dispatch_notify：載入時登記信件類型）
 from modules.subcontract.api import contractor_vouchers, contractors, dispatch_approval, vendor_contractors
+from modules.subcontract.api import remit_kinds as remit_kinds_api
 
 #: 模組自己的 migration（檔名以版號開頭，不是合法的 import 名稱 ⇒ importlib）
 _m0001 = importlib.import_module("modules.subcontract.migrations.0001_remit_fee")
@@ -17,7 +18,7 @@ MODULE = ModuleSpec(
     key="subcontract",
     # v1：contractor_payment_vouchers 匯款實付／手續費／差額審核欄位（W1）；v2：dispatch_file_delete_requests（N1，報價單附件刪除申請）；v3：contractor_dispatches 兩段審核欄位（31-A，派發審核）；v4：已卡住的審核中派發補單號 doc_code（舊單申請完工進不了佇列的資料修復，只補單號）
     migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up)],
-    routers=[contractors.router, vendor_contractors.router, dispatch_approval.router, contractor_vouchers.router],
+    routers=[contractors.router, vendor_contractors.router, dispatch_approval.router, contractor_vouchers.router, remit_kinds_api.router],
     providers={
         # IP-1：派工單列序列化（M01 應計派工成本、M06 傳票摘要來源）
         ("dispatch.row", "subcontract"): vendor_contractors._dispatch_row,

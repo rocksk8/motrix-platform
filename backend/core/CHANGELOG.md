@@ -2,16 +2,16 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — wip/t33-diff-default-c7：定義 diff 的 `default` ＝出貨預設
+- L0（新增，向下相容）：`core.definitions.default_for(kind, key) -> body|None`——程式出貨的預設（v0），**不看資料庫**；`resolve` 內部改呼叫它（行為不變：role ＞ company ＞ default）。
+- L0（行為修正，路由）：`GET /api/definitions/{kind}/{key}/diff?a|b=default` 原本呼叫 `resolve`，公司發布過就回公司最新版（`default` 對 `latest` 恆為空、無法比較公司版 vs 出貨預設）；現在回出貨預設（沒有預設 ⇒ 空內容）。編輯頁的 `latest`／`draft`／版本號比較不受影響。
+- 測試：`tests/test_definitions_diff_default_2026_10_02.py`（6 題）、`test_definitions_store_2026_09_25.py::test_definitions_default_for_…`。L1 介面快照 `--update --pending`（新增 `plat:definitions::default_for`）。
+
 ## 1.107 — 2026-10-02（wip/t32-s4a-2e：簽核佇列卡片小標註）
 - L1（新增選填鍵，向下相容）：簽核佇列項目多一個 `tags: []`（`helpers.approval_queue.base_item`；項目格式 `[{text, tone}]`，tone＝`warn`／`info`）。各單據模組的佇列提供者經 `fields` 帶入；沒帶＝空陣列，既有項目與前端不受影響。前端卡片與列表列在類型標籤旁畫出（`approval-queue.html`）。
 
 ## 1.106 — 2026-10-02（wip/t32-applicant-help-a3：出貨請款類型「申請人」欄位說明改白話）
 - L1（出貨資料，介面不變）：`helpers/expense_type_defs/*.json` 四個預設類型的 `applicant.help` 改為「這一欄會自動帶入申請人；管理者可在設計器解除鎖定」（原文含 locked 等工程用語）。只動這一個字串；仍釘在版本 0（程式預設）的舊單據只是顯示文字不同，驗證與輸出不變；公司已發布的版本（≥1）是發布當時的副本，不受影響。
-
-## (next) — wip/t33-diff-default-c7：定義 diff 的 `default` ＝出貨預設
-- L0（新增，向下相容）：`core.definitions.default_for(kind, key) -> body|None`——程式出貨的預設（v0），**不看資料庫**；`resolve` 內部改呼叫它（行為不變：role ＞ company ＞ default）。
-- L0（行為修正，路由）：`GET /api/definitions/{kind}/{key}/diff?a|b=default` 原本呼叫 `resolve`，公司發布過就回公司最新版（`default` 對 `latest` 恆為空、無法比較公司版 vs 出貨預設）；現在回出貨預設（沒有預設 ⇒ 空內容）。編輯頁的 `latest`／`draft`／版本號比較不受影響。
-- 測試：`tests/test_definitions_diff_default_2026_10_02.py`（6 題）、`test_definitions_store_2026_09_25.py::test_definitions_default_for_…`。L1 介面快照 `--update --pending`（新增 `plat:definitions::default_for`）。
 
 ## 1.105 — 2026-10-02（wip/t31-expense-prefill-a3：請款單自動帶入的接線）
 - L1（新增選填參數，向下相容）：`helpers.expense_types.validate_values(…, prior=None, case=None, type_code="")`——`prior`＝修改時舊單的 data：不重新解析任何自動帶入來源、`locked` 欄位沿用舊值（建立時行為不變）；`case`＝`{customer, project}`；`type_code` 供「我上一次填過的內容」查詢。
