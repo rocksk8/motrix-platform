@@ -174,3 +174,26 @@ def test_supplement_cannot_double_cover_one_po_line(W):
     res = _patch(c, h, [_mo("m1", quoteItemId="a", poDocCode=po["docCode"], poLine=1), _mo("m2", quoteItemId="a", poDocCode=po["docCode"], poLine=1)])
     assert [(x["itemId"], x["code"]) for x in res["rejected"]] == [("m2", "bad_link")] and "已對應另一筆材料申請" in res["rejected"][0]["message"]
     assert not [o for o in _orders() if o["itemId"] == "m2"][0].get("poDocCode")
+
+
+def test_grandfathered_flag_survives_a_tiered_submit_and_a_reject(W):
+    """舊單送審（grandfathered 草稿）→ 有簽核層送審 → 退回 → 重送：標記不可在重建 approval_json 時掉掉（掉了＝舊單被當成上線後的新單，重送被擋「需先申請請購單」）。"""
+    boss = {"username": "gf_boss", "role": "sales", "display_name": "主管"}
+    eng = {"username": "gf_eng", "role": "sales", "display_name": "工程師"}
+    cn = db.get_db()
+    try:
+        cn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+                   ("unified_approval_flow", json.dumps({"tiers": [{"order": 0, "approvers": [{"username": boss["username"], "displayName": "主管"}]}], "includeSubmitterManagerTier": False}),
+                    "2026-01-01T00:00:00"))
+        cn.commit()                                                                                   # 簽核設定由另一條連線讀，要先提交
+        MA.create_draft(cn, NO, "gf1", eng, "舊單", grandfathered=True)
+        order = _mo("gf1", quoteItemId="")
+        assert MA.submit(cn, NO, order, eng)["status"] == MA.S_PENDING
+        assert json.loads(MA.get(cn, NO, "gf1")["approval_json"]).get("grandfathered") is True        # 有簽核層的送審重建 approval_json 之後標記還在
+        MA.reject(cn, NO, "gf1", boss, "退回")
+        assert MA.po_required_for(MA.get(cn, NO, "gf1")) is False                                      # 退回後仍是舊單：重送不必有採購單
+        assert MA.submit(cn, NO, order, eng)["status"] == MA.S_PENDING
+        assert json.loads(MA.get(cn, NO, "gf1")["approval_json"]).get("grandfathered") is True
+        cn.rollback()
+    finally:
+        cn.close()
