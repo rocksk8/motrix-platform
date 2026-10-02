@@ -4328,7 +4328,7 @@
         <input x-show="cvForm.input==='amount'" type="number" min="1" step="1" x-model="cvForm.amount" @input="cvPlanSchedule()" placeholder="稅前整數元" data-testid="cv-amount-input"
                style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box">
         <div x-show="cvPlan" data-testid="cv-plan-summary" style="margin-top:8px;font-size:12px;font-family:var(--font-zh);color:var(--ink-strong)" x-text="cvPlanSummary()"></div>
-        <template x-for="w in (cvPlan ? cvPlan.warnings : [])" :key="w">
+        <template x-for="(w, wi) in (cvPlan ? cvPlan.warnings : [])" :key="wi + w">
           <div data-testid="cv-plan-warning" style="margin-top:4px;font-size:11px;color:var(--tone-warning-fg);font-family:var(--font-zh)" x-text="'⚠ ' + w"></div>
         </template>
         <div x-show="cvPlanError" data-testid="cv-plan-error" style="margin-top:8px;font-size:12px;color:var(--tone-danger-fg);font-family:var(--font-zh)" x-text="cvPlanError"></div>

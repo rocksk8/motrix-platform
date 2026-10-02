@@ -355,7 +355,7 @@ window.CM_PARTS.push(() => ({
     },
 
     _cvRemaining(d) {
-      return (d.totalAmount || 0) - this._cvIssuedPretax(d)
+      return Math.round(d.totalAmount || 0) - this._cvIssuedPretax(d)      // 後端以四捨五入的整數元計額度（派發金額可能帶角分）
     },
 
     // 這張派發現在能開的款別（啟用中、派發狀態在該款別的可開立狀態內）
@@ -402,6 +402,8 @@ window.CM_PARTS.push(() => ({
     // 試算（後端算，畫面不重算）：輸入改了 300ms 後送一次；回應順序錯亂時只認最後一次
     cvPlanSchedule() {
       clearTimeout(this._cvPlanTimer)
+      this._cvPlanSeq++                // 在途的舊請求作廢：它回來時不可以把舊輸入的試算蓋回畫面（確認鈕會在新試算回來前被誤開）
+      this.cvPlanBusy = false
       this.cvPlan = null
       this.cvPlanError = ''
       const f = this.cvForm
