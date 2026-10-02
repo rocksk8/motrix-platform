@@ -21,6 +21,15 @@ def _approved_po(c, h, lines):
     return r
 
 
+@pytest.fixture(autouse=True)
+def _won_case(W):
+    """叫料來源只讀「已成案／已結案」的案件（recognition._case_rows）。"""
+    cn = db.get_db()
+    cn.execute("UPDATE quotations SET deal_tag='已成案' WHERE quote_no=?", (NO,))
+    cn.commit()
+    cn.close()
+
+
 def _order(item_id, qty, total, **kw):
     d = {"itemId": item_id, "itemName": "品" + item_id, "quantity": qty, "unit": "台", "unitPrice": (total / qty) if qty else 0, "totalPrice": total,
          "paidStatus": "pending", "paidAmount": 0, "paidDate": "", "invoiceDate": TODAY}
