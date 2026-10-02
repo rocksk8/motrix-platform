@@ -110,3 +110,4 @@
 ## 完結精算實際支出重複計算（使用者回報 2026-10-02；2e 查證）
 - 查證：精算頁 totalActualCost = itemActualTotal(預設報價成本×1.05) + itemPoUnadopted + extraTotal + dispatchTotal；**材料申請完全不在精算裡**；沒採用前品項估計與採購單重複（+10500 例）；報表／GL 只在同一筆採購重複輸入未連結時重複；正式機材料申請 0 筆，影響僅 15 筆歷史額外支出。
 - **使用者裁示 2026-10-02：沖銷規則 A（品項有實際採購＝採用的採購單或已對應的材料申請 ⇒ 實際取代該品項估計，沒採購仍用估計；完結精算時「採用」預設開）；精算頁重做加入第33班**（後端統一端點 GET /api/quotations/{no}/settlement-actuals、頁面顯示材料申請與額外支出並可沖銷、未對應項區塊）。第32班照原計畫出貨。
+- 2e：SETTLEMENT-ACTUALS-SPEC.md（wip/t32-material-link-spec-2e@9ea4c0d4）：精算頁重做規格（settlement-actuals 端點、共用 recognition.material_money_rows、漂移契約測試、沖銷存 settlement.offsets、歷史對照、分片 33-A1..A4/B1/B2/C 約 6 天）；§9 七題待使用者（第33班排程時問）。
