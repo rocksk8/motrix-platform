@@ -76,3 +76,4 @@
 - applicant 欄位說明：**改成白話一句**：「這一欄會自動帶入申請人；管理者可在設計器解除鎖定」（動出貨定義 helpers/expense_type_defs/*.json ⇒ def_version 變更，隨第32班）。（a3）
 - 建構器分頁掛載：**先掛「我的工作」**（規格 BUILDER-ATTACH-EXISTING-MODULE-SPEC.md；daily_tasks.daily-tasks 掛載點已在第30班出貨）。
 - 第32班優先：**叫料管控擴充**（S4a–S4e，約8天；規格 wip/t32-material-link-spec-2e）。設計器預設開關待使用者預覽後裁示。
+- 第31包套用步驟 0 請正式機 Claude 加一條唯讀查詢並回報：SELECT key, version, status, published_at FROM ui_definitions WHERE kind='expense_type' ORDER BY key, version;（判斷公司是否已發布請款類型副本，影響 applicant 說明改字是否需通知重新發布）。
