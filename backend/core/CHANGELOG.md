@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-02 09:14（wip/t32-prpo-s1-2e）：結案精算 PDF 的採購單分項（32-S5 追補）
+- L0（行為）：`pdf_gen` 結案精算 PDF 的「實際成本精算」在 `summary.itemPoUnadopted > 0` 時多一列「採購單（品項尚未採用）」（分項加總＝實際總成本）；沒有該鍵或為 0 ⇒ 輸出逐字不變。介面不變。
+
 ## 1.102 — 2026-10-01（wip/builder-b-2e：建構器方案 B 掛載頁籤骨架）
 - L0（新增）：`core.mounts`（`validate_mount_points／declared_points／visible_point／point_id`、`KINDS`、`MAX_TABS_PER_POINT`）——內建模組 `module.json` 可選填 `mount_points`（key／page／kind＝tab／label／perm／context），`core.customization.validate_manifest` 一併驗證（格式錯 ⇒ loader 不載入，同 customization）。沒有 `mount_points` 的模組完全不受影響。
 - L1（新增）：`helpers.custom_modules.visible_mounts`（掛載點的可見頁籤＝自訂模組可見 ∧ 點 perm，唯一一份）、`mount_cap_problems`、`MountError`；`validate_module` 檢查 `mount`；`published_modules()` 每項多一個 `mount` 鍵。路由 `GET /api/platform/mounts?point=`（點不存在／模組未載入 ⇒ 404）、`GET /api/platform/mount-points`（只有最高管理者）。只新增；前端（`mount-tabs.js`、`custom-records.html?embed=1`、首批 `daily-tasks.html`）與建構器欄位隨後出貨。設計 `docs/platform/plans/BUILDER-B-DESIGN.md`。
