@@ -38,3 +38,10 @@
 2. 10-03 00:00 備份後確認正式機 #11 補查結果（讀回報資料夾）。
 3. 提醒使用者：D 槽舊目錄待手刪（見記憶 project_motrix_pending_cleanup）；視窗 E／F 是否開；正式機 Claude 權限規則是否要加。
 4. 恢復第 33 班開發：重新派工（照各視窗交接檔）；滾動整合到 `wip/train-33-int1`。
+
+## 7. 四視窗已停手（21:0x）— 最終 sha 與交接檔（以 `git ls-remote` 為準）
+- **a3**：交接檔 `HANDOFF-A3-20261003.md`@dce980cc（分支 wip/t33-remit-kinds-design-a3）；31-B S0 `wip/t33-remit-s0-a3`@b2f311a1、S1 `wip/t33-remit-s1-a3`@29ca6efe、S2 `wip/t33-remit-s2-a3`@c7212235（功能 9bdb65a9）；author_gate `wip/t33-author-gate-a3`@557decf0（含 @argsfile 修正）；`drill/train32`@2e3eab8b。S2 未跑守門：unit_cards／generated_maps／module_boundaries／changelog／IP-14。
+- **d7**：交接檔 `HANDOFF-D7-20261003.md`@6973ef75（分支 wip/t33-handoff-d7）；`wip/t33-nowindow-d7`@ce3116ce（待 c7 覆審）、`wip/t33-dict-comment-d7`@b5a3a5ab（+M2 設計 cbfb90ef）、`wip/t33-link-guard-d7`@03e6a536、`wip/t33-m1-d7`@26504112（**最終驗證未完成**：大範圍 tests/platform＋case 全量只跑 ~15%，新對話第一件事重跑）；D7 金額鎖定未開工（先與 2e 對齊調整單做法，傾向調整＝新建一筆材料申請）；M2 只有設計（約 4 天，依賴 2e 的 change_proposal 形狀）。
+- **c7**：交接檔 `HANDOFF-C7-20261003.md`（audit/train32-c7）；K-2 **已完成** `wip/t33-k2-c7`@45e1af1b（與 a3 分支的 default_for 快照／CHANGELOG 會衝突，以 K-2 為準重跑 `_l1_interface.py --update --pending`）；`wip/t33-diff-default-c7`@0875fd94、`fix/t32-lodging-flake-c7`@aa0cdb27；未開始：範本重發（wip/t33-refresh-c7）、D12 預設開＋真滑鼠拖放人工驗證。
+- **2e**：交接檔 `HANDOFF-2e-20261003.md`@4763338d（分支 wip/t32-material-link-spec-2e）；`wip/t33-settlement-2e`@3431d7f1（A1 完成）、`wip/t33-settlement-a2-2e`@4135f0cb（A2 程式與測試已寫、**測試尚未跑**）、`wip/t33-material-link-fix-2e`@65837b0c；新增 A5 片（D10 完結後端重算）與 M1 案件側步驟（接 d7 的 wip/t33-m1-d7@26504112）。速度參考：A1 約 1.5 小時（含突變）、A2 寫碼＋測試約 1 小時。
+- 全部視窗：無 pytest 行程、basetemp 已刪、工作樹乾淨。22:00 author_gate 真實回放窗口取消。
