@@ -8,6 +8,7 @@
 """
 import ast
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -20,18 +21,67 @@ EXEMPT = {"tools/platform/nowindow.py", "tools/platform/window_probe.py",
           "tools/platform/failfast.py"}        # failfast＝pytest 外掛，只在已安裝的 pytest 行程（conftest）內執行
 
 
+def _aliases(tree):
+    """⇒ (subprocess 模組別名集合, 直接 from-import 進來的呼叫名集合, 是否 import os)。"""
+    mods, names = set(), set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            for a in n.names:
+                if a.name == "subprocess":
+                    mods.add(a.asname or "subprocess")
+        elif isinstance(n, ast.ImportFrom) and n.module == "subprocess":
+            for a in n.names:
+                if a.name in _CALLS:
+                    names.add(a.asname or a.name)
+    return mods, names
+
+
+def _install_called(tree):
+    """真的會執行的 `nowindow.install()`：不在函式／lambda／類別內（模組層或 `if __name__ == "__main__":` 內才算），
+    且檔案有 import nowindow（任何別名）。⇒ 只在註解／字串／沒被呼叫的函式裡提到 install 不算。"""
+    aliases = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            aliases |= {a.asname or a.name for a in n.names if a.name == "nowindow"}
+        elif isinstance(n, ast.ImportFrom) and n.module == "nowindow":
+            aliases |= {a.asname or a.name for a in n.names if a.name == "install"}
+    if not aliases:
+        return False
+
+    def walk(node):
+        for ch in ast.iter_child_nodes(node):
+            if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                continue
+            if isinstance(ch, ast.Call):
+                f = ch.func
+                if (isinstance(f, ast.Attribute) and f.attr == "install" and isinstance(f.value, ast.Name) and f.value.id in aliases)                         or (isinstance(f, ast.Name) and f.id in aliases):
+                    return True
+            if walk(ch):
+                return True
+        return False
+    return walk(tree)
+
+
 def unflagged(src):
-    """⇒ (有 subprocess 呼叫?, 沒帶 creationflags 的呼叫行號, 檔案有沒有 nowindow.install)。"""
+    """⇒ (有子行程呼叫?, 沒帶 creationflags 的呼叫行號, 檔案是否真的呼叫 nowindow.install)。
+    呼叫＝`subprocess.run/Popen/check_output/call/check_call`（含 `import subprocess as sp`、`from subprocess import run`）與 `os.system/os.popen`。"""
     tree = ast.parse(src)
+    mods, names = _aliases(tree)
     calls, bad = 0, []
     for n in ast.walk(tree):
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in _CALLS \
-                and isinstance(n.func.value, ast.Name) and n.func.value.id == "subprocess":
+        if not isinstance(n, ast.Call):
+            continue
+        f = n.func
+        hit = False
+        if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name):
+            hit = (f.value.id in mods and f.attr in _CALLS) or (f.value.id == "os" and f.attr in ("system", "popen"))
+        elif isinstance(f, ast.Name):
+            hit = f.id in names
+        if hit:
             calls += 1
             if not any(k.arg == "creationflags" or k.arg is None for k in n.keywords):         # **kw 視為可能帶
                 bad.append(n.lineno)
-    installs = "nowindow" in src and ".install()" in src
-    return calls, bad, installs
+    return calls, bad, _install_called(tree)
 
 
 def verdict(src):
@@ -43,7 +93,14 @@ def test_scanner_positive_control():
     assert verdict("import subprocess\nsubprocess.run(['git'])\n")[0] is True
     assert verdict("import subprocess\nsubprocess.Popen(['x'], creationflags=8)\n")[0] is False
     assert verdict("import subprocess\nif __name__=='__main__':\n    import nowindow\n    nowindow.install()\nsubprocess.run(['git'])\n")[0] is False
-    assert verdict("import os\nos.system('x')\n")[0] is False                                   # 沒有 subprocess 呼叫
+    assert verdict("import os\nos.system('x')\n")[0] is True   # os.system 也算
+    assert verdict("import subprocess\n# nowindow.install()\nsubprocess.run(['git'])\n")[0] is True   # c7 S-2：只在註解提到
+    assert verdict("import subprocess\nimport nowindow\ndef never():\n    nowindow.install()\nsubprocess.run(['git'])\n")[0] is True   # 沒被呼叫的函式裡
+    assert verdict("import subprocess\nimport nowindow\nx = 'nowindow.install()'\nsubprocess.run(['git'])\n")[0] is True   # 只在字串
+    assert verdict("from subprocess import run\nrun(['git'])\n")[0] is True   # from-import
+    assert verdict("import subprocess as sp\nsp.run(['git'])\n")[0] is True   # 別名
+    assert verdict("import subprocess as sp\nimport nowindow as nw\nnw.install()\nsp.run(['git'])\n")[0] is False   # 別名＋真的呼叫
+    assert verdict("import os\nx = 1\n")[0] is False   # 沒有子行程呼叫
 
 
 def _targets():
@@ -89,3 +146,22 @@ def test_child_of_a_consoleless_parent_gets_no_console_window_after_install(tmp_
     subprocess.Popen([sys.executable, str(child)], creationflags=0x00000008 | 0x00000200, stdin=subprocess.DEVNULL,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).wait()          # 父：沒有主控台（DETACHED）；本行程的 Popen 已被 conftest 補旗標，所以明列 DETACHED 才不被改
     assert json.loads(out.read_text()) == "0"
+
+
+def test_every_installer_snippet_resolves_to_the_real_nowindow_dir():
+    """c7 S-1：入口片段的 `parents[N] / "tools" / "platform"` 算錯會讓 `import nowindow` 失敗、被 `except ImportError: pass` 吞掉，
+    守門仍綠但視窗回來。逐檔把片段算一遍，結果目錄必須真的有 nowindow.py。"""
+    rx = re.compile(r'_p\.Path\(__file__\)\.resolve\(\)\.parents\[(\d)\]( / "tools" / "platform")?')
+    bad, seen = [], 0
+    for p in _targets():
+        m = rx.search(p.read_text(encoding="utf-8"))
+        if not m:
+            continue
+        seen += 1
+        d = p.resolve().parents[int(m.group(1))]
+        if m.group(2):
+            d = d / "tools" / "platform"
+        if not (d / "nowindow.py").is_file():
+            bad.append("%s → %s" % (p.relative_to(ROOT).as_posix(), d))
+    assert seen >= 20, "找不到入口片段（樣式變了？）"
+    assert not bad, "入口片段的路徑算不到 nowindow.py：\n" + "\n".join(bad)
