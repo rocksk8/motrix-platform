@@ -348,7 +348,7 @@ def material_ordered(orders_with_status, po_rows) -> dict:
     return out
 
 
-def material_submit_check(conn, quote_no, order, *, exclude_item_id=None) -> dict:
+def material_submit_check(conn, quote_no, order, *, exclude_item_id=None, po_required=False) -> dict:
     """叫料單**送審**時的連結檢查（接縫：由 31-C 的送審路徑呼叫；規格 §4）⇒ `{"problems": [{code, message}], "snapshot": {...}}`。
     - `quoteItemId` 必須是報價單現有品項（`bad_quote_item`）。
     - `poDocCode` 必須是有效連結（`bad_link`，訊息帶原因）。
@@ -366,7 +366,18 @@ def material_submit_check(conn, quote_no, order, *, exclude_item_id=None) -> dic
     if qid and qid not in plan:
         problems.append({"code": "bad_quote_item", "message": "材料申請連到的品項不在這張報價單內（可能已被刪除），請重新選擇"})
     link_ok, link_reason = _link_check(order, po_rows)
-    if str(order.get("poDocCode") or "").strip() and not link_ok:
+    if po_required:                                                                         # 33-M1（E1／E2）：必須連到「已核准」的採購單（待審核／簽核中不算）；用字照 MATERIAL-REQUEST-WORDING
+        code = str(order.get("poDocCode") or "").strip()
+        po = next((r for r in po_rows if (r["doc_code"] or "") == code), None) if code else None
+        if not code:
+            problems.append({"code": "po_required", "message": "需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。"})
+        elif po is None or (po["status"] or "") not in ("草稿", "待審核", "簽核中", "已核准"):
+            problems.append({"code": "po_required", "message": "對應的採購單已退回（或作廢），請重新申請採購單。"})
+        elif (po["status"] or "") != "已核准":
+            problems.append({"code": "po_required", "message": "採購單尚未通過，通過後才能對應這筆材料申請。"})
+        elif not link_ok and link_reason != "has_payment":
+            problems.append({"code": "po_required", "message": "材料申請連到的採購單無效（%s）：必須是同案件、已核准的採購單" % link_reason})
+    if str(order.get("poDocCode") or "").strip() and not link_ok and not (po_required and any(p["code"] == "po_required" for p in problems)):
         problems.append({"code": "bad_link", "message": ("這筆材料申請已有付款紀錄，不可對應採購單" if link_reason == "has_payment"
                                                          else "材料申請連到的採購單無效（%s）：必須是同案件、待審核／簽核中／已核准的採購單" % link_reason)})
     over, reason = 0.0, str(order.get("overPlanReason") or "").strip()

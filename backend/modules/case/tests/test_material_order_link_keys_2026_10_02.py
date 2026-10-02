@@ -4,11 +4,20 @@
 （已存在的列再存檔時，哪些鍵可改由 31-C 守門 `material_guard` 決定，不在這裡測。）"""
 import json
 
+import pytest
+
 import db
 from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W, _ln, _mk, _submit  # noqa: F401
 
 URL = "/api/quotations/%s/material-orders" % NO
 
+
+
+@pytest.fixture(autouse=True)
+def _po_rule_off(monkeypatch):
+    """本檔測的是別的規則；33-M1「新申請必須帶採購單／送審必須有已核准採購單」另有 test_material_po_required_2026_10_03.py。"""
+    from modules.case import material_approval as _MA
+    monkeypatch.setattr(_MA, "PO_REQUIRED", False)
 
 def _order(item_id, **kw):
     d = {"itemId": item_id, "itemName": "品" + item_id, "quantity": 2, "unit": "台", "unitPrice": 100, "totalPrice": 200,

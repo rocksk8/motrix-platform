@@ -24,6 +24,13 @@ Q = {"items": [
 ]}
 
 
+
+@pytest.fixture(autouse=True)
+def _po_rule_off(monkeypatch):
+    """33-M1 後端強制採購單已上線；這個檔的畫面流程（手動新增列）等前端「從採購單帶入」改版時再改寫。規則本身的題在 test_material_po_required_2026_10_03.py。"""
+    from modules.case import material_approval as _MA
+    monkeypatch.setattr(_MA, "PO_REQUIRED", False)
+
 def _shot(page, name):
     os.makedirs(SHOTS, exist_ok=True)
     page.screenshot(path=os.path.join(SHOTS, "s4e-%s.png" % name), full_page=False)

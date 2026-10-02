@@ -33,6 +33,10 @@ EDITABLE = (S_DRAFT, S_RETURNED)                 # 可以修改並（重新）�
 #: 實質欄位：核准後任何一項變動 ⇒ 回草稿、要重新送審（備註、發票日、到貨欄位不算）
 #: 32-S4：quoteItemId／poDocCode／poLine（連報價品項、連採購單）也是實質欄位：核准後改連結 ⇒ 回草稿重送審（overPlanReason 是說明、不算）
 SUBSTANTIVE_KEYS = ("itemName", "quantity", "unit", "unitPrice", "totalPrice", "supplierId", "quoteItemId", "poDocCode", "poLine")
+#: 33-M1（E1／E2）：新申請必須有已核准的採購單才能送審。舊單（沒有疊加審核列）與規則上線前已存在的單（`created_at` 早於 `PO_REQUIRED_FROM`，
+#: 或審核單標了 `grandfathered`）不受影響；這些單可以「補對應」（只增連結鍵，不重簽，留紀錄）。測試以 monkeypatch 改 `PO_REQUIRED`。
+PO_REQUIRED = True
+PO_REQUIRED_FROM = "2026-10-03"
 _NUMERIC = ("quantity", "unitPrice", "totalPrice", "poLine")
 
 #: 付款只能經匯款申請寫入（paid* 的閘；`material_payment.sync_order_paid` 是唯一寫入點）。匯款切片已落地 ⇒ True
@@ -114,6 +118,15 @@ def rows_for_case(conn, quote_no: str) -> dict:
     return {r["item_id"]: dict(r) for r in conn.execute("SELECT * FROM case_material_approvals WHERE quote_no=?", (quote_no,))}
 
 
+def po_required_for(row) -> bool:
+    """這張審核單送審時是否必須已有已核准的採購單（E1／E2）：沒有審核列＝舊單 ⇒ 否；`grandfathered` ⇒ 否；規則上線前建立 ⇒ 否。"""
+    if not PO_REQUIRED or row is None:
+        return False
+    if _appr(row).get("grandfathered"):
+        return False
+    return str(row["created_at"] or "") >= PO_REQUIRED_FROM
+
+
 def status_of(conn, quote_no: str, item_id: str) -> str:
     """'' ＝ 舊單（沒有疊加列）；其餘為 STATUSES。"""
     r = get(conn, quote_no, item_id)
@@ -149,7 +162,7 @@ def next_doc_code(conn, today: str = "") -> str:
 
 # ── 建立草稿 ─────────────────────────────────────────────────────────
 
-def create_draft(conn, quote_no: str, item_id: str, user: dict, reason: str = ""):
+def create_draft(conn, quote_no: str, item_id: str, user: dict, reason: str = "", grandfathered: bool = False):
     """替一筆叫料建立疊加列（草稿）。已有列 ⇒ 回既有。新增列與舊單被實質編輯時用。"""
     cur = get(conn, quote_no, item_id)
     if cur:
@@ -157,6 +170,8 @@ def create_draft(conn, quote_no: str, item_id: str, user: dict, reason: str = ""
     now = _now()
     code = next_doc_code(conn)
     appr = {"history": [{"at": now, "by": user["username"], "byDisplay": _display(user), "action": "create", "tier": 0, "comment": reason}]}
+    if grandfathered:                                                  # 舊單被編輯／送審而建的審核列：不適用「必須有採購單」
+        appr["grandfathered"] = True
     conn.execute(
         "INSERT INTO case_material_approvals (quote_no, item_id, doc_code, status, approval_json, version, created_by, created_at, updated_at)"
         " VALUES (?,?,?,?,?,1,?,?,?)", (quote_no, str(item_id), code, S_DRAFT, json.dumps(appr, ensure_ascii=False), user["username"], now, now))
@@ -327,7 +342,7 @@ def on_substantive_change(conn, quote_no: str, item_id: str, user: dict) -> dict
     - 已核准 ⇒ 回草稿（版本 +1，歷程記一筆），允許（需重新送審）；已取消 ⇒ 不允許。"""
     row = get(conn, quote_no, item_id)
     if row is None:
-        create_draft(conn, quote_no, item_id, user, "舊單實質欄位被修改，需先送審")
+        create_draft(conn, quote_no, item_id, user, "舊單實質欄位被修改，需先送審", grandfathered=True)
         return {"allowed": True, "status": S_DRAFT, "reason": "legacy_to_draft"}
     st = row["status"]
     if st in EDITABLE:
@@ -344,6 +359,29 @@ def on_substantive_change(conn, quote_no: str, item_id: str, user: dict) -> dict
         appr.pop(k, None)
     _save(conn, quote_no, item_id, S_DRAFT, appr, now, version=int(row["version"] or 1) + 1, approved_at="", content_hash="")
     return {"allowed": True, "status": S_DRAFT, "reason": "approved_to_draft"}
+
+
+def record_link_supplement(conn, quote_no: str, item_id: str, user: dict, new_po: str):
+    """舊單／規則上線前已存在的單「補對應」採購單（只增連結鍵）：不改狀態、不重簽；審核歷程記一筆＋稽核一列。"""
+    row = get(conn, quote_no, item_id)                                    # 沒有審核列＝舊單：不建審核列（不變成草稿），只留稽核
+    now = _now()
+    detail = json.dumps({"docCode": (row or {}).get("doc_code"), "itemId": str(item_id), "poDocCode": new_po}, ensure_ascii=False)
+    if conn.execute("SELECT 1 FROM audit_log WHERE action='material_orders.link_supplement' AND target_id=? AND detail=?", (quote_no, detail)).fetchone():
+        return                                                            # 同一請求內守門會跑兩次（端點＋寫入漏斗後盾）：只記一次
+    if row is not None:
+        appr = _appr(row)
+        appr.setdefault("history", []).append({"at": now, "by": user["username"], "byDisplay": _display(user), "action": "link_supplement", "tier": 0,
+                                               "comment": "補對應採購單 %s（不重簽）" % new_po})
+        conn.execute("UPDATE case_material_approvals SET approval_json=?, updated_at=? WHERE quote_no=? AND item_id=?",
+                     (json.dumps(appr, ensure_ascii=False), now, quote_no, str(item_id)))
+    label = (row or {}).get("doc_code") or str(item_id)
+    try:                                                                  # 與請求同一交易寫稽核（_audit 另開連線，會撞寫鎖）
+        conn.execute("INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail) VALUES (?,?,?,?,?,?,?,?,?)",
+                     (now, user.get("id"), user.get("username") or "", user.get("display_name") or "", "material_orders.link_supplement", "quotation", quote_no,
+                      "材料申請 %s 補對應採購單 %s（不重簽）" % (label, new_po),
+                      detail))
+    except Exception:                                                     # noqa: BLE001 — 稽核表缺欄的舊庫：歷程已記，不因此擋
+        pass
 
 
 # ── 到貨確認（不簽核）────────────────────────────────────────────────
