@@ -45,7 +45,7 @@ def repo(tmp_path):
 def test_pattern_files_scan_every_test_root_including_module_tests():
     tree = ["backend/tests/test_money_round_half_up_2026_09_26.py", "backend/modules/subcontract/tests/test_pii_archive_mirror.py",
             "backend/core/tests/test_privacy_x.py", "backend/tests/test_unrelated.py", "backend/tests/helper_approval.py",
-            "backend/tests/test_font_zoom_x.py", "frontend/pages/approval.html", "backend/modules/case/tests/sub/test_queue_y.py"]
+            "backend/tests/test_font_zoom_x.py", "backend/modules/case/pages/approval.html", "backend/modules/case/tests/sub/test_queue_y.py"]
     got = AG.pattern_files(tree)
     assert got == sorted(["backend/tests/test_money_round_half_up_2026_09_26.py", "backend/modules/subcontract/tests/test_pii_archive_mirror.py",
                           "backend/core/tests/test_privacy_x.py", "backend/tests/test_font_zoom_x.py", "backend/modules/case/tests/sub/test_queue_y.py"])
@@ -254,10 +254,13 @@ def test_train32_reds_are_in_the_replay_table_and_covered_or_honestly_marked():
         assert r["covered"] in (True, None), (name, r["missing"])
 
 
-def test_ag_long_argv_spills_to_argsfile_and_pytest_really_runs_it(tmp_path):
+def test_ag_long_argv_spills_to_argsfile_and_pytest_really_runs_it(tmp_path, monkeypatch):
     """d7 實測 706 檔 ⇒ WinError 206。超過上限的參數改走 @argsfile；用 >700 個路徑實跑 pytest 證明 argsfile 被讀（反向：不 spill 就爆）。"""
     import os
     import tempfile
+    spill_dir = tmp_path / "spill"                                                            # 專屬暫存目錄：不掃共用 %TEMP%（並行的 author_gate 也會在那裡放 argsfile）
+    spill_dir.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(spill_dir))
     py = sys.executable
     files = []
     for i in range(320):
@@ -271,7 +274,7 @@ def test_ag_long_argv_spills_to_argsfile_and_pytest_really_runs_it(tmp_path):
     os.remove(spilled)                                                                        # 這次只是看形狀；實跑的那份由 run_pytest 自己刪
     code, out = AG.run_pytest(argv, tmp_path, {}, stream=False)
     assert code == 0 and "320 passed" in out, out[-400:]
-    leftovers = [f for f in os.listdir(tempfile.gettempdir()) if f.startswith("author_gate_args_")]
+    leftovers = [f for f in os.listdir(spill_dir) if f.startswith("author_gate_args_")]
     assert not leftovers, leftovers                                                           # 用完即刪
     short = [py, "-m", "pytest", "a.py"]
     assert AG.spill_argv(short) == (short, None)

@@ -42,7 +42,7 @@ def test_scan_covers_module_tests_and_core_tests_but_not_non_tests():
     d = GP.load()
     tree = ["backend/modules/subcontract/tests/test_pii_archive_mirror_x.py", "backend/core/tests/test_privacy_y.py",
             "backend/tests/test_legal_amount_rounding_guard.py", "backend/tests/helper_approval.py", "backend/tests/platform/test_archive_z.py",
-            "frontend/pages/approval.html", "backend/tools/test_queue_tool.py"]
+            "backend/modules/case/pages/approval.html", "backend/tools/test_queue_tool.py"]
     got = GP.match_files(tree, d)
     assert got == sorted(["backend/modules/subcontract/tests/test_pii_archive_mirror_x.py", "backend/core/tests/test_privacy_y.py",
                           "backend/tests/test_legal_amount_rounding_guard.py", "backend/tests/platform/test_archive_z.py"])
