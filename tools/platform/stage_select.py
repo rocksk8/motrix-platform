@@ -555,4 +555,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    import nowindow                                      # 預設不跳視窗（背景執行時 git／python 子行程不彈主控台）；放在入口：被 import／load_module 時不受影響
+    nowindow.install()
     sys.exit(main())
