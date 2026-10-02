@@ -581,4 +581,5 @@ def replay_main(argv):
 
 
 if __name__ == "__main__":
+    nowindow.install()                                   # 入口先裝（main() 裡也會裝，這裡讓靜態守門認得：背景執行時每個子行程不彈主控台視窗）
     sys.exit(main())
