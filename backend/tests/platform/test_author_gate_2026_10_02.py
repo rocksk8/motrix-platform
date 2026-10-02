@@ -110,6 +110,22 @@ def test_quick_drops_the_platform_floor_and_cuts_to_the_changed_modules_own_test
     assert "backend/tests/platform/test_a.py" in full["A1"] and "backend/modules/accounting/tests/test_x.py" in full["A3"] and not full["quick_cut"]
 
 
+def test_quick_adds_the_global_scanner_guards_when_the_diff_touches_endpoints_or_pages():
+    """批3d：quick 沒選到 write_endpoints_are_audited／view_filter_marking（掃整個端點／頁面母體的全域守門，不在改動模組、也不是樣式檔）。
+    diff 動到 modules/*/api/*.py ⇒ 加端點掃描；動到前端頁面／js ⇒ 加頁面掃描；只動純後端非端點檔 ⇒ 都不加。反向控制見最後一個斷言（沒觸發就沒有）。"""
+    tree = ["backend/tests/test_write_endpoints_are_audited_2026_09_24.py", "backend/tests/test_view_filter_marking_2026_09_25.py",
+            "backend/tests/platform/test_page_paths_centralized.py", "backend/tests/test_legal_amount_rounding_guard.py", "backend/tests/test_other.py"]
+    api = AG.build_selection(None, None, tree, ["backend/modules/subcontract/api/contractor_vouchers.py"], quick=True)
+    assert "backend/tests/test_write_endpoints_are_audited_2026_09_24.py" in api["A3"] and "backend/tests/test_view_filter_marking_2026_09_25.py" not in api["A3"]
+    front = AG.build_selection(None, None, tree, ["frontend/js/case-management-dispatch.js"], quick=True)
+    assert "backend/tests/test_view_filter_marking_2026_09_25.py" in front["A3"] and "backend/tests/platform/test_page_paths_centralized.py" in front["A3"]
+    assert "backend/tests/test_write_endpoints_are_audited_2026_09_24.py" not in front["A3"]
+    none = AG.build_selection(None, None, tree, ["backend/modules/subcontract/remit_split.py"], quick=True)
+    assert not [f for f in none["A3"] if "audited" in f or "filter_marking" in f]
+    full = AG.build_selection(None, None, tree, ["backend/modules/subcontract/api/contractor_vouchers.py"])
+    assert full["A3"] == []                                                     # 非 quick 不走這條（完整版底板另有選法）
+
+
 def test_build_selection_survives_missing_plans():
     sel = AG.build_selection(None, None, [], [])
     assert sel["non_e2e"] == [] and sel["E"] == [] and sel["forced_full"] == []
