@@ -41,6 +41,7 @@ function expenseTypesPage() {
     view: 'list', rows: [], docTypes: [], loading: true,
     key: '', isNew: false, newKey: '', body: null, meta: null,
     problems: [], msg: '', err: '', busy: false, draftEtag: null, conflict: null, note: '', changes: null, _initDone: false, _prev: null,
+    defBody: null, refreshOpen: false, skipped: {}, adopted: [],
 
     _hdr: function () {
       var s = {}
@@ -120,10 +121,41 @@ function expenseTypesPage() {
       }
       this.isNew = false; this.key = key
       this.body = src ? clone(src) : newBody()
+      await this.loadDefault(key)
       if (!this.body.fields) this.body.fields = []
       if (!this.body.numbering) this.body.numbering = { prefix: '' }
       this.view = 'edit'
       if (this.fdMount) this.fdMount()
+    },
+    // ── D14／D15 出貨範本：複製到草稿、與出貨範本逐項比較（只改畫面上的草稿；存草稿、發布仍由使用者按）
+    async loadDefault(key) {
+      this.defBody = null; this.refreshOpen = false; this.skipped = {}; this.adopted = []
+      try {
+        var r = await this._call('GET', '/api/definitions/' + KIND + '/' + encodeURIComponent(key) + '/default')
+        if (r.ok && r.data && r.data.body && typeof r.data.body === 'object') this.defBody = r.data.body
+      } catch (e) { /* 取不到＝不顯示比較功能 */ }
+    },
+    get refreshList() {
+      var R = window.ExpenseTypeRefresh, sk = this.skipped
+      if (!R || !this.defBody || !this.body) return []
+      return R.compute(this.body, this.defBody).filter(function (it) { return !sk[it.id] })
+    },
+    rfPreview: function (v) { return window.ExpenseTypeRefresh ? window.ExpenseTypeRefresh.preview(v) : '' },
+    rfRemount: function () { if (this.useFD && this.fdMount) { this.fdDestroy(); this.fdMount() } if (this._prev) this.showPreview() },
+    rfAdopt: function (it) {
+      if (!window.ExpenseTypeRefresh.apply(this.body, it)) { this.err = '這一項無法自動套用，請在設計器手動修改'; return }
+      this.adopted.push(it.id); this.msg = '已採用「' + it.label + '」（尚未儲存，請按「儲存草稿」）'; this.err = ''
+      this.rfRemount()
+    },
+    rfKeep: function (it) { var sk = Object.assign({}, this.skipped); sk[it.id] = true; this.skipped = sk },
+    async copyDefault() {
+      if (this.busy || this.isNew || !this.defBody) return
+      var ok = window.MotrixUI ? await window.MotrixUI.confirm('用出貨範本取代目前畫面上的內容，並存成草稿（目前的草稿內容會被取代）。不會自動發布，發布前還可以再修改。確定？', { okText: '複製到草稿' }) : true
+      if (!ok) return
+      this.body = clone(this.defBody); this.adopted = ['（整份出貨範本）']; this.skipped = {}
+      this.rfRemount()
+      await this.saveDraft()
+      if (!this.err && !this.conflict) this.msg = '已複製出貨範本到草稿（尚未發布；確認內容後再按「發布」）'
     },
     back() { if (this.fdDestroy) this.fdDestroy(); this.view = 'list'; this.body = null; this.loadList() },
 
@@ -220,7 +252,7 @@ function expenseTypesPage() {
       return this.problems.length === 0
     },
     // K-2 草稿並行保護：存草稿帶載入時的 base_etag；409 draft_conflict ⇒ 顯示「別人剛改過」提示（重新載入／複製我的內容／用我的覆蓋／先不處理）
-    _etagBody(extra) { var p = { body: this.body }; if (this.draftEtag !== null) p.base_etag = this.draftEtag; return Object.assign(p, extra || {}) },
+    _etagBody(extra) { var p = { body: this.body }; if (this.draftEtag !== null) p.base_etag = this.draftEtag; if (this.adopted.length) p.adopted = this.adopted.slice(); return Object.assign(p, extra || {}) },
     _isConflict(r) { return r.status === 409 && r.data && r.data.code === 'draft_conflict' },
     _onConflict(r) { this.conflict = r.data.current || {}; this.err = ''; this.msg = '' },
     conflictWho() { var c = this.conflict || {}; return (c.created_by || '另一位使用者') + (c.created_at ? '，' + String(c.created_at).replace('T', ' ').slice(0, 16) : '') },

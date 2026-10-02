@@ -77,6 +77,7 @@
    "js:js/module-builder-output.js",
    "js:js/expense-types.js",
    "js:js/expense-types-designer.js",
+   "js:js/expense-type-refresh.js",
    "js:static/custom-layout.js",
    "js:static/mount-tabs.js",
    "js:static/file-preview.js",

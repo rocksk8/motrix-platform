@@ -240,6 +240,15 @@ def get_definition(kind: str, key: str, scope: str = Query("company"), authoriza
         conn.close()
 
 
+@router.get("/api/definitions/{kind}/{key}/default")
+def get_definition_default(kind: str, key: str, authorization: str = Header(None)):
+    """程式出貨預設（v0；不看資料庫）。沒有預設 ⇒ `{"body": null}`。D14／D15：複製出貨範本到草稿、與出貨範本逐項比較。"""
+    _require_user(authorization, require_superadmin=True)
+    if kind not in D.kinds():
+        raise HTTPException(400, "未知的定義種類")
+    return {"body": D.default_for(kind, key)}
+
+
 @router.put("/api/definitions/{kind}/{key}/draft")
 def save_definition_draft(kind: str, key: str, scope: str = Query("company"), payload: dict = Body(...),
                           authorization: str = Header(None)):
@@ -260,8 +269,12 @@ def save_definition_draft(kind: str, key: str, scope: str = Query("company"), pa
                "用我的覆蓋 %s %s（%s）草稿（原草稿 %s 於 %s）" % (kind, key, scope, d["overridden"]["created_by"], d["overridden"]["created_at"]),
                {"overridden": d["overridden"]})
     else:
+        extra = {"unguarded": True} if base_etag is None else {}
+        _ad = payload.get("adopted")                                     # D14／D15：採用出貨範本的項目（路徑；寫稽核，最多 200 項）
+        if isinstance(_ad, list) and _ad:
+            extra["adopted_from_default"] = [str(x)[:200] for x in _ad[:200]]
         _audit(_tok(authorization), "definitions.save_draft", "ui_definition", target,
-               "存 %s %s（%s）草稿" % (kind, key, scope), {"unguarded": True} if base_etag is None else {})
+               "存 %s %s（%s）草稿%s" % (kind, key, scope, "（採用出貨範本 %d 項）" % len(extra["adopted_from_default"]) if "adopted_from_default" in extra else ""), extra)
     return {"draft": d, "etag": d.get("etag", ""), "problems": D.validate(kind, key, d["body"])}
 
 
