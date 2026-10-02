@@ -6938,20 +6938,40 @@
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:custom_builder_support",
+    "helper:custom_fields",
+    "helper:custom_files",
+    "helper:custom_finance",
+    "helper:custom_history",
+    "helper:custom_modules",
     "helper:dates",
+    "helper:doc_render",
+    "helper:doc_template",
     "helper:email_notify",
+    "helper:expense_types",
     "helper:financial_mask",
+    "helper:formula",
+    "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:prefill_sources",
     "helper:privacy_notice",
+    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
+    "helper:tax_calc",
     "helper:tiered_approval",
+    "helper:uploads",
+    "mod:case/expense_forms",
     "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/material_notify",
-    "mod:case/material_payment"
+    "mod:case/material_payment",
+    "mod:case/purchase_items",
+    "mod:case/quotations",
+    "mod:case/quote_terms",
+    "mod:case/recognition"
    ],
    "imports": [
     "core:db",
@@ -7050,6 +7070,15 @@
    ],
    "tables_r_transitive": [
     "approval_delegates",
+    "audit_log",
+    "case_extra_expenses",
+    "case_material_approvals",
+    "case_stages",
+    "contractor_dispatches",
+    "contractor_payment_vouchers",
+    "custom_record_finance_outbox",
+    "custom_record_values",
+    "custom_records",
     "daily_tasks",
     "departments",
     "dev_cases",
@@ -7059,7 +7088,9 @@
     "sessions",
     "shipping_notes",
     "suppliers",
-    "users"
+    "ui_definitions",
+    "users",
+    "vendor_contractors"
    ],
    "tables_w": [
     "case_material_payments"
@@ -7069,6 +7100,14 @@
     "case_material_approvals",
     "case_material_payment_lines",
     "case_material_payments",
+    "custom_record_counters",
+    "custom_record_files",
+    "custom_record_finance_outbox",
+    "custom_record_log",
+    "custom_record_revisions",
+    "custom_record_snapshots",
+    "custom_record_values",
+    "custom_records",
     "notifications",
     "quotations",
     "system_settings"
@@ -7850,6 +7889,7 @@
     "quotations"
    ],
    "tables_w": [
+    "audit_log",
     "case_material_approvals"
    ]
   },
@@ -7861,7 +7901,8 @@
     "helper:dates",
     "helper:financial_mask",
     "mod:case/material_approval",
-    "mod:case/material_payment"
+    "mod:case/material_payment",
+    "mod:case/purchase_items"
    ],
    "kind": "mod",
    "module_key": "case",
@@ -7898,7 +7939,8 @@
    "imports": [
     "helper:dates",
     "helper:tiered_approval",
-    "mod:case/material_approval"
+    "mod:case/material_approval",
+    "mod:case/purchase_items"
    ],
    "kind": "mod",
    "module_key": "case",
@@ -17467,6 +17509,7 @@
     "helper:company_setup",
     "helper:geo",
     "helper:startup",
+    "mod:case/material_approval",
     "mod:crm/api",
     "plat:migrations",
     "router:approval_queue",
