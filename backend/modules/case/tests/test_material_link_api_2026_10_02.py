@@ -144,3 +144,23 @@ def test_submit_check_never_counts_the_order_being_checked_even_if_it_already_co
     _put_materials([{"itemId": "m1", "itemName": "x", "quantity": 6, "unit": "台", "unitPrice": 1, "totalPrice": 6, "quoteItemId": "a"}], {"m1": "已核准"})
     res = _check({"itemId": "m1", "quoteItemId": "a", "quantity": 6, "totalPrice": 6}, exclude="m1")
     assert res["problems"] == [] and res["snapshot"]["overPlanQty"] == 0                  # 6/10，自己不重複算
+
+
+# ── 一個採購單行只對應一筆活的材料申請（送審檢查 po_line_taken）──────────────────
+
+def test_submit_check_rejects_a_po_line_already_claimed_by_a_live_request_but_not_by_a_draft(W):
+    c, h = W
+    po = _approved_po(c, h, [_ln("a", 3, unitCost=1000)])
+    mine = {"itemId": "m2", "quoteItemId": "a", "quantity": 3, "totalPrice": 3000, "poDocCode": po["docCode"], "poLine": 1}
+    first = {"itemId": "m1", "itemName": "先到的", "quoteItemId": "a", "quantity": 3, "unit": "台", "unitPrice": 1000, "totalPrice": 3000,
+             "poDocCode": po["docCode"], "poLine": 1}
+    _put_materials([first], {"m1": "草稿"})
+    assert _codes(_check(mine)) == []                                                  # 草稿不占：可以送審
+    cn = db.get_db()
+    cn.execute("UPDATE case_material_approvals SET status='待審核' WHERE quote_no=? AND item_id='m1'", (NO,))
+    cn.commit()
+    cn.close()
+    res = _check(mine)
+    assert _codes(res) == ["po_line_taken"] and "先到的" in res["problems"][0]["message"]   # 另一筆活的（待審核）占了同一行
+    assert _codes(_check(dict(first, itemId="m1"), exclude="m1")) == []                # 自己不算占用自己
+    assert _codes(_check(dict(mine, poLine=2))) == ["bad_link"]                          # 別的行不受影響（這張採購單只有一行 ⇒ 行號超出另算 bad_link）

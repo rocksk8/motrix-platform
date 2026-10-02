@@ -346,6 +346,7 @@ def material_submit_check(conn, quote_no, order, *, exclude_item_id=None) -> dic
       超出必須有 `overPlanReason`（`over_plan_reason_required`，Q2）。連到有效採購單者與採購單是同一筆採購，採購單那邊已驗，這裡不重複。
     - `snapshot`：送審當下的判定結果（`linkState`／`linkReason`／`overPlanQty`／`overPlanReason`），寫進 `approval_json` 讓簽核人看到的是送審當下的狀態。
     純讀、不寫。`exclude_item_id`＝正在送審的叫料列（不把自己算進已用量）。"""
+    from modules.case import material_approval as MA
     problems = []
     order = order or {}
     data, rows = _case_state(conn, quote_no)
@@ -358,8 +359,14 @@ def material_submit_check(conn, quote_no, order, *, exclude_item_id=None) -> dic
     if str(order.get("poDocCode") or "").strip() and not link_ok:
         problems.append({"code": "bad_link", "message": "材料申請連到的採購單無效（%s）：必須是同案件、待審核／簽核中／已核准的採購單" % link_reason})
     over, reason = 0.0, str(order.get("overPlanReason") or "").strip()
+    others = [(o, st) for o, st in load_material_orders(conn, quote_no, data) if str(o.get("itemId")) != str(exclude_item_id or order.get("itemId"))]
+    if link_ok and order.get("poLine") not in (None, ""):                                  # 一個採購單行只能對應一筆「活的」材料申請（草稿／已退回／已取消不占）
+        key = (str(order.get("poDocCode")).strip(), int(order.get("poLine")))
+        for o, st in others:
+            if MA.cost_state(st) != "excluded" and _link_check(o, po_rows)[0] and o.get("poLine") not in (None, "")                     and (str(o.get("poDocCode")).strip(), int(o.get("poLine"))) == key:
+                problems.append({"code": "po_line_taken", "message": "採購單 %s 第 %d 列已對應另一筆材料申請（%s）" % (key[0], key[1], o.get("itemName") or o.get("itemId"))})
+                break
     if qid in plan and not link_ok:
-        others = [(o, st) for o, st in load_material_orders(conn, quote_no, data) if str(o.get("itemId")) != str(exclude_item_id or order.get("itemId"))]
         used = usage(rows, extra_ordered=material_ordered(others, po_rows)).get(qid, {"orderedQty": 0.0})["orderedQty"]
         over = max(used + _num(order.get("quantity")) - plan[qid]["planQty"], 0.0)
         if over > 1e-9 and not reason:

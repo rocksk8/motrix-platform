@@ -11,9 +11,8 @@ window.CM_PARTS.push(() => ({
     mlPick: {},           // 匯入面板勾選：key → true
     mlLoadingList: false,
     mlMsg: '',
-    // 清單頁籤：approved＝已核准＋舊單（預設）／review／draft／cancelled／all
+    // 清單頁籤：approved＝已核准＋舊單＋尚未送審的草稿（預設）／review／returned／cancelled／all
     mlTab: 'approved',
-    _mlJustImported: false,   // 帶入後尚未儲存；儲存重載後切到「草稿與退回」，剛存的草稿才看得到
     mlTick: 0,            // 讓 Alpine 在清單重載後重新計算（比照 moBusy 類計數器）
 
     _mlHeaders() { return { Authorization: 'Bearer ' + this.session.token } },
@@ -26,7 +25,6 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders/link-status`, { headers: this._mlHeaders() })
         if (r.ok && this.selected?.quote_no === quoteNo) this.mlStatus = (await r.json()).statuses || {}
       } catch {}
-      if (this._mlJustImported && this.mlTab === 'approved' && !this.moDirty) { this.mlTab = 'draft'; this._mlJustImported = false }
       this.mlTick++
     },
 
@@ -92,7 +90,6 @@ window.CM_PARTS.push(() => ({
       this.mlPick = {}
       this.mlPanel = ''
       this.mlTab = 'approved'
-      this._mlJustImported = true
       this.mlMsg = `已帶入 ${n} 筆（草稿）：請選供應商後儲存，再送審`
     },
     _mlPush(o) {
@@ -108,16 +105,16 @@ window.CM_PARTS.push(() => ({
       this.moMsg = ''
     },
 
-    // 頁籤：舊單（沒有審核列）與已核准同列；尚未儲存的新列在每個頁籤都顯示（不然按了「帶入」會看不到）
+    // 頁籤：舊單（沒有審核列）、已核准、尚未送審的草稿同列（預設）；尚未儲存的新列在每個頁籤都顯示
     mlTabOk(m) { return this._mlTabOf(m, this.mlTab) },
     _mlTabOf(m, tab) {
       if (tab === 'all' || m._saved === false) return true
       const a = (this.moApprovals || {})[m.itemId] || {}
       const st = a.legacy ? '' : (a.status || '')
       switch (tab) {
-        case 'approved': return st === '' || st === '已核准'
+        case 'approved': return st === '' || st === '已核准' || st === '草稿'      // 草稿＝尚未送審：預設分頁直接看得到
         case 'review': return st === '待審核' || st === '簽核中'
-        case 'draft': return st === '草稿' || st === '已退回'
+        case 'returned': return st === '已退回'
         case 'cancelled': return st === '已取消'
       }
       return true
@@ -135,6 +132,12 @@ window.CM_PARTS.push(() => ({
       return s && s.state === 'none' ? s.text : ''
     },
     _mlNoPo: '該材料申請未申請採購單',
+    // 尚未送審：新帶入／新增但未存、或已存草稿（未進報表／總帳、不佔額度、不在簽核佇列）
+    mlDraftBadge(m) {
+      if (m._saved === false) return '尚未送審'
+      const a = (this.moApprovals || {})[m.itemId] || {}
+      return !a.legacy && a.status === '草稿' ? '尚未送審' : ''
+    },
     mlLinkedText(m) {
       const s = this.mlStatus[m.itemId]
       return s && s.state === 'linked' ? `已對應採購單 ${m.poDocCode}${m.poLine ? '（第 ' + m.poLine + ' 列）' : ''}` : ''

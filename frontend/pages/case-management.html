@@ -2388,7 +2388,7 @@
                       </div>
                     </div>
                     <div x-show="materialOrders.length > 0" data-testid="ml-tabs" style="display:flex;gap:6px;flex-wrap:wrap;font-family:var(--font-zh)">
-                      <template x-for="t in [['approved','已核准／舊單'],['review','審核中'],['draft','草稿與退回'],['cancelled','已取消'],['all','全部']]" :key="t[0]">
+                      <template x-for="t in [['approved','已核准／舊單／尚未送審'],['review','審核中'],['returned','已退回'],['cancelled','已取消'],['all','全部']]" :key="t[0]">
                         <button type="button" :data-testid="'ml-tab-' + t[0]" @click="mlTab = t[0]"
                                 :style="'font-size:11px;padding:2px 10px;border-radius:12px;cursor:pointer;border:1px solid var(--line);' + (mlTab === t[0] ? 'background:var(--accent-light);font-weight:700' : 'background:var(--surface)')">
                           <span x-text="t[1]"></span><span x-show="t[0] !== 'all'" x-text="' ' + mlTabCount(t[0])"></span>
@@ -2559,6 +2559,7 @@
 
                       <!-- 32-S4d：連結列（報價單品項／採購單明細／未申請採購單標註）；獨立一列，不與匯款區塊混在一起 -->
                       <div :data-testid="'ml-row-' + m.itemId" style="margin-top:6px;font-size:11px;font-family:var(--font-zh);display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+                        <span x-show="mlDraftBadge(m)" :data-testid="'ml-draft-' + m.itemId" x-text="mlDraftBadge(m)" style="padding:1px 8px;border-radius:10px;border:1px solid var(--line);color:var(--text-dim)"></span>
                         <span x-show="m.quoteItemId" :data-testid="'ml-item-' + m.itemId" x-text="'報價品項：' + mlQuoteName(m.quoteItemId)" style="color:var(--text-dim)"></span>
                         <span x-show="mlLinkedText(m)" :data-testid="'ml-linked-' + m.itemId" x-text="mlLinkedText(m)" style="color:var(--success)"></span>
                         <span x-show="mlBadge(m)" :data-testid="'ml-badge-' + m.itemId" x-text="mlBadge(m)"
