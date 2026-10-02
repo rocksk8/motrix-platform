@@ -7,6 +7,7 @@
   → 再開一期：進度款固定金額 800 ⇒ 試算出錯（超過剩餘額度）、確認鈕停用；改 700 ⇒ 最後一期、補到與整筆一致 → 確認
   → 已全部申請完：不再有「新增一期」鈕
   → 兩張都改成待審核（測試直接改列）⇒ 只有最新一張有「作廢」鈕；作廢（原因必填）⇒ DB voided、卡片灰字、額度回復、「新增一期」鈕回來。
+  → 第 1 期登錄發票（S4）⇒ 卡片顯示號碼與日期、DB 有值；第 2 期顯示「未登錄發票（尚不認列）」。
 終點狀態以後端列為準；每個階段留截圖（logs/e2e-shots/wip-t33-remit-s3-a3）。"""
 import json
 import os
@@ -122,6 +123,22 @@ def test_installment_vouchers_create_preview_and_void_in_the_case_page(live_serv
     assert "剩餘 0" in page.inner_text('[data-testid="cv-progress"]')
     assert page.locator('[data-testid="cv-create-btn"]').count() == 0                             # 全部申請完：不再能新增
     _shot(page, "5-complete")
+
+    # 發票（S4／D11：可事後補）：第 1 期登錄發票 ⇒ DB 有號碼與日期、卡片顯示；第 2 期還沒有 ⇒ 顯示「未登錄發票」
+    assert "未登錄發票" in page.locator('[data-testid="cv-invoice-note"]:visible').nth(0).inner_text()
+    page.locator('[data-testid="cv-invoice-btn"]:visible').nth(0).click()
+    page.wait_for_selector('[data-testid="ui-dialog-input"]', state="visible", timeout=8000)
+    page.fill('[data-testid="ui-dialog-input"]', "AB-12345678")
+    page.click('[data-testid="ui-dialog-ok"]')
+    page.wait_for_function("() => { const i = document.querySelector('[data-testid=\"ui-dialog-input\"]'); return i && i.offsetParent !== null && i.value === '' }", timeout=8000)
+    page.fill('[data-testid="ui-dialog-input"]', "2026-10-05")
+    page.click('[data-testid="ui-dialog-ok"]')
+    page.wait_for_function("() => [...document.querySelectorAll('[data-testid=\"cv-invoice-note\"]')].some(e => e.offsetParent !== null && e.innerText.includes('AB-12345678'))", timeout=10000)
+    rows = _db("SELECT kind, inv_no, inv_date FROM contractor_payment_vouchers WHERE dispatch_id=? ORDER BY id", (did,))
+    assert [(r["inv_no"], r["inv_date"]) for r in rows] == [("AB-12345678", "2026-10-05"), ("", "")]
+    assert "2026-10-05" in page.locator('[data-testid="cv-invoice-note"]:visible').nth(0).inner_text()
+    assert "未登錄發票" in page.locator('[data-testid="cv-invoice-note"]:visible').nth(1).inner_text()
+    _shot(page, "5b-invoice")
 
     # 作廢：兩張都送審（直接改列）⇒ 只有最新一張有「作廢」鈕
     _db("UPDATE contractor_payment_vouchers SET status='待審核' WHERE dispatch_id=?", (did,))

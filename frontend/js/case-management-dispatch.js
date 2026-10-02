@@ -489,6 +489,25 @@ window.CM_PARTS.push(() => ({
       }
     },
 
+    // 登錄／更正／清除分期申請自己的發票（D11：可事後補；沒有發票日就不產生該期的應付認列分錄）。兩欄都留空＝清除。
+    async setVoucherInvoice(v) {
+      const no = await MotrixUI.prompt(`匯款申請「${v.voucherNo}」的發票號碼（可留空）：`, { value: v.invNo || '' })
+      if (no === null || no === undefined) return
+      const date = await MotrixUI.prompt(`發票日期（YYYY-MM-DD；留空＝清除發票，該期不認列）：`, { value: v.invDate || '' })
+      if (date === null || date === undefined) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/invoice`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ invNo: String(no).trim(), invDate: String(date).trim() })
+        })
+        const body = await r.json().catch(() => ({}))
+        if (!r.ok) { MotrixUI.toast(body.detail || '登錄失敗', {kind: 'error'}); return }
+        if (body.glWarning) MotrixUI.toast(body.glWarning, {kind: 'warning'})
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
+    },
+
     async deleteContractorVoucher(v) {
       if (!(await MotrixUI.confirm(`確定刪除匯款申請「${v.voucherNo}」？`, {danger: true}))) return
       try {

@@ -3046,6 +3046,9 @@
                             <button x-show="!v.isPaid" @click="revokeContractorVoucherApproval(v)" style="padding:3px 10px;font-size:11px;border:1px solid var(--tone-danger-border);background:var(--tone-danger-bg);color:var(--tone-danger-fg);border-radius:5px;cursor:pointer;white-space:nowrap">撤銷核准</button>
                           </div>
                           <button x-show="v.kind && !v.voidedAt && !v.isPaid && v.status!=='草稿' && _cvIsLatestOpen(d, v)" @click="voidContractorVoucher(v)" data-testid="cv-void-btn" style="padding:3px 10px;font-size:11px;border:1px solid var(--tone-danger-border);background:var(--tone-danger-bg);color:var(--tone-danger-fg);border-radius:5px;cursor:pointer;white-space:nowrap">作廢</button>
+                          <span x-show="v.kind && !v.voidedAt" data-testid="cv-invoice-note" style="font-size:11px;color:var(--text-secondary)"
+                                x-text="v.invDate ? ('發票 ' + (v.invNo || '（無號碼）') + '　' + v.invDate) : '未登錄發票（尚不認列）'"></span>
+                          <button x-show="v.kind && !v.voidedAt" @click="setVoucherInvoice(v)" data-testid="cv-invoice-btn" style="padding:3px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap" x-text="v.invDate ? '改發票' : '登錄發票'"></button>
                           <span x-show="v.voidedAt" data-testid="cv-voided-note" style="font-size:11px;color:var(--text-dim)" x-text="'已作廢：' + (v.voidReason || '')"></span>
                           <button x-show="!v.voidedAt" @click="previewContractorVoucherPdf(v)" :disabled="cvPreviewFetching"
                                   style="padding:3px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">預覽</button>
