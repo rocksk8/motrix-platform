@@ -98,7 +98,8 @@ def _scenario(c, h):
         _order("O", 1, 400, paidStatus="paid", paidAmount=400, paidDate="2026-08-01"),                  # 舊付款歷史（舊單）
         _order("C", 1, 300),                                                                            # 已取消
         _order("L", 1, 200, paidStatus="paid", paidAmount=200, paidDate="2026-08-02"),                  # 舊單（沒有審核列）
-    ], {"K": "已核准", "N": "已核准", "D": "草稿", "P": "待審核", "C": "已取消", "O": "已核准"})
+        _order("H", 1, 100, quoteItemId="a", poDocCode=po["docCode"], poLine=1, paidStatus="paid", paidAmount=100, paidDate="2026-08-03"),   # 有連結但已有付款紀錄 ⇒ 不算連結
+    ], {"K": "已核准", "N": "已核准", "D": "草稿", "P": "待審核", "C": "已取消", "O": "已核准", "H": "已核准"})
 
 
 @pytest.mark.parametrize("basis", ["accrual", "cash"])
@@ -121,14 +122,15 @@ def test_primitive_fields_and_quote_filter(W):
     cn = db.get_db()
     try:
         rows = {r["itemId"]: r for r in R.material_money_rows(cn)}
-        assert set(rows) == {"K", "N", "D", "P", "Z", "O", "C", "L"}
+        assert set(rows) == {"K", "N", "D", "P", "Z", "O", "C", "L", "H"}
         assert (rows["K"]["linked"], rows["K"]["noPo"]) == (True, False)                                # 連採購單：不標
         assert (rows["N"]["linked"], rows["N"]["noPo"], rows["N"]["cost"], rows["N"]["state"]) == (False, True, "counted", "已核准")
         assert (rows["D"]["cost"], rows["P"]["cost"], rows["C"]["cost"]) == ("excluded", "pending", "excluded")
         assert rows["L"]["state"] == "" and rows["L"]["noPo"] is False                                  # 舊單不標
         assert rows["Z"]["noPo"] is False and rows["Z"]["total"] == 0.0                                 # $0 不標
+        assert (rows["H"]["linked"], rows["H"]["noPo"]) == (False, True)                                # 已有付款紀錄不視為連結 ⇒ 金額留在材料申請、標「未申請採購單」
         assert rows["N"]["total"] == 800.0 and rows["N"]["name"].startswith("品")
-        assert [r["quoteNo"] for r in R.material_money_rows(cn, quote_no=NO)] == [NO] * 8
+        assert [r["quoteNo"] for r in R.material_money_rows(cn, quote_no=NO)] == [NO] * 9
         assert R.material_money_rows(cn, quote_no="MQ-NOPE") == []                                      # 只取那一案
     finally:
         cn.close()
