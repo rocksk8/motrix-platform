@@ -17,7 +17,7 @@ UNADOPTED = 12000
 
 
 def _money_after(html, label):
-    m = re.search(re.escape(label) + r"</td><td[^>]*>\s*(?:−\s*)?([\d,]+)", html)
+    m = re.search(re.escape(label) + r"</td><td[^>]*>\s*(?:NT\$\s*)?(?:−\s*)?([\d,]+)", html)
     assert m, label
     return int(m.group(1).replace(",", ""))
 
@@ -63,11 +63,11 @@ def test_closing_pdf_is_identical_for_history_with_or_without_the_new_key(client
 
 def test_bonus_pdf_settlement_table_gets_an_extra_row_only_when_unadopted(client):
     from modules.payroll import bonus_pdf as BP
-    base = BP._settlement_rows_html(dict(SUMMARY))
+    base = BP._settlement_rows_html({"summary": dict(SUMMARY)})
     assert base.count("<tr>") == 11 and "採購單" not in base                 # 規格的 11 列不變
-    with_po = BP._settlement_rows_html(dict(SUMMARY, itemPoUnadopted=UNADOPTED, totalActualCost=SUMMARY["totalActualCost"] + UNADOPTED))
+    with_po = BP._settlement_rows_html({"summary": dict(SUMMARY, itemPoUnadopted=UNADOPTED, totalActualCost=SUMMARY["totalActualCost"] + UNADOPTED)})
     assert with_po.count("<tr>") == 12 and "採購單（品項尚未採用）" in with_po
-    assert BP._settlement_rows_html(dict(SUMMARY, itemPoUnadopted=0)) == base          # 0 ⇒ 逐字不變
+    assert BP._settlement_rows_html({"summary": dict(SUMMARY, itemPoUnadopted=0)}) == base          # 0 ⇒ 逐字不變
     parts = [_money_after(with_po, l) for l in ("品項實際成本", "採購單（品項尚未採用）", "額外支出", "承攬商派發成本")]
     assert sum(parts) == _money_after(with_po, "實際總成本")
 
