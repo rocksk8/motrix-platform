@@ -57,6 +57,25 @@ def _now():
     return datetime.now().isoformat(timespec="seconds")
 
 
+def case_row(conn, quote_no: str):
+    """案件列（dict；沒有 ⇒ None）：`data_json, customer_name, project_name, sales_person_id, sales_person, assigned_user_ids, deal_tag`。
+    成交標籤＝欄位優先、空時退回 `data_json.dealTag`，**逐筆在 Python 解析**（不用 SQL_DEAL_TAG／json_extract：壞的一筆不可讓整個查詢丟例外；§G5 #2）。"""
+    r = conn.execute("SELECT data_json, customer_name, project_name, sales_person_id, sales_person, assigned_user_ids, deal_tag"
+                     " FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not r:
+        return None
+    d = dict(r)
+    tag = d.get("deal_tag") or ""
+    if not tag:
+        try:
+            dj = json.loads(d.get("data_json") or "{}")
+        except (TypeError, ValueError):
+            dj = {}
+        tag = (dj.get("dealTag") or "") if isinstance(dj, dict) else ""
+    d["deal_tag"] = tag
+    return d
+
+
 def _display(user):
     return user.get("display_name") or user["username"]
 
@@ -222,8 +241,10 @@ def approve(conn, quote_no: str, order: dict, user: dict, comment: str = "", cas
     done = appr["currentTier"] >= len(tiers)
     appr.setdefault("history", []).append({"at": now, "by": user["username"], "byDisplay": _display(user), "action": "approve", "tier": ct, "comment": comment or ""})
     status = S_APPROVED if done else S_IN_PROGRESS
-    extra = {"approved_at": now, "content_hash": content_hash(order)} if done else {}
-    _save(conn, quote_no, item_id, status, appr, now, **extra)
+    if done:                                                                         # 明列關鍵字（守門 test_case_summary_purpose：禁止 ** 傳參數）
+        _save(conn, quote_no, item_id, status, appr, now, approved_at=now, content_hash=content_hash(order))
+    else:
+        _save(conn, quote_no, item_id, status, appr, now)
     nxt = [] if done else [a["username"] for a in (tiers[appr["currentTier"]].get("approvers") or [])]
     return {"status": status, "currentTier": appr["currentTier"], "nextApprovers": nxt, "requester": appr.get("requestedBy", ""), "done": done,
             "tierNo": appr["currentTier"] + 1, "totalTiers": len(tiers)}

@@ -18,10 +18,10 @@ from helpers import _audit, _notify, _require_user, _tok, notify_org_chain_notic
 from helpers.approval_queue import approval_raw_of as _approval_raw_of, tier_fields as _queue_tier_fields
 from helpers.case_access import require_case
 from helpers.financial_mask import money_visible
+from modules.case import material_approval as MA
 from modules.case import material_guard as MG
 from modules.case import material_notify as MN
 from modules.case import material_payment as MP
-from modules.case.quotations import SQL_DEAL_TAG
 
 router = APIRouter()
 
@@ -31,8 +31,7 @@ def _http(e: MP.MaterialPaymentError) -> HTTPException:
 
 
 def _load_case(conn, quote_no: str):
-    q = conn.execute("SELECT data_json, customer_name, project_name, sales_person_id, sales_person, assigned_user_ids, %s AS deal_tag"
-                     " FROM quotations WHERE quote_no=?" % SQL_DEAL_TAG, (quote_no,)).fetchone()
+    q = MA.case_row(conn, quote_no)
     if not q:
         raise HTTPException(404, "報價單 %s 不存在" % quote_no)
     return q

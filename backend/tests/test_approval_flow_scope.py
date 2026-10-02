@@ -59,6 +59,10 @@ def test_scope_defaults_and_editing(client, make_user):
         # 預設跟統一流程＝派發與報價單、出貨單同一條簽核鏈（使用者 2026-10-01 派發審核裁示：「同一流程設定」）；
         # 可逆（簽核設定頁取消勾選就改獨立的 contractor_dispatch_approval_flow）。
         "contractor_dispatch": True,
+        # 31-C（叫料審核與叫料匯款申請）：`register_doc_type("material_order"／"material_payment", unified=True)`。
+        # 預設跟統一流程＝與額外支出、派發同一條簽核鏈（設計 MATERIAL-ORDER-APPROVAL-DESIGN §3.2／§3.4：沿用既有簽核鏈）；
+        # 可逆（簽核設定頁取消勾選就改獨立流程）。
+        "material_order": True, "material_payment": True,
     }
     for key, want in EXPECTED_SCOPE.items():
         assert key in scope, f"既有的文件類型 {key} 從 scope 裡消失了：{scope}"
@@ -199,6 +203,7 @@ FULL_SCOPE_BODY = {
     "completion": True, "extra_expense": True, "voucher": False,
     "bonus": False,
     "contractor_dispatch": False,      # 31-A：只求 body 完整（值不是業務裁定；預設分組登記在 EXPECTED_SCOPE）
+    "material_order": False, "material_payment": False,     # 31-C：同上
 }
 
 

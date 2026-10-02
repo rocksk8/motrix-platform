@@ -369,7 +369,10 @@ def approve(conn, pid, order: dict, user: dict, comment: str = "", cascade: bool
         st = MA.status_of(conn, row["quote_no"], row["item_id"])
         if not MA.counts_as_approved(st):
             raise MaterialPaymentError(409, "叫料單已不是核准狀態（%s），這張匯款申請不能核准" % (st or "—"))
-    _save(conn, pid, S_APPROVED if done else S_IN_PROGRESS, appr, now, **({"approved_at": now} if done else {}))
+    if done:                                                                         # 明列關鍵字（守門 test_case_summary_purpose：禁止 ** 傳參數）
+        _save(conn, pid, S_APPROVED, appr, now, approved_at=now)
+    else:
+        _save(conn, pid, S_IN_PROGRESS, appr, now)
     nxt = [] if done else [a["username"] for a in (tiers[appr["currentTier"]].get("approvers") or [])]
     return {"status": S_APPROVED if done else S_IN_PROGRESS, "currentTier": appr["currentTier"], "nextApprovers": nxt,
             "requester": appr.get("requestedBy", ""), "done": done, "tierNo": appr["currentTier"] + 1, "totalTiers": len(tiers)}

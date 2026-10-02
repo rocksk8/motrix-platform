@@ -107,15 +107,18 @@ def _valid_order(o: dict):
 
 
 def _load_old(conn, quote_no: str):
-    r = conn.execute("SELECT json_extract(data_json,'$.caseRecord.materialOrders') AS mo, json_extract(data_json,'$.caseRecord.materials') AS mt"
-                     " FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
-    def _j(s):
-        try:
-            v = json.loads(s) if s else []
-        except (TypeError, ValueError):
-            v = []
+    r = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    if not r:
+        return [], []
+    try:                                                                              # 逐筆在 Python 解析（不用 json_extract：壞的一筆不可讓整個查詢丟例外；§G5 #2）
+        cr = (json.loads(r["data_json"] or "{}") or {}).get("caseRecord") or {}
+    except (TypeError, ValueError, AttributeError):
+        cr = {}
+    cr = cr if isinstance(cr, dict) else {}
+
+    def _j(v):
         return [x for x in v if isinstance(x, dict)] if isinstance(v, list) else []
-    return (_j(r["mo"]), _j(r["mt"])) if r else ([], [])
+    return _j(cr.get("materialOrders")), _j(cr.get("materials"))
 
 
 def enforce(conn, quote_no: str, data: dict, actor=None) -> list:
