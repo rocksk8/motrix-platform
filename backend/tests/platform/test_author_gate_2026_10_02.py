@@ -206,6 +206,17 @@ def test_dirty_tree_lists_modified_and_untracked_but_not_ignored(repo):
     assert sorted(AG.dirty_files(repo)) == ["a.txt", "new.txt"]
 
 
+def test_changed_files_leaves_out_deleted_and_renamed_away_files(repo):
+    """c7 回報：diff 刪掉／改名掉測試檔 ⇒ 舊路徑被選進 A4 ⇒ pytest -n 遇到不存在的路徑整批沒跑（exit 5 當紅）。changed_files 不列已刪除的檔（改名＝舊路徑消失、只列新路徑）。"""
+    base = _commit(repo, {"backend/tests/test_gone.py": "x = 1", "backend/tests/test_old.py": "y = 1", "backend/tests/test_keep.py": "z = 1"}, "base")
+    _git(repo, "rm", "-q", "backend/tests/test_gone.py")
+    _git(repo, "mv", "backend/tests/test_old.py", "backend/tests/test_renamed.py")
+    _git(repo, "commit", "-q", "-m", "delete and rename")
+    head = _git(repo, "rev-parse", "HEAD")
+    got = AG.changed_files(base, head, repo)
+    assert got == ["backend/tests/test_renamed.py"], got
+
+
 def test_changed_files_and_tree_files(repo):
     base = _commit(repo, {"backend/tests/test_old.py": "x"}, "base")
     head = _commit(repo, {"backend/tests/test_new_pii.py": "y"}, "head")

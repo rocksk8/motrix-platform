@@ -281,7 +281,7 @@ def tree_files_at(sha, repo=REPO):
 
 
 def changed_files(base, head, repo=REPO):
-    rc, out, err = _git("diff", "--name-only", "--no-renames", base, head, repo=repo)
+    rc, out, err = _git("diff", "--name-only", "--no-renames", "--diff-filter=d", base, head, repo=repo)   # 刪掉的檔不列：測試檔被刪／改名掉時，交給 pytest 的路徑不存在 ⇒ xdist 整批沒跑
     if rc != 0:
         raise RuntimeError("git diff 失敗：" + err.strip())
     return [f for f in out.splitlines() if f]
