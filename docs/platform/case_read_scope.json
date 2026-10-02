@@ -86,6 +86,12 @@
    "scope": "row_access"
   },
   {
+   "file": "modules/case/api/settlement_actuals.py",
+   "path": "/api/quotations/{quote_no}/settlement-actuals",
+   "handler": "settlement_actuals",
+   "scope": "row_access"
+  },
+  {
    "file": "modules/filehub/api.py",
    "path": "/api/filehub/search",
    "handler": "search",

@@ -108,25 +108,29 @@ def test_pick_items_raise_po_and_settlement_follows(live_server, make_user, e2e_
     assert (line["itemId"], line["qty"], line["amount"], line["overPlanQty"], line["overPlanReason"]) == ("a", 12, 12000, 2.0, "客戶加購"), line
     _shot(page, "3-submitted")
 
-    # ── 精算頁：採購單連結金額（尚未採用也計入總成本；採用後品項實際成本＝採購單金額）──
+    # ── 精算頁（33-B1，規則 A）：有採購的品項預設採用——實際取代估計；關掉採用＝手填取代、採購金額不另加（D8，只警示）──
     page.goto(f"{live_server}/pages/settlement.html?no={NO}")
     page.locator('[data-testid="stl-po-a"]').wait_for(state="visible", timeout=20000)
     S = "Alpine.$data(document.body)"
     s0 = page.evaluate(f"() => ({{...{S}.summary}})")
-    assert s0["itemPoUnadopted"] == 12000 and s0["itemActualTotal"] == 10500 + 525          # 品項預設實際成本（qty×cost×1.05）不含採購單
+    assert s0["itemPoUnadopted"] == 0 and s0["itemActualTotal"] == 12000 + 525              # 品項 a 實際＝採購單 12000（取代估計 10500）；b 沒採購＝估計 525
     assert page.evaluate(f"() => {S}.xeTotal") == 0                                         # 連結列不再算額外支出
-    assert s0["totalActualCost"] == 10500 + 525 + 12000
+    assert s0["totalActualCost"] == 12000 + 525 and s0["purchasedTotal"] == 12000
+    assert "已採用" in page.locator('[data-testid="stl-po-a"]').inner_text()
     _shot(page, "4-settlement")
-    page.locator('[data-testid="stl-adopt-a"]').click()
+    page.locator('[data-testid="stl-adopt-a"]').click()                                      # 取消採用
     s1 = page.evaluate(f"() => ({{...{S}.summary}})")
-    assert s1["itemPoUnadopted"] == 0 and s1["itemActualTotal"] == 12000 + 525 and s1["totalActualCost"] == 12000 + 525
-    page.wait_for_function("() => document.querySelector('[data-testid=\"stl-po-a\"]').innerText.includes('已採用')", timeout=5000)
-    _shot(page, "5-adopted")
+    assert s1["itemPoUnadopted"] == 0 and s1["itemActualTotal"] == 10500 + 525 and s1["totalActualCost"] == 10500 + 525   # 採購 12000 不另加
+    page.locator('[data-testid="stl-purchase-not-adopted"]').wait_for(state="visible", timeout=5000)
+    assert "12,000" in page.locator('[data-testid="stl-purchase-not-adopted"]').inner_text()
+    _shot(page, "5-not-adopted")
+    page.locator('[data-testid="stl-adopt-a"]').click()                                      # 再採用
+    assert page.evaluate(f"() => {S}.summary.totalActualCost") == 12000 + 525
     # 存草稿 ⇒ adoptSystem 存進精算資料；重開還在
     page.locator('[data-testid="stl-save-draft"]').click()
     page.wait_for_function(f"() => !{S}.saving", timeout=15000)
     saved = json.loads(_q("SELECT data_json FROM quotations WHERE quote_no=?", (NO,))[0]["data_json"])["settlement"]
-    assert [i["adoptSystem"] for i in saved["items"]] == [True, False] and saved["items"][0]["actualTotalCost"] == 12000
+    assert [i["adoptSystem"] for i in saved["items"]] == [True, True] and saved["items"][0]["actualTotalCost"] == 12000 and saved["offsets"] == []
     page.reload()
     page.locator('[data-testid="stl-po-a"]').wait_for(state="visible", timeout=20000)
     assert page.evaluate(f"() => {S}.summary.totalActualCost") == 12000 + 525

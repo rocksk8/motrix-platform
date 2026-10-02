@@ -4325,6 +4325,18 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         if existing_settlement.get("status") == "finalized" and user["role"] != "superadmin":
             conn.close()
             raise HTTPException(403, "精算已完結，僅超級管理員可重新修改")
+        if "offsets" in body.settlement:                       # 33-A4：沖銷對應的驗證（kind／品項存在／單一去處／ref 在未對應清單）
+            from modules.case import settlement_actuals as _SA
+            bad = _SA.validate_offsets(conn, quote_no, body.settlement.get("offsets"), existing_settlement.get("offsets"))
+            if bad:
+                conn.close()
+                raise HTTPException(422, bad)
+        if body.settlement.get("status") == "finalized" and existing_settlement.get("status") != "finalized":       # 33-A5（D10；只在「非完結 → 完結」轉換時比對，已完結的再存＝凍結快照不隨之後單據變動，da）：完結前後端用同一來源重算，與頁面送上的 summary 比對；差異超過進位誤差就拒絕
+            from modules.case import settlement_actuals as _SA
+            diffs = _SA.check_finalize(conn, quote_no, body.settlement)
+            if diffs:
+                conn.close()
+                raise HTTPException(409, "完結前系統重算的成本與畫面不一致（採購單、材料申請或額外支出在你編輯期間有變動）——請重新整理精算頁再完結。差異：" + "；".join(diffs))
         data["settlement"] = body.settlement
 
         # append edit history entry for settlement saves
