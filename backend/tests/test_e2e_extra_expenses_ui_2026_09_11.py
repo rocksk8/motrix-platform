@@ -53,6 +53,12 @@ def _seed_case(quote_no="MQ-XEUI-001"):
 def _open_tab(page, base_url, quote_no):
     page.goto(f"{base_url}/pages/case-management.html?q={quote_no}")
     page.wait_for_selector(TAB, timeout=20000)
+    # 終點狀態先到位再點（冷啟動／高負載偶發逾時的根因：分頁列比「案件選取＋案件整包載入」早出現，
+    # 點太早時 selectCase 之後的重設把剛切的分頁洗掉，面板永遠不出現）：等該案件已選取、整包載入的請求落地，才點分頁。
+    page.wait_for_function(
+        "(no) => { const d = Alpine.$data(document.querySelector('[x-data]')); return d && d.selected && d.selected.quote_no === no }",
+        arg=quote_no, timeout=30000)
+    page.wait_for_load_state("networkidle", timeout=30000)
     page.click(TAB)
     # 等載入真的結束（空狀態或項目列出現），不要等「載入中」消失——
     # 分頁列比載入早出現，那樣等會在還沒開始載入時就通過
