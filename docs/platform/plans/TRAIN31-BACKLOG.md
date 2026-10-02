@@ -142,3 +142,4 @@
 ## 第32包 c7 稽核（audit/train32-c7）：1 必修
 - M-1：material_payment_cashier.py:100 行內註解吞掉 `"fee"`／`"paidAt"` 鍵 ⇒ 出納差額審核表手續費／付款日為空。**第32包 745f3c2d 作廢**，已修（platform 52033606，case 1.0.87，測試斷言兩欄＋反向控制），重跑階段後重建新包。
 - should-fix（第33班）：S-1 legacyModified.count 讀改寫競態（兩個並行舊單編輯 → 兩筆稽核、count=1）；S-2 「材料申請匯款申請」用字重複（約 29 處）。觀察：sidebar.js dirty-probe 缺 try/catch；poLine=0 被當整張採購單；tags 未在伺服端正規化；version_manifest 缺第32班條目。
+- 2e 規格 rev.2（wip/t32-material-link-spec-2e@e50887ba；E4 改版）：一品項一筆材料申請（自動涵蓋該品項所有已核准採購單行，poSnapshot 給簽核人看）、追加走變更申請（M2：change_json 待審版、核准前舊版續生效、原子換版、不得低於已出貨＋保留量、一次一筆待審變更）、出貨單單一 materialLink；工量 12.5→13.5 天（M 7.0、S 4.0）；新增 3 題 N1（無報價品項的額外材料）、N2（自動涵蓋 vs 使用者選行）、N3（變更待審時舊版續生效）待問。USER-DECISIONS-TRAIN33.md@76925c66。
