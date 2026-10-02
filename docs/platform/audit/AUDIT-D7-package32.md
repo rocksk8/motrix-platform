@@ -13,3 +13,17 @@
 | verify_package --expect-db-version 116 | PASS | 對 `deploy_packages\20261002_185238_745f3c2d` 執行：0 項 FAIL；db.py `CURRENT_VERSION=116`＝`len(_MIGRATIONS)`＝116＝最後一筆 `_m116_case_roles_username`；包與工作樹相同；產品 full 13 模組、modules.lock 與包內模組一致；Leaflet 5／5；版本紀錄 481 筆欄位齊全；autostart 開關 2／2 |
 ## 限制
 唯讀，未安裝、未跑測試；簽章公鑰取自 `delivery.DELIVERY_PUBKEY_PEM`（工作樹）；`G:` 上的包與 `deploy_packages` 內的包是兩份（後者供 verify_package），兩者 commit 相同但**未逐檔比對這兩份之間的差異**（G: 那份已與 git archive 逐檔比對）。
+
+---
+# 重做（新第 32 包）：`20261002_200829_52033606_full`（commit 52033606580d419ca0705ae067b96bf04068ef30；837 檔／35,778,129 bytes）— PASS（必修 0）
+前一包：745f3c2d。package.sha256 SHA256＝73606BD622106215BDFAC14A26323B7241C9EBECDDD6834DEA5CA6244DB2A0C3（與回報相符）。
+| 項 | 結果 |
+|---|---|
+| 檔數／bytes／雜湊 | 837＝837＝delivery.files；bytes 相符；837 檔重算 0 不符 |
+| 簽章 | 真實 True；改 sha／meta／簽章各一位元組皆 False（反向控制） |
+| 與 745f3c2d 包差異 | 新增 0、移除 0、變更 7＝5 個建包產生檔（`.build_commit`、`export_ignore.json`、`modules.lock.json`、`deploy_manifest.json`，`version_manifest.json` 內容相同）＋**case 的 `CHANGELOG.md`、`material_payment_cashier.py`、`module.json`**；與 `git diff 745f3c2d 52033606`（4 檔：這 3 個＋1 個測試檔，測試檔在 export_ignore）完全吻合，無多無少 |
+| 內容 | `git archive 52033606` 833 檔＋4 個產生檔＝payload；逐檔雜湊相同，唯一例外 `version_manifest.json`（建包重產，481 筆＝git 481 筆，去掉 51 筆 `time:null` 後順序與內容相同；與前一包同況） |
+| export_ignore | 登記 1279＝`git ls-tree`−`git archive` 的 1279（差 0），commit 欄＝52033606，清單內檔無一出現在 payload；`.build_commit`＝52033606 |
+| 禁入掃描 | 正對照 PASS；包側 5 筆＝既有基線（`D:\MOTRIX-KEYS` 路徑字串，同前兩包），無金鑰內容 |
+| verify_package --expect-db-version 116 | 0 項 FAIL（對 `deploy_packages\20261002_200815_52033606`） |
+修正內容確認：`material_payment_cashier.py` 差異只有一處——把 `"diff"` 那行行尾註解移到行首、還原被註解吞掉的 `"fee"`、`"paidAt"` 兩個鍵。
