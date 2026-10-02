@@ -312,3 +312,18 @@ def test_static_guard_only_sync_order_paid_writes_paid_fields():
     i = src.index("def sync_order_paid")
     assert src.count("target.update({") == 2 and i > 0                                # 只有投影函式裡有（兩個分支）
     assert "sync_order_paid(conn" in src[src.index("def add_line"):src.index("def decide_line")] and "sync_order_paid(conn" in src[src.index("def decide_line"):src.index("def lines_by_order")]
+
+
+def test_amounts_are_rounded_half_up_to_cents_not_python_round(world):
+    """金額（元以下兩位）一律 half-up（X-VAT 規則；前端 MotrixLegalRound.halfUp）。Python `round()` 對二進位浮點會得到 0.145→0.14、2.675→2.67。
+    手算：0.145→0.15、2.675→2.68、1.005→1.01、-0.145→-0.15（遠離零）、100.1×2 的 200.2 不變、10000→10000。
+    付款明細的實付與手續費、叫料單的已付投影、剩餘額都走同一個 `MP.r2`。"""
+    for raw, want in ((0.145, 0.15), (2.675, 2.68), (1.005, 1.01), (-0.145, -0.15), (200.2, 200.2), (10000, 10000.0), ("12.345", 12.35)):
+        assert MP.r2(raw) == want, (raw, MP.r2(raw))
+    conn, sid = world
+    a = _approved(conn, sid, amount=1000)
+    r = MP.add_line(conn, a["id"], "2031-03-05", CASHIER, {"actualAmount": 0.145, "hasFee": True, "fee": 2.675})
+    assert (r["actual"], r["fee"]) == (0.15, 2.68), r                                          # 實付與手續費各自 half-up 到分
+    ln = MP.lines_of(conn, a["id"])[0]
+    assert (ln["amount"], ln["fee"]) == (0.15, 2.68)
+    assert _o(conn, "L1")["paidAmount"] == 0.15 and r["remaining"] == 999.85                   # 投影與剩餘額也是兩位 half-up（1000 − 0.15）

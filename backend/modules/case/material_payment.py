@@ -15,6 +15,7 @@
 import json
 import math
 from datetime import date, datetime
+from decimal import Decimal, ROUND_HALF_UP
 
 from helpers.dates import normalize_date
 from helpers.tiered_approval import (
@@ -68,8 +69,13 @@ def _display(user):
     return user.get("display_name") or user["username"]
 
 
+def r2(v) -> float:
+    """金額（元以下兩位）一律 **half-up**（X-VAT 2026-09-26：前端 `MotrixLegalRound.halfUp`、後端 Decimal；不用 Python `round`——它對二進位浮點 0.145／2.675 會得到 0.14／2.67）。"""
+    return float(Decimal(repr(float(v))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
 def _money(v) -> float:
-    return round(float(v or 0) + 0.0, 2)
+    return r2(v or 0)
 
 
 # ── 讀 ───────────────────────────────────────────────────────────────
@@ -231,7 +237,7 @@ def _amount(v, label="申請金額"):
         raise MaterialPaymentError(400, "%s格式不正確" % label)
     if not math.isfinite(f) or f <= 0:
         raise MaterialPaymentError(400, "%s必須大於 0" % label)
-    return round(f, 2)
+    return r2(f)
 
 
 def create(conn, quote_no: str, order: dict, user: dict, body: dict) -> dict:
@@ -462,7 +468,7 @@ def _num(v, label):
         raise BadRemit("%s格式不正確" % label)
     if not math.isfinite(f):
         raise BadRemit("%s格式不正確" % label)
-    return round(f + 0.0, 2)
+    return r2(f)
 
 
 def parse_line(body, remaining):
@@ -479,7 +485,7 @@ def parse_line(body, remaining):
         fee = _num(body.get("fee", body.get("remit_fee")), "手續費")
         if fee < 0:
             raise BadRemit("手續費不可為負數")
-    return {"amount": amount, "fee": fee, "diff": round(amount - remaining, 2) if amount > remaining else 0.0,
+    return {"amount": amount, "fee": fee, "diff": r2(amount - remaining) if amount > remaining else 0.0,
             "review": REVIEW_PENDING if amount > remaining + 0.005 else ""}
 
 
