@@ -49,12 +49,26 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE) -> dict
     except (TypeError, ValueError):
         data = {}
     plan = PI.plan_items(data)
-    live = {p["itemId"] for p in plan}
+    # 舊品項缺 id 或說明：plan_items 不收，但今天的精算頁會把它們的估計算進去 ⇒ 為了歷史逐位相同，以暫時鍵（~序號）納入（da S3）。
+    # 它們沒有真正的 id，採購單／材料申請連不到；只出現在 items 並標 unkeyed。
+    n_unkeyed = 0
+    for idx, it in enumerate(data.get("items") or []):
+        if not isinstance(it, dict) or it.get("type") == "header":
+            continue
+        iid, desc = str(it.get("id") or "").strip(), str(it.get("description") or "").strip()
+        if iid and desc:
+            continue
+        n_unkeyed += 1
+        plan.append({"itemId": iid or "~%d" % idx, "description": desc or "（未命名品項）", "brand": str(it.get("brand") or ""), "unit": str(it.get("unit") or ""),
+                     "planQty": _num(it.get("qty")), "planUnitCost": _num(it.get("cost")), "unkeyed": True})
+    live = {p["itemId"] for p in plan if not p.get("unkeyed")}
     saved = data.get("settlement") if isinstance(data.get("settlement"), dict) else {}
     saved_items = {str(i.get("id")): i for i in (saved.get("items") or []) if isinstance(i, dict)}
     offs = normalize_offsets(offsets if offsets is not None else saved.get("offsets"))
     off_material = {o["ref"]: o["itemId"] for o in offs if o["kind"] == "material" and o["itemId"] in live}
     off_extra = {o["ref"]: o["itemId"] for o in offs if o["kind"] == "extra" and o["itemId"] in live}
+
+    warnings = [{"code": "item_unkeyed", "ref": "", "message": "報價單有 %d 個品項缺 id 或說明，無法對應採購；以估計計入" % n_unkeyed}] if n_unkeyed else []
 
     # ── 採購單連品項／額外支出：同一批 extra_entries 列（營運報表、總帳 E11 也讀它）──
     po_by_item, extra_rows = {}, []
@@ -66,7 +80,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE) -> dict
             extra_rows.append(e)
 
     # ── 材料申請：連到有效採購單者金額在採購單（略過）；草稿／已退回／已取消不計 ──
-    mat_by_item, unassigned_mat, warnings = {}, [], []
+    mat_by_item, unassigned_mat = {}, []
     for r in R.material_money_rows(conn, quote_no=quote_no):
         if r["linked"] or r["cost"] == "excluded" or not r["total"]:
             continue
@@ -105,7 +119,8 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE) -> dict
         est = estimate_amount(p["planQty"], p["planUnitCost"])
         s = saved_items.get(iid)
         manual = _num(s.get("actualTotalCost")) if isinstance(s, dict) and s.get("actualTotalCost") not in (None, "") else None
-        adopt = bool(s.get("adoptSystem")) if isinstance(s, dict) and "adoptSystem" in s else True        # 三態：沒存過＝預設開
+        # 三態：新存檔有 adoptSystem（採用／不採用）；品項沒存過＝預設開；舊存檔（品項有存但沒有 adoptSystem 鍵，第 32 班前）＝今天頁面的行為（不採用，歷史相容；da S2）
+        adopt = bool(s.get("adoptSystem")) if isinstance(s, dict) and "adoptSystem" in s else (not isinstance(s, dict))
         has = purchased > 0
         if_not = manual if manual is not None else est
         if_adopt = purchased if has else if_not
@@ -115,7 +130,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE) -> dict
             actual, source = if_not, ("manual" if manual is not None else "estimate")
         if has and not adopt and unadopted == UNADOPTED_ADD:
             not_adopted_total += purchased
-        items.append({"itemId": iid, "description": p["description"], "planQty": p["planQty"], "unit": p["unit"],
+        items.append({"itemId": iid, "unkeyed": bool(p.get("unkeyed")), "description": p["description"], "planQty": p["planQty"], "unit": p["unit"],
                       "estimate": {"unitCost": p["planUnitCost"], "amount": est},
                       "po": {"amount": po_amt, "docs": po}, "material": {"amount": mat_amt, "orders": mats}, "extra": {"amount": ex_amt, "docs": exs},
                       "purchased": purchased, "hasPurchase": has, "adopt": adopt,
@@ -131,10 +146,70 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE) -> dict
             + sum(m["amount"] for m in unassigned_mat if m["pending"]) + sum(x["amount"] for x in extra_all if x["pending"]))
     sources = {"po": sum(it["po"]["amount"] for it in items), "materialAssigned": sum(it["material"]["amount"] for it in items),
                "materialUnassigned": un_mat_total, "extraAssigned": sum(it["extra"]["amount"] for it in items), "extraUnassigned": un_ex_total}
-    return {"quoteNo": quote_no, "basis": "accrual", "unadoptedMode": unadopted, "items": items,
+    legacy_save = any(isinstance(i, dict) and "adoptSystem" not in i for i in saved.get("items") or [])
+    out = {"quoteNo": quote_no, "basis": "accrual", "finalized": False, "frozen": False,
+           "legacySave": legacy_save,          # 存檔品項沒有 adoptSystem（第 32 班前存的）：adopt 以舊行為（不採用）
+           "unadoptedMode": unadopted, "items": items,
             "extra": {"onlyAmount": un_ex_total, "rows": extra_all},
             "unassigned": {"materials": unassigned_mat, "extras": unassigned_extra}, "offsets": offs,
             "sources": sources,
             "totals": {"itemActualTotal": item_total, "itemPoUnadopted": not_adopted_total, "extraTotal": un_ex_total,
                        "materialUnassignedTotal": un_mat_total, "purchasedTotal": sum(sources.values()), "pendingTotal": pend},
             "warnings": warnings}
+    if saved.get("status") == "finalized":
+        _freeze(out, saved, saved_items)
+    return out
+
+
+def _freeze(out, saved, saved_items):
+    """已完結的精算＝凍結快照（規格 §5；da S1）：金額取完結當下存檔的值，不隨之後核准的採購單／材料申請漂移。
+    品項金額用存檔的 `actualTotalCost`（沒存的品項保留現算值）；三個總額用存檔 `summary` 內同名鍵（沒有的鍵保留現算值）。現算值留在 `live` 供頁面提示差異。"""
+    summ = saved.get("summary") if isinstance(saved.get("summary"), dict) else {}
+    out["finalized"], out["frozen"], out["savedSummary"] = True, True, summ
+    out["live"] = {"itemActualTotal": out["totals"]["itemActualTotal"], "extraTotal": out["totals"]["extraTotal"], "purchasedTotal": out["totals"]["purchasedTotal"]}
+    total = 0.0
+    for it in out["items"]:
+        s = saved_items.get(it["itemId"])
+        v = s.get("actualTotalCost") if isinstance(s, dict) else None
+        if v not in (None, ""):
+            it["actual"] = {"amount": _num(v), "source": "frozen", "replacedEstimate": False}
+        total += it["actual"]["amount"]
+    out["totals"]["itemActualTotal"] = _num(summ["itemActualTotal"]) if "itemActualTotal" in summ else total
+    for k in ("extraTotal", "purchasedTotal"):
+        if k in summ:
+            out["totals"][k] = _num(summ[k])
+
+
+def validate_offsets(conn, quote_no, raw, previous=None):
+    """精算 PUT 的 `settlement.offsets` 驗證（33-A4）。回傳錯誤訊息；合法回 None。
+
+    規則：必須是清單；每列 `kind∈{material,extra}`、`ref`、`itemId` 俱全；`itemId` 必須是報價現有品項；同一 (kind, ref) 只能一個去處；
+    `ref` 必須存在於**目前**未對應清單（沒歸品項的材料申請／沒連品項的額外支出）。已經存在於上一次存檔、原樣沒改的列放行
+    （材料申請事後取消不致卡住舊草稿；計算端本來就會略過失效列）。"""
+    if raw in (None, []):
+        return None
+    if not isinstance(raw, list):
+        return "offsets 必須是清單"
+    keep = {(o["kind"], o["ref"], o["itemId"]) for o in normalize_offsets(previous)}
+    base = compute(conn, quote_no, offsets=[])
+    live = {i["itemId"] for i in base["items"] if not i["unkeyed"]}      # 缺 id／說明的舊品項不能當沖銷去處
+    refs = {"material": {str(m["itemId"]) for m in base["unassigned"]["materials"]},
+            "extra": {str(e["expenseId"]) for e in base["extra"]["rows"]}}
+    # base 的 unassigned 在 offsets=[] 時含全部可沖銷的列（extra.rows 含 assignedTo 者，此時皆未歸屬）
+    seen = set()
+    for n, o in enumerate(raw, 1):
+        if not isinstance(o, dict):
+            return "offsets 第 %d 列格式錯誤" % n
+        kind, ref, iid = str(o.get("kind") or ""), str(o.get("ref") or "").strip(), str(o.get("itemId") or "").strip()
+        if kind not in ("material", "extra") or not ref or not iid:
+            return "offsets 第 %d 列缺少 kind／ref／itemId，或 kind 不合法" % n
+        if (kind, ref) in seen:
+            return "offsets 第 %d 列：%s %s 重複，同一筆只能有一個去處" % (n, kind, ref)
+        seen.add((kind, ref))
+        if (kind, ref, iid) in keep:
+            continue
+        if iid not in live:
+            return "offsets 第 %d 列：品項 %s 不在報價單內" % (n, iid)
+        if ref not in refs[kind]:
+            return "offsets 第 %d 列：%s %s 不在目前的未對應清單內" % (n, "材料申請" if kind == "material" else "額外支出", ref)
+    return None

@@ -105,7 +105,7 @@ def test_adopt_off_uses_manual_and_purchase_is_not_added_unless_legacy_mode(W):
     it = _items(d)
     assert it["a"]["adopt"] is False and it["a"]["actual"] == {"amount": 9000, "source": "manual", "replacedEstimate": False}
     assert it["a"]["purchasedNotAdopted"] == 3000 and d["totals"]["itemPoUnadopted"] == 0                   # D8 建議：手填取代、採購不另加
-    assert it["b"]["actual"] == {"amount": 400, "source": "manual", "replacedEstimate": False} and it["b"]["adopt"] is True   # 沒存 adoptSystem＝預設開（但沒有採購）
+    assert it["b"]["actual"] == {"amount": 400, "source": "manual", "replacedEstimate": False} and it["b"]["adopt"] is False   # 舊存檔（品項有存、沒 adoptSystem 鍵）＝歷史相容不採用（da S2）；沒有採購所以金額不受影響
     assert d["totals"]["itemActualTotal"] == 9000 + 400
     cn = db.get_db()
     try:
@@ -169,3 +169,47 @@ def test_material_order_on_a_deleted_item_goes_back_to_unassigned_with_a_warning
     assert _items(d)["a"]["material"]["amount"] == 100                                              # 正對照：品項在 ⇒ 歸品項
     assert [(w["code"], w["ref"]) for w in d["warnings"]] == [("item_removed", "G")]
     assert d["totals"]["materialUnassignedTotal"] == 900 and d["totals"]["purchasedTotal"] == 1000
+
+
+
+def test_unkeyed_old_items_are_counted_with_a_temporary_key_and_warned(W):
+    c, h = W
+    cn = db.get_db()
+    q = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+    n_live = len(q["items"])
+    q["items"] += [{"description": "無id", "qty": 2, "cost": 100}, {"id": "z", "description": "", "qty": 1, "cost": 400}]
+    cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(q), NO))
+    cn.commit()
+    cn.close()
+    d = _get(c, h)
+    assert len(d["items"]) == n_live + 2 and [w["code"] for w in d["warnings"]] == ["item_unkeyed"]
+    assert d["totals"]["itemActualTotal"] == EST_A + EST_B + 210 + 420                           # 與今天頁面逐位相同：全部品項估計 ×1.05
+    assert _items(d)["z"]["actual"]["amount"] == 420 and _items(d)[[k for k in _items(d) if k.startswith("~")][0]]["actual"]["amount"] == 210
+
+
+def test_finalized_settlement_is_frozen_and_does_not_drift(W):
+    c, h = W
+    _put_settlement({"status": "finalized", "summary": {"itemActualTotal": 9999, "extraTotal": 5, "purchasedTotal": 7},
+                     "items": [{"id": "a", "adoptSystem": True, "actualTotalCost": 9999}]})
+    _approved_po(c, h, [_ln("a", 3, unitCost=1000)])                                              # 完結後才核准的採購單：不得改動凍結值
+    d = _get(c, h)
+    assert d["finalized"] is True and d["frozen"] is True and d["savedSummary"]["itemActualTotal"] == 9999
+    assert _items(d)["a"]["actual"] == {"amount": 9999, "source": "frozen", "replacedEstimate": False}
+    assert (d["totals"]["itemActualTotal"], d["totals"]["extraTotal"], d["totals"]["purchasedTotal"]) == (9999, 5, 7)                       # summary 為準
+    assert d["live"]["purchasedTotal"] == 3000                                                    # 現算值另放，頁面可提示「完結後有新採購」
+    _put_settlement({"status": "draft", "items": [{"id": "a", "adoptSystem": True, "actualTotalCost": 9999}]})
+    d2 = _get(c, h)
+    assert d2["frozen"] is False and _items(d2)["a"]["actual"]["source"] == "purchase"            # 反向控制：草稿照常重算
+
+
+def test_legacy_save_without_adopt_key_means_not_adopted_but_new_items_default_on(W):
+    c, h = W
+    _approved_po(c, h, [_ln("a", 3, unitCost=1000), _ln("b", 1, unitCost=5)])
+    _put_settlement({"status": "draft", "items": [{"id": "a", "actualTotalCost": 9000}, {"id": "b", "adoptSystem": True}]})   # a：第 32 班前存的（無鍵）
+    d = _get(c, h)
+    it = _items(d)
+    assert d["legacySave"] is True
+    assert it["a"]["adopt"] is False and it["a"]["actual"] == {"amount": 9000, "source": "manual", "replacedEstimate": False}   # 歷史相容＝今天頁面
+    assert it["b"]["adopt"] is True and it["b"]["actual"]["source"] == "purchase"
+    _put_settlement({"status": "draft", "items": []})                                              # 品項沒存過＝預設採用
+    assert _items(_get(c, h))["a"]["adopt"] is True

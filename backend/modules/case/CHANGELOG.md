@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-02（wip/t33-settlement-a4-2e）：精算沖銷驗證（33-A4）＋A2 稽核修正（da S1–S3）
+- `PUT /api/quotations/{no}/settlement` 對 `settlement.offsets` 驗證（422、不存檔）：kind 合法、品項必須在報價單內（缺 id／說明的舊品項不可當去處）、同一 (kind, ref) 只能一個去處、ref 必須在目前未對應清單；上次存檔原樣未改的列放行（材料申請事後取消不卡舊草稿）。完結後僅超級管理員可改（沿用）。
+- `settlement-actuals`：已完結精算回凍結快照（`frozen`、品項金額取存檔 `actualTotalCost`、三個總額取存檔 `summary`，現算值放 `live`），不隨完結後核准的採購單漂移（S1）；舊存檔品項沒有 `adoptSystem` 鍵＝不採用（歷史相容，與今天頁面同；`legacySave`），品項沒存過＝採用（S2）；缺 id／說明的舊品項以暫時鍵納入並標 `unkeyed`＋警示，估計照算（S3）。唯讀計數 SQL：docs/platform/plans/SETTLEMENT-ACTUALS-PROBE.sql。
+
 ## (next) — 2026-10-02 21:08（wip/t33-settlement-a2-2e）：完結精算實際金額端點（33-A2）
 - 新增 `GET /api/quotations/{no}/settlement-actuals`（案件可見＋財務檢視，否則 403／404）：`settlement_actuals.compute(conn, quote_no, offsets=None, unadopted="ignore")`，規則 A（有實際採購 ⇒ 實際取代該品項估計）、三態 adopt、沖銷（offsets）、未對應清單、sources／totals；金額與營運報表同源（`recognition.material_money_rows`、`extra_entries(quote_no=)`）。8 題測試。
 

@@ -4325,6 +4325,12 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         if existing_settlement.get("status") == "finalized" and user["role"] != "superadmin":
             conn.close()
             raise HTTPException(403, "精算已完結，僅超級管理員可重新修改")
+        if "offsets" in body.settlement:                       # 33-A4：沖銷對應的驗證（kind／品項存在／單一去處／ref 在未對應清單）
+            from modules.case import settlement_actuals as _SA
+            bad = _SA.validate_offsets(conn, quote_no, body.settlement.get("offsets"), existing_settlement.get("offsets"))
+            if bad:
+                conn.close()
+                raise HTTPException(422, bad)
         data["settlement"] = body.settlement
 
         # append edit history entry for settlement saves
