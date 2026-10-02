@@ -14,6 +14,13 @@ from modules.case.tests.test_material_link_2026_10_02 import _put_materials
 from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W, _ln, _mk, _submit  # noqa: F401
 
 
+
+@pytest.fixture(autouse=True)
+def _po_rule_off(monkeypatch):
+    """本檔測的是別的規則；33-M1「新申請必須帶採購單／送審必須有已核准採購單」另有 test_material_po_required_2026_10_03.py。"""
+    from modules.case import material_approval as _MA
+    monkeypatch.setattr(_MA, "PO_REQUIRED", False)
+
 def _mo(item, **kw):
     o = {"itemId": item, "itemName": "交換器", "quantity": 2, "unit": "台", "unitPrice": 1000, "totalPrice": 2000, "supplierId": 1,
          "paidStatus": "pending", "paidAmount": 0, "paidDate": "", "notes": ""}
@@ -86,10 +93,17 @@ def test_new_row_with_a_valid_link_is_saved_and_the_po_line_is_an_int(W):
     assert _ap("n1")["status"] == "草稿"
 
 
-def test_changing_the_link_of_an_approved_request_goes_back_to_draft_and_a_bad_change_is_refused(W):
+def test_changing_the_link_of_an_approved_request_goes_back_to_draft_and_a_bad_change_is_refused(W, monkeypatch):
+    """強制規則上線後建立的單（不在 grandfather 範圍）：核准後連結變動＝實質變動 ⇒ 回草稿重送審。"""
+    from modules.case import material_approval as _MA
+    monkeypatch.setattr(_MA, "PO_REQUIRED", True)
     c, h = W
     code = _po(c, h)
     _put_materials([_mo("m1", quoteItemId="a")], {"m1": "已核准"})
+    cn = db.get_db()
+    cn.execute("UPDATE case_material_approvals SET created_at='2026-10-05T00:00:00' WHERE quote_no=? AND item_id='m1'", (NO,))
+    cn.commit()
+    cn.close()
     bad = _patch(c, h, [_mo("m1", quoteItemId="a", poDocCode="PO-NOPE")])
     assert [x["code"] for x in bad["rejected"]] == ["bad_link"]
     assert _orders()[0].get("poDocCode") in (None, "") and _ap("m1")["status"] == "已核准"          # 被拒：值與狀態都沒變
@@ -109,12 +123,14 @@ def test_the_link_cannot_change_while_there_are_live_remittances(W, monkeypatch)
 
 
 def test_a_request_linked_to_a_po_cannot_open_a_remittance(W, monkeypatch):
+    c, h = W
+    code = _po(c, h)                                                                # 有效連結（已核准採購單）才擋；失效連結不擋（2e 65837b0c）
     monkeypatch.setattr(MP, "_check_order_for_payment", lambda conn, q, o: None)
     cn = db.get_db()
     try:
         with pytest.raises(MP.MaterialPaymentError) as e:
-            MP.create(cn, NO, _mo("m1", poDocCode="PO-X"), {"username": "u", "role": "superadmin"}, {})
-        assert e.value.status == 409 and "PO-X" in e.value.message
+            MP.create(cn, NO, _mo("m1", quoteItemId="a", poDocCode=code, poLine=1), {"username": "u", "role": "superadmin"}, {})
+        assert e.value.status == 409 and code in e.value.message
     finally:
         cn.close()
 

@@ -136,8 +136,8 @@ def submit(quote_no: str, item_id: str, authorization: str = Header(None)):
             raise HTTPException(400, "已結案案件無法送審材料申請")
         order = _order(q, item_id)
         if MA.get(conn, quote_no, item_id) is None:
-            MA.create_draft(conn, quote_no, item_id, user, "送審時建立（舊單）")
-        chk = _PI.material_submit_check(conn, quote_no, order, exclude_item_id=item_id)          # 32-S4：送審時檢查連結（採購單／報價品項）與超出計畫原因
+            MA.create_draft(conn, quote_no, item_id, user, "送審時建立（舊單）", grandfathered=True)
+        chk = _PI.material_submit_check(conn, quote_no, order, exclude_item_id=item_id, po_required=MA.po_required_for(MA.get(conn, quote_no, item_id)))          # 32-S4：送審時檢查連結（採購單／報價品項）與超出計畫原因
         if chk["problems"]:
             raise HTTPException(400, "；".join(p["message"] for p in chk["problems"]))
         try:

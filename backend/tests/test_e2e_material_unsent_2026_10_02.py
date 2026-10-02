@@ -25,6 +25,13 @@ NO = "MQ-UNSENT-E2E"
 PANEL = "#fin-material-orders"
 
 
+
+@pytest.fixture(autouse=True)
+def _po_rule_off(monkeypatch):
+    """33-M1 後端強制採購單已上線；這個檔的畫面流程（手動新增列）等前端「從採購單帶入」改版時再改寫。規則本身的題在 test_material_po_required_2026_10_03.py。"""
+    from modules.case import material_approval as _MA
+    monkeypatch.setattr(_MA, "PO_REQUIRED", False)
+
 def _shot(page, name):
     try:
         d = os.path.join(os.environ.get("MOTRIX_SHOTS_DIR") or os.path.join(tempfile.gettempdir(), "w4-shots"), "t32-unsent")

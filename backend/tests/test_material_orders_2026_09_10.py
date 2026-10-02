@@ -15,6 +15,13 @@ import pytest
 pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
+
+@pytest.fixture(autouse=True)
+def _po_rule_off(monkeypatch):
+    """33-M1 後端強制採購單已上線；這個檔的畫面流程（手動新增列）等前端「從採購單帶入」改版時再改寫。規則本身的題在 test_material_po_required_2026_10_03.py。"""
+    from modules.case import material_approval as _MA
+    monkeypatch.setattr(_MA, "PO_REQUIRED", False)
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
