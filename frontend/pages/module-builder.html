@@ -243,7 +243,7 @@
               <button class="mb-chipbtn mb3__side-open" id="mb-side-open" x-show="!useFD" @click="sideOpen = !sideOpen; palOpen = false">屬性</button>
               <button class="mb-chipbtn" id="mb-form-settings" x-show="!useFD" @click="sel = null; sideTab = 'props'; sideOpen = true">⚙ 表單設定</button>
             </div>
-            <div id="mb-fd-host" x-show="useFD" style="height:calc(100vh - 330px);min-height:600px;margin-top:10px"></div>
+            <div id="mb-fd-host" x-show="useFD" style="height:calc(calc(100vh / var(--fz,1)) - 330px);min-height:600px;margin-top:10px"></div>
             <div class="mb3__grid" x-show="!useFD" :data-mode="formMode" :data-pal-open="palOpen ? '1' : '0'" :data-side-open="sideOpen ? '1' : '0'">
               <!-- 左：元件列（目錄 fieldElements／elementGroups；分組可收合、可搜尋） -->
               <aside class="mb-pal mb3__pal" id="mb-palette" aria-label="元件列">
