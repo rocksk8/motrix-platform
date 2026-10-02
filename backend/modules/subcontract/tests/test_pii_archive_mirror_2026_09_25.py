@@ -260,6 +260,9 @@ def test_written_general_and_pii_files_merge_back_to_the_tables(client, make_use
                    if "承攬人員.json" in fns and day in dp]
     assert len(general_dir) == 1, general_dir
     tables = archive._daily_backup_tables()
+    MP_F2 = "模組-case-case_material_payments"                       # 31-C：叫料匯款申請的供應商收款帳戶（snapshot_json 裡的戶名與帳號）
+    if MP_F2 in tables:                                              # case 模組在 ⇒ 這張表必須宣告為 F2（拿掉就紅）
+        assert MP_F2 in archive._F2_FIELDS
     conn = get_db()
     try:
         for fname in archive._F2_FIELDS:
@@ -268,6 +271,11 @@ def test_written_general_and_pii_files_merge_back_to_the_tables(client, make_use
                                        encoding="utf-8"))["data"]
             original = [dict(r) for r in conn.execute(tables[fname]).fetchall()]
             assert original, fname
+            if fname == MP_F2:                                       # 一般份沒有帳號與戶名、個資份有（逐字比對檔案內容，不看記憶體）
+                gtxt, ptxt = _json.dumps(general, ensure_ascii=False), _json.dumps(pii_rows, ensure_ascii=False)
+                assert _M_ACCT_NO not in gtxt and _M_ACCT_NAME not in gtxt, "一般份含供應商收款帳戶"
+                assert _M_ACCT_NO in ptxt and _M_ACCT_NAME in ptxt, "個資份缺供應商收款帳戶"
+                assert "哨兵供應商" in gtxt                          # 供應商名稱與銀行名稱是機構資訊，留在一般份
             merged, missing = archive.merge_general_and_pii(fname, general, pii_rows)
             assert missing == [] and merged == original, fname
     finally:
