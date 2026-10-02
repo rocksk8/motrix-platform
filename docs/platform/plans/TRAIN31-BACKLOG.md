@@ -102,3 +102,4 @@
 - a3 設計：wip/t33-remit-kinds-design-a3@d8aeabc7（REMIT-KINDS-31B-DESIGN.md：裁示題 Q1–Q8、分片 S1–S5；PUBLISHED-TYPE-REFRESH-DESIGN.md：建議 A+C 並列版本逐項採用；發現 /api/definitions/.../diff a|b=default 回的是公司最新而非出貨預設的 bug）。已將唯讀查詢清單（31-B 的 A1–A5、B1–B8、請款類型 P1–P4）放雲端交付資料夾並通知正式機 Claude；B9 待使用者口述。
 - 正式機唯讀查詢結果（20261002_150000_唯讀查詢_31B與請款類型）：contractor_payment_vouchers 僅 4 筆、dispatch_id UNIQUE NOT NULL；11 派發中 4 有匯款申請；E04/E05 草稿各 2 筆未過帳（origin='gl:E04'／'gl:E05'／'gl:E05b'）；purchase_req v1–v4（10-01 22:38–22:44 發布）、1 筆單據釘 v2。⇒ 31-B 演練用合成資料即可，不需去識別化副本。B9 待使用者口述。
 - a3：wip/t33-remit-kinds-design-a3@c5373097（31-B／範本設計依正式機資料更新；USER-QUESTIONS-31B-AND-REFRESH.md 為待問使用者清單，先問 B9 口述題）。範本重發：只有 purchase_req 被公司發布，建議 diff/compare＋逐項採用，先修 /api/definitions/.../diff a|b=default bug。第33班詢問使用者時用該檔。
+- c7：wip/t32-sleep-fix-c7@4dd5048d（睡眠修正審查通過：反向控制正式測試＋pdf_unapproved／case_payment_number_input／case_data_loss；含 d7 d3a3dc1a，合這一個分支即可）。
