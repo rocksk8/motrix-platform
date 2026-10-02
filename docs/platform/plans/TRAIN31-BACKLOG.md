@@ -89,3 +89,4 @@
 - 使用者裁示 2026-10-02（材料申請）：①旗標閘維持現狀（對應已核准的材料申請），**不改成強制採購單**；②新增品項點選填寫後**不要先儲存**，先顯示「尚未送審」（同派發的「草稿（尚未送審）」流程：新增→草稿→按「送審」→簽核）；未送審的材料申請不進報表／總帳、不佔額度、不出現在簽核佇列。第32班 d7 做（含 e2e：新增→填寫→顯示尚未送審→重整仍在草稿→送審）。
 - c7：wip/t32-designer-c7（d7 稽核缺口併正式測試、選項貼上上限 500、預覽指引 FORM-DESIGNER-PREVIEW-GUIDE.md、K-2 設計 DRAFT-CONCURRENCY-DESIGN.md 建議 C＝內容雜湊 etag＋409；有 4 個問題待使用者）。
 - 2e S4d：wip/t32-s4a-2e@8581d3a8（前端 case-management-mlink.js、佇列 tags[] L1 加法、用字已照材料申請）；S4e（e2e 連續流程＋截圖）待窗口。d7 的 31-C 字串與旗標提示（_moFlagBlockReason）由 d7 改；case-management.html 卡片 div 一行重疊點需協調。
+- 2e S4e：wip/t32-s4a-2e@316bb108（e2e 連續流程 17s、4 突變全殺、6 截圖；佇列 tags 提供者一行）；規格 wip/t32-material-link-spec-2e@323c351b。S4 全部完成，待 d7 seam（LINK_VALIDATOR／SUBSTANTIVE_KEYS）與改字後整合。
