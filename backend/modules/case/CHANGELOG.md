@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-02 09:35（wip/t32-prpo-s1-2e）：連到的品項後來被刪 ⇒ 該列回到額外支出（32-S3 缺口修正）
+- 修正（金額靜默短計）：採購單明細連到的報價品項後來不在報價內（被刪／改版）時，該列原本仍被當品項成本（清單 `itemLinkedAmount`、報表來源料件桶、E11 item 維度），而精算與挑選器只列現有品項 ⇒ 該列金額從精算總成本消失。現在這種列在清單、營運報表來源、E11 一律回到一般額外支出（金額與科目不變、不帶 item 維度）；守恆：`extraOnlyAmount` ＋ 各品項系統帶入金額 ＝ `totalAmount`（新增 `purchase_items.live_item_ids`／`load_live_item_ids`，`linked_split` 加選填 `live`）。
+
 ## 1.0.70 — wip/t31-material-d7（31-C：叫料審核；S1–S4：核心、端點、寫入閘、報表／總帳閘）
 - **疊加審核表** `case_material_approvals`（migration 0004，只加不改、冪等）：叫料（`caseRecord.materialOrders[]`）以 (quote_no, item_id) 疊加審核狀態；**沒有疊加列＝舊單**（不溯及既往，行為與今天相同）。
 - **審核狀態機** `modules/case/material_approval.py`：草稿／待審核／簽核中／已核准／已退回（＋終態已取消）；重用分層簽核原語（申請人部門主管→組織鏈→最高管理者；沒設簽核層＝送審即核准；不能自簽）；核准後實質欄位（品名、數量、單位、單價、小計、供應商）變更 ⇒ 回草稿重送審；**到貨確認不簽核**，只記日期＋確認人＋時間。單號 `MO-YYYYMMDD-NNNN`（與 A2 費用單據同格式）。簽核單據類型 `material_order`（叫料）已登記。
