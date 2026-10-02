@@ -207,7 +207,10 @@ def test_rk8_permissions(client, hs):
     assert client.post("/api/contractor-vouchers/preview", headers=hs["rkc_admin"], json={"dispatch_id": 99999, "kind": "deposit", "amount": 10}).status_code == 404
 
 
-def test_rk8_non_integer_dispatch_total_is_refused_with_a_clear_message(client, hs):
+def test_rk8_cents_in_dispatch_total_are_rounded_half_up_to_whole_yuan_with_a_warning(client, hs):
     did = _dispatch(status="accepted", total=1000.5)
     r = _create(client, hs["rkc_admin"], did, kind="deposit", amount=100)
-    assert r.status_code == 400 and "整數元" in r.json()["detail"]
+    assert r.status_code == 201, r.text
+    assert any("含角分" in w and "1001" in w for w in r.json().get("warnings", []))
+    r2 = client.post("/api/contractor-vouchers/preview", headers=hs["rkc_admin"], json={"dispatch_id": did, "kind": "progress", "amount": 901})
+    assert r2.status_code == 200 and r2.json()["plan"]["is_last"] is True          # 剩餘額度以 1001 計：100＋901 補齊

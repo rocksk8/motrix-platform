@@ -1,5 +1,10 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-02（wip/t33-remit-s2-a3：31-B S2 稽核 should-fix）
+- `remit_split.plan`：前期逐期進位使稅額合計超過整筆稅額時，最後一期不再拒絕，稅額取 0 並警示「待會計確認」（原本會卡死、剩餘額度用不掉）。
+- 派發金額（REAL 欄）帶角分時，分期以四捨五入（half-up）後的整數元計算並警示，不再回 400。
+- 測試：`test_remit_split_2026_10_02.py` 新增前期稅超過整筆稅額題；`test_remit_kinded_create_2026_10_02.py` 角分題取代原「拒絕」題。
+
 ## (next) — 2026-10-02（wip/t33-remit-s2-a3：31-B S2 分期匯款申請的建立與試算）
 - `POST /api/contractor-vouchers` 新增選填 `kind`＋（`ratio_percent` 或 `amount`）：帶 `kind` 即開分期申請，款別／狀態規則走款別設定，金額走 `remit_split.plan`，快照改為本期金額、個人點工只掛最後一期（使用者裁示 D5）；不帶 `kind` 的舊式整筆申請行為與回傳形狀不變。
 - 新增 `POST /api/contractor-vouchers/preview`（管理員以上）：試算，不寫入，與建立同一支 `remit_create.kinded_context`，數字一致。

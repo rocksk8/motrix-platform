@@ -10,7 +10,8 @@
 - 比例模式：`A = round_half_up(T × p)`（`0 < p ≤ 1`）；固定金額模式：`A` 為整數元（≥1）。兩者都不得超過 `R`。
 - **最後一期**＝使 `R` 歸零的那一期：固定金額 `A == R`；比例模式累計比例 ≥ 100%（前期比例申請用其比例、固定金額申請用 `A/T`，容許 1e-9），
   或算出的 `A == R`。最後一期的稅前一律取 `R`（補尾差）。
-- 稅額：非最後一期 `round_half_up(A × r)`；最後一期 `X − Σ前期稅額`，補差 `d = tax − round_half_up(A × r)`（通常 0，偶爾 ±1～±2）。⇒ 全部期別稅額合計恆等於 `X`。
+- 稅額：非最後一期 `round_half_up(A × r)`；最後一期 `X − Σ前期稅額`，補差 `d = tax − round_half_up(A × r)`（通常 0，偶爾 ±1～±2）。⇒ 全部期別稅額合計恆等於 `X`；唯一例外：前期稅額合計已超過 `X`（逐期進位）時，最後一期稅額取 0 並警示，合計多出前期超出的部分。
+- 派發金額帶角分時（REAL 欄）由呼叫端四捨五入成整數元再傳入，並警示。
 """
 from decimal import Decimal
 
@@ -94,14 +95,14 @@ def plan(total, rate, previous, mode, value):
             near = (remaining - A) <= 1
     own_tax = int(round_half_up(A, r))
     if is_last:
-        tax = X - sum(prev_tax)
-        if tax < 0:
-            raise RemitSplitError("前期稅額合計 %d 元已超過整筆稅額 %d 元，請先檢查前期申請" % (sum(prev_tax), X))
+        tax = max(X - sum(prev_tax), 0)                             # 前期逐期進位可能讓稅額合計超過整筆稅額：最後一期稅額取 0，不擋（否則剩餘額度用不掉）
     else:
         tax = own_tax
     make_up = tax - own_tax
     warnings = []
-    if make_up:
+    if is_last and sum(prev_tax) > X:
+        warnings.append("前期稅額合計 %d 元已超過整筆稅額 %d 元（逐期進位），本期稅額取 0，整筆稅額合計多出 %d 元，待會計確認" % (sum(prev_tax), X, sum(prev_tax) - X))
+    elif make_up:
         warnings.append("最後一期含補差 %+d 元：整筆稅額 %d 元，前期稅額合計 %d 元，本期逐期算是 %d 元，待會計確認發票稅額" % (make_up, X, sum(prev_tax), own_tax))
     if near:
         warnings.append("再填一期就會補齊（剩餘 %d 元）" % (remaining - A))
