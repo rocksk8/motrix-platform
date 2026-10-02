@@ -1,5 +1,11 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-02（wip/t33-remit-s5-a3：31-B S5 分期申請 PDF 與周邊）
+- 承攬商匯款申請 PDF（`pdf_gen`）：分期申請加一列「款別／期別（本期稅前）」，發票號碼改顯示該期自己的發票號碼；舊式整筆申請版面不變。
+- 分期 E04 可在總帳「來源憑證補登」補登實際進項稅額與發票日（accounting 的可補登清單加 `contractor_voucher_invoice`；引擎套用補登本來就以來源類型＋來源鍵查，不用改）。
+- 已知限制（列第 34 班）：案件頁「相關傳票」仍只比對派發層來源（`contractor_dispatch`），分期 E04／E05 傳票不會列在案件頁相關傳票；需要 M04 提供「案件→匯款申請單號」連接器才不違反模組邊界。
+- 測試：`test_remit_pdf_kind_2026_10_02.py`（2 題）；accounting `test_ledger_annotations_voucher_invoice_2026_10_02.py`（2 題，含 ALLOWED 的反向控制）。
+
 ## (next) — 2026-10-02（wip/t33-remit-s4-a3：31-B S4 分期申請的發票與總帳 E04 逐張）
 - 新增 `PATCH /api/contractor-vouchers/{voucher_no}/invoice`（管理員以上）：登錄／更正／清除分期申請自己的發票（號碼＋日期；兩欄留空＝清除）。D11：發票可事後補，沒有發票日就不產生該期的應付認列分錄。舊式整筆申請的發票仍在派發上；作廢的申請不能登；已入帳的 E04 發票日被改會回提示（`glWarning`）。申請對外形狀（IP-14）加 `invNo／invDate`。
 - 總帳 `gl.events`：有未作廢分期申請的派發，E04 改由各期申請逐張認列（`source_type=contractor_voucher_invoice`、`source_key`＝申請單號、`doc_no`＝該期發票號、事件日＝該期發票日；金額＝該期稅前＋該期稅額，最後一期補差已凍結在快照，各期合計＝派發稅前／整筆稅額）；派發層的 E04 對這些派發不再產生，同一派發只會有一種層級。只認列已核准、有發票日、派發審核已核准的期別。E05 的 `meta.dispatch_invoiced` 分期看該期自己的發票日；舊式整筆的 E04／E05 形狀不變。
