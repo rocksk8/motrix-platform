@@ -14,6 +14,8 @@
   python build_test_reuse.py records-path                                   → 主工作樹的紀錄檔（建包與 modtest 共用）
   python build_test_reuse.py run-stage --stage not_e2e|e2e                  → 獨立跑一段（同建包指令）並記錄（source=standalone）：建包同指紋時直接沿用
   python build_test_reuse.py explain [--last N] [--json]                    → 唯讀診斷：這一段為什麼沒被沿用、最近每筆紀錄為何與現在的指紋不同（tree 差在哪幾個檔／環境哪個元件）
+  python build_test_reuse.py run-stage --stage X --only-failed <fail_stream.jsonl> [--with-siblings]
+                                                                           → 快速確認（找錯迴圈）：只重跑上一輪失敗的題；結果只是提示，不寫紀錄、不影響 lookup-stage
   python build_test_reuse.py lookup-stage --fp X --stage not_e2e|e2e        → 可沿用的那一段（JSON），或 null
   python build_test_reuse.py record-stage --fp X --stage S --green 1 [--flaky-from R] [--reused-at T] [--flaky ID…]
 - 每一行可帶 `stages: {not_e2e|e2e: {green, tested_at, flaky_retried[]}}`；舊格式（沒有 stages）的一行＝兩段同一個結果。
@@ -28,6 +30,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -289,6 +292,96 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
     return rc, True, "已記錄：%s=%s（建包同指紋、同一天、%d 小時內會沿用）" % (stage, "綠" if rc == 0 else "紅", MAX_HOURS)
 
 
+QUICK_LABEL = "快速確認，非階段結果"
+
+
+def failed_nodeids(stream_path, stage=None):
+    """讀 fail_stream 的 JSONL ⇒ 失敗題的 nodeid（去重、保序）。只收 type=fail／node_down（崩潰類）；aborted（外部終止）與 summary 不算。
+    `stage`：只收該段（記錄的 stage 欄；沒有 stage 欄的舊紀錄一律收）。壞行略過。"""
+    seen, out = set(), []
+    with open(stream_path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(r, dict) or r.get("type") not in ("fail", "node_down") or not r.get("nodeid"):
+                continue
+            if stage and r.get("stage") and r.get("stage") != stage:
+                continue
+            nid = str(r["nodeid"]).replace("\\", "/")
+            if nid not in seen:
+                seen.add(nid)
+                out.append(nid)
+    return out
+
+
+def quick_targets(repo, nodeids, with_siblings=False):
+    """快速確認要餵給 pytest 的目標：失敗的 nodeid 本身；`with_siblings` ⇒ 改成「失敗題所在的整個檔」＋「同目錄（不遞迴）其餘 test_*.py」。
+    不存在的檔略過（nodeid 的檔被刪／改名）。回 (目標清單, 略過的檔清單)。"""
+    backend = Path(repo) / "backend"
+    if not with_siblings:
+        keep = [n for n in nodeids if (backend / n.split("::", 1)[0]).exists()]
+        return keep, sorted({n.split("::", 1)[0] for n in nodeids if n not in keep})
+    files, missing = [], []
+    for n in nodeids:
+        rel = n.split("::", 1)[0]
+        f = backend / rel
+        if not f.exists():
+            missing.append(rel)
+            continue
+        for cand in [rel] + sorted(str(x.relative_to(backend)).replace("\\", "/") for x in f.parent.glob("test_*.py")):
+            if cand not in files:
+                files.append(cand)
+    return files, sorted(set(missing))
+
+
+def run_only_failed(repo, stage, stream_path, with_siblings=False, python=None, runner=None, workers=None, note=print):
+    """**快速確認**（找錯迴圈用）：階段紅燈後只重跑上一輪失敗的題（可加同檔／同目錄的題），讓修完能很快知道修好沒有。
+    ⚠ 結果**只是提示**：不寫沿用紀錄（`record` 一律不呼叫）、不影響 `lookup-stage`、不算階段綠燈；建包仍須整段實跑一次綠。
+    輸出每一行都帶「快速確認，非階段結果」。目標寫進 @argsfile（Windows 命令列長度上限，WinError 206）。
+    回 (exit code, 說明)。`runner(cmd, cwd, env)` 供測試注入。"""
+    import tempfile
+    python = python or sys.executable
+    repo = Path(repo)
+    nodeids = failed_nodeids(stream_path, stage)
+    if not nodeids:
+        why = "[%s] %s：fail_stream 裡沒有失敗題（%s）——沒有東西可確認" % (QUICK_LABEL, stage, stream_path)
+        note(why)
+        return 0, why
+    targets, missing = quick_targets(repo, nodeids, with_siblings)
+    if missing:
+        note("[%s] 略過不存在的檔：%s" % (QUICK_LABEL, ", ".join(missing)))
+    if not targets:
+        why = "[%s] %s：失敗題的檔都不存在了，沒有可跑的目標" % (QUICK_LABEL, stage)
+        note(why)
+        return 2, why
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    tmp = tempfile.gettempdir()
+    base = os.path.join(tmp, "motrix-quickconfirm-%s-%s" % (stage, stamp))
+    argsfile = os.path.join(tmp, "motrix-quickconfirm-%s-%s.args" % (stage, stamp))
+    with open(argsfile, "w", encoding="utf-8") as f:
+        f.write(chr(10).join(targets) + chr(10))
+    marker = [a for a in STAGE_PYTEST[stage] if a not in ("--durations=20",)]
+    n = workers or min(default_workers(stage), 2)
+    cmd = [str(python), "-m", "pytest", *marker, "-n", str(n if len(targets) > 1 else 1), "--basetemp=%s" % base, "-p", "no:cacheprovider", "@" + argsfile]
+    env = dict(os.environ)
+    note("[%s] %s：失敗 %d 題 → 目標 %d 個%s" % (QUICK_LABEL, stage, len(nodeids), len(targets), "（含同檔／同目錄）" if with_siblings else ""))
+    note("[%s] %s" % (QUICK_LABEL, " ".join(cmd)))
+    try:
+        rc = subprocess.run(cmd, cwd=str(repo / "backend"), env=env).returncode if runner is None else runner(cmd, str(repo / "backend"), env)
+    finally:
+        for p in (argsfile,):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+        shutil.rmtree(base, ignore_errors=True)
+    why = "[%s] %s：%s——只是提示；不寫沿用紀錄、不算階段綠燈，建包仍須整段實跑一次綠" % (QUICK_LABEL, stage, "這批題都過了" if rc == 0 else "還有紅（exit %s）" % rc)
+    note(why)
+    return rc, why
+
+
 def find_reusable(records, fp, now, max_hours=MAX_HOURS):
     """同指紋的**最新一筆**：嚴格全綠、同一天、max_hours 內 ⇒ 回它；否則 None。純函式。"""
     if not fp:
@@ -465,6 +558,8 @@ def main(argv=None):
     rn.add_argument("--stage", required=True, choices=STAGES)
     rn.add_argument("--records")
     rn.add_argument("--workers", type=int)
+    rn.add_argument("--only-failed", metavar="FAIL_STREAM_JSONL", help="快速確認：只重跑這個 fail_stream 檔裡失敗的題（結果只是提示，不寫沿用紀錄）")
+    rn.add_argument("--with-siblings", action="store_true", help="快速確認時一併跑失敗題所在的整個檔與同目錄其餘 test_*.py")
     ex = sub.add_parser("explain", help="為什麼這一段沒被沿用／同一份東西為何跑兩次（唯讀診斷）")
     ex.add_argument("--records")
     ex.add_argument("--last", type=int, default=12)
@@ -492,6 +587,9 @@ def main(argv=None):
         if fp:
             remember_parts(default_records(repo), fp, comps)      # 診斷旁表（只存元件雜湊）；寫不進去不影響指紋
         print(json.dumps({"fingerprint": fp, "components": comps}))
+    elif a.cmd == "run-stage" and a.only_failed:
+        rc, _why = run_only_failed(repo, a.stage, a.only_failed, with_siblings=a.with_siblings, workers=a.workers)
+        return rc
     elif a.cmd == "run-stage":
         rc, wrote, why = run_stage(repo, a.stage, a.records or default_records(repo), workers=a.workers)
         print("[run-stage] " + why)
