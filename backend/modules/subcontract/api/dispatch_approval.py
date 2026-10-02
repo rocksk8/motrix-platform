@@ -106,6 +106,10 @@ def dispatch_review_submit(did, user, authorization, st: Stage, *, allowed_from,
             tiers = _setting_to_active_tiers(resolve_active_flow_setting(DOC_TYPE), conn, user["username"])
         except UnresolvedManagerError as e:
             raise HTTPException(400, str(e))
+        if not row["doc_code"]:
+            # 舊單（第 31-A 之前建立）doc_code=''：簽核佇列／詳情／轉簽都以單號為鍵，沒有單號 ⇒ 這筆完工審核永遠不顯示（正式機回報）。
+            # 送審當下（已持寫鎖）補號；只補這一欄，舊單的其他欄位與「舊單」身分（approval_status=''）不變。
+            conn.execute("UPDATE contractor_dispatches SET doc_code=? WHERE id=? AND doc_code=''", (_flow.next_dispatch_code(conn), did))
         now = _now()
         h = _flow.substantive_hash(row["vendor_id"], row["items_json"], row["personnel_json"], row["tax_rate"])
         prev = _jdict(row[st.json_col])
@@ -132,6 +136,7 @@ def dispatch_review_submit(did, user, authorization, st: Stage, *, allowed_from,
             result = {"ok": True, "approvalStatus": _flow.PENDING, "tierCount": len(tiers)}
             tier_count = len(tiers)
         conn.commit()
+        row = _load(conn, did)                                  # 重讀：剛補的單號要進通知／稽核文字
         label = _label(conn, row)
         first = _approvers(tiers[0]) if tiers else []
         subject = _subject(conn, row)
