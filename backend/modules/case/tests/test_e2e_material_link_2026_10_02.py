@@ -163,6 +163,7 @@ def test_material_request_link_flow_in_the_browser(live_server, make_user, e2e_b
 
     # ── 5 送審新建的那筆 ⇒ 簽核人的佇列卡片帶同一個標註 ──
     _set_setting("unified_approval_flow", {"includeSubmitterManagerTier": False, "tiers": [{"order": 0, "approvers": [{"username": boss, "displayName": "主管"}]}]})
+    page.click('[data-testid="ml-tab-approved"]')                                                    # 預設分頁（草稿＝尚未送審在這裡）；「全部」不跳轉
     card = page.locator(f'[data-testid="mo-card-{new_id}"]')
     card.locator('[data-testid="mo-submit"]').click()
     _wait_db(page, lambda: _status_of(new_id) == "待審核", "送審後待審核")
