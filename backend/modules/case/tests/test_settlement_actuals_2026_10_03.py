@@ -159,3 +159,13 @@ def test_permissions_other_cases_and_financial_view(W, make_user):
     assert c.get("/api/quotations/MQ-NOPE/settlement-actuals", headers=h).status_code == 404
     assert c.get("/api/quotations/-/settlement-actuals", headers=h).status_code == 400
     assert c.get(URL).status_code in (401, 403)
+
+
+def test_material_order_on_a_deleted_item_goes_back_to_unassigned_with_a_warning(W):
+    c, h = W
+    _put_materials([_order("G", 2, 900, quoteItemId="gone"), _order("N", 1, 100, quoteItemId="a")], {"G": "已核准", "N": "已核准"})
+    d = _get(c, h)
+    assert [(m["itemId"], m["amount"]) for m in d["unassigned"]["materials"]] == [("G", 900.0)]      # 品項不在報價單：錢不消失
+    assert _items(d)["a"]["material"]["amount"] == 100                                              # 正對照：品項在 ⇒ 歸品項
+    assert [(w["code"], w["ref"]) for w in d["warnings"]] == [("item_removed", "G")]
+    assert d["totals"]["materialUnassignedTotal"] == 900 and d["totals"]["purchasedTotal"] == 1000
