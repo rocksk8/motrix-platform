@@ -1,0 +1,386 @@
+[
+ {
+  "id": "t29#1",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": null,
+  "head": "fca93b04",
+  "actual_minutes": 26.0,
+  "red_files": [
+   "backend/tests/test_approval_queue_detail_2026_09_14.py",
+   "backend/tests/test_audit_search_2026_09_30.py",
+   "backend/tests/test_ac1_write_actions_2026_09_23.py",
+   "backend/tests/test_cm12_p3_prep_2026_09_24.py",
+   "backend/tests/test_form_version_bumped_2026_09_24.py",
+   "backend/tests/test_frontend_local_date_2026_10_01.py",
+   "backend/tests/test_module_registry_2026_09_24.py",
+   "backend/tests/test_unapproved_pdf_banner_2026_09_30.py",
+   "backend/tests/test_write_endpoints_are_audited_2026_09_24.py",
+   "backend/modules/accounting/tests/test_ledger_mutation_guards_2026_10_01.py"
+  ],
+  "base_red_files": []
+ },
+ {
+  "id": "t29c",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": null,
+  "head": "9f19563d",
+  "actual_minutes": 25.97,
+  "red_files": [],
+  "base_red_files": []
+ },
+ {
+  "id": "t29c",
+  "stage": "e2e",
+  "variant": "A",
+  "base": null,
+  "head": "9f19563d",
+  "actual_minutes": 11.58,
+  "red_files": [
+   "backend/tests/test_e2e_playwright_2026_09_07.py"
+  ],
+  "base_red_files": []
+ },
+ {
+  "id": "t29e",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "9f19563d",
+  "head": "0ebe7eac",
+  "actual_minutes": 27.37,
+  "red_files": [
+   "backend/tests/test_audit_search_2026_09_30.py"
+  ],
+  "base_red_files": []
+ },
+ {
+  "id": "t29f",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "9f19563d",
+  "head": "47db5613",
+  "actual_minutes": 27.88,
+  "red_files": [],
+  "base_red_files": []
+ },
+ {
+  "id": "t29f",
+  "stage": "e2e",
+  "variant": "A",
+  "base": null,
+  "head": "47db5613",
+  "actual_minutes": 12.08,
+  "red_files": [],
+  "base_red_files": []
+ },
+ {
+  "id": "t30b",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "47db5613",
+  "head": "8b87c5c1",
+  "actual_minutes": 25.67,
+  "red_files": [
+   "backend/tests/test_builder_preview_static_2026_09_27.py",
+   "backend/tests/test_approval_flow_scope.py",
+   "backend/tests/test_approval_queue_covers_every_doc_type_2026_09_24.py",
+   "backend/tests/test_approval_queue_extra_types_2026_09_30.py",
+   "backend/tests/test_cm12_p3_prep_2026_09_24.py",
+   "backend/tests/test_navigation_destination_2026_09_23.py",
+   "backend/tests/test_write_endpoints_are_audited_2026_09_24.py"
+  ],
+  "base_red_files": []
+ },
+ {
+  "id": "t30c",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "47db5613",
+  "head": "0d4db8aa",
+  "actual_minutes": 26.4,
+  "red_files": [],
+  "base_red_files": []
+ },
+ {
+  "id": "t30c",
+  "stage": "e2e",
+  "variant": "A",
+  "base": "47db5613",
+  "head": "0d4db8aa",
+  "actual_minutes": 11.22,
+  "red_files": [
+   "backend/tests/test_e2e_case_switch_state_2026_09_24.py",
+   "backend/tests/test_e2e_local_date_2026_10_01.py",
+   "backend/tests/test_e2e_pdf_unapproved_2026_09_30.py",
+   "backend/tests/test_e2e_pdf_unapproved_more_2026_09_30.py"
+  ],
+  "base_red_files": []
+ },
+ {
+  "id": "t30d",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "0d4db8aa",
+  "head": "8d658078",
+  "actual_minutes": 26.33,
+  "red_files": [],
+  "base_red_files": []
+ },
+ {
+  "id": "t30d",
+  "stage": "e2e",
+  "variant": "A",
+  "base": "47db5613",
+  "head": "8d658078",
+  "actual_minutes": 11.65,
+  "red_files": [
+   "backend/tests/test_e2e_map_overlay_contract_2026_09_28.py",
+   "backend/modules/subcontract/tests/test_e2e_dispatch_approval_2026_10_01.py"
+  ],
+  "base_red_files": []
+ },
+ {
+  "id": "t30e",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "8d658078",
+  "head": "c7977514",
+  "actual_minutes": 27.73,
+  "red_files": [
+   "backend/tests/platform/test_e2e_classification.py"
+  ],
+  "base_red_files": []
+ },
+ {
+  "id": "t30f",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "8d658078",
+  "head": "6b5d2865",
+  "actual_minutes": 25.4,
+  "red_files": [],
+  "base_red_files": []
+ },
+ {
+  "id": "t30f",
+  "stage": "e2e",
+  "variant": "A",
+  "base": "47db5613",
+  "head": "6b5d2865",
+  "actual_minutes": 10.8,
+  "red_files": [],
+  "base_red_files": []
+ },
+ {
+  "id": "t29#1",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": null,
+  "head": "fca93b04",
+  "actual_minutes": 26.0,
+  "red_files": [
+   "backend/tests/test_approval_queue_detail_2026_09_14.py",
+   "backend/tests/test_audit_search_2026_09_30.py",
+   "backend/tests/test_ac1_write_actions_2026_09_23.py",
+   "backend/tests/test_cm12_p3_prep_2026_09_24.py",
+   "backend/tests/test_form_version_bumped_2026_09_24.py",
+   "backend/tests/test_frontend_local_date_2026_10_01.py",
+   "backend/tests/test_module_registry_2026_09_24.py",
+   "backend/tests/test_unapproved_pdf_banner_2026_09_30.py",
+   "backend/tests/test_write_endpoints_are_audited_2026_09_24.py",
+   "backend/modules/accounting/tests/test_ledger_mutation_guards_2026_10_01.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "0bb4834e"
+ },
+ {
+  "id": "t29c",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "fca93b04",
+  "head": "9f19563d",
+  "actual_minutes": 25.97,
+  "red_files": [],
+  "base_red_files": [
+   "backend/tests/test_approval_queue_detail_2026_09_14.py",
+   "backend/tests/test_audit_search_2026_09_30.py",
+   "backend/tests/test_ac1_write_actions_2026_09_23.py",
+   "backend/tests/test_cm12_p3_prep_2026_09_24.py",
+   "backend/tests/test_form_version_bumped_2026_09_24.py",
+   "backend/tests/test_frontend_local_date_2026_10_01.py",
+   "backend/tests/test_module_registry_2026_09_24.py",
+   "backend/tests/test_unapproved_pdf_banner_2026_09_30.py",
+   "backend/tests/test_write_endpoints_are_audited_2026_09_24.py",
+   "backend/modules/accounting/tests/test_ledger_mutation_guards_2026_10_01.py"
+  ]
+ },
+ {
+  "id": "t29c",
+  "stage": "e2e",
+  "variant": "B",
+  "base": null,
+  "head": "9f19563d",
+  "actual_minutes": 11.58,
+  "red_files": [
+   "backend/tests/test_e2e_playwright_2026_09_07.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "0bb4834e"
+ },
+ {
+  "id": "t29e",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "9f19563d",
+  "head": "0ebe7eac",
+  "actual_minutes": 27.37,
+  "red_files": [
+   "backend/tests/test_audit_search_2026_09_30.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "9f19563d"
+ },
+ {
+  "id": "t29f",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "0ebe7eac",
+  "head": "47db5613",
+  "actual_minutes": 27.88,
+  "red_files": [],
+  "base_red_files": [
+   "backend/tests/test_audit_search_2026_09_30.py"
+  ]
+ },
+ {
+  "id": "t29f",
+  "stage": "e2e",
+  "variant": "B",
+  "base": null,
+  "head": "47db5613",
+  "actual_minutes": 12.08,
+  "red_files": [],
+  "base_red_files": []
+ },
+ {
+  "id": "t30b",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "47db5613",
+  "head": "8b87c5c1",
+  "actual_minutes": 25.67,
+  "red_files": [
+   "backend/tests/test_builder_preview_static_2026_09_27.py",
+   "backend/tests/test_approval_flow_scope.py",
+   "backend/tests/test_approval_queue_covers_every_doc_type_2026_09_24.py",
+   "backend/tests/test_approval_queue_extra_types_2026_09_30.py",
+   "backend/tests/test_cm12_p3_prep_2026_09_24.py",
+   "backend/tests/test_navigation_destination_2026_09_23.py",
+   "backend/tests/test_write_endpoints_are_audited_2026_09_24.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "47db5613"
+ },
+ {
+  "id": "t30c",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "8b87c5c1",
+  "head": "0d4db8aa",
+  "actual_minutes": 26.4,
+  "red_files": [],
+  "base_red_files": [
+   "backend/tests/test_builder_preview_static_2026_09_27.py",
+   "backend/tests/test_approval_flow_scope.py",
+   "backend/tests/test_approval_queue_covers_every_doc_type_2026_09_24.py",
+   "backend/tests/test_approval_queue_extra_types_2026_09_30.py",
+   "backend/tests/test_cm12_p3_prep_2026_09_24.py",
+   "backend/tests/test_navigation_destination_2026_09_23.py",
+   "backend/tests/test_write_endpoints_are_audited_2026_09_24.py"
+  ]
+ },
+ {
+  "id": "t30c",
+  "stage": "e2e",
+  "variant": "B",
+  "base": "47db5613",
+  "head": "0d4db8aa",
+  "actual_minutes": 11.22,
+  "red_files": [
+   "backend/tests/test_e2e_case_switch_state_2026_09_24.py",
+   "backend/tests/test_e2e_local_date_2026_10_01.py",
+   "backend/tests/test_e2e_pdf_unapproved_2026_09_30.py",
+   "backend/tests/test_e2e_pdf_unapproved_more_2026_09_30.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "47db5613"
+ },
+ {
+  "id": "t30d",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "0d4db8aa",
+  "head": "8d658078",
+  "actual_minutes": 26.33,
+  "red_files": [],
+  "base_red_files": []
+ },
+ {
+  "id": "t30d",
+  "stage": "e2e",
+  "variant": "B",
+  "base": "0d4db8aa",
+  "head": "8d658078",
+  "actual_minutes": 11.65,
+  "red_files": [
+   "backend/tests/test_e2e_map_overlay_contract_2026_09_28.py",
+   "backend/modules/subcontract/tests/test_e2e_dispatch_approval_2026_10_01.py"
+  ],
+  "base_red_files": [
+   "backend/tests/test_e2e_case_switch_state_2026_09_24.py",
+   "backend/tests/test_e2e_local_date_2026_10_01.py",
+   "backend/tests/test_e2e_pdf_unapproved_2026_09_30.py",
+   "backend/tests/test_e2e_pdf_unapproved_more_2026_09_30.py"
+  ],
+  "recall_base": "0d4db8aa"
+ },
+ {
+  "id": "t30e",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "8d658078",
+  "head": "c7977514",
+  "actual_minutes": 27.73,
+  "red_files": [
+   "backend/tests/platform/test_e2e_classification.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "8d658078"
+ },
+ {
+  "id": "t30f",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "c7977514",
+  "head": "6b5d2865",
+  "actual_minutes": 25.4,
+  "red_files": [],
+  "base_red_files": [
+   "backend/tests/platform/test_e2e_classification.py"
+  ]
+ },
+ {
+  "id": "t30f",
+  "stage": "e2e",
+  "variant": "B",
+  "base": "8d658078",
+  "head": "6b5d2865",
+  "actual_minutes": 10.8,
+  "red_files": [],
+  "base_red_files": [
+   "backend/tests/test_e2e_map_overlay_contract_2026_09_28.py",
+   "backend/modules/subcontract/tests/test_e2e_dispatch_approval_2026_10_01.py"
+  ]
+ }
+]
