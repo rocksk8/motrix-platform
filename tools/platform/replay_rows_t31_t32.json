@@ -1,0 +1,341 @@
+[
+ {
+  "id": "t31r1",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "6b5d2865",
+  "head": "fc5f4080",
+  "actual_minutes": 9.62,
+  "red_files": [
+   "backend/tests/platform/test_case_summary_purpose.py",
+   "backend/tests/platform/test_json_extract_ratchet.py",
+   "backend/tests/platform/test_module_migrations.py",
+   "backend/tests/platform/test_pii_forms_notice.py",
+   "backend/tests/test_approval_flow_scope.py",
+   "backend/tests/test_approval_queue_covers_every_doc_type_2026_09_24.py",
+   "backend/tests/test_approval_queue_extra_types_2026_09_30.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "6b5d2865"
+ },
+ {
+  "id": "t31r1",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "6b5d2865",
+  "head": "fc5f4080",
+  "actual_minutes": 9.62,
+  "red_files": [
+   "backend/tests/platform/test_case_summary_purpose.py",
+   "backend/tests/platform/test_json_extract_ratchet.py",
+   "backend/tests/platform/test_module_migrations.py",
+   "backend/tests/platform/test_pii_forms_notice.py",
+   "backend/tests/test_approval_flow_scope.py",
+   "backend/tests/test_approval_queue_covers_every_doc_type_2026_09_24.py",
+   "backend/tests/test_approval_queue_extra_types_2026_09_30.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "6b5d2865"
+ },
+ {
+  "id": "t31r2",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "6b5d2865",
+  "head": "6aaa5fb0",
+  "actual_minutes": 6.67,
+  "red_files": [
+   "backend/tests/platform/test_module_changelog_follows_code.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "6b5d2865"
+ },
+ {
+  "id": "t31r2",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "fc5f4080",
+  "head": "6aaa5fb0",
+  "actual_minutes": 6.67,
+  "red_files": [
+   "backend/tests/platform/test_module_changelog_follows_code.py"
+  ],
+  "base_red_files": [
+   "backend/tests/platform/test_case_summary_purpose.py",
+   "backend/tests/platform/test_json_extract_ratchet.py",
+   "backend/tests/platform/test_module_migrations.py",
+   "backend/tests/platform/test_pii_forms_notice.py",
+   "backend/tests/test_approval_flow_scope.py",
+   "backend/tests/test_approval_queue_covers_every_doc_type_2026_09_24.py",
+   "backend/tests/test_approval_queue_extra_types_2026_09_30.py"
+  ],
+  "recall_base": "fc5f4080"
+ },
+ {
+  "id": "t31r3",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "6b5d2865",
+  "head": "09d13fdf",
+  "actual_minutes": 12.94,
+  "red_files": [
+   "backend/tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "6b5d2865"
+ },
+ {
+  "id": "t31r3",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "6aaa5fb0",
+  "head": "09d13fdf",
+  "actual_minutes": 12.94,
+  "red_files": [
+   "backend/tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py"
+  ],
+  "base_red_files": [
+   "backend/tests/platform/test_module_changelog_follows_code.py"
+  ],
+  "recall_base": "6aaa5fb0"
+ },
+ {
+  "id": "t31r4",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "6b5d2865",
+  "head": "26bd438d",
+  "actual_minutes": 17.79,
+  "red_files": [
+   "backend/tests/test_money_round_half_up_2026_09_26.py",
+   "backend/tests/test_spec_coverage_2026_09_21.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "6b5d2865"
+ },
+ {
+  "id": "t31r4",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "09d13fdf",
+  "head": "26bd438d",
+  "actual_minutes": 17.79,
+  "red_files": [
+   "backend/tests/test_money_round_half_up_2026_09_26.py",
+   "backend/tests/test_spec_coverage_2026_09_21.py"
+  ],
+  "base_red_files": [
+   "backend/tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py"
+  ],
+  "recall_base": "09d13fdf"
+ },
+ {
+  "id": "t31r5",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "6b5d2865",
+  "head": "e7bae66a",
+  "actual_minutes": 22.4,
+  "red_files": [
+   "backend/modules/case/tests/test_approval_providers.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "6b5d2865"
+ },
+ {
+  "id": "t31r5",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "26bd438d",
+  "head": "e7bae66a",
+  "actual_minutes": 22.4,
+  "red_files": [
+   "backend/modules/case/tests/test_approval_providers.py"
+  ],
+  "base_red_files": [
+   "backend/tests/test_money_round_half_up_2026_09_26.py",
+   "backend/tests/test_spec_coverage_2026_09_21.py"
+  ],
+  "recall_base": "26bd438d"
+ },
+ {
+  "id": "t31r6",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "6b5d2865",
+  "head": "70db060a",
+  "actual_minutes": 25.52,
+  "red_files": [
+   "backend/modules/subcontract/tests/test_pii_archive_mirror_2026_09_25.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "6b5d2865"
+ },
+ {
+  "id": "t31r6",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "e7bae66a",
+  "head": "70db060a",
+  "actual_minutes": 25.52,
+  "red_files": [
+   "backend/modules/subcontract/tests/test_pii_archive_mirror_2026_09_25.py"
+  ],
+  "base_red_files": [
+   "backend/modules/case/tests/test_approval_providers.py"
+  ],
+  "recall_base": "e7bae66a"
+ },
+ {
+  "id": "t31r7",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "6b5d2865",
+  "head": "a5dea50c",
+  "actual_minutes": 25.79,
+  "red_files": [],
+  "base_red_files": [],
+  "recall_base": "6b5d2865"
+ },
+ {
+  "id": "t31r7",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "70db060a",
+  "head": "a5dea50c",
+  "actual_minutes": 25.79,
+  "red_files": [],
+  "base_red_files": [
+   "backend/modules/subcontract/tests/test_pii_archive_mirror_2026_09_25.py"
+  ],
+  "recall_base": "70db060a"
+ },
+ {
+  "id": "t32r1",
+  "stage": "not_e2e",
+  "variant": "A",
+  "base": "a5dea50c",
+  "head": "deb8c273",
+  "actual_minutes": 9.99,
+  "red_files": [
+   "backend/tests/platform/test_version_slots.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "a5dea50c"
+ },
+ {
+  "id": "t32r1",
+  "stage": "not_e2e",
+  "variant": "B",
+  "base": "a5dea50c",
+  "head": "deb8c273",
+  "actual_minutes": 9.99,
+  "red_files": [
+   "backend/tests/platform/test_version_slots.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "a5dea50c"
+ },
+ {
+  "id": "t31e0",
+  "stage": "e2e",
+  "variant": "A",
+  "base": "6b5d2865",
+  "head": "fa64e2c4",
+  "actual_minutes": 7.69,
+  "red_files": [
+   "backend/tests/test_e2e_material_approval_2026_10_02.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "6b5d2865"
+ },
+ {
+  "id": "t31e0",
+  "stage": "e2e",
+  "variant": "B",
+  "base": "6b5d2865",
+  "head": "fa64e2c4",
+  "actual_minutes": 7.69,
+  "red_files": [
+   "backend/tests/test_e2e_material_approval_2026_10_02.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "6b5d2865"
+ },
+ {
+  "id": "t31e1",
+  "stage": "e2e",
+  "variant": "A",
+  "base": "6b5d2865",
+  "head": "fc5f4080",
+  "actual_minutes": 10.89,
+  "red_files": [],
+  "base_red_files": [],
+  "recall_base": "6b5d2865"
+ },
+ {
+  "id": "t31e1",
+  "stage": "e2e",
+  "variant": "B",
+  "base": "fa64e2c4",
+  "head": "fc5f4080",
+  "actual_minutes": 10.89,
+  "red_files": [],
+  "base_red_files": [
+   "backend/tests/test_e2e_material_approval_2026_10_02.py"
+  ],
+  "recall_base": "fa64e2c4"
+ },
+ {
+  "id": "t31e7",
+  "stage": "e2e",
+  "variant": "A",
+  "base": "fc5f4080",
+  "head": "a5dea50c",
+  "actual_minutes": 11.12,
+  "red_files": [],
+  "base_red_files": [],
+  "recall_base": "fc5f4080"
+ },
+ {
+  "id": "t31e7",
+  "stage": "e2e",
+  "variant": "B",
+  "base": "fc5f4080",
+  "head": "a5dea50c",
+  "actual_minutes": 11.12,
+  "red_files": [],
+  "base_red_files": [],
+  "recall_base": "fc5f4080"
+ },
+ {
+  "id": "t32e1",
+  "stage": "e2e",
+  "variant": "A",
+  "base": "a5dea50c",
+  "head": "deb8c273",
+  "actual_minutes": 8.96,
+  "red_files": [
+   "backend/tests/test_e2e_case_open_requests_2026_09_24.py",
+   "backend/tests/test_e2e_case_page_golden_2026_09_24.py",
+   "backend/tests/test_e2e_case_switch_state_2026_09_24.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "a5dea50c"
+ },
+ {
+  "id": "t32e1",
+  "stage": "e2e",
+  "variant": "B",
+  "base": "a5dea50c",
+  "head": "deb8c273",
+  "actual_minutes": 8.96,
+  "red_files": [
+   "backend/tests/test_e2e_case_open_requests_2026_09_24.py",
+   "backend/tests/test_e2e_case_page_golden_2026_09_24.py",
+   "backend/tests/test_e2e_case_switch_state_2026_09_24.py"
+  ],
+  "base_red_files": [],
+  "recall_base": "a5dea50c"
+ }
+]
