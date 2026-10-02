@@ -252,3 +252,26 @@ def test_train32_reds_are_in_the_replay_table_and_covered_or_honestly_marked():
             continue
         r = AG.replay_offline(c, AG.REPO)
         assert r["covered"] in (True, None), (name, r["missing"])
+
+
+def test_ag_long_argv_spills_to_argsfile_and_pytest_really_runs_it(tmp_path):
+    """d7 實測 706 檔 ⇒ WinError 206。超過上限的參數改走 @argsfile；用 >700 個路徑實跑 pytest 證明 argsfile 被讀（反向：不 spill 就爆）。"""
+    import os
+    import tempfile
+    py = sys.executable
+    files = []
+    for i in range(320):
+        f = tmp_path / ("t%03d_" % i + "x" * 90 + ".py")
+        f.write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+        files.append(str(f))
+    argv = [py, "-m", "pytest", *files, "-q", "-p", "no:cacheprovider", "--basetemp=%s" % (tmp_path / "bt")]
+    assert sum(len(a) + 1 for a in argv) > AG.ARGV_LIMIT
+    real, spilled = AG.spill_argv(argv)
+    assert spilled and real[-1] == "@" + spilled and len(" ".join(real)) < 1000
+    os.remove(spilled)                                                                        # 這次只是看形狀；實跑的那份由 run_pytest 自己刪
+    code, out = AG.run_pytest(argv, tmp_path, {}, stream=False)
+    assert code == 0 and "320 passed" in out, out[-400:]
+    leftovers = [f for f in os.listdir(tempfile.gettempdir()) if f.startswith("author_gate_args_")]
+    assert not leftovers, leftovers                                                           # 用完即刪
+    short = [py, "-m", "pytest", "a.py"]
+    assert AG.spill_argv(short) == (short, None)

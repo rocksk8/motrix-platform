@@ -260,7 +260,34 @@ def venv_warning(repo=REPO, exe=None):
     return "目前的 python（%s）不是專案 venv（%s）：requirements 涵蓋題的結果會和列車不同；請用專案 venv 的 python 執行本工具" % (cur, want)
 
 
+#: Windows 命令列上限約 32767 字元；留餘裕。超過就把 pytest 參數放進 @argsfile（pytest ≥ 8.2 支援，一行一個參數）
+ARGV_LIMIT = 24000
+
+
+def spill_argv(argv, limit=ARGV_LIMIT):
+    """⇒ (實際 argv, 暫存 argsfile 路徑或 None)。argv 形如 [python, -m, pytest, 其餘…]；過長時其餘參數改走 @file。"""
+    if sum(len(a) + 1 for a in argv) <= limit:
+        return list(argv), None
+    i = argv.index("pytest") + 1 if "pytest" in argv else 0
+    fd, path = tempfile.mkstemp(prefix="author_gate_args_", suffix=".txt")
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(argv[i:]) + "\n")
+    return list(argv[:i]) + ["@" + path], path
+
+
 def run_pytest(argv, cwd, env, stream=True):
+    argv, spilled = spill_argv(argv)
+    try:
+        return _run_pytest(argv, cwd, env, stream)
+    finally:
+        if spilled:
+            try:
+                os.remove(spilled)
+            except OSError:
+                pass
+
+
+def _run_pytest(argv, cwd, env, stream=True):
     e = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
     e.update(env or {})
     flags = (getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) | nowindow.CREATE_NO_WINDOW) if os.name == "nt" else 0       # 低優先權、不跳視窗
