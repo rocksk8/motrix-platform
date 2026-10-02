@@ -31,7 +31,7 @@
       fdInitSwitch: function () {
         try {
           var q = new URLSearchParams(location.search).get('designer')
-          this.useFD = q === '1' ? true : (q === '0' ? false : localStorage.getItem('et_designer') === '1')
+          this.useFD = q === '1' ? true : (q === '0' ? false : localStorage.getItem('et_designer') !== '0')
         } catch (e) {}
         var self = this
         this.$watch('problems', function () { self.fdSyncProblems() })
