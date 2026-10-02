@@ -70,3 +70,10 @@
 2. `pypdfium2` 要嘛列入開發需求要嘛註明；`test_bonus_correction:279` 死程式碼；`test_jv12…` 改 `pytest.skip`。
 3. test_map 的 unmapped 後 6 檔補歸屬。
 4. 刪除 payroll／subcontract money_round 副本中未使用且引用已移除 `routers.reports` 的 `_patch_entries()`。
+
+---
+## 補充 1（2026-10-03；併入 d7 提供的 fail_stream 統計 `D:\開發測試檔\d7-hygiene-data\HYGIENE-D7.md`，3.5 天／82 整段，限制見該檔 §5）
+- **佐證 §5 的降頻名單**：d7 量得 top-30 慢檔≈全段 worker 時間 47%，其中 17/30 這段期間從未紅（59% 時間）；工具／演練類（module_update_delivery、upgrade_drill、stepfile_drill、modtest_rebase_check、author_gate、stage_select、scope_gate）≈622 worker 秒／輪、僅新工具與 scope_gate 紅過。與我的靜態名單一致 ⇒ **建議依 diff 觸發**（全量／建包階段仍跑）。
+- **`ledger_mutation_guards`（8 題，平均 163s、最大 607s）**：讀碼結論——這是「突變守門的守門」：每一題都 `shutil.copytree` 整個 backend＋frontend 到暫存、植入一處突變、再起子 pytest 跑偵測檔；題數 9（8 突變＋1 反向控制）＝**9 次完整複製＋9 次子行程**。變異大（607s）主因是複製（磁碟／防毒掃描）與子行程隨機器負載。**可拆／可省**：①複製只做一次（module 範圍 fixture），之後「就地改一個檔→跑→還原」（我本班的突變做法）——預估 163s→約 60s；②它已因 `import` 目標檔而被依賴選題選中（改 ledger 檔才選），不需另做降頻。這是效能優化，不是刪守門；風險＝就地還原失敗會污染複本（用 try/finally＋對複本內容雜湊驗證）。建議由 accounting 模組作者（非我）改，我可覆審。
+- **重複覆蓋（d7 §3-6 請我判斷）**：`author_gate` 與 `stage_select` 的測試**不重複**——前者測「作者端守門集的選題組裝／預算／結果 JSON／髒樹拒絕／回放」，後者測「增量段選題計畫與反向控制」，共用的只是 guard_patterns.json 的載入；`module_update_delivery`（21 題：模組 RC 包被拒的各種條件——簽章／基底／授權／同內容）與 `upgrade_drill`（2 題：V9→新版端到端轉換與回滾）**測不同事**，不是重複；兩者都只該在 `core/`、`tools/platform/`、`delivery`、`module_update` 相關改動或建包時跑。
+- **增量選題偏粗（d7 §2）**：我同意是最大的可省項，但這屬選題器（stage_select／dep_scan）的設計，**不是測試本身的問題**；`core:db` 傳遞閉包過寬（改 case 一個檔就選 476/835 題）值得 a3 確認。我沒有讀 dep_scan，不下結論。
