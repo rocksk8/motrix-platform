@@ -335,3 +335,21 @@ def test_privacy_ack_write_failure_is_fail_closed_no_request_is_left_and_submit_
     assert s.status_code == 409 and "個資告知" in s.text, s.text
     assert _q("SELECT status FROM case_material_payments WHERE id=?", (pid,))[0]["status"] == "草稿"
     assert client.post("/api/material-payments/%d/submit" % pid, headers=world["adm"]).status_code == 200
+
+
+def test_fee_over_the_limit_goes_to_review_and_a_fee_above_the_payment_is_refused(client, world):
+    """32 班：單筆手續費 > 500 ⇒ 該筆明細進差額審核（reason＝手續費偏高）；= 500 不審；手續費 > 實付 ⇒ 400。只管材料申請匯款。"""
+    w = world
+    pid = _approved(client, w, 6000)
+    pay = "/api/cashier/pending-payables/case_material/%d/pay" % pid
+    assert client.post(pay, json={"paidDate": "2031-04-01", "actualAmount": 100, "hasFee": True, "fee": 101}, headers=w["cash"]).status_code == 400    # 手續費大於實付
+    r = client.post(pay, json={"paidDate": "2031-04-01", "actualAmount": 1000, "hasFee": True, "fee": 500}, headers=w["cash"])
+    assert r.status_code == 200 and not r.json().get("remitReview"), r.text                                        # 剛好 500：不審
+    r = client.post(pay, json={"paidDate": "2031-04-02", "actualAmount": 1000, "hasFee": True, "fee": 600}, headers=w["cash"])
+    assert r.status_code == 200 and r.json()["remitReview"] == "pending" and r.json()["diff"] == 0, r.text          # 600 > 500：審核，沒有差額
+    mine = [i for i in client.get("/api/cashier/remit-reviews", headers=w["adm"]).json()["items"] if i["source"] == "case_material"]
+    assert [(i["actual"], i["diff"]) for i in mine] == [(1000.0, 0.0)] and "手續費偏高" in mine[0]["reason"]
+    dec = "/api/cashier/remit-reviews/case_material/%s/decision" % mine[0]["key"]
+    assert client.post(dec, json={"decision": "reject", "note": "手續費不合理"}, headers=w["cash"]).status_code == 403          # 出納自己登錄的、也非 admin：不能審
+    assert client.post(dec, json={"decision": "reject", "note": "手續費不合理"}, headers=w["adm"]).status_code == 200
+    assert _q("SELECT COUNT(*) AS n FROM case_material_payment_lines")[0]["n"] == 1                                # 退回＝刪掉 600 那一筆，剩 500 那筆

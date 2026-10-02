@@ -38,6 +38,8 @@ EDITABLE = (S_DRAFT, S_RETURNED)
 QUOTA_STATUSES = (S_DRAFT, S_PENDING, S_IN_PROGRESS, S_APPROVED)
 
 REVIEW_PENDING = "pending"
+#: 單筆手續費覆核門檻（32 班；只管材料申請匯款，其他請款來源沒有此規則）：超過 ⇒ 該筆付款明細進「差額審核」（與多付同一條覆核路徑）。
+FEE_REVIEW_OVER = 500.0
 REVIEW_APPROVED = "approved"
 
 if DOC_TYPE not in APPROVAL_DOC_TYPES:
@@ -487,8 +489,11 @@ def parse_line(body, remaining):
         fee = _num(body.get("fee", body.get("remit_fee")), "手續費")
         if fee < 0:
             raise BadRemit("手續費不可為負數")
+        if fee > amount:
+            raise BadRemit("手續費不可超過實付金額")
+    over_pay = amount > remaining + 0.005
     return {"amount": amount, "fee": fee, "diff": r2(amount - remaining) if amount > remaining else 0.0,
-            "review": REVIEW_PENDING if amount > remaining + 0.005 else ""}
+            "review": REVIEW_PENDING if (over_pay or fee > FEE_REVIEW_OVER) else ""}
 
 
 def add_line(conn, pid, paid_date, user, body) -> dict:

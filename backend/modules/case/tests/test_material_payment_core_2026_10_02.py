@@ -322,8 +322,8 @@ def test_amounts_are_rounded_half_up_to_cents_not_python_round(world):
         assert MP.r2(raw) == want, (raw, MP.r2(raw))
     conn, sid = world
     a = _approved(conn, sid, amount=1000)
-    r = MP.add_line(conn, a["id"], "2031-03-05", CASHIER, {"actualAmount": 0.145, "hasFee": True, "fee": 2.675})
-    assert (r["actual"], r["fee"]) == (0.15, 2.68), r                                          # 實付與手續費各自 half-up 到分
+    r = MP.add_line(conn, a["id"], "2031-03-05", CASHIER, {"actualAmount": 10.145, "hasFee": True, "fee": 2.675})
+    assert (r["actual"], r["fee"]) == (10.15, 2.68), r                                          # 實付與手續費各自 half-up 到分
     ln = MP.lines_of(conn, a["id"])[0]
-    assert (ln["amount"], ln["fee"]) == (0.15, 2.68)
-    assert _o(conn, "L1")["paidAmount"] == 0.15 and r["remaining"] == 999.85                   # 投影與剩餘額也是兩位 half-up（1000 − 0.15）
+    assert (ln["amount"], ln["fee"]) == (10.15, 2.68)
+    assert _o(conn, "L1")["paidAmount"] == 10.15 and r["remaining"] == 989.85                 # 投影與剩餘額也是兩位 half-up（1000 − 10.15）；手續費不能大於實付，所以實付取 10.145
