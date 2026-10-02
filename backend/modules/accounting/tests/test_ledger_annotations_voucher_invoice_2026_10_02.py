@@ -72,3 +72,18 @@ def test_reverse_control_a_type_outside_the_allowed_list_is_refused(client, conn
     monkeypatch.setattr(LA, "ALLOWED", {k: v for k, v in LA.ALLOWED.items() if k != "contractor_voucher_invoice"})
     r = client.put("/api/ledger/annotations", headers=h, json={"source_type": "contractor_voucher_invoice", "source_key": "PV-1", "field": "input_tax", "value": "480"})
     assert r.status_code == 400
+
+
+def test_fields_outside_the_allowed_list_are_refused_for_the_new_type_and_loosening_the_list_turns_it_red(client, conn, monkeypatch, make_user):
+    """da S5：允許清單只放 input_tax／invoice_date；其他欄位（例 memo、tax_code）一律 400「只能補登…」。反向控制：把清單放寬 ⇒ 「只能補登」的拒絕訊息消失（證明拒絕是清單擋的）。"""
+    h = _login(client, make_user, "rka_c")
+    put = lambda field, value: client.put("/api/ledger/annotations", headers=h, json={"source_type": "contractor_voucher_invoice", "source_key": "PV-RKA-X", "field": field, "value": value})
+    assert LA.ALLOWED["contractor_voucher_invoice"] == ("input_tax", "invoice_date")
+    for bad in ("memo", "tax_code", "amount", "event_date"):
+        r = put(bad, "x")
+        assert r.status_code == 400 and "只能補登" in r.json()["detail"], (bad, r.status_code, r.text)
+    assert put("input_tax", "480").status_code == 200 and put("invoice_date", "2182-03-12").status_code == 200
+    monkeypatch.setitem(LA.ALLOWED, "contractor_voucher_invoice", ("input_tax", "invoice_date", "memo"))
+    r = put("memo", "x")
+    assert "只能補登" not in r.json()["detail"]                                         # 清單放寬 ⇒ 不再被「只能補登」擋（改由後面的日期格式驗證回 400）：上面的拒絕確實是清單擋的
+
