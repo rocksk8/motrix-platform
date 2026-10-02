@@ -627,7 +627,7 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
         conn.close()
         raise HTTPException(409, "這筆派發正在審核中，不能編輯（請先撤回或等審核結果）")
     voucher = conn.execute(
-        "SELECT voucher_no FROM contractor_payment_vouchers WHERE dispatch_id=?", (did,)
+        "SELECT voucher_no FROM contractor_payment_vouchers WHERE dispatch_id=? AND voided_at=''", (did,)
     ).fetchone()
     if voucher:
         conn.close()
@@ -695,7 +695,7 @@ def delete_dispatch(did: int, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(404, "派發紀錄不存在")
     voucher = conn.execute(
-        "SELECT voucher_no FROM contractor_payment_vouchers WHERE dispatch_id=?", (did,)
+        "SELECT voucher_no FROM contractor_payment_vouchers WHERE dispatch_id=? AND voided_at=''", (did,)
     ).fetchone()
     if voucher:
         conn.close()

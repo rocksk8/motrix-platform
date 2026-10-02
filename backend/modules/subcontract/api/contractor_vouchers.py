@@ -177,6 +177,8 @@ def _voucher_public(row, include_snapshot: bool = True, viewer=None) -> dict:
         "seq":           d.get("seq") or 0,
         "ratio":         d.get("ratio"),
         "pretaxAmount":  d.get("pretax_amount"),
+        "voidedAt":      d.get("voided_at") or "",
+        "voidReason":    d.get("void_reason") or "",
         "payableDate":   snap.get("payableDate", ""),
         "bankAccountName":   snap.get("bankAccountName", ""),
         "bankAccountNumber": snap.get("bankAccountNumber", ""),
@@ -474,13 +476,18 @@ def delete_contractor_voucher(voucher_no: str, authorization: str = Header(None)
     user = _require_user(authorization)
     _require_admin(user)
     conn = get_db()
-    row = conn.execute("SELECT status FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+    row = conn.execute("SELECT status, voucher_no, dispatch_id, kind, is_paid, voided_at FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "申請不存在")
     if row["status"] != "草稿":
         conn.close()
-        raise HTTPException(409, "僅草稿狀態可刪除")
+        raise HTTPException(409, "僅草稿狀態可刪除" + ("（已送審的分期申請請用「作廢」）" if row["kind"] else ""))
+    if row["kind"]:                                                         # 分期草稿也守 LIFO：刪中間一期會讓已凍結的補差失準
+        why = _rc.void_blocker(conn, row)
+        if why:
+            conn.close()
+            raise HTTPException(409, why)
     conn.execute("DELETE FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,))
     conn.commit()
     conn.close()
@@ -490,6 +497,42 @@ def delete_contractor_voucher(voucher_no: str, authorization: str = Header(None)
     notify_module_activity("承攬商匯款申請", "刪除", user.get("display_name") or user["username"],
                             voucher_no, "case-management.html")
     return {"ok": True}
+
+
+class VoucherVoidIn(BaseModel):
+    reason: str = ""
+
+
+@router.post("/api/contractor-vouchers/{voucher_no}/void")
+def void_contractor_voucher(voucher_no: str, body: VoucherVoidIn, authorization: str = Header(None)):
+    """31-B S2b：分期匯款申請作廢（admin＋；填原因；已付款先撤銷付款；後進先出）。作廢的不佔累計額度、不進待付款／簽核佇列，序號不回頭重用。"""
+    user = _require_user(authorization)
+    _require_admin(user)
+    reason = (body.reason or "").strip()
+    if not reason:
+        raise HTTPException(400, "請填寫作廢原因")
+    if len(reason) > 500:
+        raise HTTPException(400, "作廢原因太長（上限 500 字）")
+    conn = get_db()
+    with write_txn(conn):
+        row = conn.execute("SELECT voucher_no, dispatch_id, kind, is_paid, voided_at, status FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+        if not row:
+            conn.close()
+            raise HTTPException(404, "申請不存在")
+        why = _rc.void_blocker(conn, row)
+        if why:
+            conn.close()
+            raise HTTPException(409, why)
+        now = datetime.now().isoformat()
+        conn.execute("UPDATE contractor_payment_vouchers SET status='已作廢', voided_at=?, voided_by=?, void_reason=?, updated_at=? WHERE voucher_no=?",
+                     (now, user["username"], reason, now, voucher_no))
+        conn.commit()
+        conn.close()
+    _purge_notifications(voucher_no, ['contractor_voucher_approval_request', 'contractor_voucher_approved',
+                                       'contractor_voucher_returned', 'approval_reminder'])
+    _audit(_tok(authorization), "contractor_voucher.void", "contractor_payment_voucher", voucher_no, "%s（原狀態 %s）原因：%s" % (voucher_no, row["status"], reason))
+    notify_module_activity("承攬商匯款申請", "作廢", user.get("display_name") or user["username"], voucher_no, "case-management.html")
+    return {"ok": True, "voidedAt": now}
 
 
 # ── 簽核流程 ──────────────────────────────────────────────────────────────────
