@@ -7,6 +7,7 @@
 - 只影響**本行程**；子行程再起的行程（例如被測的 apply_update.ps1 內部的 Start-Process）由那支腳本自己負責（它們已用 -WindowStyle Hidden）。
 - 非 Windows ⇒ 什麼都不做。
 用法：`import nowindow; nowindow.install()`（冪等）。"""
+import copy
 import os
 import subprocess
 
@@ -23,8 +24,7 @@ def with_hidden(creationflags=0, startupinfo=None, *, nt=None):
         return creationflags, startupinfo
     if not (creationflags & (DETACHED_PROCESS | CREATE_NEW_CONSOLE)):
         creationflags |= CREATE_NO_WINDOW
-    if startupinfo is None:
-        startupinfo = subprocess.STARTUPINFO()
+    startupinfo = subprocess.STARTUPINFO() if startupinfo is None else copy.copy(startupinfo)      # 不改呼叫端的物件
     startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     startupinfo.wShowWindow = SW_HIDE
     return creationflags, startupinfo
@@ -39,6 +39,8 @@ def install():
     orig = subprocess.Popen.__init__
 
     def __init__(self, *args, **kw):
+        if len(args) > 12:                         # startupinfo／creationflags 以位置參數傳入：無法安全合併，原樣放行（避免 TypeError: multiple values）
+            return orig(self, *args, **kw)
         kw["creationflags"], kw["startupinfo"] = with_hidden(kw.get("creationflags", 0), kw.get("startupinfo"))
         orig(self, *args, **kw)
     subprocess.Popen.__init__ = __init__
