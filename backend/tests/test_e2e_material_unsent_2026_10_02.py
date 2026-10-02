@@ -26,12 +26,6 @@ PANEL = "#fin-material-orders"
 
 
 
-@pytest.fixture(autouse=True)
-def _po_rule_off(monkeypatch):
-    """33-M1 後端強制採購單已上線；這個檔的畫面流程（手動新增列）等前端「從採購單帶入」改版時再改寫。規則本身的題在 test_material_po_required_2026_10_03.py。"""
-    from modules.case import material_approval as _MA
-    monkeypatch.setattr(_MA, "PO_REQUIRED", False)
-
 def _shot(page, name):
     try:
         d = os.path.join(os.environ.get("MOTRIX_SHOTS_DIR") or os.path.join(tempfile.gettempdir(), "w4-shots"), "t32-unsent")
@@ -72,10 +66,19 @@ def _status(page, i=0):
 
 
 def _fill_new(page, name, price="1500"):
-    page.click(f'{PANEL} button:has-text("新增項目")')
-    page.locator(f'{PANEL} input[placeholder="項目名稱（如：交換器）"]').last.fill(name)
-    page.locator(f'{PANEL} input[placeholder="數量"]').last.fill("2")
-    page.locator(f'{PANEL} input[placeholder="單價"]').last.fill(price)
+    """33-M1：新申請只能從已核准的採購單明細帶入——用 API 開一張已核准採購單，再從畫面帶入那一列。"""
+    import re
+    from tests._material_po import approved_po
+    sess = json.loads(page.evaluate("() => localStorage.getItem('motrix_session')"))
+    base = re.match(r"https?://[^/]+", page.url).group(0)
+    approved_po(page.context, base, {"Authorization": "Bearer " + sess["token"]}, NO, name, 2, float(price), sess["username"])
+    before = page.locator(f'{PANEL} input[placeholder="項目名稱（如：交換器）"]').count()
+    page.click('[data-testid="ml-open-po"]')
+    row = page.locator('[data-testid^="ml-p-"]', has_text=name)
+    row.first.wait_for(state="visible", timeout=15000)
+    row.first.locator("input").check()
+    page.click('[data-testid="ml-import"]')
+    page.wait_for_function("(n) => document.querySelectorAll('#fin-material-orders input[placeholder=\"項目名稱（如：交換器）\"]').length === n + 1", arg=before, timeout=10000)
 
 
 def _pick_supplier(page):
@@ -163,8 +166,7 @@ def test_new_material_request_stays_unsent_until_submit(live_server, make_user, 
     _shot(page, "03-one-click-submit")
 
     # 5 守門拒絕：缺供應商 ⇒ 不送審、不留殘列
-    page.click(f'{PANEL} button:has-text("新增項目")')
-    page.locator(f'{PANEL} input[placeholder="項目名稱（如：交換器）"]').last.fill("沒供應商")
+    _fill_new(page, "沒供應商")
     before = (len(_orders()), len(_approvals()))
     page.locator(f'{PANEL} [data-testid="mo-submit"]').last.click()
     page.wait_for_timeout(1500)

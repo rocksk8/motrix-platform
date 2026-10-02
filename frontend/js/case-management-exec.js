@@ -301,15 +301,6 @@ window.CM_PARTS.push(() => ({
       return { total, paid, unpaid: total - paid, unsent }
     },
 
-    moAddItem() {
-      this.materialOrders.push({
-        itemId: this._moNewId(), itemName: '', quantity: 1, unit: '', unitPrice: 0,
-        totalPrice: 0, paidStatus: 'pending', paidAmount: 0, paidDate: '', notes: '', invoiceDate: '', supplierId: null, _saved: false, _recvDate: ''
-      })
-      this.moDirty = true
-      this.moMsg = ''
-    },
-
     // 2026-09-24（N11，使用者裁示「刪除確認全部都加」）：材料申請品項、派工／出貨表單品項列、
     // 負責人移除也要先確認；訊息寫出要刪的名稱。
     async moRemoveItem(i) {
