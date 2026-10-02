@@ -555,6 +555,21 @@ window.CM_PARTS.push(() => ({
         projectTimeline: '專案時程', materialOrders: '叫料', warrantyNote: '保固備註', notes: '備註' })[k] || k
     },
 
+    // 叫料審核（31-C）：存檔時被審核規則拒絕的項目（其餘已存）——說明原因，並把物流項目換回伺服器現值（旗標／序號被改回）
+    async _matRejected(list) {
+      const msgs = [...new Set(list.map(x => x.message))]
+      MotrixUI.toast('叫料審核規則：' + msgs.join('；'), { kind: 'info', ms: 9000 })
+      try {
+        const r = await fetch('/api/quotations/' + this.selected.quote_no, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) return
+        const srv = (await r.json()).data?.caseRecord || {}
+        if (this.cr.caseRecord) {
+          this.cr.caseRecord.materials = srv.materials || []
+          this._segBase.materials = JSON.stringify(srv.materials || [])
+        }
+      } catch {}
+    },
+
     // 衝突處理：reload＝放棄我的改動、改看伺服器現值；keep＝以伺服器現值為基準重存（明知並覆蓋那幾段）
     async resolveConflict(mode) {
       if (!this.selected || !this.segConflict) return
@@ -705,6 +720,7 @@ window.CM_PARTS.push(() => ({
             this._segBase[k] = JSON.stringify(adopted[k])
             if (JSON.stringify(this.cr.caseRecord[k]) === sent[k]) this.cr.caseRecord[k] = adopted[k]
           }
+          if (res.rejected && res.rejected.length) await this._matRejected(res.rejected)   // 叫料審核（31-C）：被拒的物流旗標／叫料變更
           const conflicts = res.stockConflicts || []
           if (res.stockNotice) {
             // IP-19：採購・庫存・出貨模組不在 ⇒ 存檔照常、序號沒有同步庫存，要讓使用者知道

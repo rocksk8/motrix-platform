@@ -1,0 +1,167 @@
+"""瀏覽器端對端（含截圖）：叫料審核（31-C S5）。
+
+一條完整來回（真實頁面、真實後端）：財務分頁新增叫料 → 儲存（建審核單＝草稿）→ 送審 → 待審核時內容欄位反灰、可撤回 → 簽核人核准 →
+重新載入顯示「已核准」＋到貨確認區 → 叫料管控頁：「已叫料」「已到料」一開始反灰（說明原因）→ 連結叫料單後可勾「已叫料」（自動存檔真的寫進資料庫）→
+「已到料」仍反灰（還沒確認到貨）→ 回財務分頁確認到貨（日期＋確認人顯示）→ 叫料管控可勾「已到料」。
+每個動作等**這一次動作的終點**（畫面文字／資料庫），不等「提示出現」。需要 playwright，沒裝的環境整檔 skip。
+截圖：暫存夾（MOTRIX_SHOTS_DIR 或系統暫存的 w4-shots），事後複製到 D:\\開發測試檔\\shots\\t31-material\\。
+"""
+from tests._requires import requires_module  # noqa: E402
+import json
+import os
+import tempfile
+import time
+
+import pytest
+
+pytest.importorskip("playwright.sync_api")
+
+from tests._e2e_login import inject_login  # noqa: E402
+
+pytestmark = requires_module("case", "本檔的題打 M01（案件）的端點或讀寫 M01 的資料")
+
+NO = "MQ-MA-E2E"
+PANEL = "#fin-material-orders"
+
+
+def _shot(page, name):
+    try:
+        d = os.path.join(os.environ.get("MOTRIX_SHOTS_DIR") or os.path.join(tempfile.gettempdir(), "w4-shots"), "t31-material")
+        os.makedirs(d, exist_ok=True)
+        page.screenshot(path=os.path.join(d, name + ".png"), full_page=True)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _cr():
+    import db
+    conn = db.get_db()
+    try:
+        return json.loads(conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"]).get("caseRecord", {})
+    finally:
+        conn.close()
+
+
+def _wait_db(pred, what, timeout=20):
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        if pred(_cr()):
+            return
+        time.sleep(0.4)
+    raise AssertionError("資料庫沒有達到預期狀態：" + what + "；目前 " + json.dumps(_cr(), ensure_ascii=False)[:400])
+
+
+def _approval_row():
+    import db
+    conn = db.get_db()
+    try:
+        r = conn.execute("SELECT status, doc_code, received_on, received_by FROM case_material_approvals WHERE quote_no=?", (NO,)).fetchone()
+        return dict(r) if r else None
+    finally:
+        conn.close()
+
+
+def _open_finance(page, base):
+    page.goto(f"{base}/pages/case-management.html?q={NO}")
+    page.wait_for_selector('.cm-tab:has-text("財務")', timeout=20000)
+    page.click('.cm-tab:has-text("財務")')
+    page.wait_for_selector(PANEL, timeout=20000)
+
+
+def _status_text(page):
+    return page.locator(f'{PANEL} [data-testid="mo-ap-status"]').first.inner_text()
+
+
+@pytest.mark.e2e
+def test_material_order_approval_round_trip_in_the_browser(live_server, make_user, e2e_browser):
+    import db
+    adm, ap = make_user(username="e2e_ma_adm", role="superadmin")
+    boss, bp = make_user(username="e2e_ma_boss", role="sales")
+    conn = db.get_db()
+    try:
+        cr = {"materials": [{"id": 1, "name": "交換器", "model": "", "qty": 2, "unit": "台", "ordered": False, "arrived": False, "devices": []}]}
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at, deal_tag, quote_date)"
+                     " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                     (NO, "已送出", "叫料審核客", "叫料審核專", 100000, 95238, json.dumps({"dealTag": "已成案", "caseRecord": cr}, ensure_ascii=False),
+                      "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案", "2026-01-01"))
+        conn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+                     ("unified_approval_flow", json.dumps({"tiers": [{"order": 0, "approvers": [{"username": boss, "displayName": "主管"}]}],
+                                                            "includeSubmitterManagerTier": False}), "2026-01-01T00:00:00"))
+        conn.execute("INSERT INTO suppliers (name, code, created_at, updated_at) VALUES (?,?,?,?)", ("甲供應商", "S-001", "2026-01-01", "2026-01-01"))
+        conn.commit()
+    finally:
+        conn.close()
+
+    page = e2e_browser.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    inject_login(page, live_server, adm, ap)
+    _open_finance(page, live_server)
+    page.wait_for_function("() => { const t = document.querySelector('#fin-material-orders')?.innerText || ''; return t.includes('尚無叫料項目') && !t.includes('載入中') }", timeout=20000)
+
+    # 1 新增並儲存 ⇒ 建審核單（草稿）
+    page.click(f'{PANEL} button:has-text("新增項目")')
+    page.fill(f'{PANEL} input[placeholder="項目名稱（如：交換器）"]', "交換器")
+    page.fill(f'{PANEL} input[placeholder="數量"]', "2")
+    page.fill(f'{PANEL} input[placeholder="單價"]', "1500")
+    page.wait_for_function("() => document.querySelectorAll('#fin-material-orders [data-testid=mo-supplier] option').length >= 2", timeout=15000)
+    page.select_option(f'{PANEL} [data-testid="mo-supplier"]', label="S-001 甲供應商")        # 31-C：新增叫料必選供應商
+    assert _status_text(page) == "尚未儲存"
+    page.click(f'{PANEL} button:has-text("儲存叫料")')
+    page.wait_for_function("() => document.querySelector('#fin-material-orders [data-testid=mo-ap-status]')?.innerText === '草稿'", timeout=15000)
+    row = _approval_row()
+    assert row["status"] == "草稿" and row["doc_code"].startswith("MO-")
+    code = row["doc_code"]
+    assert page.locator(f'{PANEL} [data-testid="mo-ap-code"]').first.inner_text() == code
+    item_id = _cr()["materialOrders"][0]["itemId"]
+    _shot(page, "01-draft")
+
+    # 2 送審 ⇒ 待審核：內容反灰、可撤回、不能再送審
+    page.click(f'{PANEL} [data-testid="mo-submit"]')
+    page.wait_for_function("() => document.querySelector('#fin-material-orders [data-testid=mo-ap-status]')?.innerText === '待審核'", timeout=15000)
+    assert _approval_row()["status"] == "待審核"
+    assert page.locator(f'{PANEL} input[placeholder="單價"]').first.is_disabled()
+    assert page.locator(f'{PANEL} [data-testid="mo-submit"]').first.is_hidden() and page.locator(f'{PANEL} [data-testid="mo-withdraw"]').first.is_visible()
+    assert "待簽：主管" in page.locator(f'{PANEL} [data-testid="mo-approval-{item_id}"]').inner_text()
+    _shot(page, "02-pending")
+
+    # 3 簽核人核准（另一個身分走 API）→ 重新載入 ⇒ 已核准＋到貨確認區
+    bctx = e2e_browser.new_context()                                                        # 另一個身分（簽核人）走 API；用瀏覽器自己的 request，不多引套件
+    tok = bctx.request.post(live_server + "/api/auth/login", data={"username": boss, "password": bp}).json()["token"]
+    r = bctx.request.post(f"{live_server}/api/quotations/{NO}/material-orders/{item_id}/approve", headers={"Authorization": "Bearer " + tok}, data={})
+    assert r.status == 200 and r.json()["status"] == "已核准", r.text()
+    _open_finance(page, live_server)
+    page.wait_for_function("() => document.querySelector('#fin-material-orders [data-testid=mo-ap-status]')?.innerText === '已核准'", timeout=15000)
+    assert page.locator(f'{PANEL} [data-testid="mo-recv"]').first.is_visible()
+    _shot(page, "03-approved")
+
+    # 4 叫料管控：旗標一開始反灰；連結後可勾「已叫料」，「已到料」仍反灰
+    page.click('.cm-tab:has-text("執行管理")') if page.locator('.cm-tab:has-text("執行管理")').count() else None
+    page.click('.cm-tab:has-text("叫料管控")')
+    page.wait_for_selector('[data-testid="mat-order-link"]', timeout=15000)
+    assert page.locator('[data-testid="mat-ordered"]').first.is_disabled() and page.locator('[data-testid="mat-arrived"]').first.is_disabled()
+    page.wait_for_function(f"() => document.querySelector('[data-testid=mat-order-link]').querySelectorAll('option').length >= 2", timeout=15000)
+    page.select_option('[data-testid="mat-order-link"]', item_id)
+    page.wait_for_function("() => !document.querySelector('[data-testid=mat-ordered]').disabled", timeout=10000)
+    assert page.locator('[data-testid="mat-arrived"]').first.is_disabled()
+    page.check('[data-testid="mat-ordered"]')
+    _wait_db(lambda c: c["materials"][0].get("ordered") is True and c["materials"][0].get("orderItemId") == item_id, "已叫料＋連結已存")
+    _shot(page, "04-ordered")
+
+    # 5 回財務分頁確認到貨（日期＋確認人）⇒ 叫料管控可勾「已到料」
+    page.click('.cm-tab:has-text("財務")')
+    page.wait_for_selector(f'{PANEL} [data-testid="mo-recv-date"]', timeout=15000)
+    page.fill(f'{PANEL} [data-testid="mo-recv-date"]', "2031-03-05")
+    page.click(f'{PANEL} [data-testid="mo-recv"]')
+    page.wait_for_selector(f'{PANEL} [data-testid="mo-recv-done"]', timeout=15000)
+    assert "2031-03-05" in page.locator(f'{PANEL} [data-testid="mo-recv-done"]').inner_text() and adm in page.locator(f'{PANEL} [data-testid="mo-recv-done"]').inner_text()
+    row = _approval_row()
+    assert (row["received_on"], row["received_by"]) == ("2031-03-05", adm)
+    _shot(page, "05-received")
+    page.click('.cm-tab:has-text("執行管理")') if page.locator('.cm-tab:has-text("執行管理")').count() else None
+    page.click('.cm-tab:has-text("叫料管控")')
+    page.wait_for_function("() => !document.querySelector('[data-testid=mat-arrived]').disabled", timeout=10000)
+    page.check('[data-testid="mat-arrived"]')
+    _wait_db(lambda c: c["materials"][0].get("arrived") is True, "已到料已存")
+    _shot(page, "06-arrived")
+    assert not errors, errors

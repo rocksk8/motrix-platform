@@ -3492,7 +3492,8 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         details["material"].append({
             **_dept_fields(e["quoteNo"]),
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round_half_up(e["amount"]),
-            "taxNote": e["taxNote"], "provisional": e["provisional"],
+            "taxNote": e["taxNote"] + ("｜待審核" if e.get("pending") else ""), "provisional": e["provisional"],
+            "pending": bool(e.get("pending")),                       # 叫料審核（31-C）：待審核／簽核中的叫料照計入並標示
         })
 
     # ── 料件 / 設備進貨成本（stock_items.cost，依 parts.category 分桶；同月同料號

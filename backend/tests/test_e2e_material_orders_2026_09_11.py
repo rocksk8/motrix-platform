@@ -80,6 +80,16 @@ def _open_finance_tab(page, base_url, quote_no, expect="empty"):
         page.wait_for_selector(f'{MO_PANEL} input[placeholder="{ITEM_NAME_PH}"]', timeout=20000)
 
 
+def _read_approval_status(quote_no):
+    import db
+    conn = db.get_db()
+    try:
+        r = conn.execute("SELECT status FROM case_material_approvals WHERE quote_no=?", (quote_no,)).fetchone()
+        return r["status"] if r else ""
+    finally:
+        conn.close()
+
+
 def _read_material_orders(quote_no):
     import db
     conn = db.get_db()
@@ -104,6 +114,7 @@ def test_material_orders_panel_round_trip(live_server, make_user, e2e_browser):
     conn = db.get_db()
     try:
         _seed_case(conn, quote_no)
+        conn.execute("INSERT INTO suppliers (name, code, created_at, updated_at) VALUES (?,?,?,?)", ("甲供應商", "S-001", "2026-01-01", "2026-01-01"))
         conn.commit()
     finally:
         conn.close()
@@ -154,6 +165,9 @@ def test_material_orders_panel_round_trip(live_server, make_user, e2e_browser):
     page.fill(f'{MO_PANEL} input[placeholder="數量"]', "3")
     page.fill(f'{MO_PANEL} input[placeholder="單位"]', "台")
     page.fill(f'{MO_PANEL} input[placeholder="單價"]', "12500")
+    # 31-C：新增叫料必須選供應商（選單來自 GET /api/material-suppliers）
+    page.wait_for_function("() => document.querySelectorAll('#fin-material-orders [data-testid=mo-supplier] option').length >= 2", timeout=15000)
+    page.select_option(f'{MO_PANEL} [data-testid="mo-supplier"]', label="S-001 甲供應商")
 
     # 小計由前端算（後端會用 abs(小計 - 數量×單價) > 0.01 擋回來，
     # 所以這個數字錯了就等於整支端點不能用）
@@ -182,6 +196,7 @@ def test_material_orders_panel_round_trip(live_server, make_user, e2e_browser):
     assert saved[0]["paidStatus"] == "pending"
     assert saved[0]["paidAmount"] == 0
     assert saved[0]["paidDate"] is None
+    assert saved[0]["supplierId"] and _read_approval_status(quote_no) == "草稿"                # 31-C：存檔建審核單（草稿）、帶供應商
 
     # 重新載入：證明 GET 端點也真的接上了，不是只有畫面上的暫存狀態
     _open_finance_tab(page, live_server, quote_no, expect="rows")
@@ -192,14 +207,9 @@ def test_material_orders_panel_round_trip(live_server, make_user, e2e_browser):
 
 
 @pytest.mark.e2e
-def test_material_orders_paid_status_rules_enforced_in_ui(live_server, make_user, e2e_browser):
-    """付款狀態的三條規則在畫面上就要成立，不能讓使用者撞到後端原始 400。
-
-    後端規則（`modules/case/api/material_orders.py` 第 5 步）：
-      pending → 已付金額必須 0、日期必須空
-      paid    → 已付金額 = 小計
-      partial/paid → 日期必填
-    """
+def test_material_orders_paid_fields_are_read_only_in_ui(live_server, make_user, e2e_browser):
+    """31-C 匯款切片：已付金額／日期不再手填（只能經匯款申請：簽核→出納）。畫面只顯示唯讀的付款狀態，
+    沒有付款狀態下拉、已付金額與日期輸入；存檔（改備註）把已付欄位原樣帶回、不被改動也不被擋。"""
     username, password = make_user(username="e2e_mo2", role="superadmin")
     quote_no = "MQ-MO-E2E2"
 
@@ -207,48 +217,36 @@ def test_material_orders_paid_status_rules_enforced_in_ui(live_server, make_user
     conn = db.get_db()
     try:
         _seed_case(conn, quote_no)
+        order = {"itemId": "mo-legacy", "itemName": "光纖模組", "quantity": 2, "unit": "個", "unitPrice": 4000, "totalPrice": 8000,
+                 "paidStatus": "partial", "paidAmount": 3000, "paidDate": "2026-09-10", "notes": ""}
+        conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
+                     (json.dumps({"dealTag": "已成案", "caseRecord": {"materialOrders": [order]}}, ensure_ascii=False), quote_no))
         conn.commit()
     finally:
         conn.close()
 
     browser = e2e_browser
     page = browser.new_page()
-    # 失敗時看得到原因：全套跑的時候這支偶發逾時，而 Playwright 的 TimeoutError
-    # 只會說「等了 45 秒」，不會說當下畫面在什麼狀態、API 是不是回了 400／500。
     bad = []
     page.on("response", lambda r: bad.append(f"{r.status} {r.url}") if r.status >= 400 else None)
     page.on("pageerror", lambda e: bad.append("PAGEERROR: " + str(e)))
     _login(page, live_server, username, password)
-    _open_finance_tab(page, live_server, quote_no)
+    _open_finance_tab(page, live_server, quote_no, expect="rows")
 
-    page.click(f'{MO_PANEL} button:has-text("＋ 新增項目")')
-    page.fill(f'{MO_PANEL} input[placeholder="{ITEM_NAME_PH}"]', "光纖模組")
-    page.fill(f'{MO_PANEL} input[placeholder="數量"]', "2")
-    page.fill(f'{MO_PANEL} input[placeholder="單價"]', "4000")
+    ro = page.locator(f'{MO_PANEL} [data-testid="mo-paid-readonly"]').first
+    assert "部分已付" in ro.inner_text() and "3,000" in ro.inner_text() and "2026-09-10" in ro.inner_text()
+    assert page.locator(f'{MO_PANEL} input[placeholder="已付金額"]').count() == 0                  # 沒有可手填的已付金額
+    assert page.locator(f'{MO_PANEL} [data-paid-status] select').count() == 0
 
-    # 待付狀態：金額與日期都應該是關掉的
-    assert page.is_disabled(f'{MO_PANEL} input[placeholder="已付金額"]')
-    assert page.is_disabled(f'{MO_PANEL} input[type="date"]')
-
-    # 切成已付清：金額自動帶小計、日期自動帶今天
-    page.select_option(f"{MO_PANEL} select", "paid")
-    assert page.input_value(f'{MO_PANEL} input[placeholder="已付金額"]') == "8000"
-    assert page.input_value(f'{MO_PANEL} input[type="date"]') != ""
-
+    page.fill(f'{MO_PANEL} input[placeholder="備註（供應商、單號…）"]', "只改備註")
     page.click(f'{MO_PANEL} button:has-text("儲存叫料")')
-    # 時限放寬到 45 秒：整個 pytest session 期間有背景排程（月報、逾期檢查等）
-    # 在寫 db，SQLite 寫鎖被佔住時 db.py 的 connect(timeout=30) 最多會等 30 秒，
-    # 存檔這支 PATCH 就會卡滿一輪才回來。單檔跑不會遇到、全套跑才會——
-    # 比照 test_e2e_playwright_2026_09_07.py 既有的同款處理。
     try:
         page.wait_for_selector(f'{MO_PANEL} :text("已儲存")', timeout=45000)
-    except Exception as exc:                      # noqa: BLE001 — 只為了補上下文
-        raise AssertionError(
-            "等不到「已儲存」。面板當下內容：\n"
-            + page.locator(MO_PANEL).inner_text()
-            + "\n失敗的請求／頁面錯誤：" + repr(bad)) from exc
+    except Exception as exc:                      # noqa: BLE001
+        raise AssertionError("等不到「已儲存」。面板當下內容：\n" + page.locator(MO_PANEL).inner_text()
+                             + "\n失敗的請求／頁面錯誤：" + repr(bad)) from exc
 
     saved = _read_material_orders(quote_no)
-    assert saved[0]["paidStatus"] == "paid"
-    assert saved[0]["paidAmount"] == 8000
-    assert saved[0]["paidDate"], "已付清必須有日期，否則後端回 400"
+    assert saved[0]["notes"] == "只改備註"
+    assert (saved[0]["paidStatus"], saved[0]["paidAmount"], saved[0]["paidDate"]) == ("partial", 3000, "2026-09-10")   # 已付欄位沒被動
+    assert not [b for b in bad if "/material-orders" in b], bad

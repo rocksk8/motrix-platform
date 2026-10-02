@@ -51,6 +51,7 @@ def _order(name="交換器", qty=2, price=1500, paid_status="pending",
         "totalPrice": qty * price,
         "paidStatus": paid_status, "paidAmount": paid_amount,
         "paidDate": paid_date, "notes": "",
+        "supplierId": 1,           # 31-C：新增叫料必須指定供應商（存在與否在開匯款申請時才查）
     }
 
 

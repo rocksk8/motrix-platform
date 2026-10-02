@@ -2552,6 +2552,9 @@ _F2_FIELDS = {
     # 戶名與帳號是個資 ⇒ 一般份拿掉、完整列只進個資資料夾；銀行代碼／名稱／分行是機構資訊，不列入。
     # ⚠️ 模組未載入時這張表不在 `_daily_backup_tables()`：`_export_pii_json_set` 對不在的表略過（不算 error）。
     "模組-payroll-user_bank_accounts": {"table": "user_bank_accounts", "columns": ("account_name", "account_number")},
+    # 2026-10-02（31-C 叫料匯款）：供應商（可能是個人）的收款帳戶凍結在申請的 snapshot_json 最上層（戶名、帳號）⇒ 一般份拿掉、完整列只進個資資料夾；
+    # 銀行代碼／名稱是機構資訊不列入。模組表宣告 T1 ⇒ 自動進每日 JSON（鍵＝`模組-case-case_material_payments`）；模組未載入時略過。
+    "模組-case-case_material_payments": {"table": "case_material_payments", "json": ("snapshot_json", ("bankAccountName", "bankAccountNumber"))},
 }
 #: data_json 解析不了時一般份放這個——**不可以原樣照放**（那等於把個資原樣帶進一般份）
 _F2_UNPARSEABLE = "<含個資欄位且無法解析，僅收錄於個資備份>"

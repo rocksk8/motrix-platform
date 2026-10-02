@@ -99,10 +99,14 @@ def gl_events(start, end, *, changed_since=""):
                 "source_type": "case_extra_expense_payment", "source_key": str(r["id"]), "event_code": "E11b", "event_date": paid, "doc_no": doc,
                 "case_no": r["quote_no"] or "", "party": {"key": "", "name": ""}, "tax_code": "", "mode": "snapshot", "lines": lines, "meta": {}})
 
+    mat_pending = 0
     for m in mat_accrual:
         amt = _i(m["amount"])
         d = (m["date"] or "")[:10]
         if amt <= 0:
+            continue
+        if m.get("pending"):                                                       # 叫料審核（31-C）：審核中的叫料單不入帳，核准後再執行
+            mat_pending += 1
             continue
         if not d:
             nodate += 1
@@ -114,15 +118,28 @@ def gl_events(start, end, *, changed_since=""):
                 "event_date": d, "doc_no": "", "case_no": m["quoteNo"], "party": {"key": "", "name": ""}, "tax_code": "", "mode": "snapshot",
                 "lines": [{"role": "COST_PROJECT", "side": "D", "amount": amt, "memo": m["desc"][:40]}, {"role": "AP", "side": "C", "amount": amt, "memo": m["desc"][:40]}],
                 "meta": {"tax_unsplit": True, "date_estimated": bool(m.get("provisional")), "weak_key": not m["itemId"]}})
+    mat_remit_pending = 0
     for m in mat_cash:
         amt = _i(m["amount"])
         d = (m["date"] or "")[:10]
         if amt > 0 and d and start <= d <= end:
+            if m.get("remitPending"):                                              # 匯款多付尚未核可：暫不產生付款分錄（同 E11b）
+                mat_remit_pending += 1
+                continue
+            fee = _i(m.get("fee") or 0)
+            lines = [{"role": "AP", "side": "D", "amount": amt, "memo": m["desc"][:40]}]
+            if fee:                                                                # 付款明細的手續費（公司自付）
+                lines.append({"role": "FEE", "side": "D", "amount": fee, "memo": "匯款手續費（公司自付）"})
+            leg = {"role": "PETTY" if m.get("payMethod") == "petty_cash" else "BANK", "side": "C", "amount": amt + fee, "memo": m["desc"][:40]}
+            if m.get("payAccountCode"):
+                leg["account_code"] = m["payAccountCode"]
+            lines.append(leg)
+            # 有付款明細的叫料單：source_key 帶明細 id（冪等；明細屬於哪張申請由 payment_id 追溯）；舊單歷史維持 `案件::itemId`
+            key = "%s::%s" % (m["quoteNo"], m["itemId"] or m["desc"]) + (("::" + m["lineId"]) if m.get("lineId") else "")
             events.append({
-                "source_type": "case_material_payment", "source_key": "%s::%s" % (m["quoteNo"], m["itemId"] or m["desc"]), "event_code": "E12b",
-                "event_date": d, "doc_no": "", "case_no": m["quoteNo"], "party": {"key": "", "name": ""}, "tax_code": "", "mode": "snapshot",
-                "lines": [{"role": "AP", "side": "D", "amount": amt, "memo": m["desc"][:40]}, {"role": "BANK", "side": "C", "amount": amt, "memo": m["desc"][:40]}],
-                "meta": {"weak_key": not m["itemId"]}})
+                "source_type": "case_material_payment", "source_key": key, "event_code": "E12b",
+                "event_date": d, "doc_no": m.get("paymentCode") or "", "case_no": m["quoteNo"], "party": {"key": "", "name": ""}, "tax_code": "", "mode": "snapshot",
+                "lines": lines, "meta": {"weak_key": not m["itemId"]}})
 
     if unsplit:
         notices.append("%d 筆額外支出／叫料的來源金額是未拆稅（含稅）：以全額列專案成本；有進項稅額請在來源憑證補登（input_tax）。" % unsplit)
@@ -132,4 +149,8 @@ def gl_events(start, end, *, changed_since=""):
         notices.append("%d 筆額外支出付款的實付與應付有差額且尚未核可：暫不產生付款分錄，核可後再執行。" % pending)
     if nodate:
         notices.append("%d 筆叫料沒有發票日也沒有付款日：不產生分錄（請補日期）。" % nodate)
+    if mat_remit_pending:
+        notices.append("%d 筆叫料匯款的實付超過應付且尚未核可：暫不產生付款分錄，核可後再執行。" % mat_remit_pending)
+    if mat_pending:
+        notices.append("%d 筆叫料單審核中（待審核／簽核中）：暫不產生應付分錄，核准後再執行。" % mat_pending)
     return {"events": events, "notice": " ".join(notices)}
