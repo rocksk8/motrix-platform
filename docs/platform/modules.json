@@ -284,6 +284,7 @@
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
+    "mod:case/api/material_links",
     "mod:case/expense_forms",
     "mod:case/expense_notify",
     "mod:case/material_approval",

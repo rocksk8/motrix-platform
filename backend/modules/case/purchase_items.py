@@ -336,3 +336,78 @@ def material_ordered(orders_with_status, po_rows) -> dict:
             continue
         out[qid] = out.get(qid, 0.0) + _num(o.get("quantity"))
     return out
+
+
+def material_submit_check(conn, quote_no, order, *, exclude_item_id=None) -> dict:
+    """叫料單**送審**時的連結檢查（接縫：由 31-C 的送審路徑呼叫；規格 §4）⇒ `{"problems": [{code, message}], "snapshot": {...}}`。
+    - `quoteItemId` 必須是報價單現有品項（`bad_quote_item`）。
+    - `poDocCode` 必須是有效連結（`bad_link`，訊息帶原因）。
+    - 累計上限（與採購單同一口徑，`usage`＋叫料貢獻）：連報價品項且**沒有有效採購單連結**時，已訂量＋本單數量 ＞ 計畫量 ⇒ 超出；
+      超出必須有 `overPlanReason`（`over_plan_reason_required`，Q2）。連到有效採購單者與採購單是同一筆採購，採購單那邊已驗，這裡不重複。
+    - `snapshot`：送審當下的判定結果（`linkState`／`linkReason`／`overPlanQty`／`overPlanReason`），寫進 `approval_json` 讓簽核人看到的是送審當下的狀態。
+    純讀、不寫。`exclude_item_id`＝正在送審的叫料列（不把自己算進已用量）。"""
+    problems = []
+    order = order or {}
+    data, rows = _case_state(conn, quote_no)
+    po_rows = [r for r in rows if (r["kind"] or "") == ORD]
+    plan = {p["itemId"]: p for p in plan_items(data)}
+    qid = str(order.get("quoteItemId") or "").strip()
+    if qid and qid not in plan:
+        problems.append({"code": "bad_quote_item", "message": "叫料連到的品項不在這張報價單內（可能已被刪除），請重新選擇"})
+    link_ok, link_reason = _link_check(order, po_rows)
+    if str(order.get("poDocCode") or "").strip() and not link_ok:
+        problems.append({"code": "bad_link", "message": "叫料連到的採購單無效（%s）：必須是同案件、待審核／簽核中／已核准的採購單" % link_reason})
+    over, reason = 0.0, str(order.get("overPlanReason") or "").strip()
+    if qid in plan and not link_ok:
+        others = [(o, st) for o, st in load_material_orders(conn, quote_no, data) if str(o.get("itemId")) != str(exclude_item_id or order.get("itemId"))]
+        used = usage(rows, extra_ordered=material_ordered(others, po_rows)).get(qid, {"orderedQty": 0.0})["orderedQty"]
+        over = max(used + _num(order.get("quantity")) - plan[qid]["planQty"], 0.0)
+        if over > 1e-9 and not reason:
+            problems.append({"code": "over_plan_reason_required",
+                             "message": "叫料超出報價計畫量 %g（計畫 %g、已訂 %g），請填寫超出原因後再送審" % (over, plan[qid]["planQty"], used)})
+    state = material_link_status(order, po_rows)
+    return {"problems": problems,
+            "snapshot": {"linkState": state["state"], "linkReason": state["reason"], "overPlanQty": over if over > 1e-9 else 0,
+                         "overPlanReason": reason if over > 1e-9 else ""}}
+
+
+def material_detail_fields(order, po_rows, *, snapshot=None, legacy=False) -> list:
+    """核准詳情（`approval.detail` 的 `fields[]`）要追加的兩欄：「採購單連結」「超出計畫」（接縫：d7 的 material_approvals.detail 呼叫）。"""
+    st = material_link_status(order, po_rows, legacy=legacy)
+    link = "已連採購單 %s" % order.get("poDocCode") if st["state"] == "linked" else (st["text"] or "不適用")
+    over = (snapshot or {}).get("overPlanQty") or 0
+    return [{"label": "採購單連結", "value": link},
+            {"label": "超出計畫", "value": ("超出 %g（%s）" % (over, (snapshot or {}).get("overPlanReason") or "未填原因")) if over else "—"}]
+
+
+def available_po_lines(conn, quote_no, *, show_cost=True) -> list:
+    """「從採購單帶入」清單：該案件待審核／簽核中／已核准的採購單明細列，**尚未被有效連結的叫料用掉**者。
+    `[{poDocCode, poLine, summary, qty, unit, vendor, quoteItemId, status, unitCost?, amount?}]`；金額看不到財務檢視者不給。"""
+    data, rows = _case_state(conn, quote_no)
+    po_rows = [r for r in rows if (r["kind"] or "") == ORD and (r["status"] or "") in COUNTED_EXTRA_STATUSES]
+    taken = set()
+    for o, st in load_material_orders(conn, quote_no, data):
+        from modules.case import material_approval as MA
+        if MA.cost_state(st) == "excluded":
+            continue
+        if _link_check(o, po_rows)[0] and o.get("poLine") not in (None, ""):
+            try:
+                taken.add((str(o["poDocCode"]).strip(), int(o["poLine"])))
+            except (TypeError, ValueError):
+                pass
+    vendors = {r["doc_code"]: r["vendor"] for r in conn.execute("SELECT doc_code, data_json AS vendor FROM case_extra_expenses WHERE quote_no=? AND kind=?", (quote_no, ORD))}
+    out = []
+    for r in po_rows:
+        try:
+            vendor = (json.loads(vendors.get(r["doc_code"]) or "{}") or {}).get("vendor") or ""
+        except (TypeError, ValueError):
+            vendor = ""
+        for i, l in enumerate(_po_lines(r), 1):
+            if not isinstance(l, dict) or (r["doc_code"], i) in taken:
+                continue
+            item = {"poDocCode": r["doc_code"], "poLine": i, "summary": str(l.get("summary") or ""), "qty": _num(l.get("qty")),
+                    "unit": str(l.get("unit") or ""), "vendor": vendor, "quoteItemId": str(l.get("itemId") or ""), "status": r["status"]}
+            if show_cost:
+                item.update(unitCost=_num(l.get("unitCost")), amount=_num(l.get("amount")))
+            out.append(item)
+    return out

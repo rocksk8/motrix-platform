@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-02 11:44（wip/t32-s4a-2e）：叫料連結送審檢查接縫與唯讀端點（32-S4b）
+- 新增接縫函式 `purchase_items.material_submit_check`（叫料送審時驗：報價品項存在、`poDocCode` 有效、累計上限與超出原因〔裁示 Q2：超出必填〕，回 `snapshot` 供寫進 `approval_json`）與 `material_detail_fields`（核准詳情追加「採購單連結」「超出計畫」）；31-C 的守門／送審路徑由 d7 接線（`MG.LINK_VALIDATOR`）。
+- 新增唯讀端點（案件可見，金額只給有財務檢視者）：`GET /api/quotations/{案件}/material-po-lines`（「從採購單帶入」清單：待審核／簽核中／已核准採購單中尚未被有效連結的叫料用掉的明細列）、`GET /api/quotations/{案件}/material-orders/link-status`（每列叫料的連結判定：linked／none／exempt，含失效註記）；`case_read_scope.json` 登記為 row_access。
+
 ## (next) — 2026-10-02 11:42（wip/t32-s4a-2e）：叫料連結判定與已訂量口徑（32-S4a）
 - 新增 `purchase_items.material_link_status(order, po_rows, legacy=)`（叫料與採購單連結的**唯一判定函式**：linked／none／exempt；$0 與舊單不標；固定文字「該叫料未申請採購單」，連結失效補註）與 `material_ordered`（叫料對報價品項已訂量的貢獻：舊單、已核准、待審核、簽核中計入，草稿／已退回／已取消不計，連到有效採購單者只算一次）。`usage()`／`picker()`／`overplan()` 新增選填 `extra_ordered`：`GET …/purchase-items` 的剩餘量與送審上限檢查把未連採購單的叫料算進已訂量（同一口徑、同一份數字）。尚未掛到叫料守門（`MG.LINK_VALIDATOR` 接縫與 UI 在 S4b／S4d）。
 
