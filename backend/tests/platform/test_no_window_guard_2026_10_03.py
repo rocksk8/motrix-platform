@@ -70,3 +70,22 @@ def test_conftest_installs_nowindow():
 def test_popen_is_patched_in_this_pytest_process():
     import subprocess
     assert getattr(subprocess.Popen, "_motrix_nowindow", False) is True
+
+
+@pytest.mark.skipif(os.name != "nt", reason="只有 Windows 有主控台視窗問題")
+def test_child_of_a_consoleless_parent_gets_no_console_window_after_install(tmp_path):
+    """機制本身：父行程沒有主控台（DETACHED_PROCESS）時，沒裝 nowindow 的子行程會得到一個可見的主控台視窗
+    （實測：GetConsoleWindow()≠0 且可見）；裝了 ⇒ 0。這裡只驗「裝了」那一側（沒裝那一側會真的閃一個視窗，留在 docs 的實測紀錄）。"""
+    import json
+    import subprocess
+    out = tmp_path / "r.json"
+    child = tmp_path / "child.py"
+    child.write_text(
+        "import subprocess, sys, json\n"
+        "sys.path.insert(0, %r)\nimport nowindow; nowindow.install()\n"
+        "code = 'import ctypes; print(ctypes.windll.kernel32.GetConsoleWindow())'\n"
+        "r = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True).stdout.strip()\n"
+        "open(%r, 'w').write(json.dumps(r))\n" % (str(ROOT / "tools" / "platform"), str(out)), encoding="utf-8")
+    subprocess.Popen([sys.executable, str(child)], creationflags=0x00000008 | 0x00000200, stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).wait()          # 父：沒有主控台（DETACHED）；本行程的 Popen 已被 conftest 補旗標，所以明列 DETACHED 才不被改
+    assert json.loads(out.read_text()) == "0"
