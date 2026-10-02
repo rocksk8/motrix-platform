@@ -137,3 +137,10 @@ def test_available_po_lines_hides_cost_without_finance_view(W):
         cn.close()
     assert full[0]["amount"] == 100 and full[0]["unitCost"] == 50
     assert "amount" not in masked[0] and "unitCost" not in masked[0] and masked[0]["qty"] == 2
+
+
+def test_submit_check_never_counts_the_order_being_checked_even_if_it_already_counts(W):
+    """防線：被檢查的叫料單本身若已在計量狀態（例如已核准後重新檢查），不可把自己算進已用量。"""
+    _put_materials([{"itemId": "m1", "itemName": "x", "quantity": 6, "unit": "台", "unitPrice": 1, "totalPrice": 6, "quoteItemId": "a"}], {"m1": "已核准"})
+    res = _check({"itemId": "m1", "quoteItemId": "a", "quantity": 6, "totalPrice": 6}, exclude="m1")
+    assert res["problems"] == [] and res["snapshot"]["overPlanQty"] == 0                  # 6/10，自己不重複算
