@@ -2,10 +2,10 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — 2026-10-02（wip/t32-s4a-2e：簽核佇列卡片小標註）
+## 1.107 — 2026-10-02（wip/t32-s4a-2e：簽核佇列卡片小標註）
 - L1（新增選填鍵，向下相容）：簽核佇列項目多一個 `tags: []`（`helpers.approval_queue.base_item`；項目格式 `[{text, tone}]`，tone＝`warn`／`info`）。各單據模組的佇列提供者經 `fields` 帶入；沒帶＝空陣列，既有項目與前端不受影響。前端卡片與列表列在類型標籤旁畫出（`approval-queue.html`）。
 
-## (next) — 2026-10-02（wip/t32-applicant-help-a3：出貨請款類型「申請人」欄位說明改白話）
+## 1.106 — 2026-10-02（wip/t32-applicant-help-a3：出貨請款類型「申請人」欄位說明改白話）
 - L1（出貨資料，介面不變）：`helpers/expense_type_defs/*.json` 四個預設類型的 `applicant.help` 改為「這一欄會自動帶入申請人；管理者可在設計器解除鎖定」（原文含 locked 等工程用語）。只動這一個字串；仍釘在版本 0（程式預設）的舊單據只是顯示文字不同，驗證與輸出不變；公司已發布的版本（≥1）是發布當時的副本，不受影響。
 
 ## 1.105 — 2026-10-02（wip/t31-expense-prefill-a3：請款單自動帶入的接線）

@@ -1,19 +1,19 @@
 # 案件 更新紀錄
 
-## 1.0.78 — 2026-10-02（wip/t32-fixes-d7）
+## 1.0.83 — 2026-10-02（wip/t32-fixes-d7）〔train_number：1.0.78 → 1.0.83〕
 - 收款人個資告知 **fail-closed**：告知紀錄寫入失敗 ⇒ 匯款申請不留（503＋稽核 `create_rolled_back`）；沒有（或讀不到）告知紀錄的申請不能送審（409）。
 - 材料申請匯款：單筆手續費 > NT$ 500 ⇒ 該筆付款明細進「差額審核」（與多付同一條覆核路徑，原因欄顯示「手續費偏高」）；手續費不可大於實付。**只管材料申請匯款**，其他請款來源沒有此規則。
 - 出納 `payee-bank`：材料申請的完整帳號只給最高管理者與出納（有 `cashier` 模組且角色不是 admin）；一般管理員只看遮罩（稽核註記「遮罩」）。
 
-## 1.0.77 — 2026-10-02（wip/t32-seam-d7：材料申請連結接縫，接 32-S4）
+## 1.0.82 — 2026-10-02（wip/t32-seam-d7：材料申請連結接縫，接 32-S4）〔train_number：1.0.77 → 1.0.82〕
 - `quoteItemId`／`poDocCode`／`poLine` 列為實質欄位（核准後改連結 ⇒ 回草稿重送審；`overPlanReason` 是說明，不算）；`poLine` 一律轉整數（專屬端點與 case-record 整包存檔同）。
 - 儲存時連結檢查：`material_guard.LINK_VALIDATOR`（預設 None，由 `api/material_approvals.py` 掛上 `purchase_items.link_validator`）；無效連結 ⇒ 該列（或該次變更）被拒，code `bad_link`，不留殘列、不建草稿。
 - 送審時 `purchase_items.material_submit_check`：問題 ⇒ 400（含 `po_line_taken`、超出計畫量須填原因）；判定快照寫進 `approval_json.linkSnapshot`；簽核詳情追加「採購單連結」「超出計畫」兩欄。
 - 已對應採購單的材料申請不能開匯款申請（409；按鈕隱藏）；有匯款申請時不能改連結（沿用 `has_payments`）。
 
-## (next) — 2026-10-02 15:29（wip/t32-s4a-2e）：對齊 d7 的「尚未送審」狀態列
+## 1.0.81 — 2026-10-02 15:29（wip/t32-s4a-2e）：對齊 d7 的「尚未送審」狀態列
 - 併入 `wip/t32-unsent-d7`：移除 S4d 自己的草稿徽章（`ml-draft-*`），「尚未送審」以 d7 的狀態列為唯一來源；預設分頁（已核准／舊單／尚未送審）與各分頁筆數 chip 維持。
-## (next) — 2026-10-02 14:20（wip/t32-s4a-2e）：材料申請連結前端（32-S4d）＋改用「材料申請」用字
+## 1.0.80 — 2026-10-02 14:20（wip/t32-s4a-2e）：材料申請連結前端（32-S4d）＋改用「材料申請」用字
 - 前端 `js/case-management-mlink.js`（新檔，獨立於 31-C 區塊）：「從報價單品項帶入」（已申請完成、剩餘 0 者不列，數量預設剩餘量）、「從採購單明細帶入」（只列尚未被有效連結用掉者）、頁籤（已核准／舊單〔預設〕、審核中、草稿與退回、已取消、全部；未儲存的新列每個頁籤都顯示）、徽章「該材料申請未申請採購單」（讀後端判定；舊單與 $0 不標）、超出計畫量原因欄。
 - `MaterialOrder` 存檔模型加選填 `quoteItemId`／`poDocCode`／`poLine`／`overPlanReason`；空值不寫入（沒用連結的舊單形狀不變）。前端載入與存檔原樣帶回這四鍵（整份覆寫端點）。
 - S4 新增的使用者可見字串改照 `MATERIAL-REQUEST-WORDING.md`：`NO_PO_TEXT`＝「該材料申請未申請採購單」；送審檢查訊息、無案件訊息同改。鍵名不動。
@@ -21,14 +21,14 @@
 - 預設分頁＝「已核准／舊單／尚未送審」（草稿帶「尚未送審」徽章，未進報表／總帳、不佔額度、不在簽核佇列）；其餘分頁：審核中、已退回、已取消、全部，各分頁 chip 顯示筆數。送審檢查加 `po_line_taken`：一個採購單行只能對應一筆活的（非草稿／已退回／已取消）材料申請。
 - 簽核佇列項目加 `tags: []`（`helpers/approval_queue.base_item`；前端卡片畫出，tone `warn`／`info`）。
 
-## (next) — 2026-10-02 13:49（wip/t32-s4a-2e）：連到採購單的叫料不重複計金額＋「未申請採購單」備註（32-S4c）
+## 1.0.79 — 2026-10-02 13:49（wip/t32-s4a-2e）：連到採購單的叫料不重複計金額＋「未申請採購單」備註（32-S4c）
 - `recognition.material_entries`（營運報表來源與總帳 E12／E12b 共用）：叫料列帶**有效 `poDocCode`**（同案件、待審核／簽核中／已核准的採購單，列序／品項對得上）⇒ **權責與現金都略過其金額**——那筆採購的金額由採購單負責（品項實際成本／額外支出），一筆採購只算一次；連結失效（採購單作廢／駁回）⇒ 叫料金額自動回來。每筆叫料來源列新增 `noPo`（`material_link_status` 為 none：沒有連結或連結失效）；舊單與 $0 不標。沒有連結資料的歷史叫料金額與以前相同。
 
-## (next) — 2026-10-02 11:44（wip/t32-s4a-2e）：叫料連結送審檢查接縫與唯讀端點（32-S4b）
+## 1.0.78 — 2026-10-02 11:44（wip/t32-s4a-2e）：叫料連結送審檢查接縫與唯讀端點（32-S4b）
 - 新增接縫函式 `purchase_items.material_submit_check`（叫料送審時驗：報價品項存在、`poDocCode` 有效、累計上限與超出原因〔裁示 Q2：超出必填〕，回 `snapshot` 供寫進 `approval_json`）與 `material_detail_fields`（核准詳情追加「採購單連結」「超出計畫」）；31-C 的守門／送審路徑由 d7 接線（`MG.LINK_VALIDATOR`）。
 - 新增唯讀端點（案件可見，金額只給有財務檢視者）：`GET /api/quotations/{案件}/material-po-lines`（「從採購單帶入」清單：待審核／簽核中／已核准採購單中尚未被有效連結的叫料用掉的明細列）、`GET /api/quotations/{案件}/material-orders/link-status`（每列叫料的連結判定：linked／none／exempt，含失效註記）；`case_read_scope.json` 登記為 row_access。
 
-## (next) — 2026-10-02 11:42（wip/t32-s4a-2e）：叫料連結判定與已訂量口徑（32-S4a）
+## 1.0.77 — 2026-10-02 11:42（wip/t32-s4a-2e）：叫料連結判定與已訂量口徑（32-S4a）
 - 新增 `purchase_items.material_link_status(order, po_rows, legacy=)`（叫料與採購單連結的**唯一判定函式**：linked／none／exempt；$0 與舊單不標；固定文字「該叫料未申請採購單」，連結失效補註）與 `material_ordered`（叫料對報價品項已訂量的貢獻：舊單、已核准、待審核、簽核中計入，草稿／已退回／已取消不計，連到有效採購單者只算一次）。`usage()`／`picker()`／`overplan()` 新增選填 `extra_ordered`：`GET …/purchase-items` 的剩餘量與送審上限檢查把未連採購單的叫料算進已訂量（同一口徑、同一份數字）。尚未掛到叫料守門（`MG.LINK_VALIDATOR` 接縫與 UI 在 S4b／S4d）。
 
 ## 1.0.76 — 2026-10-02（wip/t32-unsent-d7：材料申請「尚未送審」）

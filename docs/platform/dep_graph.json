@@ -1458,6 +1458,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -1516,6 +1517,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -1710,6 +1712,32 @@
    "path": "frontend/js/case-management-list.js",
    "routers_called": [
     "mod:case/api/quotations"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "js:js/case-management-mlink.js": {
+   "api_calls": [
+    "/api/quotations/",
+    "/api/quotations/{}/material-orders/link-status"
+   ],
+   "api_prefixes": [
+    "/api/quotations"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/js/case-management-mlink.js",
+   "routers_called": [
+    "mod:case/api/case_action_items",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
+    "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
+    "mod:case/api/material_orders",
+    "mod:case/api/material_payments",
+    "mod:case/api/quotations",
+    "mod:netplan/api"
    ],
    "tables_r": [],
    "tables_w": []
@@ -2163,6 +2191,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -2542,6 +2571,7 @@
     "mod:case/api/completion_notes",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -5263,13 +5293,13 @@
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3606,
+     "line": 3607,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 3790,
+     "line": 3791,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -5404,61 +5434,61 @@
     },
     {
      "func": "pay_pending_payable",
-     "line": 135,
+     "line": 141,
      "method": "POST",
      "path": "/api/cashier/pending-payables/{source}/{key}/pay"
     },
     {
      "func": "get_remit_reviews",
-     "line": 203,
+     "line": 209,
      "method": "GET",
      "path": "/api/cashier/remit-reviews"
     },
     {
      "func": "decide_remit_review",
-     "line": 222,
+     "line": 228,
      "method": "POST",
      "path": "/api/cashier/remit-reviews/{source}/{key}/decision"
     },
     {
      "func": "get_payable_queue",
-     "line": 334,
+     "line": 340,
      "method": "GET",
      "path": "/api/cashier/payable-queue"
     },
     {
      "func": "get_receivable_queue",
-     "line": 345,
+     "line": 351,
      "method": "GET",
      "path": "/api/cashier/receivable-queue"
     },
     {
      "func": "get_payslip_queue",
-     "line": 367,
+     "line": 373,
      "method": "GET",
      "path": "/api/cashier/payslip-queue"
     },
     {
      "func": "get_bonus_queue",
-     "line": 387,
+     "line": 393,
      "method": "GET",
      "path": "/api/cashier/bonus-queue"
     },
     {
      "func": "get_execution_history",
-     "line": 446,
+     "line": 452,
      "method": "GET",
      "path": "/api/cashier/execution-history"
     },
     {
      "func": "export_execution_history",
-     "line": 461,
+     "line": 467,
      "method": "GET",
      "path": "/api/cashier/export"
     },
     {
      "func": "bank_reconcile",
-     "line": 670,
+     "line": 676,
      "method": "POST",
      "path": "/api/reports/bank-reconcile"
     }
@@ -5865,6 +5895,7 @@
     "mod:case/api/completion_notes",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -6065,115 +6096,115 @@
     },
     {
      "func": "create_extra_expense",
-     "line": 434,
+     "line": 435,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses"
     },
     {
      "func": "update_extra_expense",
-     "line": 495,
+     "line": 496,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "payreq_cases",
-     "line": 569,
+     "line": 570,
      "method": "GET",
      "path": "/api/extra-expenses/cases"
     },
     {
      "func": "payreq_mine",
-     "line": 595,
+     "line": 596,
      "method": "GET",
      "path": "/api/extra-expenses/mine"
     },
     {
      "func": "set_extra_expense_dates",
-     "line": 617,
+     "line": 618,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/dates"
     },
     {
      "func": "delete_extra_expense",
-     "line": 687,
+     "line": 688,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "void_extra_expense",
-     "line": 710,
+     "line": 711,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/void"
     },
     {
      "func": "submit_extra_expense",
-     "line": 762,
+     "line": 763,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/submit"
     },
     {
      "func": "approve_extra_expense",
-     "line": 846,
+     "line": 847,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/approve"
     },
     {
      "func": "reject_extra_expense",
-     "line": 932,
+     "line": 933,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/reject"
     },
     {
      "func": "upload_extra_expense_files",
-     "line": 1019,
+     "line": 1020,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files"
     },
     {
      "func": "delete_extra_expense_file",
-     "line": 1065,
+     "line": 1066,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}"
     },
     {
      "func": "upsert_change_request",
-     "line": 1238,
+     "line": 1239,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "cancel_change_request",
-     "line": 1279,
+     "line": 1280,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "upload_change_request_files",
-     "line": 1305,
+     "line": 1306,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files"
     },
     {
      "func": "delete_change_request_file",
-     "line": 1337,
+     "line": 1338,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}"
     },
     {
      "func": "submit_change_request",
-     "line": 1364,
+     "line": 1365,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/submit"
     },
     {
      "func": "approve_change_request",
-     "line": 1435,
+     "line": 1436,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/approve"
     },
     {
      "func": "reject_change_request",
-     "line": 1523,
+     "line": 1524,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/reject"
     }
@@ -6509,18 +6540,41 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
+    "helper:company_identity",
+    "helper:company_setup",
+    "helper:custom_builder_support",
+    "helper:custom_fields",
+    "helper:custom_files",
+    "helper:custom_finance",
+    "helper:custom_history",
+    "helper:custom_modules",
     "helper:dates",
+    "helper:doc_render",
+    "helper:doc_template",
     "helper:email_notify",
+    "helper:expense_types",
     "helper:financial_mask",
+    "helper:formula",
+    "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:prefill_sources",
+    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
+    "helper:tax_calc",
     "helper:tiered_approval",
+    "helper:uploads",
+    "mod:case/expense_forms",
     "mod:case/material_approval",
+    "mod:case/material_guard",
     "mod:case/material_notify",
-    "mod:case/material_payment"
+    "mod:case/material_payment",
+    "mod:case/purchase_items",
+    "mod:case/quotations",
+    "mod:case/quote_terms",
+    "mod:case/recognition"
    ],
    "imports": [
     "core:db",
@@ -6530,7 +6584,9 @@
     "helper:case_access",
     "helper:financial_mask",
     "mod:case/material_approval",
+    "mod:case/material_guard",
     "mod:case/material_notify",
+    "mod:case/purchase_items",
     "plat:txn"
    ],
    "kind": "mod",
@@ -6541,7 +6597,7 @@
    "routes": [
     {
      "func": "get_approvals",
-     "line": 82,
+     "line": 85,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-order-approvals"
     }
@@ -6554,7 +6610,15 @@
    ],
    "tables_r_transitive": [
     "approval_delegates",
+    "audit_log",
+    "case_extra_expenses",
     "case_material_approvals",
+    "case_stages",
+    "contractor_dispatches",
+    "contractor_payment_vouchers",
+    "custom_record_finance_outbox",
+    "custom_record_values",
+    "custom_records",
     "daily_tasks",
     "departments",
     "dev_cases",
@@ -6564,7 +6628,9 @@
     "sessions",
     "shipping_notes",
     "suppliers",
-    "users"
+    "ui_definitions",
+    "users",
+    "vendor_contractors"
    ],
    "tables_w": [],
    "tables_w_transitive": [
@@ -6572,6 +6638,130 @@
     "case_material_approvals",
     "case_material_payment_lines",
     "case_material_payments",
+    "custom_record_counters",
+    "custom_record_files",
+    "custom_record_finance_outbox",
+    "custom_record_log",
+    "custom_record_revisions",
+    "custom_record_snapshots",
+    "custom_record_values",
+    "custom_records",
+    "notifications",
+    "quotations",
+    "system_settings"
+   ]
+  },
+  "mod:case/api/material_links": {
+   "api_prefixes": [
+    "/api/quotations"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:approval_queue",
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:company_identity",
+    "helper:company_setup",
+    "helper:custom_builder_support",
+    "helper:custom_fields",
+    "helper:custom_files",
+    "helper:custom_finance",
+    "helper:custom_history",
+    "helper:custom_modules",
+    "helper:dates",
+    "helper:doc_render",
+    "helper:doc_template",
+    "helper:email_notify",
+    "helper:expense_types",
+    "helper:financial_mask",
+    "helper:formula",
+    "helper:legal_params",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:prefill_sources",
+    "helper:recognition_basis",
+    "helper:row_access",
+    "helper:settings",
+    "helper:tax_calc",
+    "helper:tiered_approval",
+    "helper:uploads",
+    "mod:case/expense_forms",
+    "mod:case/material_approval",
+    "mod:case/material_guard",
+    "mod:case/material_payment",
+    "mod:case/purchase_items",
+    "mod:case/quotations",
+    "mod:case/quote_terms",
+    "mod:case/recognition"
+   ],
+   "imports": [
+    "core:db",
+    "helper:auth",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/purchase_items"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/api/material_links.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "material_po_lines",
+     "line": 25,
+     "method": "GET",
+     "path": "/api/quotations/{quote_no}/material-po-lines"
+    },
+    {
+     "func": "material_link_statuses",
+     "line": 37,
+     "method": "GET",
+     "path": "/api/quotations/{quote_no}/material-orders/link-status"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "audit_log",
+    "case_extra_expenses",
+    "case_material_approvals",
+    "case_stages",
+    "contractor_dispatches",
+    "contractor_payment_vouchers",
+    "custom_record_finance_outbox",
+    "custom_record_values",
+    "custom_records",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "suppliers",
+    "ui_definitions",
+    "users",
+    "vendor_contractors"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "case_material_approvals",
+    "case_material_payment_lines",
+    "case_material_payments",
+    "custom_record_counters",
+    "custom_record_files",
+    "custom_record_finance_outbox",
+    "custom_record_log",
+    "custom_record_revisions",
+    "custom_record_snapshots",
+    "custom_record_values",
+    "custom_records",
     "notifications",
     "quotations",
     "system_settings"
@@ -6643,19 +6833,19 @@
    "routes": [
     {
      "func": "update_material_orders",
-     "line": 62,
+     "line": 78,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/material-orders"
     },
     {
      "func": "set_material_order_invoice_date",
-     "line": 175,
+     "line": 191,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/material-orders/{item_id}/invoice-date"
     },
     {
      "func": "get_material_orders",
-     "line": 217,
+     "line": 233,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-orders"
     }
@@ -6759,67 +6949,67 @@
    "routes": [
     {
      "func": "get_payee_privacy_ack",
-     "line": 120,
+     "line": 123,
      "method": "GET",
      "path": "/api/material-payments/{pid}/privacy-notice"
     },
     {
      "func": "ack_payee_privacy_notice",
-     "line": 134,
+     "line": 137,
      "method": "POST",
      "path": "/api/material-payments/{pid}/privacy-notice/ack"
     },
     {
      "func": "list_payments",
-     "line": 155,
+     "line": 158,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-payments"
     },
     {
      "func": "supplier_picker",
-     "line": 174,
+     "line": 177,
      "method": "GET",
      "path": "/api/material-suppliers"
     },
     {
      "func": "create_payment",
-     "line": 212,
+     "line": 215,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/material-orders/{item_id}/payments"
     },
     {
      "func": "update_payment",
-     "line": 249,
+     "line": 262,
      "method": "PATCH",
      "path": "/api/material-payments/{pid}"
     },
     {
      "func": "submit_payment",
-     "line": 272,
+     "line": 285,
      "method": "POST",
      "path": "/api/material-payments/{pid}/submit"
     },
     {
      "func": "approve_payment",
-     "line": 312,
+     "line": 327,
      "method": "POST",
      "path": "/api/material-payments/{pid}/approve"
     },
     {
      "func": "reject_payment",
-     "line": 336,
+     "line": 351,
      "method": "POST",
      "path": "/api/material-payments/{pid}/reject"
     },
     {
      "func": "withdraw_payment",
-     "line": 358,
+     "line": 373,
      "method": "POST",
      "path": "/api/material-payments/{pid}/withdraw"
     },
     {
      "func": "void_payment",
-     "line": 377,
+     "line": 392,
      "method": "POST",
      "path": "/api/material-payments/{pid}/void"
     }
@@ -6829,13 +7019,11 @@
     "suppliers"
    ],
    "tables_r": [
-    "case_material_payments",
     "quotations",
     "suppliers"
    ],
    "tables_r_transitive": [
     "approval_delegates",
-    "case_material_payments",
     "daily_tasks",
     "departments",
     "dev_cases",
@@ -6847,7 +7035,9 @@
     "suppliers",
     "users"
    ],
-   "tables_w": [],
+   "tables_w": [
+    "case_material_payments"
+   ],
    "tables_w_transitive": [
     "audit_log",
     "case_material_approvals",
@@ -7745,6 +7935,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "mod:case/material_approval",
     "mod:case/recognition"
    ],
    "kind": "mod",
@@ -10188,49 +10379,49 @@
    "routes": [
     {
      "func": "submit_dispatch",
-     "line": 281,
+     "line": 286,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/submit"
     },
     {
      "func": "approve_dispatch",
-     "line": 287,
+     "line": 292,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/approve"
     },
     {
      "func": "reject_dispatch",
-     "line": 293,
+     "line": 298,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/reject"
     },
     {
      "func": "withdraw_dispatch",
-     "line": 299,
+     "line": 304,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/withdraw"
     },
     {
      "func": "request_completion",
-     "line": 328,
+     "line": 333,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/completion/request"
     },
     {
      "func": "approve_completion",
-     "line": 335,
+     "line": 340,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/completion/approve"
     },
     {
      "func": "reject_completion",
-     "line": 341,
+     "line": 346,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/completion/reject"
     },
     {
      "func": "withdraw_completion",
-     "line": 347,
+     "line": 352,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/completion/withdraw"
     }
@@ -10316,163 +10507,163 @@
    "routes": [
     {
      "func": "list_vendor_contractors",
-     "line": 202,
+     "line": 216,
      "method": "GET",
      "path": "/api/vendor-contractors"
     },
     {
      "func": "list_vendors_selectable",
-     "line": 230,
+     "line": 244,
      "method": "GET",
      "path": "/api/vendor-contractors/selectable"
     },
     {
      "func": "get_vendor_contractor",
-     "line": 244,
+     "line": 258,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "create_vendor_contractor",
-     "line": 256,
+     "line": 270,
      "method": "POST",
      "path": "/api/vendor-contractors"
     },
     {
      "func": "update_vendor_contractor",
-     "line": 284,
+     "line": 298,
      "method": "PUT",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "get_vendor_privacy_ack",
-     "line": 332,
+     "line": 346,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}/privacy-notice"
     },
     {
      "func": "ack_vendor_privacy_notice",
-     "line": 342,
+     "line": 356,
      "method": "POST",
      "path": "/api/vendor-contractors/{vid}/privacy-notice/ack"
     },
     {
      "func": "toggle_vendor_active",
-     "line": 362,
+     "line": 376,
      "method": "PATCH",
      "path": "/api/vendor-contractors/{vid}/active"
     },
     {
      "func": "get_vendor_passbook",
-     "line": 385,
+     "line": 399,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}/passbook"
     },
     {
      "func": "upload_vendor_passbook",
-     "line": 403,
+     "line": 417,
      "method": "PUT",
      "path": "/api/vendor-contractors/{vid}/passbook"
     },
     {
      "func": "delete_vendor_contractor",
-     "line": 436,
+     "line": 450,
      "method": "DELETE",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "update_vendor_visits",
-     "line": 463,
+     "line": 477,
      "method": "PATCH",
      "path": "/api/vendor-contractors/{vid}/visits"
     },
     {
      "func": "list_dispatches",
-     "line": 498,
+     "line": 512,
      "method": "GET",
      "path": "/api/contractor-dispatches"
     },
     {
      "func": "get_dispatch",
-     "line": 521,
+     "line": 535,
      "method": "GET",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "create_dispatch",
-     "line": 538,
+     "line": 552,
      "method": "POST",
      "path": "/api/contractor-dispatches"
     },
     {
      "func": "update_dispatch",
-     "line": 584,
+     "line": 598,
      "method": "PUT",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "delete_dispatch",
-     "line": 654,
+     "line": 687,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "upload_dispatch_files",
-     "line": 686,
+     "line": 719,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files"
     },
     {
      "func": "delete_dispatch_file",
-     "line": 781,
+     "line": 814,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}"
     },
     {
      "func": "approve_dispatch_file_delete",
-     "line": 847,
+     "line": 880,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}/delete-approve"
     },
     {
      "func": "reject_dispatch_file_delete",
-     "line": 903,
+     "line": 936,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}/delete-reject"
     },
     {
      "func": "upload_dispatch_invoice_files",
-     "line": 978,
+     "line": 1011,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/invoice-files"
     },
     {
      "func": "delete_dispatch_invoice_file",
-     "line": 1015,
+     "line": 1048,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}/invoice-files/{file_id}"
     },
     {
      "func": "set_dispatch_invoice_date",
-     "line": 1044,
+     "line": 1077,
      "method": "PATCH",
      "path": "/api/contractor-dispatches/{did}/invoice-date"
     },
     {
      "func": "accept_dispatch",
-     "line": 1081,
+     "line": 1114,
      "method": "PATCH",
      "path": "/api/contractor-dispatches/{did}/accept"
     },
     {
      "func": "set_dispatch_status",
-     "line": 1129,
+     "line": 1162,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/status"
     },
     {
      "func": "import_dispatch_to_quote",
-     "line": 1145,
+     "line": 1178,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/import-to-quote"
     }
@@ -11754,6 +11945,7 @@
     "js:js/case-management-feed.js",
     "js:js/case-management-fin.js",
     "js:js/case-management-list.js",
+    "js:js/case-management-mlink.js",
     "js:js/case-management-shipping.js",
     "js:js/case-management-xexp.js",
     "js:static/approval-cascade.js",
@@ -11776,6 +11968,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -11793,6 +11986,7 @@
     "mod:case/api/completion_notes",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -12028,6 +12222,7 @@
     "mod:case/api/completion_notes",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -12040,6 +12235,7 @@
     "mod:case/api/completion_notes",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -13221,6 +13417,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -13233,6 +13430,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -13280,6 +13478,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -13294,6 +13493,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -13459,6 +13659,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -13471,6 +13672,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -13511,6 +13713,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -13523,6 +13726,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -13577,6 +13781,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
@@ -17508,12 +17713,12 @@
    ],
    "path": "backend/modules/case/migrations/0005_material_payments.py:11",
    "readers": [
-    "mod:case/api/material_payments",
     "mod:case/material_payment_cashier"
    ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
+    "mod:case/api/material_payments",
     "mod:case/material_payment"
    ]
   },
