@@ -415,10 +415,34 @@ def load_cases(path=DEFAULT_REPLAY_CASES):
     return json.loads(Path(path).read_text(encoding="utf-8"))["cases"]
 
 
+def _load_scanner(repo, ref_path, func):
+    """從目前工作樹載入守門檔裡的掃描函式（守門是新的、被掃的原始碼是舊的）。"""
+    import importlib.util
+    path = Path(repo) / ref_path
+    spec = importlib.util.spec_from_file_location("_ag_scanner_" + path.stem, str(path))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return getattr(mod, func)
+
+
 def replay_offline(case, repo=REPO, patterns=PATTERNS):
     """離線（不跑測試）：紅燈 commit 之前的樹上，聯集（A1 底板目錄 ∪ A2 樣式 ∪ GUARDS）是否包含該輪預期紅的檔。
-    ⇒ {"name", "covered": bool, "missing": [...], "by": {檔: 組}}"""
+    ⇒ {"name", "covered": bool, "missing": [...], "by": {檔: 組}}。
+    其他兩種案例：`scanner`＝靜態掃描型守門（在 fix^ 的原始碼上必須有命中、fix 上沒有）；`uncatchable`＝靜態選題抓不到的偶發（只記錄，covered 為 None，不算缺漏）。"""
+    if case.get("uncatchable"):
+        return {"name": case["name"], "covered": None, "missing": [], "by": {}, "uncatchable": case["uncatchable"], "red_parent": ""}
     red_parent = resolve(case["fix"] + "^", repo)
+    if case.get("scanner"):
+        sc = case["scanner"]
+        scan = _load_scanner(repo, sc["module"], sc["func"])
+        def src_at(ref):
+            rc, out, _ = _git("show", "%s:%s" % (ref, sc["file"]), repo=repo)
+            return out if rc == 0 else ""
+        hit_before = len(scan(src_at(red_parent)))
+        hit_after = len(scan(src_at(resolve(case["fix"], repo))))
+        ok = hit_before > 0 and hit_after == 0
+        return {"name": case["name"], "covered": ok, "missing": [] if ok else [sc["file"]], "red_parent": red_parent[:10],
+                "by": {sc["file"]: "scanner(hits before=%d after=%d)" % (hit_before, hit_after)}}
     tree = tree_files_at(red_parent, repo)
     a2 = set(pattern_files(tree, patterns))
     from pre_train_check import GUARDS
@@ -474,9 +498,10 @@ def replay_main(argv):
     bad = 0
     for c in cases:
         r = replay_offline(c, Path(a.repo))
-        print("[離線] %-28s %s  紅前樹 %s  %s" % (c["name"], "涵蓋" if r["covered"] else "缺漏", r["red_parent"], json.dumps(r["by"], ensure_ascii=False)))
-        bad += 0 if r["covered"] else 1
-        if a.run:
+        label = "靜態抓不到(已記錄)" if r["covered"] is None else ("涵蓋" if r["covered"] else "缺漏")
+        print("[離線] %-28s %s  紅前樹 %s  %s" % (c["name"], label, r["red_parent"], json.dumps(r["by"] or r.get("uncatchable", ""), ensure_ascii=False)))
+        bad += 0 if r["covered"] in (True, None) else 1
+        if a.run and not c.get("scanner") and not c.get("uncatchable"):
             rr = replay_run(c, Path(a.repo))
             print("[實跑] %-28s %s  %s" % (c["name"], "OK" if rr["ok"] else "不符", json.dumps({k: v for k, v in rr.items() if k in ("red", "fixed")}, ensure_ascii=False)))
             bad += 0 if rr["ok"] else 1

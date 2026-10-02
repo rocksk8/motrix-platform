@@ -195,7 +195,7 @@ def test_train31_red_rounds_are_all_covered_offline_on_the_real_history():
         pytest.skip("這棵樹沒有第 31 班的歷史（shallow／不同 clone）")
     for c in cases:
         r = AG.replay_offline(c, AG.REPO)
-        assert r["covered"], (c["name"], r["missing"])
+        assert r["covered"] is (None if c.get("uncatchable") else True), (c["name"], r["missing"])      # 抓不到的偶發要明講，其餘一律要涵蓋
 
 
 def test_venv_warning_fires_only_when_python_is_not_the_project_venv(tmp_path):
@@ -212,3 +212,43 @@ def test_venv_warning_fires_only_when_python_is_not_the_project_venv(tmp_path):
     plain.mkdir()
     _git(plain, "init", "-q")
     assert AG.venv_warning(plain, exe=str(tmp_path / "x.exe")) is None              # 找不到專案 venv ⇒ 不亂警告
+
+
+def test_replay_scanner_case_requires_hits_before_the_fix_and_none_after(repo):
+    scanner = ("import io, re, tokenize\n"
+               "def suspicious(src):\n"
+               "    out = []\n"
+               "    for t in tokenize.generate_tokens(io.StringIO(src).readline):\n"
+               "        if t.type == tokenize.COMMENT and t.line[:t.start[1]].rstrip().endswith(',') and re.search(r'\"\w+\":', t.string):\n"
+               "            out.append(t.start[0])\n"
+               "    return out\n")
+    bad = 'd = {\n    "diff": 1,   # swallowed "fee": 2,\n}\n'
+    good = 'd = {\n    "diff": 1,\n    "fee": 2,\n}\n'
+    _commit(repo, {"backend/tests/platform/scan.py": scanner, "backend/m.py": bad}, "red")
+    fix = _commit(repo, {"backend/m.py": good}, "fix")
+    case = {"name": "m1", "fix": fix, "scanner": {"module": "backend/tests/platform/scan.py", "func": "suspicious", "file": "backend/m.py"}}
+    r = AG.replay_offline(case, repo)
+    assert r["covered"] is True and "hits before=1 after=0" in r["by"]["backend/m.py"]
+    # 反向控制：修好之前就沒命中的掃描器 ⇒ 不算涵蓋
+    blind = dict(case, scanner=dict(case["scanner"], file="backend/tests/platform/scan.py"))
+    assert AG.replay_offline(blind, repo)["covered"] is False
+
+
+def test_replay_uncatchable_cases_are_recorded_not_counted_as_gaps():
+    r = AG.replay_offline({"name": "flake", "fix": "HEAD", "uncatchable": "時序偶發"})
+    assert r["covered"] is None and r["missing"] == [] and r["uncatchable"] == "時序偶發"
+
+
+def test_train32_reds_are_in_the_replay_table_and_covered_or_honestly_marked():
+    cases = {c["name"]: c for c in AG.load_cases()}
+    for need in ("r32-form-version", "r32-perm-catalog-label", "r32-changelog-order", "r32-m1-swallowed-dict", "r32-ledger-hub-409", "r32-lodging-overlay"):
+        assert need in cases, need
+    assert "*form_version*" in AG.PATTERNS and "*module_registry*" in AG.PATTERNS
+    probe = subprocess.run(["git", "-C", str(AG.REPO), "cat-file", "-e", cases["r32-form-version"]["fix"] + "^{commit}"], capture_output=True)
+    if probe.returncode != 0:
+        pytest.skip("這棵樹沒有第 32 班的歷史")
+    for name, c in cases.items():
+        if not name.startswith("r32-"):
+            continue
+        r = AG.replay_offline(c, AG.REPO)
+        assert r["covered"] in (True, None), (name, r["missing"])

@@ -91,6 +91,58 @@
     "backend/modules/subcontract/tests/test_pii_archive_mirror_2026_09_25.py"
    ],
    "note": "個資備份鏡像（子模組版，跨 modules/*/tests）"
+  },
+  {
+   "name": "r32-form-version",
+   "fix": "9b5a5f34",
+   "group": "A2",
+   "expect_files": [
+    "backend/tests/test_form_version_bumped_2026_09_24.py"
+   ],
+   "note": "quotation-form 改了畫面卻沒升 FORM_VERSION（版本守門）"
+  },
+  {
+   "name": "r32-perm-catalog-label",
+   "fix": "745f3c2d",
+   "group": "A2",
+   "expect_files": [
+    "backend/tests/test_module_registry_2026_09_24.py"
+   ],
+   "note": "全站改字「叫料→材料申請」後權限目錄顯示名題紅"
+  },
+  {
+   "name": "r32-changelog-order",
+   "fix": "c7bd885a",
+   "group": "A1",
+   "expect_files": [
+    "backend/tests/platform/test_module_changelog_follows_code.py"
+   ],
+   "note": "程式改動後 CHANGELOG 最上面沒有新的版號條目（case 1.0.84／1.0.85／1.0.86 三輪）"
+  },
+  {
+   "name": "r32-m1-swallowed-dict",
+   "fix": "52033606",
+   "group": "A1",
+   "scanner": {
+    "module": "backend/tests/platform/test_no_swallowed_dict_keys_2026_10_03.py",
+    "func": "suspicious",
+    "file": "backend/modules/case/material_payment_cashier.py"
+   },
+   "note": "字典項目中間的行內註解吞掉 \"fee\"／\"paidAt\"（M-1）：d7 的靜態掃描器必須在 fix^ 的檔案上有命中、fix 上沒有"
+  },
+  {
+   "name": "r32-ledger-hub-409",
+   "fix": "23d6b1a3",
+   "group": "E",
+   "uncatchable": "負載相關的時序偶發（關閉功能與初始載入的先後）；靜態選題抓不到，作者端只能靠 A3 在改到 ledger-hub 時選到那個 e2e 檔並實跑，且不保證每次都紅",
+   "e2e_file": "backend/modules/accounting/tests/test_e2e_ledger_p1_pages_2026_09_30.py"
+  },
+  {
+   "name": "r32-lodging-overlay",
+   "fix": "49938dbb",
+   "group": "E",
+   "uncatchable": "住宿圖層 e2e 的偶發（自動開圖建回已收的圖）；同上，只有選到並實跑才可能撞到",
+   "e2e_file": "backend/modules/lodging/tests/test_lodging_overlay_e2e_2026_09_28.py"
   }
  ]
 }
