@@ -73,7 +73,7 @@ def _open_finance_tab(page, base_url, quote_no, expect="empty"):
                  const el = document.querySelector('#fin-material-orders');
                  if (!el) return false;
                  const t = el.innerText || '';
-                 return t.includes('尚無叫料項目') && !t.includes('載入中');
+                 return t.includes('尚無材料申請項目') && !t.includes('載入中');
                }""",
             timeout=20000)
     else:
@@ -135,7 +135,7 @@ def test_material_orders_panel_round_trip(live_server, make_user, e2e_browser):
     _open_finance_tab(page, live_server, quote_no)
 
     # 空狀態：沒有項目時要看得到引導文字，不是一片空白
-    assert "尚無叫料項目" in page.locator(MO_PANEL).inner_text()
+    assert "尚無材料申請項目" in page.locator(MO_PANEL).inner_text()
 
     # 回歸測試：init() 只能跑一次。<body> 寫了 x-init="init()"，而 Alpine 3
     # 本來就會自動呼叫資料物件的 init()，两者相加讓整頁初始化跑兩遍，
@@ -179,7 +179,7 @@ def test_material_orders_panel_round_trip(live_server, make_user, e2e_browser):
         arg=MO_PANEL, timeout=10000,
     )
 
-    page.click(f'{MO_PANEL} button:has-text("儲存叫料")')
+    page.click(f'{MO_PANEL} button:has-text("儲存材料申請")')
     # 時限放寬到 45 秒：整個 pytest session 期間有背景排程（月報、逾期檢查等）
     # 在寫 db，SQLite 寫鎖被佔住時 db.py 的 connect(timeout=30) 最多會等 30 秒，
     # 存檔這支 PATCH 就會卡滿一輪才回來。單檔跑不會遇到、全套跑才會——
@@ -188,7 +188,7 @@ def test_material_orders_panel_round_trip(live_server, make_user, e2e_browser):
 
     # 落地檢查：不只看畫面，直接回頭查 data_json
     saved = _read_material_orders(quote_no)
-    assert len(saved) == 1, f"data_json 裡應該有 1 筆叫料，實際 {len(saved)}"
+    assert len(saved) == 1, f"data_json 裡應該有 1 筆材料申請，實際 {len(saved)}"
     assert saved[0]["itemName"] == "24埠 PoE 交換器"
     assert saved[0]["quantity"] == 3
     assert saved[0]["unitPrice"] == 12500
@@ -239,7 +239,7 @@ def test_material_orders_paid_fields_are_read_only_in_ui(live_server, make_user,
     assert page.locator(f'{MO_PANEL} [data-paid-status] select').count() == 0
 
     page.fill(f'{MO_PANEL} input[placeholder="備註（供應商、單號…）"]', "只改備註")
-    page.click(f'{MO_PANEL} button:has-text("儲存叫料")')
+    page.click(f'{MO_PANEL} button:has-text("儲存材料申請")')
     try:
         page.wait_for_selector(f'{MO_PANEL} :text("已儲存")', timeout=45000)
     except Exception as exc:                      # noqa: BLE001

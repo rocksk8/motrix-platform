@@ -60,7 +60,7 @@ from helpers.recognition_basis import normalize_basis, BASIS_NOTES, DEFAULT_BASI
 #: 收入認列、支出歸月、待補登屬 M01 案件（`case.recognition`，M01-PLAN §3-6）；M01 不在 ⇒ 明說（§B-4），不是 0
 CASE_RECOGNITION_MISSING = "案件模組未安裝：權責口徑收入（依階段完成）不提供"
 CASE_EXPENSES_UNAVAILABLE = {"category": "case",
-                             "reason": "案件模組未安裝：叫料、額外支出與承攬商派工的支出沒有列入（不是 0 筆）"}
+                             "reason": "案件模組未安裝：材料申請、額外支出與承攬商派工的支出沒有列入（不是 0 筆）"}
 
 
 def _recognition():

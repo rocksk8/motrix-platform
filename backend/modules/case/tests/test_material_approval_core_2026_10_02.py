@@ -215,5 +215,5 @@ def test_receipt_records_date_and_who_only_for_approved_orders(conn):
 
 def test_doc_type_is_registered_and_follows_the_unified_flow():
     from helpers import tiered_approval as TA
-    assert MA.DOC_TYPE in TA.APPROVAL_DOC_TYPES and TA.APPROVAL_DOC_TYPE_LABELS[MA.DOC_TYPE] == "叫料"
+    assert MA.DOC_TYPE in TA.APPROVAL_DOC_TYPES and TA.APPROVAL_DOC_TYPE_LABELS[MA.DOC_TYPE] == "材料申請"
     assert MA.DOC_TYPE in TA.DEFAULT_UNIFIED_DOC_TYPES

@@ -22,7 +22,7 @@ from helpers.tiered_approval import (
 )
 
 DOC_TYPE = "material_order"
-DOC_LABEL = "叫料"
+DOC_LABEL = "材料申請"
 DOC_PREFIX = "MO"
 
 S_DRAFT, S_PENDING, S_IN_PROGRESS, S_APPROVED, S_RETURNED, S_CANCELLED = "草稿", "待審核", "簽核中", "已核准", "已退回", "已取消"
@@ -188,7 +188,7 @@ def submit(conn, quote_no: str, order: dict, user: dict) -> dict:
     item_id = str(order.get("itemId") or "")
     row = get(conn, quote_no, item_id)
     if row is None:
-        raise MaterialApprovalError(404, "這筆叫料還沒有審核單（請先儲存叫料清單）")
+        raise MaterialApprovalError(404, "這筆材料申請還沒有審核單（請先儲存材料申請清單）")
     if row["status"] not in EDITABLE:
         raise MaterialApprovalError(409, "「%s」狀態不可送審" % row["status"])
     flow = resolve_active_flow_setting(DOC_TYPE)
@@ -219,7 +219,7 @@ def approve(conn, quote_no: str, order: dict, user: dict, comment: str = "", cas
     item_id = str(order.get("itemId") or "")
     row = get(conn, quote_no, item_id)
     if row is None:
-        raise MaterialApprovalError(404, "找不到這筆叫料的審核單")
+        raise MaterialApprovalError(404, "找不到這筆材料申請的審核單")
     if row["status"] not in IN_FLIGHT:
         raise MaterialApprovalError(409, "「%s」狀態不在簽核中" % row["status"])
     appr = _appr(row)
@@ -254,7 +254,7 @@ def reject(conn, quote_no: str, item_id: str, user: dict, reason: str) -> dict:
     """退回（任一層當層簽核人或 superadmin；原因必填）→ 已退回，建單人修改後可重送。"""
     row = get(conn, quote_no, item_id)
     if row is None:
-        raise MaterialApprovalError(404, "找不到這筆叫料的審核單")
+        raise MaterialApprovalError(404, "找不到這筆材料申請的審核單")
     if row["status"] not in IN_FLIGHT:
         raise MaterialApprovalError(409, "「%s」狀態不在簽核中" % row["status"])
     appr = _appr(row)
@@ -277,7 +277,7 @@ def withdraw(conn, quote_no: str, item_id: str, user: dict) -> dict:
     """撤回（待審核／簽核中 → 草稿）：建單／送審人本人或 admin 以上。"""
     row = get(conn, quote_no, item_id)
     if row is None:
-        raise MaterialApprovalError(404, "找不到這筆叫料的審核單")
+        raise MaterialApprovalError(404, "找不到這筆材料申請的審核單")
     if row["status"] not in IN_FLIGHT:
         raise MaterialApprovalError(409, "「%s」狀態不可撤回" % row["status"])
     appr = _appr(row)
@@ -296,17 +296,17 @@ def cancel(conn, quote_no: str, item_id: str, user: dict, reason: str) -> dict:
     還有沒作廢的匯款申請 ⇒ 拒絕（先作廢申請；已有付款明細的申請不能作廢 ⇒ 該叫料單不能取消）。"""
     row = get(conn, quote_no, item_id)
     if row is None:
-        raise MaterialApprovalError(404, "找不到這筆叫料的審核單")
+        raise MaterialApprovalError(404, "找不到這筆材料申請的審核單")
     if user["role"] not in ("admin", "superadmin"):
-        raise MaterialApprovalError(403, "只有管理員可以取消已核准的叫料單")
+        raise MaterialApprovalError(403, "只有管理員可以取消已核准的材料申請")
     if row["status"] != S_APPROVED:
-        raise MaterialApprovalError(409, "只有已核准的叫料單可以取消（目前「%s」）" % row["status"])
+        raise MaterialApprovalError(409, "只有已核准的材料申請可以取消（目前「%s」）" % row["status"])
     text = (reason or "").strip()
     if not text:
         raise MaterialApprovalError(400, "取消要填原因")
     from modules.case import material_payment as _mp                                  # 延遲 import：material_payment 也 import 本檔
     if _mp.has_live_payments(conn, quote_no, item_id):
-        raise MaterialApprovalError(409, "這張叫料單還有匯款申請，請先作廢申請（已有付款明細者不能取消叫料單）")
+        raise MaterialApprovalError(409, "這張材料申請還有匯款申請，請先作廢申請（已有付款明細者不能取消材料申請）")
     now = _now()
     appr = _appr(row)
     appr.setdefault("history", []).append({"at": now, "by": user["username"], "byDisplay": _display(user), "action": "cancel", "tier": 0, "comment": text})
@@ -349,7 +349,7 @@ def record_receipt(conn, quote_no: str, item_id: str, received_on, user: dict) -
     """到貨確認：必填到貨日期（有效日期）；記錄確認人與時間；只有「已核准」的叫料單可以（同一人可確認）。"""
     row = get(conn, quote_no, item_id)
     if row is None or row["status"] != S_APPROVED:
-        raise MaterialApprovalError(409, "只有已核准的叫料單才能確認到貨")
+        raise MaterialApprovalError(409, "只有已核准的材料申請才能確認到貨")
     try:
         day = normalize_date(received_on, "到貨日期")
     except Exception as e:                                                       # noqa: BLE001  HTTPException 或 ValueError：統一成 400
@@ -365,7 +365,7 @@ def record_receipt(conn, quote_no: str, item_id: str, received_on, user: dict) -
 def undo_receipt(conn, quote_no: str, item_id: str, user: dict) -> dict:
     row = get(conn, quote_no, item_id)
     if row is None or not row["received_on"]:
-        raise MaterialApprovalError(409, "這筆叫料沒有到貨確認")
+        raise MaterialApprovalError(409, "這筆材料申請沒有到貨確認")
     now = _now()
     conn.execute("UPDATE case_material_approvals SET received_on='', received_by='', received_at='', updated_at=? WHERE quote_no=? AND item_id=?",
                  (now, quote_no, str(item_id)))

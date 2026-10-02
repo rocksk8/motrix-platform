@@ -65,19 +65,19 @@
       <div class="pg__l">
         <div class="pg__eyebrow">廠商與採購</div>
         <h1 class="pg__t">採購管理</h1>
-        <p class="pg__s">叫料需求與採購進度追蹤</p>
+        <p class="pg__s">材料申請需求與採購進度追蹤</p>
       </div>
     </div>
 
-    <!-- ── 叫料流程帶（2026-09-14）────────────────────────────────────
+    <!-- ── 材料申請流程帶（2026-09-14）────────────────────────────────────
          原本這裡是「4 個統計數字」加下方「4 個分頁」，顯示完全相同的 4 個數，
          連 items.filter(...) 那串運算式都各寫了兩次。收成一條帶子：每一段
          自己就是篩選器。待採購→已下單待料→已到料是真的有方向的流程，
-         所以用箭頭；「叫料項目」是總數不在流程上，放最前面當清除鍵。 -->
+         所以用箭頭；「材料申請項目」是總數不在流程上，放最前面當清除鍵。 -->
     <div class="vm-andon" style="margin-bottom:14px">
       <button type="button" class="vm-andon__seg pc-seg" :class="{on: tab==='all'}" @click="tab='all'">
         <span class="vm-andon__val" x-text="items.length"></span>
-        <span class="vm-andon__lbl">叫料項目<small>全部顯示</small></span>
+        <span class="vm-andon__lbl">材料申請項目<small>全部顯示</small></span>
       </button>
       <button type="button" class="vm-andon__seg pc-seg" :class="{on: tab==='pending'}"
               @click="tab = (tab==='pending' ? 'all' : 'pending')">
@@ -158,7 +158,7 @@
                   <td>
                     <a :href="'case-management.html?q=' + m.quoteNo"
                        style="display:inline-flex;align-items:center;gap:3px;padding:4px 8px;border-radius:var(--radius);font-size:11px;font-family:var(--font-zh);font-weight:500;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;text-decoration:none">
-                      叫料管控 →
+                      材料申請 →
                     </a>
                   </td>
                 </tr>
@@ -168,8 +168,8 @@
           </div>
           <div class="empty-state" x-show="filtered.length === 0">
             <div style="font-size:32px;margin-bottom:10px">🗂</div>
-            <div x-show="items.length === 0">尚無叫料資料，請至案件管理的叫料管控頁面新增</div>
-            <div x-show="items.length > 0 && filtered.length === 0">無符合條件的叫料項目</div>
+            <div x-show="items.length === 0">尚無材料申請資料，請至案件管理的材料申請頁面新增</div>
+            <div x-show="items.length > 0 && filtered.length === 0">無符合條件的材料申請項目</div>
           </div>
         </div>
       </template>

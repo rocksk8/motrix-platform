@@ -30,7 +30,8 @@ def _open(browser, base, user, tab=""):
 def _mode_after(page, title):
     """標題旁的儲存方式標記：標題元素本身或其後的兄弟裡第一個 [data-save-mode]。"""
     return page.evaluate("""(t) => {
-      const el = [...document.querySelectorAll('.cm-section-title')].find(e => e.textContent.trim().startsWith(t));
+      const all = [...document.querySelectorAll('.cm-section-title')];
+      const el = all.find(e => e.textContent.trim() === t) || all.find(e => e.textContent.trim().startsWith(t));   // 「材料申請」與「材料申請清單」同前綴：先找完全相同
       if (!el) return 'NO-TITLE';
       const inside = el.querySelector('[data-save-mode]');
       if (inside) return inside.dataset.saveMode;
@@ -48,9 +49,9 @@ def test_section_titles_say_how_they_save(live_server, make_user, e2e_browser):
     page = _open(browser, live_server, u)
     page.locator(".cm-section-title:has-text('人員角色')").wait_for(timeout=15000)
     got = {t: _mode_after(page, t) for t in (
-        "人員角色", "專案期間", "收款管理", "承攬商派發管理", "額外支出", "叫料（材料訂購）", "出貨單管理", "完工單管理")}
+        "人員角色", "專案期間", "收款管理", "承攬商派發管理", "額外支出", "材料申請", "出貨單管理", "完工單管理")}
     assert got == {"人員角色": "auto", "專案期間": "auto", "收款管理": "auto", "承攬商派發管理": "manual",
-                   "額外支出": "manual", "叫料（材料訂購）": "manual", "出貨單管理": "manual",
+                   "額外支出": "manual", "材料申請": "manual", "出貨單管理": "manual",
                    "完工單管理": "manual"}, got
 
 

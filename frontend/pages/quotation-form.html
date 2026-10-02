@@ -3758,7 +3758,7 @@
       async _seedDefaultStagesIfEmpty() {
         if (!this.q.quoteNo || !this.q.caseRecord) return
         if ((this.q.caseRecord.stages || []).length > 0) return
-        const labels = ['訂單確認', '叫料出貨', '施工安裝', '客戶驗收', '尾款結清']
+        const labels = ['訂單確認', '材料申請出貨', '施工安裝', '客戶驗收', '尾款結清']
         for (const label of labels) {
           try {
             const r = await fetch(`/api/quotations/${this.q.quoteNo}/stages`, {

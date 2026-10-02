@@ -17,6 +17,9 @@
 ## (next) — 2026-10-02 11:42（wip/t32-s4a-2e）：叫料連結判定與已訂量口徑（32-S4a）
 - 新增 `purchase_items.material_link_status(order, po_rows, legacy=)`（叫料與採購單連結的**唯一判定函式**：linked／none／exempt；$0 與舊單不標；固定文字「該叫料未申請採購單」，連結失效補註）與 `material_ordered`（叫料對報價品項已訂量的貢獻：舊單、已核准、待審核、簽核中計入，草稿／已退回／已取消不計，連到有效採購單者只算一次）。`usage()`／`picker()`／`overplan()` 新增選填 `extra_ordered`：`GET …/purchase-items` 的剩餘量與送審上限檢查把未連採購單的叫料算進已訂量（同一口徑、同一份數字）。尚未掛到叫料守門（`MG.LINK_VALIDATOR` 接縫與 UI 在 S4b／S4d）。
 
+## 1.0.75 — 2026-10-02（wip/t32-wording-d7：叫料→材料申請改字）
+- 使用者可見字串「叫料」一律改稱「材料申請」（case）：程式內部 key（material_order、materialOrders…）不變；只改畫面、通知、稽核顯示與報表字樣。；「已叫料」旗標顯示改「已申購」；旗標被擋的提示改為「需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。」／「這筆材料申請還沒核准。」；新案件預設階段「叫料出貨」改「材料申請出貨」；新增全站掃描守門 test_wording_material_request。閘門邏輯不變。
+
 ## 1.0.74 — 叫料匯款金額改四捨五入（half-up）
 - 修正：叫料匯款申請的實付／手續費／差額／已付與剩餘的計算，原用 Python `round()`（銀行家捨入：0.145→0.14、2.675→2.67），改成與全系統一致的 half-up（0.145→0.15、2.675→2.68）；新增 `material_payment.r2`（Decimal ROUND_HALF_UP），出納提供者與 API 同用。叫料列「已付」欄位唯讀，前端回送原值不再四捨五入（避免被誤判為已付欄位被改）。
 
