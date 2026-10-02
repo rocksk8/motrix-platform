@@ -154,3 +154,15 @@ def test_supplement_is_refused_with_paid_history_or_a_bad_link_and_only_applies_
     # 補對應時同時改了金額（不是只增連結鍵）⇒ 不算補對應：走一般實質變更（已核准 ⇒ 回草稿）
     res = _patch(c, h, [_mo("m2", quoteItemId="a", poDocCode=po["docCode"], poLine=1, unitPrice=1200, totalPrice=2400)])
     assert _ap("m2")["status"] == "草稿"
+
+
+def test_supplement_cannot_double_cover_one_po_line(W):
+    """da S1：補對應不經送審，兩筆已核准舊單不可連到同一採購單同一行（與送審檢查同一判斷 po_line_taken）。"""
+    c, h = W
+    po = _po(c, h)
+    _put_materials([_mo("m1", quoteItemId=""), _mo("m2", quoteItemId="")], {"m1": "已核准", "m2": "已核准"})
+    res = _patch(c, h, [_mo("m1", quoteItemId="a", poDocCode=po["docCode"], poLine=1), _mo("m2", quoteItemId="")])
+    assert not res.get("rejected"), res
+    res = _patch(c, h, [_mo("m1", quoteItemId="a", poDocCode=po["docCode"], poLine=1), _mo("m2", quoteItemId="a", poDocCode=po["docCode"], poLine=1)])
+    assert [(x["itemId"], x["code"]) for x in res["rejected"]] == [("m2", "bad_link")] and "已對應另一筆材料申請" in res["rejected"][0]["message"]
+    assert not [o for o in _orders() if o["itemId"] == "m2"][0].get("poDocCode")

@@ -246,6 +246,9 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
                 lmsg = "這筆材料申請已有付款紀錄，不可對應採購單"
             else:
                 lmsg = _link_problem(conn, quote_no, cand) or (None if str(cand.get("poDocCode") or "").strip() else "補對應必須指定採購單")
+                if not lmsg:                                                             # 一個採購單行只能對應一筆活的材料申請（與送審檢查同一判斷；補對應不經送審，要在這裡擋）
+                    taken = [p for p in _PIs.material_submit_check(conn, quote_no, cand, exclude_item_id=iid)["problems"] if p["code"] == "po_line_taken"]
+                    lmsg = taken[0]["message"] if taken else None
             if lmsg:
                 _rej(rejected, iid, "poDocCode", lcode, lmsg)
                 out.append(merged)
