@@ -132,12 +132,6 @@ window.CM_PARTS.push(() => ({
       return s && s.state === 'none' ? s.text : ''
     },
     _mlNoPo: '該材料申請未申請採購單',
-    // 尚未送審：新帶入／新增但未存、或已存草稿（未進報表／總帳、不佔額度、不在簽核佇列）
-    mlDraftBadge(m) {
-      if (m._saved === false) return '尚未送審'
-      const a = (this.moApprovals || {})[m.itemId] || {}
-      return !a.legacy && a.status === '草稿' ? '尚未送審' : ''
-    },
     mlLinkedText(m) {
       const s = this.mlStatus[m.itemId]
       return s && s.state === 'linked' ? `已對應採購單 ${m.poDocCode}${m.poLine ? '（第 ' + m.poLine + ' 列）' : ''}` : ''
