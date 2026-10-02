@@ -423,9 +423,10 @@ def list_purchase_items(quote_no: str, authorization: str = Header(None)):
             data = json.loads((q["data_json"] if q else "") or "{}")
         except (TypeError, ValueError):
             data = {}
-        rows = conn.execute("SELECT id, kind, status, lines_json FROM case_extra_expenses WHERE quote_no=? AND kind IN (?,?)",
+        rows = conn.execute("SELECT id, kind, status, lines_json, doc_code FROM case_extra_expenses WHERE quote_no=? AND kind IN (?,?)",
                             (quote_no, PI.REQ, PI.ORD)).fetchall()
-        return {"quoteNo": quote_no, "items": PI.picker(data, rows, show_cost=can_see_financial(user))}
+        return {"quoteNo": quote_no, "items": PI.picker(data, rows, show_cost=can_see_financial(user),
+                                                        extra_ordered=PI.case_extra_ordered(conn, quote_no, data, rows))}
     finally:
         conn.close()
 
