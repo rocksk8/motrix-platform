@@ -73,6 +73,24 @@ def checks31(root, port, base_rec, new_rec, t0, package_modules):
     st, body = T.raw_get(port, "/pages/expense-types.html")
     page_ok = st in (200, 401, 403, 302) and "et-fields" in ht and "et-add-reserved" in ht and "et-fd-host" in ht
     res["15_designer_default_off"] = (off and page_ok, {"js_present": js.is_file(), "default_off": off, "old_ui_markup_present": "et-fields" in ht, "designer_host_present": "et-fd-host" in ht, "page_status": st})
+    # 31-C：叫料核准／材料款匯款——未登記 401、三張新表存在且空、承攬商 schema 維持 3
+    mats = ["/api/quotations/DRILL-NONE/material-order-approvals", "/api/quotations/DRILL-NONE/material-payments", "/api/material-suppliers"]
+    posts = ["/api/material-payments/1/submit", "/api/material-payments/1/approve", "/api/material-payments/1/reject",
+             "/api/material-payments/1/withdraw", "/api/material-payments/1/void", "/api/material-payments/1/privacy-notice/ack",
+             "/api/quotations/DRILL-NONE/material-orders/1/payments",
+             "/api/quotations/DRILL-NONE/material-orders/1/submit", "/api/quotations/DRILL-NONE/material-orders/1/approve",
+             "/api/quotations/DRILL-NONE/material-orders/1/reject", "/api/quotations/DRILL-NONE/material-orders/1/withdraw",
+             "/api/quotations/DRILL-NONE/material-orders/1/cancel", "/api/quotations/DRILL-NONE/material-orders/1/receive"]
+    codes = {u: T.api(port, u, None, None, "GET")[0] for u in mats}
+    codes.update({u: T.api(port, u, {}, None, "POST")[0] for u in posts})
+    res["16_material_endpoints_unauth_401"] = (all(v == 401 for v in codes.values()), {k: v for k, v in codes.items() if v != 401} or "all 401")
+    c = T.ro(root)
+    try:
+        tabs = {t: (T.table_exists(c, t), T.count(c, t)) for t in ("case_material_approvals", "case_material_payments", "case_material_payment_lines")}
+    finally:
+        c.close()
+    res["16_material_tables_exist_and_empty"] = (all(e and n == 0 for e, n in tabs.values()), tabs)
+    res["16_subcontract_schema_stays_3"] = (sv.get("subcontract") == 3, sv.get("subcontract"))
     return res
 
 
