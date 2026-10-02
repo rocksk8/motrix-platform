@@ -33,3 +33,11 @@ D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe tools/platform/author_gate.py    
 ## 回放驗證（維護者用）
 `python tools/platform/author_gate.py replay` 對 `author_gate_replay.json` 的每輪紅燈（第 31 班 10 案、第 32 班 6 案）離線檢查「該輪預期紅的守門檔，在紅燈前一個 commit 的樹上是否被選到」；`--run` 在獨佔窗口實跑（fix^ 必須紅、fix 必須綠）。
 環境變數：`MOTRIX_SHOW_WINDOWS=1` 才會顯示子行程視窗（預設全部隱藏）。
+
+## 快速版 `--quick`（2026-10-02 主持裁示）
+
+每片推 sha 前用：`python tools/platform/author_gate.py --repo <worktree> --base <上一片 sha> --quick`（目標 ≤10 分鐘）。
+- 只跑 A2 樣式守門檔＋A3／A4（依 diff 選到的檔與本分支改動的測試檔）；**不含 A1**（整個 `tests/platform`、工具演練）。
+- 若這個 diff 讓選題器整段全量（硬底層／fixture 層／選題器自己改了），A3 與 e2e 改為「改動模組自己的測試」（`backend/modules/<m>/tests/`）。
+- 輸出與結果檔（`"quick": true`）都標明：不含整個 `tests/platform`，整包由階段測試涵蓋；只當部分證據，不替代階段測試。
+- `--base` 請給**上一片**的 sha（不是正式機基準），diff 才小；完整版（不加 `--quick`）留給獨佔窗口。
