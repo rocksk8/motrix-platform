@@ -103,3 +103,4 @@
 - 正式機唯讀查詢結果（20261002_150000_唯讀查詢_31B與請款類型）：contractor_payment_vouchers 僅 4 筆、dispatch_id UNIQUE NOT NULL；11 派發中 4 有匯款申請；E04/E05 草稿各 2 筆未過帳（origin='gl:E04'／'gl:E05'／'gl:E05b'）；purchase_req v1–v4（10-01 22:38–22:44 發布）、1 筆單據釘 v2。⇒ 31-B 演練用合成資料即可，不需去識別化副本。B9 待使用者口述。
 - a3：wip/t33-remit-kinds-design-a3@c5373097（31-B／範本設計依正式機資料更新；USER-QUESTIONS-31B-AND-REFRESH.md 為待問使用者清單，先問 B9 口述題）。範本重發：只有 purchase_req 被公司發布，建議 diff/compare＋逐項採用，先修 /api/definitions/.../diff a|b=default bug。第33班詢問使用者時用該檔。
 - c7：wip/t32-sleep-fix-c7@4dd5048d（睡眠修正審查通過：反向控制正式測試＋pdf_unapproved／case_payment_number_input／case_data_loss；含 d7 d3a3dc1a，合這一個分支即可）。
+- 第32班整合樹 wip/train-32-int1@f6873ae3：已合 seam-d7(fa6ead7c，含 wording＋unsent＋S4＋seam)、S-1、applicant-help、sleep-fix-c7、designer-c7，全部無衝突。待 d7 修正項（ack fail-closed、手續費上限、完整帳號端點、全額付款舊單改價提案）後取號（case 預計 1.0.81、subcontract 1.1.5、core 1.107）、重產生成檔、跑階段、建包。
