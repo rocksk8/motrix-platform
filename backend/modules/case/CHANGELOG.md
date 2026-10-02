@@ -1,19 +1,35 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-02 09:14（wip/t32-prpo-s1-2e）：請款頁重按沿用草稿（32-S5 追補）
+## 1.0.70 — wip/t31-material-d7（31-C：叫料審核；S1–S4：核心、端點、寫入閘、報表／總帳閘）
+- **疊加審核表** `case_material_approvals`（migration 0004，只加不改、冪等）：叫料（`caseRecord.materialOrders[]`）以 (quote_no, item_id) 疊加審核狀態；**沒有疊加列＝舊單**（不溯及既往，行為與今天相同）。
+- **審核狀態機** `modules/case/material_approval.py`：草稿／待審核／簽核中／已核准／已退回（＋終態已取消）；重用分層簽核原語（申請人部門主管→組織鏈→最高管理者；沒設簽核層＝送審即核准；不能自簽）；核准後實質欄位（品名、數量、單位、單價、小計、供應商）變更 ⇒ 回草稿重送審；**到貨確認不簽核**，只記日期＋確認人＋時間。單號 `MO-YYYYMMDD-NNNN`（與 A2 費用單據同格式）。簽核單據類型 `material_order`（叫料）已登記。
+- **端點**：`POST /api/quotations/{no}/material-orders/{itemId}/submit|approve|reject|withdraw|cancel|receive`、`DELETE …/receive`、`GET /api/quotations/{no}/material-order-approvals`；寫入先 commit 再通知；稽核 `material_orders.submit／approve／reject／withdraw／cancel／receive／receive_undo`；簽核佇列提供者與詳情（`approval.queue_items`／`approval.detail`）、通知信四種（信內不放金額）。
+- **寫入閘（關掉 `case-record` 後門）** `modules/case/material_guard.py`：叫料列與物流旗標的**所有**寫入路徑（專屬 PATCH、`PATCH /case-record`、報價單整份存檔／建立、已結案變更核准套用）都過閘，且寫入漏斗 `save_quotation_json` 內另有同一個閘作後盾（冪等）。**只拒有問題的項目，其餘照存**，回應 `rejected[]`（itemId／field／code／message）。規則：新列建審核單；既有列實質變更依審核狀態處理（舊單→草稿、已核准→草稿、審核中／已取消 ⇒ 拒）；刪除只限舊單／草稿／已退回；誰能新增／修改叫料列沿用專屬端點（admin 以上或 `project_manage`＋財務檢視）；**物流旗標 `ordered`／`arrived` 由 false→true 必須連結（`orderItemId`）一張已核准的叫料單，`arrived` 另要已記錄到貨確認**，被拒時連帶 `devices` 序號維持原值（不讓序號在沒核准時認領庫存）；$0 叫料單走同一流程。已付欄位只能經匯款申請寫入（`PAID_VIA_REMITTANCE_ONLY=True`，見下方匯款切片）。
+- **營運報表／總帳**：權責口徑草稿、已退回、已取消的叫料**不計**；待審核／簽核中**計入並標「待審核」**；已核准與舊單照舊；現金口徑付出去的錢照計（只標待審核）。總帳 E12 只有已核准與舊單入帳，審核中的不入帳並在 notice 說明。**上線時報表數字可能變動（舊單被實質編輯後回草稿者不再計入權責成本），需公告。**
+- 設計：docs/platform/plans/MATERIAL-ORDER-APPROVAL-DESIGN.md。
+
+### 31-C 匯款切片（叫料匯款申請；migration 0005）
+- **每張叫料單可開多張匯款申請**（表 `case_material_payments`，`UNIQUE(quote_no,item_id,seq)`，單號 `MP-YYYYMMDD-NNNN`，無款別），**每張各自走分層簽核**（簽核單據類型 `material_payment`＝叫料匯款）→ 核准 → 出納。端點：`POST /api/quotations/{no}/material-orders/{itemId}/payments`、`PATCH /api/material-payments/{id}`、`POST /api/material-payments/{id}/submit|approve|reject|withdraw|void`、`GET /api/quotations/{no}/material-payments`、`GET /api/material-suppliers`（供應商選單，只回 id／code／name，需能編輯叫料）。稽核 `material_payment.create／update／submit／auto_approve／approve／reject／withdraw／void`；通知信四種（`material_payment_*`，信內不放金額與帳戶）；簽核佇列提供者與詳情。
+- **跨申請累計上限**：同一叫料單所有未作廢、未退回申請（含草稿與待審核，**鎖額度**）的金額合計 ≤ 小計（舊單再扣已登記的歷史已付）；超過 ⇒ 409，superadmin 可帶 `overCapReason` 覆寫；作廢／退回釋出額度。**$0 叫料單不能開申請**；叫料單要已核准（**舊單例外**，不溯及既往）；供應商必填（叫料單 `supplierId` 或申請時選）；**收款帳戶（戶名、帳號）填在申請上**，存申請的 `snapshot_json`——屬個資 F2：一般備份拿掉、完整列只進個資資料夾（`archive._F2_FIELDS['模組-case-case_material_payments']`），不進佇列詳情與信件，畫面只給末四碼。
+- **出納不用改**：沿用既有名稱空間 `("payables.pending","case_material")`（每張申請一列，`amount`＝剩餘應付，可**分次付款**，未結清留在待付款）、`("remit.reviews","case_material")`（多付＝實付超過剩餘 ⇒ 該筆待審核，核可保留、退回＝刪除該筆明細；登錄人不能自審）、`("expense.entries","remit_fee_case_material")`（手續費列報表支出）。每次付款一列付款明細（`case_material_payment_lines`：日期、實付、手續費、差額審核、付款方式／科目）。
+- **叫料單的 `paidStatus／paidAmount／paidDate` 變成明細合計的投影**，唯一寫入點 `material_payment.sync_order_paid`；`PAID_VIA_REMITTANCE_ONLY` 翻成 **True**：**上線後不再有「登記已付」**（舊單與新單一律只能經匯款申請；已付的歷史資料不動，舊單歷史已付在第一張申請時凍結並計入額度）。已有匯款申請的叫料單不可改實質欄位／刪除／取消（先作廢申請；已有付款明細者不可作廢）。
+- **新建的叫料單必填供應商**（`materialOrders[].supplierId`，寫入閘 `supplier_required`；舊單不溯及既往，開匯款申請時再選）；案件頁叫料列新增供應商下拉（選單來自 `GET /api/material-suppliers`）；**已付款狀態在畫面上改為唯讀**（顯示付款明細合計），要付款請在叫料列下方「匯款申請」開單。
+- **報表／總帳**：有匯款申請的叫料單，現金口徑與總帳 E12b 改讀**付款明細**（一筆明細一列；日期＝該筆付款日、金額＝該筆實付；E12b `source_key`＝`案件::itemId::明細id`；手續費列 FEE 借方；多付未核可的暫不產生分錄並在 notice 說明）；沒有申請的舊單維持讀 JSON。
+
+## 1.0.69 — 2026-10-02 09:14（wip/t32-prpo-s1-2e）：請款頁重按沿用草稿（32-S5 追補）
 - 新增請款（有類型表單）：同一次操作內送審被擋（例如採購單缺超出原因）後再按，沿用已建立的草稿（PATCH 它、附件只傳一次），不再多建一份單據；換案件或類型時重置。
 
-## (next) — 2026-10-02 07:07（wip/t32-prpo-s1-2e）：請款頁品項挑選器＋精算頁採用採購單連結金額（32-S5）
+## 1.0.68 — 2026-10-02 07:07（wip/t32-prpo-s1-2e）：請款頁品項挑選器＋精算頁採用採購單連結金額（32-S5）
 - 新增請款（請購單／採購單、有案件）：「從案件品項帶入」——列出報價品項（計畫量／已請購／已採購／剩餘可採購），勾選後帶入明細（數量＝剩餘量、單價＝計畫單位成本，可改）；明細數量超出計畫時畫面標「超出報價計畫量 N」並提供「超出原因」欄（採購單送審必填，由伺服器檢查；請購單只提示）。無案件或其他類型：完全不變。
 - 精算頁：連到品項的採購單金額不再算額外支出——額外支出合計改讀 `extraOnlyAmount`（拿不到品項金額、例如沒有財務檢視時維持讀 `totalAmount`，不讓錢消失）；每個品項顯示「採購單 NT$ X」與「採用／取消採用」：採用＝該品項實際成本＝採購單金額（含稅最終金額，不再 ×1.05／÷1.05；完結後凍結），**未採用的採購單金額仍計入實際總成本**（摘要列「採購單（品項尚未採用）」）。沒有連結列的歷史案件：金額與以前逐位相同（e2e 以歷史案件證明）。
 
-## (next) — 2026-10-02 04:56（wip/t32-prpo-s1-2e）：連到案件品項的採購單明細＝品項實際成本（32-S3，Q1）
+## 1.0.67 — 2026-10-02 04:56（wip/t32-prpo-s1-2e）：連到案件品項的採購單明細＝品項實際成本（32-S3，Q1）
 - 採購單明細連到案件品項（`itemId`）的列，在三處**各只算一次、金額守恆**：①額外支出清單 `GET …/extra-expenses` 新增 `itemLinkedAmount`（連結列金額）與 `extraOnlyAmount`（真正的額外支出）、每列 `linkedAmount`；**`totalAmount`／`totalPending` 過渡期仍含連結列**（精算頁改版時才改讀 `extraOnlyAmount`＋品項系統帶入，兩邊一起切，避免漏算／重複）；②營運報表來源 `recognition.extra_entries`：連結列獨立成列（帶 `itemId`／`linkedItem`／`bucket`），落「料件」支出桶（`ITEM_COST_BUCKET`），不再是「其他」；③總帳 E11：連結列另成借方行並帶 `dims={"item": 品項id}`——**金額、角色（專案成本）、類別都不變**，沒有 itemId 的單據逐行與以前相同。請購單永遠不計成本；作廢／駁回不計；待審核清單與報表照計（標待定）、總帳只收已核准；核准後的變更申請以新明細為準。`GET …/purchase-items` 每個品項多 `actualAmount`（已認列的採購單連結列金額；看不到財務金額者不回）。
 
-## (next) — 2026-10-02 04:45（wip/t32-prpo-s1-2e）：請購/採購單明細連案件品項——驗證與累計上限（32-S2）
+## 1.0.66 — 2026-10-02 04:45（wip/t32-prpo-s1-2e）：請購/採購單明細連案件品項——驗證與累計上限（32-S2）
 - 新增（S2）：請購單／採購單**明細列可帶 `itemId`（報價品項）**：只准有案件的請購單／採購單；品項必須在報價內、數量＞0；伺服器依報價寫入 `itemQtyPlan`／`itemCostPlan` 快照（前端送的不採用）。累計上限：已採購（核准＋送審中的採購單列）＋本單 ＞ 計畫量 ⇒ 超計畫；**採購單送審（含已核准後的變更申請送審）必須在該列填 `overPlanReason`，否則 400（狀態不變）；請購單只警示**（建立／更新回應帶 `overPlan` 清單）；超出量由伺服器寫入 `overPlanQty`。草稿不佔量、駁回／作廢釋放；送審在寫鎖內驗。採購單 `data.fromPr` 必須是同案件、已核准的請購單。沒有 `itemId` 的明細與以前完全相同（保留鍵 `itemId`／`itemQtyPlan`／`itemCostPlan`／`overPlanReason`／`overPlanQty` 不可由未連結的列攜帶）。
 
-## (next) — 2026-10-02 04:33（wip/t32-prpo-s1-2e）：額外支出合計對齊營運報表規則＋請購/採購品項挑選器（32-S1）
+## 1.0.65 — 2026-10-02 04:33（wip/t32-prpo-s1-2e）：額外支出合計對齊營運報表規則＋請購/採購品項挑選器（32-S1）
 - ⚠️ 行為變更（使用者裁示 2026-10-02，Q6）：`GET /api/quotations/{案件}/extra-expenses` 的 `totalAmount`／`totalPending` 只計待審核／簽核中／已核准、且類型要進金流（kind='' 或採購單／差旅／零用金）——**請購單、草稿、已駁回不再計入**（與營運報表 `extra_entries` 同一條規則；原本只排除作廢與被遮蔽的列，精算的額外支出因此比報表多）；新增 `uncountedAmount`（沒計入的金額，資訊用）。精算頁、案件頁額外支出分頁的合計隨之變。
 - 新增：`modules/case/purchase_items.py`（品項計畫量、已請購／已採購量、剩餘量、超計畫判定；純函式）與 `GET /api/quotations/{案件}/purchase-items`（請購單／採購單「從案件品項帶入」挑選器；看不到財務金額者不回 `planUnitCost`；無案件 400）。明細列的 `itemId` 驗證與上限見 S2。
 

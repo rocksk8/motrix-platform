@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <link rel="stylesheet" href="../css/custom-form.css">
   <link rel="stylesheet" href="../css/module-builder.css">
+  <link rel="stylesheet" href="../css/form-designer.css">
   <!--
     自訂模組建構器（CUSTOMIZATION-SPEC §8.1、§3.7；P8 前端）。僅超級管理員。
     步驟：① 基本 ② 表單 ④ 流程 ⑤ 輸出 ⑥ 發布（2026-09-27 使用者第二輪：原本的 ② 欄位＋③ 版面合成 ② 表單——畫布就是表單本身，
@@ -231,17 +232,19 @@
                欄位外觀沿用執行頁同一套 class 與標記（css/custom-form.css），畫布與執行頁一致有題。右側同時顯示輸出與列表預覽。 -->
           <section x-show="tab === 'form'" id="mb-step-2" class="mb3">
             <div class="mb3__bar">
-              <div class="mb-seg" role="tablist" aria-label="編輯或預覽" id="mb-mode">
+              <div class="mb-seg" role="tablist" aria-label="編輯或預覽" id="mb-mode" x-show="!useFD">
                 <button role="tab" id="mb-mode-edit" :class="{ 'is-on': formMode === 'edit' }" :aria-selected="formMode === 'edit' ? 'true' : 'false'" @click="setFormMode('edit')">✎ 編輯</button>
                 <button role="tab" id="mb-mode-preview" :class="{ 'is-on': formMode === 'preview' }" :aria-selected="formMode === 'preview' ? 'true' : 'false'" @click="setFormMode('preview')">👁 預覽</button>
               </div>
-              <span class="mb-hint" x-show="formMode === 'preview'" style="margin:0">這是使用者填單的樣子（試填不會存檔）</span>
+              <span class="mb-hint" x-show="!useFD && formMode === 'preview'" style="margin:0">這是使用者填單的樣子（試填不會存檔）</span>
               <span class="grow"></span>
-              <button class="mb-chipbtn mb3__pal-open" id="mb-pal-open" @click="palOpen = !palOpen; sideOpen = false">＋ 元件</button>
-              <button class="mb-chipbtn mb3__side-open" id="mb-side-open" @click="sideOpen = !sideOpen; palOpen = false">屬性</button>
-              <button class="mb-chipbtn" id="mb-form-settings" @click="sel = null; sideTab = 'props'; sideOpen = true">⚙ 表單設定</button>
+              <button class="mb-chipbtn" id="mb-fd-toggle" :aria-pressed="useFD ? 'true' : 'false'" @click="toggleFD()" title="三欄式新版設計器：中間是真正的表單，左邊加欄位，右邊用白話設定">新版設計器（試用）<span x-text="useFD ? '：開' : '：關'"></span></button>
+              <button class="mb-chipbtn mb3__pal-open" id="mb-pal-open" x-show="!useFD" @click="palOpen = !palOpen; sideOpen = false">＋ 元件</button>
+              <button class="mb-chipbtn mb3__side-open" id="mb-side-open" x-show="!useFD" @click="sideOpen = !sideOpen; palOpen = false">屬性</button>
+              <button class="mb-chipbtn" id="mb-form-settings" x-show="!useFD" @click="sel = null; sideTab = 'props'; sideOpen = true">⚙ 表單設定</button>
             </div>
-            <div class="mb3__grid" :data-mode="formMode" :data-pal-open="palOpen ? '1' : '0'" :data-side-open="sideOpen ? '1' : '0'">
+            <div id="mb-fd-host" x-show="useFD" style="height:calc(100vh - 330px);min-height:600px;margin-top:10px"></div>
+            <div class="mb3__grid" x-show="!useFD" :data-mode="formMode" :data-pal-open="palOpen ? '1' : '0'" :data-side-open="sideOpen ? '1' : '0'">
               <!-- 左：元件列（目錄 fieldElements／elementGroups；分組可收合、可搜尋） -->
               <aside class="mb-pal mb3__pal" id="mb-palette" aria-label="元件列">
                 <input class="mb-pal__q" id="mb-palette-q" type="search" x-model="paletteQuery" placeholder="搜尋元件…" aria-label="搜尋元件">
@@ -1142,5 +1145,8 @@
   <script src="../js/module-builder-elements.js"></script>
   <script src="../js/module-builder-flow.js"></script>
   <script src="../js/module-builder-output.js"></script>
+  <script src="../static/form-designer-model.js"></script>
+  <script src="../static/form-designer.js"></script>
+  <script src="../js/module-builder-designer.js"></script>
 </body>
 </html>

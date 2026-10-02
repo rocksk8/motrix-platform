@@ -269,8 +269,23 @@ def individual_linked_entries(conn, basis):
             for e in dispatch_entries(conn, basis) if per_dispatch.get(e["dispatchId"])]
 
 
+def _material_states(conn) -> dict:
+    """叫料審核狀態 `{(quote_no, item_id): status}`（疊加表 `case_material_approvals`）；沒有列＝舊單；表不在（舊庫）⇒ 空。"""
+    try:
+        return {(r[0], r[1]): r[2] for r in conn.execute("SELECT quote_no, item_id, status FROM case_material_approvals")}
+    except Exception:                                                              # noqa: BLE001 — 表還沒建（migration 之前）＝全部視為舊單
+        return {}
+
+
 def material_entries(conn, basis, department_id=None):
-    """叫料（案件 data_json）→ 逐筆。沒有稅欄位 ⇒ 一律「未拆稅」。"""
+    """叫料（案件 data_json）→ 逐筆。沒有稅欄位 ⇒ 一律「未拆稅」。
+
+    審核規則（31-C，與承攬商派發同一組）：**權責口徑**——草稿／已退回／已取消**不計**；待審核／簽核中**計入並標 `pending`**；已核准與舊單（沒有審核單）照舊。
+    **現金口徑**——付出去的錢是事實，不因審核狀態排除（只標 `pending`）。每筆帶 `approval`（'' ＝ 舊單）。"""
+    from modules.case import material_approval as _ma
+    from modules.case import material_payment as _mp
+    states = _material_states(conn)
+    pay_lines, pay_legacy = (_mp.lines_by_order(conn), _mp.legacy_by_order(conn)) if basis == "cash" else ({}, {})
     out = []
     for row in _case_rows(conn, department_id):
         try:
@@ -282,14 +297,32 @@ def material_entries(conn, basis, department_id=None):
                 continue
             name = mo.get("itemName") or "叫料"
             paid = (mo.get("paidDate") or "")[:10]
+            st = states.get((row["quote_no"], str(mo.get("itemId"))), "")
+            cs = _ma.cost_state(st)
+            if basis != "cash" and cs == "excluded":
+                continue                                                           # 權責：草稿／已退回／已取消不計
             if basis == "cash":
+                key = (row["quote_no"], str(mo.get("itemId")))
+                if key in pay_legacy:                                              # 有匯款申請 ⇒ 讀付款明細（每筆一列）＋舊單歷史已付；不讀 JSON 的 paid*（那是投影）
+                    la, ld = pay_legacy[key]
+                    if la and ld:
+                        out.append({"date": ld, "quoteNo": row["quote_no"], "desc": "叫料｜" + name, "amount": la, "taxNote": "未拆稅", "provisional": False,
+                                    "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending", "lineId": "", "fee": 0.0,
+                                    "remitPending": False, "payMethod": "", "payAccountCode": ""})
+                    for ln in pay_lines.get(key, []):
+                        if ln["amount"] and ln["paid_at"]:
+                            out.append({"date": ln["paid_at"], "quoteNo": row["quote_no"], "desc": "叫料｜" + name, "amount": ln["amount"], "taxNote": "未拆稅",
+                                        "provisional": False, "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending",
+                                        "lineId": str(ln["id"]), "fee": ln["fee"], "remitPending": ln["review"] == "pending",
+                                        "payMethod": ln["pay_method"], "payAccountCode": ln["pay_account_code"], "paymentCode": ln["doc_code"]})
+                    continue
                 if (mo.get("paidStatus") or "pending") == "pending" or paid == "":
                     continue
                 amt = float(mo.get("paidAmount") or 0)
                 if amt:
                     out.append({"date": paid, "quoteNo": row["quote_no"], "desc": "叫料｜" + name,
                                 "amount": amt, "taxNote": "未拆稅", "provisional": False,
-                                "itemId": mo.get("itemId") or ""})
+                                "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending"})
                 continue
             amt = float(mo.get("totalPrice") or 0)
             if not amt:
@@ -297,7 +330,8 @@ def material_entries(conn, basis, department_id=None):
             inv = (mo.get("invoiceDate") or "")[:10]
             out.append({"date": inv if inv != "" else paid, "quoteNo": row["quote_no"],
                         "desc": "叫料｜" + name, "amount": amt, "taxNote": "未拆稅",
-                        "provisional": inv == "", "itemId": mo.get("itemId") or "", "invoiceDate": inv})
+                        "provisional": inv == "", "itemId": mo.get("itemId") or "", "invoiceDate": inv,
+                        "approval": st, "pending": cs == "pending"})
     return out
 
 

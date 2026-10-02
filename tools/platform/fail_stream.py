@@ -225,9 +225,10 @@ class FailStream:
                 self.timer.start()
 
     def _is_aborted(self, final=False, exitstatus=None):
-        if self.interrupted:
+        stopped = bool(getattr(self.config, "_failfast_reason", ""))      # failfast.py 自己停的：xdist 的 Interrupted 是 KeyboardInterrupt 子類，不是外部中斷
+        if self.interrupted and not stopped:
             return True
-        if final and exitstatus == 2:                             # pytest.ExitCode.INTERRUPTED
+        if final and exitstatus == 2 and not stopped:    # pytest.ExitCode.INTERRUPTED（fail-fast 自己停的不算外部中斷）
             return True
         return not self.live and bool(self.pending)
 
@@ -330,13 +331,15 @@ class FailStream:
     def pytest_sessionfinish(self, session, exitstatus):
         self._flush(final=True, exitstatus=int(exitstatus))
         try:
+            ff = getattr(self.config, "_failfast_reason", "")        # failfast.py 自己停的（紅是真的紅，不是外部中斷）
             slow = sorted(({"file": k, "seconds": round(v[0], 2), "tests": len(v[1])} for k, v in self.files.items()),
                           key=lambda x: -x["seconds"])[:TOP_FILES]
             rec = {"type": "summary", "seq": self._next(), "t": self._stamp(), "run": self.run_id, "stage": self.stage,
                    "exitstatus": int(exitstatus), "duration_s": round(time.time() - self.t0, 1), "passed": self.counts["passed"],
                    "skipped": self.counts["skipped"], "xfailed": self.counts["xfailed"], "failed": len(self.failed),
-                   "errors": len(self.errored - self.failed), "aborted": bool(self.interrupted or self.aborted or int(exitstatus) == 2),
-                   "aborted_records": len(self.aborted), "slowest_files": slow}
+                   "errors": len(self.errored - self.failed),
+                   "aborted": bool((self.interrupted or self.aborted or int(exitstatus) == 2) and not ff),
+                   "aborted_by": "failfast" if ff else "", "aborted_records": len(self.aborted), "slowest_files": slow}
             self._write(rec)
             self._say("FAIL-STREAM summary run=%s failed=%d errors=%d passed=%d exit=%s%s → %s" % (
                 self.run_id, rec["failed"], rec["errors"], rec["passed"], rec["exitstatus"], " aborted（外部終止／中斷，不是測試失敗）" if rec["aborted"] else "", self.path))

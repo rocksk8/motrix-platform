@@ -30,6 +30,10 @@ EXPECTED = {
     ("expense.entries", "remit_fee_case"),  # IP-9 額外支出匯款手續費（W1）
     ("uploads.path_access", "case"),        # IP-104 上傳檔讀取權限（sec-p0，2026-09-30）
     ("attachments.catalog", "case"),        # IP-105 附件目錄（P2，2026-09-30）
+    # 31-C 叫料審核與匯款申請（2026-10-02）：佇列／詳情；出納待付（IP-100）與差額審核（IP-102）沿用既有名稱空間；手續費列報表支出（IP-9）
+    ("approval.queue_items", "case_material"), ("approval.detail", "material_order"),
+    ("approval.queue_items", "case_material_payment"), ("approval.detail", "material_payment"),
+    ("payables.pending", "case_material"), ("remit.reviews", "case_material"), ("expense.entries", "remit_fee_case_material"),
 }
 
 

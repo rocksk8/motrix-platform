@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>表單設計器（可點的原型）</title>
+<style>
+/* ── Token：沿用 MOTRIX 站內語意色（style.css 的 --accent／--danger／--success…），淺色＋深色；沒有任何寫死在元件裡的色碼 ── */
+:root {
+  --bg: #F5F4F0;          /* 站內主底色 */
+  --desk: #E9E6DD;        /* 中間的「桌面」：讓白紙表單浮出來 */
+  --paper: #FFFFFF;
+  --ink: #1D1B17;
+  --ink-2: #5C574E;
+  --ink-3: #7A7468;
+  --line: #E1DDD2;
+  --line-strong: #C9C4B8;
+  --accent: #C8102E;
+  --accent-hover: #A60D26;
+  --accent-soft: #FBE9EC;
+  --ok: #15803D;
+  --ok-soft: #F0FDF4;
+  --danger: #B91C1C;
+  --danger-soft: #FEF2F2;
+  --warn: #92400E;
+  --warn-soft: #FFFBEB;
+  --pane: #FBFAF7;
+  --shadow: 0 2px 8px rgba(40, 30, 10, .10);
+  --shadow-paper: 0 1px 2px rgba(40, 30, 10, .08), 0 12px 32px rgba(40, 30, 10, .10);
+  --radius: 8px;
+  --radius-lg: 12px;
+  --tap: 44px;
+  --font: "LINE Seed TW_OTF", "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+}
+:root[data-theme="dark"] {
+  --bg: #17171A; --desk: #101013; --paper: #232327; --ink: #F1EFEA; --ink-2: #B9B5AB; --ink-3: #8F8B82;
+  --line: #34343A; --line-strong: #4A4A52; --accent: #FF8080; --accent-hover: #FFA3A3; --accent-soft: #3A2226;
+  --ok: #4ADE80; --ok-soft: #14301F; --danger: #FF8080; --danger-soft: #3A2226; --warn: #FBBF24; --warn-soft: #382B10;
+  --pane: #1C1C20; --shadow: 0 2px 8px rgba(0,0,0,.5); --shadow-paper: 0 1px 2px rgba(0,0,0,.5), 0 12px 32px rgba(0,0,0,.45);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { font-family: var(--font); font-size: 15px; line-height: 1.55; color: var(--ink); background: var(--bg); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+svg.ic { width: 20px; height: 20px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+.app { height: 100%; display: flex; flex-direction: column; }
+
+/* ── 頂列 ── */
+.top { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--paper); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.top .back { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-2); text-decoration: none; padding: 8px 10px; border-radius: var(--radius); min-height: var(--tap); }
+.top h1 { font-size: 17px; margin: 0; font-weight: 700; }
+.top .grow { flex: 1; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--tap); padding: 0 16px; border-radius: var(--radius); border: 1.5px solid var(--line-strong); background: var(--paper); font-weight: 600; }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn.primary { color: #1A1012; }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.icon { padding: 0; width: var(--tap); }
+.btn[disabled] { opacity: .4; cursor: not-allowed; }
+.seg { display: inline-flex; border: 1.5px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; }
+.seg button { min-height: calc(var(--tap) - 3px); padding: 0 14px; border: 0; background: var(--paper); font-weight: 600; color: var(--ink-2); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.save-state { font-size: 13px; color: var(--ink-3); min-width: 150px; display: inline-flex; align-items: center; gap: 6px; }
+.save-state i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
+.save-state.saving i { background: var(--warn); }
+
+/* ── 三欄 ── */
+.panes { flex: 1; min-height: 0; display: grid; grid-template-columns: 290px minmax(0, 1fr) 360px; }
+.pane { min-height: 0; overflow: auto; }
+.left, .right { background: var(--pane); }
+.left { border-right: 1px solid var(--line); padding: 14px; }
+.right { border-left: 1px solid var(--line); padding: 14px 16px 40px; }
+.center { background: var(--desk); padding: 22px 20px 80px; }
+.pane h2 { font-size: 15px; margin: 4px 0 2px; }
+.pane .hint { margin: 0 0 12px; font-size: 13px; color: var(--ink-3); }
+.group-title { font-size: 13px; font-weight: 700; color: var(--ink-2); margin: 16px 2px 8px; }
+
+/* 左：加入欄位 */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tile { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px; min-height: 92px; text-align: left; background: var(--paper); border: 1.5px solid var(--line); border-radius: var(--radius-lg); transition: border-color .15s, transform .15s; }
+.tile:hover { border-color: var(--accent); }
+.tile:active { transform: scale(.98); }
+.tile .ic { width: 28px; height: 28px; color: var(--accent); }
+.tile b { font-size: 15px; }
+.tile small { font-size: 12px; color: var(--ink-3); line-height: 1.35; }
+.tile[draggable="true"] { cursor: grab; }
+
+/* 中：白紙表單 */
+.paper { max-width: 760px; margin: 0 auto; background: var(--paper); border-radius: var(--radius-lg); box-shadow: var(--shadow-paper); padding: 26px 28px 30px; }
+.paper-head input.title { width: 100%; font-size: 22px; font-weight: 700; border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 4px 2px; }
+.paper-head input.title:hover, .paper-head input.title:focus { border-bottom-color: var(--line-strong); outline: none; }
+.paper-head p { margin: 2px 2px 18px; font-size: 13px; color: var(--ink-3); }
+.sec { margin-top: 22px; border-top: 2px solid var(--ink); padding-top: 10px; position: relative; }
+.sec:first-of-type { margin-top: 6px; }
+.sec-head { display: flex; align-items: center; gap: 6px; }
+.sec-head input { flex: 1; font-size: 16px; font-weight: 700; border: 0; background: transparent; padding: 6px 2px; min-height: 36px; border-bottom: 2px solid transparent; }
+.sec-head input:hover, .sec-head input:focus { border-bottom-color: var(--line-strong); outline: none; }
+.sec-tools { display: inline-flex; gap: 2px; opacity: 0; transition: opacity .15s; }
+.sec:hover .sec-tools, .sec:focus-within .sec-tools { opacity: 1; }
+.mini { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; height: 36px; border: 0; background: transparent; border-radius: var(--radius); color: var(--ink-2); }
+.mini:hover { background: var(--bg); color: var(--ink); }
+.mini.del:hover { background: var(--danger-soft); color: var(--danger); }
+.mini[disabled] { opacity: .3; cursor: default; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; margin-top: 8px; position: relative; }
+.fld { position: relative; padding: 10px 12px 12px; border: 2px solid transparent; border-radius: var(--radius); cursor: pointer; }
+.fld.wide { grid-column: 1 / -1; }
+.fld:hover { background: var(--bg); }
+.fld.is-selected { border-color: var(--accent); background: var(--accent-soft); }
+.fld.dragging { opacity: .35; }
+.fld > label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 5px; }
+.fld .req { color: var(--danger); margin-left: 3px; }
+.fld .chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; margin-left: 6px; background: var(--warn-soft); color: var(--warn); vertical-align: 1px; }
+.fld .help { font-size: 12.5px; color: var(--ink-3); margin-top: 4px; }
+.fld-bar { position: absolute; right: 8px; top: -18px; display: none; gap: 0; background: var(--ink); color: var(--paper); border-radius: var(--radius); box-shadow: var(--shadow); padding: 2px; z-index: 3; }
+.fld.is-selected .fld-bar { display: inline-flex; }
+.fld-bar .mini { color: var(--paper); min-width: 34px; height: 34px; }
+.fld-bar .mini:hover { background: rgba(255,255,255,.18); color: var(--paper); }
+.fld-bar .mini[disabled] { opacity: .35; }
+.fld-bar .grip { cursor: grab; }
+.ctl { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border: 1.5px solid var(--line-strong); border-radius: var(--radius); background: var(--paper); color: var(--ink-3); pointer-events: none; }
+.ctl .ic { width: 18px; height: 18px; color: var(--ink-3); }
+.ctl .val { color: var(--ink); }
+.ctl.tall { min-height: 78px; align-items: flex-start; padding-top: 10px; }
+.ctl.sum { background: var(--bg); border-style: dashed; }
+.choices { display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.choices span { display: inline-flex; align-items: center; gap: 8px; }
+.choices i { width: 18px; height: 18px; border: 1.5px solid var(--line-strong); background: var(--paper); display: inline-block; flex: none; }
+.choices i.round { border-radius: 50%; }
+.choices i.on { background: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 3px var(--paper); }
+.dropzone { border: 2px dashed var(--line-strong); border-radius: var(--radius); padding: 14px; color: var(--ink-3); display: flex; align-items: center; gap: 8px; pointer-events: none; }
+.mini-table { width: 100%; border-collapse: collapse; font-size: 13px; pointer-events: none; }
+.mini-table th { text-align: left; background: var(--bg); padding: 6px 8px; border: 1px solid var(--line); font-weight: 600; }
+.mini-table td { padding: 8px; border: 1px solid var(--line); color: var(--ink-3); }
+.mini-table .auto { color: var(--ink-2); background: var(--bg); }
+.slot { height: 6px; grid-column: 1 / -1; margin: -3px 0; border-radius: 3px; position: relative; z-index: 2; }
+.slot.over { background: var(--accent); height: 8px; }
+.empty-sec { grid-column: 1 / -1; border: 2px dashed var(--line-strong); border-radius: var(--radius); padding: 22px; text-align: center; color: var(--ink-3); }
+.empty-sec b { display: block; color: var(--ink-2); margin-bottom: 4px; }
+.add-sec { margin-top: 22px; width: 100%; min-height: 50px; border: 2px dashed var(--line-strong); border-radius: var(--radius); background: transparent; color: var(--ink-2); font-weight: 600; }
+.add-sec:hover { border-color: var(--accent); color: var(--accent); }
+.paper.final .fld { cursor: default; border-color: transparent !important; background: transparent !important; }
+.paper.final .fld-bar, .paper.final .sec-tools, .paper.final .add-sec { display: none !important; }
+.paper.final .sec-head input, .paper.final .title { pointer-events: none; }
+.big-empty { text-align: center; padding: 56px 20px; color: var(--ink-3); }
+.big-empty .ic { width: 56px; height: 56px; color: var(--line-strong); }
+.big-empty h3 { color: var(--ink); margin: 10px 0 4px; font-size: 18px; }
+
+/* 右：欄位設定 */
+.box { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 14px; margin-bottom: 12px; }
+.box h3 { margin: 0 0 10px; font-size: 14px; }
+.row { margin-bottom: 12px; }
+.row:last-child { margin-bottom: 0; }
+.row > label, .lbl { display: block; font-size: 14px; font-weight: 600; margin-bottom: 5px; }
+.row .why { font-size: 12.5px; color: var(--ink-3); margin-top: 4px; }
+.in { width: 100%; min-height: var(--tap); padding: 0 12px; border: 1.5px solid var(--line-strong); border-radius: var(--radius); background: var(--paper); }
+.in:focus { outline: 3px solid var(--accent-soft); border-color: var(--accent); }
+textarea.in { padding: 10px 12px; min-height: 76px; resize: vertical; }
+.switch { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.switch:first-of-type { border-top: 0; }
+.switch .txt { flex: 1; }
+.switch .txt b { display: block; font-size: 14px; }
+.switch .txt small { color: var(--ink-3); font-size: 12.5px; line-height: 1.4; display: block; margin-top: 2px; }
+.sw { position: relative; width: 52px; height: 30px; flex: none; border: 0; border-radius: 999px; background: var(--line-strong); transition: background .15s; margin-top: 2px; }
+.sw::after { content: ""; position: absolute; left: 3px; top: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--paper); transition: transform .15s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.sw[aria-checked="true"] { background: var(--ok); }
+.sw[aria-checked="true"]::after { transform: translateX(22px); }
+.sw[disabled] { opacity: .45; cursor: not-allowed; }
+.items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.items li { display: flex; align-items: center; gap: 4px; }
+.items li.over { box-shadow: 0 -3px 0 var(--accent); }
+.items .handle { cursor: grab; color: var(--ink-3); width: 28px; text-align: center; flex: none; }
+.items input { flex: 1; min-width: 0; }
+.add-item { margin-top: 8px; width: 100%; min-height: var(--tap); border: 2px dashed var(--line-strong); border-radius: var(--radius); background: transparent; color: var(--ink-2); font-weight: 600; }
+.add-item:hover { border-color: var(--accent); color: var(--accent); }
+.pick { display: flex; flex-direction: column; gap: 6px; }
+.pick label { display: flex; align-items: center; gap: 10px; min-height: var(--tap); padding: 0 12px; border: 1.5px solid var(--line); border-radius: var(--radius); background: var(--paper); cursor: pointer; }
+.pick label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.pick input { width: 20px; height: 20px; accent-color: var(--accent); }
+.tag { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.tag .ic { width: 16px; height: 16px; }
+.convert { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+details.adv { border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 12px; }
+details.adv summary { cursor: pointer; font-weight: 600; color: var(--ink-2); min-height: 36px; display: flex; align-items: center; }
+.danger-btn { width: 100%; min-height: var(--tap); border: 1.5px solid var(--danger); background: transparent; color: var(--danger); border-radius: var(--radius); font-weight: 600; }
+.danger-btn:hover { background: var(--danger-soft); }
+.guide { text-align: center; padding: 30px 10px; color: var(--ink-3); }
+.guide .ic { width: 52px; height: 52px; color: var(--line-strong); }
+.guide h3 { color: var(--ink); margin: 8px 0 4px; }
+
+/* 浮層 */
+#toasts { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+.toast { display: flex; align-items: center; gap: 14px; background: var(--ink); color: var(--paper); padding: 10px 14px; border-radius: var(--radius); box-shadow: var(--shadow); min-height: var(--tap); }
+.toast button { background: transparent; border: 1.5px solid var(--paper); color: var(--paper); border-radius: var(--radius); min-height: 34px; padding: 0 12px; font-weight: 600; }
+dialog { border: 0; border-radius: var(--radius-lg); padding: 0; width: min(720px, 94vw); background: var(--paper); color: var(--ink); box-shadow: var(--shadow-paper); }
+dialog::backdrop { background: rgba(0, 0, 0, .45); }
+dialog header { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); gap: 10px; }
+dialog header h3 { margin: 0; flex: 1; font-size: 16px; }
+dialog pre { margin: 0; padding: 14px 16px; max-height: 60vh; overflow: auto; font-size: 12.5px; line-height: 1.5; background: var(--bg); }
+.tasks { position: fixed; left: 50%; transform: translateX(-50%); bottom: 12px; width: 360px; max-width: calc(100vw - 32px); background: var(--paper); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-paper); z-index: 40; }
+.tasks > button.head { width: 100%; display: flex; align-items: center; gap: 8px; min-height: var(--tap); padding: 0 14px; border: 0; background: transparent; font-weight: 700; }
+.tasks .progress { margin-left: auto; color: var(--ok); }
+.tasks ol { list-style: none; margin: 0; padding: 4px 14px 14px; display: none; }
+.tasks.open ol { display: block; }
+.tasks li { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.tasks li i { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line-strong); flex: none; display: inline-flex; align-items: center; justify-content: center; margin-top: 1px; }
+.tasks li.done { color: var(--ink-3); }
+.tasks li.done i { background: var(--ok); border-color: var(--ok); color: var(--paper); }
+.tasks li.done span { text-decoration: line-through; }
+.tasks li small { display: block; color: var(--ink-3); font-size: 12px; }
+.tabs { display: none; }
+.switch small.ex, .ex-box { color: var(--ink-2); }
+.switch small.ex { margin-top: 3px; padding-left: 8px; border-left: 3px solid var(--line-strong); }
+.ex-box { background: var(--bg); border-left: 3px solid var(--accent); padding: 8px 10px; border-radius: 0 var(--radius) var(--radius) 0; margin-top: 8px; font-size: 13px; }
+code { font-size: 12px; background: var(--bg); padding: 1px 5px; border-radius: 4px; word-break: break-all; }
+.chk { width: 100%; border-collapse: collapse; font-size: 13px; }
+.chk th, .chk td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.chk th { background: var(--bg); position: sticky; top: 0; }
+.chk-wrap { max-height: 62vh; overflow: auto; }
+
+/* ── 窄螢幕：三欄改成「一次一欄」＋底部切換列 ── */
+@media (max-width: 960px) {
+  .panes { display: block; position: relative; }
+  .pane { position: absolute; inset: 0; display: none; }
+  .panes[data-pane="left"] .left, .panes[data-pane="center"] .center, .panes[data-pane="right"] .right { display: block; }
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--paper); border-top: 1px solid var(--line); }
+  .tabs button { min-height: 54px; border: 0; background: transparent; font-weight: 600; color: var(--ink-2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 13px; }
+  .tabs button[aria-selected="true"] { color: var(--accent); box-shadow: inset 0 3px 0 var(--accent); }
+  .grid { grid-template-columns: 1fr; }
+  .paper { padding: 18px 14px 24px; }
+  .tasks { bottom: 70px; }
+  .tiles { grid-template-columns: 1fr 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></symbol>
+  <symbol id="i-lines" viewBox="0 0 24 24"><path d="M4 6h16M4 11h16M4 16h16M4 21h10"/></symbol>
+  <symbol id="i-hash" viewBox="0 0 24 24"><path d="M5 9h15M4 15h15M10 4 8 20M16 4l-2 16"/></symbol>
+  <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 8l3 4 3-4M9 12h6M9 15h6M12 12v6"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-range" viewBox="0 0 24 24"><rect x="3" y="5" width="7.5" height="14" rx="1.5"/><rect x="13.5" y="5" width="7.5" height="14" rx="1.5"/><path d="M10.5 12h3"/></symbol>
+  <symbol id="i-select" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M9 11l3 3 3-3"/></symbol>
+  <symbol id="i-radio" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/></symbol>
+  <symbol id="i-multi" viewBox="0 0 24 24"><path d="M4 7l2 2 3-3M4 17l2 2 3-3M12 8h8M12 18h8"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12.5l3 3 5-6"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="M20 11.5l-7.7 7.7a5 5 0 0 1-7-7L13 4.5a3.3 3.3 0 0 1 4.7 4.7L10 17a1.7 1.7 0 0 1-2.4-2.4L14.5 8"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.7"/><path d="M4.5 20c.8-4 3.6-6 7.5-6s6.7 2 7.5 6"/></symbol>
+  <symbol id="i-dept" viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="17" rx="1.5"/><path d="M9 8h2M13 8h2M9 12h2M13 12h2M10 20.5v-4h4v4"/></symbol>
+  <symbol id="i-calc" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M9 12h.01M12 12h.01M15 12h.01M9 16h.01M12 16h.01M15 16h.01"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 10h17M9.5 5v14M15 5v14"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v13M6 13l6 6 6-6"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" stroke-width="3"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7 4 12l5 5M4 12h10a6 6 0 0 1 0 12" transform="translate(0 -4)"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 7l5 5-5 5M20 12H10a6 6 0 0 0 0 12" transform="translate(0 -4)"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-done" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" stroke-width="3"/></symbol>
+  <symbol id="i-click" viewBox="0 0 24 24"><path d="M9 4l1 5M5 8l4 2M14 14l6 3-3 1.5L15.5 22zM6 3.5l3 3"/></symbol>
+</svg>
+
+<div class="app" id="app">
+  <header class="top">
+    <a class="back" href="#" onclick="return false"><svg class="ic"><use href="#i-back"/></svg>回表單清單</a>
+    <h1>設計表單</h1>
+    <span class="grow"></span>
+    <button class="btn icon" id="undoBtn" title="復原（Ctrl+Z）" aria-label="復原"><svg class="ic"><use href="#i-undo"/></svg></button>
+    <button class="btn icon" id="redoBtn" title="重做（Ctrl+Y）" aria-label="重做"><svg class="ic"><use href="#i-redo"/></svg></button>
+    <span class="save-state" id="saveState" role="status"><i></i><span>已自動存草稿</span></span>
+    <div class="seg" role="group" aria-label="檢視">
+      <button id="modeEdit" aria-pressed="true">編輯</button><button id="modeFinal" aria-pressed="false">看成品</button>
+    </div>
+    <button class="btn icon" id="themeBtn" title="深色／淺色" aria-label="深色或淺色"><svg class="ic"><use href="#i-moon"/></svg></button>
+    <button class="btn" id="chkBtn">用語檢查表</button>
+    <button class="btn" id="jsonBtn">看資料格式</button>
+    <button class="btn primary" id="publishBtn">發布</button>
+  </header>
+
+  <main class="panes" id="panes" data-pane="center">
+    <aside class="pane left" id="pLeft" aria-label="加入欄位"></aside>
+    <section class="pane center" id="pCenter" aria-label="表單預覽"></section>
+    <aside class="pane right" id="pRight" aria-label="欄位設定"></aside>
+  </main>
+
+  <nav class="tabs" id="tabs" aria-label="切換區域">
+    <button data-pane="left" aria-selected="false"><svg class="ic"><use href="#i-plus"/></svg>加入欄位</button>
+    <button data-pane="center" aria-selected="true"><svg class="ic"><use href="#i-lines"/></svg>表單</button>
+    <button data-pane="right" aria-selected="false"><svg class="ic"><use href="#i-click"/></svg>設定</button>
+  </nav>
+</div>
+
+<section class="tasks" id="tasks" aria-label="新手練習">
+  <button class="head" id="tasksHead" aria-expanded="false"><svg class="ic"><use href="#i-click"/></svg>試試看（5 個小練習）<span class="progress" id="tasksProg">0/5</span></button>
+  <ol id="tasksList"></ol>
+</section>
+<div id="toasts" aria-live="polite"></div>
+<dialog id="chkDlg"><header><h3>用語檢查表：每個設定的白話標題、一句說明、例子</h3><button class="btn" id="chkClose">關閉</button></header><div class="chk-wrap"><table class="chk"><thead><tr><th>設定</th><th>白話標題</th><th>一句說明</th><th>例子</th></tr></thead><tbody id="chkBody"></tbody></table></div></dialog>
+<dialog id="jsonDlg"><header><h3>資料格式（進階）：跟現在的定義 JSON 完全相同</h3><button class="btn" id="jsonClose">關閉</button></header><pre id="jsonPre"></pre></dialog>
+
+<script>
+(function () {
+  'use strict'
+  // ───────────────────────── 資料：與現行「表單定義 JSON」同一個形狀（fields／ui.form.groups／ui.list.columns）─────────────────────────
+  var TYPES = {
+    text:      { label: '文字', icon: 'i-text', desc: '一行短文字，例如地點', json: { type: 'text' } },
+    textarea:  { label: '長文字', icon: 'i-lines', desc: '可以寫很多行，例如備註', json: { type: 'textarea' } },
+    number:    { label: '數字', icon: 'i-hash', desc: '只能輸入數字，例如數量', json: { type: 'number' } },
+    money:     { label: '金額', icon: 'i-coin', desc: '錢的數字，不能是負的', json: { type: 'number', min: 0 }, unit: '元' },
+    date:      { label: '日期', icon: 'i-cal', desc: '選一天', json: { type: 'date' } },
+    daterange: { label: '日期區間', icon: 'i-range', desc: '從哪天到哪天', json: { type: 'daterange' } },
+    select:    { label: '單選選單', icon: 'i-select', desc: '從清單裡選一個', json: { type: 'select', options: [] } },
+    radio:     { label: '單選圓點', icon: 'i-radio', desc: '選項全部攤開，點一個', json: { type: 'radio', options: [] } },
+    multiselect: { label: '多選', icon: 'i-multi', desc: '可以同時選好幾個', json: { type: 'multiselect', options: [] } },
+    checkbox:  { label: '勾選', icon: 'i-check', desc: '只有「是」或「否」', json: { type: 'checkbox' } },
+    file:      { label: '檔案上傳', icon: 'i-clip', desc: '附上檔案，例如發票', json: { type: 'file' } },
+    image:     { label: '圖片', icon: 'i-image', desc: '附上照片', json: { type: 'image' } },
+    user:      { label: '選人員', icon: 'i-user', desc: '從系統裡選一位同事', json: { type: 'ref', target: 'users' } },
+    dept:      { label: '選部門', icon: 'i-dept', desc: '從系統裡選一個部門', json: { type: 'ref', target: 'departments' } },
+    formula:   { label: '自動計算', icon: 'i-calc', desc: '系統幫你算，例如加總', json: { type: 'formula' } },
+    table:     { label: '明細表', icon: 'i-table', desc: '很多列的表格，例如費用明細', json: { type: 'table' } }
+  }
+  var PALETTE = [
+    ['常用', ['text', 'textarea', 'number', 'money', 'date', 'daterange']],
+    ['讓人選', ['select', 'radio', 'multiselect', 'checkbox', 'user', 'dept']],
+    ['其他', ['file', 'image', 'formula', 'table']]
+  ]
+  var CV = ['text', 'textarea', 'select', 'radio', 'multiselect']
+  var CONVERT = { text: CV, textarea: CV, select: CV, radio: CV, multiselect: CV }
+  var OPTION_KINDS = { select: 1, radio: 1, multiselect: 1 }
+  var IS_SUPER = true            // 原型：以最高管理者身分看（真實頁面由 session 決定；只有他看得到「進階」）
+
+  var st = null                  // 目前狀態：{title, fields:[], groups:[{title, keys:[]}], list:[keys]}
+  var ui = { sel: '', mode: 'edit', pane: 'center', drag: null, focus: null }
+  var hist = [], histAt = -1, saveTimer = null, counter = 20
+
+  function startState() {
+    function F(key, label, type, extra) { return Object.assign({ key: key, label: label, type: type, dataClass: 'T1' }, extra || {}) }
+    return {
+      title: '差旅費用請款單',
+      fields: [
+        F('applicant', '申請人', 'ref', { target: 'users', required: true, locked: true, default: { $: 'requester' }, help: '' }),
+        F('dept', '部門', 'ref', { target: 'departments', required: true }),
+        F('req_date', '申請日期', 'date', { default: { $: 'today' }, required: true }),
+        F('amount', '金額', 'number', { min: 0, _money: true }),
+        F('place', '地點', 'text', { required: true }),
+        F('period', '出差區間', 'daterange', { required: true }),
+        F('lines', '費用明細', 'table', { columns: [
+          { key: 'category', label: '費用類別', type: 'select', options: ['交通', '住宿', '餐費'] },
+          { key: 'summary', label: '品名', type: 'text' },
+          { key: 'qty', label: '數量', type: 'number' },
+          { key: 'unitCost', label: '單價', type: 'number' },
+          { key: 'amount', label: '小計', type: 'formula', formula: 'round_half_up(qty * unitCost)' }] }),
+        F('total', '總額', 'formula', { formula: '' }),
+        F('pay_date', '付款日', 'date', { editableBy: 'cashier' })
+      ],
+      groups: [
+        { title: '基本資料', keys: ['applicant', 'dept', 'req_date', 'amount'] },
+        { title: '出差資訊', keys: ['place', 'period'] },
+        { title: '費用', keys: ['lines', 'total'] },
+        { title: '其他', keys: ['pay_date'] }
+      ],
+      list: ['applicant', 'req_date', 'amount', 'place', 'total']
+    }
+  }
+  st = startState()
+
+  // ───────────────────────── 小工具 ─────────────────────────
+  function $(s, r) { return (r || document).querySelector(s) }
+  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)) }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] }) }
+  function ic(id) { return '<svg class="ic" aria-hidden="true"><use href="#' + id + '"/></svg>' }
+  function byKey(k) { return st.fields.find(function (f) { return f.key === k }) }
+  function kindOf(f) {
+    if (f._money) return 'money'
+    if (f.type === 'ref') return f.target === 'departments' ? 'dept' : 'user'
+    return f.type
+  }
+  function uniq(prefix) { var k; do { k = prefix + '_' + (++counter) } while (byKey(k)); return k }
+  function where(key) { for (var i = 0; i < st.groups.length; i++) { var j = st.groups[i].keys.indexOf(key); if (j >= 0) return { g: i, i: j } } return null }
+  function isWide(f) { var k = kindOf(f); return k === 'textarea' || k === 'table' || k === 'file' || k === 'image' || k === 'radio' || k === 'multiselect' || k === 'daterange' }
+  function snapshot() { return JSON.stringify(st) }
+  function toast(msg, actionLabel, fn) {
+    var el = document.createElement('div'); el.className = 'toast'
+    el.innerHTML = '<span>' + esc(msg) + '</span>' + (actionLabel ? '<button type="button">' + esc(actionLabel) + '</button>' : '')
+    if (actionLabel) el.querySelector('button').onclick = function () { fn(); el.remove() }
+    $('#toasts').appendChild(el)
+    setTimeout(function () { el.remove() }, 6000)
+  }
+
+  // ───────────────────────── 復原／重做、自動存草稿 ─────────────────────────
+  function commit() {
+    hist = hist.slice(0, histAt + 1); hist.push(snapshot()); if (hist.length > 100) hist.shift(); histAt = hist.length - 1
+    markSaving(); renderTasks(); syncUndo()
+  }
+  var typeTimer = null
+  function commitSoon() { clearTimeout(typeTimer); typeTimer = setTimeout(commit, 600); markSaving() }
+  function restore(s) { st = JSON.parse(s); if (!byKey(ui.sel)) ui.sel = ''; renderAll(); markSaving(); renderTasks(); syncUndo() }
+  function undo() { clearTimeout(typeTimer); if (histAt > 0) { histAt--; restore(hist[histAt]) } }
+  function redo() { if (histAt < hist.length - 1) { histAt++; restore(hist[histAt]) } }
+  function syncUndo() { $('#undoBtn').disabled = histAt <= 0; $('#redoBtn').disabled = histAt >= hist.length - 1 }
+  function markSaving() {
+    var el = $('#saveState'); el.classList.add('saving'); el.lastChild.textContent = '儲存中…'
+    clearTimeout(saveTimer)
+    saveTimer = setTimeout(function () {
+      var d = new Date(); el.classList.remove('saving')
+      el.lastChild.textContent = '已自動存草稿 ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2)
+    }, 700)
+  }
+
+  // ───────────────────────── 動作（每個動作 = 改資料 → commit → 重畫）─────────────────────────
+  function newField(kind) {
+    var T = TYPES[kind], f = Object.assign({ key: uniq(T.json.type === 'ref' ? 'ref' : T.json.type), label: T.label, dataClass: 'T1' }, JSON.parse(JSON.stringify(T.json)))
+    if (kind === 'money') f._money = true
+    if (OPTION_KINDS[kind]) f.options = ['選項 1', '選項 2']
+    if (kind === 'table') f.columns = [{ key: 'item', label: '項目', type: 'text' }, { key: 'amount', label: '金額', type: 'number' }]
+    if (kind === 'formula') f.formula = ''
+    return f
+  }
+  function addField(kind, gi, idx) {
+    var f = newField(kind)
+    if (!st.groups.length) st.groups.push({ title: '基本資料', keys: [] })
+    if (gi == null) { var w = ui.sel && where(ui.sel); gi = w ? w.g : st.groups.length - 1; idx = w ? w.i + 1 : st.groups[gi].keys.length }
+    st.fields.push(f); st.groups[gi].keys.splice(idx == null ? st.groups[gi].keys.length : idx, 0, f.key)
+    if (kind !== 'file' && kind !== 'image' && kind !== 'table') st.list.push(f.key)
+    ui.sel = f.key; commit(); renderAll(); showPane('right-if-narrow')
+    var el = $('.fld[data-key="' + f.key + '"]'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    ui.focus = '#setLabel'; focusLater()
+  }
+  function moveField(key, gi, idx) {
+    var w = where(key); if (!w) return
+    st.groups[w.g].keys.splice(w.i, 1)
+    if (w.g === gi && idx > w.i) idx--
+    st.groups[gi].keys.splice(idx, 0, key); commit(); renderAll()
+  }
+  function nudge(key, d) {
+    var w = where(key); if (!w) return
+    var arr = st.groups[w.g].keys, j = w.i + d
+    if (j < 0 || j >= arr.length) return
+    arr.splice(w.i, 1); arr.splice(j, 0, key); commit(); renderAll(); focusKey(key)
+  }
+  function dupField(key) {
+    var f = byKey(key), w = where(key); if (!f) return
+    var c = JSON.parse(JSON.stringify(f)); c.key = uniq(f.type); c.label = f.label + '（複本）'
+    st.fields.push(c); st.groups[w.g].keys.splice(w.i + 1, 0, c.key)
+    if (st.list.indexOf(key) >= 0) st.list.push(c.key)
+    ui.sel = c.key; commit(); renderAll()
+  }
+  function delField(key) {
+    var before = snapshot(), f = byKey(key); if (!f) return
+    var w = where(key); st.groups[w.g].keys.splice(w.i, 1)
+    st.fields = st.fields.filter(function (x) { return x.key !== key }); st.list = st.list.filter(function (k) { return k !== key })
+    if (ui.sel === key) ui.sel = ''
+    commit(); renderAll()
+    toast('已刪除「' + f.label + '」', '復原', function () { st = JSON.parse(before); hist.push(snapshot()); histAt = hist.length - 1; renderAll(); renderTasks(); syncUndo() })
+  }
+  function select(key) { ui.sel = key; renderCenter(); renderRight(); if (key) showPane('right-if-narrow') }
+  function focusKey(k) { var el = $('.fld[data-key="' + k + '"]'); if (el) el.focus() }
+  function focusLater() { setTimeout(function () { if (ui.focus) { var e = $(ui.focus); if (e) { e.focus(); if (e.select) e.select() } ui.focus = null } }, 30) }
+  function showPane(p) {
+    if (p === 'right-if-narrow') { if (window.innerWidth <= 960) p = 'right'; else return }
+    ui.pane = p; $('#panes').setAttribute('data-pane', p); $$('#tabs button').forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.pane === p)) })
+  }
+
+  // ───────────────────────── 畫面：左（加入欄位）─────────────────────────
+  function renderLeft() {
+    $('#pLeft').innerHTML = '<h2>加入欄位</h2><p class="hint">點一下加到表單裡，或拖到中間想放的位置。</p>' + PALETTE.map(function (g) {
+      return '<div class="group-title">' + g[0] + '</div><div class="tiles">' + g[1].map(function (k) {
+        var T = TYPES[k]
+        return '<button type="button" class="tile" draggable="true" data-add="' + k + '">' + ic(T.icon) + '<b>' + T.label + '</b><small>' + T.desc + '</small></button>'
+      }).join('') + '</div>'
+    }).join('')
+  }
+
+  // ───────────────────────── 畫面：中（真的表單）─────────────────────────
+  function control(f) {
+    var k = kindOf(f), T = TYPES[k], opts = f.options || [], def = f.default
+    var dv = def && def.$ && FILLS[def.$] ? FILLS[def.$].ex : (typeof def === 'string' ? def : '')
+    switch (k) {
+      case 'text': return '<div class="ctl"><span class="' + (dv ? 'val' : '') + '">' + esc(dv || '請輸入') + '</span></div>'
+      case 'textarea': return '<div class="ctl tall"><span>請輸入…</span></div>'
+      case 'number': return '<div class="ctl"><span>0</span></div>'
+      case 'money': return '<div class="ctl"><span>0</span><span style="margin-left:auto">元</span></div>'
+      case 'date': return '<div class="ctl">' + ic('i-cal') + '<span class="' + (dv ? 'val' : '') + '">' + esc(dv || '選擇日期') + '</span></div>'
+      case 'daterange': return '<div class="ctl">' + ic('i-range') + '<span>開始日期</span><span>→</span><span>結束日期</span></div>'
+      case 'select': return '<div class="ctl">' + '<span class="' + (dv ? 'val' : '') + '">' + esc(dv || '請選擇') + '</span><span style="margin-left:auto">▾</span></div>'
+      case 'radio': return '<div class="choices">' + (opts.length ? opts.slice(0, 5).map(function (o) { return '<span><i class="round' + (o === def ? ' on' : '') + '"></i>' + esc(o) + '</span>' }).join('') : '<span style="color:var(--ink-3)">（還沒有選項）</span>') + '</div>'
+      case 'multiselect': return '<div class="choices">' + (opts.length ? opts.slice(0, 5).map(function (o) { return '<span><i></i>' + esc(o) + '</span>' }).join('') : '<span style="color:var(--ink-3)">（還沒有選項）</span>') + '</div>'
+      case 'checkbox': return '<div class="choices"><span><i></i>是</span></div>'
+      case 'file': return '<div class="dropzone">' + ic('i-clip') + '選擇檔案，或把檔案拖到這裡</div>'
+      case 'image': return '<div class="dropzone">' + ic('i-image') + '選擇圖片，或把圖片拖到這裡</div>'
+      case 'user': return '<div class="ctl">' + ic('i-user') + '<span class="' + (dv ? 'val' : '') + '">' + esc(dv || '選擇人員') + '</span></div>'
+      case 'dept': return '<div class="ctl">' + ic('i-dept') + '<span class="' + (dv ? 'val' : '') + '">' + esc(dv || '選擇部門') + '</span></div>'
+      case 'formula': return '<div class="ctl sum">' + ic('i-calc') + '<span class="val">' + esc(formulaText(f)) + '</span><span style="margin-left:auto">' + (calcResult(calcOf(f)) == null ? '—' : esc(fmt(calcResult(calcOf(f)))) + (calcOf(f) && calcOf(f).p === 'days' ? ' 天' : '')) + '</span></div>'
+      case 'table': return '<table class="mini-table"><thead><tr>' + (f.columns || []).map(function (c) { return '<th>' + esc(c.label) + '</th>' }).join('') + '</tr></thead><tbody><tr>' + (f.columns || []).map(function (c) { return '<td class="' + (c.type === 'formula' ? 'auto' : '') + '">' + (c.type === 'formula' ? '自動' : '') + '</td>' }).join('') + '</tr></tbody></table><div style="margin-top:6px;color:var(--ink-3);pointer-events:none">＋ 新增一列</div>'
+    }
+    return ''
+  }
+  function renderCenter() {
+    var h = '<div class="paper' + (ui.mode === 'final' ? ' final' : '') + '"><div class="paper-head"><input class="title" id="formTitle" value="' + esc(st.title) + '" aria-label="表單名稱"><p>' + (ui.mode === 'final' ? '這就是使用者會看到的樣子' : '中間就是使用者會看到的表單。點任何一個欄位，右邊會出現它的設定。') + '</p></div>'
+    if (!st.groups.length) {
+      h += '<div class="big-empty">' + ic('i-lines') + '<h3>還沒有任何欄位</h3><p>從左邊點一個欄位（例如「文字」），它就會出現在這張表單上。</p><button class="btn primary" type="button" data-add-section>＋ 新增區塊</button></div>'
+    }
+    st.groups.forEach(function (g, gi) {
+      h += '<section class="sec" data-sec="' + gi + '"><div class="sec-head"><input value="' + esc(g.title) + '" data-sec-title="' + gi + '" aria-label="區塊名稱"><span class="sec-tools">' +
+        '<button type="button" class="mini" data-sec-up="' + gi + '" title="區塊往上移" aria-label="區塊往上移"' + (gi === 0 ? ' disabled' : '') + '>' + ic('i-up') + '</button>' +
+        '<button type="button" class="mini" data-sec-down="' + gi + '" title="區塊往下移" aria-label="區塊往下移"' + (gi === st.groups.length - 1 ? ' disabled' : '') + '>' + ic('i-down') + '</button>' +
+        '<button type="button" class="mini del" data-sec-del="' + gi + '" title="刪除這個區塊" aria-label="刪除這個區塊">' + ic('i-trash') + '</button></span></div><div class="grid">'
+      if (!g.keys.length) h += '<div class="empty-sec slot" data-slot data-g="' + gi + '" data-i="0"><b>這個區塊還是空的</b>把左邊的欄位拖到這裡，或在左邊點一下。</div>'
+      g.keys.forEach(function (k, i) {
+        var f = byKey(k); if (!f) return
+        h += '<div class="slot" data-slot data-g="' + gi + '" data-i="' + i + '"></div>'
+        h += '<div class="fld' + (isWide(f) ? ' wide' : '') + (ui.sel === k ? ' is-selected' : '') + '" data-key="' + esc(k) + '" draggable="' + (ui.mode === 'edit') + '" tabindex="0" role="button" aria-label="欄位：' + esc(f.label) + '">' +
+          '<div class="fld-bar"><span class="mini grip" title="拖著走">' + ic('i-grip') + '</span>' +
+          '<button type="button" class="mini" data-act="up" title="往上移（Alt+↑）" aria-label="往上移">' + ic('i-up') + '</button>' +
+          '<button type="button" class="mini" data-act="down" title="往下移（Alt+↓）" aria-label="往下移">' + ic('i-down') + '</button>' +
+          '<button type="button" class="mini" data-act="dup" title="複製" aria-label="複製">' + ic('i-copy') + '</button>' +
+          '<button type="button" class="mini" data-act="del" title="刪除（Delete）" aria-label="刪除">' + ic('i-trash') + '</button></div>' +
+          '<label>' + esc(f.label) + (f.required ? '<span class="req" aria-hidden="true">*</span>' : '') + (f.editableBy === 'cashier' ? '<span class="chip">只有出納填</span>' : '') + (f.locked ? '<span class="chip">自動帶入</span>' : '') + '</label>' +
+          control(f) + (f.help ? '<div class="help">' + esc(f.help) + '</div>' : '') + '</div>'
+      })
+      if (g.keys.length) h += '<div class="slot" data-slot data-g="' + gi + '" data-i="' + g.keys.length + '"></div>'
+      h += '</div></section>'
+    })
+    if (st.groups.length) h += '<button type="button" class="add-sec" data-add-section>＋ 新增區塊</button>'
+    h += '</div>'
+    $('#pCenter').innerHTML = h
+  }
+
+  // ───────────────────────── 畫面：右（白話設定）─────────────────────────
+  // 規則：每個設定都要有「白話標題＋一句說明＋看得到的例子」。ex 是例子（沒有例子的設定不准上畫面）。
+  function sw(id, on, title, why, ex, disabled) {
+    return '<div class="switch"><div class="txt"><b>' + title + '</b><small>' + why + '</small><small class="ex">例：' + ex + '</small></div><button type="button" class="sw" role="switch" id="' + id + '" aria-checked="' + on + '" aria-label="' + esc(title) + '"' + (disabled ? ' disabled' : '') + '></button></div>'
+  }
+
+  // ── 自動計算：現成的計算器（不打公式）。每個計算器 ⇄ 現行公式字串，存檔 JSON 不變 ──
+  var SAMPLE = { qty: 3, unitCost: 500 }
+  function numFields(except) { return st.fields.filter(function (x) { return (x.type === 'number') && x.key !== except }) }
+  function sampleOf(k) { if (SAMPLE[k] != null) return SAMPLE[k]; var i = st.fields.findIndex(function (x) { return x.key === k }); return 1000 * (1 + (i % 4)) }
+  function fmt(n) { return Number(n).toLocaleString('en-US') }
+  function nm(k) { var x = byKey(k); return x ? '「' + x.label + '」' : '「？」' }
+  function rateOf(c) { return c.rate === 'free' ? 0 : c.rate === 'custom' ? (+c.custom || 0) / 100 : 0.05 }
+  function rateText(c) { return c.rate === 'free' ? '免稅' : c.rate === 'custom' ? (c.custom || 0) + '%' : '5%' }
+  var CALCS = [
+    { id: 'sumtable', name: '加總明細', why: '把明細表每一列的某個金額加起來。', ex: '三列 1,000＋2,000＋3,000 ＝ 6,000' },
+    { id: 'sum', name: '加總欄位', why: '把你勾選的幾個數字欄位加起來。', ex: '「機票」1,000＋「住宿」2,000 ＝ 3,000' },
+    { id: 'tax', name: '稅額計算', why: '輸入未稅算出稅額和含稅，或輸入含稅拆出稅。', ex: '未稅 10,000，稅率 5% ⇒ 稅額 500、含稅 10,500' },
+    { id: 'mul', name: '數量 × 單價', why: '兩個欄位相乘。', ex: '數量 3 × 單價 500 ＝ 1,500' },
+    { id: 'pct', name: '百分比', why: '某個金額的幾 %。', ex: '總額 10,000 的 30%（訂金）＝ 3,000' },
+    { id: 'sub', name: '相減', why: 'A 減 B。', ex: '預算 10,000 − 已用 4,000 ＝ 6,000' },
+    { id: 'days', name: '日期相差幾天', why: '兩個日期之間相差幾天。', ex: '5/1 到 5/4 ＝ 3 天' }
+  ]
+  function buildCalc(c) {
+    if (!c) return ''
+    var A = c.a, B = c.b
+    switch (c.p) {
+      case 'sumtable': return c.tbl && c.col ? 'total(' + c.tbl + ', "' + c.col + '")' : ''
+      case 'sum': return (c.keys || []).join(' + ')
+      case 'mul': return A && B ? A + ' * ' + B : ''
+      case 'sub': return A && B ? A + ' - ' + B : ''
+      case 'pct': return A ? 'round_half_up(' + A + ' * ' + (+c.pct || 0) + ' / 100)' : ''
+      case 'days': return A && B ? 'days_between(' + A + ', ' + B + ')' : ''
+      case 'tax': var r = rateOf(c); if (!A) return ''
+        return c.mode === 'split' ? 'round_half_up(' + A + ' - ' + A + ' / ' + (1 + r) + ')' : (c.out === 'gross' ? 'round_half_up(' + A + ' * ' + (1 + r) + ')' : 'round_half_up(' + A + ' * ' + r + ')')
+    }
+    return ''
+  }
+  function parseCalc(f) {      // 舊定義的公式字串 ⇒ 認得的計算器；認不得 ⇒ null（顯示「進階公式」）
+    var s = (f.formula || '').trim(), m
+    if (!s) return { p: '' }
+    if ((m = /^total\((\w+),\s*"(\w+)"\)$/.exec(s))) return { p: 'sumtable', tbl: m[1], col: m[2] }
+    if ((m = /^(\w+) \* (\w+)$/.exec(s))) return { p: 'mul', a: m[1], b: m[2] }
+    if ((m = /^(\w+) - (\w+)$/.exec(s))) return { p: 'sub', a: m[1], b: m[2] }
+    if ((m = /^round_half_up\((\w+) \* ([\d.]+) \/ 100\)$/.exec(s))) return { p: 'pct', a: m[1], pct: m[2] }
+    if ((m = /^days_between\((\w+), (\w+)\)$/.exec(s))) return { p: 'days', a: m[1], b: m[2] }
+    if (/^\w+( \+ \w+)*$/.test(s) && byKey(s.split(' + ')[0])) return { p: 'sum', keys: s.split(' + ') }
+    return null
+  }
+  function calcOf(f) { if (f._calc === undefined) f._calc = parseCalc(f); return f._calc }
+  function calcResult(c) {      // 預覽用的「活範例」數字
+    if (!c || !c.p) return null
+    var v = function (k) { return sampleOf(k) }
+    if (c.p === 'sumtable') return 6000
+    if (c.p === 'sum') return (c.keys || []).reduce(function (a, k) { return a + v(k) }, 0)
+    if (c.p === 'mul') return c.a && c.b ? v(c.a) * v(c.b) : null
+    if (c.p === 'sub') return c.a && c.b ? v(c.a) - v(c.b) : null
+    if (c.p === 'pct') return c.a ? Math.round(v(c.a) * (+c.pct || 0) / 100) : null
+    if (c.p === 'days') return 3
+    if (c.p === 'tax') { if (!c.a) return null; var r = rateOf(c), a = v(c.a); return c.mode === 'split' ? Math.round(a - a / (1 + r)) : (c.out === 'gross' ? Math.round(a * (1 + r)) : Math.round(a * r)) }
+    return null
+  }
+  function formulaText(f) {
+    var c = calcOf(f)
+    if (c === null) return '進階公式'
+    if (!c.p) return '還沒選要算什麼'
+    var meta = CALCS.find(function (x) { return x.id === c.p }).name
+    if (c.p === 'sumtable') { var t = byKey(c.tbl), col = t && (t.columns || []).find(function (x) { return x.key === c.col }); return meta + '：' + (t ? t.label : '？') + '的' + (col ? col.label : '？') }
+    if (c.p === 'sum') return meta + '：' + (c.keys || []).map(nm).join('、')
+    if (c.p === 'tax') return meta + '（' + (c.mode === 'split' ? '含稅拆稅' : c.out === 'gross' ? '算含稅' : '算稅額') + '，' + rateText(c) + '）'
+    return meta
+  }
+  function sel(id, val, opts, ph) {
+    return '<select class="in" id="' + id + '"><option value="">' + ph + '</option>' + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === val ? ' selected' : '') + '>' + esc(o[1]) + '</option>' }).join('') + '</select>'
+  }
+  function formulaPicker(f) {
+    var c = calcOf(f)
+    if (c === null) return '<div class="row"><span class="tag">進階公式</span><div class="why">這是用文字寫的舊公式：<code>' + esc(f.formula) + '</code>。只有最高管理者可以改；想換成現成的計算器，選下面任何一個就會取代它。</div></div>' + calcCards(f, {})
+    return calcCards(f, c) + calcParams(f, c)
+  }
+  function calcCards(f, c) {
+    return '<div class="row"><span class="lbl">選一個計算器</span><div class="pick" role="radiogroup" aria-label="計算器">' + CALCS.map(function (x) {
+      return '<label style="flex-wrap:wrap;min-height:auto;padding:8px 12px"><input type="radio" name="calc" value="' + x.id + '"' + (c.p === x.id ? ' checked' : '') + '><b>' + x.name + '</b><span style="flex-basis:100%;font-size:12.5px;color:var(--ink-3);padding-left:30px">' + x.why + '<br>例：' + x.ex + '</span></label>'
+    }).join('') + '</div></div>'
+  }
+  function calcParams(f, c) {
+    if (!c.p) return ''
+    var nums = numFields(f.key).map(function (n) { return [n.key, n.label] })
+    var dates = st.fields.filter(function (x) { return x.type === 'date' }).map(function (n) { return [n.key, n.label] })
+    var tbls = []; st.fields.filter(function (x) { return x.type === 'table' }).forEach(function (t) { (t.columns || []).filter(function (x) { return x.type === 'number' || x.type === 'formula' }).forEach(function (x) { tbls.push([t.key + '|' + x.key, t.label + ' ➜ 每一列的「' + x.label + '」']) }) })
+    var h = '<div class="box" style="background:var(--bg)"><h3>' + CALCS.find(function (x) { return x.id === c.p }).name + '：設定</h3>'
+    if (c.p === 'sumtable') h += '<div class="row"><label for="cpT">加哪一欄？</label>' + sel('cpT', c.tbl && c.col ? c.tbl + '|' + c.col : '', tbls, '請選擇…') + '<div class="why">例：費用明細每一列的「小計」。</div></div>'
+    if (c.p === 'sum') h += '<div class="row"><span class="lbl">勾選要加起來的欄位</span><div class="pick">' + (nums.length ? nums.map(function (n) { return '<label><input type="checkbox" data-cp-key="' + esc(n[0]) + '"' + ((c.keys || []).indexOf(n[0]) >= 0 ? ' checked' : '') + '>' + esc(n[1]) + '</label>' }).join('') : '<div class="why">表單裡還沒有數字欄位，先在左邊加一個「數字」或「金額」。</div>') + '</div></div>'
+    if (c.p === 'mul') h += '<div class="row"><label for="cpA">第一個數字（例：數量）</label>' + sel('cpA', c.a, nums, '請選擇…') + '</div><div class="row"><label for="cpB">第二個數字（例：單價）</label>' + sel('cpB', c.b, nums, '請選擇…') + '</div>'
+    if (c.p === 'sub') h += '<div class="row"><label for="cpA">A（被減的數字）</label>' + sel('cpA', c.a, nums, '請選擇…') + '</div><div class="row"><label for="cpB">B（要減掉的數字）</label>' + sel('cpB', c.b, nums, '請選擇…') + '</div>'
+    if (c.p === 'pct') h += '<div class="row"><label for="cpA">拿哪個金額來算？</label>' + sel('cpA', c.a, nums, '請選擇…') + '</div><div class="row"><label for="cpPct">要幾 %？</label><input class="in" id="cpPct" type="number" min="0" max="100" value="' + esc(c.pct || '') + '" placeholder="例如 30"><div class="why">30 就是 30%，訂金常用。</div></div>'
+    if (c.p === 'days') h += '<div class="row"><label for="cpA">開始日期</label>' + sel('cpA', c.a, dates, '請選擇…') + '</div><div class="row"><label for="cpB">結束日期</label>' + sel('cpB', c.b, dates, '請選擇…') + '</div>'
+    if (c.p === 'tax') {
+      h += '<div class="row"><label for="cpA">金額是哪一欄？</label>' + sel('cpA', c.a, nums, '請選擇…') + '</div>'
+      h += '<div class="row"><label for="cpMode">你輸入的金額是</label><select class="in" id="cpMode"><option value="net"' + (c.mode !== 'split' ? ' selected' : '') + '>未稅（算出稅）</option><option value="split"' + (c.mode === 'split' ? ' selected' : '') + '>含稅（拆出稅）</option></select></div>'
+      if (c.mode !== 'split') h += '<div class="row"><label for="cpOut">要算出</label><select class="in" id="cpOut"><option value="tax"' + (c.out !== 'gross' ? ' selected' : '') + '>稅額</option><option value="gross"' + (c.out === 'gross' ? ' selected' : '') + '>含稅金額</option></select></div>'
+      h += '<div class="row"><label for="cpRate">稅率</label><select class="in" id="cpRate"><option value="5"' + (!c.rate || c.rate === '5' ? ' selected' : '') + '>5%（一般營業稅）</option><option value="free"' + (c.rate === 'free' ? ' selected' : '') + '>免稅</option><option value="custom"' + (c.rate === 'custom' ? ' selected' : '') + '>自己填</option></select>' + (c.rate === 'custom' ? '<input class="in" style="margin-top:6px" id="cpCustom" type="number" min="0" max="100" value="' + esc(c.custom || '') + '" placeholder="稅率 %">' : '') + '</div>'
+    }
+    var r = calcResult(c)
+    h += '<div class="why" style="font-weight:600;color:var(--ink)">範例結果：' + (r == null ? '（先把上面選好）' : fmt(r) + (c.p === 'days' ? ' 天' : '')) + '</div></div>'
+    return h
+  }
+
+  // ── 自動帶入：白話選單。每個選擇都有一句說明＋範例（✦＝需要後端新增帶入來源，見設計文件）──
+  var FILLS = {
+    requester: { label: '申請人本人', why: '填表的人是誰就帶誰。', ex: '王小明', json: { $: 'requester' } },
+    currentUser: { label: '目前登入的人', why: '現在正在操作的人（代理人填表時，跟申請人可能不同）。', ex: '李助理', json: { $: 'currentUser' }, nu: 1 },
+    requesterDept: { label: '申請人所屬部門', why: '申請人在人事資料裡的部門。', ex: '業務部', json: { $: 'requesterDept' }, nu: 1 },
+    requesterManager: { label: '申請人的主管', why: '申請人在人事資料裡的直屬主管。', ex: '陳經理', json: { $: 'requesterManager' }, nu: 1 },
+    today: { label: '今天日期', why: '打開表單的那一天。', ex: '2026/10/01', json: { $: 'today' } },
+    company: { label: '公司名稱', why: '系統設定裡的公司名稱。', ex: '○○機械股份有限公司', json: { $: 'company' }, nu: 1 },
+    caseCustomer: { label: '這個案件的客戶', why: '從案件帶入客戶名稱（只有掛在案件底下的表單才有）。', ex: '台灣精密', json: { $: 'caseCustomer' }, nu: 1 },
+    caseProject: { label: '這個案件的專案', why: '從案件帶入專案名稱（只有掛在案件底下的表單才有）。', ex: '新廠自動化', json: { $: 'caseProject' }, nu: 1 },
+    lastUsed: { label: '我上一次填過的內容', why: '這個人上次填同一格的內容，省得重打。', ex: '台北出差', json: { $: 'lastUsed' }, nu: 1 }
+  }
+  var FILL_BY_KIND = {
+    user: ['requester', 'currentUser', 'requesterManager', 'lastUsed'], dept: ['requesterDept', 'lastUsed'], date: ['today', '*custom', 'lastUsed'],
+    text: ['company', 'caseCustomer', 'caseProject', '*custom', 'lastUsed'], textarea: ['*custom'], number: ['*custom'], money: ['*custom'],
+    select: ['*option', 'lastUsed'], radio: ['*option', 'lastUsed'], checkbox: ['*custom']
+  }
+  function fillSel(f) {   // 目前選到哪一個
+    var d = f.default
+    if (d && typeof d === 'object' && d.$) return d.$
+    if (d !== undefined && d !== '') { var k = kindOf(f); return (k === 'select' || k === 'radio') ? '*option' : '*custom' }
+    return ''
+  }
+  function fillLabel(f) { var v = fillSel(f); return v === '' ? '' : FILLS[v] ? FILLS[v].label : v === '*option' ? '指定的選項' : '你填的內容' }
+  function defaultMenu(f) {
+    var k = kindOf(f), list = FILL_BY_KIND[k]; if (!list) return ''
+    var val = fillSel(f), extra = '', info = ''
+    var h = '<div class="row"><label for="setDef">自動帶入</label><select class="in" id="setDef"><option value="">不帶入（讓使用者自己填）</option>' + list.map(function (v) {
+      if (v === '*custom') return '<option value="*custom"' + (val === '*custom' ? ' selected' : '') + '>' + (k === 'date' ? '固定某一天' : k === 'checkbox' ? '先勾起來' : '固定的內容（我自己打）') + '</option>'
+      if (v === '*option') return '<option value="*option"' + (val === '*option' ? ' selected' : '') + '>先選好某一個選項</option>'
+      return '<option value="' + v + '"' + (val === v ? ' selected' : '') + '>' + FILLS[v].label + (FILLS[v].nu ? ' ✦' : '') + '</option>'
+    }).join('') + '</select>'
+    if (val === '*custom' && k !== 'checkbox') extra = '<input class="in" style="margin-top:6px" id="setDefText" ' + (k === 'date' ? 'type="date"' : '') + ' value="' + esc(f.default) + '" placeholder="要預先填好的內容">'
+    if (val === '*option') extra = '<select class="in" style="margin-top:6px" id="setDefOpt">' + (f.options || []).map(function (x) { return '<option' + (x === f.default ? ' selected' : '') + '>' + esc(x) + '</option>' }).join('') + '</select>'
+    if (val && FILLS[val]) info = '<b>' + FILLS[val].label + '</b>：' + FILLS[val].why + '<br>使用者會看到：' + FILLS[val].ex
+    else if (val === '') info = '欄位一開始是空的。<br>使用者會看到：（空白）'
+    else info = '使用者會看到你預先填好的內容。'
+    return h + extra + '<div class="why ex-box">' + info + '</div></div>'
+  }
+  function itemList(arr, listId, addText) {
+    return '<ul class="items" id="' + listId + '">' + arr.map(function (v, i) {
+      return '<li draggable="true" data-i="' + i + '"><span class="handle" title="拖著排順序">' + ic('i-grip') + '</span><input class="in" data-item="' + i + '" value="' + esc(v) + '" aria-label="第 ' + (i + 1) + ' 個"><button type="button" class="mini del" data-item-del="' + i + '" aria-label="刪除這一個">✕</button></li>'
+    }).join('') + '</ul><button type="button" class="add-item" data-item-add="' + listId + '">＋ ' + addText + '（或在最後一格按 Enter）</button>'
+  }
+  function renderRight() {
+    var f = byKey(ui.sel), el = $('#pRight')
+    if (!f) { el.innerHTML = '<div class="guide">' + ic('i-click') + '<h3>先點一個欄位</h3><p>點中間表單裡的任何一個欄位，<br>它的設定會出現在這裡。</p></div>'; return }
+    var k = kindOf(f), T = TYPES[k], h = ''
+    h += '<h2>這個欄位</h2><div class="convert"><span class="tag">' + ic(T.icon) + T.label + '</span>' + (CONVERT[f.type] ? '<label style="font-size:13px;color:var(--ink-3)" for="setConv">想改成：</label><select class="in" id="setConv" style="min-height:38px;width:auto">' + CONVERT[f.type].map(function (c) { return '<option value="' + c + '"' + (c === k ? ' selected' : '') + '>' + TYPES[c].label + '</option>' }).join('') + '</select>' : '') + '</div>'
+    h += '<div class="box"><div class="row"><label for="setLabel">欄位名稱</label><input class="in" id="setLabel" value="' + esc(f.label) + '"><div class="why">表單上顯示給使用者看的字。例：「出差地點」。</div></div>'
+    h += '<div class="row"><label for="setHelp">說明文字（選填）</label><input class="in" id="setHelp" value="' + esc(f.help || '') + '" placeholder="例如：請填發票上的金額"><div class="why">會用小字顯示在欄位下面。例：欄位下方出現灰色小字「請填發票上的金額」。</div></div>'
+    if (k !== 'formula' && k !== 'table') h += sw('setReq', !!f.required, '一定要填', '開起來，使用者沒填就不能送出。', '「地點」開起來 ⇒ 沒填地點，按送出會跳出提醒。')
+    h += '</div>'
+    if (OPTION_KINDS[k]) h += '<div class="box"><h3>選項（使用者可以選哪些）</h3>' + itemList(f.options || [], 'optList', '新增一個選項') + '<div class="why" style="font-size:12.5px;color:var(--ink-3);margin-top:6px">打字後按 Enter 就會多一格；也可以一次貼上很多行。例：「國內」Enter「國外」⇒ 兩個選項。</div></div>'
+    if (k === 'formula') h += '<div class="box"><h3>自動計算</h3>' + formulaPicker(f) + '</div>'
+    if (k === 'table') h += '<div class="box"><h3>表格的欄位</h3>' + itemList((f.columns || []).map(function (c) { return c.label }), 'colList', '新增一個欄') + '<div class="why" style="font-size:12.5px;color:var(--ink-3);margin-top:6px">標「自動」的欄（例如小計）由系統算，不能手動改名成別的種類。</div></div>'
+    var dm = defaultMenu(f); if (dm) h += '<div class="box">' + dm + '</div>'
+    h += '<div class="box"><h3>誰能填、怎麼顯示</h3>'
+    if (k !== 'formula') h += sw('setCashier', f.editableBy === 'cashier', '只有出納能修改', '其他人看得到，但不能填；只有出納可以改。', '「付款日」：業務只看得到，出納才能填。')
+    var hasFill = f.default !== undefined && f.default !== ''
+    if (k !== 'formula' && k !== 'table') h += sw('setLocked', !!f.locked, hasFill ? '「' + fillLabel(f) + '」不能改' : '帶入的內容不能改', hasFill ? '使用者看到這一格，但不能自己改掉。' : '要先在上面選好「自動帶入」才能開。', hasFill ? '「申請人」自動帶入王小明，而且別人不能改成別人。' : '先選「申請人本人」，這裡才會能開。', !hasFill)
+    h += sw('setList', st.list.indexOf(f.key) >= 0, '在清單中顯示', '開起來，這個欄位會出現在「單據清單」的表格裡。', '開起來 ⇒ 清單多一欄「' + esc(f.label) + '」。')
+    h += '</div>'
+    if (IS_SUPER) h += '<details class="adv"><summary>進階設定（只有最高管理者看得到）</summary><div class="row"><label>系統內部代碼</label><input class="in" value="' + esc(f.key) + '" readonly aria-readonly="true"><div class="why">自動產生，發布後不能改（舊單據靠它找資料）。改「欄位名稱」不會動它。</div></div></details>'
+    h += '<button type="button" class="danger-btn" data-del-sel>' + ic('i-trash').replace('class="ic"', 'class="ic" style="vertical-align:-4px"') + ' 刪除這個欄位</button>'
+    el.innerHTML = h
+  }
+  function renderAll() { renderLeft(); renderCenter(); renderRight() }
+
+  // ───────────────────────── 事件（一律委派）─────────────────────────
+  var left = $('#pLeft'), center = $('#pCenter'), right = $('#pRight')
+  left.addEventListener('click', function (e) { var b = e.target.closest('[data-add]'); if (b) addField(b.dataset.add) })
+  left.addEventListener('dragstart', function (e) { var b = e.target.closest('[data-add]'); if (!b) return; ui.drag = 'new:' + b.dataset.add; e.dataTransfer.setData('text/plain', ui.drag); e.dataTransfer.effectAllowed = 'copy' })
+
+  center.addEventListener('click', function (e) {
+    if (e.target.closest('[data-add-section]')) { st.groups.push({ title: '新區塊', keys: [] }); commit(); renderCenter(); var inp = $$('[data-sec-title]').pop(); if (inp) { inp.focus(); inp.select() } return }
+    var su = e.target.closest('[data-sec-up]'), sd = e.target.closest('[data-sec-down]'), sx = e.target.closest('[data-sec-del]')
+    if (su || sd) { var i = +(su || sd).dataset[su ? 'secUp' : 'secDown'], j = i + (su ? -1 : 1); var t = st.groups[i]; st.groups[i] = st.groups[j]; st.groups[j] = t; commit(); renderCenter(); return }
+    if (sx) { var gi = +sx.dataset.secDel, g = st.groups[gi], before = snapshot(); st.groups.splice(gi, 1); g.keys.forEach(function (k) { st.fields = st.fields.filter(function (x) { return x.key !== k }); st.list = st.list.filter(function (x) { return x !== k }) }); if (!byKey(ui.sel)) ui.sel = ''; commit(); renderAll(); toast('已刪除區塊「' + g.title + '」（含 ' + g.keys.length + ' 個欄位）', '復原', function () { st = JSON.parse(before); hist.push(snapshot()); histAt = hist.length - 1; renderAll(); renderTasks(); syncUndo() }); return }
+    var f = e.target.closest('.fld'); if (!f || ui.mode === 'final') return
+    var act = e.target.closest('[data-act]')
+    if (act) { var key = f.dataset.key; ({ up: function () { nudge(key, -1) }, down: function () { nudge(key, 1) }, dup: function () { dupField(key) }, del: function () { delField(key) } })[act.dataset.act](); return }
+    select(f.dataset.key)
+  })
+  center.addEventListener('input', function (e) {
+    if (e.target.id === 'formTitle') { st.title = e.target.value; commitSoon() }
+    var s = e.target.closest('[data-sec-title]'); if (s) { st.groups[+s.dataset.secTitle].title = s.value; commitSoon() }
+  })
+  center.addEventListener('keydown', function (e) {
+    var f = e.target.closest('.fld'); if (!f || e.target !== f) return
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(f.dataset.key) }
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); delField(f.dataset.key) }
+    if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); nudge(f.dataset.key, -1) }
+    if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); nudge(f.dataset.key, 1) }
+  })
+  // 拖放：欄位與新欄位都落在「插入線」(.slot) 上
+  center.addEventListener('dragstart', function (e) { var f = e.target.closest('.fld'); if (!f) return; ui.drag = 'field:' + f.dataset.key; e.dataTransfer.setData('text/plain', ui.drag); e.dataTransfer.effectAllowed = 'move'; setTimeout(function () { f.classList.add('dragging') }, 0) })
+  center.addEventListener('dragend', function () { ui.drag = null; $$('.dragging').forEach(function (n) { n.classList.remove('dragging') }); $$('.slot.over').forEach(function (n) { n.classList.remove('over') }) })
+  center.addEventListener('dragover', function (e) {
+    if (!ui.drag) return
+    var slot = e.target.closest('.slot') || nearestSlot(e); if (!slot) return
+    e.preventDefault(); $$('.slot.over').forEach(function (n) { n.classList.remove('over') }); slot.classList.add('over')
+  })
+  center.addEventListener('drop', function (e) {
+    if (!ui.drag) return
+    var slot = e.target.closest('.slot') || nearestSlot(e); if (!slot) return
+    e.preventDefault(); var d = ui.drag; ui.drag = null
+    var gi = +slot.dataset.g, idx = +slot.dataset.i
+    if (d.indexOf('new:') === 0) addField(d.slice(4), gi, idx); else if (d.indexOf('field:') === 0) moveField(d.slice(6), gi, idx)
+  })
+  function nearestSlot(e) {   // 放在欄位上面（不是細線）時，就近落到那個欄位前面或後面
+    var f = e.target.closest('.fld'); if (!f) return null
+    var w = where(f.dataset.key); if (!w) return null
+    var r = f.getBoundingClientRect(), after = e.clientY > r.top + r.height / 2
+    return center.querySelector('.slot[data-g="' + w.g + '"][data-i="' + (w.i + (after ? 1 : 0)) + '"]')
+  }
+
+  // 右側設定
+  function cur() { return byKey(ui.sel) }
+  right.addEventListener('input', function (e) {
+    var f = cur(); if (!f) return; var id = e.target.id
+    if (id === 'setLabel') { f.label = e.target.value; renderCenter() ; commitSoon() }
+    else if (id === 'setHelp') { f.help = e.target.value; renderCenter(); commitSoon() }
+    else if (id === 'setDefText') { f.default = kindOf(f) === 'number' || kindOf(f) === 'money' ? e.target.value : e.target.value; renderCenter(); commitSoon() }
+    else if (e.target.dataset.item !== undefined) {
+      var i = +e.target.dataset.item
+      if (e.target.closest('#optList')) f.options[i] = e.target.value
+      else { f.columns[i].label = e.target.value }
+      renderCenter(); commitSoon()
+    }
+  })
+  right.addEventListener('change', function (e) {
+    var f = cur(); if (!f) return; var id = e.target.id, d = e.target.dataset
+    if (id === 'setDef') {
+      var v = e.target.value
+      if (v === '') delete f.default; else if (FILLS[v]) f.default = JSON.parse(JSON.stringify(FILLS[v].json))
+      else if (v === '*option') f.default = (f.options || [])[0] || ''; else f.default = kindOf(f) === 'checkbox' ? true : ''
+      if (v === '') delete f.locked
+      commit(); renderCenter(); renderRight()
+    } else if (id.indexOf('cp') === 0 || d.cpKey !== undefined || (e.target.name === 'calc')) {
+      var c = calcOf(f) || {}
+      if (e.target.name === 'calc') c = { p: e.target.value, keys: [], rate: '5' }
+      else if (id === 'cpT') { var p = e.target.value.split('|'); c.tbl = p[0] || ''; c.col = p[1] || '' }
+      else if (id === 'cpA') c.a = e.target.value
+      else if (id === 'cpB') c.b = e.target.value
+      else if (id === 'cpPct') c.pct = e.target.value
+      else if (id === 'cpMode') c.mode = e.target.value
+      else if (id === 'cpOut') c.out = e.target.value
+      else if (id === 'cpRate') c.rate = e.target.value
+      else if (id === 'cpCustom') c.custom = e.target.value
+      else if (d.cpKey !== undefined) c.keys = $$('[data-cp-key]:checked', right).map(function (n) { return n.dataset.cpKey })
+      f._calc = c; f.formula = buildCalc(c); commit(); renderCenter(); renderRight()
+    } else if (id === 'setDefOpt') { f.default = e.target.value; commit(); renderCenter() }
+    else if (id === 'setConv') { var kk = e.target.value, T = TYPES[kk]; f.type = T.json.type; if (OPTION_KINDS[kk]) f.options = f.options || ['選項 1', '選項 2']; else delete f.options; commit(); renderAll() }
+  })
+  right.addEventListener('click', function (e) {
+    var f = cur(); if (!f) return
+    var s = e.target.closest('.sw')
+    if (s && !s.disabled) {
+      var on = s.getAttribute('aria-checked') !== 'true', id = s.id
+      if (id === 'setReq') { if (on) f.required = true; else delete f.required }
+      if (id === 'setCashier') { if (on) f.editableBy = 'cashier'; else delete f.editableBy }
+      if (id === 'setLocked') { if (on) f.locked = true; else delete f.locked }
+      if (id === 'setList') { if (on) { if (st.list.indexOf(f.key) < 0) st.list.push(f.key) } else st.list = st.list.filter(function (k) { return k !== f.key }) }
+      commit(); renderCenter(); renderRight(); var again = $('#' + id); if (again) again.focus(); return
+    }
+    if (e.target.closest('[data-del-sel]')) { delField(f.key); return }
+    var del = e.target.closest('[data-item-del]')
+    if (del) { var i = +del.dataset.itemDel; listOf(f).splice(i, 1); commit(); renderCenter(); renderRight(); return }
+    var add = e.target.closest('[data-item-add]'); if (add) { addItem(f, listOf(f).length) }
+  })
+  function listOf(f) {
+    if (f.type === 'table') { return { splice: function (i, n, v) { if (v !== undefined) f.columns.splice(i, n, { key: uniq('col'), label: v, type: 'text' }); else f.columns.splice(i, n) }, get length() { return f.columns.length } } }
+    return f.options
+  }
+  function addItem(f, at, text) {
+    if (f.type === 'table') f.columns.splice(at, 0, { key: uniq('col'), label: text || '新欄', type: 'text' }); else f.options.splice(at, 0, text || ('選項 ' + (f.options.length + 1)))
+    commit(); renderCenter(); renderRight()
+    var inp = $('[data-item="' + at + '"]', right); if (inp) { inp.focus(); inp.select() }
+  }
+  right.addEventListener('keydown', function (e) {
+    var inp = e.target.closest('[data-item]'); if (!inp) return
+    var f = cur(), i = +inp.dataset.item, isOpt = !!inp.closest('#optList')
+    var arr = isOpt ? f.options : f.columns
+    if (e.key === 'Enter') { e.preventDefault(); if (e.isComposing) return; addItem(f, i + 1, '') ; var n = $('[data-item="' + (i + 1) + '"]', right); if (n) { n.value = ''; if (isOpt) f.options[i + 1] = ''; else f.columns[i + 1].label = ''; renderCenter() } }
+    else if (e.key === 'Backspace' && inp.value === '' && arr.length > 1) { e.preventDefault(); arr.splice(i, 1); commit(); renderCenter(); renderRight(); var p = $('[data-item="' + Math.max(0, i - 1) + '"]', right); if (p) p.focus() }
+    else if (e.key === 'ArrowDown') { var nx = $('[data-item="' + (i + 1) + '"]', right); if (nx) { e.preventDefault(); nx.focus() } }
+    else if (e.key === 'ArrowUp') { var pv = $('[data-item="' + (i - 1) + '"]', right); if (pv) { e.preventDefault(); pv.focus() } }
+  })
+  right.addEventListener('paste', function (e) {   // 貼上很多行 ⇒ 自動拆成很多格
+    var inp = e.target.closest('[data-item]'); if (!inp) return
+    var text = (e.clipboardData || window.clipboardData).getData('text'); if (!/\r?\n/.test(text)) return
+    e.preventDefault()
+    var lines = text.split(/\r?\n/).map(function (s) { return s.trim() }).filter(Boolean); if (!lines.length) return
+    var f = cur(), i = +inp.dataset.item, isOpt = !!inp.closest('#optList')
+    if (isOpt) { var arr = f.options; if (arr[i] === '' || arr[i] === undefined) arr.splice(i, 1, lines[0]); else arr.splice(i + 1, 0, lines[0]); }
+    var start = (isOpt && f.options[i] === lines[0]) ? i + 1 : i + 2
+    if (isOpt) { lines.slice(1).forEach(function (l, n) { f.options.splice(start + n - 1 + (f.options[i] === lines[0] ? 0 : 0), 0, l) }) }
+    else lines.forEach(function (l, n) { f.columns.splice(i + 1 + n, 0, { key: uniq('col'), label: l, type: 'text' }) })
+    commit(); renderCenter(); renderRight()
+    toast('已貼上，拆成 ' + lines.length + ' 個項目')
+  })
+  // 選項拖曳排序
+  right.addEventListener('dragstart', function (e) { var li = e.target.closest('.items li'); if (!li) return; ui.drag = 'item:' + li.dataset.i + ':' + li.parentNode.id; e.dataTransfer.setData('text/plain', ui.drag) })
+  right.addEventListener('dragover', function (e) { var li = e.target.closest('.items li'); if (li && ui.drag && ui.drag.indexOf('item:') === 0) { e.preventDefault(); $$('.items li.over', right).forEach(function (n) { n.classList.remove('over') }); li.classList.add('over') } })
+  right.addEventListener('drop', function (e) {
+    var li = e.target.closest('.items li'); if (!li || !ui.drag || ui.drag.indexOf('item:') !== 0) return
+    e.preventDefault(); var p = ui.drag.split(':'); ui.drag = null; var from = +p[1], to = +li.dataset.i, f = cur(), arr = p[2] === 'optList' ? f.options : f.columns
+    var x = arr.splice(from, 1)[0]; arr.splice(to, 0, x); commit(); renderCenter(); renderRight()
+  })
+
+  // 全域：鍵盤、頂列
+  document.addEventListener('keydown', function (e) {
+    var mod = e.ctrlKey || e.metaKey
+    if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); undo() }
+    else if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey)) && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); redo() }
+    else if (e.key === 'Escape') { if (document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) document.activeElement.blur(); else if (ui.sel) select('') }
+  })
+  $('#undoBtn').onclick = undo; $('#redoBtn').onclick = redo
+  $('#modeEdit').onclick = function () { ui.mode = 'edit'; $('#modeEdit').setAttribute('aria-pressed', 'true'); $('#modeFinal').setAttribute('aria-pressed', 'false'); renderCenter() }
+  $('#modeFinal').onclick = function () { ui.mode = 'final'; $('#modeFinal').setAttribute('aria-pressed', 'true'); $('#modeEdit').setAttribute('aria-pressed', 'false'); renderCenter() }
+  $('#themeBtn').onclick = function () { var r = document.documentElement; r.setAttribute('data-theme', r.getAttribute('data-theme') === 'dark' ? 'light' : 'dark') }
+  $('#publishBtn').onclick = function () { toast('（原型）發布前會先檢查：每個選單至少要有一個選項、自動計算要選好算什麼。') }
+  $('#tabs').onclick = function (e) { var b = e.target.closest('button'); if (b) showPane(b.dataset.pane) }
+  $('#jsonBtn').onclick = function () { $('#jsonPre').textContent = JSON.stringify(toDefinition(), null, 2); $('#jsonDlg').showModal() }
+  $('#jsonClose').onclick = function () { $('#jsonDlg').close() }
+  // 用語檢查表：使用者逐列審字句。這份清單與設計文件 §6 同步；CALCS／FILLS 直接取自畫面實際用的資料（改字就同步）
+  var CHECK = [
+    ['欄位名稱', '欄位名稱', '表單上顯示給使用者看的字。', '「出差地點」'],
+    ['說明文字', '說明文字（選填）', '會用小字顯示在欄位下面。', '「請填發票上的金額」'],
+    ['必填', '一定要填', '開起來，使用者沒填就不能送出。', '沒填地點，按送出會跳出提醒'],
+    ['欄位種類轉換', '想改成', '把這個欄位換成相近的種類，已輸入的選項會留著。', '文字 ⇒ 長文字'],
+    ['選項', '選項（使用者可以選哪些）', '一格一個，Enter 新增下一格，可貼多行、拖曳排序、✕ 刪除。', '國內／國外'],
+    ['明細欄位', '表格的欄位', '明細表有哪幾欄。', '類別、品名、數量、單價、小計'],
+    ['預設／自動帶入', '自動帶入', '使用者打開表單時，這一格已經填好什麼（選單，每個選擇都有說明和範例）。', '申請人本人 ⇒ 王小明']
+  ].concat(Object.keys(FILLS).map(function (k) { return ['自動帶入的選擇', FILLS[k].label + (FILLS[k].nu ? ' ✦' : ''), FILLS[k].why, FILLS[k].ex] }))
+   .concat([
+    ['自動帶入且不能改', '「○○」不能改', '帶入後使用者看得到但不能自己改掉（標題會帶出實際選到的名稱）。', '「申請人本人」不能改'],
+    ['僅出納可改', '只有出納能修改', '其他人看得到，但不能填；只有出納可以改。', '「付款日」'],
+    ['清單欄位', '在清單中顯示', '開起來，這個欄位會出現在「單據清單」的表格裡。', '清單多一欄「地點」'],
+    ['內部代碼', '系統內部代碼（進階，僅最高管理者）', '自動產生，發布後不能改；改欄位名稱不會動它。', 'place']
+  ]).concat(CALCS.map(function (c) { return ['自動計算的計算器', c.name, c.why, c.ex] }))
+   .concat([
+    ['稅額：輸入的是', '你輸入的金額是 未稅／含稅', '未稅 ⇒ 算出稅額或含稅；含稅 ⇒ 拆出稅額。', '含稅 10,500 ⇒ 稅額 500'],
+    ['稅額：稅率', '稅率 5%／免稅／自己填', '一般營業稅選 5%；免稅就是 0；其他自己填。', '5% ⇒ 10,000 的稅是 500'],
+    ['百分比', '要幾 %？', '填 30 就是 30%。', '總額 10,000 × 30% ＝ 3,000'],
+    ['區塊', '區塊名稱／＋ 新增區塊', '把欄位分成幾段，區塊可上下移、刪除。', '基本資料、出差資訊'],
+    ['看成品', '看成品', '隱藏編輯用的框線和按鈕，看使用者實際看到的樣子。', ''],
+    ['復原／重做', '復原、重做', '做錯可以回上一步（Ctrl+Z／Ctrl+Y），刪除後 6 秒內也可以按「復原」。', ''],
+    ['自動存草稿', '已自動存草稿', '改了就自動存，不會因為關掉頁面而不見；按「發布」才給使用者用。', '已自動存草稿 14:32']
+  ])
+  $('#chkBtn').onclick = function () { $('#chkBody').innerHTML = CHECK.map(function (r) { return '<tr><td>' + esc(r[0]) + '</td><td><b>' + esc(r[1]) + '</b></td><td>' + esc(r[2]) + '</td><td>' + esc(r[3] || '—') + '</td></tr>' }).join(''); $('#chkDlg').showModal() }
+  $('#chkClose').onclick = function () { $('#chkDlg').close() }
+
+  // ───────────────────────── 輸出：與現行定義 JSON 同一個形狀 ─────────────────────────
+  function toDefinition() {   // 底線開頭（_money、_calc）是設計器自己的暫存，不輸出；公式輸出的是原本的公式字串
+    var fields = st.fields.map(function (f) { var o = {}; Object.keys(f).forEach(function (k) { if (k.charAt(0) !== '_') o[k] = f[k] }); return o })
+    return { name: st.title, fields: fields, ui: { form: { groups: st.groups.map(function (g) { return { title: g.title, fields: g.keys.slice() } }) }, list: { columns: st.list.filter(function (k) { return !!byKey(k) }) } } }
+  }
+
+  // ───────────────────────── 新手練習：5 件只用點的就能完成的事（畫面上自動打勾；之後會變成 e2e）─────────────────────────
+  var TASKS = [
+    { t: '加一個「備註」長文字框', h: '左邊點「長文字」，右邊把名稱改成「備註」。', ok: function () { return st.fields.some(function (f) { return f.type === 'textarea' && /備註/.test(f.label) }) } },
+    { t: '把「地點」改成選單，選項有「國內」「國外」', h: '點「地點」，右邊「想改成」選「單選選單」，再填兩個選項。', ok: function () { var f = st.fields.find(function (x) { return x.label === '地點' }); return !!f && (f.type === 'select' || f.type === 'radio') && ['國內', '國外'].every(function (o) { return (f.options || []).indexOf(o) >= 0 }) } },
+    { t: '把「金額」搬到最下面的「其他」區塊', h: '拖著「金額」放到最下面的區塊，或選它按 ↓ 一直移。', ok: function () { var w = where('amount'); return !!w && w.g === st.groups.length - 1 } },
+    { t: '讓「總額」自動加總費用明細的小計', h: '點「總額」，右邊選「加總明細」，再選「費用明細 ➜ 每一列的小計」。', ok: function () { var f = st.fields.find(function (x) { return x.label === '總額' }); return !!f && /^total\(lines,\s*"amount"\)$/.test(f.formula || '') } },
+    { t: '把「備註」從清單中隱藏', h: '點「備註」，把「在清單中顯示」關掉（要先做完第 1 件）。', ok: function () { var f = st.fields.find(function (x) { return /備註/.test(x.label) }); return !!f && st.list.indexOf(f.key) < 0 } }
+  ]
+  function renderTasks() {
+    var done = 0
+    $('#tasksList').innerHTML = TASKS.map(function (t) { var ok = t.ok(); if (ok) done++; return '<li class="' + (ok ? 'done' : '') + '"><i>' + (ok ? ic('i-done').replace('class="ic"', 'class="ic" style="width:14px;height:14px"') : '') + '</i><span>' + esc(t.t) + '<small>' + esc(t.h) + '</small></span></li>' }).join('')
+    $('#tasksProg').textContent = done + '/' + TASKS.length
+  }
+  $('#tasksHead').onclick = function () { var t = $('#tasks'); t.classList.toggle('open'); this.setAttribute('aria-expanded', String(t.classList.contains('open'))) }
+
+  // 對外：給自動截圖／e2e 用（原型專用）
+  window.FD = { st: function () { return st }, def: toDefinition, undo: undo, redo: redo, select: select, ui: ui }
+
+  commit(); renderAll(); renderTasks()
+})()
+</script>
+</body>
+</html>

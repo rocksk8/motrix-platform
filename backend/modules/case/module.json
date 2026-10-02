@@ -1,7 +1,7 @@
 {
   "key": "case",
   "name": "案件",
-  "version": "1.0.64",
+  "version": "1.0.70",
   "core": ">=1.0,<2.0",
   "license_key": "case",
   "permissions": [
@@ -17,6 +17,9 @@
     "case_action_items",
     "case_change_requests",
     "case_extra_expenses",
+    "case_material_approvals",
+    "case_material_payment_lines",
+    "case_material_payments",
     "completion_notes"
   ],
   "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration。其他模組讀這些表的地方見 M01-PLAN §2-B（讀取連接器另案）",
@@ -55,6 +58,18 @@
         "class": "T1"
       },
       {
+        "name": "case_material_approvals",
+        "class": "T1"
+      },
+      {
+        "name": "case_material_payment_lines",
+        "class": "T1"
+      },
+      {
+        "name": "case_material_payments",
+        "class": "T1"
+      },
+      {
         "name": "completion_notes",
         "class": "T1"
       }
@@ -75,6 +90,8 @@
       "/api/case-changes",
       "/api/completion-notes",
       "/api/extra-expenses",
+      "/api/material-payments",
+      "/api/material-suppliers",
       "/api/next-quote-no",
       "/api/quotations",
       "/api/sales-orders"

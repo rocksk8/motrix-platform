@@ -1,5 +1,5 @@
 {
- "core_version": "next",
+ "core_version": "1.105",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -621,10 +621,11 @@
    "RESERVED_KEYS": "const",
    "cashier_field_keys": "def(body)",
    "get_type": "def(conn, code, version=…)",
+   "last_value_hook": "def(type_code)",
    "list_types": "def(conn)",
    "normalize_lines": "def(lines)",
    "validate_expense_type": "def(body, key=…)",
-   "validate_values": "def(conn, defn, data, lines, *, viewer)"
+   "validate_values": "def(conn, defn, data, lines, *, viewer, prior=…, case=…, type_code=…)"
   },
   "helper:financial_mask": {
    "HISTORY_MONEY_FIELDS": "const",
@@ -877,6 +878,16 @@
   "helper:part_catalog": {
    "PART_CATEGORIES": "const",
    "PART_CATEGORY_PREFIX": "const"
+  },
+  "helper:prefill_sources": {
+   "PREFILL_SOURCES": "const",
+   "check_field": "def(field, *, mount_has_case=…, locked=…, path=…)",
+   "default_token": "def(field)",
+   "fill_defaults": "def(body, values, ctx, *, prior=…)",
+   "get": "def(token)",
+   "list_sources": "def()",
+   "make_ctx": "def(conn, viewer, *, requester=…, case=…, module_key=…, last_value=…, now=…)",
+   "resolve_field": "def(field, ctx)"
   },
   "helper:privacy_notice": {
    "ACKS_KEY": "const",

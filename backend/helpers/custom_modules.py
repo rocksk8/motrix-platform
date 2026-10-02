@@ -20,6 +20,7 @@ from datetime import date, datetime
 
 from core import paths as _paths
 from helpers import custom_fields as _cf
+from . import prefill_sources as _pf
 from helpers import formula as _fx
 
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
@@ -32,8 +33,8 @@ TABLE_MAX_ROWS, TABLE_MAX_COLS = 200, 12
 TABLE_COL_TYPES = ("text", "number", "date", "select", "checkbox", "formula")
 #: 金流性質（附錄 B）：欄位 `finance.kind`；缺／none ＝不計
 FINANCE_KINDS = ("income", "expense")
-#: 預設值 token（伺服器在建立單據時決定，不信前端）：`{"$": "today"｜"now"｜"requester"}`
-DEFAULT_TOKENS = ("today", "now", "requester")
+#: 預設值 token（伺服器在建立單據時決定，不信前端）：`{"$": <token>}`。清單與規則的唯一來源是 `helpers.prefill_sources`（2026-10-02）。
+DEFAULT_TOKENS = tuple(_pf.PREFILL_SOURCES)
 
 #: 建構器的元件分組（`fieldElements[].group` 用它）
 ELEMENT_GROUPS = [{"id": "basic", "label": "基礎元件"}, {"id": "layout", "label": "版面元件"}, {"id": "org", "label": "組織元件"}, {"id": "advanced", "label": "進階元件"}]
@@ -320,7 +321,8 @@ def _validate_numbering(n):
 HELP_MAX = 300
 
 
-def _validate_fields(fields):
+def _validate_fields(fields, mount_has_case=False):
+    """`mount_has_case`：這份表單有沒有掛在案件底下（決定 caseCustomer／caseProject 能不能用；自訂單據沒有案件脈絡 ⇒ 預設 False）。"""
     out, seen = [], set()
     keys = [f.get("key") for f in fields if isinstance(f, dict)]
     for i, f in enumerate(fields):
@@ -355,6 +357,7 @@ def _validate_fields(fields):
                 out.append(_p(p + ".target", "不認得的參照對象 %r（可用：%s、custom:<模組>）" % (target, "、".join(sorted(_REF_TARGETS)))))
             if "multiple" in f and not isinstance(f["multiple"], bool):
                 out.append(_p(p + ".multiple", "multiple 要是 true／false"))
+            out += _pf.check_field(f, mount_has_case=mount_has_case, path=p)
         elif t == "table":
             out += _validate_table(p, f)
         elif t in ("file", "image"):
@@ -362,7 +365,7 @@ def _validate_fields(fields):
         else:
             tok = _default_token(f)
             if tok is not None:
-                out += _validate_token(p, f, tok)
+                out += _validate_token(p, f, tok, mount_has_case=mount_has_case)
                 f = {k: v for k, v in f.items() if k != "default"}       # token 由伺服器決定，型別驗證不看它
             for prob in _cf.validate_definition({"fields": [f]}, types=_cf.MODULE_TYPES):
                 out.append(_p(prob["path"].replace("fields[0]", p, 1), prob["message"]))
@@ -400,37 +403,20 @@ def _validate_file_field(p, f):
 
 
 def _default_token(f):
-    """欄位的 `default` 是 `{"$": token}` ⇒ token 字串（可能不合法）；不是 ⇒ None。"""
-    d = f.get("default")
-    return d.get("$", "") if isinstance(d, dict) else None
+    """欄位的 `default` 是 `{"$": token}` ⇒ token 字串（可能不合法）；不是 ⇒ None。（登記處：`helpers.prefill_sources`）"""
+    return _pf.default_token(f)
 
 
-def _validate_token(p, f, tok):
-    """token 只准用在對應型別：today→date、now→date（含時間）、requester→ref(users)。"""
-    ok = {"today": f.get("type") == "date", "now": f.get("type") == "date" and bool(f.get("withTime")),
-          "requester": f.get("type") == "ref" and f.get("target") == "users"}.get(tok)
-    if tok not in DEFAULT_TOKENS:
-        return [_p(p + ".default", "預設值只認得 %s：%r" % ("、".join(DEFAULT_TOKENS), tok))]
-    if not ok:
-        return [_p(p + ".default", "預設值「%s」不能用在這個型別的欄位" % tok)]
-    return []
+def _validate_token(p, f, tok, mount_has_case=False):
+    """token 的定義檢查（唯一規則在 `prefill_sources.check_field`：認得的 token、型別、含時間、鎖定、案件脈絡、個資）。"""
+    return _pf.check_field(f, mount_has_case=mount_has_case, path=p)
 
 
-def _with_default_tokens(body, values, user):
-    """建立單據時，把沒填的欄位的 token 預設值換成伺服器當下的值（不信前端）。"""
-    values = dict(values) if isinstance(values, dict) else {}
-    now = datetime.now()
-    for f in body.get("fields", []):
-        tok = _default_token(f) if isinstance(f, dict) else None
-        if tok is None or values.get(f["key"]) not in (None, ""):
-            continue
-        if tok == "today":
-            values[f["key"]] = now.strftime("%Y-%m-%dT%H:%M") if f.get("withTime") else now.date().isoformat()
-        elif tok == "now":
-            values[f["key"]] = now.strftime("%Y-%m-%dT%H:%M")
-        elif tok == "requester":
-            values[f["key"]] = user.get("username")
-    return values
+def _with_default_tokens(body, values, user, ctx=None, prior=None):
+    """建立單據時，把沒填的欄位的 token 預設值換成伺服器當下的值（不信前端）。
+    `ctx`：`prefill_sources.make_ctx(...)`（要查主管／部門／公司／上次填的就必須給 conn）；沒給 ⇒ 只有不需要資料庫的 token 有值。
+    `prior`：既有單據的資料（更新時給）⇒ 不重算任何 token，locked 欄位保留舊值。"""
+    return _pf.fill_defaults(body, values, ctx if ctx is not None else _pf.make_ctx(None, user), prior=prior)
 
 
 def table_columns(fields) -> dict:
@@ -1225,7 +1211,7 @@ def create_record(conn, module_key, values, user) -> dict:
     from core.txn import write_txn
     d = _load_def(conn, module_key)
     body = d["body"]
-    values = _with_default_tokens(body, values, user)
+    values = _with_default_tokens(body, values, user, _pf.make_ctx(conn, user, module_key=module_key))
     vals, errors, dropped = clean_values(conn, body, values)
     errors = errors + unique_errors(conn, module_key, body, vals)
     from . import custom_files as _cfiles
