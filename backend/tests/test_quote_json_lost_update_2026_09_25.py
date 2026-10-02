@@ -20,6 +20,12 @@ import pytest
 # modules.case 的 import 移進用到它的函式（稽核 D M5-M1：M01 不在時本檔仍可收集，只略過需要 M01 的題）
 from tests.test_case_money_mask_2026_09_24 import NO, _db_data, _login, _seed
 
+@pytest.fixture(autouse=True)
+def _po_rule_off(monkeypatch):
+    """33-M1：強制採購單預設開；本檔驗的不是這條規則（手動建立材料申請的流程），明確關掉。規則本身見 test_material_po_required_2026_10_03.py。"""
+    from modules.case import material_approval as _MA
+    monkeypatch.setattr(_MA, "PO_REQUIRED", False)
+
 
 def _probe_write(quote_no):
     import db

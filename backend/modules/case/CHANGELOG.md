@@ -1,8 +1,9 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-03（wip/t33-po-off-c7）：33-M1 強制採購單出貨預設改關
-- `material_approval.PO_REQUIRED` 預設 `False`：材料申請流程與第 32 包逐位相同（可手動新增、不必採購單即可送審）；規則本身與「補對應」仍在、設成 True 即強制。M1 案件側 UI 上線的 commit 再把預設翻成 True。
-- 測試：`test_material_po_default_off_2026_10_03.py`（預設值、預設關時手動新增可存可送審、設 True 同操作被擋）；`test_material_po_required_2026_10_03.py` 明確設 True。
+## (next) — 2026-10-03（wip/t33-po-off-c7、wip/t33-m1-ui-c7）：33-M1 強制採購單（案件側 UI 上線）
+- 材料申請新增只能從「已核准的採購單明細」帶入（E1／E2）：移除「＋ 新增項目」與「從報價單品項帶入」；審核中的採購單明細列出但不能勾；送審前提示「需先申請請購單，再申請採購單…」；已全額付款的列數量／單價反灰並說明。
+- `material_approval.PO_REQUIRED` 預設 `True`（先前一版預設關；運維要回退舊流程設成 False）。
+- 測試：`test_material_po_default_2026_10_03.py`（預設值、預設強制、關閉時舊流程）；畫面 e2e `test_e2e_material_po_ui_2026_10_03.py`；`test_e2e_material_link`／`orders`／`approval`／`unsent` 改走採購單帶入（移除 `_po_rule_off`）。
 
 ## 1.0.98 — 2026-10-02（wip/t33-remit-s4-a3）：承攬商分頁分期申請的發票欄位；試算顯示防過期
 - 案件管理頁「承攬商」分頁：分期匯款申請列顯示該期發票（號碼／日期；未登錄顯示「未登錄發票（尚不認列）」）並可登錄／更正（31-B S4）；產生匯款申請視窗的試算改輸入時作廢在途請求（不會把舊輸入的金額蓋回畫面）、剩餘額度以四捨五入整數元比較（用 `MotrixLegalRound.halfUp`，金額進位守門；da 稽核 S3 兩項）。
