@@ -36,7 +36,7 @@ function expenseTypesPage() {
       ui: { form: { groups: [] }, list: { columns: [] } }
     }
   }
-  return {
+  var page = {
     FIELD_TYPES: FIELD_TYPES, COL_TYPES: COL_TYPES,
     view: 'list', rows: [], docTypes: [], loading: true,
     key: '', isNew: false, newKey: '', body: null, meta: null,
@@ -61,6 +61,7 @@ function expenseTypesPage() {
       // Alpine 3 會自動呼叫資料物件的 init()，<body> 又寫 x-init="init()" ⇒ 不守衛會跑兩遍（重複打 API）
       if (this._initDone) return
       this._initDone = true
+      if (this.fdInitSwitch) this.fdInitSwitch()
       try {
         var t = await this._call('GET', '/api/settings/approval-doc-types')
         if (t.ok) this.docTypes = (t.data && t.data.docTypes) || []
@@ -102,6 +103,7 @@ function expenseTypesPage() {
     startNew() {
       this.msg = ''; this.err = ''; this.problems = []; this.changes = null
       this.isNew = true; this.newKey = ''; this.key = ''; this.meta = { versions: [] }; this.body = newBody(); this.view = 'edit'
+      if (this.fdMount) this.fdMount()
     },
     async open(key) {
       this.msg = ''; this.err = ''; this.problems = []; this.changes = null
@@ -118,8 +120,9 @@ function expenseTypesPage() {
       if (!this.body.fields) this.body.fields = []
       if (!this.body.numbering) this.body.numbering = { prefix: '' }
       this.view = 'edit'
+      if (this.fdMount) this.fdMount()
     },
-    back() { this.view = 'list'; this.body = null; this.loadList() },
+    back() { if (this.fdDestroy) this.fdDestroy(); this.view = 'list'; this.body = null; this.loadList() },
 
     // ── 欄位（fields／lines.columns 共用一組操作；arr 是工作副本裡的陣列本身）
     get linesField() {
@@ -284,4 +287,7 @@ function expenseTypesPage() {
     },
     async refreshPreview() { if (this._prev) this.showPreview() }
   }
+  // 設計器轉接層的屬性／方法併進來（用描述子複製：本物件有 getter，Object.assign 會在 body 還是 null 時就去算它）
+  if (window.ExpenseTypesDesigner) Object.defineProperties(page, Object.getOwnPropertyDescriptors(window.ExpenseTypesDesigner()))
+  return page
 }
