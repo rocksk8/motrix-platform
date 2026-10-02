@@ -355,7 +355,7 @@ window.CM_PARTS.push(() => ({
     },
 
     _cvRemaining(d) {
-      return Math.round(d.totalAmount || 0) - this._cvIssuedPretax(d)      // 後端以四捨五入的整數元計額度（派發金額可能帶角分）
+      return MotrixLegalRound.halfUp(d.totalAmount || 0) - this._cvIssuedPretax(d)      // 後端以四捨五入的整數元計額度（派發金額可能帶角分）
     },
 
     // 這張派發現在能開的款別（啟用中、派發狀態在該款別的可開立狀態內）
