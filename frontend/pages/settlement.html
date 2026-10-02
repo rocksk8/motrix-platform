@@ -1283,7 +1283,9 @@ function settlementPage() {
           this.settlement.status      = 'draft'
           this.settlement.finalizedAt = ''
           this.settlement.finalizedBy = ''
-          this.toast('完結失敗')
+          const detail = (await res.json().catch(() => ({}))).detail
+          this.showFinalizeModal = false
+          this.toast('完結失敗' + (typeof detail === 'string' && detail ? '：' + detail : ''))      // 409（完結前重算與畫面不一致）要讓使用者看到「請重新整理」
         }
       } catch(e) {
         this.settlement.status      = 'draft'
