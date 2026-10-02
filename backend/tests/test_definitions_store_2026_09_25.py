@@ -391,3 +391,17 @@ def test_invoice_voucher_output_falls_back_to_default_when_the_store_breaks(clie
     with caplog.at_level(logging.WARNING, logger=pdf_gen.logger.name):
         assert pdf_gen._build_invoice_voucher_html(dict(v)) == base
     assert "讀輸出版型覆寫失敗" in caplog.text
+
+
+def test_definitions_default_for_is_the_shipped_default_and_ignores_the_database(defs_conn, monkeypatch):
+    """`default_for(kind, key)`＝出貨預設，**不看資料庫**：公司／角色已發布過也一樣（resolve 才套用 role ＞ company ＞ default）。"""
+    from core import definitions as D
+    monkeypatch.delitem(D._VALIDATORS, "layout", raising=False)
+    assert D.default_for("layout", "k") is None and D.default_for("no-such-kind", "k") is None       # 沒登記 ⇒ None
+    monkeypatch.setitem(D._DEFAULTS, "layout", lambda key: {"from": "default", "key": key} if key == "k" else None)
+    assert D.default_for("layout", "k") == {"from": "default", "key": "k"} and D.default_for("layout", "other") is None
+    D.save_draft(defs_conn, "layout", "k", "company", {"from": "company"})
+    D.publish(defs_conn, "layout", "k", "company")
+    assert D.resolve(defs_conn, "layout", "k")[0] == {"from": "company"}                             # resolve：公司版優先
+    assert D.default_for("layout", "k") == {"from": "default", "key": "k"}                           # default_for：仍是出貨預設
+    assert D.resolve(defs_conn, "layout", "other") == (None, "none")                                  # resolve 沒有預設仍是 (None,"none")

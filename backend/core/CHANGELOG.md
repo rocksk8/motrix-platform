@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — wip/t33-diff-default-c7：定義 diff 的 `default` ＝出貨預設
+- L0（新增，向下相容）：`core.definitions.default_for(kind, key) -> body|None`——程式出貨的預設（v0），**不看資料庫**；`resolve` 內部改呼叫它（行為不變：role ＞ company ＞ default）。
+- L0（行為修正，路由）：`GET /api/definitions/{kind}/{key}/diff?a|b=default` 原本呼叫 `resolve`，公司發布過就回公司最新版（`default` 對 `latest` 恆為空、無法比較公司版 vs 出貨預設）；現在回出貨預設（沒有預設 ⇒ 空內容）。編輯頁的 `latest`／`draft`／版本號比較不受影響。
+- 測試：`tests/test_definitions_diff_default_2026_10_02.py`（6 題）、`test_definitions_store_2026_09_25.py::test_definitions_default_for_…`。L1 介面快照 `--update --pending`（新增 `plat:definitions::default_for`）。
+
 ## 1.107 — 2026-10-02（wip/t32-s4a-2e：簽核佇列卡片小標註）
 - L1（新增選填鍵，向下相容）：簽核佇列項目多一個 `tags: []`（`helpers.approval_queue.base_item`；項目格式 `[{text, tone}]`，tone＝`warn`／`info`）。各單據模組的佇列提供者經 `fields` 帶入；沒帶＝空陣列，既有項目與前端不受影響。前端卡片與列表列在類型標籤旁畫出（`approval-queue.html`）。
 

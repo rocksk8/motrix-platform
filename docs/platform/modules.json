@@ -384,6 +384,11 @@
     "mod:subcontract/api/dispatch_approval",
     "mod:subcontract/api/vendor_contractors",
     "mod:subcontract/remit",
+    "mod:subcontract/remit_kinds",
+    "mod:subcontract/remit_split",
+    "mod:subcontract/api/remit_kinds",
+    "js:js/remit-kinds-settings.js",
+    "page:pages/remit-kinds-settings.html",
     "page:pages/contractor-voucher-approval-settings.html",
     "page:pages/contractors.html",
     "page:pages/vendor-contractors.html"
@@ -424,6 +429,7 @@
     "/api/contractor-dispatches",
     "/api/contractor-vouchers",
     "/api/contractors",
+    "/api/remit-kinds",
     "/api/vendor-contractors"
    ]
   },
