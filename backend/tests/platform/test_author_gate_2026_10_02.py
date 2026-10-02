@@ -196,3 +196,19 @@ def test_train31_red_rounds_are_all_covered_offline_on_the_real_history():
     for c in cases:
         r = AG.replay_offline(c, AG.REPO)
         assert r["covered"], (c["name"], r["missing"])
+
+
+def test_venv_warning_fires_only_when_python_is_not_the_project_venv(tmp_path):
+    repo = tmp_path / "repo"
+    py = repo / ".venv312" / "Scripts"
+    py.mkdir(parents=True)
+    (py / "python.exe").write_text("", encoding="utf-8")
+    _git(repo, "init", "-q")
+    assert AG.project_python(repo) == py / "python.exe"
+    assert AG.venv_warning(repo, exe=str(py / "python.exe")) is None
+    w = AG.venv_warning(repo, exe=str(tmp_path / "other" / "python.exe"))
+    assert w and ".venv312" in w                                                    # 反向控制：別人的 venv ⇒ 警告
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    _git(plain, "init", "-q")
+    assert AG.venv_warning(plain, exe=str(tmp_path / "x.exe")) is None              # 找不到專案 venv ⇒ 不亂警告

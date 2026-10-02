@@ -239,6 +239,32 @@ def tree_sha_of(head, repo=REPO):
     return out.strip()
 
 
+def project_python(repo=REPO):
+    """專案專用 venv 的 python（共用樹的 .venv312；worktree 沒有自己的就往主工作樹找）。找不到 ⇒ None。"""
+    cands = [Path(repo) / ".venv312" / "Scripts" / "python.exe"]
+    rc, out, _ = _git("rev-parse", "--git-common-dir", repo=repo)
+    if rc == 0 and out.strip():
+        common = Path(out.strip())
+        common = common if common.is_absolute() else Path(repo) / common
+        cands.append(common.resolve().parent / ".venv312" / "Scripts" / "python.exe")
+    for c in cands:
+        if c.is_file():
+            return c
+    return None
+
+
+def venv_warning(repo=REPO, exe=None):
+    """目前的 python 不是專案 venv ⇒ 警告文字（否則 requirements 涵蓋題會因『別人的 venv 什麼都有』而紅或綠不準）；沒問題 ⇒ None。"""
+    want = project_python(repo)
+    cur = Path(exe or sys.executable)
+    try:
+        if want is None or cur.resolve() == want.resolve():
+            return None
+    except OSError:
+        return None
+    return "目前的 python（%s）不是專案 venv（%s）：requirements 涵蓋題的結果會和列車不同；請用專案 venv 的 python 執行本工具" % (cur, want)
+
+
 def run_pytest(argv, cwd, env, stream=True):
     e = dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
     e.update(env or {})
@@ -329,6 +355,9 @@ def main(argv=None):
         print("  ⚠ GUARDS 找不到檔（被改名？）：" + "、".join(sel["guards_missing"]))
     if sel["forced_full"]:
         print("  ℹ 建包這個 diff 會整段全量（作者端仍只跑上面的集合）：" + "；".join(sel["forced_full"])[:300])
+    vw = venv_warning(repo)
+    if vw:
+        print("  ⚠ " + vw)
     w = budget_warning(est, a.budget_min, sel["non_e2e"], times, root=repo)
     if w:
         print("  ⚠ " + w)
