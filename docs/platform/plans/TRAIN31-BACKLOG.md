@@ -85,3 +85,4 @@
 - 正式機暫存驗證 OK（20261002_135000_a5dea50c_已暫存未套用）：公司已發布 purchase_req v1–v4（最後 22:44:42），purchase_order 僅草稿 v0 ⇒ 第32班改說明措辭時，purchase_req 的公司副本需通知重新發布。待 d7 稽核後下『可以套用』。
 - 2e 第32班：fix/t32-dispatch-s1-2e@0dde55ac（S-1 完成，7 題＋7 突變）；wip/t32-s4a-2e@0759f9c0（S4a/b/c：16＋10＋5 題，16 突變）。S4d（前端）、S4e（e2e）待做；d7 seam（LINK_VALIDATOR／SUBSTANTIVE_KEYS）未接，UI 暫無呼叫端。皆未併入任何整合。
 - 第31包稽核全數通過：2e 探針 CLEAN、a3 演練 PASS（drill/train31@937b065d）、c7 31-C PASS（must-fix 0）、d7 包完整性 PASS＋設計器 must-fix 0（audit/train31-designer-d7@9c38b033；2 個測試缺口已補探針，併第32班）。2026-10-02 14:01:21 主持下『可以套用』。
+- 使用者裁示 2026-10-02：「叫料」改稱「材料申請」；旗標被擋提示改為「需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請」。用字表 docs/platform/plans/MATERIAL-REQUEST-WORDING.md；只改畫面字，鍵名不改；旗標閘邏輯是否改成必須對應已通過採購單＝待使用者另裁。第32班 d7 改字＋全站掃描測試。
