@@ -6,7 +6,7 @@
 ## 共同規則（務必遵守）
 1. **回報一律用 SendMessage 給 `bin-1c`**（主持）；回報要有分支名與 `git ls-remote` 可驗證的 sha，不只口頭。
 2. **測試**：單檔、單程序、不用 `-n`；用自己的 `--basetemp` 放 `%TEMP%\motrix-pytest-<名字>-adhoc`，**不要放 repo 內**；用完刪。Python 一律用 `D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe`（你的 shell 的 python 可能是別人的 venv）。全機同時最多 2 組測試。
-3. **作者端守門**：推「最終 sha」前，必須跑完整 `backend/tests/platform` 加所有 *approval*／*queue*／*pii*／*privacy*／*migration*／*spec_coverage*／*font_zoom*／*money_round*／*wording*／*changelog* 檔，以及你改動模組的所有 e2e；不要只跑自己新寫的測試（第 31、32 班因此在整合時連紅 5 輪）。
+3. **作者端守門**（用法一頁：`docs/platform/plans/AUTHOR-GATE-USAGE.md`，分支 `wip/t33-author-gate-a3`；先 `--dry-run` 再跑，約 12–13 分鐘）：推「最終 sha」前，必須跑完整 `backend/tests/platform` 加所有 *approval*／*queue*／*pii*／*privacy*／*migration*／*spec_coverage*／*font_zoom*／*money_round*／*wording*／*changelog* 檔，以及你改動模組的所有 e2e；不要只跑自己新寫的測試（第 31、32 班因此在整合時連紅 5 輪）。
 4. **權限／金額可見度／口徑變更**不自行決定，回報給主持（用選單問使用者）。
 5. **你是作者就不能當稽核**；稽核由別的視窗做。
 6. **上下文太長時**：先把進度、決策、分支 sha、待辦寫進 `docs/platform/plans/` 下你自己的交接檔並 push，再自行 `/compact`（或使用者替你 `/clear`）；恢復時讀交接檔，不靠記憶。
