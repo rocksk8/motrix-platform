@@ -71,7 +71,11 @@ def add32(rec, root):
 
 def _queue_items(port, token):
     s, d = T.api(port, "/api/approval-queue", token=token)
-    items = d if isinstance(d, list) else ((d or {}).get("items") if isinstance(d, dict) else None) or []
+    # 回傳形狀：{"queue": [{requestedBy, count, items: [...]}], "total": N, ...}（依送審人分組）⇒ 攤平
+    items = []
+    if isinstance(d, dict):
+        for g in d.get("queue") or []:
+            items += [i for i in (g.get("items") or []) if isinstance(i, dict)]
     return s, items
 
 
