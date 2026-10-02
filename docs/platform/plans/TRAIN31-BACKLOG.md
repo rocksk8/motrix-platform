@@ -106,3 +106,7 @@
 - 第32班整合樹 wip/train-32-int1@f6873ae3：已合 seam-d7(fa6ead7c，含 wording＋unsent＋S4＋seam)、S-1、applicant-help、sleep-fix-c7、designer-c7，全部無衝突。待 d7 修正項（ack fail-closed、手續費上限、完整帳號端點、全額付款舊單改價提案）後取號（case 預計 1.0.81、subcontract 1.1.5、core 1.107）、重產生成檔、跑階段、建包。
 - c7：wip/t33-diff-default-c7（default_for 加入 core/definitions.py，版本差異 a|b=default 修正，6 題＋反向控制；第33班，不併第32班）。
 - d7：wip/t32-fixes-d7@d873843d（ack fail-closed、材料手續費>500 進差額審核、完整帳號端點 FULL_ACCOUNT_STRICT：最高管理者＋出納(非 admin)可見，admin 遮罩；提案 MATERIAL-PAID-LEGACY-PRICE-CHANGE.md 待使用者裁示 A+B vs C，排第33班)。
+
+## 完結精算實際支出重複計算（使用者回報 2026-10-02；2e 查證）
+- 查證：精算頁 totalActualCost = itemActualTotal(預設報價成本×1.05) + itemPoUnadopted + extraTotal + dispatchTotal；**材料申請完全不在精算裡**；沒採用前品項估計與採購單重複（+10500 例）；報表／GL 只在同一筆採購重複輸入未連結時重複；正式機材料申請 0 筆，影響僅 15 筆歷史額外支出。
+- **使用者裁示 2026-10-02：沖銷規則 A（品項有實際採購＝採用的採購單或已對應的材料申請 ⇒ 實際取代該品項估計，沒採購仍用估計；完結精算時「採用」預設開）；精算頁重做加入第33班**（後端統一端點 GET /api/quotations/{no}/settlement-actuals、頁面顯示材料申請與額外支出並可沖銷、未對應項區塊）。第32班照原計畫出貨。
