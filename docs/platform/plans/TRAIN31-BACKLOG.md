@@ -179,3 +179,7 @@
 ## 測試母體健康度盤點（da，audit/train33-da-hygiene@ab76a064，AUDIT-DA-test-hygiene.md；使用者 2026-10-03 質疑）
 - 結論：沒有「測的對象已被移除卻仍在跑」的失效守門（91 端點／75 頁面／26 js 抽查後皆為合成路由／fixture／反向守門）；唯一真失效＝payroll／subcontract money_round 副本內未使用的 `_patch_entries()`（孤兒死程式碼，建議刪）。長期略過：Passkey 暫緩 6 檔（常數，保留）、pypdfium2 未安裝 1 題（該修）、WD1 xfail 1 題（保留）；其餘 ~800 略過皆環境／模組缺席條件式。無 assert 59 題多為誤報；死程式碼 test_bonus_correction:279 `if False`；jv12 恆真佔位建議 skip。完全相同函式本體僅 2 組。安全可刪＝0 項。
 - 可降頻：tests/platform 148 檔約 28 分，約 15 檔工具演練類（module_update_delivery、scope_gate、stepfile_drill、ship_tier、module_selection、core_upgrade、modtest×4、build_*、failfast、fail_stream）約 12–13 分可改「依 diff 觸發」（TOOL_DRILL_RE）。**最終出貨整包仍跑全部**，中間批次才降頻；本班批次動到 tools 所以不省，下一班起省。待辦：d7 在 run-stage 加 `--tools-by-diff`（非最終輪用）＋第二版盤點補 60 skipped／3 xfailed 逐題與 e2e 最慢 30 檔（需下一輪 junit＋--durations=30）。
+
+## 第33班A上線（2026-10-03 04:32）
+- 8ae8b8cc 已上正式機（成功無回滾，27 秒）；基準 8ae8b8cc、tag prod/8ae8b8cc、origin/platform=1184efb0。階段 not_e2e 8541／e2e 864 皆 0 紅；da 包級 PASS 0 must-fix；drill_train33 PASS；探針 CLEAN；c7 二審無 must-fix（2e S-1 已修進包）。
+- 第34班（33B）：M2 變更申請（d7 wip/t33-m2b-d7）、出貨單連動（c7 wip/t33-ship-link-c7）、D12 設計器預設開（須真滑鼠拖放驗證，wip/t33-d12-c7）、D7 鎖定（wip/t33-d7lock-d7-r2）、author_gate 全域釘子（wip/t33-author-gate-globals-a3）、測試母體盤點第二版（da）、failfast 提案（wip/t33-failfast-proposal-d7）、2e nits：完結容差套到 extra/purchased、凍結後 extraTotal／materialUnassignedTotal 分法不同。待補：train 31 case_material_payments 備份分流（待有資料）。
