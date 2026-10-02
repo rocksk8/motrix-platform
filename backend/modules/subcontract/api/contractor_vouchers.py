@@ -476,21 +476,22 @@ def delete_contractor_voucher(voucher_no: str, authorization: str = Header(None)
     user = _require_user(authorization)
     _require_admin(user)
     conn = get_db()
-    row = conn.execute("SELECT status, voucher_no, dispatch_id, kind, is_paid, voided_at FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, "申請不存在")
-    if row["status"] != "草稿":
-        conn.close()
-        raise HTTPException(409, "僅草稿狀態可刪除" + ("（已送審的分期申請請用「作廢」）" if row["kind"] else ""))
-    if row["kind"]:                                                         # 分期草稿也守 LIFO：刪中間一期會讓已凍結的補差失準
-        why = _rc.void_blocker(conn, row)
-        if why:
+    with write_txn(conn):                                                   # 檢查與刪除在同一把寫鎖內（否則檢查後有人新增一期，就刪到中間期）
+        row = conn.execute("SELECT status, voucher_no, dispatch_id, kind, is_paid, voided_at FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
+        if not row:
             conn.close()
-            raise HTTPException(409, why)
-    conn.execute("DELETE FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,))
-    conn.commit()
-    conn.close()
+            raise HTTPException(404, "申請不存在")
+        if row["status"] != "草稿":
+            conn.close()
+            raise HTTPException(409, "僅草稿狀態可刪除" + ("（已送審的分期申請請用「作廢」）" if row["kind"] else ""))
+        if row["kind"]:                                                     # 分期草稿也守 LIFO：刪中間一期會讓已凍結的補差失準
+            why = _rc.void_blocker(conn, row)
+            if why:
+                conn.close()
+                raise HTTPException(409, why)
+        conn.execute("DELETE FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,))
+        conn.commit()
+        conn.close()
     _purge_notifications(voucher_no, ['contractor_voucher_approval_request', 'contractor_voucher_approved',
                                        'contractor_voucher_returned', 'approval_reminder'])
     _audit(_tok(authorization), "contractor_voucher.delete", "contractor_payment_voucher", voucher_no, voucher_no)
@@ -804,7 +805,7 @@ def reject_contractor_voucher(voucher_no: str, body: dict = Body(default={}), au
 def download_contractor_voucher_pdf(voucher_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute("SELECT voucher_no, quote_no, data_json FROM contractor_payment_vouchers WHERE voucher_no=?",
+    row = conn.execute("SELECT voucher_no, quote_no, data_json, voided_at FROM contractor_payment_vouchers WHERE voucher_no=?",
                         (voucher_no,)).fetchone()
     if not row:
         conn.close()
@@ -813,6 +814,8 @@ def download_contractor_voucher_pdf(voucher_no: str, authorization: str = Header
     conn.close()
     if not row:
         raise HTTPException(404, "申請不存在")
+    if row["voided_at"]:                                                    # 作廢的申請不能再當匯款依據印出去
+        raise HTTPException(409, "這張申請已作廢，不提供 PDF")
     try:
         pdf_bytes = generate_contractor_voucher_pdf_bytes(voucher_no, mask_bank=not _bm.can_see_full(user))
     except (ValueError, RuntimeError) as e:

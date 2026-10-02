@@ -145,3 +145,51 @@ def test_rk9_reverse_control_without_the_blocker_a_middle_period_can_be_voided(c
     assert _void(client, h, a).status_code == 409
     monkeypatch.setattr(RC, "void_blocker", lambda conn, row: None)
     assert _void(client, h, a).status_code == 200                                    # 偵測器拿掉 ⇒ 順序規則消失 ⇒ 上面的 409 確實是它擋的
+
+
+def test_rk9_case_finance_summary_leaves_voided_periods_out(client, hs):
+    """da S1：作廢的申請不能落進 else 被算成待處理。2 期（一期已核准未付、一期待審核）→ 作廢待審核那期 ⇒ 彙總只剩已核准那期。"""
+    h = hs["rkv_admin"]
+    if not _db("SELECT 1 FROM quotations WHERE quote_no='MQ-RKV-1'"):
+        _db("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at, deal_tag)"
+            " VALUES ('MQ-RKV-1','已送出','客','案',1050,1000,?, '2026-10-02','2026-10-02','已成案')", (json.dumps({"dealTag": "已成案", "caseRecord": {"payment": {"items": []}, "materials": []}}),))
+    did = _dispatch(total=1000)
+    a = _create(client, h, did, kind="deposit", amount=400)
+    b = _create(client, h, did, kind="progress", amount=600)
+    _db("UPDATE contractor_payment_vouchers SET status='已核准' WHERE voucher_no=?", (a,))
+    _db("UPDATE contractor_payment_vouchers SET status='待審核' WHERE voucher_no=?", (b,))
+    pay = client.get("/api/quotations/MQ-RKV-1/finance-summary", headers=h).json()["payable"]
+    assert pay["pendingCount"] == 1 and pay["pendingTotal"] == 630 and pay["approvedUnpaidTotal"] == 420
+    assert _void(client, h, b).status_code == 200
+    pay = client.get("/api/quotations/MQ-RKV-1/finance-summary", headers=h).json()["payable"]
+    assert pay["pendingCount"] == 0 and pay["pendingTotal"] == 0 and pay["approvedUnpaidTotal"] == 420
+
+
+def test_rk9_dispatch_with_only_voided_periods_can_be_cancelled_by_a_non_superadmin(client, hs):
+    """da S2：取消派發的「已有匯款申請」檢查只看未作廢的。"""
+    from modules.subcontract import dispatch_flow as F
+    h = hs["rkv_admin"]
+    did = _dispatch()
+    a = _create(client, h, did, kind="deposit", amount=300)
+
+    def cancel():
+        import db
+        c = db.get_db()
+        try:
+            row = c.execute("SELECT * FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
+            return F.set_status(c, row, "cancelled", {"role": "admin", "username": "rkv_admin", "display_name": "管理員"}, reason="測試取消")
+        finally:
+            c.close()
+    with pytest.raises(F.FlowError):
+        cancel()                                                                     # 還有未作廢申請 ⇒ 只有最高管理者
+    assert _void(client, h, a).status_code == 200
+    assert cancel()["new"] == "cancelled"                                            # 只剩作廢的 ⇒ 可取消
+
+
+def test_rk9_voided_period_has_no_pdf_and_draft_delete_of_the_latest_still_works(client, hs):
+    h = hs["rkv_admin"]
+    did = _dispatch()
+    a = _create(client, h, did, kind="deposit", amount=300)
+    assert _void(client, h, a).status_code == 200
+    r = client.get("/api/contractor-vouchers/%s/pdf-download" % a, headers=h)
+    assert r.status_code == 409 and "已作廢" in r.json()["detail"]
