@@ -213,3 +213,21 @@ def test_legacy_save_without_adopt_key_means_not_adopted_but_new_items_default_o
     assert it["b"]["adopt"] is True and it["b"]["actual"]["source"] == "purchase"
     _put_settlement({"status": "draft", "items": []})                                              # 品項沒存過＝預設採用
     assert _items(_get(c, h))["a"]["adopt"] is True
+
+
+def test_frozen_extra_total_excludes_remit_fee_and_custom_expense_the_page_adds(W):
+    c, h = W
+    _put_settlement({"status": "finalized", "items": [], "summary": {"itemActualTotal": 100, "extraTotal": 1000 + 30 + 4, "remitFeeTotal": 30, "customExpenseTotal": 4}})
+    assert _get(c, h)["totals"]["extraTotal"] == 1000                       # 頁面的 extraTotal＝額外支出＋手續費＋自訂；端點只管額外支出（手續費／自訂第 34 班）
+
+
+def test_offsets_query_is_a_preview_that_does_not_save(W):
+    c, h = W
+    _put_materials([_order("X", 1, 250)], {"X": "已核准"})
+    import urllib.parse
+    q = urllib.parse.quote(json.dumps([{"kind": "material", "ref": "X", "itemId": "b"}]))
+    r = c.get(URL + "?offsets=" + q, headers=h)
+    assert r.status_code == 200 and _items(r.json())["b"]["material"]["amount"] == 250 and r.json()["totals"]["materialUnassignedTotal"] == 0
+    assert _get(c, h)["totals"]["materialUnassignedTotal"] == 250           # 沒存：下一次還是未對應
+    assert c.get(URL + "?offsets=%7Bnot", headers=h).status_code == 422
+    assert c.get(URL + "?offsets=%7B%7D", headers=h).status_code == 422

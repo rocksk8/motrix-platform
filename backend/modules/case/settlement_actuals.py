@@ -163,7 +163,9 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE) -> dict
 
 def _freeze(out, saved, saved_items):
     """已完結的精算＝凍結快照（規格 §5；da S1）：金額取完結當下存檔的值，不隨之後核准的採購單／材料申請漂移。
-    品項金額用存檔的 `actualTotalCost`（沒存的品項保留現算值）；三個總額用存檔 `summary` 內同名鍵（沒有的鍵保留現算值）。現算值留在 `live` 供頁面提示差異。"""
+    品項金額用存檔的 `actualTotalCost`（沒存的品項保留現算值）。總額用存檔 `summary`：頁面寫的 `extraTotal` 含匯款手續費與自訂模組支出，
+    這裡扣掉 `remitFeeTotal`／`customExpenseTotal`（它們不在本端點，第 34 班）才與 `totals.extraTotal`（未對應額外支出）同義；
+    `purchasedTotal`（B1 起頁面也存）有就用。現算值留在 `live` 供頁面提示差異。"""
     summ = saved.get("summary") if isinstance(saved.get("summary"), dict) else {}
     out["finalized"], out["frozen"], out["savedSummary"] = True, True, summ
     out["live"] = {"itemActualTotal": out["totals"]["itemActualTotal"], "extraTotal": out["totals"]["extraTotal"], "purchasedTotal": out["totals"]["purchasedTotal"]}
@@ -175,9 +177,10 @@ def _freeze(out, saved, saved_items):
             it["actual"] = {"amount": _num(v), "source": "frozen", "replacedEstimate": False}
         total += it["actual"]["amount"]
     out["totals"]["itemActualTotal"] = _num(summ["itemActualTotal"]) if "itemActualTotal" in summ else total
-    for k in ("extraTotal", "purchasedTotal"):
-        if k in summ:
-            out["totals"][k] = _num(summ[k])
+    if "extraTotal" in summ:
+        out["totals"]["extraTotal"] = _num(summ["extraTotal"]) - _num(summ.get("remitFeeTotal")) - _num(summ.get("customExpenseTotal"))
+    if "purchasedTotal" in summ:
+        out["totals"]["purchasedTotal"] = _num(summ["purchasedTotal"])
 
 
 def validate_offsets(conn, quote_no, raw, previous=None):

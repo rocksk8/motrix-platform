@@ -1,5 +1,11 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-03（wip/t33-settlement-b1-2e）：精算頁改接後端單一來源（33-B1）
+- 精算頁（`settlement.html`）載入改打 `GET settlement-actuals`：品項「採購」＝採購單連結金額＋材料申請（連品項或沖銷對應）＋沖銷的額外支出；規則 A——有採購的品項**預設採用**（實際取代估計）；取消採用＝回手填值、採購金額不另加（D8，只在彙總區警示「採購金額未採用」）。已存草稿以存的 `adoptSystem` 為準（缺鍵＝不採用，歷史相容）。
+- 新區塊「二之一、未對應品項的材料申請與額外支出」：每筆可選一個報價品項（寫進 `settlement.offsets`，不改原單據；預覽用 `?offsets=`，不存檔），取消＝選回「不對應」；未對應的材料申請併入「額外支出」顯示行（含未對應材料申請）。
+- 已完結：額外支出／手續費／自訂模組支出取完結當下凍結的 `summary`；`summary` 新增 `purchasedTotal`、`materialUnassignedTotal`（鍵名其餘不動，報表／獎金／PDF 照讀）。端點失敗或無財務檢視 ⇒ 退回 32-S5 舊路徑。
+- `GET settlement-actuals` 新增選填 `offsets`（JSON，預覽）；完結凍結的 `extraTotal` 扣掉頁面加的手續費與自訂模組支出，與端點同義。更新 e2e `test_e2e_pr_po_item_link`（預設採用）、新增 `test_e2e_settlement_actuals`。
+
 ## (next) — 2026-10-03（wip/t33-settlement-a3-2e）：精算漂移守門＋歷史語料對照（33-A3，只加測試）
 - `test_settlement_actuals_conservation`：10 個情境（採購單連品項／額外支出、材料申請連／不連採購單／無品項、狀態矩陣、$0 與舊單、品項被刪、待審核採購單、offsets 搬家、現金口徑）逐一斷言精算 `purchasedTotal`＝營運報表＝總帳 E11＋E12（扣待審核）；任何一邊改規則而另一邊沒跟即紅。
 - `test_settlement_actuals_legacy_parity`：逐字照搬 `calcSummary()` 的參考實作對照語料（預設估計、含稅三種手填、額外支出各狀態、第 32 班前草稿缺 `adoptSystem`、缺說明／缺 id 舊品項、完結凍結）；`itemActualTotal`／`extraTotal` 逐位相同。
