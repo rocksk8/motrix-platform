@@ -12,7 +12,7 @@
 |---|---|---|---:|---:|---|
 | `plat:catalog` | L0 | 能力目錄（CUSTOMIZATION-SPEC P1；CORE-SPEC §7 端點登錄表的擴充）。 | 13 | 3 | `tests/platform/test_platform_catalog.py` |
 | `plat:customization` | L0 | L0 模組描述：可自訂點（CUSTOMIZATION-SPEC P3；§8.2 排版器需求）。 | 12 | 2 | `tests/platform/test_platform_catalog.py` |
-| `plat:definitions` | L0 | 定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。 | 23 | 8 | `tests/test_definitions_store_2026_09_25.py` |
+| `plat:definitions` | L0 | 定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。 | 25 | 8 | `tests/test_definitions_store_2026_09_25.py` |
 | `plat:events` | L0 | L1 事件匯流排（CUSTOMIZATION-SPEC §6，ROADMAP P6）。 | 9 | 2 | `tests/platform/test_core_events.py` |
 | `plat:loader` | L0 | L0 模組載入器：掃 `modules/*/module.json`，相容且匯入成功的才登錄。 | 9 | 4 | `tests/platform/test_core_loader.py` |
 | `plat:menu` | L0 | 選單由登錄表產生（階段 C／C3，docs/platform/STAGE-C-DESIGN.md §4）。 | 14 | 2 | `tests/platform/test_menu.py` |

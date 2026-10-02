@@ -34,6 +34,8 @@ def test_builder_mount_select_saves_the_target_and_label(live_server, make_user,
     assert d["mount"] == {"point": POINT, "label": "請款單"}, d.get("mount")             # 該點沒有 context ⇒ 沒有 contextField 欄、值為空不存
     assert page.locator("#mb-mount-context").count() == 0
     assert client.post("/api/definitions/custom_module/bb_mod/publish", headers=h, json={}).status_code == 200      # 草稿能通過後端驗證並發布
+    # K-2：頁面外（API）發布會刪掉草稿 ⇒ 這個分頁的草稿戳過期；請頁面重讀戳（真實使用中，頁面內的發布會自己做這件事）
+    page.evaluate("() => Alpine.$data(document.body).refreshEtag()")
     # 選回「不掛載」
     page.select_option('[data-testid="mb-mount-point"]', "")
     page.wait_for_function(SAVED)

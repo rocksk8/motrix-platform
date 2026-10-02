@@ -118,7 +118,7 @@ def _dec(row):
         return {}
 
 
-def submit(conn, module_key, user, note=""):
+def submit(conn, module_key, user, note="", base_etag=None):
     """送審（審核沒啟用 ⇒ 直接發布）。回 `{published, pending, version, definition, unreviewed?, reason?}`；
     `unreviewed`＝直接發布而沒有第二人審核（呼叫端據此寫稽核「未經第二人審核」）。"""
     if user.get("role") != "superadmin":
@@ -126,14 +126,16 @@ def submit(conn, module_key, user, note=""):
     st = review_state(conn, user["username"])
     try:
         if not st["active"]:
-            d = D.publish(conn, "custom_module", module_key, "company", note, user["username"])       # 有送審中的 ⇒ DefinitionConflict（409）
+            d = D.publish(conn, "custom_module", module_key, "company", note, user["username"], base_etag=base_etag)       # 有送審中的 ⇒ DefinitionConflict（409）
             return {"published": True, "pending": False, "version": d["version"], "definition": d, "unreviewed": True, "reason": st["reason"]}
         appr = {"requestedBy": user["username"], "requestedByDisplay": _display(conn, user["username"]),
                 "requestedAt": datetime.now().isoformat(timespec="seconds"),
                 "tiers": [{"order": 0, "approvers": [dict(r, status="pending") for r in st["reviewers"]]}], "currentTier": 0}
         # 基準版本＝送審當下的現行版：核可時現行版已經不是它 ⇒ 這份送審過期（409），不能把舊內容蓋回去
         d = D.submit_draft(conn, "custom_module", module_key, "company", note, user["username"],
-                           {"approval": appr, "baseVersion": _latest_version(conn, module_key)})
+                           {"approval": appr, "baseVersion": _latest_version(conn, module_key)}, base_etag=base_etag)
+    except D.DraftConflict:
+        raise                                                    # K-2：讓路由回 409 draft_conflict（含 current），不轉成 ReviewError
     except D.DefinitionError as e:
         raise ReviewError(str(e), 409 if isinstance(e, D.DefinitionConflict) else (422 if e.problems else 400), e.problems)
     _notify(conn, [r["username"] for r in st["reviewers"]], module_key, d["version"],

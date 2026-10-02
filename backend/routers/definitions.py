@@ -138,7 +138,11 @@ def _custom_module_scope_guard(kind, scope):
 def _err(e: D.DefinitionError, status=400):
     if isinstance(e, D.DefinitionConflict):
         status = 409
-    return JSONResponse(status_code=status, content={"detail": str(e), "problems": e.problems})
+    content = {"detail": str(e), "problems": e.problems}
+    if isinstance(e, D.DraftConflict):                                  # K-2：前端據 code 顯示「別人剛改過」，current 帶最後存的人與時間
+        content["code"] = "draft_conflict"
+        content["current"] = e.current
+    return JSONResponse(status_code=status, content=content)
 
 
 @router.get("/api/definition-kinds")
@@ -241,16 +245,24 @@ def save_definition_draft(kind: str, key: str, scope: str = Query("company"), pa
                           authorization: str = Header(None)):
     u = _require_user(authorization, require_superadmin=True)
     _custom_module_scope_guard(kind, scope)
+    base_etag = payload.get("base_etag")                                # K-2：缺 ⇒ 舊前端，照舊後寫者勝（稽核標 unguarded，盤點還有誰沒帶）
+    force = payload.get("force") is True
     conn = get_db()
     try:
-        d = D.save_draft(conn, kind, key, scope, payload.get("body"), u["username"])
+        d = D.save_draft(conn, kind, key, scope, payload.get("body"), u["username"], base_etag=base_etag, force=force)
     except D.DefinitionError as e:
         return _err(e)
     finally:
         conn.close()
-    _audit(_tok(authorization), "definitions.save_draft", "ui_definition", "%s/%s/%s" % (kind, key, scope),
-           "存 %s %s（%s）草稿" % (kind, key, scope), {})
-    return {"draft": d, "problems": D.validate(kind, key, d["body"])}
+    target = "%s/%s/%s" % (kind, key, scope)
+    if d.get("overridden"):
+        _audit(_tok(authorization), "definitions.save_draft_override", "ui_definition", target,
+               "用我的覆蓋 %s %s（%s）草稿（原草稿 %s 於 %s）" % (kind, key, scope, d["overridden"]["created_by"], d["overridden"]["created_at"]),
+               {"overridden": d["overridden"]})
+    else:
+        _audit(_tok(authorization), "definitions.save_draft", "ui_definition", target,
+               "存 %s %s（%s）草稿" % (kind, key, scope), {"unguarded": True} if base_etag is None else {})
+    return {"draft": d, "etag": d.get("etag", ""), "problems": D.validate(kind, key, d["body"])}
 
 
 @router.post("/api/definitions/{kind}/{key}/validate")
@@ -266,19 +278,25 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
                        authorization: str = Header(None)):
     u = _require_user(authorization, require_superadmin=True)
     _custom_module_scope_guard(kind, scope)
+    base_etag = (payload or {}).get("base_etag")                        # K-2：選填；缺＝照舊
+    if base_etag is not None and not isinstance(base_etag, str):
+        raise HTTPException(400, "base_etag 必須是字串")
     conn = get_db()
     try:
         if kind == "custom_module" and scope == "company":
             # 方案 B：掛載點頁籤數上限（要連線，所以不在 validate_module 裡）——發布／送審之前擋下
             from helpers import custom_modules as _cm
             _dr = D.get(conn, kind, key, scope, 0)
+            if base_etag is not None and _dr is not None and _dr.get("etag") != base_etag:       # K-2：送審／發布的是「我看到的那份草稿」（先擋＝快速失敗；真正的比對在 D.publish／D.submit_draft 的寫鎖內）
+                return _err(D.DraftConflict("這份草稿在你載入之後被別人改過，未發布",
+                                            {"etag": _dr.get("etag", ""), "created_by": _dr.get("created_by", ""), "created_at": _dr.get("created_at", "")}))
             _cap = _cm.mount_cap_problems(conn, key, (_dr or {}).get("body") or {}) if _dr else []
             if _cap:
                 return JSONResponse({"detail": "這個掛載點的頁籤數已達上限", "problems": _cap}, status_code=422)
             # S4：審核開啟且有簽核層 ⇒ 送審（回 pending）；否則與過去一樣直接發布
             from helpers import custom_def_review as _defr
             try:
-                r = _defr.submit(conn, key, u, (payload or {}).get("note", ""))
+                r = _defr.submit(conn, key, u, (payload or {}).get("note", ""), base_etag=base_etag)
             except _defr.ReviewError as e:
                 return JSONResponse({"detail": str(e), "problems": e.problems}, status_code=e.status)
             if r["pending"]:
@@ -290,7 +308,7 @@ def publish_definition(kind: str, key: str, scope: str = Query("company"), paylo
                 _audit(_tok(authorization), "definitions.publish_unreviewed", "ui_definition", "%s/%s/%s" % (kind, key, scope),
                        "發布 %s 第 %d 版：未經第二人審核（%s）" % (key, d["version"], r.get("reason", "")), {"note": d.get("note", "")})
         else:
-            d = D.publish(conn, kind, key, scope, (payload or {}).get("note", ""), u["username"])
+            d = D.publish(conn, kind, key, scope, (payload or {}).get("note", ""), u["username"], base_etag=base_etag)
             _audit_unreviewed(authorization, kind, key, scope, d["version"], _UNREVIEWED_KIND_REASON)
     except D.DefinitionError as e:
         return _err(e, 422 if e.problems else 400)

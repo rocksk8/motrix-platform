@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1053,
+  "tests": 1057,
   "unmapped": 13,
   "kinds": {
-   "api": 567,
-   "e2e": 256,
+   "api": 569,
+   "e2e": 258,
    "audit": 135,
    "unit": 95
   },
@@ -19049,6 +19049,54 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_definitions_draft_etag_2026_10_02.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "plat:__init__",
+    "plat:definitions",
+    "plat:migrations",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/core/migrations.py",
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_definitions_draft_etag_custom_module_2026_10_03.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:custom_modules",
+    "plat:__init__",
+    "plat:definitions",
+    "router:custom_records",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/definitions.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/custom_modules.py"
+    ],
+    "api": [
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_definitions_store_2026_09_25.py": {
    "kind": "api",
    "units": [
@@ -20744,6 +20792,55 @@
      "frontend/pages/procurement.html",
      "frontend/pages/reports.html",
      "frontend/static/sidebar.js"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_draft_conflict_builder_2026_10_02.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_builder_nav.py",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ui_dialogs.py",
+    "page:pages/module-builder.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_builder_nav.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ui_dialogs.py"
+    ],
+    "page": [
+     "frontend/pages/module-builder.html"
+    ],
+    "path": [
+     "frontend/pages/module-builder.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_draft_conflict_expense_types_2026_10_02.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/helpers/expense_type_defs/",
+    "file:backend/helpers/expense_type_defs/travel.json",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ui_dialogs.py",
+    "page:pages/expense-types.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ui_dialogs.py"
+    ],
+    "page": [
+     "frontend/pages/expense-types.html"
+    ],
+    "path": [
+     "backend/helpers/expense_type_defs/",
+     "backend/helpers/expense_type_defs/travel.json"
     ]
    }
   },

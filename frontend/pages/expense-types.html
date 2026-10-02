@@ -74,6 +74,13 @@
 
       <div class="et-err" data-testid="et-error" x-show="err" x-text="err"></div>
       <div class="et-ok" data-testid="et-msg" x-show="msg" x-text="msg"></div>
+      <div class="et-err" data-testid="et-conflict" x-show="conflict" x-cloak role="alert">
+        <b>別人剛改過這份草稿</b>（<span data-testid="et-conflict-who" x-text="conflictWho()"></span>）。你的修改還在畫面上、尚未存入。
+        <button class="btn btn-sm" type="button" data-testid="et-conflict-reload" @click="conflictReload()">重新載入（我的修改會消失）</button>
+        <button class="btn btn-sm" type="button" data-testid="et-conflict-copy" @click="conflictCopy()">複製我的內容（JSON）</button>
+        <button class="btn btn-sm btn-primary" type="button" data-testid="et-conflict-force" @click="conflictForce()">用我的覆蓋</button>
+        <button class="btn btn-sm" type="button" data-testid="et-conflict-hold" @click="conflictHold()">先不處理</button>
+      </div>
 
       <!-- 清單 -->
       <div class="et-panel" data-testid="et-list" x-show="view==='list'">

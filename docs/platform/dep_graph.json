@@ -15632,97 +15632,97 @@
    "routes": [
     {
      "func": "list_definition_kinds",
-     "line": 145,
+     "line": 149,
      "method": "GET",
      "path": "/api/definition-kinds"
     },
     {
      "func": "list_expense_types",
-     "line": 152,
+     "line": 156,
      "method": "GET",
      "path": "/api/expense-types"
     },
     {
      "func": "get_expense_type",
-     "line": 164,
+     "line": 168,
      "method": "GET",
      "path": "/api/expense-types/{code}"
     },
     {
      "func": "list_definitions",
-     "line": 179,
+     "line": 183,
      "method": "GET",
      "path": "/api/definitions/{kind}"
     },
     {
      "func": "delete_definition_draft",
-     "line": 192,
+     "line": 196,
      "method": "DELETE",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "delete_custom_module",
-     "line": 210,
+     "line": 214,
      "method": "DELETE",
      "path": "/api/definitions/custom_module/{key}"
     },
     {
      "func": "get_definition",
-     "line": 227,
+     "line": 231,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "save_definition_draft",
-     "line": 240,
+     "line": 244,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 257,
+     "line": 269,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 265,
+     "line": 277,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 305,
+     "line": 323,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 321,
+     "line": 339,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 345,
+     "line": 363,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 376,
+     "line": 394,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
      "func": "effective_layout",
-     "line": 389,
+     "line": 407,
      "method": "GET",
      "path": "/api/layout/{module_key}"
     },
     {
      "func": "preview_output_template",
-     "line": 415,
+     "line": 433,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
