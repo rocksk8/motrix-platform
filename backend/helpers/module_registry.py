@@ -54,7 +54,7 @@ MODULES = (
     ("lodging", "附近旅宿", "業務"),
     ("quotation", "報價單／簽核佇列", "業務"),
     ("case_manage", "案件管理", "業務"),
-    ("project_manage", "案件叫料－修改", "業務"),
+    ("project_manage", "案件材料申請－修改", "業務"),
     ("customer", "客戶管理", "業務"),
     ("financial_view", "財務金額可視", "財務"),
     ("finance", "應收帳款／銷售訂單", "財務"),

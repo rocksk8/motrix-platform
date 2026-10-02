@@ -49,14 +49,14 @@ def _order(q, item_id: str) -> dict:
     for o in _orders(q):
         if str(o.get("itemId")) == str(item_id):
             return o
-    raise HTTPException(404, "找不到這筆叫料")
+    raise HTTPException(404, "找不到這筆材料申請")
 
 
 def _need_edit(user):
     if not money_visible(user):
-        raise HTTPException(403, "此帳號沒有財務檢視權限，不可操作叫料匯款申請")
+        raise HTTPException(403, "此帳號沒有財務檢視權限，不可操作材料申請匯款申請")
     if not MG.can_edit_orders(user):
-        raise HTTPException(403, "只有管理員或專案經理可以操作叫料匯款申請")
+        raise HTTPException(403, "只有管理員或專案經理可以操作材料申請匯款申請")
 
 
 def _mask(n) -> str:
@@ -111,7 +111,7 @@ def _record_payee_ack(user, authorization, doc_code, quote_no):
     except Exception:                                                                              # noqa: BLE001
         return None
     if created:
-        _audit(_tok(authorization), "material_payment.privacy_notice_ack", "quotation", quote_no, "叫料匯款申請 %s 收款人個資告知" % doc_code,
+        _audit(_tok(authorization), "material_payment.privacy_notice_ack", "quotation", quote_no, "材料申請匯款申請 %s 收款人個資告知" % doc_code,
                {"docCode": doc_code, "noticeHash": rec.get("noticeHash")})
     return rec
 
@@ -144,7 +144,7 @@ def ack_payee_privacy_notice(pid: int, authorization: str = Header(None)):
     from helpers import privacy_notice as _pn
     rec, created = _pn.record_purpose_ack("material_payment", row["doc_code"], user, "contact")
     if created:
-        _audit(_tok(authorization), "material_payment.privacy_notice_ack", "quotation", row["quote_no"], "叫料匯款申請 %s 收款人個資告知" % row["doc_code"],
+        _audit(_tok(authorization), "material_payment.privacy_notice_ack", "quotation", row["quote_no"], "材料申請匯款申請 %s 收款人個資告知" % row["doc_code"],
                {"docCode": row["doc_code"], "noticeHash": rec.get("noticeHash")})
     return {"ack": rec, "created": created}
 
@@ -190,19 +190,19 @@ def _notify_after(event, info, res, reason=""):
     try:
         if event == "submitted":
             for u in res.get("firstApprovers") or []:
-                _notify(u, "material_payment_approval_request", info["docCode"], info["quoteNo"], "叫料匯款申請 %s 需要您簽核" % info["docCode"])
+                _notify(u, "material_payment_approval_request", info["docCode"], info["quoteNo"], "材料申請匯款申請 %s 需要您簽核" % info["docCode"])
             MN.fire_payment("submitted", info, approvers=res.get("firstApprovers"))
         elif event == "next_tier":
             for u in res.get("nextApprovers") or []:
-                _notify(u, "material_payment_approval_request", info["docCode"], info["quoteNo"], "叫料匯款申請 %s 需要您簽核" % info["docCode"])
+                _notify(u, "material_payment_approval_request", info["docCode"], info["quoteNo"], "材料申請匯款申請 %s 需要您簽核" % info["docCode"])
             MN.fire_payment("next_tier", info, approvers=res.get("nextApprovers"), tier_no=res.get("tierNo", 0), total_tiers=res.get("totalTiers", 0))
         elif event == "approved":
             if res.get("requester"):
-                _notify(res["requester"], "material_payment_approved", info["docCode"], info["quoteNo"], "叫料匯款申請 %s 已核准，已交給出納" % info["docCode"])
+                _notify(res["requester"], "material_payment_approved", info["docCode"], info["quoteNo"], "材料申請匯款申請 %s 已核准，已交給出納" % info["docCode"])
             MN.fire_payment("approved", info, requester=res.get("requester") or "")
         elif event == "returned":
             if res.get("requester"):
-                _notify(res["requester"], "material_payment_returned", info["docCode"], info["quoteNo"], "叫料匯款申請 %s 已被退回：%s" % (info["docCode"], reason))
+                _notify(res["requester"], "material_payment_returned", info["docCode"], info["quoteNo"], "材料申請匯款申請 %s 已被退回：%s" % (info["docCode"], reason))
             MN.fire_payment("returned", info, requester=res.get("requester") or "", reason=reason)
     except Exception:                                                              # noqa: BLE001
         pass
@@ -230,7 +230,7 @@ def create_payment(quote_no: str, item_id: str, body: dict = Body(default={}), a
     finally:
         conn.close()
     _audit(_tok(authorization), "material_payment.create", "quotation", quote_no,
-           "叫料匯款申請 %s（%s）建立（第 %d 張）" % (res["docCode"], order.get("itemName") or "", res["seq"]),
+           "材料申請匯款申請 %s（%s）建立（第 %d 張）" % (res["docCode"], order.get("itemName") or "", res["seq"]),
            {"docCode": res["docCode"], "seq": res["seq"], "overCap": bool(res["overCapReason"])})
     _record_payee_ack(user, authorization, res["docCode"], quote_no)                              # 寫入已告知紀錄（伺服器蓋時間與人員；失敗不影響已建立的申請，但會在回應標示）
     res["payeeNotice"] = _payee_ack(res["docCode"])
@@ -264,7 +264,7 @@ def update_payment(pid: int, body: dict = Body(default={}), authorization: str =
         res = _public(conn, new)
     finally:
         conn.close()
-    _audit(_tok(authorization), "material_payment.update", "quotation", row["quote_no"], "叫料匯款申請 %s 修改" % res["docCode"], {"docCode": res["docCode"]})
+    _audit(_tok(authorization), "material_payment.update", "quotation", row["quote_no"], "材料申請匯款申請 %s 修改" % res["docCode"], {"docCode": res["docCode"]})
     return {"ok": True, "payment": res}
 
 
@@ -288,7 +288,7 @@ def submit_payment(pid: int, authorization: str = Header(None)):
     finally:
         conn.close()
     _audit(_tok(authorization), "material_payment.submit" if not res["autoApproved"] else "material_payment.auto_approve", "quotation", row["quote_no"],
-           "叫料匯款申請 %s %s" % (info["docCode"], "送審" if not res["autoApproved"] else "未設定簽核層，直接核准"),
+           "材料申請匯款申請 %s %s" % (info["docCode"], "送審" if not res["autoApproved"] else "未設定簽核層，直接核准"),
            {"docCode": info["docCode"], "tierCount": res["tierCount"], "status": res["status"]})
     if res["autoApproved"]:
         _notify_after("approved", info, {"requester": user["username"]})
@@ -299,7 +299,7 @@ def submit_payment(pid: int, authorization: str = Header(None)):
             try:
                 tiers = (json.loads(MP.get(conn2, pid)["approval_json"] or "{}").get("tiers") or [])
                 notify_org_chain_notice(conn2, tiers, user["username"], info["docCode"], row["quote_no"],
-                                        "叫料匯款申請 %s 由 %s 依組織職權自行簽核，知會您" % (info["docCode"], user.get("display_name") or user["username"]),
+                                        "材料申請匯款申請 %s 由 %s 依組織職權自行簽核，知會您" % (info["docCode"], user.get("display_name") or user["username"]),
                                         type_="material_payment_approval_notice")
             finally:
                 conn2.close()
@@ -326,7 +326,7 @@ def approve_payment(pid: int, body: dict = Body(default={}), authorization: str 
         info = _info(row, q, row["quote_no"])
     finally:
         conn.close()
-    _audit(_tok(authorization), "material_payment.approve", "quotation", row["quote_no"], "叫料匯款申請 %s 核准 → %s" % (info["docCode"], res["status"]),
+    _audit(_tok(authorization), "material_payment.approve", "quotation", row["quote_no"], "材料申請匯款申請 %s 核准 → %s" % (info["docCode"], res["status"]),
            {"docCode": info["docCode"], "status": res["status"], "tier": res["currentTier"]})
     _notify_after("approved" if res["done"] else "next_tier", info, res)
     return {"ok": True, "status": res["status"], "currentTier": res["currentTier"]}
@@ -348,7 +348,7 @@ def reject_payment(pid: int, body: dict = Body(default={}), authorization: str =
         info = _info(row, q, row["quote_no"])
     finally:
         conn.close()
-    _audit(_tok(authorization), "material_payment.reject", "quotation", row["quote_no"], "叫料匯款申請 %s 被退回：%s" % (info["docCode"], res["reason"]),
+    _audit(_tok(authorization), "material_payment.reject", "quotation", row["quote_no"], "材料申請匯款申請 %s 被退回：%s" % (info["docCode"], res["reason"]),
            {"docCode": info["docCode"], "reason": res["reason"]})
     _notify_after("returned", info, res, reason=res["reason"])
     return {"ok": True, "status": res["status"]}
@@ -369,7 +369,7 @@ def withdraw_payment(pid: int, authorization: str = Header(None)):
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), "material_payment.withdraw", "quotation", row["quote_no"], "叫料匯款申請 %s 撤回" % row["doc_code"], {"docCode": row["doc_code"]})
+    _audit(_tok(authorization), "material_payment.withdraw", "quotation", row["quote_no"], "材料申請匯款申請 %s 撤回" % row["doc_code"], {"docCode": row["doc_code"]})
     return {"ok": True, "status": MP.S_DRAFT}
 
 
@@ -389,7 +389,7 @@ def void_payment(pid: int, body: dict = Body(default={}), authorization: str = H
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), "material_payment.void", "quotation", row["quote_no"], "叫料匯款申請 %s 作廢：%s" % (row["doc_code"], (body or {}).get("reason") or ""),
+    _audit(_tok(authorization), "material_payment.void", "quotation", row["quote_no"], "材料申請匯款申請 %s 作廢：%s" % (row["doc_code"], (body or {}).get("reason") or ""),
            {"docCode": row["doc_code"]})
     return {"ok": True, "status": MP.S_VOID}
 
@@ -409,7 +409,7 @@ def queue_items(conn) -> list:
         sn = MP.snapshot_of(dict(r))
         base = "/api/material-payments/%d" % r["id"]
         out.append({
-            "type": "material_payment", "typeLabel": "叫料匯款", "docCode": r["doc_code"], "quoteNo": r["doc_code"],
+            "type": "material_payment", "typeLabel": "材料申請匯款", "docCode": r["doc_code"], "quoteNo": r["doc_code"],
             "customer": r["customer_name"] or "", "projectName": sn.get("itemName") or "", "total": float(r["amount_approved"] or 0),
             "quoteDate": (f["requestedAt"] or "")[:10], "salesPerson": "", "requestedBy": f["requestedBy"],
             "requestedByDisplay": f["requestedByDisplay"], "requestedAt": f["requestedAt"], "isEditApproval": False, "reasons": [],
@@ -429,9 +429,9 @@ def detail(conn, doc_no):
     sn = MP.snapshot_of(row)
     fields = [{"label": "單號", "value": row["doc_code"]}, {"label": "案件", "value": row["quote_no"]}, {"label": "品名", "value": sn.get("itemName") or "—"},
               {"label": "供應商", "value": sn.get("supplierName") or "—"}, {"label": "第幾張申請", "value": str(row["seq"])},
-              {"label": "叫料單小計", "value": format(float(sn.get("totalPrice") or 0), ",.0f")},
+              {"label": "材料申請小計", "value": format(float(sn.get("totalPrice") or 0), ",.0f")},
               {"label": "本次申請金額", "value": format(float(row["amount_approved"] or 0), ",.0f")},
               {"label": "收款帳號", "value": _mask(sn.get("bankAccountNumber")) or "—"}]
     if row["over_cap_reason"]:
         fields.append({"label": "超額覆寫理由", "value": row["over_cap_reason"]})
-    return {"quoteNo": row["quote_no"], "approvalRaw": row["approval_json"], "title": "叫料匯款 %s" % row["doc_code"], "fields": fields, "items": [], "files": []}
+    return {"quoteNo": row["quote_no"], "approvalRaw": row["approval_json"], "title": "材料申請匯款 %s" % row["doc_code"], "fields": fields, "items": [], "files": []}

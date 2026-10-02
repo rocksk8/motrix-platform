@@ -36,7 +36,7 @@ FULL_BP = 10000
 #: 待補登標註的種類 → 畫面標題
 FLAG_LABELS = {
     "dispatch_no_invoice": "派工未登錄廠商發票（暫用驗收／派工月）",
-    "material_no_invoice": "叫料未登錄廠商發票（暫用付款月）",
+    "material_no_invoice": "材料申請未登錄廠商發票（暫用付款月）",
     "extra_no_invoice":    "額外支出未登錄廠商發票（暫用核准／憑證月）",
     "extra_no_paid_date":  "額外支出未登錄付款日（現金口徑暫用憑證日）",
     "stage_ratio_unset":   "階段比例未設定（全部完工月一次認列）",
@@ -295,7 +295,7 @@ def material_entries(conn, basis, department_id=None):
         for mo in cr.get("materialOrders") or []:
             if not isinstance(mo, dict):
                 continue
-            name = mo.get("itemName") or "叫料"
+            name = mo.get("itemName") or "材料申請"
             paid = (mo.get("paidDate") or "")[:10]
             st = states.get((row["quote_no"], str(mo.get("itemId"))), "")
             cs = _ma.cost_state(st)
@@ -306,12 +306,12 @@ def material_entries(conn, basis, department_id=None):
                 if key in pay_legacy:                                              # 有匯款申請 ⇒ 讀付款明細（每筆一列）＋舊單歷史已付；不讀 JSON 的 paid*（那是投影）
                     la, ld = pay_legacy[key]
                     if la and ld:
-                        out.append({"date": ld, "quoteNo": row["quote_no"], "desc": "叫料｜" + name, "amount": la, "taxNote": "未拆稅", "provisional": False,
+                        out.append({"date": ld, "quoteNo": row["quote_no"], "desc": "材料申請｜" + name, "amount": la, "taxNote": "未拆稅", "provisional": False,
                                     "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending", "lineId": "", "fee": 0.0,
                                     "remitPending": False, "payMethod": "", "payAccountCode": ""})
                     for ln in pay_lines.get(key, []):
                         if ln["amount"] and ln["paid_at"]:
-                            out.append({"date": ln["paid_at"], "quoteNo": row["quote_no"], "desc": "叫料｜" + name, "amount": ln["amount"], "taxNote": "未拆稅",
+                            out.append({"date": ln["paid_at"], "quoteNo": row["quote_no"], "desc": "材料申請｜" + name, "amount": ln["amount"], "taxNote": "未拆稅",
                                         "provisional": False, "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending",
                                         "lineId": str(ln["id"]), "fee": ln["fee"], "remitPending": ln["review"] == "pending",
                                         "payMethod": ln["pay_method"], "payAccountCode": ln["pay_account_code"], "paymentCode": ln["doc_code"]})
@@ -320,7 +320,7 @@ def material_entries(conn, basis, department_id=None):
                     continue
                 amt = float(mo.get("paidAmount") or 0)
                 if amt:
-                    out.append({"date": paid, "quoteNo": row["quote_no"], "desc": "叫料｜" + name,
+                    out.append({"date": paid, "quoteNo": row["quote_no"], "desc": "材料申請｜" + name,
                                 "amount": amt, "taxNote": "未拆稅", "provisional": False,
                                 "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending"})
                 continue
@@ -329,7 +329,7 @@ def material_entries(conn, basis, department_id=None):
                 continue
             inv = (mo.get("invoiceDate") or "")[:10]
             out.append({"date": inv if inv != "" else paid, "quoteNo": row["quote_no"],
-                        "desc": "叫料｜" + name, "amount": amt, "taxNote": "未拆稅",
+                        "desc": "材料申請｜" + name, "amount": amt, "taxNote": "未拆稅",
                         "provisional": inv == "", "itemId": mo.get("itemId") or "", "invoiceDate": inv,
                         "approval": st, "pending": cs == "pending"})
     return out
@@ -478,7 +478,7 @@ def recognition_flags(conn, year, department_id=None, money_ok=True):
     for e in material_entries(conn, "accrual", department_id):
         if e["provisional"] and (e["date"][:4] == y or e["date"] == ""):
             flags["material_no_invoice"].append(_flag_item(
-                e["quoteNo"], customer.get(e["quoteNo"]), "叫料", e["desc"], e["amount"], e["date"], money_ok, "material_no_invoice"))
+                e["quoteNo"], customer.get(e["quoteNo"]), "材料申請", e["desc"], e["amount"], e["date"], money_ok, "material_no_invoice"))
     for e in extra_entries(conn, "accrual"):
         if e["quoteNo"] not in in_scope:
             continue

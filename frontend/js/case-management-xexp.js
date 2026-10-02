@@ -6,7 +6,7 @@ window.CM_PARTS.push(() => ({
     // ── 額外支出（2026-09-11，從精算頁搬過來）──
     // 資料在 case_extra_expenses 表（DB v75），不再是 settlement.extraItems。
     // loading 預設 true：分頁列在 selected 一設好就出現，若預設 false 會先閃一下
-    // 空狀態再跳載入中——叫料那一區踩過同一個坑。
+    // 空狀態再跳載入中——材料申請那一區踩過同一個坑。
     xe: {
       loading: true, busy: false, items: [], categories: [],
       totalAmount: 0, totalPending: 0, pendingCount: 0,
@@ -19,7 +19,7 @@ window.CM_PARTS.push(() => ({
       const live = this._selectLive()
       // 比照 loadMaterialOrders()：發請求當下記住是哪張單，回應抵達時再比對。
       // 沒有這道守門，使用者在回應飛行途中新增的那一列會被蓋掉（同一天內
-      // 在叫料與系統設定兩處各踩過一次）
+      // 在材料申請與系統設定兩處各踩過一次）
       this._xeReqFor = quoteNo
       this.xe.loading = true
       try {
@@ -38,7 +38,7 @@ window.CM_PARTS.push(() => ({
             // 變更申請面板：伺服器上還沒有這筆變更申請（changeStatus 空）、但使用者
             // 正在本機填 → 保留他打到一半的內容。少了這道守門，任何一次背景重載
             // 都會把輸入中的東西清空，而且畫面上不會有任何錯誤（同一天內已經在
-            // 叫料與系統設定兩處各踩過一次同樣的競態）
+            // 材料申請與系統設定兩處各踩過一次同樣的競態）
             if (p && p._editing && !i.changeStatus) {
               return { ...i, _dirty: false, _editing: true, change: p.change, _changeDirty: p._changeDirty }
             }

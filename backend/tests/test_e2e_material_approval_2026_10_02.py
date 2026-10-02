@@ -102,7 +102,7 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     page.on("pageerror", lambda e: errors.append(str(e)))
     inject_login(page, live_server, adm, ap)
     _open_finance(page, live_server)
-    page.wait_for_function("() => { const t = document.querySelector('#fin-material-orders')?.innerText || ''; return t.includes('尚無叫料項目') && !t.includes('載入中') }", timeout=20000)
+    page.wait_for_function("() => { const t = document.querySelector('#fin-material-orders')?.innerText || ''; return t.includes('尚無材料申請項目') && !t.includes('載入中') }", timeout=20000)
 
     # 1 新增並儲存 ⇒ 建審核單（草稿）
     page.click(f'{PANEL} button:has-text("新增項目")')
@@ -112,7 +112,7 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     page.wait_for_function("() => document.querySelectorAll('#fin-material-orders [data-testid=mo-supplier] option').length >= 2", timeout=15000)
     page.select_option(f'{PANEL} [data-testid="mo-supplier"]', label="S-001 甲供應商")        # 31-C：新增叫料必選供應商
     assert _status_text(page) == "尚未儲存"
-    page.click(f'{PANEL} button:has-text("儲存叫料")')
+    page.click(f'{PANEL} button:has-text("儲存材料申請")')
     page.wait_for_function("() => document.querySelector('#fin-material-orders [data-testid=mo-ap-status]')?.innerText === '草稿'", timeout=15000)
     row = _approval_row()
     assert row["status"] == "草稿" and row["doc_code"].startswith("MO-")
@@ -140,17 +140,24 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     assert page.locator(f'{PANEL} [data-testid="mo-recv"]').first.is_visible()
     _shot(page, "03-approved")
 
-    # 4 叫料管控：旗標一開始反灰；連結後可勾「已叫料」，「已到料」仍反灰
+    # 4 材料申請：旗標一開始反灰；連結後可勾「已叫料」，「已到料」仍反灰
     page.click('.cm-tab:has-text("執行管理")') if page.locator('.cm-tab:has-text("執行管理")').count() else None
-    page.click('.cm-tab:has-text("叫料管控")')
+    page.click('.cm-tab:has-text("材料申請")')
     page.wait_for_selector('[data-testid="mat-order-link"]', timeout=15000)
     assert page.locator('[data-testid="mat-ordered"]').first.is_disabled() and page.locator('[data-testid="mat-arrived"]').first.is_disabled()
+    # 材料申請改字：沒有對應已核准申請時的提示（文案出自 MATERIAL-REQUEST-WORDING.md；閘門邏輯不變）
+    assert "需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。" in page.locator('[data-testid="mat-order-link"]').first.locator("xpath=ancestor::*[.//input[@data-testid='mat-ordered']][1]").inner_text()
+    _shot(page, "03b-block-hint")
+    other = page.evaluate("""() => { const d = Alpine.$data(document.querySelector('[data-testid=mat-order-link]'));
+        d.moApprovals = Object.assign({}, d.moApprovals, { 'X-PENDING': { status: '待審核' } });
+        return d.matTickHint({ orderItemId: 'X-PENDING' }, 'ordered'); }""")
+    assert other == "這筆材料申請還沒核准。", other
     page.wait_for_function(f"() => document.querySelector('[data-testid=mat-order-link]').querySelectorAll('option').length >= 2", timeout=15000)
     page.select_option('[data-testid="mat-order-link"]', item_id)
     page.wait_for_function("() => !document.querySelector('[data-testid=mat-ordered]').disabled", timeout=10000)
     assert page.locator('[data-testid="mat-arrived"]').first.is_disabled()
     page.check('[data-testid="mat-ordered"]')
-    _wait_db(page, lambda c: c["materials"][0].get("ordered") is True and c["materials"][0].get("orderItemId") == item_id, "已叫料＋連結已存")
+    _wait_db(page, lambda c: c["materials"][0].get("ordered") is True and c["materials"][0].get("orderItemId") == item_id, "已申購＋連結已存")
     _shot(page, "04-ordered")
 
     # 5 回財務分頁確認到貨（日期＋確認人）⇒ 叫料管控可勾「已到料」
@@ -164,7 +171,7 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     assert (row["received_on"], row["received_by"]) == ("2031-03-05", adm)
     _shot(page, "05-received")
     page.click('.cm-tab:has-text("執行管理")') if page.locator('.cm-tab:has-text("執行管理")').count() else None
-    page.click('.cm-tab:has-text("叫料管控")')
+    page.click('.cm-tab:has-text("材料申請")')
     page.wait_for_function("() => !document.querySelector('[data-testid=mat-arrived]').disabled", timeout=10000)
     page.check('[data-testid="mat-arrived"]')
     _wait_db(page, lambda c: c["materials"][0].get("arrived") is True, "已到料已存")

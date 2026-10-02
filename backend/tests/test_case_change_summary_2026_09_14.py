@@ -129,7 +129,7 @@ def test_upload_summarizes_files_not_paths():
         [{"id": "a", "filename": "出貨照片.jpg", "path": "x/y/a.jpg"}])
     assert out["after"]["檔案數"] == 1
     assert "出貨照片.jpg" in out["after"]["檔案"]
-    assert "叫料項目 #3" in out["after"]["動作"]
+    assert "材料申請項目 #3" in out["after"]["動作"]
     assert "x/y/a.jpg" not in json.dumps(out, ensure_ascii=False), "不要把實體路徑給人看"
 
 

@@ -88,10 +88,10 @@ def test_operating_report_counts_pending_with_a_flag_and_leaves_the_excluded_out
     mar = next(m for m in res["monthly"] if m["month"] == "%d-03" % Y)
     assert mar["material"] == 7000
     rows = [d for d in res["details"]["material"] if d["quoteNo"] == NO]
-    assert sorted(d["desc"] for d in rows) == ["叫料｜品A", "叫料｜品L", "叫料｜品P"]
+    assert sorted(d["desc"] for d in rows) == ["材料申請｜品A", "材料申請｜品L", "材料申請｜品P"]
     flagged = [d for d in rows if d["pending"]]
-    assert [d["desc"] for d in flagged] == ["叫料｜品P"] and "待審核" in flagged[0]["taxNote"]
-    assert all(d["pending"] is False for d in rows if d["desc"] != "叫料｜品P")
+    assert [d["desc"] for d in flagged] == ["材料申請｜品P"] and "待審核" in flagged[0]["taxNote"]
+    assert all(d["pending"] is False for d in rows if d["desc"] != "材料申請｜品P")
 
 
 def test_ledger_e12_only_for_approved_or_legacy_and_says_why(seeded):
@@ -100,7 +100,7 @@ def test_ledger_e12_only_for_approved_or_legacy_and_says_why(seeded):
     e12 = {e["source_key"].split("::")[1]: e for e in res["events"] if e["event_code"] == "E12"}
     assert sorted(e12) == ["A", "L"]
     assert sorted(sum(l["amount"] for l in e["lines"] if l["side"] == "D") for e in e12.values()) == [1000, 2000]
-    assert "1 筆叫料單審核中" in res["notice"]
+    assert "1 筆材料申請審核中" in res["notice"]
     # 現金口徑（E12b）不受審核狀態影響：付出去的錢照入帳草稿
     _set_paid_all()
     res = GE.gl_events("%d-01-01" % Y, "%d-12-31" % Y)

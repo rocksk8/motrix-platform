@@ -100,8 +100,8 @@ def test_material_invoice_date_survives_save_and_reload(live_server, make_user, 
     inv.wait_for(state="visible", timeout=20000)
     inv.fill("2026-04-20")
     with page.expect_response(lambda r: "/invoice-date" in r.url and _sends(r, "invoiceDate", "2026-04-20"), timeout=_SAVE_WAIT_MS) as resp:
-        inv.dispatch_event("change")   # 發票日期改了就直接存（專用端點），不必按「儲存叫料」
-    _saved(resp, "叫料發票日期")
+        inv.dispatch_event("change")   # 發票日期改了就直接存（專用端點），不必按「儲存材料申請」
+    _saved(resp, "材料申請發票日期")
 
     def stored():
         d = json.loads(_one("SELECT data_json FROM quotations WHERE quote_no='MQ-RBE-030'"))
@@ -111,8 +111,8 @@ def test_material_invoice_date_survives_save_and_reload(live_server, make_user, 
     page.locator('#fin-material-orders input[placeholder="備註（供應商、單號…）"]').first.fill("改備註")
     with page.expect_response(lambda r: r.url.endswith("/material-orders") and r.request.method == "PATCH",
                               timeout=_SAVE_WAIT_MS) as resp:
-        page.click('#fin-material-orders button:has-text("儲存叫料")')
-    _saved(resp, "儲存叫料")
+        page.click('#fin-material-orders button:has-text("儲存材料申請")')
+    _saved(resp, "儲存材料申請")
     d = json.loads(_one("SELECT data_json FROM quotations WHERE quote_no='MQ-RBE-030'"))
     assert d["caseRecord"]["materialOrders"][0].get("notes") == "改備註"
     assert stored() == "2026-04-20"
@@ -135,7 +135,7 @@ def test_material_invoice_date_on_a_closed_case_lands_without_pressing_save(live
     inv.fill("2026-05-05")
     with page.expect_response(lambda r: "/invoice-date" in r.url and _sends(r, "invoiceDate", "2026-05-05"), timeout=_SAVE_WAIT_MS) as resp:
         inv.dispatch_event("change")
-    _saved(resp, "已結案叫料發票日期")
+    _saved(resp, "已結案材料申請發票日期")
 
     def stored():
         d = json.loads(_one("SELECT data_json FROM quotations WHERE quote_no='MQ-RBE-031'"))

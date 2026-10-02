@@ -103,15 +103,15 @@ def update_material_orders(quote_no: str,
 
         # 3. 權限檢查：只有 admin+ 或有報價單編輯模組的使用者可以修改叫料
         if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "project_manage"):
-            raise HTTPException(403, "權限不足：只有管理員或專案經理可以修改叫料")
+            raise HTTPException(403, "權限不足：只有管理員或專案經理可以修改材料申請")
         if not money_visible(user):
             # CM13（2026-09-24）：這支整份取代叫料清單且單價／小計為必填——看不到金額的人
             # 送不出正確的值，照收就是用猜的數字蓋掉真正的價格（比照 D1 報價單 403）。
-            raise HTTPException(403, "此帳號沒有財務檢視權限，不可修改叫料清單")
+            raise HTTPException(403, "此帳號沒有財務檢視權限，不可修改材料申請清單")
 
         # 4. 檢查案件狀態
         if (q["deal_tag"] or "") == "已結案":
-            raise HTTPException(400, "已結案案件無法修改叫料")
+            raise HTTPException(400, "已結案案件無法修改材料申請")
 
         # 5. 驗證叫料邏輯
         for mo in body.materialOrders:
@@ -156,7 +156,7 @@ def update_material_orders(quote_no: str,
 
         # 8. 稽核記錄（第一個參數是 token，不是連線）
         _audit(_tok(authorization), 'material_orders.update', 'quotation', quote_no,
-               f"更新叫料清單（{len(body.materialOrders)} 項）" + (f"；{len(rejected)} 項被審核規則擋下" if rejected else ""))
+               f"更新材料申請清單（{len(body.materialOrders)} 項）" + (f"；{len(rejected)} 項被審核規則擋下" if rejected else ""))
 
         out = {
             "status": "ok",
@@ -184,7 +184,7 @@ def set_material_order_invoice_date(quote_no: str, item_id: str, body: dict = Bo
     user = _require_user(authorization)
     if user["role"] not in ("superadmin", "admin") and not any(
             user_has_module(user, m) for m in ("project_manage", "cashier", "finance")):
-        raise HTTPException(403, "權限不足：只有管理員、專案經理、出納或財務可以登錄叫料發票日期")
+        raise HTTPException(403, "權限不足：只有管理員、專案經理、出納或財務可以登錄材料申請發票日期")
     inv = normalize_date((body or {}).get("invoiceDate"), "發票日期")
     conn = get_db()
     try:
@@ -199,9 +199,9 @@ def set_material_order_invoice_date(quote_no: str, item_id: str, body: dict = Bo
         orders = (data.get("caseRecord") or {}).get("materialOrders") or []
         hit = [mo for mo in orders if isinstance(mo, dict) and str(mo.get("itemId")) == item_id]
         if not hit:
-            raise HTTPException(404, "找不到這筆叫料（請先儲存叫料清單）")
+            raise HTTPException(404, "找不到這筆材料申請（請先儲存材料申請清單）")
         if MA.status_of(conn, quote_no, item_id) in MA.IN_FLIGHT:
-            raise HTTPException(409, "審核中的叫料單不可改發票日期（請先撤回或等審核完成）")
+            raise HTTPException(409, "審核中的材料申請不可改發票日期（請先撤回或等審核完成）")
         before = hit[0].get("invoiceDate") or ""
         hit[0]["invoiceDate"] = inv
         save_quotation_json(conn, quote_no, data)
@@ -209,7 +209,7 @@ def set_material_order_invoice_date(quote_no: str, item_id: str, body: dict = Bo
     finally:
         conn.close()
     _audit(_tok(authorization), "material_orders.invoice_date", "quotation", quote_no,
-           "叫料「%s」發票日期：%s → %s" % (hit[0].get("itemName") or item_id, before or "（未登錄）", inv or "（未登錄）"))
+           "材料申請「%s」發票日期：%s → %s" % (hit[0].get("itemName") or item_id, before or "（未登錄）", inv or "（未登錄）"))
     return {"ok": True, "invoiceDate": inv}
 
 

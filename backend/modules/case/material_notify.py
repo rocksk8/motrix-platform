@@ -12,27 +12,27 @@ from helpers import mail_types as _mt
 
 logger = logging.getLogger(__name__)
 
-_APPROVE = "請登入系統，於簽核佇列開啟該叫料單確認內容後核准或退回。"
+_APPROVE = "請登入系統，於簽核佇列開啟該材料申請確認內容後核准或退回。"
 _RESULT = "請登入系統查看目前狀態；如有疑問請洽簽核人。"
-_RETURN = "請登入系統依退回原因修改叫料內容後重新送審。"
+_RETURN = "請登入系統依退回原因修改材料申請內容後重新送審。"
 
-_mt.register("material_order_submitted", "叫料單待審核", "approval", "none", "當層簽核人",
-             "叫料單在您簽核之前不會成為已核准的叫料（不能標記已叫料）。", _APPROVE, owner="case")
-_mt.register("material_order_next_tier", "叫料單輪到您審核", "approval", "none", "當層簽核人",
-             "前一層已完成，叫料單在本層簽核之前不會繼續。", _APPROVE, owner="case")
-_mt.register("material_order_approved", "叫料單已核准", "approval", "none", "申請人",
-             "叫料單已核准，可以標記已叫料。", _RESULT, owner="case")
-_mt.register("material_order_returned", "叫料單被退回", "approval", "none", "申請人",
-             "叫料單已退回，修改並重新送審之前流程暫停。", _RETURN, owner="case")
+_mt.register("material_order_submitted", "材料申請待審核", "approval", "none", "當層簽核人",
+             "材料申請在您簽核之前不會成為已核准的材料申請（不能標記已申購）。", _APPROVE, owner="case")
+_mt.register("material_order_next_tier", "材料申請輪到您審核", "approval", "none", "當層簽核人",
+             "前一層已完成，材料申請在本層簽核之前不會繼續。", _APPROVE, owner="case")
+_mt.register("material_order_approved", "材料申請已核准", "approval", "none", "申請人",
+             "材料申請已核准，可以標記已申購。", _RESULT, owner="case")
+_mt.register("material_order_returned", "材料申請被退回", "approval", "none", "申請人",
+             "材料申請已退回，修改並重新送審之前流程暫停。", _RETURN, owner="case")
 
 # 叫料匯款申請（31-C 匯款切片）：同一組四種事件，類型名 material_payment_*；信內不放金額與帳戶
-_mt.register("material_payment_submitted", "叫料匯款申請待審核", "approval", "none", "當層簽核人",
+_mt.register("material_payment_submitted", "材料申請匯款申請待審核", "approval", "none", "當層簽核人",
              "匯款申請在您簽核之前不會交給出納付款。", _APPROVE, owner="case")
-_mt.register("material_payment_next_tier", "叫料匯款申請輪到您審核", "approval", "none", "當層簽核人",
+_mt.register("material_payment_next_tier", "材料申請匯款申請輪到您審核", "approval", "none", "當層簽核人",
              "前一層已完成，匯款申請在本層簽核之前不會繼續。", _APPROVE, owner="case")
-_mt.register("material_payment_approved", "叫料匯款申請已核准", "approval", "none", "申請人",
+_mt.register("material_payment_approved", "材料申請匯款申請已核准", "approval", "none", "申請人",
              "匯款申請已核准，已交給出納付款。", _RESULT, owner="case")
-_mt.register("material_payment_returned", "叫料匯款申請被退回", "approval", "none", "申請人",
+_mt.register("material_payment_returned", "材料申請匯款申請被退回", "approval", "none", "申請人",
              "匯款申請已退回，修改並重新送審之前流程暫停。", "請登入系統依退回原因修改匯款申請後重新送審。", owner="case")
 
 EVENTS = ("submitted", "next_tier", "approved", "returned")
@@ -43,7 +43,7 @@ def _page(quote_no, name="approval-queue.html"):
 
 
 def _rows(info, extra=None):
-    rows = [("叫料單", info.get("docCode") or "—"), ("案件", info.get("quoteNo") or "—"), ("品名", info.get("itemName") or "—")]
+    rows = [("材料申請", info.get("docCode") or "—"), ("案件", info.get("quoteNo") or "—"), ("品名", info.get("itemName") or "—")]
     return rows + list(extra or [])
 
 
@@ -54,24 +54,24 @@ def _mail(event, info, *, usernames, extra=None, page="approval-queue.html"):
         return False
     rows = _rows(info, extra)
     link = _page(info.get("quoteNo"), page)
-    ident = "叫料單 %s" % (info.get("docCode") or "")
+    ident = "材料申請 %s" % (info.get("docCode") or "")
     if event == "submitted":
-        return _en.send_registered("material_order_submitted", title="叫料單簽核申請", rows=rows, usernames=users,
+        return _en.send_registered("material_order_submitted", title="材料申請簽核申請", rows=rows, usernames=users,
                                    badge_text="待您審核", link=link, button_text="前往審核", reason=ident,
-                                   note="您好，以下叫料單已進入簽核流程，敬請於系統中完成審核。")
+                                   note="您好，以下材料申請已進入簽核流程，敬請於系統中完成審核。")
     if event == "next_tier":
-        return _en.send_registered("material_order_next_tier", title="叫料單簽核流程通知", rows=rows, usernames=users,
+        return _en.send_registered("material_order_next_tier", title="材料申請簽核流程通知", rows=rows, usernames=users,
                                    badge_text="輪到您審核", link=link, button_text="前往審核", reason=ident,
-                                   note="您好，前層審核已完成，叫料單現已輪到您審核。")
+                                   note="您好，前層審核已完成，材料申請現已輪到您審核。")
     if event == "approved":
-        return _en.send_registered("material_order_approved", title="叫料單已核准", rows=rows, usernames=users,
+        return _en.send_registered("material_order_approved", title="材料申請已核准", rows=rows, usernames=users,
                                    badge_text="已核准", badge_color="#2E8B57", link=link, button_text="前往查看", reason=ident,
-                                   note="您好，您送審的叫料單已完成審核並核准。")
+                                   note="您好，您送審的材料申請已完成審核並核准。")
     if event == "returned":
-        return _en.send_registered("material_order_returned", title="叫料單被退回", rows=rows, usernames=users,
+        return _en.send_registered("material_order_returned", title="材料申請被退回", rows=rows, usernames=users,
                                    badge_text="已退回", badge_color="#C0392B", link=link, button_text="前往查看", reason=ident,
-                                   note="您好，您送審的叫料單經審核後退回，請參閱退回原因修改後重新送審。")
-    raise ValueError("未知的叫料通知事件：%r" % (event,))
+                                   note="您好，您送審的材料申請經審核後退回，請參閱退回原因修改後重新送審。")
+    raise ValueError("未知的材料申請通知事件：%r" % (event,))
 
 
 def fire(event, info, *, approvers=None, requester="", reason="", tier_no=0, total_tiers=0):
@@ -89,7 +89,7 @@ def fire(event, info, *, approvers=None, requester="", reason="", tier_no=0, tot
                          extra=[("退回原因", reason or "—")] if reason else None)
         raise ValueError(event)
     except Exception:                                            # noqa: BLE001 — 附帶動作：不可以讓簽核失敗
-        logger.exception("叫料單通知失敗（%s）", event)
+        logger.exception("材料申請通知失敗（%s）", event)
         return False
 
 
@@ -107,22 +107,22 @@ def _pay_mail(event, info, *, usernames, extra=None, page="approval-queue.html")
     link = _page(info.get("quoteNo"), page)
     ident = "匯款申請 %s" % (info.get("docCode") or "")
     if event == "submitted":
-        return _en.send_registered("material_payment_submitted", title="叫料匯款申請簽核", rows=rows, usernames=users,
+        return _en.send_registered("material_payment_submitted", title="材料申請匯款申請簽核", rows=rows, usernames=users,
                                    badge_text="待您審核", link=link, button_text="前往審核", reason=ident,
-                                   note="您好，以下叫料匯款申請已進入簽核流程，敬請於系統中完成審核。")
+                                   note="您好，以下材料申請匯款申請已進入簽核流程，敬請於系統中完成審核。")
     if event == "next_tier":
-        return _en.send_registered("material_payment_next_tier", title="叫料匯款申請簽核流程通知", rows=rows, usernames=users,
+        return _en.send_registered("material_payment_next_tier", title="材料申請匯款申請簽核流程通知", rows=rows, usernames=users,
                                    badge_text="輪到您審核", link=link, button_text="前往審核", reason=ident,
                                    note="您好，前層審核已完成，匯款申請現已輪到您審核。")
     if event == "approved":
-        return _en.send_registered("material_payment_approved", title="叫料匯款申請已核准", rows=rows, usernames=users,
+        return _en.send_registered("material_payment_approved", title="材料申請匯款申請已核准", rows=rows, usernames=users,
                                    badge_text="已核准", badge_color="#2E8B57", link=link, button_text="前往查看", reason=ident,
                                    note="您好，您送審的匯款申請已完成審核並核准，已交給出納付款。")
     if event == "returned":
-        return _en.send_registered("material_payment_returned", title="叫料匯款申請被退回", rows=rows, usernames=users,
+        return _en.send_registered("material_payment_returned", title="材料申請匯款申請被退回", rows=rows, usernames=users,
                                    badge_text="已退回", badge_color="#C0392B", link=link, button_text="前往查看", reason=ident,
                                    note="您好，您送審的匯款申請經審核後退回，請參閱退回原因修改後重新送審。")
-    raise ValueError("未知的叫料匯款通知事件：%r" % (event,))
+    raise ValueError("未知的材料申請匯款通知事件：%r" % (event,))
 
 
 def fire_payment(event, info, *, approvers=None, requester="", reason="", tier_no=0, total_tiers=0):
@@ -140,5 +140,5 @@ def fire_payment(event, info, *, approvers=None, requester="", reason="", tier_n
                              extra=[("退回原因", reason or "—")] if reason else None)
         raise ValueError(event)
     except Exception:                                            # noqa: BLE001
-        logger.exception("叫料匯款通知失敗（%s）", event)
+        logger.exception("材料申請匯款通知失敗（%s）", event)
         return False
