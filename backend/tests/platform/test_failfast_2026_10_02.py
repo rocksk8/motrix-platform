@@ -134,3 +134,17 @@ def test_failure_first_with_xdist_workers_agree_and_run_everything(proj):
     (fs / "20300101_000000_1.jsonl").write_text(json.dumps({"type": "fail", "nodeid": "test_c_tail.py::test_tail_29"}) + "\n", encoding="utf-8")
     rc, out = run(proj, ["-n", "2"], {"MOTRIX_FAILFIRST": "1"})
     assert counts(out) == (60, 12) and "worker" not in out.lower().replace("workers", ""), out[-500:]   # 全部跑完、worker 之間沒有 collection 不一致
+
+def test_xdist_workers_stop_after_the_current_test_instead_of_draining_their_queue(proj):
+    """W2 實測：controller 端 shouldstop 只在每個 worker 已分到的題之後排 SHUTDOWN ⇒ 手上排的幾百題都跑完才收工（+4:07 停、+16:05 才結束）。
+    這題在 -n 2、600 題（每題 0.1 秒）的專案裡讓 1 個紅出現在最前面、安靜期 1.2 秒：worker 端停止旗標生效時只會多跑幾題；
+    若退回「只靠 controller 的 shouldstop」，每個 worker 的初始批次（600//4//2＝75 題）都會被跑完 ⇒ 超過 140 題。"""
+    for f in proj.glob("test_*.py"):
+        f.unlink()
+    (proj / "test_0_red.py").write_text("def test_red():"+chr(10)+"    assert False"+chr(10), encoding="utf-8")
+    many = "import time"+chr(10)+chr(10) + "".join(("def test_m_%03d():" + chr(10) + "    time.sleep(0.1)" + chr(10) + chr(10)) % i for i in range(600))
+    (proj / "test_1_many.py").write_text(many, encoding="utf-8")
+    rc, out = run(proj, ["-n", "2"], {"MOTRIX_FAILFAST": "1", "MOTRIX_FAILFAST_N": "99", "MOTRIX_FAILFAST_QUIET_MIN": "0.02"})
+    p, f = counts(out)
+    assert rc == 1 and f == 1 and "FAIL-FAST" in out, out[-300:]
+    assert p < 80, "停止後 worker 沒有收工（跑了 %d 題；排隊的題被跑完了）" % p

@@ -24,6 +24,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -165,6 +166,9 @@ class FailFast:
         self.reason = ""
         self.session = None
         self.prio = None
+        # xdist 的 controller 端 shouldstop 只是在每個 worker「已分到的題」之後排一個 SHUTDOWN 標記 ⇒ worker 會把手上排的幾百題跑完才收工
+        # （W2 實測：+4:07 發出停止，+16:05 才結束）。所以另用「停止旗標檔」讓 worker 每跑完一題就自己收工（worker 端見 _Worker）。
+        self.stopfile = os.path.join(tempfile.gettempdir(), "motrix-failfast-%d-%d.stop" % (os.getpid(), int(time.time() * 1000)))
         if _truthy(FIRST_ON):
             hist = int(os.environ.get(HIST_ENV, "10") or 10)
             self.prio = {"ids": recent_red_nodeids(hist), "files": changed_files(os.environ.get(BASE_ENV, ""))}
@@ -172,6 +176,7 @@ class FailFast:
     # xdist：把優先清單交給 worker（順序要與 controller 一致）
     @pytest.hookimpl(optionalhook=True)
     def pytest_configure_node(self, node):
+        node.workerinput["failfast_stopfile"] = self.stopfile
         if self.prio is not None:
             node.workerinput["failfirst"] = self.prio
 
@@ -188,6 +193,10 @@ class FailFast:
             line = "FAIL-FAST: %s ⇒ 停止本段（未登記的紅 %d 筆；已跑的紅清單與 summary 照常輸出）" % (why, len(self.reds))
             (tr.write_line(line) if tr else print(line, flush=True))
         except Exception:                                       # noqa: BLE001
+            pass
+        try:
+            Path(self.stopfile).write_text(why, encoding="utf-8")   # worker 端每題之後看這個檔，有就自己收工（不把排隊的題跑完）
+        except OSError:
             pass
         ds = self.config.pluginmanager.get_plugin("dsession")
         if ds is not None:
@@ -221,6 +230,10 @@ class FailFast:
 
     @pytest.hookimpl(trylast=True)
     def pytest_sessionfinish(self, session, exitstatus):
+        try:
+            os.remove(self.stopfile)
+        except OSError:
+            pass
         if self.reason:
             session.exitstatus = int(pytest.ExitCode.TESTS_FAILED)   # 不是 INTERRUPTED(2)：紅是真的紅，不是外部中斷
 
@@ -232,7 +245,22 @@ class FailFast:
 
 
 class _Worker:
-    """xdist worker：只做重排（優先清單由 controller 經 workerinput 給）。"""
+    """xdist worker：重排（優先清單由 controller 經 workerinput 給）＋看停止旗標檔：有 ⇒ 這一題跑完就收工（session.shouldstop；xdist worker 迴圈每題後檢查它）。"""
+
+    def pytest_runtest_logfinish(self, nodeid, location):
+        try:
+            sf = (getattr(self.config, "workerinput", {}) or {}).get("failfast_stopfile")
+            if sf and os.path.exists(sf):
+                self.session.shouldstop = "failfast（controller 已停止本段）"
+        except Exception:                                       # noqa: BLE001
+            pass
+
+    def pytest_sessionstart(self, session):
+        self.session = session
+
+    @property
+    def config(self):
+        return self._config
 
     @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, session, config, items):
@@ -243,6 +271,8 @@ class _Worker:
 
 def pytest_configure(config):
     if hasattr(config, "workerinput"):
-        config.pluginmanager.register(_Worker(), "failfast_worker")
+        w = _Worker()
+        w._config = config
+        config.pluginmanager.register(w, "failfast_worker")
     else:
         config.pluginmanager.register(FailFast(config), "failfast_impl")
