@@ -10,7 +10,7 @@
    "audit": 133,
    "unit": 89
   },
-  "routes": 741
+  "routes": 743
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -5958,7 +5958,9 @@
    "units": [
     "core:db",
     "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
     "file:backend/tests/_requires.py",
+    "helper:privacy_notice",
     "mod:arap/api/cashier",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
@@ -5976,6 +5978,8 @@
      "backend/core/__init__.py",
      "backend/core/registry.py",
      "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/privacy_notice.py",
      "backend/tests/_requires.py"
     ],
     "api": [

@@ -74,7 +74,7 @@
 | `helper:notification_prefs` | L1 | Per-user email notification opt-out list.（無單位卡） | 5 | 4 | — |
 | `helper:part_catalog` | L1 | 料件分類代碼表（L1；DEPENDENCY-MAP §3 #17）。（無單位卡） | 2 | 2 | — |
 | `helper:prefill_sources` | L1 | 表單「自動帶入」來源的唯一登記處（L1；表單設計器的下拉、定義驗證、伺服器端取值都讀這一份）。（無單位卡） | 8 | 3 | — |
-| `helper:privacy_notice` | L1 | L1 個資蒐集告知（R3；規格 CUSTOMIZATION-SPEC §9.3；個人資料保護法 §8 I）。（無單位卡） | 23 | 12 | — |
+| `helper:privacy_notice` | L1 | L1 個資蒐集告知（R3；規格 CUSTOMIZATION-SPEC §9.3；個人資料保護法 §8 I）。（無單位卡） | 23 | 13 | — |
 | `helper:procurement` | L1 | 採購前置時間與採購建議狀態的判定（2026-09-21，第 3 輪）。（無單位卡） | 11 | 3 | — |
 | `helper:receivables` | L1 | L1 薄殼（淘汰中）：收款明細與銷項發票清單——**資料在 M05 應收應付**，這裡只轉呼叫它的 provider。（無單位卡） | 4 | 0 | — |
 | `helper:recognition_basis` | L1 | 權責／現金口徑的純標籤（L1；2026-09-26 自 M01 modules/case/recognition.py 下沉，M01-PLAN §3-6）。（無單位卡） | 4 | 3 | — |

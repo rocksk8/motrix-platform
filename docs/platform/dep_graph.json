@@ -6509,41 +6509,18 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
-    "helper:company_identity",
-    "helper:company_setup",
-    "helper:custom_builder_support",
-    "helper:custom_fields",
-    "helper:custom_files",
-    "helper:custom_finance",
-    "helper:custom_history",
-    "helper:custom_modules",
     "helper:dates",
-    "helper:doc_render",
-    "helper:doc_template",
     "helper:email_notify",
-    "helper:expense_types",
     "helper:financial_mask",
-    "helper:formula",
-    "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
-    "helper:prefill_sources",
-    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
-    "helper:tax_calc",
     "helper:tiered_approval",
-    "helper:uploads",
-    "mod:case/expense_forms",
     "mod:case/material_approval",
-    "mod:case/material_guard",
     "mod:case/material_notify",
-    "mod:case/material_payment",
-    "mod:case/purchase_items",
-    "mod:case/quotations",
-    "mod:case/quote_terms",
-    "mod:case/recognition"
+    "mod:case/material_payment"
    ],
    "imports": [
     "core:db",
@@ -6554,7 +6531,6 @@
     "helper:financial_mask",
     "mod:case/material_approval",
     "mod:case/material_notify",
-    "mod:case/quotations",
     "plat:txn"
    ],
    "kind": "mod",
@@ -6565,7 +6541,7 @@
    "routes": [
     {
      "func": "get_approvals",
-     "line": 84,
+     "line": 82,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-order-approvals"
     }
@@ -6578,15 +6554,7 @@
    ],
    "tables_r_transitive": [
     "approval_delegates",
-    "audit_log",
-    "case_extra_expenses",
     "case_material_approvals",
-    "case_stages",
-    "contractor_dispatches",
-    "contractor_payment_vouchers",
-    "custom_record_finance_outbox",
-    "custom_record_values",
-    "custom_records",
     "daily_tasks",
     "departments",
     "dev_cases",
@@ -6596,9 +6564,7 @@
     "sessions",
     "shipping_notes",
     "suppliers",
-    "ui_definitions",
-    "users",
-    "vendor_contractors"
+    "users"
    ],
    "tables_w": [],
    "tables_w_transitive": [
@@ -6606,14 +6572,6 @@
     "case_material_approvals",
     "case_material_payment_lines",
     "case_material_payments",
-    "custom_record_counters",
-    "custom_record_files",
-    "custom_record_finance_outbox",
-    "custom_record_log",
-    "custom_record_revisions",
-    "custom_record_snapshots",
-    "custom_record_values",
-    "custom_records",
     "notifications",
     "quotations",
     "system_settings"
@@ -6764,39 +6722,20 @@
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
-    "helper:custom_builder_support",
-    "helper:custom_fields",
-    "helper:custom_files",
-    "helper:custom_finance",
-    "helper:custom_history",
-    "helper:custom_modules",
     "helper:dates",
-    "helper:doc_render",
-    "helper:doc_template",
     "helper:email_notify",
-    "helper:expense_types",
     "helper:financial_mask",
-    "helper:formula",
-    "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
-    "helper:prefill_sources",
-    "helper:recognition_basis",
+    "helper:privacy_notice",
     "helper:row_access",
     "helper:settings",
-    "helper:tax_calc",
     "helper:tiered_approval",
-    "helper:uploads",
-    "mod:case/expense_forms",
     "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/material_notify",
-    "mod:case/material_payment",
-    "mod:case/purchase_items",
-    "mod:case/quotations",
-    "mod:case/quote_terms",
-    "mod:case/recognition"
+    "mod:case/material_payment"
    ],
    "imports": [
     "core:db",
@@ -6805,10 +6744,11 @@
     "helper:auth",
     "helper:case_access",
     "helper:financial_mask",
+    "helper:privacy_notice",
+    "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/material_notify",
     "mod:case/material_payment",
-    "mod:case/quotations",
     "plat:txn"
    ],
    "kind": "mod",
@@ -6818,56 +6758,68 @@
    "role": "router",
    "routes": [
     {
+     "func": "get_payee_privacy_ack",
+     "line": 120,
+     "method": "GET",
+     "path": "/api/material-payments/{pid}/privacy-notice"
+    },
+    {
+     "func": "ack_payee_privacy_notice",
+     "line": 134,
+     "method": "POST",
+     "path": "/api/material-payments/{pid}/privacy-notice/ack"
+    },
+    {
      "func": "list_payments",
-     "line": 99,
+     "line": 155,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-payments"
     },
     {
      "func": "supplier_picker",
-     "line": 118,
+     "line": 174,
      "method": "GET",
      "path": "/api/material-suppliers"
     },
     {
      "func": "create_payment",
-     "line": 156,
+     "line": 212,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/material-orders/{item_id}/payments"
     },
     {
      "func": "update_payment",
-     "line": 189,
+     "line": 249,
      "method": "PATCH",
      "path": "/api/material-payments/{pid}"
     },
     {
      "func": "submit_payment",
-     "line": 212,
+     "line": 272,
      "method": "POST",
      "path": "/api/material-payments/{pid}/submit"
     },
     {
      "func": "approve_payment",
-     "line": 252,
+     "line": 312,
      "method": "POST",
      "path": "/api/material-payments/{pid}/approve"
     },
     {
      "func": "reject_payment",
-     "line": 276,
+     "line": 336,
      "method": "POST",
      "path": "/api/material-payments/{pid}/reject"
     },
     {
      "func": "withdraw_payment",
-     "line": 298,
+     "line": 358,
      "method": "POST",
      "path": "/api/material-payments/{pid}/withdraw"
     },
     {
      "func": "void_payment",
-     "line": 317,
+     "line": 377,
      "method": "POST",
      "path": "/api/material-payments/{pid}/void"
     }
@@ -6883,16 +6835,7 @@
    ],
    "tables_r_transitive": [
     "approval_delegates",
-    "audit_log",
-    "case_extra_expenses",
-    "case_material_approvals",
     "case_material_payments",
-    "case_stages",
-    "contractor_dispatches",
-    "contractor_payment_vouchers",
-    "custom_record_finance_outbox",
-    "custom_record_values",
-    "custom_records",
     "daily_tasks",
     "departments",
     "dev_cases",
@@ -6902,9 +6845,7 @@
     "sessions",
     "shipping_notes",
     "suppliers",
-    "ui_definitions",
-    "users",
-    "vendor_contractors"
+    "users"
    ],
    "tables_w": [],
    "tables_w_transitive": [
@@ -6912,14 +6853,6 @@
     "case_material_approvals",
     "case_material_payment_lines",
     "case_material_payments",
-    "custom_record_counters",
-    "custom_record_files",
-    "custom_record_finance_outbox",
-    "custom_record_log",
-    "custom_record_revisions",
-    "custom_record_snapshots",
-    "custom_record_values",
-    "custom_records",
     "notifications",
     "quotations",
     "system_settings"
@@ -7697,7 +7630,9 @@
    "role": "helper",
    "tables_ddl": [],
    "tables_named": [],
-   "tables_r": [],
+   "tables_r": [
+    "quotations"
+   ],
    "tables_w": [
     "case_material_approvals"
    ]
@@ -19197,6 +19132,7 @@
     "mod:case/attachments",
     "mod:case/case_deadlines",
     "mod:case/case_stage_tasks",
+    "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/material_payment_cashier",
     "mod:case/payables",
