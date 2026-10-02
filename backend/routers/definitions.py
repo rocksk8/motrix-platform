@@ -330,8 +330,7 @@ def diff_definition(kind: str, key: str, scope: str = Query("company"), a: str =
             elif x == "latest":
                 r = D.get(conn, kind, key, scope)
             elif x == "default":
-                body, _src = D.resolve(conn, kind, key)
-                return body or {}
+                return D.default_for(kind, key) or {}                      # 程式出貨預設（v0），不是目前生效的公司版
             else:
                 r = D.get(conn, kind, key, scope, int(x))
             return (r or {}).get("body") or {}
