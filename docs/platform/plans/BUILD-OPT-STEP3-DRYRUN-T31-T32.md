@@ -59,3 +59,8 @@ python tools/platform/replay_incremental.py tools/platform/replay_rows_t31_t32.j
 1. 影子期長度與上線門檻（建議：≥2 班、0 漏）。
 2. 是否共用 `guard_patterns.json`（建包增量＋作者閘門）。
 3. 靜態守門（迴圈內 `time.sleep` 無 Playwright 呼叫）要不要做。
+
+## 8. 補充：併入共用樣式清單後的重放（a3 的 `guard_patterns.json` @cdf5ae77；`--guard-patterns`）
+- `replay_incremental.py --guard-patterns`：該段收集範圍內、命中 `guard_patterns.json` 的守門檔併入底板（與作者閘門 A2 同一份清單，a3 負責清單、d7 負責重放驗證）。
+- **召回 18／18（漏：無）**；B·M 省 **35.9 分（21%）**（原 40.9；多跑的守門檔約 5 分，與 §3 預估 34 分相符）；B·S 省 28.7；出貨包強制全量省 22.0。A 基準仍省 0（選題器變更／硬底層）。
+- 仍是**樣本內**結果（樣式是看過 3 個漏報後訂的）：上線門檻不變——影子模式連 ≥2 班、0 漏。新的漏報型別請把檔名給 a3 加樣式與 `why`。

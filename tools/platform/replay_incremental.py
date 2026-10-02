@@ -103,7 +103,7 @@ def short(reasons, n=60):
     return (reasons[0] if reasons else "")[:n]
 
 
-def replay_row(row, known, repo=REPO, legacy_floor=False, release_ids=(), cache=None):
+def replay_row(row, known, repo=REPO, legacy_floor=False, release_ids=(), cache=None, guard=False):
     """⇒ 一列結果 dict。"""
     cache = cache if cache is not None else {}
     stage, head, base = row["stage"], row["head"], row.get("base")
@@ -119,6 +119,13 @@ def replay_row(row, known, repo=REPO, legacy_floor=False, release_ids=(), cache=
     total_tests, total_sec = cm.cost(SS.collect_files(tmap, rd.tree(), rd, stage)[0], stage)
     res["model_full_min"] = (OVERHEAD_S[stage] + total_sec / WORKERS) / 60.0
 
+    guard_files = set()
+    if guard:                                                                   # 共用樣式清單（guard_patterns.json）：該段收集範圍內命中的守門檔併入底板
+        import guard_patterns as GP
+        collected_here = set(SS.collect_files(tmap, rd.tree(), rd, stage)[0])
+        guard_files = set(GP.match_files(rd.tree())) & collected_here
+    res["guard_files"] = len(guard_files)
+
     def plan_for(b, reds=None):
         return SS.plan_stage(stage, b, head, repo, reader=rd, tmap=tmap, legacy_floor=legacy_floor,
                              red_files=reds or [], pages=None)
@@ -131,7 +138,7 @@ def replay_row(row, known, repo=REPO, legacy_floor=False, release_ids=(), cache=
         if p["mode"] == "full":
             run = p["collected"]
         else:
-            run = p["to_run"]
+            run = sorted(set(p["to_run"]) | guard_files)
         t_run, s_run = cm.cost(run, stage)
         res["files"], res["collected_files"] = len(run), len(p["collected"])
         res["share"] = t_run / total_tests if total_tests else 1.0
@@ -149,7 +156,7 @@ def replay_row(row, known, repo=REPO, legacy_floor=False, release_ids=(), cache=
     rb = row.get("recall_base") or base
     if reds and rb:
         q = plan_for(rb)
-        covered = set(q["selected"]) | set(q["floor"])
+        covered = set(q["selected"]) | set(q["floor"]) | guard_files
         res["recall"] = {"reds": len(reds), "hit": sorted(f for f in reds if f in covered),
                          "miss": sorted(f for f in reds if f not in covered), "base": rb,
                          "via_full_only": q["mode"] == "full"}
@@ -230,6 +237,7 @@ def main(argv=None):
     ap.add_argument("--json")
     ap.add_argument("--repo", default=str(REPO))
     ap.add_argument("--fail-stream-dir", default=FAIL_STREAM_DIR)
+    ap.add_argument("--guard-patterns", action="store_true", help="底板併入 guard_patterns.json 命中的守門檔（與作者閘門 A2 共用）")
     ap.add_argument("--legacy-floor", action="store_true", help="用 §3.1 舊底板（契約目錄＋global＋unmapped，F1 不扣、無 F0d）")
     ap.add_argument("--release-ids", default="t29f,t30f", help="出貨包（強制全量情境）的 id，逗號分隔")
     a = ap.parse_args(argv)
@@ -237,7 +245,7 @@ def main(argv=None):
     known = load_file_seconds(a.fail_stream_dir)
     print("已知檔秒數：%d 檔（%s）" % (len(known), a.fail_stream_dir), file=sys.stderr)
     cache, rel = {}, tuple(x for x in a.release_ids.split(",") if x)
-    rows = [replay_row(r, known, a.repo, a.legacy_floor, rel, cache) for r in rows_in]
+    rows = [replay_row(r, known, a.repo, a.legacy_floor, rel, cache, a.guard_patterns) for r in rows_in]
     text, summ, rec = report(rows, rel)
     print(text)
     if a.json:
