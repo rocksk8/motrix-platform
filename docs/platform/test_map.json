@@ -12518,7 +12518,6 @@
      "backend/tests/test_money_round_half_up_2026_09_26.py",
      "backend/tests/test_spec_coverage_2026_09_21.py",
      "frontend/js/case-management-dispatch.js",
-     "frontend/pages/voucher.html",
      "tools/platform/"
     ]
    }
