@@ -75,9 +75,9 @@ def _public(conn, row) -> dict:
     ct = appr.get("currentTier") or 0
     cur = [a.get("displayName") or a.get("username") for a in (tiers[ct].get("approvers") or [])] if tiers and ct < len(tiers) else []
     lines = MP.lines_of(conn, row["id"])
-    paid = round(sum(float(x["amount"] or 0) for x in lines), 2)
+    paid = MP.r2(sum(float(x["amount"] or 0) for x in lines))
     return {"id": row["id"], "docCode": row["doc_code"], "quoteNo": row["quote_no"], "itemId": row["item_id"], "seq": row["seq"], "status": row["status"],
-            "amount": float(row["amount_approved"] or 0), "paid": paid, "remaining": round(float(row["amount_approved"] or 0) - paid, 2),
+            "amount": float(row["amount_approved"] or 0), "paid": paid, "remaining": MP.r2(float(row["amount_approved"] or 0) - paid),
             "supplierId": row["supplier_id"], "supplierName": sn.get("supplierName") or "", "supplierCode": sn.get("supplierCode") or "",
             "payee": {"bankCode": sn.get("bankCode") or "", "bankName": sn.get("bankName") or "", "bankAccountName": sn.get("bankAccountName") or "",
                       "bankAccountNumber": _mask(sn.get("bankAccountNumber"))},

@@ -361,18 +361,23 @@ def test_frontend_settlement_rounds_half_up():
 
 @needs_node
 def test_frontend_material_order_amounts_round_half_up_to_cents():
-    """叫料小計（元以下兩位）：1 × 0.145 ⇒ 0.15（舊 Math.round(0.145*100)/100＝0.14，浮點 14.499…）；
-    部分付款 0.145 ⇒ 0.15（同上）；2 × 100.1 ⇒ 200.2（正對照）。case-management-exec.js moRecalc／moSave"""
+    """叫料小計（元以下兩位）：1 × 0.145 ⇒ 0.15（舊 Math.round(0.145*100)/100＝0.14，浮點 14.499…）；2 × 100.1 ⇒ 200.2（正對照）。
+    case-management-exec.js moRecalc。
+    ⚠️ 31-C 之後**已付金額不再由前端算**（PAID_VIA_REMITTANCE_ONLY：已付欄位是匯款申請付款明細的投影，只有 `material_payment.sync_order_paid` 會寫）：
+    moRecalc 不再把 paidAmount 跟著小計連動——這裡斷言「小計變了，已付金額原封不動」（舊版會被蓋成小計）。"""
     got = _cm("""
-        o.materialOrders = [{ quantity: 1, unitPrice: 0.145, paidStatus: 'paid' }, { quantity: 2, unitPrice: 100.1 }]
+        o.materialOrders = [{ quantity: 1, unitPrice: 0.145, paidStatus: 'paid', paidAmount: 7 }, { quantity: 2, unitPrice: 100.1 }]
         o.moRecalc(0); o.moRecalc(1)
         return [o.materialOrders[0].totalPrice, o.materialOrders[0].paidAmount, o.materialOrders[1].totalPrice]""")
-    assert got == [0.15, 0.15, 200.2]
+    assert got == [0.15, 7, 200.2]
 
 
 @needs_node
 def test_frontend_material_order_save_payload_rounds_half_up_to_cents():
-    """送出前的正規化：小計 1 × 0.145 ⇒ 0.15、部分付款 0.145 ⇒ 0.15（舊 0.14／0.14）。moSave"""
+    """送出前的正規化：小計 1 × 0.145 ⇒ 0.15（舊 0.14）。moSave。
+    ⚠️ 31-C 之後已付金額是唯讀投影：moSave 把「目前值原樣帶回」（0.145 照送），**不再四捨五入**——因為伺服端的寫入閘拿它跟資料庫現值比，
+    若這裡改成 0.15 反而與現值（0.145）不同、被當成「改了已付欄位」而拒絕（paid_via_remittance）。已付金額只由匯款申請付款明細產生，
+    寫入點的 half-up 在後端（`material_payment.r2`，見 test_material_payment_core 的 half-up 題）。"""
     got = _cm("""
         let sent = null
         o.selected = { quote_no: 'Q' }; o.session = { token: 't' }
@@ -383,7 +388,7 @@ def test_frontend_material_order_save_payload_rounds_half_up_to_cents():
         globalThis.fetch = realFetch
         const m = sent && sent.materialOrders[0]
         return m ? [m.totalPrice, m.paidAmount] : ['no-payload', o.moMsg || '']""")
-    assert got == [0.15, 0.15]
+    assert got == [0.15, 0.145]
 
 
 @needs_node

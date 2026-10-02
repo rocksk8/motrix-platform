@@ -91,10 +91,10 @@ class _RemitReviews:
                               " WHERE l.remit_review=? ORDER BY l.id", (MP.REVIEW_PENDING,)).fetchall():
             sn = MP.snapshot_of({"snapshot_json": r["snapshot_json"]})
             before = MP.paid_total(conn, r["payment_id"]) - float(r["amount"] or 0)             # 這一筆之前的累計
-            payable = round(float(r["amount_approved"] or 0) - before, 2)                       # 這一筆登錄時的剩餘應付
+            payable = MP.r2(float(r["amount_approved"] or 0) - before)                       # 這一筆登錄時的剩餘應付
             out.append({"key": str(r["id"]), "sourceLabel": MP.SOURCE_LABEL, "quoteNo": r["quote_no"] or "", "customerName": r["customer_name"] or "",
                         "payee": sn.get("supplierName") or "", "payable": payable, "actual": float(r["amount"] or 0),
-                        "diff": round(float(r["amount"] or 0) - payable, 2), "fee": float(r["fee"] or 0), "paidAt": (r["paid_at"] or "")[:10],
+                        "diff": MP.r2(float(r["amount"] or 0) - payable), "fee": float(r["fee"] or 0), "paidAt": (r["paid_at"] or "")[:10],
                         "paidBy": r["paid_by"] or ""})
         return out
 
