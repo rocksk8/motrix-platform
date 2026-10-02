@@ -68,3 +68,4 @@
 - 已有：叫料審核（d7 31-C，case_material_approvals 疊加表、四路徑閘，wip/t31-material-d7@73e82a57）；PR/PO 連品項（2e S1–S3/S5，S4＝叫料連結待 31-C 併入）。
 - 缺口（待 2e 規格）：①叫料從報價單品項匯入＋扣除已匯入量（remaining）；②選單／選項 UX；③叫料與 PR/PO 連動；④無報價品項／未連 PR·PO 的叫料可申請但顯示「未申請採購單」標註（審核頁、列表、報表）。
 - 叫料管控擴充規格（2e，wip/t32-material-link-spec-2e@3ecc5652，docs/platform/plans/MATERIAL-ORDER-LINK-SPEC.md）：使用者裁示 2026-10-02：**直接套用不設開關**；**無財務檢視者只看數量不看金額**。主持採納 2e 建議：$0 叫料單無標註、舊列無標註、不強制連 PR/PO、僅連 PR 不算、PO 作廢/退回只標記失敗不自動退回、不入待補登旗標、佇列卡片顯示標籤（L1 佇列項加選填 tags[]，加法不破壞）、已全數匯入的品項隱藏並顯示剩餘量。預估 S4a–S4e 約 8 天，在 31-C 併入後；不進第31包，排第32班。
+- 2e：fix/t32-dispatch-cancel-2e@77e3c0d0（稽核 S-2 修正；6 題＋9 突變全殺；待跑 changelog 守門）。S5 缺口測試待跑。
