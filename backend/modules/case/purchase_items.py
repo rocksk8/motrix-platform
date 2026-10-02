@@ -367,7 +367,8 @@ def material_submit_check(conn, quote_no, order, *, exclude_item_id=None) -> dic
         problems.append({"code": "bad_quote_item", "message": "材料申請連到的品項不在這張報價單內（可能已被刪除），請重新選擇"})
     link_ok, link_reason = _link_check(order, po_rows)
     if str(order.get("poDocCode") or "").strip() and not link_ok:
-        problems.append({"code": "bad_link", "message": "材料申請連到的採購單無效（%s）：必須是同案件、待審核／簽核中／已核准的採購單" % link_reason})
+        problems.append({"code": "bad_link", "message": ("這筆材料申請已有付款紀錄，不可對應採購單" if link_reason == "has_payment"
+                                                         else "材料申請連到的採購單無效（%s）：必須是同案件、待審核／簽核中／已核准的採購單" % link_reason)})
     over, reason = 0.0, str(order.get("overPlanReason") or "").strip()
     others = [(o, st) for o, st in load_material_orders(conn, quote_no, data) if str(o.get("itemId")) != str(exclude_item_id or order.get("itemId"))]
     if link_ok and order.get("poLine") not in (None, ""):                                  # 一個採購單行只能對應一筆「活的」材料申請（草稿／已退回／已取消不占）
@@ -406,7 +407,7 @@ def link_validator(conn, quote_no, order):
             return "採購單列序必須是正整數"
     if str(order.get("poDocCode") or "").strip():
         ok, reason = _link_check(order, [r for r in rows if (r["kind"] or "") == ORD])
-        if not ok:
+        if not ok and reason != "has_payment":      # 已有付款紀錄＝金額歸屬規則（不是連結無效）；「新增連結」已在 PATCH 擋下，這裡不再擋既有連結的存回
             return "連到的採購單無效（%s）：必須是同案件、待審核／簽核中／已核准的採購單" % reason
     elif pl not in (None, ""):
         return "填了採購單列序就必須指定採購單"

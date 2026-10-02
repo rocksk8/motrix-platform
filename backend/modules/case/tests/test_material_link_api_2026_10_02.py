@@ -199,3 +199,19 @@ def test_queue_tags_reads_the_case_once_per_queue_call_when_given_a_cache(W, mon
         assert calls == [NO, NO]
     finally:
         cn.close()
+
+
+def test_paid_history_link_message_and_validator_does_not_block_resaving_an_existing_link(W):
+    """33 修正：已有付款紀錄的材料申請——送審檢查給清楚訊息；儲存時的 link_validator 不因 has_payment 擋既有連結存回。"""
+    c, h = W
+    po = _approved_po(c, h, [_ln("a", 3, unitCost=1000)])
+    paid = {"itemId": "m1", "quoteItemId": "a", "quantity": 3, "totalPrice": 3000, "poDocCode": po["docCode"], "poLine": 1,
+            "paidStatus": "paid", "paidAmount": 3000, "paidDate": "2026-08-01"}
+    res = _check(paid)
+    assert _codes(res) == ["bad_link"] and "已有付款紀錄" in res["problems"][0]["message"]
+    cn = db.get_db()
+    try:
+        assert PI.link_validator(cn, NO, paid) is None                                              # 既有連結存回不被擋
+        assert "無效" in (PI.link_validator(cn, NO, dict(paid, paidStatus="pending", paidAmount=0, poDocCode="PO-NOPE")) or "")   # 真正無效的連結仍擋
+    finally:
+        cn.close()
