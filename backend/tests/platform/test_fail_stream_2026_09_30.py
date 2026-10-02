@@ -82,6 +82,9 @@ def _env(out, run="t1", **extra):
     e["PYTHONPATH"] = str(PLAT) + os.pathsep + e.get("PYTHONPATH", "")
     e["MOTRIX_FAIL_STREAM_DIR"] = str(out)
     e["MOTRIX_FAIL_STREAM_RUN"] = run
+    # 子行程的 stdio 一律 UTF-8（否則在主控台碼頁是 cp950／cp932 的殼裡，子行程印的中文父行程用 UTF-8 讀會變亂碼）
+    e["PYTHONUTF8"] = "1"
+    e["PYTHONIOENCODING"] = "utf-8"
     e.update(extra)
     return e
 
@@ -227,7 +230,8 @@ def test_an_unwritable_stream_never_breaks_the_tests(tmp_path):
     r = _pytest(root, ["."], _env(blocker / "sub"))              # 目錄建不出來（上層是檔案）
     without = _pytest(root, ["."], _env(tmp_path / "o2"), plugin=False)
     assert r.returncode == without.returncode == 1
-    assert r.stderr.count("[fail_stream] 寫不出") + r.stdout.count("[fail_stream] 寫不出") == 1, "只該說一次"
+    # 比對 ASCII 標籤而不是中文句子：即使編碼又出問題，也不會把「有說」誤判成「沒說」
+    assert r.stderr.count("[fail_stream]") + r.stdout.count("[fail_stream]") == 1, "只該說一次"
 
 
 # ── 模組推導、CLI ──────────────────────────────────────────────────────────────────────

@@ -37,3 +37,12 @@ def get_platform_catalog(authorization: str = Header(None)):
     """能力目錄：已載入模組的端點與可自訂點、provider、事件、輸出引擎；缺的區段列在 gaps。"""
     _require_user(authorization, require_superadmin=True)
     return catalog.build()
+
+
+@router.get("/api/platform/prefill-sources")
+def get_prefill_sources(authorization: str = Header(None)):
+    """表單「自動帶入」來源清單（表單設計器的下拉只讀這支，不寫死 token）：依登記順序，
+    `[{token,label,why,example,applies_to,lockable,needs_context,requires_time}]`。任何登入者可讀（內容是說明文字，不含資料）。"""
+    _require_user(authorization)
+    from helpers import prefill_sources
+    return prefill_sources.list_sources()

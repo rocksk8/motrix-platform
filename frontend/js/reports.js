@@ -71,7 +71,7 @@ function reportsApp() {
     // ── 收支報表（原「月支出」，2026-08-30 重構為《當月收支》/《今年度收支》）──
     expensesScope:     'month', // month/quarter/year — 畫面上目前顯示哪個範圍
     expensesYear:      new Date().getFullYear(),
-    expensesMonth:     new Date().toISOString().slice(0, 7),  // 'YYYY-MM'，當月範圍用
+    expensesMonth:     MotrixDate.thisMonth(),  // 'YYYY-MM'，當月範圍用
     expensesQuarter:   Math.ceil((new Date().getMonth() + 1) / 3),  // 1-4，季範圍用
     expensesData:      null,
     expensesLoading:   false,
@@ -86,7 +86,7 @@ function reportsApp() {
     //    2026-09-10 改回「預設跟隨 period-bar、分頁上的選擇器可臨時覆寫」──
     receivablesScope:     'month', // month/quarter/year
     receivablesYear:      new Date().getFullYear(),
-    receivablesMonth:     new Date().toISOString().slice(0, 7),  // 'YYYY-MM'
+    receivablesMonth:     MotrixDate.thisMonth(),  // 'YYYY-MM'
     receivablesQuarter:   Math.ceil((new Date().getMonth() + 1) / 3),  // 1-4
     receivablesData:      null,
     receivablesLoading:   false,
@@ -270,6 +270,21 @@ function reportsApp() {
       if (this.expensesFilter === 'all') return items
       return items.filter(function(x) { return x.cat === this.expensesFilter }, this)
     },
+    // 依部門彙總（2026-10-01）：用目前期別的全部類別明細（不受類別按鈕影響）；無案件且沒有明示部門 ⇒「未分類」排最後
+    get expenseByDept() {
+      var items = this._scopePick(this.expensesScope, this.monthExpenseItems, this.quarterExpenseItems, this.yearExpenseItemsAll)
+      var m = {}
+      items.forEach(function(x) {
+        var k = x.deptId == null ? 'none' : String(x.deptId)
+        var b = m[k] || (m[k] = { key: k, deptId: x.deptId == null ? null : x.deptId, name: x.deptName || '未分類', total: 0, count: 0 })
+        b.total += x.amount || 0
+        b.count += 1
+      })
+      return Object.keys(m).map(function(k) { return m[k] }).sort(function(a, b) {
+        if ((a.deptId == null) !== (b.deptId == null)) return a.deptId == null ? 1 : -1
+        return b.total - a.total
+      })
+    },
     get netScopeAmount() {
       return this.activeIncomeTotal - this.activeExpenseTotal
     },
@@ -416,9 +431,7 @@ function reportsApp() {
     // 本地日期字串（YYYY-MM-DD），不用 toISOString()（UTC，台灣 UTC+8 每天
     // 00:00-08:00 之間會誤判成前一天，比照 case-management.js/cashier.js 同款修法）。
     _localDateStr(d) {
-      d = d || new Date()
-      const tz = d.getTimezoneOffset() * 60000
-      return new Date(d.getTime() - tz).toISOString().slice(0, 10)
+      return MotrixDate.ymd(d)
     },
 
     // ── 期別同步 ──────────────────────────────────────────────────────────────
@@ -1443,11 +1456,11 @@ function reportsApp() {
 
 
 
-    async exportTaxInvoices() {
+    async exportTaxInvoices(fmt) {
       this.taxExporting = true
       try {
         var qs = 'year=' + this.taxExportYear + (this.taxExportMonth ? '&month=' + this.taxExportMonth : '')
-        var res = await fetch('/api/reports/tax-export?' + qs, {
+        var res = await fetch('/api/reports/tax-export' + (fmt === 'pdf' ? '/pdf' : '') + '?' + qs, {
           headers: { Authorization: 'Bearer ' + this._token() }
         })
         if (!res.ok) {
@@ -1458,7 +1471,7 @@ function reportsApp() {
         var label = this.taxExportYear + (this.taxExportMonth ? ('_' + String(this.taxExportMonth).padStart(2, '0')) : '')
         var a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
-        a.download = 'MOTRIX_銷項發票清單_' + label + '.xlsx'
+        a.download = 'MOTRIX_銷項發票清單_' + label + (fmt === 'pdf' ? '.pdf' : '.xlsx')
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)

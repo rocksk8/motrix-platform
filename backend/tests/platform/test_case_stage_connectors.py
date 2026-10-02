@@ -321,7 +321,8 @@ def test_calendar_writeback_without_owner_event_is_created_but_nothing_is_writte
 
 
 @needs_case('驗 M01 案件階段的回寫欄位')
-def test_calendar_writeback_unknown_stage_slot_is_refused():
+def test_calendar_writeback_unknown_stage_slot_is_refused(client):
+    # `client`＝載入器已把 M01 的提供者掛好；沒有它時，這題只在「同一個 worker 前面剛好有別題載入過模組」時才過（單獨跑會 KeyError，xdist 分派不同就紅）
     import modules.case.api.quotations  # noqa: F401
     fn = registry.providers("calendar.writeback")["case_stage"]
     with pytest.raises(KeyError):

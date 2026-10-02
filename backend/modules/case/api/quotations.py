@@ -10,6 +10,7 @@ import sqlite3
 import uuid
 from collections import defaultdict
 from datetime import datetime
+
 import copy
 from typing import List, Optional
 
@@ -18,6 +19,22 @@ from urllib.parse import quote as urlquote
 
 logger = logging.getLogger(__name__)
 
+
+def _local_date_of(ts) -> str:
+    """時間戳字串 ⇒ 伺服器本地的 YYYY-MM-DD。帶時區的（`…Z`／`+00:00`，舊資料：前端曾用 toISOString() 存）先換成本地時區再取日期；
+    不帶時區的（本系統後端存的都是本地時間）照取前 10 碼。讀不懂 ⇒ 前 10 碼。**只改顯示，不改資料。**
+    （台灣 UTC+8：UTC 的 `2026-09-30T17:03:00Z` 是本地 10/01 01:03，直接切前 10 碼會得到 09-30。）"""
+    s = str(ts or "").strip()
+    if not s:
+        return ""
+    try:
+        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return s[:10]
+    if d.tzinfo is not None:
+        d = d.astimezone()
+    return d.strftime("%Y-%m-%d")
+
 from fastapi import APIRouter, Body, Form, HTTPException, Header, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -25,15 +42,17 @@ from pydantic import BaseModel, Field
 from db import get_db, spawn_bg_thread
 from db import db_conn  # /api/sales-orders（M08 搬遷移入）
 from modules.case.quotations import payment_item_amounts  # 同上
+from helpers.gl_status import gl_posted_warning
 from helpers import row_access
+from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from helpers.case_access import case_page_readable   # AT-M1c：與報價單上附件的提供者同一支
 from modules.case import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
 from helpers import (
-    _require_user, _tok, _audit, _notify, _purge_notifications, notify_approval_request,
+    _require_user, _tok, _audit, _notify, _purge_notifications, _mark_notifications_read, notify_approval_request,
     notify_next_tier, notify_approved, notify_returned, notify_resubmit_requester,
     notify_settlement_finalized, notify_module_activity, push_event_for_quotation_won,
     push_event_for_important_comment, push_event_for_case_stage_due, push_event_delete_for_case_stage,
-    push_event_for_case_stage_done, check_approve_permission, check_reject_permission,
+    push_event_for_case_stage_done, push_event_for_module, check_approve_permission, check_reject_permission,
     check_no_tier_self_approval, resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     submitter_manager_tiers, cascade_self_tiers, notify_org_chain_notice, save_document_files,
     delete_document_file, notify_case_close_blocked, notify_case_change_requested, norm_at,
@@ -41,6 +60,7 @@ from helpers import (
 )
 from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E402  CA-O4：L1
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
+from modules.case import material_guard as MG  # 叫料審核的寫入閘（31-C）
 from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
 from modules.case.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
 from modules.case.quotations import validate_tax_basis
@@ -62,6 +82,7 @@ from pdf_gen import (
 )
 
 router = APIRouter()
+from helpers.xlsx_out import add_pdf_sibling, export_logged   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
 
 
 # ── Approval tier helpers ─────────────────────────────────────────────────────
@@ -1350,32 +1371,57 @@ def toggle_quotation_signed(quote_no: str, body: dict = Body(...), authorization
     return {"ok": True, "is_signed": action == "sign", "signed_log": log}
 
 
-@router.post("/api/quotations/{quote_no}/signed-files", status_code=201)
-async def upload_quotation_signed_files(quote_no: str, files: List[UploadFile] = File(...),
-                                        authorization: str = Header(None)):
-    """報價單回簽附件上傳（多檔）——任何登入使用者皆可補傳。"""
-    user = _require_user(authorization)
-    conn = get_db()
+#: 客戶回簽單（報價單回簽附件）可上傳的報價單狀態：完成簽核（已送出）之後——客戶把簽回的報價單寄回，通常在標記「已成案」之前或當下。
+#: 草稿／待審核／簽核中／已退回／已作廢一律擋（4xx，不是 200 後靜默丟檔）。成案撤回、已結案不改狀態 ⇒ 仍可補傳，既有檔不動。
+SIGNED_BACK_STATUSES = ("已送出",)
+
+
+def _signed_back_gate(conn, quote_no: str, user: dict, authorization) -> dict:
+    """上傳前的共用檢查 ⇒ 回報價單列。擁有者規則（`_guard_case`：業務／協作者／admin+）→ 狀態閘（`SIGNED_BACK_STATUSES`）。
+    被狀態閘擋下也寫一筆稽核（`quotation.upload_signed_files_denied`），與被擁有者規則擋下（`deny_case` 的稽核）對稱。"""
     _guard_case(conn, quote_no, user)
-    row = conn.execute("SELECT signed_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    row = conn.execute("SELECT status, signed_files_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, "報價單不存在")
+    if row["status"] not in SIGNED_BACK_STATUSES:
+        st = row["status"]
+        conn.close()
+        _audit(_tok(authorization), "quotation.upload_signed_files_denied", "quotation", quote_no, "%s 狀態「%s」不可上傳客戶回簽單" % (quote_no, st))
+        raise HTTPException(400, "報價單完成簽核（狀態為「已送出」）之後才能上傳客戶回簽單；目前狀態：「%s」" % st)
+    return row
+
+
+@router.post("/api/quotations/{quote_no}/signed-files", status_code=201)
+async def upload_quotation_signed_files(quote_no: str, files: List[UploadFile] = File(...),
+                                        authorization: str = Header(None)):
+    """客戶回簽單（報價單回簽附件）上傳（多檔；pdf／jpg／png，大小上限同其他附件）。
+    誰：能讀這張報價單的人（業務／協作者／admin+；`_guard_case`，外人看到的是 404）。何時：報價單已送出（`SIGNED_BACK_STATUSES`）之後。
+    每個檔記錄上傳者（顯示名＋帳號 `uploaderUsername`）與時間；刪除規則見 `delete_quotation_signed_file`。**不是**結案條件。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    row = _signed_back_gate(conn, quote_no, user, authorization)
     existing = json.loads(row["signed_files_json"] or "[]")
     new_files = await save_document_files("quotations", quote_no, files, user.get("display_name") or user["username"])
+    for f in new_files:
+        f["uploaderUsername"] = user["username"]          # 刪除規則（上傳者本人或 admin+）要靠帳號；顯示名可能重複
     all_files = existing + new_files
     now = datetime.now().isoformat()
     conn.execute("UPDATE quotations SET signed_files_json=?, updated_at=? WHERE quote_no=?",
                  (json.dumps(all_files, ensure_ascii=False), now, quote_no))
     conn.commit()
     conn.close()
+    names = "、".join(str(f.get("filename") or "")[:60] for f in new_files)[:300]
     _audit(_tok(authorization), "quotation.upload_signed_files", "quotation", quote_no,
-           f"{quote_no}（{len(new_files)} 個檔案）")
+           f"{quote_no}（{len(new_files)} 個檔案：{names}）")
     return {"ok": True, "added": len(new_files), "files": new_files}
 
 
 @router.delete("/api/quotations/{quote_no}/signed-files/{file_id}")
 def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str = Header(None)):
+    """刪除客戶回簽單：上傳者本人或 admin+（實體刪除：檔＋清單列，寫稽核）。
+    行為變更（2026-10-01，第 29 班）：原本任何看得到報價單的人都能刪；沒有 `uploaderUsername` 的舊檔只有 admin+ 刪得掉。
+    清單裡沒有這個 id ⇒ 404；檔案路徑不在這張報價單自己的資料夾（資料被竄改）⇒ 409 且不碰磁碟。"""
     user = _require_user(authorization)
     conn = get_db()
     _guard_case(conn, quote_no, user)
@@ -1384,13 +1430,26 @@ def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str
         conn.close()
         raise HTTPException(404, "報價單不存在")
     existing = json.loads(row["signed_files_json"] or "[]")
+    target = next((f for f in existing if isinstance(f, dict) and f.get("id") == file_id), None)
+    if target is None:
+        conn.close()
+        raise HTTPException(404, "找不到這個回簽附件")
+    is_admin = user.get("role") in ("admin", "superadmin")
+    if not is_admin and not (target.get("uploaderUsername") and target.get("uploaderUsername") == user.get("username")):
+        conn.close()
+        _audit(_tok(authorization), "quotation.delete_signed_file_denied", "quotation", quote_no, "%s 無權刪除回簽附件" % quote_no)
+        raise HTTPException(403, "只有上傳者本人或管理員可以刪除客戶回簽單")
+    if _uploads_mod.upload_path_key(target, "quotations") != quote_no:
+        conn.close()
+        raise HTTPException(409, "這個附件的檔案位置不正確，無法刪除；請洽管理員")
     remaining = delete_document_file("quotations", quote_no, existing, file_id)
     now = datetime.now().isoformat()
     conn.execute("UPDATE quotations SET signed_files_json=?, updated_at=? WHERE quote_no=?",
                  (json.dumps(remaining, ensure_ascii=False), now, quote_no))
     conn.commit()
     conn.close()
-    _audit(_tok(authorization), "quotation.delete_signed_file", "quotation", quote_no, quote_no)
+    _audit(_tok(authorization), "quotation.delete_signed_file", "quotation", quote_no,
+           f"{quote_no}（{str(target.get('filename') or '')[:60]}）")
     return {"ok": True}
 
 
@@ -1420,6 +1479,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     # body.created_by 欄位保留不刪（前端仍會送），但一律以 session 為準。
     user = _require_user(authorization)
     q   = body.data
+    _strip_foreign_file_entries(q.get("caseRecord"), {})   # 安全審查 W3：新建沒有既有檔案，前端帶的檔案路徑一律不收
     validate_quote_tax(q)   # AC1：只能存法定稅別
     validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
     if body.status == "待審核":
@@ -1466,6 +1526,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
 
     def _do_insert(no: str):
         q["quoteNo"] = no
+        MG.enforce(conn, no, q, actor=user)        # 叫料審核（31-C）：新建報價單帶來的叫料也要過閘（被拒的項目直接丟掉）
         conn.execute("""
             INSERT INTO quotations
               (quote_no, status, customer_name, project_name,
@@ -1720,6 +1781,10 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     if existing["status"] == "已拒絕":
         conn.close()
         raise HTTPException(403, "已拒絕結案的報價單不可修改")
+    try:                                                   # 安全審查 W3：整份存檔也不得夾帶新的檔案路徑
+        _strip_foreign_file_entries(q.get("caseRecord"), (json.loads(existing["data_json"] or "{}") or {}).get("caseRecord") or {})
+    except (ValueError, TypeError):
+        _strip_foreign_file_entries(q.get("caseRecord"), {})
     # 樂觀鎖（選填）：草稿階段沒有狀態鎖保護，兩人同時編輯同一張草稿會後寫覆蓋
     # 前寫且完全沒有提示。自動存檔（autoSave）跟手動存檔共用這支端點，衝突時
     # 一律回 409，讓呼叫端自行決定要不要提示使用者或重新載入。
@@ -1772,6 +1837,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     elif new_status == "草稿":
         q.pop(SNAPSHOT_KEY, None)
 
+    MG.enforce(conn, quote_no, q, actor=user)   # 叫料審核（31-C）：整份存檔也要過閘（以資料庫現值為準；被拒的項目維持原值）
     conn.execute("""
         UPDATE quotations SET
           status=?, customer_name=?, project_name=?,
@@ -2024,7 +2090,7 @@ def _close_gate_facts(conn, quote_nos: list) -> dict:
             ph = ",".join("?" * len(ch))
             for r in conn.execute(
                     f"SELECT quote_no, COUNT(*) c, SUM(CASE WHEN status='待審核' THEN 1 ELSE 0 END) p "
-                    f"FROM case_extra_expenses WHERE quote_no IN ({ph}) GROUP BY quote_no", ch):
+                    f"FROM case_extra_expenses WHERE quote_no IN ({ph}) AND status <> '已作廢' GROUP BY quote_no", ch):
                 xe[r["quote_no"]] = (r["c"] or 0, r["p"] or 0)
         for no in nos:
             facts[no]["xe"] = xe.get(no, (0, 0))
@@ -2562,6 +2628,64 @@ def _payment_item_label(it: dict, i: int) -> str:
     return it.get("type") or it.get("label") or f"第{i + 1}期"
 
 
+#: caseRecord 裡存「已上傳檔案 metadata」的三種清單：(外層鍵, 陣列鍵, 檔案鍵)（同 attachments 提供者的 `_INDEXED`）
+_CASE_FILE_LISTS = (("payment", "items", "invoiceFiles"), (None, "materials", "files"), (None, "materials", "invoiceFiles"))
+
+
+def _gl_doc(msg, doc):
+    """把「此筆」說成「此筆（單號／項目）」：提示要說得出是哪一筆（W1 複核）。下游同 `helpers.gl_status`（L1 訊息本文不動；L1 加 doc 參數留給下一個有 L1 的班）。"""
+    return msg.replace("此筆", "此筆（%s）" % doc, 1) if msg else msg
+
+
+def _case_file_entries(cr) -> dict:
+    """caseRecord 目前已有的檔案 metadata：`{path: 那一筆}`。"""
+    out = {}
+    for outer, key, fkey in _CASE_FILE_LISTS:
+        arr = ((cr or {}).get(outer) or {}).get(key) if outer else (cr or {}).get(key)
+        for it in (arr if isinstance(arr, list) else []):
+            for f in ((it or {}).get(fkey) if isinstance(it, dict) else None) or []:
+                if isinstance(f, dict) and isinstance(f.get("path"), str):
+                    out[f["path"]] = f
+    return out
+
+
+def _strip_foreign_file_entries(new_cr, old_cr) -> int:
+    """前端送來的 caseRecord 裡，`files`／`invoiceFiles` 只准是**資料庫裡本來就有**的那幾筆（安全審查 W3，2026-09-30）。
+
+    檔案只能經專屬的上傳端點（`save_document_files`）進來、路徑由伺服器產生；整包／分段存檔不得夾帶新的檔案路徑——
+    否則前端可塞任意 uploads 路徑，借這張案件的權限讀別人的檔（附件目錄開檔、`/api/photo-token` 都以這份 metadata 為憑）。
+    比對用 `path`：在現值裡 ⇒ 沿用**資料庫的那一筆**（前端改過的檔名／大小不收）；不在 ⇒ 丟掉。回丟掉的筆數。
+    ⚠️ 只看 `files`／`invoiceFiles` 這三種清單；其他欄位不動。**下游效應（R1）**：檔案只影響附件顯示與開檔，不影響營運報表／總帳／出納。"""
+    if not isinstance(new_cr, dict):
+        return 0
+    known = _case_file_entries(old_cr)
+    dropped = 0
+    for outer, key, fkey in _CASE_FILE_LISTS:
+        arr = (new_cr.get(outer) or {}).get(key) if outer else new_cr.get(key)
+        if not isinstance(arr, list):
+            continue
+        for it in arr:
+            if not isinstance(it, dict) or fkey not in it:
+                continue
+            kept = []
+            for f in (it.get(fkey) if isinstance(it.get(fkey), list) else []):
+                p = f.get("path") if isinstance(f, dict) else None
+                if isinstance(p, str) and p in known:
+                    kept.append(known[p])
+                else:
+                    dropped += 1
+            it[fkey] = kept
+    return dropped
+
+
+def _invoice_no_change_allowed(user: dict) -> bool:
+    """**更換**已登錄的發票號碼（舊值非空、新值不同）的權限：admin 以上，或持 cashier／finance 模組（MONEY-FLOWS §9 L12）。
+    第一次登錄（舊值空白）維持任何登入者皆可。
+    下游效應（R1）：營運報表現金收入不變；稅務匯出立即變；總帳 E01（銷項發票事件鍵＝案件::發票號碼）——
+    舊號碼消失 ⇒ 已過帳者 orphan（反向草稿）、新號碼 ⇒ 新 E01 草稿，要到『分錄草稿』手動執行才會動。"""
+    return user["role"] in ("superadmin", "admin") or user_has_module(user, "cashier") or user_has_module(user, "finance")
+
+
 def _payment_items_lock_violation(old_items: list, new_items: list) -> Optional[str]:
     """非 admin、非出納的整包存檔：回傳違規說明，None 表示放行。
 
@@ -2721,6 +2845,18 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         except HTTPException:
             conn.close()
             raise
+        # MONEY-FLOWS §9 L3：改動／刪除**已入帳**的已收款期別 ⇒ 下次引擎執行時 E03 drift／orphan。下游效應：營運報表現金收入立即變；
+        # 總帳要手動執行才反映。只提示、不擋；提示放在回應 `glWarning`，前端顯示。
+        gl_warn = None
+        for _oit in old_items:
+            if not (isinstance(_oit, dict) and _oit.get("received") and _oit.get("id") is not None):
+                continue
+            _nit = next((x for x in new_items if isinstance(x, dict) and x.get("id") == _oit.get("id")), None)
+            if _nit is None or any(_nit.get(k) != _oit.get(k) for k in ("received", "receivedAt", "actualAmount", "feeAmount")):
+                gl_warn = _gl_doc(gl_posted_warning(conn, "quotation_receipt", "%s::%s" % (quote_no, _oit.get("id"))),
+                                  "%s／%s" % (quote_no, _oit.get("label") or _oit.get("type") or "款項"))
+                if gl_warn:
+                    break
 
         # 2026-09-02（反派/國稅局視角複查發現）：這支整包存檔端點是案件管理財務
         # Tab 填發票號碼的實際主要路徑（mark_payment() 的 invoiceNo 驗證只涵蓋
@@ -2728,6 +2864,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         # 過去完全沒有走到格式/重複驗證，等於前面加的防呆對最常用的入口沒有生效。
         # 用 item id 比對排除自己這筆（見 validate_invoice_no() docstring 說明
         # 為什麼不能用陣列位置）。
+        invoice_changes = []
         new_items_for_inv = ((body.case_record or {}).get("payment") or {}).get("items") or []
         old_items_for_inv = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
         old_inv_by_id = {it.get("id"): it.get("invoiceNo") for it in old_items_for_inv if it.get("id") is not None}
@@ -2739,11 +2876,18 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
                 new_inv = new_it.get("invoiceNo")
                 if new_it.get("id") is not None and old_inv_by_id.get(new_it.get("id")) == new_inv:
                     continue  # 未變動，不必重新驗證
+                _old_inv = (old_inv_by_id.get(new_it.get("id")) or "").strip() if new_it.get("id") is not None else ""
+                if _old_inv and (new_inv or "").strip() != _old_inv:
+                    if not _invoice_no_change_allowed(user):   # MONEY-FLOWS §9 L12
+                        raise HTTPException(403, "已登錄的發票號碼只有管理員、出納或財務可以更換")
+                    invoice_changes.append((_old_inv, new_inv))
                 validate_invoice_no(conn, new_inv, exclude_quote_no=quote_no, exclude_item_id=new_it.get("id"))
         except Exception:
             conn.close()
             raise
 
+        # 安全審查 W3：檔案 metadata 只准是資料庫現有的那幾筆（要在排進審核之前剝，否則審核 payload 也帶著）
+        _strip_foreign_file_entries(body.case_record, data.get("caseRecord") or {})
         gated, change_id = _gate_case_edit(
             conn, quote_no, user, authorization, "case_record_update",
             f"{label} 更新案件記錄（材料/款項/角色/合約等）", {"case_record": body.case_record or {}},
@@ -2770,15 +2914,25 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         new_case_record = body.case_record or {}
         new_case_record["stages"] = (data.get("caseRecord") or {}).get("stages") or []
         data["caseRecord"] = new_case_record
+        # 叫料審核（31-C）：叫料列與物流旗標一律過閘（以資料庫現值為準，只拒有問題的項目，其餘照存；被拒的逐項回報）
+        mat_rejected = MG.enforce(conn, quote_no, data, actor=user)
+        new_devices = (data["caseRecord"] or {}).get("devices") or []       # 閘可能把被拒的到料項目的序號改回現值
         stock_conflicts, stock_notice = [], None
         if new_devices != old_devices:
             stock_conflicts, stock_notice = _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
-        now = save_quotation_json(conn, quote_no, data)
+        now = save_quotation_json(conn, quote_no, data, actor=user)
         conn.commit()
         conn.close()
         spawn_bg_thread(_backup_quotation, args=(quote_no,))
         _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
+        for _o, _n in invoice_changes:                     # MONEY-FLOWS §9 L12：更換已登錄的發票號碼留稽核
+            _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', quote_no,
+                   f"{quote_no} 發票號碼 {_o} → {_n}（總帳 E01 將在下次引擎執行時沖轉並重建）")
         out = {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts, "adopted": adopted}
+        if mat_rejected:
+            out["rejected"] = mat_rejected          # 叫料審核（31-C）：被拒的項目（itemId／field／code／message），其餘已存
+        if gl_warn:
+            out["glWarning"] = gl_warn
         if stock_notice:
             out["stockNotice"] = stock_notice
         return out
@@ -3711,7 +3865,21 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         received_by = user.get("display_name") or user["username"]
         if "received" in body:
             body["receivedBy"] = received_by
+        # MONEY-FLOWS §9 L3：改動**已入帳**的收款（取消收款、改收款日／實收／手續費）或更換已登錄的發票號碼 ⇒ 下次引擎執行時
+        # E03／E01 drift（沖轉草稿＋新草稿）或 orphan。下游效應：營運報表現金收入立即變；總帳要手動執行才反映。只提示、不擋。
+        gl_warn = None
+        if any(k in body for k in ("received", "receivedAt", "actualAmount", "feeAmount")):
+            _iid = pits[idx].get("id")
+            gl_warn = (gl_posted_warning(conn, "quotation_receipt", "%s::%s" % (no, _iid)) if _iid is not None
+                       else gl_posted_warning(conn, "quotation_receipt", no + "::", prefix=True))
+        invoice_changed_from = None
         if "invoiceNo" in body:
+            _old_inv = (pits[idx].get("invoiceNo") or "").strip()
+            if _old_inv and (body["invoiceNo"] or "").strip() != _old_inv:
+                if not _invoice_no_change_allowed(user):       # MONEY-FLOWS §9 L12：更換已登錄的發票號碼要 admin＋／出納／財務
+                    raise HTTPException(403, "已登錄的發票號碼只有管理員、出納或財務可以更換")
+                invoice_changed_from = _old_inv
+                gl_warn = gl_warn or gl_posted_warning(conn, "quotation_invoice", "%s::%s" % (no, _old_inv))
             validate_invoice_no(conn, body["invoiceNo"], exclude_quote_no=no, exclude_idx=idx)
         # AC1：驗「套用後」那一期的發票未稅／稅額（只送其中一欄、而另一欄原本也是空的 ⇒ 拒存）
         validate_invoice_amounts({**pits[idx], **{k: body[k] for k in _INVOICE_AMOUNT_KEYS if k in body}})
@@ -3748,9 +3916,13 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         else ('標記收款' if body.get('received') else '取消收款')
     )
     _audit(_tok(authorization), 'payment.mark', 'quotation', no, f"{no} {label}（{action_detail}）")
+    if invoice_changed_from:
+        _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', no,
+               f"{no} {label} 發票號碼 {invoice_changed_from} → {body.get('invoiceNo')}（總帳 E01 將在下次引擎執行時沖轉並重建）")
     notify_module_activity("報價單", action_detail, user.get("display_name") or user["username"],
                             f"{no} {label}", "quotations.html")
-    return {"ok": True, "updated_at": now}
+    return {"ok": True, "updated_at": now,
+            **({"glWarning": _gl_doc(gl_warn, "%s／%s" % (no, pits[idx].get("label") or pits[idx].get("type") or "第%d期" % (idx + 1)))} if gl_warn else {})}
 
 
 def _locate_item(arr: list, idx: int, item_id, range_msg: str) -> int:
@@ -4319,15 +4491,28 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
         "createdByInferred": bool(r["created_by_inferred"]),
         "payerName":   r["payer_name"] or "",
         "status":      r["status"],
-        "pending":     r["status"] != "已核准",
+        "pending":     r["status"] not in ("已核准", "已作廢"),
+        "voided":      r["status"] == "已作廢",          # 已作廢：列照列（稽核／申請人），不進合計
         "files":       json.loads(r["files_json"] or "[]"),
     } for r in conn.execute(
         "SELECT * FROM case_extra_expenses WHERE quote_no=? ORDER BY id", (quote_no,)
     ).fetchall()]
+    # 費用單據（kind≠''）綁了案件時：金額只給申請人／簽核人／出納財務／管理員（使用者 2026-10-01）；其他人（例如只有財務檢視偏好的案件成員）只看到狀態
+    from modules.case.api import case_extra_expenses as _xe
+    _xr = {r["id"]: r for r in conn.execute("SELECT * FROM case_extra_expenses WHERE quote_no=?", (quote_no,)).fetchall()}
+    extras = [({"id": e["id"], "category": "", "description": "", "status": e["status"], "pending": e["pending"],
+                "expenseDate": e["expenseDate"], "voided": e["voided"], "masked": True, "totalCost": None, "unitCost": None, "qty": None, "files": []}
+               if (_xr.get(e["id"]) is not None and (_xr[e["id"]]["kind"] or "") and not _xe._amount_viewer(conn, _xr[e["id"]], user)) else e)
+              for e in extras]
     # 2026-09-11：conn 從這裡才關——額外支出改讀 case_extra_expenses 表之後，
     # 上面那段列表推導需要連線，原本在它之前就 close() 會變成 use-after-close
+    _shown = {e["id"] for e in extras if not e.get("masked")}          # 手續費合計只算看得到金額的列
     extras_fee_total = sum(float(r["remit_fee"] or 0) for r in conn.execute(
-        "SELECT remit_fee FROM case_extra_expenses WHERE quote_no=? AND COALESCE(paid_date, '') != ''", (quote_no,)).fetchall())
+        "SELECT id, remit_fee FROM case_extra_expenses WHERE quote_no=? AND COALESCE(paid_date, '') != ''", (quote_no,)).fetchall()
+        if r["id"] in _shown)
+    # 建構器（自訂模組）的金流：關聯到這個案件的入帳支出＝案件成本的一列；收入因內建報價單已認列而略過（標 skipped，供對照）
+    from helpers import custom_finance as _cfin
+    custom_finance = _cfin.case_finance(conn, quote_no)
     conn.close()
 
     return {
@@ -4346,10 +4531,11 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
             "paymentRequests": payment_requests,
         },
         "settlementExtras": {
-            "total": sum(e["totalCost"] for e in extras),
+            "total": sum((e["totalCost"] or 0) for e in extras if not e["voided"]),
             "remitFeeTotal": extras_fee_total,
             "items": extras,
         },
+        "customFinance": custom_finance,
     }
 
 
@@ -4367,6 +4553,27 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
 # 2026-09-27 主持裁示：佇列／角標／詳情／轉簽端點搬進 L1 `routers/approval_queue.py`（路徑不變）。M01 只是提供者之一：
 # 報價單、已結案變更（case_change）、額外支出、完工單、額外支出變更。項目形狀見 `helpers/approval_queue.py::base_item`。
 # 權限過濾（誰看得到哪一筆）與角標計數都在 L1，這裡只列「待審核／簽核中」的單。
+
+def _xe_doc_no(r, suffix: str) -> str:
+    """佇列上的單號顯示：有案件＝`{案件}-XE{id}`（舊行為）；無案件＝費用單據單號（doc_code），沒有就 `XE{id}`（不出現開頭的 `-`）。"""
+    if r["quote_no"]:
+        return f"{r['quote_no']}-XE{r['id']}{suffix}"
+    return (r["doc_code"] or f"XE{r['id']}") + suffix
+
+
+def _xe_caseless_fields(r, *actions) -> dict:
+    """無案件單據的佇列項目補欄位（W1 A2-0 佇列契約）：`caseless=True`、`typeLabel`、各動作 URL（哨兵路徑 `-`）。有案件 ⇒ 空。"""
+    if r["quote_no"]:
+        return {}
+    base = "/api/quotations/-/extra-expenses/%d" % r["id"]
+    out = {"caseless": True, "typeLabel": _XE_KIND_LABEL.get(r["kind"] or "", "費用單據"), "docCode": r["doc_code"] or ""}
+    for a in actions:
+        out[a.split("/")[-1] + "Url"] = base + "/" + a
+    return out
+
+
+_XE_KIND_LABEL = {"purchase_req": "請購單", "purchase_order": "採購單", "travel": "差旅費用請款單", "petty_cash": "零用金支付單"}
+
 
 def approval_queue_items(conn) -> list:
     """`approval.queue_items`（M01）：報價單、已結案案件變更、案件額外支出、完工單、額外支出變更。
@@ -4461,7 +4668,7 @@ def approval_queue_items(conn) -> list:
     # 的典型來源。tiers 用真實的分層資料（不像 case_change 借用空 tiers 的捷徑），
     # 因為這個類型走的就是正規的 tiered_approval。
     xe_rows = conn.execute("""
-        SELECT e.id, e.quote_no, e.description, e.total_cost, e.approval_json,
+        SELECT e.id, e.quote_no, e.description, e.total_cost, e.approval_json, e.kind, e.doc_code,
                q.customer_name, q.project_name
         FROM case_extra_expenses e
         LEFT JOIN quotations q ON q.quote_no = e.quote_no
@@ -4475,11 +4682,11 @@ def approval_queue_items(conn) -> list:
         f = _queue_tier_fields(raw)
         items.append({
             "type":                "extra_expense",
-            "quoteNo":             f"{r['quote_no']}-XE{r['id']}",
+            "quoteNo":             _xe_doc_no(r, ""),
             "customer":            r["customer_name"] or "",
             "projectName":         r["description"] or "",
             "total":               r["total_cost"] or 0,
-            "quoteDate":           (f["requestedAt"] or "")[:10],
+            "quoteDate":           _local_date_of(f["requestedAt"]),
             "salesPerson":         "",
             "requestedBy":         f["requestedBy"],
             "requestedByDisplay":  f["requestedByDisplay"],
@@ -4492,6 +4699,7 @@ def approval_queue_items(conn) -> list:
             "currentApprovers":    f["currentApprovers"],
             "linkedQuoteNo":       r["quote_no"],
             "extraExpenseId":      r["id"],
+            **_xe_caseless_fields(r, "approve", "reject"),
         })
 
     # 完工單（2026-09-12）：跟出貨單同一種形狀，簽核狀態在 data_json.$.approval。
@@ -4545,7 +4753,7 @@ def approval_queue_items(conn) -> list:
     # 列進佇列**——借用上面那個 extra_expense 類型的話，簽核人按下核准會打到本體
     # 的 /approve，那支看到 status 已經是「已核准」就 409，變更永遠簽不掉。
     xec_rows = conn.execute("""
-        SELECT e.id, e.quote_no, e.description, e.total_cost, e.change_json,
+        SELECT e.id, e.quote_no, e.description, e.total_cost, e.change_json, e.kind, e.doc_code,
                e.change_approval_json, q.customer_name, q.project_name
         FROM case_extra_expenses e
         LEFT JOIN quotations q ON q.quote_no = e.quote_no
@@ -4563,14 +4771,14 @@ def approval_queue_items(conn) -> list:
             chg = {}
         items.append({
             "type":                "extra_expense_change",
-            "quoteNo":             f"{r['quote_no']}-XE{r['id']}改",
+            "quoteNo":             _xe_doc_no(r, "改"),
             "customer":            r["customer_name"] or "",
             # 佇列上一眼就要看得出「改什麼、從多少變多少」，只放新說明的話簽核人
             # 得自己去案件裡翻舊值
             "projectName":         f"{chg.get('description') or r['description'] or ''}"
                                    f"（原 NT$ {float(r['total_cost'] or 0):,.0f}）",
             "total":               chg.get("totalCost") or 0,
-            "quoteDate":           (f["requestedAt"] or "")[:10],
+            "quoteDate":           _local_date_of(f["requestedAt"]),
             "salesPerson":         "",
             "requestedBy":         f["requestedBy"],
             "requestedByDisplay":  f["requestedByDisplay"],
@@ -4585,6 +4793,7 @@ def approval_queue_items(conn) -> list:
             "extraExpenseId":      r["id"],
             "previousTotal":       r["total_cost"] or 0,
             "pendingFileCount":    len(chg.get("addFiles") or []),
+            **_xe_caseless_fields(r, "change-request/approve", "change-request/reject"),
         })
 
     return items
@@ -4719,6 +4928,7 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
         _audit(_tok(authorization), "quotation.approve", "quotation", quote_no,
                f"{quote_no}（{cname}）", {"allDone": all_done, "status": detail_status})
         _run_after_commit(after_commit)
+        _mark_notifications_read(quote_no, ["approval_request"], user["username"])     # 我簽過了：自己那筆「待簽核」通知失效
         return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}
 
 
@@ -4747,7 +4957,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
             raise HTTPException(status_code, err_msg)
 
         new_no = _next_revision_no(quote_no)
-        note   = body.note or ""
+        note   = require_reject_reason(body.note)
         now    = datetime.now().isoformat()
 
         # Append to statusLog
@@ -4804,6 +5014,7 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
         conn.close()
         _audit(_tok(authorization), "quotation.return", "quotation", new_no,
                f"{new_no}（原 {quote_no}，{cname}）", {"note": note, "previous_no": quote_no})
+        _mark_notifications_read(quote_no, ["approval_request"])           # 簽核作廢：所有人的待簽核通知失效
         return {"ok": True, "new_quote_no": new_no}
 
 
@@ -4838,7 +5049,7 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
                 conn.close()
                 raise HTTPException(403, "僅超級管理員可執行此操作")
 
-        note = body.note or ""
+        note = require_reject_reason(body.note)
         now  = datetime.now().isoformat()
         d["rejection"] = {
             "rejectedBy":        user["username"],
@@ -4867,6 +5078,7 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
         conn.close()
         _audit(_tok(authorization), "quotation.reject_final", "quotation", quote_no,
                f"{quote_no}（{cname}）", {"note": note})
+        _mark_notifications_read(quote_no, ["approval_request"])           # 拒絕結案：所有人的待簽核通知失效
         return {"ok": True}
 
 
@@ -5008,6 +5220,16 @@ def list_case_updates(quote_no: str, authorization: str = Header(None)):
     return results
 
 
+def _case_update_calendar_args(quote_no, customer_name, project_name, author, content, n_files, at):
+    """行事曆「案件更新」事件的內容（push_event_for_module 的參數）：標題「○○案件更新」，說明＝這一則更新；
+    merge_key＝案件編號 ⇒ 同一天的更新累加在同一個事件的說明裡。"""
+    title = f"{project_name or customer_name or quote_no}案件更新"
+    line = f"[{(at or '')[11:16]}] {quote_no} {author}：{content or '（附件）'}"
+    if n_files:
+        line += f"（附件 {n_files} 個）"
+    return ("case_update", title, line, (at or "")[:10] or None, quote_no)
+
+
 @router.post("/api/quotations/{quote_no}/updates", status_code=201)
 async def post_case_update(quote_no: str,
                            content: str = Form(""),
@@ -5076,6 +5298,10 @@ async def post_case_update(quote_no: str,
                             "case-management.html", detail=content)
     if important:
         spawn_bg_thread(push_event_for_important_comment, args=(new_id, quote_no, content, author_display))
+    else:
+        # 行事曆「案件更新」（2026-09-30，預設關；開關在 L1 判斷）：同一案件同一天合併成一個事件
+        spawn_bg_thread(push_event_for_module, args=_case_update_calendar_args(
+            quote_no, qrow["customer_name"], qrow["project_name"], author_display, content, len(saved_files), now))
     _audit(_tok(authorization), 'case.update_post', 'case_update', quote_no, quote_no, {'id': new_id, 'files': len(saved_files)})
     return {
         "id": new_id,
@@ -5694,6 +5920,14 @@ def detail_completion_note(conn, doc_no):
     }
 
 
+def _lines_of_row(r) -> list:
+    try:
+        v = json.loads(r["lines_json"] or "[]")
+        return v if isinstance(v, list) else []
+    except Exception:
+        return []
+
+
 def detail_extra_expense(conn, doc_no):
     r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (doc_no,)).fetchone()
     if not r:
@@ -5715,6 +5949,22 @@ def detail_extra_expense(conn, doc_no):
         "items": [],
         "files": _file_entries(r["files_json"]),
     }
+    _kind = r["kind"] if "kind" in r.keys() else ""
+    if _kind:
+        # 費用單據（A2）：單號、類型、部門、收款人、明細列（無案件＝caseless，簽核人／建立者／admin 才開得了：與佇列同一個判斷由 L1 做）
+        try:
+            _lines = json.loads(r["lines_json"] or "[]")
+        except Exception:
+            _lines = []
+        out["title"] = "%s %s" % (_XE_KIND_LABEL.get(_kind, "費用單據"), r["doc_code"] or "#" + str(r["id"]))
+        out["fields"][:0] = [{"label": "單號", "value": r["doc_code"] or "—"},
+                             {"label": "類型", "value": _XE_KIND_LABEL.get(_kind, _kind)}]
+        out["fields"].append({"label": "收款人", "value": r["payee_name"] or r["payer_name"] or "—"})
+        out["items"] = [{"description": (l.get("summary") or l.get("category") or ""), "brand": "", "qty": l.get("qty", ""),
+                         "unit": "", "unitPrice": l.get("unitCost", ""), "amount": l.get("amount", 0),
+                         "notes": " ".join(x for x in (l.get("category") or "", l.get("invoiceNo") or "") if x)}
+                        for l in _lines if isinstance(l, dict)]
+        out["caseless"] = not r["quote_no"]
     # 「編修後的結果」：已核准的額外支出要改內容必須走變更申請，
     # change_json 裡就是改完會變成什麼樣子——簽核人要看的正是這個對照。
     if (r["change_status"] or "") not in ("", "none"):
@@ -5728,11 +5978,18 @@ def detail_extra_expense(conn, doc_no):
                 "before": {"項目": r["description"], "數量": r["qty"],
                            "單價": r["unit_cost"], "小計": r["total_cost"],
                            "備註": r["note"]},
+                # 修正（A2）：提議內容的鍵是 camelCase（`unitCost`／`totalCost`／`addFiles`，見 `_proposal_from`）；原本讀 snake_case 鍵，
+                # 簽核人看到的「改後單價／小計」永遠是空的、待核准附件也列不出來
                 "after": {"項目": chg.get("description"), "數量": chg.get("qty"),
-                          "單價": chg.get("unit_cost"), "小計": chg.get("total_cost"),
+                          "單價": chg.get("unitCost"), "小計": chg.get("totalCost"),
                           "備註": chg.get("note")},
-                "files": _file_entries(json.dumps(chg.get("files") or [])),
+                "files": _file_entries(json.dumps(chg.get("addFiles") or [])),
             }
+            if "lines" in chg:               # 費用單據：明細與收款人也要讓簽核人看到前後對照
+                out["changes"]["before"].update({"明細列數": len(_lines_of_row(r)), "收款人": r["payee_name"] or ""})
+                out["changes"]["after"].update({"明細列數": len(chg.get("lines") or []), "收款人": chg.get("payeeName") or ""})
+                out["changes"]["afterLines"] = [{"description": (l.get("summary") or l.get("category") or ""), "amount": l.get("amount", 0)}
+                                                for l in (chg.get("lines") or []) if isinstance(l, dict)]
     return out
 
 
@@ -6055,6 +6312,7 @@ def case_batch_assign(body: dict = Body(...), authorization: str = Header(None))
 
 
 @router.post("/api/case-batch/export")
+@export_logged("xlsx", "case", "case-batch")
 def case_batch_export(body: dict = Body(...), authorization: str = Header(None)):
     """批次匯出勾選的案件（xlsx）。只含呼叫者看得到的案件（規則同案件清單）；
     看不到金額的帳號金額欄留空（CM13）。"""
@@ -6324,3 +6582,10 @@ def list_sales_orders(authorization: str = Header(None)):
             "stagesCount":    stages_count,
         })
     return {"items": items, "total": len(items)}
+
+
+# ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
+# 匯出稽核／PDF 姊妹的「歸屬區」＝稽核 detail.module 的字串，**不是權限 key**；用常數傳而不是字面量：
+# tests/test_module_keys_consistency 的後端掃描器把任何 module 等號字串字面量當權限 key。
+_EXPORT_AREA = "case"
+add_pdf_sibling(router, "/api/case-batch/export/pdf", case_batch_export, module=_EXPORT_AREA, name="case-batch", title="案件匯出", method="POST")

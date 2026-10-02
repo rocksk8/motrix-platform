@@ -28,6 +28,19 @@
       document.documentElement.setAttribute('data-preview', '1')
     })()
   </script>
+  <script>
+    /* 嵌入模式（建構器方案 B：自訂模組掛成內建頁面的頁籤；docs/platform/plans/BUILDER-B-DESIGN.md §5.3）。
+     * ?embed=1 ⇒ 本頁被同源 iframe 嵌在別的頁裡：不畫頂欄／側欄、不跑通知腳本（旗標 window.MOTRIX_EMBED，sidebar.js／notif.js 看到就不執行），
+     * 並把頁面高度用 postMessage 回報給外層（mount-tabs.js 檢查 origin 與 source）。**不改任何權限判斷**：登入檢查（auth-guard）照跑、各端點照驗。 */
+    (function () {
+      try {
+        if (new URLSearchParams(location.search).get('embed') === '1') {
+          window.MOTRIX_EMBED = true
+          document.documentElement.setAttribute('data-embed', '1')
+        }
+      } catch (e) {}
+    })()
+  </script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -75,6 +88,11 @@
     .cr-tier .ok { color: var(--success); }
     .cr-tier .cur { color: var(--accent); font-weight: 700; }
     .cr-ref-q { margin-bottom: 4px; }
+    .cr-flist { list-style: none; margin: 4px 0 0; padding: 0; font-size: 13px; }
+    .cr-flist li { padding: 2px 0; }
+    .cr-flist a { margin-left: 8px; font-size: 12px; }
+    .cr-ref-list { max-height: 180px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+    .cr-opt { display: flex; gap: 6px; align-items: center; padding: 2px 0; font-size: 13px; }
     .cr-ref-why { font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; line-height: 1.5; }
     .cr-log { font-size: 12px; color: var(--text-secondary); line-height: 1.8; }
     .cr-frame { width: 100%; height: 520px; border: 1px solid var(--border-light); border-radius: 8px; background: #fff; }
@@ -94,6 +112,9 @@
     .cr-f.is-preview-hl { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 6px; }
     .cr-f .cr-ph { color: var(--text-secondary); font-size: 13px; padding: 8px 0; }
     html[data-preview="1"] .cr-main { margin-left: 0; margin-top: 0; padding: 12px 16px 16px; }
+    html[data-embed="1"] #app-topbar, html[data-embed="1"] #app-sidebar, html[data-embed="1"] .sidebar-overlay, html[data-embed="1"] .pg { display: none !important; }
+    html[data-embed="1"] .cr-main { margin: 0; padding: 8px 4px 12px; }
+    html[data-embed="1"] body { background: transparent; min-height: 0; height: auto; }
   </style>
 </head>
 <body x-data="customRecordsPage()" x-init="init()" x-cloak>
@@ -137,7 +158,7 @@
               <thead><tr><template x-for="c in columns" :key="c.key"><th x-text="c.label"></th></template></tr></thead>
               <tbody>
                 <template x-for="r in records" :key="r.record_no">
-                  <tr :data-record-no="r.record_no" @click="openRecord(r.record_no)">
+                  <tr :data-record-no="r.record_no" :data-display-no="r.displayNo || r.record_no" @click="openRecord(r.record_no)">
                     <template x-for="c in columns" :key="c.key">
                       <td :data-label="c.label">
                         <span :class="c.key === '$status' ? 'cr-status' : ''" x-text="cell(r, c.key)"></span>
@@ -160,24 +181,92 @@
           <template x-for="(sec, si) in sections(formDef)" :key="si">
             <div class="cr-sec">
               <div class="cr-sec__t" x-show="sec.title" x-text="sec.title"></div>
-              <div class="cr-grid">
+              <div class="cr-grid" :class="{ 'cr-grid--n': sec.columns }" :style="gridStyle(sec)">
                 <template x-for="f in sec.fields" :key="f.key">
-                  <div class="cr-f" :class="{ 'is-bad': fieldErr[f.key] }" :data-field="f.key">
+                  <div class="cr-f" :class="{ 'is-bad': fieldErr[f.key], 'cr-f--wide': f.type === 'table' || f.type === 'textarea' }" :data-field="f.key">
                     <label :for="'cr-in-' + f.key"><span x-text="f.label || f.key"></span><span class="req" x-show="f.required">*</span></label>
                     <template x-if="f.type === 'text'">
                       <input type="text" :id="'cr-in-' + f.key" x-model="values[f.key]">
                     </template>
+                    <template x-if="f.type === 'textarea'">
+                      <textarea :id="'cr-in-' + f.key" x-model="values[f.key]" :maxlength="f.maxLength || null" :placeholder="f.placeholder || ''"></textarea>
+                    </template>
                     <template x-if="f.type === 'number'">
-                      <input type="number" step="any" :id="'cr-in-' + f.key" x-model="values[f.key]">
+                      <input type="number" step="any" :id="'cr-in-' + f.key" x-model="values[f.key]" :min="f.min" :max="f.max">
                     </template>
                     <template x-if="f.type === 'date'">
-                      <input type="date" :id="'cr-in-' + f.key" x-model="values[f.key]">
+                      <input :type="f.withTime ? 'datetime-local' : 'date'" :id="'cr-in-' + f.key" x-model="values[f.key]">
                     </template>
-                    <template x-if="f.type === 'select'">
+                    <template x-if="f.type === 'daterange'">
+                      <div class="cr-range" :data-range="f.key">
+                        <input :type="f.withTime ? 'datetime-local' : 'date'" :id="'cr-in-' + f.key" x-model="values[f.key].from" aria-label="起">
+                        <span>～</span>
+                        <input :type="f.withTime ? 'datetime-local' : 'date'" x-model="values[f.key].to" aria-label="迄">
+                      </div>
+                    </template>
+                    <template x-if="f.type === 'select' && !f.allowOther">
                       <select :id="'cr-in-' + f.key" x-model="values[f.key]">
                         <option value="">（未選）</option>
                         <template x-for="o in (f.options || [])" :key="o"><option :value="o" x-text="o"></option></template>
                       </select>
+                    </template>
+                    <template x-if="f.type === 'select' && f.allowOther">
+                      <div>
+                        <input type="text" :id="'cr-in-' + f.key" x-model="values[f.key]" :list="'cr-dl-' + f.key" placeholder="選一個或自己輸入">
+                        <datalist :id="'cr-dl-' + f.key"><template x-for="o in (f.options || [])" :key="o"><option :value="o"></option></template></datalist>
+                      </div>
+                    </template>
+                    <template x-if="f.type === 'radio'">
+                      <div class="cr-opts" role="radiogroup" :data-radio="f.key">
+                        <template x-for="o in (f.options || [])" :key="o">
+                          <label><input type="radio" :name="'cr-rd-' + f.key" :value="o" x-model="values[f.key]"><span x-text="o"></span></label>
+                        </template>
+                        <template x-if="f.allowOther">
+                          <label><input type="radio" :name="'cr-rd-' + f.key" :checked="isOther(f)" @change="values[f.key] = ''"><span>其他</span>
+                            <input type="text" class="cr-other" :value="isOther(f) ? values[f.key] : ''" @input="values[f.key] = $event.target.value" aria-label="其他內容"></label>
+                        </template>
+                      </div>
+                    </template>
+                    <template x-if="f.type === 'checkboxes' || f.type === 'multiselect'">
+                      <div class="cr-opts" :data-multi="f.key">
+                        <template x-for="o in (f.options || [])" :key="o">
+                          <label><input type="checkbox" :checked="(values[f.key] || []).indexOf(o) >= 0" @change="toggleMulti(f, o, $event.target.checked)"><span x-text="o"></span></label>
+                        </template>
+                      </div>
+                    </template>
+                    <template x-if="f.type === 'table'">
+                      <div class="cr-tbl" :data-table="f.key">
+                        <table>
+                          <thead><tr>
+                            <template x-for="c in (f.columns || [])" :key="c.key"><th x-text="c.label || c.key"></th></template>
+                            <th class="cr-tbl__x"></th>
+                          </tr></thead>
+                          <tbody>
+                            <template x-for="(row, ri) in (values[f.key] || [])" :key="row._k">
+                              <tr :data-row="ri">
+                                <template x-for="c in (f.columns || [])" :key="c.key">
+                                  <td :data-col="c.key">
+                                    <template x-if="c.type === 'formula'"><div class="cr-ro" x-text="fmt(cellCalc(f, ri, c))"></div></template>
+                                    <template x-if="c.type === 'text'"><input type="text" x-model="row[c.key]"></template>
+                                    <template x-if="c.type === 'number'"><input type="number" step="any" class="num" x-model="row[c.key]" :min="c.min" :max="c.max"></template>
+                                    <template x-if="c.type === 'date'"><input type="date" x-model="row[c.key]"></template>
+                                    <template x-if="c.type === 'checkbox'"><input type="checkbox" x-model="row[c.key]"></template>
+                                    <template x-if="c.type === 'select' && !c.allowOther">
+                                      <select x-model="row[c.key]"><option value="">（未選）</option><template x-for="o in (c.options || [])" :key="o"><option :value="o" x-text="o"></option></template></select>
+                                    </template>
+                                    <template x-if="c.type === 'select' && c.allowOther">
+                                      <div><input type="text" x-model="row[c.key]" :list="'cr-dl-' + f.key + '-' + c.key">
+                                        <datalist :id="'cr-dl-' + f.key + '-' + c.key"><template x-for="o in (c.options || [])" :key="o"><option :value="o"></option></template></datalist></div>
+                                    </template>
+                                  </td>
+                                </template>
+                                <td class="cr-tbl__x"><button type="button" class="btn btn-ghost btn-sm" :data-remove-row="ri" aria-label="刪除這一列" @click="removeRow(f, ri)">✕</button></td>
+                              </tr>
+                            </template>
+                          </tbody>
+                        </table>
+                        <button type="button" class="btn btn-ghost btn-sm cr-tbl__add" :data-add-row="f.key" @click="addRow(f)" x-text="'＋ ' + (f.addLabel || '新增一列')"></button>
+                      </div>
                     </template>
                     <template x-if="f.type === 'checkbox'">
                       <!-- 布林：寫死 value＋x-model.boolean（空字串＝沒填） -->
@@ -187,7 +276,33 @@
                         <option value="false">否</option>
                       </select>
                     </template>
-                    <template x-if="f.type === 'ref'">
+                    <template x-if="f.type === 'file' || f.type === 'image'">
+                      <!-- 附件：先傳到暫存（伺服器回檔案代號），存單時才綁到單據；值＝檔案物件陣列，送出只送代號 -->
+                      <div class="cr-files" :data-file-field="f.key">
+                        <input type="file" multiple :id="'cr-in-' + f.key" :accept="fileAccept(f)" :disabled="busy || uploading[f.key]"
+                               @change="uploadFiles(f, $event)">
+                        <div class="cr-help" x-show="uploading[f.key]">上傳中…</div>
+                        <ul class="cr-flist">
+                          <template x-for="(m, mi) in (values[f.key] || [])" :key="m.id">
+                            <li :data-file-id="m.id"><span x-text="m.filename"></span> <small x-text="fileSize(m.size)"></small>
+                              <a href="javascript:void(0)" :data-file-remove="m.id" @click="removeFile(f, mi)">移除</a></li>
+                          </template>
+                        </ul>
+                      </div>
+                    </template>
+                    <template x-if="f.type === 'ref' && f.multiple">
+                      <!-- 複選參照（人員／部門）：可搜尋的核取清單；值＝代號陣列 -->
+                      <div class="cr-ref" :data-ref-multi="f.key" :data-ref-state="refState[f.key] || 'loading'">
+                        <input type="search" class="cr-ref-q" :id="'cr-ref-q-' + f.key" :value="refQuery[f.key] || ''" placeholder="搜尋…" @input="searchRef(f.key, $event.target.value)">
+                        <div class="cr-ref-list">
+                          <template x-for="o in refMultiChoices(f.key)" :key="String(o.value)">
+                            <label class="cr-opt"><input type="checkbox" :data-ref-opt="String(o.value)" :checked="refPicked(f, o.value)" @change="toggleRef(f, o.value, $event.target.checked)"> <span x-text="o.label"></span></label>
+                          </template>
+                        </div>
+                        <div class="cr-ferr" x-show="refState[f.key] === 'denied' || refState[f.key] === 'error'" x-text="refState[f.key] === 'denied' ? '您沒有讀取這個清單的權限' : '讀取選項失敗'"></div>
+                      </div>
+                    </template>
+                    <template x-if="f.type === 'ref' && !f.multiple">
                       <!-- 參照欄：選項來自 GET …/ref-options/{欄位}（可搜尋）；403 才退回手動輸入並說明原因 -->
                       <div class="cr-ref" :data-ref-field="f.key" :data-ref-state="refState[f.key] || 'loading'">
                         <template x-if="refState[f.key] === 'denied'">
@@ -220,7 +335,7 @@
                     </template>
                     <template x-if="f.type === 'formula'">
                       <div class="cr-ro" :id="'cr-in-' + f.key" data-formula
-                           x-text="(record && record.data[f.key] !== undefined && record.data[f.key] !== null) ? fmt(record.data[f.key]) : '（儲存後由系統計算）'"></div>
+                           x-text="formulaShown(f)"></div>
                     </template>
                     <div class="cr-fx" :data-fx-readable="f.key" x-show="f.type === 'formula' && fxReadable(f)" x-text="fxReadable(f)"></div>
                     <div class="cr-help" :data-field-help="f.key" x-show="f.help" x-text="f.help"></div>
@@ -242,7 +357,7 @@
       <template x-if="mode === 'view' && record">
         <section class="cr-panel" id="cr-record" :data-record-no="record.record_no" :data-status="record.status" :data-busy="busy ? '1' : '0'">
           <h2>
-            <span x-text="record.record_no"></span>
+            <span id="cr-record-no" :data-base-no="record.record_no" x-text="record.displayNo || record.record_no"></span>
             <span class="cr-status" id="cr-record-status" x-text="record.view.statusLabel"></span>
           </h2>
           <div class="cr-sub">
@@ -260,7 +375,26 @@
                   <div class="cr-sec__t" x-show="sec.title" x-text="sec.title"></div>
                   <div class="cr-kv">
                     <template x-for="f in sec.fields" :key="f.key">
-                      <div :data-view-field="f.key"><span x-text="f.label || f.key"></span><b x-text="fmt(record.data[f.key]) || '—'"></b></div>
+                      <div :data-view-field="f.key" :class="{ 'cr-f--wide': f.type === 'table' }">
+                        <span x-text="f.label || f.key"></span>
+                        <template x-if="f.type === 'file' || f.type === 'image'">
+                          <div class="cr-files" :data-view-files="f.key">
+                            <template x-for="m in ((record.fileMeta || {})[f.key] || [])" :key="m.id">
+                              <div><a href="javascript:void(0)" :data-file-link="m.id" @click="openFile(m)" x-text="m.filename"></a> <small x-text="fileSize(m.size)"></small></div>
+                            </template>
+                            <b x-show="!((record.fileMeta || {})[f.key] || []).length">—</b>
+                          </div>
+                        </template>
+                        <template x-if="f.type !== 'table' && f.type !== 'file' && f.type !== 'image'"><b x-text="fmt(f.type === 'ref' && record.refLabels && record.refLabels[f.key] !== undefined ? record.refLabels[f.key] : record.data[f.key]) || '—'"></b></template>
+                        <template x-if="f.type === 'table'">
+                          <div class="cr-tbl"><table>
+                            <thead><tr><template x-for="c in (f.columns || [])" :key="c.key"><th x-text="c.label || c.key"></th></template></tr></thead>
+                            <tbody><template x-for="(row, ri) in (record.data[f.key] || [])" :key="ri">
+                              <tr><template x-for="c in (f.columns || [])" :key="c.key"><td :class="c.type === 'number' || c.type === 'formula' ? 'num' : ''" x-text="fmt(row[c.key])"></td></template></tr>
+                            </template></tbody>
+                          </table><b x-show="!(record.data[f.key] || []).length">—</b></div>
+                        </template>
+                      </div>
                     </template>
                   </div>
                 </div>
@@ -303,7 +437,7 @@
               <textarea class="cr-note-in" id="cr-decide-note" rows="2" x-model="note" placeholder="備註（退回時請說明原因）"></textarea>
               <div class="cr-actions">
                 <button class="btn btn-approve" id="cr-approve" @click="decide(true)" :disabled="busy">核准</button>
-                <button class="btn btn-reject" id="cr-reject" @click="decide(false)" :disabled="busy">退回</button>
+                <button class="btn btn-reject" id="cr-reject" data-testid="preview-return" @click="decide(false)" :disabled="busy">退回</button>
               </div>
             </div>
           </template>
@@ -311,6 +445,42 @@
           <div class="cr-sec">
             <div class="cr-sec__t">依建立時版本的輸出</div>
             <iframe class="cr-frame" id="cr-output-frame" sandbox="" :srcdoc="outputHtml" title="單據輸出"></iframe>
+          </div>
+
+          <div class="cr-sec" id="cr-revisions" x-show="revs && revs.revisions && revs.revisions.length">
+            <div class="cr-sec__t">送簽修訂紀錄（目前 <span x-text="revs ? revs.current.displayNo : ''"></span>）</div>
+            <table class="cr-table" style="margin-top:6px">
+              <thead><tr><th>修訂</th><th>送簽</th><th>結果</th><th>定義</th><th></th></tr></thead>
+              <tbody>
+                <template x-for="rv in ((revs && revs.revisions) || [])" :key="rv.revision">
+                  <tr :data-revision="rv.revision" style="cursor:default">
+                    <td x-text="rv.displayNo"></td>
+                    <td x-text="(rv.submittedAt || '').replace('T', ' ').slice(0, 16) + '　' + rv.submittedBy"></td>
+                    <td x-text="rv.decision === 'rejected' ? ('退回' + (rv.note ? '：' + rv.note : '')) : (rv.decision === 'approved' ? '核可' : '簽核中')"></td>
+                    <td x-text="'第 ' + rv.defVersion + ' 版'"></td>
+                    <td>
+                      <a href="javascript:void(0)" :data-diff-current="rv.revision" @click="showDiff(rv.revision, 'current')">與目前比對</a>
+                      <a href="javascript:void(0)" x-show="rv.revision > 0" :data-diff-prev="rv.revision" style="margin-left:8px" @click="showDiff(rv.revision - 1, rv.revision)">與上一版比對</a>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <div id="cr-rev-diff" x-show="revDiff" style="margin-top:8px">
+              <div class="cr-sub" x-text="revDiff ? (revDiff.a + ' → ' + revDiff.b + '（' + revDiff.changes.length + ' 處不同）') : ''"></div>
+              <table class="cr-table" x-show="revDiff && revDiff.changes.length">
+                <thead><tr><th>欄位</th><th>原本</th><th>改成</th></tr></thead>
+                <tbody>
+                  <template x-for="c in (revDiff ? revDiff.changes : [])" :key="c.key">
+                    <tr :data-diff-field="c.key" style="cursor:default">
+                      <td x-text="c.label"></td>
+                      <td x-text="c.rows ? rowsText(c.rows, 'old') : fmt(c.old)"></td>
+                      <td x-text="c.rows ? rowsText(c.rows, 'new') : fmt(c.new)"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div class="cr-sec" x-show="(record.log || []).length">
@@ -326,6 +496,7 @@
     </div>
   </main>
 
+  <script src="../static/file-preview.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/ui.js"></script>
   <script src="../static/custom-layout.js"></script>
@@ -340,7 +511,10 @@
         refOptions: {}, refState: {}, refQuery: {}, refErr: {}, _refSeq: {}, _refTimers: {}, note: '', busy: false, outputHtml: '', me: {}, _initDone: false, _defCache: {},
         //: 預覽模式（BUILDER-UX §3.3）：同一個旗標擋住本頁所有 API 呼叫（讀與寫）
         preview: !!window.MOTRIX_PREVIEW, previewHl: null,
-        KNOWN_TYPES: ['text', 'number', 'date', 'select', 'checkbox', 'ref', 'formula'],
+        KNOWN_TYPES: ['text', 'textarea', 'number', 'date', 'daterange', 'select', 'radio', 'checkboxes', 'multiselect', 'checkbox', 'ref', 'formula', 'table', 'file', 'image'],
+        computed: {}, computedTables: {}, _cmpTimer: null, _cmpSeq: 0, _rowSeq: 0,
+        //: 嵌入模式的上下文（方案 B）：外層頁面帶 `ctx.<鍵>=<值>`；欄位對應取自本模組定義的 mount.contextField；沒有 ⇒ 空（不篩選、不預填）
+        embed: !!window.MOTRIX_EMBED, embedCtx: { field: '', value: '' },
         retry: null,     // 網路失敗時錯誤列上的按鈕：{label, run, msg}（msg≠目前的 errMsg ⇒ 不顯示）
 
         _hdr() {
@@ -385,6 +559,7 @@
         async init() {
           if (this._initDone) return
           this._initDone = true
+          this.$watch('values', () => this.queueCompute())
           if (this.preview) return this._initPreview()
           try { this.me = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { this.me = {} }
           var q = new URLSearchParams(location.search)
@@ -396,6 +571,12 @@
             this.def = m.data.definition
             this.metaVersion = m.data.version
             this._defCache[m.data.version] = m.data.definition
+            if (this.embed) {                                  // 方案 B：上下文值＝第一個 ctx.* 參數；欄位＝mount.contextField
+              var cf = ((this.def.mount || {}).contextField) || ''
+              var cv = ''
+              q.forEach(function (v, k) { if (cv === '' && k.indexOf('ctx.') === 0) cv = v })
+              this.embedCtx = { field: cf, value: cf ? cv : '' }
+            }
             document.title = (this.def.name || this.key) + ' — MOTRIX 專案管理系統'
             this.loadRefOptions(this.def)
             await this.loadList()
@@ -471,13 +652,17 @@
         },
         cell(r, k) { return L.cellValue(r, k, this.stateLabels(this.def)) },
         sections(def) { return L.formSections(def || {}) },
+        gridStyle(sec) { return L.gridStyle(sec.columns) },
         // 使用者 2026-09-27：公式欄位顯示可讀式子（與建構器同一支 L.formulaReadable）；說明（help）顯示在欄位下方
         fxReadable(f) { return L.formulaReadable(this.formDef || {}, f) },
         async setFilter(st) { this.statusFilter = st; await this.loadList() },
         async loadList() {
           this.listLoading = true
           try {
-            var url = this.base() + '/records' + (this.statusFilter ? '?status=' + encodeURIComponent(this.statusFilter) : '')
+            var qs = []
+            if (this.statusFilter) qs.push('status=' + encodeURIComponent(this.statusFilter))
+            if (this.embedCtx.field && this.embedCtx.value !== '') qs.push('field=' + encodeURIComponent(this.embedCtx.field) + '&value=' + encodeURIComponent(this.embedCtx.value))
+            var url = this.base() + '/records' + (qs.length ? '?' + qs.join('&') : '')
             var r = await this.api('GET', url)
             if (r.ok) this.records = r.data || []
             else this.fail('讀取列表失敗', r, { label: '重試', run: () => this.loadList() })
@@ -531,33 +716,173 @@
           }
           return opts
         },
+        // 複選參照：值是代號陣列；已選但不在這次搜尋結果的仍列出（同 refChoices 的理由）
+        refPicked(f, v) { return (this.values[f.key] || []).some(function (x) { return String(x) === String(v) }) },
+        toggleRef(f, v, on) {
+          var cur = Array.isArray(this.values[f.key]) ? this.values[f.key].filter(function (x) { return String(x) !== String(v) }) : []
+          if (on) cur.push(String(v))
+          this.values[f.key] = cur
+        },
+        refMultiChoices(fk) {
+          var opts = this.refOptions[fk] || []
+          var picked = Array.isArray(this.values[fk]) ? this.values[fk] : []
+          var extra = picked.filter(function (p) { return !opts.some(function (o) { return String(o.value) === String(p) }) })
+                            .map(function (p) { return { value: p, label: String(p) } })
+          return extra.concat(opts)
+        },
+        // ── 送簽修訂紀錄（-R1、-R2…）──
+        revs: null, revDiff: null,
+        async loadRevisions(no) {
+          var r = await this.api('GET', this.base() + '/records/' + encodeURIComponent(no) + '/revisions')
+          if (r.ok && this.record && this.record.record_no === no) this.revs = r.data
+        },
+        async showDiff(a, b) {
+          var no = this.record.record_no
+          var r = await this.api('GET', this.base() + '/records/' + encodeURIComponent(no) + '/revisions/diff?a=' + encodeURIComponent(a) + '&b=' + encodeURIComponent(b))
+          if (r.ok) this.revDiff = r.data
+          else this.errMsg = '比對失敗：' + this.detail(r)
+        },
+        rowsText(rows, side) {
+          var self = this
+          return (rows || []).map(function (r) {
+            var cols = Object.keys(r.cols || {}).map(function (k) { return k + '＝' + self.fmt(r.cols[k][side]) }).join('，')
+            return '第 ' + (r.index + 1) + ' 列' + ({ add: '（新增）', remove: '（刪除）', change: '' }[r.op] || '') + '：' + cols
+          }).join('；') || '—'
+        },
+        // ── 附件 ──
+        uploading: {}, _staged: {},
+        fileAccept(f) {
+          var acc = (f.accept || []).map(function (x) { return '.' + String(x).replace(/^\./, '') })
+          if (f.type === 'image') return acc.length ? acc.join(',') : '.jpg,.jpeg,.png'
+          return acc.length ? acc.join(',') : '.jpg,.jpeg,.png,.pdf'
+        },
+        fileSize(n) { n = Number(n) || 0; return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB' },
+        async uploadFiles(f, ev) {
+          var input = ev.target
+          var list = Array.prototype.slice.call(input.files || [])
+          if (!list.length) return
+          this._noApiInPreview()
+          var fd = new FormData()
+          list.forEach(function (x) { fd.append('files', x) })
+          var h = this._hdr(); delete h['Content-Type']
+          this._setMap('uploading', f.key, true)
+          try {
+            var res = await fetch(this.base() + '/files/' + encodeURIComponent(f.key), { method: 'POST', headers: h, body: fd })
+            var data = await res.json().catch(function () { return null })
+            if (!res.ok) { this._setMap('fieldErr', f.key, (data && data.detail) ? String(data.detail) : '上傳失敗（' + res.status + '）'); return }
+            var cur = Array.isArray(this.values[f.key]) ? this.values[f.key].slice() : []
+            var st = Object.assign({}, this._staged)
+            data.forEach(function (m) { cur.push(m); st[m.id] = true })
+            this._staged = st
+            this.values[f.key] = cur
+            this._setMap('fieldErr', f.key, '')
+          } catch (e) {
+            this._setMap('fieldErr', f.key, '網路連線失敗，請重新選檔')
+          } finally {
+            this._setMap('uploading', f.key, false)
+            input.value = ''
+          }
+        },
+        async removeFile(f, i) {
+          var cur = (this.values[f.key] || []).slice()
+          var m = cur.splice(i, 1)[0]
+          this.values[f.key] = cur
+          if (m && this._staged[m.id]) {            // 這次才上傳、還沒綁單 ⇒ 順手刪暫存檔；已綁單的等存檔時由伺服器移除
+            await this._send(this.base() + '/files/' + encodeURIComponent(m.id), { method: 'DELETE', headers: this._hdr() })
+            var st = Object.assign({}, this._staged); delete st[m.id]; this._staged = st
+          }
+        },
+        async openFile(m) {
+          // 共用預覽元件（static/file-preview.js）：頁內預覽窗；圖片／PDF 內嵌，其他類型給下載
+          try { await window.MotrixFilePreview.openFile(m) } catch (e) { this.errMsg = '開啟檔案失敗：' + e.message }
+        },
         refHint(t) { return t === 'users' ? '輸入帳號' : (t === 'customers' ? '輸入客戶編號' : '輸入單號') },
 
         // ── 新增／編輯 ──
         blankValues(def) {
           var v = {}
+          var self = this
           ;(def.fields || []).forEach(function (f) {
             if (f.type === 'formula') return
-            v[f.key] = (f.default !== undefined && f.default !== null) ? f.default : ''
+            if (f.type === 'table') { v[f.key] = self.rowsOf(f, null); return }
+            if (f.type === 'checkboxes' || f.type === 'multiselect' || (f.type === 'ref' && f.multiple) || f.type === 'file' || f.type === 'image') { v[f.key] = []; return }
+            if (f.type === 'daterange') { v[f.key] = { from: '', to: '' }; return }
+            // `default` 是 {"$": token} ⇒ 由伺服器在建立時決定（前端只留空），不當成固定值
+            v[f.key] = (f.default !== undefined && f.default !== null && typeof f.default !== 'object') ? f.default : ''
           })
           return v
+        },
+        // ── 新型別的輔助（W1 建構器第三輪）──
+        rowsOf(f, rows) {
+          var self = this
+          return (Array.isArray(rows) ? rows : []).map(function (r) { return Object.assign({ _k: ++self._rowSeq }, r) })
+        },
+        addRow(f) {
+          var row = { _k: ++this._rowSeq }
+          ;(f.columns || []).forEach(function (c) { if (c.type !== 'formula') row[c.key] = c.type === 'checkbox' ? false : '' })
+          if (!Array.isArray(this.values[f.key])) this.values[f.key] = []
+          this.values[f.key].push(row)
+        },
+        removeRow(f, i) { this.values[f.key].splice(i, 1) },
+        toggleMulti(f, o, on) {
+          var cur = Array.isArray(this.values[f.key]) ? this.values[f.key].slice() : []
+          var at = cur.indexOf(o)
+          if (on && at < 0) cur.push(o)
+          if (!on && at >= 0) cur.splice(at, 1)
+          this.values[f.key] = cur
+        },
+        isOther(f) { var v = this.values[f.key]; return v !== '' && v !== null && v !== undefined && (f.options || []).indexOf(v) < 0 },
+        // 公式欄：填單時顯示伺服器即時算的（compute），存檔後顯示單據的值
+        formulaShown(f) {
+          var c = this.computed[f.key]
+          if (c !== undefined && c !== null) return this.fmt(c)
+          if (this.record && this.mode === 'view' && this.record.data[f.key] !== undefined && this.record.data[f.key] !== null) return this.fmt(this.record.data[f.key])
+          return '（儲存後由系統計算）'
+        },
+        cellCalc(f, ri, c) {
+          var rows = this.computedTables[f.key]
+          return rows && rows[ri] ? rows[ri][c.key] : null
+        },
+        // 值一改就（去抖）請伺服器算公式與明細列；較晚送出的才算數。預覽模式不打 API
+        queueCompute() {
+          if (this.preview || !(this.mode === 'new' || this.mode === 'edit')) return
+          clearTimeout(this._cmpTimer)
+          var seq = ++this._cmpSeq
+          this._cmpTimer = setTimeout(async () => {
+            var version = this.mode === 'edit' && this.record ? this.record.def_version : this.metaVersion
+            var r = await this.post(this.base() + '/compute?version=' + encodeURIComponent(version), { values: this.payload() })
+            if (seq !== this._cmpSeq || !r.ok) return
+            this.computed = r.data.computed || {}
+            this.computedTables = r.data.tables || {}
+          }, 300)
         },
         startNew() {
           this.record = null; this.recDef = null
           this.formDef = this.def
           this.values = this.blankValues(this.def)
           this.fieldErr = {}; this.dropped = []
+          if (this.embedCtx.field && this.embedCtx.value !== '') this.values[this.embedCtx.field] = this.embedCtx.value     // 嵌入：預填上下文欄位
+          this.computed = {}; this.computedTables = {}
           this.loadRefOptions(this.def)
           this.mode = 'new'
-          this.$nextTick(function () { var el = document.getElementById('cr-form'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }) })
+          this.$nextTick(() => { this.queueCompute(); var el = document.getElementById('cr-form'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }) })
         },
         startEdit() {
           if (!this.record || !this.recDef) return
           this.formDef = this.recDef
           var v = this.blankValues(this.recDef)
           var data = this.record.data || {}
-          Object.keys(v).forEach(function (k) { if (data[k] !== undefined && data[k] !== null) v[k] = data[k] })
+          var self = this
+          ;(this.recDef.fields || []).forEach(function (f) {
+            if (data[f.key] === undefined || data[f.key] === null || f.type === 'formula') return
+            if (f.type === 'table') v[f.key] = self.rowsOf(f, data[f.key])
+            else if (f.type === 'file' || f.type === 'image') v[f.key] = ((self.record.fileMeta || {})[f.key] || []).slice()
+            else if (f.type === 'daterange') v[f.key] = { from: (data[f.key].from || ''), to: (data[f.key].to || '') }
+            else if (f.type === 'date' && f.withTime) v[f.key] = String(data[f.key]).replace(' ', 'T')
+            else v[f.key] = data[f.key]
+          })
           this.values = v
+          this.computed = {}; this.computedTables = {}
           this.fieldErr = {}; this.dropped = []
           this.loadRefOptions(this.recDef)
           this.mode = 'edit'
@@ -569,6 +894,11 @@
           ;(this.formDef.fields || []).forEach(function (f) {
             if (f.type === 'formula') return
             var v = self.values[f.key]
+            if (f.type === 'table') { out[f.key] = self.tablePayload(f, v); return }
+            if (f.type === 'daterange') { out[f.key] = (v && (v.from || v.to)) ? { from: v.from, to: v.to } : null; return }
+            if (f.type === 'file' || f.type === 'image') { out[f.key] = (Array.isArray(v) && v.length) ? v.map(function (m) { return m.id }) : null; return }
+            if ((f.type === 'checkboxes' || f.type === 'multiselect')) { out[f.key] = (Array.isArray(v) && v.length) ? v : null; return }
+            if (f.type === 'date' && f.withTime && typeof v === 'string') v = v.replace('T', ' ')
             if (v === '' || v === undefined) v = null
             if (f.type === 'number' && v !== null && typeof v === 'string') { var n = Number(v); v = isNaN(n) ? v : n }
             // 下拉的值是字串 ⇒ 換回伺服器給的原值（客戶的 id 是數字）
@@ -579,6 +909,20 @@
             out[f.key] = v
           })
           return out
+        },
+        // 明細表送出：去掉前端的列識別、數字轉成數字、空字串當沒填
+        tablePayload(f, rows) {
+          return (Array.isArray(rows) ? rows : []).map(function (r) {
+            var o = {}
+            ;(f.columns || []).forEach(function (c) {
+              if (c.type === 'formula') return
+              var x = r[c.key]
+              if (x === '' || x === undefined) x = null
+              if (c.type === 'number' && x !== null && typeof x === 'string') { var n = Number(x); x = isNaN(n) ? x : n }
+              o[c.key] = x
+            })
+            return o
+          })
         },
         async save() {
           if (this.preview) return            // 預覽模式：存檔無效（api／post／put 也各自擋）
@@ -636,6 +980,8 @@
         },
         async showRecord(rec) {
           this.record = rec
+          this.revs = null; this.revDiff = null
+          this.loadRevisions(rec.record_no)
           this.recDef = await this.defFor(rec.def_version, rec)
           this.note = ''
           this.mode = 'view'
@@ -765,14 +1111,25 @@
           var what = names[l.action] || (t ? t.label : l.action)
           return what + (l.to_state && l.to_state !== l.from_state ? ' → ' + (labels[l.to_state] || l.to_state) : '')
         },
-        fmt(v) {
-          if (v === null || v === undefined) return ''
-          if (v === true) return '是'
-          if (v === false) return '否'
-          return String(v)
-        },
+        fmt(v) { return L.formatValue(v) },
       }
     }
+  </script>
+  <script>
+    /* 嵌入模式：回報頁面高度給外層（同源，targetOrigin＝本頁 origin；外層收到時再驗 origin 與 source）。 */
+    (function () {
+      if (!window.MOTRIX_EMBED) return
+      var last = 0
+      function send() {
+        var h = Math.ceil(document.body.getBoundingClientRect().height)      // body 自己的高度（不是 scrollHeight：後者會跟著 iframe 視窗高度走、造成回報互相放大／縮小）
+        if (!h || h === last) return
+        last = h
+        try { parent.postMessage({ type: 'motrix-embed-height', height: h }, location.origin) } catch (e) {}
+      }
+      window.addEventListener('load', send)
+      if (window.ResizeObserver) new ResizeObserver(send).observe(document.body)
+      setInterval(send, 1000)
+    })()
   </script>
 </body>
 </html>

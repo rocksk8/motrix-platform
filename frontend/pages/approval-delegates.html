@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>簽核代理人 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260828a">
   <style>
@@ -168,7 +169,7 @@ function approvalDelegatesPage() {
       this.myUsername = me.username
       this.isSuperadmin = me.role === 'superadmin'
 
-      const today = new Date().toISOString().slice(0, 10)
+      const today = MotrixDate.today()
       this.form.startDate = today
       this.form.endDate = today
 

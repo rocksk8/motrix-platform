@@ -14,6 +14,12 @@ from modules.accounting.ledger import withholding as W
 _N = [0]
 
 
+@pytest.fixture(autouse=True)
+def _future_today(monkeypatch):
+    import datetime as _d
+    monkeypatch.setattr(W, "_today", lambda: _d.date(2181, 1, 1))      # 測試資料用遠期年份（2179）；「繳庫日不可在未來」以此為今天
+
+
 @pytest.fixture
 def conn(client):
     c = db.get_db()
@@ -146,7 +152,7 @@ def test_mark_remitted_validation(conn, fake):
     with pytest.raises(W.WithholdingError):
         W.mark_remitted(conn, ids, "2179-04-09", "NO-SUCH-VOUCHER")
     assert W.mark_remitted(conn, ids, "2179-04-09") == 2 and W.mark_remitted(conn, ids, "2179-04-09") == 0        # 重複登記不再算
-    assert W.unmark_remitted(conn, ids) == 2
+    assert W.unmark_remitted(conn, ids, "填錯日期")["updated"] == 2
 
 
 def test_api_flag_permissions_and_audit(client, conn, fake, make_user):
@@ -165,7 +171,8 @@ def test_api_flag_permissions_and_audit(client, conn, fake, make_user):
     assert client.post("/api/ledger/withholding/remit", headers=h, json={"ids": ids, "remitted_at": "bad"}).status_code == 400
     ok = client.post("/api/ledger/withholding/remit", headers=h, json={"ids": ids, "remitted_at": "2179-04-09"})
     assert ok.status_code == 200 and ok.json() == {"updated": 2}
-    assert client.post("/api/ledger/withholding/unremit", headers=h, json={"ids": ids}).json() == {"updated": 2}
+    assert client.post("/api/ledger/withholding/unremit", headers=h, json={"ids": ids}).status_code == 400            # 沒填原因
+    assert client.post("/api/ledger/withholding/unremit", headers=h, json={"ids": ids, "reason": "登記錯誤"}).json() == {"updated": 2}
     c = db.get_db()
     try:
         n = c.execute("SELECT COUNT(*) FROM audit_log WHERE action IN ('ledger.withholding.remit','ledger.withholding.unremit')").fetchone()[0]
@@ -224,8 +231,8 @@ def test_bonus_payment_withholding_enters_the_list_and_follows_changes(conn):
     conn.commit()
     assert len(_bonus_items(conn, aid)) == 2                                               # 冪等
     import json
-    conn.execute("UPDATE bonus_case_award_edit_log SET changes_json=? WHERE award_id=?",
-                 (json.dumps({"deductions": {"lines": [{"username": "u1", "gross": 50000, "withholding": 5000, "nhiPremium": 0}]}}), aid))
+    conn.execute("INSERT INTO bonus_case_award_edit_log(award_id, changed_by, changed_at, action, changes_json) VALUES (?,?,?,?,?)",      # 編寫紀錄只增不改：以較新的一筆為準
+                 (aid, "t", "2179-06-30T00:00:00", "mark_paid", json.dumps({"deductions": {"lines": [{"username": "u1", "gross": 50000, "withholding": 5000, "nhiPremium": 0}]}})))
     conn.commit()
     E.run(conn, "2179-06-01", "2179-06-30", "acc")
     conn.commit()
@@ -243,3 +250,105 @@ def test_voided_bonus_voucher_removes_unremitted_rows_but_keeps_remitted(conn):
     E.run(conn, "2179-06-01", "2179-06-30", "acc")
     conn.commit()
     assert set(_bonus_items(conn, aid)) == {("income_tax", "u1")}                          # 未繳庫的補充保費移除；已繳庫的所得稅保留
+
+
+# ── W3 資安複查 D4／D5／D6：繳庫登記的驗證、期間鎖、ids 驗證、報表上限 ───────────────────────────
+
+def _one(conn, fake):
+    ev = _slip()
+    _run(conn, fake, [ev])
+    return [r["id"] for r in _items(conn, ev["source_key"])]
+
+
+def _pay_voucher(conn, debit_code, credit_code, status):
+    from modules.accounting.api import voucher_providers as VP          # fake fixture 清空了 registry ⇒ 直接呼叫傳票草稿函式
+    v = VP._provide_voucher_draft(conn, voucher_date="2179-04-08", summary="繳庫", created_by="t", now="2179-04-08T00:00:00",
+                                                  lines=[{"account_code": debit_code, "summary": "x", "debit": 1211, "credit": 0},
+                                                         {"account_code": credit_code, "summary": "x", "debit": 0, "credit": 1211}])
+    conn.execute("UPDATE vouchers_all SET status=? WHERE id=?", (status, v["id"]))
+    conn.commit()
+    return conn.execute("SELECT voucher_no FROM vouchers_all WHERE id=?", (v["id"],)).fetchone()[0]
+
+
+def _close_month_of(conn, date):
+    from modules.accounting.ledger import periods as P
+    if not conn.execute("SELECT 1 FROM gl_fiscal_years WHERE year=?", (int(date[:4]),)).fetchone():
+        P.create_year(conn, int(date[:4]), "acc")
+    per = conn.execute("SELECT id FROM gl_periods WHERE start_date<=? AND end_date>=?", (date, date)).fetchone()[0]
+    P.close_period(conn, per, "acc", True)
+    conn.commit()
+    return per
+
+
+def test_remit_date_rules_future_before_period_and_locked(conn, fake):
+    ids = _one(conn, fake)
+    with pytest.raises(W.WithholdingError, match="未來"):
+        W.mark_remitted(conn, ids, "2181-06-01")
+    with pytest.raises(W.WithholdingError, match="早於所屬月份"):
+        W.mark_remitted(conn, ids, "2179-02-28")
+    _close_month_of(conn, "2179-04-08")
+    with pytest.raises(W.WithholdingError, match="已結帳"):
+        W.mark_remitted(conn, ids, "2179-04-08")
+    assert W.mark_remitted(conn, ids, "2179-05-08") == 2                                      # 開放期間的日期才可以
+
+
+def test_remit_voucher_must_be_posted_and_debit_the_withholding_account(conn, fake):
+    ids = _one(conn, fake)
+    draft = _pay_voucher(conn, "2252", "1113", "草稿")
+    with pytest.raises(W.WithholdingError, match="尚未過帳"):
+        W.mark_remitted(conn, ids, "2179-04-08", draft)
+    unrelated = _pay_voucher(conn, "6111", "1113", "已過帳")
+    with pytest.raises(W.WithholdingError, match="沒有借記代扣科目"):
+        W.mark_remitted(conn, ids, "2179-04-08", unrelated)
+    good = _pay_voucher(conn, "2252", "1113", "已過帳")
+    assert W.mark_remitted(conn, ids, "2179-04-08", good) == 2
+
+
+def test_unremit_needs_reason_is_blocked_in_a_closed_period_and_returns_previous_state(conn, fake):
+    ids = _one(conn, fake)
+    W.mark_remitted(conn, ids, "2179-04-08")
+    conn.commit()
+    with pytest.raises(W.WithholdingError, match="原因"):
+        W.unmark_remitted(conn, ids, "  ")
+    per = _close_month_of(conn, "2179-04-08")
+    with pytest.raises(W.WithholdingError, match="已結帳"):
+        W.unmark_remitted(conn, ids, "想改")
+    from modules.accounting.ledger import periods as P
+    P.reopen_period(conn, per, "acc", "測試重開")
+    conn.commit()
+    res = W.unmark_remitted(conn, ids, "登記錯誤")
+    assert res["updated"] == 2 and {p[1] for p in res["previous"]} == {"2179-04-08"}
+
+
+def test_ids_validation_and_report_flag(conn, fake):
+    for bad in ({"a": 1}, "1", [], [True], ["x"], list(range(W.MAX_IDS + 1))):
+        with pytest.raises(W.WithholdingError):
+            W.mark_remitted(conn, bad, "2179-04-08")
+    _one(conn, fake)
+    assert W.report(conn)["truncated"] is False
+
+
+def test_api_bad_ids_is_400_not_500(client, conn, fake, make_user):
+    u, p = make_user(username="wh_ids%d" % id(client), role="superadmin")
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
+    F.set_flag(conn, "withholding", True)
+    conn.commit()
+    assert client.post("/api/ledger/withholding/remit", headers=h, json={"ids": {"a": 1}, "remitted_at": "2179-04-08"}).status_code == 400
+    assert client.post("/api/ledger/withholding/unremit", headers=h, json={"ids": {"a": 1}, "reason": "x"}).status_code == 400
+
+
+def test_report_shows_party_names_and_explains_a_missing_withholding_account(conn, fake):
+    """R3：對象顯示姓名（事件裡的受款人姓名，不是 C1）；沒設定代扣科目時對帳列明說要去哪裡設定。"""
+    ev = _slip()
+    _run(conn, fake, [ev])
+    rep = W.report(conn, "2179-03", today="2179-04-11")
+    assert {i["party_name"] for i in rep["items"] if i["source_key"] == ev["source_key"]} == {"王"}
+    conn.execute("DELETE FROM gl_account_roles WHERE role='WITHHOLD_TAX'")
+    conn.commit()
+    try:
+        rep = W.report(conn, "2179-03", today="2179-04-11")
+        chk = rep["checks"][0]
+        assert chk["ok"] is False and "尚未設定" in chk["label"] and "總帳設定" in chk["note"] and "2252" in chk["note"]
+    finally:
+        ROLES.ensure_default_roles(conn)
+        conn.commit()

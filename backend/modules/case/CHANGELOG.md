@@ -1,10 +1,192 @@
 # 案件 更新紀錄
 
-## 1.0.26 — 2026-09-30（暫用號，列車取號；W4 總帳 C4b）
+## 1.0.74 — 叫料匯款金額改四捨五入（half-up）
+- 修正：叫料匯款申請的實付／手續費／差額／已付與剩餘的計算，原用 Python `round()`（銀行家捨入：0.145→0.14、2.675→2.67），改成與全系統一致的 half-up（0.145→0.15、2.675→2.68）；新增 `material_payment.r2`（Decimal ROUND_HALF_UP），出納提供者與 API 同用。叫料列「已付」欄位唯讀，前端回送原值不再四捨五入（避免被誤判為已付欄位被改）。
+
+## 1.0.73 — 第 31 包整合：簽核佇列的叫料付款單據類型改字面值
+- 內部：叫料付款的簽核佇列提供者改用字面值 `"material_payment"`（原用常數 `MP.DOC_TYPE`，佇列涵蓋守門以靜態字面值掃描，某些順序下紅）；行為不變，無使用者可見改動。
+
+## 1.0.72 — 2026-10-02（wip/t31-material-fix-d7：31-C 守門修正＋收款人個資告知）
+- 守門修正（第 31 包 not_e2e 階段紅）：`approve()` 兩處改明列關鍵字（不用 `**`）；叫料程式不再用 `json_extract`（新增 `material_approval.case_row()`、`material_guard._load_old` 在 Python 逐筆解析；成交標籤欄位優先、空時退回 `data_json.dealTag`）；`material_order`／`material_payment` 登記進簽核套用範圍（預設跟統一流程）與簽核佇列覆蓋對照；`test_module_migrations` 期望 case 遷移 `[1..5]`。
+- **收款人個資告知**（使用者裁示 A，2026-10-02）：供應商可能是自然人，叫料匯款申請上的收款戶名與銀行帳號屬個資。新增告知對象 `material_payee`（`docs/platform/pii_forms.json`）：開匯款申請必須勾選「已告知收款人」（伺服器強制，否則 400、不建立）；建立時伺服器記錄告知（時間與人員，`privacy_notice_acks` 設定鍵 `material_payment:<單號>`）並寫稽核 `material_payment.privacy_notice_ack`；`GET /api/material-payments/{id}/privacy-notice`（讀）、`POST …/privacy-notice/ack`（補記，冪等）。
+- e2e：叫料審核／匯款 e2e 的資料庫輪詢改用 `page.wait_for_timeout`（不用 `time.sleep`，避免 sync Playwright 卡住頁面請求）。
+
+## 1.0.71 — 2026-10-02 09:35（wip/t32-prpo-s1-2e）：連到的品項後來被刪 ⇒ 該列回到額外支出（32-S3 缺口修正）
+- 修正（金額靜默短計）：採購單明細連到的報價品項後來不在報價內（被刪／改版）時，該列原本仍被當品項成本（清單 `itemLinkedAmount`、報表來源料件桶、E11 item 維度），而精算與挑選器只列現有品項 ⇒ 該列金額從精算總成本消失。現在這種列在清單、營運報表來源、E11 一律回到一般額外支出（金額與科目不變、不帶 item 維度）；守恆：`extraOnlyAmount` ＋ 各品項系統帶入金額 ＝ `totalAmount`（新增 `purchase_items.live_item_ids`／`load_live_item_ids`，`linked_split` 加選填 `live`）。
+
+## 1.0.70 — wip/t31-material-d7（31-C：叫料審核；S1–S4：核心、端點、寫入閘、報表／總帳閘）
+- **疊加審核表** `case_material_approvals`（migration 0004，只加不改、冪等）：叫料（`caseRecord.materialOrders[]`）以 (quote_no, item_id) 疊加審核狀態；**沒有疊加列＝舊單**（不溯及既往，行為與今天相同）。
+- **審核狀態機** `modules/case/material_approval.py`：草稿／待審核／簽核中／已核准／已退回（＋終態已取消）；重用分層簽核原語（申請人部門主管→組織鏈→最高管理者；沒設簽核層＝送審即核准；不能自簽）；核准後實質欄位（品名、數量、單位、單價、小計、供應商）變更 ⇒ 回草稿重送審；**到貨確認不簽核**，只記日期＋確認人＋時間。單號 `MO-YYYYMMDD-NNNN`（與 A2 費用單據同格式）。簽核單據類型 `material_order`（叫料）已登記。
+- **端點**：`POST /api/quotations/{no}/material-orders/{itemId}/submit|approve|reject|withdraw|cancel|receive`、`DELETE …/receive`、`GET /api/quotations/{no}/material-order-approvals`；寫入先 commit 再通知；稽核 `material_orders.submit／approve／reject／withdraw／cancel／receive／receive_undo`；簽核佇列提供者與詳情（`approval.queue_items`／`approval.detail`）、通知信四種（信內不放金額）。
+- **寫入閘（關掉 `case-record` 後門）** `modules/case/material_guard.py`：叫料列與物流旗標的**所有**寫入路徑（專屬 PATCH、`PATCH /case-record`、報價單整份存檔／建立、已結案變更核准套用）都過閘，且寫入漏斗 `save_quotation_json` 內另有同一個閘作後盾（冪等）。**只拒有問題的項目，其餘照存**，回應 `rejected[]`（itemId／field／code／message）。規則：新列建審核單；既有列實質變更依審核狀態處理（舊單→草稿、已核准→草稿、審核中／已取消 ⇒ 拒）；刪除只限舊單／草稿／已退回；誰能新增／修改叫料列沿用專屬端點（admin 以上或 `project_manage`＋財務檢視）；**物流旗標 `ordered`／`arrived` 由 false→true 必須連結（`orderItemId`）一張已核准的叫料單，`arrived` 另要已記錄到貨確認**，被拒時連帶 `devices` 序號維持原值（不讓序號在沒核准時認領庫存）；$0 叫料單走同一流程。已付欄位只能經匯款申請寫入（`PAID_VIA_REMITTANCE_ONLY=True`，見下方匯款切片）。
+- **營運報表／總帳**：權責口徑草稿、已退回、已取消的叫料**不計**；待審核／簽核中**計入並標「待審核」**；已核准與舊單照舊；現金口徑付出去的錢照計（只標待審核）。總帳 E12 只有已核准與舊單入帳，審核中的不入帳並在 notice 說明。**上線時報表數字可能變動（舊單被實質編輯後回草稿者不再計入權責成本），需公告。**
+- 設計：docs/platform/plans/MATERIAL-ORDER-APPROVAL-DESIGN.md。
+
+### 31-C 匯款切片（叫料匯款申請；migration 0005）
+- **每張叫料單可開多張匯款申請**（表 `case_material_payments`，`UNIQUE(quote_no,item_id,seq)`，單號 `MP-YYYYMMDD-NNNN`，無款別），**每張各自走分層簽核**（簽核單據類型 `material_payment`＝叫料匯款）→ 核准 → 出納。端點：`POST /api/quotations/{no}/material-orders/{itemId}/payments`、`PATCH /api/material-payments/{id}`、`POST /api/material-payments/{id}/submit|approve|reject|withdraw|void`、`GET /api/quotations/{no}/material-payments`、`GET /api/material-suppliers`（供應商選單，只回 id／code／name，需能編輯叫料）。稽核 `material_payment.create／update／submit／auto_approve／approve／reject／withdraw／void`；通知信四種（`material_payment_*`，信內不放金額與帳戶）；簽核佇列提供者與詳情。
+- **跨申請累計上限**：同一叫料單所有未作廢、未退回申請（含草稿與待審核，**鎖額度**）的金額合計 ≤ 小計（舊單再扣已登記的歷史已付）；超過 ⇒ 409，superadmin 可帶 `overCapReason` 覆寫；作廢／退回釋出額度。**$0 叫料單不能開申請**；叫料單要已核准（**舊單例外**，不溯及既往）；供應商必填（叫料單 `supplierId` 或申請時選）；**收款帳戶（戶名、帳號）填在申請上**，存申請的 `snapshot_json`——屬個資 F2：一般備份拿掉、完整列只進個資資料夾（`archive._F2_FIELDS['模組-case-case_material_payments']`），不進佇列詳情與信件，畫面只給末四碼。
+- **出納不用改**：沿用既有名稱空間 `("payables.pending","case_material")`（每張申請一列，`amount`＝剩餘應付，可**分次付款**，未結清留在待付款）、`("remit.reviews","case_material")`（多付＝實付超過剩餘 ⇒ 該筆待審核，核可保留、退回＝刪除該筆明細；登錄人不能自審）、`("expense.entries","remit_fee_case_material")`（手續費列報表支出）。每次付款一列付款明細（`case_material_payment_lines`：日期、實付、手續費、差額審核、付款方式／科目）。
+- **叫料單的 `paidStatus／paidAmount／paidDate` 變成明細合計的投影**，唯一寫入點 `material_payment.sync_order_paid`；`PAID_VIA_REMITTANCE_ONLY` 翻成 **True**：**上線後不再有「登記已付」**（舊單與新單一律只能經匯款申請；已付的歷史資料不動，舊單歷史已付在第一張申請時凍結並計入額度）。已有匯款申請的叫料單不可改實質欄位／刪除／取消（先作廢申請；已有付款明細者不可作廢）。
+- **新建的叫料單必填供應商**（`materialOrders[].supplierId`，寫入閘 `supplier_required`；舊單不溯及既往，開匯款申請時再選）；案件頁叫料列新增供應商下拉（選單來自 `GET /api/material-suppliers`）；**已付款狀態在畫面上改為唯讀**（顯示付款明細合計），要付款請在叫料列下方「匯款申請」開單。
+- **報表／總帳**：有匯款申請的叫料單，現金口徑與總帳 E12b 改讀**付款明細**（一筆明細一列；日期＝該筆付款日、金額＝該筆實付；E12b `source_key`＝`案件::itemId::明細id`；手續費列 FEE 借方；多付未核可的暫不產生分錄並在 notice 說明）；沒有申請的舊單維持讀 JSON。
+
+## 1.0.69 — 2026-10-02 09:14（wip/t32-prpo-s1-2e）：請款頁重按沿用草稿（32-S5 追補）
+- 新增請款（有類型表單）：同一次操作內送審被擋（例如採購單缺超出原因）後再按，沿用已建立的草稿（PATCH 它、附件只傳一次），不再多建一份單據；換案件或類型時重置。
+
+## 1.0.68 — 2026-10-02 07:07（wip/t32-prpo-s1-2e）：請款頁品項挑選器＋精算頁採用採購單連結金額（32-S5）
+- 新增請款（請購單／採購單、有案件）：「從案件品項帶入」——列出報價品項（計畫量／已請購／已採購／剩餘可採購），勾選後帶入明細（數量＝剩餘量、單價＝計畫單位成本，可改）；明細數量超出計畫時畫面標「超出報價計畫量 N」並提供「超出原因」欄（採購單送審必填，由伺服器檢查；請購單只提示）。無案件或其他類型：完全不變。
+- 精算頁：連到品項的採購單金額不再算額外支出——額外支出合計改讀 `extraOnlyAmount`（拿不到品項金額、例如沒有財務檢視時維持讀 `totalAmount`，不讓錢消失）；每個品項顯示「採購單 NT$ X」與「採用／取消採用」：採用＝該品項實際成本＝採購單金額（含稅最終金額，不再 ×1.05／÷1.05；完結後凍結），**未採用的採購單金額仍計入實際總成本**（摘要列「採購單（品項尚未採用）」）。沒有連結列的歷史案件：金額與以前逐位相同（e2e 以歷史案件證明）。
+
+## 1.0.67 — 2026-10-02 04:56（wip/t32-prpo-s1-2e）：連到案件品項的採購單明細＝品項實際成本（32-S3，Q1）
+- 採購單明細連到案件品項（`itemId`）的列，在三處**各只算一次、金額守恆**：①額外支出清單 `GET …/extra-expenses` 新增 `itemLinkedAmount`（連結列金額）與 `extraOnlyAmount`（真正的額外支出）、每列 `linkedAmount`；**`totalAmount`／`totalPending` 過渡期仍含連結列**（精算頁改版時才改讀 `extraOnlyAmount`＋品項系統帶入，兩邊一起切，避免漏算／重複）；②營運報表來源 `recognition.extra_entries`：連結列獨立成列（帶 `itemId`／`linkedItem`／`bucket`），落「料件」支出桶（`ITEM_COST_BUCKET`），不再是「其他」；③總帳 E11：連結列另成借方行並帶 `dims={"item": 品項id}`——**金額、角色（專案成本）、類別都不變**，沒有 itemId 的單據逐行與以前相同。請購單永遠不計成本；作廢／駁回不計；待審核清單與報表照計（標待定）、總帳只收已核准；核准後的變更申請以新明細為準。`GET …/purchase-items` 每個品項多 `actualAmount`（已認列的採購單連結列金額；看不到財務金額者不回）。
+
+## 1.0.66 — 2026-10-02 04:45（wip/t32-prpo-s1-2e）：請購/採購單明細連案件品項——驗證與累計上限（32-S2）
+- 新增（S2）：請購單／採購單**明細列可帶 `itemId`（報價品項）**：只准有案件的請購單／採購單；品項必須在報價內、數量＞0；伺服器依報價寫入 `itemQtyPlan`／`itemCostPlan` 快照（前端送的不採用）。累計上限：已採購（核准＋送審中的採購單列）＋本單 ＞ 計畫量 ⇒ 超計畫；**採購單送審（含已核准後的變更申請送審）必須在該列填 `overPlanReason`，否則 400（狀態不變）；請購單只警示**（建立／更新回應帶 `overPlan` 清單）；超出量由伺服器寫入 `overPlanQty`。草稿不佔量、駁回／作廢釋放；送審在寫鎖內驗。採購單 `data.fromPr` 必須是同案件、已核准的請購單。沒有 `itemId` 的明細與以前完全相同（保留鍵 `itemId`／`itemQtyPlan`／`itemCostPlan`／`overPlanReason`／`overPlanQty` 不可由未連結的列攜帶）。
+
+## 1.0.65 — 2026-10-02 04:33（wip/t32-prpo-s1-2e）：額外支出合計對齊營運報表規則＋請購/採購品項挑選器（32-S1）
+- ⚠️ 行為變更（使用者裁示 2026-10-02，Q6）：`GET /api/quotations/{案件}/extra-expenses` 的 `totalAmount`／`totalPending` 只計待審核／簽核中／已核准、且類型要進金流（kind='' 或採購單／差旅／零用金）——**請購單、草稿、已駁回不再計入**（與營運報表 `extra_entries` 同一條規則；原本只排除作廢與被遮蔽的列，精算的額外支出因此比報表多）；新增 `uncountedAmount`（沒計入的金額，資訊用）。精算頁、案件頁額外支出分頁的合計隨之變。
+- 新增：`modules/case/purchase_items.py`（品項計畫量、已請購／已採購量、剩餘量、超計畫判定；純函式）與 `GET /api/quotations/{案件}/purchase-items`（請購單／採購單「從案件品項帶入」挑選器；看不到財務金額者不回 `planUnitCost`；無案件 400）。明細列的 `itemId` 驗證與上限見 S2。
+
+## 1.0.64 — 2026-10-02 00:59（fix/t31-build-2e）：案件頁承攬商卡片字級
+- 派發卡片的「舊單」徽章與單號字級由 10px 改 11px（案件頁字級下限）。
+
+## 1.0.63 — 2026-10-01（暫用號，列車取號；wip/t31-builder-b-c7：稽核補洞）
+- `set_extra_expense_dates` 文件對齊（第 29 班稽核 O2）：出納也要看得到該案（`_guard_case`），沒有案件讀權的出納得 404；行為不變。補測試 `test_expense_visibility_gaps_2026_10_01.py`（`_caseless_visible` 對未知使用者 fail-closed、舊版額外支出附件對無案件權限者隱藏）。
+
+## 1.0.62 — 2026-10-01 23:40（wip/t31-dispatch-approval-2e）：派發審核對應計成本與案件頁的影響（31-A）
+- 應計承攬商成本（`recognition.dispatch_entries`）：派發審核狀態為草稿／已退回者不計入；待審核／簽核中計入並帶 `approvalPending`；已核准與舊單照舊。
+- 案件頁承攬商分頁：拿掉新增視窗的狀態下拉（狀態只由卡片按鈕改）；卡片依狀態顯示送審／撤回送審／已送出／已確認／申請完工／撤回完工申請／取消；狀態顯示合併人話（派發審核中、完工審核中…）、舊單徽章；外包總成本與精算頁（`settlement.html`）的派發合計與營運報表同一規則，並標「含待審核 N 筆」。
+
+## 1.0.61 — 2026-10-01（fix/t29-w1／fix/t29-w3：建包全量關卡）
+- 案件頁「全部附件」頁籤的兩處寫死色碼改用語意 token；`quotation-form.html` FORM_VERSION V3.14→V3.15（客戶回簽單區塊）；模組目錄 `file_center` 登記；未核可橫幅守門改登記 `doc_render.render_document`。產品行為不變。
+
+## 1.0.60 — 2026-10-01（wip/w1-quote-signed-back：客戶回簽單上傳）
+- 報價單「客戶回簽單」（使用者：「報價單成案要能上傳客戶報價回簽單」）：沿用既有 `POST/DELETE /api/quotations/{no}/signed-files`（`quotations.signed_files_json`，不新增表／migration），補規則——
+  - **狀態閘**：報價單完成簽核（狀態「已送出」）之後才能上傳（成案前客戶剛簽回、成案、已結案、成案撤回都可傳；草稿／待審核／簽核中／已退回／已作廢 ⇒ 400「…已送出之後才能上傳…」並寫稽核 `quotation.upload_signed_files_denied`）。
+  - **權限**：能讀該報價單的人（業務、協作者 `assigned_user_ids`、admin+）可傳可看；外人與唯讀角色 ⇒ 404（看不到＝不存在）。
+  - ⚠️ **行為變更（刪除收緊）**：原本任何看得到報價單的人都能刪；現在**上傳者本人或 admin+**（舊檔沒有 `uploaderUsername` ⇒ 只有 admin+）；清單裡沒有該 id ⇒ 404；檔案路徑不在這張報價單自己的資料夾（資料被竄改）⇒ 409 且不碰磁碟；被擋寫稽核 `quotation.delete_signed_file_denied`。
+  - 每個新檔記錄上傳者帳號（`uploaderUsername`）與時間；上傳稽核內含檔名（不含伺服器路徑）。
+  - **案件管理頁**「案件資訊」分頁最上方新增「客戶回簽單」區塊（列出／預覽／上傳／刪除；上傳鈕只在可上傳時出現）；**報價單表單**每檔顯示上傳者與時間、刪除鈕只給有權的人、案件進度旁新增選填的「客戶回簽單 ＋上傳」入口（不影響標記成案）。
+  - 檔案中心（P3）既有的 `quotation_signed` 類別沿用同一可見性；不是結案條件。
+
+## 1.0.59 — 2026-10-01（wip/w1-a2-4：A2-7 費用單據的通知信與單據輸出）
+- 通知信（`expense_notify.py`；信件類型 `owner="case"`，自動併入個人通知偏好）：`expense_form_submitted／next_tier／approved／returned／payout_pending／paid`。送審→當層簽核人；下一層→新一層簽核人；核准→申請人（需付款的類型另寄出納「待撥款」）；退回→申請人（含原因）；出納登錄付款→申請人。**信內不放金額**；`kind=''` 的舊額外支出一律不寄；寄信失敗只記 log、不影響簽核／付款。掛點：`case_extra_expenses.py` 的 submit（含無簽核層的自動核准）／approve／reject 與 `payables.mark_paid`。
+- 單據輸出：`GET /api/quotations/{quote_no}/extra-expenses/{id}/document?format=html|pdf`（無案件用 `-`）。版型取自單據釘住的定義版本的 `output.template`（`def_version=0` ⇒ 目前生效版），走 L1 `render_document`（公司抬頭／簽核欄／未核可每頁紅色標示）；可見性＝建立者、簽核鏈成員、admin／superadmin、出納／財務，看不到回 404；`kind=''` 回 404。
+- 附件目錄 P3：`_CaseCatalog` 加 `search`／`count`（權限沿用各類 `_READ_RULE`／完工單 `case_documents_readable`）；案件管理頁新增「全部附件」頁籤（檔案中心在才出現，呼叫 `/api/filehub/search` 固定本案件，點檔用共用預覽元件）。
+
+## 1.0.58 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2-w2b：推翻已付款限最高管理員、總帳備註）〔train_number：1.0.57 → 1.0.58〕
+- 使用者裁示（「admin 給主管等級而已」）：**清除或更改已登錄的付款日**（＝推翻已付款、退回待付款）原本 admin 與 superadmin 皆可，現在**只限 superadmin**（admin／出納 ⇒ 403；第一次登錄付款日不變：出納或 admin 仍可）；稽核專用動作 `extra_expense.paid_date_override` 不變。作廢（已是 superadmin 專屬）的 409 訊息同步改指向最高管理員。下游效應（R1）：沒有 UI 入口會清付款日（只有 API）；出納頁與營運報表不變。
+- 總帳事件備註：費用單據（kind≠''）的「來源金額未拆稅」備註不再說「以全額列專案成本」，改為依費用類別對應科目／預設費用科目；舊版列與叫料的備註不變。
+
+## 1.0.57 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2-w2b：費用類別清單為空時不擋送審）〔train_number：1.0.56 → 1.0.57〕
+- 使用者裁示 A：`expense.categories` 提供者在、但**沒有任何啟用類別**（公司尚未設定）⇒ 送審不驗證類別（不寫 `categoryCode`／`categoryName`），總帳以既有 `category_unmapped` 備註落到預設科目；一旦有 ≥1 個啟用類別，立刻恢復嚴格驗證（不在清單 ⇒ 400、狀態不變）。原本整合後的全新環境所有費用單據都送不出去（清單空 ⇒ 每個類別都「不是啟用中」）。下游效應（R1）：營運報表／出納不變；總帳未設類別的單據走預設科目並有備註。
+
+## 1.0.56 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2-w2b：單據釘住類型定義版本）〔train_number：1.0.55 → 1.0.56〕
+- 費用單據（kind≠''）在**建立**與**送審**當下把目前生效的類型定義版本寫進 `def_version`（`expense_forms.current_def_version` → W1 `helpers.expense_types.get_type`；W1 模組不在或沒發布過 ⇒ 0＝程式預設）；之後定義改版、編輯草稿、變更申請、讀取都不動它——已送審的單據輸出／驗證仍依自己的版本，不被改定義牽動（W1 A2-7 回報：不釘則列印依「目前」定義）。舊版列（kind=''）不查定義、維持 0。下游效應（R1）：營運報表／總帳／出納不讀此欄，不變。
+
+## 1.0.55 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2-w2b：A2 S2 稽核摘要與精算守門）〔train_number：1.0.54 → 1.0.55〕
+- 稽核：費用單據的 `extra_expense.*` 稽核 detail 帶單據摘要（類型、單號、金額、明細列數、歸屬部門、收款人類型、幣別；核准帶層級、駁回／作廢帶理由、修改帶前值）——**不含**收款人姓名／銀行／帳號／其餘明細列內容與 data（稽核標題文字沿用單據說明，既有作法）；舊版列（kind=''）只多一個金額。
+- 案件額外支出清單新增 `maskedCount`（對本人遮蔽金額的列數，不含已作廢）；精算頁（settlement.html）據此：> 0 ⇒ 顯示警告並**停用「儲存草稿」「完結精算」**（否則金額被遮蔽的費用單據不會進 `totalAmount`，殘缺的額外支出總額會被寫進精算、再被營運報表與獎金讀走）。
+- 收款人銀行帳號 `payee_account` 列入 F2 個資備份（L1 `archive._F2_FIELDS`，見 core CHANGELOG (next)）：一般每日 JSON 不再含該欄，完整列只進個資資料夾。
+- 下游效應（R1）：營運報表／總帳／出納金額不變；只影響精算存檔的可操作性（金額被遮蔽者不能存）與備份內容（少一欄帳號）。
+
+## 1.0.54 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2-w2b：A2 S1 作廢路徑）〔train_number：1.0.53 → 1.0.54〕
+- 新增 `POST /api/quotations/{案件|-}/extra-expenses/{id}/void`（含按鈕，同一片）：**僅 superadmin**、僅「已核准且尚未付款」、理由必填；狀態改「已作廢」並記 `void_reason／voided_by／voided_at`、清掉待核准的變更申請（待核准附件一併丟棄）、通知申請人、稽核 `extra_expense.void`（detail 帶理由與金額）。已付款的列回 409（先由管理員更正付款日退回待付款再作廢）；作廢後不可再編輯／刪除／送審／變更申請／改日期發票／動附件（409）。
+- 排除（列照列、不計入）：案件額外支出清單合計與 `pendingCount`、案件財務總覽 `settlementExtras.total`（項目帶 `voided`）、`case_extra_expenses()` 逐筆彙總、案件清單的待審計數、出納待付款／已付款、營運報表認列、總帳 E11／E11b 來源、簽核佇列（狀態白名單本來就不含）。申請人「我的請款」與稽核照列（標已作廢）。前端：案件額外支出頁加「作廢」鈕（僅 superadmin、已核准未付款列）、已作廢標示與理由、財務總覽明細標「已作廢（不計入）」。
+- 下游效應（R1）：總帳**不另寫反向分錄**——E11／E11b 只對 status='已核准' 產生，來源消失後引擎自動作廢草稿傳票或對已過帳傳票產生借貸對調的反向草稿（`ledger/engine.py::_orphans`；accounting 測試用真提供者＋真 API 驗證，含反向控制）。營運報表支出總額因此少該筆（預期）。
+
+## 1.0.53 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2：A2-6 營運報表逐類別列＋詳情修正）〔train_number：1.0.52 → 1.0.53〕
+- 營運報表（`recognition.extra_entries`）：費用單據（kind≠''）依費用類別**逐類**一筆，帶 `departmentId`（費用歸屬單位）、`kind`、`docCode`；現金口徑實付≠應付另加「付款差額」列（合計＝實付）；明細對不上金額 ⇒ 退回一列。舊版列（kind=''）一列一筆、不帶新鍵，行為不變。下游效應（R1）：營運報表支出總額不變（仍為 total_cost／現金口徑實付），只是結構（類別、部門）可看；部門篩選對無案件列改看 `departmentId` 由 W3 接。
+- 修正：簽核詳情（`detail_extra_expense`）變更申請的「改後單價／小計」原本讀 snake_case 鍵（`unit_cost`／`total_cost`）而永遠是空的、待核准附件（`addFiles`）也列不出來；改讀提議真正的鍵（`unitCost`／`totalCost`／`addFiles`），費用單據另顯示明細列數與收款人前後對照。加測試。
+
+## 1.0.52 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2：A2-5 費用單據金額遮蔽）〔train_number：1.0.51 → 1.0.52〕
+- 使用者最終裁示：費用單據（kind≠''）的金額只給申請人（建立者／data.applicant）、本單簽核人（含變更申請簽核鏈與代理）、出納／財務、管理員以上；其他人只看到狀態。案件額外支出清單對這類列回遮蔽列（`masked: true`；金額、明細、資料、說明、類別、收款人銀行、付款資訊、附件一律清掉，只留單號／類型／狀態／日期），合計只算看得到金額的列；案件財務總覽 `settlementExtras` 同樣遮蔽。簽核佇列與出納待付款本來就只給簽核人／出納（測試確認不外洩）。舊版列（kind=''）規則不變。下游效應（R1）：營運報表／總帳不受影響（讀 `total_cost`，不經這些回應）。
+
+## 1.0.51 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2：A2-4 費用類別與總帳事件行）〔train_number：1.0.50 → 1.0.51〕
+- 費用單據送審（含已核准後的變更申請送審）：明細每列的費用類別必須是 `expense.categories`（accounting，IP-108 草案）的**啟用中**代碼或名稱，否則 400、狀態不變（草稿可放任何類別；提供者不在 ⇒ 不驗證）；通過的列寫入 `categoryCode`（代碼）＋`categoryName`（顯示快照），並由 `gl.category_account` 寫入唯讀 `accountCode` 快照（只供顯示，過帳時總帳由事件行的類別重新解；解不出 ⇒ 空字串）。
+- 總帳事件（`gl_events.py`）：費用單據（kind≠''）E11 依費用類別**逐類**借方（行上 `category`＝代碼；有案件 COST_PROJECT、無案件 EXP_OTHER），貸 AP 合計；E11b 付款貸方腿依 `pay_method`（零用金 PETTY、其餘 BANK），出納另選付款科目時行上帶 `account_code`。舊版列（kind=''）分錄**不變**（單一借方 COST_PROJECT、貸 BANK）。下游效應（R1）：營運報表只讀 `total_cost`，不變；總帳 E11／E11b 的行拆分與貸方腿是這次的變動，引擎端由 W4 接。
+
+## 1.0.50 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2：W4 稽核低風險）〔train_number：1.0.49 → 1.0.50〕
+- 舊版額外支出附件資料夾的路徑存取（`_CasePathAccess`，`extra_expense_legacy`）改為逐筆解析 `files_json`、比對**完整路徑**（原本是子字串比對：名稱是已列出檔案前綴的檔案也會被放行，僅限同案使用者；並避免含非 ASCII 檔名的 JSON 逸出造成比對失敗）。加測試：未列出的前綴同名檔 ⇒ 不可讀。
+
+## 1.0.49 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2：A2-3 出納付款段）〔train_number：1.0.48 → 1.0.49〕
+- IP-100 `case` 提供者：`mark_paid` 寫入 `pay_method／pay_account_code／pay_terms／remit_date／paid_by`；採購單匯款日＋付款條件必填、零用金付款方式必填、請購單不可付款（409）；新增 `payee_info`（收款人資料，給出納專用端點）；待付款項目加 kind／docCode／payee／遮罩銀行。下游效應（R1）：營運報表現金口徑與出納金額不變；總帳 E11b 貸方腿由 W4 讀 `pay_method`。
+
+## 1.0.48 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2：費用單據 A2 前兩段）〔train_number：1.0.47 → 1.0.48〕
+- migration 0003（`0003_expense_forms.py`）：`case_extra_expenses` 一次加齊通用欄位（kind／doc_code／data_json／lines_json／def_version／department_id／payee_*／pay_terms／remit_date／pay_method／pay_account_code／paid_by／pretax／tax／currency／void_*）；只新增欄位與索引、冪等、舊列維持原值（kind=''）。
+- 無案件單據：哨兵路徑段 `/api/quotations/-/extra-expenses/...`（`-`＝`quote_no=''`；17 支端點共用同一個 `_qn()`）。建立需管理員以上或 `expense_forms` 權限；逐列可見＝建立者／本單簽核鏈成員（含代理）／admin／出納／財務（看不到＝404，不用 `case_owner_readable`）；稽核 target 改為 `case_extra_expense`＋單據 id（不留空 target_id）；「我的請款」列得出自己的無案件列。有案件的舊路徑行為不變。下游效應（R1）：營運報表／總帳／出納對無案件列的處理另由後續切片接（本段只開路徑與守門，不改金流計算）。
+- 第二段（W1 契約 §7）：新增 `modules/case/expense_forms.py`（類型 purchase_req／purchase_order／travel／petty_cash、單號 `{PR|PO|TE|PC}-YYYYMMDD-NNNN`、明細金額後端重算、data 合併、未知鍵保留、`payable_sql`）；新欄位帶進建立／編輯（類型建立後不可改）／讀出／已核准後的變更申請（前後值進歷史）／簽核詳情／簽核佇列（無案件項目帶 `caseless`、`typeLabel`、核准／駁回網址）／出納待付款項目。請購單核准後不進出納、營運報表支出、總帳（E11）。舊版列（kind=''）行為不變；舊版變更申請不動新欄位。下游效應（R1）：營運報表與總帳只讀 `total_cost`（＝Σ 明細，整數 TWD）。
+
+## 1.0.47 — 2026-10-01（暫用號，列車取號；wip/w3-dept-dim）〔train_number：1.0.46 → 1.0.47〕
+- `recognition.extra_entries` 每筆多選填鍵 `departmentId`（讀 `case_extra_expenses.department_id`；欄位尚未建立 ⇒ 值為 None，不影響舊資料庫）。營運報表用它歸屬無案件支出的部門。
+
+## 1.0.46 — 2026-10-01（暫用號，列車取號；fix/login-approval-popup：簽過的待簽核通知標已讀）
+- 報價單核准（只標自己那筆）、退回修改、拒絕結案（標整張單）時，對應的 `approval_request` 通知列標已讀（`helpers.audit._mark_notifications_read`）；原本永遠未讀，造成登入橫幅每次再跳（使用者 2026-10-01 回報）。其他簽核流程（出貨／匯款／發票開立／承攬商憑證／完工單）同樣缺這一步，列為後續。
+
+## 1.0.45 — 2026-10-01（暫用號，列車取號；wip/w3-local-date-2）
+- 報價表單 FORM_VERSION V3.14（本地日期：報價日期預設值與送審時間改用 static/motrix-date.js）；測試沙盒載入 motrix-date.js。只動前端與測試，後端行為不變。
+
+## 1.0.44 — 2026-10-01（暫用號，列車取號；wip/w2-legacy-extra-files：額外支出舊版附件資料夾）
+- 正式機實測：8 筆額外支出的附件仍在 DB v75 之前的舊資料夾 `quotation_settlement_extra/{案件}_{舊索引}/`（v75 只搬 metadata、沒搬檔案）；路徑綁單據上線後 `attachments.catalog` 的 `open()` 只認 `case_extra_expense/{案件}_{id}` ⇒ 這些舊檔會 404。
+- 修法：舊資料夾**只綁案件**（鍵 `{案件}_{數字}` 的案件編號＝該列的 quote_no；舊索引不是現在的列 id，不比）。別案的路徑、別種資料夾、沒有索引尾巴的鍵照舊 404。`uploads.path_access` 同步認領舊資料夾：該案某筆額外支出的 `files_json` 真的列了這個路徑才放行。下游效應（R1）：只影響附件開檔與預覽，不影響營運報表／總帳／出納。
+
+## 1.0.43 — 2026-10-01（暫用號，列車取號；wip/w3-local-date）
+- 本地日期（使用者 2026-10-01：凌晨建的單日期變前一天）：報價單預設報價日期、案件管理頁（動態／階段／外包／出貨／額外支出）的「今天」改用本地日期；送審 requestedAt 改存本地時間；佇列送審日／PDF 申請日改經 `_local_date_of`（舊的 UTC 字串換成本地日期，只改顯示）。
+
+## 1.0.42 — 2026-10-01（wip/w1-unapproved-wm）
+- 完工單未核准預覽／PDF：改用共用的每頁標示（fixed 大斜角紅色浮水印＋每頁頂端紅條＋頁尾單號頁碼，舊灰色浮水印隱藏）；報價單預覽／PDF 同（`_build_quote_html`，浮水印字樣「報價單預覽稿・尚未正式生效」）。已核准輸出不變。
+
+## 1.0.41 — 2026-09-30（wip/w1-t27fix2）
+- 完工單退回／撤銷核准：原因改在狀態與權限檢查之後才驗（已回簽不可撤銷的 409 不再被 400 蓋掉）。
+
+## 1.0.40 — 2026-09-30（暫用號，列車取號；wip/w3-t27fix2）
+- 匯出 PDF 姊妹的歸屬區改用常數 `_EXPORT_AREA`（不寫 module 等號字串字面量：test_module_keys_consistency 的後端掃描器會把它當權限 key）；只動寫法，行為與稽核內容不變。
+
+## 1.0.39 — 2026-09-30（暫用號，列車取號；wip/w2-glwarn-doc：提示要說得出是哪一筆（W1 複核））
+- 已入帳提示 `glWarning` 帶單號與項目：「此筆（MQ-…／款項）已入總帳…」（`_gl_doc`；L1 訊息本文不動）。
+
+## 1.0.38 — 2026-09-30（暫用號，列車取號；wip/w2-money-guards：金流寫入連動修補（MONEY-FLOWS §9 L5/L11/L12））
+- L12：更換**已登錄**的發票號碼（`mark_payment`／案件紀錄整包存）要 admin 以上或出納／財務，並寫稽核 `payment.invoice_no_change`（第一次登錄不變）；L11：已付款的額外支出經變更申請改金額 ⇒ 實付≠新應付時設 `remit_review='pending'`，強制重走出納的差額審核（下游：報表現金標差額待審核、總帳 E11b 待審核期間不產生）。
+
+## 1.0.37 — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：附件開檔路徑綁單據（安全審查 W3））
+- `attachments.py`：`_CaseCatalog.open` 要求檔案路徑在該單據自己的資料夾底下（`_path_bound_to_doc`）；`api/quotations.py`：案件紀錄 PATCH／PUT／POST 只保留資料庫已有的 `files`／`invoiceFiles`（`_strip_foreign_file_entries`，前端夾帶的新路徑一律丟掉；R1 下游效應：只影響附件顯示與開檔，不影響報表／總帳／出納）。
+
+## 1.0.36 — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
+- 匯出規則（使用者 2026-09-30）：案件批次匯出加 PDF 姊妹（`POST /api/case-batch/export/pdf`），每次匯出寫稽核。
+
+## 1.0.35 — 2026-09-30（暫用號，列車取號；wip/w2-gl-warn：已入帳來源的修改提示（MONEY-FLOWS §9 L3））
+- 改動／取消已入總帳的收款、更換發票號碼時，回應帶 `glWarning`（非阻擋）：案件紀錄整包存與 `mark_payment`；前端 toast／出納頁行內提示「此筆已入總帳：修改後下次引擎執行會產生沖轉草稿」。
+
+## 1.0.34 — 2026-09-30（暫用號，列車取號；wip/w1-xss）
+- 完工單 PDF：區域 `esc()` 補跳脫引號（共用 `helpers.doc_template.esc_quotes`；W3 #2 再查）。
+
+## 1.0.33 — 2026-09-30（暫用號，列車取號；wip/w1-pdf-unapproved）
+- 完工單預覽視窗高度包 `--fz`（字級放大不超出視窗）。
+
+## 1.0.32 — 2026-09-30（暫用號，列車取號；wip/w1-pdf-unapproved＋退回原因必填）
+- 完工單 PDF／預覽：未核准時加紅色「未核可・僅供預覽」橫幅（共用 `helpers.doc_template.unapproved_banner`）；已核准輸出不變。（另含退回原因必填，見下）
+- 退回（報價單 reject／reject-final、完工單）與完工單撤銷核准一律要填原因；完工單 `pdf-download` 放行本單簽核人／申請人，`export?mode=preview` 不計次，案件頁完工單預覽改為視窗並可「退回修改」。
+
+## 1.0.31 — 2026-09-30（暫用號，列車取號；wip/w1-builder3-s25 建構器 S2.5；1.0.26 已被 wip/cal-toggle 取用）
+- `GET /api/quotations/{單號}/finance-summary` 多回 `customFinance`（自訂模組關聯到本案件的入帳金流：`expense.total`／`items`；`income` 因內建報價單已認列而標 `skipped`、累計 `skippedTotal`，不進 total；讀 L1 `helpers.custom_finance`）。案件管理財務 Tab 多兩個標籤（`fin-custom-expense`、`fin-custom-income-skipped`）。
+
+## 1.0.30 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
+- 新增提供者 `attachments.catalog`／`case`（IP-105，`attachments.py::_CaseCatalog`）：quotation_signed、case_update、payment_item、material、material_invoice、extra_expense、completion_note 的開檔；權限沿用擁有單據的既有規則（不另寫第二份）；待核准暫存檔不進目錄。
+
+## 1.0.29 — 2026-09-30（暫用號，列車取號；W4 總帳 C4b）
 - 新增提供者 `gl.events`（IP-GL1）：已核准額外支出 E11（發票日→核准日→憑證日）與付款 E11b（付款日，含匯款手續費、已核可的實付差額）、叫料 E12（發票日，無則付款日）與付款 E12b。來源金額未拆稅，以全額列專案成本，進項稅額由會計在總帳補登。唯讀、不寫資料、不改欄位。
 
-## 1.0.25 — 2026-09-30（暫用號，列車取號；W4 總帳 R12 畫面）
+## 1.0.28 — 2026-09-30（暫用號，列車取號；W4 總帳 R12 畫面）
 - 案件管理『標記已匯款』視窗：個人外包人員逐位挑選勞報單（R12），行為同出納頁。純畫面，無新端點、無 migration。
+
+## 1.0.27 — 2026-09-30（暫用號，列車取號；wip/w1-file-preview 共用檔案預覽 P1）
+- 案件管理、報價單、成本精算頁的附件開啟改用 L1 共用預覽元件（頁內預覽，不再開新分頁／換 photo-token）；報價表單 `FORM_VERSION` V3.12 → V3.13。
+
+## 1.0.26 — 2026-09-30（暫用號，列車取號；wip/cal-toggle 行事曆推送可選）
+- 行事曆「案件更新」（預設關，事件種類開關在 L1）：案件留言板新增留言（重要留言除外，重要的仍走「案件重要留言」）commit 之後推 `push_event_for_module('case_update', …, merge_key=案件編號)` ⇒ 標題「○○案件更新」、同一案件同一天合併成一個事件、說明累加。IP-100 `payables.pending` 的 `mark_paid` 回傳加 `title`／`payee`（加欄位、相容；出納推「支出付款」事件用）。題 `modules/case/tests/test_case_update_calendar_2026_09_30.py`
+## 1.0.25 — 2026-09-30（暫用號，列車取號；wip/sec-p0 安全修正 P0）
+- 安全修正 P0：`GET /api/completion-notes/{no}` 與 `POST /api/completion-notes/{no}/signed-files` 原本只要求登入（單號可列舉即可讀／上傳任何完工單）⇒ 改用完工單清單的規則 `guard_case_access(allow_module="case_manage")`（`_readable_note`）；看不到與查無同一句 404「完工單不存在」（不帶案件單號），上傳被擋時不寫檔。
+- 新增提供者 `uploads.path_access`／`case`（IP-104，`attachments._CasePathAccess`）：quotations、quotation_payment_items、quotation_materials、quotation_materials_invoices、case_updates、case_extra_expense、completion_notes、_pending_case_changes 八個上傳資料夾依擁有單據的讀取規則判斷（同 IP-21 `_READ_RULE`；完工單＝清單規則；待核准變更＝申請人本人或案件頁規則，變更 id 必須屬於該案）。
 
 ## 1.0.24 — 2026-09-30（暫用號，列車取號；wip/w2-report-cash）
 - 案件財務 Tab：實際淨收／實收淨額＝銀行入帳，不再減客戶內扣手續費（手續費另列費用）；「實收金額」標籤改「銀行實際入帳，已扣客戶內扣手續費」。案件結算單 PDF 的收款明細同步。

@@ -7,6 +7,7 @@
   <title>外包名冊 — MOTRIX ERP</title>
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -82,6 +83,7 @@
     <div style="display:flex;gap:8px;align-items:center">
       <!-- CT1（2026-09-24）：名冊 Excel 匯入／匯出。匯出的證件號碼只顯示末 4 碼；匯入以姓名＋證件號碼比對 -->
       <button class="btn btn-ghost" data-testid="ct-export" @click="exportXlsx()" :disabled="xlsxBusy">匯出 Excel</button>
+      <button class="btn btn-ghost" data-testid="ct-export-pdf" @click="exportXlsx('pdf')" :disabled="xlsxBusy">匯出 PDF</button>
       <button class="btn btn-ghost" data-testid="ct-import" @click="$refs.importFile.click()" :disabled="xlsxBusy">匯入 Excel</button>
       <input type="file" x-ref="importFile" accept=".xlsx" style="display:none" @change="importXlsx($event)">
       <button class="btn btn-primary" @click="openNew()">
@@ -232,7 +234,7 @@
             </div>
             <div class="detail-row">
               <span class="detail-label">帳號</span>
-              <span class="detail-val" style="font-family:LINE Seed TW_OTF, monospace" x-text="selectedContractor.bank_account_number"></span>
+              <span class="detail-val" style="font-family:LINE Seed TW_OTF, monospace" data-testid="contractor-bank-number" x-text="selectedContractor.bank_account_number"></span>
             </div>
           </div>
         </template>
@@ -381,6 +383,7 @@
         <div class="form-group">
           <label class="form-label">帳號</label>
           <input class="form-input" type="text" x-model="form.bank_account_number">
+            <div class="form-hint" data-testid="bank-masked-hint" x-show="(form.bank_account_number || '').startsWith('****')" style="font-size:12px;color:var(--text-dim)">帳號已遮蔽（僅最高管理者可見完整帳號）；不修改就會保留原帳號，輸入新帳號才會更換。</div>
         </div>
       </div>
 
@@ -595,15 +598,15 @@ function contractorsPage() {
 
     xlsxBusy: false,
     importResult: null,
-    async exportXlsx() {
+    async exportXlsx(fmt) {
       this.xlsxBusy = true
       try {
-        const r = await fetch(`${API}/contractors/export`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        const r = await fetch(`${API}/contractors/export` + (fmt === 'pdf' ? '/pdf' : ''), { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '匯出失敗'); return }
         const blob = await r.blob()
         const a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
-        a.download = `外包名冊_${new Date().toISOString().slice(0, 10)}.xlsx`
+        a.download = `外包名冊_${MotrixDate.today()}` + (fmt === 'pdf' ? '.pdf' : '.xlsx')
         a.click()
         setTimeout(() => URL.revokeObjectURL(a.href), 1000)
       } catch (e) { alert('匯出失敗：' + e.message) } finally { this.xlsxBusy = false }

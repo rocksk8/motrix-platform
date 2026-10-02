@@ -1,5 +1,14 @@
 # 每日任務 更新紀錄
 
+## 1.0.8 — 2026-10-01（暫用號，列車取號；wip/t31-builder-b-c7：掛載點）
+- `module.json` 新增 `mount_points`：`daily-tasks`（頁面 daily-tasks.html、kind=tab、perm any）——自訂模組（建構器方案 B）可掛成「工作事項詳情頁籤列」的頁籤；頁面加掛載元件容器（`data-mount-point="daily_tasks.daily-tasks"`）與 `static/mount-tabs.js`。沒有自訂模組掛上去時頁面行為不變。
+
+## 1.0.7 — 2026-10-01（暫用號，列車取號；wip/w3-local-date）
+- 本地日期（使用者 2026-10-01：凌晨建的單日期變前一天）：每日任務頁：日報日期、週／日切換、歷史週別改用本地日期（原本用 UTC 日期，且本地午夜轉 UTC 會差一天）。
+
+## 1.0.6 — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
+- 匯出規則（使用者 2026-09-30）：工作事項歷史匯出（CSV）每次寫稽核（`export.csv`）。
+
 ## 1.0.5 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
 - 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`daily-tasks.html`
 

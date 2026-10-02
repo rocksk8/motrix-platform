@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>傳票 - MOTRIX 專案管理系統</title>
+  <script src="../static/approval-return.js"></script>
   <script src="../js/voucher.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -497,10 +498,10 @@
                 </template>
                 <div class="vc-src__empty"
                      x-show="srcSel.key && !srcState().loading && !srcState().err && !srcFiles().length">
-                  這個來源沒有已上傳檔案。<span x-show="canEdit && isSaved">可直接從電腦上傳（圖片或 PDF）：
+                  這個來源沒有已上傳檔案。<span x-show="canEdit && isSaved">可直接從電腦上傳（圖片、PDF、Word、Excel）：
                 <label class="vc-btn" style="cursor:pointer">
                   ＋ 從電腦上傳檔案
-                  <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf"
+                  <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.doc,.xls"
                          data-testid="src-empty-upload" style="display:none"
                          @change="uploadAttachments($event)">
                 </label></span></div>
@@ -591,7 +592,7 @@
             <div class="vc-att__acts" x-show="canEdit">
               <label class="vc-btn" style="cursor:pointer">
                 ＋ 上傳檔案
-                <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf"
+                <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.doc,.xls"
                        data-testid="voucher-att-upload" style="display:none"
                        @change="uploadAttachments($event)">
               </label>
@@ -650,17 +651,21 @@
                     @click="submit()">送出審核</button>
             <button class="vc-btn" data-testid="voucher-approve"
                     x-show="isSaved && (status === '待審核' || status === '簽核中')"
-                    :disabled="busy" @click="approve()">簽核</button>
+                    :disabled="busy || !actionAllowed('approve')" :title="actionReason('approve')" @click="approve()">簽核</button>
             <button class="vc-btn" data-testid="voucher-post"
                     x-show="isSaved && status === '已核准'" :disabled="busy"
                     @click="post()">過帳</button>
             <button class="vc-btn vc-btn--warn" data-testid="voucher-sendback"
                     x-show="isSaved && (status === '待審核' || status === '簽核中' || status === '已核准')"
-                    :disabled="busy" @click="openReason('sendback')">退回修改</button>
+                    :disabled="busy || !actionAllowed('send_back')" :title="actionReason('send_back')" @click="openReason('sendback')">退回修改</button>
             <button class="vc-btn vc-btn--warn" data-testid="voucher-void"
-                    x-show="isSaved" :disabled="busy"
+                    x-show="isSaved" :disabled="busy || !actionAllowed('void')" :title="actionReason('void')"
                     @click="openReason('void')">作廢</button>
           </div>
+          <!-- 不能按的原因（後端算的一句話）：停用的鍵旁邊一定要看得到為什麼 -->
+          <template x-for="r in blockedReasons" :key="r">
+            <div class="vc-note" style="margin-top:6px;color:var(--text-secondary)" x-text="r" data-testid="voucher-blocked-reason"></div>
+          </template>
 
           <!-- ══ 匯出（JV5）════════════════════════════════════════════
                🔴 **兩個動作不是一個**：只印本體／含附件。
@@ -757,11 +762,11 @@
           <div class="vc-att__acts" x-show="canEdit && isSaved" style="margin-top:8px">
             <label class="vc-btn" style="cursor:pointer">
                   ＋ 從電腦上傳檔案
-                  <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf"
+                  <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf,.docx,.xlsx,.doc,.xls"
                          data-testid="voucher-preview-upload" style="display:none"
                          @change="uploadAttachments($event)">
                 </label>
-            <span class="vc-att__hint">圖片或 PDF；上傳後立即列在上面，匯出「含附件」會一併輸出。</span>
+            <span class="vc-att__hint">圖片、PDF、Word、Excel；上傳後立即列在上面。匯出「含附件」時圖片與 PDF 會併入，Word／Excel 只列檔名。</span>
           </div>
           <!-- `JV19②`：主頁面（395-401 附近）attErr／attMsg 兩個都有
                對應節點，這個 modal 之前只搬了 attErr 那一半——匯出成功時
@@ -777,6 +782,8 @@
         </div>
       </div>
       <div class="modal-foot">
+        <button class="btn btn-sm" x-show="canReturnPreview()" data-testid="preview-return" @click="returnFromPreview()"
+                style="border-color:#FCA5A5;background:#FEF2F2;color:#B91C1C;font-weight:600">退回修改</button>
         <button class="btn btn-ghost btn-sm" @click="previewOpen=false">關閉</button>
         <!-- 「預覽後匯出」：不必關掉 modal 再回去找按鈕，這裡直接匯出。
              ⚠️ 匯出仍然走 exportPdf()，簽核未完成一樣會被後端擋下——
@@ -796,69 +803,14 @@
     </div>
   </div>
 
-  <!-- `JV28`：附件頁內預覽窗。疊在傳票預覽窗之上（z-index 高一層），兩個清單共用。
-       📌 放在傳票預覽窗**之後**：既有題用 querySelector('.modal-box') 取第一個，放前面會取到這個（隱藏的）。
-       🔴 只有 attKind() 判定為 image／pdf 的才內嵌；其餘（含 SVG／HTML）只給下載。 -->
-  <!-- 2026-09-25：來源檔（分錄下方「已上傳檔案」）也用這個視窗——◀ ▶ 切換同案其他檔案、下方案件單號與上傳日期、
-       「取消」「帶入附件」（只有來源檔才有；附件區點開只看不帶入）。鍵盤比照 MotrixUI：Esc 關（等同取消）、
-       焦點鎖在視窗內、← → 切換。 -->
-  <div class="modal-overlay" x-show="attPv.open" style="display:none;z-index:300"
-       data-testid="voucher-att-preview" @click.self="closeAttPv()"
-       @keydown.escape.stop.prevent="closeAttPv()" @keydown.tab="trapAttPvTab($event)"
-       @keydown.arrow-left="stepAttPv(-1)" @keydown.arrow-right="stepAttPv(1)">
-    <div class="modal-box" role="dialog" aria-modal="true" x-ref="attPvBox">
-      <div class="modal-head">
-        <span class="modal-head__title"
-              x-text="(attPvItem() ? attPvItem().filename : '') + '　（' + (attPv.idx + 1) + ' / ' + attPvItems().length + '）'"></span>
-        <button class="modal-close" data-testid="voucher-att-close" @click="closeAttPv()">×</button>
-      </div>
-      <div class="modal-body" style="text-align:center">
-        <div class="vc-att__hint" x-show="attPv.loading">載入中…</div>
-        <template x-if="attPv.err"><div class="vc-err" x-text="attPv.err"></div></template>
-        <div class="vc-pv-stage">
-        <button class="vc-pv-nav vc-pv-nav--prev" data-testid="att-pv-prev" x-show="attPvItems().length > 1 && !attPv.ext"
-                @click="stepAttPv(-1)" aria-label="上一個">◀</button>
-        <template x-if="attPv.kind === 'image' && attPv.url">
-          <img data-testid="voucher-att-preview-img" :src="attPv.url" alt=""
-               style="max-width:calc(100% - 96px);max-height:calc(70vh / var(--fz,1));object-fit:contain">
-        </template>
-        <template x-if="attPv.kind === 'pdf' && attPv.url">
-          <iframe data-testid="voucher-att-preview-pdf" :src="attPv.url" title="附件預覽"
-                  style="width:calc(100% - 96px);height:calc(70vh / var(--fz,1));border:1px solid var(--border-light)"></iframe>
-        </template>
-        <button class="vc-pv-nav vc-pv-nav--next" data-testid="att-pv-next" x-show="attPvItems().length > 1 && !attPv.ext"
-                @click="stepAttPv(1)" aria-label="下一個">▶</button>
-        </div>
-        <template x-if="attPv.kind === 'download' && attPvItem()">
-          <div style="padding:24px">
-            <div x-text="attPvItem().filename"></div>
-            <div class="vc-att__hint" x-text="fileSize(attPvItem().size) + '　' + (attPvItem().mime || '未知類型')"></div>
-            <div class="vc-att__hint">這個類型不在頁面上直接顯示，請下載後開啟。</div>
-          </div>
-        </template>
-      </div>
-      <div class="modal-foot">
-        <span class="vc-pv-meta" data-testid="att-pv-meta" x-text="attPvMeta()"></span>
-        <template x-if="attPv.mode === 'src'">
-          <span style="display:flex;gap:8px;align-items:center">
-            <span class="vc-err" style="margin:0;padding:4px 8px" x-show="attErr" x-text="attErr"></span>
-            <button class="btn btn-ghost btn-sm" data-testid="att-pv-cancel" @click="closeAttPv()">取消</button>
-            <button class="btn btn-sm" data-testid="att-pv-bring"
-                    :disabled="uploading || !attPvItem() || isBrought(attPvItem()) || attPvItem().exists === false"
-                    @click="bringFromPreview()"
-                    x-text="attPvItem() && isBrought(attPvItem()) ? '已帶入' : (uploading ? '帶入中…' : '帶入附件')"></button>
-          </span>
-        </template>
-        <template x-if="attPv.mode !== 'src'">
-          <button class="btn btn-sm" data-testid="voucher-att-download" @click="downloadAttachment(attPvItem())">下載</button>
-        </template>
-      </div>
-    </div>
-  </div>
+  <!-- `JV28` 頁內預覽窗已抽成共用元件（static/file-preview.js，P1）：DOM 由元件在開啟時建立，data-testid 沿用舊名
+       （voucher-att-preview／voucher-att-close／att-pv-prev／att-pv-next／voucher-att-preview-img／-pdf／att-pv-meta／att-pv-cancel／
+       att-pv-bring／voucher-att-download）。規則不變：只有 attKind() 判定為 image／pdf 的才內嵌；其餘（含 SVG／HTML）只給下載。 -->
 
   <!-- ⚠️ `notif.js` 必須與 `sidebar.js` 成對出現：`sidebar.js` 無條件輸出
        `globalSearchStore()` 與 `notifStore()`，而那兩支定義在 `notif.js` 裡。
        少載它的症狀不是錯誤畫面，是搜尋框與鈴鐺變成死的。 -->
+  <script src="../static/file-preview.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>

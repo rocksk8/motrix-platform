@@ -65,6 +65,9 @@ grandTotal（直接讀 `contractor_dispatches`，沒有經過 `_dispatch_row`）
 行為不會壞，但屬 M07 直接寫 M06 的表（DEPENDENCY-MAP §4）；應由 M06 再公開「作廢草稿」「查傳票狀態」兩個連接器，另開題。
 ➡ 2026-09-25 已處理：見 IP-4。
 
+
+**2026-09-30 追加（契約仍是版本 1，選填參數）：`reverses_voucher_id`**（獎金更正單）——給了 ⇒ 依該張**已過帳**傳票存的分錄組出反向草稿（借貸互換）、`kind='reversal'`、`reverses_no`＝原單號、`origin` 照傳入；`voucher_date` 沒給用今天，`lines` 忽略。不能做時**不丟例外**，回 `{"blocked": "<原因>"}`（原傳票不存在／未過帳／已作廢／已被未作廢的反向傳票沖過／日期落在已結帳或鎖定期間）；呼叫端先檢查 `res.get("blocked")`。反向傳票是系統產生的傳票：不可從傳票頁作廢（L9）；草稿階段要撤回走 IP-4 `voucher.void_draft`。
+
 ---
 
 ## IP-3　`accounting.settings`：會計設定（付款銀行）（M06 → M07）
@@ -139,6 +142,8 @@ M06 的 `vouchers_all`。
 
 **尚未處理（不在 A11 範圍）**：L1 行事曆仍**直接讀** 5 張 L2 表來組事件標題與內容（`SELECT … FROM invoice_vouchers` 等）。寫入已歸位，讀取的相依還在；要切斷須改成各模組提供「事件內容」或把 push 函式移回各模組，另開題。
 
+**新事件的寫法（2026-09-30 wip/cal-toggle，行事曆推送可選；CORE 1.72 暫用號）**：新增的事件種類**一律**由模組組好標題／說明／日期，commit 之後 `spawn_bg_thread(push_event_for_module, args=(代碼, 標題, 說明, 日期, merge_key))`（`from helpers import push_event_for_module`）；L1 只判斷事件種類開關（`system_settings.google_calendar.events`，目錄＝`helpers.google_calendar.EVENT_TYPES`）並呼叫 Google，**不查 L2 表**。新代碼要先加進 `EVENT_TYPES`（未知代碼一律不推）。使用方：M01 `case_update`、M02 `dev_case_update`、M04 `contractor_payout`、M05 `expense_payout`。守門 `backend/tests/test_calendar_event_toggles_2026_09_30.py`（開關、預設、合併、未知代碼）＋各模組 `test_*_calendar_2026_09_30.py`（觸發點）；寫鎖內呼叫由 `tools/platform/write_txn_scan.py`（`push_event_*`）擋。
+
 ---
 
 ## IP-7　L1 法規參數讀取介面（L1 `helpers.legal_params` → 所有算扣繳／補充保費的模組；首個使用方：M07 勞報單，下一個：U4 獎金分潤）
@@ -182,14 +187,16 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M07 薪資獎金：`modules/payroll/bonus_payouts.py::_expense_entries`（名稱 `bonus`）；`modules/payroll/payslip_payouts.py::_expense_entries`（名稱 `payslip`，2026-09-29：已付款勞報單，以**付款日期**歸月、金額取**應付總額**，類別「勞報單」，`quoteNo` 空 ⇒ 篩部門時無法歸屬而排除；已作廢、未付款、付款後退回者不列；權責與現金口徑相同）。守門：`backend/modules/payroll/tests/test_payslip_void_signed_paid_2026_09_29.py::test_cost_report_counts_paid_by_payment_month_gross`、`::test_cost_report_still_works_without_payslip_provider`（反向控制） |
+| 提供方 | M07 薪資獎金：`modules/payroll/bonus_payouts.py::_expense_entries`（名稱 `bonus`）；`modules/payroll/payslip_payouts.py::_expense_entries`（名稱 `payslip`，2026-09-29：已付款勞報單，以**付款日期**歸月、金額取**應付總額**，類別「勞報單」，`quoteNo` 空 ⇒ 篩部門時無法歸屬而排除；已作廢、未付款、付款後退回者不列；權責與現金口徑相同）。守門：`backend/modules/payroll/tests/test_payslip_void_signed_paid_2026_09_29.py::test_cost_report_counts_paid_by_payment_month_gross`、`::test_cost_report_still_works_without_payslip_provider`（反向控制）；L1 自訂模組金流：`helpers/custom_finance.py::expense_entries`（名稱 `custom_module`，2026-09-30 建構器第三輪 S2.5，登記在 `routers/custom_records.py`：入帳狀態中的單據、`finance.kind=expense` 的欄位；類別＝模組名稱；**回傳多兩個選填鍵 `cashDate`／`cashAmount`**——現金口徑改用它們，`_collect_expenses` 依口徑取；缺該口徑日期 ⇒ 不列並在 `unavailable` 以 category `custom` 明說「待補登」）。收入不走 provider：`reports._custom_income` 直接呼叫 L1 `custom_finance.income_items`（形狀同 `receivables.income_items`，關聯到內建案件的略過＝dupSkipped）。守門：`backend/tests/test_builder3_finance_2026_09_30.py` |
 | 使用方 | M08 `modules/analytics/api/reports.py::_collect_expenses`（⇒ `/api/reports/expenses-monthly`、`/api/reports/financial`（JSON／Excel／PDF）、每月營運報表信、首頁儀表板支出） |
 | 形式 | provider，**多提供者、以名稱區分**（`registry.providers("expense.entries")`；依名稱排序逐一呼叫）。之後其他模組的支出（例：勞報單）可登記同一個名稱空間，報表不用改 |
 | 語法 | 提供：`registry.provide("expense.entries", "bonus", _expense_entries)`<br>取用：`for name, fn in sorted(registry.providers("expense.entries").items()): fn(conn, d0, d1)` |
-| 回傳 | `[{date, quoteNo, desc, amount, category}]`；`date`＝發放日（權責與現金兩種口徑相同），`category`＝`"獎金分潤"`。一案一筆，`desc`＝「獎金分潤（N 人）」，**不列個人**。報表把它併進「其他支出」（`details.other[].category` 區分；首頁 otherBreakdown 依 category 自動多一塊），部門篩選照 `quoteNo` 歸屬 |
+| 回傳 | `[{date, quoteNo, desc, amount, category}]`；**選填鍵 `departmentId`（2026-10-01，契約版本不變）**：提供者明示的部門（無案件支出於送出當下凍結；`None`／缺 ⇒ 報表依案件業務部門推導，再不行歸「未分類」；0 視為真的部門 id）。M01 `recognition.extra_entries` 同樣多此選填鍵。`date`＝發放日（權責與現金兩種口徑相同），`category`＝`"獎金分潤"`。一案一筆，`desc`＝「獎金分潤（N 人）」，**不列個人**。報表把它併進「其他支出」（`details.other[].category` 區分；首頁 otherBreakdown 依 category 自動多一塊），部門篩選照 `quoteNo` 歸屬 |
 | 對方不在時 | 沒有提供者 ⇒ 支出少了獎金這一類，其餘照常，不丟例外。**不另加提示**：M07 不在時獎金分潤這個功能不存在，沒有應列而未列的支出（⚠ 例外：M07 曾經安裝、之後被停用而資料還在 ⇒ 報表少列那些已發放的獎金。觀察項，見 RUN-PLAN §6 本項回報） |
 | 契約版本 | 1（2026-09-25） |
 | 守門 | 同上測試檔：`test_report_counts_bonus_on_paid_date`（待發放不算、發放後出現在發放月、月合計差額＝發放總額）、`test_reverse_without_payroll_report_still_works`（**反向控制**）。突變：報表不讀提供者 ⇒ 轉紅 |
+
+**獎金更正單（2026-09-30，使用者核准）**：同名稱空間再登記一個提供者 `bonus_correction`（`payroll/bonus_correction.py::expense_entries`）——已完成更正單的**補發**以補發日（paid_at）列 +補發總額、**追回**以核准日列 −追回總額（`category` 同樣是 `"獎金分潤"`，`desc` 帶更正單號）；原單那一筆不動。回傳形狀不變、`amount` 可為負（報表加總本來就支援）。IP-8 `bonus.payouts` 的 `pending`／`paid` 多帶 `kind="correction"` 與 `originQuoteNo` 的補發列（選填鍵，既有欄位不變）。IP-2 `voucher.draft` 多兩個選填參數 `kind`（只接受 `"reversal"`）與 `reverses_no`（契約版本仍 1）。守門：`payroll/tests/test_bonus_correction_2026_09_30.py`。
 
 **案件頁相關傳票（同一項裁示）**：不新增串接點。獎金產生的兩張傳票草稿，每一行都帶摘要來源 `source_type="case"`、`source_key=案件單號`（JV36），經 IP-2 `voucher.draft` 寫入；案件頁的 `GET /api/vouchers/by-case/{單號}` 本來就依這個來源找。IP-2 的 `lines` 因此多了兩個**選填**欄位（只加不改，契約版本不變）。守門：`test_case_page_related_vouchers_show_bonus_vouchers`；突變：拿掉來源 ⇒ 轉紅。⚠ 這次之前已產生的獎金傳票沒有來源、不回填（開發機測試資料）。
 
@@ -230,6 +237,7 @@ M04 不 import M07，經這一個單一提供者（三個動作，都不 commit�
 | 回傳 | `check`：`{slipNo, status, contractorId, contractorName, net, paidViaRemit}`（不含身分證字號等個資）；不存在 ⇒ None。`mark_paid`／`unmark_paid`：更新筆數 |
 | 對方不在時 | 有 `payslipNo` 的人員 ⇒ 匯款被擋並說明「薪資獎金模組未安裝，無法驗證勞報單」；沒有關聯且 `system_settings.remit_require_payslip` 未開 ⇒ 匯款照舊 |
 | 契約版本 | 1（2026-09-30） |
+
 
 ---
 
@@ -366,7 +374,7 @@ M04 不 import M07，經這一個單一提供者（三個動作，都不 commit�
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | L1 `helpers/custom_modules.py::queue_items`（簽核中的自訂模組單據）。**2026-09-26 起（M01-PLAN §3-7）各單據模組提供自己的待簽**：M04 `modules/subcontract/api/contractor_vouchers.py::queue_items`（`contractor_voucher`）、M05 `modules/arap/api/invoice_vouchers.py::queue_items`（`invoice_voucher`）與 `payment_requests.py::queue_items`（`payment_request`）、M03 `modules/supply/api/shipping_notes.py::_queue_items`（`shipping_note`）、M06 `modules/accounting/api/vouchers.py::_queue_items`（`voucher`）、M07 `modules/payroll/bonus_queue.py::queue_items`（`bonus_award`、`bonus_case_award`）。~~M01 自己的報價單、完工單、額外支出（含變更）、已結案變更仍在 M01 端點內~~ ⇒ 2026-09-27 起 M01 也是提供者之一：`modules/case/api/quotations.py::approval_queue_items`（名稱 `case`；`quotation`、`case_change`、`extra_expense`、`completion_note`、`extra_expense_change`），ModuleSpec 宣告（主持裁示 2026-09-27，c-approval-l1） |
+| 提供方 | L1 `helpers/custom_modules.py::queue_items`（簽核中的自訂模組單據）。**2026-09-26 起（M01-PLAN §3-7）各單據模組提供自己的待簽**：M04 `modules/subcontract/api/contractor_vouchers.py::queue_items`（`contractor_voucher`）、M05 `modules/arap/api/invoice_vouchers.py::queue_items`（`invoice_voucher`）與 `payment_requests.py::queue_items`（`payment_request`）、M03 `modules/supply/api/shipping_notes.py::_queue_items`（`shipping_note`）、M06 `modules/accounting/api/vouchers.py::_queue_items`（`voucher`）、M07 `modules/payroll/bonus_queue.py::queue_items`（`bonus_award`、`bonus_case_award`）。~~M01 自己的報價單、完工單、額外支出（含變更）、已結案變更仍在 M01 端點內~~ ⇒ 2026-09-27 起 M01 也是提供者之一：`modules/case/api/quotations.py::approval_queue_items`（名稱 `case`；`quotation`、`case_change`、`extra_expense`、`completion_note`、`extra_expense_change`），ModuleSpec 宣告（主持裁示 2026-09-27，c-approval-l1）；L1 自訂模組定義送審：`helpers/custom_def_review.py::queue_items`（名稱 `custom_module_def`，type `custom_module_def`，`quoteNo`＝「模組key:版號」；點卡片開 `custom-def-review.html?key=…` 審核頁做核可／退回；2026-09-30 建構器 S4，登記在 `routers/custom_records.py`；`approval.detail` 同名提供者只回摘要） |
 | 使用方 | L1 `routers/approval_queue.py` 的 `GET /api/approval-queue`（列表）與 `GET /api/approval-queue/count`（角標），經 `_queue_provider_items(conn)`（兩支同一份來源）；~~M01 `modules/case/api/quotations.py`~~（主持裁示 2026-09-27，c-approval-l1）。路徑不變、前端不改 |
 | 形式 | provider，多個提供者（`core.registry.providers()`；以名稱排序依序取用） |
 | 語法 | 提供：`_registry.provide("approval.queue_items", "custom_modules", queue_items)`<br>取用：`for name, fn in sorted(registry.providers("approval.queue_items").items()): items.extend(fn(conn))` |
@@ -634,7 +642,86 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ---
 
+## IP-104　`uploads.path_access`：上傳檔的讀取權限（各單據模組＋L1 工作日誌 → L1 `/api/photo-token`、`/api/uploads/…`；多提供者）
+
+2026-09-30 安全修正 P0（設計審查）：原本 `/api/photo-token` 對**任何路徑**簽發簽章、`/api/uploads/…` 帶 Authorization 也只要求登入 ⇒ 任何登入者讀得到任何單據附件（路徑形狀 `<資料夾>/<單號>/<檔名>` 可列舉）。改為依第一段資料夾交給**擁有那張單據的模組**，用那張單據自己的讀取規則判斷；沒有人認領的資料夾一律不放行。**編號暫定（104），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`modules/case/attachments.py::_CasePathAccess`（quotations、quotation_payment_items、quotation_materials、quotation_materials_invoices、case_updates、case_extra_expense、completion_notes、_pending_case_changes）；M02：`modules/crm/api.py::_DevLogPathAccess`（dev_logs）；M03：`modules/supply/api/shipping_notes.py::_ShippingPathAccess`（shipping_notes）；M04：`modules/subcontract/attachments.py::_SubcontractPathAccess`（contractor_dispatches、contractor_dispatch_invoices）；M05：`modules/arap/api/invoice_vouchers.py::_InvoiceVoucherPathAccess`（invoice_vouchers）；L1：`routers/system.py::_WorkLogPhotoAccess`（projects＝工作日誌照片，`registry.provide`）；L1 自訂模組附件：`helpers/custom_files.py::CustomFilesAccess`（`custom_records`；2026-09-30 建構器第三輪 S2，登記在 `routers/custom_records.py` 匯入時：暫存檔＝上傳者、已綁單＝有該模組權限者／引用該檔的單據簽核人，且看得到該欄位 `access.visibleTo`） |
+| 使用方 | L1 `helpers/uploads.py::upload_readable`（`routers/uploads.py` 的 `GET /api/photo-token`、`POST /api/photo-token/batch`〔稽核 S1：多張一次換，簽核佇列情境每次請求最多一次詳情守門〕與 `GET /api/uploads/{path}` 標頭那條）。每個上傳寫入資料夾都要被認領或明列排除：守門 `backend/tests/platform/test_upload_folders_claimed_2026_09_30.py` |
+| 形式 | provider，**多提供者、以模組 key 區分**；每個提供者宣告 `FOLDERS`（兩兩不重疊） |
+| 語法 | 提供：`ModuleSpec(providers={("uploads.path_access", "<key>"): Obj})`；`Obj.FOLDERS`、`Obj.readable(conn, folder, rest, user) -> bool`（`rest`＝資料夾之後各段、含檔名；demo 前綴 `_demo_uploads/`、`_demo_projects/`→`projects` 已由 L1 去掉）。取用：`helpers.uploads.canonical_upload_path(raw)`（不合法 ⇒ None ⇒ 403）→ `upload_readable(conn, rel, user)` |
+| 回傳 | `readable` ⇒ True／False；單據不存在、看不到、形狀不對（段數、編號）⇒ False。規則＝該單據自己端點的判斷：報價單上四類 `case_page_readable`、動態 `case_documents_readable`、額外支出 `case_owner_readable`（同 IP-21）；完工單／出貨單＝清單規則 `case_documents_readable`；待核准變更＝申請人本人 ∨ `case_page_readable`（變更 id 必須屬於該案）；開票申請 `_voucher_readable`；派工單＝單筆端點模組 ∨ `case_documents_readable`；開發記錄＝`_require_dev`＋row_access `dev_case`；工作日誌＝`work_log`／`case_manage` 模組 ∨ 日誌掛的案件 `case_documents_readable`。提供者丟例外 ⇒ L1 當 False 並記 ERROR（fail closed） |
+| 對方不在時 | 那幾個資料夾沒有提供者 ⇒ 讀不到（404，與查無同一句「檔案不存在」）——**安全的方向**，檔案本身不動；單據頁在模組不在時本來就不存在 |
+| 契約版本 | 1（2026-09-30） |
+| 守門 | `backend/tests/test_upload_path_access_2026_09_30.py`（正規化／穿越／連結、無人認領 404、工作日誌、FOLDERS 不重疊、提供者例外 fail closed）；`backend/modules/case/tests/test_upload_access_p0_2026_09_30.py`、`backend/modules/supply/tests/test_shipping_note_access_p0_2026_09_30.py`、`backend/modules/crm/tests/test_dev_log_upload_access_p0_2026_09_30.py`、`backend/modules/subcontract/tests/test_dispatch_upload_access_p0_2026_09_30.py`、`backend/modules/arap/tests/test_invoice_voucher_upload_access_p0_2026_09_30.py` |
+
+簽核佇列情境（非 provider，L1 內部）：`/api/photo-token?path=…&type=…&id=…` ⇒ `routers/approval_queue.py::detail_file_paths`——詳情守門（`_open_detail`，與 `GET /api/approval-queue/detail` 同一支）放行，而且詳情列出這個路徑才簽；簽核人常常不是案件的人。approval-queue 頁帶目前詳情的 (type, id)。
+
+---
+
+## IP-105　`attachments.catalog`：附件目錄（各單據模組＋L1 工作日誌 → L1 `GET /api/attachments/open`；多提供者）
+
+2026-09-30 附件目錄 P2（設計 `proposal-attachments-search-preview` §4；使用者：「所有上傳的檔案都要參照出納裡面有預覽的功能」＋分類搜尋）。開檔走一支 L1 端點，權限由**擁有那張單據的模組**判斷；P3（2026-09-30）在同一契約加 `search`／`count`（檔案中心 `modules/filehub`）。**編號暫定（105），列車定號。**與 IP-21 `attachments.for_document`（會計憑證來源政策）分開：範圍不同。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`modules/case/attachments.py::_CaseCatalog`（quotation_signed、case_update、payment_item、material、material_invoice、extra_expense、completion_note）；M03：`modules/supply/attachments.py::_SupplyCatalog`（shipping_note）；M05：`modules/arap/attachments.py::_ArapCatalog`（invoice_voucher）；M04：`modules/subcontract/attachments.py::_SubcontractCatalog`（contractor_dispatch、contractor_invoice）；M02：`modules/crm/attachments.py::_CrmCatalog`（dev_log）；M06：`modules/accounting/attachments_catalog.py::_AccountingCatalog`（voucher）；M07：`modules/payroll/attachments.py::_PayrollCatalog`（payslip_signed）；L1：`routers/system.py::_WorkLogCatalog`（work_log_photo，`registry.provide`） |
+| 使用方 | L1 `routers/attachments.py`：`GET /api/attachments/open?type=&doc=&file=`（預覽元件 `MotrixFilePreview` 的 `byAttachmentRef` 轉接器；沒裝檔案中心也能用）。P3：`modules/filehub` 的搜尋頁 |
+| 形式 | provider，**多提供者、以模組 key 區分**；每個提供者宣告 `CATEGORIES`（source_type ⇒ `{label, doc, module}`，兩兩不重疊） |
+| 語法 | 提供：`ModuleSpec(providers={("attachments.catalog", "<key>"): Obj})`；`Obj.CATEGORIES`、`Obj.open(conn, user, source_type, doc_no, file_id) -> OpenedFile \| None`（`OpenedFile(abs_path, filename, mime, size)`，L1 `helpers.uploads`）；可選 `Obj.ROOTS()`＝uploads 以外允許的根目錄（例：勞報單封存目錄）。取用：`registry.providers("attachments.catalog")` 找 `CATEGORIES` 含該 type 的那個 |
+| 回傳 | `open` ⇒ `OpenedFile`；單據或檔案不存在 ⇒ `None`；看不到 ⇒ raise `AttachmentNotVisible`；來源資料壞 ⇒ raise `AttachmentSourceError`（訊息給使用者）。端點：看不到＝查無＝未知 type＝提供者例外＝實體檔不在允許的根之下 ⇒ 同一句 404「檔案不存在」（fail closed，不洩漏存在）；資料壞 ⇒ 400；body＝`application/octet-stream` 的檔案本身。`doc`／`file` 的意義：`doc`＝單據鍵（案件／單號／id，各類見 `CATEGORIES` 的提供者 docstring），`file`＝`save_document_files` 回的 metadata `id`（傳票為 `file_id`） |
+| 權限 | **不另寫第二份規則**：多數類別直接用擁有單據已有的判斷（`uploads.path_access` 的 `readable`、IP-21 `for_document` 的 `files`、傳票／勞報單各自端點的閘門）；守門題驗「對每個使用者，`open` 成功 ⇔ `photo-token` 成功」 |
+| 不收 | 待核准暫存檔（`_pending_case_changes`、額外支出變更申請）：未核准不是正式檔案（設計 Q6）；PII（身分證、存簿）；暫存匯入檔；設定圖檔——登記在 `docs/platform/upload_points.json` 的 `excluded` |
+| 對方不在時 | 沒有提供者認領該 type ⇒ 404；P3 搜尋頁回 `unavailable=[{category, reason}]` 明說（屆時補契約） |
+| 契約版本 | 1（2026-09-30；P2 `CATEGORIES`＋`open`；P3 加 `search`／`count`，同版次只增：舊提供者沒有這兩個方法 ⇒ 檔案中心不列它那一類並在 `unavailable` 明說） |
+| P3 搜尋 | `Obj.search(conn, user, crit) -> [item]`：已套權限、已依條件篩、`uploadedAt` 由新到舊、最多 `crit["take"]` 筆；`Obj.count(conn, user, crit) -> {source_type: n}`（已套權限、不套 `types`）。`crit` 鍵：`q／types／exts／date_from／date_to／uploader／quote_no／doc_no／customer／take`（`helpers.attachment_search.normalize_crit`）。項目鍵固定 `sourceType／docNo／docLabel／quoteNo／customerName／projectName／fileId／filename／ext／size／mime／uploadedBy／uploadedAt／link`（**沒有 path**）。**看不到的不列、也不回個數**（設計 Q3）。共用件 `helpers/attachment_search.py`（篩選、排序、項目形狀）；使用方 `GET /api/filehub/search`（合併、分頁 ≤20 頁、`facets`、`categories`、`unavailable`）與案件頁「全部附件」 |
+| 守門 | `backend/tests/platform/test_upload_points_registered.py`（每個上傳端點必須分類；`catalog` 必須有提供者認領、每個 category 有上傳點餵它、兩兩不重疊；反向控制：合成未登記端點、死列、重疊、沒人認領、沒人餵）；`backend/tests/test_attachments_open_2026_09_30.py`（打得開且位元組相同、看不到＝查無同一句 404、與 photo-token 同答案、根目錄檢查、提供者例外 fail closed、資料壞 400、沒有提供者 404、契約形狀） |
+
+> 🔒 **路徑綁單據（安全審查 W3，train 27）**：`open()` 回的檔案路徑必須在**那張單據自己的資料夾**底下（`helpers.uploads.upload_path_key`：資料夾＋單據鍵比對；收付款／材料類因索引可位移只比案件；工作日誌照片 `projects/worklog_<id>/<日期>/<檔>`）；案件紀錄 PATCH／PUT／POST 只接受資料庫裡本來就有的 `files`／`invoiceFiles`（`quotations._strip_foreign_file_entries`）。緊急開關 `routers/attachments.ATTACHMENTS_OPEN_ENABLED`（False ⇒ 一律 404）。守門：`backend/tests/test_attachments_bind_2026_09_30.py`。
+
+**新增上傳端點時**：先在 `docs/platform/upload_points.json` 加一列（`catalog`＝source_type，或 `excluded`＋理由，或 `pending`＋理由）；`catalog` 類由擁有模組的提供者宣告該 type 並實作 `open`。
+
+---
+
+## IP-106　`gl.source_status`：來源是否已入總帳（M06 → L1 `helpers/gl_status` → 各來源寫入端點）
+
+2026-09-30（MONEY-FLOWS §9 L3，主持裁示）：使用者改動／取消**已入總帳**的來源（收款、派工發票日、匯款…）前後，回應帶一句非阻擋提示「此筆已入總帳：修改後下次引擎執行會產生沖轉草稿」。**編號暫定（106），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計：`modules/accounting/ledger/source_status.py::source_status`（`ModuleSpec.providers`，名稱 `accounting`） |
+| 使用方 | L1 `helpers/gl_status.py::gl_posted_warning`；呼叫端：M01 `mark_payment`／案件紀錄整包存（E03、E01）、M04 派工 `invoice-date`（E04）與匯款 `paid-toggle unpay`（E05） |
+| 形式 | provider，單一提供者（名稱 `accounting`） |
+| 語法 | 提供：`("gl.source_status", "accounting"): fn`；取用：`registry.providers("gl.source_status").get("accounting")` ⇒ `fn(conn, source_type, source_key, prefix=False) -> [{event_code, status, voucher_no, event_date}]` |
+| 回傳 | 只回 `posted`（已過帳）與 `drift`（來源已變、舊傳票仍在）；草稿不算入帳（改了引擎會自動重建）。`prefix=True` ⇒ `source_key` 當前綴。表不存在／查詢失敗 ⇒ `[]` |
+| 對方不在時 | 沒有提供者 ⇒ `gl_posted_warning` 回 `None`（沒有總帳就沒有可提示的），寫入照常；提供者丟例外 ⇒ 記 ERROR、回 `None`，不擋寫入 |
+| 契約版本 | 1（2026-09-30） |
+| 守門 | `backend/tests/test_gl_source_status_2026_09_30.py` |
+
+---
+
+## IP-107　`ledger.month_totals`：總帳逐月彙總（M06 → M08 營運分析『與總帳差異』頁）
+
+2026-09-30（MONEY-FLOWS §9 L4 / Part B）：營運報表不讀總帳（F6）；差異頁需要總帳逐月的收入／費用彙總，經提供者取得（L2 不互相 import）。**編號暫定（107），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計：`modules/accounting/ledger/month_totals.py::month_totals` |
+| 使用方 | M08 `modules/analytics/api/ledger_diff.py`：`GET /api/reports/ledger-diff` |
+| 形式 | provider，單一提供者（名稱 `accounting`） |
+| 語法 | 提供：`("ledger.month_totals", "accounting"): fn`；取用：`registry.providers("ledger.month_totals").get("accounting")` ⇒ `fn(conn, year)` |
+| 回傳 | `{available, year, months:{"YYYY-MM":{engine_posted, engine_unposted, bonus_posted, manual_posted: {revenue, expense, tax_out, tax_in}, by_origin_posted:{origin: expense}}}, events:{"YYYY-MM":{drift, orphan, blocked}}}`；不含結轉（`kind='closing'`）與已作廢；表不存在 ⇒ `{available:false, notice}` |
+| 對方不在時 | 提供者不在 ⇒ 差異頁 `glAvailable:false` 並說明，只顯示營運報表欄（不是 0） |
+| 契約版本 | 1（2026-09-30） |
+| 守門 | `backend/tests/test_ledger_diff_2026_09_30.py` |
+
+---
+
 ## IP-100　`payables.pending`：請款待付款（M01 → M05 出納；多提供者）
+
+> **A2-3 追加（2026-10-01，加法、契約版本不變）**：項目多 `kind／docCode／payeeType／payeeUsername／payeeBank（遮罩）／payTerms／remitDate`；`mark_paid` 的 `remit` 多收 `payMethod（transfer／cash／petty_cash）／payAccountCode／payTerms／remitDate`；提供者可選實作 `payee_info(conn, key)`（出納端點 `GET /api/cashier/pending-payables/{來源}/{key}/payee-bank` 用；完整銀行資料只給能付款的人、每次留稽核）。可選的銀行資料表提供者 `payee.bank_profile(conn, username, viewer) → {bank, account, accountName} | None`（W3，payroll；不在 ⇒ 用單據手填快照）。
 
 對應 CORE-SPEC「請款流程（下一版）」（2026-09-27 使用者裁示）：核准而未付款的請款（案件額外支出）進出納待付款；出納登錄付款寫回付款日。
 以**額外引用疊加**：出納既有的兩個來源（IP-14 承攬商匯款、IP-8 獎金分潤）不動，另開一個名稱空間。
@@ -700,7 +787,7 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M05 應收應付：`modules/arap/gl_events.py`（銷項發票 E01、客戶收款 E03；2026-09-30 C1）。M04 外包工班：`modules/subcontract/gl_events.py`（承攬商發票 E04、匯款 E05／E05b；2026-09-30 C2）。M07 薪資獎金：`modules/payroll/gl_events.py`（勞報單應付 E06、付款 E06b；2026-09-30 C3）。M03 採購・庫存：`modules/supply/gl_events.py`（進貨入庫 E08、進貨發票進項稅 E08b、進貨付款 E09；2026-09-30 C4）。M01 案件：`modules/case/gl_events.py`（額外支出 E11／E11b、叫料 E12／E12b；2026-09-30 C4b）。M06 總帳自己（固定資產）：`modules/accounting/ledger/fixed_assets.py`（取得 E13a、每月折舊 E13b，來源鍵 `fixed_assets`；2026-09-30 C6）。之後逐批接入：建構器 outbox（C7），每接一個在本列加一筆 `modules/<key>/…` |
+| 提供方 | M05 應收應付：`modules/arap/gl_events.py`（銷項發票 E01、客戶收款 E03；2026-09-30 C1）。M04 外包工班：`modules/subcontract/gl_events.py`（承攬商發票 E04、匯款 E05／E05b；2026-09-30 C2）。自訂模組（建構器，L1）：`modules/accounting/ledger/custom_events.py`（單據入帳 E20／收付款 E20b；資料來自 `helpers/custom_finance.gl_lines`，鍵 `custom_modules`；2026-09-30 C7）。M07 薪資獎金：`modules/payroll/gl_events.py`（勞報單應付 E06、付款 E06b；2026-09-30 C3）。M03 採購・庫存：`modules/supply/gl_events.py`（進貨入庫 E08、進貨發票進項稅 E08b、進貨付款 E09；2026-09-30 C4）。M01 案件：`modules/case/gl_events.py`（額外支出 E11／E11b、叫料 E12／E12b；2026-09-30 C4b）。M06 總帳自己（固定資產）：`modules/accounting/ledger/fixed_assets.py`（取得 E13a、每月折舊 E13b，來源鍵 `fixed_assets`；2026-09-30 C6）。之後逐批接入：建構器 outbox（C7），每接一個在本列加一筆 `modules/<key>/…` |
 | 使用方 | M06 `modules/accounting/ledger/contract.py::collect`（`GET /api/ledger/events/preview`）與 `modules/accounting/ledger/engine.py::run`（`POST /api/ledger/engine/run`，功能旗標 engine_drafts） |
 | 形式 | provider，多提供者（`registry.providers("gl.events")`，鍵＝來源模組 key） |
 | 語法 | 提供：`ModuleSpec(providers={("gl.events", "<模組key>"): fn})`；`fn(start, end, *, changed_since="") -> {"events": [Event], "notice": str}`<br>Event：`{source_type, source_key(不可變、不含陣列索引), event_code, event_date(YYYY-MM-DD 權責日), doc_no, case_no, party{key,name}, tax_code, mode(snapshot｜cumulative｜append), lines:[{role, side(D｜C), amount(非負整數新臺幣), case_no, party_key, tax_code, memo}], meta}`。來源給**角色**，角色→科目由 M06 設定（`gl_account_roles`） |
@@ -709,3 +796,49 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 契約版本 | 1（2026-09-30） |
 | 守門 | `backend/modules/accounting/tests/test_ledger_a_contract_2026_09_30.py`：驗證（12 種壞事件各有原因）、內容雜湊（meta／順序／說明不參與，金額變了雜湊必變）、正對照（合格事件必出現且帶雜湊）、反向控制（缺席、未接入、提供者壞掉、無效事件、重複、notice 傳遞）、API 權限與缺席說明 |
 
+## IP-BK1　`payee.bank_profile`：收款人銀行資料（payroll → 請款／出納／A2 撥款；單一提供者；暫定號，列車定號）
+
+**狀態：實作於 `wip/w3-bank-profile`（2026-10-01，W3）。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | `modules/payroll/bank_account.py::payee_bank_profile` |
+| 使用方 | A2 請款收款人／出納撥款（`modules/case`、`modules/arap`；W2）、`modules/payroll/api/bank_account.py`（本模組 API 也走同一支） |
+| 形式 | provider（單一提供者；`ModuleSpec.providers[("payee.bank_profile", "payroll")]`）；簽章 `(conn, username, viewer, reveal=False, audit_token=None, purpose="") -> dict` |
+| 回傳 | `{"status": "none"}`（沒登錄）或 `{"status": "ok", bankCode, bankName, bankBranch, accountName, accountNumber（遮蔽時為空字串）, accountNumberMasked（`****1234`）, last4, masked, updatedAt, updatedBy}`；拒絕 reveal 時多 `revealRefused` |
+| 遮蔽規則 | 本人看自己：完整。超級管理員／財務（`finance`）／出納（`cashier`）：預設遮蔽，`reveal=True` **且帶 `audit_token`** 才回完整，並寫稽核 `user.bank_account.reveal`（誰、看誰、用途、末四碼；不記全碼）。其他人：遮蔽。`reveal` 沒帶 token ⇒ 照遮蔽回＋`revealRefused`（不會靜默給全碼又沒紀錄） |
+| 快照 | 單據送審時凍結用 `bank_account.snapshot(conn, username, viewer)`：只存遮蔽版（銀行／分行／戶名／末四碼／凍結時間）；**完整帳號不散落在單據 JSON**，付款時由有資格者 reveal 讀現值（送審後帳號被改 ⇒ 快照末四碼與現值不同，簽核畫面可據此警示） |
+| 對方不在時 | payroll 模組不在 ⇒ `single_provider("payee.bank_profile")` 為 None ⇒ 呼叫端退回收款人文字（請款單自己的收款人欄），不報錯 |
+| 資料 | payroll migration 0003 `user_bank_accounts`（T1）；每人一個 `active=1`（部分唯一索引），改帳號＝舊列 `active=0`＋新列 |
+| 守門 | `modules/payroll/tests/test_bank_account_2026_10_01.py`（遮蔽矩陣、IDOR、稽核不含全碼、快照、reveal 必帶 token）、e2e `test_e2e_bank_account_2026_10_01.py` |
+
+## IP-108　`expense.categories`：費用類別清單（M06 → 費用單據／請款；暫定號，列車定號；2026-10-01，W4）
+
+費用類別清單歸會計主管維護（`expense_categories`，migration 0003）；費用單據只消費代碼、不維護。事件行用 `category`（代碼）＋選填 `tax`／`doc_type`，科目由 `gl_category_map` 決定（`ledger/category_map.py`，引擎收集時套用）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計：`modules/accounting/api/ledger_category_map.py::provide_categories` |
+| 使用方 | 尚無（M01 費用單據 A2 接入時補；目前只有總帳自己的對應頁） |
+| 形式 | provider，單一提供者（名稱 `accounting`） |
+| HTTP | `GET /api/expense-categories`（任何登入者；只讀啟用中；`{categories:[…]}`，給費用單據下拉選單）；維護：`PUT /api/ledger/expense-categories`（最高管理者） |
+| 語法 | 提供：`("expense.categories", "accounting"): fn`；取用：`registry.providers("expense.categories").get("accounting")` ⇒ `fn(conn)` |
+| 回傳 | `[{code, name, default_tax}]`，只含啟用中的類別；**代碼發布後不可改**（單據存代碼；改名只改 name、停用用 active=0）；消費端忽略未知鍵 |
+| 對方不在時 | 提供者不在 ⇒ 費用單據退回自己的固定類別清單（不阻擋） |
+| 契約版本 | 1（2026-10-01） |
+| 守門 | `backend/modules/accounting/tests/test_category_map_g1_2026_10_01.py` |
+
+另預留兩個能力名稱（尚未實作，不在本表登記；實作時各開一節）：進項憑證來源（多提供者，`fn(start, end) -> [{invoiceNo, invoiceDate, pretax, tax, deductible, source}]`，401 進項彙總讀所有提供者）、逐月類別彙總（帶維度篩選 `dims`，對應 `voucher_lines.dim_json`）。事件契約 v1 的行另有選填 `dims`（`{維度代碼: 字串}`）：引擎寫入 `voucher_lines.dim_json`；有值才進內容雜湊。
+
+## IP-109　`gl.category_account`：費用類別 → 科目代號（M06 → 費用單據；暫定號，列車定號；2026-10-01，W4）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計：`modules/accounting/api/ledger_category_map.py::provide_category_account` |
+| 使用方 | 尚無（M01 費用單據 A2 送審時寫唯讀科目快照；接入時補） |
+| 形式 | provider，單一提供者（名稱 `accounting`） |
+| 語法 | 提供：`("gl.category_account", "accounting"): fn`；取用：`registry.providers("gl.category_account").get("accounting")` ⇒ `fn(conn, category_code_or_name)` |
+| 回傳 | 科目代號字串；沒有對應、類別不存在或已停用 ⇒ `None`（入帳時走預設：有案件＝專案成本、無案件＝其他營業費用）。先比代碼，再比**啟用中**類別名稱全等。**只是顯示用快照**：入帳時引擎依事件行的 `category` 重新解析 |
+| 對方不在時 | 提供者不在 ⇒ 呼叫端視同 `None` |
+| 契約版本 | 1（2026-10-01） |
+| 守門 | `backend/modules/accounting/tests/test_category_map_g1_2026_10_01.py::test_category_account_resolver` |

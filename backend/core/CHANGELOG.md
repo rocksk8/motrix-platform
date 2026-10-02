@@ -2,6 +2,172 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.105 — 2026-10-02（wip/t31-expense-prefill-a3：請款單自動帶入的接線）
+- L1（新增選填參數，向下相容）：`helpers.expense_types.validate_values(…, prior=None, case=None, type_code="")`——`prior`＝修改時舊單的 data：不重新解析任何自動帶入來源、`locked` 欄位沿用舊值（建立時行為不變）；`case`＝`{customer, project}`；`type_code` 供「我上一次填過的內容」查詢。
+- L1（新增）：`helpers.expense_types.last_value_hook(type_code)`（`lastUsed` 來源的查詢鉤子：本人在該類型最近一張單據的欄位值；只查 `case_extra_expenses`）。`validate_expense_type` 在 `helpers.prefill_sources` 上線後，逐欄把 `default: {"$": …}` 交給 `check_field` 檢查（上線前行為不變）。
+
+## 1.104 — 2026-10-02 09:14（wip/t32-prpo-s1-2e）：結案精算 PDF 的採購單分項（32-S5 追補）
+- L0（行為）：`pdf_gen` 結案精算 PDF 的「實際成本精算」在 `summary.itemPoUnadopted > 0` 時多一列「採購單（品項尚未採用）」（分項加總＝實際總成本）；沒有該鍵或為 0 ⇒ 輸出逐字不變。介面不變。
+
+## 1.103 — 2026-10-02 00:07（wip/t31-prefill-sources-2e）：表單自動帶入來源登記處
+- L1（新增）：`helpers/prefill_sources`（`PREFILL_SOURCES`／`list_sources`／`get`／`default_token`／`check_field`／`make_ctx`／`resolve_field`／`fill_defaults`）——預設值 token（`{"$": …}`）的唯一登記處，定義驗證與伺服器取值共用：`requester`／`currentUser`／`requesterDept`／`requesterManager`／`today`／`now`／`company`／`caseCustomer`／`caseProject`／`lastUsed`；每個來源有 label／why／example（文字只在這裡改）、`applies_to`、`lockable`、`needs_context`；resolve 永不丟例外、解析不到＝留白；只在建立當下解析一次，更新（給 `prior`）不重算、locked 欄保留舊值。
+- L1（行為）：`helpers.custom_modules` 的 token 驗證改走登記處（ref 欄位的 token 原本沒檢查，現在檢查；案件類 token 在沒有案件脈絡的自訂單據被擋）；`_validate_fields` 加選填 `mount_has_case`、`_validate_token` 加選填 `mount_has_case`、`_with_default_tokens` 加選填 `ctx`／`prior`（相容擴充，舊呼叫不變）；`DEFAULT_TOKENS` 由登記處衍生。
+- L1（端點，不入快照）：`GET /api/platform/prefill-sources`（登入即可）回登記處清單，表單設計器的下拉只讀這支。
+- 公式 `days_between(起, 迄)`：**只認 `YYYY-MM-DD`**（Python 3.11 的 `date.fromisoformat` 也收 `20261001`、3.10 不收 ⇒ 行為隨直譯器版本變；現在一律拒絕並回公式錯誤）；補上天數規則文件（迄 − 起、不含起算日、同日 0、反向為負、只看前 10 碼）與邊界測試。
+
+## 1.102 — 2026-10-01（wip/builder-b-2e：建構器方案 B 掛載頁籤骨架）
+- L0（新增）：`core.mounts`（`validate_mount_points／declared_points／visible_point／point_id`、`KINDS`、`MAX_TABS_PER_POINT`）——內建模組 `module.json` 可選填 `mount_points`（key／page／kind＝tab／label／perm／context），`core.customization.validate_manifest` 一併驗證（格式錯 ⇒ loader 不載入，同 customization）。沒有 `mount_points` 的模組完全不受影響。
+- L1（新增）：`helpers.custom_modules.visible_mounts`（掛載點的可見頁籤＝自訂模組可見 ∧ 點 perm，唯一一份）、`mount_cap_problems`、`MountError`；`validate_module` 檢查 `mount`；`published_modules()` 每項多一個 `mount` 鍵。路由 `GET /api/platform/mounts?point=`（點不存在／模組未載入 ⇒ 404）、`GET /api/platform/mount-points`（只有最高管理者）。只新增；前端（`mount-tabs.js`、`custom-records.html?embed=1`、首批 `daily-tasks.html`）與建構器欄位隨後出貨。設計 `docs/platform/plans/BUILDER-B-DESIGN.md`。
+
+## 1.101 — 2026-10-01（wip/t31-payslip-mask-a3：勞報單 PDF 帳號遮蔽）
+- L0（新增選填參數，向下相容）：`pdf_gen.generate_payslip_pdf_bytes(slip_no, mask_bank=True)`——預設 fail closed：收款帳號 ⇒ `****末四碼`、不帶存簿影本；只有最高管理者下載、或匯出存檔（F2 法定紀錄）才傳 `False`。
+
+## 1.100 — 2026-10-01（fix/upload-path-guard：自訂單據附件的實體刪除只准在 uploads 之內，稽核探針 Q4）
+- L1（行為）：`helpers.custom_files._remove_physical`／`helpers.custom_module_delete.delete_module` 刪實體檔前先過路徑守門（`custom_files._safe_physical_path`：絕對路徑、`..`、`..\`、磁碟機代號／UNC、NTFS 資料流、符號連結／接合點穿出 uploads ⇒ 略過並記 log，不刪、不丟例外）。介面不變。
+
+## 1.99 — 2026-10-01（fix/contractor-bank-mask：承攬商收款帳號遮蔽）
+- L0（新增，向下相容）：`pdf_gen.generate_contractor_voucher_pdf_bytes(voucher_no, mask_bank=True)` 加選填參數 `mask_bank`（預設遮蔽＝fail closed；只有最高管理者下載才傳 False）；`_build_contractor_voucher_html(v, mask_bank=False)`。`routers/approval_queue.py`：非最高管理者的佇列項目與詳情，帳號遮成 `****末四碼`、存簿封面拿掉。
+
+## 1.98 — 2026-10-01（wip/w1-attach-p3-a3：檔案中心／附件目錄 P3）
+- L1（新增）：`helpers/attachment_search`（`normalize_crit／make_item／matches／finish／count_by_type／case_names／CRIT_KEYS／ITEM_KEYS`）——`attachments.catalog` 提供者的 `search`／`count` 共用件（項目鍵固定、沒有 path；看不到的不列也不回個數）；`preview 元件` 新增 `MotrixFilePreview.byAttachmentRef`（前端）。提供者契約 IP-105 加 `search`／`count`（同契約版次只增）。
+- L1（新增）：`attachment_search.owned(entry, 資料夾, 單據鍵)`——搜尋與各提供者 `open()` 共用的「路徑綁單據」判斷（`upload_path_key`）。
+- 工作日誌照片提供者（`routers/system.py::_WorkLogCatalog`）補 `search`／`count`（權限與路徑綁日誌同 `open()`；GPS／浮水印不外帶）。
+
+## 1.97 — 2026-10-01（wip/w1-a2-2：A2-2 費用單據類型定義）
+- L1（新增）頁面：`expense-types.html`（請款類型定義編輯頁，超級管理員；`l1_pages.json`）＋選單項「請款類型」（`menu_l1.json`，system 群組、perm＝superadmin）。編輯頁列出程式預設的四個類型（定義庫沒有列時以目前生效的預設為起點），改了走既有 `/api/definitions/expense_type` 草稿→驗證→發布；單據仍釘在自己的 `def_version`。
+- L1（新增）：`helpers.expense_types`（費用單據類型定義 `expense_type`：`validate_expense_type／get_type／list_types／cashier_field_keys／normalize_lines／validate_values`，明細金額唯一實作）＋四個預設定義（purchase_req／purchase_order／travel／petty_cash，欄位為草稿待使用者確認）；路由 `GET /api/expense-types`、`GET /api/expense-types/{code}`；`POST /api/definitions/{kind}/{key}/validate` 改用 `D.kinds()`（登記的種類不再 400）。
+
+## 1.96 — 2026-10-01（wip/w1-a2-0：A2 費用單據的底層預留切片，一次到位；之後各類型只動模組）〔train_number：1.92 → 1.96〕
+- L0（新增）：`core.definitions.register_kind(kind, label="", validator=None, default=None)`／`kinds()`／`kinds_meta()`——定義種類可登記（內建四種不變；重複登記或覆寫內建 ⇒ ValueError）；`save_draft／publish／list_definitions／…` 認得登記的種類。路由 `GET /api/definition-kinds`（超級管理員）。
+- L1（新增）：`helpers.tiered_approval.register_doc_type(code, label, unified=False)`／`doc_types_meta()`（就地擴充 `APPROVAL_DOC_TYPES／DEFAULT_UNIFIED_DOC_TYPES／APPROVAL_DOC_TYPE_LABELS`）；路由 `GET /api/settings/approval-doc-types`。`PUT /api/settings/approval-flow-scope` 由固定欄位模型改成依登記表驗證（鍵＝目前全部單據類型、值＝布林；缺／多／非布林 ⇒ 422，與原行為一致）；簽核設定頁接上登記的類型。
+- L1（新增）簽核佇列項目契約（選用欄位，舊項目不變）：`typeLabel`（未知 type 自帶標籤；內建不被覆寫）、`openUrl／approveUrl／rejectUrl／rejectField`（前端優先使用）、`caseless: True`（不掛案件的單據：簽核鏈上的人與送審人＋超級管理員可開，其餘 404；項目與 `approval.detail` 同一個判斷 `_access_step(caseless=)`）。
+- L1（新增）：`helpers.notification_prefs.ensure_event(key, desc)`＋`MODULE_GROUP_LABEL`；`mail_types.register`（owner≠core）自動把新類型併進個人通知偏好「其他模組通知」組。`helpers.email_notify.send_registered(event_key, *, title, rows, usernames=None, to_group=False, reason="", …)`（模組通用寄信入口；字面 key 由 `test_mail_registry` 的掃描核對已登記）。
+- L1（新增）：`helpers.doc_render.render_document(template, view)`（版型＋單據視圖 ⇒ HTML，未核可由程式補標示）；`custom_modules.render_view` 改為委派。
+- L1（新增）權限目錄 `expense_forms`（費用單據；A2-1 起由無案件新增端點讀取；目前列在 `UNREAD_BY_DESIGN`，有人讀它時守門會要求刪掉那一筆）。
+
+## 1.95 — 2026-10-01（wip/w4-g2-5：自訂模組金流屬性原樣傳給總帳）
+- L1（新增回傳鍵）：`helpers.custom_finance.gl_lines` 每個金流行多帶 `finance`（該欄位的整個 `finance` 屬性字典，唯讀副本），每張單據多帶 `data`（單據資料唯讀副本）。之後新增金流屬性（例 `taxField`／`docTypeField`）由總帳提供者解讀，不必再改 helper。只新增鍵，舊消費端忽略。
+
+## 1.94 — 2026-10-01（wip/w2-expense-a2-w2b：費用單據收款人帳號列入 F2 個資備份）
+- L1（行為，不改介面）：`archive._F2_FIELDS` 新增 `案件額外支出`（`case_extra_expenses.payee_account`）。A2 的 migration 0003 讓額外支出表存了收款人銀行帳號，而該表走一般每日 JSON（`SELECT *`）⇒ 帳號會原樣進一般備份／雲端「系統存檔」；現在一般份拿掉該欄、完整列只進 `系統存檔_個資/每日備份/{date}/`，還原用既有 `merge_general_and_pii` 合回。收款人姓名與銀行名稱不列入（同承攬人員界線）。下游效應（R1）：一般備份的「案件額外支出.json」少一欄 `payee_account`（還原需個資份；個資資料夾未建時該欄在還原後為空——與其他 F2 表相同）。
+- L1 前端（`pages/approval-queue.html`）：`extra_expense` 類型的卡片標籤改用佇列項目自帶的 `typeLabel`（A2-0 #2 契約）——費用單據（請購單／採購單／差旅費用請款單／零用金支付單）原本一律顯示「案件額外支出」；舊版額外支出沒有 `typeLabel`，仍顯示「案件額外支出」。只改畫面文字，不改任何介面或資料。
+
+## 1.93 — 2026-10-01（fix/module-delete-ownership：刪除自訂模組）
+- L1（新增）：`helpers.custom_module_delete`（`delete_module`／`record_count`／`ModuleDeleteError`）——建構器「刪除模組」：整個自訂模組（所有版本＋草稿）一起刪；有單據拒絕（409＋單據數），`with_records` 才連單據刪，已有金流 outbox 或送審中一律拒絕。只新增；`DELETE /api/definitions/custom_module/{key}`（routers/definitions.py）呼叫它。modules.json 登記為 L1 單位。
+
+## 1.92 — 2026-10-01（fix/login-approval-popup：簽核處理掉 ⇒ 待簽核通知標已讀）
+- L1（新增）：`helpers.audit._mark_notifications_read(ref_id, types, username=None)`（列入 `__l1_public__`）——簽核已處理（核准只標自己那筆、退回／拒絕標整張單）時把對應通知列標已讀。只新增。報價單核准／退回／拒絕結案已呼叫；登入橫幅改用 `/api/approval-queue/count`（`static/notif.js`）。
+
+## 1.91 — 2026-09-30（wip/w2-bonus-correction：獎金更正單的三種通知）
+- L1（新增）：`helpers.email_notify.notify_bonus_correction_submitted／_approved／_returned`——獎金更正單送審／核准／駁回的通知信（信內不放金額）；`helpers/mail_types.py` 登記三個信件類型。只新增，舊呼叫端不受影響。
+
+## 1.90 — 2026-10-01（wip/w1-unapproved-wm）
+- L1（新增）未核可單據每一頁都要看得到：`helpers.doc_template.unapproved_overlay／UNAPPROVED_RED／UNAPPROVED_HEADER_TEXT`；`unapproved_banner`／`inject_unapproved` 加 `doc_no`、`wm_text`，並附帶每頁標示（fixed 大斜角紅色浮水印 ≥96px 粗體 opacity≈.2、`@page` 邊界框＝每頁頂端紅底白字「未核可預覽稿 – 不可作為正式文件」＋頁尾「單號 ｜ 未核可・僅供預覽 ｜ 第 N 頁」、body 背景平鋪後備；未核可時隱藏舊的灰色 `.wm`／`.wm-overlay`）。報價單（舊灰色浮水印太淡、第 2 頁以後幾乎沒有）與所有單據共用這一套。已核准輸出不變。
+
+## 1.89 — 2026-09-30（wip/w1-t27fix3）
+- 前端共用：`static/approval-return.js` 的 `MotrixApprovalReturn.ask` 在頁面有 `MotrixUI`（案件頁）時改用 `MotrixUI.prompt`（原因必填：空白 toast 後重問、取消不送），沒有才用自己的視窗；案件頁四個退回／撤銷核准的提示用語還原為原本的「退回出貨單「X」…」（test_case_page_p4b_dialogs 釘住的元件與用語）。公開介面不變。
+
+## 1.88 — 2026-09-30（wip/w1-t27fix2）
+- L1（行為）：`helpers.tiered_approval.require_reject_reason(note, conn=None)`——新增選用參數 `conn`（丟錯前先關連線）；各 reject／revoke-approval 端點改為**先狀態與權限、最後才驗原因**；自訂單據的退回原因檢查移進 `custom_modules.decide`（權限之後）。`helpers/custom_modules`／`custom_def_review` 的信件改以名稱明寫呼叫（不用動態 getattr）。
+
+## 1.87 — 2026-09-30（暫用號；wip/w2-open-bind：附件開檔路徑綁單據，安全審查 W3）〔core_bump：暫用 1.99 → 1.82〕〔train_number：1.82 → 1.87〕
+- L1（新增）：`helpers.uploads.upload_path_key(entry, folder, depth=2)`——metadata 的 `path` 在指定資料夾底下時回單據鍵，否則 None（demo 前綴已去掉）。給 `attachments.catalog` 提供者驗「被提供的檔案屬於這張單據」。`routers/attachments.ATTACHMENTS_OPEN_ENABLED` 重新預設開（緊急開關）。
+
+## 1.86 — 2026-09-30（暫用，列車取號；wip/w3-export-pdf：每個 Excel 匯出都要有 PDF、每次匯出都要留紀錄）〔train_number：1.82 → 1.86〕
+- L1（新增）：`helpers.xlsx_out.export_logged(fmt, module, name, label="")`（匯出端點裝飾器：成功後寫稽核 `export.<fmt>`，detail＝module／篩選摘要／列數，不含個資值）、
+  `add_pdf_sibling(router, path, handler, *, module, name, title="", method="GET")`（xlsx 端點的 PDF 姊妹：同一個處理函式、公司資料第二道閘門、Edge headless、PDF 冷卻 30 秒、不吃 Excel 冷卻）、
+  `log_export(authorization, fmt, module, name, filters=None, rows=None, label="")`、`summarize_filters(params)`、`xlsx_to_html(data, title="", max_rows=4000)`、`count_xlsx_rows(data)`、常數 `XLSX_MEDIA`／`PDF_MAX_ROWS`。
+- 行為：8 支 xlsx 匯出端點掛 `export_logged` 並各有 PDF 姊妹（T100 傳票、四大表、營業稅 401、銷項發票清單、營運報表（既有 PDF）、出納執行紀錄、案件批次、外包名冊；網路規劃 Excel／PDF 既有）；
+  lodging 紀錄與每日工作事項歷史（CSV／JSON）匯出也記稽核。守門：`tests/platform/test_export_pdf_and_audit_2026_09_30.py`（AST）。
+- 稽核畫面：模組標籤「匯出」與四個動作標籤。
+
+## 1.85 — 2026-09-30（wip/w1-xss：W3 #2 輸出版型儲存型 XSS；wip/w1-defreview-bypass：W3 #3；升版幅度由列車取號）
+- L1（安全，行為）：`helpers.doc_template._esc` 加跳脫 `"`／`'`；版型會落進屬性的值改白名單——`class`（英數／底線／連字號）、`width`（數字＋%／px／mm／pt／em）、`colspan`（1～20）、浮水印 `count`（1～60，原本可填任意大數撐爆記憶體）；壞值渲染丟 `TemplateError`、儲存驗證（`problems`）同步回報，存不進去。公開介面不變（快照不動）。
+- L1（安全，行為）W3 #3 定義審核繞過：審核只涵蓋自訂模組定義（company）；其他 kind 直接發布與任何還原（審核未啟用時）**都寫稽核 `definitions.publish_unreviewed`**；自訂模組定義的 draft／publish／restore 只接受 `company` 範圍（其餘 400，引擎本來就只讀 company）。
+- L1（安全，新增）：`helpers.doc_template.esc_quotes／attr_esc`——引號跳脫的單一來源（各 builder 的區域 `esc()` 保留原本的 &<>／換行規則，最後一步交給 `esc_quotes`）；單據抬頭／頁尾（公司名稱、英文名、統編、電話、email）與 `<img src>`（存摺、身分證路徑）一律跳脫；JSON 的 Infinity／NaN 進 colspan／count ⇒ `TemplateError`。
+- L1（安全，新增）W3 #3 補：`core.definitions.DefinitionConflict`（HTTP 409）——這份定義有送審中的版本時，`publish`／`restore` 直接拒絕（寫鎖內判斷）；`custom_def_review`：送審記 `baseVersion`，核可時現行版已變 ⇒ 409「送審已過期」（退回仍可）；有送審中的定義時變更審核模式／審核人 ⇒ 409。
+- L1（新增）接線稽核（建構器簽核）：信件類型 `custom_record_submitted／next_tier／approved／returned`、`custom_def_submitted／approved／returned`（`helpers/mail_types`，出現在「信件與通知收件設定」）；`helpers.email_notify.notify_custom_record_*`／`notify_custom_def_*` 七支；模組定義送審的站內通知 ref_id 改 `customdef:<key>:<ver>`（`static/notif.js` 解析 ⇒ 點鈴鐺開審核頁）；定義審核的佇列項目／詳情補列「申請人以外的最高管理者」為可決定者（provider 內，不動 `case_access`）；自訂單據佇列項目新增 `displayNo`（修訂版帶 -R<n>，id 仍是原單號）。
+
+## 1.84 — 2026-09-30（暫用號；wip/w2-gl-warn：已入帳來源的修改提示，MONEY-FLOWS §9 L3）〔core_bump：暫用 1.99 → 1.82〕〔train_number：1.82 → 1.84〕
+- L1（新增）：`helpers.gl_status.gl_posted_warning(conn, source_type, source_key, prefix=False)`——經 `gl.source_status` 提供者（accounting）查來源是否已入總帳，回一句非阻擋提示或 None（沒有提供者／丟例外 ⇒ None）。各來源寫入端點用：成功後把文字放進回應 `glWarning`。
+
+## 1.83 — 2026-09-30（wip/w1-menu-split：選單拆分；升版幅度由列車取號）
+- L1（資料）：`core/menu_l1.json` 新增固定群組 `analysis`「經營分析」（排在財務之前）；群組 `finance` 標籤「財務」→「財務會計」（key 不變，模組 `menu.group` 仍用 `finance`）。不動權限、不動介面快照。
+
+## 1.82 — 2026-09-30（wip/w1-pdf-unapproved；升版幅度由列車取號）
+- L1（新增）：`helpers.doc_template.unapproved_banner／inject_unapproved／UNAPPROVED_TEXT`——尚未核可的單據 PDF／預覽一律顯示紅色「未核可・僅供預覽」橫幅（行內樣式，列印／下載同一份 HTML；`inject_unapproved` 冪等，版型拿掉 banner 積木也擋不掉）。套用：報價單、請款單、開票申請、承攬商匯款申請、出貨單、完工單、會計傳票、自訂模組單據；已核准的輸出不變。
+- L1（新增）：`helpers.tiered_approval.require_reject_reason(note)`——退回／駁回／退回修改／撤銷核准一律要填原因（空白 ⇒ HTTP 400「退回要填原因」；後端強制，前端只是提示）；報價單、請款單、開票申請、承攬商匯款申請、出貨單、完工單、傳票 send-back、自訂模組單據 reject 與各 revoke-approval 都走這一支。
+- 前端共用：`frontend/static/approval-return.js`（`MotrixApprovalReturn.ask／canDecide／loadDelegators`：預覽裡的「退回修改」與各頁退回按鈕共用的原因視窗，原因必填、顯示後端錯誤原文）；`routers/custom_records`：reject 原因必填；自訂模組單據輸出在「尚未核可」狀態（簽核通過後可到達的狀態之外）有紅色警示。
+
+## 1.81 — 2026-09-30（暫用，列車取號；wip/w1-t26fix：列車 26 守門修補）
+- L1（行為，安全）：`GET /api/attachments/open` 本班關閉（`routers/attachments.ATTACHMENTS_OPEN_ENABLED = False`，一律 404；W3 安全檢查：路徑未綁定來源單據，正式修正隨 P3）；`POST /api/audit-log/module-counts` 需 `audit_log` 權限、`since` 非字串 400（wip/w2-t26sec）
+- L1（新增宣告）：`helpers.audit.__l1_public__` 加 `_audit_login_failed`、`_FAIL_REASON_LABELS`、`_MODULE_LABELS`（routers/auth.py、routers/system.py 已在用；wip/w2-t26fix）
+- L1（新增）：`helpers.case_access.case_exists(conn, quote_no)`、`case_sales_department(conn, quote_no)`（L1 金流串接 `helpers/custom_finance` 讀 quotations 只准經這個檔，DEPENDENCY-MAP §3.2）。
+- L1（行為）：`GET /api/custom-modules/finance/case/{案件單號}` 看不到案件／查無案件改回 404（走 `case_access.deny_case`，M01-O1 看不到＝不存在；原為 403）；自訂模組定義送審的簽核佇列提供者改用 `approval_json_of` 讀 `decision_json.approval`（壞 JSON 那一筆跳過並記 ERROR）、詳情 `quoteNo` 改回空（沒有掛案件）。
+
+## 1.80 — 2026-09-30（wip/version-slots：版號佔位，使用者「撞號太多次了，想辦法解決」）〔train_number：1.79 → 1.80〕
+- L0（新增）：`core.migrations.NEXT`——`register("core", NEXT, fn)`＝未取號的 core migration（分支用）：排在已編號的之後跑、不記版號、每次 `run_all` 重跑（靠冪等）；非 core 登記 NEXT ⇒ ValueError。列車 `tools/platform/train_number.py assign` 依檔案順序換成連續整數；列車／platform 上有 NEXT ⇒ `test_version_slots` 紅。已編號的行為不變。
+- 流程：分支不再取號——模組／CORE CHANGELOG 寫 `## (next)`、manifest 寫 `"version": "next"`、`core_bump.py --pending`（G1 快照 core_version="next"、CORE_VERSION 不動）；列車 `train_number.py assign` 一次取號；CHANGELOG／version_manifest 的 git 合併驅動（`setup_merge_drivers.py`）讓兩邊的新增都留。PLAYBOOK §G6
+
+## 1.79 — 2026-09-30（暫用，列車取號；W1 建構器 S2.5～S5：金流串接、欄位改得到、定義送審、單據修訂；wip/w1-builder3-s25）〔train_number：1.76 → 1.78〕〔train_number：1.78 → 1.79〕
+- L1（新增）：`core.paths.FORM_TEMPLATES_DIR`（自訂模組內建範本資料夾；原本用 `__file__` 算，違反 core.paths 守門）
+- L0（新增，只增）：`core.definitions.submit_draft／decide_submitted／open_submission／save_decision`（S4：草稿→送審＝不可變快照 `submitted`＋新版號→核可＝`published`／退回＝`rejected` 保留原因、版號不回收；草稿與快照相同才在核可時刪）；`versions()` 每列多 `submitted_by／submitted_at／decision`。`get()`／`resolve()` 仍只認 `published` ⇒ 舊行為不變
+- L1（新增）：`helpers/custom_def_review`（`submit／decide／open_view／restore_to_draft／queue_items／detail／review_state／set_review_settings`；**審核人名單**（系統設定 `custom_module_def_reviewers`）有申請人以外至少一人 ⇒ 送審自動啟用，沒有 ⇒ 發布維持直接發布並稽核「未經第二人審核」；手動覆寫 `custom_module_def_review`＝auto／on／off；審核人任一位（或代理、或申請人以外的最高管理者）核可即發布，退回要原因、版號不回收，申請人不能審自己送的；啟用時「還原」＝放回草稿）；端點 `GET／PUT /api/custom-modules/definition-review`、`GET /api/custom-modules/{key}/definition/review`、`POST …/definition/{版}/approve|reject`；`POST /api/definitions/custom_module/{key}/publish` 對 custom_module 改走它；簽核佇列新類型 `custom_module_def`（`approval.queue_items`／`approval.detail`）；頁面 `custom-def-review.html`；建構器標頭顯示送審狀態
+- L1（新增）：單據送簽修訂紀錄（S5）——core migration v5：`custom_records.revision`＋表 `custom_record_snapshots`（每次送簽一列不可變快照＋決定回填）；`helpers/custom_history`（`display_no／on_submitted／on_decided／list_revisions／diff_revisions`）；`custom_modules._enter_state` 送簽寫快照、離開簽核狀態回填決定；`get_record` 多 `displayNo`（首次送簽不帶尾碼，被退回後重送＝-R1、-R2）、`view.recordNo` 帶尾碼；`list_records` 每列多 `revision`／`displayNo`；端點 `GET /api/custom/{key}/records/{no}/revisions`、`…/revisions/diff?a=&b=`（與讀單同權限，看不到的欄位不進差異）。與 v3 `custom_record_revisions`（修訂已核准單據＝另開新單）是兩件事
+- L1（新增）：欄位「改得到」（S3 補完）——`helpers.custom_builder_support.can_edit_field／guard_writes`；欄位屬性 `access.editableTo`（形狀同 `visibleTo`；改得到蘊含看得到；看得到但改不到的欄位，送來的值與既有值不同 ⇒ 建立／修改端點回 403 並列出欄位）；`menu.visibleTo` 也擋直接打單據端點（`routers.custom_records._can_use` ⇒ 404，不只藏選單）；`access_problems` 兩個鍵都驗，必填欄位不可設成部分人看得到或改得到
+- L1（新增）：金流串接（S2.5）——`helpers/custom_finance`（`post_states／on_transition／expense_entries／income_items／undated_counts／dup_skipped／case_finance／EVENT_POSTED／EVENT_REVERSED`）；入帳狀態進入／離開時在同一交易寫 `custom_record_finance_outbox`（`custom_module._enter_state` 呼叫）；IP-9 `expense.entries` 多提供者 `custom_module`（entries 多選填鍵 `cashDate／cashAmount`，營運報表現金口徑改用）；營運報表收入併入自訂模組收入（`reports._custom_income`）與「待補登」說明；端點 `GET /api/custom-modules/finance/case/{案件單號}`、`GET /api/custom-modules/finance/summary`；`case_finance` 回傳 `income.skippedTotal`（案件是內建案件時收入行標 `skipped`）；端點 `GET /api/custom-modules/finance/case/{案件單號}` 需查看財務金額權限與案件單據讀取權限；案件財務總覽（M01）與成本精算頁併入自訂模組支出
+
+## （不升版號：介面不變）— 歷史紀錄分層搜尋＋失敗紀錄
+core migration v6（audit_log 加 module／case_no／ref_no／result／reason_code／status_code＋搜尋索引＋分批回填）；L1 新增 helpers.audit 私有函式（_derive_fields／_audit_failure／_audit_login_failed），_audit 簽章不變；auth_middleware 回應後記失敗寫入（403/404/409/422/428/500，不含 GET、不含 401 過期）。
+
+## 1.78 — 2026-09-30（暫用號；wip/w2-upload-magic：上傳檔頭檢查）〔train_number：1.76 → 1.77〕〔train_number：1.77 → 1.78〕
+- L1（新增）：`helpers.uploads._check_upload_magic`（列入 `__l1_public__`）——副檔名白名單之外的檔頭（magic bytes）檢查，唯一關卡；`save_document_files` 自動套用，自有存檔邏輯的 L2（勞報單回簽檔）與 L1 工作日誌照片呼叫同一支。不符 ⇒ 400＋稽核 `upload.rejected_magic`。白名單裡沒有檔頭規則的副檔名一律擋（fail-closed）。`save_document_files` 簽章不變。
+
+## 1.77 — 2026-09-30（暫用號；wip/w2-attach-p2：附件目錄 P2，IP-105）〔train_number：1.76 → 1.77〕
+- L1（新增）：`helpers.uploads.ATTACHMENTS_CATALOG`（capability 名 `attachments.catalog`）、`OpenedFile`（`abs_path, filename, mime, size`）、`pick_file(files, file_id)`、`opened_upload_file(entry)`；`routers/attachments.py`：`GET /api/attachments/open?type=&doc=&file=`（找認領 type 的提供者 ⇒ `open()`；看不到＝查無＝404；實體檔必須在 uploads 或提供者宣告的 `ROOTS` 之下）。`save_document_files` 與既有 `attachments.for_document`／`uploads.path_access` 不變。
+
+## 1.76 — 2026-09-30（暫用，列車取號；wip/w1-file-preview：共用檔案預覽元件 P1，前端新增、Python 介面不變）
+- L1（新增，前端，不在 Python 介面快照內）：`frontend/static/file-preview.js`（`window.MotrixFilePreview`：`open／openFile／kind／withMime／byUploadsPath／openInNewTab／close／refresh／setStatus`）——從傳票頁 JV28 抽出的頁內預覽窗（副檔名＋mime 雙重符合才內嵌 image／pdf、其餘檔案卡＋下載、blob 指定 type、關閉或切換 revoke、競態丟棄、鍵盤與焦點規則照 JV28）。傳票頁改用（data-testid 沿用舊名）；出納勞報單簽回檔（保留「另開新分頁」）、勞報單頁、案件管理、報價單、成本精算、業務開發、簽核佇列、自訂模組單據的附件開啟都改用它，不再 `window.open`／換 photo-token。
+
+## 1.75 — 2026-09-30（列車 25 合併補號；wip/w1-builder3 c98f5bcc 的 L1 新增，原寫在 1.73 段但 1.74 已被行事曆開關取用）
+- L1（新增）：`core.paths.FORM_TEMPLATES_DIR`（自訂模組內建範本資料夾；原本用 `__file__` 算，違反 core.paths 守門）
+
+## （不升版號：介面不變）— 2026-09-30（wip/w2-edge-profile：Edge PDF 重用專屬 profile）
+- L1（行為，私有）：`helpers/startup.py` 新增 `_EDGE_PROFILE_ROOT`（`<LOGS_DIR>/edge_profiles`）、`_EDGE_PROFILE_MAX_BYTES`／`_EDGE_PROFILE_CHECK_EVERY` 與內部池函式；`run_edge_pdf(cmd)` 簽章不變，命令沒有 `--user-data-dir` 時自動帶專屬 profile（逾時／非 0 結束／過大 ⇒ 整份重建；取不到 ⇒ 退回舊行為）。產品碼只有 `helpers/startup.py` 可以帶 `--user-data-dir`。
+
+## （不升版號：介面不變）— 2026-09-30（wip/w2-backup-dedup：每日備份同上一份）
+- L0（行為，私有）：`archive.py` 每日備份資料沒變（內容指紋與前一份相同，不含備份自己的稽核／sessions）時：本機快照硬連結前一份、雲端整庫與 41 張表 JSON 只寫 `SAME_AS.json`（月備份不省）；清理不刪被標記引用的日子；新增內部函式與 `backend/tools/find_backup.py`（還原用）。無公開介面變動；DR-SOP §3b。
+## （不升版號：介面不變）— 2026-09-30（wip/w2-disk-quick：降低硬碟重複寫入）
+- L0（行為，私有）：`heartbeat_job.py` 正常時只在狀態改變／每日第一筆／壞的狀態每小時才記 log（狀態記在 `logs/heartbeat_state.json`）；`heartbeat_job.log`、`backup_job.log` 改 RotatingFileHandler（5MB×3）。測試端（conftest）：demo 庫到用才複製；測試暫存目錄不洩漏。無公開介面變動。
+
+## 1.74 — 2026-09-30 12:00（暫用，列車取號；wip/cal-toggle：行事曆推送可選）〔core_bump：暫用 1.72 → 1.74〕
+- L1（新增）：`helpers.google_calendar` 事件種類開關——`EVENT_TYPES`／`EVENT_CODES`（13 種：既有 9 種預設開、新 4 種 `case_update`／`dev_case_update`／`contractor_payout`／`expense_payout` 預設關）、`event_types()`、`event_switches(cfg=None)`（缺項或非 bool 取預設）、`event_enabled(code)`（未知代碼 ⇒ False）。存於 `system_settings.google_calendar.events`，不需 migration；全域 `enabled` 仍為總開關。
+- L1（新增）：`helpers.google_calendar.push_event_for_module(code, summary, description, event_date=None, merge_key="")`（經 `helpers` 匯出）——模組組好內容、L1 只判斷開關並呼叫 Google；`merge_key` ⇒ 同一 (代碼, key, 日期) 合併為一個事件（以 Google private extendedProperty `motrixMergeKey` 找回、說明累加；行程內每 key 一把鎖）。fire-and-forget、不拋出；呼叫端須在 commit 之後 `spawn_bg_thread`（名稱符合 write_txn_scan 的 `push_event_*`）。
+- L1（行為）：既有 9 支 `push_event_for_*` 開頭先判斷自己的開關；關閉 ⇒ 不建、不改、不刪（既有事件保留）。`push_event_delete_for_case_stage`（階段被刪除的清理）不受開關影響。
+- L1（行為）：`GET /api/settings/google-calendar` 多回 `events`（有效值）與 `eventTypes`（目錄）；`PUT` 收 `events: {代碼: bool}`（未知代碼／非 bool ⇒ 400），每個實際變更記一筆稽核 `settings.google_calendar.event_toggle`（detail：event／from／to），回 `changed`。仍只限最高管理者。頁面 `google-calendar-settings.html` 加事件種類勾選清單。守門 `tests/test_calendar_event_toggles_2026_09_30.py`、`tests/test_e2e_calendar_event_toggles_2026_09_30.py`；假行事曆 `tests/_fake_gcal.py`
+
+## 1.73 — 2026-09-30（W1 建構器第三輪 S1～S3，暫用號；wip/w1-builder3；1.72 已被 wip/sec-p0 取用）
+- L1（新增）：`helpers.custom_fields.EXT_TYPES／MODULE_TYPES／OPTION_TYPES`——自訂模組新欄位型別 `textarea`（多行文字）、`radio`（單選）、`checkboxes`（複選）、`multiselect`（下拉複選）、`daterange`（日期時間區間 `{from,to}`）；`validate_definition(…, types=)` 可傳型別集合（預設仍是 P4 的 5 種，內建單據的 customFields 不受影響）；`_coerce` 支援新型別與屬性 `maxLength／min／max／withTime／allowOther／minSelect／maxSelect`（只增）
+- L1（新增）：`helpers.custom_modules`——欄位型別 `table`（明細表：逐列逐欄驗證、列內公式、列數限制、索引只記列數）、`clean_table`、`table_columns`、`FINANCE_KINDS`、欄位屬性 `finance:{kind,dateField,cashDateField,caseField}` 與模組層 `finance.postStates` 的發布驗證（金流性質，使用者 2026-09-30 規則；提供者與報表整合在後續段）
+- L1（新增）：`helpers.formula`——函式 `total(表,"欄")`、`avg(表,"欄")`、`count(表)`（明細表加總／平均／列數，空值不算 0）、`round_half_up(x[,n])`（與既有 `round` 同為四捨五入的明確別名；`round` 語意不變）；`check(expr, fields, tables=)` 可驗明細表引用
+- L1（新增）：core migration v3（建構器 S1～S5 底層，只增）——`ui_definitions` 加 `submitted_by／submitted_at／decision_json`（定義送審／退回）；`custom_records` 加 `base_no／rev／supersedes_id` 與表 `custom_record_revisions`（單據 -R 修訂）；表 `custom_record_finance_outbox`（金流事件，`dedupe_key` 唯一，供 W4 總帳）。明細表值、欄位／選單可見設定、選單群組都在定義／單據 JSON 內，不另建表
+- L1（新增）：`helpers.custom_builder_support`——`mask_for／can_see_field／can_see_menu／access_problems／leaking_formulas`（欄位 `access.visibleTo`、選單 `menu.visibleTo` 的後端強制與發布驗證，公式引用受限欄位而可見範圍較大＝洩漏，發布拒絕）；`emit_finance_event／pending_finance_events／mark_finance_processed`（金流 outbox，`EVENT_FINANCE_POSTED／REVERSED`）；`create_revision`（單據 -R 修訂）。`custom_modules.visible_to` 依 `menu.visibleTo` 過濾（沒設＝不變）；`validate_module` 加可見設定驗證
+- L1（新增）：組織元件（S2）——`helpers.custom_modules.ref_labels(conn, body, data)`（單據參照欄的顯示名稱）；`ref` 欄位屬性 `multiple`（複選，值＝去重代號清單，逐一驗證存在）；參照對象 `departments`；元件群組 `org` 與元件 `user／users／dept／depts`（都是 `ref` 的預設屬性組）；`get_record` 回傳多 `refLabels`（只增）
+- L1（新增）：`helpers.custom_builder_support`（S3）——`hidden_keys／mask_record／mask_records／mask_compute／keep_hidden_values／render_output_for`（欄位可見的後端強制：讀取、列表、寫入回應、即時計算、輸出都拿掉看不到的欄位；受限使用者存檔不會清掉看不到的欄位）；`access_problems` 加「必填欄位不可設成部分人才看得到」。`routers.custom_records` 全部單據端點改走這些函式；`VISIBLE_ROLES`（可見設定可選的角色，同基本角色；目錄 `roles`）；`access_problems` 的問題路徑改用 `fields[i]`（建構器標卡片）並檢查角色在清單內
+- L1（新增）：附件欄（S2）——core migration v4 `custom_record_files`（先傳後綁單；T1，實體檔在 `uploads/custom_records/<模組>/`）；`helpers/custom_files`（`accepted_exts／clean_ids／check_files／bind_files／remove_files／remove_staged／purge_stale_staged／register_staged／file_meta／files_of_field／view_names／CustomFilesAccess`，`uploads.path_access` 提供者 `custom_files` 認領資料夾 `custom_records`，IP-104）；欄位型別 `file`／`image`（屬性 `accept`＝白名單子集、`maxFiles`）；端點 `POST /api/custom/{key}/files/{欄位}`、`DELETE /api/custom/{key}/files/{id}`；`get_record` 多 `fileMeta`；`mask_record` 一併拿掉看不到欄位的 `fileMeta`；`db.py`／`archive.py` 登記 v3／v4 新表（demo 重置清單、每日匯出）
+
+## （不升版號：介面不變）— 2026-09-30（wip/w2-voucher-office：傳票附件開放 Word／Excel）
+- L1（行為，私有）：`helpers/uploads.py` 新增私有表 `_EXTRA_EXTS_BY_SUBFOLDER`（個別單據類型另外放行的副檔名；目前只有 `voucher_attachments`：docx／xlsx／doc／xls）；`save_document_files` 簽章與其他呼叫端的白名單（jpg／png／pdf）不變。
+
+## 1.72 — 2026-09-30（暫用，列車取號；wip/sec-p0 安全修正 P0）
+- L1（新增）：`helpers.uploads.PATH_ACCESS`（＝`"uploads.path_access"`，IP-104）、`canonical_upload_path(raw)`（上傳相對路徑正規化：絕對路徑、`..`、`.`、反斜線、冒號、NUL、空段、只有一段、realpath 與字面不同〔連結／junction〕或跑出 UPLOADS_ROOT ⇒ None）、`upload_owner(rel)`（⇒ `(資料夾, 其餘各段)`，去掉 `_demo_uploads/`、`_demo_projects/`→`projects`）、`upload_readable(conn, rel, user)`（依資料夾找 `uploads.path_access` 提供者、用擁有單據的規則判斷；沒人認領 ⇒ False；提供者例外 ⇒ False＋ERROR）
+- L1（行為，安全）：`GET /api/photo-token` 原本對任何路徑簽發（只要求登入）、`GET /api/uploads/{path}` 帶 Authorization 那條也只要求登入 ⇒ 兩者改為 `canonical_upload_path`（不合法 403）＋`upload_readable`，或帶 `type`／`id`（簽核佇列情境）時詳情守門放行且詳情列出該路徑；其餘 404「檔案不存在」（與查無同一句）。簽章改綁正規路徑（`a/b/c`）；已發出的舊簽章（1 小時）部署後失效、重新載入即可
+- L1（新增，私有）：`routers/approval_queue._open_detail`（詳情端點的守門抽出，行為不變）、`detail_file_paths`；`routers/system._WorkLogPhotoAccess`（`projects/` 工作日誌照片：`work_log`／`case_manage` 模組，或日誌掛的案件 `case_documents_readable`）
+- 頁面：`approval-queue.html` 換簽章時帶目前詳情的 (type, id)
+- 〔稽核 W2 補修〕L1（新增端點）：`POST /api/photo-token/batch {paths[], type?, id?}` ⇒ `{tokens:{路徑:簽章}, denied:[路徑], ttl}`（上限 200，超過 400）。規則同單張端點，但簽核佇列情境**一次請求最多跑一次**詳情守門（只有路徑單看擁有單據讀不到時才跑）⇒ 被拒時 audit 一筆。approval-queue 縮圖改用批次（S1：原本 N 張圖＝N 次詳情提供者＋N 筆 audit；20 張量測 589 ms → 58 ms，詳情守門 20 次 → 1 次）；點開單一檔案仍用單張端點（相容保留）。守門 `tests/platform/test_upload_folders_claimed_2026_09_30.py`（S2：每個上傳寫入資料夾都要被提供者認領或明列排除）
+- 已知限制：`routers/system.py` 在 import 時以 `registry.provide` 登記 L1 工作日誌提供者（L1 沒有 ModuleSpec；同 `helpers/custom_modules.py` 的既有作法；「不在 import 時登記」的守門只管 M01）
+- 已知限制（稽核 S6，不在本包修）：`routers/system._WorkLogPhotoAccess.readable` 每張照片對 `work_logs` 做 `photos LIKE '%…%'` 全表掃描（日誌上千筆＋一次 20～30 張圖＝N 次掃描）；日後改以路徑中的 `worklog_<id>` 直接 `WHERE id=?` 定位
+
 ## 1.71 — 2026-09-30（暫用，列車取號；wip/w2-report-cash）
 - L1（新增）：`helpers.tax_calc.receipt_amounts(receivable, actual, fee)` ⇒ `(bank, gross, fee)`，經 `helpers` 匯出：已收款項的銀行入帳／收入(含稅)／手續費單一定義（實收＝銀行入帳、收入＝入帳＋手續費、淨額＝入帳不再減手續費）。`summarize_payment_items` 的 `netAmount`／`netCollected` 改用它。
 - L1（新增）：`helpers.recognition_basis.DEFAULT_BASIS`（營運報表預設口徑＝`cash`）；`normalize_basis(None)` 回它（原為 accrual）。

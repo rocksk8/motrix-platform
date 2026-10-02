@@ -205,6 +205,10 @@ def _settlement_rows_html(settle):
                 text += "<small>（含稅 %s）</small>" % _settle_money(qt)
         rows.append("<tr><td>%s</td><td class='num'>%s</td></tr>"
                     % (lbl, text))
+        po_unadopted = ((settle or {}).get("summary") or {}).get("itemPoUnadopted") or 0
+        if key == "itemActualTotal" and po_unadopted > 0:
+            # 32-S5：未採用的採購單連結金額另列一行（分項加總＝實際總成本）；沒有這個鍵／為 0 的歷史精算完全不變
+            rows.append("<tr><td>採購單（品項尚未採用）</td><td class='num'>%s</td></tr>" % _settle_money(po_unadopted))
     return "".join(rows)
 
 

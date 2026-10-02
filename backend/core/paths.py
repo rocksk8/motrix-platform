@@ -3,7 +3,7 @@
 
 [單位] plat:paths    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] AUTOSTART_BAT, BACKEND_DIR, BACKUP_ALERT_DIR, BUILD_COMMIT_FILE, CERTS_DIR, CERT_PEM, COMPANY_CONFIRMATION_FILE,
-    COMPANY_SETUP_GRACE_FILE, DB_PATH, INSTALL_IDENTITY_FILE,
+    COMPANY_SETUP_GRACE_FILE, DB_PATH, FORM_TEMPLATES_DIR, INSTALL_IDENTITY_FILE,
     DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR, DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR, DEMO_DB_PATH,
     DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR, DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR,
     DEMO_PAYSLIP_ARCHIVE_DIR, DEMO_PDF_ARCHIVE_DIR, DEMO_PROJECT_PHOTOS_DIR,
@@ -108,6 +108,8 @@ CERT_PEM = os.path.join(CERTS_DIR, "cert.pem")
 INITIAL_ADMIN_CREDENTIALS = backend(".initial_admin_credentials.txt")
 INITIAL_DEMO_CREDENTIALS = backend(".initial_demo_credentials.txt")
 BUILD_COMMIT_FILE = backend(".build_commit")
+#: 自訂模組的內建範本（程式出貨的 JSON；`helpers.custom_modules.templates()`）
+FORM_TEMPLATES_DIR = backend("helpers", "form_templates")
 DEPLOYED_COMMIT_FILE = backend(".deployed_commit.json")
 VERSION_MANIFEST = backend("version_manifest.json")
 #: 排程啟動腳本。內含**這台機器的設定**（對外連線總開關、安裝路徑），不是程式碼（稽核 X-9b M-4）

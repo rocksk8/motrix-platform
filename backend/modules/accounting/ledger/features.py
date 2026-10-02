@@ -13,17 +13,23 @@ FEATURES = {
     "tax401": ("營業稅 401", "C5", "銷項／進項彙總、對帳、雙月稅額結轉"),
     "fixed_assets": ("固定資產", "C6", "資產卡、直線折舊（管理／稅務）、處分、折舊表"),
     "invoice_adjustments": ("發票折讓／作廢", "C7", "銷貨折讓與退回、發票作廢、折讓證明單"),
-    "custom_records": ("自訂模組入帳", "C7", "建構器自訂單據的入帳對應與反轉"),
+    "custom_records": ("自訂模組入帳", "C7", "建構器自訂單據的入帳對應與反轉。稅額處理：暫以未稅計（待確認）"),
     "backfill": ("補登多年", "C8", "過往年度補登、歷史草稿補產、期初核對"),
     "source_annotations": ("來源憑證補登", "C1", "會計補登進項稅額實際值、發票種類、保固旗標等來源資料"),
 }
 _PREFIX = "feature."
 
 
+#: 這一版真的出貨的功能（有畫面／端點可用）。不在這裡的功能顯示『開發中』、不能開啟（PUT 回 409）——避免使用者開了只看到空白頁籤。
+#: 新批次完成時把它的鍵加進來（守門：test_ledger_c5_ready_2026_09_30）。
+READY = frozenset({"engine_drafts", "tax401", "withholding", "source_annotations"})   # 2026-09-30：401（欄位代號已依官方格式核對、W3 第 6 項已修）、扣繳清單、來源憑證補登可開啟（預設仍關，最高管理者自己開；401 仍有 4 項未核實，畫面明列）
+
+
 def flags(conn):
-    """回 `{鍵: bool}`（沒有紀錄＝關）。"""
+    """回 `{鍵: bool}`（沒有紀錄＝關）。🔴 **有效值＝紀錄開著 且 在 READY 裡**：這是所有功能檢查的唯一入口（端點、頁籤、清單都讀這裡），
+    所以殘留的 `feature.x=1`（舊版開過、之後降回『開發中』）不會讓未出貨的功能又開起來（W3 交叉驗證 2026-09-30）。"""
     on = {r[0][len(_PREFIX):]: r[1] == "1" for r in conn.execute("SELECT key, value FROM gl_settings WHERE key LIKE 'feature.%'")}
-    return {k: bool(on.get(k)) for k in FEATURES}
+    return {k: bool(on.get(k)) and k in READY for k in FEATURES}
 
 
 def set_flag(conn, key, enabled):
@@ -35,4 +41,4 @@ def set_flag(conn, key, enabled):
 
 def listing(conn):
     f = flags(conn)
-    return [{"key": k, "label": v[0], "batch": v[1], "description": v[2], "enabled": f[k]} for k, v in FEATURES.items()]
+    return [{"key": k, "label": v[0], "batch": v[1], "description": v[2], "enabled": f[k], "ready": k in READY} for k, v in FEATURES.items()]

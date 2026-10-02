@@ -52,7 +52,7 @@ def _expected_reassign_types():
     if source_tree.module_installed("modules/supply/"):
         out.add("shipping_note")
     if source_tree.module_installed("modules/subcontract/"):
-        out.add("contractor_voucher")
+        out |= {"contractor_voucher", "contractor_dispatch", "contractor_dispatch_completion"}      # 31-A：派發審核／完工審核
     if source_tree.module_installed("modules/arap/"):
         out |= {"invoice_voucher", "payment_request"}
     return out
@@ -68,10 +68,13 @@ def test_every_reassign_type_has_one_provider(client):
 def test_every_detail_type_has_one_provider(client):
     """每種單據各有一個 `approval.detail`（端點在 L1，2026-09-27）：M01 四種（報價單、完工單、額外支出、已結案變更）與其他模組的。"""
     want = {"quotation", "completion_note", "extra_expense", "case_change"}   # 本檔在 modules/case/tests ⇒ M01 在
+    want |= {"material_order", "material_payment"}   # 31-C 叫料審核／叫料匯款（M01 case 提供）
+    want.add("custom_module_def")            # L1 自訂模組定義送審（`helpers/custom_def_review.detail`，routers/custom_records 匯入時登記）
     if source_tree.module_installed("modules/supply/"):
         want.add("shipping_note")
     if source_tree.module_installed("modules/subcontract/"):
         want.add("contractor_voucher")
+        want |= {"contractor_dispatch", "contractor_dispatch_completion"}      # 31-A
         want.add("dispatch_file_delete")     # W1／N1（承攬商報價單附件刪除審核）由外包工班提供
     if source_tree.module_installed("modules/arap/"):
         want |= {"invoice_voucher", "payment_request"}
@@ -245,8 +248,12 @@ def test_case_sales_without_money_rights_gets_no_passbook(client, make_user):
     assert sales.status_code == 200, sales.text
     assert sales.json().get("moneyMasked") is True
     assert not [f for f in sales.json()["files"] if f.get("id") == "passbook" or f.get("dataUrl")], sales.json()["files"]
+    # 2026-10-01 使用者裁示：存簿封面只有最高管理者；非最高管理者的簽核人也拿不到
     appr = client.get(url, headers=_login(client, au, ap)).json()
-    assert [f for f in appr["files"] if f.get("id") == "passbook" and f.get("dataUrl", "").startswith("data:image/")]
+    assert not [f for f in appr["files"] if f.get("id") == "passbook" or f.get("dataUrl")], appr["files"]
+    sau, sap = make_user(username="apm2_sa", role="superadmin")[:2]
+    sa = client.get(url, headers=_login(client, sau, sap)).json()
+    assert [f for f in sa["files"] if f.get("id") == "passbook" and f.get("dataUrl", "").startswith("data:image/")]   # 正對照
 
 
 def test_unreadable_chain_is_refused(client, iv_setup):

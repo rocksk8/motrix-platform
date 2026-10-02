@@ -80,6 +80,35 @@ APPROVAL_DOC_TYPE_LABELS = {
 }
 
 
+_BUILTIN_DOC_TYPES = tuple(APPROVAL_DOC_TYPES)   # 內建九類（固定）；其餘由 `register_doc_type()` 登記
+
+
+def register_doc_type(code: str, label: str, unified: bool = False) -> None:
+    """登記一種新的簽核單據類型（預留鉤子：A2 的請購／採購／差旅／零用金是第一批使用者）。
+    登記後它立刻出現在簽核設定頁（套用範圍＋獨立流程）、`/api/settings/approval-flow/{code}`、
+    `approval_flow_setting_key`；不必再改 `routers/system.py` 的固定模型或前端清單。
+    `unified`＝預設是否走統一流程（預設 False＝獨立；與 voucher／bonus 同樣先做可逆的一邊）。
+    重複登記（含內建九類）⇒ ValueError：兩個登記者搶同一個代碼不能靜默覆蓋。
+    就地修改 `APPROVAL_DOC_TYPES`／`DEFAULT_UNIFIED_DOC_TYPES`／`APPROVAL_DOC_TYPE_LABELS`（舊的 import 名稱不會失效）。"""
+    import re as _re
+    if not isinstance(code, str) or not _re.match(r"^[a-z][a-z0-9_]{0,39}$", code):
+        raise ValueError("簽核單據類型代碼不合法：%r" % (code,))
+    if code in APPROVAL_DOC_TYPES:
+        raise ValueError("簽核單據類型已登記：%r" % code)
+    if not isinstance(label, str) or not label.strip():
+        raise ValueError("簽核單據類型 %r 缺少名稱" % code)
+    APPROVAL_DOC_TYPES.append(code)
+    APPROVAL_DOC_TYPE_LABELS[code] = label.strip()
+    if unified:
+        DEFAULT_UNIFIED_DOC_TYPES.add(code)
+
+
+def doc_types_meta() -> list:
+    """`[{code, label, builtin, defaultUnified}]`（簽核設定頁用；順序＝內建在前、登記的依登記順序）。"""
+    return [{"code": c, "label": APPROVAL_DOC_TYPE_LABELS.get(c, c), "builtin": c in _BUILTIN_DOC_TYPES,
+             "defaultUnified": c in DEFAULT_UNIFIED_DOC_TYPES} for c in APPROVAL_DOC_TYPES]
+
+
 def approval_flow_setting_key(doc_type: str, scope: dict) -> str:
     """依 approval_flow_scope 設定解析某文件類型送審當下該讀寫哪把 system_settings
     key：scope[doc_type] 為 True（或沒設定時的預設分組）就是走 unified_approval_flow，
@@ -461,6 +490,23 @@ def sign_first_pending(tier: dict, user: dict, now: str, conn=None) -> bool:
     if fp.get("username") != user["username"]:
         fp["onBehalfOf"] = fp.get("username")
     return all(a.get("status") == "approved" for a in approvers)
+
+
+def require_reject_reason(note, conn=None) -> str:
+    """退回／駁回／退回修改一律要填原因（使用者 2026-09-30 規則；後端強制，前端只是提示）。
+    回傳去掉前後空白的原因；空白 ⇒ HTTP 400「退回要填原因」。各單據的 reject／send-back／revoke-approval 端點都走這一支，
+    ⚠️ 順序：**先狀態與權限（404／403／409），最後才檢查原因（400）**——否則「已回簽不可撤銷」這類 409 會被 400 蓋掉（第 27 班 build 紅燈）。
+    原因會進各自的稽核（audit_log／編修紀錄／通知）。"""
+    from fastapi import HTTPException
+    text = ("" if note is None else str(note)).strip()
+    if not text:
+        if conn is not None:                       # 呼叫端已開連線：丟錯前關掉（各端點的慣例）
+            try:
+                conn.close()
+            except Exception:                      # noqa: BLE001
+                pass
+        raise HTTPException(400, "退回要填原因")
+    return text
 
 
 def check_reject_permission(tiers: list, ct_idx: int, user: dict, conn=None):

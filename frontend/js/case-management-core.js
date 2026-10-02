@@ -45,6 +45,9 @@ window.CM_PARTS.push(() => ({
     },
     selected: null,
     activeTab: 'biz',
+    // 附件目錄 P3「全部附件」頁籤：檔案中心（filehub）在才有；資料依案件單號標記（換案件時舊資料不顯示）
+    signedBackBusy: false, signedBackErr: '',
+    fileCenterOn: false, caseFiles: [], caseFilesFor: '', caseFilesLoading: false, caseFilesErr: '', caseFilesUnavail: [],
     execSubTab: 'progress',
     cr: { dealTag: '已成案', caseRecord: null },
     dirty: false,
@@ -76,7 +79,7 @@ window.CM_PARTS.push(() => ({
     _pendingUrlTab: null,
     _initTabFromUrl() {
       var t = new URLSearchParams(location.search).get('tab')
-      var valid = ['biz','exec','dispatch','shipping','completion','feed','fin','xexp']
+      var valid = ['biz','exec','dispatch','shipping','completion','feed','fin','xexp','allfiles']
       // 只記下來，不直接套：選案件時會把 activeTab 重設成 'biz'（那行是刻意的，
       // 見 selectCase 的註解），所以要在重設之後才套，而且只套第一次。
       if (t && valid.indexOf(t) >= 0) this._pendingUrlTab = t
@@ -97,6 +100,7 @@ window.CM_PARTS.push(() => ({
       // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，
       // 而這一頁的主體（案件矩陣）不應該等它。
       this.loadLocations()
+      this.detectFileCenter()
       // Alpine 3 會自動呼叫資料物件上的 init()，而 case-management.html 的
       // <body> 又寫了一次 x-init="init()"，所以整個 init() 每次開頁都跑兩遍：
       // 所有 API 都發兩次，並且第二次 selectCase() 會把第一次已經載好的狀態
@@ -233,10 +237,78 @@ window.CM_PARTS.push(() => ({
         fin: () => { this.loadFinanceSummary(no); this.loadInvoiceVouchers(no); this.loadPaymentRequests(no); this.loadMaterialOrders(no) },
         dispatch: () => { this.loadContractorVouchers(no) },
         feed: () => { this._loadCaseTasks(no) },
+        allfiles: () => { this.loadCaseFiles(no) },
       }
       if (!loaders[tab]) return
       this._tabLoaded = { ...this._tabLoaded, [tab]: no }
       loaders[tab]()
+    },
+
+    // ── 附件目錄 P3：案件頁「全部附件」（檔案中心在才出現；同一支 /api/filehub/search 固定本案件）──
+    // ── 客戶回簽單（報價單回簽附件）：案件頁的列出／上傳／刪除，打既有 /api/quotations/{no}/signed-files ──
+    signedBackFiles() { return (this.selected && this.selected.signed_files) || [] },
+    canUploadSignedBack() { return !!this.selected && this.selected.status === '已送出' && !this.caseReadOnly() },
+    canDeleteSignedBack(f) {
+      const role = this.session && this.session.role
+      return ['admin', 'superadmin'].includes(role) || (!!f.uploaderUsername && f.uploaderUsername === (this.session && this.session.username))
+    },
+    async _refreshSignedBack() {
+      const no = this.selected && this.selected.quote_no
+      if (!no) return
+      const r = await fetch('/api/quotations/' + encodeURIComponent(no), { headers: { Authorization: 'Bearer ' + this.session.token } })
+      if (r.ok && this.selected && this.selected.quote_no === no) this.selected.signed_files = (await r.json()).signed_files || []
+    },
+    async uploadSignedBack(evt) {
+      const files = evt && evt.target && evt.target.files
+      if (!files || !files.length || !this.selected) return
+      const fd = new FormData()
+      for (const f of files) fd.append('files', f)
+      this.signedBackBusy = true; this.signedBackErr = ''
+      try {
+        const r = await fetch('/api/quotations/' + encodeURIComponent(this.selected.quote_no) + '/signed-files', {
+          method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }, body: fd })
+        if (!r.ok) { this.signedBackErr = (await r.json().catch(() => ({}))).detail || '上傳失敗'; return }
+        await this._refreshSignedBack()
+        MotrixUI.toast('已上傳客戶回簽單')
+      } catch (e) { this.signedBackErr = '上傳失敗：' + e.message } finally { this.signedBackBusy = false; evt.target.value = '' }
+    },
+    async deleteSignedBack(f) {
+      if (!(await MotrixUI.confirm('確定刪除「' + f.filename + '」？刪除後無法復原。'))) return
+      this.signedBackErr = ''
+      const r = await fetch('/api/quotations/' + encodeURIComponent(this.selected.quote_no) + '/signed-files/' + encodeURIComponent(f.id), {
+        method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+      if (!r.ok) { this.signedBackErr = (await r.json().catch(() => ({}))).detail || '刪除失敗'; return }
+      await this._refreshSignedBack()
+    },
+
+    async detectFileCenter() {
+      try {
+        const r = await fetch('/api/system/modules/availability', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) return
+        const d = await r.json()
+        this.fileCenterOn = !!(d && d.filehub && d.filehub.state === 'loaded')
+      } catch (e) { /* 偵測不到就當沒裝：頁籤不出現 */ }
+    },
+
+    async loadCaseFiles(no) {
+      this.caseFilesLoading = true; this.caseFilesErr = ''
+      try {
+        const r = await fetch('/api/filehub/search?quote_no=' + encodeURIComponent(no) + '&size=50', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        const d = await r.json().catch(() => null)
+        if (this.selected?.quote_no !== no) return                  // 已換案件：這一份作廢
+        if (!r.ok) { this.caseFiles = []; this.caseFilesErr = (d && d.detail) ? String(d.detail) : '讀取附件失敗（' + r.status + '）'; return }
+        this.caseFiles = d.items || []
+        this.caseFilesUnavail = d.unavailable || []
+        this.caseFilesFor = no
+      } catch (e) { this.caseFilesErr = '網路連線失敗，請重新整理' } finally { this.caseFilesLoading = false }
+    },
+
+    previewCaseFile(i) {
+      const P = window.MotrixFilePreview
+      if (!P || !this.caseFiles[i]) return
+      P.open({ items: this.caseFiles.map(P.withMime), index: i, fetchBlob: P.byAttachmentRef,
+               meta: (it) => [it.docLabel, (it.uploadedAt || '').slice(0, 10), it.uploadedBy].filter(Boolean).join('　'),
+               opener: document.activeElement })
     },
 
     // CM12 P2（2026-09-24）：案件層級狀態的重設集中在各模組的 _reset_<模組>(phase, data)。
@@ -483,6 +555,21 @@ window.CM_PARTS.push(() => ({
         projectTimeline: '專案時程', materialOrders: '叫料', warrantyNote: '保固備註', notes: '備註' })[k] || k
     },
 
+    // 叫料審核（31-C）：存檔時被審核規則拒絕的項目（其餘已存）——說明原因，並把物流項目換回伺服器現值（旗標／序號被改回）
+    async _matRejected(list) {
+      const msgs = [...new Set(list.map(x => x.message))]
+      MotrixUI.toast('叫料審核規則：' + msgs.join('；'), { kind: 'info', ms: 9000 })
+      try {
+        const r = await fetch('/api/quotations/' + this.selected.quote_no, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) return
+        const srv = (await r.json()).data?.caseRecord || {}
+        if (this.cr.caseRecord) {
+          this.cr.caseRecord.materials = srv.materials || []
+          this._segBase.materials = JSON.stringify(srv.materials || [])
+        }
+      } catch {}
+    },
+
     // 衝突處理：reload＝放棄我的改動、改看伺服器現值；keep＝以伺服器現值為基準重存（明知並覆蓋那幾段）
     async resolveConflict(mode) {
       if (!this.selected || !this.segConflict) return
@@ -612,6 +699,7 @@ window.CM_PARTS.push(() => ({
           this.dirty = false
           this.segConflict = null
           const res = await r.json().catch(() => ({}))
+          if (res.glWarning) MotrixUI.toast(res.glWarning, {kind: 'info', ms: 9000})   // MONEY-FLOWS §9 L3：已入帳的收款被改動
           if (res.pending) {
             // 已結案案件半解鎖期間：此次存檔不會立即生效，已排隊等最高管理員審核
             // （見 backend/routers/quotations.py::_gate_case_edit()）。
@@ -632,6 +720,7 @@ window.CM_PARTS.push(() => ({
             this._segBase[k] = JSON.stringify(adopted[k])
             if (JSON.stringify(this.cr.caseRecord[k]) === sent[k]) this.cr.caseRecord[k] = adopted[k]
           }
+          if (res.rejected && res.rejected.length) await this._matRejected(res.rejected)   // 叫料審核（31-C）：被拒的物流旗標／叫料變更
           const conflicts = res.stockConflicts || []
           if (res.stockNotice) {
             // IP-19：採購・庫存・出貨模組不在 ⇒ 存檔照常、序號沒有同步庫存，要讓使用者知道
@@ -674,13 +763,10 @@ window.CM_PARTS.push(() => ({
       return ok
     },
 
-    // 本地日期字串（YYYY-MM-DD），不要用 new Date().toISOString().slice(0,10)——
-    // toISOString() 是 UTC 時間，台灣 UTC+8 在本地每天 00:00–08:00 之間會被
-    // 誤判成前一天（比照 static/sidebar.js::_localISOString() 同款修法）。
+    // 本地日期字串（YYYY-MM-DD）：走共用的 MotrixDate（static/motrix-date.js，本地時區）。
+    // 不要用 toISOString() 取日期——它是 UTC，台灣 UTC+8 在本地每天 00:00–08:00 之間會被誤判成前一天。
     _localDateStr(d) {
-      d = d || new Date()
-      const tz = d.getTimezoneOffset() * 60000
-      return new Date(d.getTime() - tz).toISOString().slice(0, 10)
+      return MotrixDate.ymd(d)
     },
 
     // 2026-08-31（財務/出納權限分工）：是否具備指定模組——session.modules 是
@@ -729,17 +815,10 @@ window.CM_PARTS.push(() => ({
     },
 
     // ── 附件（回簽/已開立檔案）共用 helper ──────────────────────────────────
-    // 點擊即時在新分頁開啟（瀏覽器原生顯示圖片/PDF），不用另外刻預覽元件；
-    // 連結需要簽名短效 token 才能通過 /api/uploads 的存取檢查。
+    // 頁內預覽窗（共用元件 MotrixFilePreview）：圖片／PDF 內嵌，其他類型給下載；取檔走 /api/uploads（標頭帶 Authorization）。
     async previewAttachmentFile(file) {
-      try {
-        const r = await fetch(`/api/photo-token?path=${encodeURIComponent(file.path)}`, {
-          headers: { Authorization: 'Bearer ' + this.session.token }
-        })
-        if (!r.ok) { MotrixUI.toast('取得檔案連結失敗', {kind: 'error'}); return }
-        const { token } = await r.json()
-        window.open(`/api/uploads/${file.path}?pt=${encodeURIComponent(token)}`, '_blank')
-      } catch (e) { MotrixUI.toast('開啟檔案失敗：' + e.message, {kind: 'error'}) }
+      // 共用預覽元件（static/file-preview.js）：頁內預覽窗，不再開新分頁／換 photo-token
+      try { await MotrixFilePreview.openFile(file) } catch (e) { MotrixUI.toast('開啟檔案失敗：' + e.message, {kind: 'error'}) }
     },
 
     logout() {

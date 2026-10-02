@@ -1,0 +1,221 @@
+{
+ "key": "equipment_loan",
+ "name": "借用登記",
+ "category": "行政",
+ "description": "借用人、品項與數量、借用起訖、用途、歸還日與歸還狀況；主管簽核。",
+ "note": "不連動庫存；歸還日由借用人或管理員回填。",
+ "body": {
+  "name": "借用登記",
+  "icon": "",
+  "menu": {
+   "group": "行政",
+   "order": 60
+  },
+  "numbering": {
+   "prefix": "LN",
+   "date": "YYYYMMDD",
+   "digits": 4
+  },
+  "fields": [
+   {
+    "key": "borrower",
+    "label": "借用人",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "users",
+    "default": {
+     "$": "requester"
+    },
+    "required": true
+   },
+   {
+    "key": "dept",
+    "label": "部門",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "departments"
+   },
+   {
+    "key": "item",
+    "label": "品項",
+    "type": "text",
+    "dataClass": "T1",
+    "required": true
+   },
+   {
+    "key": "qty",
+    "label": "數量",
+    "type": "number",
+    "dataClass": "T1",
+    "min": 1,
+    "required": true
+   },
+   {
+    "key": "period",
+    "label": "借用起訖",
+    "type": "daterange",
+    "dataClass": "T1",
+    "withTime": false,
+    "required": true
+   },
+   {
+    "key": "purpose",
+    "label": "用途",
+    "type": "textarea",
+    "dataClass": "T1",
+    "maxLength": 500
+   },
+   {
+    "key": "return_date",
+    "label": "歸還日",
+    "type": "date",
+    "dataClass": "T1"
+   },
+   {
+    "key": "condition",
+    "label": "歸還狀況",
+    "type": "select",
+    "dataClass": "T1",
+    "options": [
+     "完好",
+     "有損壞",
+     "遺失"
+    ],
+    "allowOther": true
+   }
+  ],
+  "workflow": {
+   "initial": "draft",
+   "states": [
+    {
+     "key": "draft",
+     "label": "草稿"
+    },
+    {
+     "key": "pending",
+     "label": "簽核中",
+     "approval": {
+      "tiers": [
+       {
+        "approvers": [
+         {
+          "sourceType": "submitter_manager"
+         }
+        ]
+       }
+      ],
+      "on_approved": "approved",
+      "on_rejected": "draft"
+     }
+    },
+    {
+     "key": "approved",
+     "label": "已核准",
+     "final": true,
+     "notify": {
+      "requester": true
+     }
+    }
+   ],
+   "transitions": [
+    {
+     "key": "submit",
+     "label": "送審",
+     "from": "draft",
+     "to": "pending"
+    }
+   ]
+  },
+  "ui": {
+   "form": {
+    "groups": [
+     {
+      "title": "借用資訊",
+      "fields": [
+       "borrower",
+       "dept",
+       "item",
+       "qty",
+       "period",
+       "purpose"
+      ]
+     },
+     {
+      "title": "歸還",
+      "fields": [
+       "return_date",
+       "condition"
+      ]
+     }
+    ]
+   },
+   "list": {
+    "columns": [
+     "borrower",
+     "item",
+     "period",
+     "return_date"
+    ]
+   }
+  },
+  "output": {
+   "template": {
+    "theme": "voucher_standard",
+    "blocks": [
+     {
+      "type": "identity_header",
+      "title": "借用登記"
+     },
+     {
+      "type": "meta",
+      "fields": [
+       {
+        "label": "單號",
+        "path": "recordNo"
+       },
+       {
+        "label": "借用人",
+        "path": "fields.borrower"
+       },
+       {
+        "label": "部門",
+        "path": "fields.dept"
+       },
+       {
+        "label": "品項",
+        "path": "fields.item"
+       },
+       {
+        "label": "數量",
+        "path": "fields.qty"
+       },
+       {
+        "label": "借用起訖",
+        "path": "fields.period"
+       },
+       {
+        "label": "用途",
+        "path": "fields.purpose"
+       },
+       {
+        "label": "歸還日",
+        "path": "fields.return_date",
+        "format": "date10"
+       },
+       {
+        "label": "歸還狀況",
+        "path": "fields.condition"
+       }
+      ]
+     },
+     {
+      "type": "approval_sign"
+     },
+     {
+      "type": "identity_footer"
+     }
+    ]
+   }
+  }
+ }
+}

@@ -9,6 +9,7 @@ window.CM_PARTS.push(() => ({
     dispatches: [],
     dispatchesLoading: false,
     showDispatchModal: false,
+    _dispatchesFor: '',
     editDispatchId: null,
     dispatchSaving: false,
     dispatchForm: {},
@@ -68,7 +69,10 @@ window.CM_PARTS.push(() => ({
       if (!quoteNo) return
       const live = this._selectLive()
       this.dispatchesLoading = true
-      this.dispatches = []
+      // 同一個案件重新載入（按鈕操作後、頁面自己的二次載入）不先清空清單：清空再填會讓整張卡片被換掉（x-for 重建），
+      // 使用者正要按的按鈕在點擊瞬間脫離 DOM（e2e 偶發 detached）。換案件才清空，避免短暫顯示別案的派發。
+      if (this._dispatchesFor !== quoteNo) this.dispatches = []
+      this._dispatchesFor = quoteNo
       try {
         const r = pre ? this._preResp(pre) : await fetch(`/api/contractor-dispatches?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -81,11 +85,31 @@ window.CM_PARTS.push(() => ({
       this.dispatchesLoading = false
     },
 
+    // 31-A：與營運報表同一條規則——已取消、草稿、已退回不計；待審核／簽核中計入（另標「含待審核」）；已核准與舊單照舊
+    _dispatchCounts(d) {
+      return d.status !== 'cancelled' && !['草稿', '已退回'].includes(d.approvalStatus || '')
+    },
+
     dispatchTotalCost() {
       // 承攬商含稅合計 + 外包人員金額（不計稅），與精算頁面「承攬商派發成本」算法一致
       return this.dispatches
-        .filter(d => d.status !== 'cancelled')
+        .filter(d => this._dispatchCounts(d))
         .reduce((s, d) => s + (d.grandTotal || 0), 0)
+    },
+
+    dispatchPendingNote() {
+      const p = this.dispatches.filter(d => this._dispatchCounts(d) && ['待審核', '簽核中'].includes(d.approvalStatus || ''))
+      if (!p.length) return ''
+      return `含待審核 ${p.length} 筆 NT$ ${p.reduce((s, d) => s + (d.grandTotal || 0), 0).toLocaleString()}`
+    },
+
+    // 可往下推進作業狀態：已核准或舊單（後端同一道閘）
+    _dispatchCanAdvance(d) {
+      return d.status !== 'cancelled' && (d.legacy || d.approvalStatus === '已核准')
+    },
+
+    _dispatchReviewing(d) {
+      return ['待審核', '簽核中'].includes(d.approvalStatus || '') || ['待審核', '簽核中'].includes(d.completionStatus || '')
     },
 
     // 財務 Tab 顯示的精算結果是完結當下凍結的 caseSettleSummary().dispatchTotal 快照，
@@ -100,7 +124,7 @@ window.CM_PARTS.push(() => ({
     },
 
     _blankDispatchForm() {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = MotrixDate.today()
       return {
         quote_no: this.selected?.quote_no || '',
         vendor_id: '',
@@ -110,7 +134,6 @@ window.CM_PARTS.push(() => ({
         invoice_no: '',
         invoice_date: '',
         payable_date: '',
-        status: this._quoteStatusToDispatch(this.selected?.status || ''),
         tax_rate: 0.05,
         items: [],
         personnel: []
@@ -136,7 +159,6 @@ window.CM_PARTS.push(() => ({
         invoice_no: d.invoiceNo || '',
         invoice_date: d.invoiceDate || '',
         payable_date: d.payableDate || '',
-        status: d.status || 'draft',
         tax_rate: d.taxRate !== undefined ? d.taxRate : 0.05,
         items: JSON.parse(JSON.stringify(d.items || [])),
         personnel: JSON.parse(JSON.stringify(d.personnel || [])),
@@ -206,7 +228,6 @@ window.CM_PARTS.push(() => ({
         invoice_no: this.dispatchForm.invoice_no || '',
         invoice_date: this.dispatchForm.invoice_date || '',
         payable_date: this.dispatchForm.payable_date || '',
-        status: this.dispatchForm.status || 'draft',
         tax_rate: parseFloat(this.dispatchForm.tax_rate) || 0,
         items_json: this.dispatchForm.items || [],
         personnel_json: (this.dispatchForm.personnel || []).map(p => ({
@@ -243,6 +264,7 @@ window.CM_PARTS.push(() => ({
         if (!r.ok) { MotrixUI.toast(j.detail || '發票日期儲存失敗', {kind: 'error'}); return }
         d.invoiceDate = j.invoiceDate
         this.flashSaved('dispatch-' + d.id)
+        if (j.glWarning) MotrixUI.toast(j.glWarning, {kind: 'info', ms: 9000})   // MONEY-FLOWS §9 L3：已入帳的 E04 會 drift
         if (j.updated_at) d.updatedAt = j.updated_at
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
@@ -363,32 +385,37 @@ window.CM_PARTS.push(() => ({
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
-    async rejectContractorVoucher(v) {
-      const note = (await MotrixUI.prompt(`退回匯款申請「${v.voucherNo}」，可填寫退回原因（選填）：`))
-      if (note === null) return
-      try {
-        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/reject`, {
+    // 退回（列表按鈕與預覽裡的「退回修改」同一條路）：原因必填，後端也強制
+    rejectContractorVoucher(v) {
+      window.MotrixApprovalReturn.ask({
+        title: `退回匯款申請「${v.voucherNo}」`,
+        post: (reason) => fetch(`/api/contractor-vouchers/${v.voucherNo}/reject`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ note })
-        })
-        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '退回失敗', {kind: 'error'}); return }
-        await this.loadContractorVouchers(this.selected?.quote_no)
-      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
+          body: JSON.stringify({ note: reason })
+        }),
+        onDone: () => this.loadContractorVouchers(this.selected?.quote_no),
+      })
     },
 
-    async revokeContractorVoucherApproval(v) {
-      const note = (await MotrixUI.prompt(`撤銷匯款申請「${v.voucherNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`))
-      if (note === null) return
-      try {
-        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/revoke-approval`, {
+    returnFromContractorVoucherPreview() {
+      const v = this.cvPreviewVoucher
+      this.closeContractorVoucherPreview()
+      if (v) this.rejectContractorVoucher(v)
+    },
+
+    // 撤銷核准（退回草稿）：原因必填，後端也強制
+    revokeContractorVoucherApproval(v) {
+      window.MotrixApprovalReturn.ask({
+        title: `撤銷匯款申請「${v.voucherNo}」的核准`,
+        hint: '撤銷後單據退回草稿。撤銷原因必填，會寫進稽核並通知申請人。',
+        post: (reason) => fetch(`/api/contractor-vouchers/${v.voucherNo}/revoke-approval`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ note })
-        })
-        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '撤銷失敗', {kind: 'error'}); return }
-        await this.loadContractorVouchers(this.selected?.quote_no)
-      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
+          body: JSON.stringify({ note: reason })
+        }),
+        onDone: () => this.loadContractorVouchers(this.selected?.quote_no),
+      })
     },
 
     async loadT100BankAccounts() {
@@ -470,6 +497,8 @@ window.CM_PARTS.push(() => ({
           body: JSON.stringify({ action: 'unpay', note: '' })
         })
         if (!r.ok) { MotrixUI.toast((await r.json()).detail || '操作失敗', {kind: 'error'}); return }
+        const unpayRes = await r.json().catch(() => ({}))
+        if (unpayRes.glWarning) MotrixUI.toast(unpayRes.glWarning, {kind: 'info', ms: 9000})   // MONEY-FLOWS §9 L3：已入帳的 E05 會 orphan（反向草稿）
         await this.loadContractorVouchers(this.selected?.quote_no)
         this.loadFinanceSummary(this.selected?.quote_no)   // 已付/未付數字會變
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
@@ -552,6 +581,7 @@ window.CM_PARTS.push(() => ({
 
     async previewContractorVoucherPdf(v) {
       this.cvPreviewFetching = true
+      await window.MotrixApprovalReturn.loadDelegators(this.session.token)   // 代理簽核人也要看得到「退回修改」
       try {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/pdf-download`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -705,6 +735,46 @@ window.CM_PARTS.push(() => ({
       return { draft: 'badge--draft', sent: 'badge--pending', confirmed: 'badge--approved', pending_acceptance: 'badge--signing', accepted: 'badge--running', completed: 'badge--settled', cancelled: 'badge--danger' }[s] || ''
     },
 
+    // 派發卡片上的操作按鈕（送審／撤回／已送出／已確認／申請完工／取消）：一律打後端，狀態只由後端決定
+    async _dispatchPost(d, path, body, confirmMsg, opts) {
+      if (confirmMsg && !(await MotrixUI.confirm(confirmMsg, opts || {}))) return false
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}${path}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify(body || {})
+        })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) { MotrixUI.toast(j.detail || '操作失敗', {kind: 'error'}); return false }
+        if (j.autoApproved) MotrixUI.toast('未設定簽核層，已直接核准')
+        await this.loadDispatches(this.selected?.quote_no)
+        return true
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}); return false }
+    },
+
+    submitDispatch(d) {
+      return this._dispatchPost(d, '/submit', {}, `送審「${this._dispatchLabel(d)}」？送出後在核准前不能編輯。`)
+    },
+    withdrawDispatch(d) {
+      return this._dispatchPost(d, '/withdraw', {}, `撤回「${this._dispatchLabel(d)}」的送審？`)
+    },
+    setDispatchStatus(d, target, label) {
+      return this._dispatchPost(d, '/status', { target }, `將「${this._dispatchLabel(d)}」標記為${label}？`)
+    },
+    requestDispatchCompletion(d) {
+      return this._dispatchPost(d, '/completion/request', {}, `申請「${this._dispatchLabel(d)}」完工？需經完工審核通過才會完結。`)
+    },
+    withdrawDispatchCompletion(d) {
+      return this._dispatchPost(d, '/completion/withdraw', {}, `撤回「${this._dispatchLabel(d)}」的完工申請？`)
+    },
+    async cancelDispatch(d) {
+      const needReason = d.approvalStatus === '已核准' || ['pending_acceptance', 'accepted'].includes(d.status)
+      const reason = await MotrixUI.prompt(`取消「${this._dispatchLabel(d)}」（金額不再計入成本）${needReason ? '，請填寫取消原因：' : '：'}`,
+        { title: '取消派發', required: needReason, okText: '取消派發' })
+      if (reason === null || reason === undefined || reason === false) return
+      return this._dispatchPost(d, '/status', { target: 'cancelled', reason })
+    },
+
     async markPendingAcceptance(d) {
       if (!(await MotrixUI.confirm(`確定將「${this._dispatchLabel(d)}」標記為待驗收？`))) return
       try {
@@ -734,6 +804,7 @@ window.CM_PARTS.push(() => ({
     // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）
     _reset_dispatch(phase, data) {
       if (phase === 'early') {
+        this._dispatchesFor = ''
         this.contractorVouchers = []
         this.contractorVouchersLoading = true
       }

@@ -55,7 +55,7 @@ _BACKUP_RETENTION_DEFAULT = {
     "cloud_weekly_keep_days": 90,
     "cloud_monthly_keep_days": 0,      # 0 = 永久保留
     "local_pre_update_keep":  5,       # pre_update_* 快照保留份數（非天數）
-    "audit_log_keep_days":    730,
+    "audit_log_keep_days":    1825,     # 5 年（U9，2026-09-25 使用者裁示；已明確設定過的安裝沿用自己的值）
 }
 
 
@@ -1099,6 +1099,226 @@ def _snapshot_health(path: str, summary: dict = None, day: str = None,
     return True, [], counts
 
 
+# ── 資料沒變就不重寫（使用者 2026-09-30：「盡可能降低硬碟的重複寫入」；docs/DR-SOP.md「同上一份」）───────────────
+#
+# 每日備份本來每天寫：本機整庫快照＋雲端（個資資料夾）整庫＋41 張表 JSON（含 `exported_at`，內容永不相同）。資料沒變的日子
+# （假日／休息日）三份都是同一份內容的重複寫入。改成：先算**內容指紋**，與**前一份快照**相同 ⇒
+#   本機   ⇒ 用 NTFS 硬連結指向前一份（寫入 0；每一天的資料夾裡仍然有一個真的 motrix_erp.db，還原與清理都不用改）
+#   雲端   ⇒ 不重寫整庫與 JSON，改寫一個小的 `SAME_AS.json`（指向那一天）＋當日 `彙總.json`；月備份**照常完整寫**
+# 🔑 「沒變」的定義：內容指紋相同，**不含備份程式自己的紀錄與連線狀態**（audit_log 的 backup.* 列、pii_archive_state／archive_instance_id 設定、sessions 表）——
+#    否則備份每天寫進去的稽核會讓資料庫每天都「有變」，這個功能永遠不會觸發。還原到「同上一份」的那一天，會少幾筆備份自己的稽核。
+# ☠️ 損毀的庫不可以被當成「沒變」（S-CD02）：指紋前先 `PRAGMA quick_check`，不是 ok ⇒ 不做「同上一份」，走原本的完整快照
+#    （快照健檢會擋下並告警）。
+# ⚠️ 只有本機資料夾型雲端後端會做「同上一份」；S3 後端維持每天完整寫（沒有可靠的硬連結／讀回標記）。
+_SAME_AS_FILE = "SAME_AS.json"
+_FINGERPRINT_FILE = "fingerprint.txt"
+#: 指紋要略過的列（備份程式自己每天寫的東西）：表名 ⇒ WHERE 條件（符合的列不進指紋）
+_FP_SKIP_ROWS = {
+    "audit_log": "action LIKE 'backup.%'",
+    "system_settings": "key IN ('pii_archive_state', 'archive_instance_id')",      # 備份程式自己記的狀態／第一次備份時建的實例 ID
+    "sessions": "1 = 1",                                                          # 登入連線（每日清理過期列）：不是業務資料
+}
+
+
+def _db_content_fingerprint(path: str):
+    """庫的內容指紋（sha256）；庫壞了／讀不了 ⇒ None（呼叫端一律走完整寫入）。
+    先 `PRAGMA quick_check`（S-CD02）；再在**同一個讀取交易**內依表名排序、逐列雜湊（含 DDL），略過 `_FP_SKIP_ROWS`。"""
+    import hashlib
+    conn = None
+    try:
+        conn = sqlite3.connect(path, timeout=30)
+        rows = conn.execute("PRAGMA quick_check").fetchall()
+        if len(rows) != 1 or rows[0][0] != "ok":
+            return None
+        # 明確的唯讀交易（BEGIN DEFERRED）：指紋要跨「所有表」讀，必須是同一個時間點的一致快照——
+        # WAL 模式下讀交易看到開始那一刻的整庫；不開交易的話每個 SELECT 各看各的時間點，指紋可能是「從未存在過的混合狀態」。
+        # 為什麼不用 core.txn.begin_write：它是 BEGIN IMMEDIATE（拿寫鎖，會擋住正式庫上使用者的寫入）；這裡不寫入，
+        # 只需要讀取快照，用 DEFERRED（不拿寫鎖）。已登記在 tests/test_begin_only_via_begin_write_2026_09_25.py 的白名單，
+        # finally 會 close（連線關閉即結束交易）。
+        conn.execute("BEGIN DEFERRED")
+        h = hashlib.sha256()
+        for name, sql in conn.execute(
+                "SELECT name, sql FROM sqlite_master WHERE type IN ('table','index','trigger','view') "
+                "AND name NOT LIKE 'sqlite_%' ORDER BY type, name").fetchall():
+            h.update(("%s\x00%s\x00" % (name, sql or "")).encode("utf-8"))
+        for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' "
+                                    "ORDER BY name").fetchall():
+            where = (" WHERE NOT (%s)" % _FP_SKIP_ROWS[name]) if name in _FP_SKIP_ROWS else ""
+            h.update(("\x01" + name + "\x01").encode("utf-8"))
+            cur = conn.execute('SELECT * FROM "%s"%s' % (name, where))
+            while True:
+                chunk = cur.fetchmany(2000)
+                if not chunk:
+                    break
+                for r in chunk:
+                    h.update(repr(r).encode("utf-8", "surrogatepass"))
+        conn.execute("ROLLBACK")                 # 唯讀交易，結束即可
+        return h.hexdigest()
+    except Exception:                                           # noqa: BLE001
+        logger.exception("_db_content_fingerprint failed for %s", path)
+        return None
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:                                   # noqa: BLE001
+                pass
+
+
+def _read_text(path: str) -> str:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def _read_json_file(path: str):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def _resolve_same_as(day_dir: str) -> str:
+    """還原用：某一天的備份資料夾 ⇒ **真正存放內容的那個資料夾**。
+    沒有 `SAME_AS.json` ⇒ 就是它自己；有 ⇒ 同層的 `same_as` 那一天（標記永遠直接指向實體那天，不會串鏈）。
+    指向的資料夾不在 ⇒ 回 ""（呼叫端要說明：那一天的內容不見了，不可以假裝有）。"""
+    m = _read_json_file(os.path.join(day_dir, _SAME_AS_FILE))
+    if not isinstance(m, dict) or not m.get("same_as"):
+        return day_dir
+    if m.get("linked") and os.path.isfile(os.path.join(day_dir, "motrix_erp.db")):
+        return day_dir                          # 本機：硬連結，這一天自己就有完整的檔（指向的那天被清掉也無妨）
+    real = os.path.join(os.path.dirname(os.path.abspath(day_dir)), str(m["same_as"]))
+    return real if os.path.isdir(real) else ""
+
+
+def _parse_day_or_none(name: str):
+    try:
+        return date.fromisoformat(name)
+    except ValueError:
+        return None
+
+
+def _latest_real_snapshot(today: str):
+    """本機「前一份」快照：日期早於今天、有 `.done`、有真的 motrix_erp.db 的最新一天 ⇒ (day, db 路徑, 指紋)；
+    那一天沒有指紋檔（舊版備份）⇒ None（不往更早找：最新一份不能比 ⇒ 完整寫）。"""
+    try:
+        names = sorted((n for n in os.listdir(_LOCAL_DB_BACKUP)
+                        if _parse_day_or_none(n) is not None and n < today), reverse=True)
+    except OSError:
+        return None
+    for n in names:
+        d = os.path.join(_LOCAL_DB_BACKUP, n)
+        db_path = os.path.join(d, "motrix_erp.db")
+        if not (os.path.isfile(os.path.join(d, ".done")) and os.path.isfile(db_path) and os.path.getsize(db_path) > 0):
+            continue                        # 沒完成／缺檔的日子不能當參照，繼續往前找到第一個完整的
+        fp = _read_text(os.path.join(d, _FINGERPRINT_FILE))
+        return (n, db_path, fp) if fp else None
+    return None
+
+
+def _write_fingerprint(dest_dir: str, dest: str) -> None:
+    """真的寫出快照之後，記下**快照檔本身**的內容指紋（之後拿正式庫的指紋來比）。失敗只記 log（下一天就是完整寫，安全方向）。"""
+    try:
+        fp = _db_content_fingerprint(dest)
+        if fp:
+            with open(os.path.join(dest_dir, _FINGERPRINT_FILE), "w", encoding="utf-8") as f:
+                f.write(fp)
+    except Exception:                                           # noqa: BLE001
+        logger.exception("_write_fingerprint failed for %s", dest)
+
+
+def _try_same_snapshot(today: str, dest_dir: str, dest: str, marker: str) -> bool:
+    """正式庫內容與前一份快照相同 ⇒ 硬連結、寫 SAME_AS.json／指紋／.done，回 True（這一天不再寫整庫）；否則 False。
+    任何一步失敗（含檔案系統不支援硬連結）⇒ False，走原本的完整快照（安全方向）。"""
+    try:
+        prev = _latest_real_snapshot(today)
+        if not prev:
+            return False
+        prev_day, prev_path, prev_fp = prev
+        fp_src = _db_content_fingerprint(DB_PATH)
+        if fp_src is None or fp_src != prev_fp:
+            return False
+        if os.path.exists(dest):                                # 先前失敗留下的殘檔（沒有 .done）
+            os.remove(dest)
+        try:
+            os.link(prev_path, dest)
+        except OSError:
+            return False
+        with open(os.path.join(dest_dir, _SAME_AS_FILE), "w", encoding="utf-8") as f:
+            json.dump({"same_as": prev_day, "fingerprint": fp_src, "linked": True,
+                       "at": datetime.now().isoformat(),
+                       "note": "資料內容與前一份相同（不含備份程式自己的紀錄）；本檔是同一個檔案的硬連結"}, f, ensure_ascii=False)
+        with open(os.path.join(dest_dir, _FINGERPRINT_FILE), "w", encoding="utf-8") as f:
+            f.write(fp_src)
+        with open(marker, "w", encoding="utf-8") as f:
+            f.write(datetime.now().isoformat())
+        logger.info("SQLite snapshot unchanged since %s: hard-linked %s", prev_day, dest)
+        _system_audit("backup.sqlite_snapshot_same", today,
+                      {"path": dest, "same_as": prev_day, "bytes": os.path.getsize(dest)})
+        return True
+    except Exception:                                           # noqa: BLE001
+        logger.exception("_try_same_snapshot failed（改走完整快照）")
+        return False
+
+
+def _local_same_as_day(today: str) -> str:
+    """今天的本機快照是不是「同上一份」⇒ 那一天（真正寫出內容的日子）；否則 ""。"""
+    m = _read_json_file(os.path.join(_LOCAL_DB_BACKUP, today, _SAME_AS_FILE))
+    return str(m["same_as"]) if isinstance(m, dict) and m.get("same_as") else ""
+
+
+def _cloud_dedupe_ok() -> bool:
+    return _active_backend() != "s3"
+
+
+def _real_day_in(layer_dir: str, day: str, must_have: str) -> str:
+    """`layer_dir/<day>` 的內容實際在哪一天：那天資料夾自己有 `must_have` ⇒ 它自己；有 SAME_AS 標記 ⇒ 標記指的那天（要有 must_have）；否則 ""。"""
+    d = os.path.join(layer_dir, day)
+    if os.path.isfile(os.path.join(d, must_have)):
+        return day
+    m = _read_json_file(os.path.join(d, _SAME_AS_FILE))
+    if isinstance(m, dict) and m.get("same_as") and os.path.isfile(os.path.join(layer_dir, str(m["same_as"]), must_have)):
+        return str(m["same_as"])
+    return ""
+
+
+def _write_same_marker(dir_abs: str, real_day: str, what: str, pii: bool = False) -> None:
+    payload = {"same_as": real_day, "covers": what, "at": datetime.now().isoformat(),
+               "note": "資料內容與 %s 相同（不含備份程式自己的紀錄），為省寫入未重複寫；還原請用 %s 那一天的內容" % (real_day, real_day)}
+    if pii:
+        _pii_ensure_dir(dir_abs)
+    else:
+        os.makedirs(dir_abs, exist_ok=True)
+    _atomic_json_write(os.path.join(dir_abs, _SAME_AS_FILE), payload)
+
+
+def _referenced_days(layer_dir: str) -> set:
+    """這一層底下所有 `SAME_AS.json` 指向的日期（清理時不可刪：刪了會讓標記指向不存在的內容）。"""
+    out = set()
+    try:
+        for n in os.listdir(layer_dir):
+            m = _read_json_file(os.path.join(layer_dir, n, _SAME_AS_FILE))
+            if isinstance(m, dict) and m.get("same_as"):
+                out.add(str(m["same_as"]))
+    except OSError:
+        pass
+    return out
+
+
+def _protect_referenced(doomed: list, layer_dir: str, label: str) -> list:
+    """把「還被別天的 SAME_AS 標記指著」的日子從要刪清單拿掉（並記一行 log）。"""
+    if not doomed:
+        return doomed
+    refs = _referenced_days(layer_dir)
+    keep = [n for n in doomed if n in refs]
+    if keep:
+        logger.info("%s：%s 仍被「同上一份」標記引用，本輪不清理", label, "、".join(sorted(keep)))
+    return [n for n in doomed if n not in refs]
+
+
 def _snapshot_sqlite(also_to_cloud: bool = True):
     """
     Consistent SQLite snapshot under backend/db_backups/YYYY-MM-DD/motrix_erp.db.
@@ -1110,7 +1330,7 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
     dest = os.path.join(dest_dir, "motrix_erp.db")
     try:
         os.makedirs(dest_dir, exist_ok=True)
-        if not os.path.exists(marker) or not os.path.exists(dest):
+        if (not os.path.exists(marker) or not os.path.exists(dest)) and not _try_same_snapshot(today, dest_dir, dest, marker):
             # Use SQLite Online Backup API for a consistent copy while DB may be open
             src = sqlite3.connect(DB_PATH)
             try:
@@ -1147,6 +1367,7 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
                 return None
             with open(marker, "w", encoding="utf-8") as f:
                 f.write(datetime.now().isoformat())
+            _write_fingerprint(dest_dir, dest)              # 之後「同上一份」的比對基準（快照檔本身的內容指紋）
             logger.info("SQLite snapshot saved: %s", dest)
             _system_audit(
                 "backup.sqlite_snapshot",
@@ -1162,8 +1383,16 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
             pii_db = _pii_db_path("每日備份", today)
             if pii_db:
                 try:
-                    _pii_copy_file(dest, pii_db,
-                                   f"{_PII_ARCHIVE_DIRNAME}/每日備份/{today}/motrix_erp.db")
+                    _same = _local_same_as_day(today) if _cloud_dedupe_ok() else ""
+                    _pii_layer = os.path.dirname(os.path.dirname(pii_db))
+                    _real = _real_day_in(_pii_layer, _same, "motrix_erp.db") if _same else ""
+                    if _real:
+                        # 同上一份：雲端整庫不重寫，只留一個小標記（還原見 DR-SOP「同上一份」）
+                        _write_same_marker(os.path.dirname(pii_db), _real, "motrix_erp.db", pii=True)
+                        logger.info("cloud(PII) snapshot same as %s: wrote %s only", _real, _SAME_AS_FILE)
+                    else:
+                        _pii_copy_file(dest, pii_db,
+                                       f"{_PII_ARCHIVE_DIRNAME}/每日備份/{today}/motrix_erp.db")
                 except PiiFolderMissing as e:
                     _pii_vanished_alert("每日整庫備份", e)
                 except Exception as e:
@@ -1431,7 +1660,7 @@ def _mirror_pii_archives() -> int:
     return copied
 
 
-def _prune_audit_log(keep_days: int = 730) -> None:
+def _prune_audit_log(keep_days: int = 1825) -> None:
     """Delete audit_log rows older than keep_days. Daily backup exports first, so nothing is lost."""
     try:
         cutoff = (datetime.now() - timedelta(days=keep_days)).isoformat()
@@ -1686,10 +1915,10 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
 
     cutoff_daily = date.today().toordinal() - daily_keep_days
     try:
-        for name in _prune_select(_cloud_list_top_level(_daily_dir(), "每日備份"),
+        for name in _protect_referenced(_prune_select(_cloud_list_top_level(_daily_dir(), "每日備份"),
                                   _parse_day, cutoff_daily, "雲端每日備份",
                                   os.path.join(_daily_dir(), _PRUNE_HOLD_NAME), f"每日備份/{_PRUNE_HOLD_NAME}",
-                                  gap_days=_PRUNE_GAP_DAYS_DAILY):
+                                  gap_days=_PRUNE_GAP_DAYS_DAILY), _daily_dir(), "雲端每日備份"):
             try:
                 d = date.fromisoformat(name)
             except ValueError:
@@ -1706,11 +1935,11 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
         _pii = pii_archive_status()
         if _pii["state"] == "ready":
             _pii_daily = os.path.join(_pii["path"], "每日備份")
-            for name in _prune_select(_cloud_list_top_level(_pii_daily, f"{_PII_ARCHIVE_DIRNAME}/每日備份"),
+            for name in _protect_referenced(_prune_select(_cloud_list_top_level(_pii_daily, f"{_PII_ARCHIVE_DIRNAME}/每日備份"),
                                       _parse_day, cutoff_daily, "個資每日備份",
                                       os.path.join(_pii_daily, _PRUNE_HOLD_NAME),
                                       f"{_PII_ARCHIVE_DIRNAME}/每日備份/{_PRUNE_HOLD_NAME}",
-                                      gap_days=_PRUNE_GAP_DAYS_DAILY):
+                                      gap_days=_PRUNE_GAP_DAYS_DAILY), _pii_daily, "個資每日備份"):
                 try:
                     d = date.fromisoformat(name)
                 except ValueError:
@@ -2029,6 +2258,11 @@ def _daily_backup_tables() -> dict:
         "自訂模組單據":     "SELECT * FROM custom_records ORDER BY id",
         "自訂模組單據歷程": "SELECT * FROM custom_record_log ORDER BY id",
         "自訂模組編號":     "SELECT * FROM custom_record_counters ORDER BY module, period",
+        # 2026-09-30 建構器第三輪（core v3／v4）：單據修訂、金流事件 outbox、附件清單（實體檔隨 uploads 鏡像備份）
+        "自訂模組單據修訂": "SELECT * FROM custom_record_revisions ORDER BY id",
+        "自訂模組金流事件": "SELECT * FROM custom_record_finance_outbox ORDER BY id",
+        "自訂模組附件":     "SELECT * FROM custom_record_files ORDER BY uploaded_at, id",
+        "自訂模組送簽快照": "SELECT * FROM custom_record_snapshots ORDER BY id",
         "協力廠商":         "SELECT * FROM vendor_contractors ORDER BY id",
         "T100匯出確認":     "SELECT * FROM t100_export_confirmations ORDER BY id",
         # ── 業務開發 ──
@@ -2311,6 +2545,16 @@ _F2_FIELDS = {
     # 銀行代碼／名稱／分行是機構資訊，不列入（同外包人員）。
     "協力廠商": {"table": "vendor_contractors",
                  "json": ("data_json", _VENDOR_ACCOUNT_KEYS)},
+    # A2 費用單據（2026-10-01）：收款人（員工或廠商）的銀行帳號存在 case_extra_expenses.payee_account（migration 0003）。
+    # 帳號＝個人帳戶 ⇒ 一般份拿掉、完整列只進個資資料夾。收款人姓名／銀行名稱是識別與機構資訊，沿用承攬人員的界線不列入。
+    "案件額外支出": {"table": "case_extra_expenses", "columns": ("payee_account",)},
+    # 2026-10-01（A2 收款人）：員工收款帳號（payroll 模組表 `user_bank_accounts`，模組宣告 T1 ⇒ 自動進每日 JSON，鍵＝`模組-payroll-…`）。
+    # 戶名與帳號是個資 ⇒ 一般份拿掉、完整列只進個資資料夾；銀行代碼／名稱／分行是機構資訊，不列入。
+    # ⚠️ 模組未載入時這張表不在 `_daily_backup_tables()`：`_export_pii_json_set` 對不在的表略過（不算 error）。
+    "模組-payroll-user_bank_accounts": {"table": "user_bank_accounts", "columns": ("account_name", "account_number")},
+    # 2026-10-02（31-C 叫料匯款）：供應商（可能是個人）的收款帳戶凍結在申請的 snapshot_json 最上層（戶名、帳號）⇒ 一般份拿掉、完整列只進個資資料夾；
+    # 銀行代碼／名稱是機構資訊不列入。模組表宣告 T1 ⇒ 自動進每日 JSON（鍵＝`模組-case-case_material_payments`）；模組未載入時略過。
+    "模組-case-case_material_payments": {"table": "case_material_payments", "json": ("snapshot_json", ("bankAccountName", "bankAccountNumber"))},
 }
 #: data_json 解析不了時一般份放這個——**不可以原樣照放**（那等於把個資原樣帶進一般份）
 _F2_UNPARSEABLE = "<含個資欄位且無法解析，僅收錄於個資備份>"
@@ -2389,6 +2633,8 @@ def _export_pii_json_set(conn, dest_dir_abs: str, now: str) -> dict:
     summary = {}
     tables = _daily_backup_tables()
     for fname in _F2_FIELDS:
+        if fname not in tables:                         # 宣告在模組表上、而模組沒載入 ⇒ 沒有這張表可匯（不是錯誤）
+            continue
         try:
             rows = [dict(r) for r in conn.execute(tables[fname]).fetchall()]
             path = os.path.join(dest_dir_abs, f"{fname}.json")
@@ -2515,10 +2761,15 @@ def _monthly_backup():
     # ⚠️ 前提不成立時**仍然驗結構**，只是不做身分對照 ——
     # 🔑 「這份檔是不是我們的資料庫」不需要對照組，而那一半照樣守得住。
     # ☠️ 整個跳過的話，`BK12`（月備份複製了一份空庫）就沒有人守了。
+    # 🔴 2026-10-01 正式機（月備份 2026-10 卡住：快照 audit_log 3319／彙總 3321，重跑 3319／3326）：每日層早在 T11 就帶
+    #    `allowance`（快照**之後**才寫進正式庫的筆數），月備份這一條漏了 ⇒ 月備份是在每日快照之後才匯出 JSON，
+    #    之間的稽核列（至少備份自己那筆 backup.sqlite_snapshot）讓彙總必定比快照多 ⇒ `got < want` ⇒ 整庫沒進月備份、不標完成。
+    #    ⚠️ 修的是**判準**（同每日層）：只放寬「快照之後寫的」那幾列；空庫／他庫（差幾千列）照樣擋。
+    snap_allow = _rows_written_after_snapshot(today_snapshot) if os.path.isfile(today_snapshot) else {}
     snap_ok, snap_reasons, _snap_counts = _snapshot_health(
         today_snapshot,
         summary=summary if _summary_is_comparable() else None,
-        day=month_label)
+        day=month_label, allowance=snap_allow)
     if os.path.isfile(today_snapshot) and not snap_ok:
         summary["db_snapshot"] = False
         _write_backup_alert(
@@ -2625,19 +2876,36 @@ def _daily_backup():
                 logger.exception("_monthly_backup retry failed")
             _check_previous_month_backup()
             return
-        conn = get_db()
         now  = datetime.now().isoformat()
 
-        summary: dict = _daily_backup_summary_header(today_label, now)
-        summary.update(_export_table_json_set(
-            conn, day_dir, f"每日備份/{today_label}", now))
-        try:
-            _pii_daily_json_export(conn, today_label, now)
-        except Exception:
-            logger.exception("_pii_daily_json_export failed")
-            _write_backup_alert("個資每日匯出失敗，詳見 server.log", level="ERROR")
+        # 資料沒變（本機快照是「同上一份」）且前一份的雲端 JSON 是完整的 ⇒ 不重寫 41 張表 JSON，只留 SAME_AS.json＋當日彙總
+        # （使用者 2026-09-30「盡可能降低硬碟的重複寫入」；月備份不走這裡，照常完整寫）。S3 後端不做。
+        same_ref = ""
+        if _cloud_dedupe_ok():
+            _sd = _local_same_as_day(today_label)
+            if _sd:
+                _r = _real_day_in(_daily_dir(), _sd, "彙總.json")
+                if _r and os.path.isfile(os.path.join(_daily_dir(), _r, ".done")):
+                    same_ref = _r
 
-        conn.close()
+        summary: dict = _daily_backup_summary_header(today_label, now)
+        if same_ref:
+            for _k, _v in (_read_json_file(os.path.join(_daily_dir(), same_ref, "彙總.json")) or {}).items():
+                summary.setdefault(_k, _v)                 # 各表筆數沿用前一份（內容相同）
+            summary["same_as"] = same_ref
+            _write_same_marker(day_dir, same_ref, "*.json（41 張表）")
+            logger.info("Daily JSON export same as %s: wrote %s only", same_ref, _SAME_AS_FILE)
+        else:
+            conn = get_db()
+            summary.update(_export_table_json_set(
+                conn, day_dir, f"每日備份/{today_label}", now))
+            try:
+                _pii_daily_json_export(conn, today_label, now)
+            except Exception:
+                logger.exception("_pii_daily_json_export failed")
+                _write_backup_alert("個資每日匯出失敗，詳見 server.log", level="ERROR")
+
+            conn.close()
         _cloud_write_json(os.path.join(day_dir, '彙總.json'), f"每日備份/{today_label}/彙總.json", summary)
 
         # 🔴🔴 BK10 身分對照 —— **這一關才是抓 08-30／08-31／09-03 的那一關。**
@@ -2661,7 +2929,8 @@ def _daily_backup():
         _snap_today = os.path.join(_LOCAL_DB_BACKUP, today_label, "motrix_erp.db")
         _snap_ok, _snap_reasons, _snap_counts = (True, [], {})
         # 🔴 前提見 `_summary_is_comparable()`：兩邊要來自同一個資料庫。
-        if _summary_is_comparable() and os.path.isfile(_snap_today):
+        # 同上一份：內容與前一份相同（已在那一天通過身分對照），彙總又是沿用它的 ⇒ 這一天不再比一次
+        if not same_ref and _summary_is_comparable() and os.path.isfile(_snap_today):
             # 🔴 T11：彙總是在快照**之後**匯出的 ⇒ 快照之後寫的列（至少有備份自己那筆
             #    backup.sqlite_snapshot）會讓彙總比快照多。那一段要算出來再比。
             _snap_allow = _rows_written_after_snapshot(_snap_today)

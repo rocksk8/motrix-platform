@@ -64,7 +64,7 @@
 | 4 | 改 L2 模組只跑受影響的題；~~改 L1 或 fixture 層（conftest、pytest.ini、requirements）就跑全量，並且在 detached worktree 裡跑~~〔更正（B，2026-09-26，稽核 D b-rebasecheck；主持裁示 §G3）：**各線不自己跑全量**——影響大（帶進 fixture 層／程式碼衝突、或本分支自己動 fixture 層）時，差異題擴大到那些檔＋`tests/platform`＋改到頁面的 e2e，**全量交給列車跑一次**；月台登記註明那幾個檔，帶進／動到 fixture 層的包排在列車最前面〕 |
 | 5 | 每一條新規則都寫進 MODULE-GUIDE，並配一個守門；還沒有守門的，標「⚠ 未守門」，排進 ROADMAP 階段 G |
 | 6 | 守門要有正對照與反向控制；正對照不可以綁在特定的 L2 模組上 |
-| 7 | L0／L1 介面有新增就升次版號（`CORE_VERSION`），有修改或刪除就升主版號，並寫進 `backend/core/CHANGELOG.md`。**版號在合回時才定**（2026-09-25，一晚撞號三次：9c 修正、R、A2 都拿 1.5）：分支裡先寫「待定」或暫用號碼，rebase 到 origin 當下取「origin 的下一號」，並重產 G1 快照；規格章節編號（CUSTOMIZATION-SPEC §N、MODULE-GUIDE §N、IP-N）同樣在合回時對照 origin 再定。**工具**（B，2026-09-26）：rebase 之後跑 `python tools/platform/core_bump.py`（只列出，exit 3＝要改），確認後加 `--apply`：依 origin 的 CORE_VERSION 把我的 CHANGELOG 段落重新編號（依介面差異取次／主版號、標題註記暫用號）、改 registry、由 origin 的快照重產 G1 快照；rebase 停在 CHANGELOG 衝突時先 `git checkout origin/platform -- backend/core/CHANGELOG.md`（⚠ 不用 --ours／--theirs：rebase 時兩者的意思與 merge 相反，--theirs 是**我的** commit），再以 `--mine <rebase 前的分支尖端>` 指定我的段落。介面變了卻沒寫 CHANGELOG ⇒ 工具拒絕（不替人寫內容） |
+| 7 | L0／L1 介面有新增就升次版號（`CORE_VERSION`），有修改或刪除就升主版號，並寫進 `backend/core/CHANGELOG.md`。**版號在合回時才定**（2026-09-25，一晚撞號三次：9c 修正、R、A2 都拿 1.5）：分支裡先寫「待定」或暫用號碼，rebase 到 origin 當下取「origin 的下一號」，並重產 G1 快照；規格章節編號（CUSTOMIZATION-SPEC §N、MODULE-GUIDE §N、IP-N）同樣在合回時對照 origin 再定。**工具**（B，2026-09-26）：rebase 之後跑 `python tools/platform/core_bump.py`（只列出，exit 3＝要改），確認後加 `--apply`：依 origin 的 CORE_VERSION 把我的 CHANGELOG 段落重新編號（依介面差異取次／主版號、標題註記暫用號）、改 registry、由 origin 的快照重產 G1 快照；rebase 停在 CHANGELOG 衝突時先 `git checkout origin/platform -- backend/core/CHANGELOG.md`（⚠ 不用 --ours／--theirs：rebase 時兩者的意思與 merge 相反，--theirs 是**我的** commit），再以 `--mine <rebase 前的分支尖端>` 指定我的段落。介面變了卻沒寫 CHANGELOG ⇒ 工具拒絕（不替人寫內容）。〔更正 2026-09-30（使用者「撞號太多次了，想辦法解決」）：**分支改寫佔位 `## (next)`＋`core_bump.py --pending`，CORE_VERSION 不動；號碼由列車 `train_number.py assign` 定**（§G6）。上面的 `--apply` 只留給還沒改用佔位的舊分支〕 |
 | 8 | 長時間的動作，開跑時就回報「跑什麼、預估多久、死線」，死線＝預估×1.5 |
 | 9 | 回報錯了就更正，而且要保留原本那一句錯的內容 |
 | 10 | 不連線、不寫入正式機；正式機的動作一律由使用者執行 |
@@ -127,9 +127,45 @@
 ## D. 發行與正式換版（使用者執行，儀表板操作）
 
 **發行前（開發機）**
-1. 在要發行的 commit 上跑全量：`python tools/platform/modtest.py --full`。全綠之後，儀表板的測試閘門才會放行。
+1. 在要發行的 commit 上跑全量：`python tools/platform/modtest.py --full`。全綠之後，儀表板的測試閘門才會放行。〔補 2026-09-30：這一包沒動到底層時，可改跑範圍驗證，見下方 §D-1a〕
 2. 儀表板 →「1. 打包」（階段 2 完成後，可以選擇產品設定檔）。
 3. 儀表板 →「這一包會改到哪些模組」：確認改動範圍，以及各模組的更新紀錄。
+
+### D-1a. 範圍驗證閘門：沒動到底層就不跑全量（2026-09-30 使用者：「如果未影響到底層，審核測試上包可由獨立模組，不需要跑全域，也可以視這次更動範圍做驗證減少只改小部分但仍需花大量時間跑全域」）
+
+**規則**
+- 比較範圍＝正式機基準 P → X 的**所有**改動檔（不是只看最後一個 commit）。P＝X 上 `backend/tests/_prod_baseline.py` 的 `BASELINE`，**而且必須等於受信來源**＝最新的 git tag `prod/<sha>`（主持在正式機確認部署後打，例 `prod/0c20864a`）；tag 不在或不符 ⇒ 全量〔稽核 W4 M4：候選 commit 可以自己改 `_prod_baseline.py` 把基準往後移，縮小比較範圍〕。部署包 `verification.scoped.base` 寫 40 碼完整 SHA；正式機步驟檔步驟 0 斷言 `.deployed_commit.json` 的 `commit` 開頭＝`verification.scoped.base`（範本 `docs/platform/prod-tasks/TEMPLATE-apply.md`）。
+- 底層清單的**唯一來源**是 `tools/platform/bottom_layer.json`（規則由上往下、第一條符合者決定；**沒有規則符合 ⇒ 當成底層**）。底層＝L0／L1（`backend/core/**`、`backend/helpers/**`、`backend/db.py`、`backend/main.py`、`backend/routers/**`、`backend/migrations_frozen/**`、backend 根目錄其他檔）、fixture 層（任何 `conftest.py`、`pytest.ini`、`requirements*.txt`）、**模組的 `migrations/**`**、建包／部署／平台工具（`backend/tools/**`、`tools/**`，含本閘門與清單本身）、`product/**`、共用前端（`frontend/static|js|css|fonts/**`、`frontend/index.html`、沒有恰好一個模組宣告的頁面）、測試共用工具（`backend/tests/` 下不是 `test_*.py` 的檔）。可走範圍驗證的只有：`backend/modules/<key>/**`（migrations 除外）、恰好一個模組宣告的頁面、`test_*.py`、`docs/**` 與根目錄 `*.md`、`version_manifest.json` 與 `_prod_baseline.py`（這兩個另帶 VR 守門題）。
+- P→X **有任何一檔在底層** ⇒ 照舊全量（`modtest --full`；建包腳本自己跑全量）。**全部不在底層** ⇒ 在 X 上跑 `python tools/platform/scope_gate.py run`（工作樹乾淨、HEAD＝X；`plan` 只判定與選題），綠了儀表板閘門與建包腳本就接受它、不跑全量。
+- 範圍驗證的內容＝`modtest --train` 同型：P→X 改動檔＋改到的提供者的消費端（`ship_tier.provider_check`；判不了 ⇒ 全量）當改動，**遞移選題**（不用名稱層級縮小——閘門寧寬）＋改到頁面的 e2e＋`tests/platform` 全部（`MOTRIX_TRAIN=1`，「是否最新」三題不可以被 skip）＋規則附帶的題（module／page 規則帶 `@global_tests`＝不靠 import、掃整個母體的全域釘子：`sqlite_master`、巡覽所有 `module.json`、glob 所有頁面、權限目錄；`scope_gate.global_test_candidates()` 掃得到的都必須列在 `global_tests`，守門題驗〔稽核 W4 M1〕）；非 e2e 與 e2e 兩段都要綠。紀錄寫主工作樹 `tools/platform/full_results/scoped/<X>.json`。
+- 閘門（`scope_gate.py gate`；儀表板 `/api/build-gate`、建包腳本 Step 3 都呼叫它）**現場重算**判定，不信紀錄自己寫的：紀錄的 commit＝X、非 dirty、ok、基準＝現在的 P、模組集合＝現場算出的集合、`config_sha256`＝X 上 `bottom_layer.json` 的雜湊、題目清單非空而且 ⊇ 現場重算的選題、非 e2e 段 exit 0 且有題通過、e2e 段 exit 0／5〔W4 M2〕，缺一 ⇒ 不接受；判定出錯 ⇒ 不接受（回到全量）。規則一律讀 `git show X:tools/platform/bottom_layer.json`；閘門只在 HEAD＝X、而且 `tools/`、`backend/tools/`、`product/` 沒有未 commit 的改動時判定（跑判定的程式就是 X 的版本）〔W4 M3〕。建包腳本的判定段在 `backend/tools/_scope_gate.ps1`：exit 非 0、輸出看不懂、例外、commit 不符、mode 不是 scoped、基準不是 40 碼 ⇒ 全量〔W4 S1〕；儀表板另比對判定的 commit＝HEAD〔W4 S2〕。建包加 `-ForceTests` ⇒ 一律全量。全量那條路不變。
+- **優先序**（2026-09-30 合併 build-opt）：建包先判範圍驗證，接受 ⇒ 整段跳過（不查 §D-建包 的分段沿用、不跑測試）；不接受 ⇒ 走 §D-建包 的分段沿用／全量。
+- 哪一種驗證放行寫進部署包 `deploy_manifest.json` 的 `verification`，形狀統一為 `{mode, scoped, stages}`：`mode`＝`full`／`scoped`；`scoped`＝範圍驗證的判定（`base` 40 碼、`units`、`consumers`、`test_files`、`counts`、`finished`、`record`），`full` 時為 null；`stages`＝各段 `not_e2e`／`e2e` 是實跑、沿用（來源、時間）或 `skipped (scoped)`，以及 `flaky_retried`。稽核與正式機步驟檔看這一欄；`scoped` 的包在步驟檔上註明「未跑全量，驗證單位：…」。
+
+**為什麼可以（安全論證）與反方**
+- 支持：全量的大半是「沒被改到的東西再驗一次」。模組只經 L1 介面互相接觸（MODULE-GUIDE §1）；L1 沒變 ⇒ 別的模組的執行環境沒變。契約題（`tests/platform`）每次全跑，守的正是模組與底層的邊界。
+- 反方 ① **共用資料庫 schema**：模組的 migration 寫的是同一個庫，別的模組可能讀它的表。⇒ 模組 `migrations/**` 列為底層（一律全量）；沒有 migration 的表讀寫由 modtest 的資料表一跳（table_hop）把讀那張表的單位選進來。
+- 反方 ② **提供者契約漂移**：模組改了它提供的串接點（capability），消費端在別的模組／L1。⇒ `ship_tier.provider_check` 找出消費端當虛擬改動選題；任何一處取用判不了 ⇒ 全量（不猜）。
+- 反方 ③ **跨模組 e2e**：頁面流程可能經過別的模組的頁（例：傳票 e2e 點案件來源）。⇒ 改到的頁面與經相依圖擴散到的單位的 e2e 都選；純「資料依賴」的 e2e 由 table_hop 抓；抓不到的殘餘風險由 §G1 ③ 列車全量（每批合回後）與 ④ 發版演練承擔——範圍驗證只替代**出包前那一次**全量，不替代列車。
+- 反方 ④ **清單過期**（新增共用目錄沒登記）：沒有規則符合 ⇒ 底層（fail closed）；守門題驗每一條規則今天都對得到已追蹤的檔、modtest 的 fixture 層與 ship_tier 的完整包路徑都在底層。改清單本身＝改 `tools/**`＝那一包必須全量。
+- 反方 ⑤ **紀錄被沿用到別的 commit／基準**：紀錄以完整 SHA 分檔，閘門比對 commit、基準、模組集合，並現場重算底層判定。
+- **信任邊界（W4 S3）**：範圍驗證紀錄是開發機上**未簽章的 JSON**——任何能寫主工作樹 `full_results/` 的人都能偽造一份。閘門擋得住的是「過期／抄錯／跑錯範圍／跑錯 commit」這類**失誤**（全部欄位對照現場重算），擋不住**有意偽造**（寫一份欄位都對、但題目根本沒跑的紀錄）。信任的前提＝開發機本身可信（同全量紀錄 `full_results/<sha>.json`，它也沒有簽章）；基準的信任來自 git tag `prod/<sha>`，由主持在正式機確認部署後打，不由候選 commit 決定。要升級成可驗證的，要把紀錄與 pytest 的原始輸出一起簽章（未做）。
+- 守門：`tests/platform/test_scope_gate_2026_09_30.py`（(a) 動到底層 ⇒ 不接受；(b) 只動模組 ⇒ 接受；(c) 別的 commit／dirty／紅／基準或模組不同 ⇒ 不接受；(d) 對 `scope_gate.py` 的真突變各一、對應題轉紅；暫存 repo 上的 P→X 整合題；M1～M4 各一組正題＋真突變；建包判定段用 PowerShell 實跑假 scope_gate 八種輸出＋四個突變）、`tests/platform/test_deploy_dashboard_scope_gate_2026_09_30.py`（儀表板閘門：全量綠優先、範圍驗證接受才放行、判定出錯不放行）。
+
+#### D-建包：建包的測試流程（2026-09-30，使用者「安排建包的優化方式，避免非正常情況的失敗」）
+**起因（同一天實測）**：①同一份 tree 30 分鐘前 `modtest --full` 全綠，建包的沿用紀錄只有建包自己寫 ⇒ 全量又跑一次（非 e2e ~17 分＋e2e 8～13 分）；②建包 e2e 段紅在已知偶發題（RUN-PLAN O7，第 3 次；單獨跑 5/5 綠）⇒ 重建整套再 ~35 分，而非 e2e 早已綠；③建包持有獨佔時別的視窗照樣起臨時 `pytest …-adhoc`（單程序不搶鎖）加負載；④timeout.exe／TaskStop 結束外層後，pytest 孫行程還握著鎖。
+
+| 規則 | 作法（工具） | 正方 | 反方與處置 |
+|---|---|---|---|
+| ① 跨工具＋分段沿用 | `modtest --full` 在乾淨工作樹、無縮小範圍參數（-k／-m／路徑／--deselect／-x）時寫進建包的沿用紀錄（主工作樹 `backend/tools/deploy_logs/test_results.jsonl`，`build_test_reuse.record_full_run`）；建包各段各查（`lookup-stage`）：非 e2e 綠、只有 e2e 紅 ⇒ 重建只跑 e2e | 同一份 tree＋環境的綠是同一個證據，重跑只是花時間；每次發行省一輪全量（~25～30 分），e2e 偶發後的重建省 ~17 分 | worker 數不同（modtest e2e -n 2、建包 -n 4）：平行度只影響負載與快慢、不影響題目本身，而且較低平行度的綠只會**更少**偶發 ⇒ 接受，worker 上限類環境變數不進指紋；`PYTEST_ADDOPTS` 有設就進指紋（可能含 -k／-m 縮小範圍，稽核 W4）。**假綠風險**：題目以假 run_pytest 呼叫 run_full ⇒ 只信這一輪自己的 fail_stream summary（下游證據），沒有就不寫。指紋在結束時算（樹沒變由 dirty 判定）；殘留風險＝跑到一半改了 pip 環境。窗口照舊：同一天、12 小時，以該段**原本實跑**的時間算（沿用不延長）。指紋扣掉 `tools/platform/known_flakes.json`（政策檔，不決定任何題目過或不過）⇒「登記偶發 → commit → 重建」仍只跑 e2e |
+| ② 偶發政策 | 一段紅了 ⇒ `tools/platform/flaky_retry.py` 只把紅的題**單獨、循序**重跑（最多 2 次，一過就停）。通過**且**登記在 `tools/platform/known_flakes.json`（nodeid、first_seen、owner、ticket、expires，最長 30 天；**延期**＝同一 nodeid 再登記（含 remove 後再登記）：每次 ≤14 天、要 `--reason`，第 2 次須換原因＋`--root-cause-link`，第 3 次一律拒絕——稽核 W4）⇒ 繼續打包，manifest `verification.stages.flaky_retried` 與 fail_stream（`type=flaky_retried`）記下；**未登記的偶發照樣擋**並印出登記指令；每次都紅 ⇒ 擋；中斷／收集錯誤／一次紅超過 5 題／認不出是哪一題 ⇒ 不重跑直接擋；登記簿有**過期**條目 ⇒ 建包一開頭就失敗 | 偶發題讓 35 分鐘的建包重來，而它單獨跑是綠的；只重跑紅的題，成本是秒級 | 「重跑到綠」是經典的假綠來源（〈偶發失敗先當產品競態〉）⇒ 三道限制：只有**人登記過**的題可放行（登記＝有人做過「這是偶發、要追根因」的決定）、登記有期限且過期就擋整個建包（逼根因修正）、放行的題寫進 manifest 看得到。整輪 retry、放寬 timeout 照舊不做 |
+| ③ 建包獨佔 | 建包持有獨佔登記期間，**不搶鎖的臨時 pytest 直接拒絕開始**（conftest `light_run_block_reason`，exit 4＋說明）；建包自己的子行程帶 `MOTRIX_PYTEST_BUILD_CHILD=<建包 pid>`（`utf8_env` 不剝掉它）；`--collect-only` 放行；重型測試照舊排隊 | 建包期間的額外負載是 e2e 偶發的主因之一 | 擋住別人的工作 ⇒ 訊息寫明原因與等待對象；真的非跑不可設 `MOTRIX_PYTEST_BUILD_GUARD=0`（明示的覆寫）。直接以獨佔身分跑（不經建包）時 conftest 替自己的子行程設 BUILD_CHILD |
+| ④ 盤點與孤兒 | 建包登記獨佔前跑 `tools/platform/build_preflight.py`：列出其他 pytest／modtest（附父行程鏈，venv 轉呼叫器只算一次）；鎖持有者父行程已不在（或 pid 被重用）、或祖先鏈沒有存活的 Claude／殼 ⇒ 標「疑似孤兒」並印 `taskkill` 指令；`-WaitForOtherTests N` 等非孤兒結束最多 N 分鐘 | 孤兒握鎖時建包只會安靜地排隊，看不出在等誰 | **不自動結束任何行程**：孤兒也可能是刻意放著跑的；盤點失敗只警告、永遠 exit 0（這一步不可以變成新的失敗來源） |
+
+- **開關（預設全開；關掉＝舊行為）**：`build_deploy_package.ps1 -NoStageReuse`（只沿用兩段都綠的完整紀錄）、`-NoFlakeRetry`（紅就擋、不查登記簿、不載 fail_stream）、`-NoPreflight`；conftest `MOTRIX_PYTEST_BUILD_GUARD=0`。`-ForceTests` 照舊（一律重跑）。
+- **登記偶發題**（人看過紅的現場、開了追根因的單才登記）：`.venv312\Scripts\python.exe tools\platform\known_flakes.py add --nodeid "<nodeid>" --owner "<負責人>" --ticket "<RUN-PLAN 編號>" --days 14`；根因修好 ⇒ `remove`；`check` 列出並驗過期。
+- **發行時的順序**：先 `modtest --full`（綠會被建包沿用）→ 儀表板打包；建包紅在 e2e 時，直接再建一次＝只跑 e2e。
+- **守門**：`backend/tests/platform/test_build_opt_2026_09_30.py`（每條規則含反向控制）；既有 `test_build_test_reuse_2026_09_25`、`test_pytest_exclusive_lock_2026_09_25`。
 
 **換版當天（儀表板「5. 升級精靈」，逐步按下並確認）**
 
@@ -190,7 +226,7 @@
 | ① 開發中 | 每次存檔或 commit 前 | 名稱層級選題（改到的名稱 ⇒ 真的用到它的單位）＋該單位的契約題 | 數分鐘 |
 | ② 合回閘門 | push 到 platform 前 | ①＋tests/platform（契約與守門）＋有改到的頁面的 e2e；`--rebase-check` 判定差異題要擴大到哪些檔（~~要不要升到③~~〔更正 2026-09-26：影響大也不升到③，全量交給列車，§G3〕） | ≤20 分鐘 |
 | ③ 批次全量 | 每批合回之後、動到 fixture 層時〔更正（§G3）：**由列車跑**，各線不自己跑〕 | 全量（2 個名額、-n 4、低優先權） | ≤60 分鐘 |
-| ④ 發版 | 出部署包前 | 全量＋D7 型的升級演練（正式機資料的複本、兩種回滾、冒煙） | 以演練報告為準 |
+| ④ 發版 | 出部署包前 | 全量＋D7 型的升級演練（正式機資料的複本、兩種回滾、冒煙）〔補 2026-09-30：正式機基準→這一包沒動到底層 ⇒ 全量可由範圍驗證代替，§D-1a〕 | 以演練報告為準 |
 
 - 安全靠的是**邊界上的契約題**加上**守門的突變抽查**，不是每次都跑全部。每新增一道守門，都要附一個會讓它轉紅的突變。
 - 偶發失敗一律當成真問題查（O1 的教訓：它其實不是偶發），不准標成 flaky 或加重試。
@@ -205,14 +241,15 @@
 | 1 | 直譯器 | 命令一律 `D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe`；PATH 上的、別的工具的 venv 都不行 | C httpx2 假紅（9/27） |
 | 2 | 資料庫裡的 JSON | 新寫的 SQL 不准 `json_extract(data_json…)`（**含** `SQL_DEAL_TAG` 這類包好的常數——它裡面就有 json_extract）；逐筆 Python 解析（`approval_json_of`），~~壞的一筆跳過＋ERROR~~〔更正 2026-09-27 13:53 D：跳過＋ERROR **只限解析不了的**；data_json 正常、approval 沒有簽核層的是合法的「沒有設定流程」，要照舊列給 superadmin（核准端點的 no-tier 分支就是給它走的），跳過會讓要簽的單消失〕，不可以整類消失 | AL2-M2、c-queue-json、AUDIT-D-C-approval-l1 §3-5 |
 | 3 | 頁面色碼 | 改到的 html／css／js 不准新寫死 `#RRGGBB`，用語意 token | cm12（第十班漏上 origin） |
-| 4 | 模組版號 | 改到 `modules/<key>/` 的程式 ⇒ 同包升該模組版號＋CHANGELOG | 第十一、十二班交互紅 |
+| 4 | 模組版號 | 改到 `modules/<key>/` 的程式 ⇒ 同包寫 CHANGELOG 條目〔2026-09-30 起寫佔位 `## (next) — <日期>（<分支>）`、module.json version 不動，號碼由列車定（§G6）〕 | 第十一、十二班交互紅 |
 | 5 | 搬家後的舊路徑 | 改到被搬遷的檔 ⇒ grep 舊路徑字串（`routers/quotations`、`helpers/…`）在題目、INTEGRATION-POINTS、基準檔裡是否還有 | 第十二班 KNOWN_STAR_KWARGS、IP 使用方 |
 | 6 | 逐案拒絕 | 案件看不到一律 404（與查無同訊息），不寫 403 | c-case404 CR-M1 |
 | 7 | 模組缺席的略過 | 需要某模組的題**逐題**標 `requires_module`，不整檔；驗「L1 照常」的不可以標 | M5-M1 |
 | 8 | 起子 pytest | 用 `utf8_env`、自己的鎖檔、探針寫 tmp；子行程期限＜外層上限 | O14、subproc_helper |
 | 9 | e2e 斷言 | 驗 DOM／資料庫終點狀態，不驗 Alpine 模型；等終點不等某一趟請求；焦點／非同步回應要防晚到 | M4-M1、O9-2、O13 |
 | 10 | 守門的方向與範圍 | 下限還是上限、單向還是雙向、掃描範圍是否含 `modules/`；每道守門附正對照＋反向控制 | EM10、SM-M1、AB-S2 |
-| 11 | 版本紀錄 | 當天第一個 commit ⇒ version_manifest 補當天條目 | VR1 跨日 |
+| 11 | 版本紀錄 | 當天第一個 commit ⇒ version_manifest 補當天條目〔2026-09-30 起 `"version": "next"`＋date，字母由列車定（§G6）〕 | VR1 跨日 |
+| 19 | 佔位不取號 | 分支上 grep 自己的 diff：不准改 `CORE_VERSION`、`module.json` 的 version、manifest 的字母號、`register("core", <數字>` 新行——一律佔位（§G6）；CORE 佔位要跑過 `core_bump.py --pending` | 2026-09-30 撞號（使用者「撞號太多次了」） |
 | 12 | 題目讀別的模組檔 | 題目不准 `read_text` 讀別的模組的原始碼、不准在模組層 import 別的模組 | 第十二班 core-only 65 題 |
 | 13 | 列出⇔放行 | 清單的過濾與詳情的守門要用**同一個輸入**判斷（同一支函式、同一個欄位）；一邊看 `linkedQuoteNo`、一邊看 `quoteNo` ⇒ 空值那一格就對不上。一致性題要含「欄位為空」的那一種 | AL2-M1（AUDIT-D-C-approval-l1 §3-3） |
 | 14 | 繞過守門的分支 | 「本人免守門」「簽核人放行」這類分支，兩個方向都要有題：**沒有一般權限的人**是本人 ⇒ 放行；不是本人 ⇒ 與查無同一個 404。用有一般權限的人測，兩個方向都會綠（放行的其實是一般權限） | AL-M1（AUDIT-D-C-approval-l1 §2） |
@@ -220,6 +257,7 @@
 | 16 | 題目讀頁面路徑 | 新題出現 `"pages"`／`FRONT / "pages"` 寫死路徑 ⇒ 改 `core.source_tree.page_file(...)` | test_page_paths_only_decrease（第十五班 core-only RC，B 題檔） |
 | 17 | 新規格編號要宣告 | 新題名帶模組規格編號（例 S6）⇒ grep 該模組 SPEC 已宣告；送測清單加 `test_spec_coverage` | test_spec_coverage（第十六班 --train，B54） |
 | 18 | 新增頁／表／權限 key | 送測前跑全域釘子（modtest 模組選題選不到）：test_alpine_double_init（頁母體）、test_demo_reset dm1（表分類）、test_module_registry＋test_module_keys_consistency（權限目錄）、test_system_audit＋test_module_data_classes（備份分類） | 第十八班 --train 6 紅（E lodging） |
+| 19 | 預演列車（合併後才紅的守門） | **改到 L1（helpers／core）、frontend、routers 的分支，push 前跑** `python tools/platform/pre_train_check.py <分支>`（Python 用 .venv312；約 10～25 分，-n 2、低優先權、走全機測試鎖）：在 `D:\開發測試檔\pre-train-*` 拋棄式樹把分支合進 origin/platform（不 push、不寫 rerere）→ `train_number assign`＋`--check` → 重產 dep_graph／UNIT-INDEX／test_map → `MOTRIX_TRAIN=1` 跑 tests/platform＋GUARDS 列的非 platform 守門（spec_coverage、alpine double-init、公司設定輸出點、system_audit、raw-vh 靜態題、簽核提供者、頁面殼腳本），紅的題依歸屬（模組／core）分組並列出本分支動到的相關檔。exit 0＝綠；1＝有紅（先修再 push）；2＝合併衝突（先 rebase）。單一分支單獨看是綠、合上 platform 才紅的那批（C_OWNED、modules.json 歸屬、page_paths 棘輪、scope_gate global_tests、單位卡、L1 底線名稱、簽核提供者集合、產生檔）由它一次抓出，不必等列車逐個退回。**列車上又抓到「合併後才紅」的守門 ⇒ 加進 `pre_train_check.GUARDS`**。| 第二十六班重建 3 次（reds 只在合併＋MOTRIX_TRAIN=1 出現）；wip/pre-train-check |
 
 清單會長大：列車或稽核抓到「讀碼就看得出來」的紅，當輪加一列（寫出處）。
 
@@ -254,7 +292,7 @@
 - **做法**：
   1. 各線做完，只跑 §G1 ②合回閘門（差異題＋tests/platform＋改到的頁面 e2e），綠了就在 RUN-PLAN §5 的「列車月台」登記：分支名、HEAD、差異題結果、有沒有動到 fixture 層。**不要自己跑全量。**
      〔補充 2026-09-27 13:52 使用者：「在登記列車前先檢查代碼」〕登記前必須做完 §G1 ⓪ 自查（讀整包 `git diff origin/platform...HEAD`，對照 §G5 逐項查）；月台列多一欄「⓪ 自查：中 N 項、已修／未中」，**沒有這一欄的列不上車**（列車長退回）。
-  2. 主持大約每 60 分鐘發一班：從 origin/platform 開 `train/<時間>`，依登記順序一包一包 rebase 上去。rebase 有衝突的那一包退回月台，下一班再上；CORE 版號與版本紀錄由主持在列車上用 core_bump 與 VR3 統一處理。
+  2. 主持大約每 60 分鐘發一班：從 origin/platform 開 `train/<時間>`，依登記順序一包一包 rebase 上去。rebase 有衝突的那一包退回月台，下一班再上；CORE 版號與版本紀錄由主持在列車上用 core_bump 與 VR3 統一處理。〔更正 2026-09-30：改用 `train_number.py assign` 一次取號（§G6）〕
   3. 列車只跑**一次**全量（-n 4、低優先權，佔 1 個名額）。
   4. 全綠：列車 fast-forward 推上 platform，每一包的作者在 §6 補記一筆。
   5. 有紅：依失敗題的歸屬（test_map 的單位 ⇒ 哪一包改到那個單位）找出可疑的包，只在可疑的包之間二分排查。找到的那一包退回給作者，其他包重跑差異題後推上去。
@@ -278,7 +316,7 @@
   1. 移除上一班的列車樹（先確認沒有行程在用）；從 origin/platform 建 `train/<MMDD-HHMM>`（時間用 date）於 `D:\\MOTRIX-PLATFORM-TRAIN<N>`。
   1b. （2026-09-27 13:52 補，使用者「在登記列車前先檢查代碼」）**上車前讀碼**：逐包讀 `git diff origin/platform...<HEAD>`，確認月台列有「⓪ 自查」欄，再對照 §G5 快速掃一次（特別是第 4、5、11 項這類交會才會出現的）；中了就退回作者或在車上先修，**不要等 --train 跑出來才知道**。回報寫「上車前讀碼：退回 N 包／車上先修 N 項」。
   2. 依序 cherry-pick 各包自己的範圍（git cherry 排除已合回）；動 main.py／fixture 層的排車頭；各包自帶的產生檔重產與 core_bump 簿記一律略過。
-  3. 列車上 core_bump 取號、IP 照 origin 已用號碼往後定號（引用處同步、歷史不改寫）、模組版號衝突往後排；重產 UNIT-INDEX／dep_graph／test_map 單獨一個 commit，三者 --check 一致。〔補充（B，18:31）：再以 `MOTRIX_TRAIN=1` 跑 `tests/platform/test_generated_maps.py tests/platform/test_unit_cards.py`，「是否最新」三題必須是 **passed，不可以是 skipped**（沒設旗標時它們會 skip ⇒ 過期沒人發現）；過渡期：各包自帶的產生檔改動照第 2 步略過〕
+  3. ~~列車上 core_bump 取號~~〔更正 2026-09-30：`setup_merge_drivers.py --check` → `train_number.py assign`（模組／CORE／manifest／core migration 一次取號，單獨一個 commit）→ `train_number.py --check` exit 0，見 §G6〕、IP 照 origin 已用號碼往後定號（引用處同步、歷史不改寫）、~~模組版號衝突往後排~~；重產 UNIT-INDEX／dep_graph／test_map 單獨一個 commit，三者 --check 一致。〔補充（B，18:31）：再以 `MOTRIX_TRAIN=1` 跑 `tests/platform/test_generated_maps.py tests/platform/test_unit_cards.py`，「是否最新」三題必須是 **passed，不可以是 skipped**（沒設旗標時它們會 skip ⇒ 過期沒人發現）；過渡期：各包自帶的產生檔改動照第 2 步略過〕
   4. ~~全量：`MOTRIX_PYTEST_SLOTS=4 modtest.py --full --workers 4 --e2e-workers 2 --window TR<N>`；起跑前可用記憶體 ≥ 4 GB；全量期間不改列車樹；**兩段都讀到結果行才結束回合**（背景 until 迴圈盯 pid）。~~〔更正 2026-09-26 17:33，使用者表單「開發完成才跑全量」：第十班起**不跑全量**，改跑：①`modtest.py --base origin/platform`（本班所有包的差異選題，含改到頁面的 e2e，e2e -n 2）②`tests/platform` 全部（守門）〔補充（B，18:58，D 稽核 GF-M1）：①②合併成 **`modtest.py --train`**——自動設 MOTRIX_TRAIN=1、跑差異題＋tests/platform，「是否最新」三題被 skip 或收集不到就判紅（exit 1）；不要手動拆開跑〕③core-only 反向控制 ④本班有搬遷的模組做真刪驗證；**兩段都讀到結果行才結束回合**；在 RUN-PLAN §6 記「本班交互紅 N 題」。全量只在 D1～D6 完成、D7 之前跑一次〕
   5. core-only 反向控制（`core_only_rc.py --commit <列車 HEAD> --train`；S2 2026-09-27 起列車長一律帶 `--train`）：紅 ⊆ §B-11 允許 ∪ 已知紅清單；清單有新增要核對 Ruling-By: 8d。這班有模組搬遷 ⇒ 該模組真刪驗證（tests/platform＋提到該模組的檔、--continue-on-collection-errors）。
   6. 交會紅在列車上修；修不了的包連同相依包下車。全量 e2e 的偶發紅先在 origin 基底重跑，基底也紅才照常合回並記錄。
@@ -302,3 +340,23 @@
 - 建包／交付：`deploy_packages\` 只留最近 3 包；staging 與演練目錄用完即刪；不重複 copy 同一包到多處。
 - 產品：日誌輪替與上限、同內容不重寫（寫前比對雜湊）、定時工作無變化不落檔。
 - 每一項優化附量測（寫入量前後），寫進 IMPROVEMENT-REPORT。
+
+### G6. 版號佔位：號碼在列車上才定（使用者 2026-09-30：「撞號太多次了，想辦法解決」）
+- **為什麼**：一班 5～10 包，各包在分支上各自取「下一號」（模組版號、CORE_VERSION、core migration 號、manifest 字母）⇒ 合在一起必撞；主持逐一手動改號，還要解每個 CHANGELOG／version_manifest 最上面的文字衝突。取號的時間點錯了：**號碼只有在全部包都疊上去之後才算得出來。**
+- **分支（作者）只寫佔位，不取號**：
+  | 東西 | 分支上寫 | 不要動 |
+  |---|---|---|
+  | 模組 CHANGELOG | 最上面 `## (next) — <日期>（<分支>）說明`；新增功能 `(next:minor)`、不相容 `(next:major)`（預設修正號） | `module.json` 的 `version` |
+  | CORE CHANGELOG | 最上面 `## (next) — <日期>（<分支>）…`；再跑 `python tools/platform/core_bump.py --pending`（G1 快照介面＝目前、`core_version: "next"`；主／次版號由列車依介面差異判斷） | `registry.CORE_VERSION` |
+  | version_manifest | 最上面插入 `{"module": …, "version": "next", "date": "YYYY-MM-DD", "time": …, "content": …}`；同模組這一包已有條目也**另寫一筆**（列車會併；改別人那一筆＝兩包改同一行＝衝突） | 別人的條目 |
+  | core migration | `register("core", NEXT, _fn)`（runtime：排在已編號之後、不記版號、每次啟動重跑 ⇒ 必須冪等；**只准在分支上**：列車 `assign` 一律換成整數（高於目前檔案／origin/platform／正式機基準已用的號；檔案比它們少 ⇒ 拒絕），列車／platform／prod 標籤上還有 NEXT ⇒ `test_version_slots` 紅） | 已編號的 |
+  守門（分支上）：`## (next)` 算「有寫條目」（G4 test_module_changelog_follows_code；寫錯成 `## (Next)` 不算）；佔位格式、manifest 佔位欄位（`test_version_slots`）；快照 `next` ⇔ CORE CHANGELOG 最上面是 `(next)`（`test_l1_interface_snapshot`）。舊式「先取號」的分支照樣可以上車（下面第 3 步只重編撞到的號）。
+- **合併驅動（每個 clone 一次，worktree 共用）**：`D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe tools/platform/setup_merge_drivers.py`；列車長開車前 `--check`（exit 0）。`.gitattributes` 已把 `backend/core/CHANGELOG.md`、`backend/modules/*/CHANGELOG.md`、`backend/version_manifest.json` 指給驅動：兩邊都在最上面插入 ⇒ 兩邊都留（我方在上、完全相同的只留一份）；其他形狀（兩邊改同一段舊內容、兩邊都改了同一筆舊條目、排版看不懂）⇒ 交給 `git merge-file`＝跟沒裝一樣的衝突標記。沒登記的機器 ⇒ 一般衝突，**不會靜默少東西**。不用內建 `merge=union`：實測兩塊之間的空行會被吃掉，兩邊改同一行舊內容時兩行都留（靜默）。merge、rebase、cherry-pick 都走驅動。
+- **列車（主持／列車長）**：§G4 第 2 步疊完所有包之後：
+  1. `python tools/platform/setup_merge_drivers.py --check`（開車前；沒登記就先登記再疊）。
+  2. 有 CORE 佔位而合併後快照有衝突 ⇒ 解成任一邊後跑 `python backend/tests/platform/_l1_interface.py --update --pending` 重產。
+  3. `python tools/platform/train_number.py assign`（`--dry-run` 先看）：印取號表（類別／對象／舊／新／說明）並改寫；**單獨一個 commit**（訊息附表）。規則：號碼從「正式機基準（`tests/_prod_baseline.py`）與目前檔案」較大者往上；`--base origin/platform` 已有的號碼優先保留；佔位依序取號；舊式分支撞號的重編並在標題尾註記〔train_number：舊 → 新〕；manifest 佔位依 (date, time) 取當天下一個字母、併進同模組這一包已有的條目；已出貨的一律不動。再跑一次＝不改（冪等）。
+  4. `python tools/platform/train_number.py --check` ⇒ exit 0；之後照 §G4 以 `MOTRIX_TRAIN=1` 跑 `modtest.py --train`（列車上有任何佔位 ⇒ `test_version_slots`、`test_l1_interface_snapshot` 紅）。
+  取號表裡有「撞號 ⇒ 重編（⚠ 已跑過舊號的開發庫要重建）」＝舊式分支撞了 core migration 號，回報時點名。
+- **准不准有佔位**：`MOTRIX_TRAIN=1`、分支 platform／master／main／train/*、HEAD 是 prod/* 標籤 ⇒ 不准；其他（wip/*、detached）⇒ 准（`tests/_version_slots.placeholders_allowed`）。
+- **仍然要人做的**：同模組兩筆 manifest 佔位由工具以換行串接內容（文字不潤飾）；CHANGELOG 段落順序＝疊車順序；模組要引用分支上新增的 CORE 功能時 `module.json` 的 `core` 下限只能寫目前號碼（列車取號後再收緊）。

@@ -1,0 +1,217 @@
+{
+ "key": "overtime",
+ "name": "加班單",
+ "category": "人資",
+ "description": "申請人、加班日期、起訖時間、時數、事由、補償方式（加班費／補休）；主管簽核。",
+ "note": "不連動薪資計算；補償方式僅供人資核對。",
+ "body": {
+  "name": "加班單",
+  "icon": "",
+  "menu": {
+   "group": "人資",
+   "order": 61
+  },
+  "numbering": {
+   "prefix": "OT",
+   "date": "YYYYMMDD",
+   "digits": 4
+  },
+  "fields": [
+   {
+    "key": "applicant",
+    "label": "申請人",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "users",
+    "default": {
+     "$": "requester"
+    },
+    "required": true
+   },
+   {
+    "key": "dept",
+    "label": "部門",
+    "type": "ref",
+    "dataClass": "T1",
+    "target": "departments"
+   },
+   {
+    "key": "work_date",
+    "label": "加班日期",
+    "type": "date",
+    "dataClass": "T1",
+    "required": true
+   },
+   {
+    "key": "period",
+    "label": "加班起訖",
+    "type": "daterange",
+    "dataClass": "T1",
+    "withTime": true,
+    "required": true
+   },
+   {
+    "key": "hours",
+    "label": "加班時數",
+    "type": "number",
+    "dataClass": "T1",
+    "min": 0.5,
+    "required": true
+   },
+   {
+    "key": "project",
+    "label": "專案／工作內容",
+    "type": "text",
+    "dataClass": "T1"
+   },
+   {
+    "key": "comp",
+    "label": "補償方式",
+    "type": "radio",
+    "dataClass": "T1",
+    "options": [
+     "加班費",
+     "補休"
+    ],
+    "default": "加班費",
+    "required": true
+   },
+   {
+    "key": "reason",
+    "label": "事由",
+    "type": "textarea",
+    "dataClass": "T1",
+    "maxLength": 500
+   }
+  ],
+  "workflow": {
+   "initial": "draft",
+   "states": [
+    {
+     "key": "draft",
+     "label": "草稿"
+    },
+    {
+     "key": "pending",
+     "label": "簽核中",
+     "approval": {
+      "tiers": [
+       {
+        "approvers": [
+         {
+          "sourceType": "submitter_manager"
+         }
+        ]
+       }
+      ],
+      "on_approved": "approved",
+      "on_rejected": "draft"
+     }
+    },
+    {
+     "key": "approved",
+     "label": "已核准",
+     "final": true,
+     "notify": {
+      "requester": true
+     }
+    }
+   ],
+   "transitions": [
+    {
+     "key": "submit",
+     "label": "送審",
+     "from": "draft",
+     "to": "pending"
+    }
+   ]
+  },
+  "ui": {
+   "form": {
+    "groups": [
+     {
+      "title": "申請人",
+      "fields": [
+       "applicant",
+       "dept"
+      ]
+     },
+     {
+      "title": "加班內容",
+      "fields": [
+       "work_date",
+       "period",
+       "hours",
+       "project",
+       "comp",
+       "reason"
+      ]
+     }
+    ]
+   },
+   "list": {
+    "columns": [
+     "applicant",
+     "work_date",
+     "hours",
+     "comp"
+    ]
+   }
+  },
+  "output": {
+   "template": {
+    "theme": "voucher_standard",
+    "blocks": [
+     {
+      "type": "identity_header",
+      "title": "加班單"
+     },
+     {
+      "type": "meta",
+      "fields": [
+       {
+        "label": "單號",
+        "path": "recordNo"
+       },
+       {
+        "label": "申請人",
+        "path": "fields.applicant"
+       },
+       {
+        "label": "部門",
+        "path": "fields.dept"
+       },
+       {
+        "label": "加班日期",
+        "path": "fields.work_date",
+        "format": "date10"
+       },
+       {
+        "label": "加班起訖",
+        "path": "fields.period"
+       },
+       {
+        "label": "時數",
+        "path": "fields.hours"
+       },
+       {
+        "label": "補償方式",
+        "path": "fields.comp"
+       },
+       {
+        "label": "事由",
+        "path": "fields.reason"
+       }
+      ]
+     },
+     {
+      "type": "approval_sign"
+     },
+     {
+      "type": "identity_footer"
+     }
+    ]
+   }
+  }
+ }
+}

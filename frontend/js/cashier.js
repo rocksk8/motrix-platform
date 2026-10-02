@@ -72,6 +72,8 @@ function cashierApp() {
     receiveNote:          '',
     receiveBankAcctCode:  '',
     receiveSaving:        false,
+    // MONEY-FLOWS §9 L3：改動已入總帳的收款時的非阻擋提示（行內可關閉；不用 alert，避免卡住頁面）
+    glNotice:             '',
     // T100 傳票匯出設定裡的銀行帳戶清單（2026-09-01 新增），標記已收款/已匯款
     // 時挑選要用哪個帳戶；每次開啟標記 Modal 都重抓最新清單，見
     // loadT100BankAccounts()
@@ -101,6 +103,7 @@ function cashierApp() {
     payreqDates: {},
     payreqBusy: false,
     payreqNotice: '',
+    payreqExtras: {},                    // A2-3：費用單據的出納欄位 { 'source:key': {payMethod, payTerms, remitDate, bank, bankBusy, bankErr} }
     payreqRemits: {},                    // W1：每筆請款的實付／手續費輸入 { 'source:key': {actual, hasFee, fee} }
     // W1：匯款實付／手續費（三個標記已匯款入口共用同一組欄位規則）；實付空白＝等於應付；手續費是公司自付、不參與比對
     payRemit:  { actual: '', hasFee: false, fee: '' },
@@ -153,9 +156,7 @@ function cashierApp() {
       return this.isAdminPlus() || this._modules().includes('cashier')
     },
     _localDateStr(d) {
-      d = d || new Date()
-      const tz = d.getTimezoneOffset() * 60000
-      return new Date(d.getTime() - tz).toISOString().slice(0, 10)
+      return MotrixDate.ymd(d)
     },
     // ── 出納頁籤（2026-08-31 併入本頁，原 frontend/js/cashier.js 內容原封不動
     // 搬過來，只改了跟本檔案既有狀態衝突的名稱，見上方 state 區塊註解）────────
@@ -218,6 +219,39 @@ function cashierApp() {
       return b
     },
     remitReviewLabel(s) { return s === 'pending' ? '差額待審核' : (s === 'approved' ? '差額已核可' : '') },
+    kindLabel(k) { return { purchase_req: '請購單', purchase_order: '採購單', travel: '差旅費用請款單', petty_cash: '零用金支付單', material_payment: '叫料匯款（可分次付款：實付填本次金額）' }[k] || '' },
+    payreqExtra(it) {
+      const k = it.source + ':' + it.key
+      if (!this.payreqExtras[k]) this.payreqExtras[k] = { payMethod: '', payTerms: it.payTerms || '', remitDate: it.remitDate || '', bank: null, bankBusy: false, bankErr: '' }
+      return this.payreqExtras[k]
+    },
+    // 採購單：匯款日＋付款條件必填；零用金支付單：付款方式必填（後端同規則，這裡只是提早提示）
+    payreqExtraError(it) {
+      const x = this.payreqExtra(it)
+      if (it.kind === 'purchase_order' && (!x.remitDate || !(x.payTerms || '').trim())) return '採購單請填匯款日與付款條件'
+      if (it.kind === 'petty_cash' && !x.payMethod) return '零用金支付單請選付款方式'
+      return ''
+    },
+    payreqExtraBody(it) {
+      if (!it.kind) return {}
+      const x = this.payreqExtra(it), b = {}
+      if (x.payMethod) b.payMethod = x.payMethod
+      if (it.kind === 'purchase_order') { b.payTerms = (x.payTerms || '').trim(); b.remitDate = x.remitDate }
+      return b
+    },
+    async viewPayeeBank(it) {
+      const x = this.payreqExtra(it)
+      x.bankBusy = true; x.bankErr = ''; x.bank = null
+      try {
+        const r = await fetch('/api/cashier/pending-payables/' + encodeURIComponent(it.source) + '/' + encodeURIComponent(it.key) + '/payee-bank',
+          { headers: { Authorization: 'Bearer ' + this._token() } })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { x.bankErr = d.detail || ('查詢失敗（HTTP ' + r.status + '）'); return }
+        x.bank = d
+        if (d.notice) x.bankErr = d.notice
+      } catch (e) { x.bankErr = '查詢失敗：' + e.message }
+      finally { x.bankBusy = false }
+    },
     payreqRemit(it) {
       const k = it.source + ':' + it.key
       if (!this.payreqRemits[k]) this.payreqRemits[k] = this._newRemit('')
@@ -320,13 +354,14 @@ function cashierApp() {
         const k = it.source + ':' + it.key
         const r = await fetch('/api/cashier/pending-payables/' + encodeURIComponent(it.source) + '/' + encodeURIComponent(it.key) + '/pay', {
           method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({ paidDate: this.payreqDates[k] || '', ...this.remitBody(this.payreqRemit(it)) }),
+          body: JSON.stringify({ paidDate: this.payreqDates[k] || '', ...this.remitBody(this.payreqRemit(it)), ...this.payreqExtraBody(it) }),
         })
         const d = await r.json().catch(() => ({}))
         if (!r.ok) { this.payreqNotice = d.detail || ('登錄付款失敗（HTTP ' + r.status + '）'); return }
         this.payreqNotice = '已登錄付款：' + (it.quoteNo || '') + '　' + it.title + '　付款日 ' + d.paidDate
           + (d.remitReview ? '　⚠ 實付與應付差 ' + d.diff + '，已送管理員審核' : '')
         delete this.payreqRemits[k]
+        delete this.payreqExtras[k]
         await Promise.all([this.loadPayreqQueue(), this.loadRemitReviews()])
       } catch (e) { this.payreqNotice = '登錄付款失敗：' + e.message }
       finally { this.payreqBusy = false }
@@ -361,11 +396,22 @@ function cashierApp() {
       f.saving = false
     },
 
+    // 勞報單簽回檔：頁內預覽（共用元件 static/file-preview.js），下方保留「另開新分頁」（出納要看大圖或並排比對時用）
     async openPayslipSigned(p, file) {
-      try {
-        const r = await fetch('/api/payslips/' + encodeURIComponent(p.slipNo) + '/signed-files/' + encodeURIComponent(file.id), {
+      const P = window.MotrixFilePreview
+      const items = (p.files || [file]).map(f => P.withMime({ id: f.id, filename: f.filename, size: f.size }))
+      const fetchBlob = async (it) => {
+        const r = await fetch('/api/payslips/' + encodeURIComponent(p.slipNo) + '/signed-files/' + encodeURIComponent(it.id), {
           headers: { Authorization: 'Bearer ' + this._token() } })
-        if (r.ok) window.open(URL.createObjectURL(await r.blob()), '_blank')
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        return r.arrayBuffer()
+      }
+      try {
+        await P.open({ items, index: Math.max(0, (p.files || []).findIndex(f => f.id === file.id)), fetchBlob,
+          meta: (it) => P.fileSize(it.size) || '',
+          actions: [{ label: '另開新分頁', testid: 'file-preview-newtab', ghost: true,
+                      enabled: (it) => P.kind(it) === 'image' || P.kind(it) === 'pdf',
+                      run: (it) => P.openInNewTab(it, fetchBlob) }] })
       } catch (e) { console.error(e) }
     },
 
@@ -426,16 +472,16 @@ function cashierApp() {
       finally { this.bonusPay.saving = false }
     },
 
-    async exportCashierHistory() {
+    async exportCashierHistory(fmt) {      // fmt：'pdf' ⇒ 走 /pdf 姊妹端點（2026-09-30：每個 Excel 匯出都要有 PDF）
       this.cashierExporting = true
       try {
         const qs = `?start=${this.cashierHistoryStart}&end=${this.cashierHistoryEnd}`
-        const r = await fetch('/api/cashier/export' + qs, { headers: { Authorization: 'Bearer ' + this._token() } })
+        const r = await fetch('/api/cashier/export' + (fmt === 'pdf' ? '/pdf' : '') + qs, { headers: { Authorization: 'Bearer ' + this._token() } })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '匯出失敗'); this.cashierExporting = false; return }
         const blob = await r.blob()
         const a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
-        a.download = `MOTRIX_出納執行紀錄_${this.cashierHistoryStart}_${this.cashierHistoryEnd}.xlsx`
+        a.download = `MOTRIX_出納執行紀錄_${this.cashierHistoryStart}_${this.cashierHistoryEnd}` + (fmt === 'pdf' ? '.pdf' : '.xlsx')
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
@@ -581,6 +627,7 @@ function cashierApp() {
           })
         })
         if (!r.ok) { alert(await _caseActionError(r)); this.receiveSaving = false; return }
+        this.glNotice = (await r.json().catch(() => ({}))).glWarning || ''
         this.receiveModal = false
         this.receiveTarget = null
         await Promise.all([this.loadReceivable(), this.loadCashierHistory()])
@@ -597,6 +644,7 @@ function cashierApp() {
           body: JSON.stringify({ received, receivedAt: '', receivedBy: '', ...(item.itemId != null ? { itemId: item.itemId } : {}) })
         })
         if (!r.ok) { alert(await _caseActionError(r)); return }
+        this.glNotice = (await r.json().catch(() => ({}))).glWarning || ''
         await this.loadReceivable()
       } catch (e) { alert('更新收款狀態失敗：' + e.message) }
     },
@@ -750,7 +798,7 @@ function cashierApp() {
       }
     },
 
-    async exportT100Vouchers() {
+    async exportT100Vouchers(fmt) {
       if (!this.t100Start || !this.t100End || this.t100Start > this.t100End) {
         alert('請確認起訖日期區間正確')
         return
@@ -758,7 +806,7 @@ function cashierApp() {
       this.t100Exporting = true
       try {
         var qs = 'start=' + this.t100Start + '&end=' + this.t100End
-        var res = await fetch('/api/reports/t100-export/vouchers?' + qs, {
+        var res = await fetch('/api/reports/t100-export/vouchers' + (fmt === 'pdf' ? '/pdf' : '') + '?' + qs, {
           headers: { Authorization: 'Bearer ' + this._token() }
         })
         if (!res.ok) {
@@ -768,7 +816,7 @@ function cashierApp() {
         var blob = await res.blob()
         var a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
-        a.download = 'MOTRIX_T100傳票匯出_' + this.t100Start + '_' + this.t100End + '.xlsx'
+        a.download = 'MOTRIX_T100傳票匯出_' + this.t100Start + '_' + this.t100End + (fmt === 'pdf' ? '.pdf' : '.xlsx')
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
@@ -873,8 +921,8 @@ function cashierApp() {
     // 📌 而它在概念上屬於這裡：`accounting_export.py:8` 逐字寫著
     //    「設計採**現金基礎**：只匯出『錢真的有進出』的事件」
     //    ⇒ **現金基礎就是出納的領域。**
-    t100Start:        new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
-    t100End:          new Date().toISOString().slice(0, 10),
+    t100Start:        MotrixDate.monthStart(),
+    t100End:          MotrixDate.today(),
     t100Exporting:    false,
     t100ConfigOpen:   false,
     t100Config:       null,

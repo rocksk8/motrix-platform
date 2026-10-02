@@ -10,11 +10,11 @@
 
 | 串接 | 編號／能力名 | 提供方 → 使用方 | 資料形狀（重點） | 冪等／反轉規則 | 功能旗標 | 守門測試 |
 |---|---|---|---|---|---|---|
-| 支出（一般） | IP-9 `expense.entries`（多提供者，名稱＝來源：`bonus`、`payslip`、`remit_fee_contractor`、`remit_fee_case`、`receipt_fee`、`custom_module`） | 各模組 → M08 `analytics/api/reports.py::_collect_expenses`（營運報表、月報信、首頁） | `fn(conn,start,end) -> [{date, quoteNo, desc, amount, category}]`；`date`＝**現金事件日**；權責＝現金才用這條 | 純查詢；來源狀態變了下次就變 | 無 | `payroll/tests/test_payslip_void_signed_paid_2026_09_29.py`、各模組 `*_providers` 題 |
+| 支出（一般） | IP-9 `expense.entries`（多提供者，名稱＝來源：`bonus`、`payslip`、`remit_fee_contractor`、`remit_fee_case`、`remit_fee_case_material`、`receipt_fee`、`custom_module`） | 各模組 → M08 `analytics/api/reports.py::_collect_expenses`（營運報表、月報信、首頁） | `fn(conn,start,end) -> [{date, quoteNo, desc, amount, category}]`；`date`＝**現金事件日**；權責＝現金才用這條 | 純查詢；來源狀態變了下次就變 | 無 | `payroll/tests/test_payslip_void_signed_paid_2026_09_29.py`、各模組 `*_providers` 題 |
 | 收入（現金） | IP-98 `receivables.income_items` | M05 arap → M08 | 已收款品項逐筆（quoteNo、customer、amount＝含稅收入、netAmount＝銀行入帳、feeAmount…）；語意見 `helpers.tax_calc.receipt_amounts` | 純查詢 | 無 | `arap/tests/test_receivables_providers.py` |
 | 收入（權責）／支出（口徑不同） | IP-95 `case.recognition` | M01 case → M08 | 權責口徑收入、派工／叫料／額外支出的日期與稅 | 純查詢 | 無 | case 模組題 |
-| 出納待付 | IP-100 `payables.pending`（名稱 `case`）；IP-14 承攬商匯款；IP-8 `bonus.payouts`；IP-103 `payslip.payables` | 各模組 → M05 出納 | `pending(conn)` 列已核准未付；`mark_paid(conn,key,date,user)` 寫回（呼叫端 commit） | 條件式 UPDATE＋rowcount，雙擊只成功一次 | 無 | `arap/tests/test_cashier_pending_payables_2026_09_27.py` |
-| 匯款差額審核 | IP-102 `remit.reviews`（`contractor_voucher`、`case`） | M04／M01 → M05 | 實付≠應付 ⇒ `remit_review='pending'`，admin 核可／退回 | 退回＝回未匯款並清欄位 | 無 | subcontract／case 的 remit 題 |
+| 出納待付 | IP-100 `payables.pending`（名稱 `case`、`case_material`＝叫料匯款申請，可分次付款）；IP-14 承攬商匯款；IP-8 `bonus.payouts`；IP-103 `payslip.payables` | 各模組 → M05 出納 | `pending(conn)` 列已核准未付；`mark_paid(conn,key,date,user)` 寫回（呼叫端 commit） | 條件式 UPDATE＋rowcount，雙擊只成功一次 | 無 | `arap/tests/test_cashier_pending_payables_2026_09_27.py` |
+| 匯款差額審核 | IP-102 `remit.reviews`（`contractor_voucher`、`case`、`case_material`＝叫料匯款付款明細的多付） | M04／M01 → M05 | 實付≠應付 ⇒ `remit_review='pending'`，admin 核可／退回 | 退回＝回未匯款並清欄位 | 無 | subcontract／case 的 remit 題 |
 | 傳票草稿 | IP-2 `voucher.draft` | M06 → M07（獎金）、總帳引擎 | `fn(conn, *, voucher_date, summary, lines[{account_code,summary,debit,credit,…}], created_by, now, origin="")` ⇒ `{id, voucher_no}`；不 commit | `origin` 標記產生來源（`bonus_accrual`／`bonus_payment`）；借貸不平即拒 | 無 | `payroll/tests/test_voucher_connectors.py` |
 | 傳票狀態 | IP-4 `voucher.status`／`voucher.by_no`／`voucher.void_draft` | M06 → M07、引擎 | status ⇒ `{id, voucher_no, status, voided, date}`；`void_draft` 只作廢草稿 | 已作廢＝`gone` | 無 | `payroll/tests/test_voucher_status_connectors.py` |
 | **總帳事件** | **IP-GL1 `gl.events`（契約 v1，多提供者，名稱＝來源模組 key）** | arap、subcontract、payroll、supply、case（已接）；custom_modules、fixed_assets（待接）→ M06 `ledger/contract.py::collect`、`ledger/engine.py::run` | 見 §2 | 見 §3 | `engine_drafts`（預設關） | `accounting/tests/test_ledger_a_contract`、`c1_engine`、`c2_subcontract`、`c3_payroll`、`c3b_native`、`r12_remit_payslip` |
@@ -48,9 +48,10 @@
 
 ## 4. 功能旗標與設定
 
-- **營業稅 401**（`tax401`）：`GET /api/ledger/tax401` 由已過帳分錄（稅碼＋科目類別）彙總，不另讀單據；對帳＝稅額科目、與 arap 發票逐項；`POST …/settlement` 產生期末稅額結轉草稿（E14）。**扣繳清單**（`withholding`）：引擎產生 E06 草稿時記入 `gl_withholding_items`，`GET /api/ledger/withholding`、`POST …/withholding/remit`。新來源若有稅額，事件行/事件要帶稅碼（OUT-*／IN-*），401 才抓得到。
+- **營業稅 401**（`tax401`；欄位代號逐一對照官方，見 `TAX401-OFFICIAL-FIELDS.md`）：`GET /api/ledger/tax401` 由已過帳分錄（稅碼＋科目類別）彙總，不另讀單據；對帳＝稅額科目、與 arap 發票逐項；`POST …/settlement` 產生期末稅額結轉草稿（E14）。**扣繳清單**（`withholding`）：引擎產生 E06 草稿時記入 `gl_withholding_items`，`GET /api/ledger/withholding`、`POST …/withholding/remit`。新來源若有稅額，事件行/事件要帶稅碼（OUT-*／IN-*），401 才抓得到。
 - 總帳作業（`ledger-hub`）的 `gl_settings` 鍵 `feature.<名稱>`，預設全關，最高管理者開：`engine_drafts`、`withholding`、`inventory_cost`、`tax401`、`fixed_assets`、`invoice_adjustments`、`custom_records`、`backfill`、`source_annotations`。旗標關閉時引擎 API 回說明、現有手工傳票行為完全不變。
 - `system_settings.remit_require_payslip`：個人外包匯款前必須關聯勞報單（預設開；`PUT /api/contractor-vouchers/settings/remit-require-payslip`，僅最高管理者、寫稽核）。已帶勞報單者不論設定一律驗證（已簽回、受款人相符、金額＝勞報單實付）。
+- **來源憑證補登輸入**（`source_annotations`）：`/api/ledger/annotations*`（PUT 新增／修改、DELETE、`pending` 待補登清單）；補登值在引擎收集時覆寫來源值（`contract.apply_annotations`），只影響之後產生的草稿。
 - `voucher_auto_approval_flow`（system_settings）：引擎傳票的簽核流程，未設定＝與手工傳票相同。
 
 ## 5. 會被誤觸的全域守門（新增提供者／頁面／端點常見紅燈）

@@ -76,16 +76,19 @@ def _item_approval_raw(item: dict) -> str:
 OPEN, DENY, CASE_RULE = "open", "deny", "case_rule"
 
 
-def _access_step(conn, user: dict, case_key, approval_raw, case_present: bool, existing=None) -> str:
+def _access_step(conn, user: dict, case_key, approval_raw, case_present: bool, existing=None, caseless: bool = False) -> str:
     """**佇列列出與詳情放行共用的唯一判斷**（§G5 #13：同一個函式、同一組輸入；稽核 D AL2-M1 的成因是兩邊各看各的欄位）。
     輸入＝（這張單掛的案件單號、簽核 JSON）：佇列取項目的 `linkedQuoteNo`＋tiers／requestedBy，詳情取提供者的 `quoteNo`＋`approvalRaw`
     ——兩者是同一件事，契約題 `test_queue_items_malformed_json` 逐一核對 `linkedQuoteNo == 詳情 quoteNo`。
     - 簽核鏈上的人與送審人（`_on_chain`）⇒ OPEN
     - M01 不在，或沒掛案件，或**掛的案件已不存在**（孤兒單；稽核 D 建議、主持採納）⇒ DENY（每案守門一定查無）
       `existing`：已知存在的案件單號集合（佇列一次查完）；None ⇒ 這裡查這一筆（詳情）——同一個 `_case_names`
-    - 其餘 ⇒ CASE_RULE（交給 `guard_case_access`：admin+／業務／協作者／案件管理；佇列對非 admin 本來就只列簽核鏈上的人）"""
+    - 其餘 ⇒ CASE_RULE（交給 `guard_case_access`：admin+／業務／協作者／案件管理；佇列對非 admin 本來就只列簽核鏈上的人）
+    - `caseless`（A2-0：單據本來就不掛案件，項目與詳情提供者都帶 `caseless: True`）：沒有案件可查 ⇒ 簽核鏈上的人與送審人（上面）＋超級管理員 ⇒ OPEN，其餘 DENY"""
     if _on_chain(conn, user, approval_raw):
         return OPEN
+    if caseless:
+        return OPEN if user.get("role") == "superadmin" else DENY
     if not (case_present and case_key):
         return DENY
     if case_key not in (existing if existing is not None else _case_names(conn, [case_key])):
@@ -97,7 +100,8 @@ def _detail_opens(conn, user: dict, item: dict, case_present: bool, detail_types
     """佇列這一筆要不要列：這一類沒有詳情提供者 ⇒ 不歸這裡管（詳情回 400，佇列照列）；否則 `_access_step` 不是 DENY。"""
     if item.get("type") not in detail_types:
         return True
-    return _access_step(conn, user, item.get("linkedQuoteNo"), _item_approval_raw(item), case_present, existing) != DENY
+    return _access_step(conn, user, item.get("linkedQuoteNo"), _item_approval_raw(item), case_present, existing,
+                        caseless=bool(item.get("caseless"))) != DENY
 
 
 def _openable(conn, user: dict, items: list) -> list:
@@ -176,6 +180,9 @@ def get_approval_queue(authorization: str = Header(None)):
     # 權限過濾（2026-09-15）：過濾在分組**之前**——分組之後才過濾會留下「某某人 0 件」的空群組。
     items = [it for it in items if _queue_visible_to(user, it, my_delegated_for)]
 
+    if user.get("role") != "superadmin":          # 收款帳號：只有最高管理者看得到完整（使用者裁示 2026-10-01）
+        items = [_mask_bank_deep(it) for it in items]
+
     groups: dict = defaultdict(list)
     for item in items:
         groups[item["requestedBy"]].append(item)
@@ -195,12 +202,35 @@ def get_approval_queue(authorization: str = Header(None)):
             "reassignTypes": _reassign_types()}
 
 
+_BANK_NUMBER_KEYS = ("bankAccountNumber", "bank_account_number")
+_BANK_IMAGE_KEYS = ("bankPassbookImage", "bank_passbook_image")
+
+
+def _mask_bank_deep(obj):
+    """佇列項目裡任何深度的收款帳號 ⇒ ****末四碼、存簿影像清空（回新物件，不改原值）。"""
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if k in _BANK_NUMBER_KEYS:
+                n = str(v or "")
+                out[k] = "" if not n else ("****" + n[-4:] if len(n) > 4 else "****")
+            elif k in _BANK_IMAGE_KEYS:
+                out[k] = ""
+            else:
+                out[k] = _mask_bank_deep(v)
+        return out
+    if isinstance(obj, list):
+        return [_mask_bank_deep(x) for x in obj]
+    return obj
+
+
 #: 與 approval-queue.html 的 `docTypeLabel()` 同一份對照（兩處標籤要一致）。
 _ITEM_TYPE_LABELS = {
     "contractor_voucher": "匯款申請", "invoice_voucher": "開票申請憑據", "shipping_note": "出貨單",
     "completion_note": "完工單", "payment_request": "請款單", "case_change": "已結案案件變更",
     "extra_expense": "案件額外支出", "extra_expense_change": "額外支出變更", "voucher": "傳票（會計）",
-    "bonus_award": "獎金", "bonus_case_award": "獎金分潤", "dispatch_file_delete": "報價單附件刪除",
+    "bonus_award": "獎金", "bonus_case_award": "獎金分潤", "bonus_correction": "獎金更正單", "dispatch_file_delete": "報價單附件刪除",
+    "custom_module_def": "自訂模組定義", "ledger_action": "總帳申請",
 }
 
 
@@ -208,7 +238,9 @@ def _item_type_label(it: dict) -> str:
     t = it.get("type")
     if t == "custom_record":
         return it.get("moduleName") or it.get("moduleKey") or "自訂模組"
-    return _ITEM_TYPE_LABELS.get(t, "報價單")
+    if t in _ITEM_TYPE_LABELS:
+        return _ITEM_TYPE_LABELS[t]
+    return it.get("typeLabel") or "報價單"      # 模組登記的新單據類型（A2-0 #2）自帶標籤；都沒有才退回舊預設
 
 
 @router.get("/api/approval-queue/count")
@@ -250,7 +282,7 @@ def _case_header(conn, quote_no: str) -> dict:
             "projectName": q["project_name"] or "", "dealTag": q.get("deal_tag") or ""}
 
 
-def _guard_queue_detail(conn, user: dict, quote_no: str, approval_raw=None) -> None:
+def _guard_queue_detail(conn, user: dict, quote_no: str, approval_raw=None, caseless: bool = False) -> None:
     """簽核佇列詳情的存取守門（2026-09-14 自動安全掃描後補上）。
 
     詳情回傳完整內容（明細、附件路徑、變更 payload、匯款帳戶），而 `id` 是可預測的單號或小整數 ⇒
@@ -259,7 +291,7 @@ def _guard_queue_detail(conn, user: dict, quote_no: str, approval_raw=None) -> N
     2. 其餘走一般的每案規則 `guard_case_access()`（admin+／該案業務／協作者／案件管理模組、案件本身的簽核人）；
        看不到與查無同一個 404（c-case404，M01-O1）；M01 不在 ⇒ 404（`case_access` 的 fail-closed）
     """
-    step = _access_step(conn, user, quote_no, approval_raw, case_module_present())
+    step = _access_step(conn, user, quote_no, approval_raw, case_module_present(), caseless=caseless)
     if step == OPEN:
         return
     if step == DENY:
@@ -324,6 +356,41 @@ def _deny_detail(user: dict, type_: str, doc_id, reason: str):
     raise HTTPException(404, detail_not_found_message(doc_id))
 
 
+def _open_detail(conn, user: dict, type_: str, doc_id: str) -> dict:
+    """詳情的內容＋存取守門（詳情端點與 `/api/photo-token` 的簽核佇列情境共用同一支）。
+    類型沒有提供者 ⇒ 400；查無或看不到 ⇒ 同一個 404（`_deny_detail`）。回提供者的原始內容（未遮蔽）。"""
+    prov = registry.providers("approval.detail").get(type_)
+    if prov is None:
+        raise HTTPException(400, "不支援的類型（或該單據的模組未安裝）：" + str(type_))
+    try:
+        d = prov(conn, doc_id)
+    except HTTPException as e:                           # 提供者自己的查無訊息（例：「完工單不存在」）也統一
+        if e.status_code != 404:
+            raise
+        d = None
+    if not d:
+        _deny_detail(user, type_, doc_id, "not_found")
+    approval_raw = d.get("approvalRaw")
+    # `selfViewBy`：申請人本人不經每案守門。**只有 M01 的已結案變更（case_change）宣告**——單層「任一 superadmin」、
+    # 沒有簽核鏈可比對，而申請人要看得到自己送出的內容；其他提供者不可以宣告（它會繞過每案守門）。
+    if not (d.get("selfViewBy") and d["selfViewBy"] == user["username"]):
+        try:
+            _guard_queue_detail(conn, user, d["quoteNo"], approval_raw, caseless=bool(d.get("caseless")))
+        except HTTPException as e:                       # 守門的 404 帶關聯的案件單號（會洩漏掛在哪一案）⇒ 換成同一句
+            if e.status_code != 404:
+                raise
+            _deny_detail(user, type_, doc_id, "denied")  # 案件層的真正原因 case_access 已另記
+    return d
+
+
+def detail_file_paths(conn, user: dict, type_: str, doc_id: str) -> set:
+    """這個人**點得開的**簽核佇列詳情 (type, id) 列出的檔案路徑（`/api/photo-token` 的簽核佇列情境，2026-09-30 P0）。
+    簽核人常常不是案件的人（`_guard_queue_detail` 放行順序 1）⇒ 單看路徑的擁有單據規則會擋掉他要簽的附件；
+    這裡只放行「詳情守門放行 ∧ 詳情真的列出這個路徑」。看不到 ⇒ 丟與詳情相同的 404。"""
+    d = _open_detail(conn, user, type_, doc_id)
+    return {f.get("path") for f in (d.get("files") or []) if isinstance(f, dict) and f.get("path")}
+
+
 @router.get("/api/approval-queue/detail")
 def approval_queue_detail(type: str, id: str, authorization: str = Header(None)):
     """一筆待簽核項目的完整內容：屬於哪個案件、送審了什麼、夾帶哪些檔案、改了什麼。
@@ -331,34 +398,17 @@ def approval_queue_detail(type: str, id: str, authorization: str = Header(None))
     內容由擁有模組提供（`approval.detail`，名稱＝type）；這裡做每案權限、案件抬頭與金額遮蔽。
     真正的動作權限（核准／退回）仍由各自的端點把關。"""
     user = _require_user(authorization)
-    prov = registry.providers("approval.detail").get(type)
-    if prov is None:
-        raise HTTPException(400, "不支援的類型（或該單據的模組未安裝）：" + str(type))
     conn = get_db()
     try:
-        try:
-            d = prov(conn, id)
-        except HTTPException as e:                       # 提供者自己的查無訊息（例：「完工單不存在」）也統一
-            if e.status_code != 404:
-                raise
-            d = None
-        if not d:
-            _deny_detail(user, type, id, "not_found")
+        d = _open_detail(conn, user, type, id)
         approval_raw = d.get("approvalRaw")
-        # `selfViewBy`：申請人本人不經每案守門。**只有 M01 的已結案變更（case_change）宣告**——單層「任一 superadmin」、
-        # 沒有簽核鏈可比對，而申請人要看得到自己送出的內容；其他提供者不可以宣告（它會繞過每案守門）。
-        if not (d.get("selfViewBy") and d["selfViewBy"] == user["username"]):
-            try:
-                _guard_queue_detail(conn, user, d["quoteNo"], approval_raw)
-            except HTTPException as e:                   # 守門的 404 帶關聯的案件單號（會洩漏掛在哪一案）⇒ 換成同一句
-                if e.status_code != 404:
-                    raise
-                _deny_detail(user, type, id, "denied")   # 案件層的真正原因 case_access 已另記
         out = {"type": type, "id": id, "title": d.get("title") or id,
                "fields": list(d.get("fields") or []), "items": list(d.get("items") or []),
                "files": list(d.get("files") or []), "changes": d.get("changes"),
                "case": _case_header(conn, d["quoteNo"])}
         # 金額遮蔽：規則與憑證流一致（見 _can_see_queue_money）
+        if user.get("role") != "superadmin":           # 存簿封面影像上印著完整帳號 ⇒ 只有最高管理者（使用者裁示 2026-10-01）
+            out["files"] = [f for f in out["files"] if not f.get("dataUrl") and f.get("id") != "passbook"]
         if not _can_see_queue_money(conn, user, approval_raw):
             _mask_money(out)
             # 內嵌影像（dataUrl：存簿封面）一律拿掉——看的是「有沒有內嵌內容」，不只看 id 字串（稽核 D AP-M2）

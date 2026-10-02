@@ -117,8 +117,8 @@ def test_detail_shows_change_request_result(client, make_user):
     import db
     u, p = make_user(username="aqd_u3", role="superadmin")
     quote_no = _seed_case("MQ-AQD-CHG")
-    change = {"description": "更正後品名", "qty": 2, "unit_cost": 900,
-              "total_cost": 1800, "note": "改成兩件"}
+    change = {"description": "更正後品名", "qty": 2, "unitCost": 900,          # 提議內容的鍵是 camelCase（`_proposal_from` 寫入的就是這個形狀；A2 修正了詳情原本讀 snake_case 的舊錯）
+              "totalCost": 1800, "note": "改成兩件"}
     conn = db.get_db()
     try:
         conn.execute(

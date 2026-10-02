@@ -118,3 +118,50 @@ def test_monthly_failure_does_not_mark_done(isolated_archive, monkeypatch):
     conn.close()
     assert "backup.monthly_partial" in rows
     assert "backup.monthly_ok" not in rows
+
+
+def test_monthly_snapshot_check_allows_rows_written_after_the_snapshot(isolated_archive, monkeypatch):
+    """**正式機 2026-10-01 實測**：月備份 2026-10 的整庫沒進來（快照 audit_log 3319／彙總 3321）。每日層早有 `allowance`
+    （快照之後才寫的列；至少備份自己那筆 `backup.sqlite_snapshot`），月備份那條漏了 ⇒ 彙總必定比快照多 ⇒ 整庫沒進月備份、不標完成。
+
+    ⚠️ 這條 bug 在測試裡一直看不到：fixture 換了 `db.DB_PATH`，`archive.DB_PATH` 是 import 當下的值 ⇒ `_summary_is_comparable()`
+    回 False ⇒ **身分對照整個被跳過**（正式機上兩者是同一個檔，對照才會跑）。這題把 `archive.DB_PATH` 指到同一個庫，讓對照真的執行。
+    **反向控制**：拿掉月備份那條的 `allowance=snap_allow` ⇒ 這題紅。"""
+    import archive
+    import db
+    monkeypatch.setattr(archive, "DB_PATH", db.DB_PATH)
+    assert archive._summary_is_comparable() is True, "前提：兩邊同一個庫，身分對照才會在月備份跑"
+    _pii_root(isolated_archive)
+
+    archive._daily_backup()
+
+    md = _month_dir(archive)
+    summary = json.load(open(os.path.join(md, "彙總.json"), encoding="utf-8"))
+    assert summary["db_snapshot"] is True, "月備份的整庫快照被誤判不合格（身分對照沒算快照之後寫入的列）"
+    assert os.path.isfile(os.path.join(md, ".done"))
+    db_copy = os.path.join(_pii_root(isolated_archive), "月備份", date.today().strftime("%Y-%m"), "motrix_erp.db")
+    assert os.path.isfile(db_copy)
+
+
+def test_monthly_snapshot_check_still_rejects_a_foreign_or_empty_database(isolated_archive, monkeypatch):
+    """放寬只限「快照之後寫的」那幾列：快照少了幾千列（空庫／他庫）照樣不合格、整庫不進月備份。"""
+    import archive
+    import db
+    monkeypatch.setattr(archive, "DB_PATH", db.DB_PATH)
+    _pii_root(isolated_archive)
+    archive._daily_backup()                               # 先做出正常的每日快照，再把月備份層清掉重跑（直接打月備份）
+    import shutil
+    md = _month_dir(archive)
+    shutil.rmtree(md)
+    shutil.rmtree(os.path.join(_pii_root(isolated_archive), "月備份"), ignore_errors=True)
+    real = archive._snapshot_row_counts
+
+    def _short(path):
+        names, counts = real(path)
+        return names, {k: (v - 500 if isinstance(v, int) else v) for k, v in counts.items()}     # 快照比彙總少 500 列
+    monkeypatch.setattr(archive, "_snapshot_row_counts", _short)
+    archive._monthly_backup()
+    md = _month_dir(archive)
+    summary = json.load(open(os.path.join(md, "彙總.json"), encoding="utf-8"))
+    assert summary["db_snapshot"] is False
+    assert not os.path.isfile(os.path.join(_pii_root(isolated_archive), "月備份", date.today().strftime("%Y-%m"), "motrix_erp.db"))

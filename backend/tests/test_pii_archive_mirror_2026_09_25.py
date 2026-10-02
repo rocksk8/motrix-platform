@@ -116,9 +116,15 @@ _TOTP = "TOTPSENTINELBASE32XX"
 _SMTP_PW = "smtp-sentinel-password"
 _C_IDNO, _C_PHONE, _C_MAIL = "B987654321_SENTINEL", "0911-CPHONE", "c-sentinel@example.invalid"
 _C_ADDR, _C_LINE, _C_ACCT = "承攬哨兵地址", "line-sentinel", "000123456789SENTINEL"
+_E_ACCT = "EXPENSE-PAYEE-ACCT-SENTINEL"          # A2 費用單據收款人帳號（case_extra_expenses.payee_account）
+_U_ACCT_NAME, _U_ACCT_NO = "員工哨兵戶名", "EMPLOYEE-BANK-ACCT-SENTINEL"          # 員工收款帳號（payroll user_bank_accounts：account_name／account_number；W3 的 F2 項目）
+_M_ACCT_NAME, _M_ACCT_NO = "供應商哨兵戶名", "SUPPLIER-BANK-ACCT-SENTINEL"          # 叫料匯款申請的供應商收款帳戶（case_material_payments.snapshot_json；31-C 的 F2 項目）
 #: 一般份（去個資）不可以出現的值——承攬人員與勞報單兩張表的全部 F2 欄位
 _F2_SENTINELS = (_IMG, "data:image", _IDNO, "哨兵地址", "0900-SENTINEL", "sentinel@example.invalid",
-                 _C_IDNO, _C_PHONE, _C_MAIL, _C_ADDR, _C_LINE, _C_ACCT, "哨兵戶名")
+                 _C_IDNO, _C_PHONE, _C_MAIL, _C_ADDR, _C_LINE, _C_ACCT, "哨兵戶名", _E_ACCT, _U_ACCT_NAME, _U_ACCT_NO, _M_ACCT_NAME, _M_ACCT_NO)
+
+
+_SEEDED_ELSEWHERE = ("承攬付款憑據", "協力廠商")
 
 
 def _seed_pii(conn):
@@ -135,6 +141,16 @@ def _seed_pii(conn):
     conn.execute("INSERT INTO payslips (slip_no, contractor_name, data_json, created_at, updated_at) "
                  "VALUES (?,?,?,?,?)", ("PS-202609-009", "哨兵承攬", _j.dumps(data, ensure_ascii=False),
                                         "2026-09-25", "2026-09-25"))
+    conn.execute("INSERT INTO case_extra_expenses (quote_no, category, description, total_cost, status, kind, doc_code, payee_type, payee_name, payee_bank, payee_account, created_at) "
+                 "VALUES ('', '其他', '差旅', 1200, '已核准', 'travel', 'TE-20260925-0001', 'employee', '哨兵員工', '玉山銀行', ?, '2026-09-25T00:00:00')", (_E_ACCT,))
+    if conn.execute("PRAGMA table_info(user_bank_accounts)").fetchall():     # payroll 模組在（W3 員工收款帳號）
+        conn.execute("INSERT INTO user_bank_accounts (user_id, username, bank_code, bank_name, account_name, account_number, active, created_at) "
+                     "SELECT MIN(id), MIN(username), '808', '玉山銀行', ?, ?, 1, '2026-10-01' FROM users", (_U_ACCT_NAME, _U_ACCT_NO))
+    if conn.execute("PRAGMA table_info(case_material_payments)").fetchall():     # case 模組在（31-C 叫料匯款申請：供應商收款帳戶凍結在 snapshot_json）
+        conn.execute("INSERT INTO case_material_payments (doc_code, quote_no, item_id, seq, amount_approved, snapshot_json, status, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                     ("MP-20260925-0001", "", "x", 1, 1000,
+                      _j.dumps({"supplierName": "哨兵供應商", "bankCode": "812", "bankName": "台新銀行", "bankAccountName": _M_ACCT_NAME, "bankAccountNumber": _M_ACCT_NO,
+                                "itemName": "交換器"}, ensure_ascii=False), "已核准", "2026-09-25"))
     conn.execute("UPDATE users SET totp_secret=? WHERE id=(SELECT MIN(id) FROM users)", (_TOTP,))
     conn.commit()
 
@@ -151,6 +167,8 @@ def test_general_rows_drop_f2_fields_and_merge_restores_the_original(client):
         tables = archive._daily_backup_tables()
         for fname in archive._F2_FIELDS:
             original = _rows(conn, tables[fname])
+            if fname not in _SEEDED_ELSEWHERE:       # 這兩張由 API 建立（見 subcontract 那份）；其餘都要由 _seed_pii 種到
+                assert original, "%s：_seed_pii 沒有種到這張表（空表＝這一輪對它什麼也沒驗）" % fname
             general = [archive._general_row(fname, dict(r)) for r in original]
             blob = str(general)
             for bad in _F2_SENTINELS:

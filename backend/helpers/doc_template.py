@@ -22,13 +22,62 @@ class TemplateError(ValueError):
 
 # ── 取值與格式 ──────────────────────────────────────────────────────────────
 
-def _esc(s) -> str:
-    """與既有 builder 相同的跳脫（& < > 與換行）。非字串一律先轉字串。"""
+def esc_quotes(text) -> str:
+    """只做引號那一步（單一來源）：`"` → `&quot;`、`'` → `&#x27;`。各 builder 自己的 `esc()` 保留原本的 `&<>` 與換行規則，
+    最後一步都交給這支——引號規則不再散在十幾個區域函式裡（W3 #2 再查：同形狀的 sink）。"""
+    return text.replace('"', '&quot;').replace("'", '&#x27;')
+
+
+def attr_esc(s) -> str:
+    """HTML 屬性值／單行文字用的完整跳脫（`& < > " '`；不轉換行）。非字串先轉字串，None ⇒ 空字串。"""
     if s is None:
         s = ""
     if not isinstance(s, str):
         s = str(s)
-    return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+    return esc_quotes(s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
+
+
+def _esc(s) -> str:
+    """跳脫（& < > " ' 與換行）。非字串一律先轉字串。
+
+    引號也要跳脫（W3 #2 儲存型 XSS）：版型的 class／width 等值會落在 HTML 屬性內，`"` 沒跳脫就能跳出屬性塞 onmouseover 等事件。"""
+    if s is None:
+        s = ""
+    if not isinstance(s, str):
+        s = str(s)
+    return esc_quotes(s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')).replace('\n', '<br>')
+
+
+#: 版型作者可填、會落進屬性的值：一律白名單驗證（不是只跳脫）
+_CLASS_RE = re.compile(r"^[A-Za-z0-9_-]+(?: [A-Za-z0-9_-]+)*$")
+_WIDTH_RE = re.compile(r"^\d{1,4}(?:\.\d{1,2})?(?:%|px|mm|pt|em)?$")
+_MAX_WATERMARK = 60
+_MAX_COLSPAN = 20
+
+
+def _css_class(v) -> str:
+    v = "" if v is None else v
+    if not isinstance(v, str) or len(v) > 80 or not _CLASS_RE.match(v):
+        raise TemplateError("class 只能是英數、底線、連字號（多個以空白隔開）：%r" % (v,))
+    return v
+
+
+def _css_width(v) -> str:
+    if not isinstance(v, str) or not _WIDTH_RE.match(v.strip()):
+        raise TemplateError("width 只能是數字加單位（%%／px／mm／pt／em），例：12%%：%r" % (v,))
+    return v.strip()
+
+
+def _int_in(v, lo, hi, what) -> int:
+    if isinstance(v, bool):
+        raise TemplateError("%s 必須是整數：%r" % (what, v))
+    try:
+        n = int(v)
+    except (TypeError, ValueError, OverflowError):                 # JSON 的 Infinity／NaN（float）也是「不是整數」，不是 500
+        raise TemplateError("%s 必須是整數：%r" % (what, v)) from None
+    if not lo <= n <= hi:
+        raise TemplateError("%s 必須在 %d～%d：%r" % (what, lo, hi, v))
+    return n
 
 
 def _get(data: dict, path: str, default=""):
@@ -88,13 +137,90 @@ def _text(data: dict, text: str) -> str:
     return "".join(out)
 
 
+# ── 未核可警示（使用者 2026-09-30 規則：尚未核可的單據，PDF／預覽一律顯示紅色警示）──────────────
+
+#: 警示的固定字樣（e2e／守門用它找）
+UNAPPROVED_TEXT = "未核可・僅供預覽"
+_UNAPPROVED_STYLE = ("background:#FEF2F2;border:2px solid #DC2626;color:#B91C1C;font-weight:700;font-size:13px;"
+                     "padding:8px 12px;margin-bottom:12px;border-radius:5px;letter-spacing:.03em;"
+                     "-webkit-print-color-adjust:exact;print-color-adjust:exact")
+
+
+#: 紅色（Material red 800）：浮水印、頁首條、頁尾都用它
+UNAPPROVED_RED = "#C62828"
+#: 每一頁頂端的紅條白字（@page 邊界框，列印／PDF 每一頁都有）
+UNAPPROVED_HEADER_TEXT = "未核可預覽稿 – 不可作為正式文件"
+_SVG_TILE = ("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='500'>"
+             "<text x='300' y='250' transform='rotate(-30 300 250)' text-anchor='middle' font-size='60' font-weight='900' "
+             "font-family='Microsoft JhengHei,PMingLiU,Arial,sans-serif' fill='%23C62828' fill-opacity='.11'>" + UNAPPROVED_TEXT + "</text></svg>")
+
+
+def _unapproved_css(doc_no: str) -> str:
+    """未核可單據的**每一頁**標示（使用者 2026-10-01：舊的灰色浮水印太淡、第 2 頁以後幾乎沒有）：
+    ① `position:fixed` 的大斜角紅色浮水印——Chromium／Edge 列印時 fixed 元素每一頁重畫一次（實測 3 頁 PDF 每頁都有）；
+    ② `@page` 邊界框：每一頁頂端整條紅底白字、頁尾單號＋頁碼（邊界框在內容之外，不會蓋到內文；fixed 的 top/bottom 會蓋到）；
+    ③ body 背景平鋪斜字（連續長頁的螢幕預覽、fixed 失效時的後備）；
+    ④ 舊的灰色 `.wm`／`.wm-overlay` 浮水印在未核可時一律隱藏——**同一套機制，不是兩套疊在一起**。
+    `@page` 的邊界只在本段加上頁首頁尾所需的上下 12mm；已核准的單據不走這裡（輸出與過去完全相同）。"""
+    foot = _esc(doc_no)
+    foot_text = ('"%s ｜ %s ｜ 第 " counter(page) " 頁"' % (foot.replace('"', ""), UNAPPROVED_TEXT)) if doc_no else (
+        '"%s ｜ 第 " counter(page) " 頁"' % UNAPPROVED_TEXT)
+    red = UNAPPROVED_RED
+    bar = "background:%s" % red
+    return (
+        "<style data-unapproved-style=\"1\">\n"
+        "@page{margin-top:12mm;margin-bottom:12mm;\n"
+        "  @top-left-corner{content:\"\";%(bar)s}\n  @top-left{content:\"\";%(bar)s}\n"
+        "  @top-center{content:\"%(head)s\";%(bar)s;color:#fff;font:700 12px \"Microsoft JhengHei\",Arial,sans-serif;width:120mm;white-space:nowrap}\n"
+        "  @top-right{content:\"\";%(bar)s}\n  @top-right-corner{content:\"\";%(bar)s}\n"
+        "  @bottom-left{content:\"\"}\n  @bottom-right{content:\"\"}\n"
+        "  @bottom-center{content:%(foot)s;color:%(red)s;font:700 11px \"Microsoft JhengHei\",Arial,sans-serif;white-space:nowrap}}\n"
+        ".wm,.wm-overlay{display:none!important}\n"
+        "html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact}\n"
+        "body{background-image:url(\"%(tile)s\")}\n"
+        ".uw-wm{position:fixed;left:0;top:0;width:100%%;height:100%%;display:flex;align-items:center;justify-content:center;"
+        "pointer-events:none;z-index:2147483000;overflow:hidden}\n"
+        ".uw-wm span{display:block;text-align:center;transform:rotate(-32deg);white-space:nowrap;font:900 96px/1.15 \"Microsoft JhengHei\",\"PMingLiU\",Arial,sans-serif;"
+        "letter-spacing:.04em;color:%(red)s;opacity:.2;-webkit-print-color-adjust:exact;print-color-adjust:exact}\n"
+        "</style>\n" % {"bar": bar, "head": UNAPPROVED_HEADER_TEXT, "foot": foot_text, "red": red, "tile": _SVG_TILE})
+
+
+def unapproved_overlay(doc_no="", wm_text=None) -> str:
+    """每頁標示：樣式（頁首紅條、頁尾單號頁碼、背景平鋪、隱藏舊浮水印）＋ fixed 大斜角紅色浮水印。`wm_text` 可含換行（兩行）。"""
+    return _unapproved_css(doc_no) + '<div class="uw-wm" data-unapproved-wm="1"><span>%s</span></div>\n' % _esc(wm_text or UNAPPROVED_TEXT)
+
+
+def unapproved_banner(status="", detail="", cls="preview-banner", doc_no="", wm_text=None) -> str:
+    """紅色「未核可・僅供預覽」橫幅（行內樣式：不依賴各主題的 CSS，列印／下載的 PDF 也印得出來）＋每頁標示（`unapproved_overlay`）。
+    `cls` 沿用原本的 `preview-banner`（既有選擇器與測試不變）；`data-unapproved` 是新的穩定錨點。
+    已核准的單據不呼叫本函式（PDF 與過去完全相同）。"""
+    st = _esc(status or "草稿")
+    tail = ("　" + _esc(detail)) if detail else ""
+    return ('<div class="%s unapproved-red" data-unapproved="1" style="%s">\u26a0 %s（目前狀態：%s）%s</div>\n'
+            % (cls, _UNAPPROVED_STYLE, UNAPPROVED_TEXT, st, tail)) + unapproved_overlay(doc_no, wm_text)
+
+
+def inject_unapproved(html, status="", detail="", doc_no="", wm_text=None) -> str:
+    """把紅色橫幅放進一份已渲染好的 HTML（`<div id="root">` 之後，沒有就放 `<body>` 之後）。
+    已經有 `data-unapproved` ⇒ 原樣回傳（冪等）。版型作者拿掉 banner 積木也擋不掉它（核可狀態由程式決定，不由版型決定）。"""
+    if 'data-unapproved="1"' in html:
+        return html
+    bar = unapproved_banner(status, detail, doc_no=doc_no, wm_text=wm_text)
+    for anchor in ('<div id="root">\n', '<div id="root">', "<body>\n", "<body>"):
+        i = html.find(anchor)
+        if i >= 0:
+            j = i + len(anchor)
+            return html[:j] + bar + html[j:]
+    return bar + html
+
+
 # ── 積木 ───────────────────────────────────────────────────────────────────
 
 def _b_watermark(b, data, parts):
     if b.get("unless") and _cond(data, b["unless"]):
         return "\n"
     item = '<div class="wm-item"><b>%s</b><small>%s</small></div>' % (_esc(b["text"]), _esc(b["small"]))
-    return '<div class="wm">' + item * int(b.get("count", 12)) + '</div>' + "\n"
+    return '<div class="wm">' + item * _int_in(b.get("count", 12), 1, _MAX_WATERMARK, "浮水印 count") + '</div>' + "\n"
 
 
 def _b_accent_bar(b, data, parts):
@@ -141,7 +267,7 @@ def _b_when(b, data, parts):
 
 def _th(c):
     attrs = (' class="r"' if c.get("align") == "right" else "") + \
-            (' style="width:%s"' % c["width"] if c.get("width") else "")
+            (' style="width:%s"' % _css_width(c["width"]) if c.get("width") else "")
     return '<th%s>%s</th>' % (attrs, _esc(c["title"]))
 
 
@@ -247,13 +373,13 @@ def _cell(c, data):
         v = '<span class="tag">%s</span>' % v
     attrs = ""
     if c.get("class"):
-        attrs += ' class="%s"' % _esc(c["class"])
+        attrs += ' class="%s"' % _css_class(c["class"])
     if c.get("style"):
         if c["style"] not in _CELL_STYLES:
             raise TemplateError("未知儲存格樣式：%r（可用：%s）" % (c["style"], "、".join(_CELL_STYLES)))
         attrs += ' style="%s"' % _CELL_STYLES[c["style"]]
-    if c.get("colspan"):
-        attrs += ' colspan="%d"' % int(c["colspan"])
+    if c.get("colspan") is not None:
+        attrs += ' colspan="%d"' % _int_in(c["colspan"], 1, _MAX_COLSPAN, "colspan")
     return "<td%s>%s</td>" % (attrs, v)
 
 
@@ -265,9 +391,9 @@ def _b_kv_table(b, data, parts):
             continue
         if r.get("unless") and _cond(data, r["unless"]):
             continue
-        cls = ' class="%s"' % _esc(r["class"]) if r.get("class") else ""
+        cls = ' class="%s"' % _css_class(r["class"]) if r.get("class") else ""
         rows.append("  <tr%s>%s</tr>\n" % (cls, "".join(_cell(c, data) for c in r["cells"])))
-    cls = ' class="%s"' % _esc(b["class"]) if b.get("class") else ""
+    cls = ' class="%s"' % _css_class(b["class"]) if b.get("class") else ""
     return "<table%s>\n%s</table>\n" % (cls, "".join(rows))
 
 
@@ -439,6 +565,8 @@ def problems(template: dict, sample_view: dict = None) -> list:
             if t not in BLOCKS:
                 out.append({"path": here + ".type", "message": "%s第 %d 塊：未知積木 %r" % (where, n + 1, t)})
                 continue
+            for msg in _attr_problems(b):
+                out.append({"path": here, "message": "%s第 %d 塊（%s）%s" % (where, n + 1, t, msg)})
             if t == "when":
                 walk(b.get("then"), where + "when/then ", here + ".then")
                 walk(b.get("else"), where + "when/else ", here + ".else")
@@ -452,6 +580,39 @@ def problems(template: dict, sample_view: dict = None) -> list:
 
 
 _MISSING = object()
+
+
+def _attr_problems(b) -> list:
+    """會落進 HTML 屬性的值（class／width／colspan／count）的靜態檢查；與渲染時用同一組檢查函式。"""
+    out = []
+
+    def chk(fn, *a):
+        try:
+            fn(*a)
+        except TemplateError as e:
+            out.append(str(e))
+    t = b.get("type")
+    if t == "watermark" and "count" in b:
+        chk(_int_in, b["count"], 1, _MAX_WATERMARK, "浮水印 count")
+    if t == "items_table":
+        for c in b.get("columns") or []:
+            if isinstance(c, dict) and c.get("width"):
+                chk(_css_width, c["width"])
+    if t == "kv_table":
+        if b.get("class"):
+            chk(_css_class, b["class"])
+        for r in b.get("rows") or []:
+            if not isinstance(r, dict):
+                continue
+            if r.get("class"):
+                chk(_css_class, r["class"])
+            for c in r.get("cells") or []:
+                if isinstance(c, dict):
+                    if c.get("class"):
+                        chk(_css_class, c["class"])
+                    if c.get("colspan") is not None:
+                        chk(_int_in, c["colspan"], 1, _MAX_COLSPAN, "colspan")
+    return out
 
 
 def _paths_of(b):

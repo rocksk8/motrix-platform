@@ -1,11 +1,63 @@
 # 應收應付 更新紀錄
 
-## 1.0.15 — 2026-09-30（暫用號，列車取號；W4 總帳 R12 畫面）
+## 1.0.33 — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
+- 附件目錄 P3：`_ArapCatalog` 加 `search`／`count`（開票申請已開立檔案；權限＝`_voucher_readable` 逐張）。
+
+## 1.0.32 — 2026-10-01（暫用號，列車取號；wip/w2-expense-a2：A2-3 出納頁）
+- 出納「請款待付款」：費用單據（採購單匯款日＋付款條件、零用金付款方式、其他可選付款方式）、類型標籤、收款人銀行資料遮罩＋「查看收款人資料」（`GET …/payee-bank`，只限能付款者、每次留稽核、不記帳號）；付款科目（`payAccountCode`）用會計連接器驗證。下游效應（R1）：付款日與金額規則不變。
+
+## 1.0.31 — 2026-10-01（暫用號，列車取號；wip/w3-local-date）
+- 本地日期（使用者 2026-10-01：凌晨建的單日期變前一天）：出納頁（T100 起迄日、檔名日期）等「今天」預設值改用本地日期（static/motrix-date.js）。
+
+## 1.0.30 — 2026-09-30（暫用號，列車取號；wip/w2-bonus-correction：獎金更正單）
+出納「獎金待發放」與發放紀錄納入獎金更正單的補發列（kind=correction）：連結（testid `cashier-bonus-corr-<更正單號>`）到更正單頁處理，不在出納頁直接標記。
+
+## 1.0.29 — 2026-09-30（wip/w4-l-gaps-4：E01 deal_tag 篩選改逐筆解析）
+- 內部：`gl_events._deal_ok_quotes` 不再用資料庫 JSON 函式，改為取出每筆 `data_json` 後在程式內逐筆解析（壞 JSON 視為沒有標籤）；判斷語意不變（欄位優先，其次 data_json.dealTag；已成案／已結案）。
+
+## 1.0.28 — 2026-09-30（暫用號，列車取號；W4 修正）
+- E01 案件狀態篩選改在 Python 逐列解析 data_json（不用 SQL json_extract，守門棘輪）；行為不變。
+
+## 1.0.27 — 2026-09-30（wip/w1-t27fix2）
+- 請款單／開票申請的退回與撤銷核准：原因（400「退回要填原因」）改在狀態與權限檢查之後才驗（404／403／409 不再被 400 蓋掉）。
+
+## 1.0.26 — 2026-09-30（暫用號，列車取號；wip/w3-t27fix2）
+- 匯出 PDF 姊妹的歸屬區改用常數 `_EXPORT_AREA`（不寫 module 等號字串字面量：test_module_keys_consistency 的後端掃描器會把它當權限 key）；只動寫法，行為與稽核內容不變。
+
+## 1.0.25 — 2026-09-30（暫用號，列車取號；W4 寫入串接缺口 L1／L2／L6／L8／L9／L10）
+- L8：銷項發票事件 E01 與收款事件 E03、營運報表同一口徑——案件狀態不是「已成案／已結案」（例如已降級）時不入帳（notice 說明）；已過帳的由引擎判來源消失、產生反向草稿。
+
+## 1.0.24 — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：附件開檔路徑綁單據（安全審查 W3））
+- 附件目錄提供者 `open()` 加路徑綁單據檢查（`helpers.uploads.upload_path_key`）：檔案路徑不在這張單據自己的資料夾 ⇒ 當作沒有這個檔。
+
+## 1.0.23 — 2026-09-30（暫用號，列車取號；wip/w3-export-pdf）
+- 匯出規則（使用者 2026-09-30）：出納執行紀錄 Excel 匯出加 PDF 姊妹（`/api/cashier/export/pdf`），每次匯出寫稽核。
+
+## 1.0.22 — 2026-09-30（暫用號，列車取號；wip/w2-gl-warn：已入帳來源的修改提示（MONEY-FLOWS §9 L3））
+- 出納頁（`pages/cashier.html`／`js/cashier.js`）：取消或改動已入總帳的收款時，回應帶 `glWarning` ⇒ 頁首行內可關閉提示（不用 alert）。
+
+## 1.0.21 — 2026-09-30（暫用號，列車取號；wip/w1-menu-split 選單拆分）
+- 選單：出納排到「財務會計」群組第一項（order 20→10）；perm 不變。
+
+## 1.0.20 — 2026-09-30（暫用號，列車取號；wip/w1-pdf-unapproved）
+- 請款單／開票申請：退回（reject）與撤銷核准（revoke-approval）一律要填原因（400「退回要填原因」，`helpers.tiered_approval.require_reject_reason`）；PDF 預覽未核准時有紅色「未核可・僅供預覽」橫幅，預覽視窗有權決定者可「退回修改」。
+
+## 1.0.19 — 2026-09-30（暫用號，列車取號；W4 總帳 R12 畫面）
 - 出納頁『標記已匯款』視窗：個人外包人員逐位挑選勞報單（R12，經承攬商匯款單的 `personnel-links`／`personnel-link` 端點），顯示勞報單實付與匯款金額差異；未通過驗證時按鈕停用並顯示原因。純畫面，無新端點、無 migration。
 
-## 1.0.14 — 2026-09-30（暫用號，列車取號；W4 總帳 C1）
+## 1.0.18 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
+- 新增 `attachments.py::_ArapCatalog`（`attachments.catalog`／`arap`，IP-105）：開票申請已開立檔案開檔；權限＝`_voucher_readable`（同 IP-21 提供者）。
+
+## 1.0.17 — 2026-09-30（暫用號，列車取號；wip/w1-file-preview 共用檔案預覽 P1）
+- 出納頁勞報單簽回檔改用 L1 共用預覽元件（頁內預覽，下方保留「另開新分頁」），不再直接 `window.open(blob)`。
+
+## 1.0.16 — 2026-09-30（暫用號，列車取號；wip/cal-toggle 行事曆推送可選）
+- 行事曆「支出付款」（預設關，事件種類開關在 L1）：出納登錄請款付款（`pending-payables/{來源}/{key}/pay`）commit 之後推 `push_event_for_module('expense_payout', …)`，事件日期＝付款日；名目／受款人取提供者回傳（不讀別的模組的表）。勞報單付款走自己的端點，不推。題 `modules/arap/tests/test_expense_payout_calendar_2026_09_30.py`
+## 1.0.15 — 2026-09-30（暫用號，列車取號；W4 總帳 C1）
 - 新增提供者 `gl.events`（IP-GL1）：銷項發票（E01）與客戶收款（E03）事件，供 M06 總帳引擎產生傳票草稿；唯讀、不寫資料。收款採 W2 語意（實收＋手續費＝含稅收入，手續費另列）；先收款後開票用預收貨款沖轉；實收與發票含稅不一致、缺開立日期、無不可變 id 皆在 notice 明說。
 - `receivables.collect_tax_invoices`／`collect_income_items` 的回傳**多帶**欄位（itemId、itemIdx、hasInvoiceDate、invoiceDate、bankAccountCode）；既有呼叫端不讀、行為不變。
+## 1.0.14 — 2026-09-30（暫用號，列車取號；wip/sec-p0 安全修正 P0）
+- 安全修正 P0：新增提供者 `uploads.path_access`／`arap`（IP-104，`invoice_vouchers._InvoiceVoucherPathAccess`，`ModuleSpec.providers`）：`invoice_vouchers/<開票單號>/` 的已開立檔案只簽給開票申請單筆規則 `_voucher_readable` 放行的人（本單簽核人經簽核佇列情境）。原本任何登入者都拿得到簽章。
 
 ## 1.0.13 — 2026-09-30（暫用號，列車取號；wip/w2-report-cash）
 - 收款端手續費不再重複扣（使用者 2026-09-30，正式機案件 MQ-202607-045：實收 263,813（銀行入帳，已扣客戶內扣手續費 15）被報表再減 15 成 263,798，且 9 月當月收入是 0（預設權責））：收入明細 `collect_income_items` 的 `amount`＝銀行入帳＋手續費（含稅收入）、`netAmount`＝銀行入帳（L1 `receipt_amounts`）；`collect_tax_invoices` 多回 `feeAmount`／`bankAmount`（T100 收款傳票用）。

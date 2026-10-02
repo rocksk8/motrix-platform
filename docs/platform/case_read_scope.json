@@ -44,6 +44,18 @@
    "scope": "own_rule"
   },
   {
+   "file": "modules/payroll/api/bonus_correction.py",
+   "path": "",
+   "handler": "list_corrections",
+   "scope": "own_rule"
+  },
+  {
+   "file": "modules/payroll/api/bonus_correction.py",
+   "path": "/current/{quote_no}",
+   "handler": "current_amounts",
+   "scope": "own_rule"
+  },
+  {
    "file": "modules/case/api/case_action_items.py",
    "path": "/api/quotations/{quote_no}/action-items",
    "handler": "list_case_action_items",
@@ -53,6 +65,24 @@
    "file": "modules/case/api/case_extra_expenses.py",
    "path": "/api/quotations/{quote_no}/extra-expenses",
    "handler": "list_extra_expenses",
+   "scope": "row_access"
+  },
+  {
+   "file": "modules/case/api/case_extra_expenses.py",
+   "path": "/api/quotations/{quote_no}/purchase-items",
+   "handler": "list_purchase_items",
+   "scope": "row_access"
+  },
+  {
+   "file": "modules/filehub/api.py",
+   "path": "/api/filehub/search",
+   "handler": "search",
+   "scope": "own_rule"
+  },
+  {
+   "file": "modules/case/api/expense_form_pdf.py",
+   "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/document",
+   "handler": "expense_document",
    "scope": "row_access"
   },
   {
@@ -89,6 +119,18 @@
    "file": "modules/case/api/material_orders.py",
    "path": "/api/quotations/{quote_no}/material-orders",
    "handler": "get_material_orders",
+   "scope": "row_access"
+  },
+  {
+   "file": "modules/case/api/material_approvals.py",
+   "path": "/api/quotations/{quote_no}/material-order-approvals",
+   "handler": "get_approvals",
+   "scope": "row_access"
+  },
+  {
+   "file": "modules/case/api/material_payments.py",
+   "path": "/api/quotations/{quote_no}/material-payments",
+   "handler": "list_payments",
    "scope": "row_access"
   },
   {

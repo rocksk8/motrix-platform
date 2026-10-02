@@ -28,7 +28,7 @@ def test_backup_retention_default_matches_policy(client):
     assert retention["cloud_monthly_keep_days"] == 0      # 0 = 永久保留
     assert retention["local_db_keep_days"] == 30
     assert retention["local_pre_update_keep"] == 5
-    assert retention["audit_log_keep_days"] == 730
+    assert retention["audit_log_keep_days"] == 1825
 
 
 def test_get_backup_retention_requires_superadmin(client, make_user):

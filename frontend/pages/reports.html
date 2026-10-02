@@ -10,6 +10,7 @@
   <script src="../static/legal-round.js"></script>
   <script src="../js/reports.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -265,6 +266,7 @@
       <!-- Period bar（財務報表期間選擇/匯出，僅 admin+；2026-08-31 出納併入
            本頁後，純 cashier/finance 模組使用者不該看到跟他們無關的期間/
            匯出控制列，出納自己的執行歷史匯出在出納頁籤裡另有一份） -->
+      <div class="rpt-sub" data-testid="reports-subtitle" style="font-size:12px;color:var(--text-secondary);margin:2px 0 8px">管理用・即時計算（非會計帳）</div>
       <div class="period-bar">
         <button class="period-type-btn" :class="{on: periodType==='month'}" @click="switchType('month')">月報</button>
         <button class="period-type-btn" :class="{on: periodType==='quarter'}" @click="switchType('quarter')">季報</button>
@@ -526,6 +528,9 @@
             </button>
             <button class="tab" :class="{on:activeTab==='ar'}" @click="showArTab()">
               帳齡分析<span class="tab__cnt" x-show="arAging" x-text="arAging ? arAging.total.count : ''"></span>
+            </button>
+            <button class="tab" data-testid="tab-gldiff" :class="{on:activeTab==='gldiff'}" @click="activeTab='gldiff'">
+              與總帳差異
             </button>
             <button class="tab" :class="{on:activeTab==='cashpos'}" @click="showCashPosTab()">
               資金水位<span class="tab__cnt" x-show="cashPos" x-text="cashPos ? (cashPos.ar.count + cashPos.ap.count) : ''"></span>
@@ -969,6 +974,25 @@
               </table>
             </template>
 
+            <!-- 依部門（2026-10-01）：無案件的支出以送出者部門／明示部門歸屬，其餘依案件業務；都沒有 ⇒ 未分類 -->
+            <template x-if="!expensesLoading && expenseByDept.length > 0">
+              <div data-testid="expense-by-dept" style="margin-bottom:18px">
+                <div class="cm-section-title" style="margin:0 0 8px;font-size:13px;font-weight:700;font-family:var(--font-zh)" x-text="scopeLabel + '支出・依部門'"></div>
+                <table class="data-table">
+                  <thead><tr><th>部門</th><th class="r">筆數</th><th class="r">金額</th></tr></thead>
+                  <tbody>
+                    <template x-for="b in expenseByDept" :key="b.key">
+                      <tr :data-testid="'expense-dept-' + b.key">
+                        <td x-text="b.name"></td>
+                        <td class="r mono" x-text="b.count"></td>
+                        <td class="r mono" x-text="fmt(b.total)"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+
             <!-- 支出明細 -->
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
               <span class="cm-section-title" style="margin:0;font-size:13px;font-weight:700;font-family:var(--font-zh)"
@@ -985,13 +1009,14 @@
             <template x-if="filteredExpenseItems.length > 0">
               <table class="data-table">
                 <thead><tr>
-                  <th class="c">日期</th><th>類別</th><th>關聯案件</th><th>說明</th><th class="r">金額</th>
+                  <th class="c">日期</th><th>類別</th><th>部門</th><th>關聯案件</th><th>說明</th><th class="r">金額</th>
                 </tr></thead>
                 <tbody>
                   <template x-for="(it, i) in filteredExpenseItems" :key="it.cat + '-' + it.date + '-' + i">
                     <tr>
                       <td class="c mono" x-text="it.date"></td>
                       <td x-text="expensesCatLabel(it.cat)"></td>
+                      <td data-testid="expense-row-dept" x-text="it.deptName || '未分類'"></td>
                       <td class="mono" x-text="it.quoteNo || '—'"></td>
                       <td>
                         <span x-text="it.desc"></span>
@@ -1852,6 +1877,90 @@
           </div>
 
           <!-- 資金水位 -->
+          <!-- 與總帳差異（MONEY-FLOWS §9 L4；唯讀）。本班只准動 modules/*：邏輯在檔尾的 glDiffPanel()（巢狀元件），不加進 js/reports.js -->
+          <div x-show="activeTab==='gldiff'" class="panel" data-testid="gldiff-panel" x-data="glDiffPanel()"
+               x-effect="if (activeTab === 'gldiff' && !glDiff && !glDiffLoading && !glDiffError) load()">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+              <select class="filter" data-testid="gldiff-year" x-model.number="glDiffYear" @change="load()">
+                <template x-for="y in [glDiffYear-2, glDiffYear-1, glDiffYear, glDiffYear+1].filter((v, i, a) => a.indexOf(v) === i)" :key="y">
+                  <option :value="y" x-text="y + ' 年'"></option>
+                </template>
+              </select>
+              <div class="period-type-tabs">
+                <button class="period-type-btn" data-testid="gldiff-basis-cash" :class="{on:glDiffBasis==='cash'}" @click="glDiffBasis='cash'; load()">現金（含稅）</button>
+                <button class="period-type-btn" data-testid="gldiff-basis-accrual" :class="{on:glDiffBasis==='accrual'}" @click="glDiffBasis='accrual'; load()">權責（未稅）</button>
+              </div>
+              <span style="font-size:12px;color:var(--text-dim)">唯讀：營運報表的數字 vs 總帳已過帳金額；差額依原因分桶。</span>
+            </div>
+            <div x-show="glDiffLoading" class="loading-text">載入中…</div>
+            <div x-show="glDiffError" data-testid="gldiff-error" style="color:#b91c1c;padding:8px 0" x-text="glDiffError"></div>
+            <template x-if="glDiff && !glDiffLoading">
+              <div>
+                <div x-show="!glDiff.glAvailable" data-testid="gldiff-unavailable" style="padding:10px;background:#fef3c7;border-radius:6px;margin-bottom:10px"
+                     x-text="'總帳不可用：' + glDiff.glNotice + '（只顯示營運報表欄）'"></div>
+                <div x-show="glDiff.incomeNotice" style="padding:6px 0;color:var(--text-secondary);font-size:12px" x-text="glDiff.incomeNotice"></div>
+                <table class="data-table" data-testid="gldiff-table">
+                  <thead><tr>
+                    <th>月份</th><th>收入：報表</th><th x-show="glDiff.glAvailable">總帳</th><th x-show="glDiff.glAvailable">差額</th>
+                    <th>支出：報表</th><th x-show="glDiff.glAvailable">總帳</th><th x-show="glDiff.glAvailable">差額</th>
+                    <th x-show="glDiff.glAvailable">待處理事件</th>
+                  </tr></thead>
+                  <tbody>
+                    <template x-for="m in glDiff.months" :key="m.month">
+                      <tr :data-month="m.month">
+                        <td x-text="m.month"></td>
+                        <td x-text="fmt(m.income.report)"></td>
+                        <td x-show="glDiff.glAvailable" x-text="fmt(m.income.gl)"></td>
+                        <td x-show="glDiff.glAvailable" :style="m.income.diff ? 'color:#b91c1c' : ''" x-text="fmt(m.income.diff)"></td>
+                        <td x-text="fmt(m.expense.report)"></td>
+                        <td x-show="glDiff.glAvailable" x-text="fmt(m.expense.gl)"></td>
+                        <td x-show="glDiff.glAvailable" :style="m.expense.diff ? 'color:#b91c1c' : ''" x-text="fmt(m.expense.diff)"></td>
+                        <td x-show="glDiff.glAvailable" x-text="m.pendingEvents ? (m.pendingEvents.drift + m.pendingEvents.orphan + m.pendingEvents.blocked) : 0"></td>
+                      </tr>
+                    </template>
+                    <tr style="font-weight:600" data-testid="gldiff-total">
+                      <td>合計</td>
+                      <td x-text="fmt(glDiff.totals.income.report)"></td>
+                      <td x-show="glDiff.glAvailable" x-text="fmt(glDiff.totals.income.gl)"></td>
+                      <td x-show="glDiff.glAvailable" x-text="fmt(glDiff.totals.income.diff)"></td>
+                      <td x-text="fmt(glDiff.totals.expense.report)"></td>
+                      <td x-show="glDiff.glAvailable" x-text="fmt(glDiff.totals.expense.gl)"></td>
+                      <td x-show="glDiff.glAvailable" x-text="fmt(glDiff.totals.expense.diff)"></td>
+                      <td x-show="glDiff.glAvailable"></td>
+                    </tr>
+                  </tbody>
+                </table>
+                <template x-if="glDiff.glAvailable">
+                  <div style="margin-top:14px">
+                    <div style="font-weight:600;margin-bottom:6px">差額原因（有差額的月份；正值＝報表比總帳多）</div>
+                    <template x-for="m in glDiff.months.filter(x => x.income.diff || x.expense.diff)" :key="'b' + m.month">
+                      <div style="margin-bottom:8px;font-size:13px" :data-buckets="m.month">
+                        <b x-text="m.month"></b>
+                        <span>收入：</span>
+                        <template x-for="(v, k) in m.income.buckets" :key="'i' + k"><span x-show="v" style="margin-right:8px" x-text="bucketLabel(k) + ' ' + fmt(v)"></span></template>
+                        <span style="margin-left:10px">支出：</span>
+                        <template x-for="(v, k) in m.expense.buckets" :key="'e' + k"><span x-show="v" style="margin-right:8px" x-text="bucketLabel(k) + ' ' + fmt(v)"></span></template>
+                        <!-- 類別層級（承攬商／設備／料件／其他）：差額＝各桶加總＋其餘；只列有差額的類別 -->
+                        <div style="margin:3px 0 0 14px;color:var(--text-secondary)" :data-cat-buckets="m.month">
+                          <template x-for="(cat, ck) in (m.expense.categories || {})" :key="'c' + ck">
+                            <div x-show="cat.diff" :data-cat="ck" style="margin-bottom:2px">
+                              <b x-text="cat.label"></b>
+                              <span x-text="'　報表 ' + fmt(cat.report) + '　總帳 ' + fmt(cat.gl) + '　差額 ' + fmt(cat.diff) + '：'"></span>
+                              <template x-for="(cv, cb) in (cat.buckets || {})" :key="'cb' + ck + cb"><span x-show="cv" style="margin-right:8px" :data-bucket="cb" x-text="bucketLabel(cb) + ' ' + fmt(cv)"></span></template>
+                            </div>
+                          </template>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+                <ul style="margin-top:12px;font-size:12px;color:var(--text-secondary);padding-left:18px">
+                  <template x-for="n in glDiff.notes" :key="n"><li x-text="n"></li></template>
+                </ul>
+              </div>
+            </template>
+          </div>
+
           <div x-show="activeTab==='cashpos'" class="panel">
             <div x-show="cashPosLoading" class="loading-text">資金水位載入中…</div>
             <template x-if="cashPos && !cashPosLoading">
@@ -1929,10 +2038,11 @@
                       <option value="">整年</option>
                       <template x-for="m in 12" :key="m"><option :value="m" x-text="m + ' 月'"></option></template>
                     </select>
-                    <button class="btn-export excel" @click="exportTaxInvoices()" :disabled="taxExporting">
+                    <button class="btn-export excel" data-testid="export-xlsx-tax-export" @click="exportTaxInvoices()" :disabled="taxExporting">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                       <span x-text="taxExporting ? '產製中…' : '匯出 Excel'"></span>
                     </button>
+                    <button class="btn-export pdf" data-testid="export-pdf-tax-export" @click="exportTaxInvoices('pdf')" :disabled="taxExporting">匯出 PDF</button>
                   </div>
                 </div>
 
@@ -2242,5 +2352,34 @@
 
   <script src="../static/sidebar.js"></script>
   <script src="../static/notif.js"></script>
+<script>
+// 與總帳差異頁籤的元件（MONEY-FLOWS §9 L4）。獨立於 js/reports.js：本班只准動 modules/*。
+function glDiffPanel() {
+  return {
+    glDiff: null, glDiffLoading: false, glDiffError: '',
+    glDiffYear: new Date().getFullYear(), glDiffBasis: 'cash',
+    _tok() { try { return (JSON.parse(localStorage.getItem('motrix_session') || '{}')).token || '' } catch (e) { return '' } },
+    bucketLabel(k) {
+      return { unposted: '總帳未過帳草稿', tax: '稅額（報表含稅）', individual: '個人外包（報表算承攬商、總帳記其他）', manual: '手工傳票', bonus: '獎金傳票', residual: '其餘（口徑／時點）' }[k] || k
+    },
+    async load() {
+      this.glDiffLoading = true
+      this.glDiffError = ''
+      try {
+        const res = await fetch('/api/reports/ledger-diff?year=' + this.glDiffYear + '&basis=' + this.glDiffBasis, {
+          headers: { Authorization: 'Bearer ' + this._tok() }
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || '載入失敗')
+        this.glDiff = await res.json()
+      } catch (e) {
+        this.glDiff = null
+        this.glDiffError = '與總帳差異載入失敗：' + (e.message || e)
+      } finally {
+        this.glDiffLoading = false
+      }
+    },
+  }
+}
+</script>
 </body>
 </html>

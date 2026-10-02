@@ -48,8 +48,12 @@ def test_detail_drops_any_inline_image_for_users_without_money_rights(client, ma
     assert body.get("moneyMasked") is True
     assert not [f for f in body["files"] if f.get("dataUrl")], body["files"]          # 看的是 dataUrl，不只 id
     assert [f["id"] for f in body["files"]] == ["f1"]                                  # 一般檔照給
+    # 2026-10-01 使用者裁示：存簿封面（帶完整帳號的內嵌影像）只有最高管理者；非最高管理者的簽核人也拿不到
     appr = client.get(url, headers=_login(client, au, ap)).json()
-    assert [f for f in appr["files"] if f.get("dataUrl", "").startswith("data:image/")]  # 正對照：簽核人拿得到
+    assert not [f for f in appr["files"] if f.get("dataUrl")], appr["files"]
+    sau, sap = make_user(username="edg_sa", role="superadmin")[:2]
+    sa = client.get(url, headers=_login(client, sau, sap)).json()
+    assert [f for f in sa["files"] if f.get("dataUrl", "").startswith("data:image/")]       # 正對照：最高管理者拿得到
 
 
 def test_reassign_refuses_an_unreadable_chain_without_needing_m05(client, make_user):

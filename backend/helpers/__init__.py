@@ -27,7 +27,7 @@ from .auth import (
     user_has_module, can_see_financial, require_any_module,
 )
 from .settings import _get_setting, _set_setting
-from .audit import (_notify, _audit, _filter_live_notifications, _purge_notifications,
+from .audit import (_notify, _audit, _filter_live_notifications, _purge_notifications, _mark_notifications_read,
                     notify_org_chain_notice)
 # M01 的 modules.case.quotations／case_stage_tasks 不再從這裡再匯出（M01-PLAN §3-8 CA-O4：`import helpers` 不可以載入 M01）。
 # 純函式已在 L1：norm_at（dates，§3-2）、summarize_payment_items（tax_calc，CA-O4）、steps_to_tiers（tiered_approval，§3-2；直接 import 那裡）。
@@ -43,7 +43,7 @@ from .tiered_approval import (
     plan_self_cascade, cascade_self_tiers,
     resolve_tier_approvers, UnresolvedManagerError,
     approval_flow_setting_key, resolve_active_flow_setting, active_delegators_for,
-    APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES, APPROVAL_DOC_TYPE_LABELS,
+    APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES, APPROVAL_DOC_TYPE_LABELS, register_doc_type, doc_types_meta,
 )
 from .email_notify import (
     notify_approval_request,
@@ -100,6 +100,7 @@ from .google_calendar import (
     push_event_for_case_stage_due,
     push_event_for_case_stage_done,
     push_event_delete_for_case_stage,
+    push_event_for_module,
     create_test_event as create_calendar_test_event,
 )
 from .uploads import (
@@ -129,7 +130,7 @@ __all__ = [
     # settings
     "_get_setting", "_set_setting",
     # audit
-    "_notify", "_audit", "_filter_live_notifications", "_purge_notifications",
+    "_notify", "_audit", "_filter_live_notifications", "_purge_notifications", "_mark_notifications_read",
     # 稅額／日期純函式（L1）、案件權限（L1 case_access）
     "payment_item_amounts", "norm_ymd", "receipt_amounts", "summarize_payment_items", "norm_at",
     "guard_case_access", "is_document_approver",
@@ -141,7 +142,7 @@ __all__ = [
     "resolve_submitter_org_chain", "submitter_manager_tiers", "org_chain_notice_usernames",
     "plan_self_cascade", "cascade_self_tiers", "notify_org_chain_notice",
     "approval_flow_setting_key", "resolve_active_flow_setting",
-    "APPROVAL_DOC_TYPES", "DEFAULT_UNIFIED_DOC_TYPES", "APPROVAL_DOC_TYPE_LABELS",
+    "APPROVAL_DOC_TYPES", "DEFAULT_UNIFIED_DOC_TYPES", "APPROVAL_DOC_TYPE_LABELS", "register_doc_type", "doc_types_meta",
     # email_notify
     "notify_approval_request", "notify_next_tier", "notify_approved",
     "notify_returned", "notify_resubmit_requester", "notify_settlement_finalized",
@@ -167,7 +168,7 @@ __all__ = [
     "push_event_for_invoice_voucher", "push_event_for_payment_request", "push_event_for_shipping_note",
     "push_event_for_quotation_won", "create_calendar_test_event",
     "push_event_for_case_stage_due", "push_event_for_case_stage_done",
-    "push_event_delete_for_case_stage",
+    "push_event_delete_for_case_stage", "push_event_for_module",
     # uploads
     "save_document_files", "delete_document_file",
     # startup

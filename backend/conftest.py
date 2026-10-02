@@ -502,7 +502,27 @@ def client(_app, _template_db, tmp_path, monkeypatch):
         db.init_db(demo_path)
     else:
         shutil.copyfile(_template_db, real_path)
-        shutil.copyfile(_template_db, demo_path)
+        if os.environ.get("MOTRIX_TEST_EAGER_DEMO") == "1":
+            shutil.copyfile(_template_db, demo_path)
+        else:
+            # 2026-09-30 寫入量（使用者：「盡可能降低硬碟的重複寫入」；PLAN-TEST-PERF §5.1）：demo 庫**到用才複製**——
+            # 多數題不碰 demo，每題白寫 1.3 MB。首次有人 `db._connect(demo_path)`（demo 模式的 get_db、reset_demo_db…）
+            # 才從範本複製（先寫暫存檔再原子 rename，執行緒間用鎖；不會有人讀到寫一半的庫）。
+            # 設 MOTRIX_TEST_EAGER_DEMO=1 ⇒ 回到每題預先複製（A/B 對照用）。守門：tests/test_lazy_demo_db_2026_09_30.py。
+            import threading as _threading
+            _orig_connect = db._connect
+            _lock = _threading.Lock()
+
+            def _lazy_demo_connect(path, *a, **kw):
+                if path == demo_path and not os.path.exists(path):
+                    with _lock:
+                        if not os.path.exists(path):
+                            tmp = path + ".part"
+                            shutil.copyfile(_template_db, tmp)
+                            os.replace(tmp, path)
+                return _orig_connect(path, *a, **kw)
+
+            monkeypatch.setattr(db, "_connect", _lazy_demo_connect)
     monkeypatch.setattr(db, "DB_PATH", real_path)
     monkeypatch.setattr(db, "DEMO_DB_PATH", demo_path)
     # `IA2`：`init_demo_account()` 現在靠 `demo_account_on()` 把關
@@ -730,6 +750,18 @@ def _company_setup_gate_default(request, monkeypatch):
     _cs.reset_cache()
     yield
     _cs.reset_cache()
+
+
+@pytest.fixture(autouse=True)
+def _upload_magic_default(request, monkeypatch):
+    """上傳檔頭檢查（helpers.uploads._check_upload_magic，2026-09-30）：既有的上傳題用的是 b"x"／b"fake" 之類的假內容，
+    測的是各單據的業務流程，不是檔頭 ⇒ 一般的題把**判定函式** `_magic_matches` 換成「一律符合」。
+    **只換判定，不換守門**（呼叫點、稽核、400 照舊）；驗檔頭本身的題標 `@pytest.mark.upload_magic` ⇒ 用真的判定
+    （tests/test_upload_magic_2026_09_30.py）。"""
+    if not request.node.get_closest_marker("upload_magic"):
+        from helpers import uploads as _up
+        monkeypatch.setattr(_up, "_magic_matches", lambda ext, raw: True)
+    yield
 
 
 @pytest.fixture()
@@ -990,7 +1022,8 @@ def pytest_configure(config):
     if hasattr(config, "workerinput"):
         return
     if not _is_heavy_run(config):
-        return                       # 單檔臨時跑，不搶鎖
+        _refuse_light_run_during_build(config)
+        return                       # 單檔臨時跑，不搶鎖（建包獨佔期間例外：直接拒絕，見上一行）
 
     slots = _lock_slots()
     wait = _env_seconds("MOTRIX_PYTEST_LOCK_WAIT", LOCK_WAIT_SECONDS_DEFAULT)
@@ -1015,6 +1048,10 @@ def pytest_configure(config):
             return
         if ok:
             _lock_taken_by_me = mine
+            if exclusive and not os.environ.get(BUILD_CHILD_ENV):
+                # 直接以獨佔身分跑（不經建包腳本）：自己起的子 pytest 也要認得這份登記，否則會被下面的守門拒絕
+                reg = _read_lock(intent) or {}
+                os.environ[BUILD_CHILD_ENV] = str(reg.get("pid") or os.getpid())
             return
         held = held or {}
         try:
@@ -1047,6 +1084,54 @@ def pytest_configure(config):
                   % (why, held.get("pid"), held.get("basetemp"), age // 60, (deadline - now) // 60), flush=True)
             announced = now
         time.sleep(min(poll, max(0.05, deadline - now)))
+
+
+#: 建包自己的子行程（含 xdist worker、題目起的子 pytest、偶發重跑）帶這個 = 登記的 pid ⇒ 不被下面的守門拒絕。
+#: 建包腳本設它；utf8_env() **不**剝掉它（剝掉的是 EXCLUSIVE／_OWNER，那兩個會讓子行程去搶獨佔）。
+BUILD_CHILD_ENV = "MOTRIX_PYTEST_BUILD_CHILD"
+#: 設成 0 ⇒ 關掉「建包期間拒絕臨時 pytest」（回到 2026-09-30 之前的行為）
+BUILD_GUARD_ENV = "MOTRIX_PYTEST_BUILD_GUARD"
+
+
+def light_run_block_reason(reg, alive, env, my_pid, collect_only):
+    """建包獨佔期間，一輪**不搶鎖的臨時 pytest** 要不要拒絕 ⇒ 拒絕的原因字串，或 None（放行）。純函式。
+
+    2026-09-30：建包持有獨佔時，其他視窗照樣起 `pytest … --basetemp=…-adhoc`（單程序不搶鎖）⇒ 加負載 ⇒
+    建包的 e2e 靠時序的題偶發紅，整包 35 分鐘重來。重型測試本來就排隊（不跑、不佔 CPU），臨時跑的現在改成直接拒絕。
+    - 沒有登記、登記的持有者已死 ⇒ 放行（一個解不掉的鎖比沒有鎖更糟）。
+    - 登記是自己家的（BUILD_CHILD／EXCLUSIVE_OWNER／自己的 pid ＝ 登記 pid）⇒ 放行。
+    - `--collect-only` ⇒ 放行（數秒、不跑題；modtest 的選題與鎖守門題都靠它）。
+    - `MOTRIX_PYTEST_BUILD_GUARD=0` ⇒ 放行（關掉這道守門）。"""
+    if env.get(BUILD_GUARD_ENV) == "0" or collect_only or not reg or not alive:
+        return None
+    pid = str(reg.get("pid"))
+    if pid in {str(env.get(BUILD_CHILD_ENV) or ""), str(env.get("MOTRIX_PYTEST_EXCLUSIVE_OWNER") or ""), str(my_pid)}:
+        return None
+    return pid
+
+
+def _refuse_light_run_during_build(config):
+    intent = _lock_slots()[0]
+    intent = intent.with_name(intent.name + ".exclusive")
+    reg = _read_lock(intent)          # 只讀不刪：清過期登記是搶鎖那一側的事，臨時跑不動別人的檔
+    try:
+        alive = (bool(reg) and _pid_alive(int(reg.get("pid", -1)))
+                 and time.time() - float(reg.get("started_at", 0)) <= EXCLUSIVE_MAX_AGE_SECONDS)
+    except (TypeError, ValueError, AttributeError):
+        return
+    pid = light_run_block_reason(reg, alive, os.environ, os.getpid(), bool(getattr(config.option, "collectonly", False)))
+    if pid is None:
+        return
+    try:
+        mins = (time.time() - float(reg.get("started_at", 0))) // 60
+    except (TypeError, ValueError):
+        mins = 0
+    raise pytest.UsageError(
+        "【建包獨佔中：不開始臨時 pytest】建包（pid=%s，已 %d 分鐘，%s）正在跑全量。\n"
+        "  建包期間任何額外的 pytest 都會分走 CPU，e2e 靠時序的題會偶發紅，而一紅整包約 35 分鐘重來。\n"
+        "  ⇒ 等建包結束再跑（登記檔：%s；持有者結束後自動失效）。\n"
+        "  真的非跑不可（知道後果）：設 %s=0 再跑。建包自己的子行程帶 %s=<建包 pid>，不受影響。"
+        % (pid, mins, reg.get("basetemp"), intent, BUILD_GUARD_ENV, BUILD_CHILD_ENV))
 
 
 def _create_lock(path, basetemp) -> bool:
@@ -2151,3 +2236,47 @@ def pytest_probe_leak_sessionfinish(session, exitstatus):
         print(msg)
     if session.exitstatus == 0:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+# ══════════════════════════════════════════════════════════════════════════
+# 31-A 相容殼：舊測試用 API 建立／編輯「帶 status 的派發」（例如直接 completed）來造「既有資料」。
+# 第 31 班起 API 忽略建立時的 status、編輯不可改狀態（寫入口的閘，見 modules/subcontract/dispatch_flow.py）；
+# 這個 autouse fixture 把那種呼叫還原成它本來代表的東西——**舊單**（approval_status=''、無單號、指定的作業狀態）。
+# 要測真正的閘的測試用 `@pytest.mark.no_dispatch_shim`（或 pytestmark）關掉它，否則會拿到被改過形狀的資料。
+# ══════════════════════════════════════════════════════════════════════════
+@pytest.fixture(autouse=True)
+def _legacy_dispatch_shim(request):
+    if request.node.get_closest_marker("no_dispatch_shim"):
+        yield
+        return
+    import re as _re
+    from starlette.testclient import TestClient as _TC
+    real = _TC.request
+
+    def _shim(self, method, url, *args, **kwargs):
+        u = str(url).split("?")[0]
+        m = _re.match(r"^/api/contractor-dispatches(?:/(\d+))?$", u)
+        body = kwargs.get("json")
+        want = None
+        if m and method in ("POST", "PUT") and isinstance(body, dict) and body.get("status") and body.get("status") != "draft":
+            want = body["status"]
+            if method == "PUT":                       # 編輯不可改狀態：先拿掉，成功後再把狀態還原成舊測試要的值
+                kwargs["json"] = {k: v for k, v in body.items() if k != "status"}
+        resp = real(self, method, url, *args, **kwargs)
+        if want and resp.status_code in (200, 201):
+            try:
+                did = int(m.group(1)) if m.group(1) else resp.json().get("id")
+                import db as _db
+                c = _db.get_db()
+                try:
+                    c.execute("UPDATE contractor_dispatches SET status=?, approval_status='', doc_code='' WHERE id=?", (want, did))   # noqa: G-D1 測試殼
+                    c.commit()
+                finally:
+                    c.close()
+            except Exception:                         # 殼壞掉不可讓測試靜默通過：留給後面的斷言去紅
+                pass
+        return resp
+    _TC.request = _shim
+    try:
+        yield
+    finally:
+        _TC.request = real

@@ -170,6 +170,31 @@ def describe_missing(meta):
     return [k for k in _OPTIONAL_META if not (meta or {}).get(k)]
 
 
+#: 各來源類型的檔案存檔資料夾（`save_document_files` 第一個參數）——傳票帶入與來源檔預覽**只信資料夾對得上單據**的檔案
+#: （安全審查 W3 #2，2026-09-30：metadata 的 `path` 來自案件／派工等 JSON 欄，前端曾可塞任意 uploads 路徑）。
+_SOURCE_FOLDER = {
+    "quotation_signed": "quotations", "case_update": "case_updates", "payment_item": "quotation_payment_items",
+    "material": "quotation_materials", "material_invoice": "quotation_materials_invoices",
+    "extra_expense": "case_extra_expense", "invoice_voucher": "invoice_vouchers",
+    "contractor_dispatch": "contractor_dispatches", "contractor_invoice": "contractor_dispatch_invoices",
+}
+
+
+def _path_belongs_to_doc(st, doc_no, meta):
+    """`meta["path"]` 是不是在這張來源單據自己的資料夾底下（同各 `attachments.catalog` 提供者的 `upload_path_key` 規則）。
+    報價單回簽／案件動態／開票申請／派工單＝單號全等；收付款／材料／材料發票＝同一案件（索引可能因刪除位移，只比案件）；
+    額外支出＝資料夾鍵以 `_<支出 id>` 結尾（支出 id 全域唯一）。"""
+    key = _uploads.upload_path_key(meta, _SOURCE_FOLDER.get(st, ""))
+    if key is None:
+        return False
+    doc_no = str(doc_no)
+    if st in ("payment_item", "material", "material_invoice"):
+        return key.rpartition("_")[0] == doc_no.rpartition("_")[0] != ""
+    if st == "extra_expense":
+        return key.rpartition("_")[2] == doc_no
+    return key == doc_no
+
+
 def resolve_picks(conn, picks, user):
     """把 `[{type, docNo, fileId}]` 解析成可以複製的清單。
 
@@ -204,6 +229,9 @@ def resolve_picks(conn, picks, user):
         if meta is None:
             raise HTTPException(
                 400, "在來源「%s／%s」裡找不到檔案 %s。" % (st, doc_no, file_id))
+        if not _path_belongs_to_doc(st, doc_no, meta):
+            # 路徑不在這張來源自己的資料夾（資料被動過手腳／舊資料格式不對）⇒ 當作沒有這個檔：不複製、不預覽（W3）
+            raise HTTPException(404, "在來源「%s／%s」裡找不到檔案 %s。" % (st, doc_no, file_id))
         src = abs_path(meta.get("path"))
         if not os.path.isfile(src):
             raise HTTPException(

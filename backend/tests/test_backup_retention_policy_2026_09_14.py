@@ -109,7 +109,9 @@ def test_bk9_monthly_pruned_only_when_explicitly_configured(arch):
     """
     base = arch._archive_base()
     old = (date.today() - timedelta(days=400)).strftime("%Y-%m")
-    recent = date.today().strftime("%Y-%m")
+    # 2026-10-01 教訓：「本月」在每月 1 號＝今天，清理的安全門檻（中間沒有快照超過 62 天 ⇒ 暫停清理）不把它當成已過去的快照，
+    # 測試就在每月 1 號紅。改用「上個月」當保留的那份（任何日期都在今天之前）。
+    recent = (date.today().replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
     _mkdir_with_file(base, "月備份", old)
     _mkdir_with_file(base, "月備份", recent)
 

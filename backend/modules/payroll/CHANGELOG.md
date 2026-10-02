@@ -1,19 +1,73 @@
 # 薪資獎金 更新紀錄
 
-## 1.1.5 — 2026-09-30（暫用號，列車取號；W4 總帳 C6／扣繳補齊）
+## (next) — 2026-10-02（wip/w4-gl-c6-realign-a3：W4 總帳 C6 固定資產／扣繳補齊，重新對齊第 31 班）
 - 獎金發放事件 E07b（native）多帶 `meta.withholding`／`wh_prefix`（發放當下的每人代扣所得稅與補充保費快照），供總帳扣繳清單；作廢的發放傳票也照送，讓總帳移除未繳庫的列。無 migration。
 
-## 1.1.4 — 2026-09-30（暫用號，列車取號；W4 總帳 R12 畫面）
+## 1.1.21 — 2026-10-02 09:14（wip/t32-prpo-s1-2e）：獎金分潤 PDF 精算明細的採購單列（32-S5 追補）
+- 精算明細表（固定 11 列，規格 BN11）在 `summary.itemPoUnadopted > 0` 時於「品項實際成本」下多印一列「採購單（品項尚未採用）」，分項加總＝實際總成本；沒有該鍵或為 0 的歷史精算輸出逐字不變。
+
+## 1.1.20 — 2026-10-01（wip/t31-payslip-mask-a3：勞報單收款帳號遮蔽，稽核 F1）
+- ⚠️ 行為變更（使用者裁示：只有最高管理者看得到完整帳號，沒有例外）：`GET /api/payslips/{no}` 對非最高管理者（持 payslip 模組）回 `data.bankAccountNumber`＝`****末四碼`＋`bankMasked=true`；`pdf-download` 的 PDF 文字只有末四碼、不帶存簿影本；匯出存檔（F2 法定紀錄）仍是完整版（不論誰按匯出），存檔讀取（`/archive/{idx}`）對非最高管理者改回傳遮蔽的重新產生版。
+- 寫入：遮蔽值原樣送回 ⇒ 沿用舊單的帳號；沒有舊值可沿用 ⇒ 400；非最高管理者建單／改單沒有帳號時，伺服器從外包名冊取值填入（真值不經過前端）。新增 `payslip_bank.py`（規則同 subcontract/bank_mask.py，模組之間不互相 import，測試逐案對照）；勞報單表單在帳號為遮蔽值時顯示「僅最高管理者可見完整帳號」。
+
+## 1.1.19 — 2026-10-01（暫用號，列車取號；fix/t29-w2）員工收款帳號：寫入端點的稽核改由端點本體呼叫
+- `PUT /api/me/bank-account`、`PUT /api/bank-accounts/{user_id}`：稽核（`user.bank_account.update`）原本藏在內部 helper `_save` 裡，寫入端點稽核守門（`test_write_endpoints_are_audited`，只認端點本體直接呼叫 `_audit`）判為沒稽核而擋下全量測試；改成端點自己呼叫 `_audit`。稽核內容照舊（欄位、前後**末四碼**、byAdmin），另加 `userId`、`changedBy`；**不含帳號全碼與戶名**；沒有變更（noop）不寫稽核。下游效應（R1）：只多兩個稽核欄位，API 回應與資料不變。
+
+## 1.1.18 — 2026-10-01（暫用號，列車取號；fix/contractor-bank-mask-2）
+- 勞報單頁（`payslip-form.html`）從外包名冊挑人時不再帶入遮蔽的帳號（`****末四碼`，非最高管理者從名冊拿到的值），避免存成假帳號；留空由有權限者補。勞報單 API／PDF 的帳號遮蔽仍在 TRAIN31 backlog。
+
+## 1.1.17 — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
+- 附件目錄 P3：`_PayrollCatalog` 加 `search`／`count`（勞報單簽回檔；權限＝最高管理者或出納模組，不符一筆都不列）。
+
+## 1.1.16 — 2026-10-01（暫用號，列車取號；wip/w3-bank-profile）
+- 員工收款帳號（A2 收款人，使用者 2026-10-01）：migration 0003 新增 `user_bank_accounts`（每人一個有效帳戶、舊的留歷史）；`/api/me/bank-account`（本人）、`/api/bank-accounts*`（超級管理員／財務維護；出納查看）；頁面 `bank-account.html`；遮蔽：本人完整、有資格者要 `reveal=1` 才回完整並寫稽核、其他人只見末四碼；提供者 `payee.bank_profile`（IP-BK1）。只新增表，舊程式碼不讀它（回滾相容）。
+
+## 1.1.15 — 2026-10-01（暫用號，列車取號；wip/w2-bonus-correction-3：列車 28 紅燈修正）
+- 獎金更正單：寫入交易改用 `core.txn.begin_write`（不再自己 `BEGIN IMMEDIATE`）；沖轉傳票呼叫 `voucher.draft` 改明列關鍵字（不用 `**`）；更正單頁的狀態篩選標 `class="filter"`。
+- 文件：`case_read_scope.json` 歸類更正單的兩條讀取路徑（`list_corrections`、`current_amounts`＝own_rule）；`money_flows.json`／MONEY-FLOWS.md 登記 E8b（IP-9 `bonus_correction`）；三種信件類型加進個人通知設定（`notification_prefs`）。行為不變。
+
+## 1.1.14 — 2026-10-01（列車 28 整合：獎金更正單頁防重複初始化）
+- 內部：`bonus-corrections.html` 補 `_initDone` 守衛（Alpine 會自動呼叫 `init()`，`<body>` 又寫 `x-init`，不守衛會重複打 API）；行為不變。
+
+## 1.1.13 — 2026-09-30（暫用號，列車取號；wip/w2-bonus-correction：獎金更正單）
+沖轉改用總帳 `voucher.draft(reverses_voucher_id=…)`（連續更正時沖轉前一次的重開傳票；總帳拒絕時沖轉與重開都不開、畫面寫原因）；追回＝「其他應收款」傳票（設定鍵 bonus_corr_clawback_receivable_code，預設 1213），標「追回處理方式待確認」。
+新增獎金更正單（已發放獎金的事後更正）：migration 0002（bonus_corrections／bonus_correction_log）、/api/bonus/corrections、bonus-corrections.html、簽核佇列項目、IP-9 expense.entries（bonus_correction）、IP-8 補發列；核准開沖轉＋重開應付傳票草稿、出納補發。
+
+## 1.1.12 — 2026-09-30（暫用號，列車取號；wip/w2-money-guards：金流寫入連動修補（MONEY-FLOWS §9 L5/L11/L12））
+- L5：經承攬商匯款單付款（`paid_via_remit`）的勞報單，營運報表支出只列代扣部分（gross − net），匯款單實付已由承攬商支出計入，不再雙計。
+
+## 1.1.11 — 2026-09-30（暫用號，列車取號；W4 寫入串接缺口 L1／L2／L6／L8／L9／L10）
+- L6：已付款勞報單的付款事件 E06b——出納填的傳票號指向有效的手工傳票（存在、未作廢、不是系統產生）時不再重複產生（notice 說明）；應付事件 E06 照常。
+
+## 1.1.10 — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：安全審查 W3 sibling gap）
+- 勞報單簽回檔 metadata 的 `ext` 必須在允許集合（.pdf／.jpg／.jpeg／.png），不合法 ⇒ 不拼進路徑（讀取端點 400、附件目錄 404）。
+
+## 1.1.9 — 2026-09-30（暫用號，列車取號；wip/w1-menu-split 選單拆分）
+- 選單：獎金分潤在「財務會計」群組 order 50→90（排在報表設定之後，避開與會計期間與結帳同為 50）；perm 不變。
+
+## 1.1.8 — 2026-09-30（暫用號，列車取號；wip/w2-upload-magic：上傳檔頭檢查）
+- 勞報單簽回檔上傳（`POST /api/payslips/{no}/signed-files`）在副檔名檢查之後呼叫 L1 `_check_upload_magic`（檔頭與副檔名不符 ⇒ 400＋稽核）；單據狀態、大小、空檔檢查不變。
+
+## 1.1.7 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
+- 新增 `attachments.py::_PayrollCatalog`（`attachments.catalog`／`payroll`，IP-105）：勞報單簽回檔開檔（實體檔在封存目錄，宣告 `ROOTS`）；權限＝superadmin 或出納（同簽回檔讀取端點）。
+
+## 1.1.6 — 2026-09-30（暫用號，列車取號；W4 總帳 C6／扣繳補齊）
+- 獎金發放事件 E07b（native）多帶 `meta.withholding`／`wh_prefix`（發放當下的每人代扣所得稅與補充保費快照），供總帳扣繳清單；作廢的發放傳票也照送，讓總帳移除未繳庫的列。無 migration。
+
+## 1.1.5 — 2026-09-30（暫用號，列車取號；W4 總帳 R12 畫面）
 - `payslip.remit`（IP-105，原暫用 IP-104 與 sec-p0 撞號）新增 `candidates(conn, contractor_id)`：列出該受款人已簽回、未付款的勞報單供匯款單挑選。
 
-## 1.1.3 — 2026-09-30（暫用號，列車取號；W4 總帳 R12）
+## 1.1.4 — 2026-09-30（暫用號，列車取號；W4 總帳 R12）
 - 新增提供者 `payslip.remit`（IP-105）：承攬商匯款單驗證、標記、退回勞報單付款；由匯款單付款的勞報單不可單獨 unpay（409，請到匯款單取消），總帳不再另產生其 E06b。無 migration（沿用 data_json.paid_via_remit）。
 
-## 1.1.2 — 2026-09-30（暫用號，列車取號；W4 總帳 C3b）
+## 1.1.3 — 2026-09-30（暫用號，列車取號；W4 總帳 C3b）
 - 獎金核准應付／發放傳票開立時帶 `origin`（bonus_accrual／bonus_payment，經 `voucher.draft` 可選參數）；`gl.events` 新增獎金事件 E07a／E07b（mode=native，登記既有傳票，不重複產生）。無 migration、無新欄位。
 
-## 1.1.1 — 2026-09-30（暫用號，列車取號；W4 總帳 C3）
+## 1.1.2 — 2026-09-30（暫用號，列車取號；W4 總帳 C3）
 - 新增提供者 `gl.events`（IP-GL1）：勞報單應付（E06，已簽回／已付款，依勞報日或簽回日）與付款（E06b，依付款日）事件，供 M06 總帳引擎產生傳票草稿；唯讀、不寫資料、不改欄位；不帶身分證字號。
+
+## 1.1.1 — 2026-09-30（暫用號，列車取號；wip/w1-file-preview 共用檔案預覽 P1）
+- 勞報單頁簽回檔改用 L1 共用預覽元件（頁內預覽，同一張勞報單的簽回檔可 ◀ ▶ 切換），不再 `window.open(blob)`。
 
 ## 1.1.0 — 2026-09-29（暫用號，列車取號；wip/payslip-void-signed）
 - 勞報單作廢（新功能）：`POST /api/payslips/{單號}/void`，只准從「已匯出」、原因必填，終結狀態（不可改／刪／再匯出）；PDF 對已作廢單加斜向「已作廢」浮水印與頂端紅色橫幅（作廢時間、人、原因；`pdf_gen._payslip_apply_void_mark`，版型沒有 <body> 也不漏）。

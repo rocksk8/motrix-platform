@@ -90,7 +90,7 @@ def nav():
     """C4：選單宣告（tests/_menu_decl.py；依渲染順序）。原本是 sidebar.js 原始碼的 `sec()`／`ni()` 呼叫。"""
     from tests._menu_decl import declared_items
     items = declared_items()
-    assert any(it["group_label"] == "財務" for it in items), "宣告裡沒有「財務」組 —— **儀器失效**。"
+    assert any(it["group_label"] == "財務會計" for it in items), "宣告裡沒有「財務會計」組 —— **儀器失效**。"
     return items
 
 
@@ -123,8 +123,8 @@ def test_ui6_finance_has_a_cashier_entry(nav):
     只有 cashier 權限的人，現在側欄上**沒有任何地方**可以到他被授權的頁。
     """
     groups = _groups(nav)
-    assert "財務" in groups, "宣告裡沒有「財務」組 —— **儀器失效**（抓到的分組：%s）" % sorted(groups)
-    _label, _cond, items = groups["財務"]
+    assert "財務會計" in groups, "宣告裡沒有「財務會計」組 —— **儀器失效**（抓到的分組：%s）" % sorted(groups)
+    _label, _cond, items = groups["財務會計"]
     labels = [it[0] for it in items]
     assert "出納" in labels, (
         "財務組底下沒有「出納」，現在只有：%s\n" % labels
@@ -144,7 +144,7 @@ def test_ui6_the_cashier_entry_is_shown_to_cashiers(nav):
     🔴 **「營運報表那一項要不要拿掉 `cCash`」不在這裡** —— 拿掉會踩到
     `_deniedPages` 的檔名碰撞（見本檔檔頭），**那條路由 A 裁**。
     """
-    _label, _cond, items = _groups(nav)["財務"]
+    _label, _cond, items = _groups(nav)["財務會計"]
     cashier = [it for it in items if it[0] == "出納"]
     assert cashier, "財務組底下沒有「出納」—— 見上一題。"
     assert "cashier" in cashier[0][3], (
@@ -216,7 +216,7 @@ def test_the_section_union_check_can_actually_fail(nav):
     assert _perm_set("any") == set(), "`_perm_set()` 把「任何人」當成權限"
     assert _perm_set(["reports", "finance"]) == {"reports", "finance"}, "`_perm_set()` 抽不出權限 —— **量法壞了**"
     assert _perm_set(["work_log"]) != _perm_set(["work_log", "quotation"]), "`_perm_set()` 沒有辨識力"
-    _l, _cond, items = _groups(nav)["財務"]
+    _l, _cond, items = _groups(nav)["財務會計"]
     assert items, "財務組底下一個項目都沒抓到 —— **儀器失效**。"
     assert any(it[3] for it in items), "財務組的項目一個權限都抽不出來 —— **儀器失效**。"
 
@@ -263,7 +263,7 @@ def test_ui6_finance_has_enough_items_to_render_a_dropdown(nav):
        **交付說明裡任何「現在會顯示／現在可以」的句子，
          都要問一次：這句話在哪一組權限下不成立？**
     """
-    _l, _c, items = _groups(nav)["財務"]
+    _l, _c, items = _groups(nav)["財務會計"]
     assert len(items) >= 2, (
         "財務組底下只有 %d 項：%s\n" % (len(items), [it[0] for it in items])
         + "☠️ renderMainNav 的 `if (g.items.length === 1)` 會把它渲染成**純連結**，沒有面板也沒有箭頭。")
@@ -425,9 +425,10 @@ def test_ui10_the_reports_item_is_not_shown_to_cashier_only_users(nav):
     ```
     ✅ 而本檔那兩道鎖門守門會繼續驗這件事 —— **它們不是靠這一段推演，是靠斷言。**
     """
-    _l, _c, items = _groups(nav)["財務"]
+    # 2026-09-30 選單拆分：營運報表搬到「經營分析」組（不在財務會計）
+    _l, _c, items = _groups(nav)["經營分析"]
     rpt = [it for it in items if it[0] == "營運報表"]
-    assert rpt, "財務組底下沒有「營運報表」—— **儀器失效**。"
+    assert rpt, "經營分析組底下沒有「營運報表」—— **儀器失效**。"
 
     flags = rpt[0][3]
     assert "cashier" not in flags, (
@@ -458,7 +459,7 @@ def test_ui10_the_cashier_item_still_reaches_its_own_page(nav):
     📌 本檔 `..._never_points_at_a_page_someone_else_denied` 是通用版，
        而這一題是它在**這一組權限**上的具體案例 —— 兩個都留著。
     """
-    _l, _c, items = _groups(nav)["財務"]
+    _l, _c, items = _groups(nav)["財務會計"]
     cash = [it for it in items if it[0] == "出納"]
     assert cash, "財務組底下沒有「出納」—— **儀器失效**。"
 

@@ -16,8 +16,9 @@ from db import get_db, CURRENT_VERSION, _MIGRATIONS
 from helpers import (
     _require_user, _tok, _audit, _get_setting, _set_setting, _get_edge_path,
     _filter_live_notifications, notify_module_activity, APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES,
-    APPROVAL_DOC_TYPE_LABELS, require_any_module)
+    APPROVAL_DOC_TYPE_LABELS, require_any_module, doc_types_meta)
 from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers   # M01-PLAN §3-2：L1
+from helpers.uploads import _check_upload_magic
 from helpers.errors import trace_id
 from photos import _process_project_photo, _photo_root
 import trail
@@ -140,57 +141,28 @@ def set_approval_flow_settings(body: ApprovalFlowSettings, authorization: str = 
 #     一把 key 的實際內容。
 # 這樣「切換」永遠不會弄丟另一邊的既有設定，勾來勾去也不會互相覆蓋。
 
-class ApprovalFlowScopeSettings(BaseModel):
-    # 刻意不給預設值——PUT 這個模型永遠代表「完整覆蓋」整組 scope，五個欄位都
-    # 必須明確帶值。2026-08-28 code review 抓到：若欄位有預設值，前端載入 scope
-    # 失敗（例如 GET 失敗留下空物件 `{}`）又剛好按了儲存，PUT body 會是 `{}`，
-    # Pydantic 會靜默把每個缺漏欄位填回這裡的預設值，等於在使用者毫無所覺的
-    # 情況下把已自訂的 scope 洗回預設分組。改成必填後，這種殘缺 body 會直接
-    # 422，而不是靜默套用預設值。
-    #
-    # 🔴 2026-09-23：這裡**少了三欄**，而少的那三類**存不進去**。
-    #
-    # ```
-    # GET   回 APPROVAL_DOC_TYPES 全部（8 類）
-    # 前端  docTypeOrder 列 7 類（2026-09-11 加了 completion／extra_expense）
-    # PUT   這個模型只有 5 欄 => pydantic 預設 extra='ignore'
-    #       ⇒ completion／extra_expense／voucher **被靜默丟掉**
-    # ```
-    # ☠️ 症狀不是報錯：使用者把「完工單」切成獨立設定、按儲存，
-    #    畫面說「✓ 已儲存套用範圍」，**而重新整理之後它自己變回統一流程**。
-    # 📌 〈判準的寬窄都會騙人〉的反面：這裡的模型**比對象窄**，
-    #    而窄掉的那一段沒有人會收到訊息。
-    quotation:          bool
-    shipping:           bool
-    invoice_voucher:    bool
-    payment_request:    bool
-    contractor_voucher: bool
-    completion:         bool
-    extra_expense:      bool
-    # ⚠️ `voucher`（會計傳票）也要有一欄 —— 它在 `APPROVAL_DOC_TYPES` 裡，
-    #    而 GET 會回它 ⇒ 前端原封不動送回來時，少一欄就是少一個決定。
-    #    📌 它不在 `DEFAULT_UNIFIED_DOC_TYPES`（A `§234` 裁）—— 那是**預設值**，
-    #       與「可不可以設定」是兩件事。
-    voucher:            bool
-    # ⚠️ `BN8`：`bonus`（獎金分潤單）同理，也不在 `DEFAULT_UNIFIED_DOC_TYPES`。
-    #    這裡少加的話，下面的 import-time 守門會**當場炸**——
-    #    那正是它的用途：忘了同步變成啟動就炸，不是十二天後才被使用者發現。
-    bonus:               bool
+def _validated_scope(body) -> dict:
+    """PUT scope 永遠代表「完整覆蓋」：鍵必須**剛好等於**目前登記的全部單據類型、值必須是布林。
+    （原本是固定欄位的 pydantic 模型＋import-time 斷言；單據類型改成可登記後，同一個決定改成在收到請求時查登記表。
+    缺欄／多欄／非布林 ⇒ 422，與舊行為一致：殘缺 body 不會被靜默補預設值。）"""
+    if not isinstance(body, dict):
+        raise HTTPException(422, "套用範圍必須是物件")
+    missing = [dt for dt in APPROVAL_DOC_TYPES if dt not in body]
+    extra = [k for k in body if k not in APPROVAL_DOC_TYPES]
+    if missing or extra:
+        raise HTTPException(422, "套用範圍的欄位要與目前的單據類型完全一致（缺：%s／多：%s）"
+                            % ("、".join(missing) or "無", "、".join(map(str, extra)) or "無"))
+    bad = [dt for dt in APPROVAL_DOC_TYPES if not isinstance(body[dt], bool)]
+    if bad:
+        raise HTTPException(422, "套用範圍的值必須是布林：%s" % "、".join(bad))
+    return {dt: body[dt] for dt in APPROVAL_DOC_TYPES}
 
 
-# 🔑 **驗「有沒有人做過決定」，不是驗「決定得對不對」。**
-#
-# ☠️ 上面那個缺三欄的狀態活了十二天，因為它的失敗方式是**少一段輸出**，
-#    不是一個錯誤 —— 沒有任何一次請求會紅。
-# ⇒ 下一次有人往 `APPROVAL_DOC_TYPES` 加一類而忘了這裡，**import 當場炸**，
-#   而不是等到某個使用者發現他的設定存不起來。
-_scope_fields = set(ApprovalFlowScopeSettings.model_fields)
-assert _scope_fields == set(APPROVAL_DOC_TYPES), (
-    "ApprovalFlowScopeSettings 的欄位與 APPROVAL_DOC_TYPES 對不上："
-    "少了 %s／多了 %s —— 少的那幾類 PUT 會被 pydantic 靜默丟掉，"
-    "而畫面照樣說「已儲存」。"
-    % (sorted(set(APPROVAL_DOC_TYPES) - _scope_fields) or "（無）",
-       sorted(_scope_fields - set(APPROVAL_DOC_TYPES)) or "（無）"))
+@router.get("/api/settings/approval-doc-types")
+def get_approval_doc_types(authorization: str = Header(None)):
+    """簽核單據類型清單（內建＋模組登記的）——簽核設定頁用。"""
+    _require_user(authorization)
+    return {"docTypes": doc_types_meta()}
 
 
 @router.get("/api/settings/approval-flow-scope")
@@ -201,10 +173,10 @@ def get_approval_flow_scope(authorization: str = Header(None)):
 
 
 @router.put("/api/settings/approval-flow-scope")
-def set_approval_flow_scope(body: ApprovalFlowScopeSettings, authorization: str = Header(None)):
+def set_approval_flow_scope(body: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
+    new_scope = _validated_scope(body)
     old_scope  = _get_setting("approval_flow_scope", {}) or {}
-    new_scope  = body.model_dump()
     unified_flow = _get_setting("unified_approval_flow", {"tiers": []}) or {"tiers": []}
     seeded = []
     for dt, is_unified in new_scope.items():
@@ -351,15 +323,30 @@ def mark_all_notifications_read(authorization: str = Header(None)):
 from helpers.module_registry import BADGE_PREFIXES as _MODULE_ACTION_PREFIXES  # noqa: E402
 from helpers.module_registry import refuse_unknown_new_keys  # noqa: E402
 from helpers.module_registry import BADGE_EXCLUDE as _MODULE_EXCLUDE_ACTIONS  # noqa: E402
+from helpers.audit import _MODULE_LABELS as _AUDIT_MODULE_LABELS  # noqa: E402
+from helpers.audit import _FAIL_REASON_LABELS as _AUDIT_FAIL_LABELS  # noqa: E402
+
+
+def _audit_counts_since(since_ts: str) -> str:
+    """module-counts 的 `since`（ISO 字串）不可早於今天往前 `_AUDIT_COUNTS_MAX_DAYS` 天（更早的一律當作那一天）。"""
+    from datetime import datetime, timedelta
+    floor = (datetime.now() - timedelta(days=_AUDIT_COUNTS_MAX_DAYS)).isoformat()
+    return since_ts if since_ts >= floor else floor
 
 
 @router.post("/api/audit-log/module-counts")
 def audit_module_counts(body: dict = Body(...), authorization: str = Header(None)):
     """Return per-module count of audit_log entries after given timestamps, excluding the caller's own actions."""
     user = _require_user(authorization)
+    # 安全審查 W3（2026-09-30）：這支直接數 audit_log，原本只要求登入 ⇒ 與歷史紀錄頁同一個權限（模組 audit_log）。
+    # 舊端點，前端已改用 /api/reads/module-counts，沒有活的呼叫端。
+    require_any_module(user, ["audit_log"], "歷史紀錄")
     modules_since = (body.get("modules") or {}) if isinstance(body, dict) else {}
     if not isinstance(modules_since, dict) or not modules_since:
         return {}
+    for _k, _ts in modules_since.items():                      # 非字串（數字、物件…）原本進 SQL 參數 ⇒ 500
+        if _ts is not None and not isinstance(_ts, str):
+            raise HTTPException(400, "since 時間必須是字串（ISO 格式）")
     conn = get_db()
     result = {}
     try:
@@ -368,8 +355,11 @@ def audit_module_counts(body: dict = Body(...), authorization: str = Header(None
             if not prefixes or not since_ts:
                 result[mod_key] = 0
                 continue
-            conds = " OR ".join("action LIKE ?" for _ in prefixes)
-            params = [p + "%" for p in prefixes] + [since_ts, user["username"]]
+            # 前綴比對改「範圍」（action >= 前綴 AND action < 前綴+1）：LIKE 前綴在預設大小寫不敏感下用不到索引（百萬列 11 秒）
+            conds = " OR ".join("(action >= ? AND action < ?)" for _ in prefixes)
+            params = [x for p in prefixes for x in (p, p[:-1] + chr(ord(p[-1]) + 1))]
+            since_ts = _audit_counts_since(since_ts)                # 最多往前 90 天：避免無界掃描
+            params += [since_ts, user["username"]]
             excl = _MODULE_EXCLUDE_ACTIONS.get(mod_key, ())
             if excl:
                 excl_ph = ", ".join("?" for _ in excl)
@@ -387,37 +377,198 @@ def audit_module_counts(body: dict = Body(...), authorization: str = Header(None
     return result
 
 
+#: 安全審查 W3 #5（2026-09-30）：歷史紀錄搜尋的輸入上限與成本上限
+_AUDIT_TEXT_MAX = 100          # 每個文字篩選值最多 100 字（超過截斷，不報錯）
+_AUDIT_OFFSET_MAX = 10000      # 舊的 offset 分頁最多跳 1 萬列（＝總數上限）；更深請用 before_id（keyset）
+_AUDIT_COUNT_CAP = 10000       # 「總數」最多數到 1 萬（超過回 10000＋totalCapped），不對全表 COUNT(*)
+_AUDIT_TREE_DEFAULT_DAYS = 90  # 分層樹沒給日期 ⇒ 預設看近 90 天（百萬列時無日期的 GROUP BY 要 10 秒以上）
+_AUDIT_TREE_MAX_DAYS = 366     # 分層樹的時間窗最長 366 天；超過就截成最近 366 天並在回應標 clamped
+_AUDIT_COUNTS_MAX_DAYS = 90    # module-counts 的 since 最多往前 90 天
+
+
+def _like_escape(s: str) -> str:
+    """LIKE 的跳脫：使用者輸入的 %、_、反斜線當字面值（否則 `q=%%%%…` 會變成全表掃描的萬用字元炸彈）。搭配 ESCAPE 子句。"""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _audit_filters(module, case_no, ref_no, user_q, action, date_from, date_to, result, q):
+    """歷史紀錄的共用篩選（列表、樹、失敗摘要同一套）。除 q（相容舊版的關鍵字）外都走索引：精確／前綴，不用 %x%。
+    文字值一律截到 `_AUDIT_TEXT_MAX`；LIKE 的萬用字元一律跳脫（安全審查 W3 #5）。"""
+    mx = _AUDIT_TEXT_MAX
+    module, case_no, ref_no, user_q, action, q = [
+        (v[:mx] if isinstance(v, str) else v) for v in (module, case_no, ref_no, user_q, action, q)]
+    date_from, date_to = [(v[:32] if isinstance(v, str) else v) for v in (date_from, date_to)]
+    where, params = [], []
+    if module:
+        where.append("module=?");        params.append("" if module == "other" else module)
+    if case_no:
+        where.append("case_no=?");       params.append(case_no.strip())
+    if ref_no:
+        where.append("ref_no=?");        params.append(ref_no.strip())
+    if user_q:
+        u = user_q.strip()
+        where.append("(username=? OR display_name=? OR username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\')")
+        params.extend([u, u, _like_escape(u) + "%", _like_escape(u) + "%"])
+    if action:
+        where.append("action=?");        params.append(action)
+    if date_from:
+        where.append("at>=?");           params.append(date_from)
+    if date_to:
+        where.append("at<?");            params.append(date_to + "T99" if len(date_to) == 10 else date_to)
+    if result in ("ok", "fail"):
+        where.append("result=?");        params.append(result)
+    if q:
+        like = "%" + _like_escape(q) + "%"
+        where.append("(target_label LIKE ? ESCAPE '\\' OR username LIKE ? ESCAPE '\\'"
+                     " OR display_name LIKE ? ESCAPE '\\' OR target_id LIKE ? ESCAPE '\\')")
+        params.extend([like, like, like, like])
+    return where, params
+
+
+def _require_audit_view(authorization):
+    # 2026-09-14 使用者裁示：這頁原本沒有對應的模組 key，只能靠角色寫死（`admin` 以上）。
+    # 建了 key（`audit_log`）後跟其他模組一樣可逐帳號勾選；列表、樹、失敗摘要同一個權限。
+    user = _require_user(authorization)
+    require_any_module(user, ["audit_log"], "歷史紀錄")
+    return user
+
+
 @router.get("/api/audit-log")
 def list_audit_log(
     limit:  int = 100,
     offset: int = 0,
     action: str = None,
     q:      str = None,
+    module: str = None,
+    case_no: str = None,
+    ref_no: str = None,
+    user:   str = None,
+    date_from: str = None,
+    date_to: str = None,
+    result: str = None,
+    before_id: int = None,
     authorization: str = Header(None),
 ):
-    # 2026-09-14 使用者裁示：這頁原本沒有對應的模組 key，只能靠角色寫死
-    # （`admin` 以上）。既然全站已經改成「未開啟的模組直接不顯示」，就替它
-    # 建一個 key（`audit_log`）——「沒有對應模組 key 也建立就沒有這個問題」。
-    # 好處是它從此跟其他模組一樣可以逐帳號勾選，不用再為了「誰能看稽核紀錄」
-    # 去改程式碼裡的角色判斷式。
-    user = _require_user(authorization)
-    require_any_module(user, ["audit_log"], "歷史紀錄")
+    """使用者 2026-09-30：「人員的紀錄或是操作紀錄可以分層依模組、案件等搜尋，或是紀錄中有失敗能快速查詢」。
+    分頁：`before_id`（keyset，走索引，深頁不掃描）；舊的 `offset` 仍可用。`limit` 上限 200。"""
+    _require_audit_view(authorization)
+    limit = max(1, min(int(limit), 200))
     conn = get_db()
-    where, params = [], []
-    if action:
-        where.append("action=?");   params.append(action)
-    if q:
-        like = f'%{q}%'
-        where.append("(target_label LIKE ? OR username LIKE ? OR display_name LIKE ? OR target_id LIKE ?)")
-        params.extend([like, like, like, like])
-    cond = ("WHERE " + " AND ".join(where)) if where else ""
-    total = conn.execute(f"SELECT COUNT(*) FROM audit_log {cond}", params).fetchone()[0]
-    rows  = conn.execute(
-        f"SELECT * FROM audit_log {cond} ORDER BY id DESC LIMIT ? OFFSET ?",
-        params + [limit, offset]
-    ).fetchall()
-    conn.close()
-    return {"total": total, "items": [dict(r) for r in rows]}
+    try:
+        where, params = _audit_filters(module, case_no, ref_no, user, action, date_from, date_to, result, q)
+        cond = ("WHERE " + " AND ".join(where)) if where else ""
+        # 總數只數到 _AUDIT_COUNT_CAP（帶索引的篩選很快；無篩選時不對百萬列做 COUNT(*)）
+        total = conn.execute(f"SELECT COUNT(*) FROM (SELECT 1 FROM audit_log {cond} LIMIT {_AUDIT_COUNT_CAP})", params).fetchone()[0]
+        w2, p2 = list(where), list(params)
+        if before_id:
+            w2.append("id<?");           p2.append(int(before_id))
+        cond2 = ("WHERE " + " AND ".join(w2)) if w2 else ""
+        rows = conn.execute(
+            f"SELECT * FROM audit_log {cond2} ORDER BY id DESC LIMIT ? OFFSET ?",
+            p2 + [limit, 0 if before_id else max(0, min(int(offset), _AUDIT_OFFSET_MAX))]
+        ).fetchall()
+    finally:
+        conn.close()
+    items = [dict(r) for r in rows]
+    for it in items:
+        it["module_label"] = _AUDIT_MODULE_LABELS.get(it.get("module") or "", it.get("module") or "其他")
+        it["reason_label"] = _AUDIT_FAIL_LABELS.get(it.get("reason_code") or "", "")
+    return {"total": total, "totalCapped": total >= _AUDIT_COUNT_CAP, "items": items,
+            "next_before_id": items[-1]["id"] if len(items) == limit else None}
+
+
+def _audit_tree_window(date_from, date_to):
+    """分層樹的時間窗（YYYY-MM-DD，含頭尾）：沒給日期 ⇒ 近 `_AUDIT_TREE_DEFAULT_DAYS` 天；日期格式錯 ⇒ 400；
+    跨度超過 `_AUDIT_TREE_MAX_DAYS` ⇒ 只取最近那段並 `clamped: true`（畫面據此提示「已縮到上限」）。"""
+    from datetime import date, timedelta
+    def _d(v, name):
+        try:
+            return date.fromisoformat((v or "")[:10])
+        except ValueError:
+            raise HTTPException(400, "%s 格式錯誤，需為 YYYY-MM-DD" % name)
+    end = _d(date_to, "date_to") if date_to else date.today()
+    start = _d(date_from, "date_from") if date_from else end - timedelta(days=_AUDIT_TREE_DEFAULT_DAYS)
+    if start > end:
+        raise HTTPException(400, "date_from 不可晚於 date_to")
+    clamped = (end - start).days > _AUDIT_TREE_MAX_DAYS
+    if clamped:
+        start = end - timedelta(days=_AUDIT_TREE_MAX_DAYS)
+    return {"from": start.isoformat(), "to": end.isoformat(), "defaultDays": _AUDIT_TREE_DEFAULT_DAYS,
+            "maxDays": _AUDIT_TREE_MAX_DAYS, "clamped": clamped, "defaulted": not (date_from or date_to)}
+
+
+@router.get("/api/audit-log/tree")
+def audit_log_tree(
+    level: str = "module",
+    module: str = None,
+    case_no: str = None,
+    ref_no: str = None,
+    user:   str = None,
+    action: str = None,
+    date_from: str = None,
+    date_to: str = None,
+    result: str = None,
+    authorization: str = Header(None),
+):
+    """分層下鑽：module（模組）→ case（案件，需 module）→ ref（單據，需 module／case_no）。每層回
+    `[{key, label, count, failCount, lastAt}]`；事件層用 `GET /api/audit-log` 帶同一組篩選。"""
+    _require_audit_view(authorization)
+    col = {"module": "module", "case": "case_no", "ref": "ref_no"}.get(level)
+    if col is None:
+        raise HTTPException(400, "level 只能是 module／case／ref")
+    window = _audit_tree_window(date_from, date_to)
+    conn = get_db()
+    try:
+        where, params = _audit_filters(module, case_no, ref_no, user, action, window["from"], window["to"], result, None)
+        # 加一個 **id 範圍**收窄掃描：`at` 條件單獨會讓 SQLite 走 idx_audit_at 再逐列回表（100 萬列 1.7～4.7 秒）。
+        # id 上下界各一次索引查詢取得：窗內每一列的 id 必定落在 [MIN(id where at>=起), MAX(id where at<迄)] 之內（與資料是否依時間遞增無關），
+        # `at` 條件仍保留 ⇒ 結果恆正確；稽核列依寫入順序遞增（正式機如此）時掃描量就是窗內那一段，不是全表。
+        lo = conn.execute("SELECT MIN(id) FROM audit_log WHERE at >= ?", (window["from"],)).fetchone()[0]
+        hi = conn.execute("SELECT MAX(id) FROM audit_log WHERE at < ?", (window["to"] + "T99",)).fetchone()[0]
+        if lo is None or hi is None or lo > hi:
+            return {"level": level, "items": [], "window": window}
+        where += ["id>=?", "id<=?"]
+        params += [lo, hi]
+        cond = ("WHERE " + " AND ".join(where)) if where else ""
+        rows = conn.execute(
+            f"SELECT {col} AS k, COUNT(*) AS n, SUM(result='fail') AS f, MAX(id) AS last_id "
+            f"FROM audit_log {cond} GROUP BY {col} ORDER BY MAX(id) DESC LIMIT 500", params).fetchall()
+        last_at = {r["last_id"]: (conn.execute("SELECT at FROM audit_log WHERE id=?", (r["last_id"],)).fetchone() or [None])[0]
+                   for r in rows}
+    finally:
+        conn.close()
+    out = []
+    for r in rows:
+        k = r["k"] or ""
+        label = (_AUDIT_MODULE_LABELS.get(k, k) if level == "module" else k) or "其他"
+        out.append({"key": k or ("other" if level == "module" else ""), "label": label, "count": r["n"],
+                    "failCount": r["f"] or 0, "lastAt": last_at.get(r["last_id"])})
+    return {"level": level, "items": out, "window": window}
+
+
+@router.get("/api/audit-log/failures/summary")
+def audit_log_failure_summary(date_from: str = None, date_to: str = None, authorization: str = Header(None)):
+    """失敗紀錄摘要：總數＋原因碼／模組／人員前 10。"""
+    _require_audit_view(authorization)
+    conn = get_db()
+    try:
+        where, params = _audit_filters(None, None, None, None, None, date_from, date_to, "fail", None)
+        cond = "WHERE " + " AND ".join(where)
+
+        def top(col, n=10):
+            return conn.execute(
+                f"SELECT {col} AS k, COUNT(*) AS n FROM audit_log {cond} GROUP BY {col} ORDER BY n DESC LIMIT {n}",
+                params).fetchall()
+        total = conn.execute(f"SELECT COUNT(*) FROM audit_log {cond}", params).fetchone()[0]
+        reasons, mods, users = top("reason_code"), top("module"), top("username")
+    finally:
+        conn.close()
+    return {
+        "total": total,
+        "byReason": [{"key": r["k"], "label": _AUDIT_FAIL_LABELS.get(r["k"], r["k"] or "其他"), "count": r["n"]} for r in reasons],
+        "byModule": [{"key": r["k"] or "other", "label": _AUDIT_MODULE_LABELS.get(r["k"], r["k"]) or "其他", "count": r["n"]} for r in mods],
+        "byUser": [{"key": r["k"], "label": r["k"] or "（未登入）", "count": r["n"]} for r in users],
+    }
 
 
 # ── Work Logs ─────────────────────────────────────────────────────────────────
@@ -568,8 +719,12 @@ async def upload_work_log_photos(
     new_photos = []
     for upload in files:
         raw_bytes = await upload.read()
-        processed, gps_str, wm_str = _process_project_photo(raw_bytes, user['display_name'])
         ext   = os.path.splitext(upload.filename or 'photo.jpg')[1] or '.jpg'
+        # 白名單＝前端（case-management.html 的 accept＝jpeg/png/pdf）本來就送得出去的東西＋手機常見格式（heic/heif/webp/gif）
+        if ext.lower() not in ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif', '.pdf'):
+            raise HTTPException(400, f"不支援的檔案格式：{upload.filename}（僅支援 jpg/png/gif/webp/heic/pdf）")
+        _check_upload_magic(upload.filename or 'photo.jpg', ext, raw_bytes, "work_log_photos", user['username'])
+        processed, gps_str, wm_str = _process_project_photo(raw_bytes, user['display_name'])
         fname = uuid.uuid4().hex[:14] + ext.lower()
         with open(os.path.join(save_dir, fname), 'wb') as f:
             f.write(processed)
@@ -624,6 +779,123 @@ def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(N
                             f"日誌 #{wid}", "work-log.html")
     _audit(_tok(authorization), 'work_log.photo_delete', 'work_log', str(wid), str(wid), {'photoId': photo_id})
     return {"ok": True}
+
+
+class _WorkLogPhotoAccess:
+    """`uploads.path_access`（IP-104，2026-09-30 P0）：`projects/…`（demo：`_demo_projects/…`）＝工作日誌照片
+    （含 2026-08-26 從專案日誌搬過來的舊路徑）。擁有單據＝`photos` 列出這個路徑的那筆 `work_logs`；讀取規則＝
+    `GET /api/work-logs`（`work_log` 或 `case_manage` 模組；superadmin 直通），或該日誌掛的案件的動態看得到
+    （案件動態端點把掛在案件上的工作日誌連照片一起列出，規則 `case_documents_readable`）。沒有任何一筆列出 ⇒ False。"""
+    FOLDERS = ("projects",)
+
+    @staticmethod
+    def readable(conn, folder, rest, user):
+        from helpers.auth import user_has_module
+        from helpers.case_access import case_documents_readable
+        from helpers.uploads import upload_owner
+        by_module = user.get("role") == "superadmin" or any(user_has_module(user, k) for k in ('work_log', 'case_manage'))
+        want = (folder, tuple(rest))
+        tail = "/".join(rest)
+        like = "%" + tail.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        for r in conn.execute("SELECT case_no, photos FROM work_logs WHERE photos LIKE ? ESCAPE '\\'", (like,)):
+            try:
+                photos = json.loads(r["photos"] or "[]") or []
+            except (TypeError, ValueError):
+                continue
+            if not any(isinstance(p, dict) and upload_owner(p.get("path") or "") == want for p in photos):
+                continue
+            if by_module or (r["case_no"] and case_documents_readable(conn, r["case_no"], user)):
+                return True
+        return False
+
+
+from core import registry as _registry  # noqa: E402
+_registry.provide("uploads.path_access", "work_log", _WorkLogPhotoAccess)
+
+
+class _WorkLogCatalog:
+    """`attachments.catalog`（契約 v1，2026-09-30 P2）：工作日誌照片（`work_logs.photos`）。`doc_no`＝日誌 id。
+    權限＝`_WorkLogPhotoAccess` 同一支（`work_log`／`case_manage` 模組 ∨ 日誌掛的案件動態看得到）。"""
+    CATEGORIES = {
+        "work_log_photo": {"label": "工作日誌照片", "doc": "工作日誌", "module": "工作日誌"},
+    }
+
+    @staticmethod
+    def open(conn, user, source_type, doc_no, file_id):
+        from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, opened_upload_file, pick_file, upload_owner
+        if source_type != "work_log_photo":
+            raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
+        if not str(doc_no).isdigit():
+            return None
+        row = conn.execute("SELECT case_no, photos FROM work_logs WHERE id = ?", (int(doc_no),)).fetchone()
+        if row is None:
+            return None
+        try:
+            photos = json.loads(row["photos"] or "[]") or []
+        except (TypeError, ValueError):
+            raise AttachmentSourceError("工作日誌「%s」的照片資料格式不正確。" % doc_no)
+        entry = pick_file(photos, file_id)
+        if entry is None:
+            return None
+        from helpers.uploads import upload_path_key
+        if upload_path_key(entry, "projects", depth=3) != "worklog_%d" % int(doc_no):
+            return None                                          # 路徑不在這則日誌自己的資料夾 ⇒ 當作沒有這個檔（W3）
+        owner = upload_owner(entry.get("path") or "")
+        if owner is None or not _WorkLogPhotoAccess.readable(conn, owner[0], owner[1], user):
+            raise AttachmentNotVisible()
+        return opened_upload_file(entry)
+
+    # ── 搜尋（附件目錄 P3）：權限＝open() 同一支 `_WorkLogPhotoAccess.readable`，路徑綁日誌（同 open()）；
+    #    只取檔案 metadata——照片的 GPS／浮水印欄位不進搜尋項目 ──
+    @staticmethod
+    def _collect(conn, user, crit):
+        import mimetypes
+        from helpers import attachment_search as S
+        from helpers.uploads import upload_owner, upload_path_key
+        sql, args = "SELECT id, case_no, photos FROM work_logs WHERE photos LIKE ?", ["%\"path\"%"]
+        if crit["quote_no"]:
+            sql += " AND case_no = ?"
+            args.append(crit["quote_no"])
+        rows = conn.execute(sql, args).fetchall()
+        names = S.case_names(conn, {r["case_no"] for r in rows if r["case_no"]})
+        ok, items = {}, []
+        for r in rows:
+            try:
+                photos = json.loads(r["photos"] or "[]") or []
+            except (TypeError, ValueError):
+                continue
+            cust, proj = names.get(r["case_no"], ("", ""))
+            for p in photos:
+                if not isinstance(p, dict) or upload_path_key(p, "projects", depth=3) != "worklog_%d" % int(r["id"]):
+                    continue                                     # 與 open() 同一道：路徑不在這則日誌的資料夾 ⇒ 不列
+                owner = upload_owner(p.get("path") or "")
+                if owner is None:
+                    continue
+                if owner not in ok:
+                    ok[owner] = bool(_WorkLogPhotoAccess.readable(conn, owner[0], owner[1], user))
+                if not ok[owner]:
+                    continue
+                f = {"id": p.get("id"), "filename": p.get("filename"), "size": p.get("size") or 0,
+                     "mime": mimetypes.guess_type(str(p.get("filename") or ""))[0] or "",
+                     "uploadedBy": p.get("uploaded_by"), "uploadedAt": p.get("uploaded_at")}
+                items.append(S.make_item("work_log_photo", r["id"], "工作日誌 #%s" % r["id"], f, quote_no=r["case_no"] or "",
+                                         customer=cust, project=proj, link="work-log.html"))
+        return items
+
+    @staticmethod
+    def search(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.finish(_WorkLogCatalog._collect(conn, user, c), c)
+
+    @staticmethod
+    def count(conn, user, crit):
+        from helpers import attachment_search as S
+        c = S.normalize_crit(crit)
+        return S.count_by_type(_WorkLogCatalog._collect(conn, user, c), c)
+
+
+_registry.provide("attachments.catalog", "work_log", _WorkLogCatalog)
 
 
 # ── 執行時的開關（2026-09-22 §8 FX1a）─────────────────────────────────────────
@@ -2252,23 +2524,57 @@ def get_google_calendar(authorization: str = Header(None)):
     # 提示管理員授權時要用哪個 Gmail 帳號（跟寄信用的 SMTP 帳號同一組）
     email_cfg = _get_setting("email_notify", {}) or {}
     safe["smtp_user_hint"] = email_cfg.get("smtp_user", "")
+    # 事件種類開關（2026-09-30）：回有效值（缺項＝預設）＋目錄
+    from helpers.google_calendar import event_switches, event_types
+    safe["events"] = event_switches(cfg)
+    safe["eventTypes"] = event_types()
     return safe
+
+
+def _gcal_event_changes(body: dict, current: dict):
+    """驗 body["events"]（{代碼: bool}，只收已知代碼）⇒ (新的 events dict 或 None, [(代碼, 舊, 新)])。不合法 ⇒ 400。"""
+    from helpers.google_calendar import EVENT_CODES, event_switches
+    if "events" not in body:
+        return None, []
+    ev = body["events"]
+    if not isinstance(ev, dict):
+        raise HTTPException(400, "events 必須是 {事件代碼: true/false}")
+    bad = [k for k in ev if k not in EVENT_CODES]
+    if bad:
+        raise HTTPException(400, "未知的事件種類：%s" % "、".join(sorted(map(str, bad))))
+    if any(not isinstance(v, bool) for v in ev.values()):
+        raise HTTPException(400, "事件開關的值必須是 true 或 false")
+    before = event_switches(current)
+    stored = dict(current.get("events") if isinstance(current.get("events"), dict) else {})
+    stored.update(ev)
+    changes = [(c, before[c], ev[c]) for c in EVENT_CODES if c in ev and ev[c] != before[c]]
+    return stored, changes
 
 
 @router.put("/api/settings/google-calendar")
 def set_google_calendar(body: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     current = _get_setting("google_calendar", {}) or {}
+    new_events, changes = _gcal_event_changes(body, current)
     data = {k: body[k] for k in _GCAL_DEFAULTS if k in body}
     data = {**_GCAL_DEFAULTS, **current, **data}
     if data.get("client_secret") in ("", _MASKED):
         data["client_secret"] = current.get("client_secret", "")
     # refresh_token 只由一次性授權腳本寫入，這個端點絕不清空/覆蓋它
     data["refresh_token"] = current.get("refresh_token", "")
+    if new_events is not None:
+        data["events"] = new_events
     _set_setting("google_calendar", data)
-    _audit(_tok(authorization), "settings.google_calendar.update", "settings",
+    tok = _tok(authorization)
+    _audit(tok, "settings.google_calendar.update", "settings",
            "google_calendar", "Google 行事曆設定")
-    return {"ok": True}
+    # 每個事件種類開關的變更各記一筆（誰、哪一種、由什麼改成什麼）
+    from helpers.google_calendar import event_types
+    labels = {t["code"]: t["label"] for t in event_types()}
+    for code, old, new in changes:
+        _audit(tok, "settings.google_calendar.event_toggle", "settings", "google_calendar." + code,
+               "行事曆事件「%s」%s" % (labels[code], "開啟" if new else "關閉"), {"event": code, "from": old, "to": new})
+    return {"ok": True, "changed": [c for c, _o, _n in changes]}
 
 
 @router.post("/api/settings/google-calendar/test")

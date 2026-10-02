@@ -2,11 +2,13 @@
 """每模組獨立版本的 migration（CORE-SPEC §6）。
 
 [單位] plat:migrations    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] current_version, incomplete, register, registered, run_all
+[公開介面] NEXT, current_version, incomplete, register, registered, run_all
 [不變式] 版本從 1 起、連續、不可重複；每支**回 None** 才記版本（回原因字串＝未完成：不記、ERROR、該模組後面的這次不跑、其他模組照跑、
          不丟例外）；只准新增（加表、加欄位），不刪欄位、不改名；每支必須冪等
          core 以外的模組逐支 SAVEPOINT：**丟例外＝未完成**（原因「例外：<型別>: <訊息>」、撤回這一支的寫入、不往上丟，稽核 D PM1）；
          core 的例外照舊往上丟；模組 migration 不准自己 commit（run_all 負責）
+         `register("core", NEXT, fn)`＝未取號（分支用，PLAYBOOK §G6）：排在已編號的之後跑、**不記版號**、每次 run_all 重跑
+         （靠冪等）；列車 `train_number.py assign` 換成連續整數；platform／列車上有 NEXT ⇒ 守門紅（test_version_slots）
 [契約題] tests/test_definitions_store_2026_09_25.py、tests/platform/test_migration_incomplete.py
 [注意] V9 基準（db._MIGRATIONS v1~v116）凍結不動，新表一律由這裡建；模組沒安裝 ⇒ migration 沒登記 ⇒ 不建它的表
 
@@ -31,11 +33,22 @@ import sqlite3
 from datetime import datetime
 
 _REGISTRY = {}          # module -> {version: fn}
+_PENDING = []           # 未取號的 core migration（register("core", NEXT, fn)），依登記順序
+#: 未取號的版號（只准 core；分支上用，列車取號時換成整數——PLAYBOOK §G6）
+NEXT = "NEXT"
 _INCOMPLETE = {}        # 正規化的庫路徑 -> {module: (version, reason)}；主庫、demo 庫各一份，互不覆蓋
 _log = logging.getLogger("motrix.migrations")
 
 
 def register(module: str, version: int, fn) -> None:
+    if version == NEXT:
+        # 為什麼不在執行時自動給號（max+1）：開發庫會記下那個號碼，列車取號後同一號可能換成別支 ⇒ 那一支在該庫永遠不跑。
+        # 不記版號＋每次重跑（靠冪等）⇒ 資料庫裡出現的永遠只有列車定的連續整數。
+        if module != "core":
+            raise ValueError("NEXT（未取號）只給 core 用；模組 migration 用 ModuleSpec.migrations 的整數版號")
+        if fn not in _PENDING:
+            _PENDING.append(fn)
+        return
     per = _REGISTRY.setdefault(module, {})
     if version in per and per[version] is not fn:
         raise ValueError("migration %s v%d 已登記為另一支函式" % (module, version))
@@ -100,6 +113,17 @@ def run_all(conn) -> dict:
                 "ON CONFLICT(module) DO UPDATE SET version=excluded.version, applied_at=excluded.applied_at",
                 (module, v, datetime.now().isoformat()))
             conn.commit()
+        if module == "core" and _PENDING and module not in todo:
+            _log.warning("未取號的 core migration %d 支（只限開發分支；不記版號、每次啟動重跑）：%s",
+                         len(_PENDING), ", ".join(getattr(f, "__name__", "?") for f in _PENDING))
+            for fn in _PENDING:
+                res = fn(conn)                  # core：例外照舊往上丟
+                if res is not None:
+                    why = res.strip() if isinstance(res, str) and res.strip() else (
+                        "migration 回傳值只能是 None（完成）或原因字串（未完成），收到 %r" % (res,))
+                    todo[module] = (max(versions) + 1, why)
+                    _log.error("未取號的 core migration 未完成（%s）：%s", getattr(fn, "__name__", "?"), why)
+                    break
         end = current_version(conn, module)
         if end != start:
             ran[module] = (start, end)
@@ -208,5 +232,181 @@ def _core_v2_custom_records(conn):
     conn.commit()
 
 
+def _cols(conn, table):
+    return {r[1] for r in conn.execute("PRAGMA table_info(%s)" % table).fetchall()}
+
+
+def _add_col(conn, table, col, ddl):
+    if col not in _cols(conn, table):
+        conn.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, col, ddl))
+
+
+def _core_v3_builder_foundation(conn):
+    """建構器 S1～S5 底層（只增不改，建構器第三輪一次設計）：
+    ① 定義送審／退回（ui_definitions 加 submitted_by／submitted_at／decision_json；status 另有 submitted／rejected，本表無 CHECK）；
+    ② 單據修訂 -R（custom_records 加 base_no／rev／supersedes_id；custom_record_revisions 記修訂原因與前後單）；
+    ③ 金流事件 outbox（custom_record_finance_outbox：即時算不建分錄表，事件供 W4 總帳消費；dedupe_key 唯一＝冪等）。
+    明細表值（data_json 內 list-of-dict）、欄位／選單可見設定（定義 body 的 fields[].access／menu.visibleTo／menu.group）
+    都在 JSON 內，不需結構變更。"""
+    _add_col(conn, "ui_definitions", "submitted_by", "TEXT NOT NULL DEFAULT ''")
+    _add_col(conn, "ui_definitions", "submitted_at", "TEXT NOT NULL DEFAULT ''")
+    _add_col(conn, "ui_definitions", "decision_json", "TEXT NOT NULL DEFAULT '{}'")
+    _add_col(conn, "custom_records", "base_no", "TEXT NOT NULL DEFAULT ''")
+    _add_col(conn, "custom_records", "rev", "INTEGER NOT NULL DEFAULT 0")
+    _add_col(conn, "custom_records", "supersedes_id", "INTEGER NOT NULL DEFAULT 0")
+    conn.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_custom_records_base ON custom_records(module_key, base_no);
+        CREATE TABLE IF NOT EXISTS custom_record_revisions (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            module_key  TEXT    NOT NULL,
+            base_no     TEXT    NOT NULL,
+            rev         INTEGER NOT NULL,
+            record_id   INTEGER NOT NULL,
+            prev_id     INTEGER NOT NULL DEFAULT 0,
+            reason      TEXT    NOT NULL DEFAULT '',
+            by_user     TEXT    NOT NULL DEFAULT '',
+            at          TEXT    NOT NULL DEFAULT '',
+            UNIQUE(module_key, base_no, rev)
+        );
+        CREATE TABLE IF NOT EXISTS custom_record_finance_outbox (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            dedupe_key   TEXT    NOT NULL UNIQUE,
+            event        TEXT    NOT NULL,
+            module_key   TEXT    NOT NULL,
+            record_id    INTEGER NOT NULL,
+            record_no    TEXT    NOT NULL DEFAULT '',
+            kind         TEXT    NOT NULL DEFAULT '',
+            payload_json TEXT    NOT NULL DEFAULT '{}',
+            created_at   TEXT    NOT NULL DEFAULT '',
+            processed_at TEXT    NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_finance_outbox_pending ON custom_record_finance_outbox(processed_at, id);
+        CREATE INDEX IF NOT EXISTS idx_custom_finance_outbox_record ON custom_record_finance_outbox(module_key, record_id);
+    """)
+    conn.commit()
+
+
 register("core", 1, _core_v1_ui_definitions)
 register("core", 2, _core_v2_custom_records)
+def _core_v4_custom_record_files(conn):
+    """自訂模組附件（file／image 欄位，建構器 S2）：先傳後綁單。上傳當下 record_id＝0（暫存，只有上傳者讀得到）；
+    單據存檔時綁上 record_id；從單據拿掉 ⇒ 列與實體檔一併刪。實體檔在 uploads/custom_records/<模組>/…（demo 走 _demo_uploads 前綴）。
+    T1（含檔名；不含檔案內容——實體檔隨 uploads 鏡像備份）。"""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS custom_record_files (
+            id          TEXT    PRIMARY KEY,
+            module_key  TEXT    NOT NULL,
+            field       TEXT    NOT NULL,
+            record_id   INTEGER NOT NULL DEFAULT 0,
+            path        TEXT    NOT NULL UNIQUE,
+            filename    TEXT    NOT NULL DEFAULT '',
+            size        INTEGER NOT NULL DEFAULT 0,
+            mime        TEXT    NOT NULL DEFAULT '',
+            uploaded_by TEXT    NOT NULL DEFAULT '',
+            uploaded_at TEXT    NOT NULL DEFAULT '',
+            bound_at    TEXT    NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_record_files_record ON custom_record_files(record_id);
+        CREATE INDEX IF NOT EXISTS idx_custom_record_files_staged ON custom_record_files(record_id, uploaded_at);
+    """)
+    conn.commit()
+
+
+def _core_v5_custom_record_snapshots(conn):
+    """單據送簽修訂紀錄（建構器 S5）：每次送簽一列不可變快照（欄位值＋定義版本），決定（核可／退回＋原因）回填同一列；
+    `custom_records.revision`＝目前修訂號（0＝首次送簽或還沒送簽；-R<n> 顯示尾碼）。與 v3 的 `custom_record_revisions`（修訂已核准單據＝另開新單）是兩件事。
+    T1（欄位值快照＝單據內容的複本，跟著每日 JSON 匯出）。"""
+    _add_col(conn, "custom_records", "revision", "INTEGER NOT NULL DEFAULT 0")
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS custom_record_snapshots (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_id    INTEGER NOT NULL,
+            module_key   TEXT    NOT NULL,
+            revision     INTEGER NOT NULL,
+            data_json    TEXT    NOT NULL DEFAULT '{}',
+            def_version  INTEGER NOT NULL DEFAULT 0,
+            submitted_by TEXT    NOT NULL DEFAULT '',
+            submitted_at TEXT    NOT NULL DEFAULT '',
+            decision     TEXT    NOT NULL DEFAULT '',
+            decided_by   TEXT    NOT NULL DEFAULT '',
+            decided_at   TEXT    NOT NULL DEFAULT '',
+            note         TEXT    NOT NULL DEFAULT '',
+            UNIQUE(record_id, revision)
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_record_snapshots_module ON custom_record_snapshots(module_key, record_id);
+    """)
+    conn.commit()
+
+
+register("core", 3, _core_v3_builder_foundation)
+register("core", 4, _core_v4_custom_record_files)
+register("core", 5, _core_v5_custom_record_snapshots)
+
+
+# ── core v6：歷史紀錄分層搜尋（2026-09-30）───────────────────────────────────
+# 凍結的規則副本（migration 不准 import 會演進的程式）；與 helpers/audit.py::_derive_fields 同一份規則，
+# tests/test_audit_search_2026_09_30.py 逐列驗證兩邊算出同樣的結果。
+_V3_DOC_TARGET_TYPES = frozenset({
+    "vouchers", "contractor_dispatch", "shipping_note", "payslip", "completion_note", "invoice_voucher", "payment_request",
+    "bonus_awards", "bonus_case_awards", "contractor_payment_voucher", "custom_record", "stock_batch", "network_plan",
+    "case_action_item", "case_update",
+})
+_V3_BATCH = 5000
+
+
+def _v3_derive(action, target_type, target_id, target_label, detail):
+    import json as _json
+    import re as _re
+    rx = _re.compile(r"MQ-\d{6}-\d{3}")
+    module = (action or "").split(".", 1)[0]
+    hay = [str(target_id or ""), str(target_label or "")]
+    try:
+        d = _json.loads(detail or "{}")
+    except ValueError:
+        d = detail
+    if isinstance(d, dict):
+        hay += [v for v in d.values() if isinstance(v, str)]
+    elif isinstance(d, str):
+        hay.append(d)
+    case_no = ""
+    for h in hay:
+        m = rx.search(h)
+        if m:
+            case_no = m.group(0)
+            break
+    ref_no = str(target_id or "") if (target_type or "") in _V3_DOC_TARGET_TYPES else ""
+    return module, case_no, ref_no
+
+
+def _core_v6_audit_search(conn):
+    """audit_log 加 module／case_no／ref_no／result／reason_code／status_code＋搜尋索引；舊列分批回填（每批 commit、可重入）。"""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(audit_log)").fetchall()}
+    if not cols:
+        return "audit_log 表不存在"
+    for name, ddl in (("module", "TEXT NOT NULL DEFAULT ''"), ("case_no", "TEXT NOT NULL DEFAULT ''"),
+                      ("ref_no", "TEXT NOT NULL DEFAULT ''"), ("result", "TEXT NOT NULL DEFAULT 'ok'"),
+                      ("reason_code", "TEXT NOT NULL DEFAULT ''"), ("status_code", "INTEGER NOT NULL DEFAULT 0")):
+        if name not in cols:
+            conn.execute("ALTER TABLE audit_log ADD COLUMN %s %s" % (name, ddl))
+    for idx, cols_ in (("idx_audit_module", "module, result, id"), ("idx_audit_case", "case_no, result, id"),
+                       ("idx_audit_ref", "ref_no, result, id"),   # 含 result＝分層樹的 GROUP BY 只掃索引（不回表）
+                       ("idx_audit_result", "result, id"), ("idx_audit_user", "username, id"), ("idx_audit_at", "at"),
+                       ("idx_audit_action", "action, id")):
+        conn.execute("CREATE INDEX IF NOT EXISTS %s ON audit_log(%s)" % (idx, cols_))
+    conn.commit()
+    last = 0
+    while True:
+        rows = conn.execute(
+            "SELECT id, action, target_type, target_id, target_label, detail FROM audit_log "
+            "WHERE id>? AND module='' ORDER BY id LIMIT ?", (last, _V3_BATCH)).fetchall()
+        if not rows:
+            break
+        conn.executemany(
+            "UPDATE audit_log SET module=?, case_no=?, ref_no=? WHERE id=?",
+            [_v3_derive(r[1], r[2], r[3], r[4], r[5]) + (r[0],) for r in rows])
+        conn.commit()
+        last = rows[-1][0]
+    return None
+
+
+register("core", 6, _core_v6_audit_search)

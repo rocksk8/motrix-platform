@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>請款類型 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <script src="../static/form-preview.js"></script>
+  <script src="../js/expense-types-designer.js"></script>
+  <script src="../js/expense-types.js"></script>
+  <script src="../static/form-designer-model.js"></script>
+  <script src="../static/form-designer.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <link rel="stylesheet" href="../css/form-designer.css">
+  <!--
+    請款類型定義編輯頁 v1（A2-2；只給最高管理者）：請購單／採購單／差旅費用／零用金等類型的欄位、明細欄、必填、鎖定、
+    僅出納可改、簽核單據類型、單號前綴、是否進出納、版面與啟用。資料全走既有定義庫路由 /api/definitions/expense_type；
+    驗證以伺服器為準（本頁只把 problems 列出來）。簽核流程本身在「簽核設定」頁設。
+  -->
+  <style>
+    .et-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 28px 36px 60px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .et-wrap { max-width: 1120px; }
+    .et-err { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: var(--tone-danger-bg);
+      border: 1px solid var(--tone-danger-border); color: var(--tone-danger-fg); font-size: 13px; }
+    .et-ok { margin-top: 14px; padding: 10px 16px; border-radius: 8px; background: var(--tone-info-bg);
+      border: 1px solid var(--tone-info-border); color: var(--tone-info-fg); font-size: 13px; }
+    .et-panel { margin-top: 18px; border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; background: #fff; }
+    .et-panel h2 { font-size: 15px; margin: 0 0 8px; }
+    .et-sub { font-size: 12.5px; color: var(--text-secondary); line-height: 1.7; }
+    .et-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 16px; margin-top: 10px; }
+    .et-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+    .et-grid input[type=text], .et-grid select, .et-tbl input[type=text], .et-tbl select, .et-tbl textarea { width: 100%; box-sizing: border-box; font-size: 12.5px; }
+    .et-chk { flex-direction: row !important; align-items: center; gap: 6px !important; }
+    .et-scroll { overflow-x: auto; }
+    .et-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; min-width: 860px; }
+    .et-tbl th, .et-tbl td { padding: 6px 8px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
+    .et-tbl textarea { min-height: 52px; }
+    .et-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+    .et-prob { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--tone-danger-fg); }
+    .et-tag { font-size: 11px; padding: 1px 7px; border-radius: 8px; background: var(--border-light); }
+    .et-group { border: 1px dashed var(--border); border-radius: 8px; padding: 10px 12px; margin-top: 8px; }
+    .et-keys { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 12.5px; }
+    .et-keys label { display: flex; align-items: center; gap: 4px; }
+    #et-preview { margin-top: 10px; min-height: 40px; }
+    /* 深色主題＝整頁 invert 濾鏡（style.css）：頁面要用「淺色版」token，濾鏡才會把它反轉成深色；
+       style.css 的深色 token 只給不經濾鏡的頁面用，直接用會被反轉成淺底（面板標題與底色對比不足）。
+       這裡的面板底色與提示條 token 無條件固定成淺色值（淺色主題下本來就是這些值），所以不需要寫深色選擇器；設計器元件有自己的色票，不能被這裡覆蓋。 */
+    .et-err, .et-ok { --tone-danger-fg: #B91C1C; --tone-danger-bg: #FEF2F2; --tone-danger-border: #FECACA;
+      --tone-info-fg: #1D4ED8; --tone-info-bg: #EEF2FF; --tone-info-border: #BFDBFE; }
+    @media (max-width: 720px) { .et-main { margin-left: 0; padding: 20px 16px 60px; } }
+  </style>
+</head>
+<body x-data="expenseTypesPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="et-main">
+    <div class="et-wrap">
+      <div class="pg">
+        <div class="pg__l">
+          <div class="pg__eyebrow">系統設定</div>
+          <h1 class="pg__t">請款類型</h1>
+          <p class="pg__s">請購單、採購單、差旅費用、零用金：欄位、明細欄、必填與鎖定、是否進出納、單號前綴</p>
+        </div>
+        <div class="pg__a">
+          <button class="btn btn-primary" data-testid="et-new" x-show="view==='list'" @click="startNew()">新增類型</button>
+          <button class="btn" data-testid="et-back" x-show="view==='edit'" @click="back()">← 回清單</button>
+        </div>
+      </div>
+
+      <div class="et-err" data-testid="et-error" x-show="err" x-text="err"></div>
+      <div class="et-ok" data-testid="et-msg" x-show="msg" x-text="msg"></div>
+
+      <!-- 清單 -->
+      <div class="et-panel" data-testid="et-list" x-show="view==='list'">
+        <div class="et-sub" x-show="loading">載入中…</div>
+        <div class="et-sub" data-testid="et-empty" x-show="!loading && rows.length===0">還沒有任何類型。按「新增類型」建立第一個。</div>
+        <div class="et-scroll" x-show="rows.length>0">
+          <table class="data-table" style="width:100%">
+            <thead><tr><th>代碼</th><th>名稱</th><th>單號前綴</th><th>進出納</th><th>版本</th><th>狀態</th><th></th></tr></thead>
+            <tbody>
+              <template x-for="r in rows" :key="r.key">
+                <tr :data-testid="'et-row-' + r.key">
+                  <td class="mono" x-text="r.key"></td>
+                  <td x-text="r.name || '（未命名）'"></td>
+                  <td class="mono" x-text="r.prefix || '—'"></td>
+                  <td x-text="r.payable ? '是' : '否'"></td>
+                  <td x-text="statusLabel(r)"></td>
+                  <td><span class="et-tag" x-text="r.enabled ? '啟用' : '停用'"></span></td>
+                  <td><button class="btn" :data-testid="'et-open-' + r.key" @click="open(r.key)">編輯</button></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 編輯 -->
+      <template x-if="view==='edit' && body">
+        <div data-testid="et-edit">
+          <div class="et-panel">
+            <h2>基本設定</h2>
+            <div class="et-grid">
+              <label x-show="isNew">類型代碼（建立後不可改）
+                <input type="text" data-testid="et-key" x-model="newKey" placeholder="purchase_req" maxlength="40">
+              </label>
+              <label x-show="!isNew">類型代碼<input type="text" :value="key" disabled></label>
+              <label>名稱<input type="text" data-testid="et-name" x-model="body.name" maxlength="40"></label>
+              <label>單號前綴（大寫英文，例 PR）
+                <input type="text" data-testid="et-prefix" x-model="body.numbering.prefix" maxlength="4" @input="body.numbering.prefix = body.numbering.prefix.toUpperCase()">
+              </label>
+              <label>簽核單據類型
+                <select data-testid="et-doctype" @change="body.docType = $event.target.value === '__default' ? undefined : $event.target.value">
+                  <template x-if="body.docType === undefined"><option value="__default" selected>額外支出（預設）</option></template>
+                  <option value="" :selected="body.docType === ''">（請選擇）</option>
+                  <template x-for="d in docTypes" :key="d.code"><option :value="d.code" :selected="body.docType === d.code" x-text="d.label + '（' + d.code + '）'"></option></template>
+                  <option x-show="body.docType && !docTypes.some(d => d.code===body.docType)" :value="body.docType" selected x-text="body.docType + '（未登記）'"></option>
+                </select>
+              </label>
+              <label class="et-chk"><input type="checkbox" data-testid="et-payable" x-model="body.payable"> 核准後進出納（付款）</label>
+              <label class="et-chk"><input type="checkbox" data-testid="et-enabled" x-model="body.enabled"> 啟用（停用：新增表單不列，舊單不受影響）</label>
+            </div>
+            <div class="et-sub" style="margin-top:8px">簽核流程（誰簽、幾層）在「簽核設定」頁依上面的單據類型設定。</div>
+          </div>
+
+          <div class="et-panel" x-show="useFD">
+            <h2>表單設計</h2>
+            <div class="et-sub">中間就是請款單的樣子；左邊加欄位，右邊改設定。<a href="javascript:void(0)" data-testid="et-old-ui" @click="toggleFD()">改用舊的表格畫面</a></div>
+            <div id="et-fd-host" data-testid="et-fd-host" style="height:calc(calc(100vh / var(--fz,1)) - 260px);min-height:560px"></div>
+          </div>
+          <div class="et-sub" x-show="!useFD"><a href="javascript:void(0)" data-testid="et-new-ui" @click="toggleFD()">改用新的設計畫面</a></div>
+
+          <div class="et-panel" x-show="!useFD">
+            <h2>表單欄位</h2>
+            <div class="et-sub">每個欄位的代碼（key）是資料的名字，建立後請不要改。平台保留欄位（申請人、部門、日期…）從下拉加入，型別已固定。</div>
+            <div class="et-actions">
+              <select data-testid="et-add-reserved" @change="addReserved($event.target.value); $event.target.value=''">
+                <option value="">＋ 加入保留欄位…</option>
+                <template x-for="k in reservedMissing()" :key="k"><option :value="k" x-text="reservedLabel(k)"></option></template>
+              </select>
+              <button class="btn" data-testid="et-add-blank" @click="addBlank()">＋ 自訂欄位</button>
+            </div>
+            <div class="et-scroll">
+              <table class="et-tbl" data-testid="et-fields">
+                <thead><tr><th>代碼</th><th>顯示名稱</th><th>型別</th><th>必填</th><th>預填鎖定</th><th>僅出納可改</th><th>預設</th><th>選項／對象／公式</th><th></th></tr></thead>
+                <tbody>
+                  <template x-for="(f, i) in plainFields" :key="i">
+                    <tr data-testid="et-field-row" :data-key="f.key">
+                      <td><input type="text" x-model="f.key" maxlength="40" data-testid="et-f-key"></td>
+                      <td><input type="text" x-model="f.label" maxlength="40" data-testid="et-f-label"></td>
+                      <td><select :value="f.type" @change="setType(f, $event.target.value)" data-testid="et-f-type">
+                        <template x-for="t in FIELD_TYPES" :key="t[0]"><option :value="t[0]" :selected="f.type===t[0]" x-text="t[1]"></option></template>
+                      </select></td>
+                      <td><input type="checkbox" x-model="f.required" data-testid="et-f-required"></td>
+                      <td><input type="checkbox" x-model="f.locked" data-testid="et-f-locked"></td>
+                      <td><input type="checkbox" :checked="f.editableBy==='cashier'" @change="setCashier(f, $event.target.checked)" data-testid="et-f-cashier"></td>
+                      <td>
+                        <select :value="defaultKind(f)" @change="setDefaultKind(f, $event.target.value)" data-testid="et-f-defkind">
+                          <option value="">無</option>
+                          <option value="requester" x-show="f.type==='ref' && f.target==='users'">申請人</option>
+                          <option value="today" x-show="f.type==='date'">今天</option>
+                          <option value="value" x-show="['text','textarea','number','select','radio'].includes(f.type)">固定值</option>
+                        </select>
+                        <input type="text" x-show="defaultKind(f)==='value'" :value="defaultValue(f)" @input="setDefaultValue(f, $event.target.value)">
+                      </td>
+                      <td>
+                        <textarea x-show="f.type==='select' || f.type==='radio'" :value="optionsText(f)" @input="setOptions(f, $event.target.value)" placeholder="一行一個選項"></textarea>
+                        <select x-show="f.type==='ref'" x-model="f.target"><option value="users">使用者</option><option value="departments">部門</option></select>
+                        <input type="text" x-show="f.type==='formula'" x-model="f.formula" placeholder="例：qty * unit_cost">
+                      </td>
+                      <td style="white-space:nowrap">
+                        <button class="btn" title="上移" @click="move(body.fields, f, -1)">↑</button>
+                        <button class="btn" title="下移" @click="move(body.fields, f, 1)">↓</button>
+                        <button class="btn btn-danger" data-testid="et-f-del" @click="remove(body.fields, f)">刪除</button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="et-panel" x-show="!useFD">
+            <h2>明細欄（<span class="mono">lines</span>）</h2>
+            <div class="et-sub">金額要嘛有「數量＋單價」（金額由後端算），要嘛只有「金額」。費用類別下拉取自費用類別清單。</div>
+            <div x-show="!linesField" class="et-actions"><button class="btn" data-testid="et-add-lines" @click="addLinesField()">加入明細表</button></div>
+            <template x-if="linesField">
+              <div>
+                <div class="et-actions">
+                  <select data-testid="et-add-col" @change="addCol($event.target.value); $event.target.value=''">
+                    <option value="">＋ 加入常用明細欄…</option>
+                    <template x-for="k in colsMissing()" :key="k"><option :value="k" x-text="colLabel(k)"></option></template>
+                    <option value="_blank">自訂欄…</option>
+                  </select>
+                  <label class="et-sub">最少列數 <input type="number" min="0" style="width:64px" x-model.number="linesField.minRows"></label>
+                </div>
+                <div class="et-scroll">
+                  <table class="et-tbl" data-testid="et-lines">
+                    <thead><tr><th>代碼</th><th>顯示名稱</th><th>型別</th><th>必填</th><th>選項／公式</th><th></th></tr></thead>
+                    <tbody>
+                      <template x-for="(c, i) in linesField.columns" :key="i">
+                        <tr data-testid="et-col-row" :data-key="c.key">
+                          <td><input type="text" x-model="c.key" maxlength="40"></td>
+                          <td><input type="text" x-model="c.label" maxlength="40"></td>
+                          <td><select :value="c.type" @change="c.type=$event.target.value">
+                            <template x-for="t in COL_TYPES" :key="t[0]"><option :value="t[0]" :selected="c.type===t[0]" x-text="t[1]"></option></template>
+                          </select></td>
+                          <td><input type="checkbox" x-model="c.required"></td>
+                          <td>
+                            <label class="et-chk" x-show="c.type==='select'"><input type="checkbox" :checked="c.optionsFrom==='expense_categories'" @change="setOptionsFrom(c, $event.target.checked)"> 取自費用類別</label>
+                            <textarea x-show="c.type==='select' && c.optionsFrom!=='expense_categories'" :value="optionsText(c)" @input="setOptions(c, $event.target.value)" placeholder="一行一個選項"></textarea>
+                            <input type="text" x-show="c.type==='formula'" x-model="c.formula" placeholder="例：qty * unitCost">
+                          </td>
+                          <td style="white-space:nowrap">
+                            <button class="btn" @click="move(linesField.columns, c, -1)">↑</button>
+                            <button class="btn" @click="move(linesField.columns, c, 1)">↓</button>
+                            <button class="btn btn-danger" data-testid="et-col-del" @click="remove(linesField.columns, c)">刪除</button>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <div class="et-panel" x-show="!useFD">
+            <h2>版面</h2>
+            <div class="et-sub">表單分組（沒設＝全部欄位依序一組）與列表欄位。</div>
+            <div class="et-actions">
+              <button class="btn" data-testid="et-add-group" @click="addGroup()">＋ 分組</button>
+              <button class="btn" data-testid="et-auto-group" @click="autoGroup()">全部放一組</button>
+            </div>
+            <template x-for="(g, gi) in groups" :key="gi">
+              <div class="et-group" data-testid="et-group">
+                <div class="et-actions" style="margin-top:0">
+                  <input type="text" x-model="g.title" placeholder="分組標題" style="max-width:260px">
+                  <button class="btn btn-danger" @click="groups.splice(gi, 1)">刪除分組</button>
+                </div>
+                <div class="et-keys">
+                  <template x-for="k in fieldKeys" :key="k">
+                    <label><input type="checkbox" :checked="inGroup(g, k)" @change="toggleIn(g.fields, k)"> <span x-text="k"></span></label>
+                  </template>
+                </div>
+              </div>
+            </template>
+            <div style="margin-top:12px;font-size:12.5px">列表顯示欄位</div>
+            <div class="et-keys" data-testid="et-list-cols">
+              <template x-for="k in fieldKeys" :key="k">
+                <label><input type="checkbox" :checked="inList(k)" @change="toggleIn(listCols, k)"> <span x-text="k"></span></label>
+              </template>
+            </div>
+            <div class="et-sub" style="margin-top:8px">輸出版型沿用預設（本頁不改，原樣保留）。</div>
+          </div>
+
+          <div class="et-panel">
+            <h2>預覽與發布</h2>
+            <div class="et-actions">
+              <button class="btn" data-testid="et-validate" @click="validate()">驗證</button>
+              <button class="btn" data-testid="et-preview-btn" @click="showPreview()">預覽表單</button>
+              <button class="btn" data-testid="et-save" :disabled="busy" @click="saveDraft()">儲存草稿</button>
+              <button class="btn" data-testid="et-changes" x-show="!isNew && meta && meta.latest && hasDraft" @click="showChanges()">與已發布版的差異</button>
+              <button class="btn btn-danger" data-testid="et-discard" x-show="!isNew && hasDraft" @click="discardDraft()">丟棄草稿</button>
+            </div>
+            <div data-testid="et-problems" x-show="problems.length">
+              <ul class="et-prob">
+                <template x-for="(p, pi) in problems" :key="pi"><li :style="useFD ? 'cursor:pointer' : ''" @click="fdFocus(p)"><b x-text="pathLabel(p.path)"></b>：<span x-text="p.message"></span></li></template>
+              </ul>
+            </div>
+            <div data-testid="et-changes-list" x-show="changes !== null" class="et-sub" style="margin-top:8px">
+              <span x-text="'與已發布版差 ' + (changes ? changes.length : 0) + ' 處'"></span>
+              <ul><template x-for="(c, ci) in (changes || [])" :key="ci"><li><span class="et-tag" x-text="c.op"></span> <span x-text="c.path"></span></li></template></ul>
+            </div>
+            <div id="et-preview" data-testid="et-preview"></div>
+            <div class="et-actions" style="margin-top:14px">
+              <input type="text" data-testid="et-note" x-model="note" placeholder="發布說明（選填）" style="min-width:260px">
+              <button class="btn btn-primary" data-testid="et-publish" :disabled="busy" @click="publish()">發布</button>
+            </div>
+            <div class="et-sub" style="margin-top:6px">發布前伺服器會再驗證一次；有問題不會發布。已開出的單據固定使用開單當時的版本。</div>
+          </div>
+
+          <div class="et-panel" x-show="!isNew && meta && meta.versions && meta.versions.length">
+            <h2>版本</h2>
+            <table class="data-table" data-testid="et-versions" style="width:100%">
+              <thead><tr><th>版本</th><th>狀態</th><th>發布者</th><th>時間</th><th>說明</th><th></th></tr></thead>
+              <tbody>
+                <template x-for="v in ((meta && meta.versions) || [])" :key="v.version">
+                  <tr>
+                    <td x-text="v.version === 0 ? '草稿' : 'v' + v.version"></td>
+                    <td x-text="v.status === 'published' ? '已發布' : '草稿'"></td>
+                    <td x-text="v.published_by || v.created_by || ''"></td>
+                    <td x-text="(v.published_at || v.created_at || '').replace('T', ' ').slice(0, 16)"></td>
+                    <td x-text="v.note || ''"></td>
+                    <td><button class="btn" :data-testid="'et-restore-' + v.version" x-show="v.status==='published'" @click="restore(v.version)">還原為新版本</button></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+    </div>
+  </main>
+  <script src="../static/notif.js"></script>
+  <script src="../static/ui.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

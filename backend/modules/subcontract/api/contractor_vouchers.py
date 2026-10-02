@@ -23,6 +23,7 @@ from pydantic import BaseModel, model_validator
 from db import get_db, next_entity_code, spawn_bg_thread
 from core import registry
 from core.txn import begin_write, write_txn
+from helpers.gl_status import gl_posted_warning
 from helpers import (
     _require_user, _tok, _audit, _notify, _get_setting, _set_setting, _purge_notifications,
     notify_module_activity, notify_contractor_voucher_submitted, notify_contractor_voucher_next_tier,
@@ -34,9 +35,11 @@ from helpers import (
     UnresolvedManagerError, resolve_active_flow_setting, user_has_module,
     guard_case_access, require_any_module,
 
-    can_see_financial, is_document_approver,
+    can_see_financial, is_document_approver, push_event_for_module,
 )
+from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from pdf_gen import generate_contractor_voucher_pdf_bytes, _generate_contractor_voucher_pdf
+from modules.subcontract import bank_mask as _bm
 from helpers.errors import trace_id
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
@@ -142,7 +145,7 @@ def _paid_between(start: str, end: str) -> list:
         conn.close()
 
 
-def _voucher_public(row, include_snapshot: bool = True) -> dict:
+def _voucher_public(row, include_snapshot: bool = True, viewer=None) -> dict:
     """一張承攬商匯款申請的對外形狀。IP-14 `contractor_voucher.public`（M05 出納、M06 會計匯出）也用這一支。"""
     d = dict(row)
     snap = json.loads(d.get("snapshot_json") or "{}")
@@ -179,7 +182,19 @@ def _voucher_public(row, include_snapshot: bool = True) -> dict:
     }
     if include_snapshot:
         out["snapshot"] = snap
+    # 帳號遮蔽（使用者裁示 2026-10-01）：viewer 不是最高管理者（含沒帶 viewer 的提供者呼叫）⇒ ****末四碼、存簿影本拿掉
+    if not _bm.can_see_full(viewer):
+        _bm.mask_record(viewer, out)
+        if include_snapshot:
+            out["snapshot"] = _mask_snapshot(snap)
     return out
+
+
+def _mask_snapshot(snap: dict) -> dict:
+    s = dict(snap)
+    _bm.mask_record(None, s)
+    s["personnel"] = [_bm.mask_record(None, dict(p)) if isinstance(p, dict) else p for p in (s.get("personnel") or [])]
+    return s
 
 
 # ── 銀行帳戶預設值（2026-09-02 新增，見 accounting_export.py 檔頭「標記已付款/
@@ -246,7 +261,7 @@ def list_contractor_vouchers(quote_no: Optional[str] = None, authorization: str 
         ).fetchall()
     rows = _visible_rows(rows, user, conn)
     conn.close()
-    return [_voucher_public(r, include_snapshot=False) for r in rows]
+    return [_voucher_public(r, include_snapshot=False, viewer=user) for r in rows]
 
 
 @router.get("/api/contractor-vouchers/{voucher_no}")
@@ -259,7 +274,7 @@ def get_contractor_voucher(voucher_no: str, authorization: str = Header(None)):
         raise HTTPException(404, f"申請 {voucher_no} 不存在")
     _guard_voucher(conn, row, user)
     conn.close()
-    return _voucher_public(row)
+    return _voucher_public(row, viewer=user)
 
 
 @router.post("/api/contractor-vouchers", status_code=201)
@@ -282,6 +297,9 @@ def create_contractor_voucher(body: VoucherCreateIn, authorization: str = Header
         if dispatch["status"] not in ("accepted", "completed"):
             conn.close()
             raise HTTPException(409, "僅「已驗收」或「完工」狀態的派發可產生匯款申請")
+        if (dispatch["approval_status"] or "") not in ("", "已核准"):        # 31-A：派發審核未核准不得請款（舊單 '' 照舊）
+            conn.close()
+            raise HTTPException(409, "派發尚未核准（審核狀態：%s），不能產生匯款申請" % dispatch["approval_status"])
         existing = conn.execute(
             "SELECT voucher_no, quote_no, data_json FROM contractor_payment_vouchers WHERE dispatch_id=?", (body.dispatch_id,)
         ).fetchone()
@@ -600,6 +618,7 @@ def revoke_contractor_voucher_approval(voucher_no: str, body: dict = Body(defaul
     if row["is_paid"]:
         conn.close()
         raise HTTPException(409, "已匯款的申請不可撤銷核准")
+    note = require_reject_reason(note, conn=conn)
     snap  = json.loads(row["snapshot_json"] or "{}")
     vname = snap.get("vendorName") or "外包人員點工"
     d = json.loads(row["data_json"] or "{}")
@@ -648,6 +667,7 @@ def reject_contractor_voucher(voucher_no: str, body: dict = Body(default={}), au
     if not ok:
         conn.close()
         raise HTTPException(status_code, err_msg)
+    note = require_reject_reason(note, conn=conn)
 
     now       = datetime.now().isoformat()
     requester = appr.get("requestedBy")
@@ -684,7 +704,7 @@ def download_contractor_voucher_pdf(voucher_no: str, authorization: str = Header
     if not row:
         raise HTTPException(404, "申請不存在")
     try:
-        pdf_bytes = generate_contractor_voucher_pdf_bytes(voucher_no)
+        pdf_bytes = generate_contractor_voucher_pdf_bytes(voucher_no, mask_bank=not _bm.can_see_full(user))
     except (ValueError, RuntimeError) as e:
         raise HTTPException(503, str(e))
     except HTTPException:          # 第二道 428（COMPANY-SETUP-GATE §5）不可以被下面的 except Exception 吞成 500
@@ -756,7 +776,7 @@ def _personnel_link_errors(conn, snapshot_json, require_all):
             errs.append("%s：勞報單 %s 狀態是「%s」，須為已簽回%s" % (name, no, c["status"], "（已由匯款單 %s 付款）" % c["paidViaRemit"] if c["paidViaRemit"] else ""))
         elif p.get("id") and c["contractorId"] and int(p["id"]) != int(c["contractorId"]):
             errs.append("%s：勞報單 %s 的受款人是 %s，不符" % (name, no, c["contractorName"]))
-        elif round(float(p.get("amount") or 0), 2) != round(c["net"], 2):
+        elif abs(float(p.get("amount") or 0) - c["net"]) > 0.005:          # 金額比對（到分），不做進位
             errs.append("%s：匯款金額 %g 必須等於勞報單 %s 的實付 %g" % (name, float(p.get("amount") or 0), no, c["net"]))
         else:
             ok.append(no)
@@ -864,6 +884,20 @@ def link_personnel_payslip(voucher_no: str, body: PersonnelLinkIn, authorization
 
 # ── 財務已匯款 toggle ─────────────────────────────────────────────────────────
 
+def _payout_calendar_args(voucher_no, snapshot_json, paid_at, rm, who):
+    """行事曆「包商撥款」事件的內容（push_event_for_module 的參數）。"""
+    try:
+        snap = json.loads(snapshot_json or "{}") or {}
+    except (TypeError, ValueError):
+        snap = {}
+    vname = snap.get("vendorName") or "外包人員點工"
+    payable = _remit._payable(snapshot_json)
+    desc = (f"承攬商匯款申請 {voucher_no} 已標記匯款。\n廠商：{vname}\n應付：NT$ {payable:,.0f}"
+            f"\n實付：NT$ {float(rm['actual'] or 0):,.0f}\n手續費：NT$ {float(rm['fee'] or 0):,.0f}"
+            f"\n匯款日期：{paid_at}\n標記人：{who}")
+    return ("contractor_payout", f"包商匯款 — {voucher_no}（{vname}）", desc, paid_at or None)
+
+
 @router.post("/api/contractor-vouchers/{voucher_no}/paid-toggle")
 def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = Header(None)):
     """標記已匯款**必須**帶 paid_at（YYYY-MM-DD，實際匯款日期，不一定等於操作
@@ -945,9 +979,15 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
              rm["actual"], rm["fee"], rm["review"], voucher_no)
         )
         if linked_slips:                                   # R12：連結的勞報單一併記為已付款（同一個交易）
+            # ⚠ 跨模組寫入連結（M04 → M07）：這裡改的是**薪資模組的資料**（payslips：status／payment_date／paid_by／data_json.paid_via_remit），
+            #   經 IP-105 `payslip.remit`，與本匯款單同一個連線、同一次 commit；反向在下面 unpay 的 unmark_paid。
+            #   登記：docs/platform/MONEY-FLOWS.md §9 列 W-1；守門：accounting/tests/test_ledger_r12_remit_payslip_2026_09_30.py。
             registry.single_provider("payslip.remit").mark_paid(conn, linked_slips, voucher_no, paid_at_value,
                                                                 user.get("display_name") or user["username"])
     else:
+        # MONEY-FLOWS §9 L3：取消已匯款 ⇒ 已入帳的 E05 來源消失（orphan）：下次引擎執行時產生反向草稿（日期＝今天）。
+        # 下游效應：營運報表現金支出立即消失；總帳要手動執行才反映；已結帳期間則要手工沖轉。只提示、不擋。
+        gl_warn = gl_posted_warning(conn, "contractor_voucher", voucher_no)
         conn.execute(
             "UPDATE contractor_payment_vouchers SET is_paid=0, paid_by='', paid_at='', paid_log=?, "
             "paid_bank_account_name='', paid_bank_account_code='', updated_at=?, " + _remit.CLEAR_SQL + " WHERE voucher_no=?",
@@ -955,6 +995,7 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
         )
         prov = registry.single_provider("payslip.remit")
         if prov is not None:                               # R12：由這張匯款單付款的勞報單一併退回已簽回
+            # ⚠ 跨模組寫入連結（M04 → M07）：同上（MONEY-FLOWS §9 W-1）；只退回 data_json.paid_via_remit＝本匯款單號的勞報單。
             prov.unmark_paid(conn, voucher_no)
     conn.commit()
     conn.close()
@@ -968,8 +1009,13 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
     else:
         notify_module_activity("承攬商匯款申請", "已匯款" if action == "pay" else "取消已匯款", who, voucher_no,
                                "case-management.html", detail=note or "")
+    if action == "pay":
+        # 行事曆「包商撥款」（2026-09-30，預設關；開關在 L1 判斷）：以匯款日期建立；取消匯款不刪事件
+        spawn_bg_thread(push_event_for_module, args=_payout_calendar_args(
+            voucher_no, row["snapshot_json"], paid_at_value, rm, who))
     return {"ok": True, "is_paid": action == "pay", "paid_log": log,
-            **({"remitReview": rm["review"], "diff": rm["diff"], "actual": rm["actual"], "fee": rm["fee"]} if action == "pay" else {})}
+            **({"remitReview": rm["review"], "diff": rm["diff"], "actual": rm["actual"], "fee": rm["fee"]} if action == "pay" else {}),
+            **({"glWarning": gl_warn.replace("此筆", "此筆（匯款單 %s）" % voucher_no, 1)} if action != "pay" and gl_warn else {})}
 
 
 # ── 簽核設定（獨立於報價單／出貨單）────────────────────────────────────────────

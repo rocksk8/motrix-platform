@@ -24,6 +24,7 @@ from datetime import date
 from fastapi import HTTPException
 
 from helpers.dates import normalize_date  # noqa: F401  2026-09-26 下沉 L1（M04 搬遷）；本檔與 M01 呼叫端照舊從這裡取
+from modules.case import expense_forms as _EF      # 請購單（purchase_req）不入支出：payable_sql
 from modules.case.quotations import round_half_up, quote_tax_type
 
 _log = logging.getLogger(__name__)
@@ -217,6 +218,9 @@ def dispatch_entries(conn, basis):
             "SELECT cd.*, vc.name AS vendor_name FROM contractor_dispatches cd"
             " LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id WHERE cd.status != 'cancelled'"):
         d = dispatch_row(r)
+        ap = d.get("approvalStatus") or ""
+        if ap in ("草稿", "已退回"):        # 31-A（Q6）：尚未承諾的支出不計入應計成本；待審核／簽核中照計並標示；已核准與舊單（''）照舊
+            continue
         inv = (r["invoice_date"] or "")[:10]
         fallback = (d.get("acceptedAt") or "")[:10] or (r["dispatch_date"] or "")[:10]
         use = inv if inv != "" else fallback
@@ -228,12 +232,60 @@ def dispatch_entries(conn, basis):
         note = "未稅" if not personnel else ("外包人員未拆稅" if not pretax else "承攬商未稅＋外包人員未拆稅")
         out.append({"date": use, "quoteNo": r["quote_no"] or "",
                     "desc": d["vendorName"] or "（外包人員點工）", "amount": amount, "taxNote": note,
-                    "provisional": inv == "", "dispatchId": r["id"], "invoiceDate": inv})
+                    "provisional": inv == "", "dispatchId": r["id"], "invoiceDate": inv,
+                    "approvalPending": ap in ("待審核", "簽核中")})
     return out
 
 
+def individual_linked_entries(conn, basis):
+    """匯款單裡『已關聯勞報單』的個人外包金額 → [{date, dispatchId, amount}]（給『與總帳差異』頁的類別分桶）。
+
+    為什麼要單獨列：營運報表的「承攬商派發」把個人外包（匯款單 personnel）算在承攬商裡；總帳對已關聯勞報單的個人改記勞報單（E06＝勞務費用，歸「其他」，
+    見 subcontract/gl_events.py 的 `linked`：同一條規則——姓名非空且帶 payslipNo 者）。這兩邊的類別差就是這個金額。
+    日期與 `dispatch_entries` 的報表口徑相同：現金＝匯款已付日（只算已付匯款單）；應計＝派工的認列日（取該派工**已付**匯款單上關聯的個人；
+    應計派工本身沒有 payslipNo，關聯只存在匯款單快照）。只增函式，不改任何既有回傳。"""
+    def _linked(snap):
+        total = 0
+        for q in (snap.get("personnel") or []):
+            if isinstance(q, dict) and str(q.get("name") or "").strip() and str(q.get("payslipNo") or "").strip():
+                total += int(round_half_up(q.get("amount") or 0))
+        return total
+    rows = conn.execute("SELECT dispatch_id, snapshot_json, paid_at FROM contractor_payment_vouchers WHERE is_paid = 1").fetchall()
+    per_dispatch, out = {}, []
+    for r in rows:
+        try:
+            amt = _linked(json.loads(r["snapshot_json"] or "{}"))
+        except (TypeError, ValueError):
+            continue
+        if not amt:
+            continue
+        per_dispatch[r["dispatch_id"]] = per_dispatch.get(r["dispatch_id"], 0) + amt
+        paid = (r["paid_at"] or "")[:10]
+        if basis == "cash" and paid:
+            out.append({"date": paid, "dispatchId": r["dispatch_id"], "amount": amt})
+    if basis == "cash":
+        return out
+    return [{"date": e["date"], "dispatchId": e["dispatchId"], "amount": per_dispatch[e["dispatchId"]]}
+            for e in dispatch_entries(conn, basis) if per_dispatch.get(e["dispatchId"])]
+
+
+def _material_states(conn) -> dict:
+    """叫料審核狀態 `{(quote_no, item_id): status}`（疊加表 `case_material_approvals`）；沒有列＝舊單；表不在（舊庫）⇒ 空。"""
+    try:
+        return {(r[0], r[1]): r[2] for r in conn.execute("SELECT quote_no, item_id, status FROM case_material_approvals")}
+    except Exception:                                                              # noqa: BLE001 — 表還沒建（migration 之前）＝全部視為舊單
+        return {}
+
+
 def material_entries(conn, basis, department_id=None):
-    """叫料（案件 data_json）→ 逐筆。沒有稅欄位 ⇒ 一律「未拆稅」。"""
+    """叫料（案件 data_json）→ 逐筆。沒有稅欄位 ⇒ 一律「未拆稅」。
+
+    審核規則（31-C，與承攬商派發同一組）：**權責口徑**——草稿／已退回／已取消**不計**；待審核／簽核中**計入並標 `pending`**；已核准與舊單（沒有審核單）照舊。
+    **現金口徑**——付出去的錢是事實，不因審核狀態排除（只標 `pending`）。每筆帶 `approval`（'' ＝ 舊單）。"""
+    from modules.case import material_approval as _ma
+    from modules.case import material_payment as _mp
+    states = _material_states(conn)
+    pay_lines, pay_legacy = (_mp.lines_by_order(conn), _mp.legacy_by_order(conn)) if basis == "cash" else ({}, {})
     out = []
     for row in _case_rows(conn, department_id):
         try:
@@ -245,14 +297,32 @@ def material_entries(conn, basis, department_id=None):
                 continue
             name = mo.get("itemName") or "叫料"
             paid = (mo.get("paidDate") or "")[:10]
+            st = states.get((row["quote_no"], str(mo.get("itemId"))), "")
+            cs = _ma.cost_state(st)
+            if basis != "cash" and cs == "excluded":
+                continue                                                           # 權責：草稿／已退回／已取消不計
             if basis == "cash":
+                key = (row["quote_no"], str(mo.get("itemId")))
+                if key in pay_legacy:                                              # 有匯款申請 ⇒ 讀付款明細（每筆一列）＋舊單歷史已付；不讀 JSON 的 paid*（那是投影）
+                    la, ld = pay_legacy[key]
+                    if la and ld:
+                        out.append({"date": ld, "quoteNo": row["quote_no"], "desc": "叫料｜" + name, "amount": la, "taxNote": "未拆稅", "provisional": False,
+                                    "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending", "lineId": "", "fee": 0.0,
+                                    "remitPending": False, "payMethod": "", "payAccountCode": ""})
+                    for ln in pay_lines.get(key, []):
+                        if ln["amount"] and ln["paid_at"]:
+                            out.append({"date": ln["paid_at"], "quoteNo": row["quote_no"], "desc": "叫料｜" + name, "amount": ln["amount"], "taxNote": "未拆稅",
+                                        "provisional": False, "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending",
+                                        "lineId": str(ln["id"]), "fee": ln["fee"], "remitPending": ln["review"] == "pending",
+                                        "payMethod": ln["pay_method"], "payAccountCode": ln["pay_account_code"], "paymentCode": ln["doc_code"]})
+                    continue
                 if (mo.get("paidStatus") or "pending") == "pending" or paid == "":
                     continue
                 amt = float(mo.get("paidAmount") or 0)
                 if amt:
                     out.append({"date": paid, "quoteNo": row["quote_no"], "desc": "叫料｜" + name,
                                 "amount": amt, "taxNote": "未拆稅", "provisional": False,
-                                "itemId": mo.get("itemId") or ""})
+                                "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending"})
                 continue
             amt = float(mo.get("totalPrice") or 0)
             if not amt:
@@ -260,25 +330,36 @@ def material_entries(conn, basis, department_id=None):
             inv = (mo.get("invoiceDate") or "")[:10]
             out.append({"date": inv if inv != "" else paid, "quoteNo": row["quote_no"],
                         "desc": "叫料｜" + name, "amount": amt, "taxNote": "未拆稅",
-                        "provisional": inv == "", "itemId": mo.get("itemId") or "", "invoiceDate": inv})
+                        "provisional": inv == "", "itemId": mo.get("itemId") or "", "invoiceDate": inv,
+                        "approval": st, "pending": cs == "pending"})
     return out
 
 
 #: 月支出計入的額外支出狀態（2026-09-27 使用者裁示請款流程）：送審中（待審核／簽核中，標 pending＝待定）與已核准；
 #: 草稿與已駁回**不計**（原本「只要填了就算」）。權責與現金兩種口徑都走 extra_entries ⇒ 同一處決定。
 COUNTED_EXTRA_STATUSES = ("待審核", "簽核中", "已核准")
+#: 連到案件品項的採購單列在營運報表落哪一個支出桶（32-S3；使用者原話「不再額外支出，而是案件的實際支出」）。
+#: 報價品項沒有分類（設備／料件）⇒ 一律「料件」；要拆設備需要品項分類欄位（另案）。
+ITEM_COST_BUCKET = "material"
 
 
 def extra_entries(conn, basis):
     """額外支出 → 逐筆。金額 0 不列；只計 COUNTED_EXTRA_STATUSES（送審中照樣計入、pending 標示；草稿與已駁回不計）。
     現金口徑：有付款日（出納登錄付款，IP-100）⇒ 用付款日、不是暫用；沒有 ⇒ 憑證日、暫用。"""
     out = []
+    _live = {}
+
+    def live_of(quote_no):
+        if quote_no not in _live:
+            from modules.case import purchase_items as _PI
+            _live[quote_no] = _PI.load_live_item_ids(conn, quote_no) if quote_no else set()
+        return _live[quote_no]
     for r in conn.execute(
             "SELECT e.id, e.quote_no, e.category, e.description, e.total_cost, e.expense_date,"
             " e.created_at, e.doc_no, e.files_json, e.status, e.approval_json, e.invoice_date,"
-            " e.paid_date, e.remit_actual, e.remit_review, q.customer_name FROM case_extra_expenses e"
+            " e.paid_date, e.remit_actual, e.remit_review, e.kind, e.doc_code, e.department_id, e.lines_json, q.customer_name FROM case_extra_expenses e"
             " LEFT JOIN quotations q ON q.quote_no = e.quote_no"
-            " WHERE e.status IN (%s) ORDER BY e.id" % ",".join("?" * len(COUNTED_EXTRA_STATUSES)),
+            " WHERE e.status IN (%s) AND %s ORDER BY e.id" % (",".join("?" * len(COUNTED_EXTRA_STATUSES)), _EF.payable_sql("e")),
             COUNTED_EXTRA_STATUSES):
         cost = float(r["total_cost"] or 0)
         if not cost:
@@ -299,13 +380,54 @@ def extra_entries(conn, basis):
             files = json.loads(r["files_json"] or "[]")
         except (TypeError, ValueError):
             files = []
-        out.append({"date": use, "quoteNo": r["quote_no"] or "",
-                    "desc": "%s｜%s｜%s" % (r["customer_name"] or "", r["category"] or "其他", desc),
-                    "amount": cost, "taxNote": "未拆稅", "provisional": provisional,
-                    "pending": r["status"] != "已核准", "files": files, "expenseId": r["id"],
-                    "category": r["category"] or "其他",
-                    "remitPending": basis == "cash" and paid != "" and r["remit_review"] == "pending",
-                    "invoiceDate": inv, "paidDate": paid})
+        base = {"date": use, "quoteNo": r["quote_no"] or "",
+                "desc": "%s｜%s｜%s" % (r["customer_name"] or "", r["category"] or "其他", desc),
+                "amount": cost, "taxNote": "未拆稅", "provisional": provisional,
+                "pending": r["status"] != "已核准", "files": files, "expenseId": r["id"],
+                "category": r["category"] or "其他",
+                "remitPending": basis == "cash" and paid != "" and r["remit_review"] == "pending",
+                "invoiceDate": inv, "paidDate": paid}      # 舊版列不帶 departmentId（缺＝報表依案件推導；與 A2 前相同）；單據列在 _typed_entries 帶
+        if not (r["kind"] or ""):
+            out.append(base)                                     # 舊版列：一列一筆，**行為不變**
+            continue
+        out.extend(_typed_entries(r, base, cost, basis, paid, live_of))
+    return out
+
+
+def _typed_entries(r, base, cost, basis, paid, live_of=None) -> list:
+    """費用單據（kind≠''）的營運報表列（A2）：依**費用類別逐類**一筆（讓「支出結構」看得出差旅／住宿…）、帶 `departmentId`（費用歸屬單位；
+    無案件時部門維度靠它）、`kind`、`docCode`。明細加總對不上單據金額（不該發生）⇒ 退回一列（類別＝單據類別）；
+    現金口徑實付≠應付 ⇒ 另加一筆「付款差額」（實付−應付），合計＝實付（與舊版現金口徑一致）。
+    下游效應（R1）：營運報表支出＝Σ 這些列；總額仍等於 `total_cost`（現金口徑為實付）。"""
+    try:
+        lines = json.loads(r["lines_json"] or "[]")
+    except (TypeError, ValueError):
+        lines = []
+    total = float(r["total_cost"] or 0)
+    by_cat = {}
+    for l in lines if isinstance(lines, list) else []:
+        if isinstance(l, dict):
+            k = l.get("categoryName") or l.get("category") or "其他"
+            # 32-S3：採購單明細連到案件品項的列＝品項實際成本，獨立成列（帶 itemId／linkedItem；金額守恆：Σ 列＝單據金額）
+            iid = str(l.get("itemId") or "").strip() if (r["kind"] or "") == "purchase_order" else ""
+            if iid and live_of is not None and iid not in live_of(r["quote_no"]):
+                iid = ""                                   # 品項已不在報價內 ⇒ 回到一般額外支出（錢不消失）
+            by_cat[(k, iid)] = by_cat.get((k, iid), 0) + float(l.get("amount") or 0)
+    common = {"departmentId": r["department_id"], "kind": r["kind"], "docCode": r["doc_code"] or ""}
+    if not by_cat or abs(sum(by_cat.values()) - total) > 0.005:
+        by_cat = {(r["category"] or "其他", ""): total}
+    out = []
+    for (cat, iid), amt in by_cat.items():
+        if not amt:
+            continue
+        ent = {**base, **common, "amount": amt, "category": cat,
+               "desc": "%s｜%s｜%s" % (r["doc_code"] or "", cat, r["description"] or "")}
+        if iid:
+            ent.update(itemId=iid, linkedItem=True, bucket=ITEM_COST_BUCKET)
+        out.append(ent)
+    if basis == "cash" and cost != total:
+        out.append({**base, **common, "amount": cost - total, "category": "付款差額",
+                    "desc": "%s｜付款差額（實付 %g／應付 %g）" % (r["doc_code"] or "", cost, total)})
     return out
 
 

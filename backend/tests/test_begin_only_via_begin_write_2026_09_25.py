@@ -22,6 +22,8 @@ ALLOWED = {
     ("modules/payroll/api/bonus.py", "return_case_bonus"): "同上",
     ("modules/payroll/api/bonus.py", "mark_case_bonus_paid"): "同上",
     ("modules/case/api/quotations.py", "case_batch_assign"): "批次指派；讀前已拿鎖、try/finally 關連線（lost update C 組判讀）",
+    ("archive.py", "_db_content_fingerprint"): ("每日備份「同上一份」的內容指紋（2026-09-30）：**唯讀** `BEGIN DEFERRED`（不拿寫鎖）——跨所有表雜湊需要同一時間點的一致讀取快照；"
+                                                "begin_write 是 BEGIN IMMEDIATE（寫鎖），會擋住正式庫上使用者的寫入，對唯讀讀取是錯的工具；try/finally 會 close"),
 }
 
 

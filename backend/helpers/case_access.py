@@ -201,6 +201,31 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
     return q
 
 
+def case_exists(conn, quote_no: str) -> bool:
+    """這個單號在內建案件（quotations）裡存不存在。給 L1 的金流串接（helpers/custom_finance）判斷「關聯案件是不是內建案件」
+    用——L1 讀 quotations 只准經這個檔（DEPENDENCY-MAP §3.2）。M01 不在／表不存在 ⇒ False。"""
+    if not quote_no:
+        return False
+    try:
+        return conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)).fetchone() is not None
+    except sqlite3.OperationalError as e:
+        if "no such table" not in str(e):
+            raise
+        return False
+
+
+def case_sales_department(conn, quote_no: str):
+    """案件業務所屬部門 id（查無案件／業務沒有部門 ⇒ None）。給營運報表部門篩選的 L1 金流串接用（同上，唯一讀 quotations 的位置）。"""
+    try:
+        r = conn.execute("SELECT u.department_id AS d FROM quotations q LEFT JOIN users u ON u.id=q.sales_person_id WHERE q.quote_no=?",
+                         (quote_no,)).fetchone()
+    except sqlite3.OperationalError as e:
+        if "no such table" not in str(e):
+            raise
+        return None
+    return r["d"] if r else None
+
+
 def case_page_readable(conn, quote_no: str, user: dict) -> bool:
     """案件頁（報價單本體）的**讀取規則**：row_access `case`／scope="read"（擁有者、admin+，或持 cashier，CM14b；
     **不放行 case_manage**）。

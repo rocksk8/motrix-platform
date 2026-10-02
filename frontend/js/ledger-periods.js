@@ -23,6 +23,9 @@ function ledgerPeriodsPage() {
     // 期初餘額
     op: { year: '', date: '', text: '', filename: '', result: null, error: '', busy: false },
 
+    // 總帳申請（會計規定 C 類）：一般財務人員的結帳／重開／年度決算／期初批次先送申請，最高管理者核准後自動執行
+    requests: [],
+
     _initDone: false,
     async init() {
       if (this._initDone) return
@@ -49,6 +52,18 @@ function ledgerPeriodsPage() {
     },
 
     isSuper() { return this.role === 'superadmin' },
+    async loadRequests() {
+      try { this.requests = (await this._api('GET', '/api/ledger/action-requests')).requests } catch (e) { this.requests = [] }
+    },
+    canWithdraw(r) { return r.status === '待審核' && r.requested_by === (this._session().username || '') },
+    async withdrawReq(r) {
+      this.error = ''
+      try {
+        await this._api({ method: 'POST' }, '/api/ledger/action-requests/' + r.id + '/withdraw')
+        await this.loadRequests()
+        this.notice = '已撤回申請 ' + r.request_no + '。'
+      } catch (e) { this.error = e.message }
+    },
     statusLabel(s) { return ({ open: '開放', closed: '已結帳', locked: '已鎖定' })[s] || s },
     fmt(n) { return (n || 0).toLocaleString('zh-TW') },
 
@@ -60,6 +75,7 @@ function ledgerPeriodsPage() {
         this.batches = d.batches
         const l = await this._api('GET', '/api/ledger/period-log')
         this.log = (l.log || []).slice(0, 50)
+        await this.loadRequests()
         this.loaded = true
       } catch (e) {
         this.error = e.message
@@ -97,14 +113,17 @@ function ledgerPeriodsPage() {
       const d = this.dlg
       if (!d) return
       this.dlgError = ''
+      this.notice = ''          // 不留上一個動作的訊息（撤回後再申請時會誤判成新訊息）
       const id = d.period.id
       this.busy = true
       try {
-        if (d.kind === 'close') await this._api({ method: 'POST' }, '/api/ledger/periods/' + id + '/close', { accept_warnings: d.accept, reason: d.reason })
-        else if (d.kind === 'reopen') await this._api({ method: 'POST' }, '/api/ledger/periods/' + id + '/reopen', { reason: d.reason })
+        let r = {}
+        if (d.kind === 'close') r = await this._api({ method: 'POST' }, '/api/ledger/periods/' + id + '/close', { accept_warnings: d.accept, reason: d.reason })
+        else if (d.kind === 'reopen') r = await this._api({ method: 'POST' }, '/api/ledger/periods/' + id + '/reopen', { reason: d.reason })
         else await this._api({ method: 'POST' }, '/api/ledger/periods/' + id + '/unlock', { reason: d.reason })
         this.dlg = null
         await this.load()
+        if (r && r.pending) this.notice = r.message
       } catch (e) { this.dlgError = e.message }
       this.busy = false
     },
@@ -137,6 +156,7 @@ function ledgerPeriodsPage() {
     async closeYearAct() {
       await this._closingAct(async c => {
         const r = await this._api({ method: 'POST' }, '/api/ledger/years/' + c.year + '/close', { accept_warnings: c.accept })
+        if (r.pending) { c.done = r.message; await this.load(); return }
         c.done = c.year + ' 年度已決算（本期淨利 ' + this.fmt(r.net_income) + '）；四大表已凍結。'
         await this.load()
         c.status = 'closed'
@@ -152,10 +172,10 @@ function ledgerPeriodsPage() {
         await this.load()
       })
     },
-    async exportStatements(y) {
+    async exportStatements(y, fmt) {
       this.error = ''
       try {
-        const r = await fetch('/api/ledger/years/' + y.year + '/statements/export', { headers: { Authorization: 'Bearer ' + (this._session().token || '') } })
+        const r = await fetch('/api/ledger/years/' + y.year + '/statements/export' + (fmt === 'pdf' ? '/pdf' : ''), { headers: { Authorization: 'Bearer ' + (this._session().token || '') } })
         if (!r.ok) {
           let d = {}
           try { d = await r.json() } catch (e) { d = {} }
@@ -164,7 +184,7 @@ function ledgerPeriodsPage() {
         const blob = await r.blob()
         const a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
-        a.download = '財務報表_' + y.year + '年度' + (y.status === 'closed' ? '_決算' : '') + '.xlsx'
+        a.download = '財務報表_' + y.year + '年度' + (y.status === 'closed' ? '_決算' : '') + (fmt === 'pdf' ? '.pdf' : '.xlsx')
         a.click()
         URL.revokeObjectURL(a.href)
       } catch (e) { this.error = e.message }
@@ -218,10 +238,10 @@ function ledgerPeriodsPage() {
         const r = await this._api({ method: 'POST' }, '/api/ledger/opening', {
           year: parseInt(this.op.year, 10), opening_date: this.op.date, rows: this.parseRows(), filename: this.op.filename,
         })
-        this.notice = '已建立期初傳票草稿 ' + r.voucher_no + '；請到傳票頁送審、核准、過帳後才會入帳'
         this.op.result = null
         this.op.text = ''
         await this.load()
+        this.notice = r.pending ? r.message : '已建立期初傳票草稿 ' + r.voucher_no + '；請到傳票頁送審、核准、過帳後才會入帳'
       } catch (e) { this.op.error = e.message }
       this.op.busy = false
     },

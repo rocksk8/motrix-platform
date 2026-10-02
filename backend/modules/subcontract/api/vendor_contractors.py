@@ -8,6 +8,7 @@ from fastapi import APIRouter, Body, File, HTTPException, Header, UploadFile
 from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, next_entity_code
+from helpers.gl_status import gl_posted_warning
 from helpers import (_require_user, _tok, _audit, _notify, notify_module_activity, require_any_module,
                      check_approve_permission, resolve_active_flow_setting, UnresolvedManagerError,
                      setting_to_active_tiers)
@@ -64,7 +65,7 @@ class DispatchIn(BaseModel):
     items_json: Optional[list] = []
     personnel_json: Optional[list] = []
     tax_rate: Optional[float] = 0.05
-    status: Optional[str] = 'draft'
+    status: Optional[str] = None      # 31-A：建立忽略、編輯只能等於現值（狀態只經操作按鈕改）
     notes: Optional[str] = ''
     invoice_no: Optional[str] = ''
     payable_date: Optional[str] = ''
@@ -78,7 +79,13 @@ class DispatchIn(BaseModel):
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _vendor_row(row) -> dict:
+from modules.subcontract import bank_mask as _bm  # noqa: E402
+from modules.subcontract import dispatch_flow as _flow  # noqa: E402
+from core.txn import begin_write as _begin_write  # noqa: E402
+
+
+def _vendor_row(row, user=None) -> dict:
+    """user＝檢視者；帳號遮蔽規則見 modules/subcontract/bank_mask.py（沒帶 user ⇒ 一律遮蔽，fail closed）。"""
     d = {}
     try:
         d = json.loads(row["data_json"] or "{}")
@@ -88,6 +95,7 @@ def _vendor_row(row) -> dict:
     # 實際影像走專屬的 GET/PUT .../passbook 端點（比照 contractors.py 的 has_passbook 慣例）
     has_passbook = bool(d.pop("bankPassbookImage", None))
     keys = row.keys() if hasattr(row, 'keys') else []
+    _bm.mask_record(user, d)
     return {
         "id": row["id"],
         "code": (row["code"] if "code" in keys else "") or "",
@@ -166,6 +174,19 @@ def _dispatch_row(row) -> dict:
         "updatedAt": row["updated_at"] or "",
         "acceptedAt": (row["accepted_at"] if "accepted_at" in keys else "") or "",
         "acceptedBy": (row["accepted_by"] if "accepted_by" in keys else "") or "",
+        # 31-A 派發審核（只新增鍵；契約 IP-1 只准加不准改）：兩段審核狀態、單號、舊單旗標、合併後的人話狀態
+        "approvalStatus": (row["approval_status"] if "approval_status" in keys else "") or "",
+        "completionStatus": (row["completion_status"] if "completion_status" in keys else "") or "",
+        "docCode": (row["doc_code"] if "doc_code" in keys else "") or "",
+        "legacy": _flow.is_legacy(row),
+        "displayStatus": _flow.display_status(row),
+        "submittedBy": (row["submitted_by"] if "submitted_by" in keys else "") or "",
+        "submittedAt": (row["submitted_at"] if "submitted_at" in keys else "") or "",
+        "approvedAt": (row["approved_at"] if "approved_at" in keys else "") or "",
+        "completionRequestedBy": (row["completion_requested_by"] if "completion_requested_by" in keys else "") or "",
+        "completionRequestedAt": (row["completion_requested_at"] if "completion_requested_at" in keys else "") or "",
+        "completionApprovedAt": (row["completion_approved_at"] if "completion_approved_at" in keys else "") or "",
+        "cancelReason": (row["cancel_reason"] if "cancel_reason" in keys else "") or "",
     }
 
 
@@ -202,7 +223,7 @@ def list_vendor_contractors(
     sql += " ORDER BY name"
     rows = conn.execute(sql, params).fetchall()
     conn.close()
-    return [_vendor_row(r) for r in rows]
+    return [_vendor_row(r, user) for r in rows]
 
 
 @router.get("/api/vendor-contractors/selectable")
@@ -228,7 +249,7 @@ def get_vendor_contractor(vid: int, authorization: str = Header(None)):
     conn.close()
     if not row:
         raise HTTPException(404, "找不到此承攬商")
-    return _vendor_row(row)
+    return _vendor_row(row, user)
 
 
 @router.post("/api/vendor-contractors", status_code=201)
@@ -284,6 +305,9 @@ def update_vendor_contractor(vid: int, body: VendorContractorIn, authorization: 
         "visits", "bankPassbookImage",
         "bankCode", "bankName", "bankBranch", "bankAccountName", "bankAccountNumber",
     )
+    # 遮蔽值原樣送回（編輯表單載入的是 ****1234）⇒ 保留原帳號，不可覆蓋成遮蔽字串
+    if _bm.is_masked_value(new_data.get("bankAccountNumber")):
+        new_data = {**new_data, "bankAccountNumber": existing_data.get("bankAccountNumber", "")}
     for key in _preserve_keys:
         if key not in new_data:
             default = [] if key == "visits" else ""
@@ -370,6 +394,8 @@ def get_vendor_passbook(vid: int, authorization: str = Header(None)):
         data = json.loads(row["data_json"] or "{}")
     except Exception:
         data = {}
+    if not _bm.can_see_full(user):         # 存簿影像上印著完整帳號 ⇒ 只有最高管理者
+        return {"bank_passbook": "", "masked": bool(data.get("bankPassbookImage"))}
     return {"bank_passbook": data.get("bankPassbookImage", "")}
 
 
@@ -527,17 +553,21 @@ def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
             conn.close()
             raise HTTPException(404, "承攬商不存在")
         vendor_name = vrow["name"]
+    # 31-A：新建的派發一律是「草稿＋審核狀態 草稿」，body 帶的 status 一律忽略（狀態只能由操作按鈕經 dispatch_flow.set_status 改）；單號 DP- 在寫鎖內取號
+    _begin_write(conn)
+    doc_code = _flow.next_dispatch_code(conn)
     cur = conn.execute(
         "INSERT INTO contractor_dispatches "
-        "(quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json, total_amount, tax_rate, status, notes, invoice_no, payable_date, invoice_date, created_by, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json, total_amount, tax_rate, status, notes, invoice_no, payable_date, invoice_date, created_by, created_at, updated_at,"
+        " approval_status, doc_code) "
+        "VALUES (?,?,?,?,?,?,?,?,'draft',?,?,?,?,?,?,?,?,?)",
         (body.quote_no, body.vendor_id, body.dispatch_date or '',
          body.scope or '', json.dumps(items, ensure_ascii=False),
          json.dumps(personnel, ensure_ascii=False), total,
          body.tax_rate if body.tax_rate is not None else 0.05,
-         body.status or 'draft', body.notes or '', body.invoice_no or '',
+         body.notes or '', body.invoice_no or '',
          body.payable_date or '', normalize_date(body.invoice_date, "發票日期"),
-         user["username"], now, now)
+         user["username"], now, now, _flow.DRAFT, doc_code)
     )
     did = cur.lastrowid
     conn.commit()
@@ -547,7 +577,7 @@ def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
     dispatch_label = f"{body.quote_no}" + (f"（{vendor_name}）" if vendor_name else "（外包人員點工）")
     notify_module_activity("承攬商派發", "建立", user.get("display_name") or user["username"],
                             dispatch_label, "vendor-contractors.html", detail=body.scope or "")
-    return {"id": did, "created_at": now, "total_amount": total}
+    return {"id": did, "created_at": now, "total_amount": total, "status": "draft", "approvalStatus": _flow.DRAFT, "docCode": doc_code}
 
 
 @router.put("/api/contractor-dispatches/{did}")
@@ -571,10 +601,17 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
         raise HTTPException(400, "請至少選擇承攬商或外包名單人員其中一項")
     total = sum(float(it.get("amount", 0) or 0) for it in items)
     conn = get_db()
-    existing = conn.execute("SELECT updated_at, invoice_date FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
+    existing = conn.execute("SELECT * FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
     if not existing:
         conn.close()
         raise HTTPException(404, "派發紀錄不存在")
+    # 31-A：狀態不能經由編輯改（只有操作按鈕走 dispatch_flow.set_status）；送審中（任一段）整筆不可編輯
+    if body.status and body.status != (existing["status"] or "draft"):
+        conn.close()
+        raise HTTPException(400, "不能在編輯時改狀態：請使用派發卡片上的操作按鈕（送審、確認驗收、申請完工、取消…）")
+    if (existing["approval_status"] in (_flow.PENDING, _flow.IN_PROGRESS)) or (existing["completion_status"] in (_flow.PENDING, _flow.IN_PROGRESS)):
+        conn.close()
+        raise HTTPException(409, "這筆派發正在審核中，不能編輯（請先撤回或等審核結果）")
     voucher = conn.execute(
         "SELECT voucher_no FROM contractor_payment_vouchers WHERE dispatch_id=?", (did,)
     ).fetchone()
@@ -587,22 +624,30 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
     if body.vendor_id and not conn.execute("SELECT id FROM vendor_contractors WHERE id=?", (body.vendor_id,)).fetchone():
         conn.close()
         raise HTTPException(404, "承攬商不存在")
+    # 實質欄位（承攬商、品項、人員、稅率）有變：已核准的與舊單都要重新送審（審核狀態回「草稿」、清掉核准紀錄）；沒變的欄位（備註、日期、發票）照舊可改
+    new_rate = body.tax_rate if body.tax_rate is not None else 0.05
+    changed = _flow.substantive_hash(existing["vendor_id"], existing["items_json"], existing["personnel_json"], existing["tax_rate"]) !=         _flow.substantive_hash(body.vendor_id, items, personnel, new_rate)
+    reset = changed and (existing["approval_status"] in ("", _flow.APPROVED))
     conn.execute(
         "UPDATE contractor_dispatches SET vendor_id=?, dispatch_date=?, scope=?, items_json=?, "
-        "personnel_json=?, total_amount=?, tax_rate=?, status=?, notes=?, invoice_no=?, payable_date=?, invoice_date=?, updated_at=? WHERE id=?",
+        "personnel_json=?, total_amount=?, tax_rate=?, notes=?, invoice_no=?, payable_date=?, invoice_date=?, updated_at=? WHERE id=?",
         (body.vendor_id, body.dispatch_date or '', body.scope or '',
          json.dumps(items, ensure_ascii=False),
          json.dumps(personnel, ensure_ascii=False), total,
-         body.tax_rate if body.tax_rate is not None else 0.05,
-         body.status or 'draft', body.notes or '', body.invoice_no or '',
+         new_rate, body.notes or '', body.invoice_no or '',
          body.payable_date or '',
          existing["invoice_date"] if body.invoice_date is None else normalize_date(body.invoice_date, "發票日期"),
          now, did)
     )
+    if reset:
+        _begin_write(conn)
+        code = existing["doc_code"] or _flow.next_dispatch_code(conn)
+        conn.execute("UPDATE contractor_dispatches SET approval_status=?, approval_json='{}', approved_hash='', approved_at='', doc_code=? WHERE id=?",
+                     (_flow.DRAFT, code, did))
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'vendor.dispatch.update', 'contractor_dispatch', str(did), body.quote_no)
-    return {"ok": True, "updated_at": now, "total_amount": total}
+    return {"ok": True, "updated_at": now, "total_amount": total, "needsResubmit": bool(reset)}
 
 
 @router.delete("/api/contractor-dispatches/{did}")
@@ -622,6 +667,10 @@ def delete_dispatch(did: int, authorization: str = Header(None)):
     if voucher:
         conn.close()
         raise HTTPException(409, f"此派發已產生匯款申請（{voucher['voucher_no']}），請先處理該申請後再刪除")
+    st = conn.execute("SELECT approval_status, status FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
+    if st and st["approval_status"] in (_flow.PENDING, _flow.IN_PROGRESS, _flow.APPROVED):      # 審核中／已核准的派發不可刪（留下紀錄）：請改用「取消」
+        conn.close()
+        raise HTTPException(409, "審核中或已核准的派發不能刪除，請改用「取消」並填理由")
     conn.execute("DELETE FROM contractor_dispatches WHERE id=?", (did,))
     conn.commit()
     conn.close()
@@ -1008,13 +1057,17 @@ def set_dispatch_invoice_date(did: int, body: dict = Body(...), authorization: s
         if not row:
             raise HTTPException(404, "派發紀錄不存在")
         now = datetime.now().isoformat()
+        # MONEY-FLOWS §9 L3：發票日進 E04 雜湊；已入帳的 E04 會在下次引擎執行時 drift（沖轉草稿＋新草稿）。
+        # 下游效應：營運報表權責口徑立即換月；總帳要手動執行才反映。這裡只提示、不擋（註解：發票日刻意不擋）。
+        gl_warn = gl_posted_warning(conn, "contractor_dispatch", str(did)) if inv != (row["invoice_date"] or "") else None
         conn.execute("UPDATE contractor_dispatches SET invoice_date=?, updated_at=? WHERE id=?", (inv, now, did))
         conn.commit()
     finally:
         conn.close()
     _audit(_tok(authorization), "vendor.dispatch.invoice_date", "contractor_dispatch", str(did),
            "%s 發票日期：%s → %s" % (row["quote_no"], row["invoice_date"] or "（未登錄）", inv or "（未登錄）"))
-    return {"ok": True, "invoiceDate": inv, "updated_at": now}
+    return {"ok": True, "invoiceDate": inv, "updated_at": now,
+            **({"glWarning": gl_warn.replace("此筆", "此筆（派工單 %s／%s）" % (did, row["quote_no"]), 1)} if gl_warn else {})}
 
 
 # ── 驗收流程節點 ──────────────────────────────────────────────────────────────
@@ -1037,35 +1090,53 @@ def accept_dispatch(did: int, body: dict, authorization: str = Header(None)):
     action = body.get("action", "")
     if action not in _ACCEPT_ALLOWED_FROM:
         raise HTTPException(400, "不支援的驗收操作：請使用派工列上的「待驗收」或「確認驗收」按鈕。")
+    return dispatch_status_audited(did, action, user, authorization, reason="", legacy_action=True)
+
+
+def dispatch_status_audited(did, target, user, authorization, *, reason="", legacy_action=False):
+    """所有「改作業狀態」的端點共用：讀列 → `dispatch_flow.set_status`（唯一寫入口）→ commit → 稽核／通知。"""
     conn = get_db()
-    row = conn.execute(
-        "SELECT quote_no, status FROM contractor_dispatches WHERE id=?", (did,)
-    ).fetchone()
-    if not row:
+    try:
+        _begin_write(conn)
+        row = conn.execute("SELECT * FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
+        if not row:
+            raise HTTPException(404, "派發紀錄不存在")
+        if legacy_action:
+            cur = row["status"] or "draft"
+            if cur not in _ACCEPT_ALLOWED_FROM[target]:       # 沿用既有訊息（/accept 的來源狀態限制）
+                allowed_labels = "、".join(_STATUS_LABELS.get(x, x) for x in _ACCEPT_ALLOWED_FROM[target])
+                raise HTTPException(409, f"目前狀態「{_STATUS_LABELS.get(cur, cur)}」無法執行此操作（需為：{allowed_labels}）")
+        try:
+            res = _flow.set_status(conn, row, target, user, reason=reason)
+        except _flow.FlowError as e:
+            raise HTTPException(e.status_code, str(e))
+        conn.commit()
+    finally:
         conn.close()
-        raise HTTPException(404, "派發紀錄不存在")
-    current = row["status"] or "draft"
-    if current not in _ACCEPT_ALLOWED_FROM[action]:
-        allowed_labels = "、".join(_STATUS_LABELS.get(s, s) for s in _ACCEPT_ALLOWED_FROM[action])
-        conn.close()
-        raise HTTPException(409, f"目前狀態「{_STATUS_LABELS.get(current, current)}」無法執行此操作（需為：{allowed_labels}）")
-    now = datetime.now().isoformat()
-    if action == "accepted":
-        conn.execute(
-            "UPDATE contractor_dispatches SET status='accepted', accepted_by=?, accepted_at=?, updated_at=? WHERE id=?",
-            (user.get("display_name") or user["username"], now, now, did)
-        )
-    else:
-        conn.execute(
-            "UPDATE contractor_dispatches SET status=?, updated_at=? WHERE id=?",
-            (action, now, did)
-        )
-    conn.commit()
-    conn.close()
-    _audit(_tok(authorization), f'vendor.dispatch.{action}', 'contractor_dispatch', str(did), row["quote_no"])
-    notify_module_activity("承攬商派發", _STATUS_LABELS.get(action, action),
+    _audit(_tok(authorization), f'vendor.dispatch.{target}', 'contractor_dispatch', str(did), row["quote_no"],
+           {"from": res["prev"], "to": res["new"], "reason": reason, "note": res["note"], "docCode": row["doc_code"] or "",
+            **({"closedStages": [c["stage"] for c in res["closed"]]} if res.get("closed") else {})})
+    for c in res.get("closed") or []:                              # 通知送審人：派發已取消、審核已關閉（不放金額）
+        if c["requestedBy"]:
+            _notify(c["requestedBy"], "dispatch_returned", str(did), row["quote_no"],
+                    "派發 %s 已取消，%s已關閉" % (row["doc_code"] or ("#%s" % did), "完工審核" if c["stage"] == "completion" else "派發審核"))
+    notify_module_activity("承攬商派發", _STATUS_LABELS.get(target, target),
                             user.get("display_name") or user["username"], row["quote_no"], "vendor-contractors.html")
-    return {"ok": True, "status": action, "updated_at": now}
+    return {"ok": True, "status": target, "updated_at": datetime.now().isoformat()}
+
+
+@router.post("/api/contractor-dispatches/{did}/status")
+def set_dispatch_status(did: int, body: dict, authorization: str = Header(None)):
+    """卡片上的操作按鈕（已送出／已確認／取消…；待驗收與確認驗收也可走這裡）。`completed` 不能由這裡設定（只有完工審核通過）。
+    取消已核准或已進入驗收的派發要 `reason`；已有匯款申請者只有最高管理者。"""
+    user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "需要管理員權限")
+    target = str((body or {}).get("target") or "")
+    if target not in _flow.STATUSES:
+        raise HTTPException(400, "不認得的狀態")
+    return dispatch_status_audited(did, target, user, authorization, reason=str((body or {}).get("reason") or ""))
 
 
 # ── 回推報價單品項 ────────────────────────────────────────────────────────────
@@ -1146,6 +1217,7 @@ def dispatch_cost_view(d: dict) -> dict:
         "invoiceDate": d.get("invoiceDate") or "",
         "payableDate": d.get("payableDate") or "",
         "amount": d.get("grandTotal") or 0,
+        "approvalPending": (d.get("approvalStatus") or "") in (_flow.PENDING, _flow.IN_PROGRESS),     # 31-A：待審核仍計入、但標示
         "totalWithTax": d.get("totalWithTax") or 0,
         "personnelTotal": d.get("personnelTotal") or 0,
         "personnelCount": sum(1 for p in personnel if str((p or {}).get("name") or "").strip()),
@@ -1168,4 +1240,6 @@ def dispatch_cost_for_case(quote_no: str, authorization: str) -> list:
             "WHERE d.quote_no=? ORDER BY d.id", (quote_no,)).fetchall()
     finally:
         conn.close()
-    return [dispatch_cost_view(_dispatch_row(r)) for r in rows]
+    # 31-A（使用者裁示一條報表規則，所有成本檢視一致）：已取消、草稿、已退回不計；待審核／簽核中計入並標示；已核准與舊單（''）照舊
+    return [dispatch_cost_view(d) for d in (_dispatch_row(r) for r in rows)
+            if (d.get("status") or "") != "cancelled" and (d.get("approvalStatus") or "") not in (_flow.DRAFT, _flow.RETURNED)]

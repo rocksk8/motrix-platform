@@ -2,6 +2,8 @@
 
 介面一有變動就紅；修法：照規則升 CORE_VERSION（新增＝次版號、修改／刪除＝主版號）、
 寫 backend/core/CHANGELOG.md，再跑 `python backend/tests/platform/_l1_interface.py --update` 重產快照。
+〔2026-09-30 版號佔位（PLAYBOOK §G6）：分支改寫 `## (next)` 段落＋`core_bump.py --pending`（快照 core_version="next"、
+ CORE_VERSION 不動），號碼由列車 train_number.py 定；列車／platform 上有佔位 ⇒ 紅〕
 """
 import pytest
 
@@ -32,14 +34,67 @@ def test_interface_matches_snapshot():
           "再跑 _l1_interface.py --update（版號不足會拒絕重產）。")
 
 
+def pending_problems(snap_version, changelog_pending, allowed):
+    """版號佔位（PLAYBOOK §G6）的一致性：CHANGELOG 最上面有 `## (next)` ⇔ 快照 core_version="next"；不准有佔位時兩者都不可以有。
+    ⇒ None（不是佔位狀態，照舊比號碼）或問題清單（空＝合格的佔位）。純函式。"""
+    ok, why = allowed
+    if snap_version != "next" and not changelog_pending:
+        return None
+    bad = []
+    if not ok:
+        bad.append("這裡不准有版號佔位（%s）⇒ 跑 tools/platform/train_number.py assign" % why)
+    if changelog_pending and snap_version != "next":
+        bad.append("core/CHANGELOG.md 最上面是 (next) 佔位，而 G1 快照 core_version=%s ⇒ 跑 core_bump.py --pending" % snap_version)
+    if snap_version == "next" and not changelog_pending:
+        bad.append("G1 快照 core_version=next，而 core/CHANGELOG.md 最上面沒有 `## (next)` 段落 ⇒ 先寫段落")
+    return bad
+
+
+def _pending_state():
+    from tests._version_slots import placeholders_allowed
+    return pending_problems(G.load_snapshot()["core_version"], G.changelog_pending(), placeholders_allowed())
+
+
 def test_snapshot_version_is_current():
+    bad = _pending_state()
+    if bad is not None:                                     # 分支上的佔位：號碼由列車定（不比 CORE_VERSION）
+        assert not bad, "；".join(bad)
+        return
     assert G.load_snapshot()["core_version"] == G.core_version(), (
         "快照記的 CORE_VERSION 與目前不同 ⇒ 升了版號卻沒重產快照（或反過來）")
 
 
 def test_changelog_top_equals_core_version():
+    bad = _pending_state()
+    if bad is not None:
+        assert not bad, "；".join(bad)
+        return
     assert G.changelog_top_version() == G.core_version(), (
         "core/CHANGELOG.md 最上面的版號 %s ≠ CORE_VERSION %s" % (G.changelog_top_version(), G.core_version()))
+
+
+@pytest.mark.parametrize("snap,pend,allowed,expect", [
+    ("1.71", False, (True, "wip"), None),                  # 沒有佔位 ⇒ 照舊比號碼
+    ("next", True, (True, "wip"), []),                     # 分支：一致的佔位 ⇒ 合格
+    ("next", True, (False, "MOTRIX_TRAIN=1"), ["不准"]),    # 列車／platform ⇒ 紅
+    ("1.71", True, (True, "wip"), ["--pending"]),           # 寫了段落沒跑 --pending
+    ("next", False, (True, "wip"), ["沒有 `## (next)`"]),   # 快照佔位、段落不見了
+])
+def test_rc_pending_consistency(snap, pend, allowed, expect):
+    got = pending_problems(snap, pend, allowed)
+    if expect is None:
+        assert got is None
+    else:
+        assert len(got) == len(expect) and all(e in g for e, g in zip(expect, got)), got
+
+
+def test_rc_changelog_pending_detection():
+    base = "# x\n\n## 1.71 — d\n- a\n"
+    assert not G.changelog_pending(base)
+    assert G.changelog_pending("# x\n\n## (next) — d（wip/a）\n- b\n\n" + base[4:])
+    assert G.changelog_pending("# x\n\n## (next:major) — d\n- b\n\n" + base[4:])
+    assert not G.changelog_pending("# x\n\n## (Next) — d\n\n" + base[4:]), "格式不對的不算佔位（另一道守門擋）"
+    assert not G.changelog_pending(base + "\n## (next) — 在舊段落下面\n"), "只看最上面一個版號之上"
 
 
 # ── 反向控制：判定函式在突變後必須報出來 ─────────────────────────────────────

@@ -800,6 +800,8 @@ def export_task_history(task_id: int, authorization: str = Header(None)):
                 (c["report"] if c else ""),
             ])
 
+    from helpers.xlsx_out import log_export
+    log_export(authorization, "csv", "daily_tasks", "task-history", {"task_id": task_id}, len(all_occs) * max(len(assigned), 1))   # 每次匯出都留紀錄（2026-09-30）
     return _HTTPResponse(
         content=buf.getvalue().encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8",

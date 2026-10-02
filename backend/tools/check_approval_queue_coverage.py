@@ -69,6 +69,11 @@ _QUEUE_TYPE_FOR_DOC_TYPE = {
     "completion":         ("completion_note",    "completion_notes"),
     "voucher":            ("voucher",            "vouchers_all"),
     "bonus":              ("bonus_award",        "bonus_awards"),
+    # 31-A：派發審核與完工審核共用這一個送審類型；佇列 type 是 contractor_dispatch（完工段 contractor_dispatch_completion 是同表的第二段）
+    "contractor_dispatch": ("contractor_dispatch", "contractor_dispatches"),
+    # 31-C：叫料審核與叫料匯款申請（疊加表／申請表；佇列提供者 `approval.queue_items`／case_material、case_material_payment）
+    "material_order":     ("material_order",     "case_material_approvals"),
+    "material_payment":   ("material_payment",   "case_material_payments"),
 }
 
 
@@ -76,6 +81,7 @@ _QUEUE_TYPE_FOR_DOC_TYPE = {
 #: 不算漏掉（稽核 D AP-M1：列車 core-only／真刪時，覆蓋檢查掃不到已拿掉模組的提供者）。不在表上的類型屬 L1 或 M01。
 _OWNER_MODULE = {
     "contractor_voucher": "subcontract",
+    "contractor_dispatch": "subcontract",
     "invoice_voucher":    "arap",
     "payment_request":    "arap",
     "bonus":              "payroll",
@@ -84,6 +90,8 @@ _OWNER_MODULE = {
     "quotation":          "case",
     "extra_expense":      "case",
     "completion":         "case",
+    "material_order":     "case",
+    "material_payment":   "case",
     "voucher":            "accounting",     # M06（2026-09-26 搬進 modules/accounting）
 }
 

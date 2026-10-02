@@ -17,7 +17,7 @@ from openpyxl.styles import Alignment
 from openpyxl.utils import get_column_letter
 
 from fastapi import APIRouter, Header, HTTPException, Query, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from db import get_db
 from helpers import (
@@ -36,6 +36,13 @@ from core import registry as _registry
 RECEIVABLES_MISSING = "應收應付模組未安裝：收款與銷項發票資料不提供（現金口徑收入、銷項發票匯出需要它）"
 
 
+def _custom_income(conn, d0, d1, basis, department_id=None):
+    """自訂模組（建構器）的收入逐筆（L1 `helpers.custom_finance`；沒有入帳單據 ⇒ []）。
+    關聯到內建案件的略過（內建報價單自己認列，不重複計入）。"""
+    from helpers import custom_finance
+    return custom_finance.income_items(conn, d0, d1, basis, department_id)
+
+
 def _collect_income_items(d0, d1, department_id=None):
     p = _registry.single_provider("receivables.income_items")
     return [] if p is None else p(d0, d1, department_id)
@@ -46,7 +53,7 @@ def _collect_tax_invoices(year=None, month=None):
     if p is None:
         raise HTTPException(404, RECEIVABLES_MISSING)
     return p(year, month)
-from helpers.xlsx_out import check_export_rate, set_row, xl_style
+from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, set_row, xl_style
 from helpers.company_identity import company_heading, contact_line
 from helpers.recognition_basis import normalize_basis, BASIS_NOTES, DEFAULT_BASIS   # `AC2`：口徑的純標籤（L1）
 
@@ -156,6 +163,8 @@ def _live_dispatch_totals_by_quote(conn):
             "SELECT cd.*, vc.name AS vendor_name FROM contractor_dispatches cd"
             " LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id WHERE cd.status != 'cancelled'"):
         d = dispatch_row(r)
+        if (d.get("approvalStatus") or "") in ("草稿", "已退回"):      # 31-A（Q6）：與應計成本同一條規則
+            continue
         totals[r["quote_no"]] = totals.get(r["quote_no"], 0) + float(d["grandTotal"] or 0)
     return totals
 
@@ -191,9 +200,7 @@ def _case_sales_owner(cr: dict, row, name_index: dict, user_by_id: dict):
          `sales_person_id` / `sales_person`。舊案件不回填是刻意的：那個欄位
          當初沒人填，補一個猜測值只會製造假資料。
 
-    ⚠️ **部門彙總仍然依 `sales_person_id`**，沒有跟著改（見 `_row_dept()`）。
-    那是另一條線：部門篩選會影響整份報表的取數範圍，改動面遠大於這次交辦，
-    而且要先決定「案件的部門是跟著開單者還是跟著業務負責」。已記在 §11。
+    部門歸屬 2026-10-01 起同樣跟著這個歸屬（見 `_case_dept()`）。
     """
     raw = (cr.get("roles") or {}).get("sales") if isinstance(cr, dict) else None
     # CM3（2026-09-24）：物件形狀直接用帳號定位（改名、同名都不影響）；未轉換的舊字串照舊反查
@@ -217,6 +224,46 @@ def _case_sales_owner(cr: dict, row, name_index: dict, user_by_id: dict):
     return ("name", label), label
 
 
+def _load_user_index(conn):
+    """users ⇒ (user_by_id, name_index)：部門歸屬與業務負責反查共用（`_case_sales_owner`／`_case_dept` 的輸入）。"""
+    user_by_id = {
+        r["id"]: {"deptId": r["department_id"], "deptName": r["dept_name"], "displayName": r["display_name"],
+                  "username": r["username"]}
+        for r in conn.execute("""
+            SELECT u.id, u.username, u.department_id, u.display_name, d.name AS dept_name
+            FROM users u LEFT JOIN departments d ON d.id = u.department_id
+        """).fetchall()
+    }
+    return user_by_id, _build_name_index(user_by_id)
+
+
+def _row_cr(row) -> dict:
+    """quotations 列的 caseRecord ⇒ dict；缺或壞 ⇒ {}。列有 `cr_json` 用它；只有 `data_json` 就在 Python 逐筆解析
+    （新程式不寫 `json_extract(`：壞的一筆只影響那一筆，見 tests/platform/test_json_extract_ratchet.py）。"""
+    try:
+        keys = row.keys()
+        if "cr_json" in keys:
+            v = json.loads(row["cr_json"]) if row["cr_json"] else {}
+        elif "data_json" in keys:
+            v = (json.loads(row["data_json"] or "{}") or {}).get("caseRecord") or {}
+        else:
+            v = {}
+    except Exception:
+        return {}
+    return v if isinstance(v, dict) else {}
+
+
+def _case_dept(cr: dict, row, name_index: dict, user_by_id: dict):
+    """案件的部門 ⇒ (department_id, department_name)：**跟著業績歸屬的業務負責人**（`_case_sales_owner`），不是開單者。
+
+    2026-10-01 使用者裁示：案件部門跟 `caseRecord.roles.sales`。規則與業務員績效表同一份（兩表並排看，必須對得起來）：
+    歸屬是帳號（key＝("id", uid)）⇒ 該帳號的部門；只有名字、查無帳號、同名無法唯一 ⇒ 「未分類」，**不**悄悄退回開單者的部門。
+    例外：`roles.sales` 沒填時 `_case_sales_owner` 本來就退回 `sales_person_id`（開單者），部門照舊跟開單者。"""
+    key, _label = _case_sales_owner(cr, row, name_index, user_by_id)
+    info = user_by_id.get(key[1]) if key[0] == "id" else None
+    return (info["deptId"], info["deptName"]) if info else (None, "未分類")
+
+
 def _collect(period_start: str, period_end: str, department_id: Optional[int] = None) -> dict:
     conn = get_db()
     rows = conn.execute("""
@@ -238,29 +285,20 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     # 直接存部門），displayName 則供下方業務員績效/目標達成率用 id 比對、
     # 但顯示「目前」名稱（不受 quotations.sales_person 這個建立當下快照字串
     # 影響，見 case["salesPersonId"] 的說明）。
-    user_by_id = {
-        r["id"]: {"deptId": r["department_id"], "deptName": r["dept_name"], "displayName": r["display_name"],
-                  "username": r["username"]}
-        for r in conn.execute("""
-            SELECT u.id, u.username, u.department_id, u.display_name, d.name AS dept_name
-            FROM users u LEFT JOIN departments d ON d.id = u.department_id
-        """).fetchall()
-    }
+    user_by_id, name_index = _load_user_index(conn)
     # 案件實際「成案」的月份（見 helpers/quotations.py::quote_won_month_map()
     # docstring）——優先 quote_date，quote_date 缺漏或誤填未來日期才退回
     # audit_log 實際成案時間戳；monthly_trend() 已經用這個避開「舊案件補登/
     # 業務員手誤填未來日期，被歸錯月份甚至整筆從近N月報表消失」的坑，這裡
     # 一併存進每個 case，讓 _compute_achievement()（年度目標達成率）也能用
     # 同一套邏輯判斷案件算哪一年，不要各自用一半的日期判斷邏輯。
-    name_index = _build_name_index(user_by_id)
     won_month = quote_won_month_map(conn)
     live_dispatch_totals = _live_dispatch_totals_by_quote(conn)
     conn.close()
 
     def _row_dept(row):
         """回傳 (department_id, department_name) 或 (None, '未分類')。"""
-        info = user_by_id.get(row["sales_person_id"])
-        return (info["deptId"], info["deptName"]) if info else (None, "未分類")
+        return _case_dept(_row_cr(row), row, name_index, user_by_id)
 
     if department_id:
         rows = [r for r in rows if _row_dept(r)[0] == department_id]
@@ -406,7 +444,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     sales.sort(key=lambda x: x["totalAmount"], reverse=True)
 
     # dept perf（依部門彙總，跟上面「依業務員」同樣算法，多一層部門分組；
-    # 查無 sales_person_id 對應部門的案件歸類「未分類」）
+    # 業務負責人查無帳號／部門的案件歸類「未分類」）
     for c in cases_all:
         k = c["deptName"] or "未分類"
         dm.setdefault(k, {"deptId": c["deptId"], "deptName": k, "cases": 0, "total": 0, "received": 0,
@@ -1459,7 +1497,8 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         orig_margin   = float(s.get("origMarginPct", 0) or 0)
         orig_net_pct  = float(s.get("origNetMarginPct", 0) or 0)
         orig_net_prof = int(s.get("origNetProfit", 0) or 0)
-        item_cost     = int(s.get("itemActualTotal", 0) or 0)
+        # 32-S5：未採用的採購單連結金額＝該品項的實際成本（只是還沒按「採用」）⇒ Excel 固定欄位併進「品項實際成本」，分項加總才等於實際總成本
+        item_cost     = int(s.get("itemActualTotal", 0) or 0) + int(s.get("itemPoUnadopted", 0) or 0)
         extra_cost    = int(s.get("extraTotal", 0) or 0)
         total_cost    = int(s.get("totalActualCost", 0) or 0)
         gross_pct     = float(s.get("grossMarginPct", 0) or 0)
@@ -1492,7 +1531,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         tot_pretax    = sum(mc["pretax"] or 0 for mc in data["marginCases"])
         tot_orig_cost = sum(int((mc.get("settleSummary") or {}).get("origTotalCost",0) or 0) for mc in data["marginCases"])
         tot_orig_np   = sum(int((mc.get("settleSummary") or {}).get("origNetProfit",0) or 0) for mc in data["marginCases"])
-        tot_item      = sum(int((mc.get("settleSummary") or {}).get("itemActualTotal",0) or 0) for mc in data["marginCases"])
+        tot_item      = sum(int((mc.get("settleSummary") or {}).get("itemActualTotal",0) or 0) + int((mc.get("settleSummary") or {}).get("itemPoUnadopted",0) or 0) for mc in data["marginCases"])
         tot_extra     = sum(int((mc.get("settleSummary") or {}).get("extraTotal",0) or 0) for mc in data["marginCases"])
         tot_total     = sum(int((mc.get("settleSummary") or {}).get("totalActualCost",0) or 0) for mc in data["marginCases"])
         tot_net_prof  = sum(int((mc.get("settleSummary") or {}).get("netProfit",0) or 0) for mc in data["marginCases"])
@@ -2008,6 +2047,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
       <tbody>
         <tr><td>報價稅前收入</td><td class="r">{_fn(ss.get("quotedPretax"))}</td></tr>
         <tr><td>品項實際成本</td><td class="r orange">{_fn(ss.get("itemActualTotal"))}</td></tr>
+        {('<tr><td>採購單（品項尚未採用）</td><td class="r orange">' + _fn(ss.get("itemPoUnadopted")) + '</td></tr>') if (ss.get("itemPoUnadopted") or 0) > 0 else ''}
         <tr><td>額外支出</td><td class="r orange">{_fn(ss.get("extraTotal"))}</td></tr>
         <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{_fn(ss.get("totalActualCost"))}</td></tr>
         <tr><td>真實毛利</td><td class="r {'green' if int(ss.get('grossProfit',0) or 0)>=0 else 'red'}">{_fn(ss.get("grossProfit"))}</td></tr>
@@ -2332,6 +2372,7 @@ def report_json(
 
 
 @router.get("/api/reports/financial/excel")
+@export_logged("xlsx", "analytics", "financial-report")
 def report_excel(
     period: Optional[str] = Query(None),
     department_id: Optional[int] = Query(None),
@@ -2359,14 +2400,15 @@ def report_excel(
     _audit(_tok(authorization), "reports.export", "reports", "financial",
            f"營運報表 Excel 匯出（{label}）",
            {"format": "excel", "period": period, "departmentId": department_id})
-    return StreamingResponse(
-        io.BytesIO(xlsx),
+    return Response(
+        content=xlsx,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
     )
 
 
 @router.get("/api/reports/financial/pdf")
+@export_logged("pdf", "analytics", "financial-report")
 def report_pdf(
     period: Optional[str] = Query(None),
     department_id: Optional[int] = Query(None),
@@ -2614,6 +2656,7 @@ def _build_tax_export_excel(rows: list, period_label: str, gen_at: str) -> bytes
 
 
 @router.get("/api/reports/tax-export")
+@export_logged("xlsx", "analytics", "tax-export")
 def tax_export_excel(
     year: Optional[int] = Query(None),
     month: Optional[int] = Query(None),
@@ -2635,8 +2678,8 @@ def tax_export_excel(
     _audit(_tok(authorization), "reports.export", "reports", "tax-export",
            f"銷項發票清單匯出（{label}，共 {len(rows)} 筆）",
            {"year": year, "month": month, "count": len(rows)})
-    return StreamingResponse(
-        io.BytesIO(xlsx),
+    return Response(
+        content=xlsx,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
     )
@@ -3019,14 +3062,12 @@ def _collect_unreceived_items(d0: str, d1: str, department_id: Optional[int] = N
         FROM quotations
         WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
     """).fetchall()
-    dept_by_user = {}
-    if department_id:
-        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+    user_by_id, name_index = _load_user_index(conn) if department_id else ({}, {})
     conn.close()
 
     items = []
     for row in rows:
-        if department_id and dept_by_user.get(row["sales_person_id"]) != department_id:
+        if department_id and _case_dept(_row_cr(row), row, name_index, user_by_id)[0] != department_id:
             continue
         cr = {}
         if row["cr_json"]:
@@ -3091,15 +3132,12 @@ def _collect_payment_anomalies(department_id: Optional[int] = None) -> list:
                COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag_eff
         FROM quotations
     """).fetchall()
-    dept_by_user = {}
-    if department_id:
-        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute(
-            "SELECT id, department_id FROM users").fetchall()}
+    user_by_id, name_index = _load_user_index(conn) if department_id else ({}, {})
     conn.close()
 
     items = []
     for row in rows:
-        if department_id and dept_by_user.get(row["sales_person_id"]) != department_id:
+        if department_id and _case_dept(_row_cr(row), row, name_index, user_by_id)[0] != department_id:
             continue
         cr = {}
         if row["cr_json"]:
@@ -3184,7 +3222,8 @@ def _months_expense_slice(expenses: dict, months) -> dict:
             if (it.get("date") or "")[:7] in want:
                 flat.append({**it, "cat": cat})
     flat.sort(key=lambda x: x.get("date") or "", reverse=True)
-    return {"items": flat, "total": sum(it["amount"] for it in flat)}
+    return {"items": flat, "total": sum(it["amount"] for it in flat),
+            "byDepartment": _dept_rollup((it["cat"], it) for it in flat)}
 
 
 def _month_expense_slice(expenses: dict, month: str) -> dict:
@@ -3241,19 +3280,32 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     rec = _recognition()
     if basis == "accrual":
         def _income(a, b, dept):
-            if rec is None:
-                return []                                   # M01 不在 ⇒ 權責口徑收入沒有資料來源（incomeNotice 明說）
             conn = get_db()
             try:
-                return rec.accrual_income_items(conn, a, b, dept)
+                base = [] if rec is None else rec.accrual_income_items(conn, a, b, dept)   # M01 不在 ⇒ 權責口徑收入沒有資料來源（incomeNotice 明說）
+                return base + _custom_income(conn, a, b, basis, dept)
             finally:
                 conn.close()
     else:
-        _income = _collect_income_items
+        def _income(a, b, dept):
+            conn = get_db()
+            try:
+                return _collect_income_items(a, b, dept) + _custom_income(conn, a, b, basis, dept)
+            finally:
+                conn.close()
     if basis == "accrual":
         income_notice = "" if rec is not None else CASE_RECOGNITION_MISSING
     else:
         income_notice = "" if _registry.single_provider("receivables.income_items") else RECEIVABLES_MISSING
+    from helpers import custom_finance
+    _c = get_db()
+    try:
+        _und = custom_finance.undated_counts(_c, basis)
+    finally:
+        _c.close()
+    if _und["income"]:                                       # 自訂模組入帳但缺該口徑日期的收入 ⇒ 明說（待補登），不靜默少列
+        income_notice = (income_notice + "；" if income_notice else "") + "自訂模組有 %d 筆收入缺%s日期，沒有列入（待補登）" % (
+            _und["income"], "歸屬" if basis == "accrual" else "現金")
     expenses_annual = _collect_expenses(year, department_id, basis)
     if month[:4] == str(year):
         month_slice = _month_expense_slice(expenses_annual, month)
@@ -3363,13 +3415,25 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     }
 
 
+def _dept_rollup(pairs) -> list:
+    """(類別, 明細列) → 依部門彙總；未分類（deptId None）排最後。Σ total＝明細金額總和（守恆由測試保證）。"""
+    by_dept: dict = {}
+    for cat, d in pairs:
+        k = d.get("deptId")
+        b = by_dept.setdefault(k, {"deptId": k, "deptName": d.get("deptName") or "未分類", "contractor": 0,
+                                   "equipment": 0, "material": 0, "other": 0, "total": 0})
+        b[cat] += d["amount"]
+        b["total"] += d["amount"]
+    return sorted(by_dept.values(), key=lambda b: (b["deptId"] is None, -b["total"]))
+
+
 def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str = DEFAULT_BASIS,
                       conn=None) -> dict:
     """回傳該年度 1~12 月的支出結構（承攬商/設備/料件/其他）＋逐筆明細。
 
     department_id（2026-08-28 新增）：承攬商派發／料件進貨／其他支出三類都只透過
     quote_no 間接連結案件，不像 dashboard.py 的案件列表本身就有 sales_person_id
-    可直接篩——這裡改用 quote_no → sales_person_id → department_id 兩段查表比對。
+    可直接篩——這裡改用 quote_no → 案件業務負責人（`_case_dept`）→ department_id 兩段查表比對。
     設備進貨若料號批次沒有掛在任何案件（quote_no 為空，例如尚未出貨的常備庫存
     先行進貨），department_id 篩選開啟時會被排除，因為無法歸屬到任何部門，這點
     與 dashboard.py「案件沒有 sales_person_id 就被篩掉」的既有落差一致。"""
@@ -3384,18 +3448,28 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     if own_conn:
         conn = get_db()
 
-    dept_by_quote: dict = {}
-    if department_id:
-        dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
-        dept_by_quote = {
-            r["quote_no"]: dept_by_user.get(r["sales_person_id"])
-            for r in conn.execute("SELECT quote_no, sales_person_id FROM quotations").fetchall()
-        }
+    # 部門歸屬（2026-10-01 無案件支出）：明示 departmentId（提供者給、送出當下凍結）＞案件業務負責人的部門（_case_dept）＞未分類。
+    # 篩選與明細都走同一個解析 ⇒ 篩選開啟時「無案件但有明示部門」的支出屬於該部門，不再一律被排除。
+    user_by_id, name_index = _load_user_index(conn)
+    dept_by_quote = {
+        r["quote_no"]: _case_dept(_row_cr(r), r, name_index, user_by_id)[0]
+        for r in conn.execute("SELECT quote_no, sales_person_id, sales_person, data_json FROM quotations").fetchall()
+    }
+    dept_names = {r["id"]: r["name"] for r in conn.execute("SELECT id, name FROM departments").fetchall()}
 
-    def _quote_in_department(quote_no: str) -> bool:
+    def _dept_of(quote_no, explicit=None):
+        if explicit is not None:
+            return explicit
+        return dept_by_quote.get(quote_no) if quote_no else None
+
+    def _quote_in_department(quote_no: str, explicit=None) -> bool:
         if not department_id:
             return True
-        return bool(quote_no) and dept_by_quote.get(quote_no) == department_id
+        return _dept_of(quote_no, explicit) == department_id
+
+    def _dept_fields(quote_no, explicit=None) -> dict:
+        did = _dept_of(quote_no, explicit)
+        return {"deptId": did, "deptName": dept_names.get(did, "未分類") if did is not None else "未分類"}
 
     rec = _recognition()                                   # M01 的 case.recognition；不在 ⇒ 下面三類整個缺（unavailable 明說）
     # ── 承攬商派發（`AC2`：口徑由 M01 決定——權責＝發票日、未稅；現金＝已匯款日、含稅）
@@ -3405,9 +3479,10 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             continue
         monthly[mo]["contractor"] += e["amount"]
         details["contractor"].append({
+            **_dept_fields(e["quoteNo"]),
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round_half_up(e["amount"]),
-            "taxNote": e["taxNote"] + ("｜差額待審核" if e.get("remitPending") else ""), "provisional": e["provisional"],
-            "pending": bool(e.get("remitPending")),
+            "taxNote": e["taxNote"] + ("｜差額待審核" if e.get("remitPending") else "") + ("｜派發待審核" if e.get("approvalPending") else ""),
+            "provisional": e["provisional"], "pending": bool(e.get("remitPending") or e.get("approvalPending")),
         })
 
     # ── 叫料（`AC2`：原本完全沒算進支出；併入「料件」類，不會寫入 stock_items ⇒ 不重複）
@@ -3417,8 +3492,10 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             continue
         monthly[mo]["material"] += e["amount"]
         details["material"].append({
+            **_dept_fields(e["quoteNo"]),
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round_half_up(e["amount"]),
-            "taxNote": e["taxNote"], "provisional": e["provisional"],
+            "taxNote": e["taxNote"] + ("｜待審核" if e.get("pending") else ""), "provisional": e["provisional"],
+            "pending": bool(e.get("pending")),                       # 叫料審核（31-C）：待審核／簽核中的叫料照計入並標示
         })
 
     # ── 料件 / 設備進貨成本（stock_items.cost，依 parts.category 分桶；同月同料號
@@ -3437,9 +3514,10 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         bucket = "equipment" if r["category"] in _EQUIPMENT_PART_CATEGORIES else "material"
         cost = float(r["cost"] or 0)
         monthly[mo][bucket] += cost
-        key = (mo, bucket, r["part_no"], r["batch_no"] or "")
+        dpt = _dept_fields(r["quote_no"])
+        key = (mo, bucket, r["part_no"], r["batch_no"] or "", dpt["deptId"])
         agg = stock_agg.setdefault(key, {
-            "date": r["created_date"] or "", "bucket": bucket,
+            **dpt, "date": r["created_date"] or "", "bucket": bucket,
             "name": r["part_name"] or r["part_no"] or "（未知料號）",
             "batchNo": r["batch_no"] or "", "amount": 0.0, "qty": 0,
         })
@@ -3448,6 +3526,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     for agg in stock_agg.values():
         label = agg["name"] + (f"（批號 {agg['batchNo']}）" if agg["batchNo"] else "")
         details[agg["bucket"]].append({
+            "deptId": agg["deptId"], "deptName": agg["deptName"],
             "date": agg["date"], "quoteNo": "",
             "desc": f"{label} × {agg['qty']}", "amount": round_half_up(agg["amount"]),
         })
@@ -3457,10 +3536,12 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     # `AC2`：歸月改由 helpers.recognition 決定（權責＝發票日→核准日→憑證日；現金＝付款日→憑證日）。
     for e in (rec.extra_entries(conn, basis) if rec is not None else []):
         mo = (e["date"] or "")[:7]
-        if mo not in monthly or not _quote_in_department(e["quoteNo"]):
+        if mo not in monthly or not _quote_in_department(e["quoteNo"], e.get("departmentId")):
             continue
-        monthly[mo]["other"] += e["amount"]
-        details["other"].append({
+        bucket = e.get("bucket") or "other"          # 32-S3：連到案件品項的採購單列＝案件的實際支出，落「料件」桶（recognition.ITEM_COST_BUCKET），不再是「其他」
+        monthly[mo][bucket] += e["amount"]
+        details[bucket].append({
+            **_dept_fields(e["quoteNo"], e.get("departmentId")),
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"].strip("｜"),
             "amount": round_half_up(e["amount"]), "files": e["files"],
             # 精算尚未完結：金額還可能變動，前端會標示出來，不要讓使用者
@@ -3475,16 +3556,22 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     from core import registry
     for _name, fn in sorted(registry.providers("expense.entries").items()):
         for e in fn(conn, d0, d1):
-            mo = (e["date"] or "")[:7]
-            if mo not in monthly or not _quote_in_department(e["quoteNo"]):
+            date, amount = e["date"], e["amount"]
+            if basis != "accrual" and "cashDate" in e:      # 現金口徑：提供者另給現金日與現金金額（選填鍵，舊提供者沒有 ⇒ 沿用 date／amount）
+                date, amount = e["cashDate"], e.get("cashAmount", e["amount"])
+            mo = (date or "")[:7]
+            if mo not in monthly or not _quote_in_department(e["quoteNo"], e.get("departmentId")):
                 continue
-            monthly[mo]["other"] += e["amount"]
+            monthly[mo]["other"] += amount
             details["other"].append({
-                "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round(e["amount"]),
+                **_dept_fields(e["quoteNo"], e.get("departmentId")),
+                "date": date, "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round(amount),
                 "files": [], "pending": bool(e.get("pending")), "taxNote": "差額待審核" if e.get("pending") else "",
                 "provisional": False, "category": e["category"],
             })
 
+    from helpers import custom_finance
+    _undated = custom_finance.undated_counts(conn, basis)        # 自訂模組入帳但缺該口徑日期 ⇒ 明說「待補登」，不靜默少列
     if own_conn:
         conn.close()
 
@@ -3506,9 +3593,13 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     for cat in details:
         details[cat].sort(key=lambda x: x["date"], reverse=True)
 
+    by_department = _dept_rollup((cat, d) for cat, rows in details.items() for d in rows)   # 與 monthly 同一批明細
+
     # 稽核 X-1：某一類整個沒算（例如 IP-1 提供者不在）⇒ 明說，不可以跟「這期 0 元」長得一樣
-    return {"monthly": monthly_items, "totals": totals, "details": details,
-            "unavailable": rec.dispatch_unavailable(basis) if rec is not None else [dict(CASE_EXPENSES_UNAVAILABLE)]}
+    return {"monthly": monthly_items, "totals": totals, "details": details, "byDepartment": by_department,
+            "unavailable": (rec.dispatch_unavailable(basis) if rec is not None else [dict(CASE_EXPENSES_UNAVAILABLE)])
+                           + ([{"category": "custom", "reason": "自訂模組有 %d 筆支出缺%s日期，沒有列入（待補登，不是 0 筆）"
+                                % (_undated["expense"], "現金" if basis != "accrual" else "歸屬")}] if _undated["expense"] else [])}
 
 
 @router.get("/api/reports/expenses-monthly")
@@ -3547,10 +3638,7 @@ def _collect_receivable_items(department_id: Optional[int] = None) -> list:
   _collect() L161/L249 已經驗證過該防呆邏輯。"""
   conn = get_db()
 
-  dept_by_user = {}
-  if department_id:
-    dept_by_user = {r["id"]: r["department_id"]
-                    for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+  user_by_id, name_index = _load_user_index(conn) if department_id else ({}, {})
 
   won_month = quote_won_month_map(conn)
 
@@ -3564,7 +3652,7 @@ def _collect_receivable_items(department_id: Optional[int] = None) -> list:
          WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')
                IN ('已成案','已結案')"""
   ).fetchall():
-    if department_id and dept_by_user.get(row["sales_person_id"]) != department_id:
+    if department_id and _case_dept(_row_cr(row), row, name_index, user_by_id)[0] != department_id:
       continue
 
     try:
@@ -3712,3 +3800,10 @@ def report_receivables_monthly(year: int = Query(None), month: str = Query(None)
   year  = year or today.year
   month = month or today.strftime("%Y-%m")
   return _build_receivables_scopes(year, month, department_id, quarter)
+
+
+# ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
+# 匯出稽核／PDF 姊妹的「歸屬區」＝稽核 detail.module 的字串，**不是權限 key**；用常數傳而不是字面量：
+# tests/test_module_keys_consistency 的後端掃描器把任何 module 等號字串字面量當權限 key。
+_EXPORT_AREA = "analytics"
+add_pdf_sibling(router, "/api/reports/tax-export/pdf", tax_export_excel, module=_EXPORT_AREA, name="tax-export", title="銷項發票清單")

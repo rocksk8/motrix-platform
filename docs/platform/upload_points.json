@@ -1,0 +1,105 @@
+{
+  "_note": "每一個會收檔案（UploadFile／request.form／save_document_files／data:image 內文）的端點都要在這裡分類：catalog＝進附件目錄（source_type 必須被某個 attachments.catalog 提供者的 CATEGORIES 認領）；excluded＝不進目錄＋理由（PII／暫存／設定／未核准暫存檔）；pending＝已決定要進、尚未做（P3）。守門：backend/tests/platform/test_upload_points_registered.py；契約：INTEGRATION-POINTS IP-105。",
+  "points": {
+    "POST /api/quotations/{quote_no}/signed-files": {
+      "module": "case",
+      "catalog": "quotation_signed"
+    },
+    "POST /api/quotations/{quote_no}/updates": {
+      "module": "case",
+      "catalog": "case_update"
+    },
+    "POST /api/quotations/{no}/payment/{idx}/invoice-files": {
+      "module": "case",
+      "catalog": "payment_item"
+    },
+    "POST /api/quotations/{no}/materials/{idx}/files": {
+      "module": "case",
+      "catalog": "material"
+    },
+    "POST /api/quotations/{no}/materials/{idx}/invoice-files": {
+      "module": "case",
+      "catalog": "material_invoice"
+    },
+    "POST /api/quotations/{quote_no}/extra-expenses/{exp_id}/files": {
+      "module": "case",
+      "catalog": "extra_expense"
+    },
+    "POST /api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files": {
+      "module": "case",
+      "excluded": "額外支出變更申請的暫存檔：未核准前不是正式檔案，不進目錄（設計 Q6）；核准後併入 extra_expense"
+    },
+    "POST /api/completion-notes/{note_no}/signed-files": {
+      "module": "case",
+      "catalog": "completion_note"
+    },
+    "POST /api/shipping-notes/{note_no}/signed-files": {
+      "module": "supply",
+      "catalog": "shipping_note"
+    },
+    "POST /api/invoice-vouchers/{voucher_no}/issued-files": {
+      "module": "arap",
+      "catalog": "invoice_voucher"
+    },
+    "POST /api/contractor-dispatches/{did}/files": {
+      "module": "subcontract",
+      "catalog": "contractor_dispatch"
+    },
+    "POST /api/contractor-dispatches/{did}/invoice-files": {
+      "module": "subcontract",
+      "catalog": "contractor_invoice"
+    },
+    "POST /api/dev-cases/{case_id}/logs": {
+      "module": "crm",
+      "catalog": "dev_log"
+    },
+    "POST /api/vouchers/{voucher_id}/attachments": {
+      "module": "accounting",
+      "catalog": "voucher"
+    },
+    "POST /api/payslips/{slip_no}/signed-files": {
+      "module": "payroll",
+      "catalog": "payslip_signed"
+    },
+    "POST /api/work-logs/{wid}/photos": {
+      "module": "L1",
+      "catalog": "work_log_photo"
+    },
+    "POST /api/custom/{key}/files/{field}": {
+      "module": "L1",
+      "pending": "自訂模組附件：以動態類別 custom:<模組>:<欄位> 登記，P3（檔案中心）一起做；目前讀取權限已由 uploads.path_access（custom_files）守住"
+    },
+    "PUT /api/contractors/{cid}/id-card": {
+      "module": "subcontract",
+      "excluded": "PII（身分證正反面），base64 存 DB 欄位，只在名冊頁由 superadmin 看；不進搜尋（pii_forms.json）"
+    },
+    "PUT /api/vendor-contractors/{vid}/passbook": {
+      "module": "subcontract",
+      "excluded": "PII（存簿封面），base64 存 DB 欄位；不進搜尋（pii_forms.json）"
+    },
+    "PUT /api/settings/branding/{kind}": {
+      "module": "L1",
+      "excluded": "系統設定（LOGO／favicon），不是單據"
+    },
+    "POST /api/reports/bank-reconcile": {
+      "module": "arap",
+      "excluded": "銀行對帳 CSV，對帳後即丟，不落檔"
+    },
+    "POST /api/contractors/import": {
+      "module": "subcontract",
+      "excluded": "xlsx 匯入，解析後即丟，不落檔"
+    },
+    "POST /api/network-plans/{plan_id}/import/excel": {
+      "module": "netplan",
+      "excluded": "xlsx 匯入，解析後即丟，不落檔"
+    },
+    "POST /api/auth/login": {
+      "module": "L1",
+      "excluded": "非上傳：回應含 TOTP／Passkey 的 data:image QR 圖，掃描器的字面值誤判"
+    },
+    "POST /api/auth/totp/setup": {
+      "module": "L1",
+      "excluded": "非上傳：回應含 TOTP QR 的 data:image，掃描器的字面值誤判"
+    }
+  }
+}

@@ -5,8 +5,17 @@
 - 數字、字串（'…' 或 "…"）、`true`／`false`／`null`
 - 欄位引用：直接寫欄位 key（例：`qty * unit_price`）
 - 四則運算 `+ - * /`、取餘數 `%`；比較 `== != < <= > >=`；`and`／`or`／`not`
-- 函式：`if(條件, 是, 否)`、`round(x[, 位數])`、`min(…)`、`max(…)`、`sum(…)`、`abs(x)`、
+- 函式：`if(條件, 是, 否)`、`round(x[, 位數])`、`round_half_up(x[, 位數])`、`min(…)`、`max(…)`、`sum(…)`、`abs(x)`、
   `coalesce(a, b, …)`（第一個不是空值的）、`days_between(起, 迄)`（日期字串 YYYY-MM-DD）
+  **天數規則**：`迄 − 起`，**不含起算日**——同一天＝0、隔天＝1、迄早於起＝負數；只取字串前 10 碼（帶時間的 `2026-10-01T23:59` 也只看日期）；
+  任一邊空白 ⇒ 空值；格式錯（`2026-02-30`、`昨天`）⇒ 公式錯誤。要「含頭含尾」（例：請假 10/1～10/3 算 3 天）寫 `days_between(起, 迄) + 1`。
+- 明細表（W1 建構器第三輪，2026-09-30）：`total(表, "欄")` 加總、`avg(表, "欄")` 平均、`count(表)` 列數。
+  第一個參數是明細表欄位的 key（不加引號），第二個是該表某個數值欄的 key（字串）；空值不算 0：
+  沒有任何數字 ⇒ `total` 回 0、`avg` 回空值；`count` 是列數（含空白列）。
+
+**`round` 與 `round_half_up` 現況（2026-09-30 查證）**：兩者**同一種算法**＝四捨五入（.5 一律進位，例 12562.5 → 12563），
+不是 Python 內建 `round()` 的銀行家捨入；實作走 L1 `helpers.legal_params.round_half_up`（稽核 D C-M4，營業稅規定）。
+`round_half_up` 是明確名稱的別名——稅額公式寫它，讀公式的人不必猜；`round` 的既有語意不變。
 
 不允許：屬性（`a.b`）、索引（`a[0]`）、次方、lambda、推導式、任何其他函式——解析時就拒絕，不執行。
 
@@ -14,14 +23,19 @@
 `coalesce(qty, 0)` 才把它當 0。除以 0 ⇒ 空值並回報，不丟到呼叫端。
 """
 import ast
+import re
 from datetime import date
 from decimal import Decimal
 
 from helpers.legal_params import round_half_up
 
+_ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MAX_LENGTH = 500
 MAX_DEPTH = 30
-FUNCTIONS = ("if", "round", "min", "max", "sum", "abs", "coalesce", "days_between")
+FUNCTIONS = ("if", "round", "round_half_up", "min", "max", "sum", "abs", "coalesce", "days_between",
+             "total", "avg", "count")
+#: 第一個參數是明細表、第二個是欄 key 的函式
+TABLE_FUNCTIONS = ("total", "avg", "count")
 _LITERALS = {"true": True, "false": False, "null": None}
 _BIN = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/", ast.Mod: "%"}
 _CMP = {ast.Eq: "==", ast.NotEq: "!=", ast.Lt: "<", ast.LtE: "<=", ast.Gt: ">", ast.GtE: ">="}
@@ -91,13 +105,22 @@ def _parse(expr):
         return FormulaError("語法錯誤：%s" % (e.msg or "無法解析"), _lead(expr) + max((e.offset or 1) - 1, 0))
 
 
-def check(expr, fields=None) -> list:
-    """回 `[{"pos": 字元位置, "message": …}]`（空＝通過）。`fields` 給了 ⇒ 引用不存在的欄位也列出。"""
+def check(expr, fields=None, tables=None) -> list:
+    """回 `[{"pos": 字元位置, "message": …}]`（空＝通過）。`fields` 給了 ⇒ 引用不存在的欄位也列出。
+    `tables`：`{明細表 key: [可加總的數值欄 key…]}`；給了 ⇒ `total／avg／count` 的第一個參數必須是其中的表、
+    第二個必須是該表的數值欄，而明細表不可以直接參與運算（只能當上面三個函式的第一個參數）。"""
     tree = _parse_or_error(expr)
     if isinstance(tree, dict):
         return [tree]
     problems = []
     known = set(fields) if fields is not None else None
+    table_keys = set(tables) if tables is not None else set()
+    #: 當作明細表參數用的 Name 節點 id（這些不算「直接參與運算」）
+    table_args = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in TABLE_FUNCTIONS and n.args \
+                and isinstance(n.args[0], ast.Name):
+            table_args.add(id(n.args[0]))
 
     def walk(node, depth):
         if depth > MAX_DEPTH:
@@ -111,6 +134,8 @@ def check(expr, fields=None) -> list:
                 return
             if known is not None and node.id not in known:
                 problems.append({"pos": _pos(expr, node), "message": "引用不到欄位 %s" % node.id})
+            elif node.id in table_keys and id(node) not in table_args:
+                problems.append({"pos": _pos(expr, node), "message": "明細表 %s 不能直接運算，請用 total／avg／count" % node.id})
         elif isinstance(node, ast.BinOp):
             if type(node.op) not in _BIN:
                 problems.append({"pos": _pos(expr, node), "message": "不支援的運算（只能用 + - * / %）"})
@@ -139,16 +164,38 @@ def check(expr, fields=None) -> list:
                 problems.append({"pos": _pos(expr, node.keywords[0].value), "message": "函式不接受具名參數"})
             else:
                 n = len(node.args)
-                ok = {"if": n == 3, "round": n in (1, 2), "abs": n == 1, "days_between": n == 2}.get(name, n >= 1)
+                ok = {"if": n == 3, "round": n in (1, 2), "round_half_up": n in (1, 2), "abs": n == 1, "days_between": n == 2,
+                      "total": n == 2, "avg": n == 2, "count": n == 1}.get(name, n >= 1)
                 if not ok:
                     problems.append({"pos": _pos(expr, node), "message": "%s 的參數個數不對" % name})
-            for a in node.args:
+                elif name in TABLE_FUNCTIONS:
+                    problems.extend(_check_table_call(expr, node, name, tables))
+            for i, a in enumerate(node.args):
+                if name in TABLE_FUNCTIONS and i == 1:
+                    continue                                   # 欄 key 是字串常數，不當公式常數檢查
                 walk(a, depth + 1)
         else:
             problems.append({"pos": _pos(expr, node), "message": "不支援的寫法（%s）" % type(node).__name__})
 
     walk(tree.body, 0)
     return problems
+
+
+def _check_table_call(expr, node, name, tables):
+    """`total(表, "欄")`／`avg(表, "欄")`／`count(表)` 的引數檢查。`tables` 是 None ⇒ 只檢查形狀。"""
+    out = []
+    first = node.args[0]
+    if not isinstance(first, ast.Name):
+        return [{"pos": _pos(expr, first), "message": "%s 的第一個參數必須是明細表欄位" % name}]
+    if name != "count":
+        col = node.args[1]
+        if not (isinstance(col, ast.Constant) and isinstance(col.value, str)):
+            return [{"pos": _pos(expr, col), "message": "%s 的第二個參數必須是欄位 key（加引號的文字）" % name}]
+        if tables is not None and first.id in tables and col.value not in tables[first.id]:
+            out.append({"pos": _pos(expr, col), "message": "明細表 %s 沒有可加總的數值欄 %s" % (first.id, col.value)})
+    if tables is not None and first.id not in tables:
+        out.append({"pos": _pos(expr, first), "message": "%s 不是明細表" % first.id})
+    return out
 
 
 def _parse_or_error(expr):
@@ -240,11 +287,16 @@ def evaluate(expr, values: dict):
             name = "if" if node.func.id == _IF else node.func.id
             if name == "if":
                 return ev(node.args[1]) if ev(node.args[0]) else ev(node.args[2])
+            if name in TABLE_FUNCTIONS:
+                return _table_call(name, node, values, expr)
             args = [ev(a) for a in node.args]
             if name == "coalesce":
                 return next((a for a in args if a is not None and a != ""), None)
             if name == "days_between":
                 try:
+                    # 只認 YYYY-MM-DD：`date.fromisoformat` 在 Python 3.11 起也收 `20261001`（3.10 不收）⇒ 先擋，行為不隨直譯器版本變
+                    if any(a and not _ISO_DAY.match(str(a)[:10]) for a in args):
+                        raise ValueError(args)
                     d1, d2 = (date.fromisoformat(str(a)[:10]) if a else None for a in args)
                 except ValueError:
                     raise FormulaError("days_between 需要日期（YYYY-MM-DD）", _pos(expr, node))
@@ -252,7 +304,7 @@ def evaluate(expr, values: dict):
             nums = [num(a, node) for a in args]
             if any(a is None for a in nums):
                 return None
-            if name == "round":
+            if name in ("round", "round_half_up"):
                 # 四捨五入（稽核 D C-M4）：內建 round 是銀行家捨入（2.5 ⇒ 2），1.005 還會因浮點變 1.0。
                 # 用 L1 法規參數那一支（主持裁示不另寫一份）：乘上 10^位數、四捨五入到整數、再除回來。
                 digits = int(nums[1]) if len(nums) == 2 else 0
@@ -266,6 +318,30 @@ def evaluate(expr, values: dict):
         raise FormulaError("不支援的寫法", _pos(expr, node))           # check 已擋，理論上到不了
 
     return ev(tree.body)
+
+
+def _table_call(name, node, values, expr):
+    """`total／avg／count`：表值是 `[{欄: 值}]`。空值不算 0：`total` 沒有數字回 0、`avg` 沒有數字回空值。"""
+    rows = values.get(node.args[0].id)
+    rows = rows if isinstance(rows, list) else []
+    if name == "count":
+        return len(rows)
+    col = node.args[1].value
+    nums = []
+    for r in rows:
+        v = r.get(col) if isinstance(r, dict) else None
+        if v is None or v == "":
+            continue
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            raise FormulaError("明細表 %s 的 %s 欄有不是數字的值 %r" % (node.args[0].id, col, v), _pos(expr, node))
+        nums.append(v)
+    if name == "total":
+        t = sum(nums) if nums else 0
+        return int(t) if isinstance(t, float) and t.is_integer() else t
+    if not nums:
+        return None
+    a = sum(nums) / len(nums)
+    return int(a) if isinstance(a, float) and a.is_integer() else a
 
 
 def evaluation_order(formulas: dict) -> list:

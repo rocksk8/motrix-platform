@@ -36,6 +36,7 @@ GOLDEN_MODULES = [
     ("finance", "應收帳款／銷售訂單", "財務"),
     ("reports", "營運報表", "財務"),
     ("cashier", "出納（標記已匯款/已收款、銀行對帳）", "財務"),
+    ("expense_forms", "費用單據（不掛案件的請款／請購／採購／差旅／零用金；新增與編輯）", "財務"),
     ("procurement", "供應商／料號／採購", "採購"),
     ("inventory", "庫存管理", "採購"),
     ("equipment", "設備登載／保固", "設備"),
@@ -51,6 +52,7 @@ GOLDEN_MODULES = [
     ("audit_log", "歷史紀錄（全系統操作軌跡）", "系統"),
     ("shipping_export_log", "出貨單歷史紀錄", "系統"),
     ("module_versions", "版本紀錄", "系統"),
+    ("file_center", "檔案中心（全系統上傳檔案搜尋）", "系統"),      # 2026-10-01 附件目錄 P3 新增（末尾追加，既有順序不變）
 ]
 
 GOLDEN_ROLE_TEMPLATES = {

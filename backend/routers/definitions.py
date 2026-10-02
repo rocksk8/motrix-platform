@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from db import get_db
 from helpers import _require_user, _tok, _audit
 from core import definitions as D
+from helpers import expense_types as _expense_types  # noqa: F401  匯入即登記 expense_type 定義種類（A2-2）
 
 router = APIRouter()
 
@@ -116,8 +117,62 @@ def _payslip_sample_view():
 _SAMPLE_VIEWS = {"invoice_voucher": _invoice_voucher_sample_view, "payslip": _payslip_sample_view}
 
 
+#: 第二人審核只涵蓋「自訂模組定義（company 範圍）」——它會新增頁面、資料表與金流串接。
+#: 版面／輸出版型／自訂欄位 是超級管理員直接發布（不審核）；**每一條直接發布的路徑都寫稽核
+#: `definitions.publish_unreviewed`**（同一個動作名，稽核一次篩得到）。W3 #3：不准有沒留痕的直接發布。
+_UNREVIEWED_KIND_REASON = "此類定義不走第二人審核（只有自訂模組定義有審核流程）"
+
+
+def _audit_unreviewed(authorization, kind, key, scope, version, reason, verb="發布"):
+    _audit(_tok(authorization), "definitions.publish_unreviewed", "ui_definition", "%s/%s/%s" % (kind, key, scope),
+           "%s %s %s（%s）第 %d 版：未經第二人審核（%s）" % (verb, kind, key, scope, version, reason), {})
+
+
+def _custom_module_scope_guard(kind, scope):
+    """自訂模組定義只有 company 範圍：引擎只讀 company（`custom_modules.published_modules`），其他範圍不會生效，
+    也不該有一條不過審核的寫入路徑（W3 #3）。"""
+    if kind == "custom_module" and scope != "company":
+        raise HTTPException(400, "自訂模組定義只有 company 範圍")
+
+
 def _err(e: D.DefinitionError, status=400):
+    if isinstance(e, D.DefinitionConflict):
+        status = 409
     return JSONResponse(status_code=status, content={"detail": str(e), "problems": e.problems})
+
+
+@router.get("/api/definition-kinds")
+def list_definition_kinds(authorization: str = Header(None)):
+    """定義種類清單（內建＋模組登記的）——編輯畫面用；只有超級管理員。"""
+    _require_user(authorization, require_superadmin=True)
+    return {"kinds": D.kinds_meta()}
+
+
+@router.get("/api/expense-types")
+def list_expense_types(authorization: str = Header(None)):
+    """費用單據類型清單（已啟用；任何登入者——新增表單的下拉用）。定義的編輯走 `/api/definitions/expense_type`（超級管理員）。"""
+    _require_user(authorization)
+    from helpers import expense_types as ET
+    conn = get_db()
+    try:
+        return ET.list_types(conn)
+    finally:
+        conn.close()
+
+
+@router.get("/api/expense-types/{code}")
+def get_expense_type(code: str, version: int = Query(None, ge=0), authorization: str = Header(None)):
+    """類型定義（預設＝目前生效版；`version`＝單據釘住的版本，0＝程式預設）。任何登入者（表單要依定義渲染）。"""
+    _require_user(authorization)
+    from helpers import expense_types as ET
+    conn = get_db()
+    try:
+        t = ET.get_type(conn, code, version)
+    finally:
+        conn.close()
+    if t is None:
+        raise HTTPException(404, "查無這個單據類型")
+    return {"code": t["code"], "defVersion": t["version"], "definition": t["body"]}
 
 
 @router.get("/api/definitions/{kind}")
@@ -151,6 +206,23 @@ def delete_definition_draft(kind: str, key: str, scope: str = Query("company"), 
     return {"ok": True}
 
 
+@router.delete("/api/definitions/custom_module/{key}")
+def delete_custom_module(key: str, with_records: bool = Query(False), authorization: str = Header(None)):
+    """刪整個自訂模組（所有版本＋草稿）。有單據 ⇒ 409（帶單據數）；`with_records=1` 才連單據一起刪（已入帳的一律拒絕）。"""
+    from helpers import custom_module_delete as MD
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        r = MD.delete_module(conn, key, with_records)
+    except MD.ModuleDeleteError as e:
+        return JSONResponse(status_code=e.status, content={"detail": str(e), "records": e.records})
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "definitions.delete_module", "ui_definition", "custom_module/%s/company" % key,
+           "刪自訂模組 %s（%d 個版本、%d 筆單據）" % (key, r["versions"], r["records"]), r)
+    return dict(r, ok=True)
+
+
 @router.get("/api/definitions/{kind}/{key}")
 def get_definition(kind: str, key: str, scope: str = Query("company"), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
@@ -168,6 +240,7 @@ def get_definition(kind: str, key: str, scope: str = Query("company"), authoriza
 def save_definition_draft(kind: str, key: str, scope: str = Query("company"), payload: dict = Body(...),
                           authorization: str = Header(None)):
     u = _require_user(authorization, require_superadmin=True)
+    _custom_module_scope_guard(kind, scope)
     conn = get_db()
     try:
         d = D.save_draft(conn, kind, key, scope, payload.get("body"), u["username"])
@@ -183,7 +256,7 @@ def save_definition_draft(kind: str, key: str, scope: str = Query("company"), pa
 @router.post("/api/definitions/{kind}/{key}/validate")
 def validate_definition(kind: str, key: str, payload: dict = Body(...), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
-    if kind not in D.KINDS:
+    if kind not in D.kinds():
         raise HTTPException(400, "未知的定義種類")
     return {"problems": D.validate(kind, key, payload.get("body"))}
 
@@ -192,9 +265,33 @@ def validate_definition(kind: str, key: str, payload: dict = Body(...), authoriz
 def publish_definition(kind: str, key: str, scope: str = Query("company"), payload: dict = Body(default={}),
                        authorization: str = Header(None)):
     u = _require_user(authorization, require_superadmin=True)
+    _custom_module_scope_guard(kind, scope)
     conn = get_db()
     try:
-        d = D.publish(conn, kind, key, scope, (payload or {}).get("note", ""), u["username"])
+        if kind == "custom_module" and scope == "company":
+            # 方案 B：掛載點頁籤數上限（要連線，所以不在 validate_module 裡）——發布／送審之前擋下
+            from helpers import custom_modules as _cm
+            _dr = D.get(conn, kind, key, scope, 0)
+            _cap = _cm.mount_cap_problems(conn, key, (_dr or {}).get("body") or {}) if _dr else []
+            if _cap:
+                return JSONResponse({"detail": "這個掛載點的頁籤數已達上限", "problems": _cap}, status_code=422)
+            # S4：審核開啟且有簽核層 ⇒ 送審（回 pending）；否則與過去一樣直接發布
+            from helpers import custom_def_review as _defr
+            try:
+                r = _defr.submit(conn, key, u, (payload or {}).get("note", ""))
+            except _defr.ReviewError as e:
+                return JSONResponse({"detail": str(e), "problems": e.problems}, status_code=e.status)
+            if r["pending"]:
+                _audit(_tok(authorization), "definitions.submit", "ui_definition", "%s/%s/%s" % (kind, key, scope),
+                       "送審 %s 第 %d 版" % (key, r["version"]), {"note": (payload or {}).get("note", "")})
+                return dict(r["definition"], pending=True)
+            d = r["definition"]
+            if r.get("unreviewed"):                      # 直接發布而沒有第二人審核 ⇒ 稽核明記（主持裁示 2026-09-30）
+                _audit(_tok(authorization), "definitions.publish_unreviewed", "ui_definition", "%s/%s/%s" % (kind, key, scope),
+                       "發布 %s 第 %d 版：未經第二人審核（%s）" % (key, d["version"], r.get("reason", "")), {"note": d.get("note", "")})
+        else:
+            d = D.publish(conn, kind, key, scope, (payload or {}).get("note", ""), u["username"])
+            _audit_unreviewed(authorization, kind, key, scope, d["version"], _UNREVIEWED_KIND_REASON)
     except D.DefinitionError as e:
         return _err(e, 422 if e.problems else 400)
     finally:
@@ -249,9 +346,24 @@ def diff_definition(kind: str, key: str, scope: str = Query("company"), a: str =
 def restore_definition(kind: str, key: str, version: int, scope: str = Query("company"),
                        payload: dict = Body(default={}), authorization: str = Header(None)):
     u = _require_user(authorization, require_superadmin=True)
+    _custom_module_scope_guard(kind, scope)
     conn = get_db()
+    unreviewed_reason = _UNREVIEWED_KIND_REASON
     try:
+        if kind == "custom_module" and scope == "company":
+            from helpers import custom_def_review as _defr
+            _st = _defr.review_state(conn, u["username"])
+            unreviewed_reason = _st["reason"]
+            if _st["active"]:          # S4：審核啟用時，還原＝把舊版放回草稿（再走送審），不直接發布
+                try:
+                    r = _defr.restore_to_draft(conn, key, version, u)
+                except _defr.ReviewError as e:
+                    return JSONResponse({"detail": str(e), "problems": e.problems}, status_code=e.status)
+                _audit(_tok(authorization), "definitions.restore_to_draft", "ui_definition", "%s/%s/%s" % (kind, key, scope),
+                       "把 %s 第 %d 版放回草稿" % (key, version), {})
+                return r
         d = D.restore(conn, kind, key, scope, version, (payload or {}).get("note", ""), u["username"])
+        _audit_unreviewed(authorization, kind, key, scope, d["version"], unreviewed_reason, verb="還原")
     except D.DefinitionError as e:
         return _err(e, 422 if e.problems else 400)
     finally:

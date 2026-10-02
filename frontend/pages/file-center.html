@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>檔案中心 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!--
+    檔案中心（附件目錄 P3，L2 模組 filehub）：全系統上傳檔案的分類搜尋。
+    - 資料：GET /api/filehub/search（各模組 attachments.catalog 提供者已套原單據的讀取規則；結果沒有路徑；看不到的不列、不回個數）
+    - 「開啟檔案」＝同一條開檔路徑在新分頁開啟（圖片／PDF；失敗明說）；「前往原單據」＝舊的跳轉。
+    - 開檔：GET /api/attachments/open?type&doc&file（L1，提供者驗權）⇒ 共用預覽元件 MotrixFilePreview（◀ ▶ 在目前這一頁結果內切換）
+    - 條件寫進網址（?q=&types=&exts=&date_from=&…），可分享；網址不含任何憑證
+    - 預設只查近 90 天（畫面標出、可改）；模組不在／提供者失敗 ⇒ 顯示 unavailable，不可以跟「沒有檔案」長一樣
+  -->
+  <style>
+    .fc-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 24px 32px 60px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .fc-wrap { max-width: 1280px; }
+    .fc-grid { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 18px; margin-top: 14px; align-items: start; }
+    .fc-tree { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface, #fff); font-size: 13px; }
+    .fc-tree h3 { font-size: 12px; color: var(--text-secondary); margin: 8px 0 4px; font-weight: 600; }
+    .fc-cat { display: flex; justify-content: space-between; gap: 8px; width: 100%; padding: 5px 8px; border: 0; background: none; border-radius: 6px;
+      cursor: pointer; text-align: left; font-size: 13px; color: inherit; font-family: inherit; }
+    .fc-cat:hover { background: var(--surface-muted, #FAFAF8); }
+    .fc-cat.is-on { background: var(--tone-info-bg); color: var(--tone-info-fg); }
+    .fc-cat small { color: var(--text-secondary); }
+    .fc-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .fc-bar input, .fc-bar select { padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit; }
+    .fc-chip { padding: 4px 11px; border: 1px solid var(--border); border-radius: 14px; background: none; cursor: pointer; font-size: 12.5px; font-family: inherit; color: inherit; }
+    .fc-chip.is-on { background: var(--accent, #2563EB); border-color: var(--accent, #2563EB); color: #fff; }
+    .fc-tbl { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+    .fc-tbl th, .fc-tbl td { padding: 8px 10px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
+    .fc-tbl th { font-size: 11px; color: var(--text-secondary); background: var(--surface-muted, #FAFAF8); }
+    .fc-tbl tbody tr { cursor: pointer; }
+    .fc-tbl tbody tr:hover td { background: var(--surface-muted, #FAFAF8); }
+    .fc-note { margin-top: 10px; padding: 9px 12px; border-radius: 8px; background: var(--tone-info-bg); border: 1px solid var(--tone-info-border);
+      color: var(--tone-info-fg); font-size: 12.5px; line-height: 1.6; }
+    .fc-warn { margin-top: 10px; padding: 9px 12px; border-radius: 8px; background: var(--tone-danger-bg); border: 1px solid var(--tone-danger-border);
+      color: var(--tone-danger-fg); font-size: 12.5px; line-height: 1.6; }
+    .fc-empty { padding: 28px; text-align: center; color: var(--text-dim); font-size: 13px; }
+    .fc-pager { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 13px; }
+    @media (max-width: 900px) { .fc-grid { grid-template-columns: 1fr; } .fc-main { margin-left: 0; padding: 16px; } }
+  </style>
+</head>
+<body x-data="fileCenterPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="fc-main">
+    <div class="fc-wrap">
+      <div class="pg">
+        <div class="pg__l">
+          <div class="pg__eyebrow">系統</div>
+          <h1 class="pg__t" id="fc-title">檔案中心</h1>
+          <p class="pg__s">全系統的上傳檔案（報價單回簽、出貨單、發票、傳票附件、勞報單簽回…）。只列出你在原單據頁打得開的檔案。</p>
+        </div>
+      </div>
+
+      <div class="fc-warn" id="fc-error" x-show="err" x-text="err"></div>
+      <div class="fc-warn" id="fc-open-msg" data-fc-open-msg x-show="openMsg" x-text="openMsg"></div>
+      <template x-for="u in unavailable" :key="u.category + u.reason">
+        <div class="fc-warn" data-fc-unavailable x-text="u.reason"></div>
+      </template>
+
+      <div class="fc-grid">
+        <nav class="fc-tree" id="fc-tree" aria-label="檔案分類">
+          <button class="fc-cat" :class="{ 'is-on': !f.types.length }" data-fc-cat="" @click="pickCat('')">全部<small x-text="totalCount()"></small></button>
+          <template x-for="m in modules()" :key="m">
+            <div>
+              <h3 x-text="m"></h3>
+              <template x-for="c in catsOf(m)" :key="c.type">
+                <button class="fc-cat" :class="{ 'is-on': f.types.length === 1 && f.types[0] === c.type }" :data-fc-cat="c.type" @click="pickCat(c.type)">
+                  <span x-text="c.label"></span><small x-text="c.count"></small>
+                </button>
+              </template>
+            </div>
+          </template>
+        </nav>
+
+        <section>
+          <div class="fc-bar">
+            <input type="search" id="fc-q" placeholder="關鍵字（檔名、單號、客戶、案名）" x-model.trim="f.q" @keydown.enter="apply()" style="min-width:240px">
+            <button class="fc-chip" :class="{ 'is-on': !f.exts.length }" data-fc-ext="" @click="pickExt([])">全部</button>
+            <button class="fc-chip" :class="{ 'is-on': isExt(['pdf']) }" data-fc-ext="pdf" @click="pickExt(['pdf'])">PDF</button>
+            <button class="fc-chip" :class="{ 'is-on': isExt(['jpg','jpeg','png']) }" data-fc-ext="img" @click="pickExt(['jpg','jpeg','png'])">圖片</button>
+            <input type="date" id="fc-from" x-model="f.date_from" title="上傳日期（起）" @change="apply()">
+            <span>～</span>
+            <input type="date" id="fc-to" x-model="f.date_to" title="上傳日期（迄）" @change="apply()">
+            <input type="text" id="fc-uploader" placeholder="上傳者" x-model.trim="f.uploader" style="width:110px" @keydown.enter="apply()">
+            <input type="text" id="fc-quote" placeholder="案件號" x-model.trim="f.quote_no" style="width:130px" @keydown.enter="apply()">
+            <input type="text" id="fc-doc" placeholder="單號" x-model.trim="f.doc_no" style="width:120px" @keydown.enter="apply()">
+            <button class="btn btn-primary btn-sm" id="fc-search" @click="apply()">搜尋</button>
+            <button class="btn btn-ghost btn-sm" id="fc-clear" @click="clearAll()">清除條件</button>
+          </div>
+          <div class="fc-note" id="fc-default-range" x-show="defaultRange">
+            目前只查近 90 天上傳的檔案（<a href="javascript:void(0)" id="fc-all-time" @click="allTime()">改查全部時間</a>）。
+          </div>
+
+          <div class="fc-empty" id="fc-loading" x-show="loading">載入中…</div>
+          <table class="fc-tbl" id="fc-table" x-show="items.length">
+            <thead><tr><th>檔名</th><th>類別</th><th>單號</th><th>客戶／案名</th><th>上傳者</th><th>上傳日</th><th>大小</th><th></th></tr></thead>
+            <tbody>
+              <template x-for="(it, i) in items" :key="it.sourceType + '|' + it.docNo + '|' + it.fileId">
+                <tr :data-fc-row="i" @click="preview(i)">
+                  <td x-text="it.filename"></td>
+                  <td x-text="label(it.sourceType)"></td>
+                  <td x-text="it.docLabel"></td>
+                  <td><span x-text="it.customerName"></span><small x-show="it.projectName" style="color:var(--text-secondary)" x-text="' ／ ' + it.projectName"></small></td>
+                  <td x-text="it.uploadedBy"></td>
+                  <td x-text="(it.uploadedAt || '').slice(0, 10)"></td>
+                  <td x-text="size(it.size)"></td>
+                  <td style="white-space:nowrap">
+                    <button class="btn btn-primary btn-sm" data-fc-open @click.stop="openFile(i)">開啟檔案</button>
+                    <a :href="it.link" @click.stop x-show="it.link" data-fc-origin style="font-size:11.5px;margin-left:6px">前往原單據</a>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div class="fc-empty" id="fc-none" x-show="loaded && !loading && !items.length">沒有符合條件的檔案（只列出你有權限打開的）。</div>
+          <div class="fc-pager" x-show="loaded && (page > 1 || hasMore)">
+            <button class="btn btn-ghost btn-sm" id="fc-prev" :disabled="page <= 1 || loading" @click="go(page - 1)">上一頁</button>
+            <span>第 <b x-text="page"></b> 頁</span>
+            <button class="btn btn-ghost btn-sm" id="fc-next" :disabled="!hasMore || loading || page >= 20" @click="go(page + 1)">下一頁</button>
+            <span class="fc-note" style="margin:0" x-show="page >= 20 && hasMore">最多翻到第 20 頁；請加條件（關鍵字、日期、類別）縮小範圍。</span>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function fileCenterPage() {
+      const EMPTY = () => ({ q: '', types: [], exts: [], date_from: '', date_to: '', uploader: '', quote_no: '', doc_no: '', customer: '' })
+      return {
+        _initDone: false,
+        f: EMPTY(), items: [], categories: [], unavailable: [], facets: {}, page: 1, hasMore: false, loading: false, loaded: false, err: '', openMsg: '',
+        defaultRange: false, _seq: 0,
+        _hdr() {
+          let s = {}
+          try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
+          return { Authorization: 'Bearer ' + (s.token || '') }
+        },
+        init() {
+          if (this._initDone) return                    // <body> 的 x-init 與 Alpine 自動呼叫 ⇒ 不守衛會跑兩遍
+          this._initDone = true
+          // 條件來自網址（可分享）；沒有任何條件 ⇒ 預設近 90 天
+          const q = new URLSearchParams(location.search)
+          const list = (k) => (q.get(k) || '').split(',').map(x => x.trim()).filter(Boolean)
+          this.f = Object.assign(EMPTY(), { q: q.get('q') || '', types: list('types'), exts: list('exts'), date_from: q.get('date_from') || '',
+            date_to: q.get('date_to') || '', uploader: q.get('uploader') || '', quote_no: q.get('quote_no') || '', doc_no: q.get('doc_no') || '',
+            customer: q.get('customer') || '' })
+          this.page = Math.max(1, parseInt(q.get('page') || '1', 10) || 1)
+          if (!location.search.replace('?', '').trim()) { this.f.date_from = this.daysAgo(90); this.defaultRange = true }
+          this.fetch()
+        },
+        daysAgo(n) { return MotrixDate.addDays(MotrixDate.today(), -n) },       // 本地日期（台灣 00:00–08:00 用 UTC 會得到前一天）
+        params() {
+          const p = new URLSearchParams()
+          Object.keys(this.f).forEach(k => { const v = this.f[k]; const s = Array.isArray(v) ? v.join(',') : v; if (s) p.set(k, s) })
+          return p
+        },
+        pushUrl() {
+          const p = this.params()
+          if (this.page > 1) p.set('page', String(this.page))
+          try { history.replaceState(null, '', location.pathname + (p.toString() ? '?' + p.toString() : '')) } catch (e) {}
+        },
+        apply() { this.page = 1; this.defaultRange = false; this.fetch() },     // 使用者一動條件就不再是「預設近 90 天」
+        go(n) { this.page = n; this.fetch() },
+        clearAll() { this.f = EMPTY(); this.defaultRange = false; this.page = 1; this.fetch() },
+        allTime() { this.f.date_from = ''; this.defaultRange = false; this.page = 1; this.fetch() },
+        pickCat(t) { this.f.types = t ? [t] : []; this.apply() },
+        pickExt(e) { this.f.exts = e; this.apply() },
+        isExt(e) { return this.f.exts.length === e.length && e.every(x => this.f.exts.includes(x)) },
+        async fetch() {
+          const seq = ++this._seq
+          this.loading = true; this.err = ''
+          this.pushUrl()
+          const p = this.params()
+          p.set('page', String(this.page))
+          try {
+            const r = await window.fetch('/api/filehub/search?' + p.toString(), { headers: this._hdr() })
+            const d = await r.json().catch(() => null)
+            if (seq !== this._seq) return                       // 較晚送出的查詢才算數
+            if (!r.ok) { this.err = (d && d.detail) ? String(d.detail) : '搜尋失敗（' + r.status + '）'; this.items = []; return }
+            this.items = d.items || []; this.categories = d.categories || []; this.unavailable = d.unavailable || []
+            this.facets = d.facets || {}; this.hasMore = !!d.hasMore
+          } catch (e) { if (seq === this._seq) this.err = '網路連線失敗，請重新搜尋' }
+          finally { if (seq === this._seq) { this.loading = false; this.loaded = true } }
+        },
+        modules() { return Array.from(new Set(this.categories.map(c => c.module))) },
+        catsOf(m) { return this.categories.filter(c => c.module === m) },
+        totalCount() { return Object.values((this.facets && this.facets.byType) || {}).reduce((a, b) => a + b, 0) },
+        label(t) { const c = this.categories.find(x => x.type === t); return c ? c.label : t },
+        size(n) { return window.MotrixFilePreview ? window.MotrixFilePreview.fileSize(n) : String(n || '') },
+        // 「開啟檔案」：圖片／PDF 直接在新分頁開檔（Authorization 標頭取檔 ⇒ blob，與預覽共用 L1 attachments/open 的驗權，不另開取檔路徑）；
+        // 其他類型走預覽窗（可下載）。取不到（已刪除／無權限）⇒ 明確訊息，不留空白分頁。
+        async openFile(i) {
+          const P = window.MotrixFilePreview
+          const it = this.items[i]
+          this.openMsg = ''
+          if (!P || !it) return
+          const m = P.withMime(it)
+          const k = P.kind(m)
+          if (k !== 'image' && k !== 'pdf') { this.preview(i); return }
+          try { await P.openInNewTab(m, P.byAttachmentRef) }
+          catch (e) {
+            const msg = String((e && e.message) || '')
+            this.openMsg = /HTTP (403|404)/.test(msg) ? '無法開啟「' + it.filename + '」：檔案已被刪除，或你沒有開啟這個檔案的權限。'
+              : '無法開啟「' + it.filename + '」，請稍後再試（' + msg + '）。'
+          }
+        },
+        preview(i) {
+          const P = window.MotrixFilePreview
+          if (!P || !this.items[i]) return
+          P.open({ items: this.items.map(P.withMime), index: i, fetchBlob: P.byAttachmentRef,
+            meta: (it) => [it.docLabel, it.customerName, (it.uploadedAt || '').slice(0, 10), it.uploadedBy].filter(Boolean).join('　'),
+            opener: document.activeElement })
+        },
+      }
+    }
+  </script>
+  <script src="../static/file-preview.js"></script>
+  <script src="../static/notif.js"></script>
+  <script src="../static/ui.js"></script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

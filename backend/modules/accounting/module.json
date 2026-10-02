@@ -1,7 +1,7 @@
 {
   "key": "accounting",
   "name": "會計",
-  "version": "1.1.9",
+  "version": "next",
   "core": ">=1.0,<2.0",
   "license_key": "accounting",
   "permissions": [
@@ -10,6 +10,7 @@
   ],
   "tables": [
     "account_items",
+    "expense_categories",
     "fa_assets",
     "fa_categories",
     "fa_depr_lines",
@@ -17,12 +18,14 @@
     "fa_revisions",
     "gl_account_meta",
     "gl_account_roles",
+    "gl_action_requests",
     "gl_backfill_runs",
     "gl_balance_snapshot",
     "gl_category_map",
     "gl_confirm_batches",
     "gl_cursors",
     "gl_custom_field_map",
+    "gl_dimensions",
     "gl_engine_runs",
     "gl_fiscal_years",
     "gl_fs_lines",
@@ -58,6 +61,10 @@
         "class": "T1"
       },
       {
+        "name": "expense_categories",
+        "class": "T1"
+      },
+      {
         "name": "fa_assets",
         "class": "T1"
       },
@@ -86,6 +93,10 @@
         "class": "T1"
       },
       {
+        "name": "gl_action_requests",
+        "class": "T1"
+      },
+      {
         "name": "gl_backfill_runs",
         "class": "T1"
       },
@@ -107,6 +118,10 @@
       },
       {
         "name": "gl_custom_field_map",
+        "class": "T1"
+      },
+      {
+        "name": "gl_dimensions",
         "class": "T1"
       },
       {
@@ -231,7 +246,7 @@
       "menu": {
         "group": "finance",
         "label": "傳票",
-        "order": 30,
+        "order": 20,
         "perm": [
           "cashier"
         ]
@@ -242,7 +257,7 @@
       "menu": {
         "group": "finance",
         "label": "會計科目",
-        "order": 40,
+        "order": 30,
         "perm": [
           "cashier"
         ]
@@ -252,7 +267,7 @@
       "path": "ledger-periods.html",
       "menu": {
         "group": "finance",
-        "label": "會計期間",
+        "label": "會計期間與結帳",
         "order": 50,
         "perm": [
           "cashier",
@@ -265,7 +280,7 @@
       "menu": {
         "group": "finance",
         "label": "帳簿報表",
-        "order": 55,
+        "order": 60,
         "perm": [
           "cashier",
           "finance"
@@ -277,7 +292,7 @@
       "menu": {
         "group": "finance",
         "label": "報表設定",
-        "order": 60,
+        "order": 80,
         "perm": [
           "cashier",
           "finance"
@@ -289,7 +304,7 @@
       "menu": {
         "group": "finance",
         "label": "財務報表",
-        "order": 58,
+        "order": 70,
         "perm": [
           "cashier",
           "finance"
@@ -301,7 +316,7 @@
       "menu": {
         "group": "finance",
         "label": "總帳作業",
-        "order": 70,
+        "order": 40,
         "perm": [
           "cashier",
           "finance"

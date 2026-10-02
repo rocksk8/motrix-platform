@@ -8,12 +8,21 @@
 import json
 from datetime import date
 
-from fastapi import APIRouter, Body, Header, HTTPException, Query
+from typing import List
+
+from fastapi import APIRouter, Body, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from db import get_db
 from helpers import _require_user, _tok, _audit
 from helpers import custom_modules as CM
+from helpers import custom_builder_support as SUP
+from helpers import custom_files as CFILES
+from helpers import custom_finance as CFIN
+from helpers import custom_def_review as DEFR
+from helpers import custom_history as HIST
+from helpers import uploads as _uploads
+from core import registry as _registry
 from helpers import formula as FX
 from core import definitions as D
 
@@ -54,6 +63,8 @@ def _can_use(conn, user, key) -> dict:
     mods = json.loads(user.get("modules") or "[]")
     if CM.permission_of(key, d["body"]) not in mods:
         raise HTTPException(403, "沒有「%s」的權限" % d["body"].get("name", key))
+    if not SUP.can_see_menu(d["body"].get("menu"), user):        # menu.visibleTo：直接打 API 也一樣（不只藏選單；404 不洩漏模組存在）
+        raise HTTPException(404, "沒有這個模組")
     return d
 
 
@@ -106,7 +117,11 @@ def list_custom_records(key: str, status: str = Query(None), field: str = Query(
     conn = get_db()
     try:
         _can_use(conn, u, key)
-        return CM.list_records(conn, key, status=status, field=field, value=value)
+        body = _can_use(conn, u, key)["body"]
+        if field and field in SUP.hidden_keys(body, u):        # 用看不到的欄位篩選＝可以反推它的值 ⇒ 擋（不洩漏欄位存在，與不存在的欄位同一句）
+            raise HTTPException(400, "沒有這個欄位可以篩選：%s" % field)
+        rows = CM.list_records(conn, key, status=status, field=field, value=value)
+        return SUP.mask_records(rows, body, u)
     finally:
         conn.close()
 
@@ -117,13 +132,32 @@ def create_custom_record(key: str, payload: dict = Body(...), authorization: str
     conn = get_db()
     try:
         _can_use(conn, u, key)
-        rec = CM.create_record(conn, key, payload.get("values"), u)
+        d = _can_use(conn, u, key)
+        vals, forbidden = SUP.guard_writes(d["body"], payload.get("values"), None, u)
+        if forbidden:
+            raise HTTPException(403, "有欄位你沒有修改權限：" + "；".join(x["message"] for x in forbidden))
+        rec = CM.create_record(conn, key, vals, u)
     except CM.CustomModuleError as e:
         return _err(e)
     finally:
         conn.close()
     _audit(_tok(authorization), "custom.create", "custom_record", rec["record_no"], "建立 %s" % rec["record_no"], {"module": key})
-    return rec
+    return SUP.mask_record(rec, u)
+
+
+@router.post("/api/custom/{key}/compute")
+def compute_custom_record(key: str, payload: dict = Body(...), version: int = Query(None), authorization: str = Header(None)):
+    """填單時即時算公式與明細列（不存檔；權限同建立單據）。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        _can_use(conn, u, key)
+        d = _can_use(conn, u, key)
+        return SUP.mask_compute(CM.compute_preview(conn, key, payload.get("values"), version), d["body"], u)
+    except CM.CustomModuleError as e:
+        return _err(e)
+    finally:
+        conn.close()
 
 
 @router.get("/api/custom/{key}/records/{record_no}")
@@ -139,7 +173,49 @@ def get_custom_record(key: str, record_no: str, authorization: str = Header(None
             _can_use(conn, u, key)
         # U14：前端依這個欄位決定要不要顯示「修改」「送出」（後端另外擋 403）
         rec["canEdit"] = CM.can_edit_draft(rec, rec["definition"], u)
-        return rec
+        return SUP.mask_record(rec, u)
+    finally:
+        conn.close()
+
+
+@router.get("/api/custom/{key}/records/{record_no}/revisions")
+def list_custom_record_revisions(key: str, record_no: str, authorization: str = Header(None)):
+    """送簽修訂紀錄（-R1、-R2…）：每次送簽一列（誰、何時、用哪一版定義、核可／退回與原因）。與讀單同權限。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        try:
+            rec = CM.get_record(conn, key, record_no)
+        except CM.CustomModuleError as e:
+            return _err(e)
+        if not _is_approver(rec, u["username"], conn):
+            _can_use(conn, u, key)
+        return {"current": {"revision": rec.get("revision") or 0, "displayNo": rec["displayNo"], "status": rec["status"]},
+                "revisions": HIST.list_revisions(conn, rec, rec["definition"], u)}
+    finally:
+        conn.close()
+
+
+@router.get("/api/custom/{key}/records/{record_no}/revisions/diff")
+def diff_custom_record_revisions(key: str, record_no: str, a: str = Query("0"), b: str = Query("current"),
+                                 authorization: str = Header(None)):
+    """兩個修訂的逐欄位差異（`a`／`b`＝修訂號或 `current`）；看不到的欄位不出現（與讀單同一個遮蔽）。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        try:
+            rec = CM.get_record(conn, key, record_no)
+        except CM.CustomModuleError as e:
+            return _err(e)
+        if not _is_approver(rec, u["username"], conn):
+            _can_use(conn, u, key)
+        for x in (a, b):
+            if x != "current" and not x.isdigit():
+                raise HTTPException(400, "a／b 要是修訂號或 current")
+        try:
+            return HIST.diff_revisions(conn, rec, rec["definition"], a, b, u)
+        except ValueError as e:
+            raise HTTPException(404, str(e))
     finally:
         conn.close()
 
@@ -150,13 +226,17 @@ def update_custom_record(key: str, record_no: str, payload: dict = Body(...), au
     conn = get_db()
     try:
         _can_use(conn, u, key)
-        rec = CM.update_record(conn, key, record_no, payload.get("values"), u)
+        cur = CM.get_record(conn, key, record_no)
+        vals, forbidden = SUP.guard_writes(cur["definition"], payload.get("values"), cur["data"], u)
+        if forbidden:
+            raise HTTPException(403, "有欄位你沒有修改權限：" + "；".join(x["message"] for x in forbidden))
+        rec = CM.update_record(conn, key, record_no, vals, u)
     except CM.CustomModuleError as e:
         return _err(e)
     finally:
         conn.close()
     _audit(_tok(authorization), "custom.update", "custom_record", record_no, "修改 %s" % record_no, {"module": key})
-    return rec
+    return SUP.mask_record(rec, u)
 
 
 @router.post("/api/custom/{key}/records/{record_no}/transitions/{tkey}")
@@ -172,7 +252,7 @@ def transition_custom_record(key: str, record_no: str, tkey: str, payload: dict 
     finally:
         conn.close()
     _audit(_tok(authorization), "custom.transition", "custom_record", record_no, "%s：%s" % (record_no, tkey), {"module": key})
-    return rec
+    return SUP.mask_record(rec, u)
 
 
 def _decide(conn, u, key, record_no, approve, note):
@@ -193,6 +273,7 @@ def approve_custom_record(key: str, record_no: str, payload: dict = Body(default
         conn.close()
     if isinstance(rec, dict):
         _audit(_tok(authorization), "custom.approve", "custom_record", record_no, "核准 %s" % record_no, {"module": key, "note": note})
+        return SUP.mask_record(rec, u)
     return rec
 
 
@@ -207,6 +288,7 @@ def reject_custom_record(key: str, record_no: str, payload: dict = Body(default=
         conn.close()
     if isinstance(rec, dict):
         _audit(_tok(authorization), "custom.reject", "custom_record", record_no, "退回 %s" % record_no, {"module": key, "note": note})
+        return SUP.mask_record(rec, u)
     return rec
 
 
@@ -222,7 +304,7 @@ def output_custom_record(key: str, record_no: str, format: str = Query("html"), 
             return _err(e)
         if not _is_approver(rec, u["username"], conn):
             _can_use(conn, u, key)
-        html = CM.render_output(conn, key, record_no)
+        html = SUP.render_output_for(conn, key, record_no, u)
     finally:
         conn.close()
     if format == "pdf":
@@ -232,26 +314,211 @@ def output_custom_record(key: str, record_no: str, format: str = Query("html"), 
     return HTMLResponse(html)
 
 
+# ── 附件（file／image 欄位）：先傳後綁單 ─────────────────────────────────────
+
+# L1 沒有 ModuleSpec ⇒ 匯入時登記讀檔權限提供者（IP-104；同 routers/system 的工作日誌照片）
+_registry.provide(_uploads.PATH_ACCESS, CFILES.PROVIDER, CFILES.CustomFilesAccess)
+# 自訂模組的支出進營運報表（IP-9 expense.entries；名稱 custom_module）
+_registry.provide("expense.entries", "custom_module", CFIN.expense_entries)
+# 模組定義送審（S4）：簽核佇列的待簽項目與詳情（type custom_module_def）
+_registry.provide("approval.queue_items", "custom_module_def", DEFR.queue_items)
+_registry.provide("approval.detail", DEFR.QUEUE_TYPE, DEFR.detail)
+
+
+@router.post("/api/custom/{key}/files/{field}")
+async def upload_custom_files(key: str, field: str, files: List[UploadFile] = File(...), authorization: str = Header(None)):
+    """上傳附件到暫存（record_id＝0，只有自己讀得到）；存單時才綁到單據。副檔名＝欄位 accept ∩ uploads 白名單。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        d = _can_use(conn, u, key)
+        f = next((x for x in d["body"].get("fields", []) if isinstance(x, dict) and x.get("key") == field and x.get("type") in ("file", "image")), None)
+        if f is None:
+            raise HTTPException(404, "沒有這個附件欄位")
+        if not SUP.can_see_field(f, u):
+            raise HTTPException(403, "沒有這個欄位的權限")
+        ok = CFILES.accepted_exts(f)
+        for up in files:
+            ext = (up.filename or "").rsplit(".", 1)[-1].lower() if "." in (up.filename or "") else ""
+            if ext not in ok:
+                raise HTTPException(400, "「%s」不接受 %s 檔（可用：%s）" % (f.get("label") or field, ext or "沒有副檔名", "、".join(sorted(set(e for e in ok if e != "jpeg")))))
+        CFILES.purge_stale_staged(conn)
+        saved = await _uploads.save_document_files("custom_records", key, files, u["username"])
+        out = CFILES.register_staged(conn, key, field, saved, u["username"])
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "custom.file_upload", "custom_record_file", "%s/%s" % (key, field),
+           "上傳附件 %d 個到 %s／%s" % (len(out), key, field), {"files": [m["filename"] for m in out]})
+    return out
+
+
+@router.delete("/api/custom/{key}/files/{file_id}")
+def delete_staged_custom_file(key: str, file_id: str, authorization: str = Header(None)):
+    """刪自己暫存、還沒綁單的檔（已綁單的要改單據內容才會移除；已送出的單據內容凍結 ⇒ 開修訂版）。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        _can_use(conn, u, key)
+        if not CFILES.remove_staged(conn, key, file_id, u["username"]):
+            raise HTTPException(404, "找不到這個暫存檔（只能刪自己上傳、尚未存進單據的檔）")
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "custom.file_delete_staged", "custom_record_file", file_id, "刪除暫存附件 %s（%s）" % (file_id, key), {})
+    return {"ok": True}
+
+
+# ── 金流：案件成本、待補登、被略過的收入 ─────────────────────────────────────
+
+@router.get("/api/custom-modules/finance/case/{case_no}")
+def custom_finance_of_case(case_no: str, authorization: str = Header(None)):
+    """某案件在自訂模組裡的入帳金流（案件成本用）。看得到案件底下單據的人才能讀（同 `case_documents_readable`）；
+    沒有案件模組／案件不存在／看不到 ⇒ 同一個 404（M01-O1：看不到＝不存在，不洩漏案件是否存在）。沒有查看財務金額權限 ⇒ 403（非逐案判定）。"""
+    from helpers import can_see_financial
+    from helpers.case_access import case_documents_readable, deny_case
+    u = _require_user(authorization)
+    if not can_see_financial(u):
+        raise HTTPException(403, "沒有查看財務金額的權限")
+    conn = get_db()
+    try:
+        if not case_documents_readable(conn, case_no, u):
+            deny_case(conn, case_no, u, "denied")            # 404（訊息同查無）＋audit 真正原因；同時關連線
+        return CFIN.case_finance(conn, case_no)
+    finally:
+        conn.close()
+
+
+@router.get("/api/custom-modules/finance/summary")
+def custom_finance_summary(basis: str = Query("cash"), authorization: str = Header(None)):
+    """建構器／管理者對帳用：待補登（缺該口徑日期）與因關聯內建案件而略過的收入。僅超級管理員。"""
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        return {"undated": CFIN.undated_counts(conn, basis), "dupSkipped": CFIN.dup_skipped(conn)}
+    finally:
+        conn.close()
+
+
+# ── 模組定義送審（S4）：審核畫面與核可／退回（送審本身走 POST /api/definitions/custom_module/{key}/publish）──
+
+def _def_review_state(username=""):
+    conn = get_db()
+    try:
+        st = DEFR.review_state(conn, username)
+        return {"mode": st["mode"], "active": st["active"], "reason": st["reason"],
+                "reviewers": [{"username": r["username"], "displayName": r["displayName"]} for r in st["reviewers"]]}
+    finally:
+        conn.close()
+
+
+def _review_err(e):
+    return JSONResponse({"detail": str(e), "problems": e.problems}, status_code=e.status)
+
+
+@router.get("/api/custom-modules/{key}/definition/review")
+def custom_definition_review(key: str, authorization: str = Header(None)):
+    """送審中的那一版（簽核進度、與現行版的差異）＋被退回的歷史。最高管理者、簽核鏈上的人、申請人可讀。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        return {"reviewEnabled": DEFR.review_state(conn, u["username"])["active"], **DEFR.open_view(conn, key, u)}
+    except DEFR.ReviewError as e:
+        return _review_err(e)
+    finally:
+        conn.close()
+
+
+@router.post("/api/custom-modules/{key}/definition/{version}/approve")
+def approve_custom_definition(key: str, version: int, payload: dict = Body(default={}), authorization: str = Header(None)):
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        out = DEFR.decide(conn, key, version, u, True, (payload or {}).get("note", ""))
+    except DEFR.ReviewError as e:
+        return _review_err(e)
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "custom_def.approve", "ui_definition", "custom_module/%s" % key, "核可 %s 第 %d 版定義" % (key, version), {"published": out["published"]})
+    return out
+
+
+@router.post("/api/custom-modules/{key}/definition/{version}/reject")
+def reject_custom_definition(key: str, version: int, payload: dict = Body(default={}), authorization: str = Header(None)):
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        out = DEFR.decide(conn, key, version, u, False, (payload or {}).get("note", ""))
+    except DEFR.ReviewError as e:
+        return _review_err(e)
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "custom_def.reject", "ui_definition", "custom_module/%s" % key, "退回 %s 第 %d 版定義" % (key, version), {"note": (payload or {}).get("note", "")})
+    return out
+
+
+@router.get("/api/custom-modules/definition-review")
+def get_custom_definition_review(authorization: str = Header(None)):
+    """目前的「定義送審」狀態（給建構器標頭顯示）：模式（auto／on／off）、有沒有啟用、審核人、沒啟用的原因。"""
+    u = _require_user(authorization, require_superadmin=True)
+    return _def_review_state(u["username"])
+
+
+@router.put("/api/custom-modules/definition-review")
+def set_custom_definition_review(payload: dict = Body(...), authorization: str = Header(None)):
+    """設定「模組審核人」名單與手動覆寫（`mode`：auto 預設＝依名單、on 強制送審、off 強制直接發布）。僅超級管理員；寫稽核。
+    名單裡有申請人以外至少一人 ⇒ 送審自動啟用；沒有 ⇒ 發布維持直接發布（稽核記「未經第二人審核」）。"""
+    u = _require_user(authorization, require_superadmin=True)
+    if "mode" not in payload and "reviewers" not in payload:
+        raise HTTPException(400, "要帶 mode 或 reviewers")
+    conn = get_db()
+    try:
+        DEFR.set_review_settings(conn, payload.get("mode"), payload.get("reviewers"))
+    except DEFR.ReviewError as e:
+        return _review_err(e)
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "custom_def.review_settings", "settings", DEFR.SETTING_KEY,
+           "定義送審設定：mode=%s reviewers=%s" % (payload.get("mode"), payload.get("reviewers")), {})
+    return _def_review_state(u["username"])
+
+
 # ── 建構器輔助（僅超級管理員）──────────────────────────────────────────────
 
 @router.get("/api/custom-modules/catalog")
 def custom_module_catalog(authorization: str = Header(None)):
     """能力目錄（建構器只能從這裡挑）：欄位型別、公式函式、參照對象、日期格式、輸出積木。"""
-    _require_user(authorization, require_superadmin=True)
+    cu = _require_user(authorization, require_superadmin=True)
     from helpers import doc_template as dt
+    tpls, tpl_gaps = CM.templates(include_gaps=True)
     return {"fieldTypes": list(CM.FIELD_TYPES), "formulaFunctions": list(FX.FUNCTIONS), "refTargets": CM.ref_targets(),
+            "fieldTypeSpecs": CM.field_type_specs(), "fieldElements": CM.FIELD_ELEMENTS, "elementGroups": CM.ELEMENT_GROUPS,
+            "financeKinds": list(CM.FINANCE_KINDS), "templates": tpls, "templateGaps": tpl_gaps,
+            "tableColumnTypes": list(CM.TABLE_COL_TYPES), "tableFunctions": list(FX.TABLE_FUNCTIONS),
             "numberingDateFormats": [k for k in CM.DATE_FORMATS], "outputBlocks": sorted(dt.BLOCKS),
             "outputBlockSpecs": dt.BLOCK_SPECS, "outputBlockItemSpecs": dt.BLOCK_ITEM_SPECS,
             "outputThemes": sorted(dt.THEMES), "outputFormats": ["html", "pdf"], "fieldFormats": list(dt.FORMATS),
-            "approverSources": CM.APPROVER_SOURCES, "dataClasses": ["T1"]}
+            "approverSources": CM.APPROVER_SOURCES, "dataClasses": ["T1"],
+            "roles": list(SUP.VISIBLE_ROLES), "defReview": _def_review_state(cu["username"])}
+
+
+@router.get("/api/custom-modules/templates/{tkey}")
+def custom_module_template(tkey: str, authorization: str = Header(None)):
+    """範本的整份定義（新建模組時「從範本開始」用；套用後與範本脫鉤）。僅超級管理員。"""
+    _require_user(authorization, require_superadmin=True)
+    body = CM.template_body(tkey)
+    if body is None:
+        raise HTTPException(404, "沒有這個範本（或範本沒通過載入驗證）")
+    return {"key": tkey, "body": body}
 
 
 @router.post("/api/custom-modules/formula/check")
 def check_custom_formula(payload: dict = Body(...), authorization: str = Header(None)):
-    """公式語法檢查：`{"formula": "qty * price", "fields": ["qty", "price"]}` ⇒ `{"problems": [{"pos", "message"}]}`。"""
+    """公式語法檢查：`{"formula": "qty * price", "fields": ["qty", "price"], "tables": {"lines": ["amt"]}}`
+    ⇒ `{"problems": [{"pos", "message"}]}`（`tables`＝明細表 key ⇒ 可加總的數值欄，選填）。"""
     _require_user(authorization, require_superadmin=True)
     fields = payload.get("fields")
-    return {"problems": FX.check(payload.get("formula"), fields if isinstance(fields, list) else None)}
+    tables = payload.get("tables")
+    return {"problems": FX.check(payload.get("formula"), fields if isinstance(fields, list) else None,
+                                 tables if isinstance(tables, dict) else None)}
 
 
 @router.post("/api/custom-modules/numbering/preview")

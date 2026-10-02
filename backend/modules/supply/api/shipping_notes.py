@@ -27,8 +27,9 @@ from helpers import (
     cascade_self_tiers, notify_org_chain_notice,
     UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
-    guard_case_access, require_any_module,
+    guard_case_access, require_any_module, is_document_approver,
 )
+from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from pdf_gen import generate_shipping_pdf_bytes, _generate_shipping_pdf
 from helpers.errors import trace_id
 
@@ -169,14 +170,44 @@ def list_shipping_export_history(
     return events
 
 
+def _readable_note(conn, note_no: str, user: dict, cols: str = "*"):
+    """單張出貨單的讀取守門（2026-09-30 P0：單筆 GET 與回簽上傳原本只要求登入 ⇒ 單號可列舉即 IDOR）。
+    規則＝出貨單清單帶 quote_no 的那一條：`guard_case_access(allow_module="case_manage")`。
+    查無與看不到回**同一句**「出貨單 X 不存在」（不回守門那句「報價單 Y 不存在」：那會洩漏掛在哪一案）。
+    被擋時連線已關（guard_case_access 的慣例）。"""
+    row = conn.execute("SELECT %s FROM shipping_notes WHERE note_no=?" % cols, (note_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"出貨單 {note_no} 不存在")
+    try:
+        guard_case_access(conn, row["quote_no"], user, allow_module="case_manage")
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+        raise HTTPException(404, f"出貨單 {note_no} 不存在")
+    return row
+
+
+class _ShippingPathAccess:
+    """`uploads.path_access`（IP-104，2026-09-30 P0）：`shipping_notes/<出貨單號>/<檔名>`（回簽附件）
+    ⇒ 同 `_readable_note` 的規則（`case_documents_readable`＝`guard_case_access(allow_module="case_manage")`，不關連線）。"""
+    FOLDERS = ("shipping_notes",)
+
+    @staticmethod
+    def readable(conn, folder, rest, user):
+        from helpers.case_access import case_documents_readable
+        if len(rest) != 2:
+            return False
+        row = conn.execute("SELECT quote_no FROM shipping_notes WHERE note_no=?", (rest[0],)).fetchone()
+        return bool(row) and case_documents_readable(conn, row["quote_no"], user)
+
+
 @router.get("/api/shipping-notes/{note_no}")
 def get_shipping_note(note_no: str, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute("SELECT * FROM shipping_notes WHERE note_no=?", (note_no,)).fetchone()
+    row = _readable_note(conn, note_no, user)
     conn.close()
-    if not row:
-        raise HTTPException(404, f"出貨單 {note_no} 不存在")
     return _note_public(row, include_items=True)
 
 
@@ -547,6 +578,7 @@ def revoke_shipping_note_approval(note_no: str, body: dict = Body(default={}), a
     if row["is_signed"]:
         conn.close()
         raise HTTPException(409, "已回簽（客戶確認收貨）的出貨單不可撤銷核准，請先取消回簽")
+    note = require_reject_reason(note, conn=conn)
     cname = row["customer_name"] or ""
     d = json.loads(row["data_json"] or "{}")
     appr = d.get("approval") or {}
@@ -604,6 +636,7 @@ def reject_shipping_note(note_no: str, body: dict = Body(default={}), authorizat
     if not ok:
         conn.close()
         raise HTTPException(status_code, err_msg)
+    note = require_reject_reason(note, conn=conn)
 
     now       = datetime.now().isoformat()
     requester = appr.get("requestedBy")
@@ -627,12 +660,15 @@ def reject_shipping_note(note_no: str, body: dict = Body(default={}), authorizat
 @router.get("/api/shipping-notes/{note_no}/pdf-download")
 def download_shipping_pdf(note_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
-    _require_admin(user)
     conn = get_db()
-    row = conn.execute("SELECT note_no FROM shipping_notes WHERE note_no=?", (note_no,)).fetchone()
+    row = conn.execute("SELECT note_no, data_json FROM shipping_notes WHERE note_no=?", (note_no,)).fetchone()
+    # 閘門＝管理員，或本單簽核人／申請人（含有效代理人）：簽核人要看得到預覽稿（紅色「未核可」警示）才能判斷退回或核准
+    allowed = bool(row) and (user.get("role") in ("admin", "superadmin") or is_document_approver(row["data_json"], user, conn))
     conn.close()
     if not row:
         raise HTTPException(404, "出貨單不存在")
+    if not allowed:
+        _require_admin(user)
     try:
         pdf_bytes = generate_shipping_pdf_bytes(note_no)
     except ValueError as e:
@@ -662,6 +698,9 @@ def record_shipping_export(note_no: str, mode: str = "external", authorization: 
     if not row:
         conn.close()
         raise HTTPException(404, f"出貨單 {note_no} 不存在")
+    if mode == "preview":                       # 預覽不是匯出：不計次、不寫紀錄（使用者 2026-09-30）
+        conn.close()
+        return {"export_count": row["export_count"] or 0, "log": json.loads(row["export_log"] or "[]")}
     log   = json.loads(row["export_log"] or "[]")
     count = (row["export_count"] or 0) + 1
     log.append({
@@ -742,15 +781,12 @@ def toggle_signed(note_no: str, body: dict = Body(...), authorization: str = Hea
 @router.post("/api/shipping-notes/{note_no}/signed-files", status_code=201)
 async def upload_shipping_signed_files(note_no: str, files: List[UploadFile] = File(...),
                                        authorization: str = Header(None)):
-    """回簽附件上傳（多檔）——任何登入使用者皆可補傳，未來要查證『當初到底簽了
-    什麼』直接在這裡看得到。不限制單據狀態，草稿階段也能先留存客戶提供的
+    """回簽附件上傳（多檔）——看得到這張出貨單的人（`_readable_note`，同清單規則；2026-09-30 P0 前是任何登入者）
+    皆可補傳，未來要查證『當初到底簽了什麼』直接在這裡看得到。不限制單據狀態，草稿階段也能先留存客戶提供的
     參考資料，不強制一定要 already 已核准才能傳。"""
     user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute("SELECT signed_files_json FROM shipping_notes WHERE note_no=?", (note_no,)).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, "出貨單不存在")
+    row = _readable_note(conn, note_no, user, "quote_no, signed_files_json")
     existing = json.loads(row["signed_files_json"] or "[]")
     new_files = await save_document_files("shipping_notes", note_no, files, user.get("display_name") or user["username"])
     all_files = existing + new_files

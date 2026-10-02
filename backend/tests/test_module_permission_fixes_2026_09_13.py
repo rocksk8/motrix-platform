@@ -402,7 +402,7 @@ def test_extra_expenses_visible_to_filer_even_without_financial_view(client, mak
                 "unit_cost, total_cost, note, expense_date, doc_no, files_json, created_by, "
                 "created_by_name, created_by_inferred, payer_username, payer_name, created_at, "
                 "updated_at, updated_by_name, status, approval_json) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?,?,0,?,?,?,?,?,'草稿','{}')",
+                "VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?,?,0,?,?,?,?,?,'待審核','{}')",
                 ("MQ-XE-100", "其他", desc, 1, "式", 1000, 1000, "", "2026-09-01", "",
                  who, who, who, who, "2026-01-01T00:00:00", "2026-01-01T00:00:00", who),
             )

@@ -2,6 +2,7 @@
 """M03 採購・庫存・出貨（supply）：供應商、庫存（入庫批次、序號、採購建議）、出貨單。只 import core／helpers／db（L1），不 import 其他 L2 模組。"""
 from core.registry import ModuleSpec
 
+from modules.supply import attachments
 from modules.supply import gl_events
 from modules.supply.api import inventory, shipping_notes, suppliers
 
@@ -23,5 +24,9 @@ MODULE = ModuleSpec(
         ("approval.queue_items", "shipping_note"): shipping_notes._queue_items,
         ("approval.reassign", "shipping_note"): shipping_notes.REASSIGN,
         ("approval.detail", "shipping_note"): shipping_notes._queue_detail,
+        # IP-104：上傳檔的讀取權限（出貨單回簽附件；2026-09-30 P0）
+        ("uploads.path_access", "supply"): shipping_notes._ShippingPathAccess,
+        # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
+        ("attachments.catalog", "supply"): attachments._SupplyCatalog,
     },
 )

@@ -116,6 +116,8 @@ def _flat(obj, path=()):
         else:
             for i, x in enumerate(obj):
                 ident = (x.get("version") or x.get("key")) if isinstance(x, dict) else None
+                if ident == "next":        # 版號佔位（PLAYBOOK §G6）：各包都寫 next，不是同一筆 ⇒ 以模組＋日期時間辨認
+                    ident = "next:%s@%s %s" % (x.get("module"), x.get("date"), x.get("time"))
                 out.update(_flat(x, path + ("[%s]" % (ident or i),)))
     else:
         out[path] = obj
@@ -1160,10 +1162,71 @@ def run_dirty(start, end):
     return bool(s0.strip()) or h0 != h1 or s0 != s1
 
 
+def _reuse_tool():
+    """backend/tools/build_test_reuse.py（建包的沿用紀錄）；載不到回 None（不影響全量本身）。"""
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("build_test_reuse", BACKEND / "tools" / "build_test_reuse.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:                               # noqa: BLE001
+        return None
+
+
+def stream_evidence(run_id, windows, stream_dir=None):
+    """fail_stream 的 summary 紀錄 ⇒ {段: [各批 exitstatus]}（段 = run_full 的 main／e2e，windows 對應 stage 名）。
+    🔑 沿用紀錄只信**真的跑過 pytest 才會寫出來**的下游證據：run_pytest 被換掉（題目）或 plugin 沒載入 ⇒ 沒有 summary ⇒ 不寫。"""
+    if not run_id:
+        return {}
+    try:
+        import fail_stream
+        d = Path(stream_dir) if stream_dir else fail_stream.stream_dir()
+        lines = (d / (run_id + ".jsonl")).read_text(encoding="utf-8").splitlines()
+    except Exception:                               # noqa: BLE001
+        return {}
+    rev = {w: name for name, w in windows.items()}
+    out = {}
+    for raw in lines:
+        try:
+            rec = json.loads(raw)
+        except ValueError:
+            continue
+        if rec.get("type") == "summary" and rec.get("stage") in rev:
+            out.setdefault(rev[rec["stage"]], []).append(rec.get("exitstatus"))
+    return out
+
+
+def record_for_build(commit, codes, user_extra, interrupted, dirty, evidence, tool=None):
+    """全量結果寫進建包的沿用紀錄（2026-09-30：同一份 tree 30 分鐘前 --full 全綠，建包卻整套重跑兩次）。
+    規則在 build_test_reuse.record_full_run（指紋、範圍、分段）；這裡把關「這一輪真的代表這份 tree」：
+    - dirty（開跑時不乾淨、或跑到一半 HEAD／工作樹變了）⇒ 不寫；
+    - 每一段都要有 fail_stream 的 summary，而且各批的 exitstatus 與該段結果一致 ⇒ 否則不寫。
+    指紋在結束時算一次（樹沒變已由 dirty 判定；殘留風險：跑到一半改了 pip 環境——見 PLAYBOOK §D-建包）。回 (寫了?, 原因)。"""
+    tool = tool or _reuse_tool()
+    if tool is None:
+        return False, "載不到 build_test_reuse"
+    if dirty:
+        return False, "工作樹不乾淨，或跑到一半 HEAD／工作樹變了"
+    ran = {k: v for k, v in codes.items() if not (k == "e2e" and interrupted)}
+    for name, code in ran.items():
+        got = evidence.get(name) or []
+        consistent = all(x == 0 for x in got) if code == 0 else any(x != 0 for x in got)   # 紅：分批時有綠有紅是正常的
+        if not got or not consistent:
+            return False, "%s 段沒有對得上的 fail_stream 摘要（%s）——不當作跑過" % (name, got)
+    fp = tool.fingerprint_via(PYEXE or sys.executable)
+    return tool.record_full_run(tool.default_records(REPO), fp, fp, commit, ran, user_extra, interrupted)
+
+
 def run_full(extra, a):
     """全量＝兩段：非 e2e（-n workers）＋ e2e（-n e2e-workers）。結果（含失敗、中斷）一律寫進主工作樹（write_last_full：full_results/<commit>.json＋.last_full.json）。
     dirty：開跑與結束各取一次 tree_state()，由 run_dirty() 判定。"""
+    global _FAIL_STREAM_RUN
     start = tree_state()
+    user_extra = list(extra)
+    # 這一輪全量自己的 run-id（一次 modtest 只跑一次 run_full，與原本「一次 modtest 一個 id」等價）：
+    # 沿用紀錄的證據只認這個 id 底下的 summary——換掉 run_pytest 的題目不會留下它（stream_evidence）
+    _FAIL_STREAM_RUN = "%s_%d_full%s" % (time.strftime("%Y%m%d_%H%M%S"), os.getpid(), uuid.uuid4().hex[:6])
     result = {
         "commit": start[0],
         "branch": git("rev-parse", "--abbrev-ref", "HEAD").strip(),
@@ -1218,6 +1281,12 @@ def run_full(extra, a):
             print("[全量結果] %s ok=%s → %s" % (result["commit"][:8], result["ok"], dest))
         except Exception as e:                      # noqa: BLE001 — 寫不出結果檔要說出來，不可靜默
             print("[全量結果] ⚠ 寫不出全量結果檔：%r" % e)
+        try:
+            done, why = record_for_build(result["commit"], codes, user_extra, result["interrupted"], result["dirty"],
+                                         stream_evidence(_FAIL_STREAM_RUN, {"main": a.window, "e2e": a.window + "e2e"}))
+            print("[建包沿用] %s：%s" % ("已寫入" if done else "未寫入", why))
+        except Exception as e:                      # noqa: BLE001
+            print("[建包沿用] ⚠ 寫不進沿用紀錄：%r（建包會自己重跑，不影響正確性）" % e)
 
 
 def main(argv=None):

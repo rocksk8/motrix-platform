@@ -30,17 +30,38 @@ def _paid_via_remit(raw):
         return False
 
 
+def _manual_payment_slips(conn, rows):
+    """L6：`payslips.voucher_no`（出納付款時填的既有傳票號）指向**有效的手工傳票**（存在、未作廢、不是系統產生）的勞報單編號集合。
+    傳票模組不在、查不到、已作廢、或那張本身就是引擎產生的 ⇒ 不算（引擎照常產生付款事件，不會漏記，也不會讓自己的傳票被判成來源消失）。"""
+    look = registry.single_provider("voucher.by_no")
+    out = set()
+    if look is None:
+        return out
+    for r in rows:
+        vno = (r["voucher_no"] or "").strip()
+        if not vno or r["status"] != "已付款":
+            continue
+        try:
+            v = look(conn, vno)
+        except Exception:                               # noqa: BLE001  查不到就當沒有（fail-open 於「多記一次」被 drift 抓，不是漏記）
+            v = None
+        if v and not v.get("voided") and not v.get("system_generated"):
+            out.add(r["slip_no"])
+    return out
+
+
 def gl_events(start, end, *, changed_since=""):
     conn = get_db()
     try:
         rows = conn.execute(
             "SELECT slip_no, contractor_id, contractor_name, income_type, gross_amount, tax_withheld, nhi_supplement, net_amount, "
-            "slip_date, status, tax_rules_version, signed_at, payment_date, data_json FROM payslips "
+            "slip_date, status, tax_rules_version, signed_at, payment_date, data_json, voucher_no FROM payslips "
             "WHERE status IN ('已簽回','已付款') ORDER BY slip_no").fetchall()
+        manual_paid = _manual_payment_slips(conn, rows)
     finally:
         conn.close()
     events, notices = [], []
-    mismatch = nodate = nopay = 0
+    mismatch = nodate = nopay = skipped_manual = 0
     for r in rows:
         gross, tax, nhi = _i(r["gross_amount"]), _i(r["tax_withheld"]), _i(r["nhi_supplement"])
         if gross <= 0:
@@ -71,6 +92,8 @@ def gl_events(start, end, *, changed_since=""):
             pd = (r["payment_date"] or "")[:10]
             if not pd:
                 nopay += 1
+            elif r["slip_no"] in manual_paid:            # L6：出納填的傳票號指向有效的手工傳票 ⇒ 付款已入帳，不再產生 E06b（避免重複）
+                skipped_manual += 1
             elif net > 0 and start <= pd <= end:
                 events.append({
                     "source_type": "payslip_payment", "source_key": r["slip_no"], "event_code": "E06b", "event_date": pd,
@@ -83,6 +106,8 @@ def gl_events(start, end, *, changed_since=""):
         notices.append("%d 張勞報單沒有勞報日期：暫以簽回日認列。" % nodate)
     if nopay:
         notices.append("%d 張已付款勞報單沒有付款日期：不產生付款分錄。" % nopay)
+    if skipped_manual:
+        notices.append("%d 張已付款勞報單的付款已由出納填的手工傳票記帳：不重複產生付款分錄。" % skipped_manual)
     native = _bonus_native(start, end, notices)
     events += native
     return {"events": events, "notice": " ".join(notices)}

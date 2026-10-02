@@ -26,12 +26,16 @@ for (const f of process.argv.slice(1)) {
   const ctx = { window: { innerWidth: 1200, addEventListener() {} }, document: {}, localStorage: { getItem() { return null } }, console }
   vm.createContext(ctx)
   vm.runInContext('var window = globalThis.window', ctx)
+  // 2026-10-01：分檔直接引用全域 MotrixDate（static/motrix-date.js）⇒ 沙盒先載入它
+  vm.runInContext(fs.readFileSync(__MOTRIX_DATE__, 'utf8'), ctx)
+  vm.runInContext('var MotrixDate = window.MotrixDate', ctx)
   vm.runInContext(fs.readFileSync(f, 'utf8'), ctx, { filename: f })
   const parts = ctx.window.CM_PARTS || []
   out[f] = parts.flatMap(p => Object.getOwnPropertyNames(p()))
 }
 console.log(JSON.stringify(out))
 """
+NODE_SCRIPT = NODE_SCRIPT.replace("__MOTRIX_DATE__", json.dumps(str(ROOT / "frontend" / "static" / "motrix-date.js")))
 
 
 def test_the_single_file_is_gone_and_parts_exist():

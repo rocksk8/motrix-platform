@@ -1,0 +1,366 @@
+# -*- coding: utf-8 -*-
+"""附件目錄 P2（設計 proposal-attachments-search-preview §4）：L1 `GET /api/attachments/open` ＋ `attachments.catalog` 提供者（契約 v1）。
+
+驗：① 有權限的人打得開（octet-stream、位元組相同）；② 看不到＝查無＝同一句 404，未知 type／未知檔／壞 id 也是 404，未登入 401；
+③ 與 `/api/photo-token`（擁有模組的 path_access）**同一個答案**——目錄不得比原端點寬（也不得窄到擁有者打不開）；
+④ 端點自己的護欄：檔案必須落在 uploads 或提供者宣告的根之下、提供者例外＝404（fail closed）、來源資料壞＝400；
+⑤ 沒有提供者認領（模組不在）＝404。反向控制見各題註解（拿掉根目錄檢查／忽略 user ⇒ 紅）。"""
+import json
+import os
+
+import pytest
+
+from core import registry
+from helpers import uploads as up
+
+PNG = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4"
+       b"\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82")
+Q = "MQ-CAT-001"
+
+
+def _login(client, u, p):
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def _uid(username):
+    import db
+    c = db.get_db()
+    try:
+        return c.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()["id"]
+    finally:
+        c.close()
+
+
+def _exec(sql, args=()):
+    import db
+    c = db.get_db()
+    try:
+        cur = c.execute(sql, args)
+        c.commit()
+        return cur.lastrowid
+    finally:
+        c.close()
+
+
+@pytest.fixture(autouse=True)
+def _open_route_on(request, monkeypatch):
+    """路由在 train 26 預設關閉（`routers.attachments.ATTACHMENTS_OPEN_ENABLED`）；除了驗「關閉」的題，其餘打開來測程式。"""
+    if not request.node.get_closest_marker("route_off"):
+        from routers import attachments as _r
+        monkeypatch.setattr(_r, "ATTACHMENTS_OPEN_ENABLED", True)
+    yield
+
+
+def _open(client, h, type_, doc, file):
+    return client.get("/api/attachments/open", headers=h, params={"type": type_, "doc": doc, "file": file})
+
+
+@pytest.fixture
+def world(client, make_user):
+    """admin 建案件＋完工單；owner＝該案業務；out＝有 quotation／work_log 模組但不是該案的人；cm＝case_manage。"""
+    H = {}
+    for name, role, mods in (("ct_admin", "admin", None), ("ct_owner", "sales", []),
+                             ("ct_out", "sales", ["quotation", "work_log"]), ("ct_cm", "sales", ["case_manage"]),
+                             ("ct_none", "sales", [])):
+        u, p = make_user(username=name, role=role, modules=mods)
+        H[name] = _login(client, u, p)
+    _exec("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at,"
+          " updated_at, deal_tag, sales_person_id, sales_person) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+          (Q, "已送出", "客戶", "工程", 1000, 952, json.dumps({"dealTag": "已成案"}), "2026-01-01T00:00:00",
+           "2026-01-01T00:00:00", "已成案", _uid("ct_owner"), "ct_owner"))
+    r = client.post("/api/completion-notes", headers=H["ct_admin"],
+                    json={"quote_no": Q, "completion_date": "2026-09-10", "items": []})
+    assert r.status_code == 201, r.text
+    note_no = r.json().get("noteNo") or r.json().get("note_no")
+    up_r = client.post(f"/api/completion-notes/{note_no}/signed-files", headers=H["ct_admin"],
+                       files=[("files", ("sign.png", PNG, "image/png"))])
+    assert up_r.status_code == 201, up_r.text
+    f = up_r.json()["files"][0]
+    return H, note_no, f
+
+
+@pytest.mark.route_off
+def test_route_is_on_by_default_and_kill_switch_works(client, world, monkeypatch):
+    """路徑綁單據（test_attachments_bind_2026_09_30.py）補完後預設開；緊急開關關掉 ⇒ 一律 404。
+    **反向控制**：把常數預設改回 False ⇒ 第一個斷言紅。"""
+    from routers import attachments as r
+    assert r.ATTACHMENTS_OPEN_ENABLED is True
+    H, note_no, f = world
+    assert _open(client, H["ct_owner"], "completion_note", note_no, f["id"]).status_code == 200
+    monkeypatch.setattr(r, "ATTACHMENTS_OPEN_ENABLED", False)
+    for who in ("ct_admin", "ct_owner"):
+        resp = _open(client, H[who], "completion_note", note_no, f["id"])
+        assert resp.status_code == 404 and resp.json()["detail"] == "檔案不存在", who
+
+
+# ── ① 打得開 ─────────────────────────────────────────────────────────────────
+
+def test_completion_note_file_opens_for_readers_with_same_bytes(client, world):
+    H, note_no, f = world
+    for who in ("ct_owner", "ct_cm", "ct_admin"):                  # 完工單清單規則：本人／case_manage／admin
+        r = _open(client, H[who], "completion_note", note_no, f["id"])
+        assert r.status_code == 200, (who, r.text)
+        assert r.content == PNG and r.headers["content-type"].startswith("application/octet-stream")
+        assert "sign.png" in r.headers.get("content-disposition", "")
+
+
+def test_quotation_signed_file_opens_for_case_page_readers(client, world):
+    H, _, _ = world
+    r = client.post(f"/api/quotations/{Q}/signed-files", headers=H["ct_admin"], files=[("files", ("s.png", PNG, "image/png"))])
+    assert r.status_code in (200, 201), r.text
+    fid = r.json()["files"][0]["id"]
+    assert _open(client, H["ct_owner"], "quotation_signed", Q, fid).content == PNG
+    # 案件頁規則不放行 case_manage（AT-M1c）⇒ 目錄也不放行
+    assert _open(client, H["ct_cm"], "quotation_signed", Q, fid).status_code == 404
+
+
+# ── ② 看不到＝查無＝同一句 404 ───────────────────────────────────────────────
+
+def test_hidden_equals_missing_and_nothing_leaks(client, world):
+    H, note_no, f = world
+    hidden = _open(client, H["ct_out"], "completion_note", note_no, f["id"])
+    no_doc = _open(client, H["ct_out"], "completion_note", "CN-NOPE-1", f["id"])
+    no_file = _open(client, H["ct_owner"], "completion_note", note_no, "deadbeef")
+    unknown_type = _open(client, H["ct_owner"], "no_such_type", note_no, f["id"])
+    for r in (hidden, no_doc, no_file, unknown_type):
+        assert r.status_code == 404 and r.json()["detail"] == "檔案不存在", r.text
+    assert Q not in hidden.text and "sign.png" not in hidden.text
+    assert client.get("/api/attachments/open", params={"type": "completion_note", "doc": note_no, "file": f["id"]}).status_code == 401
+
+
+def test_bad_doc_shapes_are_404_not_500(client, world):
+    H, _, _ = world
+    for t in ("work_log_photo", "dev_log", "contractor_dispatch", "contractor_invoice", "voucher", "payslip_signed",
+              "shipping_note", "invoice_voucher", "extra_expense", "payment_item", "material", "case_update"):
+        for doc in ("abc", "../../x", "9" * 30):
+            r = _open(client, H["ct_admin"], t, doc, "zz")
+            assert r.status_code in (404, 400), (t, doc, r.status_code, r.text)
+
+
+# ── ③ 與 photo-token（擁有模組的 path_access）同一個答案 ─────────────────────
+
+def test_catalog_answer_equals_photo_token_answer(client, world):
+    """目錄不得比原端點寬；也不得窄到擁有者打不開。對每個使用者，`open` 成功 ⇔ `photo-token` 成功。"""
+    H, note_no, f = world
+    for who in H:
+        via_catalog = _open(client, H[who], "completion_note", note_no, f["id"]).status_code == 200
+        via_token = client.get("/api/photo-token", headers=H[who], params={"path": f["path"]}).status_code == 200
+        assert via_catalog == via_token, who
+
+
+def test_work_log_photo_follows_path_access(client, world):
+    H, _, _ = world
+    r = client.post("/api/work-logs", headers=H["ct_admin"], json={"log_date": "2026-09-30", "content": "x", "hours": 1, "case_no": Q,
+                                                                "user_id": _uid("ct_admin")})
+    assert r.status_code in (200, 201), r.text
+    wid = r.json()["id"]
+    pr = client.post(f"/api/work-logs/{wid}/photos", headers=H["ct_admin"], files=[("files", ("a.png", PNG, "image/png"))])
+    assert pr.status_code == 201, pr.text
+    import db
+    c = db.get_db()
+    try:
+        photos = json.loads(c.execute("SELECT photos FROM work_logs WHERE id=?", (wid,)).fetchone()["photos"])
+    finally:
+        c.close()
+    pid, path = photos[0]["id"], photos[0]["path"]
+    for who in H:
+        via_catalog = _open(client, H[who], "work_log_photo", str(wid), pid).status_code == 200
+        via_token = client.get("/api/photo-token", headers=H[who], params={"path": path}).status_code == 200
+        assert via_catalog == via_token, who
+    assert _open(client, H["ct_admin"], "work_log_photo", str(wid), pid).status_code == 200
+    assert _open(client, H["ct_none"], "work_log_photo", str(wid), pid).status_code == 404
+
+
+@pytest.mark.parametrize("t", ["voucher", "payslip_signed"])
+def test_users_without_the_module_get_404_even_for_missing_docs(client, world, t):
+    """傳票（cashier／finance）與勞報單簽回檔（superadmin／cashier）：沒有那個模組的人，存在與否看起來一樣。"""
+    H, _, _ = world
+    assert _open(client, H["ct_out"], t, "1", "x").status_code == 404
+    assert _open(client, H["ct_out"], t, "PS-202609-001" if t == "payslip_signed" else "999", "x").status_code == 404
+
+
+# ── ④ 端點自己的護欄（合成提供者）─────────────────────────────────────────────
+
+class _Synth:
+    CATEGORIES = {"zz_synth": {"label": "合成", "doc": "合成單", "module": "測試"}}
+    result = None
+    roots = ()
+
+    @classmethod
+    def ROOTS(cls):
+        return list(cls.roots)
+
+    @classmethod
+    def open(cls, conn, user, source_type, doc_no, file_id):
+        if isinstance(cls.result, Exception):
+            raise cls.result
+        return cls.result
+
+
+@pytest.fixture
+def synth(client):
+    snap = registry.snapshot()
+    saved = dict(registry._LEGACY_PROVIDERS)
+    registry._LEGACY_PROVIDERS[(up.ATTACHMENTS_CATALOG, "zz")] = _Synth
+    _Synth.result, _Synth.roots = None, ()
+    yield _Synth
+    registry._LEGACY_PROVIDERS.clear()
+    registry._LEGACY_PROVIDERS.update(saved)
+    registry.restore(snap)
+
+
+def _admin(client, make_user):
+    u, p = make_user(username="syn_admin", role="superadmin", modules=[])
+    return _login(client, u, p)
+
+
+def test_file_outside_the_allowed_roots_is_404(client, make_user, synth, tmp_path):
+    """**反向控制**：拿掉端點的根目錄檢查 ⇒ 這題紅（提供者回了 uploads 之外的檔，端點照送）。"""
+    h = _admin(client, make_user)
+    outside = tmp_path / "secret.txt"
+    outside.write_text("top secret")
+    synth.result = up.OpenedFile(str(outside), "secret.txt", "text/plain", outside.stat().st_size)
+    assert _open(client, h, "zz_synth", "1", "1").status_code == 404
+    synth.roots = (str(tmp_path),)                                   # 提供者宣告了這個根 ⇒ 放行（勞報單封存目錄的形狀）
+    r = _open(client, h, "zz_synth", "1", "1")
+    assert r.status_code == 200 and r.content == b"top secret"
+
+
+def test_traversal_through_declared_root_is_still_404(client, make_user, synth, tmp_path):
+    h = _admin(client, make_user)
+    root = tmp_path / "root"
+    root.mkdir()
+    (tmp_path / "escape.txt").write_text("x")
+    synth.roots = (str(root),)
+    synth.result = up.OpenedFile(str(root / ".." / "escape.txt"), "e.txt", "text/plain", 1)
+    assert _open(client, h, "zz_synth", "1", "1").status_code == 404
+
+
+def test_provider_exception_fails_closed_and_source_error_is_400(client, make_user, synth):
+    h = _admin(client, make_user)
+    synth.result = RuntimeError("boom")
+    assert _open(client, h, "zz_synth", "1", "1").status_code == 404
+    synth.result = up.AttachmentSourceError("資料壞了")
+    r = _open(client, h, "zz_synth", "1", "1")
+    assert r.status_code == 400 and "資料壞了" in r.text
+    synth.result = up.AttachmentNotVisible()
+    assert _open(client, h, "zz_synth", "1", "1").status_code == 404
+    synth.result = None                                              # 單據／檔案不存在
+    assert _open(client, h, "zz_synth", "1", "1").status_code == 404
+
+
+def test_missing_physical_file_is_404(client, make_user, synth, tmp_path):
+    h = _admin(client, make_user)
+    synth.roots = (str(tmp_path),)
+    synth.result = up.OpenedFile(str(tmp_path / "gone.bin"), "gone.bin", "", 0)
+    assert _open(client, h, "zz_synth", "1", "1").status_code == 404
+
+
+def test_no_provider_claims_the_type_is_404(client, make_user):
+    """模組不在 ⇒ 沒有提供者認領該 type ⇒ 404（安全的方向）。"""
+    h = _admin(client, make_user)
+    assert _open(client, h, "quotation_signed_absent_xyz", "1", "1").status_code == 404
+
+
+# ── ⑤ 契約形狀 ──────────────────────────────────────────────────────────────
+
+def test_every_registered_provider_has_the_contract_shape(client):
+    provs = registry.providers(up.ATTACHMENTS_CATALOG)
+    assert provs
+    seen = {}
+    for key, p in provs.items():
+        assert callable(getattr(p, "open", None)), key
+        for c, info in p.CATEGORIES.items():
+            assert c not in seen, "%s 被 %s 與 %s 重複認領" % (c, seen.get(c), key)
+            seen[c] = key
+            assert {"label", "doc", "module"} <= set(info) and all(isinstance(v, str) and v for v in info.values())
+    # 不含待核准暫存檔（設計 Q6）：沒有任何 category 以 pending 命名
+    assert not any("pending" in c for c in seen)
+
+
+# ── ⑥ 單據存在、檔案在，但使用者不在允許範圍（傳票／勞報單簽回檔）────────────────────────
+# 規則（與各自的原端點相同）：傳票＝cashier／finance 模組；勞報單簽回檔＝superadmin 或 cashier。
+# 「存在＋有別的財務類模組但沒有那一個」要 404，而且與不存在同一句；有權限的人要打得開（正對照，否則「全 404」也會綠）。
+
+@pytest.fixture
+def money_docs(client, make_user, tmp_path):
+    """一張有簽回檔的勞報單、兩張各有一個附件的傳票（其中一個附件已刪）。回 (users, info)。"""
+    import db
+    import helpers.uploads as uploads
+    from modules.payroll.api import payslips as ps
+    H = {}
+    for name, role, mods in (("mn_cashier", "sales", ["cashier"]), ("mn_finance", "sales", ["finance"]),
+                             ("mn_super", "superadmin", []),
+                             ("mn_other_fin", "admin", ["payslip", "case_manage", "quotation", "procurement"]),
+                             ("mn_none", "sales", [])):
+        u, p = make_user(username=name, role=role, modules=mods)
+        H[name] = _login(client, u, p)
+    c = db.get_db()
+    try:
+        slip, fid = "PS-202609-777", "0123456789abcdef"
+        c.execute("INSERT INTO payslips (slip_no, contractor_name, income_type, gross_amount, tax_withheld, nhi_supplement,"
+                  " net_amount, slip_date, status, tax_rules_version, data_json, created_at, updated_at, signed_files_json)"
+                  " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                  (slip, "乙", "50", 30000, 0, 0, 30000, "2026-09-01", "已簽回", "2026", "{}", "n", "n",
+                   json.dumps([{"id": fid, "filename": "signed.pdf", "ext": ".pdf"}])))
+        c.commit()
+    finally:
+        c.close()
+    path = ps._signed_path(slip, fid, ".pdf")
+    open(path, "wb").write(b"%PDF-1.4 payslip")
+    vids = []
+    c = db.get_db()
+    try:
+        for n in (1, 2):
+            cur = c.execute("INSERT INTO vouchers_all(voucher_no, voucher_date, category, summary, status, created_by, created_at,"
+                            " updated_at) VALUES (?,?, '轉', 's', '草稿', 't','n','n')", ("20260901-90%d" % n, "2026-09-01"))
+            vid = cur.lastrowid
+            vids.append(vid)
+            d = os.path.join(uploads.UPLOADS_ROOT, "voucher_attachments", str(vid))
+            os.makedirs(d, exist_ok=True)
+            open(os.path.join(d, "a%d.png" % n), "wb").write(PNG)
+            c.execute("INSERT INTO voucher_attachments (voucher_id, file_id, filename, path, size, mime, uploaded_by, uploaded_at)"
+                      " VALUES (?,?,?,?,?,?,?,?)", (vid, "file%d" % n, "a%d.png" % n, "voucher_attachments/%d/a%d.png" % (vid, n),
+                                                    len(PNG), "image/png", "t", "n"))
+        c.execute("INSERT INTO voucher_attachments (voucher_id, file_id, filename, path, size, mime, uploaded_by, uploaded_at, deleted_at)"
+                  " VALUES (?,?,?,?,?,?,?,?,?)", (vids[0], "filedel", "gone.png", "voucher_attachments/%d/a1.png" % vids[0],
+                                                  len(PNG), "image/png", "t", "n", "2026-09-02"))
+        c.commit()
+    finally:
+        c.close()
+    return H, {"slip": slip, "fid": fid, "vids": vids}
+
+
+def test_payslip_signed_file_exists_but_user_not_allowed_is_404(client, money_docs):
+    H, info = money_docs
+    args = ("payslip_signed", info["slip"], info["fid"])
+    for who in ("mn_cashier", "mn_super"):                                     # 正對照：有權限的人打得開
+        r = _open(client, H[who], *args)
+        assert r.status_code == 200 and r.content == b"%PDF-1.4 payslip", (who, r.status_code)
+    missing = _open(client, H["mn_none"], "payslip_signed", "PS-202609-778", "ffffffffffffffff")
+    for who in ("mn_other_fin", "mn_none", "mn_finance"):                      # 文件存在、有別的（財務）模組，但不是 cashier／superadmin
+        r = _open(client, H[who], *args)
+        assert r.status_code == 404 and r.json()["detail"] == "檔案不存在" == missing.json()["detail"], (who, r.status_code)
+        assert "payslip" not in r.text.lower() and "signed.pdf" not in r.text
+
+
+def test_voucher_attachment_exists_but_user_not_allowed_is_404(client, money_docs):
+    H, info = money_docs
+    v1, v2 = info["vids"]
+    for who in ("mn_cashier", "mn_finance", "mn_super"):                      # 正對照：cashier／finance／superadmin
+        r = _open(client, H[who], "voucher", str(v1), "file1")
+        assert r.status_code == 200 and r.content == PNG, (who, r.status_code)
+    for who in ("mn_other_fin", "mn_none"):                                    # 傳票與附件都存在，但沒有 cashier／finance
+        r = _open(client, H[who], "voucher", str(v1), "file1")
+        assert r.status_code == 404 and r.json()["detail"] == "檔案不存在", (who, r.status_code)
+
+
+def test_voucher_attachment_must_belong_to_that_voucher_and_not_be_deleted(client, money_docs):
+    """有權限的人也不能用 A 傳票的 id 配 B 傳票的 file_id，已刪的附件也打不開（同原下載端點的規則）。"""
+    H, info = money_docs
+    v1, v2 = info["vids"]
+    assert _open(client, H["mn_cashier"], "voucher", str(v1), "file2").status_code == 404        # file2 屬於 v2
+    assert _open(client, H["mn_cashier"], "voucher", str(v2), "file2").status_code == 200
+    assert _open(client, H["mn_cashier"], "voucher", str(v1), "filedel").status_code == 404      # 已刪

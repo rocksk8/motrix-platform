@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>每日工作事項 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -1786,6 +1787,8 @@
             </div>
           </template>
 
+          <!-- 掛載點（建構器方案 B）：發布時選了「每日工作事項頁籤」的自訂模組會出現在這一排；元件 static/mount-tabs.js（頁面不自己呼叫掛載 API，守門 G-M2） -->
+          <div x-data="motrixMountTabs('daily_tasks.daily-tasks')" data-mount-point="daily_tasks.daily-tasks" style="display:contents">
           <!-- Tab bar -->
           <div class="dt-tab-bar">
             <button class="dt-tab-btn" :class="{active: activeTab==='detail'}" @click="setTab('detail')">
@@ -1799,6 +1802,10 @@
                 <span class="dt-tab-count" x-text="history.total + ' 筆'"></span>
               </template>
             </button>
+            <template x-for="t in mtTabs" :key="t.key">
+              <button class="dt-tab-btn" :class="{active: activeTab === 'mount:' + t.key}" :data-mount-tab="t.key"
+                      @click="setTab('mount:' + t.key); mtSelect(t.key)" x-text="t.label"></button>
+            </template>
             <div class="dt-tab-spacer"></div>
             <template x-if="activeTab === 'history'">
               <button class="btn btn-ghost btn-sm" @click="exportHistory()" style="font-size:11px;margin:4px 0">
@@ -2217,6 +2224,22 @@
 
           </div><!-- history tab -->
 
+          <!-- 掛載頁籤面板（方案 B）：被點到才建立同源 iframe；8 秒沒載入 ⇒ 改顯示「從選單開啟」連結（失效保護） -->
+          <template x-for="t in mtTabs" :key="'p-' + t.key">
+            <div x-show="activeTab === 'mount:' + t.key" :data-mount-panel="t.key">
+              <template x-if="mtOpened[t.key]">
+                <div>
+                  <iframe :data-mt-key="t.key" :src="mtSrc(t)" :style="'width:100%;border:0;display:block;height:' + mtHeight(t.key)"
+                          :title="t.label" @load="mtOnLoad(t.key)"></iframe>
+                  <div x-show="mtFailed[t.key]" style="padding:12px;font-size:13px;color:var(--text-secondary)" data-mount-failed>
+                    載入失敗，請從選單開啟：<a :href="mtFallbackHref(t)" x-text="t.label"></a>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+          </div><!-- 掛載點 motrixMountTabs -->
+
         </div>
       </template>
     </div><!-- .dt-right -->
@@ -2426,6 +2449,7 @@
   </div>
 </div>
 
+<script src="../static/mount-tabs.js"></script>
 <script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
 <script>
@@ -2504,7 +2528,7 @@ function app() {
 
     // Report summary view
     reportMode:         false,
-    reportDate:         new Date().toISOString().slice(0,10),
+    reportDate:         MotrixDate.today(),
     reportData:         [],
     reportLoading:      false,
     reportSelected:     null,
@@ -2662,7 +2686,7 @@ function app() {
       const q    = this.searchQ.trim().toLowerCase()
       const seen = new Set()
       const res  = []
-      const todayStr = new Date().toISOString().slice(0,10)
+      const todayStr = MotrixDate.today()
       const inMonth  = todayStr.startsWith(this.yearMonthStr())
 
       for (const t of this.tasks) {
@@ -2726,7 +2750,7 @@ function app() {
     },
 
     weeklyTodayOcc(taskId) {
-      const todayStr = new Date().toISOString().slice(0,10)
+      const todayStr = MotrixDate.today()
       if (!todayStr.startsWith(this.yearMonthStr())) return null
       return this.tasks.find(t => t.id === taskId && t.occurrence_date === todayStr) || null
     },
@@ -2920,7 +2944,7 @@ function app() {
     openCreate() {
       this.editingId = null
       this.form = {
-        task_date: new Date().toISOString().slice(0,10), title:'', description:'', category:'',
+        task_date: MotrixDate.today(), title:'', description:'', category:'',
         priority:'一般', assigned_to:[], supervisors:[],
         recurrence_type:'once', recurrence_days:[], recurrence_end_date:'',
         case_no: ''
@@ -3105,7 +3129,7 @@ function app() {
       } else {
         const d = new Date(this.histWeekStart + 'T00:00:00')
         d.setDate(d.getDate() - 7)
-        this.histWeekStart = d.toISOString().slice(0, 10)
+        this.histWeekStart = MotrixDate.ymd(d)
       }
       this.historyExpanded = {}
     },
@@ -3116,7 +3140,7 @@ function app() {
       } else {
         const d = new Date(this.histWeekStart + 'T00:00:00')
         d.setDate(d.getDate() + 7)
-        this.histWeekStart = d.toISOString().slice(0, 10)
+        this.histWeekStart = MotrixDate.ymd(d)
       }
       this.historyExpanded = {}
     },
@@ -3138,7 +3162,7 @@ function app() {
       if (!this.histWeekStart) return []
       const end = new Date(this.histWeekStart + 'T00:00:00')
       end.setDate(end.getDate() + 6)
-      const endStr = end.toISOString().slice(0, 10)
+      const endStr = MotrixDate.ymd(end)
       return this.history.items.filter(x => x.occurrence_date >= this.histWeekStart && x.occurrence_date <= endStr)
     },
 
@@ -3163,7 +3187,7 @@ function app() {
       return Array.from({ length: 7 }, (_, i) => {
         const d = new Date(this.histWeekStart + 'T00:00:00')
         d.setDate(d.getDate() + i)
-        const dateStr = d.toISOString().slice(0, 10)
+        const dateStr = MotrixDate.ymd(d)
         const wdIdx = d.getDay() === 0 ? 6 : d.getDay() - 1
         return { date: dateStr, weekday: WD[wdIdx], occ: this.history.items.find(x => x.occurrence_date === dateStr) || null }
       })
@@ -3173,7 +3197,7 @@ function app() {
       const d = new Date(dateStr + 'T00:00:00')
       const day = d.getDay()
       d.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
-      return d.toISOString().slice(0, 10)
+      return MotrixDate.ymd(d)
     },
     _weekLabel(mondayStr) {
       const d = new Date(mondayStr + 'T00:00:00')
@@ -3189,13 +3213,13 @@ function app() {
     _thisWeekMonday() {
       const today = new Date()
       today.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1))
-      return today.toISOString().slice(0, 10)
+      return MotrixDate.ymd(today)
     },
 
     // ── Left panel stat helpers ────────────────────────────────────────────────
 
     leftStats() {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = MotrixDate.today()
       const me = this.session?.username
       if (!me) return { todayTotal: 0, todayPending: 0, rate: 0 }
       const myTasks = this.tasks.filter(t => (t.assigned_to || []).includes(me))
@@ -3241,7 +3265,7 @@ function app() {
     },
 
     goReportToday() {
-      this.reportDate = new Date().toISOString().slice(0, 10)
+      this.reportDate = MotrixDate.today()
       this.reportSearch = ''; this.reportFilterPerson = ''
       this.loadReportData()
     },
@@ -3249,7 +3273,7 @@ function app() {
     prevReportDay() {
       const d = new Date(this.reportDate + 'T00:00:00')
       d.setDate(d.getDate() - 1)
-      this.reportDate = d.toISOString().slice(0, 10)
+      this.reportDate = MotrixDate.ymd(d)
       this.reportSearch = ''; this.reportFilterPerson = ''
       this.loadReportData()
     },
@@ -3257,7 +3281,7 @@ function app() {
     nextReportDay() {
       const d = new Date(this.reportDate + 'T00:00:00')
       d.setDate(d.getDate() + 1)
-      this.reportDate = d.toISOString().slice(0, 10)
+      this.reportDate = MotrixDate.ymd(d)
       this.reportSearch = ''; this.reportFilterPerson = ''
       this.loadReportData()
     },
@@ -3374,7 +3398,7 @@ function app() {
 
     // Monthly completion rate for 常駐任務 card badge
     monthRate(taskId) {
-      const today = new Date().toISOString().slice(0,10)
+      const today = MotrixDate.today()
       const occs  = this.tasks.filter(t => t.id === taskId && (t.occurrence_date || '') <= today)
       if (!occs.length) return null
       const done = occs.filter(o => {

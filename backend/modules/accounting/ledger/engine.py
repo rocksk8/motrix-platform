@@ -65,6 +65,13 @@ def _voucher_row(conn, vid):
     return dict(r) if r else None
 
 
+def _dims_json(ln):
+    """事件行選填 `dims`（維度代碼→字串，例 department）⇒ `voucher_lines.dim_json`（migration 0003）；沒有 ⇒ '{}'。"""
+    import json
+    d = ln.get("dims") or {}
+    return json.dumps({str(k): str(v) for k, v in d.items() if v not in (None, "")}, ensure_ascii=False, sort_keys=True) if isinstance(d, dict) else "{}"
+
+
 def _make_draft(conn, ev, resolved, user, kind="auto", reverse=False, reverses_no="", date=None, event_id=0, code_hint=None):
     """寫一張草稿傳票（含維度欄位）。`reverse=True` 借貸對調。回 (voucher_id, voucher_no)。"""
     from modules.accounting.api.voucher_common import _amount_lines, insert_draft_voucher
@@ -85,9 +92,9 @@ def _make_draft(conn, ev, resolved, user, kind="auto", reverse=False, reverses_n
     conn.execute("UPDATE vouchers_all SET kind=?, origin=?, reverses_no=?, gl_event_id=?, is_backfill=? WHERE id=?",
                  (kind, "gl:%s" % ev["event_code"], reverses_no, event_id, 1 if ev.get("backfill") else 0, vid))
     for i, ln in enumerate(resolved, start=1):
-        conn.execute("UPDATE voucher_lines SET case_no=?, party_key=?, tax_code=?, doc_no=? WHERE voucher_id=? AND line_no=?",
+        conn.execute("UPDATE voucher_lines SET case_no=?, party_key=?, tax_code=?, doc_no=?, dim_json=? WHERE voucher_id=? AND line_no=?",
                      (ln.get("case_no") or ev.get("case_no") or "", ln.get("party_key") or (ev.get("party") or {}).get("key") or "",
-                      ln.get("tax_code") or ev.get("tax_code") or "", ev.get("doc_no") or "", vid, i))
+                      ln.get("tax_code") or ev.get("tax_code") or "", ev.get("doc_no") or "", _dims_json(ln), vid, i))
     return vid, no
 
 
@@ -137,8 +144,9 @@ def _latest(conn, ev):
 def _prepare_stock(conn, ev):
     """mode=stock：依移動加權平均算出庫金額並組出分錄（借 COGS 依案件／貸 INVENTORY）。只算不記；在庫不足 ⇒ InsufficientStock。"""
     amt = _inv.issue_amount(conn, ev["stock_part_no"], ev["stock_qty"])
-    memo = "出庫 %s×%d" % (ev["stock_part_no"], ev["stock_qty"])
-    ev["lines"] = [{"role": "COGS", "side": "D", "amount": amt, "memo": memo, "case_no": ev.get("case_no") or ""},
+    scrap = (ev.get("meta") or {}).get("via") == "scrap"                 # 報廢＝借存貨盤損；出貨／案件認領＝借營業成本
+    memo = ("報廢 %s×%d" if scrap else "出庫 %s×%d") % (ev["stock_part_no"], ev["stock_qty"])
+    ev["lines"] = [{"role": "INV_LOSS" if scrap else "COGS", "side": "D", "amount": amt, "memo": memo, "case_no": ev.get("case_no") or ""},
                    {"role": "INVENTORY", "side": "C", "amount": amt, "memo": memo}]
     return amt
 
@@ -314,22 +322,69 @@ def _orphans(conn, start, end, seen, ok_sources, user, stats):
         stats["orphans"] += 1
 
 
+_ACTIVE = ("drafted", "posted", "native", "blocked_closed", "blocked_no_account", "blocked_inventory")
+
+
+def effective_range(conn, start, end):
+    """L2（W2 寫入串接矩陣）：偵測範圍＝使用者指定的區間 ∪ **已知有效事件**（草稿／已過帳／既有傳票／被擋）所涵蓋的日期。
+    區間外的已知事件也要能被偵測到來源變動（drift）或消失（orphan）——原本只有事件日落在執行區間時才偵測，跨月改日期、
+    重新匯款的舊事件會永遠不被反向。區間外**還沒有事件紀錄**的來源資料不在這次建立（過往年度補登是 C8）。"""
+    lo, hi = conn.execute("SELECT MIN(event_date), MAX(event_date) FROM gl_source_events WHERE status IN (%s)" % ",".join("?" * len(_ACTIVE)), _ACTIVE).fetchone()
+    return (min(start, lo) if lo else start), (max(end, hi) if hi else end)
+
+
+def _in_scope(conn, ev, start, end):
+    """區間內的事件一律處理；區間外的只處理已有事件紀錄的（見 effective_range）。"""
+    return start <= ev["event_date"] <= end or _latest(conn, ev) is not None
+
+
+def pending_changes(conn, start, end):
+    """唯讀：自上次執行後，若現在執行會有多少變動——`new`（將新增草稿）、`changed`（來源內容變動）、`gone`（來源已消失）。
+    以來源事件的內容雜湊與已記錄的最新一版比對（輕量比對；不寫入）。⇒ `{new, changed, gone, total, sources}`。"""
+    _roles.ensure_meta(conn)
+    _roles.ensure_default_roles(conn)
+    lo, hi = effective_range(conn, start, end)
+    res = _contract.collect(lo, hi, conn=conn)
+    new = changed = 0
+    seen = set()
+    for ev in res["events"]:
+        latest = _latest(conn, ev)
+        if latest is None:
+            if start <= ev["event_date"] <= end and ev.get("mode") != "native":
+                new += 1
+            continue
+        seen.add((ev["source_type"], ev["source_key"], ev["event_code"]))
+        if latest["status"] in ("blocked_closed", "blocked_no_account", "blocked_inventory"):
+            continue                                                       # 被擋的事件：條件改善才會重試，不算來源變動
+        if latest["content_hash"] != ev["content_hash"] and latest["status"] in ("drafted", "posted", "native", "superseded", "rejected", "reversed"):
+            changed += 1
+    ok = {k for k, v in res["sources"].items() if v == "ok"}
+    gone = 0
+    for e in conn.execute("SELECT source_module, source_type, source_key, event_code FROM gl_source_events WHERE status IN ('drafted','posted') AND event_date BETWEEN ? AND ?", (lo, hi)):
+        if e["source_module"] in ok and (e["source_type"], e["source_key"], e["event_code"]) not in seen:
+            gone += 1
+    return {"new": new, "changed": changed, "gone": gone, "total": new + changed + gone, "sources": res["sources"], "range": [lo, hi]}
+
+
 def run(conn, start, end, user):
     """向所有來源收集事件並落到傳票草稿。回 `{stats, notices, invalid, sources, run_id}`。"""
     started = _now()
     _roles.ensure_meta(conn)
     _roles.ensure_default_roles(conn)
-    res = _contract.collect(start, end, conn=conn)
+    lo, hi = effective_range(conn, start, end)                            # L2：偵測範圍涵蓋區間外的已知事件
+    res = _contract.collect(lo, hi, conn=conn)
     stats = {"scanned": 0, "created": 0, "drift": 0, "superseded": 0, "reversals": 0, "blocked": 0, "orphans": 0, "native": 0}
     sync_statuses(conn)
     seen = set()
     order = {"E08": 0, "E08b": 1}                                        # 同一天：進貨先於出庫（存貨鏈要先有貨）
     for ev in sorted(res["events"], key=lambda x: (x["event_date"], order.get(x["event_code"], 2))):
+        if not _in_scope(conn, ev, start, end):
+            continue
         seen.add((ev["source_type"], ev["source_key"], ev["event_code"]))
         _process(conn, ev, user, stats)
         _record_receipt(conn, ev)
     ok_sources = {k for k, v in res["sources"].items() if v == "ok"}
-    _orphans(conn, start, end, seen, ok_sources, user, stats)
+    _orphans(conn, lo, hi, seen, ok_sources, user, stats)
     sync_statuses(conn)
     cur = conn.execute(
         "INSERT INTO gl_engine_runs(started_at, finished_at, started_by, range_start, range_end, scanned, created, drift, blocked, notices_json)"

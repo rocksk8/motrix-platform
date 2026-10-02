@@ -184,3 +184,11 @@ backend/tools/parse_account_items.py export-ignore
 # · verify_package.py 本身 —— 未歸類，SCOPE.md 書面紀錄仍是「未歸類」
 #   （即使有訊息提過要歸類，權威紀錄沒有落地前不當作已裁決）
 # · backend/create_claude_account.py（不在 backend/tools/ 下）—— 仍待歸屬
+
+# 版號佔位的合併驅動（2026-09-30，PLAYBOOK §G6；使用者「撞號太多次了，想辦法解決」）
+# 兩條分支都在最上面插入段落／條目 ⇒ 兩邊都留。驅動要先登記：tools/platform/setup_merge_drivers.py
+# 沒登記的機器 git 找不到驅動 ⇒ 一般三方合併（照常出衝突，不會靜默少東西）。
+# ⚠ 不用內建 merge=union：實測兩邊的新段落之間的空行會被吃掉，而且兩邊改同一行舊內容時會兩行都留（靜默）。
+backend/core/CHANGELOG.md           merge=motrix-changelog
+backend/modules/*/CHANGELOG.md      merge=motrix-changelog
+backend/version_manifest.json       merge=motrix-manifest

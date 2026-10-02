@@ -152,7 +152,7 @@ def _c_deal_tag(client, h):
 def _saved_orders(client, h):
     """先存一筆合法的叫料（modules/case/api/material_orders.py::MaterialOrder 的欄位）。"""
     mos = [{"itemId": "mo-probe", "itemName": "線材", "quantity": 10, "unit": "條", "unitPrice": 100,
-            "totalPrice": 1000, "paidStatus": "pending", "paidAmount": 0, "paidDate": None}]
+            "totalPrice": 1000, "paidStatus": "pending", "paidAmount": 0, "paidDate": None, "supplierId": 1}]
     r = client.patch(f"/api/quotations/{NO}/material-orders", headers=h, json={"materialOrders": mos})
     assert r.status_code == 200, r.text
     return mos
@@ -160,8 +160,8 @@ def _saved_orders(client, h):
 
 def _c_mat_orders(client, h):
     mos = _saved_orders(client, h)
-    mos[0].update(paidAmount=500, paidStatus="partial", paidDate="2026-09-20")
-    return None, lambda: client.patch(f"/api/quotations/{NO}/material-orders", headers=h, json={"materialOrders": mos}),         lambda d: d["caseRecord"]["materialOrders"][0].get("paidAmount") == 500
+    mos[0].update(notes="探針")       # 31-C：已付欄位只能經匯款申請寫入 ⇒ 探針改備註（非實質、非已付欄位）
+    return None, lambda: client.patch(f"/api/quotations/{NO}/material-orders", headers=h, json={"materialOrders": mos}),         lambda d: d["caseRecord"]["materialOrders"][0].get("notes") == "探針"
 
 
 def _c_mat_order_invoice_date(client, h):
@@ -210,7 +210,7 @@ def _c_approve(client, h, me):
 def _c_reject_final(client, h, me):
     from tests.test_approval_reassign_history_2026_09_14 import _seed_quote_pending
     _seed_quote_pending("MQ-LU-REJ", me)
-    return None, lambda: client.post("/api/quotations/MQ-LU-REJ/reject-final", headers=h, json={"reason": "探針"}),         lambda d: "reject" in json.dumps(d.get("approval") or {}, ensure_ascii=False).lower() or         "拒絕" in json.dumps(d.get("approval") or {}, ensure_ascii=False)
+    return None, lambda: client.post("/api/quotations/MQ-LU-REJ/reject-final", headers=h, json={"reason": "探針", "note": "探針"}),         lambda d: "reject" in json.dumps(d.get("approval") or {}, ensure_ascii=False).lower() or         "拒絕" in json.dumps(d.get("approval") or {}, ensure_ascii=False)
 
 
 def _c_reassign(client, h, me):

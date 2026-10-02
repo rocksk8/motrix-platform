@@ -13,6 +13,7 @@ from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm
 from helpers import row_access
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
+from modules.analytics.api import reports as R
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -41,8 +42,10 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
         """).fetchall()
         cust_count = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
         if department_id:
-            dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
-            rows = [r for r in rows if r["sales_person_id"] and dept_by_user.get(r["sales_person_id"]) == department_id]
+            # 2026-10-01：案件部門跟業績歸屬的業務負責人（與營運報表同一份 R._case_dept）；查無帳號 ⇒ 未分類 ⇒ 被篩掉
+            user_by_id, name_index = R._load_user_index(conn)
+            rows = [r for r in rows
+                    if R._case_dept(R._row_cr({"cr_json": r["case_record_json"]}), r, name_index, user_by_id)[0] == department_id]
 
     today = date.today()
     total_count   = len(rows)
@@ -274,9 +277,7 @@ def dashboard_monthly(department_id: Optional[int] = Query(None), authorization:
         return {"items": []}
     with db_conn() as conn:
         # 部門篩選邏輯（2026-09-09 新增）
-        dept_by_user = {}
-        if department_id:
-            dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+        user_by_id, name_index = R._load_user_index(conn) if department_id else ({}, {})
         # 依實際收款進度與時間分組（2026-08-24，第二輪修正）：使用者指出「銷售收入
         # 趨勢」該反映真正收到錢的月份，不是案件成交（dealTag 轉為已成案，第一輪
         # 用 dealWonAt 修正的邏輯）的月份——業務簽單跟財務實際收款常常不同月份，
@@ -288,14 +289,14 @@ def dashboard_monthly(department_id: Optional[int] = Query(None), authorization:
         # 換算出的應收金額。跟「應收款狀態」圓環（本檔案上方 recv_received 那段）
         # 共用同一套換算邏輯，避免兩處分開實作、算出不一致的數字。
         rows = conn.execute(
-            "SELECT total, pretax, sales_person_id, data_json FROM quotations WHERE "
+            "SELECT total, pretax, sales_person_id, sales_person, data_json FROM quotations WHERE "
             "COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')"
         ).fetchall()
 
         monthly_amount, monthly_count, monthly_fee = {}, {}, {}
         for r in rows:
             # 部門篩選
-            if department_id and dept_by_user.get(r["sales_person_id"]) != department_id:
+            if department_id and R._case_dept(R._row_cr(r), r, name_index, user_by_id)[0] != department_id:
                 continue
             try:
                 data = json.loads(r["data_json"] or "{}")
@@ -778,21 +779,20 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
             ⚠️ 查詢必須選出 q.assigned_user_ids，否則被指派那一條永遠比不到。"""
             return row_access.visible("case", u, row, scope="read")
 
-        dept_by_user = {}
-        if department_id:
-            dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
+        user_by_id, name_index = R._load_user_index(conn) if department_id else ({}, {})
 
         def _in_department(row) -> bool:
+            """與營運報表同一份歸屬（R._case_dept：業務負責人＞開單者；查無帳號 ⇒ 未分類 ⇒ 篩選時排除）。"""
             if not department_id:
                 return True
-            return bool(row["sales_person_id"]) and dept_by_user.get(row["sales_person_id"]) == department_id
+            return R._case_dept(R._row_cr(row), row, name_index, user_by_id)[0] == department_id
 
         # 1. 案件留言板 comments（quote_no 範圍比照報價單可視權限）
         if can_quotation:
             rows = conn.execute("""
                 SELECT cu.id, cu.quote_no, cu.author, cu.content, cu.created_at,
                        q.customer_name, q.sales_person_id, q.sales_person, q.assigned_user_ids,
-                       du.display_name
+                       q.data_json, du.display_name
                 FROM case_updates cu
                 LEFT JOIN quotations q ON q.quote_no = cu.quote_no
                 LEFT JOIN users du ON du.username = cu.author

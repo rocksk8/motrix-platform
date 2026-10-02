@@ -14,6 +14,12 @@
   寫入：CHANGELOG＝onto 的全文，最上面插入我的段落（標題的版號換成新號並註記暫用號）；
         registry.CORE_VERSION＝最上面那段的版號；G1 快照＝onto 的快照再以新版號重產。
   我沒有段落、介面也沒變 ⇒ 什麼都不做。介面有變卻沒有段落 ⇒ 拒絕（要先寫 CHANGELOG，工具不替人寫內容）。
+
+〔2026-09-30 起分支改用佔位（PLAYBOOK §G6）〕
+  python tools/platform/core_bump.py --pending
+    CHANGELOG 最上面寫 `## (next) — <日期>（<分支>）…`（要主版號寫 `(next:major)`，其實列車會依介面自己判斷）；
+    本指令只重產 G1 快照（介面＝目前、core_version="next"），**CORE_VERSION 不動** ⇒ 兩條分支不會改到同一個號碼。
+    號碼由列車 `tools/platform/train_number.py assign` 定。上面的取號模式（--apply）留給還沒改用佔位的舊分支。
 """
 import argparse
 import json
@@ -125,12 +131,40 @@ def _interface_tools():
     return G
 
 
+#: 佔位段落標題（與 backend/tests/_version_slots.HEADING 相同）
+PLACEHOLDER = re.compile(r"^##[ \t]+\(next(?::(?:patch|minor|major))?\)", re.M)
+
+
+def pending():
+    """分支：CHANGELOG 最上面要有 (next) 段落；重產快照為介面＝目前、core_version=next；CORE_VERSION 不動。"""
+    G = _interface_tools()
+    if not G.changelog_pending():
+        print("core/CHANGELOG.md 最上面（第一個「## 主.次」之上）沒有 `## (next) — <日期>（<分支>）` 段落 ⇒ 先寫段落（工具不替人寫內容）")
+        return 1
+    sys.path.insert(0, str(REPO / "backend"))
+    from tests._version_slots import placeholders_allowed   # noqa: E402
+    ok, why = placeholders_allowed(REPO)
+    if not ok:
+        print("這裡不寫佔位（%s）⇒ 列車用 tools/platform/train_number.py assign" % why)
+        return 1
+    rc = G.main(["--update", "--pending"])
+    print("G1 快照：core_version=next（%s）；CORE_VERSION 維持 %s，號碼由列車 train_number.py 定"
+          % ("成功" if rc == 0 else "失敗 rc=%s" % rc, G.core_version()))
+    return rc
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--onto", default="origin/platform")
     ap.add_argument("--mine", help="我的 CHANGELOG 從哪個 ref 讀（預設工作樹）")
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--pending", action="store_true", help="分支用：只記介面、快照 core_version=next（PLAYBOOK §G6）")
     a = ap.parse_args(argv)
+    if a.pending:
+        return pending()
+    if PLACEHOLDER.search((REPO / CHANGELOG_REL).read_text(encoding="utf-8")):
+        print("core/CHANGELOG.md 有 `## (next)` 佔位段落 ⇒ 分支用 --pending；列車用 tools/platform/train_number.py assign")
+        return 2
 
     onto_text = _show(a.onto, CHANGELOG_REL)
     onto_version = _version_of(_show(a.onto, REGISTRY_REL))

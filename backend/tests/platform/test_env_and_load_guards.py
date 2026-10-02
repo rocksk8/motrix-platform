@@ -316,34 +316,43 @@ def test_run_train_sets_the_flag_and_fails_on_a_skip(monkeypatch):
     assert code == 1
 
 
-def test_live_map_sees_an_untracked_new_test(tmp_path):
-    """GF-M2：modtest 預設現場算 test_map——一個還沒 git add 的新測試檔要在裡面。突變：load_map 預設讀檔 ⇒ 紅。"""
-    import uuid
-    name = "test_zz_gf_live_%s.py" % uuid.uuid4().hex[:8]
-    f = REPO / "backend" / "tests" / name
-    f.write_text("def test_x():\n    assert True\n", encoding="utf-8")
-    try:
-        tmap = MT.load_map()
-        keys = set((tmap or {}).get("tests") or {})
-        assert "backend/tests/" + name in keys, "現場算的 test_map 看不到未追蹤的新檔"
-    finally:
-        f.unlink()
+def _tmp_repo(tmp_path):
+    """一個自己的小 git repo（backend/main.py＋一個已追蹤的測試檔）。**暫存的測試檔一律建在這裡，不建在共用的 backend/tests/**：
+    同時跑的子 pytest 收集共用目錄時，檔案剛好被刪掉就 FileNotFoundError（O6 同型；test_module_selection 在全量紅過一次）。"""
+    r = tmp_path / "repo"
+    (r / "backend" / "tests").mkdir(parents=True)
+    (r / "backend" / "main.py").write_text("app = None\n", encoding="utf-8")
+    (r / "backend" / "tests" / "test_tracked.py").write_text("def test_t():\n    pass\n", encoding="utf-8")
+    for a in (["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x"]):
+        subprocess.run(["git", "-C", str(r), *a], check=True, capture_output=True)
+    return r
 
 
-def test_committed_test_map_ignores_untracked_files():
+def test_live_map_sees_an_untracked_new_test(tmp_path, monkeypatch):
+    """GF-M2：modtest 預設現場算 test_map——一個還沒 git add 的新測試檔要在裡面。突變：load_map 預設讀檔 ⇒ 紅。
+    （暫存檔建在 tmp 的小 repo，不動共用的 backend/tests/。）"""
+    r = _tmp_repo(tmp_path)
+    monkeypatch.setattr(sys.modules["test_map"], "REPO", r)        # MT 內部 import 的那一份 test_map
+    name = "test_zz_gf_live_x.py"
+    (r / "backend" / "tests" / name).write_text("def test_x():\n    assert True\n", encoding="utf-8")
+    tmap = MT.load_map()
+    keys = set((tmap or {}).get("tests") or {})
+    assert "backend/tests/test_tracked.py" in keys, "前提：小 repo 的已追蹤測試檔要在（否則這題驗的是別的東西）"
+    assert "backend/tests/" + name in keys, "現場算的 test_map 看不到未追蹤的新檔"
+
+
+def test_committed_test_map_ignores_untracked_files(tmp_path, monkeypatch):
     """寫進提交／--check 用的 test_map 只看已追蹤的檔；未追蹤的新檔只進 modtest 的現場選題。
     〔D 稽核觀察原建議「髒樹拒絕重產」；實跑 --train 時發現更根本的問題：題目在 -n 4 下暫時建檔，同時跑的 --check 就判過期 ⇒
       改成結構上不讓未追蹤的檔進入提交的檔（拒絕重產因此不需要）〕突變：build() 預設含未追蹤 ⇒ 紅。"""
-    import uuid
+    r = _tmp_repo(tmp_path)
     TMm = _load("test_map")
-    name = "test_zz_gf_commit_%s.py" % uuid.uuid4().hex[:8]
-    f = REPO / "backend" / "tests" / name
-    f.write_text("def test_y():\n    pass\n", encoding="utf-8")
-    try:
-        assert "backend/tests/" + name not in set(TMm.build()["tests"]), "提交用的 test_map 不可以含未追蹤的檔"
-        assert "backend/tests/" + name in set(TMm.build(include_untracked=True)["tests"])
-    finally:
-        f.unlink()
+    monkeypatch.setattr(TMm, "REPO", r)
+    name = "test_zz_gf_commit_x.py"
+    (r / "backend" / "tests" / name).write_text("def test_y():\n    pass\n", encoding="utf-8")
+    assert "backend/tests/test_tracked.py" in set(TMm.build()["tests"]), "前提：已追蹤的測試檔要在"
+    assert "backend/tests/" + name not in set(TMm.build()["tests"]), "提交用的 test_map 不可以含未追蹤的檔"
+    assert "backend/tests/" + name in set(TMm.build(include_untracked=True)["tests"])
 
 
 # ── B-S4：同一個 commit 的歷次紀錄 ─────────────────────────────────────────────

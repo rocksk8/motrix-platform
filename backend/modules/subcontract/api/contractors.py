@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from db import get_db
 from helpers import _require_user, _tok, _audit, notify_module_activity
+from modules.subcontract import bank_mask as _bm
 
 # 字體路徑（Windows 微軟正黑體，找不到退回預設）
 _FONT_PATH = r"C:\Windows\Fonts\msjhbd.ttc"
@@ -110,6 +111,7 @@ def _stamp_passbook(data_uri: str) -> str:
 
 
 router = APIRouter()
+from helpers.xlsx_out import add_pdf_sibling, export_logged   # noqa: E402  匯出稽核＋PDF 姊妹（2026-09-30）
 
 _LIST_COLS = (
     "id, name, id_number, nationality, has_union_insurance, "
@@ -139,12 +141,15 @@ class ContractorIn(BaseModel):
     notes:               Optional[str] = ''
 
 
-def _row_to_dict(row) -> dict:
+def _row_to_dict(row, user=None) -> dict:
+    """user＝檢視者。收款帳號遮蔽（使用者裁示 2026-10-01）：非最高管理者（含只持 contractor_list 模組者；沒帶 user ⇒ fail closed）
+    看到 ****末四碼、存簿影本拿掉；規則見 modules/subcontract/bank_mask.py。"""
     d = dict(row)
     d['has_union_insurance'] = bool(d.get('has_union_insurance', 0))
     d['active'] = bool(d.get('active', 1))
     d['has_id_card']   = bool(d.get('has_id_card', 0))
-    d['has_passbook']  = bool(d.get('has_passbook', 0))
+    d['has_passbook']  = bool(d.get('has_passbook', 0)) or bool(d.get('bank_passbook_image'))
+    _bm.mask_record(user, d)
     return d
 
 
@@ -164,7 +169,7 @@ def list_contractors_selectable(authorization: str = Header(None)):
 @router.get("/api/contractors")
 def list_contractors(q: Optional[str] = None, active_only: bool = True,
                      authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module='contractor_list')
+    user = _require_user(authorization, require_superadmin=True, module='contractor_list')
     conn = get_db()
     sql = f"SELECT {_LIST_COLS} FROM contractors"
     params = []
@@ -179,12 +184,14 @@ def list_contractors(q: Optional[str] = None, active_only: bool = True,
     sql += " ORDER BY name"
     rows = conn.execute(sql, params).fetchall()
     conn.close()
-    return [_row_to_dict(r) for r in rows]
+    return [_row_to_dict(r, user) for r in rows]
 
 
 @router.post("/api/contractors", status_code=201)
 def create_contractor(body: ContractorIn, authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True, module='contractor_list')
+    if _bm.is_masked_value(body.bank_account_number):
+        body.bank_account_number = ''                     # 遮蔽字串不是帳號，不存
     now = datetime.now().isoformat()
     conn = get_db()
     cur = conn.execute("""
@@ -228,10 +235,11 @@ def _mask_id(v):
 
 
 @router.get("/api/contractors/export")
+@export_logged("xlsx", "subcontract", "contractors")
 def export_contractors(authorization: str = Header(None)):
     """匯出外包名冊（含停用的人）。證件號碼遮成末 4 碼；分行與帳號照實（出納匯款要用）。寫稽核。"""
     import openpyxl
-    _require_user(authorization, require_superadmin=True, module='contractor_list')
+    user = _require_user(authorization, require_superadmin=True, module='contractor_list')
     conn = get_db()
     try:
         rows = conn.execute("SELECT * FROM contractors ORDER BY name").fetchall()
@@ -247,6 +255,8 @@ def export_contractors(authorization: str = Header(None)):
             v = r[col]
             if col == "id_number":
                 v = _mask_id(v)
+            elif col == "bank_account_number":
+                v = _bm.number_for(user, v)          # 只有最高管理者是全碼（使用者裁示 2026-10-01）
             elif col == "has_union_insurance":
                 v = "是" if v else "否"
             elif col == "active":
@@ -325,6 +335,8 @@ async def import_contractors(file: UploadFile = File(...), authorization: str = 
             for col, v in vals.items():
                 if col in ("name",) or (col == "id_number" and masked):
                     continue
+                if col == "bank_account_number" and _bm.is_masked_value(v):
+                    continue                              # 匯出檔裡的遮蔽帳號不寫回（保留原帳號）
                 if col == "has_union_insurance":
                     v = 1 if v in ("是", "1", "Y", "y", "true", "True") else 0
                 elif col == "active":
@@ -359,13 +371,13 @@ async def import_contractors(file: UploadFile = File(...), authorization: str = 
 
 @router.get("/api/contractors/{cid}")
 def get_contractor(cid: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module='contractor_list')
+    user = _require_user(authorization, require_superadmin=True, module='contractor_list')
     conn = get_db()
     row = conn.execute("SELECT * FROM contractors WHERE id=?", (cid,)).fetchone()
     conn.close()
     if not row:
         raise HTTPException(404, "找不到此外包人員")
-    return _row_to_dict(row)
+    return _row_to_dict(row, user)
 
 
 @router.put("/api/contractors/{cid}")
@@ -373,6 +385,9 @@ def update_contractor(cid: int, body: ContractorIn, authorization: str = Header(
     _require_user(authorization, require_superadmin=True, module='contractor_list')
     now = datetime.now().isoformat()
     conn = get_db()
+    if _bm.is_masked_value(body.bank_account_number):      # 遮蔽值原樣送回（沒改帳號）⇒ 保留原帳號，不覆蓋成 ****1234
+        old = conn.execute("SELECT bank_account_number FROM contractors WHERE id=?", (cid,)).fetchone()
+        body.bank_account_number = (old[0] if old else '') or ''
     res = conn.execute("""
         UPDATE contractors SET
           name=?, id_number=?, nationality=?, has_union_insurance=?,
@@ -448,7 +463,7 @@ def toggle_contractor_active(cid: int, authorization: str = Header(None)):
 
 @router.get("/api/contractors/{cid}/id-card")
 def get_id_card(cid: int, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module='contractor_list')
+    user = _require_user(authorization, require_superadmin=True, module='contractor_list')
     conn = get_db()
     row = conn.execute(
         "SELECT id_card_image, id_card_image_back, bank_passbook_image FROM contractors WHERE id=?", (cid,)
@@ -459,6 +474,8 @@ def get_id_card(cid: int, authorization: str = Header(None)):
     front    = row["id_card_image"] or ""
     back     = row["id_card_image_back"] or ""
     passbook = row["bank_passbook_image"] or ""
+    if not _bm.can_see_full(user):                # 存簿影本上印著完整帳號 ⇒ 只有最高管理者
+        return {"image_front": front, "image_back": back, "image_data": front, "bank_passbook": "", "masked": bool(passbook)}
     return {"image_front": front, "image_back": back, "image_data": front, "bank_passbook": passbook}
 
 
@@ -498,3 +515,10 @@ def upload_id_card(cid: int, body: dict = Body(...), authorization: str = Header
     label = f"上傳影本（{'、'.join(parts)}）" if parts else "移除影本"
     _audit(_tok(authorization), 'contractor.id_card.update', 'contractor', str(cid), label)
     return {"ok": True, "updated_at": now}
+
+
+# ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
+# 匯出稽核／PDF 姊妹的「歸屬區」＝稽核 detail.module 的字串，**不是權限 key**；用常數傳而不是字面量：
+# tests/test_module_keys_consistency 的後端掃描器把任何 module 等號字串字面量當權限 key。
+_EXPORT_AREA = "subcontract"
+add_pdf_sibling(router, "/api/contractors/export/pdf", export_contractors, module=_EXPORT_AREA, name="contractors", title="外包名冊")

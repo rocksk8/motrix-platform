@@ -9,8 +9,40 @@
 - 不猜：實收與發票含稅不一致、缺開立日期都在 notice 明說，帳上 AR 餘額如實保留（由會計處理），不自行沖差額。
 只讀，不寫資料。
 """
+import json
+
+from db import get_db
 from helpers.legal_params import round_half_up
 from modules.arap.receivables import collect_income_items, collect_tax_invoices
+
+#: 與營運報表、E03（`collect_income_items`）同一口徑：案件狀態要是「已成案／已結案」才入帳（L8，W2 寫入串接矩陣）
+_DEAL_OK = ("已成案", "已結案")
+
+
+def _deal_ok_quotes(quote_nos):
+    """⇒ 案件狀態（deal_tag，欄位優先、退回 data_json.dealTag）是已成案／已結案的報價單號集合。
+    data_json 在 Python 裡逐列解析（不用 SQL json_extract：一列壞 JSON 會讓整個查詢失敗）。"""
+    nos = sorted({q for q in quote_nos if q})
+    if not nos:
+        return set()
+    conn = get_db()
+    try:
+        out = set()
+        for i in range(0, len(nos), 500):
+            chunk = nos[i:i + 500]
+            for r in conn.execute("SELECT quote_no, deal_tag, data_json FROM quotations WHERE quote_no IN (%s)" % ",".join("?" * len(chunk)), chunk):
+                tag = (r["deal_tag"] or "").strip()
+                if not tag:
+                    try:
+                        tag = str((json.loads(r["data_json"] or "{}") or {}).get("dealTag") or "")
+                    except (TypeError, ValueError, AttributeError):
+                        tag = ""
+                if tag in _DEAL_OK:
+                    out.add(r["quote_no"])
+        return out
+    finally:
+        conn.close()
+
 
 _TAX_CODE = {"taxable": "OUT-5", "zero": "OUT-0", "exempt": "OUT-EX", "legacy": "OUT-LEGACY"}
 
@@ -31,11 +63,15 @@ def gl_events(start, end, *, changed_since=""):
     for r in receipts:
         rec_by_item[(r["quoteNo"], _item_key(r.get("itemId"), r.get("itemIdx", 0))[0])] = r
     events, notices = [], []
-    no_date = weak = diff = 0
+    no_date = weak = diff = not_deal = 0
+    deal_ok = _deal_ok_quotes({i["quoteNo"] for i in invoices})
 
     for inv in invoices:
         d = inv["invoiceDate"]
         if not d or not (start <= d <= end):
+            continue
+        if inv["quoteNo"] not in deal_ok:               # L8：案件降級後（不再是成案／結案）與 E03、報表同口徑 ⇒ 不入帳；已過帳的引擎判來源消失、產生反向草稿
+            not_deal += 1
             continue
         pretax, tax = _i(inv["amountPretax"]), _i(inv["taxAmount"])
         total = pretax + tax
@@ -93,6 +129,8 @@ def gl_events(start, end, *, changed_since=""):
             "party": {"key": (inv or {}).get("taxId") or r.get("customer") or "", "name": r.get("customer") or ""},
             "tax_code": "", "mode": "snapshot", "lines": lines, "meta": {"weak_key": is_weak, "advance": not invoiced}})
 
+    if not_deal:
+        notices.append("%d 張發票所屬案件目前不是「已成案／已結案」（例如已降級）：暫不入帳（與收款、營運報表同口徑）；若之前已過帳，引擎會產生反向草稿。" % not_deal)
     if no_date:
         notices.append("%d 張發票沒有填開立日期，暫以收款日認列（請補開立日期後，引擎會產生更正組）。" % no_date)
     if diff:

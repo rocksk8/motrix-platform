@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>客戶日誌 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -701,7 +702,7 @@
         this.editingId = null
         this.formError = ''
         this.form = {
-          date: new Date().toISOString().slice(0, 10),
+          date: MotrixDate.today(),
           type: '現場拜訪',
           attendees: this.session.displayName ? [this.session.displayName] : [],
           content: '',

@@ -36,7 +36,10 @@ AUTH_PY = os.path.join(ROOT, "backend", "helpers", "auth.py")
 
 # 目錄裡有、但刻意沒有任何地方讀的 key：{key: 原因}
 # 空的就是好事——每一筆都代表使用者勾得到一個不會發生任何事情的核取方塊。
-UNREAD_BY_DESIGN = {}
+UNREAD_BY_DESIGN = {
+    # A2-0 #13 預留：key 與目錄先進底層（一次），讀它的端點由 A2-1（W2，modules/case 額外支出的無案件新增）同一班上；
+    # 那支一讀它，下面的 test_unread_by_design_entries_are_really_unread 會紅，逼著把這一筆刪掉。
+}
 
 # 後端會擋、但刻意不出現在權限目錄的 key：{key: 原因}
 ENFORCED_BUT_NOT_GRANTABLE = {}
@@ -154,6 +157,13 @@ def test_every_catalogue_key_is_read_somewhere():
         f"勾了不會發生任何事：{dead}\n"
         f"請刪除，或補上實際的用途；刻意保留請在本檔 UNREAD_BY_DESIGN 補一筆。"
     )
+
+
+def test_unread_by_design_entries_are_really_unread():
+    """UNREAD_BY_DESIGN 的每一筆都必須真的沒人讀；有人讀了就要刪掉那一筆（否則例外清單只增不減）。"""
+    read = sidebar_keys() | backend_keys() | frontend_other_keys()
+    stale = sorted(k for k in UNREAD_BY_DESIGN if k in read)
+    assert not stale, f"這些 key 已經有人讀了，請從 UNREAD_BY_DESIGN 刪掉：{stale}"
 
 
 def test_role_template_keys_are_in_catalogue():

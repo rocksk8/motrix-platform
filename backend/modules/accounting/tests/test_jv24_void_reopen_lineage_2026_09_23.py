@@ -68,22 +68,22 @@ def _seed_case(conn, quote_no):
     conn.commit()
 
 
-def _make_file(subfolder, file_id):
+def _make_file(subfolder, file_id, doc_key):
     import pathlib
     import helpers.uploads as up
     base = getattr(up, "UPLOADS_ROOT", None)
     assert base, "`helpers/uploads.py` 沒有 `UPLOADS_ROOT`——退回給我。"
-    folder = pathlib.Path(str(base)) / subfolder
+    folder = pathlib.Path(str(base)) / subfolder / doc_key      # 真實配置：<資料夾>/<單據鍵>/<檔名>（W3：路徑綁單據）
     folder.mkdir(parents=True, exist_ok=True)
     real = folder / ("%s.pdf" % file_id)
     real.write_bytes(b"%PDF-1.4 jv24")
     return {"id": file_id, "name": "%s.pdf" % file_id,
-            "path": "%s/%s" % (subfolder, real.name)}
+            "path": "%s/%s/%s" % (subfolder, doc_key, real.name)}
 
 
 def _seed_invoice_voucher_candidate(conn, quote_no, file_id):
-    f = _make_file("invoice_vouchers", file_id)
     vno = "IV-" + file_id
+    f = _make_file("invoice_vouchers", file_id, vno)
     conn.execute(
         "INSERT INTO invoice_vouchers (voucher_no, quote_no, scope, status,"
         " snapshot_json, data_json, created_by, created_at, updated_at,"

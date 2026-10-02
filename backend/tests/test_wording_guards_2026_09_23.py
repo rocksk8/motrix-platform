@@ -55,6 +55,8 @@ GW1_BASELINE = 0
 #: 掃描範圍：會送出文案的那幾支。⚠️ **不是**「檔名含 notify」。
 #: 模組搬出去的通知一併列入（守門對象不可以被搬走）。
 SCAN_FILES = ("helpers/email_notify.py", "modules/tender_radar/notify.py",
+              "modules/accounting/notify.py",   # 傳票簽核／總帳申請信：寄給簽核人與申請人（非維護者）
+              "modules/case/expense_notify.py",   # 費用單據信（A2-7）：寄給簽核人、申請人、出納（非維護者）
               # 〔主持派工 wip/b-scan-modules：「送信檔都要有人歸類」題第一次跑出來的三支——寄給客戶端的
               #   管理員（不是維護者）⇒ 依本檔「寫給誰看的」那條線在範圍〕
               "archive.py",            # 備份失敗告警信

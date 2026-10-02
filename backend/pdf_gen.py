@@ -27,8 +27,27 @@ from db import (
 )
 from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report, run_edge_pdf
 from helpers import receipt_amounts as _receipt_amounts
+from helpers.doc_template import esc_quotes as _esc_q, attr_esc as _attr
+# 未核可紅色警示（使用者 2026-09-30）：各單據 builder 共用同一個元件與同一個字樣
+from helpers.doc_template import unapproved_banner as _unapproved_banner, inject_unapproved as _inject_unapproved
 
 from core import paths as _paths
+
+
+def _local_date_of(ts) -> str:
+    """時間戳字串 ⇒ 伺服器本地的 YYYY-MM-DD。帶時區的（`…Z`／`+00:00`，舊資料：前端曾用 toISOString() 存）先換成本地時區再取日期；
+    不帶時區的（本系統後端存的都是本地時間）照取前 10 碼。讀不懂 ⇒ 前 10 碼。**只改顯示，不改資料。**
+    （台灣 UTC+8：UTC 的 `2026-09-30T17:03:00Z` 是本地 10/01 01:03，直接切前 10 碼會得到 09-30。）"""
+    s = str(ts or "").strip()
+    if not s:
+        return ""
+    try:
+        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return s[:10]
+    if d.tzinfo is not None:
+        d = d.astimezone()
+    return d.strftime("%Y-%m-%d")
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +125,8 @@ def _tax_line_label(q: dict) -> str:
 def _build_quote_html(q: dict, tot: dict, internal: bool = False,
                       show_watermark: bool = False, watermark_text: str = '未成案 · 報價單僅供瀏覽',
                       watermark_font_size: int = 30,
-                      show_notice: bool = False, notice_text: str = '') -> str:
+                      show_notice: bool = False, notice_text: str = '',
+                      unapproved_status: str = None) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
@@ -118,7 +138,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
     #    版型沒有匯款帳號欄位，`QL10` 管的是請款單那幾支，原封不動）。
     _ident = apply_snapshot(location_identity(_location_of(q)), q)
     def esc(s):
-        return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
     ps = q.get('pdfShow') or {}
 
     items = q.get('items', [])
@@ -278,7 +298,9 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         + '</div>\n'
         if show_watermark else '')
         + '<div id="root">\n'
-        '<div class="accent-bar"></div>\n'
+        + (_unapproved_banner(unapproved_status, doc_no=(q.get('quoteNo') or ''), wm_text='報價單預覽稿・\n尚未正式生效')
+           if unapproved_status is not None else '')
+        + '<div class="accent-bar"></div>\n'
         + (
         f'<div class="notice-bar">'
         f'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">'
@@ -461,6 +483,7 @@ def _quote_watermark_kwargs(status: str, deal_tag: str) -> dict:
         watermark_font_size=18 if is_unsettled else 28,
         show_notice=is_unsettled,
         notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用",
+        unapproved_status=(status or "草稿") if status != "已送出" else None,
     )
 
 
@@ -581,13 +604,13 @@ def _identity_head(ident: dict) -> str:
     ☠️ 換成半形的話所有既有單據的那一行都會變，而沒有人會說得出是哪一次改的。
     """
     third = "統一編號：%s　｜　電話：%s　｜　%s" % (
-        ident.get("tax_id", ""), ident.get("phone", ""), ident.get("email", ""))
+        _attr(ident.get("tax_id", "")), _attr(ident.get("phone", "")), _attr(ident.get("email", "")))
     require_for_output()                  # 第二道（COMPANY-SETUP-GATE §5）：未設定／判定失敗 ⇒ 428，文件不產生
     return _demo_watermark() + (
         '    <div class="co-name">%s</div>\n'
         '    <div class="co-sub">%s</div>\n'
         '    <div class="co-sub" style="margin-top:4px">%s</div>\n'
-        % (ident.get("company_name", ""), ident.get("company_name_en", ""),
+        % (_attr(ident.get("company_name", "")), _attr(ident.get("company_name_en", "")),
            third))
 
 
@@ -595,20 +618,20 @@ def _identity_foot(ident: dict) -> str:
     """頁尾那一行（完整版：英文名 ＋ 中文名 ｜ email ｜ Tel ｜ 統編）。"""
     require_for_output()
     return "  %s %s ｜ %s ｜ Tel: %s ｜ 統一編號: %s\n" % (
-        ident.get("company_name_en", ""),
+        _attr(ident.get("company_name_en", "")),
         # ⚠️ 頁尾用的是**不含「股份有限公司」的短名**。改版前寫死的是本公司名稱的短名，
         # 🔑 而那是 `company_name` 去掉尾綴 —— 這裡只去掉既有那幾種尾綴，
         #    使用者自己填的名字原樣印出去，不要替他猜。
-        _short_name(ident.get("company_name", "")),
-        ident.get("email", ""), ident.get("phone", ""), ident.get("tax_id", ""))
+        _attr(_short_name(ident.get("company_name", ""))),
+        _attr(ident.get("email", "")), _attr(ident.get("phone", "")), _attr(ident.get("tax_id", "")))
 
 
 def _identity_foot_short(ident: dict) -> str:
     """頁尾那一行（短版：只有英文名與中文短名）。"""
     require_for_output()
     return "%s %s\n</div>\n" % (
-        ident.get("company_name_en", ""),
-        _short_name(ident.get("company_name", "")))
+        _attr(ident.get("company_name_en", "")),
+        _attr(_short_name(ident.get("company_name", ""))))
 
 
 #: 頁尾短名（2026-09-25 A8c：移到 helpers/company_identity.short_name，唯一來源）
@@ -616,7 +639,7 @@ from helpers.company_identity import short_name as _short_name  # noqa: E402
 
 
 def _payslip_esc(s):
-    return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+    return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
 
 
 def _payslip_view(d: dict) -> dict:
@@ -703,7 +726,7 @@ def _payslip_reprint_note(view) -> str:
 
 def _payslip_passbook_html(d: dict) -> str:
     """附件：乙方銀行存簿影本（照抄改版前的 HTML；沒有影本 ⇒ 空字串）。"""
-    def esc(s): return (s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>')
+    def esc(s): return _esc_q((s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>'))
     cname, slip_no = d.get('contractorName', ''), d.get('slipNo', '')
     bank_code, bank_name, bank_bran, bank_no = d.get('bankCode', ''), d.get('bankName', ''), d.get('bankBranch', ''), d.get('bankAccountNumber', '')
     bank_passbook = d.get('_bank_passbook', '')
@@ -738,7 +761,7 @@ def _payslip_passbook_html(d: dict) -> str:
     </tr>
   </table>
   <div style="text-align:center">
-    <img src="{bank_passbook}" style="max-width:100%;max-height:340px;
+    <img src="{_attr(bank_passbook)}" style="max-width:100%;max-height:340px;
          object-fit:contain;border:1px solid #ccc;border-radius:4px">
   </div>
   <div style="text-align:center;font-size:8pt;color:#888;margin-top:8px">
@@ -751,7 +774,7 @@ def _payslip_passbook_html(d: dict) -> str:
 
 def _payslip_id_card_html(d: dict) -> str:
     """附件：乙方身分證影本（照抄改版前的 HTML；沒有影本 ⇒ 空字串）。"""
-    def esc(s): return (s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>')
+    def esc(s): return _esc_q((s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>'))
     cname, cid_no, slip_no = d.get('contractorName', ''), d.get('contractorIdNumber', ''), d.get('slipNo', '')
     id_card_front, id_card_back = d.get('_id_card_front', ''), d.get('_id_card_back', '')
     id_card_section = ''
@@ -760,11 +783,11 @@ def _payslip_id_card_html(d: dict) -> str:
             images_html = (
                 '<div style="display:flex;gap:14px">'
                 f'<div style="flex:1;text-align:center">'
-                f'<img src="{id_card_front}" style="max-width:100%;max-height:220px;'
+                f'<img src="{_attr(id_card_front)}" style="max-width:100%;max-height:220px;'
                 f'object-fit:contain;border:1px solid #ccc;border-radius:4px">'
                 f'<div style="font-size:9pt;color:#666;margin-top:4px">正面</div></div>'
                 f'<div style="flex:1;text-align:center">'
-                f'<img src="{id_card_back}" style="max-width:100%;max-height:220px;'
+                f'<img src="{_attr(id_card_back)}" style="max-width:100%;max-height:220px;'
                 f'object-fit:contain;border:1px solid #ccc;border-radius:4px">'
                 f'<div style="font-size:9pt;color:#666;margin-top:4px">反面</div></div>'
                 '</div>'
@@ -773,7 +796,7 @@ def _payslip_id_card_html(d: dict) -> str:
             img = id_card_front or id_card_back
             images_html = (
                 f'<div style="text-align:center">'
-                f'<img src="{img}" style="max-width:100%;max-height:300px;'
+                f'<img src="{_attr(img)}" style="max-width:100%;max-height:300px;'
                 f'object-fit:contain;border:1px solid #ccc;border-radius:4px">'
                 f'</div>'
             )
@@ -849,7 +872,9 @@ def _payslip_apply_void_mark(html_content: str, info: dict) -> str:
     return mark + html_content
 
 
-def generate_payslip_pdf_bytes(slip_no: str) -> bytes:
+def generate_payslip_pdf_bytes(slip_no: str, mask_bank: bool = True) -> bytes:
+    """勞報單 PDF。`mask_bank` 預設 True（fail closed）：收款帳號 ⇒ ****末四碼、不帶存簿影本（影像上印著帳號）；
+    只有最高管理者下載、或匯出存檔（F2 法定紀錄）才傳 False。"""
     edge = _get_edge_path()
     conn = get_db()
     row = conn.execute(
@@ -875,6 +900,10 @@ def generate_payslip_pdf_bytes(slip_no: str) -> bytes:
     d["_id_card_front"] = id_card_front
     d["_id_card_back"]  = id_card_back
     d["_bank_passbook"] = bank_passbook
+    if mask_bank:
+        n = str(d.get("bankAccountNumber") or "")
+        d["bankAccountNumber"] = "" if not n else ("****" + n[-4:] if len(n) > 4 else "****")
+        d["_bank_passbook"] = ""
     html_content = _build_payslip_html(d)
     if row["status"] == "已作廢":
         html_content = _payslip_apply_void_mark(html_content, {
@@ -950,7 +979,8 @@ def _generate_quotation_pdf(quote_no: str, actor: str = '', action_type: str = '
         html_content = _build_quote_html(q, tot, show_watermark=show_wm, watermark_text=wm_text,
                                          watermark_font_size=18 if is_unsettled else 28,
                                          show_notice=is_unsettled,
-                                         notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用")
+                                         notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用",
+                                         unapproved_status=(status or "草稿") if status != "已送出" else None)
 
         # 時間戳到「秒」（2026-09-14 改）——原本只到「日」，靠 `_2`…`_19` 後綴避開
         # 同日同人的第 2～19 次。**第 20 次會靜默覆蓋掉當天的第一份**：迴圈找不到
@@ -1017,7 +1047,7 @@ def _build_shipping_html(n: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(n)), n)
     def esc(s):
-        return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
 
     items = n.get('items', [])
     item_rows = ''
@@ -1064,10 +1094,8 @@ def _build_shipping_html(n: dict) -> str:
             for _ in range(12)
         ) + '</div>'
     )
-    banner_html = '' if is_final else (
-        f'<div class="preview-banner">⚠ 此為出貨單預覽稿（目前狀態：{esc(n.get("status") or "草稿")}），'
-        f'尚未正式核准，請勿對外提供或引用</div>'
-    )
+    banner_html = '' if is_final else _unapproved_banner(
+        n.get("status"), '此為出貨單預覽稿，尚未正式核准，請勿對外提供或引用', doc_no=n.get("noteNo", ""))
 
     return (
         '<!DOCTYPE html>\n'
@@ -1346,7 +1374,7 @@ def _voucher_sign_html(appr: dict) -> str:
     """簽核歷程 HTML 區塊，出貨單 PDF 沒有這段（出貨單簽核歷程只存在系統內），
     但財務申請需要在紙本上就能看到完整簽核歷程，故獨立為共用小工具。"""
     def esc(s):
-        return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
     tiers = (appr or {}).get('tiers') or []
     if not tiers:
         return ''
@@ -1367,7 +1395,22 @@ def _voucher_sign_html(appr: dict) -> str:
     )
 
 
-def _build_contractor_voucher_html(v: dict) -> str:
+def _mask_voucher_bank(v: dict) -> dict:
+    """匯款申請 PDF 的帳號遮蔽（使用者裁示 2026-10-01：只有最高管理者看得到完整帳號）：帳號 ⇒ ****末四碼，存簿影本拿掉。回新 dict。"""
+    def m(n):
+        n = str(n or "")
+        return "" if not n else ("****" + n[-4:] if len(n) > 4 else "****")
+    out = dict(v)
+    out["bankAccountNumber"] = m(out.get("bankAccountNumber"))
+    out["bankPassbookImage"] = ""
+    out["personnel"] = [dict(p, bankAccountNumber=m(p.get("bankAccountNumber")), bankPassbookImage="")
+                        if isinstance(p, dict) else p for p in (out.get("personnel") or [])]
+    return out
+
+
+def _build_contractor_voucher_html(v: dict, mask_bank: bool = False) -> str:
+    if mask_bank:
+        v = _mask_voucher_bank(v)
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
@@ -1377,7 +1420,7 @@ def _build_contractor_voucher_html(v: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(v)), v)
     def esc(s):
-        return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
     def money(n):
         return f'{n:,.0f}' if isinstance(n, (int, float)) else '0'
 
@@ -1433,7 +1476,7 @@ def _build_contractor_voucher_html(v: dict) -> str:
         )
 
     applicant_name = (v.get('approval') or {}).get('requestedByDisplay') or v.get('createdBy', '')
-    applicant_date = ((v.get('approval') or {}).get('requestedAt') or v.get('createdAt') or '')[:10]
+    applicant_date = _local_date_of((v.get('approval') or {}).get('requestedAt') or v.get('createdAt') or '')
 
     is_final = v.get('status') == '已核准'
     watermark_html = '' if is_final else (
@@ -1442,10 +1485,8 @@ def _build_contractor_voucher_html(v: dict) -> str:
             for _ in range(12)
         ) + '</div>'
     )
-    banner_html = '' if is_final else (
-        f'<div class="preview-banner">⚠ 此為承攬商匯款申請預覽稿（目前狀態：{esc(v.get("status") or "草稿")}），'
-        f'尚未正式核准，請勿提供財務單位辦理匯款</div>'
-    )
+    banner_html = '' if is_final else _unapproved_banner(
+        v.get("status"), '此為承攬商匯款申請預覽稿，尚未正式核准，請勿提供財務單位辦理匯款', doc_no=v.get("voucherNo", ""))
     paid_note = ''
     paid_date = ''
     if v.get('isPaid'):
@@ -1618,8 +1659,9 @@ def _contractor_voucher_dict(row) -> dict:
     return out
 
 
-def generate_contractor_voucher_pdf_bytes(voucher_no: str) -> bytes:
-    """Edge Headless 產生承攬商匯款申請 PDF 並以 bytes 回傳（供 API 下載使用）。"""
+def generate_contractor_voucher_pdf_bytes(voucher_no: str, mask_bank: bool = True) -> bytes:
+    """Edge Headless 產生承攬商匯款申請 PDF 並以 bytes 回傳（供 API 下載使用）。
+    mask_bank 預設 True（fail closed）：只有最高管理者下載時才傳 False（見 modules/subcontract/bank_mask.py）。"""
     edge = _get_edge_path()
     conn = get_db()
     row = conn.execute(
@@ -1629,7 +1671,7 @@ def generate_contractor_voucher_pdf_bytes(voucher_no: str) -> bytes:
     if not row:
         raise ValueError("申請不存在")
     v = _contractor_voucher_dict(row)
-    html_content = _build_contractor_voucher_html(v)
+    html_content = _build_contractor_voucher_html(v, mask_bank=mask_bank)
     tmp_html = tmp_pdf = None
     try:
         with tempfile.NamedTemporaryFile(mode='w', suffix='.html', encoding='utf-8', delete=False) as f:
@@ -1744,7 +1786,7 @@ def _invoice_voucher_view(v: dict) -> dict:
         "selectedItems": v.get('selectedItems') or [],
         "quoteItems": v.get('quoteItems') or [],
         "applicantName": appr.get('requestedByDisplay') or v.get('createdBy', ''),
-        "applicantDate": (appr.get('requestedAt') or v.get('createdAt') or '')[:10],
+        "applicantDate": _local_date_of(appr.get('requestedAt') or v.get('createdAt') or ''),
         "approval": appr,
         # R2（營業稅法 §7、§8）：零稅率／免稅要印出依據（款次＋說明）；R2 之前的快照沒有 taxBasis ⇒ 退回 taxNote
         "taxType": v.get('taxType') or "",
@@ -1768,7 +1810,9 @@ def _build_invoice_voucher_html(v: dict, template: dict = None) -> str:
         "identity_foot": lambda: _identity_foot(_ident),
         "approval_sign": lambda: _voucher_sign_html(view["approval"]),
     }
-    return _dt.render(template or _published_output_template("invoice_voucher", v), view, parts)
+    html = _dt.render(template or _published_output_template("invoice_voucher", v), view, parts)
+    # 核可狀態由程式決定、不由版型決定：未核准一律有紅色警示（冪等；版型自己的 banner 積木照舊保留）
+    return html if v.get("status") == "已核准" else _inject_unapproved(html, v.get("status"), "此為開票申請預覽稿，尚未正式核准", doc_no=v.get("voucherNo", ""))
 
 
 def _published_output_template(key: str, doc: dict = None) -> dict:
@@ -1934,7 +1978,7 @@ def _build_payment_request_html(v: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(v)), v)
     def esc(s):
-        return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+        return _esc_q((s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
     def money(n):
         return f'{n:,.0f}' if isinstance(n, (int, float)) else '0'
 
@@ -2050,10 +2094,8 @@ def _build_payment_request_html(v: dict) -> str:
             for _ in range(12)
         ) + '</div>'
     )
-    banner_html = '' if is_final else (
-        f'<div class="preview-banner">⚠ 此為請款單預覽稿（目前狀態：{esc(v.get("status") or "草稿")}），'
-        f'尚未正式核准，請勿提供給客戶辦理請款</div>'
-    )
+    banner_html = '' if is_final else _unapproved_banner(
+        v.get("status"), '此為請款單預覽稿，尚未正式核准，請勿提供給客戶辦理請款', doc_no=v.get("requestNo", ""))
 
     return (
         '<!DOCTYPE html>\n<html lang="zh-Hant">\n<head>\n<meta charset="UTF-8">\n'
@@ -2442,7 +2484,7 @@ def _build_case_closing_html(data: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(data)), data)
     def esc(s):
-        return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+        return _esc_q((str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
 
     def money(n):
         return f'{n:,.0f}' if isinstance(n, (int, float)) else '0'
@@ -2509,6 +2551,7 @@ def _build_case_closing_html(data: dict) -> str:
     <tbody>
       <tr><td>報價稅前收入</td><td class="r">{money(summary.get("quotedPretax"))}</td></tr>
       <tr><td>品項實際成本</td><td class="r orange">{money(summary.get("itemActualTotal"))}</td></tr>
+      {('<tr><td>採購單（品項尚未採用）</td><td class="r orange">' + money(summary.get("itemPoUnadopted")) + '</td></tr>') if (summary.get("itemPoUnadopted") or 0) > 0 else ''}
       <tr><td>額外支出</td><td class="r orange">{money(summary.get("extraTotal"))}</td></tr>
       <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>
       <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{money(summary.get("totalActualCost"))}</td></tr>
@@ -2954,7 +2997,7 @@ def _build_project_execution_report_html(data: dict) -> str:
     #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
     _ident = apply_snapshot(location_identity(_location_of(data)), data)
     def esc(s):
-        return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
+        return _esc_q((str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>'))
 
     def _stage_period(st):
         if st["visitStart"] or st["visitEnd"]:

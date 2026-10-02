@@ -29,6 +29,8 @@ from pydantic import BaseModel
 
 from db import get_db, next_entity_code
 from helpers.errors import trace_id
+from helpers.case_access import is_document_approver
+from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_module_activity,
@@ -238,15 +240,29 @@ def list_completion_notes(quote_no: Optional[str] = None, authorization: str = H
         conn.close()
 
 
+def _readable_note(conn, note_no: str, user: dict, cols: str = "*"):
+    """單張完工單的讀取守門（2026-09-30 P0：單筆 GET 與回簽上傳原本只要求登入 ⇒ 單號可列舉即 IDOR）。
+    規則＝完工單清單帶 quote_no 的那一條：`guard_case_access(allow_module="case_manage")`。
+    查無與看不到回**同一句**「完工單不存在」（不回守門那句「報價單 Y 不存在」：那會洩漏掛在哪一案）。
+    被擋時連線可能已關（guard_case_access 的慣例；呼叫端的 finally 再關一次無妨）。"""
+    row = conn.execute("SELECT %s FROM completion_notes WHERE note_no=?" % cols, (note_no,)).fetchone()
+    if not row:
+        raise HTTPException(404, "完工單不存在")
+    try:
+        guard_case_access(conn, row["quote_no"], user, allow_module="case_manage")
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+        raise HTTPException(404, "完工單不存在")
+    return row
+
+
 @router.get("/api/completion-notes/{note_no}")
 def get_completion_note(note_no: str, authorization: str = Header(None)):
-    _require_user(authorization)
+    user = _require_user(authorization)
     conn = get_db()
     try:
-        row = conn.execute("SELECT * FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
-        if not row:
-            raise HTTPException(404, "完工單不存在")
-        return _note_public(row)
+        return _note_public(_readable_note(conn, note_no, user))
     finally:
         conn.close()
 
@@ -559,6 +575,7 @@ def reject_completion_note(note_no: str, body: dict = Body(default={}),
     if not ok:
         conn.close()
         raise HTTPException(status_code, err_msg)
+    note = require_reject_reason(note, conn=conn)
 
     now       = datetime.now().isoformat()
     requester = appr.get("requestedBy")
@@ -601,6 +618,7 @@ def revoke_completion_approval(note_no: str, body: dict = Body(default={}),
     if row["is_signed"]:
         conn.close()
         raise HTTPException(409, "已回簽（客戶已驗收）的完工單不可撤銷核准，請先取消回簽")
+    note = require_reject_reason(note, conn=conn)
     cname = row["customer_name"] or ""
     d = json.loads(row["data_json"] or "{}")
     requester = (d.get("approval") or {}).get("requestedBy")
@@ -625,12 +643,15 @@ def revoke_completion_approval(note_no: str, body: dict = Body(default={}),
 @router.get("/api/completion-notes/{note_no}/pdf-download")
 def download_completion_pdf(note_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
-    _require_admin(user)
     conn = get_db()
-    row = conn.execute("SELECT note_no FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
+    row = conn.execute("SELECT note_no, data_json FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
+    # 閘門＝管理員，或本單簽核人／申請人（含有效代理人）：簽核人要看得到預覽稿（紅色「未核可」警示）才能判斷退回或核准
+    allowed = bool(row) and (user.get("role") in ("admin", "superadmin") or is_document_approver(row["data_json"], user, conn))
     conn.close()
     if not row:
         raise HTTPException(404, "完工單不存在")
+    if not allowed:
+        _require_admin(user)
     try:
         pdf_bytes = generate_completion_pdf_bytes(note_no)
     except ValueError as e:
@@ -658,6 +679,8 @@ def record_completion_export(note_no: str, mode: str = "external", authorization
         if not row:
             raise HTTPException(404, f"完工單 {note_no} 不存在")
         log   = json.loads(row["export_log"] or "[]")
+        if mode == "preview":                   # 預覽不是匯出：不計次、不寫紀錄（使用者 2026-09-30）
+            return {"export_count": row["export_count"] or 0, "log": log}
         count = (row["export_count"] or 0) + 1
         log.append({"at": datetime.now().isoformat(), "mode": mode, "user": user["username"],
                     "userDisplay": user.get("display_name") or user["username"], "count": count})
@@ -735,10 +758,8 @@ async def upload_completion_signed_files(note_no: str, files: List[UploadFile] =
     user = _require_user(authorization)
     conn = get_db()
     try:
-        row = conn.execute("SELECT signed_files_json FROM completion_notes WHERE note_no=?",
-                           (note_no,)).fetchone()
-        if not row:
-            raise HTTPException(404, "完工單不存在")
+        # 2026-09-30 P0：原本任何登入者都能對任何完工單上傳 ⇒ 同單筆讀取規則（看不到＝不存在）
+        row = _readable_note(conn, note_no, user, "quote_no, signed_files_json")
         existing = json.loads(row["signed_files_json"] or "[]")
         new_files = await save_document_files("completion_notes", note_no, files,
                                               user.get("display_name") or user["username"])

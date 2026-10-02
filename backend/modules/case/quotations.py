@@ -145,7 +145,7 @@ def case_extra_expenses(conn, quote_no: str) -> list:
     rows = conn.execute(
         "SELECT category, description, total_cost, expense_date, created_at, doc_no, "
         "       files_json, status "
-        "FROM case_extra_expenses WHERE quote_no=? ORDER BY id", (quote_no,)
+        "FROM case_extra_expenses WHERE quote_no=? AND status <> '已作廢' ORDER BY id", (quote_no,)
     ).fetchall()
 
     out = []
@@ -306,12 +306,17 @@ def save_quotation_json(
     data: dict,
     status: str = None,
     updated_at: str = None,
+    actor: dict = None,
 ) -> str:
     """Persist data_json and keep deal_tag / settle_status columns in sync.
 
     Optionally updates status. Returns the updated_at timestamp used.
     """
     _check_read_under_write_lock(conn, quote_no)
+    # 叫料審核的後盾（31-C）：所有寫 caseRecord.materialOrders／materials 物流旗標的路徑最後都走到這裡；冪等（端點層已過閘的資料不會再有改動）。
+    # actor＝呼叫端有給才檢查「誰能改」；沒給（系統／已結案變更核准套用）＝只強制不變式。
+    from modules.case import material_guard as _mg
+    _mg.enforce(conn, quote_no, data, actor)
     now = updated_at or datetime.now().isoformat()
     deal_tag, settle_status = quote_hot_fields(data)
     if status is not None:
@@ -493,6 +498,11 @@ class _CaseRecognition:
     def dispatch_entries(conn, basis):
         from modules.case import recognition as r
         return r.dispatch_entries(conn, basis)
+
+    @staticmethod
+    def individual_linked_entries(conn, basis):
+        from modules.case import recognition as r
+        return r.individual_linked_entries(conn, basis)
 
     @staticmethod
     def material_entries(conn, basis, department_id=None):

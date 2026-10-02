@@ -37,9 +37,28 @@ EVENT_GROUPS = [
         ("payment_request_next_tier","請款單進入下一層審核"),
         ("payment_request_approved", "請款單審核完成"),
         ("payment_request_returned", "請款單退回修改"),
+        ("custom_record_submitted", "自訂模組單據待審核通知（當層簽核人）"),
+        ("custom_record_next_tier", "自訂模組單據進入下一層審核"),
+        ("custom_record_approved",  "自訂模組單據審核完成"),
+        ("custom_record_returned",  "自訂模組單據退回修改"),
+        ("custom_def_submitted", "自訂模組定義待審核通知（模組審核人）"),
+        ("custom_def_approved",  "自訂模組定義審核完成（送審人）"),
+        ("custom_def_returned",  "自訂模組定義退回修改（送審人）"),
         ("bonus_submitted",   "獎金分潤待審核通知（輪到我簽，含代理；信中不含金額）"),
         ("bonus_payout_ready","獎金分潤核准待發放（出納；信中不含金額）"),
+        ("bonus_correction_submitted","獎金更正單待審核通知（輪到我簽，含代理；信中不含金額）"),
+        ("bonus_correction_approved", "獎金更正單核准通知（申請人；有補發時含出納；信中不含金額）"),
+        ("bonus_correction_returned", "獎金更正單駁回通知（申請人）"),
         ("approval_reminder", "簽核逾期催辦提醒（工作日 1/3/5 天分級升級，含報價單／匯款申請／開票申請憑據／請款單）"),
+    ]),
+    ("會計傳票與總帳申請", [
+        ("voucher_submitted",  "會計傳票待審核通知（當層簽核人）"),
+        ("voucher_next_tier",  "會計傳票進入下一層審核"),
+        ("voucher_approved",   "會計傳票審核完成"),
+        ("voucher_returned",   "會計傳票退回修改"),
+        ("ledger_action_submitted", "總帳申請待審核通知（最高管理者）"),
+        ("ledger_action_approved",  "總帳申請已核准並執行"),
+        ("ledger_action_returned",  "總帳申請被退回"),
     ]),
     ("工作事項", [
         ("daily_task_assigned",  "工作事項指派通知"),
@@ -97,6 +116,25 @@ EVENT_GROUPS = [
 ]
 
 EVENT_KEYS = [key for _, items in EVENT_GROUPS for key, _ in items]
+
+#: 模組自己登記的信件類型（`mail_types.register`）若不在上面的固定清單 ⇒ 自動併進這一組（A2-0 #6）：
+#: 使用者在「使用者管理 → 通知偏好」看得到、關得掉，模組不必回頭改這支 L1 檔。
+MODULE_GROUP_LABEL = "其他模組通知"
+
+
+def ensure_event(key: str, desc: str) -> bool:
+    """`key` 不在 `EVENT_KEYS` ⇒ 加進「其他模組通知」組（沒有這組就建）並回 True；已在 ⇒ 什麼都不做、回 False。
+    就地修改 `EVENT_GROUPS`／`EVENT_KEYS`（舊的 import 名稱指向同一物件）。"""
+    if not key or key in EVENT_KEYS:
+        return False
+    for label, items in EVENT_GROUPS:
+        if label == MODULE_GROUP_LABEL:
+            items.append((key, desc or key))
+            break
+    else:
+        EVENT_GROUPS.append((MODULE_GROUP_LABEL, [(key, desc or key)]))
+    EVENT_KEYS.append(key)
+    return True
 
 
 def is_enabled(muted_json, event_key: str) -> bool:

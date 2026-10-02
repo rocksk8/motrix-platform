@@ -1,7 +1,7 @@
 {
   "key": "analytics",
   "name": "營運分析",
-  "version": "1.0.14",
+  "version": "1.0.25",
   "core": ">=1.0,<2.0",
   "license_key": "analytics",
   "permissions": ["dashboard", "reports", "finance", "equipment", "procurement"],
@@ -15,7 +15,7 @@
                "probes": ["/api/dashboard/stats", "/api/devices", "/api/materials-summary", "/api/reports/ar-aging"]},
   "pages": [
     {"path": "reports.html",
-     "menu": {"group": "finance", "label": "營運報表", "order": 10, "perm": ["finance", "reports"], "badge": "sb-mod-finance"}},
+     "menu": {"group": "analysis", "label": "營運報表", "order": 10, "perm": ["finance", "reports"], "badge": "sb-mod-finance"}},
     {"path": "devices.html",
      "menu": {"group": "device", "label": "設備登載", "order": 10, "perm": ["equipment"], "badge": "sb-mod-equipment"}},
     {"path": "warranty.html",

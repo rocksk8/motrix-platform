@@ -16,6 +16,7 @@ from core import registry, source_tree
 
 BACKEND = Path(__file__).resolve().parents[2]
 EXPECTED = {
+    ("gl.events", "case"),                                   # W4 總帳 C4b：額外支出／叫料事件提供者（唯讀）
     ("case.access", "case"), ("case.summary", "case"), ("case.locations", "case"), ("case.recognition", "case"),
     ("case.default_terms", "case"), ("case.doc_version", "case"), ("daily.check", "case_deadlines"),
     ("approval.reassign", "quotation"), ("approval.reassign", "completion_note"),
@@ -27,6 +28,12 @@ EXPECTED = {
     ("payables.pending", "case"),          # IP-100 請款待付款（2026-09-27）
     ("remit.reviews", "case"),             # IP-102 匯款差額審核（W1，2026-09-30）
     ("expense.entries", "remit_fee_case"),  # IP-9 額外支出匯款手續費（W1）
+    ("uploads.path_access", "case"),        # IP-104 上傳檔讀取權限（sec-p0，2026-09-30）
+    ("attachments.catalog", "case"),        # IP-105 附件目錄（P2，2026-09-30）
+    # 31-C 叫料審核與匯款申請（2026-10-02）：佇列／詳情；出納待付（IP-100）與差額審核（IP-102）沿用既有名稱空間；手續費列報表支出（IP-9）
+    ("approval.queue_items", "case_material"), ("approval.detail", "material_order"),
+    ("approval.queue_items", "case_material_payment"), ("approval.detail", "material_payment"),
+    ("payables.pending", "case_material"), ("remit.reviews", "case_material"), ("expense.entries", "remit_fee_case_material"),
 }
 
 

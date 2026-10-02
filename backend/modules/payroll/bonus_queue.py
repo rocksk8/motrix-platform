@@ -52,4 +52,25 @@ def queue_items(conn) -> list:
             requestedAt=r["created_at"] or "",
             linkedQuoteNo=r["quote_no"],
         ))
+    # 獎金更正單（已發放獎金的事後更正；R1：簽完才沖轉傳票／補發）：端點吃更正單號（itemPathId＝item.quoteNo）；金額不放進佇列
+    for r in conn.execute("""
+        SELECT corr_no, quote_no, created_by, created_at, approval_json
+        FROM bonus_corrections
+        WHERE status = '待審核'
+        ORDER BY id DESC
+    """).fetchall():
+        raw = _aq.approval_raw_of(r["approval_json"], "bonus_correction", r["corr_no"])
+        if raw is None:
+            continue
+        f = _aq.tier_fields(raw)
+        req = (json.loads(raw) or {}).get("requestedBy") or r["created_by"]
+        out.append(_aq.base_item(
+            "bonus_correction", r["corr_no"], f,
+            total=0,
+            quoteDate=(r["created_at"] or "")[:10],
+            requestedBy=req or "",
+            requestedByDisplay=req or "",
+            requestedAt=r["created_at"] or "",
+            linkedQuoteNo=r["quote_no"],
+        ))
     return out

@@ -8,6 +8,7 @@
   <title>出納 - MOTRIX 專案管理系統</title>
   <script src="../js/cashier.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <!-- ⚠️ 下面這整塊樣式是從 `reports.html` **整段複製**過來的。
@@ -277,6 +278,11 @@
 
       <h1 class="page-title">出納</h1>
 
+      <div x-show="glNotice" data-testid="gl-notice" class="alert-bar" style="display:flex;gap:12px;align-items:center;justify-content:space-between;background:#fef3c7;color:#92400e">
+        <span x-text="glNotice"></span>
+        <button type="button" data-testid="gl-notice-close" @click="glNotice = ''" style="border:0;background:transparent;cursor:pointer;font-size:16px" aria-label="關閉提示">✕</button>
+      </div>
+
       <div x-show="error" class="alert-bar" x-text="error"></div>
 
       <div x-show="!error" class="panel" style="padding:20px">
@@ -429,13 +435,16 @@
                     <tbody>
                       <template x-for="b in bonusQueue.items" :key="b.quoteNo">
                         <tr :data-testid="'cashier-bonus-row-' + b.quoteNo">
-                          <td class="mono"><a :href="'bonus.html?q=' + encodeURIComponent(b.quoteNo)" x-text="b.quoteNo"></a></td>
-                          <td x-text="b.customer"></td>
+                          <td class="mono"><a :href="(b.kind === 'correction' ? 'bonus-corrections.html?no=' : 'bonus.html?q=') + encodeURIComponent(b.quoteNo)" x-text="b.quoteNo"></a></td>
+                          <td x-text="b.kind === 'correction' ? b.project : b.customer"></td>
                           <td class="c mono" x-text="b.people"></td>
                           <td class="r mono" x-text="fmt(b.total)"></td>
                           <td class="c mono" x-text="b.approvedAt"></td>
                           <td class="c">
-                            <button x-show="bonusQueue.canMarkPaid" class="action-btn pay" @click="openBonusPayModal(b)"
+                            <!-- 獎金更正單的補發（kind='correction'）：扣繳試算與銀行選擇在更正單頁，這裡給連結 -->
+                            <a x-show="b.kind === 'correction'" class="action-btn pay" :href="'bonus-corrections.html?no=' + encodeURIComponent(b.quoteNo)"
+                               :data-testid="'cashier-bonus-corr-' + b.quoteNo">前往補發</a>
+                            <button x-show="bonusQueue.canMarkPaid && b.kind !== 'correction'" class="action-btn pay" @click="openBonusPayModal(b)"
                                     :data-testid="'cashier-bonus-pay-' + b.quoteNo">標記已發放</button>
                             <span x-show="!bonusQueue.canMarkPaid" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
                           </td>
@@ -464,10 +473,19 @@
                     <tbody>
                       <template x-for="it in payreqQueue.items" :key="it.source + ':' + it.key">
                         <tr :data-testid="'cashier-payreq-row-' + it.source + '-' + it.key">
-                          <td class="mono" x-text="it.quoteNo"></td>
+                          <td class="mono" x-text="it.quoteNo || it.docCode || '（無案件）'"></td>
                           <td x-text="it.customerName"></td>
-                          <td x-text="it.title"></td>
-                          <td x-text="it.payee"></td>
+                          <td><span x-show="it.kind" style="font-size:11px;color:var(--accent);margin-right:4px" :data-testid="'cashier-payreq-kind-' + it.source + '-' + it.key" x-text="kindLabel(it.kind)"></span><span x-text="it.title"></span></td>
+                          <td>
+                            <span x-text="it.payee"></span>
+                            <div class="mono" style="font-size:11px;color:var(--text-dim)" x-show="it.payeeBank" :data-testid="'cashier-payreq-bank-masked-' + it.source + '-' + it.key" x-text="it.payeeBank"></div>
+                            <div x-show="payreqQueue.canPay && it.kind" style="font-size:11px;margin-top:2px">
+                              <button type="button" class="action-btn" :disabled="payreqExtra(it).bankBusy" @click="viewPayeeBank(it)" :data-testid="'cashier-payreq-bank-view-' + it.source + '-' + it.key">查看收款人資料</button>
+                              <div class="mono" x-show="payreqExtra(it).bank && payreqExtra(it).bank.account" :data-testid="'cashier-payreq-bank-full-' + it.source + '-' + it.key"
+                                   x-text="payreqExtra(it).bank ? (payreqExtra(it).bank.bank + ' ' + payreqExtra(it).bank.account + (payreqExtra(it).bank.accountName ? '（' + payreqExtra(it).bank.accountName + '）' : '')) : ''"></div>
+                              <div style="color:#b45309" x-show="payreqExtra(it).bankErr" :data-testid="'cashier-payreq-bank-err-' + it.source + '-' + it.key" x-text="payreqExtra(it).bankErr"></div>
+                            </div>
+                          </td>
                           <td class="r mono" x-text="fmt(it.amount)"></td>
                           <td class="c mono" x-text="(it.approvedAt || '').slice(0, 10)"></td>
                           <td class="c" x-text="(it.invoiceNo || '—') + (it.invoiceFiles ? '（' + it.invoiceFiles + ' 檔）' : '')"></td>
@@ -483,9 +501,24 @@
                               <div style="color:#b45309" x-show="remitDiff(payreqRemit(it), it.amount) !== 0" x-text="'⚠ 差 ' + remitDiff(payreqRemit(it), it.amount) + '，將送管理員審核'"></div>
                               <div style="color:#b91c1c" x-show="remitError(payreqRemit(it))" x-text="remitError(payreqRemit(it))"></div>
                             </div>
+                            <!-- A2-3：費用單據的出納欄位（採購單：匯款日＋付款條件必填；零用金：付款方式必填；其他：付款方式選填，預設轉帳） -->
+                            <div x-show="payreqQueue.canPay && it.kind && it.kind !== 'purchase_req'" style="margin-top:4px;text-align:left;font-size:11px" :data-testid="'cashier-payreq-extra-' + it.source + '-' + it.key">
+                              <template x-if="it.kind === 'purchase_order'">
+                                <span>匯款日 <input type="date" class="field-input" style="width:130px;display:inline-block" x-model="payreqExtra(it).remitDate" :data-testid="'cashier-payreq-remitdate-' + it.source + '-' + it.key">
+                                  付款條件 <input type="text" maxlength="200" class="field-input" style="width:120px;display:inline-block" x-model="payreqExtra(it).payTerms" :data-testid="'cashier-payreq-terms-' + it.source + '-' + it.key"></span>
+                              </template>
+                              <template x-if="it.kind !== 'purchase_order'">
+                                <span>付款方式
+                                  <select class="field-input" style="width:110px;display:inline-block" x-model="payreqExtra(it).payMethod" :data-testid="'cashier-payreq-method-' + it.source + '-' + it.key">
+                                    <option value="" x-text="it.kind === 'petty_cash' ? '請選擇' : '轉帳（預設）'"></option>
+                                    <option value="transfer">轉帳</option><option value="cash">現金</option><option value="petty_cash">零用金</option>
+                                  </select></span>
+                              </template>
+                              <div style="color:#b91c1c" x-show="payreqExtraError(it)" :data-testid="'cashier-payreq-extra-err-' + it.source + '-' + it.key" x-text="payreqExtraError(it)"></div>
+                            </div>
                           </td>
                           <td class="c">
-                            <button x-show="payreqQueue.canPay" class="action-btn pay" @click="payPayreq(it)" :disabled="payreqBusy || !payreqDates[it.source + ':' + it.key] || !!remitError(payreqRemit(it))"
+                            <button x-show="payreqQueue.canPay" class="action-btn pay" @click="payPayreq(it)" :disabled="payreqBusy || !payreqDates[it.source + ':' + it.key] || !!remitError(payreqRemit(it)) || !!payreqExtraError(it)"
                                     :data-testid="'cashier-payreq-pay-' + it.source + '-' + it.key">登錄付款</button>
                             <span x-show="!payreqQueue.canPay" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
                           </td>
@@ -627,10 +660,11 @@
                 <label class="field-label" style="margin:0">迄</label>
                 <input type="date" class="field-input filter" style="width:auto;margin:0" x-model="cashierHistoryEnd">
                 <button class="period-type-btn" @click="loadCashierHistory()">查詢</button>
-                <button class="btn-export excel" style="margin-left:auto" :disabled="cashierExporting" @click="exportCashierHistory()">
+                <button class="btn-export excel" data-testid="export-xlsx-cashier-history" style="margin-left:auto" :disabled="cashierExporting" @click="exportCashierHistory()">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   <span x-text="cashierExporting ? '匯出中…' : '匯出 Excel'"></span>
                 </button>
+                <button class="btn-export pdf" data-testid="export-pdf-cashier-history" :disabled="cashierExporting" @click="exportCashierHistory('pdf')">匯出 PDF</button>
               </div>
 
               <template x-if="cashierHistoryLoading">
@@ -681,7 +715,7 @@
                               <template x-for="b in cashierHistoryBonus" :key="b.quoteNo">
                                 <tr>
                                   <td class="mono" x-text="b.quoteNo"></td>
-                                  <td x-text="b.customer"></td>
+                                  <td x-text="b.kind === 'correction' ? b.project : b.customer"></td>
                                   <td class="c mono" x-text="b.people"></td>
                                   <td class="r mono" x-text="fmt(b.total)"></td>
                                   <!-- null＝發放時沒有計算（法規參數接上前），顯示「未計算」不是 0 -->
@@ -822,10 +856,11 @@
             <span style="font-size:12px;color:var(--text-dim)">～</span>
             <input class="filter" type="date" x-model="t100End" style="padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
             <span style="width:1px;align-self:stretch;background:var(--border-light);margin:0 4px"></span>
-            <button class="btn-export excel" @click="exportT100Vouchers()" :disabled="t100Exporting">
+            <button class="btn-export excel" data-testid="export-xlsx-t100" @click="exportT100Vouchers()" :disabled="t100Exporting">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             <span x-text="t100Exporting ? '產製中…' : '匯出傳票 Excel'"></span>
             </button>
+            <button class="btn-export pdf" data-testid="export-pdf-t100" @click="exportT100Vouchers('pdf')" :disabled="t100Exporting">匯出傳票 PDF</button>
             <button class="btn-ghost btn-sm" @click="loadT100Preview()" :disabled="t100Previewing" x-text="t100Previewing ? '載入中…' : '重新整理預覽'"></button>
             <!-- ⚠️ 這顆按鈕要與面板**同一個條件** —— 面板藏起來而按鈕留著，
                  按下去什麼都不會發生，而那與「功能壞了」在使用者眼中一樣。 -->
@@ -1228,6 +1263,7 @@
        ☠️ 少載它的症狀**不是錯誤畫面**：全域搜尋框與通知鈴鐺變成死的，
           而版面其餘部分完全正常 ⇒ 使用者不會報修，
           **他會以為那個框本來就長那樣**。 -->
+  <script src="../static/file-preview.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>

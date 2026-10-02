@@ -16,6 +16,7 @@ window.CM_PARTS.push(() => ({
     completionNotes: [],
     completionNotesLoading: false,
     completionPreviewFetching: false,
+    completionPreviewModal: false, completionPreviewBlobUrl: '', completionPreviewNote: null,
 
     async loadCompletionNotes(quoteNo, pre) {
       if (!quoteNo) return
@@ -61,16 +62,37 @@ window.CM_PARTS.push(() => ({
       await this._cnAction(n, '/approve', 'POST', '簽核失敗', { cascade: _casc.length > 0 })
     },
 
-    async rejectCompletionNote(n) {
-      const note = (await MotrixUI.prompt(`退回完工單「${n.noteNo}」，可填寫退回原因（選填）：`))
-      if (note === null) return
-      await this._cnAction(n, '/reject', 'POST', '退回失敗', { note })
+    // 退回（列表按鈕與預覽裡的「退回修改」同一條路）：原因必填，後端也強制
+    rejectCompletionNote(n) {
+      window.MotrixApprovalReturn.ask({
+        title: `退回完工單「${n.noteNo}」`,
+        post: (reason) => fetch(`/api/completion-notes/${n.noteNo}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note: reason })
+        }),
+        onDone: () => this.loadCompletionNotes(this.selected?.quote_no),
+      })
     },
 
-    async revokeCompletionApproval(n) {
-      const note = (await MotrixUI.prompt(`撤銷完工單「${n.noteNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`))
-      if (note === null) return
-      await this._cnAction(n, '/revoke-approval', 'POST', '撤銷失敗', { note })
+    returnFromCompletionPreview() {
+      const n = this.completionPreviewNote
+      this.closeCompletionPreview()
+      if (n) this.rejectCompletionNote(n)
+    },
+
+    // 撤銷核准（退回草稿）：原因必填，後端也強制
+    revokeCompletionApproval(n) {
+      window.MotrixApprovalReturn.ask({
+        title: `撤銷完工單「${n.noteNo}」的核准`,
+        hint: '撤銷後單據退回草稿。撤銷原因必填，會寫進稽核並通知申請人。',
+        post: (reason) => fetch(`/api/completion-notes/${n.noteNo}/revoke-approval`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ note: reason })
+        }),
+        onDone: () => this.loadCompletionNotes(this.selected?.quote_no),
+      })
     },
 
     async toggleCompletionSigned(n, action) {
@@ -98,20 +120,25 @@ window.CM_PARTS.push(() => ({
 
     async previewCompletionPdf(n) {
       this.completionPreviewFetching = true
+      await window.MotrixApprovalReturn.loadDelegators(this.session.token)   // 代理簽核人也要看得到「退回修改」
       try {
         const r = await fetch(`/api/completion-notes/${n.noteNo}/pdf-download`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗', {kind: 'error'}); return }
         const blob = await r.blob()
-        const url = URL.createObjectURL(blob)
-        window.open(url, '_blank')
-        setTimeout(() => URL.revokeObjectURL(url), 60000)
-        fetch(`/api/completion-notes/${n.noteNo}/export?mode=preview`, {
-          method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }
-        }).catch(() => {})
+        this.completionPreviewBlobUrl = URL.createObjectURL(blob)
+        this.completionPreviewNote = n
+        this.completionPreviewModal = true          // 預覽不是匯出：不再呼叫 /export（不計次、不寫紀錄）
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
       this.completionPreviewFetching = false
+    },
+
+    closeCompletionPreview() {
+      if (this.completionPreviewBlobUrl) URL.revokeObjectURL(this.completionPreviewBlobUrl)
+      this.completionPreviewBlobUrl = ''
+      this.completionPreviewModal = false
+      this.completionPreviewNote = null
     },
 
     _completionStatusLabel(s) { return s || '草稿' },

@@ -6,14 +6,17 @@ function ledgerStatementsPage() {
   const pad = n => String(n).padStart(2, '0')
   const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
   const firstOfYear = today.getFullYear() + '-01-01'
+  // 預設比較期（使用者 2026-10-01）：資產負債表＝上一年度期末（截至日所在年度的前一年 12/31）；綜合損益表＝去年同期間。
+  // 只在頁面建立時填一次：使用者改了或清掉就以使用者的為準（不會被重新填回）。
+  const prevYear = s => (parseInt(s.slice(0, 4), 10) - 1) + s.slice(4)
   return {
     tab: 'bs',
     asOf: ymd(today),
-    compareAsOf: '',
+    compareAsOf: (today.getFullYear() - 1) + '-12-31',
     start: firstOfYear,
     end: ymd(today),
-    compareStart: '',
-    compareEnd: '',
+    compareStart: prevYear(firstOfYear),
+    compareEnd: prevYear(ymd(today)),
     drafts: false,
     showZero: false,
     loading: false,
@@ -82,25 +85,27 @@ function ledgerStatementsPage() {
     bsRows() {
       if (!this.bs) return []
       const s = this.bs.sections, rows = []
+      const cs = this.bs.compare ? this.bs.compare.sections : null, ct = this.bs.compare ? this.bs.compare.totals : null
+      const sub = k => (cs && cs[k] ? cs[k].total : null)        // 比較期的小節合計（沒有比較期 ⇒ null）
       const groups = [
-        { key: 'assets', title: '資產', parts: [s.current_assets, s.noncurrent_assets], total: this.bs.totals.assets, totalLabel: '資產總計' },
-        { key: 'liab', title: '負債', parts: [s.current_liabilities, s.noncurrent_liabilities], total: this.bs.totals.liabilities, totalLabel: '負債總計' },
-        { key: 'eq', title: '權益', parts: [s.equity], total: this.bs.totals.equity, totalLabel: '權益總計' },
+        { key: 'assets', title: '資產', parts: [s.current_assets, s.noncurrent_assets], pk: ['current_assets', 'noncurrent_assets'], total: this.bs.totals.assets, cmpTotal: ct ? ct.assets : null, totalLabel: '資產總計' },
+        { key: 'liab', title: '負債', parts: [s.current_liabilities, s.noncurrent_liabilities], pk: ['current_liabilities', 'noncurrent_liabilities'], total: this.bs.totals.liabilities, cmpTotal: ct ? ct.liabilities : null, totalLabel: '負債總計' },
+        { key: 'eq', title: '權益', parts: [s.equity], pk: ['equity'], total: this.bs.totals.equity, cmpTotal: ct ? ct.equity : null, totalLabel: '權益總計' },
       ]
       for (const g of groups) {
         rows.push({ type: 'sec', label: g.title, amount: null, cmp: null, indent: 10, testid: 'st-bs-sec-' + g.key })
-        for (const p of g.parts) {
+        for (const [pi, p] of g.parts.entries()) {
           if (g.parts.length > 1) rows.push({ type: 'sub', label: p.title, amount: null, cmp: null, indent: 10 })
           for (const i of p.items) {
             const key = i.code || i.label
             rows.push({ type: 'item', label: i.label, amount: i.amount, cmp: this.compareAmount(i.code, i.label), indent: 28, key, testid: 'st-bs-line-' + (i.code || 'pl') })
             if (this.open[key]) for (const a of i.accounts) rows.push({ type: 'acct', label: a.code + ' ' + a.name, amount: a.amount, cmp: null, indent: 52 })
           }
-          if (g.parts.length > 1) rows.push({ type: 'sub', label: p.title + '合計', amount: p.total, cmp: null, indent: 10 })
+          if (g.parts.length > 1) rows.push({ type: 'sub', label: p.title + '合計', amount: p.total, cmp: sub(g.pk[pi]), indent: 10, testid: 'st-bs-sub-' + g.pk[pi] })
         }
-        rows.push({ type: 'total', label: g.totalLabel, amount: g.total, cmp: null, indent: 10, testid: 'st-bs-total-' + g.key })
+        rows.push({ type: 'total', label: g.totalLabel, amount: g.total, cmp: g.cmpTotal, indent: 10, testid: 'st-bs-total-' + g.key })
       }
-      rows.push({ type: 'total', label: '負債及權益總計', amount: this.bs.totals.liabilities_and_equity, cmp: null, indent: 10, testid: 'st-bs-total-le' })
+      rows.push({ type: 'total', label: '負債及權益總計', amount: this.bs.totals.liabilities_and_equity, cmp: ct ? ct.liabilities_and_equity : null, indent: 10, testid: 'st-bs-total-le' })
       return rows
     },
     rowClass(r) { return ({ sec: 'st-sec', sub: 'st-sub', item: 'st-item', acct: 'st-acct', total: 'st-total' })[r.type] || '' },
@@ -122,8 +127,9 @@ function ledgerStatementsPage() {
     exportCsv() {
       const rows = []
       if (this.tab === 'bs' && this.bs) {
-        rows.push(['項目', this.bs.as_of])
-        for (const r of this.bsRows()) rows.push([r.label, r.amount === null ? '' : r.amount])
+        const hasCmp = !!this.bs.compare
+        rows.push(hasCmp ? ['項目', this.bs.as_of, this.bs.compare.as_of] : ['項目', this.bs.as_of])
+        for (const r of this.bsRows()) rows.push(hasCmp ? [r.label, r.amount === null ? '' : r.amount, r.cmp === null || r.cmp === undefined ? '' : r.cmp] : [r.label, r.amount === null ? '' : r.amount])
       } else if (this.tab === 'cf' && this.cf) {
         rows.push(['項目', this.cf.start + '～' + this.cf.end])
         for (const sec of this.cf.sections) {
@@ -138,8 +144,9 @@ function ledgerStatementsPage() {
         rows.push(['項目'].concat(this.eq.columns.map(c => c.label)))
         for (const r of this.eq.rows) rows.push([r.label].concat(this.eq.columns.map(c => r.amounts[c.key])))
       } else if (this.tab === 'is' && this.is) {
-        rows.push(['項目', '本期 ' + this.is.start + '～' + this.is.end, '年初至今'])
-        for (const l of this.is.lines) rows.push([l.label, l.period, l.ytd])
+        const hasCmp = !!this.is.compare
+        rows.push(['項目', '本期 ' + this.is.start + '～' + this.is.end, '年初至今'].concat(hasCmp ? ['比較期 ' + this.is.compare.start + '～' + this.is.compare.end] : []))
+        for (const l of this.is.lines) rows.push([l.label, l.period, l.ytd].concat(hasCmp ? [this.compareIs(l.code)] : []))
       } else return
       const csv = rows.map(r => r.map(c => '"' + String(c === null || c === undefined ? '' : c).replace(/"/g, '""') + '"').join(',')).join('\r\n')
       const a = document.createElement('a')

@@ -21,6 +21,7 @@
   <script src="../js/case-management-fin.js"></script>
   <script src="../js/case-management-xexp.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
@@ -267,6 +268,8 @@
             </template>
             <button type="button" class="aq-sort" data-testid="batch-export" :disabled="batchBusy"
                     @click="batchExport()">匯出 Excel</button>
+            <button type="button" class="aq-sort" data-testid="batch-export-pdf" :disabled="batchBusy"
+                    @click="batchExport('pdf')">匯出 PDF</button>
             <span data-testid="batch-msg" x-show="batchMsg" x-text="batchMsg"
                   style="flex-basis:100%;color:var(--text-secondary)"></span>
           </div>
@@ -593,6 +596,8 @@
               <button class="cm-tab" :class="{active: activeTab==='completion'}"
                       @click="activeTab='completion'; loadCompletionNotes(selected.quote_no)">完工單<span class="cm-tab__n" x-show="completionNotes.length > 0" x-text="completionNotes.length"></span></button>
               <button class="cm-tab" :class="{active: activeTab==='feed'}" @click="activeTab='feed'; loadCaseUpdates(selected.quote_no)">動態<span class="cm-tab__n" x-show="caseUpdates.length > 0" x-text="caseUpdates.length"></span></button>
+              <!-- 附件目錄 P3：檔案中心（filehub）在才出現；不在就不顯示頁籤（不是空表）。同一支 /api/filehub/search、固定本案件 -->
+              <button class="cm-tab" x-show="fileCenterOn" data-testid="cm-tab-allfiles" :class="{active: activeTab==='allfiles'}" @click="activeTab='allfiles'">全部附件<span class="cm-tab__n" x-show="caseFilesFor === selected.quote_no && caseFiles.length > 0" x-text="caseFiles.length"></span></button>
               <!-- CU5：收款搬進財務分頁 ⇒ 分頁本身人人看得到（收款以外的財務區塊仍只給 canSeeFinancial） -->
               <button class="cm-tab" :class="{active: activeTab==='fin'}" @click="activeTab='fin'">財務</button>
               <!-- 額外支出（2026-09-11）：從精算頁搬過來，獨立成一個分頁而不是塞進財務
@@ -776,13 +781,36 @@
                 </div>
                 </fieldset><!-- /CM14b -->
                 <div x-show="caseReadOnly()" class="fi-label" style="margin-bottom:10px;color:var(--tone-warning-fg)">您不是這個案件的成員，以出納身分開啟：只能登錄收款（在「財務」分頁），其他內容唯讀。</div>
+                <!-- 客戶回簽單（報價單回簽附件）：報價單已送出之後才能上傳；看得到案件的人可列出／預覽，上傳者本人或管理員可刪。不是結案條件。 -->
+                <div data-testid="cm-signed-back" x-show="selected && (signedBackFiles().length || canUploadSignedBack())"
+                     style="border:1px solid var(--border-light);border-radius:8px;padding:10px 12px;margin-bottom:14px">
+                  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <span style="font-size:12px;font-weight:700">客戶回簽單</span>
+                    <span style="font-size:11px;color:var(--text-dim)" x-text="signedBackFiles().length ? signedBackFiles().length + ' 個檔案' : '尚未上傳'"></span>
+                    <span style="flex:1"></span>
+                    <label x-show="canUploadSignedBack()" data-testid="cm-signed-back-upload" class="btn btn-ghost btn-sm" style="cursor:pointer">
+                      ＋ 上傳回簽單
+                      <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" :disabled="signedBackBusy" @change="uploadSignedBack($event)">
+                    </label>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">
+                    <template x-for="f in signedBackFiles()" :key="f.id">
+                      <div data-testid="cm-signed-back-file" :data-file-id="f.id" style="display:flex;align-items:center;gap:8px;font-size:12px;flex-wrap:wrap">
+                        <a href="javascript:void(0)" style="color:var(--accent);text-decoration:underline" @click="previewAttachmentFile(f)" x-text="f.filename"></a>
+                        <span style="color:var(--text-dim)" x-text="(f.uploadedBy || '') + '　' + (f.uploadedAt || '').slice(0, 16).replace('T', ' ')"></span>
+                        <button type="button" x-show="canDeleteSignedBack(f)" data-testid="cm-signed-back-delete" class="btn btn-ghost btn-sm" style="color:var(--danger)" @click="deleteSignedBack(f)">刪除</button>
+                      </div>
+                    </template>
+                  </div>
+                  <div data-testid="cm-signed-back-err" x-show="signedBackErr" style="font-size:12px;color:var(--danger);margin-top:6px" x-text="signedBackErr"></div>
+                </div>
               </div><!-- /biz -->
 
               <!-- ══ 執行管理 Tab（進度／叫料／設備／保固 子分頁） ══ -->
               <div x-show="activeTab==='exec'">
                 <div class="cm-subtabs">
                   <button class="cm-tab" :class="{active: execSubTab==='progress'}"  @click="execSubTab='progress'">執行進度</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='materials'}" @click="execSubTab='materials'">叫料管控</button>
+                  <button class="cm-tab" :class="{active: execSubTab==='materials'}" @click="execSubTab='materials'; loadMaterialOrders(selected && selected.quote_no)">叫料管控</button>
                   <button class="cm-tab" :class="{active: execSubTab==='devices'}"   @click="execSubTab='devices'">設備登錄</button>
                   <button class="cm-tab" :class="{active: execSubTab==='warranty'}"  @click="execSubTab='warranty'">保固備註</button>
                   <button class="cm-tab" :class="{active: execSubTab==='todos'}"     @click="execSubTab='todos'; loadCaseActionItems()">待辦事項</button>
@@ -874,7 +902,7 @@
                         <path d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01"/>
                       </svg>
                       <input type="checkbox" x-model="st.done"
-                             @change="updateStage(st, {done: st.done, doneAt: st.done ? (st.doneAt || new Date().toISOString().slice(0,10)) : ''})"
+                             @change="updateStage(st, {done: st.done, doneAt: st.done ? (st.doneAt || MotrixDate.today()) : ''})"
                              style="width:15px;height:15px;flex-shrink:0;accent-color:var(--success)">
                       <input type="text" x-model="st.label" @change="updateStage(st, {label: st.label})"
                              style="flex:1;border:none;outline:none;font-size:13px;font-weight:600;font-family:var(--font-zh);background:transparent"
@@ -1034,13 +1062,27 @@
                       <button class="btn-del" @click="removeMaterial(idx)">×</button>
                     </div>
                     <div class="mat-card__body">
+                      <!-- 叫料審核（31-C）：「已叫料」「已到料」只能對著一張已核准的叫料單勾 -->
+                      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;font-size:11px;font-family:var(--font-zh)">
+                        <span style="color:var(--text-dim)">對應叫料單</span>
+                        <select class="fi fi--sm" style="min-width:220px" x-model="mat.orderItemId" @change="setDirty()" data-testid="mat-order-link">
+                          <option value="">（未連結）</option>
+                          <template x-for="o in materialOrders" :key="o.itemId">
+                            <option :value="o.itemId" x-text="(moAp(o).docCode || '未送審') + '｜' + (o.itemName || '未命名') + '（' + moApLabel(o) + '）'"></option>
+                          </template>
+                        </select>
+                      </div>
                       <div style="display:flex;gap:16px;margin-bottom:6px">
-                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer">
-                          <input type="checkbox" x-model="mat.ordered" @change="setDirty()">已叫料
+                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer"
+                               :style="matCanTick(mat, 'ordered') ? '' : 'opacity:.55;cursor:not-allowed'" :title="matTickHint(mat, 'ordered')">
+                          <input type="checkbox" x-model="mat.ordered" :disabled="!matCanTick(mat, 'ordered')" @change="setDirty()" data-testid="mat-ordered">已叫料
                         </label>
-                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer">
-                          <input type="checkbox" x-model="mat.arrived" @change="onMaterialArrived(mat)">已到料
+                        <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-family:var(--font-zh);cursor:pointer"
+                               :style="matCanTick(mat, 'arrived') ? '' : 'opacity:.55;cursor:not-allowed'" :title="matTickHint(mat, 'arrived')">
+                          <input type="checkbox" x-model="mat.arrived" :disabled="!matCanTick(mat, 'arrived')" @change="onMaterialArrived(mat)" data-testid="mat-arrived">已到料
                         </label>
+                        <span x-show="!matCanTick(mat, 'ordered') || !matCanTick(mat, 'arrived')" style="font-size:11px;color:var(--text-dim)"
+                              x-text="matTickHint(mat, mat.ordered ? 'arrived' : 'ordered')"></span>
                         <template x-if="mat.arrived">
                           <span style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-left:auto" x-text="'共 ' + (mat.qty||1) + ' ' + (mat.unit||'台')"></span>
                         </template>
@@ -1054,7 +1096,7 @@
                         <input class="fi fi--sm" type="date"
                                x-model="mat.expectedDate" @input="setDirty()"
                                title="預計到料日" style="flex:1;min-width:120px;font-size:12px">
-                        <span x-show="mat.ordered && !mat.arrived && mat.expectedDate && mat.expectedDate < new Date().toISOString().slice(0,10)"
+                        <span x-show="mat.ordered && !mat.arrived && mat.expectedDate && mat.expectedDate < MotrixDate.today()"
                               style="font-size:11px;font-weight:700;color:var(--tone-danger-fg);background:var(--tone-danger-bg);border:1px solid var(--tone-danger-border);border-radius:4px;padding:2px 6px;white-space:nowrap;flex-shrink:0">交期逾期</span>
                       </div>
 
@@ -1434,7 +1476,7 @@
                 <div x-show="!xe.loading && xe.items.length > 0" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">
                   <div class="cm-kpi__pill">
                     <span class="cm-kpi__val" x-text="caseSettleFmt(xe.totalAmount)"></span>
-                    <span class="cm-kpi__lbl">支出總額（<span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="xe.items.length"></span> 筆）</span>
+                    <span class="cm-kpi__lbl">支出總額（<span style="font-family:LINE Seed TW_OTF, sans-serif" x-text="xe.items.filter(i => i.status !== '已作廢').length"></span> 筆）</span>
                   </div>
                   <div class="cm-kpi__pill" :class="xe.totalPending > 0 ? 'warning' : ''">
                     <span class="cm-kpi__val" x-text="caseSettleFmt(xe.totalPending)"></span>
@@ -1459,7 +1501,7 @@
                 </template>
 
                 <template x-for="(x, xi) in xe.items" :key="x.id">
-                  <div style="border:1px solid var(--line);border-radius:6px;padding:10px;margin-bottom:8px;background:var(--surface-muted)">
+                  <div :data-xe-card="x.id" style="border:1px solid var(--line);border-radius:6px;padding:10px;margin-bottom:8px;background:var(--surface-muted)">
                     <!-- 第一列：狀態、填寫人、日期 -->
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">
                       <span style="padding:2px 8px;border-radius:4px;font-weight:600"
@@ -1475,6 +1517,7 @@
                         <span x-show="x.updatedByName" x-text="'（' + x.updatedByName + '）'"></span>
                       </span>
                       <span style="margin-left:auto;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;color:var(--tone-warning-fg);font-size:13px"
+                            :style="x.status === '已作廢' ? 'text-decoration:line-through;opacity:.5' : ''"
                             x-text="caseSettleFmt(x.totalCost)"></span>
                     </div>
 
@@ -1577,7 +1620,16 @@
                         ✎ 編輯（需審核）
                       </button>
                     </div>
-                    <div x-show="!xeEditable(x) && x.status !== '已核准'" style="margin-top:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">簽核中，不可修改</div>
+                    <div x-show="!xeEditable(x) && x.status !== '已核准' && x.status !== '已作廢'" style="margin-top:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">簽核中，不可修改</div>
+                    <!-- 作廢：僅最高管理員、已核准且未付款；已作廢的列保留供查詢，不計入合計 -->
+                    <div x-show="xeCanVoid(x) && !xeInChange(x)" style="margin-top:6px">
+                      <button @click="xeVoid(xi)" :disabled="xe.busy" data-testid="xe-void-btn"
+                              style="font-size:11px;padding:4px 10px;background:var(--surface);color:var(--tone-danger-fg);border:1px solid var(--tone-danger-border);border-radius:6px;cursor:pointer;font-family:var(--font-zh)">作廢</button>
+                    </div>
+                    <div x-show="x.status === '已作廢'" data-testid="xe-voided-note" style="margin-top:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">
+                      已作廢（不計入成本與報表）：<span x-text="x.voidReason"></span>
+                      <span x-text="x.voidedAt ? '｜' + x.voidedAt.slice(0,10) : ''"></span>
+                    </div>
                     <!-- ══ 變更申請面板（2026-09-11）══
                          已核准的項目要改內容就開這一塊。**刻意不是直接在上面那排欄位
                          上改**：使用者指定「原核准金額不動，核准後才生效」，若在原欄位
@@ -2170,6 +2222,8 @@
                         <span>開票申請 <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="finRelatedDocs().invoiceVouchers.length"></span> 張</span>
                         <span>請款單 <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="finRelatedDocs().paymentRequests.length"></span> 張</span>
                         <span>精算額外支出 <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="caseSettleFmt(finExtrasTotal())"></span>（未計入應付）</span>
+                        <span x-show="(financeSummary?.customFinance?.expense?.total || 0) > 0" data-testid="fin-custom-expense">自訂模組支出（列入成本） <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="caseSettleFmt(financeSummary?.customFinance?.expense?.total || 0)"></span></span>
+                        <span x-show="(financeSummary?.customFinance?.income?.skippedTotal || 0) > 0" data-testid="fin-custom-income-skipped" title="內建報價單已認列這個案件的收入，自訂模組的收入行不重複計入">自訂模組收入（未重複計入） <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="caseSettleFmt(financeSummary?.customFinance?.income?.skippedTotal || 0)"></span></span>
                         <span x-show="(financeSummary?.payable?.remitFeeTotal || 0) + (financeSummary?.settlementExtras?.remitFeeTotal || 0) > 0" data-testid="fin-remit-fee">匯款手續費（已匯款，列入成本） <span style="font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-text="caseSettleFmt((financeSummary?.payable?.remitFeeTotal || 0) + (financeSummary?.settlementExtras?.remitFeeTotal || 0))"></span></span>
                       </div>
 
@@ -2217,7 +2271,8 @@
                             <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
                               <span style="font-size:11px;background:var(--surface-neutral);color:var(--ink-secondary);padding:2px 6px;border-radius:3px;font-family:var(--font-zh);white-space:nowrap;font-weight:500" x-text="ex.category || '—'"></span>
                               <span style="font-family:var(--font-zh);color:var(--text-primary);flex:1;font-size:12px;font-weight:500" x-text="ex.description || '—'"></span>
-                              <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:var(--tone-warning-fg);text-align:right;min-width:80px" x-text="caseSettleFmt(ex.totalCost)"></span>
+                              <span x-show="ex.voided" style="font-size:11px;background:var(--surface-neutral);color:var(--ink-secondary);padding:2px 6px;border-radius:3px;font-family:var(--font-zh)">已作廢（不計入）</span>
+                              <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:var(--tone-warning-fg);text-align:right;min-width:80px" :style="ex.voided ? 'text-decoration:line-through;opacity:.5' : ''" x-text="caseSettleFmt(ex.totalCost)"></span>
                             </div>
                             <!-- 第二列：填寫人、填單日期、單號 -->
                             <div style="display:flex;align-items:center;gap:12px;font-size:11px;color:var(--text-dim);margin-bottom:4px;font-family:var(--font-zh)">
@@ -2318,34 +2373,28 @@
                            後端會用 abs(totalPrice - 數量×單價) > 0.01 擋回來） -->
                       <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:7px">
                         <input class="fi fi--sm" type="text" placeholder="項目名稱（如：交換器）" style="flex:1;min-width:130px"
-                               x-model="m.itemName" :disabled="!moCanEdit()" @input="moDirty = true">
+                               x-model="m.itemName" :disabled="!moCanEdit() || moLocked(m)" @input="moDirty = true">
                         <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="數量" style="width:74px"
-                               x-model="m.quantity" :disabled="!moCanEdit()" @input="moRecalc(mi)">
+                               x-model="m.quantity" :disabled="!moCanEdit() || moLocked(m)" @input="moRecalc(mi)">
                         <input class="fi fi--sm" type="text" placeholder="單位" style="width:56px"
-                               x-model="m.unit" :disabled="!moCanEdit()" @input="moDirty = true">
+                               x-model="m.unit" :disabled="!moCanEdit() || moLocked(m)" @input="moDirty = true">
                         <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="單價" style="width:96px"
-                               x-model="m.unitPrice" :disabled="!moCanEdit()" @input="moRecalc(mi)">
+                               x-model="m.unitPrice" :disabled="!moCanEdit() || moLocked(m)" @input="moRecalc(mi)">
+                        <select class="fi fi--sm" style="width:150px" x-model="m.supplierId" data-testid="mo-supplier"
+                                :disabled="!moCanEdit() || moLocked(m) || (m._saved !== false && moPayOf(m).payments.length > 0)" @change="moDirty = true">
+                          <option value="">供應商…</option>
+                          <template x-for="s in moSuppliers" :key="s.id"><option :value="s.id" x-text="(s.code ? s.code + ' ' : '') + s.name"></option></template>
+                        </select>
                         <span style="font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;color:var(--tone-warning-fg);min-width:96px;text-align:right;font-size:12px"
                               x-text="caseSettleFmt(m.totalPrice)"></span>
-                        <button x-show="moCanEdit()" @click="moRemoveItem(mi)" title="刪除這一項"
+                        <button x-show="moCanEdit() && !moLocked(m) && moAp(m).status !== '已核准'" @click="moRemoveItem(mi)" title="刪除這一項"
                                 style="border:none;background:none;color:var(--tone-danger-fg);cursor:pointer;font-size:15px;line-height:1;padding:0 4px">×</button>
                       </div>
-                      <!-- 第二列：付款狀態。三種狀態的欄位規則由後端強制
-                           （待付不能有金額/日期、部分或已付必須有日期），這裡先擋一次
-                           並給明確訊息，不要讓使用者撞到原始 400 -->
-                      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-                        <select data-saved-field class="fi fi--sm" style="width:104px" x-model="m.paidStatus"
-                                :disabled="!moCanEdit()" @change="moOnStatusChange(mi)">
-                          <option value="pending">待付</option>
-                          <option value="partial">部分已付</option>
-                          <option value="paid">已付清</option>
-                        </select>
-                        <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="已付金額" style="width:104px"
-                               x-model="m.paidAmount" :disabled="!moCanEdit() || m.paidStatus !== 'partial'"
-                               @input="moDirty = true">
-                        <input class="fi fi--sm" type="date" style="width:142px"
-                               x-model="m.paidDate" :disabled="!moCanEdit() || m.paidStatus === 'pending'"
-                               @input="moDirty = true">
+                      <!-- 第二列：付款狀態（31-C：唯讀）。已付金額／日期是匯款申請的付款明細合計（簽核→出納），不再手填；
+                           要付款請在下方「匯款申請」開單 -->
+                      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap" data-testid="mo-paid-readonly">
+                        <span style="font-size:12px;font-family:var(--font-zh);min-width:150px" :data-paid-status="m.paidStatus"
+                              x-text="m.paidStatus === 'paid' ? ('已付清 ' + caseSettleFmt(m.paidAmount) + '（' + m.paidDate + '）') : (m.paidStatus === 'partial' ? ('部分已付 ' + caseSettleFmt(m.paidAmount) + '（' + m.paidDate + '）') : '待付')"></span>
                         <input class="fi fi--sm" type="text" placeholder="備註（供應商、單號…）" style="flex:1;min-width:130px"
                                x-model="m.notes" :disabled="!moCanEdit()" @input="moDirty = true">
                       </div>
@@ -2357,6 +2406,102 @@
                                x-model="m.invoiceDate" @change="moSetInvoiceDate(m)">
                         <span x-show="!m.invoiceDate" style="color:var(--tone-warning-fg)">未登錄（報表暫用付款月）</span>
                         <span class="save-mode__ok" x-show="savedFlash['mo-' + m.itemId]" x-transition.opacity>✓ 已存</span>
+                      </div>
+                      <!-- 叫料審核（31-C）：狀態、送審／撤回／取消、到貨確認（不簽核，只記日期與確認人） -->
+                      <div style="display:flex;align-items:center;gap:7px;margin-top:6px;font-size:11px;font-family:var(--font-zh);flex-wrap:wrap"
+                           :data-testid="'mo-approval-' + m.itemId">
+                        <span style="font-weight:600" :style="moApTone(m)" data-testid="mo-ap-status" x-text="moApLabel(m)"></span>
+                        <span x-show="moAp(m).docCode" style="color:var(--text-dim)" data-testid="mo-ap-code" x-text="moAp(m).docCode"></span>
+                        <span x-show="['待審核','簽核中'].includes(moAp(m).status)" style="color:var(--text-dim)"
+                              x-text="'待簽：' + ((moAp(m).currentApprovers || []).join('、') || '—')"></span>
+                        <span x-show="moAp(m).status === '已退回' && moAp(m).rejectReason" style="color:var(--tone-danger-fg)"
+                              x-text="'退回原因：' + moAp(m).rejectReason"></span>
+                        <span x-show="moLocked(m)" style="color:var(--text-dim)">（審核中不可修改內容；要改請先撤回）</span>
+                        <button type="button" x-show="moShowSubmit(m)" @click="moSubmit(m)" :disabled="moBusy === m.itemId" data-testid="mo-submit"
+                                style="font-size:11px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">送審</button>
+                        <button type="button" x-show="moShowWithdraw(m)" @click="moWithdraw(m)" :disabled="moBusy === m.itemId" data-testid="mo-withdraw"
+                                style="font-size:11px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">撤回</button>
+                        <button type="button" x-show="moShowCancel(m)" @click="moCancel(m)" :disabled="moBusy === m.itemId" data-testid="mo-cancel"
+                                style="font-size:11px;padding:2px 10px;border:1px solid var(--tone-danger-border);border-radius:5px;background:var(--surface);color:var(--tone-danger-fg);cursor:pointer">取消叫料單</button>
+                        <template x-if="moAp(m).status === '已核准'">
+                          <span style="display:inline-flex;align-items:center;gap:6px;margin-left:8px">
+                            <template x-if="!moAp(m).receivedOn">
+                              <span style="display:inline-flex;align-items:center;gap:5px">
+                                <span style="color:var(--text-dim)">到貨日期</span>
+                                <input class="fi fi--sm" type="date" style="width:132px" x-model="m._recvDate" data-testid="mo-recv-date">
+                                <button type="button" @click="moReceive(m)" :disabled="moBusy === m.itemId" data-testid="mo-recv"
+                                        style="font-size:11px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">確認到貨</button>
+                              </span>
+                            </template>
+                            <template x-if="moAp(m).receivedOn">
+                              <span style="display:inline-flex;align-items:center;gap:6px" data-testid="mo-recv-done">
+                                <span style="color:var(--success)" x-text="'✓ 已到貨 ' + moAp(m).receivedOn + '（' + moAp(m).receivedBy + '）'"></span>
+                                <button type="button" @click="moUndoReceive(m)" :disabled="moBusy === m.itemId" data-testid="mo-recv-undo"
+                                        style="font-size:11px;padding:2px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">撤銷</button>
+                              </span>
+                            </template>
+                          </span>
+                        </template>
+                      </div>
+                      <!-- 叫料匯款申請（31-C）：每張叫料單可開多張，每張各自簽核→出納；顯示「已申請／剩餘」額度 -->
+                      <div x-show="m._saved !== false && (moPayOf(m).payments.length || moCanRequestPay(m))" style="margin-top:6px;font-size:11px;font-family:var(--font-zh)"
+                           :data-testid="'mo-pay-' + m.itemId">
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                          <span style="font-weight:600">匯款申請</span>
+                          <span x-show="moPayOf(m).quota" style="color:var(--text-dim)" data-testid="mo-pay-quota"
+                                x-text="moPayOf(m).quota ? ('已申請 ' + caseSettleFmt(moPayOf(m).quota.committed + moPayOf(m).quota.legacyPaid) + '／剩餘 ' + caseSettleFmt(moPayOf(m).quota.remaining)) : ''"></span>
+                          <button type="button" x-show="moCanRequestPay(m)" @click="moOpenPayForm(m)" data-testid="mo-pay-new"
+                                  style="font-size:11px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">＋ 開匯款申請</button>
+                        </div>
+                        <template x-for="p in moPayOf(m).payments" :key="p.id">
+                          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;padding-left:10px" :data-testid="'mo-pay-row-' + p.id">
+                            <span x-text="'第 ' + p.seq + ' 張'"></span>
+                            <span style="color:var(--text-dim)" x-text="p.docCode"></span>
+                            <span style="font-weight:600" :style="moPayTone(p.status)" data-testid="mo-pay-status" x-text="p.status"></span>
+                            <span x-text="'申請 ' + caseSettleFmt(p.amount) + '（已付 ' + caseSettleFmt(p.paid) + '／剩餘 ' + caseSettleFmt(p.remaining) + '）'"></span>
+                            <span style="color:var(--text-dim)" x-text="p.supplierName + (p.payee.bankAccountNumber ? '　' + p.payee.bankAccountNumber : '')"></span>
+                            <span x-show="['待審核','簽核中'].includes(p.status)" style="color:var(--text-dim)" x-text="'待簽：' + ((p.currentApprovers || []).join('、') || '—')"></span>
+                            <span x-show="p.status === '已退回' && p.rejectReason" style="color:var(--tone-danger-fg)" x-text="'退回原因：' + p.rejectReason"></span>
+                            <button type="button" x-show="['草稿','已退回'].includes(p.status)" @click="moPayAct(p, 'submit')" data-testid="mo-pay-submit"
+                                    style="font-size:11px;padding:2px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">送審</button>
+                            <button type="button" x-show="['待審核','簽核中'].includes(p.status)" @click="moPayAct(p, 'withdraw')" data-testid="mo-pay-withdraw"
+                                    style="font-size:11px;padding:2px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">撤回</button>
+                            <button type="button" x-show="['草稿','已退回'].includes(p.status) || (p.status === '已核准' && !p.lines.length)" @click="moPayAct(p, 'void')" data-testid="mo-pay-void"
+                                    style="font-size:11px;padding:2px 8px;border:1px solid var(--tone-danger-border);border-radius:5px;background:var(--surface);color:var(--tone-danger-fg);cursor:pointer">作廢</button>
+                            <template x-for="ln in p.lines" :key="ln.id">
+                              <span style="color:var(--text-dim)" x-text="'· ' + ln.paidAt + ' 付 ' + caseSettleFmt(ln.amount) + (ln.fee ? '（手續費 ' + caseSettleFmt(ln.fee) + '）' : '') + (ln.review === 'pending' ? '（差額待審核）' : '')"></span>
+                            </template>
+                          </div>
+                        </template>
+                        <template x-if="moPayForm && moPayForm.itemId === m.itemId">
+                          <div style="margin-top:6px;padding:8px;border:1px dashed var(--line);border-radius:6px;display:flex;gap:7px;flex-wrap:wrap;align-items:center" data-testid="mo-pay-form">
+                            <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="申請金額" style="width:110px" x-model="moPayForm.amount" data-testid="mo-pay-amount">
+                            <select class="fi fi--sm" style="width:170px" x-model="moPayForm.supplierId" data-testid="mo-pay-supplier">
+                              <option value="">選擇供應商…</option>
+                              <template x-for="s in moSuppliers" :key="s.id"><option :value="s.id" x-text="(s.code ? s.code + ' ' : '') + s.name"></option></template>
+                            </select>
+                            <input class="fi fi--sm" type="text" placeholder="銀行代碼" style="width:80px" x-model="moPayForm.bankCode" data-testid="mo-pay-bankcode">
+                            <input class="fi fi--sm" type="text" placeholder="銀行名稱" style="width:110px" x-model="moPayForm.bankName">
+                            <input class="fi fi--sm" type="text" placeholder="戶名" style="width:120px" x-model="moPayForm.bankAccountName" data-testid="mo-pay-acctname">
+                            <input class="fi fi--sm" type="text" placeholder="帳號" style="width:150px" x-model="moPayForm.bankAccountNumber" data-testid="mo-pay-acctno">
+                            <input x-show="session.role === 'superadmin'" class="fi fi--sm" type="text" placeholder="超額覆寫理由（最高管理員）" style="width:170px" x-model="moPayForm.overCapReason">
+                            <!-- 個資蒐集告知（收款人＝供應商，可能是自然人；使用者裁示 2026-10-02）：勾選必填，建立時伺服器記錄時間與人員 -->
+                            <div data-privacy-card data-privacy-subject="material_payee" style="flex-basis:100%;margin-top:4px;padding:6px 8px;border:1px solid var(--border-light);border-radius:6px">
+                              <div style="font-size:11px;color:var(--text-dim);line-height:1.6">
+                                個資蒐集告知（收款人）：收款人的戶名與銀行帳號可能屬個人資料。蒐集目的＝辦理叫料貨款匯款；類別＝戶名、銀行代碼與帳號；利用範圍＝本公司財務與出納於付款作業所需範圍；
+                                當事人得依個人資料保護法請求查詢、閱覽、更正、停止蒐集或刪除。請先向收款人說明並確認其知悉。
+                              </div>
+                              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:4px 0 0">
+                                <input type="checkbox" data-privacy-ack data-testid="mo-pay-ack" x-model="moPayForm.payeeNoticeAcked" style="width:auto">
+                                已告知收款人（必填；建立時記錄時間與人員）
+                              </label>
+                              <div x-show="!moPayForm.payeeNoticeAcked" data-privacy-missing style="margin-top:4px;font-size:11px;color:var(--warning)">尚未確認告知收款人，無法建立申請</div>
+                            </div>
+                            <button type="button" @click="moCreatePay(m)" data-testid="mo-pay-create"
+                                    style="font-size:11px;padding:2px 10px;border:1px solid var(--line);border-radius:5px;background:var(--accent-hover);color:var(--surface);cursor:pointer">建立草稿</button>
+                            <button type="button" @click="moPayForm = null" style="font-size:11px;padding:2px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">取消</button>
+                          </div>
+                        </template>
                       </div>
                     </div>
                   </template>
@@ -2614,6 +2759,8 @@
                     外包總成本：
                     <strong style="color:var(--text-main);font-family:LINE Seed TW_OTF, sans-serif"
                             x-text="'NT$ ' + dispatchTotalCost().toLocaleString()"></strong>
+                    <span x-show="dispatchPendingNote()" x-text="'（' + dispatchPendingNote() + '）'" data-testid="dispatch-pending-note"
+                          style="color:var(--tone-warning-fg);font-size:11px"></span>
                   </div>
                   <button class="btn-add" @click="openNewDispatch()" style="padding:5px 12px;font-size:12px">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
@@ -2645,28 +2792,47 @@
                           <span x-show="d.scope" x-text="d.scope" style="font-style:italic"></span>
                         </div>
                       </div>
-                      <span :class="'badge ' + _dispatchStatusClass(d.status)" x-text="d.statusLabel"
+                      <span :class="'badge ' + _dispatchStatusClass(d.status)" x-text="d.displayStatus || d.statusLabel" data-testid="dispatch-status"
                             style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
+                      <span x-show="d.legacy" class="badge badge--draft" data-testid="dispatch-legacy-badge" title="此派發在審核機制上線前建立，未經審核"
+                            style="font-size:11px;padding:2px 6px;border-radius:4px;opacity:.8">舊單（未經審核）</span>
+                      <span x-show="d.docCode" x-text="d.docCode" style="font-size:11px;color:var(--text-dim)"></span>
                       <div style="font-size:13px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-main)">
                         NT$ <span x-text="(d.grandTotal||0).toLocaleString()"></span>
                       </div>
+                      <!-- 31-A：審核與作業狀態操作（狀態只由這些按鈕改） -->
+                      <button x-show="d.status!=='cancelled' && ['草稿','已退回'].includes(d.approvalStatus)" @click="submitDispatch(d)" data-testid="dispatch-submit"
+                              style="padding:4px 10px;font-size:11px;border:none;background:var(--accent);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送審</button>
+                      <button x-show="d.approvalStatus==='待審核'" @click="withdrawDispatch(d)" data-testid="dispatch-withdraw"
+                              style="padding:4px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap">撤回送審</button>
+                      <button x-show="_dispatchCanAdvance(d) && d.status==='draft'" @click="setDispatchStatus(d,'sent','已送出')" data-testid="dispatch-sent"
+                              style="padding:4px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap">已送出</button>
+                      <button x-show="_dispatchCanAdvance(d) && d.status==='sent'" @click="setDispatchStatus(d,'confirmed','已確認')" data-testid="dispatch-confirmed"
+                              style="padding:4px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap">已確認</button>
+                      <button x-show="d.status==='accepted' && (d.legacy || d.approvalStatus==='已核准') && ['','已退回'].includes(d.completionStatus)" @click="requestDispatchCompletion(d)" data-testid="dispatch-completion-request"
+                              style="padding:4px 10px;font-size:11px;border:none;background:var(--accent);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">申請完工</button>
+                      <button x-show="d.completionStatus==='待審核'" @click="withdrawDispatchCompletion(d)" data-testid="dispatch-completion-withdraw"
+                              style="padding:4px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap">撤回完工申請</button>
                       <!-- 驗收快速操作 -->
-                      <button x-show="d.status==='confirmed' || d.status==='sent'"
+                      <button x-show="_dispatchCanAdvance(d) && (d.status==='confirmed' || d.status==='sent')"
                               @click="markPendingAcceptance(d)"
                               style="padding:4px 10px;font-size:11px;border:1px solid var(--tone-success-border);background:var(--tone-success-bg);color:var(--tone-success-fg);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">
                         待驗收
                       </button>
-                      <button x-show="d.status==='pending_acceptance'"
+                      <button x-show="d.status==='pending_acceptance' && _dispatchCanAdvance(d)"
                               @click="acceptDispatch(d)"
                               style="padding:4px 10px;font-size:11px;border:none;background:var(--tone-success-solid);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">
                         ✓ 確認驗收
                       </button>
-                      <button @click="openEditDispatch(d)" style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer">編輯</button>
+                      <button @click="openEditDispatch(d)" :disabled="_dispatchReviewing(d)" :title="_dispatchReviewing(d) ? '審核中不能編輯（請先撤回或等審核結果）' : ''" data-testid="dispatch-edit"
+                              style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer" :style="_dispatchReviewing(d) ? 'opacity:.45;cursor:not-allowed' : ''">編輯</button>
+                      <button x-show="!['cancelled','completed'].includes(d.status)" @click="cancelDispatch(d)" data-testid="dispatch-cancel"
+                              style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer;color:var(--danger)">取消</button>
                       <button @click="importDispatchToQuote(d)" title="匯入品項至報價單"
                               style="padding:4px 8px;font-size:11px;border:1px solid var(--tone-info-border);background:var(--accent-light);color:var(--accent-hover);border-radius:5px;cursor:pointer;white-space:nowrap">
                         ↩ 回推報價單
                       </button>
-                      <button @click="deleteDispatch(d)" style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer;color:var(--danger)">刪</button>
+                      <button x-show="!['待審核','簽核中','已核准'].includes(d.approvalStatus)" @click="deleteDispatch(d)" style="padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer;color:var(--danger)">刪</button>
                     </div>
                     <!-- Items list -->
                     <div x-show="d.items && d.items.length > 0" style="padding:10px 16px">
@@ -3093,6 +3259,27 @@
 </fieldset><!-- /CM14b -->
               </div>
 
+              <div x-show="activeTab==='allfiles'" data-testid="cm-allfiles" style="padding:4px 2px">
+                <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">本案件在全系統的上傳檔案（報價單回簽、動態、收付款發票、材料、額外支出、完工單、出貨單、派工單、開票申請…）。只列出你在原單據頁打得開的檔案。</div>
+                <template x-for="u in caseFilesUnavail" :key="u.category + u.reason">
+                  <div class="cm-note" data-testid="cm-allfiles-unavailable" style="color:var(--tone-danger-fg)" x-text="u.reason"></div>
+                </template>
+                <div style="font-size:12px;color:var(--tone-danger-fg)" data-testid="cm-allfiles-err" x-show="caseFilesErr" x-text="caseFilesErr"></div>
+                <div style="padding:14px;color:var(--text-dim)" x-show="caseFilesLoading">載入中…</div>
+                <table class="cm-tbl" style="width:100%;border-collapse:collapse;font-size:13px" x-show="caseFilesFor === selected.quote_no && caseFiles.length">
+                  <thead><tr><th style="text-align:left">檔名</th><th style="text-align:left">類別</th><th style="text-align:left">單號</th><th style="text-align:left">上傳者</th><th style="text-align:left">上傳日</th><th style="text-align:left">大小</th></tr></thead>
+                  <tbody>
+                    <template x-for="(it, i) in caseFiles" :key="it.sourceType + '|' + it.docNo + '|' + it.fileId">
+                      <tr :data-allfiles-row="i" style="cursor:pointer" @click="previewCaseFile(i)">
+                        <td x-text="it.filename"></td><td x-text="it.docLabel.split(' ')[0]"></td><td x-text="it.docLabel"></td>
+                        <td x-text="it.uploadedBy"></td><td x-text="(it.uploadedAt || '').slice(0, 10)"></td><td x-text="MotrixFilePreview.fileSize(it.size)"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+                <div style="padding:14px;color:var(--text-dim)" data-testid="cm-allfiles-empty" x-show="caseFilesFor === selected.quote_no && !caseFilesLoading && !caseFiles.length && !caseFilesErr">這個案件沒有你看得到的上傳檔案。</div>
+              </div>
+
               <div x-show="activeTab==='feed'" class="feed-wrap">
                 <!-- 月曆總覽 toggle -->
                 <div class="feed-cal-toggle-row">
@@ -3480,19 +3667,6 @@
           <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">派發日期</label>
           <input type="date" x-model="dispatchForm.dispatch_date"
                  style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
-        </div>
-        <div>
-          <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">狀態</label>
-          <select data-saved-field x-model="dispatchForm.status"
-                  style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
-            <option value="draft">草稿</option>
-            <option value="sent">已送出</option>
-            <option value="confirmed">已確認</option>
-            <option value="pending_acceptance">待驗收</option>
-            <option value="accepted">已驗收</option>
-            <option value="completed">完工</option>
-            <option value="cancelled">已取消</option>
-          </select>
         </div>
         <div style="grid-column:1 / -1">
           <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">派工內容（工作範圍）</label>
@@ -3943,6 +4117,8 @@
     </div>
     <!-- Footer -->
     <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
+      <button x-show="canReturnDoc(shippingPreviewNote)" data-testid="preview-return" @click="returnFromShippingPreview()"
+              style="padding:7px 16px;border:1px solid var(--tone-danger-border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--tone-danger-bg);color:var(--tone-danger-fg);font-weight:600;cursor:pointer">退回修改</button>
       <button @click="closeShippingPreview()"
               style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--surface);cursor:pointer">關閉</button>
     </div>
@@ -3964,6 +4140,8 @@
       <iframe :src="cvPreviewBlobUrl" style="width:100%;height:100%;border:none;display:block"></iframe>
     </div>
     <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
+      <button x-show="canReturnDoc(cvPreviewVoucher)" data-testid="preview-return" @click="returnFromContractorVoucherPreview()"
+              style="padding:7px 16px;border:1px solid var(--tone-danger-border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--tone-danger-bg);color:var(--tone-danger-fg);font-weight:600;cursor:pointer">退回修改</button>
       <button @click="closeContractorVoucherPreview()"
               style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--surface);cursor:pointer">關閉</button>
     </div>
@@ -4193,6 +4371,29 @@
   </div>
 </div>
 
+<!-- ── 完工單 PDF 預覽 Modal（原本是 window.open 新分頁；改成視窗才放得下「退回修改」）── -->
+<div x-show="completionPreviewModal" x-cloak
+     style="position:fixed;inset:0;background:var(--overlay-backdrop);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
+     @click.self="closeCompletionPreview()"
+     @keydown.escape.window="closeCompletionPreview()">
+  <div style="background:var(--surface);border-radius:12px;width:100%;max-width:820px;height:calc(90vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:var(--shadow-popover)">
+    <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
+      <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
+            x-text="'預覽完工單' + (completionPreviewNote ? '　' + completionPreviewNote.noteNo : '')"></span>
+      <button @click="closeCompletionPreview()" style="width:28px;height:28px;border:none;background:var(--surface-sunken);border-radius:5px;cursor:pointer;font-size:16px">×</button>
+    </div>
+    <div style="flex:1;background:var(--surface-sunken);overflow:hidden">
+      <iframe :src="completionPreviewBlobUrl" style="width:100%;height:100%;border:none;display:block"></iframe>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
+      <button x-show="canReturnDoc(completionPreviewNote)" data-testid="preview-return" @click="returnFromCompletionPreview()"
+              style="padding:7px 16px;border:1px solid var(--tone-danger-border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--tone-danger-bg);color:var(--tone-danger-fg);font-weight:600;cursor:pointer">退回修改</button>
+      <button @click="closeCompletionPreview()"
+              style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--surface);cursor:pointer">關閉</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── 開票申請憑據 PDF 預覽 Modal ── -->
 <div x-show="ivPreviewModal" x-cloak
      style="position:fixed;inset:0;background:var(--overlay-backdrop);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
@@ -4208,6 +4409,8 @@
       <iframe :src="ivPreviewBlobUrl" style="width:100%;height:100%;border:none;display:block"></iframe>
     </div>
     <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
+      <button x-show="canReturnDoc(ivPreviewVoucher)" data-testid="preview-return" @click="returnFromInvoiceVoucherPreview()"
+              style="padding:7px 16px;border:1px solid var(--tone-danger-border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--tone-danger-bg);color:var(--tone-danger-fg);font-weight:600;cursor:pointer">退回修改</button>
       <button @click="closeInvoiceVoucherPreview()"
               style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--surface);cursor:pointer">關閉</button>
     </div>
@@ -4270,6 +4473,8 @@
 void 0
 </script>
   <script src="../static/approval-cascade.js"></script>
+  <script src="../static/approval-return.js"></script>
+  <script src="../static/file-preview.js"></script>
   <script src="../static/notif.js"></script>
 
   <script src="../static/edit-presence.js"></script>

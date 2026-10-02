@@ -50,7 +50,15 @@ CASES = {
 def test_byte_identical_to_the_frozen_builder(company, name):
     import pdf_gen
     v = CASES[name]
-    assert pdf_gen._build_invoice_voucher_html(copy.deepcopy(v)) == legacy(copy.deepcopy(v))
+    # 2026-09-30：未核准另外多一條紅色「未核可・僅供預覽」橫幅（程式保證、不靠版型；tests/test_unapproved_pdf_banner_2026_09_30）。
+    # 逐位元組比對的是「橫幅以外的一切」：先把那一條拿掉再比；已核准的案例不含橫幅 ⇒ 仍逐位元組相同。
+    import re
+    got = pdf_gen._build_invoice_voucher_html(copy.deepcopy(v))
+    got = re.sub(r'<div class="preview-banner unapproved-red" data-unapproved="1"[^>]*>.*?</div>\n', "", got, count=1, flags=re.S)
+    # 每頁標示（2026-10-01）：未核可時另外多一段樣式與 fixed 大浮水印——同樣是「橫幅以外的附加」，比對前一併拿掉
+    got = re.sub(r'<style data-unapproved-style="1">.*?</style>\n', "", got, count=1, flags=re.S)
+    got = re.sub(r'<div class="uw-wm" data-unapproved-wm="1">.*?</div>\n', "", got, count=1, flags=re.S)
+    assert got == legacy(copy.deepcopy(v))
 
 
 def _tpl():

@@ -126,6 +126,17 @@ def test_preview_writes_nothing(client, make_user, monkeypatch):
     assert _preview(client, sa, _definition(), format="pdf").status_code == 200
     assert _preview(client, sa, {"fields": []}).status_code == 422
     after = _row_counts()
+    # 最後那次故意送 {"fields": []} 得 422 ⇒ 歷史紀錄的失敗鉤子（helpers.audit._audit_failure，使用者要求失敗可搜尋）
+    # 記了一筆 `fail.POST`：那是「被擋下的請求」的紀錄，不是預覽寫了東西。排除 fail.* 列再比對，
+    # 並斷言恰好就是這一次 422 產生了一筆（鉤子有動作，而不是被藏起來）。
+    import db as _db
+    _c = _db.get_db()
+    try:
+        fails = [dict(r) for r in _c.execute("SELECT action, status_code, target_label FROM audit_log WHERE action LIKE 'fail.%'")]
+    finally:
+        _c.close()
+    assert len(fails) == 1 and fails[0]["status_code"] == 422 and fails[0]["target_label"].endswith("/output/preview"), fails
+    after["audit_log"] -= len(fails)
     # user_request_log＝main.py 中介層替每個請求記的操作軌跡（任何端點都有、去重），不是本端點寫的；
     # 排除它，但要求多出來的軌跡只有這支預覽的路徑
     trail = (before.pop("user_request_log", 0), after.pop("user_request_log", 0))

@@ -22,8 +22,12 @@
    "label": "設備"
   },
   {
+   "key": "analysis",
+   "label": "經營分析"
+  },
+  {
    "key": "finance",
-   "label": "財務"
+   "label": "財務會計"
   },
   {
    "key": "payroll",
@@ -107,7 +111,7 @@
    ],
    "extra_badge": {
     "id": "sb-approval-badge",
-    "color": "#DC2626"
+    "color": "var(--danger)"
    }
   },
   {
@@ -124,6 +128,13 @@
    "href": "module-builder.html",
    "label": "模組建構器",
    "order": 5,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
+   "href": "expense-types.html",
+   "label": "請款類型",
+   "order": 6,
    "perm": "superadmin"
   },
   {

@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>工作日誌 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -344,7 +345,7 @@
         const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
         if (!s.token) { location.href = 'login.html'; return }
         this.session = s
-        this.viewDate = new Date().toISOString().slice(0, 10)
+        this.viewDate = MotrixDate.today()
         await Promise.all([this.loadUsers(), this.load()])
       },
 
@@ -381,12 +382,12 @@
       shiftDay(delta) {
         const d = new Date(this.viewDate)
         d.setDate(d.getDate() + delta)
-        this.viewDate = d.toISOString().slice(0, 10)
+        this.viewDate = MotrixDate.ymd(d)
         this.load()
       },
 
       goToday() {
-        this.viewDate = new Date().toISOString().slice(0, 10)
+        this.viewDate = MotrixDate.today()
         this.load()
       },
 

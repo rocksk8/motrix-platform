@@ -41,6 +41,7 @@ from helpers import (
 
     can_see_financial, is_document_approver,
 )
+from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from pdf_gen import generate_payment_request_pdf_bytes, _generate_payment_request_pdf
 from helpers.errors import trace_id
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）。守門 test_legal_amount_rounding_guard
@@ -760,6 +761,7 @@ def revoke_payment_request_approval(request_no: str, body: dict = Body(default={
     if (row["export_count"] or 0) > 0:
         conn.close()
         raise HTTPException(409, "此請款單已匯出過，不可撤銷核准")
+    note = require_reject_reason(note, conn=conn)
     snap  = json.loads(row["snapshot_json"] or "{}")
     cname = snap.get("customerName") or ""
     d = json.loads(row["data_json"] or "{}")
@@ -807,6 +809,7 @@ def reject_payment_request(request_no: str, body: dict = Body(default={}), autho
     if not ok:
         conn.close()
         raise HTTPException(status_code, err_msg)
+    note = require_reject_reason(note, conn=conn)
 
     now       = datetime.now().isoformat()
     requester = appr.get("requestedBy")

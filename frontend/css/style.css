@@ -466,6 +466,8 @@ body {
   text-decoration: none; position: relative; transition: color .18s var(--v4-ease);
 }
 .mnav__top svg { width: 9px; height: 9px; opacity: .55; }
+/* 群組標題的紅點（有待處理項目；顏色用語意 token，深色模式跟著換） */
+.mnav__dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex-shrink: 0; align-self: flex-start; margin-top: 14px; margin-left: -2px; }
 .mnav__grp:hover > .mnav__top, a.mnav__top:hover { color: var(--accent); }
 .mnav__grp.is-on > .mnav__top, a.mnav__top.is-on { color: var(--text-primary); font-weight: 700; }
 .mnav__grp.is-on > .mnav__top::after, a.mnav__top.is-on::after {

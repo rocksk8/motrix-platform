@@ -42,6 +42,7 @@ from helpers import (
 
     can_see_financial, is_document_approver,
 )
+from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from pdf_gen import generate_invoice_voucher_pdf_bytes, _generate_invoice_voucher_pdf
 from helpers.errors import trace_id
 from helpers.tax_calc import quote_tax_type, tax_split, LEGACY_TAX_NOTE   # T：L1
@@ -668,6 +669,7 @@ def revoke_invoice_voucher_approval(voucher_no: str, body: dict = Body(default={
     if (row["export_count"] or 0) > 0:
         conn.close()
         raise HTTPException(409, "此憑據已匯出過，財務可能已憑此核發票，不可撤銷核准")
+    note = require_reject_reason(note, conn=conn)
     snap  = json.loads(row["snapshot_json"] or "{}")
     cname = snap.get("customerName") or ""
     d = json.loads(row["data_json"] or "{}")
@@ -715,6 +717,7 @@ def reject_invoice_voucher(voucher_no: str, body: dict = Body(default={}), autho
     if not ok:
         conn.close()
         raise HTTPException(status_code, err_msg)
+    note = require_reject_reason(note, conn=conn)
 
     now       = datetime.now().isoformat()
     requester = appr.get("requestedBy")
@@ -958,3 +961,16 @@ class _InvoiceVoucherAttachments:
 
 
 _registry.provide("attachments.for_document", "arap", _InvoiceVoucherAttachments)
+
+
+class _InvoiceVoucherPathAccess:
+    """`uploads.path_access`（IP-104，2026-09-30 P0）：`invoice_vouchers/<開票單號>/<檔名>`（已開立檔案）
+    ⇒ 開票申請單筆的讀取規則 `_voucher_readable`（案件層＋金額層，含本單簽核人例外）。"""
+    FOLDERS = ("invoice_vouchers",)
+
+    @staticmethod
+    def readable(conn, folder, rest, user):
+        if len(rest) != 2:
+            return False
+        row = conn.execute("SELECT quote_no, data_json FROM invoice_vouchers WHERE voucher_no = ?", (rest[0],)).fetchone()
+        return bool(row) and _voucher_readable(conn, row, user)

@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>庫存管理 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -691,7 +692,7 @@ function app() {
     },
 
     async openBatchPayModal(b) {
-      this.batchPay = { show: true, batchNo: b.batch_no, paidAt: new Date().toISOString().slice(0,10), bankAcctCode: '', saving: false, error: '' }
+      this.batchPay = { show: true, batchNo: b.batch_no, paidAt: MotrixDate.today(), bankAcctCode: '', saving: false, error: '' }
       await this.loadT100BankAccounts()
       const url = b.supplier_id ? `${API}/inventory/batches/last-paid-bank-account?supplier_id=${b.supplier_id}` : ''
       this.batchPay.bankAcctCode = await this._resolveDefaultBankAccount(url)

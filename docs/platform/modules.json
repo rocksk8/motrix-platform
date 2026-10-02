@@ -12,6 +12,7 @@
    "core:photos",
    "core:trail",
    "helper:approval_queue",
+   "helper:attachment_search",
    "helper:audit",
    "helper:auth",
    "helper:branding",
@@ -21,11 +22,20 @@
    "helper:company_identity",
    "helper:company_setup",
    "helper:daily_checks",
+   "helper:custom_builder_support",
+   "helper:custom_def_review",
+   "helper:custom_files",
+   "helper:custom_finance",
+   "helper:custom_history",
    "helper:custom_fields",
    "helper:custom_modules",
+   "helper:custom_module_delete",
    "helper:formula",
+   "helper:prefill_sources",
    "helper:dates",
    "helper:doc_template",
+   "helper:doc_render",
+   "helper:expense_types",
    "helper:edit_log",
    "helper:email_notify",
    "helper:errors",
@@ -55,9 +65,25 @@
    "helper:uploads",
    "helper:xlsx_out",
    "js:static/approval-cascade.js",
+   "js:static/approval-return.js",
    "js:static/auth-guard.js",
+   "js:static/motrix-date.js",
+   "js:js/module-builder-consts.js",
+   "js:js/module-builder-core.js",
+   "js:js/module-builder-designer.js",
+   "js:js/module-builder-elements.js",
+   "js:js/module-builder-flow.js",
+   "js:js/module-builder-form.js",
+   "js:js/module-builder-output.js",
+   "js:js/expense-types.js",
+   "js:js/expense-types-designer.js",
    "js:static/custom-layout.js",
+   "js:static/mount-tabs.js",
+   "js:static/file-preview.js",
    "js:static/form-preview.js",
+   "js:static/form-designer-model.js",
+   "js:static/form-designer.js",
+   "js:static/definition-form.js",
    "js:static/map-google.js",
    "js:static/map-overlay.js",
    "js:static/edit-presence.js",
@@ -79,9 +105,11 @@
    "page:pages/change-password.html",
    "page:pages/company-profile-settings.html",
    "page:pages/company-setup-required.html",
+   "page:pages/custom-def-review.html",
    "page:pages/custom-records.html",
    "page:pages/customer-log.html",
    "page:pages/customers.html",
+   "page:pages/expense-types.html",
    "page:pages/google-calendar-settings.html",
    "page:pages/legal-params.html",
    "page:pages/login-qr-approve.html",
@@ -106,6 +134,7 @@
    "plat:loader",
    "plat:menu",
    "plat:migrations",
+   "plat:mounts",
    "plat:pages",
    "plat:paths",
    "plat:registry",
@@ -133,7 +162,9 @@
    "router:platform_menu",
    "router:search",
    "router:system",
-   "router:uploads"
+   "router:uploads",
+   "router:attachments",
+   "helper:gl_status"
   ],
   "tables": [
    "approval_delegates",
@@ -158,6 +189,10 @@
    "custom_record_values",
    "custom_record_counters",
    "custom_record_log",
+   "custom_record_revisions",
+   "custom_record_finance_outbox",
+   "custom_record_files",
+   "custom_record_snapshots",
    "user_activity_daily",
    "user_list_prefs",
    "user_request_log",
@@ -174,6 +209,8 @@
    "/api/company",
    "/api/customers",
    "/api/definitions",
+   "/api/definition-kinds",
+   "/api/expense-types",
    "/api/custom-modules",
    "/api/custom",
    "/api/edit-presence",
@@ -200,7 +237,8 @@
    "/api/uploads",
    "/api/user-activity",
    "/api/users",
-   "/api/work-logs"
+   "/api/work-logs",
+   "/api/attachments"
   ]
  },
  "modules": {
@@ -240,14 +278,28 @@
     "mod:case/gl_events",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
     "mod:case/api/completion_notes",
+    "mod:case/api/material_approvals",
     "mod:case/api/material_orders",
-    "mod:case/api/quotations"
+    "mod:case/api/material_payments",
+    "mod:case/api/quotations",
+    "mod:case/expense_forms",
+    "mod:case/expense_notify",
+    "mod:case/material_approval",
+    "mod:case/material_guard",
+    "mod:case/material_notify",
+    "mod:case/material_payment",
+    "mod:case/material_payment_cashier",
+    "mod:case/purchase_items"
    ],
    "tables": [
     "case_action_items",
     "case_change_requests",
     "case_extra_expenses",
+    "case_material_approvals",
+    "case_material_payment_lines",
+    "case_material_payments",
     "case_stage_visits",
     "case_stages",
     "case_updates",
@@ -261,6 +313,8 @@
     "/api/case-changes",
     "/api/completion-notes",
     "/api/extra-expenses",
+    "/api/material-payments",
+    "/api/material-suppliers",
     "/api/next-quote-no",
     "/api/quotations",
     "/api/sales-orders"
@@ -272,6 +326,7 @@
    "units": [
     "mod:crm/__init__",
     "mod:crm/api",
+    "mod:crm/attachments",
     "page:pages/dev-crm.html"
    ],
    "tables": [
@@ -296,7 +351,8 @@
     "mod:supply/gl_events",
     "mod:supply/api/inventory",
     "mod:supply/api/shipping_notes",
-    "mod:supply/api/suppliers"
+    "mod:supply/api/suppliers",
+    "mod:supply/attachments"
    ],
    "tables": [
     "purchase_suggestion_status",
@@ -318,8 +374,12 @@
     "mod:subcontract/__init__",
     "mod:subcontract/gl_events",
     "mod:subcontract/attachments",
+    "mod:subcontract/bank_mask",
+    "mod:subcontract/dispatch_flow",
+    "mod:subcontract/dispatch_notify",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
+    "mod:subcontract/api/dispatch_approval",
     "mod:subcontract/api/vendor_contractors",
     "mod:subcontract/remit",
     "page:pages/contractor-voucher-approval-settings.html",
@@ -378,7 +438,8 @@
     "mod:arap/api/cashier",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
-    "mod:arap/receivables"
+    "mod:arap/receivables",
+    "mod:arap/attachments"
    ],
    "tables": [
     "invoice_vouchers",
@@ -416,16 +477,25 @@
     "mod:accounting/ledger/equity",
     "mod:accounting/ledger/statements",
     "mod:accounting/ledger/tax401",
+    "mod:accounting/ledger/tax401_media",
     "mod:accounting/ledger/withholding",
     "js:js/ledger-statements.js",
     "page:pages/ledger-statements.html",
     "js:js/ledger-hub.js",
     "page:pages/ledger-hub.html",
     "mod:accounting/ledger/features",
+    "mod:accounting/ledger/requests",
+    "mod:accounting/notify",
     "mod:accounting/ledger/fixed_assets",
     "mod:accounting/ledger/inventory",
+    "mod:accounting/api/ledger_annotations",
+    "mod:accounting/api/ledger_category_map",
+    "mod:accounting/ledger/category_map",
+    "mod:accounting/api/ledger_requests",
     "mod:accounting/api/ledger_closing",
+    "mod:accounting/ledger/auto_run",
     "mod:accounting/ledger/closing",
+    "mod:accounting/ledger/custom_events",
     "mod:accounting/ledger/export",
     "mod:accounting/api/ledger_settings",
     "mod:accounting/ledger/fs_lines",
@@ -444,7 +514,10 @@
     "js:js/ledger-periods.js",
     "js:js/ledger-reports.js",
     "page:pages/ledger-periods.html",
-    "page:pages/ledger-reports.html"
+    "page:pages/ledger-reports.html",
+    "mod:accounting/attachments_catalog",
+    "mod:accounting/ledger/source_status",
+    "mod:accounting/ledger/month_totals"
    ],
    "tables": [
     "account_items",
@@ -472,6 +545,7 @@
     "gl_balance_snapshot",
     "gl_category_map",
     "gl_confirm_batches",
+    "gl_action_requests",
     "gl_cursors",
     "gl_custom_field_map",
     "gl_engine_runs",
@@ -483,7 +557,9 @@
     "gl_statement_snapshots",
     "gl_tax401_map",
     "gl_tax_settlements",
-    "gl_withholding_items"
+    "gl_withholding_items",
+    "expense_categories",
+    "gl_dimensions"
    ],
    "api_prefixes": [
     "/api/account-items",
@@ -502,7 +578,12 @@
     "mod:payroll/gl_events",
     "mod:payroll/remit_link",
     "mod:payroll/api/bonus",
+    "mod:payroll/api/bonus_correction",
+    "mod:payroll/bonus_correction",
     "mod:payroll/api/payslips",
+    "mod:payroll/api/bank_account",
+    "mod:payroll/bank_account",
+    "mod:payroll/payslip_bank",
     "mod:payroll/bonus",
     "mod:payroll/bonus_case",
     "mod:payroll/bonus_deductions",
@@ -511,9 +592,12 @@
     "mod:payroll/bonus_pdf",
     "mod:payroll/bonus_queue",
     "mod:payroll/bonus_vouchers",
+    "page:pages/bonus-corrections.html",
+    "page:pages/bank-account.html",
     "page:pages/bonus.html",
     "page:pages/payslip-form.html",
-    "page:pages/payslips.html"
+    "page:pages/payslips.html",
+    "mod:payroll/attachments"
    ],
    "tables": [
     "bonus_award_edit_log",
@@ -522,12 +606,15 @@
     "bonus_case_award_edit_log",
     "bonus_case_award_lines",
     "bonus_case_awards",
+    "bonus_correction_log",
+    "bonus_corrections",
     "bonus_group_members",
     "bonus_groups",
     "bonus_item_people",
     "bonus_items",
     "payslip_seq",
-    "payslips"
+    "payslips",
+    "user_bank_accounts"
    ],
    "data": {
     "files": [
@@ -552,11 +639,22 @@
        "data_json.bankAccountNumber"
       ],
       "note": "一般每日 JSON 排除 F2 欄位；完整列匯出到 系統存檔_個資/每日備份"
+     },
+     {
+      "name": "user_bank_accounts",
+      "class": "T1",
+      "f2_fields": [
+       "account_name",
+       "account_number"
+      ],
+      "note": "員工收款帳號；模組宣告 T1（自動進每日 JSON），戶名與帳號由 archive._F2_FIELDS 在一般份拿掉、完整列只進個資資料夾"
      }
     ]
    },
    "api_prefixes": [
+    "/api/bank-accounts",
     "/api/bonus",
+    "/api/me",
     "/api/next-slip-no",
     "/api/payslips",
     "/api/tax-rules"
@@ -573,7 +671,8 @@
     "page:pages/warranty.html",
     "mod:analytics/__init__",
     "mod:analytics/api/dashboard",
-    "mod:analytics/api/reports"
+    "mod:analytics/api/reports",
+    "mod:analytics/api/ledger_diff"
    ],
    "tables": [],
    "api_prefixes": [
@@ -665,6 +764,19 @@
    ],
    "api_prefixes": [
     "/api/lodging"
+   ]
+  },
+"M14": {
+   "key": "filehub",
+   "name": "檔案中心",
+   "units": [
+    "mod:filehub/__init__",
+    "mod:filehub/api",
+    "page:pages/file-center.html"
+   ],
+   "tables": [],
+   "api_prefixes": [
+    "/api/filehub"
    ]
   }
  },

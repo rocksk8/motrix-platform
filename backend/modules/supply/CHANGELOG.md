@@ -1,10 +1,38 @@
 # 採購・庫存・出貨 更新紀錄
 
-## 1.0.9 — 2026-09-30（暫用號，列車取號；W4 總帳 C4 存貨）
+## 1.0.18 — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
+- 附件目錄 P3：`_SupplyCatalog` 加 `search`／`count`（出貨單回簽；權限＝`case_documents_readable`，逐案）。
+
+## 1.0.17 — 2026-10-01（暫用號，列車取號；wip/w3-local-date）
+- 本地日期（使用者 2026-10-01：凌晨建的單日期變前一天）：供應商／料號頁的匯出檔名日期改用本地日期。
+
+## 1.0.16 — 2026-09-30（wip/w1-t27fix2）
+- 出貨單退回與撤銷核准：原因改在狀態與權限檢查之後才驗（已回簽不可撤銷的 409 不再被 400 蓋掉）。
+
+## 1.0.15 — 2026-09-30（暫用號，列車取號；W4 寫入串接缺口 L1／L2／L6／L8／L9／L10）
+- L10：庫存報廢（作廢件，終態）產生 E10 報廢事件（借存貨盤損／貸存貨，依移動加權平均）；報廢件改備註不再更動報廢日。
+
+## 1.0.14 — 2026-09-30（暫用號，列車取號；wip/w2-open-bind：附件開檔路徑綁單據（安全審查 W3））
+- 附件目錄提供者 `open()` 加路徑綁單據檢查（`helpers.uploads.upload_path_key`）：檔案路徑不在這張單據自己的資料夾 ⇒ 當作沒有這個檔。
+
+## 1.0.13 — 2026-09-30（暫用號，列車取號；wip/w1-pdf-unapproved）
+- 出貨單：退回與撤銷核准一律要填原因；`pdf-download` 放行本單簽核人／申請人（含代理），不再限管理員；`export?mode=preview` 不計匯出次數；PDF 預覽未核准時有紅色警示、預覽可「退回修改」。
+
+## 1.0.12 — 2026-09-30（暫用號，列車取號；wip/w2-attach-p2：附件目錄 P2）
+- 新增 `attachments.py::_SupplyCatalog`（`attachments.catalog`／`supply`，IP-105）：出貨單回簽附件開檔；權限＝出貨單清單規則 `case_documents_readable`。
+
+## 1.0.11 — 2026-09-30（暫用號，列車取號；W4 總帳 C5）
+- `gl.events` 進貨入庫 E08：批次有發票號碼時存貨行帶稅碼 IN-5，讓營業稅 401 的進項金額欄取得到這筆進貨金額。純事件內容，無 migration。
+
+## 1.0.10 — 2026-09-30（暫用號，列車取號；W4 總帳 C4 存貨）
 - `gl.events` 新增出庫成本事件 E10（出貨單核准 shipped、案件序號認領 installed；只回料號／件數／案件／日期，不含金額）；期間內被標為作廢（報廢／盤損）的庫存件數在 notice 提醒手工處理。
 
-## 1.0.8 — 2026-09-30（暫用號，列車取號；W4 總帳 C4）
+## 1.0.9 — 2026-09-30（暫用號，列車取號；W4 總帳 C4）
 - 新增提供者 `gl.events`（IP-GL1）：進貨批次入庫 E08（成本合計，未稅）、進貨發票進項稅額 E08b（有發票號碼才有；稅額與日期暫為估計，會計可補登）、進貨付款 E09（付款日）。唯讀、不寫資料、不改欄位。
+
+## 1.0.8 — 2026-09-30（暫用號，列車取號；wip/sec-p0 安全修正 P0）
+- 安全修正 P0：`GET /api/shipping-notes/{no}` 與 `POST /api/shipping-notes/{no}/signed-files` 原本只要求登入 ⇒ 改用出貨單清單的規則（`_readable_note`：`guard_case_access(allow_module="case_manage")`）；看不到與查無同一句 404「出貨單 X 不存在」（不帶案件單號），上傳被擋時不寫檔。
+- 新增提供者 `uploads.path_access`／`supply`（IP-104，`_ShippingPathAccess`）：`shipping_notes/<單號>/` 依同一規則判斷。
 
 ## 1.0.7 — 2026-09-28（暫用號，列車取號；E4 wip/e-company-gate-impl 第三段）
 - 本公司資料設定閘門第二道（COMPANY-SETUP-GATE §5；D CG5-M1）：出貨單 PDF 下載端點：`except Exception` 前先 `except HTTPException: raise`（第二道的 428 不被吞成 500）

@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>新增請款 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/definition-form.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <!--
@@ -60,8 +61,20 @@
 
       <!-- 新增 -->
       <section x-show="tab === 'new'" id="pr-new" :data-busy="busy ? '1' : '0'">
+        <div class="pr-card" id="pr-type-card" x-show="types.length">
+          <h3>請款類型</h3>
+          <div class="pr-f">
+            <label for="pr-type">類型</label>
+            <select id="pr-type" x-model="typeCode" @change="selectType()">
+              <option value="">一般（案件額外支出）</option>
+              <template x-for="t in types" :key="t.code"><option :value="t.code" x-text="t.name + '（' + t.prefix + '）'"></option></template>
+            </select>
+          </div>
+          <div class="pr-hint" x-show="typeCode" x-text="typeCode ? '依「' + typeName() + '」的定義填寫；案件為選填，綁案件的支出會算入案件成本。' : ''"></div>
+        </div>
+
         <div class="pr-card">
-          <h3>① 挑案件</h3>
+          <h3 x-text="typeCode ? '案件（選填）' : '① 挑案件'"></h3>
           <div class="pr-f">
             <label for="pr-case-q">搜尋案件（單號、客戶或專案）</label>
             <input id="pr-case-q" type="search" x-model="caseQ" @input="queueCaseSearch()" placeholder="例：MQ-2026 或客戶名稱">
@@ -76,7 +89,7 @@
           </div>
         </div>
 
-        <div class="pr-card" x-show="picked" id="pr-form">
+        <div class="pr-card" x-show="picked && !typeCode" id="pr-form">
           <h3 x-text="'② 請款內容　' + (picked ? picked.quoteNo + '　' + (picked.customerName || '') : '')"></h3>
           <div class="pr-grid">
             <div class="pr-f">
@@ -122,6 +135,54 @@
             <button class="btn btn-primary" id="pr-submit" :disabled="busy" @click="save(true)">送審</button>
           </div>
         </div>
+        <div class="pr-card" x-show="typeCode" id="pr-typed-form">
+          <h3 x-text="'填寫' + typeName() + (picked ? '　' + picked.quoteNo : '　（不綁案件）')"></h3>
+          <div id="pr-df" x-ref="df"></div>
+          <div id="pr-item-picker" x-show="prItems.length" style="margin-top:12px;border:1px solid var(--border-light,#e5e7eb);border-radius:8px;padding:10px 12px">
+            <div style="font-weight:600;margin-bottom:4px">從案件品項帶入</div>
+            <div class="pr-hint" style="margin-bottom:6px">連到品項的明細，算該品項的<b>實際成本</b>，不是額外支出；已請購／已採購量依已送審或核准的單據累計。</div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead><tr style="text-align:left;color:var(--text-dim)"><th></th><th>品項</th><th>計畫量</th><th>已請購</th><th>已採購</th><th>剩餘可採購</th></tr></thead>
+              <tbody>
+                <template x-for="it in prItems" :key="it.itemId">
+                  <tr :data-pick-item="it.itemId">
+                    <td><input type="checkbox" x-model="prSel[it.itemId]" :aria-label="'選 ' + it.description"></td>
+                    <td x-text="it.description"></td>
+                    <td x-text="it.planQty + (it.unit || '')"></td>
+                    <td x-text="it.requestedQty"></td>
+                    <td x-text="it.orderedQty"></td>
+                    <td x-text="it.remainingQty"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <button type="button" class="btn btn-secondary" id="pr-item-add" style="margin-top:8px" @click="addSelectedItems()">帶入選取的品項</button>
+          </div>
+          <div id="pr-item-reasons" x-show="linkedIds.length" style="margin-top:8px">
+            <template x-for="id in linkedIds" :key="id">
+              <div class="pr-f" :data-linked-item="id" style="margin-bottom:6px">
+                <label x-text="itemName(id) + (overOf(id) > 0 ? '　⚠ 超出報價計畫量 ' + overOf(id) : '')"></label>
+                <input type="text" :id="'pr-reason-' + id" x-model="prReasons[id]" maxlength="500"
+                       :placeholder="typeCode === 'purchase_order' ? '超出報價計畫量時必填（送審時伺服器會檢查）' : '超出報價計畫量的原因（請購單只提示，可不填）'">
+              </div>
+            </template>
+          </div>
+          <div class="pr-grid" style="margin-top:12px">
+            <div class="pr-f">
+              <label for="pr-t-files">附件（收據、照片…）</label>
+              <input id="pr-t-files" type="file" multiple accept=".jpg,.jpeg,.png,.pdf" @change="form.files = [...$event.target.files]">
+            </div>
+            <div class="pr-f">
+              <label for="pr-t-invoice-files">發票（可以核准後再補）</label>
+              <input id="pr-t-invoice-files" type="file" multiple accept=".jpg,.jpeg,.png,.pdf" @change="form.invoiceFiles = [...$event.target.files]">
+            </div>
+          </div>
+          <div class="pr-err" id="pr-t-error" x-show="err" x-text="err"></div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="btn btn-secondary" id="pr-t-save-draft" :disabled="busy" @click="saveTyped(false)">存成草稿</button>
+            <button class="btn btn-primary" id="pr-t-submit" :disabled="busy" @click="saveTyped(true)">送審</button>
+          </div>
+        </div>
         <div class="pr-ok" id="pr-result" x-show="result" :data-status="result ? result.status : ''" x-text="result ? result.text : ''"></div>
       </section>
 
@@ -130,7 +191,7 @@
         <div class="pr-card">
           <div class="pr-hint" x-show="mineLoaded && !mine.length">還沒有請款</div>
           <table class="pr-table" x-show="mine.length">
-            <thead><tr><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>付款日</th><th></th></tr></thead>
+            <thead><tr><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>付款日</th><th>單據</th><th></th></tr></thead>
             <tbody>
               <template x-for="e in mine" :key="e.id">
                 <tr :data-payreq-row="e.id" :data-status="e.status">
@@ -142,6 +203,14 @@
                     <div x-text="(e.invoiceNo || '—') + '（' + invoiceCount(e) + ' 檔）'" :data-invoice-count="invoiceCount(e)"></div>
                   </td>
                   <td :data-paid-date="e.paidDate" x-text="e.paidDate || '未付款'"></td>
+                  <td>
+                    <template x-if="e.kind">
+                      <div :data-doc-actions="e.id" style="display:flex;gap:4px;flex-wrap:wrap">
+                        <button class="btn btn-ghost btn-sm" :data-doc-html="e.id" :disabled="busy" @click="openDoc(e, 'html')">預覽單據</button>
+                        <button class="btn btn-ghost btn-sm" :data-doc-pdf="e.id" :disabled="busy" @click="openDoc(e, 'pdf')">PDF</button>
+                      </div>
+                    </template>
+                  </td>
                   <td>
                     <template x-if="e.status === '已核准'">
                       <div :data-invoice-form="e.id">
@@ -172,11 +241,13 @@
         session: JSON.parse(localStorage.getItem('motrix_session') || '{}'),
         tab: 'new', busy: false, err: '', result: null,
         caseQ: '', cases: [], casesLoaded: false, picked: null, categories: [], _caseTimer: null,
+        types: [], typeCode: '', typeDef: null, _df: null, _draft: null,
+        prItems: [], prSel: {}, prReasons: {}, linkedIds: [], lineTick: 0,      // 32-S5：請購／採購單「從案件品項帶入」
         form: blank(),
         mine: [], mineLoaded: false, mineErr: '', mineMsg: '', invoiceDraft: {}, invoiceNoDraft: {},
 
         init() {
-          this.searchCases()
+          this.searchCases(); this.loadTypes()
           try { if (new URLSearchParams(location.search).get('tab') === 'mine') { this.tab = 'mine'; this.loadMine() } } catch (e) {}
         },
         _h(json) { var h = { Authorization: 'Bearer ' + (this.session.token || '') }; if (json) h['Content-Type'] = 'application/json'; return h },
@@ -190,8 +261,54 @@
           this.cases = r.ok ? await r.json() : []
           this.casesLoaded = true
         },
+        isPrPo() { return this.typeCode === 'purchase_req' || this.typeCode === 'purchase_order' },
+        async loadPrItems() {
+          this.prItems = []; this.prSel = {}
+          if (!this.picked || !this.isPrPo()) return
+          try {
+            var r = await fetch('/api/quotations/' + encodeURIComponent(this.picked.quoteNo) + '/purchase-items', { headers: this._h() })
+            if (r.ok) this.prItems = (await r.json()).items || []
+          } catch (e) { this.prItems = [] }
+        },
+        itemName(id) { var it = this.prItems.find(function (x) { return x.itemId === id }); return it ? it.description : id },
+        _lineQty(id) {
+          if (!this._df) return 0
+          return (this._df.getValue().lines || []).reduce(function (s, l) { return s + (l.itemId === id ? (Number(l.qty) || 0) : 0) }, 0)
+        },
+        // 超出計畫量（只做畫面提示；真正的上限與必填原因由伺服器在建立／送審驗）：採購看剩餘可採購量，請購看計畫量減已請購
+        overOf(id) {
+          void this.lineTick                                              // 明細數量變動時重算（_syncLinked 會推進它）
+          var it = this.prItems.find(function (x) { return x.itemId === id }); if (!it) return 0
+          var cap = this.typeCode === 'purchase_order' ? it.remainingQty : Math.max(it.planQty - it.requestedQty, 0)
+          var over = this._lineQty(id) - cap
+          return over > 0 ? Math.round(over * 100) / 100 : 0
+        },
+        _syncLinked(v) {
+          v = v || (this._df && this._df.getValue()) || { lines: [] }
+          var ids = []
+          ;(v.lines || []).forEach(function (l) { if (l.itemId && ids.indexOf(l.itemId) < 0) ids.push(l.itemId) })
+          this.linkedIds = ids
+          this.lineTick++
+        },
+        addSelectedItems() {
+          if (!this._df) return
+          var self = this
+          var v = this._df.getValue()
+          var have = {}
+          var lines = (v.lines || []).filter(function (l) { return l.itemId || l.summary || l.qty || l.unitCost })      // 拿掉空白列
+          lines.forEach(function (l) { if (l.itemId) have[l.itemId] = true })
+          this.prItems.forEach(function (it) {
+            if (!self.prSel[it.itemId] || have[it.itemId]) return
+            lines.push({ category: '', summary: it.description, qty: it.remainingQty > 0 ? it.remainingQty : 1,
+                         unitCost: it.planUnitCost !== undefined ? it.planUnitCost : '', itemId: it.itemId })
+          })
+          this._df.setValue({ data: v.data, lines: lines })
+          this.prSel = {}
+          this._syncLinked()
+        },
         async pickCase(c) {
-          this.picked = c; this.err = ''; this.result = null
+          this.picked = c; this.err = ''; this.result = null; this._draft = null
+          this.loadPrItems()
           var r = await fetch('/api/quotations/' + encodeURIComponent(c.quoteNo) + '/extra-expenses', { headers: this._h() })
           var d = await this._json(r)
           this.categories = r.ok ? (d.categories || []) : []
@@ -239,6 +356,100 @@
             ;['pr-files', 'pr-invoice-files'].forEach(function (x) { var el = document.getElementById(x); if (el) el.value = '' })
           } catch (e) { this.err = e.message }
           finally { this.busy = false }
+        },
+
+        // ── 費用單據類型（A2-4）：定義來自 GET /api/expense-types；表單由 static/definition-form.js 依定義渲染 ──
+        typeName() { var t = this.types.find((x) => x.code === this.typeCode); return t ? t.name : '' },
+        async loadTypes() {
+          try { var r = await fetch('/api/expense-types', { headers: this._h() }); this.types = r.ok ? await r.json() : [] } catch (e) { this.types = [] }
+        },
+        async selectType() {
+          this.err = ''; this.result = null; this._draft = null
+          if (this._df) { this._df.destroy(); this._df = null }
+          this.typeDef = null
+          if (!this.typeCode) return
+          try {
+            var h = this._h()
+            var rs = await Promise.all([
+              fetch('/api/expense-types/' + encodeURIComponent(this.typeCode), { headers: h }),
+              fetch('/api/expense-categories', { headers: h }),
+              fetch('/api/users/selectable', { headers: h }),
+              fetch('/api/org/tree', { headers: h })])
+            if (!rs[0].ok) throw new Error('讀不到類型定義（HTTP ' + rs[0].status + '）')
+            var def = await rs[0].json()
+            var cats = rs[1].ok ? ((await rs[1].json()).categories || []) : null        // null＝沒抓到（不當成「空清單」放行必填）
+            var users = rs[2].ok ? await rs[2].json() : []
+            var tree = rs[3].ok ? await rs[3].json() : []
+            var depts = []
+            tree.forEach(function (dv) { (dv.departments || []).forEach(function (d) { depts.push({ id: d.id, name: dv.name + '／' + d.name }) }) })
+            this.typeDef = def
+            var me = this.session.user || this.session || {}
+            this._df = window.MotrixDefinitionForm.mount(this.$refs.df, {
+              definition: def.definition || def, viewer: { username: me.username || '', isCashier: false },
+              categories: cats, users: users, departments: depts, onChange: (v) => this._syncLinked(v) })
+            this.linkedIds = []; this.prReasons = {}
+            await this.loadPrItems()
+          } catch (e) { this.err = e.message }
+        },
+        async saveTyped(submit) {
+          this.err = ''; this.result = null
+          if (!this._df) { this.err = '請先選擇類型'; return }
+          var problems = this._df.validate()
+          if (problems.length) { this.err = problems[0].message + (problems.length > 1 ? '（還有 ' + (problems.length - 1) + ' 項）' : ''); return }
+          var v = this._df.getValue()
+          var reasons = this.prReasons
+          v.lines = (v.lines || []).map(function (l) {
+            var r = l.itemId ? String(reasons[l.itemId] || '').trim() : ''
+            return r ? Object.assign({}, l, { overPlanReason: r }) : l
+          })
+          var no = this.picked ? this.picked.quoteNo : '-'                       // 哨兵「-」＝無案件（W2 路徑）
+          var base = '/api/quotations/' + encodeURIComponent(no) + '/extra-expenses'
+          var dep = v.data.cost_dept || v.data.dept
+          this.busy = true
+          try {
+            // 同一次操作重按（例如送審被擋：缺超出原因）要沿用已建立的草稿，不再多建一份：有草稿 ⇒ PATCH 它，附件只傳一次
+            var dr = this._draft && this._draft.no === no && this._draft.kind === this.typeCode ? this._draft : null
+            var body = JSON.stringify({ kind: this.typeCode, data: v.data, lines: v.lines, departmentId: dep ? Number(dep) : null,
+              expenseDate: v.data.req_date || '' })
+            var r = await fetch(dr ? base + '/' + dr.id : base, { method: dr ? 'PATCH' : 'POST', headers: this._h(true), body: body })
+            var d = await this._json(r)
+            if (!r.ok) throw new Error(d.detail || ((dr ? '更新草稿失敗' : '建立失敗') + '（HTTP ' + r.status + '）'))
+            var id = dr ? dr.id : d.id
+            if (!dr) { this._draft = { no: no, kind: this.typeCode, id: id, code: d.docCode || '', filesDone: false }; dr = this._draft }
+            d.docCode = d.docCode || dr.code
+            if (!dr.filesDone) {
+              await this._upload(no, id, this.form.files, 'other')
+              await this._upload(no, id, this.form.invoiceFiles, 'invoice')
+              dr.filesDone = true
+            }
+            var status = '草稿'
+            if (submit) {
+              var rs = await fetch(base + '/' + id + '/submit', { method: 'POST', headers: this._h() })
+              var ds = await this._json(rs)
+              if (!rs.ok) throw new Error('已存成草稿（' + (d.docCode || '') + '），但送審失敗：' + (ds.detail || ('HTTP ' + rs.status)))
+              status = ds.status || '待審核'
+            }
+            var text = (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + (d.docCode || (no + ' #' + id)) + '，可以在「我的請款」看進度'
+            this.form = blank(); this._draft = null
+            ;['pr-t-files', 'pr-t-invoice-files'].forEach(function (x) { var el = document.getElementById(x); if (el) el.value = '' })
+            await this.selectType()                                              // 重新渲染空白表單（它會清掉結果訊息 ⇒ 先渲染再放結果）
+            this.result = { status: status, id: id, text: text }
+          } catch (e) { this.err = e.message }
+          finally { this.busy = false }
+        },
+
+        // 單據輸出（A2-7）：端點要 Bearer ⇒ 不能用一般連結，改 fetch → blob → 新分頁（HTML 預覽或 PDF）
+        async openDoc(e, fmt) {
+          this.mineErr = ''
+          var win = window.open('', '_blank')                                  // 先開分頁（點擊當下，避免被擋彈窗），拿到內容再導過去
+          try {
+            var r = await fetch('/api/quotations/' + encodeURIComponent(e.quoteNo || '-') + '/extra-expenses/' + e.id + '/document?format=' + fmt, { headers: this._h() })
+            if (!r.ok) throw new Error((await this._json(r)).detail || ('開啟失敗（HTTP ' + r.status + '）'))
+            var blob = await r.blob()
+            var url = URL.createObjectURL(blob)
+            if (win) win.location.href = url; else window.location.href = url
+            setTimeout(function () { URL.revokeObjectURL(url) }, 120000)
+          } catch (err) { if (win) win.close(); this.mineErr = err.message }
         },
 
         invoiceCount(e) { return (e.files || []).filter(function (f) { return f && f.kind === 'invoice' }).length },

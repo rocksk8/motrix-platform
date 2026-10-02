@@ -8,6 +8,7 @@
   <title>成本精算 — MOTRIX 專案管理系統</title>
   <script src="../static/legal-round.js"></script>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -204,15 +205,16 @@
     </template>
   </div>
   <div class="stl-toolbar__right">
+    <span x-show="xeMasked > 0" data-testid="stl-masked-warning" style="font-size:11px;color:#B45309;max-width:320px">⚠️ 有 <b x-text="xeMasked"></b> 筆費用單據的金額對你遮蔽，額外支出總額不完整：不能儲存或完結精算（請由申請人／簽核人／出納／財務／管理員處理）</span>
     <span x-show="saving" style="font-size:11px;color:var(--text-dim)">儲存中…</span>
     <template x-if="settlement.status !== 'finalized'">
-      <button class="btn btn-ghost btn-sm" @click="saveDraft()" :disabled="saving">
+      <button class="btn btn-ghost btn-sm" @click="saveDraft()" :disabled="saving || xeMasked > 0" data-testid="stl-save-draft">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
         儲存草稿
       </button>
     </template>
     <template x-if="settlement.status !== 'finalized'">
-      <button class="btn btn-success btn-sm" @click="showFinalizeModal=true">
+      <button class="btn btn-success btn-sm" @click="showFinalizeModal=true" :disabled="xeMasked > 0" data-testid="stl-finalize">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         完結精算
       </button>
@@ -389,11 +391,17 @@
                   </td>
                   <td class="col-actual" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600">
                     <span x-text="item.actualTotalCost > 0 ? 'NT$ ' + fmt(item.actualTotalCost) : '—'"></span>
-                    <template x-if="item.actualCostTaxMode === 'taxed' && item.actualTotalCost > 0">
+                    <template x-if="item.actualCostTaxMode === 'taxed' && item.actualTotalCost > 0 && !item.adoptSystem">
                       <div style="font-size:9px;color:var(--text-dim);font-weight:400"
                            x-text="'原含稅 NT$ ' + fmt(MotrixLegalRound.halfUp(item.actualQty||0, item.actualUnitCost||0))"></div>
                     </template>
-                    <template x-if="item.actualCostTaxMode === 'taxed_gross' && item.actualTotalCost > 0">
+                    <div x-show="systemActual(item) > 0" :data-testid="'stl-po-' + item.id" style="margin-top:4px;font-size:10px;font-weight:400;color:#92400E">
+                      <span x-text="'採購單 NT$ ' + fmt(systemActual(item))"></span>
+                      <button type="button" class="btn btn-ghost btn-sm" style="padding:0 6px;font-size:10px" :disabled="settlement.status === 'finalized'"
+                              @click="toggleAdopt(item)" :data-testid="'stl-adopt-' + item.id" x-text="item.adoptSystem ? '取消採用' : '採用'"></button>
+                      <span x-show="item.adoptSystem" style="color:#15803D">已採用</span>
+                    </div>
+                    <template x-if="item.actualCostTaxMode === 'taxed_gross' && item.actualTotalCost > 0 && !item.adoptSystem">
                       <div style="font-size:9px;color:var(--text-dim);font-weight:400"
                            x-text="'原未稅 NT$ ' + fmt(MotrixLegalRound.halfUp(item.actualQty||0, item.actualUnitCost||0))"></div>
                     </template>
@@ -602,9 +610,16 @@
                   <td style="padding:5px 0;color:var(--text-secondary)">品項實際成本</td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.itemActualTotal)"></td>
                 </tr>
+                <tr x-show="summary.itemPoUnadopted > 0" data-testid="stl-po-unadopted">
+                  <td style="padding:5px 0;color:var(--text-secondary)">採購單（品項尚未採用）</td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.itemPoUnadopted)"></td>
+                </tr>
                 <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">額外支出<span x-show="summary.remitFeeTotal" style="font-size:11px" x-text="'（含匯款手續費 ' + fmt(summary.remitFeeTotal) + '）'"></span></td>
+                  <td style="padding:5px 0;color:var(--text-secondary)">額外支出<span x-show="summary.remitFeeTotal" style="font-size:11px" x-text="'（含匯款手續費 ' + fmt(summary.remitFeeTotal) + '）'"></span><span x-show="summary.customExpenseTotal" data-testid="settle-custom-expense" style="font-size:11px" x-text="'（含自訂模組支出 ' + fmt(summary.customExpenseTotal) + '）'"></span></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.extraTotal)"></td>
+                </tr>
+                <tr x-show="customIncomeSkipped.length" data-testid="settle-custom-income-skipped">
+                  <td colspan="2" style="padding:2px 0;font-size:11px;color:var(--text-dim)" x-text="'自訂模組有 ' + customIncomeSkipped.length + ' 筆收入（' + customIncomeSkipped.map(i => i.recordNo).join('、') + '）關聯到本案件，因內建報價單已認列而未重複計入'"></td>
                 </tr>
                 <tr>
                   <td style="padding:5px 0;color:var(--text-secondary)">承攬商派發成本</td>
@@ -703,6 +718,8 @@
   </template>
 </div>
 
+<script src="../static/file-preview.js"></script>
+
 <script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
 <script>
@@ -720,7 +737,7 @@ function settlementPage() {
 
     settlement: {
       status: 'draft',
-      settlementDate: new Date().toISOString().slice(0, 10),
+      settlementDate: MotrixDate.today(),
       finalizedAt:  '',
       finalizedBy:  '',
       items:      [],
@@ -729,9 +746,13 @@ function settlementPage() {
     },
     // 額外支出（case_extra_expenses 表）總額與未核准金額，loadExtraExpenseTotals() 填
     xeTotal: 0,
+    itemPo: {},                  // 32-S5：{報價品項 id: 已認列的採購單連結金額}（來源 GET …/purchase-items 的 actualAmount；拿不到＝空）
     // W1：匯款手續費（公司自付、已匯款者）：額外支出請款的手續費＋承攬商匯款單的手續費；併入「額外支出」成本（十二格鍵名不動）
     remitFeeTotal: 0,
+    customExpenseTotal: 0,        // 建構器（自訂模組）關聯到這個案件的入帳支出；loadCustomFinance() 填
+    customIncomeSkipped: [],      // 關聯到這個案件的自訂模組收入（內建報價單已認列 ⇒ 不重複計入，只列出供對照）
     xePending: 0,
+    xeMasked: 0,                 // 費用單據金額對本人遮蔽的列數（>0 ⇒ 額外支出總額不完整，不可存精算）
 
     dispatches: [],  // 承攬商派發（唯讀，即時從 /api/contractor-dispatches 讀取，不隨精算存檔凍結）
     _frozenSummary: null,  // 精算完結當下寫入 data_json 的 summary 快照，供比對是否已過期
@@ -813,13 +834,14 @@ function settlementPage() {
           actualCostTaxMode: 'taxed_gross',
           actualTotalCost: MotrixLegalRound.halfUp((it.qty || 0) * (it.cost || 0), 1.05),
           note:            '',
+          adoptSystem:     false,       // 32-S5：true＝此品項的實際成本採用「採購單連結金額」（跟著採購單變動，完結後凍結）
         }))
 
         if (d.settlement) {
           // 已有精算資料：合併（保留實際成本欄；原始報價欄以最新報價為準）
           const saved = d.settlement
           this.settlement.status        = saved.status || 'draft'
-          this.settlement.settlementDate= saved.settlementDate || new Date().toISOString().slice(0,10)
+          this.settlement.settlementDate= saved.settlementDate || MotrixDate.today()
           this.settlement.finalizedAt   = saved.finalizedAt || ''
           this.settlement.finalizedBy   = saved.finalizedBy || ''
           this.settlement.memo          = saved.memo || ''
@@ -839,6 +861,7 @@ function settlementPage() {
                 actualUnitCost: si.actualUnitCost !== undefined ? si.actualUnitCost : oi.actualUnitCost,
                 actualCostTaxMode: si.actualCostTaxMode || oi.actualCostTaxMode,
                 actualTotalCost:si.actualTotalCost|| oi.actualTotalCost,
+                adoptSystem:    !!si.adoptSystem,
                 note:           si.note || '',
               }
             }
@@ -851,8 +874,10 @@ function settlementPage() {
         // 記錄原始 tot 資料用於比較
         this._origTot = d.tot || {}
         await this.loadDispatches()
-        await this.loadExtraExpenseTotals()   // 成本彙總要用到，必須在 calcSummary 之前
+        await this.loadExtraExpenseTotals()   // 成本彙總要用到，必須在 calcSummary 之前（含 32-S5 的 itemPo）
+        if (this.settlement.status !== 'finalized') this.settlement.items.forEach(i => { if (i.adoptSystem) this.calcItemCost(i) })   // 採用採購單金額的品項跟著最新值
         await this.loadVoucherRemitFees()     // W1：承攬商匯款手續費併入額外支出成本
+        await this.loadCustomFinance()        // 建構器：自訂模組支出併入額外支出成本
         this.calcSummary()
       } catch(e) {
         this.toast('載入失敗：' + e.message)
@@ -863,6 +888,29 @@ function settlementPage() {
 
     // 額外支出總額（含送審中）與其中尚未核准的金額，來源是 case_extra_expenses 表。
     // 這一頁只讀不寫——編輯入口已移到案件管理的「額外支出」分頁。
+    async loadItemPo() {
+      this.itemPo = {}
+      this._itemPoOk = false
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(this.quoteNo)}/purchase-items`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) return
+        const items = (await r.json()).items || []
+        if (items.some(i => i.actualAmount === undefined)) return      // 看不到金額 ⇒ 不用（維持舊算法）
+        items.forEach(i => { if (i.actualAmount > 0) this.itemPo[i.itemId] = i.actualAmount })
+        this._itemPoOk = true
+      } catch {}
+    },
+
+    systemActual(item) { return (this.itemPo && this.itemPo[item.id]) || 0 },
+
+    toggleAdopt(item) {
+      item.adoptSystem = !item.adoptSystem
+      if (item.adoptSystem) this.calcItemCost(item)
+      this.calcSummary()
+    },
+
     async loadExtraExpenseTotals() {
       if (!this.quoteNo) return
       try {
@@ -871,9 +919,29 @@ function settlementPage() {
         })
         if (r.ok) {
           const d = await r.json()
-          this.xeTotal = d.totalAmount || 0
+          // 32-S5：連到案件品項的採購單列＝品項實際成本（不再算額外支出）。只有**確定拿得到品項系統金額**時才改讀 extraOnlyAmount，
+          // 否則（沒有財務檢視、端點失敗）維持 totalAmount（含連結列），不讓錢憑空消失。沒有連結列的案件兩者相等＝金額與以前逐位相同。
+          await this.loadItemPo()
+          this.xeTotal = (this._itemPoOk && d.extraOnlyAmount !== undefined) ? (d.extraOnlyAmount || 0) : (d.totalAmount || 0)
           this.remitFeeTotal = d.remitFeeTotal || 0
           this.xePending = d.totalPending || 0
+          this.xeMasked = d.maskedCount || 0
+        }
+      } catch {}
+    },
+
+    // 自訂模組（建構器）關聯到這個案件的金流（無權限 ⇒ 403 ⇒ 不加，與額外支出同一規則）
+    async loadCustomFinance() {
+      this.customExpenseTotal = 0
+      this.customIncomeSkipped = []
+      try {
+        const r = await fetch(`/api/custom-modules/finance/case/${encodeURIComponent(this.quoteNo)}`, {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          const d = await r.json()
+          this.customExpenseTotal = (d.expense && d.expense.total) || 0
+          this.customIncomeSkipped = ((d.income && d.income.items) || []).filter(i => i.skipped)
         }
       } catch {}
     },
@@ -893,7 +961,7 @@ function settlementPage() {
         const r = await fetch(`${API}/contractor-dispatches?quote_no=${encodeURIComponent(this.quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok) this.dispatches = (await r.json()).filter(d => d.status !== 'cancelled')
+        if (r.ok) this.dispatches = (await r.json()).filter(d => d.status !== 'cancelled' && !['草稿', '已退回'].includes(d.approvalStatus || ''))   // 31-A：與營運報表同一條規則（待審核計入）
       } catch {}
     },
 
@@ -927,6 +995,7 @@ function settlementPage() {
     },
 
     calcItemCost(item) {
+      if (item.adoptSystem) { item.actualTotalCost = this.systemActual(item); return }      // 32-S5：照採購單連結金額（含稅最終金額，不再 ×1.05 或 ÷1.05）
       // X-VAT（2026-09-26）：金額一律 static/legal-round.js 四捨五入（與後端同一套）
       const raw = MotrixLegalRound.halfUp(item.actualQty || 0, item.actualUnitCost || 0)
       if (item.actualCostTaxMode === 'taxed') {
@@ -962,9 +1031,11 @@ function settlementPage() {
       // 總額。**不能再用 settlement.extraItems 算**——那份陣列現在只是搬移前的唯讀
       // 備份、不會再更新，拿它算成本會停在搬移當下的舊數字。含送審中的金額
       // （使用者指定：送審中照樣算進成本，但畫面要提醒）。
-      const extraTotal      = this.xeTotal + this.remitFeeTotal   // W1：含匯款手續費（明細見 summary.remitFeeTotal）
+      const extraTotal      = this.xeTotal + this.remitFeeTotal + this.customExpenseTotal   // W1：含匯款手續費（summary.remitFeeTotal）、自訂模組支出（summary.customExpenseTotal）
       const dispatchTotal   = this.dispatchTotal()
-      const totalActualCost = itemActualTotal + extraTotal + dispatchTotal
+      // 32-S5：採購單連結金額還沒採用到品項的，仍計入總成本（不讓連結列從額外支出扣掉後憑空消失）；全部採用或沒有連結 ⇒ 0（歷史案件逐位不變）
+      const itemPoUnadopted = this.settlement.items.reduce((s, i) => s + (i.adoptSystem ? 0 : this.systemActual(i)), 0)
+      const totalActualCost = itemActualTotal + itemPoUnadopted + extraTotal + dispatchTotal
       const grossProfit     = quotedPretax - totalActualCost
       const grossMarginPct  = quotedPretax > 0 ? grossProfit / quotedPretax * 100 : 0
       const adminCost       = MotrixLegalRound.halfUp(quotedPretax, 0.10)
@@ -987,7 +1058,7 @@ function settlementPage() {
         origAdminCost, origCharity,
         origNetProfit:    MotrixLegalRound.halfUp(origNetProfit),
         origNetMarginPct: MotrixLegalRound.halfUp(origNetMarginPct, 10) / 10,
-        itemActualTotal, extraTotal, dispatchTotal, totalActualCost, remitFeeTotal: this.remitFeeTotal,
+        itemActualTotal, itemPoUnadopted, extraTotal, dispatchTotal, totalActualCost, remitFeeTotal: this.remitFeeTotal, customExpenseTotal: this.customExpenseTotal,
         grossProfit:     MotrixLegalRound.halfUp(grossProfit),
         grossMarginPct:  MotrixLegalRound.halfUp(grossMarginPct, 10) / 10,
         adminCost, charityDonation,
@@ -1004,14 +1075,8 @@ function settlementPage() {
     // 定位，見 routers/case_extra_expenses.py。
 
     async previewAttachmentFile(file) {
-      try {
-        const r = await fetch(`${API}/photo-token?path=${encodeURIComponent(file.path)}`, {
-          headers: { Authorization: 'Bearer ' + this.session.token },
-        })
-        if (!r.ok) { this.toast('取得檔案連結失敗'); return }
-        const { token } = await r.json()
-        window.open(`${API}/uploads/${file.path}?pt=${encodeURIComponent(token)}`, '_blank')
-      } catch (e) { this.toast('開啟檔案失敗：' + e.message) }
+      // 共用預覽元件（static/file-preview.js）：頁內預覽窗
+      try { await MotrixFilePreview.openFile(file) } catch (e) { this.toast('開啟檔案失敗：' + e.message) }
     },
 
     buildPayload() {
@@ -1034,6 +1099,7 @@ function settlementPage() {
           actualUnitCost: i.actualUnitCost,
           actualCostTaxMode: i.actualCostTaxMode,
           actualTotalCost:i.actualTotalCost,
+          adoptSystem:    !!i.adoptSystem,
           note:           i.note,
         })),
         extraItems: this.settlement.extraItems,
@@ -1053,6 +1119,7 @@ function settlementPage() {
     },
 
     async saveDraft() {
+      if (this.xeMasked > 0) { this.toast('有 ' + this.xeMasked + ' 筆費用單據的金額對你遮蔽，額外支出總額不完整，不能儲存精算'); return }
       this.saving = true
       try {
         await this._putSettlement()
@@ -1062,6 +1129,7 @@ function settlementPage() {
     },
 
     async finalize() {
+      if (this.xeMasked > 0) { this.toast('額外支出總額不完整（有金額對你遮蔽的費用單據），不能完結精算'); this.showFinalizeModal = false; return }
       this.saving = true
       this.settlement.status      = 'finalized'
       this.settlement.finalizedAt = new Date().toISOString()

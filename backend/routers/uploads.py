@@ -7,11 +7,15 @@ import hmac
 import os
 import secrets
 import time
+from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi import APIRouter, Body, HTTPException, Header, Query
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
+from db import get_db
 from helpers import _require_user
+from helpers import uploads as _uploads_helper
 
 _PHOTO_TOKEN_TTL = 3600  # seconds
 _PHOTO_SECRET_CACHE: bytes | None = None
@@ -65,14 +69,103 @@ def _verify_photo_token(path: str, token: str) -> bool:
     return hmac.compare_digest(expected, sig)
 
 
-@router.get("/api/photo-token")
-def get_photo_token(path: str = Query(...), authorization: str = Header(None)):
-    """Return a short-lived signed token for accessing a specific upload path via ?pt=."""
-    _require_user(authorization)
-    safe = os.path.normpath(path).lstrip('/\\')
-    if _resolve_upload_path(safe) is None:
+#: 看不到與查無同一句（c-case404 慣例：不讓人用回應差別探知單據／檔案存不存在）
+_NOT_FOUND = "檔案不存在"
+
+
+def _canonical_or_403(raw: str) -> str:
+    rel = _uploads_helper.canonical_upload_path(raw)
+    if rel is None or _resolve_upload_path(rel) is None:
         raise HTTPException(403, "無效路徑")
-    return {"token": _make_photo_token(safe), "ttl": _PHOTO_TOKEN_TTL}
+    return rel
+
+
+def _authorize_read(user: dict, rel: str, ctx_type: str = None, ctx_id: str = None) -> None:
+    """放行條件（2026-09-30 安全修正 P0；原本只要求登入）：
+    1. 路徑的擁有單據看得到（`helpers.uploads.upload_readable`：擁有模組經 `uploads.path_access` 用那張單據自己的規則）；或
+    2. 帶了簽核佇列情境 (type, id)：詳情守門放行，而且詳情真的列出這個路徑（簽核人常常不是案件的人）。
+    其餘 ⇒ 404（與查無同一句）。"""
+    conn = get_db()
+    try:
+        if _uploads_helper.upload_readable(conn, rel, user):
+            return
+    finally:
+        conn.close()
+    if rel in _approval_context_paths(user, ctx_type, ctx_id):
+        return
+    raise HTTPException(404, _NOT_FOUND)
+
+
+def _approval_context_paths(user: dict, ctx_type, ctx_id) -> set:
+    """簽核佇列情境 (type, id) 放行的路徑集合（詳情守門＋詳情列出的檔案）；沒帶情境或看不到 ⇒ 空集合。
+    ⚠️ 每呼叫一次＝跑一次詳情提供者（被拒時另寫一筆 audit）⇒ 多張圖一律走批次端點，一次請求只呼叫一次。"""
+    if not (ctx_type and ctx_id):
+        return set()
+    from routers import approval_queue as _aq
+    conn = get_db()
+    try:
+        try:
+            return _aq.detail_file_paths(conn, user, ctx_type, ctx_id)
+        except HTTPException as e:
+            if e.status_code not in (400, 404):
+                raise
+            return set()
+    finally:
+        conn.close()
+
+
+class PhotoTokenBatchIn(BaseModel):
+    paths: List[str]
+    type: Optional[str] = None
+    id: Optional[str] = None
+
+
+#: 一次最多換幾個簽章（詳情夾帶檔案的實務上限遠低於此；超過 ⇒ 400，不靜默截斷）
+PHOTO_TOKEN_BATCH_MAX = 200
+
+
+@router.post("/api/photo-token/batch")
+def get_photo_tokens_batch(body: PhotoTokenBatchIn = Body(...), authorization: str = Header(None)):
+    """一次換多張的簽章（2026-09-30 稽核 S1：簽核佇列縮圖原本每張打一次單張端點 ⇒ N 張圖＝N 次詳情提供者＋N 筆 audit）。
+
+    規則與單張端點相同（`_authorize_read`），但**簽核佇列情境最多只跑一次**詳情守門，且只在有路徑單看擁有單據讀不到時才跑。
+    回 `{tokens: {路徑: 簽章}, denied: [路徑], ttl}`：不合法、看不到、查無的路徑一律列在 denied（不區分，同 404 慣例）。"""
+    user = _require_user(authorization)
+    paths = list(dict.fromkeys(p for p in (body.paths or []) if isinstance(p, str)))
+    if len(paths) > PHOTO_TOKEN_BATCH_MAX:
+        raise HTTPException(400, "一次最多 %d 個檔案" % PHOTO_TOKEN_BATCH_MAX)
+    tokens, denied, pending = {}, [], []
+    conn = get_db()
+    try:
+        for raw in paths:
+            rel = _uploads_helper.canonical_upload_path(raw)
+            if rel is None or _resolve_upload_path(rel) is None:
+                denied.append(raw)
+            elif _uploads_helper.upload_readable(conn, rel, user):
+                tokens[raw] = _make_photo_token(rel)
+            else:
+                pending.append((raw, rel))
+    finally:
+        conn.close()
+    if pending:
+        allowed = _approval_context_paths(user, body.type, body.id)      # 最多一次
+        for raw, rel in pending:
+            if rel in allowed:
+                tokens[raw] = _make_photo_token(rel)
+            else:
+                denied.append(raw)
+    return {"tokens": tokens, "denied": denied, "ttl": _PHOTO_TOKEN_TTL}
+
+
+@router.get("/api/photo-token")
+def get_photo_token(path: str = Query(...), type: str = Query(None), id: str = Query(None),
+                    authorization: str = Header(None)):
+    """換 `?pt=` 短效簽章（綁單一路徑、1 小時）。**只簽發給讀得到該檔擁有單據的人**（見 `_authorize_read`）；
+    `type`／`id`＝簽核佇列詳情的情境（approval-queue 頁帶）。不合法路徑 403；看不到與查無同一個 404。"""
+    user = _require_user(authorization)
+    rel = _canonical_or_403(path)
+    _authorize_read(user, rel, type, id)
+    return {"token": _make_photo_token(rel), "ttl": _PHOTO_TOKEN_TTL}
 
 
 @router.get("/api/uploads/{file_path:path}")
@@ -96,15 +189,15 @@ def serve_upload(
     📌 實查過再拿掉的：前端用 `?token=` 打 uploads **0 處**、用 `?pt=` **8 處**，
     `backend/tests/` 也沒有任何一支在用。**一條沒有人走、而仍然打開著的路。**
     """
-    safe = os.path.normpath(file_path).lstrip('/\\')
-    full = _resolve_upload_path(safe)
-    if full is None:
-        raise HTTPException(403, "無效路徑")
+    rel = _canonical_or_403(file_path)
+    full = _resolve_upload_path(rel)
     if pt:
-        if not _verify_photo_token(safe, pt):
+        # 簽章在簽發時已查過權限（`get_photo_token`）；簽章綁的是同一個正規路徑
+        if not _verify_photo_token(rel, pt):
             raise HTTPException(403, "照片連結已過期或無效，請重新載入")
     else:
-        _require_user(authorization)
+        # 🔴 2026-09-30 P0：標頭這條原本也只要求登入 ⇒ 與 photo-token 同一個洞，一起補
+        _authorize_read(_require_user(authorization), rel)
     if not os.path.isfile(full):
-        raise HTTPException(404, "檔案不存在")
+        raise HTTPException(404, _NOT_FOUND)
     return FileResponse(full)

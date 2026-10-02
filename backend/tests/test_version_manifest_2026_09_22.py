@@ -182,7 +182,8 @@ def test_vr3_one_entry_per_module_not_one_per_day():
     entries = [e for e in _entries() if (e.get("date") or "") >= GAP_FROM]
     if not entries:
         pytest.skip("VR3 還沒補 —— 見上一題（它會紅，這一題沒有東西可以驗）")
-    dupes = unshipped_module_dupes(entries, baseline_manifest())
+    from tests._version_slots import placeholders_allowed
+    dupes = unshipped_module_dupes(entries, baseline_manifest(), skip_placeholders=placeholders_allowed()[0])
     assert not dupes, (
         "這一包（未出貨的條目）裡有模組出現超過一次：\n  " + "\n  ".join(dupes)
         + "\n⇒ 同一個模組這一包的改動要合併成一筆。"
@@ -192,12 +193,17 @@ def test_vr3_one_entry_per_module_not_one_per_day():
     )
 
 
-def unshipped_module_dupes(entries, shipped):
-    """同一模組出現一筆以上**未出貨**條目的清單。已出貨＝(module, version) 在正式機基準裡。"""
+def unshipped_module_dupes(entries, shipped, skip_placeholders=False):
+    """同一模組出現一筆以上**未出貨**條目的清單。已出貨＝(module, version) 在正式機基準裡。
+
+    skip_placeholders（分支上）：`"version": "next"` 佔位不算——列車 train_number.py 取號時會把它併進同模組的那一筆
+    （PLAYBOOK §G6）；在分支上改寫別人已寫的那一筆＝兩條分支改同一行＝又回到合併衝突。列車／platform 上不略過。"""
     shipped_keys = {(e.get("module"), e.get("version")) for e in shipped}
     seen, dupes = {}, []
     for e in entries:
         if (e.get("module"), e.get("version")) in shipped_keys:
+            continue
+        if skip_placeholders and e.get("version") == "next":
             continue
         key = e.get("module")
         if key in seen:
@@ -214,6 +220,14 @@ def test_vr3_counts_only_unshipped_entries():
     assert unshipped_module_dupes([new1, new2], shipped=[old]) == ["傳票（2026-09-24h 與 2026-09-25a）"]
     assert unshipped_module_dupes([new1, old], shipped=[old]) == []
     assert len(unshipped_module_dupes([new1, old], shipped=[])) == 1, "基準過期時同樣的資料要紅（訊息指向基準）"
+
+
+def test_vr3_placeholders_are_skipped_only_on_branches():
+    """分支：佔位＋同模組已有的未出貨條目 ⇒ 不紅（列車取號時併）；列車／platform（不略過）⇒ 紅。"""
+    new1 = {"module": "傳票", "version": "2026-09-24h"}
+    pend = {"module": "傳票", "version": "next"}
+    assert unshipped_module_dupes([new1, pend], shipped=[], skip_placeholders=True) == []
+    assert unshipped_module_dupes([new1, pend], shipped=[], skip_placeholders=False) == ["傳票（2026-09-24h 與 next）"]
 
 
 # ══════════════════════════════════════════════════════════════════════

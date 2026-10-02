@@ -11,7 +11,7 @@ from fastapi.responses import Response
 from core import registry
 from db import get_db
 from helpers import _audit, _require_user, _tok, require_any_module
-from helpers.xlsx_out import check_export_rate
+from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged
 from modules.accounting.ledger import export as _export
 from modules.accounting.ledger import features as _features
 from modules.accounting.ledger import tax401 as _tax
@@ -62,6 +62,7 @@ def tax401(year: int, period: int, authorization: str = Header(None)):
 
 
 @router.get("/tax401/export")
+@export_logged("xlsx", "accounting", "ledger-tax401")
 def tax401_export(year: int, period: int, authorization: str = Header(None)):
     user = _require_tax_read(authorization)
     check_export_rate(user["id"], "excel")
@@ -92,6 +93,9 @@ def tax401_settlement(body: dict = Body(...), authorization: str = Header(None))
         _flag(conn)
         try:
             res = _tax.generate_settlement(conn, int(b.get("year")), int(b.get("period")), (user or {}).get("username") or "", _invoices())
+        except _tax.TaxConflict as exc:
+            conn.rollback()
+            raise HTTPException(409, str(exc))
         except (_tax.TaxError, ValueError, TypeError) as exc:
             conn.rollback()
             raise HTTPException(400, str(exc))
@@ -134,32 +138,43 @@ def withholding_remit(body: dict = Body(...), authorization: str = Header(None))
     try:
         _wh_flag(conn)
         try:
-            n = _wh.mark_remitted(conn, b.get("ids") or [], b.get("remitted_at"), str(b.get("voucher_no") or ""))
+            n = _wh.mark_remitted(conn, b.get("ids"), b.get("remitted_at"), str(b.get("voucher_no") or ""))
         except (_wh.WithholdingError, ValueError, TypeError) as exc:
             conn.rollback()
             raise HTTPException(400, str(exc))
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), "ledger.withholding.remit", "gl_withholding_items", ",".join(str(i) for i in (b.get("ids") or [])[:20]),
-           "登記繳庫 %d 筆（%s）" % (n, b.get("remitted_at")))
+    _audit(_tok(authorization), "ledger.withholding.remit", "gl_withholding_items", "%d 筆" % len(b["ids"]),
+           "登記繳庫 %d 筆（繳庫日 %s，傳票 %s；項目 %s）" % (n, b.get("remitted_at"), b.get("voucher_no") or "未連結", ",".join(str(i) for i in b["ids"])))
     return {"updated": n}
 
 
 @router.post("/withholding/unremit")
 def withholding_unremit(body: dict = Body(...), authorization: str = Header(None)):
     user = _require_tax_write(authorization)
-    ids = (body or {}).get("ids") or []
+    if user.get("role") != "superadmin":              # B：取消繳庫登記只有最高管理者（登記繳庫本身不需簽核）
+        raise HTTPException(403, "只有最高管理者（會計主管）可以取消扣繳繳庫登記。")
+    ids = (body or {}).get("ids")
+    reason = str((body or {}).get("reason") or "")
     conn = get_db()
     try:
         _wh_flag(conn)
         try:
-            n = _wh.unmark_remitted(conn, ids)
-        except (ValueError, TypeError) as exc:
+            res = _wh.unmark_remitted(conn, ids, reason)
+        except (_wh.WithholdingError, ValueError, TypeError) as exc:
             conn.rollback()
             raise HTTPException(400, str(exc))
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), "ledger.withholding.unremit", "gl_withholding_items", ",".join(str(i) for i in ids[:20]), "取消繳庫登記 %d 筆" % n)
-    return {"updated": n}
+    _audit(_tok(authorization), "ledger.withholding.unremit", "gl_withholding_items", "%d 筆" % len(ids),
+           "取消繳庫登記 %d 筆，原因：%s；原狀態（項目、繳庫日、傳票id）：%s" % (res["updated"], reason.strip()[:80], res["previous"]))
+    return {"updated": res["updated"]}
+
+
+# ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
+# 匯出稽核／PDF 姊妹的「歸屬區」＝稽核 detail.module 的字串，**不是權限 key**；用常數傳而不是字面量：
+# tests/test_module_keys_consistency 的後端掃描器把任何 module 等號字串字面量當權限 key。
+_EXPORT_AREA = "accounting"
+add_pdf_sibling(router, "/tax401/export/pdf", tax401_export, module=_EXPORT_AREA, name="ledger-tax401", title="營業稅 401 工作底稿")

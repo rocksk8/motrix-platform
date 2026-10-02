@@ -468,11 +468,11 @@
             <template x-for="item in lane.items" :key="itemKey(item)">
               <div class="aq-card"
                    :class="{active: selected && itemKey(selected) === itemKey(item)}"
-                   @click="selectItem(item)">
+                   @click="selectItem(item)" :data-testid="'aq-item-' + item.quoteNo">
                 <span class="vm-spine" :class="'vm-spine--' + ageTone(item)"></span>
                 <div class="aq-card__in">
                   <div class="aq-card__r1">
-                    <span class="aq-card__no" x-text="item.quoteNo"></span>
+                    <span class="aq-card__no" x-text="item.displayNo || item.quoteNo"></span>
                     <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)" x-text="docTypeLabel(item)"></span>
                     <span class="aq-card__age" :class="'vm-age--' + ageWord(item)" x-text="ageText(item)"></span>
                   </div>
@@ -491,11 +491,11 @@
                     </span>
                     <span class="aq-card__act">
                       <!-- P8：自訂模組單據的簽核在它自己的頁面（依該單那一版的定義）⇒ 卡片只給「開啟簽核」 -->
-                      <template x-if="item.type === 'custom_record'">
+                      <template x-if="item.type === 'custom_record' || item.type === 'custom_module_def'">
                         <a class="btn btn-primary btn-sm" :href="customRecordHref(item)" @click.stop
-                           :data-open-custom="item.moduleKey + ':' + item.quoteNo">開啟簽核</a>
+                           :data-open-custom="(item.moduleKey || '') + ':' + item.quoteNo">開啟簽核</a>
                       </template>
-                      <template x-if="item.type !== 'custom_record'">
+                      <template x-if="item.type !== 'custom_record' && item.type !== 'custom_module_def'">
                         <span style="display:contents">
                           <button type="button" class="btn btn-primary btn-sm"
                                   @click.stop="quickApprove(item)" :disabled="actioning">核准</button>
@@ -540,9 +540,9 @@
             <template x-for="item in grp.items" :key="itemKey(item)">
               <div class="aq-qrow"
                    :class="{active: selected && itemKey(selected) === itemKey(item)}"
-                   @click="selectItem(item)">
+                   @click="selectItem(item)" :data-testid="'aq-item-' + item.quoteNo">
                 <span class="vm-lamp" :class="'vm-lamp--' + ageTone(item)"></span>
-                <span class="aq-qrow__no" x-text="item.quoteNo"></span>
+                <span class="aq-qrow__no" x-text="item.displayNo || item.quoteNo"></span>
                 <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)" x-text="docTypeLabel(item)"></span>
                 <span class="aq-qrow__who" x-text="item.customer"></span>
                 <span class="aq-qrow__age" x-text="ageText(item)"></span>
@@ -579,7 +579,7 @@
           <button @click="closeDrawer()" class="mob-back-aq" style="display:none;align-items:center;gap:5px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);padding:0;font-family:var(--font-zh)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>列表</button>
           
           <div class="aq-detail-title">
-            <div class="aq-detail-quote-no" x-text="selected?.quoteNo"></div>
+            <div class="aq-detail-quote-no" x-text="selected?.displayNo || selected?.quoteNo"></div>
             <div class="aq-detail-customer" x-text="(selected?.customer || '') + (selected?.projectName ? '　' + selected.projectName : '')"></div>
           </div>
           <div class="aq-detail-actions">
@@ -589,15 +589,18 @@
                  退回頁面（`voucher.html`），佇列這裡直接連過去，不必在通用
                  抽屜裡重做一次（`/api/approval-queue/detail` 也還沒有它的分支，
                  那個守門是 `_guard_case()`，是「案件」的存取模型，傳票不是）。 -->
-            <a :href="selected?.type === 'voucher' ? ('voucher.html?id=' + (selected?.voucherId||''))
+            <a :href="selected?.openUrl ? selected.openUrl
+                    : selected?.type === 'voucher' ? ('voucher.html?id=' + (selected?.voucherId||''))
+                    : selected?.type === 'ledger_action' ? 'ledger-periods.html'
                     : selected?.type === 'bonus_case_award' ? ('bonus.html?q=' + encodeURIComponent(selected?.quoteNo||''))
+                    : selected?.type === 'bonus_correction' ? ('bonus-corrections.html?no=' + encodeURIComponent(selected?.quoteNo||''))
                     : isVoucher(selected) ? ('case-management.html?no=' + (selected?.linkedQuoteNo||''))
                     : ('quotation-form.html?id=' + (selected?.quoteNo||''))" target="_blank"
                style="font-size:12px;color:var(--accent);text-decoration:none;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);display:inline-flex;align-items:center;gap:5px">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-              <span x-text="selected?.type === 'voucher' ? '開啟傳票' : selected?.type === 'bonus_case_award' ? '開啟獎金分潤' : (isVoucher(selected) ? '開啟案件管理' : '開啟報價單')"></span>
+              <span x-text="selected?.openUrl ? '開啟單據' : selected?.type === 'voucher' ? '開啟傳票' : selected?.type === 'ledger_action' ? '開啟期間與結帳' : selected?.type === 'bonus_case_award' ? '開啟獎金分潤' : selected?.type === 'bonus_correction' ? '開啟獎金更正單' : (isVoucher(selected) ? '開啟案件管理' : '開啟報價單')"></span>
             </a>
-            <button class="btn btn-sm" x-show="selected?.type !== 'case_change' && selected?.type !== 'bonus_case_award'" @click="previewItem(selected)" :disabled="previewFetching"
+            <button class="btn btn-sm" x-show="selected?.type !== 'case_change' && selected?.type !== 'bonus_case_award' && selected?.type !== 'bonus_correction'" @click="previewItem(selected)" :disabled="previewFetching"
                     style="font-size:12px;color:var(--accent);background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;display:inline-flex;align-items:center;gap:5px;cursor:pointer">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               預覽
@@ -613,13 +616,13 @@
             <!-- Can approve: my turn in steps, OR (no steps + superadmin + not self) -->
             <template x-if="canApprove(selected)">
               <div style="display:flex;gap:8px;flex-wrap:wrap">
-                <button class="btn btn-approve btn-sm" @click="doApprove()" :disabled="actioning">
+                <button class="btn btn-approve btn-sm" @click="doApprove()" data-testid="aq-approve" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   確認簽核
                 </button>
-                <button class="btn btn-reject btn-sm" @click="openRejectModal()" :disabled="actioning">
+                <button class="btn btn-reject btn-sm" @click="openRejectModal()" data-testid="aq-reject" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                  退回草稿
+                  <span x-text="selected?.type === 'ledger_action' ? '退回申請' : '退回草稿'">退回草稿</span>
                 </button>
                 <button x-show="!isVoucher(selected)" class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
@@ -632,9 +635,9 @@
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                 <span style="font-size:11px;color:#6B7280;padding:5px 9px;background:#F3F4F6;border-radius:5px;white-space:nowrap"
                       x-text="waitingForText(selected)"></span>
-                <button class="btn btn-reject btn-sm" @click="openRejectModal()" :disabled="actioning">
+                <button class="btn btn-reject btn-sm" @click="openRejectModal()" data-testid="aq-reject" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                  退回草稿
+                  <span x-text="selected?.type === 'ledger_action' ? '退回申請' : '退回草稿'">退回草稿</span>
                 </button>
                 <button x-show="!isVoucher(selected)" class="btn btn-reject-final btn-sm" @click="openRejectFinalModal()" :disabled="actioning">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
@@ -940,14 +943,14 @@
 
         <!-- Bottom action bar: show when canApprove and there's content to scroll past -->
         <div x-show="canApprove(selected)" style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-light);display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <button class="btn btn-approve" @click="doApprove()" :disabled="actioning" style="min-width:110px">
+          <button class="btn btn-approve" @click="doApprove()" data-testid="aq-approve" :disabled="actioning" style="min-width:110px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             <span x-show="!actioning">確認簽核</span>
             <span x-show="actioning">處理中…</span>
           </button>
-          <button class="btn btn-reject" @click="openRejectModal()" :disabled="actioning" style="min-width:90px">
+          <button class="btn btn-reject" @click="openRejectModal()" data-testid="aq-reject" :disabled="actioning" style="min-width:90px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            退回草稿
+            <span x-text="selected?.type === 'ledger_action' ? '退回申請' : '退回草稿'">退回草稿</span>
           </button>
           <button x-show="!isVoucher(selected)" class="btn btn-reject-final" @click="openRejectFinalModal()" :disabled="actioning" style="min-width:90px">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
@@ -977,6 +980,8 @@
         <iframe :src="previewBlobUrl" style="width:100%;height:100%;border:none;display:block"></iframe>
       </div>
       <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
+        <button x-show="previewItemData && canApprove(previewItemData)" data-testid="preview-return" @click="returnFromPreview()"
+                style="padding:7px 16px;border:1px solid #FCA5A5;border-radius:7px;font-size:13px;font-family:var(--font-zh);background:#FEF2F2;color:#B91C1C;font-weight:600;cursor:pointer">退回修改</button>
         <button @click="closePreview()"
                 style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">關閉</button>
       </div>
@@ -986,17 +991,20 @@
   <!-- Reject modal -->
   <div class="reject-modal-overlay" x-show="rejectModalOpen" @click.self="rejectModalOpen=false">
     <div class="reject-modal">
-      <h3 x-text="selected?.type === 'case_change' ? '拒絕此變更' : '退回草稿'"></h3>
-      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" x-show="selected?.type !== 'case_change'">
+      <h3 x-text="selected?.type === 'case_change' ? '拒絕此變更' : (selected?.type === 'ledger_action' ? '退回申請' : '退回草稿')"></h3>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" x-show="selected?.type === 'ledger_action'">
+        這個申請會退回給申請人，退回原因會顯示在他的申請列表；申請人可以修改後重新申請。
+      </p>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" x-show="selected?.type !== 'case_change' && selected?.type !== 'ledger_action'">
         此<span x-text="selected ? docTypeLabel(selected) : '報價單'"></span>將退回「草稿」狀態，申請人可修改後重新送出。
       </p>
       <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px" x-show="selected?.type === 'case_change'">
         此變更申請將被拒絕、不會套用到案件資料（暫存的上傳檔案會一併刪除），申請人會收到通知。
       </p>
-      <textarea x-model="rejectNote" placeholder="退回原因（選填，供申請人參考）"></textarea>
+      <textarea x-model="rejectNote" data-testid="reject-reason" placeholder="退回原因（必填，供申請人參考）"></textarea>
       <div class="reject-modal-footer">
         <button class="btn btn-ghost btn-sm" @click="rejectModalOpen=false">取消</button>
-        <button class="btn btn-reject btn-sm" @click="doReject()" :disabled="actioning" x-text="selected?.type === 'case_change' ? '確認拒絕' : '確認退回'"></button>
+        <button class="btn btn-reject btn-sm" data-testid="reject-confirm" @click="doReject()" :disabled="actioning" x-text="selected?.type === 'case_change' ? '確認拒絕' : '確認退回'"></button>
       </div>
     </div>
   </div>
@@ -1233,7 +1241,7 @@
           if (item.type === 'completion_note') return '完工單'
           if (item.type === 'payment_request') return '請款單'
           if (item.type === 'case_change') return '已結案案件變更'
-          if (item.type === 'extra_expense') return '案件額外支出'
+          if (item.type === 'extra_expense') return item.typeLabel || '案件額外支出'     // 費用單據（A2）：依類型顯示（請購單／採購單／差旅費用請款單／零用金支付單）；舊版額外支出沒有 typeLabel
           if (item.type === 'dispatch_file_delete') return '報價單附件刪除'
           // 已核准的額外支出要改內容走這條（DB v76）。標題要跟原單分得開，
           // 否則簽核人不知道自己簽的是「新增一筆」還是「改一筆已核准的」
@@ -1242,21 +1250,27 @@
           // 開票申請憑據都叫「傳票」的舊稱），這裡要跟後端 APPROVAL_DOC_TYPE_LABELS
           // 一致寫「傳票（會計）」，否則簽核人分不出卡片上是哪一種。
           if (item.type === 'voucher') return '傳票（會計）'
+          if (item.type === 'ledger_action') return '總帳申請'        // 會計規定 C 類：結帳／重開期間／年度決算／期初批次
           // SPEC-BONUS §十一（2026-09-24）：以案件為中心的獎金分潤
           if (item.type === 'bonus_award') return '獎金'   // 之前漏了 ⇒ 落到最後一行被標成「報價單」
           if (item.type === 'bonus_case_award') return '獎金分潤'
+          if (item.type === 'bonus_correction') return '獎金更正單'
           // P8（IP-10）：自訂模組單據，標籤用模組名稱
           if (item.type === 'custom_record') return item.moduleName || item.moduleKey || '自訂模組'
-          return '報價單'
+          if (item.type === 'custom_module_def') return '自訂模組定義'     // S4：模組定義送審
+          return item.typeLabel || '報價單'     // A2-0 #2：模組登記的新單據類型自帶標籤
         },
 
         // P8：自訂模組單據開在執行頁（簽核人不需要模組權限；網址帶 key 與單號，不必手打）
         customRecordHref(item) {
+          // S4：模組定義送審 ⇒ 審核頁（核可／退回在那裡做，含與現行版的差異；簽核鏈上的人不一定是最高管理者，所以不放建構器頁）
+          if (item?.type === 'custom_module_def') return 'custom-def-review.html?key=' + encodeURIComponent(item?.moduleKey || '')
           return 'custom-records.html?key=' + encodeURIComponent(item?.moduleKey || '') + '&no=' + encodeURIComponent(item?.quoteNo || '')
         },
 
         cardSubtitle(item) {
           if (item?.type === 'custom_record') return (item.requestedByDisplay || '') + (item.statusLabel ? '｜' + item.statusLabel : '')
+          if (item?.type === 'custom_module_def') return (item.requestedByDisplay || '') + (item.note ? '｜' + item.note : '')
           return item.customer + (item.projectName ? '｜' + item.projectName : '')
         },
 
@@ -1268,9 +1282,9 @@
           if (item?.type === 'payment_request') return 'pr'
           if (item?.type === 'case_change') return 'cc'
           if (item?.type === 'dispatch_file_delete') return 'cv'
-          if (item?.type === 'voucher') return 'vo'
-          if (item?.type === 'bonus_case_award') return 'pr'
-          if (item?.type === 'custom_record') return 'cm'
+          if (item?.type === 'voucher' || item?.type === 'ledger_action') return 'vo'
+          if (item?.type === 'bonus_case_award' || item?.type === 'bonus_correction') return 'pr'
+          if (item?.type === 'custom_record' || item?.type === 'custom_module_def') return 'cm'
           return 'quotation'
         },
 
@@ -1281,8 +1295,11 @@
           if (item?.type === 'completion_note') return '/api/completion-notes'
           if (item?.type === 'payment_request') return '/api/payment-requests'
           if (item?.type === 'voucher') return '/api/vouchers'
+          if (item?.type === 'ledger_action') return '/api/ledger/action-requests'
           // 吃案件單號：/api/bonus/cases/{quote_no}/approve|reject
           if (item?.type === 'bonus_case_award') return '/api/bonus/cases'
+          // 吃更正單號：/api/bonus/corrections/{corr_no}/approve|reject
+          if (item?.type === 'bonus_correction') return '/api/bonus/corrections'
           return '/api/quotations'
         },
 
@@ -1291,7 +1308,7 @@
         //    不同的識別碼，不能沿用 `apiBase(item) + '/' + item.quoteNo` 那一套。
         //    ⚠️ 這裡只解決「用哪個當路徑參數」，不是新開一套動作邏輯。
         itemPathId(item) {
-          return item?.type === 'voucher' ? item.voucherId : item?.quoteNo
+          return item?.type === 'voucher' ? item.voucherId : item?.type === 'ledger_action' ? item.requestId : item?.quoteNo
         },
 
         isVoucher(item) {
@@ -1333,6 +1350,7 @@
           if (item?.type === 'shipping_note') return (item.total || 0) + ' 項'
           if (item?.type === 'case_change') return item.projectName || ''
           if (item?.type === 'custom_record') return item.statusLabel || ''
+          if (item?.type === 'custom_module_def') return '第 ' + (item.definitionVersion || '') + ' 版'
           return 'NT$ ' + (item?.total || 0).toLocaleString()
         },
 
@@ -1343,10 +1361,12 @@
         async previewItem(item) {
           // 額外支出跟已結案變更一樣沒有 PDF 可預覽
           if (!item || item.type === 'case_change' || item.type === 'dispatch_file_delete' || item.type === 'extra_expense'
-              || item.type === 'extra_expense_change' || item.type === 'bonus_case_award') return
+              || item.type === 'extra_expense_change' || item.type === 'bonus_case_award' || item.type === 'bonus_correction') return
           this.previewFetching = true
           try {
-            const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(this.itemPathId(item))}/pdf-download`, {
+            // 傳票：pdf-download 只給簽核完成的（400）；待簽核要看的是「預覽稿」（/preview，HTML，含紅色「未核可・僅供預覽」）
+            const tail = item.type === 'voucher' ? '/preview' : '/pdf-download'
+            const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(this.itemPathId(item))}${tail}`, {
               headers: { Authorization: 'Bearer ' + this.session.token }
             })
             if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); this.previewFetching = false; return }
@@ -1358,15 +1378,36 @@
           this.previewFetching = false
         },
 
+        // 簽核人常常不是案件的人：換簽章時帶上目前詳情的 (type, id)，伺服器以詳情守門＋詳情列出的路徑放行（2026-09-30 P0）
+        _photoTokenUrl(path) {
+          const d = this.detail
+          const ctx = (d && d.type && d.id) ? '&type=' + encodeURIComponent(d.type) + '&id=' + encodeURIComponent(d.id) : ''
+          return API + '/api/photo-token?path=' + encodeURIComponent(path) + ctx
+        },
+
         async previewFile(file) {
+          // 共用預覽元件（static/file-preview.js）頁內預覽；取檔仍用帶詳情情境 (type,id) 的簽章（簽核人常常不是案件的人）
           try {
-            const r = await fetch(`${API}/api/photo-token?path=${encodeURIComponent(file.path)}`, {
-              headers: { Authorization: 'Bearer ' + this.session.token }
+            await MotrixFilePreview.openFile(file, {
+              fetchBlob: async (it) => {
+                const r = await fetch(this._photoTokenUrl(it.path), { headers: { Authorization: 'Bearer ' + this.session.token } })
+                if (!r.ok) throw new Error('取得檔案連結失敗（HTTP ' + r.status + '）')
+                const { token } = await r.json()
+                const f = await fetch(`${API}/api/uploads/${it.path}?pt=${encodeURIComponent(token)}`)
+                if (!f.ok) throw new Error('HTTP ' + f.status)
+                return f.arrayBuffer()
+              },
             })
-            if (!r.ok) { alert('取得檔案連結失敗'); return }
-            const { token } = await r.json()
-            window.open(`${API}/api/uploads/${file.path}?pt=${encodeURIComponent(token)}`, '_blank')
           } catch (e) { alert('開啟檔案失敗：' + e.message) }
+        },
+
+        // 預覽裡的「退回修改」：關掉預覽、對同一張開原本的退回視窗（原因必填）
+        returnFromPreview() {
+          const item = this.previewItemData
+          if (!item) return
+          this.closePreview()
+          this.selected = item
+          this.openRejectModal()
         },
 
         closePreview() {
@@ -1415,6 +1456,7 @@
             const d = await r.json()
             this.queue = d.queue || []
             this.totalPending = d.total || 0
+            try { window.dispatchEvent(new CustomEvent('motrix:approval-changed')) } catch (e) {}      // 選單紅點／數字跟著重抓（簽核處理完不會停在舊值）
             this.myDelegatedFor = d.myDelegatedFor || []
             this.reassignTypes = Array.isArray(d.reassignTypes) ? d.reassignTypes : []
             // Keep selection in sync
@@ -1501,7 +1543,7 @@
 
         selectItem(item) {
           // P8：自訂模組單據沒有佇列詳情端點，簽核在執行頁做 ⇒ 直接開那一張
-          if (item && item.type === 'custom_record') { location.href = this.customRecordHref(item); return }
+          if (item && (item.type === 'custom_record' || item.type === 'custom_module_def')) { location.href = this.customRecordHref(item); return }
           this.selected = item
           this.drawerOpen = true
           this.loadDetail(item)
@@ -1516,7 +1558,7 @@
           this.fileUrls = {}
           if (!item) return
           // 獎金分潤沒有佇列詳情端點：明細到獎金分潤頁看（抽屜裡有連結）
-          if (item.type === 'bonus_case_award') return
+          if (item.type === 'bonus_case_award' || item.type === 'bonus_correction') return
           const id = item.type === 'case_change' ? item.changeRequestId
                    : item.type === 'extra_expense' ? item.extraExpenseId
                    : item.quoteNo
@@ -1535,17 +1577,25 @@
         },
 
         // 圖片要能直接顯示縮圖 → 先換簽章 URL（/api/uploads 需要 pt 簽章）
+        // 2026-09-30 稽核 S1：一次批次換完（原本每張圖打一次單張端點 ⇒ 伺服器每張都重跑一次詳情守門）
         async _prefetchImages() {
-          for (const f of (this.detail?.files || [])) {
-            if (f.kind !== 'image' || !f.path || f.dataUrl) continue
-            try {
-              const r = await fetch(API + '/api/photo-token?path=' + encodeURIComponent(f.path),
-                                    { headers: { Authorization: 'Bearer ' + this.session.token } })
-              if (!r.ok) continue
-              const d = await r.json()
-              this.fileUrls[f.id] = API + '/api/uploads/' + f.path + '?pt=' + encodeURIComponent(d.token)
-            } catch (e) {}
-          }
+          const d = this.detail
+          const imgs = (d?.files || []).filter(f => f.kind === 'image' && f.path && !f.dataUrl)
+          if (!imgs.length) return
+          try {
+            const r = await fetch(API + '/api/photo-token/batch', {
+              method: 'POST',
+              headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ paths: imgs.map(f => f.path), type: d.type || null, id: d.id || null }),
+            })
+            if (!r.ok) return
+            const res = await r.json()
+            if (this.detail !== d) return            // 回應晚到：使用者已切到別筆
+            for (const f of imgs) {
+              const t = (res.tokens || {})[f.path]
+              if (t) this.fileUrls[f.id] = API + '/api/uploads/' + f.path + '?pt=' + encodeURIComponent(t)
+            }
+          } catch (e) {}
         },
 
         async openFile(f) {
@@ -1577,7 +1627,11 @@
             const cur = item.currentTier ?? 0
             if (cur >= tiers.length) return false
             const approvers = tiers[cur].approvers || []
+            // 系統規定的最終關卡（傳票的『最高管理者（會計主管）』層、總帳申請）：同一層的任一人都可以核准，不是循序
+            if (tiers[cur].system) return approvers.some(a => a.status !== 'approved' && this._isMeOrDelegate(a.username))
             // sequential within tier: only the first unapproved approver may act
+            // 模組定義送審：審核人（含最高管理者）任一位都可以決定，不是依序（helpers/custom_def_review.decide）
+            if (item.type === 'custom_module_def') return approvers.some(a => a.status !== 'approved' && this._isMeOrDelegate(a.username)) && item.requestedBy !== this.session.username
             const firstPending = approvers.find(a => a.status !== 'approved')
             return firstPending && this._isMeOrDelegate(firstPending.username)
           }
@@ -1594,6 +1648,7 @@
             const cur = item.currentTier ?? 0
             if (cur < tiers.length) {
               const firstPending = (tiers[cur].approvers || []).find(a => a.status !== 'approved')
+              if (tiers[cur].system && firstPending) return `等待最高管理者（會計主管）簽核（第 ${cur + 1}/${tiers.length} 層）`
               if (firstPending) {
                 const name = firstPending.displayName || firstPending.username
                 return `等待 ${name} 簽核（第 ${cur + 1}/${tiers.length} 層）`
@@ -1610,6 +1665,8 @@
           if (a.status === 'approved') return '已簽核' + selfTag + '　' + new Date(a.approvedAt).toLocaleString('zh-TW')
           if (tierIdx < currentTier) return '已完成'
           if (tierIdx > currentTier) return '尚未輪到' + selfTag
+          // 系統規定的最終關卡（最高管理者／會計主管）：同層任一位都可以核准，不是一位一位循序——不要寫「等待前一位完成」
+          if (tier.system) return '任一位最高管理者可核准' + selfTag
           const firstPending = (tier.approvers || []).find(ap => ap.status !== 'approved')
           return (firstPending?.username === a.username ? '等待簽核中' : '等待前一位完成') + selfTag
         },
@@ -1642,7 +1699,8 @@
           }
           // 額外支出的端點掛在案件底下（/quotations/{no}/extra-expenses/{id}/approve），
           // 形狀跟 apiBase(item) + quoteNo 那套不一樣，另外組。
-          const approveUrl = item.type === 'extra_expense'
+          const approveUrl = item.approveUrl ? item.approveUrl    // A2-0 #2：項目自帶端點（新單據類型不必再改這一頁）
+            : item.type === 'extra_expense'
             ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/approve`
             : item.type === 'extra_expense_change'
             ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/change-request/approve`
@@ -1654,11 +1712,12 @@
           const isLastTier  = isMultiTier && (item.currentTier ?? 0) === tiers.length - 1
           const willFinish  = !isMultiTier || isLastTier
           const finalStatus = item.type === 'bonus_case_award' ? '待發放'
+                            : item.type === 'bonus_correction' ? '生效（沖轉傳票＋補發）'
                             : this.isVoucher(item) ? '已核准' : '已送出'
           // 同一人連任多層：一次問清楚、一次簽完（2026-09-15）
           // ⚠ 獎金分潤的後端簽核不做連簽（approve_case_bonus 不處理 cascade）⇒ 不預告「一次簽完」，
           //   否則確認視窗說一併完成兩層、實際只簽一層（2026-09-25 hichan-0a 裁：只修預告、不改獎金簽核）
-          const cascadeNos = item.type === 'bonus_case_award' ? [] : window.MotrixApproval.selfCascadeTiers(
+          const cascadeNos = (item.type === 'bonus_case_award' || item.type === 'bonus_correction') ? [] : window.MotrixApproval.selfCascadeTiers(
             tiers, item.currentTier ?? 0, this.session.username, this.myDelegatedFor)
           // 2026-09-25：拿掉額外支出／獎金分潤的 completesOnFirst（「當層任一人簽即通過」）——
           // 使用者裁示同層每一位都要依序簽完，連簽不可以替同層的別人簽（與後端 cascade_self_tiers 一致）
@@ -1738,6 +1797,7 @@
 
         async doReject() {
           if (!this.selected) return
+          if (!(this.rejectNote || '').trim()) { alert('退回要填原因'); return }   // 後端也強制（400）；這裡先擋，不白跑一趟
           const item = this.selected
           if (item.type === 'case_change') {
             this.actioning = true
@@ -1773,10 +1833,11 @@
             // 🔴 `AS3`：傳票沒有「拒絕」端點，「退回」對它就是 send-back
             //    （`vouchers.py:562`：狀態回草稿＋清除簽核＋單號升版），
             //    不是 `/reject`。body 的欄位名也是 `reason`，跟額外支出同形狀。
-            const isVoucherType = item.type === 'voucher'
+            const isVoucherType = item.type === 'voucher' || item.type === 'ledger_action'     // 總帳申請的退回端點與傳票同形狀（/send-back、body.reason）
             // 獎金分潤的駁回端點是 /reject，body 欄位名是 reason（同額外支出）
-            const isBonusCase = item.type === 'bonus_case_award'
-            const rejectUrl = isXEC
+            const isBonusCase = item.type === 'bonus_case_award' || item.type === 'bonus_correction'
+            const rejectUrl = item.rejectUrl ? item.rejectUrl
+              : isXEC
               ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/change-request/reject`
               : item.type === 'extra_expense'
               ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/reject`
@@ -1788,7 +1849,7 @@
             const r = await fetch(rejectUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-              body: JSON.stringify((isXE || isVoucherType || isBonusCase) ? { reason: this.rejectNote } : { note: this.rejectNote })
+              body: JSON.stringify((item.rejectField ? item.rejectField === 'reason' : (isXE || isVoucherType || isBonusCase)) ? { reason: this.rejectNote } : { note: this.rejectNote })
             })
             if (!r.ok) {
               const err = await r.json().catch(() => ({}))
@@ -1859,6 +1920,7 @@
   </div>
 
   <script src="../static/approval-cascade.js"></script>
+  <script src="../static/file-preview.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>

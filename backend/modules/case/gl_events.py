@@ -10,13 +10,43 @@
 - 保固（使用者裁示）：本批不特別處理，保固實際發生仍歸專案成本。
 只讀，不寫資料。
 """
+import json
+
 from db import get_db
 from helpers.legal_params import round_half_up
+from modules.case import expense_forms as _EF
 from modules.case import recognition as _rec
 
 
 def _i(x):
     return int(round_half_up(x or 0))
+
+
+def _accrual_lines(r, total, memo, live=None) -> list:
+    """E11 應付認列的分錄行。舊版列（kind=''）＝單一借方（案件成本）——**行為不變**。
+    費用單據（kind≠''）且明細金額加總＝單據金額 ⇒ 依費用類別**逐類**借方（行上帶 `category`＝類別代碼，W4 引擎據此重新解科目；
+    有案件 COST_PROJECT、無案件 EXP_OTHER），貸方 AP 合計。明細對不上金額（不該發生）⇒ 退回單一借方，不猜。"""
+    role = "COST_PROJECT" if r["quote_no"] else "EXP_OTHER"
+    ap = {"role": "AP", "side": "C", "amount": total, "memo": memo}
+    if not (r["kind"] or ""):
+        return [{"role": "COST_PROJECT", "side": "D", "amount": total, "memo": memo}, ap]
+    try:
+        lines = json.loads(r["lines_json"] or "[]")
+    except (TypeError, ValueError):
+        lines = []
+    by_cat = {}
+    for l in lines if isinstance(lines, list) else []:
+        if isinstance(l, dict):
+            key = l.get("categoryCode") or l.get("category") or ""
+            # 32-S3：採購單連到案件品項的列另成借方行並帶 `dims={"item": 品項id}`（金額、角色、類別都不變；沒有 itemId ⇒ 與以前逐行相同）
+            iid = str(l.get("itemId") or "").strip() if (r["kind"] or "") == "purchase_order" and r["quote_no"] else ""
+            if iid and (live is None or iid not in live):
+                iid = ""                                   # 品項已不在報價內（或查不到）⇒ 不帶 item 維度
+            by_cat[(key, iid)] = by_cat.get((key, iid), 0) + _i(l.get("amount"))
+    if not by_cat or sum(by_cat.values()) != total or any(v <= 0 for v in by_cat.values()):
+        return [{"role": role, "side": "D", "amount": total, "memo": memo}, ap]
+    return [{"role": role, "side": "D", "amount": v, "memo": memo, **({"category": k} if k else {}), **({"dims": {"item": iid}} if iid else {})}
+            for (k, iid), v in by_cat.items()] + [ap]
 
 
 def gl_events(start, end, *, changed_since=""):
@@ -25,12 +55,16 @@ def gl_events(start, end, *, changed_since=""):
     try:
         extra_rows = conn.execute(
             "SELECT id, quote_no, category, description, total_cost, expense_date, created_at, doc_no, invoice_no, invoice_date, approval_json,"
-            " paid_date, remit_actual, remit_fee, remit_review FROM case_extra_expenses WHERE status='已核准' ORDER BY id").fetchall()
+            " paid_date, remit_actual, remit_fee, remit_review, kind, lines_json, pay_method, pay_account_code"
+            " FROM case_extra_expenses WHERE status='已核准' AND " + _EF.payable_sql() + " ORDER BY id").fetchall()
+        from modules.case import purchase_items as _PI
+        live_by_quote = {q: _PI.load_live_item_ids(conn, q) for q in {r["quote_no"] for r in extra_rows
+                                                                  if (r["kind"] or "") == "purchase_order" and r["quote_no"] and "itemId" in (r["lines_json"] or "")}}
         mat_accrual = _rec.material_entries(conn, "accrual")
         mat_cash = _rec.material_entries(conn, "cash")
     finally:
         conn.close()
-    unsplit = pending = nodate = 0
+    unsplit = typed_unsplit = pending = nodate = 0
 
     for r in extra_rows:
         total = _i(r["total_cost"])
@@ -41,11 +75,14 @@ def gl_events(start, end, *, changed_since=""):
         memo = "%s %s" % (r["category"] or "額外支出", (r["description"] or "")[:30])
         doc = r["invoice_no"] or r["doc_no"] or ""
         if d and start <= d <= end:
-            unsplit += 1
+            if r["kind"]:
+                typed_unsplit += 1                                  # 費用單據：不是「專案成本」，另列說明
+            else:
+                unsplit += 1
             events.append({
                 "source_type": "case_extra_expense", "source_key": str(r["id"]), "event_code": "E11", "event_date": d, "doc_no": doc,
                 "case_no": r["quote_no"] or "", "party": {"key": "", "name": ""}, "tax_code": "", "mode": "snapshot",
-                "lines": [{"role": "COST_PROJECT", "side": "D", "amount": total, "memo": memo}, {"role": "AP", "side": "C", "amount": total, "memo": memo}],
+                "lines": _accrual_lines(r, total, memo, live_by_quote.get(r["quote_no"])),
                 "meta": {"category": r["category"] or "其他", "tax_unsplit": True, "date_estimated": not inv}})
         paid = (r["paid_date"] or "")[:10]
         if paid and start <= paid <= end:
@@ -61,15 +98,23 @@ def gl_events(start, end, *, changed_since=""):
                 lines.append({"role": "EXP_OTHER", "side": "D", "amount": actual - total, "memo": "付款多付（已核可）"})
             elif actual < total:
                 lines.append({"role": "EXP_OTHER", "side": "C", "amount": total - actual, "memo": "付款少付（已核可）"})
-            lines.append({"role": "BANK", "side": "C", "amount": actual + fee, "memo": memo})
+            # 付款方式（A2-3）：零用金貸 PETTY，其餘貸 BANK；出納另選了付款科目 ⇒ 帶 `account_code`（W4 的引擎優先採用）。舊版列＝BANK
+            _leg = {"role": "PETTY" if (r["pay_method"] or "") == "petty_cash" else "BANK", "side": "C", "amount": actual + fee, "memo": memo}
+            if (r["pay_account_code"] or "").strip():
+                _leg["account_code"] = r["pay_account_code"].strip()
+            lines.append(_leg)
             events.append({
                 "source_type": "case_extra_expense_payment", "source_key": str(r["id"]), "event_code": "E11b", "event_date": paid, "doc_no": doc,
                 "case_no": r["quote_no"] or "", "party": {"key": "", "name": ""}, "tax_code": "", "mode": "snapshot", "lines": lines, "meta": {}})
 
+    mat_pending = 0
     for m in mat_accrual:
         amt = _i(m["amount"])
         d = (m["date"] or "")[:10]
         if amt <= 0:
+            continue
+        if m.get("pending"):                                                       # 叫料審核（31-C）：審核中的叫料單不入帳，核准後再執行
+            mat_pending += 1
             continue
         if not d:
             nodate += 1
@@ -81,20 +126,39 @@ def gl_events(start, end, *, changed_since=""):
                 "event_date": d, "doc_no": "", "case_no": m["quoteNo"], "party": {"key": "", "name": ""}, "tax_code": "", "mode": "snapshot",
                 "lines": [{"role": "COST_PROJECT", "side": "D", "amount": amt, "memo": m["desc"][:40]}, {"role": "AP", "side": "C", "amount": amt, "memo": m["desc"][:40]}],
                 "meta": {"tax_unsplit": True, "date_estimated": bool(m.get("provisional")), "weak_key": not m["itemId"]}})
+    mat_remit_pending = 0
     for m in mat_cash:
         amt = _i(m["amount"])
         d = (m["date"] or "")[:10]
         if amt > 0 and d and start <= d <= end:
+            if m.get("remitPending"):                                              # 匯款多付尚未核可：暫不產生付款分錄（同 E11b）
+                mat_remit_pending += 1
+                continue
+            fee = _i(m.get("fee") or 0)
+            lines = [{"role": "AP", "side": "D", "amount": amt, "memo": m["desc"][:40]}]
+            if fee:                                                                # 付款明細的手續費（公司自付）
+                lines.append({"role": "FEE", "side": "D", "amount": fee, "memo": "匯款手續費（公司自付）"})
+            leg = {"role": "PETTY" if m.get("payMethod") == "petty_cash" else "BANK", "side": "C", "amount": amt + fee, "memo": m["desc"][:40]}
+            if m.get("payAccountCode"):
+                leg["account_code"] = m["payAccountCode"]
+            lines.append(leg)
+            # 有付款明細的叫料單：source_key 帶明細 id（冪等；明細屬於哪張申請由 payment_id 追溯）；舊單歷史維持 `案件::itemId`
+            key = "%s::%s" % (m["quoteNo"], m["itemId"] or m["desc"]) + (("::" + m["lineId"]) if m.get("lineId") else "")
             events.append({
-                "source_type": "case_material_payment", "source_key": "%s::%s" % (m["quoteNo"], m["itemId"] or m["desc"]), "event_code": "E12b",
-                "event_date": d, "doc_no": "", "case_no": m["quoteNo"], "party": {"key": "", "name": ""}, "tax_code": "", "mode": "snapshot",
-                "lines": [{"role": "AP", "side": "D", "amount": amt, "memo": m["desc"][:40]}, {"role": "BANK", "side": "C", "amount": amt, "memo": m["desc"][:40]}],
-                "meta": {"weak_key": not m["itemId"]}})
+                "source_type": "case_material_payment", "source_key": key, "event_code": "E12b",
+                "event_date": d, "doc_no": m.get("paymentCode") or "", "case_no": m["quoteNo"], "party": {"key": "", "name": ""}, "tax_code": "", "mode": "snapshot",
+                "lines": lines, "meta": {"weak_key": not m["itemId"]}})
 
     if unsplit:
         notices.append("%d 筆額外支出／叫料的來源金額是未拆稅（含稅）：以全額列專案成本；有進項稅額請在來源憑證補登（input_tax）。" % unsplit)
+    if typed_unsplit:
+        notices.append("%d 筆費用單據的來源金額是未拆稅（含稅）：以全額列費用（依費用類別對應的科目；未設定對應者列預設費用科目並標註）；有進項稅額請在來源憑證補登（input_tax）。" % typed_unsplit)
     if pending:
         notices.append("%d 筆額外支出付款的實付與應付有差額且尚未核可：暫不產生付款分錄，核可後再執行。" % pending)
     if nodate:
         notices.append("%d 筆叫料沒有發票日也沒有付款日：不產生分錄（請補日期）。" % nodate)
+    if mat_remit_pending:
+        notices.append("%d 筆叫料匯款的實付超過應付且尚未核可：暫不產生付款分錄，核可後再執行。" % mat_remit_pending)
+    if mat_pending:
+        notices.append("%d 筆叫料單審核中（待審核／簽核中）：暫不產生應付分錄，核准後再執行。" % mat_pending)
     return {"events": events, "notice": " ".join(notices)}

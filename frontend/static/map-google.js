@@ -94,6 +94,13 @@
         clickableIcons: false, streetViewControl: false, fullscreenControl: false,
       }))
       this._gmInfo = keepRaw(new g.InfoWindow())
+      document.getElementById('mp-canvas').setAttribute('data-mp-bm', 'google')
+      // 圖釘尺寸隨縮放、名稱標籤重疊時只留一個（map.html 的 `_afterPins`）；假 Google 沒有 addListener ⇒ 有才掛
+      var self = this
+      if (this._map.addListener) {
+        this._map.addListener('zoom_changed', function () { self._syncPinSize() })
+        this._map.addListener('idle', function () { self._afterPins() })
+      }
       this._redraw()
     },
 
@@ -142,7 +149,7 @@
       this._markerOf = new WeakMap()
       var data = []
       this.view.points.forEach(function (p) {
-        var m = self._gmMarker(p.lat, p.lon, self._pinHtml(p), self._popupHtml(p), null, false)
+        var m = self._gmMarker(p.lat, p.lon, self._pinHtml(p), self._popupHtml(p), 900, false)   // 高於 Google 自己的 POI／據點 500
         var fk = window.MotrixRecordLink ? window.MotrixRecordLink.focusKey(p) : null
         if (fk && !self._markerByKey[fk]) self._markerByKey[fk] = m
         self._markerOf.set(self._raw(p), m)
@@ -159,6 +166,7 @@
       this._fitAll(!!this._focus)
       this._applyFocus()
       if (this._pendingRow) { var r = this._pendingRow; this._pendingRow = null; this._focusPoint(r) }
+      this._afterPins()
     },
 
     _drawUser: function () {

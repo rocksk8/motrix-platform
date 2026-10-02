@@ -18,7 +18,8 @@ import pytest
 from core import source_tree
 from helpers import mail_types as mt
 
-RECIP = ("_lookup_emails", "_admin_emails", "_superadmin_emails", "_group_emails", "_department_manager_emails")
+RECIP = ("_lookup_emails", "_admin_emails", "_superadmin_emails", "_group_emails", "_department_manager_emails",
+         "send_registered")      # A2-0 #6：模組通用寄信入口；第一個位置參數＝字面 key，其餘一律關鍵字
 SEND = ("_async_send", "_send_raising", "_send", "_send_with_attachments")
 #: 禁用詞（口語、猜測、情緒化符號）。「您好」屬正式用語，不禁。
 BANNED = ("多半", "不會自己好", "看起來", "好像", "應該", "大概", "其實", "不用擔心", "救不回",
@@ -26,7 +27,7 @@ BANNED = ("多半", "不會自己好", "看起來", "好像", "應該", "大概"
 #: 寄信原語與收件人包裝函式本身（參數是變數，屬於實作；守門看的是它們的呼叫端）
 PRIMITIVES = {"_send", "_async_send", "_send_raising", "_send_with_attachments", "_smtp_send_blocked",
               "_admin_emails", "_superadmin_emails", "_group_emails", "_lookup_emails",
-              "_department_manager_emails", "_monthly_report_recipient_emails", "_with_event_recipients",
+              "_department_manager_emails", "_monthly_report_recipient_emails", "_with_event_recipients", "send_registered",
               # 只查詢「群組收件人是否為空」、不寄信（routers/mail_settings.py，稽核 M-S1）
               "_no_recipient"}
 

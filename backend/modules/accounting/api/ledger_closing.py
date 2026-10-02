@@ -10,7 +10,8 @@ from fastapi.responses import Response
 
 from db import get_db
 from helpers import _audit, _require_user, _tok, require_any_module
-from helpers.xlsx_out import check_export_rate
+from modules.accounting.api import ledger_requests as _requests
+from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged
 from modules.accounting.ledger import closing as _closing
 from modules.accounting.ledger import export as _export
 from modules.accounting.ledger import periods as _periods
@@ -76,6 +77,8 @@ def closing_generate(year: int, body: dict = Body(default={}), authorization: st
 @router.post("/years/{year}/close")
 def year_close(year: int, body: dict = Body(default={}), authorization: str = Header(None)):
     user = _require_closing_write(authorization)
+    if user.get("role") != "superadmin":                # C：一般財務人員送申請，最高管理者核准後自動執行
+        return _requests.submit(user, "year_close", dict(body or {}, year=year), authorization)
     conn = get_db()
     try:
         res = _run(conn, _closing.close_year, year, _who(user), bool((body or {}).get("accept_warnings")))
@@ -113,6 +116,7 @@ def year_statements(year: int, authorization: str = Header(None)):
 
 
 @router.get("/years/{year}/statements/export")
+@export_logged("xlsx", "accounting", "ledger-statements")
 def year_statements_export(year: int, authorization: str = Header(None)):
     user = _require_closing_read(authorization)
     check_export_rate(user["id"], "excel")
@@ -127,3 +131,10 @@ def year_statements_export(year: int, authorization: str = Header(None)):
     name = urllib.parse.quote("財務報表_%s年度%s.xlsx" % (year, "_決算" if source == "frozen" else ""))
     return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": "attachment; filename*=UTF-8''" + name})
+
+
+# ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
+# 匯出稽核／PDF 姊妹的「歸屬區」＝稽核 detail.module 的字串，**不是權限 key**；用常數傳而不是字面量：
+# tests/test_module_keys_consistency 的後端掃描器把任何 module 等號字串字面量當權限 key。
+_EXPORT_AREA = "accounting"
+add_pdf_sibling(router, "/years/{year}/statements/export/pdf", year_statements_export, module=_EXPORT_AREA, name="ledger-statements", title="財務報表")

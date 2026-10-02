@@ -282,6 +282,14 @@
             </div>
           </div>
 
+          <!-- 傳票（會計）：最終關卡由系統規定，不在設定裡 -->
+          <div x-show="key === 'voucher'" data-testid="as-voucher-final" style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid var(--border-light);border-radius:8px;background:#F8F7F4;margin-bottom:16px">
+            <div>
+              <div style="font-size:12px;font-weight:600">最終：最高管理者（系統規定）</div>
+              <div style="font-size:11px;color:var(--text-dim);margin-top:2px">會計傳票不論這裡怎麼設定，送審後<b>最後一層一律由最高管理者（會計主管）核准</b>才能過帳；這裡只決定它之前的層。此規定不可移除，也不會改動已儲存的流程設定。</div>
+            </div>
+          </div>
+
           <!-- Steps list -->
           <div class="as-steps" x-show="flows[key] && flows[key].steps.length > 0">
             <template x-for="(step, idx) in (flows[key] ? flows[key].steps : [])" :key="step._id">
@@ -641,8 +649,23 @@
           }
         },
 
+        // A2-0：模組登記的單據類型（後端 register_doc_type）接在內建清單後面；內建的字面清單維持原樣。
+        async loadDocTypes() {
+          try {
+            const r = await fetch(`${API}/settings/approval-doc-types`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+            if (!r.ok) return
+            for (const t of ((await r.json()).docTypes || [])) {
+              if (this.docTypeOrder.includes(t.code)) continue
+              this.docTypeOrder.push(t.code)
+              this.docTypeMeta[t.code] = t.label
+              this.flowSettingKeys[t.code] = { unified: 'unified_approval_flow', independent: t.code + '_approval_flow' }
+            }
+          } catch (e) { console.error('loadDocTypes', e) }
+        },
+
         async loadScope() {
           try {
+            await this.loadDocTypes()
             const r = await fetch(`${API}/settings/approval-flow-scope`, {
               headers: { Authorization: 'Bearer ' + this.session.token }
             })

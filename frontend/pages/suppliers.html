@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>供應商管理 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script src="../static/gov-lookup.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -965,7 +966,7 @@
         ws['!cols'] = [20,16,10,14,14,22,22,24,10,10,14,12,18,10,10,14,22,20].map(w=>({wch:w}))
         const wb = XLSX.utils.book_new()
         XLSX.utils.book_append_sheet(wb, ws, '供應商')
-        XLSX.writeFile(wb, `MOTRIX_供應商_${new Date().toISOString().slice(0,10)}.xlsx`)
+        XLSX.writeFile(wb, `MOTRIX_供應商_${MotrixDate.today()}.xlsx`)
       },
 
       async handleImport(event) {

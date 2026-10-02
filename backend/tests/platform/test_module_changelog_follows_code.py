@@ -18,7 +18,9 @@ import pytest
 from core import source_tree
 
 EXCLUDE = ("tests", "README.md", "SPEC.md", "CHANGELOG.md", "module.json")
-_TOP = re.compile(r"^##\s+(\d+\.\d+\.\d+)\b", re.M)
+#: 最上面的條目：「## X.Y.Z」或版號佔位「## (next…)」（PLAYBOOK §G6：分支不取號，列車 train_number.py 取號；
+#: 佔位也算「有寫條目」——准不准有佔位由 test_version_slots 另守）
+_TOP = re.compile(r"^##[ \t]+(?:(\d+\.\d+\.\d+)\b|\(next(?::(?:patch|minor|major))?\)).*$", re.M)
 
 
 def _git(repo, *args):
@@ -70,6 +72,11 @@ def heading_commit(repo, version, path):
     return _git(repo, "log", "-1", "-m", "--first-parent", "--format=%H", "-S", "## " + version, "--", path)
 
 
+def placeholder_commit(repo, heading_line, path):
+    """佔位標題（整行，含日期與分支 ⇒ 幾乎唯一）被寫進去的 commit；找法同 heading_commit。找不到 ⇒ ""。"""
+    return _git(repo, "log", "-1", "-m", "--first-parent", "--format=%H", "-S", heading_line, "--", path)
+
+
 def check_module(repo, rel_dir):
     """repo 內某個模組資料夾（repo 相對路徑）⇒ 問題清單。"""
     import json
@@ -85,14 +92,18 @@ def check_module(repo, rel_dir):
     top = _TOP.search(cl.read_text(encoding="utf-8")) if cl.is_file() else None
     if last_code:
         if top is None:
-            problems.append("有程式改動，但 CHANGELOG.md 沒有「## X.Y.Z」版號條目")
+            problems.append("有程式改動，但 CHANGELOG.md 沒有「## X.Y.Z」版號條目（或 `## (next)` 佔位）")
         else:
-            entry = heading_commit(repo, top.group(1), "%s/CHANGELOG.md" % rel_dir)
+            label = top.group(1) or top.group(0).rstrip()
+            if top.group(1):
+                entry = heading_commit(repo, top.group(1), "%s/CHANGELOG.md" % rel_dir)
+            else:
+                entry = placeholder_commit(repo, top.group(0).rstrip(), "%s/CHANGELOG.md" % rel_dir)
             if not entry:
-                problems.append("CHANGELOG 最上面的 %s 還沒提交" % top.group(1))
+                problems.append("CHANGELOG 最上面的 %s 還沒提交" % label)
             elif subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", last_code, entry]).returncode != 0:
                 problems.append("最後一次程式改動 %s 之後沒有新的版號條目（最上面仍是 %s，寫於 %s）"
-                                % (last_code[:8], top.group(1), entry[:8]))
+                                % (last_code[:8], label, entry[:8]))
     dirty = _git(repo, "status", "--porcelain", "--", *spec)
     head_manifest = _manifest_at(repo, "HEAD", "%s/module.json" % rel_dir)
     if head_manifest is not None and _without_version(manifest) != _without_version(head_manifest):
@@ -286,4 +297,44 @@ def test_rc_linear_history_behaves_as_before(repo):
     (repo / "mod" / "CHANGELOG.md").write_text("# m\n\n## 1.0.1 — d\n\n## 1.0.0 — d\n", encoding="utf-8")
     _commit(repo, "程式＋版號同一個 commit")
     assert heading_commit(repo, "1.0.1", "mod/CHANGELOG.md") == _git(repo, "rev-parse", "HEAD")
+    assert check_module(repo, "mod") == []
+
+
+# ── 版號佔位（PLAYBOOK §G6）：`## (next)` 也算有條目；時間順序照舊驗 ──────────────────────────
+
+NEXT_HEAD = "## (next) — 2026-09-30（wip/x）"
+
+
+def test_rc_placeholder_heading_after_code_passes(repo):
+    (repo / "mod" / "api.py").write_text("x = 2\n", encoding="utf-8")
+    _commit(repo, "改程式")
+    (repo / "mod" / "CHANGELOG.md").write_text("# m\n\n%s\n- 修正\n\n## 1.0.0 — d\n- 初版\n" % NEXT_HEAD, encoding="utf-8")
+    _commit(repo, "寫佔位條目")
+    assert check_module(repo, "mod") == []
+
+
+def test_rc_code_change_after_placeholder_is_still_red(repo):
+    """反向控制：佔位寫完之後又改程式 ⇒ 紅（佔位不是免死金牌）。"""
+    (repo / "mod" / "CHANGELOG.md").write_text("# m\n\n%s\n- 修正\n\n## 1.0.0 — d\n- 初版\n" % NEXT_HEAD, encoding="utf-8")
+    _commit(repo, "先寫佔位")
+    (repo / "mod" / "api.py").write_text("x = 3\n", encoding="utf-8")
+    _commit(repo, "再改程式")
+    assert any("之後沒有新的版號條目" in p and "(next)" in p for p in check_module(repo, "mod"))
+
+
+def test_rc_malformed_placeholder_does_not_count(repo):
+    """反向控制：`## (Next)` 不是佔位 ⇒ 最上面的條目仍是舊的 1.0.0 ⇒ 紅。"""
+    (repo / "mod" / "api.py").write_text("x = 2\n", encoding="utf-8")
+    (repo / "mod" / "CHANGELOG.md").write_text("# m\n\n## (Next) — d\n- 修正\n\n## 1.0.0 — d\n- 初版\n", encoding="utf-8")
+    _commit(repo, "寫錯的佔位")
+    assert any("最上面仍是 1.0.0" in p for p in check_module(repo, "mod"))
+
+
+def test_rc_train_numbering_commit_counts_as_the_entry(repo):
+    """列車取號（佔位 ⇒ 1.0.1，單獨一個 commit）之後：1.0.1 標題寫於程式改動之後 ⇒ 不紅。"""
+    (repo / "mod" / "api.py").write_text("x = 2\n", encoding="utf-8")
+    (repo / "mod" / "CHANGELOG.md").write_text("# m\n\n%s\n- 修正\n\n## 1.0.0 — d\n- 初版\n" % NEXT_HEAD, encoding="utf-8")
+    _commit(repo, "分支：程式＋佔位")
+    (repo / "mod" / "CHANGELOG.md").write_text("# m\n\n## 1.0.1 — 2026-09-30（wip/x）\n- 修正\n\n## 1.0.0 — d\n- 初版\n", encoding="utf-8")
+    _commit(repo, "列車取號")
     assert check_module(repo, "mod") == []

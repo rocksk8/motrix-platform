@@ -15,6 +15,68 @@
 - [`changelog-2026-09-08_2026-09-14.md`](changelog-2026-09-08_2026-09-14.md)：2026-09-08 ～ 2026-09-14，65 則
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
+
+## 2026-10-02 側欄通知元件單一宣告
+- `frontend/static/sidebar.js`：通知鈴鐺（管理員）與無頭掛載（一般使用者）兩個互斥分支改走同一個輔助函式 `notifOpen(attrs)`，`x-data="notifStore()"` 只剩一個宣告，重複初始化守門的共用母體回到 2。畫面與行為不變。
+
+## 2026-10-01 承攬商派發兩段審核（31-A）
+
+- 派發審核（第一段）＋完工審核（第二段）：分層簽核重用 `helpers/tiered_approval`，類型 `contractor_dispatch`；`completed` 只能由完工審核通過設定（舊單也要）；作業狀態唯一寫入口 `dispatch_flow.set_status`（G-D1）；migration `subcontract/0003`（只加不改，既有列＝舊單、不補審）。
+- 下游：匯款申請與總帳 E04 要求派發已核准（舊單照舊）；應計成本／成本檢視／精算比對同一條規則（已取消、草稿、已退回不計；待審核計入並標示）。
+- 簽核佇列兩種 type＋詳情＋轉簽、八種信件類型（不含金額）；案件頁卡片按鈕與舊單徽章；Modal 不再有狀態下拉。
+- 測試：S1–S6 後端題＋e2e 一題；突變逐閘（約 40 條）皆紅。細節：`mod-contractor.md` §5.7。
+
+## 2026-10-01 財務報表：預設比較期與總計列比較欄
+
+- `ledger-statements.js`：資產負債表預設比較＝上一年度期末、綜合損益表預設比較＝去年同期間（頁面建立時填一次；使用者改或清空以使用者的為準）。進頁面即自動查詢（原本就會），現在連比較欄一併帶出。
+- 修正總計／小計列比較欄空白（`bsRows()` 的 cmp 原為 null）；CSV 匯出含比較欄。
+- 測試 `modules/accounting/tests/test_e2e_ledger_bs_default_compare_2026_10_01.py`（4 題 e2e；5 條突變皆紅）。
+
+## 2026-10-01 模組建構器：刪除模組
+
+- 新增 `DELETE /api/definitions/custom_module/{key}`（`helpers/custom_module_delete.py`）：無單據直接刪；有單據 409＋單據數；`?with_records=1` 連單據刪，已入帳（金流 outbox 有紀錄）或送審中一律拒絕。前端首頁每列「刪除模組」。測試 `test_delete_custom_module_2026_10_01.py`。
+- 取捨：「已發布版本不可刪」不變式只在此一處例外（整模組刪）。
+- 待辦：「把功能加進既有模組（而非新增獨立模組）」尚未做，見對話裁示。
+
+
+## 2026-10-01 模組建構器：選單位置清單修正（方案 A）
+
+- `module-builder-core.js:readMenuGroups` 改讀 `window.MOTRIX_MENU.groups`（伺服器宣告，與使用者版面／側欄渲染時機無關）＋已發布自訂模組的分組；新增 `groupOptions()`／`groupMissing()`：已存分組不在清單時保留並提醒。頁面補說明：這是選單項目，不是頁內頁籤。e2e：`test_e2e_builder_menu_group_2026_10_01.py`。
+- 取捨：頁內頁籤掛載（方案 B）**延後、未捨棄**，見 `docs/platform/plans/BUILDER-ATTACH-EXISTING-MODULE-SPEC.md`。
+
+
+## 2026-10-01 營運報表：案件部門跟業務負責人
+
+- 新增 `reports.py::_case_dept()`／`_load_user_index()`／`_row_cr()`；`_row_dept`、`_collect_unreceived_items`、`_collect_payment_anomalies`、`_collect_expenses`、月趨勢類彙總與 `dashboard.py`（stats、月趨勢）改用它。規則：負責人是帳號 ⇒ 該帳號部門；名字型／查無帳號 ⇒ 未分類；未填 ⇒ 開單者。
+- 測試 `modules/analytics/tests/test_dept_follows_sales_owner_2026_10_01.py`（6 題：部門合計、與業務員績效對帳、無帳號⇒未分類、首頁篩選、收款異常、正向控制）。
+- 首頁「最新動態」（案件留言）部門篩選同日補上同規則；順手補齊 `_collect_expenses`／月趨勢查詢缺的 `sales_person` 欄（缺欄會在「開單者無帳號且未填業務負責」時 IndexError，已加回歸題）。§11 三列同步更新（部門彙總⇒完成；financial_view⇒部分修復；16 模組⇒已修復）。
+
+## 2026-10-01 簽核：登入橫幅每次都跳（已簽過）
+
+- 根因（程式碼＋重現測試）：`static/notif.js` 橫幅數字＝未讀 `approval_request` 通知列；報價單核准／退回／拒絕從不標已讀 ⇒ 簽過的項目永遠「待簽」，每次登入（登出清 sessionStorage 旗標）再跳。
+- 修：①橫幅改取 `/api/approval-queue/count`（與角標同一份），0 件不彈；②報價單三條路徑標通知已讀（`helpers.audit._mark_notifications_read`）。測試 `test_approval_notice_after_signing_2026_10_01.py`、`test_e2e_login_approval_banner_2026_10_01.py`（含反向控制）。
+- 後續（未做）：出貨／匯款申請／發票開立／承攬商憑證／完工單的簽核通知同樣缺標已讀；橫幅已不受影響（改看真實待簽數），但通知中心未讀數仍會殘留。
+
+
+## 2026-10-01 承攬商收款帳號遮蔽
+
+- 使用者裁示：只有最高管理者看得到完整帳號，其餘一律遮蔽。範圍：承攬商列表／詳情／存簿影本、匯款申請列表／詳情／提供者形狀、簽核佇列（列表與詳情封面）、匯款申請 PDF 下載。遮蔽＝`****末四碼`（換字串、不拿欄位）；編輯時遮蔽值送回＝保留原值。測試 `test_bank_account_mask_2026_10_01.py`、`test_e2e_bank_mask_vendor_page_2026_10_01.py`（含反向控制）；兩題既有簽核詳情題的正對照改為最高管理者。
+- 取捨／風險：出納、財務、一般管理員不再看得到完整帳號（含 PDF）；若出納要用匯款 PDF 付款，需最高管理者下載或另行裁示例外。未動：勞報單（payroll）乙方帳號、伺服器端核准後存檔的 PDF（稽核存檔副本）、外包名冊（本來就僅最高管理者）。
+
+
+## 2026-10-01 外包名冊帳號遮蔽（更正）
+
+- 先前記載「外包名冊本來就只有最高管理者」有誤：`_require_user(require_superadmin=True, module='contractor_list')` 會放行持該模組的非最高管理者，列表／詳情原本回完整帳號。已補：列表／詳情／存簿影本／匯出遮蔽、編輯與匯入保留原帳號、勞報單頁不帶入遮蔽值。測試含反向控制與 e2e。
+- 已盤點其餘讀者：匯款申請（已遮蔽）、簽核佇列（已遮蔽）、承攬商（已遮蔽）、匯款申請 PDF（已遮蔽）；未遮蔽＝勞報單 API／PDF、核准後存檔 PDF（TRAIN31 backlog）。
+
+---
+
+### 2026-09-30 — 排版器：重開時編輯被自己稍後的載入蓋掉（O7 第三次；`frontend/static/layout-editor.js`，DB 無異動）
+
+- **缺陷**：`start()` 先打開面板、再等角色標籤與側欄兩趟請求、最後才 `loadScope()`；這段期間 `loading=false`、上次殘留的 `work`／`loadedScope` 還在，畫面可操作。此時的編輯（或 e2e 的勾選）會被 `start` 自己稍後的 `loadScope` 用伺服器版蓋掉，發布出去的是「沒改」的版本。全量 e2e `test_layout_editor_role_override_and_restore` 因此間歇紅（第三次；負載下重複 24 次，修前 8/24 與 4/24 失敗，修後 0/24）。
+- **修正**：`start()` 一開始就鎖住（`loading=true`、清 `loadedScope`），等待期間使用者已切範圍就不再重載；角色標籤／側欄讀不到 ⇒ 維持鎖定並說明。範圍下拉**不**鎖（保留「連切兩次」的序號保護）。e2e `_editor()` 改等本次載入完成；新增決定性題（側欄請求拖慢 1.5 秒，斷言此時 busy＝1、編輯區 inert、loadedScope 空），舊 JS 上必紅。
+- **失敗形狀的解讀（已驗）**：失敗時 v2 的 ops ＝ v1 的 ops 完整重發（含 `hide location`）。其中「多出的 `move enabled`」不是另一個缺陷——第 1 版本身就有 `move enabled`（表單欄位搬移會整批輸出 7 筆 move）；被蓋回伺服器版後 v2 與 v1 逐筆相同。無編輯的重新發布 ops 與前一版逐筆相同（冪等，已驗）。
+
 ---
 
 ### 2026-09-24 — 正式機修補包：派工匯入報價單沒有存檔（T9，DB 無異動）

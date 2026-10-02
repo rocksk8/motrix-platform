@@ -7,6 +7,7 @@
   <title>承攬商管理 — MOTRIX ERP</title>
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/motrix-date.js"></script>
   <script src="../static/gov-lookup.js"></script>
   <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -207,7 +208,7 @@
             <div class="detail-row" x-show="selectedVendor.bankName"><span class="detail-label">銀行名稱</span><span class="detail-val" x-text="selectedVendor.bankName"></span></div>
             <div class="detail-row" x-show="selectedVendor.bankBranch"><span class="detail-label">分行</span><span class="detail-val" x-text="selectedVendor.bankBranch"></span></div>
             <div class="detail-row" x-show="selectedVendor.bankAccountName"><span class="detail-label">戶名</span><span class="detail-val" x-text="selectedVendor.bankAccountName"></span></div>
-            <div class="detail-row" x-show="selectedVendor.bankAccountNumber"><span class="detail-label">帳號</span><span class="detail-val" x-text="selectedVendor.bankAccountNumber"></span></div>
+            <div class="detail-row" x-show="selectedVendor.bankAccountNumber"><span class="detail-label">帳號</span><span class="detail-val" data-testid="vendor-bank-number" x-text="selectedVendor.bankAccountNumber"></span></div>
             <div style="font-size:12px;color:var(--success);margin-top:4px" x-show="selectedVendor.hasPassbook">● 銀行存簿已上傳</div>
           </div>
         </template>
@@ -453,6 +454,7 @@
           <div class="form-group" style="grid-column:span 2">
             <label class="form-label">帳號</label>
             <input class="form-input" type="text" x-model="form.bank_account_number">
+            <div class="form-hint" data-testid="bank-masked-hint" x-show="(form.bank_account_number || '').startsWith('****')" style="font-size:12px;color:var(--text-dim)">帳號已遮蔽（僅最高管理者可見完整帳號）；不修改就會保留原帳號，輸入新帳號才會更換。</div>
           </div>
         </div>
       </div>
@@ -895,7 +897,7 @@ function vendorContractorsPage() {
     },
 
     addVisit() {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = MotrixDate.today()
       this.editVisits.push({ id: Date.now() + Math.random(), date: today, note: '' })
     },
     removeVisit(idx) { this.editVisits.splice(idx, 1) },
@@ -931,7 +933,7 @@ function vendorContractorsPage() {
       ws['!cols'] = [22, 12, 10, 12, 14, 22, 24, 16, 20, 8].map(w => ({ wch: w }))
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, '承攬商')
-      XLSX.writeFile(wb, `MOTRIX_承攬商_${new Date().toISOString().slice(0, 10)}.xlsx`)
+      XLSX.writeFile(wb, `MOTRIX_承攬商_${MotrixDate.today()}.xlsx`)
     },
 
     async handleImport(event) {

@@ -95,7 +95,7 @@ window.CM_PARTS.push(() => ({
 
     // 未收款且預計收款日已過（今天到期不算逾期）
     overdueReceivables() {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = MotrixDate.today()
       return this.paymentItems().filter(it => !it.received && it.expectedReceiptDate && it.expectedReceiptDate < today)
     },
 

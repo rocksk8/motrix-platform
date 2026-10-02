@@ -87,13 +87,17 @@ def test_non_admin_can_still_save_other_case_record_fields(client, make_user):
 
     cr = _case_record("MQ-CRGATE-002")
     cr["materials"][0]["ordered"] = True
+    cr["materials"][0]["note"] = "物流備註可以改"
     cr["payment"]["items"][0]["note"] = "更新備註"  # 非金流欄位
 
     r = client.patch("/api/quotations/MQ-CRGATE-002/case-record", headers=_auth(token), json={"case_record": cr})
     assert r.status_code == 200, r.text
+    # 2026-10-02（31-C 叫料審核）：「已叫料」只能對著已核准的叫料單勾——沒有連結的 ordered=true 被拒（逐項回報），其餘欄位照存
+    assert [(x["field"], x["code"]) for x in r.json()["rejected"]] == [("ordered", "order_not_approved")]
 
     saved = _case_record("MQ-CRGATE-002")
-    assert saved["materials"][0]["ordered"] is True
+    assert saved["materials"][0]["ordered"] is False
+    assert saved["materials"][0]["note"] == "物流備註可以改"
     assert saved["payment"]["items"][0]["note"] == "更新備註"
 
 

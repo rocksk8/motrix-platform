@@ -24,17 +24,17 @@ import csv
 from typing import Optional
 
 from fastapi import APIRouter, Body, Header, HTTPException, Query, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 import io
 from urllib.parse import quote as _url_quote
 
 from core import registry
-from db import get_db
-from helpers import _require_user, user_has_module, payment_item_amounts, notify_module_activity
+from db import get_db, spawn_bg_thread
+from helpers import _require_user, user_has_module, payment_item_amounts, notify_module_activity, push_event_for_module
 from modules.arap.receivables import collect_income_items as _collect_income_items  # 本模組（ROADMAP A8b 已收回）
 from helpers.legal_params import round_half_up          # bank-reconcile（金額四捨五入唯一來源）
 from helpers import _audit, _tok                         # bank-reconcile 的稽核
-from helpers.xlsx_out import check_export_rate, set_row, xl_style
+from helpers.xlsx_out import add_pdf_sibling, check_export_rate, export_logged, set_row, xl_style
 
 router = APIRouter()
 
@@ -99,6 +99,38 @@ def get_pending_payables(authorization: str = Header(None)):
     return {"available": True, "notice": "", "items": items, "canPay": _can_pay(user)}
 
 
+@router.get("/api/cashier/pending-payables/{source}/{key}/payee-bank")
+def get_payee_bank(source: str, key: str, authorization: str = Header(None)):
+    """出納付款前看收款人銀行資料（A2-3）。**只有能付款的人**（管理員／出納）；每次查看都留稽核（不記帳號內容）。
+    來源優先序：銀行資料表提供者 `payee.bank_profile`（有登錄、員工）→ 單據上手填的快照 → 沒有（明說，不猜）。"""
+    user = _require_user(authorization)
+    if not _can_pay(user):
+        raise HTTPException(403, "只有管理員或出納可以查看收款人銀行資料")
+    p = registry.providers("payables.pending").get(source)
+    if p is None or not hasattr(p, "payee_info"):
+        raise HTTPException(404, "找不到請款來源「%s」（或該來源不提供收款人資料）" % source)
+    conn = get_db()
+    try:
+        try:
+            info = p.payee_info(conn, key)
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+        out = {"payeeType": info["payeeType"], "payeeName": info["payeeName"], "source": "none", "bank": "", "account": "", "accountName": "",
+               "notice": ""}
+        prof_fn = registry.single_provider("payee.bank_profile") if info.get("payeeUsername") else None
+        prof = prof_fn(conn, info["payeeUsername"], user) if prof_fn else None
+        if prof and prof.get("account"):
+            out.update(source="profile", bank=prof.get("bank") or "", account=prof.get("account") or "", accountName=prof.get("accountName") or "")
+        elif info["bank"] or info["account"]:
+            out.update(source="form", bank=info["bank"], account=info["account"])
+        else:
+            out["notice"] = "尚未登錄收款人銀行資料" + ("（員工請先到個人設定登錄）" if info.get("payeeUsername") else "")
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "cashier.payee_bank_view", source, key, "出納查看收款人銀行資料（來源：%s）" % out["source"])
+    return out
+
+
 @router.post("/api/cashier/pending-payables/{source}/{key}/pay")
 def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), authorization: str = Header(None)):
     """登錄付款：寫回來源單據的付款日（經提供者，出納不直接碰別的模組的表）⇒ 從待付款消失。"""
@@ -119,6 +151,13 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
         raise HTTPException(400, "付款日不是有效的日期")
     conn = get_db()
     try:
+        acct = str((body or {}).get("payAccountCode") or "").strip()      # A2-3：付款科目（選填）——有給就用會計連接器驗存在與啟用
+        if acct:
+            chk = registry.single_provider("voucher.account_check")
+            if chk is not None:
+                ok, err = chk(conn, acct)
+                if not ok:
+                    raise HTTPException(400, "付款科目：%s" % err)
         try:
             res = p.mark_paid(conn, key, paid, user, remit=body)          # W1：實付／手續費／差額審核
         except LookupError as e:
@@ -129,14 +168,26 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
     finally:
         conn.close()
     _audit(_tok(authorization), "cashier.payable_paid", source, key,
-           "出納登錄請款付款：%s #%s（%s）付款日 %s 實付 %s 手續費 %s%s" % (
-               source, key, res.get("quoteNo") or "", paid, res.get("actual"), res.get("fee"),
+           "出納登錄請款付款：%s #%s（%s）付款日 %s 實付 %s 手續費 %s 付款方式 %s%s" % (
+               source, key, res.get("quoteNo") or "", paid, res.get("actual"), res.get("fee"), (body or {}).get("payMethod") or "預設",
                "（差額 %+g，待審核）" % res["diff"] if res.get("remitReview") else ""))
     if res.get("remitReview"):
         notify_module_activity("請款付款", "匯款差額待審核", user.get("display_name") or user["username"],
                                "%s #%s（%s）" % (source, key, res.get("quoteNo") or ""), "cashier.html",
                                detail="實付與應付不符（差額 %+g），請管理員到出納頁核可或退回。" % res["diff"])
+    # 行事曆「支出付款」（2026-09-30，預設關；開關在 L1 判斷）：以付款日建立。勞報單付款走自己的端點，不在此列
+    spawn_bg_thread(push_event_for_module, args=_expense_calendar_args(source, key, paid, res, user))
     return {"ok": True, **res}
+
+
+def _expense_calendar_args(source, key, paid, res, user):
+    """行事曆「支出付款」事件的內容（push_event_for_module 的參數）；名目／金額取提供者回傳（出納不讀別的模組的表）。"""
+    title = res.get("title") or "%s #%s" % (source, key)
+    desc = ("出納已登錄付款。\n名目：%s\n關聯案件：%s\n受款人：%s\n金額：NT$ %s\n實付：NT$ %s\n手續費：NT$ %s\n付款日：%s\n登錄人：%s"
+            % (title, res.get("quoteNo") or "", res.get("payee") or "", "{:,.0f}".format(float(res.get("amount") or 0)),
+               "{:,.0f}".format(float(res.get("actual") or 0)), "{:,.0f}".format(float(res.get("fee") or 0)), paid,
+               user.get("display_name") or user.get("username") or ""))
+    return ("expense_payout", "支出付款 — %s" % title, desc, paid)
 
 
 # ── 匯款差額審核（W1；IP-102 `remit.reviews`，多提供者：承攬商匯款、案件額外支出）────────────────
@@ -406,6 +457,7 @@ def get_execution_history(start: str = Query(None), end: str = Query(None), auth
 
 
 @router.get("/api/cashier/export")
+@export_logged("xlsx", "arap", "cashier-history")
 def export_execution_history(start: str = Query(None), end: str = Query(None), authorization: str = Header(None)):
     """出納執行紀錄 Excel 匯出（已匯款／已收款明細，預設本月），沿用
     reports.py 既有的 Excel 樣式 helper，不重新發明一套。"""
@@ -544,8 +596,8 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
     wb.save(buf)
     buf.seek(0)
     fname = f"MOTRIX_出納執行紀錄_{start}_{end}.xlsx"
-    return StreamingResponse(
-        buf,
+    return Response(
+        content=buf.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
     )
@@ -681,3 +733,10 @@ async def bank_reconcile(file: UploadFile = File(...), authorization: str = Head
         "note": "僅依金額比對，且同金額只配對一次，屬建議配對供人工複核；請核對案件號/"
                 "承攬商名稱後再手動標記已匯款，系統不會自動標記。",
     }
+
+
+# ── 匯出：PDF 姊妹（使用者規則 2026-09-30：每個 Excel 匯出都要同時提供 PDF、每次匯出都要留紀錄）──
+# 匯出稽核／PDF 姊妹的「歸屬區」＝稽核 detail.module 的字串，**不是權限 key**；用常數傳而不是字面量：
+# tests/test_module_keys_consistency 的後端掃描器把任何 module 等號字串字面量當權限 key。
+_EXPORT_AREA = "arap"
+add_pdf_sibling(router, "/api/cashier/export/pdf", export_execution_history, module=_EXPORT_AREA, name="cashier-history", title="出納執行紀錄")

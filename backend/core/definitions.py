@@ -2,8 +2,8 @@
 """定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。
 
 [單位] plat:definitions    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] DefinitionError, KINDS, delete_draft, diff, get, list_definitions, publish, register_default,
-    register_validator, resolve, restore, save_draft, validate, versions
+[公開介面] DefinitionConflict, DefinitionError, KINDS, decide_submitted, delete_draft, diff, get, kinds, kinds_meta, list_definitions, open_submission, publish,
+    register_default, register_kind, register_validator, resolve, restore, save_decision, save_draft, submit_draft, validate, versions
 [不變式] 每個 (kind, key, scope) 最多一份草稿；已發布的版本不可改、不可刪；還原＝把舊版再發布成新的一版；發布前驗證不過就不發布
 [契約題] tests/test_definitions_store_2026_09_25.py
 [注意] 函式吃呼叫端的連線、不自己開；寫入的函式自己 commit
@@ -18,7 +18,10 @@ import json
 import re
 from datetime import datetime
 
+#: 內建的四種（固定）；其餘由模組／helper 以 `register_kind()` 登記（資料驅動：新增一種定義不必再改這支 L0 檔）。
 KINDS = ("layout", "output_template", "custom_fields", "custom_module")
+_EXTRA_KINDS = {}    # kind -> {"label": str}（`register_kind` 登記的；內建四種不在這裡）
+_BUILTIN_LABELS = {"layout": "頁面版面", "output_template": "輸出版型", "custom_fields": "自訂欄位", "custom_module": "自訂模組"}
 _KEY_RE = re.compile(r"^[a-z][a-z0-9_:.\-]{0,79}$")
 _SCOPE_RE = re.compile(r"^(company|role:[A-Za-z0-9_\-]{1,40})$")
 
@@ -34,8 +37,46 @@ class DefinitionError(ValueError):
         self.problems = problems or []
 
 
+class DefinitionConflict(DefinitionError):
+    """與目前狀態衝突（HTTP 409）：例如這份定義有送審中的版本時，直接發布／還原會讓那份送審變成過期的（W3 #3）。"""
+
+
+def _open_blocks_direct(conn, kind, key, scope, what):
+    sub_ = open_submission(conn, kind, key, scope)
+    if sub_ is not None:
+        raise DefinitionConflict("這份定義有送審中的第 %s 版，不能直接%s：請先審核（核可／退回）那一版，或請審核人退回後再處理"
+                                 % (sub_["version"], what))
+
+
 def register_validator(kind: str, fn) -> None:
     _VALIDATORS[kind] = fn
+
+
+def register_kind(kind: str, label: str = "", validator=None, default=None) -> None:
+    """登記一種新的定義種類（預留鉤子：A2 的 `expense_type` 是第一個使用者）。
+    `kind`＝小寫英數與底線（與 key 同規則）；已登記的種類不可重複登記（兩個登記者在搶 ⇒ ValueError；內建四種也不可覆寫）；
+    `validator(body, key) -> [problem]`、`default(key) -> body|None` 與 `register_validator`／`register_default` 同義。
+    登記後 `save_draft／publish／…` 與 `GET /api/definition-kinds` 立即認得它；版本、差異、還原、送審機制全部共用。"""
+    if not isinstance(kind, str) or not re.match(r"^[a-z][a-z0-9_]{0,39}$", kind):
+        raise ValueError("定義種類名稱不合法：%r" % (kind,))
+    if kind in KINDS or kind in _EXTRA_KINDS:
+        raise ValueError("定義種類已登記：%r" % kind)
+    _EXTRA_KINDS[kind] = {"label": label or kind}
+    if validator is not None:
+        register_validator(kind, validator)
+    if default is not None:
+        register_default(kind, default)
+
+
+def kinds() -> tuple:
+    """所有可用的定義種類（內建四種＋已登記的）。"""
+    return KINDS + tuple(sorted(_EXTRA_KINDS))
+
+
+def kinds_meta() -> list:
+    """`[{kind, label, builtin}]`（編輯畫面的種類清單用）。"""
+    return ([{"kind": k, "label": _BUILTIN_LABELS.get(k, k), "builtin": True} for k in KINDS] +
+            [{"kind": k, "label": _EXTRA_KINDS[k]["label"], "builtin": False} for k in sorted(_EXTRA_KINDS)])
 
 
 def register_default(kind: str, fn) -> None:
@@ -43,8 +84,8 @@ def register_default(kind: str, fn) -> None:
 
 
 def _check(kind, key, scope):
-    if kind not in KINDS:
-        raise DefinitionError("未知的定義種類：%r（可用：%s）" % (kind, "、".join(KINDS)))
+    if kind not in kinds():
+        raise DefinitionError("未知的定義種類：%r（可用：%s）" % (kind, "、".join(kinds())))
     if not _KEY_RE.match(key or ""):
         raise DefinitionError("定義的 key 不合法：%r" % key)
     if not _SCOPE_RE.match(scope or ""):
@@ -94,16 +135,26 @@ def get(conn, kind, key, scope, version=None):
 
 def versions(conn, kind, key, scope) -> list:
     _check(kind, key, scope)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(ui_definitions)").fetchall()}
+    extra = ", submitted_by, submitted_at, decision_json" if "decision_json" in cols else ""      # core v3 之前的庫（測試只跑 v1）沒有送審欄
     rows = conn.execute("SELECT id, kind, key, scope, version, status, note, created_by, created_at, published_by, "
-                        "published_at FROM ui_definitions WHERE kind=? AND key=? AND scope=? ORDER BY version DESC",
-                        (kind, key, scope)).fetchall()
-    return [dict(r) for r in rows]
+                        "published_at" + extra + " FROM ui_definitions WHERE kind=? AND key=? AND scope=? "
+                        "ORDER BY version DESC", (kind, key, scope)).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["decision"] = json.loads(d.pop("decision_json", None) or "{}") or {}
+        except (TypeError, ValueError):
+            d["decision"] = {}
+        out.append(d)
+    return out
 
 
 def list_definitions(conn, kind) -> list:
     """同一 kind 的所有定義（含只有草稿、還沒發布過的）：`[{key, scope, latestVersion, hasDraft, updatedAt}]`。"""
-    if kind not in KINDS:
-        raise DefinitionError("未知的定義種類：%r（可用：%s）" % (kind, "、".join(KINDS)))
+    if kind not in kinds():
+        raise DefinitionError("未知的定義種類：%r（可用：%s）" % (kind, "、".join(kinds())))
     rows = conn.execute(
         "SELECT key, scope, MAX(CASE WHEN status='published' THEN version END) AS latest, "
         "MAX(CASE WHEN status='draft' THEN 1 ELSE 0 END) AS has_draft, "
@@ -126,6 +177,93 @@ def _next_version(conn, kind, key, scope) -> int:
     r = conn.execute("SELECT MAX(version) FROM ui_definitions WHERE kind=? AND key=? AND scope=?",
                      (kind, key, scope)).fetchone()
     return (r[0] or 0) + 1
+
+
+# ── 送審流程（建構器第三輪 S4，2026-09-30）：草稿 → 送審（不可變快照，取新版號）→ 核可＝發布／退回＝保留並帶原因 ──
+# 版號單調遞增、被退回的版號不回收；已發布版本不可變。`resolve()`／`get(version=None)` 只認 published ⇒ 舊行為不變。
+
+def open_submission(conn, kind, key, scope):
+    """目前送審中（status='submitted'）的那一列；沒有 ⇒ None。"""
+    _check(kind, key, scope)
+    return _row(conn.execute("SELECT * FROM ui_definitions WHERE kind=? AND key=? AND scope=? AND status='submitted' "
+                             "ORDER BY version DESC LIMIT 1", (kind, key, scope)).fetchone())
+
+
+def submit_draft(conn, kind, key, scope, note="", user="", decision=None) -> dict:
+    """把草稿凍結成不可變快照（status='submitted'，取 max(version)+1）；草稿保留（送審期間還能繼續改下一版）。
+    驗證不過、沒有草稿、已有送審中的 ⇒ DefinitionError。`decision`＝簽核鏈等（寫進 decision_json）。"""
+    from core.txn import begin_write
+    _check(kind, key, scope)
+    began = begin_write(conn)
+    try:
+        draft = get(conn, kind, key, scope, 0)
+        if draft is None:
+            raise DefinitionError("沒有草稿可以送審")
+        if open_submission(conn, kind, key, scope) is not None:
+            raise DefinitionError("已有送審中的版本，請等審核結果（或請審核人退回）再送")
+        problems = validate(kind, key, draft["body"])
+        if problems:
+            raise DefinitionError("驗證不通過，未送審（%d 個問題）" % len(problems), problems)
+        now = datetime.now().isoformat(timespec="seconds")
+        v = _next_version(conn, kind, key, scope)
+        conn.execute(
+            "INSERT INTO ui_definitions (kind, key, scope, version, status, body_json, note, created_by, created_at, "
+            "submitted_by, submitted_at, decision_json) VALUES (?,?,?,?,'submitted',?,?,?,?,?,?,?)",
+            (kind, key, scope, v, json.dumps(draft["body"], ensure_ascii=False), note or "", user, now, user, now,
+             json.dumps(decision or {}, ensure_ascii=False)))
+        conn.commit()
+        return get(conn, kind, key, scope, v)
+    except Exception:
+        if began:
+            conn.rollback()
+        raise
+
+
+def save_decision(conn, kind, key, scope, version, decision) -> None:
+    """送審中的列：更新 decision_json（簽核進度）。只准改 submitted 的列。"""
+    _check(kind, key, scope)
+    n = conn.execute("UPDATE ui_definitions SET decision_json=? WHERE kind=? AND key=? AND scope=? AND version=? AND status='submitted'",
+                     (json.dumps(decision, ensure_ascii=False), kind, key, scope, int(version))).rowcount
+    if n == 0:
+        raise DefinitionError("第 %s 版不是送審中" % version)
+    conn.commit()
+
+
+def decide_submitted(conn, kind, key, scope, version, approve, user="", note="", decision=None) -> dict:
+    """送審中的列：核可 ⇒ published（成為現行版本；草稿內容與它相同才刪草稿，否則保留，送審期間的新修改不會被吃掉）；
+    退回 ⇒ rejected（保留列與原因，不可變；版號不回收）。`decision`＝要併進 decision_json 的鍵。"""
+    from core.txn import begin_write
+    _check(kind, key, scope)
+    began = begin_write(conn)
+    try:
+        row = get(conn, kind, key, scope, int(version))
+        if row is None or row["status"] != "submitted":
+            raise DefinitionError("第 %s 版不是送審中" % version)
+        now = datetime.now().isoformat(timespec="seconds")
+        try:
+            dec = json.loads(row.get("decision_json") or "{}") or {}
+        except (TypeError, ValueError):
+            dec = {}
+        dec.update(decision or {})
+        dec.update({"decidedBy": user, "decidedAt": now, "result": "approved" if approve else "rejected", "note": note or ""})
+        if approve:
+            problems = validate(kind, key, row["body"])
+            if problems:
+                raise DefinitionError("驗證不通過，未發布（%d 個問題）" % len(problems), problems)
+            conn.execute("UPDATE ui_definitions SET status='published', published_by=?, published_at=?, decision_json=? WHERE id=?",
+                         (user, now, json.dumps(dec, ensure_ascii=False), row["id"]))
+            draft = get(conn, kind, key, scope, 0)
+            if draft is not None and draft["body"] == row["body"]:
+                conn.execute("DELETE FROM ui_definitions WHERE kind=? AND key=? AND scope=? AND version=0 AND status='draft'", (kind, key, scope))
+        else:
+            conn.execute("UPDATE ui_definitions SET status='rejected', decision_json=? WHERE id=?",
+                         (json.dumps(dec, ensure_ascii=False), row["id"]))
+        conn.commit()
+        return get(conn, kind, key, scope, int(version))
+    except Exception:
+        if began:
+            conn.rollback()
+        raise
 
 
 def _insert_published(conn, kind, key, scope, body, note, user) -> dict:
@@ -152,6 +290,7 @@ def publish(conn, kind, key, scope, note="", user="") -> dict:
 
 
 def _publish_locked(conn, kind, key, scope, note, user) -> dict:
+    _open_blocks_direct(conn, kind, key, scope, "發布")
     draft = get(conn, kind, key, scope, 0)
     if draft is None:
         raise DefinitionError("沒有草稿可以發布")
@@ -179,6 +318,7 @@ def restore(conn, kind, key, scope, version, note="", user="") -> dict:
 
 
 def _restore_locked(conn, kind, key, scope, version, note, user) -> dict:
+    _open_blocks_direct(conn, kind, key, scope, "還原")
     old = get(conn, kind, key, scope, int(version))
     if old is None or old["status"] != "published":
         raise DefinitionError("找不到第 %s 版（已發布）" % version)
