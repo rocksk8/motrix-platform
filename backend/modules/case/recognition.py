@@ -378,7 +378,7 @@ COUNTED_EXTRA_STATUSES = ("待審核", "簽核中", "已核准")
 ITEM_COST_BUCKET = "material"
 
 
-def extra_entries(conn, basis):
+def extra_entries(conn, basis, quote_no=None):
     """額外支出 → 逐筆。金額 0 不列；只計 COUNTED_EXTRA_STATUSES（送審中照樣計入、pending 標示；草稿與已駁回不計）。
     現金口徑：有付款日（出納登錄付款，IP-100）⇒ 用付款日、不是暫用；沒有 ⇒ 憑證日、暫用。"""
     out = []
@@ -394,8 +394,8 @@ def extra_entries(conn, basis):
             " e.created_at, e.doc_no, e.files_json, e.status, e.approval_json, e.invoice_date,"
             " e.paid_date, e.remit_actual, e.remit_review, e.kind, e.doc_code, e.department_id, e.lines_json, q.customer_name FROM case_extra_expenses e"
             " LEFT JOIN quotations q ON q.quote_no = e.quote_no"
-            " WHERE e.status IN (%s) AND %s ORDER BY e.id" % (",".join("?" * len(COUNTED_EXTRA_STATUSES)), _EF.payable_sql("e")),
-            COUNTED_EXTRA_STATUSES):
+            " WHERE e.status IN (%s) AND %s%s ORDER BY e.id" % (",".join("?" * len(COUNTED_EXTRA_STATUSES)), _EF.payable_sql("e"), " AND e.quote_no=?" if quote_no else ""),
+            COUNTED_EXTRA_STATUSES + ((quote_no,) if quote_no else ())):
         cost = float(r["total_cost"] or 0)
         if not cost:
             continue

@@ -286,6 +286,7 @@
     "mod:case/api/material_payments",
     "mod:case/api/quotations",
     "mod:case/api/material_links",
+    "mod:case/api/settlement_actuals",
     "mod:case/expense_forms",
     "mod:case/expense_notify",
     "mod:case/material_approval",
@@ -293,7 +294,8 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_payment_cashier",
-    "mod:case/purchase_items"
+    "mod:case/purchase_items",
+    "mod:case/settlement_actuals"
    ],
    "tables": [
     "case_action_items",
