@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1057,
+  "tests": 1058,
   "unmapped": 13,
   "kinds": {
    "api": 569,
    "e2e": 258,
-   "audit": 135,
+   "audit": 136,
    "unit": 95
   },
   "routes": 748
@@ -12101,12 +12101,16 @@
    "units": [
     "dir:backend/tests/platform/",
     "dir:tools/platform/",
+    "file:backend/tests/spec_impl_modules.json",
     "file:backend/tests/test_money_round_half_up_2026_09_26.py",
-    "file:backend/tests/test_spec_coverage_2026_09_21.py"
+    "file:backend/tests/test_spec_coverage_2026_09_21.py",
+    "mod:subcontract/gl_events"
    ],
    "evidence": {
     "path": [
+     "backend/modules/subcontract/gl_events.py",
      "backend/tests/platform/",
+     "backend/tests/spec_impl_modules.json",
      "backend/tests/test_money_round_half_up_2026_09_26.py",
      "backend/tests/test_spec_coverage_2026_09_21.py",
      "tools/platform/"
@@ -14832,6 +14836,29 @@
     "path": [
      "backend/tests/platform/test_no_temp_files_in_shared_tests_dir_2026_09_30.py",
      "backend/tests/test_exception_detail_leak_2026_09_23.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_no_window_guard_2026_10_03.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/tools/",
+    "dir:tools/platform/",
+    "file:backend/conftest.py",
+    "file:backend/tools/build_test_reuse.py",
+    "file:tools/platform/failfast.py",
+    "file:tools/platform/nowindow.py",
+    "file:tools/platform/window_probe.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/conftest.py",
+     "backend/tools/",
+     "backend/tools/build_test_reuse.py",
+     "tools/platform/",
+     "tools/platform/failfast.py",
+     "tools/platform/nowindow.py",
+     "tools/platform/window_probe.py"
     ]
    }
   },
