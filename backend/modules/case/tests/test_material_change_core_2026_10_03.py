@@ -354,12 +354,3 @@ def test_compute_diff_normalizes_numbers_and_whitespace():
     assert MC.compute_diff(a, b) == []
     d = MC.compute_diff(a, dict(b, unitPrice=1100))
     assert d == [{"field": "unitPrice", "old": 1000.0, "new": 1100.0, "money": True}]
-
-
-def test_doc_type_is_not_registered_by_import_alone():
-    """M2a 不自動登記：登記屬 M2b（連同佇列／詳情／通知／覆蓋守門）。reg fixture 以外的環境 import 本模組不得改變簽核單據類型清單。"""
-    import subprocess
-    import sys
-    out = subprocess.run([sys.executable, "-c", "from helpers import tiered_approval as T; import modules.case.material_change; print('material_change' in T.APPROVAL_DOC_TYPES)"],
-                         capture_output=True, text=True, cwd=str(__import__("pathlib").Path(__file__).resolve().parents[3]), timeout=120)
-    assert out.stdout.strip().endswith("False"), out.stdout + out.stderr

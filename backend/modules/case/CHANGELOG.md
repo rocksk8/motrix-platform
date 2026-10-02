@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-03（wip/t33-m2b-d7：33-M2b 材料申請變更申請，端點與簽核整合）
+- 端點：`GET /api/quotations/{q}/material-orders/{item}/changes`、`GET …/change-proposal`（預覽）、`POST …/changes`（建立；body 只收 `reason／quantity／notes`，金額與涵蓋行由已核准採購單決定）、`POST /api/quotations/{q}/material-changes/{id}/revise|submit|approve|reject|withdraw`。看不到財務檢視者不給金額。核准最後一層 ⇒ 同一交易內套用，套不了回 409 且什麼都不改。
+- 簽核整合：登記簽核單據類型 `material_change`（材料申請變更，預設跟統一流程）、簽核佇列與詳情（差異表：數量／單價／小計／涵蓋採購單行／備註 原→新）、站內通知與四種信件（送審／輪到您／核准／退回，信內不放金額）、稽核動作 `material_changes.*`。
+- 守門：強制採購單之後建立的已核准材料申請，直接改內容被拒（`use_change_request`，訊息指向變更申請）；舊單與 grandfather 單維持「改了回草稿」。提案內容來自案件側 `material_coverage.change_proposal`，尚未上線時建立／預覽回 501。
+
 ## 1.0.99 — 2026-10-03（wip/t33-settlement-a5-2e）：完結重算只在「非完結 → 完結」轉換時比對（da 覆審）
 - 已完結的精算超級管理員再存（例如只改備註）不再跑完結重算——凍結快照本來就不隨之後的單據變動；草稿重開後再完結仍照常比對。
 

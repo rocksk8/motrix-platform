@@ -265,6 +265,10 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
                     _rej(rejected, iid, amt_keys[0], "paid_in_full", "這筆材料申請已全額付款，金額不能修改；要調整請另開一筆材料申請，或請管理員取消後重開。")
                     out.append(merged)
                     continue
+            if st == MA.S_APPROVED and MA.po_required_for(MA.get(conn, quote_no, iid)):  # 33-M2b：強制採購單之後的已核准申請，內容要改走變更申請（核准前原版本照常有效）；舊單／grandfather 維持「改了回草稿」
+                _rej(rejected, iid, "*", "use_change_request", "已核准的材料申請不能直接修改內容，請改提「變更申請」（核准前原內容照常有效）。")
+                out.append(merged)
+                continue
             if MP.has_live_payments(conn, quote_no, iid):                                # 已有匯款申請：金額／品名等變動會讓申請與額度對不上
                 _rej(rejected, iid, "*", "has_payments", "這張材料申請已有匯款申請，請先作廢申請再修改內容")
                 out.append(merged)

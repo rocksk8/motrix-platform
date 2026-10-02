@@ -283,6 +283,7 @@
     "mod:case/api/expense_form_pdf",
     "mod:case/api/completion_notes",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_changes",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
     "mod:case/api/quotations",

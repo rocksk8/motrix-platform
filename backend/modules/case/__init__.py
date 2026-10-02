@@ -13,12 +13,14 @@ from modules.case import attachments, case_deadlines, gl_events, material_paymen
 #    （報價單 helper）蓋成 api 那一支，`from modules.case import quotations` 就拿錯檔
 from modules.case.api import (case_action_items as _api_action_items, case_extra_expenses as _api_extra_expenses,
                               completion_notes as _api_completion_notes, expense_form_pdf as _api_expense_form_pdf,
-                              material_approvals as _api_material_approvals, material_orders as _api_material_orders,
+                              material_approvals as _api_material_approvals, material_changes as _api_material_changes, material_orders as _api_material_orders,
                               material_payments as _api_material_payments,
                               material_links as _api_material_links, settlement_actuals as _api_settlement_actuals,
                               quotations as _api_quotations)
 from modules.case import expense_notify as _expense_notify     # noqa: F401 — 載入時登記費用單據的信件類型
 from modules.case import material_approval as _material_approval  # noqa: F401 — 載入時登記簽核單據類型 material_order（叫料）
+from modules.case import material_change as _material_change      # noqa: E402
+_material_change.ensure_registered()                              # 33-M2b：載入時登記簽核單據類型 material_change（材料申請變更）
 from modules.case import material_notify as _material_notify      # noqa: F401 — 載入時登記叫料審核的信件類型
 from modules.case import material_payment as _material_payment    # noqa: F401 — 載入時登記簽核單據類型 material_payment（叫料匯款）
 
@@ -36,7 +38,7 @@ MODULE = ModuleSpec(
     # v1：case_extra_expenses.invoice_no（請款流程，2026-09-27）；v2：匯款實付／手續費／差額審核欄位（W1，2026-09-30）
     migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up)],
     # 與搬遷前 main.py 的掛載順序相同（路由比對順序不變）
-    routers=[_api_quotations.router, _api_material_orders.router, _api_material_approvals.router, _api_material_payments.router, _api_material_links.router, _api_settlement_actuals.router, _api_extra_expenses.router, _api_expense_form_pdf.router,
+    routers=[_api_quotations.router, _api_material_orders.router, _api_material_approvals.router, _api_material_changes.router, _api_material_payments.router, _api_material_links.router, _api_settlement_actuals.router, _api_extra_expenses.router, _api_expense_form_pdf.router,
              _api_completion_notes.router, _api_action_items.router],
     providers={
         # IP-12：逐案權限與摘要（也是「M01 在不在」的唯一訊號，helpers.case_access.CASE_PRESENT）
@@ -64,6 +66,8 @@ MODULE = ModuleSpec(
         # 31-C 匯款切片：叫料匯款申請（每單多張、各自簽核）：待簽項目與詳情；出納與差額審核走既有名稱空間（IP-100／IP-102），手續費列報表支出（IP-9）
         ("approval.queue_items", "case_material_payment"): _api_material_payments.queue_items,
         ("approval.detail", "material_payment"): _api_material_payments.detail,
+        ("approval.queue_items", "case_material_change"): _api_material_changes.queue_items,       # 33-M2b：材料申請變更（待簽項目與詳情）
+        ("approval.detail", "material_change"): _api_material_changes.detail,
         ("payables.pending", "case_material"): material_payment_cashier._Payables,
         ("remit.reviews", "case_material"): material_payment_cashier._RemitReviews,
         ("expense.entries", "remit_fee_case_material"): material_payment_cashier._expense_entries,

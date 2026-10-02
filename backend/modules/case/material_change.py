@@ -181,15 +181,30 @@ def validate(conn, quote_no, item_id, before: dict, after: dict, order: dict) ->
     return {"problems": problems, "warnings": warnings, "diff": diff}
 
 
+def _proposal_fn():
+    """案件側提案函式（2e：`material_coverage.change_proposal`）；測試以 `PROPOSAL_FN` 注入。沒有 ⇒ None。"""
+    if PROPOSAL_FN is not None:
+        return PROPOSAL_FN
+    try:
+        from modules.case import material_coverage as _mc
+    except ImportError:
+        return None
+    return _mc.change_proposal
+
+
+def proposal(conn, quote_no, item_id, proposed=None) -> dict:
+    """取得變更提案（`{itemId, before, after, diff, uncoveredLines, problems}`）：端點建立／預覽用。案件側提案函式還沒上線 ⇒ 501。"""
+    fn = _proposal_fn()
+    if fn is None:
+        raise MaterialChangeError(501, "變更申請的提案功能尚未啟用", "proposal_unavailable")
+    return fn(conn, quote_no, item_id, proposed or {})
+
+
 def _reproposal(conn, quote_no, item_id, stored_after):
     """套用前重驗：用「儲存的數量／備註」重跑案件側提案；回 (cp 或 None, 警告)。"""
-    fn = PROPOSAL_FN
+    fn = _proposal_fn()
     if fn is None:
-        try:
-            from modules.case import material_coverage as _mc                           # 2e 的唯讀提案（可能尚未存在）
-            fn = _mc.change_proposal
-        except ImportError:
-            return None, "沒有案件側提案函式，套用前未重驗涵蓋範圍"
+        return None, "沒有案件側提案函式，套用前未重驗涵蓋範圍"
     proposed = {k: stored_after.get(k) for k in ("quantity", "notes") if k in stored_after}
     return fn(conn, quote_no, item_id, proposed), ""
 
@@ -272,6 +287,7 @@ def revise(conn, change_id, user: dict, cp: dict, reason: str = "") -> dict:
                   json.dumps(res["diff"], ensure_ascii=False), json.dumps(appr, ensure_ascii=False), text, now, int(change_id)))
     out = get(conn, change_id)
     out["warnings"] = res["warnings"]
+    _audit(conn, user, "material_changes.revise", ch["quote_no"], out, "修改材料申請變更 %s" % ch["doc_code"])
     return out
 
 
