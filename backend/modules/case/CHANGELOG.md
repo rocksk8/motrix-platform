@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.73 — 第 31 包整合：簽核佇列的叫料付款單據類型改字面值
+- 內部：叫料付款的簽核佇列提供者改用字面值 `"material_payment"`（原用常數 `MP.DOC_TYPE`，佇列涵蓋守門以靜態字面值掃描，某些順序下紅）；行為不變，無使用者可見改動。
+
 ## 1.0.72 — 2026-10-02（wip/t31-material-fix-d7：31-C 守門修正＋收款人個資告知）
 - 守門修正（第 31 包 not_e2e 階段紅）：`approve()` 兩處改明列關鍵字（不用 `**`）；叫料程式不再用 `json_extract`（新增 `material_approval.case_row()`、`material_guard._load_old` 在 Python 逐筆解析；成交標籤欄位優先、空時退回 `data_json.dealTag`）；`material_order`／`material_payment` 登記進簽核套用範圍（預設跟統一流程）與簽核佇列覆蓋對照；`test_module_migrations` 期望 case 遷移 `[1..5]`。
 - **收款人個資告知**（使用者裁示 A，2026-10-02）：供應商可能是自然人，叫料匯款申請上的收款戶名與銀行帳號屬個資。新增告知對象 `material_payee`（`docs/platform/pii_forms.json`）：開匯款申請必須勾選「已告知收款人」（伺服器強制，否則 400、不建立）；建立時伺服器記錄告知（時間與人員，`privacy_notice_acks` 設定鍵 `material_payment:<單號>`）並寫稽核 `material_payment.privacy_notice_ack`；`GET /api/material-payments/{id}/privacy-notice`（讀）、`POST …/privacy-notice/ack`（補記，冪等）。
