@@ -77,3 +77,4 @@
 - 建構器分頁掛載：**先掛「我的工作」**（規格 BUILDER-ATTACH-EXISTING-MODULE-SPEC.md；daily_tasks.daily-tasks 掛載點已在第30班出貨）。
 - 第32班優先：**叫料管控擴充**（S4a–S4e，約8天；規格 wip/t32-material-link-spec-2e）。設計器預設開關待使用者預覽後裁示。
 - 第31包套用步驟 0 請正式機 Claude 加一條唯讀查詢並回報：SELECT key, version, status, published_at FROM ui_definitions WHERE kind='expense_type' ORDER BY key, version;（判斷公司是否已發布請款類型副本，影響 applicant 說明改字是否需通知重新發布）。
+- 第31包稽核：2e 探針 CLEAN（probe/t31-2e@db8d9316，PR/PO 7 題＋結算匯出＋勞報單遮蔽；探的是 commit 樹，非解包 payload）。待：c7（31-C）、d7（設計器＋包完整性）、a3（演練）、正式機暫存驗證。
