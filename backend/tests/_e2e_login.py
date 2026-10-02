@@ -16,10 +16,15 @@ SESSION_KEYS = ("token", "userId", "username", "displayName", "role", "modules",
 PREVISITED_TAB_FLAGS = ("motrix_totp_reminder_shown", "motrix_approval_banner_shown")
 
 
+#: D12（2026-10-03）：新設計器預設開之後，既有 e2e（驗舊畫面）一律釘在舊畫面——除非自己清掉（test_e2e_designer_default_on_2026_10_03.py）。
+LEGACY_UI_PINS = ("mb_designer", "et_designer")
+
+
 def session_init_script(sess):
     """寫 localStorage 的 session＋sessionStorage 的「已經過 index」旗標（inject_login 與 conftest.login_as 共用）。"""
     flags = "".join("sessionStorage.setItem(%s, '1');" % json.dumps(k) for k in PREVISITED_TAB_FLAGS)
-    return "try { localStorage.setItem('motrix_session', %s); %s } catch (e) {}" % (json.dumps(json.dumps(sess)), flags)
+    pins = "".join("if (!sessionStorage.getItem('_no_legacy_pin') && localStorage.getItem(%s) === null) localStorage.setItem(%s, '0');" % (json.dumps(k), json.dumps(k)) for k in LEGACY_UI_PINS)
+    return "try { localStorage.setItem('motrix_session', %s); %s %s } catch (e) {}" % (json.dumps(json.dumps(sess)), flags, pins)
 
 
 def wait_logged_in(page, timeout=10000):

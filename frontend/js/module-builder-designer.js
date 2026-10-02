@@ -1,5 +1,5 @@
 // module-builder-designer.js — 把共用「表單設計器」（static/form-designer.js）接進建構器 ② 表單。
-// 功能開關：頁面「新版設計器」按鈕（記在 localStorage.mb_designer）、或網址 ?designer=1／0；預設關（舊畫面照舊，新版通過 e2e 前不替換）。
+// 功能開關：頁面「新版設計器」按鈕（記在 localStorage.mb_designer）、或網址 ?designer=1／0；預設開（D12；?designer=0 或按「舊畫面」回退並記住；新版通過 e2e 前不替換）。
 // 設計器只改 fields／ui（欄位與版面）；其餘（流程、輸出、權限…）仍由建構器其他步驟編輯。自動存檔沿用建構器自己的流程（onDefChange）。
 (function () {
   window.MotrixMB.parts.push(function (MB) {
@@ -10,7 +10,7 @@
       fdInitSwitch() {
         try {
           var q = new URLSearchParams(location.search).get('designer')
-          this.useFD = q === '1' ? true : (q === '0' ? false : localStorage.getItem('mb_designer') === '1')
+          this.useFD = q === '1' ? true : (q === '0' ? false : localStorage.getItem('mb_designer') !== '0')
         } catch (e) {}
         this.$watch('tab', () => this.fdRefresh())
         this.$watch('useFD', () => this.fdRefresh())
