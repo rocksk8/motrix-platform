@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-03（wip/t33-settlement-a3-2e）：精算漂移守門＋歷史語料對照（33-A3，只加測試）
+- `test_settlement_actuals_conservation`：10 個情境（採購單連品項／額外支出、材料申請連／不連採購單／無品項、狀態矩陣、$0 與舊單、品項被刪、待審核採購單、offsets 搬家、現金口徑）逐一斷言精算 `purchasedTotal`＝營運報表＝總帳 E11＋E12（扣待審核）；任何一邊改規則而另一邊沒跟即紅。
+- `test_settlement_actuals_legacy_parity`：逐字照搬 `calcSummary()` 的參考實作對照語料（預設估計、含稅三種手填、額外支出各狀態、第 32 班前草稿缺 `adoptSystem`、缺說明／缺 id 舊品項、完結凍結）；`itemActualTotal`／`extraTotal` 逐位相同。
+
 ## (next) — 2026-10-02（wip/t33-settlement-a4-2e）：精算沖銷驗證（33-A4）＋A2 稽核修正（da S1–S3）
 - `PUT /api/quotations/{no}/settlement` 對 `settlement.offsets` 驗證（422、不存檔）：kind 合法、品項必須在報價單內（缺 id／說明的舊品項不可當去處）、同一 (kind, ref) 只能一個去處、ref 必須在目前未對應清單；上次存檔原樣未改的列放行（材料申請事後取消不卡舊草稿）。完結後僅超級管理員可改（沿用）。
 - `settlement-actuals`：已完結精算回凍結快照（`frozen`、品項金額取存檔 `actualTotalCost`、三個總額取存檔 `summary`，現算值放 `live`），不隨完結後核准的採購單漂移（S1）；舊存檔品項沒有 `adoptSystem` 鍵＝不採用（歷史相容，與今天頁面同；`legacySave`），品項沒存過＝採用（S2）；缺 id／說明的舊品項以暫時鍵納入並標 `unkeyed`＋警示，估計照算（S3）。唯讀計數 SQL：docs/platform/plans/SETTLEMENT-ACTUALS-PROBE.sql。
