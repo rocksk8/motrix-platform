@@ -402,14 +402,14 @@ def queue_items(conn) -> list:
     out = []
     for r in conn.execute("SELECT p.*, q.customer_name, q.project_name FROM case_material_payments p LEFT JOIN quotations q ON q.quote_no = p.quote_no"
                           " WHERE p.status IN ('待審核','簽核中') ORDER BY p.id DESC").fetchall():
-        raw = _approval_raw_of(r["approval_json"], MP.DOC_TYPE, r["doc_code"])
+        raw = _approval_raw_of(r["approval_json"], "material_payment", r["doc_code"])   # 字面值：簽核佇列覆蓋守門靠提供者原始碼裡的 type 字面值判定
         if raw is None:
             continue
         f = _queue_tier_fields(raw)
         sn = MP.snapshot_of(dict(r))
         base = "/api/material-payments/%d" % r["id"]
         out.append({
-            "type": MP.DOC_TYPE, "typeLabel": MP.DOC_LABEL, "docCode": r["doc_code"], "quoteNo": r["doc_code"],
+            "type": "material_payment", "typeLabel": "叫料匯款", "docCode": r["doc_code"], "quoteNo": r["doc_code"],
             "customer": r["customer_name"] or "", "projectName": sn.get("itemName") or "", "total": float(r["amount_approved"] or 0),
             "quoteDate": (f["requestedAt"] or "")[:10], "salesPerson": "", "requestedBy": f["requestedBy"],
             "requestedByDisplay": f["requestedByDisplay"], "requestedAt": f["requestedAt"], "isEditApproval": False, "reasons": [],
