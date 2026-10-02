@@ -303,6 +303,7 @@
     "case_change_requests",
     "case_extra_expenses",
     "case_material_approvals",
+    "case_material_changes",
     "case_material_payment_lines",
     "case_material_payments",
     "case_stage_visits",
