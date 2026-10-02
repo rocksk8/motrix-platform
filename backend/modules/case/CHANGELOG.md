@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-02 19:08（wip/t33-material-link-fix-2e）：連結失效後可開匯款申請（第 32 包探針）
+- `material_payment.create`：「已對應採購單不能另開匯款申請」改看**有效**連結（`purchase_items._link_check`），不再只看 `poDocCode` 有沒有填。採購單作廢／退回後連結失效、金額回到材料申請時，這筆不再被卡住（既不能走採購單請款、又不能匯款）；連結有效時照舊 409。
+
 ## (next) — 2026-10-02（wip/t33-link-guard-d7）
 - 守門：已有付款紀錄的材料申請，經 case-record 整包存檔也不可新增／改連採購單（`bad_link`「已有付款紀錄，不可對應採購單」）；`link_validator` 對 has_payment 放行（既有連結存回）後，這條擋在守門自己做，與專屬端點同規則。
 

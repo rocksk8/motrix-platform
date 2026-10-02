@@ -215,3 +215,22 @@ def test_paid_history_link_message_and_validator_does_not_block_resaving_an_exis
         assert "無效" in (PI.link_validator(cn, NO, dict(paid, paidStatus="pending", paidAmount=0, poDocCode="PO-NOPE")) or "")   # 真正無效的連結仍擋
     finally:
         cn.close()
+
+
+def test_remittance_is_blocked_only_by_a_valid_po_link_not_by_a_dead_one(W):
+    """33 修正（2e 第 32 包探針）：採購單作廢後連結失效 ⇒ 金額回到材料申請、匯款申請可以開；連結有效時仍不能開。"""
+    c, h = W
+    po = _approved_po(c, h, [_ln("a", 3, unitCost=1000)])
+    cn = db.get_db()
+    cn.execute("INSERT INTO suppliers (id, name, code, created_at, updated_at) VALUES (1,'甲','S-1','2026-10-02','2026-10-02')")
+    cn.commit()
+    cn.close()
+    _put_materials([{"itemId": "L", "itemName": "品", "quantity": 3, "unit": "台", "unitPrice": 1000, "totalPrice": 3000, "paidStatus": "pending",
+                     "paidAmount": 0, "paidDate": "", "supplierId": 1, "quoteItemId": "a", "poDocCode": po["docCode"], "poLine": 1}], {"L": "已核准"})
+    url = "/api/quotations/%s/material-orders/L/payments" % NO
+    body = {"payeeNoticeAcked": True, "bankCode": "004", "bankName": "臺灣銀行", "bankAccountName": "甲", "bankAccountNumber": "1234567890"}
+    r = c.post(url, headers=h, json=body)
+    assert r.status_code == 409 and "不能另開匯款申請" in r.text                                   # 有效連結 ⇒ 擋
+    _status(po["id"], "已作廢")
+    r2 = c.post(url, headers=h, json=body)
+    assert r2.status_code == 200, r2.text                                                         # 連結失效 ⇒ 可以開匯款申請
