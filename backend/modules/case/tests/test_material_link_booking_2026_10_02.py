@@ -112,5 +112,5 @@ def test_operating_report_marks_unlinked_material_and_amounts_are_unchanged(W):
     month = date.today().strftime("%Y-%m")
     r = c.get("/api/reports/expenses-monthly", params={"year": date.today().year, "month": month, "basis": "accrual"}, headers=h)
     assert r.status_code == 200, r.text
-    mat = [x for x in r.json()["expenses"]["details"]["material"] if x.get("quoteNo") == NO and "叫料" in x["desc"]]
+    mat = [x for x in r.json()["expenses"]["details"]["material"] if x.get("quoteNo") == NO and "材料申請" in x["desc"]]
     assert len(mat) == 1 and mat[0]["amount"] == 800 and "｜未申請採購單" in mat[0]["taxNote"] and mat[0]["noPo"] is True

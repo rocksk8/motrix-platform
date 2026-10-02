@@ -150,6 +150,7 @@ def test_new_material_request_stays_unsent_until_submit(live_server, make_user, 
     _wait(page, lambda: sorted(a["status"] for a in _approvals()) == ["待審核", "草稿"], "一鍵送審後：另一列待審核")
     assert [o["itemName"] for o in _orders()] == ["路由器", "線材"]
     page.wait_for_function("() => [...document.querySelectorAll('#fin-material-orders [data-testid=mo-ap-status]')].some(e => e.innerText === '待審核')", timeout=15000)
+    page.wait_for_selector(f'{PANEL} [data-testid="mo-withdraw"]:visible', timeout=5000)      # 送審後頁籤跟著切到「審核中」，那一列看得到
     submitted = [a["doc_code"] for a in _approvals() if a["status"] == "待審核"]
     assert len(submitted) == 1 and _queue_codes(page, live_server, tok) == submitted      # 只有送審的那張在佇列，草稿不在
     _shot(page, "03-one-click-submit")

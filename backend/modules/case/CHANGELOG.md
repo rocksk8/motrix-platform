@@ -1,5 +1,11 @@
 # 案件 更新紀錄
 
+## 1.0.77 — 2026-10-02（wip/t32-seam-d7：材料申請連結接縫，接 32-S4）
+- `quoteItemId`／`poDocCode`／`poLine` 列為實質欄位（核准後改連結 ⇒ 回草稿重送審；`overPlanReason` 是說明，不算）；`poLine` 一律轉整數（專屬端點與 case-record 整包存檔同）。
+- 儲存時連結檢查：`material_guard.LINK_VALIDATOR`（預設 None，由 `api/material_approvals.py` 掛上 `purchase_items.link_validator`）；無效連結 ⇒ 該列（或該次變更）被拒，code `bad_link`，不留殘列、不建草稿。
+- 送審時 `purchase_items.material_submit_check`：問題 ⇒ 400（含 `po_line_taken`、超出計畫量須填原因）；判定快照寫進 `approval_json.linkSnapshot`；簽核詳情追加「採購單連結」「超出計畫」兩欄。
+- 已對應採購單的材料申請不能開匯款申請（409；按鈕隱藏）；有匯款申請時不能改連結（沿用 `has_payments`）。
+
 ## (next) — 2026-10-02 14:20（wip/t32-s4a-2e）：材料申請連結前端（32-S4d）＋改用「材料申請」用字
 - 前端 `js/case-management-mlink.js`（新檔，獨立於 31-C 區塊）：「從報價單品項帶入」（已申請完成、剩餘 0 者不列，數量預設剩餘量）、「從採購單明細帶入」（只列尚未被有效連結用掉者）、頁籤（已核准／舊單〔預設〕、審核中、草稿與退回、已取消、全部；未儲存的新列每個頁籤都顯示）、徽章「該材料申請未申請採購單」（讀後端判定；舊單與 $0 不標）、超出計畫量原因欄。
 - `MaterialOrder` 存檔模型加選填 `quoteItemId`／`poDocCode`／`poLine`／`overPlanReason`；空值不寫入（沒用連結的舊單形狀不變）。前端載入與存檔原樣帶回這四鍵（整份覆寫端點）。

@@ -5,7 +5,7 @@
 import json
 
 import db
-from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W  # noqa: F401
+from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W, _ln, _mk, _submit  # noqa: F401
 
 URL = "/api/quotations/%s/material-orders" % NO
 
@@ -39,12 +39,14 @@ def _patch(c, h, orders):
 
 def test_link_keys_round_trip_and_empty_ones_are_not_written(W):
     c, h = W
-    r = _patch(c, h, [_order("L1", quoteItemId="a", poDocCode="PO-1", poLine=2, overPlanReason="加購"),
+    po = _mk(c, h, "purchase_order", [_ln("a", 1), _ln("a", 1)]).json()          # 32-S4 接縫後 poDocCode 必須是有效連結（兩行，才有第 2 列）
+    assert _submit(c, h, po["id"]).status_code == 200
+    r = _patch(c, h, [_order("L1", quoteItemId="a", poDocCode=po["docCode"], poLine=2, overPlanReason="加購"),
                       _order("L2", quoteItemId="", poDocCode="", poLine=None, overPlanReason=""),
                       _order("L3")])
     assert r.status_code == 200 and not r.json().get("rejected"), r.text
     got = _saved()
-    assert (got["L1"]["quoteItemId"], got["L1"]["poDocCode"], got["L1"]["poLine"], got["L1"]["overPlanReason"]) == ("a", "PO-1", 2, "加購")
+    assert (got["L1"]["quoteItemId"], got["L1"]["poDocCode"], got["L1"]["poLine"], got["L1"]["overPlanReason"]) == ("a", po["docCode"], 2, "加購")
     for k in ("L2", "L3"):
         assert not {"quoteItemId", "poDocCode", "poLine", "overPlanReason"} & set(got[k])
     back = {o["itemId"]: o for o in c.get(URL, headers=h).json()["materialOrders"]}

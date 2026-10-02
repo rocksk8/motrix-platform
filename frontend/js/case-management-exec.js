@@ -242,6 +242,12 @@ window.CM_PARTS.push(() => ({
         if (!m) return
       }
       await this._moSubmitPost(m)
+      // 送審後那一列會離開「已核准／舊單／尚未送審」分頁（頁籤由 case-management-mlink.js 提供）：跟著切過去，使用者才看得到它
+      if (typeof this.mlTab === 'string' && this.mlTab !== 'all') {
+        const st = (this.moApprovals[id] || {}).status
+        if (['待審核', '簽核中'].includes(st)) this.mlTab = 'review'
+        else if (st === '已核准') this.mlTab = 'approved'
+      }
     },
     async _moSubmitPost(m) { await this._moPost(m, 'submit', {}, d => d.autoApproved ? `已核准（未設定簽核層）：${d.docCode}` : `已送審：${d.docCode}`) },
     async moWithdraw(m) { await this._moPost(m, 'withdraw', {}, () => '已撤回（回草稿）') },

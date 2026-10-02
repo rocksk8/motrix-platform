@@ -127,7 +127,7 @@ def test_material_orders_panel_round_trip(live_server, make_user, e2e_browser):
     page.on("request", lambda r: case_list_calls.append(r.url)
             if "/api/quotations?" in r.url and "offset=0" in r.url else None)
     page.on("request", lambda r: mo_calls.append(r.url)
-            if "/material-orders" in r.url and r.method == "GET" else None)
+            if "/material-orders" in r.url and "/link-status" not in r.url and r.method == "GET" else None)   # link-status＝32-S4 連結徽章的另一支小請求，不算「清單載入」
     api_calls = []
     page.on("request", lambda r: api_calls.append(r.method + " " + r.url)
             if "/api/" in r.url else None)
