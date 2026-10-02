@@ -125,3 +125,4 @@
 - D4：稅額「逐期算、最後一期補到與整筆一致」。
 - 建包優化 step 3（d7，wip/build-opt2-d7@bf534ca4）：dry-run 回放 18 個紅燈檔召回 15/18（83%），未達 0 漏；漏的 3 個屬「跨模組守門家族」（font_zoom e2e marker、money_round、pii_archive_mirror），加進保底樣式後 18/18（樣本內）。結論：維持影子模式，需 ≥2 班 0 漏後才可略過任何測試；與 a3 author_gate 共用一份 guard_patterns.json。
 - D2 裁示（使用者 2026-10-02）：匯款款別「會依據案件狀態調整付款，最好是能調整，像是既有這樣」⇒ 採公司可維護的款別清單＋隨案件階段的規則（預設出貨四種：訂金／進度款／完工款／驗收款；設定方式參照既有可調整的案件階段設定）；多 1～2 天。
+- 2e 發現（第33班修）：link_validator 呼叫 _link_check 在有付款歷史時回 (False,'has_payment')，若對『已連結＋已付款』的列重存會被誤擋；目前不可達（連結只能加在無付款的單、連了就不能開匯款），不為此重跑第32班階段。修法：link_validator 對 has_payment 視為有效；material_submit_check 對 has_payment 回『這筆材料申請已有付款紀錄，不可對應採購單』。
