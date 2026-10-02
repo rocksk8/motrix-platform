@@ -224,6 +224,7 @@ def test_overpayment_goes_to_remit_review_and_only_another_admin_decides(client,
     rv = client.get("/api/cashier/remit-reviews", headers=w["adm"]).json()["items"]
     mine = [i for i in rv if i["source"] == "case_material"]
     assert [(i["payable"], i["actual"], i["diff"]) for i in mine] == [(4000.0, 4500.0, 500.0)]
+    assert mine[0]["fee"] == 0.0 and mine[0]["paidAt"] == "2031-03-20", mine[0]      # 差額審核表要有手續費與付款日（c7 稽核 M-1：行內註解曾吞掉這兩個鍵）
     lid = mine[0]["key"]
     assert client.post("/api/cashier/remit-reviews/case_material/%s/decision" % lid, json={"decision": "approve"}, headers=w["cash"]).status_code == 403   # 非 admin
     assert client.post("/api/cashier/remit-reviews/case_material/%s/decision" % lid, json={"decision": "approve"}, headers=w["adm"]).status_code == 403   # 自己登錄的不能自審
