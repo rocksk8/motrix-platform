@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-02 07:27（fix/t32-dispatch-cancel-2e）：審核中取消派發同交易關閉待審階段（稽核 S-2）
+## 1.1.4 — 2026-10-02 07:27（fix/t32-dispatch-cancel-2e）：審核中取消派發同交易關閉待審階段（稽核 S-2）
 - 修正：派發在**待審核／簽核中**（派發審核或完工審核）被取消時，`dispatch_flow.set_status` 在同一個交易內把還在審的階段關閉（`已退回`＋歷程記一筆 `cancelled`、`closedByCancel`）；已核准／已退回的階段不動；沒有在審的（草稿、舊單、已核准）取消行為不變。`/approve`、`/reject` 對已取消的派發回 409；簽核佇列提供者不列已取消的派發，待簽紅點／計數隨之消失；稽核 `vendor.dispatch.cancelled` 的 detail 帶 `closedStages`，並通知送審人（不含金額）。
 
 ## 1.1.3 — 2026-10-02 01:08（fix/t31-build2-2e）：派發佇列提供者的 type 寫成字面值

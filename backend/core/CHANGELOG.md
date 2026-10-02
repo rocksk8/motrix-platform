@@ -2,14 +2,14 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — 2026-10-02（wip/t31-expense-prefill-a3：請款單自動帶入的接線）
+## 1.105 — 2026-10-02（wip/t31-expense-prefill-a3：請款單自動帶入的接線）
 - L1（新增選填參數，向下相容）：`helpers.expense_types.validate_values(…, prior=None, case=None, type_code="")`——`prior`＝修改時舊單的 data：不重新解析任何自動帶入來源、`locked` 欄位沿用舊值（建立時行為不變）；`case`＝`{customer, project}`；`type_code` 供「我上一次填過的內容」查詢。
 - L1（新增）：`helpers.expense_types.last_value_hook(type_code)`（`lastUsed` 來源的查詢鉤子：本人在該類型最近一張單據的欄位值；只查 `case_extra_expenses`）。`validate_expense_type` 在 `helpers.prefill_sources` 上線後，逐欄把 `default: {"$": …}` 交給 `check_field` 檢查（上線前行為不變）。
 
-## (next) — 2026-10-02 09:14（wip/t32-prpo-s1-2e）：結案精算 PDF 的採購單分項（32-S5 追補）
+## 1.104 — 2026-10-02 09:14（wip/t32-prpo-s1-2e）：結案精算 PDF 的採購單分項（32-S5 追補）
 - L0（行為）：`pdf_gen` 結案精算 PDF 的「實際成本精算」在 `summary.itemPoUnadopted > 0` 時多一列「採購單（品項尚未採用）」（分項加總＝實際總成本）；沒有該鍵或為 0 ⇒ 輸出逐字不變。介面不變。
 
-## (next:minor) — 2026-10-02 00:07（wip/t31-prefill-sources-2e）：表單自動帶入來源登記處
+## 1.103 — 2026-10-02 00:07（wip/t31-prefill-sources-2e）：表單自動帶入來源登記處
 - L1（新增）：`helpers/prefill_sources`（`PREFILL_SOURCES`／`list_sources`／`get`／`default_token`／`check_field`／`make_ctx`／`resolve_field`／`fill_defaults`）——預設值 token（`{"$": …}`）的唯一登記處，定義驗證與伺服器取值共用：`requester`／`currentUser`／`requesterDept`／`requesterManager`／`today`／`now`／`company`／`caseCustomer`／`caseProject`／`lastUsed`；每個來源有 label／why／example（文字只在這裡改）、`applies_to`、`lockable`、`needs_context`；resolve 永不丟例外、解析不到＝留白；只在建立當下解析一次，更新（給 `prior`）不重算、locked 欄保留舊值。
 - L1（行為）：`helpers.custom_modules` 的 token 驗證改走登記處（ref 欄位的 token 原本沒檢查，現在檢查；案件類 token 在沒有案件脈絡的自訂單據被擋）；`_validate_fields` 加選填 `mount_has_case`、`_validate_token` 加選填 `mount_has_case`、`_with_default_tokens` 加選填 `ctx`／`prior`（相容擴充，舊呼叫不變）；`DEFAULT_TOKENS` 由登記處衍生。
 - L1（端點，不入快照）：`GET /api/platform/prefill-sources`（登入即可）回登記處清單，表單設計器的下拉只讀這支。
