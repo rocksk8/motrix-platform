@@ -18,6 +18,13 @@ skip_module_unless("case", "本檔全部是 M01 的叫料審核")
 NO = "MQ-MATG-001"
 
 
+
+@pytest.fixture(autouse=True)
+def _po_rule_off(monkeypatch):
+    """本檔測的是別的規則；33-M1「新申請必須帶採購單／送審必須有已核准採購單」另有 test_material_po_required_2026_10_03.py。"""
+    from modules.case import material_approval as _MA
+    monkeypatch.setattr(_MA, "PO_REQUIRED", False)
+
 def _q(sql, args=()):
     import db
     conn = db.get_db()

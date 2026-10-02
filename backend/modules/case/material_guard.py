@@ -51,6 +51,19 @@ def _norm_links(o: dict) -> dict:
     return o
 
 
+def _supplement_only(conn, quote_no, iid, old, cand, st) -> bool:
+    """「補對應」：這張單不受強制採購單規則約束（舊單轉的審核列／規則上線前建立），且與現值相比只有連結鍵從「沒有」變成「有」。"""
+    if st == MA.S_CANCELLED:
+        return False
+    if MA.po_required_for(MA.get(conn, quote_no, iid)):
+        return False
+    if str(old.get("poDocCode") or "").strip() or not str(cand.get("poDocCode") or "").strip():
+        return False
+    diff_keys = [k for k in MA.SUBSTANTIVE_KEYS if not _same(k, cand.get(k), old.get(k))]
+    return bool(diff_keys) and all(k in _LINK_KEYS for k in diff_keys) and (not str(old.get("quoteItemId") or "").strip()
+                                                                       or str(cand.get("quoteItemId") or "") == str(old.get("quoteItemId") or ""))
+
+
 def _link_problem(conn, quote_no, order):
     if LINK_VALIDATOR is None or not any(order.get(k) not in (None, "") for k in _LINK_KEYS):
         return None
@@ -192,6 +205,9 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
                 _rej(rejected, iid, "supplierId", "supplier_required", "新增材料申請必須選擇供應商")
                 continue
             row = _norm_links(dict(no))
+            if MA.PO_REQUIRED and actor is not None and not str(row.get("poDocCode") or "").strip():    # E1：新申請只能從採購單帶入（後端面；系統寫入不擋）
+                _rej(rejected, iid, "poDocCode", "po_required", "需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。")
+                continue
             lmsg = _link_problem(conn, quote_no, row)
             if lmsg:
                 _rej(rejected, iid, "poDocCode", "bad_link", lmsg)
@@ -220,12 +236,39 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
             _rej(rejected, iid, "*", "invalid", msg)
             out.append(merged)
             continue
-        if MA.substantive_changed(old, cand):
+        supplement = MA.substantive_changed(old, cand) and _supplement_only(conn, quote_no, iid, old, cand, st)
+        if supplement:                                                                   # 舊單／上線前已存在的單補對應：只增連結鍵，不重簽，留紀錄
+            from modules.case import purchase_items as _PIs
+            lcode, lmsg = "bad_link", None
+            if MP.has_live_payments(conn, quote_no, iid):
+                lcode, lmsg = "has_payments", "這張材料申請已有匯款申請，請先作廢申請再修改內容"
+            elif _PIs.has_paid_history(old):
+                lmsg = "這筆材料申請已有付款紀錄，不可對應採購單"
+            else:
+                lmsg = _link_problem(conn, quote_no, cand) or (None if str(cand.get("poDocCode") or "").strip() else "補對應必須指定採購單")
+                if not lmsg:                                                             # 一個採購單行只能對應一筆活的材料申請（與送審檢查同一判斷；補對應不經送審，要在這裡擋）
+                    taken = [p for p in _PIs.material_submit_check(conn, quote_no, cand, exclude_item_id=iid)["problems"] if p["code"] == "po_line_taken"]
+                    lmsg = taken[0]["message"] if taken else None
+            if lmsg:
+                _rej(rejected, iid, "poDocCode", lcode, lmsg)
+                out.append(merged)
+                continue
+            for k in _LINK_KEYS:
+                if k in no:
+                    merged[k] = no[k]
+            MA.record_link_supplement(conn, quote_no, iid, user, str(cand.get("poDocCode")).strip())
+        elif MA.substantive_changed(old, cand):
             if MP.has_live_payments(conn, quote_no, iid):                                # 已有匯款申請：金額／品名等變動會讓申請與額度對不上
                 _rej(rejected, iid, "*", "has_payments", "這張材料申請已有匯款申請，請先作廢申請再修改內容")
                 out.append(merged)
                 continue
             if any(not _same(k, cand.get(k), old.get(k)) for k in _LINK_KEYS):
+                from modules.case import purchase_items as _PIg
+                new_po, old_po = str(cand.get("poDocCode") or "").strip(), str(old.get("poDocCode") or "").strip()
+                if new_po and new_po != old_po and _PIg.has_paid_history(old):          # 已有付款紀錄不可新增／改連採購單（與專屬端點同規則；link_validator 對既有連結存回放行）
+                    _rej(rejected, iid, "poDocCode", "bad_link", "這筆材料申請已有付款紀錄，不可對應採購單")
+                    out.append(merged)
+                    continue
                 lmsg = _link_problem(conn, quote_no, cand)
                 if lmsg:
                     _rej(rejected, iid, "poDocCode", "bad_link", lmsg)

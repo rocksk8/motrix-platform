@@ -242,11 +242,21 @@ def _amount(v, label="申請金額"):
     return r2(f)
 
 
+def _has_valid_po_link(conn, quote_no: str, order: dict) -> bool:
+    """材料申請目前是否連到**有效**的採購單（`purchase_items._link_check`）。只看 `poDocCode` 有沒有填會讓採購單作廢後的申請
+    既不能走採購單請款、又不能匯款（金額已回到材料申請，付款出口卻被關；2e 第 32 包探針）。"""
+    if not str((order or {}).get("poDocCode") or "").strip():
+        return False
+    from modules.case import purchase_items as PI
+    _, rows = PI._case_state(conn, quote_no)
+    return PI._link_check(order, [r for r in rows if (r["kind"] or "") == PI.ORD])[0]
+
+
 def create(conn, quote_no: str, order: dict, user: dict, body: dict) -> dict:
     """開一張匯款申請（草稿）。`body`＝{amount?, supplierId?, bankCode, bankName, bankAccountName, bankAccountNumber, overCapReason?}；
     金額不帶＝叫料單剩餘額度。供應商：叫料單上的 `supplierId`，沒有（舊單）就要在 body 給。"""
     _check_order_for_payment(conn, quote_no, order)
-    if str(order.get("poDocCode") or "").strip():                              # 32-S4：已對應採購單的材料申請，付款走採購單的請款流程，不能另開匯款申請（避免同一筆錢付兩次）
+    if _has_valid_po_link(conn, quote_no, order):                              # 32-S4（33 修正：只認「有效」連結，連結失效＝採購單作廢／退回後不再卡住匯款）：已對應採購單的材料申請，付款走採購單的請款流程，不能另開匯款申請（避免同一筆錢付兩次）
         raise MaterialPaymentError(409, "這筆材料申請已對應採購單 %s，請走採購單的請款流程，不能另開匯款申請" % str(order.get("poDocCode")).strip())
     item_id = str(order.get("itemId"))
     sid = (body or {}).get("supplierId") or order.get("supplierId")
