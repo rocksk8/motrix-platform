@@ -68,6 +68,23 @@ def module_own_tests(changed, tree_files):
     return sorted(f for f in tree_files if is_test_file(f) and any(f.startswith("backend/modules/%s/tests/" % m) for m in mods))
 
 
+def changed_page_tests(plans, changed):
+    """--quick 用：選題器因『這次真的改到的頁面／前端 js』選到的測試（理由 page:pages/<name>／js:<name> 對得上 changed 的檔）。
+    不含因 core／router／mod 相依而連帶選到的（那些在 d7 的實測會膨脹成六百多檔）。"""
+    names = set()
+    for f in changed:
+        if f.startswith("frontend/pages/") and f.endswith(".html"):
+            names.add("page:pages/" + f.rsplit("/", 1)[-1])
+        elif f.startswith("frontend/js/"):
+            names.add("js:" + f.rsplit("/", 1)[-1])
+    out = []
+    for plan in plans:
+        for t, why in ((plan or {}).get("selected") or {}).items():
+            if any(str(w) in names for w in why):
+                out.append(t)
+    return sorted(set(out))
+
+
 def build_selection(plan_n, plan_e, tree_files, changed, guard_args=(), patterns=PATTERNS, full_floor=False, quick=False):
     """⇒ {"A1": [...], "A2": [...], "A3": [...], "A4": [...], "E": [...], "non_e2e": [...聯集...], "forced_full": [...]}
     全部是 repo 相對路徑（backend/…）。plan_*＝stage_select 的計畫 dict（floor／selected 一律取用，即使 mode=full——
@@ -82,11 +99,10 @@ def build_selection(plan_n, plan_e, tree_files, changed, guard_args=(), patterns
     quick_cut = False
     if quick:
         a1 = []                                   # --quick：不含整個 tests/platform 與依 diff 觸發的工具演練（整包由階段測試涵蓋）
-        forced_any = ((plan_n or {}).get("forced_full") or []) + ((plan_e or {}).get("forced_full") or [])
-        if forced_any:                            # 這個 diff 會讓選題器整段全量（硬底層／fixture 層／選題器自己改了）：作者端快速版改跑「改動模組自己的測試」
-            quick_cut = True
+        quick_cut = True                          # 一律縮成「改動模組自己的測試」＋因改到的頁面選到的測試（相依選題在 core／router 改動時會膨脹成數百檔；整包由階段測試涵蓋）
     a3 = sorted((plan_n or {}).get("selected") or {})
     own = module_own_tests(changed, tree_files) if quick_cut else []
+    page_hits = changed_page_tests((plan_n, plan_e), changed) if quick_cut else []
     if quick_cut:
         a3 = []
     a2 = pattern_files(tree_files, patterns)
@@ -98,8 +114,9 @@ def build_selection(plan_n, plan_e, tree_files, changed, guard_args=(), patterns
     a4 = [f for f in changed_tests if f not in e2e_sel and f not in e2e_collected]        # e2e 類的測試檔改動 ⇒ 進 e2e 那一段
     e2e_files = sorted(e2e_sel | {f for f in changed_tests if f in e2e_collected})
     if quick_cut:
-        e2e_files = sorted({f for f in own if "test_e2e_" in f.rsplit("/", 1)[-1]} | {f for f in changed_tests if f in e2e_collected})
-        a3 = sorted(f for f in own if "test_e2e_" not in f.rsplit("/", 1)[-1] and f not in a4)
+        is_e2e = lambda f: "test_e2e_" in f.rsplit("/", 1)[-1] or f in e2e_collected          # noqa: E731
+        e2e_files = sorted({f for f in own if is_e2e(f)} | {f for f in changed_tests if f in e2e_collected} | {f for f in page_hits if is_e2e(f)})
+        a3 = sorted((set(f for f in own if not is_e2e(f)) | set(f for f in page_hits if not is_e2e(f))) - set(a4))
     non_e2e = sorted(set(a1) | set(a2) | set(a3) | set(a4))
     forced = list(dict.fromkeys(((plan_n or {}).get("forced_full") or []) + ((plan_e or {}).get("forced_full") or [])))
     return {"A1": a1, "A1x": a1x, "A2": a2, "A3": a3, "A4": a4, "E": e2e_files, "non_e2e": non_e2e, "forced_full": forced, "quick_cut": quick_cut}
@@ -401,7 +418,7 @@ def main(argv=None):
     if a.quick:
         print("  quick：不含整個 tests/platform（A1）與工具演練，整包由階段測試涵蓋；只當部分證據")
         if sel.get("quick_cut"):
-            print("  quick：這個 diff 讓選題器整段全量（見下），A3／e2e 改為「改動模組自己的測試」；其餘由階段測試涵蓋")
+            print("  quick：A3／e2e 只含「改動模組自己的測試」＋因改到的頁面／前端 js 選到的測試；相依連帶選題不跑，由階段測試涵蓋")
     if sel["guards_missing"]:
         print("  ⚠ GUARDS 找不到檔（被改名？）：" + "、".join(sel["guards_missing"]))
     if sel["forced_full"]:
