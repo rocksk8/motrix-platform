@@ -872,3 +872,30 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 對方不在時 | 提供者不在 ⇒ 視同 0（精算只少這一項，不阻擋） |
 | 契約版本 | 1（2026-10-03） |
 | 守門 | `backend/modules/case/tests/test_settlement_cost_extras_2026_10_03.py::test_remit_fees_equal_the_old_pages_two_sources` |
+
+## IP-SH2　`shipping.material_shipped`：材料申請的出貨占用量（M03 → M01）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 供應：`modules/supply/material_link.py::material_shipped` |
+| 使用方 | 尚無（33-S3：材料申請頁三格數量、取消阻擋；接入時補） |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("shipping.material_shipped", "supply"): fn`；取用：`registry.providers("shipping.material_shipped").get("supply")` ⇒ `fn(conn, quote_no, exclude_note_no=None)` |
+| 回傳 | `{materialItemId: {"reserved": 數量（待審核／簽核中）, "shipped": 數量（已核准）, "notes": [出貨單號…]}}`；草稿、已退回不計 |
+| 對方不在時 | 提供者不在 ⇒ 呼叫端視同 0 |
+| 契約版本 | 1（2026-10-03） |
+| 守門 | `backend/modules/supply/tests/test_shipping_material_link_2026_10_03.py` |
+
+## IP-SH3　`shipping.material_shipped_qty`：材料申請已出貨＋占用中的數量（M03 → M01 變更申請；暫定號，列車定號；2026-10-03，c7）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 供應：`modules/supply/material_link.py::material_shipped_qty` |
+| 使用方 | 尚無（M01 變更申請〔d7〕的 `SHIPPED_PROVIDER` 接入時補檔案路徑；變更申請不得低於已出貨） |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("shipping.material_shipped_qty", "supply"): fn`；取用：`registry.providers("shipping.material_shipped_qty").get("supply")` ⇒ `fn(conn, quote_no, item_id) -> float` |
+| 回傳 | 該材料申請（`item_id`＝材料申請列的 itemId）**已出貨（已核准出貨單）＋占用中（待審核／簽核中）**的數量；草稿、已退回不計；沒有資料 ⇒ `0.0`（不丟例外）。單位＝材料申請自己的單位（無換算） |
+| 對方不在時 | 提供者不在 ⇒ 呼叫端視同「沒有出貨資料」（d7 的變更申請回警示「未檢查」；提供者丟例外則拒絕變更＝fail closed） |
+| 契約版本 | 1（2026-10-03；與 IP-SH2 同源，只是回單一數字） |
+| 守門 | `backend/modules/supply/tests/test_shipping_material_link_2026_10_03.py::test_material_shipped_qty_is_reserved_plus_shipped` |
+

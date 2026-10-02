@@ -4,6 +4,7 @@ from core.registry import ModuleSpec
 
 from modules.supply import attachments
 from modules.supply import gl_events
+from modules.supply import material_link
 from modules.supply.api import inventory, shipping_notes, suppliers
 
 MODULE = ModuleSpec(
@@ -24,6 +25,10 @@ MODULE = ModuleSpec(
         ("approval.queue_items", "shipping_note"): shipping_notes._queue_items,
         ("approval.reassign", "shipping_note"): shipping_notes.REASSIGN,
         ("approval.detail", "shipping_note"): shipping_notes._queue_detail,
+        # 33-S1：出貨單連動材料申請——已占用／已出貨量（M01 取消阻擋與三格數量用；M03 不讀 M01，可出貨量取自 M01 的 material.shippable）
+        ("shipping.material_shipped", "supply"): material_link.material_shipped,
+        # 34：同一份資料的單一數字版（reserved＋shipped；M01 變更申請「不得低於已出貨」用）
+        ("shipping.material_shipped_qty", "supply"): material_link.material_shipped_qty,
         # IP-104：上傳檔的讀取權限（出貨單回簽附件；2026-09-30 P0）
         ("uploads.path_access", "supply"): shipping_notes._ShippingPathAccess,
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
