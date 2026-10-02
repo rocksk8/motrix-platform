@@ -52,8 +52,8 @@ def test_contractor_voucher(client, live_server, make_user, new_page, login_as, 
         return
     _html_shot(new_page(), pdf_gen._build_contractor_voucher_html({"voucherNo": vno, "status": "待審核"}), "contractor-voucher-unapproved-html")
     _do_return(page, "匯款對象有誤")
-    _eventually("SELECT status FROM contractor_payment_vouchers WHERE voucher_no=?", (vno,), "草稿", "退回後")
-    a = _last_audit("contractor_voucher.reject")
+    _eventually("SELECT status FROM contractor_payment_vouchers WHERE voucher_no=?", (vno,), "草稿", "退回後", page=page)
+    a = _last_audit("contractor_voucher.reject", page=page)
     assert a and "匯款對象有誤" in (a["detail_json"] or "")
 
 
@@ -104,7 +104,7 @@ def test_accounting_voucher(client, live_server, make_user, new_page, login_as, 
     _do_return(page, "科目有誤")
     row = _db("SELECT status, voucher_no FROM vouchers_all WHERE id=?", (vid,))[0]
     assert row["status"] == "草稿" and row["voucher_no"].endswith("-R1"), row
-    assert _last_audit("voucher.send_back") is not None
+    assert _last_audit("voucher.send_back", page=page) is not None
 
 
 # ─────────────────────────────── 簽核佇列預覽（傳票＝HTML 預覽稿，不再 400；出貨單＝PDF，簽核人非管理者）───────────────────────────────
@@ -200,7 +200,7 @@ def test_custom_record(client, live_server, make_user, new_page, login_as, compa
     btn.click()
     page.wait_for_function("() => !document.querySelector('#cr-reject')", timeout=45000)
     assert _db("SELECT status FROM custom_records WHERE module_key=? AND record_no=?", (key, no))[0]["status"] == "draft"
-    a = _last_audit("custom.reject")
+    a = _last_audit("custom.reject", page=page)
     assert a and "預覽頁退回" in (a["detail_json"] or "")
 
 

@@ -161,7 +161,7 @@ def test_deleting_payment_item_asks_first(live_server, make_user, e2e_browser):
     page.on("request", lambda r: writes.append(r.url) if r.method in ("PATCH", "PUT", "POST") and "/case-record" in r.url else None)
     first_del.click()
     answer_confirm(page, ok=False, expect="訂金款")
-    page.wait_for_timeout(2000)   # 超過 1.5 秒防抖：若沒有確認就刪，這時已經存進去了（Playwright 等待：會處理事件）
+    page.wait_for_timeout(3000)   # 超過 1.5 秒防抖（餘裕 1.5 秒：負載下計時器稍晚觸發也看得到）：若沒有確認就刪，這時已經存進去了（Playwright 等待：會處理事件）
     assert writes == [], "取消之後不可以送出任何存檔請求：%s" % writes
     assert [it["id"] for it in _items("MQ-E2ELOSS-D")] == [1, 2], "取消之後不可以刪"
 

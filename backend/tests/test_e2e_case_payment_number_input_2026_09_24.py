@@ -6,7 +6,6 @@
 """
 from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
-import time
 
 import pytest
 
@@ -84,12 +83,16 @@ def test_payment_amounts_accept_separators_and_block_bad_values(live_server, mak
 
     page.fill(FEE1, "1o")
     assert "num-bad" in (page.get_attribute(FEE1, "class") or "")
+    writes = []                                                    # 負向斷言看「請求有沒有送出」，不睡著再看資料庫（睡著時卡住的請求會讓資料庫斷言假綠）
+    page.on("request", lambda r: writes.append((r.method, r.url)) if r.method in ("PUT", "PATCH", "POST") and "/case-record" in r.url else None)   # 只看案件資料的存檔（階段同步 /stages 等是 saveCaseRecord 之外的背景呼叫）
     msg = _save(page)
     assert "無法辨識" in msg, msg
-    time.sleep(0.3)
+    page.wait_for_timeout(500)                                     # Playwright 的等待：會處理事件；若有請求被送出，這時已被記錄
+    assert writes == [], "標紅時不可以送出存檔請求：%s" % writes
     assert _items()[1]["feeAmount"] == 15, "標紅時不可以存檔"
 
     page.fill(FEE1, "20")
     assert "num-bad" not in (page.get_attribute(FEE1, "class") or "")
     assert "已儲存" in _save(page)
+    assert writes, "正對照：修正後的存檔請求有被記錄到（否則上面的『沒有請求』沒有意義）"
     assert _items()[1]["feeAmount"] == 20

@@ -72,8 +72,18 @@ def _pdf_text(body: bytes) -> str:
     return "\n".join((p.extract_text() or "") for p in PdfReader(io.BytesIO(body)).pages)
 
 
-def _eventually(sql, args, want, what, timeout=10.0):
-    """退回是在提示關閉之後才送出請求：資料庫終點用輪詢等（等終點狀態，不是等某一趟請求）。"""
+def _pause(page, seconds):
+    """輪詢間的等待：給了 page 就用 `page.wait_for_timeout`（會處理瀏覽器事件，頁面在途的請求才會流動）；`time.sleep` 睡著時 sync Playwright
+    不處理事件，頁面剛送出的請求可能被卡住整段（e2e 睡覺等待稽核 2026-10-02：點了之後睡著輪詢資料庫＝同型風險）。"""
+    if page is not None:
+        page.wait_for_timeout(int(seconds * 1000))
+    else:
+        import time
+        time.sleep(seconds)
+
+
+def _eventually(sql, args, want, what, timeout=10.0, page=None):
+    """退回是在提示關閉之後才送出請求：資料庫終點用輪詢等（等終點狀態，不是等某一趟請求）。傳 page ⇒ 輪詢間用 Playwright 的等待。"""
     import time
     end = time.time() + timeout
     got = None
@@ -82,11 +92,11 @@ def _eventually(sql, args, want, what, timeout=10.0):
         got = r[0]["status"] if r else None
         if got == want:
             return
-        time.sleep(0.2)
+        _pause(page, 0.2)
     raise AssertionError("%s：狀態是 %r，預期 %r" % (what, got, want))
 
 
-def _last_audit(action, timeout=15.0):
+def _last_audit(action, timeout=15.0, page=None):
     """最後一筆該動作的稽核列。🔴 狀態改成草稿（_eventually 等到的終點）與稽核列不是同一個提交：高負載下狀態先到、稽核列晚一步，
     單次讀取會得到 None（建包 e2e 偶發：`assert (None)`）。所以輪詢到有為止（上限 timeout 秒）；真的沒有才回 None。"""
     import time
@@ -95,7 +105,7 @@ def _last_audit(action, timeout=15.0):
         r = _db("SELECT target_label, detail AS detail_json FROM audit_log WHERE action=? ORDER BY id DESC LIMIT 1", (action,))
         if r or time.time() >= end:
             return r[0] if r else None
-        time.sleep(0.2)
+        _pause(page, 0.2)
 
 
 def _users(make_user, tag, extra_modules=()):
@@ -182,8 +192,8 @@ def test_shipping_note(client, live_server, make_user, new_page, login_as, compa
     _html_shot(new_page(), pdf_gen._build_shipping_html({"noteNo": nno, "status": "待審核", "items": []}), "shipping-unapproved-html")
     _do_return(page, "出貨數量有誤")
     page.wait_for_function("() => true")
-    _eventually("SELECT status FROM shipping_notes WHERE note_no=?", (nno,), "草稿", "退回後")
-    a = _last_audit("shipping.reject")
+    _eventually("SELECT status FROM shipping_notes WHERE note_no=?", (nno,), "草稿", "退回後", page=page)
+    a = _last_audit("shipping.reject", page=page)
     assert a and nno in a["target_label"] and "出貨數量有誤" in (a["detail_json"] or "")
 
 
@@ -220,8 +230,8 @@ def test_completion_note(client, live_server, make_user, new_page, login_as, com
         return
     _html_shot(new_page(), cp._build_completion_html({"noteNo": nno, "status": "待審核"}), "completion-unapproved-html")
     _do_return(page, "完工日期不對")
-    _eventually("SELECT status FROM completion_notes WHERE note_no=?", (nno,), "草稿", "退回後")
-    a = _last_audit("completion.reject")
+    _eventually("SELECT status FROM completion_notes WHERE note_no=?", (nno,), "草稿", "退回後", page=page)
+    a = _last_audit("completion.reject", page=page)
     assert a and "完工日期不對" in (a["detail_json"] or "")
 
 
@@ -253,7 +263,7 @@ def test_payment_request(client, live_server, make_user, new_page, login_as, com
     _html_shot(new_page(), pdf_gen._build_payment_request_html({"requestNo": rno, "status": "待審核"}), "payment-request-unapproved-html")
     _do_return(page, "請款金額有誤")
     assert _db("SELECT status FROM payment_requests WHERE request_no=?", (rno,))[0]["status"] == "草稿"
-    a = _last_audit("payment_request.reject")
+    a = _last_audit("payment_request.reject", page=page)
     assert a and "請款金額有誤" in (a["detail_json"] or "")
 
 
@@ -285,8 +295,8 @@ def test_invoice_voucher(client, live_server, make_user, new_page, login_as, com
         assert page.locator('[data-testid="preview-return"]:visible').count() == 0
         return
     _do_return(page, "稅額有誤")
-    _eventually("SELECT status FROM invoice_vouchers WHERE voucher_no=?", (vno,), "草稿", "退回後")
-    a = _last_audit("invoice_voucher.reject")
+    _eventually("SELECT status FROM invoice_vouchers WHERE voucher_no=?", (vno,), "草稿", "退回後", page=page)
+    a = _last_audit("invoice_voucher.reject", page=page)
     assert a and "稅額有誤" in (a["detail_json"] or "")
 
 

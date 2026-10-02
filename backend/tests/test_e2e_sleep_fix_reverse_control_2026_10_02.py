@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
-"""c7 對 wip/t32-sleep-fix-d7 的審查探針（反向控制）：請求被扣住時，舊寫法（睡一下再看資料庫）假綠；d7 的新寫法（看請求）紅。
-用 d7 的 `_watch_writes`／`_wait_dialog` 原樣。不隨產品出貨；可併入 d7 的修正當正式反向控制。"""
+"""
+反向控制（睡眠隱患修正，docs/platform/plans/E2E-SLEEP-HAZARD-AUDIT.md）：請求被扣住時，舊寫法（睡一下再看資料庫）假綠；新寫法（看頁面送出的請求）紅。
+用 `test_e2e_quote_number_input` 的 `_watch_writes` 原樣；另有正對照（真的標紅時沒送請求＝綠）。
+"""
 import time
 
 import pytest
