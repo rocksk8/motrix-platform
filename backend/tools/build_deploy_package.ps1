@@ -56,6 +56,9 @@ param(
     [switch]$NoFlakeRetry,
     # 開跑前盤點其他 pytest 與疑似孤兒的鎖持有者（只報告、不結束行程）。
     [switch]$NoPreflight,
+    # 建包優化 2 項 1（BUILD-OPTIMIZATION-2.md）：紅了就停＋最可能紅的先跑（tools/platform/failfast.py）。預設開；-NoFailFast ⇒ 回到舊行為（整段跑完才說紅）。
+    # 停止只在「已有未登記的紅」且（累計達 N 或第一個紅之後 Q 分鐘沒有新紅）時發生；停止那一段一律記紅、不進偶發重跑放行（沒跑完的段不可能被放行）。
+    [switch]$NoFailFast,
     # 盤點時等其他（非孤兒）pytest 結束，最多幾分鐘；0＝不等（預設）。
     [int]$WaitForOtherTests = 0
 )
@@ -714,6 +717,10 @@ try {
 }
 $runNonE2e = -not $stageReuse.ContainsKey("not_e2e")
 $runE2e = -not $stageReuse.ContainsKey("e2e")
+if ($runNonE2e -or $runE2e) {
+    # 建包優化 2 項 2：沒有沿用某一段時，說明去哪看原因（tree 差在哪幾個檔／環境哪一項不同），以及怎麼讓獨立跑也算數
+    Write-Host "  [建包優化] 有段別沒沿用：原因 → & $pyExe backend	oolsuild_test_reuse.py explain；先獨立跑再建包也算數 → & $pyExe backend	oolsuild_test_reuse.py run-stage --stage e2e|not_e2e" -ForegroundColor DarkGray
+}
 # manifest 的 verification：每一段是實跑還是沿用、哪些題是偶發重跑通過的
 $BuildVerification = [ordered]@{ not_e2e = "ran"; e2e = "ran"; flaky_retried = @() }
 foreach ($st in @($stageReuse.Keys)) {
@@ -810,10 +817,21 @@ $env:MOTRIX_PYTEST_BUILD_CHILD = "$PID"
 $buildRunId = "build_$(Get-Date -Format 'yyyyMMdd_HHmmss')_$PID"
 $prevPyPath = $env:PYTHONPATH
 $fsArgs = @()
-if (-not $NoFlakeRetry) {
+if (-not $NoFlakeRetry -or -not $NoFailFast) {
     $env:PYTHONPATH = (@((Join-Path $projectRoot "tools\platform")) + @($prevPyPath | Where-Object { $_ })) -join ";"
+}
+if (-not $NoFlakeRetry) {
     $env:MOTRIX_FAIL_STREAM_RUN = $buildRunId
     $fsArgs = @("-p", "fail_stream")
+}
+# 紅了就停＋先跑最可能紅的（failfast.py；環境變數不進測試指紋，見 build_test_reuse._ENV_IGNORE）。-NoFailFast ⇒ 什麼都不加。
+$ffArgs = @()
+$ffStopped = @{}
+if (-not $NoFailFast) {
+    $env:MOTRIX_FAILFAST = "1"; $env:MOTRIX_FAILFAST_N = "10"; $env:MOTRIX_FAILFAST_QUIET_MIN = "3"
+    $env:MOTRIX_FAILFIRST = "1"; $env:MOTRIX_FAILFIRST_BASE = "auto"
+    $ffArgs = @("-p", "failfast")
+    Write-Host "  [建包優化] fail-fast＋failure-first 開（N=10、安靜 3 分；-NoFailFast 關閉）" -ForegroundColor DarkGray
 }
 Push-Location (Join-Path $projectRoot "backend")
 $testExit = 0
@@ -824,7 +842,7 @@ Write-Host "`n[測試] 執行 pytest（非 e2e，backend/tests/，含 API 整合
 # 🔑 那是我們先前唯一拿不到的那一格（單獨跑一支探針量不到 `-n 6` 的競爭）。
 $_tNonE2e = Get-Date
 $env:MOTRIX_FAIL_STREAM_STAGE = "not_e2e"
-& $pyExe -m pytest -q -m "not e2e" -n $workers --durations=20 --basetemp="$pytestTemp" @fsArgs 2>&1 |
+& $pyExe -m pytest -q -m "not e2e" -n $workers --durations=20 --basetemp="$pytestTemp" @fsArgs @ffArgs 2>&1 |
     Tee-Object -Variable nonE2eOut |
     ForEach-Object { Write-Host $_ }
 # ⚠️ `$LASTEXITCODE` 由原生執行檔設定，**管線接到 cmdlet 不會覆蓋它** ——
@@ -834,7 +852,9 @@ Mark-Elapsed "pytest_not_e2e" $_tNonE2e
 $BuildStats["not_e2e"] = Parse-PytestSummary $nonE2eOut
 $BuildStats["workers"] = $workers
 $nonE2eFlaky = ""
-if ($testExit -ne 0) {
+$ffStopped["not_e2e"] = [bool](@($nonE2eOut | Where-Object { "$_" -match "^FAIL-FAST:" }).Count)
+if ($ffStopped["not_e2e"]) { Write-Host "  [建包優化] 非 e2e 段由 fail-fast 提前停止：這一段沒跑完，不進偶發重跑放行，一律記紅。" -ForegroundColor Yellow }
+if ($testExit -ne 0 -and -not $ffStopped["not_e2e"]) {
     $retry = Invoke-FlakyRetry "not_e2e" $testExit $nonE2eOut
     if ($retry.Ok) { $nonE2eFlaky = $retry.ResultFile; $testExit = 0 }
 }
@@ -897,14 +917,16 @@ $_tE2e = Get-Date
 #   （Invoke-FlakyRetry）——未登記的偶發照樣擋，並印出登記指令。見 PLAYBOOK §D-建包〕
 $e2eWorkers = 4
 $env:MOTRIX_FAIL_STREAM_STAGE = "e2e"
-& $pyExe -m pytest -q -rf -m "e2e" -n $e2eWorkers --durations=20 --basetemp="${pytestTemp}_e2e" @fsArgs 2>&1 |
+& $pyExe -m pytest -q -rf -m "e2e" -n $e2eWorkers --durations=20 --basetemp="${pytestTemp}_e2e" @fsArgs @ffArgs 2>&1 |
     Tee-Object -Variable e2eOut |
     ForEach-Object { Write-Host $_ }
 $e2eExit = $LASTEXITCODE
 Mark-Elapsed "pytest_e2e" $_tE2e
 $BuildStats["e2e"] = Parse-PytestSummary $e2eOut
 $e2eRawExit = $e2eExit
-if ($e2eExit -ne 0) {
+$ffStopped["e2e"] = [bool](@($e2eOut | Where-Object { "$_" -match "^FAIL-FAST:" }).Count)
+if ($ffStopped["e2e"]) { Write-Host "  [建包優化] e2e 段由 fail-fast 提前停止：這一段沒跑完，不進偶發重跑放行，一律記紅。" -ForegroundColor Yellow }
+if ($e2eExit -ne 0 -and -not $ffStopped["e2e"]) {
     $retry = Invoke-FlakyRetry "e2e" $e2eExit $e2eOut
     if ($retry.Ok) { $e2eFlaky = $retry.ResultFile; $e2eExit = 0 }
 }
@@ -914,7 +936,7 @@ if ($e2eExit -ne 0) {
 }
 Pop-Location
 $env:PYTHONPATH = $prevPyPath
-Remove-Item Env:\MOTRIX_FAIL_STREAM_RUN, Env:\MOTRIX_FAIL_STREAM_STAGE -ErrorAction SilentlyContinue
+Remove-Item Env:\MOTRIX_FAIL_STREAM_RUN, Env:\MOTRIX_FAIL_STREAM_STAGE, Env:\MOTRIX_FAILFAST, Env:\MOTRIX_FAILFAST_N, Env:\MOTRIX_FAILFAST_QUIET_MIN, Env:\MOTRIX_FAILFIRST, Env:\MOTRIX_FAILFIRST_BASE -ErrorAction SilentlyContinue
 
 # 🔴 **逾時與斷言失敗要分開判**（2026-09-22）。
 #

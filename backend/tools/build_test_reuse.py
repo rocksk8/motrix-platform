@@ -12,6 +12,8 @@
 
 ## 分段沿用（2026-09-30，建包優化「避免非正常情況的失敗」；正反論證見 PLAYBOOK §D-建包）
   python build_test_reuse.py records-path                                   → 主工作樹的紀錄檔（建包與 modtest 共用）
+  python build_test_reuse.py run-stage --stage not_e2e|e2e                  → 獨立跑一段（同建包指令）並記錄（source=standalone）：建包同指紋時直接沿用
+  python build_test_reuse.py explain [--last N] [--json]                    → 唯讀診斷：這一段為什麼沒被沿用、最近每筆紀錄為何與現在的指紋不同（tree 差在哪幾個檔／環境哪個元件）
   python build_test_reuse.py lookup-stage --fp X --stage not_e2e|e2e        → 可沿用的那一段（JSON），或 null
   python build_test_reuse.py record-stage --fp X --stage S --green 1 [--flaky-from R] [--reused-at T] [--flaky ID…]
 - 每一行可帶 `stages: {not_e2e|e2e: {green, tested_at, flaky_retried[]}}`；舊格式（沒有 stages）的一行＝兩段同一個結果。
@@ -39,7 +41,10 @@ _ENV_IGNORE = {"MOTRIX_PYTEST_LOCK", "MOTRIX_PYTEST_LOCK_WAIT", "MOTRIX_PYTEST_L
                # worker 上限（影響快慢與負載，不影響題目本身；反方論證見 PLAYBOOK §D-建包）、失敗先行 log、建包守門
                "MOTRIX_FULL_MAX_WORKERS", "MOTRIX_PARTIAL_MAX_WORKERS", "MOTRIX_E2E_MAX_WORKERS",
                "MOTRIX_FAIL_STREAM_RUN", "MOTRIX_FAIL_STREAM_STAGE", "MOTRIX_FAIL_STREAM_DIR",
-               "MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_BUILD_GUARD"}
+               "MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_BUILD_GUARD",
+               # 2026-10-02（建包優化 2 項 1）：fail-fast／failure-first 只決定「何時停、先跑誰」，不決定哪些題存在或過不過（停止＝該段記紅）
+               "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_FAILFAST_QUIET_MIN", "MOTRIX_FAILFAST_FLAKES",
+               "MOTRIX_FAILFIRST", "MOTRIX_FAILFIRST_BASE", "MOTRIX_FAILFIRST_HISTORY", "MOTRIX_FAILFIRST_RECORDS"}
 #: 不進指紋的檔（repo 相對路徑）：只決定「建包放不放行」、不決定任何一題過或不過（2026-09-30）
 REUSE_EXCLUDE = frozenset({"tools/platform/known_flakes.json"})
 #: 分段沿用認得的段名（建包與 modtest --full 都是這兩段）
@@ -89,6 +94,199 @@ def fingerprint(repo, env=None):
     env = current_env() if env is None else env
     blob = json.dumps({"tree": tree, "env": env}, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _tree_listing(repo, rev="HEAD"):
+    """{路徑: 'mode type sha'}（扣掉 REUSE_EXCLUDE）；rev 解不開 ⇒ None。"""
+    try:
+        out = _git(repo, "ls-tree", "-r", rev)
+    except (subprocess.CalledProcessError, OSError):
+        return None
+    d = {}
+    for ln in out.splitlines():
+        meta, _, path = ln.partition("\t")
+        if path not in REUSE_EXCLUDE:
+            d[path] = meta
+    return d
+
+
+def components(repo, env=None):
+    """指紋的組成（診斷用）：{"tree": sha256, "env": {元件名: 該元件內容 sha256 前 12 碼}}；工作樹不乾淨 ⇒ None。
+    與 `fingerprint()` 同一份輸入（tree＋env），所以「哪個元件不同」就等於「為什麼指紋不同」。"""
+    if _git(repo, "status", "--porcelain").strip():
+        return None
+    listing = [ln for ln in _git(repo, "ls-tree", "-r", "HEAD").splitlines() if ln.split("\t", 1)[-1] not in REUSE_EXCLUDE]
+    env = current_env() if env is None else env
+    return {"tree": hashlib.sha256("\n".join(listing).encode("utf-8")).hexdigest(),
+            "env": {k: hashlib.sha256(json.dumps(v, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:12]
+                    for k, v in sorted(env.items())}}
+
+
+def parts_path(records):
+    return Path(records).with_name("fp_parts.jsonl")
+
+
+def remember_parts(records, fp, comps):
+    """每次算指紋就記一行「指紋 → 組成」（去重；只存元件雜湊，不含任何環境變數的值）——事後 `explain` 才答得出『環境哪一項不同』。"""
+    try:
+        p = parts_path(records)
+        if p.exists() and any(('"%s"' % fp) in ln for ln in p.read_text(encoding="utf-8").splitlines()[-200:]):
+            return
+        _append(p, {"fingerprint": fp, "t": datetime.now().strftime(TS_FMT), "parts": comps})
+    except OSError:
+        pass
+
+
+def _parts_for(records, fp):
+    p = parts_path(records)
+    if not p.exists():
+        return None
+    got = None
+    for ln in p.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            r = json.loads(ln)
+        except ValueError:
+            continue
+        if r.get("fingerprint") == fp:
+            got = r.get("parts")
+    return got
+
+
+def _stage_verdict(records_list, fp, stage, now):
+    """這一段現在能不能沿用？⇒ (能否, 原因)。與 `find_reusable_stage` 同一套規則，只是把「為什麼不行」說出來。"""
+    same = [r for r in records_list if r.get("fingerprint") == fp]
+    if not same:
+        return False, "沒有任何同指紋的紀錄"
+    for r in reversed(same):
+        stages = r.get("stages")
+        if isinstance(stages, dict):
+            if stage not in stages:
+                continue
+            s_ = stages.get(stage)
+            entry = dict(s_) if isinstance(s_, dict) else {}
+        else:
+            entry = {"green": r.get("green"), "tested_at": r.get("tested_at")}
+        if entry.get("green") is not True:
+            return False, "同指紋帶這一段的最新一筆是紅的（%s，來源 %s）" % (entry.get("tested_at") or r.get("tested_at"), r.get("source") or "build")
+        if not _stage_ok(entry, now, MAX_HOURS):
+            return False, "同指紋的綠已過期（需同一天且 %d 小時內；實跑於 %s）" % (MAX_HOURS, entry.get("tested_at"))
+        return True, "可沿用（%s 實跑於 %s，來源 %s）" % (r.get("commit"), entry["tested_at"], r.get("source") or "build")
+    return False, "同指紋的紀錄都沒有帶這一段"
+
+
+def explain(records, repo, env=None, now=None, last=12):
+    """為什麼某段沒被沿用／為什麼同一份東西跑了兩次（建包優化 2 項 2 的診斷；純讀）。
+    回 dict：dirty、fingerprint、components、stages{段:{reuse,reason}}、rows[最近 `last` 筆紀錄各自的比對]。
+    每一筆紀錄：fp_match；不同時——① 該紀錄 commit 的 tree vs 現在（相同 ⇒ 差在環境；不同 ⇒ 列出不同的檔）
+    ② 有 fp_parts 旁表時列出環境哪些元件不同。"""
+    now = now or datetime.now()
+    recs = _read(records)
+    dirty = [ln for ln in _git(repo, "status", "--porcelain").splitlines() if ln.strip()]
+    env_ = current_env() if env is None else env
+    comps = None if dirty else components(repo, env_)
+    fp = None if dirty else fingerprint(repo, env_)
+    cur_listing = _tree_listing(repo, "HEAD") or {}
+    out = {"dirty": dirty[:20], "fingerprint": fp, "components": comps, "stages": {}, "rows": []}
+    for st in STAGES:
+        if not fp:
+            out["stages"][st] = {"reuse": False, "reason": "工作樹不乾淨 ⇒ 沒有指紋、不沿用（含未追蹤檔）"}
+        else:
+            ok, why = _stage_verdict(recs, fp, st, now)
+            out["stages"][st] = {"reuse": ok, "reason": why}
+    for r in recs[-last:]:
+        row = {"tested_at": r.get("tested_at"), "source": r.get("source") or "build", "commit": r.get("commit"),
+               "stages": {k: ("綠" if (v or {}).get("green") else "紅") for k, v in (r.get("stages") or {}).items()}
+               or {"(舊格式)": "綠" if r.get("green") else "紅"},
+               "fp_match": bool(fp) and r.get("fingerprint") == fp}
+        if fp and not row["fp_match"]:
+            old = _tree_listing(repo, str(r.get("commit") or "")) if r.get("commit") else None
+            if old is None:
+                row["why"] = "紀錄的 commit %s 不在這個 repo ⇒ 無法比對 tree" % r.get("commit")
+            else:
+                changed = sorted(k for k in set(old) | set(cur_listing) if old.get(k) != cur_listing.get(k))
+                if changed:
+                    row["why"] = "tree 不同：%d 個檔不同（前 8：%s）" % (len(changed), "、".join(changed[:8]))
+                    row["changed_files"] = len(changed)
+                else:
+                    row["why"] = "tree 相同 ⇒ 差在執行環境"
+                    parts = _parts_for(records, r.get("fingerprint"))
+                    if parts and comps:
+                        diff = sorted(k for k in set(parts.get("env", {})) | set(comps["env"]) if parts.get("env", {}).get(k) != comps["env"].get(k))
+                        row["env_diff"] = diff
+                        row["why"] += "：不同的元件 %s" % ("、".join(diff) or "（旁表看不出）")
+                    else:
+                        row["why"] += "（該指紋沒有旁表記錄，無法指出是哪一項；之後算過的指紋都會有）"
+        out["rows"].append(row)
+    return out
+
+
+def render_explain(res):
+    L = []
+    if res["dirty"]:
+        L.append("工作樹不乾淨（含未追蹤檔）⇒ 沒有指紋、所有段都不沿用：")
+        L += ["  " + x for x in res["dirty"]]
+    else:
+        L.append("目前指紋 %s…" % (res["fingerprint"] or "")[:16])
+    for st, v in res["stages"].items():
+        L.append("[%s] %s：%s" % (st, "可沿用" if v["reuse"] else "不沿用", v["reason"]))
+    L.append("最近 %d 筆紀錄（舊→新）：" % len(res["rows"]))
+    for r in res["rows"]:
+        L.append("  %s  %-14s %-9s %s  %s%s" % (r["tested_at"], r["source"], r["commit"], r["stages"],
+                                              "指紋相同" if r["fp_match"] else "指紋不同", ("  ← " + r["why"]) if r.get("why") else ""))
+    return "\n".join(L)
+
+
+#: 建包一段的 pytest 指令（與 build_deploy_package.ps1 同一組；tests/test_build_stage_reuse_2026_10_02.py 逐項對照腳本文字，防漂移）
+STAGE_PYTEST = {"not_e2e": ["-q", "-m", "not e2e", "--durations=20"],
+                "e2e": ["-q", "-rf", "-m", "e2e", "--durations=20"]}
+
+
+def default_workers(stage):
+    """建包的 worker 數：非 e2e＝max(2, min(實體核心, 4))；e2e 固定 4（build_deploy_package.ps1 :659／:898）。"""
+    if stage == "e2e":
+        return 4
+    try:
+        import psutil
+        phys = psutil.cpu_count(logical=False) or 2
+    except Exception:  # noqa: BLE001 — 沒有 psutil：用邏輯核心的一半估
+        phys = max(2, (os.cpu_count() or 4) // 2)
+    return max(2, min(int(phys), 4))
+
+
+def stage_command(stage, python, workers, basetemp):
+    return [str(python), "-m", "pytest", *STAGE_PYTEST[stage], "-n", str(workers), "--basetemp=%s" % basetemp,
+            "-p", "fail_stream", "-p", "failfast", "-p", "no:cacheprovider"]
+
+
+def run_stage(repo, stage, records, python=None, runner=None, workers=None, note=print):
+    """**獨立跑一段也算數**（建包優化 2 項 2）：跑與建包同一組指令；開跑與結束的指紋相同且工作樹乾淨 ⇒ 把這一段（綠或紅）寫進沿用紀錄
+    （source=standalone）。之後建包遇到同指紋、同一天、12 小時內的綠就直接沿用這一段，不再跑第二次。
+    - 紅也照記（同指紋之前的綠不可以再被沿用，與建包同一條規則）；fail-fast 提前停止的一段是紅。
+    - 指紋不同（跑到一半 HEAD／工作樹／環境變了）或一開始就不乾淨 ⇒ 照跑、回傳 exit code，但**不寫紀錄**。
+    - 這裡不做偶發重跑：紅就是紅（要走偶發登記請用建包）。
+    回 (exit code, 是否寫了紀錄, 說明)。`runner(cmd, cwd, env)` 供測試注入（回 returncode）。"""
+    import tempfile
+    python = python or sys.executable
+    repo = Path(repo)
+    fp0 = fingerprint(repo)
+    backend = repo / "backend"
+    base = os.path.join(tempfile.gettempdir(), "motrix-runstage-%s-%s" % (stage, datetime.now().strftime("%Y%m%d_%H%M%S")))
+    cmd = stage_command(stage, python, workers or default_workers(stage), base)
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([str(repo / "tools" / "platform")] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
+    env.update({"MOTRIX_FAIL_STREAM_STAGE": stage, "MOTRIX_FAILFAST": "1", "MOTRIX_FAILFAST_N": "10", "MOTRIX_FAILFAST_QUIET_MIN": "3",
+                "MOTRIX_FAILFIRST": "1", "MOTRIX_FAILFIRST_BASE": "auto"})
+    note("[run-stage] %s：%s" % (stage, " ".join(cmd)))
+    if runner is None:
+        rc = subprocess.run(cmd, cwd=str(backend), env=env).returncode
+    else:
+        rc = runner(cmd, str(backend), env)
+    fp1 = fingerprint(repo)
+    if not fp0 or fp0 != fp1:
+        return rc, False, "不寫紀錄：%s" % ("開跑時工作樹不乾淨（含未追蹤檔）" if not fp0 else "跑到一半指紋變了（HEAD／工作樹／環境）")
+    commit = _git(repo, "rev-parse", "--short", "HEAD").strip()
+    record(records, fp1, False, commit, stages={stage: stage_entry(rc == 0)}, source="standalone")
+    return rc, True, "已記錄：%s=%s（建包同指紋、同一天、%d 小時內會沿用）" % (stage, "綠" if rc == 0 else "紅", MAX_HOURS)
 
 
 def find_reusable(records, fp, now, max_hours=MAX_HOURS):
@@ -263,6 +461,14 @@ def main(argv=None):
     rc.add_argument("--green", required=True)
     rc.add_argument("--commit", default="")
     sub.add_parser("records-path")
+    rn = sub.add_parser("run-stage", help="獨立跑一段（與建包同一組指令）並把結果寫進沿用紀錄——建包就不必再跑一次")
+    rn.add_argument("--stage", required=True, choices=STAGES)
+    rn.add_argument("--records")
+    rn.add_argument("--workers", type=int)
+    ex = sub.add_parser("explain", help="為什麼這一段沒被沿用／同一份東西為何跑兩次（唯讀診斷）")
+    ex.add_argument("--records")
+    ex.add_argument("--last", type=int, default=12)
+    ex.add_argument("--json", action="store_true")
     ls = sub.add_parser("lookup-stage")
     ls.add_argument("--records")
     ls.add_argument("--fp", required=True)
@@ -280,7 +486,20 @@ def main(argv=None):
     a = ap.parse_args(argv)
     repo = _git(Path(__file__).resolve().parent, "rev-parse", "--show-toplevel").strip()
     if a.cmd == "fingerprint":
-        print(json.dumps({"fingerprint": fingerprint(repo)}))
+        env = current_env()
+        fp = fingerprint(repo, env)
+        comps = components(repo, env) if fp else None
+        if fp:
+            remember_parts(default_records(repo), fp, comps)      # 診斷旁表（只存元件雜湊）；寫不進去不影響指紋
+        print(json.dumps({"fingerprint": fp, "components": comps}))
+    elif a.cmd == "run-stage":
+        rc, wrote, why = run_stage(repo, a.stage, a.records or default_records(repo), workers=a.workers)
+        print("[run-stage] " + why)
+        return rc
+    elif a.cmd == "explain":
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        res = explain(a.records or default_records(repo), repo, last=a.last)
+        print(json.dumps(res, ensure_ascii=False, indent=1) if a.json else render_explain(res))
     elif a.cmd == "lookup":
         print(json.dumps(lookup(a.records, a.fp), ensure_ascii=False))
     elif a.cmd == "records-path":
