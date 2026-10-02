@@ -176,6 +176,13 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    try:                                                              # 背景執行不彈視窗（tools/platform/nowindow.py；MOTRIX_SHOW_WINDOWS=1 可關）
+        import sys as _s, pathlib as _p
+        _s.path.insert(0, str(_p.Path(__file__).resolve().parents[1] / "tools" / "platform"))
+        import nowindow as _nw
+        _nw.install()
+    except ImportError:
+        pass
     for _s in (sys.stdout, sys.stderr):
         try:
             _s.reconfigure(encoding="utf-8", errors="replace")   # 否則 Windows 主控台編碼（cp950）的中文訊息經 git 轉出會亂碼
