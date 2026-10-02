@@ -35,6 +35,13 @@ ITEM_NAME_PH = "項目名稱（如：交換器）"
 
 
 
+@pytest.fixture(autouse=True)
+def _po_rule_on(monkeypatch):
+    """33-M1 畫面：本檔驗「強制採購單」之下的畫面流程，明確設成開（不依賴 material_approval.PO_REQUIRED 的出貨預設）。"""
+    from modules.case import material_approval as _MA
+    monkeypatch.setattr(_MA, "PO_REQUIRED", True)
+
+
 def _login(page, base_url, username, password):
     return inject_login(page, base_url, username, password)
 

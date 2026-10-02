@@ -25,6 +25,13 @@ Q = {"items": [
 
 
 
+@pytest.fixture(autouse=True)
+def _po_rule_on(monkeypatch):
+    """33-M1 畫面：本檔驗「強制採購單」之下的畫面流程，明確設成開（不依賴 material_approval.PO_REQUIRED 的出貨預設）。"""
+    from modules.case import material_approval as _MA
+    monkeypatch.setattr(_MA, "PO_REQUIRED", True)
+
+
 def _shot(page, name):
     os.makedirs(SHOTS, exist_ok=True)
     page.screenshot(path=os.path.join(SHOTS, "s4e-%s.png" % name), full_page=False)
