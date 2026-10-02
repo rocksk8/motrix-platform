@@ -13,6 +13,7 @@ window.CM_PARTS.push(() => ({
     mlMsg: '',
     // 清單頁籤：approved＝已核准＋舊單＋尚未送審的草稿（預設）／review／returned／cancelled／all
     mlTab: 'approved',
+    _mlTabOfRow: {},      // 上一次載入時各列所在的頁籤：列的狀態變了（送審、核准、撤回…）就讓目前頁籤跟著它走，不然操作完那一列會憑空消失
     mlTick: 0,            // 讓 Alpine 在清單重載後重新計算（比照 moBusy 類計數器）
 
     _mlHeaders() { return { Authorization: 'Bearer ' + this.session.token } },
@@ -25,6 +26,7 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders/link-status`, { headers: this._mlHeaders() })
         if (r.ok && this.selected?.quote_no === quoteNo) this.mlStatus = (await r.json()).statuses || {}
       } catch {}
+      this._mlFollowMovedRow()
       this.mlTick++
     },
 
@@ -106,18 +108,31 @@ window.CM_PARTS.push(() => ({
     },
 
     // 頁籤：舊單（沒有審核列）、已核准、尚未送審的草稿同列（預設）；尚未儲存的新列在每個頁籤都顯示
+    // 該列目前屬於哪個頁籤（單一來源；_mlTabOf 也用它）
+    _mlKeyOf(m) {
+      const a = (this.moApprovals || {})[m.itemId] || {}
+      const st = a.legacy ? '' : (a.status || '')
+      if (st === '待審核' || st === '簽核中') return 'review'
+      if (st === '已退回') return 'returned'
+      if (st === '已取消') return 'cancelled'
+      return 'approved'                                                   // 舊單、已核准、尚未送審的草稿
+    },
+    _mlFollowMovedRow() {
+      const now = {}
+      let moved = ''
+      for (const m of this.materialOrders) {
+        if (m._saved === false) continue
+        now[m.itemId] = this._mlKeyOf(m)
+        const was = this._mlTabOfRow[m.itemId]
+        if (!moved && was && was !== now[m.itemId] && this.mlTab !== 'all' && this.mlTab === was) moved = now[m.itemId]
+      }
+      this._mlTabOfRow = now
+      if (moved) this.mlTab = moved
+    },
     mlTabOk(m) { return this._mlTabOf(m, this.mlTab) },
     _mlTabOf(m, tab) {
       if (tab === 'all' || m._saved === false) return true
-      const a = (this.moApprovals || {})[m.itemId] || {}
-      const st = a.legacy ? '' : (a.status || '')
-      switch (tab) {
-        case 'approved': return st === '' || st === '已核准' || st === '草稿'      // 草稿＝尚未送審：預設分頁直接看得到
-        case 'review': return st === '待審核' || st === '簽核中'
-        case 'returned': return st === '已退回'
-        case 'cancelled': return st === '已取消'
-      }
-      return true
+      return this._mlKeyOf(m) === tab
     },
     mlTabCount(tab) { return this.materialOrders.filter(m => m._saved !== false && this._mlTabOf(m, tab)).length },
 
