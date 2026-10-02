@@ -3,10 +3,18 @@
 可「補對應」（只增連結鍵，不重簽，留歷程與稽核）。付款互斥（E3）見 test_material_link_api／seam（有效連結不能開匯款申請）。"""
 import json
 
+import pytest
+
 import db
 from modules.case import material_approval as MA
 from modules.case.tests.test_material_link_2026_10_02 import _put_materials
 from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W, _ln, _mk, _status, _submit  # noqa: F401
+
+@pytest.fixture(autouse=True)
+def _po_rule_on(monkeypatch):
+    """出貨預設是關的（見 test_material_po_default_off_2026_10_03.py）；本檔驗規則本身，明確設成開。"""
+    monkeypatch.setattr(MA, "PO_REQUIRED", True)
+
 
 MSG_NONE = "需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。"
 MSG_PENDING = "採購單尚未通過，通過後才能對應這筆材料申請。"
