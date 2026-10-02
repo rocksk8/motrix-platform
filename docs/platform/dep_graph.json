@@ -6059,121 +6059,121 @@
     },
     {
      "func": "list_purchase_items",
-     "line": 410,
+     "line": 411,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/purchase-items"
     },
     {
      "func": "create_extra_expense",
-     "line": 433,
+     "line": 434,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses"
     },
     {
      "func": "update_extra_expense",
-     "line": 494,
+     "line": 495,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "payreq_cases",
-     "line": 568,
+     "line": 569,
      "method": "GET",
      "path": "/api/extra-expenses/cases"
     },
     {
      "func": "payreq_mine",
-     "line": 594,
+     "line": 595,
      "method": "GET",
      "path": "/api/extra-expenses/mine"
     },
     {
      "func": "set_extra_expense_dates",
-     "line": 616,
+     "line": 617,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/dates"
     },
     {
      "func": "delete_extra_expense",
-     "line": 686,
+     "line": 687,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "void_extra_expense",
-     "line": 709,
+     "line": 710,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/void"
     },
     {
      "func": "submit_extra_expense",
-     "line": 761,
+     "line": 762,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/submit"
     },
     {
      "func": "approve_extra_expense",
-     "line": 845,
+     "line": 846,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/approve"
     },
     {
      "func": "reject_extra_expense",
-     "line": 931,
+     "line": 932,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/reject"
     },
     {
      "func": "upload_extra_expense_files",
-     "line": 1018,
+     "line": 1019,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files"
     },
     {
      "func": "delete_extra_expense_file",
-     "line": 1064,
+     "line": 1065,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}"
     },
     {
      "func": "upsert_change_request",
-     "line": 1237,
+     "line": 1238,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "cancel_change_request",
-     "line": 1278,
+     "line": 1279,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "upload_change_request_files",
-     "line": 1304,
+     "line": 1305,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files"
     },
     {
      "func": "delete_change_request_file",
-     "line": 1336,
+     "line": 1337,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}"
     },
     {
      "func": "submit_change_request",
-     "line": 1363,
+     "line": 1364,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/submit"
     },
     {
      "func": "approve_change_request",
-     "line": 1434,
+     "line": 1435,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/approve"
     },
     {
      "func": "reject_change_request",
-     "line": 1522,
+     "line": 1523,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/reject"
     }
@@ -6540,6 +6540,7 @@
     "mod:case/material_guard",
     "mod:case/material_notify",
     "mod:case/material_payment",
+    "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
     "mod:case/recognition"
@@ -6658,6 +6659,7 @@
     "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/material_payment",
+    "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
     "mod:case/recognition"
@@ -6791,6 +6793,7 @@
     "mod:case/material_guard",
     "mod:case/material_notify",
     "mod:case/material_payment",
+    "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
     "mod:case/recognition"
@@ -6975,6 +6978,7 @@
     "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/material_payment",
+    "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
     "mod:case/recognition"
@@ -7665,6 +7669,7 @@
     "core:db",
     "helper:legal_params",
     "mod:case/expense_forms",
+    "mod:case/purchase_items",
     "mod:case/recognition"
    ],
    "kind": "mod",
@@ -7874,6 +7879,7 @@
     "mod:case/expense_forms",
     "mod:case/material_approval",
     "mod:case/material_payment",
+    "mod:case/purchase_items",
     "mod:case/quotations",
     "plat:registry"
    ],
