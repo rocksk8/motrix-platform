@@ -35,7 +35,7 @@ EDITABLE = (S_DRAFT, S_RETURNED)                 # 可以修改並（重新）�
 SUBSTANTIVE_KEYS = ("itemName", "quantity", "unit", "unitPrice", "totalPrice", "supplierId", "quoteItemId", "poDocCode", "poLine")
 #: 33-M1（E1／E2）：新申請必須有已核准的採購單才能送審。舊單（沒有疊加審核列）與規則上線前已存在的單（`created_at` 早於 `PO_REQUIRED_FROM`，
 #: 或審核單標了 `grandfathered`）不受影響；這些單可以「補對應」（只增連結鍵，不重簽，留紀錄）。測試以 monkeypatch 改 `PO_REQUIRED`。
-PO_REQUIRED = True
+PO_REQUIRED = False                                     # 出貨預設關（舊流程＝第 32 包行為）；M1 案件側 UI 上線時翻 True（同 commit 帶測試）
 PO_REQUIRED_FROM = "2026-10-03"
 _NUMERIC = ("quantity", "unitPrice", "totalPrice", "poLine")
 
