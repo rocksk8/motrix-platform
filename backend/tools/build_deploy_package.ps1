@@ -717,6 +717,10 @@ try {
 }
 $runNonE2e = -not $stageReuse.ContainsKey("not_e2e")
 $runE2e = -not $stageReuse.ContainsKey("e2e")
+if ($runNonE2e -or $runE2e) {
+    # 建包優化 2 項 2：沒有沿用某一段時，說明去哪看原因（tree 差在哪幾個檔／環境哪一項不同），以及怎麼讓獨立跑也算數
+    Write-Host "  [建包優化] 有段別沒沿用：原因 → & $pyExe backend	oolsuild_test_reuse.py explain；先獨立跑再建包也算數 → & $pyExe backend	oolsuild_test_reuse.py run-stage --stage e2e|not_e2e" -ForegroundColor DarkGray
+}
 # manifest 的 verification：每一段是實跑還是沿用、哪些題是偶發重跑通過的
 $BuildVerification = [ordered]@{ not_e2e = "ran"; e2e = "ran"; flaky_retried = @() }
 foreach ($st in @($stageReuse.Keys)) {
