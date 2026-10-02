@@ -302,7 +302,7 @@ def queue_items(conn) -> list:
     rows = conn.execute("SELECT c.*, q.customer_name, q.data_json FROM case_material_changes c LEFT JOIN quotations q ON q.quote_no = c.quote_no"
                         " WHERE c.status IN ('待審核','簽核中') ORDER BY c.id DESC").fetchall()
     for r in rows:
-        raw = _approval_raw_of(r["approval_json"], MC.DOC_TYPE, r["doc_code"])
+        raw = _approval_raw_of(r["approval_json"], "material_change", r["doc_code"])          # 字面值：佇列覆蓋守門（check_approval_queue_coverage）掃提供者源碼找它
         if raw is None:
             continue
         f = _queue_tier_fields(raw)
@@ -311,7 +311,7 @@ def queue_items(conn) -> list:
         name = _order_name(r, r["item_id"])
         base_url = "/api/quotations/%s/material-changes/%d" % (r["quote_no"], r["id"])
         out.append({
-            "type": MC.DOC_TYPE, "typeLabel": MC.DOC_LABEL, "docCode": r["doc_code"], "quoteNo": r["doc_code"],
+            "type": "material_change", "typeLabel": MC.DOC_LABEL, "docCode": r["doc_code"], "quoteNo": r["doc_code"],
             "customer": r["customer_name"] or "", "projectName": "%s（原 %s → 變更後 %s）" % (name, base.get("quantity", ""), prop.get("quantity", "")),
             "total": prop.get("totalPrice") or 0, "quoteDate": (f["requestedAt"] or "")[:10], "salesPerson": "", "requestedBy": f["requestedBy"],
             "requestedByDisplay": f["requestedByDisplay"], "requestedAt": f["requestedAt"], "isEditApproval": False, "reasons": [],
