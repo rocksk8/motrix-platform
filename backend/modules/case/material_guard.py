@@ -30,6 +30,32 @@ from modules.case import material_payment as MP
 _PAID_KEYS = ("paidStatus", "paidAmount", "paidDate")
 _FLAGS = ("ordered", "arrived")
 
+#: 儲存時的連結檢查（32-S4 接縫）：`(conn, quote_no, order) -> 錯誤訊息 | None`。預設 None＝不檢查；
+#: 由 `api/material_approvals.py` 掛上 `purchase_items.link_validator`。無效 ⇒ 該列（或該次變更）被拒，code `bad_link`。
+LINK_VALIDATOR = None
+_LINK_KEYS = ("quoteItemId", "poDocCode", "poLine")
+
+
+def _norm_links(o: dict) -> dict:
+    """poLine 轉整數（前端可能送字串）；空值統一成 ''。轉不動的原樣留著，交給檢查器拒絕。"""
+    if "poLine" in o:
+        v = o.get("poLine")
+        if v in (None, ""):
+            o["poLine"] = ""
+        else:
+            try:
+                if float(v) == int(float(v)):
+                    o["poLine"] = int(float(v))
+            except (TypeError, ValueError, OverflowError):
+                pass
+    return o
+
+
+def _link_problem(conn, quote_no, order):
+    if LINK_VALIDATOR is None or not any(order.get(k) not in (None, "") for k in _LINK_KEYS):
+        return None
+    return LINK_VALIDATOR(conn, quote_no, order)
+
 
 def _num(v):
     try:
@@ -51,6 +77,8 @@ def _canon(v):
 
 def _same(key, new, old) -> bool:
     """欄位值相同？已付欄位把 None／空字串／0 視為同一個「沒有」（前端未付款時送 null，資料庫存 ''）。"""
+    if key in _LINK_KEYS and new in (None, "") and old in (None, ""):
+        return True
     if key in _PAID_KEYS and new in (None, "", 0) and old in (None, "", 0):
         return True
     if key == "paidStatus" and new in (None, "", "pending") and old in (None, "", "pending"):
@@ -163,7 +191,11 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
             if MA.SUPPLIER_REQUIRED_ON_NEW and actor is not None and not _valid_supplier_id(no.get("supplierId")):
                 _rej(rejected, iid, "supplierId", "supplier_required", "新增材料申請必須選擇供應商")
                 continue
-            row = dict(no)
+            row = _norm_links(dict(no))
+            lmsg = _link_problem(conn, quote_no, row)
+            if lmsg:
+                _rej(rejected, iid, "poDocCode", "bad_link", lmsg)
+                continue
             if paid_only and ((row.get("paidStatus") or "pending") != "pending" or float(row.get("paidAmount") or 0) or row.get("paidDate")):
                 row.update({"paidStatus": "pending", "paidAmount": 0, "paidDate": ""})
                 _rej(rejected, iid, "paidStatus", "paid_via_remittance", "已付款只能經匯款申請登錄，已改為待付")
@@ -171,6 +203,7 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
             out.append(row)
             continue
         merged = dict(old)                                                               # ── 既有列：以現值為底
+        no = _norm_links(dict(no))
         diff = {k: v for k, v in no.items() if not _same(k, v, old.get(k))}
         if not diff:
             out.append(merged)
@@ -192,6 +225,12 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
                 _rej(rejected, iid, "*", "has_payments", "這張材料申請已有匯款申請，請先作廢申請再修改內容")
                 out.append(merged)
                 continue
+            if any(not _same(k, cand.get(k), old.get(k)) for k in _LINK_KEYS):
+                lmsg = _link_problem(conn, quote_no, cand)
+                if lmsg:
+                    _rej(rejected, iid, "poDocCode", "bad_link", lmsg)
+                    out.append(merged)
+                    continue
             r = MA.on_substantive_change(conn, quote_no, iid, user)
             if not r["allowed"]:
                 _rej(rejected, iid, "*", r["reason"], "「%s」狀態的材料申請不可修改內容（請先撤回，或已取消的單不可再改）" % st if r["reason"] == "in_approval" else "已取消的材料申請不可修改")

@@ -31,8 +31,9 @@ IN_FLIGHT = (S_PENDING, S_IN_PROGRESS)           # 簽核中：實質欄位不�
 EDITABLE = (S_DRAFT, S_RETURNED)                 # 可以修改並（重新）送審
 
 #: 實質欄位：核准後任何一項變動 ⇒ 回草稿、要重新送審（備註、發票日、到貨欄位不算）
-SUBSTANTIVE_KEYS = ("itemName", "quantity", "unit", "unitPrice", "totalPrice", "supplierId")
-_NUMERIC = ("quantity", "unitPrice", "totalPrice")
+#: 32-S4：quoteItemId／poDocCode／poLine（連報價品項、連採購單）也是實質欄位：核准後改連結 ⇒ 回草稿重送審（overPlanReason 是說明、不算）
+SUBSTANTIVE_KEYS = ("itemName", "quantity", "unit", "unitPrice", "totalPrice", "supplierId", "quoteItemId", "poDocCode", "poLine")
+_NUMERIC = ("quantity", "unitPrice", "totalPrice", "poLine")
 
 #: 付款只能經匯款申請寫入（paid* 的閘；`material_payment.sync_order_paid` 是唯一寫入點）。匯款切片已落地 ⇒ True
 #: （主持裁示：半關的金流控制比沒有更糟，31-C 不能帶著 False 出貨）。守門題兩個值都測。
@@ -182,7 +183,7 @@ def _appr(row) -> dict:
     return d if isinstance(d, dict) else {}
 
 
-def submit(conn, quote_no: str, order: dict, user: dict) -> dict:
+def submit(conn, quote_no: str, order: dict, user: dict, snapshot: dict = None) -> dict:
     """送審（草稿／已退回 → 待審核；沒設簽核層 ⇒ 直接已核准）。回 `{status, tierCount, firstApprovers, autoApproved}`。
     實質欄位的雜湊在**核准當下**以目前的叫料內容存（`order`＝目前 materialOrders 該列）。"""
     item_id = str(order.get("itemId") or "")
@@ -199,7 +200,9 @@ def submit(conn, quote_no: str, order: dict, user: dict) -> dict:
     now = _now()
     appr = _appr(row)
     hist = appr.get("history") or []
+    link_snap = {"linkSnapshot": snapshot} if snapshot else {}                      # 32-S4：送審當下的連結／超出計畫判定，簽核人看到的是這份
     if not tiers:
+        appr.update(link_snap)
         appr.update({"autoApproved": True, "note": "未設定任何簽核層，送審即視為核准", "requestedBy": user["username"],
                      "requestedByDisplay": _display(user), "requestedAt": now})
         hist.append({"at": now, "by": user["username"], "byDisplay": _display(user), "action": "submit", "tier": 0, "comment": "自動核准"})
@@ -208,7 +211,7 @@ def submit(conn, quote_no: str, order: dict, user: dict) -> dict:
               content_hash=content_hash(order))
         return {"status": S_APPROVED, "tierCount": 0, "firstApprovers": [], "autoApproved": True}
     appr = {"requestedBy": user["username"], "requestedByDisplay": _display(user), "requestedAt": now, "tiers": tiers, "currentTier": 0,
-            "history": hist + [{"at": now, "by": user["username"], "byDisplay": _display(user), "action": "submit", "tier": 0, "comment": ""}]}
+            "history": hist + [{"at": now, "by": user["username"], "byDisplay": _display(user), "action": "submit", "tier": 0, "comment": ""}], **link_snap}
     _save(conn, quote_no, item_id, S_PENDING, appr, now, submitted_by=user["username"], submitted_at=now)
     return {"status": S_PENDING, "tierCount": len(tiers), "firstApprovers": [a["username"] for a in (tiers[0].get("approvers") or [])],
             "autoApproved": False}

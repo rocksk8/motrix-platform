@@ -378,6 +378,31 @@ def material_submit_check(conn, quote_no, order, *, exclude_item_id=None) -> dic
                          "overPlanReason": reason if over > 1e-9 else ""}}
 
 
+def link_validator(conn, quote_no, order):
+    """`material_guard.LINK_VALIDATOR` 的實作（儲存時的連結檢查；送審時另有 `material_submit_check`）⇒ 無效時回訊息，有效回 None。
+    只驗「有填的連結鍵」：`quoteItemId` 要在報價單品項內；`poDocCode`／`poLine` 要是有效採購單連結；`poLine` 必須是正整數。"""
+    order = order or {}
+    data, rows = _case_state(conn, quote_no)
+    qid = str(order.get("quoteItemId") or "").strip()
+    if qid and qid not in {p["itemId"] for p in plan_items(data)}:
+        return "材料申請連到的品項不在這張報價單內，請重新選擇"
+    pl = order.get("poLine")
+    if pl not in (None, ""):
+        try:
+            ok = int(pl) >= 1 and float(pl) == int(pl)
+        except (TypeError, ValueError):
+            ok = False
+        if not ok:
+            return "採購單列序必須是正整數"
+    if str(order.get("poDocCode") or "").strip():
+        ok, reason = _link_check(order, [r for r in rows if (r["kind"] or "") == ORD])
+        if not ok:
+            return "連到的採購單無效（%s）：必須是同案件、待審核／簽核中／已核准的採購單" % reason
+    elif pl not in (None, ""):
+        return "填了採購單列序就必須指定採購單"
+    return None
+
+
 def queue_tags(conn, quote_no, order) -> list:
     """簽核佇列卡片的小標註（L1 `tags[]`；接縫：材料申請的佇列提供者呼叫）⇒ 「未申請採購單」才有一個 warn 標註，其餘 []。
     正在簽核的單一定有審核列（非舊單），所以 `legacy=False`；$0 仍免標。"""

@@ -129,6 +129,7 @@ window.CM_PARTS.push(() => ({
     // 可以開匯款申請：已存檔、$0 以外、舊單或已核准、還有額度
     moCanRequestPay(m) {
       if (!m || m._saved === false || this.moDirty || !this.moCanEdit()) return false
+      if (m.poDocCode) return false                              // 32-S4：已對應採購單 ⇒ 付款走採購單請款，不開匯款申請
       if (!['', '已核准'].includes(this.moAp(m).status)) return false
       const q = this.moPayOf(m).quota
       return !!q && Number(m.totalPrice) > 0 && q.remaining > 0

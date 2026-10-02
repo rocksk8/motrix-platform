@@ -244,6 +244,8 @@ def create(conn, quote_no: str, order: dict, user: dict, body: dict) -> dict:
     """開一張匯款申請（草稿）。`body`＝{amount?, supplierId?, bankCode, bankName, bankAccountName, bankAccountNumber, overCapReason?}；
     金額不帶＝叫料單剩餘額度。供應商：叫料單上的 `supplierId`，沒有（舊單）就要在 body 給。"""
     _check_order_for_payment(conn, quote_no, order)
+    if str(order.get("poDocCode") or "").strip():                              # 32-S4：已對應採購單的材料申請，付款走採購單的請款流程，不能另開匯款申請（避免同一筆錢付兩次）
+        raise MaterialPaymentError(409, "這筆材料申請已對應採購單 %s，請走採購單的請款流程，不能另開匯款申請" % str(order.get("poDocCode")).strip())
     item_id = str(order.get("itemId"))
     sid = (body or {}).get("supplierId") or order.get("supplierId")
     sup = supplier_brief(conn, sid) if sid not in (None, "") else None

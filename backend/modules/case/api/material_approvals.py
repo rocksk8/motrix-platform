@@ -20,6 +20,8 @@ from db import get_db
 from helpers import _audit, _notify, _require_user, _tok, notify_org_chain_notice
 from helpers.approval_queue import approval_raw_of as _approval_raw_of, tier_fields as _queue_tier_fields
 from modules.case import purchase_items as _PI
+from modules.case import material_guard as _MG
+_MG.LINK_VALIDATOR = _PI.link_validator                         # 32-S4：儲存時的連結檢查（material_guard 的接縫）
 from helpers.case_access import require_case
 from helpers.financial_mask import money_visible
 from modules.case import material_approval as MA
@@ -135,8 +137,11 @@ def submit(quote_no: str, item_id: str, authorization: str = Header(None)):
         order = _order(q, item_id)
         if MA.get(conn, quote_no, item_id) is None:
             MA.create_draft(conn, quote_no, item_id, user, "送審時建立（舊單）")
+        chk = _PI.material_submit_check(conn, quote_no, order, exclude_item_id=item_id)          # 32-S4：送審時檢查連結（採購單／報價品項）與超出計畫原因
+        if chk["problems"]:
+            raise HTTPException(400, "；".join(p["message"] for p in chk["problems"]))
         try:
-            res = MA.submit(conn, quote_no, order, user)
+            res = MA.submit(conn, quote_no, order, user, snapshot=chk["snapshot"])
         except MA.MaterialApprovalError as e:
             raise _http(e)
         row = MA.get(conn, quote_no, item_id)
@@ -364,4 +369,10 @@ def detail(conn, doc_no):
               {"label": "單價", "value": format(float(order.get("unitPrice") or 0), ",.0f")},
               {"label": "小計", "value": format(float(order.get("totalPrice") or 0), ",.0f")},
               {"label": "備註", "value": order.get("notes") or "—"}, {"label": "版本", "value": str(r["version"])}]
+    try:
+        snap = (json.loads(r["approval_json"] or "{}") or {}).get("linkSnapshot")
+    except (TypeError, ValueError):
+        snap = None
+    _, ext_rows = _PI._case_state(conn, r["quote_no"])
+    fields += _PI.material_detail_fields(order, [x for x in ext_rows if (x["kind"] or "") == _PI.ORD], snapshot=snap, legacy=False)          # 32-S4：採購單連結、超出計畫
     return {"quoteNo": r["quote_no"], "approvalRaw": r["approval_json"], "title": "材料申請 %s" % r["doc_code"], "fields": fields, "items": [], "files": []}
