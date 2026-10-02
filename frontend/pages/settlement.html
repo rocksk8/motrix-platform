@@ -1140,6 +1140,8 @@ function settlementPage() {
       }
     },
 
+    estimateOf(item) { return MotrixLegalRound.halfUp((item.origQty || 0) * (item.origCost || 0), 1.05) },
+
     calcExtraCost(ex) {
       ex.totalCost = MotrixLegalRound.halfUp(ex.qty || 0, ex.unitCost || 0)
     },
@@ -1157,7 +1159,9 @@ function settlementPage() {
       const origMarginPct = tot.directMarginPct != null ? tot.directMarginPct
         : (quotedPretax > 0 ? origDirectProfit / quotedPretax * 100 : 0)
 
-      const itemActualTotal = this.settlement.items.reduce((s, i) => s + (i.actualTotalCost || 0), 0)
+      // 手填實際成本 0／空＝沒填 ⇒ 用估計（與重新載入存檔 `si.actualTotalCost || oi.actualTotalCost`、後端 manual_actual 同一規則；
+      // 否則同一次編輯中頁面把 0 加進去，完結時與後端重算差一筆估計而被 409）
+      const itemActualTotal = this.settlement.items.reduce((s, i) => s + (i.actualTotalCost || this.estimateOf(i)), 0)
       // 2026-09-11：額外支出搬到 case_extra_expenses 表（DB v75），改用從 API 取回的
       // 總額。**不能再用 settlement.extraItems 算**——那份陣列現在只是搬移前的唯讀
       // 備份、不會再更新，拿它算成本會停在搬移當下的舊數字。含送審中的金額
@@ -1285,7 +1289,7 @@ function settlementPage() {
           this.settlement.finalizedBy = ''
           const detail = (await res.json().catch(() => ({}))).detail
           this.showFinalizeModal = false
-          this.toast('完結失敗' + (typeof detail === 'string' && detail ? '：' + detail : ''))      // 409（完結前重算與畫面不一致）要讓使用者看到「請重新整理」
+          this.toast('完結失敗' + (typeof detail === 'string' && detail ? '：' + detail : ''), 10000)      // 409（完結前重算與畫面不一致）要讓使用者看到「請重新整理」
         }
       } catch(e) {
         this.settlement.status      = 'draft'
@@ -1303,10 +1307,10 @@ function settlementPage() {
       await this.saveDraft()
     },
 
-    toast(msg) {
-      const id = Date.now()
+    toast(msg, ms = 3500) {
+      const id = Date.now() + Math.random()
       this.toasts.push({ id, msg })
-      setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id) }, 3500)
+      setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id) }, ms)
     },
   }
 }
