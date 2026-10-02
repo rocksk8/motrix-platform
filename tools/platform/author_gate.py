@@ -37,10 +37,10 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 
-#: A2：檔名樣式（比對 basename；跨所有測試根）。新增樣式要同步更新 AUTHOR-GATE-DESIGN §2 與樣式涵蓋守門題
-PATTERNS = ("*approval*", "*queue*", "*pii*", "*privacy*", "*migration*", "*spec_coverage*", "*font_zoom*",
-            "*money_round*", "*wording*", "*changelog*")
-TEST_ROOT_RE = re.compile(r"^backend/(?:tests|core/tests|modules/[^/]+/tests)/")
+import guard_patterns as GP  # noqa: E402
+
+#: A2：檔名樣式（比對 basename；跨所有測試根）——唯一一份在 tools/platform/guard_patterns.json（負責人 a3；增量選題底板共用）
+PATTERNS = GP.patterns()
 RESULT_DIR = HERE / "author_gate_results"
 TIMES_FILE = HERE / "author_gate_times.json"
 DEFAULT_FILE_SECONDS = 12.0          # 沒有歷史秒數的檔（序列秒數；實測 2267 題 1693 s ≈ 0.75 s／題，平均每檔 ~11 s）
@@ -51,18 +51,12 @@ RESULT_VERSION = 1
 # ── 純函式（有題）────────────────────────────────────────────────────────
 
 def is_test_file(path):
-    p = path.replace("\\", "/")
-    return bool(TEST_ROOT_RE.match(p)) and p.rsplit("/", 1)[-1].startswith("test_") and p.endswith(".py")
+    return GP.is_test_file(path)
 
 
 def pattern_files(tree_files, patterns=PATTERNS):
-    """git tree 的檔案清單 ⇒ 符合樣式的測試檔（排序、去重）。"""
-    out = set()
-    for f in tree_files:
-        f = f.replace("\\", "/")
-        if is_test_file(f) and any(fnmatch.fnmatch(f.rsplit("/", 1)[-1], p) for p in patterns):
-            out.add(f)
-    return sorted(out)
+    """git tree 的檔案清單 ⇒ 符合樣式的測試檔（排序、去重）。樣式預設取 guard_patterns.json。"""
+    return GP.match_files(tree_files, pats=patterns)
 
 
 def build_selection(plan_n, plan_e, tree_files, changed, guard_args=(), patterns=PATTERNS, full_floor=False):

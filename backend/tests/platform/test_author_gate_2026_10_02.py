@@ -54,7 +54,7 @@ def test_pattern_files_scan_every_test_root_including_module_tests():
 
 def test_reverse_control_dropping_a_pattern_loses_its_files():
     tree = ["backend/modules/subcontract/tests/test_pii_archive_mirror.py"]
-    assert AG.pattern_files(tree, tuple(p for p in AG.PATTERNS if p != "*pii*")) == []
+    assert AG.pattern_files(tree, tuple(p for p in AG.PATTERNS if p not in ("*pii*", "*archive*"))) == []
     assert AG.pattern_files(tree) == tree
 
 
@@ -183,7 +183,7 @@ def test_replay_offline_covers_pattern_files_and_flags_a_missing_one(repo):
     bad = AG.replay_offline({"name": "n2", "fix": fix, "expect_files": ["backend/tests/test_plain_guard.py"]}, repo)        # 名稱不符任何樣式 ⇒ 缺漏
     assert not bad["covered"] and bad["missing"] == ["backend/tests/test_plain_guard.py"]
     cut = AG.replay_offline({"name": "n3", "fix": fix, "expect_files": ["backend/modules/subcontract/tests/test_pii_archive_mirror_x.py"]}, repo,
-                            patterns=tuple(p for p in AG.PATTERNS if p != "*pii*"))
+                            patterns=tuple(p for p in AG.PATTERNS if p not in ("*pii*", "*archive*")))
     assert not cut["covered"]                                                                                                    # 反向控制：拿掉樣式 ⇒ 缺漏
 
 

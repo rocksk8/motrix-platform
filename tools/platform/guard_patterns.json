@@ -1,0 +1,21 @@
+{
+ "version": 1,
+ "_doc": "跨檔守門的檔名樣式（作者端守門集 A2 與增量選題的底板共用的唯一一份；負責人 a3，回放驗證 d7）。比對測試檔 basename，掃 roots 底下所有 test_*.py。新增樣式＝新增一列並寫 why（哪一輪紅燈／哪種守門）；每個樣式至少要命中一個真實檔（守門題 test_guard_patterns 驗，防死樣式）。",
+ "roots": ["backend/tests", "backend/core/tests", "backend/modules/*/tests"],
+ "patterns": [
+  {"glob": "*approval*", "why": "簽核提供者清單／套用範圍／佇列覆蓋（第 31 班 r2、r7a）"},
+  {"glob": "*queue*", "why": "簽核佇列覆蓋守門讀提供者原始碼字面值（r2）"},
+  {"glob": "*pii*", "why": "個資備份鏡像／告知欄位（r7b；子模組版在 modules/*/tests）"},
+  {"glob": "*privacy*", "why": "收款人個資告知（31-C PII）"},
+  {"glob": "*archive*", "why": "備份／封存家族（pii_archive_mirror、archive_ownership、payslip_archive_path…）"},
+  {"glob": "*migration*", "why": "遷移登記／冪等（r2）"},
+  {"glob": "*spec_coverage*", "why": "規格編號 owner map（r6）"},
+  {"glob": "*font_zoom*", "why": "字級放大 raw-vh 靜態題；檔名含 e2e 但有非瀏覽器題（r4）"},
+  {"glob": "*money_round*", "why": "金額往返／half-up（r5）"},
+  {"glob": "*legal_amount_rounding*", "why": "法規金額捨入守門（d7 回放漏接）"},
+  {"glob": "*wording*", "why": "用語守門"},
+  {"glob": "*changelog*", "why": "CHANGELOG 跟著程式"}
+ ],
+ "static_in_e2e_named": ["*font_zoom*"],
+ "extra_nodes": []
+}
