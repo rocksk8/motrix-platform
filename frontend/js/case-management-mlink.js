@@ -1,4 +1,4 @@
-// case-management-mlink.js — 案件管理頁：材料申請的「報價單品項／採購單明細」連結（32-S4d）
+// case-management-mlink.js — 案件管理頁：材料申請的「採購單明細」連結（32-S4d；33-M1：新申請只能從已核准的採購單明細帶入）
 // 規格 docs/platform/plans/MATERIAL-ORDER-LINK-SPEC.md；用字照 docs/platform/plans/MATERIAL-REQUEST-WORDING.md（鍵名仍是 materialOrders／quoteItemId…）。
 // 獨立成檔：不與 case-management-exec.js 的 31-C 材料申請審核／匯款區塊改同一段；組合見 case-management-core.js 的 app()。
 window.CM_PARTS = window.CM_PARTS || []
@@ -7,7 +7,7 @@ window.CM_PARTS.push(() => ({
     mlStatus: {},
     mlItems: [],          // 報價單品項挑選器（剩餘可申請量）
     mlPoLines: [],        // 採購單明細（尚未被有效連結用掉的）
-    mlPanel: '',          // '' | 'quote' | 'po'：目前開著哪個匯入面板
+    mlPanel: '',          // '' | 'po'：目前開著哪個匯入面板（33-M1 起只有採購單明細）
     mlPick: {},           // 匯入面板勾選：key → true
     mlLoadingList: false,
     mlMsg: '',
@@ -39,8 +39,9 @@ window.CM_PARTS.push(() => ({
       this.mlTick++
     },
 
-    // 開／關匯入面板；打開時才取清單（品項的剩餘量與採購單明細都以伺服器當下為準）
+    // 開／關匯入面板；打開時才取清單（採購單明細以伺服器當下為準）
     async mlOpen(kind) {
+      kind = 'po'
       if (this.mlPanel === kind) { this.mlPanel = ''; return }
       this.mlPanel = kind
       this.mlPick = {}
@@ -51,34 +52,18 @@ window.CM_PARTS.push(() => ({
       const token = this._mlReq = this._mlReq + 1       // 只有最新一次開啟的回應算數；切換案件後晚到的回應也丟掉（c7 預審）
       const live = () => this._mlReq === token && this.selected?.quote_no === quoteNo
       try {
-        if (kind === 'quote') {
-          const r = await fetch(base + '/purchase-items', { headers: this._mlHeaders() })
-          const d = r.ok ? await r.json() : null
-          if (!live()) return
-          if (d) this.mlItems = d.items || []
-          else this.mlMsg = '無法讀取報價單品項'
-        } else {
-          const r = await fetch(base + '/material-po-lines', { headers: this._mlHeaders() })
-          const d = r.ok ? await r.json() : null
-          if (!live()) return
-          if (d) this.mlPoLines = d.lines || []
-          else this.mlMsg = '無法讀取採購單明細'
-        }
+        const r = await fetch(base + '/material-po-lines', { headers: this._mlHeaders() })
+        const d = r.ok ? await r.json() : null
+        if (!live()) return
+        if (d) this.mlPoLines = d.lines || []
+        else this.mlMsg = '無法讀取採購單明細'
       } catch { if (!live()) return; this.mlMsg = '讀取失敗，請稍後再試' }
       this.mlLoadingList = false
     },
 
-    // 報價品項：剩餘 0 ⇒ 不列出（預先扣除已申請完成的）；本頁尚未儲存的列也要扣，避免同一筆重複帶入
-    mlQuoteChoices() {
-      void this.mlTick
-      const pending = {}
-      for (const m of this.materialOrders) {
-        if (m._saved === false && m.quoteItemId && !m.poDocCode) pending[m.quoteItemId] = (pending[m.quoteItemId] || 0) + (Number(m.quantity) || 0)
-      }
-      return this.mlItems
-        .map(i => ({ ...i, left: Math.max((Number(i.remainingQty) || 0) - (pending[i.itemId] || 0), 0) }))
-        .filter(i => i.left > 1e-9)
-    },
+    // 33-M1（E1／E2）：只有「已核准」的採購單明細能帶入
+    mlPoApproved(l) { return l.status === '已核准' },
+
     mlPoChoices() {
       void this.mlTick
       const used = new Set(this.materialOrders.filter(m => m.poDocCode && m.poLine).map(m => m.poDocCode + '#' + m.poLine))
@@ -90,21 +75,13 @@ window.CM_PARTS.push(() => ({
     // 把勾選的品項／明細帶成新的材料申請列（仍是草稿：要選供應商、按儲存、再送審）
     mlImport() {
       let n = 0
-      if (this.mlPanel === 'quote') {
-        for (const i of this.mlQuoteChoices()) {
-          if (!this.mlPick['q:' + i.itemId]) continue
-          this._mlPush({ itemName: i.description, quantity: i.left, unit: i.unit, unitPrice: Number(i.planUnitCost) || 0, quoteItemId: i.itemId })
-          n++
-        }
-      } else if (this.mlPanel === 'po') {
-        for (const l of this.mlPoChoices()) {
-          if (!this.mlPick['p:' + l.poDocCode + '#' + l.poLine]) continue
-          this._mlPush({ itemName: l.summary, quantity: l.qty, unit: l.unit, unitPrice: Number(l.unitCost) || 0,
-                         quoteItemId: l.quoteItemId || '', poDocCode: l.poDocCode, poLine: l.poLine })
-          n++
-        }
+      for (const l of this.mlPoChoices()) {
+        if (!this.mlPick['p:' + l.poDocCode + '#' + l.poLine] || !this.mlPoApproved(l)) continue
+        this._mlPush({ itemName: l.summary, quantity: l.qty, unit: l.unit, unitPrice: Number(l.unitCost) || 0,
+                       quoteItemId: l.quoteItemId || '', poDocCode: l.poDocCode, poLine: l.poLine })
+        n++
       }
-      if (!n) { this.mlMsg = '請先勾選要帶入的項目'; return }
+      if (!n) { this.mlMsg = '請先勾選要帶入的項目（只能帶入已核准的採購單明細）'; return }
       this.mlPick = {}
       this.mlPanel = ''
       this.mlTab = 'approved'
@@ -176,5 +153,16 @@ window.CM_PARTS.push(() => ({
       return Math.max((Number(m.quantity) || 0) - (Number(it.remainingQty) || 0), 0)
     },
     mlShowReason(m) { return !!(m.quoteItemId && !m.poDocCode && (m.overPlanReason || this.mlOverBy(m) > 1e-9)) },
+    // 送審前提示（33-M1，後端 po_required 為準）：新的（非舊單）材料申請沒有採購單連結 ⇒ 先告訴使用者，不用等被擋
+    mlSubmitHint(m) {
+      if (!m || String(m.poDocCode || '').trim()) return ''
+      const a = (this.moApprovals || {})[m.itemId] || {}
+      if (m._saved !== false && a.legacy) return ''                                    // 舊單不受影響
+      if (!['', '草稿', '已退回'].includes(a.status || '')) return ''
+      return '需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。'
+    },
+    // 已全額付款的材料申請：數量／單價不能改（金額已付清，要調整請另開一筆）
+    moPaidFullHint: '已全額付款，金額不能修改；要調整請另開一筆材料申請',
+    moPaidFull(m) { return !!m && m._saved !== false && m.paidStatus === 'paid' },
     mlQuoteName(id) { const it = this.mlItems.find(i => i.itemId === id); return it ? it.description : id }
 }))
