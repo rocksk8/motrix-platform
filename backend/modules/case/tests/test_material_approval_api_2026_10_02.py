@@ -16,6 +16,12 @@ NO = "MQ-MATA-001"
 ITEM = "it-api-1"
 BASE = "/api/quotations/%s/material-orders/%s" % (NO, ITEM)
 
+@pytest.fixture(autouse=True)
+def _po_rule_off(monkeypatch):
+    """33-M1：強制採購單預設開；本檔驗的不是這條規則（手動建立材料申請的流程），明確關掉。規則本身見 test_material_po_required_2026_10_03.py。"""
+    from modules.case import material_approval as _MA
+    monkeypatch.setattr(_MA, "PO_REQUIRED", False)
+
 
 def _q(sql, args=()):
     import db
