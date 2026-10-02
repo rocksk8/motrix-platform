@@ -11,6 +11,7 @@
 import json
 from decimal import Decimal
 
+from helpers.legal_params import round_half_up
 from modules.subcontract import remit_kinds as RK
 from modules.subcontract import remit_split as RS
 
@@ -43,6 +44,13 @@ def _dispatch_total(dispatch):
     return total
 
 
+def _whole_yuan(total):
+    """派發金額（REAL 欄，可能帶角分）⇒ 整數元，四捨五入（half-up，不經浮點）；回 (整數元, 是否有進位／捨去)。"""
+    d = Decimal(str(total))
+    whole = int(round_half_up(d, Decimal(1)))
+    return whole, d != whole
+
+
 def kinded_context(conn, dispatch, kind_code, ratio_percent=None, amount=None):
     """⇒ `{"kind", "kinds_version", "previous", "plan", "seq", "mode", "ratio", "total", "rate", "warnings"}`；不合法 ⇒ RemitCreateError(狀態碼, 訊息)。"""
     if not kind_code:
@@ -60,7 +68,7 @@ def kinded_context(conn, dispatch, kind_code, ratio_percent=None, amount=None):
     if legacy:
         raise RemitCreateError(409, "此派發已用整筆方式產生匯款申請（%s），不能再改用分期；請先處理該申請" % legacy[0])
     prev = previous_periods(conn, dispatch["id"])
-    total = _dispatch_total(dispatch)
+    total, rounded = _whole_yuan(_dispatch_total(dispatch))
     rate = float(dispatch["tax_rate"]) if "tax_rate" in dispatch.keys() and dispatch["tax_rate"] is not None else 0.05
     if amount is not None:
         mode, value = "amount", amount
@@ -71,6 +79,8 @@ def kinded_context(conn, dispatch, kind_code, ratio_percent=None, amount=None):
     except RS.RemitSplitError as e:
         raise RemitCreateError(400, str(e))
     warnings = list(plan["warnings"])
+    if rounded:
+        warnings.append("派發金額 %s 元含角分，分期以四捨五入後的整數元 %d 元計算，待會計確認" % (dispatch["total_amount"], total))
     if kind_code in ("completion", "acceptance") and any(not p["is_paid"] for p in prev):
         warnings.append("前面還有 %d 期尚未付款（%s）；仍可開立，請確認付款順序" % (
             sum(1 for p in prev if not p["is_paid"]), "、".join(p["voucher_no"] for p in prev if not p["is_paid"])))

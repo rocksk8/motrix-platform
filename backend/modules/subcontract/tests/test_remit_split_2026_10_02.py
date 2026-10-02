@@ -82,7 +82,6 @@ def test_rk7_near_complete_hint_when_one_yuan_remains_but_cumulative_ratio_is_sh
     ((10, 0.05, [], "ratio", "0.01"), "不到 1 元"),
     ((1000, 0.05, [], "amount", "abc"), "不是數字"),
     ((1000, 0.05, [{"pretax": 0, "tax": 0}], "amount", 1), "正整數"),
-    ((1000, 0.05, [{"pretax": 999, "tax": 99}], "amount", 1), "超過整筆稅額"),
 ])
 def test_rk7_rejections(args, needle):
     with pytest.raises(RS.RemitSplitError) as e:
@@ -125,3 +124,12 @@ def test_rk7_reverse_control_without_the_make_up_the_tax_sum_drifts_from_the_who
     naive = [int(round_half_up(a, 0.05)) for a in (33, 33, 34)]
     assert sum(naive) == 6 and int(round_half_up(100, 0.05)) == 5
     assert sum(x["tax"] for x in _run(100, 0.05, [("ratio", "0.3333"), ("ratio", "0.3333"), ("ratio", "0.3334")])) == 5
+
+
+def test_rk7_prior_tax_above_total_tax_does_not_block_the_last_period():
+    """da S1：T=100、5%、X=5；前 9 期各 10 元每期稅 round(0.5)=1 ⇒ 前期稅 9 > 5（第 10 期為最後一期）。最後一期仍要開得出來：稅額取 0＋警示（不 raise）。"""
+    res = _run(100, 0.05, [("amount", 10)] * 9 + [("amount", 10)])
+    last = res[-1]
+    assert last["is_last"] and last["remaining_after"] == 0 and last["tax"] == 0
+    assert last["tax_sum_after"] == 9 and last["total_tax"] == 5
+    assert "超過整筆稅額" in last["warnings"][0] and "待會計確認" in last["warnings"][0]

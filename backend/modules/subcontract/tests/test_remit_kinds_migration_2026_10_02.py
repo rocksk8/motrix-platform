@@ -55,7 +55,7 @@ def _old_db(rows=4, delete_some=False):
         c.execute("INSERT INTO contractor_payment_vouchers (voucher_no, dispatch_id, quote_no, vendor_id, status, snapshot_json, is_paid, paid_at, remit_actual,"
                   " remit_fee, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                   ("PV-%04d" % i, i, "Q-1", 1, "已核准", json.dumps(snap, ensure_ascii=False), 1 if i <= 2 else 0, "2026-09-0%d" % i if i <= 2 else "",
-                   None if i > 2 else 1050.0 * i, 15 if i == 1 else 0, "admin", "2026-09-01T00:00:00", "2026-09-02T00:00:00"))
+                   None if i != 1 else 1050.0 * i, 15 if i == 1 else 0, "admin", "2026-09-01T00:00:00", "2026-09-02T00:00:00"))
     if delete_some:
         c.execute("DELETE FROM contractor_payment_vouchers WHERE id=?", (rows,))          # 留下 sqlite_sequence 比 max(id) 大的狀況
     c.commit()
@@ -65,6 +65,14 @@ def _old_db(rows=4, delete_some=False):
 def _dump(c, table="contractor_payment_vouchers", cols=None):
     cols = cols or [r[1] for r in c.execute("PRAGMA table_info(%s)" % table)]
     return [tuple(r) for r in c.execute("SELECT %s FROM %s ORDER BY id" % (",".join(cols), table))]
+
+
+def test_rk6_paid_rows_with_null_remit_actual_stay_null_after_rebuild():
+    """正式機回報：已付申請的 remit_actual 全為 NULL（舊式整筆，實付＝grandTotal）。遷移不得補 0 或改值；讀取端回退用應付金額。"""
+    c = _old_db()
+    assert c.execute("SELECT is_paid, remit_actual FROM contractor_payment_vouchers WHERE voucher_no='PV-0002'").fetchone() == (1, None)
+    assert M.up(c) is None
+    assert c.execute("SELECT is_paid, remit_actual FROM contractor_payment_vouchers WHERE voucher_no='PV-0002'").fetchone() == (1, None)
 
 
 def test_rk6_rebuild_keeps_every_old_column_value_and_adds_defaulted_new_columns():
