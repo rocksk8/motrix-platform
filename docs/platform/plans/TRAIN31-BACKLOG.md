@@ -175,3 +175,7 @@
 - 批次節奏：每批整包一輪（夜間機器空閒）；批2＝744ddf05（跑中）；批3＝31-B S2b/S3/S4/S5＋refresh＋A1/A2/A4；批4＝精算 A3/B1/A5/B2；批5＝M1 案件側＋D7。
 - 套用依賴：正式機 Claude 分類器擋 apply_update.ps1 ⇒ **使用者先在正式機 Claude 的權限設定加允許規則**（2026-10-03 00:4x 使用者回答「我先加」）。
 - 正式機真實資料影響：精算品項『存檔實際成本＝0』在 6 張報價單存在 ⇒ 端點／頁面維持今天語意（0＝沒填⇒估計）。da 稽核精算 B1 PASS（e4b49b72，舊案金額逐位相同）。
+
+## 測試母體健康度盤點（da，audit/train33-da-hygiene@ab76a064，AUDIT-DA-test-hygiene.md；使用者 2026-10-03 質疑）
+- 結論：沒有「測的對象已被移除卻仍在跑」的失效守門（91 端點／75 頁面／26 js 抽查後皆為合成路由／fixture／反向守門）；唯一真失效＝payroll／subcontract money_round 副本內未使用的 `_patch_entries()`（孤兒死程式碼，建議刪）。長期略過：Passkey 暫緩 6 檔（常數，保留）、pypdfium2 未安裝 1 題（該修）、WD1 xfail 1 題（保留）；其餘 ~800 略過皆環境／模組缺席條件式。無 assert 59 題多為誤報；死程式碼 test_bonus_correction:279 `if False`；jv12 恆真佔位建議 skip。完全相同函式本體僅 2 組。安全可刪＝0 項。
+- 可降頻：tests/platform 148 檔約 28 分，約 15 檔工具演練類（module_update_delivery、scope_gate、stepfile_drill、ship_tier、module_selection、core_upgrade、modtest×4、build_*、failfast、fail_stream）約 12–13 分可改「依 diff 觸發」（TOOL_DRILL_RE）。**最終出貨整包仍跑全部**，中間批次才降頻；本班批次動到 tools 所以不省，下一班起省。待辦：d7 在 run-stage 加 `--tools-by-diff`（非最終輪用）＋第二版盤點補 60 skipped／3 xfailed 逐題與 e2e 最慢 30 檔（需下一輪 junit＋--durations=30）。
