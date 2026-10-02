@@ -48,3 +48,22 @@ def test_install_is_idempotent_patches_popen_and_respects_the_opt_out(monkeypatc
     assert NW.install() is True and Fake.__init__ is patched                                                   # 冪等
     Fake(["x"])
     assert seen["creationflags"] & NW.CREATE_NO_WINDOW and seen["startupinfo"].wShowWindow == NW.SW_HIDE
+
+
+def test_positional_startupinfo_is_passed_through_and_a_callers_startupinfo_is_not_mutated(monkeypatch):
+    """c7 O-1：位置參數的 startupinfo／creationflags 不得造成 TypeError（multiple values）；呼叫端自己的 STARTUPINFO 不被改。"""
+    seen = {}
+
+    class Fake:
+        _motrix_nowindow = False
+
+        def __init__(self, *a, **kw):
+            seen["a"], seen["kw"] = a, kw
+    monkeypatch.setattr(subprocess, "Popen", Fake)
+    monkeypatch.delenv("MOTRIX_SHOW_WINDOWS", raising=False)
+    assert NW.install() is True
+    Fake(["x"], -1, None, None, None, None, None, True, False, None, None, False, "SI", 0)       # 第 13、14 個位置參數＝startupinfo、creationflags
+    assert seen["a"][12] == "SI" and "startupinfo" not in seen["kw"]
+    mine = subprocess.STARTUPINFO()
+    Fake(["x"], startupinfo=mine)
+    assert mine.dwFlags == 0 and seen["kw"]["startupinfo"] is not mine and seen["kw"]["startupinfo"].wShowWindow == NW.SW_HIDE

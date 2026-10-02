@@ -222,6 +222,13 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    try:                                                              # 背景執行不彈視窗（tools/platform/nowindow.py；MOTRIX_SHOW_WINDOWS=1 可關）
+        import sys as _s, pathlib as _p
+        _s.path.insert(0, str(_p.Path(__file__).resolve().parents[0]))
+        import nowindow as _nw
+        _nw.install()
+    except ImportError:
+        pass
     try:
         sys.exit(main())
     except Exception as e:                    # noqa: BLE001 — 盤點不可以讓建包失敗

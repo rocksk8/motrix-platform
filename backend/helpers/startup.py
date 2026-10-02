@@ -89,15 +89,21 @@ EDGE_PDF_TIMEOUT_SECONDS = int(os.environ.get("MOTRIX_EDGE_PDF_TIMEOUT", "120"))
 _BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
 
 
+_CREATE_NO_WINDOW = 0x08000000
+
+
 def _edge_creationflags() -> int:
     """`subprocess.run(creationflags=)`：背景工作＋Windows ⇒ BELOW_NORMAL；其餘 0（POSIX 的 creationflags 只能是 0）。"""
-    if os.name != "nt" or os.environ.get("MOTRIX_EDGE_PDF_PRIORITY", "").lower() == "normal":
+    if os.name != "nt":
         return 0
+    no_window = _CREATE_NO_WINDOW                            # Edge 是 GUI 程式；加上保險，背景（無主控台）行程啟動它時不會彈任何視窗
+    if os.environ.get("MOTRIX_EDGE_PDF_PRIORITY", "").lower() == "normal":
+        return no_window
     try:
         from db import _BACKGROUND_WORK
-        return _BELOW_NORMAL_PRIORITY_CLASS if _BACKGROUND_WORK.get() else 0
+        return no_window | (_BELOW_NORMAL_PRIORITY_CLASS if _BACKGROUND_WORK.get() else 0)
     except Exception:                                        # noqa: BLE001 — 優先權只是加分，取不到就照常
-        return 0
+        return no_window
 
 
 # ── Edge 專屬 profile（使用者 2026-09-30：「盡可能降低硬碟的重複寫入」）──────────────────────────────
