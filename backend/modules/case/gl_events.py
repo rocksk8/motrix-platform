@@ -150,15 +150,15 @@ def gl_events(start, end, *, changed_since=""):
                 "lines": lines, "meta": {"weak_key": not m["itemId"]}})
 
     if unsplit:
-        notices.append("%d 筆額外支出／叫料的來源金額是未拆稅（含稅）：以全額列專案成本；有進項稅額請在來源憑證補登（input_tax）。" % unsplit)
+        notices.append("%d 筆額外支出／材料申請的來源金額是未拆稅（含稅）：以全額列專案成本；有進項稅額請在來源憑證補登（input_tax）。" % unsplit)
     if typed_unsplit:
         notices.append("%d 筆費用單據的來源金額是未拆稅（含稅）：以全額列費用（依費用類別對應的科目；未設定對應者列預設費用科目並標註）；有進項稅額請在來源憑證補登（input_tax）。" % typed_unsplit)
     if pending:
         notices.append("%d 筆額外支出付款的實付與應付有差額且尚未核可：暫不產生付款分錄，核可後再執行。" % pending)
     if nodate:
-        notices.append("%d 筆叫料沒有發票日也沒有付款日：不產生分錄（請補日期）。" % nodate)
+        notices.append("%d 筆材料申請沒有發票日也沒有付款日：不產生分錄（請補日期）。" % nodate)
     if mat_remit_pending:
-        notices.append("%d 筆叫料匯款的實付超過應付且尚未核可：暫不產生付款分錄，核可後再執行。" % mat_remit_pending)
+        notices.append("%d 筆材料申請匯款的實付超過應付且尚未核可：暫不產生付款分錄，核可後再執行。" % mat_remit_pending)
     if mat_pending:
-        notices.append("%d 筆叫料單審核中（待審核／簽核中）：暫不產生應付分錄，核准後再執行。" % mat_pending)
+        notices.append("%d 筆材料申請審核中（待審核／簽核中）：暫不產生應付分錄，核准後再執行。" % mat_pending)
     return {"events": events, "notice": " ".join(notices)}

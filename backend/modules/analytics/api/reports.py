@@ -60,7 +60,7 @@ from helpers.recognition_basis import normalize_basis, BASIS_NOTES, DEFAULT_BASI
 #: 收入認列、支出歸月、待補登屬 M01 案件（`case.recognition`，M01-PLAN §3-6）；M01 不在 ⇒ 明說（§B-4），不是 0
 CASE_RECOGNITION_MISSING = "案件模組未安裝：權責口徑收入（依階段完成）不提供"
 CASE_EXPENSES_UNAVAILABLE = {"category": "case",
-                             "reason": "案件模組未安裝：叫料、額外支出與承攬商派工的支出沒有列入（不是 0 筆）"}
+                             "reason": "案件模組未安裝：材料申請、額外支出與承攬商派工的支出沒有列入（不是 0 筆）"}
 
 
 def _recognition():
@@ -3494,8 +3494,9 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         details["material"].append({
             **_dept_fields(e["quoteNo"]),
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round_half_up(e["amount"]),
-            "taxNote": e["taxNote"] + ("｜待審核" if e.get("pending") else ""), "provisional": e["provisional"],
+            "taxNote": e["taxNote"] + ("｜待審核" if e.get("pending") else "") + ("｜未申請採購單" if e.get("noPo") else ""), "provisional": e["provisional"],
             "pending": bool(e.get("pending")),                       # 叫料審核（31-C）：待審核／簽核中的叫料照計入並標示
+            "noPo": bool(e.get("noPo")),                             # 32-S4c：該叫料未申請採購單（只標註，金額不變）
         })
 
     # ── 料件 / 設備進貨成本（stock_items.cost，依 parts.category 分桶；同月同料號

@@ -5787,7 +5787,7 @@ def _flatten_case_record(cr: dict) -> dict:
                     v = "是" if v else "否"
                 out[f"款項 #{i + 1}·{lbl}"] = v
 
-    for key, label in (("materials", "叫料項目數"), ("devices", "設備登載數")):
+    for key, label in (("materials", "材料申請項目數"), ("devices", "設備登載數")):
         arr = cr.get(key)
         if isinstance(arr, list):
             out[label] = len(arr)
@@ -5853,8 +5853,8 @@ def _summarize_case_change(action_type: str, payload: dict, cr: dict,
     if action_type in ("payment_invoice_upload", "material_file_upload",
                        "material_invoice_upload"):
         noun = {"payment_invoice_upload": "款項",
-                "material_file_upload": "叫料項目",
-                "material_invoice_upload": "叫料項目"}[action_type]
+                "material_file_upload": "材料申請項目",
+                "material_invoice_upload": "材料申請項目"}[action_type]
         what = "發票附件" if "invoice" in action_type else "附件"
         return {"label": "核准後會套用的內容",
                 "before": None,
@@ -5865,7 +5865,7 @@ def _summarize_case_change(action_type: str, payload: dict, cr: dict,
 
     if action_type in ("payment_invoice_delete", "material_file_delete",
                        "material_invoice_delete"):
-        noun = "款項" if action_type == "payment_invoice_delete" else "叫料項目"
+        noun = "款項" if action_type == "payment_invoice_delete" else "材料申請項目"
         what = "發票附件" if "invoice" in action_type else "附件"
         field = ("invoiceFiles" if "invoice" in action_type else "files")
         idx = payload.get("idx")

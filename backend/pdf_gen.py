@@ -3028,9 +3028,9 @@ def _build_project_execution_report_html(data: dict) -> str:
         f'<td class="c">{esc(m["status"]) or "—"}</td><td class="c">{esc(m["eta"]) or "—"}</td></tr>'
         for m in data["materials"]
     )
-    _no_mat_row = '<tr><td colspan="5" class="c" style="color:#9CA3AF">無叫料管控資料</td></tr>'
+    _no_mat_row = '<tr><td colspan="5" class="c" style="color:#9CA3AF">無材料申請資料</td></tr>'
     materials_section = (
-        '<div class="section-label">二、叫料管控</div>'
+        '<div class="section-label">二、材料申請</div>'
         '<table><thead><tr><th>料件</th><th>規格</th><th class="c" style="width:70px">數量</th>'
         '<th class="c" style="width:90px">狀態</th><th class="c" style="width:100px">預計到貨</th></tr></thead>'
         f'<tbody>{mat_rows_html or _no_mat_row}</tbody></table>'

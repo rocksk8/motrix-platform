@@ -155,7 +155,7 @@ def test_danger_confirm_and_prompt_go_through_motrix_ui(live_server, make_user, 
     # confirm(danger)：叫料品項刪除——取消不刪、確定才刪
     page.evaluate(f"() => {{ {DATA_JS}.materialOrders = [{{ itemName: '線材' }}] }}")
     page.evaluate(f"() => {{ {DATA_JS}.moRemoveItem(0) }}")
-    answer_confirm(page, ok=False, expect="確定要刪除叫料品項「線材」")
+    answer_confirm(page, ok=False, expect="確定要刪除材料申請品項「線材」")
     page.wait_for_timeout(200)
     assert page.evaluate(f"() => {DATA_JS}.materialOrders.length") == 1
     page.evaluate(f"() => {{ {DATA_JS}.moRemoveItem(0) }}")

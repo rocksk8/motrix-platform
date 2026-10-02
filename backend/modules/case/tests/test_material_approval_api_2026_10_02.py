@@ -139,7 +139,7 @@ def test_one_tier_flow_queue_approve_and_reject(client, world):
         conn.close()
     assert len(items) == 1
     it = items[0]
-    assert (it["type"], it["typeLabel"], it["quoteNo"], it["docCode"], it["linkedQuoteNo"]) == ("material_order", "叫料", code, code, NO)
+    assert (it["type"], it["typeLabel"], it["quoteNo"], it["docCode"], it["linkedQuoteNo"]) == ("material_order", "材料申請", code, code, NO)
     assert it["approveUrl"] == BASE + "/approve" and it["rejectUrl"] == BASE + "/reject" and it["rejectField"] == "reason" and it["total"] == 3000
     # 簽核人在 L1 佇列與詳情看得到
     q = client.get("/api/approval-queue", headers=world["boss"])

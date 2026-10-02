@@ -26,9 +26,9 @@ from helpers.tiered_approval import (
 from modules.case import material_approval as MA
 
 DOC_TYPE = "material_payment"
-DOC_LABEL = "叫料匯款"
+DOC_LABEL = "材料申請匯款"
 DOC_PREFIX = "MP"
-SOURCE_LABEL = "叫料匯款"
+SOURCE_LABEL = "材料申請匯款"
 FEE_CATEGORY = "匯款手續費"
 
 S_DRAFT, S_PENDING, S_IN_PROGRESS, S_APPROVED, S_RETURNED, S_VOID = "草稿", "待審核", "簽核中", "已核准", "已退回", "作廢"
@@ -208,12 +208,12 @@ def _check_payee(p: dict):
 
 def _check_order_for_payment(conn, quote_no, order):
     if not order:
-        raise MaterialPaymentError(404, "找不到這筆叫料")
+        raise MaterialPaymentError(404, "找不到這筆材料申請")
     st = MA.status_of(conn, quote_no, order.get("itemId"))
     if not MA.counts_as_approved(st):                       # 舊單（''）不溯及既往，可直接開；其餘要已核准
-        raise MaterialPaymentError(409, "叫料單「%s」尚未核准，不能開匯款申請" % (st or "—"))
+        raise MaterialPaymentError(409, "材料申請「%s」尚未核准，不能開匯款申請" % (st or "—"))
     if order_total(order) <= 0:
-        raise MaterialPaymentError(409, "$0 的叫料單不能開匯款申請")
+        raise MaterialPaymentError(409, "$0 的材料申請不能開匯款申請")
 
 
 def _check_cap(conn, quote_no, order, amount, exclude_id, user, reason):
@@ -223,7 +223,7 @@ def _check_cap(conn, quote_no, order, amount, exclude_id, user, reason):
         return ""
     if user.get("role") == "superadmin" and (reason or "").strip():
         return reason.strip()
-    raise MaterialPaymentError(409, "超過這張叫料單的可申請額度（小計 %s，已付／其他申請已佔 %s，剩餘 %s）%s" % (
+    raise MaterialPaymentError(409, "超過這張材料申請的可申請額度（小計 %s，已付／其他申請已佔 %s，剩餘 %s）%s" % (
         format(order_total(order), ",.0f"), format(_money(order_total(order) - room), ",.0f"), format(max(room, 0), ",.0f"),
         "；superadmin 可填理由覆寫" if user.get("role") != "superadmin" else "；請填覆寫理由"))
 
@@ -244,18 +244,20 @@ def create(conn, quote_no: str, order: dict, user: dict, body: dict) -> dict:
     """開一張匯款申請（草稿）。`body`＝{amount?, supplierId?, bankCode, bankName, bankAccountName, bankAccountNumber, overCapReason?}；
     金額不帶＝叫料單剩餘額度。供應商：叫料單上的 `supplierId`，沒有（舊單）就要在 body 給。"""
     _check_order_for_payment(conn, quote_no, order)
+    if str(order.get("poDocCode") or "").strip():                              # 32-S4：已對應採購單的材料申請，付款走採購單的請款流程，不能另開匯款申請（避免同一筆錢付兩次）
+        raise MaterialPaymentError(409, "這筆材料申請已對應採購單 %s，請走採購單的請款流程，不能另開匯款申請" % str(order.get("poDocCode")).strip())
     item_id = str(order.get("itemId"))
     sid = (body or {}).get("supplierId") or order.get("supplierId")
     sup = supplier_brief(conn, sid) if sid not in (None, "") else None
     if sup is None:
-        raise MaterialPaymentError(400, "請選擇供應商（叫料單沒有指定供應商，或指定的供應商不存在）")
+        raise MaterialPaymentError(400, "請選擇供應商（材料申請沒有指定供應商，或指定的供應商不存在）")
     payee = _payee(body)
     _check_payee(payee)
     room = room_for(conn, quote_no, order)
     raw = (body or {}).get("amount")
     amount = room if raw in (None, "") else _amount(raw)
     if amount <= 0:
-        raise MaterialPaymentError(409, "這張叫料單已沒有可申請的額度")
+        raise MaterialPaymentError(409, "這張材料申請已沒有可申請的額度")
     over = _check_cap(conn, quote_no, order, amount, None, user, (body or {}).get("overCapReason"))
     now = _now()
     seq = int(conn.execute("SELECT COALESCE(MAX(seq),0) FROM case_material_payments WHERE quote_no=? AND item_id=?", (quote_no, item_id)).fetchone()[0]) + 1
@@ -374,7 +376,7 @@ def approve(conn, pid, order: dict, user: dict, comment: str = "", cascade: bool
     if done:                                                                          # 最後一層：叫料單必須還可用（沒被取消）
         st = MA.status_of(conn, row["quote_no"], row["item_id"])
         if not MA.counts_as_approved(st):
-            raise MaterialPaymentError(409, "叫料單已不是核准狀態（%s），這張匯款申請不能核准" % (st or "—"))
+            raise MaterialPaymentError(409, "材料申請已不是核准狀態（%s），這張匯款申請不能核准" % (st or "—"))
     if done:                                                                         # 明列關鍵字（守門 test_case_summary_purpose：禁止 ** 傳參數）
         _save(conn, pid, S_APPROVED, appr, now, approved_at=now)
     else:
@@ -513,7 +515,7 @@ def add_line(conn, pid, paid_date, user, body) -> dict:
     return {"lineId": cur.lastrowid, "quoteNo": row["quote_no"], "itemId": row["item_id"], "docCode": row["doc_code"], "amount": float(row["amount_approved"]),
             "paid": paid, "remaining": _money(float(row["amount_approved"]) - paid), "settled": paid >= float(row["amount_approved"]) - 0.005,
             "actual": ln["amount"], "fee": ln["fee"], "diff": ln["diff"], "remitReview": ln["review"],
-            "title": "叫料｜%s（%s）" % (snap.get("itemName") or "", row["doc_code"]), "payee": snap.get("supplierName") or ""}
+            "title": "材料申請｜%s（%s）" % (snap.get("itemName") or "", row["doc_code"]), "payee": snap.get("supplierName") or ""}
 
 
 def decide_line(conn, line_id, decision, user, note="") -> dict:

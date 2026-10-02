@@ -474,6 +474,7 @@
                   <div class="aq-card__r1">
                     <span class="aq-card__no" x-text="item.displayNo || item.quoteNo"></span>
                     <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)" x-text="docTypeLabel(item)"></span>
+                    <template x-for="tg in (item.tags || [])" :key="tg.text"><span class="aq-type-tag" data-testid="aq-tag" :style="tg.tone === 'warn' ? 'background:var(--tone-warning-bg);color:var(--warning)' : ''" x-text="tg.text"></span></template>
                     <span class="aq-card__age" :class="'vm-age--' + ageWord(item)" x-text="ageText(item)"></span>
                   </div>
                   <div class="aq-card__r2" x-text="cardSubtitle(item)"></div>
@@ -544,6 +545,7 @@
                 <span class="vm-lamp" :class="'vm-lamp--' + ageTone(item)"></span>
                 <span class="aq-qrow__no" x-text="item.displayNo || item.quoteNo"></span>
                 <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)" x-text="docTypeLabel(item)"></span>
+                <template x-for="tg in (item.tags || [])" :key="tg.text"><span class="aq-type-tag" data-testid="aq-tag" :style="tg.tone === 'warn' ? 'background:var(--tone-warning-bg);color:var(--warning)' : ''" x-text="tg.text"></span></template>
                 <span class="aq-qrow__who" x-text="item.customer"></span>
                 <span class="aq-qrow__age" x-text="ageText(item)"></span>
               </div>

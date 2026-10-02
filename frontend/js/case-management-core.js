@@ -94,7 +94,9 @@ window.CM_PARTS.push(() => ({
     async init() {
       // 2026-09-24：離頁警告（sidebar.js）跟著主表單的 dirty 走：setDirty() 設 true，
       // 存檔成功（dirty 轉 false）時清掉。
-      this.$watch('dirty', v => { window.motrixIsDirty = !!v })
+      window.motrixDirtyProbe = () => !!this.moDirty     // sidebar.js 的「任一請求成功就清離頁警告」不得清掉材料申請的未存列
+      this.$watch('dirty', v => { window.motrixIsDirty = !!v || !!this.moDirty })
+      this.$watch('moDirty', v => { window.motrixIsDirty = !!v || !!this.dirty })   // 材料申請有未儲存的新增／修改：離頁（beforeunload）與站內切換都提示
       this.$watch('activeTab', v => this.ensureTabData(v))      // CM8：分頁延後載入
       this._initTabFromUrl()
       // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，
@@ -105,7 +107,7 @@ window.CM_PARTS.push(() => ({
       // <body> 又寫了一次 x-init="init()"，所以整個 init() 每次開頁都跑兩遍：
       // 所有 API 都發兩次，並且第二次 selectCase() 會把第一次已經載好的狀態
       // 整個重置。先前看不出來是因為這頁的子清單全部是唯讀的，重載一次
-      // 看不出差別；2026-09-11 新增可編輯的叫料清單後才暴露——使用者在兩次
+      // 看不出差別；2026-09-11 新增可編輯的材料申請清單後才暴露——使用者在兩次
       // init 中間按「＋新增項目」，那一列會被第二次載入默默抹掉。
       // 這裡只修本頁；全站共 50 個頁面有同樣的 x-init 寫法，屬於独立課題。
       if (this._initDone) return
@@ -335,6 +337,7 @@ window.CM_PARTS.push(() => ({
       // 2026-09-24：有未存的變更時先存完再切換。原本這裡直接取消待存計時器、
       // 下面再 dirty=false ⇒ 打完字 1.5 秒內切換案件，剛打的內容就消失。
       clearTimeout(this._autoSaveTimer)
+      if (this.moDirty && this.selected && !(await MotrixUI.confirm('材料申請有尚未儲存的項目（顯示為「尚未送審」），切換案件會遺失。\n\n仍要切換嗎？', {danger: true}))) return
       if (this.dirty && this.selected) {
         while (this.saving) await new Promise(res => setTimeout(res, 50))
         if (this.dirty) await this.saveCaseRecord()
@@ -481,7 +484,7 @@ window.CM_PARTS.push(() => ({
       if (!this.selected || !this.cr.caseRecord) return
       if ((this.cr.caseRecord.stages || []).length > 0) return
       const live = this._selectLive()
-      const labels = ['訂單確認', '叫料出貨', '施工安裝', '客戶驗收', '尾款結清']
+      const labels = ['訂單確認', '材料申請出貨', '施工安裝', '客戶驗收', '尾款結清']
       for (const label of labels) {
         if (!live()) return
         try {
@@ -552,13 +555,13 @@ window.CM_PARTS.push(() => ({
 
     _segLabel(k) {
       return ({ payment: '收款', materials: '材料', devices: '設備', contract: '合約資訊', roles: '角色',
-        projectTimeline: '專案時程', materialOrders: '叫料', warrantyNote: '保固備註', notes: '備註' })[k] || k
+        projectTimeline: '專案時程', materialOrders: '材料申請', warrantyNote: '保固備註', notes: '備註' })[k] || k
     },
 
-    // 叫料審核（31-C）：存檔時被審核規則拒絕的項目（其餘已存）——說明原因，並把物流項目換回伺服器現值（旗標／序號被改回）
+    // 材料申請審核（31-C）：存檔時被審核規則拒絕的項目（其餘已存）——說明原因，並把物流項目換回伺服器現值（旗標／序號被改回）
     async _matRejected(list) {
       const msgs = [...new Set(list.map(x => x.message))]
-      MotrixUI.toast('叫料審核規則：' + msgs.join('；'), { kind: 'info', ms: 9000 })
+      MotrixUI.toast('材料申請審核規則：' + msgs.join('；'), { kind: 'info', ms: 9000 })
       try {
         const r = await fetch('/api/quotations/' + this.selected.quote_no, { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (!r.ok) return
@@ -720,7 +723,7 @@ window.CM_PARTS.push(() => ({
             this._segBase[k] = JSON.stringify(adopted[k])
             if (JSON.stringify(this.cr.caseRecord[k]) === sent[k]) this.cr.caseRecord[k] = adopted[k]
           }
-          if (res.rejected && res.rejected.length) await this._matRejected(res.rejected)   // 叫料審核（31-C）：被拒的物流旗標／叫料變更
+          if (res.rejected && res.rejected.length) await this._matRejected(res.rejected)   // 材料申請審核（31-C）：被拒的物流旗標／材料申請變更
           const conflicts = res.stockConflicts || []
           if (res.stockNotice) {
             // IP-19：採購・庫存・出貨模組不在 ⇒ 存檔照常、序號沒有同步庫存，要讓使用者知道

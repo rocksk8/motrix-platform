@@ -19,6 +19,9 @@ from core.txn import begin_write
 from db import get_db
 from helpers import _audit, _notify, _require_user, _tok, notify_org_chain_notice
 from helpers.approval_queue import approval_raw_of as _approval_raw_of, tier_fields as _queue_tier_fields
+from modules.case import purchase_items as _PI
+from modules.case import material_guard as _MG
+_MG.LINK_VALIDATOR = _PI.link_validator                         # 32-S4：儲存時的連結檢查（material_guard 的接縫）
 from helpers.case_access import require_case
 from helpers.financial_mask import money_visible
 from modules.case import material_approval as MA
@@ -52,7 +55,7 @@ def _order(q, item_id: str) -> dict:
     for o in _orders(q):
         if str(o.get("itemId")) == str(item_id):
             return o
-    raise HTTPException(404, "找不到這筆叫料（請先儲存叫料清單）")
+    raise HTTPException(404, "找不到這筆材料申請（請先儲存材料申請清單）")
 
 
 def _info(row, q, order, quote_no):
@@ -99,20 +102,20 @@ def _notify_after(event, info, res, requester_display="", reason=""):
     try:
         if event == "submitted":
             for u in res.get("firstApprovers") or []:
-                _notify(u, "material_order_approval_request", info["docCode"], info["quoteNo"], "叫料單 %s（%s）需要您簽核" % (info["docCode"], info["itemName"]))
+                _notify(u, "material_order_approval_request", info["docCode"], info["quoteNo"], "材料申請 %s（%s）需要您簽核" % (info["docCode"], info["itemName"]))
             MN.fire("submitted", info, approvers=res.get("firstApprovers"))
         elif event == "next_tier":
             for u in res.get("nextApprovers") or []:
-                _notify(u, "material_order_approval_request", info["docCode"], info["quoteNo"], "叫料單 %s（%s）需要您簽核" % (info["docCode"], info["itemName"]))
+                _notify(u, "material_order_approval_request", info["docCode"], info["quoteNo"], "材料申請 %s（%s）需要您簽核" % (info["docCode"], info["itemName"]))
             MN.fire("next_tier", info, approvers=res.get("nextApprovers"), tier_no=res.get("tierNo", 0), total_tiers=res.get("totalTiers", 0))
         elif event == "approved":
             if res.get("requester"):
-                _notify(res["requester"], "material_order_approved", info["docCode"], info["quoteNo"], "叫料單 %s（%s）已核准" % (info["docCode"], info["itemName"]))
+                _notify(res["requester"], "material_order_approved", info["docCode"], info["quoteNo"], "材料申請 %s（%s）已核准" % (info["docCode"], info["itemName"]))
             MN.fire("approved", info, requester=res.get("requester") or "")
         elif event == "returned":
             if res.get("requester"):
                 _notify(res["requester"], "material_order_returned", info["docCode"], info["quoteNo"],
-                        "叫料單 %s（%s）已被退回：%s" % (info["docCode"], info["itemName"], reason))
+                        "材料申請 %s（%s）已被退回：%s" % (info["docCode"], info["itemName"], reason))
             MN.fire("returned", info, requester=res.get("requester") or "", reason=reason)
     except Exception:                                                              # noqa: BLE001
         pass
@@ -128,14 +131,17 @@ def submit(quote_no: str, item_id: str, authorization: str = Header(None)):
         q = _load_case(conn, quote_no)
         require_case(user, q, quote_no)
         if not money_visible(user):
-            raise HTTPException(403, "此帳號沒有財務檢視權限，不可送審叫料")
+            raise HTTPException(403, "此帳號沒有財務檢視權限，不可送審材料申請")
         if (q["deal_tag"] or "") == "已結案":
-            raise HTTPException(400, "已結案案件無法送審叫料")
+            raise HTTPException(400, "已結案案件無法送審材料申請")
         order = _order(q, item_id)
         if MA.get(conn, quote_no, item_id) is None:
             MA.create_draft(conn, quote_no, item_id, user, "送審時建立（舊單）")
+        chk = _PI.material_submit_check(conn, quote_no, order, exclude_item_id=item_id)          # 32-S4：送審時檢查連結（採購單／報價品項）與超出計畫原因
+        if chk["problems"]:
+            raise HTTPException(400, "；".join(p["message"] for p in chk["problems"]))
         try:
-            res = MA.submit(conn, quote_no, order, user)
+            res = MA.submit(conn, quote_no, order, user, snapshot=chk["snapshot"])
         except MA.MaterialApprovalError as e:
             raise _http(e)
         row = MA.get(conn, quote_no, item_id)
@@ -144,7 +150,7 @@ def submit(quote_no: str, item_id: str, authorization: str = Header(None)):
     finally:
         conn.close()
     _audit(_tok(authorization), "material_orders.submit" if not res["autoApproved"] else "material_orders.auto_approve", "quotation", quote_no,
-           "叫料單 %s（%s）%s" % (info["docCode"], info["itemName"], "送審" if not res["autoApproved"] else "未設定簽核層，直接核准"),
+           "材料申請 %s（%s）%s" % (info["docCode"], info["itemName"], "送審" if not res["autoApproved"] else "未設定簽核層，直接核准"),
            {"docCode": info["docCode"], "tierCount": res["tierCount"], "status": res["status"]})
     if res["autoApproved"]:
         _notify_after("approved", info, {"requester": user["username"]})
@@ -156,7 +162,7 @@ def submit(quote_no: str, item_id: str, authorization: str = Header(None)):
                 row2 = MA.get(conn2, quote_no, item_id)
                 tiers = (json.loads(row2["approval_json"] or "{}").get("tiers") or [])
                 notify_org_chain_notice(conn2, tiers, user["username"], info["docCode"], quote_no,
-                                        "叫料單 %s（%s）由 %s 依組織職權自行簽核，知會您" % (info["docCode"], info["itemName"], user.get("display_name") or user["username"]),
+                                        "材料申請 %s（%s）由 %s 依組織職權自行簽核，知會您" % (info["docCode"], info["itemName"], user.get("display_name") or user["username"]),
                                         type_="material_order_approval_notice")
             finally:
                 conn2.close()
@@ -184,7 +190,7 @@ def approve(quote_no: str, item_id: str, body: dict = Body(default={}), authoriz
     finally:
         conn.close()
     _audit(_tok(authorization), "material_orders.approve", "quotation", quote_no,
-           "叫料單 %s（%s）核准 → %s" % (info["docCode"], info["itemName"], res["status"]), {"docCode": info["docCode"], "status": res["status"], "tier": res["currentTier"]})
+           "材料申請 %s（%s）核准 → %s" % (info["docCode"], info["itemName"], res["status"]), {"docCode": info["docCode"], "status": res["status"], "tier": res["currentTier"]})
     _notify_after("approved" if res["done"] else "next_tier", info, res)
     return {"ok": True, "status": res["status"], "currentTier": res["currentTier"]}
 
@@ -208,7 +214,7 @@ def reject(quote_no: str, item_id: str, body: dict = Body(default={}), authoriza
     finally:
         conn.close()
     _audit(_tok(authorization), "material_orders.reject", "quotation", quote_no,
-           "叫料單 %s（%s）被退回：%s" % (info["docCode"], info["itemName"], res["reason"]), {"docCode": info["docCode"], "reason": res["reason"]})
+           "材料申請 %s（%s）被退回：%s" % (info["docCode"], info["itemName"], res["reason"]), {"docCode": info["docCode"], "reason": res["reason"]})
     _notify_after("returned", info, res, reason=res["reason"])
     return {"ok": True, "status": res["status"]}
 
@@ -232,7 +238,7 @@ def withdraw(quote_no: str, item_id: str, authorization: str = Header(None)):
         info = _info(row, q, order, quote_no)
     finally:
         conn.close()
-    _audit(_tok(authorization), "material_orders.withdraw", "quotation", quote_no, "叫料單 %s（%s）撤回" % (info["docCode"], info["itemName"]), {"docCode": info["docCode"]})
+    _audit(_tok(authorization), "material_orders.withdraw", "quotation", quote_no, "材料申請 %s（%s）撤回" % (info["docCode"], info["itemName"]), {"docCode": info["docCode"]})
     return {"ok": True, "status": MA.S_DRAFT}
 
 
@@ -255,7 +261,7 @@ def cancel(quote_no: str, item_id: str, body: dict = Body(default={}), authoriza
     finally:
         conn.close()
     _audit(_tok(authorization), "material_orders.cancel", "quotation", quote_no,
-           "叫料單 %s（%s）取消：%s" % (info["docCode"], info["itemName"], row["cancel_reason"]), {"docCode": info["docCode"], "reason": row["cancel_reason"]})
+           "材料申請 %s（%s）取消：%s" % (info["docCode"], info["itemName"], row["cancel_reason"]), {"docCode": info["docCode"], "reason": row["cancel_reason"]})
     return {"ok": True, "status": MA.S_CANCELLED}
 
 
@@ -279,7 +285,7 @@ def receive(quote_no: str, item_id: str, body: dict = Body(default={}), authoriz
     finally:
         conn.close()
     _audit(_tok(authorization), "material_orders.receive", "quotation", quote_no,
-           "叫料單 %s（%s）確認到貨：%s" % (info["docCode"], info["itemName"], res["receivedOn"]), {"docCode": info["docCode"], "receivedOn": res["receivedOn"]})
+           "材料申請 %s（%s）確認到貨：%s" % (info["docCode"], info["itemName"], res["receivedOn"]), {"docCode": info["docCode"], "receivedOn": res["receivedOn"]})
     return {"ok": True, **res}
 
 
@@ -303,7 +309,7 @@ def receive_undo(quote_no: str, item_id: str, authorization: str = Header(None))
     finally:
         conn.close()
     _audit(_tok(authorization), "material_orders.receive_undo", "quotation", quote_no,
-           "叫料單 %s（%s）撤銷到貨確認（原 %s／%s）" % (info["docCode"], info["itemName"], res["was"]["receivedOn"], res["was"]["receivedBy"]), {"docCode": info["docCode"]})
+           "材料申請 %s（%s）撤銷到貨確認（原 %s／%s）" % (info["docCode"], info["itemName"], res["was"]["receivedOn"], res["was"]["receivedBy"]), {"docCode": info["docCode"]})
     return {"ok": True}
 
 
@@ -335,6 +341,7 @@ def queue_items(conn) -> list:
             "quoteDate": (f["requestedAt"] or "")[:10], "salesPerson": "", "requestedBy": f["requestedBy"],
             "requestedByDisplay": f["requestedByDisplay"], "requestedAt": f["requestedAt"], "isEditApproval": False, "reasons": [],
             "tiers": f["tiers"], "currentTier": f["currentTier"], "tierCount": f["tierCount"], "currentApprovers": f["currentApprovers"],
+            "tags": _PI.queue_tags(conn, r["quote_no"], order),            # 32-S4d：「該材料申請未申請採購單」小標註（L1 tags[]）
             "linkedQuoteNo": r["quote_no"], "openUrl": "case-management.html?q=%s" % r["quote_no"],
             "approveUrl": base + "/approve", "rejectUrl": base + "/reject", "rejectField": "reason",
         })
@@ -345,7 +352,7 @@ def detail(conn, doc_no):
     """`approval.detail`（name＝material_order）：簽核人看的詳情。`doc_no`＝叫料單號。金額欄位由 L1 依財務檢視權遮蔽（標籤 單價／小計）。"""
     r = conn.execute("SELECT * FROM case_material_approvals WHERE doc_code=?", (doc_no,)).fetchone()
     if not r:
-        raise HTTPException(404, "叫料單不存在")
+        raise HTTPException(404, "材料申請不存在")
     q = conn.execute("SELECT data_json, customer_name, project_name FROM quotations WHERE quote_no=?", (r["quote_no"],)).fetchone()
     order = {}
     if q:
@@ -362,4 +369,10 @@ def detail(conn, doc_no):
               {"label": "單價", "value": format(float(order.get("unitPrice") or 0), ",.0f")},
               {"label": "小計", "value": format(float(order.get("totalPrice") or 0), ",.0f")},
               {"label": "備註", "value": order.get("notes") or "—"}, {"label": "版本", "value": str(r["version"])}]
-    return {"quoteNo": r["quote_no"], "approvalRaw": r["approval_json"], "title": "叫料 %s" % r["doc_code"], "fields": fields, "items": [], "files": []}
+    try:
+        snap = (json.loads(r["approval_json"] or "{}") or {}).get("linkSnapshot")
+    except (TypeError, ValueError):
+        snap = None
+    _, ext_rows = _PI._case_state(conn, r["quote_no"])
+    fields += _PI.material_detail_fields(order, [x for x in ext_rows if (x["kind"] or "") == _PI.ORD], snapshot=snap, legacy=False)          # 32-S4：採購單連結、超出計畫
+    return {"quoteNo": r["quote_no"], "approvalRaw": r["approval_json"], "title": "材料申請 %s" % r["doc_code"], "fields": fields, "items": [], "files": []}

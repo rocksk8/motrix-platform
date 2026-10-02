@@ -74,6 +74,18 @@
    "scope": "row_access"
   },
   {
+   "file": "modules/case/api/material_links.py",
+   "path": "/api/quotations/{quote_no}/material-po-lines",
+   "handler": "material_po_lines",
+   "scope": "row_access"
+  },
+  {
+   "file": "modules/case/api/material_links.py",
+   "path": "/api/quotations/{quote_no}/material-orders/link-status",
+   "handler": "material_link_statuses",
+   "scope": "row_access"
+  },
+  {
    "file": "modules/filehub/api.py",
    "path": "/api/filehub/search",
    "handler": "search",

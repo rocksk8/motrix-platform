@@ -10,7 +10,7 @@ IP-9 `expense.entries`（名稱 `remit_fee_case_material`）。出納（M05）�
 from modules.case import material_payment as MP
 from modules.case.recognition import _approved_at
 
-_FIELD_NOTE = "叫料匯款"
+_FIELD_NOTE = "材料申請匯款"
 
 
 def _mask(bank, account) -> str:
@@ -21,7 +21,7 @@ def _mask(bank, account) -> str:
 
 
 def _title(snap, code) -> str:
-    return "叫料｜%s（%s）" % (snap.get("itemName") or "", code)
+    return "材料申請｜%s（%s）" % (snap.get("itemName") or "", code)
 
 
 class _Payables:
@@ -113,6 +113,6 @@ def _expense_entries(conn, start, end):
                           " ORDER BY l.paid_at, l.id", (start, end)).fetchall():
         sn = MP.snapshot_of({"snapshot_json": r["snapshot_json"]})
         out.append({"date": (r["paid_at"] or "")[:10], "quoteNo": r["quote_no"] or "",
-                    "desc": "%s｜%s（匯款申請 %s）" % (MP.FEE_CATEGORY, sn.get("supplierName") or "叫料", r["doc_code"]),
+                    "desc": "%s｜%s（匯款申請 %s）" % (MP.FEE_CATEGORY, sn.get("supplierName") or "材料申請", r["doc_code"]),
                     "amount": float(r["fee"]), "category": MP.FEE_CATEGORY, "pending": r["remit_review"] == MP.REVIEW_PENDING})
     return out

@@ -30,6 +30,32 @@ from modules.case import material_payment as MP
 _PAID_KEYS = ("paidStatus", "paidAmount", "paidDate")
 _FLAGS = ("ordered", "arrived")
 
+#: 儲存時的連結檢查（32-S4 接縫）：`(conn, quote_no, order) -> 錯誤訊息 | None`。預設 None＝不檢查；
+#: 由 `api/material_approvals.py` 掛上 `purchase_items.link_validator`。無效 ⇒ 該列（或該次變更）被拒，code `bad_link`。
+LINK_VALIDATOR = None
+_LINK_KEYS = ("quoteItemId", "poDocCode", "poLine")
+
+
+def _norm_links(o: dict) -> dict:
+    """poLine 轉整數（前端可能送字串）；空值統一成 ''。轉不動的原樣留著，交給檢查器拒絕。"""
+    if "poLine" in o:
+        v = o.get("poLine")
+        if v in (None, ""):
+            o["poLine"] = ""
+        else:
+            try:
+                if float(v) == int(float(v)):
+                    o["poLine"] = int(float(v))
+            except (TypeError, ValueError, OverflowError):
+                pass
+    return o
+
+
+def _link_problem(conn, quote_no, order):
+    if LINK_VALIDATOR is None or not any(order.get(k) not in (None, "") for k in _LINK_KEYS):
+        return None
+    return LINK_VALIDATOR(conn, quote_no, order)
+
 
 def _num(v):
     try:
@@ -51,6 +77,8 @@ def _canon(v):
 
 def _same(key, new, old) -> bool:
     """欄位值相同？已付欄位把 None／空字串／0 視為同一個「沒有」（前端未付款時送 null，資料庫存 ''）。"""
+    if key in _LINK_KEYS and new in (None, "") and old in (None, ""):
+        return True
     if key in _PAID_KEYS and new in (None, "", 0) and old in (None, "", 0):
         return True
     if key == "paidStatus" and new in (None, "", "pending") and old in (None, "", "pending"):
@@ -147,36 +175,41 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
     out, seen = [], set()
     for no in (new_list if isinstance(new_list, list) else []):
         if not isinstance(no, dict) or not str(no.get("itemId") or ""):
-            _rej(rejected, "", "itemId", "invalid", "叫料列缺少 itemId，已忽略")
+            _rej(rejected, "", "itemId", "invalid", "材料申請列缺少 itemId，已忽略")
             continue
         iid = str(no["itemId"])
         seen.add(iid)
         old = old_by.get(iid)
         if old is None:                                                                  # ── 新列
             if not allow:
-                _rej(rejected, iid, "*", "no_permission", "只有管理員或專案經理（且有財務檢視權）可以新增叫料")
+                _rej(rejected, iid, "*", "no_permission", "只有管理員或專案經理（且有財務檢視權）可以新增材料申請")
                 continue
             msg = _valid_order(no)
             if msg:
                 _rej(rejected, iid, "*", "invalid", msg)
                 continue
             if MA.SUPPLIER_REQUIRED_ON_NEW and actor is not None and not _valid_supplier_id(no.get("supplierId")):
-                _rej(rejected, iid, "supplierId", "supplier_required", "新增叫料必須選擇供應商")
+                _rej(rejected, iid, "supplierId", "supplier_required", "新增材料申請必須選擇供應商")
                 continue
-            row = dict(no)
+            row = _norm_links(dict(no))
+            lmsg = _link_problem(conn, quote_no, row)
+            if lmsg:
+                _rej(rejected, iid, "poDocCode", "bad_link", lmsg)
+                continue
             if paid_only and ((row.get("paidStatus") or "pending") != "pending" or float(row.get("paidAmount") or 0) or row.get("paidDate")):
                 row.update({"paidStatus": "pending", "paidAmount": 0, "paidDate": ""})
                 _rej(rejected, iid, "paidStatus", "paid_via_remittance", "已付款只能經匯款申請登錄，已改為待付")
-            MA.create_draft(conn, quote_no, iid, user, "新增叫料")
+            MA.create_draft(conn, quote_no, iid, user, "新增材料申請")
             out.append(row)
             continue
         merged = dict(old)                                                               # ── 既有列：以現值為底
+        no = _norm_links(dict(no))
         diff = {k: v for k, v in no.items() if not _same(k, v, old.get(k))}
         if not diff:
             out.append(merged)
             continue
         if not allow:
-            _rej(rejected, iid, "*", "no_permission", "只有管理員或專案經理（且有財務檢視權）可以修改叫料")
+            _rej(rejected, iid, "*", "no_permission", "只有管理員或專案經理（且有財務檢視權）可以修改材料申請")
             out.append(merged)
             continue
         st = MA.status_of(conn, quote_no, iid)
@@ -189,12 +222,18 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
             continue
         if MA.substantive_changed(old, cand):
             if MP.has_live_payments(conn, quote_no, iid):                                # 已有匯款申請：金額／品名等變動會讓申請與額度對不上
-                _rej(rejected, iid, "*", "has_payments", "這張叫料單已有匯款申請，請先作廢申請再修改內容")
+                _rej(rejected, iid, "*", "has_payments", "這張材料申請已有匯款申請，請先作廢申請再修改內容")
                 out.append(merged)
                 continue
+            if any(not _same(k, cand.get(k), old.get(k)) for k in _LINK_KEYS):
+                lmsg = _link_problem(conn, quote_no, cand)
+                if lmsg:
+                    _rej(rejected, iid, "poDocCode", "bad_link", lmsg)
+                    out.append(merged)
+                    continue
             r = MA.on_substantive_change(conn, quote_no, iid, user)
             if not r["allowed"]:
-                _rej(rejected, iid, "*", r["reason"], "「%s」狀態的叫料單不可修改內容（請先撤回，或已取消的單不可再改）" % st if r["reason"] == "in_approval" else "已取消的叫料單不可修改")
+                _rej(rejected, iid, "*", r["reason"], "「%s」狀態的材料申請不可修改內容（請先撤回，或已取消的單不可再改）" % st if r["reason"] == "in_approval" else "已取消的材料申請不可修改")
                 out.append(merged)
                 continue
             for k in MA.SUBSTANTIVE_KEYS:
@@ -207,7 +246,7 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
                 _rej(rejected, iid, k, "paid_via_remittance", "已付款只能經匯款申請登錄")
                 continue
             if k == "invoiceDate" and st in MA.IN_FLIGHT:
-                _rej(rejected, iid, k, "in_approval", "審核中的叫料單不可改發票日期")
+                _rej(rejected, iid, k, "in_approval", "審核中的材料申請不可改發票日期")
                 continue
             merged[k] = v
         out.append(merged)
@@ -216,13 +255,13 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
             continue
         st = MA.status_of(conn, quote_no, iid)
         if not allow:
-            _rej(rejected, iid, "*", "no_permission", "只有管理員或專案經理（且有財務檢視權）可以刪除叫料")
+            _rej(rejected, iid, "*", "no_permission", "只有管理員或專案經理（且有財務檢視權）可以刪除材料申請")
             out.append(old)
         elif MP.has_any_payments(conn, quote_no, iid):
-            _rej(rejected, iid, "*", "delete_blocked", "這張叫料單有匯款申請紀錄，不可刪除")
+            _rej(rejected, iid, "*", "delete_blocked", "這張材料申請有匯款申請紀錄，不可刪除")
             out.append(old)
         elif st in MA.IN_FLIGHT or st in (MA.S_APPROVED, MA.S_CANCELLED):
-            _rej(rejected, iid, "*", "delete_blocked", "審核中或已核准的叫料單不可刪除（請先撤回，或改用取消）")
+            _rej(rejected, iid, "*", "delete_blocked", "審核中或已核准的材料申請不可刪除（請先撤回，或改用取消）")
             out.append(old)
         elif st:                                                                         # 草稿／已退回：連審核單一起刪
             conn.execute("DELETE FROM case_material_approvals WHERE quote_no=? AND item_id=?", (quote_no, iid))
@@ -243,7 +282,7 @@ def _gate_materials(conn, quote_no, old_list, new_list, orders, rejected):
         link_new = str(m.get("orderItemId") or "")
         link_old = str((om or {}).get("orderItemId") or "")
         if link_new != link_old and link_new and link_new not in order_ids:
-            _rej(rejected, mid, "orderItemId", "bad_link", "連結的叫料單不存在")
+            _rej(rejected, mid, "orderItemId", "bad_link", "連結的材料申請不存在")
             m["orderItemId"] = (om or {}).get("orderItemId") or ""
             link_new = link_old
         link = link_new or link_old
@@ -254,9 +293,9 @@ def _gate_materials(conn, quote_no, old_list, new_list, orders, rejected):
                 continue
             row = rows.get(link) if link else None
             if not link or row is None or row["status"] != MA.S_APPROVED:
-                _rej(rejected, mid, flag, "order_not_approved", "必須先連結一張已核准的叫料單，才能標記%s" % ("已叫料" if flag == "ordered" else "已到料"))
+                _rej(rejected, mid, flag, "order_not_approved", "需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。" if not link or row is None else "這筆材料申請還沒核准。")
             elif flag == "arrived" and not row["received_on"]:
-                _rej(rejected, mid, flag, "receipt_missing", "請先在叫料單上確認到貨（日期與確認人），才能標記已到料")
+                _rej(rejected, mid, flag, "receipt_missing", "請先在材料申請上確認到貨（日期與確認人），才能標記已到料")
             else:
                 continue
             m[flag] = had

@@ -1,4 +1,4 @@
-// case-management-exec.js — 案件管理頁：執行管理分頁：階段、時間軸、拜訪、叫料、設備、保固、待辦、成員
+// case-management-exec.js — 案件管理頁：執行管理分頁：階段、時間軸、拜訪、材料申請、設備、保固、待辦、成員
 // CM12 P1（2026-09-24）：由 case-management.js 原樣搬出，成員文字未改；組合見 case-management-core.js 的 app()。
 window.CM_PARTS = window.CM_PARTS || []
 window.CM_PARTS.push(() => ({
@@ -31,14 +31,14 @@ window.CM_PARTS.push(() => ({
     assignedUserIds: [],
     assignedUsersSaving: false,
 
-    // ── 叫料（材料訂購，前端 2026-09-11 補上）──
+    // ── 材料申請（材料訂購，前端 2026-09-11 補上）──
     // 後端端點 2026-09-10 就上線，但一直沒有任何呼叫點，見
     // routers/material_orders.py 檔頭與 WEEKLY-AUDIT §E-1。
     // 存檔刻意走專屬端點而不是併進 saveCase()：saveCase() 會覆蓋整份
-    // data_json，兩邊同時存會互相蓋掉；且叫料的權限與已結案規則由後端
+    // data_json，兩邊同時存會互相蓋掉；且材料申請的權限與已結案規則由後端
     // 那支端點自己守，跟案件整包存檔不一樣。
     materialOrders: [],
-    // 預設 true：面板只在 !moLoading 時才渲染「尚無叫料項目」，一旦預設 false，
+    // 預設 true：面板只在 !moLoading 時才渲染「尚無材料申請項目」，一旦預設 false，
     // 任何「還沒開始載入」的瞬間都會對使用者說「沒有資料」——那是還沒查就先
     // 回答。額外支出的 xe.loading 本來就是 true，這裡跟它對齊。
     moLoading: true,
@@ -46,15 +46,15 @@ window.CM_PARTS.push(() => ({
     moDirty: false,
     moMsg: '',
     moMsgError: false,
-    // 叫料審核（31-C）：itemId → 審核摘要 {status, legacy, docCode, currentApprovers, rejectReason, receivedOn, receivedBy…}
+    // 材料申請審核（31-C）：itemId → 審核摘要 {status, legacy, docCode, currentApprovers, rejectReason, receivedOn, receivedBy…}
     moApprovals: {},
     moBusy: '',
-    // 叫料匯款申請（31-C）：itemId → {quota:{total,legacyPaid,committed,remaining}, payments:[…]}；供應商選單；開單表單（一次只開一張）
+    // 材料申請匯款申請（31-C）：itemId → {quota:{total,legacyPaid,committed,remaining}, payments:[…]}；供應商選單；開單表單（一次只開一張）
     moPay: {},
     moSuppliers: [],
     moPayForm: null,
 
-    // ── 叫料（材料訂購）────────────────────────────────────────────────────
+    // ── 材料申請────────────────────────────────────────────────────
     async loadMaterialOrders(quoteNo) {
       if (!quoteNo) return
       const live = this._selectLive()
@@ -73,7 +73,7 @@ window.CM_PARTS.push(() => ({
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (!live()) return
-        // 已經切到別的案件：這份回應過期，丟掉（不然會把別張單的叫料貼上來）
+        // 已經切到別的案件：這份回應過期，丟掉（不然會把別張單的材料申請貼上來）
         if (this._moReqFor !== quoteNo) return
         // 使用者已經動手編輯：保留他打的東西，不要用伺服器版本覆蓋
         if (r.ok && this.moDirty) { this.moLoading = false; return }
@@ -94,18 +94,20 @@ window.CM_PARTS.push(() => ({
             notes:      o.notes || '',
             invoiceDate: o.invoiceDate || '',  // `AC2`
             supplierId: o.supplierId ?? null,  // 31-C：整份覆寫的端點——少帶這一鍵，已指定的供應商會在下次存檔被抹掉
+            quoteItemId: o.quoteItemId || '', poDocCode: o.poDocCode || '', poLine: o.poLine || null, overPlanReason: o.overPlanReason || '',  // 32-S4：連結鍵同理（case-management-mlink.js）
             _saved: true,                      // 伺服器上已有這一列（才能送審）
             _recvDate: ''
           }))
           await this.loadMoApprovals(quoteNo)
           await this.loadMoPayments(quoteNo)
+          if (this.mlLoadStatus) this.mlLoadStatus(quoteNo)     // 32-S4：連結徽章
           if (this.moCanEdit()) await this.moLoadSuppliers()
         }
       } catch {}
       this.moLoading = false
     },
 
-    // ── 叫料審核（31-C）──────────────────────────────────────────────
+    // ── 材料申請審核（31-C）──────────────────────────────────────────────
     async loadMoApprovals(quoteNo) {
       try {
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-order-approvals`, {
@@ -114,7 +116,7 @@ window.CM_PARTS.push(() => ({
         if (r.ok && this._moReqFor === quoteNo) this.moApprovals = (await r.json()).approvals || {}
       } catch {}
     },
-    // ── 叫料匯款申請（31-C 匯款切片）：已付金額不再手填，只能經匯款申請（簽核→出納）登錄 ──
+    // ── 材料申請匯款申請（31-C 匯款切片）：已付金額不再手填，只能經匯款申請（簽核→出納）登錄 ──
     async loadMoPayments(quoteNo) {
       try {
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-payments`, {
@@ -127,6 +129,7 @@ window.CM_PARTS.push(() => ({
     // 可以開匯款申請：已存檔、$0 以外、舊單或已核准、還有額度
     moCanRequestPay(m) {
       if (!m || m._saved === false || this.moDirty || !this.moCanEdit()) return false
+      if (m.poDocCode) return false                              // 32-S4：已對應採購單 ⇒ 付款走採購單請款，不開匯款申請
       if (!['', '已核准'].includes(this.moAp(m).status)) return false
       const q = this.moPayOf(m).quota
       return !!q && Number(m.totalPrice) > 0 && q.remaining > 0
@@ -188,12 +191,14 @@ window.CM_PARTS.push(() => ({
     moAp(m) { return (m && this.moApprovals[m.itemId]) || { status: '', legacy: true } },
     moApLabel(m) {
       const a = this.moAp(m)
-      if (m && m._saved === false) return '尚未儲存'
+      if (this.moIsUnsent(m)) return '尚未送審'
       return a.legacy ? '舊單（未經審核）' : a.status
     },
+    // 尚未送審＝畫面上新增但還沒存的列，或已存成草稿的列（不計入報表／額度／簽核佇列）；舊單與已退回不算
+    moIsUnsent(m) { return !!m && (m._saved === false || (!this.moAp(m).legacy && this.moAp(m).status === '草稿')) },
     moApTone(m) {
       const s = this.moAp(m).status
-      if (m && m._saved === false) return 'color:var(--text-dim)'
+      if (this.moIsUnsent(m)) return 'color:var(--text-dim)'
       if (s === '已核准') return 'color:var(--success)'
       if (s === '已退回' || s === '已取消') return 'color:var(--tone-danger-fg)'
       if (s === '待審核' || s === '簽核中') return 'color:var(--tone-warning-fg)'
@@ -201,7 +206,7 @@ window.CM_PARTS.push(() => ({
     },
     // 審核中、已取消：實質欄位不能改（後端閘也會擋；這裡先反灰並說明原因）
     moLocked(m) { return ['待審核', '簽核中', '已取消'].includes(this.moAp(m).status) },
-    moShowSubmit(m) { return !!m && m._saved !== false && !this.moDirty && ['', '草稿', '已退回'].includes(this.moAp(m).status) && !(this.caseReadOnly && this.caseReadOnly()) },
+    moShowSubmit(m) { return !!m && (m._saved === false || ['', '草稿', '已退回'].includes(this.moAp(m).status)) && !this.moLocked(m) && !(m._saved !== false && this.moAp(m).legacy && !this.moDirty) && !(this.caseReadOnly && this.caseReadOnly()) },
     moShowWithdraw(m) { return ['待審核', '簽核中'].includes(this.moAp(m).status) },
     moShowCancel(m) { return this.moAp(m).status === '已核准' && ['superadmin', 'admin'].includes(this.session.role) },
     async _moPost(m, action, body, okMsg) {
@@ -228,19 +233,35 @@ window.CM_PARTS.push(() => ({
         return false
       }
     },
-    async moSubmit(m) { await this._moPost(m, 'submit', {}, d => d.autoApproved ? `已核准（未設定簽核層）：${d.docCode}` : `已送審：${d.docCode}`) },
+    // 一鍵＝先儲存再送審：儲存被守門拒絕（或沒存成）就停，不送審；被拒的列由重新載入還原，不留殘列
+    async moSubmit(m) {
+      const id = m.itemId
+      if (m._saved === false || this.moDirty) {
+        if (!(await this.moSave(true))) return
+        m = this.materialOrders.find(x => x.itemId === id)
+        if (!m) return
+      }
+      await this._moSubmitPost(m)
+      // 送審後那一列會離開「已核准／舊單／尚未送審」分頁（頁籤由 case-management-mlink.js 提供）：跟著切過去，使用者才看得到它
+      if (typeof this.mlTab === 'string' && this.mlTab !== 'all') {
+        const st = (this.moApprovals[id] || {}).status
+        if (['待審核', '簽核中'].includes(st)) this.mlTab = 'review'
+        else if (st === '已核准') this.mlTab = 'approved'
+      }
+    },
+    async _moSubmitPost(m) { await this._moPost(m, 'submit', {}, d => d.autoApproved ? `已核准（未設定簽核層）：${d.docCode}` : `已送審：${d.docCode}`) },
     async moWithdraw(m) { await this._moPost(m, 'withdraw', {}, () => '已撤回（回草稿）') },
     async moCancel(m) {
-      const reason = await MotrixUI.prompt('取消已核准的叫料單需要填原因（會留稽核紀錄）：', { title: '取消叫料單', required: true })
+      const reason = await MotrixUI.prompt('取消已核准的材料申請需要填原因（會留稽核紀錄）：', { title: '取消材料申請', required: true })
       if (!reason || !String(reason).trim()) return
-      await this._moPost(m, 'cancel', { reason: String(reason).trim() }, () => '叫料單已取消')
+      await this._moPost(m, 'cancel', { reason: String(reason).trim() }, () => '材料申請已取消')
     },
     async moReceive(m) {
       const day = m._recvDate || MotrixDate.today()
       await this._moPost(m, 'receive', { receivedOn: day }, d => `已確認到貨：${d.receivedOn}`)
     },
     async moUndoReceive(m) { await this._moPost(m, 'receive-undo', null, () => '已撤銷到貨確認') },
-    // 物流旗標只能對著「已核准的叫料單」勾；已勾的可以取消勾選（後端閘同規則，這裡先反灰並說明）
+    // 物流旗標只能對著「已核准的材料申請」勾；已勾的可以取消勾選（後端閘同規則，這裡先反灰並說明）
     matCanTick(mat, flag) {
       if (mat[flag]) return true
       const a = this.moApprovals[mat.orderItemId || '']
@@ -250,8 +271,9 @@ window.CM_PARTS.push(() => ({
     matTickHint(mat, flag) {
       if (this.matCanTick(mat, flag)) return ''
       const a = this.moApprovals[mat.orderItemId || '']
-      if (!a || a.status !== '已核准') return '需先連結一張已核准的叫料單'
-      return '需先在叫料單上確認到貨（日期與確認人）'
+      if (!a) return '需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。'
+      if (a.status !== '已核准') return '這筆材料申請還沒核准。'
+      return '需先在材料申請上確認到貨（日期與確認人）'
     },
 
     // crypto.randomUUID() 在 HTTP 明文頁面下不存在（非安全上下文），正式機是
@@ -270,12 +292,13 @@ window.CM_PARTS.push(() => ({
     },
 
     moTotals() {
-      let total = 0, paid = 0
+      let total = 0, paid = 0, unsent = 0
       for (const m of this.materialOrders) {
+        if (this.moIsUnsent(m)) { unsent++; continue }     // 尚未送審的不計入
         total += Number(m.totalPrice) || 0
         paid  += Number(m.paidAmount) || 0
       }
-      return { total, paid, unpaid: total - paid }
+      return { total, paid, unpaid: total - paid, unsent }
     },
 
     moAddItem() {
@@ -287,11 +310,11 @@ window.CM_PARTS.push(() => ({
       this.moMsg = ''
     },
 
-    // 2026-09-24（N11，使用者裁示「刪除確認全部都加」）：叫料品項、派工／出貨表單品項列、
+    // 2026-09-24（N11，使用者裁示「刪除確認全部都加」）：材料申請品項、派工／出貨表單品項列、
     // 負責人移除也要先確認；訊息寫出要刪的名稱。
     async moRemoveItem(i) {
       const m = this.materialOrders[i]
-      if (!(await MotrixUI.confirm(`確定要刪除叫料品項「${(m && m.itemName) || '未命名'}」？\n\n按「儲存」之後才會寫入。`, {danger: true}))) return
+      if (!(await MotrixUI.confirm(`確定要刪除材料申請品項「${(m && m.itemName) || '未命名'}」？\n\n按「儲存」之後才會寫入。`, {danger: true}))) return
       this.materialOrders.splice(i, 1)
       this.moDirty = true
       this.moMsg = ''
@@ -310,7 +333,7 @@ window.CM_PARTS.push(() => ({
       this.moDirty = true    // 31-C：已付金額／日期是匯款申請付款明細的投影，不再隨小計連動，也不能在這裡改
     },
 
-    // `AC2`：只登一筆叫料的發票日期（專用端點；任何案件狀態都可以，不動金額）
+    // `AC2`：只登一筆材料申請的發票日期（專用端點；任何案件狀態都可以，不動金額）
     async moSetInvoiceDate(m) {
       const quoteNo = this.selected?.quote_no
       if (!quoteNo || !m.itemId) return
@@ -330,18 +353,18 @@ window.CM_PARTS.push(() => ({
       }
     },
 
-    async moSave() {
-      if (this.moSaving) return
+    async moSave(forSubmit = false) {
+      if (this.moSaving) return false
       const quoteNo = this.selected?.quote_no
-      if (!quoteNo) return
+      if (!quoteNo) return false
 
       // 送出前正規化＋先擋一次。後端這些規則都會再驗一次，這裡擋只是為了
       // 給看得懂的中文訊息（後端回的 detail 會指名項目，但撞到才看到）
       const payload = []
       for (const m of this.materialOrders) {
         const name = (m.itemName || '').trim()
-        if (!name) { this.moMsgError = true; this.moMsg = '有項目還沒填名稱'; return }
-        if (m._saved === false && !m.supplierId) { this.moMsgError = true; this.moMsg = `「${name}」還沒選供應商（新增叫料必填）`; return }
+        if (!name) { this.moMsgError = true; this.moMsg = '有項目還沒填名稱'; return false }
+        if (m._saved === false && !m.supplierId) { this.moMsgError = true; this.moMsg = `「${name}」還沒選供應商（新增材料申請必填）`; return false }
         const quantity  = Math.max(0, Number(m.quantity) || 0)
         const unitPrice = Math.max(0, Number(m.unitPrice) || 0)
         const totalPrice = MotrixLegalRound.halfUp(quantity * unitPrice, 100) / 100
@@ -354,12 +377,16 @@ window.CM_PARTS.push(() => ({
           notes: (m.notes || '').trim(),
           // `AC2`：整份覆寫的端點——少帶這一鍵，已登錄的發票日期就會在下次存檔時被抹掉
           invoiceDate: m.invoiceDate || '',
-          supplierId: m.supplierId ? Number(m.supplierId) : null
+          supplierId: m.supplierId ? Number(m.supplierId) : null,
+          // 32-S4：連結鍵（空值後端不寫入；整份覆寫的端點，少帶就會被抹掉）
+          quoteItemId: m.quoteItemId || null, poDocCode: m.poDocCode || null, poLine: m.poLine ? Number(m.poLine) : null,
+          overPlanReason: (m.overPlanReason || '').trim() || null
         })
       }
 
       this.moSaving = true
       this.moMsg = ''
+      let ok = false
       try {
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders`, {
           method: 'PATCH',
@@ -370,10 +397,11 @@ window.CM_PARTS.push(() => ({
           this.moDirty = false
           const d = await r.json().catch(() => ({}))
           if (d.rejected && d.rejected.length) {
-            // 叫料審核（31-C）：只拒有問題的項目，其餘已存——逐項說明，並重新載入以顯示伺服器現值
+            // 材料申請審核（31-C）：只拒有問題的項目，其餘已存——逐項說明，並重新載入以顯示伺服器現值
             this.moMsgError = true
             this.moMsg = '部分項目沒有儲存：' + [...new Set(d.rejected.map(x => x.message))].join('；')
           } else {
+            ok = true
             this.moMsgError = false
             this.moMsg = '已儲存'
             setTimeout(() => { if (!this.moDirty) this.moMsg = '' }, 2500)
@@ -389,6 +417,7 @@ window.CM_PARTS.push(() => ({
         this.moMsg = '網路錯誤：' + e.message
       }
       this.moSaving = false
+      return ok
     },
 
     // ── 待辦事項（2026-08-26 專案管理併入案件管理，取代原本跳去 projects.html
@@ -1488,11 +1517,11 @@ window.CM_PARTS.push(() => ({
     // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）
     _reset_exec(phase, data) {
       if (phase === 'early') {
-        // 叫料的狀態也屬於「必須在 await 之前重設完」那一類（2026-09-14 修）：
+        // 材料申請的狀態也屬於「必須在 await 之前重設完」那一類（2026-09-14 修）：
         // selected 一設定分頁列就渲染出來，使用者可以立刻點「財務」，而下面
         // ensureCaseRecord()／_seedDefaultStagesIfEmpty() 是會發網路請求的 await
         // ——原本 moLoading 要等到那之後才立起來，這段空窗期點進財務分頁就會看到
-        // 「尚無叫料項目」，接著才跳成「載入中…」。全套測試偶發的紅燈就是它
+        // 「尚無材料申請項目」，接著才跳成「載入中…」。全套測試偶發的紅燈就是它
         // （test_e2e_material_orders_2026_09_11.py，約 1/5 機率）。
         this.materialOrders = []
         this.moDirty = false

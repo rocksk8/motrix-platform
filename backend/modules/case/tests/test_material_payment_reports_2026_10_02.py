@@ -119,7 +119,7 @@ def test_ledger_e12b_one_event_per_line_idempotent_keys_fee_and_pending_review(s
     assert keys == sorted(["%s::L1::%d" % (NO, ids["l1a"]), "%s::L1::%d" % (NO, ids["l1b"]), "%s::L9" % NO, "%s::L9::%d" % (NO, ids["l9"]), "%s::L7" % NO]), keys
     assert len(set(keys)) == len(keys)                                                          # 冪等鍵不重複
     assert not [e for e in ev if e["source_key"].startswith("%s::L8" % NO)]                     # 多付待審不入帳
-    assert "1 筆叫料匯款的實付超過應付且尚未核可" in res["notice"]
+    assert "1 筆材料申請匯款的實付超過應付且尚未核可" in res["notice"]
     second = next(e for e in ev if e["source_key"].endswith("::%d" % ids["l1b"]))
     legs = [(l["role"], l["side"], l["amount"], l.get("account_code", "")) for l in second["lines"]]
     assert legs == [("AP", "D", 3500, ""), ("FEE", "D", 15, ""), ("BANK", "C", 3515, "1111")], legs

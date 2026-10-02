@@ -36,7 +36,7 @@ FULL_BP = 10000
 #: 待補登標註的種類 → 畫面標題
 FLAG_LABELS = {
     "dispatch_no_invoice": "派工未登錄廠商發票（暫用驗收／派工月）",
-    "material_no_invoice": "叫料未登錄廠商發票（暫用付款月）",
+    "material_no_invoice": "材料申請未登錄廠商發票（暫用付款月）",
     "extra_no_invoice":    "額外支出未登錄廠商發票（暫用核准／憑證月）",
     "extra_no_paid_date":  "額外支出未登錄付款日（現金口徑暫用憑證日）",
     "stage_ratio_unset":   "階段比例未設定（全部完工月一次認列）",
@@ -284,9 +284,18 @@ def material_entries(conn, basis, department_id=None):
     **現金口徑**——付出去的錢是事實，不因審核狀態排除（只標 `pending`）。每筆帶 `approval`（'' ＝ 舊單）。"""
     from modules.case import material_approval as _ma
     from modules.case import material_payment as _mp
+    from modules.case import purchase_items as _pi
     states = _material_states(conn)
     pay_lines, pay_legacy = (_mp.lines_by_order(conn), _mp.legacy_by_order(conn)) if basis == "cash" else ({}, {})
     out = []
+    no_po = {}                                    # (案件, 叫料 itemId) ⇒ 該叫料是否「未申請採購單」（S4c；只加備註，不改金額）
+    _po_cache = {}
+
+    def po_rows_of(quote_no):
+        if quote_no not in _po_cache:
+            _po_cache[quote_no] = conn.execute(
+                "SELECT id, kind, status, lines_json, doc_code FROM case_extra_expenses WHERE quote_no=? AND kind='purchase_order'", (quote_no,)).fetchall()
+        return _po_cache[quote_no]
     for row in _case_rows(conn, department_id):
         try:
             cr = (json.loads(row["data_json"] or "{}") or {}).get("caseRecord") or {}
@@ -295,10 +304,14 @@ def material_entries(conn, basis, department_id=None):
         for mo in cr.get("materialOrders") or []:
             if not isinstance(mo, dict):
                 continue
-            name = mo.get("itemName") or "叫料"
+            name = mo.get("itemName") or "材料申請"
             paid = (mo.get("paidDate") or "")[:10]
             st = states.get((row["quote_no"], str(mo.get("itemId"))), "")
             cs = _ma.cost_state(st)
+            prs = po_rows_of(row["quote_no"])
+            if _pi._link_check(mo, prs)[0]:
+                continue        # 32-S4c：連到有效採購單 ⇒ 金額由採購單負責（成本進品項實際成本／額外支出的採購單列），叫料只是已叫／已到追蹤——權責與現金都不重複計
+            no_po[(row["quote_no"], str(mo.get("itemId")))] = _pi.material_link_status(mo, prs, legacy=(st == ""))["state"] == "none"
             if basis != "cash" and cs == "excluded":
                 continue                                                           # 權責：草稿／已退回／已取消不計
             if basis == "cash":
@@ -306,12 +319,12 @@ def material_entries(conn, basis, department_id=None):
                 if key in pay_legacy:                                              # 有匯款申請 ⇒ 讀付款明細（每筆一列）＋舊單歷史已付；不讀 JSON 的 paid*（那是投影）
                     la, ld = pay_legacy[key]
                     if la and ld:
-                        out.append({"date": ld, "quoteNo": row["quote_no"], "desc": "叫料｜" + name, "amount": la, "taxNote": "未拆稅", "provisional": False,
+                        out.append({"date": ld, "quoteNo": row["quote_no"], "desc": "材料申請｜" + name, "amount": la, "taxNote": "未拆稅", "provisional": False,
                                     "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending", "lineId": "", "fee": 0.0,
                                     "remitPending": False, "payMethod": "", "payAccountCode": ""})
                     for ln in pay_lines.get(key, []):
                         if ln["amount"] and ln["paid_at"]:
-                            out.append({"date": ln["paid_at"], "quoteNo": row["quote_no"], "desc": "叫料｜" + name, "amount": ln["amount"], "taxNote": "未拆稅",
+                            out.append({"date": ln["paid_at"], "quoteNo": row["quote_no"], "desc": "材料申請｜" + name, "amount": ln["amount"], "taxNote": "未拆稅",
                                         "provisional": False, "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending",
                                         "lineId": str(ln["id"]), "fee": ln["fee"], "remitPending": ln["review"] == "pending",
                                         "payMethod": ln["pay_method"], "payAccountCode": ln["pay_account_code"], "paymentCode": ln["doc_code"]})
@@ -320,7 +333,7 @@ def material_entries(conn, basis, department_id=None):
                     continue
                 amt = float(mo.get("paidAmount") or 0)
                 if amt:
-                    out.append({"date": paid, "quoteNo": row["quote_no"], "desc": "叫料｜" + name,
+                    out.append({"date": paid, "quoteNo": row["quote_no"], "desc": "材料申請｜" + name,
                                 "amount": amt, "taxNote": "未拆稅", "provisional": False,
                                 "itemId": mo.get("itemId") or "", "approval": st, "pending": cs == "pending"})
                 continue
@@ -329,9 +342,11 @@ def material_entries(conn, basis, department_id=None):
                 continue
             inv = (mo.get("invoiceDate") or "")[:10]
             out.append({"date": inv if inv != "" else paid, "quoteNo": row["quote_no"],
-                        "desc": "叫料｜" + name, "amount": amt, "taxNote": "未拆稅",
+                        "desc": "材料申請｜" + name, "amount": amt, "taxNote": "未拆稅",
                         "provisional": inv == "", "itemId": mo.get("itemId") or "", "invoiceDate": inv,
                         "approval": st, "pending": cs == "pending"})
+    for e in out:
+        e["noPo"] = bool(no_po.get((e["quoteNo"], str(e.get("itemId") or ""))))
     return out
 
 
@@ -478,7 +493,7 @@ def recognition_flags(conn, year, department_id=None, money_ok=True):
     for e in material_entries(conn, "accrual", department_id):
         if e["provisional"] and (e["date"][:4] == y or e["date"] == ""):
             flags["material_no_invoice"].append(_flag_item(
-                e["quoteNo"], customer.get(e["quoteNo"]), "叫料", e["desc"], e["amount"], e["date"], money_ok, "material_no_invoice"))
+                e["quoteNo"], customer.get(e["quoteNo"]), "材料申請", e["desc"], e["amount"], e["date"], money_ok, "material_no_invoice"))
     for e in extra_entries(conn, "accrual"):
         if e["quoteNo"] not in in_scope:
             continue

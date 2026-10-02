@@ -177,7 +177,7 @@ def test_detail_shows_staged_files_of_case_change(client, make_user):
     assert d["files"][0]["kind"] == "image"
     # 摘要要講得出「這次要做什麼、動到哪一項、帶了哪些檔案」，而不是倒 payload
     after = d["changes"]["after"]
-    assert "叫料項目 #1" in after["動作"], after
+    assert "材料申請項目 #1" in after["動作"], after
     assert after["檔案數"] == 1
     assert "補件照片.png" in after["檔案"]
     # 只驗**摘要**裡沒有實體路徑；`files` 陣列本來就帶 path（前端靠它開檔），
