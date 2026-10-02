@@ -145,3 +145,4 @@
 - 2e 規格 rev.2（wip/t32-material-link-spec-2e@e50887ba；E4 改版）：一品項一筆材料申請（自動涵蓋該品項所有已核准採購單行，poSnapshot 給簽核人看）、追加走變更申請（M2：change_json 待審版、核准前舊版續生效、原子換版、不得低於已出貨＋保留量、一次一筆待審變更）、出貨單單一 materialLink；工量 12.5→13.5 天（M 7.0、S 4.0）；新增 3 題 N1（無報價品項的額外材料）、N2（自動涵蓋 vs 使用者選行）、N3（變更待審時舊版續生效）待問。USER-DECISIONS-TRAIN33.md@76925c66。
 - 第32包新版 52033606：c7 差異稽核 PASS（audit/train32-c7）、d7 包完整性 PASS（a12e4325）、a3 演練 PASS（drill/train32）、2e 探針差異 CLEAN（probe/t32-pkg-2e-b@b5cffbe0）。待正式機暫存驗證回報後下『可以套用』。
 - 第33班整合樹 wip/train-33-int1：基準 52033606；已併 a3 的 31-B S0（款別設定）＋S1（遷移 0005 重建匯款申請表、remit_split.plan）wip/t33-remit-s1-a3@29ca6efe（含 c7 的 default_for 版本差異修正 cherry-pick）。滾動整合：各片到齊就併、每日跑階段。
+- a3 author_gate 收尾 wip/t33-author-gate-a3@725f2dfb：回放表 16 案例（第31班 10＋第32班 6）；14 個樣式；d7 的字典鍵註解守門併入；用法 AUTHOR-GATE-USAGE.md。待安靜窗口：真實回放 rounds 2/4/7＋一次完整實跑量真實分鐘。
