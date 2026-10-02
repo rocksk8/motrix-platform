@@ -27,6 +27,9 @@ def _title(snap, code) -> str:
 class _Payables:
     """IP-100 提供者（名稱 `case_material`）。"""
 
+    #: 出納端點 `payee-bank`：完整帳號只給最高管理者與出納（`cashier` 模組）；一般管理員只看遮罩（32 班；其他請款來源未啟用此規則）
+    FULL_ACCOUNT_STRICT = True
+
     @staticmethod
     def payee_info(conn, key) -> dict:
         """出納付款前看收款人資料（完整，只給出納端點）。查無或不是已核准 ⇒ LookupError。"""
@@ -94,8 +97,9 @@ class _RemitReviews:
             payable = MP.r2(float(r["amount_approved"] or 0) - before)                       # 這一筆登錄時的剩餘應付
             out.append({"key": str(r["id"]), "sourceLabel": MP.SOURCE_LABEL, "quoteNo": r["quote_no"] or "", "customerName": r["customer_name"] or "",
                         "payee": sn.get("supplierName") or "", "payable": payable, "actual": float(r["amount"] or 0),
-                        "diff": MP.r2(float(r["amount"] or 0) - payable), "fee": float(r["fee"] or 0), "paidAt": (r["paid_at"] or "")[:10],
-                        "paidBy": r["paid_by"] or ""})
+                        "diff": max(0.0, MP.r2(float(r["amount"] or 0) - payable)),          # 只有多付才有差額；手續費偏高的覆核是 0 "fee": float(r["fee"] or 0), "paidAt": (r["paid_at"] or "")[:10],
+                        "paidBy": r["paid_by"] or "",
+                        "reason": "手續費偏高（超過 %g）" % MP.FEE_REVIEW_OVER if float(r["fee"] or 0) > MP.FEE_REVIEW_OVER and float(r["amount"] or 0) <= payable + 0.005 else ""})
         return out
 
     @staticmethod

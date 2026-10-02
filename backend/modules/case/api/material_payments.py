@@ -104,11 +104,14 @@ def _payee_ack(doc_code):
         return None
 
 
-def _record_payee_ack(user, authorization, doc_code, quote_no):
+def _record_payee_ack(user, authorization, doc_code, quote_no, strict=False):
+    """寫入收款人個資告知紀錄。`strict=True`（建立申請用）：寫入失敗就丟出例外，由呼叫端復原（fail-closed）；否則回 None。"""
     from helpers import privacy_notice as _pn
     try:
         rec, created = _pn.record_purpose_ack("material_payment", doc_code, user, "contact")
     except Exception:                                                                              # noqa: BLE001
+        if strict:
+            raise
         return None
     if created:
         _audit(_tok(authorization), "material_payment.privacy_notice_ack", "quotation", quote_no, "材料申請匯款申請 %s 收款人個資告知" % doc_code,
@@ -232,7 +235,17 @@ def create_payment(quote_no: str, item_id: str, body: dict = Body(default={}), a
     _audit(_tok(authorization), "material_payment.create", "quotation", quote_no,
            "材料申請匯款申請 %s（%s）建立（第 %d 張）" % (res["docCode"], order.get("itemName") or "", res["seq"]),
            {"docCode": res["docCode"], "seq": res["seq"], "overCap": bool(res["overCapReason"])})
-    _record_payee_ack(user, authorization, res["docCode"], quote_no)                              # 寫入已告知紀錄（伺服器蓋時間與人員；失敗不影響已建立的申請，但會在回應標示）
+    try:
+        _record_payee_ack(user, authorization, res["docCode"], quote_no, strict=True)             # 寫入已告知紀錄（伺服器蓋時間與人員）
+    except Exception:                                                                              # noqa: BLE001 — fail-closed：沒有告知紀錄的申請不留（草稿剛建立，直接撤掉）
+        cn = get_db()
+        try:
+            cn.execute("DELETE FROM case_material_payments WHERE id=? AND status=?", (res["id"], MP.S_DRAFT))
+            cn.commit()
+        finally:
+            cn.close()
+        _audit(_tok(authorization), "material_payment.create_rolled_back", "quotation", quote_no, "材料申請匯款申請 %s 因個資告知紀錄寫入失敗而撤銷" % res["docCode"], {"docCode": res["docCode"]})
+        raise HTTPException(503, "收款人個資告知紀錄寫入失敗，這張匯款申請沒有建立，請稍後再試")
     res["payeeNotice"] = _payee_ack(res["docCode"])
     return {"ok": True, "payment": res}
 
@@ -277,6 +290,8 @@ def submit_payment(pid: int, authorization: str = Header(None)):
         row, q = _row_and_case(conn, pid)
         require_case(user, q, row["quote_no"])
         _need_edit(user)
+        if not _payee_ack(row["doc_code"]):                                                        # fail-closed：沒有（或讀不到）收款人個資告知紀錄不能送審
+            raise HTTPException(409, "這張匯款申請沒有收款人個資告知紀錄，請先補記告知後再送審")
         order = _order(q, row["item_id"])
         try:
             res = MP.submit(conn, pid, order, user)

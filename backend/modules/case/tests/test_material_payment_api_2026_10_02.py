@@ -182,6 +182,12 @@ def test_cashier_pays_in_two_steps_and_the_order_paid_fields_follow(client, worl
     assert pb.status_code == 200 and pb.json()["account"] == ACCT and pb.json()["accountName"] == "" and pb.json()["bank"].startswith("812")   # 出納專用端點才有完整帳號
     assert "cashier.payee_bank_view" in [r["action"] for r in _q("SELECT action FROM audit_log")]
     assert client.get("/api/cashier/pending-payables/case_material/%d/payee-bank" % pid, headers=w["eng"]).status_code == 403
+    # 32 班：完整帳號只給最高管理者與出納；一般管理員（能付款但不是出納）只看遮罩
+    ad = client.get("/api/cashier/pending-payables/case_material/%d/payee-bank" % pid, headers=w["adm"])
+    assert ad.status_code == 200 and ad.json()["account"] == "****7890" and ACCT not in ad.text, ad.text
+    sa = client.get("/api/cashier/pending-payables/case_material/%d/payee-bank" % pid, headers=w["sa"])
+    assert sa.status_code == 200 and sa.json()["account"] == ACCT, sa.text
+    assert any("遮罩" in (r["target_label"] or "") for r in _q("SELECT target_label FROM audit_log WHERE action='cashier.payee_bank_view'"))
     r = client.post("/api/cashier/pending-payables/case_material/%d/pay" % pid, json={"paidDate": "2031-03-05", "actualAmount": 2500}, headers=w["cash"])
     assert r.status_code == 200 and (r.json()["actual"], r.json()["remaining"], r.json()["settled"]) == (2500.0, 3500.0, False), r.text
     assert [(i["key"], i["amount"], i["paid"]) for i in _pending_items(client, w)] == [(str(pid), 3500.0, 2500.0)]       # 未結清留在待付款，顯示剩餘
@@ -309,3 +315,47 @@ def test_payee_privacy_notice_is_required_recorded_and_audited(client, world):
     assert again.status_code == 200 and again.json()["created"] is False and again.json()["ack"]["at"] == ack["at"]        # 已記錄的不覆蓋
     assert _audit_actions().count("material_payment.privacy_notice_ack") == 1
     assert client.post("/api/material-payments/%d/privacy-notice/ack" % pay["id"], headers=w["eng"]).status_code == 403     # 沒有編輯叫料權限的人不能補記
+
+
+def test_privacy_ack_write_failure_is_fail_closed_no_request_is_left_and_submit_needs_the_record(client, world, monkeypatch):
+    """32 班：個資告知紀錄寫不進去 ⇒ 申請不留（503）；沒有（或讀不到）告知紀錄的申請不能送審（409）。
+    （用 `monkeypatch.context()`：不能 `undo()` 整個 fixture——conftest 也用同一個 monkeypatch 設了 session 時間等東西。）"""
+    from helpers import privacy_notice as pn
+    _flow([])
+    before = _q("SELECT COUNT(*) AS n FROM case_material_payments")[0]["n"]
+
+    def boom(*a, **k):
+        raise RuntimeError("設定庫寫入失敗")
+    with monkeypatch.context() as m:
+        m.setattr(pn, "record_purpose_ack", boom)
+        r = _create(client, world, 1000)
+    assert r.status_code == 503 and "沒有建立" in r.text, r.text
+    assert _q("SELECT COUNT(*) AS n FROM case_material_payments")[0]["n"] == before, "寫入失敗不得留下申請"
+    assert "material_payment.create_rolled_back" in _audit_actions()
+    r = _create(client, world, 1000)                                        # 正常建立 ⇒ 有紀錄
+    assert r.status_code == 200, r.text
+    pid = r.json()["payment"]["id"]
+    with monkeypatch.context() as m:                                        # 紀錄讀不到（None）⇒ 送審 409，申請仍是草稿
+        m.setattr(pn, "get_ack", lambda kind, key: None)
+        s = client.post("/api/material-payments/%d/submit" % pid, headers=world["adm"])
+    assert s.status_code == 409 and "個資告知" in s.text, s.text
+    assert _q("SELECT status FROM case_material_payments WHERE id=?", (pid,))[0]["status"] == "草稿"
+    assert client.post("/api/material-payments/%d/submit" % pid, headers=world["adm"]).status_code == 200
+
+
+def test_fee_over_the_limit_goes_to_review_and_a_fee_above_the_payment_is_refused(client, world):
+    """32 班：單筆手續費 > 500 ⇒ 該筆明細進差額審核（reason＝手續費偏高）；= 500 不審；手續費 > 實付 ⇒ 400。只管材料申請匯款。"""
+    w = world
+    pid = _approved(client, w, 6000)
+    pay = "/api/cashier/pending-payables/case_material/%d/pay" % pid
+    assert client.post(pay, json={"paidDate": "2031-04-01", "actualAmount": 100, "hasFee": True, "fee": 101}, headers=w["cash"]).status_code == 400    # 手續費大於實付
+    r = client.post(pay, json={"paidDate": "2031-04-01", "actualAmount": 1000, "hasFee": True, "fee": 500}, headers=w["cash"])
+    assert r.status_code == 200 and not r.json().get("remitReview"), r.text                                        # 剛好 500：不審
+    r = client.post(pay, json={"paidDate": "2031-04-02", "actualAmount": 1000, "hasFee": True, "fee": 600}, headers=w["cash"])
+    assert r.status_code == 200 and r.json()["remitReview"] == "pending" and r.json()["diff"] == 0, r.text          # 600 > 500：審核，沒有差額
+    mine = [i for i in client.get("/api/cashier/remit-reviews", headers=w["adm"]).json()["items"] if i["source"] == "case_material"]
+    assert [(i["actual"], i["diff"]) for i in mine] == [(1000.0, 0.0)] and "手續費偏高" in mine[0]["reason"]
+    dec = "/api/cashier/remit-reviews/case_material/%s/decision" % mine[0]["key"]
+    assert client.post(dec, json={"decision": "reject", "note": "手續費不合理"}, headers=w["cash"]).status_code == 403          # 出納自己登錄的、也非 admin：不能審
+    assert client.post(dec, json={"decision": "reject", "note": "手續費不合理"}, headers=w["adm"]).status_code == 200
+    assert _q("SELECT COUNT(*) AS n FROM case_material_payment_lines")[0]["n"] == 1                                # 退回＝刪掉 600 那一筆，剩 500 那筆
