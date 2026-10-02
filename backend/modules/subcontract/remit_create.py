@@ -51,6 +51,23 @@ def _whole_yuan(total):
     return whole, d != whole
 
 
+def void_blocker(conn, row):
+    """分期申請能不能作廢（LIFO，設計 §4）。`row`＝申請列（要有 voucher_no／dispatch_id／kind／is_paid／voided_at）⇒ 不能時回訊息（字串），可以回 None。
+    只有該派發「最新一張未作廢」的分期申請可作廢：最後一期的稅額補差在建立當下凍結，作廢中間一期會讓合計失準。"""
+    if not row["kind"]:
+        return "舊式整筆申請不能作廢（草稿請刪除；已核准請先撤銷核准）"
+    if row["voided_at"]:
+        return "這張申請已經作廢"
+    if row["is_paid"]:
+        return "這張申請已標記匯款，請先撤銷付款再作廢"
+    later = [r[0] for r in conn.execute(
+        "SELECT voucher_no FROM contractor_payment_vouchers WHERE dispatch_id=? AND kind<>'' AND voided_at='' AND id>(SELECT id FROM contractor_payment_vouchers WHERE voucher_no=?) ORDER BY id",
+        (row["dispatch_id"], row["voucher_no"])).fetchall()]
+    if later:
+        return "只能從最新一期往前作廢（後進先出）：請先作廢後面的 %s" % "、".join(later)
+    return None
+
+
 def kinded_context(conn, dispatch, kind_code, ratio_percent=None, amount=None):
     """⇒ `{"kind", "kinds_version", "previous", "plan", "seq", "mode", "ratio", "total", "rate", "warnings"}`；不合法 ⇒ RemitCreateError(狀態碼, 訊息)。"""
     if not kind_code:
@@ -68,6 +85,9 @@ def kinded_context(conn, dispatch, kind_code, ratio_percent=None, amount=None):
     if legacy:
         raise RemitCreateError(409, "此派發已用整筆方式產生匯款申請（%s），不能再改用分期；請先處理該申請" % legacy[0])
     prev = previous_periods(conn, dispatch["id"])
+    if not prev and (dispatch["invoice_date"] if "invoice_date" in dispatch.keys() else ""):
+        # 派發層的發票日（整筆發票）已登錄：總帳 E04 以派發為單位認列；再開分期會變成派發層＋各期各認一次（成本翻倍）
+        raise RemitCreateError(409, "這張派發已登錄整筆發票日（%s），不能改開分期；請改用整筆匯款申請，或先清除派發的發票日期" % dispatch["invoice_date"])
     total, rounded = _whole_yuan(_dispatch_total(dispatch))
     rate = float(dispatch["tax_rate"]) if "tax_rate" in dispatch.keys() and dispatch["tax_rate"] is not None else 0.05
     if amount is not None:

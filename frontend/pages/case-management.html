@@ -3018,43 +3018,52 @@
 
                     <!-- 匯款申請：已有申請時無論派發狀態之後是否被改掉都要維持可見，
                          否則已核准/已匯款的申請會從畫面上消失，找不到地方下載 -->
-                    <div x-show="(d.status==='completed' || d.status==='accepted' || _dispatchVoucher(d)) && ['superadmin','admin'].includes(session.role)"
-                         style="padding:8px 16px;border-top:1px solid var(--border-light);background:var(--tone-warning-bg);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <div x-show="_cvRowVisible(d) && ['superadmin','admin'].includes(session.role)"
+                         style="padding:8px 16px;border-top:1px solid var(--border-light);background:var(--tone-warning-bg);display:flex;flex-direction:column;align-items:flex-start;gap:8px">
                       <span x-show="contractorVouchersLoading" style="font-size:11px;color:var(--text-dim)">載入中…</span>
-                      <!-- CM8：匯款憑據改成點進這個分頁才載入；載入完之前不可以顯示「產生匯款申請」（會重複建立） -->
-                      <template x-if="!contractorVouchersLoading && !_dispatchVoucher(d)">
-                        <button @click="createContractorVoucher(d)"
-                                style="padding:4px 10px;font-size:11px;border:1px solid var(--tone-warning-border);background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">
-                          產生匯款申請
-                        </button>
-                      </template>
-                      <template x-if="_dispatchVoucher(d)">
-                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%">
-                          <span style="font-size:11px;font-weight:600;color:var(--tone-warning-fg)" x-text="_dispatchVoucher(d).voucherNo"></span>
-                          <span :class="'badge ' + _cvStatusClass(_dispatchVoucher(d).status)" x-text="_cvStatusLabel(_dispatchVoucher(d).status)"
+                      <!-- 31-B：一張派發可有多張匯款申請（分期）；舊式整筆仍同派發最多一張未作廢 -->
+                      <template x-for="v in _dispatchVouchers(d)" :key="v.voucherNo">
+                        <div :style="'display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%' + (v.voidedAt ? ';opacity:.55' : '')">
+                          <span style="font-size:11px;font-weight:600;color:var(--tone-warning-fg)" :style="v.voidedAt ? 'text-decoration:line-through' : ''" x-text="v.voucherNo"></span>
+                          <span x-show="v.kind" data-testid="cv-kind-label" style="font-size:11px;font-weight:600;color:var(--text-secondary)" x-text="_cvKindLabel(v) + (v.pretaxAmount != null ? '　稅前 ' + Number(v.pretaxAmount).toLocaleString() : '')"></span>
+                          <span :class="'badge ' + _cvStatusClass(v.status)" x-text="_cvStatusLabel(v.status)"
                                 style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
-                          <span x-show="_dispatchVoucher(d).isPaid" style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--tone-success-bg-strong);color:var(--tone-success-fg)">
-                            ✓ 已匯款<span x-show="_dispatchVoucher(d).paidAt" x-text="'（' + _dispatchVoucher(d).paidAt.slice(0,10) + '）'"></span><span x-show="_dispatchVoucher(d).remitReview==='pending'" style="color:var(--tone-warning-fg)"> ⚠ 差額待審核</span><span x-show="_dispatchVoucher(d).remitFee" x-text="' 手續費 ' + _dispatchVoucher(d).remitFee"></span>
+                          <span x-show="v.isPaid" style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--tone-success-bg-strong);color:var(--tone-success-fg)">
+                            ✓ 已匯款<span x-show="v.paidAt" x-text="'（' + v.paidAt.slice(0,10) + '）'"></span><span x-show="v.remitReview==='pending'" style="color:var(--tone-warning-fg)"> ⚠ 差額待審核</span><span x-show="v.remitFee" x-text="' 手續費 ' + v.remitFee"></span>
                           </span>
 
-                          <div x-show="_dispatchVoucher(d).status==='草稿'" style="display:flex;gap:6px">
-                            <button @click="submitContractorVoucher(_dispatchVoucher(d))" style="padding:3px 10px;font-size:11px;border:none;background:var(--accent);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送出審核</button>
-                            <button @click="deleteContractorVoucher(_dispatchVoucher(d))" style="padding:3px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer;color:var(--danger)">刪</button>
+                          <div x-show="v.status==='草稿'" style="display:flex;gap:6px">
+                            <button @click="submitContractorVoucher(v)" style="padding:3px 10px;font-size:11px;border:none;background:var(--accent);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送出審核</button>
+                            <button @click="deleteContractorVoucher(v)" style="padding:3px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer;color:var(--danger)">刪</button>
                           </div>
-                          <div x-show="_dispatchVoucher(d).status==='待審核' || _dispatchVoucher(d).status==='簽核中'" style="display:flex;gap:6px">
-                            <button @click="approveContractorVoucher(_dispatchVoucher(d))" style="padding:3px 10px;font-size:11px;border:none;background:var(--tone-success-solid);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">簽核</button>
-                            <button @click="rejectContractorVoucher(_dispatchVoucher(d))" style="padding:3px 10px;font-size:11px;border:1px solid var(--tone-danger-border);background:var(--tone-danger-bg);color:var(--tone-danger-fg);border-radius:5px;cursor:pointer;white-space:nowrap">退回</button>
+                          <div x-show="v.status==='待審核' || v.status==='簽核中'" style="display:flex;gap:6px">
+                            <button @click="approveContractorVoucher(v)" style="padding:3px 10px;font-size:11px;border:none;background:var(--tone-success-solid);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">簽核</button>
+                            <button @click="rejectContractorVoucher(v)" style="padding:3px 10px;font-size:11px;border:1px solid var(--tone-danger-border);background:var(--tone-danger-bg);color:var(--tone-danger-fg);border-radius:5px;cursor:pointer;white-space:nowrap">退回</button>
                           </div>
-                          <div x-show="_dispatchVoucher(d).status==='已核准'" style="display:flex;gap:6px;flex-wrap:wrap">
-                            <button x-show="!_dispatchVoucher(d).isPaid" @click="toggleContractorVoucherPaid(_dispatchVoucher(d),'pay')" style="padding:3px 10px;font-size:11px;border:none;background:var(--tone-success-solid);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">標記已匯款</button>
-                            <button x-show="_dispatchVoucher(d).isPaid" @click="toggleContractorVoucherPaid(_dispatchVoucher(d),'unpay')" style="padding:3px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">取消已匯款</button>
-                            <button x-show="!_dispatchVoucher(d).isPaid" @click="revokeContractorVoucherApproval(_dispatchVoucher(d))" style="padding:3px 10px;font-size:11px;border:1px solid var(--tone-danger-border);background:var(--tone-danger-bg);color:var(--tone-danger-fg);border-radius:5px;cursor:pointer;white-space:nowrap">撤銷核准</button>
+                          <div x-show="v.status==='已核准'" style="display:flex;gap:6px;flex-wrap:wrap">
+                            <button x-show="!v.isPaid" @click="toggleContractorVoucherPaid(v,'pay')" style="padding:3px 10px;font-size:11px;border:none;background:var(--tone-success-solid);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">標記已匯款</button>
+                            <button x-show="v.isPaid" @click="toggleContractorVoucherPaid(v,'unpay')" style="padding:3px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">取消已匯款</button>
+                            <button x-show="!v.isPaid" @click="revokeContractorVoucherApproval(v)" style="padding:3px 10px;font-size:11px;border:1px solid var(--tone-danger-border);background:var(--tone-danger-bg);color:var(--tone-danger-fg);border-radius:5px;cursor:pointer;white-space:nowrap">撤銷核准</button>
                           </div>
-                          <button @click="previewContractorVoucherPdf(_dispatchVoucher(d))" :disabled="cvPreviewFetching"
+                          <button x-show="v.kind && !v.voidedAt && !v.isPaid && v.status!=='草稿' && _cvIsLatestOpen(d, v)" @click="voidContractorVoucher(v)" data-testid="cv-void-btn" style="padding:3px 10px;font-size:11px;border:1px solid var(--tone-danger-border);background:var(--tone-danger-bg);color:var(--tone-danger-fg);border-radius:5px;cursor:pointer;white-space:nowrap">作廢</button>
+                          <span x-show="v.kind && !v.voidedAt" data-testid="cv-invoice-note" style="font-size:11px;color:var(--text-secondary)"
+                                x-text="v.invDate ? ('發票 ' + (v.invNo || '（無號碼）') + '　' + v.invDate) : '未登錄發票（尚不認列）'"></span>
+                          <button x-show="v.kind && !v.voidedAt" @click="setVoucherInvoice(v)" data-testid="cv-invoice-btn" style="padding:3px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap" x-text="v.invDate ? '改發票' : '登錄發票'"></button>
+                          <span x-show="v.voidedAt" data-testid="cv-voided-note" style="font-size:11px;color:var(--text-dim)" x-text="'已作廢：' + (v.voidReason || '')"></span>
+                          <button x-show="!v.voidedAt" @click="previewContractorVoucherPdf(v)" :disabled="cvPreviewFetching"
                                   style="padding:3px 10px;font-size:11px;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">預覽</button>
-                          <button x-show="_dispatchVoucher(d).status==='已核准'" @click="downloadContractorVoucherPdf(_dispatchVoucher(d))"
+                          <button x-show="v.status==='已核准'" @click="downloadContractorVoucherPdf(v)"
                                   style="padding:3px 10px;font-size:11px;border:1px solid var(--tone-info-border);background:var(--accent-light);color:var(--accent-hover);border-radius:5px;cursor:pointer;white-space:nowrap">下載 PDF</button>
                         </div>
+                      </template>
+                      <div x-show="_dispatchOpenVouchers(d).some(x => x.kind)" data-testid="cv-progress" style="font-size:11px;color:var(--text-secondary);font-family:var(--font-zh)"
+                           x-text="'已申請 稅前 ' + _cvIssuedPretax(d).toLocaleString() + ' ／ ' + (d.totalAmount || 0).toLocaleString() + '（剩餘 ' + _cvRemaining(d).toLocaleString() + '）'"></div>
+                      <!-- CM8：匯款憑據改成點進這個分頁才載入；載入完之前不可以顯示「產生匯款申請」（會重複建立） -->
+                      <template x-if="!contractorVouchersLoading && _cvCanCreate(d)">
+                        <button @click="createContractorVoucher(d)" data-testid="cv-create-btn"
+                                style="padding:4px 10px;font-size:11px;border:1px solid var(--tone-warning-border);background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600"
+                                x-text="_dispatchOpenVouchers(d).some(x => x.kind) ? '新增一期匯款申請' : '產生匯款申請'">
+                        </button>
                       </template>
                     </div>
                   </div>
@@ -4297,6 +4306,33 @@
       <button @click="closeCreateVoucherModalGuarded()" style="width:28px;height:28px;border:none;background:var(--surface-sunken);border-radius:5px;cursor:pointer;font-size:16px">×</button>
     </div>
     <div style="padding:18px 20px">
+      <!-- 31-B：整筆（舊流程）或分期（款別＋比例／固定金額；試算由後端算） -->
+      <div x-show="createVoucherDispatch && !_dispatchOpenVouchers(createVoucherDispatch).some(x => x.kind) && (createVoucherDispatch.status==='completed' || createVoucherDispatch.status==='accepted')" style="display:flex;gap:14px;margin-bottom:12px;font-size:12px;font-family:var(--font-zh)">
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" value="whole" x-model="cvForm.mode" @change="cvPlanSchedule()" data-testid="cv-mode-whole"> 整筆</label>
+        <label x-show="_cvKindsFor(createVoucherDispatch).length" style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" value="kind" x-model="cvForm.mode" @change="cvPlanSchedule()" data-testid="cv-mode-kind"> 分期（款別）</label>
+      </div>
+      <div x-show="cvForm.mode==='kind'" style="margin-bottom:12px">
+        <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">款別</label>
+        <select x-model="cvForm.kind" @change="cvPlanSchedule()" data-testid="cv-kind-select"
+                style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box">
+          <template x-for="k in (createVoucherDispatch ? _cvKindsFor(createVoucherDispatch) : [])" :key="k.code">
+            <option :value="k.code" x-text="k.name"></option>
+          </template>
+        </select>
+        <div style="display:flex;gap:14px;margin:10px 0 6px;font-size:12px;font-family:var(--font-zh)">
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" value="ratio" x-model="cvForm.input" @change="cvPlanSchedule()"> 依比例（%）</label>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="radio" value="amount" x-model="cvForm.input" @change="cvPlanSchedule()"> 固定金額（稅前）</label>
+        </div>
+        <input x-show="cvForm.input==='ratio'" type="number" min="0" max="100" step="any" x-model="cvForm.ratio" @input="cvPlanSchedule()" placeholder="例：30" data-testid="cv-ratio-input"
+               style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box">
+        <input x-show="cvForm.input==='amount'" type="number" min="1" step="1" x-model="cvForm.amount" @input="cvPlanSchedule()" placeholder="稅前整數元" data-testid="cv-amount-input"
+               style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;box-sizing:border-box">
+        <div x-show="cvPlan" data-testid="cv-plan-summary" style="margin-top:8px;font-size:12px;font-family:var(--font-zh);color:var(--ink-strong)" x-text="cvPlanSummary()"></div>
+        <template x-for="(w, wi) in (cvPlan ? cvPlan.warnings : [])" :key="wi + w">
+          <div data-testid="cv-plan-warning" style="margin-top:4px;font-size:11px;color:var(--tone-warning-fg);font-family:var(--font-zh)" x-text="'⚠ ' + w"></div>
+        </template>
+        <div x-show="cvPlanError" data-testid="cv-plan-error" style="margin-top:8px;font-size:12px;color:var(--tone-danger-fg);font-family:var(--font-zh)" x-text="cvPlanError"></div>
+      </div>
       <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">應付款日期（選填）</label>
       <input type="date" x-model="createVoucherPayableDate"
              style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
@@ -4307,7 +4343,7 @@
     <div style="padding:12px 20px;border-top:1px solid var(--border-light);display:flex;justify-content:flex-end;gap:10px">
       <button @click="createVoucherModal=false" :disabled="createVoucherSaving"
               style="padding:7px 16px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:var(--font-zh);background:var(--surface);cursor:pointer">取消</button>
-      <button @click="confirmCreateContractorVoucher()" :disabled="createVoucherSaving"
+      <button @click="confirmCreateContractorVoucher()" :disabled="createVoucherSaving || (cvForm.mode==='kind' && (!cvPlan || !!cvPlanError || cvPlanBusy))" data-testid="cv-create-confirm"
               style="padding:7px 16px;border:none;border-radius:7px;font-size:13px;font-weight:600;font-family:var(--font-zh);background:var(--tone-success-solid);color:var(--surface);cursor:pointer"
               x-text="createVoucherSaving ? '處理中…' : '確認產生申請'"></button>
     </div>

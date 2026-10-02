@@ -47,6 +47,14 @@ window.CM_PARTS.push(() => ({
     createVoucherDispatch: null,
     createVoucherPayableDate: '',
     createVoucherSaving: false,
+    // 31-B S3：款別（分期）——款別清單來自 GET /api/remit-kinds；試算打 POST /api/contractor-vouchers/preview（與建立同一支後端規則，畫面不自己算）
+    remitKinds: [],
+    cvForm: { mode: 'whole', kind: '', input: 'ratio', ratio: '', amount: '' },
+    cvPlan: null,           // 試算結果（後端回傳的 plan＋序號＋警示）
+    cvPlanError: '',
+    cvPlanBusy: false,
+    _cvPlanTimer: null,
+    _cvPlanSeq: 0,
 
     // ── 承攬商 ──────────────────────────────────────────────────────────────
 
@@ -304,6 +312,7 @@ window.CM_PARTS.push(() => ({
       const live = this._selectLive()
       this.contractorVouchersLoading = true
       this.contractorVouchers = []
+      if (!this.remitKinds.length) this.loadRemitKinds()
       try {
         const r = await fetch(`/api/contractor-vouchers?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -316,14 +325,130 @@ window.CM_PARTS.push(() => ({
       this.contractorVouchersLoading = false
     },
 
+    // 一張派發可有多張匯款申請（31-B 分期）：全部（含已作廢，畫面灰字顯示）依建立順序
+    _dispatchVouchers(d) {
+      return this.contractorVouchers.filter(v => v.dispatchId === d.id).sort((a, b) => (a.id || 0) - (b.id || 0))
+    },
+
+    _dispatchOpenVouchers(d) {
+      return this._dispatchVouchers(d).filter(v => !v.voidedAt)
+    },
+
+    // 舊式整筆申請（不分期）：同派發最多一張未作廢
     _dispatchVoucher(d) {
-      return this.contractorVouchers.find(v => v.dispatchId === d.id) || null
+      return this._dispatchOpenVouchers(d).find(v => !v.kind) || null
+    },
+
+    // 後進先出：只有最新一張未作廢的分期申請可以作廢
+    _cvIsLatestOpen(d, v) {
+      const open = this._dispatchOpenVouchers(d).filter(x => x.kind)
+      return open.length > 0 && open[open.length - 1].voucherNo === v.voucherNo
+    },
+
+    _cvKindLabel(v) {
+      return v.kind ? `${v.kindName || v.kind}　第 ${v.seq} 期` : ''
+    },
+
+    // 已申請稅前合計／剩餘（只算未作廢的分期申請；舊式整筆不分期）
+    _cvIssuedPretax(d) {
+      return this._dispatchOpenVouchers(d).filter(x => x.kind).reduce((s, x) => s + (x.pretaxAmount || 0), 0)
+    },
+
+    _cvRemaining(d) {
+      return MotrixLegalRound.halfUp(d.totalAmount || 0) - this._cvIssuedPretax(d)      // 後端以四捨五入的整數元計額度（派發金額可能帶角分）
+    },
+
+    // 這張派發現在能開的款別（啟用中、派發狀態在該款別的可開立狀態內）
+    _cvKindsFor(d) {
+      if (!d) return []
+      return (this.remitKinds || []).filter(k => k.active !== false && (k.stages || []).includes(d.status))
+    },
+
+    // 「產生匯款申請／新增一期」是否顯示：有舊式未作廢申請 ⇒ 不顯示；已分期且已全部申請完 ⇒ 不顯示
+    _cvCanCreate(d) {
+      if (this._dispatchVoucher(d)) return false
+      const kinded = this._dispatchOpenVouchers(d).filter(x => x.kind)
+      if (kinded.length) return this._cvRemaining(d) > 0
+      return d.status === 'completed' || d.status === 'accepted' || this._cvKindsFor(d).length > 0
+    },
+
+    // 整列（匯款申請區）是否顯示：已有申請（含已作廢）或現在能開
+    _cvRowVisible(d) {
+      return this._dispatchVouchers(d).length > 0 || d.status === 'completed' || d.status === 'accepted' || this._cvKindsFor(d).length > 0
+    },
+
+    async loadRemitKinds() {
+      if (!['superadmin', 'admin'].includes(this.session?.role)) return
+      try {
+        const r = await fetch('/api/remit-kinds', { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) this.remitKinds = (await r.json()).kinds || []
+      } catch {}
     },
 
     createContractorVoucher(d) {
       this.createVoucherDispatch = d
       this.createVoucherPayableDate = d.payableDate || ''
+      const kinded = this._dispatchOpenVouchers(d).some(x => x.kind)
+      const kinds = this._cvKindsFor(d)
+      const wholeOk = d.status === 'completed' || d.status === 'accepted'
+      // 已分期 ⇒ 只能續開分期；否則整筆可用就預設整筆（與舊流程一致），不能整筆就預設分期
+      const mode = kinded || !wholeOk ? 'kind' : 'whole'
+      this.cvForm = { mode, kind: (kinds[0] || {}).code || '', input: 'ratio', ratio: '', amount: '' }
+      this.cvPlan = null
+      this.cvPlanError = ''
       this.createVoucherModal = true
+    },
+
+    // 試算（後端算，畫面不重算）：輸入改了 300ms 後送一次；回應順序錯亂時只認最後一次
+    cvPlanSchedule() {
+      clearTimeout(this._cvPlanTimer)
+      this._cvPlanSeq++                // 在途的舊請求作廢：它回來時不可以把舊輸入的試算蓋回畫面（確認鈕會在新試算回來前被誤開）
+      this.cvPlanBusy = false
+      this.cvPlan = null
+      this.cvPlanError = ''
+      const f = this.cvForm
+      const d = this.createVoucherDispatch
+      if (!d || f.mode !== 'kind' || !f.kind) return
+      const v = f.input === 'ratio' ? f.ratio : f.amount
+      if (v === '' || v == null) return
+      this._cvPlanTimer = setTimeout(() => this.cvPlanRun(), 300)
+    },
+
+    async cvPlanRun() {
+      const f = this.cvForm
+      const d = this.createVoucherDispatch
+      if (!d) return
+      const mine = ++this._cvPlanSeq
+      this.cvPlanBusy = true
+      try {
+        const r = await fetch('/api/contractor-vouchers/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify(this._cvKindBody(d, f))
+        })
+        const body = await r.json().catch(() => ({}))
+        if (mine !== this._cvPlanSeq) return
+        if (r.ok) { this.cvPlan = body; this.cvPlanError = '' }
+        else { this.cvPlan = null; this.cvPlanError = body.detail || '試算失敗' }
+      } catch (e) { if (mine === this._cvPlanSeq) { this.cvPlan = null; this.cvPlanError = '網路錯誤：' + e.message } }
+      if (mine === this._cvPlanSeq) this.cvPlanBusy = false
+    },
+
+    _cvKindBody(d, f) {
+      const b = { dispatch_id: d.id, kind: f.kind }
+      if (f.input === 'ratio') b.ratio_percent = Number(f.ratio)
+      else b.amount = Number(f.amount)
+      return b
+    },
+
+    // 試算區顯示用：本期稅前／稅額、是否最後一期
+    cvPlanSummary() {
+      const p = this.cvPlan && this.cvPlan.plan
+      if (!p) return ''
+      const money = n => Number(n || 0).toLocaleString()
+      let t = `第 ${this.cvPlan.seq} 期　稅前 ${money(p.pretax)}　稅額 ${money(p.tax)}　`
+      t += p.is_last ? '（最後一期，補到與整筆一致）' : `（剩餘額度 ${money(p.remaining_after)}）`
+      return t
     },
 
     async confirmCreateContractorVoucher() {
@@ -334,7 +459,9 @@ window.CM_PARTS.push(() => ({
         const r = await fetch('/api/contractor-vouchers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ dispatch_id: d.id, payable_date: this.createVoucherPayableDate || null })
+          body: JSON.stringify(this.cvForm.mode === 'kind'
+            ? Object.assign(this._cvKindBody(d, this.cvForm), { payable_date: this.createVoucherPayableDate || null })
+            : { dispatch_id: d.id, payable_date: this.createVoucherPayableDate || null })
         })
         if (!r.ok) { MotrixUI.toast((await r.json()).detail || '建立失敗', {kind: 'error'}); this.createVoucherSaving = false; return }
         this.createVoucherModal = false
@@ -343,6 +470,44 @@ window.CM_PARTS.push(() => ({
         await this.loadContractorVouchers(this.selected?.quote_no)
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
       this.createVoucherSaving = false
+    },
+
+    // 作廢分期申請（後進先出；已付款須先取消已匯款）：原因必填，後端也強制
+    async voidContractorVoucher(v) {
+      for (;;) {
+        const reason = await MotrixUI.prompt(`作廢匯款申請「${v.voucherNo}」：作廢後這一期不再占用額度，可重新開立；序號不會回頭重用。請填寫作廢原因（必填）：`)
+        if (reason === null || reason === undefined) return
+        if (!String(reason).trim()) { MotrixUI.toast('作廢要填原因', {kind: 'error'}); continue }
+        try {
+          const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/void`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ reason: String(reason).trim() })
+          })
+          if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '作廢失敗', {kind: 'error'}); return }
+        } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}); return }
+        await this.loadContractorVouchers(this.selected?.quote_no)
+        return
+      }
+    },
+
+    // 登錄／更正／清除分期申請自己的發票（D11：可事後補；沒有發票日就不產生該期的應付認列分錄）。兩欄都留空＝清除。
+    async setVoucherInvoice(v) {
+      const no = await MotrixUI.prompt(`匯款申請「${v.voucherNo}」的發票號碼（可留空）：`, { value: v.invNo || '' })
+      if (no === null || no === undefined) return
+      const date = await MotrixUI.prompt(`發票日期（YYYY-MM-DD；留空＝清除發票，該期不認列）：`, { value: v.invDate || '' })
+      if (date === null || date === undefined) return
+      try {
+        const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/invoice`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ invNo: String(no).trim(), invDate: String(date).trim() })
+        })
+        const body = await r.json().catch(() => ({}))
+        if (!r.ok) { MotrixUI.toast(body.detail || '登錄失敗', {kind: 'error'}); return }
+        if (body.glWarning) MotrixUI.toast(body.glWarning, {kind: 'warning'})
+        await this.loadContractorVouchers(this.selected?.quote_no)
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async deleteContractorVoucher(v) {
@@ -605,7 +770,7 @@ window.CM_PARTS.push(() => ({
     },
 
     _cvStatusLabel(s) {
-      return { '草稿': '草稿', '待審核': '待審核', '簽核中': '簽核中', '已核准': '已核准' }[s] || s
+      return { '草稿': '草稿', '待審核': '待審核', '簽核中': '簽核中', '已核准': '已核准', '已作廢': '已作廢' }[s] || s
     },
 
     _cvStatusClass(s) {

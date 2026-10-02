@@ -4418,6 +4418,11 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
         "SELECT * FROM contractor_payment_vouchers WHERE quote_no=? ORDER BY created_at DESC",
         (quote_no,),
     ).fetchall():
+        try:
+            if v["voided_at"]:                  # 31-B：作廢的分期申請不計入應付（欄位由 M04 的 migration 建）
+                continue
+        except (IndexError, KeyError):
+            pass
         snap   = json.loads(v["snapshot_json"] or "{}")
         amount = float(snap.get("grandTotal") or 0)
         status = v["status"] or "草稿"

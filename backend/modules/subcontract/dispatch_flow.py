@@ -138,7 +138,7 @@ def set_status(conn, row, target, user, *, reason="", via_completion=False, now=
             raise FlowError("取消已核准或已進入驗收的派發要填寫理由", 400)
         if len(reason) > 500:
             raise FlowError("理由太長（上限 500 字）", 400)
-        has_voucher = conn.execute("SELECT 1 FROM contractor_payment_vouchers WHERE dispatch_id=?", (row["id"],)).fetchone()
+        has_voucher = conn.execute("SELECT 1 FROM contractor_payment_vouchers WHERE dispatch_id=? AND voided_at=''", (row["id"],)).fetchone()
         if has_voucher and user.get("role") != "superadmin":
             raise FlowError("此派發已產生匯款申請，只有最高管理者可以取消（請先處理該申請）", 403)
         conn.execute("UPDATE contractor_dispatches SET status='cancelled', cancel_reason=?, cancelled_by=?, cancelled_at=?, updated_at=? WHERE id=?",

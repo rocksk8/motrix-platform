@@ -34,7 +34,14 @@ def gl_events(start, end, *, changed_since=""):
             "SELECT d.*, v.name AS vendor_name, v.tax_id AS vendor_tax_id FROM contractor_dispatches d "
             "LEFT JOIN vendor_contractors v ON v.id=d.vendor_id "
             "WHERE d.status IN ('accepted','completed') AND d.approval_status IN ('','已核准') AND d.invoice_date IS NOT NULL AND d.invoice_date<>'' "
-            "AND d.invoice_date BETWEEN ? AND ? ORDER BY d.id", (start, end)).fetchall()
+            "AND d.invoice_date BETWEEN ? AND ? "
+            # 31-B：已改分期（有未作廢的分期申請）的派發，E04 改由各期申請逐張認列——同一派發只會有一種層級的 E04（否則成本翻倍）
+            "AND NOT EXISTS (SELECT 1 FROM contractor_payment_vouchers p WHERE p.dispatch_id=d.id AND p.kind<>'' AND p.voided_at='') "
+            "ORDER BY d.id", (start, end)).fetchall()
+        kinded = conn.execute(
+            "SELECT p.*, d.approval_status AS d_approval FROM contractor_payment_vouchers p JOIN contractor_dispatches d ON d.id=p.dispatch_id "
+            "WHERE p.kind<>'' AND p.voided_at='' AND p.status='已核准' AND p.inv_date<>'' AND p.inv_date BETWEEN ? AND ? "
+            "AND d.approval_status IN ('','已核准') ORDER BY p.id", (start, end)).fetchall()
         vouchers = conn.execute(
             "SELECT * FROM contractor_payment_vouchers WHERE is_paid=1 AND substr(paid_at,1,10) BETWEEN ? AND ? ORDER BY voucher_no",
             (start, end)).fetchall()
@@ -66,6 +73,26 @@ def gl_events(start, end, *, changed_since=""):
             "tax_code": code, "mode": "snapshot", "lines": lines,
             "meta": {"tax_estimated": True, "tax_rate": rate}})
 
+    for v in kinded:                                              # E04 逐張（D11：沒有發票日的期別不認列；發票日事後補）
+        s = _snap(v)
+        pretax = _i(v["pretax_amount"] if v["pretax_amount"] is not None else s.get("totalAmount"))
+        if pretax <= 0:
+            continue
+        tax = _i(s.get("taxAmount"))                              # 逐期稅額（最後一期的補差已凍結在快照，各期合計＝整筆稅額）
+        estimated += 1
+        code = "IN-5" if tax else "IN-EX"
+        memo = "%s 發票 %s（%s 第 %s 期）" % (s.get("vendorName") or "", v["inv_no"] or "", v["kind_name"] or v["kind"], v["seq"])
+        lines = [{"role": "COST_PROJECT", "side": "D", "amount": pretax, "memo": memo}]
+        if tax:
+            lines.append({"role": "INPUT_TAX", "side": "D", "amount": tax, "memo": memo, "tax_code": code})
+        lines.append({"role": "AP", "side": "C", "amount": pretax + tax, "memo": memo})
+        events.append({
+            "source_type": "contractor_voucher_invoice", "source_key": v["voucher_no"], "event_code": "E04",
+            "event_date": v["inv_date"][:10], "doc_no": v["inv_no"] or "", "case_no": v["quote_no"],
+            "party": {"key": s.get("vendorTaxId") or s.get("vendorName") or "", "name": s.get("vendorName") or ""},
+            "tax_code": code, "mode": "snapshot", "lines": lines,
+            "meta": {"tax_estimated": True, "tax_rate": s.get("taxRate"), "remit_kind": v["kind"], "seq": v["seq"]}})
+
     for v in vouchers:
         s = _snap(v)
         payable = _i(s.get("grandTotal"))
@@ -77,6 +104,7 @@ def gl_events(start, end, *, changed_since=""):
             pending += 1
             continue
         pd = (v["paid_at"] or "")[:10]
+        has_invoice = bool(v["inv_date"]) if v["kind"] else v["dispatch_id"] in invoiced      # 分期：該期自己的發票日；舊式整筆：派發的發票日
         party = {"key": s.get("vendorTaxId") or s.get("vendorName") or "", "name": s.get("vendorName") or ""}
         memo = "%s 匯款 %s" % (s.get("vendorName") or "", v["voucher_no"])
         bank = {"role": "BANK", "side": "C", "amount": actual + fee, "memo": memo}
@@ -98,8 +126,8 @@ def gl_events(start, end, *, changed_since=""):
             "source_type": "contractor_voucher", "source_key": v["voucher_no"], "event_code": "E05",
             "event_date": pd, "doc_no": v["voucher_no"], "case_no": v["quote_no"], "party": party,
             "tax_code": "", "mode": "snapshot", "lines": lines,
-            "meta": {"dispatch_invoiced": v["dispatch_id"] in invoiced}})
-        if v["dispatch_id"] not in invoiced:
+            "meta": {"dispatch_invoiced": has_invoice}})
+        if not has_invoice:
             uninvoiced += 1
         person = _i(s.get("personnelTotal")) - linked
         if person > 0:
