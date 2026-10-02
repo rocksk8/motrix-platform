@@ -42,7 +42,7 @@ def normalize_offsets(raw) -> list:
     return out
 
 
-def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE) -> dict:
+def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlement=None, freeze=True) -> dict:
     q = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     try:
         data = json.loads((q["data_json"] if q else "") or "{}")
@@ -62,7 +62,9 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE) -> dict
         plan.append({"itemId": iid or "~%d" % idx, "description": desc or "（未命名品項）", "brand": str(it.get("brand") or ""), "unit": str(it.get("unit") or ""),
                      "planQty": _num(it.get("qty")), "planUnitCost": _num(it.get("cost")), "unkeyed": True})
     live = {p["itemId"] for p in plan if not p.get("unkeyed")}
-    saved = data.get("settlement") if isinstance(data.get("settlement"), dict) else {}
+    # settlement＝呼叫端給的精算（PUT 完結時用請求本文，尚未寫進資料庫）；沒給就讀資料庫存的
+    src = settlement if isinstance(settlement, dict) else data.get("settlement")
+    saved = src if isinstance(src, dict) else {}
     saved_items = {str(i.get("id")): i for i in (saved.get("items") or []) if isinstance(i, dict)}
     offs = normalize_offsets(offsets if offsets is not None else saved.get("offsets"))
     off_material = {o["ref"]: o["itemId"] for o in offs if o["kind"] == "material" and o["itemId"] in live}
@@ -156,7 +158,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE) -> dict
             "totals": {"itemActualTotal": item_total, "itemPoUnadopted": not_adopted_total, "extraTotal": un_ex_total,
                        "materialUnassignedTotal": un_mat_total, "purchasedTotal": sum(sources.values()), "pendingTotal": pend},
             "warnings": warnings}
-    if saved.get("status") == "finalized":
+    if freeze and saved.get("status") == "finalized":
         _freeze(out, saved, saved_items)
     return out
 
@@ -216,3 +218,23 @@ def validate_offsets(conn, quote_no, raw, previous=None):
         if ref not in refs[kind]:
             return "offsets 第 %d 列：%s %s 不在目前的未對應清單內" % (n, "材料申請" if kind == "material" else "額外支出", ref)
     return None
+
+
+def check_finalize(conn, quote_no, settlement):
+    """完結（PUT status=finalized）時後端用同一來源重算，與頁面送上的 `summary` 比對（D10；33-A5）。回傳差異說明（清單）；沒有差異回 []。
+    比對：品項實際成本、品項未採用採購（新規則恆為 0）、額外支出（扣掉頁面加的手續費與自訂模組支出，含未對應材料申請）、採購類總額（頁面有送才比）。
+    允許進位誤差：每個品項 ±1 元（兩邊各自逐品項進位）。summary 沒有 `itemActualTotal`（非精算頁的呼叫）⇒ 無從比對，回 []。"""
+    summ = settlement.get("summary") if isinstance(settlement, dict) else None
+    if not isinstance(summ, dict) or "itemActualTotal" not in summ:
+        return []
+    d = compute(conn, quote_no, settlement=settlement, freeze=False)
+    tol = max(1, len(d["items"]))
+    t = d["totals"]
+    mine_extra = t["extraTotal"] + t["materialUnassignedTotal"]
+    their_extra = _num(summ.get("extraTotal")) - _num(summ.get("remitFeeTotal")) - _num(summ.get("customExpenseTotal"))
+    checks = [("品項實際成本", _num(summ.get("itemActualTotal")), t["itemActualTotal"]),
+              ("品項未採用的採購（新規則不另計）", _num(summ.get("itemPoUnadopted")), 0.0),
+              ("額外支出（含未對應材料申請）", their_extra, mine_extra)]
+    if "purchasedTotal" in summ:
+        checks.append(("採購類總額", _num(summ.get("purchasedTotal")), t["purchasedTotal"]))
+    return ["%s：頁面 %s、系統重算 %s" % (name, round(a), round(b)) for name, a, b in checks if abs(a - b) > tol]

@@ -4331,6 +4331,12 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
             if bad:
                 conn.close()
                 raise HTTPException(422, bad)
+        if body.settlement.get("status") == "finalized":       # 33-A5（D10）：完結前後端用同一來源重算，與頁面送上的 summary 比對；差異超過進位誤差就拒絕
+            from modules.case import settlement_actuals as _SA
+            diffs = _SA.check_finalize(conn, quote_no, body.settlement)
+            if diffs:
+                conn.close()
+                raise HTTPException(409, "完結前系統重算的成本與畫面不一致（採購單、材料申請或額外支出在你編輯期間有變動）——請重新整理精算頁再完結。差異：" + "；".join(diffs))
         data["settlement"] = body.settlement
 
         # append edit history entry for settlement saves
