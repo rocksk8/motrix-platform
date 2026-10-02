@@ -57,3 +57,12 @@ B3 離頁提示的 e2e（只讀碼）；A3 的 `has_payments` 兩路（作者測
 
 ## 執行紀錄
 `test_probe_t32_pkg_link_c7.py` 28 題全綠；`test_probe_t32_pkg_pay_c7.py` 11 題：9 綠、2 紅（M-1）；`test_probe_t32_pkg_dispatch_c7.py` 6 題：5 綠、1 紅（S-1）；`test_probe_t30_dispatch_c7.py` 21／21；`test_probe_t31c_material_c7.py` 35／36；預審探針 5／5；`t32_mig_probe.py` 通過；突變 8／8。
+
+---
+## 差異稽核：新第 32 包 52033606（取代 745f3c2d）— **M-1 已修，PASS；無新發現**
+1. `git diff 745f3c2d..52033606` 只有 4 檔：`material_payment_cashier.py`（註解移到字典項目上方獨立一行、`"fee"`／`"paidAt"` 放回同一行）、case `module.json` 1.0.86→1.0.87、case CHANGELOG +3 行、作者測試 +1 斷言（`fee`／`paidAt`）。與宣稱一致。
+2. 我的兩個 M-1 探針轉綠；`test_probe_t32_pkg_pay_c7.py` 11／11。
+3. 真基準升級探針（prod/a5dea50c → 52033606，兩次）：與前次相同——只有 2 筆卡住列的 `doc_code` 變、其餘逐列相同、無新表、integrity ok、FK 0、第二次零變更。
+4. 端到端：手續費>500（實付 2000、手續費 600）項目 `fee=600.0、paidAt=2031-03-05、diff=0、reason=手續費偏高（超過 500）`；超額（實付 7000／應付 6000、手續費 10）項目 `fee=10.0、paidAt=2031-03-05、diff=1000`。
+突變：把 `fee`／`paidAt` 兩鍵再拿掉 ⇒ 作者新斷言所在的 `test_overpayment_goes_to_remit_review…` 變紅（守門有效）；已還原。
+觀察：作者斷言只涵蓋「超額」路徑（fee=0）；「手續費>500」路徑的 fee 斷言只在我的探針（`test_fee_review_item_shows_what_the_approver_needs`，未隨包），建議收編。S-1／S-2 與各觀察項不變、未在本包處理。
