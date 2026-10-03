@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""35c F1（AUDIT-0C S7；使用者裁示 D10「後端重算，超出進位誤差就拒絕完結」）：完結時後端用同一個 compute() 重算**全部**會被下游讀的欄位，
+"""35c F1（AUDIT-0C finding #7；使用者裁示 D10「後端重算，超出進位誤差就拒絕完結」）：完結時後端用同一個 compute() 重算**全部**會被下游讀的欄位，
 不只品項／額外支出／採購類三塊——承攬商、手續費、自訂支出、總成本、毛利、管理費、公益金、淨利、毛利率都要對得上，否則 409、不存檔。
 
 背景：營運報表毛利直接讀 settlement.netProfit／grossProfit（reports.py:401-402），獎金與結案 PDF 讀同一份 summary；
-S7 探針（財務檢視帳號直接 PUT）送 dispatchTotal=0、totalActualCost=4550、netProfit=888888 ⇒ 舊程式 200 並凍結。
+偽造完結探針（財務檢視帳號直接 PUT）送 dispatchTotal=0、totalActualCost=4550、netProfit=888888 ⇒ 舊程式 200 並凍結。
 紅燈探針先 commit（舊程式上這些偽造案例都是 200）；舊完結案不重驗（只在「非完結 → 完結」轉換時比對，與 33-A5 相同）。
 """
 import json
@@ -83,8 +83,8 @@ def test_the_honest_page_payload_finalizes(case):
     assert _status() == "finalized"
 
 
-def test_s7_probe_forged_dispatch_total_and_net_profit_are_rejected(case):
-    """0c S7 原樣：dispatchTotal=0、totalActualCost 偽造、netProfit=888888（其餘維持頁面算出的值，所以舊的三塊比對全過）。"""
+def test_forged_finalize_probe_dispatch_total_and_net_profit_are_rejected(case):
+    """0c 偽造完結探針原樣：dispatchTotal=0、totalActualCost 偽造、netProfit=888888（其餘維持頁面算出的值，所以舊的三塊比對全過）。"""
     c, h = case
     honest = page_payload(c, h)
     forged = page_payload(c, h, dispatchTotal=0, totalActualCost=honest["summary"]["totalActualCost"] - 12000, netProfit=888888)
