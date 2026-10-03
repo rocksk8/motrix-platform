@@ -234,6 +234,25 @@ def test_floor_excludes_dependency_keyed_tool_drill_unless_triggered(SS, repo):
     assert SS.drill_triggered([], True) and not SS.drill_triggered(["backend/modules/alpha/api/foo.py"], False)
 
 
+def test_tool_drill_list_covers_tool_tests_and_only_existing_files(SS):
+    """T35-L1：工具自測（選題器／作者閘門／failfast／fail_stream／核心升級／建包沿用…）依賴鍵控；
+    清單裡每個名字都要對得到真檔（改名後不會靜默失效），而架構守門（模組邊界、掃描型…）不可被誤納入。"""
+    plat = Path(__file__).resolve().parent
+    names = sorted(p.name for p in plat.glob("test_*.py"))
+    keyed = [n for n in names if SS.TOOL_DRILL_RE.match(n)]
+    must = ["test_author_gate", "test_stage_select", "test_modtest_rebase_bookkeeping", "test_failfast_2026",
+            "test_fail_stream_2026", "test_fail_stream_aborted", "test_core_upgrade", "test_build_stage_reuse",
+            "test_build_opt", "test_module_update_delivery", "test_scope_gate", "test_ship_tier"]
+    for m in must:
+        assert any(n.startswith(m) for n in keyed), "工具自測沒被依賴鍵控：" + m
+    for guard in ("test_module_boundaries.py", "test_generated_maps.py", "test_unit_cards.py",
+                  "test_build_failfast_wiring_2026_10_02.py", "test_pii_forms_notice.py"):
+        assert guard in names and guard not in keyed, "架構守門被誤納入依賴鍵控：" + guard
+    alts = SS.TOOL_DRILL_RE.pattern.split("test_(", 1)[1].rsplit(")(?:", 1)[0].split("|")
+    dead = [a for a in alts if not any(n.startswith("test_" + a) for n in names)]
+    assert not dead, "TOOL_DRILL_RE 有名字對不到任何檔：%s" % dead
+
+
 def test_red_reselect_includes_red_files(SS, repo):
     scenario_red(SS, repo)
 

@@ -16,6 +16,12 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-03 T35-L1 工具自測依賴鍵控擴充
+- `tools/platform/stage_select.py::TOOL_DRILL_RE` 由 9 組擴為 17 組：新增 author_gate、stage_select、modtest_rebase_bookkeeping、failfast、fail_stream（含 aborted）、core_upgrade、build_stage_reuse、build_opt。這些檔只在動到 `tools/`、`backend/tools/`、`backend/core/`、`docs/platform/modules.json` 或選題器時才進增量底板；最終全量不受影響。
+- 量測：這 8 組在全量中 worker 合計約 309 秒（`-n 2` 實測 junit），每次增量約省 1.3 分（4 worker）。replay 26 段召回維持 25/26，漏的仍是 t29e `test_audit_search_2026_09_30.py`（L2 處理）。
+- 勘誤：先前估 465 worker 秒含 4 組在 `backend/tests/` 的檔（upgrade_drill、build_python_selection、pytest_exclusive、build_test_reuse）；它們不在底板、本來就依賴選題，不計入。
+- 新增 `test_tool_drill_list_covers_tool_tests_and_only_existing_files`：清單每個名字都要對得到真檔，架構守門不可被誤納入。
+
 ## 2026-10-03 測試母體清理（T35 驗證提速，只動測試與開發相依）
 - 刪除 payroll／subcontract 兩份 `money_round_half_up` 測試內無人呼叫、且引用已不存在的 `routers.reports` 的 `_patch_entries()`（AST 比對：兩檔測試函式數不變，唯一差異是該輔助函式）。
 - 刪除 `test_bonus_correction_2026_09_30.py` 內恆為 `None`、後續從未使用的 `cash = ... if False else None` 一行。

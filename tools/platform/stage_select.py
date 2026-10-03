@@ -49,7 +49,9 @@ HARD_BOTTOM_PATTERNS = (
 CONTRACT_DIRS = ("backend/tests/platform", "backend/core/tests")   # 同 modtest.CONTRACT_DIRS
 #: F1「測工具的演練」（§5.1）：依賴鍵控，只有動到工具／核心／模組清單／選題器才進底板
 TOOL_DRILL_RE = re.compile(r"^test_(module_update_delivery|scope_gate|mail_registry|modtest_rebase_check|"
-                           r"module_selection|stepfile_drill|ship_tier|modtest_json_stdout|modtest_scope)(?:_|\.)")
+                           r"module_selection|stepfile_drill|ship_tier|modtest_json_stdout|modtest_scope|"
+                           r"author_gate|stage_select|modtest_rebase_bookkeeping|failfast|fail_stream|core_upgrade|"
+                           r"build_stage_reuse|build_opt)(?:_|\.)")
 TOOL_DRILL_TRIGGERS = (r"^tools/", r"^backend/tools/", r"^backend/core/", r"^docs/platform/modules\.json$")
 #: e2e 段的登入送簽冒煙（§2.3）
 E2E_SMOKE_FILES = ("backend/tests/test_e2e_playwright_2026_09_07.py",)
