@@ -85,6 +85,27 @@ def changed_page_tests(plans, changed):
     return sorted(set(out))
 
 
+#: --quick 補洞（批3d：quick 沒選到 write_endpoints_are_audited／view_filter_marking）：這幾支是「掃整個端點／頁面母體」的全域守門，
+#: 不屬於改動模組、也不是檔名樣式；diff 動到端點或前端頁面／js 時加跑。每支數秒～數十秒。
+GLOBAL_SCANNERS = {
+    "api": ("test_write_endpoints_are_audited_", "test_legal_amount_rounding_guard"),                       # 端點：寫入要稽核、金額進位
+    "front": ("test_view_filter_marking_", "test_page_paths_centralized", "test_legal_amount_rounding_guard"),   # 頁面／js：篩選標記、頁面路徑、金額進位
+}
+
+
+def global_scanner_tests(changed, tree_files):
+    """--quick 用：依 diff 的種類補上對應的全域掃描守門（在 tree 內存在才列）。"""
+    kinds = set()
+    for f in changed:
+        base = f.rsplit("/", 1)[-1]
+        if ("/api/" in f and f.endswith(".py")) or (f.startswith("backend/routers/") and f.endswith(".py")) or (f.startswith("backend/modules/") and base in ("api.py", "routes.py")):
+            kinds.add("api")
+        if f.startswith("frontend/") or (f.endswith(".html") and "/pages/" in f):
+            kinds.add("front")
+    want = sorted({n for k in kinds for n in GLOBAL_SCANNERS[k]})
+    return sorted(t for t in tree_files if is_test_file(t) and any(t.rsplit("/", 1)[-1].startswith(n) for n in want))
+
+
 def build_selection(plan_n, plan_e, tree_files, changed, guard_args=(), patterns=PATTERNS, full_floor=False, quick=False):
     """⇒ {"A1": [...], "A2": [...], "A3": [...], "A4": [...], "E": [...], "non_e2e": [...聯集...], "forced_full": [...]}
     全部是 repo 相對路徑（backend/…）。plan_*＝stage_select 的計畫 dict（floor／selected 一律取用，即使 mode=full——
@@ -117,6 +138,8 @@ def build_selection(plan_n, plan_e, tree_files, changed, guard_args=(), patterns
         is_e2e = lambda f: "test_e2e_" in f.rsplit("/", 1)[-1] or f in e2e_collected          # noqa: E731
         e2e_files = sorted({f for f in own if is_e2e(f)} | {f for f in changed_tests if f in e2e_collected} | {f for f in page_hits if is_e2e(f)})
         a3 = sorted((set(f for f in own if not is_e2e(f)) | set(f for f in page_hits if not is_e2e(f))) - set(a4))
+    if quick_cut:
+        a3 = sorted(set(a3) | set(global_scanner_tests(changed, tree_files)) - set(a4))
     non_e2e = sorted(set(a1) | set(a2) | set(a3) | set(a4))
     forced = list(dict.fromkeys(((plan_n or {}).get("forced_full") or []) + ((plan_e or {}).get("forced_full") or [])))
     return {"A1": a1, "A1x": a1x, "A2": a2, "A3": a3, "A4": a4, "E": e2e_files, "non_e2e": non_e2e, "forced_full": forced, "quick_cut": quick_cut}
@@ -258,7 +281,7 @@ def tree_files_at(sha, repo=REPO):
 
 
 def changed_files(base, head, repo=REPO):
-    rc, out, err = _git("diff", "--name-only", "--no-renames", base, head, repo=repo)
+    rc, out, err = _git("diff", "--name-only", "--no-renames", "--diff-filter=d", base, head, repo=repo)   # 刪掉的檔不列：測試檔被刪／改名掉時，交給 pytest 的路徑不存在 ⇒ xdist 整批沒跑
     if rc != 0:
         raise RuntimeError("git diff 失敗：" + err.strip())
     return [f for f in out.splitlines() if f]

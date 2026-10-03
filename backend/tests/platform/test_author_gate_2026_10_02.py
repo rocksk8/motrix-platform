@@ -110,6 +110,22 @@ def test_quick_drops_the_platform_floor_and_cuts_to_the_changed_modules_own_test
     assert "backend/tests/platform/test_a.py" in full["A1"] and "backend/modules/accounting/tests/test_x.py" in full["A3"] and not full["quick_cut"]
 
 
+def test_quick_adds_the_global_scanner_guards_when_the_diff_touches_endpoints_or_pages():
+    """批3d：quick 沒選到 write_endpoints_are_audited／view_filter_marking（掃整個端點／頁面母體的全域守門，不在改動模組、也不是樣式檔）。
+    diff 動到 modules/*/api/*.py ⇒ 加端點掃描；動到前端頁面／js ⇒ 加頁面掃描；只動純後端非端點檔 ⇒ 都不加。反向控制見最後一個斷言（沒觸發就沒有）。"""
+    tree = ["backend/tests/test_write_endpoints_are_audited_2026_09_24.py", "backend/tests/test_view_filter_marking_2026_09_25.py",
+            "backend/tests/platform/test_page_paths_centralized.py", "backend/tests/test_legal_amount_rounding_guard.py", "backend/tests/test_other.py"]
+    api = AG.build_selection(None, None, tree, ["backend/modules/subcontract/api/contractor_vouchers.py"], quick=True)
+    assert "backend/tests/test_write_endpoints_are_audited_2026_09_24.py" in api["A3"] and "backend/tests/test_view_filter_marking_2026_09_25.py" not in api["A3"]
+    front = AG.build_selection(None, None, tree, ["frontend/js/case-management-dispatch.js"], quick=True)
+    assert "backend/tests/test_view_filter_marking_2026_09_25.py" in front["A3"] and "backend/tests/platform/test_page_paths_centralized.py" in front["A3"]
+    assert "backend/tests/test_write_endpoints_are_audited_2026_09_24.py" not in front["A3"]
+    none = AG.build_selection(None, None, tree, ["backend/modules/subcontract/remit_split.py"], quick=True)
+    assert not [f for f in none["A3"] if "audited" in f or "filter_marking" in f]
+    full = AG.build_selection(None, None, tree, ["backend/modules/subcontract/api/contractor_vouchers.py"])
+    assert full["A3"] == []                                                     # 非 quick 不走這條（完整版底板另有選法）
+
+
 def test_build_selection_survives_missing_plans():
     sel = AG.build_selection(None, None, [], [])
     assert sel["non_e2e"] == [] and sel["E"] == [] and sel["forced_full"] == []
@@ -188,6 +204,17 @@ def test_dirty_tree_lists_modified_and_untracked_but_not_ignored(repo):
     (repo / "new.txt").write_text("x", encoding="utf-8")
     (repo / "ign.txt").write_text("x", encoding="utf-8")
     assert sorted(AG.dirty_files(repo)) == ["a.txt", "new.txt"]
+
+
+def test_changed_files_leaves_out_deleted_and_renamed_away_files(repo):
+    """c7 回報：diff 刪掉／改名掉測試檔 ⇒ 舊路徑被選進 A4 ⇒ pytest -n 遇到不存在的路徑整批沒跑（exit 5 當紅）。changed_files 不列已刪除的檔（改名＝舊路徑消失、只列新路徑）。"""
+    base = _commit(repo, {"backend/tests/test_gone.py": "x = 1", "backend/tests/test_old.py": "y = 1", "backend/tests/test_keep.py": "z = 1"}, "base")
+    _git(repo, "rm", "-q", "backend/tests/test_gone.py")
+    _git(repo, "mv", "backend/tests/test_old.py", "backend/tests/test_renamed.py")
+    _git(repo, "commit", "-q", "-m", "delete and rename")
+    head = _git(repo, "rev-parse", "HEAD")
+    got = AG.changed_files(base, head, repo)
+    assert got == ["backend/tests/test_renamed.py"], got
 
 
 def test_changed_files_and_tree_files(repo):

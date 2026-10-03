@@ -41,3 +41,4 @@ D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe tools/platform/author_gate.py    
 - A3 與 e2e 一律縮成「改動模組自己的測試」（`backend/modules/<m>/tests/`）＋「因改到的頁面／前端 js 選到的測試」；因 core／router／mod 相依連帶選到的不跑（實測會膨脹成 600 多檔），由階段測試涵蓋。
 - 輸出與結果檔（`"quick": true`）都標明：不含整個 `tests/platform`，整包由階段測試涵蓋；只當部分證據，不替代階段測試。
 - `--base` 請給**上一片**的 sha（不是正式機基準），diff 才小；完整版（不加 `--quick`）留給獨佔窗口。
+- quick 的全域掃描補洞（批3d）：diff 動到 `*/api/*.py`／`backend/routers/` 時加跑 `test_write_endpoints_are_audited_`、`test_legal_amount_rounding_guard`；動到 `frontend/`／頁面時加跑 `test_view_filter_marking_`、`test_page_paths_centralized`、`test_legal_amount_rounding_guard`（清單在 `author_gate.GLOBAL_SCANNERS`）。
