@@ -91,7 +91,11 @@ def test_mutations_make_the_per_page_check_red(company, mutation, needle):
 
 
 def test_pixel_coverage_and_page_screenshots(company):
-    pdfium = pytest.importorskip("pypdfium2")
+    # T35（2026-10-03）：明確略過並寫出原因與待辦——.venv312 沒裝 pypdfium2，這一題在階段測試裡恆略過（隔離安裝後 7/7 綠、22.7 秒）。
+    # 只加進 requirements-dev.txt 不行：建包環境檢查會判專案 venv「不符 requirements」而改選別的 Python（2026-10-03 實測）。
+    # 待辦（下一班列車）：.venv312 安裝 pypdfium2 ＋ requirements-dev.txt 加 pypdfium2>=4.30.0，兩者同一包。
+    pdfium = pytest.importorskip(
+        "pypdfium2", reason="pypdfium2 未安裝於開發 venv；待辦：下一班列車與 requirements-dev.txt 一起安裝（見 docs/quick/changelog.md T35）")
     import pdf_gen
     import tempfile
     html = pdf_gen.build_quote_preview_html(_long_quote(), "待審核", "洽談中")

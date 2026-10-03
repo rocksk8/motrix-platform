@@ -74,16 +74,10 @@ def test_b_package_methods_have_no_native_dialogs():
     assert not bad, "包 B 方法仍有原生對話框：%s" % bad
 
 
-def test_positive_control_scanner_sees_a_package_natives():
-    """正對照：A 包（hichan-bf）尚未改完前，掃描器要看得到它們——否則上一題可能是空集合的綠。"""
-    bodies = _method_bodies()
-    natives = [m for m, b in bodies.items() if re.search(r"(?<![\w.$])(alert|confirm|prompt)\s*\(", b)]
-    s = SPEC.read_text(encoding="utf-8")
-    a = set(re.findall(r"\|\s*\d+\s*\|\s*`(\w+)`（", s[s.index("### 包 A"):s.index("### 包 B")]))
-    if not natives:
-        pytest.skip("A 包也已全部改完：正對照改由 forbid_native_dialogs 全頁守門負責")
-    assert set(natives) <= a, "有原生對話框的方法不屬於 A 包：%s" % sorted(set(natives) - a)
-
+# T35（2026-10-03）：刪除 test_positive_control_scanner_sees_a_package_natives——A 包全部改完後它恆為 skip（沒有東西可驗）。
+# 正對照由 tests/test_case_page_no_native_dialogs_2026_09_24.py 接手：test_scanner_positive_control（合成樣本：抓 3 種原生呼叫、
+# 不抓 MotrixUI.confirm／_confirmX／註解）＋ test_case_page_source_has_no_native_dialogs（全頁原始碼）＋ e2e forbid_native_dialogs；
+# 突變驗證：在 case-management-biz.js 加一行 `confirm('x')` ⇒ 全頁原始碼題紅，還原後綠。
 
 # ── e2e ──────────────────────────────────────────────────────────────────────
 

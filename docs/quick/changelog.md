@@ -16,6 +16,14 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-03 T35 收尾：失效測試清理與偶發修正
+- 刪除 `test_case_page_p4b_dialogs_2026_09_24.py::test_positive_control_scanner_sees_a_package_natives`（A 包全改完後恆 skip）。替代守門的正對照：`test_case_page_no_native_dialogs_2026_09_24.py::test_scanner_positive_control`（合成樣本）＋全頁原始碼題＋e2e `forbid_native_dialogs`；突變驗證：在 `case-management-biz.js` 加 `confirm('x')` ⇒ 全頁原始碼題紅、還原後綠。
+- `test_pixel_coverage_and_page_screenshots`：`importorskip` 加明確原因與待辦（下一班列車：`.venv312` 安裝 pypdfium2＋requirements-dev.txt 同一包；只加 requirements 會讓建包環境檢查改選別的 Python，2026-10-03 實測）。
+- e2e `test_edit_preview_toggle_swaps_the_same_canvas_in_place`：預覽切換後的可見性斷言改用 `expect` 自動等待（斷言內容不變）。突變（拿掉預覽隱藏把手的 CSS 與 x-show）⇒ 仍紅；負載下（-n 2、5 檔 45 題）連跑 3 次全綠。**不能證明原偶發已根除**：原失敗只出現 1 次（全量）。
+- `test_perf_100k_rows_filters_and_tree` 不需修改：10/01 20:48 已改為「5 次取最快」，其後 fail_stream 再無紅；本班突變（`/api/audit-log` 加 0.4 秒延遲）⇒ 紅（0.452 s > 0.3 s），還原後綠＝仍抓得到真變慢。replay 該筆「漏」＝此題負載偶發，已標 `load_flake_files`。
+- MOTRIX_TRAIN=1：不需新增斷言——`test_env_and_load_guards.py` GF-M1 已讓 `modtest --train` 在三個列車限定守門被略過時 exit 1，`pre_train_check` 已測會設 MOTRIX_TRAIN=1；一般階段／建包的 60 skipped 含這 3 題屬預期（列車才驗）。
+- 量測後放棄：L4（ledger 突變題就地還原，copytree 只占約 14／105 worker 秒）；quick-confirm（d7：0 分）；兩段並行（CPU 已飽和）。
+
 ## 2026-10-03 T35-L3' test_map／dep_graph 內容簽章快取
 - 根因（cProfile）：`modtest.py` 每次呼叫現場重算 test_map＋dep_graph（本樹約 41 秒純 CPU）；`ship_tests`、modtest_scope／json_stdout／rebase_check、scope_gate 真樹題都各付一次。L4（ledger 突變題改就地還原）量測後放棄：copytree 只佔約 14／105 worker 秒。
 - 新增 `tools/platform/map_cache.py`：簽章＝內容 sha256（backend/**/*.py、frontend/**/*.html／js——dep_scan 走檔案系統、含 .gitignore 的檔；加 `git ls-files --cached --others` 與 tools/platform/*.py＝算圖工具原始碼；檔名集合進簽章＝刪除／改名／新增皆 miss）＋repo 根絕對路徑＋Python 主次版＋格式版號。位置 `%TEMP%\motrix-map-cache`、留最近 8 份、tmp＋replace 原子寫、任何錯誤重算、非純 JSON 型別不快取。
