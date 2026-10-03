@@ -1,5 +1,11 @@
 # 採購・庫存・出貨 更新紀錄
 
+
+## (next) — wip/t34-ship-link-c7：出貨單連動材料申請（34-S1，供應側）
+- 出貨單明細列可帶選填 `materialLink: {materialItemId, docCode, qty}`（加性；舊單沒有此鍵＝行為不變）。送審與核准各檢查一次：同一筆材料申請所有活的連結數量合計 ≤ 已到料（`material.shippable` 的 `arrivedQty`）；錯誤碼 `ship_exceeds_arrived`／`ship_link_invalid`／`ship_link_serial_exclusive`／`ship_link_module_off`（400，回 `{detail, code}`）。存檔時先擋形狀與序號互斥。
+- 新提供者 `shipping.material_shipped`（`{materialItemId: {reserved, shipped, notes}}`）與單一數字版 `shipping.material_shipped_qty`（reserved＋shipped；M01 變更申請用）；新端點 `GET /api/shipping-notes/{note_no}/material-link-check`（E6 警示：已到料有剩餘量卻沒連結，不擋）。IP-SH1／SH2／SH3 已登記。
+- 測試：`modules/supply/tests/test_shipping_material_link_2026_10_03.py`（22 題）。契約 docs/platform/plans/SHIPPING-MATERIAL-LINK-CONTRACT-S1.md。
+
 ## 1.0.18 — 2026-10-01（wip/w1-attach-p3-a3：附件目錄 P3）
 - 附件目錄 P3：`_SupplyCatalog` 加 `search`／`count`（出貨單回簽；權限＝`case_documents_readable`，逐案）。
 
