@@ -193,3 +193,10 @@
 ## 第35班待問使用者：精算頁承攬成本含稅／未稅口徑（2e 發現，2026-10-03）
 - 現況：精算頁把派發以含稅 grandTotal（承攬商含稅合計＋人員）計入成本；營運報表／recognition.dispatch_entries／總帳用未稅 total＋人員 ⇒ 兩者相差 5% 稅。
 - 第34班裁示 A（維持頁面口徑、歷史不變），端點同時輸出 dispatchGrandTotal 與 dispatchReport，測試鎖定差異；是否統一成未稅（B）待使用者決定。
+
+## 第35班：財務／出納與 admin 脫鉤（使用者 2026-10-03）
+- 裁示：未來不要 admin 角色；既有 admin 員工依各自負責項目調整；出納／財務不綁 admin，只有 superadmin 全可見（例：出納是一般員工但需要此權限）。
+- 做法（選單）：先脫鉤財務／出納——「金額可見、出納、財務」相關判斷改成「superadmin 或持有 cashier／finance 模組」，admin 不再直通；其餘管理功能 admin 暫時照舊，之後逐項換成權限。維持 cashier／finance 兩個勾選，「出納填寫」獨立勾選＝未來處理。
+- 排程：使用者說「今天維持原本的班次」⇒ 不進第34班，改第35班。a3 先交盤點（F 金額／出納／財務相關＝要改；M 一般管理＝不動；約 98 處、33 檔，案件 29、承攬 19），da 獨立盤點；實作與稽核在 35 班。
+- 正式機帳號形狀（唯讀計數）：在職 11＝admin 4、superadmin 2、sales 2、viewer 2、engineer 1；4 位 admin 皆同時持有 cashier＋finance；2 位 superadmin 只有 finance。⇒ 脫鉤上線本身不會鎖人；使用者再調整各人勾選。
+- 現況說明：「角色快速套用」＝使用者編輯視窗的 chips（系統預設＋自訂角色［superadmin 建立：名稱＋基礎角色層＋模組清單，存 system_settings］），只是一次勾好角色層級與模組，不是另一套權限。
