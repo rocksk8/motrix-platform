@@ -158,3 +158,43 @@ def test_grandfathered_and_pre_rule_approved_requests_still_fall_back_to_draft_o
 
 def test_doc_type_is_registered_with_the_case_package_and_follows_the_unified_flow():
     assert MC.DOC_TYPE in TA.APPROVAL_DOC_TYPES and MC.DOC_TYPE in TA.DEFAULT_UNIFIED_DOC_TYPES and TA.APPROVAL_DOC_TYPE_LABELS[MC.DOC_TYPE] == "材料申請變更"
+
+
+# ── 出貨連動接線（c7 的契約：dict 版 `shipping.material_shipped`、float 版 `shipping.material_shipped_qty`）────────────
+
+def _fake_registry(monkeypatch, table):
+    from core import registry
+    monkeypatch.setattr(registry, "providers", lambda cap: table.get(cap, {}))
+
+
+def test_shipped_provider_resolution_order_and_dict_wrapper(W, reg, monkeypatch, fake_proposal):
+    c, h = W
+    _setup()
+    assert MC._shipped_fn() is None                                                                    # 沒有任何提供者 ⇒ 警告而非靜默
+    d = {"shipping.material_shipped": {"supply": lambda conn, qn: {IID: {"reserved": 1.0, "shipped": 3.0, "notes": ["SN-1"]}, "other": {"shipped": 99}}}}
+    _fake_registry(monkeypatch, d)
+    f = MC._shipped_fn()
+    assert f(None, NO, IID) == 4.0 and f(None, NO, "none") == 0.0                                      # 保留＋已出貨；沒資料＝0
+    r = _post(c, h, BASE + "/changes", {"reason": "追加"})                                              # 新數量 3 < 4 ⇒ 擋
+    assert r.status_code == 409 and r.json()["detail"].startswith("新的數量低於已出貨")
+    d["shipping.material_shipped"]["supply"] = lambda conn, qn: {IID: {"reserved": 0, "shipped": 2.0}}
+    assert _post(c, h, BASE + "/changes", {"reason": "追加"}).status_code == 200                       # 2 ≤ 3 ⇒ 過
+    qty = {"shipping.material_shipped_qty": {"supply": lambda conn, qn, item: 9.0}, **d}
+    _fake_registry(monkeypatch, qty)
+    assert MC._shipped_fn()(None, NO, IID) == 9.0                                                      # float 版優先於 dict 版
+    monkeypatch.setattr(MC, "SHIPPED_PROVIDER", lambda conn, qn, item: 1.0)
+    assert MC._shipped_fn()(None, NO, IID) == 1.0                                                      # 測試覆寫最優先
+
+
+def test_case_level_list_returns_all_items_changes_newest_first_with_item_name(W, reg, fake_proposal):
+    c, h = W
+    _flow([])
+    _setup()
+    first = _post(c, h, BASE + "/changes", {"reason": "第一張"}).json()["change"]
+    _post(c, h, "/api/quotations/%s/material-changes/%d/withdraw" % (NO, first["id"]))
+    second = _post(c, h, BASE + "/changes", {"reason": "第二張"}).json()["change"]
+    r = c.get("/api/quotations/%s/material-changes" % NO, headers=h)
+    assert r.status_code == 200
+    got = r.json()["changes"]
+    assert [x["id"] for x in got] == [second["id"], first["id"]] and got[0]["itemName"] == "交換器" and got[1]["status"] == "已撤回"
+    assert c.get("/api/quotations/NOPE/material-changes", headers=h).status_code == 404
