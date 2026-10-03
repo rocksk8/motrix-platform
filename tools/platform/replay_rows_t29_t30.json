@@ -52,7 +52,11 @@
   "red_files": [
    "backend/tests/test_audit_search_2026_09_30.py"
   ],
-  "base_red_files": []
+  "base_red_files": [],
+  "load_flake_files": [
+   "backend/tests/test_audit_search_2026_09_30.py"
+  ],
+  "load_flake_evidence": "test_perf_100k_rows_filters_and_tree 的時限題；fail_stream 另在 2026-10-01 18:17、20:23（-n4 負載、無關 diff）也紅；t29e diff 只動 flaky_retry／test_build_opt／一個 pdf e2e"
  },
  {
   "id": "t29f",
@@ -239,7 +243,11 @@
    "backend/tests/test_audit_search_2026_09_30.py"
   ],
   "base_red_files": [],
-  "recall_base": "9f19563d"
+  "recall_base": "9f19563d",
+  "load_flake_files": [
+   "backend/tests/test_audit_search_2026_09_30.py"
+  ],
+  "load_flake_evidence": "test_perf_100k_rows_filters_and_tree 的時限題；fail_stream 另在 2026-10-01 18:17、20:23（-n4 負載、無關 diff）也紅；t29e diff 只動 flaky_retry／test_build_opt／一個 pdf e2e"
  },
  {
   "id": "t29f",

@@ -8,6 +8,7 @@
   actual_minutes   該段實際分鐘（[實測]）
   red_files        這一段實際紅的檔（nodeid 或檔路徑；召回用）
   base_red_files   基準那一段紅的檔（紅重選用）
+  load_flake_files 這一段紅的檔裡，已有證據是負載偶發（與 diff 無關）的；召回另報「可選題」數，原始數照列
   recall_base      召回用的基準（缺 ⇒ 用 base；供「base＝null」的首輪以正式機基準算召回）
 每列以 stage_select.plan_stage 計畫（M 分層：只有硬底層⇒全量）估計增量分鐘；S 分層＝現行 scope_gate（底層⇒全量）。
 
@@ -152,7 +153,8 @@ def replay_row(row, known, repo=REPO, legacy_floor=False, release_ids=(), cache=
         covered = set(q["selected"]) | set(q["floor"])
         res["recall"] = {"reds": len(reds), "hit": sorted(f for f in reds if f in covered),
                          "miss": sorted(f for f in reds if f not in covered), "base": rb,
-                         "via_full_only": q["mode"] == "full"}
+                         "via_full_only": q["mode"] == "full",
+                         "flake": sorted(f for f in SS.normalize_red(row.get("load_flake_files")) if f in reds)}
     return res
 
 
@@ -201,7 +203,7 @@ def report(rows, release_ids):
     if fl:
         out.append("  底板（含段開銷；增量列）：%s" % "、".join("%s/%s %.1f 分(%d 檔)" % (r["id"], r["stage"], r["floor_min"], r["floor_files"]) for r in fl[:4]))
     # 召回
-    seen, hit, tot, miss = set(), 0, 0, []
+    seen, hit, tot, miss, flake = set(), 0, 0, [], 0
     for r in rows:
         if r.get("variant") != "B":              # 每組紅只算一次（B 列的 recall_base 是該紅的對應基準）
             continue
@@ -214,9 +216,13 @@ def report(rows, release_ids):
         seen.add(key)
         hit += len(rc["hit"])
         tot += rc["reds"]
+        flake += len([f for f in rc["flake"] if f in rc["miss"]])
         miss += ["%s/%s:%s" % (r["id"], r["stage"], f.rsplit("/", 1)[-1]) for f in rc["miss"]]
     out.append("  召回（選題＋底板，無全量逃生門）：%d／%d（%.1f%%）｜文件 %d／%d（補 F0d 後 25／26）｜漏：%s" % (
         hit, tot, 100.0 * hit / tot if tot else 0, DOC_RECALL[0], DOC_RECALL[1], "、".join(miss) or "無"))
+    if flake:
+        out.append("  召回（可選題）：%d／%d｜原始 %d／%d 內有 %d 個標記為負載偶發（row.load_flake_files；與 diff 無關、任何對應都選不到）" % (
+            hit, tot - flake, hit, tot, flake))
     return "\n".join(out), summ, (hit, tot, miss)
 
 

@@ -253,6 +253,44 @@ def test_tool_drill_list_covers_tool_tests_and_only_existing_files(SS):
     assert not dead, "TOOL_DRILL_RE 有名字對不到任何檔：%s" % dead
 
 
+def _real_select(changed, inert):
+    """真樹的 test_map／dep_graph 上跑 modtest.select（T35-L2 正對照用）。"""
+    import modtest as MT
+    root = Path(__file__).resolve().parents[3]
+    tmap = json.loads((root / "docs/platform/test_map.json").read_text(encoding="utf-8"))
+    graph = json.loads((root / "docs/platform/dep_graph.json").read_text(encoding="utf-8"))
+    graph = graph.get("units", graph)
+    return MT.select(changed, tmap, graph, None, inert_schema=inert), tmap
+
+
+def test_l2_direct_db_change_still_selects_core_db_tests():
+    """(i) 改 db.py 本身 ⇒ 依賴 core:db 的題照選（結構擁有者只在「資料表一跳」被擋，直接改動不擋）。"""
+    (picked, rep), tmap = _real_select(["backend/db.py"], inert=True)
+    want = [t for t, v in tmap["tests"].items() if "core:db" in v["units"] and v["kind"] != "audit"]
+    assert want and set(want) <= set(picked), "core:db 直接改動漏選 %d 題" % len(set(want) - set(picked))
+
+
+def test_l2_direct_migration_change_still_selects_migration_tests():
+    """(ii) 改遷移檔 ⇒ 依賴 plat:migrations 的題照選。"""
+    (picked, rep), tmap = _real_select(["backend/core/migrations.py"], inert=True)
+    want = [t for t, v in tmap["tests"].items() if "plat:migrations" in v["units"] and v["kind"] != "audit"]
+    assert want and set(want) <= set(picked), "plat:migrations 直接改動漏選 %d 題" % len(set(want) - set(picked))
+
+
+def test_l2_table_writer_change_still_selects_the_tables_readers_but_not_schema_owners():
+    """(iii) 模組改了某資料表的寫入端 ⇒ 該表 readers 的題照選；只有結構擁有者（core:db、plat:migrations）不經一跳被拉進來。"""
+    changed = ["backend/modules/case/material_payment.py"]
+    (p_on, r_on), tmap = _real_select(changed, inert=True)
+    (p_off, r_off), _ = _real_select(changed, inert=False)
+    hop_on, hop_off = set(r_on["table_hop_units"]), set(r_off["table_hop_units"])
+    assert hop_on and hop_on == hop_off - {"core:db", "plat:migrations"}, sorted(hop_off ^ hop_on)
+    assert {"core:db", "plat:migrations"} & hop_off, "對照失效：不開旗標時一跳應拉進結構擁有者"
+    readers = {u for u in hop_on if not u.startswith("table:")}
+    must = {t for t, v in tmap["tests"].items() if set(v["units"]) & readers and v["kind"] != "audit"}
+    assert must <= set(p_on), "資料表 readers 的題漏選 %d 題" % len(must - set(p_on))
+    assert len(p_on) < len(p_off), "旗標沒有縮小選題（%d vs %d）" % (len(p_on), len(p_off))
+
+
 def test_red_reselect_includes_red_files(SS, repo):
     scenario_red(SS, repo)
 

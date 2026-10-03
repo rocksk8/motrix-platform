@@ -16,6 +16,13 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-03 T35-L2 增量選題：資料表一跳不拉結構擁有者
+- 診斷：改 case 模組檔（M1）時 `core:db` 並非經 import 進入，而是 `modtest._table_hop`：被改檔寫入的表（quotations、audit_log、suppliers…）的 readers／named_by 含 `db.py`（DDL 命名了全部表）⇒ 476/835 題因 `core:db` 被選。
+- 變更：`modtest.select/table_hop` 新增 `inert_schema`（預設關，modtest／scope 行為不變）；只有 `stage_select._select` 傳開：`core:db`、`plat:migrations` 不經資料表一跳進入受影響單位。
+- **殘餘風險：結構擁有者不經資料表一跳被選；只保證於「直接改動 db.py／遷移」與最終全量閘門。**
+- 正對照（先 commit 再突變）：(i) 改 db.py 仍選全部 core:db 題；(ii) 改遷移檔仍選 plat:migrations 題；(iii) 模組改寫入端仍選該表 readers 的題，且一跳結果＝不開旗標結果去掉兩個結構擁有者。
+- replay（26 段）：召回原始 25/26 不變、無新漏；B·M 總省 94.7 → 101.0 分（t30c 選題 87% → 61%）。漏的 1 檔 `test_audit_search_2026_09_30.py` 是 `test_perf_100k_rows_filters_and_tree` 時限題的負載偶發（fail_stream：10/01 18:17、20:23 亦紅，diff 無關），replay 列已標 `load_flake_files`，另報「可選題 25/25」。
+
 ## 2026-10-03 T35-L1 工具自測依賴鍵控擴充
 - `tools/platform/stage_select.py::TOOL_DRILL_RE` 由 9 組擴為 17 組：新增 author_gate、stage_select、modtest_rebase_bookkeeping、failfast、fail_stream（含 aborted）、core_upgrade、build_stage_reuse、build_opt。這些檔只在動到 `tools/`、`backend/tools/`、`backend/core/`、`docs/platform/modules.json` 或選題器時才進增量底板；最終全量不受影響。
 - 量測：這 8 組在全量中 worker 合計約 309 秒（`-n 2` 實測 junit），每次增量約省 1.3 分（4 worker）。replay 26 段召回維持 25/26，漏的仍是 t29e `test_audit_search_2026_09_30.py`（L2 處理）。

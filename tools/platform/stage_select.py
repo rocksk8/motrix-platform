@@ -327,7 +327,7 @@ def _hard_files(files, rules_fixture_layer):
 def _select(changed, tmap, graph):
     """modtest.select（iface=None＝遞移，閘門寧寬）。獨立成函式方便測試注入／替換。"""
     import modtest as MT
-    return MT.select(changed, tmap, graph, None)
+    return MT.select(changed, tmap, graph, None, inert_schema=True)
 
 
 def _full_plan(stage, base, head, reasons, extra=None):

@@ -486,11 +486,17 @@ def frontend_callers(targets, units):
     return out
 
 
-def table_hop(changed_units, units, conservative, override=None):
+#: T35-L2：資料表「命名」它們的結構擁有者（DDL／遷移）。只在增量選題（stage_select）要求時，資料表一跳不經由
+#: readers／named_by 把它們拉進受影響單位——改一個模組的寫入不代表 db.py 的行為要重驗；db.py／遷移本身被改時仍是直接單位。
+SCHEMA_OWNERS = frozenset({"core:db", "plat:migrations"})
+
+
+def table_hop(changed_units, units, conservative, override=None, inert_schema=False):
     """override：{單位: {"tables_r", "tables_w", "tables_ddl", "tables_named", "dynamic_sql"}}——§C-11a ③ 名稱層級時，
     改用「這次被改的函式」自己的資料表，不用整個單位的（db.py 帶 dynamic_sql ⇒ 否則一律擴到所有表）。"""
-    return _table_hop(changed_units, {**units, **{k: dict(units.get(k, {}), **v) for k, v in (override or {}).items()}},
-                      conservative)
+    out = _table_hop(changed_units, {**units, **{k: dict(units.get(k, {}), **v) for k, v in (override or {}).items()}},
+                     conservative)
+    return out - SCHEMA_OWNERS if inert_schema else out
 
 
 def _table_hop(changed_units, units, conservative):
@@ -517,7 +523,7 @@ def _table_hop(changed_units, units, conservative):
     return out
 
 
-def select(changed, tmap, graph, iface_changed=None):
+def select(changed, tmap, graph, iface_changed=None, inert_schema=False):
     """iface_changed(檔) -> bool：有給 ⇒ 介面沒變的單位只擴到直接依賴（§C-11a ①②）；沒給 ⇒ 全部遞移（舊規則）。"""
     tests = tmap["tests"]
     report = {"changed": changed, "direct_units": [], "affected_units": [], "graph": graph is not None,
@@ -553,7 +559,7 @@ def select(changed, tmap, graph, iface_changed=None):
                 narrow = name_filter(seeds - wide, narrow, by_unit, graph, iface_changed.refs, report)
             affected = reverse_closure(wide, graph) | narrow | direct
         # 資料表一跳：只加該單位本身＋直接呼叫它的頁面／js，不再沿 import 遞移（否則 archive／trail 會拖進全部）
-        hop = table_hop(seeds, graph, conservative, report.get("name_tables")) - affected
+        hop = table_hop(seeds, graph, conservative, report.get("name_tables"), inert_schema) - affected
         report["table_hop_units"] = sorted(hop)
         affected |= hop | frontend_callers(hop, graph)
     report["affected_units"] = sorted(affected)
