@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-03（wip/t34-settlement-extras-2e）：精算端點納入承攬商派發、匯款手續費、自訂模組支出（34）
+- `settlement-actuals` 新增 `costExtras` 與 `totals.dispatchTotal／dispatchReport／remitFeeTotal／customExpenseTotal／totalActualCost`：口徑與精算頁現行算法逐位相同（使用者裁示 A：歷史精算不變）——派發＝承攬商含稅合計＋外包人員（`dispatch.row` 的 grandTotal；排除已取消、草稿、已退回）；手續費＝額外支出手續費（已登錄付款、未作廢）＋承攬商匯款手續費；自訂模組支出＝`custom_finance.case_finance`。另輸出 `dispatchReport`（未稅承攬費＋人員，營運報表／總帳 `dispatch_entries` 口徑，供漂移守門）；兩者差異＝承攬費的 5% 稅，含稅或未稅由使用者決定（列第 35 班問題），這裡只並列。已完結精算的這幾個鍵取存檔 summary 的凍結值。`extraTotal` 語意不變（仍只含額外支出）。頁面尚未改用這些鍵（下一步）。完結重算比對（D10）不含這三類（頁面端因無權限可能少打其中一支端點）。
+
 ## (next) — 2026-10-03（wip/t34-settlement-nits-2e）：精算——完結容差、凍結分法、POST 預覽（第 33 班稽核 nits）
 - 完結重算的進位容差只套在「品項實際成本」（每品項 ±1 元）；額外支出、採購類總額、未採用採購只留 1 元防浮點（原本一併放寬成品項數）。
 - 已完結精算的 `settlement-actuals`：`totals.materialUnassignedTotal` 取存檔 summary 的同名鍵、`extraTotal` 扣掉它與手續費、自訂模組支出，分法與完結前的即時值一致（舊完結案沒有這鍵＝0，合計不變）。

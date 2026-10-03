@@ -38,6 +38,8 @@ MODULE = ModuleSpec(
         # IP-102（W1）：出納頁的匯款差額審核；IP-9：匯款手續費列營運報表支出
         ("remit.reviews", "contractor_voucher"): remit._RemitReviews,
         ("expense.entries", "remit_fee_contractor"): remit._expense_entries,
+        # 34：案件完結精算讀「承攬商匯款手續費合計」（公司自付、已匯款；唯讀）。case 不 import 本模組，經 registry 取用
+        ("case.remit_fee_total", "subcontract"): remit.fee_total_for_case,
         # IP-10（N1）：承攬商報價單附件的刪除申請進簽核佇列（type＝dispatch_file_delete），核可／退回打派工的 delete-approve／delete-reject
         # 31-A：派發審核／完工審核進簽核佇列（type＝contractor_dispatch／contractor_dispatch_completion；單號＝doc_code）
         ("approval.queue_items", "subcontract_dispatch"): dispatch_approval.queue_items,

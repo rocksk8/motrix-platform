@@ -7,11 +7,15 @@
 口徑：權責、含待審核（標 pending）；材料申請只含已成案／已結案案件（與報表同一條件）。派發、匯款手續費、自訂模組支出不在這裡（第 34 班）。
 """
 import json
+import logging
 
+from core import registry
 from helpers.legal_params import round_half_up
 from modules.case import purchase_items as PI
 from modules.case import recognition as R
 
+_log = logging.getLogger(__name__)
+VOIDED_STATUS = "已作廢"        # 與 api/case_extra_expenses.VOIDED_STATUS 同值（已作廢的額外支出不進任何合計）
 ESTIMATE_RATE = 1.05            # 精算頁預設實際成本＝報價成本 ×1.05（5%「非扣抵進項稅」假設；與 settlement.html 的預設同一條）
 #: 關掉「採用」時採購金額怎麼算（USER-DECISIONS D8）：ignore＝手填取代、採購不另加（建議）；add＝舊行為（採購另加，會與估計重複）。
 UNADOPTED_IGNORE, UNADOPTED_ADD = "ignore", "add"
@@ -155,6 +159,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
             + sum(m["amount"] for m in unassigned_mat if m["pending"]) + sum(x["amount"] for x in extra_all if x["pending"]))
     sources = {"po": sum(it["po"]["amount"] for it in items), "materialAssigned": sum(it["material"]["amount"] for it in items),
                "materialUnassigned": un_mat_total, "extraAssigned": sum(it["extra"]["amount"] for it in items), "extraUnassigned": un_ex_total}
+    ex = case_extras(conn, quote_no)
     legacy_save = any(isinstance(i, dict) and "adoptSystem" not in i for i in saved.get("items") or [])
     out = {"quoteNo": quote_no, "basis": "accrual", "finalized": False, "frozen": False,
            "legacySave": legacy_save,          # 存檔品項沒有 adoptSystem（第 32 班前存的）：adopt 以舊行為（不採用）
@@ -164,7 +169,13 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
             "sources": sources,
             "totals": {"itemActualTotal": item_total, "itemPoUnadopted": not_adopted_total, "extraTotal": un_ex_total,
                        "materialUnassignedTotal": un_mat_total, "purchasedTotal": sum(sources.values()), "pendingTotal": pend},
-            "warnings": warnings}
+            "warnings": warnings, "costExtras": ex}
+    t_ = out["totals"]
+    t_.update(dispatchTotal=ex["dispatch"]["grandTotal"], dispatchReport=ex["dispatch"]["report"], remitFeeTotal=ex["remitFee"]["total"],
+              customExpenseTotal=ex["customExpense"]["total"])
+    # 與頁面 calcSummary 同一條式：品項＋未採用採購＋額外支出（含未對應材料申請、手續費、自訂模組）＋派發
+    t_["totalActualCost"] = (t_["itemActualTotal"] + t_["itemPoUnadopted"] + t_["extraTotal"] + t_["materialUnassignedTotal"] + t_["remitFeeTotal"]
+                             + t_["customExpenseTotal"] + t_["dispatchTotal"])
     if freeze and saved.get("status") == "finalized":
         _freeze(out, saved, saved_items)
     return out
@@ -192,6 +203,9 @@ def _freeze(out, saved, saved_items):
         out["totals"]["extraTotal"] = _num(summ["extraTotal"]) - _num(summ.get("remitFeeTotal")) - _num(summ.get("customExpenseTotal")) - mat
     if "purchasedTotal" in summ:
         out["totals"]["purchasedTotal"] = _num(summ["purchasedTotal"])
+    for k in ("dispatchTotal", "remitFeeTotal", "customExpenseTotal", "totalActualCost"):          # 頁面存的完結 summary 同名鍵：凍結值
+        if k in summ:
+            out["totals"][k] = _num(summ[k])
 
 
 def validate_offsets(conn, quote_no, raw, previous=None):
@@ -227,6 +241,48 @@ def validate_offsets(conn, quote_no, raw, previous=None):
         if ref not in refs[kind]:
             return "offsets 第 %d 列：%s %s 不在目前的未對應清單內" % (n, "材料申請" if kind == "material" else "額外支出", ref)
     return None
+
+
+def case_extras(conn, quote_no) -> dict:
+    """精算頁「成本彙總」裡不屬於品項／採購的三類成本（34；之前由頁面各打一支端點加總）——**口徑與頁面現行算法逐位相同**（使用者裁示 A：歷史精算不變）：
+    - 承攬商派發：`dispatchGrandTotal`＝承攬商含稅合計＋外包人員（`dispatch.row` 的 grandTotal；排除已取消、草稿、已退回，待審核／簽核中照計，與頁面同）。
+      另給 `dispatchReport`＝未稅承攬費＋人員（營運報表／總帳 `recognition.dispatch_entries` 的口徑，供漂移守門；兩者差異＝承攬費的稅）。
+      含稅或未稅是使用者的決定，這裡只並列、不切換。
+    - 匯款手續費：額外支出的手續費（已登錄付款、未作廢）＋承攬商匯款手續費（`case.remit_fee_total` 提供者；沒有提供者＝0）。
+    - 自訂模組支出：`helpers.custom_finance.case_finance` 的支出合計。
+    純讀。"""
+    grand = report = 0.0
+    n = 0
+    dispatch_row = registry.single_provider("dispatch.row")
+    if dispatch_row is not None:
+        try:
+            rows = conn.execute("SELECT cd.*, vc.name AS vendor_name FROM contractor_dispatches cd LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id"
+                                " WHERE cd.quote_no=? AND cd.status != 'cancelled'", (quote_no,)).fetchall()
+        except Exception:                                                                                  # noqa: BLE001  承攬商表不在（模組未啟用）
+            rows = []
+        for r in rows:
+            d = dispatch_row(r)
+            if (d.get("approvalStatus") or "") in ("草稿", "已退回"):
+                continue
+            n += 1
+            grand += _num(d.get("grandTotal"))
+            report += _num(d.get("totalAmount")) + _num(d.get("personnelTotal"))
+    try:
+        fee_extra = _num(conn.execute("SELECT COALESCE(SUM(remit_fee), 0) AS t FROM case_extra_expenses WHERE quote_no=? AND COALESCE(paid_date,'') != '' AND status != ?",
+                                      (quote_no, VOIDED_STATUS)).fetchone()["t"])
+    except Exception:                                                                                      # noqa: BLE001
+        fee_extra = 0.0
+    fee_fn = registry.single_provider("case.remit_fee_total")
+    fee_contractor = _num(fee_fn(conn, quote_no)) if fee_fn is not None else 0.0
+    custom = 0.0
+    try:
+        from helpers import custom_finance as CFIN
+        custom = _num(CFIN.case_finance(conn, quote_no)["expense"]["total"])
+    except Exception:                                                                                      # noqa: BLE001  自訂模組表不在
+        _log.warning("custom_finance.case_finance 失敗 ⇒ 自訂模組支出略過", exc_info=True)
+    return {"dispatch": {"grandTotal": grand, "report": report, "count": n},
+            "remitFee": {"extraExpenses": fee_extra, "contractor": fee_contractor, "total": fee_extra + fee_contractor},
+            "customExpense": {"total": custom}}
 
 
 def check_finalize(conn, quote_no, settlement):
