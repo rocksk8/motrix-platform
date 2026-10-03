@@ -411,6 +411,11 @@ def material_submit_check(conn, quote_no, order, *, exclude_item_id=None, po_req
         cov = MC.coverage_snapshot(conn, quote_no, qid, po_code, only_untaken=bool(adjust_of), exclude_item_id=item_id)
         if not cov["poSnapshot"] and not any(p["code"] in ("po_required", "adjust_no_new_lines") for p in problems):
             problems.append({"code": "no_coverage", "message": "這個品項目前沒有可涵蓋的已核准採購單行，請先申請採購單。"})
+        if cov["poSnapshot"]:                                                                # N2：申請涵蓋該品項**所有**已核准採購單行——金額＝行金額合計、數量只能往下調；否則申請量小於涵蓋量（可出貨量失真）
+            if abs(_num(order.get("totalPrice")) - cov["totalPrice"]) > 0.5 or _num(order.get("quantity")) > cov["quantity"] + 1e-9:
+                problems.append({"code": "content_not_cover_snapshot",
+                                 "message": "材料申請的內容要涵蓋該品項全部已核准的採購單行（%d 行：數量 %g、小計 %g），目前是數量 %g、小計 %g；請以涵蓋全部採購單行的內容送審（數量可往下調，金額不可改）。"
+                                            % (len(cov["poSnapshot"]), cov["quantity"], cov["totalPrice"], _num(order.get("quantity")), _num(order.get("totalPrice")))})
         snap["poSnapshot"] = cov["poSnapshot"]
         if adjust_of:
             snap["adjustOf"] = adjust_of

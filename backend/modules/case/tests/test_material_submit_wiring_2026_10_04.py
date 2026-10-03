@@ -110,3 +110,20 @@ def test_item_without_approved_po_lines_but_a_valid_po_code_reports_no_coverage(
     po = _approved_po(c, h, [_ln("a", 3, unitCost=1000, unit="台")])
     r = _check(_order("M5", 1, 100, quoteItemId="b", poDocCode=po["docCode"]), exclude_item_id="M5", po_required=True)    # 品項 b 在這張採購單沒有行
     assert "no_coverage" in _codes(r)
+
+
+def test_request_content_must_cover_all_approved_lines_only_quantity_may_be_lowered(W):
+    c, h = W
+    po = _approved_po(c, h, [_ln("a", 3, unitCost=1000, unit="台"), _ln("a", 2, unitCost=1000, unit="台")])
+    # 只帶第 1 行（3 台／3000），但涵蓋快照有兩行（5 台／5000）⇒ 擋（N2：自動涵蓋該品項所有已核准行）
+    one_line = _order("M1", 3, 3000, quoteItemId="a", poDocCode=po["docCode"], poLine=1, unit="台")
+    r = _check(one_line, exclude_item_id="M1", po_required=True)
+    assert "content_not_cover_snapshot" in _codes(r) and "5000" in [p["message"] for p in r["problems"] if p["code"] == "content_not_cover_snapshot"][0]
+    full = _order("M1", 5, 5000, quoteItemId="a", poDocCode=po["docCode"], poLine=1, unit="台")
+    assert _check(full, exclude_item_id="M1", po_required=True)["problems"] == []
+    lowered = _order("M1", 4, 5000, quoteItemId="a", poDocCode=po["docCode"], poLine=1, unit="台")           # 數量可往下調、金額不可改
+    assert _check(lowered, exclude_item_id="M1", po_required=True)["problems"] == []
+    raised = _order("M1", 9, 5000, quoteItemId="a", poDocCode=po["docCode"], poLine=1, unit="台")
+    assert "content_not_cover_snapshot" in _codes(_check(raised, exclude_item_id="M1", po_required=True))
+    cheaper = _order("M1", 5, 4000, quoteItemId="a", poDocCode=po["docCode"], poLine=1, unit="台")
+    assert "content_not_cover_snapshot" in _codes(_check(cheaper, exclude_item_id="M1", po_required=True))

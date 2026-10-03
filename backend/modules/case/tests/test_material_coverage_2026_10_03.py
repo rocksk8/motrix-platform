@@ -205,3 +205,12 @@ def test_adjust_check_and_untaken_coverage(W):
     assert {(l["poDocCode"], l["line"]) for l in _call(MC.coverage_snapshot, "a")["poSnapshot"]} == {(po1["docCode"], 1), (po2["docCode"], 1)}
     assert [x["code"] for x in _call(MC.adjust_check, "a", "NOPE")] == ["adjust_target_missing"]
     assert "adjust_item_mismatch" in [x["code"] for x in _call(MC.adjust_check, "b", "M1")]
+
+
+def test_quantity_cannot_be_raised_above_the_coverage_only_lowered(W):
+    c, h = W
+    _approved_request(c, h)                                                              # 涵蓋 3 台
+    for q in (50, 3.0001):
+        assert "quantity_exceeds_coverage" in [x["code"] for x in _call(MC.change_proposal, "M1", {"quantity": q})["problems"]], q
+    assert "quantity_exceeds_coverage" not in [x["code"] for x in _call(MC.change_proposal, "M1", {"quantity": 3})["problems"]]
+    assert "quantity_exceeds_coverage" not in [x["code"] for x in _call(MC.change_proposal, "M1", {"quantity": 1})["problems"]]

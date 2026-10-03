@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-04（wip/t34-m2-wire2-2e）：變更申請數量不得高於涵蓋量；送審內容必須涵蓋全部已核准採購單行（da 稽核）
+- `change_proposal` 新增 `quantity_exceeds_coverage`：數量只能往下調，不得超過已核准採購單行涵蓋的數量（單位不同＝品項報價量）；否則一張變更就能把可出貨量灌大。
+- `material_submit_check`（強制採購單路徑）新增 `content_not_cover_snapshot`：申請內容要涵蓋該品項**全部**已核准的採購單行——小計＝行金額合計（不可改）、數量只能往下調；只帶一行的申請（同品項多行採購單時）會被擋並提示正確內容（N2）。既有測試 `test_material_po_required` 的材料金額改成與採購單行一致（100×2）。
+- 影響 UI：c7 的「從採購單帶入」要以**品項**為單位帶入全部行的內容（一個品項一列），否則第二個採購單行會被 `item_request_exists` 擋下。
+
 ## (next) — 2026-10-04（wip/t34-m2-wire-2e）：材料申請送審接上涵蓋快照、一品項一筆與調整單（34-M2 接線）
 - `material_submit_check`（強制採購單路徑 `po_required`）新增：`item_request_exists`（同品項已有活的材料申請，訊息帶單號，提示追加請走變更申請；保留 `po_line_taken`）、`poSnapshot`（送審當下該品項所有已核准採購單行的涵蓋快照，存在審核列 `approval_json.linkSnapshot`）、`no_coverage`、調整單 `adjustOf`（原申請已全額付款才可；只涵蓋尚未被占用的採購單行，快照帶 `adjustOf`）。舊路徑（非強制）逐位不變。
 - `material_coverage.snapshot_lines`：讀涵蓋快照時 `snapshot.poSnapshot`（變更申請核准後 d7 套用時改寫）優先於送審時的 `linkSnapshot.poSnapshot`。6 題接線測試。

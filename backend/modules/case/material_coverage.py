@@ -159,6 +159,11 @@ def _view(order, snap):
             "totalPrice": PI._num(order.get("totalPrice")), "poSnapshot": snap, "notes": str(order.get("notes") or "")}
 
 
+def _quantity_limit(cov):
+    """涵蓋內容的數量上限：`snapshot_content` 的預設數量（單位一致＝行數量合計；單位不同＝品項報價量）。沒有涵蓋行 ⇒ None（另有 no_coverage）。"""
+    return cov["quantity"] if cov.get("poSnapshot") else None
+
+
 def _line_key(l):
     return (l.get("poDocCode"), l.get("line"))
 
@@ -204,6 +209,9 @@ def change_proposal(conn, quote_no, item_id, proposed=None):
         problems.append({"code": "paid_in_full", "message": "已全額付款，金額與數量不能修改；要調整請另開一筆材料申請（調整單）"})
     elif paid > 0 and PI._num(after["totalPrice"]) < paid - 1e-9:
         problems.append({"code": "below_paid", "message": "變更後小計低於已付金額 %g" % paid})
+    limit = _quantity_limit(fresh)                    # 數量只能往下調（規格 §A.1）：不得超過涵蓋行數量合計（單位不同＝品項報價量）；否則一張變更就能把可出貨量灌大（da）
+    if limit is not None and after.get("quantity") is not None and isinstance(after["quantity"], float) and after["quantity"] > limit + 1e-9:
+        problems.append({"code": "quantity_exceeds_coverage", "message": "數量 %g 超過已核准採購單行涵蓋的數量 %g（數量只能往下調；要增加請先申請採購單）" % (after["quantity"], limit)})
     dropped = [l for l in snap if _line_key(l) not in {_line_key(x) for x in fresh["poSnapshot"]}]
     if dropped:
         problems.append({"code": "coverage_shrinks", "message": "原本涵蓋的採購單行不再是已核准（%s），請先處理採購單" % "、".join("%s 第 %s 列" % _line_key(l) for l in dropped)})
