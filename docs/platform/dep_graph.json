@@ -8029,6 +8029,22 @@
     "case_material_approvals"
    ]
   },
+  "mod:case/material_coverage": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:case/material_approval",
+    "mod:case/purchase_items"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/material_coverage.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "mod:case/material_guard": {
    "api_prefixes": [],
    "dynamic_sql": false,
