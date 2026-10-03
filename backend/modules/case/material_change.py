@@ -515,8 +515,13 @@ def _apply(conn, change_id, user: dict, now: str) -> bool:
     if "poSnapshot" in stored:
         snap["poSnapshot"] = stored["poSnapshot"]
         appr["snapshot"] = snap
-    summary = "、".join("%s %s→%s" % (d["field"], d["old"] if d["field"] != "poSnapshot" else "%d 行" % len(d["old"]),
-                                     d["new"] if d["field"] != "poSnapshot" else "%d 行" % len(d["new"])) for d in diff)
+    def _part(d):                                                                       # 歷程（approval_json）與稽核都是讀得到的文字：金額欄位只寫「已變更」，不寫數字（da：金額可見度）
+        if d["field"] == "poSnapshot":
+            return "poSnapshot %d 行→%d 行" % (len(d["old"]), len(d["new"]))
+        if d.get("money"):
+            return "%s 已變更" % d["field"]
+        return "%s %s→%s" % (d["field"], d["old"], d["new"])
+    summary = "、".join(_part(d) for d in diff)
     appr.setdefault("history", []).append({"at": now, "by": user["username"], "byDisplay": _display(user), "action": "changed", "tier": 0,
                                            "comment": "變更申請 %s 核准套用：%s" % (ch["doc_code"], summary), "changeId": int(change_id)})
     conn.execute("UPDATE case_material_approvals SET version=?, content_hash=?, approval_json=?, updated_at=? WHERE quote_no=? AND item_id=?",

@@ -50,13 +50,26 @@ def _info(ch, q):
     return {"docCode": ch["doc_code"], "quoteNo": ch["quote_no"], "itemName": _order_name(q, ch["item_id"])}
 
 
+_MONEY_KEYS = ("unitPrice", "totalPrice", "amount")
+
+
 def _mask(v, money: bool):
-    """看不到財務檢視者：金額欄位與涵蓋行金額一律拿掉。"""
+    """看不到財務檢視者：金額欄位（單價、小計、涵蓋行的 amount）一律拿掉——遞迴到巢狀的涵蓋行與差異裡的新舊值（da：poSnapshot 的行金額曾漏出）。"""
     if money:
         return v
     if isinstance(v, dict):
-        return {k: x for k, x in v.items() if k not in ("unitPrice", "totalPrice", "amount")}
+        return {k: _mask(x, False) for k, x in v.items() if k not in _MONEY_KEYS}
+    if isinstance(v, list):
+        return [_mask(x, False) for x in v]
     return v
+
+
+def _mask_diff(diff, money: bool):
+    """差異：金額欄位（money=true）整項遮成 hidden；其餘項（含 poSnapshot 的新舊涵蓋行）去掉行金額。"""
+    if money:
+        return diff
+    return [{"field": d["field"], "old": None, "new": None, "money": True, "hidden": True} if d.get("money")
+            else {**d, "old": _mask(d.get("old"), False), "new": _mask(d.get("new"), False)} for d in diff or []]
 
 
 def _view(ch, money: bool) -> dict:
@@ -64,14 +77,9 @@ def _view(ch, money: bool) -> dict:
     tiers = appr.get("tiers") or []
     ct = appr.get("currentTier") or 0
     cur = [a.get("displayName") or a.get("username") for a in (tiers[ct].get("approvers") or [])] if tiers and ct < len(tiers) else []
-    diff = MC._j(ch["diff_json"], [])
-    if not money:
-        diff = [{"field": d["field"], "old": None, "new": None, "money": True, "hidden": True} if d.get("money") else d for d in diff]
-    prop = MC._j(ch["proposal_json"], {})
-    base = MC._j(ch["base_json"], {})
-    if not money:
-        prop = {**_mask(prop, False), "poSnapshot": [_mask(x, False) for x in prop.get("poSnapshot") or []]}
-        base = {**_mask(base, False), "poSnapshot": [_mask(x, False) for x in base.get("poSnapshot") or []]}
+    diff = _mask_diff(MC._j(ch["diff_json"], []), money)
+    prop = _mask(MC._j(ch["proposal_json"], {}), money)
+    base = _mask(MC._j(ch["base_json"], {}), money)
     return {"id": ch["id"], "docCode": ch["doc_code"], "quoteNo": ch["quote_no"], "itemId": ch["item_id"], "status": ch["status"], "baseVersion": ch["base_version"],
             "reason": ch["reason"], "diff": diff, "proposal": prop, "base": base, "createdBy": ch["created_by"], "createdAt": ch["created_at"],
             "submittedAt": ch["submitted_at"], "approvedAt": ch["approved_at"], "appliedAt": ch["applied_at"],
@@ -131,8 +139,9 @@ def preview_proposal(quote_no: str, item_id: str, quantity: float = None, notes:
             raise _http(e)
         money = money_visible(user)
         if not money:
-            cp = {**cp, "before": _mask(cp.get("before"), False), "after": _mask(cp.get("after"), False),
-                  "diff": [{"field": d["field"], "old": None, "new": None, "money": True, "hidden": True} if d.get("money") else d for d in cp.get("diff") or []]}
+            cp = {**cp, "before": _mask(cp.get("before"), False), "after": _mask(cp.get("after"), False), "diff": _mask_diff(cp.get("diff"), False),
+                  "uncoveredLines": _mask(cp.get("uncoveredLines"), False),
+                  "problems": [{**p, "message": "變更後小計低於已付金額"} if p.get("code") == "below_paid" else p for p in cp.get("problems") or []]}      # 訊息帶已付金額數字：非財務者只留文字
         return cp
     finally:
         conn.close()
