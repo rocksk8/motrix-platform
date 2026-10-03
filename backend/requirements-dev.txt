@@ -36,3 +36,8 @@ httpx2>=2.0
 # opencv/numpy: QR decoding in test_no_credentials_in_query (TOTP setup image).
 opencv-python-headless>=4.8
 numpy>=1.24
+
+# pypdfium2: renders PDF pages to measure red-pixel coverage of the unapproved
+# watermark (tests/test_unapproved_every_page_2026_10_01.py). Without it that one
+# check is skipped via pytest.importorskip, so it silently never runs.
+pypdfium2>=4.30.0

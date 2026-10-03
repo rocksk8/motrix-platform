@@ -16,6 +16,12 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-03 測試母體清理（T35 驗證提速，只動測試與開發相依）
+- 刪除 payroll／subcontract 兩份 `money_round_half_up` 測試內無人呼叫、且引用已不存在的 `routers.reports` 的 `_patch_entries()`（AST 比對：兩檔測試函式數不變，唯一差異是該輔助函式）。
+- 刪除 `test_bonus_correction_2026_09_30.py` 內恆為 `None`、後續從未使用的 `cash = ... if False else None` 一行。
+- `requirements-dev.txt` 新增 `pypdfium2`：`test_unapproved_every_page_2026_10_01.py::test_pixel_coverage_and_page_screenshots` 先前因開發環境未安裝而恆略過；隔離安裝後該檔 7 題全綠（22.7 秒）。**`.venv312` 尚未安裝**，安裝後該題才會在階段測試中實際執行。
+- 無產品程式變更，不進 `version_manifest.json`（使用者可見更新說明）。
+
 ## 2026-10-02 側欄通知元件單一宣告
 - `frontend/static/sidebar.js`：通知鈴鐺（管理員）與無頭掛載（一般使用者）兩個互斥分支改走同一個輔助函式 `notifOpen(attrs)`，`x-data="notifStore()"` 只剩一個宣告，重複初始化守門的共用母體回到 2。畫面與行為不變。
 

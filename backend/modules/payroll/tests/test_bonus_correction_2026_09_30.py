@@ -276,7 +276,6 @@ def test_approve_opens_reversal_and_rebook_drafts_and_waits_for_payout(client, p
     assert _q("SELECT status, accrual_voucher_id FROM bonus_case_awards WHERE quote_no=?", no)[0] == {
         "status": "已發放", "accrual_voucher_id": award["accrual_voucher_id"]}
     # 出納清單：待補發列（kind=correction），金額＝補發總額
-    cash = client.get("/api/cashier/bonus-payouts", headers=_auth(people["bc_cash"])) if False else None
     from core import registry
     pend = registry.single_provider("bonus.payouts").pending(_db())
     mine = [p for p in pend if p["quoteNo"] == cn]
