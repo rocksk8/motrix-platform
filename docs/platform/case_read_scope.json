@@ -264,6 +264,12 @@
    "path": "/api/shipping-notes",
    "handler": "list_shipping_notes",
    "scope": "row_access"
+  },
+  {
+   "file": "modules/supply/api/shipping_notes.py",
+   "path": "/api/shipping-notes/material-shippable",
+   "handler": "material_shippable_for_note",
+   "scope": "row_access"
   }
  ]
 }

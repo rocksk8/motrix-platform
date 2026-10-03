@@ -2448,6 +2448,8 @@
                            :data-testid="'mo-approval-' + m.itemId">
                         <span style="font-weight:600" :style="moApTone(m)" data-testid="mo-ap-status" x-text="moApLabel(m)" :title="moIsUnsent(m) ? '尚未送審，不計入報表與額度，也不會出現在簽核佇列。' : ''"></span>
                         <span x-show="moAp(m).docCode" style="color:var(--text-dim)" data-testid="mo-ap-code" x-text="moAp(m).docCode"></span>
+                        <span x-show="mlShipText(m)" x-cloak style="color:var(--text-secondary)" :data-testid="'ml-ship-' + m.itemId" x-text="mlShipText(m)"></span>
+                        <span x-show="mlShipNotes(m)" x-cloak style="color:var(--text-dim)" :data-testid="'ml-ship-notes-' + m.itemId" x-text="mlShipNotes(m)"></span>
                         <span x-show="['待審核','簽核中'].includes(moAp(m).status)" style="color:var(--text-dim)"
                               x-text="'待簽：' + ((moAp(m).currentApprovers || []).join('、') || '—')"></span>
                         <span x-show="moAp(m).status === '已退回' && moAp(m).rejectReason" style="color:var(--tone-danger-fg)"
@@ -3116,7 +3118,7 @@
                             style="font-size:11px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
                       <span x-show="(n.status==='待審核'||n.status==='簽核中') && (n.approval && n.approval.tiers || []).length>0"
                             style="font-size:11px;color:var(--text-dim)"
-                            x-text="'第 ' + (((n.approval.currentTier)||0)+1) + ' 層 / 共 ' + n.approval.tiers.length + ' 層'"></span>
+                            x-text="'第 ' + ((((n.approval || {}).currentTier)||0)+1) + ' 層 / 共 ' + ((n.approval && n.approval.tiers || []).length) + ' 層'"></span>
 
                       <!-- 草稿操作 -->
                       <div x-show="n.status==='草稿' && ['superadmin','admin'].includes(session.role)" style="display:flex;gap:6px">
@@ -4016,6 +4018,33 @@
                 style="font-size:11px;padding:3px 10px;border:1px solid var(--tone-info-border);background:var(--accent-light);color:var(--accent-hover);border-radius:5px;cursor:pointer;white-space:nowrap">
           從報價單匯入品項
         </button>
+        <button type="button" data-testid="msh-open" @click="mshOpen()"
+                style="font-size:11px;padding:3px 10px;border:1px solid var(--tone-info-border);background:var(--accent-light);color:var(--accent-hover);border-radius:5px;cursor:pointer;white-space:nowrap">
+          從材料申請帶入
+        </button>
+      </div>
+      <!-- 34-S2：從材料申請帶入（已到料、尚有剩餘可出貨量者；數量預設剩餘，可往下調） -->
+      <div x-show="msh.open" x-cloak data-testid="msh-panel" style="border:1px solid var(--line);border-radius:6px;padding:9px;background:var(--surface);margin-bottom:8px;font-size:12px">
+        <div x-show="msh.loading" style="color:var(--text-dim)">載入中…</div>
+        <template x-if="!msh.loading">
+          <div>
+            <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">只列已核准且已確認到貨、還有剩餘可出貨量的材料申請；與庫存序號不能放在同一列。</div>
+            <template x-for="x in msh.items" :key="x.materialItemId">
+              <label style="display:flex;gap:8px;align-items:center;padding:3px 0" :data-testid="'msh-row-' + x.docCode">
+                <input type="checkbox" style="width:auto" x-model="msh.pick[x.materialItemId]">
+                <span style="flex:1" x-text="x.docCode + '　' + x.name"></span>
+                <span style="color:var(--text-dim)" x-text="'已到料 ' + x.arrivedQty + '／其他出貨單 ' + (x.reserved + x.shipped) + '／剩餘 ' + x.left + (x.unit ? ' ' + x.unit : '')"></span>
+                <input type="number" min="0" step="any" style="width:80px;text-align:right" x-model.number="msh.qty[x.materialItemId]" :data-testid="'msh-qty-' + x.docCode">
+              </label>
+            </template>
+            <div x-show="msh.items.length === 0 && !msh.err" style="color:var(--text-dim)">沒有可帶入的材料申請</div>
+            <div x-show="msh.err" data-testid="msh-err" style="color:var(--tone-danger-fg)" x-text="msh.err"></div>
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button type="button" data-testid="msh-import" @click="mshImport()" style="font-size:11px;padding:3px 12px;border:1px solid var(--line);border-radius:5px;background:var(--accent-hover);color:var(--surface);cursor:pointer">帶入</button>
+              <button type="button" @click="mshOpen()" style="font-size:11px;padding:3px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface);cursor:pointer">關閉</button>
+            </div>
+          </div>
+        </template>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px">
         <thead>
@@ -4036,6 +4065,7 @@
                 <input type="text" x-model="it.description"
                        :placeholder="it.type==='header' ? '段落標題…' : '品名 / 規格說明'"
                        :style="'width:100%;padding:5px 8px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box' + (it.type==='header' ? ';font-weight:700;color:var(--accent-hover)' : '')">
+              <div x-show="it.materialLink" x-cloak data-testid="ship-link-tag" style="font-size:11px;color:var(--accent-hover);margin-top:2px" x-text="it.materialLink ? ('連結材料申請 ' + it.materialLink.docCode) : ''"></div>
               </td>
               <template x-if="it.type!=='header'">
                 <td style="padding:4px 6px">
@@ -4045,7 +4075,7 @@
               </template>
               <template x-if="it.type!=='header'">
                 <td style="padding:4px 6px">
-                  <input type="number" x-model.number="it.qty" min="0" step="1"
+                  <input type="number" x-model.number="it.qty" min="0" step="any" @input="syncLinkQty(it)" :data-testid="it.materialLink ? 'ship-qty-linked' : null"
                          style="width:100%;padding:5px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;text-align:right;outline:none;box-sizing:border-box">
                 </td>
               </template>
@@ -4065,8 +4095,8 @@
               </td>
               <template x-if="it.type!=='header'">
                 <td style="padding:4px 6px">
-                  <button type="button" @click="openSerialPicker(ii)"
-                          :title="it.part_no ? (it.part_no + '：' + it.serials.join('、')) : '選擇庫存料號/序號（選填）'"
+                  <button type="button" @click="openSerialPicker(ii)" :disabled="!!it.materialLink"
+                          :title="it.materialLink ? '這一列已連結材料申請，不能同時選庫存序號' : (it.part_no ? (it.part_no + '：' + it.serials.join('、')) : '選擇庫存料號/序號（選填）')"
                           style="width:100%;padding:5px 8px;border:1px dashed var(--border-light);border-radius:5px;font-size:11px;font-family:inherit;background:var(--surface);cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
                           :style="it.part_no ? 'border-style:solid;border-color:var(--tone-info-border);background:var(--accent-light);color:var(--accent-hover)' : ''"
                           x-text="it.part_no ? (it.part_no + ' ×' + (it.serials||[]).length) : '選料號'"></button>

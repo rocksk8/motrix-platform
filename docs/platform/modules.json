@@ -299,6 +299,7 @@
     "mod:case/material_payment",
     "mod:case/material_payment_cashier",
     "mod:case/material_shippable",
+    "mod:case/material_shipping_view",
     "mod:case/purchase_items",
     "mod:case/settlement_actuals"
    ],
@@ -359,6 +360,7 @@
     "page:pages/suppliers.html",
     "mod:supply/__init__",
     "mod:supply/gl_events",
+    "mod:supply/material_link",
     "mod:supply/api/inventory",
     "mod:supply/api/shipping_notes",
     "mod:supply/api/suppliers",

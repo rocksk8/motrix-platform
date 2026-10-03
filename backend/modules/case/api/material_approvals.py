@@ -26,6 +26,7 @@ from helpers.case_access import require_case
 from helpers.financial_mask import money_visible
 from modules.case import material_approval as MA
 from modules.case import material_notify as MN
+from modules.case import material_shipping_view as _MSV   # 34-S3：出貨連動（只經 M03 提供者）
 
 router = APIRouter()
 
@@ -90,7 +91,8 @@ def get_approvals(quote_no: str, authorization: str = Header(None)):
         q = _load_case(conn, quote_no)
         require_case(user, q, quote_no)
         rows = MA.rows_for_case(conn, quote_no)
-        return {"quoteNo": quote_no, "approvals": {str(o.get("itemId")): _summary(rows.get(str(o.get("itemId")))) for o in _orders(q)}}
+        return {"quoteNo": quote_no, "approvals": {str(o.get("itemId")): _summary(rows.get(str(o.get("itemId")))) for o in _orders(q)},
+                "shipping": _MSV.summary_extra(conn, quote_no)}              # 34-S3：已申請／已到料／已出貨（占用中）＋出貨單號；只經提供者
     finally:
         conn.close()
 
@@ -251,6 +253,9 @@ def cancel(quote_no: str, item_id: str, body: dict = Body(default={}), authoriza
         begin_write(conn)
         q = _load_case(conn, quote_no)
         order = _order(q, item_id)
+        why = _MSV.cancel_blocker(conn, quote_no, item_id)                   # 34-S3：有活的出貨連結（占用或已出貨）不可取消
+        if why:
+            raise HTTPException(409, why)
         try:
             MA.cancel(conn, quote_no, item_id, user, (body or {}).get("reason"))
         except MA.MaterialApprovalError as e:

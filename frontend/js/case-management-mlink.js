@@ -165,5 +165,14 @@ window.CM_PARTS.push(() => ({
     // 已全額付款的材料申請：數量／單價不能改（金額已付清，要調整請另開一筆）
     moPaidFullHint: '已全額付款，金額不能修改；要調整請另開一筆材料申請',
     moPaidFull(m) { return !!m && m._saved !== false && m.paidStatus === 'paid' },
+    // 34-S3：已申請／已到料／已出貨（占用中）＋出貨單號；沒有到料也沒有出貨連動 ⇒ 空字串（不顯示）
+    mlShip(m) { return (this.moShipping || {})[m && m.itemId] || null },
+    mlShipText(m) {
+      const s = this.mlShip(m)
+      if (!s || (!(s.arrivedQty > 0) && !(s.shipped > 0) && !(s.reserved > 0))) return ''
+      const n = v => (v === null || v === undefined) ? '—' : Number(v)
+      return `已申請 ${n(s.appliedQty != null ? s.appliedQty : m.quantity)}／已到料 ${n(s.arrivedQty)}／已出貨 ${n(s.shipped)}` + (s.reserved > 0 ? `（占用中 ${n(s.reserved)}）` : '')
+    },
+    mlShipNotes(m) { const s = this.mlShip(m); return s && s.notes && s.notes.length ? '出貨單：' + s.notes.join('、') : '' },
     mlQuoteName(id) { const it = this.mlItems.find(i => i.itemId === id); return it ? it.description : id }
 }))

@@ -48,6 +48,7 @@ window.CM_PARTS.push(() => ({
     moMsgError: false,
     // 材料申請審核（31-C）：itemId → 審核摘要 {status, legacy, docCode, currentApprovers, rejectReason, receivedOn, receivedBy…}
     moApprovals: {},
+    moShipping: {},        // 34-S3：{itemId: {appliedQty, arrivedQty, reserved, shipped, notes}}（出貨連動；只讀）
     moBusy: '',
     // 材料申請匯款申請（31-C）：itemId → {quota:{total,legacyPaid,committed,remaining}, payments:[…]}；供應商選單；開單表單（一次只開一張）
     moPay: {},
@@ -113,7 +114,7 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-order-approvals`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok && this._moReqFor === quoteNo) { this.moApprovals = (await r.json()).approvals || {}; if (this._mlFollowMovedRow) this._mlFollowMovedRow() }   // 32-S4d：列的狀態變了，頁籤跟著走
+        if (r.ok && this._moReqFor === quoteNo) { const _d = await r.json(); this.moApprovals = _d.approvals || {}; this.moShipping = _d.shipping || {}; if (this._mlFollowMovedRow) this._mlFollowMovedRow() }   // 32-S4d：列的狀態變了，頁籤跟著走
       } catch {}
     },
     // ── 材料申請匯款申請（31-C 匯款切片）：已付金額不再手填，只能經匯款申請（簽核→出納）登錄 ──
@@ -1515,7 +1516,7 @@ window.CM_PARTS.push(() => ({
         // 「尚無材料申請項目」，接著才跳成「載入中…」。全套測試偶發的紅燈就是它
         // （test_e2e_material_orders_2026_09_11.py，約 1/5 機率）。
         this.materialOrders = []
-        this.moApprovals = {}; this.moPay = {}        // 31-C：審核摘要與匯款額度也是案件層級（沒重置會把前一件的狀態帶進這一件；c7 預審）
+        this.moApprovals = {}; this.moShipping = {}; this.moPay = {}        // 31-C：審核摘要與匯款額度也是案件層級（沒重置會把前一件的狀態帶進這一件；c7 預審）
         this.moDirty = false
         this.moMsg = ''
         this.moLoading = true
