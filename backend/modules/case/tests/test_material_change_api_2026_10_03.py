@@ -234,22 +234,38 @@ def test_real_change_proposal_end_to_end_create_apply_and_no_change_afterwards(W
 
 
 def test_real_supply_provider_blocks_lowering_below_shipped_without_overriding_the_hook(W, reg, monkeypatch, fake_proposal):
-    """da：不覆寫 `MC.SHIPPED_PROVIDER`，走真正的註冊表取 c7 的出貨連動提供者；出貨連動還沒進這個安裝包就略過（有它時：已出貨的材料申請把數量降到低於已出貨 ⇒ 409）。"""
+    """da：不覆寫 `MC.SHIPPED_PROVIDER`，走真正的註冊表取 c7 的出貨連動提供者（modules/supply/material_link.py）：
+    已核准的出貨單占用／已出貨 4 台，提案把數量降到 3 ⇒ 409 `change_below_shipped`；已出貨 ≤ 新數量就過。"""
     from core import registry
-    prov = registry.providers("shipping.material_shipped_qty").get("supply") or registry.providers("shipping.material_shipped").get("supply")
-    if prov is None:
+    if registry.providers("shipping.material_shipped_qty").get("supply") is None and registry.providers("shipping.material_shipped").get("supply") is None:
         pytest.skip("出貨連動提供者（shipping.material_shipped／_qty）不在這個安裝包")
     monkeypatch.setattr(MC, "SHIPPED_PROVIDER", None)                                                  # 明確不覆寫：驗註冊表那條路
     c, h = W
     _flow([])
-    _setup()
-    assert MC._shipped_fn() is not None
-    # 建立一張已核准、會占用／已出貨 4 台的出貨單的情境需要出貨模組的資料表與單據；交給 c7 的契約測試覆蓋提供者本身，這裡只驗接線存在且可呼叫
+    _setup(received="2026-10-04")
+    r = c.post("/api/shipping-notes", headers=h, json={"quote_no": NO, "items": [{"description": "交換器", "materialLink": {"materialItemId": IID, "docCode": "MO-20261005-0001", "qty": 1}}]})
+    assert r.status_code == 201, r.text
+    note = r.json()["note_no"]
     cn = db.get_db()
     try:
-        assert float(MC._shipped_fn()(cn, NO, IID) or 0) >= 0.0
+        cn.execute("UPDATE shipping_notes SET status='已核准', items_json=? WHERE note_no=?",
+                   (json.dumps([{"description": "交換器", "materialLink": {"materialItemId": IID, "docCode": "MO-20261005-0001", "qty": 4.0}}], ensure_ascii=False), note))
+        cn.commit()
+        assert MC._shipped_fn()(cn, NO, IID) == 4.0                                                    # 真提供者：已出貨 4（已核准的出貨單）
     finally:
         cn.close()
+    r = _post(c, h, BASE + "/changes", {"reason": "追加"})                                              # 新數量 3 < 4
+    assert r.status_code == 409 and "已出貨" in r.json()["detail"], r.text
+    assert db.get_db().execute("SELECT COUNT(*) FROM case_material_changes").fetchone()[0] == 0
+    cn = db.get_db()
+    try:
+        cn.execute("UPDATE shipping_notes SET items_json=? WHERE note_no=?",
+                   (json.dumps([{"description": "交換器", "materialLink": {"materialItemId": IID, "docCode": "MO-20261005-0001", "qty": 3.0}}], ensure_ascii=False), note))
+        cn.commit()
+    finally:
+        cn.close()
+    assert _post(c, h, BASE + "/changes", {"reason": "追加"}).status_code == 200                       # 已出貨 3 ≤ 新數量 3 ⇒ 過
+
 
 
 def test_audit_rows_really_land_after_commit_for_every_action(W, reg, fake_proposal):
