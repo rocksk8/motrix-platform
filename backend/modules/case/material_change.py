@@ -190,6 +190,12 @@ def validate(conn, quote_no, item_id, before: dict, after: dict, order: dict) ->
         problems.append({"code": "bad_amount", "message": "單價與小計不可為負"})
     if q > 0 and abs(q * u - t) > 0.01 + 0.00005 * q:
         problems.append({"code": "bad_total", "message": "小計必須等於數量 × 單價"})
+    snap = [x for x in (after.get("poSnapshot") or []) if isinstance(x, dict)]
+    units = {str(x.get("unit") or "") for x in snap}
+    if snap and len(units) == 1 and str(after.get("unit") or "") in units:                # 數量上限＝涵蓋的採購單行數量合計（單位一致時）：不能憑空灌大「可出貨量」（da）
+        covered = sum(_num(x.get("qty")) for x in snap)
+        if q > covered + 1e-9:
+            problems.append({"code": "quantity_exceeds_coverage", "message": "數量 %s 超過已核准採購單行涵蓋的數量 %s" % (q, covered)})
     diff = compute_diff(before, after)
     if not diff:
         problems.append({"code": "no_change", "message": "沒有任何變更"})
