@@ -218,3 +218,8 @@
 - 既有輸入：da 測試衛生盤點（audit/train33-da-hygiene）、d7 HYGIENE-D7.md、PROPOSAL-FAILFAST-AND-SELECTOR-D7.md（wip/t33-failfast-proposal-d7@577129f4）、工具演練約15檔改依 diff 觸發（約省12–13分）、a3 author_gate 全域釘子（已進第34班）、串接點孤兒盤點（da，attachments.catalog／gl.events／uploads.path_access）。
 - 上線後分工草案（待啟動時派）：da＝測試母體衛生第二版（-rsx --durations=30、失效／無效測試清單）；d7＝選擇器與 failfast 方案；a3＝author_gate／drill 與包級驗證流程；ea＝階段／整合流程時間拆解；c7／2e＝稽核流程（作者自審 vs 獨立稽核、滾動稽核）的成本與漏洞。
 - 補充（使用者 2026-10-03）：除驗證／稽核優化方案外，也要**盤點近期更新的優化**——近幾班做過的建包／測試／流程優化（stage 結果重用、failfast［d7：首紅後平均僅 4.3 分，大頭在首紅前］、author_gate quick 與全域釘子補洞、無視窗工具鏈、選擇器、quick-confirm［d7 回放：省 0 分，低優先］等）逐項量化：省多少時間、有沒有真的生效、有無副作用或遺留（過時設定、已無用的守門）。同樣上線後才處理，輸入含 build_history.jsonl、fail_stream、d7 HYGIENE-D7.md。
+
+## 第34班上線（2026-10-03 15:34）
+- 6927e222 已上正式機（成功無回滾，15 秒）；基準 6927e222、tag prod/6927e222。階段 not_e2e／e2e(884) 0 紅；da 包級 PASS；drill_train34 PASS；探針 CLEAN（249d851a 因 M2 變更申請 API 洩漏採購單行金額被 da 擋下作廢，d7 maskfix c05e5b72 修正重出）。
+- 內容：M2 材料申請變更申請（case 0006）、材料申請依品項帶入、出貨單連動、精算納入承攬／手續費／自訂支出、D12 設計器預設開（使用者已驗拖放）、出納款別標示、D7 全額付款金額鎖定。
+- 待辦：①上線後「驗證／稽核優化方案」＋「近期優化盤點」（使用者重開機後啟動）；②權限路線 A→職責角色化→B（15題預設已同意、superadmin 每功能可用不變式；待使用者說開工）；③精算承攬成本含稅／未稅口徑待問；④報表「已出貨數量」欄位；⑤train 31 case_material_payments 備份分流（待有資料）；⑥da 串接點孤兒盤點（attachments.catalog／gl.events／uploads.path_access）。
