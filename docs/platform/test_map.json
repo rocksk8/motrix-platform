@@ -6194,6 +6194,7 @@
    "unresolved_api": [
     "/api/quotations/NOPE/material-changes/{}/submit"
    ],
+   "login_fixture": true,
    "module": "case"
   },
   "backend/modules/case/tests/test_material_change_core_2026_10_03.py": {

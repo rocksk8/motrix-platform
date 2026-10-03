@@ -6811,19 +6811,19 @@
    "routes": [
     {
      "func": "list_case_changes",
-     "line": 92,
+     "line": 100,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-changes"
     },
     {
      "func": "list_changes",
-     "line": 106,
+     "line": 114,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-orders/{item_id}/changes"
     },
     {
      "func": "preview_proposal",
-     "line": 120,
+     "line": 128,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-orders/{item_id}/change-proposal"
     }
