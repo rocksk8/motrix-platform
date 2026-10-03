@@ -25,7 +25,7 @@ IID = "m1"
 def reg(monkeypatch):
     """登記 material_change 單據類型（M2a 本身不登記）；測完還原，免得污染同一行程裡別的守門題。"""
     monkeypatch.setattr(MA, "PO_REQUIRED", True)
-    monkeypatch.setattr(MC, "SHIPPED_PROVIDER", None)
+    monkeypatch.setattr(MC, "SHIPPED_PROVIDER", lambda c, q, i: 0.0)                              # 預設：沒有出貨（個別題自己改）
     monkeypatch.setattr(MC, "PROPOSAL_FN", lambda *a, **k: None)                                 # 預設：不重驗（個別題自己設）
     had = MC.DOC_TYPE in TA.APPROVAL_DOC_TYPES
     MC.ensure_registered()
@@ -137,7 +137,6 @@ def test_create_stores_base_proposal_diff_and_a_sequential_doc_code(conn):
     assert ch["status"] == MC.S_DRAFT and ch["doc_code"].startswith("MC-") and ch["doc_code"].endswith("0001") and ch["base_version"] == 1
     assert [d["field"] for d in json.loads(ch["diff_json"])] == ["quantity", "totalPrice", "poSnapshot"]
     assert json.loads(ch["proposal_json"])["quantity"] == 3.0 and json.loads(ch["base_json"])["quantity"] == 2.0
-    assert [w for w in ch["warnings"]] and "出貨" in ch["warnings"][0]                    # 沒有出貨提供者 ⇒ 警告而非靜默
 
 
 def test_create_validations_leave_the_original_untouched(conn):
@@ -207,6 +206,19 @@ def test_shipped_lower_bound_uses_the_provider_when_present_and_fails_closed(con
         raise RuntimeError("provider down")
     monkeypatch.setattr(MC, "SHIPPED_PROVIDER", boom)
     _no_change_made(conn, _frozen(conn), lambda: MC.create(conn, NO, IID, ENG, _cp(), "追加"), 400, "shipped_unavailable")      # 提供者壞了不放行
+
+
+def test_without_a_shipped_provider_it_warns_when_there_is_no_supply_module_and_fails_closed_when_there_is(conn, monkeypatch):
+    """出貨下限：沒有提供者時——沒有出貨模組＝警告放行；出貨模組在（連動啟用）＝fail closed（da：寧可擋也不讓人把已出貨的數量改小）。"""
+    _setup()
+    monkeypatch.setattr(MC, "SHIPPED_PROVIDER", None)
+    monkeypatch.setattr(MC, "_shipped_fn", lambda: None)
+    monkeypatch.setattr(MC, "_supply_loaded", lambda: False)
+    ch = MC.create(conn, NO, IID, ENG, _cp(), "追加")
+    assert ch["warnings"] and "出貨" in ch["warnings"][0]
+    conn.execute("DELETE FROM case_material_changes")
+    monkeypatch.setattr(MC, "_supply_loaded", lambda: True)
+    _no_change_made(conn, _frozen(conn), lambda: MC.create(conn, NO, IID, ENG, _cp(), "追加"), 400, "shipped_unavailable")
 
 
 # ── 簽核與原子套用 ───────────────────────────────────────────────────

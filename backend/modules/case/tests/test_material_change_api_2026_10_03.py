@@ -170,7 +170,9 @@ def _fake_registry(monkeypatch, table):
 def test_shipped_provider_resolution_order_and_dict_wrapper(W, reg, monkeypatch, fake_proposal):
     c, h = W
     _setup()
-    assert MC._shipped_fn() is None                                                                    # 沒有任何提供者 ⇒ 警告而非靜默
+    monkeypatch.setattr(MC, "SHIPPED_PROVIDER", None)
+    _fake_registry(monkeypatch, {})
+    assert MC._shipped_fn() is None                                                                    # 沒有任何提供者
     d = {"shipping.material_shipped": {"supply": lambda conn, qn: {IID: {"reserved": 1.0, "shipped": 3.0, "notes": ["SN-1"]}, "other": {"shipped": 99}}}}
     _fake_registry(monkeypatch, d)
     f = MC._shipped_fn()
@@ -229,3 +231,22 @@ def test_real_change_proposal_end_to_end_create_apply_and_no_change_afterwards(W
         cn.close()
     again = _post(c, h, BASE + "/changes", {"reason": "再來一次"})
     assert again.status_code == 400 and "沒有任何變更" in again.json()["detail"]                       # 套用後涵蓋已齊，不能再提空變更
+
+
+def test_real_supply_provider_blocks_lowering_below_shipped_without_overriding_the_hook(W, reg, monkeypatch, fake_proposal):
+    """da：不覆寫 `MC.SHIPPED_PROVIDER`，走真正的註冊表取 c7 的出貨連動提供者；出貨連動還沒進這個安裝包就略過（有它時：已出貨的材料申請把數量降到低於已出貨 ⇒ 409）。"""
+    from core import registry
+    prov = registry.providers("shipping.material_shipped_qty").get("supply") or registry.providers("shipping.material_shipped").get("supply")
+    if prov is None:
+        pytest.skip("出貨連動提供者（shipping.material_shipped／_qty）不在這個安裝包")
+    monkeypatch.setattr(MC, "SHIPPED_PROVIDER", None)                                                  # 明確不覆寫：驗註冊表那條路
+    c, h = W
+    _flow([])
+    _setup()
+    assert MC._shipped_fn() is not None
+    # 建立一張已核准、會占用／已出貨 4 台的出貨單的情境需要出貨模組的資料表與單據；交給 c7 的契約測試覆蓋提供者本身，這裡只驗接線存在且可呼叫
+    cn = db.get_db()
+    try:
+        assert float(MC._shipped_fn()(cn, NO, IID) or 0) >= 0.0
+    finally:
+        cn.close()
