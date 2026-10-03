@@ -286,3 +286,75 @@ def test_audit_rows_really_land_after_commit_for_every_action(W, reg, fake_propo
     finally:
         cn.close()
     assert {"material_changes.create", "material_changes.revise", "material_changes.submit", "material_changes.withdraw", "material_changes.apply"} <= acts, acts
+
+
+def _walk_keys(v, acc):
+    if isinstance(v, dict):
+        for k, x in v.items():
+            acc.add(k)
+            _walk_keys(x, acc)
+    elif isinstance(v, list):
+        for x in v:
+            _walk_keys(x, acc)
+    return acc
+
+
+def test_account_with_case_access_but_no_finance_view_gets_no_money_from_any_change_endpoint(W, reg, fake_proposal, make_user, client, monkeypatch):
+    """da must-fix：有案件存取、沒有財務檢視權的帳號打三支讀取端點，回應任何地方（含差異的涵蓋行、uncoveredLines）都不可有 amount／unitPrice／totalPrice。"""
+    c, h = W
+    _flow([])
+    _setup()
+    base_fn = MC.PROPOSAL_FN
+
+    def with_uncovered(conn, q, i, proposed):                                                           # 假提案補上 uncoveredLines（含行金額）與帶已付金額的 below_paid 問題
+        cp = base_fn(conn, q, i, proposed)
+        cp["uncoveredLines"] = [dict(LINE2)]
+        cp["problems"] = [{"code": "below_paid", "message": "變更後小計低於已付金額 1500"}]
+        return cp
+    monkeypatch.setattr(MC, "PROPOSAL_FN", with_uncovered)
+    u, p = make_user(username="mc_eng_nomoney", role="engineer", modules=["case_manage"])
+    cn = db.get_db()
+    try:
+        uid = cn.execute("SELECT id FROM users WHERE username='mc_eng_nomoney'").fetchone()["id"]
+        cn.execute("UPDATE quotations SET assigned_user_ids=? WHERE quote_no=?", (json.dumps([uid]), NO))
+        cn.commit()
+    finally:
+        cn.close()
+    monkeypatch.setattr(MC, "PROPOSAL_FN", base_fn)                                                     # 建立用無問題的提案
+    ch = _post(c, h, BASE + "/changes", {"reason": "追加"}).json()["change"]
+    monkeypatch.setattr(MC, "PROPOSAL_FN", with_uncovered)
+    assert any(l.get("amount") for d in ch["diff"] if d["field"] == "poSnapshot" for l in d["new"])        # 有財務檢視權者看得到金額（對照）
+    pv = c.get(BASE + "/change-proposal", headers=h).json()
+    assert pv["uncoveredLines"][0]["amount"] == 1000.0 and "1500" in pv["problems"][0]["message"]         # 對照：財務檢視者看得到金額與已付數字
+    lg = c.post("/api/auth/login", json={"username": u, "password": p})
+    assert lg.status_code == 200, lg.text
+    eh = {"Authorization": "Bearer " + lg.json()["token"]}
+    got = {}
+    for name, url in (("item", BASE + "/changes"), ("case", "/api/quotations/%s/material-changes" % NO), ("proposal", BASE + "/change-proposal")):
+        r = c.get(url, headers=eh)
+        assert r.status_code == 200, (name, r.text)
+        got[name] = r.json()
+        keys = _walk_keys(r.json(), set())
+        assert not (keys & {"amount", "unitPrice", "totalPrice"}), (name, keys & {"amount", "unitPrice", "totalPrice"})
+        assert "3000" not in r.text and "2000" not in r.text and "1500" not in r.text and "1000.0" not in r.text, (name, r.text[:300])      # 數值本身也不在（涵蓋行金額、已付）
+    assert got["proposal"]["uncoveredLines"] and all("amount" not in x for x in got["proposal"]["uncoveredLines"])
+    assert [d["field"] for d in got["item"]["changes"][0]["diff"]] == ["quantity", "totalPrice", "poSnapshot"]    # 數量與涵蓋行仍看得到，只有金額被遮
+
+
+def test_history_comment_and_audit_label_of_an_applied_change_carry_no_money_numbers(W, reg, fake_proposal):
+    """da 輸出面掃描：核准套用寫進審核歷程（approval_json）與稽核的差異摘要，金額欄位只寫「已變更」，不帶單價／小計的數字。"""
+    c, h = W
+    _flow([])
+    _setup()
+    ch = _post(c, h, BASE + "/changes", {"reason": "追加"}).json()["change"]
+    assert _post(c, h, "/api/quotations/%s/material-changes/%d/submit" % (NO, ch["id"])).json()["applied"]
+    cn = db.get_db()
+    try:
+        hist = json.loads(MA.get(cn, NO, IID)["approval_json"])["history"][-1]["comment"]
+        labels = [r[0] for r in cn.execute("SELECT target_label FROM audit_log WHERE action='material_changes.apply'")]
+        details = [r[0] for r in cn.execute("SELECT detail FROM audit_log WHERE action LIKE 'material_changes.%'")]
+    finally:
+        cn.close()
+    for text in [hist] + labels + details:
+        assert "3000" not in text and "2000" not in text and "1000" not in text, text
+    assert "totalPrice 已變更" in hist and "quantity 2.0→3.0" in hist and "poSnapshot 1 行→2 行" in hist, hist
