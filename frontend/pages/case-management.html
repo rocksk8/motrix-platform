@@ -2448,6 +2448,8 @@
                            :data-testid="'mo-approval-' + m.itemId">
                         <span style="font-weight:600" :style="moApTone(m)" data-testid="mo-ap-status" x-text="moApLabel(m)" :title="moIsUnsent(m) ? '尚未送審，不計入報表與額度，也不會出現在簽核佇列。' : ''"></span>
                         <span x-show="moAp(m).docCode" style="color:var(--text-dim)" data-testid="mo-ap-code" x-text="moAp(m).docCode"></span>
+                        <span x-show="mlShipText(m)" x-cloak style="color:var(--text-secondary)" :data-testid="'ml-ship-' + m.itemId" x-text="mlShipText(m)"></span>
+                        <span x-show="mlShipNotes(m)" x-cloak style="color:var(--text-dim)" :data-testid="'ml-ship-notes-' + m.itemId" x-text="mlShipNotes(m)"></span>
                         <span x-show="['待審核','簽核中'].includes(moAp(m).status)" style="color:var(--text-dim)"
                               x-text="'待簽：' + ((moAp(m).currentApprovers || []).join('、') || '—')"></span>
                         <span x-show="moAp(m).status === '已退回' && moAp(m).rejectReason" style="color:var(--tone-danger-fg)"

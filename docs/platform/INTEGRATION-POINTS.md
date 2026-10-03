@@ -878,7 +878,7 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M03 供應：`modules/supply/material_link.py::material_shipped` |
-| 使用方 | 尚無（33-S3：材料申請頁三格數量、取消阻擋；接入時補） |
+| 使用方 | M01 案件：`modules/case/material_shipping_view.py`（材料申請摘要的出貨欄、取消前檢查；34-S3） |
 | 形式 | provider，單一提供者（名稱 `supply`） |
 | 語法 | 提供：`("shipping.material_shipped", "supply"): fn`；取用：`registry.providers("shipping.material_shipped").get("supply")` ⇒ `fn(conn, quote_no, exclude_note_no=None)` |
 | 回傳 | `{materialItemId: {"reserved": 數量（待審核／簽核中）, "shipped": 數量（已核准）, "notes": [出貨單號…]}}`；草稿、已退回不計 |

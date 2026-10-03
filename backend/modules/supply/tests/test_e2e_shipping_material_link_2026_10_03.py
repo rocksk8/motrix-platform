@@ -108,3 +108,32 @@ def test_submit_warns_about_unlinked_remaining_but_does_not_block(ui):
             break
         pg.wait_for_timeout(200)
     assert _st() in ("待審核", "已核准"), _st()
+
+
+def test_material_card_shows_applied_arrived_shipped_and_the_note_numbers(world, live_server, new_context):
+    """34-S3：案件頁材料申請卡片：已申請／已到料／已出貨（占用中）＋出貨單號；沒到料也沒出貨連動的那一筆不顯示。"""
+    client, h = world
+    a = _note(client, h, [{"description": "電纜", "materialLink": {"materialItemId": ITEM, "docCode": DOC, "qty": 4}}], status="已核准")
+    b = _note(client, h, [{"description": "電纜", "materialLink": {"materialItemId": ITEM, "docCode": DOC, "qty": 2}}], status="待審核")
+    import db
+    cn = db.get_db()
+    for no in (a, b):
+        cn.execute("UPDATE shipping_notes SET data_json=? WHERE note_no=?", (json.dumps({"approval": {"tiers": [], "currentTier": 0}}), no))
+    cn.commit()
+    cn.close()
+    pg = new_context(viewport={"width": 1500, "height": 1200}).new_page()
+    errors = []
+    pg.on("pageerror", lambda e: errors.append(str(e)))
+    inject_login(pg, live_server, "sl_super", "Test-Pass-123")
+    pg.goto("%s/pages/case-management.html?q=%s" % (live_server, Q))
+    pg.wait_for_selector('.cm-tab:has-text("財務")', timeout=20000)
+    pg.click('.cm-tab:has-text("財務")')
+    pg.wait_for_selector('[data-testid="mo-card-%s"]' % ITEM, timeout=20000)
+    pg.click('[data-testid="ml-tab-all"]')
+    t = pg.locator('[data-testid="ml-ship-%s"]' % ITEM)
+    t.wait_for(state="visible", timeout=15000)
+    assert t.inner_text() == "已申請 10／已到料 10／已出貨 4（占用中 2）", t.inner_text()
+    notes = pg.locator('[data-testid="ml-ship-notes-%s"]' % ITEM).inner_text()
+    assert a in notes and b in notes, notes
+    assert pg.locator('[data-testid="ml-ship-it2"]').is_hidden()
+    assert not errors, errors

@@ -1,5 +1,6 @@
 # 案件 更新紀錄
 
+
 ## 1.0.114 — 2026-10-03（wip/t34-settlement-extras-2e）：精算端點納入承攬商派發、匯款手續費、自訂模組支出（34）
 - `settlement-actuals` 新增 `costExtras` 與 `totals.dispatchTotal／dispatchReport／remitFeeTotal／customExpenseTotal／totalActualCost`：口徑與精算頁現行算法逐位相同（使用者裁示 A：歷史精算不變）——派發＝承攬商含稅合計＋外包人員（`dispatch.row` 的 grandTotal；排除已取消、草稿、已退回）；手續費＝額外支出手續費（已登錄付款、未作廢）＋承攬商匯款手續費；自訂模組支出＝`custom_finance.case_finance`。另輸出 `dispatchReport`（未稅承攬費＋人員，營運報表／總帳 `dispatch_entries` 口徑，供漂移守門）；兩者差異＝承攬費的 5% 稅，含稅或未稅由使用者決定（列第 35 班問題），這裡只並列。已完結精算的這幾個鍵取存檔 summary 的凍結值。`extraTotal` 語意不變（仍只含額外支出）。精算頁改取這些值（派發小計、匯款手續費、自訂模組支出；端點不可用時退回原本各打一支的舊路徑），金額與原本逐位相同；新增 e2e 對照頁面成本彙總與端點 totals。完結重算比對（D10）不含這三類（頁面端因無權限可能少打其中一支端點）。
 
@@ -7,6 +8,11 @@
 - 完結重算的進位容差只套在「品項實際成本」（每品項 ±1 元）；額外支出、採購類總額、未採用採購只留 1 元防浮點（原本一併放寬成品項數）。
 - 已完結精算的 `settlement-actuals`：`totals.materialUnassignedTotal` 取存檔 summary 的同名鍵、`extraTotal` 扣掉它與手續費、自訂模組支出，分法與完結前的即時值一致（舊完結案沒有這鍵＝0，合計不變）。
 - 新增 `POST /api/quotations/{no}/settlement-actuals/preview`（沖銷對應放請求本文；上百筆不受網址長度限制），精算頁預覽改用它；`GET ?offsets=` 保留相容。
+
+## (next) — wip/t34-ship-link-c7：材料申請的出貨連動（34-S3，案件側）
+- `GET /api/quotations/{no}/material-order-approvals` 回應多一個頂層鍵 `shipping`：`{itemId: {appliedQty, arrivedQty, reserved, shipped, notes[]}}`（已到料或有出貨連動的材料申請；只經 M03 提供者 `shipping.material_shipped`，不讀 `shipping_notes`；提供者不在＝0）。材料申請卡片顯示「已申請／已到料／已出貨（占用中）」與出貨單號。
+- 取消材料申請（`POST …/cancel`）：有活的出貨連結（占用中或已出貨）⇒ 409 並列出貨單號；退回／草稿的出貨單不擋；出貨提供者出錯 ⇒ 擋（fail closed）。
+- 測試：`modules/supply/tests/test_material_ship_case_view_2026_10_03.py`（5）、`test_e2e_shipping_material_link_2026_10_03.py::test_material_card_shows_…`。
 
 ## 1.0.112 — 2026-10-03（wip/t34-ship-case-2e）：出貨單連動——可出貨材料提供者（34-S1 case 側）
 - 新增提供者 `("material.shippable", "case")`（`modules/case/material_shippable.py`）：回傳已核准且已做到貨確認的材料申請 `[{materialItemId, docCode, name, unit, quoteItemId, appliedQty, arrivedQty, status}]`，供出貨單（supply）經 registry 取用、不互相 import。唯讀；`arrivedQty` 預設整筆到貨（E5），有選填欄位 `received_qty` 時取 `min(實收, 已核准量)`（欄位與到貨 API 的 `receivedQty` 後補）。契約與逐點答覆：SHIPPING-MATERIAL-LINK-CONTRACT-S1.md §8。
