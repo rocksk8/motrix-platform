@@ -67,9 +67,9 @@ def test_resaving_as_finalized_runs_the_same_recompute_as_the_first_finalize(cas
 
 def test_resaving_a_legacy_finalized_case_stamps_the_basis_and_records_the_reason(case):
     c, h = case
-    _put_settlement({"status": "finalized", "items": [], "summary": {"itemActualTotal": 1, "extraTotal": 0, "dispatchTotal": 12500, "totalActualCost": 99, "netProfit": 5}})
-    p = page_payload(c, h)
+    p = page_payload(c, h)                                          # 先取頁面數字（凍結之後 GET 回的是凍結值）
     p["summary"].pop("dispatchBasis")
+    _put_settlement({"status": "finalized", "items": [], "summary": {"itemActualTotal": 1, "extraTotal": 0, "dispatchTotal": 12500, "totalActualCost": 99, "netProfit": 5}})
     r = _put_r(c, h, p, "補上漏記的備註")
     assert r.status_code == 200, r.text[:200]
     s = _saved()

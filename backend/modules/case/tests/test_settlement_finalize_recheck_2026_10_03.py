@@ -133,13 +133,16 @@ def test_the_request_body_is_what_gets_checked_not_the_older_saved_draft(W):
     assert _finalize(c, h, final).status_code == 200                                         # 使用者後來改採用、完結：以這次送上的為準（不是資料庫裡舊草稿的 9000）
 
 
-def test_resaving_an_already_finalized_settlement_is_not_rechecked(W):
+def test_resaving_an_already_finalized_settlement_needs_a_reason_and_is_rechecked_too(W):
+    """35c（使用者裁示，取代 33-A5 時『已完結再存不比對』的前提）：已完結的再存要有理由，再存成完結時與第一次完結同樣重算比對。"""
     c, h = W
     assert _finalize(c, h, _page_payload(c, h)).status_code == 200
     _approved_po(c, h, [_ln("a", 3, unitCost=1000)])                                         # 完結後才核准的採購單
     again = _page_payload(c, h)
-    again["summary"]["itemActualTotal"] = 1                                                  # 與重算差很多，但這是已完結的再存（超級管理員改備註）：不比對
-    assert _finalize(c, h, again).status_code == 200
+    again["summary"]["itemActualTotal"] = 1                                                  # 與重算差很多
+    assert c.put(URL, json={"settlement": again}, headers=h).status_code == 422             # 沒理由
+    r = c.put(URL, json={"settlement": again, "reason": "改備註"}, headers=h)
+    assert r.status_code == 409 and "差異" in r.json()["detail"]                             # 有理由但數字對不上：擋
 
 
 def test_tolerance_is_per_item_only_for_item_actual_total_not_for_extra_or_purchased(W):

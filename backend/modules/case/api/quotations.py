@@ -4271,6 +4271,7 @@ def approve_payment_writeoff(no: str, idx: int, body: WriteOffApproveIn, itemId:
 
 class SettlementIn(BaseModel):
     settlement: dict
+    reason: str = ""        # 35c：對已完結的精算再存（重新開啟或再完結）必填；記入編輯歷程與稽核紀錄
 
 
 @router.get("/api/quotations/{quote_no}/settlement")
@@ -4325,20 +4326,27 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         if existing_settlement.get("status") == "finalized" and user["role"] != "superadmin":
             conn.close()
             raise HTTPException(403, "精算已完結，僅超級管理員可重新修改")
+        was_final = existing_settlement.get("status") == "finalized"
+        reopen_reason = (body.reason or "").strip()
+        if was_final and not reopen_reason:                    # 35c（使用者裁示）：已完結的精算要重新開啟或修改，必須填理由（留稽核軌跡）
+            conn.close()
+            raise HTTPException(422, "重新開啟或修改已完結的精算必須填寫理由")
+        if len(reopen_reason) > 500:
+            conn.close()
+            raise HTTPException(422, "理由太長（上限 500 字）")
         if "offsets" in body.settlement:                       # 33-A4：沖銷對應的驗證（kind／品項存在／單一去處／ref 在未對應清單）
             from modules.case import settlement_actuals as _SA
             bad = _SA.validate_offsets(conn, quote_no, body.settlement.get("offsets"), existing_settlement.get("offsets"))
             if bad:
                 conn.close()
                 raise HTTPException(422, bad)
-        if body.settlement.get("status") == "finalized" and existing_settlement.get("status") != "finalized":       # 33-A5（D10；只在「非完結 → 完結」轉換時比對，已完結的再存＝凍結快照不隨之後單據變動，da）：完結前後端用同一來源重算，與頁面送上的 summary 比對；差異超過進位誤差就拒絕
+        if body.settlement.get("status") == "finalized":       # 33-A5（D10）；35c：已完結再存成完結也比對（要有理由；舊口徑頁面送的含稅數字會被擋 ⇒ 請先重新開啟再完結）
             from modules.case import settlement_actuals as _SA
             diffs = _SA.check_finalize(conn, quote_no, body.settlement)
             if diffs:
                 conn.close()
                 raise HTTPException(409, "完結前系統重算的成本與畫面不一致（採購單、材料申請或額外支出在你編輯期間有變動）——請重新整理精算頁再完結。差異：" + "；".join(diffs))
-        if body.settlement.get("status") == "finalized" and isinstance(body.settlement.get("summary"), dict) and "itemActualTotal" in body.settlement["summary"] \
-                and existing_settlement.get("status") != "finalized":
+        if body.settlement.get("status") == "finalized" and isinstance(body.settlement.get("summary"), dict) and "itemActualTotal" in body.settlement["summary"]:
             from modules.case import settlement_actuals as _SA2
             _SA2.fill_downstream(conn, quote_no, body.settlement)      # 35c F1：沒送的下游欄位由伺服器重算值補齊＋蓋口徑標記（舊完結案沒有標記＝含稅口徑）
         data["settlement"] = body.settlement
@@ -4355,6 +4363,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
             "by":        user["username"],
             "byDisplay": user["display_name"] or user["username"],
             "type":      "settlement_finalized" if is_finalized else "settlement_draft",
+            **({"reason": reopen_reason, "from": "finalized"} if was_final else {}),
         })
         data["editHistory"] = history
 
@@ -4365,7 +4374,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         spawn_bg_thread(_backup_quotation, args=(quote_no,))
         _audit(_tok(authorization), 'quotation.settlement', 'quotation', quote_no,
                f"{quote_no}（{cname}）成本精算{'完結' if is_finalized else '更新'}",
-               {"rev": settle_rev})
+               {"rev": settle_rev, **({"reason": reopen_reason, "from": "finalized"} if was_final else {})})
         if is_finalized:
             notify_settlement_finalized(
                 quote_no, cname,

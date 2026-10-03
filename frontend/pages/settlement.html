@@ -230,7 +230,7 @@
       </button>
     </template>
     <template x-if="settlement.status === 'finalized'">
-      <button class="btn btn-ghost btn-sm" @click="reopenDraft()" style="color:#DC2626;border-color:#FECACA">
+      <button class="btn btn-ghost btn-sm" @click="reopenReason=''; reopenErr=''; showReopenModal=true" style="color:#DC2626;border-color:#FECACA" data-testid="stl-reopen">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
         重新開啟
       </button>
@@ -795,6 +795,22 @@
 </div>
 
 <!-- ── 完結確認 Modal ── -->
+<div class="modal-overlay" x-show="showReopenModal" @click.self="showReopenModal=false" data-testid="stl-reopen-modal">
+  <div class="modal-box">
+    <div style="font-size:16px;font-weight:700;margin-bottom:8px">重新開啟已完結的精算？</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.7">
+      重新開啟後可修改並重新完結；請填寫理由，會記錄在編輯歷程與稽核紀錄。
+    </div>
+    <textarea x-model="reopenReason" rows="3" maxlength="500" placeholder="重新開啟的理由（必填）" data-testid="stl-reopen-reason"
+              style="width:100%;padding:6px 8px;border:1px solid var(--border-light);border-radius:6px;font-size:12px;font-family:inherit;box-sizing:border-box"></textarea>
+    <div x-show="reopenErr" x-text="reopenErr" data-testid="stl-reopen-error" style="color:#DC2626;font-size:12px;margin-top:6px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button class="btn btn-ghost btn-sm" @click="showReopenModal=false">取消</button>
+      <button class="btn btn-sm" @click="reopenDraft()" :disabled="saving" data-testid="stl-reopen-confirm" style="color:#DC2626;border-color:#FECACA">確認重新開啟</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" x-show="showFinalizeModal" @click.self="showFinalizeModal=false">
   <div class="modal-box">
     <div style="font-size:16px;font-weight:700;margin-bottom:8px">確認完結精算？</div>
@@ -845,6 +861,9 @@ function settlementPage() {
     loading: true,
     saving:  false,
     showFinalizeModal: false,
+    showReopenModal: false,
+    reopenReason: '',
+    reopenErr: '',
     toasts: [],
 
     settlement: {
@@ -1386,12 +1405,12 @@ function settlementPage() {
       }
     },
 
-    async _putSettlement() {
+    async _putSettlement(reason) {
       this.calcSummary()
       const res = await fetch(`${API}/quotations/${this.quoteNo}/settlement`, {
         method:  'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-        body:    JSON.stringify({ settlement: this.buildPayload() }),
+        body:    JSON.stringify(reason ? { settlement: this.buildPayload(), reason } : { settlement: this.buildPayload() }),
       })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || '儲存失敗')
       return res
@@ -1442,11 +1461,22 @@ function settlementPage() {
     },
 
     async reopenDraft() {
-      if (!confirm('確認重新開啟精算並允許修改？')) return
+      const reason = (this.reopenReason || '').trim()
+      if (!reason) { this.reopenErr = '請填寫重新開啟的理由'; return }
+      this.reopenErr = ''
+      const keep = { status: this.settlement.status, finalizedAt: this.settlement.finalizedAt, finalizedBy: this.settlement.finalizedBy }
       this.settlement.status      = 'draft'
       this.settlement.finalizedAt = ''
       this.settlement.finalizedBy = ''
-      await this.saveDraft()
+      this.saving = true
+      try {
+        await this._putSettlement(reason)
+        this.showReopenModal = false
+        this.toast('精算已重新開啟（草稿）')
+      } catch (e) {
+        Object.assign(this.settlement, keep)                       // 後端拒絕（例如理由空白）⇒ 畫面維持完結，不要停在『草稿』的假象
+        this.reopenErr = '重新開啟失敗：' + e.message
+      } finally { this.saving = false }
     },
 
     toast(msg, ms = 3500) {
