@@ -16,6 +16,12 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-03 T35 測試時間預算警報（warn-only）
+- 新增 `tools/platform/time_budget.py`＋基準 `tools/platform/time_budget_baseline.json`（4b18cd01 實測，-n 2：9598 題、8729 worker 秒、1089 檔）。看 worker 秒（junit time 加總）而非牆鐘（同一棵樹 -n2 55 分／-n4 25 分，牆鐘會隨負載 flapping）。
+- 規則：新測試檔 > 30 worker 秒；既有檔增加 > 30 秒且 > 1.5 倍；總量 > 基準 +5% 且 changelog 前 120 行沒有一行 `- 時間預算：<理由>`。報告同時印題數與每題 ms（測試數 +56% 時全量 +50%，每題約 190 ms 沒變慢＝成長來自數量）。
+- 接線：`build_deploy_package.ps1` 兩段 pytest 加 `--junitxml`，兩段都實際跑過才檢查，結果進 `build_history.jsonl` 的 `tests.time_budget`；整段在 try/catch、永不 Fail。每班列車全量後由整合者以 `time_budget.py update-baseline` 重量基準。
+- 注意：基準取自共用機器 -n 2；-n 4 建包的 worker 秒略低，初期總量警報偏鬆，下一班重量後收斂。
+
 ## 2026-10-03 T35-L2 增量選題：資料表一跳不拉結構擁有者
 - 診斷：改 case 模組檔（M1）時 `core:db` 並非經 import 進入，而是 `modtest._table_hop`：被改檔寫入的表（quotations、audit_log、suppliers…）的 readers／named_by 含 `db.py`（DDL 命名了全部表）⇒ 476/835 題因 `core:db` 被選。
 - 變更：`modtest.select/table_hop` 新增 `inert_schema`（預設關，modtest／scope 行為不變）；只有 `stage_select._select` 傳開：`core:db`、`plat:migrations` 不經資料表一跳進入受影響單位。

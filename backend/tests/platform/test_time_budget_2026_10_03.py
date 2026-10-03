@@ -78,6 +78,15 @@ def test_cli_and_run_check_never_fail_the_build(tmp_path):
     assert json.loads(bl.read_text(encoding="utf-8"))["files"] == {"backend/tests/test_a.py": 1.5}
 
 
+def test_cli_exits_zero_even_when_alarms_fire(tmp_path):
+    """警告機制永不擋建包：有警報時退出碼仍是 0（輸出裡看得到警報）。"""
+    j = _junit(tmp_path, [("tests.test_big", "40")])
+    bl = tmp_path / "b.json"
+    bl.write_text(json.dumps({"tests": 1, "total_ws": 1.0, "files": {}}), encoding="utf-8")
+    assert TB.run_check([j], bl, tmp_path / "none.md")["alarms"], "對照失效：這組資料應該有警報"
+    assert TB.main(["check", str(j), "--baseline", str(bl), "--changelog", str(tmp_path / "none.md")]) == 0
+
+
 def test_committed_baseline_is_loadable_and_covers_this_test_file_family():
     b = TB.load_baseline()
     assert b["tests"] > 5000 and b["total_ws"] > 3000 and b["files"]
