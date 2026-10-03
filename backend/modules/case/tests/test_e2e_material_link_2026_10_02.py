@@ -105,23 +105,22 @@ def test_material_request_link_flow_in_the_browser(live_server, make_user, e2e_b
 
     # ── 1 採購單：A 已核准（送審即核准）、B 審核中（有簽核人、還沒簽） ──
     from modules.case.tests.test_purchase_item_lines_2026_10_02 import _body, _ln
-    r = ctx.request.post(f"{live_server}/api/quotations/{NO}/extra-expenses", headers=H, data=_body("purchase_order", [_ln("a", 3, unitCost=1000, summary="交換器（採購單）")]))
+    r = ctx.request.post(f"{live_server}/api/quotations/{NO}/extra-expenses", headers=H, data=_body("purchase_order", [_ln(None, 3, unitCost=1000, summary="線材（額外採購）")]))
     assert r.status == 201, r.text()
     eid, doc = r.json()["id"], r.json()["docCode"]
     assert ctx.request.post(f"{live_server}/api/quotations/{NO}/extra-expenses/{eid}/submit", headers=H).status == 200
     _set_setting("unified_approval_flow", {"includeSubmitterManagerTier": False, "tiers": [{"order": 0, "approvers": [{"username": boss, "displayName": "主管"}]}]})
-    r = ctx.request.post(f"{live_server}/api/quotations/{NO}/extra-expenses", headers=H, data=_body("purchase_order", [_ln("a", 2, unitCost=1000, summary="交換器二號（採購單）")]))
+    r = ctx.request.post(f"{live_server}/api/quotations/{NO}/extra-expenses", headers=H, data=_body("purchase_order", [_ln(None, 2, unitCost=1000, summary="線材二號（額外採購）")]))
     assert r.status == 201, r.text()
     eid2, doc2 = r.json()["id"], r.json()["docCode"]
     rs = ctx.request.post(f"{live_server}/api/quotations/{NO}/extra-expenses/{eid2}/submit", headers=H)
     assert rs.status == 200, rs.text()
 
     page.click('[data-testid="ml-open-po"]')
-    row, row2 = page.locator(f'[data-testid="ml-p-{doc}-1"]'), page.locator(f'[data-testid="ml-p-{doc2}-1"]')
+    row = page.locator(f'[data-testid="ml-p-{doc}-1"]')
     row.wait_for(state="visible", timeout=15000)
-    row2.wait_for(state="visible", timeout=15000)
-    assert row2.locator("input").is_disabled() and "採購單尚未通過" in row2.inner_text()          # 審核中：列出但不能勾
-    assert row.locator("input").is_enabled()
+    assert page.locator(f'[data-testid="ml-p-{doc2}-1"]').count() == 0                            # 審核中的採購單不併入、也不單獨列（通過後才有）
+    assert row.locator("input").is_enabled() and "（1 行）" in row.inner_text()                    # 額外採購：以採購單為單位一組
     _shot(page, "01-po-panel")
     row.locator("input").check()
     page.click('[data-testid="ml-import"]')
@@ -146,7 +145,9 @@ def test_material_request_link_flow_in_the_browser(live_server, make_user, e2e_b
     # 同一明細不能被第二筆材料申請再帶入
     page.click('[data-testid="ml-open-po"]')
     page.wait_for_function("() => !document.querySelector('[data-testid=ml-panel]').innerText.includes('載入中')", timeout=10000)
-    assert page.locator(f'[data-testid="ml-p-{doc}-1"]').count() == 0
+    blk = page.locator(f'[data-testid="ml-block-po:{doc}"]')
+    blk.wait_for(state="visible", timeout=10000)                                                  # 同一張採購單已有申請 ⇒ 列出但不能再帶入，要追加走變更申請
+    assert "變更申請" in blk.inner_text() and page.locator(f'[data-testid="ml-p-{doc}-1"] input').is_disabled()
     page.click('[data-testid="ml-open-po"]')
 
     # ── 3 採購單作廢 ⇒ 連結失效 ⇒ 重新載入後標註回來；送審被擋、仍是草稿 ──

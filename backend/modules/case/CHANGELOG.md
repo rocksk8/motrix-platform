@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+
+## (next) — wip/t34-m1-coverage-c7：「從採購單帶入」依報價品項分組（34-M1 UI，E4）
+- 新唯讀端點 `GET /api/quotations/{no}/material-coverage`：涵蓋分組（一個報價品項一組、內容＝該品項**全部已核准**採購單行的涵蓋快照；額外採購以採購單為單位各一組；審核中的採購單行不併入、只計 `pendingLines`；已有活的材料申請 ⇒ `existing`）。內容與送審的涵蓋檢查（`material_submit_check`）同一個函式，畫面不做金額運算；金額看不到財務檢視者不給單價／小計。
+- 案件頁「從採購單明細帶入」改成帶「一品項一列」（數量／金額合計），已有申請的品項標「請用變更申請」且不能勾；涵蓋採購單的列：單價欄唯讀、小計固定（涵蓋行金額合計）、數量只能往下調（單價隨數量換算）。
+- 測試：`test_material_coverage_view_2026_10_04.py`（4）、`test_e2e_material_coverage_import_2026_10_04.py`；`test_e2e_material_link`／`po_ui`／洩漏探針改成分組語意。
 ## (next) — 2026-10-04（wip/t34-m2-wire2-2e）：變更申請數量不得高於涵蓋量；送審內容必須涵蓋全部已核准採購單行（da 稽核）
 - `change_proposal` 新增 `quantity_exceeds_coverage`：數量只能往下調，不得超過已核准採購單行涵蓋的數量（單位不同＝品項報價量）；否則一張變更就能把可出貨量灌大。
 - `material_submit_check`（強制採購單路徑）新增 `content_not_cover_snapshot`：申請內容要涵蓋該品項**全部**已核准的採購單行——小計＝行金額合計（不可改）、數量只能往下調；只帶一行的申請（同品項多行採購單時）會被擋並提示正確內容（N2）。既有測試 `test_material_po_required` 的材料金額改成與採購單行一致（100×2）。

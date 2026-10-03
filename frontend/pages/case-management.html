@@ -2353,15 +2353,17 @@
                       <div x-show="mlLoadingList" style="color:var(--text-dim)">載入中…</div>
                       <template x-if="mlPanel === 'po' && !mlLoadingList">
                         <div>
-                          <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">只有「已核准」的採購單明細可以帶入；尚在審核中的列出但不能勾選（通過後再帶入）。已對應其他材料申請的不會列出。</div>
-                          <template x-for="l in mlPoChoices()" :key="l.poDocCode + '#' + l.poLine">
-                            <label style="display:flex;gap:8px;align-items:center;padding:3px 0" :style="mlPoApproved(l) ? 'cursor:pointer' : 'cursor:not-allowed;opacity:.55'" :data-testid="'ml-p-' + l.poDocCode + '-' + l.poLine">
-                              <input type="checkbox" style="width:auto" x-model="mlPick['p:' + l.poDocCode + '#' + l.poLine]" :disabled="!mlPoApproved(l)">
-                              <span x-text="l.poDocCode + ' 第' + l.poLine + '列　' + l.summary" style="flex:1"></span>
-                              <span style="color:var(--text-dim)" x-text="l.qty + (l.unit ? ' ' + l.unit : '') + (l.vendor ? '｜' + l.vendor : '') + '｜' + l.status + (mlPoApproved(l) ? '' : '（採購單尚未通過）')"></span>
+                          <div style="color:var(--text-dim);font-size:11px;margin-bottom:6px">一個報價品項一筆材料申請，內容涵蓋該品項<b>全部已核准</b>的採購單行（數量、金額由系統算；數量可往下調）；額外採購以採購單為單位各一筆。已有申請的品項要追加請用變更申請；審核中的採購單行通過後才會併入。</div>
+                          <template x-for="g in mlGroupChoices()" :key="g.key">
+                            <label style="display:flex;gap:8px;align-items:center;padding:3px 0" :style="mlGroupBlock(g) ? 'cursor:not-allowed;opacity:.55' : 'cursor:pointer'" :data-testid="'ml-p-' + g.poDocCode + '-' + g.poLine">
+                              <input type="checkbox" style="width:auto" x-model="mlPick[mlGroupKey(g)]" :disabled="!!mlGroupBlock(g)">
+                              <span x-text="g.name" style="flex:1"></span>
+                              <span style="color:var(--text-dim)" x-text="mlGroupText(g)"></span>
+                              <span x-show="mlGroupBlock(g)" style="color:var(--tone-warning-fg)" :data-testid="'ml-block-' + g.key" x-text="mlGroupBlock(g)"></span>
+                              <span x-show="g.pendingLines > 0 && !mlGroupBlock(g)" style="color:var(--text-dim)" x-text="'另有 ' + g.pendingLines + ' 行採購單審核中（通過後用變更申請納入）'"></span>
                             </label>
                           </template>
-                          <div x-show="mlPoChoices().length === 0" style="color:var(--text-dim)">沒有可帶入的採購單明細</div>
+                          <div x-show="mlGroupChoices().length === 0" style="color:var(--text-dim)">沒有可帶入的採購單明細（只有已核准的採購單能帶入）</div>
                         </div>
                       </template>
                       <div x-show="!mlLoadingList" style="margin-top:8px;display:flex;gap:8px">
@@ -2415,7 +2417,7 @@
                         <input class="fi fi--sm" type="text" placeholder="單位" style="width:56px"
                                x-model="m.unit" :disabled="!moCanEdit() || moLocked(m)" @input="moDirty = true">
                         <input class="fi fi--sm" type="number" min="0" step="0.01" placeholder="單價" style="width:96px"
-                               x-model="m.unitPrice" :disabled="!moCanEdit() || moLocked(m) || moPaidFull(m)" :title="moPaidFull(m) ? moPaidFullHint : ''" @input="moRecalc(mi)">
+                               x-model="m.unitPrice" :disabled="!moCanEdit() || moLocked(m) || moPaidFull(m) || moCovered(m)" :title="moPaidFull(m) ? moPaidFullHint : (moCovered(m) ? moCoveredHint : '')" @input="moRecalc(mi)">
                         <select class="fi fi--sm" style="width:150px" x-model="m.supplierId" data-testid="mo-supplier"
                                 :disabled="!moCanEdit() || moLocked(m) || (m._saved !== false && moPayOf(m).payments.length > 0)" @change="moDirty = true">
                           <option value="">供應商…</option>

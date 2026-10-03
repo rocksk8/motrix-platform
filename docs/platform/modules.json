@@ -294,6 +294,7 @@
     "mod:case/material_approval",
     "mod:case/material_change",
     "mod:case/material_coverage",
+    "mod:case/material_coverage_view",
     "mod:case/material_guard",
     "mod:case/material_notify",
     "mod:case/material_payment",

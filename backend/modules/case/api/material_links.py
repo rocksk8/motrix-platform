@@ -9,6 +9,7 @@ from fastapi import APIRouter, Header, HTTPException
 
 from db import get_db
 from helpers import _require_user, can_see_financial
+from modules.case import material_coverage_view as _MCV
 from modules.case import purchase_items as PI
 from modules.case.api.case_extra_expenses import _guard_case
 
@@ -29,6 +30,19 @@ def material_po_lines(quote_no: str, authorization: str = Header(None)):
     try:
         _guard_case(conn, quote_no, user)
         return {"quoteNo": quote_no, "lines": PI.available_po_lines(conn, quote_no, show_cost=can_see_financial(user))}
+    finally:
+        conn.close()
+
+
+@router.get("/api/quotations/{quote_no}/material-coverage")
+def material_coverage(quote_no: str, authorization: str = Header(None)):
+    """34-M1 UI：「從採購單帶入」的涵蓋分組（一個報價品項一組；額外採購以採購單為單位）。內容與送審檢查同一個函式，畫面不做金額運算。"""
+    quote_no = _case(quote_no)
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        return {"quoteNo": quote_no, "groups": _MCV.groups(conn, quote_no, show_cost=can_see_financial(user))}
     finally:
         conn.close()
 

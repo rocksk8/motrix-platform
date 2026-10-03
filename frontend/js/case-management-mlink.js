@@ -6,7 +6,7 @@ window.CM_PARTS.push(() => ({
     // 連結判定（後端 material_link_status 的唯一口徑）：itemId → {state:'linked'|'none'|'exempt', reason, stale, text}
     mlStatus: {},
     mlItems: [],          // 報價單品項挑選器（剩餘可申請量）
-    mlPoLines: [],        // 採購單明細（尚未被有效連結用掉的）
+    mlGroups: [],         // 34：涵蓋分組（一個報價品項一組；額外採購以採購單為單位）——GET material-coverage
     mlPanel: '',          // '' | 'po'：目前開著哪個匯入面板（33-M1 起只有採購單明細）
     mlPick: {},           // 匯入面板勾選：key → true
     mlLoadingList: false,
@@ -20,7 +20,7 @@ window.CM_PARTS.push(() => ({
     // 切換案件時重設（core 的 _resetCaseScoped 依模組清單呼叫 _reset_<模組>）；不重設就會殘留前一件的清單／頁籤／筆數
     _reset_mlink(phase) {
       if (phase !== 'early') return
-      this.mlStatus = {}; this.mlItems = []; this.mlPoLines = []; this.mlPanel = ''; this.mlPick = {}
+      this.mlStatus = {}; this.mlItems = []; this.mlGroups = []; this.mlPanel = ''; this.mlPick = {}
       this.mlLoadingList = false; this.mlMsg = ''; this.mlTab = 'approved'; this._mlTabOfRow = {}; this.mlTick = 0
       this._mlReq = 0                                               // 切換前還在路上的 mlOpen 回應：代號對不上（且案件不同）⇒ 丟掉
     },
@@ -52,36 +52,42 @@ window.CM_PARTS.push(() => ({
       const token = this._mlReq = this._mlReq + 1       // 只有最新一次開啟的回應算數；切換案件後晚到的回應也丟掉（c7 預審）
       const live = () => this._mlReq === token && this.selected?.quote_no === quoteNo
       try {
-        const r = await fetch(base + '/material-po-lines', { headers: this._mlHeaders() })
+        const r = await fetch(base + '/material-coverage', { headers: this._mlHeaders() })
         const d = r.ok ? await r.json() : null
         if (!live()) return
-        if (d) this.mlPoLines = d.lines || []
+        if (d) this.mlGroups = d.groups || []
         else this.mlMsg = '無法讀取採購單明細'
       } catch { if (!live()) return; this.mlMsg = '讀取失敗，請稍後再試' }
       this.mlLoadingList = false
     },
 
-    // 33-M1（E1／E2）：只有「已核准」的採購單明細能帶入
-    mlPoApproved(l) { return l.status === '已核准' },
-
-    mlPoChoices() {
-      void this.mlTick
-      const used = new Set(this.materialOrders.filter(m => m.poDocCode && m.poLine).map(m => m.poDocCode + '#' + m.poLine))
-      return this.mlPoLines.filter(l => !used.has(l.poDocCode + '#' + l.poLine))
+    // 34（E4）：一個報價品項一筆材料申請，涵蓋該品項全部已核准採購單行（數量、金額由後端的涵蓋快照給，畫面不做金額運算）；
+    // 額外採購（沒有報價品項）以採購單為單位各一筆（N1）。已有活的申請 ⇒ 不能再帶入，要追加走變更申請。
+    mlGroupChoices() { void this.mlTick; return this.mlGroups },
+    mlGroupBlock(g) {
+      if (g.existing) return `已有材料申請 ${g.existing.docCode || ''}（${g.existing.status}）→ 要追加請用變更申請`
+      const dup = this.materialOrders.some(m => m._saved === false && ((g.quoteItemId && m.quoteItemId === g.quoteItemId) || (!g.quoteItemId && !m.quoteItemId && m.poDocCode === g.poDocCode)))
+      return dup ? '已帶入（尚未儲存）' : ''
+    },
+    mlGroupKey(g) { return 'g:' + g.key },
+    mlGroupText(g) {
+      const money = g.totalPrice != null ? '｜小計 ' + g.totalPrice : ''
+      return `${g.quantity}${g.unit ? ' ' + g.unit : ''}${money}｜${g.docCodes.join('、')}（${g.lineCount} 行）`
     },
 
     mlPickedCount() { return Object.keys(this.mlPick).filter(k => this.mlPick[k]).length },
 
-    // 把勾選的品項／明細帶成新的材料申請列（仍是草稿：要選供應商、按儲存、再送審）
+    // 把勾選的分組帶成新的材料申請列（仍是草稿：要選供應商、按儲存、再送審）；一組一列，內容＝涵蓋快照
     mlImport() {
       let n = 0
-      for (const l of this.mlPoChoices()) {
-        if (!this.mlPick['p:' + l.poDocCode + '#' + l.poLine] || !this.mlPoApproved(l)) continue
-        this._mlPush({ itemName: l.summary, quantity: l.qty, unit: l.unit, unitPrice: Number(l.unitCost) || 0,
-                       quoteItemId: l.quoteItemId || '', poDocCode: l.poDocCode, poLine: l.poLine })
+      for (const g of this.mlGroupChoices()) {
+        if (!this.mlPick[this.mlGroupKey(g)] || this.mlGroupBlock(g)) continue
+        if (g.totalPrice == null) { this.mlMsg = '看不到金額的帳號不能從採購單帶入材料申請（需要財務檢視權限）'; return }
+        this._mlPush({ itemName: g.name, quantity: g.quantity, unit: g.unit, unitPrice: g.unitPrice, totalPrice: g.totalPrice,
+                       quoteItemId: g.quoteItemId || '', poDocCode: g.poDocCode, poLine: g.poLine })
         n++
       }
-      if (!n) { this.mlMsg = '請先勾選要帶入的項目（只能帶入已核准的採購單明細）'; return }
+      if (!n) { this.mlMsg = '請先勾選要帶入的項目（只能帶入已核准採購單的涵蓋內容；已有申請的品項請用變更申請）'; return }
       this.mlPick = {}
       this.mlPanel = ''
       this.mlTab = 'approved'
@@ -92,7 +98,7 @@ window.CM_PARTS.push(() => ({
       const unitPrice = Number(o.unitPrice) || 0
       this.materialOrders.push({
         itemId: this._moNewId(), itemName: o.itemName || '', quantity, unit: o.unit || '', unitPrice,
-        totalPrice: MotrixLegalRound.halfUp(quantity * unitPrice, 100) / 100, paidStatus: 'pending', paidAmount: 0, paidDate: '', notes: '',
+        totalPrice: (o.totalPrice != null ? Number(o.totalPrice) : MotrixLegalRound.halfUp(quantity * unitPrice, 100) / 100), paidStatus: 'pending', paidAmount: 0, paidDate: '', notes: '',
         invoiceDate: '', supplierId: null, quoteItemId: o.quoteItemId || '', poDocCode: o.poDocCode || '', poLine: o.poLine || null,
         overPlanReason: '', _saved: false, _recvDate: ''
       })
@@ -163,6 +169,9 @@ window.CM_PARTS.push(() => ({
       return '需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。'
     },
     // 已全額付款的材料申請：數量／單價不能改（金額已付清，要調整請另開一筆）
+    // 34（E7）：涵蓋採購單的材料申請，金額＝涵蓋行金額合計（唯讀）；數量只能往下調（單價隨數量換算，小計不變）
+    moCovered(m) { return !!(m && String(m.poDocCode || '').trim() && m.poLine) },
+    moCoveredHint: '金額＝涵蓋的採購單行金額合計，不能修改；數量只能往下調（單價隨數量換算）',
     moPaidFullHint: '已全額付款，金額不能修改；要調整請另開一筆材料申請',
     moPaidFull(m) { return !!m && m._saved !== false && m.paidStatus === 'paid' },
     mlQuoteName(id) { const it = this.mlItems.find(i => i.itemId === id); return it ? it.description : id }
