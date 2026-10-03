@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-03（wip/t35c-settle-assigned）：完結精算全欄位後端重算（F1，AUDIT-0C S7）
+- **完結時後端用同一個 `compute()` 重算全部下游欄位**（承攬商、匯款手續費、自訂支出、總成本、毛利、管理費、公益金、淨利、毛利率、報價稅前收入），超出進位誤差回 409「請重新整理」且不存檔；原本只比品項／額外支出／採購類三塊，偽造 summary（0c S7 探針：dispatchTotal=0、netProfit=888888）可完結並凍結，而營運報表毛利直接讀 netProfit。
+- 沒送的欄位不拒絕，存檔前由伺服器補上重算值並蓋 `dispatchBasis`；只在「非完結→完結」轉換時比對，舊完結案不重寫、讀取時不重驗。
+- 精算頁修正：完結送出時狀態先變 finalized 導致誤判成舊口徑（含稅），頁面自己的完結 payload 會被擋；新增 `_finalizing` 旗標，成功後寫入 `_frozenSummary`。
+
 ## (next) — 2026-10-03（wip/t35c-settle-assigned）：精算稅基 B——承攬商成本改為未稅＋外包人員
 - **稅基 B（使用者 2026-10-03「承攬商的部分稅金也跟正式做同步，避免有 5% 金額爭議」；對帳依據 AUDIT-0C S2）**：精算的承攬商成本改為「未稅承攬費＋外包人員」（營運報表權責口徑／總帳 E04 同一口徑）；承攬商稅額是進項稅額（總帳記 1268 資產），不是成本，只並列為資訊。範例（未稅 10,000、5%、人員 2,000）：計入成本 12,500 → 12,000，總實際成本 −500，毛利 +500、淨利 +495（公益金 1% 隨毛利）。
   - 端點（只加不減）：`totals.dispatchTotal` **意義改變**（未稅＋人員）、`dispatchReport` 保留（同值）、新增 `dispatchGrandTotal`（含稅，舊值）、`dispatchTax`、`dispatchBasis='pretax'`；`costExtras.dispatch` 保留 `grandTotal`／`report`，新增 `tax`。恆等式 grandTotal ＝ report ＋ tax，測試對帳 `recognition.dispatch_entries(accrual)` 與總帳 E04 未稅／進項稅額。

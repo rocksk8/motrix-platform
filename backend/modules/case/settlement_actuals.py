@@ -316,4 +316,77 @@ def check_finalize(conn, quote_no, settlement):
               ("額外支出（含未對應材料申請）", their_extra, mine_extra, tol)]
     if "purchasedTotal" in summ:
         checks.append(("採購類總額", _num(summ.get("purchasedTotal")), t["purchasedTotal"], tol))
-    return ["%s：頁面 %s、系統重算 %s" % (name, round(a), round(b)) for name, a, b, tl in checks if abs(a - b) > tl]
+    out = ["%s：頁面 %s、系統重算 %s" % (name, round(a), round(b)) for name, a, b, tl in checks if abs(a - b) > tl]
+    return out + _check_downstream(conn, quote_no, summ, d, tol_item)
+
+
+#: 完結 summary 裡「下游會讀」的欄位（營運報表毛利讀 netProfit／grossProfit、獎金與結案 PDF 讀同一份 summary）；精算頁一定會送（35c F1，AUDIT-0C S7）。
+DOWNSTREAM_KEYS = ("dispatchTotal", "remitFeeTotal", "customExpenseTotal", "totalActualCost", "grossProfit", "adminCost", "charityDonation",
+                   "netProfit", "grossMarginPct", "netMarginPct")
+_DOWNSTREAM_NAMES = {"dispatchTotal": "承攬商派發成本（未稅＋外包人員）", "remitFeeTotal": "匯款手續費", "customExpenseTotal": "自訂模組支出",
+                     "totalActualCost": "實際總成本", "grossProfit": "毛利", "adminCost": "管理費", "charityDonation": "公益金", "netProfit": "淨利",
+                     "grossMarginPct": "毛利率(%)", "netMarginPct": "淨利率(%)"}
+
+
+def _expected_downstream(conn, quote_no, d, tol_item):
+    """後端重算的「下游欄位」期望值與容差：{鍵: (期望值, 容差)}，另附 `_pretax`。報價稅前收入取伺服器上報價單的 `tot.pretax`（與精算頁
+    `_origTot.pretax` 同源）；管理費＝round_half_up(稅前×10%)、公益金＝round_half_up(毛利×1%)、淨利＝毛利−管理費−公益金（與頁面 calcSummary 同式）。"""
+    q = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    try:
+        tot = (json.loads((q["data_json"] if q else "") or "{}").get("tot") or {})
+    except (TypeError, ValueError):
+        tot = {}
+    pretax = _num(tot.get("pretax"))
+    t = d["totals"]
+    tol_total = tol_item + 3                         # 總成本由多塊加總，每塊各自進位
+    total = t["totalActualCost"]
+    gross = pretax - total
+    admin = round_half_up(pretax, 0.10)
+    charity = round_half_up(gross, 0.01)
+    net = gross - admin - charity
+    pct_tol = 0.1 + (100.0 * tol_total / pretax if pretax > 0 else 0.0)
+    return {"_pretax": pretax,
+            "dispatchTotal": (t["dispatchTotal"], 1), "remitFeeTotal": (t["remitFeeTotal"], 1), "customExpenseTotal": (t["customExpenseTotal"], 1),
+            "totalActualCost": (total, tol_total), "grossProfit": (gross, tol_total), "adminCost": (admin, 1),
+            "charityDonation": (charity, 2 + round(tol_total * 0.01)), "netProfit": (net, tol_total + 3),
+            "grossMarginPct": (round(gross / pretax * 100, 1) if pretax > 0 else 0.0, pct_tol),
+            "netMarginPct": (round(net / pretax * 100, 1) if pretax > 0 else 0.0, pct_tol)}
+
+
+def _check_downstream(conn, quote_no, summ, d, tol_item):
+    """35c F1（AUDIT-0C S7；使用者裁示 D10：後端重算，超出進位誤差就拒絕完結）：承攬商、匯款手續費、自訂支出、總成本、毛利、管理費、公益金、淨利、利潤率
+    也用同一個 compute() 重算比對（原本只比品項／額外支出／採購類三塊，偽造 summary 可完結並凍結；報表毛利直接讀 netProfit）。
+    頁面送了的欄位逐一比對；**沒送的欄位不拒絕**（那不是偽造），而是在存檔前由 `fill_downstream()` 用伺服器重算值補齊——所以省略欄位也繞不過。
+    回傳差異說明清單；沒有差異回 []。"""
+    exp = _expected_downstream(conn, quote_no, d, tol_item)
+    pretax = exp.pop("_pretax")
+    out = []
+    for k, (v, tl) in exp.items():
+        if summ.get(k) is None:
+            continue
+        if abs(_num(summ.get(k)) - v) > tl:
+            pct = k.endswith("Pct")
+            out.append("%s：頁面 %s、系統重算 %s" % (_DOWNSTREAM_NAMES[k], ("%.1f" % _num(summ.get(k))) if pct else round(_num(summ.get(k))), ("%.1f" % v) if pct else round(v)))
+    if summ.get("quotedPretax") is not None and abs(_num(summ.get("quotedPretax")) - pretax) > 1:
+        out.append("報價稅前收入：頁面 %s、系統重算 %s" % (round(_num(summ.get("quotedPretax"))), round(pretax)))
+    return out
+
+
+def fill_downstream(conn, quote_no, settlement):
+    """完結通過比對後、存檔前：summary 沒有的下游欄位用伺服器重算值補上（含報價稅前收入），並蓋口徑標記。回傳補了哪些鍵（給稽核紀錄／測試）。"""
+    summ = settlement.get("summary") if isinstance(settlement, dict) else None
+    if not isinstance(summ, dict) or "itemActualTotal" not in summ:
+        return []
+    d = compute(conn, quote_no, settlement=settlement, freeze=False)
+    exp = _expected_downstream(conn, quote_no, d, max(1, len(d["items"])))
+    pretax = exp.pop("_pretax")
+    filled = []
+    for k, (v, _tl) in exp.items():
+        if summ.get(k) is None:
+            summ[k] = v
+            filled.append(k)
+    if summ.get("quotedPretax") is None:
+        summ["quotedPretax"] = pretax
+        filled.append("quotedPretax")
+    summ["dispatchBasis"] = DISPATCH_BASIS
+    return filled

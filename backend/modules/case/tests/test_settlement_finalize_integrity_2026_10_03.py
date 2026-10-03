@@ -129,14 +129,31 @@ def test_remit_fee_and_custom_expense_are_verified_too(case):
     assert _put(c, h, p).status_code == 409
 
 
-def test_a_summary_missing_the_downstream_fields_is_rejected(case):
-    """省略欄位也不能繞過：精算頁的完結 summary 一定帶這些鍵（缺＝不是這一頁送的、或是舊頁面快取）。"""
+def test_a_summary_missing_the_downstream_fields_cannot_bypass_the_check_the_server_fills_them_in(case):
+    """省略欄位也繞不過：沒送的下游欄位不是偽造所以不拒絕，但存檔前由伺服器用重算值補齊（含口徑標記）⇒ 存下來的一定是完整且正確的。"""
     c, h = case
+    honest = page_payload(c, h)["summary"]
     p = page_payload(c, h)
-    for k in ("dispatchTotal", "netProfit", "totalActualCost"):
-        del p["summary"][k]
+    for k in ("dispatchTotal", "netProfit", "totalActualCost", "grossProfit", "adminCost", "charityDonation", "grossMarginPct", "netMarginPct", "quotedPretax", "dispatchBasis"):
+        p["summary"].pop(k, None)
     r = _put(c, h, p)
-    assert r.status_code == 409 and "缺少" in r.text and _status() is None
+    assert r.status_code == 200, r.text[:300]
+    cn = db.get_db()
+    try:
+        saved = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])["settlement"]["summary"]
+    finally:
+        cn.close()
+    for k in ("dispatchTotal", "netProfit", "totalActualCost", "grossProfit", "adminCost", "charityDonation", "quotedPretax"):
+        assert abs(saved[k] - honest[k]) <= 3, (k, saved[k], honest[k])           # 伺服器重算值（進位誤差內）
+    assert saved["dispatchBasis"] == "pretax"
+
+
+def test_a_partial_forgery_is_still_rejected_even_if_other_fields_are_omitted(case):
+    c, h = case
+    p = page_payload(c, h, netProfit=888888)
+    for k in ("dispatchTotal", "totalActualCost"):
+        p["summary"].pop(k, None)
+    assert _put(c, h, p).status_code == 409 and _status() is None
 
 
 def test_a_stale_cached_page_without_the_basis_marker_is_asked_to_refresh(case):
@@ -154,8 +171,8 @@ def test_rounding_tolerance_still_allows_small_differences(case):
     s = p["summary"]
     s["charityDonation"] += 1
     s["netProfit"] -= 1
-    s["grossMarginPct"] = round(s["grossMarginPct"] + 0.1, 1)
-    assert _put(c, h, p).status_code == 200
+    r = _put(c, h, p)
+    assert r.status_code == 200, r.text[:300]
 
 
 def test_non_settlement_page_callers_without_item_totals_are_not_checked(W):

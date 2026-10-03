@@ -129,3 +129,41 @@ def test_case_page_stale_check_pairs_the_basis_and_shows_pretax_cost_with_the_ta
     _reload_case(page, live_server)
     s = page.evaluate(stale)
     assert s and s["frozen"] == 12500 and s["live"] == 12000
+
+
+@pytest.mark.e2e
+def test_the_pages_own_finalize_payload_passes_the_server_recheck_on_the_new_basis(live_server, make_user, e2e_browser):
+    """F1 的另一半：精算頁自己送出的完結 payload（含未稅承攬商成本、稅額、口徑標記、利潤線）要通過後端全欄位重算；存下來的數字與公式一致。"""
+    import db
+    sa = make_user(username="sc_sc", role="superadmin")
+    seed(item_ids=("a", "b"))
+    _dispatch(10000, 2000)
+    c = db.get_db()
+    try:
+        d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+        d["tot"] = {"pretax": 100000, "total": 105000}
+        d["settlement"] = {"status": "draft", "items": [], "offsets": []}
+        c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+        c.commit()
+    finally:
+        c.close()
+    page = open_page(live_server, e2e_browser, sa)
+    page.locator('[data-testid="stl-dispatch-subtotal"]').wait_for(state="visible", timeout=15000)
+    page.wait_for_function("() => %s.summary && %s._actualsOk && !%s.loading" % (S, S, S), timeout=20000)
+    page.locator('[data-testid="stl-finalize"]').click()
+    with page.expect_response(lambda r: r.request.method == "PUT" and "/settlement" in r.url, timeout=20000) as resp:
+        page.get_by_role("button", name="確認完結").click()
+    assert resp.value.status == 200, "頁面自己的完結 payload 被後端擋下：%s %s" % (resp.value.status, resp.value.text()[:300])
+    page.wait_for_function("() => %s.settlement.status === 'finalized' && !%s.saving" % (S, S), timeout=20000)
+    c = db.get_db()
+    try:
+        saved = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])["settlement"]
+    finally:
+        c.close()
+    assert saved["status"] == "finalized", "完結被後端擋下了：%s" % saved.get("status")
+    s_ = saved["summary"]
+    assert s_["dispatchTotal"] == 12000 and s_["dispatchBasis"] == "pretax" and s_["dispatchTax"] == 500 and s_["dispatchGrandTotal"] == 12500
+    from helpers.legal_params import round_half_up
+    gross = 100000 - s_["totalActualCost"]
+    assert s_["grossProfit"] == gross and s_["adminCost"] == round_half_up(100000, 0.10) and s_["charityDonation"] == round_half_up(gross, 0.01)
+    assert s_["netProfit"] == gross - s_["adminCost"] - s_["charityDonation"]

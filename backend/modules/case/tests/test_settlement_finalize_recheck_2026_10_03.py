@@ -73,7 +73,9 @@ def test_extra_total_mismatch_is_rejected_but_remit_fee_and_custom_expense_are_t
     c, h = W
     ex = _mk(c, h, "purchase_order", [_ln(None, 1, unitCost=700)]).json()
     assert _submit(c, h, ex["id"]).status_code == 200
-    assert _finalize(c, h, _page_payload(c, h, extraTotal=700 + 30 + 4, remitFeeTotal=30, customExpenseTotal=4)).status_code == 200   # 頁面額外加的手續費與自訂模組支出不在比對內
+    # 35c F1：手續費與自訂模組支出現在也由後端重算比對（舊註解「頁面額外加的不在比對內」已不成立）；此案伺服器上兩者都是 0，頁面送 0 才對得上。
+    # 偽造它們的情境見 test_settlement_finalize_integrity_2026_10_03.py::test_remit_fee_and_custom_expense_are_verified_too
+    assert _finalize(c, h, _page_payload(c, h, extraTotal=700, remitFeeTotal=0, customExpenseTotal=0)).status_code == 200
     cn = db.get_db()
     q = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
     q.pop("settlement")

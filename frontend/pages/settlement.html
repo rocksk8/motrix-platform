@@ -869,6 +869,7 @@ function settlementPage() {
     xeMasked: 0,                 // 費用單據金額對本人遮蔽的列數（>0 ⇒ 額外支出總額不完整，不可存精算）
 
     dispatches: [],  // 承攬商派發（唯讀，即時從 /api/contractor-dispatches 讀取，不隨精算存檔凍結）
+    _finalizing: false,   // 完結送出中：此刻狀態已是 finalized 但 _frozenSummary 還沒有——新完結一律是新口徑（未稅），不可誤判成舊口徑
     _frozenSummary: null,  // 精算完結當下寫入 data_json 的 summary 快照，供比對是否已過期
 
     summary: {
@@ -1202,7 +1203,7 @@ function settlementPage() {
 
     // 35c 稅基 B（使用者 2026-10-03）：承攬商成本計入的是「未稅承攬費＋外包人員」（營運報表權責口徑／總帳同一口徑；稅額是進項稅額，不是成本）。
     // 例外：完結於舊口徑（存檔 summary 沒有 dispatchBasis）的精算維持含稅口徑顯示，與完結當下存的數字逐位相同，不改寫。
-    dispatchBasisOld() { return this.settlement.status === 'finalized' && !(this._frozenSummary && this._frozenSummary.dispatchBasis) },
+    dispatchBasisOld() { return !this._finalizing && this.settlement.status === 'finalized' && !(this._frozenSummary && this._frozenSummary.dispatchBasis) },
     dispatchPretax() {
       if (this._actualsOk && this.actuals.costExtras) return this.actuals.costExtras.dispatch.report || 0
       return this.dispatches.reduce((s, d) => s + (+d.totalAmount || 0) + (+d.personnelTotal || 0), 0)
@@ -1407,6 +1408,7 @@ function settlementPage() {
     async finalize() {
       if (this.xeMasked > 0) { this.toast('額外支出總額不完整（有金額對你遮蔽的費用單據），不能完結精算'); this.showFinalizeModal = false; return }
       this.saving = true
+      this._finalizing = true
       this.settlement.status      = 'finalized'
       this.settlement.finalizedAt = new Date().toISOString()
       this.settlement.finalizedBy = this.session.displayName || this.session.username || ''
@@ -1418,6 +1420,7 @@ function settlementPage() {
           body:    JSON.stringify({ settlement: this.buildPayload() }),
         })
         if (res.ok) {
+          this._frozenSummary = Object.assign({}, this.summary, { dispatchBasis: 'pretax' })      // 與後端存下的一致，之後的顯示／過期比對才認得新口徑
           this.showFinalizeModal = false
           this.toast('精算已完結')
         } else {
@@ -1433,7 +1436,7 @@ function settlementPage() {
         this.settlement.finalizedAt = ''
         this.settlement.finalizedBy = ''
         this.toast('完結失敗：' + e.message)
-      } finally { this.saving = false }
+      } finally { this.saving = false; this._finalizing = false }
     },
 
     async reopenDraft() {
