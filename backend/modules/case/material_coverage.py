@@ -52,16 +52,68 @@ def snapshot_content(lines, plan_qty=None, plan_unit=""):
     return {"poSnapshot": lines, "quantity": qty, "unit": unit, "totalPrice": amount, "unitPrice": (amount / qty) if qty else 0.0}
 
 
-def coverage_snapshot(conn, quote_no, quote_item_id="", po_doc_code=""):
-    """送審當下的涵蓋快照與預設內容。品項已不在報價單 ⇒ 沒有計畫量（數量 0）。"""
+def coverage_snapshot(conn, quote_no, quote_item_id="", po_doc_code="", *, only_untaken=False, exclude_item_id=None):
+    """送審當下的涵蓋快照與預設內容。品項已不在報價單 ⇒ 沒有計畫量（數量 0）。
+    `only_untaken`：去掉已被其他活的材料申請占用的採購單行（D7 調整單：只涵蓋原申請沒有的行）。"""
     data, _rows = PI._case_state(conn, quote_no)
     plan = {p["itemId"]: p for p in PI.plan_items(data)}
     p = plan.get(str(quote_item_id or "").strip())
-    return snapshot_content(approved_po_lines(conn, quote_no, quote_item_id, po_doc_code), p["planQty"] if p else None, p["unit"] if p else "")
+    lines = approved_po_lines(conn, quote_no, quote_item_id, po_doc_code)
+    if only_untaken:
+        taken = taken_lines(conn, quote_no, exclude_item_id=exclude_item_id)
+        lines = [l for l in lines if _line_key(l) not in taken]
+    return snapshot_content(lines, p["planQty"] if p else None, p["unit"] if p else "")
 
 
-def item_request_exists(conn, quote_no, quote_item_id, *, exclude_item_id=None, po_doc_code=""):
-    """同品項（或同一張額外採購單）已有活的材料申請 ⇒ `{"itemId", "docCode", "status"}`，沒有回 None（`item_request_exists`；取代 S4 的 po_line_taken）。"""
+def adjust_check(conn, quote_no, quote_item_id, adjust_of):
+    """D7 調整單（`adjustOf=<原 itemId>`）能不能建立 ⇒ `[{code, message}]`（空＝可以）：原申請必須存在、同品項、**已全額付款**；
+    涵蓋範圍只能是**沒被占用**的已核准採購單行（空＝沒有可調整的新採購單行）。"""
+    problems = []
+    order, _row, _snap = current_version(conn, quote_no, adjust_of)
+    if order is None:
+        return [{"code": "adjust_target_missing", "message": "找不到要調整的原材料申請"}]
+    if str(order.get("quoteItemId") or "").strip() != str(quote_item_id or "").strip():
+        problems.append({"code": "adjust_item_mismatch", "message": "調整單必須與原材料申請同一個品項"})
+    if not paid_in_full(order):
+        problems.append({"code": "adjust_not_paid_in_full", "message": "原材料申請尚未全額付款，請走變更申請（調整單只用於已全額付款、金額不能修改的申請）"})
+    if not coverage_snapshot(conn, quote_no, quote_item_id, only_untaken=True, exclude_item_id=None)["poSnapshot"]:
+        problems.append({"code": "adjust_no_new_lines", "message": "這個品項沒有尚未被材料申請涵蓋的已核准採購單行"})
+    return problems
+
+
+def paid_in_full(order):
+    """材料申請已全額付款（`paidAmount` 是付款明細的唯一投影，見 material_payment.sync_order_paid）：付款 > 0 且 ≥ 小計。"""
+    paid, total = PI._num((order or {}).get("paidAmount")), PI._num((order or {}).get("totalPrice"))
+    return paid > 0 and paid >= total - 1e-9
+
+
+def taken_lines(conn, quote_no, *, exclude_item_id=None):
+    """被其他**活的**材料申請占用的採購單行 `{(poDocCode, line)}`：涵蓋快照＋舊的單行連結（`poDocCode`／`poLine`）。"""
+    from modules.case import material_approval as MA
+    data, _rows = PI._case_state(conn, quote_no)
+    ap = MA.rows_for_case(conn, quote_no)
+    out = set()
+    for o, status in PI.load_material_orders(conn, quote_no, data):
+        iid = str(o.get("itemId"))
+        if iid == str(exclude_item_id or "") or status not in LIVE_STATUSES:
+            continue
+        try:
+            snap = (json.loads(ap[iid]["approval_json"] or "{}").get("snapshot") or {}).get("poSnapshot") if iid in ap else None
+        except (TypeError, ValueError):
+            snap = None
+        for l in snap or []:
+            out.add(_line_key(l))
+        if str(o.get("poDocCode") or "").strip() and o.get("poLine") not in (None, ""):
+            try:
+                out.add((str(o["poDocCode"]).strip(), int(o["poLine"])))
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
+def item_request_exists(conn, quote_no, quote_item_id, *, exclude_item_id=None, po_doc_code="", adjust_of=""):
+    """同品項（或同一張額外採購單）已有活的材料申請 ⇒ `{"itemId", "docCode", "status"}`，沒有回 None（`item_request_exists`；取代 S4 的 po_line_taken）。
+    `adjust_of`（D7 調整單）：原申請**已全額付款**時，原申請不算占用（調整單另開一筆、不走變更申請）；原申請沒有全額付款 ⇒ 照常算占用（回原申請）。"""
     from modules.case import material_approval as MA
     data, _rows = PI._case_state(conn, quote_no)
     qid = str(quote_item_id or "").strip()
@@ -69,6 +121,8 @@ def item_request_exists(conn, quote_no, quote_item_id, *, exclude_item_id=None, 
     for o, status in PI.load_material_orders(conn, quote_no, data):
         iid = str(o.get("itemId"))
         if iid == str(exclude_item_id or "") or status not in LIVE_STATUSES:
+            continue
+        if adjust_of and iid == str(adjust_of) and paid_in_full(o):
             continue
         snap = (json.loads(ap[iid]["approval_json"] or "{}").get("snapshot") or {}).get("poSnapshot") if iid in ap else None
         if qid:
@@ -139,6 +193,11 @@ def change_proposal(conn, quote_no, item_id, proposed=None):
             problems.append({"code": "bad_quantity", "message": "數量必須大於 0"})
         if "quantity" in (proposed or {}):                                    # 數量改了：單價＝金額 ÷ 數量（金額來源在採購單，不讓人手改）
             after["unitPrice"] = round(after["totalPrice"] / after["quantity"], 4) if after["quantity"] else 0.0
+    paid = PI._num(order.get("paidAmount"))                               # D7 鎖定：已全額付款不可改金額（走調整單）；付款後新小計不得低於已付
+    if paid_in_full(order) and any(abs(PI._num(before[k]) - PI._num(after[k])) > 1e-9 for k in ("quantity", "unitPrice", "totalPrice")):
+        problems.append({"code": "paid_in_full", "message": "已全額付款，金額與數量不能修改；要調整請另開一筆材料申請（調整單）"})
+    elif paid > 0 and PI._num(after["totalPrice"]) < paid - 1e-9:
+        problems.append({"code": "below_paid", "message": "變更後小計低於已付金額 %g" % paid})
     dropped = [l for l in snap if _line_key(l) not in {_line_key(x) for x in fresh["poSnapshot"]}]
     if dropped:
         problems.append({"code": "coverage_shrinks", "message": "原本涵蓋的採購單行不再是已核准（%s），請先處理採購單" % "、".join("%s 第 %s 列" % _line_key(l) for l in dropped)})

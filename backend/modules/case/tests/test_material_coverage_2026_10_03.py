@@ -4,6 +4,7 @@
 import json
 
 import db
+from modules.case import material_approval as MA
 from modules.case import material_coverage as MC
 from modules.case.tests.test_material_link_2026_10_02 import _put_materials
 from modules.case.tests.test_material_link_booking_2026_10_02 import _approved_po, _order, _won_case  # noqa: F401
@@ -18,7 +19,7 @@ def _row(item_id, status="已核准", snapshot=None, doc="MO-X"):
     cn = _conn()
     try:
         cn.execute("UPDATE case_material_approvals SET status=?, doc_code=?, approval_json=?, created_at=? WHERE quote_no=? AND item_id=?",
-                   (status, doc, json.dumps({"snapshot": {"poSnapshot": snapshot or []}}), "2026-10-03T09:00:00", NO, item_id))   # 規則上線後建立（非 grandfather）
+                   (status, doc, json.dumps({"snapshot": {"poSnapshot": snapshot or []}}), MA.PO_REQUIRED_FROM + "T09:00:00", NO, item_id))   # 規則上線後建立（非 grandfather）
         cn.commit()
     finally:
         cn.close()
@@ -146,3 +147,61 @@ def test_unit_price_after_a_quantity_change_is_rounded_to_four_places(W):
     _approved_request(c, h, qty=3, amount=1000)
     p = _call(MC.change_proposal, "M1", {"quantity": 3})
     assert p["after"]["unitPrice"] == round(1000 / 3, 4) == 333.3333
+
+
+def _paid(item_id, amount):
+    """付款明細的投影欄位（material_payment.sync_order_paid 寫的）。"""
+    cn = _conn()
+    try:
+        d = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+        for o in d["caseRecord"]["materialOrders"]:
+            if str(o["itemId"]) == item_id:
+                o["paidAmount"] = amount
+                o["paidStatus"] = "paid" if amount >= o["totalPrice"] else "partial"
+        cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+        cn.commit()
+    finally:
+        cn.close()
+
+
+def test_paid_in_full_blocks_a_change_and_points_to_an_adjustment(W):
+    c, h = W
+    _approved_request(c, h)
+    _approved_po(c, h, [_ln("a", 2, unitCost=1000, unit="台")])                          # 有新採購單行，變更會改金額
+    _paid("M1", 3000)
+    codes = [x["code"] for x in _call(MC.change_proposal, "M1")["problems"]]
+    assert "paid_in_full" in codes
+    _paid("M1", 1000)                                                                    # 部分已付：可以變更，只要新小計不低於已付
+    assert "paid_in_full" not in [x["code"] for x in _call(MC.change_proposal, "M1")["problems"]]
+    _paid("M1", 2500)                                                                    # 部分已付 2500；涵蓋的採購單被作廢 ⇒ 新小計 0 低於已付
+    cn = _conn()
+    cn.execute("UPDATE case_extra_expenses SET status='已作廢' WHERE kind='purchase_order'")
+    cn.commit()
+    cn.close()
+    assert "below_paid" in [x["code"] for x in _call(MC.change_proposal, "M1")["problems"]]
+
+
+def test_adjust_of_is_exempt_from_one_item_one_request_only_when_the_original_is_paid_in_full(W):
+    c, h = W
+    _approved_request(c, h)
+    assert _call(MC.item_request_exists, "a", adjust_of="M1") is not None                # 沒全額付款：原申請照常占用
+    _paid("M1", 3000)
+    assert _call(MC.item_request_exists, "a", adjust_of="M1") is None                    # 全額付款：調整單可另開
+    assert _call(MC.item_request_exists, "a") is not None                                # 沒帶 adjustOf：仍占用（正對照）
+    assert _call(MC.item_request_exists, "a", adjust_of="OTHER") is not None
+
+
+def test_adjust_check_and_untaken_coverage(W):
+    c, h = W
+    po1 = _approved_request(c, h)
+    codes = lambda: [x["code"] for x in _call(MC.adjust_check, "a", "M1")]   # noqa: E731
+    assert set(codes()) == {"adjust_not_paid_in_full", "adjust_no_new_lines"}
+    _paid("M1", 3000)
+    assert codes() == ["adjust_no_new_lines"]                                            # 全額付款了，但沒有新的採購單行
+    po2 = _approved_po(c, h, [_ln("a", 2, unitCost=1000, unit="台")])
+    assert codes() == []
+    snap = _call(MC.coverage_snapshot, "a", only_untaken=True)
+    assert [(l["poDocCode"], l["line"]) for l in snap["poSnapshot"]] == [(po2["docCode"], 1)] and snap["totalPrice"] == 2000   # 只涵蓋原申請沒有的行
+    assert {(l["poDocCode"], l["line"]) for l in _call(MC.coverage_snapshot, "a")["poSnapshot"]} == {(po1["docCode"], 1), (po2["docCode"], 1)}
+    assert [x["code"] for x in _call(MC.adjust_check, "a", "NOPE")] == ["adjust_target_missing"]
+    assert "adjust_item_mismatch" in [x["code"] for x in _call(MC.adjust_check, "b", "M1")]
