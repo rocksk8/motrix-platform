@@ -189,3 +189,7 @@
 - D12：使用者「今天內」親自做真滑鼠拖放驗證（c7 備驗證指引 D12-VERIFY-GUIDE.md）；通過才翻預設（獨立 commit，最後併）。
 - 材料申請採購單規則生效日維持 2026-10-04。
 - 分工：2e change_proposal／adjustOf／nits／出貨案件端契約；d7 wip/t34-m2-d7（M2c、D7 鎖定）；c7 D12 驗證指引＋ship-link；a3 globals＋drill_train34；ea 整合 wip/train-34-int1（基底 origin/platform 1184efb0）；da 滾動稽核。
+
+## 第35班待問使用者：精算頁承攬成本含稅／未稅口徑（2e 發現，2026-10-03）
+- 現況：精算頁把派發以含稅 grandTotal（承攬商含稅合計＋人員）計入成本；營運報表／recognition.dispatch_entries／總帳用未稅 total＋人員 ⇒ 兩者相差 5% 稅。
+- 第34班裁示 A（維持頁面口徑、歷史不變），端點同時輸出 dispatchGrandTotal 與 dispatchReport，測試鎖定差異；是否統一成未稅（B）待使用者決定。
