@@ -147,6 +147,12 @@
   },
   {
    "file": "modules/case/api/material_changes.py",
+   "path": "/api/quotations/{quote_no}/material-changes",
+   "handler": "list_case_changes",
+   "scope": "row_access"
+  },
+  {
+   "file": "modules/case/api/material_changes.py",
    "path": "/api/quotations/{quote_no}/material-orders/{item_id}/changes",
    "handler": "list_changes",
    "scope": "row_access"
