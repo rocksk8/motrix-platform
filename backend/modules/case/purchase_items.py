@@ -395,9 +395,26 @@ def material_submit_check(conn, quote_no, order, *, exclude_item_id=None, po_req
             problems.append({"code": "over_plan_reason_required",
                              "message": "材料申請超出報價計畫量 %g（計畫 %g、已訂 %g），請填寫超出原因後再送審" % (over, plan[qid]["planQty"], used)})
     state = material_link_status(order, po_rows)
-    return {"problems": problems,
-            "snapshot": {"linkState": state["state"], "linkReason": state["reason"], "overPlanQty": over if over > 1e-9 else 0,
-                         "overPlanReason": reason if over > 1e-9 else ""}}
+    snap = {"linkState": state["state"], "linkReason": state["reason"], "overPlanQty": over if over > 1e-9 else 0,
+            "overPlanReason": reason if over > 1e-9 else ""}
+    if po_required:                                                                         # 33-M1 E4／34-M2：一品項一筆＋涵蓋快照（送審當下該品項所有已核准採購單行）；追加走變更申請，原申請已全額付款者走調整單（adjustOf）
+        from modules.case import material_coverage as MC
+        adjust_of = str(order.get("adjustOf") or "").strip()
+        item_id = str(exclude_item_id or order.get("itemId") or "")
+        po_code = str(order.get("poDocCode") or "").strip() if not qid else ""
+        if adjust_of:
+            problems.extend(MC.adjust_check(conn, quote_no, qid, adjust_of))
+        else:
+            hit = MC.item_request_exists(conn, quote_no, qid, exclude_item_id=item_id, po_doc_code=po_code)
+            if hit:
+                problems.append({"code": "item_request_exists", "message": "這個品項已經有一筆材料申請（單號 %s），要追加請走變更申請。" % (hit["docCode"] or hit["itemId"])})
+        cov = MC.coverage_snapshot(conn, quote_no, qid, po_code, only_untaken=bool(adjust_of), exclude_item_id=item_id)
+        if not cov["poSnapshot"] and not any(p["code"] in ("po_required", "adjust_no_new_lines") for p in problems):
+            problems.append({"code": "no_coverage", "message": "這個品項目前沒有可涵蓋的已核准採購單行，請先申請採購單。"})
+        snap["poSnapshot"] = cov["poSnapshot"]
+        if adjust_of:
+            snap["adjustOf"] = adjust_of
+    return {"problems": problems, "snapshot": snap}
 
 
 def link_validator(conn, quote_no, order):

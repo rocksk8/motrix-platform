@@ -16,6 +16,22 @@ CHANGE_KEYS = ("quantity", "unit", "unitPrice", "totalPrice", "poSnapshot", "not
 _MONEY = ("unitPrice", "totalPrice")
 
 
+def snapshot_lines(approval_json):
+    """審核列 `approval_json` 裡的涵蓋快照 `poSnapshot`：變更申請核准後在 `snapshot.poSnapshot`（d7 套用時改寫），
+    首次送審時由 `material_submit_check` 的結果存在 `linkSnapshot.poSnapshot`；前者優先。"""
+    try:
+        a = json.loads(approval_json or "{}") if not isinstance(approval_json, dict) else approval_json
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(a, dict):
+        return []
+    for k in ("snapshot", "linkSnapshot"):
+        v = (a.get(k) or {}).get("poSnapshot") if isinstance(a.get(k), dict) else None
+        if isinstance(v, list):
+            return v
+    return []
+
+
 def _snap_line(po_code, idx, line):
     return {"poDocCode": po_code, "line": idx, "qty": PI._num(line.get("qty")), "unit": str(line.get("unit") or ""), "amount": PI._num(line.get("amount"))}
 
@@ -97,11 +113,7 @@ def taken_lines(conn, quote_no, *, exclude_item_id=None):
         iid = str(o.get("itemId"))
         if iid == str(exclude_item_id or "") or status not in LIVE_STATUSES:
             continue
-        try:
-            snap = (json.loads(ap[iid]["approval_json"] or "{}").get("snapshot") or {}).get("poSnapshot") if iid in ap else None
-        except (TypeError, ValueError):
-            snap = None
-        for l in snap or []:
+        for l in (snapshot_lines(ap[iid]["approval_json"]) if iid in ap else []):
             out.add(_line_key(l))
         if str(o.get("poDocCode") or "").strip() and o.get("poLine") not in (None, ""):
             try:
@@ -124,7 +136,7 @@ def item_request_exists(conn, quote_no, quote_item_id, *, exclude_item_id=None, 
             continue
         if adjust_of and iid == str(adjust_of) and paid_in_full(o):
             continue
-        snap = (json.loads(ap[iid]["approval_json"] or "{}").get("snapshot") or {}).get("poSnapshot") if iid in ap else None
+        snap = snapshot_lines(ap[iid]["approval_json"]) if iid in ap else None
         if qid:
             if str(o.get("quoteItemId") or "").strip() == qid:
                 return {"itemId": iid, "docCode": ap[iid]["doc_code"], "status": status}
@@ -139,13 +151,7 @@ def current_version(conn, quote_no, item_id):
     data, _rows = PI._case_state(conn, quote_no)
     order = next((o for o, _st in PI.load_material_orders(conn, quote_no, data) if str(o.get("itemId")) == str(item_id)), None)
     row = MA.get(conn, quote_no, item_id)
-    snap = []
-    if row is not None:
-        try:
-            snap = (json.loads(row["approval_json"] or "{}").get("snapshot") or {}).get("poSnapshot") or []
-        except (TypeError, ValueError):
-            snap = []
-    return order, row, snap
+    return order, row, (snapshot_lines(row["approval_json"]) if row is not None else [])
 
 
 def _view(order, snap):

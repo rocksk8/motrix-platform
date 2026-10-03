@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-04（wip/t34-m2-wire-2e）：材料申請送審接上涵蓋快照、一品項一筆與調整單（34-M2 接線）
+- `material_submit_check`（強制採購單路徑 `po_required`）新增：`item_request_exists`（同品項已有活的材料申請，訊息帶單號，提示追加請走變更申請；保留 `po_line_taken`）、`poSnapshot`（送審當下該品項所有已核准採購單行的涵蓋快照，存在審核列 `approval_json.linkSnapshot`）、`no_coverage`、調整單 `adjustOf`（原申請已全額付款才可；只涵蓋尚未被占用的採購單行，快照帶 `adjustOf`）。舊路徑（非強制）逐位不變。
+- `material_coverage.snapshot_lines`：讀涵蓋快照時 `snapshot.poSnapshot`（變更申請核准後 d7 套用時改寫）優先於送審時的 `linkSnapshot.poSnapshot`。6 題接線測試。
+
 ## 1.0.112 — 2026-10-03（wip/t34-ship-case-2e）：出貨單連動——可出貨材料提供者（34-S1 case 側）
 - 新增提供者 `("material.shippable", "case")`（`modules/case/material_shippable.py`）：回傳已核准且已做到貨確認的材料申請 `[{materialItemId, docCode, name, unit, quoteItemId, appliedQty, arrivedQty, status}]`，供出貨單（supply）經 registry 取用、不互相 import。唯讀；`arrivedQty` 預設整筆到貨（E5），有選填欄位 `received_qty` 時取 `min(實收, 已核准量)`（欄位與到貨 API 的 `receivedQty` 後補）。契約與逐點答覆：SHIPPING-MATERIAL-LINK-CONTRACT-S1.md §8。
 
