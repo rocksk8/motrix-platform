@@ -167,3 +167,46 @@ e2e 探針（舊草稿：存檔 summary `dispatchTotal 12500`、無標記）：
 2. 該路徑存下的 summary 若沒有 `dispatchBasis`，之後 `_freeze` 以預設 `'taxed'` 解讀（顯示含稅）；頁面自己重存會帶標記，直接 PUT 才會。
 3. 錯誤訊息前綴固定寫「採購單、材料申請或額外支出在你編輯期間有變動」，在差異只是承攬商／利潤欄位時敘述不貼切（差異清單本身是準確的）。文字微調即可。
 4. **未涵蓋**：自訂模組支出（`customExpenseTotal`）的非零夾具（只驗了 0 與偽造 999 的匯款手續費）。
+
+## 11. 複審（五項併入 35b：案件 `27652e01`、標案 `f9eda556`）— PASS（含 1 項 should-fix）
+
+**結論：PASS，無 must-fix。** 1 項建議（理由文字對無財務權限者可見）、3 項觀察。以下全部是我獨立重跑／重現（探針未入庫、已刪）。
+
+### 11.0 Golden（案件頁「承攬商」分頁）
+- `golden_case_page_2026_09_24.json` 對 `origin/platform`：25 個步驟鍵相同；**只有 `06 分頁 02 承攬商` 一個步驟、一行改變**：`外包總成本： NT$ 48,000` → `外包總成本： NT$ 8,000 （未稅承攬費＋外包人員；承攬商稅額 NT$ 40,000 是進項稅額，不計成本）`。其餘 24 步逐字相同。
+- 數字與夾具一致：夾具派發 `total_amount 8000`、**`tax_rate 5`（不是 0.05）**、無外包人員 ⇒ 稅額＝8000×5＝40,000、含稅 48,000；新口徑計入 8000＝未稅 8000＋人員 0。與精算頁公式（未稅＋人員）同式。**觀察**：夾具的 `tax_rate=5`（即 500%）是既有夾具的怪值，golden 現在把「稅額 40,000」固定下來；數字算術上一致，但這個 40,000 只是夾具假資料的產物。
+
+### 11.1 項目 1：已完結再存的理由護欄（我的 bypass 探針，案件 `27652e01`）
+| 嘗試 | 結果 |
+|---|---|
+| 再存（完結）不帶 `reason`／`""`／全空白（空格換行 tab） | **422**「重新開啟或修改已完結的精算必須填寫理由」 |
+| 理由 501 字／500 字 | 501 → 422「理由太長（上限 500 字）」；500 → 200 |
+| 有理由但數字竄改（`netProfit 888888`、`dispatchTotal 0`） | **409**，點名欄位與兩邊數字 |
+| 舊頁面的含稅 payload（12500、無標記）再存 | **409**（文字：「資料在你編輯期間有變動，或精算頁版本過舊——請重新整理精算頁再完結」；項目 4 中性前綴已生效） |
+| 省略欄位再存 | 200；伺服器補齊並蓋 `dispatchBasis 'pretax'`（淨利 73630、承攬商 12000） |
+| 重新開啟（`status:draft`）不帶理由／帶理由 | 422／200 |
+| 重開後的草稿 PUT（不帶理由）；草稿→完結（不帶理由） | 200／200（理由只對「已完結 → 任何寫入」要求，符合設計） |
+| 第二次重開不帶理由／帶理由 | 422／200（每次都要） |
+| 非超級管理員（admin＋financial_view、sales）再存／重開 | **403**「精算已完結，僅超級管理員可重新修改」；viewer 403（無財務權限） |
+| 兩個並行重開 | 皆 200；較晚的那筆看到的已是草稿，不需理由、理由不入歷程（不是繞過：它不是在改完結案；歷程只留第一個理由） |
+- `editHistory` 新增 `{reason, from:'finalized'}`；`audit_log`：`action quotation.settlement`、`detail {"rev":7,"reason":"第二次重開","from":"finalized"}`（含使用者名稱，無其他個資）。
+- **S（should-fix）理由文字對無財務權限者可見**：我以 viewer（已指派該案）`GET /api/quotations/{no}`：回應含 `editHistory` 與完整理由字串（探針字串「機密理由XYZ金額99999」可見）。理由是自由文字（上限 500 字），使用者可能寫到金額或原因；建議對非財務角色在回傳時剔除 `editHistory[].reason`（`financial_mask` 已對 `settlement` 遮罩，可同處理），或在重開對話框提示「理由會被有權限看案件的人看到」。
+- 舊路徑相容：唯一送 `PUT …/settlement` 的頁面是 `settlement.html`（儲存草稿＝草稿、完結＝草稿→完結、重開＝帶理由）；舊快取頁面的完結才會被 409，訊息已說明請重新整理。（`reports.js` 的 `/settlement` 只有 GET。）
+- 後果提醒：舊口徑（含稅）的完結案**重新開啟再完結**會改成新口徑，數字改變（少承攬商稅額）、獎金基底淨利＋0.99×稅額；已建立的獎金單不會自動重算。
+
+### 11.2 項目 2：結案報表 PDF（我自己重做的 differential，不是作者那份未提交的）
+- 方法：同一支探針在 `origin/platform`（`5d76b528`）與 `27652e01` 各跑 7 個夾具，輸出 HTML（時間戳與案號正規化），逐位元組比對。
+- **5 個舊完結案（無 `dispatchBasis`）：5/5 位元組完全相同**：基準案、含「採購單（品項尚未採用）」＋負毛利、承攬商 0、客戶名含 `<script>…&"'`、缺 `dispatchTotal` 鍵。
+- 新口徑案：**只多 3 行（1 個 `<tr>`）**：`承攬商：未稅 12,000／稅額 500（進項稅額，不計成本）`，位置在「承攬商派發成本」與「實際總成本」之間。
+- 逸出：惡意值（`dispatchTotal="<b>x</b>"`、`dispatchTax="<script>1</script>"`）經 `money()` 轉為 `0`，輸出無 `script`／標籤注入。
+
+### 11.3 項目 3：標案「前往來源網站明細」連結（`f9eda556`）
+- 渲染探針（11 筆敵意網址）：`javascript:`、`JAVASCRIPT:`、`data:`、`vbscript:`、`//` 協定相對 ⇒ **不放連結，顯示「來源網址未取得」**；`https://web.pcc.gov.tw/x"onmouseover="…` ⇒ 連結存在但屬性只有 `data-source-link／href／target／rel／style`（引號已逸出，**無事件屬性**）；`http://…/<img src=x onerror=…>` ⇒ 逸出、`img[src=x]` 數 0、`window.__p*` 全未執行。所有連結 `target="_blank" rel="noopener noreferrer"`；`HTTPS://` 大寫與一般 http(s) 可連。
+- 網址來源＝`tenders.url`（解析器 `_absolute` 從來源列表頁取得，**既有欄位**；新連結與既有的標案名稱連結同一信任模型）。觀察：`_absolute` 只檢查 `startswith('http')`，不限制主機是來源網站——與既有名稱連結相同，非本次新增；若要更硬可加主機白名單。
+- 權限與資料：`api.py`／`source.py`／`listing.py` 在此範圍**沒有改動**（diff 只有頁面、測試、文件、版本登記）⇒ 閘門不變、沒有新資料給任何角色（`url` 本來就在清單回應內，僅限 `tender_radar` 權限）。無驗證碼自動化（只放連結與說明文字）。
+- 前提變更：(b) 每列連結數 2→3、(c) 招標方式空值 `—`→`未取得`＋說明句，皆是本項的直接結果，合理；(a) 33-A5 測試改寫是本報告 §10.4 的建議＋使用者裁示。
+
+### 11.4 守門與測試（單程序）
+- 標案側：`test_page_paths_centralized`、`test_module_boundaries`、`test_module_changelog_follows_code`、`test_version_slots`、`test_unit_cards`、`test_l1_interface_snapshot`、`test_generated_maps`、3 支 `test_version_manifest*`、`test_spec_coverage`、`test_changelog_sections`＋`modules/tender_radar/tests` 全部：**512 passed、4 skipped**（在 `f9eda556` 上）。
+- 案件側（`27652e01`）：重開理由／再存護欄／完結完整性／重算／e2e（重開對話框、稅基、已對應清單、完結連續流程）／精算端點／PDF／golden：**78 passed**。
+- **未跑**：案件頁 75 個 e2e 檔在最終案件 sha 上（留給階段）。
