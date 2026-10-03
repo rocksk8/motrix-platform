@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-03（wip/t34-m2-coverage-2e）：材料申請涵蓋快照與變更提案（34-M2，唯讀新檔；尚未接線）
+- 新增 `modules/case/material_coverage.py`（只讀）：`approved_po_lines`／`coverage_snapshot`（涵蓋該品項所有已核准採購單行的快照 `poSnapshot`，金額＝行合計，數量依單位規則；`only_untaken` 去掉已被占用的行）、`item_request_exists`（草稿／待審核／簽核中／已核准的活申請占用品項；`adjust_of` 且原申請已全額付款時不占用）、`taken_lines`、`paid_in_full`、`adjust_check`（D7 調整單條件）、`change_proposal(conn, quote_no, item_id, proposed=None)` ⇒ `{itemId, before, after, diff:[{field,old,new,money}], uncoveredLines, problems}`。problems：`not_found／use_direct_edit／not_approved／no_coverage／coverage_shrinks／bad_quantity／unknown_field／paid_in_full／below_paid／no_change`。
+- 還沒有任何呼叫者（簽核與畫面由 d7／c7 接）；不改現有行為。
+
 ## 1.0.107 — 2026-10-03（wip/t33-settlement-a5b-2e）：精算頁手填實際成本 0 ＝沒填、完結失敗提示延長（c7 二審）
 - 精算頁摘要把手填實際成本 0／空視為沒填、用估計（與重新載入存檔、後端 `manual_actual` 同一規則）：同一次編輯中清成 0 再完結不再被 409「頁面少一筆估計」。新增 e2e（輸入 0 ⇒ 摘要用估計 ⇒ 完結成功；移除修正即紅）。
 - 完結被拒的提示（含伺服器說明，約 100 字）顯示 10 秒（原 3.5 秒）。
