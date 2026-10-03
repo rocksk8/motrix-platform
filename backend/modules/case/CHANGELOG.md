@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-03（wip/t34-m2c-d7：33-M2c 材料申請變更申請，畫面與出貨連動接線）
+- 案件管理頁財務分頁新增「材料申請變更」面板（`case-management-mchange.js`）：選已核准的材料申請 → 預覽差異（數量、小計、涵蓋採購單行；金額由已核准採購單決定）→ 填原因建立 → 修改／送審／撤回；簽核人在面板或簽核佇列核可／退回。核准前原材料申請內容照常有效；看不到財務檢視者金額顯示「金額已遮蔽」。
+- 新端點 `GET /api/quotations/{q}/material-changes`（案件所有變更申請）。變更申請的「不得低於已出貨＋占用量」改接出貨連動：測試覆寫＞`shipping.material_shipped_qty`＞包裝 `shipping.material_shipped`（保留＋已出貨）＞沒有就不檢查並回警告。
+- 提案內容接上案件側 `material_coverage.change_proposal`（2e）；e2e 走完預覽、建立、送審、核准、退回、修改、撤回。
+
 ## (next) — 2026-10-03（wip/t33-m2b-d7：33-M2b 材料申請變更申請，端點、簽核整合與守門調整；重疊於 platform 1184efb0）
 - 端點：`GET /api/quotations/{q}/material-orders/{item}/changes`、`GET …/change-proposal`（預覽）、`POST …/changes`（建立；body 只收 `reason／quantity／notes`，金額與涵蓋行由已核准採購單決定）、`POST /api/quotations/{q}/material-changes/{id}/revise|submit|approve|reject|withdraw`。看不到財務檢視者不給金額。核准最後一層 ⇒ 同一交易內套用，套不了回 409 且什麼都不改。
 - 簽核整合：登記簽核單據類型 `material_change`（材料申請變更，預設跟統一流程）、簽核佇列與詳情（差異表：數量／單價／小計／涵蓋採購單行／備註 原→新）、站內通知與四種信件（送審／輪到您／核准／退回，信內不放金額）、稽核動作 `material_changes.*`。
