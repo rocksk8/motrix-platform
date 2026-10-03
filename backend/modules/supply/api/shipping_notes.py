@@ -120,6 +120,19 @@ def list_shipping_notes(quote_no: Optional[str] = None, authorization: str = Hea
     return [_note_public(r, include_items=False) for r in rows]
 
 
+@router.get("/api/shipping-notes/material-shippable")
+def material_shippable_for_note(quote_no: str, note_no: Optional[str] = None, authorization: str = Header(None)):
+    """34-S2：出貨單頁「從材料申請帶入」——該案件已到料的材料申請與剩餘可出貨量（扣掉其他出貨單的占用與已出貨；`note_no` 給了就排除自己）。"""
+    user = _require_user(authorization)
+    _require_admin(user)
+    conn = get_db()
+    try:
+        guard_case_access(conn, quote_no, user, allow_module="case_manage")
+        return {"items": _ML.shippable_list(conn, quote_no, exclude_note_no=note_no or None)}
+    finally:
+        conn.close()
+
+
 @router.get("/api/shipping-notes/export-history")
 def list_shipping_export_history(
     q: Optional[str] = None,
@@ -942,11 +955,19 @@ def _queue_detail(conn, doc_no):
         items = json.loads(r["items_json"] or "[]")
     except Exception:
         items = []
+    fields = [
+        {"label": "出貨日期", "value": r["ship_date"] or "—"},
+        {"label": "收件人", "value": r["recipient"] or "—"},
+        {"label": "送貨地址", "value": r["delivery_address"] or "—"},
+        {"label": "備註", "value": r["notes"] or "—"},
+    ]
+    try:                                                                       # 34-S2：對應材料申請（單號、品名、本單出貨量／其他累計／已到料）；查不到不影響詳情
+        ml = _ML.link_lines(conn, r["note_no"], r["quote_no"], r["items_json"])
+    except Exception:                                                          # noqa: BLE001
+        ml = []
+    if ml:
+        fields.append({"label": "對應材料申請", "value": "；".join("%s %s 本單 %g%s／其他出貨單累計 %g／已到料 %g" % (
+            x["docCode"], x["name"], x["qty"], x["unit"], x["others"], x["arrivedQty"]) for x in ml)})
     return {"quoteNo": r["quote_no"], "approvalRaw": r["data_json"], "title": "出貨單 " + r["note_no"],
-            "fields": [
-                {"label": "出貨日期", "value": r["ship_date"] or "—"},
-                {"label": "收件人", "value": r["recipient"] or "—"},
-                {"label": "送貨地址", "value": r["delivery_address"] or "—"},
-                {"label": "備註", "value": r["notes"] or "—"},
-            ],
+            "fields": fields,
             "items": items, "files": _aq.file_entries(r["signed_files_json"])}

@@ -148,3 +148,42 @@ def unlinked_warnings(conn, note_no, quote_no, items_json) -> list:
         if rem > _EPS:
             out.append({"materialItemId": mid, "docCode": s.get("docCode", ""), "name": s.get("name", ""), "remaining": rem})
     return out
+
+
+def shippable_list(conn, quote_no, exclude_note_no=None) -> list:
+    """出貨單頁「從材料申請帶入」的清單（34-S2）：已到料的材料申請與剩餘可出貨量（已到料 − 其他出貨單占用／已出貨；排除自己）。
+    `[{materialItemId, docCode, name, unit, appliedQty, arrivedQty, reserved, shipped, remaining}]`，依單號排序；M01 不在 ⇒ []。"""
+    ship = _shippable(conn, quote_no)
+    if not ship:
+        return []
+    used = material_shipped(conn, quote_no, exclude_note_no=exclude_note_no)
+    out = []
+    for mid, s in ship.items():
+        u = used.get(mid, {"reserved": 0.0, "shipped": 0.0})
+        arrived = _num(s.get("arrivedQty")) or 0.0
+        out.append({"materialItemId": mid, "docCode": s.get("docCode", ""), "name": s.get("name", ""), "unit": s.get("unit", ""),
+                    "appliedQty": _num(s.get("appliedQty")) or 0.0, "arrivedQty": arrived, "reserved": u["reserved"], "shipped": u["shipped"],
+                    "remaining": max(arrived - u["reserved"] - u["shipped"], 0.0)})
+    return sorted(out, key=lambda x: x["docCode"])
+
+
+def link_lines(conn, note_no, quote_no, items_json) -> list:
+    """簽核人詳情的「對應材料申請」（34-S2）：每個有 materialLink 的列 ⇒ 單號、品名、本單出貨量、其他出貨單累計（占用＋已出貨）、已到料。壞資料略過。"""
+    try:
+        links = links_of(_items(items_json))
+    except LinkError:
+        return []
+    if not links:
+        return []
+    ship = _shippable(conn, quote_no) or {}
+    used = material_shipped(conn, quote_no, exclude_note_no=note_no)
+    mine = {}
+    for _i, _it, (mid, doc, qty) in links:
+        mine[mid] = (doc, mine.get(mid, (doc, 0.0))[1] + qty)
+    out = []
+    for mid, (doc, qty) in mine.items():
+        s, u = ship.get(mid) or {}, used.get(mid, {"reserved": 0.0, "shipped": 0.0})
+        out.append({"materialItemId": mid, "docCode": doc, "name": s.get("name", ""), "unit": s.get("unit", ""), "qty": qty,
+                    "others": u["reserved"] + u["shipped"], "arrivedQty": _num(s.get("arrivedQty")) or 0.0})
+    return out
+

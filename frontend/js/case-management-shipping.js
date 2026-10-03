@@ -21,6 +21,8 @@ window.CM_PARTS.push(() => ({
     shippingPreviewFetching: false,
     shippingPreviewNote: null,
     _partsOptions: null,
+    // 34-S2：從材料申請帶入（出貨單連動；契約 SHIPPING-MATERIAL-LINK-CONTRACT-S1.md）
+    msh: { open: false, loading: false, items: [], pick: {}, qty: {}, err: '' },
     serialPicker: { show: false, itemIdx: null, partNo: '', options: [], selected: [], loading: false, error: '' },
 
     // ── 出貨單 ────────────────────────────────────────────────────────────────
@@ -98,6 +100,7 @@ window.CM_PARTS.push(() => ({
       this.shippingMsg = ''
       this.showShippingContactPicker = false
       this._loadShippingContactOptions()
+      this.msh = { open: false, loading: false, items: [], pick: {}, qty: {}, err: '' }
       this.showShippingModal = true
     },
 
@@ -120,9 +123,46 @@ window.CM_PARTS.push(() => ({
         this.shippingMsg = ''
         this.showShippingContactPicker = false
         this._loadShippingContactOptions()
-        this.showShippingModal = true
+        this.msh = { open: false, loading: false, items: [], pick: {}, qty: {}, err: '' }
+      this.showShippingModal = true
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
+
+    // ── 34-S2：從材料申請帶入 ──────────────────────────────────────────
+    _mshLinkedQty(id) {
+      return (this.shippingForm.items || []).reduce((s, it) => s + ((it.materialLink && it.materialLink.materialItemId === id) ? (Number(it.materialLink.qty) || 0) : 0), 0)
+    },
+    async mshOpen() {
+      if (this.msh.open) { this.msh = { open: false, loading: false, items: [], pick: {}, qty: {}, err: '' }; return }
+      const quoteNo = this.shippingForm.quote_no
+      this.msh = { open: true, loading: true, items: [], pick: {}, qty: {}, err: '' }
+      try {
+        const q = `quote_no=${encodeURIComponent(quoteNo)}` + (this.editShippingNoteNo ? `&note_no=${encodeURIComponent(this.editShippingNoteNo)}` : '')
+        const r = await fetch('/api/shipping-notes/material-shippable?' + q, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (this.shippingForm.quote_no !== quoteNo || !this.msh.open) return          // 切案／關掉之後晚到的回應不落地
+        if (!r.ok) { this.msh.err = '無法讀取材料申請'; this.msh.loading = false; return }
+        const items = ((await r.json()).items || []).map(x => ({ ...x, left: Math.max(x.remaining - this._mshLinkedQty(x.materialItemId), 0) })).filter(x => x.left > 1e-9)
+        if (this.shippingForm.quote_no !== quoteNo || !this.msh.open) return
+        const qty = {}
+        items.forEach(x => { qty[x.materialItemId] = x.left })
+        this.msh.items = items; this.msh.qty = qty
+      } catch { this.msh.err = '網路錯誤' }
+      this.msh.loading = false
+    },
+    mshImport() {
+      let n = 0
+      for (const x of this.msh.items) {
+        if (!this.msh.pick[x.materialItemId]) continue
+        const q = Number(this.msh.qty[x.materialItemId])
+        if (!(q > 0) || q > x.left + 1e-9) { this.msh.err = `「${x.name}」數量要大於 0 且不超過剩餘可出貨量 ${x.left}`; return }
+        this.shippingForm.items.push({ id: Date.now() + Math.random(), description: x.name, brand: '', qty: q, unit: x.unit || '台', notes: '',
+                                       materialLink: { materialItemId: x.materialItemId, docCode: x.docCode, qty: q } })
+        n++
+      }
+      if (!n) { this.msh.err = '請先勾選要帶入的材料申請'; return }
+      this.msh = { open: false, loading: false, items: [], pick: {}, qty: {}, err: '' }
+    },
+    syncLinkQty(it) { if (it && it.materialLink) it.materialLink.qty = Number(it.qty) || 0 },
 
     importItemsFromQuote() {
       const srcItems = this.selected?.data?.items || []
@@ -266,7 +306,14 @@ window.CM_PARTS.push(() => ({
     },
 
     async submitShippingNote(n) {
-      if (!(await MotrixUI.confirm(`確定送出出貨單「${n.noteNo}」進行簽核？`))) return
+      // 34-S2／E6：已到料且還有剩餘可出貨量、卻沒連到這張單的材料申請 ⇒ 送審前提醒（不擋）
+      let warn = ''
+      try {
+        const w = await fetch(`/api/shipping-notes/${n.noteNo}/material-link-check`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        const un = w.ok ? ((await w.json()).unlinked || []) : []
+        if (un.length) warn = '\n\n提醒：以下已到料的材料申請還有剩餘可出貨量，但沒有連結到這張出貨單（不擋，仍可送出）：\n' + un.map(x => `・${x.docCode} ${x.name}（剩餘 ${x.remaining}）`).join('\n')
+      } catch {}
+      if (!(await MotrixUI.confirm(`確定送出出貨單「${n.noteNo}」進行簽核？` + warn))) return
       try {
         const r = await fetch(`/api/shipping-notes/${n.noteNo}/submit`, {
           method: 'POST',

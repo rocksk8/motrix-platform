@@ -261,3 +261,44 @@ def test_supply_does_not_import_case():
             mods = [n.module] if isinstance(n, ast.ImportFrom) and n.module else [a.name for a in n.names] if isinstance(n, ast.Import) else []
             bad += [(f.name, m) for m in mods if m.startswith("modules.case")]
     assert not bad, bad
+
+
+# ── 34-S2：出貨單頁清單端點、簽核人詳情 ──────────────────────────────────────
+
+def test_shippable_endpoint_lists_arrived_items_with_remaining_and_excludes_the_note_itself(world):
+    client, h = world
+    other = _note(client, h, [L(4)], status="待審核")                      # 別張單據占用 4
+    mine = _note(client, h, [L(3)])                                         # 本張草稿（草稿不占用；排除自己也不影響）
+    r = client.get("/api/shipping-notes/material-shippable", params={"quote_no": Q, "note_no": mine}, headers=h)
+    assert r.status_code == 200, r.text
+    it = r.json()["items"]
+    assert [(x["materialItemId"], x["docCode"], x["arrivedQty"], x["reserved"], x["shipped"], x["remaining"]) for x in it] == [(ITEM, DOC, 10.0, 4.0, 0.0, 6.0)]
+    assert it[0]["name"] == "電纜" and it[0]["unit"] == "捲"
+    _set(other, status="已核准")
+    again = client.get("/api/shipping-notes/material-shippable", params={"quote_no": Q}, headers=h).json()["items"][0]
+    assert (again["reserved"], again["shipped"], again["remaining"]) == (0.0, 4.0, 6.0)
+
+
+def test_shippable_endpoint_permissions(world, client, make_user):
+    c, h = world
+    u, p = make_user(username="sl_plain", role="sales", modules=["quotation"])
+    h2 = _login(client, u, p)
+    assert client.get("/api/shipping-notes/material-shippable", params={"quote_no": Q}, headers=h2).status_code in (403, 404)
+    assert client.get("/api/shipping-notes/material-shippable", params={"quote_no": Q}).status_code in (401, 403)
+
+
+def test_approver_detail_shows_the_linked_material_request(world):
+    client, h = world
+    _note(client, h, [L(4)], status="已核准")                                # 其他單據已出貨 4
+    mine = _note(client, h, [L(3)], status="待審核")
+    import db
+    from modules.supply.api import shipping_notes as sn
+    c = db.get_db()
+    try:
+        d = sn._queue_detail(c, mine)
+        f = [x for x in d["fields"] if x["label"] == "對應材料申請"]
+        assert len(f) == 1 and DOC in f[0]["value"] and "電纜" in f[0]["value"] and "本單 3捲" in f[0]["value"] and "累計 4" in f[0]["value"] and "已到料 10" in f[0]["value"], f
+        plain = sn._queue_detail(c, _note(client, h, [{"description": "一般"}], status="待審核"))
+        assert not [x for x in plain["fields"] if x["label"] == "對應材料申請"]       # 沒有連結的單據詳情不變
+    finally:
+        c.close()
