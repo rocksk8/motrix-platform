@@ -25,7 +25,7 @@ if ($conn) { Write-Host "已經在跑：http://localhost:$Port/（帳號 admin �
 
 New-Item -ItemType File -Force "$root\.no_cloud_archive", "$root\.no_email_send" | Out-Null
 $env:MOTRIX_CREATE_NEW_DB = '1'
-$logDir = Join-Path $root 'logs'; New-Item -ItemType Directory -Force $logDir | Out-Null
+$logDir = Join-Path $env:TEMP 'd12-verify'; New-Item -ItemType Directory -Force $logDir | Out-Null
 Start-Process -FilePath $py -ArgumentList '-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', $Port `
     -WorkingDirectory "$root\backend" -WindowStyle Hidden `
     -RedirectStandardOutput "$logDir\d12-verify.out.log" -RedirectStandardError "$logDir\d12-verify.err.log" | Out-Null
