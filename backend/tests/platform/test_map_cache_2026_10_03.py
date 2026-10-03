@@ -36,6 +36,7 @@ def env(tmp_path, monkeypatch):
     (root / ".gitignore").write_text("backend/ignored.py\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
     _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "init")
     tools = tmp_path / "tools"
     tools.mkdir()
     (tools / "algo.py").write_text("V = 1\n", encoding="utf-8")
@@ -73,6 +74,16 @@ def test_b_new_untracked_file_misses(env):
     root, calls, run = env
     run()
     (root / "backend" / "new_untracked.py").write_text("Y = 1\n", encoding="utf-8")
+    run()
+    assert len(calls) == 2
+
+
+def test_b3_untracked_file_outside_backend_and_frontend_misses(env):
+    """test_map 的輸入是 git ls-files（含未追蹤）；backend／frontend 以外的檔 rglob 看不到，只有這一路涵蓋。"""
+    root, calls, run = env
+    run()
+    (root / "scripts").mkdir()
+    (root / "scripts" / "s.py").write_text("S = 1\n", encoding="utf-8")
     run()
     assert len(calls) == 2
 
