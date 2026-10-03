@@ -73,6 +73,8 @@ def test_materials_count_by_link_status_and_never_double_with_the_po(W):
     assert [(m["itemId"], m["assignedBy"]) for m in a["material"]["orders"]] == [("N", "link")]
     assert [(m["itemId"], m["amount"], m["pending"]) for m in d["unassigned"]["materials"]] == [("X", 250.0, True)]
     assert d["totals"]["materialUnassignedTotal"] == 250 and d["totals"]["pendingTotal"] == 250
+    um = d["unassigned"]["materials"][0]                                             # 2026-10-03：未對應列帶品名／數量／單位（精算頁用來分辨列）
+    assert um["quantity"] == 1.0 and um["name"] and isinstance(um["unit"], str)
 
 
 def test_offsets_move_an_unassigned_material_and_an_extra_expense_onto_an_item(W):

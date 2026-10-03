@@ -98,7 +98,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
         if r["linked"] or r["cost"] == "excluded" or not r["total"]:
             continue
         mo = r["order"]
-        rec = {"itemId": r["itemId"], "docCode": "", "name": r["name"], "status": r["state"], "amount": r["total"], "pending": r["cost"] == "pending", "noPo": r["noPo"]}
+        rec = {"itemId": r["itemId"], "docCode": "", "name": r["name"], "quantity": r.get("quantity"), "unit": r.get("unit") or "", "status": r["state"], "amount": r["total"], "pending": r["cost"] == "pending", "noPo": r["noPo"]}
         qid = str(mo.get("quoteItemId") or "").strip()
         if qid in live:
             mat_by_item.setdefault(qid, []).append(dict(rec, assignedBy="link"))
@@ -112,7 +112,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
     # ── 額外支出：整張單歸單一品項（offset）；其餘留在未對應 ──
     extra_by_item, unassigned_extra, extra_all = {}, [], []
     for e in extra_rows:
-        row = {"expenseId": e.get("expenseId"), "docCode": e.get("docCode") or "", "category": e.get("category") or "", "amount": _num(e.get("amount")),
+        row = {"expenseId": e.get("expenseId"), "docCode": e.get("docCode") or "", "category": e.get("category") or "", "description": e.get("description") or "", "amount": _num(e.get("amount")),
                "pending": bool(e.get("pending"))}
         target = off_extra.get(str(e.get("expenseId")))
         extra_all.append(dict(row, assignedTo=target or ""))

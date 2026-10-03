@@ -280,6 +280,9 @@ td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
 .cm-tabs::-webkit-scrollbar-thumb { background:var(--border-light); border-radius:2px; }
 .cm-tab { font-size:12px; font-family:var(--font-zh); padding:9px 14px; border:none; background:none; color:var(--text-dim); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; flex-shrink:0; transition:color .1s; }
 .cm-tab:hover { color:var(--text-primary); }
+/* 精算入口（連到獨立頁，不是分頁）：外觀同分頁，但不帶 .cm-tab，免得逐分頁點擊的測試點到它而離開本頁 */
+.cm-tab-link { font-size:12px; font-family:var(--font-zh); padding:9px 14px; color:var(--accent); text-decoration:none; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; flex-shrink:0; }
+.cm-tab-link:hover { text-decoration:underline; }
 .cm-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
 
 /* Tab body */

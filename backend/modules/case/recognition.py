@@ -309,7 +309,7 @@ def material_money_rows(conn, department_id=None, quote_no=None):
             prs = po_rows_of(qn)
             linked = _pi._link_check(mo, prs)[0]
             out.append({"quoteNo": qn, "itemId": mo.get("itemId") or "", "key": (qn, str(mo.get("itemId"))), "order": mo,
-                        "name": mo.get("itemName") or "材料申請", "state": st, "cost": _ma.cost_state(st), "linked": linked,
+                        "name": mo.get("itemName") or "材料申請", "quantity": (float(mo["quantity"]) if str(mo.get("quantity") or "").replace(".","",1).isdigit() else None), "unit": str(mo.get("unit") or ""), "state": st, "cost": _ma.cost_state(st), "linked": linked,
                         "noPo": (not linked) and _pi.material_link_status(mo, prs, legacy=(st == ""))["state"] == "none",
                         "total": float(mo.get("totalPrice") or 0)})
     return out
@@ -419,7 +419,7 @@ def extra_entries(conn, basis, quote_no=None):
                 "desc": "%s｜%s｜%s" % (r["customer_name"] or "", r["category"] or "其他", desc),
                 "amount": cost, "taxNote": "未拆稅", "provisional": provisional,
                 "pending": r["status"] != "已核准", "files": files, "expenseId": r["id"],
-                "category": r["category"] or "其他",
+                "category": r["category"] or "其他", "description": r["description"] or "",
                 "remitPending": basis == "cash" and paid != "" and r["remit_review"] == "pending",
                 "invoiceDate": inv, "paidDate": paid}      # 舊版列不帶 departmentId（缺＝報表依案件推導；與 A2 前相同）；單據列在 _typed_entries 帶
         if not (r["kind"] or ""):
