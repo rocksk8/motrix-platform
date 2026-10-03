@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-03（wip/t34-ship-case-2e）：出貨單連動——可出貨材料提供者（34-S1 case 側）
+- 新增提供者 `("material.shippable", "case")`（`modules/case/material_shippable.py`）：回傳已核准且已做到貨確認的材料申請 `[{materialItemId, docCode, name, unit, quoteItemId, appliedQty, arrivedQty, status}]`，供出貨單（supply）經 registry 取用、不互相 import。唯讀；`arrivedQty` 預設整筆到貨（E5），有選填欄位 `received_qty` 時取 `min(實收, 已核准量)`（欄位與到貨 API 的 `receivedQty` 後補）。契約與逐點答覆：SHIPPING-MATERIAL-LINK-CONTRACT-S1.md §8。
+
 ## 1.0.107 — 2026-10-03（wip/t33-settlement-a5b-2e）：精算頁手填實際成本 0 ＝沒填、完結失敗提示延長（c7 二審）
 - 精算頁摘要把手填實際成本 0／空視為沒填、用估計（與重新載入存檔、後端 `manual_actual` 同一規則）：同一次編輯中清成 0 再完結不再被 409「頁面少一筆估計」。新增 e2e（輸入 0 ⇒ 摘要用估計 ⇒ 完結成功；移除修正即紅）。
 - 完結被拒的提示（含伺服器說明，約 100 字）顯示 10 秒（原 3.5 秒）。
