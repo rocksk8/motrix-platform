@@ -42,6 +42,8 @@ _ENV_IGNORE = {"MOTRIX_PYTEST_LOCK", "MOTRIX_PYTEST_LOCK_WAIT", "MOTRIX_PYTEST_L
                "MOTRIX_FULL_MAX_WORKERS", "MOTRIX_PARTIAL_MAX_WORKERS", "MOTRIX_E2E_MAX_WORKERS",
                "MOTRIX_FAIL_STREAM_RUN", "MOTRIX_FAIL_STREAM_STAGE", "MOTRIX_FAIL_STREAM_DIR",
                "MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_BUILD_GUARD",
+               # T35 L3'：圖快取旗標只決定算圖快慢；出貨判定（建包／run-stage／全量／列車）一律明確設 0，不靠它進指紋
+               "MOTRIX_MAP_CACHE",
                # 2026-10-02（建包優化 2 項 1）：fail-fast／failure-first 只決定「何時停、先跑誰」，不決定哪些題存在或過不過（停止＝該段記紅）
                "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_FAILFAST_QUIET_MIN", "MOTRIX_FAILFAST_FLAKES",
                "MOTRIX_FAILFIRST", "MOTRIX_FAILFIRST_BASE", "MOTRIX_FAILFIRST_HISTORY", "MOTRIX_FAILFIRST_RECORDS"}
@@ -275,7 +277,7 @@ def run_stage(repo, stage, records, python=None, runner=None, workers=None, note
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join([str(repo / "tools" / "platform")] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
     env.update({"MOTRIX_FAIL_STREAM_STAGE": stage, "MOTRIX_FAILFAST": "1", "MOTRIX_FAILFAST_N": "10", "MOTRIX_FAILFAST_QUIET_MIN": "3",
-                "MOTRIX_FAILFIRST": "1", "MOTRIX_FAILFIRST_BASE": "auto"})
+                "MOTRIX_FAILFIRST": "1", "MOTRIX_FAILFIRST_BASE": "auto", "MOTRIX_MAP_CACHE": "0"})
     note("[run-stage] %s：%s" % (stage, " ".join(cmd)))
     if runner is None:
         rc = subprocess.run(cmd, cwd=str(backend), env=env).returncode

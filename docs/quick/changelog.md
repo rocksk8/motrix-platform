@@ -16,6 +16,15 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-03 T35-L3' test_map／dep_graph 內容簽章快取
+- 根因（cProfile）：`modtest.py` 每次呼叫現場重算 test_map＋dep_graph（本樹約 41 秒純 CPU）；`ship_tests`、modtest_scope／json_stdout／rebase_check、scope_gate 真樹題都各付一次。L4（ledger 突變題改就地還原）量測後放棄：copytree 只佔約 14／105 worker 秒。
+- 新增 `tools/platform/map_cache.py`：簽章＝內容 sha256（backend/**/*.py、frontend/**/*.html／js——dep_scan 走檔案系統、含 .gitignore 的檔；加 `git ls-files --cached --others` 與 tools/platform/*.py＝算圖工具原始碼；檔名集合進簽章＝刪除／改名／新增皆 miss）＋repo 根絕對路徑＋Python 主次版＋格式版號。位置 `%TEMP%\motrix-map-cache`、留最近 8 份、tmp＋replace 原子寫、任何錯誤重算、非純 JSON 型別不快取。
+- 接線：`modtest.load_map／load_graph／name_filter 的 known_tables` 走快取；CLI 行程內簽章只掃一次；`--refresh-map`＝不讀仍寫；新增 `--no-count`（dry-run 不做 pytest --collect-only，約 20 秒；`module_update.ship_tests` 只要選題清單，已改用）。
+- **出貨判定一律明確關閉**（不靠簽章本身）：`build_deploy_package.ps1` 開頭 `$env:MOTRIX_MAP_CACHE="0"`、`build_test_reuse.run_stage` 子行程 env、`modtest --full／--train`；旗標在 `_ENV_IGNORE`（不進測試指紋）。
+- 量測（真樹，`modtest --files … --dry-run --json --no-count`）：miss 22.0 秒／命中 3.2 秒／關閉 20.5 秒；三者輸出逐位元組相同。含數題的呼叫：命中 27 秒（原 41 秒）。
+- 對照測試 `test_map_cache_2026_10_03.py`（20 題）：改已追蹤檔、新增未追蹤檔、刪除／改名、同大小且 mtime 調回的改動、工具原始碼、被 .gitignore 的檔、兩個 worktree 路徑、Python 版本／kind、旗標 0、refresh、壞檔、非 JSON、淘汰上限、行程內 memo、三處關閉接線。
+- **殘餘風險：簽章漏掉某種輸入就會假綠；簽章涵蓋 dep_scan／test_map 實際讀的全部檔案，新增讀取來源時必須同步 `_input_files`。**
+
 ## 2026-10-03 T35 測試時間預算警報（warn-only）
 - 新增 `tools/platform/time_budget.py`＋基準 `tools/platform/time_budget_baseline.json`（4b18cd01 實測，-n 2：9598 題、8729 worker 秒、1089 檔）。看 worker 秒（junit time 加總）而非牆鐘（同一棵樹 -n2 55 分／-n4 25 分，牆鐘會隨負載 flapping）。
 - 規則：新測試檔 > 30 worker 秒；既有檔增加 > 30 秒且 > 1.5 倍；總量 > 基準 +5% 且 changelog 前 120 行沒有一行 `- 時間預算：<理由>`。報告同時印題數與每題 ms（測試數 +56% 時全量 +50%，每題約 190 ms 沒變慢＝成長來自數量）。

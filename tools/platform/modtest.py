@@ -260,6 +260,10 @@ def _read_graph_file():
     return g.get("units", g)
 
 
+#: --refresh-map：不讀快取、仍寫（強制刷新）。main() 設定。
+REFRESH_MAP = False
+
+
 def load_map(use_files=False):
     """test_map：預設**現場算**（產生檔只由列車提交，分支上的檔是 origin 版——GENERATED-FILES-PROPOSAL §2：
     讀檔會漏掉新增／搬家的測試檔，回放最多漏 13 檔）。use_files ⇒ 讀 docs/platform/test_map.json（除錯用）。
@@ -267,7 +271,9 @@ def load_map(use_files=False):
     if use_files:
         return _read_map_file() or build_map(include_untracked=True)
     try:
-        return build_map(include_untracked=True)   # 現場選題含還沒 git add 的新檔
+        # 現場選題含還沒 git add 的新檔；同一棵樹（內容簽章，見 map_cache.py）重複呼叫直接取快取。MOTRIX_MAP_CACHE=0 ⇒ 不用。
+        import map_cache
+        return map_cache.get_or_compute("test_map", lambda: build_map(include_untracked=True), REPO, refresh=REFRESH_MAP)
     except Exception as e:                                   # noqa: BLE001 退回讀檔並明說
         _say("[modtest] ⚠ 現場建 test_map 失敗（%r）⇒ 退回讀 %s（可能漏掉本分支新增的測試檔）" % (e, MAP_PATH.name))
         return _read_map_file()
@@ -279,7 +285,8 @@ def load_graph(use_files=False):
         return _read_graph_file()
     try:
         import dep_scan
-        g = dep_scan.build()
+        import map_cache
+        g = map_cache.get_or_compute("dep_graph", dep_scan.build, REPO, refresh=REFRESH_MAP)
         return g.get("units", g)
     except Exception as e:                                   # noqa: BLE001 退回讀檔並明說
         _say("[modtest] ⚠ 現場建 dep_graph 失敗（%r）⇒ 退回讀 %s（反向遞移可能不準）" % (e, GRAPH_PATH.name))
@@ -406,10 +413,11 @@ def name_filter(seeds, deps, by_unit, graph, refs, report):
     判斷不了（ALL、找不到 import、讀不到原始碼、頁面／js 的呼叫邊）一律保留。report["names"] 記下每個 seed 被改的名稱。"""
     import scope_names as SN
     from dep_scan import helper_reexports, known_tables
+    import map_cache
     old, new = refs
     reexp = helper_reexports()
     try:
-        known = set(known_tables())
+        known = set(map_cache.get_or_compute("known_tables", known_tables, REPO, refresh=REFRESH_MAP))
     except Exception:            # noqa: BLE001 — 讀不到表清單 ⇒ 資料表一跳退回整個單位（保守）
         known = None
     keep = set(seeds)
@@ -1317,7 +1325,7 @@ def main(argv=None):
     _e2e = e2e_max_workers()
     ap.add_argument("--e2e-workers", type=int, default=_e2e,
                     help="--full e2e 段的 xdist worker 數（上限 %d，§C-13；%s 可覆寫）" % (_e2e, E2E_ENV))
-    ap.add_argument("--refresh-map", action="store_true", help="（已是預設：現場算 test_map 與 dep_graph；保留相容，無作用）")
+    ap.add_argument("--refresh-map", action="store_true", help="強制刷新圖快取（不讀、仍寫；現場算 test_map 與 dep_graph 本來就是預設）")
     ap.add_argument("--use-files", action="store_true",
                     help="讀已提交的 test_map.json／dep_graph.json，不現場算（除錯用；分支上的檔是 origin 版，會漏題）")
     ap.add_argument("--no-durations", dest="durations", action="store_false",
@@ -1325,6 +1333,8 @@ def main(argv=None):
     ap.add_argument("--window", default="modtest")
     ap.add_argument("--python", help="指定跑 pytest 的直譯器（預設：主工作樹的專案 .venv）")
     ap.add_argument("--json", action="store_true", help="dry-run 以 JSON 輸出")
+    ap.add_argument("--no-count", action="store_true",
+                    help="dry-run 不做 pytest --collect-only 數題（items／by_module.items 為 null；只要選題清單的呼叫端用，省約 20 秒）")
     ap.add_argument("--list", action="store_true", help="dry-run 另列每個測試檔與原因")
     ap.add_argument("--transitive", action="store_true", help="舊規則：改動單位一律沿反向 import 遞移擴散（預設：介面沒變只到直接依賴，§C-11a）")
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -1342,8 +1352,14 @@ def main(argv=None):
         else:
             print_rebase_check(r)
         return 2 if not r["rebased"] else (3 if r["high_impact"] else 0)   # 3＝影響大（差異題擴大＋月台註明），不是「跑全量」
-    global PYEXE
+    global PYEXE, REFRESH_MAP
     PYEXE = resolve_python(a.python)
+    REFRESH_MAP = bool(a.refresh_map)
+    import map_cache
+    map_cache.MEMO = True                       # CLI 行程內輸入檔不會變 ⇒ 內容簽章只掃一次
+    if a.full or a.train:
+        # T35 L3'：全量／列車是出貨判定的一部分 ⇒ 明確關掉圖快取（不靠內容簽章本身）；子行程繼承
+        os.environ["MOTRIX_MAP_CACHE"] = "0"
 
     if a.full:
         if a.dry_run:
@@ -1363,7 +1379,7 @@ def main(argv=None):
         return run_train(picked, tmap, extra, a)
 
     n_items, tail, full_n, per = None, "", None, None
-    if a.dry_run:
+    if a.dry_run and not a.no_count:
         per, tail = collect_per_file(a.window)
         if per is not None:
             n_items = sum(per.get(t, 0) for t in picked)

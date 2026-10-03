@@ -64,6 +64,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# T35 L3'：建包是出貨判定 ⇒ 明確關掉 test_map／dep_graph 內容簽章快取（tools/platform/map_cache.py；不靠簽章本身）。子行程繼承。
+$env:MOTRIX_MAP_CACHE = "0"
 
 # ── 計時與統計（2026-09-22，使用者問「打包的時間為什麼會越來越久」）──────
 #
