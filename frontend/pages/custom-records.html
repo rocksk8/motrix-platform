@@ -112,6 +112,9 @@
     .cr-f.is-preview-hl { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 6px; }
     .cr-f .cr-ph { color: var(--text-secondary); font-size: 13px; padding: 8px 0; }
     html[data-preview="1"] .cr-main { margin-left: 0; margin-top: 0; padding: 12px 16px 16px; }
+    /* 預覽 iframe 裡沒有頂欄／側欄內容（sidebar.js 在預覽模式不掛載），但頁面的 #app-topbar 空殼仍是 position:fixed 的黑色 60px 橫帶，
+       會蓋住預覽的標題（D12 驗證發現）——預覽模式把外殼整個藏起來（與嵌入模式同一條規則）。 */
+    html[data-preview="1"] #app-topbar, html[data-preview="1"] #app-sidebar, html[data-preview="1"] .sidebar-overlay { display: none !important; }
     html[data-embed="1"] #app-topbar, html[data-embed="1"] #app-sidebar, html[data-embed="1"] .sidebar-overlay, html[data-embed="1"] .pg { display: none !important; }
     html[data-embed="1"] .cr-main { margin: 0; padding: 8px 4px 12px; }
     html[data-embed="1"] body { background: transparent; min-height: 0; height: auto; }
