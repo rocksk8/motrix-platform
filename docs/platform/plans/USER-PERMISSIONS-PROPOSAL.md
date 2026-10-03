@@ -1,6 +1,6 @@
 # 使用者權限調整方案（提案；只有文件，未改程式）
 
-作者：a3（hichan-a3）　日期：2026-10-03　狀態：待使用者裁示（確認後才列待辦；第 34 班不動）
+作者：a3（hichan-a3）　日期：2026-10-03　狀態：路線已定（A 脫鉤→職責角色化→B 逐領域）；15 題預設答案與 5 件職責角色化方向**使用者已同意**（第 8 題「產生獎金單」維持現狀）；新增不變式：superadmin 全功能可用；實作排第 35 班起
 基底：origin/wip/train-34-int1（2f027536）。明細盤點見同目錄 `ADMIN-DECOUPLE-INVENTORY.md`（案件／金流／核心三區，約 100 處判斷點）。
 
 ## 0. 一頁結論
@@ -8,6 +8,7 @@
 - **目標（使用者原話）**：未來不要 admin；既有 admin 員工依各自負責項目調整；出納與財務不綁 admin、一般員工也能持有；只有 superadmin 全可見；「出納填寫」獨立勾選留未來。
 - **現況關鍵**：後端「模組」這一層其實早已不讓 admin 直通（`require_any_module`、`user_has_module` 都只認 superadmin 或實際持有）。admin 之所以還什麼都能做，來自兩處：①**寫死的角色比較**（約 100 處 `role in ("superadmin","admin")`，其中金額／出納／財務相關約 70～80 處，主要在三個各自定義的 `_require_admin`、`cashier.py`、`accounting_export.py`、`can_see_financial`、案件額外支出／報價單遮蔽、前端按鈕）；②**角色樣板**——admin 樣板預設就含 `finance／financial_view／cashier／reports`，既有 admin 帳號在 DB v84 已被回填這些模組。
 - **正式機形狀**：在職 11 人＝admin 4（**4 位都同時持有 cashier＋finance**）、superadmin 2（只有 finance，直通不受影響）、sales 2、viewer 2、engineer 1。⇒ 把財務／出納脫鉤後，**現有 4 位 admin 的實際行為完全不變**；日後把某人的勾拿掉，才會失去金額可見／出納。
+- **硬性不變式（使用者 2026-10-03）**：superadmin 每個功能都要能使用，不因沒勾 cashier／finance 而被擋（見 §5 之前的「不變式」節與第 35 班守門）。
 - **建議**：分兩班。**第 35 班做方案 A（財務／出納脫鉤）**——範圍清楚、可逐檔驗證、正式機零行為變動；**第 36 班起視需要做方案 B 的其餘部分（把 admin 的一般管理直通逐步換成模組權限）**，每班一個領域。
 
 ## 1. 現況
@@ -79,6 +80,26 @@
 5. **防呆**：移除最後一位持有 `finance` 或 `cashier` 的非 superadmin 時提示（目前正式機 superadmin 沒有 cashier，出納實際靠 admin 的勾）。
 6. **稽核**：變更使用者模組勾選已寫稽核；脫鉤後建議把「財務／出納勾選變更」標成高敏感事件。
 
+## 不變式：superadmin 每個功能都要能使用（使用者 2026-10-03 裁示）
+
+**規則**：superadmin 不因為沒有勾 `cashier`／`finance`／`financial_view` 等任何模組，而被任何功能擋下——含所有「財務／出納」判斷、頁面選單、API、PDF 產出、通知收件。理由：避免財務／出納無人可處理時系統卡死（正式機現況：superadmin 2 位只有 `finance`、沒有 `cashier`，出納實際靠 admin 的勾）。**脫鉤只拿掉 admin 的角色直通，不得影響 superadmin 直通。**
+
+### 查證（基底 int1 2f027536）
+| 層 | 現況 | 結論 |
+|---|---|---|
+| 側欄選單 | `frontend/static/sidebar.js`：`has = k => sa \|\| mods.indexOf(k) >= 0`；`_permOk(perm)` 對陣列 perm 用 `has`；module.json 的 `menu.perm`（例如 arap 的出納頁 `["cashier"]`） | **superadmin 看得到所有選單項目（包含 cashier）**，不因沒有 cashier 勾選而隱藏 ✔ |
+| 後端模組守門 | `require_any_module`／`_require_user(module=)`：`role == "superadmin"` 直通 | ✔ |
+| 後端「單獨用 `user_has_module`」 | `user_has_module` 只看 `modules` JSON，**不看角色**。全後端 54 處呼叫，其中**未同時帶 superadmin／admin 判斷**的至少有：`helpers/case_access.py:157,290`、`helpers/financial_mask.py:40`、`helpers/row_access.py:78`、`analytics/reports.py:101-102`、`arap/cashier.py:44-45`、`case/case_extra_expenses.py:252,652,1037`、`case/material_orders.py:205`、`case/quotations.py:2776`、`payroll/bonus.py:1772`、`payroll/bonus_correction.py:51`、`payroll/bank_account.py:90,98` | **這些處的前後文通常另有 superadmin 分支，但需逐一確認**；**脫鉤時若把「admin 直通」拿掉、只剩 `user_has_module`，會讓 superadmin（沒有該勾）被擋** ⇒ 新 helper 必須內含 superadmin 直通，且這批要逐一驗 |
+| 前端按鈕／頁面條件 | `canSeeFinancial／canMarkPayment／isAdminPlus` 與頁面的 `['superadmin','admin'].includes(session.role)` | 目前含 superadmin；脫鉤改寫時 superadmin 必須保留 |
+| PDF／通知 | 匯款申請 PDF 下載走 `_guard_voucher`＋`can_see_financial`；通知收件依角色／模組挑人（`email_notify` 的 `admins` 群組） | 通知改「依 cashier／finance 勾選挑人」時要**加上 superadmin**（否則沒勾的 superadmin 收不到）；PDF 路徑保留 superadmin |
+
+### 守門（併入第 35 班 A 案）
+1. **行為測試**：建立「superadmin、`modules=[]`」帳號，對**每個 F 類端點／判斷**（以盤點附錄 F 清單為準）都通過（含 API、PDF 下載、T100、差額審核、憑證建立／作廢／送審、報價單財務／收款、dashboard 財務、獎金金額端點）。正對照：同一請求用 `admin（modules=[]）` ⇒ 403／看不到；反向控制：把新 helper 的 superadmin 直通拿掉 ⇒ 此測試紅。
+2. **靜態守門**：掃描 `has_finance_access`／`has_cashier_access`（新 helper）本體必含 `role == "superadmin"` 直通；掃描 F 類檔案內**單獨使用 `user_has_module(..., "cashier"|"finance"|"financial_view")` 而同一判斷式沒有 superadmin 直通**者 ⇒ 紅（基線＝目前的 15～20 處，只准減少；逐處在 A 班改成走新 helper）。新增的權限判斷若沒有 superadmin 直通也紅。
+3. **前端**：側欄對 superadmin 顯示所有項目（現況已是，補一題 e2e：superadmin 無 cashier 勾選仍看得到「出納」選單並進得去）；F 類按鈕條件改寫後 superadmin 仍顯示（e2e 抽驗：標記已匯款、差額審核、T100、憑證建立）。
+4. **正式機形狀演練**：以「superadmin 2 位只有 finance、沒有 cashier」的帳號形狀，在演練庫跑全部出納功能（待付款、標記已匯款、差額審核、銀行對帳）與財務功能，全部可用；admin 4 位（皆有 cashier＋finance）行為與上線前相同；再把某 admin 的勾拿掉，確認該 admin 403 而 superadmin 不受影響。
+5. **盤點補欄**：`ADMIN-DECOUPLE-INVENTORY.md` 的 F 表每列加「superadmin 路徑已確認」欄（實作班填）。
+
 ## 5. 需要使用者裁示的題目（每題附「預設答案＋理由」；你只需改不同意的）
 
 預設原則（bin-1c 2026-10-03）：最小權限；職務分離（建立／核可／匯款不由同一人完成；cashier 不核可自己匯的款）；金額與個資預設收緊；管理功能（看案件列、看簽核單本身）admin 可留 M 類；通知對象跟權限走；有疑義的標「需使用者」。
@@ -114,6 +135,8 @@
 - 守門測試：對每個 F 類端點／判斷，三種帳號——`admin（無模組）`⇒403／看不到；`admin（有 cashier 或 finance）`⇒通過；`superadmin（不持有任何模組）`⇒通過；另含「簽核人例外仍可看」與反向控制（把 helper 換回舊規則 ⇒ 第一種帳號變成可通過 ⇒ 測試紅）。
 - 靜態守門：禁止新增 `role in ("superadmin","admin")` 出現在標記為金額／出納／財務的檔案（掃描式，類似 page_paths 棘輪：基線只准減少）。
 - 演練（drill）：以正式機帳號形狀（admin 4 皆有 cashier＋finance、superadmin 2 只有 finance）驗上線前後逐帳號行為相同。
+
+- **superadmin 不變式**：見「不變式」節的守門 1～5（行為測試、靜態守門、前端 e2e、正式機形狀演練），併入 A 案驗收。
 
 ## 8. 不在本提案範圍
 「出納填寫」獨立勾選、移除 admin 角色本身、模組載入器／授權機制的改動、正式機帳號的實際調整（由使用者在 users.html 操作）。
