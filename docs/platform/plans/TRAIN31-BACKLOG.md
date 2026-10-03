@@ -183,3 +183,9 @@
 ## 第33班A上線（2026-10-03 04:32）
 - 8ae8b8cc 已上正式機（成功無回滾，27 秒）；基準 8ae8b8cc、tag prod/8ae8b8cc、origin/platform=1184efb0。階段 not_e2e 8541／e2e 864 皆 0 紅；da 包級 PASS 0 must-fix；drill_train33 PASS；探針 CLEAN；c7 二審無 must-fix（2e S-1 已修進包）。
 - 第34班（33B）：M2 變更申請（d7 wip/t33-m2b-d7）、出貨單連動（c7 wip/t33-ship-link-c7）、D12 設計器預設開（須真滑鼠拖放驗證，wip/t33-d12-c7）、D7 鎖定（wip/t33-d7lock-d7-r2）、author_gate 全域釘子（wip/t33-author-gate-globals-a3）、測試母體盤點第二版（da）、failfast 提案（wip/t33-failfast-proposal-d7）、2e nits：完結容差套到 extra/purchased、凍結後 extraTotal／materialUnassignedTotal 分法不同。待補：train 31 case_material_payments 備份分流（待有資料）。
+
+## 第34班範圍裁示（使用者 2026-10-03 早上）
+- 範圍：M2 變更申請＋出貨單連動＋D12 設計器預設開＋D7 鎖定（全做），工具項（author_gate globals）併入；盤點第二版低優先。
+- D12：使用者「今天內」親自做真滑鼠拖放驗證（c7 備驗證指引 D12-VERIFY-GUIDE.md）；通過才翻預設（獨立 commit，最後併）。
+- 材料申請採購單規則生效日維持 2026-10-04。
+- 分工：2e change_proposal／adjustOf／nits／出貨案件端契約；d7 wip/t34-m2-d7（M2c、D7 鎖定）；c7 D12 驗證指引＋ship-link；a3 globals＋drill_train34；ea 整合 wip/train-34-int1（基底 origin/platform 1184efb0）；da 滾動稽核。
