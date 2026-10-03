@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1078,
+  "tests": 1081,
   "unmapped": 13,
   "kinds": {
-   "api": 579,
+   "api": 581,
    "e2e": 263,
    "audit": 136,
-   "unit": 100
+   "unit": 101
   },
-  "routes": 752
+  "routes": 754
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -5997,6 +5997,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_changes",
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
@@ -6024,6 +6025,7 @@
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
      "backend/modules/case/api/material_approvals.py",
+     "backend/modules/case/api/material_changes.py",
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
@@ -6061,6 +6063,98 @@
      "backend/modules/case/__init__.py",
      "backend/modules/case/material_approval.py",
      "backend/tests/_requires.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_material_change_api_2026_10_03.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "helper:email_notify",
+    "helper:tiered_approval",
+    "mod:case/__init__",
+    "mod:case/api/__init__",
+    "mod:case/api/case_action_items",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
+    "mod:case/api/material_approvals",
+    "mod:case/api/material_changes",
+    "mod:case/api/material_links",
+    "mod:case/api/material_orders",
+    "mod:case/api/material_payments",
+    "mod:case/api/quotations",
+    "mod:case/api/settlement_actuals",
+    "mod:case/material_approval",
+    "mod:case/material_change",
+    "mod:case/material_notify",
+    "mod:case/tests/test_material_change_core_2026_10_03",
+    "mod:netplan/api"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/tiered_approval.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/material_changes.py",
+     "backend/modules/case/material_approval.py",
+     "backend/modules/case/material_change.py",
+     "backend/modules/case/material_notify.py",
+     "backend/modules/case/tests/test_material_change_core_2026_10_03.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_action_items.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/expense_form_pdf.py",
+     "backend/modules/case/api/material_approvals.py",
+     "backend/modules/case/api/material_changes.py",
+     "backend/modules/case/api/material_links.py",
+     "backend/modules/case/api/material_orders.py",
+     "backend/modules/case/api/material_payments.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/api/settlement_actuals.py",
+     "backend/modules/netplan/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "unresolved_api": [
+    "/api/quotations/NOPE/material-changes/{}/submit"
+   ],
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_material_change_core_2026_10_03.py": {
+   "kind": "unit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "helper:tiered_approval",
+    "mod:case/__init__",
+    "mod:case/material_approval",
+    "mod:case/material_change",
+    "mod:case/material_payment",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/tiered_approval.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/material_approval.py",
+     "backend/modules/case/material_change.py",
+     "backend/modules/case/material_payment.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
     ],
     "module_dir": [
      "backend/modules/case/"
@@ -6107,6 +6201,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_changes",
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
@@ -6133,6 +6228,7 @@
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
      "backend/modules/case/api/material_approvals.py",
+     "backend/modules/case/api/material_changes.py",
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
@@ -6248,6 +6344,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_changes",
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
@@ -6279,6 +6376,7 @@
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
      "backend/modules/case/api/material_approvals.py",
+     "backend/modules/case/api/material_changes.py",
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
@@ -6353,6 +6451,36 @@
    },
    "module": "case"
   },
+  "backend/modules/case/tests/test_material_paid_lock_2026_10_03.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/api/material_orders",
+    "mod:case/material_approval",
+    "mod:case/tests/test_material_link_2026_10_02",
+    "mod:case/tests/test_material_po_required_2026_10_03",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/material_approval.py",
+     "backend/modules/case/tests/test_material_link_2026_10_02.py",
+     "backend/modules/case/tests/test_material_po_required_2026_10_03.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
+    ],
+    "api": [
+     "backend/modules/case/api/material_orders.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
   "backend/modules/case/tests/test_material_payment_api_2026_10_02.py": {
    "kind": "api",
    "units": [
@@ -6366,6 +6494,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_changes",
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
@@ -6390,6 +6519,7 @@
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
      "backend/modules/case/api/material_approvals.py",
+     "backend/modules/case/api/material_changes.py",
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
@@ -6517,6 +6647,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/expense_form_pdf",
     "mod:case/api/material_approvals",
+    "mod:case/api/material_changes",
     "mod:case/api/material_links",
     "mod:case/api/material_orders",
     "mod:case/api/material_payments",
@@ -6540,6 +6671,7 @@
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/api/expense_form_pdf.py",
      "backend/modules/case/api/material_approvals.py",
+     "backend/modules/case/api/material_changes.py",
      "backend/modules/case/api/material_links.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/material_payments.py",
