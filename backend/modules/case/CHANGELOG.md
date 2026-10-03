@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-03（wip/t35-settle-ui）：精算頁未對應清單帶品名、案件頁分頁列加精算入口
+## 1.0.121 — 2026-10-03（wip/t35-settle-ui）：精算頁未對應清單帶品名、案件頁分頁列加精算入口
 - 精算頁二之一「未對應品項的材料申請與額外支出」：材料列顯示品名＋數量單位、額外支出列顯示單號｜類別｜說明。後端只加欄位（`recognition.extra_entries` 列加 `description`；`material_money_rows` 加 `quantity`／`unit`，數量解析遇髒資料回 None 不丟錯；`settlement_actuals` 帶出），金額與規則不動。
 - 案件頁分頁列在「額外支出」右邊加「精算 ▶」連結（`.cm-tab-link`，權限同精算頁）；財務分頁內舊連結保留。
 
