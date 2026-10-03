@@ -158,3 +158,131 @@ def test_grandfathered_and_pre_rule_approved_requests_still_fall_back_to_draft_o
 
 def test_doc_type_is_registered_with_the_case_package_and_follows_the_unified_flow():
     assert MC.DOC_TYPE in TA.APPROVAL_DOC_TYPES and MC.DOC_TYPE in TA.DEFAULT_UNIFIED_DOC_TYPES and TA.APPROVAL_DOC_TYPE_LABELS[MC.DOC_TYPE] == "材料申請變更"
+
+
+# ── 出貨連動接線（c7 的契約：dict 版 `shipping.material_shipped`、float 版 `shipping.material_shipped_qty`）────────────
+
+def _fake_registry(monkeypatch, table):
+    from core import registry
+    monkeypatch.setattr(registry, "providers", lambda cap: table.get(cap, {}))
+
+
+def test_shipped_provider_resolution_order_and_dict_wrapper(W, reg, monkeypatch, fake_proposal):
+    c, h = W
+    _setup()
+    monkeypatch.setattr(MC, "SHIPPED_PROVIDER", None)
+    _fake_registry(monkeypatch, {})
+    assert MC._shipped_fn() is None                                                                    # 沒有任何提供者
+    d = {"shipping.material_shipped": {"supply": lambda conn, qn: {IID: {"reserved": 1.0, "shipped": 3.0, "notes": ["SN-1"]}, "other": {"shipped": 99}}}}
+    _fake_registry(monkeypatch, d)
+    f = MC._shipped_fn()
+    assert f(None, NO, IID) == 4.0 and f(None, NO, "none") == 0.0                                      # 保留＋已出貨；沒資料＝0
+    r = _post(c, h, BASE + "/changes", {"reason": "追加"})                                              # 新數量 3 < 4 ⇒ 擋
+    assert r.status_code == 409 and r.json()["detail"].startswith("新的數量低於已出貨")
+    d["shipping.material_shipped"]["supply"] = lambda conn, qn: {IID: {"reserved": 0, "shipped": 2.0}}
+    assert _post(c, h, BASE + "/changes", {"reason": "追加"}).status_code == 200                       # 2 ≤ 3 ⇒ 過
+    qty = {"shipping.material_shipped_qty": {"supply": lambda conn, qn, item: 9.0}, **d}
+    _fake_registry(monkeypatch, qty)
+    assert MC._shipped_fn()(None, NO, IID) == 9.0                                                      # float 版優先於 dict 版
+    monkeypatch.setattr(MC, "SHIPPED_PROVIDER", lambda conn, qn, item: 1.0)
+    assert MC._shipped_fn()(None, NO, IID) == 1.0                                                      # 測試覆寫最優先
+
+
+def test_case_level_list_returns_all_items_changes_newest_first_with_item_name(W, reg, fake_proposal):
+    c, h = W
+    _flow([])
+    _setup()
+    first = _post(c, h, BASE + "/changes", {"reason": "第一張"}).json()["change"]
+    _post(c, h, "/api/quotations/%s/material-changes/%d/withdraw" % (NO, first["id"]))
+    second = _post(c, h, BASE + "/changes", {"reason": "第二張"}).json()["change"]
+    r = c.get("/api/quotations/%s/material-changes" % NO, headers=h)
+    assert r.status_code == 200
+    got = r.json()["changes"]
+    assert [x["id"] for x in got] == [second["id"], first["id"]] and got[0]["itemName"] == "交換器" and got[1]["status"] == "已撤回"
+    assert c.get("/api/quotations/NOPE/material-changes", headers=h).status_code == 404
+
+
+# ── 真實的案件側提案（2e 的 material_coverage.change_proposal，不用假函式）─────────────────────────────
+
+def test_real_change_proposal_end_to_end_create_apply_and_no_change_afterwards(W, reg, monkeypatch):
+    from modules.case.tests.test_material_coverage_2026_10_03 import _approved_po, _line, _ln, _put_materials, _row
+    monkeypatch.setattr(MC, "PROPOSAL_FN", None)                                                    # 真提案：走 material_coverage.change_proposal
+    c, h = W
+    _flow([])
+    po1 = _approved_po(c, h, [_ln("a", 3, unitCost=1000, unit="台")])
+    _put_materials([{"itemId": IID, "itemName": "交換器", "quantity": 3, "unit": "台", "unitPrice": 1000, "totalPrice": 3000, "quoteItemId": "a", "notes": "",
+                     "paidStatus": "pending", "paidAmount": 0, "paidDate": "", "supplierId": 1, "poDocCode": po1["docCode"], "poLine": 1}], {IID: "已核准"})
+    _row(IID, snapshot=[_line(po1["docCode"], 1, 3.0, 3000.0)], doc="MO-20261005-0001")
+    assert _post(c, h, BASE + "/changes", {"reason": "x"}).status_code == 400                       # 還沒有新的採購單行 ⇒ 沒有變更
+    po2 = _approved_po(c, h, [_ln("a", 2, unitCost=1000, unit="台")])
+    pv = c.get(BASE + "/change-proposal", headers=h).json()
+    assert pv["problems"] == [] and pv["after"]["quantity"] == 5.0 and pv["after"]["totalPrice"] == 5000.0 and [l["poDocCode"] for l in pv["uncoveredLines"]] == [po2["docCode"]]
+    ch = _post(c, h, BASE + "/changes", {"reason": "追加 2 台"}).json()["change"]
+    assert [d["field"] for d in ch["diff"]] == ["quantity", "totalPrice", "poSnapshot"]
+    s = _post(c, h, "/api/quotations/%s/material-changes/%d/submit" % (NO, ch["id"]))
+    assert s.status_code == 200 and s.json()["applied"], s.text
+    cn = db.get_db()
+    try:
+        o = _order_now(cn)
+        assert (o["quantity"], o["totalPrice"]) == (5.0, 5000.0)
+        snap = json.loads(MA.get(cn, NO, IID)["approval_json"])["snapshot"]["poSnapshot"]
+        assert [x["poDocCode"] for x in snap] == [po1["docCode"], po2["docCode"]]
+    finally:
+        cn.close()
+    again = _post(c, h, BASE + "/changes", {"reason": "再來一次"})
+    assert again.status_code == 400 and "沒有任何變更" in again.json()["detail"]                       # 套用後涵蓋已齊，不能再提空變更
+
+
+def test_real_supply_provider_blocks_lowering_below_shipped_without_overriding_the_hook(W, reg, monkeypatch, fake_proposal):
+    """da：不覆寫 `MC.SHIPPED_PROVIDER`，走真正的註冊表取 c7 的出貨連動提供者（modules/supply/material_link.py）：
+    已核准的出貨單占用／已出貨 4 台，提案把數量降到 3 ⇒ 409 `change_below_shipped`；已出貨 ≤ 新數量就過。"""
+    from core import registry
+    if registry.providers("shipping.material_shipped_qty").get("supply") is None and registry.providers("shipping.material_shipped").get("supply") is None:
+        pytest.skip("出貨連動提供者（shipping.material_shipped／_qty）不在這個安裝包")
+    monkeypatch.setattr(MC, "SHIPPED_PROVIDER", None)                                                  # 明確不覆寫：驗註冊表那條路
+    c, h = W
+    _flow([])
+    _setup(received="2026-10-04")
+    r = c.post("/api/shipping-notes", headers=h, json={"quote_no": NO, "items": [{"description": "交換器", "materialLink": {"materialItemId": IID, "docCode": "MO-20261005-0001", "qty": 1}}]})
+    assert r.status_code == 201, r.text
+    note = r.json()["note_no"]
+    cn = db.get_db()
+    try:
+        cn.execute("UPDATE shipping_notes SET status='已核准', items_json=? WHERE note_no=?",
+                   (json.dumps([{"description": "交換器", "materialLink": {"materialItemId": IID, "docCode": "MO-20261005-0001", "qty": 4.0}}], ensure_ascii=False), note))
+        cn.commit()
+        assert MC._shipped_fn()(cn, NO, IID) == 4.0                                                    # 真提供者：已出貨 4（已核准的出貨單）
+    finally:
+        cn.close()
+    r = _post(c, h, BASE + "/changes", {"reason": "追加"})                                              # 新數量 3 < 4
+    assert r.status_code == 409 and "已出貨" in r.json()["detail"], r.text
+    assert db.get_db().execute("SELECT COUNT(*) FROM case_material_changes").fetchone()[0] == 0
+    cn = db.get_db()
+    try:
+        cn.execute("UPDATE shipping_notes SET items_json=? WHERE note_no=?",
+                   (json.dumps([{"description": "交換器", "materialLink": {"materialItemId": IID, "docCode": "MO-20261005-0001", "qty": 3.0}}], ensure_ascii=False), note))
+        cn.commit()
+    finally:
+        cn.close()
+    assert _post(c, h, BASE + "/changes", {"reason": "追加"}).status_code == 200                       # 已出貨 3 ≤ 新數量 3 ⇒ 過
+
+
+
+def test_audit_rows_really_land_after_commit_for_every_action(W, reg, fake_proposal):
+    """稽核寫在自己的交易裡（不另開連線）：commit 之後另一條連線讀得到每個動作的 material_changes.* 稽核（create／submit／approve／apply／reject／withdraw／revise）。"""
+    c, h = W
+    _one_tier()
+    _setup()
+    ch = _post(c, h, BASE + "/changes", {"reason": "追加"}).json()["change"]
+    _post(c, h, "/api/quotations/%s/material-changes/%d/revise" % (NO, ch["id"]), {"reason": "追加（改）"})
+    _post(c, h, "/api/quotations/%s/material-changes/%d/submit" % (NO, ch["id"]))
+    _post(c, h, "/api/quotations/%s/material-changes/%d/withdraw" % (NO, ch["id"]))
+    _flow([])
+    ch2 = _post(c, h, BASE + "/changes", {"reason": "再追加"}).json()["change"]
+    assert _post(c, h, "/api/quotations/%s/material-changes/%d/submit" % (NO, ch2["id"])).json()["applied"]
+    cn = db.get_db()                                                                                      # 全新連線：只看得到已 commit 的
+    try:
+        acts = {r[0] for r in cn.execute("SELECT action FROM audit_log WHERE action LIKE 'material_changes.%'")}
+    finally:
+        cn.close()
+    assert {"material_changes.create", "material_changes.revise", "material_changes.submit", "material_changes.withdraw", "material_changes.apply"} <= acts, acts

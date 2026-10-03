@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-03（wip/t34-m2final2-d7：33-M2c 材料申請變更申請，畫面與出貨連動接線；稽核寫入改在同一交易；出貨連動真提供者測試；modules.json 登記 mchange.js）
+- 案件管理頁財務分頁新增「材料申請變更」面板（`case-management-mchange.js`）：選已核准的材料申請 → 查看差異（數量、小計、涵蓋採購單行；金額由已核准採購單決定）→ 填原因建立 → 修改／送審／撤回；簽核人在面板或簽核佇列核可／退回。核准前原材料申請內容照常有效；看不到財務檢視者金額顯示「金額已遮蔽」。沒有「有審核單」的材料申請時不發任何請求、不留 DOM。
+- 新端點 `GET /api/quotations/{q}/material-changes`（案件所有變更申請）。變更申請的「不得低於已出貨＋占用量」接出貨連動（登記表 `shipping.material_shipped_qty`／`shipping.material_shipped`，保留＋已出貨；草稿出貨單不算）；沒有提供者時：出貨模組（supply）已載入＝拒絕（`shipped_unavailable`，fail closed）、沒有出貨模組＝只警告。提案數量不得超過涵蓋採購單行的數量合計（單位一致時，`quantity_exceeds_coverage`）。
+- 修正：變更申請的稽核寫入函式改名 `_audit_row`（與 helpers 的另開連線寫入的 `_audit` 區隔；一直是用呼叫端的連線、同一交易寫入，commit 時一起落地），守門 `test_write_lock_deadlock_guard` 不再誤報；測試補「commit 後另一條連線讀得到每個動作的稽核」。
 
 ## 1.0.117 — wip/t34-ship-link-c7：材料申請的出貨連動（34-S3，案件側）
 - `GET /api/quotations/{no}/material-order-approvals` 回應多一個頂層鍵 `shipping`：`{itemId: {appliedQty, arrivedQty, reserved, shipped, notes[]}}`（已到料或有出貨連動的材料申請；只經 M03 提供者 `shipping.material_shipped`，不讀 `shipping_notes`；提供者不在＝0）。材料申請卡片顯示「已申請／已到料／已出貨（占用中）」與出貨單號。

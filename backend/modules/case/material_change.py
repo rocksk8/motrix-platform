@@ -52,6 +52,38 @@ class MaterialChangeError(Exception):
         self.code = code
 
 
+def _supply_loaded() -> bool:
+    """出貨模組（supply）在這個安裝包裡且已載入？（沒有提供者時，有它＝fail closed、沒有它＝警告放行。）"""
+    try:
+        from core import registry
+        return bool(registry.is_loaded("supply"))
+    except Exception:                                                                   # noqa: BLE001
+        return False
+
+
+def _shipped_fn():
+    """出貨量提供者（c7 的出貨連動，契約 docs/platform/plans/SHIPPING-MATERIAL-LINK-CONTRACT-S1.md）：
+    測試覆寫 `SHIPPED_PROVIDER` ＞ 註冊的 `shipping.material_shipped_qty`（float＝保留＋已出貨）＞ 包裝字典版 `shipping.material_shipped`
+    （`{itemId: {reserved, shipped}}`）＞ None（沒有出貨連動 ⇒ 不檢查、回警告）。草稿出貨單不算保留（契約）。"""
+    if SHIPPED_PROVIDER is not None:
+        return SHIPPED_PROVIDER
+    try:
+        from core import registry
+        q = registry.providers("shipping.material_shipped_qty").get("supply")
+        if q is not None:
+            return q
+        d = registry.providers("shipping.material_shipped").get("supply")
+    except Exception:                                                                    # noqa: BLE001 — 註冊表讀不到＝沒有提供者
+        return None
+    if d is None:
+        return None
+
+    def wrapped(conn, quote_no, item_id):
+        row = (d(conn, quote_no) or {}).get(str(item_id)) or {}
+        return float(row.get("reserved") or 0) + float(row.get("shipped") or 0)
+    return wrapped
+
+
 def ensure_registered():
     """登記簽核單據類型（M2b 在模組載入時呼叫；M2a 不自動登記）。冪等。"""
     if DOC_TYPE not in APPROVAL_DOC_TYPES:
@@ -90,6 +122,11 @@ def get(conn, change_id):
 
 def list_for_item(conn, quote_no, item_id) -> list:
     return [dict(r) for r in conn.execute("SELECT * FROM case_material_changes WHERE quote_no=? AND item_id=? ORDER BY id DESC", (quote_no, str(item_id)))]
+
+
+def list_for_case(conn, quote_no) -> list:
+    """這個案件所有材料申請的變更申請（新到舊）。"""
+    return [dict(r) for r in conn.execute("SELECT * FROM case_material_changes WHERE quote_no=? ORDER BY id DESC", (quote_no,))]
 
 
 def live_for(conn, quote_no, item_id):
@@ -153,6 +190,12 @@ def validate(conn, quote_no, item_id, before: dict, after: dict, order: dict) ->
         problems.append({"code": "bad_amount", "message": "單價與小計不可為負"})
     if q > 0 and abs(q * u - t) > 0.01 + 0.00005 * q:
         problems.append({"code": "bad_total", "message": "小計必須等於數量 × 單價"})
+    snap = [x for x in (after.get("poSnapshot") or []) if isinstance(x, dict)]
+    units = {str(x.get("unit") or "") for x in snap}
+    if snap and len(units) == 1 and str(after.get("unit") or "") in units:                # 數量上限＝涵蓋的採購單行數量合計（單位一致時）：不能憑空灌大「可出貨量」（da）
+        covered = sum(_num(x.get("qty")) for x in snap)
+        if q > covered + 1e-9:
+            problems.append({"code": "quantity_exceeds_coverage", "message": "數量 %s 超過已核准採購單行涵蓋的數量 %s" % (q, covered)})
     diff = compute_diff(before, after)
     if not diff:
         problems.append({"code": "no_change", "message": "沒有任何變更"})
@@ -168,11 +211,15 @@ def validate(conn, quote_no, item_id, before: dict, after: dict, order: dict) ->
         probe.update({"quantity": q, "unitPrice": u, "totalPrice": t})
         if MP.room_for(conn, quote_no, probe) < -0.005:
             problems.append({"code": "change_below_committed", "message": "新的小計低於已申請匯款的額度，請先處理匯款申請。"})
-    if SHIPPED_PROVIDER is None:
-        warnings.append("尚未提供出貨量（出貨提供者不存在），未檢查「不得低於已出貨＋占用量」")
+    ship = _shipped_fn()
+    if ship is None:
+        if _supply_loaded():                                                            # 出貨連動（supply）已啟用卻取不到出貨量 ⇒ fail closed：寧可擋也不讓人把已出貨的數量改小
+            problems.append({"code": "shipped_unavailable", "message": "出貨連動已啟用但目前取不到已出貨量，暫時不能變更（避免把已出貨的數量改小）；請聯絡管理員"})
+        else:                                                                           # 沒有出貨模組：沒有「已出貨」這件事，警告即可
+            warnings.append("沒有出貨連動（出貨模組不存在），未檢查「不得低於已出貨＋占用量」")
     else:
         try:
-            shipped = float(SHIPPED_PROVIDER(conn, quote_no, item_id) or 0)
+            shipped = float(ship(conn, quote_no, item_id) or 0)
         except Exception:                                                              # noqa: BLE001 — 提供者壞了不可放行下限檢查，也不可讓變更整個爆掉
             problems.append({"code": "shipped_unavailable", "message": "暫時無法取得已出貨量，請稍後再試"})
         else:
@@ -259,7 +306,7 @@ def create(conn, quote_no: str, item_id: str, user: dict, cp: dict, reason: str)
                   json.dumps(res["diff"], ensure_ascii=False), json.dumps(appr, ensure_ascii=False), text, user["username"], now, now))
     out = live_for(conn, quote_no, item_id)
     out["warnings"] = res["warnings"]
-    _audit(conn, user, "material_changes.create", quote_no, out, "建立材料申請變更 %s" % code)
+    _audit_row(conn, user, "material_changes.create", quote_no, out, "建立材料申請變更 %s" % code)
     return out
 
 
@@ -287,7 +334,7 @@ def revise(conn, change_id, user: dict, cp: dict, reason: str = "") -> dict:
                   json.dumps(res["diff"], ensure_ascii=False), json.dumps(appr, ensure_ascii=False), text, now, int(change_id)))
     out = get(conn, change_id)
     out["warnings"] = res["warnings"]
-    _audit(conn, user, "material_changes.revise", ch["quote_no"], out, "修改材料申請變更 %s" % ch["doc_code"])
+    _audit_row(conn, user, "material_changes.revise", ch["quote_no"], out, "修改材料申請變更 %s" % ch["doc_code"])
     return out
 
 
@@ -360,12 +407,12 @@ def submit(conn, change_id, user: dict) -> dict:
         appr["history"] = hist
         _save(conn, change_id, S_IN_PROGRESS, appr, now, submitted_by=user["username"], submitted_at=now, diff_json=json.dumps(diff, ensure_ascii=False))
         applied = _apply(conn, change_id, user, now)
-        _audit(conn, user, "material_changes.submit", ch["quote_no"], get(conn, change_id), "送審並自動核准材料申請變更 %s" % ch["doc_code"])
+        _audit_row(conn, user, "material_changes.submit", ch["quote_no"], get(conn, change_id), "送審並自動核准材料申請變更 %s" % ch["doc_code"])
         return {"status": S_APPROVED, "tierCount": 0, "firstApprovers": [], "autoApproved": True, "applied": applied}
     appr = {"requestedBy": user["username"], "requestedByDisplay": _display(user), "requestedAt": now, "tiers": tiers, "currentTier": 0,
             "history": hist + [{"at": now, "by": user["username"], "byDisplay": _display(user), "action": "submit", "tier": 0, "comment": ""}]}
     _save(conn, change_id, S_PENDING, appr, now, submitted_by=user["username"], submitted_at=now, diff_json=json.dumps(diff, ensure_ascii=False))
-    _audit(conn, user, "material_changes.submit", ch["quote_no"], get(conn, change_id), "送審材料申請變更 %s" % ch["doc_code"])
+    _audit_row(conn, user, "material_changes.submit", ch["quote_no"], get(conn, change_id), "送審材料申請變更 %s" % ch["doc_code"])
     return {"status": S_PENDING, "tierCount": len(tiers), "firstApprovers": [a["username"] for a in (tiers[0].get("approvers") or [])], "autoApproved": False, "applied": False}
 
 
@@ -400,7 +447,7 @@ def approve(conn, change_id, user: dict, comment: str = "", cascade: bool = Fals
         _save(conn, change_id, S_IN_PROGRESS, appr, now)
         applied = False
     nxt = [] if done else [a["username"] for a in (tiers[appr["currentTier"]].get("approvers") or [])]
-    _audit(conn, user, "material_changes.approve", ch["quote_no"], get(conn, change_id), "核准材料申請變更 %s%s" % (ch["doc_code"], "（已套用）" if done else ""))
+    _audit_row(conn, user, "material_changes.approve", ch["quote_no"], get(conn, change_id), "核准材料申請變更 %s%s" % (ch["doc_code"], "（已套用）" if done else ""))
     return {"status": S_APPROVED if done else S_IN_PROGRESS, "currentTier": appr["currentTier"], "nextApprovers": nxt, "requester": appr.get("requestedBy", ""),
             "done": done, "applied": applied, "tierNo": appr["currentTier"] + 1, "totalTiers": len(tiers)}
 
@@ -422,7 +469,7 @@ def reject(conn, change_id, user: dict, reason: str) -> dict:
     appr.setdefault("history", []).append({"at": now, "by": user["username"], "byDisplay": _display(user), "action": "reject", "tier": ct, "comment": text})
     appr.update({"rejectedAt": now, "rejectedByDisplay": _display(user), "rejectReason": text})
     _save(conn, change_id, S_RETURNED, appr, now)
-    _audit(conn, user, "material_changes.reject", ch["quote_no"], get(conn, change_id), "退回材料申請變更 %s：%s" % (ch["doc_code"], text))
+    _audit_row(conn, user, "material_changes.reject", ch["quote_no"], get(conn, change_id), "退回材料申請變更 %s：%s" % (ch["doc_code"], text))
     return {"status": S_RETURNED, "requester": appr.get("requestedBy", ""), "reason": text}
 
 
@@ -440,7 +487,7 @@ def withdraw(conn, change_id, user: dict) -> dict:
     for k in ("tiers", "currentTier"):
         appr.pop(k, None)
     _save(conn, change_id, S_WITHDRAWN, appr, now)
-    _audit(conn, user, "material_changes.withdraw", ch["quote_no"], get(conn, change_id), "撤回材料申請變更 %s" % ch["doc_code"])
+    _audit_row(conn, user, "material_changes.withdraw", ch["quote_no"], get(conn, change_id), "撤回材料申請變更 %s" % ch["doc_code"])
     return {"status": S_WITHDRAWN}
 
 
@@ -459,7 +506,9 @@ def _apply(conn, change_id, user: dict, now: str) -> bool:
     for k in _ORDER_KEYS:
         if k in stored:
             order[k] = stored[k]
-    conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), quote_no))     # 系統自己的投影（同 sync_order_paid），不經 material_guard
+    # 系統自己的投影（同 sync_order_paid），不經 material_guard；直接寫 data_json、不經 save_quotation_json ⇒ 不更新 updated_at／熱欄位
+    # （材料申請欄位目前不影響報價單的熱欄位；若之後有欄位進熱欄位，這裡要改走 save_quotation_json）。
+    conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), quote_no))
     row = MA.get(conn, quote_no, item_id)
     appr = _j(row["approval_json"], {})
     snap = appr.get("snapshot") if isinstance(appr.get("snapshot"), dict) else {}
@@ -474,13 +523,15 @@ def _apply(conn, change_id, user: dict, now: str) -> bool:
                  (int(row["version"] or 1) + 1, MA.content_hash(order), json.dumps(appr, ensure_ascii=False), now, quote_no, str(item_id)))
     MP.sync_order_paid(conn, quote_no, item_id)
     conn.execute("UPDATE case_material_changes SET status=?, approved_at=?, applied_at=?, updated_at=? WHERE id=?", (S_APPROVED, now, now, now, int(change_id)))
-    _audit(conn, user, "material_changes.apply", quote_no, get(conn, change_id), "材料申請變更 %s 已套用：%s" % (ch["doc_code"], summary))
+    _audit_row(conn, user, "material_changes.apply", quote_no, get(conn, change_id), "材料申請變更 %s 已套用：%s" % (ch["doc_code"], summary))
     return True
 
 
 # ── 稽核（與請求同一交易；稽核表缺欄的舊庫不因此擋）────────────────────
+# ⚠️ 不叫 `_audit`：helpers 的 `_audit()` 另開連線寫入（在自己的寫入交易還沒 commit 時呼叫會撞鎖＋稽核被吞），守門 test_write_lock_deadlock_guard 靠名字認它。
+# 這裡直接用呼叫端的 conn 寫 audit_log（同一個交易，commit 時一起落地）。
 
-def _audit(conn, user, action, quote_no, ch, label):
+def _audit_row(conn, user, action, quote_no, ch, label):
     try:
         conn.execute("INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail) VALUES (?,?,?,?,?,?,?,?,?)",
                      (_now(), user.get("id"), user.get("username") or "", user.get("display_name") or "", action, "quotation", quote_no, label,

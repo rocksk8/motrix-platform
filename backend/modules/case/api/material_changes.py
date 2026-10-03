@@ -88,6 +88,20 @@ def _change_for(conn, quote_no, change_id):
 
 # ── 讀 ──────────────────────────────────────────────────────────────
 
+@router.get("/api/quotations/{quote_no}/material-changes")
+def list_case_changes(quote_no: str, authorization: str = Header(None)):
+    """這個案件所有材料申請的變更申請（新到舊；案件頁的變更申請面板用）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        q = _load_case(conn, quote_no)
+        require_case(user, q, quote_no)
+        money = money_visible(user)
+        return {"quoteNo": quote_no, "changes": [_view(c, money) | {"itemName": _order_name(q, c["item_id"])} for c in MC.list_for_case(conn, quote_no)]}
+    finally:
+        conn.close()
+
+
 @router.get("/api/quotations/{quote_no}/material-orders/{item_id}/changes")             # 字面路徑：case_read_scope 的掃描只認字串常數
 def list_changes(quote_no: str, item_id: str, authorization: str = Header(None)):
     """這筆材料申請的變更申請（新到舊）。"""

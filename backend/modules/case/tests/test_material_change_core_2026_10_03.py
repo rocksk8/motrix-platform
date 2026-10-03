@@ -25,7 +25,7 @@ IID = "m1"
 def reg(monkeypatch):
     """登記 material_change 單據類型（M2a 本身不登記）；測完還原，免得污染同一行程裡別的守門題。"""
     monkeypatch.setattr(MA, "PO_REQUIRED", True)
-    monkeypatch.setattr(MC, "SHIPPED_PROVIDER", None)
+    monkeypatch.setattr(MC, "SHIPPED_PROVIDER", lambda c, q, i: 0.0)                              # 預設：沒有出貨（個別題自己改）
     monkeypatch.setattr(MC, "PROPOSAL_FN", lambda *a, **k: None)                                 # 預設：不重驗（個別題自己設）
     had = MC.DOC_TYPE in TA.APPROVAL_DOC_TYPES
     MC.ensure_registered()
@@ -137,7 +137,6 @@ def test_create_stores_base_proposal_diff_and_a_sequential_doc_code(conn):
     assert ch["status"] == MC.S_DRAFT and ch["doc_code"].startswith("MC-") and ch["doc_code"].endswith("0001") and ch["base_version"] == 1
     assert [d["field"] for d in json.loads(ch["diff_json"])] == ["quantity", "totalPrice", "poSnapshot"]
     assert json.loads(ch["proposal_json"])["quantity"] == 3.0 and json.loads(ch["base_json"])["quantity"] == 2.0
-    assert [w for w in ch["warnings"]] and "出貨" in ch["warnings"][0]                    # 沒有出貨提供者 ⇒ 警告而非靜默
 
 
 def test_create_validations_leave_the_original_untouched(conn):
@@ -209,6 +208,19 @@ def test_shipped_lower_bound_uses_the_provider_when_present_and_fails_closed(con
     _no_change_made(conn, _frozen(conn), lambda: MC.create(conn, NO, IID, ENG, _cp(), "追加"), 400, "shipped_unavailable")      # 提供者壞了不放行
 
 
+def test_without_a_shipped_provider_it_warns_when_there_is_no_supply_module_and_fails_closed_when_there_is(conn, monkeypatch):
+    """出貨下限：沒有提供者時——沒有出貨模組＝警告放行；出貨模組在（連動啟用）＝fail closed（da：寧可擋也不讓人把已出貨的數量改小）。"""
+    _setup()
+    monkeypatch.setattr(MC, "SHIPPED_PROVIDER", None)
+    monkeypatch.setattr(MC, "_shipped_fn", lambda: None)
+    monkeypatch.setattr(MC, "_supply_loaded", lambda: False)
+    ch = MC.create(conn, NO, IID, ENG, _cp(), "追加")
+    assert ch["warnings"] and "出貨" in ch["warnings"][0]
+    conn.execute("DELETE FROM case_material_changes")
+    monkeypatch.setattr(MC, "_supply_loaded", lambda: True)
+    _no_change_made(conn, _frozen(conn), lambda: MC.create(conn, NO, IID, ENG, _cp(), "追加"), 400, "shipped_unavailable")
+
+
 # ── 簽核與原子套用 ───────────────────────────────────────────────────
 
 def test_no_tier_submit_auto_approves_and_applies_atomically(conn):
@@ -264,7 +276,7 @@ def test_one_tier_approve_applies_in_the_same_transaction(conn):
     assert r["done"] and r["applied"] and r["status"] == MC.S_APPROVED
     assert _order_now(conn)["quantity"] == 3.0 and MA.get(conn, NO, IID)["version"] == 2
     assert MC.live_for(conn, NO, IID) is None                                                          # 核准後不再占位，可以再提下一張
-    nxt = MC.create(conn, NO, IID, ENG, _cp(quantity=4.0, totalPrice=4000.0), "再追加")
+    nxt = MC.create(conn, NO, IID, ENG, _cp(quantity=4.0, totalPrice=4000.0, poSnapshot=[LINE1, LINE2, dict(LINE2, line=2)]), "再追加")
     assert nxt["base_version"] == 2
 
 
@@ -345,7 +357,7 @@ def test_withdraw_permissions_and_revise_rules(conn):
     assert e.value.status == 409
     MC.withdraw(conn, ch["id"], ADMIN)                                                                  # admin 可以撤回別人的
     assert MC.get(conn, ch["id"])["status"] == MC.S_WITHDRAWN
-    assert MC.revise(conn, ch["id"], ENG, _cp(quantity=4.0, totalPrice=4000.0), "改成 4")["status"] == MC.S_DRAFT      # 已撤回改完回草稿
+    assert MC.revise(conn, ch["id"], ENG, _cp(quantity=4.0, totalPrice=4000.0, poSnapshot=[LINE1, LINE2, dict(LINE2, line=2)]), "改成 4")["status"] == MC.S_DRAFT      # 已撤回改完回草稿
 
 
 def test_compute_diff_normalizes_numbers_and_whitespace():
@@ -354,3 +366,16 @@ def test_compute_diff_normalizes_numbers_and_whitespace():
     assert MC.compute_diff(a, b) == []
     d = MC.compute_diff(a, dict(b, unitPrice=1100))
     assert d == [{"field": "unitPrice", "old": 1000.0, "new": 1100.0, "money": True}]
+
+
+def test_quantity_cannot_exceed_the_covered_po_quantity(conn):
+    """da：提案數量不得超過涵蓋採購單行的數量合計（單位一致時）；少於可以（可往下調）。"""
+    _setup()
+    f = _frozen(conn)
+    _no_change_made(conn, f, lambda: MC.create(conn, NO, IID, ENG, _cp(quantity=50.0, totalPrice=3000.0, unitPrice=60.0), "灌大"), 400, "quantity_exceeds_coverage")
+    ch = MC.create(conn, NO, IID, ENG, _cp(quantity=2.0, totalPrice=3000.0, unitPrice=1500.0), "往下調")                 # 涵蓋 3 台、提案 2 台：允許
+    assert ch["status"] == MC.S_DRAFT
+    conn.execute("DELETE FROM case_material_changes")
+    mixed = _cp(quantity=50.0, totalPrice=3000.0, unitPrice=60.0)
+    mixed["after"]["poSnapshot"] = [LINE1, dict(LINE2, unit="個")]                                                      # 單位不一致：不在這裡判（案件側以品項報價量為預設）
+    assert MC.create(conn, NO, IID, ENG, mixed, "混單位")["status"] == MC.S_DRAFT
