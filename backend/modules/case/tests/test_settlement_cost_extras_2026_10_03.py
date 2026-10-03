@@ -75,8 +75,12 @@ def test_dispatch_total_equals_the_old_page_rule_and_report_is_the_pretax_basis(
     finally:
         cn.close()
     assert ex["report"] == rep                                                    # 漂移守門：dispatchReport＝營運報表／總帳的派發口徑
-    assert ex["grandTotal"] - ex["report"] == 10000 * 0.05 + 2000 * 0.05 + 1000 * 0.05   # 兩個口徑的差異正好是承攬費的 5% 稅（口徑問題待使用者決定，這裡只並列）
-    assert d["totals"]["dispatchTotal"] == ex["grandTotal"] and d["totals"]["dispatchReport"] == ex["report"]
+    assert ex["grandTotal"] - ex["report"] == 10000 * 0.05 + 2000 * 0.05 + 1000 * 0.05   # 兩個口徑的差異正好是承攬費的 5% 稅
+    # 35c 稅基 B（使用者 2026-10-03）：精算計入成本的 dispatchTotal ＝ 未稅＋人員（＝報表／總帳口徑 report）；含稅合計與稅額並列為資訊
+    t = d["totals"]
+    assert t["dispatchTotal"] == ex["report"] == t["dispatchReport"] and t["dispatchBasis"] == "pretax"
+    assert t["dispatchGrandTotal"] == ex["grandTotal"] and t["dispatchTax"] == ex["tax"] == 10000 * 0.05 + 2000 * 0.05 + 1000 * 0.05
+    assert t["dispatchGrandTotal"] == t["dispatchTotal"] + t["dispatchTax"]                # 恆等式：含稅 ＝ 計入成本 ＋ 稅額
 
 
 def test_no_dispatches_is_zero_and_other_cases_do_not_leak(W):
@@ -133,7 +137,7 @@ def test_custom_module_expense_and_total_actual_cost_follow_the_pages_formula(W,
     d = _get(c, h)
     t = d["totals"]
     assert t["materialUnassignedTotal"] == 250
-    assert t["totalActualCost"] == (EST_A + EST_B) + 0 + (700 + 250 + t["remitFeeTotal"] + 123) + 1050
+    assert t["totalActualCost"] == (EST_A + EST_B) + 0 + (700 + 250 + t["remitFeeTotal"] + 123) + 1000        # 35c：承攬商以未稅 1000 計入（含稅 1050 的稅 50 不計成本）
     assert t["extraTotal"] == 700                                                 # extraTotal 仍只是額外支出（鍵名與舊語意不變）
 
 

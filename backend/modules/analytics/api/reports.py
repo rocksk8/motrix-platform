@@ -146,14 +146,17 @@ def _fmt(n):
     return f"NT$ {int(n or 0):,}"
 
 
-def _live_dispatch_totals_by_quote(conn):
+def _live_dispatch_totals_by_quote(conn, pretax=False):
     """{quote_no: 目前有效（非取消）承攬商派發總成本} 或 None（外包工班模組不在）。
 
     M08 搬遷 ⑤（INTEGRATION-POINTS IP-1 的待辦，2026-09-25 主持裁示「等 M08 搬遷時處理」）：
     原本自己又算了一次 grandTotal（同一算法的第二份實作），改用 M04 的 `dispatch.row` 提供者，
     算法只剩一份（含稅承攬商費用＋外包人員個別計費）。
     ⚠ 提供者不在 ⇒ 回 **None**，不回 `{}`：`{}` 會讓每一筆快照都跟 0 比，把「無法檢查」算成「過期」。
-    供比對精算快照是否過期使用（見 _collect() 的 staleSettlementCount）。"""
+    供比對精算快照是否過期使用（見 _collect() 的 staleSettlementCount）。
+
+    35c（稅基 B）：`pretax=True` ⇒ 改回未稅承攬費＋外包人員（精算現行口徑；完結時 summary 帶 `dispatchBasis='pretax'`）；
+    預設 False＝含稅 grandTotal（舊完結案的口徑，沒有 dispatchBasis 鍵）。比對時兩種口徑各比各的，舊案不會因為口徑切換而全部誤報過期。"""
     from core import registry
     dispatch_row = registry.single_provider("dispatch.row")
     if dispatch_row is None:
@@ -165,7 +168,8 @@ def _live_dispatch_totals_by_quote(conn):
         d = dispatch_row(r)
         if (d.get("approvalStatus") or "") in ("草稿", "已退回"):      # 31-A（Q6）：與應計成本同一條規則
             continue
-        totals[r["quote_no"]] = totals.get(r["quote_no"], 0) + float(d["grandTotal"] or 0)
+        amt = (float(d.get("totalAmount") or 0) + float(d.get("personnelTotal") or 0)) if pretax else float(d["grandTotal"] or 0)
+        totals[r["quote_no"]] = totals.get(r["quote_no"], 0) + amt
     return totals
 
 def _build_name_index(user_by_id: dict) -> dict:
@@ -294,6 +298,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     # 同一套邏輯判斷案件算哪一年，不要各自用一半的日期判斷邏輯。
     won_month = quote_won_month_map(conn)
     live_dispatch_totals = _live_dispatch_totals_by_quote(conn)
+    live_dispatch_pretax = _live_dispatch_totals_by_quote(conn, pretax=True)
     conn.close()
 
     def _row_dept(row):
@@ -540,7 +545,9 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
         frozen = c["settleSummary"].get("dispatchTotal")
         if frozen is None:
             continue
-        live = live_dispatch_totals.get(c["quoteNo"], 0)
+        # 35c：完結 summary 帶 dispatchBasis='pretax' ⇒ 跟未稅現算值比；沒有（舊完結案、含稅口徑）⇒ 跟含稅現算值比
+        basis_pretax = (c["settleSummary"].get("dispatchBasis") == "pretax")
+        live = (live_dispatch_pretax if basis_pretax else live_dispatch_totals).get(c["quoteNo"], 0)
         if round_half_up(live) != round_half_up(frozen):
             stale_settlement_count += 1
 

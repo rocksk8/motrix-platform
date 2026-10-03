@@ -152,10 +152,11 @@ def test_page_cost_summary_equals_the_endpoint_including_dispatch_fees_and_custo
     page.wait_for_function(f"() => {S}.summary && {S}.summary.totalActualCost > 0 && {S}._actualsOk", timeout=20000)
     s = page.evaluate(f"() => ({{...{S}.summary}})")
     t = page.evaluate(f"() => {S}.actuals.totals")
-    assert s["dispatchTotal"] == t["dispatchTotal"] == 1000 * 1.05 + 200                      # 含稅承攬費＋人員（口徑不變）
+    assert s["dispatchTotal"] == t["dispatchTotal"] == 1000 + 200                             # 35c 稅基 B：未稅承攬費＋人員（稅額 50 並列為資訊、不計成本）；35c 前是含稅 1,250
+    assert s["dispatchTax"] == t["dispatchTax"] == 1000 * 0.05 and s["dispatchGrandTotal"] == t["dispatchGrandTotal"] == 1000 * 1.05 + 200
     assert s["remitFeeTotal"] == t["remitFeeTotal"] == 15 + 30
     assert s["totalActualCost"] == t["totalActualCost"] == s["itemActualTotal"] + s["extraTotal"] + s["dispatchTotal"], (s, t)
-    assert "1,250" in page.locator("text=承攬商派發成本小計").locator("xpath=following-sibling::td").inner_text()
+    assert "1,200" in page.locator('[data-testid="stl-dispatch-subtotal"]').inner_text()
 
 
 @pytest.mark.e2e

@@ -99,16 +99,25 @@ window.CM_PARTS.push(() => ({
     },
 
     dispatchTotalCost() {
-      // 承攬商含稅合計 + 外包人員金額（不計稅），與精算頁面「承攬商派發成本」算法一致
+      // 35c 稅基 B：未稅承攬費 + 外包人員金額（稅額是進項稅額，不計成本），與精算頁面「承攬商派發成本」同一口徑（營運報表權責口徑／總帳同）
+      return this.dispatches
+        .filter(d => this._dispatchCounts(d))
+        .reduce((s, d) => s + (d.totalAmount || 0) + (d.personnelTotal || 0), 0)
+    },
+
+    // 含稅合計（舊精算口徑）：只給舊完結案的「過期」比對與稅額顯示用
+    dispatchTotalCostGross() {
       return this.dispatches
         .filter(d => this._dispatchCounts(d))
         .reduce((s, d) => s + (d.grandTotal || 0), 0)
     },
 
+    dispatchTaxCost() { return Math.max(0, this.dispatchTotalCostGross() - this.dispatchTotalCost()) },
+
     dispatchPendingNote() {
       const p = this.dispatches.filter(d => this._dispatchCounts(d) && ['待審核', '簽核中'].includes(d.approvalStatus || ''))
       if (!p.length) return ''
-      return `含待審核 ${p.length} 筆 NT$ ${p.reduce((s, d) => s + (d.grandTotal || 0), 0).toLocaleString()}`
+      return `含待審核 ${p.length} 筆 NT$ ${p.reduce((s, d) => s + (d.totalAmount || 0) + (d.personnelTotal || 0), 0).toLocaleString()}`
     },
 
     // 可往下推進作業狀態：已核准或舊單（後端同一道閘）
@@ -126,7 +135,8 @@ window.CM_PARTS.push(() => ({
     financeDispatchStale() {
       if (this.caseSettleStatus() !== 'finalized') return null
       const frozen = MotrixLegalRound.halfUp(this.caseSettleSummary().dispatchTotal || 0)
-      const live   = MotrixLegalRound.halfUp(this.dispatchTotalCost() || 0)
+      // 35c：完結 summary 帶 dispatchBasis='pretax' ⇒ 與未稅現算值比；沒有（舊完結案、含稅口徑）⇒ 與含稅現算值比（舊案不會因口徑切換而誤報過期）
+      const live   = MotrixLegalRound.halfUp((this.caseSettleSummary().dispatchBasis === 'pretax' ? this.dispatchTotalCost() : this.dispatchTotalCostGross()) || 0)
       if (frozen === live) return null
       return { frozen, live, diff: live - frozen }
     },
