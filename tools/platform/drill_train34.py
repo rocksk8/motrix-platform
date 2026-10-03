@@ -202,9 +202,9 @@ def checks34(root, port, base_rec, new_rec, t0, package_modules):
          "approvals_same": new_rec.get("mat_approvals") == base_rec.get("mat_approvals")})
     # 34b 出貨單連動：可出貨材料提供者（case 側）已掛上——靜態：安裝版 case 的 module.json／檔案
     cj = Path(root) / "backend" / "modules" / "case"
-    mj = (cj / "module.json").read_text(encoding="utf-8", errors="replace") if (cj / "module.json").is_file() else ""
-    res["34b_shippable_material_provider_present"] = ((cj / "material_shippable.py").is_file() and "material.shippable" in mj,
-                                                     {"file": (cj / "material_shippable.py").is_file(), "declared_in_module_json": "material.shippable" in mj})
+    ij = (cj / "__init__.py").read_text(encoding="utf-8", errors="replace") if (cj / "__init__.py").is_file() else ""      # 提供者登記在 ModuleSpec.providers（不在 module.json）
+    res["34b_shippable_material_provider_present"] = ((cj / "material_shippable.py").is_file() and "material.shippable" in ij,
+                                                     {"file": (cj / "material_shippable.py").is_file(), "registered_in_init": "material.shippable" in ij})
     sm, dm = T.api(port, "/api/shipping-notes/material-shippable?quote_no=%s" % SEED_QUOTE, None, token, "GET")
     sl, dl = T.api(port, "/api/shipping-notes/DRILL-NO-SUCH-NOTE/material-link-check", None, token, "GET")
     items_ok = isinstance(dm, dict) and isinstance(dm.get("items"), list)
