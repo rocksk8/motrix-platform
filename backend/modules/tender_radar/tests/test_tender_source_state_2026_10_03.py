@@ -328,6 +328,16 @@ def test_an_alert_that_resolved_over_the_weekend_is_not_mailed_on_monday(client,
     assert mails == [] and ts._pending_alerts() == set()
 
 
+def test_a_pending_alert_is_dropped_as_soon_as_the_condition_resolves_even_on_a_no_mail_day(client, mails, monkeypatch):
+    _day(monkeypatch, "2026-10-03")                                      # 週六：進入異常 ⇒ 待寄
+    ts._notify_health(SUSPECT, PREV_OK)
+    assert "tender_source_changed" in ts._pending_alerts()
+    _day(monkeypatch, "2026-10-04")                                      # 週日：已恢復 ⇒ 待寄當天就清掉（不留到週一）
+    healthy = {"recognised": True, "error": None, "parsed": 20, "dropped": 0, "suspect_redesign": False, "detail_blocked": False}
+    ts._notify_health(healthy, {**PREV_OK, "suspected": True})
+    assert ts._pending_alerts() == set() and mails == []
+
+
 def test_national_holiday_is_also_a_no_mail_day_for_alerts(client, mails, monkeypatch):
     _day(monkeypatch, "2026-10-09")                                      # 國慶補假（週五）
     ts._notify_health({"recognised": None, "error": "URLError: boom"}, PREV_OK)
