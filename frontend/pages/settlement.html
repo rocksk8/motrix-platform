@@ -84,6 +84,14 @@
     }
     .stl-table tr:last-child td { border-bottom: none; }
     .stl-table tr:hover td { background: #FAFAF9; }
+    /* 35c：已對應的列＝淺綠底＋文字徽章「已對應」（不只靠顏色）；用共用的 tone 令牌（深色主題自動換色），拿不到令牌時退回淺綠 */
+    .stl-table tr.stl-row--mapped td { background: var(--tone-success-bg, #ECFDF5); }
+    .stl-table tr.stl-row--mapped:hover td { background: var(--tone-success-bg-strong, #D1FAE5); }
+    .stl-badge-mapped { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;
+                        background: var(--tone-success-bg-strong, #D1FAE5); color: var(--tone-success-fg, #065F46); border: 1px solid var(--tone-success-border, #6EE7B7); }
+    .stl-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 11px; color: var(--text-secondary); margin: 2px 0 8px; }
+    .stl-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; border: 1px solid var(--border-light); }
+    .stl-legend .is-mapped { background: var(--tone-success-bg, #ECFDF5); border-color: var(--tone-success-border, #6EE7B7); }
 
     .stl-orig  { color: var(--text-secondary); font-family: 'LINE Seed TW_OTF', sans-serif; font-size: 11px; }
     .stl-input {
@@ -471,31 +479,34 @@
         </div>
       </div>
 
-      <!-- ── 二之一、未對應品項的材料申請與額外支出（33-B1；沖銷對應寫進 settlement.offsets，不改原單據）── -->
-      <div class="stl-card" x-show="_actualsOk && (offsets.length || actuals.unassigned.materials.length || actuals.unassigned.extras.length)" data-testid="stl-unassigned">
+      <!-- ── 二之一、未對應品項的材料申請與額外支出（33-B1；沖銷對應寫進 settlement.offsets，不改原單據）──
+           35c：已對應的另列一張「已對應」表（看得出哪些已被帶入哪個品項、金額多少，避免重複帶入）；一律 x-text。
+           下拉用 String 比對品項 id（報價品項 id 可能是數字；number === string 會讓已對應的列顯示成「不對應」）。 -->
+      <div class="stl-card" x-show="_actualsOk && (offsets.length || allMapRows().length)" data-testid="stl-unassigned">
         <div class="stl-card__head">
           <div class="stl-card__title">二之一、未對應品項的材料申請與額外支出</div>
           <div style="font-size:11px;color:var(--text-dim)">沒對應到報價品項的錢一律照算（計入額外支出）；選一個品項＝改算在那個品項的實際成本，原單據不動</div>
         </div>
-        <div style="overflow-x:auto">
+        <div style="overflow-x:auto" x-show="unmappedRows().length">
           <table class="stl-table">
             <thead><tr><th style="width:90px">類型</th><th style="min-width:180px">單據</th><th style="width:120px;text-align:right">金額 (NT$)</th><th style="min-width:200px">對應到品項</th></tr></thead>
             <tbody>
-              <template x-for="u in unassignedRows()" :key="u.kind + ':' + u.ref">
+              <template x-for="u in unmappedRows()" :key="u.kind + ':' + u.ref">
                 <tr :data-testid="'stl-un-' + u.kind + '-' + u.ref">
                   <td x-text="u.kind === 'material' ? '材料申請' : '額外支出'"></td>
                   <td>
                     <span x-text="u.label"></span>
                     <span x-show="u.pending" style="font-size:10px;color:#B45309">（待審核）</span>
                     <span x-show="u.noPo" style="font-size:10px;color:#92400E">（未申請採購單）</span>
+                    <div x-show="u.detail" style="font-size:11px;color:var(--text-secondary)" x-text="u.detail"></div>
                   </td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(u.amount)"></td>
                   <td>
                     <select class="stl-input" :data-testid="'stl-offset-' + u.kind + '-' + u.ref" :disabled="settlement.status === 'finalized'"
-                            :value="u.itemId" @change="setOffset(u.kind, u.ref, $event.target.value)" style="width:100%">
-                      <option value="">（不對應，計入額外支出）</option>
-                      <template x-for="it in settlement.items.filter(i => !String(i.id || '').startsWith('~') && i.id)" :key="it.id">
-                        <option :value="it.id" :selected="it.id === u.itemId" x-text="it.origDescription || it.id"></option>
+                            @change="setOffset(u.kind, u.ref, $event.target.value)" style="width:100%">
+                      <option value="" :selected="!u.itemId">（不對應，計入額外支出）</option>
+                      <template x-for="it in offsetTargets()" :key="it.id">
+                        <option :value="String(it.id)" :selected="String(it.id) === String(u.itemId)" x-text="'#' + itemNo(it.id) + ' ' + (it.origDescription || it.id)"></option>
                       </template>
                     </select>
                   </td>
@@ -503,6 +514,49 @@
               </template>
             </tbody>
           </table>
+        </div>
+        <div x-show="!unmappedRows().length" data-testid="stl-unmapped-none" style="padding:8px 2px;font-size:12px;color:var(--text-secondary)">目前沒有未對應的項目。</div>
+        <div x-show="mappedRows().length" data-testid="stl-mapped" style="margin-top:14px">
+          <div style="font-size:12px;font-weight:600;margin-bottom:4px">已對應到品項（已帶入，不會再出現在上面的未對應清單；同一筆只能有一個去處）</div>
+          <div class="stl-legend" data-testid="stl-legend"><span><i class="is-mapped"></i>淺綠底＋「已對應」＝已帶入某個品項的實際成本</span><span><i></i>白底＝尚未對應（計入額外支出）</span></div>
+          <div style="overflow-x:auto">
+            <table class="stl-table">
+              <thead><tr><th style="width:90px">類型</th><th style="min-width:180px">單據</th><th style="min-width:160px">已對應到品項</th><th style="width:120px;text-align:right">金額 (NT$)</th><th style="min-width:200px">對應方式／改對應</th></tr></thead>
+              <tbody>
+                <template x-for="u in mappedRows()" :key="u.kind + ':' + u.ref">
+                  <tr class="stl-row--mapped" :data-testid="'stl-mapped-' + u.kind + '-' + u.ref">
+                    <td x-text="u.kind === 'material' ? '材料申請' : '額外支出'"></td>
+                    <td>
+                      <span class="stl-badge-mapped" data-testid="stl-badge-mapped">已對應</span>
+                      <span x-text="u.label"></span>
+                      <span x-show="u.pending" style="font-size:10px;color:#B45309">（待審核）</span>
+                      <div x-show="u.detail" style="font-size:11px;color:var(--text-secondary)" x-text="u.detail"></div>
+                    </td>
+                    <td>
+                      <span :data-testid="'stl-mapped-to-' + u.kind + '-' + u.ref" x-text="'#' + itemNo(u.itemId) + ' ' + itemName(u.itemId)"></span>
+                      <div style="font-size:10px" :style="itemAdopted(u.itemId) ? 'color:#15803D' : 'color:#92400E'"
+                           x-text="itemAdopted(u.itemId) ? '已計入該品項的實際成本' : '該品項未採用：這筆金額目前不計入實際成本'"></div>
+                    </td>
+                    <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(u.amount)"></td>
+                    <td>
+                      <template x-if="u.assignedBy === 'link'">
+                        <span style="font-size:12px;color:var(--text-secondary)" :data-testid="'stl-linked-' + u.kind + '-' + u.ref">由材料申請連結（唯讀）</span>
+                      </template>
+                      <template x-if="u.assignedBy !== 'link'">
+                        <select class="stl-input" :data-testid="'stl-offset-' + u.kind + '-' + u.ref" :disabled="settlement.status === 'finalized'"
+                                @change="setOffset(u.kind, u.ref, $event.target.value)" style="width:100%">
+                          <option value="" :selected="!u.itemId">（取消對應，計入額外支出）</option>
+                          <template x-for="it in offsetTargets()" :key="it.id">
+                            <option :value="String(it.id)" :selected="String(it.id) === String(u.itemId)" x-text="'#' + itemNo(it.id) + ' ' + (it.origDescription || it.id)"></option>
+                          </template>
+                        </select>
+                      </template>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -1014,20 +1068,37 @@ function settlementPage() {
       return (e.docCode || '#' + e.expenseId) + '｜' + (e.category || '') + (e.description ? '｜' + e.description : '')
     },
 
-    // 未對應清單（含已用沖銷對應到品項的，才能取消）
-    unassignedRows() {
+    // 二之一的列模型（35c）：未對應＋已對應（沖銷對應到品項的、材料申請連結到品項的）。已對應的目標品項取自後端回應（itemId 一律字串），
+    // 不取頁面的 offsets 狀態——兩邊不一致時以伺服器算出來的為準，畫面才不會把「已計入品項」的錢顯示成「不對應」。
+    allMapRows() {
       if (!this._actualsOk) return []
-      const off = {}
-      this.offsets.forEach(o => { off[o.kind + ':' + o.ref] = o.itemId })
       const rows = []
-      const add = (kind, ref, label, amount, pending, noPo) => rows.push({ kind, ref: String(ref), label, amount, pending, noPo, itemId: off[kind + ':' + ref] || '' })
-      this.actuals.unassigned.materials.forEach(m => add('material', m.itemId, this.matLabel(m), m.amount, m.pending, m.noPo))
-      this.actuals.unassigned.extras.forEach(e => add('extra', e.expenseId, this.extLabel(e), e.amount, e.pending, false))
+      const add = (kind, ref, label, detail, amount, pending, noPo, itemId, assignedBy) =>
+        rows.push({ kind, ref: String(ref), label, detail, amount, pending, noPo, itemId: itemId === '' ? '' : String(itemId), assignedBy })
+      this.actuals.unassigned.materials.forEach(m => add('material', m.itemId, this.matLabel(m), this.matDetail(m), m.amount, m.pending, m.noPo, '', ''))
+      this.actuals.unassigned.extras.forEach(e => add('extra', e.expenseId, this.extLabel(e), this.extDetail(e), e.amount, e.pending, false, '', ''))
       this.actuals.items.forEach(it => {
-        ;(it.material.orders || []).filter(m => m.assignedBy === 'offset').forEach(m => add('material', m.itemId, this.matLabel(m), m.amount, m.pending, m.noPo))
-        ;(it.extra.docs || []).forEach(e => add('extra', e.expenseId, this.extLabel(e), e.amount, e.pending, false))
+        ;(it.material.orders || []).filter(m => m.assignedBy === 'offset' || m.assignedBy === 'link')
+          .forEach(m => add('material', m.itemId, this.matLabel(m), this.matDetail(m), m.amount, m.pending, m.noPo, it.itemId, m.assignedBy))
+        ;(it.extra.docs || []).forEach(e => add('extra', e.expenseId, this.extLabel(e), this.extDetail(e), e.amount, e.pending, false, it.itemId, 'offset'))
       })
       return rows
+    },
+    unmappedRows() { return this.allMapRows().filter(r => !r.itemId) },
+    mappedRows() { return this.allMapRows().filter(r => r.itemId) },
+    unassignedRows() { return this.unmappedRows() },     // 舊名稱（相容）
+    offsetTargets() { return this.settlement.items.filter(i => !String(i.id || '').startsWith('~') && i.id) },
+    _itemOf(id) { return this.settlement.items.find(i => String(i.id) === String(id)) },
+    itemNo(id) { const i = this.settlement.items.findIndex(x => String(x.id) === String(id)); return i < 0 ? '?' : i + 1 },
+    itemName(id) { const it = this._itemOf(id); return it ? (it.origDescription || String(id)) : String(id) },
+    itemAdopted(id) { const it = this._itemOf(id); return !!(it && it.adoptSystem) },
+    // 說明列（品名之外的規格／說明）：材料申請＝備註；額外支出＝附註＋數量單位。沒有資料就不顯示（不編造規格）
+    matDetail(m) { return m.notes ? '備註：' + m.notes : '' },
+    extDetail(e) {
+      const parts = []
+      if (e.note) parts.push('附註：' + e.note)
+      if (e.qty && Number(e.qty) !== 1) parts.push('數量 ' + e.qty + (e.unit ? ' ' + e.unit : ''))      // 預設 1 式是每筆都有的雜訊，不顯示
+      return parts.join('　')
     },
 
     async setOffset(kind, ref, itemId) {

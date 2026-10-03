@@ -74,3 +74,107 @@ def test_mapped_rows_show_their_target_item_when_quote_item_ids_are_numbers(live
     assert sel("material", "M").input_value() == "7", "材料申請 M 已對應到品項 7，下拉卻顯示 %r" % sel("material", "M").input_value()
     assert sel("extra", "1").input_value() == "8", "額外支出 #1 已對應到品項 8，下拉卻顯示 %r" % sel("extra", "1").input_value()
     assert sel("material", "X").input_value() == "" and sel("extra", "2").input_value() == ""
+
+
+S = "Alpine.$data(document.body)"
+#: 在 origin/platform（5d76b528，改版前）用同一份 seed 量到的頁面數字（品項 id 數字、兩個品項都預設採用）：
+#: 品項 7＝材料 M 300；品項 8＝材料 N 800＋額外支出 #1 700；未對應：材料 X 250、額外支出 #2 900
+PRE_CHANGE = {"itemActualTotal": 1800, "extraTotal": 1150, "purchasedTotal": 2950, "totalActualCost": 2950}
+
+
+def _totals(page):
+    return page.evaluate("() => { const s = %s.summary; return {itemActualTotal: s.itemActualTotal, extraTotal: s.extraTotal, purchasedTotal: s.purchasedTotal, totalActualCost: s.totalActualCost} }" % S)
+
+
+@pytest.mark.e2e
+def test_totals_are_identical_to_the_pre_change_page_and_offsets_are_saved_in_the_same_shape(live_server, make_user, e2e_browser):
+    """守恆：同一份 seed 在改版前的頁面量到的總額＝現在；存草稿時 offsets 的儲存格式不變（只有 kind／ref／itemId 三鍵、全字串）。"""
+    import db
+    sa = make_user(username="sc_sc", role="superadmin")
+    seed(item_ids=(7, 8))
+    page = open_page(live_server, e2e_browser, sa)
+    assert _totals(page) == PRE_CHANGE, _totals(page)
+    page.locator('[data-testid="stl-save-draft"]').click()
+    page.wait_for_function("() => !%s.saving" % S, timeout=15000)
+    c = db.get_db()
+    try:
+        saved = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])["settlement"]
+    finally:
+        c.close()
+    assert saved["offsets"] == [{"kind": "material", "ref": "M", "itemId": "7"}, {"kind": "extra", "ref": "1", "itemId": "8"}]
+    assert all(set(o) == {"kind", "ref", "itemId"} and all(isinstance(v, str) for v in o.values()) for o in saved["offsets"])
+
+
+@pytest.mark.e2e
+def test_mapped_rows_move_to_the_mapped_list_with_target_amount_badge_and_tint(live_server, make_user, e2e_browser):
+    sa = make_user(username="sc_sc", role="superadmin")
+    seed(item_ids=(7, 8))
+    page = open_page(live_server, e2e_browser, sa)
+    un = page.locator('[data-testid^="stl-un-"]')
+    assert sorted(un.evaluate_all("els => els.map(e => e.getAttribute('data-testid'))")) == ["stl-un-extra-2", "stl-un-material-X"], "未對應表只該有真正未對應的兩列"
+    mapped = page.locator("tr.stl-row--mapped")
+    assert sorted(mapped.evaluate_all("els => els.map(e => e.getAttribute('data-testid'))")) == ["stl-mapped-extra-1", "stl-mapped-material-M", "stl-mapped-material-N"]
+    assert page.locator('[data-testid="stl-mapped-to-material-M"]').inner_text().strip() == "#1 交換器 24埠 PoE"        # 品項號碼＋名稱
+    assert page.locator('[data-testid="stl-mapped-to-extra-1"]').inner_text().strip() == "#2 線材 Cat6"
+    assert page.locator('[data-testid="stl-mapped-to-material-N"]').inner_text().strip() == "#2 線材 Cat6"
+    row_m = page.locator('[data-testid="stl-mapped-material-M"]').inner_text()
+    assert "手動對應料M" in row_m and "300" in row_m and "已對應" in row_m and "備註：備註-M" in row_m and "已計入該品項的實際成本" in row_m
+    row_e = page.locator('[data-testid="stl-mapped-extra-1"]').inner_text()
+    assert "已被對應的支出" in row_e and "700" in row_e and "附註：附註1" in row_e
+    # 連結來的材料申請：唯讀（沒有下拉），標示由材料申請連結
+    assert "由材料申請連結（唯讀）" in page.locator('[data-testid="stl-linked-material-N"]').inner_text()
+    assert page.locator('[data-testid="stl-offset-material-N"]').count() == 0
+    # 顏色：已對應列的底色與未對應列不同（淺綠 vs 無底色／白），而且有文字徽章（不只靠顏色）與圖例
+    bg = lambda sel: page.locator(sel).locator("td").first.evaluate("e => getComputedStyle(e).backgroundColor")   # noqa: E731
+    assert bg('[data-testid="stl-mapped-extra-1"]') != bg('[data-testid="stl-un-extra-2"]')
+    assert page.locator('[data-testid="stl-badge-mapped"]').count() == 3
+    assert "已對應" in page.locator('[data-testid="stl-legend"]').inner_text() and "尚未對應" in page.locator('[data-testid="stl-legend"]').inner_text()
+    # 未對應表沒有已對應的列（不重複顯示）
+    for ref in ("material-M", "extra-1", "material-N"):
+        assert page.locator('[data-testid="stl-un-%s"]' % ref).count() == 0
+
+
+@pytest.mark.e2e
+def test_unmap_and_remap_conserve_the_money_and_keep_one_offset_per_row(live_server, make_user, e2e_browser):
+    sa = make_user(username="sc_sc", role="superadmin")
+    seed(item_ids=(7, 8))
+    page = open_page(live_server, e2e_browser, sa)
+    # 取消對應 extra #1：回到未對應（700 回到額外支出）；採購類總額不變（錢只是換地方，不增不減）
+    page.locator('[data-testid="stl-offset-extra-1"]').select_option("")
+    page.wait_for_function("() => %s.summary.extraTotal === 1850" % S, timeout=10000)
+    t = _totals(page)
+    assert t["purchasedTotal"] == PRE_CHANGE["purchasedTotal"] and t["itemActualTotal"] == 1100 and t["totalActualCost"] == 1100 + 1850
+    assert page.locator('[data-testid="stl-un-extra-1"]').count() == 1 and page.locator('[data-testid="stl-mapped-extra-1"]').count() == 0
+    # 改對應到另一個品項：每一列只有一個 offset；回到改版前的總額
+    page.locator('[data-testid="stl-offset-extra-1"]').select_option("7")
+    page.wait_for_function("() => %s.summary.extraTotal === 1150" % S, timeout=10000)
+    assert page.evaluate("() => %s.offsets.filter(o => o.kind === 'extra' && o.ref === '1')" % S) == [{"kind": "extra", "ref": "1", "itemId": "7"}]
+    assert page.locator('[data-testid="stl-mapped-to-extra-1"]').inner_text().strip() == "#1 交換器 24埠 PoE"
+    assert _totals(page)["purchasedTotal"] == PRE_CHANGE["purchasedTotal"]
+    page.locator('[data-testid="stl-offset-extra-1"]').select_option("8")
+    page.wait_for_function("() => %s.summary.itemActualTotal === 1800" % S, timeout=10000)
+    assert _totals(page) == PRE_CHANGE
+
+
+@pytest.mark.e2e
+def test_an_unadopted_item_says_its_mapped_money_is_not_counted_yet_and_totals_are_unchanged(live_server, make_user, e2e_browser):
+    """D8 規則不變：品項未採用＝手填取代、採購不另加。已對應表照實說「目前不計入」，總額與改版前相同（在 5d76b528 量到 7,750）。"""
+    sa = make_user(username="sc_sc", role="superadmin")
+    seed(item_ids=(7, 8), saved_items=[{"id": "8", "adoptSystem": False, "actualQty": 1, "actualUnitCost": 6300, "actualCostTaxMode": "pretax", "actualTotalCost": 6300}])
+    page = open_page(live_server, e2e_browser, sa)
+    assert _totals(page) == {"itemActualTotal": 6600, "extraTotal": 1150, "purchasedTotal": 2950, "totalActualCost": 7750}
+    assert "該品項未採用：這筆金額目前不計入實際成本" in page.locator('[data-testid="stl-mapped-extra-1"]').inner_text()
+    assert "已計入該品項的實際成本" in page.locator('[data-testid="stl-mapped-material-M"]').inner_text()          # 品項 7 仍採用
+    page.locator('[data-testid="stl-adopt-8"]').click()
+    page.wait_for_function("() => %s.summary.totalActualCost === 2950" % S, timeout=10000)
+    assert "已計入該品項的實際成本" in page.locator('[data-testid="stl-mapped-extra-1"]').inner_text()
+    assert page.evaluate("() => %s.summary.extraTotal" % S) == 1150            # 採用不動「額外支出」：已對應的錢本來就不在裡面
+
+
+@pytest.mark.e2e
+def test_string_item_ids_still_work_after_the_fix(live_server, make_user, e2e_browser):
+    sa = make_user(username="sc_sc", role="superadmin")
+    seed(item_ids=("a", "b"))
+    page = open_page(live_server, e2e_browser, sa)
+    assert page.locator('[data-testid="stl-offset-material-M"]').input_value() == "a" and page.locator('[data-testid="stl-offset-extra-1"]').input_value() == "b"
+    assert _totals(page) == PRE_CHANGE

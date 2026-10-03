@@ -98,7 +98,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
         if r["linked"] or r["cost"] == "excluded" or not r["total"]:
             continue
         mo = r["order"]
-        rec = {"itemId": r["itemId"], "docCode": "", "name": r["name"], "quantity": r.get("quantity"), "unit": r.get("unit") or "", "status": r["state"], "amount": r["total"], "pending": r["cost"] == "pending", "noPo": r["noPo"]}
+        rec = {"itemId": r["itemId"], "docCode": "", "name": r["name"], "quantity": r.get("quantity"), "unit": r.get("unit") or "", "notes": str(mo.get("notes") or ""), "status": r["state"], "amount": r["total"], "pending": r["cost"] == "pending", "noPo": r["noPo"]}
         qid = str(mo.get("quoteItemId") or "").strip()
         if qid in live:
             mat_by_item.setdefault(qid, []).append(dict(rec, assignedBy="link"))
@@ -111,8 +111,11 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
 
     # ── 額外支出：整張單歸單一品項（offset）；其餘留在未對應 ──
     extra_by_item, unassigned_extra, extra_all = {}, [], []
+    # 35c：二之一要顯示品名／說明——附註與數量單位另查（唯讀；共用的 recognition.extra_entries 與營運報表、總帳同源，不動它）
+    meta = {r["id"]: r for r in conn.execute("SELECT id, note, qty, unit FROM case_extra_expenses WHERE quote_no=?", (quote_no,)).fetchall()}
     for e in extra_rows:
-        row = {"expenseId": e.get("expenseId"), "docCode": e.get("docCode") or "", "category": e.get("category") or "", "description": e.get("description") or "", "amount": _num(e.get("amount")),
+        m_ = meta.get(e.get("expenseId"))
+        row = {"expenseId": e.get("expenseId"), "docCode": e.get("docCode") or "", "category": e.get("category") or "", "description": e.get("description") or "", "note": str(m_["note"] or "") if m_ else "", "qty": _num(m_["qty"]) if m_ else 0, "unit": str(m_["unit"] or "") if m_ else "", "amount": _num(e.get("amount")),
                "pending": bool(e.get("pending"))}
         target = off_extra.get(str(e.get("expenseId")))
         extra_all.append(dict(row, assignedTo=target or ""))
