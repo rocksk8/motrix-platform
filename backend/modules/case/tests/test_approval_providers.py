@@ -68,7 +68,7 @@ def test_every_reassign_type_has_one_provider(client):
 def test_every_detail_type_has_one_provider(client):
     """每種單據各有一個 `approval.detail`（端點在 L1，2026-09-27）：M01 四種（報價單、完工單、額外支出、已結案變更）與其他模組的。"""
     want = {"quotation", "completion_note", "extra_expense", "case_change"}   # 本檔在 modules/case/tests ⇒ M01 在
-    want |= {"material_order", "material_payment"}   # 31-C 叫料審核／叫料匯款（M01 case 提供）
+    want |= {"material_order", "material_payment", "material_change"}   # 31-C 叫料審核／叫料匯款、33-M2b 材料申請變更（M01 case 提供）
     want.add("custom_module_def")            # L1 自訂模組定義送審（`helpers/custom_def_review.detail`，routers/custom_records 匯入時登記）
     if source_tree.module_installed("modules/supply/"):
         want.add("shipping_note")
