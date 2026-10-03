@@ -2539,6 +2539,11 @@ def _build_case_closing_html(data: dict) -> str:
         diff_ppts = round(float(summary.get("netMarginPct") or 0) - float(summary.get("origNetMarginPct") or 0), 1)
         settle_date = s.get("settlementDate", "") or ""
         settle_by   = s.get("finalizedBy", "") or ""
+        # 35c：新完結案（稅基 B、dispatchBasis＝pretax）加一行稅額說明；舊完結案（沒有標記）維持原樣，一個位元組都不加
+        dispatch_tax_note = (
+            '\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">承攬商：未稅 %s／稅額 %s（進項稅額，不計成本）</td></tr>'
+            % (money(summary.get("dispatchTotal")), money(summary.get("dispatchTax")))
+        ) if summary.get("dispatchBasis") == "pretax" else ""
         profit_section = f"""
 <div class="section-label">三、損益分析（精算完結 · 精算日期：{esc(settle_date) or '—'}　完結人：{esc(settle_by) or '—'}）</div>
 <div class="profit-grid">
@@ -2562,7 +2567,7 @@ def _build_case_closing_html(data: dict) -> str:
       <tr><td>品項實際成本</td><td class="r orange">{money(summary.get("itemActualTotal"))}</td></tr>
       {('<tr><td>採購單（品項尚未採用）</td><td class="r orange">' + money(summary.get("itemPoUnadopted")) + '</td></tr>') if (summary.get("itemPoUnadopted") or 0) > 0 else ''}
       <tr><td>額外支出</td><td class="r orange">{money(summary.get("extraTotal"))}</td></tr>
-      <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>
+      <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>{dispatch_tax_note}
       <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{money(summary.get("totalActualCost"))}</td></tr>
       <tr><td>真實毛利</td><td class="r {'green' if int(summary.get('grossProfit',0) or 0)>=0 else 'red'}">{money(summary.get("grossProfit"))}</td></tr>
       <tr><td>真實毛利率</td><td class="r">{float(summary.get("grossMarginPct") or 0):.1f}%</td></tr>
