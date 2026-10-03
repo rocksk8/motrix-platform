@@ -5688,6 +5688,7 @@
     "dir:backend/modules/case/",
     "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
+    "page:pages/case-management.html",
     "page:pages/settlement.html"
    ],
    "evidence": {
@@ -5697,6 +5698,7 @@
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
     "page": [
+     "frontend/pages/case-management.html",
      "frontend/pages/settlement.html"
     ],
     "module_dir": [
