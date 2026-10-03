@@ -17,7 +17,10 @@ import modules.tender_radar.source as ts
 
 USES_REAL_CALENDAR = True        # tests/conftest.py 的 _mail_day_independent_of_the_real_weekday 不介入：本檔自己注入日期
 
-PAGE = Path(__file__).resolve().parents[4] / "frontend" / "pages" / "tender-radar.html"
+def _page_text():
+    """頁面原始碼：走 core.source_tree.page_file()（page_paths 棘輪：頁面路徑不可在測試裡寫死）。"""
+    from core import source_tree
+    return source_tree.page_file("tender-radar.html").read_text(encoding="utf-8")
 
 
 def _day(monkeypatch, iso):
@@ -153,7 +156,7 @@ def test_status_notices_carry_only_status_text_no_tender_content(client, make_us
 # ── 頁面：x-text、不用 x-html；地點「未取得」──────────────────────────────
 
 def test_page_renders_notices_with_x_text_only():
-    html = PAGE.read_text(encoding="utf-8")
+    html = _page_text()
     i = html.index('x-for="n in ((status && status.notices) || [])"')
     block = html[i:html.index("</template>", i)]
     assert 'x-text="n.text"' in block and "x-html" not in block and "innerHTML" not in block
@@ -161,7 +164,7 @@ def test_page_renders_notices_with_x_text_only():
 
 
 def test_page_marks_a_missing_location_as_not_obtained_instead_of_blank_or_dash():
-    html = PAGE.read_text(encoding="utf-8")
+    html = _page_text()
     m = re.search(r"case 'location':.*?\n(?=\s*case 'procurementType')", html, re.S)
     assert m and "未取得" in m.group(0) and "data-location-missing" in m.group(0)
     assert "_esc(t.location)" in m.group(0), "地點有值時仍要經過跳脫"
