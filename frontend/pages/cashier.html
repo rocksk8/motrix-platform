@@ -358,7 +358,7 @@
                         <tr>
                           <td class="mono" x-text="v.voucherNo"></td>
                           <td class="mono" x-text="v.quoteNo"></td>
-                          <td x-text="v.vendorName || '（外包人員點工）'"></td>
+                          <td><span x-text="v.vendorName || '（外包人員點工）'"></span><span x-show="v.kind" data-testid="cashier-kind-label" style="margin-left:6px;font-size:11px;font-weight:600;color:var(--text-secondary)" x-text="(v.kindName || v.kind) + ' 第 ' + v.seq + ' 期'"></span></td>
                           <td class="r mono" x-text="fmt(v.grandTotal)"></td>
                           <td class="c mono" :class="isOverdue(v.payableDate) ? 'red-txt' : (isDueSoon(v.payableDate) ? 'orange-txt' : '')"
                               x-text="v.payableDate || '未指定'"></td>
@@ -686,7 +686,7 @@
                             <tr>
                               <td class="mono" x-text="v.voucherNo"></td>
                               <td class="mono" x-text="v.quoteNo"></td>
-                              <td x-text="v.vendorName || '（外包人員點工）'"></td>
+                              <td><span x-text="v.vendorName || '（外包人員點工）'"></span><span x-show="v.kind" data-testid="cashier-kind-label" style="margin-left:6px;font-size:11px;font-weight:600;color:var(--text-secondary)" x-text="(v.kindName || v.kind) + ' 第 ' + v.seq + ' 期'"></span></td>
                               <td class="r mono" x-text="fmt(v.grandTotal)"></td>
                               <td class="r mono" x-text="fmt(v.remitActual != null ? v.remitActual : v.grandTotal)"></td>
                               <td class="r mono" x-text="v.remitFee ? fmt(v.remitFee) : '—'"></td>
@@ -1069,7 +1069,7 @@
   <div x-show="payVoucherModal" class="modal-overlay" @click.self="payVoucherModal=false">
     <div class="modal-box" style="max-width:360px">
       <div class="modal-hd">
-        <div class="modal-title" x-text="'標記已匯款' + (payVoucherTarget ? '　' + payVoucherTarget.voucherNo : '')"></div>
+        <div class="modal-title" x-text="'標記已匯款' + (payVoucherTarget ? '　' + payVoucherTarget.voucherNo + (payVoucherTarget.kind ? '（' + (payVoucherTarget.kindName || payVoucherTarget.kind) + ' 第 ' + payVoucherTarget.seq + ' 期）' : '') : '')"></div>
         <button class="modal-close" @click="payVoucherModal=false">&#10005;</button>
       </div>
       <div class="modal-body">
