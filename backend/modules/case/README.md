@@ -37,3 +37,12 @@
 
 - ③ 提供者改成 ModuleSpec 宣告（CA-O3）；④ SO 提示與補題；⑤ ATT（A 的 attachments.for_document）已知例外＋到期守門
 - 其他模組直接讀本模組的表（M01-PLAN §2-B）：讀取連接器另案
+
+## 精算完結的護欄（35c；0c 稽核四項已知限制已於同班處理）
+
+- 對「已完結」的案件再 PUT（超級管理員的重新開啟路徑）一律要非空白理由（≤500 字），理由記入編輯歷程與稽核紀錄 `quotation.settlement`；再存成完結時與第一次完結同樣重算比對並補蓋 `dispatchBasis`。舊的已凍結案讀取不重驗、不改寫。
+- 舊口徑頁面（沒有 `dispatchBasis`、送含稅數字）直接再存會被 409 擋下：請先重新開啟再完結。
+- 409 訊息前綴為中性說法，差異欄位清單才是重點。
+- 自訂模組支出非 0 的完結 fixture 已有測試（`test_settlement_finalize_integrity_2026_10_03.py`）。
+- 重新開啟理由是自由文字，只有財務檢視（`money_visible()`）的帳號看得到：單筆案件 GET、`/versions`、`/case-bundle` 的編輯歷程對其他帳號只留誰／何時／事件、不含理由（沿用 CM13 遮蔽，`helpers/financial_mask.py::strip_history_reasons`）。稽核紀錄 `audit_log` 的 detail 仍帶理由，由 `audit_log` 模組權限把關。
+- 對**舊口徑（含稅）**的已完結案「重新開啟再完結」會把它轉成新口徑（未稅）：淨利基數 +0.99×承攬商稅額；已發放的獎金不會被重算。這是刻意的，改之前要知道。

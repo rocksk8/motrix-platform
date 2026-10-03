@@ -1,5 +1,10 @@
 # 營運分析 更新紀錄
 
+## (next) — 2026-10-03（wip/t35c-settle-assigned）：精算快照「過期」比對口徑對口徑（精算稅基 B 的配套）
+- `_live_dispatch_totals_by_quote(conn, pretax=False)`：新增 `pretax` 參數（預設不變＝含稅 grandTotal，既有三處呼叫與測試不動）；`pretax=True` ＝未稅承攬費＋外包人員。
+- `_collect()` 的 `staleSettlementCount`：完結 summary 帶 `dispatchBasis='pretax'`（精算新口徑）⇒ 跟未稅現算值比；沒有（舊完結案、含稅口徑）⇒ 跟含稅現算值比。舊案不會因口徑切換全部誤報過期；口徑錯配與真正的完結後異動仍會被抓到。
+- 營運報表的金額口徑**沒有改**（權責＝未稅＋人員、現金＝實付含稅，原樣）；測試 5 題（`test_reports_stale_dispatch_basis_2026_10_03.py`）。
+
 ## 1.0.28 — 2026-10-02 15:29（wip/t32-s4a-2e）：併入 d7 的「材料申請」改字（報表畫面字）
 - 合併 `wip/t32-wording-d7`：營運報表的使用者可見字串「叫料」改稱「材料申請」（鍵名不動）；S4c 的備註與 `noPo` 不變。
 ## 1.0.27 — 2026-10-02 13:49（wip/t32-s4a-2e）：營運報表叫料明細標註「未申請採購單」（32-S4c）

@@ -73,7 +73,9 @@ def test_extra_total_mismatch_is_rejected_but_remit_fee_and_custom_expense_are_t
     c, h = W
     ex = _mk(c, h, "purchase_order", [_ln(None, 1, unitCost=700)]).json()
     assert _submit(c, h, ex["id"]).status_code == 200
-    assert _finalize(c, h, _page_payload(c, h, extraTotal=700 + 30 + 4, remitFeeTotal=30, customExpenseTotal=4)).status_code == 200   # 頁面額外加的手續費與自訂模組支出不在比對內
+    # 35c F1：手續費與自訂模組支出現在也由後端重算比對（舊註解「頁面額外加的不在比對內」已不成立）；此案伺服器上兩者都是 0，頁面送 0 才對得上。
+    # 偽造它們的情境見 test_settlement_finalize_integrity_2026_10_03.py::test_remit_fee_and_custom_expense_are_verified_too
+    assert _finalize(c, h, _page_payload(c, h, extraTotal=700, remitFeeTotal=0, customExpenseTotal=0)).status_code == 200
     cn = db.get_db()
     q = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
     q.pop("settlement")
@@ -131,13 +133,16 @@ def test_the_request_body_is_what_gets_checked_not_the_older_saved_draft(W):
     assert _finalize(c, h, final).status_code == 200                                         # 使用者後來改採用、完結：以這次送上的為準（不是資料庫裡舊草稿的 9000）
 
 
-def test_resaving_an_already_finalized_settlement_is_not_rechecked(W):
+def test_resaving_an_already_finalized_settlement_needs_a_reason_and_is_rechecked_too(W):
+    """35c（使用者裁示，取代 33-A5 時『已完結再存不比對』的前提）：已完結的再存要有理由，再存成完結時與第一次完結同樣重算比對。"""
     c, h = W
     assert _finalize(c, h, _page_payload(c, h)).status_code == 200
     _approved_po(c, h, [_ln("a", 3, unitCost=1000)])                                         # 完結後才核准的採購單
     again = _page_payload(c, h)
-    again["summary"]["itemActualTotal"] = 1                                                  # 與重算差很多，但這是已完結的再存（超級管理員改備註）：不比對
-    assert _finalize(c, h, again).status_code == 200
+    again["summary"]["itemActualTotal"] = 1                                                  # 與重算差很多
+    assert c.put(URL, json={"settlement": again}, headers=h).status_code == 422             # 沒理由
+    r = c.put(URL, json={"settlement": again, "reason": "改備註"}, headers=h)
+    assert r.status_code == 409 and "差異" in r.json()["detail"]                             # 有理由但數字對不上：擋
 
 
 def test_tolerance_is_per_item_only_for_item_actual_total_not_for_extra_or_purchased(W):

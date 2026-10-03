@@ -44,6 +44,15 @@ class PaymentStructureChange(Exception):
     """遮蔽帳號新增、刪除或重排款項期別（CM13 D2：不允許）。"""
 
 
+def strip_history_reasons(history):
+    """就地拿掉修改紀錄（editHistory）裡的自由文字理由（例如重新開啟已完結精算的理由，可能寫到金額或對帳細節）；誰／何時／事件保留。
+    給沒有財務檢視（`money_visible()` 為否）的帳號用。回傳同一個 list。"""
+    for h in history or []:
+        if isinstance(h, dict):
+            h.pop("reason", None)
+    return history
+
+
 def mask_row(row: dict, cols=QUOTATION_MONEY_COLS) -> dict:
     """清單列：金額欄位回 None。只改 row 裡確實存在的鍵。"""
     for k in cols:
@@ -95,6 +104,7 @@ def mask_quotation_data(data: dict) -> dict:
     if isinstance(appr, dict) and isinstance(appr.get("reasons"), list):
         appr["reasons"] = [MASKED_REASON if isinstance(r, str) and any(m in r for m in _REASON_MONEY_MARKS) else r
                            for r in appr["reasons"]]
+    strip_history_reasons(data.get("editHistory"))
     for h in data.get("editHistory") or []:
         for c in (h.get("changes") or []) if isinstance(h, dict) else []:
             if isinstance(c, dict) and c.get("field") in HISTORY_MONEY_FIELDS:

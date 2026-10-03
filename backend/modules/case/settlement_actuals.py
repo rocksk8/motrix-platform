@@ -21,6 +21,10 @@ ESTIMATE_RATE = 1.05            # 精算頁預設實際成本＝報價成本 ×1
 UNADOPTED_IGNORE, UNADOPTED_ADD = "ignore", "add"
 
 
+#: 精算的承攬商成本口徑標記（35c）：寫進完結的 summary；沒有這個鍵的舊完結案＝含稅口徑（承攬商稅額計入成本），不改寫、不重驗。
+DISPATCH_BASIS = "pretax"
+
+
 def estimate_amount(qty, cost) -> int:
     return round_half_up((qty or 0) * (cost or 0), ESTIMATE_RATE)
 
@@ -98,7 +102,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
         if r["linked"] or r["cost"] == "excluded" or not r["total"]:
             continue
         mo = r["order"]
-        rec = {"itemId": r["itemId"], "docCode": "", "name": r["name"], "quantity": r.get("quantity"), "unit": r.get("unit") or "", "status": r["state"], "amount": r["total"], "pending": r["cost"] == "pending", "noPo": r["noPo"]}
+        rec = {"itemId": r["itemId"], "docCode": "", "name": r["name"], "quantity": r.get("quantity"), "unit": r.get("unit") or "", "notes": str(mo.get("notes") or ""), "status": r["state"], "amount": r["total"], "pending": r["cost"] == "pending", "noPo": r["noPo"]}
         qid = str(mo.get("quoteItemId") or "").strip()
         if qid in live:
             mat_by_item.setdefault(qid, []).append(dict(rec, assignedBy="link"))
@@ -111,8 +115,11 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
 
     # ── 額外支出：整張單歸單一品項（offset）；其餘留在未對應 ──
     extra_by_item, unassigned_extra, extra_all = {}, [], []
+    # 35c：二之一要顯示品名／說明——附註與數量單位另查（唯讀；共用的 recognition.extra_entries 與營運報表、總帳同源，不動它）
+    meta = {r["id"]: r for r in conn.execute("SELECT id, note, qty, unit FROM case_extra_expenses WHERE quote_no=?", (quote_no,)).fetchall()}
     for e in extra_rows:
-        row = {"expenseId": e.get("expenseId"), "docCode": e.get("docCode") or "", "category": e.get("category") or "", "description": e.get("description") or "", "amount": _num(e.get("amount")),
+        m_ = meta.get(e.get("expenseId"))
+        row = {"expenseId": e.get("expenseId"), "docCode": e.get("docCode") or "", "category": e.get("category") or "", "description": e.get("description") or "", "note": str(m_["note"] or "") if m_ else "", "qty": _num(m_["qty"]) if m_ else 0, "unit": str(m_["unit"] or "") if m_ else "", "amount": _num(e.get("amount")),
                "pending": bool(e.get("pending"))}
         target = off_extra.get(str(e.get("expenseId")))
         extra_all.append(dict(row, assignedTo=target or ""))
@@ -171,7 +178,9 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
                        "materialUnassignedTotal": un_mat_total, "purchasedTotal": sum(sources.values()), "pendingTotal": pend},
             "warnings": warnings, "costExtras": ex}
     t_ = out["totals"]
-    t_.update(dispatchTotal=ex["dispatch"]["grandTotal"], dispatchReport=ex["dispatch"]["report"], remitFeeTotal=ex["remitFee"]["total"],
+    # 35c 稅基 B：dispatchTotal（這個鍵的意義變了）＝未稅＋人員；dispatchBasis 標記讓「過期」比對與舊凍結案分得出口徑（舊案沒有這個鍵＝含稅口徑）
+    t_.update(dispatchTotal=ex["dispatch"]["report"], dispatchReport=ex["dispatch"]["report"], dispatchGrandTotal=ex["dispatch"]["grandTotal"],
+              dispatchTax=ex["dispatch"]["tax"], dispatchBasis=DISPATCH_BASIS, remitFeeTotal=ex["remitFee"]["total"],
               customExpenseTotal=ex["customExpense"]["total"])
     # 與頁面 calcSummary 同一條式：品項＋未採用採購＋額外支出（含未對應材料申請、手續費、自訂模組）＋派發
     t_["totalActualCost"] = (t_["itemActualTotal"] + t_["itemPoUnadopted"] + t_["extraTotal"] + t_["materialUnassignedTotal"] + t_["remitFeeTotal"]
@@ -188,7 +197,8 @@ def _freeze(out, saved, saved_items):
     `purchasedTotal`（B1 起頁面也存）有就用。現算值留在 `live` 供頁面提示差異。"""
     summ = saved.get("summary") if isinstance(saved.get("summary"), dict) else {}
     out["finalized"], out["frozen"], out["savedSummary"] = True, True, summ
-    out["live"] = {"itemActualTotal": out["totals"]["itemActualTotal"], "extraTotal": out["totals"]["extraTotal"], "purchasedTotal": out["totals"]["purchasedTotal"]}
+    out["live"] = {"itemActualTotal": out["totals"]["itemActualTotal"], "extraTotal": out["totals"]["extraTotal"], "purchasedTotal": out["totals"]["purchasedTotal"],
+                   "dispatchTotal": out["totals"]["dispatchTotal"], "dispatchGrandTotal": out["totals"]["dispatchGrandTotal"], "dispatchTax": out["totals"]["dispatchTax"]}
     total = 0.0
     for it in out["items"]:
         s = saved_items.get(it["itemId"])
@@ -206,6 +216,8 @@ def _freeze(out, saved, saved_items):
     for k in ("dispatchTotal", "remitFeeTotal", "customExpenseTotal", "totalActualCost"):          # 頁面存的完結 summary 同名鍵：凍結值
         if k in summ:
             out["totals"][k] = _num(summ[k])
+    # 凍結案的承攬商口徑＝完結當下存的標記；舊案沒有標記＝含稅口徑（dispatchTotal 當時是含稅合計）。值本身不改寫。
+    out["totals"]["dispatchBasis"] = summ.get("dispatchBasis") or "taxed"
 
 
 def validate_offsets(conn, quote_no, raw, previous=None):
@@ -245,13 +257,13 @@ def validate_offsets(conn, quote_no, raw, previous=None):
 
 def case_extras(conn, quote_no) -> dict:
     """精算頁「成本彙總」裡不屬於品項／採購的三類成本（34；之前由頁面各打一支端點加總）——**口徑與頁面現行算法逐位相同**（使用者裁示 A：歷史精算不變）：
-    - 承攬商派發：`dispatchGrandTotal`＝承攬商含稅合計＋外包人員（`dispatch.row` 的 grandTotal；排除已取消、草稿、已退回，待審核／簽核中照計，與頁面同）。
-      另給 `dispatchReport`＝未稅承攬費＋人員（營運報表／總帳 `recognition.dispatch_entries` 的口徑，供漂移守門；兩者差異＝承攬費的稅）。
-      含稅或未稅是使用者的決定，這裡只並列、不切換。
+    - 承攬商派發（35c 稅基 B，使用者 2026-10-03「承攬商的部分稅金也跟正式做同步，避免有 5% 金額爭議」）：**計入成本的是 `report`＝
+      未稅承攬費＋外包人員**（營運報表權責口徑／總帳 `recognition.dispatch_entries` 同一口徑；稅額是進項稅額，不是成本）。排除已取消、草稿、已退回，
+      待審核／簽核中照計。並列：`grandTotal`＝含稅合計（舊精算算法）、`tax`＝承攬商稅額；恆等式 grandTotal ＝ report ＋ tax。
     - 匯款手續費：額外支出的手續費（已登錄付款、未作廢）＋承攬商匯款手續費（`case.remit_fee_total` 提供者；沒有提供者＝0）。
     - 自訂模組支出：`helpers.custom_finance.case_finance` 的支出合計。
     純讀。"""
-    grand = report = 0.0
+    grand = report = tax = 0.0
     n = 0
     dispatch_row = registry.single_provider("dispatch.row")
     if dispatch_row is not None:
@@ -267,6 +279,7 @@ def case_extras(conn, quote_no) -> dict:
             n += 1
             grand += _num(d.get("grandTotal"))
             report += _num(d.get("totalAmount")) + _num(d.get("personnelTotal"))
+            tax += _num(d.get("grandTotal")) - _num(d.get("totalAmount")) - _num(d.get("personnelTotal"))     # 承攬商稅額（進項稅額，不計成本；只供顯示）
     try:
         fee_extra = _num(conn.execute("SELECT COALESCE(SUM(remit_fee), 0) AS t FROM case_extra_expenses WHERE quote_no=? AND COALESCE(paid_date,'') != '' AND status != ?",
                                       (quote_no, VOIDED_STATUS)).fetchone()["t"])
@@ -280,7 +293,7 @@ def case_extras(conn, quote_no) -> dict:
         custom = _num(CFIN.case_finance(conn, quote_no)["expense"]["total"])
     except Exception:                                                                                      # noqa: BLE001  自訂模組表不在
         _log.warning("custom_finance.case_finance 失敗 ⇒ 自訂模組支出略過", exc_info=True)
-    return {"dispatch": {"grandTotal": grand, "report": report, "count": n},
+    return {"dispatch": {"grandTotal": grand, "report": report, "tax": tax, "count": n},
             "remitFee": {"extraExpenses": fee_extra, "contractor": fee_contractor, "total": fee_extra + fee_contractor},
             "customExpense": {"total": custom}}
 
@@ -303,4 +316,77 @@ def check_finalize(conn, quote_no, settlement):
               ("額外支出（含未對應材料申請）", their_extra, mine_extra, tol)]
     if "purchasedTotal" in summ:
         checks.append(("採購類總額", _num(summ.get("purchasedTotal")), t["purchasedTotal"], tol))
-    return ["%s：頁面 %s、系統重算 %s" % (name, round(a), round(b)) for name, a, b, tl in checks if abs(a - b) > tl]
+    out = ["%s：頁面 %s、系統重算 %s" % (name, round(a), round(b)) for name, a, b, tl in checks if abs(a - b) > tl]
+    return out + _check_downstream(conn, quote_no, summ, d, tol_item)
+
+
+#: 完結 summary 裡「下游會讀」的欄位（營運報表毛利讀 netProfit／grossProfit、獎金與結案 PDF 讀同一份 summary）；精算頁一定會送（35c F1，AUDIT-0C S7）。
+DOWNSTREAM_KEYS = ("dispatchTotal", "remitFeeTotal", "customExpenseTotal", "totalActualCost", "grossProfit", "adminCost", "charityDonation",
+                   "netProfit", "grossMarginPct", "netMarginPct")
+_DOWNSTREAM_NAMES = {"dispatchTotal": "承攬商派發成本（未稅＋外包人員）", "remitFeeTotal": "匯款手續費", "customExpenseTotal": "自訂模組支出",
+                     "totalActualCost": "實際總成本", "grossProfit": "毛利", "adminCost": "管理費", "charityDonation": "公益金", "netProfit": "淨利",
+                     "grossMarginPct": "毛利率(%)", "netMarginPct": "淨利率(%)"}
+
+
+def _expected_downstream(conn, quote_no, d, tol_item):
+    """後端重算的「下游欄位」期望值與容差：{鍵: (期望值, 容差)}，另附 `_pretax`。報價稅前收入取伺服器上報價單的 `tot.pretax`（與精算頁
+    `_origTot.pretax` 同源）；管理費＝round_half_up(稅前×10%)、公益金＝round_half_up(毛利×1%)、淨利＝毛利−管理費−公益金（與頁面 calcSummary 同式）。"""
+    q = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    try:
+        tot = (json.loads((q["data_json"] if q else "") or "{}").get("tot") or {})
+    except (TypeError, ValueError):
+        tot = {}
+    pretax = _num(tot.get("pretax"))
+    t = d["totals"]
+    tol_total = tol_item + 3                         # 總成本由多塊加總，每塊各自進位
+    total = t["totalActualCost"]
+    gross = pretax - total
+    admin = round_half_up(pretax, 0.10)
+    charity = round_half_up(gross, 0.01)
+    net = gross - admin - charity
+    pct_tol = 0.1 + (100.0 * tol_total / pretax if pretax > 0 else 0.0)
+    return {"_pretax": pretax,
+            "dispatchTotal": (t["dispatchTotal"], 1), "remitFeeTotal": (t["remitFeeTotal"], 1), "customExpenseTotal": (t["customExpenseTotal"], 1),
+            "totalActualCost": (total, tol_total), "grossProfit": (gross, tol_total), "adminCost": (admin, 1),
+            "charityDonation": (charity, 2 + round(tol_total * 0.01)), "netProfit": (net, tol_total + 3),
+            "grossMarginPct": (round(gross / pretax * 100, 1) if pretax > 0 else 0.0, pct_tol),
+            "netMarginPct": (round(net / pretax * 100, 1) if pretax > 0 else 0.0, pct_tol)}
+
+
+def _check_downstream(conn, quote_no, summ, d, tol_item):
+    """35c F1（AUDIT-0C S7；使用者裁示 D10：後端重算，超出進位誤差就拒絕完結）：承攬商、匯款手續費、自訂支出、總成本、毛利、管理費、公益金、淨利、利潤率
+    也用同一個 compute() 重算比對（原本只比品項／額外支出／採購類三塊，偽造 summary 可完結並凍結；報表毛利直接讀 netProfit）。
+    頁面送了的欄位逐一比對；**沒送的欄位不拒絕**（那不是偽造），而是在存檔前由 `fill_downstream()` 用伺服器重算值補齊——所以省略欄位也繞不過。
+    回傳差異說明清單；沒有差異回 []。"""
+    exp = _expected_downstream(conn, quote_no, d, tol_item)
+    pretax = exp.pop("_pretax")
+    out = []
+    for k, (v, tl) in exp.items():
+        if summ.get(k) is None:
+            continue
+        if abs(_num(summ.get(k)) - v) > tl:
+            pct = k.endswith("Pct")
+            out.append("%s：頁面 %s、系統重算 %s" % (_DOWNSTREAM_NAMES[k], ("%.1f" % _num(summ.get(k))) if pct else round(_num(summ.get(k))), ("%.1f" % v) if pct else round(v)))
+    if summ.get("quotedPretax") is not None and abs(_num(summ.get("quotedPretax")) - pretax) > 1:
+        out.append("報價稅前收入：頁面 %s、系統重算 %s" % (round(_num(summ.get("quotedPretax"))), round(pretax)))
+    return out
+
+
+def fill_downstream(conn, quote_no, settlement):
+    """完結通過比對後、存檔前：summary 沒有的下游欄位用伺服器重算值補上（含報價稅前收入），並蓋口徑標記。回傳補了哪些鍵（給稽核紀錄／測試）。"""
+    summ = settlement.get("summary") if isinstance(settlement, dict) else None
+    if not isinstance(summ, dict) or "itemActualTotal" not in summ:
+        return []
+    d = compute(conn, quote_no, settlement=settlement, freeze=False)
+    exp = _expected_downstream(conn, quote_no, d, max(1, len(d["items"])))
+    pretax = exp.pop("_pretax")
+    filled = []
+    for k, (v, _tl) in exp.items():
+        if summ.get(k) is None:
+            summ[k] = v
+            filled.append(k)
+    if summ.get("quotedPretax") is None:
+        summ["quotedPretax"] = pretax
+        filled.append("quotedPretax")
+    summ["dispatchBasis"] = DISPATCH_BASIS
+    return filled

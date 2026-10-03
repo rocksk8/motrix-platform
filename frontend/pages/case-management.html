@@ -2687,7 +2687,7 @@
 
                     <!-- 快照過期警示：承攬商成本在精算完結後又異動，下方數字尚未反映最新狀況 -->
                     <template x-if="financeDispatchStale()">
-                      <div style="background:var(--tone-warning-bg);border:1px solid var(--tone-warning-border);border-radius:8px;padding:9px 14px;margin-bottom:14px;font-size:12px;color:var(--tone-warning-fg);display:flex;align-items:center;gap:8px">
+                      <div data-testid="fin-dispatch-stale" style="background:var(--tone-warning-bg);border:1px solid var(--tone-warning-border);border-radius:8px;padding:9px 14px;margin-bottom:14px;font-size:12px;color:var(--tone-warning-fg);display:flex;align-items:center;gap:8px">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="stroke:var(--tone-warning-fg)" stroke-width="2"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
                         <span style="font-family:var(--font-zh)"
                               x-text="'下方精算數字為完結當下快照，承攬商成本之後已異動（快照 NT$' + financeDispatchStale().frozen.toLocaleString() + ' → 目前 NT$' + financeDispatchStale().live.toLocaleString() + '），如需更新請至精算頁面重新開啟並完結'"></span>
@@ -2874,7 +2874,9 @@
                   <div style="font-size:12px;color:var(--text-secondary)">
                     外包總成本：
                     <strong style="color:var(--text-main);font-family:LINE Seed TW_OTF, sans-serif"
-                            x-text="'NT$ ' + dispatchTotalCost().toLocaleString()"></strong>
+                            x-text="'NT$ ' + dispatchTotalCost().toLocaleString()" data-testid="dispatch-total-cost"></strong>
+                    <span x-show="dispatchTaxCost() > 0" data-testid="dispatch-tax-note" style="font-size:11px;color:var(--text-dim)"
+                          x-text="'（未稅承攬費＋外包人員；承攬商稅額 NT$ ' + dispatchTaxCost().toLocaleString() + ' 是進項稅額，不計成本）'"></span>
                     <span x-show="dispatchPendingNote()" x-text="'（' + dispatchPendingNote() + '）'" data-testid="dispatch-pending-note"
                           style="color:var(--tone-warning-fg);font-size:11px"></span>
                   </div>
