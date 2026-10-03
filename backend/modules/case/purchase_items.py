@@ -395,9 +395,31 @@ def material_submit_check(conn, quote_no, order, *, exclude_item_id=None, po_req
             problems.append({"code": "over_plan_reason_required",
                              "message": "材料申請超出報價計畫量 %g（計畫 %g、已訂 %g），請填寫超出原因後再送審" % (over, plan[qid]["planQty"], used)})
     state = material_link_status(order, po_rows)
-    return {"problems": problems,
-            "snapshot": {"linkState": state["state"], "linkReason": state["reason"], "overPlanQty": over if over > 1e-9 else 0,
-                         "overPlanReason": reason if over > 1e-9 else ""}}
+    snap = {"linkState": state["state"], "linkReason": state["reason"], "overPlanQty": over if over > 1e-9 else 0,
+            "overPlanReason": reason if over > 1e-9 else ""}
+    if po_required:                                                                         # 33-M1 E4／34-M2：一品項一筆＋涵蓋快照（送審當下該品項所有已核准採購單行）；追加走變更申請，原申請已全額付款者走調整單（adjustOf）
+        from modules.case import material_coverage as MC
+        adjust_of = str(order.get("adjustOf") or "").strip()
+        item_id = str(exclude_item_id or order.get("itemId") or "")
+        po_code = str(order.get("poDocCode") or "").strip() if not qid else ""
+        if adjust_of:
+            problems.extend(MC.adjust_check(conn, quote_no, qid, adjust_of))
+        else:
+            hit = MC.item_request_exists(conn, quote_no, qid, exclude_item_id=item_id, po_doc_code=po_code)
+            if hit:
+                problems.append({"code": "item_request_exists", "message": "這個品項已經有一筆材料申請（單號 %s），要追加請走變更申請。" % (hit["docCode"] or hit["itemId"])})
+        cov = MC.coverage_snapshot(conn, quote_no, qid, po_code, only_untaken=bool(adjust_of), exclude_item_id=item_id)
+        if not cov["poSnapshot"] and not any(p["code"] in ("po_required", "adjust_no_new_lines") for p in problems):
+            problems.append({"code": "no_coverage", "message": "這個品項目前沒有可涵蓋的已核准採購單行，請先申請採購單。"})
+        if cov["poSnapshot"]:                                                                # N2：申請涵蓋該品項**所有**已核准採購單行——金額＝行金額合計、數量只能往下調；否則申請量小於涵蓋量（可出貨量失真）
+            if abs(_num(order.get("totalPrice")) - cov["totalPrice"]) > 0.5 or _num(order.get("quantity")) > cov["quantity"] + 1e-9:
+                problems.append({"code": "content_not_cover_snapshot",
+                                 "message": "材料申請的內容要涵蓋該品項全部已核准的採購單行（%d 行：數量 %g、小計 %g），目前是數量 %g、小計 %g；請以涵蓋全部採購單行的內容送審（數量可往下調，金額不可改）。"
+                                            % (len(cov["poSnapshot"]), cov["quantity"], cov["totalPrice"], _num(order.get("quantity")), _num(order.get("totalPrice")))})
+        snap["poSnapshot"] = cov["poSnapshot"]
+        if adjust_of:
+            snap["adjustOf"] = adjust_of
+    return {"problems": problems, "snapshot": snap}
 
 
 def link_validator(conn, quote_no, order):

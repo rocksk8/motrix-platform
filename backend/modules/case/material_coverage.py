@@ -16,6 +16,22 @@ CHANGE_KEYS = ("quantity", "unit", "unitPrice", "totalPrice", "poSnapshot", "not
 _MONEY = ("unitPrice", "totalPrice")
 
 
+def snapshot_lines(approval_json):
+    """審核列 `approval_json` 裡的涵蓋快照 `poSnapshot`：變更申請核准後在 `snapshot.poSnapshot`（d7 套用時改寫），
+    首次送審時由 `material_submit_check` 的結果存在 `linkSnapshot.poSnapshot`；前者優先。"""
+    try:
+        a = json.loads(approval_json or "{}") if not isinstance(approval_json, dict) else approval_json
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(a, dict):
+        return []
+    for k in ("snapshot", "linkSnapshot"):
+        v = (a.get(k) or {}).get("poSnapshot") if isinstance(a.get(k), dict) else None
+        if isinstance(v, list):
+            return v
+    return []
+
+
 def _snap_line(po_code, idx, line):
     return {"poDocCode": po_code, "line": idx, "qty": PI._num(line.get("qty")), "unit": str(line.get("unit") or ""), "amount": PI._num(line.get("amount"))}
 
@@ -97,11 +113,7 @@ def taken_lines(conn, quote_no, *, exclude_item_id=None):
         iid = str(o.get("itemId"))
         if iid == str(exclude_item_id or "") or status not in LIVE_STATUSES:
             continue
-        try:
-            snap = (json.loads(ap[iid]["approval_json"] or "{}").get("snapshot") or {}).get("poSnapshot") if iid in ap else None
-        except (TypeError, ValueError):
-            snap = None
-        for l in snap or []:
+        for l in (snapshot_lines(ap[iid]["approval_json"]) if iid in ap else []):
             out.add(_line_key(l))
         if str(o.get("poDocCode") or "").strip() and o.get("poLine") not in (None, ""):
             try:
@@ -124,7 +136,7 @@ def item_request_exists(conn, quote_no, quote_item_id, *, exclude_item_id=None, 
             continue
         if adjust_of and iid == str(adjust_of) and paid_in_full(o):
             continue
-        snap = (json.loads(ap[iid]["approval_json"] or "{}").get("snapshot") or {}).get("poSnapshot") if iid in ap else None
+        snap = snapshot_lines(ap[iid]["approval_json"]) if iid in ap else None
         if qid:
             if str(o.get("quoteItemId") or "").strip() == qid:
                 return {"itemId": iid, "docCode": ap[iid]["doc_code"], "status": status}
@@ -139,18 +151,17 @@ def current_version(conn, quote_no, item_id):
     data, _rows = PI._case_state(conn, quote_no)
     order = next((o for o, _st in PI.load_material_orders(conn, quote_no, data) if str(o.get("itemId")) == str(item_id)), None)
     row = MA.get(conn, quote_no, item_id)
-    snap = []
-    if row is not None:
-        try:
-            snap = (json.loads(row["approval_json"] or "{}").get("snapshot") or {}).get("poSnapshot") or []
-        except (TypeError, ValueError):
-            snap = []
-    return order, row, snap
+    return order, row, (snapshot_lines(row["approval_json"]) if row is not None else [])
 
 
 def _view(order, snap):
     return {"quantity": PI._num(order.get("quantity")), "unit": str(order.get("unit") or ""), "unitPrice": PI._num(order.get("unitPrice")),
             "totalPrice": PI._num(order.get("totalPrice")), "poSnapshot": snap, "notes": str(order.get("notes") or "")}
+
+
+def _quantity_limit(cov):
+    """涵蓋內容的數量上限：`snapshot_content` 的預設數量（單位一致＝行數量合計；單位不同＝品項報價量）。沒有涵蓋行 ⇒ None（另有 no_coverage）。"""
+    return cov["quantity"] if cov.get("poSnapshot") else None
 
 
 def _line_key(l):
@@ -198,6 +209,9 @@ def change_proposal(conn, quote_no, item_id, proposed=None):
         problems.append({"code": "paid_in_full", "message": "已全額付款，金額與數量不能修改；要調整請另開一筆材料申請（調整單）"})
     elif paid > 0 and PI._num(after["totalPrice"]) < paid - 1e-9:
         problems.append({"code": "below_paid", "message": "變更後小計低於已付金額 %g" % paid})
+    limit = _quantity_limit(fresh)                    # 數量只能往下調（規格 §A.1）：不得超過涵蓋行數量合計（單位不同＝品項報價量）；否則一張變更就能把可出貨量灌大（da）
+    if limit is not None and after.get("quantity") is not None and isinstance(after["quantity"], float) and after["quantity"] > limit + 1e-9:
+        problems.append({"code": "quantity_exceeds_coverage", "message": "數量 %g 超過已核准採購單行涵蓋的數量 %g（數量只能往下調；要增加請先申請採購單）" % (after["quantity"], limit)})
     dropped = [l for l in snap if _line_key(l) not in {_line_key(x) for x in fresh["poSnapshot"]}]
     if dropped:
         problems.append({"code": "coverage_shrinks", "message": "原本涵蓋的採購單行不再是已核准（%s），請先處理採購單" % "、".join("%s 第 %s 列" % _line_key(l) for l in dropped)})

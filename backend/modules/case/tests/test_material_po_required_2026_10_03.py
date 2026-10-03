@@ -22,7 +22,7 @@ MSG_VOID = "對應的採購單已退回（或作廢），請重新申請採購�
 
 
 def _mo(item, **kw):
-    o = {"itemId": item, "itemName": "交換器", "quantity": 2, "unit": "台", "unitPrice": 1000, "totalPrice": 2000, "supplierId": 1,
+    o = {"itemId": item, "itemName": "交換器", "quantity": 2, "unit": "台", "unitPrice": 100, "totalPrice": 200, "supplierId": 1,
          "paidStatus": "pending", "paidAmount": 0, "paidDate": "", "notes": "", "quoteItemId": "a"}
     o.update(kw)
     return o
