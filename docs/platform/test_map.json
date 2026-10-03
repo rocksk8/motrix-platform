@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1085,
+  "tests": 1089,
   "unmapped": 13,
   "kinds": {
    "api": 582,
-   "e2e": 264,
+   "e2e": 268,
    "audit": 136,
    "unit": 103
   },
@@ -21647,6 +21647,100 @@
      "frontend/static/sidebar.js"
     ]
    }
+  },
+  "backend/tests/test_e2e_designer_default_on_2026_10_03.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_builder_nav.py",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/test_e2e_form_designer_beginner_tasks_2026_10_02.py",
+    "page:pages/expense-types.html",
+    "page:pages/module-builder.html",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_builder_nav.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/test_e2e_form_designer_beginner_tasks_2026_10_02.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/pages/expense-types.html",
+     "frontend/pages/module-builder.html"
+    ],
+    "path": [
+     "frontend/pages/expense-types.html"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_e2e_designer_fluid_width_2026_10_03.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_builder_nav.py",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/expense-types.html",
+    "page:pages/module-builder.html",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_builder_nav.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/pages/expense-types.html",
+     "frontend/pages/module-builder.html"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_e2e_designer_preview_frame_2026_10_03.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "js:static/sidebar.js",
+    "page:pages/custom-records.html",
+    "page:pages/expense-types.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/custom-records.html",
+     "frontend/pages/expense-types.html",
+     "frontend/static/sidebar.js"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_designer_real_mouse_2026_10_03.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_builder_nav.py",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/module-builder.html",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_builder_nav.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/pages/module-builder.html"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_draft_conflict_builder_2026_10_02.py": {
    "kind": "e2e",
