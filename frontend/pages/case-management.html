@@ -15,6 +15,7 @@
   <script src="../js/case-management-biz.js"></script>
   <script src="../js/case-management-exec.js"></script>
   <script src="../js/case-management-mlink.js"></script>
+  <script src="../js/case-management-mchange.js"></script>
   <script src="../js/case-management-dispatch.js"></script>
   <script src="../js/case-management-shipping.js"></script>
   <script src="../js/case-management-completion.js"></script>
@@ -2576,6 +2577,60 @@
                   <div x-show="!moCanEdit() && materialOrders.length > 0" style="margin-top:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)"
                        x-text="cr.dealTag === '已結案' ? '案件已結案，材料申請清單為唯讀。' : '你沒有材料申請的編輯權限（需要管理員或專案經理）。'"></div>
                 </div>
+
+                <!-- 33-M2c：材料申請變更申請（case-management-mchange.js）。已核准的材料申請要追加採購單行／改數量，在這裡發起變更申請走簽核；核准前原內容照常有效。 -->
+                <div id="fin-material-changes" data-testid="mc-panel" x-data x-effect="mcSync()" x-show="mcVisible()" x-cloak style="margin-bottom:24px;font-family:var(--font-zh)">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                    <span class="cm-section-title" style="margin-bottom:0">材料申請變更</span>
+                    <span style="font-size:11px;color:var(--text-dim)">已核准的材料申請不能直接修改；在這裡提變更申請，核准後才切換，核准前原內容照常有效。</span>
+                  </div>
+                  <div x-show="mcCandidates().length > 0 || mcReviseId" data-testid="mc-form" style="border:1px solid var(--line);border-radius:6px;padding:9px;background:var(--surface);margin-bottom:10px;font-size:12px">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+                      <select class="fi fi--sm" data-testid="mc-item" x-model="mcItemId" :disabled="!!mcReviseId" style="min-width:200px" @change="mcPreview = null">
+                        <option value="">選擇要變更的材料申請…</option>
+                        <template x-for="m in (mcReviseId ? (materialOrders || []).filter(x => x.itemId === mcItemId) : mcCandidates())" :key="m.itemId">
+                          <option :value="m.itemId" x-text="(m.itemName || m.itemId) + '（' + m.quantity + ' ' + (m.unit || '') + '）'"></option>
+                        </template>
+                      </select>
+                      <input class="fi fi--sm" type="number" min="0" step="0.01" data-testid="mc-qty" placeholder="數量（不填＝依採購單行合計）" x-model="mcQty" style="width:190px" @input="mcPreview = null">
+                      <input class="fi fi--sm" type="text" data-testid="mc-notes" placeholder="備註（選填）" x-model="mcNotes" style="width:160px" @input="mcPreview = null">
+                      <button type="button" data-testid="mc-preview-btn" @click="mcDoPreview()" :disabled="mcBusy || !mcItemId" style="font-size:11px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer">預覽變更</button>
+                    </div>
+                    <div x-show="mcPreview" data-testid="mc-preview" style="margin:6px 0;padding:7px;border:1px dashed var(--line);border-radius:6px">
+                      <template x-for="p in ((mcPreview && mcPreview.problems) || [])" :key="p.code"><div style="color:var(--danger,#c0392b)" :data-testid="'mc-problem-' + p.code" x-text="p.message"></div></template>
+                      <template x-for="d in mcDiffRows(mcPreview && mcPreview.diff)" :key="d.field"><div :data-testid="'mc-diff-' + d.field"><b x-text="d.label"></b>：<span x-text="d.text"></span></div></template>
+                      <div x-show="mcPreview && (mcPreview.uncoveredLines || []).length > 0" style="color:var(--text-dim)" x-text="'尚未納入的採購單行：' + mcLines(mcPreview && mcPreview.uncoveredLines)"></div>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                      <input class="fi fi--sm" type="text" data-testid="mc-reason" placeholder="變更原因（必填）" x-model="mcReason" style="flex:1;min-width:220px">
+                      <button type="button" data-testid="mc-save" @click="mcSave()" :disabled="mcBusy || !mcPreviewOk()" style="font-size:11px;padding:4px 12px;border:1px solid var(--line);border-radius:6px;background:var(--accent-hover);color:var(--surface);cursor:pointer" x-text="mcReviseId ? '儲存修改' : '建立變更申請'"></button>
+                      <button type="button" data-testid="mc-cancel-form" x-show="mcReviseId || mcItemId" @click="mcResetForm()" style="font-size:11px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer">取消</button>
+                      <span x-show="mcMsg" data-testid="mc-msg" x-text="mcMsg" style="font-size:11px;color:var(--text-dim)"></span>
+                    </div>
+                  </div>
+                  <template x-for="c in mcChanges" :key="c.id">
+                    <div :data-testid="'mc-row-' + c.docCode" style="border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:12px">
+                      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        <b x-text="c.docCode"></b><span x-text="c.itemName || mcItemName(c.itemId)"></span>
+                        <span :data-testid="'mc-status-' + c.docCode" :style="mcStatusStyle(c.status)" x-text="c.status"></span>
+                        <span style="color:var(--text-dim)" x-text="'原因：' + (c.reason || '—')"></span>
+                        <span x-show="c.status === '待審核' || c.status === '簽核中'" style="color:var(--text-dim)" x-text="'目前簽核人：' + ((c.currentApprovers || []).join('、') || '—')"></span>
+                        <span x-show="c.status === '已退回' && c.rejectReason" style="color:var(--danger,#c0392b)" x-text="'退回原因：' + c.rejectReason"></span>
+                      </div>
+                      <div style="margin:5px 0 3px">
+                        <template x-for="d in mcDiffRows(c.diff)" :key="d.field"><div :data-testid="'mc-row-diff-' + c.docCode + '-' + d.field"><b x-text="d.label"></b>：<span x-text="d.text"></span></div></template>
+                      </div>
+                      <div style="display:flex;gap:6px;flex-wrap:wrap">
+                        <button type="button" x-show="mcCanRevise(c)" :data-testid="'mc-revise-' + c.docCode" @click="mcStartRevise(c)" :disabled="mcBusy" style="font-size:11px;padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer">修改</button>
+                        <button type="button" x-show="mcCanRevise(c)" :data-testid="'mc-submit-' + c.docCode" @click="mcSubmit(c)" :disabled="mcBusy" style="font-size:11px;padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:var(--accent-hover);color:var(--surface);cursor:pointer">送審</button>
+                        <button type="button" x-show="mcCanWithdraw(c)" :data-testid="'mc-withdraw-' + c.docCode" @click="mcWithdraw(c)" :disabled="mcBusy" style="font-size:11px;padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer">撤回</button>
+                        <button type="button" x-show="mcCanDecide(c)" :data-testid="'mc-approve-' + c.docCode" @click="mcApprove(c)" :disabled="mcBusy" style="font-size:11px;padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:var(--accent-hover);color:var(--surface);cursor:pointer">核可</button>
+                        <button type="button" x-show="mcCanDecide(c)" :data-testid="'mc-reject-' + c.docCode" @click="mcReject(c)" :disabled="mcBusy" style="font-size:11px;padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer">退回</button>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+
 
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
                   <span class="cm-section-title" style="margin-bottom:0">精算結果</span>
