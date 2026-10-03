@@ -12606,10 +12606,15 @@
    "units": [
     "dir:backend/tests/platform/",
     "dir:tools/platform/",
+    "file:backend/tests/platform/test_page_paths_centralized.py",
     "file:backend/tests/test_money_round_half_up_2026_09_26.py",
     "file:backend/tests/test_spec_coverage_2026_09_21.py",
+    "file:backend/tests/test_view_filter_marking_2026_09_25.py",
+    "file:backend/tests/test_write_endpoints_are_audited_2026_09_24.py",
     "js:js/case-management-dispatch.js",
+    "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/gl_events",
+    "mod:subcontract/remit_split",
     "page:pages/voucher.html"
    ],
    "evidence": {
@@ -12618,10 +12623,15 @@
      "frontend/pages/voucher.html"
     ],
     "path": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/gl_events.py",
+     "backend/modules/subcontract/remit_split.py",
      "backend/tests/platform/",
+     "backend/tests/platform/test_page_paths_centralized.py",
      "backend/tests/test_money_round_half_up_2026_09_26.py",
      "backend/tests/test_spec_coverage_2026_09_21.py",
+     "backend/tests/test_view_filter_marking_2026_09_25.py",
+     "backend/tests/test_write_endpoints_are_audited_2026_09_24.py",
      "frontend/js/case-management-dispatch.js",
      "tools/platform/"
     ]
