@@ -1005,6 +1005,15 @@ function settlementPage() {
     },
     get matUnassigned() { return (this._actualsOk && this.actuals.totals.materialUnassignedTotal) || 0 },
 
+    // 未對應清單的列名稱：單據＋品名（材料另帶數量單位；額外支出帶說明），讓使用者分得出每一列
+    matLabel(m) {
+      const qty = m.quantity ? '（' + m.quantity + ' ' + (m.unit || '') + '）' : ''
+      return (m.name || String(m.itemId)) + qty
+    },
+    extLabel(e) {
+      return (e.docCode || '#' + e.expenseId) + '｜' + (e.category || '') + (e.description ? '｜' + e.description : '')
+    },
+
     // 未對應清單（含已用沖銷對應到品項的，才能取消）
     unassignedRows() {
       if (!this._actualsOk) return []
@@ -1012,11 +1021,11 @@ function settlementPage() {
       this.offsets.forEach(o => { off[o.kind + ':' + o.ref] = o.itemId })
       const rows = []
       const add = (kind, ref, label, amount, pending, noPo) => rows.push({ kind, ref: String(ref), label, amount, pending, noPo, itemId: off[kind + ':' + ref] || '' })
-      this.actuals.unassigned.materials.forEach(m => add('material', m.itemId, m.name || String(m.itemId), m.amount, m.pending, m.noPo))
-      this.actuals.unassigned.extras.forEach(e => add('extra', e.expenseId, (e.docCode || '#' + e.expenseId) + '｜' + (e.category || ''), e.amount, e.pending, false))
+      this.actuals.unassigned.materials.forEach(m => add('material', m.itemId, this.matLabel(m), m.amount, m.pending, m.noPo))
+      this.actuals.unassigned.extras.forEach(e => add('extra', e.expenseId, this.extLabel(e), e.amount, e.pending, false))
       this.actuals.items.forEach(it => {
-        ;(it.material.orders || []).filter(m => m.assignedBy === 'offset').forEach(m => add('material', m.itemId, m.name || String(m.itemId), m.amount, m.pending, m.noPo))
-        ;(it.extra.docs || []).forEach(e => add('extra', e.expenseId, (e.docCode || '#' + e.expenseId) + '｜' + (e.category || ''), e.amount, e.pending, false))
+        ;(it.material.orders || []).filter(m => m.assignedBy === 'offset').forEach(m => add('material', m.itemId, this.matLabel(m), m.amount, m.pending, m.noPo))
+        ;(it.extra.docs || []).forEach(e => add('extra', e.expenseId, this.extLabel(e), e.amount, e.pending, false))
       })
       return rows
     },

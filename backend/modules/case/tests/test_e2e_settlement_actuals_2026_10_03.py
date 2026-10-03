@@ -74,6 +74,9 @@ def test_settlement_page_rule_a_unassigned_list_and_offsets(live_server, make_us
     assert s0["itemActualTotal"] == 10500 + 800 and s0["extraTotal"] == 700 + 250 and s0["purchasedTotal"] == 800 + 250 + 700, s0
     assert page.locator('[data-testid="stl-un-material-X"]').count() == 1 and page.locator('[data-testid^="stl-un-extra-"]').count() == 1
     assert "250" in page.locator('[data-testid="stl-mat-unassigned"]').inner_text()
+    # 2026-10-03：列要看得出品名（材料＝品名＋數量單位；額外支出＝說明），不能只剩「#1｜材料」
+    assert "料X（1 批）" in page.locator('[data-testid="stl-un-material-X"]').inner_text()
+    assert "雜支" in page.locator('[data-testid^="stl-un-extra-"]').first.inner_text()
     assert "已採用" in page.locator('[data-testid="stl-po-b"]').inner_text()
     _shot(page, "1-unassigned")
 
@@ -153,3 +156,24 @@ def test_page_cost_summary_equals_the_endpoint_including_dispatch_fees_and_custo
     assert s["remitFeeTotal"] == t["remitFeeTotal"] == 15 + 30
     assert s["totalActualCost"] == t["totalActualCost"] == s["itemActualTotal"] + s["extraTotal"] + s["dispatchTotal"], (s, t)
     assert "1,250" in page.locator("text=承攬商派發成本小計").locator("xpath=following-sibling::td").inner_text()
+
+
+@pytest.mark.e2e
+def test_case_page_has_a_settlement_tab_right_of_extra_expense_that_opens_the_settlement_page(live_server, make_user, e2e_browser):
+    """2026-10-03：精算入口不能只藏在財務分頁的小連結——分頁列要有「精算」，緊貼在「額外支出」右邊，點了到精算頁。"""
+    sa = make_user(username="sa_sa", role="superadmin")
+    _seed()
+    page = e2e_browser.new_context(viewport={"width": 1400, "height": 900}).new_page()
+    _login(page, live_server, *sa)
+    page.goto(f"{live_server}/pages/case-management.html?q={NO}")
+    tab = page.locator('[data-testid="cm-tab-settlement"]')
+    tab.wait_for(state="visible", timeout=30000)
+    page.wait_for_function("(no) => { const d = Alpine.$data(document.querySelector('[x-data]')); return d && d.selected && d.selected.quote_no === no }", arg=NO, timeout=30000)
+    labels = page.locator(".cm-tabs > .cm-tab:visible, .cm-tabs > .cm-tab-link:visible").all_inner_texts()
+    labels = [t.strip().split("\n")[0].strip() for t in labels]
+    assert labels[-2:] == ["額外支出", "精算 ▶"], labels
+    _shot(page, "case-tab-settlement")
+    tab.click()
+    page.wait_for_url(f"**/settlement.html?no={NO}", timeout=20000)
+    page.locator('[data-testid="stl-unassigned"]').wait_for(state="visible", timeout=20000)
+    _shot(page, "case-tab-settlement-landed")

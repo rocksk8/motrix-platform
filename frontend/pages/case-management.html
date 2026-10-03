@@ -617,6 +617,10 @@
                       style="display:inline-block;margin-left:4px;padding:0 5px;border-radius:8px;background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg);font-size:11px;font-weight:700"
                       x-text="xe.pendingCount"></span>
               </button>
+              <!-- 精算入口（2026-10-03）：原本只有財務分頁裡一個小連結，使用者找不到；放在額外支出右邊。
+                   精算是獨立頁面，所以是連結不是分頁內容（刻意不用 .cm-tab：逐分頁點擊的 golden／主題 e2e 會點到它而離開本頁）；權限同精算頁（canSeeFinancial）。 -->
+              <a class="cm-tab-link" x-show="canSeeFinancial()" data-testid="cm-tab-settlement"
+                 :href="'settlement.html?no=' + (selected?.quote_no||'')">精算 ▶</a>
             </div>
 
             <!-- Tab content -->

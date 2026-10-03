@@ -14,6 +14,8 @@
 | 承攬商 | 派發記錄 + 驗收流程 |
 | **動態** | 案件留言板（手動留言 + work_log 同步 + daily_task 完成回報） |
 | 財務 | KPI + 精算結果（需 `canSeeFinancial`） |
+| 額外支出 | 額外支出登記（需 `canSeeFinancial`） |
+| **精算 ▶**（連結，2026-10-03） | 緊貼在「額外支出」右邊，直接開 `settlement.html?no=<案件>`（`data-testid="cm-tab-settlement"`；需 `canSeeFinancial`）。財務分頁內的「前往精算頁面 ▶」保留 |
 
 ---
 
