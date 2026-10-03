@@ -320,6 +320,12 @@ window.CM_PARTS.push(() => ({
       const m = this.materialOrders[i]
       const q = Number(m.quantity) || 0
       const p = Number(m.unitPrice) || 0
+      // 34（E7）：涵蓋採購單的申請，小計固定（涵蓋行金額合計）、數量往下調時單價隨之換算
+      if (this.moCovered && this.moCovered(m) && Number(m.totalPrice) > 0) {
+        if (q > 0) m.unitPrice = Number(m.totalPrice) / q
+        this.moDirty = true
+        return
+      }
       // X-VAT（2026-09-26）：金額（元以下兩位）一律 static/legal-round.js 四捨五入
       m.totalPrice = MotrixLegalRound.halfUp(q * p, 100) / 100
       this.moDirty = true    // 31-C：已付金額／日期是匯款申請付款明細的投影，不再隨小計連動，也不能在這裡改

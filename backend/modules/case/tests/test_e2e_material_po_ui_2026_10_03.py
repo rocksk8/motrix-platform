@@ -106,6 +106,9 @@ def test_paid_in_full_rows_gray_out_quantity_and_price_with_the_reason(page):
     assert paid.locator('input[placeholder="數量"]').is_disabled() and paid.locator('input[placeholder="單價"]').is_disabled()
     assert paid.locator('[data-testid="mo-paid-full-hint"]').inner_text() == "已全額付款，金額不能修改；要調整請另開一筆材料申請"
     assert paid.locator('input[placeholder="單價"]').get_attribute("title") == "已全額付款，金額不能修改；要調整請另開一筆材料申請"
-    for c in (part, leg):                                                                          # 未付清、舊單：照舊可改
-        assert c.locator('input[placeholder="數量"]').is_enabled() and c.locator('input[placeholder="單價"]').is_enabled()
+    assert leg.locator('input[placeholder="數量"]').is_enabled() and leg.locator('input[placeholder="單價"]').is_enabled()           # 舊單（沒有採購單連結）：照舊可改
+    assert part.locator('input[placeholder="數量"]').is_enabled()                                                                  # 部分已付：數量可改
+    assert part.locator('input[placeholder="單價"]').is_disabled()                                                                 # 34（E7）：涵蓋採購單的申請金額唯讀（單價隨數量換算）
+    assert "不能修改" in part.locator('input[placeholder="單價"]').get_attribute("title")
+    for c in (part, leg):
         assert c.locator('[data-testid="mo-paid-full-hint"]').is_hidden()
