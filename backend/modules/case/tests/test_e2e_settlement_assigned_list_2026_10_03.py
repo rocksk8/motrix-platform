@@ -178,3 +178,65 @@ def test_string_item_ids_still_work_after_the_fix(live_server, make_user, e2e_br
     page = open_page(live_server, e2e_browser, sa)
     assert page.locator('[data-testid="stl-offset-material-M"]').input_value() == "a" and page.locator('[data-testid="stl-offset-extra-1"]').input_value() == "b"
     assert _totals(page) == PRE_CHANGE
+
+
+# ── 深色模式對比（0c M1）──────────────────────────────────────────────────────────────────────
+# 全站深色＝body 的子元素整塊 filter: invert(1) hue-rotate(180deg)；getComputedStyle 看不到 filter，所以量到的前景／背景色要自己套同一個 filter 再算 WCAG 對比。
+_HUE180 = ((-0.574, 1.430, 0.144), (0.426, 0.430, 0.144), (0.426, 1.430, -0.856))
+
+_MEASURE_JS = """() => {
+  const parse = c => { const m = c.match(/rgba?\(([^)]+)\)/); const p = m[1].split(',').map(x => parseFloat(x)); return {r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1} }
+  const bgOf = el => { for (let e = el; e; e = e.parentElement) { const c = parse(getComputedStyle(e).backgroundColor); if (c.a > 0.99) return c } return {r: 255, g: 255, b: 255, a: 1} }
+  const out = []
+  document.querySelectorAll('tr.stl-row--mapped').forEach(tr => {
+    tr.querySelectorAll('td, td *').forEach(el => {
+      const own = Array.from(el.childNodes).some(n => n.nodeType === 3 && n.textContent.trim())
+      if (!own && !['SELECT', 'INPUT', 'TEXTAREA'].includes(el.tagName)) return
+      if (el.offsetParent === null) return
+      const cs = getComputedStyle(el), fg = parse(cs.color)
+      out.push({tag: el.tagName, text: (el.textContent || el.value || '').trim().slice(0, 20), badge: el.classList.contains('stl-badge-mapped'), fg: [fg.r, fg.g, fg.b], bg: (() => { const b = bgOf(el); return [b.r, b.g, b.b] })()})
+    })
+  })
+  return out
+}"""
+
+
+def _lum(rgb):
+    def ch(v):
+        v = v / 255.0
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = (ch(v) for v in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _dark(rgb):
+    inv = [255 - v for v in rgb]
+    return [min(255.0, max(0.0, sum(m * v for m, v in zip(row, inv)))) for row in _HUE180]
+
+
+def _contrast(fg, bg):
+    a, b = sorted((_lum(fg), _lum(bg)), reverse=True)
+    return (a + 0.05) / (b + 0.05)
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("dark", [False, True])
+@pytest.mark.parametrize("finalized", [False, True])
+def test_mapped_rows_text_and_badge_keep_readable_contrast_in_light_and_dark_theme(live_server, make_user, e2e_browser, dark, finalized):
+    """已對應列（淺綠底）在深色模式（整頁 invert）下，列內文字與「已對應」徽章對比都要 ≥ 4.5:1；草稿（有下拉）與已完結（唯讀文字）兩種畫面都量。"""
+    sa = make_user(username="sc_sc", role="superadmin")
+    seed(item_ids=(7, 8))
+    page = open_page(live_server, e2e_browser, sa)
+    if finalized:
+        page.evaluate("() => { Alpine.$data(document.body).settlement.status = 'finalized' }")
+        page.wait_for_timeout(300)
+    rows = page.evaluate(_MEASURE_JS)
+    assert rows, "沒有量到任何已對應列的文字"
+    assert any(r["badge"] for r in rows), "沒有量到「已對應」徽章"
+    bad = []
+    for r in rows:
+        fg, bg = (_dark(r["fg"]), _dark(r["bg"])) if dark else (r["fg"], r["bg"])
+        c = _contrast(fg, bg)
+        if c < 4.5:
+            bad.append("%s %r badge=%s fg=%s bg=%s ⇒ %.2f:1" % (r["tag"], r["text"], r["badge"], r["fg"], r["bg"], c))
+    assert not bad, "已對應列對比不足（dark=%s finalized=%s）：\n%s" % (dark, finalized, "\n".join(bad))

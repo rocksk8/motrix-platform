@@ -94,7 +94,7 @@ def test_s7_probe_forged_dispatch_total_and_net_profit_are_rejected(case):
 
 
 @pytest.mark.parametrize("field,value", [
-    ("dispatchTotal", 0), ("dispatchTotal", 99999),
+    ("dispatchTotal", 0), ("dispatchTotal", 99999), ("dispatchTotal", 12500),      # 12500＝含稅額蓋 pretax 標記（0c M2 驗收的第二個竄改）
     ("totalActualCost", 1), ("grossProfit", 1), ("adminCost", 1), ("charityDonation", 99999), ("netProfit", 888888),
 ])
 def test_every_field_downstream_reads_is_verified_one_at_a_time(case, field, value):

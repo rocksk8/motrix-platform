@@ -150,6 +150,14 @@ def test_the_pages_own_finalize_payload_passes_the_server_recheck_on_the_new_bas
     page = open_page(live_server, e2e_browser, sa)
     page.locator('[data-testid="stl-dispatch-subtotal"]').wait_for(state="visible", timeout=15000)
     page.wait_for_function("() => %s.summary && %s._actualsOk && !%s.loading" % (S, S, S), timeout=20000)
+    page.locator('[data-testid="stl-save-draft"]').click()
+    page.wait_for_function("() => !%s.saving" % S, timeout=15000)
+    c = db.get_db()
+    try:
+        draft = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])["settlement"]["summary"]
+    finally:
+        c.close()
+    assert draft["dispatchTotal"] == 12000, draft["dispatchTotal"]
     page.locator('[data-testid="stl-finalize"]').click()
     with page.expect_response(lambda r: r.request.method == "PUT" and "/settlement" in r.url, timeout=20000) as resp:
         page.get_by_role("button", name="確認完結").click()
@@ -162,6 +170,16 @@ def test_the_pages_own_finalize_payload_passes_the_server_recheck_on_the_new_bas
         c.close()
     assert saved["status"] == "finalized", "完結被後端擋下了：%s" % saved.get("status")
     s_ = saved["summary"]
+    # 0c M2 驗收：真實頁面完結（草稿→按完結）存下的數字與草稿逐位相同、口徑標記是 pretax，且等於營運報表的權責口徑
+    assert s_["dispatchTotal"] == draft["dispatchTotal"] and s_["totalActualCost"] == draft["totalActualCost"], (s_["dispatchTotal"], draft["dispatchTotal"], s_["totalActualCost"], draft["totalActualCost"])
+    assert s_["dispatchBasis"] == "pretax"
+    from modules.analytics.api import reports as _R
+    c = db.get_db()
+    try:
+        accrual = _R._live_dispatch_totals_by_quote(c, pretax=True)
+    finally:
+        c.close()
+    assert accrual[NO] == s_["dispatchTotal"], "營運報表權責口徑 %s ≠ 完結存的承攬商成本 %s" % (accrual.get(NO), s_["dispatchTotal"])
     assert s_["dispatchTotal"] == 12000 and s_["dispatchBasis"] == "pretax" and s_["dispatchTax"] == 500 and s_["dispatchGrandTotal"] == 12500
     from helpers.legal_params import round_half_up
     gross = 100000 - s_["totalActualCost"]

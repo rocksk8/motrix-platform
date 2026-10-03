@@ -85,13 +85,15 @@
     .stl-table tr:last-child td { border-bottom: none; }
     .stl-table tr:hover td { background: #FAFAF9; }
     /* 35c：已對應的列＝淺綠底＋文字徽章「已對應」（不只靠顏色）；用共用的 tone 令牌（深色主題自動換色），拿不到令牌時退回淺綠 */
-    .stl-table tr.stl-row--mapped td { background: var(--tone-success-bg, #ECFDF5); }
-    .stl-table tr.stl-row--mapped:hover td { background: var(--tone-success-bg-strong, #D1FAE5); }
+    /* 本頁在深色模式下整頁 invert 反轉：這裡一律寫淺色字面值（反轉後才是深底淺字），不可用 --tone-* 的深色值（那組是給不被反轉的頁面） */
+    .stl-table tr.stl-row--mapped td { background: #ECFDF5; }
+    .stl-table tr.stl-row--mapped select:disabled { color: #374151; opacity: 1; -webkit-text-fill-color: #374151 }      /* 完結後唯讀：瀏覽器預設灰字 #767676 在淺綠底只有 4.2:1 */
+    .stl-table tr.stl-row--mapped:hover td { background: #D1FAE5; }
     .stl-badge-mapped { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;
-                        background: var(--tone-success-bg-strong, #D1FAE5); color: var(--tone-success-fg, #065F46); border: 1px solid var(--tone-success-border, #6EE7B7); }
+                        background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
     .stl-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 11px; color: var(--text-secondary); margin: 2px 0 8px; }
     .stl-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; border: 1px solid var(--border-light); }
-    .stl-legend .is-mapped { background: var(--tone-success-bg, #ECFDF5); border-color: var(--tone-success-border, #6EE7B7); }
+    .stl-legend .is-mapped { background: #ECFDF5; border-color: #6EE7B7; }
 
     .stl-orig  { color: var(--text-secondary); font-family: 'LINE Seed TW_OTF', sans-serif; font-size: 11px; }
     .stl-input {
