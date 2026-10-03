@@ -72,7 +72,7 @@ def record34(rec, root):
     try:
         row = c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (SEED_QUOTE,)).fetchone()
         rec["mat_orders"] = ((json.loads(row["data_json"] or "{}").get("caseRecord") or {}).get("materialOrders")) if row else None
-        rec["mat_approvals"] = [dict(r) for r in c.execute("SELECT * FROM case_material_approvals ORDER BY id")] if T.table_exists(c, "case_material_approvals") else []
+        rec["mat_approvals"] = [dict(r) for r in c.execute("SELECT * FROM case_material_approvals ORDER BY quote_no, item_id")] if T.table_exists(c, "case_material_approvals") else []
         rec["mat_changes_table"] = T.table_exists(c, "case_material_changes")
         rec["mat_changes_indexes"] = sorted(r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='case_material_changes'")) if rec["mat_changes_table"] else []
         rec["mat_changes_rows"] = T.count(c, "case_material_changes")
