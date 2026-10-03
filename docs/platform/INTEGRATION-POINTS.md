@@ -842,3 +842,18 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 對方不在時 | 提供者不在 ⇒ 呼叫端視同 `None` |
 | 契約版本 | 1（2026-10-01） |
 | 守門 | `backend/modules/accounting/tests/test_category_map_g1_2026_10_01.py::test_category_account_resolver` |
+
+## IP-111　`case.remit_fee_total`：承攬商匯款手續費合計（M04 外包工班 → M01 案件精算；暫定號，列車定號；2026-10-03，34）
+
+案件完結精算要把「承攬商匯款手續費（公司自付、已匯款者）」算進成本；案件模組不 import 外包工班，改經 registry 取用。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M04 外包工班：`modules/subcontract/remit.py::fee_total_for_case` |
+| 使用方 | M01 案件：`modules/case/settlement_actuals.py::case_extras`（精算端點 `settlement-actuals` 的 `costExtras.remitFee.contractor`） |
+| 形式 | provider，單一提供者（名稱 `subcontract`） |
+| 語法 | 提供：`("case.remit_fee_total", "subcontract"): fn`；取用：`registry.single_provider("case.remit_fee_total")` ⇒ `fn(conn, quote_no)` |
+| 回傳 | 數字：該案件 `is_paid=1` 的匯款申請手續費合計（`contractor_payment_vouchers.remit_fee`）；唯讀 |
+| 對方不在時 | 提供者不在 ⇒ 視同 0（精算只少這一項，不阻擋） |
+| 契約版本 | 1（2026-10-03） |
+| 守門 | `backend/modules/case/tests/test_settlement_cost_extras_2026_10_03.py::test_remit_fees_equal_the_old_pages_two_sources` |
