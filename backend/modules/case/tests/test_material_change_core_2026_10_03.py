@@ -276,7 +276,7 @@ def test_one_tier_approve_applies_in_the_same_transaction(conn):
     assert r["done"] and r["applied"] and r["status"] == MC.S_APPROVED
     assert _order_now(conn)["quantity"] == 3.0 and MA.get(conn, NO, IID)["version"] == 2
     assert MC.live_for(conn, NO, IID) is None                                                          # 核准後不再占位，可以再提下一張
-    nxt = MC.create(conn, NO, IID, ENG, _cp(quantity=4.0, totalPrice=4000.0), "再追加")
+    nxt = MC.create(conn, NO, IID, ENG, _cp(quantity=4.0, totalPrice=4000.0, poSnapshot=[LINE1, LINE2, dict(LINE2, line=2)]), "再追加")
     assert nxt["base_version"] == 2
 
 
@@ -357,7 +357,7 @@ def test_withdraw_permissions_and_revise_rules(conn):
     assert e.value.status == 409
     MC.withdraw(conn, ch["id"], ADMIN)                                                                  # admin 可以撤回別人的
     assert MC.get(conn, ch["id"])["status"] == MC.S_WITHDRAWN
-    assert MC.revise(conn, ch["id"], ENG, _cp(quantity=4.0, totalPrice=4000.0), "改成 4")["status"] == MC.S_DRAFT      # 已撤回改完回草稿
+    assert MC.revise(conn, ch["id"], ENG, _cp(quantity=4.0, totalPrice=4000.0, poSnapshot=[LINE1, LINE2, dict(LINE2, line=2)]), "改成 4")["status"] == MC.S_DRAFT      # 已撤回改完回草稿
 
 
 def test_compute_diff_normalizes_numbers_and_whitespace():
@@ -366,3 +366,16 @@ def test_compute_diff_normalizes_numbers_and_whitespace():
     assert MC.compute_diff(a, b) == []
     d = MC.compute_diff(a, dict(b, unitPrice=1100))
     assert d == [{"field": "unitPrice", "old": 1000.0, "new": 1100.0, "money": True}]
+
+
+def test_quantity_cannot_exceed_the_covered_po_quantity(conn):
+    """da：提案數量不得超過涵蓋採購單行的數量合計（單位一致時）；少於可以（可往下調）。"""
+    _setup()
+    f = _frozen(conn)
+    _no_change_made(conn, f, lambda: MC.create(conn, NO, IID, ENG, _cp(quantity=50.0, totalPrice=3000.0, unitPrice=60.0), "灌大"), 400, "quantity_exceeds_coverage")
+    ch = MC.create(conn, NO, IID, ENG, _cp(quantity=2.0, totalPrice=3000.0, unitPrice=1500.0), "往下調")                 # 涵蓋 3 台、提案 2 台：允許
+    assert ch["status"] == MC.S_DRAFT
+    conn.execute("DELETE FROM case_material_changes")
+    mixed = _cp(quantity=50.0, totalPrice=3000.0, unitPrice=60.0)
+    mixed["after"]["poSnapshot"] = [LINE1, dict(LINE2, unit="個")]                                                      # 單位不一致：不在這裡判（案件側以品項報價量為預設）
+    assert MC.create(conn, NO, IID, ENG, mixed, "混單位")["status"] == MC.S_DRAFT
