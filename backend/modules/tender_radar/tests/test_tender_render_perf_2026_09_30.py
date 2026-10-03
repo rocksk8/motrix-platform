@@ -121,4 +121,5 @@ def test_cells_are_escaped_and_only_http_links_are_made(live_server, make_user, 
     assert bad.locator("a[target=_blank]").count() == 0                       # 非 http(s) ⇒ 純文字
     assert "<b>粗</b>" in bad.inner_text() and "<img" in bad.inner_text()
     ok = page.locator('tr[data-case-no="X-2"] a[target=_blank]')
-    assert ok.count() == 2 and all("noopener" in (ok.nth(i).get_attribute("rel") or "") for i in range(2))
+    assert ok.count() == 3 and all("noopener" in (ok.nth(i).get_attribute("rel") or "") for i in range(3))      # 機關、名稱、「前往來源網站明細」（2026-10-04 起每列多一個）
+    assert page.locator('tr[data-case-no="X-2"] a[data-source-link]').count() == 1

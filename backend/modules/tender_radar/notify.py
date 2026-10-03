@@ -18,6 +18,9 @@ _mt.register("tender_fetch_failed", "標案雷達無法連線來源網站", "sys
 _mt.register("tender_source_changed", "標案雷達來源網站格式異動", "system", "superadmins", "",
              "大部分資料無法解析；解析器調整之前，標案雷達每日結果為 0 筆，而頁面不會顯示錯誤。",
              "請通知系統維護人員依來源網站的新格式調整解析器。", owner="tender_radar")
+_mt.register("tender_detail_blocked", "標案雷達詳細頁被要求驗證碼", "system", "superadmins", "",
+             "來源網站的標案詳細頁改成要先通過驗證碼；標案列表仍可讀取，但履約地點與招標方式暫時無法自動取得（顯示為「未取得」）。",
+             "系統不會嘗試破解驗證碼，已停止抓取詳細頁；請通知系統維護人員評估改用官方開放資料或人工補地點。", owner="tender_radar")
 
 
 # ── 標案雷達（2026-09-21，細線 6 第 5 步）────────────────────────────────────
@@ -184,3 +187,24 @@ def notify_tender_source_changed(parsed: int, dropped: int) -> None:
                        rows, "", _en._base_url(), note=_TENDER_SOURCE_NOTE, intro=intro,
                        button_text="前往標案雷達")
     _en._send_raising(to, _mt.subject("tender_source_changed", "標案雷達來源網站格式異動"), html)
+
+
+def notify_tender_detail_blocked() -> None:
+    """標案雷達**詳細頁被來源網站要求驗證碼** → 所有 admin/superadmin。
+
+    ⚠️ 只在「進入異常」那一次寄（邊緣觸發）、每天最多一封、不寄信日（週六日、國定假日）延後（見 `source._notify_health`）。
+    ⚠️ 跟 `notify_tender_source_changed` 是不同的事件 key：改版要改解析器；驗證碼是對方的防機器人措施，
+    **解析器改不好它，也不該去繞它**——處置是評估改用官方開放資料或人工補地點。
+    """
+    to = _en._admin_emails("tender_detail_blocked")
+    if not to:
+        return
+    rows = [("狀態", "詳細頁要求驗證碼（撲克牌檢核）"), ("影響", "履約地點、招標方式無法自動取得；標案列表不受影響")]
+    intro = (
+        "標案雷達可以讀取政府電子採購網的標案列表，但標案詳細頁現在要先通過驗證碼。"
+        "系統不會嘗試破解，已停止抓取詳細頁（隔天才會試一次看是否解除）。"
+    )
+    html = _en._build_html("tender_detail_blocked", "標案雷達：詳細頁被要求驗證碼", "地點暫時無法取得", "#92400E",
+                       rows, "", _en._base_url(), note=_TENDER_SOURCE_NOTE, intro=intro,
+                       button_text="前往標案雷達")
+    _en._send_raising(to, _mt.subject("tender_detail_blocked", "標案雷達詳細頁被要求驗證碼"), html)
