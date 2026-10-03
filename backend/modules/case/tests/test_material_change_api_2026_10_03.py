@@ -198,3 +198,34 @@ def test_case_level_list_returns_all_items_changes_newest_first_with_item_name(W
     got = r.json()["changes"]
     assert [x["id"] for x in got] == [second["id"], first["id"]] and got[0]["itemName"] == "交換器" and got[1]["status"] == "已撤回"
     assert c.get("/api/quotations/NOPE/material-changes", headers=h).status_code == 404
+
+
+# ── 真實的案件側提案（2e 的 material_coverage.change_proposal，不用假函式）─────────────────────────────
+
+def test_real_change_proposal_end_to_end_create_apply_and_no_change_afterwards(W, reg, monkeypatch):
+    from modules.case.tests.test_material_coverage_2026_10_03 import _approved_po, _line, _ln, _put_materials, _row
+    monkeypatch.setattr(MC, "PROPOSAL_FN", None)                                                    # 真提案：走 material_coverage.change_proposal
+    c, h = W
+    _flow([])
+    po1 = _approved_po(c, h, [_ln("a", 3, unitCost=1000, unit="台")])
+    _put_materials([{"itemId": IID, "itemName": "交換器", "quantity": 3, "unit": "台", "unitPrice": 1000, "totalPrice": 3000, "quoteItemId": "a", "notes": "",
+                     "paidStatus": "pending", "paidAmount": 0, "paidDate": "", "supplierId": 1, "poDocCode": po1["docCode"], "poLine": 1}], {IID: "已核准"})
+    _row(IID, snapshot=[_line(po1["docCode"], 1, 3.0, 3000.0)], doc="MO-20261005-0001")
+    assert _post(c, h, BASE + "/changes", {"reason": "x"}).status_code == 400                       # 還沒有新的採購單行 ⇒ 沒有變更
+    po2 = _approved_po(c, h, [_ln("a", 2, unitCost=1000, unit="台")])
+    pv = c.get(BASE + "/change-proposal", headers=h).json()
+    assert pv["problems"] == [] and pv["after"]["quantity"] == 5.0 and pv["after"]["totalPrice"] == 5000.0 and [l["poDocCode"] for l in pv["uncoveredLines"]] == [po2["docCode"]]
+    ch = _post(c, h, BASE + "/changes", {"reason": "追加 2 台"}).json()["change"]
+    assert [d["field"] for d in ch["diff"]] == ["quantity", "totalPrice", "poSnapshot"]
+    s = _post(c, h, "/api/quotations/%s/material-changes/%d/submit" % (NO, ch["id"]))
+    assert s.status_code == 200 and s.json()["applied"], s.text
+    cn = db.get_db()
+    try:
+        o = _order_now(cn)
+        assert (o["quantity"], o["totalPrice"]) == (5.0, 5000.0)
+        snap = json.loads(MA.get(cn, NO, IID)["approval_json"])["snapshot"]["poSnapshot"]
+        assert [x["poDocCode"] for x in snap] == [po1["docCode"], po2["docCode"]]
+    finally:
+        cn.close()
+    again = _post(c, h, BASE + "/changes", {"reason": "再來一次"})
+    assert again.status_code == 400 and "沒有任何變更" in again.json()["detail"]                       # 套用後涵蓋已齊，不能再提空變更
