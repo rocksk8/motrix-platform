@@ -1727,6 +1727,33 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:js/case-management-mchange.js": {
+   "api_calls": [
+    "/api/quotations/"
+   ],
+   "api_prefixes": [
+    "/api/quotations"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/js/case-management-mchange.js",
+   "routers_called": [
+    "mod:case/api/case_action_items",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/expense_form_pdf",
+    "mod:case/api/material_approvals",
+    "mod:case/api/material_changes",
+    "mod:case/api/material_links",
+    "mod:case/api/material_orders",
+    "mod:case/api/material_payments",
+    "mod:case/api/quotations",
+    "mod:case/api/settlement_actuals",
+    "mod:netplan/api"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:js/case-management-mlink.js": {
    "api_calls": [
     "/api/quotations/",
@@ -6783,14 +6810,20 @@
    "role": "router",
    "routes": [
     {
-     "func": "list_changes",
+     "func": "list_case_changes",
      "line": 92,
+     "method": "GET",
+     "path": "/api/quotations/{quote_no}/material-changes"
+    },
+    {
+     "func": "list_changes",
+     "line": 106,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-orders/{item_id}/changes"
     },
     {
      "func": "preview_proposal",
-     "line": 106,
+     "line": 120,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-orders/{item_id}/change-proposal"
     }
@@ -8193,7 +8226,8 @@
     "helper:tiered_approval",
     "mod:case/material_approval",
     "mod:case/material_coverage",
-    "mod:case/material_payment"
+    "mod:case/material_payment",
+    "plat:registry"
    ],
    "kind": "mod",
    "module_key": "case",
@@ -12563,6 +12597,7 @@
     "js:js/case-management-feed.js",
     "js:js/case-management-fin.js",
     "js:js/case-management-list.js",
+    "js:js/case-management-mchange.js",
     "js:js/case-management-mlink.js",
     "js:js/case-management-shipping.js",
     "js:js/case-management-xexp.js",
