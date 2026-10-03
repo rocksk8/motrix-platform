@@ -199,3 +199,39 @@ def test_the_409_prefix_is_neutral_and_the_field_list_names_what_differs(case):
     d = r.json()["detail"]
     assert "重新整理" in d and "承攬商" in d and "淨利" in d, d
     assert "採購單、材料申請" not in d, "前綴還在說採購／材料變動，但不符的是承攬商與淨利：%s" % d
+
+
+def _with_custom_expense(monkeypatch, total):
+    from helpers import custom_finance as CFIN
+    monkeypatch.setattr(CFIN, "case_finance", lambda conn, no: {"expense": {"total": total, "items": []}, "income": {"total": 0, "items": [], "skippedTotal": 0}})
+
+
+def test_a_non_zero_custom_module_expense_is_part_of_the_honest_finalize(case, monkeypatch):
+    """35c（0c 稽核 (d)）：自訂模組支出非 0 的 fixture——頁面算法（extraTotal／totalActualCost／利潤線都含它）的完結要過，存下來的自訂模組支出與總成本含它。"""
+    c, h = case
+    _with_custom_expense(monkeypatch, 3000)
+    p = page_payload(c, h)
+    assert p["summary"]["customExpenseTotal"] == 3000
+    base = page_payload(c, h)["summary"]["totalActualCost"]
+    assert _put(c, h, p).status_code == 200 and _status() == "finalized"
+    cn = db.get_db()
+    try:
+        saved = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])["settlement"]["summary"]
+    finally:
+        cn.close()
+    assert saved["customExpenseTotal"] == 3000 and saved["totalActualCost"] == base and saved["totalActualCost"] >= 3000
+
+
+def test_a_forged_zero_custom_module_expense_is_rejected_even_if_the_other_fields_are_made_consistent(case, monkeypatch):
+    """偽造者把自訂模組支出填 0、同步調低 extraTotal／總成本、並重算毛利與淨利（舊的三塊比對只看 extraTotal，這樣調整後仍對得上品項／採購類）——要被抓到。"""
+    c, h = case
+    _with_custom_expense(monkeypatch, 3000)
+    honest = page_payload(c, h)["summary"]
+    gross = QUOTED_PRETAX - (honest["totalActualCost"] - 3000)
+    charity = SA.round_half_up(gross, 0.01)
+    forged = page_payload(c, h, customExpenseTotal=0, extraTotal=honest["extraTotal"] - 3000, totalActualCost=honest["totalActualCost"] - 3000,
+                          grossProfit=gross, charityDonation=charity, netProfit=gross - honest["adminCost"] - charity,
+                          grossMarginPct=round(gross / QUOTED_PRETAX * 100, 1), netMarginPct=round((gross - honest["adminCost"] - charity) / QUOTED_PRETAX * 100, 1))
+    r = _put(c, h, forged)
+    assert r.status_code == 409 and "自訂模組支出" in r.json()["detail"], r.text[:240]
+    assert _status() is None
