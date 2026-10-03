@@ -24,7 +24,7 @@
   <style>
     .et-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 28px 36px 60px;
       min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
-    .et-wrap { max-width: 1120px; }
+    .et-wrap { max-width: none; width: 100%; margin: 0 auto; }          /* D12：寬度隨視窗伸縮（不固定上限），置中 */
     .et-err { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: var(--tone-danger-bg);
       border: 1px solid var(--tone-danger-border); color: var(--tone-danger-fg); font-size: 13px; }
     .et-ok { margin-top: 14px; padding: 10px 16px; border-radius: 8px; background: var(--tone-info-bg);

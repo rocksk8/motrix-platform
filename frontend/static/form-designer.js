@@ -186,7 +186,7 @@
   // ───────────── 動作 ─────────────
   proto.select = function (key) { this.sel = key || ''; this.renderCenter(); this.renderRight(); this.emit('select', this.sel) }
   proto.showPane = function (p) {
-    if (p === 'right-if-narrow') { if (this.root.clientWidth <= 960) p = 'right'; else return }
+    if (p === 'right-if-narrow') { if (this.root.clientWidth <= 1100) p = 'right'; else return }
     this.pane = p; this.els.panes.setAttribute('data-pane', p)
     $$('button', this.els.tabs).forEach(function (b) { b.setAttribute('aria-selected', String(b.dataset.pane === p)) })
   }

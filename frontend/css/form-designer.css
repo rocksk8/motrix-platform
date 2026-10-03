@@ -49,7 +49,7 @@
 .fd-seg button[aria-pressed="true"] { background: var(--ink-strong); color: var(--surface); }
 
 /* 三欄 */
-.fd-panes { flex: 1; min-height: 0; display: grid; grid-template-columns: 270px minmax(0, 1fr) 350px; }
+.fd-panes { flex: 1; min-height: 0; display: grid; grid-template-columns: clamp(240px, 16vw, 360px) minmax(0, 1fr) clamp(320px, 22vw, 480px); }       /* D12：左右欄隨視窗寬度在合理範圍內伸縮，中間預覽欄吃剩餘空間 */
 .fd-pane { min-height: 0; overflow: auto; }
 .fd-left, .fd-right { background: var(--surface-muted); }
 .fd-left { border-right: 1px solid var(--line); padding: 14px; }
@@ -70,7 +70,7 @@
 .fd-tile[draggable="true"] { cursor: grab; }
 
 /* 中：白紙表單 */
-.fd-paper { max-width: 760px; margin: 0 auto; background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-popover); padding: 24px 26px 28px; }
+.fd-paper { max-width: none; width: 100%; margin: 0 auto; background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-popover); padding: 24px 26px 28px; }
 .fd-head .fd-title { font-size: 21px; font-weight: 700; padding: 2px; }
 .fd-head p { margin: 2px 2px 16px; font-size: 13px; color: var(--ink-secondary); }
 .fd-sec { margin-top: 20px; border-top: 2px solid var(--ink-strong); padding-top: 8px; }
@@ -213,7 +213,7 @@
 .fd-tabs { display: none; }
 
 /* 窄螢幕：三欄改一次一欄＋底部切換列 */
-@media (max-width: 960px) {
+@media (max-width: 1100px) {
   .fd-panes { display: block; position: relative; }
   .fd-pane { position: absolute; inset: 0; display: none; }
   .fd-panes[data-pane="left"] .fd-left, .fd-panes[data-pane="center"] .fd-center, .fd-panes[data-pane="right"] .fd-right { display: block; }

@@ -1,6 +1,6 @@
 .mb-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 24px 32px 60px;
   min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
-.mb-wrap { max-width: 1280px; }
+.mb-wrap { max-width: none; width: 100%; margin: 0 auto; }          /* D12：寬度隨視窗伸縮（不固定上限），置中 */
 .mb-err { margin-top: 12px; padding: 11px 15px; border-radius: 8px; background: var(--tone-danger-bg);
   border: 1px solid var(--tone-danger-border); color: var(--tone-danger-fg); font-size: 13px; line-height: 1.6; }
 .mb-info { margin-top: 10px; padding: 9px 13px; border-radius: 8px; background: var(--tone-info-bg);
