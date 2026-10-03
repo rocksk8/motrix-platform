@@ -45,6 +45,8 @@ EXEMPT = {
     # ── 用 POST 的純查詢／試算（不改任何資料）────────────────────────────
     ("modules/subcontract/api/contractor_vouchers.py", "POST", "/api/contractor-vouchers/preview"):
         "純試算：分期匯款申請的金額試算（31-B），與建立同一支規則但不寫任何資料表；建立的 POST /api/contractor-vouchers 有稽核",
+    ("modules/case/api/settlement_actuals.py", "POST", "/api/quotations/{quote_no}/settlement-actuals/preview"):
+        "純試算：精算頁沖銷對應（尚未存檔）的預覽，與 GET 同權限同結果、只是對應清單放請求本文（上百筆不受網址長度限制）；不寫任何資料表；存檔的 PUT /settlement 有稽核",
     ("modules/case/api/quotations.py", "POST", "/api/quotations/case-activity"):
         "純查詢：回傳各案件最後動態時間，POST 只是為了帶一長串單號",
     ("modules/case/api/quotations.py", "POST", "/api/quotations/preview-html"):

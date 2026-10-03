@@ -5,6 +5,7 @@
 import json
 
 from fastapi import APIRouter, Header, HTTPException
+from pydantic import BaseModel
 
 from db import get_db
 from helpers import _require_user, can_see_financial
@@ -34,5 +35,25 @@ def settlement_actuals(quote_no: str, offsets: str = "", authorization: str = He
             if not isinstance(preview, list):
                 raise HTTPException(422, "offsets 必須是清單")
         return SA.compute(conn, quote_no, offsets=preview)
+    finally:
+        conn.close()
+
+
+class PreviewIn(BaseModel):
+    offsets: list = []
+
+
+@router.post("/api/quotations/{quote_no}/settlement-actuals/preview")
+def settlement_actuals_preview(quote_no: str, body: PreviewIn, authorization: str = Header(None)):
+    """與 GET 同權限、同結果，只是沖銷對應（尚未存檔）放在請求本文：上百筆沖銷時不受網址長度限制（da nit）。不寫入、不驗證。"""
+    if not quote_no or quote_no == "-":
+        raise HTTPException(400, "無案件的單據沒有完結精算")
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        if not can_see_financial(user):
+            raise HTTPException(403, "此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）")
+        return SA.compute(conn, quote_no, offsets=body.offsets)
     finally:
         conn.close()

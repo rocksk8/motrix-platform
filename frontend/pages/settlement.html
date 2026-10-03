@@ -956,8 +956,10 @@ function settlementPage() {
       this._actualsOk = false
       this.itemActuals = {}
       try {
-        const r = await fetch(`/api/quotations/${encodeURIComponent(this.quoteNo)}/settlement-actuals?offsets=${encodeURIComponent(JSON.stringify(this.offsets))}`, {
-          headers: { Authorization: 'Bearer ' + this.session.token }
+        // 預覽用 POST：沖銷對應放請求本文（上百筆時 GET 網址會過長）
+        const r = await fetch(`/api/quotations/${encodeURIComponent(this.quoteNo)}/settlement-actuals/preview`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ offsets: this.offsets })
         })
         if (!r.ok) return
         const d = await r.json()
@@ -1030,7 +1032,11 @@ function settlementPage() {
     },
 
     applyXeTotal() {
-      if (this._actualsOk) this.xeTotal = (this.actuals.totals.extraTotal || 0) + (this.actuals.totals.materialUnassignedTotal || 0)
+      if (!this._actualsOk) return
+      this.xeTotal = (this.actuals.totals.extraTotal || 0) + (this.actuals.totals.materialUnassignedTotal || 0)
+      // 34：匯款手續費（額外支出＋承攬商）、自訂模組支出也取後端單一來源（口徑與原本逐位相同）；拿不到端點時維持原本各打一支的舊路徑
+      const ce = this.actuals.costExtras
+      if (ce) { this.remitFeeTotal = ce.remitFee.total || 0; this.customExpenseTotal = ce.customExpense.total || 0 }
     },
 
     toggleAdopt(item) {
@@ -1052,8 +1058,8 @@ function settlementPage() {
           await this.loadActuals()
           if (!this._actualsOk) await this.loadItemPo()
           this.xeTotal = (this._itemPoOk && d.extraOnlyAmount !== undefined) ? (d.extraOnlyAmount || 0) : (d.totalAmount || 0)
-          this.applyXeTotal()
           this.remitFeeTotal = d.remitFeeTotal || 0
+          this.applyXeTotal()                                    // 端點可用時覆蓋 xeTotal／手續費／自訂模組支出（放在舊路徑的賦值之後）
           this.xePending = d.totalPending || 0
           this.xeMasked = d.maskedCount || 0
         }
@@ -1062,7 +1068,7 @@ function settlementPage() {
 
     // 自訂模組（建構器）關聯到這個案件的金流（無權限 ⇒ 403 ⇒ 不加，與額外支出同一規則）
     async loadCustomFinance() {
-      this.customExpenseTotal = 0
+      if (!(this._actualsOk && this.actuals.costExtras)) this.customExpenseTotal = 0
       this.customIncomeSkipped = []
       try {
         const r = await fetch(`/api/custom-modules/finance/case/${encodeURIComponent(this.quoteNo)}`, {
@@ -1070,7 +1076,7 @@ function settlementPage() {
         })
         if (r.ok) {
           const d = await r.json()
-          this.customExpenseTotal = (d.expense && d.expense.total) || 0
+          if (!(this._actualsOk && this.actuals.costExtras)) this.customExpenseTotal = (d.expense && d.expense.total) || 0      // 34：金額以端點為準，這裡只取未計入的收入清單
           this.customIncomeSkipped = ((d.income && d.income.items) || []).filter(i => i.skipped)
         }
       } catch {}
@@ -1078,6 +1084,7 @@ function settlementPage() {
 
     // 承攬商匯款單的手續費合計（無權限看財務金額 ⇒ 403 ⇒ 不加，與額外支出同一規則）
     async loadVoucherRemitFees() {
+      if (this._actualsOk && this.actuals.costExtras) return          // 34：承攬商匯款手續費已在端點的 remitFeeTotal 內
       try {
         const r = await fetch(`${API}/contractor-vouchers/remit-fee-total?quote_no=${encodeURIComponent(this.quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -1097,6 +1104,7 @@ function settlementPage() {
 
     // 承攬商含稅合計 + 外包名單人員（不計稅）＝該筆派發對「實際總成本」的貢獻
     dispatchTotal() {
+      if (this._actualsOk && this.actuals.costExtras) return this.actuals.costExtras.dispatch.grandTotal || 0       // 34：現算值（完結後的過期提醒要比的就是它；不是凍結值）
       return this.dispatches.reduce((s, d) => s + (+d.grandTotal || 0), 0)
     },
 

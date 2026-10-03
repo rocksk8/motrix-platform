@@ -120,3 +120,36 @@ def test_zero_manual_actual_means_use_the_estimate_in_session_and_finalize_passe
     page.get_by_role("button", name="確認完結").click()
     page.wait_for_function(f"() => {S}.settlement.status === 'finalized' && !{S}.saving", timeout=15000)
     assert _settlement()["status"] == "finalized"
+
+
+@pytest.mark.e2e
+def test_page_cost_summary_equals_the_endpoint_including_dispatch_fees_and_custom(live_server, make_user, e2e_browser):
+    """34：派發、匯款手續費、自訂模組支出也取後端單一來源——頁面成本彙總與 `settlement-actuals` 的 totals 逐位相同（含稅派發口徑不變）。"""
+    import db
+    sa = make_user(username="sa_sa", role="superadmin")
+    _seed()
+    c = db.get_db()
+    try:
+        c.execute("INSERT INTO vendor_contractors (name, created_at, updated_at) VALUES ('承攬甲','2026-10-03','2026-10-03')")
+        vid = c.execute("SELECT id FROM vendor_contractors WHERE name='承攬甲'").fetchone()["id"]
+        c.execute("INSERT INTO contractor_dispatches (quote_no, vendor_id, dispatch_date, scope, items_json, total_amount, tax_rate, personnel_json, status, created_at, updated_at)"
+                  " VALUES (?,?,?,?,?,?,?,?,?,?,?)", (NO, vid, "2026-10-03", "amount", "[]", 1000, 0.05, json.dumps([{"name": "乙", "amount": 200}]), "confirmed",
+                                                      "2026-10-03T00:00:00", "2026-10-03T00:00:00"))
+        did = c.execute("SELECT id FROM contractor_dispatches").fetchone()["id"]
+        c.execute("INSERT INTO contractor_payment_vouchers(voucher_no, dispatch_id, quote_no, status, snapshot_json, is_paid, paid_at, remit_fee) VALUES (?,?,?,?,?,?,?,?)",
+                  ("V-E2E", did, NO, "已核可", "{}", 1, "2026-10-03", 30))
+        c.execute("UPDATE case_extra_expenses SET remit_fee=15, paid_date='2026-10-03' WHERE quote_no=?", (NO,))
+        c.commit()
+    finally:
+        c.close()
+    page = e2e_browser.new_context(viewport={"width": 1400, "height": 1100}).new_page()
+    _login(page, live_server, *sa)
+    S = "Alpine.$data(document.body)"
+    page.goto(f"{live_server}/pages/settlement.html?no={NO}")
+    page.wait_for_function(f"() => {S}.summary && {S}.summary.totalActualCost > 0 && {S}._actualsOk", timeout=20000)
+    s = page.evaluate(f"() => ({{...{S}.summary}})")
+    t = page.evaluate(f"() => {S}.actuals.totals")
+    assert s["dispatchTotal"] == t["dispatchTotal"] == 1000 * 1.05 + 200                      # 含稅承攬費＋人員（口徑不變）
+    assert s["remitFeeTotal"] == t["remitFeeTotal"] == 15 + 30
+    assert s["totalActualCost"] == t["totalActualCost"] == s["itemActualTotal"] + s["extraTotal"] + s["dispatchTotal"], (s, t)
+    assert "1,250" in page.locator("text=承攬商派發成本小計").locator("xpath=following-sibling::td").inner_text()
