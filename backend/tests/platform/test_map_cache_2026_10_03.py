@@ -33,7 +33,7 @@ def env(tmp_path, monkeypatch):
     (root / "frontend").mkdir()
     (root / "backend" / "a.py").write_text("X = 1\n", encoding="utf-8")
     (root / "frontend" / "p.js").write_text("var a = 1\n", encoding="utf-8")
-    (root / ".gitignore").write_text("backend/ignored.py\n", encoding="utf-8")
+    (root / ".gitignore").write_text("backend/ign*.py\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
     _git(root, "add", "-A")
     _git(root, "commit", "-q", "-m", "init")
@@ -74,6 +74,16 @@ def test_b_new_untracked_file_misses(env):
     root, calls, run = env
     run()
     (root / "backend" / "new_untracked.py").write_text("Y = 1\n", encoding="utf-8")
+    run()
+    assert len(calls) == 2
+
+
+def test_b4_renaming_an_ignored_file_with_the_same_content_misses(env):
+    """被 .gitignore 的檔沒有 git 索引項可「補差」：內容相同的改名只靠檔名進簽章才抓得到。"""
+    root, calls, run = env
+    (root / "backend" / "ign1.py").write_text("Z = 1\n", encoding="utf-8")
+    run()
+    (root / "backend" / "ign1.py").rename(root / "backend" / "ign2.py")
     run()
     assert len(calls) == 2
 
