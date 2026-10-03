@@ -6918,6 +6918,7 @@
     "mod:case/expense_forms",
     "mod:case/material_approval",
     "mod:case/material_coverage",
+    "mod:case/material_coverage_view",
     "mod:case/material_guard",
     "mod:case/material_payment",
     "mod:case/purchase_items",
@@ -6929,6 +6930,7 @@
     "core:db",
     "helper:auth",
     "mod:case/api/case_extra_expenses",
+    "mod:case/material_coverage_view",
     "mod:case/purchase_items"
    ],
    "kind": "mod",
@@ -6939,13 +6941,19 @@
    "routes": [
     {
      "func": "material_po_lines",
-     "line": 25,
+     "line": 26,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-po-lines"
     },
     {
+     "func": "material_coverage",
+     "line": 38,
+     "method": "GET",
+     "path": "/api/quotations/{quote_no}/material-coverage"
+    },
+    {
      "func": "material_link_statuses",
-     "line": 37,
+     "line": 51,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-link-status"
     }
@@ -8253,6 +8261,23 @@
    "kind": "mod",
    "module_key": "case",
    "path": "backend/modules/case/material_coverage.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:case/material_coverage_view": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:case/material_approval",
+    "mod:case/material_coverage",
+    "mod:case/purchase_items"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/material_coverage_view.py",
    "role": "helper",
    "tables_ddl": [],
    "tables_named": [],

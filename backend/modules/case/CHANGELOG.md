@@ -1,7 +1,7 @@
 # 案件 更新紀錄
 
 
-## (next) — wip/t34-m1-coverage-c7：「從採購單帶入」依報價品項分組（34-M1 UI，E4）
+## 1.0.119 — wip/t34-m1-coverage-c7：「從採購單帶入」依報價品項分組（34-M1 UI，E4）
 - 新唯讀端點 `GET /api/quotations/{no}/material-coverage`：涵蓋分組（一個報價品項一組、內容＝該品項**全部已核准**採購單行的涵蓋快照；額外採購以採購單為單位各一組；審核中的採購單行不併入、只計 `pendingLines`；已有活的材料申請 ⇒ `existing`）。內容與送審的涵蓋檢查（`material_submit_check`）同一個函式，畫面不做金額運算；金額看不到財務檢視者不給單價／小計。
 - 案件頁「從採購單明細帶入」改成帶「一品項一列」（數量／金額合計），已有申請的品項標「請用變更申請」且不能勾；涵蓋採購單的列：單價欄唯讀、小計固定（涵蓋行金額合計）、數量只能往下調（單價隨數量換算）。
 - 測試：`test_material_coverage_view_2026_10_04.py`（4）、`test_e2e_material_coverage_import_2026_10_04.py`；`test_e2e_material_link`／`po_ui`／洩漏探針改成分組語意。

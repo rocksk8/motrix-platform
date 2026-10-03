@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1093,
+  "tests": 1095,
   "unmapped": 13,
   "kinds": {
-   "api": 584,
-   "e2e": 270,
+   "api": 585,
+   "e2e": 271,
    "audit": 136,
    "unit": 103
   },
-  "routes": 758
+  "routes": 759
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -5560,6 +5560,32 @@
    },
    "module": "case"
   },
+  "backend/modules/case/tests/test_e2e_material_coverage_import_2026_10_04.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_material_po.py",
+    "file:backend/tests/_requires.py",
+    "page:pages/case-management.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_material_po.py",
+     "backend/tests/_requires.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
   "backend/modules/case/tests/test_e2e_material_link_2026_10_02.py": {
    "kind": "e2e",
    "units": [
@@ -6226,6 +6252,39 @@
      "backend/modules/case/"
     ]
    },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_material_coverage_view_2026_10_04.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/api/material_links",
+    "mod:case/material_approval",
+    "mod:case/purchase_items",
+    "mod:case/tests/test_material_link_2026_10_02",
+    "mod:case/tests/test_material_link_booking_2026_10_02",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/material_approval.py",
+     "backend/modules/case/purchase_items.py",
+     "backend/modules/case/tests/test_material_link_2026_10_02.py",
+     "backend/modules/case/tests/test_material_link_booking_2026_10_02.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
+    ],
+    "api": [
+     "backend/modules/case/api/material_links.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
    "module": "case"
   },
   "backend/modules/case/tests/test_material_guard_2026_10_02.py": {
