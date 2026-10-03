@@ -52,6 +52,15 @@ class MaterialChangeError(Exception):
         self.code = code
 
 
+def _supply_loaded() -> bool:
+    """出貨模組（supply）在這個安裝包裡且已載入？（沒有提供者時，有它＝fail closed、沒有它＝警告放行。）"""
+    try:
+        from core import registry
+        return bool(registry.is_loaded("supply"))
+    except Exception:                                                                   # noqa: BLE001
+        return False
+
+
 def _shipped_fn():
     """出貨量提供者（c7 的出貨連動，契約 docs/platform/plans/SHIPPING-MATERIAL-LINK-CONTRACT-S1.md）：
     測試覆寫 `SHIPPED_PROVIDER` ＞ 註冊的 `shipping.material_shipped_qty`（float＝保留＋已出貨）＞ 包裝字典版 `shipping.material_shipped`
@@ -198,7 +207,10 @@ def validate(conn, quote_no, item_id, before: dict, after: dict, order: dict) ->
             problems.append({"code": "change_below_committed", "message": "新的小計低於已申請匯款的額度，請先處理匯款申請。"})
     ship = _shipped_fn()
     if ship is None:
-        warnings.append("尚未提供出貨量（出貨提供者不存在），未檢查「不得低於已出貨＋占用量」")
+        if _supply_loaded():                                                            # 出貨連動（supply）已啟用卻取不到出貨量 ⇒ fail closed：寧可擋也不讓人把已出貨的數量改小
+            problems.append({"code": "shipped_unavailable", "message": "出貨連動已啟用但目前取不到已出貨量，暫時不能變更（避免把已出貨的數量改小）；請聯絡管理員"})
+        else:                                                                           # 沒有出貨模組：沒有「已出貨」這件事，警告即可
+            warnings.append("沒有出貨連動（出貨模組不存在），未檢查「不得低於已出貨＋占用量」")
     else:
         try:
             shipped = float(ship(conn, quote_no, item_id) or 0)
@@ -488,7 +500,9 @@ def _apply(conn, change_id, user: dict, now: str) -> bool:
     for k in _ORDER_KEYS:
         if k in stored:
             order[k] = stored[k]
-    conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), quote_no))     # 系統自己的投影（同 sync_order_paid），不經 material_guard
+    # 系統自己的投影（同 sync_order_paid），不經 material_guard；直接寫 data_json、不經 save_quotation_json ⇒ 不更新 updated_at／熱欄位
+    # （材料申請欄位目前不影響報價單的熱欄位；若之後有欄位進熱欄位，這裡要改走 save_quotation_json）。
+    conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(data, ensure_ascii=False), quote_no))
     row = MA.get(conn, quote_no, item_id)
     appr = _j(row["approval_json"], {})
     snap = appr.get("snapshot") if isinstance(appr.get("snapshot"), dict) else {}

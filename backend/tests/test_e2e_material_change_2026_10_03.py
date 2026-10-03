@@ -27,6 +27,8 @@ PANEL = "#fin-material-changes"
 def _po_rule_on(monkeypatch):
     from modules.case import material_approval as _MA
     monkeypatch.setattr(_MA, "PO_REQUIRED", True)
+    from modules.case import material_change as _MC
+    monkeypatch.setattr(_MC, "SHIPPED_PROVIDER", lambda conn, q, i: 0.0)       # 沒有出貨單：出貨連動（c7）的真提供者進樹後改測真實那條（見 test_material_change_api 的真提供者題）
 
 
 def _shot(page, name):
