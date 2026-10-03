@@ -306,7 +306,7 @@ def create(conn, quote_no: str, item_id: str, user: dict, cp: dict, reason: str)
                   json.dumps(res["diff"], ensure_ascii=False), json.dumps(appr, ensure_ascii=False), text, user["username"], now, now))
     out = live_for(conn, quote_no, item_id)
     out["warnings"] = res["warnings"]
-    _audit(conn, user, "material_changes.create", quote_no, out, "建立材料申請變更 %s" % code)
+    _audit_row(conn, user, "material_changes.create", quote_no, out, "建立材料申請變更 %s" % code)
     return out
 
 
@@ -334,7 +334,7 @@ def revise(conn, change_id, user: dict, cp: dict, reason: str = "") -> dict:
                   json.dumps(res["diff"], ensure_ascii=False), json.dumps(appr, ensure_ascii=False), text, now, int(change_id)))
     out = get(conn, change_id)
     out["warnings"] = res["warnings"]
-    _audit(conn, user, "material_changes.revise", ch["quote_no"], out, "修改材料申請變更 %s" % ch["doc_code"])
+    _audit_row(conn, user, "material_changes.revise", ch["quote_no"], out, "修改材料申請變更 %s" % ch["doc_code"])
     return out
 
 
@@ -407,12 +407,12 @@ def submit(conn, change_id, user: dict) -> dict:
         appr["history"] = hist
         _save(conn, change_id, S_IN_PROGRESS, appr, now, submitted_by=user["username"], submitted_at=now, diff_json=json.dumps(diff, ensure_ascii=False))
         applied = _apply(conn, change_id, user, now)
-        _audit(conn, user, "material_changes.submit", ch["quote_no"], get(conn, change_id), "送審並自動核准材料申請變更 %s" % ch["doc_code"])
+        _audit_row(conn, user, "material_changes.submit", ch["quote_no"], get(conn, change_id), "送審並自動核准材料申請變更 %s" % ch["doc_code"])
         return {"status": S_APPROVED, "tierCount": 0, "firstApprovers": [], "autoApproved": True, "applied": applied}
     appr = {"requestedBy": user["username"], "requestedByDisplay": _display(user), "requestedAt": now, "tiers": tiers, "currentTier": 0,
             "history": hist + [{"at": now, "by": user["username"], "byDisplay": _display(user), "action": "submit", "tier": 0, "comment": ""}]}
     _save(conn, change_id, S_PENDING, appr, now, submitted_by=user["username"], submitted_at=now, diff_json=json.dumps(diff, ensure_ascii=False))
-    _audit(conn, user, "material_changes.submit", ch["quote_no"], get(conn, change_id), "送審材料申請變更 %s" % ch["doc_code"])
+    _audit_row(conn, user, "material_changes.submit", ch["quote_no"], get(conn, change_id), "送審材料申請變更 %s" % ch["doc_code"])
     return {"status": S_PENDING, "tierCount": len(tiers), "firstApprovers": [a["username"] for a in (tiers[0].get("approvers") or [])], "autoApproved": False, "applied": False}
 
 
@@ -447,7 +447,7 @@ def approve(conn, change_id, user: dict, comment: str = "", cascade: bool = Fals
         _save(conn, change_id, S_IN_PROGRESS, appr, now)
         applied = False
     nxt = [] if done else [a["username"] for a in (tiers[appr["currentTier"]].get("approvers") or [])]
-    _audit(conn, user, "material_changes.approve", ch["quote_no"], get(conn, change_id), "核准材料申請變更 %s%s" % (ch["doc_code"], "（已套用）" if done else ""))
+    _audit_row(conn, user, "material_changes.approve", ch["quote_no"], get(conn, change_id), "核准材料申請變更 %s%s" % (ch["doc_code"], "（已套用）" if done else ""))
     return {"status": S_APPROVED if done else S_IN_PROGRESS, "currentTier": appr["currentTier"], "nextApprovers": nxt, "requester": appr.get("requestedBy", ""),
             "done": done, "applied": applied, "tierNo": appr["currentTier"] + 1, "totalTiers": len(tiers)}
 
@@ -469,7 +469,7 @@ def reject(conn, change_id, user: dict, reason: str) -> dict:
     appr.setdefault("history", []).append({"at": now, "by": user["username"], "byDisplay": _display(user), "action": "reject", "tier": ct, "comment": text})
     appr.update({"rejectedAt": now, "rejectedByDisplay": _display(user), "rejectReason": text})
     _save(conn, change_id, S_RETURNED, appr, now)
-    _audit(conn, user, "material_changes.reject", ch["quote_no"], get(conn, change_id), "退回材料申請變更 %s：%s" % (ch["doc_code"], text))
+    _audit_row(conn, user, "material_changes.reject", ch["quote_no"], get(conn, change_id), "退回材料申請變更 %s：%s" % (ch["doc_code"], text))
     return {"status": S_RETURNED, "requester": appr.get("requestedBy", ""), "reason": text}
 
 
@@ -487,7 +487,7 @@ def withdraw(conn, change_id, user: dict) -> dict:
     for k in ("tiers", "currentTier"):
         appr.pop(k, None)
     _save(conn, change_id, S_WITHDRAWN, appr, now)
-    _audit(conn, user, "material_changes.withdraw", ch["quote_no"], get(conn, change_id), "撤回材料申請變更 %s" % ch["doc_code"])
+    _audit_row(conn, user, "material_changes.withdraw", ch["quote_no"], get(conn, change_id), "撤回材料申請變更 %s" % ch["doc_code"])
     return {"status": S_WITHDRAWN}
 
 
@@ -523,13 +523,15 @@ def _apply(conn, change_id, user: dict, now: str) -> bool:
                  (int(row["version"] or 1) + 1, MA.content_hash(order), json.dumps(appr, ensure_ascii=False), now, quote_no, str(item_id)))
     MP.sync_order_paid(conn, quote_no, item_id)
     conn.execute("UPDATE case_material_changes SET status=?, approved_at=?, applied_at=?, updated_at=? WHERE id=?", (S_APPROVED, now, now, now, int(change_id)))
-    _audit(conn, user, "material_changes.apply", quote_no, get(conn, change_id), "材料申請變更 %s 已套用：%s" % (ch["doc_code"], summary))
+    _audit_row(conn, user, "material_changes.apply", quote_no, get(conn, change_id), "材料申請變更 %s 已套用：%s" % (ch["doc_code"], summary))
     return True
 
 
 # ── 稽核（與請求同一交易；稽核表缺欄的舊庫不因此擋）────────────────────
+# ⚠️ 不叫 `_audit`：helpers 的 `_audit()` 另開連線寫入（在自己的寫入交易還沒 commit 時呼叫會撞鎖＋稽核被吞），守門 test_write_lock_deadlock_guard 靠名字認它。
+# 這裡直接用呼叫端的 conn 寫 audit_log（同一個交易，commit 時一起落地）。
 
-def _audit(conn, user, action, quote_no, ch, label):
+def _audit_row(conn, user, action, quote_no, ch, label):
     try:
         conn.execute("INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail) VALUES (?,?,?,?,?,?,?,?,?)",
                      (_now(), user.get("id"), user.get("username") or "", user.get("display_name") or "", action, "quotation", quote_no, label,
