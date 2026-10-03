@@ -57,3 +57,22 @@ def _no_politeness_delay(monkeypatch):
         return
     monkeypatch.setattr(tender_source, "DETAIL_INTERVAL_SECONDS", 0,
                         raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _mail_day_independent_of_the_real_weekday(request, monkeypatch):
+    """**既有測試不可以依賴「今天是星期幾」。**
+
+    2026-10-03 起標案雷達週六、週日、國定假日不寄信（`source.no_mail_today()`）。既有的寄信／告警測試驗的是
+    「寄幾封、何時寄」，它們用真實日期跑——在週六跑就會因為「今天不寄信」而紅，而那與它們要驗的東西無關。
+    ⇒ 預設把 `no_mail_today()` 固定成「可寄信」。**要驗不寄信日行為的測試檔**在模組層宣告
+    `USES_REAL_CALENDAR = True`（自己用 `today`／`now_dt` 注入日期），這支 fixture 就不介入。
+    反向側（真的會擋）：test_tender_source_state_2026_10_03.py、test_tender_source_notices_2026_10_03.py。
+    """
+    if getattr(request.module, "USES_REAL_CALENDAR", False):
+        return
+    try:
+        from modules.tender_radar import source as tender_source
+    except Exception:       # noqa: BLE001
+        return
+    monkeypatch.setattr(tender_source, "no_mail_today", lambda: (False, None), raising=False)

@@ -730,6 +730,7 @@
    "units": [
     "mod:tender_radar/__init__",
     "mod:tender_radar/api",
+    "mod:tender_radar/calendar_tw",
     "mod:tender_radar/listing",
     "mod:tender_radar/match",
     "mod:tender_radar/notify",

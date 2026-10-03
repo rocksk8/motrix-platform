@@ -330,6 +330,7 @@ def radar_status(authorization: str = Header(None)):
             "FROM tender_fetch_log ORDER BY id DESC LIMIT 1").fetchone()
         counts = conn.execute(
             "SELECT COUNT(*) AS c FROM tenders").fetchone()
+        state = tender_source._load_scan_state(conn)
     finally:
         conn.close()
 
@@ -353,12 +354,51 @@ def radar_status(authorization: str = Header(None)):
         "lastRecognised": last["recognised"] if last else None,
         "lastDropped": last["dropped"] if last else None,
         "lastError": last["error"] if last else None,
+        # 疑似改版：用「最近一次掃描自己的成功／丟棄筆數」判斷（舊寫法拿「資料庫裡全部標案數」當分母，
+        # 標案一多 dropped=1 就永遠不會成立——這就是頁面從來不顯示的原因之一；而且前端根本沒讀這個旗標）。
         "suspectRedesign": bool(
-            last and last["recognised"] and
-            tender_source.suspect_redesign(counts["c"], last["dropped"])),
+            last and last["recognised"] and (
+                state.get("list") == "format_changed" if "list" in state
+                else tender_source.suspect_redesign(counts["c"], last["dropped"]))),
         "tenderCount": counts["c"],
         "source": "資料來源：政府電子採購網",
+        "listState": state.get("list"),
+        "detailState": state.get("detail"),
+        "notices": _source_notices(state, last),
     }
+
+
+def _source_notices(state, last):
+    """頁面狀態列要顯示的訊息（**純文字，前端一律 x-text**）。「不可用要明說、不可以長得像 0」：
+    來源網站格式異動／詳細頁要求驗證碼／當日無公告／今天不寄信／假日表未涵蓋，各自一句不同的話，不合併。
+    只回狀態與筆數，不含任何標案內容（路由本身已要求 tender_radar 權限）。"""
+    from modules.tender_radar import calendar_tw
+    out = []
+    if state.get("list") == "format_changed":
+        out.append({"kind": "format_changed", "tone": "warn",
+                    "text": "來源網站格式異動：上次抓取成功解析 %s 筆、解析失敗 %s 筆，結果可能不完整（這不是「沒有符合的標案」），解析器需要調整。"
+                            % (state.get("parsed", 0), state.get("dropped", 0))})
+    if state.get("detail") == "captcha":
+        out.append({"kind": "detail_captcha", "tone": "warn",
+                    "text": "來源網站的標案詳細頁現在要求驗證碼：履約地點與招標方式暫時無法自動取得（列表中標示為「未取得」），"
+                            "標案列表不受影響。系統不會嘗試破解驗證碼，已停止抓取詳細頁。"})
+    if state.get("list") == "empty_day":
+        out.append({"kind": "empty_day", "tone": "idle",
+                    "text": "上次抓取：來源網站回報當日沒有公告（0 筆），不是錯誤。"})
+    no_mail, why = tender_source.no_mail_today()
+    if no_mail:
+        out.append({"kind": "no_mail_day", "tone": "idle",
+                    "text": "今天是不寄信日（%s）：系統照常抓取，新標案的通知信會順延到下一個上班日寄出。" % why})
+    d = tender_source.today()
+    left = calendar_tw.days_until_expiry(d)
+    if left is not None and 0 <= left <= tender_source.HOLIDAY_WARN_DAYS:
+        out.append({"kind": "calendar_expiring", "tone": "warn",
+                    "text": "假日表將在 %d 天後到期（涵蓋到 %s），請維護人員用新一年的官方辦公日曆表更新。"
+                            % (left, calendar_tw.coverage()[1].isoformat())})
+    if not calendar_tw.covered(d):
+        out.append({"kind": "calendar_uncovered", "tone": "warn",
+                    "text": "假日表未涵蓋 %s 年：只能辨識週六日，國定假日仍會照常寄信，請維護人員更新假日表。" % d.year})
+    return out
 
 
 @router.get("/api/tender-radar/schedule")

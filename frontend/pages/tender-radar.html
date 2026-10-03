@@ -134,6 +134,15 @@
       </div>
     </div>
 
+    <!-- 來源網站狀態（2026-10-03）：格式異動／詳細頁要求驗證碼／當日無公告／今天不寄信／假日表未涵蓋，
+         各自一句不同的話（「不可用要明說、不可以長得像 0 筆」）。文字一律 x-text，由 /api/tender-radar/status 的 notices 給。 -->
+    <template x-for="n in ((status && status.notices) || [])" :key="n.kind">
+      <div class="tr-health" :class="n.tone === 'warn' ? 'warn' : 'idle'" :data-source-notice="n.kind" role="status" style="margin-top:6px">
+        <span style="font-size:15px;line-height:1.2" x-text="n.tone === 'warn' ? '!' : 'ⓘ'"></span>
+        <div x-text="n.text"></div>
+      </div>
+    </template>
+
     <!-- ── 雷達儀表板：三個訊號 ──────────────────────────────────────────
          ☠️ 這三件在畫面上**都長成「一張乾淨、看起來完全正常的地圖」**，
          而處置完全相反：
@@ -530,7 +539,11 @@ function tenderRadarPage() {
           return '<span><span>' + this._esc(t.caseNo) + '</span><a class="mp1-onmap" style="font-size:11px;margin-left:4px" href="'
             + this._esc(MotrixRecordLink.mapUrl('tenders', t.caseNo)) + '">在地圖上看</a></span>'
         // ⚠️ NULL 顯示「—」不是空白：空白分不出「沒有這個欄位」與「沒載好」
-        case 'location': return '<span>' + this._esc(t.location || '—') + '</span>'
+        // 2026-10-03：地點為 NULL 一律明講「未取得」（詳細頁可能被來源網站的驗證碼擋住），不是空白也不是「—」：
+        // 「這筆沒有地點」與「我們沒拿到」是兩件事，而畫面上不能長得一樣。
+        case 'location': return t.location
+          ? '<span>' + this._esc(t.location) + '</span>'
+          : '<span data-location-missing="1" style="color:var(--text-secondary)" title="詳細頁尚未取得（來源網站可能要求驗證碼）">未取得</span>'
         case 'procurementType': return '<span>' + this._esc(t.procurementType || '—') + '</span>'
         case 'tenderMethod': return '<span>' + this._esc(t.tenderMethod || '—') + '</span>'
         // ⚠️ 預算用 === null 判斷：0 元是合法金額
