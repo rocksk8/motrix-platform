@@ -6,6 +6,7 @@ window.CM_PARTS = window.CM_PARTS || []
 window.CM_PARTS.push(() => ({
     mcChanges: [],        // 這個案件所有材料申請的變更申請（新到舊）
     mcFor: '',            // 目前載入的是哪一個案件
+    mcLoaded: false,      // 這個案件的變更申請載入過了嗎（沒有任何有審核單的材料申請時不發請求）
     mcLoading: false,
     mcMsg: '',
     mcItemId: '',         // 發起：選哪一筆已核准的材料申請
@@ -13,35 +14,34 @@ window.CM_PARTS.push(() => ({
     mcPreview: null,      // 預覽結果 {before, after, diff, uncoveredLines, problems}
     mcReviseId: null,     // 正在修改哪一張（null＝新建）
     mcBusy: false,
-    _mcReq: 0,
 
     _mcHeaders() { return { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' } },
     _mcBase(quoteNo) { return `/api/quotations/${encodeURIComponent(quoteNo || this.selected?.quote_no || '')}` },
 
-    // x-effect 掛在面板容器：切換案件就重設並載入；材料申請清單載入完（moApprovals 變）也跟著刷新候選
+    // x-effect 掛在面板容器：切換案件就重設；案件有「有審核單」的材料申請（moApprovals 載入後）才取變更申請（沒有就不發請求，開案件的請求數不變）
     mcSync() {
       const q = this.selected?.quote_no || ''
-      void this.moApprovals
-      if (q === this.mcFor) return
-      this.mcFor = q
-      this.mcChanges = []; this.mcMsg = ''; this.mcItemId = ''; this.mcQty = ''; this.mcNotes = ''; this.mcReason = ''
-      this.mcPreview = null; this.mcReviseId = null; this.mcBusy = false; this._mcReq++
-      if (q) this.mcLoad(q)
+      const tracked = Object.values(this.moApprovals || {}).some(a => a && !a.legacy)
+      if (q !== this.mcFor) {
+        this.mcFor = q; this.mcLoaded = false
+        this.mcChanges = []; this.mcMsg = ''; this.mcItemId = ''; this.mcQty = ''; this.mcNotes = ''; this.mcReason = ''
+        this.mcPreview = null; this.mcReviseId = null; this.mcBusy = false
+      }
+      if (q && tracked && !this.mcLoaded) { this.mcLoaded = true; this.mcLoad(q) }
     },
     mcVisible() { return !!this.selected?.quote_no && (this.mcChanges.length > 0 || this.mcCandidates().length > 0) },
 
     async mcLoad(quoteNo) {
       quoteNo = quoteNo || this.selected?.quote_no
       if (!quoteNo) return
-      const token = ++this._mcReq
       this.mcLoading = true
       try {
         const r = await fetch(this._mcBase(quoteNo) + '/material-changes', { headers: this._mcHeaders() })
         const d = r.ok ? await r.json() : null
-        if (token !== this._mcReq || this.selected?.quote_no !== quoteNo) return          // 晚到、或已切到別的案件的回應丟掉
+        if (this.selected?.quote_no !== quoteNo) return                                    // 晚到、或已切到別的案件的回應丟掉
         if (d) this.mcChanges = d.changes || []
       } catch {}
-      if (token === this._mcReq) this.mcLoading = false
+      this.mcLoading = false
     },
 
     // 可以發起變更的材料申請：已核准、不是舊單（舊單沒有審核單，直接改即可）、目前沒有進行中的變更
@@ -55,7 +55,7 @@ window.CM_PARTS.push(() => ({
     mcItemName(itemId) { const m = (this.materialOrders || []).find(x => x.itemId === itemId); return m ? (m.itemName || itemId) : itemId },
 
     mcStatusStyle(st) {
-      const c = { '草稿': '#888', '待審核': '#b7791f', '簽核中': '#b7791f', '已核准': '#2e8b57', '已退回': '#c0392b', '已撤回': '#888' }[st] || '#888'
+      const c = { '草稿': 'var(--text-dim)', '待審核': 'var(--warning)', '簽核中': 'var(--warning)', '已核准': 'var(--success)', '已退回': 'var(--danger)', '已撤回': 'var(--text-dim)' }[st] || 'var(--text-dim)'
       return `font-size:11px;padding:1px 8px;border-radius:10px;border:1px solid ${c};color:${c}`
     },
     mcFmt(v) {

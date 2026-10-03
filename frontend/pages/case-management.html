@@ -2577,7 +2577,9 @@
                 </div>
 
                 <!-- 33-M2c：材料申請變更申請（case-management-mchange.js）。已核准的材料申請要追加採購單行／改數量，在這裡發起變更申請走簽核；核准前原內容照常有效。 -->
-                <div id="fin-material-changes" data-testid="mc-panel" x-data x-effect="mcSync()" x-show="mcVisible()" x-cloak style="margin-bottom:24px;font-family:var(--font-zh)">
+                <div x-data x-effect="mcSync()" data-testid="mc-sync" style="display:none"></div>
+                <template x-if="mcVisible()">
+                <div id="fin-material-changes" data-testid="mc-panel" style="margin-bottom:24px;font-family:var(--font-zh)">
                   <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
                     <span class="cm-section-title" style="margin-bottom:0">材料申請變更</span>
                     <span style="font-size:11px;color:var(--text-dim)">已核准的材料申請不能直接修改；在這裡提變更申請，核准後才切換，核准前原內容照常有效。</span>
@@ -2592,10 +2594,10 @@
                       </select>
                       <input class="fi fi--sm" type="number" min="0" step="0.01" data-testid="mc-qty" placeholder="數量（不填＝依採購單行合計）" x-model="mcQty" style="width:190px" @input="mcPreview = null">
                       <input class="fi fi--sm" type="text" data-testid="mc-notes" placeholder="備註（選填）" x-model="mcNotes" style="width:160px" @input="mcPreview = null">
-                      <button type="button" data-testid="mc-preview-btn" @click="mcDoPreview()" :disabled="mcBusy || !mcItemId" style="font-size:11px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer">預覽變更</button>
+                      <button type="button" data-testid="mc-preview-btn" @click="mcDoPreview()" :disabled="mcBusy || !mcItemId" style="font-size:11px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer">查看差異</button>
                     </div>
                     <div x-show="mcPreview" data-testid="mc-preview" style="margin:6px 0;padding:7px;border:1px dashed var(--line);border-radius:6px">
-                      <template x-for="p in ((mcPreview && mcPreview.problems) || [])" :key="p.code"><div style="color:var(--danger,#c0392b)" :data-testid="'mc-problem-' + p.code" x-text="p.message"></div></template>
+                      <template x-for="p in ((mcPreview && mcPreview.problems) || [])" :key="p.code"><div style="color:var(--danger)" :data-testid="'mc-problem-' + p.code" x-text="p.message"></div></template>
                       <template x-for="d in mcDiffRows(mcPreview && mcPreview.diff)" :key="d.field"><div :data-testid="'mc-diff-' + d.field"><b x-text="d.label"></b>：<span x-text="d.text"></span></div></template>
                       <div x-show="mcPreview && (mcPreview.uncoveredLines || []).length > 0" style="color:var(--text-dim)" x-text="'尚未納入的採購單行：' + mcLines(mcPreview && mcPreview.uncoveredLines)"></div>
                     </div>
@@ -2613,7 +2615,7 @@
                         <span :data-testid="'mc-status-' + c.docCode" :style="mcStatusStyle(c.status)" x-text="c.status"></span>
                         <span style="color:var(--text-dim)" x-text="'原因：' + (c.reason || '—')"></span>
                         <span x-show="c.status === '待審核' || c.status === '簽核中'" style="color:var(--text-dim)" x-text="'目前簽核人：' + ((c.currentApprovers || []).join('、') || '—')"></span>
-                        <span x-show="c.status === '已退回' && c.rejectReason" style="color:var(--danger,#c0392b)" x-text="'退回原因：' + c.rejectReason"></span>
+                        <span x-show="c.status === '已退回' && c.rejectReason" style="color:var(--danger)" x-text="'退回原因：' + c.rejectReason"></span>
                       </div>
                       <div style="margin:5px 0 3px">
                         <template x-for="d in mcDiffRows(c.diff)" :key="d.field"><div :data-testid="'mc-row-diff-' + c.docCode + '-' + d.field"><b x-text="d.label"></b>：<span x-text="d.text"></span></div></template>
@@ -2628,6 +2630,7 @@
                     </div>
                   </template>
                 </div>
+                </template>
 
 
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
