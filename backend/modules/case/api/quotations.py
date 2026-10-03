@@ -4345,7 +4345,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
             diffs = _SA.check_finalize(conn, quote_no, body.settlement)
             if diffs:
                 conn.close()
-                raise HTTPException(409, "完結前系統重算的成本與畫面不一致（採購單、材料申請或額外支出在你編輯期間有變動）——請重新整理精算頁再完結。差異：" + "；".join(diffs))
+                raise HTTPException(409, "完結前系統重算的數字與畫面不一致（資料在你編輯期間有變動，或精算頁版本過舊）——請重新整理精算頁再完結。差異：" + "；".join(diffs))
         if body.settlement.get("status") == "finalized" and isinstance(body.settlement.get("summary"), dict) and "itemActualTotal" in body.settlement["summary"]:
             from modules.case import settlement_actuals as _SA2
             _SA2.fill_downstream(conn, quote_no, body.settlement)      # 35c F1：沒送的下游欄位由伺服器重算值補齊＋蓋口徑標記（舊完結案沒有標記＝含稅口徑）

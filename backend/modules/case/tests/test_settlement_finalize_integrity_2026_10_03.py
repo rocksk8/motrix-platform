@@ -189,3 +189,13 @@ def test_old_finalized_cases_are_never_revalidated_on_read(case):
     _put_settlement({"status": "finalized", "items": [], "summary": {"itemActualTotal": 1, "extraTotal": 0, "dispatchTotal": 0, "totalActualCost": 4550, "netProfit": 888888}})
     d = _get(c, h)
     assert d["frozen"] is True and d["totals"]["dispatchTotal"] == 0 and d["savedSummary"]["netProfit"] == 888888
+
+
+def test_the_409_prefix_is_neutral_and_the_field_list_names_what_differs(case):
+    """35c（0c 稽核 (c)）：訊息前綴不再固定寫「採購單、材料申請或額外支出變動」——被偽造的是承攬商／利潤欄位時那句是錯的；差異欄位清單才是重點。"""
+    c, h = case
+    r = _put(c, h, page_payload(c, h, dispatchTotal=0, netProfit=888888))
+    assert r.status_code == 409
+    d = r.json()["detail"]
+    assert "重新整理" in d and "承攬商" in d and "淨利" in d, d
+    assert "採購單、材料申請" not in d, "前綴還在說採購／材料變動，但不符的是承攬商與淨利：%s" % d
