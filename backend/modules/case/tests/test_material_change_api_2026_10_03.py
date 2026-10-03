@@ -250,3 +250,23 @@ def test_real_supply_provider_blocks_lowering_below_shipped_without_overriding_t
         assert float(MC._shipped_fn()(cn, NO, IID) or 0) >= 0.0
     finally:
         cn.close()
+
+
+def test_audit_rows_really_land_after_commit_for_every_action(W, reg, fake_proposal):
+    """稽核寫在自己的交易裡（不另開連線）：commit 之後另一條連線讀得到每個動作的 material_changes.* 稽核（create／submit／approve／apply／reject／withdraw／revise）。"""
+    c, h = W
+    _one_tier()
+    _setup()
+    ch = _post(c, h, BASE + "/changes", {"reason": "追加"}).json()["change"]
+    _post(c, h, "/api/quotations/%s/material-changes/%d/revise" % (NO, ch["id"]), {"reason": "追加（改）"})
+    _post(c, h, "/api/quotations/%s/material-changes/%d/submit" % (NO, ch["id"]))
+    _post(c, h, "/api/quotations/%s/material-changes/%d/withdraw" % (NO, ch["id"]))
+    _flow([])
+    ch2 = _post(c, h, BASE + "/changes", {"reason": "再追加"}).json()["change"]
+    assert _post(c, h, "/api/quotations/%s/material-changes/%d/submit" % (NO, ch2["id"])).json()["applied"]
+    cn = db.get_db()                                                                                      # 全新連線：只看得到已 commit 的
+    try:
+        acts = {r[0] for r in cn.execute("SELECT action FROM audit_log WHERE action LIKE 'material_changes.%'")}
+    finally:
+        cn.close()
+    assert {"material_changes.create", "material_changes.revise", "material_changes.submit", "material_changes.withdraw", "material_changes.apply"} <= acts, acts
