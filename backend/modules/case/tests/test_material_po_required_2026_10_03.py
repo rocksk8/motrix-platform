@@ -22,7 +22,7 @@ MSG_VOID = "對應的採購單已退回（或作廢），請重新申請採購�
 
 
 def _mo(item, **kw):
-    o = {"itemId": item, "itemName": "交換器", "quantity": 2, "unit": "台", "unitPrice": 100, "totalPrice": 200, "supplierId": 1,
+    o = {"itemId": item, "itemName": "交換器", "quantity": 2, "unit": "台", "unitPrice": 1000, "totalPrice": 2000, "supplierId": 1,
          "paidStatus": "pending", "paidAmount": 0, "paidDate": "", "notes": "", "quoteItemId": "a"}
     o.update(kw)
     return o
@@ -94,7 +94,7 @@ def test_submit_needs_an_approved_po_with_the_three_wordings(W):
     r = _submit_mo(c, h, "m1")
     assert r.status_code == 400 and MSG_VOID in r.text
     good = _po(c, h)
-    _put_materials([_mo("m1", poDocCode=good["docCode"], poLine=1)], {})
+    _put_materials([_mo("m1", poDocCode=good["docCode"], poLine=1, unitPrice=100, totalPrice=200)], {})     # N2：內容要與採購單行（100×2）一致
     r = _submit_mo(c, h, "m1")
     assert r.status_code == 200, r.text and _ap("m1")["status"] in ("待審核", "已核准")
 
