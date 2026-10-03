@@ -98,6 +98,18 @@ def test_a_single_cell_row_with_other_text_still_counts_as_dropped():
     assert len(items) == 0 and dropped == 1 and ts.is_empty_result(_table_with(['<tr><td colspan="10">系統訊息</td></tr>'])) is False
 
 
+def test_a_multi_cell_row_whose_first_cell_contains_the_empty_marker_still_counts_as_dropped():
+    """稽核 F1：空結果列的判準要求「只有一格」。多格的列即使第一格含「無符合條件資料」字樣，也是被改壞的資料列，必須算 dropped；
+    少了 `len(cells)==1` 這個條件，這種列會被當成空結果放行，對方改版時 suspect_redesign 就失效。"""
+    cells = "".join("<td>%s</td>" % t for t in ["無符合條件資料 1", "機關乙", "AB-1", "01", "公開招標", "工程類", "115/10/06", "115/10/12", "1,000", "檢視"])
+    row = "<tr>%s</tr>" % cells
+    assert len(ts._TD_RE.findall(row)) == 10
+    items, dropped, rec = ts.parse_list(_table_with([row]))
+    assert rec is True and len(items) == 0 and dropped == 1
+    assert ts.suspect_redesign(len(items), dropped) is True
+    assert ts.is_empty_result(_table_with([row])) is False
+
+
 # ══════════════════ B．驗證碼頁 ══════════════════
 
 def test_captcha_page_is_detected_but_a_normal_detail_page_is_not():
