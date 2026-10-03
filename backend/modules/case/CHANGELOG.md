@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-04（wip/t35c-settle-assigned）：重新開啟理由的可見範圍
+- **重新開啟理由只給有財務檢視的人看（0c 稽核）**：理由是自由文字，沒有財務檢視（`money_visible()` 為否）的帳號從單筆案件 GET、`/versions`、`/case-bundle` 拿到的編輯歷程只留誰／何時／事件，不含理由；沿用 CM13 遮蔽（`helpers/financial_mask.py` 新增 `strip_history_reasons`，由 `mask_quotation_data` 與 `/versions` 呼叫）。案件清單的「最近一次修改」本來就不帶理由。稽核紀錄 `audit_log` 的 detail 仍帶理由，由 `audit_log` 模組權限把關。
+- 重新開啟對話框加一行「原因僅財務人員可見」。README 補：對舊口徑已完結案「重新開啟再完結」會轉成新口徑（淨利基數 +0.99×承攬商稅額，已發放的獎金不重算）。
+- 測試：`tests/test_case_reopen_reason_visibility_2026_10_04.py`（掃出 OpenAPI 裡路徑帶案件單號的**每一支 GET**，無財務檢視帳號都不可拿到理由；有財務檢視者仍看得到；修改前 3 支端點外洩、紅燈）。
+
 ## (next) — 2026-10-04（wip/t35c-settle-assigned）：結案報表 PDF 的承攬商稅額說明
 - **結案報表 PDF：新完結案多一行承攬商稅額說明（使用者裁示）**：「損益分析」的實際成本精算表在「承攬商派發成本」下加一行「承攬商：未稅 X／稅額 Y（進項稅額，不計成本）」，只在新完結案（`summary.dispatchBasis`＝`pretax`）出現；舊完結案印出的 HTML 與改版前逐位元組相同（已用改版前的函式逐份比對：舊口徑、空 summary、無標記三種）。新增 `tests/test_pdf_closing_dispatch_tax_2026_10_04.py`（repo 第一份結案報表 PDF 文字測試）。
 

@@ -36,6 +36,7 @@ def test_reopening_a_finalized_settlement_in_the_page_requires_a_reason(live_ser
 
     page.locator('[data-testid="stl-reopen"]').click()
     page.locator('[data-testid="stl-reopen-modal"]').wait_for(state="visible", timeout=5000)
+    assert page.locator('[data-testid="stl-reopen-hint"]').inner_text().strip() == "原因僅財務人員可見"
     page.locator('[data-testid="stl-reopen-confirm"]').click()               # 沒填理由
     page.locator('[data-testid="stl-reopen-error"]').wait_for(state="visible", timeout=5000)
     assert "理由" in page.locator('[data-testid="stl-reopen-error"]').inner_text()

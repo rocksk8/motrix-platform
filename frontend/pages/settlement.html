@@ -803,6 +803,7 @@
     </div>
     <textarea x-model="reopenReason" rows="3" maxlength="500" placeholder="重新開啟的理由（必填）" data-testid="stl-reopen-reason"
               style="width:100%;padding:6px 8px;border:1px solid var(--border-light);border-radius:6px;font-size:12px;font-family:inherit;box-sizing:border-box"></textarea>
+    <div data-testid="stl-reopen-hint" style="font-size:11px;color:var(--text-dim);margin-top:4px">原因僅財務人員可見</div>
     <div x-show="reopenErr" x-text="reopenErr" data-testid="stl-reopen-error" style="color:#DC2626;font-size:12px;margin-top:6px"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
       <button class="btn btn-ghost btn-sm" @click="showReopenModal=false">取消</button>

@@ -44,3 +44,5 @@
 - 舊口徑頁面（沒有 `dispatchBasis`、送含稅數字）直接再存會被 409 擋下：請先重新開啟再完結。
 - 409 訊息前綴為中性說法，差異欄位清單才是重點。
 - 自訂模組支出非 0 的完結 fixture 已有測試（`test_settlement_finalize_integrity_2026_10_03.py`）。
+- 重新開啟理由是自由文字，只有財務檢視（`money_visible()`）的帳號看得到：單筆案件 GET、`/versions`、`/case-bundle` 的編輯歷程對其他帳號只留誰／何時／事件、不含理由（沿用 CM13 遮蔽，`helpers/financial_mask.py::strip_history_reasons`）。稽核紀錄 `audit_log` 的 detail 仍帶理由，由 `audit_log` 模組權限把關。
+- 對**舊口徑（含稅）**的已完結案「重新開啟再完結」會把它轉成新口徑（未稅）：淨利基數 +0.99×承攬商稅額；已發放的獎金不會被重算。這是刻意的，改之前要知道。

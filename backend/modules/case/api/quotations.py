@@ -67,7 +67,7 @@ from modules.case.quotations import validate_tax_basis
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
 from helpers.case_roles import ROLE_KEYS, ROLE_LABELS, role_username, role_display
 from helpers.financial_mask import (
-    money_visible, mask_row as _mask_money_row, mask_quotation_data, mask_case_record, restore_case_record,
+    money_visible, mask_row as _mask_money_row, mask_quotation_data, mask_case_record, restore_case_record, strip_history_reasons,
     PaymentStructureChange,
 )
 import helpers.uploads as _uploads_mod
@@ -5552,6 +5552,8 @@ def list_quotation_versions(quote_no: str, authorization: str = Header(None)):
         })
 
     history = [h for h in (data.get("editHistory") or []) if isinstance(h, dict)]
+    if not money_visible(user):                       # 重新開啟精算的理由是自由文字：沒有財務檢視的帳號只看誰／何時／事件
+        strip_history_reasons(history)
     return {"quote_no": quote_no, "versions": versions, "history": history}
 
 
