@@ -19,7 +19,7 @@
 ## 2026-10-03 測試母體清理（T35 驗證提速，只動測試與開發相依）
 - 刪除 payroll／subcontract 兩份 `money_round_half_up` 測試內無人呼叫、且引用已不存在的 `routers.reports` 的 `_patch_entries()`（AST 比對：兩檔測試函式數不變，唯一差異是該輔助函式）。
 - 刪除 `test_bonus_correction_2026_09_30.py` 內恆為 `None`、後續從未使用的 `cash = ... if False else None` 一行。
-- `requirements-dev.txt` 新增 `pypdfium2`：`test_unapproved_every_page_2026_10_01.py::test_pixel_coverage_and_page_screenshots` 先前因開發環境未安裝而恆略過；隔離安裝後該檔 7 題全綠（22.7 秒）。**`.venv312` 尚未安裝**，安裝後該題才會在階段測試中實際執行。
+- `pypdfium2` **不**列入 `requirements-dev.txt`（試過，已還原）：`.venv312` 沒裝時，建包環境檢查（`tests/test_build_python_selection_2026_09_27.py` 的 2 題）會判專案 venv「不符 requirements」並改選其他 Python。隔離安裝後 `test_unapproved_every_page_2026_10_01.py` 7 題全綠（22.7 秒），要讓該像素題實際執行，須**先在 `.venv312` 安裝 pypdfium2 再同時加進 requirements-dev.txt**（兩者同一包）。目前該題仍以 `importorskip` 略過（略過原因會列在 `-rs`）。
 - 無產品程式變更，不進 `version_manifest.json`（使用者可見更新說明）。
 
 ## 2026-10-02 側欄通知元件單一宣告
