@@ -30,6 +30,7 @@ T = T30.T
 TRAIN = {"number": 34, "base": "8ae8b8cc", "schema": {"case": 6}, "db_version": None}
 _FAILED = []
 _LEGACY_CALLS = [0]
+_M2 = {}               # 種子產生的 M2 資料（採購單號、m1）
 
 SEED_QUOTE = "%sMQ-001" % T.SEED_TAG
 #: 種子（基線＝第 33 班A 程式）：材料申請三筆（全額已付舊單、部分已付已核准、未付已核准）＋四張已驗收派發（B 階段與 A 階段的舊流程用）
@@ -64,7 +65,64 @@ def seed34(root, port):
         c.commit()
     finally:
         c.close()
-    return {"materials": len(MATERIALS), "approved": list(APPROVED_ITEMS), "kind_dispatch": KIND_DID, "legacy_dispatches": list(LEGACY_DIDS)}
+    info = {"materials": len(MATERIALS), "approved": list(APPROVED_ITEMS), "kind_dispatch": KIND_DID, "legacy_dispatches": list(LEGACY_DIDS)}
+    info["m2"] = seed_m2(root, port)
+    return info
+
+
+def _admin_username(root):
+    import re as _re
+    cred = (Path(root) / "backend" / ".initial_admin_credentials.txt").read_text(encoding="utf-8")
+    return _re.search(r"帳號:\s*(\S+)", cred).group(1)
+
+
+def _po(port, token, user, qty):
+    """建立並送審一張採購單（品項 a、單價 1000）；沒設簽核層 ⇒ 送審即核准。⇒ (docCode, status, 步驟回應)"""
+    body = {"kind": "purchase_order", "payeeName": "某人", "payeeType": "employee", "data": {"applicant": user},
+            "lines": [{"category": "雜項", "summary": "DRILL採購", "qty": qty, "unitCost": 1000, "itemId": "a"}]}
+    s1, d1 = T.api(port, "/api/quotations/%s/extra-expenses" % SEED_QUOTE, body, token, "POST")
+    if s1 != 201:
+        return None, None, {"create": (s1, str(d1)[:200])}
+    s2, d2 = T.api(port, "/api/quotations/%s/extra-expenses/%d/submit" % (SEED_QUOTE, d1["id"]), None, token, "POST")
+    return d1.get("docCode"), (d2 or {}).get("status") if isinstance(d2, dict) else None, {"create": s1, "submit": s2}
+
+
+def seed_m2(root, port):
+    """M2 種子（基線＝第 33 班A 程式）：報價品項 a（10 台）、一張已核准採購單 PO-1（2 台）、一筆「規則後」已核准材料申請 m1（created_at ≥ PO_REQUIRED_FROM、
+    approval_json 帶涵蓋行快照；數量 2、單價 1000）。套用後才建第二張採購單（PO-2，1 台）⇒ 變更提案會涵蓋兩行、數量 3。"""
+    _u, token = T.login(root, port)
+    user = _admin_username(root)
+    c = T.rw(root)
+    try:
+        row = c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (SEED_QUOTE,)).fetchone()
+        d = json.loads(row["data_json"] or "{}")
+        d["items"] = [{"id": "a", "description": "交換器", "qty": 10, "unit": "台", "cost": 1000}]
+        c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), SEED_QUOTE))
+        c.commit()
+    finally:
+        c.close()
+    code, status, steps = _po(port, token, user, 2)
+    if not code or status != "已核准":
+        raise T.DrillError("M2 種子：採購單沒建成／沒核准：%s %s %s" % (code, status, steps))
+    line = {"poDocCode": code, "line": 1, "qty": 2.0, "unit": "台", "amount": 2000.0}
+    m1 = {"itemId": "m1", "itemName": "交換器", "quantity": 2, "unit": "台", "unitPrice": 1000, "totalPrice": 2000, "supplierId": 1, "paidStatus": "pending", "paidAmount": 0,
+          "paidDate": "", "notes": "", "quoteItemId": "a", "poDocCode": code, "poLine": 1}
+    c = T.rw(root)
+    try:
+        row = c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (SEED_QUOTE,)).fetchone()
+        d = json.loads(row["data_json"])
+        cr = d.get("caseRecord") or {}
+        cr["materialOrders"] = list(cr.get("materialOrders") or []) + [m1]
+        d["caseRecord"] = cr
+        c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), SEED_QUOTE))
+        appr = {"snapshot": {"poSnapshot": [line]}, "history": []}
+        c.execute("INSERT INTO case_material_approvals (quote_no, item_id, doc_code, status, approval_json, content_hash, version, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                  (SEED_QUOTE, "m1", "MO-DRILL-0001", "已核准", json.dumps(appr, ensure_ascii=False), "", 1, "2026-10-05T00:00:00"))
+        c.commit()
+    finally:
+        c.close()
+    _M2.update({"po1": code, "line": line, "m1": m1})
+    return {"po1": code, "m1": "m1"}
 
 
 def record34(rec, root):
@@ -140,10 +198,16 @@ def checks34(root, port, base_rec, new_rec, t0, package_modules):
     mj = (cj / "module.json").read_text(encoding="utf-8", errors="replace") if (cj / "module.json").is_file() else ""
     res["34b_shippable_material_provider_present"] = ((cj / "material_shippable.py").is_file() and "material.shippable" in mj,
                                                      {"file": (cj / "material_shippable.py").is_file(), "declared_in_module_json": "material.shippable" in mj})
+    sm, dm = T.api(port, "/api/shipping-notes/material-shippable?quote_no=%s" % SEED_QUOTE, None, token, "GET")
+    sl, dl = T.api(port, "/api/shipping-notes/DRILL-NO-SUCH-NOTE/material-link-check", None, token, "GET")
+    items_ok = isinstance(dm, dict) and isinstance(dm.get("items"), list)
+    res["34b_shipping_endpoints_live"] = (sm == 200 and items_ok and sl == 404,
+                                         {"material_shippable": (sm, (list(dm.keys()) if isinstance(dm, dict) else str(dm)[:80])), "link_check_missing_note": (sl, str(dl)[:80]),
+                                          "note": "link-check 以不存在的出貨單驗路由已掛（404）；有出貨單的形狀由整合測試涵蓋"})
     # 34c D7：全額已付的舊單不能改金額（paid_in_full）、其他欄位可存；部分已付新小計低於已付 ⇒ 400；未付的可改
     def orders(extra_by_item):
         out = []
-        for m in MATERIALS:
+        for m in MATERIALS + ([_M2["m1"]] if _M2.get("m1") else []):
             o = dict(m)
             o.update(extra_by_item.get(m["itemId"], {}))
             out.append(o)
@@ -166,6 +230,32 @@ def checks34(root, port, base_rec, new_rec, t0, package_modules):
         s1 == 200 and rej1 == ["paid_in_full"] and (cur.get("dp1") or {}).get("totalPrice") == 2000
         and s2 == 200 and not ((r2 or {}).get("rejected") if isinstance(r2, dict) else True) and s3 == 400 and s4 == 200 and not ((r4 or {}).get("rejected") if isinstance(r4, dict) else True),
         {"change_amount_on_paid": (s1, rej1), "paid_total_after": (cur.get("dp1") or {}).get("totalPrice"), "notes_on_paid": s2, "below_paid": s3, "unpaid_change": s4})
+    # 34f M2 材料申請變更申請：規則後的已核准申請，直接改內容被拒；走變更申請（提案→建立→送審→自動核准套用，版本+1、數量變）
+    BASE = "/api/quotations/%s/material-orders/m1" % SEED_QUOTE
+    m1 = dict(_M2.get("m1") or {})
+    sd, rd = T.api(port, "/api/quotations/%s/material-orders" % SEED_QUOTE, {"materialOrders": [dict(m, **({"quantity": 5, "totalPrice": 5000} if m["itemId"] == "m1" else {})) for m in MATERIALS + [m1]]}, token, "PATCH")
+    rej = [x.get("code") for x in ((rd or {}).get("rejected") or [])] if isinstance(rd, dict) else None
+    code2, st2, steps2 = _po(port, token, _admin_username(root), 1)                      # 第二張採購單：變更提案會涵蓋 PO-1＋PO-2
+    sp2, dp2 = T.api(port, BASE + "/change-proposal?quantity=3", None, token, "GET")
+    sc0, _dc0 = T.api(port, BASE + "/changes", {"reason": "x", "totalPrice": 1}, token, "POST")                 # 不收金額欄位
+    sc, dc = T.api(port, BASE + "/changes", {"reason": "DRILL追加", "quantity": 3}, token, "POST")
+    chg = (dc or {}).get("change") if isinstance(dc, dict) else None
+    ss, ds = (None, None)
+    if isinstance(chg, dict) and chg.get("id"):
+        ss, ds = T.api(port, "/api/quotations/%s/material-changes/%d/submit" % (SEED_QUOTE, chg["id"]), None, token, "POST")
+    c = T.ro(root)
+    try:
+        row = c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (SEED_QUOTE,)).fetchone()
+        now_m1 = next((m for m in ((json.loads(row["data_json"]).get("caseRecord") or {}).get("materialOrders") or []) if m.get("itemId") == "m1"), {})
+        ver = (c.execute("SELECT version FROM case_material_approvals WHERE quote_no=? AND item_id='m1'", (SEED_QUOTE,)).fetchone() or [None])[0]
+        nchg = T.count(c, "case_material_changes")
+    finally:
+        c.close()
+    res["34f_m2_change_request_flow"] = (
+        sd == 200 and rej and "use_change_request" in rej and code2 and st2 == "已核准" and sp2 == 200 and sc0 == 400 and sc == 200 and bool(chg) and str(chg.get("docCode", "")).startswith("MC-")
+        and ss == 200 and isinstance(ds, dict) and ds.get("applied") and float(now_m1.get("quantity") or 0) == 3.0 and ver == 2 and nchg == 1,
+        {"direct_edit": (sd, rej), "po2": (code2, st2, steps2), "proposal": sp2, "create_with_amount": sc0, "create": (sc, (chg or {}).get("docCode") if isinstance(chg, dict) else str(dc)[:160]),
+         "submit": (ss, {k: ds.get(k) for k in ("autoApproved", "applied")} if isinstance(ds, dict) else str(ds)[:120]), "m1_quantity": now_m1.get("quantity"), "approval_version": ver, "changes_rows": nchg})
     # 34d D12 設計器預設開：程式預設開（useFD:true 或預設開的判斷）、仍帶舊畫面標記（可切回）
     js = Path(root) / "frontend" / "js" / "expense-types-designer.js"
     html = Path(root) / "frontend" / "pages" / "expense-types.html"
