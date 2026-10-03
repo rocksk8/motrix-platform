@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-03（wip/t34-m2final-d7：33-M2c 材料申請變更申請，畫面與出貨連動接線；面板只在有已核准材料申請時載入；出貨量取不到時 fail closed；提案數量不得超過涵蓋行數量）
+- 案件管理頁財務分頁新增「材料申請變更」面板（`case-management-mchange.js`）：選已核准的材料申請 → 查看差異（數量、小計、涵蓋採購單行；金額由已核准採購單決定）→ 填原因建立 → 修改／送審／撤回；簽核人在面板或簽核佇列核可／退回。核准前原材料申請內容照常有效；看不到財務檢視者金額顯示「金額已遮蔽」。沒有「有審核單」的材料申請時不發任何請求、不留 DOM。
+- 新端點 `GET /api/quotations/{q}/material-changes`（案件所有變更申請）。變更申請的「不得低於已出貨＋占用量」接出貨連動（登記表 `shipping.material_shipped_qty`／`shipping.material_shipped`，保留＋已出貨；草稿出貨單不算）；沒有提供者時：出貨模組（supply）已載入＝拒絕（`shipped_unavailable`，fail closed）、沒有出貨模組＝只警告。提案數量不得超過涵蓋採購單行的數量合計（單位一致時，`quantity_exceeds_coverage`）。
+- 提案內容用案件側 `material_coverage.change_proposal`（2e）；e2e 走完預覽、建立、送審、核准、退回、修改、撤回。D7 鎖定測試改用自己的金額基準（不受共用 `_mo` 預設金額影響）。
+
 ## 1.0.114 — 2026-10-03（wip/t34-settlement-extras-2e）：精算端點納入承攬商派發、匯款手續費、自訂模組支出（34）
 - `settlement-actuals` 新增 `costExtras` 與 `totals.dispatchTotal／dispatchReport／remitFeeTotal／customExpenseTotal／totalActualCost`：口徑與精算頁現行算法逐位相同（使用者裁示 A：歷史精算不變）——派發＝承攬商含稅合計＋外包人員（`dispatch.row` 的 grandTotal；排除已取消、草稿、已退回）；手續費＝額外支出手續費（已登錄付款、未作廢）＋承攬商匯款手續費；自訂模組支出＝`custom_finance.case_finance`。另輸出 `dispatchReport`（未稅承攬費＋人員，營運報表／總帳 `dispatch_entries` 口徑，供漂移守門）；兩者差異＝承攬費的 5% 稅，含稅或未稅由使用者決定（列第 35 班問題），這裡只並列。已完結精算的這幾個鍵取存檔 summary 的凍結值。`extraTotal` 語意不變（仍只含額外支出）。精算頁改取這些值（派發小計、匯款手續費、自訂模組支出；端點不可用時退回原本各打一支的舊路徑），金額與原本逐位相同；新增 e2e 對照頁面成本彙總與端點 totals。完結重算比對（D10）不含這三類（頁面端因無權限可能少打其中一支端點）。
 

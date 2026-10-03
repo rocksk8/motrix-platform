@@ -5,8 +5,13 @@ import json
 import db
 from modules.case import material_approval as MA
 from modules.case.tests.test_material_link_2026_10_02 import _put_materials
-from modules.case.tests.test_material_po_required_2026_10_03 import _ap, _mo, _orders, _patch
+from modules.case.tests.test_material_po_required_2026_10_03 import _ap, _mo as _base_mo, _orders, _patch
 from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W  # noqa: F401
+
+def _mo(item, **kw):
+    """本檔自己的金額基準（2×1000＝2000）：不依賴別的測試檔 `_mo` 的預設金額（2e 的 wire2 把那邊改成 2×100）。"""
+    return _base_mo(item, **dict({"unitPrice": 1000, "totalPrice": 2000}, **kw))
+
 
 PAID = dict(paidStatus="paid", paidAmount=2000, paidDate="2026-08-01")
 PART = dict(paidStatus="partial", paidAmount=800, paidDate="2026-08-01")
