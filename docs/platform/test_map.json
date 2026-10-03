@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1084,
+  "tests": 1085,
   "unmapped": 13,
   "kinds": {
    "api": 582,
    "e2e": 264,
    "audit": 136,
-   "unit": 102
+   "unit": 103
   },
   "routes": 755
  },
@@ -6763,6 +6763,34 @@
      "backend/db.py",
      "backend/modules/case/__init__.py",
      "backend/modules/case/material_shippable.py",
+     "backend/modules/case/tests/test_material_link_2026_10_02.py",
+     "backend/modules/case/tests/test_material_link_booking_2026_10_02.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_material_submit_wiring_2026_10_04.py": {
+   "kind": "unit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/material_coverage",
+    "mod:case/purchase_items",
+    "mod:case/tests/test_material_link_2026_10_02",
+    "mod:case/tests/test_material_link_booking_2026_10_02",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/material_coverage.py",
+     "backend/modules/case/purchase_items.py",
      "backend/modules/case/tests/test_material_link_2026_10_02.py",
      "backend/modules/case/tests/test_material_link_booking_2026_10_02.py",
      "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
