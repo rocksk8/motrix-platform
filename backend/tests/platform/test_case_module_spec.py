@@ -17,6 +17,7 @@ from core import registry, source_tree
 BACKEND = Path(__file__).resolve().parents[2]
 EXPECTED = {
     ("gl.events", "case"),                                   # W4 總帳 C4b：額外支出／叫料事件提供者（唯讀）
+    ("material.shippable", "case"),                          # 34-S1：出貨單連動——已核准且已到貨確認的材料申請（唯讀；supply 經 registry 取用）
     ("case.access", "case"), ("case.summary", "case"), ("case.locations", "case"), ("case.recognition", "case"),
     ("case.default_terms", "case"), ("case.doc_version", "case"), ("daily.check", "case_deadlines"),
     ("approval.reassign", "quotation"), ("approval.reassign", "completion_note"),

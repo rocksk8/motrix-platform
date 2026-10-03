@@ -842,3 +842,18 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 對方不在時 | 提供者不在 ⇒ 呼叫端視同 `None` |
 | 契約版本 | 1（2026-10-01） |
 | 守門 | `backend/modules/accounting/tests/test_category_map_g1_2026_10_01.py::test_category_account_resolver` |
+
+## IP-110　`material.shippable`：可出貨的材料申請（M01 案件 → 出貨單 supply；暫定號，列車定號；2026-10-03，34-S1）
+
+出貨單明細可連到材料申請（`items_json[i].materialLink`），送審與核准時檢查「其他單據已占用＋已出貨＋本單 ≤ 已到貨量」。可出貨量只由案件側回答：疊加審核列已核准、且已做到貨確認。契約全文與逐點答覆：`docs/platform/plans/SHIPPING-MATERIAL-LINK-CONTRACT-S1.md`（§8）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`modules/case/material_shippable.py::material_shippable` |
+| 使用方 | 出貨單（supply，34-S1 接入時補；supply 不 import case，只經 registry） |
+| 形式 | provider，單一提供者（名稱 `case`） |
+| 語法 | 提供：`("material.shippable", "case"): fn`；取用：`registry.single_provider("material.shippable")` ⇒ `fn(conn, quote_no)`；`None` ⇒ 出貨單含 `materialLink` 時回 400 `ship_link_module_off` |
+| 回傳 | `[{materialItemId, docCode, name, unit, quoteItemId, appliedQty, arrivedQty, status:'已核准'}]`；只含疊加列 `已核准` 且 `received_on` 非空者；`arrivedQty` 預設＝`appliedQty`（整筆到貨），有選填欄位 `received_qty` 時取 `min(實收, 已核准量)`；變更申請待審期間仍以已核准版本計；唯讀、不 commit |
+| 對方不在時 | 提供者不在 ⇒ 取用方視同「沒有可出貨的材料」 |
+| 契約版本 | 1（2026-10-03；欄位只准加不准改名／刪除） |
+| 守門 | `backend/modules/case/tests/test_material_shippable_2026_10_03.py` |
