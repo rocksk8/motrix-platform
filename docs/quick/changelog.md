@@ -16,6 +16,12 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-03 精算入口上分頁列、未對應清單帶品名
+- `case-management.html`：分頁列在「額外支出」右邊新增「精算 ▶」連結（`cm-tab-settlement`，權限同精算頁）；財務分頁內舊連結保留。
+- `settlement.html` 二之一「未對應品項的材料申請與額外支出」：材料列顯示品名＋數量單位、額外支出列顯示單號｜類別｜說明。
+- 後端僅加欄位（金額、規則不動）：`recognition.extra_entries` 列加 `description`；`material_money_rows` 加 `quantity`／`unit`；`settlement_actuals` 未對應／歸屬列帶出。
+- 測試：`test_settlement_actuals_2026_10_03`、`test_e2e_settlement_actuals_2026_10_03`（新增分頁題）。
+
 ## 2026-10-02 側欄通知元件單一宣告
 - `frontend/static/sidebar.js`：通知鈴鐺（管理員）與無頭掛載（一般使用者）兩個互斥分支改走同一個輔助函式 `notifOpen(attrs)`，`x-data="notifStore()"` 只剩一個宣告，重複初始化守門的共用母體回到 2。畫面與行為不變。
 
