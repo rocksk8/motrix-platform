@@ -212,3 +212,8 @@
 - 15 題預設答案全部同意（第 8 題「產生獎金單」維持現狀）；職責角色化 5 件方向同意。
 - **不變式：superadmin 每個功能都要能使用**（含財務／出納判斷、選單、API、PDF、通知；不因沒持有 cashier／finance 模組被擋），避免財務／出納無人可處理時卡死。第 35 班 A 案守門含：superadmin（modules 空）對每個 F 類通過的測試、掃描新增權限判斷必含 superadmin 直通、前端選單對 superadmin 顯示、正式機形狀驗（superadmin 2 位只有 finance、無 cashier）。
 - 路線與班次：35＝A、36＝R1（職責角色化）、37＝R2、之後 B 逐領域（a3 建議；排程待使用者說開工，今天第34班不動）。
+
+## 待辦（使用者 2026-10-03）：驗證／稽核優化方案——第34班上線後才處理
+- 使用者指示：這包套用到正式機後，請數個視窗各自提出「驗證、稽核的優化方案」，由主持整合後與使用者討論；原因：驗證時間過長，且需檢查測試項目是否有修改遺留（已移除／改版功能的測試仍在跑、無效測試）。**這包出貨前不處理，只先記錄。**
+- 既有輸入：da 測試衛生盤點（audit/train33-da-hygiene）、d7 HYGIENE-D7.md、PROPOSAL-FAILFAST-AND-SELECTOR-D7.md（wip/t33-failfast-proposal-d7@577129f4）、工具演練約15檔改依 diff 觸發（約省12–13分）、a3 author_gate 全域釘子（已進第34班）、串接點孤兒盤點（da，attachments.catalog／gl.events／uploads.path_access）。
+- 上線後分工草案（待啟動時派）：da＝測試母體衛生第二版（-rsx --durations=30、失效／無效測試清單）；d7＝選擇器與 failfast 方案；a3＝author_gate／drill 與包級驗證流程；ea＝階段／整合流程時間拆解；c7／2e＝稽核流程（作者自審 vs 獨立稽核、滾動稽核）的成本與漏洞。
