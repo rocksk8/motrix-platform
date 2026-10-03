@@ -1762,9 +1762,11 @@
     "/api/inventory/stock-items",
     "/api/parts",
     "/api/shipping-notes",
+    "/api/shipping-notes/material-shippable",
     "/api/shipping-notes/{}",
     "/api/shipping-notes/{}/approve",
     "/api/shipping-notes/{}/export",
+    "/api/shipping-notes/{}/material-link-check",
     "/api/shipping-notes/{}/pdf-download",
     "/api/shipping-notes/{}/reject",
     "/api/shipping-notes/{}/revoke-approval",
@@ -6631,6 +6633,8 @@
     "mod:case/material_guard",
     "mod:case/material_notify",
     "mod:case/material_payment",
+    "mod:case/material_shippable",
+    "mod:case/material_shipping_view",
     "mod:case/purchase_items",
     "mod:case/quotations",
     "mod:case/quote_terms",
@@ -6646,6 +6650,7 @@
     "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/material_notify",
+    "mod:case/material_shipping_view",
     "mod:case/purchase_items",
     "plat:txn"
    ],
@@ -6657,7 +6662,7 @@
    "routes": [
     {
      "func": "get_approvals",
-     "line": 85,
+     "line": 86,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-order-approvals"
     }
@@ -8321,6 +8326,22 @@
    "tables_r": [
     "quotations"
    ],
+   "tables_w": []
+  },
+  "mod:case/material_shipping_view": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:case/material_shippable",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/material_shipping_view.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
    "tables_w": []
   },
   "mod:case/payables": {
@@ -11379,6 +11400,7 @@
     "mod:supply/api/suppliers",
     "mod:supply/attachments",
     "mod:supply/gl_events",
+    "mod:supply/material_link",
     "plat:registry"
    ],
    "kind": "mod",
@@ -11550,7 +11572,8 @@
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval",
-    "helper:uploads"
+    "helper:uploads",
+    "mod:supply/material_link"
    ],
    "imports": [
     "core:db",
@@ -11565,6 +11588,7 @@
     "helper:privacy_notice",
     "helper:tiered_approval",
     "helper:uploads",
+    "mod:supply/material_link",
     "plat:txn"
    ],
    "kind": "mod",
@@ -11575,103 +11599,115 @@
    "routes": [
     {
      "func": "list_shipping_notes",
-     "line": 98,
+     "line": 99,
      "method": "GET",
      "path": "/api/shipping-notes"
     },
     {
+     "func": "material_shippable_for_note",
+     "line": 124,
+     "method": "GET",
+     "path": "/api/shipping-notes/material-shippable"
+    },
+    {
      "func": "list_shipping_export_history",
-     "line": 123,
+     "line": 137,
      "method": "GET",
      "path": "/api/shipping-notes/export-history"
     },
     {
+     "func": "material_link_check",
+     "line": 220,
+     "method": "GET",
+     "path": "/api/shipping-notes/{note_no}/material-link-check"
+    },
+    {
      "func": "get_shipping_note",
-     "line": 206,
+     "line": 232,
      "method": "GET",
      "path": "/api/shipping-notes/{note_no}"
     },
     {
      "func": "get_shipping_recipient_privacy_acks",
-     "line": 228,
+     "line": 254,
      "method": "GET",
      "path": "/api/shipping-notes/{note_no}/privacy-notice"
     },
     {
      "func": "ack_shipping_recipient_privacy_notice",
-     "line": 238,
+     "line": 264,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/privacy-notice/ack"
     },
     {
      "func": "create_shipping_note",
-     "line": 256,
+     "line": 287,
      "method": "POST",
      "path": "/api/shipping-notes"
     },
     {
      "func": "update_shipping_note",
-     "line": 289,
+     "line": 324,
      "method": "PUT",
      "path": "/api/shipping-notes/{note_no}"
     },
     {
      "func": "delete_shipping_note",
-     "line": 315,
+     "line": 354,
      "method": "DELETE",
      "path": "/api/shipping-notes/{note_no}"
     },
     {
      "func": "submit_shipping_note",
-     "line": 340,
+     "line": 379,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/submit"
     },
     {
      "func": "approve_shipping_note",
-     "line": 405,
+     "line": 449,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/approve"
     },
     {
      "func": "revoke_shipping_note_approval",
-     "line": 554,
+     "line": 603,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/revoke-approval"
     },
     {
      "func": "reject_shipping_note",
-     "line": 616,
+     "line": 665,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/reject"
     },
     {
      "func": "download_shipping_pdf",
-     "line": 661,
+     "line": 710,
      "method": "GET",
      "path": "/api/shipping-notes/{note_no}/pdf-download"
     },
     {
      "func": "record_shipping_export",
-     "line": 691,
+     "line": 740,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/export"
     },
     {
      "func": "toggle_signed",
-     "line": 725,
+     "line": 774,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/signed-toggle"
     },
     {
      "func": "upload_shipping_signed_files",
-     "line": 782,
+     "line": 831,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/signed-files"
     },
     {
      "func": "delete_shipping_signed_file",
-     "line": 804,
+     "line": 853,
      "method": "DELETE",
      "path": "/api/shipping-notes/{note_no}/signed-files/{file_id}"
     }
@@ -11849,6 +11885,23 @@
    "tables_r": [
     "stock_batches",
     "stock_items"
+   ],
+   "tables_w": []
+  },
+  "mod:supply/material_link": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "supply",
+   "path": "backend/modules/supply/material_link.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "shipping_notes"
    ],
    "tables_w": []
   },
@@ -20092,7 +20145,8 @@
     "helper:google_calendar",
     "mod:analytics/api/dashboard",
     "mod:case/api/quotations",
-    "mod:supply/attachments"
+    "mod:supply/attachments",
+    "mod:supply/material_link"
    ],
    "tables_r": [],
    "tables_w": [],
