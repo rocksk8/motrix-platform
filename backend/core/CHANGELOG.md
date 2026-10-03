@@ -2,9 +2,6 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — wip/t34-d12-c7（新設計器預設開）
-- 前端（D12）：新設計器在「模組建構器 ② 表單」與「請款類型編輯頁」預設開（無偏好時）；`?designer=0` 或頁面上「改用舊的…」回退並記住（localStorage `mb_designer`／`et_designer`＝'0'）。既有 e2e 一律釘舊畫面（`tests/_e2e_login.py` LEGACY_UI_PINS），新題 `test_e2e_designer_default_on_2026_10_03.py`（2）驗預設開。**上線前條件：真滑鼠拖放人工驗證（FORM-DESIGNER-PREVIEW-GUIDE.md 8 步）**。
-
 ## 1.109 — wip/t33-diff-default-c7（定義 diff 的 `default` ＝出貨預設）、wip/t33-k2-c7（草稿並行保護）
 - L0（新增，向下相容）：`core.definitions.default_for(kind, key) -> body|None`——程式出貨的預設（v0），**不看資料庫**；`resolve` 內部改呼叫它（行為不變：role ＞ company ＞ default）。
 - L0（行為修正，路由）：`GET /api/definitions/{kind}/{key}/diff?a|b=default` 原本呼叫 `resolve`，公司發布過就回公司最新版（`default` 對 `latest` 恆為空、無法比較公司版 vs 出貨預設）；現在回出貨預設（沒有預設 ⇒ 空內容）。編輯頁的 `latest`／`draft`／版本號比較不受影響。
