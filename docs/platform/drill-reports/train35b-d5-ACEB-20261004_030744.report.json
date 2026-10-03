@@ -1,0 +1,1812 @@
+{
+ "base": "D:\\開發測試檔\\d5-drill35b-run\\20261004_030744",
+ "base_commit": "326e6676",
+ "runs": {
+  "A": {
+   "returncode": 0,
+   "seconds": 21.7,
+   "result": {
+    "status": "success",
+    "rolled_back": "applied",
+    "service": "up",
+    "exit": "0"
+   },
+   "tail": "\\install\\backend\\db_backups\\pre_update_20261004_030809\\motrix_erp_demo.db\n  Migration ��?�暁i��Ɂ{demo �Ɂj...\n[OK]   Migration ��?�暒ʉ߁i�V�� db.py ���Ɛ����ɖڑO�I schema ��?��ցC��ᢌ�����j�B\n  �����v�`...\napply_plan 2026-10-04T03:08:16  commit=345a34cd59c89bbf3de8f4c683a0000d4956f28d\nroot=D:\\開發測試檔\\d5-drill35b-run\\20261004_030744\\install\npkg=D:\\開發測試檔\\d5-drill35b-run\\20261004_030744\\staging\\20261004_025908_345a34cd_full\\payload\nbaseline=True�E�Eommit 326e667608e7b57cb60a017cc51c2b477f549d6b�E�E lock=True\nDELETE 0 檔（上限 200�E�！E\n模絁E��E��夾�E�整個移除�E�：無\nADDED 4 檔（�E動回滾時刪除�E�E\nAPPLY_PLAN_OK delete=0 added=4\n\n[OK]   �����v�`�F�� 0 ?�A�V�� 4 ?�i���d�ߛ��� D:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\logs\\apply_update_20261004_030809.plan.txt�j\n  �{���i�����ݒ�a��...\n{\"allowed\": true, \"configured\": true, \"developer\": false, \"grace\": false, \"grace_until\": null, \"install\": \"25ec553682990330cf2cebd45586cf8cf7b0f714c5ebf7e6b51332b62664bc71\", \"missing\": [], \"payment_bank_missing\": [\"��s���i\", \"?��\", \"���j\"], \"reason\": \"configured\", \"via\": \"settings_page\"}\n\n[OK]   �{���i�����ݒ�a���ʉ߁iconfigured�j�B\n[WARN]   �����d�������ʖ�ꎑS�i��s���i�A?���A���j�j�F�����㐿���d PDF ���?�i428 company_bank_required�j�C����݌��i�����ݒ���\n::NOTE:: company_bank_missing=��s���i,?��,���j\n  ����������������ƁFD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\rollback_snapshots\\20261004_030809\n[OK]   ������Ɗ����i�܍���?�����j�B\n\n[2/6] ��~�f����i���┇����I autostart 珚��o�����s���j...\n  ���� autostart 珚� PID 20496�icmd.exe�j�FC:\\WINDOWS\\System32\\cmd.exe /c D:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\autostart.bat\n  ���� �����s�� PID 6384�iconhost.exe�j�F\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4\n  ���� �����s�� PID 26616�ipython.exe�j�F\"D:\\MOTRIX-PLATFORM\\.venv312\\Scripts\\python.exe\"  -m uvicorn main:app --port 6766 --host 127.0.0.1 --log-level info \n  ���� �����s�� PID 39324�ipython.exe�j�F\"C:\\Users\\hichan\\AppData\\Local\\Programs\\Python\\Python312\\python.exe\" -m uvicorn main:app --port 6766 --host 127.0.0.1 --log-level info \n  ���� 4 �s���B\n[OK]   Port 6766 �ߊm�F�ו��B\n[OK]   �f����ߒ�~�G�����o�������䊮����R�{?�{�d�V?��珚��B\n\n[3/6] ���p�V������...\n  autostart.bat �ۗ�����@��I�Ŗ{�i�o������I�a�ݔŖ{�s���G�V�Ŏ�L�v���I�ݒ萿�l�H�䛔�j�B\nAPPLY_DELETE_OK 0\n\n[OK]   �������{�����ߓ��p�B\n\n[4/6] ����/�X�V Python ����...\n[OK]   requirements.txt �����ߊm�F����B\n\n[4b/6] �d�V?������...\n[WARN]   �r���H��uMOTRIX ERP Server Autostart�v�s���݈��ߒ�p�F���R�{?�{����?�� autostart.bat�B���[�H��K�i���������\\������C���㐿�m�F�r���H��B\n\n[5/6] ���Ҏf������������N��?...\n    ������ 1/20 ���i�S�� 3s�j�F����\n{\"allowed\": true, \"configured\": true, \"developer\": false, \"grace\": false, \"grace_until\": null, \"install\": \"25ec553682990330cf2cebd45586cf8cf7b0f714c5ebf7e6b51332b62664bc71\", \"missing\": [], \"payment_bank_missing\": [\"��s���i\", \"?��\", \"���j\"], \"reason\": \"configured\", \"via\": \"settings_page\"}\n\n[OK]   �{���i�����ݒ��?�ʉ߁iconfigured�j�B\n[OK]   /api/ping ��䐳��Clog �����V����B\n\n[6/6] �X�V�Ŗ{���F?...\n[OK]   �ߛ�������œI����?���d�ibackend\\.deployed_files.json�j�B\n\n======================================\n  �X�V�����F345a34cd\n======================================\n\n����F\n  - ���p�O db ���ƁFD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\db_backups\\pre_update_20261004_030809\n  - ���p�O���������ƁFD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\rollback_snapshots\\20261004_030809\n  - ��{���X�V���䓞�ߒm�����I?�i��0�j�C�L���񋎍X�V�Y�\\�i?��\n::RESULT:: v=2 status=success rolled_back=applied service=up exit=0\n",
+   "t0": 1791054488.9777033,
+   "rewritten": {
+    "apply_update.ps1": [
+     69,
+     70
+    ],
+    "rollback_update.ps1": [
+     30,
+     31
+    ]
+   },
+   "timestamp": "20261004_030809",
+   "result_json": {
+    "protocol": 2,
+    "status": "success",
+    "rolled_back": "applied",
+    "service": "up",
+    "exit": 0,
+    "script": "apply_update",
+    "script_version": "2026-09-28k",
+    "timestamp": "20261004_030809",
+    "package": "D:\\開發測試檔\\d5-drill35b-run\\20261004_030744\\staging\\20261004_025908_345a34cd_full\\payload",
+    "commit": "345a34cd59c89bbf3de8f4c683a0000d4956f28d",
+    "started_at": "2026-10-04 03:08:09",
+    "finished_at": "2026-10-04 03:08:30"
+   },
+   "checks": {
+    "1_version": [
+     true,
+     "345a34cd59c89bbf3de8f4c683a0000d4956f28d"
+    ],
+    "2_ping": [
+     true,
+     ""
+    ],
+    "5_api_docs_off": [
+     true,
+     [
+      404,
+      404
+     ]
+    ],
+    "6_modules": [
+     true,
+     {
+      "changed": {
+       "analytics": [
+        "1.0.28",
+        "1.0.29"
+       ],
+       "case": [
+        "1.0.121",
+        "1.0.129"
+       ],
+       "tender_radar": [
+        "1.5.4",
+        "1.5.6"
+       ]
+      },
+      "unexpected": [],
+      "count": 13
+     }
+    ],
+    "7_log_no_traceback": [
+     true,
+     {
+      "traceback": 0,
+      "errors_head": [],
+      "lines": 5
+     }
+    ],
+    "8_one_listener": [
+     true,
+     [
+      "22412"
+     ]
+    ],
+    "9b_dispatch_cols": [
+     true,
+     []
+    ],
+    "9c_counts": [
+     true,
+     {
+      "audit_log": [
+       3354,
+       3354
+      ],
+      "custom_records": [
+       0,
+       0
+      ],
+      "vouchers_all": [
+       64,
+       64
+      ],
+      "voucher_lines": [
+       151,
+       151
+      ],
+      "dev_cases": [
+       109,
+       109
+      ],
+      "quotations": [
+       43,
+       43
+      ],
+      "case_extra_expenses": [
+       12,
+       12
+      ]
+     }
+    ],
+    "10_approval_endpoints_401": [
+     true,
+     {
+      "/api/contractor-dispatches/1/submit": 401,
+      "/api/contractor-dispatches/1/approve": 401,
+      "/api/contractor-dispatches/1/reject": 401,
+      "/api/contractor-dispatches/1/withdraw": 401,
+      "/api/contractor-dispatches/1/completion/request": 401,
+      "/api/contractor-dispatches/1/completion/approve": 401,
+      "/api/contractor-dispatches/1/completion/reject": 401,
+      "/api/contractor-dispatches/1/completion/withdraw": 401
+     }
+    ],
+    "11_builder_b_mount": [
+     true,
+     {
+      "points": [
+       "daily_tasks.daily-tasks"
+      ],
+      "mounts": [
+       200,
+       "{'point': 'daily_tasks.daily-tasks', 'tabs': []}"
+      ]
+     }
+    ],
+    "12_approval_dot_plain_user": [
+     true,
+     {
+      "count_status": 200,
+      "body": {
+       "count": 0,
+       "items": []
+      }
+     }
+    ],
+    "13_file_center_open": [
+     true,
+     {
+      "items": 3,
+      "opened": [
+       200,
+       108,
+       "b'\\x89PNG'"
+      ],
+      "plain_search": 403,
+      "plain_items": 0
+     }
+    ],
+    "14_payslip_mask": [
+     true,
+     {
+      "staff": "****8901",
+      "superadmin": "00012345678901",
+      "leak": false
+     }
+    ],
+    "9a_no_schema_version_shrinks": [
+     true,
+     {
+      "shrunk": {},
+      "changed": {}
+     }
+    ],
+    "9a_schema_case_is_6": [
+     true,
+     {
+      "base": 6,
+      "new": 6
+     }
+    ],
+    "9a_schema_subcontract_is_5": [
+     true,
+     {
+      "base": 5,
+      "new": 5
+     }
+    ],
+    "9a_db_version": [
+     true,
+     {
+      "base": 116,
+      "new": 116,
+      "expected": 116
+     }
+    ],
+    "16_material_endpoints_unauth_401": [
+     true,
+     "all 401"
+    ],
+    "35b_0_stale_checks_skipped": [
+     true,
+     {
+      "15_designer_default_off": "D12 設計器預設改開（34 班起），舊判準是「預設關」",
+      "16_subcontract_schema_stays_3": "承攬商 schema 已是 5（本班判準改成 case=6／subcontract=5）",
+      "16_material_tables_exist_and_empty": "35a 的種子會寫 case_material_approvals（材料申請審核列），表不再是空的",
+      "9c_legacy_dispatch_untouched": "第 30 班專屬（舊派發單不動）；基線已含兩段審核，種子派發的欄位預設不同"
+     }
+    ],
+    "35b_1_financial_pretax_basis": [
+     true,
+     {
+      "status": 200,
+      "dispatchTotal": 12000.0,
+      "dispatchTax": 500.0,
+      "dispatchGrandTotal": 12500.0,
+      "dispatchBasis": "pretax",
+      "baseline_dispatchTotal": 12500.0,
+      "changed_vs_baseline": [
+       [
+        "/totals/dispatchTotal",
+        "12500.0→12000.0"
+       ],
+       [
+        "/totals/totalActualCost",
+        "23000.0→22500.0"
+       ]
+      ],
+      "added_keys": [
+       "dispatchBasis",
+       "dispatchGrandTotal",
+       "dispatchTax",
+       "tax"
+      ],
+      "removed": [],
+      "draft_totalActualCost": 22500.0
+     }
+    ],
+    "35b_2_non_financial_403_no_new_fields": [
+     true,
+     {
+      "status": 403,
+      "body": "{\"detail\":\"此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）\"}",
+      "login_ok": true
+     }
+    ],
+    "35b_3_old_frozen_case_unchanged": [
+     true,
+     {
+      "status": 200,
+      "frozen": true,
+      "dispatchTotal": 12500.0,
+      "changed": [],
+      "removed": [],
+      "added_keys": [
+       "dispatchBasis",
+       "dispatchGrandTotal",
+       "dispatchGrandTotal",
+       "dispatchTax",
+       "dispatchTax",
+       "dispatchTotal",
+       "tax"
+      ]
+     }
+    ],
+    "35b_4_browser_finalize_stores_pretax": [
+     true,
+     {
+      "put_status": 200,
+      "put_text": "{\"ok\":true,\"updated_at\":\"2026-10-04T03:08:35.630641\"}",
+      "stored": {
+       "dispatchTotal": 12000,
+       "dispatchTax": 500,
+       "dispatchGrandTotal": 12500,
+       "dispatchBasis": "pretax",
+       "totalActualCost": 22500,
+       "netProfit": 66725
+      },
+      "draft_totalActualCost": 22500.0
+     }
+    ],
+    "35b_5_tampered_finalize_409_and_not_saved": [
+     true,
+     {
+      "dispatchTotal_0_with_pretax_marker": [
+       409,
+       "{\"detail\":\"完結前系統重算的數字與畫面不一致（資料在你編輯期間有變動，或精算頁版本過舊）——請重新整理精算頁再完結。差異：承攬商派發成本（未稅＋外包人員）：頁面 0、系統重算 12000；實際總成本：頁面 10500、系統重算 22500；淨利：頁面 888888、系統重算 66725\"}"
+      ],
+      "gross_12500_under_pretax": [
+       409,
+       "{\"detail\":\"完結前系統重算的數字與畫面不一致（資料在你編輯期間有變動，或精算頁版本過舊）——請重新整理精算頁再完結。差異：承攬商派發成本（未稅＋外包人員）：頁面 12500、系統重算 12000；實際總成本：頁面 23000、系統重算 22500\"}"
+      ],
+      "status_after": null
+     }
+    ],
+    "35b_5b_honest_payload_positive_control_200": [
+     true,
+     {
+      "status": 200,
+      "body": "{\"ok\": true, \"updated_at\": \"2026-10-04T03:08:36.136502\"}"
+     }
+    ],
+    "35b_6_reopen_needs_reason": [
+     true,
+     {
+      "no_reason": [
+       422,
+       "{\"detail\":\"重新開啟或修改已完結的精算必須填寫理由\"}"
+      ],
+      "blank_reason": 422,
+      "status_after_refusals": "finalized",
+      "with_reason": 200
+     }
+    ],
+    "35b_6b_reason_hidden_from_non_financial": [
+     true,
+     {
+      "engineer_statuses": {
+       "/api/quotations/DRILL-35B-N1": 200,
+       "/api/quotations/DRILL-35B-N1/case-bundle": 200,
+       "/api/quotations/DRILL-35B-N1/versions": 200
+      },
+      "engineer_leaks": [],
+      "financial_sees_reason_in": [
+       "/api/quotations/DRILL-35B-N1",
+       "/api/quotations/DRILL-35B-N1/case-bundle",
+       "/api/quotations/DRILL-35B-N1/versions"
+      ]
+     }
+    ],
+    "35b_7_closing_pdf_new_case_has_tax_line": [
+     true,
+     {
+      "status": 200,
+      "bytes": 415923,
+      "has_line": true,
+      "excerpt": "承攬商派發成本 12,000\n承攬商：未稅 12,000／稅額 500（進項稅額，不計成本）\n實際總成本 22,500\n真實⽑利 77,500\n真實⽑利率 77"
+     }
+    ],
+    "35b_7b_closing_pdf_old_case_unchanged": [
+     true,
+     {
+      "status": 200,
+      "baseline_pdf_available": true,
+      "text_equal_to_baseline": true,
+      "len_now": 831,
+      "len_base": 831
+     }
+    ],
+    "35b_8_pages_served": [
+     true,
+     {
+      "case-management": [
+       200,
+       true
+      ],
+      "settlement": [
+       200,
+       true,
+       true
+      ]
+     }
+    ],
+    "35b_t0_no_network_was_attempted": [
+     true,
+     {
+      "urlopen_calls": 0
+     }
+    ],
+    "35b_t1_empty_page_recognised_not_suspected_no_mail": [
+     true,
+     {
+      "parse": [
+       0,
+       0,
+       true
+      ],
+      "run_scan": {
+       "recognised": true,
+       "parsed": 0,
+       "dropped": 0,
+       "suspect_redesign": false,
+       "list_state": "empty_day"
+      },
+      "fetch_log_suspected": 0,
+      "mails": []
+     }
+    ],
+    "35b_t2_positive_control_garbled_list_still_suspected_and_mails": [
+     true,
+     {
+      "suspect": true,
+      "list_state": "format_changed",
+      "parsed": 1,
+      "dropped": 9,
+      "mails": [
+       [
+        "source_changed",
+        1,
+        9
+       ]
+      ]
+     }
+    ],
+    "35b_t3_saturday_and_sunday_do_not_mail": [
+     true,
+     {
+      "saturday": {
+       "no_mail_day": true,
+       "why": "週末",
+       "mails": [],
+       "pending": [
+        "tender_source_changed"
+       ]
+      },
+      "sunday": {
+       "no_mail_day": true,
+       "why": "週末",
+       "mails": [],
+       "pending": [
+        "tender_source_changed"
+       ]
+      }
+     }
+    ],
+    "35b_t3b_national_holiday_weekday_holds_then_mails_next_working_day": [
+     true,
+     {
+      "date": "2026-10-26",
+      "why": "國定假日：補假",
+      "mails": [],
+      "pending": [
+       "tender_source_changed"
+      ],
+      "next_mail_day": "2026-10-27",
+      "mails_after_next_mail_day": [
+       [
+        "source_changed",
+        1,
+        9
+       ]
+      ],
+      "pending_after": []
+     }
+    ],
+    "35b_t4_holidays_table_present_and_loaded": [
+     true,
+     {
+      "file": "D:\\開發測試檔\\d5-drill35b-run\\20261004_030744\\install\\backend\\modules\\tender_radar\\holidays_tw.json",
+      "bytes": 2400,
+      "coverage": [
+       "2026-01-01",
+       "2027-12-31"
+      ],
+      "days_until_expiry": 452
+     }
+    ],
+    "35b_t5_captcha_page_stops_the_detail_loop": [
+     true,
+     {
+      "fetch_detail_result": [
+       null,
+       "來源網站要求驗證碼（撲克牌檢核），詳細頁無法自動讀取；已停止抓取詳細頁"
+      ],
+      "tenders": 3,
+      "detail_requests_cumulative_by_day": [
+       1,
+       1,
+       2
+      ],
+      "state_detail": "captcha",
+      "locations": [
+       null,
+       null,
+       null
+      ]
+     }
+    ],
+    "35b_t6_page_status_notices": [
+     true,
+     {
+      "empty_day": {
+       "http": 200,
+       "kinds": [
+        "empty_day",
+        "no_mail_day"
+       ],
+       "listState": "empty_day",
+       "detailState": null
+      },
+      "format_changed_and_captcha": {
+       "http": 200,
+       "kinds": [
+        "format_changed",
+        "detail_captcha",
+        "no_mail_day"
+       ],
+       "listState": "format_changed",
+       "detailState": "captcha"
+      }
+     }
+    ],
+    "35b_t7_row_link_and_missing_helper_rendered": [
+     true,
+     {
+      "D35B-1": {
+       "link_count": 1,
+       "link_text": "前往來源網站明細",
+       "target": "_blank",
+       "rel": "noopener noreferrer",
+       "href": "https://web.pcc.gov.tw/prkms/urlSelector/common/tpam?pk=D35B-1",
+       "helper_count": 0,
+       "helper_text": [],
+       "location_missing": 0,
+       "method_missing": 0
+      },
+      "D35B-2": {
+       "link_count": 1,
+       "link_text": "前往來源網站明細",
+       "target": "_blank",
+       "rel": "noopener noreferrer",
+       "href": "https://web.pcc.gov.tw/prkms/urlSelector/common/tpam?pk=D35B-2",
+       "helper_count": 2,
+       "helper_text": [
+        "地點與招標方式需在來源網站通過驗證碼後查看",
+        "地點與招標方式需在來源網站通過驗證碼後查看"
+       ],
+       "location_missing": 1,
+       "method_missing": 1
+      },
+      "D35B-3": {
+       "link_count": 1,
+       "link_text": "前往來源網站明細",
+       "target": "_blank",
+       "rel": "noopener noreferrer",
+       "href": "https://web.pcc.gov.tw/prkms/urlSelector/common/tpam?pk=D35B-3",
+       "helper_count": 1,
+       "helper_text": [
+        "地點與招標方式需在來源網站通過驗證碼後查看"
+       ],
+       "location_missing": 0,
+       "method_missing": 1
+      },
+      "notices": [
+       "ⓘ\n今天是不寄信日（週末）：系統照常抓取，新標案的通知信會順延到下一個上班日寄出。"
+      ]
+     }
+    ],
+    "35b_c_module_versions": [
+     true,
+     {
+      "installed": {
+       "case": "1.0.129",
+       "tender_radar": "1.5.6",
+       "analytics": "1.0.29"
+      },
+      "expected": {
+       "case": "1.0.129",
+       "tender_radar": "1.5.6",
+       "analytics": "1.0.29"
+      }
+     }
+    ],
+    "14_legacy_attachments": [
+     true,
+     {
+      "skipped": "第 30 班不比附件（第 29 班判準）"
+     }
+    ],
+    "15_legacy_flow": [
+     true,
+     {
+      "skipped": true
+     }
+    ],
+    "13_restart_idempotent": [
+     true,
+     {
+      "restart_s": 13.2
+     }
+    ]
+   },
+   "ok": true
+  },
+  "C": {
+   "returncode": 0,
+   "seconds": 14.2,
+   "result": {
+    "status": "rollback_ok",
+    "rolled_back": "restored",
+    "service": "up",
+    "exit": "0"
+   },
+   "tail": "::PROTOCOL:: v=2\n======================================\n  MOTRIX ERP - Rollback\n======================================\n�g���m�F�F�����@�iD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install�j\n\n  would-remove backend/.build_commit\n  would-remove backend/export_ignore.json\n  would-remove backend/modules/tender_radar/calendar_tw.py\n  would-remove backend/modules/tender_radar/holidays_tw.json\nAPPLY_SNAPCLEAN_PLAN 4\n\n[1/2] �����暒ʉ߁F\n  ���������ƁFD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\rollback_snapshots\\20261004_030809\n  �͎��F�����{�����Ɂi�����Ɋ��� D:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\db_backups\\pre_update_20261004_030809\\motrix_erp.db�G�����O��?������O�I�����Ɂj\n  demo �ɉ��ƁFD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\db_backups\\pre_update_20261004_030809\\motrix_erp_demo.db\n\n[2/2] �J�n���...\n  ���L�Q��������I autostart 珚��icmd.exe �c autostart.bat�j�B\n[OK]   ����O�I�����ɛ�?���FD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\db_backups\\pre_rollback_20261004_030903\n  removed backend/.build_commit\n  removed backend/export_ignore.json\n  removed backend/modules/tender_radar/calendar_tw.py\n  removed backend/modules/tender_radar/holidays_tw.json\nAPPLY_SNAPCLEAN_OK 4\n\n[OK]   ����?�����ߊҌ��B\n[OK]   �����ɛߊҌ��FD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\db_backups\\pre_update_20261004_030809\\motrix_erp.db�i����O�I������?���� db_backups\\pre_rollback_20261004_030903�j\n[OK]   demo �ɛߊҌ��FD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\db_backups\\pre_update_20261004_030809\\motrix_erp_demo.db\n[OK]   �����I?�i.deployed_commit.json�j�ߊҌ��׉����c���I�Ŗ{�B\n[WARN]   �r���H��uMOTRIX ERP Server Autostart�v�s���݈��ߒ�p�F���R�{?�{����?�� autostart.bat�B���[�H��K�i���������\\������C���㐿�m�F�r���H��B\n[WARN]     ���N��?���s�ڏ�FHEALTHCHECK_FAIL: URLError: <urlopen error [WinError 10061] 無法連線，因為目標電腦拒絕連線、E\n    ������ 1/20 ���i�S�� 4s�j�F�����\n    ������ 2/20 ���i�S�� 7s�j�F����\n\n======================================\n  ��������C���N?�Ԑ���F20261004_030809\n======================================\n::RESULT:: v=2 status=rollback_ok rolled_back=restored service=up exit=0\n",
+   "t0": 1791054543.1689587,
+   "after": {
+    "commit": "326e667608e7b57cb60a017cc51c2b477f549d6b",
+    "commit_is_base": true,
+    "ping": true,
+    "schema_versions": {
+     "accounting": 3,
+     "case": 6,
+     "core": 6,
+     "crm": 1,
+     "lodging": 1,
+     "payroll": 3,
+     "subcontract": 5
+    },
+    "schema_is_base": true,
+    "tables_new": {
+     "expense_categories": true,
+     "gl_dimensions": true,
+     "user_bank_accounts": true
+    },
+    "extra_cols_is_base": true,
+    "counts_is_base": true,
+    "legacy_same": true,
+    "log": {
+     "traceback": 0,
+     "errors_head": [],
+     "lines": 4
+    }
+   },
+   "ok": true
+  },
+  "E": {
+   "returncode": 0,
+   "seconds": 18.9,
+   "result": {
+    "status": "success",
+    "rolled_back": "applied",
+    "service": "up",
+    "exit": "0"
+   },
+   "tail": "6f28d\nroot=D:\\開發測試檔\\d5-drill35b-run\\20261004_030744\\install\npkg=D:\\開發測試檔\\d5-drill35b-run\\20261004_030744\\staging\\20261004_025908_345a34cd_full\\payload\nbaseline=True�E�Eommit 326e667608e7b57cb60a017cc51c2b477f549d6b�E�E lock=True\nDELETE 0 檔（上限 200�E�！E\n模絁E��E��夾�E�整個移除�E�：無\nADDED 4 檔（�E動回滾時刪除�E�E\nAPPLY_PLAN_OK delete=0 added=4\n\n[OK]   �����v�`�F�� 0 ?�A�V�� 4 ?�i���d�ߛ��� D:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\logs\\apply_update_20261004_030918.plan.txt�j\n  �{���i�����ݒ�a��...\n{\"allowed\": true, \"configured\": true, \"developer\": false, \"grace\": false, \"grace_until\": null, \"install\": \"25ec553682990330cf2cebd45586cf8cf7b0f714c5ebf7e6b51332b62664bc71\", \"missing\": [], \"payment_bank_missing\": [\"��s���i\", \"?��\", \"���j\"], \"reason\": \"configured\", \"via\": \"settings_page\"}\n\n[OK]   �{���i�����ݒ�a���ʉ߁iconfigured�j�B\n[WARN]   �����d�������ʖ�ꎑS�i��s���i�A?���A���j�j�F�����㐿���d PDF ���?�i428 company_bank_required�j�C����݌��i�����ݒ���\n::NOTE:: company_bank_missing=��s���i,?��,���j\n  ����������������ƁFD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\rollback_snapshots\\20261004_030918\n[OK]   ������Ɗ����i�܍���?�����j�B\n\n[2/6] ��~�f����i���┇����I autostart 珚��o�����s���j...\n  ���� autostart 珚� PID 38904�icmd.exe�j�F\"C:\\WINDOWS\\System32\\cmd.exe\" /c \"D:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\autostart.bat\" \n  ���� �����s�� PID 10960�iconhost.exe�j�F\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4\n  ���� �����s�� PID 6816�ipython.exe�j�F\"D:\\MOTRIX-PLATFORM\\.venv312\\Scripts\\python.exe\"  -m uvicorn main:app --port 6766 --host 127.0.0.1 --log-level info \n  ���� �����s�� PID 416�ipython.exe�j�F\"C:\\Users\\hichan\\AppData\\Local\\Programs\\Python\\Python312\\python.exe\" -m uvicorn main:app --port 6766 --host 127.0.0.1 --log-level info \n  ���� autostart 珚� PID 12292�icmd.exe�j�FC:\\WINDOWS\\System32\\cmd.exe /c D:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\autostart.bat\n  ���� �����s�� PID 9504�iconhost.exe�j�F\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4\n  ���� �����s�� PID 4832�itimeout.exe�j�F\n  ���� 7 �s���B\n[OK]   Port 6766 �ߊm�F�ו��B\n[OK]   �f����ߒ�~�G�����o�������䊮����R�{?�{�d�V?��珚��B\n\n[3/6] ���p�V������...\n  autostart.bat �ۗ�����@��I�Ŗ{�i�o������I�a�ݔŖ{�s���G�V�Ŏ�L�v���I�ݒ萿�l�H�䛔�j�B\nAPPLY_DELETE_OK 0\n\n[OK]   �������{�����ߓ��p�B\n\n[4/6] ����/�X�V Python ����...\n[OK]   requirements.txt �����ߊm�F����B\n\n[4b/6] �d�V?������...\n[WARN]   �r���H��uMOTRIX ERP Server Autostart�v�s���݈��ߒ�p�F���R�{?�{����?�� autostart.bat�B���[�H��K�i���������\\������C���㐿�m�F�r���H��B\n\n[5/6] ���Ҏf������������N��?...\n    ������ 1/20 ���i�S�� 3s�j�F����\n{\"allowed\": true, \"configured\": true, \"developer\": false, \"grace\": false, \"grace_until\": null, \"install\": \"25ec553682990330cf2cebd45586cf8cf7b0f714c5ebf7e6b51332b62664bc71\", \"missing\": [], \"payment_bank_missing\": [\"��s���i\", \"?��\", \"���j\"], \"reason\": \"configured\", \"via\": \"settings_page\"}\n\n[OK]   �{���i�����ݒ��?�ʉ߁iconfigured�j�B\n[OK]   /api/ping ��䐳��Clog �����V����B\n\n[6/6] �X�V�Ŗ{���F?...\n[OK]   �ߛ�������œI����?���d�ibackend\\.deployed_files.json�j�B\n\n======================================\n  �X�V�����F345a34cd\n======================================\n\n����F\n  - ���p�O db ���ƁFD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\db_backups\\pre_update_20261004_030918\n  - ���p�O���������ƁFD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\rollback_snapshots\\20261004_030918\n  - ��{���X�V���䓞�ߒm�����I?�i��0�j�C�L���񋎍X�V�Y�\\�i?��\n::RESULT:: v=2 status=success rolled_back=applied service=up exit=0\n",
+   "t0": 1791054558.2988448,
+   "rewritten": {
+    "apply_update.ps1": [
+     69,
+     70
+    ],
+    "rollback_update.ps1": [
+     30,
+     31
+    ]
+   },
+   "timestamp": "20261004_030918",
+   "result_json": {
+    "protocol": 2,
+    "status": "success",
+    "rolled_back": "applied",
+    "service": "up",
+    "exit": 0,
+    "script": "apply_update",
+    "script_version": "2026-09-28k",
+    "timestamp": "20261004_030918",
+    "package": "D:\\開發測試檔\\d5-drill35b-run\\20261004_030744\\staging\\20261004_025908_345a34cd_full\\payload",
+    "commit": "345a34cd59c89bbf3de8f4c683a0000d4956f28d",
+    "started_at": "2026-10-04 03:09:18",
+    "finished_at": "2026-10-04 03:09:37"
+   },
+   "checks": {
+    "1_version": [
+     true,
+     "345a34cd59c89bbf3de8f4c683a0000d4956f28d"
+    ],
+    "2_ping": [
+     true,
+     ""
+    ],
+    "5_api_docs_off": [
+     true,
+     [
+      404,
+      404
+     ]
+    ],
+    "6_modules": [
+     true,
+     {
+      "changed": {
+       "analytics": [
+        "1.0.28",
+        "1.0.29"
+       ],
+       "case": [
+        "1.0.121",
+        "1.0.129"
+       ],
+       "tender_radar": [
+        "1.5.4",
+        "1.5.6"
+       ]
+      },
+      "unexpected": [],
+      "count": 13
+     }
+    ],
+    "7_log_no_traceback": [
+     true,
+     {
+      "traceback": 0,
+      "errors_head": [],
+      "lines": 5
+     }
+    ],
+    "8_one_listener": [
+     true,
+     [
+      "1404"
+     ]
+    ],
+    "9b_dispatch_cols": [
+     true,
+     []
+    ],
+    "9c_counts": [
+     true,
+     {
+      "audit_log": [
+       3354,
+       3354
+      ],
+      "custom_records": [
+       0,
+       0
+      ],
+      "vouchers_all": [
+       64,
+       64
+      ],
+      "voucher_lines": [
+       151,
+       151
+      ],
+      "dev_cases": [
+       109,
+       109
+      ],
+      "quotations": [
+       43,
+       43
+      ],
+      "case_extra_expenses": [
+       12,
+       12
+      ]
+     }
+    ],
+    "10_approval_endpoints_401": [
+     true,
+     {
+      "/api/contractor-dispatches/1/submit": 401,
+      "/api/contractor-dispatches/1/approve": 401,
+      "/api/contractor-dispatches/1/reject": 401,
+      "/api/contractor-dispatches/1/withdraw": 401,
+      "/api/contractor-dispatches/1/completion/request": 401,
+      "/api/contractor-dispatches/1/completion/approve": 401,
+      "/api/contractor-dispatches/1/completion/reject": 401,
+      "/api/contractor-dispatches/1/completion/withdraw": 401
+     }
+    ],
+    "11_builder_b_mount": [
+     true,
+     {
+      "points": [
+       "daily_tasks.daily-tasks"
+      ],
+      "mounts": [
+       200,
+       "{'point': 'daily_tasks.daily-tasks', 'tabs': []}"
+      ]
+     }
+    ],
+    "12_approval_dot_plain_user": [
+     true,
+     {
+      "count_status": 200,
+      "body": {
+       "count": 0,
+       "items": []
+      }
+     }
+    ],
+    "13_file_center_open": [
+     true,
+     {
+      "items": 3,
+      "opened": [
+       200,
+       108,
+       "b'\\x89PNG'"
+      ],
+      "plain_search": 403,
+      "plain_items": 0
+     }
+    ],
+    "14_payslip_mask": [
+     true,
+     {
+      "staff": "****8901",
+      "superadmin": "00012345678901",
+      "leak": false
+     }
+    ],
+    "9a_no_schema_version_shrinks": [
+     true,
+     {
+      "shrunk": {},
+      "changed": {}
+     }
+    ],
+    "9a_schema_case_is_6": [
+     true,
+     {
+      "base": 6,
+      "new": 6
+     }
+    ],
+    "9a_schema_subcontract_is_5": [
+     true,
+     {
+      "base": 5,
+      "new": 5
+     }
+    ],
+    "9a_db_version": [
+     true,
+     {
+      "base": 116,
+      "new": 116,
+      "expected": 116
+     }
+    ],
+    "16_material_endpoints_unauth_401": [
+     true,
+     "all 401"
+    ],
+    "35b_0_stale_checks_skipped": [
+     true,
+     {
+      "15_designer_default_off": "D12 設計器預設改開（34 班起），舊判準是「預設關」",
+      "16_subcontract_schema_stays_3": "承攬商 schema 已是 5（本班判準改成 case=6／subcontract=5）",
+      "16_material_tables_exist_and_empty": "35a 的種子會寫 case_material_approvals（材料申請審核列），表不再是空的",
+      "9c_legacy_dispatch_untouched": "第 30 班專屬（舊派發單不動）；基線已含兩段審核，種子派發的欄位預設不同"
+     }
+    ],
+    "35b_1_financial_pretax_basis": [
+     true,
+     {
+      "status": 200,
+      "dispatchTotal": 12000.0,
+      "dispatchTax": 500.0,
+      "dispatchGrandTotal": 12500.0,
+      "dispatchBasis": "pretax",
+      "baseline_dispatchTotal": 12500.0,
+      "changed_vs_baseline": [
+       [
+        "/totals/dispatchTotal",
+        "12500.0→12000.0"
+       ],
+       [
+        "/totals/totalActualCost",
+        "23000.0→22500.0"
+       ]
+      ],
+      "added_keys": [
+       "dispatchBasis",
+       "dispatchGrandTotal",
+       "dispatchTax",
+       "tax"
+      ],
+      "removed": [],
+      "draft_totalActualCost": 22500.0
+     }
+    ],
+    "35b_2_non_financial_403_no_new_fields": [
+     true,
+     {
+      "status": 403,
+      "body": "{\"detail\":\"此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）\"}",
+      "login_ok": true
+     }
+    ],
+    "35b_3_old_frozen_case_unchanged": [
+     true,
+     {
+      "status": 200,
+      "frozen": true,
+      "dispatchTotal": 12500.0,
+      "changed": [],
+      "removed": [],
+      "added_keys": [
+       "dispatchBasis",
+       "dispatchGrandTotal",
+       "dispatchGrandTotal",
+       "dispatchTax",
+       "dispatchTax",
+       "dispatchTotal",
+       "tax"
+      ]
+     }
+    ],
+    "35b_4_browser_finalize_stores_pretax": [
+     true,
+     {
+      "put_status": 200,
+      "put_text": "{\"ok\":true,\"updated_at\":\"2026-10-04T03:09:42.215153\"}",
+      "stored": {
+       "dispatchTotal": 12000,
+       "dispatchTax": 500,
+       "dispatchGrandTotal": 12500,
+       "dispatchBasis": "pretax",
+       "totalActualCost": 22500,
+       "netProfit": 66725
+      },
+      "draft_totalActualCost": 22500.0
+     }
+    ],
+    "35b_5_tampered_finalize_409_and_not_saved": [
+     true,
+     {
+      "dispatchTotal_0_with_pretax_marker": [
+       409,
+       "{\"detail\":\"完結前系統重算的數字與畫面不一致（資料在你編輯期間有變動，或精算頁版本過舊）——請重新整理精算頁再完結。差異：承攬商派發成本（未稅＋外包人員）：頁面 0、系統重算 12000；實際總成本：頁面 10500、系統重算 22500；淨利：頁面 888888、系統重算 66725\"}"
+      ],
+      "gross_12500_under_pretax": [
+       409,
+       "{\"detail\":\"完結前系統重算的數字與畫面不一致（資料在你編輯期間有變動，或精算頁版本過舊）——請重新整理精算頁再完結。差異：承攬商派發成本（未稅＋外包人員）：頁面 12500、系統重算 12000；實際總成本：頁面 23000、系統重算 22500\"}"
+      ],
+      "status_after": null
+     }
+    ],
+    "35b_5b_honest_payload_positive_control_200": [
+     true,
+     {
+      "status": 200,
+      "body": "{\"ok\": true, \"updated_at\": \"2026-10-04T03:09:42.743758\"}"
+     }
+    ],
+    "35b_6_reopen_needs_reason": [
+     true,
+     {
+      "no_reason": [
+       422,
+       "{\"detail\":\"重新開啟或修改已完結的精算必須填寫理由\"}"
+      ],
+      "blank_reason": 422,
+      "status_after_refusals": "finalized",
+      "with_reason": 200
+     }
+    ],
+    "35b_6b_reason_hidden_from_non_financial": [
+     true,
+     {
+      "engineer_statuses": {
+       "/api/quotations/DRILL-35B-N1": 200,
+       "/api/quotations/DRILL-35B-N1/case-bundle": 200,
+       "/api/quotations/DRILL-35B-N1/versions": 200
+      },
+      "engineer_leaks": [],
+      "financial_sees_reason_in": [
+       "/api/quotations/DRILL-35B-N1",
+       "/api/quotations/DRILL-35B-N1/case-bundle",
+       "/api/quotations/DRILL-35B-N1/versions"
+      ]
+     }
+    ],
+    "35b_7_closing_pdf_new_case_has_tax_line": [
+     true,
+     {
+      "status": 200,
+      "bytes": 415923,
+      "has_line": true,
+      "excerpt": "承攬商派發成本 12,000\n承攬商：未稅 12,000／稅額 500（進項稅額，不計成本）\n實際總成本 22,500\n真實⽑利 77,500\n真實⽑利率 77"
+     }
+    ],
+    "35b_7b_closing_pdf_old_case_unchanged": [
+     true,
+     {
+      "status": 200,
+      "baseline_pdf_available": true,
+      "text_equal_to_baseline": true,
+      "len_now": 831,
+      "len_base": 831
+     }
+    ],
+    "35b_8_pages_served": [
+     true,
+     {
+      "case-management": [
+       200,
+       true
+      ],
+      "settlement": [
+       200,
+       true,
+       true
+      ]
+     }
+    ],
+    "35b_t0_no_network_was_attempted": [
+     true,
+     {
+      "urlopen_calls": 0
+     }
+    ],
+    "35b_t1_empty_page_recognised_not_suspected_no_mail": [
+     true,
+     {
+      "parse": [
+       0,
+       0,
+       true
+      ],
+      "run_scan": {
+       "recognised": true,
+       "parsed": 0,
+       "dropped": 0,
+       "suspect_redesign": false,
+       "list_state": "empty_day"
+      },
+      "fetch_log_suspected": 0,
+      "mails": []
+     }
+    ],
+    "35b_t2_positive_control_garbled_list_still_suspected_and_mails": [
+     true,
+     {
+      "suspect": true,
+      "list_state": "format_changed",
+      "parsed": 1,
+      "dropped": 9,
+      "mails": [
+       [
+        "source_changed",
+        1,
+        9
+       ]
+      ]
+     }
+    ],
+    "35b_t3_saturday_and_sunday_do_not_mail": [
+     true,
+     {
+      "saturday": {
+       "no_mail_day": true,
+       "why": "週末",
+       "mails": [],
+       "pending": [
+        "tender_source_changed"
+       ]
+      },
+      "sunday": {
+       "no_mail_day": true,
+       "why": "週末",
+       "mails": [],
+       "pending": [
+        "tender_source_changed"
+       ]
+      }
+     }
+    ],
+    "35b_t3b_national_holiday_weekday_holds_then_mails_next_working_day": [
+     true,
+     {
+      "date": "2026-10-26",
+      "why": "國定假日：補假",
+      "mails": [],
+      "pending": [
+       "tender_source_changed"
+      ],
+      "next_mail_day": "2026-10-27",
+      "mails_after_next_mail_day": [
+       [
+        "source_changed",
+        1,
+        9
+       ]
+      ],
+      "pending_after": []
+     }
+    ],
+    "35b_t4_holidays_table_present_and_loaded": [
+     true,
+     {
+      "file": "D:\\開發測試檔\\d5-drill35b-run\\20261004_030744\\install\\backend\\modules\\tender_radar\\holidays_tw.json",
+      "bytes": 2400,
+      "coverage": [
+       "2026-01-01",
+       "2027-12-31"
+      ],
+      "days_until_expiry": 452
+     }
+    ],
+    "35b_t5_captcha_page_stops_the_detail_loop": [
+     true,
+     {
+      "fetch_detail_result": [
+       null,
+       "來源網站要求驗證碼（撲克牌檢核），詳細頁無法自動讀取；已停止抓取詳細頁"
+      ],
+      "tenders": 3,
+      "detail_requests_cumulative_by_day": [
+       1,
+       1,
+       2
+      ],
+      "state_detail": "captcha",
+      "locations": [
+       null,
+       null,
+       null
+      ]
+     }
+    ],
+    "35b_t6_page_status_notices": [
+     true,
+     {
+      "empty_day": {
+       "http": 200,
+       "kinds": [
+        "empty_day",
+        "no_mail_day"
+       ],
+       "listState": "empty_day",
+       "detailState": null
+      },
+      "format_changed_and_captcha": {
+       "http": 200,
+       "kinds": [
+        "format_changed",
+        "detail_captcha",
+        "no_mail_day"
+       ],
+       "listState": "format_changed",
+       "detailState": "captcha"
+      }
+     }
+    ],
+    "35b_t7_row_link_and_missing_helper_rendered": [
+     true,
+     {
+      "D35B-1": {
+       "link_count": 1,
+       "link_text": "前往來源網站明細",
+       "target": "_blank",
+       "rel": "noopener noreferrer",
+       "href": "https://web.pcc.gov.tw/prkms/urlSelector/common/tpam?pk=D35B-1",
+       "helper_count": 0,
+       "helper_text": [],
+       "location_missing": 0,
+       "method_missing": 0
+      },
+      "D35B-2": {
+       "link_count": 1,
+       "link_text": "前往來源網站明細",
+       "target": "_blank",
+       "rel": "noopener noreferrer",
+       "href": "https://web.pcc.gov.tw/prkms/urlSelector/common/tpam?pk=D35B-2",
+       "helper_count": 2,
+       "helper_text": [
+        "地點與招標方式需在來源網站通過驗證碼後查看",
+        "地點與招標方式需在來源網站通過驗證碼後查看"
+       ],
+       "location_missing": 1,
+       "method_missing": 1
+      },
+      "D35B-3": {
+       "link_count": 1,
+       "link_text": "前往來源網站明細",
+       "target": "_blank",
+       "rel": "noopener noreferrer",
+       "href": "https://web.pcc.gov.tw/prkms/urlSelector/common/tpam?pk=D35B-3",
+       "helper_count": 1,
+       "helper_text": [
+        "地點與招標方式需在來源網站通過驗證碼後查看"
+       ],
+       "location_missing": 0,
+       "method_missing": 1
+      },
+      "notices": [
+       "ⓘ\n今天是不寄信日（週末）：系統照常抓取，新標案的通知信會順延到下一個上班日寄出。"
+      ]
+     }
+    ],
+    "35b_c_module_versions": [
+     true,
+     {
+      "installed": {
+       "case": "1.0.129",
+       "tender_radar": "1.5.6",
+       "analytics": "1.0.29"
+      },
+      "expected": {
+       "case": "1.0.129",
+       "tender_radar": "1.5.6",
+       "analytics": "1.0.29"
+      }
+     }
+    ]
+   },
+   "ok": true
+  },
+  "B": {
+   "returncode": 0,
+   "seconds": 13.5,
+   "result": {
+    "status": "rollback_ok",
+    "rolled_back": "restored",
+    "service": "up",
+    "exit": "0"
+   },
+   "tail": "::PROTOCOL:: v=2\n======================================\n  MOTRIX ERP - Rollback\n======================================\n�g���m�F�F�����@�iD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install�j\n\n  would-remove backend/.build_commit\n  would-remove backend/export_ignore.json\n  would-remove backend/modules/tender_radar/calendar_tw.py\n  would-remove backend/modules/tender_radar/holidays_tw.json\nAPPLY_SNAPCLEAN_PLAN 4\n\n[1/2] �����暒ʉ߁F\n  ���������ƁFD:\\�Jᢑ���?\\d5-drill35b-run\\20261004_030744\\install\\backend\\rollback_snapshots\\20261004_030918\n  �͎��F��������C�����ɕۗ��i�a�݁j\n\n[2/2] �J�n���...\n  ���L�Q��������I autostart 珚��icmd.exe �c autostart.bat�j�B\n  ���� �����s�� PID 8076�ipython.exe�j�F\"D:\\MOTRIX-PLATFORM\\.venv312\\Scripts\\python.exe\"  -m uvicorn main:app --port 6766 --host 127.0.0.1 --log-level info \n  ���� �����s�� PID 20664�ipython.exe�j�F\"C:\\Users\\hichan\\AppData\\Local\\Programs\\Python\\Python312\\python.exe\" -m uvicorn main:app --port 6766 --host 127.0.0.1 --log-level info \n  removed backend/.build_commit\n  removed backend/export_ignore.json\n  removed backend/modules/tender_radar/calendar_tw.py\n  removed backend/modules/tender_radar/holidays_tw.json\nAPPLY_SNAPCLEAN_OK 4\n\n[OK]   ����?�����ߊҌ��B\n  �����ɕۗ��s���i��������G�V�� migration ���V�������o�\\�C�p��椓����j�B\n[OK]   �����I?�i.deployed_commit.json�j�ߊҌ��׉����c���I�Ŗ{�B\n[WARN]   �r���H��uMOTRIX ERP Server Autostart�v�s���݈��ߒ�p�F���R�{?�{����?�� autostart.bat�B���[�H��K�i���������\\������C���㐿�m�F�r���H��B\n[WARN]     ���N��?���s�ڏ�FHEALTHCHECK_FAIL: URLError: <urlopen error [WinError 10061] 無法連線，因為目標電腦拒絕連線、E\n    ������ 1/20 ���i�S�� 4s�j�F�����\n    ������ 2/20 ���i�S�� 7s�j�F����\n\n======================================\n  ��������C���N?�Ԑ���F20261004_030918\n======================================\n::RESULT:: v=2 status=rollback_ok rolled_back=restored service=up exit=0\n",
+   "t0": 1791054594.4864473,
+   "train35a_tree_after_B": {
+    "files_base": 879,
+    "files_now": 879,
+    "diff_count": 0,
+    "diff_sample": [],
+    "only_in_now": [],
+    "only_in_base": [],
+    "ok": true
+   },
+   "after": {
+    "commit": "326e667608e7b57cb60a017cc51c2b477f549d6b",
+    "commit_is_base": true,
+    "ping": true,
+    "schema_versions": {
+     "accounting": 3,
+     "case": 6,
+     "core": 6,
+     "crm": 1,
+     "lodging": 1,
+     "payroll": 3,
+     "subcontract": 5
+    },
+    "tables_new": {
+     "expense_categories": true,
+     "gl_dimensions": true,
+     "user_bank_accounts": true
+    },
+    "migrated_before": {
+     "expense_categories": true,
+     "gl_dimensions": true,
+     "user_bank_accounts": true
+    },
+    "legacy_same": true,
+    "legacy_flow": [
+     true,
+     {
+      "skipped": true
+     }
+    ],
+    "log": {
+     "traceback": 0,
+     "errors_head": [],
+     "lines": 5
+    }
+   },
+   "ok": true
+  }
+ },
+ "baseline_setup": {
+  "first_start_s": 8.1,
+  "restart_s": 4.1,
+  "rewrite": {
+   "apply_update.ps1": [
+    69,
+    70
+   ],
+   "rollback_update.ps1": [
+    30,
+    31
+   ]
+  },
+  "seed": {
+   "legacy_expenses": [
+    {
+     "id": 1,
+     "status": "草稿",
+     "total_cost": 100,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 2,
+     "status": "待審核",
+     "total_cost": 200,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 3,
+     "status": "已核准",
+     "total_cost": 300,
+     "files": [
+      {
+       "id": "ee3",
+       "filename": "receipt3.png",
+       "path": "case_extra_expense/DRILL-MQ-001_3/receipt3.png",
+       "size": 108,
+       "kind": "other"
+      }
+     ],
+     "files_sha": [
+      "bc03bf4f6390e4deb17e380b2cf6f5d91e83f9941816a96b9cce3685cd466cd3"
+     ]
+    },
+    {
+     "id": 4,
+     "status": "已駁回",
+     "total_cost": 400,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 5,
+     "status": "已核准",
+     "total_cost": 500,
+     "files": [
+      {
+       "id": "ee5",
+       "filename": "receipt5.png",
+       "path": "case_extra_expense/DRILL-MQ-001_5/receipt5.png",
+       "size": 108,
+       "kind": "other"
+      }
+     ],
+     "files_sha": [
+      "bc03bf4f6390e4deb17e380b2cf6f5d91e83f9941816a96b9cce3685cd466cd3"
+     ]
+    },
+    {
+     "id": 6,
+     "status": "草稿",
+     "total_cost": 600,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 7,
+     "status": "待審核",
+     "total_cost": 700,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 8,
+     "status": "已核准",
+     "total_cost": 800,
+     "files": [
+      {
+       "id": "ee8",
+       "filename": "legacy8.png",
+       "path": "quotation_settlement_extra/DRILL-MQ-001_5/legacy8.png",
+       "size": 108,
+       "kind": "other"
+      }
+     ],
+     "files_sha": [
+      "bc03bf4f6390e4deb17e380b2cf6f5d91e83f9941816a96b9cce3685cd466cd3"
+     ]
+    },
+    {
+     "id": 9,
+     "status": "已駁回",
+     "total_cost": 900,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 10,
+     "status": "已核准",
+     "total_cost": 1000,
+     "files": [
+      {
+       "id": "ee10",
+       "filename": "legacy10.png",
+       "path": "quotation_settlement_extra/DRILL-MQ-001_7/legacy10.png",
+       "size": 108,
+       "kind": "other"
+      }
+     ],
+     "files_sha": [
+      "bc03bf4f6390e4deb17e380b2cf6f5d91e83f9941816a96b9cce3685cd466cd3"
+     ]
+    },
+    {
+     "id": 11,
+     "status": "草稿",
+     "total_cost": 1100,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 12,
+     "status": "已核准",
+     "total_cost": 1200,
+     "files": [],
+     "files_sha": []
+    }
+   ],
+   "errors": [],
+   "dispatch_ids": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "contractor_id": 1
+  },
+  "slip_no": "PS-202610-001",
+  "train35b_seed": {
+   "quotes": [
+    "DRILL-35B-N1",
+    "DRILL-35B-N2",
+    "DRILL-35B-OLD"
+   ],
+   "dispatch": {
+    "untaxed": 10000,
+    "rate": 0.05,
+    "personnel": 2000
+   },
+   "engineer_user": "drill_eng"
+  },
+  "train35b_baseline": {
+   "new1_dispatchTotal": 12500.0,
+   "old_dispatchTotal": 12500.0,
+   "old_pdf_status": 200,
+   "old_pdf_text_len": 831,
+   "tree_files": 879
+  }
+ },
+ "baseline": {
+  "counts": {
+   "audit_log": 3354,
+   "custom_records": 0,
+   "vouchers_all": 64,
+   "voucher_lines": 151,
+   "dev_cases": 109,
+   "quotations": 43,
+   "case_extra_expenses": 12
+  },
+  "tables_new": {
+   "expense_categories": true,
+   "gl_dimensions": true,
+   "user_bank_accounts": true
+  },
+  "db_version": 116,
+  "schema_versions": {
+   "accounting": 3,
+   "case": 6,
+   "core": 6,
+   "crm": 1,
+   "lodging": 1,
+   "payroll": 3,
+   "subcontract": 5
+  },
+  "extra_cols": [
+   "id",
+   "quote_no",
+   "category",
+   "description",
+   "qty",
+   "unit",
+   "unit_cost",
+   "total_cost",
+   "note",
+   "expense_date",
+   "doc_no",
+   "files_json",
+   "created_by",
+   "created_by_name",
+   "created_by_inferred",
+   "payer_username",
+   "payer_name",
+   "created_at",
+   "updated_at",
+   "updated_by_name",
+   "status",
+   "approval_json",
+   "change_status",
+   "change_json",
+   "change_approval_json",
+   "invoice_date",
+   "paid_date",
+   "invoice_no",
+   "remit_actual",
+   "remit_fee",
+   "remit_review",
+   "remit_review_by",
+   "remit_review_at",
+   "remit_review_note",
+   "kind",
+   "doc_code",
+   "data_json",
+   "lines_json",
+   "def_version",
+   "department_id",
+   "payee_type",
+   "payee_name",
+   "payee_bank",
+   "payee_account",
+   "pay_terms",
+   "remit_date",
+   "pay_method",
+   "pay_account_code",
+   "paid_by",
+   "pretax",
+   "tax",
+   "currency",
+   "void_reason",
+   "voided_by",
+   "voided_at"
+  ],
+  "voucher_line_cols": [
+   "id",
+   "voucher_id",
+   "line_no",
+   "account_code",
+   "account_name_snapshot",
+   "summary",
+   "summary_template_id",
+   "summary_template_version",
+   "debit",
+   "credit",
+   "dept_code",
+   "source_type",
+   "source_id",
+   "source_amount_snapshot",
+   "counterparty",
+   "source_key",
+   "case_no",
+   "party_key",
+   "tax_code",
+   "doc_no",
+   "dim_json"
+  ],
+  "gl_features": [
+   [
+    "feature.engine_drafts",
+    "1"
+   ],
+   [
+    "feature.source_annotations",
+    "1"
+   ],
+   [
+    "feature.tax401",
+    "1"
+   ],
+   [
+    "feature.withholding",
+    "1"
+   ]
+  ],
+  "module_states": {
+   "accounting": {
+    "version": "1.1.52",
+    "state": "loaded"
+   },
+   "analytics": {
+    "version": "1.0.28",
+    "state": "loaded"
+   },
+   "arap": {
+    "version": "1.0.35",
+    "state": "loaded"
+   },
+   "case": {
+    "version": "1.0.121",
+    "state": "loaded"
+   },
+   "crm": {
+    "version": "1.0.16",
+    "state": "loaded"
+   },
+   "daily_tasks": {
+    "version": "1.0.8",
+    "state": "loaded"
+   },
+   "filehub": {
+    "version": "1.0.3",
+    "state": "loaded"
+   },
+   "lodging": {
+    "version": "1.2.3",
+    "state": "loaded"
+   },
+   "netplan": {
+    "version": "1.0.7",
+    "state": "loaded"
+   },
+   "payroll": {
+    "version": "1.1.21",
+    "state": "loaded"
+   },
+   "subcontract": {
+    "version": "1.1.17",
+    "state": "loaded"
+   },
+   "supply": {
+    "version": "1.0.19",
+    "state": "loaded"
+   },
+   "tender_radar": {
+    "version": "1.5.4",
+    "state": "loaded"
+   }
+  },
+  "commit": "326e667608e7b57cb60a017cc51c2b477f549d6b",
+  "dispatch_cols": [
+   "id",
+   "quote_no",
+   "vendor_id",
+   "dispatch_date",
+   "scope",
+   "items_json",
+   "total_amount",
+   "status",
+   "notes",
+   "invoice_no",
+   "created_by",
+   "created_at",
+   "updated_at",
+   "tax_rate",
+   "accepted_at",
+   "accepted_by",
+   "personnel_json",
+   "files_json",
+   "payable_date",
+   "invoice_files_json",
+   "invoice_date",
+   "approval_status",
+   "approval_json",
+   "doc_code",
+   "submitted_by",
+   "submitted_at",
+   "approved_at",
+   "approved_hash",
+   "completion_status",
+   "completion_approval_json",
+   "completion_requested_by",
+   "completion_requested_at",
+   "completion_approved_at",
+   "cancel_reason",
+   "cancelled_by",
+   "cancelled_at"
+  ],
+  "dispatch_digest": [
+   {
+    "id": 1,
+    "quote_no": "DRILL-MQ-001",
+    "vendor_id": 1,
+    "scope": "DRILL派發1",
+    "items_json": "[]",
+    "total_amount": 1000.0,
+    "status": "draft"
+   },
+   {
+    "id": 2,
+    "quote_no": "DRILL-MQ-001",
+    "vendor_id": 1,
+    "scope": "DRILL派發2",
+    "items_json": "[]",
+    "total_amount": 2000.0,
+    "status": "sent"
+   },
+   {
+    "id": 3,
+    "quote_no": "DRILL-MQ-001",
+    "vendor_id": 1,
+    "scope": "DRILL派發3",
+    "items_json": "[]",
+    "total_amount": 3000.0,
+    "status": "confirmed"
+   },
+   {
+    "id": 4,
+    "quote_no": "DRILL-MQ-001",
+    "vendor_id": 1,
+    "scope": "DRILL派發4",
+    "items_json": "[]",
+    "total_amount": 4000.0,
+    "status": "completed"
+   },
+   {
+    "id": 5,
+    "quote_no": "DRILL-35B-N1",
+    "vendor_id": 1,
+    "scope": "DRILL35B派發",
+    "items_json": "[]",
+    "total_amount": 10000.0,
+    "status": "accepted"
+   },
+   {
+    "id": 6,
+    "quote_no": "DRILL-35B-N2",
+    "vendor_id": 1,
+    "scope": "DRILL35B派發",
+    "items_json": "[]",
+    "total_amount": 10000.0,
+    "status": "accepted"
+   },
+   {
+    "id": 7,
+    "quote_no": "DRILL-35B-OLD",
+    "vendor_id": 1,
+    "scope": "DRILL35B派發",
+    "items_json": "[]",
+    "total_amount": 10000.0,
+    "status": "accepted"
+   }
+  ],
+  "dispatch_approval": [
+   {
+    "id": 1,
+    "approval_status": "",
+    "completion_status": "",
+    "doc_code": "",
+    "approval_json": "{}"
+   },
+   {
+    "id": 2,
+    "approval_status": "",
+    "completion_status": "",
+    "doc_code": "",
+    "approval_json": "{}"
+   },
+   {
+    "id": 3,
+    "approval_status": "",
+    "completion_status": "",
+    "doc_code": "",
+    "approval_json": "{}"
+   },
+   {
+    "id": 4,
+    "approval_status": "",
+    "completion_status": "",
+    "doc_code": "",
+    "approval_json": "{}"
+   },
+   {
+    "id": 5,
+    "approval_status": "",
+    "completion_status": "",
+    "doc_code": "",
+    "approval_json": "{}"
+   },
+   {
+    "id": 6,
+    "approval_status": "",
+    "completion_status": "",
+    "doc_code": "",
+    "approval_json": "{}"
+   },
+   {
+    "id": 7,
+    "approval_status": "",
+    "completion_status": "",
+    "doc_code": "",
+    "approval_json": "{}"
+   }
+  ],
+  "payslip_bank": [
+   "00012345678901"
+  ],
+  "slip_no": "PS-202610-001",
+  "legacy_rows": 12
+ },
+ "delivery": {
+  "verify_ok": true,
+  "problems": [],
+  "notes": [],
+  "verify_package_rc": 0,
+  "verify_package_tail": "\n\n### (6) 包內 db.py 的版本（🔴 擋關）\n  包內    CURRENT_VERSION=116  len(_MIGRATIONS)=116  最後一筆=_m116_case_roles_username\n          三者一致 ✅\n  包內版本 == 期望值 116 ✅\n  工作樹  CURRENT_VERSION=116  len(_MIGRATIONS)=116  最後一筆=_m116_case_roles_username　← **只用來比對，不是判準來源**\n  包 vs 工作樹：相同 ✅\n\n### (7) 產品選配：modules.lock.json ＝ 包內模組、L0／L1 必要檔齊全（🔴 擋關，CORE-SPEC §9c①）\n  ✅ 產品 full：模組 ['accounting', 'analytics', 'arap', 'case', 'crm', 'daily_tasks', 'filehub', 'lodging', 'netplan', 'payroll', 'subcontract', 'supply', 'tender_radar']；排除 無\n\n==========================================================================\n✅ 全部通過（0 項 FAIL）\n",
+  "expect_db_version": "116",
+  "signature": "演練金鑰（拋棄式）；正式金鑰簽章驗證不在本演練範圍"
+ },
+ "package": {
+  "verification": {
+   "mode": "full",
+   "scoped": null,
+   "stages": {
+    "not_e2e": "reused 2026-10-04 02:39:02（standalone，commit 345a34cd）",
+    "e2e": "reused 2026-10-04 02:51:52（standalone，commit 345a34cd）",
+    "flaky_retried": []
+   }
+  },
+  "commit": "345a34cd"
+ },
+ "stop": "STOPPED 11484,26948,24064"
+}
