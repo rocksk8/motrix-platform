@@ -52,6 +52,29 @@ class MaterialChangeError(Exception):
         self.code = code
 
 
+def _shipped_fn():
+    """出貨量提供者（c7 的出貨連動，契約 docs/platform/plans/SHIPPING-MATERIAL-LINK-CONTRACT-S1.md）：
+    測試覆寫 `SHIPPED_PROVIDER` ＞ 註冊的 `shipping.material_shipped_qty`（float＝保留＋已出貨）＞ 包裝字典版 `shipping.material_shipped`
+    （`{itemId: {reserved, shipped}}`）＞ None（沒有出貨連動 ⇒ 不檢查、回警告）。草稿出貨單不算保留（契約）。"""
+    if SHIPPED_PROVIDER is not None:
+        return SHIPPED_PROVIDER
+    try:
+        from core import registry
+        q = registry.providers("shipping.material_shipped_qty").get("supply")
+        if q is not None:
+            return q
+        d = registry.providers("shipping.material_shipped").get("supply")
+    except Exception:                                                                    # noqa: BLE001 — 註冊表讀不到＝沒有提供者
+        return None
+    if d is None:
+        return None
+
+    def wrapped(conn, quote_no, item_id):
+        row = (d(conn, quote_no) or {}).get(str(item_id)) or {}
+        return float(row.get("reserved") or 0) + float(row.get("shipped") or 0)
+    return wrapped
+
+
 def ensure_registered():
     """登記簽核單據類型（M2b 在模組載入時呼叫；M2a 不自動登記）。冪等。"""
     if DOC_TYPE not in APPROVAL_DOC_TYPES:
@@ -90,6 +113,11 @@ def get(conn, change_id):
 
 def list_for_item(conn, quote_no, item_id) -> list:
     return [dict(r) for r in conn.execute("SELECT * FROM case_material_changes WHERE quote_no=? AND item_id=? ORDER BY id DESC", (quote_no, str(item_id)))]
+
+
+def list_for_case(conn, quote_no) -> list:
+    """這個案件所有材料申請的變更申請（新到舊）。"""
+    return [dict(r) for r in conn.execute("SELECT * FROM case_material_changes WHERE quote_no=? ORDER BY id DESC", (quote_no,))]
 
 
 def live_for(conn, quote_no, item_id):
@@ -168,11 +196,12 @@ def validate(conn, quote_no, item_id, before: dict, after: dict, order: dict) ->
         probe.update({"quantity": q, "unitPrice": u, "totalPrice": t})
         if MP.room_for(conn, quote_no, probe) < -0.005:
             problems.append({"code": "change_below_committed", "message": "新的小計低於已申請匯款的額度，請先處理匯款申請。"})
-    if SHIPPED_PROVIDER is None:
+    ship = _shipped_fn()
+    if ship is None:
         warnings.append("尚未提供出貨量（出貨提供者不存在），未檢查「不得低於已出貨＋占用量」")
     else:
         try:
-            shipped = float(SHIPPED_PROVIDER(conn, quote_no, item_id) or 0)
+            shipped = float(ship(conn, quote_no, item_id) or 0)
         except Exception:                                                              # noqa: BLE001 — 提供者壞了不可放行下限檢查，也不可讓變更整個爆掉
             problems.append({"code": "shipped_unavailable", "message": "暫時無法取得已出貨量，請稍後再試"})
         else:
