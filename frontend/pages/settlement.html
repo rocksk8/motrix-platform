@@ -956,8 +956,10 @@ function settlementPage() {
       this._actualsOk = false
       this.itemActuals = {}
       try {
-        const r = await fetch(`/api/quotations/${encodeURIComponent(this.quoteNo)}/settlement-actuals?offsets=${encodeURIComponent(JSON.stringify(this.offsets))}`, {
-          headers: { Authorization: 'Bearer ' + this.session.token }
+        // 預覽用 POST：沖銷對應放請求本文（上百筆時 GET 網址會過長）
+        const r = await fetch(`/api/quotations/${encodeURIComponent(this.quoteNo)}/settlement-actuals/preview`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ offsets: this.offsets })
         })
         if (!r.ok) return
         const d = await r.json()

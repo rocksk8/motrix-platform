@@ -138,3 +138,12 @@ def test_resaving_an_already_finalized_settlement_is_not_rechecked(W):
     again = _page_payload(c, h)
     again["summary"]["itemActualTotal"] = 1                                                  # 與重算差很多，但這是已完結的再存（超級管理員改備註）：不比對
     assert _finalize(c, h, again).status_code == 200
+
+
+def test_tolerance_is_per_item_only_for_item_actual_total_not_for_extra_or_purchased(W):
+    c, h = W
+    ex = _mk(c, h, "purchase_order", [_ln(None, 1, unitCost=700)]).json()
+    assert _submit(c, h, ex["id"]).status_code == 200
+    r = _finalize(c, h, _page_payload(c, h, extraTotal=700 + 2))                                       # 兩品項的容差 2 不再放寬到額外支出
+    assert r.status_code == 409 and "額外支出" in r.json()["detail"]
+    assert _finalize(c, h, _page_payload(c, h, extraTotal=700 + 1)).status_code == 200                  # 只留 1 元防浮點

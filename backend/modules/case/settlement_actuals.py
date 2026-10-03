@@ -187,7 +187,9 @@ def _freeze(out, saved, saved_items):
         total += it["actual"]["amount"]
     out["totals"]["itemActualTotal"] = _num(summ["itemActualTotal"]) if "itemActualTotal" in summ else total
     if "extraTotal" in summ:
-        out["totals"]["extraTotal"] = _num(summ["extraTotal"]) - _num(summ.get("remitFeeTotal")) - _num(summ.get("customExpenseTotal"))
+        mat = _num(summ.get("materialUnassignedTotal"))                  # B1 起頁面存；舊完結案沒有這鍵＝當時沒有材料申請併入（0）
+        out["totals"]["materialUnassignedTotal"] = mat
+        out["totals"]["extraTotal"] = _num(summ["extraTotal"]) - _num(summ.get("remitFeeTotal")) - _num(summ.get("customExpenseTotal")) - mat
     if "purchasedTotal" in summ:
         out["totals"]["purchasedTotal"] = _num(summ["purchasedTotal"])
 
@@ -235,13 +237,14 @@ def check_finalize(conn, quote_no, settlement):
     if not isinstance(summ, dict) or "itemActualTotal" not in summ:
         return []
     d = compute(conn, quote_no, settlement=settlement, freeze=False)
-    tol = max(1, len(d["items"]))
+    tol_item = max(1, len(d["items"]))               # 進位誤差只發生在逐品項進位：每品項 ±1 元
+    tol = 1                                          # 額外支出／採購類總額是整數金額加總，不該有進位差；留 1 元防浮點
     t = d["totals"]
     mine_extra = t["extraTotal"] + t["materialUnassignedTotal"]
     their_extra = _num(summ.get("extraTotal")) - _num(summ.get("remitFeeTotal")) - _num(summ.get("customExpenseTotal"))
-    checks = [("品項實際成本", _num(summ.get("itemActualTotal")), t["itemActualTotal"]),
-              ("品項未採用的採購（新規則不另計）", _num(summ.get("itemPoUnadopted")), 0.0),
-              ("額外支出（含未對應材料申請）", their_extra, mine_extra)]
+    checks = [("品項實際成本", _num(summ.get("itemActualTotal")), t["itemActualTotal"], tol_item),
+              ("品項未採用的採購（新規則不另計）", _num(summ.get("itemPoUnadopted")), 0.0, tol),
+              ("額外支出（含未對應材料申請）", their_extra, mine_extra, tol)]
     if "purchasedTotal" in summ:
-        checks.append(("採購類總額", _num(summ.get("purchasedTotal")), t["purchasedTotal"]))
-    return ["%s：頁面 %s、系統重算 %s" % (name, round(a), round(b)) for name, a, b in checks if abs(a - b) > tol]
+        checks.append(("採購類總額", _num(summ.get("purchasedTotal")), t["purchasedTotal"], tol))
+    return ["%s：頁面 %s、系統重算 %s" % (name, round(a), round(b)) for name, a, b, tl in checks if abs(a - b) > tl]

@@ -231,3 +231,34 @@ def test_offsets_query_is_a_preview_that_does_not_save(W):
     assert _get(c, h)["totals"]["materialUnassignedTotal"] == 250           # 沒存：下一次還是未對應
     assert c.get(URL + "?offsets=%7Bnot", headers=h).status_code == 422
     assert c.get(URL + "?offsets=%7B%7D", headers=h).status_code == 422
+
+
+def test_frozen_split_of_extra_and_unassigned_material_follows_the_saved_summary(W):
+    c, h = W
+    live = None
+    _put_materials([_order("X", 1, 250)], {"X": "已核准"})
+    ex = _mk(c, h, "purchase_order", [_ln(None, 1, unitCost=1000)]).json()
+    assert _submit(c, h, ex["id"]).status_code == 200
+    live = _get(c, h)["totals"]
+    assert (live["extraTotal"], live["materialUnassignedTotal"]) == (1000, 250)
+    # B1 起頁面存的 summary：extraTotal 含未對應材料申請與手續費／自訂，另存 materialUnassignedTotal
+    _put_settlement({"status": "finalized", "items": [], "summary": {"itemActualTotal": 1, "extraTotal": 1000 + 250 + 30 + 4, "remitFeeTotal": 30, "customExpenseTotal": 4,
+                                                                      "materialUnassignedTotal": 250}})
+    t = _get(c, h)["totals"]
+    assert (t["extraTotal"], t["materialUnassignedTotal"]) == (live["extraTotal"], live["materialUnassignedTotal"])      # 分法與完結前的即時值一致
+    _put_settlement({"status": "finalized", "items": [], "summary": {"itemActualTotal": 1, "extraTotal": 1000}})           # 舊完結案：沒有這鍵＝0，合計不變
+    t = _get(c, h)["totals"]
+    assert (t["extraTotal"], t["materialUnassignedTotal"]) == (1000, 0)
+
+
+def test_preview_post_equals_the_get_preview_and_saves_nothing(W):
+    c, h = W
+    _put_materials([_order("X", 1, 250)], {"X": "已核准"})
+    offs = [{"kind": "material", "ref": "X", "itemId": "b"}]
+    r = c.post(URL + "/preview", json={"offsets": offs}, headers=h)
+    assert r.status_code == 200 and _items(r.json())["b"]["material"]["amount"] == 250 and r.json()["totals"]["materialUnassignedTotal"] == 0
+    assert _get(c, h)["totals"]["materialUnassignedTotal"] == 250                                    # 沒存
+    big = [{"kind": "material", "ref": "R%d" % i, "itemId": "b"} for i in range(500)]                 # 上百筆沖銷：POST 不受網址長度限制
+    assert c.post(URL + "/preview", json={"offsets": big}, headers=h).status_code == 200
+    assert c.post(URL + "/preview", json={"offsets": "x"}, headers=h).status_code == 422
+    assert c.post("/api/quotations/NO-SUCH/settlement-actuals/preview", json={"offsets": []}, headers=h).status_code == 404
