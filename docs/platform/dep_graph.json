@@ -5964,6 +5964,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_payment_cashier",
+    "mod:case/material_shippable",
     "mod:case/payables",
     "mod:case/quotations",
     "plat:registry"
@@ -8287,6 +8288,24 @@
    "tables_r": [
     "case_material_payment_lines",
     "case_material_payments",
+    "quotations"
+   ],
+   "tables_w": []
+  },
+  "mod:case/material_shippable": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:case/material_approval",
+    "mod:case/purchase_items"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/material_shippable.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
     "quotations"
    ],
    "tables_w": []
@@ -19953,6 +19972,7 @@
     "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/material_payment_cashier",
+    "mod:case/material_shippable",
     "mod:case/payables",
     "mod:case/purchase_items",
     "mod:case/recognition",

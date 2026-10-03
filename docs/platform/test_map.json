@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1082,
+  "tests": 1083,
   "unmapped": 13,
   "kinds": {
    "api": 581,
    "e2e": 264,
    "audit": 136,
-   "unit": 101
+   "unit": 102
   },
   "routes": 754
  },
@@ -6736,6 +6736,36 @@
      "backend/modules/case/gl_events.py",
      "backend/modules/case/recognition.py",
      "backend/tests/_requires.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_material_shippable_2026_10_03.py": {
+   "kind": "unit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/material_shippable",
+    "mod:case/tests/test_material_link_2026_10_02",
+    "mod:case/tests/test_material_link_booking_2026_10_02",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/material_shippable.py",
+     "backend/modules/case/tests/test_material_link_2026_10_02.py",
+     "backend/modules/case/tests/test_material_link_booking_2026_10_02.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
     ],
     "module_dir": [
      "backend/modules/case/"
