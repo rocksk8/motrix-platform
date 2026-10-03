@@ -295,6 +295,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_payment_cashier",
+    "mod:case/material_shippable",
     "mod:case/purchase_items",
     "mod:case/settlement_actuals"
    ],
