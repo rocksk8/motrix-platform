@@ -114,6 +114,18 @@ _MIN_COLUMNS = 9
 
 _DATE_SANITY_YEARS = 5
 
+# ── 來源網站「不是資料」的兩種頁面（2026-10-03 正式機告警調查；用 live 頁面驗證）──
+# ① 當日沒有公告（週末、假日）：結果表只有一列 `<td colspan="10">無符合條件資料</td>`＋「共有 0 筆資料」。
+#    那是**真的 0 筆**，不是解析失敗；先前被算成 dropped=1 ⇒ suspect_redesign(0,1)=True ⇒ 寄「來源網站格式異動」（誤報）。
+EMPTY_RESULT_MARKER = "無符合條件資料"
+# ② 詳細頁改成先要「驗證碼檢核」（撲克牌）。我們**不解、不繞**：偵測到就停、記下、顯示狀態。
+CAPTCHA_MARKERS = ("驗證碼檢核", "撲克牌")
+CAPTCHA_ERROR = "來源網站要求驗證碼（撲克牌檢核），詳細頁無法自動讀取；已停止抓取詳細頁"
+# 最近一次掃描／詳細頁的狀態（JSON，存 system_settings；頁面的狀態列從這裡讀，不從「資料庫裡共有幾筆標案」推）
+SCAN_STATE_SETTING = "tender_radar_scan_state"
+# 每種告警一天最多寄一次（日期，存 system_settings）：key 為 ALERT_DAY_SETTING % <event key>
+ALERT_DAY_SETTING = "tender_radar_alert_day_%s"
+
 # 純記錄模式：首次成功掃描起 N 天內只抓只存、不寄信（SPEC §T.5 #3）。
 # ⚠️ 起算點是「第一次成功掃描」不是「開關被打開」——常數翻開的時間無法查證，
 # 而**無法查證的起算點在正式機上完全不存在**。
@@ -390,12 +402,40 @@ def parse_list(html):
         cells = _TD_RE.findall(row)
         if not cells:
             continue  # 表頭列用 <th>，不是資料
+        if _is_empty_result_row(cells):
+            continue  # 「無符合條件資料」＝真的 0 筆，不是解析失敗（不計入 dropped）
         parsed = _parse_row(cells)
         if parsed is None:
             dropped += 1
         else:
             items.append(parsed)
     return items, dropped, True
+
+
+def _is_empty_result_row(cells):
+    """結果表裡「沒有資料」的那一列：**只有一格**、字樣是 `無符合條件資料`。
+
+    ⚠️ 必須同時滿足「只有一格」與「字樣」：真的被改壞的資料列（格數不對或內容怪）仍要算 dropped，
+    否則對方改版時 `suspect_redesign` 會被這條放行而失效（回歸題：十列裡九列壞仍要 suspect）。
+    """
+    return len(cells) == 1 and EMPTY_RESULT_MARKER in _text(cells[0])
+
+
+def is_empty_result(html):
+    """這一頁是「來源網站說當日沒有符合的資料」。**純函式。**需要結果表存在（認得頁面）才成立。"""
+    table = _find_result_table(html)
+    if table is None:
+        return False
+    rows = [r for r in (_TD_RE.findall(x) for x in _TR_RE.findall(table)) if r]
+    return bool(rows) and all(_is_empty_result_row(c) for c in rows)
+
+
+def is_captcha_page(html):
+    """詳細頁被換成「驗證碼檢核」頁。**純函式**；兩個字樣都要有，且沒有標案詳細頁的欄位 id（避免誤判正常頁）。"""
+    h = html or ""
+    if not all(m in h for m in CAPTCHA_MARKERS):
+        return False
+    return not any(("id=" + q + fid + q) in h for fid in (_LOCATION_FIELD_ID, _METHOD_FIELD_ID) for q in (chr(34), chr(39)))
 
 
 def suspect_redesign(parsed_count, dropped):
@@ -481,7 +521,12 @@ def fetch_detail(url):
             "Referer": TENDER_INDEX_URL,
         })
         with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT_SECONDS) as resp:
-            return resp.read().decode("utf-8", "replace"), resp.geturl()
+            body = resp.read().decode("utf-8", "replace")
+            if is_captcha_page(body):
+                # 驗證碼頁：不回 HTML（呼叫端會拿去 parse_detail 得到一個看起來像「這筆沒地點」的 None），回明確錯誤。
+                # 不解、不繞、不重試（呼叫端據此停掉本次掃描的詳細頁迴圈）。
+                return None, CAPTCHA_ERROR
+            return body, resp.geturl()
     except Exception as exc:  # noqa: BLE001
         return None, f"{type(exc).__name__}: {exc}"
 
@@ -535,6 +580,35 @@ def _remember_details_fetched(conn, total):
          _now_iso()))
 
 
+def _load_scan_state(conn):
+    """最近一次掃描／詳細頁的狀態（JSON dict）。**走傳進來的 conn**（同 `_details_fetched_today` 的理由：不可在交易中另開連線）。
+    壞掉／沒有 ⇒ `{}`（呼叫端當成「沒有紀錄」，不是「正常」）。"""
+    row = conn.execute("SELECT value_json FROM system_settings WHERE key=?", (SCAN_STATE_SETTING,)).fetchone()
+    if not row:
+        return {}
+    try:
+        d = json.loads(row["value_json"])
+    except (TypeError, ValueError):
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
+def _save_scan_state(conn, **fields):
+    """合併寫入狀態欄位（列表狀態、詳細頁狀態各自更新、互不蓋掉）。格式與 `_set_setting` 相同（JSON）。"""
+    st = _load_scan_state(conn)
+    st.update(fields)
+    conn.execute(
+        "INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) "
+        "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
+        (SCAN_STATE_SETTING, json.dumps(st, ensure_ascii=False), _now_iso()))
+
+
+def _detail_blocked_today(conn):
+    """今天已經被詳細頁驗證碼擋過 ⇒ 今天不再對詳細頁發任何請求（不重試；隔天才試一次看有沒有解除）。"""
+    st = _load_scan_state(conn)
+    return st.get("detail") == "captcha" and st.get("detail_day") == today().isoformat()
+
+
 def _backlog_detail_ids(conn, limit=None):
     """**既有**那些命中 watch 而還沒有地點的標案 id。
 
@@ -571,6 +645,8 @@ def _fetch_details(conn, tender_ids):
     """
     if not tender_ids:
         return 0
+    if _detail_blocked_today(conn):
+        return 0                     # 今天已被驗證碼擋過：不再對詳細頁發請求（標案照樣留著，地點維持 NULL）
     marks = ",".join("?" * len(tender_ids))
     rows = conn.execute(
         f"SELECT DISTINCT t.id, t.url FROM tenders t "
@@ -597,8 +673,17 @@ def _fetch_details(conn, tender_ids):
             time.sleep(DETAIL_INTERVAL_SECONDS)   # D3：走模組屬性，patch 得到
         html, second = fetch_detail(r["url"])
         fetched += 1
+        if html is None and second == CAPTCHA_ERROR:
+            # 驗證碼：**不解、不繞、不重試**。停掉本次掃描的詳細頁迴圈、記進抓取紀錄與狀態（頁面與告警據此顯示）。
+            # 標案照樣留著（location 維持 NULL＝「未取得」，不是「沒有地點」）。
+            conn.execute(
+                "UPDATE tender_fetch_log SET error=? WHERE id=(SELECT MAX(id) FROM tender_fetch_log)", (CAPTCHA_ERROR,))
+            _save_scan_state(conn, detail="captcha", detail_at=_now_iso(), detail_day=today().isoformat())
+            logger.warning("%s", CAPTCHA_ERROR)
+            break
         if html is None:
             continue                 # D4：抓不到就算了，標案照樣留著
+        _save_scan_state(conn, detail="ok", detail_at=_now_iso(), detail_day=today().isoformat())
         detail = parse_detail(html)
         location = detail.get("location")
         method = detail.get("tender_method")
@@ -789,6 +874,7 @@ def run_scan():
         if error is not None or html is None:
             # 抓不到 ⇒ 根本沒解析 ⇒ recognised 是 NULL，不是 False。
             _log_fetch(conn, None, 0, error or "empty response")
+            _save_scan_state(conn, list="unreachable", scan_at=_now_iso(), parsed=0, dropped=0)
             conn.commit()
             return {"fetched": True, "error": error, "recognised": None}
 
@@ -796,6 +882,18 @@ def run_scan():
         suspected = suspect_redesign(len(items), dropped)
         _log_fetch(conn, 1 if recognised else 0, dropped, "",
                    suspected=1 if suspected else 0)
+        # 列表狀態（頁面狀態列與告警共用）：認不得／疑似改版／當日無公告（真的 0 筆）／正常。
+        # 「無公告」要求頁面真的說了「無符合條件資料」，不是「剛好解出 0 筆」。
+        if not recognised:
+            list_state = "unrecognised"
+        elif suspected:
+            list_state = "format_changed"
+        elif not items and is_empty_result(html):
+            list_state = "empty_day"
+        else:
+            list_state = "ok"
+        before_state = _load_scan_state(conn)
+        _save_scan_state(conn, list=list_state, scan_at=_now_iso(), parsed=len(items), dropped=dropped)
         new_ids, new_hits = ([], 0)
         if recognised:
             new_ids, new_hits = _store(conn, items)
@@ -809,13 +907,17 @@ def run_scan():
                        if i not in set(new_ids or [])]
             if backlog:
                 _fetch_details(conn, backlog)
+        after_state = _load_scan_state(conn)
+        # 這一次掃描「新」撞到驗證碼（隔天才會重試一次；同一天的後續掃描不再請求詳細頁，所以不會重複為真）
+        detail_blocked = (after_state.get("detail") == "captcha"
+                          and after_state.get("detail_at") != before_state.get("detail_at"))
         conn.commit()
         if recognised:
             _listing.bump(background=True)   # 標案清單快取失效、背景重算（請求先拿舊的；listing.py）
         return {
             "fetched": True, "error": None, "recognised": recognised,
             "parsed": len(items), "dropped": dropped,
-            "suspect_redesign": suspected,
+            "suspect_redesign": suspected, "list_state": list_state, "detail_blocked": detail_blocked,
             "new_tenders": len(new_ids), "new_tender_ids": new_ids,
             "new_hits": new_hits,
         }
@@ -898,10 +1000,11 @@ def _previous_alert_state(conn):
     row = conn.execute(
         "SELECT recognised, suspected FROM tender_fetch_log ORDER BY id DESC LIMIT 1"
     ).fetchone()
+    blocked = _load_scan_state(conn).get("detail") == "captcha"
     if not row:
-        return {"failed": False, "suspected": False}
+        return {"failed": False, "suspected": False, "detail_blocked": blocked}
     return {"failed": row["recognised"] is None,
-            "suspected": bool(row["suspected"])}
+            "suspected": bool(row["suspected"]), "detail_blocked": blocked}
 
 
 def _has_enabled_watch():
@@ -991,8 +1094,49 @@ def _mark_hits_notified(hit_ids):
         conn.close()
 
 
+ALERT_PENDING_SETTING = "tender_radar_alert_pending"
+
+
+def no_mail_today():
+    """今天是不是「不寄信日」（週六、週日、國定假日；補班日可寄）。⇒ `(是否, 理由或 None)`。
+    日期取 `today()`（模組屬性，測試可 monkeypatch；不讀真實時鐘以外的東西）。"""
+    from modules.tender_radar import calendar_tw
+    return calendar_tw.no_mail_day(today())
+
+
+HOLIDAY_WARN_DAYS = 60
+
+
+def _check_holiday_table_expiry():
+    """假日表快到期（涵蓋範圍最後一天起算 60 天內）或根本沒有表 ⇒ 記一筆警告日誌（每天一次）。
+    頁面狀態列另有同一件事的提示（api._source_notices）。放在本模組的每日排程裡，不放 helpers/system_checks：
+    L1 不可依賴模組程式碼（模組要能獨立拆分）。"""
+    from modules.tender_radar import calendar_tw
+    left = calendar_tw.days_until_expiry(today())
+    if left is not None and left > HOLIDAY_WARN_DAYS:
+        return
+    if str(_get_setting(ALERT_DAY_SETTING % "holiday_table") or "") == today().isoformat():
+        return
+    logger.warning("標案雷達假日表%s——請用新一年的官方辦公日曆表更新 holidays_tw.json，否則國定假日會照常寄信",
+                   "不存在或讀不到" if left is None else ("已過期 %d 天" % -left if left < 0 else "將在 %d 天後到期" % left))
+    _set_setting(ALERT_DAY_SETTING % "holiday_table", today().isoformat())
+
+
+def _alert_sent_today(key):
+    return str(_get_setting(ALERT_DAY_SETTING % key) or "") == today().isoformat()
+
+
+def _mark_alert_sent(key):
+    _set_setting(ALERT_DAY_SETTING % key, today().isoformat())
+
+
+def _pending_alerts():
+    raw = _get_setting(ALERT_PENDING_SETTING)
+    return {str(k) for k in raw} if isinstance(raw, (list, tuple)) else set()
+
+
 def _notify_health(result, previous):
-    """抓取健康度的兩種告警。**綁在「有沒有抓」上，不是綁在寄信時段上。**
+    """抓取健康度的告警（抓不到／疑似改版／詳細頁被要求驗證碼）。**綁在「有沒有抓」上，不是綁在寄信時段上。**
 
     🔴 為什麼與彙總信分家：**它們回答的是不同的問題。**
     「站台抓不到了」是**這一次抓取**的結果，晚幾個小時才講就失去意義；
@@ -1000,29 +1144,61 @@ def _notify_health(result, previous):
     ⚠️ 綁在一起的話，把寄信時段設成空（＝不寄彙總信）會**順手關掉故障告警**——
     **而使用者以為他只是不想每天收標案清單。**
 
-    三種事件各自一個 key、各自邊緣觸發。**任何情況都不把例外往外丟。**
+    三種事件各自一個 key、各自邊緣觸發（準位觸發的話站台掛一週就是七封信——**狼來了的告警等於沒有告警**）。
+    疊上兩條規則（2026-10-03）：
+      ① 不寄信日（週六日、國定假日）不寄：邊緣照常偵測，但改記成「待寄」；下一個可寄信日若**條件仍成立**就補寄一封
+         （週末就已恢復的問題不補寄）。
+      ② 每個 key 一天最多一封（`ALERT_DAY_SETTING`）：條件在「正常／異常」之間抖動時不會每天一封。
+    **任何情況都不把例外往外丟。**
     """
     from modules.tender_radar import notify as tender_notify
 
     failed = result.get("error") is not None or result.get("recognised") is None
-    if failed:
+    conn = get_db()
+    try:
+        detail_state_blocked = _load_scan_state(conn).get("detail") == "captcha"
+    finally:
+        conn.close()
+    cond = {
+        "tender_fetch_failed": failed,
+        "tender_source_changed": (not failed) and bool(result.get("suspect_redesign")),
+        "tender_detail_blocked": (not failed) and detail_state_blocked,
+    }
+    edge = {
         # 邊緣觸發：只有「從正常進入異常」那一次寄。
-        # 準位觸發的話，站台掛一週就是七封信——**狼來了的告警等於沒有告警**。
-        if not previous["failed"]:
-            try:
-                tender_notify.notify_tender_fetch_failed(result.get("error") or "")
-            except Exception:  # noqa: BLE001
-                logger.exception("notify_tender_fetch_failed failed")
+        "tender_fetch_failed": failed and not previous["failed"],
+        "tender_source_changed": cond["tender_source_changed"] and not previous["suspected"],
+        "tender_detail_blocked": (not failed) and bool(result.get("detail_blocked")) and not previous.get("detail_blocked"),
+    }
+    pending = _pending_alerts()
+    due = {k for k in cond if edge[k] or (k in pending and cond[k])}
+    no_mail, _why = no_mail_today()
+    if no_mail:
+        # 不寄信日：只記「待寄」（保留尚未解除者）；不寄、不標記已寄。
+        new_pending = (pending & {k for k in cond if cond[k]}) | due
+        if new_pending != pending:
+            _set_setting(ALERT_PENDING_SETTING, sorted(new_pending))
         return
-
-    if result.get("suspect_redesign") and not previous["suspected"]:
+    senders = {
+        "tender_fetch_failed": lambda: tender_notify.notify_tender_fetch_failed(result.get("error") or ""),
+        "tender_source_changed": lambda: tender_notify.notify_tender_source_changed(
+            result.get("parsed", 0), result.get("dropped", 0)),
+        "tender_detail_blocked": lambda: tender_notify.notify_tender_detail_blocked(),
+    }
+    still_pending = {k for k in pending if cond.get(k)}
+    for key in sorted(due):
+        if _alert_sent_today(key):
+            still_pending.discard(key)       # 今天寄過了；條件若持續，明天不會再因「待寄」補寄
+            continue
         try:
-            tender_notify.notify_tender_source_changed(
-                result.get("parsed", 0), result.get("dropped", 0))
+            senders[key]()
+            _mark_alert_sent(key)
+            still_pending.discard(key)
         except Exception:  # noqa: BLE001
-            logger.exception("notify_tender_source_changed failed")
-
-    return
+            logger.exception("%s failed", key)
+            still_pending.add(key)           # 寄失敗：保留待寄，下一次再試
+    if still_pending != pending:
+        _set_setting(ALERT_PENDING_SETTING, sorted(still_pending))
 
 
 def _notify_found(result=None):
@@ -1036,6 +1212,13 @@ def _notify_found(result=None):
     （設定成「抓 9／寄 18」時，18 點根本沒有 `result`）。
     """
     from modules.tender_radar import notify as tender_notify
+
+    # 不寄信日（週六日、國定假日；使用者 2026-10-03「未來六日跟國定假日，直接不寄信」）：**整封不寄，也不動任何狀態。**
+    # 🔑 為什麼這樣是安全的：判準是「有沒有未通知的命中」（見上），命中留在 tender_hits、未標已通知；
+    #    不寄信日掃描到的標案會在下一個可寄信日的寄信時段一起寄出，不會因為 INSERT OR IGNORE 而「下次已存在」。
+    #    也因此我們不跳過週末的**掃描**（列表是「當日」查詢，跳過＝日曆表若有錯就永久漏掉）。
+    if no_mail_today()[0]:
+        return False
 
     # ⚠️ 疑似改版時**仍然照常通知解析成功的那幾筆**：它們通過了形狀驗證，
     # 是真的標案。因為版面有疑慮就整批不通知的話，**會漏掉真的標案**，
@@ -1110,6 +1293,10 @@ def run_scheduled_scan():
     📌 這個錯在預設設定下看不出來（預設抓 9,12,15,18、寄 18，兩者重疊），
     **要等到有人把兩份設定設成不重疊那天才爆。**
     """
+    try:
+        _check_holiday_table_expiry()
+    except Exception:  # noqa: BLE001
+        logger.exception("假日表到期檢查失敗")
     slot = current_slot()
     result = None
     if slot is not None:

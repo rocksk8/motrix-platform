@@ -30,8 +30,14 @@
 | 對象 | 形式 | 對方不在時 |
 |---|---|---|
 | L1 `helpers.email_notify`（寄信原語） | 模組屬性晚綁定 | L1 一定存在 |
-| L1 通知偏好（事件 key：`tender_found`／`tender_fetch_failed`／`tender_source_changed`） | 事件 key 字串 | — |
+| L1 通知偏好（事件 key：`tender_found`／`tender_fetch_failed`／`tender_source_changed`／`tender_detail_blocked`） | 事件 key 字串 | — |
 | M08 地圖（讀取 `tenders` 表） | ⚠ 目前是 M08 直接讀表，改成 provider 已排入路線圖 | 拿掉本模組時，地圖上的標案點消失，其他點照常顯示 |
+
+## 不寄信日與假日表
+
+週六、週日、國定假日不寄信（彙總信與健康告警）；掃描照常。判定在 `calendar_tw.py`，資料在 `holidays_tw.json`
+（官方政府行政機關辦公日曆表；來源、取得日期、涵蓋範圍、sha256 記在檔內）。**每年要用新一年的官方 CSV 更新**；
+表外年份只認得週末，頁面會明說。補班日（週末但要上班）可寄信；官方 2026、2027 沒有補班日。
 
 ## 拿掉本模組時
 
