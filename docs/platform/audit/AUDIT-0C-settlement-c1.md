@@ -5,10 +5,11 @@
 
 ## 結論
 
-**MUST-FIX 1 項（顯示，僅深色主題）；金額與口徑部分全部 PASS。** 作者的 55 題全綠（精算稅基／已對應欄位／成本彙總／端點／報表過期比對／3 個 e2e 檔）。
+**MUST-FIX 2 項：M1（顯示，僅深色主題）、M2（頁面完結存成含稅值，金額）。** 其餘金額與口徑部分 PASS。作者的 55 題全綠（精算稅基／已對應欄位／成本彙總／端點／報表過期比對／3 個 e2e 檔），但**沒有一題走真實頁面完結**——M2 因此沒被抓到（主持通知 d5 自己也發現了同一個缺陷；本報告以獨立重現確認，見 §9）。
 
 | 級別 | # | 內容 |
 |---|---|---|
+| **must-fix** | M2 | 經**精算頁**完結（草稿→按完結）時，存檔 summary 是含稅 `dispatchTotal 12500`、`dispatchBasis 'taxed'`、`totalActualCost 23525`（草稿畫面是 12000／23025；營運報表權責是 12000）。新口徑在頁面完結路徑上**從不生效**，5% 爭議依然存在（§9） |
 | **must-fix** | M1 | 深色主題下「已對應」列幾乎讀不到字（單據、類型、金額對比 **1.25:1**）。淺色主題正常 |
 | should-fix／確認 | S1 | 舊完結案在精算頁**數字逐位相同**，但多了 1 個欄位標題改字＋2 行說明（非「逐位元組相同」）；請確認是預期 |
 | documented-by-design | D1–D3 | 報表總計混合新舊口徑；舊頁面完結仍落舊口徑；完結驗證仍未涵蓋派發（C2） |
@@ -103,3 +104,21 @@ e2e 探針（舊草稿：存檔 summary `dispatchTotal 12500`、無標記）：
 
 - 探針：`test_zz_recon_c1.py`（後端，12 題；基準與 C1 各跑；S2 預期值基準 17050／C1 16550，其餘斷言相同）、`test_zz_e2e_c1.py`（Playwright，舊完結頁面文字、草稿說明／存檔、已對應清單／主題對比；基準與 C1 同跑）。皆未入庫、已刪；`-n 1`／單程序、basetemp 已刪。
 - 作者測試（C1 worktree）：`test_settlement_tax_basis`／`assigned_fields`／`cost_extras`／`actuals`／`reports_stale_dispatch_basis`＋3 個 e2e 檔，**55 passed**。
+
+## 9. 頁面完結端到端（M2；補測，2026-10-03 22:3x）
+
+探針（未入庫）：同夾具（報價未稅 21000、承攬商未稅 10000／稅 5%／人員 2000）；真實頁面草稿載入 → 按「完結精算」→「確認完結」→ 讀存檔與各下游。對象 `55242226`。
+
+| 步驟 | 結果 |
+|---|---|
+| 草稿頁面 summary（完結前） | `dispatchTotal 12000`、`dispatchBasis 'pretax'`、`totalActualCost 23025` |
+| **頁面完結後的存檔 summary** | **`dispatchTotal 12500`、`dispatchBasis 'taxed'`、`dispatchGrandTotal 12500`、`totalActualCost 23525`**、`netProfit -4600`（頁面無錯誤） |
+| 完結後 `settlement-actuals`（凍結） | `dispatchTotal 12500`、`dispatchBasis 'taxed'`、`totalActualCost 23525` |
+| 營運報表權責（該案承攬商） | **12000** |
+| 偽造 PUT（`dispatchTotal 0`＋標記 `pretax`，其餘照填）| HTTP **200**（C2 未到，預期） |
+| 含稅值 12500 掛 `pretax` 標記的 PUT | HTTP **200**（C2 應拒絕） |
+
+- 成因（與 d5 自查一致，我獨立重現）：`finalize()` 先把 `status` 設為 `finalized` 再算 `calcSummary()`；此時 `dispatchBasisOld()`＝`finalized && 沒有 _frozenSummary.dispatchBasis`＝true ⇒ 走含稅口徑並把標記寫成 `'taxed'`。
+- 影響：經頁面完結的**每一個**新案都落在舊口徑（多算承攬商稅額 500＝5%），與營運報表／總帳差 5%；過期比對因標記一致而不會報警，問題隱形。`netProfit` 少算 0.99×稅額（獎金基底偏低）。
+- 作者測試沒抓到的原因：所有「新完結案」題都以 `_set_settlement`（直接寫 DB 的合成 summary，帶 `dispatchBasis:'pretax'`）造案，沒有任何一題走頁面完結。
+- 驗收條件（待 d5 新 sha＋C2）：(a) 頁面完結後存檔 `dispatchTotal 12000`、`dispatchBasis 'pretax'`、`totalActualCost 23025`；(b) 偽造 PUT（`dispatchTotal 0`）與含稅值掛未稅標記 → 409；(c) 以上用**真實頁面完結**造案的 e2e 題入庫；(d) 重跑本報告 §1 的 S2＝16550 與 §3 的舊完結案不變。我會在新 sha 出來後以同一探針重測並更新結論。
