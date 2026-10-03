@@ -76,7 +76,7 @@ def _admin_username(root):
     return _re.search(r"帳號:\s*(\S+)", cred).group(1)
 
 
-def _po(port, token, user, qty):
+def _po(root, port, token, user, qty):
     """建立並送審一張採購單（品項 a、單價 1000）；沒設簽核層 ⇒ 送審即核准。⇒ (docCode, status, 步驟回應)"""
     body = {"kind": "purchase_order", "payeeName": "某人", "payeeType": "employee", "data": {"applicant": user},
             "lines": [{"category": "雜項", "summary": "DRILL採購", "qty": qty, "unitCost": 1000, "itemId": "a"}]}
@@ -84,7 +84,14 @@ def _po(port, token, user, qty):
     if s1 != 201:
         return None, None, {"create": (s1, str(d1)[:200])}
     s2, d2 = T.api(port, "/api/quotations/%s/extra-expenses/%d/submit" % (SEED_QUOTE, d1["id"]), None, token, "POST")
-    return d1.get("docCode"), (d2 or {}).get("status") if isinstance(d2, dict) else None, {"create": s1, "submit": s2}
+    c = T.rw(root)                      # 演練庫的簽核設定有簽核層（送審後待審核）：種子資料直接寫成已核准
+    try:
+        c.execute("UPDATE case_extra_expenses SET status='已核准' WHERE id=?", (d1["id"],))
+        c.commit()
+        st = c.execute("SELECT status FROM case_extra_expenses WHERE id=?", (d1["id"],)).fetchone()[0]
+    finally:
+        c.close()
+    return d1.get("docCode"), st, {"create": s1, "submit": s2}
 
 
 def seed_m2(root, port):
@@ -101,7 +108,7 @@ def seed_m2(root, port):
         c.commit()
     finally:
         c.close()
-    code, status, steps = _po(port, token, user, 2)
+    code, status, steps = _po(root, port, token, user, 2)
     if not code or status != "已核准":
         raise T.DrillError("M2 種子：採購單沒建成／沒核准：%s %s %s" % (code, status, steps))
     line = {"poDocCode": code, "line": 1, "qty": 2.0, "unit": "台", "amount": 2000.0}
@@ -235,14 +242,31 @@ def checks34(root, port, base_rec, new_rec, t0, package_modules):
     m1 = dict(_M2.get("m1") or {})
     sd, rd = T.api(port, "/api/quotations/%s/material-orders" % SEED_QUOTE, {"materialOrders": [dict(m, **({"quantity": 5, "totalPrice": 5000} if m["itemId"] == "m1" else {})) for m in MATERIALS + [m1]]}, token, "PATCH")
     rej = [x.get("code") for x in ((rd or {}).get("rejected") or [])] if isinstance(rd, dict) else None
-    code2, st2, steps2 = _po(port, token, _admin_username(root), 1)                      # 第二張採購單：變更提案會涵蓋 PO-1＋PO-2
+    code2, st2, steps2 = _po(root, port, token, _admin_username(root), 1)                      # 第二張採購單：變更提案會涵蓋 PO-1＋PO-2
     sp2, dp2 = T.api(port, BASE + "/change-proposal?quantity=3", None, token, "GET")
     sc0, _dc0 = T.api(port, BASE + "/changes", {"reason": "x", "totalPrice": 1}, token, "POST")                 # 不收金額欄位
+    c = T.rw(root)
+    try:
+        saved = c.execute("SELECT value_json FROM system_settings WHERE key='unified_approval_flow'").fetchone()
+        c.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES ('unified_approval_flow', ?, '2026-01-01T00:00:00') ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+                  (json.dumps({"tiers": [], "includeSubmitterManagerTier": False}),))
+        c.commit()
+    finally:
+        c.close()
     sc, dc = T.api(port, BASE + "/changes", {"reason": "DRILL追加", "quantity": 3}, token, "POST")
     chg = (dc or {}).get("change") if isinstance(dc, dict) else None
     ss, ds = (None, None)
     if isinstance(chg, dict) and chg.get("id"):
         ss, ds = T.api(port, "/api/quotations/%s/material-changes/%d/submit" % (SEED_QUOTE, chg["id"]), None, token, "POST")
+    c = T.rw(root)
+    try:                                # 還原簽核設定（不影響之後的判準）
+        if saved:
+            c.execute("UPDATE system_settings SET value_json=? WHERE key='unified_approval_flow'", (saved[0],))
+        else:
+            c.execute("DELETE FROM system_settings WHERE key='unified_approval_flow'")
+        c.commit()
+    finally:
+        c.close()
     c = T.ro(root)
     try:
         row = c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (SEED_QUOTE,)).fetchone()
