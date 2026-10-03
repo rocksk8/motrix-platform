@@ -155,19 +155,22 @@ def test_edit_preview_toggle_swaps_the_same_canvas_in_place(live_server, make_us
     page.wait_for_selector("#mb-canvas.is-preview")
     assert page.evaluate("() => window.__cv === document.getElementById('mb-canvas')") is True     # 同一個畫布元素
     assert page.url == url and len(page.context.pages) == pages
-    assert not page.locator("#mb-canvas .mb-fc__bar").first.is_visible()
-    assert page.locator("#mb-canvas .cr-sec__t", has_text="報價明細").first.is_visible()          # 區塊標題以填單樣式列出
+    # T35 L6：切到預覽後畫布是非同步重畫；負載下 wait_for_selector(is-preview) 之後立刻 is_visible() 會搶在重畫前
+    # （2026-10-03 -n 2 實測紅：報價明細標題尚未出現，單獨重跑 2/2 綠）。改用 expect 的自動等待（斷言內容不變）。
+    from playwright.sync_api import expect
+    expect(page.locator("#mb-canvas .mb-fc__bar").first).not_to_be_visible()
+    expect(page.locator("#mb-canvas .cr-sec__t", has_text="報價明細").first).to_be_visible()     # 區塊標題以填單樣式列出
     assert page.locator("#mb-preview-actions button").count() >= 1
     assert page.locator('.mb-fc[data-field-key="cust"] input').first.is_enabled()                 # 可操作（不存檔）
     n0 = page.locator('[data-mock-table="lines"] tbody tr').count()
     page.click('[data-mock-table="lines"] .cr-tbl__add')
-    assert page.locator('[data-mock-table="lines"] tbody tr').count() == n0 + 1
+    expect(page.locator('[data-mock-table="lines"] tbody tr')).to_have_count(n0 + 1)
     assert page.locator('[data-field-key="tax"] input[type=radio]').count() >= 3                   # 稅別是單選
     page.click("#mb-mode-edit")
     page.wait_for_selector("#mb-canvas:not(.is-preview)")
     assert page.locator('.mb-fc[data-field-key="cust"].is-sel').count() == 1                        # 選中狀態保留
     assert page.locator('#mb-props-pane [data-props-for]').count() == 1
-    assert page.locator("#mb-canvas .mb-fc__bar").first.is_visible()
+    expect(page.locator("#mb-canvas .mb-fc__bar").first).to_be_visible()
     assert not errors, errors
 
 
