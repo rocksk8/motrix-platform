@@ -842,7 +842,7 @@ Write-Host "`n[測試] 執行 pytest（非 e2e，backend/tests/，含 API 整合
 # 🔑 那是我們先前唯一拿不到的那一格（單獨跑一支探針量不到 `-n 6` 的競爭）。
 $_tNonE2e = Get-Date
 $env:MOTRIX_FAIL_STREAM_STAGE = "not_e2e"
-& $pyExe -m pytest -q -m "not e2e" -n $workers --durations=20 --basetemp="$pytestTemp" @fsArgs @ffArgs 2>&1 |
+& $pyExe -m pytest -q -m "not e2e" -n $workers --durations=20 --basetemp="$pytestTemp" "--junitxml=${pytestTemp}_ne.xml" @fsArgs @ffArgs 2>&1 |
     Tee-Object -Variable nonE2eOut |
     ForEach-Object { Write-Host $_ }
 # ⚠️ `$LASTEXITCODE` 由原生執行檔設定，**管線接到 cmdlet 不會覆蓋它** ——
@@ -917,7 +917,7 @@ $_tE2e = Get-Date
 #   （Invoke-FlakyRetry）——未登記的偶發照樣擋，並印出登記指令。見 PLAYBOOK §D-建包〕
 $e2eWorkers = 4
 $env:MOTRIX_FAIL_STREAM_STAGE = "e2e"
-& $pyExe -m pytest -q -rf -m "e2e" -n $e2eWorkers --durations=20 --basetemp="${pytestTemp}_e2e" @fsArgs @ffArgs 2>&1 |
+& $pyExe -m pytest -q -rf -m "e2e" -n $e2eWorkers --durations=20 --basetemp="${pytestTemp}_e2e" "--junitxml=${pytestTemp}_e2e.xml" @fsArgs @ffArgs 2>&1 |
     Tee-Object -Variable e2eOut |
     ForEach-Object { Write-Host $_ }
 $e2eExit = $LASTEXITCODE
@@ -957,6 +957,24 @@ Release-TestExclusive    # 兩段測試都跑完了，後面的打包不需要�
 if ($runE2e) { Record-Stage "e2e" ($e2eExit -eq 0) $e2eFlaky }
 Record-TestResult ($testExit -eq 0 -and $e2eExit -eq 0)
 foreach ($rf in @($nonE2eFlaky, $e2eFlaky)) { if ($rf) { Remove-Item -LiteralPath $rf -ErrorAction SilentlyContinue } }
+# T35 時間預算警報（tools/platform/time_budget.py；只警告、永不擋建包、出錯也只記一筆）：兩段都實際跑過才有 junit 可比。
+try {
+    $tbJunits = @("${pytestTemp}_ne.xml", "${pytestTemp}_e2e.xml") | Where-Object { Test-Path -LiteralPath $_ }
+    if (@($tbJunits).Count -eq 2) {
+        $tbRaw = & $pyExe (Join-Path $projectRoot "tools\platform	ime_budget.py") check @tbJunits --json 2>$null
+        $tb = ($tbRaw | Out-String) | ConvertFrom-Json
+        if ($tb.error) { $BuildStats["time_budget"] = [ordered]@{ error = "$($tb.error)" } }
+        else {
+            $BuildStats["time_budget"] = [ordered]@{ alarms = @($tb.alarms).Count; total_ws = $tb.total_ws; baseline_ws = $tb.baseline_ws
+                                                    tests = $tb.tests; ms_per_test = $tb.ms_per_test
+                                                    detail = @($tb.alarms | Select-Object -First 5 | ForEach-Object { "$($_.kind) $($_.file) $($_.ws)" }) }
+            foreach ($al in @($tb.alarms)) { Write-Host "  [時間預算] ⚠ $($al.kind) $($al.file) $($al.ws) 秒（基準 $($al.baseline)）" -ForegroundColor Yellow }
+        }
+    }
+} catch {
+    $BuildStats["time_budget"] = [ordered]@{ error = "$($_.Exception.Message)" }
+}
+foreach ($tbx in @("${pytestTemp}_ne.xml", "${pytestTemp}_e2e.xml")) { Remove-Item -LiteralPath $tbx -ErrorAction SilentlyContinue }
 # 📌 更正（2026-09-25）：上面「只有認得出來的逾時才降級成警告」已撤回——
 #    逾時的題**沒有驗到任何東西**，警告後繼續打包＝靜默少驗（平行化後只會更多）。
 #    現在逾時也擋下打包；逾時與斷言失敗仍分開列，並附每題的單獨重跑指令。
