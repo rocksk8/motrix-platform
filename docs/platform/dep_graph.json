@@ -7938,9 +7938,15 @@
    "routes": [
     {
      "func": "settlement_actuals",
-     "line": 18,
+     "line": 19,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/settlement-actuals"
+    },
+    {
+     "func": "settlement_actuals_preview",
+     "line": 47,
+     "method": "POST",
+     "path": "/api/quotations/{quote_no}/settlement-actuals/preview"
     }
    ],
    "tables_ddl": [],
@@ -8431,9 +8437,11 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:custom_finance",
     "helper:legal_params",
     "mod:case/purchase_items",
-    "mod:case/recognition"
+    "mod:case/recognition",
+    "plat:registry"
    ],
    "kind": "mod",
    "module_key": "case",
@@ -8442,7 +8450,10 @@
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [
-    "quotations"
+    "case_extra_expenses",
+    "contractor_dispatches",
+    "quotations",
+    "vendor_contractors"
    ],
    "tables_w": []
   },
@@ -14444,7 +14455,7 @@
     "/api/quotations/{}/extra-expenses",
     "/api/quotations/{}/purchase-items",
     "/api/quotations/{}/settlement",
-    "/api/quotations/{}/settlement-actuals",
+    "/api/quotations/{}/settlement-actuals/preview",
     "/api/system/branding/favicon"
    ],
    "api_prefixes": [
@@ -18275,7 +18286,8 @@
     "mod:case/gl_events",
     "mod:case/purchase_items",
     "mod:case/quotations",
-    "mod:case/recognition"
+    "mod:case/recognition",
+    "mod:case/settlement_actuals"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -18450,6 +18462,7 @@
     "core:pdf_gen",
     "mod:analytics/api/reports",
     "mod:case/recognition",
+    "mod:case/settlement_actuals",
     "mod:subcontract/attachments",
     "mod:subcontract/gl_events"
    ],
@@ -20482,6 +20495,7 @@
     "core:pdf_gen",
     "mod:analytics/api/reports",
     "mod:case/recognition",
+    "mod:case/settlement_actuals",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/dispatch_approval",
     "mod:subcontract/gl_events"

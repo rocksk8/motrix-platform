@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-03（wip/t34-settlement-extras-2e）：提供 `case.remit_fee_total`（唯讀）
+## 1.1.17 — 2026-10-03（wip/t34-settlement-extras-2e）：提供 `case.remit_fee_total`（唯讀）
 - 登記提供者 `("case.remit_fee_total", "subcontract")` ⇒ `remit.fee_total_for_case(conn, quote_no)`（既有函式，行為不變）：案件完結精算讀「承攬商匯款手續費合計」，case 不 import 本模組。只新增能力名，不改既有檔行為。
 
 ## 1.1.16 — 2026-10-03（wip/t33-fix-31b-a3）：款別設定頁標記與試算端點稽核豁免

@@ -1,5 +1,13 @@
 # 案件 更新紀錄
 
+## 1.0.114 — 2026-10-03（wip/t34-settlement-extras-2e）：精算端點納入承攬商派發、匯款手續費、自訂模組支出（34）
+- `settlement-actuals` 新增 `costExtras` 與 `totals.dispatchTotal／dispatchReport／remitFeeTotal／customExpenseTotal／totalActualCost`：口徑與精算頁現行算法逐位相同（使用者裁示 A：歷史精算不變）——派發＝承攬商含稅合計＋外包人員（`dispatch.row` 的 grandTotal；排除已取消、草稿、已退回）；手續費＝額外支出手續費（已登錄付款、未作廢）＋承攬商匯款手續費；自訂模組支出＝`custom_finance.case_finance`。另輸出 `dispatchReport`（未稅承攬費＋人員，營運報表／總帳 `dispatch_entries` 口徑，供漂移守門）；兩者差異＝承攬費的 5% 稅，含稅或未稅由使用者決定（列第 35 班問題），這裡只並列。已完結精算的這幾個鍵取存檔 summary 的凍結值。`extraTotal` 語意不變（仍只含額外支出）。精算頁改取這些值（派發小計、匯款手續費、自訂模組支出；端點不可用時退回原本各打一支的舊路徑），金額與原本逐位相同；新增 e2e 對照頁面成本彙總與端點 totals。完結重算比對（D10）不含這三類（頁面端因無權限可能少打其中一支端點）。
+
+## 1.0.113 — 2026-10-03（wip/t34-settlement-nits-2e）：精算——完結容差、凍結分法、POST 預覽（第 33 班稽核 nits）
+- 完結重算的進位容差只套在「品項實際成本」（每品項 ±1 元）；額外支出、採購類總額、未採用採購只留 1 元防浮點（原本一併放寬成品項數）。
+- 已完結精算的 `settlement-actuals`：`totals.materialUnassignedTotal` 取存檔 summary 的同名鍵、`extraTotal` 扣掉它與手續費、自訂模組支出，分法與完結前的即時值一致（舊完結案沒有這鍵＝0，合計不變）。
+- 新增 `POST /api/quotations/{no}/settlement-actuals/preview`（沖銷對應放請求本文；上百筆不受網址長度限制），精算頁預覽改用它；`GET ?offsets=` 保留相容。
+
 ## 1.0.112 — 2026-10-03（wip/t34-ship-case-2e）：出貨單連動——可出貨材料提供者（34-S1 case 側）
 - 新增提供者 `("material.shippable", "case")`（`modules/case/material_shippable.py`）：回傳已核准且已做到貨確認的材料申請 `[{materialItemId, docCode, name, unit, quoteItemId, appliedQty, arrivedQty, status}]`，供出貨單（supply）經 registry 取用、不互相 import。唯讀；`arrivedQty` 預設整筆到貨（E5），有選填欄位 `received_qty` 時取 `min(實收, 已核准量)`（欄位與到貨 API 的 `receivedQty` 後補）。契約與逐點答覆：SHIPPING-MATERIAL-LINK-CONTRACT-S1.md §8。
 
@@ -18,14 +26,6 @@
 ## 1.0.108 — 2026-10-03（wip/t34-m2-coverage-2e）：材料申請涵蓋快照與變更提案（34-M2，唯讀新檔；尚未接線）
 - 新增 `modules/case/material_coverage.py`（只讀）：`approved_po_lines`／`coverage_snapshot`（涵蓋該品項所有已核准採購單行的快照 `poSnapshot`，金額＝行合計，數量依單位規則；`only_untaken` 去掉已被占用的行）、`item_request_exists`（草稿／待審核／簽核中／已核准的活申請占用品項；`adjust_of` 且原申請已全額付款時不占用）、`taken_lines`、`paid_in_full`、`adjust_check`（D7 調整單條件）、`change_proposal(conn, quote_no, item_id, proposed=None)` ⇒ `{itemId, before, after, diff:[{field,old,new,money}], uncoveredLines, problems}`。problems：`not_found／use_direct_edit／not_approved／no_coverage／coverage_shrinks／bad_quantity／unknown_field／paid_in_full／below_paid／no_change`。
 - 還沒有任何呼叫者（簽核與畫面由 d7／c7 接）；不改現有行為。
-
-## (next) — 2026-10-03（wip/t34-settlement-extras-2e）：精算端點納入承攬商派發、匯款手續費、自訂模組支出（34）
-- `settlement-actuals` 新增 `costExtras` 與 `totals.dispatchTotal／dispatchReport／remitFeeTotal／customExpenseTotal／totalActualCost`：口徑與精算頁現行算法逐位相同（使用者裁示 A：歷史精算不變）——派發＝承攬商含稅合計＋外包人員（`dispatch.row` 的 grandTotal；排除已取消、草稿、已退回）；手續費＝額外支出手續費（已登錄付款、未作廢）＋承攬商匯款手續費；自訂模組支出＝`custom_finance.case_finance`。另輸出 `dispatchReport`（未稅承攬費＋人員，營運報表／總帳 `dispatch_entries` 口徑，供漂移守門）；兩者差異＝承攬費的 5% 稅，含稅或未稅由使用者決定（列第 35 班問題），這裡只並列。已完結精算的這幾個鍵取存檔 summary 的凍結值。`extraTotal` 語意不變（仍只含額外支出）。精算頁改取這些值（派發小計、匯款手續費、自訂模組支出；端點不可用時退回原本各打一支的舊路徑），金額與原本逐位相同；新增 e2e 對照頁面成本彙總與端點 totals。完結重算比對（D10）不含這三類（頁面端因無權限可能少打其中一支端點）。
-
-## (next) — 2026-10-03（wip/t34-settlement-nits-2e）：精算——完結容差、凍結分法、POST 預覽（第 33 班稽核 nits）
-- 完結重算的進位容差只套在「品項實際成本」（每品項 ±1 元）；額外支出、採購類總額、未採用採購只留 1 元防浮點（原本一併放寬成品項數）。
-- 已完結精算的 `settlement-actuals`：`totals.materialUnassignedTotal` 取存檔 summary 的同名鍵、`extraTotal` 扣掉它與手續費、自訂模組支出，分法與完結前的即時值一致（舊完結案沒有這鍵＝0，合計不變）。
-- 新增 `POST /api/quotations/{no}/settlement-actuals/preview`（沖銷對應放請求本文；上百筆不受網址長度限制），精算頁預覽改用它；`GET ?offsets=` 保留相容。
 
 ## 1.0.107 — 2026-10-03（wip/t33-settlement-a5b-2e）：精算頁手填實際成本 0 ＝沒填、完結失敗提示延長（c7 二審）
 - 精算頁摘要把手填實際成本 0／空視為沒填、用估計（與重新載入存檔、後端 `manual_actual` 同一規則）：同一次編輯中清成 0 再完結不再被 409「頁面少一筆估計」。新增 e2e（輸入 0 ⇒ 摘要用估計 ⇒ 完結成功；移除修正即紅）。
