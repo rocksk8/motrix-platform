@@ -640,7 +640,8 @@
    "mask_quotation_data": "def(data)",
    "mask_row": "def(row, cols=…)",
    "money_visible": "def(user)",
-   "restore_case_record": "def(new_cr, db_cr)"
+   "restore_case_record": "def(new_cr, db_cr)",
+   "strip_history_reasons": "def(history)"
   },
   "helper:formula": {
    "FUNCTIONS": "const",
