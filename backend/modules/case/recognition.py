@@ -277,6 +277,15 @@ def _material_states(conn) -> dict:
         return {}
 
 
+def _qty_or_none(v):
+    """材料申請數量 → float；缺、空、非數字（含 '²' 這類 isdigit() 為真但 float() 會丟錯的字元）→ None，不讓精算／報表端點因一格髒資料 500。"""
+    try:
+        f = float(v) if v not in (None, "") else None
+        return f if f is None or f == f and abs(f) != float("inf") else None
+    except (TypeError, ValueError):
+        return None
+
+
 def material_money_rows(conn, department_id=None, quote_no=None):
     """材料申請逐筆判定（**不分口徑**；營運報表、總帳 E12／E12b、完結精算共用的唯一原語，33-A1）。
 
@@ -309,7 +318,7 @@ def material_money_rows(conn, department_id=None, quote_no=None):
             prs = po_rows_of(qn)
             linked = _pi._link_check(mo, prs)[0]
             out.append({"quoteNo": qn, "itemId": mo.get("itemId") or "", "key": (qn, str(mo.get("itemId"))), "order": mo,
-                        "name": mo.get("itemName") or "材料申請", "quantity": (float(mo["quantity"]) if str(mo.get("quantity") or "").replace(".","",1).isdigit() else None), "unit": str(mo.get("unit") or ""), "state": st, "cost": _ma.cost_state(st), "linked": linked,
+                        "name": mo.get("itemName") or "材料申請", "quantity": _qty_or_none(mo.get("quantity")), "unit": str(mo.get("unit") or ""), "state": st, "cost": _ma.cost_state(st), "linked": linked,
                         "noPo": (not linked) and _pi.material_link_status(mo, prs, legacy=(st == ""))["state"] == "none",
                         "total": float(mo.get("totalPrice") or 0)})
     return out

@@ -264,3 +264,19 @@ def test_preview_post_equals_the_get_preview_and_saves_nothing(W):
     assert c.post(URL + "/preview", json={"offsets": big}, headers=h).status_code == 200
     assert c.post(URL + "/preview", json={"offsets": "x"}, headers=h).status_code == 422
     assert c.post("/api/quotations/NO-SUCH/settlement-actuals/preview", json={"offsets": []}, headers=h).status_code == 404
+
+
+def test_dirty_material_quantity_never_breaks_the_endpoint(W):
+    """稽核 S1（2026-10-03）：數量 '²'（str.isdigit() 為真、float() 會丟錯）、None、空字串、'nan'、'abc' ⇒ 端點仍 200，quantity 為 None，金額照算。"""
+    c, h = W
+    bad = ["²", None, "", "nan", "abc", "1e999"]
+    orders = []
+    for i, q in enumerate(bad):
+        o = _order("Q%d" % i, 1, 100)
+        o["quantity"] = q
+        orders.append(o)
+    _put_materials(orders, {"Q%d" % i: "已核准" for i in range(len(bad))})
+    d = _get(c, h)                                                                 # _get 內斷言 200
+    qs = {m["itemId"]: m["quantity"] for m in d["unassigned"]["materials"]}
+    assert len(qs) == len(bad) and all(v is None for v in qs.values()), qs
+    assert sum(m["amount"] for m in d["unassigned"]["materials"]) == 100 * len(bad)
