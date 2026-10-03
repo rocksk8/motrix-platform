@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — wip/t34-d12-c7（新設計器預設開）
+- 前端（D12）：新設計器在「模組建構器 ② 表單」與「請款類型編輯頁」預設開（無偏好時）；`?designer=0` 或頁面上「改用舊的…」回退並記住（localStorage `mb_designer`／`et_designer`＝'0'）。既有 e2e 一律釘舊畫面（`tests/_e2e_login.py` LEGACY_UI_PINS），新題 `test_e2e_designer_default_on_2026_10_03.py`（2）驗預設開。**上線前條件：真滑鼠拖放人工驗證（FORM-DESIGNER-PREVIEW-GUIDE.md 8 步）**。
+
 ## 1.109 — wip/t33-diff-default-c7（定義 diff 的 `default` ＝出貨預設）、wip/t33-k2-c7（草稿並行保護）
 - L0（新增，向下相容）：`core.definitions.default_for(kind, key) -> body|None`——程式出貨的預設（v0），**不看資料庫**；`resolve` 內部改呼叫它（行為不變：role ＞ company ＞ default）。
 - L0（行為修正，路由）：`GET /api/definitions/{kind}/{key}/diff?a|b=default` 原本呼叫 `resolve`，公司發布過就回公司最新版（`default` 對 `latest` 恆為空、無法比較公司版 vs 出貨預設）；現在回出貨預設（沒有預設 ⇒ 空內容）。編輯頁的 `latest`／`draft`／版本號比較不受影響。
@@ -10,7 +13,6 @@
 - L1（router，新增選填欄位）：`PUT /api/definitions/{kind}/{key}/draft` 與 `POST …/publish` body 可帶 `base_etag`（字串）；PUT 另可帶 `force:true`；回應 `etag`；稽核 `definitions.save_draft_override`。測試：`tests/test_definitions_draft_etag_2026_10_02.py`。
 - L0（新增選填參數，向下相容；K-2 補強）：`core.definitions.submit_draft(…, base_etag=None)`——寫鎖內比對草稿戳，不同 ⇒ `DraftConflict`；`helpers.custom_def_review.submit(…, base_etag=None)` 轉傳給 `publish`／`submit_draft`，`DraftConflict` 不轉成 ReviewError（路由回 409 `draft_conflict`＋`current`）。custom_module 發布路徑的比對因此也在寫鎖內。測試 `tests/test_definitions_draft_etag_custom_module_2026_10_03.py`（3 題）。
 - L1（router，新增端點與選填欄位；wip/t33-refresh-c7，D14／D15）：`GET /api/definitions/{kind}/{key}/default`（最高管理者；回 `{"body": 程式出貨預設|null}`，不看資料庫）；`PUT …/draft` body 可帶 `adopted`（採用出貨範本的路徑清單，最多 200 項）⇒ 稽核 `definitions.save_draft` detail 多 `adopted_from_default`。請款類型頁：「複製出貨範本到草稿」（不自動發布）、「出貨範本有 N 項差異」逐項採用／保留（`frontend/js/expense-type-refresh.js`）。測試 `test_definitions_default_endpoint_2026_10_03.py`（6）、`test_e2e_expense_type_refresh_2026_10_03.py`（6）。
-- 前端（D12）：新設計器在「模組建構器 ② 表單」與「請款類型編輯頁」預設開（無偏好時）；`?designer=0` 或頁面上「改用舊的…」回退並記住（localStorage `mb_designer`／`et_designer`＝'0'）。既有 e2e 一律釘舊畫面（`tests/_e2e_login.py` LEGACY_UI_PINS），新題 `test_e2e_designer_default_on_2026_10_03.py`（2）驗預設開。**上線前條件：真滑鼠拖放人工驗證（FORM-DESIGNER-PREVIEW-GUIDE.md 8 步）**。
 
 ## 1.108 — wip/t33-diff-default-c7：定義 diff 的 `default` ＝出貨預設
 - L0（新增，向下相容）：`core.definitions.default_for(kind, key) -> body|None`——程式出貨的預設（v0），**不看資料庫**；`resolve` 內部改呼叫它（行為不變：role ＞ company ＞ default）。

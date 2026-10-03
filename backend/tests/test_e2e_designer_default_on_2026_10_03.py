@@ -8,6 +8,8 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
+pytestmark = pytest.mark.e2e
+
 from tests._e2e_login import inject_login  # noqa: E402
 from tests._builder_nav import go_step  # noqa: E402
 from tests.test_e2e_form_designer_beginner_tasks_2026_10_02 import KEY, _body  # noqa: E402
