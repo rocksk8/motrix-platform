@@ -37,8 +37,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
                    COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') as deal_tag,
                    json_extract(data_json,'$.caseRecord')           as case_record_json,
                    json_extract(data_json,'$.approval')             as approval_json,
-                   json_extract(data_json,'$.settlement.summary')   as settlement_summary_json,
-                   COALESCE(NULLIF(settle_status,''), json_extract(data_json,'$.settlement.status'), '') as settle_status
+                   json_extract(data_json,'$.settlement')           as settlement_json
             FROM quotations ORDER BY id DESC
         """).fetchall()
         cust_count = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
@@ -150,13 +149,14 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
     for r in rows:
         if r["deal_tag"] not in ("已成案", "已結案"):
             continue
-        if not r["settlement_summary_json"]:
-            continue
-        # 只算已完結（finalized）：draft 的 summary 是前端送來的暫存值，不是定案數字
-        if r["settle_status"] != "finalized":
+        if not r["settlement_json"]:
             continue
         try:
-            s          = json.loads(r["settlement_summary_json"])
+            st = json.loads(r["settlement_json"]) or {}
+            # 只算已完結（finalized）：draft 的 summary 是前端送來的暫存值，不是定案數字
+            if st.get("status") != "finalized":
+                continue
+            s = st.get("summary") or {}
             # 與報價單 net_margin_pct 同口徑＝淨利。有 netProfit 鍵就用淨利（含 0／負數）；
             # 沒有鍵的舊精算才退回毛利（同 reports._settle_actual_profit_margin）。
             if s.get("netProfit") is not None:
