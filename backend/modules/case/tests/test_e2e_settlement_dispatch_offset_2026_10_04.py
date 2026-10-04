@@ -258,3 +258,79 @@ def test_grand_total_two_blocks_original_vs_actual_with_headline(live_server, ma
     page.wait_for_timeout(300)
     boxes = [page.locator(f'[data-testid="stl-block-{k}"]').bounding_box() for k in ("before", "after")]
     assert boxes[1]["y"] > boxes[0]["y"] + boxes[0]["height"] - 2, boxes                 # 窄螢幕上下堆疊
+
+
+@pytest.mark.e2e
+def test_management_view_strip_exceptions_readiness_sort_filter_print(live_server, make_user, e2e_browser):
+    """管理視角：5 張高階摘要卡＋需處理（可前往）＋完結閘門（未對應只警示、不擋完結；硬性阻擋才停用）＋品項排序／篩選＋列印版面無 sticky。"""
+    import db
+    sa = make_user(username="sa_sa", role="superadmin")
+    _seed()
+    _dispatch(10000, 2000, quote_no=NO)
+    c = db.get_db()
+    try:
+        d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+        d["tot"] = {"pretax": 20000, "total": 21000, "totalCost": 10500 + 525}
+        c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+        c.commit()
+    finally:
+        c.close()
+    page = e2e_browser.new_context(viewport={"width": 1400, "height": 900}).new_page()
+    _login(page, live_server, *sa)
+    page.goto(f"{live_server}/pages/settlement.html?no={NO}")
+    page.locator('[data-testid="stl-strip"]').wait_for(state="visible", timeout=20000)
+    page.wait_for_function(f"() => {S}._actualsOk && {S}.summary.totalActualCost > 0", timeout=20000)
+    # (a) 5 張摘要卡：報價／總成本／毛利／最終淨利／與原始差額；每張有 title（口徑與來源）
+    keys = ["rev", "cost", "gp", "net", "diff"]
+    for k in keys:
+        card = page.locator(f'[data-testid="stl-k-{k}"]')
+        assert card.is_visible() and card.get_attribute("title"), k
+    assert "20,000" in page.locator('[data-testid="stl-k-rev"]').inner_text()
+    page.evaluate("() => window.scrollTo(0, 1200)")
+    top = page.locator('[data-testid="stl-strip"]').bounding_box()["y"]
+    assert 40 < top < 200, top                                             # sticky：捲動後仍貼在工具列下方
+    page.evaluate("() => window.scrollTo(0, 0)")
+    # (b) 需處理：未對應（派發 d1 ＋ 材料 X ＋ 額外）、品項 b 毛利比比原始低 27.5pp、a／b 以外無虧損；折扣／調整
+    assert page.locator('[data-testid="stl-exc-unassigned"]').is_visible()
+    assert page.locator('[data-testid="stl-exc-drop-b"]').is_visible() and "27.5" in page.locator('[data-testid="stl-exc-drop-b"]').inner_text()
+    assert page.locator('[data-testid="stl-exc-adjust"]').is_visible()
+    page.locator('[data-testid="stl-exc-drop-b"] button').click()
+    page.wait_for_timeout(800)
+    row_b = page.locator("#stl-row-b").bounding_box()
+    assert 0 <= row_b["y"] <= 900, row_b                                   # 「前往」捲到該列
+    page.evaluate("() => window.scrollTo(0, 0)")
+    # 完結閘門：未對應只警示、不擋完結（使用者裁示）
+    ready = page.locator('[data-testid="stl-ready"]')
+    assert ready.get_attribute("data-state") == "warn" and "有未對應項目（仍計入成本）" in ready.inner_text() and "不可完結" not in ready.inner_text()
+    assert page.locator('[data-testid="stl-finalize"]').is_enabled()
+    # 硬性阻擋才停用：把政策旗標改成「未對應擋完結」（單一設定處），按鈕停用並顯示原因
+    page.evaluate(f"() => {{ STL_CONFIG.BLOCK_ON_UNASSIGNED = true; const d = {S}; d.summary = {{...d.summary}} }}")
+    page.wait_for_function("() => document.querySelector('[data-testid=\"stl-ready\"]').dataset.state === 'blocked'", timeout=5000)
+    assert page.locator('[data-testid="stl-finalize"]').is_disabled() and "不可完結" in page.locator('[data-testid="stl-ready"]').inner_text()
+    assert "未對應" in (page.locator('[data-testid="stl-finalize"]').get_attribute("title") or "")
+    page.evaluate(f"() => {{ STL_CONFIG.BLOCK_ON_UNASSIGNED = false; const d = {S}; d.summary = {{...d.summary}} }}")
+    page.wait_for_function("() => document.querySelector('[data-testid=\"stl-ready\"]').dataset.state === 'warn'", timeout=5000)
+    # (c) 品項賺賠表：篩選「虧損／低於原始」只剩 b；排序依毛利（高→低）a 在前、再點一次變 b 在前
+    page.locator('[data-testid="stl-pf-loss"]').click()
+    assert page.locator('[data-testid^="stl-pt-"][data-testid$="-a"], [data-testid="stl-pt-a"]').count() == 0 and page.locator('[data-testid="stl-pt-b"]').count() == 1
+    page.locator('[data-testid="stl-pf-all"]').click()
+    order = lambda: page.locator('[data-testid="stl-profit-table"] tbody tr[data-testid^="stl-pt-"]:not([data-testid^="stl-pt-un-"]):not([data-testid="stl-pt-adjust"]):not([data-testid="stl-pt-total"])').evaluate_all("els => els.map(e => e.dataset.testid)")
+    page.locator('[data-testid="stl-sort-gp"]').click()
+    assert order() == ["stl-pt-a", "stl-pt-b"], order()
+    page.locator('[data-testid="stl-sort-gp"]').click()
+    assert order() == ["stl-pt-b", "stl-pt-a"], order()
+    # (e) 稽核頁尾：口徑、狀態、凍結時間
+    assert "草稿" in page.locator('[data-testid="stl-audit-status"]').inner_text()
+    # 列印：A4 版面不用 sticky／固定列、隱藏工具列
+    page.emulate_media(media="print")
+    assert page.locator('[data-testid="stl-strip"]').evaluate("e => getComputedStyle(e).position") == "static"
+    assert page.locator(".stl-toolbar").evaluate("e => getComputedStyle(e).display") == "none"
+    page.emulate_media(media="screen")
+    # 有未對應項目照樣可完結（伺服器不擋）
+    page.locator('[data-testid="stl-finalize"]').click()
+    page.get_by_role("button", name="確認完結").click()
+    page.wait_for_function(f"() => {S}.settlement.status === 'finalized' && !{S}.saving", timeout=15000)
+    assert _settlement()["status"] == "finalized"
+    assert "已完結" in page.locator('[data-testid="stl-audit-status"]').inner_text()
+    page.evaluate("() => window.scrollTo(0, 0)")
+    _shot(page, "9-management-view")

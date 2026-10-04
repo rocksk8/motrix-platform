@@ -54,7 +54,7 @@
 
   /* readiness */
   .ready{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px 14px;align-items:center;padding:12px 14px;border:2px solid;border-radius:10px;margin-top:10px}
-  .ready.ok{background:var(--ok-bg);border-color:var(--ok-line)} .ready.no{background:var(--warn-bg);border-color:var(--warn-line)}
+  .ready.ok{background:var(--ok-bg);border-color:var(--ok-line)} .ready.no{background:var(--warn-bg);border-color:var(--warn-line)} .ready.no.bad{background:var(--bad-bg);border-color:var(--bad-line)}
   .ready .big{font-size:16px;font-weight:800} .ready ul{margin:4px 0 0;padding-left:18px;font-size:12px}
   .ready .why{font-size:11px;color:var(--ink2);margin-top:2px}
 
@@ -175,7 +175,7 @@ const CONFIG = {
   GP_DROP_PP: 5,            // 品項毛利比比原始（估計）低超過 N 個百分點 → 列入「需處理」
   LOSS_GP_BELOW: 0,         // 毛利 < 此值＝虧損
   PENDING_WARN: true,       // 待審核金額列入「需處理」（照計成本，只提醒）
-  BLOCK_ON_UNASSIGNED: true,// 有未對應項目 → 不可完結（server 仍為準；可改為只警示）
+  BLOCK_ON_UNASSIGNED: false,// 使用者裁示：未對應項目只警示、不擋完結（仍計入成本）；硬性擋住的只有「對帳差額≠0」與已凍結
   BLOCK_ON_PENDING: false,  // 有待審核金額 → 不可完結
   BLOCK_ON_NO_RECORD: false,// 無採購紀錄且未手填的品項 → 不可完結（預設只警示）
   RECON_TOLERANCE: 0        // 對帳差額容許值（元）
@@ -315,19 +315,23 @@ function drawExc(c, L){
   window.__exc = L;
 }
 function drawReady(c, L){
-  const blockers = [];
-  if (CONFIG.BLOCK_ON_UNASSIGNED && c.un.length) blockers.push(`尚有 ${c.un.length} 件未對應項目（NT$ ${N(c.unTotal)}）`);
-  if (CONFIG.BLOCK_ON_PENDING && c.pendingAll) blockers.push(`尚有待審核金額 NT$ ${N(c.pendingAll)}`);
-  if (CONFIG.BLOCK_ON_NO_RECORD && S.items.some(it => c.per[it.id].noRecord)) blockers.push('有品項無採購紀錄且未手填');
-  if (Math.abs(c.reconQuote) > CONFIG.RECON_TOLERANCE) blockers.push('報價對帳差額不為 0');
-  if (Math.abs(c.reconCost) > CONFIG.RECON_TOLERANCE) blockers.push('成本對帳差額不為 0');
-  const ok = !blockers.length && !S.frozen;
+  const hard = [], warns = [];
+  if (Math.abs(c.reconQuote) > CONFIG.RECON_TOLERANCE) hard.push('報價對帳差額不為 0');
+  if (Math.abs(c.reconCost) > CONFIG.RECON_TOLERANCE) hard.push('成本對帳差額不為 0');
+  if (c.un.length) (CONFIG.BLOCK_ON_UNASSIGNED ? hard : warns).push(`有未對應項目（仍計入成本）：${c.un.length} 件，NT$ ${N(c.unTotal)}`);
+  if (c.pendingAll) (CONFIG.BLOCK_ON_PENDING ? hard : warns).push(`有待審核金額 NT$ ${N(c.pendingAll)}（照計，核准前可能變動）`);
+  if (S.items.some(it => c.per[it.id].noRecord)) (CONFIG.BLOCK_ON_NO_RECORD ? hard : warns).push('有品項無採購／對應紀錄且未手填（暫以估計計）');
   const el = $('ready');
-  el.className = 'ready ' + (S.frozen ? 'ok' : ok ? 'ok' : 'no');
+  const cls = S.frozen ? 'ok' : hard.length ? 'no bad' : warns.length ? 'no' : 'ok';
+  el.className = 'ready ' + cls;
+  el.setAttribute('data-state', S.frozen ? 'frozen' : hard.length ? 'blocked' : warns.length ? 'warn' : 'ok');
   el.innerHTML = S.frozen
     ? `<div class="big" aria-hidden="true">🔒</div><div><div class="big">已完結</div><div class="why">${esc(S.finalizedAt)}　全部唯讀</div></div><div class="act"></div>`
-    : `<div class="big" aria-hidden="true">${ok ? '✔' : '✖'}</div><div><div class="big">${ok ? '可完結' : '不可完結'}</div>${ok ? '<div class="why">所有檢查已通過；最終以伺服器驗證為準（總成本不符會拒絕）。</div>' : `<ul>${blockers.map(b => `<li>${esc(b)}</li>`).join('')}</ul><div class="why">伺服器仍為準；以上為前端預檢。</div>`}</div>
-       <div class="act"><button class="btn primary noprint" id="fin" ${ok ? '' : 'disabled'} title="${ok ? '' : esc('不可完結：' + blockers.join('；'))}">完結精算</button></div>`;
+    : `<div class="big" aria-hidden="true">${hard.length ? '✖' : warns.length ? '⚠' : '✔'}</div>
+       <div><div class="big">${hard.length ? '不可完結' : warns.length ? '可完結（有提醒，仍計入成本）' : '可完結'}</div>
+         ${(hard.length || warns.length) ? `<ul>${hard.map(b => `<li><b>✖ 必須處理：</b>${esc(b)}</li>`).join('')}${warns.map(b => `<li>⚠ ${esc(b)}</li>`).join('')}</ul>` : ''}
+         <div class="why">最終以伺服器驗證為準（總成本與伺服器重算不符會拒絕）；以上為前端預檢。</div></div>
+       <div class="act"><button class="btn primary noprint" id="fin" ${hard.length ? 'disabled' : ''} title="${hard.length ? esc('不可完結：' + hard.join('；')) : ''}" data-testid="stl-finalize">完結精算</button></div>`;
 }
 
 function drawTools(c){

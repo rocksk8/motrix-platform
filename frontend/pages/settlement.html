@@ -104,6 +104,41 @@
     .stl-bt tr.is-strong td { font-weight: 800; font-size: 14px; background: #FAF9F6; }
     .stl-bt__basis { font-size: 10px; color: var(--text-dim); font-weight: 400; }
     @media (max-width: 900px) { .stl-blocks { grid-template-columns: 1fr; } }
+    /* 管理視角（第 36 班）：高階摘要列（sticky）／需處理／完結閘門／列印 */
+    .stl-strip { position: sticky; top: calc(var(--topbar-h) + 52px); z-index: 40; background: var(--bg, #F5F4F0); padding: 8px 0 6px; margin-bottom: 8px; border-bottom: 1px solid var(--border-light); }
+    .stl-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+    .stl-k { background: #fff; border: 1px solid var(--border-light); border-left-width: 6px; border-radius: 8px; padding: 6px 10px; min-width: 0; }
+    .stl-k__l { font-size: 11px; color: var(--text-secondary); }
+    .stl-k__v { font-size: 18px; font-weight: 800; line-height: 1.25; white-space: nowrap; font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .stl-k__s { font-size: 11px; color: var(--text-secondary); }
+    .stl-k__st { font-weight: 700; }
+    .stl-k--g { border-left-color: #15803D; background: #ECFDF3; } .stl-k--g .stl-k__st { color: #15803D; }
+    .stl-k--a { border-left-color: #D97706; background: #FEF3C7; } .stl-k--a .stl-k__st { color: #92400E; }
+    .stl-k--r { border-left-color: #B91C1C; background: #FEE2E2; } .stl-k--r .stl-k__st { color: #B91C1C; }
+    .stl-k--n { border-left-color: #9CA3AF; }
+    .stl-exc__it { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 14px; border-top: 1px solid #EFEDE7; }
+    .stl-exc__it:first-child { border-top: 0; }
+    .stl-exc__it.is-r { background: #FEE2E2; } .stl-exc__it.is-a { background: #FEF3C7; }
+    .stl-ready { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; align-items: start; padding: 12px 14px; border: 2px solid; border-radius: 10px; margin: 10px 0 14px; }
+    .stl-ready--ok { background: #ECFDF3; border-color: #86EFAC; } .stl-ready--warn { background: #FEF3C7; border-color: #FCD34D; } .stl-ready--blocked { background: #FEE2E2; border-color: #FCA5A5; }
+    .stl-ready ul { margin: 4px 0 0; padding-left: 18px; font-size: 12px; }
+    .stl-flash td, .stl-flash { animation: stlflash 1.2s ease-out; }
+    @keyframes stlflash { from { background: #FEF08A; } }
+    .stl-pf { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 8px 20px; border-bottom: 1px solid var(--border-light); background: #FAF9F6; font-size: 12px; }
+    .stl-pf button { font: inherit; border: 1px solid #BDB8AB; background: #fff; border-radius: 999px; padding: 2px 10px; cursor: pointer; }
+    .stl-pf button[aria-pressed="true"] { background: #111; color: #fff; border-color: #111; }
+    .stl-table th .stl-sort { all: unset; cursor: pointer; font-weight: 700; }
+    .stl-table th .stl-sort:focus-visible, .stl-table th .stl-sort:hover { text-decoration: underline; }
+    @media (max-width: 900px) { .stl-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stl-strip { position: static; } }
+    /* 列印／PDF：A4、不用 sticky／固定列、隱藏操作元件（主管簽核用） */
+    @page { size: A4; margin: 12mm; }
+    @media print {
+      .stl-toolbar, .noprint, .btn, .toast, .stl-pf, nav, aside { display: none !important; }
+      .stl-main { margin: 0 !important; padding: 0 !important; }
+      .stl-strip { position: static !important; border: 0; }
+      .stl-card, .stl-k, .stl-ready { break-inside: avoid; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
     .stl-row--warn td { background: #FFFBEB; }
     .stl-chip { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; white-space: nowrap; }
     .stl-chip--material { color: #1D4ED8; background: #DBEAFE; }
@@ -250,7 +285,7 @@
       </button>
     </template>
     <template x-if="settlement.status !== 'finalized'">
-      <button class="btn btn-success btn-sm" @click="showFinalizeModal=true" :disabled="xeMasked > 0" data-testid="stl-finalize">
+      <button class="btn btn-success btn-sm" @click="showFinalizeModal=true" :disabled="xeMasked > 0 || readiness.hard.length > 0" :title="readiness.hard.length ? '不可完結：' + readiness.hard.join('；') : ''" data-testid="stl-finalize">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         完結精算
       </button>
@@ -300,43 +335,46 @@
         </div>
       </template>
 
-      <!-- ── KPI 彙總 ── -->
-      <div class="stl-summary">
-        <div class="stl-kpi highlight-blue">
-          <div class="stl-kpi__label">報價收入（稅前）</div>
-          <div class="stl-kpi__value" x-text="'NT$ ' + fmt(summary.quotedPretax)"></div>
-          <div class="stl-kpi__sub" x-text="'含稅：NT$ ' + fmt(summary.quotedTotal)"></div>
-        </div>
-        <div class="stl-kpi">
-          <div class="stl-kpi__label">實際總成本</div>
-          <div class="stl-kpi__value" x-text="'NT$ ' + fmt(summary.totalActualCost)"></div>
-          <div class="stl-kpi__sub">品項成本 + 額外支出 + 承攬商派發</div>
-        </div>
-        <div :class="summary.grossProfit >= 0 ? 'stl-kpi highlight-green' : 'stl-kpi highlight-red'">
-          <div class="stl-kpi__label">真實毛利</div>
-          <div class="stl-kpi__value" x-text="(summary.grossProfit < 0 ? '▼ ' : '') + 'NT$ ' + fmt(Math.abs(summary.grossProfit))"></div>
-          <div class="stl-kpi__sub" x-text="'毛利率 ' + summary.grossMarginPct.toFixed(1) + '%'"></div>
-          <div class="profit-bar">
-            <div class="profit-bar__fill"
-                 :style="'width:' + Math.min(Math.max(summary.grossMarginPct, 0), 100) + '%;background:' + (summary.grossMarginPct >= 30 ? '#22c55e' : summary.grossMarginPct >= 0 ? '#f59e0b' : '#ef4444')"></div>
-          </div>
-        </div>
-        <div class="stl-kpi">
-          <div class="stl-kpi__label">與原始報價毛利差異</div>
-          <div class="stl-kpi__value"
-               :class="summary.profitDiff >= 0 ? 'diff-pos' : 'diff-neg'"
-               x-text="(summary.profitDiff >= 0 ? '+' : '') + 'NT$ ' + fmt(summary.profitDiff)"></div>
-          <div class="stl-kpi__sub" x-text="'原始毛利 NT$ ' + fmt(summary.origDirectProfit)"></div>
-        </div>
-        <div class="stl-kpi">
-          <div class="stl-kpi__label">精算日期</div>
-          <div style="margin-top:6px">
-            <input type="date" class="stl-input" x-model="settlement.settlementDate"
-                   :disabled="settlement.status === 'finalized'" style="max-width:160px">
-          </div>
-          <div class="stl-kpi__sub" style="margin-top:4px" x-text="settlement.status === 'finalized' ? '已完結' : '草稿中'"></div>
+      <!-- ── (a) 高階摘要列：報價／總成本／毛利／最終淨利／與原始差額（sticky；顏色之外一律附圖示與文字）── -->
+      <div class="stl-strip" data-testid="stl-strip">
+        <div class="stl-kpis">
+          <template x-for="k in stripKpis" :key="k.key">
+            <div class="stl-k" :class="'stl-k--' + k.cls" :title="k.tip" :data-testid="'stl-k-' + k.key">
+              <div class="stl-k__l" x-text="k.label"></div>
+              <div class="stl-k__v" :style="{ color: k.neg ? '#B91C1C' : '' }" x-text="k.value"></div>
+              <div class="stl-k__s"><span x-text="k.sub"></span> <span class="stl-k__st" x-text="k.status"></span></div>
+            </div>
+          </template>
         </div>
       </div>
+
+      <!-- ── (b) 需處理：每項可「前往」該列 ── -->
+      <div class="stl-card" data-testid="stl-exceptions">
+        <div class="stl-card__head"><div class="stl-card__title">需處理</div><div style="font-size:11px;color:var(--text-dim)">每一項都可按「前往」直接跳到該列；門檻集中在 STL_CONFIG</div></div>
+        <template x-if="!exceptionsList.length"><div style="padding:12px 20px;background:#ECFDF3;color:#15803D;font-weight:700">✔ 沒有需處理的項目</div></template>
+        <template x-for="(e, i) in exceptionsList" :key="i">
+          <div class="stl-exc__it" :class="'is-' + e.lv" :data-testid="'stl-exc-' + e.key">
+            <div aria-hidden="true" style="text-align:center" x-text="e.ic"></div>
+            <div><b x-text="e.t"></b><div style="font-size:12px;color:var(--text-secondary)" x-text="e.s"></div></div>
+            <button type="button" class="btn btn-ghost btn-sm noprint" @click="jumpTo(e.go, e.item)">前往</button>
+          </div>
+        </template>
+      </div>
+
+      <!-- ── 完結閘門：可完結／不可完結（伺服器仍為準；未對應項目只警示）── -->
+      <template x-if="settlement.status !== 'finalized'">
+        <div class="stl-ready" :class="'stl-ready--' + readiness.state" :data-state="readiness.state" data-testid="stl-ready">
+          <div aria-hidden="true" style="font-size:18px;font-weight:800" x-text="readiness.icon"></div>
+          <div>
+            <div style="font-size:15px;font-weight:800" x-text="readiness.title"></div>
+            <ul x-show="readiness.hard.length || readiness.warns.length">
+              <template x-for="h in readiness.hard" :key="h"><li><b>✖ 必須處理：</b><span x-text="h"></span></li></template>
+              <template x-for="w in readiness.warns" :key="w"><li>⚠ <span x-text="w"></span></li></template>
+            </ul>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">最終以伺服器驗證為準（總成本與伺服器重算不符會拒絕）；以上為前端預檢。</div>
+          </div>
+        </div>
+      </template>
 
       <!-- ── 一、原始報價品項實際成本 ── -->
       <div class="stl-card">
@@ -380,7 +418,7 @@
             </thead>
             <tbody>
               <template x-for="(item, idx) in settlement.items" :key="item.id">
-                <tr>
+                <tr :id="'stl-row-' + item.id">
                   <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif" x-text="idx+1"></td>
                   <td>
                     <div style="font-size:12px;font-weight:500;color:var(--text-primary)" x-text="item.origDescription || '（無品名）'"></div>
@@ -701,41 +739,62 @@
           <div class="stl-card__title">四之一、每個品項的賺賠（毛利）</div>
           <div style="font-size:11px;color:var(--text-dim)">品項只算到毛利；管理費、公益捐贈、淨利只在下方「利潤分析」</div>
         </div>
+        <div class="stl-pf noprint" data-testid="stl-pf">
+          <b>篩選</b>
+          <button type="button" data-testid="stl-pf-all" :aria-pressed="pfFilter === 'all'" @click="pfFilter = 'all'">全部</button>
+          <button type="button" data-testid="stl-pf-loss" :aria-pressed="pfFilter === 'loss'" @click="pfFilter = 'loss'">虧損／低於原始</button>
+          <button type="button" data-testid="stl-pf-norec" :aria-pressed="pfFilter === 'norec'" @click="pfFilter = 'norec'">無紀錄</button>
+          <span style="color:var(--text-dim)">排序：點欄名（毛利、毛利比、差異）</span>
+        </div>
         <div style="overflow-x:auto">
           <table class="stl-table" data-testid="stl-profit-table">
-            <thead><tr><th>品項</th><th style="text-align:right">報價（未稅）</th><th style="text-align:right">實際成本</th><th style="text-align:right">毛利</th><th style="text-align:right">毛利比</th></tr></thead>
+            <thead><tr><th>品項</th><th style="text-align:right" title="報價單品項金額（未稅）">報價（未稅）</th><th style="text-align:right" title="報價單估計成本＝數量×成本×1.05">估計成本</th><th style="text-align:right" title="規則 A：採用且有對應 → 對應合計；否則手填；否則估計">實際成本</th>
+              <th style="text-align:right" :title="'實際 − 估計（成本：高於估計＝紅 ▲）'"><button type="button" class="stl-sort" data-testid="stl-sort-var" @click="pfSortBy('var')" x-text="'差異' + pfArrow('var')"></button></th>
+              <th style="text-align:right" title="報價 − 實際成本"><button type="button" class="stl-sort" data-testid="stl-sort-gp" @click="pfSortBy('gp')" x-text="'毛利' + pfArrow('gp')"></button></th>
+              <th style="text-align:right" title="毛利 ÷ 報價"><button type="button" class="stl-sort" data-testid="stl-sort-pct" @click="pfSortBy('pct')" x-text="'毛利比' + pfArrow('pct')"></button></th>
+              <th style="text-align:right" title="毛利比 − 原始（以估計成本算）毛利比">較原始</th></tr></thead>
             <tbody>
-              <template x-for="(item, idx) in settlement.items" :key="'pt' + item.id">
-                <tr :data-testid="'stl-pt-' + item.id">
-                  <td><span x-text="'#' + (idx + 1) + ' ' + (item.origDescription || '（無品名）')"></span> <span class="stl-src" :class="'stl-src--' + itemSource(item).key" x-text="itemSource(item).label"></span></td>
+              <template x-for="item in profitRows" :key="'pt' + item.id">
+                <tr :data-testid="'stl-pt-' + item.id" :class="itemProfit(item) < 0 ? 'stl-row--warn' : ''">
+                  <td><span x-text="'#' + itemNo(item.id) + ' ' + (item.origDescription || '（無品名）')"></span><span x-show="itemProfit(item) < 0" style="color:#B91C1C;font-weight:700"> ✖ 虧損</span> <span class="stl-src" :class="'stl-src--' + itemSource(item).key" x-text="itemSource(item).label"></span></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(itemQuote(item))"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(estimateOf(item))"></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(itemActual(item))"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: itemVar(item) > 0 ? '#B91C1C' : itemVar(item) < 0 ? '#15803D' : '' }" x-text="(itemVar(item) > 0 ? '▲ +' : itemVar(item) < 0 ? '▼ −' : '') + fmt(Math.abs(itemVar(item)))"></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:800;font-size:14px" :style="{ color: itemProfit(item) < 0 ? '#B91C1C' : '#15803D' }" x-text="(itemProfit(item) < 0 ? '−' : '') + fmt(Math.abs(itemProfit(item)))"></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: itemProfit(item) < 0 ? '#B91C1C' : '' }" x-text="pctTxt(itemPct(item))"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: itemDpp(item) == null ? '' : itemDpp(item) < 0 ? '#B91C1C' : itemDpp(item) > 0 ? '#15803D' : '' }" :title="'原始毛利比 ' + pctTxt(itemOrigPct(item))" x-text="itemDpp(item) == null ? '—' : (itemDpp(item) > 0 ? '+' : itemDpp(item) < 0 ? '−' : '') + Math.abs(itemDpp(item)).toFixed(1) + ' pp'"></td>
                 </tr>
               </template>
               <template x-for="r in unassignedCostRows" :key="r.key">
                 <tr class="stl-row--warn" :data-testid="'stl-pt-un-' + r.key">
                   <td x-text="r.label"></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif">0</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(r.amount)"></td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#B91C1C;font-weight:700" x-text="r.amount ? '−' + fmt(r.amount) : '0'"></td>
                   <td style="text-align:right">—</td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(r.amount)"></td>
+                  <td style="text-align:right">—</td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#B91C1C;font-weight:700" x-text="r.amount ? '−' + fmt(r.amount) : '0'"></td>
+                  <td style="text-align:right">—</td><td style="text-align:right">—</td>
                 </tr>
               </template>
               <tr x-show="quoteAdjust !== 0" data-testid="stl-pt-adjust" style="color:var(--text-secondary)">
                 <td>折扣／調整（報價收入與品項報價加總的差額）</td>
                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="(quoteAdjust < 0 ? '−' : '') + fmt(Math.abs(quoteAdjust))"></td>
-                <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif">0</td>
-                <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="(quoteAdjust < 0 ? '−' : '') + fmt(Math.abs(quoteAdjust))"></td>
                 <td style="text-align:right">—</td>
+                <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif">0</td>
+                <td style="text-align:right">—</td>
+                <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="(quoteAdjust < 0 ? '−' : '') + fmt(Math.abs(quoteAdjust))"></td>
+                <td style="text-align:right">—</td><td style="text-align:right">—</td>
               </tr>
               <tr style="font-weight:800" data-testid="stl-pt-total">
                 <td style="border-top:2px solid #111">合計</td>
                 <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(summary.quotedPretax)"></td>
+                <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(summary.origTotalCost)"></td>
                 <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(summary.totalActualCost)"></td>
+                <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: summary.totalActualCost > summary.origTotalCost ? '#B91C1C' : '#15803D' }" x-text="(summary.totalActualCost > summary.origTotalCost ? '▲ +' : summary.totalActualCost < summary.origTotalCost ? '▼ −' : '') + fmt(Math.abs(summary.totalActualCost - summary.origTotalCost))"></td>
                 <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: summary.grossProfit < 0 ? '#B91C1C' : '#15803D' }" x-text="(summary.grossProfit < 0 ? '−' : '') + fmt(Math.abs(summary.grossProfit))"></td>
                 <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="summary.quotedPretax > 0 ? summary.grossMarginPct.toFixed(1) + '%' : '—'"></td>
+                <td style="border-top:2px solid #111"></td>
               </tr>
             </tbody>
           </table>
@@ -790,6 +849,21 @@
               </div>
             </template>
           </div>
+        </div>
+      </div>
+
+      <!-- ── (e) 對帳與稽核：口徑標示、凍結時間／人員、資料截至、精算日期 ── -->
+      <div class="stl-card" data-testid="stl-audit">
+        <div class="stl-card__head"><div class="stl-card__title">六、對帳與稽核</div></div>
+        <div class="stl-card__body" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:12px">
+          <div><div style="color:var(--text-secondary)">金額口徑</div><b>報價／成本一律未稅；派發成本＝未稅承攬費＋外包人員（pretax），稅額僅供參考</b></div>
+          <div><div style="color:var(--text-secondary)">認列基礎</div><b>待審核單據照計；已取消、草稿、已退回不計</b></div>
+          <div><div style="color:var(--text-secondary)">狀態</div><b data-testid="stl-audit-status" x-text="settlement.status === 'finalized' ? '已完結（凍結）' : '草稿（未凍結）'"></b></div>
+          <div><div style="color:var(--text-secondary)">凍結時間／人員</div><b data-testid="stl-audit-frozen" x-text="settlement.status === 'finalized' ? (settlement.finalizedAt ? new Date(settlement.finalizedAt).toLocaleString('zh-TW') : '') + '／' + (settlement.finalizedBy || '') : '—'"></b></div>
+          <div><div style="color:var(--text-secondary)">資料截至</div><b x-text="_loadedAt.toLocaleString('zh-TW', { hour12: false })"></b></div>
+          <div><div style="color:var(--text-secondary)">精算日期</div>
+            <input type="date" class="stl-input" x-model="settlement.settlementDate" :disabled="settlement.status === 'finalized'" style="max-width:160px"></div>
+          <div><div style="color:var(--text-secondary)">管理費／公益</div><b>管理費＝報價×10%；公益＝毛利×1%（淨利只在總結區顯示）</b></div>
         </div>
       </div>
 
@@ -856,6 +930,16 @@
 <script src="../static/sidebar.js"></script>
 <script>
 const API = '/api'
+// ── 管理視角門檻與政策（唯一設定處，需使用者確認）──
+const STL_CONFIG = {
+  GP_DROP_PP: 5,              // 品項毛利比比原始（估計）低超過 N 個百分點 → 列入「需處理」
+  LOSS_GP_BELOW: 0,           // 品項毛利 < 此值＝虧損
+  PENDING_WARN: true,         // 待審核金額列入「需處理」（照計成本，只提醒）
+  BLOCK_ON_UNASSIGNED: false, // 使用者裁示：未對應項目只警示、不擋完結（仍計入成本）
+  BLOCK_ON_PENDING: false,    // 待審核金額不擋完結
+  BLOCK_ON_NO_RECORD: false,  // 無採購紀錄且未手填的品項只警示
+  RECON_TOLERANCE: 0          // 對帳差額容許值（元）；超過＝硬性擋住完結
+}
 function settlementPage() {
   return {
     session: null,
@@ -865,6 +949,8 @@ function settlementPage() {
     loading: true,
     saving:  false,
     showFinalizeModal: false,
+    pfSort: null, pfDir: -1, pfFilter: 'all',     // 四之一表的排序／篩選（純顯示）
+    _loadedAt: new Date(),
     showReopenModal: false,
     reopenReason: '',
     reopenErr: '',
@@ -1151,6 +1237,73 @@ function settlementPage() {
       const sm = this.summary, d = sm.netProfit - sm.origNetProfit
       const pctv = sm.origNetProfit !== 0 ? Math.abs(d) / Math.abs(sm.origNetProfit) * 100 : null
       return '比原始報價 ' + (d < 0 ? '少 ' : '多 ') + 'NT$ ' + this.fmt(Math.abs(d)) + '（' + (pctv == null ? '—' : (d < 0 ? '−' : '+') + pctv.toFixed(1) + '%') + '）'
+    },
+    // ───────── 管理視角：高階摘要／需處理／完結閘門（沿用 summary 既有定義，不新增公式）─────────
+    itemVar(i) { return this.itemActual(i) - this.estimateOf(i) },
+    itemOrigPct(i) { const q = this.itemQuote(i); return q > 0 ? (q - this.estimateOf(i)) / q * 100 : null },
+    itemDpp(i) { const a = this.itemPct(i), o = this.itemOrigPct(i); return a == null || o == null ? null : Math.round((a - o) * 10) / 10 },
+    _noRecord(i) { return !(this.systemActual(i) > 0) && this.itemSource(i).key === 'est' },
+    pfSortBy(k) { if (this.pfSort === k) this.pfDir *= -1; else { this.pfSort = k; this.pfDir = -1 } },
+    pfArrow(k) { return this.pfSort === k ? (this.pfDir < 0 ? ' ▼' : ' ▲') : '' },
+    get profitRows() {
+      let rows = this.settlement.items.slice()
+      if (this.pfFilter === 'loss') rows = rows.filter(i => this.itemProfit(i) < STL_CONFIG.LOSS_GP_BELOW || (this.itemDpp(i) != null && this.itemDpp(i) < -STL_CONFIG.GP_DROP_PP))
+      if (this.pfFilter === 'norec') rows = rows.filter(i => this._noRecord(i))
+      if (this.pfSort) {
+        const g = { gp: i => this.itemProfit(i), pct: i => (this.itemPct(i) == null ? -1e9 : this.itemPct(i)), var: i => this.itemVar(i) }[this.pfSort]
+        rows.sort((a, b) => (g(a) - g(b)) * this.pfDir)
+      }
+      return rows
+    },
+    get pendingAllAmount() {      // 待審核金額（照計成本）：後端 pendingTotal（採購／材料／額外）＋待審核的派發
+      const t = this._actualsOk ? (this.actuals.totals.pendingTotal || 0) : 0
+      return t + this.allMapRows().filter(r => r.kind === 'dispatch' && r.pending).reduce((x, r) => x + (+r.amount || 0), 0)
+    },
+    get stripKpis() {
+      const sm = this.summary, rev = sm.quotedPretax, f = n => this.fmt(Math.abs(n))
+      const signed = n => (n < 0 ? '−' : '') + 'NT$ ' + f(n)
+      const gpCls = sm.grossProfit < 0 ? 'r' : (rev > 0 && sm.grossMarginPct < sm.origMarginPct - STL_CONFIG.GP_DROP_PP ? 'a' : 'g')
+      const netCls = sm.netProfit < 0 ? 'r' : sm.profitDiff < 0 ? 'a' : 'g'
+      const d = sm.profitDiff
+      return [
+        { key: 'rev', label: '報價（稅前收入）', value: 'NT$ ' + this.fmt(rev), sub: '折扣／調整 ' + signed(this.quoteAdjust), status: '', cls: 'n', tip: '報價單稅前收入（未稅）；來源：報價單' },
+        { key: 'cost', label: '總成本', value: 'NT$ ' + this.fmt(sm.totalActualCost), sub: '原始 ' + this.fmt(sm.origTotalCost), status: sm.totalActualCost > sm.origTotalCost ? '▲ 高於原始' : sm.totalActualCost < sm.origTotalCost ? '▼ 低於原始' : '＝原始', cls: sm.totalActualCost > sm.origTotalCost ? 'a' : 'g', tip: '總實際成本＝品項實際＋未對應項目（派發未稅口徑）；與伺服器 totalActualCost 同源' },
+        { key: 'gp', label: '毛利／毛利比', value: signed(sm.grossProfit) + ' ／ ' + this.pctTxt(rev > 0 ? sm.grossMarginPct : null), neg: sm.grossProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origMarginPct : null), status: gpCls === 'r' ? '✖ 虧損' : gpCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: gpCls, tip: '毛利＝報價 − 總成本；毛利比＝毛利 ÷ 報價（未扣管理費、公益）' },
+        { key: 'net', label: '最終淨利／淨利比', value: signed(sm.netProfit) + ' ／ ' + this.pctTxt(rev > 0 ? sm.netMarginPct : null), neg: sm.netProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origNetMarginPct : null), status: netCls === 'r' ? '✖ 虧損' : netCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: netCls, tip: '最終淨利＝毛利 − 管理費（報價×10%）− 公益（毛利×1%）' },
+        { key: 'diff', label: '與原始差額（淨利）', value: (d > 0 ? '+' : d < 0 ? '−' : '') + 'NT$ ' + f(d), neg: d < 0, sub: '原始 ' + this.fmt(sm.origNetProfit), status: d < 0 ? '▼ 少賺' : d > 0 ? '▲ 多賺' : '＝原始', cls: d < 0 ? 'r' : 'g', tip: '差額＝精算後最終淨利 − 原始（報價單估計）最終淨利' },
+      ]
+    },
+    get exceptionsList() {
+      if (!this._actualsOk) return []
+      const L = [], ms = this.mapSummary, sm = this.summary, C = STL_CONFIG, f = n => this.fmt(n)
+      if (ms.unCount) L.push({ key: 'unassigned', lv: C.BLOCK_ON_UNASSIGNED ? 'r' : 'a', ic: '⚠', t: '未對應 ' + ms.unCount + ' 件，NT$ ' + f(ms.unTotal), s: '仍計入總成本；對應到品項才會取代估計', go: '[data-testid="stl-unassigned"]' })
+      if (C.PENDING_WARN && this.pendingAllAmount) L.push({ key: 'pending', lv: 'a', ic: '⏳', t: '待審核金額 NT$ ' + f(this.pendingAllAmount), s: '待審照計成本，核准前可能變動', go: '[data-testid="stl-unassigned"]' })
+      this.settlement.items.forEach(i => {
+        const name = '#' + this.itemNo(i.id) + ' ' + (i.origDescription || ''), pf = this.itemProfit(i), dpp = this.itemDpp(i)
+        if (pf < C.LOSS_GP_BELOW) L.push({ key: 'loss-' + i.id, lv: 'r', ic: '✖', t: name + '：虧損 ' + f(pf) + '（毛利比 ' + this.pctTxt(this.itemPct(i)) + '）', s: '報價 ' + f(this.itemQuote(i)) + '，實際成本 ' + f(this.itemActual(i)), go: '#stl-row-' + i.id, item: i.id })
+        else if (dpp != null && dpp < -C.GP_DROP_PP) L.push({ key: 'drop-' + i.id, lv: 'a', ic: '▼', t: name + '：毛利比比原始低 ' + Math.abs(dpp).toFixed(1) + ' pp', s: this.pctTxt(this.itemOrigPct(i)) + ' → ' + this.pctTxt(this.itemPct(i)) + '（門檻 ' + C.GP_DROP_PP + ' pp）', go: '#stl-row-' + i.id, item: i.id })
+      })
+      const nr = this.settlement.items.filter(i => this._noRecord(i))
+      if (nr.length) L.push({ key: 'norecord', lv: C.BLOCK_ON_NO_RECORD ? 'r' : 'a', ic: '📝', t: nr.length + ' 個品項無採購／對應紀錄且未手填：' + nr.map(i => '#' + this.itemNo(i.id)).join('、'), s: '實際成本暫以估計計；已採購未建系統（歷史）或人力成本請手填', go: '#stl-row-' + nr[0].id, item: nr[0].id })
+      if (this.quoteAdjust !== 0) L.push({ key: 'adjust', lv: 'a', ic: '±', t: '折扣／調整 NT$ ' + (this.quoteAdjust < 0 ? '−' : '') + f(Math.abs(this.quoteAdjust)), s: '報價收入與品項報價加總不同；已單列於對帳', go: '[data-testid="stl-profit-card"]' })
+      if (Math.abs(this.reconQuoteGap) > C.RECON_TOLERANCE || Math.abs(this.reconCostGap) > C.RECON_TOLERANCE) L.push({ key: 'recon', lv: 'r', ic: '✖', t: '對帳差額不為 0（報價 ' + f(this.reconQuoteGap) + '／成本 ' + f(this.reconCostGap) + '）', s: '加總對不上，需查明', go: '[data-testid="stl-recon"]' })
+      return L
+    },
+    get readiness() {
+      const C = STL_CONFIG, hard = [], warns = [], ms = this._actualsOk ? this.mapSummary : { unCount: 0, unTotal: 0 }
+      if (Math.abs(this.reconQuoteGap) > C.RECON_TOLERANCE) hard.push('報價對帳差額不為 0')
+      if (Math.abs(this.reconCostGap) > C.RECON_TOLERANCE) hard.push('成本對帳差額不為 0')
+      if (ms.unCount) (C.BLOCK_ON_UNASSIGNED ? hard : warns).push('有未對應項目（仍計入成本）：' + ms.unCount + ' 件，NT$ ' + this.fmt(ms.unTotal))
+      if (this._actualsOk && this.pendingAllAmount) (C.BLOCK_ON_PENDING ? hard : warns).push('有待審核金額 NT$ ' + this.fmt(this.pendingAllAmount) + '（照計，核准前可能變動）')
+      if (this.settlement.items.some(i => this._noRecord(i))) (C.BLOCK_ON_NO_RECORD ? hard : warns).push('有品項無採購／對應紀錄且未手填（暫以估計計）')
+      const state = hard.length ? 'blocked' : warns.length ? 'warn' : 'ok'
+      return { hard, warns, state, icon: hard.length ? '✖' : warns.length ? '⚠' : '✔', title: hard.length ? '不可完結' : warns.length ? '可完結（有提醒，仍計入成本）' : '可完結' }
+    },
+    jumpTo(sel, itemId) {
+      const el = document.querySelector(sel)
+      if (!el) return
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      el.classList.add('stl-flash'); setTimeout(() => el.classList.remove('stl-flash'), 1300)
     },
     // 每個品項的賺賠（毛利；報價＝報價單品項金額 origAmount，未稅；實際成本與 calcSummary 的 itemActualTotal 同一規則：手填 0／空＝用估計）
     pctTxt(v) { return v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '%' },
