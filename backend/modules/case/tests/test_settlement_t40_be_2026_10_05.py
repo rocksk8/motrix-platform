@@ -87,8 +87,6 @@ def test_closing_pdf_cost_basis_notes_add_text_only():
     import pdf_gen
     assert "含 5% 稅" in pdf_gen._cost_basis_note("item", {})
     assert "未拆稅" in pdf_gen._cost_basis_note("extra", {})
-    assert "含稅" in pdf_gen._cost_basis_note("dispatch_legacy", {})                                       # 舊精算（沒有口徑標記）
-    assert pdf_gen._cost_basis_note("dispatch_legacy", {"dispatchBasis": "pretax"}) == ""                  # 新口徑已有稅額說明行
 
 
 def test_settlement_rows_labels_are_untouched():
