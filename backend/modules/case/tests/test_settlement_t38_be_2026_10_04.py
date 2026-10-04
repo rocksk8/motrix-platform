@@ -213,7 +213,7 @@ def test_orphan_saved_items_are_exposed_read_only(W):
     assert _get(c, h)["orphanItems"] == []
 
 
-# ── 稽核 AUDIT-T38：H-1／S-1／S-2／S-4 ───────────────────────────────────────────
+# ── 稽核 AUDIT-T38 稽核項目 ───────────────────────────────────────────
 
 def _post_quote(c, h, **extra):
     data = {"customerName": "京城", "projectName": "偽造探針", "quoteDate": "2026-10-04", "validDays": 30, "salesPerson": "pl_sa", "items": [], "tot": {"total": 1000, "pretax": 952}}
@@ -230,7 +230,7 @@ def _row(no):
         cn.close()
 
 
-def test_h1_create_quotation_ignores_client_deal_tag_and_settlement(W):
+def test_create_quotation_ignores_client_deal_tag_and_settlement(W):
     c, h = W
     forged = {"status": "finalized", "items": [], "summary": {"netProfit": 99999999, "totalActualCost": 1}}
     r = _post_quote(c, h, dealTag="已結案", settlement=forged)
@@ -239,7 +239,7 @@ def test_h1_create_quotation_ignores_client_deal_tag_and_settlement(W):
     assert deal_tag == "" and settle_status == "" and "settlement" not in data and data.get("dealTag", "") == ""
 
 
-def test_h1_copy_to_new_shape_still_creates(W):
+def test_create_quotation_copy_to_new_shape_still_creates(W):
     c, h = W
     r = _post_quote(c, h, dealTag="", settlement=None)                # 前端 copyToNew 的形狀
     assert r.status_code == 201, r.text
@@ -247,7 +247,7 @@ def test_h1_copy_to_new_shape_still_creates(W):
     assert (deal_tag, settle_status) == ("", "") and data["projectName"] == "偽造探針"
 
 
-def test_h1_whole_quote_put_cannot_set_deal_tag_or_settlement_status(W):
+def test_whole_quote_put_cannot_set_deal_tag_or_settlement_status(W):
     c, h = W
     cn = db.get_db()
     cn.execute("UPDATE quotations SET status='草稿' WHERE quote_no=?", (NO,))
@@ -261,7 +261,7 @@ def test_h1_whole_quote_put_cannot_set_deal_tag_or_settlement_status(W):
     assert deal_tag != "已結案" and settle_status != "finalized" and (data.get("settlement") or {}).get("status") != "finalized"
 
 
-def test_s1_forged_original_side_keys_are_overwritten_by_server(W):
+def test_forged_original_side_keys_are_overwritten_by_server(W):
     c, h = W
     _set_tot()
     _dispatch(10000, 2000)
@@ -274,7 +274,7 @@ def test_s1_forged_original_side_keys_are_overwritten_by_server(W):
     assert s["profitDiff"] == s["netProfit"] - 78605 and s["origMarginPct"] != 99.9 and s["origNetMarginPct"] != 99.9
 
 
-def test_s2_readers_fall_back_to_page_key_dispatch_absorbed():
+def test_readers_fall_back_to_page_key_dispatch_absorbed():
     import pdf_gen
     from modules.payroll import bonus_pdf as BP
     old_final = {"dispatchTotal": 50, "dispatchAbsorbed": 50}               # 36／37 班完結案：只有頁面寫的鍵
@@ -283,7 +283,7 @@ def test_s2_readers_fall_back_to_page_key_dispatch_absorbed():
     assert pdf_gen._dispatch_absorbed_row({"dispatchTotal": 50}) == ""
 
 
-def test_s4_finalize_response_returns_the_server_overwritten_summary(W):
+def test_finalize_response_returns_the_server_overwritten_summary(W):
     c, h = W
     _set_tot()
     _dispatch(10000, 2000)
