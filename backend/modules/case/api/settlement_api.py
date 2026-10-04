@@ -58,7 +58,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
     conn = get_db()
     with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（modules.case.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
         row = conn.execute(
-            "SELECT data_json, customer_name, sales_person_id, sales_person, assigned_user_ids, updated_at "
+            "SELECT data_json, customer_name, sales_person_id, sales_person, assigned_user_ids, updated_at, deal_tag "
             "FROM quotations WHERE quote_no=?", (quote_no,)
         ).fetchone()
         if not row:
@@ -74,6 +74,9 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         except HTTPException:
             conn.close()
             raise
+        if body.settlement.get("status") == "finalized" and (row["deal_tag"] or "") not in ("已成案", "已結案"):      # 40：沒成案的報價單不能完結精算（已結案＝管理員重新開啟後再完結）
+            conn.close()
+            raise HTTPException(409, "這張報價單還沒成案（目前：%s），不能完結精算；請先把案件標為已成案" % ((row["deal_tag"] or "") or "未標記"))
         if body.expectedUpdatedAt is not None and (row["updated_at"] or "") != body.expectedUpdatedAt:      # 38：樂觀鎖——兩人（或兩個分頁）同時編輯，後存的不再悄悄蓋掉前存的
             conn.close()
             raise HTTPException(409, "精算（或這張報價單）已被其他人更新，請重新載入後再存")

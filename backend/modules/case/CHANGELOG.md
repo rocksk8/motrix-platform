@@ -1,5 +1,12 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-05（wip/t40-case-be）：精算端點拆檔、完結要已成案、稅基標示（階段 0）、稽核 T39 修正
+- **純搬移（零行為變更）**：`GET／PUT /api/quotations/{quote_no}/settlement` 與 `SettlementIn` 自 `api/quotations.py` 逐字搬到新檔 `api/settlement_api.py`（路由路徑、函式名、驗證相依不變；router 在 `quotations` 之後立即註冊）。守門 `tests/test_route_table_golden_2026_10_05.py`：整個應用的 OpenAPI 路由表與搬移前逐位相同、精算網址仍先被精算端點匹配。
+- **完結要求報價單已成案**：`PUT /settlement` 的 `status=finalized` 在報價單 `deal_tag` 不是「已成案」或「已結案」時回 409「這張報價單還沒成案…」（已結案＝管理員重新開啟後再完結）；草稿存檔與重新開啟不受影響。
+- **進項稅階段 0（只標示，不改任何金額）**：`settlement-actuals` 新增 `taxBasis`（品項估計＝含稅×1.05、採購單／材料申請＝含稅最終金額、額外支出＝未拆稅、承攬商＝未稅＋人員、匯款手續費／自訂支出＝實付）；結案報表 PDF 的成本分項旁加稅基說明行（`SETTLEMENT_ROWS` 標籤不動）；守門題釘住 `ESTIMATE_RATE == 1.05`。
+- **稽核 T39**：S-1 PDF 差額說明改為「原始預估已扣報價預留間接成本 X；實際成本只計單據」（不再宣稱差額裡含 X）；S-2 `original_side()` 對舊虧損報價存的負 `charityDonation` 也下限 0（預留隨之重算，原始淨利不變）。伺服器 `schemaVersion` 判斷為 `>= 2`（契約），頁面請對齊。
+- 測試：`tests/test_settlement_t40_be_2026_10_05.py`。
+
 ## 1.0.136 — 2026-10-04（wip/t39-case-be）：公益金下限 0、實際成本 0 是真的 0（schemaVersion 2）
 - **公益金下限 0**：毛利為負時 `charityDonation = 0`（不再算出負的公益金）；完結重算比對、`fill_downstream`、報價原始側 `origCharity`（報價 `tot` 沒有該欄時伺服器算）同一條。毛利 ≥ 0 與已凍結的完結 summary 完全不變（不改寫）。舊頁面對毛利為負的案件送負的公益金 ⇒ 完結 409（要用新頁面）。
 - **精算存檔頂層 `schemaVersion`（整數；沒有＝1＝舊存檔）**：`PUT /settlement` 驗證（非 ≥1 整數 ⇒ 422）、原樣存檔、`settlement-actuals` 回傳 `schemaVersion`。**v2：品項 `actualTotalCost` 是數字（含 0）＝已填、null／沒有／空字串＝沒填（用估計）**；沒有標記的舊存檔維持「0＝沒填」。套用在 `compute`（`actual.source` manual／estimate）、完結比對、凍結讀取。
