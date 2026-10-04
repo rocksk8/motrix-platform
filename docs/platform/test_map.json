@@ -28177,6 +28177,7 @@
      "backend/modules/case/__init__.py",
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/quotations.py",
+     "backend/modules/case/api/settlement_api.py",
      "backend/modules/case/material_approval.py",
      "backend/modules/subcontract/tests/test_dispatch_import_to_quote_persists_2026_09_23.py",
      "backend/tests/_requires.py",
