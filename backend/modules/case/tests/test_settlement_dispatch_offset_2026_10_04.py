@@ -203,3 +203,32 @@ def test_finalize_fills_split_and_rejects_wrong_split(D):
     assert r.status_code == 200, r.text
     s = _get(c, h)["savedSummary"]
     assert (s["dispatchAssignedTotal"], s["dispatchUnassignedTotal"]) == (12000, 3000)
+
+
+def test_item_actual_source_roundtrip_is_display_only(D):
+    c, h, d1, d2 = D
+    items = [{"id": "a", "adoptSystem": False, "actualTotalCost": 700, "actualSource": "labor"}, {"id": "b", "adoptSystem": False, "actualSource": "legacy"}]
+    before = _get(c, h)["totals"]
+    assert _put(c, h, [], items=items).status_code == 200
+    d = _get(c, h)
+    assert (_items(d)["a"]["actualSource"], _items(d)["b"]["actualSource"]) == ("labor", "legacy")
+    cn = db.get_db()
+    try:
+        saved = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])["settlement"]["items"]
+    finally:
+        cn.close()
+    assert [i.get("actualSource") for i in saved] == ["labor", "legacy"]                            # 存檔原樣保留
+    assert _items(d)["a"]["actual"]["amount"] == 700 and _items(d)["b"]["actual"]["amount"] == EST_B   # 不影響金額
+    assert before["dispatchTotal"] == d["totals"]["dispatchTotal"]
+    assert _items(_get(c, h))["a"]["actualSource"] == "labor"
+    _put_settlement({"items": [{"id": "a"}], "offsets": []})
+    assert _items(_get(c, h))["a"]["actualSource"] == "manual"                                       # 沒有＝manual
+    assert _put(c, h, [], items=[{"id": "a", "actualSource": "bogus"}]).status_code == 422
+
+
+def test_item_actual_source_survives_finalize_freeze(D):
+    c, h, d1, d2 = D
+    _put_settlement({"status": "finalized", "items": [{"id": "a", "actualTotalCost": 700, "actualSource": "labor"}], "offsets": [],
+                     "summary": {"itemActualTotal": 700 + EST_B, "extraTotal": 0, "dispatchTotal": 15000, "totalActualCost": 700 + EST_B + 15000}})
+    d = _get(c, h)
+    assert d["frozen"] is True and _items(d)["a"]["actualSource"] == "labor" and _items(d)["a"]["actual"]["amount"] == 700

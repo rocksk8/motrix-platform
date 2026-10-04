@@ -30,6 +30,18 @@ OFFSET_KINDS = ("material", "extra", "dispatch")
 _LABELS = {"material": "材料申請", "extra": "額外支出", "dispatch": "承攬商派發"}
 
 
+#: 品項實際成本的來源標記（顯示用，不影響任何金額／完結比對）；沒有＝manual
+ACTUAL_SOURCES = ("manual", "legacy", "labor")
+
+
+def validate_item_sources(items):
+    """精算 PUT 的 `settlement.items[].actualSource` 驗證：有值必須是 ACTUAL_SOURCES 之一。回傳錯誤訊息；合法回 None。"""
+    for n, i in enumerate(items if isinstance(items, list) else [], 1):
+        if isinstance(i, dict) and i.get("actualSource") not in (None, "") and i.get("actualSource") not in ACTUAL_SOURCES:
+            return "items 第 %d 列：actualSource 必須是 %s" % (n, "／".join(ACTUAL_SOURCES))
+    return None
+
+
 def estimate_amount(qty, cost) -> int:
     return round_half_up((qty or 0) * (cost or 0), ESTIMATE_RATE)
 
@@ -174,6 +186,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
                       "po": {"amount": po_amt, "docs": po}, "material": {"amount": mat_amt, "orders": mats}, "extra": {"amount": ex_amt, "docs": exs}, "dispatch": {"amount": dp_amt, "orders": dps},
                       "purchased": purchased, "hasPurchase": has, "adopt": adopt,
                       "actual": {"amount": actual, "source": source, "replacedEstimate": bool(has and adopt)},
+                      "actualSource": (s.get("actualSource") if isinstance(s, dict) and s.get("actualSource") in ACTUAL_SOURCES else "manual"),
                       "actualIfAdopted": if_adopt, "actualIfNot": if_not,
                       "purchasedNotAdopted": purchased if (has and not adopt) else 0})
         item_total += actual
