@@ -276,9 +276,12 @@ def _dispatch_split(summary: dict):
 
     精算摘要的 `dispatchAbsorbedTotal`（M01 寫入）是 dispatchTotal 中已併入「品項實際成本」的部分；
     成本分項要加得回 totalActualCost：品項(+未採用採購單)＋額外支出＋未併入承攬＝實際總成本。
-    舊精算沒有這個鍵 ⇒ (0, 0)，輸出與以前相同（不能拿 dispatchTotal 當未併入，否則舊案會變）。
+    t36／t37 完結的案件只帶頁面鍵 `dispatchAbsorbed` ⇒ 沒有總計鍵時退回它（唯讀，不改資料；有總計鍵就以它為準，含 0）。
+    兩個都沒有（舊精算）⇒ (0, 0)，輸出與以前相同（不能拿 dispatchTotal 當未併入，否則舊案會變）。
     """
     raw = (summary or {}).get("dispatchAbsorbedTotal")
+    if raw is None:
+        raw = (summary or {}).get("dispatchAbsorbed")
     if raw is None:
         return 0, 0
     absorbed = int(raw or 0)
