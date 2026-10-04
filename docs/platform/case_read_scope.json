@@ -242,7 +242,7 @@
    "scope": "row_access"
   },
   {
-   "file": "modules/case/api/quotations.py",
+   "file": "modules/case/api/settlement_api.py",
    "path": "/api/quotations/{quote_no}/settlement",
    "handler": "get_settlement",
    "scope": "row_access"

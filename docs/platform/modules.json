@@ -290,6 +290,7 @@
     "mod:case/api/quotations",
     "mod:case/api/material_links",
     "mod:case/api/settlement_actuals",
+    "mod:case/api/settlement_api",
     "mod:case/expense_forms",
     "mod:case/expense_notify",
     "mod:case/material_approval",
