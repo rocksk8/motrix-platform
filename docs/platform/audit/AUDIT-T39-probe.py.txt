@@ -1,0 +1,131 @@
+import json
+import pytest
+import db
+from modules.case import settlement_actuals as SA
+from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W, _login  # noqa
+from modules.case.tests.test_settlement_actuals_2026_10_03 import EST_A, EST_B, _get, _items, _put_settlement
+from modules.case.tests.test_settlement_finalize_integrity_2026_10_03 import _set_tot, page_payload, QUOTED_PRETAX
+
+URL = "/api/quotations/%s/settlement" % NO
+
+
+def _saved():
+    cn = db.get_db()
+    try:
+        return json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+    finally:
+        cn.close()
+
+
+def _put(c, h, s, **kw):
+    return c.put(URL, json=dict({"settlement": s}, **kw), headers=h)
+
+
+def _loss_payload(c, h, charity_sign):
+    """報價稅前收入 100000；把總成本拉到 > 收入（手填實際成本）形成虧損，charity_sign=-1 ⇒ 模擬舊頁面送負的公益金"""
+    items = [{"id": "a", "actualTotalCost": 150000, "adoptSystem": False}, {"id": "b", "actualTotalCost": 1000, "adoptSystem": False}]
+    _put_settlement({"items": items, "offsets": [], "schemaVersion": 2})
+    t = _get(c, h)["totals"]
+    total = t["totalActualCost"]
+    gross = QUOTED_PRETAX - total
+    admin = SA.round_half_up(QUOTED_PRETAX, 0.10)
+    charity = SA.round_half_up(gross, 0.01) if charity_sign < 0 else 0
+    net = gross - admin - charity
+    p = page_payload(c, h, totalActualCost=total, grossProfit=gross, charityDonation=charity, netProfit=net, itemActualTotal=t["itemActualTotal"],
+                     grossMarginPct=round(gross / 1000, 1), netMarginPct=round(net / 1000, 1))
+    p["items"] = items
+    p["schemaVersion"] = 2
+    return p, gross, charity
+
+
+def test_charity_floor_finalize(W):
+    c, h = W
+    _set_tot()
+    p, gross, old_charity = _loss_payload(c, h, -1)
+    print("LOSS gross", gross, "old charity", old_charity)
+    assert gross < 0 and old_charity < 0
+    r = _put(c, h, p)
+    print("STALE_OLD_PAGE", r.status_code, r.text[:140])
+    p2, gross2, ch2 = _loss_payload(c, h, +1)
+    r2 = _put(c, h, p2)
+    print("NEW_PAGE", r2.status_code, r2.text[:100])
+    assert r2.status_code == 200
+    s = _saved()["settlement"]["summary"]
+    print("SAVED", s["charityDonation"], s["netProfit"], s["grossProfit"])
+    assert s["charityDonation"] == 0 and s["netProfit"] == gross2 - SA.round_half_up(QUOTED_PRETAX, 0.10)
+
+
+def test_charity_small_loss_within_tolerance_overwritten(W):
+    """小虧損：舊頁面的負公益金在容差內被接受，但存檔值被伺服器覆蓋成 0"""
+    c, h = W
+    _set_tot()
+    items = [{"id": "a", "actualTotalCost": 99990, "adoptSystem": False}, {"id": "b", "actualTotalCost": 200, "adoptSystem": False}]
+    _put_settlement({"items": items, "offsets": [], "schemaVersion": 2})
+    t = _get(c, h)["totals"]
+    gross = QUOTED_PRETAX - t["totalActualCost"]
+    admin = SA.round_half_up(QUOTED_PRETAX, 0.10)
+    charity = SA.round_half_up(gross, 0.01)
+    p = page_payload(c, h, totalActualCost=t["totalActualCost"], grossProfit=gross, charityDonation=charity, netProfit=gross - admin - charity,
+                     itemActualTotal=t["itemActualTotal"])
+    p["items"] = items
+    p["schemaVersion"] = 2
+    r = _put(c, h, p)
+    s = _saved().get("settlement", {}).get("summary", {})
+    print("SMALLLOSS gross", gross, "sent charity", charity, "status", r.status_code, "saved charity", s.get("charityDonation"), "net", s.get("netProfit"))
+
+
+@pytest.mark.parametrize("tot", [
+    {"pretax": 100000, "total": 105000, "directProfit": -5000, "adminCost": 10000, "charityDonation": -50, "totalIndirect": 14950 + 2000, "netProfit": -5000 - 14950 - 2000},
+    {"pretax": 100000, "total": 105000, "directProfit": 5000, "adminCost": 10000, "charityDonation": 50, "totalIndirect": 12050, "netProfit": -7050},
+])
+def test_orig_side_server_vs_page_formula(W, tot):
+    c, h = W
+    cn = db.get_db()
+    row = cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()
+    d = json.loads(row["data_json"])
+    d["tot"] = tot
+    cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+    cn.commit()
+    cn.close()
+    cn = db.get_db()
+    try:
+        o = SA.original_side(cn, NO, {"netProfit": 0})
+    finally:
+        cn.close()
+    # 頁面（settlement.html calcSummary）同式
+    od = tot["directProfit"]
+    floor = od < 0
+    pg_charity = 0 if floor else tot["charityDonation"]
+    pg_reserve = max(0, tot["totalIndirect"] - tot["adminCost"] - pg_charity)
+    print("ORIG server charity/reserve", o["origCharity"], o["origIndirectReserve"], "| page", pg_charity, pg_reserve, "| stored net", tot["netProfit"], "server net", o["origNetProfit"])
+
+
+@pytest.mark.parametrize("bad", ["2", True, 2.5, 0, -1, [], {}])
+def test_schema_version_validation(W, bad):
+    c, h = W
+    r = _put(c, h, {"items": [], "offsets": [], "schemaVersion": bad})
+    print("SV", repr(bad), r.status_code)
+    assert r.status_code == 422
+
+
+def test_schema_version_ok_values(W):
+    c, h = W
+    for v in (None, 1, 2, 3):
+        assert _put(c, h, {"items": [], "offsets": [], "schemaVersion": v}).status_code == 200, v
+
+
+def test_schema_semantics(W):
+    c, h = W
+    for sv, expect in ((None, EST_A), (1, EST_A), (2, 0), (3, 0)):
+        s = {"items": [{"id": "a", "actualTotalCost": 0, "adoptSystem": False}], "offsets": []}
+        if sv is not None:
+            s["schemaVersion"] = sv
+        _put_settlement(s)
+        a = _items(_get(c, h))["a"]["actual"]["amount"]
+        print("SEM", sv, a)
+        assert a == expect, (sv, a)
+    # 凍結的舊案（沒有標記）：0 維持「沒填」
+    _put_settlement({"status": "finalized", "items": [{"id": "a", "actualTotalCost": 0, "adoptSystem": False}], "offsets": [],
+                     "summary": {"itemActualTotal": EST_A + EST_B, "extraTotal": 0, "dispatchTotal": 0, "totalActualCost": EST_A + EST_B}})
+    d = _get(c, h)
+    assert _items(d)["a"]["actual"]["amount"] == EST_A and d["totals"]["itemActualTotal"] == EST_A + EST_B
