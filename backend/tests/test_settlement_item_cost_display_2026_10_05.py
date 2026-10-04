@@ -56,11 +56,12 @@ def test_report_modal_legacy_save_keeps_zero_as_unfilled():
 
 def test_pages_use_the_helpers_and_no_other_reader_hides_a_zero():
     """兩個頁面都改走輔助函式；前端其他地方（settlement.html 以外）不再有 `actualTotalCost||0 > 0` 這種把 0 當未填的判斷。"""
-    cm = (FRONTEND / "pages" / "case-management.html").read_text(encoding="utf-8")
-    rp = (FRONTEND / "pages" / "reports.html").read_text(encoding="utf-8")
+    from core import source_tree      # 頁面位置一律經 source_tree（PLAYBOOK §G5 #16），不寫死 frontend/pages
+    cm = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
+    rp = source_tree.page_file("reports.html").read_text(encoding="utf-8")
     assert "caseSettleItemCost(item)" in cm and "stlItemCost(it)" in rp
     bad = []
-    for path in list((FRONTEND / "pages").glob("*.html")) + list((FRONTEND / "js").glob("*.js")):
+    for path in list(source_tree.page_files()) + list((FRONTEND / "js").glob("*.js")):
         if path.name == "settlement.html":
             continue
         for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
