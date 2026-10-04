@@ -293,7 +293,7 @@ def test_finalize_adopts_the_server_frozen_summary_and_legacy_without_absorbed_k
         assert live[k] == saved[k], (k, live[k], saved[k])                           # 完結當下畫面＝存檔（伺服器值）
     assert live["dispatchAbsorbed"] == saved["dispatchAbsorbedTotal"]
     page.reload()
-    page.wait_for_function(f"() => {S}._actualsOk && {S}.settlement.status === 'finalized'", timeout=20000)
+    page.wait_for_function(f"() => !{S}.loading && {S}._actualsOk && {S}.settlement.status === 'finalized' && {S}.summary.totalActualCost > 0", timeout=20000)
     after = page.evaluate(f"() => ({{...{S}.summary}})")
     for k in keys:
         assert after[k] == saved[k], (k, after[k], saved[k])                         # 重新載入後也一致
@@ -308,8 +308,34 @@ def test_finalize_adopts_the_server_frozen_summary_and_legacy_without_absorbed_k
     finally:
         c.close()
     page.reload()
-    page.wait_for_function(f"() => {S}._actualsOk && {S}.settlement.status === 'finalized'", timeout=20000)
+    page.wait_for_function(f"() => !{S}.loading && {S}._actualsOk && {S}.settlement.status === 'finalized' && {S}.summary.totalActualCost > 0", timeout=20000)
     legacy = page.evaluate(f"() => ({{...{S}.summary}})")
     assert all(isinstance(legacy[k], (int, float)) and legacy[k] == legacy[k] for k in keys + ["dispatchAbsorbed"]), legacy
     assert page.locator('[data-testid="stl-k-net"]').is_visible()
     assert errors == [], errors
+
+
+@pytest.mark.e2e
+def test_page_adopts_whatever_summary_the_finalize_response_returns(live_server, make_user, e2e_browser):
+    """判別題：把 PUT 回應的 summary 改成「伺服器值＋7」，完結後本頁顯示必須是伺服器值（採用回應，不是自己算的）。"""
+    sa = make_user(username="sa_sa", role="superadmin")
+    _seed()
+    page = _open(e2e_browser, live_server, sa)
+    mine = page.evaluate(f"() => {S}.summary.netProfit")
+
+    def handler(route, *_):
+        if route.request.method != "PUT":
+            return route.continue_()
+        resp = route.fetch()
+        data = resp.json()
+        if isinstance(data.get("summary"), dict):
+            data["summary"]["netProfit"] = data["summary"]["netProfit"] + 7
+            data["summary"]["dispatchAbsorbedTotal"] = 5
+        return route.fulfill(status=resp.status, content_type="application/json", body=json.dumps(data))
+
+    page.route("**/api/quotations/*/settlement", handler)
+    _finalize_click(page)
+    page.wait_for_function(f"() => {S}.settlement.status === 'finalized' && !{S}.saving", timeout=15000)
+    assert page.evaluate(f"() => {S}.summary.netProfit") == mine + 7
+    assert page.evaluate(f"() => {S}._frozenSummary.netProfit") == mine + 7
+    assert page.evaluate(f"() => {S}.summary.dispatchAbsorbed") == 5
