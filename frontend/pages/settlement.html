@@ -91,42 +91,51 @@
     .stl-table tr.stl-row--mapped:hover td { background: #D1FAE5; }
     .stl-badge-mapped { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;
                         background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
-    .stl-src { display: inline-block; padding: 0 6px; border-radius: 4px; background: #F0EFEB; color: #6B6B6B; }
-    .stl-src--po, .stl-src--map, .stl-src--po-map { background: #ECFDF5; color: #15803D; }
-    .stl-src--manual { background: #DBEAFE; color: #1D4ED8; }
-    .stl-src--est { background: #FEF3C7; color: #92400E; }
+    .stl-src { display: inline-block; padding: 0 6px; border-radius: 4px; background: var(--stl-note-bg); color: var(--text-secondary); }
+    .stl-src--po, .stl-src--map, .stl-src--po-map { background: var(--success-light); color: var(--success); }
+    .stl-src--manual { background: var(--stl-info-bg); color: var(--stl-info); }
+    .stl-src--est { background: var(--stl-warn-bg); color: var(--warning); }
     .stl-blocks { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
-    .stl-blk { border: 1px solid var(--border-light); border-radius: 10px; padding: 10px 12px; background: #fff; min-width: 0; overflow-x: auto; }
+    .stl-blk { border: 1px solid var(--border-light); border-radius: 10px; padding: 10px 12px; background: var(--stl-surface); min-width: 0; overflow-x: auto; }
     .stl-bt { width: 100%; border-collapse: collapse; font-size: 12px; font-family: 'LINE Seed TW_OTF', sans-serif; }
-    .stl-bt th { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-align: right; padding: 5px 6px; border-bottom: 2px solid #111; }
-    .stl-bt td { padding: 6px; border-bottom: 1px solid #F0EFEB; text-align: right; white-space: nowrap; }
+    .stl-bt th { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-align: right; padding: 5px 6px; border-bottom: 2px solid var(--text-primary); }
+    .stl-bt td { padding: 6px; border-bottom: 1px solid var(--stl-note-bg); text-align: right; white-space: nowrap; }
     .stl-bt td:first-child, .stl-bt th:first-child { text-align: left; white-space: normal; }
-    .stl-bt tr.is-strong td { font-weight: 800; font-size: 14px; background: #FAF9F6; }
+    .stl-bt tr.is-strong td { font-weight: 800; font-size: 14px; background: var(--stl-surface-muted); }
     .stl-bt__basis { font-size: 10px; color: var(--text-dim); font-weight: 400; }
     @media (max-width: 900px) { .stl-blocks { grid-template-columns: 1fr; } }
+    /* 本頁（管理視角／賺賠表／圖表）專用語意 token——唯一寫死色碼處。深色模式本頁整頁 invert，故一律寫淺色值；
+       有基底 token 的（--danger／--success／--warning／--text-*／--border-light）直接用基底。 */
+    :root {
+      --stl-surface: #FFFFFF; --stl-surface-muted: #FAF9F6; --stl-note-bg: #F0EFEB; --stl-line: #EFEDE7; --stl-line-strong: #E5E7EB;
+      --stl-gray: #9CA3AF; --stl-gray-mid: #6B7280; --stl-gray-dark: #374151; --stl-gray-line: #BDB8AB;
+      --stl-warn-bg: #FEF3C7; --stl-warn-line: #FCD34D; --stl-warn-solid: #D97706; --stl-bad-line: #FCA5A5; --stl-ok-line: #86EFAC;
+      --stl-info: #1D4ED8; --stl-info-bg: #DBEAFE; --stl-violet: #6D28D9; --stl-violet-bg: #EDE9FE; --stl-slate: #475569; --stl-slate-bg: #E2E8F0;
+      --stl-flash: #FEF08A;
+    }
     /* 管理視角（第 36 班）：高階摘要列（sticky）／需處理／完結閘門／列印 */
-    .stl-strip { position: sticky; top: calc(var(--topbar-h) + 52px); z-index: 40; background: var(--bg, #F5F4F0); padding: 8px 0 6px; margin-bottom: 8px; border-bottom: 1px solid var(--border-light); }
+    .stl-strip { position: sticky; top: calc(var(--topbar-h) + 52px); z-index: 40; background: var(--bg, var(--white)); padding: 8px 0 6px; margin-bottom: 8px; border-bottom: 1px solid var(--border-light); }
     .stl-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-    .stl-k { background: #fff; border: 1px solid var(--border-light); border-left-width: 6px; border-radius: 8px; padding: 6px 10px; min-width: 0; }
+    .stl-k { background: var(--stl-surface); border: 1px solid var(--border-light); border-left-width: 6px; border-radius: 8px; padding: 6px 10px; min-width: 0; }
     .stl-k__l { font-size: 11px; color: var(--text-secondary); }
     .stl-k__v { font-size: 18px; font-weight: 800; line-height: 1.25; white-space: nowrap; font-family: 'LINE Seed TW_OTF', sans-serif; }
     .stl-k__s { font-size: 11px; color: var(--text-secondary); }
     .stl-k__st { font-weight: 700; }
-    .stl-k--g { border-left-color: #15803D; background: #ECFDF3; } .stl-k--g .stl-k__st { color: #15803D; }
-    .stl-k--a { border-left-color: #D97706; background: #FEF3C7; } .stl-k--a .stl-k__st { color: #92400E; }
-    .stl-k--r { border-left-color: #B91C1C; background: #FEE2E2; } .stl-k--r .stl-k__st { color: #B91C1C; }
-    .stl-k--n { border-left-color: #9CA3AF; }
-    .stl-exc__it { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 14px; border-top: 1px solid #EFEDE7; }
+    .stl-k--g { border-left-color: var(--success); background: var(--success-light); } .stl-k--g .stl-k__st { color: var(--success); }
+    .stl-k--a { border-left-color: var(--stl-warn-solid); background: var(--stl-warn-bg); } .stl-k--a .stl-k__st { color: var(--warning); }
+    .stl-k--r { border-left-color: var(--danger); background: var(--danger-hover-bg); } .stl-k--r .stl-k__st { color: var(--danger); }
+    .stl-k--n { border-left-color: var(--stl-gray); }
+    .stl-exc__it { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--stl-line); }
     .stl-exc__it:first-child { border-top: 0; }
-    .stl-exc__it.is-r { background: #FEE2E2; } .stl-exc__it.is-a { background: #FEF3C7; }
+    .stl-exc__it.is-r { background: var(--danger-hover-bg); } .stl-exc__it.is-a { background: var(--stl-warn-bg); }
     .stl-ready { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; align-items: start; padding: 12px 14px; border: 2px solid; border-radius: 10px; margin: 10px 0 14px; }
-    .stl-ready--ok { background: #ECFDF3; border-color: #86EFAC; } .stl-ready--warn { background: #FEF3C7; border-color: #FCD34D; } .stl-ready--blocked { background: #FEE2E2; border-color: #FCA5A5; }
+    .stl-ready--ok { background: var(--success-light); border-color: var(--stl-ok-line); } .stl-ready--warn { background: var(--stl-warn-bg); border-color: var(--stl-warn-line); } .stl-ready--blocked { background: var(--danger-hover-bg); border-color: var(--stl-bad-line); }
     .stl-ready ul { margin: 4px 0 0; padding-left: 18px; font-size: 12px; }
     .stl-flash td, .stl-flash { animation: stlflash 1.2s ease-out; }
-    @keyframes stlflash { from { background: #FEF08A; } }
-    .stl-pf { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 8px 20px; border-bottom: 1px solid var(--border-light); background: #FAF9F6; font-size: 12px; }
-    .stl-pf button { font: inherit; border: 1px solid #BDB8AB; background: #fff; border-radius: 999px; padding: 2px 10px; cursor: pointer; }
-    .stl-pf button[aria-pressed="true"] { background: #111; color: #fff; border-color: #111; }
+    @keyframes stlflash { from { background: var(--stl-flash); } }
+    .stl-pf { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 8px 20px; border-bottom: 1px solid var(--border-light); background: var(--stl-surface-muted); font-size: 12px; }
+    .stl-pf button { font: inherit; border: 1px solid var(--stl-gray-line); background: var(--stl-surface); border-radius: 999px; padding: 2px 10px; cursor: pointer; }
+    .stl-pf button[aria-pressed="true"] { background: var(--text-primary); color: var(--stl-surface); border-color: var(--text-primary); }
     .stl-table th .stl-sort { all: unset; cursor: pointer; font-weight: 700; }
     .stl-table th .stl-sort:focus-visible, .stl-table th .stl-sort:hover { text-decoration: underline; }
     @media (max-width: 900px) { .stl-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stl-strip { position: static; } }
@@ -140,23 +149,23 @@
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
     .stl-charts { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 14px; }
-    .stl-chcard { border: 1px solid var(--border-light); border-radius: 10px; padding: 10px 14px; background: #fff; min-width: 0; overflow: hidden; }
+    .stl-chcard { border: 1px solid var(--border-light); border-radius: 10px; padding: 10px 14px; background: var(--stl-surface); min-width: 0; overflow: hidden; }
     .stl-chcard__t { font-size: 14px; font-weight: 800; margin-bottom: 4px; }
     .stl-chcard__n { font-size: 11px; color: var(--text-secondary); }
     @media (min-width: 1100px) { .stl-charts { grid-template-columns: 1fr 1fr; } .stl-chcard--wide { grid-column: 1 / -1; } }
     @media print { .stl-chcard { break-inside: avoid; } }
-    .stl-row--warn td { background: #FFFBEB; }
+    .stl-row--warn td { background: var(--warning-light); }
     .stl-chip { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-    .stl-chip--material { color: #1D4ED8; background: #DBEAFE; }
-    .stl-chip--extra { color: #475569; background: #E2E8F0; }
-    .stl-chip--dispatch { color: #6D28D9; background: #EDE9FE; }
-    .stl-badge-st { display: inline-block; margin-left: 4px; padding: 0 7px; border-radius: 999px; font-size: 10px; background: #F0EFEB; color: var(--text-secondary); }
-    .stl-table tr.stl-row--mapped td:first-child { box-shadow: inset 5px 0 0 #15803D; }
+    .stl-chip--material { color: var(--stl-info); background: var(--stl-info-bg); }
+    .stl-chip--extra { color: var(--stl-slate); background: var(--stl-slate-bg); }
+    .stl-chip--dispatch { color: var(--stl-violet); background: var(--stl-violet-bg); }
+    .stl-badge-st { display: inline-block; margin-left: 4px; padding: 0 7px; border-radius: 999px; font-size: 10px; background: var(--stl-note-bg); color: var(--text-secondary); }
+    .stl-table tr.stl-row--mapped td:first-child { box-shadow: inset 5px 0 0 var(--success); }
     .stl-sumbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 10px 20px; border-bottom: 2px solid; font-size: 13px; }
-    .stl-sumbar--warn { background: #FEF3C7; border-color: #FCD34D; color: #92400E; }
-    .stl-sumbar--bad { background: #FEE2E2; border-color: #FCA5A5; color: #B91C1C; }
-    .stl-sumbar--ok { background: #ECFDF5; border-color: #86EFAC; color: #15803D; }
-    .stl-conserve { margin: 12px 20px; padding: 10px 14px; border: 2px solid #111; border-radius: 8px; font-size: 14px; font-weight: 700; }
+    .stl-sumbar--warn { background: var(--stl-warn-bg); border-color: var(--stl-warn-line); color: var(--warning); }
+    .stl-sumbar--bad { background: var(--danger-hover-bg); border-color: var(--stl-bad-line); color: var(--danger); }
+    .stl-sumbar--ok { background: var(--success-light); border-color: var(--stl-ok-line); color: var(--success); }
+    .stl-conserve { margin: 12px 20px; padding: 10px 14px; border: 2px solid var(--text-primary); border-radius: 8px; font-size: 14px; font-weight: 700; }
     .stl-conserve small { display: block; margin-top: 4px; font-weight: 400; font-size: 11px; color: var(--text-secondary); }
     .stl-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 11px; color: var(--text-secondary); margin: 2px 0 8px; }
     .stl-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; border: 1px solid var(--border-light); }
@@ -347,7 +356,7 @@
           <template x-for="k in stripKpis" :key="k.key">
             <div class="stl-k" :class="'stl-k--' + k.cls" :title="k.tip" :data-testid="'stl-k-' + k.key">
               <div class="stl-k__l" x-text="k.label"></div>
-              <div class="stl-k__v" :style="{ color: k.neg ? '#B91C1C' : '' }" x-text="k.value"></div>
+              <div class="stl-k__v" :style="{ color: k.neg ? 'var(--danger)' : '' }" x-text="k.value"></div>
               <div class="stl-k__s"><span x-text="k.sub"></span> <span class="stl-k__st" x-text="k.status"></span></div>
             </div>
           </template>
@@ -357,7 +366,7 @@
       <!-- ── (b) 需處理：每項可「前往」該列 ── -->
       <div class="stl-card" data-testid="stl-exceptions">
         <div class="stl-card__head"><div class="stl-card__title">需處理</div><div style="font-size:11px;color:var(--text-dim)">每一項都可按「前往」直接跳到該列；門檻集中在 STL_CONFIG</div></div>
-        <template x-if="!exceptionsList.length"><div style="padding:12px 20px;background:#ECFDF3;color:#15803D;font-weight:700">✔ 沒有需處理的項目</div></template>
+        <template x-if="!exceptionsList.length"><div style="padding:12px 20px;background:var(--success-light);color:var(--success);font-weight:700">✔ 沒有需處理的項目</div></template>
         <template x-for="(e, i) in exceptionsList" :key="i">
           <div class="stl-exc__it" :class="'is-' + e.lv" :data-testid="'stl-exc-' + e.key">
             <div aria-hidden="true" style="text-align:center" x-text="e.ic"></div>
@@ -498,9 +507,9 @@
 
                   <!-- 毛利欄：每個品項賺多少（只算到毛利；管理費／公益／淨利只在總結） -->
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :data-testid="'stl-profit-' + item.id">
-                    <div style="font-size:18px;font-weight:800;line-height:1.2" :style="{ color: itemProfit(item) < 0 ? '#B91C1C' : '#15803D' }"
+                    <div style="font-size:18px;font-weight:800;line-height:1.2" :style="{ color: itemProfit(item) < 0 ? 'var(--danger)' : 'var(--success)' }"
                          x-text="(itemProfit(item) < 0 ? '−' : '') + 'NT$ ' + fmt(Math.abs(itemProfit(item)))"></div>
-                    <div style="font-size:12px;font-weight:700" :style="{ color: itemProfit(item) < 0 ? '#B91C1C' : '' }" x-text="'毛利比 ' + pctTxt(itemPct(item))"></div>
+                    <div style="font-size:12px;font-weight:700" :style="{ color: itemProfit(item) < 0 ? 'var(--danger)' : '' }" x-text="'毛利比 ' + pctTxt(itemPct(item))"></div>
                     <div style="font-size:10px;color:var(--text-dim)" x-text="'單件毛利 ' + (itemUnitProfit(item) == null ? '—' : fmt(itemUnitProfit(item))) + (item.origUnit ? '／' + item.origUnit : '')"></div>
                   </td>
 
@@ -510,7 +519,7 @@
                            :disabled="settlement.status === 'finalized'"
                            placeholder="說明…"
                            @input="calcSummary()">
-                    <div x-show="itemSource(item).key === 'est' && !(systemActual(item) > 0)" :data-testid="'stl-nopurchase-' + item.id" style="margin-top:4px;font-size:11px;font-weight:400;color:#92400E;line-height:1.4">
+                    <div x-show="itemSource(item).key === 'est' && !(systemActual(item) > 0)" :data-testid="'stl-nopurchase-' + item.id" style="margin-top:4px;font-size:11px;font-weight:400;color:var(--warning);line-height:1.4">
                       ⚠ 無採購／對應紀錄：實際成本暫以估計計。已採購但沒進系統（歷史）或人力成本，請在左側填實際數量／單位成本。
                     </div>
                   </td>
@@ -762,14 +771,14 @@
             <tbody>
               <template x-for="item in profitRows" :key="'pt' + item.id">
                 <tr :data-testid="'stl-pt-' + item.id" :class="itemProfit(item) < 0 ? 'stl-row--warn' : ''">
-                  <td><span x-text="'#' + itemNo(item.id) + ' ' + (item.origDescription || '（無品名）')"></span><span x-show="itemProfit(item) < 0" style="color:#B91C1C;font-weight:700"> ✖ 虧損</span> <span class="stl-src" :class="'stl-src--' + itemSource(item).key" x-text="itemSource(item).label"></span></td>
+                  <td><span x-text="'#' + itemNo(item.id) + ' ' + (item.origDescription || '（無品名）')"></span><span x-show="itemProfit(item) < 0" style="color:var(--danger);font-weight:700"> ✖ 虧損</span> <span class="stl-src" :class="'stl-src--' + itemSource(item).key" x-text="itemSource(item).label"></span></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(itemQuote(item))"></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(estimateOf(item))"></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(itemActual(item))"></td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: itemVar(item) > 0 ? '#B91C1C' : itemVar(item) < 0 ? '#15803D' : '' }" x-text="(itemVar(item) > 0 ? '▲ +' : itemVar(item) < 0 ? '▼ −' : '') + fmt(Math.abs(itemVar(item)))"></td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:800;font-size:14px" :style="{ color: itemProfit(item) < 0 ? '#B91C1C' : '#15803D' }" x-text="(itemProfit(item) < 0 ? '−' : '') + fmt(Math.abs(itemProfit(item)))"></td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: itemProfit(item) < 0 ? '#B91C1C' : '' }" x-text="pctTxt(itemPct(item))"></td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: itemDpp(item) == null ? '' : itemDpp(item) < 0 ? '#B91C1C' : itemDpp(item) > 0 ? '#15803D' : '' }" :title="'原始毛利比 ' + pctTxt(itemOrigPct(item))" x-text="itemDpp(item) == null ? '—' : (itemDpp(item) > 0 ? '+' : itemDpp(item) < 0 ? '−' : '') + Math.abs(itemDpp(item)).toFixed(1) + ' pp'"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: itemVar(item) > 0 ? 'var(--danger)' : itemVar(item) < 0 ? 'var(--success)' : '' }" x-text="(itemVar(item) > 0 ? '▲ +' : itemVar(item) < 0 ? '▼ −' : '') + fmt(Math.abs(itemVar(item)))"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:800;font-size:14px" :style="{ color: itemProfit(item) < 0 ? 'var(--danger)' : 'var(--success)' }" x-text="(itemProfit(item) < 0 ? '−' : '') + fmt(Math.abs(itemProfit(item)))"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: itemProfit(item) < 0 ? 'var(--danger)' : '' }" x-text="pctTxt(itemPct(item))"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: itemDpp(item) == null ? '' : itemDpp(item) < 0 ? 'var(--danger)' : itemDpp(item) > 0 ? 'var(--success)' : '' }" :title="'原始毛利比 ' + pctTxt(itemOrigPct(item))" x-text="itemDpp(item) == null ? '—' : (itemDpp(item) > 0 ? '+' : itemDpp(item) < 0 ? '−' : '') + Math.abs(itemDpp(item)).toFixed(1) + ' pp'"></td>
                 </tr>
               </template>
               <template x-for="r in unassignedCostRows" :key="r.key">
@@ -779,7 +788,7 @@
                   <td style="text-align:right">—</td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(r.amount)"></td>
                   <td style="text-align:right">—</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#B91C1C;font-weight:700" x-text="r.amount ? '−' + fmt(r.amount) : '0'"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--danger);font-weight:700" x-text="r.amount ? '−' + fmt(r.amount) : '0'"></td>
                   <td style="text-align:right">—</td><td style="text-align:right">—</td>
                 </tr>
               </template>
@@ -793,24 +802,24 @@
                 <td style="text-align:right">—</td><td style="text-align:right">—</td>
               </tr>
               <tr style="font-weight:800" data-testid="stl-pt-total">
-                <td style="border-top:2px solid #111">合計</td>
-                <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(summary.quotedPretax)"></td>
-                <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(summary.origTotalCost)"></td>
-                <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(summary.totalActualCost)"></td>
-                <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: summary.totalActualCost > summary.origTotalCost ? '#B91C1C' : '#15803D' }" x-text="(summary.totalActualCost > summary.origTotalCost ? '▲ +' : summary.totalActualCost < summary.origTotalCost ? '▼ −' : '') + fmt(Math.abs(summary.totalActualCost - summary.origTotalCost))"></td>
-                <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: summary.grossProfit < 0 ? '#B91C1C' : '#15803D' }" x-text="(summary.grossProfit < 0 ? '−' : '') + fmt(Math.abs(summary.grossProfit))"></td>
-                <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="summary.quotedPretax > 0 ? summary.grossMarginPct.toFixed(1) + '%' : '—'"></td>
-                <td style="border-top:2px solid #111"></td>
+                <td style="border-top:2px solid var(--text-primary)">合計</td>
+                <td style="border-top:2px solid var(--text-primary);text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(summary.quotedPretax)"></td>
+                <td style="border-top:2px solid var(--text-primary);text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(summary.origTotalCost)"></td>
+                <td style="border-top:2px solid var(--text-primary);text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(summary.totalActualCost)"></td>
+                <td style="border-top:2px solid var(--text-primary);text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: summary.totalActualCost > summary.origTotalCost ? 'var(--danger)' : 'var(--success)' }" x-text="(summary.totalActualCost > summary.origTotalCost ? '▲ +' : summary.totalActualCost < summary.origTotalCost ? '▼ −' : '') + fmt(Math.abs(summary.totalActualCost - summary.origTotalCost))"></td>
+                <td style="border-top:2px solid var(--text-primary);text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: summary.grossProfit < 0 ? 'var(--danger)' : 'var(--success)' }" x-text="(summary.grossProfit < 0 ? '−' : '') + fmt(Math.abs(summary.grossProfit))"></td>
+                <td style="border-top:2px solid var(--text-primary);text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="summary.quotedPretax > 0 ? summary.grossMarginPct.toFixed(1) + '%' : '—'"></td>
+                <td style="border-top:2px solid var(--text-primary)"></td>
               </tr>
             </tbody>
           </table>
         </div>
         <div style="padding:10px 20px 14px;font-size:12px;display:grid;gap:3px" data-testid="stl-recon">
-          <div>對帳①：Σ品項報價 <span x-text="fmt(sumItemQuote)"></span><span x-show="quoteAdjust !== 0" x-text="(quoteAdjust < 0 ? ' − ' : ' ＋ ') + '折扣／調整 ' + fmt(Math.abs(quoteAdjust))"></span> ＝ 報價收入 <span x-text="fmt(summary.quotedPretax)"></span>　差額 <b data-testid="stl-recon-quote-gap" :style="{ color: reconQuoteGap === 0 ? '#15803D' : '#B91C1C' }" x-text="fmt(reconQuoteGap)"></b></div>
-          <div>對帳②：Σ品項實際成本 <span x-text="fmt(summary.itemActualTotal)"></span> ＋ 未對應項目 <span x-text="fmt(unassignedCostTotal)"></span> ＝ 總實際成本 <span x-text="fmt(summary.totalActualCost)"></span>　差額 <b data-testid="stl-recon-cost-gap" :style="{ color: reconCostGap === 0 ? '#15803D' : '#B91C1C' }" x-text="fmt(reconCostGap)"></b></div>
+          <div>對帳①：Σ品項報價 <span x-text="fmt(sumItemQuote)"></span><span x-show="quoteAdjust !== 0" x-text="(quoteAdjust < 0 ? ' − ' : ' ＋ ') + '折扣／調整 ' + fmt(Math.abs(quoteAdjust))"></span> ＝ 報價收入 <span x-text="fmt(summary.quotedPretax)"></span>　差額 <b data-testid="stl-recon-quote-gap" :style="{ color: reconQuoteGap === 0 ? 'var(--success)' : 'var(--danger)' }" x-text="fmt(reconQuoteGap)"></b></div>
+          <div>對帳②：Σ品項實際成本 <span x-text="fmt(summary.itemActualTotal)"></span> ＋ 未對應項目 <span x-text="fmt(unassignedCostTotal)"></span> ＝ 總實際成本 <span x-text="fmt(summary.totalActualCost)"></span>　差額 <b data-testid="stl-recon-cost-gap" :style="{ color: reconCostGap === 0 ? 'var(--success)' : 'var(--danger)' }" x-text="fmt(reconCostGap)"></b></div>
           <div style="padding-top:4px;color:var(--text-secondary)" data-testid="stl-cost-notes">
             <div>未對應項目的額外支出 <b x-text="fmt(summary.extraTotal)"></b>：<span x-show="matUnassigned > 0" data-testid="stl-mat-unassigned" x-text="'含未對應材料申請 ' + fmt(matUnassigned) + '　'"></span><span x-show="summary.remitFeeTotal" x-text="'含匯款手續費 ' + fmt(summary.remitFeeTotal) + '　'"></span><span x-show="summary.customExpenseTotal" data-testid="settle-custom-expense" x-text="'含自訂模組支出 ' + fmt(summary.customExpenseTotal)"></span></div>
-            <div x-show="summary.itemPoUnadopted > 0" data-testid="stl-po-unadopted" style="color:#92400E" x-text="'採購單（品項尚未採用）計入 ' + fmt(summary.itemPoUnadopted)"></div>
+            <div x-show="summary.itemPoUnadopted > 0" data-testid="stl-po-unadopted" style="color:var(--warning)" x-text="'採購單（品項尚未採用）計入 ' + fmt(summary.itemPoUnadopted)"></div>
             <div x-show="_actualsOk && notAdoptedPurchased > 0" data-testid="stl-purchase-not-adopted" x-text="'採購金額未採用（以手填取代，不另計）：' + fmt(notAdoptedPurchased)"></div>
             <div x-show="customIncomeSkipped.length" data-testid="settle-custom-income-skipped" style="color:var(--text-dim)" x-text="'自訂模組有 ' + customIncomeSkipped.length + ' 筆收入（' + customIncomeSkipped.map(i => i.recordNo).join('、') + '）關聯到本案件，因內建報價單已認列而未重複計入'"></div>
           </div>
@@ -828,12 +837,12 @@
         <div class="stl-card__body">
           <!-- 標題：精算後最終淨利（比原始報價多／少多少） -->
           <div data-testid="stl-headline" style="padding:12px 16px;border-radius:10px;border:2px solid;display:flex;flex-wrap:wrap;gap:4px 18px;align-items:baseline"
-               :style="{ background: summary.profitDiff < 0 ? '#FEE2E2' : '#ECFDF5', borderColor: summary.profitDiff < 0 ? '#FCA5A5' : '#86EFAC' }">
+               :style="{ background: summary.profitDiff < 0 ? 'var(--danger-hover-bg)' : 'var(--success-light)', borderColor: summary.profitDiff < 0 ? 'var(--stl-bad-line)' : 'var(--stl-ok-line)' }">
             <span style="font-size:13px;font-weight:700;color:var(--text-secondary)">精算後最終淨利</span>
             <span data-testid="stl-net" style="font-size:30px;font-weight:800;line-height:1.1;font-family:LINE Seed TW_OTF, sans-serif"
-                  :style="{ color: summary.netProfit < 0 ? '#B91C1C' : '#15803D' }" x-text="(summary.netProfit < 0 ? '−' : '') + 'NT$ ' + fmt(Math.abs(summary.netProfit))"></span>
+                  :style="{ color: summary.netProfit < 0 ? 'var(--danger)' : 'var(--success)' }" x-text="(summary.netProfit < 0 ? '−' : '') + 'NT$ ' + fmt(Math.abs(summary.netProfit))"></span>
             <span data-testid="stl-headline-diff" style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif"
-                  :style="{ color: summary.profitDiff < 0 ? '#B91C1C' : '#15803D' }" x-text="headlineDiffText"></span>
+                  :style="{ color: summary.profitDiff < 0 ? 'var(--danger)' : 'var(--success)' }" x-text="headlineDiffText"></span>
           </div>
           <div class="stl-blocks">
             <template x-for="blk in totalsBlocks" :key="blk.key">
@@ -846,7 +855,7 @@
                       <tr :data-testid="'stl-' + r.key" :class="r.strong ? 'is-strong' : ''">
                         <td><span x-text="r.label"></span><div class="stl-bt__basis" x-text="r.basis"></div></td>
                         <td x-text="r.pct ? pctTxt(r.o) : fmt(r.o)"></td>
-                        <td :style="{ color: r.neg && r.a < 0 ? '#B91C1C' : '' }" x-text="r.pct ? pctTxt(r.a) : (r.a < 0 ? '−' : '') + fmt(Math.abs(r.a))"></td>
+                        <td :style="{ color: r.neg && r.a < 0 ? 'var(--danger)' : '' }" x-text="r.pct ? pctTxt(r.a) : (r.a < 0 ? '−' : '') + fmt(Math.abs(r.a))"></td>
                         <td :style="{ color: diffColor(r) }" x-text="diffText(r)"></td>
                       </tr>
                     </template>
@@ -953,7 +962,7 @@ const STL_CONFIG = {
   RECON_TOLERANCE: 0          // 對帳差額容許值（元）；超過＝硬性擋住完結
 }
 /* ───────── 圖表（純 inline SVG，無外部函式庫；列印／離線可用；數值＝與表格同一組算好的數字，圖不另算）───────── */
-const STL_CH = { dark: '#374151', good: '#15803D', bad: '#B91C1C', decFill: '#FCA5A5', origFill: '#E5E7EB', origStroke: '#6B7280' }
+const STL_CH = { dark: 'var(--stl-gray-dark)', good: 'var(--success)', bad: 'var(--danger)', decFill: 'var(--stl-bad-line)', origFill: 'var(--stl-line-strong)', origStroke: 'var(--stl-gray-mid)' }
 function stlEsc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) }
 // 通用橫向區間長條圖：rows = [{id,label,lo,hi,v,fill,stroke,dash,text,tfill,tip}]；0 軸一條線；數值文字一律標在長條右端（色彩之外一定有數字與 ▲▼✖ 符號）
 function stlRangeChart(rows, o) {
@@ -965,11 +974,11 @@ function stlRangeChart(rows, o) {
   let g = ''
   rows.forEach((r, i) => {
     const y = PAD + i * RH, bx = x(r.lo), bw = Math.max(2, x(r.hi) - x(r.lo))
-    g += `<g data-row="${stlEsc(r.id)}"><text x="${LW - 8}" y="${y + RH / 2 + 4}" text-anchor="end" font-size="15" fill="#111">${stlEsc(r.label)}</text>`
-    g += `<rect data-testid="${o.id}-${stlEsc(r.id)}" data-v="${r.v}" x="${bx.toFixed(1)}" y="${y + 4}" width="${bw.toFixed(1)}" height="${RH - 8}" rx="3" fill="${r.fill}"${r.stroke ? ` stroke="${r.stroke}" stroke-width="1.5"` : ''}${r.dash ? ' stroke-dasharray="4 2"' : ''}><title>${stlEsc(r.tip || r.label)}</title></rect>`
-    g += `<text x="${(bx + bw + 6).toFixed(1)}" y="${y + RH / 2 + 4}" font-size="15" font-weight="700" fill="${r.tfill || '#111'}">${stlEsc(r.text)}</text></g>`
+    g += `<g data-row="${stlEsc(r.id)}"><text x="${LW - 8}" y="${y + RH / 2 + 4}" text-anchor="end" font-size="15" style="fill:var(--text-primary)">${stlEsc(r.label)}</text>`
+    g += `<rect data-testid="${o.id}-${stlEsc(r.id)}" data-v="${r.v}" x="${bx.toFixed(1)}" y="${y + 4}" width="${bw.toFixed(1)}" height="${RH - 8}" rx="3" style="fill:${r.fill};${r.stroke ? `stroke:${r.stroke};stroke-width:1.5;` : ''}"${r.dash ? ' stroke-dasharray="4 2"' : ''}><title>${stlEsc(r.tip || r.label)}</title></rect>`
+    g += `<text x="${(bx + bw + 6).toFixed(1)}" y="${y + RH / 2 + 4}" font-size="15" font-weight="700" style="fill:${r.tfill || 'var(--text-primary)'}">${stlEsc(r.text)}</text></g>`
   })
-  const axis = `<line x1="${x(0).toFixed(1)}" y1="0" x2="${x(0).toFixed(1)}" y2="${H}" stroke="#111" stroke-width="1"/>`
+  const axis = `<line x1="${x(0).toFixed(1)}" y1="0" x2="${x(0).toFixed(1)}" y2="${H}" style="stroke:var(--text-primary);stroke-width:1"/>`
   return `<svg role="img" aria-label="${stlEsc(o.aria)}" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;height:auto;display:block" data-testid="${o.id}">${axis}${g}</svg>`
 }
 // ① 橋接圖：報價 → −各項成本 → 毛利 → −管理費 → −公益 → 最終淨利
@@ -991,7 +1000,7 @@ function stlPairSvg(d, f) {
   d.metrics.forEach(m => {
     const diff = m.a - m.o, good = (m.kind === 'cost') !== (diff > 0), same = diff === 0
     rows.push({ id: m.id + '-o', label: m.label + '｜原始', lo: Math.min(0, m.o), hi: Math.max(0, m.o), v: m.o, fill: C.origFill, stroke: C.origStroke, dash: true, text: f(m.o), tip: m.label + ' 原始 ' + f(m.o) })
-    rows.push({ id: m.id + '-a', label: m.label + '｜精算後', lo: Math.min(0, m.a), hi: Math.max(0, m.a), v: m.a, fill: same ? C.dark : good ? C.good : C.bad, text: f(m.a) + '　' + (same ? '＝' : (diff > 0 ? '▲ +' : '▼ −') + f(Math.abs(diff))), tfill: same ? '#111' : good ? C.good : C.bad, tip: m.label + ' 精算後 ' + f(m.a) })
+    rows.push({ id: m.id + '-a', label: m.label + '｜精算後', lo: Math.min(0, m.a), hi: Math.max(0, m.a), v: m.a, fill: same ? C.dark : good ? C.good : C.bad, text: f(m.a) + '　' + (same ? '＝' : (diff > 0 ? '▲ +' : '▼ −') + f(Math.abs(diff))), tfill: same ? 'var(--text-primary)' : good ? C.good : C.bad, tip: m.label + ' 精算後 ' + f(m.a) })
   })
   return stlRangeChart(rows, { id: 'stl-ch-pair', rowH: 30, rightW: 220, aria: '原始與精算後對照：報價、總成本、毛利、最終淨利' })
 }
@@ -999,7 +1008,7 @@ function stlPairSvg(d, f) {
 function stlItemsSvg(items, f, pf) {
   const C = STL_CH, sorted = items.slice().sort((a, b) => b.profit - a.profit)
   const rows = sorted.map(i => ({ id: 'i-' + i.id, label: ('#' + i.no + ' ' + (i.name || '')).slice(0, 16), lo: Math.min(0, i.profit), hi: Math.max(0, i.profit), v: i.profit,
-    fill: i.profit < 0 ? C.bad : C.good, text: (i.profit < 0 ? '✖ ' : '') + f(i.profit) + '（' + pf(i.pct) + '）', tfill: i.profit < 0 ? C.bad : '#111', tip: i.name + ' 毛利 ' + f(i.profit) }))
+    fill: i.profit < 0 ? C.bad : C.good, text: (i.profit < 0 ? '✖ ' : '') + f(i.profit) + '（' + pf(i.pct) + '）', tfill: i.profit < 0 ? C.bad : 'var(--text-primary)', tip: i.name + ' 毛利 ' + f(i.profit) }))
   return stlRangeChart(rows, { id: 'stl-ch-items', rightW: 200, aria: '各品項毛利長條圖（由高到低），共 ' + rows.length + ' 項' })
 }
 
@@ -1294,7 +1303,7 @@ function settlementPage() {
     diffColor(r) {
       const d = this._diff(r)
       if (!d) return ''
-      return ((r.kind === 'cost') === (d > 0)) ? '#B91C1C' : '#15803D'
+      return ((r.kind === 'cost') === (d > 0)) ? 'var(--danger)' : 'var(--success)'
     },
     get headlineDiffText() {
       const sm = this.summary, d = sm.netProfit - sm.origNetProfit

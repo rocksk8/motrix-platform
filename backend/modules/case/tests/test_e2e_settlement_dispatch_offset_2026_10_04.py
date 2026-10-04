@@ -384,7 +384,7 @@ def test_summary_charts_exist_and_match_table_numbers(live_server, make_user, e2
     page.evaluate(f"() => {{ const d = {S}; const b = d.settlement.items[1]; b.adoptSystem = false; b.actualUnitCost = 20; d.calcItemCost(b); d.calcSummary() }}")
     page.wait_for_function(f"() => {S}.itemProfit({S}.settlement.items[1]) === -1100", timeout=5000)
     assert v("stl-ch-items-i-b") == -1100
-    assert page.locator('[data-testid="stl-ch-items-i-b"]').get_attribute("fill") == "#B91C1C"
+    assert page.locator('[data-testid="stl-ch-items-i-b"]').evaluate("e => getComputedStyle(e).fill") == "rgb(185, 28, 28)"        # --danger（走 token，不寫死色碼）
     assert "✖" in page.locator('[data-testid="stl-ch-items"]').text_content()
     assert v("stl-ch-bridge-gp") == _tot(page)["grossProfit"]
     # 窄螢幕：圖縮放不超出容器

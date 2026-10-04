@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-04（wip/t36-dispatch-offset-fe）：精算頁管理視角（純前端）
+- **只動 `frontend/pages/settlement.html`（前端）與 e2e，後端與公式不變**：頁首摘要列、需處理清單、完結前檢查（未對應只警示；對帳差額≠0 才停用完結鈕）、品項毛利／毛利比／單件毛利、賺賠總表（含「未對應項目」與「折扣／調整」列與兩條對帳）、扣費前後對照、三張 inline SVG 圖、稽核頁尾、列印版面。
+- 品項毛利＝報價單品項金額 − 實際成本；總成本取畫面 summary（與後端 `totalActualCost` 同一規則，派發被品項吸收的部分不重複計入）。門檻與政策集中在頁面 `STL_CONFIG`。
+- 送出 `actualSource`（手填／歷史未建系統／人力標籤，後端已支援）。測試：`tests/test_e2e_settlement_dispatch_offset_2026_10_04.py`。
+
 ## 1.0.130 — 2026-10-04（wip/t36-dispatch-offset-be）：承攬商派發可回推報價單品項
 - **offsets 新增 `kind: "dispatch"`（`ref`＝`contractor_dispatches.id`）**：派發單整張歸單一品項，規則與材料申請相同（規格 `DISPATCH-OFFSET-SPEC.md`）。`compute()` 新增 `unassigned.dispatches[]`、`items[].dispatch`、`totals.dispatchUnassignedTotal／dispatchAssignedTotal／dispatchAbsorbedTotal`；`dispatchTotal` 語意不變（未對應＋已對應＝dispatchTotal）。金額＝未稅承攬費＋外包人員（稅額只顯示）。
 - 規則 A 併入：採用時品項實際＝材料申請＋採購單＋派發的合計取代估計，`totalActualCost` 扣掉被吸收的派發（不重複計入）；不採用時對應／取消對應不改總成本。`sources`／`purchasedTotal`／`pendingTotal` 不含派發（舊案逐位相同）。
