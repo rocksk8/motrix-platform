@@ -838,7 +838,7 @@
           <!-- 標題：精算後最終淨利（比原始報價多／少多少） -->
           <div data-testid="stl-headline" style="padding:12px 16px;border-radius:10px;border:2px solid;display:flex;flex-wrap:wrap;gap:4px 18px;align-items:baseline"
                :style="{ background: summary.profitDiff < 0 ? 'var(--danger-hover-bg)' : 'var(--success-light)', borderColor: summary.profitDiff < 0 ? 'var(--stl-bad-line)' : 'var(--stl-ok-line)' }">
-            <span style="font-size:13px;font-weight:700;color:var(--text-secondary)">精算後最終淨利</span>
+            <span style="font-size:13px;font-weight:700;color:var(--text-secondary)">精算後真實淨利（最終淨利）</span>
             <span data-testid="stl-net" style="font-size:30px;font-weight:800;line-height:1.1;font-family:LINE Seed TW_OTF, sans-serif"
                   :style="{ color: summary.netProfit < 0 ? 'var(--danger)' : 'var(--success)' }" x-text="(summary.netProfit < 0 ? '−' : '') + 'NT$ ' + fmt(Math.abs(summary.netProfit))"></span>
             <span data-testid="stl-headline-diff" style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif"
@@ -1279,16 +1279,16 @@ function settlementPage() {
       return [
         { key: 'before', title: '① 扣管理費／公益前', rows: [
           R('b1-rev', '報價（稅前收入）', '報價單稅前收入；兩邊相同', rev, rev, 'good'),
-          R('b1-cost', '總成本', '原始＝Σ估計成本；精算後＝總實際成本（後端同源）', sm.origTotalCost, sm.totalActualCost, 'cost'),
-          R('b1-gp', '毛利', '報價 − 總成本', sm.origDirectProfit, sm.grossProfit, 'good', { strong: true, neg: true }),
-          R('b1-gpp', '毛利比', '毛利 ÷ 報價', pct(sm.origDirectProfit), pct(sm.grossProfit), 'good', { pct: true }),
+          R('b1-cost', '實際總成本', '原始＝Σ估計成本；精算後＝總成本（後端同源）', sm.origTotalCost, sm.totalActualCost, 'cost'),
+          R('b1-gp', '真實毛利', '報價 − 總成本', sm.origDirectProfit, sm.grossProfit, 'good', { strong: true, neg: true }),
+          R('b1-gpp', '真實毛利率', '毛利比＝毛利 ÷ 報價', pct(sm.origDirectProfit), pct(sm.grossProfit), 'good', { pct: true }),
           R('b1-pre', '未扣費用淨利', '＝毛利（尚未扣管理費、公益）', sm.origDirectProfit, sm.grossProfit, 'good', { neg: true }),
         ] },
         { key: 'after', title: '② 扣管理費／公益後', rows: [
-          R('b2-admin', '管理費', '報價稅前收入 × 10%', sm.origAdminCost, sm.adminCost, 'cost'),
-          R('b2-ch', '公益捐贈', '毛利 × 1%', sm.origCharity, sm.charityDonation, 'cost'),
-          R('b2-net', '最終淨利', '毛利 − 管理費 − 公益捐贈', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true }),
-          R('b2-netp', '淨利比', '最終淨利 ÷ 報價', pct(sm.origNetProfit), pct(sm.netProfit), 'good', { pct: true }),
+          R('b2-admin', '管銷分攤（10%）', '管理費＝報價稅前收入 × 10%', sm.origAdminCost, sm.adminCost, 'cost'),
+          R('b2-ch', '公益捐款（1%）', '公益捐贈＝毛利 × 1%', sm.origCharity, sm.charityDonation, 'cost'),
+          R('b2-net', '真實淨利', '最終淨利＝毛利 − 管理費 − 公益捐贈（＝獎金分潤基數）', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true }),
+          R('b2-netp', '真實淨利率', '淨利比＝最終淨利 ÷ 報價', pct(sm.origNetProfit), pct(sm.netProfit), 'good', { pct: true }),
         ] },
       ]
     },
