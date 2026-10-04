@@ -95,6 +95,15 @@
     .stl-src--po, .stl-src--map, .stl-src--po-map { background: #ECFDF5; color: #15803D; }
     .stl-src--manual { background: #DBEAFE; color: #1D4ED8; }
     .stl-src--est { background: #FEF3C7; color: #92400E; }
+    .stl-blocks { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+    .stl-blk { border: 1px solid var(--border-light); border-radius: 10px; padding: 10px 12px; background: #fff; min-width: 0; overflow-x: auto; }
+    .stl-bt { width: 100%; border-collapse: collapse; font-size: 12px; font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .stl-bt th { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-align: right; padding: 5px 6px; border-bottom: 2px solid #111; }
+    .stl-bt td { padding: 6px; border-bottom: 1px solid #F0EFEB; text-align: right; white-space: nowrap; }
+    .stl-bt td:first-child, .stl-bt th:first-child { text-align: left; white-space: normal; }
+    .stl-bt tr.is-strong td { font-weight: 800; font-size: 14px; background: #FAF9F6; }
+    .stl-bt__basis { font-size: 10px; color: var(--text-dim); font-weight: 400; }
+    @media (max-width: 900px) { .stl-blocks { grid-template-columns: 1fr; } }
     .stl-row--warn td { background: #FFFBEB; }
     .stl-chip { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; white-space: nowrap; }
     .stl-chip--material { color: #1D4ED8; background: #DBEAFE; }
@@ -734,6 +743,12 @@
         <div style="padding:10px 20px 14px;font-size:12px;display:grid;gap:3px" data-testid="stl-recon">
           <div>對帳①：Σ品項報價 <span x-text="fmt(sumItemQuote)"></span><span x-show="quoteAdjust !== 0" x-text="(quoteAdjust < 0 ? ' − ' : ' ＋ ') + '折扣／調整 ' + fmt(Math.abs(quoteAdjust))"></span> ＝ 報價收入 <span x-text="fmt(summary.quotedPretax)"></span>　差額 <b data-testid="stl-recon-quote-gap" :style="{ color: reconQuoteGap === 0 ? '#15803D' : '#B91C1C' }" x-text="fmt(reconQuoteGap)"></b></div>
           <div>對帳②：Σ品項實際成本 <span x-text="fmt(summary.itemActualTotal)"></span> ＋ 未對應項目 <span x-text="fmt(unassignedCostTotal)"></span> ＝ 總實際成本 <span x-text="fmt(summary.totalActualCost)"></span>　差額 <b data-testid="stl-recon-cost-gap" :style="{ color: reconCostGap === 0 ? '#15803D' : '#B91C1C' }" x-text="fmt(reconCostGap)"></b></div>
+          <div style="padding-top:4px;color:var(--text-secondary)" data-testid="stl-cost-notes">
+            <div>未對應項目的額外支出 <b x-text="fmt(summary.extraTotal)"></b>：<span x-show="matUnassigned > 0" data-testid="stl-mat-unassigned" x-text="'含未對應材料申請 ' + fmt(matUnassigned) + '　'"></span><span x-show="summary.remitFeeTotal" x-text="'含匯款手續費 ' + fmt(summary.remitFeeTotal) + '　'"></span><span x-show="summary.customExpenseTotal" data-testid="settle-custom-expense" x-text="'含自訂模組支出 ' + fmt(summary.customExpenseTotal)"></span></div>
+            <div x-show="summary.itemPoUnadopted > 0" data-testid="stl-po-unadopted" style="color:#92400E" x-text="'採購單（品項尚未採用）計入 ' + fmt(summary.itemPoUnadopted)"></div>
+            <div x-show="_actualsOk && notAdoptedPurchased > 0" data-testid="stl-purchase-not-adopted" x-text="'採購金額未採用（以手填取代，不另計）：' + fmt(notAdoptedPurchased)"></div>
+            <div x-show="customIncomeSkipped.length" data-testid="settle-custom-income-skipped" style="color:var(--text-dim)" x-text="'自訂模組有 ' + customIncomeSkipped.length + ' 筆收入（' + customIncomeSkipped.map(i => i.recordNo).join('、') + '）關聯到本案件，因內建報價單已認列而未重複計入'"></div>
+          </div>
         </div>
       </div>
 
@@ -746,132 +761,34 @@
           </div>
         </div>
         <div class="stl-card__body">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
-            <!-- 原始預估 -->
-            <div>
-              <div style="font-size:11px;font-weight:600;color:var(--text-secondary);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border-light)">原始報價預估</div>
-              <table style="width:100%;font-size:12px">
-                <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">報價稅前收入</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + fmt(summary.quotedPretax)"></td>
-                </tr>
-                <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">原始成本（料件）</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + fmt(summary.origTotalCost)"></td>
-                </tr>
-                <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">原始直接毛利</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600"
-                      :style="summary.origDirectProfit >= 0 ? 'color:#15803D' : 'color:#DC2626'"
-                      x-text="'NT$ ' + fmt(summary.origDirectProfit)"></td>
-                </tr>
-                <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">原始毛利率</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"
-                      x-text="summary.origMarginPct.toFixed(1) + '%'"></td>
-                </tr>
-                <tr style="border-top:1px solid var(--border-light)">
-                  <td style="padding:5px 0;color:var(--text-secondary)">管銷分攤（10%）</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#DC2626" x-text="'− NT$ ' + fmt(summary.origAdminCost)"></td>
-                </tr>
-                <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">公益捐款（1%）</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#DC2626" x-text="'− NT$ ' + fmt(summary.origCharity)"></td>
-                </tr>
-                <tr style="border-top:1.5px solid var(--border-light)">
-                  <td style="padding:5px 0;font-weight:700">原始預估淨利</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
-                      :style="summary.origNetProfit >= 0 ? 'color:#15803D' : 'color:#DC2626'"
-                      x-text="'NT$ ' + fmt(summary.origNetProfit)"></td>
-                </tr>
-                <tr>
-                  <td style="padding:5px 0;font-weight:600;color:var(--text-secondary)">原始預估淨利率</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600"
-                      :style="summary.origNetMarginPct >= 20 ? 'color:#15803D' : summary.origNetMarginPct >= 0 ? 'color:#B45309' : 'color:#DC2626'"
-                      x-text="summary.origNetMarginPct.toFixed(1) + '%'"></td>
-                </tr>
-              </table>
-            </div>
-            <!-- 實際精算 -->
-            <div>
-              <div style="font-size:11px;font-weight:600;color:#92400E;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #FDE68A;background:transparent">實際成本精算</div>
-              <table style="width:100%;font-size:12px">
-                <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">報價稅前收入</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + fmt(summary.quotedPretax)"></td>
-                </tr>
-                <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">品項實際成本</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.itemActualTotal)"></td>
-                </tr>
-                <tr x-show="summary.itemPoUnadopted > 0" data-testid="stl-po-unadopted">
-                  <td style="padding:5px 0;color:var(--text-secondary)">採購單（品項尚未採用）</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.itemPoUnadopted)"></td>
-                </tr>
-                <tr x-show="_actualsOk && notAdoptedPurchased > 0" data-testid="stl-purchase-not-adopted">
-                  <td style="padding:5px 0;color:var(--text-secondary)">採購金額未採用（以手填取代，不另計）</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-dim)" x-text="'NT$ ' + fmt(notAdoptedPurchased)"></td>
-                </tr>
-                <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">額外支出<span x-show="matUnassigned > 0" data-testid="stl-mat-unassigned" style="font-size:11px" x-text="'（含未對應材料申請 ' + fmt(matUnassigned) + '）'"></span><span x-show="summary.remitFeeTotal" style="font-size:11px" x-text="'（含匯款手續費 ' + fmt(summary.remitFeeTotal) + '）'"></span><span x-show="summary.customExpenseTotal" data-testid="settle-custom-expense" style="font-size:11px" x-text="'（含自訂模組支出 ' + fmt(summary.customExpenseTotal) + '）'"></span></td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.extraTotal)"></td>
-                </tr>
-                <tr x-show="customIncomeSkipped.length" data-testid="settle-custom-income-skipped">
-                  <td colspan="2" style="padding:2px 0;font-size:11px;color:var(--text-dim)" x-text="'自訂模組有 ' + customIncomeSkipped.length + ' 筆收入（' + customIncomeSkipped.map(i => i.recordNo).join('、') + '）關聯到本案件，因內建報價單已認列而未重複計入'"></td>
-                </tr>
-                <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">承攬商派發成本</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-text="'NT$ ' + fmt(summary.dispatchTotal)"></td>
-                </tr>
-                <tr style="border-top:1px solid #FDE68A">
-                  <td style="padding:5px 0;font-weight:600">實際總成本</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;color:#92400E" x-text="'NT$ ' + fmt(summary.totalActualCost)"></td>
-                </tr>
-                <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">真實毛利</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"
-                      :style="summary.grossProfit >= 0 ? 'color:#15803D' : 'color:#DC2626'"
-                      x-text="'NT$ ' + fmt(summary.grossProfit)"></td>
-                </tr>
-                <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">真實毛利率</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"
-                      x-text="summary.grossMarginPct.toFixed(1) + '%'"></td>
-                </tr>
-                <tr style="border-top:1px solid #FDE68A">
-                  <td style="padding:5px 0;color:var(--text-secondary)">管銷分攤（10%）</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#DC2626" x-text="'− NT$ ' + fmt(summary.adminCost)"></td>
-                </tr>
-                <tr>
-                  <td style="padding:5px 0;color:var(--text-secondary)">公益捐款（1%）</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#DC2626" x-text="'− NT$ ' + fmt(summary.charityDonation)"></td>
-                </tr>
-                <tr style="border-top:1.5px solid #FDE68A">
-                  <td style="padding:5px 0;font-weight:700">真實淨利</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
-                      :style="summary.netProfit >= 0 ? 'color:#15803D' : 'color:#DC2626'"
-                      x-text="'NT$ ' + fmt(summary.netProfit)"></td>
-                </tr>
-                <tr>
-                  <td style="padding:5px 0;font-weight:600;color:var(--text-secondary)">真實淨利率</td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"
-                      :style="summary.netMarginPct >= 20 ? 'color:#15803D' : summary.netMarginPct >= 0 ? 'color:#B45309' : 'color:#DC2626'"
-                      x-text="summary.netMarginPct.toFixed(1) + '%'"></td>
-                </tr>
-              </table>
-            </div>
+          <!-- 標題：精算後最終淨利（比原始報價多／少多少） -->
+          <div data-testid="stl-headline" style="padding:12px 16px;border-radius:10px;border:2px solid;display:flex;flex-wrap:wrap;gap:4px 18px;align-items:baseline"
+               :style="{ background: summary.profitDiff < 0 ? '#FEE2E2' : '#ECFDF5', borderColor: summary.profitDiff < 0 ? '#FCA5A5' : '#86EFAC' }">
+            <span style="font-size:13px;font-weight:700;color:var(--text-secondary)">精算後最終淨利</span>
+            <span data-testid="stl-net" style="font-size:30px;font-weight:800;line-height:1.1;font-family:LINE Seed TW_OTF, sans-serif"
+                  :style="{ color: summary.netProfit < 0 ? '#B91C1C' : '#15803D' }" x-text="(summary.netProfit < 0 ? '−' : '') + 'NT$ ' + fmt(Math.abs(summary.netProfit))"></span>
+            <span data-testid="stl-headline-diff" style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif"
+                  :style="{ color: summary.profitDiff < 0 ? '#B91C1C' : '#15803D' }" x-text="headlineDiffText"></span>
           </div>
-
-          <!-- 差異說明 -->
-          <div x-show="summary.profitDiff !== 0"
-               style="margin-top:16px;padding:12px 14px;border-radius:6px"
-               :style="summary.profitDiff >= 0 ? 'background:#F0FDF4;border:1px solid #86EFAC' : 'background:#FFF1F2;border:1px solid #FECACA'">
-            <span style="font-size:12px;font-weight:600"
-                  :style="summary.profitDiff >= 0 ? 'color:#15803D' : 'color:#DC2626'"
-                  x-text="summary.profitDiff >= 0
-                    ? '真實淨利比原始預估高 NT$ ' + fmt(summary.profitDiff) + '（+' + ((summary.netMarginPct - summary.origNetMarginPct).toFixed(1)) + ' ppts）'
-                    : '真實淨利比原始預估低 NT$ ' + fmt(Math.abs(summary.profitDiff)) + '（' + ((summary.netMarginPct - summary.origNetMarginPct).toFixed(1)) + ' ppts）'">
-            </span>
+          <div class="stl-blocks">
+            <template x-for="blk in totalsBlocks" :key="blk.key">
+              <div class="stl-blk" :data-testid="'stl-block-' + blk.key">
+                <div style="font-size:14px;font-weight:800;margin-bottom:6px" x-text="blk.title"></div>
+                <table class="stl-bt">
+                  <thead><tr><th></th><th>原始報價（估計）</th><th>精算後</th><th>差額（精算−原始）</th></tr></thead>
+                  <tbody>
+                    <template x-for="r in blk.rows" :key="r.key">
+                      <tr :data-testid="'stl-' + r.key" :class="r.strong ? 'is-strong' : ''">
+                        <td><span x-text="r.label"></span><div class="stl-bt__basis" x-text="r.basis"></div></td>
+                        <td x-text="r.pct ? pctTxt(r.o) : fmt(r.o)"></td>
+                        <td :style="{ color: r.neg && r.a < 0 ? '#B91C1C' : '' }" x-text="r.pct ? pctTxt(r.a) : (r.a < 0 ? '−' : '') + fmt(Math.abs(r.a))"></td>
+                        <td :style="{ color: diffColor(r) }" x-text="diffText(r)"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
           </div>
         </div>
       </div>
@@ -1195,6 +1112,46 @@ function settlementPage() {
       return (m.name || String(m.itemId)) + qty
     },
     // 承攬商派發（第 36 班契約）：金額＝未稅承攬費＋外包人員；稅額只顯示不計成本。docCode 可能是空字串，退回以派發 id 辨認
+    // 總結兩區塊（扣費前／扣費後）：原始側＝報價單估計的既有定義（summary.orig*），精算後＝本頁 summary（總成本與後端 totals.totalActualCost 同源）；不新增公式
+    get totalsBlocks() {
+      const sm = this.summary
+      const rev = sm.quotedPretax
+      const pct = (v) => rev > 0 ? v / rev * 100 : null
+      const R = (key, label, basis, o, a, kind, extra) => Object.assign({ key, label, basis, o, a, kind, pct: false, strong: false, neg: false }, extra || {})
+      return [
+        { key: 'before', title: '① 扣管理費／公益前', rows: [
+          R('b1-rev', '報價（稅前收入）', '報價單稅前收入；兩邊相同', rev, rev, 'good'),
+          R('b1-cost', '總成本', '原始＝Σ估計成本；精算後＝總實際成本（後端同源）', sm.origTotalCost, sm.totalActualCost, 'cost'),
+          R('b1-gp', '毛利', '報價 − 總成本', sm.origDirectProfit, sm.grossProfit, 'good', { strong: true, neg: true }),
+          R('b1-gpp', '毛利比', '毛利 ÷ 報價', pct(sm.origDirectProfit), pct(sm.grossProfit), 'good', { pct: true }),
+          R('b1-pre', '未扣費用淨利', '＝毛利（尚未扣管理費、公益）', sm.origDirectProfit, sm.grossProfit, 'good', { neg: true }),
+        ] },
+        { key: 'after', title: '② 扣管理費／公益後', rows: [
+          R('b2-admin', '管理費', '報價稅前收入 × 10%', sm.origAdminCost, sm.adminCost, 'cost'),
+          R('b2-ch', '公益捐贈', '毛利 × 1%', sm.origCharity, sm.charityDonation, 'cost'),
+          R('b2-net', '最終淨利', '毛利 − 管理費 − 公益捐贈', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true }),
+          R('b2-netp', '淨利比', '最終淨利 ÷ 報價', pct(sm.origNetProfit), pct(sm.netProfit), 'good', { pct: true }),
+        ] },
+      ]
+    },
+    // 差額＝精算−原始；收入／利潤高為佳（綠）、成本／費用高為差（紅）；比率差以百分點
+    _diff(r) { return r.pct ? (r.a == null || r.o == null ? null : Math.round((r.a - r.o) * 10) / 10) : r.a - r.o },
+    diffText(r) {
+      const d = this._diff(r)
+      if (d == null) return '—'
+      if (d === 0) return '0'
+      return (d > 0 ? '+' : '−') + (r.pct ? Math.abs(d).toFixed(1) + ' pp' : this.fmt(Math.abs(d)))
+    },
+    diffColor(r) {
+      const d = this._diff(r)
+      if (!d) return ''
+      return ((r.kind === 'cost') === (d > 0)) ? '#B91C1C' : '#15803D'
+    },
+    get headlineDiffText() {
+      const sm = this.summary, d = sm.netProfit - sm.origNetProfit
+      const pctv = sm.origNetProfit !== 0 ? Math.abs(d) / Math.abs(sm.origNetProfit) * 100 : null
+      return '比原始報價 ' + (d < 0 ? '少 ' : '多 ') + 'NT$ ' + this.fmt(Math.abs(d)) + '（' + (pctv == null ? '—' : (d < 0 ? '−' : '+') + pctv.toFixed(1) + '%') + '）'
+    },
     // 每個品項的賺賠（毛利；報價＝報價單品項金額 origAmount，未稅；實際成本與 calcSummary 的 itemActualTotal 同一規則：手填 0／空＝用估計）
     pctTxt(v) { return v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '%' },
     itemQuote(i) { return +i.origAmount || 0 },

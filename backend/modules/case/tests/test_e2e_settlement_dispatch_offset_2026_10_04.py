@@ -206,3 +206,55 @@ def test_profit_per_item_and_grand_total_table_reconcile_with_discount_row(live_
     assert "淨利" not in t.inner_text() and "淨利" not in page.locator('[data-testid="stl-profit-a"]').inner_text()
     page.locator('[data-testid="stl-profit-card"]').scroll_into_view_if_needed()
     _shot(page, "7-profit-table")
+
+
+@pytest.mark.e2e
+def test_grand_total_two_blocks_original_vs_actual_with_headline(live_server, make_user, e2e_browser):
+    """總結：標題（最終淨利比原始多／少）＋ ①扣費前（報價／總成本／毛利／毛利比）②扣費後（管理費／公益／最終淨利／淨利比），
+    每格＝原始｜精算後｜差額（成本類高為紅）；數字取既有 summary 定義，淨利只出現在總結區塊。"""
+    import db
+    sa = make_user(username="sa_sa", role="superadmin")
+    _seed()
+    c = db.get_db()
+    try:
+        d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+        d["tot"] = {"pretax": 20000, "total": 21000, "totalCost": 10500 + 525}
+        c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+        c.commit()
+    finally:
+        c.close()
+    page = e2e_browser.new_context(viewport={"width": 1400, "height": 1100}).new_page()
+    _login(page, live_server, *sa)
+    page.goto(f"{live_server}/pages/settlement.html?no={NO}")
+    page.locator('[data-testid="stl-headline"]').wait_for(state="visible", timeout=20000)
+    page.wait_for_function(f"() => {S}._actualsOk && {S}.summary.totalActualCost > 0", timeout=20000)
+    s = _tot(page)
+    assert s["quotedPretax"] == 20000 and s["totalActualCost"] == 12250 and s["grossProfit"] == 7750
+    assert s["adminCost"] == 2000 and s["charityDonation"] == 78 and s["netProfit"] == 7750 - 2000 - 78 == 5672     # 公益＝halfUp(7750×1%)＝78
+    fmt = lambda n: f"{abs(int(n)):,}"
+    row = lambda k: page.locator(f'[data-testid="stl-{k}"]').inner_text()
+    # ① 扣費前：報價兩邊同、差額 0；總成本精算後 12,250；毛利 7,750；未扣費用淨利＝毛利
+    assert fmt(20000) in row("b1-rev"), row("b1-rev")
+    assert row("b1-rev").split("\t")[-1].strip() == "0", row("b1-rev")
+    assert fmt(12250) in row("b1-cost") and fmt(7750) in row("b1-gp") and fmt(7750) in row("b1-pre")
+    assert "38.8%" in row("b1-gpp")                                                       # 7750÷20000
+    # ② 扣費後：管理費 2,000、公益 78、最終淨利 5,672、淨利比 28.4%（5672÷20000）
+    assert fmt(2000) in row("b2-admin") and fmt(78) in row("b2-ch") and fmt(5672) in row("b2-net") and "28.4%" in row("b2-netp")
+    # 差額＝精算−原始，成本類（總成本）上升為紅、下降為綠；與 summary 一致
+    cost_diff = s["totalActualCost"] - s["origTotalCost"]
+    cost_cell = page.locator('[data-testid="stl-b1-cost"] td:last-child')
+    assert (cost_diff == 0) or (cost_cell.evaluate("e => getComputedStyle(e).color") == ("rgb(185, 28, 28)" if cost_diff > 0 else "rgb(21, 128, 61)"))
+    # 標題：最終淨利大字＋比原始多／少（與 summary.profitDiff 同號）
+    head = page.locator('[data-testid="stl-headline"]').inner_text()
+    assert fmt(5672) in head and ("多" if s["profitDiff"] >= 0 else "少") in head and fmt(s["profitDiff"]) in head, (head, s["profitDiff"])
+    big = page.locator('[data-testid="stl-net"]').evaluate("e => parseFloat(getComputedStyle(e).fontSize)")
+    assert big >= 28, big
+    # 淨利／管理費只在總結區塊：品項表與品項賺賠表都沒有
+    assert "淨利" not in page.locator('[data-testid="stl-profit-table"]').inner_text()
+    assert page.locator('[data-testid="stl-block-before"]').is_visible() and page.locator('[data-testid="stl-block-after"]').is_visible()
+    page.locator('[data-testid="stl-headline"]').scroll_into_view_if_needed()
+    _shot(page, "8-totals-blocks")
+    page.set_viewport_size({"width": 700, "height": 1000})
+    page.wait_for_timeout(300)
+    boxes = [page.locator(f'[data-testid="stl-block-{k}"]').bounding_box() for k in ("before", "after")]
+    assert boxes[1]["y"] > boxes[0]["y"] + boxes[0]["height"] - 2, boxes                 # 窄螢幕上下堆疊
