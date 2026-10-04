@@ -2780,7 +2780,7 @@
                                     x-text="'− '+caseSettleFmt(caseSettleSummary().adminCost)"></td></tr>
                             <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">公益捐款（1%）</td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--tone-danger-fg)"
-                                    x-text="'− '+caseSettleFmt(caseSettleSummary().charityDonation)"></td></tr>
+                                    x-text="caseSettleCharityText(caseSettleSummary().charityDonation)" data-testid="cm-settle-charity"></td></tr>
                             <tr style="border-top:1.5px solid var(--tone-warning-border)">
                                 <td style="padding:4px 0;font-weight:700;font-family:var(--font-zh)">真實淨利</td>
                                 <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"

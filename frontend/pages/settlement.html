@@ -168,6 +168,11 @@
     .stl-banner--warn { background: var(--stl-warn-bg); border-color: var(--stl-warn-line); color: var(--warning); }
     .stl-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     .stl-exc__it button:focus-visible, .stl-pf button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+    .stl-basis-tag { display: inline-block; margin-left: 4px; padding: 0 5px; border: 1px solid var(--border-light); border-radius: 4px; font-size: 10px; font-weight: 400; color: var(--text-secondary); white-space: nowrap; }
+    .stl-basis { font-size: 10px; font-weight: 400; color: var(--text-secondary); margin-top: 2px; line-height: 1.4; }
+    .stl-basis-note { display: flex; gap: 6px; align-items: flex-start; margin-top: 10px; padding: 8px 12px; border: 1px solid var(--stl-warn-line); border-radius: 8px; background: var(--warning-light); font-size: 12px; color: var(--warning); }
+    .stl-info { all: unset; cursor: help; font-size: 14px; line-height: 1; border: 1px solid var(--warning); border-radius: 50%; width: 18px; height: 18px; text-align: center; flex: none; }
+    .stl-info:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
     .stl-row--warn td { background: var(--warning-light); }
     .stl-chip { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; white-space: nowrap; }
     .stl-chip--material { color: var(--stl-info); background: var(--stl-info-bg); }
@@ -524,6 +529,7 @@
                     <div style="margin-top:3px;font-size:10px;font-weight:600" :data-testid="'stl-source-' + item.id">
                       <span class="stl-src" :class="'stl-src--' + itemSource(item).key" x-text="'來源：' + itemSource(item).label"></span>
                     </div>
+                    <div class="stl-basis" :data-testid="'stl-basis-' + item.id" x-text="itemBasisText(item)"></div>
                     <select class="stl-input" x-show="itemSource(item).key === 'manual' || (itemSource(item).key === 'est' && !hasPurchase(item))" :data-testid="'stl-actual-source-' + item.id"
                             x-model="item.actualSource" :disabled="settlement.status === 'finalized'" aria-label="手填來源標籤" style="margin-top:3px;font-size:10px;padding:2px 4px;width:100%">
                       <option value="manual">手填</option>
@@ -623,7 +629,7 @@
             <tbody>
               <template x-for="u in unmappedRows()" :key="u.kind + ':' + u.ref">
                 <tr :data-testid="'stl-un-' + u.kind + '-' + u.ref">
-                  <td><span class="stl-chip" :class="'stl-chip--' + u.kind" x-text="kindLabel(u.kind)"></span></td>
+                  <td><span class="stl-chip" :class="'stl-chip--' + u.kind" x-text="kindLabel(u.kind)"></span><div class="stl-basis" :data-testid="'stl-kindbasis-' + u.kind + '-' + u.ref" x-text="kindBasis(u.kind)"></div></td>
                   <td>
                     <span x-text="u.label"></span>
                     <span x-show="u.status" class="stl-badge-st" x-text="u.status"></span>
@@ -660,7 +666,7 @@
               <tbody>
                 <template x-for="u in mappedRows()" :key="u.kind + ':' + u.ref">
                   <tr class="stl-row--mapped" :data-testid="'stl-mapped-' + u.kind + '-' + u.ref">
-                    <td><span class="stl-chip" :class="'stl-chip--' + u.kind" x-text="kindLabel(u.kind)"></span></td>
+                    <td><span class="stl-chip" :class="'stl-chip--' + u.kind" x-text="kindLabel(u.kind)"></span><div class="stl-basis" :data-testid="'stl-kindbasis-' + u.kind + '-' + u.ref" x-text="kindBasis(u.kind)"></div></td>
                     <td>
                       <span class="stl-badge-mapped" data-testid="stl-badge-mapped">已對應</span>
                       <span x-text="u.label"></span>
@@ -829,7 +835,7 @@
               </template>
               <template x-for="r in unassignedCostRows" :key="r.key">
                 <tr class="stl-row--warn" :data-testid="'stl-pt-un-' + r.key">
-                  <td x-text="r.label"></td>
+                  <td><span x-text="r.label"></span><span class="stl-basis-tag" :data-testid="'stl-pt-basis-' + r.key" x-text="r.basis"></span></td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif">0</td>
                   <td style="text-align:right">—</td>
                   <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(r.amount)"></td>
@@ -891,6 +897,10 @@
                   :style="{ color: summary.profitDiff < 0 ? 'var(--danger)' : 'var(--success)' }" x-text="headlineDiffText"></span>
           </div>
           <div class="stl-charity-note" data-testid="stl-charity-floor-note" x-show="charityFloorNote" x-cloak role="note" style="margin-top:8px;font-size:12px;color:var(--warning)" x-text="charityFloorNote"></div>
+          <div class="stl-basis-note" role="note" data-testid="stl-basis-note">
+            <button type="button" class="stl-info" data-testid="stl-basis-info" :title="basisNoteLong" :aria-label="'口徑說明：' + basisNoteLong">ⓘ</button>
+            <span x-text="basisNoteShort"></span>
+          </div>
           <div class="stl-blocks">
             <template x-for="blk in totalsBlocks" :key="blk.key">
               <div class="stl-blk" :data-testid="'stl-block-' + blk.key">
@@ -999,6 +1009,10 @@
 <script>
 const API = '/api'
 // ── 管理視角門檻與政策（唯一設定處，需使用者確認）──
+// ── 稅基標籤（階段 0：只標示，不改任何金額；伺服器之後在 settlement-actuals 回 taxBasis 時以它為準）──
+//   品項估計＝數量×成本×1.05（settlement_actuals ESTIMATE_RATE／本頁 estimateOf）；採購單／材料申請＝含稅最終金額直接採用（無稅欄位）；
+//   額外支出＝未分稅（全額）；承攬商派發＝未稅承攬費＋外包人員（35c）；匯款手續費／自訂模組支出＝實付金額（不分稅）
+const STL_TAX_BASIS = { estimate: '含稅 ×1.05（假設不可扣抵）', po: '含稅', material: '含稅', extra: '未分稅', dispatch: '未稅（＋外包人員）', remit: '實付金額（不分稅）', custom: '實付金額（不分稅）' }
 const STL_CONFIG = {
   GP_DROP_PP: 5,              // 品項毛利比比原始（估計）低超過 N 個百分點 → 列入「需處理」
   LOSS_GP_BELOW: 0,           // 品項毛利 < 此值＝虧損
@@ -1213,9 +1227,9 @@ function settlementPage() {
                 ...oi,
                 actualQty:      si.actualQty      !== undefined ? si.actualQty      : oi.actualQty,
                 // 舊存檔（沒有 schemaVersion）：0／空＝沒填 ⇒ 載入時轉成 null（數字與顯示和舊版完全一樣，重新存檔才升級成 v2）；v2：照存值（0 就是 0）
-                actualUnitCost: (saved.schemaVersion === 2 || si.actualTotalCost) ? (si.actualUnitCost !== undefined ? si.actualUnitCost : oi.actualUnitCost) : null,
+                actualUnitCost: (Number(saved.schemaVersion) >= 2 || si.actualTotalCost) ? (si.actualUnitCost !== undefined ? si.actualUnitCost : oi.actualUnitCost) : null,
                 actualCostTaxMode: si.actualCostTaxMode || oi.actualCostTaxMode,
-                actualTotalCost: saved.schemaVersion === 2 ? (si.actualTotalCost === undefined ? null : si.actualTotalCost) : (si.actualTotalCost || null),
+                actualTotalCost: Number(saved.schemaVersion) >= 2 ? (si.actualTotalCost === undefined ? null : si.actualTotalCost) : (si.actualTotalCost || null),
                 actualSource:   ['legacy', 'labor'].includes(si.actualSource) ? si.actualSource : 'manual',      // 純標籤（手填／歷史未建系統／人力）：不進任何合計；缺鍵＝手填
                 adoptSystem:    !!si.adoptSystem,       // 舊存檔缺鍵＝今天的行為（不採用）；後端 settlement_actuals 同一規則
                 _fromSave:      true,
@@ -1342,8 +1356,8 @@ function settlementPage() {
       return [
         { key: 'before', title: '① 扣管理費／公益前', rows: [
           R('b1-rev', '報價（稅前收入）', '報價單稅前收入；兩邊相同', rev, rev, 'good'),
-          R('b1-cost', '實際總成本', '原始＝Σ估計成本；精算後＝總成本（後端同源）', sm.origTotalCost, sm.totalActualCost, 'cost'),
-          R('b1-gp', '真實毛利', '報價 − 總成本', sm.origDirectProfit, sm.grossProfit, 'good', { strong: true, neg: true }),
+          R('b1-cost', '實際總成本', '原始＝未稅 Σ(數量×成本)；精算後＝品項含稅(×1.05)＋承攬商未稅＋額外未分稅（後端同源）', sm.origTotalCost, sm.totalActualCost, 'cost'),
+          R('b1-gp', '真實毛利', '報價 − 總成本（原始毛利另扣進項稅 5%）', sm.origDirectProfit, sm.grossProfit, 'good', { strong: true, neg: true }),
           R('b1-gpp', '真實毛利率', '毛利比＝毛利 ÷ 報價', pct(sm.origDirectProfit), pct(sm.grossProfit), 'good', { pct: true }),
           R('b1-pre', '未扣費用淨利', '＝毛利（尚未扣管理費、公益）', sm.origDirectProfit, sm.grossProfit, 'good', { neg: true }),
         ] },
@@ -1411,6 +1425,34 @@ function settlementPage() {
       if (stored) return ''            // 已完結：照存檔值顯示，不提規則
       return sm.grossProfit < 0 || sm.origDirectProfit < 0 ? '虧損案公益金以 0 計' : ''
     },
+    // 稅基標籤（純文字）：伺服器有回 taxBasis 就用它，沒有就用常數
+    taxBasis(key) {
+      const b = this._actualsOk && this.actuals && this.actuals.taxBasis && this.actuals.taxBasis[key]
+      return (typeof b === 'string' ? b : b && b.label) || STL_TAX_BASIS[key] || ''
+    },
+    kindBasis(kind) { return this.taxBasis(kind) },      // material／extra／dispatch
+    itemBasisText(item) {
+      const src = this.itemSource(item)
+      if (src.key === 'est') return '稅基：' + this.taxBasis('estimate')
+      if (src.key === 'manual') {
+        const m = item.actualCostTaxMode
+        return '稅基：' + (m === 'taxed' ? '手填含稅，已 ÷1.05 換算為未稅' : m === 'taxed_gross' ? '手填未稅底價 ×1.05（以含稅計）' : '手填未稅（原值）')
+      }
+      const a = (this._actualsOk && this.itemActuals[item.id]) || {}
+      const parts = []
+      if (a.po && a.po.amount) parts.push('採購單 ' + this.taxBasis('po'))
+      if (a.material && a.material.amount) parts.push('材料申請 ' + this.taxBasis('material'))
+      if (a.dispatch && a.dispatch.amount) parts.push('派發 ' + this.taxBasis('dispatch'))
+      if (a.extra && a.extra.amount) parts.push('額外支出 ' + this.taxBasis('extra'))
+      return '稅基：' + (parts.join('；') || '依對應單據')
+    },
+    // 原始 vs 精算後 的口徑說明（一句話＋ⓘ 詳解）
+    get basisNoteShort() { return '口徑說明：原始總成本為未稅（數量×成本），但原始毛利已另扣進項稅 5%；精算後品項成本含稅（估計 ×1.05）、承攬商未稅、額外支出未分稅——「原始 vs 精算後」的成本差額含約 5% 的口徑差，不全是真實成本變化。' },
+    get basisNoteLong() {
+      return '各來源稅基——品項估計：' + this.taxBasis('estimate') + '；採購單：' + this.taxBasis('po') + '（含稅最終金額，直接採用）；材料申請：' + this.taxBasis('material') +
+        '；額外支出：' + this.taxBasis('extra') + '；承攬商派發：' + this.taxBasis('dispatch') + '；匯款手續費／自訂模組支出：' + this.taxBasis('remit') +
+        '。原始總成本＝Σ（數量×成本）為未稅；原始毛利＝報價稅前收入 − 成本 − 進項稅 5%（報價單 inputVat）。此版本只標示稅基，不改任何金額。'
+    },
     get orphanItems() { return this._actualsOk ? (this.actuals.orphanItems || []) : [] },
     // ───────── 管理視角：高階摘要／需處理／完結閘門（沿用 summary 既有定義，不新增公式）─────────
     itemVar(i) { return this.itemActual(i) - this.estimateOf(i) },
@@ -1441,7 +1483,7 @@ function settlementPage() {
       const d = sm.profitDiff
       return [
         { key: 'rev', label: '報價（稅前收入）', value: 'NT$ ' + this.fmt(rev), sub: '折扣／調整 ' + signed(this.quoteAdjust), status: '', cls: 'n', tip: '報價單稅前收入（未稅）；來源：報價單' },
-        { key: 'cost', label: '總成本', value: 'NT$ ' + this.fmt(sm.totalActualCost), sub: '原始 ' + this.fmt(sm.origTotalCost), status: sm.totalActualCost > sm.origTotalCost ? '▲ 高於原始' : sm.totalActualCost < sm.origTotalCost ? '▼ 低於原始' : '＝原始', cls: sm.totalActualCost > sm.origTotalCost ? 'a' : 'g', tip: '總實際成本＝品項實際＋未對應項目（派發未稅口徑）；與伺服器 totalActualCost 同源' },
+        { key: 'cost', label: '總成本', value: 'NT$ ' + this.fmt(sm.totalActualCost), sub: '原始 ' + this.fmt(sm.origTotalCost), status: sm.totalActualCost > sm.origTotalCost ? '▲ 高於原始' : sm.totalActualCost < sm.origTotalCost ? '▼ 低於原始' : '＝原始', cls: sm.totalActualCost > sm.origTotalCost ? 'a' : 'g', tip: '總實際成本＝品項實際（估計含稅 ×1.05）＋未對應項目（派發未稅、額外未分稅）；與伺服器 totalActualCost 同源；原始總成本為未稅，兩者口徑不同' },
         { key: 'gp', label: '毛利／毛利比', value: signed(sm.grossProfit), value2: this.pctTxt(rev > 0 ? sm.grossMarginPct : null), neg: sm.grossProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origMarginPct : null), status: gpCls === 'r' ? '✖ 虧損' : gpCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: gpCls, tip: '毛利＝報價 − 總成本；毛利比＝毛利 ÷ 報價（未扣管理費、公益）' },
         { key: 'net', label: '最終淨利／淨利比', value: signed(sm.netProfit), value2: this.pctTxt(rev > 0 ? sm.netMarginPct : null), neg: sm.netProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origNetMarginPct : null), status: netCls === 'r' ? '✖ 虧損' : netCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: netCls, tip: '最終淨利＝毛利 − 管理費（報價×10%）− 公益（毛利×1%）' },
         { key: 'diff', label: '與原始差額（淨利）', value: (d > 0 ? '+' : d < 0 ? '−' : '') + 'NT$ ' + f(d), neg: d < 0, sub: '原始 ' + this.fmt(sm.origNetProfit), status: d < 0 ? '▼ 少賺' : d > 0 ? '▲ 多賺' : '＝原始', cls: d < 0 ? 'r' : 'g', tip: '差額＝精算後最終淨利 − 原始（報價單估計）最終淨利' },
@@ -1494,11 +1536,11 @@ function settlementPage() {
     get unassignedCostRows() {
       const sm = this.summary
       const rows = [
-        { key: 'extra', label: '未對應項目：額外支出（含未對應材料申請）', amount: this.xeTotal },
-        { key: 'remit', label: '未對應項目：匯款手續費', amount: this.remitFeeTotal },
-        { key: 'custom', label: '未對應項目：自訂模組支出', amount: this.customExpenseTotal },
-        { key: 'dispatch', label: '未對應項目：承攬商派發（未被品項吸收）', amount: sm.dispatchTotal - sm.dispatchAbsorbed },
-        { key: 'po', label: '未對應項目：採購單（品項尚未採用）', amount: sm.itemPoUnadopted },
+        { key: 'extra', label: '未對應項目：額外支出（含未對應材料申請）', amount: this.xeTotal, basis: this.taxBasis('extra') + '（含未對應材料申請：' + this.taxBasis('material') + '）' },
+        { key: 'remit', label: '未對應項目：匯款手續費', amount: this.remitFeeTotal, basis: this.taxBasis('remit') },
+        { key: 'custom', label: '未對應項目：自訂模組支出', amount: this.customExpenseTotal, basis: this.taxBasis('custom') },
+        { key: 'dispatch', label: '未對應項目：承攬商派發（未被品項吸收）', amount: sm.dispatchTotal - sm.dispatchAbsorbed, basis: this.taxBasis('dispatch') },
+        { key: 'po', label: '未對應項目：採購單（品項尚未採用）', amount: sm.itemPoUnadopted, basis: this.taxBasis('po') },
       ]
       return rows.filter(r => r.key === 'extra' || r.key === 'dispatch' || r.amount)
     },

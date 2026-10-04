@@ -2259,7 +2259,7 @@
                           x-text="'− '+stlFmt(stlSummary().adminCost)"></td></tr>
                   <tr><td style="padding:4px 0;color:var(--text-dim);font-family:var(--font-zh)">公益捐款（1%）</td>
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#DC2626"
-                          x-text="'− '+stlFmt(stlSummary().charityDonation)"></td></tr>
+                          x-text="stlCharityText(stlSummary().charityDonation)" data-testid="rp-settle-charity"></td></tr>
                   <tr style="border-top:1.5px solid #FDE68A">
                       <td style="padding:4px 0;font-weight:700;font-family:var(--font-zh)">真實淨利</td>
                       <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700"

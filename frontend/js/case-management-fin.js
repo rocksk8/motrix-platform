@@ -50,9 +50,11 @@ window.CM_PARTS.push(() => ({
     caseSettleItems()   { return this.caseSettlement()?.items   || [] },
     // 第 39 班契約：settlement.schemaVersion>=2 ⇒ actualTotalCost 是數字（含 0）＝有填，null／空＝未填；舊存檔（沒有標記）0＝未填
     caseSettleItemFilled(item) {
-      const t = item && item.actualTotalCost, v2 = (this.caseSettlement()?.schemaVersion || 0) >= 2
+      const t = item && item.actualTotalCost, v2 = Number(this.caseSettlement()?.schemaVersion) >= 2
       return v2 ? (t !== null && t !== undefined && t !== '') : ((+t || 0) > 0)
     },
+    // 公益金顯示：≥0（有下限後的資料）照舊以「− 金額」表示扣除；舊的已凍結負值（會加回淨利）直接顯示帶號金額，不再出現「− −50」
+    caseSettleCharityText(n) { n = +n || 0; return n > 0 ? '− ' + this.caseSettleFmt(n) : this.caseSettleFmt(n) },
     caseSettleItemCost(item) { return this.caseSettleItemFilled(item) ? this.caseSettleFmt(item.actualTotalCost) : '未填寫' },
     caseSettleExtras()  { return this.caseSettlement()?.extraItems || [] },
     caseSettleMemo()    { return this.caseSettlement()?.memo || '' },

@@ -67,3 +67,27 @@ def test_pages_use_the_helpers_and_no_other_reader_hides_a_zero():
             if re.search(r"actualTotalCost\s*\|\|\s*0\s*\)\s*(>|!==?)\s*0|actualTotalCost\s*\|\|\s*0\)>0", line):
                 bad.append("%s:%d" % (path.name, n))
     assert not bad, "仍有把 actualTotalCost 的 0 當未填的讀取端（須依 schemaVersion）：%s" % bad
+
+
+@needs_node
+def test_schema_version_is_compared_as_a_number_like_the_server():
+    """伺服器規則是 >= 2：字串 "2"、2.0、3 都算新格式；缺／0／1／無法轉數字都算舊格式。"""
+    for sv in ("2", 2, 2.0, 3):
+        assert _cm_cost({"schemaVersion": sv}, {"actualTotalCost": 0})["text"] == "NT$ 0", sv
+        assert _rp_cost({"schemaVersion": sv}, {"actualTotalCost": 0})["text"] == "NT$ 0", sv
+    for sv in (None, 0, 1, "1", "abc"):
+        assert _cm_cost({"schemaVersion": sv}, {"actualTotalCost": 0})["text"] == "未填寫", sv
+        assert _rp_cost({"schemaVersion": sv}, {"actualTotalCost": 0})["text"] == "—", sv
+
+
+@needs_node
+def test_charity_line_has_no_double_minus_for_legacy_negative_values():
+    """≥0：照舊「− 金額」表示扣除；舊的已凍結負值（公益金會加回淨利）顯示帶號金額，不是「− −50」。"""
+    cm = lambda n: _cm("return o.caseSettleCharityText(%s)" % json.dumps(n))
+    rp = lambda n: _js("js", str(FRONTEND / "js" / "reports.js"), "reportsApp", "return o.stlCharityText(%s)" % json.dumps(n))
+    for f in (cm, rp):
+        assert f(120) == "− NT$ 120"
+        assert f(0) == "NT$ 0"
+        assert f(-50) == "NT$ -50"
+        assert "− -" not in f(-50) and "− −" not in f(-50)
+        assert f(None) == "NT$ 0"
