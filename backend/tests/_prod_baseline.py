@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "3ce337ec"
+BASELINE = "4b144d85"
 
 
 def baseline_manifest():
