@@ -165,3 +165,45 @@ def test_quotation_form_charity_floor(live_server, make_user, e2e_browser):
     note.wait_for(state="visible", timeout=5000)
     assert "虧損案公益金以 0 計" in note.inner_text()
     assert "0" in page.locator('[data-testid="qf-charity-value"]').inner_text()
+
+
+@pytest.mark.e2e
+def test_original_column_shows_the_indirect_reserve_so_it_adds_up(live_server, make_user, e2e_browser):
+    """報價單的「間接成本預算」（tot.totalIndirect − 管銷 − 公益，例：物流 5,000）：原始欄多一列資訊列，原始淨利＝報價單淨利；
+    差額欄在最終淨利列說明「其中 間接成本預算 X；實際端以單據為準」；補上等額的實際支出後，淨利只因公益金差一點點。"""
+    import db
+    sa = make_user(username="sa_sa", role="superadmin")
+    _seed()
+    _set_data(lambda d: d.__setitem__("tot", {"pretax": 20000, "total": 21000, "directProfit": 9000, "adminCost": 2000, "charityDonation": 90,
+                                              "totalIndirect": 2000 + 90 + 5000, "netProfit": 9000 - 2000 - 90 - 5000, "totalCost": 11025}))
+    page = _open(e2e_browser, live_server, sa)
+    s = page.evaluate(f"() => ({{...{S}.summary}})")
+    assert s["origNetProfit"] == 1910, s                                                              # ＝報價單淨利
+    assert s["origIndirectReserve"] == 5000 and s["origDirectProfit"] - s["origAdminCost"] - s["origCharity"] - s["origIndirectReserve"] == s["origNetProfit"]  # 原始欄加得起來
+    row = page.locator('[data-testid="stl-b2-reserve"]')
+    row.wait_for(state="visible", timeout=5000)
+    assert "5,000" in row.inner_text() and "報價預留間接成本" in row.inner_text()
+    assert "以單據為準（已含於實際總成本）" in row.locator("td").nth(2).inner_text() and row.locator("td").nth(3).inner_text().strip() == "—"     # 實際端不算
+    note = page.locator('[data-testid="stl-diffnote-b2-net"]').inner_text()
+    assert "其中報價預留間接成本 5,000（原始預估已扣、實際只計單據）" in note, note
+    net_before, ch_before = s["netProfit"], s["charityDonation"]
+    # 補一筆等額 5,000 的實際（額外）支出 ⇒ 實際端淨利減少 5,000，只因公益金（1% 毛利）少一點點而差一些
+    c = db.get_db()
+    try:
+        c.execute("INSERT INTO case_extra_expenses (quote_no, category, description, qty, unit, unit_cost, total_cost, note, expense_date, doc_no, files_json, "
+                  "created_by, created_by_name, created_by_inferred, payer_username, payer_name, created_at, updated_at, updated_by_name, status, approval_json) "
+                  "VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?,?,0,?,?,?,?,?,?,'{}')",
+                  (NO, "物流", "物流費", 1, "式", 5000, 5000, "", "2026-10-02", "", "sa_sa", "sa_sa", "sa_sa", "sa_sa",
+                   "2026-10-02T00:00:00", "2026-10-02T00:00:00", "sa_sa", "已核准"))
+        c.commit()
+    finally:
+        c.close()
+    page.reload()
+    page.wait_for_function(f"() => !{S}.loading && {S}._actualsOk && {S}.summary.totalActualCost > 0", timeout=20000)
+    s2 = page.evaluate(f"() => ({{...{S}.summary}})")
+    assert s2["netProfit"] - net_before == -5000 + (ch_before - s2["charityDonation"]), (s, s2)
+    # 沒有報價單間接預算（舊報價單／沒填）⇒ 不出現資訊列、淨利列沒有說明
+    _set_data(lambda d: d.__setitem__("tot", {"pretax": 20000, "total": 21000}))
+    page.reload()
+    page.wait_for_function(f"() => !{S}.loading && {S}._actualsOk && {S}.summary.quotedPretax === 20000", timeout=20000)
+    assert not page.locator('[data-testid="stl-b2-reserve"]').is_visible()

@@ -902,8 +902,8 @@
                       <tr :data-testid="'stl-' + r.key" :class="r.strong ? 'is-strong' : ''">
                         <td><span x-text="r.label"></span><div class="stl-bt__basis" x-text="r.basis"></div></td>
                         <td x-text="r.pct ? pctTxt(r.o) : fmt(r.o)"></td>
-                        <td :style="{ color: r.neg && r.a < 0 ? 'var(--danger)' : '' }" x-text="r.pct ? pctTxt(r.a) : (r.a < 0 ? '−' : '') + fmt(Math.abs(r.a))"></td>
-                        <td :style="{ color: diffColor(r) }" x-text="diffText(r)"></td>
+                        <td :style="{ color: r.neg && r.a < 0 ? 'var(--danger)' : '' }" x-text="r.info ? '以單據為準（已含於實際總成本）' : (r.pct ? pctTxt(r.a) : (r.a < 0 ? '−' : '') + fmt(Math.abs(r.a)))"></td>
+                        <td :style="{ color: r.info ? '' : diffColor(r) }"><span x-text="r.info ? '—' : diffText(r)"></span><div class="stl-bt__basis" x-show="r.diffNote" x-text="r.diffNote" :data-testid="'stl-diffnote-' + r.key"></div></td>
                       </tr>
                     </template>
                   </tbody>
@@ -1350,7 +1350,8 @@ function settlementPage() {
         { key: 'after', title: '② 扣管理費／公益後', rows: [
           R('b2-admin', '管銷分攤（10%）', '管理費＝報價稅前收入 × 10%', sm.origAdminCost, sm.adminCost, 'cost'),
           R('b2-ch', '公益捐款（1%）', '公益捐贈＝毛利 × 1%（毛利為負時以 0 計）', sm.origCharity, sm.charityDonation, 'cost'),
-          R('b2-net', '真實淨利', '最終淨利＝毛利 − 管理費 − 公益捐贈（＝獎金分潤基數）', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true }),
+          ...(sm.origIndirectReserve > 0 ? [R('b2-reserve', '報價預留間接成本', '報價單淨利已扣的間接成本預算＝間接合計 − 管銷 − 公益（原始端資訊）', sm.origIndirectReserve, null, 'cost', { info: true })] : []),
+          R('b2-net', '真實淨利', '最終淨利＝毛利 − 管理費 − 公益捐贈（＝獎金分潤基數）', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true, diffNote: sm.origIndirectReserve > 0 ? '其中報價預留間接成本 ' + this.fmt(sm.origIndirectReserve) + '（原始預估已扣、實際只計單據）' : '' }),
           R('b2-netp', '真實淨利率', '淨利比＝最終淨利 ÷ 報價', pct(sm.origNetProfit), pct(sm.netProfit), 'good', { pct: true }),
         ] },
       ]
@@ -1406,8 +1407,9 @@ function settlementPage() {
     },
     // 公益金下限的提示：實際側毛利＜0（且非已完結照存值）或原始側毛利＜0 時顯示
     get charityFloorNote() {
-      const sm = this.summary, live = !(this.settlement.status === 'finalized' && this._frozenSummary && typeof this._frozenSummary.charityDonation === 'number')
-      return (live && sm.grossProfit < 0) || sm.origDirectProfit < 0 ? '虧損案公益金以 0 計' : ''
+      const sm = this.summary, stored = this.settlement.status === 'finalized' && this._frozenSummary && typeof this._frozenSummary.charityDonation === 'number'
+      if (stored) return ''            // 已完結：照存檔值顯示，不提規則
+      return sm.grossProfit < 0 || sm.origDirectProfit < 0 ? '虧損案公益金以 0 計' : ''
     },
     get orphanItems() { return this._actualsOk ? (this.actuals.orphanItems || []) : [] },
     // ───────── 管理視角：高階摘要／需處理／完結閘門（沿用 summary 既有定義，不新增公式）─────────
@@ -1782,7 +1784,11 @@ function settlementPage() {
       // 原始側同規則：報價單原始毛利＜0 ⇒ 公益金 0、原始淨利＝毛利 − 管銷（報價單存的舊值可能帶負的公益金，不沿用）
       const origFloor       = origDirectProfit < 0
       const origCharity     = origFloor ? 0 : (tot.charityDonation != null ? tot.charityDonation : Math.max(0, MotrixLegalRound.halfUp(origDirectProfit, 0.01)))
-      const origNetProfit   = origFloor ? (origDirectProfit - origAdminCost) : (tot.netProfit != null ? tot.netProfit : (origDirectProfit - origAdminCost - origCharity))
+      // 報價預留間接成本（原始端資訊）：報價單淨利早已扣掉；實際端以單據為準、不另算。開著的草稿用報價單數字算；已完結讀存檔 summary（舊案沒有 ⇒ 0＝不顯示）
+      const origIndirectReserve = frz ? (typeof frz.origIndirectReserve === 'number' ? frz.origIndirectReserve : 0)
+        : (typeof tot.totalIndirect === 'number' ? Math.max(0, tot.totalIndirect - origAdminCost - origCharity) : 0)
+      // 原始淨利：報價單存的淨利優先；否則 毛利 − 管銷 − 公益 − 預留（與後端 original_side 同一恆等式）
+      const origNetProfit   = tot.netProfit != null ? tot.netProfit : (origDirectProfit - origAdminCost - origCharity - origIndirectReserve)
       const origNetMarginPct = tot.netMarginPct != null ? tot.netMarginPct
         : (quotedPretax > 0 ? origNetProfit / quotedPretax * 100 : 0)
 
@@ -1792,7 +1798,7 @@ function settlementPage() {
         quotedPretax, quotedTotal,
         origItemTotal, origTotalCost, origDirectProfit,
         origMarginPct:    MotrixLegalRound.halfUp(origMarginPct, 10) / 10,
-        origAdminCost, origCharity,
+        origAdminCost, origCharity, origIndirectReserve,
         origNetProfit:    MotrixLegalRound.halfUp(origNetProfit),
         origNetMarginPct: MotrixLegalRound.halfUp(origNetMarginPct, 10) / 10,
         itemActualTotal, itemPoUnadopted, extraTotal, dispatchTotal, dispatchAbsorbed, totalActualCost, remitFeeTotal: this.remitFeeTotal, customExpenseTotal: this.customExpenseTotal,

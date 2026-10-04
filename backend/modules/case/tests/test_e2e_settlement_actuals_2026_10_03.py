@@ -106,8 +106,8 @@ def test_settlement_page_rule_a_unassigned_list_and_offsets(live_server, make_us
 
 
 @pytest.mark.e2e
-def test_zero_manual_actual_means_use_the_estimate_in_session_and_finalize_passes(live_server, make_user, e2e_browser):
-    """手填實際成本 0 ⇒ 與重載、後端同一規則（用估計）：摘要用估計、完結 200（不再被 409『頁面少一筆估計』）。"""
+def test_typed_zero_is_a_real_zero_in_session_and_finalize_passes(live_server, make_user, e2e_browser):
+    """第 39 班起：新頁面（schemaVersion 2）填 0＝實際為 0（不再等於沒填）：摘要用 0、完結 200 且存檔 summary 與頁面一致。"""
     sa = make_user(username="sa_sa", role="superadmin")
     _seed()
     page = e2e_browser.new_context(viewport={"width": 1400, "height": 1100}).new_page()
@@ -115,14 +115,16 @@ def test_zero_manual_actual_means_use_the_estimate_in_session_and_finalize_passe
     S = "Alpine.$data(document.body)"
     page.goto(f"{live_server}/pages/settlement.html?no={NO}")
     page.locator('[data-testid="stl-unassigned"]').wait_for(state="visible", timeout=20000)
-    # 品項 a 沒有採購（估計 10500）：使用者把實際單位成本清成 0（頁面 calcItemCost 寫 0）
+    # 品項 a 沒有採購（估計 10500）：使用者把實際單位成本填成 0（頁面 calcItemCost 寫 0）
     page.evaluate(f"""() => {{ const d = {S}; const a = d.settlement.items[0]; a.adoptSystem = false; a.actualUnitCost = 0; d.calcItemCost(a); d.calcSummary() }}""")
     assert page.evaluate(f"() => {S}.settlement.items[0].actualTotalCost") == 0
-    assert page.evaluate(f"() => {S}.summary.itemActualTotal") == 10500 + 800            # 0＝沒填 ⇒ 估計 10500（b 的 800 取代估計）
+    assert page.evaluate(f"() => {S}.summary.itemActualTotal") == 0 + 800                 # 0＝真的 0；b 的 800 取代估計
     page.locator('[data-testid="stl-finalize"]').click()
     page.get_by_role("button", name="確認完結").click()
     page.wait_for_function(f"() => {S}.settlement.status === 'finalized' && !{S}.saving", timeout=15000)
-    assert _settlement()["status"] == "finalized"
+    saved = _settlement()
+    assert saved["status"] == "finalized" and saved["schemaVersion"] == 2
+    assert saved["summary"]["itemActualTotal"] == 800 and saved["items"][0]["actualTotalCost"] == 0
 
 
 @pytest.mark.e2e
