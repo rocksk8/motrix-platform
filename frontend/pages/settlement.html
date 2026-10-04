@@ -91,6 +91,22 @@
     .stl-table tr.stl-row--mapped:hover td { background: #D1FAE5; }
     .stl-badge-mapped { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;
                         background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; }
+    .stl-src { display: inline-block; padding: 0 6px; border-radius: 4px; background: #F0EFEB; color: #6B6B6B; }
+    .stl-src--po, .stl-src--map, .stl-src--po-map { background: #ECFDF5; color: #15803D; }
+    .stl-src--manual { background: #DBEAFE; color: #1D4ED8; }
+    .stl-src--est { background: #FEF3C7; color: #92400E; }
+    .stl-chip { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .stl-chip--material { color: #1D4ED8; background: #DBEAFE; }
+    .stl-chip--extra { color: #475569; background: #E2E8F0; }
+    .stl-chip--dispatch { color: #6D28D9; background: #EDE9FE; }
+    .stl-badge-st { display: inline-block; margin-left: 4px; padding: 0 7px; border-radius: 999px; font-size: 10px; background: #F0EFEB; color: var(--text-secondary); }
+    .stl-table tr.stl-row--mapped td:first-child { box-shadow: inset 5px 0 0 #15803D; }
+    .stl-sumbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 10px 20px; border-bottom: 2px solid; font-size: 13px; }
+    .stl-sumbar--warn { background: #FEF3C7; border-color: #FCD34D; color: #92400E; }
+    .stl-sumbar--bad { background: #FEE2E2; border-color: #FCA5A5; color: #B91C1C; }
+    .stl-sumbar--ok { background: #ECFDF5; border-color: #86EFAC; color: #15803D; }
+    .stl-conserve { margin: 12px 20px; padding: 10px 14px; border: 2px solid #111; border-radius: 8px; font-size: 14px; font-weight: 700; }
+    .stl-conserve small { display: block; margin-top: 4px; font-weight: 400; font-size: 11px; color: var(--text-secondary); }
     .stl-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 11px; color: var(--text-secondary); margin: 2px 0 8px; }
     .stl-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; border: 1px solid var(--border-light); }
     .stl-legend .is-mapped { background: #ECFDF5; border-color: #6EE7B7; }
@@ -405,6 +421,12 @@
                       <div style="font-size:9px;color:var(--text-dim);font-weight:400"
                            x-text="'原含稅 NT$ ' + fmt(MotrixLegalRound.halfUp(item.actualQty||0, item.actualUnitCost||0))"></div>
                     </template>
+                    <div style="margin-top:3px;font-size:10px;font-weight:600" :data-testid="'stl-source-' + item.id">
+                      <span class="stl-src" :class="'stl-src--' + itemSource(item).key" x-text="'來源：' + itemSource(item).label"></span>
+                    </div>
+                    <div x-show="itemSource(item).key === 'est' && !(systemActual(item) > 0)" :data-testid="'stl-nopurchase-' + item.id" style="margin-top:3px;font-size:10px;font-weight:400;color:#92400E;line-height:1.4">
+                      無採購／對應紀錄：實際成本以估計計；已採購但沒進系統（歷史）或人力成本，請在左側填「實際數量／單位成本」。
+                    </div>
                     <div x-show="systemActual(item) > 0" :data-testid="'stl-po-' + item.id" style="margin-top:4px;font-size:10px;font-weight:400;color:#92400E">
                       <span x-text="purchaseLabel(item)"></span>
                       <button type="button" class="btn btn-ghost btn-sm" style="padding:0 6px;font-size:10px" :disabled="settlement.status === 'finalized'"
@@ -486,8 +508,13 @@
            下拉用 String 比對品項 id（報價品項 id 可能是數字；number === string 會讓已對應的列顯示成「不對應」）。 -->
       <div class="stl-card" x-show="_actualsOk && (offsets.length || allMapRows().length)" data-testid="stl-unassigned">
         <div class="stl-card__head">
-          <div class="stl-card__title">二之一、未對應品項的材料申請與額外支出</div>
+          <div class="stl-card__title">二之一、未對應品項的材料申請、額外支出與承攬商派發</div>
           <div style="font-size:11px;color:var(--text-dim)">沒對應到報價品項的錢一律照算（計入額外支出）；選一個品項＝改算在那個品項的實際成本，原單據不動</div>
+        </div>
+        <div class="stl-sumbar" data-testid="stl-sumbar" :class="mapSummary.unCount === 0 ? 'stl-sumbar--ok' : (mapSummary.unPending ? 'stl-sumbar--bad' : 'stl-sumbar--warn')">
+          <b x-text="mapSummary.unCount === 0 ? '✔ 全部已對應' : '⚠ 未對應 ' + mapSummary.unCount + ' 件'"></b>
+          <span x-show="mapSummary.unCount > 0" x-text="'NT$ ' + fmt(mapSummary.unTotal) + '（仍計入總成本）' + (mapSummary.unPending ? '・含待審核' : '')"></span>
+          <span x-show="settlement.status === 'finalized'" style="margin-left:auto;font-weight:700">已完結・唯讀</span>
         </div>
         <div style="overflow-x:auto" x-show="unmappedRows().length">
           <table class="stl-table">
@@ -495,14 +522,15 @@
             <tbody>
               <template x-for="u in unmappedRows()" :key="u.kind + ':' + u.ref">
                 <tr :data-testid="'stl-un-' + u.kind + '-' + u.ref">
-                  <td x-text="u.kind === 'material' ? '材料申請' : '額外支出'"></td>
+                  <td><span class="stl-chip" :class="'stl-chip--' + u.kind" x-text="kindLabel(u.kind)"></span></td>
                   <td>
                     <span x-text="u.label"></span>
+                    <span x-show="u.status" class="stl-badge-st" x-text="u.status"></span>
                     <span x-show="u.pending" style="font-size:10px;color:#B45309">（待審核）</span>
                     <span x-show="u.noPo" style="font-size:10px;color:#92400E">（未申請採購單）</span>
                     <div x-show="u.detail" style="font-size:11px;color:var(--text-secondary)" x-text="u.detail"></div>
                   </td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(u.amount)"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"><b x-text="fmt(u.amount)"></b><div x-show="u.kind === 'dispatch'" data-testid="stl-tax" style="font-size:10px;color:var(--text-dim)" x-text="'稅額 ' + fmt(u.tax) + '（不計成本）'"></div></td>
                   <td>
                     <select class="stl-input" :data-testid="'stl-offset-' + u.kind + '-' + u.ref" :disabled="settlement.status === 'finalized'"
                             @change="setOffset(u.kind, u.ref, $event.target.value)" style="width:100%">
@@ -517,6 +545,10 @@
             </tbody>
           </table>
         </div>
+        <div class="stl-conserve" data-testid="stl-conserve">
+          <span x-text="'未對應 NT$ ' + fmt(mapSummary.unTotal) + ' ＋ 已對應 NT$ ' + fmt(mapSummary.asTotal) + ' ＝ NT$ ' + fmt(mapSummary.all)"></span>
+          <small x-text="mapSummary.byKind.map(b => kindLabel(b.kind) + ' ' + fmt(b.un) + '＋' + fmt(b.as)).join('　')"></small>
+        </div>
         <div x-show="!unmappedRows().length" data-testid="stl-unmapped-none" style="padding:8px 2px;font-size:12px;color:var(--text-secondary)">目前沒有未對應的項目。</div>
         <div x-show="mappedRows().length" data-testid="stl-mapped" style="margin-top:14px">
           <div style="font-size:12px;font-weight:600;margin-bottom:4px">已對應到品項（已帶入，不會再出現在上面的未對應清單；同一筆只能有一個去處）</div>
@@ -527,10 +559,11 @@
               <tbody>
                 <template x-for="u in mappedRows()" :key="u.kind + ':' + u.ref">
                   <tr class="stl-row--mapped" :data-testid="'stl-mapped-' + u.kind + '-' + u.ref">
-                    <td x-text="u.kind === 'material' ? '材料申請' : '額外支出'"></td>
+                    <td><span class="stl-chip" :class="'stl-chip--' + u.kind" x-text="kindLabel(u.kind)"></span></td>
                     <td>
                       <span class="stl-badge-mapped" data-testid="stl-badge-mapped">已對應</span>
                       <span x-text="u.label"></span>
+                      <span x-show="u.status" class="stl-badge-st" x-text="u.status"></span>
                       <span x-show="u.pending" style="font-size:10px;color:#B45309">（待審核）</span>
                       <div x-show="u.detail" style="font-size:11px;color:var(--text-secondary)" x-text="u.detail"></div>
                     </td>
@@ -539,7 +572,7 @@
                       <div style="font-size:10px" :style="itemAdopted(u.itemId) ? 'color:#15803D' : 'color:#92400E'"
                            x-text="itemAdopted(u.itemId) ? '已計入該品項的實際成本' : '該品項未採用：這筆金額目前不計入實際成本'"></div>
                     </td>
-                    <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(u.amount)"></td>
+                    <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"><b x-text="fmt(u.amount)"></b><div x-show="u.kind === 'dispatch'" data-testid="stl-tax" style="font-size:10px;color:var(--text-dim)" x-text="'稅額 ' + fmt(u.tax) + '（不計成本）'"></div></td>
                     <td>
                       <template x-if="u.assignedBy === 'link'">
                         <span style="font-size:12px;color:var(--text-secondary)" :data-testid="'stl-linked-' + u.kind + '-' + u.ref">由材料申請連結（唯讀）</span>
@@ -1077,6 +1110,7 @@ function settlementPage() {
       if (a.po && a.po.amount) parts.push('採購單 NT$ ' + this.fmt(a.po.amount))
       if (a.material && a.material.amount) parts.push('材料申請 NT$ ' + this.fmt(a.material.amount))
       if (a.extra && a.extra.amount) parts.push('額外支出 NT$ ' + this.fmt(a.extra.amount))
+      if (a.dispatch && a.dispatch.amount) parts.push('承攬商派發 NT$ ' + this.fmt(a.dispatch.amount))
       return parts.join('＋') + (item.adoptSystem ? '' : '（未採用）')
     },
 
@@ -1105,6 +1139,36 @@ function settlementPage() {
       const qty = m.quantity ? '（' + m.quantity + ' ' + (m.unit || '') + '）' : ''
       return (m.name || String(m.itemId)) + qty
     },
+    // 承攬商派發（第 36 班契約）：金額＝未稅承攬費＋外包人員；稅額只顯示不計成本。docCode 可能是空字串，退回以派發 id 辨認
+    // 每個品項的實際成本來源（顯示用，不存檔）：採用且有採購／對應 ⇒ 取代；否則有手填 ⇒ 手填；否則 ⇒ 估計（優先序＝規則 A）
+    itemSource(item) {
+      if (item.adoptSystem && this.systemActual(item) > 0) {
+        const a = (this._actualsOk && this.itemActuals[item.id]) || {}
+        const po = !!(a.po && a.po.amount), map = !!((a.material && a.material.amount) || (a.extra && a.extra.amount) || (a.dispatch && a.dispatch.amount))
+        return po && map ? { key: 'po-map', label: '採購單＋已對應' } : po ? { key: 'po', label: '採購單' } : { key: 'map', label: '已對應' }
+      }
+      if ((+item.actualTotalCost || 0) > 0) return { key: 'manual', label: '手填' }
+      return { key: 'est', label: '估計' }
+    },
+    dispLabel(d) { return (d.docCode || '派發#' + d.itemId) + '｜' + (d.vendorName || '（未命名承攬商）') },
+    dispDetail(d) { return d.name && d.name !== 'amount' ? d.name : '' },
+    kindLabel(k) { return k === 'material' ? '材料申請' : k === 'dispatch' ? '承攬商派發' : '額外支出' },
+    // 已被品項吸收的派發金額：採用且該品項有金額時，派發已在品項實際成本裡，不能再於承攬商派發成本重複加（規則 A，與後端同一條）。
+    // 總成本 ＝ 品項實際 ＋ 額外 ＋ 派發 − 被吸收；不用 dispatchTotal 直接加（完結時後端重算比對，重複計入會 409）
+    get dispatchAbsorbed() {
+      if (!this._actualsOk) return 0
+      return this.settlement.items.reduce((sum, i) => {
+        const a = this.itemActuals[i.id]
+        return sum + (a && a.dispatch && i.adoptSystem && this.systemActual(i) > 0 ? (a.dispatch.amount || 0) : 0)
+      }, 0)
+    },
+    get mapSummary() {
+      const rows = this.allMapRows()
+      const sum = a => a.reduce((x, r) => x + (+r.amount || 0), 0)
+      const un = rows.filter(r => !r.itemId), as = rows.filter(r => r.itemId)
+      return { unCount: un.length, unTotal: sum(un), asTotal: sum(as), all: sum(rows), unPending: un.some(r => r.pending),
+               byKind: ['dispatch', 'material', 'extra'].map(k => ({ kind: k, un: sum(un.filter(r => r.kind === k)), as: sum(as.filter(r => r.kind === k)) })) }
+    },
     extLabel(e) {
       return (e.docCode || '#' + e.expenseId) + '｜' + (e.category || '') + (e.description ? '｜' + e.description : '')
     },
@@ -1114,11 +1178,14 @@ function settlementPage() {
     allMapRows() {
       if (!this._actualsOk) return []
       const rows = []
-      const add = (kind, ref, label, detail, amount, pending, noPo, itemId, assignedBy) =>
-        rows.push({ kind, ref: String(ref), label, detail, amount, pending, noPo, itemId: itemId === '' ? '' : String(itemId), assignedBy })
+      const add = (kind, ref, label, detail, amount, pending, noPo, itemId, assignedBy, extra) =>
+        rows.push(Object.assign({ kind, ref: String(ref), label, detail, amount, pending, noPo, itemId: itemId === '' ? '' : String(itemId), assignedBy }, extra || {}))
+      const dsp = (d, itemId, assignedBy) => add('dispatch', d.itemId, this.dispLabel(d), this.dispDetail(d), d.amount, d.pending, false, itemId, assignedBy, { tax: d.tax || 0, status: d.status || '' })
       this.actuals.unassigned.materials.forEach(m => add('material', m.itemId, this.matLabel(m), this.matDetail(m), m.amount, m.pending, m.noPo, '', ''))
       this.actuals.unassigned.extras.forEach(e => add('extra', e.expenseId, this.extLabel(e), this.extDetail(e), e.amount, e.pending, false, '', ''))
+      ;((this.actuals.unassigned || {}).dispatches || []).forEach(d => dsp(d, '', ''))
       this.actuals.items.forEach(it => {
+        ;((it.dispatch || {}).orders || []).forEach(d => dsp(d, it.itemId, d.assignedBy || 'offset'))
         ;(it.material.orders || []).filter(m => m.assignedBy === 'offset' || m.assignedBy === 'link')
           .forEach(m => add('material', m.itemId, this.matLabel(m), this.matDetail(m), m.amount, m.pending, m.noPo, it.itemId, m.assignedBy))
         ;(it.extra.docs || []).forEach(e => add('extra', e.expenseId, this.extLabel(e), this.extDetail(e), e.amount, e.pending, false, it.itemId, 'offset'))
@@ -1330,7 +1397,8 @@ function settlementPage() {
       // 32-S5：採購單連結金額還沒採用到品項的，仍計入總成本（不讓連結列從額外支出扣掉後憑空消失）；全部採用或沒有連結 ⇒ 0（歷史案件逐位不變）
       // 33-B1（D8）：後端單一來源可用時，關掉採用＝手填取代、採購金額不另加（只在上方警示）⇒ 0；退回舊路徑時維持 32-S5 算法
       const itemPoUnadopted = this._actualsOk ? 0 : this.settlement.items.reduce((s, i) => s + (i.adoptSystem ? 0 : this.systemActual(i)), 0)
-      const totalActualCost = itemActualTotal + itemPoUnadopted + extraTotal + dispatchTotal
+      const dispatchAbsorbed = this.dispatchAbsorbed     // 派發被品項吸收的部分已在 itemActualTotal 內，不重複計入（沒有派發對應 ⇒ 0，與現況逐位相同）
+      const totalActualCost = itemActualTotal + itemPoUnadopted + extraTotal + dispatchTotal - dispatchAbsorbed
       const grossProfit     = quotedPretax - totalActualCost
       const grossMarginPct  = quotedPretax > 0 ? grossProfit / quotedPretax * 100 : 0
       const adminCost       = MotrixLegalRound.halfUp(quotedPretax, 0.10)
@@ -1353,7 +1421,7 @@ function settlementPage() {
         origAdminCost, origCharity,
         origNetProfit:    MotrixLegalRound.halfUp(origNetProfit),
         origNetMarginPct: MotrixLegalRound.halfUp(origNetMarginPct, 10) / 10,
-        itemActualTotal, itemPoUnadopted, extraTotal, dispatchTotal, totalActualCost, remitFeeTotal: this.remitFeeTotal, customExpenseTotal: this.customExpenseTotal,
+        itemActualTotal, itemPoUnadopted, extraTotal, dispatchTotal, dispatchAbsorbed, totalActualCost, remitFeeTotal: this.remitFeeTotal, customExpenseTotal: this.customExpenseTotal,
         dispatchTax, dispatchGrandTotal, dispatchBasis: this.dispatchBasisOld() ? 'taxed' : 'pretax',     // 35c：口徑標記（舊口徑的完結案沒有這個鍵）
         // 33-B1：完結時後端用同一來源重算比對（A5）；purchasedTotal＝採購類總額（品項＋未對應），materialUnassignedTotal 已併在 extraTotal 內
         purchasedTotal: this._actualsOk ? this.actuals.totals.purchasedTotal : 0, materialUnassignedTotal: this.matUnassigned,

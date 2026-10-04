@@ -106,6 +106,11 @@
   .step.act .v{font-size:18px;font-weight:800}
   .step.map .parts{display:flex;gap:4px 6px;flex-wrap:wrap;margin-top:2px}
   .step.map .parts span{font-size:12px}
+  .src{font-size:11px;font-weight:700;margin-top:2px}
+  .step.act:not(.adopted) .src{color:var(--ink2)}
+  .step.manual{background:#EFF6FF;border-color:#BFDBFE}
+  .step.manual .mi{width:130px;font:inherit;padding:4px 6px;border:1px solid #93C5FD;border-radius:6px;text-align:right}
+  .step.manual .tag{margin-top:4px;font-size:12px;padding:3px 6px}
   .arrow{align-self:center;color:#999;font-size:16px}
   .item-note{margin:8px 0 0;font-size:12px;color:var(--warn)}
 
@@ -172,6 +177,7 @@ const SEED = () => ({
     {id:'103', name:'全室水電配管', est:120000, adopt:true},
     {id:'104', name:'衛浴防水與磁磚', est:86000, adopt:false},
     {id:'105', name:'油漆粉刷（全室）', est:64000, adopt:true},
+    {id:'106', name:'現場監工（人力）', est:50000, adopt:false},
   ],
   // 採購單：後端固定掛在品項，不可由本區改（原型唯讀）
   po: [{id:'PO-0912', itemId:'103', name:'電線電纜（採購單）', amount:38500}],
@@ -206,8 +212,10 @@ function calc(){
     S.docs.filter(d => d.itemId === it.id).forEach(d => m[d.kind] += d.amount);
     const poSum = po.reduce((a,p) => a + p.amount, 0);
     const mapped = m.material + m.extra + m.dispatch + poSum;
-    const adoptedActual = it.adopt && mapped > 0;          // 規則 A：採用且有對應 → 取代估計
-    per[it.id] = {m, poSum, mapped, adoptedActual, actual: adoptedActual ? mapped : it.est};
+    const adoptedActual = it.adopt && mapped > 0;          // 規則 A：採用且有對應 → 取代估計；否則手填（>0）；否則估計
+    const manual = +it.manual || 0;
+    const source = adoptedActual ? (poSum && (m.material + m.extra + m.dispatch) ? '採購單＋已對應' : poSum ? '採購單' : '已對應') : manual > 0 ? '手填' : '估計';
+    per[it.id] = {m, poSum, mapped, adoptedActual, manual, source, actual: adoptedActual ? mapped : manual > 0 ? manual : it.est};
   });
   const un = S.docs.filter(d => !d.itemId);
   const as = S.docs.filter(d => d.itemId);
@@ -317,8 +325,12 @@ function render(){
               <div class="parts">${parts.length?parts.join(''):'<span style="color:#999">無</span>'}</div>
               ${p.mapped?`<div class="v num" style="font-size:13px;margin-top:2px">小計 ${fmt(p.mapped)}</div>`:''}</div>
             <span class="arrow">→</span>
-            <div class="step act ${p.adoptedActual?'adopted':''}" data-testid="stl-actual-${it.id}"><div class="lb">實際成本${p.adoptedActual?'（採用對應合計）':'（採用前＝估計）'}</div><div class="v num">${fmt(p.actual)}</div></div>
+            <div class="step act ${p.adoptedActual?'adopted':''}" data-testid="stl-actual-${it.id}"><div class="lb">實際成本${p.adoptedActual?'（採用對應合計）':'（採用前＝估計）'}</div><div class="v num">${fmt(p.actual)}</div><div class="src" data-testid="stl-source-${it.id}">來源：${p.source}</div></div>
+            <div class="step manual"><div class="lb">手填實際成本（NT$）</div>
+              <input class="mi num" type="number" min="0" step="1" value="${p.manual || ''}" placeholder="0＝沒填" data-act="manual" data-item="${it.id}" ${frozen ? 'disabled' : ''} data-testid="stl-manual-${it.id}">
+              <select class="tag" ${frozen ? 'disabled' : ''} aria-label="手填來源標籤"><option>手填</option><option>歷史未建系統</option><option>人力</option></select></div>
           </div>
+          ${!p.mapped && !p.manual ? `<p class="item-note" data-testid="stl-nopurchase-${it.id}">無採購／對應紀錄：實際成本以估計計。已採購但沒進系統（歷史）或人力成本無法估計者，請在右側填入實際成本。</p>` : ''}
           ${p.mapped && !it.adopt ? `<p class="item-note">⚠ 已對應 ${fmt(p.mapped)}，但本品項未採用：實際仍是估計；這些金額以額外支出計入總成本。</p>` : ''}
         </div>
         <label class="sw"><input type="checkbox" data-act="adopt" data-item="${it.id}" ${it.adopt?'checked':''} ${frozen?'disabled':''} data-testid="stl-adopt-${it.id}"><i></i><span>採用</span></label>
@@ -347,6 +359,7 @@ function render(){
   /* 事件 */
   document.querySelectorAll('[data-act="map"]').forEach(el => el.onchange = () => setOffset(el.dataset.id, el.value));
   document.querySelectorAll('[data-act="unmap"]').forEach(el => el.onclick = () => setOffset(el.dataset.id, ''));
+  document.querySelectorAll('[data-act="manual"]').forEach(el => el.onchange = () => { itemOf(el.dataset.item).manual = +el.value || 0; render(); });
   document.querySelectorAll('[data-act="adopt"]').forEach(el => el.onchange = () => setAdopt(el.dataset.item, el.checked));
   justId = null;
 }
