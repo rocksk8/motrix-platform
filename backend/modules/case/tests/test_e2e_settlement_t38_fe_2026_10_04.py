@@ -85,7 +85,7 @@ def test_finalize_and_reopen_failures_do_not_mislead(live_server, make_user, e2e
     _finalize_click(page)
     err = page.locator('[data-testid="stl-toast-error"]').first
     err.wait_for(state="visible", timeout=10000)
-    assert "完結精算失敗" in err.inner_text() and "測試：後端拒絕" in err.inner_text()
+    assert "完結失敗" in err.inner_text() and "測試：後端拒絕" in err.inner_text()
     assert page.evaluate(f"() => {S}.settlement.status") == "draft" and page.evaluate(f"() => {S}.settlement.finalizedAt") in ("", None)
     page.wait_for_function(f"() => !{S}.saving", timeout=5000)
     assert calls["get"] > g0, calls                                                   # 重新取得伺服器狀態

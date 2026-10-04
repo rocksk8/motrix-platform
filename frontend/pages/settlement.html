@@ -1888,7 +1888,7 @@ function settlementPage() {
           this.toast('精算已完結')
         } else {
           this.showFinalizeModal = false
-          await this._failed(r, '完結精算')
+          await this._failed(r, '完結')
         }
       } finally { this.saving = false; this._finalizing = false }
     },
