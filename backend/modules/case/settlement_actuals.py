@@ -257,7 +257,7 @@ def _freeze(out, saved, saved_items):
         if k in summ:
             out["totals"][k] = _num(summ[k])
     # 36：派發未對應／已對應拆分隨 summary 凍結；舊案沒有這兩鍵＝沒有派發對應（已對應 0、未對應＝凍結的 dispatchTotal）
-    out["totals"]["dispatchAbsorbedTotal"] = _num(summ.get("dispatchAbsorbedTotal"))            # 38：舊案沒有這鍵＝0
+    out["totals"]["dispatchAbsorbedTotal"] = _num(summ.get("dispatchAbsorbedTotal", summ.get("dispatchAbsorbed")))      # 36／37 班完結案只有頁面寫的 dispatchAbsorbed（唯讀 fallback，不改寫已凍結資料）            # 38：舊案沒有這鍵＝0
     out["totals"]["dispatchAssignedTotal"] = _num(summ.get("dispatchAssignedTotal"))
     out["totals"]["dispatchUnassignedTotal"] = _num(summ["dispatchUnassignedTotal"]) if "dispatchUnassignedTotal" in summ else out["totals"]["dispatchTotal"] - out["totals"]["dispatchAssignedTotal"]
     # 凍結案的承攬商口徑＝完結當下存的標記；舊案沒有標記＝含稅口徑（dispatchTotal 當時是含稅合計）。值本身不改寫。
@@ -451,6 +451,28 @@ def rebuild_summary_if_missing(conn, quote_no, settlement):
     return True
 
 
+def original_side(conn, quote_no, summ) -> dict:
+    """精算 summary 的「原始側」欄位（報價當時的預估與差異）——與精算頁 `calcSummary()` 同式，改由伺服器用報價單的 `tot` 與品項重算：
+    quotedTotal、origTotalCost（Σ數量×成本）、origDirectProfit、origMarginPct、origAdminCost、origCharity、origNetProfit、origNetMarginPct、profitDiff。"""
+    q = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    try:
+        data = json.loads((q["data_json"] if q else "") or "{}")
+    except (TypeError, ValueError):
+        data = {}
+    tot = data.get("tot") if isinstance(data.get("tot"), dict) else {}
+    pretax = _num(tot.get("pretax"))
+    orig_cost = sum(_num(i.get("qty")) * _num(i.get("cost")) for i in data.get("items") or [] if isinstance(i, dict) and i.get("type") != "header")
+    direct = _num(tot["directProfit"]) if tot.get("directProfit") is not None else pretax - orig_cost
+    margin = _num(tot["directMarginPct"]) if tot.get("directMarginPct") is not None else (direct / pretax * 100 if pretax > 0 else 0.0)
+    admin = _num(tot["adminCost"]) if tot.get("adminCost") is not None else round_half_up(pretax, 0.10)
+    charity = _num(tot["charityDonation"]) if tot.get("charityDonation") is not None else round_half_up(direct, 0.01)
+    net = _num(tot["netProfit"]) if tot.get("netProfit") is not None else direct - admin - charity
+    net_pct = _num(tot["netMarginPct"]) if tot.get("netMarginPct") is not None else (net / pretax * 100 if pretax > 0 else 0.0)
+    return {"quotedTotal": _num(tot.get("total")), "origTotalCost": orig_cost, "origDirectProfit": direct, "origMarginPct": margin,
+            "origAdminCost": admin, "origCharity": charity, "origNetProfit": net, "origNetMarginPct": net_pct,
+            "profitDiff": _num(summ.get("netProfit")) - net}
+
+
 def fill_downstream(conn, quote_no, settlement):
     """完結通過比對後、存檔前：下游欄位**一律**以伺服器重算值覆蓋（38；原本只補沒送的，容差內的偏差與頁面值照存），含報價稅前收入，
     並蓋口徑標記、寫入派發對應拆分／被吸收金額。回傳被改寫（補上或值不同）的鍵（給稽核紀錄／測試）。"""
@@ -470,6 +492,8 @@ def fill_downstream(conn, quote_no, settlement):
         put(k, v)
     put("quotedPretax", pretax)
     summ["dispatchBasis"] = DISPATCH_BASIS
+    for k, v in original_side(conn, quote_no, summ).items():       # 38（稽核 S-1）：「原始側」欄位也由伺服器依報價單重算，不凍結用戶端偽造的值
+        put(k, v)
     for k in ("dispatchAssignedTotal", "dispatchUnassignedTotal", "dispatchAbsorbedTotal"):          # 36／38：派發對應拆分隨 summary 凍結
         put(k, d["totals"][k])
     return filled

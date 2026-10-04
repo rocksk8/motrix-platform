@@ -1487,6 +1487,11 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     now = datetime.now().isoformat()
     month = datetime.now().strftime("%Y%m")
     tot  = q.get("tot", {})
+    # 38（稽核 H-1）：新建的報價單不可能已成案／已完結——精算本文與成案狀態只能走各自的專用端點（PATCH /deal-tag、PUT /settlement）。
+    # 客戶端帶來的一律丟掉（原本直接採用：探針建出 deal_tag=已結案、settle_status=finalized、淨利 99,999,999 的報價單）。
+    # 前端「複製為新單」本來就送 dealTag=''、settlement=null，不受影響。
+    q["dealTag"] = ""
+    q.pop("settlement", None)
     deal_tag, settle_status = quote_hot_fields(q)
     conn = get_db()
 
@@ -4411,7 +4416,10 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
                 quote_no, cname,
                 user.get("display_name") or user["username"],
             )
-        return {"ok": True, "updated_at": now}
+        out = {"ok": True, "updated_at": now}
+        if is_finalized:
+            out["summary"] = body.settlement.get("summary")      # 38（稽核 S-4）：回傳伺服器覆蓋後凍結的 summary，前端據此更新畫面（不再停在頁面自己算的版本）
+        return out
 
 
 # ── 案件財務總覽（應收應付，2026-09-09）────────────────────────────────────────

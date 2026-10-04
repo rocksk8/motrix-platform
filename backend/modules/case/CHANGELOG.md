@@ -6,6 +6,7 @@
 - **負數／零和採購列算「有採購」**：`hasPurchase` 改為「有採購單／材料申請／額外支出／派發列」而非 `purchased>0`；退款列（負數）、正負相抵為 0 的列在「採用」時一樣取代估計。
 - **派發被品項吸收時的分項列**：完結 summary 新增 `dispatchAbsorbedTotal`（隨 summary 凍結；舊案沒有＝0）；結案報表 PDF 與獎金分潤 PDF 精算表在 >0 時多一行「已併入品項」，讓分項加總＝實際總成本（`SETTLEMENT_ROWS` 11 列與標籤不動）。
 - **編輯歷程**：完結紀錄附快照（`netProfit／totalActualCost／dispatchBasis／frozenAt`）；同一人連續的精算草稿存檔合併成一筆、精算草稿紀錄最多留 50 筆（完結／重新開啟理由不合併不丟）。`settlement-actuals` 新增 `orphanItems`（存檔裡有、報價單已刪的品項，唯讀）。
+- **稽核 AUDIT-T38 修正**：①（H-1，既有高風險）`POST /api/quotations` 新建時丟掉用戶端帶的 `settlement` 並強制 `dealTag=''`——原本可直接建出已結案／已完結／淨利 99,999,999 的報價單；整份報價存檔（PUT）本來就不能改成案狀態與精算本文（有題鎖定）。②（S-1）完結時「原始側」欄位（`quotedTotal／origTotalCost／origDirectProfit／origMarginPct／origAdminCost／origCharity／origNetProfit／origNetMarginPct／profitDiff`）也由伺服器依報價單重算。③（S-2）36／37 班完結案只有頁面寫的 `dispatchAbsorbed`：PDF／獎金 PDF／`_freeze` 讀取時 fallback（唯讀，不改寫資料）。④（S-4）完結成功的回應多帶 `summary`（伺服器覆蓋後凍結的版本）。
 - 測試：`tests/test_settlement_t38_be_2026_10_04.py`。
 
 ## 1.0.131 — 2026-10-04（wip/t36-dispatch-offset-fe）：精算頁管理視角（純前端；總結列標籤對齊獎金 PDF）

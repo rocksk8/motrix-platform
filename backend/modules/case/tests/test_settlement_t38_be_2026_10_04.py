@@ -211,3 +211,86 @@ def test_orphan_saved_items_are_exposed_read_only(W):
     assert "gone" not in _items(d)
     _put_settlement({"items": [{"id": "a"}], "offsets": []})
     assert _get(c, h)["orphanItems"] == []
+
+
+# ── 稽核 AUDIT-T38：H-1／S-1／S-2／S-4 ───────────────────────────────────────────
+
+def _post_quote(c, h, **extra):
+    data = {"customerName": "京城", "projectName": "偽造探針", "quoteDate": "2026-10-04", "validDays": 30, "salesPerson": "pl_sa", "items": [], "tot": {"total": 1000, "pretax": 952}}
+    data.update(extra)
+    return c.post("/api/quotations", headers=h, json={"data": data, "status": "草稿"})
+
+
+def _row(no):
+    cn = db.get_db()
+    try:
+        r = cn.execute("SELECT deal_tag, settle_status, data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()
+        return r["deal_tag"], r["settle_status"], json.loads(r["data_json"])
+    finally:
+        cn.close()
+
+
+def test_h1_create_quotation_ignores_client_deal_tag_and_settlement(W):
+    c, h = W
+    forged = {"status": "finalized", "items": [], "summary": {"netProfit": 99999999, "totalActualCost": 1}}
+    r = _post_quote(c, h, dealTag="已結案", settlement=forged)
+    assert r.status_code == 201, r.text
+    deal_tag, settle_status, data = _row(r.json()["quote_no"])
+    assert deal_tag == "" and settle_status == "" and "settlement" not in data and data.get("dealTag", "") == ""
+
+
+def test_h1_copy_to_new_shape_still_creates(W):
+    c, h = W
+    r = _post_quote(c, h, dealTag="", settlement=None)                # 前端 copyToNew 的形狀
+    assert r.status_code == 201, r.text
+    deal_tag, settle_status, data = _row(r.json()["quote_no"])
+    assert (deal_tag, settle_status) == ("", "") and data["projectName"] == "偽造探針"
+
+
+def test_h1_whole_quote_put_cannot_set_deal_tag_or_settlement_status(W):
+    c, h = W
+    cn = db.get_db()
+    cn.execute("UPDATE quotations SET status='草稿' WHERE quote_no=?", (NO,))
+    cn.commit()
+    cn.close()
+    q = _saved()
+    q["dealTag"] = "已結案"
+    q["settlement"] = {"status": "finalized", "items": [], "summary": {"netProfit": 99999999}}
+    assert c.put("/api/quotations/%s" % NO, json={"status": "草稿", "data": q}, headers=h).status_code == 200
+    deal_tag, settle_status, data = _row(NO)
+    assert deal_tag != "已結案" and settle_status != "finalized" and (data.get("settlement") or {}).get("status") != "finalized"
+
+
+def test_s1_forged_original_side_keys_are_overwritten_by_server(W):
+    c, h = W
+    _set_tot()
+    _dispatch(10000, 2000)
+    p = page_payload(c, h)
+    p["summary"].update(origNetProfit=777777, profitDiff=555555, origTotalCost=1, quotedTotal=9, origDirectProfit=5, origAdminCost=5, origCharity=5, origMarginPct=99.9, origNetMarginPct=99.9)
+    assert _put(c, h, p).status_code == 200
+    s = _saved()["settlement"]["summary"]
+    assert s["origTotalCost"] == 10500 and s["quotedTotal"] == 105000 and s["origDirectProfit"] == 89500
+    assert s["origAdminCost"] == 10000 and s["origCharity"] == 895 and s["origNetProfit"] == 78605
+    assert s["profitDiff"] == s["netProfit"] - 78605 and s["origMarginPct"] != 99.9 and s["origNetMarginPct"] != 99.9
+
+
+def test_s2_readers_fall_back_to_page_key_dispatch_absorbed():
+    import pdf_gen
+    from modules.payroll import bonus_pdf as BP
+    old_final = {"dispatchTotal": 50, "dispatchAbsorbed": 50}               # 36／37 班完結案：只有頁面寫的鍵
+    assert "已併入品項" in pdf_gen._dispatch_absorbed_row(old_final)
+    assert "已併入品項" in BP._settlement_rows_html({"summary": dict(old_final, itemActualTotal=150, totalActualCost=150)})
+    assert pdf_gen._dispatch_absorbed_row({"dispatchTotal": 50}) == ""
+
+
+def test_s4_finalize_response_returns_the_server_overwritten_summary(W):
+    c, h = W
+    _set_tot()
+    _dispatch(10000, 2000)
+    p = page_payload(c, h)
+    p["summary"]["totalActualCost"] += 1
+    r = _put(c, h, p)
+    assert r.status_code == 200
+    assert r.json()["summary"] == _saved()["settlement"]["summary"]
+    d = _put(c, h, {"status": "draft", "items": [], "offsets": []}, reason="重開")
+    assert d.status_code == 200 and "summary" not in d.json()

@@ -38,7 +38,8 @@ from core import paths as _paths
 def _dispatch_absorbed_row(summary, money=None):
     """38（審計 S-1）：承攬商派發被「採用」的品項吸收時（`dispatchAbsorbedTotal`>0），品項實際成本已含這筆錢、實際總成本只算一次——
     表上「品項＋額外＋派發」會比總成本多出這一塊 ⇒ 明列一行負數讓分項加總＝實際總成本。沒有吸收（含所有舊完結案）⇒ 空字串（一個位元組都不加）。"""
-    n = (summary or {}).get("dispatchAbsorbedTotal") or 0
+    sm = summary or {}
+    n = (sm.get("dispatchAbsorbedTotal") if sm.get("dispatchAbsorbedTotal") is not None else sm.get("dispatchAbsorbed")) or 0     # 36／37 班完結案只有頁面寫的 dispatchAbsorbed
     if not n:
         return ""
     fmt = money or (lambda v: "{:,}".format(int(round(float(v)))))
