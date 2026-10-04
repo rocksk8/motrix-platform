@@ -1,6 +1,6 @@
 # 營運分析 更新紀錄
 
-## (next) — 2026-10-04（wip/t38-analytics-f9）：精算實際利潤不再在淨利 0 時退回毛利；儀表板只算完結並比淨利率
+## 1.0.30 — 2026-10-04（wip/t38-analytics-f9）：精算實際利潤不再在淨利 0 時退回毛利；儀表板只算完結並比淨利率
 - `reports._settle_actual_profit_margin()`：有 `netProfit` 鍵就用淨利（含 0／負數），沒有鍵的舊精算才退回毛利；`_collect()` 的 `actualMarginPct`／`grossProfit` 改走它，下游（業務績效、年度達成、毛利表、Excel／HTML）同步。金額 `int()` 截斷改 `round()`。
 - 儀表板 `marginComparison`／`settledSummary`：只計 `settlement.status=='finalized'`（草稿 summary 為前端暫存值），並比淨利率（`netMarginPct`／`netProfit`）對報價單 `net_margin_pct`；舊完結案（無淨利鍵）仍用毛利，值不改寫。
 - **使用者可見字樣（使用者裁示）**：營運報表畫面／Excel／PDF 的「預估毛利率／實際毛利率／預估毛利／實際毛利／精算實際毛利／平均淨毛利率／年度實際毛利」改稱「…淨利…」，分頁「毛利分析」改「利潤分析」；**Excel 工作表名「毛利分析」不改**。「真實毛利(率)」「原始直接毛利」「原始毛利率」是真的毛利，維持。舊精算（摘要沒有 `netProfit`）的實際率／實際金額旁加註「（舊精算為毛利）」（案件 `actualIsGross`），數字不變。清單見 `docs/platform/plans/NOTE-REPORT-LABELS-T38.md`。
