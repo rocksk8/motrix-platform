@@ -45,8 +45,9 @@ def gap_probe(monkeypatch):
     """被測端點每一次呼叫 save_quotation_json 之前（讀完、寫回前）插入一次探針寫入。"""
     import modules.case.api.material_orders as mo
     import modules.case.api.quotations as q
+    import modules.case.api.settlement_api as sapi      # 第 40 班：精算 GET/PUT 搬到 settlement_api.py（它自己 import 了 save_quotation_json）
     state = {"fired": 0, "threads": [], "quote": NO}
-    for mod in (q, mo):     # 外包派工匯入（vc）經 IP-17 由 M01 的 q.save_quotation_json 寫（2026-09-26 外包工班搬遷）
+    for mod in (q, mo, sapi):     # 外包派工匯入（vc）經 IP-17 由 M01 的 q.save_quotation_json 寫（2026-09-26 外包工班搬遷）
         original = mod.save_quotation_json
 
         def _wrapped(conn, quote_no, data, *a, _orig=original, **kw):
@@ -332,7 +333,8 @@ def test_an_error_after_taking_the_write_lock_releases_it(client, make_user, mon
 
     def _boom(*a, **k):
         raise RuntimeError("拿了寫鎖之後的意外錯誤（探針）")
-    for mod in (q, mo):     # 外包派工匯入（vc）經 IP-17 由 M01 的 q.save_quotation_json 寫（2026-09-26 外包工班搬遷）
+    import modules.case.api.settlement_api as sapi      # 第 40 班：精算 GET/PUT 搬到 settlement_api.py
+    for mod in (q, mo, sapi):     # 外包派工匯入（vc）經 IP-17 由 M01 的 q.save_quotation_json 寫（2026-09-26 外包工班搬遷）
         monkeypatch.setattr(mod, "save_quotation_json", _boom)
     with pytest.raises(RuntimeError) as excinfo:          # 握著例外（traceback 還引用著 frame），貼近正式機
         call()
