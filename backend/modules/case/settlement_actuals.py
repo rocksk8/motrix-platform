@@ -25,6 +25,23 @@ UNADOPTED_IGNORE, UNADOPTED_ADD = "ignore", "add"
 DISPATCH_BASIS = "pretax"
 
 
+#: 沖銷對應的 kind（36：新增 dispatch＝承攬商派發單，ref＝contractor_dispatches.id；規格 DISPATCH-OFFSET-SPEC.md §2）
+OFFSET_KINDS = ("material", "extra", "dispatch")
+_LABELS = {"material": "材料申請", "extra": "額外支出", "dispatch": "承攬商派發"}
+
+
+#: 品項實際成本的來源標記（顯示用，不影響任何金額／完結比對）；沒有＝manual
+ACTUAL_SOURCES = ("manual", "legacy", "labor")
+
+
+def validate_item_sources(items):
+    """精算 PUT 的 `settlement.items[].actualSource` 驗證：有值必須是 ACTUAL_SOURCES 之一。回傳錯誤訊息；合法回 None。"""
+    for n, i in enumerate(items if isinstance(items, list) else [], 1):
+        if isinstance(i, dict) and i.get("actualSource") not in (None, "") and i.get("actualSource") not in ACTUAL_SOURCES:
+            return "items 第 %d 列：actualSource 必須是 %s" % (n, "／".join(ACTUAL_SOURCES))
+    return None
+
+
 def estimate_amount(qty, cost) -> int:
     return round_half_up((qty or 0) * (cost or 0), ESTIMATE_RATE)
 
@@ -44,13 +61,13 @@ def manual_actual(saved_item):
 
 
 def normalize_offsets(raw) -> list:
-    """精算存的 `offsets`（容錯：壞列略過）⇒ `[{kind: material|extra, ref: str, itemId: str}]`；同一 (kind, ref) 只留第一個。"""
+    """精算存的 `offsets`（容錯：壞列略過）⇒ `[{kind: material|extra|dispatch, ref: str, itemId: str}]`；同一 (kind, ref) 只留第一個。"""
     out, seen = [], set()
     for o in raw if isinstance(raw, list) else []:
         if not isinstance(o, dict):
             continue
         kind, ref, iid = str(o.get("kind") or ""), str(o.get("ref") or "").strip(), str(o.get("itemId") or "").strip()
-        if kind not in ("material", "extra") or not ref or not iid or (kind, ref) in seen:
+        if kind not in OFFSET_KINDS or not ref or not iid or (kind, ref) in seen:
             continue
         seen.add((kind, ref))
         out.append({"kind": kind, "ref": ref, "itemId": iid})
@@ -84,6 +101,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
     offs = normalize_offsets(offsets if offsets is not None else saved.get("offsets"))
     off_material = {o["ref"]: o["itemId"] for o in offs if o["kind"] == "material" and o["itemId"] in live}
     off_extra = {o["ref"]: o["itemId"] for o in offs if o["kind"] == "extra" and o["itemId"] in live}
+    off_dispatch = {o["ref"]: o["itemId"] for o in offs if o["kind"] == "dispatch" and o["itemId"] in live}
 
     warnings = [{"code": "item_unkeyed", "ref": "", "message": "報價單有 %d 個品項缺 id 或說明，無法對應採購；以估計計入" % n_unkeyed}] if n_unkeyed else []
 
@@ -128,14 +146,25 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
         else:
             unassigned_extra.append(row)
 
-    items, item_total, not_adopted_total = [], 0.0, 0.0
+    # ── 承攬商派發（36）：整張單歸單一品項（offset）；其餘留在未對應。金額＝report（未稅＋外包人員，35c 稅基 B）──
+    disp_by_item, unassigned_disp = {}, []
+    for d in dispatch_rows(conn, quote_no):
+        tgt = off_dispatch.get(d["itemId"])
+        if tgt:
+            disp_by_item.setdefault(tgt, []).append(dict(d, assignedBy="offset"))
+        else:
+            unassigned_disp.append(d)
+
+    items, item_total, not_adopted_total, disp_absorbed = [], 0.0, 0.0, 0.0
     for p in plan:
         iid = p["itemId"]
         po = po_by_item.get(iid, [])
         mats = mat_by_item.get(iid, [])
         exs = extra_by_item.get(iid, [])
+        dps = disp_by_item.get(iid, [])
         po_amt, mat_amt, ex_amt = sum(x["amount"] for x in po), sum(x["amount"] for x in mats), sum(x["amount"] for x in exs)
-        purchased = po_amt + mat_amt + ex_amt
+        dp_amt = sum(x["amount"] for x in dps)
+        purchased = po_amt + mat_amt + ex_amt + dp_amt
         est = estimate_amount(p["planQty"], p["planUnitCost"])
         s = saved_items.get(iid)
         manual = manual_actual(s)
@@ -149,12 +178,15 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
         else:
             actual, source = if_not, ("manual" if manual is not None else "estimate")
         if has and not adopt and unadopted == UNADOPTED_ADD:
-            not_adopted_total += purchased
+            not_adopted_total += purchased - dp_amt                     # 派發另由 dispatchTotal 計入，不在這裡重複
+        if has and adopt:
+            disp_absorbed += dp_amt                                     # 被品項實際成本吸收的派發：總成本公式要扣掉，否則重複計入
         items.append({"itemId": iid, "unkeyed": bool(p.get("unkeyed")), "description": p["description"], "planQty": p["planQty"], "unit": p["unit"],
                       "estimate": {"unitCost": p["planUnitCost"], "amount": est},
-                      "po": {"amount": po_amt, "docs": po}, "material": {"amount": mat_amt, "orders": mats}, "extra": {"amount": ex_amt, "docs": exs},
+                      "po": {"amount": po_amt, "docs": po}, "material": {"amount": mat_amt, "orders": mats}, "extra": {"amount": ex_amt, "docs": exs}, "dispatch": {"amount": dp_amt, "orders": dps},
                       "purchased": purchased, "hasPurchase": has, "adopt": adopt,
                       "actual": {"amount": actual, "source": source, "replacedEstimate": bool(has and adopt)},
+                      "actualSource": (s.get("actualSource") if isinstance(s, dict) and s.get("actualSource") in ACTUAL_SOURCES else "manual"),
                       "actualIfAdopted": if_adopt, "actualIfNot": if_not,
                       "purchasedNotAdopted": purchased if (has and not adopt) else 0})
         item_total += actual
@@ -172,19 +204,23 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
            "legacySave": legacy_save,          # 存檔品項沒有 adoptSystem（第 32 班前存的）：adopt 以舊行為（不採用）
            "unadoptedMode": unadopted, "items": items,
             "extra": {"onlyAmount": un_ex_total, "rows": extra_all},
-            "unassigned": {"materials": unassigned_mat, "extras": unassigned_extra}, "offsets": offs,
+            "unassigned": {"materials": unassigned_mat, "extras": unassigned_extra, "dispatches": unassigned_disp}, "offsets": offs,
             "sources": sources,
             "totals": {"itemActualTotal": item_total, "itemPoUnadopted": not_adopted_total, "extraTotal": un_ex_total,
                        "materialUnassignedTotal": un_mat_total, "purchasedTotal": sum(sources.values()), "pendingTotal": pend},
             "warnings": warnings, "costExtras": ex}
     t_ = out["totals"]
+    # 36：dispatchTotal 語意不變（全部派發 report 合計）；未對應＋已對應＝dispatchTotal。sources／purchasedTotal 不含派發（舊口徑，頁面同）
+    t_["dispatchUnassignedTotal"] = sum(d["amount"] for d in unassigned_disp)
+    t_["dispatchAssignedTotal"] = sum(d["amount"] for ds in disp_by_item.values() for d in ds)
+    t_["dispatchAbsorbedTotal"] = disp_absorbed                  # 已被「採用」品項的實際成本吸收的派發（totalActualCost 已扣，不重複計入）
     # 35c 稅基 B：dispatchTotal（這個鍵的意義變了）＝未稅＋人員；dispatchBasis 標記讓「過期」比對與舊凍結案分得出口徑（舊案沒有這個鍵＝含稅口徑）
     t_.update(dispatchTotal=ex["dispatch"]["report"], dispatchReport=ex["dispatch"]["report"], dispatchGrandTotal=ex["dispatch"]["grandTotal"],
               dispatchTax=ex["dispatch"]["tax"], dispatchBasis=DISPATCH_BASIS, remitFeeTotal=ex["remitFee"]["total"],
               customExpenseTotal=ex["customExpense"]["total"])
     # 與頁面 calcSummary 同一條式：品項＋未採用採購＋額外支出（含未對應材料申請、手續費、自訂模組）＋派發
     t_["totalActualCost"] = (t_["itemActualTotal"] + t_["itemPoUnadopted"] + t_["extraTotal"] + t_["materialUnassignedTotal"] + t_["remitFeeTotal"]
-                             + t_["customExpenseTotal"] + t_["dispatchTotal"])
+                             + t_["customExpenseTotal"] + t_["dispatchTotal"] - disp_absorbed)
     if freeze and saved.get("status") == "finalized":
         _freeze(out, saved, saved_items)
     return out
@@ -216,6 +252,9 @@ def _freeze(out, saved, saved_items):
     for k in ("dispatchTotal", "remitFeeTotal", "customExpenseTotal", "totalActualCost"):          # 頁面存的完結 summary 同名鍵：凍結值
         if k in summ:
             out["totals"][k] = _num(summ[k])
+    # 36：派發未對應／已對應拆分隨 summary 凍結；舊案沒有這兩鍵＝沒有派發對應（已對應 0、未對應＝凍結的 dispatchTotal）
+    out["totals"]["dispatchAssignedTotal"] = _num(summ.get("dispatchAssignedTotal"))
+    out["totals"]["dispatchUnassignedTotal"] = _num(summ["dispatchUnassignedTotal"]) if "dispatchUnassignedTotal" in summ else out["totals"]["dispatchTotal"] - out["totals"]["dispatchAssignedTotal"]
     # 凍結案的承攬商口徑＝完結當下存的標記；舊案沒有標記＝含稅口徑（dispatchTotal 當時是含稅合計）。值本身不改寫。
     out["totals"]["dispatchBasis"] = summ.get("dispatchBasis") or "taxed"
 
@@ -223,7 +262,7 @@ def _freeze(out, saved, saved_items):
 def validate_offsets(conn, quote_no, raw, previous=None):
     """精算 PUT 的 `settlement.offsets` 驗證（33-A4）。回傳錯誤訊息；合法回 None。
 
-    規則：必須是清單；每列 `kind∈{material,extra}`、`ref`、`itemId` 俱全；`itemId` 必須是報價現有品項；同一 (kind, ref) 只能一個去處；
+    規則：必須是清單；每列 `kind∈{material,extra,dispatch}`、`ref`、`itemId` 俱全；`itemId` 必須是報價現有品項；同一 (kind, ref) 只能一個去處；
     `ref` 必須存在於**目前**未對應清單（沒歸品項的材料申請／沒連品項的額外支出）。已經存在於上一次存檔、原樣沒改的列放行
     （材料申請事後取消不致卡住舊草稿；計算端本來就會略過失效列）。"""
     if raw in (None, []):
@@ -234,14 +273,15 @@ def validate_offsets(conn, quote_no, raw, previous=None):
     base = compute(conn, quote_no, offsets=[])
     live = {i["itemId"] for i in base["items"] if not i["unkeyed"]}      # 缺 id／說明的舊品項不能當沖銷去處
     refs = {"material": {str(m["itemId"]) for m in base["unassigned"]["materials"]},
-            "extra": {str(e["expenseId"]) for e in base["extra"]["rows"]}}
+            "extra": {str(e["expenseId"]) for e in base["extra"]["rows"]},
+            "dispatch": {str(d["itemId"]) for d in base["unassigned"]["dispatches"]}}
     # base 的 unassigned 在 offsets=[] 時含全部可沖銷的列（extra.rows 含 assignedTo 者，此時皆未歸屬）
     seen = set()
     for n, o in enumerate(raw, 1):
         if not isinstance(o, dict):
             return "offsets 第 %d 列格式錯誤" % n
         kind, ref, iid = str(o.get("kind") or ""), str(o.get("ref") or "").strip(), str(o.get("itemId") or "").strip()
-        if kind not in ("material", "extra") or not ref or not iid:
+        if kind not in OFFSET_KINDS or not ref or not iid:
             return "offsets 第 %d 列缺少 kind／ref／itemId，或 kind 不合法" % n
         if (kind, ref) in seen:
             return "offsets 第 %d 列：%s %s 重複，同一筆只能有一個去處" % (n, kind, ref)
@@ -251,8 +291,34 @@ def validate_offsets(conn, quote_no, raw, previous=None):
         if iid not in live:
             return "offsets 第 %d 列：品項 %s 不在報價單內" % (n, iid)
         if ref not in refs[kind]:
-            return "offsets 第 %d 列：%s %s 不在目前的未對應清單內" % (n, "材料申請" if kind == "material" else "額外支出", ref)
+            return "offsets 第 %d 列：%s %s 不在目前的未對應清單內" % (n, _LABELS[kind], ref)
     return None
+
+
+def dispatch_rows(conn, quote_no) -> list:
+    """承攬商派發單（精算計入成本者）逐張：`[{itemId(=派發 id 字串), docCode, vendorName, name, status, amount, tax, grandTotal, pending}]`。
+    `amount`＝report＝未稅承攬費＋外包人員（35c 稅基 B）；`tax`＝承攬商稅額（只顯示、不計成本）。排除已取消、草稿、已退回；待審核／簽核中照計並標 pending。
+    `case_extras().dispatch` 的合計與 `compute()` 的未對應／已對應都由這一份列產生，三處不會漂。純讀。"""
+    out = []
+    dispatch_row = registry.single_provider("dispatch.row")
+    if dispatch_row is None:
+        return out
+    try:
+        rows = conn.execute("SELECT cd.*, vc.name AS vendor_name FROM contractor_dispatches cd LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id"
+                            " WHERE cd.quote_no=? AND cd.status != 'cancelled' ORDER BY cd.id", (quote_no,)).fetchall()
+    except Exception:                                                                                  # noqa: BLE001  承攬商表不在（模組未啟用）
+        return out
+    for r in rows:
+        d = dispatch_row(r)
+        ap = d.get("approvalStatus") or ""
+        if ap in ("草稿", "已退回"):
+            continue
+        grand, pretax, pers = _num(d.get("grandTotal")), _num(d.get("totalAmount")), _num(d.get("personnelTotal"))
+        out.append({"itemId": str(d.get("id")), "docCode": d.get("docCode") or "", "vendorName": d.get("vendorName") or "",
+                    "name": str(d.get("scope") or "").strip() or d.get("vendorName") or "（外包人員點工）",
+                    "status": d.get("displayStatus") or d.get("statusLabel") or "", "amount": pretax + pers, "tax": grand - pretax - pers,
+                    "grandTotal": grand, "pending": ap in ("待審核", "簽核中")})
+    return out
 
 
 def case_extras(conn, quote_no) -> dict:
@@ -263,23 +329,8 @@ def case_extras(conn, quote_no) -> dict:
     - 匯款手續費：額外支出的手續費（已登錄付款、未作廢）＋承攬商匯款手續費（`case.remit_fee_total` 提供者；沒有提供者＝0）。
     - 自訂模組支出：`helpers.custom_finance.case_finance` 的支出合計。
     純讀。"""
-    grand = report = tax = 0.0
-    n = 0
-    dispatch_row = registry.single_provider("dispatch.row")
-    if dispatch_row is not None:
-        try:
-            rows = conn.execute("SELECT cd.*, vc.name AS vendor_name FROM contractor_dispatches cd LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id"
-                                " WHERE cd.quote_no=? AND cd.status != 'cancelled'", (quote_no,)).fetchall()
-        except Exception:                                                                                  # noqa: BLE001  承攬商表不在（模組未啟用）
-            rows = []
-        for r in rows:
-            d = dispatch_row(r)
-            if (d.get("approvalStatus") or "") in ("草稿", "已退回"):
-                continue
-            n += 1
-            grand += _num(d.get("grandTotal"))
-            report += _num(d.get("totalAmount")) + _num(d.get("personnelTotal"))
-            tax += _num(d.get("grandTotal")) - _num(d.get("totalAmount")) - _num(d.get("personnelTotal"))     # 承攬商稅額（進項稅額，不計成本；只供顯示）
+    drows = dispatch_rows(conn, quote_no)
+    grand, report, tax, n = sum(d["grandTotal"] for d in drows), sum(d["amount"] for d in drows), sum(d["tax"] for d in drows), len(drows)
     try:
         fee_extra = _num(conn.execute("SELECT COALESCE(SUM(remit_fee), 0) AS t FROM case_extra_expenses WHERE quote_no=? AND COALESCE(paid_date,'') != '' AND status != ?",
                                       (quote_no, VOIDED_STATUS)).fetchone()["t"])
@@ -316,6 +367,9 @@ def check_finalize(conn, quote_no, settlement):
               ("額外支出（含未對應材料申請）", their_extra, mine_extra, tol)]
     if "purchasedTotal" in summ:
         checks.append(("採購類總額", _num(summ.get("purchasedTotal")), t["purchasedTotal"], tol))
+    for k, nm in (("dispatchAssignedTotal", "承攬商派發已對應品項"), ("dispatchUnassignedTotal", "承攬商派發未對應")):
+        if summ.get(k) is not None:
+            checks.append((nm, _num(summ.get(k)), t[k], tol))
     out = ["%s：頁面 %s、系統重算 %s" % (name, round(a), round(b)) for name, a, b, tl in checks if abs(a - b) > tl]
     return out + _check_downstream(conn, quote_no, summ, d, tol_item)
 
@@ -389,4 +443,8 @@ def fill_downstream(conn, quote_no, settlement):
         summ["quotedPretax"] = pretax
         filled.append("quotedPretax")
     summ["dispatchBasis"] = DISPATCH_BASIS
+    for k in ("dispatchAssignedTotal", "dispatchUnassignedTotal"):          # 36：派發對應拆分隨 summary 凍結
+        if summ.get(k) is None:
+            summ[k] = d["totals"][k]
+            filled.append(k)
     return filled

@@ -1,5 +1,12 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-04（wip/t36-dispatch-offset-be）：承攬商派發可回推報價單品項
+- **offsets 新增 `kind: "dispatch"`（`ref`＝`contractor_dispatches.id`）**：派發單整張歸單一品項，規則與材料申請相同（規格 `DISPATCH-OFFSET-SPEC.md`）。`compute()` 新增 `unassigned.dispatches[]`、`items[].dispatch`、`totals.dispatchUnassignedTotal／dispatchAssignedTotal／dispatchAbsorbedTotal`；`dispatchTotal` 語意不變（未對應＋已對應＝dispatchTotal）。金額＝未稅承攬費＋外包人員（稅額只顯示）。
+- 規則 A 併入：採用時品項實際＝材料申請＋採購單＋派發的合計取代估計，`totalActualCost` 扣掉被吸收的派發（不重複計入）；不採用時對應／取消對應不改總成本。`sources`／`purchasedTotal`／`pendingTotal` 不含派發（舊案逐位相同）。
+- `validate_offsets` 認 dispatch（須在目前未對應清單、品項存在、單一去處；舊存檔原樣列放行）；完結比對與補齊 `dispatchAssignedTotal／dispatchUnassignedTotal`，隨 summary 凍結（舊完結案沒有這兩鍵＝已對應 0）。
+- 品項選填欄位 `actualSource`（`manual`／`legacy`／`labor`，沒有＝manual）：顯示用標記，存檔／凍結原樣保留、`compute()` 的 items 回傳；值域外 422；不進任何金額或完結比對。
+- `settlement_actuals.dispatch_rows()` 為派發列單一來源，`case_extras().dispatch` 合計改由它產生（輸出不變）。測試：`tests/test_settlement_dispatch_offset_2026_10_04.py`。
+
 ## 1.0.129 — 2026-10-04（wip/t35c-settle-assigned）：重新開啟理由的可見範圍
 - **重新開啟理由只給有財務檢視的人看（0c 稽核）**：理由是自由文字，沒有財務檢視（`money_visible()` 為否）的帳號從單筆案件 GET、`/versions`、`/case-bundle` 拿到的編輯歷程只留誰／何時／事件，不含理由；沿用 CM13 遮蔽（`helpers/financial_mask.py` 新增 `strip_history_reasons`，由 `mask_quotation_data` 與 `/versions` 呼叫）。案件清單的「最近一次修改」本來就不帶理由。稽核紀錄 `audit_log` 的 detail 仍帶理由，由 `audit_log` 模組權限把關。
 - 重新開啟對話框加一行「原因僅財務人員可見」。README 補：對舊口徑已完結案「重新開啟再完結」會轉成新口徑（淨利基數 +0.99×承攬商稅額，已發放的獎金不重算）。
