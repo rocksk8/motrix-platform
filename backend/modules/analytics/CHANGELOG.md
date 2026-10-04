@@ -3,7 +3,8 @@
 ## (next) — 2026-10-04（wip/t38-analytics-f9）：精算實際利潤不再在淨利 0 時退回毛利；儀表板只算完結並比淨利率
 - `reports._settle_actual_profit_margin()`：有 `netProfit` 鍵就用淨利（含 0／負數），沒有鍵的舊精算才退回毛利；`_collect()` 的 `actualMarginPct`／`grossProfit` 改走它，下游（業務績效、年度達成、毛利表、Excel／HTML）同步。金額 `int()` 截斷改 `round()`。
 - 儀表板 `marginComparison`／`settledSummary`：只計 `settlement.status=='finalized'`（草稿 summary 為前端暫存值），並比淨利率（`netMarginPct`／`netProfit`）對報價單 `net_margin_pct`；舊完結案（無淨利鍵）仍用毛利，值不改寫。
-- 測試 10 題（`test_net_not_gross_fallback_2026_10_04.py`）。
+- **使用者可見字樣（使用者裁示）**：營運報表畫面／Excel／PDF 的「預估毛利率／實際毛利率／預估毛利／實際毛利／精算實際毛利／平均淨毛利率／年度實際毛利」改稱「…淨利…」，分頁「毛利分析」改「利潤分析」；**Excel 工作表名「毛利分析」不改**。「真實毛利(率)」「原始直接毛利」「原始毛利率」是真的毛利，維持。舊精算（摘要沒有 `netProfit`）的實際率／實際金額旁加註「（舊精算為毛利）」（案件 `actualIsGross`），數字不變。清單見 `docs/platform/plans/NOTE-REPORT-LABELS-T38.md`。
+- 測試 15 題（`test_net_not_gross_fallback_2026_10_04.py`）。
 
 ## 1.0.29 — 2026-10-03（wip/t35c-settle-assigned）：精算快照「過期」比對口徑對口徑（精算稅基 B 的配套）
 - `_live_dispatch_totals_by_quote(conn, pretax=False)`：新增 `pretax` 參數（預設不變＝含稅 grandTotal，既有三處呼叫與測試不動）；`pretax=True` ＝未稅承攬費＋外包人員。

@@ -116,3 +116,96 @@ def test_dashboard_legacy_finalized_without_net_keys_uses_gross(client, make_use
     _set_net_margin("T38-D4", 12.0)
     cmp, _ = _comparison(client, make_user)
     assert cmp["T38-D4"]["actualMarginPct"] == 40.0 and cmp["T38-D4"]["grossProfit"] == 4000
+
+
+# ── 字樣：預估／實際都是淨利口徑 ⇒ 標「淨利」；舊精算（沒有 netProfit 鍵）的實際欄加註 ────────────────────
+
+LEGACY_NOTE = "（舊精算為毛利）"
+
+
+def _data():
+    from modules.analytics.api.reports import _augment_with_targets, _build_income_expense_scopes, _collect, _parse_period
+    lab, d0, d1 = _parse_period("2026")
+    data = _augment_with_targets(_collect(d0, d1, None), d0)
+    data["arAging"] = []
+    data.update(_build_income_expense_scopes(2026, "2026-03", None, basis="accrual"))
+    return lab, data
+
+
+def _seed_new_and_legacy():
+    _case("T38-L-NEW", {"netProfit": 5000, "netMarginPct": 5.0, "grossProfit": 30000, "grossMarginPct": 30.0})
+    _case("T38-L-OLD", {"grossProfit": 30000, "grossMarginPct": 30.0})
+
+
+def test_legacy_flag_only_on_summaries_without_the_net_profit_key(client):
+    from modules.analytics.api.reports import _collect
+    _seed_new_and_legacy()
+    _case("T38-L-ZERO", {"netProfit": 0, "netMarginPct": 0, "grossProfit": 30000, "grossMarginPct": 30.0})
+    cases = {c["quoteNo"]: c for c in _collect("2026-01-01", "2026-12-31")["casesAll"]}
+    assert cases["T38-L-NEW"]["actualIsGross"] is False
+    assert cases["T38-L-ZERO"]["actualIsGross"] is False            # 淨利 0 是真的 0，不是舊精算
+    assert cases["T38-L-OLD"]["actualIsGross"] is True
+
+
+def test_excel_headers_say_net_note_only_on_legacy_rows_and_sheet_name_is_unchanged(client):
+    import io
+    import openpyxl
+    from modules.analytics.api.reports import _build_excel
+    _seed_new_and_legacy()
+    lab, data = _data()
+    wb = openpyxl.load_workbook(io.BytesIO(_build_excel(data, lab, "t")))
+    assert "毛利分析" in wb.sheetnames and "利潤分析" not in wb.sheetnames        # 使用者裁：工作表名不改
+    ws = wb["案件清單"]
+    cells = [str(c.value) for row in ws.iter_rows() for c in row if c.value is not None]
+    assert {"預估淨利率", "實際淨利率", "實際淨利"} <= set(cells)
+    assert not {"預估毛利率", "實際毛利率", "實際毛利"} & set(cells)
+    rows = {r[0].value: r for r in ws.iter_rows() if r[0].value in ("T38-L-NEW", "T38-L-OLD")}
+    assert LEGACY_NOTE in str(rows["T38-L-OLD"][12].value)
+    assert rows["T38-L-NEW"][12].value == "5.0%"
+    sales = [str(c.value) for row in wb["業務員績效"].iter_rows() for c in row if c.value is not None] if "業務員績效" in wb.sheetnames else []
+    assert "實際毛利率" not in sales
+
+
+def test_pdf_html_labels_are_net_and_note_only_on_legacy_rows(client):
+    from modules.analytics.api.reports import _build_report_html
+    _seed_new_and_legacy()
+    lab, data = _data()
+    html = _build_report_html(data, lab, "t")
+    for gone in ("預估毛利率", "實際毛利率", "實際毛利<", "精算實際毛利合計", "平均淨毛利率", "年度實際毛利"):
+        assert gone not in html, gone
+    for there in ("預估淨利率", "實際淨利率", "精算實際淨利合計", "利潤分析"):
+        assert there in html, there
+    assert html.count(LEGACY_NOTE) >= 1
+    # 新格式案件的列不帶註記：整份只有舊案那兩處（案件清單＋利潤分析）才出現
+    rows = [seg.split("</tr>")[0] for seg in html.split("<tr")]
+    old_rows = [seg for seg in rows if "<td>T38-L-OLD</td>" in seg]
+    new_rows = [seg for seg in rows if "<td>T38-L-NEW</td>" in seg]
+    assert old_rows and all(LEGACY_NOTE in seg for seg in old_rows)
+    assert new_rows and not any(LEGACY_NOTE in seg for seg in new_rows)
+
+
+def test_gross_wording_is_kept_where_it_really_is_gross(client):
+    from modules.analytics.api.reports import _build_report_html
+    _seed_new_and_legacy()
+    lab, data = _data()
+    html = _build_report_html(data, lab, "t")
+    assert "真實毛利率" in html and "原始直接毛利" in html and "原始毛利率" in html
+
+
+def test_screen_page_and_script_use_net_wording_and_the_same_legacy_note():
+    from pathlib import Path
+    from core import source_tree
+    from modules.analytics.api.reports import _LEGACY_GROSS_NOTE
+    assert _LEGACY_GROSS_NOTE == LEGACY_NOTE
+    page = source_tree.page_file("reports.html").read_text(encoding="utf-8")
+    js = (Path(source_tree.FRONTEND_PAGES).parent / "js" / "reports.js").read_text(encoding="utf-8")
+    for gone in ("預估毛利率", "實際毛利率", "預估毛利<", "實際毛利<", "精算實際毛利", "平均淨毛利率", "年度實際毛利", "毛利率比較"):
+        assert gone not in page, gone
+    for gone in ("預估毛利率", "實際毛利率", "平均毛利率", "平均淨毛利率", "年度實際毛利"):
+        assert gone not in js, gone
+    for there in ("預估淨利率", "實際淨利率", "預估淨利", "實際淨利", "精算實際淨利", "利潤分析", "淨利率比較"):
+        assert there in page, there
+    assert page.count(LEGACY_NOTE) == 4                              # 兩張案件表＋利潤分析表的實際率與實際金額
+    assert page.count("actualIsGross") == 4
+    for keep in ("真實毛利", "原始直接毛利", "原始毛利率"):
+        assert keep in page, keep

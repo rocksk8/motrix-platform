@@ -268,6 +268,9 @@ def _case_dept(cr: dict, row, name_index: dict, user_by_id: dict):
     return (info["deptId"], info["deptName"]) if info else (None, "未分類")
 
 
+_LEGACY_GROSS_NOTE = "（舊精算為毛利）"      # 舊精算（摘要沒有 netProfit）的「實際」欄是毛利；畫面／Excel／PDF 與 reports.html 共用同一句
+
+
 def _settle_actual_profit_margin(settle: dict):
     """`(實際利潤, 實際利潤率%)`。有 `netProfit` 鍵 ⇒ 用淨利（含 0 與負數）；沒有 ⇒ 舊精算，退回毛利。
 
@@ -418,6 +421,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             # 淨利剛好 0 是真的 0，不是舊格式（見 _settle_actual_profit_margin；payroll/bonus.py base_amount_for 同型）。
             "actualMarginPct": _settle_actual_profit_margin(settle)[1] if settle else None,
             "grossProfit":     _settle_actual_profit_margin(settle)[0] if settle else None,
+            "actualIsGross":   bool(settle) and settle.get("netProfit") is None,
             "settleSummary":   settle if settle else None,
             "settleDate":      row["settle_date"] or "",
             "settleBy":        row["settle_by"]   or "",
@@ -545,7 +549,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     backlog = sum(c["total"] - c["receivedAmount"] for c in cases_all if c["dealTag"] == "已成案")
 
     # 精算快照過期：finalized 案件的 dispatchTotal 快照 vs 目前即時計算值不一致，
-    # 代表承攬商成本在精算完結後又異動過，這份報表用到的毛利/業務員績效/部門
+    # 代表承攬商成本在精算完結後又異動過，這份報表用到的淨利/業務員績效/部門
     # 績效數字可能已經跟實際不符（同一份快照，settlement.html／案件管理財務Tab
     # 各自有逐案件的即時比對banner，這裡只給總數當全域警訊，不逐案列出——
     # 要看是哪幾筆，去對應案件本身的頁面會有詳細比較）。
@@ -841,7 +845,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         ("手續費合計",       _fmt(s["totalFee"]),                 C_ORANGE, None),
         ("實收淨額",         _fmt(s["netCollected"]),             C_GREEN,  None),
         ("本期收款",         _fmt(s["periodReceived"]),           C_BLUE,   f"本期淨 {_fmt(s['periodNet'])}"),
-        ("精算實際毛利合計", _fmt(s["totalActualGrossProfit"]),   "7C3AED", f"已精算 {s['settledCases']} 件"),
+        ("精算實際淨利合計", _fmt(s["totalActualGrossProfit"]),   "7C3AED", f"已精算 {s['settledCases']} 件"),
         ("精算覆蓋率",       f"{s['settleCoverage']}%",          "7C3AED", f"已結案 {s['closedCases']} 件中 {s['settledCases']} 件完成"),
     ]
     r = 5
@@ -974,8 +978,8 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         _acv_xl_row(ws_acv, ri+1, "年度新成案數", _xl_c, cas_d.get("actual",0),  cas_d.get("target",0),  cas_d.get("rate"),  cas_d.get("prorata"))
         _acv_xl_row(ws_acv, ri+2, "年度收款金額", _xl_m, colA_d.get("actual",0), colA_d.get("target",0), colA_d.get("rate"), colA_d.get("prorata"))
         _acv_xl_row(ws_acv, ri+3, "收款率",       _xl_p, colR_d.get("actual",0), colR_d.get("target",0), colR_d.get("rate"), None)
-        _acv_xl_row(ws_acv, ri+4, "平均淨毛利率", _xl_p, mgn_d.get("actual",0),  mgn_d.get("target",0),  mgn_d.get("rate"),  None)
-        _acv_xl_row(ws_acv, ri+5, "年度實際毛利", _xl_m, gp_d.get("actual",0),   gp_d.get("target",0),   gp_d.get("rate"),   gp_d.get("prorata"))
+        _acv_xl_row(ws_acv, ri+4, "平均淨利率", _xl_p, mgn_d.get("actual",0),  mgn_d.get("target",0),  mgn_d.get("rate"),  None)
+        _acv_xl_row(ws_acv, ri+5, "年度實際淨利", _xl_m, gp_d.get("actual",0),   gp_d.get("target",0),   gp_d.get("rate"),   gp_d.get("prorata"))
         ri += 7
 
         sp_acv = acv.get("salesperson") or []
@@ -1323,7 +1327,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     ws4.sheet_view.showGridLines = False
 
     hdrs4 = ["案件號","客戶","專案名稱","業務員","報價日期","案件進度",
-             "合約含稅","合約未稅","預估毛利率","已收款","收款率(%)","精算狀態","實際毛利率","實際毛利"]
+             "合約含稅","合約未稅","預估淨利率","已收款","收款率(%)","精算狀態","實際淨利率","實際淨利"]
     cols4 = [13,18,18,10,11,9,13,13,11,13,10,9,11,13]
     for i, (h, w) in enumerate(zip(hdrs4, cols4), 1):
         ws4.column_dimensions[get_column_letter(i)].width = w
@@ -1369,7 +1373,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
             c_["receivedAmount"],
             f"{c_['collectionRate']:.1f}%",
             c_["settleStatus"] or "未精算",
-            f"{am:.1f}%" if am is not None else "",
+            (f"{am:.1f}%" + (_LEGACY_GROSS_NOTE if c_.get("actualIsGross") else "")) if am is not None else "",
             c_["grossProfit"] if c_["grossProfit"] is not None else "",
         ]
         set_row(ws4, r_i, row_v,
@@ -1397,7 +1401,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     # ── Sheet 6: 業務員績效 ──────────────────────────────────────────────────
     ws5 = wb.create_sheet("業務員績效")
     ws5.sheet_view.showGridLines = False
-    hdrs5 = ["業務員","案件數","合約總額","已收款","收款率(%)","預估毛利率","實際毛利率","精算件數"]
+    hdrs5 = ["業務員","案件數","合約總額","已收款","收款率(%)","預估淨利率","實際淨利率","精算件數"]
     cols5 = [16, 9, 16, 16, 11, 14, 14, 9]
     for i, (h, w) in enumerate(zip(hdrs5, cols5), 1):
         ws5.column_dimensions[get_column_letter(i)].width = w
@@ -1475,7 +1479,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
 
     ws6.merge_cells(f"A1:{get_column_letter(len(hdrs6))}1")
     c = ws6["A1"]
-    c.value = "毛利分析 — 精算利潤對照（已結案案件）"
+    c.value = "利潤分析 — 精算利潤對照（已結案案件）"
     c.font  = mk(bold=True, size=12, color=C_WHITE)
     c.fill  = fill("7C3AED")
     c.alignment = al("center")
@@ -1856,7 +1860,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
             f"<td class='r'>NT$ {c['total']:,}</td>"
             f"<td class='r'>{c['netMarginPct']:.1f}%</td>"
             "<td class='r " + ("green" if c["collectionRate"] >= 80 else "orange") + f"'>{c['collectionRate']:.1f}%</td>"
-            "<td class='c'>" + ((("▲" if diff >= 0 else "▼") + str(abs(diff)) + "%") if diff is not None else "—") + "</td></tr>"
+            "<td class='c'>" + ((("▲" if diff >= 0 else "▼") + str(abs(diff)) + "%" + (f"<br><small>{_LEGACY_GROSS_NOTE}</small>" if c.get("actualIsGross") else "")) if diff is not None else "—") + "</td></tr>"
         )
 
     # ── 當月收支／今年度收支（2026-08-30 重構，取代原本單一「月支出」區塊）──
@@ -1995,6 +1999,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         act_cls  = "green" if act >= net else "red"
         diff_sign = "+" if diff >= 0 else ""
         gpd_sign  = "+" if gp_diff >= 0 else ""
+        legacy_note = f"<br><small>{_LEGACY_GROSS_NOTE}</small>" if mc.get("actualIsGross") else ""
         mg_rows += (
             f"<tr>"
             f"<td>{esc(mc['quoteNo'])}</td><td>{esc(mc['customer'])}</td>"
@@ -2002,8 +2007,8 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
             f"<td class='c'>{esc(mc['dealTag'])}</td>"
             f"<td class='r'>{net:.1f}%</td>"
             f"<td class='r'>NT$ {est_gp:,}</td>"
-            f"<td class='r {act_cls}'><b>{act:.1f}%</b></td>"
-            f"<td class='r'>NT$ {act_gp:,}</td>"
+            f"<td class='r {act_cls}'><b>{act:.1f}%</b>{legacy_note}</td>"
+            f"<td class='r'>NT$ {act_gp:,}{legacy_note}</td>"
             f"<td class='r {diff_cls}'><b>{diff_sign}{diff:.1f}pp</b></td>"
             f"<td class='r {diff_cls}'><b>{gpd_sign}NT$ {abs(gp_diff):,}</b></td>"
             f"<td class='c'>{esc(mc['settleStatus'] or '—')}</td>"
@@ -2137,8 +2142,8 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
           + _pdf_acv_card("年度新成案數",  f"{_cas_d.get('actual',0)} 件",  f"{_cas_d.get('target',0)} 件",  _cas_d.get("rate"), f"{_cas_d.get('prorata',0)} 件" if _cas_d.get("prorata") else None)
           + _pdf_acv_card("年度收款金額",  fmt(_colA_d.get("actual",0)), fmt(_colA_d.get("target",0)), _colA_d.get("rate"), fmt(_colA_d.get("prorata",0)) if _colA_d.get("prorata") else None)
           + _pdf_acv_card("收款率目標",    f"{_colR_d.get('actual',0):.1f}%", f"{_colR_d.get('target',0):.0f}%", _colR_d.get("rate"))
-          + _pdf_acv_card("平均淨毛利率",  f"{_mgn_d.get('actual',0):.1f}%",  f"{_mgn_d.get('target',0):.0f}%",  _mgn_d.get("rate"))
-          + _pdf_acv_card("年度實際毛利",  fmt(_gp_d.get("actual",0)),   fmt(_gp_d.get("target",0)),   _gp_d.get("rate"),   fmt(_gp_d.get("prorata",0)) if _gp_d.get("prorata") else None)
+          + _pdf_acv_card("平均淨利率",  f"{_mgn_d.get('actual',0):.1f}%",  f"{_mgn_d.get('target',0):.0f}%",  _mgn_d.get("rate"))
+          + _pdf_acv_card("年度實際淨利",  fmt(_gp_d.get("actual",0)),   fmt(_gp_d.get("target",0)),   _gp_d.get("rate"),   fmt(_gp_d.get("prorata",0)) if _gp_d.get("prorata") else None)
         )
 
         _sp_rows_html = ""
@@ -2222,7 +2227,7 @@ tr.in-period{{background:#EFF6FF}}
   <div class="kpi"><div class="kpi-label">合約總案數</div><div class="kpi-val">{s["totalCases"]}</div><div class="kpi-sub">進行中 {s["activeCases"]}　已結案 {s["closedCases"]}</div></div>
   <div class="kpi"><div class="kpi-label">本期新成案</div><div class="kpi-val blue">{s["periodCases"]}</div></div>
   <div class="kpi"><div class="kpi-label">保固到期預警</div><div class="kpi-val orange">{s["warrantyAlerts"]}</div><div class="kpi-sub">90 天內到期</div></div>
-  <div class="kpi"><div class="kpi-label">精算實際毛利合計</div><div class="kpi-val" style="color:#7C3AED">{fmt(s["totalActualGrossProfit"])}</div><div class="kpi-sub">已精算 {s["settledCases"]} 件</div></div>
+  <div class="kpi"><div class="kpi-label">精算實際淨利合計</div><div class="kpi-val" style="color:#7C3AED">{fmt(s["totalActualGrossProfit"])}</div><div class="kpi-sub">已精算 {s["settledCases"]} 件</div></div>
   <div class="kpi"><div class="kpi-label">精算覆蓋率</div><div class="kpi-val" style="color:#7C3AED">{s["settleCoverage"]}%</div><div class="kpi-sub">已結案 {s["closedCases"]} 件中 {s["settledCases"]} 件完成精算</div></div>
   <div class="kpi"><div class="kpi-label">在製訂單 (Backlog)</div><div class="kpi-val blue">{fmt(s["backlog"])}</div><div class="kpi-sub">進行中案件未收款合計</div></div>
   {'<div class="kpi"><div class="kpi-label">已結案未精算</div><div class="kpi-val red">' + str(s["settleOverdueCount"]) + ' 件</div><div class="kpi-sub">待補精算</div></div>' if s["settleOverdueCount"] > 0 else ""}
@@ -2306,21 +2311,21 @@ tr.in-period{{background:#EFF6FF}}
 <div class="page-break"></div>
 <div class="section-title" style="background:#1F2937">案件清單（本期新成案以藍色標示，依月份區分）</div>
 <table>
-<thead>{tbl_hdr("案件號","客戶","專案","業務員","報價日","進度","合約金額","預估毛利率","收款率","實際毛利率(▲▼)")}</thead>
+<thead>{tbl_hdr("案件號","客戶","專案","業務員","報價日","進度","合約金額","預估淨利率","收款率","實際淨利率(▲▼)")}</thead>
 <tbody>{case_rows}</tbody>
 </table>
 
 <!-- 業務員績效 -->
 <div class="section-title" style="background:#2563EB">業務員績效</div>
 <table>
-<thead>{tbl_hdr("業務員","案件數","合約總額","已收款","收款率","預估毛利率(加權)","實際毛利率(精算)","精算件數")}</thead>
+<thead>{tbl_hdr("業務員","案件數","合約總額","已收款","收款率","預估淨利率(加權)","實際淨利率(精算)","精算件數")}</thead>
 <tbody>{sp_rows}</tbody>
 </table>
 
 <!-- 毛利分析 -->
 <div class="page-break"></div>
-<div class="section-title" style="background:#7C3AED">毛利分析（已精算案件，共 {len(data["marginCases"])} 件）</div>
-{'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員","進度","預估毛利率","預估毛利","實際毛利率","實際毛利","差異(pp)","差異金額","精算狀態") + '</thead><tbody>' + mg_rows + '</tbody></table><h3 style="margin:20px 0 10px;font-size:10pt;color:#6D28D9;border-bottom:1px solid #DDD6FE;padding-bottom:4px">各案件利潤分析明細</h3>' + mg_detail_blocks if data["marginCases"] else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">目前尚無已完成精算之案件。</p>'}
+<div class="section-title" style="background:#7C3AED">利潤分析（已精算案件，共 {len(data["marginCases"])} 件）</div>
+{'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員","進度","預估淨利率","預估淨利","實際淨利率","實際淨利","差異(pp)","差異金額","精算狀態") + '</thead><tbody>' + mg_rows + '</tbody></table><h3 style="margin:20px 0 10px;font-size:10pt;color:#6D28D9;border-bottom:1px solid #DDD6FE;padding-bottom:4px">各案件利潤分析明細</h3>' + mg_detail_blocks if data["marginCases"] else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">目前尚無已完成精算之案件。</p>'}
 
 <!-- 保固預警 -->
 <div class="page-break"></div>
@@ -2987,7 +2992,7 @@ def schedule_monthly_report() -> None:
 
 @router.get("/api/reports/monthly-trend")
 def monthly_trend(months: int = 12, authorization: str = Header(None)):
-    """近 N 月 MoM 趨勢：新成案件數、合約金額、實收金額、收入加權平均毛利率。"""
+    """近 N 月 MoM 趨勢：新成案件數、合約金額、實收金額、收入加權平均淨利率。"""
     u = _require_user(authorization)
     _require_reports_access(u)
 
