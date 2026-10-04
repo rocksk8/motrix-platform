@@ -72,3 +72,22 @@ def test_pdf_detail_lists_unabsorbed_dispatch_and_the_absorbed_note(client):
     assert "承攬商（未併入品項成本）" in new and "NT$ 380" in new
     assert "其中 NT$ 120 已併入品項實際成本" in new
     assert "承攬商（未併入品項成本）" not in old and "已併入品項實際成本" not in old
+
+
+# ── t36／t37 完結的案件只帶頁面鍵 dispatchAbsorbed（稽核 S-2）──────────────────
+
+PAGE_KEY_ONLY = {k: v for k, v in NEW.items() if k != "dispatchAbsorbedTotal"} | {"dispatchAbsorbed": 120}
+
+
+def test_page_key_only_summary_still_sums_to_total_cost(client):
+    _insert_case("T38-X-PAGE", deal_tag="已結案", settlement={"status": "finalized", "summary": PAGE_KEY_ONLY})
+    r = _excel_rows()["T38-X-PAGE"]
+    assert (r[10].value, r[11].value, r[12].value) == (1200, 680, 1880)
+
+
+def test_total_key_wins_over_page_key_and_both_absent_is_unchanged():
+    from modules.analytics.api.reports import _dispatch_split
+    assert _dispatch_split({"dispatchTotal": 500, "dispatchAbsorbedTotal": 120, "dispatchAbsorbed": 999}) == (380, 120)
+    assert _dispatch_split({"dispatchTotal": 500, "dispatchAbsorbed": 120}) == (380, 120)
+    assert _dispatch_split({"dispatchTotal": 500}) == (0, 0)
+    assert _dispatch_split({"dispatchTotal": 500, "dispatchAbsorbedTotal": 0, "dispatchAbsorbed": 120}) == (500, 0)   # 有總計鍵（含 0）就以它為準
