@@ -271,6 +271,20 @@ def _case_dept(cr: dict, row, name_index: dict, user_by_id: dict):
 _LEGACY_GROSS_NOTE = "（舊精算為毛利）"      # 舊精算（摘要沒有 netProfit）的「實際」欄是毛利；畫面／Excel／PDF 與 reports.html 共用同一句
 
 
+def _dispatch_split(summary: dict):
+    """`(未併入品項的承攬金額, 已併入品項實際成本的承攬金額)`。
+
+    精算摘要的 `dispatchAbsorbedTotal`（M01 寫入）是 dispatchTotal 中已併入「品項實際成本」的部分；
+    成本分項要加得回 totalActualCost：品項(+未採用採購單)＋額外支出＋未併入承攬＝實際總成本。
+    舊精算沒有這個鍵 ⇒ (0, 0)，輸出與以前相同（不能拿 dispatchTotal 當未併入，否則舊案會變）。
+    """
+    raw = (summary or {}).get("dispatchAbsorbedTotal")
+    if raw is None:
+        return 0, 0
+    absorbed = int(raw or 0)
+    return max(int((summary or {}).get("dispatchTotal", 0) or 0) - absorbed, 0), absorbed
+
+
 def _settle_actual_profit_margin(settle: dict):
     """`(實際利潤, 實際利潤率%)`。有 `netProfit` 鍵 ⇒ 用淨利（含 0 與負數）；沒有 ⇒ 舊精算，退回毛利。
 
@@ -1523,7 +1537,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         orig_net_prof = int(s.get("origNetProfit", 0) or 0)
         # 32-S5：未採用的採購單連結金額＝該品項的實際成本（只是還沒按「採用」）⇒ Excel 固定欄位併進「品項實際成本」，分項加總才等於實際總成本
         item_cost     = int(s.get("itemActualTotal", 0) or 0) + int(s.get("itemPoUnadopted", 0) or 0)
-        extra_cost    = int(s.get("extraTotal", 0) or 0)
+        extra_cost    = int(s.get("extraTotal", 0) or 0) + _dispatch_split(s)[0]     # 未併入品項的承攬併進「額外支出」欄，分項才加得回總成本
         total_cost    = int(s.get("totalActualCost", 0) or 0)
         gross_pct     = float(s.get("grossMarginPct", 0) or 0)
         net_pct       = float(s.get("netMarginPct", 0) or 0)
@@ -1556,7 +1570,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         tot_orig_cost = sum(int((mc.get("settleSummary") or {}).get("origTotalCost",0) or 0) for mc in data["marginCases"])
         tot_orig_np   = sum(int((mc.get("settleSummary") or {}).get("origNetProfit",0) or 0) for mc in data["marginCases"])
         tot_item      = sum(int((mc.get("settleSummary") or {}).get("itemActualTotal",0) or 0) + int((mc.get("settleSummary") or {}).get("itemPoUnadopted",0) or 0) for mc in data["marginCases"])
-        tot_extra     = sum(int((mc.get("settleSummary") or {}).get("extraTotal",0) or 0) for mc in data["marginCases"])
+        tot_extra     = sum(int((mc.get("settleSummary") or {}).get("extraTotal",0) or 0) + _dispatch_split(mc.get("settleSummary") or {})[0] for mc in data["marginCases"])
         tot_total     = sum(int((mc.get("settleSummary") or {}).get("totalActualCost",0) or 0) for mc in data["marginCases"])
         tot_net_prof  = sum(int((mc.get("settleSummary") or {}).get("netProfit",0) or 0) for mc in data["marginCases"])
         tot_est       = sum(int((mc["pretax"] or 0) * (mc["netMarginPct"] or 0) / 100) for mc in data["marginCases"])
@@ -2074,6 +2088,8 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         <tr><td>品項實際成本</td><td class="r orange">{_fn(ss.get("itemActualTotal"))}</td></tr>
         {('<tr><td>採購單（品項尚未採用）</td><td class="r orange">' + _fn(ss.get("itemPoUnadopted")) + '</td></tr>') if (ss.get("itemPoUnadopted") or 0) > 0 else ''}
         <tr><td>額外支出</td><td class="r orange">{_fn(ss.get("extraTotal"))}</td></tr>
+        {('<tr><td>承攬商（未併入品項成本）</td><td class="r orange">' + _fn(_dispatch_split(ss)[0]) + '</td></tr>') if _dispatch_split(ss)[0] > 0 else ''}
+        {('<tr class="sub"><td colspan="2">其中 ' + _fn(_dispatch_split(ss)[1]) + ' 已併入品項實際成本</td></tr>') if _dispatch_split(ss)[1] > 0 else ''}
         <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{_fn(ss.get("totalActualCost"))}</td></tr>
         <tr><td>真實毛利</td><td class="r {'green' if int(ss.get('grossProfit',0) or 0)>=0 else 'red'}">{_fn(ss.get("grossProfit"))}</td></tr>
         <tr><td>真實毛利率</td><td class="r">{float(ss.get("grossMarginPct") or 0):.1f}%</td></tr>
