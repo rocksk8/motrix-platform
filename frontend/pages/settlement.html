@@ -424,6 +424,12 @@
                     <div style="margin-top:3px;font-size:10px;font-weight:600" :data-testid="'stl-source-' + item.id">
                       <span class="stl-src" :class="'stl-src--' + itemSource(item).key" x-text="'來源：' + itemSource(item).label"></span>
                     </div>
+                    <select class="stl-input" x-show="itemSource(item).key === 'manual' || (itemSource(item).key === 'est' && !(systemActual(item) > 0))" :data-testid="'stl-actual-source-' + item.id"
+                            x-model="item.actualSource" :disabled="settlement.status === 'finalized'" aria-label="手填來源標籤" style="margin-top:3px;font-size:10px;padding:2px 4px;width:100%">
+                      <option value="manual">手填</option>
+                      <option value="legacy">歷史未建系統</option>
+                      <option value="labor">人力</option>
+                    </select>
                     <div x-show="itemSource(item).key === 'est' && !(systemActual(item) > 0)" :data-testid="'stl-nopurchase-' + item.id" style="margin-top:3px;font-size:10px;font-weight:400;color:#92400E;line-height:1.4">
                       無採購／對應紀錄：實際成本以估計計；已採購但沒進系統（歷史）或人力成本，請在左側填「實際數量／單位成本」。
                     </div>
@@ -1005,6 +1011,7 @@ function settlementPage() {
           actualCostTaxMode: 'taxed_gross',
           actualTotalCost: MotrixLegalRound.halfUp((it.qty || 0) * (it.cost || 0), 1.05),
           note:            '',
+          actualSource:    'manual',    // 手填來源標籤（顯示用）
           adoptSystem:     false,       // 32-S5：true＝此品項的實際成本採用「採購單連結金額」（跟著採購單變動，完結後凍結）
         }))
 
@@ -1033,6 +1040,7 @@ function settlementPage() {
                 actualUnitCost: si.actualUnitCost !== undefined ? si.actualUnitCost : oi.actualUnitCost,
                 actualCostTaxMode: si.actualCostTaxMode || oi.actualCostTaxMode,
                 actualTotalCost:si.actualTotalCost|| oi.actualTotalCost,
+                actualSource:   ['legacy', 'labor'].includes(si.actualSource) ? si.actualSource : 'manual',      // 純標籤（手填／歷史未建系統／人力）：不進任何合計；缺鍵＝手填
                 adoptSystem:    !!si.adoptSystem,       // 舊存檔缺鍵＝今天的行為（不採用）；後端 settlement_actuals 同一規則
                 _fromSave:      true,
                 note:           si.note || '',
@@ -1147,7 +1155,9 @@ function settlementPage() {
         const po = !!(a.po && a.po.amount), map = !!((a.material && a.material.amount) || (a.extra && a.extra.amount) || (a.dispatch && a.dispatch.amount))
         return po && map ? { key: 'po-map', label: '採購單＋已對應' } : po ? { key: 'po', label: '採購單' } : { key: 'map', label: '已對應' }
       }
-      if ((+item.actualTotalCost || 0) > 0) return { key: 'manual', label: '手填' }
+      // 手填欄預設帶入估計值：數字與估計相同＝沒動過（來源＝估計）；改過、或標了「歷史未建系統／人力」才算手填
+      const tagged = item.actualSource === 'legacy' || item.actualSource === 'labor'
+      if ((+item.actualTotalCost || 0) > 0 && (tagged || +item.actualTotalCost !== this.estimateOf(item))) return { key: 'manual', label: item.actualSource === 'legacy' ? '手填・歷史未建系統' : item.actualSource === 'labor' ? '手填・人力' : '手填' }
       return { key: 'est', label: '估計' }
     },
     dispLabel(d) { return (d.docCode || '派發#' + d.itemId) + '｜' + (d.vendorName || '（未命名承攬商）') },
@@ -1466,6 +1476,7 @@ function settlementPage() {
           actualCostTaxMode: i.actualCostTaxMode,
           actualTotalCost:i.actualTotalCost,
           adoptSystem:    !!i.adoptSystem,
+          actualSource:   i.actualSource === 'legacy' || i.actualSource === 'labor' ? i.actualSource : 'manual',
           note:           i.note,
         })),
         extraItems: this.settlement.extraItems,
