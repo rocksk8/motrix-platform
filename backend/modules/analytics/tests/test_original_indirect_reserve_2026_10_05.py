@@ -11,6 +11,16 @@ import openpyxl
 
 from modules.analytics.tests.test_reports_logic_fixes_2026_08_28 import _insert_case
 
+#: 既有「毛利分析」表（T39 之前）的表頭與欄號（1 起算）：使用者為依賴這份匯出的人／工具保留了工作表名，欄號同樣不可動
+LEGACY_HEADERS = [
+    "案件號", "客戶", "專案名稱", "業務員", "案件進度", "報價稅前",
+    "原始成本", "原始毛利率", "原始淨利率", "原始預估淨利",
+    "品項成本", "額外支出", "實際總成本", "真實毛利率", "真實淨利率", "真實淨利",
+    "差異(pp)", "差異金額",
+    "精算狀態", "精算日期", "完結人",
+]
+NEW_HEADERS = ["報價預留間接成本", "其中：報價預留間接成本", "其中：其他"]
+
 BASE = {"netProfit": 26630, "netMarginPct": 26.6, "grossProfit": 37000, "grossMarginPct": 37.0,
         "itemActualTotal": 60000, "extraTotal": 0, "totalActualCost": 63000,
         "origTotalCost": 60000, "origNetProfit": 21630, "origNetMarginPct": 21.6,
@@ -51,7 +61,7 @@ def test_excel_original_group_has_the_reserve_column_and_diff_is_split(client):
     ix = _header_index(ws)
     for h in ("報價預留間接成本", "其中：報價預留間接成本", "其中：其他"):
         assert h in ix, h
-    assert ix["報價預留間接成本"] == ix["原始預估淨利"] + 1                      # 在原始側群組內
+    assert [ws.cell(3, i).value for i in range(1, 25)] == LEGACY_HEADERS + NEW_HEADERS      # 既有欄號不動，新欄在最右
     rows = {r[0].value: r for r in ws.iter_rows(min_row=4) if r[0].value in ("T39-R-NEW", "T39-R-OLD")}
     new, old = rows["T39-R-NEW"], rows["T39-R-OLD"]
     diff_amt = new[ix["差異金額"]].value
@@ -62,13 +72,24 @@ def test_excel_original_group_has_the_reserve_column_and_diff_is_split(client):
     assert old[ix["其中：其他"]].value == old[ix["差異金額"]].value        # 舊精算：差額原封不動
 
 
-def test_excel_group_header_spans_the_new_column(client):
+def test_existing_group_headers_keep_their_columns_and_the_new_group_is_at_the_far_right(client):
     _seed()
     ws = _sheet()
-    ix = _header_index(ws)
-    merged = {str(m): m for m in ws.merged_cells.ranges}
-    orig = [m for m in ws.merged_cells.ranges if m.min_row == 2 and ws.cell(2, m.min_col).value == "原始報價預估"][0]
-    assert orig.min_col == ix["原始成本"] + 1 and orig.max_col == ix["報價預留間接成本"] + 1
+    spans = {ws.cell(2, m.min_col).value: (m.min_col, m.max_col) for m in ws.merged_cells.ranges if m.min_row == 2}
+    assert spans["基本資訊"] == (1, 6) and spans["原始報價預估"] == (7, 10)
+    assert spans["實際成本精算"] == (11, 16) and spans["差異"] == (17, 18) and spans["精算資訊"] == (19, 21)
+    assert spans["報價預留間接成本"] == (22, 24)
+
+
+def test_legacy_columns_hold_the_same_values_with_or_without_a_reserve(client):
+    """既有欄的值與有無 origIndirectReserve 無關（新欄只多不改）。"""
+    _seed()
+    ws = _sheet()
+    rows = {r[0].value: r for r in ws.iter_rows(min_row=4) if r[0].value in ("T39-R-NEW", "T39-R-OLD")}
+    new, old = rows["T39-R-NEW"], rows["T39-R-OLD"]
+    for i in range(1, 21):                                       # 案件號以外都應相同（兩案內容相同，僅差預留）
+        if i > 1:
+            assert new[i].value == old[i].value, (LEGACY_HEADERS[i], new[i].value, old[i].value)
 
 
 def test_excel_total_row_sums_the_reserve(client):
