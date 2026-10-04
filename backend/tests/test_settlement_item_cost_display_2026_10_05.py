@@ -82,12 +82,12 @@ def test_schema_version_is_compared_as_a_number_like_the_server():
 
 @needs_node
 def test_charity_line_has_no_double_minus_for_legacy_negative_values():
-    """≥0：照舊「− 金額」表示扣除；舊的已凍結負值（公益金會加回淨利）顯示帶號金額，不是「− −50」。"""
+    """≥0（含 0）：照舊「− 金額」表示扣除；舊的已凍結負值（公益金會加回淨利）顯示帶號金額，不是「− −50」。"""
     cm = lambda n: _cm("return o.caseSettleCharityText(%s)" % json.dumps(n))
     rp = lambda n: _js("js", str(FRONTEND / "js" / "reports.js"), "reportsApp", "return o.stlCharityText(%s)" % json.dumps(n))
     for f in (cm, rp):
         assert f(120) == "− NT$ 120"
-        assert f(0) == "NT$ 0"
+        assert f(0) == "− NT$ 0"                                 # 0 仍是扣除列（既有畫面不變）
         assert f(-50) == "NT$ -50"
         assert "− -" not in f(-50) and "− −" not in f(-50)
-        assert f(None) == "NT$ 0"
+        assert f(None) == "− NT$ 0"

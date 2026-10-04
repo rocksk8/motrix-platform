@@ -595,7 +595,7 @@ function reportsApp() {
       const t = it && it.actualTotalCost, v2 = Number(((this.settlement && this.settlement.settlement) || {}).schemaVersion) >= 2
       return v2 ? (t !== null && t !== undefined && t !== '') : ((+t || 0) > 0)
     },
-    stlCharityText(n) { n = +n || 0; return n > 0 ? '− ' + this.stlFmt(n) : this.stlFmt(n) },      // 同案件頁：負值（舊凍結資料）顯示帶號金額，不出現「− −50」
+    stlCharityText(n) { n = +n || 0; return n >= 0 ? '− ' + this.stlFmt(n) : this.stlFmt(n) },      // 同案件頁：負值（舊凍結資料）顯示帶號金額，不出現「− −50」
     stlItemCost(it) { return this.stlItemFilled(it) ? this.stlFmt(it.actualTotalCost) : '—' },
     stlExtras()  { return (this.settlement && this.settlement.settlement && this.settlement.settlement.extraItems) || [] },
     stlMemo()    { return (this.settlement && this.settlement.settlement && this.settlement.settlement.memo) || '' },
