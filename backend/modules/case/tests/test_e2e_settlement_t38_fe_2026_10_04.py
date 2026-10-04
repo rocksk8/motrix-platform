@@ -267,3 +267,49 @@ def test_zero_sum_purchase_rows_replace_the_estimate_when_adopted(live_server, m
     }}""")
     assert r["has"] is True and r["actual"] == 0 and r["est"] == 10500, r
     assert r["total"] == 0 + 800, r                                                     # a 取代為 0；b 仍是 800
+
+
+@pytest.mark.e2e
+def test_finalize_adopts_the_server_frozen_summary_and_legacy_without_absorbed_key_renders(live_server, make_user, e2e_browser):
+    """S-4：完結後本頁採用 PUT 回應的 summary（＝伺服器覆蓋後實際凍結的）；重新載入後顯示的數字＝存檔 summary；
+    舊完結案（summary 沒有 dispatchAbsorbedTotal）照常顯示、不報錯。"""
+    import db
+    from modules.case.tests.test_settlement_tax_basis_2026_10_03 import _dispatch
+    sa = make_user(username="sa_sa", role="superadmin")
+    _seed()
+    d1 = _dispatch(10000, 2000, quote_no=NO)                                          # 派發 12000 → 對應到品項 a 並採用 ⇒ 被吸收 12000
+    page = _open(e2e_browser, live_server, sa)
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.locator(f'[data-testid="stl-offset-dispatch-{d1}"]').select_option("a")
+    page.wait_for_function(f"() => {S}.summary.dispatchAbsorbed === 12000", timeout=10000)
+    _finalize_click(page)
+    page.wait_for_function(f"() => {S}.settlement.status === 'finalized' && !{S}.saving", timeout=15000)
+    saved = _settlement()["summary"]
+    keys = ["totalActualCost", "grossProfit", "adminCost", "charityDonation", "netProfit", "dispatchTotal", "itemActualTotal"]
+    live = page.evaluate(f"() => ({{...{S}.summary}})")
+    assert saved["dispatchAbsorbedTotal"] == 12000, saved
+    for k in keys:
+        assert live[k] == saved[k], (k, live[k], saved[k])                           # 完結當下畫面＝存檔（伺服器值）
+    assert live["dispatchAbsorbed"] == saved["dispatchAbsorbedTotal"]
+    page.reload()
+    page.wait_for_function(f"() => {S}._actualsOk && {S}.settlement.status === 'finalized'", timeout=20000)
+    after = page.evaluate(f"() => ({{...{S}.summary}})")
+    for k in keys:
+        assert after[k] == saved[k], (k, after[k], saved[k])                         # 重新載入後也一致
+    assert after["dispatchAbsorbed"] == 12000
+    # 舊案：把存檔 summary 的 dispatchAbsorbedTotal 拿掉（模擬 38 之前完結）⇒ 仍可顯示、沒有 JS 錯誤、數字是有限值
+    c = db.get_db()
+    try:
+        row = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+        row["settlement"]["summary"].pop("dispatchAbsorbedTotal", None)
+        c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(row), NO))
+        c.commit()
+    finally:
+        c.close()
+    page.reload()
+    page.wait_for_function(f"() => {S}._actualsOk && {S}.settlement.status === 'finalized'", timeout=20000)
+    legacy = page.evaluate(f"() => ({{...{S}.summary}})")
+    assert all(isinstance(legacy[k], (int, float)) and legacy[k] == legacy[k] for k in keys + ["dispatchAbsorbed"]), legacy
+    assert page.locator('[data-testid="stl-k-net"]').is_visible()
+    assert errors == [], errors

@@ -1506,6 +1506,9 @@ function settlementPage() {
     // 已被品項吸收的派發金額：採用且該品項有金額時，派發已在品項實際成本裡，不能再於承攬商派發成本重複加（規則 A，與後端同一條）。
     // 總成本 ＝ 品項實際 ＋ 額外 ＋ 派發 − 被吸收；不用 dispatchTotal 直接加（完結時後端重算比對，重複計入會 409）
     get dispatchAbsorbed() {
+      // S-2／S-4：已完結且存檔 summary 有 dispatchAbsorbedTotal ⇒ 以凍結值為準（`dispatchAbsorbedTotal ?? 即時算`）；舊案沒有這鍵 ⇒ 沿用即時算
+      const fz = this._frozenSummary
+      if (this.settlement.status === 'finalized' && fz && typeof fz.dispatchAbsorbedTotal === 'number') return fz.dispatchAbsorbedTotal
       if (!this._actualsOk) return 0
       return this.settlement.items.reduce((sum, i) => {
         const a = this.itemActuals[i.id]
@@ -1919,7 +1922,15 @@ function settlementPage() {
         if (r.ok) {
           this.settlement.status = 'finalized'; this.settlement.finalizedAt = when; this.settlement.finalizedBy = who
           this.calcSummary()
-          this._frozenSummary = Object.assign({}, this.summary, { dispatchBasis: 'pretax' })      // 與後端存下的一致，之後的顯示／過期比對才認得新口徑
+          // S-4：完結時伺服器會用重算值覆蓋下游欄位，PUT 回應帶回「實際凍結的 summary」⇒ 本頁直接採用它（顯示與存檔一致，不再用本頁自己算的）
+          const srv = r.data && r.data.summary && typeof r.data.summary === 'object' ? r.data.summary : null
+          if (srv) {
+            this._frozenSummary = Object.assign({}, srv)
+            Object.keys(srv).forEach(k => { if (k in this.summary && typeof srv[k] === typeof this.summary[k]) this.summary[k] = srv[k] })
+            if (typeof srv.dispatchAbsorbedTotal === 'number') this.summary.dispatchAbsorbed = srv.dispatchAbsorbedTotal
+          } else {
+            this._frozenSummary = Object.assign({}, this.summary, { dispatchBasis: 'pretax' })      // 舊後端沒回 summary：維持原行為（與後端存下的口徑一致）
+          }
           this.showFinalizeModal = false
           this.toast('精算已完結')
         } else {
