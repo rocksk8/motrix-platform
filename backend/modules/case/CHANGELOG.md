@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-05（wip/t40-fe-05）：案件頁與報表的精算成本品項不再把「真的 0」顯示成未填（純前端）
+- `case-management.html`（案件→精算摘要）與 `reports.html`（結案精算明細）的「成本品項」依 `settlement.schemaVersion`：≥2 時 `actualTotalCost` 為數字（含 0）＝有填，顯示 `NT$ 0`，`null`／空才顯示「未填寫」／「—」；舊存檔（沒有標記）0 仍視為未填，顯示不變。不改任何公式與後端。
+- 測試：`tests/test_settlement_item_cost_display_2026_10_05.py`（node 載入分檔，兩種顯示＋舊存檔不變）。
+
 ## 1.0.136 — 2026-10-04（wip/t39-case-be）：公益金下限 0、實際成本 0 是真的 0（schemaVersion 2）
 - **公益金下限 0**：毛利為負時 `charityDonation = 0`（不再算出負的公益金）；完結重算比對、`fill_downstream`、報價原始側 `origCharity`（報價 `tot` 沒有該欄時伺服器算）同一條。毛利 ≥ 0 與已凍結的完結 summary 完全不變（不改寫）。舊頁面對毛利為負的案件送負的公益金 ⇒ 完結 409（要用新頁面）。
 - **精算存檔頂層 `schemaVersion`（整數；沒有＝1＝舊存檔）**：`PUT /settlement` 驗證（非 ≥1 整數 ⇒ 422）、原樣存檔、`settlement-actuals` 回傳 `schemaVersion`。**v2：品項 `actualTotalCost` 是數字（含 0）＝已填、null／沒有／空字串＝沒填（用估計）**；沒有標記的舊存檔維持「0＝沒填」。套用在 `compute`（`actual.source` manual／estimate）、完結比對、凍結讀取。

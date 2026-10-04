@@ -48,6 +48,12 @@ window.CM_PARTS.push(() => ({
     caseSettleStatus()  { return this.caseSettlement()?.status || '' },
     caseSettleSummary() { return this.caseSettlement()?.summary || {} },
     caseSettleItems()   { return this.caseSettlement()?.items   || [] },
+    // 第 39 班契約：settlement.schemaVersion>=2 ⇒ actualTotalCost 是數字（含 0）＝有填，null／空＝未填；舊存檔（沒有標記）0＝未填
+    caseSettleItemFilled(item) {
+      const t = item && item.actualTotalCost, v2 = (this.caseSettlement()?.schemaVersion || 0) >= 2
+      return v2 ? (t !== null && t !== undefined && t !== '') : ((+t || 0) > 0)
+    },
+    caseSettleItemCost(item) { return this.caseSettleItemFilled(item) ? this.caseSettleFmt(item.actualTotalCost) : '未填寫' },
     caseSettleExtras()  { return this.caseSettlement()?.extraItems || [] },
     caseSettleMemo()    { return this.caseSettlement()?.memo || '' },
     caseSettleFmt(n)    { return 'NT$ ' + (MotrixLegalRound.halfUp(n || 0)).toLocaleString() },

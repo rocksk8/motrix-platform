@@ -590,6 +590,12 @@ function reportsApp() {
     stlFmt(n) { return 'NT$ ' + (Math.round(n || 0)).toLocaleString() },
     stlSummary() { return (this.settlement && this.settlement.settlement && this.settlement.settlement.summary) || {} },
     stlItems()   { return (this.settlement && this.settlement.settlement && this.settlement.settlement.items)   || [] },
+    // 第 39 班契約：settlement.schemaVersion>=2 ⇒ 數字（含 0）＝有填，null／空＝未填；舊存檔（沒有標記）0＝未填（顯示不變）
+    stlItemFilled(it) {
+      const t = it && it.actualTotalCost, v2 = (((this.settlement && this.settlement.settlement) || {}).schemaVersion || 0) >= 2
+      return v2 ? (t !== null && t !== undefined && t !== '') : ((+t || 0) > 0)
+    },
+    stlItemCost(it) { return this.stlItemFilled(it) ? this.stlFmt(it.actualTotalCost) : '—' },
     stlExtras()  { return (this.settlement && this.settlement.settlement && this.settlement.settlement.extraItems) || [] },
     stlMemo()    { return (this.settlement && this.settlement.settlement && this.settlement.settlement.memo) || '' },
     stlStatus()  { return (this.settlement && this.settlement.settlement && this.settlement.settlement.status) || '' },

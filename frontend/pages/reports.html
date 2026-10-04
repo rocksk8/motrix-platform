@@ -2295,7 +2295,7 @@
                         <td style="font-family:var(--font-zh)" x-text="it.origDescription || '（無品名）'"></td>
                         <td style="color:var(--text-dim)" x-text="it.origBrand || '—'"></td>
                         <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600"
-                            x-text="(it.actualTotalCost||0)>0 ? stlFmt(it.actualTotalCost) : '—'"></td>
+                            x-text="stlItemCost(it)" data-testid="rp-settle-item-cost"></td>
                         <td style="font-family:var(--font-zh);color:var(--text-dim)" x-text="it.note || ''"></td>
                       </tr>
                     </template>
