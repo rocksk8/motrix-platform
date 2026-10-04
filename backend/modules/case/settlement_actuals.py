@@ -170,7 +170,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
         manual = manual_actual(s)
         # 三態：新存檔有 adoptSystem（採用／不採用）；品項沒存過＝預設開；舊存檔（品項有存但沒有 adoptSystem 鍵，第 32 班前）＝今天頁面的行為（不採用，歷史相容；da S2）
         adopt = bool(s.get("adoptSystem")) if isinstance(s, dict) and "adoptSystem" in s else (not isinstance(s, dict))
-        has = purchased > 0
+        has = bool(po or mats or exs or dps)                       # 38：有採購列就算（負數退款列、正負相抵為 0 的列也是採購；原本 purchased>0 會把它們當沒採購）
         if_not = manual if manual is not None else est
         if_adopt = purchased if has else if_not
         if has and adopt:
@@ -199,10 +199,14 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
     sources = {"po": sum(it["po"]["amount"] for it in items), "materialAssigned": sum(it["material"]["amount"] for it in items),
                "materialUnassigned": un_mat_total, "extraAssigned": sum(it["extra"]["amount"] for it in items), "extraUnassigned": un_ex_total}
     ex = case_extras(conn, quote_no)
+    # 38：存檔裡有、但報價單已沒有的品項（品項被刪）——唯讀列出，讓畫面提示「這些存檔資料目前不計入」；不影響任何金額
+    orphans = [{"id": str(i.get("id")), "description": str(i.get("description") or ""), "actualTotalCost": _num(i.get("actualTotalCost")),
+                "adoptSystem": bool(i.get("adoptSystem")) if "adoptSystem" in i else None, "actualSource": i.get("actualSource") if i.get("actualSource") in ACTUAL_SOURCES else "manual"}
+               for i in (saved.get("items") or []) if isinstance(i, dict) and str(i.get("id") or "") and str(i.get("id")) not in {p_["itemId"] for p_ in plan}]
     legacy_save = any(isinstance(i, dict) and "adoptSystem" not in i for i in saved.get("items") or [])
     out = {"quoteNo": quote_no, "basis": "accrual", "finalized": False, "frozen": False,
            "legacySave": legacy_save,          # 存檔品項沒有 adoptSystem（第 32 班前存的）：adopt 以舊行為（不採用）
-           "unadoptedMode": unadopted, "items": items,
+           "unadoptedMode": unadopted, "items": items, "orphanItems": orphans,
             "extra": {"onlyAmount": un_ex_total, "rows": extra_all},
             "unassigned": {"materials": unassigned_mat, "extras": unassigned_extra, "dispatches": unassigned_disp}, "offsets": offs,
             "sources": sources,
@@ -253,6 +257,7 @@ def _freeze(out, saved, saved_items):
         if k in summ:
             out["totals"][k] = _num(summ[k])
     # 36：派發未對應／已對應拆分隨 summary 凍結；舊案沒有這兩鍵＝沒有派發對應（已對應 0、未對應＝凍結的 dispatchTotal）
+    out["totals"]["dispatchAbsorbedTotal"] = _num(summ.get("dispatchAbsorbedTotal"))            # 38：舊案沒有這鍵＝0
     out["totals"]["dispatchAssignedTotal"] = _num(summ.get("dispatchAssignedTotal"))
     out["totals"]["dispatchUnassignedTotal"] = _num(summ["dispatchUnassignedTotal"]) if "dispatchUnassignedTotal" in summ else out["totals"]["dispatchTotal"] - out["totals"]["dispatchAssignedTotal"]
     # 凍結案的承攬商口徑＝完結當下存的標記；舊案沒有標記＝含稅口徑（dispatchTotal 當時是含稅合計）。值本身不改寫。
@@ -367,7 +372,7 @@ def check_finalize(conn, quote_no, settlement):
               ("額外支出（含未對應材料申請）", their_extra, mine_extra, tol)]
     if "purchasedTotal" in summ:
         checks.append(("採購類總額", _num(summ.get("purchasedTotal")), t["purchasedTotal"], tol))
-    for k, nm in (("dispatchAssignedTotal", "承攬商派發已對應品項"), ("dispatchUnassignedTotal", "承攬商派發未對應")):
+    for k, nm in (("dispatchAssignedTotal", "承攬商派發已對應品項"), ("dispatchUnassignedTotal", "承攬商派發未對應"), ("dispatchAbsorbedTotal", "承攬商派發已併入品項")):
         if summ.get(k) is not None:
             checks.append((nm, _num(summ.get(k)), t[k], tol))
     out = ["%s：頁面 %s、系統重算 %s" % (name, round(a), round(b)) for name, a, b, tl in checks if abs(a - b) > tl]
@@ -426,8 +431,29 @@ def _check_downstream(conn, quote_no, summ, d, tol_item):
     return out
 
 
+def rebuild_summary_if_missing(conn, quote_no, settlement):
+    """完結時 `summary` 沒有 `itemActualTotal`（或根本沒有 summary）⇒ 無從比對，過去照存（偽造／殘缺的 summary 就這樣被凍結）。
+    38：改由伺服器用同一個 compute() 重建所有計算欄位；summary 裡的非計算欄位（備註等）保留。回傳是否重建。"""
+    if not isinstance(settlement, dict) or settlement.get("status") != "finalized":
+        return False
+    summ = settlement.get("summary")
+    if isinstance(summ, dict) and "itemActualTotal" in summ:
+        return False
+    d = compute(conn, quote_no, settlement=settlement, freeze=False)
+    t = d["totals"]
+    base = dict(summ) if isinstance(summ, dict) else {}
+    for k in DOWNSTREAM_KEYS:
+        base.pop(k, None)
+    base.update(itemActualTotal=t["itemActualTotal"], itemPoUnadopted=t["itemPoUnadopted"], purchasedTotal=t["purchasedTotal"],
+                materialUnassignedTotal=t["materialUnassignedTotal"], dispatchTax=t["dispatchTax"], dispatchGrandTotal=t["dispatchGrandTotal"],
+                extraTotal=t["extraTotal"] + t["materialUnassignedTotal"] + t["remitFeeTotal"] + t["customExpenseTotal"])
+    settlement["summary"] = base
+    return True
+
+
 def fill_downstream(conn, quote_no, settlement):
-    """完結通過比對後、存檔前：summary 沒有的下游欄位用伺服器重算值補上（含報價稅前收入），並蓋口徑標記。回傳補了哪些鍵（給稽核紀錄／測試）。"""
+    """完結通過比對後、存檔前：下游欄位**一律**以伺服器重算值覆蓋（38；原本只補沒送的，容差內的偏差與頁面值照存），含報價稅前收入，
+    並蓋口徑標記、寫入派發對應拆分／被吸收金額。回傳被改寫（補上或值不同）的鍵（給稽核紀錄／測試）。"""
     summ = settlement.get("summary") if isinstance(settlement, dict) else None
     if not isinstance(summ, dict) or "itemActualTotal" not in summ:
         return []
@@ -435,16 +461,15 @@ def fill_downstream(conn, quote_no, settlement):
     exp = _expected_downstream(conn, quote_no, d, max(1, len(d["items"])))
     pretax = exp.pop("_pretax")
     filled = []
+
+    def put(k, v):
+        if summ.get(k) != v:
+            filled.append(k)
+        summ[k] = v
     for k, (v, _tl) in exp.items():
-        if summ.get(k) is None:
-            summ[k] = v
-            filled.append(k)
-    if summ.get("quotedPretax") is None:
-        summ["quotedPretax"] = pretax
-        filled.append("quotedPretax")
+        put(k, v)
+    put("quotedPretax", pretax)
     summ["dispatchBasis"] = DISPATCH_BASIS
-    for k in ("dispatchAssignedTotal", "dispatchUnassignedTotal"):          # 36：派發對應拆分隨 summary 凍結
-        if summ.get(k) is None:
-            summ[k] = d["totals"][k]
-            filled.append(k)
+    for k in ("dispatchAssignedTotal", "dispatchUnassignedTotal", "dispatchAbsorbedTotal"):          # 36／38：派發對應拆分隨 summary 凍結
+        put(k, d["totals"][k])
     return filled

@@ -34,6 +34,16 @@ from helpers.doc_template import unapproved_banner as _unapproved_banner, inject
 from core import paths as _paths
 
 
+
+def dispatch_absorbed_row(summary, money=None):
+    """38（審計 S-1）：承攬商派發被「採用」的品項吸收時（`dispatchAbsorbedTotal`>0），品項實際成本已含這筆錢、實際總成本只算一次——
+    表上「品項＋額外＋派發」會比總成本多出這一塊 ⇒ 明列一行負數讓分項加總＝實際總成本。沒有吸收（含所有舊完結案）⇒ 空字串（一個位元組都不加）。"""
+    n = (summary or {}).get("dispatchAbsorbedTotal") or 0
+    if not n:
+        return ""
+    fmt = money or (lambda v: "{:,}".format(int(round(float(v)))))
+    return '\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">其中 %s 已併入品項實際成本（不重複計）：品項＋額外＋派發 − %s ＝ 實際總成本</td></tr>' % (fmt(n), fmt(n))
+
 def _local_date_of(ts) -> str:
     """時間戳字串 ⇒ 伺服器本地的 YYYY-MM-DD。帶時區的（`…Z`／`+00:00`，舊資料：前端曾用 toISOString() 存）先換成本地時區再取日期；
     不帶時區的（本系統後端存的都是本地時間）照取前 10 碼。讀不懂 ⇒ 前 10 碼。**只改顯示，不改資料。**
@@ -2567,7 +2577,7 @@ def _build_case_closing_html(data: dict) -> str:
       <tr><td>品項實際成本</td><td class="r orange">{money(summary.get("itemActualTotal"))}</td></tr>
       {('<tr><td>採購單（品項尚未採用）</td><td class="r orange">' + money(summary.get("itemPoUnadopted")) + '</td></tr>') if (summary.get("itemPoUnadopted") or 0) > 0 else ''}
       <tr><td>額外支出</td><td class="r orange">{money(summary.get("extraTotal"))}</td></tr>
-      <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>{dispatch_tax_note}
+      <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>{dispatch_tax_note}{dispatch_absorbed_row(summary, money)}
       <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{money(summary.get("totalActualCost"))}</td></tr>
       <tr><td>真實毛利</td><td class="r {'green' if int(summary.get('grossProfit',0) or 0)>=0 else 'red'}">{money(summary.get("grossProfit"))}</td></tr>
       <tr><td>真實毛利率</td><td class="r">{float(summary.get("grossMarginPct") or 0):.1f}%</td></tr>

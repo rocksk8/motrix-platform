@@ -206,6 +206,10 @@ def _settlement_rows_html(settle):
         rows.append("<tr><td>%s</td><td class='num'>%s</td></tr>"
                     % (lbl, text))
         po_unadopted = ((settle or {}).get("summary") or {}).get("itemPoUnadopted") or 0
+        absorbed = ((settle or {}).get("summary") or {}).get("dispatchAbsorbedTotal") or 0
+        if key == "dispatchTotal" and absorbed > 0:
+            # 38（審計 S-1）：派發被採用的品項吸收時，分項（品項＋額外＋派發）會比實際總成本多出這一塊 ⇒ 明列一行；SETTLEMENT_ROWS 的 11 列與標籤不動
+            rows.append("<tr><td>已併入品項實際成本（承攬商派發，不重複計）</td><td class='num'>− %s</td></tr>" % _settle_money(absorbed))
         if key == "itemActualTotal" and po_unadopted > 0:
             # 32-S5：未採用的採購單連結金額另列一行（分項加總＝實際總成本）；沒有這個鍵／為 0 的歷史精算完全不變
             rows.append("<tr><td>採購單（品項尚未採用）</td><td class='num'>%s</td></tr>" % _settle_money(po_unadopted))
