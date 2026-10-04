@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-05（wip/t40-fe-05）：精算頁稅基標籤對齊伺服器鍵名（純前端）
+- 稅基標籤的取值改用伺服器 `taxBasis` 的鍵名（`itemEstimate`／`purchase`／`remitFee`／`customExpense`，其餘同名），伺服器有值就顯示它的 `label`，沒有才退回頁面常數；不改伺服器鍵、不改任何金額。測試：`tests/test_e2e_settlement_tax_labels_2026_10_05.py`（逐鍵覆蓋）。
+
 ## 1.0.138 — 2026-10-05（wip/t40-case-be）：精算端點拆檔、完結要已成案、稅基標示（階段 0）、稽核 T39 修正
 - **純搬移（零行為變更）**：`GET／PUT /api/quotations/{quote_no}/settlement` 與 `SettlementIn` 自 `api/quotations.py` 逐字搬到新檔 `api/settlement_api.py`（路由路徑、函式名、驗證相依不變；router 在 `quotations` 之後立即註冊）。守門 `tests/test_route_table_golden_2026_10_05.py`：整個應用的 OpenAPI 路由表與搬移前逐位相同、精算網址仍先被精算端點匹配。
 - **完結要求報價單已成案**：`PUT /settlement` 的 `status=finalized` 在報價單 `deal_tag` 不是「已成案」或「已結案」時回 409「這張報價單還沒成案…」（已結案＝管理員重新開啟後再完結）；草稿存檔與重新開啟不受影響。
