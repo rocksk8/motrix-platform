@@ -14,6 +14,7 @@ from modules.case.tests.test_settlement_actuals_2026_10_03 import EST_A, EST_B, 
 from modules.case.tests.test_settlement_assigned_fields_2026_10_03 import _extra
 from modules.case.tests.test_settlement_finalize_integrity_2026_10_03 import _set_tot, page_payload
 from modules.case.tests.test_settlement_tax_basis_2026_10_03 import _dispatch
+from modules.case.tests._t40_won import quote_is_won  # noqa: F401  第 40 班：完結要已成案（autouse）
 
 URL = "/api/quotations/%s/settlement" % NO
 

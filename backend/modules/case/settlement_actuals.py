@@ -33,6 +33,19 @@ _LABELS = {"material": "材料申請", "extra": "額外支出", "dispatch": "承
 #: 品項實際成本的來源標記（顯示用，不影響任何金額／完結比對）；沒有＝manual
 ACTUAL_SOURCES = ("manual", "legacy", "labor")
 
+#: 第 40 班（進項稅階段 0，只標示、不改任何金額）：每個成本來源的稅基。與 DESIGN-INPUT-VAT-20261004.md §1 現況矩陣一致；守門題釘住 ESTIMATE_RATE 與各來源的值。
+TAX_BASIS = {
+    "estimateRate": ESTIMATE_RATE,
+    "itemEstimate": {"basis": "taxed", "label": "含稅（報價成本×1.05 估計，假設進項稅不可扣抵）"},
+    "itemManual": {"basis": "by_item_mode", "label": "依各品項的稅別設定（含稅／未稅）"},
+    "purchase": {"basis": "taxed", "label": "含稅最終金額（採購單，未拆稅）"},
+    "material": {"basis": "taxed", "label": "含稅最終金額（材料申請，未拆稅）"},
+    "extra": {"basis": "unsplit", "label": "單據金額，未拆稅"},
+    "dispatch": {"basis": "pretax", "label": "未稅承攬費＋外包人員（稅額只顯示、不計成本）"},
+    "remitFee": {"basis": "actual", "label": "實付金額（不分稅）"},
+    "customExpense": {"basis": "actual", "label": "實付金額（不分稅）"},
+}
+
 
 def validate_item_sources(items):
     """精算 PUT 的 `settlement.items[].actualSource` 驗證：有值必須是 ACTUAL_SOURCES 之一。回傳錯誤訊息；合法回 None。"""
@@ -226,7 +239,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
     legacy_save = any(isinstance(i, dict) and "adoptSystem" not in i for i in saved.get("items") or [])
     out = {"quoteNo": quote_no, "basis": "accrual", "finalized": False, "frozen": False,
            "legacySave": legacy_save,          # 存檔品項沒有 adoptSystem（第 32 班前存的）：adopt 以舊行為（不採用）
-           "unadoptedMode": unadopted, "items": items, "orphanItems": orphans, "schemaVersion": schema,
+           "unadoptedMode": unadopted, "items": items, "orphanItems": orphans, "schemaVersion": schema, "taxBasis": TAX_BASIS,
             "extra": {"onlyAmount": un_ex_total, "rows": extra_all},
             "unassigned": {"materials": unassigned_mat, "extras": unassigned_extra, "dispatches": unassigned_disp}, "offsets": offs,
             "sources": sources,
@@ -485,7 +498,9 @@ def original_side(conn, quote_no, summ) -> dict:
     direct = _num(tot["directProfit"]) if tot.get("directProfit") is not None else pretax - orig_cost
     margin = _num(tot["directMarginPct"]) if tot.get("directMarginPct") is not None else (direct / pretax * 100 if pretax > 0 else 0.0)
     admin = _num(tot["adminCost"]) if tot.get("adminCost") is not None else round_half_up(pretax, 0.10)
-    charity = _num(tot["charityDonation"]) if tot.get("charityDonation") is not None else max(0, round_half_up(direct, 0.01))
+    # 第 39 班後的稽核 S-2：舊報價（虧損案）存的 charityDonation 可能是負的（當時沒有下限）；頁面已改成下限 0，伺服器這裡也一律下限 0，
+    # 預留（totalIndirect − 管銷 − 公益）隨之重算——原始淨利（tot.netProfit）不變，對帳式仍成立。已凍結的舊 summary 不改寫。
+    charity = max(0, _num(tot["charityDonation"])) if tot.get("charityDonation") is not None else max(0, round_half_up(direct, 0.01))
     net = _num(tot["netProfit"]) if tot.get("netProfit") is not None else direct - admin - charity
     net_pct = _num(tot["netMarginPct"]) if tot.get("netMarginPct") is not None else (net / pretax * 100 if pretax > 0 else 0.0)
     # 第 39 班：報價預留的間接成本（運費／安裝／差旅／保固／其他五項；`tot.totalIndirect` 含管理費與公益金，扣掉這兩項後的餘額）——原始淨利已扣掉它、

@@ -51,7 +51,27 @@ def _orig_reserve_note(summary, money=None):
     if not n:
         return ""
     fmt = money or (lambda v: "{:,}".format(int(round(float(v)))))
-    return '<br><span style="font-size:11px">其中報價預留間接成本 NT$ %s（原始預估已扣、實際只計單據）</span>' % fmt(n)
+    # 稽核 T39：預留 R 只有「沒被實際成本抵用」的部分才是淨利差額的來源。C＝實際多花的直接成本（原始直接毛利 − 實際毛利）；
+    # Y＝clamp(R − max(C,0), 0, R)＝預留裡未被實際成本抵用的部分；Z＝淨利差額 − Y（其他：公益金連動、成本差異等）。與營運報表（analytics）同一規則；數字不動，只做說明。
+    sm = summary or {}
+    c = float(sm.get("origDirectProfit") or 0) - float(sm.get("grossProfit") or 0)
+    y = min(max(float(n) - max(c, 0.0), 0.0), float(n))
+    z = (float(sm.get("netProfit") or 0) - float(sm.get("origNetProfit") or 0)) - y
+    zs = ("+" if z > 0 else ("−" if z < 0 else "")) + fmt(abs(z))
+    return ('<br><span style="font-size:11px">原始預估已扣報價預留間接成本 NT$ %s（實際只計單據）；其中未被實際成本抵用 NT$ %s；其他 %s</span>'
+            % (fmt(n), fmt(y), zs))
+
+
+def _cost_basis_note(kind, summary):
+    """40（進項稅階段 0）：成本分項旁的稅基說明行——只加文字、不改任何金額或標籤。kind＝item／extra／dispatch_legacy。"""
+    texts = {
+        "item": "品項：含 5% 稅（估計＝報價成本×1.05，假設進項稅不可扣抵；採購單／材料申請為含稅最終金額）",
+        "extra": "額外支出：單據金額，未拆稅",
+        "dispatch_legacy": "承攬商：含稅（舊精算口徑，稅額計入成本）",
+    }
+    if kind == "dispatch_legacy" and (summary or {}).get("dispatchBasis") == "pretax":
+        return ""
+    return '\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">%s</td></tr>' % texts[kind]
 
 
 def _dispatch_absorbed_row(summary, money=None):
@@ -2594,10 +2614,10 @@ def _build_case_closing_html(data: dict) -> str:
     <thead><tr><th colspan="2" class="c" style="background:#FFFBEB;color:#92400E">實際成本精算</th></tr></thead>
     <tbody>
       <tr><td>報價稅前收入</td><td class="r">{money(summary.get("quotedPretax"))}</td></tr>
-      <tr><td>品項實際成本</td><td class="r orange">{money(summary.get("itemActualTotal"))}</td></tr>
+      <tr><td>品項實際成本</td><td class="r orange">{money(summary.get("itemActualTotal"))}</td></tr>{_cost_basis_note("item", summary)}
       {('<tr><td>採購單（品項尚未採用）</td><td class="r orange">' + money(summary.get("itemPoUnadopted")) + '</td></tr>') if (summary.get("itemPoUnadopted") or 0) > 0 else ''}
-      <tr><td>額外支出</td><td class="r orange">{money(summary.get("extraTotal"))}</td></tr>
-      <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>{dispatch_tax_note}{_dispatch_absorbed_row(summary, money)}
+      <tr><td>額外支出</td><td class="r orange">{money(summary.get("extraTotal"))}</td></tr>{_cost_basis_note("extra", summary)}
+      <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>{dispatch_tax_note}{_cost_basis_note("dispatch_legacy", summary)}{_dispatch_absorbed_row(summary, money)}
       <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{money(summary.get("totalActualCost"))}</td></tr>
       <tr><td>真實毛利</td><td class="r {'green' if int(summary.get('grossProfit',0) or 0)>=0 else 'red'}">{money(summary.get("grossProfit"))}</td></tr>
       <tr><td>真實毛利率</td><td class="r">{float(summary.get("grossMarginPct") or 0):.1f}%</td></tr>
