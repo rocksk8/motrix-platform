@@ -1857,12 +1857,13 @@
           <span class="cost-row__label">管銷分攤（10%，固定）</span>
           <span class="cost-row__val warning" x-text="'NT$ ' + tot.adminCost.toLocaleString()"></span>
         </div>
-        <div class="cost-row">
+        <div class="cost-row" style="flex-wrap:wrap">
           <span class="cost-row__label" style="display:flex;align-items:center;gap:6px">
             公益捐款（直接毛利 1%）
             <span style="font-size:9px;font-family:LINE Seed TW_OTF, sans-serif;background:#1A1A1A;color:#888;padding:1px 5px;border-radius:3px;letter-spacing:.04em">不可修改</span>
           </span>
-          <span class="cost-row__val warning" x-text="'NT$ ' + tot.charityDonation.toLocaleString()"></span>
+          <span class="cost-row__val warning" x-text="'NT$ ' + tot.charityDonation.toLocaleString()" data-testid="qf-charity-value"></span>
+          <span x-show="tot.directProfit < 0" x-cloak data-testid="qf-charity-floor-note" style="flex-basis:100%;font-size:11px;color:var(--warning)">虧損案公益金以 0 計</span>
         </div>
         <div class="cost-row" style="align-items:center">
           <span class="cost-row__label">運輸物流費</span>
@@ -2187,7 +2188,7 @@
   // V3.10（2026-09-26，個資蒐集告知；列車上改號，V3.9 已被 X-VAT 使用）：聯絡人下方加告知區塊（列印告知書、已告知紀錄）
   // V3.11（2026-09-28，H10 品牌設定；第十四班列車補號）：分頁圖示改讀 /api/system/branding/favicon
   // V3.14（2026-10-01，本地日期）：報價日期預設值與送審時間改用本地日期（static/motrix-date.js；台灣 00:00–08:00 不再得到前一天）
-  const FORM_VERSION = 'V3.16'
+  const FORM_VERSION = 'V3.17'
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
   // 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：內容在
@@ -2468,7 +2469,7 @@
         const directProfit    = pretax - totalCost - inputVat
         const directMarginPct = pretax > 0 ? directProfit / pretax * 100 : 0
         const adminCost       = MotrixLegalRound.halfUp(pretax, 0.10)
-        const charityDonation = MotrixLegalRound.halfUp(directProfit, 0.01)
+        const charityDonation = Math.max(0, MotrixLegalRound.halfUp(directProfit, 0.01))      // 第 39 班：公益金不為負——虧損案（直接毛利＜0）以 0 計
         const totalIndirect   = adminCost + charityDonation +
           (this.q.indirectLogistics||0) + (this.q.indirectInstallation||0) +
           (this.q.indirectTravel||0)    + (this.q.indirectWarranty||0)    +

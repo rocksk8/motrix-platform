@@ -496,9 +496,15 @@
                       <span style="font-size:10px;color:var(--text-dim)">NT$</span>
                       <input class="stl-input num" type="number" min="0" step="any"
                              x-model.number="item.actualUnitCost" :aria-label="(item.origDescription || '品項') + ' 實際單位成本'"
+                             :placeholder="'預設 ' + fmt(item.origCost)" :data-testid="'stl-unitcost-' + item.id"
                              :disabled="settlement.status === 'finalized'"
                              @input="calcItemCost(item); calcSummary()"
                              style="width:80px">
+                    </div>
+                    <div style="font-size:10px;color:var(--text-dim);margin-top:2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                      <span x-text="_filled(item) ? (+item.actualTotalCost === 0 ? '已填 0（實際為 0）' : '已填') : '未填（用估計）'" :data-testid="'stl-filled-' + item.id"></span>
+                      <button type="button" class="btn btn-ghost btn-sm noprint" style="padding:0 6px;font-size:10px" x-show="settlement.status !== 'finalized' && item.actualUnitCost !== null && item.actualUnitCost !== ''"
+                              :data-testid="'stl-clear-' + item.id" :aria-label="(item.origDescription || '品項') + ' 清除實際成本（改回未填、用估計）'" @click="clearActual(item)">清除</button>
                     </div>
                     <select data-saved-field class="stl-input" x-model="item.actualCostTaxMode" :aria-label="(item.origDescription || '品項') + ' 稅別'"
                             :disabled="settlement.status === 'finalized'"
@@ -510,7 +516,7 @@
                     </select>
                   </td>
                   <td class="col-actual" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600">
-                    <span x-text="item.actualTotalCost > 0 ? 'NT$ ' + fmt(item.actualTotalCost) : '—'"></span>
+                    <span x-text="_filled(item) ? 'NT$ ' + fmt(item.actualTotalCost) : '—'" :data-testid="'stl-actual-total-' + item.id"></span>
                     <template x-if="item.actualCostTaxMode === 'taxed' && item.actualTotalCost > 0 && !item.adoptSystem">
                       <div style="font-size:9px;color:var(--text-dim);font-weight:400"
                            x-text="'原含稅 NT$ ' + fmt(MotrixLegalRound.halfUp(item.actualQty||0, item.actualUnitCost||0))"></div>
@@ -884,6 +890,7 @@
             <span data-testid="stl-headline-diff" style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif"
                   :style="{ color: summary.profitDiff < 0 ? 'var(--danger)' : 'var(--success)' }" x-text="headlineDiffText"></span>
           </div>
+          <div class="stl-charity-note" data-testid="stl-charity-floor-note" x-show="charityFloorNote" x-cloak role="note" style="margin-top:8px;font-size:12px;color:var(--warning)" x-text="charityFloorNote"></div>
           <div class="stl-blocks">
             <template x-for="blk in totalsBlocks" :key="blk.key">
               <div class="stl-blk" :data-testid="'stl-block-' + blk.key">
@@ -895,8 +902,8 @@
                       <tr :data-testid="'stl-' + r.key" :class="r.strong ? 'is-strong' : ''">
                         <td><span x-text="r.label"></span><div class="stl-bt__basis" x-text="r.basis"></div></td>
                         <td x-text="r.pct ? pctTxt(r.o) : fmt(r.o)"></td>
-                        <td :style="{ color: r.neg && r.a < 0 ? 'var(--danger)' : '' }" x-text="r.pct ? pctTxt(r.a) : (r.a < 0 ? '−' : '') + fmt(Math.abs(r.a))"></td>
-                        <td :style="{ color: diffColor(r) }" x-text="diffText(r)"></td>
+                        <td :style="{ color: r.neg && r.a < 0 ? 'var(--danger)' : '' }" x-text="r.info ? '以單據為準（已含於實際總成本）' : (r.pct ? pctTxt(r.a) : (r.a < 0 ? '−' : '') + fmt(Math.abs(r.a)))"></td>
+                        <td :style="{ color: r.info ? '' : diffColor(r) }"><span x-text="r.info ? '—' : diffText(r)"></span><div class="stl-bt__basis" x-show="r.diffNote" x-text="r.diffNote" :data-testid="'stl-diffnote-' + r.key"></div></td>
                       </tr>
                     </template>
                   </tbody>
@@ -924,7 +931,7 @@
           <div><div style="color:var(--text-secondary)">資料截至</div><b x-text="_loadedAt.toLocaleString('zh-TW', { hour12: false })"></b></div>
           <div><div style="color:var(--text-secondary)">精算日期</div>
             <input type="date" class="stl-input" x-model="settlement.settlementDate" :disabled="settlement.status === 'finalized'" style="max-width:160px"></div>
-          <div><div style="color:var(--text-secondary)">管理費／公益</div><b>管理費＝報價×10%；公益＝毛利×1%（淨利只在總結區顯示）</b></div>
+          <div><div style="color:var(--text-secondary)">管理費／公益</div><b>管理費＝報價×10%；公益＝毛利×1%（毛利為負時以 0 計；淨利只在總結區顯示）</b></div>
         </div>
       </div>
 
@@ -1172,12 +1179,12 @@ function settlementPage() {
           origAmount:      it.amount      || 0,
           origCost:        it.cost        || 0,
           actualQty:       it.qty         || 0,
-          actualUnitCost:  it.cost        || 0,
+          actualUnitCost:  null,        // 第 39 班：空白＝未填（用估計）；填 0＝實際為 0（schemaVersion 2）
           // 預設帶入與報價單建立時相同的 5%「非扣抵進項稅」假設（quotation-form.html
           // calcTotals() 的 inputVat = totalCost×5%），確保未經使用者調整的精算品項
           // 預估/實際毛利率基準一致，「差異(pp)」欄反映的才是真實成本表現而非公式落差
           actualCostTaxMode: 'taxed_gross',
-          actualTotalCost: MotrixLegalRound.halfUp((it.qty || 0) * (it.cost || 0), 1.05),
+          actualTotalCost: null,        // null＝未填 ⇒ 用估計；數字（含 0）＝使用者填的
           note:            '',
           actualSource:    'manual',    // 手填來源標籤（顯示用）
           adoptSystem:     false,       // 32-S5：true＝此品項的實際成本採用「採購單連結金額」（跟著採購單變動，完結後凍結）
@@ -1205,9 +1212,10 @@ function settlementPage() {
               return {
                 ...oi,
                 actualQty:      si.actualQty      !== undefined ? si.actualQty      : oi.actualQty,
-                actualUnitCost: si.actualUnitCost !== undefined ? si.actualUnitCost : oi.actualUnitCost,
+                // 舊存檔（沒有 schemaVersion）：0／空＝沒填 ⇒ 載入時轉成 null（數字與顯示和舊版完全一樣，重新存檔才升級成 v2）；v2：照存值（0 就是 0）
+                actualUnitCost: (saved.schemaVersion === 2 || si.actualTotalCost) ? (si.actualUnitCost !== undefined ? si.actualUnitCost : oi.actualUnitCost) : null,
                 actualCostTaxMode: si.actualCostTaxMode || oi.actualCostTaxMode,
-                actualTotalCost:si.actualTotalCost|| oi.actualTotalCost,
+                actualTotalCost: saved.schemaVersion === 2 ? (si.actualTotalCost === undefined ? null : si.actualTotalCost) : (si.actualTotalCost || null),
                 actualSource:   ['legacy', 'labor'].includes(si.actualSource) ? si.actualSource : 'manual',      // 純標籤（手填／歷史未建系統／人力）：不進任何合計；缺鍵＝手填
                 adoptSystem:    !!si.adoptSystem,       // 舊存檔缺鍵＝今天的行為（不採用）；後端 settlement_actuals 同一規則
                 _fromSave:      true,
@@ -1341,8 +1349,9 @@ function settlementPage() {
         ] },
         { key: 'after', title: '② 扣管理費／公益後', rows: [
           R('b2-admin', '管銷分攤（10%）', '管理費＝報價稅前收入 × 10%', sm.origAdminCost, sm.adminCost, 'cost'),
-          R('b2-ch', '公益捐款（1%）', '公益捐贈＝毛利 × 1%', sm.origCharity, sm.charityDonation, 'cost'),
-          R('b2-net', '真實淨利', '最終淨利＝毛利 − 管理費 − 公益捐贈（＝獎金分潤基數）', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true }),
+          R('b2-ch', '公益捐款（1%）', '公益捐贈＝毛利 × 1%（毛利為負時以 0 計）', sm.origCharity, sm.charityDonation, 'cost'),
+          ...(sm.origIndirectReserve > 0 ? [R('b2-reserve', '報價預留間接成本', '報價單淨利已扣的間接成本預算＝間接合計 − 管銷 − 公益（原始端資訊）', sm.origIndirectReserve, null, 'cost', { info: true })] : []),
+          R('b2-net', '真實淨利', '最終淨利＝毛利 − 管理費 − 公益捐贈（＝獎金分潤基數）', sm.origNetProfit, sm.netProfit, 'good', { strong: true, neg: true, diffNote: sm.origIndirectReserve > 0 ? '其中報價預留間接成本 ' + this.fmt(sm.origIndirectReserve) + '（原始預估已扣、實際只計單據）' : '' }),
           R('b2-netp', '真實淨利率', '淨利比＝最終淨利 ÷ 報價', pct(sm.origNetProfit), pct(sm.netProfit), 'good', { pct: true }),
         ] },
       ]
@@ -1395,6 +1404,12 @@ function settlementPage() {
     },
     get chartItems() {
       return stlItemsSvg(this.settlement.items.map(i => ({ id: i.id, no: this.itemNo(i.id), name: i.origDescription || '', profit: this.itemProfit(i), pct: this.itemPct(i) })), n => this.fmt(n), v => this.pctTxt(v))
+    },
+    // 公益金下限的提示：實際側毛利＜0（且非已完結照存值）或原始側毛利＜0 時顯示
+    get charityFloorNote() {
+      const sm = this.summary, stored = this.settlement.status === 'finalized' && this._frozenSummary && typeof this._frozenSummary.charityDonation === 'number'
+      if (stored) return ''            // 已完結：照存檔值顯示，不提規則
+      return sm.grossProfit < 0 || sm.origDirectProfit < 0 ? '虧損案公益金以 0 計' : ''
     },
     get orphanItems() { return this._actualsOk ? (this.actuals.orphanItems || []) : [] },
     // ───────── 管理視角：高階摘要／需處理／完結閘門（沿用 summary 既有定義，不新增公式）─────────
@@ -1467,7 +1482,8 @@ function settlementPage() {
     // 每個品項的賺賠（毛利；報價＝報價單品項金額 origAmount，未稅；實際成本與 calcSummary 的 itemActualTotal 同一規則：手填 0／空＝用估計）
     pctTxt(v) { return v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '%' },   /* 非金額 */
     itemQuote(i) { return +i.origAmount || 0 },
-    itemActual(i) { return (i.adoptSystem && this.hasPurchase(i)) ? (+i.actualTotalCost || 0) : (i.actualTotalCost || this.estimateOf(i)) },   // 採用且有採購列：取代估計（含 0／負數），與後端同一規則
+    _filled(i) { return i.actualTotalCost !== null && i.actualTotalCost !== undefined && i.actualTotalCost !== '' },      // 第 39 班：0 是有填
+    itemActual(i) { return (i.adoptSystem && this.hasPurchase(i)) ? (+i.actualTotalCost || 0) : (this._filled(i) ? +i.actualTotalCost : this.estimateOf(i)) },   // 採用且有採購列：取代估計（含 0／負數），與後端同一規則
     itemProfit(i) { return this.itemQuote(i) - this.itemActual(i) },
     itemPct(i) { const q = this.itemQuote(i); return q > 0 ? this.itemProfit(i) / q * 100 : null },
     itemUnitProfit(i) { const q = +i.origQty || 0; return q > 0 ? (+i.origUnitPrice || 0) - this.itemActual(i) / q : null },
@@ -1488,6 +1504,7 @@ function settlementPage() {
     },
     get unassignedCostTotal() { return this.unassignedCostRows.reduce((s, r) => s + r.amount, 0) },
     get reconCostGap() { return this.summary.itemActualTotal + this.unassignedCostTotal - this.summary.totalActualCost },
+    clearActual(item) { item.actualUnitCost = null; this.calcItemCost(item); this.calcSummary() },      // 回到「未填」⇒ 用估計
     // 每個品項的實際成本來源（顯示用，不存檔）：採用且有採購／對應 ⇒ 取代；否則有手填 ⇒ 手填；否則 ⇒ 估計（優先序＝規則 A）
     itemSource(item) {
       if (item.adoptSystem && this.hasPurchase(item)) {
@@ -1497,7 +1514,7 @@ function settlementPage() {
       }
       // 手填欄預設帶入估計值：數字與估計相同＝沒動過（來源＝估計）；改過、或標了「歷史未建系統／人力」才算手填
       const tagged = item.actualSource === 'legacy' || item.actualSource === 'labor'
-      if ((+item.actualTotalCost || 0) > 0 && (tagged || +item.actualTotalCost !== this.estimateOf(item))) return { key: 'manual', label: item.actualSource === 'legacy' ? '手填・歷史未建系統' : item.actualSource === 'labor' ? '手填・人力' : '手填' }
+      if (this._filled(item) && (tagged || +item.actualTotalCost === 0 || +item.actualTotalCost !== this.estimateOf(item))) return { key: 'manual', label: item.actualSource === 'legacy' ? '手填・歷史未建系統' : item.actualSource === 'labor' ? '手填・人力' : '手填' }
       return { key: 'est', label: '估計' }
     },
     dispLabel(d) { return (d.docCode || '派發#' + d.itemId) + '｜' + (d.vendorName || '（未命名承攬商）') },
@@ -1706,7 +1723,9 @@ function settlementPage() {
       if (item.adoptSystem && this.hasPurchase(item)) { item.actualTotalCost = this.systemActual(item); item._fromSystem = true; return }
       item._fromSystem = false      // 32-S5：照採購單連結金額（含稅最終金額，不再 ×1.05 或 ÷1.05）
       // X-VAT（2026-09-26）：金額一律 static/legal-round.js 四捨五入（與後端同一套）
-      const raw = MotrixLegalRound.halfUp(item.actualQty || 0, item.actualUnitCost || 0)
+      const uc = item.actualUnitCost
+      if (uc === null || uc === undefined || uc === '') { item.actualTotalCost = null; return }      // 空白＝未填 ⇒ 用估計（0 不是空白）
+      const raw = MotrixLegalRound.halfUp(item.actualQty || 0, +uc || 0)
       if (item.actualCostTaxMode === 'taxed') {
         // 含稅5%：供應商發票金額已含稅，扣掉稅額換算回未稅，與報價稅前收入同一基準才能正確比毛利
         item.actualTotalCost = MotrixLegalRound.halfUp(raw / 1.05)
@@ -1737,7 +1756,7 @@ function settlementPage() {
       const origMarginPct = tot.directMarginPct != null ? tot.directMarginPct
         : (quotedPretax > 0 ? origDirectProfit / quotedPretax * 100 : 0)
 
-      // 手填實際成本 0／空＝沒填 ⇒ 用估計（與重新載入存檔 `si.actualTotalCost || oi.actualTotalCost`、後端 manual_actual 同一規則；
+      // 第 39 班：空白（null）＝沒填 ⇒ 用估計；填 0＝實際為 0（舊存檔載入時已把 0 轉成 null，數字不變）；
       // 否則同一次編輯中頁面把 0 加進去，完結時與後端重算差一筆估計而被 409）
       const itemActualTotal = this.settlement.items.reduce((s, i) => s + this.itemActual(i), 0)
       // 2026-09-11：額外支出搬到 case_extra_expenses 表（DB v75），改用從 API 取回的
@@ -1755,13 +1774,21 @@ function settlementPage() {
       const grossProfit     = quotedPretax - totalActualCost
       const grossMarginPct  = quotedPretax > 0 ? grossProfit / quotedPretax * 100 : 0
       const adminCost       = MotrixLegalRound.halfUp(quotedPretax, 0.10)
-      const charityDonation = MotrixLegalRound.halfUp(grossProfit, 0.01)
+      // 第 39 班：公益金不為負——虧損案（毛利＜0）公益金以 0 計；已完結的精算照存檔值顯示（不因規則改變而回頭改寫）
+      const frz = (this.settlement.status === 'finalized' && !this._finalizing && this._frozenSummary) || null
+      const charityDonation = frz && typeof frz.charityDonation === 'number' ? frz.charityDonation : Math.max(0, MotrixLegalRound.halfUp(grossProfit, 0.01))
       const netProfit       = grossProfit - adminCost - charityDonation
       const netMarginPct    = quotedPretax > 0 ? netProfit / quotedPretax * 100 : 0
 
       const origAdminCost   = tot.adminCost != null ? tot.adminCost : MotrixLegalRound.halfUp(quotedPretax, 0.10)
-      const origCharity     = tot.charityDonation != null ? tot.charityDonation : MotrixLegalRound.halfUp(origDirectProfit, 0.01)
-      const origNetProfit   = tot.netProfit != null ? tot.netProfit : (origDirectProfit - origAdminCost - origCharity)
+      // 原始側同規則：報價單原始毛利＜0 ⇒ 公益金 0、原始淨利＝毛利 − 管銷（報價單存的舊值可能帶負的公益金，不沿用）
+      const origFloor       = origDirectProfit < 0
+      const origCharity     = origFloor ? 0 : (tot.charityDonation != null ? tot.charityDonation : Math.max(0, MotrixLegalRound.halfUp(origDirectProfit, 0.01)))
+      // 報價預留間接成本（原始端資訊）：報價單淨利早已扣掉；實際端以單據為準、不另算。開著的草稿用報價單數字算；已完結讀存檔 summary（舊案沒有 ⇒ 0＝不顯示）
+      const origIndirectReserve = frz ? (typeof frz.origIndirectReserve === 'number' ? frz.origIndirectReserve : 0)
+        : (typeof tot.totalIndirect === 'number' ? Math.max(0, tot.totalIndirect - origAdminCost - origCharity) : 0)
+      // 原始淨利：報價單存的淨利優先；否則 毛利 − 管銷 − 公益 − 預留（與後端 original_side 同一恆等式）
+      const origNetProfit   = tot.netProfit != null ? tot.netProfit : (origDirectProfit - origAdminCost - origCharity - origIndirectReserve)
       const origNetMarginPct = tot.netMarginPct != null ? tot.netMarginPct
         : (quotedPretax > 0 ? origNetProfit / quotedPretax * 100 : 0)
 
@@ -1771,7 +1798,7 @@ function settlementPage() {
         quotedPretax, quotedTotal,
         origItemTotal, origTotalCost, origDirectProfit,
         origMarginPct:    MotrixLegalRound.halfUp(origMarginPct, 10) / 10,
-        origAdminCost, origCharity,
+        origAdminCost, origCharity, origIndirectReserve,
         origNetProfit:    MotrixLegalRound.halfUp(origNetProfit),
         origNetMarginPct: MotrixLegalRound.halfUp(origNetMarginPct, 10) / 10,
         itemActualTotal, itemPoUnadopted, extraTotal, dispatchTotal, dispatchAbsorbed, totalActualCost, remitFeeTotal: this.remitFeeTotal, customExpenseTotal: this.customExpenseTotal,
@@ -1800,6 +1827,7 @@ function settlementPage() {
 
     buildPayload(over = {}) {
       return {
+        schemaVersion:   2,       // 第 39 班：實際成本 0 ＝ 真的 0；null ＝ 未填（舊存檔沒有這個標記＝0 視為未填）
         status:          'status' in over ? over.status : this.settlement.status,
         settlementDate:  this.settlement.settlementDate,
         finalizedAt:     'finalizedAt' in over ? over.finalizedAt : this.settlement.finalizedAt,
@@ -1815,9 +1843,9 @@ function settlementPage() {
           origAmount:     i.origAmount,
           origCost:       i.origCost,
           actualQty:      i.actualQty,
-          actualUnitCost: i.actualUnitCost,
+          actualUnitCost: i.actualUnitCost === '' ? null : i.actualUnitCost,
           actualCostTaxMode: i.actualCostTaxMode,
-          actualTotalCost:i.actualTotalCost,
+          actualTotalCost:i.actualTotalCost === '' ? null : i.actualTotalCost,      // null＝未填；0＝實際為 0（schemaVersion 2）
           adoptSystem:    !!i.adoptSystem,
           actualSource:   i.actualSource === 'legacy' || i.actualSource === 'labor' ? i.actualSource : 'manual',
           note:           i.note,

@@ -276,7 +276,7 @@ def _cm(body):
 @needs_node
 def test_frontend_quotation_item_amount_and_charity_round_half_up():
     """報價表單：數量 0.7 × 單價 45 ＝ 31.5 ⇒ 32（舊 Math.round(0.7*45)＝31，浮點 31.499…）；
-    直接利潤 −150 的公益 1% ＝ −1.5 ⇒ −2（舊 Math.round(−1.5)＝−1）；稅額 9,810 × 5% ⇒ 491（正對照）。"""
+    直接利潤 −150 的公益 1%：第 39 班起虧損案以 0 計（下限，不再是 −2）；稅額 9,810 × 5% ⇒ 491（正對照）。公益 1% 的半捨五入由正毛利對照題（+150 ⇒ 2）釘住。"""
     got = _page("quotation-form.html", "quotationForm", """
         const it = { type: 'item', qty: 0.7, unitPrice: 45, cost: 0, unitPriceOverride: true }
         o.q = { items: [it], discount: 0, freight: 0, taxRate: 5 }
@@ -287,8 +287,11 @@ def test_frontend_quotation_item_amount_and_charity_round_half_up():
         const t1 = o.tot
         o.q = { items: [{ type: 'item', qty: 1, unitPrice: 9810, amount: 9810, cost: 0 }], discount: 0, freight: 0, taxRate: 5 }
         o.calcTotals()
-        return { a, directProfit: t1.directProfit, charity: t1.charityDonation, tax: o.tot.tax, total: o.tot.total }""")
-    assert got == {"a": 32, "directProfit": -150, "charity": -2, "tax": 491, "total": 10301}
+        const t3 = o.tot
+        o.q = { items: [{ type: 'item', qty: 1, unitPrice: 150, amount: 150, cost: 0 }], discount: 0, freight: 0, taxRate: 5 }
+        o.calcTotals()
+        return { a, directProfit: t1.directProfit, charity: t1.charityDonation, tax: t3.tax, total: t3.total, pos: o.tot.directProfit, posCharity: o.tot.charityDonation }""")
+    assert got == {"a": 32, "directProfit": -150, "charity": 0, "tax": 491, "total": 10301, "pos": 150, "posCharity": 2}      # 負毛利下限 0；正毛利 150 × 1% ＝ 1.5 ⇒ 2（半捨五入）
 
 
 @needs_node
@@ -345,7 +348,7 @@ def test_frontend_dispatch_and_extra_expense_match_the_backend():
 
 @needs_node
 def test_frontend_settlement_rounds_half_up():
-    """成本精算：實際 0.7 × 45 ⇒ 32（舊 31）；毛利 −150 的公益 1% ⇒ −2（舊 −1）；管理費 10% of 105 ⇒ 11（正對照）。"""
+    """成本精算：實際 0.7 × 45 ⇒ 32（舊 31）；毛利 −150 的公益 1%：第 39 班起虧損案以 0 計；管理費 10% of 105 ⇒ 11（正對照）。"""
     got = _page("settlement.html", "settlementPage", """
         const it = { actualQty: 0.7, actualUnitCost: 45, actualCostTaxMode: 'untaxed' }
         o.calcItemCost(it)
@@ -356,7 +359,7 @@ def test_frontend_settlement_rounds_half_up():
         o.calcSummary()
         return { a: it.actualTotalCost, gross: o.summary.grossProfit, charity: o.summary.charityDonation,
                  admin: o.summary.adminCost }""")
-    assert got == {"a": 32, "gross": -150, "charity": -2, "admin": 11}
+    assert got == {"a": 32, "gross": -150, "charity": 0, "admin": 11}
 
 
 @needs_node

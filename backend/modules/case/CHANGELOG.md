@@ -6,6 +6,12 @@
 - **原始側資訊列「報價預留間接成本」**（使用者裁示 a）：`original_side()` 新增 `origIndirectReserve`＝報價 `tot.totalIndirect` − `origAdminCost` − `origCharity`（報價沒有 `totalIndirect` ⇒ 0），完結時與其他原始側鍵一樣由伺服器覆蓋並隨 summary 凍結；結案報表 PDF 的「原始預估」欄多一列、差額橫幅多一行拆解（只在該鍵 > 0 時出現，舊完結案輸出逐位元不變）。**不改任何淨利／獎金基數／實際側金額。**
 - 測試：`tests/test_settlement_t39_be_2026_10_04.py`。
 
+## (next) — 2026-10-05（wip/t39-fe-05）：公益金下限（虧損案以 0 計）、實際成本 0＝真的 0、報價預留間接成本資訊列（前端）
+- **公益金不為負**：精算頁（實際側與原始側）與報價單表單，毛利為負時公益金以 0 計並顯示「虧損案公益金以 0 計」；已完結的精算照存檔值顯示，不回頭改寫。
+- **實際成本 0＝真的 0**：新存檔帶 `schemaVersion: 2`；品項實際成本空白（`null`）＝未填、用估計（來源「估計」），填 0＝實際為 0（來源「手填」、毛利＝報價），輸入框有預設單價提示與「清除」鈕可回到未填；舊存檔（沒有標記）0 仍視為未填，載入後數字與舊版一致，重新存檔才升級。
+- **報價預留間接成本**：總結「扣管理費／公益後」區塊的原始欄多一列資訊列（報價單淨利已扣的間接成本預算＝間接合計 − 管銷 − 公益），實際欄寫「以單據為準（已含於實際總成本）」，最終淨利列的差額欄說明「其中報價預留間接成本 X」，讓原始欄加得起來、不再出現假的多賺；已完結讀存檔的 `origIndirectReserve`（舊案沒有＝不顯示）。
+- 只動 `frontend/pages/settlement.html`、`quotation-form.html` 與 e2e；後端對應（`schemaVersion`、公益金下限）由後端分支處理。測試：`tests/test_e2e_settlement_zero_and_loss_2026_10_05.py`。
+
 ## 1.0.134 — 2026-10-04（wip/t38-case-be）：精算後端強化（完結覆蓋、樂觀鎖、負數採購、派發併入列、歷程快照）
 - **完結時下游欄位一律以伺服器值覆蓋**（`fill_downstream`）：過去只補「沒送的」，容差內的偏差照存；現在 `dispatchTotal／remitFeeTotal／customExpenseTotal／totalActualCost／毛利／管理費／公益金／淨利／利潤率／quotedPretax` 一律寫伺服器重算值。`summary` 缺 `itemActualTotal`（或沒有 summary）⇒ 不再照存（可偽造），改由伺服器重建所有計算欄位（非計算欄位保留）。選此而非 422：不擋任何合法呼叫端、結果由伺服器決定。
 - **`PUT /settlement` 樂觀鎖**：`SettlementIn.expectedUpdatedAt`（選填）與報價單 `updated_at` 不同 ⇒ 409 不存檔；`GET /settlement` 回 `updatedAt`；舊頁面不帶欄位不受影響。**整份報價存檔**（`PUT /api/quotations/{no}`）不再採用 client 的精算本文，一律沿用資料庫的（過期副本不會蓋掉別人剛存的精算）。
