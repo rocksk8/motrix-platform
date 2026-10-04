@@ -160,9 +160,9 @@ def test_bonus_settlement_rows_show_an_explicit_absorbed_row_only_when_absorbed(
 
 def test_closing_pdf_rows_for_absorbed_dispatch():
     import pdf_gen
-    assert hasattr(pdf_gen, "dispatch_absorbed_row")
-    assert pdf_gen.dispatch_absorbed_row({"dispatchTotal": 50}) == ""                      # 舊案／沒吸收：一個位元組都不加
-    assert "已併入品項" in pdf_gen.dispatch_absorbed_row({"dispatchAbsorbedTotal": 50})
+    assert hasattr(pdf_gen, "_dispatch_absorbed_row")
+    assert pdf_gen._dispatch_absorbed_row({"dispatchTotal": 50}) == ""                      # 舊案／沒吸收：一個位元組都不加
+    assert "已併入品項" in pdf_gen._dispatch_absorbed_row({"dispatchAbsorbedTotal": 50})
 
 
 # ── ⑤ 完結快照、歷程上限、已刪品項 ───────────────────────────────────────────────

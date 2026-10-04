@@ -35,7 +35,7 @@ from core import paths as _paths
 
 
 
-def dispatch_absorbed_row(summary, money=None):
+def _dispatch_absorbed_row(summary, money=None):
     """38（審計 S-1）：承攬商派發被「採用」的品項吸收時（`dispatchAbsorbedTotal`>0），品項實際成本已含這筆錢、實際總成本只算一次——
     表上「品項＋額外＋派發」會比總成本多出這一塊 ⇒ 明列一行負數讓分項加總＝實際總成本。沒有吸收（含所有舊完結案）⇒ 空字串（一個位元組都不加）。"""
     n = (summary or {}).get("dispatchAbsorbedTotal") or 0
@@ -2577,7 +2577,7 @@ def _build_case_closing_html(data: dict) -> str:
       <tr><td>品項實際成本</td><td class="r orange">{money(summary.get("itemActualTotal"))}</td></tr>
       {('<tr><td>採購單（品項尚未採用）</td><td class="r orange">' + money(summary.get("itemPoUnadopted")) + '</td></tr>') if (summary.get("itemPoUnadopted") or 0) > 0 else ''}
       <tr><td>額外支出</td><td class="r orange">{money(summary.get("extraTotal"))}</td></tr>
-      <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>{dispatch_tax_note}{dispatch_absorbed_row(summary, money)}
+      <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>{dispatch_tax_note}{_dispatch_absorbed_row(summary, money)}
       <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{money(summary.get("totalActualCost"))}</td></tr>
       <tr><td>真實毛利</td><td class="r {'green' if int(summary.get('grossProfit',0) or 0)>=0 else 'red'}">{money(summary.get("grossProfit"))}</td></tr>
       <tr><td>真實毛利率</td><td class="r">{float(summary.get("grossMarginPct") or 0):.1f}%</td></tr>
