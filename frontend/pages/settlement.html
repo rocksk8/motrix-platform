@@ -1293,7 +1293,7 @@ function settlementPage() {
       ]
     },
     // 差額＝精算−原始；收入／利潤高為佳（綠）、成本／費用高為差（紅）；比率差以百分點
-    _diff(r) { return r.pct ? (r.a == null || r.o == null ? null : Math.round((r.a - r.o) * 10) / 10) : r.a - r.o },
+    _diff(r) { return r.pct ? (r.a == null || r.o == null ? null : Math.round((r.a - r.o) * 10) / 10) : r.a - r.o },   /* 非金額 */
     diffText(r) {
       const d = this._diff(r)
       if (d == null) return '—'
@@ -1332,7 +1332,7 @@ function settlementPage() {
     // ───────── 管理視角：高階摘要／需處理／完結閘門（沿用 summary 既有定義，不新增公式）─────────
     itemVar(i) { return this.itemActual(i) - this.estimateOf(i) },
     itemOrigPct(i) { const q = this.itemQuote(i); return q > 0 ? (q - this.estimateOf(i)) / q * 100 : null },
-    itemDpp(i) { const a = this.itemPct(i), o = this.itemOrigPct(i); return a == null || o == null ? null : Math.round((a - o) * 10) / 10 },
+    itemDpp(i) { const a = this.itemPct(i), o = this.itemOrigPct(i); return a == null || o == null ? null : Math.round((a - o) * 10) / 10 },   /* 非金額 */
     _noRecord(i) { return !(this.systemActual(i) > 0) && this.itemSource(i).key === 'est' },
     pfSortBy(k) { if (this.pfSort === k) this.pfDir *= -1; else { this.pfSort = k; this.pfDir = -1 } },
     pfArrow(k) { return this.pfSort === k ? (this.pfDir < 0 ? ' ▼' : ' ▲') : '' },
@@ -1397,7 +1397,7 @@ function settlementPage() {
       el.classList.add('stl-flash'); setTimeout(() => el.classList.remove('stl-flash'), 1300)
     },
     // 每個品項的賺賠（毛利；報價＝報價單品項金額 origAmount，未稅；實際成本與 calcSummary 的 itemActualTotal 同一規則：手填 0／空＝用估計）
-    pctTxt(v) { return v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '%' },
+    pctTxt(v) { return v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '%' },   /* 非金額 */
     itemQuote(i) { return +i.origAmount || 0 },
     itemActual(i) { return i.actualTotalCost || this.estimateOf(i) },
     itemProfit(i) { return this.itemQuote(i) - this.itemActual(i) },
