@@ -49,16 +49,16 @@ def test_excel_original_group_has_the_reserve_column_and_diff_is_split(client):
     _seed()
     ws = _sheet()
     ix = _header_index(ws)
-    for h in ("間接成本預算", "其中：間接成本預算未發生", "其中：其他"):
+    for h in ("報價預留間接成本", "其中：報價預留間接成本", "其中：其他"):
         assert h in ix, h
-    assert ix["間接成本預算"] == ix["原始預估淨利"] + 1                      # 在原始側群組內
+    assert ix["報價預留間接成本"] == ix["原始預估淨利"] + 1                      # 在原始側群組內
     rows = {r[0].value: r for r in ws.iter_rows(min_row=4) if r[0].value in ("T39-R-NEW", "T39-R-OLD")}
     new, old = rows["T39-R-NEW"], rows["T39-R-OLD"]
     diff_amt = new[ix["差異金額"]].value
-    assert new[ix["間接成本預算"]].value == 5000
-    assert new[ix["其中：間接成本預算未發生"]].value == 5000
+    assert new[ix["報價預留間接成本"]].value == 5000
+    assert new[ix["其中：報價預留間接成本"]].value == 5000
     assert new[ix["其中：其他"]].value == diff_amt - 5000                   # 兩項相加＝差異金額
-    assert old[ix["間接成本預算"]].value == 0 and old[ix["其中：間接成本預算未發生"]].value == 0
+    assert old[ix["報價預留間接成本"]].value == 0 and old[ix["其中：報價預留間接成本"]].value == 0
     assert old[ix["其中：其他"]].value == old[ix["差異金額"]].value        # 舊精算：差額原封不動
 
 
@@ -68,7 +68,7 @@ def test_excel_group_header_spans_the_new_column(client):
     ix = _header_index(ws)
     merged = {str(m): m for m in ws.merged_cells.ranges}
     orig = [m for m in ws.merged_cells.ranges if m.min_row == 2 and ws.cell(2, m.min_col).value == "原始報價預估"][0]
-    assert orig.min_col == ix["原始成本"] + 1 and orig.max_col == ix["間接成本預算"] + 1
+    assert orig.min_col == ix["原始成本"] + 1 and orig.max_col == ix["報價預留間接成本"] + 1
 
 
 def test_excel_total_row_sums_the_reserve(client):
@@ -76,7 +76,7 @@ def test_excel_total_row_sums_the_reserve(client):
     ws = _sheet()
     ix = _header_index(ws)
     tot = [r for r in ws.iter_rows(min_row=4) if r[0].value == "合計"][-1]
-    assert tot[ix["間接成本預算"]].value == 5000
+    assert tot[ix["報價預留間接成本"]].value == 5000
 
 
 def test_pdf_original_table_lists_the_reserve_and_the_diff_split_only_when_present(client):
@@ -87,9 +87,10 @@ def test_pdf_original_table_lists_the_reserve_and_the_diff_split_only_when_prese
     blocks = html.split("各案件利潤分析明細")[1].split("page-break-inside:avoid")
     new = [b for b in blocks if "T39-R-NEW" in b][0]
     old = [b for b in blocks if "T39-R-OLD" in b][0]
-    assert "間接成本預算" in new and "NT$ 5,000" in new
-    assert "其中 間接成本預算未發生 NT$ 5,000" in new and "其他 NT$ 0" in new
-    assert "間接成本預算" not in old and "其中 間接成本預算未發生" not in old
+    assert "報價預留間接成本" in new and "NT$ 5,000" in new
+    assert "以單據為準（已含於實際總成本）" in new                                   # 實際欄
+    assert "其中報價預留間接成本 NT$ 5,000（原始預估已扣、實際只計單據）" in new
+    assert "報價預留間接成本" not in old and "以單據為準" not in old
 
 
 def test_net_profit_and_bonus_basis_are_untouched_by_the_reserve(client):
