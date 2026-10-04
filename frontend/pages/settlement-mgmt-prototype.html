@@ -114,6 +114,10 @@
   table.bt tr.strong td{font-weight:800;font-size:15px;background:#FAF9F6}
   table.bt .basis{font-size:10px;color:var(--ink2);font-weight:400}
 
+  .charts{display:grid;grid-template-columns:1fr;gap:12px;margin-top:14px}
+  .chcard{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;overflow:hidden}
+  .chcard h4{margin:0 0 4px;font-size:14px}
+  @media (min-width:1100px){.charts{grid-template-columns:1fr 1fr}.charts .chcard:first-child{grid-column:1 / -1}}
   /* (e) 對帳與稽核 */
   .audit{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:12px;padding:12px 14px}
   .audit dt{color:var(--ink2)} .audit dd{margin:0 0 4px;font-weight:600}
@@ -202,6 +206,57 @@ const SEED = () => ({
   ],
   adjust: -10000, frozen:false, finalizedAt:null
 });
+/* ───────── 圖表（純 inline SVG，無外部函式庫；列印／離線可用；數值＝與表格同一組算好的數字，圖不另算）───────── */
+const STL_CH = { dark: '#374151', good: '#15803D', bad: '#B91C1C', decFill: '#FCA5A5', origFill: '#E5E7EB', origStroke: '#6B7280' }
+function stlEsc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) }
+// 通用橫向區間長條圖：rows = [{id,label,lo,hi,v,fill,stroke,dash,text,tfill,tip}]；0 軸一條線；數值文字一律標在長條右端（色彩之外一定有數字與 ▲▼✖ 符號）
+function stlRangeChart(rows, o) {
+  const W = 720, LW = o.labelW || 210, RW = o.rightW || 170, RH = o.rowH || 34, PAD = 6, H = rows.length * RH + PAD * 2
+  let min = 0, max = 0
+  rows.forEach(r => { min = Math.min(min, r.lo); max = Math.max(max, r.hi) })
+  if (max === min) max = min + 1
+  const span = W - LW - RW, x = v => LW + (v - min) / (max - min) * span
+  let g = ''
+  rows.forEach((r, i) => {
+    const y = PAD + i * RH, bx = x(r.lo), bw = Math.max(2, x(r.hi) - x(r.lo))
+    g += `<g data-row="${stlEsc(r.id)}"><text x="${LW - 8}" y="${y + RH / 2 + 4}" text-anchor="end" font-size="15" fill="#111">${stlEsc(r.label)}</text>`
+    g += `<rect data-testid="${o.id}-${stlEsc(r.id)}" data-v="${r.v}" x="${bx.toFixed(1)}" y="${y + 4}" width="${bw.toFixed(1)}" height="${RH - 8}" rx="3" fill="${r.fill}"${r.stroke ? ` stroke="${r.stroke}" stroke-width="1.5"` : ''}${r.dash ? ' stroke-dasharray="4 2"' : ''}><title>${stlEsc(r.tip || r.label)}</title></rect>`
+    g += `<text x="${(bx + bw + 6).toFixed(1)}" y="${y + RH / 2 + 4}" font-size="15" font-weight="700" fill="${r.tfill || '#111'}">${stlEsc(r.text)}</text></g>`
+  })
+  const axis = `<line x1="${x(0).toFixed(1)}" y1="0" x2="${x(0).toFixed(1)}" y2="${H}" stroke="#111" stroke-width="1"/>`
+  return `<svg role="img" aria-label="${stlEsc(o.aria)}" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px;height:auto;display:block" data-testid="${o.id}">${axis}${g}</svg>`
+}
+// ① 橋接圖：報價 → −各項成本 → 毛利 → −管理費 → −公益 → 最終淨利
+function stlBridgeSvg(d, f) {
+  const C = STL_CH, rows = [], tot = (id, label, v, fill) => ({ id, label, lo: Math.min(0, v), hi: Math.max(0, v), v, fill, text: f(v), tip: label + ' ' + f(v) })
+  rows.push(tot('rev', '報價（稅前收入）', d.rev, C.dark))
+  let cur = d.rev
+  const dec = (id, label, amt) => { rows.push({ id, label: '− ' + label, lo: cur - amt, hi: cur, v: amt, fill: C.decFill, stroke: C.bad, text: '−' + f(amt), tfill: C.bad, tip: label + ' −' + f(amt) }); cur -= amt }
+  d.costParts.forEach(p => dec('c-' + p.id, p.label, p.amt))
+  rows.push(Object.assign(tot('gp', '毛利', d.gp, d.gp < 0 ? C.bad : C.good), { text: (d.gp < 0 ? '✖ ' : '＝ ') + f(d.gp) }))
+  cur = d.gp
+  dec('admin', '管理費（報價×10%）', d.admin); dec('ch', '公益捐贈（毛利×1%）', d.ch)
+  rows.push(Object.assign(tot('net', '最終淨利', d.net, d.net < 0 ? C.bad : C.good), { text: (d.net < 0 ? '✖ ' : '＝ ') + f(d.net) }))
+  return stlRangeChart(rows, { id: 'stl-ch-bridge', aria: '報價到最終淨利的橋接圖：報價 ' + f(d.rev) + '，總成本 ' + f(d.cost) + '，毛利 ' + f(d.gp) + '，最終淨利 ' + f(d.net) })
+}
+// ② 原始 vs 精算後：報價／總成本／毛利／最終淨利
+function stlPairSvg(d, f) {
+  const C = STL_CH, rows = []
+  d.metrics.forEach(m => {
+    const diff = m.a - m.o, good = (m.kind === 'cost') !== (diff > 0), same = diff === 0
+    rows.push({ id: m.id + '-o', label: m.label + '｜原始', lo: Math.min(0, m.o), hi: Math.max(0, m.o), v: m.o, fill: C.origFill, stroke: C.origStroke, dash: true, text: f(m.o), tip: m.label + ' 原始 ' + f(m.o) })
+    rows.push({ id: m.id + '-a', label: m.label + '｜精算後', lo: Math.min(0, m.a), hi: Math.max(0, m.a), v: m.a, fill: same ? C.dark : good ? C.good : C.bad, text: f(m.a) + '　' + (same ? '＝' : (diff > 0 ? '▲ +' : '▼ −') + f(Math.abs(diff))), tfill: same ? '#111' : good ? C.good : C.bad, tip: m.label + ' 精算後 ' + f(m.a) })
+  })
+  return stlRangeChart(rows, { id: 'stl-ch-pair', rowH: 30, rightW: 220, aria: '原始與精算後對照：報價、總成本、毛利、最終淨利' })
+}
+// ③ 各品項毛利（由高到低；虧損紅色＋✖；附毛利比）
+function stlItemsSvg(items, f, pf) {
+  const C = STL_CH, sorted = items.slice().sort((a, b) => b.profit - a.profit)
+  const rows = sorted.map(i => ({ id: 'i-' + i.id, label: ('#' + i.no + ' ' + (i.name || '')).slice(0, 16), lo: Math.min(0, i.profit), hi: Math.max(0, i.profit), v: i.profit,
+    fill: i.profit < 0 ? C.bad : C.good, text: (i.profit < 0 ? '✖ ' : '') + f(i.profit) + '（' + pf(i.pct) + '）', tfill: i.profit < 0 ? C.bad : '#111', tip: i.name + ' 毛利 ' + f(i.profit) }))
+  return stlRangeChart(rows, { id: 'stl-ch-items', rightW: 200, aria: '各品項毛利長條圖（由高到低），共 ' + rows.length + ' 項' })
+}
+
 let S = SEED();
 let ST = {sort:null, dir:-1, filter:'all', open:{}};
 let flashId = null;
@@ -415,7 +470,22 @@ function drawTotals(c){
     ${row('公益捐贈', '毛利 × 1%', c.oCh, c.ch, 'cost', 'stl-b2-ch')}
     ${row('最終淨利', '毛利 − 管理費 − 公益捐贈', c.oNet, c.net, 'good', 'stl-b2-net', {strong:true})}
     ${row('淨利比', '最終淨利 ÷ 報價', pct(c.oNet), pct(c.net), 'good', 'stl-b2-netp', {pct:true})}
-  </tbody></table></div></div>`;
+  </tbody></table></div></div>
+  <div class="charts" data-testid="stl-charts">
+    <div class="chcard"><h4>① 從報價到最終淨利（橋接圖）</h4>${chBridge(c)}<div class="hint">長條長度＝金額；紅＝扣減；數字一律標在長條右端。</div></div>
+    <div class="chcard"><h4>② 原始 vs 精算後</h4>${chPair(c)}<div class="hint">灰色虛線＝原始（估計）；彩色＝精算後；▲▼ 為與原始差額（成本類：高＝紅）。</div></div>
+    <div class="chcard"><h4>③ 各品項毛利（由高到低）</h4>${chItems(c)}<div class="hint">✖＝虧損；括號內為毛利比。</div></div>
+  </div>`;
+}
+function chBridge(c){
+  const parts = [{id:'items', label:'品項實際成本', amt:c.itemsActual}, {id:'mat', label:'未對應材料申請', amt:c.byKind('material').un}, {id:'extra', label:'未對應額外支出', amt:c.byKind('extra').un}, {id:'disp', label:'未對應承攬商派發', amt:c.byKind('dispatch').un}, {id:'kept', label:'已對應但品項未採用', amt:c.keptOutside}].filter(p => p.amt || p.id === 'items');
+  return stlBridgeSvg({rev:c.quoteTotal, costParts:parts, cost:c.total, gp:c.gp, admin:c.admin, ch:c.ch, net:c.net}, N);
+}
+function chPair(c){
+  return stlPairSvg({metrics:[{id:'rev',label:'報價',o:c.quoteTotal,a:c.quoteTotal,kind:'good'},{id:'cost',label:'總成本',o:c.oCost,a:c.total,kind:'cost'},{id:'gp',label:'毛利',o:c.oGp,a:c.gp,kind:'good'},{id:'net',label:'最終淨利',o:c.oNet,a:c.net,kind:'good'}]}, N);
+}
+function chItems(c){
+  return stlItemsSvg(S.items.map(it => ({id:it.id, no:itemNo(it.id), name:it.name, profit:c.per[it.id].profit, pct:c.per[it.id].pct})), N, P);
 }
 
 /* (e) 對帳與稽核 */

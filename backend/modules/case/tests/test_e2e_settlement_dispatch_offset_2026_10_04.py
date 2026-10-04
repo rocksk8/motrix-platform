@@ -22,7 +22,7 @@ S = "Alpine.$data(document.body)"
 
 def _shot(page, name, full=False):
     os.makedirs(SHOTS, exist_ok=True)
-    if name[0] in "123":
+    if name.split("-")[0] in ("1", "2", "3"):
         page.evaluate("() => document.querySelector('[data-testid=\"stl-unassigned\"]').scrollIntoView({block: 'start'})")
     page.screenshot(path=os.path.join(SHOTS, "36-%s.png" % name), full_page=full)
 
@@ -334,3 +334,61 @@ def test_management_view_strip_exceptions_readiness_sort_filter_print(live_serve
     assert "已完結" in page.locator('[data-testid="stl-audit-status"]').inner_text()
     page.evaluate("() => window.scrollTo(0, 0)")
     _shot(page, "9-management-view")
+
+
+@pytest.mark.e2e
+def test_summary_charts_exist_and_match_table_numbers(live_server, make_user, e2e_browser):
+    """總結三張圖（橋接／原始 vs 精算後／各品項毛利）：inline SVG 存在，關鍵長條的值＝表格與 summary 同一組數字；虧損品項紅色＋✖；窄螢幕不撐破。"""
+    import db
+    sa = make_user(username="sa_sa", role="superadmin")
+    _seed()
+    c = db.get_db()
+    try:
+        d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+        d["tot"] = {"pretax": 20000, "total": 21000, "totalCost": 10500 + 525}
+        c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+        c.commit()
+    finally:
+        c.close()
+    page = e2e_browser.new_context(viewport={"width": 1400, "height": 1000}).new_page()
+    _login(page, live_server, *sa)
+    page.goto(f"{live_server}/pages/settlement.html?no={NO}")
+    page.locator('[data-testid="stl-charts"]').wait_for(state="attached", timeout=20000)
+    page.wait_for_function(f"() => {S}._actualsOk && {S}.summary.totalActualCost > 0", timeout=20000)
+    v = lambda tid: float(page.locator(f'[data-testid="{tid}"]').get_attribute("data-v"))
+    s = _tot(page)
+    assert all(page.locator(f'svg[data-testid="{t}"]').count() == 1 for t in ("stl-ch-bridge", "stl-ch-pair", "stl-ch-items"))
+    # ① 橋接：報價 20000、品項成本 11300、額外 950、毛利 7750、管理費 2000、公益 78、淨利 5672；扣減各段加總＝總成本
+    assert v("stl-ch-bridge-rev") == s["quotedPretax"] == 20000
+    assert v("stl-ch-bridge-gp") == s["grossProfit"] == 7750 and v("stl-ch-bridge-net") == s["netProfit"] == 5672
+    assert v("stl-ch-bridge-admin") == s["adminCost"] == 2000 and v("stl-ch-bridge-ch") == s["charityDonation"] == 78
+    parts = page.locator('[data-testid^="stl-ch-bridge-c-"]').evaluate_all("els => els.map(e => +e.dataset.v)")
+    assert sum(parts) == s["totalActualCost"] == 12250, parts
+    assert v("stl-ch-bridge-c-items") == s["itemActualTotal"]
+    # 圖上的文字＝表格上的數字
+    assert "5,672" in page.locator('[data-testid="stl-ch-bridge"]').text_content() and "5,672" in page.locator('[data-testid="stl-b2-net"]').inner_text()
+    # ② 原始 vs 精算後：值＝summary；成本上升有 ▲ 文字（不只靠顏色）
+    assert v("stl-ch-pair-cost-a") == s["totalActualCost"] and v("stl-ch-pair-cost-o") == s["origTotalCost"]
+    assert v("stl-ch-pair-gp-a") == s["grossProfit"] and v("stl-ch-pair-net-a") == s["netProfit"]
+    ptxt = page.locator('[data-testid="stl-ch-pair"]').text_content()
+    assert ("▲" in ptxt) or ("▼" in ptxt), ptxt
+    # ③ 各品項：a 9500、b 200；先排序高→低
+    assert v("stl-ch-items-i-a") == 9500 and v("stl-ch-items-i-b") == 200
+    rows = page.locator('[data-testid="stl-ch-items"] g[data-row]').evaluate_all("els => els.map(e => e.dataset.row)")
+    assert rows == ["i-a", "i-b"], rows
+    page.evaluate("() => document.querySelector('[data-testid=\"stl-charts\"]').scrollIntoView({block: 'start'})")
+    page.evaluate("() => window.scrollBy(0, -170)")
+    page.wait_for_timeout(200)
+    _shot(page, "10-charts")
+    # 虧損：b 不採用＋手填單位成本 20（×100 米×1.05＝2100 ＞ 報價 1000）⇒ 毛利 −1100：長條紅色＋✖
+    page.evaluate(f"() => {{ const d = {S}; const b = d.settlement.items[1]; b.adoptSystem = false; b.actualUnitCost = 20; d.calcItemCost(b); d.calcSummary() }}")
+    page.wait_for_function(f"() => {S}.itemProfit({S}.settlement.items[1]) === -1100", timeout=5000)
+    assert v("stl-ch-items-i-b") == -1100
+    assert page.locator('[data-testid="stl-ch-items-i-b"]').get_attribute("fill") == "#B91C1C"
+    assert "✖" in page.locator('[data-testid="stl-ch-items"]').text_content()
+    assert v("stl-ch-bridge-gp") == _tot(page)["grossProfit"]
+    # 窄螢幕：圖縮放不超出容器
+    page.set_viewport_size({"width": 420, "height": 900})
+    page.wait_for_timeout(300)
+    widths = page.locator('[data-testid="stl-charts"] svg').evaluate_all("els => els.map(e => e.getBoundingClientRect().width <= e.parentElement.getBoundingClientRect().width + 1)")
+    assert all(widths), widths
