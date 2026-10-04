@@ -92,7 +92,7 @@
   /* 品項區塊 */
   .item{border-top:1px solid var(--line)}
   .item:first-child{border-top:0}
-  .item-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:12px 14px;align-items:start}
+  .item-head{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:10px;padding:12px 14px;align-items:start}
   .item-name{font-weight:700;font-size:15px}
   .item-no{color:var(--ink2);font-weight:400;margin-right:4px}
   .flow{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:stretch;margin-top:8px}
@@ -108,9 +108,36 @@
   .step.map .parts span{font-size:12px}
   .src{font-size:11px;font-weight:700;margin-top:2px}
   .step.act:not(.adopted) .src{color:var(--ink2)}
-  .step.manual{background:#EFF6FF;border-color:#BFDBFE}
-  .step.manual .mi{width:130px;font:inherit;padding:4px 6px;border:1px solid #93C5FD;border-radius:6px;text-align:right}
+  .step.manual{background:#EFF6FF;border-color:#BFDBFE;min-width:0}
+  .flow{gap:6px 8px}
+  .step{min-width:0;padding:6px 8px}
+  .rightcol .step.profit{width:100%}
+  .rightcol .sw{align-self:flex-end}
+  .step.manual .mi{width:110px;font:inherit;padding:4px 6px;border:1px solid #93C5FD;border-radius:6px;text-align:right}
   .step.manual .tag{margin-top:4px;font-size:12px;padding:3px 6px}
+  .step.quote{background:#fff}
+  .rightcol{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+  .step.profit{border:2px solid var(--ok);background:var(--ok-bg);min-width:190px}
+  .step.profit.neg{border-color:var(--bad);background:var(--bad-bg)}
+  .step.profit .big{font-size:24px;font-weight:800;color:var(--ok);line-height:1.2}
+  .step.profit.neg .big{color:var(--bad)}
+  .step.profit .pct{font-size:14px;font-weight:700;margin-left:6px}
+  .step.profit .unit{font-size:11px;color:var(--ink2);margin-top:2px}
+  .pos{color:var(--ok)} .neg-t{color:var(--bad)}
+  table.pt{width:100%;border-collapse:collapse;font-size:13px}
+  table.pt th{font-size:11px;color:var(--ink2);font-weight:600;text-align:right;padding:6px 8px;border-bottom:2px solid #111;white-space:nowrap}
+  table.pt th:first-child,table.pt td:first-child{text-align:left}
+  table.pt td{padding:7px 8px;border-bottom:1px solid var(--line2);text-align:right}
+  table.pt td.gp{font-weight:800;font-size:15px}
+  table.pt tr.un td{background:var(--warn-bg)}
+  table.pt tr.adj td{color:var(--ink2)}
+  table.pt tr.sum td{border-top:2px solid #111;font-weight:800;border-bottom:0}
+  .recon{margin-top:8px;font-size:12px;display:grid;gap:2px}
+  .recon b.ok{color:var(--ok)} .recon b.bad{color:var(--bad)}
+  .chain{margin-top:10px;display:grid;grid-template-columns:1fr auto;gap:2px 14px;font-size:13px}
+  .chain .t{font-weight:800;font-size:17px;border-top:1px solid var(--line);margin-top:4px;padding-top:6px}
+  .chain div:nth-child(even){text-align:right}
+  .tablewrap{overflow-x:auto}
   .arrow{align-self:center;color:#999;font-size:16px}
   .item-note{margin:8px 0 0;font-size:12px;color:var(--warn)}
 
@@ -137,6 +164,7 @@
     .step{min-width:0;flex:1 1 40%}
     .arrow{display:none}
     .item-head{grid-template-columns:minmax(0,1fr)}
+    .rightcol{align-items:stretch;flex-direction:column-reverse}
     .row{grid-template-columns:62px minmax(0,1fr)}
     .row>*{min-width:0}
     .row .hint{grid-column:1 / -1}
@@ -172,12 +200,12 @@
 /* ───────── 假資料（金額＝未稅 report；稅額僅顯示不計成本）───────── */
 const SEED = () => ({
   items: [
-    {id:'101', name:'主臥室系統櫃', est:180000, adopt:true},
-    {id:'102', name:'客廳電視牆木作', est:95000, adopt:false},
-    {id:'103', name:'全室水電配管', est:120000, adopt:true},
-    {id:'104', name:'衛浴防水與磁磚', est:86000, adopt:false},
-    {id:'105', name:'油漆粉刷（全室）', est:64000, adopt:true},
-    {id:'106', name:'現場監工（人力）', est:50000, adopt:false},
+    {id:'101', name:'主臥室系統櫃', qty:6, unit:'組', price:40000, est:180000, adopt:true},
+    {id:'102', name:'客廳電視牆木作', qty:1, unit:'式', price:130000, est:95000, adopt:false},
+    {id:'103', name:'全室水電配管', qty:1, unit:'式', price:160000, est:120000, adopt:true},
+    {id:'104', name:'衛浴防水與磁磚', qty:2, unit:'間', price:55000, est:86000, adopt:false},
+    {id:'105', name:'油漆粉刷（全室）', qty:1, unit:'式', price:90000, est:64000, adopt:true},
+    {id:'106', name:'現場監工（人力）', qty:10, unit:'人日', price:7000, est:50000, adopt:false},
   ],
   // 採購單：後端固定掛在品項，不可由本區改（原型唯讀）
   po: [{id:'PO-0912', itemId:'103', name:'電線電纜（採購單）', amount:38500}],
@@ -190,6 +218,7 @@ const SEED = () => ({
     {kind:'dispatch', id:'D-2610-003', code:'D-2610-003', name:'電視牆木作安裝（含外包人員）', vendor:'木匠師傅工作室', status:'待審核', amount:41500, tax:2075, pending:true, itemId:null},
     {kind:'dispatch', id:'D-2610-004', code:'D-2610-004', name:'全室油漆批土＋噴漆', vendor:'彩匠油漆', status:'已核准', amount:52000, tax:2600, pending:false, itemId:null},
   ],
+  adjust: -10000,        // 折扣／調整（報價總額 ≠ Σ品項報價 時的差額，讓加總對得上）
   frozen:false
 });
 let S = SEED();
@@ -200,6 +229,7 @@ const fmt = n => 'NT$ ' + Math.round(n).toLocaleString('en-US');
 const fmtN = n => Math.round(n).toLocaleString('en-US');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $ = id => document.getElementById(id);
+const pctTxt = v => v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '%';
 const itemNo = id => S.items.findIndex(i => i.id === id) + 1;
 const itemOf = id => S.items.find(i => i.id === id);
 
@@ -215,7 +245,12 @@ function calc(){
     const adoptedActual = it.adopt && mapped > 0;          // 規則 A：採用且有對應 → 取代估計；否則手填（>0）；否則估計
     const manual = +it.manual || 0;
     const source = adoptedActual ? (poSum && (m.material + m.extra + m.dispatch) ? '採購單＋已對應' : poSum ? '採購單' : '已對應') : manual > 0 ? '手填' : '估計';
-    per[it.id] = {m, poSum, mapped, adoptedActual, manual, source, actual: adoptedActual ? mapped : manual > 0 ? manual : it.est};
+    const actual = adoptedActual ? mapped : manual > 0 ? manual : it.est;
+    const quote = it.qty * it.price;
+    const profit = quote - actual;
+    per[it.id] = {m, poSum, mapped, adoptedActual, manual, source, actual, quote, profit,
+                  pct: quote > 0 ? profit / quote * 100 : null,
+                  unitProfit: it.qty > 0 ? it.price - actual / it.qty : null};
   });
   const un = S.docs.filter(d => !d.itemId);
   const as = S.docs.filter(d => d.itemId);
@@ -225,7 +260,9 @@ function calc(){
   const keptOutside = as.filter(d => !per[d.itemId].adoptedActual);
   const itemsActual = S.items.reduce((a,it) => a + per[it.id].actual, 0);
   const total = itemsActual + sum(un) + sum(keptOutside);
-  return {per, un, as, unTotal:sum(un), asTotal:sum(as), all:sum(S.docs), byKind, itemsActual,
+  const quoteItems = S.items.reduce((a,it) => a + per[it.id].quote, 0);
+  const quoteTotal = quoteItems + S.adjust;
+  return {quoteItems, quoteTotal, per, un, as, unTotal:sum(un), asTotal:sum(as), all:sum(S.docs), byKind, itemsActual,
           unTotalOnly:sum(un), keptOutsideTotal:sum(keptOutside), total};
 }
 
@@ -276,6 +313,7 @@ function docRow(d, mappedState){
   </div>`;
 }
 
+const netProfit = c => { const gp = c.quoteTotal - c.total; return gp - c.quoteTotal * 0.10 - Math.max(0, gp) * 0.01 };
 function render(){
   const c = calc();
   const frozen = S.frozen;
@@ -319,6 +357,8 @@ function render(){
         <div>
           <div class="item-name"><span class="item-no">#${itemNo(it.id)}</span>${esc(it.name)}</div>
           <div class="flow">
+            <div class="step quote"><div class="lb">報價（${it.qty} ${esc(it.unit)} × ${fmtN(it.price)}）</div><div class="v num">${fmt(p.quote)}</div></div>
+            <span class="arrow">｜</span>
             <div class="step est ${p.adoptedActual?'struck':''}"><div class="lb">估計成本</div><div class="v num">${fmt(it.est)}</div></div>
             <span class="arrow">→</span>
             <div class="step map"><div class="lb">已對應（${mine.length + S.po.filter(x=>x.itemId===it.id).length} 筆）</div>
@@ -333,7 +373,14 @@ function render(){
           ${!p.mapped && !p.manual ? `<p class="item-note" data-testid="stl-nopurchase-${it.id}">無採購／對應紀錄：實際成本以估計計。已採購但沒進系統（歷史）或人力成本無法估計者，請在右側填入實際成本。</p>` : ''}
           ${p.mapped && !it.adopt ? `<p class="item-note">⚠ 已對應 ${fmt(p.mapped)}，但本品項未採用：實際仍是估計；這些金額以額外支出計入總成本。</p>` : ''}
         </div>
-        <label class="sw"><input type="checkbox" data-act="adopt" data-item="${it.id}" ${it.adopt?'checked':''} ${frozen?'disabled':''} data-testid="stl-adopt-${it.id}"><i></i><span>採用</span></label>
+        <div class="rightcol">
+            <div class="step profit pcard ${p.profit < 0 ? 'neg' : ''}" data-testid="stl-profit-${it.id}">
+              <div class="lb">本項毛利（報價 − 實際成本）</div>
+              <div><span class="big num">${p.profit < 0 ? '−' : ''}${fmt(Math.abs(p.profit))}</span><span class="pct num">${pctTxt(p.pct)}</span></div>
+              <div class="unit num">單件毛利 ${p.unitProfit == null ? '—' : fmt(p.unitProfit)}／${esc(it.unit)}</div>
+            </div>
+          <label class="sw"><input type="checkbox" data-act="adopt" data-item="${it.id}" ${it.adopt?'checked':''} ${frozen?'disabled':''} data-testid="stl-adopt-${it.id}"><i></i><span>採用</span></label>
+        </div>
       </div>
       ${poRows}${mine.map(d => docRow(d,c)).join('')}
     </div>`;
@@ -348,11 +395,26 @@ function render(){
       <span class="num">${fmt(c.all)}</span><span class="hint">（材料申請＋額外支出＋派發 全部單據；互相移動，合計不變）</span>
     </div>
     <div class="bytype">${bk}</div>
-    <div class="total num">
-      <div>品項實際成本合計</div><div>${fmt(c.itemsActual)}</div>
-      <div>＋ 未對應（照算）</div><div>${fmt(c.unTotal)}</div>
-      <div>＋ 已對應但品項未採用（以額外支出計）</div><div>${fmt(c.keptOutsideTotal)}</div>
-      <div class="t">總實際成本</div><div class="t" data-testid="stl-total-cost">${fmt(c.total)}</div>
+    <h3 style="margin:14px 0 4px;font-size:14px">總結：每個品項的賺賠</h3>
+    <div class="tablewrap"><table class="pt num" data-testid="stl-profit-table">
+      <thead><tr><th>品項</th><th>報價（未稅）</th><th>實際成本</th><th>毛利</th><th>毛利比</th></tr></thead>
+      <tbody>
+        ${S.items.map(it => { const p = c.per[it.id]; return `<tr data-testid="stl-pt-${it.id}"><td>#${itemNo(it.id)} ${esc(it.name)} <span class="src">${p.source}</span></td><td>${fmtN(p.quote)}</td><td>${fmtN(p.actual)}</td><td class="gp ${p.profit<0?'neg-t':'pos'}">${p.profit<0?'−':''}${fmtN(Math.abs(p.profit))}</td><td class="${p.profit<0?'neg-t':''}">${pctTxt(p.pct)}</td></tr>`; }).join('')}
+        <tr class="un" data-testid="stl-pt-unassigned"><td>未對應項目（材料申請／額外支出／派發，${c.un.length} 件${c.keptOutsideTotal ? '＋已對應但品項未採用' : ''}）</td><td>0</td><td>${fmtN(c.unTotal + c.keptOutsideTotal)}</td><td class="gp neg-t">−${fmtN(c.unTotal + c.keptOutsideTotal)}</td><td>—</td></tr>
+        ${S.adjust ? `<tr class="adj" data-testid="stl-pt-adjust"><td>折扣／調整（報價總額與品項加總的差額）</td><td>${S.adjust<0?'−':''}${fmtN(Math.abs(S.adjust))}</td><td>0</td><td class="${S.adjust<0?'neg-t':'pos'}">${S.adjust<0?'−':''}${fmtN(Math.abs(S.adjust))}</td><td>—</td></tr>` : ''}
+        <tr class="sum" data-testid="stl-pt-total"><td>合計</td><td>${fmtN(c.quoteTotal)}</td><td>${fmtN(c.total)}</td><td class="${c.quoteTotal-c.total<0?'neg-t':'pos'}">${c.quoteTotal-c.total<0?'−':''}${fmtN(Math.abs(c.quoteTotal-c.total))}</td><td>${pctTxt(c.quoteTotal>0?(c.quoteTotal-c.total)/c.quoteTotal*100:null)}</td></tr>
+      </tbody></table></div>
+    <div class="recon" data-testid="stl-recon">
+      <div>對帳①：Σ品項報價 ${fmtN(c.quoteItems)} ${S.adjust?(S.adjust<0?'−':'＋')+' 折扣／調整 '+fmtN(Math.abs(S.adjust)):''} ＝ 報價總額 ${fmtN(c.quoteTotal)}　差額 <b class="ok">0</b></div>
+      <div>對帳②：Σ品項實際成本 ${fmtN(c.itemsActual)} ＋ 未對應 ${fmtN(c.unTotal)} ＋ 已對應但品項未採用 ${fmtN(c.keptOutsideTotal)} ＝ 總實際成本 ${fmtN(c.total)}　差額 <b class="${c.itemsActual + c.unTotal + c.keptOutsideTotal - c.total === 0 ? 'ok' : 'bad'}">${fmtN(c.itemsActual + c.unTotal + c.keptOutsideTotal - c.total)}</b></div>
+    </div>
+    <div class="chain num">
+      <div>報價稅前收入</div><div>${fmt(c.quoteTotal)}</div>
+      <div>− 總實際成本</div><div data-testid="stl-total-cost">${fmt(c.total)}</div>
+      <div>＝ 毛利</div><div class="${c.quoteTotal-c.total<0?'neg-t':'pos'}">${fmt(c.quoteTotal-c.total)}</div>
+      <div>− 管理費 10%</div><div>${fmt(c.quoteTotal * 0.10)}</div>
+      <div>− 公益捐贈 1%（毛利）</div><div>${fmt(Math.max(0,c.quoteTotal-c.total) * 0.01)}</div>
+      <div class="t">淨利（只在總結顯示）</div><div class="t ${netProfit(c)<0?'neg-t':'pos'}" data-testid="stl-net">${fmt(netProfit(c))}</div>
     </div>
     <p class="tip">派發金額＝未稅承攬費＋外包人員；稅額只顯示、不計成本。派發被品項吸收後不會在總成本重複計入。${frozen?'　已完結：全部唯讀。':''}</p>`;
 
