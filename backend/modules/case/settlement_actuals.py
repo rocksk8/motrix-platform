@@ -53,10 +53,29 @@ def _num(v):
         return 0.0
 
 
-def manual_actual(saved_item):
+def schema_version(saved) -> int:
+    """精算存檔頂層標記 `schemaVersion`（整數；沒有＝1＝舊存檔）。2＝「實際成本 0 是真的 0」（第 39 班）。"""
+    v = saved.get("schemaVersion") if isinstance(saved, dict) else None
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 1 else 1
+
+
+def validate_schema_version(settlement):
+    """精算 PUT 的 `settlement.schemaVersion` 驗證：沒帶或 null＝舊存檔；有值必須是 ≥1 的整數（不收字串、布林、小數）。回傳錯誤訊息；合法回 None。"""
+    if not isinstance(settlement, dict) or settlement.get("schemaVersion") is None:
+        return None
+    v = settlement["schemaVersion"]
+    if isinstance(v, bool) or not isinstance(v, int) or v < 1:
+        return "schemaVersion 必須是 1 以上的整數"
+    return None
+
+
+def manual_actual(saved_item, schema=1):
     """精算存檔品項的手填實際成本；沒填＝None。語意與今天頁面載入存檔時的 `si.actualTotalCost || oi.actualTotalCost` 相同：
-    0、空字串、null 一律視為「沒填」（⇒ 用估計）——0 元實際成本在頁面上本來就無法持久（da A3 S1；歷史相容，不自行改語意；是否算缺陷列第 34 班待裁示）。"""
+    0、空字串、null 一律視為「沒填」（⇒ 用估計）——0 元實際成本在頁面上本來就無法持久（da A3 S1；歷史相容）。
+    第 39 班：存檔頂層 `schemaVersion>=2`（新頁面寫的）⇒ 數字（含 0）＝已填、null／沒有＝沒填；沒有標記的舊存檔維持上面的語意。"""
     v = saved_item.get("actualTotalCost") if isinstance(saved_item, dict) else None
+    if schema >= 2:                                    # 第 39 班：v2 存檔——數字（含 0）＝已填；null／沒有／空字串＝沒填
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
     return _num(v) if v else None
 
 
@@ -98,6 +117,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
     src = settlement if isinstance(settlement, dict) else data.get("settlement")
     saved = src if isinstance(src, dict) else {}
     saved_items = {str(i.get("id")): i for i in (saved.get("items") or []) if isinstance(i, dict)}
+    schema = schema_version(saved)
     offs = normalize_offsets(offsets if offsets is not None else saved.get("offsets"))
     off_material = {o["ref"]: o["itemId"] for o in offs if o["kind"] == "material" and o["itemId"] in live}
     off_extra = {o["ref"]: o["itemId"] for o in offs if o["kind"] == "extra" and o["itemId"] in live}
@@ -167,7 +187,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
         purchased = po_amt + mat_amt + ex_amt + dp_amt
         est = estimate_amount(p["planQty"], p["planUnitCost"])
         s = saved_items.get(iid)
-        manual = manual_actual(s)
+        manual = manual_actual(s, schema)
         # 三態：新存檔有 adoptSystem（採用／不採用）；品項沒存過＝預設開；舊存檔（品項有存但沒有 adoptSystem 鍵，第 32 班前）＝今天頁面的行為（不採用，歷史相容；da S2）
         adopt = bool(s.get("adoptSystem")) if isinstance(s, dict) and "adoptSystem" in s else (not isinstance(s, dict))
         has = bool(po or mats or exs or dps)                       # 38：有採購列就算（負數退款列、正負相抵為 0 的列也是採購；原本 purchased>0 會把它們當沒採購）
@@ -206,7 +226,7 @@ def compute(conn, quote_no, *, offsets=None, unadopted=UNADOPTED_IGNORE, settlem
     legacy_save = any(isinstance(i, dict) and "adoptSystem" not in i for i in saved.get("items") or [])
     out = {"quoteNo": quote_no, "basis": "accrual", "finalized": False, "frozen": False,
            "legacySave": legacy_save,          # 存檔品項沒有 adoptSystem（第 32 班前存的）：adopt 以舊行為（不採用）
-           "unadoptedMode": unadopted, "items": items, "orphanItems": orphans,
+           "unadoptedMode": unadopted, "items": items, "orphanItems": orphans, "schemaVersion": schema,
             "extra": {"onlyAmount": un_ex_total, "rows": extra_all},
             "unassigned": {"materials": unassigned_mat, "extras": unassigned_extra, "dispatches": unassigned_disp}, "offsets": offs,
             "sources": sources,
@@ -242,7 +262,7 @@ def _freeze(out, saved, saved_items):
     total = 0.0
     for it in out["items"]:
         s = saved_items.get(it["itemId"])
-        v = manual_actual(s)
+        v = manual_actual(s, schema_version(saved))
         if v is not None:
             it["actual"] = {"amount": v, "source": "frozen", "replacedEstimate": False}
         total += it["actual"]["amount"]
@@ -401,7 +421,7 @@ def _expected_downstream(conn, quote_no, d, tol_item):
     total = t["totalActualCost"]
     gross = pretax - total
     admin = round_half_up(pretax, 0.10)
-    charity = round_half_up(gross, 0.01)
+    charity = max(0, round_half_up(gross, 0.01))       # 第 39 班：毛利為負時公益金為 0（不算出負的公益金）
     net = gross - admin - charity
     pct_tol = 0.1 + (100.0 * tol_total / pretax if pretax > 0 else 0.0)
     return {"_pretax": pretax,
@@ -465,7 +485,7 @@ def original_side(conn, quote_no, summ) -> dict:
     direct = _num(tot["directProfit"]) if tot.get("directProfit") is not None else pretax - orig_cost
     margin = _num(tot["directMarginPct"]) if tot.get("directMarginPct") is not None else (direct / pretax * 100 if pretax > 0 else 0.0)
     admin = _num(tot["adminCost"]) if tot.get("adminCost") is not None else round_half_up(pretax, 0.10)
-    charity = _num(tot["charityDonation"]) if tot.get("charityDonation") is not None else round_half_up(direct, 0.01)
+    charity = _num(tot["charityDonation"]) if tot.get("charityDonation") is not None else max(0, round_half_up(direct, 0.01))
     net = _num(tot["netProfit"]) if tot.get("netProfit") is not None else direct - admin - charity
     net_pct = _num(tot["netMarginPct"]) if tot.get("netMarginPct") is not None else (net / pretax * 100 if pretax > 0 else 0.0)
     return {"quotedTotal": _num(tot.get("total")), "origTotalCost": orig_cost, "origDirectProfit": direct, "origMarginPct": margin,

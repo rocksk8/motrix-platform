@@ -4350,6 +4350,13 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         if len(reopen_reason) > 500:
             conn.close()
             raise HTTPException(422, "理由太長（上限 500 字）")
+        bad = None
+        if "schemaVersion" in body.settlement:                 # 39：存檔格式標記（整數；v2＝實際成本 0 是真的 0）
+            from modules.case import settlement_actuals as _SAv
+            bad = _SAv.validate_schema_version(body.settlement)
+        if bad:
+            conn.close()
+            raise HTTPException(422, bad)
         if "items" in body.settlement:                         # 36：品項 actualSource（顯示用標記）的值域
             from modules.case import settlement_actuals as _SAi
             bad = _SAi.validate_item_sources(body.settlement.get("items"))

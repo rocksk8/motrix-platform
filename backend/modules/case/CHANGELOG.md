@@ -1,5 +1,10 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-04（wip/t39-case-be）：公益金下限 0、實際成本 0 是真的 0（schemaVersion 2）
+- **公益金下限 0**：毛利為負時 `charityDonation = 0`（不再算出負的公益金）；完結重算比對、`fill_downstream`、報價原始側 `origCharity`（報價 `tot` 沒有該欄時伺服器算）同一條。毛利 ≥ 0 與已凍結的完結 summary 完全不變（不改寫）。舊頁面對毛利為負的案件送負的公益金 ⇒ 完結 409（要用新頁面）。
+- **精算存檔頂層 `schemaVersion`（整數；沒有＝1＝舊存檔）**：`PUT /settlement` 驗證（非 ≥1 整數 ⇒ 422）、原樣存檔、`settlement-actuals` 回傳 `schemaVersion`。**v2：品項 `actualTotalCost` 是數字（含 0）＝已填、null／沒有／空字串＝沒填（用估計）**；沒有標記的舊存檔維持「0＝沒填」。套用在 `compute`（`actual.source` manual／estimate）、完結比對、凍結讀取。
+- 測試：`tests/test_settlement_t39_be_2026_10_04.py`。
+
 ## 1.0.134 — 2026-10-04（wip/t38-case-be）：精算後端強化（完結覆蓋、樂觀鎖、負數採購、派發併入列、歷程快照）
 - **完結時下游欄位一律以伺服器值覆蓋**（`fill_downstream`）：過去只補「沒送的」，容差內的偏差照存；現在 `dispatchTotal／remitFeeTotal／customExpenseTotal／totalActualCost／毛利／管理費／公益金／淨利／利潤率／quotedPretax` 一律寫伺服器重算值。`summary` 缺 `itemActualTotal`（或沒有 summary）⇒ 不再照存（可偽造），改由伺服器重建所有計算欄位（非計算欄位保留）。選此而非 422：不擋任何合法呼叫端、結果由伺服器決定。
 - **`PUT /settlement` 樂觀鎖**：`SettlementIn.expectedUpdatedAt`（選填）與報價單 `updated_at` 不同 ⇒ 409 不存檔；`GET /settlement` 回 `updatedAt`；舊頁面不帶欄位不受影響。**整份報價存檔**（`PUT /api/quotations/{no}`）不再採用 client 的精算本文，一律沿用資料庫的（過期副本不會蓋掉別人剛存的精算）。
