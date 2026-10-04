@@ -35,6 +35,25 @@ from core import paths as _paths
 
 
 
+def _orig_reserve_row(summary, money=None):
+    """39：原始預估欄的「報價預留間接成本」資訊列（`origIndirectReserve`＝報價 totalIndirect − 管銷 − 公益；原始淨利已扣掉它）。
+    沒有這個鍵（舊完結案）或為 0 ⇒ 空字串（輸出逐位元不變）。"""
+    n = (summary or {}).get("origIndirectReserve") or 0
+    if not n:
+        return ""
+    fmt = money or (lambda v: "{:,}".format(int(round(float(v)))))
+    return '\n      <tr><td>報價預留間接成本（運費／安裝／差旅／保固／其他）</td><td class="r red">− %s</td></tr>' % fmt(n)
+
+
+def _orig_reserve_note(summary, money=None):
+    """39：差額橫幅的拆解——原始淨利含報價預留的間接成本，實際只含單據；預留沒有發生的部分會讓真實淨利看起來「多賺」。"""
+    n = (summary or {}).get("origIndirectReserve") or 0
+    if not n:
+        return ""
+    fmt = money or (lambda v: "{:,}".format(int(round(float(v)))))
+    return '<br><span style="font-size:11px">其中報價預留間接成本 NT$ %s（原始預估已扣、實際只計單據）</span>' % fmt(n)
+
+
 def _dispatch_absorbed_row(summary, money=None):
     """38（審計 S-1）：承攬商派發被「採用」的品項吸收時（`dispatchAbsorbedTotal`>0），品項實際成本已含這筆錢、實際總成本只算一次——
     表上「品項＋額外＋派發」會比總成本多出這一塊 ⇒ 明列一行負數讓分項加總＝實際總成本。沒有吸收（含所有舊完結案）⇒ 空字串（一個位元組都不加）。"""
@@ -2566,7 +2585,7 @@ def _build_case_closing_html(data: dict) -> str:
       <tr><td class="bold">原始直接毛利</td><td class="r bold">{money(summary.get("origDirectProfit"))}</td></tr>
       <tr><td>原始毛利率</td><td class="r">{float(summary.get("origMarginPct") or 0):.1f}%</td></tr>
       <tr><td>管銷分攤（10%）</td><td class="r red">− {money(summary.get("origAdminCost"))}</td></tr>
-      <tr><td>公益捐款（1%）</td><td class="r red">− {money(summary.get("origCharity"))}</td></tr>
+      <tr><td>公益捐款（1%）</td><td class="r red">− {money(summary.get("origCharity"))}</td></tr>{_orig_reserve_row(summary, money)}
       <tr class="bold-row"><td>原始預估淨利</td><td class="r">{money(summary.get("origNetProfit"))}</td></tr>
       <tr><td>原始預估淨利率</td><td class="r">{float(summary.get("origNetMarginPct") or 0):.1f}%</td></tr>
     </tbody>
@@ -2590,7 +2609,7 @@ def _build_case_closing_html(data: dict) -> str:
   </table>
 </div>
 <div class="diff-banner" style="background:{'#F0FDF4' if prof_diff>=0 else '#FFF1F2'};border-color:{'#86EFAC' if prof_diff>=0 else '#FECACA'};color:{diff_clr}">
-  {'真實淨利比原始預估高' if prof_diff>=0 else '真實淨利比原始預估低'} NT$ {abs(prof_diff):,}（{'+' if diff_ppts>=0 else ''}{diff_ppts:.1f} ppts）
+  {'真實淨利比原始預估高' if prof_diff>=0 else '真實淨利比原始預估低'} NT$ {abs(prof_diff):,}（{'+' if diff_ppts>=0 else ''}{diff_ppts:.1f} ppts）{_orig_reserve_note(summary, money)}
 </div>"""
     else:
         profit_section = (

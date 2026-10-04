@@ -189,3 +189,73 @@ def test_item_conservation_with_a_v2_zero_item_and_a_dispatch_offset(W):
     t1 = _get(c, h)["totals"]
     assert t0["totalActualCost"] == t1["totalActualCost"] == 0 + EST_B + 12000                   # 採用關：對應／取消對應不改總成本
     assert t1["dispatchUnassignedTotal"] + t1["dispatchAssignedTotal"] == t1["dispatchTotal"]
+
+
+# ── 原始側「報價預留間接成本」資訊列（使用者裁示 a）─────────────────────────────────
+
+def _tot_with_indirect():
+    """範例：稅前 100000、品項成本 60000、進項稅 3000 ⇒ 直接毛利 37000；管理費 10000、公益金 370、五項預留 5000 ⇒ totalIndirect 15370、淨利 21630。"""
+    cn = db.get_db()
+    try:
+        d = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+        d["tot"] = {"pretax": 100000, "total": 105000, "directProfit": 37000, "adminCost": 10000, "charityDonation": 370, "totalIndirect": 15370, "netProfit": 21630,
+                    "netMarginPct": 21.6}
+        cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+        cn.commit()
+    finally:
+        cn.close()
+
+
+def test_indirect_reserve_is_total_indirect_minus_admin_and_charity(W):
+    c, h = W
+    _tot_with_indirect()
+    cn = db.get_db()
+    try:
+        o = SA.original_side(cn, NO, {"netProfit": 0})
+    finally:
+        cn.close()
+    assert o["origIndirectReserve"] == 5000
+    assert o["origDirectProfit"] - o["origAdminCost"] - o["origCharity"] - o["origIndirectReserve"] == o["origNetProfit"] == 21630
+
+
+def test_indirect_reserve_is_zero_when_the_quote_has_no_total_indirect(W):
+    c, h = W
+    _set_tot()                                                 # tot 只有 pretax／total（早期資料）
+    cn = db.get_db()
+    try:
+        o = SA.original_side(cn, NO, {"netProfit": 0})
+    finally:
+        cn.close()
+    assert o["origIndirectReserve"] == 0
+
+
+def test_finalize_overwrites_a_forged_indirect_reserve_and_net_profit_is_untouched(W):
+    c, h = W
+    _tot_with_indirect()
+    base = _honest(c, h)
+    r0 = _put(c, h, dict(base))
+    assert r0.status_code == 200
+    s_plain = _saved()["settlement"]["summary"]
+    assert s_plain["origIndirectReserve"] == 5000
+    _put(c, h, {"status": "draft", "items": [], "offsets": []}, reason="重開")
+    p = _honest(c, h, origIndirectReserve=999999)
+    assert _put(c, h, p, reason="再完結").status_code == 200
+    s = _saved()["settlement"]["summary"]
+    assert s["origIndirectReserve"] == 5000
+    assert s["netProfit"] == s_plain["netProfit"] and s["charityDonation"] == s_plain["charityDonation"]          # 獎金基數（淨利）不因此改變
+
+
+def test_legacy_frozen_summary_without_the_reserve_key_reads_unchanged(W):
+    c, h = W
+    _put_settlement({"status": "finalized", "items": [{"id": "a", "actualTotalCost": 1}], "offsets": [], "summary": {"itemActualTotal": 1, "extraTotal": 0, "dispatchTotal": 0, "totalActualCost": 1}})
+    d = _get(c, h)
+    assert d["frozen"] is True and "origIndirectReserve" not in d["savedSummary"]
+
+
+def test_closing_report_original_column_shows_the_reserve_row_only_when_present():
+    import pdf_gen
+    assert pdf_gen._orig_reserve_row({"origCharity": 1}) == "" and pdf_gen._orig_reserve_row({"origIndirectReserve": 0}) == ""
+    assert pdf_gen._orig_reserve_note({}) == ""
+    row = pdf_gen._orig_reserve_row({"origIndirectReserve": 5000})
+    assert "報價預留間接成本" in row and "5,000" in row
+    assert "5,000" in pdf_gen._orig_reserve_note({"origIndirectReserve": 5000})

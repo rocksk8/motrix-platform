@@ -3,6 +3,7 @@
 ## (next) — 2026-10-04（wip/t39-case-be）：公益金下限 0、實際成本 0 是真的 0（schemaVersion 2）
 - **公益金下限 0**：毛利為負時 `charityDonation = 0`（不再算出負的公益金）；完結重算比對、`fill_downstream`、報價原始側 `origCharity`（報價 `tot` 沒有該欄時伺服器算）同一條。毛利 ≥ 0 與已凍結的完結 summary 完全不變（不改寫）。舊頁面對毛利為負的案件送負的公益金 ⇒ 完結 409（要用新頁面）。
 - **精算存檔頂層 `schemaVersion`（整數；沒有＝1＝舊存檔）**：`PUT /settlement` 驗證（非 ≥1 整數 ⇒ 422）、原樣存檔、`settlement-actuals` 回傳 `schemaVersion`。**v2：品項 `actualTotalCost` 是數字（含 0）＝已填、null／沒有／空字串＝沒填（用估計）**；沒有標記的舊存檔維持「0＝沒填」。套用在 `compute`（`actual.source` manual／estimate）、完結比對、凍結讀取。
+- **原始側資訊列「報價預留間接成本」**（使用者裁示 a）：`original_side()` 新增 `origIndirectReserve`＝報價 `tot.totalIndirect` − `origAdminCost` − `origCharity`（報價沒有 `totalIndirect` ⇒ 0），完結時與其他原始側鍵一樣由伺服器覆蓋並隨 summary 凍結；結案報表 PDF 的「原始預估」欄多一列、差額橫幅多一行拆解（只在該鍵 > 0 時出現，舊完結案輸出逐位元不變）。**不改任何淨利／獎金基數／實際側金額。**
 - 測試：`tests/test_settlement_t39_be_2026_10_04.py`。
 
 ## 1.0.134 — 2026-10-04（wip/t38-case-be）：精算後端強化（完結覆蓋、樂觀鎖、負數採購、派發併入列、歷程快照）

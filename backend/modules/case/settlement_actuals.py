@@ -488,7 +488,10 @@ def original_side(conn, quote_no, summ) -> dict:
     charity = _num(tot["charityDonation"]) if tot.get("charityDonation") is not None else max(0, round_half_up(direct, 0.01))
     net = _num(tot["netProfit"]) if tot.get("netProfit") is not None else direct - admin - charity
     net_pct = _num(tot["netMarginPct"]) if tot.get("netMarginPct") is not None else (net / pretax * 100 if pretax > 0 else 0.0)
-    return {"quotedTotal": _num(tot.get("total")), "origTotalCost": orig_cost, "origDirectProfit": direct, "origMarginPct": margin,
+    # 第 39 班：報價預留的間接成本（運費／安裝／差旅／保固／其他五項；`tot.totalIndirect` 含管理費與公益金，扣掉這兩項後的餘額）——原始淨利已扣掉它、
+    # 精算「實際」側只認單據，兩邊才看起來差一塊。只是資訊列，不改任何淨利／獎金基數；報價沒有 totalIndirect（早期資料）⇒ 0。
+    reserve = _num(tot["totalIndirect"]) - admin - charity if tot.get("totalIndirect") is not None else 0.0
+    return {"quotedTotal": _num(tot.get("total")), "origTotalCost": orig_cost, "origIndirectReserve": reserve, "origDirectProfit": direct, "origMarginPct": margin,
             "origAdminCost": admin, "origCharity": charity, "origNetProfit": net, "origNetMarginPct": net_pct,
             "profitDiff": _num(summ.get("netProfit")) - net}
 
