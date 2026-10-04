@@ -1,5 +1,12 @@
 # 營運分析 更新紀錄
 
+## (next) — 2026-10-05（wip/t39-analytics-f9）：利潤分析原始側列出「報價預留間接成本」並拆解淨利差額
+- 精算摘要新鍵 `origIndirectReserve`（報價 tot.totalIndirect − 管銷 − 公益；M01 完結時凍結）。Excel「毛利分析」表（**工作表名與既有欄號都不變**）在最右側新增群組「報價預留間接成本」三欄：「報價預留間接成本」「其中：報價預留間接成本」「其中：其他」（後兩欄相加＝差異金額；含合計列）；PDF 利潤分析明細的原始側多一列「報價預留間接成本」，差額列尾註明「其中 報價預留間接成本 X（實際以單據為準）；其他 Y」。畫面利潤分析表沒有原始側分項，不變。
+- 純資訊與差額拆解：不改任何金額、不影響獎金基數、實際側不變（沒有類別對應）。舊精算沒有該鍵 ⇒ 0，PDF 不多任何列。
+- 既有 21 欄的位置與表頭一律不動（依賴這份匯出的人或工具不受影響），有測試鎖定。
+- 註解更正：`actualMarginPct` 與報價 `net_margin_pct` 的「可比」只在實際單據已涵蓋報價預留的間接成本時成立。
+- 測試 5 題（`test_original_indirect_reserve_2026_10_05.py`）。
+
 ## 1.0.30 — 2026-10-04（wip/t38-analytics-f9）：精算實際利潤不再在淨利 0 時退回毛利；儀表板只算完結並比淨利率
 - `reports._settle_actual_profit_margin()`：有 `netProfit` 鍵就用淨利（含 0／負數），沒有鍵的舊精算才退回毛利；`_collect()` 的 `actualMarginPct`／`grossProfit` 改走它，下游（業務績效、年度達成、毛利表、Excel／HTML）同步。金額 `int()` 截斷改 `round()`。
 - 儀表板 `marginComparison`／`settledSummary`：只計 `settlement.status=='finalized'`（草稿 summary 為前端暫存值），並比淨利率（`netMarginPct`／`netProfit`）對報價單 `net_margin_pct`；舊完結案（無淨利鍵）仍用毛利，值不改寫。

@@ -31,17 +31,26 @@ def _data():
     return lab, data
 
 
+class _Row:
+    """以表頭名稱取欄（T39 在原始側加了欄，不再用固定欄號）。"""
+    def __init__(self, row, ws):
+        self._row, self._ix = row, {c.value: i for i, c in enumerate(ws[3]) if c.value}
+
+    def __getitem__(self, name):
+        return self._row[self._ix[name]]
+
+
 def _excel_rows():
     from modules.analytics.api.reports import _build_excel
     lab, data = _data()
     ws = openpyxl.load_workbook(io.BytesIO(_build_excel(data, lab, "t")))["毛利分析"]
-    return {r[0].value: r for r in ws.iter_rows() if r[0].value in ("T38-X-NEW", "T38-X-OLD", "T38-X-PAGE")}
+    return {r[0].value: _Row(r, ws) for r in ws.iter_rows() if r[0].value in ("T38-X-NEW", "T38-X-OLD", "T38-X-PAGE")}
 
 
 def test_excel_item_plus_extra_equals_total_when_dispatch_is_partly_absorbed(client):
     _seed()
     r = _excel_rows()["T38-X-NEW"]
-    item, extra, total = r[10].value, r[11].value, r[12].value          # 品項成本／額外支出／實際總成本
+    item, extra, total = r['品項成本'].value, r['額外支出'].value, r['實際總成本'].value          # 品項成本／額外支出／實際總成本
     assert (item, extra, total) == (1200, 680, 1880)                     # 300 + (500 − 120)
     assert item + extra == total
 
@@ -49,7 +58,7 @@ def test_excel_item_plus_extra_equals_total_when_dispatch_is_partly_absorbed(cli
 def test_excel_legacy_summary_is_unchanged(client):
     _seed()
     r = _excel_rows()["T38-X-OLD"]
-    assert (r[10].value, r[11].value, r[12].value) == (1200, 300, 1500)
+    assert (r['品項成本'].value, r['額外支出'].value, r['實際總成本'].value) == (1200, 300, 1500)
 
 
 def test_excel_total_row_follows_the_folded_extra(client):
@@ -58,7 +67,7 @@ def test_excel_total_row_follows_the_folded_extra(client):
     lab, data = _data()
     ws = openpyxl.load_workbook(io.BytesIO(_build_excel(data, lab, "t")))["毛利分析"]
     tot = [r for r in ws.iter_rows() if r[0].value == "合計"][-1]
-    assert tot[11].value == 680 + 300
+    assert tot[[c.value for c in ws[3]].index('額外支出')].value == 680 + 300
 
 
 def test_pdf_detail_lists_unabsorbed_dispatch_and_the_absorbed_note(client):
@@ -82,7 +91,7 @@ PAGE_KEY_ONLY = {k: v for k, v in NEW.items() if k != "dispatchAbsorbedTotal"} |
 def test_page_key_only_summary_still_sums_to_total_cost(client):
     _insert_case("T38-X-PAGE", deal_tag="已結案", settlement={"status": "finalized", "summary": PAGE_KEY_ONLY})
     r = _excel_rows()["T38-X-PAGE"]
-    assert (r[10].value, r[11].value, r[12].value) == (1200, 680, 1880)
+    assert (r['品項成本'].value, r['額外支出'].value, r['實際總成本'].value) == (1200, 680, 1880)
 
 
 def test_total_key_wins_over_page_key_and_both_absent_is_unchanged():
