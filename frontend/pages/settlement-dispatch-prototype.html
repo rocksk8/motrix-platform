@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>精算：未對應品項（含承攬商派發）— 互動原型</title>
+<!-- 獨立靜態原型：假資料、無後端、雙擊即可開。規則依 DISPATCH-OFFSET-SPEC §2/§4。 -->
+<style>
+  :root{
+    --bg:#F5F4F0; --card:#fff; --ink:#111; --ink2:#5F5F5F; --line:#E3E0D8; --line2:#EFEDE7;
+    --mat:#1D4ED8; --mat-bg:#DBEAFE;
+    --ext:#475569; --ext-bg:#E2E8F0;
+    --dis:#7C3AED; --dis-bg:#EDE9FE;
+    --po:#0F766E;  --po-bg:#CCFBF1;
+    --ok:#15803D;  --ok-bg:#ECFDF3; --ok-line:#86EFAC;
+    --warn:#92400E; --warn-bg:#FEF3C7; --warn-line:#FCD34D;
+    --bad:#B91C1C; --bad-bg:#FEE2E2;
+    --num: "SF Mono","Cascadia Mono",Consolas,"Noto Sans TC",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{overflow-x:hidden}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 16px 80px}
+  .num{font-family:var(--num);font-variant-numeric:tabular-nums}
+
+  /* 原型控制列 */
+  .proto{background:#111;color:#eee;font-size:12px;padding:8px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .proto b{color:#fff}
+  .proto button{background:#333;color:#fff;border:1px solid #555;border-radius:6px;padding:3px 10px;cursor:pointer;font:inherit}
+  .proto label{display:flex;gap:6px;align-items:center;cursor:pointer}
+
+  /* 頂部固定摘要 */
+  .topbar{position:sticky;top:0;z-index:20;margin:0 -16px;padding:10px 16px;border-bottom:2px solid;display:flex;gap:14px;align-items:center;flex-wrap:wrap;transition:background .2s}
+  .topbar.is-warn{background:var(--warn-bg);border-color:var(--warn-line)}
+  .topbar.is-bad{background:var(--bad-bg);border-color:#FCA5A5}
+  .topbar.is-ok{background:var(--ok-bg);border-color:var(--ok-line)}
+  .topbar .big{font-size:16px;font-weight:700}
+  .topbar .sub{font-size:12px;color:var(--ink2)}
+  .topbar .amt{margin-left:auto;font-size:18px;font-weight:800}
+  .frozen-tag{background:#111;color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700}
+
+  h2{font-size:15px;margin:26px 0 4px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+  h2 small{font-weight:400;color:var(--ink2);font-size:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+
+  /* 類型色塊 */
+  .chip{display:inline-block;font-size:11px;font-weight:700;border-radius:4px;padding:1px 7px;white-space:nowrap}
+  .chip.material{color:var(--mat);background:var(--mat-bg)}
+  .chip.extra{color:var(--ext);background:var(--ext-bg)}
+  .chip.dispatch{color:var(--dis);background:var(--dis-bg)}
+  .chip.po{color:var(--po);background:var(--po-bg)}
+  .badge{display:inline-block;font-size:11px;border-radius:999px;padding:0 8px;font-weight:600}
+  .badge.pending{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-line)}
+  .badge.st{background:var(--line2);color:var(--ink2)}
+  .badge.mapped{background:var(--ok);color:#fff}
+
+  /* 同一種列樣式（未對應／已對應共用） */
+  .row{display:grid;grid-template-columns:78px minmax(0,1fr) 150px 260px;gap:10px 14px;align-items:center;padding:10px 14px;border-top:1px solid var(--line2)}
+  .row:first-child{border-top:0}
+  .row .doc{font-weight:600}
+  .row .meta{font-size:12px;color:var(--ink2)}
+  .row .money{text-align:right}
+  .row .money .net{font-weight:800;font-size:15px}
+  .row .money .tax{font-size:11px;color:#8A8A8A}
+  .row.mapped{background:var(--ok-bg);box-shadow:inset 5px 0 0 var(--ok);padding-left:24px}
+  .row.mapped.off{background:#F6F8F3;box-shadow:inset 5px 0 0 #A3B8A0}
+  .row.just{animation:flash .9s ease-out}
+  @keyframes flash{from{background:#FEF08A}}
+  select{width:100%;font:inherit;padding:6px 8px;border:1px solid #C9C5BA;border-radius:6px;background:#fff;color:var(--ink)}
+  select:disabled{background:#F1F0EC;color:#888}
+  .btn{font:inherit;font-size:12px;border:1px solid #C9C5BA;background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer}
+  .btn:hover{background:#F5F4F0}
+  .btn.danger{color:var(--bad);border-color:#FCA5A5}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .ctl{display:flex;flex-direction:column;gap:6px}
+  .ctl .line{display:flex;gap:8px;align-items:center}
+  .hint{font-size:11px;color:var(--ink2)}
+
+  /* 開關 */
+  .sw{display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none}
+  .sw input{position:absolute;opacity:0;width:0;height:0}
+  .sw i{width:34px;height:20px;border-radius:999px;background:#C9C5BA;position:relative;transition:.15s;flex:none}
+  .sw i::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.15s}
+  .sw input:checked + i{background:var(--ok)}
+  .sw input:checked + i::after{left:16px}
+  .sw input:disabled + i{opacity:.5}
+  .sw input:focus-visible + i{outline:2px solid #111;outline-offset:2px}
+
+  .empty{padding:16px;color:var(--ok);font-weight:600;background:var(--ok-bg)}
+  .group-head{padding:6px 14px;background:#FAF9F6;font-size:12px;font-weight:700;color:var(--ink2);border-top:1px solid var(--line)}
+
+  /* 品項區塊 */
+  .item{border-top:1px solid var(--line)}
+  .item:first-child{border-top:0}
+  .item-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:12px 14px;align-items:start}
+  .item-name{font-weight:700;font-size:15px}
+  .item-no{color:var(--ink2);font-weight:400;margin-right:4px}
+  .flow{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:stretch;margin-top:8px}
+  .step{border:1px solid var(--line);border-radius:8px;padding:6px 10px;min-width:120px;background:#FCFBF9}
+  .step .lb{font-size:11px;color:var(--ink2)}
+  .step .v{font-size:15px;font-weight:700}
+  .step.est.struck .v{text-decoration:line-through;color:#999;font-weight:500}
+  .step.act{background:#fff;border-color:#111}
+  .step.act.adopted{background:var(--ok);border-color:var(--ok);color:#fff}
+  .step.act.adopted .lb{color:#DCFCE7}
+  .step.act .v{font-size:18px;font-weight:800}
+  .step.map .parts{display:flex;gap:4px 6px;flex-wrap:wrap;margin-top:2px}
+  .step.map .parts span{font-size:12px}
+  .arrow{align-self:center;color:#999;font-size:16px}
+  .item-note{margin:8px 0 0;font-size:12px;color:var(--warn)}
+
+  /* 守恆摘要＋總成本 */
+  .conserve{margin-top:14px;border:2px solid #111;border-radius:10px;background:#fff;padding:12px 14px}
+  .eq{font-size:17px;font-weight:800;display:flex;gap:8px 10px;flex-wrap:wrap;align-items:baseline}
+  .eq .op{color:#999}
+  .eq .pill{padding:1px 10px;border-radius:6px}
+  .eq .un{background:var(--warn-bg);color:var(--warn)}
+  .eq .as{background:var(--ok-bg);color:var(--ok)}
+  .eq.zero .un{background:var(--ok-bg);color:var(--ok)}
+  .bytype{display:flex;gap:6px 16px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--ink2)}
+  .total{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px;display:grid;grid-template-columns:1fr auto;gap:2px 14px;font-size:13px}
+  .total .t{font-weight:800;font-size:17px;border-top:1px solid var(--line);margin-top:4px;padding-top:6px}
+  .total div:nth-child(even){text-align:right}
+  .tip{font-size:12px;color:var(--ink2);margin-top:8px}
+
+  @media (max-width:760px){
+    .row{grid-template-columns:62px minmax(0,1fr);gap:6px 10px}
+    .row .money{grid-column:2;text-align:left;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+    .row .ctl{grid-column:1 / -1}
+    .row.mapped{padding-left:20px}
+    .topbar .amt{margin-left:0}
+    .step{min-width:0;flex:1 1 40%}
+    .arrow{display:none}
+    .item-head{grid-template-columns:minmax(0,1fr)}
+    .row{grid-template-columns:62px minmax(0,1fr)}
+    .row>*{min-width:0}
+    .row .hint{grid-column:1 / -1}
+    .step{min-width:0}
+    .proto{font-size:11px}
+  }
+  .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#111;color:#fff;border-radius:8px;padding:8px 16px;font-size:13px;opacity:0;pointer-events:none;transition:.2s;z-index:50;max-width:90vw}
+  .toast.on{opacity:1}
+</style>
+</head>
+<body>
+
+<div class="proto">
+  <b>原型</b><span>假資料，不會存檔。試試：對應、取消對應、切換「採用」、凍結。</span>
+  <label><input type="checkbox" id="frz"> 模擬已完結（凍結）</label>
+  <button id="reset">重設資料</button>
+</div>
+
+<div class="wrap">
+  <div class="topbar" id="topbar" data-testid="stl-topbar"></div>
+
+  <h2>二之一、未對應品項 <small>材料申請・額外支出・承攬商派發 — 沒對應的錢一律照算（計入額外支出）；選一個品項＝改算在那個品項的實際成本，原單據不動</small></h2>
+  <div class="card" id="unassigned" data-testid="stl-unassigned"></div>
+
+  <h2>二、報價單品項 <small>每個品項：估計成本 → 已對應 → 實際成本；已對應的單據排在該品項下方</small></h2>
+  <div class="card" id="items" data-testid="stl-items"></div>
+
+  <div class="conserve" id="conserve" data-testid="stl-conserve"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ───────── 假資料（金額＝未稅 report；稅額僅顯示不計成本）───────── */
+const SEED = () => ({
+  items: [
+    {id:'101', name:'主臥室系統櫃', est:180000, adopt:true},
+    {id:'102', name:'客廳電視牆木作', est:95000, adopt:false},
+    {id:'103', name:'全室水電配管', est:120000, adopt:true},
+    {id:'104', name:'衛浴防水與磁磚', est:86000, adopt:false},
+    {id:'105', name:'油漆粉刷（全室）', est:64000, adopt:true},
+  ],
+  // 採購單：後端固定掛在品項，不可由本區改（原型唯讀）
+  po: [{id:'PO-0912', itemId:'103', name:'電線電纜（採購單）', amount:38500}],
+  docs: [
+    {kind:'material', id:'MR-2210', code:'MR-2210', name:'系統櫃五金組', vendor:'倉庫申請', status:'已核准', amount:12600, tax:630, pending:false, itemId:'101'},
+    {kind:'material', id:'MR-2214', code:'MR-2214', name:'矽酸鈣板 ×24', vendor:'倉庫申請', status:'待審核', amount:9800,  tax:490, pending:true,  itemId:null},
+    {kind:'extra',    id:'EX-0388', code:'EX-0388', name:'垃圾清運費', vendor:'額外支出', status:'已核准', amount:6500,  tax:0,   pending:false, itemId:null},
+    {kind:'dispatch', id:'D-2610-001', code:'D-2610-001', name:'水電配管施作 第一期', vendor:'宏達水電行', status:'已核准', amount:58000, tax:2900, pending:false, itemId:'103'},
+    {kind:'dispatch', id:'D-2610-002', code:'D-2610-002', name:'衛浴防水施作', vendor:'安固防水工程', status:'已核准', amount:32000, tax:1600, pending:false, itemId:null},
+    {kind:'dispatch', id:'D-2610-003', code:'D-2610-003', name:'電視牆木作安裝（含外包人員）', vendor:'木匠師傅工作室', status:'待審核', amount:41500, tax:2075, pending:true, itemId:null},
+    {kind:'dispatch', id:'D-2610-004', code:'D-2610-004', name:'全室油漆批土＋噴漆', vendor:'彩匠油漆', status:'已核准', amount:52000, tax:2600, pending:false, itemId:null},
+  ],
+  frozen:false
+});
+let S = SEED();
+let justId = null;
+
+const KIND_LABEL = {material:'材料申請', extra:'額外支出', dispatch:'承攬商派發'};
+const fmt = n => 'NT$ ' + Math.round(n).toLocaleString('en-US');
+const fmtN = n => Math.round(n).toLocaleString('en-US');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = id => document.getElementById(id);
+const itemNo = id => S.items.findIndex(i => i.id === id) + 1;
+const itemOf = id => S.items.find(i => i.id === id);
+
+/* ───────── 計算（對應 compute() 契約的精簡版）───────── */
+function calc(){
+  const per = {};
+  S.items.forEach(it => {
+    const po = S.po.filter(p => p.itemId === it.id);
+    const m = {material:0, extra:0, dispatch:0};
+    S.docs.filter(d => d.itemId === it.id).forEach(d => m[d.kind] += d.amount);
+    const poSum = po.reduce((a,p) => a + p.amount, 0);
+    const mapped = m.material + m.extra + m.dispatch + poSum;
+    const adoptedActual = it.adopt && mapped > 0;          // 規則 A：採用且有對應 → 取代估計
+    per[it.id] = {m, poSum, mapped, adoptedActual, actual: adoptedActual ? mapped : it.est};
+  });
+  const un = S.docs.filter(d => !d.itemId);
+  const as = S.docs.filter(d => d.itemId);
+  const sum = a => a.reduce((x,d) => x + d.amount, 0);
+  const byKind = k => ({un: sum(un.filter(d => d.kind === k)), as: sum(as.filter(d => d.kind === k))});
+  // 品項未採用時，已對應的錢仍計入成本（歸類為額外支出）→ 互移時總成本不變
+  const keptOutside = as.filter(d => !per[d.itemId].adoptedActual);
+  const itemsActual = S.items.reduce((a,it) => a + per[it.id].actual, 0);
+  const total = itemsActual + sum(un) + sum(keptOutside);
+  return {per, un, as, unTotal:sum(un), asTotal:sum(as), all:sum(S.docs), byKind, itemsActual,
+          unTotalOnly:sum(un), keptOutsideTotal:sum(keptOutside), total};
+}
+
+/* ───────── 動作 ───────── */
+function setOffset(docId, itemId){
+  if (S.frozen) return;
+  const d = S.docs.find(x => x.id === docId);
+  const was = d.itemId;
+  d.itemId = itemId || null;
+  justId = d.id;
+  render();
+  toast(itemId ? `已對應：${d.code} → #${itemNo(itemId)} ${itemOf(itemId).name}` : `已取消對應：${d.code} 回到未對應（仍計入成本）`);
+}
+function setAdopt(itemId, on){
+  if (S.frozen) return;
+  itemOf(itemId).adopt = on;
+  render();
+}
+let tt;
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('on'),2200); }
+
+/* ───────── 繪製 ───────── */
+function docRow(d, mappedState){
+  const mapped = !!d.itemId;
+  const adopted = mapped && mappedState.per[d.itemId].adoptedActual;
+  const opts = (mapped ? '<option value="">（取消對應，計入額外支出）</option>' : '<option value="">對應到報價單品項…</option>')
+    + S.items.map(it => `<option value="${it.id}" ${it.id===d.itemId?'selected':''}>#${itemNo(it.id)} ${esc(it.name)}</option>`).join('');
+  const ctl = `
+    <div class="ctl">
+      <select data-act="map" data-id="${d.id}" ${S.frozen?'disabled':''} aria-label="對應到品項（${esc(d.code)}）" data-testid="stl-offset-${d.kind}-${d.id}">${opts}</select>
+      <div class="line">
+        ${mapped ? `
+          <label class="sw"><input type="checkbox" data-act="adopt" data-item="${d.itemId}" ${itemOf(d.itemId).adopt?'checked':''} ${S.frozen?'disabled':''}><i></i><span>採用（取代估計）</span></label>
+          <button class="btn danger" data-act="unmap" data-id="${d.id}" ${S.frozen?'disabled':''} data-testid="stl-unmap-${d.kind}-${d.id}">取消對應</button>`
+        : `<span class="hint">對應後可在該品項選「採用」</span>`}
+      </div>
+      ${mapped ? `<div class="hint" style="color:${adopted?'var(--ok)':'var(--warn)'}">${adopted?'✔ 已計入 #'+itemNo(d.itemId)+' 的實際成本（取代估計）':'該品項未採用：估計不變，這筆仍以額外支出計入總成本'}</div>` : ''}
+    </div>`;
+  return `
+  <div class="row ${mapped?'mapped':''} ${mapped&&!adopted?'off':''} ${justId===d.id?'just':''}" data-testid="stl-${mapped?'mapped':'un'}-${d.kind}-${d.id}">
+    <div><span class="chip ${d.kind}">${KIND_LABEL[d.kind]}</span></div>
+    <div>
+      <div class="doc">${mapped?'<span class="badge mapped">已對應</span> ':''}${esc(d.code)} <span style="font-weight:400">· ${esc(d.name)}</span></div>
+      <div class="meta">${esc(d.vendor)} · <span class="badge st">${esc(d.status)}</span> ${d.pending?'<span class="badge pending">待審核・照計</span>':''}</div>
+    </div>
+    <div class="money"><div class="net num">${fmt(d.amount)}</div><div class="tax num">稅額 ${fmtN(d.tax)}（不計成本）</div></div>
+    ${ctl}
+  </div>`;
+}
+
+function render(){
+  const c = calc();
+  const frozen = S.frozen;
+
+  /* 頂部摘要 */
+  const tb = $('topbar'), n = c.un.length;
+  const hasPending = c.un.some(d => d.pending);
+  tb.className = 'topbar ' + (n===0 ? 'is-ok' : (hasPending ? 'is-bad' : 'is-warn'));
+  tb.innerHTML = n===0
+    ? `<span class="big">✔ 全部已對應</span><span class="sub">所有材料申請、額外支出、承攬商派發都已有去處</span>${frozen?'<span class="frozen-tag">已完結・唯讀</span>':''}<span class="amt num">未對應 NT$ 0</span>`
+    : `<span class="big">⚠ 未對應 ${n} 件</span><span class="sub">${['dispatch','material','extra'].map(k=>{const x=c.un.filter(d=>d.kind===k);return x.length?`${KIND_LABEL[k]} ${x.length}`:''}).filter(Boolean).join('・')}${hasPending?'・含待審核':''}　仍計入總成本</span>${frozen?'<span class="frozen-tag">已完結・唯讀</span>':''}<span class="amt num">${fmt(c.unTotal)}</span>`;
+
+  /* 未對應區：依類型分組，同一種列樣式 */
+  const ua = $('unassigned');
+  ua.innerHTML = n===0
+    ? '<div class="empty">✔ 目前沒有未對應的項目。</div>'
+    : ['dispatch','material','extra'].map(k => {
+        const rows = c.un.filter(d => d.kind===k);
+        if (!rows.length) return '';
+        return `<div class="group-head"><span class="chip ${k}">${KIND_LABEL[k]}</span> ${rows.length} 件・${fmt(rows.reduce((a,d)=>a+d.amount,0))}</div>` + rows.map(d => docRow(d,c)).join('');
+      }).join('');
+
+  /* 品項區 */
+  $('items').innerHTML = S.items.map(it => {
+    const p = c.per[it.id];
+    const mine = S.docs.filter(d => d.itemId === it.id);
+    const parts = [];
+    if (p.m.material) parts.push(`<span><span class="chip material">材料</span> <b class="num">${fmtN(p.m.material)}</b></span>`);
+    if (p.poSum) parts.push(`<span><span class="chip po">採購</span> <b class="num">${fmtN(p.poSum)}</b></span>`);
+    if (p.m.dispatch) parts.push(`<span><span class="chip dispatch">派發</span> <b class="num">${fmtN(p.m.dispatch)}</b></span>`);
+    if (p.m.extra) parts.push(`<span><span class="chip extra">額外</span> <b class="num">${fmtN(p.m.extra)}</b></span>`);
+    const poRows = S.po.filter(x => x.itemId === it.id).map(x => `
+      <div class="row" style="background:#FAFEFD;box-shadow:inset 5px 0 0 var(--po)">
+        <div><span class="chip po">採購單</span></div>
+        <div><div class="doc">${esc(x.id)} <span style="font-weight:400">· ${esc(x.name)}</span></div><div class="meta">連結自採購單（唯讀）</div></div>
+        <div class="money"><div class="net num">${fmt(x.amount)}</div></div><div class="hint">由採購單帶入，不可在此改</div>
+      </div>`).join('');
+    return `
+    <div class="item" data-testid="stl-item-${it.id}">
+      <div class="item-head">
+        <div>
+          <div class="item-name"><span class="item-no">#${itemNo(it.id)}</span>${esc(it.name)}</div>
+          <div class="flow">
+            <div class="step est ${p.adoptedActual?'struck':''}"><div class="lb">估計成本</div><div class="v num">${fmt(it.est)}</div></div>
+            <span class="arrow">→</span>
+            <div class="step map"><div class="lb">已對應（${mine.length + S.po.filter(x=>x.itemId===it.id).length} 筆）</div>
+              <div class="parts">${parts.length?parts.join(''):'<span style="color:#999">無</span>'}</div>
+              ${p.mapped?`<div class="v num" style="font-size:13px;margin-top:2px">小計 ${fmt(p.mapped)}</div>`:''}</div>
+            <span class="arrow">→</span>
+            <div class="step act ${p.adoptedActual?'adopted':''}" data-testid="stl-actual-${it.id}"><div class="lb">實際成本${p.adoptedActual?'（採用對應合計）':'（採用前＝估計）'}</div><div class="v num">${fmt(p.actual)}</div></div>
+          </div>
+          ${p.mapped && !it.adopt ? `<p class="item-note">⚠ 已對應 ${fmt(p.mapped)}，但本品項未採用：實際仍是估計；這些金額以額外支出計入總成本。</p>` : ''}
+        </div>
+        <label class="sw"><input type="checkbox" data-act="adopt" data-item="${it.id}" ${it.adopt?'checked':''} ${frozen?'disabled':''} data-testid="stl-adopt-${it.id}"><i></i><span>採用</span></label>
+      </div>
+      ${poRows}${mine.map(d => docRow(d,c)).join('')}
+    </div>`;
+  }).join('');
+
+  /* 守恆摘要＋總成本 */
+  const bk = ['dispatch','material','extra'].map(k => `<span><span class="chip ${k}">${KIND_LABEL[k]}</span> 未對應 ${fmtN(c.byKind(k).un)}＋已對應 ${fmtN(c.byKind(k).as)}＝${fmtN(c.byKind(k).un + c.byKind(k).as)}</span>`).join('');
+  $('conserve').innerHTML = `
+    <div class="eq ${c.unTotal===0?'zero':''}" data-testid="stl-conserve-eq">
+      <span>未對應</span><span class="pill un num">${fmt(c.unTotal)}</span><span class="op">＋</span>
+      <span>已對應</span><span class="pill as num">${fmt(c.asTotal)}</span><span class="op">＝</span>
+      <span class="num">${fmt(c.all)}</span><span class="hint">（材料申請＋額外支出＋派發 全部單據；互相移動，合計不變）</span>
+    </div>
+    <div class="bytype">${bk}</div>
+    <div class="total num">
+      <div>品項實際成本合計</div><div>${fmt(c.itemsActual)}</div>
+      <div>＋ 未對應（照算）</div><div>${fmt(c.unTotal)}</div>
+      <div>＋ 已對應但品項未採用（以額外支出計）</div><div>${fmt(c.keptOutsideTotal)}</div>
+      <div class="t">總實際成本</div><div class="t" data-testid="stl-total-cost">${fmt(c.total)}</div>
+    </div>
+    <p class="tip">派發金額＝未稅承攬費＋外包人員；稅額只顯示、不計成本。派發被品項吸收後不會在總成本重複計入。${frozen?'　已完結：全部唯讀。':''}</p>`;
+
+  /* 事件 */
+  document.querySelectorAll('[data-act="map"]').forEach(el => el.onchange = () => setOffset(el.dataset.id, el.value));
+  document.querySelectorAll('[data-act="unmap"]').forEach(el => el.onclick = () => setOffset(el.dataset.id, ''));
+  document.querySelectorAll('[data-act="adopt"]').forEach(el => el.onchange = () => setAdopt(el.dataset.item, el.checked));
+  justId = null;
+}
+
+$('frz').onchange = e => { S.frozen = e.target.checked; render(); };
+$('reset').onclick = () => { S = SEED(); $('frz').checked = false; render(); };
+render();
+</script>
+</body>
+</html>
