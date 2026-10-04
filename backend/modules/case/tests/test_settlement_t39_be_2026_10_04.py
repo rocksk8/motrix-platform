@@ -110,7 +110,7 @@ def test_frozen_finalized_summary_with_negative_charity_stays_as_stored(W):
 
 # ── ② schemaVersion 2：實際成本 0＝真的 0 ─────────────────────────────────────────
 
-def test_v2_zero_actual_cost_is_a_filled_value(W):
+def test_schema2_zero_actual_cost_is_a_filled_value(W):
     c, h = W
     _put_settlement({"schemaVersion": 2, "items": [{"id": "a", "adoptSystem": False, "actualTotalCost": 0}, {"id": "b", "adoptSystem": False}], "offsets": []})
     d = _get(c, h)
@@ -128,7 +128,7 @@ def test_legacy_zero_actual_cost_still_means_unfilled(W):
     assert a["amount"] == EST_A and a["source"] == "estimate" and d["schemaVersion"] == 1
 
 
-def test_v2_null_or_blank_actual_cost_is_unfilled(W):
+def test_schema2_null_or_blank_actual_cost_is_unfilled(W):
     c, h = W
     _put_settlement({"schemaVersion": 2, "items": [{"id": "a", "adoptSystem": False, "actualTotalCost": None}, {"id": "b", "adoptSystem": False, "actualTotalCost": ""}], "offsets": []})
     it = _items(_get(c, h))
@@ -136,13 +136,13 @@ def test_v2_null_or_blank_actual_cost_is_unfilled(W):
     assert it["b"]["actual"]["amount"] == EST_B and it["b"]["actual"]["source"] == "estimate"
 
 
-def test_v2_positive_and_adopted_purchase_behaviour_unchanged(W):
+def test_schema2_positive_and_adopted_purchase_behaviour_unchanged(W):
     c, h = W
     _put_settlement({"schemaVersion": 2, "items": [{"id": "a", "adoptSystem": False, "actualTotalCost": 777}], "offsets": []})
     assert _items(_get(c, h))["a"]["actual"] == {"amount": 777.0, "source": "manual", "replacedEstimate": False}
 
 
-def test_v2_finalize_with_a_zero_item_agrees_with_the_server_and_freezes_zero(W):
+def test_schema2_finalize_with_a_zero_item_agrees_with_the_server_and_freezes_zero(W):
     c, h = W
     _set_tot()
     _put_settlement({"schemaVersion": 2, "items": [{"id": "a", "adoptSystem": False, "actualTotalCost": 0}, {"id": "b", "adoptSystem": False, "actualTotalCost": EST_B}], "offsets": []})
