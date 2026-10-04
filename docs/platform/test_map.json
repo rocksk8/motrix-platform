@@ -28681,28 +28681,29 @@
   "backend/tests/test_settlement_item_cost_display_2026_10_05.py": {
    "kind": "audit",
    "units": [
-    "dir:frontend/js/",
     "file:backend/tests/test_money_round_half_up_2026_09_26.py",
+    "js:js/case-management-fin.js",
     "js:js/reports.js",
     "page:pages/case-management.html",
     "page:pages/reports.html",
-    "page:pages/settlement.html"
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/tests/test_money_round_half_up_2026_09_26.py"
     ],
     "page": [
-     "frontend/js/reports.js",
-     "frontend/pages/case-management.html",
-     "frontend/pages/reports.html",
-     "frontend/pages/settlement.html"
-    ],
-    "path": [
-     "frontend/js/",
+     "frontend/js/case-management-fin.js",
      "frontend/js/reports.js",
      "frontend/pages/case-management.html",
      "frontend/pages/reports.html"
+    ],
+    "path": [
+     "frontend/js/case-management-fin.js",
+     "frontend/js/reports.js"
     ]
    }
   },

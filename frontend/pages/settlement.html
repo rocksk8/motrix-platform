@@ -1012,6 +1012,8 @@ const API = '/api'
 // ── 稅基標籤（階段 0：只標示，不改任何金額；伺服器之後在 settlement-actuals 回 taxBasis 時以它為準）──
 //   品項估計＝數量×成本×1.05（settlement_actuals ESTIMATE_RATE／本頁 estimateOf）；採購單／材料申請＝含稅最終金額直接採用（無稅欄位）；
 //   額外支出＝未分稅（全額）；承攬商派發＝未稅承攬費＋外包人員（35c）；匯款手續費／自訂模組支出＝實付金額（不分稅）
+// 伺服器 settlement-actuals.taxBasis 的鍵名（TAX_BASIS）：本頁內部鍵 ⇒ 伺服器鍵；伺服器有值就用它的 label，沒有才用下面的常數
+const STL_TAX_KEY = { estimate: 'itemEstimate', po: 'purchase', remit: 'remitFee', custom: 'customExpense' }
 const STL_TAX_BASIS = { estimate: '含稅 ×1.05（假設不可扣抵）', po: '含稅', material: '含稅', extra: '未分稅', dispatch: '未稅（＋外包人員）', remit: '實付金額（不分稅）', custom: '實付金額（不分稅）' }
 const STL_CONFIG = {
   GP_DROP_PP: 5,              // 品項毛利比比原始（估計）低超過 N 個百分點 → 列入「需處理」
@@ -1427,7 +1429,7 @@ function settlementPage() {
     },
     // 稅基標籤（純文字）：伺服器有回 taxBasis 就用它，沒有就用常數
     taxBasis(key) {
-      const b = this._actualsOk && this.actuals && this.actuals.taxBasis && this.actuals.taxBasis[key]
+      const tb = this._actualsOk && this.actuals && this.actuals.taxBasis, b = tb && tb[STL_TAX_KEY[key] || key]
       return (typeof b === 'string' ? b : b && b.label) || STL_TAX_BASIS[key] || ''
     },
     kindBasis(kind) { return this.taxBasis(kind) },      // material／extra／dispatch

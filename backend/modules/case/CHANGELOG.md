@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-05（wip/t40-fe-05）：精算頁稅基標籤對齊伺服器鍵名（純前端）
+- 稅基標籤的取值改用伺服器 `taxBasis` 的鍵名（`itemEstimate`／`purchase`／`remitFee`／`customExpense`，其餘同名），伺服器有值就顯示它的 `label`，沒有才退回頁面常數；不改伺服器鍵、不改任何金額。測試：`tests/test_e2e_settlement_tax_labels_2026_10_05.py`（逐鍵覆蓋）。
+
 ## 1.0.138 — 2026-10-05（wip/t40-case-be）：精算端點拆檔、完結要已成案、稅基標示（階段 0）、稽核 T39 修正
 - **純搬移（零行為變更）**：`GET／PUT /api/quotations/{quote_no}/settlement` 與 `SettlementIn` 自 `api/quotations.py` 逐字搬到新檔 `api/settlement_api.py`（路由路徑、函式名、驗證相依不變；router 在 `quotations` 之後立即註冊）。守門 `tests/test_route_table_golden_2026_10_05.py`：整個應用的 OpenAPI 路由表與搬移前逐位相同、精算網址仍先被精算端點匹配。
 - **完結要求報價單已成案**：`PUT /settlement` 的 `status=finalized` 在報價單 `deal_tag` 不是「已成案」或「已結案」時回 409「這張報價單還沒成案…」（已結案＝管理員重新開啟後再完結）；草稿存檔與重新開啟不受影響。
@@ -8,7 +11,7 @@
 - **稽核 T40 S-1**：結案報表品項「實際成本」欄與精算後端同一條規則——`schemaVersion >= 2` 時數字（含 0）印出、null／沒有＝「未填寫」；舊存檔 0＝「未填寫」不變。
 - 測試：`tests/test_settlement_t40_be_2026_10_05.py`。
 
-## 1.0.137 — 2026-10-05（wip/t40-fe-05）：精算成本品項顯示真的 0、精算頁標示各來源稅基、首頁財務面板隨 financeVisible（純前端，不改任何數字）
+## 1.0.137 — 2026-10-05（wip/t40-fe-05）：精算成本品項顯示真的 0、精算頁標示各來源稅基、首頁財務面板隨 financeVisible、稅基標籤對齊伺服器鍵名（純前端，不改任何數字）
 - `case-management.html`（案件→精算摘要）與 `reports.html`（結案精算明細）的「成本品項」依 `settlement.schemaVersion`：≥2 時 `actualTotalCost` 為數字（含 0）＝有填，顯示 `NT$ 0`，`null`／空才顯示「未填寫」／「—」；舊存檔（沒有標記）0 仍視為未填，顯示不變。不改任何公式與後端。
 - **增修**：`schemaVersion` 一律以 `Number(sv) >= 2` 判斷（與伺服器同規則）；案件頁／報表的公益金：≥0 顯示「− 金額」，舊的凍結負值顯示帶號金額（不再有「− −50」）。
 - **稅基標示（VAT 階段 0）**：精算頁每個成本來源標稅基——品項估計「含稅 ×1.05（假設不可扣抵）」、手填依稅別、採購單／材料申請「含稅」、額外支出「未分稅」、承攬商派發「未稅（＋外包人員）」、匯款手續費／自訂「實付金額」；總結加一行口徑說明與 ⓘ（原始總成本未稅、原始毛利另扣進項稅 5%、精算後品項含稅）。只加文字，不改任何金額；伺服器之後回 `taxBasis` 時以它為準。測試：`tests/test_e2e_settlement_tax_labels_2026_10_05.py`。

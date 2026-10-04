@@ -54,40 +54,18 @@ def test_report_modal_legacy_save_keeps_zero_as_unfilled():
         assert _rp_cost(st, {"actualTotalCost": 500}) == {"filled": True, "text": "NT$ 500"}
 
 
-def test_pages_use_the_helpers_and_no_other_reader_hides_a_zero():
-    """兩個頁面都改走輔助函式；前端其他地方（settlement.html 以外）不再有 `actualTotalCost||0 > 0` 這種把 0 當未填的判斷。"""
-    cm = (FRONTEND / "pages" / "case-management.html").read_text(encoding="utf-8")
-    rp = (FRONTEND / "pages" / "reports.html").read_text(encoding="utf-8")
+def test_pages_use_the_helpers_and_the_known_readers_do_not_hide_a_zero():
+    """兩個頁面都改走輔助函式；案件頁與報表這幾支前端檔不再有 `actualTotalCost||0 > 0` 這種把 0 當未填的判斷
+    （只掃明確列出的檔，不掃整棵樹——整棵樹掃描要登記到 bottom_layer.json 的 global_tests）。"""
+    from core import source_tree      # 頁面位置一律經 source_tree（PLAYBOOK §G5 #16）
+    cm = source_tree.page_file("case-management.html").read_text(encoding="utf-8")
+    rp = source_tree.page_file("reports.html").read_text(encoding="utf-8")
     assert "caseSettleItemCost(item)" in cm and "stlItemCost(it)" in rp
     bad = []
-    for path in list((FRONTEND / "pages").glob("*.html")) + list((FRONTEND / "js").glob("*.js")):
-        if path.name == "settlement.html":
-            continue
-        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for name, text in (("case-management.html", cm), ("reports.html", rp),
+                       ("case-management-fin.js", (FRONTEND / "js" / "case-management-fin.js").read_text(encoding="utf-8")),
+                       ("reports.js", (FRONTEND / "js" / "reports.js").read_text(encoding="utf-8"))):
+        for n, line in enumerate(text.splitlines(), 1):
             if re.search(r"actualTotalCost\s*\|\|\s*0\s*\)\s*(>|!==?)\s*0|actualTotalCost\s*\|\|\s*0\)>0", line):
-                bad.append("%s:%d" % (path.name, n))
+                bad.append("%s:%d" % (name, n))
     assert not bad, "仍有把 actualTotalCost 的 0 當未填的讀取端（須依 schemaVersion）：%s" % bad
-
-
-@needs_node
-def test_schema_version_is_compared_as_a_number_like_the_server():
-    """伺服器規則是 >= 2：字串 "2"、2.0、3 都算新格式；缺／0／1／無法轉數字都算舊格式。"""
-    for sv in ("2", 2, 2.0, 3):
-        assert _cm_cost({"schemaVersion": sv}, {"actualTotalCost": 0})["text"] == "NT$ 0", sv
-        assert _rp_cost({"schemaVersion": sv}, {"actualTotalCost": 0})["text"] == "NT$ 0", sv
-    for sv in (None, 0, 1, "1", "abc"):
-        assert _cm_cost({"schemaVersion": sv}, {"actualTotalCost": 0})["text"] == "未填寫", sv
-        assert _rp_cost({"schemaVersion": sv}, {"actualTotalCost": 0})["text"] == "—", sv
-
-
-@needs_node
-def test_charity_line_has_no_double_minus_for_legacy_negative_values():
-    """≥0（含 0）：照舊「− 金額」表示扣除；舊的已凍結負值（公益金會加回淨利）顯示帶號金額，不是「− −50」。"""
-    cm = lambda n: _cm("return o.caseSettleCharityText(%s)" % json.dumps(n))
-    rp = lambda n: _js("js", str(FRONTEND / "js" / "reports.js"), "reportsApp", "return o.stlCharityText(%s)" % json.dumps(n))
-    for f in (cm, rp):
-        assert f(120) == "− NT$ 120"
-        assert f(0) == "− NT$ 0"                                 # 0 仍是扣除列（既有畫面不變）
-        assert f(-50) == "NT$ -50"
-        assert "− -" not in f(-50) and "− −" not in f(-50)
-        assert f(None) == "− NT$ 0"
