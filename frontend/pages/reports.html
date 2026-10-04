@@ -355,7 +355,7 @@
               <div class="kpi-card__sub" x-text="'淨 ' + fmt(summary.periodNet)"></div>
             </div>
             <div class="kpi-card purple">
-              <div class="kpi-card__lbl">精算實際毛利</div>
+              <div class="kpi-card__lbl">精算實際淨利</div>
               <div class="kpi-card__val" x-text="fmt(summary.totalActualGrossProfit)"></div>
               <div class="kpi-card__sub" x-text="'已精算 ' + summary.settledCases + ' 件'"></div>
             </div>
@@ -452,7 +452,7 @@
             <span style="font-size:14px">⚠️</span>
             <span>
               <strong>精算快照可能已過期：</strong>
-              <span x-text="summary.staleSettlementCount + ' 件'"></span> 已結案案件的承攬商成本在精算完結後又異動，下方毛利/業務員/部門績效可能未反映最新數字——請至個別案件的成本精算頁面確認並視需要重新完結
+              <span x-text="summary.staleSettlementCount + ' 件'"></span> 已結案案件的承攬商成本在精算完結後又異動，下方淨利/業務員/部門績效可能未反映最新數字——請至個別案件的成本精算頁面確認並視需要重新完結
             </span>
           </div>
 
@@ -469,7 +469,7 @@
             <span style="font-size:14px">⚠️</span>
             <span>
               <strong>案件缺收款期別：</strong>
-              <span x-text="casesWithoutPaymentItems.length + ' 件'"></span> 已成案/已結案案件沒有填寫收款期別，合約金額不會計入收款率/毛利等統計
+              <span x-text="casesWithoutPaymentItems.length + ' 件'"></span> 已成案/已結案案件沒有填寫收款期別，合約金額不會計入收款率/淨利等統計
               —
               <template x-for="cw in casesWithoutPaymentItems.slice(0,4)" :key="cw.quoteNo">
                 <span style="margin-right:4px;font-family:monospace" x-text="cw.quoteNo"></span>
@@ -518,7 +518,7 @@
               案件清單<span class="tab__cnt" x-text="casesAll.length"></span>
             </button>
             <button class="tab" :class="{on:activeTab==='margin'}" @click="activeTab='margin'">
-              毛利分析<span class="tab__cnt" x-text="marginCases.length"></span>
+              利潤分析<span class="tab__cnt" x-text="marginCases.length"></span>
             </button>
             <button class="tab" :class="{on:activeTab==='warr'}" @click="activeTab='warr'">
               保固預警<span class="tab__cnt" x-text="warranty.length"></span>
@@ -1068,9 +1068,9 @@
                 <thead><tr>
                   <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
                   <th class="c">報價日</th><th class="c">進度</th>
-                  <th class="r">合約金額</th><th class="r">預估毛利率</th>
+                  <th class="r">合約金額</th><th class="r">預估淨利率</th>
                   <th class="r">已收款</th><th class="r">收款率</th>
-                  <th class="c">實際毛利率</th><th class="c">精算</th>
+                  <th class="c">實際淨利率</th><th class="c">精算</th>
                 </tr></thead>
                 <template x-for="mgroup in casesByMonth" :key="mgroup.month">
                   <tbody>
@@ -1095,7 +1095,7 @@
                         <td class="r mono" x-text="(c.netMarginPct||0).toFixed(1) + '%'"></td>
                         <td class="r mono" x-text="fmt(c.receivedAmount)"></td>
                         <td class="r mono" :class="c.collectionRate>=80?'green-txt':c.collectionRate>=50?'orange-txt':'red-txt'" x-text="c.collectionRate.toFixed(1) + '%'"></td>
-                        <td class="c mono" :class="c.actualMarginPct!==null?(c.actualMarginPct>=(c.netMarginPct||0)?'green-txt':'red-txt'):''" x-text="c.actualMarginPct!==null ? c.actualMarginPct.toFixed(1)+'%' : '—'"></td>
+                        <td class="c mono" :class="c.actualMarginPct!==null?(c.actualMarginPct>=(c.netMarginPct||0)?'green-txt':'red-txt'):''" x-text="c.actualMarginPct!==null ? c.actualMarginPct.toFixed(1)+'%'+(c.actualIsGross ? '（舊精算為毛利）' : '') : '—'"></td>
                         <td class="c">
                           <template x-if="stlCanOpen(c)">
                             <button class="link-btn" @click="openSettlement(c.quoteNo)">精算</button>
@@ -1117,9 +1117,9 @@
                 <thead><tr>
                   <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
                   <th class="c">報價日</th><th class="c">進度</th>
-                  <th class="r">合約金額</th><th class="r">預估毛利率</th>
+                  <th class="r">合約金額</th><th class="r">預估淨利率</th>
                   <th class="r">已收款</th><th class="r">收款率</th>
-                  <th class="c">實際毛利率</th><th class="c">精算</th>
+                  <th class="c">實際淨利率</th><th class="c">精算</th>
                 </tr></thead>
                 <tbody>
                   <template x-for="c in casesAll" :key="c.quoteNo">
@@ -1134,7 +1134,7 @@
                       <td class="r mono" x-text="(c.netMarginPct||0).toFixed(1) + '%'"></td>
                       <td class="r mono" x-text="fmt(c.receivedAmount)"></td>
                       <td class="r mono" :class="c.collectionRate>=80?'green-txt':c.collectionRate>=50?'orange-txt':'red-txt'" x-text="c.collectionRate.toFixed(1) + '%'"></td>
-                      <td class="c mono" :class="c.actualMarginPct!==null?(c.actualMarginPct>=(c.netMarginPct||0)?'green-txt':'red-txt'):''" x-text="c.actualMarginPct!==null ? c.actualMarginPct.toFixed(1)+'%' : '—'"></td>
+                      <td class="c mono" :class="c.actualMarginPct!==null?(c.actualMarginPct>=(c.netMarginPct||0)?'green-txt':'red-txt'):''" x-text="c.actualMarginPct!==null ? c.actualMarginPct.toFixed(1)+'%'+(c.actualIsGross ? '（舊精算為毛利）' : '') : '—'"></td>
                       <td class="c">
                         <template x-if="stlCanOpen(c)">
                           <button class="link-btn" @click="openSettlement(c.quoteNo)">精算</button>
@@ -1160,8 +1160,8 @@
                 <th class="r">合約總額</th>
                 <th class="r">已收款</th>
                 <th class="r">收款率</th>
-                <th class="r">預估毛利率</th>
-                <th class="r">實際毛利率</th>
+                <th class="r">預估淨利率</th>
+                <th class="r">實際淨利率</th>
                 <th class="r">精算件數</th>
               </tr></thead>
               <tbody>
@@ -1191,7 +1191,7 @@
                   <th class="r">合約總額</th>
                   <th class="r">已收款</th>
                   <th class="r">收款率</th>
-                  <th class="r">預估毛利率</th>
+                  <th class="r">預估淨利率</th>
                 </tr></thead>
                 <tbody>
                   <template x-for="dp in deptPerf" :key="dp.deptName">
@@ -1209,7 +1209,7 @@
             </div>
           </div>
 
-          <!-- 毛利分析 -->
+          <!-- 利潤分析 -->
           <div x-show="activeTab==='margin'" class="panel">
             <template x-if="marginCases.length === 0">
               <div class="empty-state">目前尚無已完成精算之案件</div>
@@ -1219,8 +1219,8 @@
                 <thead><tr>
                   <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
                   <th class="c">進度</th><th class="r">報價稅前</th>
-                  <th class="r">預估毛利率</th><th class="r">預估毛利</th>
-                  <th class="r">實際毛利率</th><th class="r">實際毛利</th>
+                  <th class="r">預估淨利率</th><th class="r">預估淨利</th>
+                  <th class="r">實際淨利率</th><th class="r">實際淨利</th>
                   <th class="r">差異(pp)</th><th class="r">差異金額</th><th class="c">精算狀態</th>
                 </tr></thead>
                 <tbody>
@@ -1234,8 +1234,8 @@
                       <td class="r mono" x-text="fmt(mc.pretax)"></td>
                       <td class="r mono" x-text="(mc.netMarginPct||0).toFixed(1) + '%'"></td>
                       <td class="r mono" x-text="fmt(estGrossProfit(mc))"></td>
-                      <td class="r mono" :class="mc.actualMarginPct>=(mc.netMarginPct||0)?'green-txt':'red-txt'" x-text="(mc.actualMarginPct||0).toFixed(1) + '%'"></td>
-                      <td class="r mono" x-text="fmt(mc.grossProfit)"></td>
+                      <td class="r mono" :class="mc.actualMarginPct>=(mc.netMarginPct||0)?'green-txt':'red-txt'" x-text="(mc.actualMarginPct||0).toFixed(1) + '%' + (mc.actualIsGross ? '（舊精算為毛利）' : '')"></td>
+                      <td class="r mono" x-text="fmt(mc.grossProfit) + (mc.actualIsGross ? '（舊精算為毛利）' : '')"></td>
                       <td class="r mono" :class="((mc.actualMarginPct||0)-(mc.netMarginPct||0))>=0?'green-txt':'red-txt'" x-text="(((mc.actualMarginPct||0)-(mc.netMarginPct||0))>=0?'+':'') + ((mc.actualMarginPct||0)-(mc.netMarginPct||0)).toFixed(1) + 'pp'"></td>
                       <td class="r mono" :class="(mc.grossProfit-estGrossProfit(mc))>=0?'green-txt':'red-txt'" x-text="fmtDiff(mc.grossProfit-estGrossProfit(mc))"></td>
                       <td class="c"><span class="rb rb-fin" x-text="mc.settleStatus==='finalized'?'已結算':'草稿'"></span></td>
@@ -1262,7 +1262,7 @@
               <div class="empty-state">
                 <p style="font-size:28px;margin-bottom:10px">🎯</p>
                 <p style="margin-bottom:6px">尚未設定 <span x-text="year"></span> 年度目標</p>
-                <p style="font-size:11px;color:var(--text-dim);margin-bottom:16px">設定後，系統將追蹤營收、收款率、毛利等六大核心指標的年度達成進度</p>
+                <p style="font-size:11px;color:var(--text-dim);margin-bottom:16px">設定後，系統將追蹤營收、收款率、淨利等六大核心指標的年度達成進度</p>
                 <template x-if="_role()==='superadmin'">
                   <button class="btn-set-target" @click="openTargetModal()">立即設定年度目標</button>
                 </template>
@@ -1337,9 +1337,9 @@
                       <span class="acv-prorata" style="font-size:9px">基於 YTD 成案</span>
                     </div>
                   </div>
-                  <!-- 平均淨毛利率 -->
+                  <!-- 平均淨利率 -->
                   <div class="acv-card">
-                    <div class="acv-card__lbl">平均淨毛利率</div>
+                    <div class="acv-card__lbl">平均淨利率</div>
                     <div class="acv-value-row">
                       <span class="acv-actual" x-text="(achievement.annual.avgMarginPct.actual||0).toFixed(1) + '%'"></span>
                       <span class="acv-sep">/</span>
@@ -1353,9 +1353,9 @@
                       <span class="acv-prorata">基於精算案件</span>
                     </div>
                   </div>
-                  <!-- 年度實際毛利 -->
+                  <!-- 年度實際淨利 -->
                   <div class="acv-card">
-                    <div class="acv-card__lbl">年度實際毛利</div>
+                    <div class="acv-card__lbl">年度實際淨利</div>
                     <div class="acv-value-row">
                       <span class="acv-actual" x-text="fmt(achievement.annual.grossProfit.actual)"></span>
                       <span class="acv-sep">/</span>
@@ -1525,7 +1525,7 @@
                             <th class="c">狀態</th>
                             <th class="r">報價金額</th>
                             <th class="r">已收款</th>
-                            <th class="r">毛利率</th>
+                            <th class="r">淨利率</th>
                           </tr></thead>
                           <tbody>
                             <template x-for="t in selectedCust.transactions" :key="t.quoteNo">
@@ -1778,9 +1778,9 @@
                 </div>
               </template>
             </div>
-            <!-- 毛利率比較 -->
+            <!-- 淨利率比較 -->
             <div class="chart-card" x-show="marginCases.length > 0">
-              <div class="chart-card__title">毛利率比較（預估 vs 實際精算，依業務員平均）</div>
+              <div class="chart-card__title">淨利率比較（預估 vs 實際精算，依業務員平均）</div>
               <div style="position:relative;height:200px">
                 <canvas id="rpt-chart-margin"></canvas>
               </div>
@@ -2104,11 +2104,11 @@
             <input type="number" min="0" max="100" step="0.1" x-model.number="targetForm.annual.collectionRate" placeholder="例：85">
           </div>
           <div class="tgt-field">
-            <label>平均淨毛利率目標（%）</label>
+            <label>平均淨利率目標（%）</label>
             <input type="number" min="0" max="100" step="0.1" x-model.number="targetForm.annual.avgNetMarginPct" placeholder="例：25">
           </div>
           <div class="tgt-field">
-            <label>年度實際毛利目標（元，精算後）</label>
+            <label>年度實際淨利目標（元，精算後）</label>
             <input type="number" min="0" x-model.number="targetForm.annual.grossProfit" placeholder="例：2000000">
           </div>
         </div>
