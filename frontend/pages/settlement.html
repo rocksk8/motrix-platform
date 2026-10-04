@@ -144,13 +144,16 @@
     .stl-pf button[aria-pressed="true"] { background: var(--text-primary); color: var(--stl-surface); border-color: var(--text-primary); }
     .stl-table th .stl-sort { all: unset; cursor: pointer; font-weight: 700; }
     .stl-table th .stl-sort:focus-visible, .stl-table th .stl-sort:hover { text-decoration: underline; }
-    @media (max-width: 900px) { .stl-strip { position: static; } }
+    @media (max-width: 1249px) { .stl-strip { position: static; } }      /* 1250 以下摘要卡會折成多列，sticky 會遮住內容 ⇒ 不黏 */
     /* 列印／PDF：A4、不用 sticky／固定列、隱藏操作元件（主管簽核用） */
     @page { size: A4; margin: 12mm; }
     @media print {
       .stl-toolbar, .noprint, .btn, .toast, .stl-pf, nav, aside { display: none !important; }
       .stl-main { margin: 0 !important; padding: 0 !important; }
       .stl-strip { position: static !important; border: 0; }
+      .stl-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; gap: 4px; }
+      .stl-k__v { font-size: 13px !important; }
+      .stl-k { padding: 4px 6px; }
       .stl-card, .stl-k, .stl-ready { break-inside: avoid; }
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
@@ -160,6 +163,11 @@
     .stl-chcard__n { font-size: 11px; color: var(--text-secondary); }
     @media (min-width: 1100px) { .stl-charts { grid-template-columns: 1fr 1fr; } .stl-chcard--wide { grid-column: 1 / -1; } }
     @media print { .stl-chcard { break-inside: avoid; } }
+    .stl-banner { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 14px; border: 2px solid; border-radius: 10px; margin-bottom: 12px; font-size: 13px; }
+    .stl-banner--bad { background: var(--danger-hover-bg); border-color: var(--stl-bad-line); color: var(--danger); }
+    .stl-banner--warn { background: var(--stl-warn-bg); border-color: var(--stl-warn-line); color: var(--warning); }
+    .stl-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .stl-exc__it button:focus-visible, .stl-pf button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
     .stl-row--warn td { background: var(--warning-light); }
     .stl-chip { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; white-space: nowrap; }
     .stl-chip--material { color: var(--stl-info); background: var(--stl-info-bg); }
@@ -300,13 +308,13 @@
     <span x-show="xeMasked > 0" data-testid="stl-masked-warning" style="font-size:11px;color:#B45309;max-width:320px">⚠️ 有 <b x-text="xeMasked"></b> 筆費用單據的金額對你遮蔽，額外支出總額不完整：不能儲存或完結精算（請由申請人／簽核人／出納／財務／管理員處理）</span>
     <span x-show="saving" style="font-size:11px;color:var(--text-dim)">儲存中…</span>
     <template x-if="settlement.status !== 'finalized'">
-      <button class="btn btn-ghost btn-sm" @click="saveDraft()" :disabled="saving || xeMasked > 0" data-testid="stl-save-draft">
+      <button class="btn btn-ghost btn-sm" @click="saveDraft()" :disabled="saving || xeMasked > 0 || conflict" data-testid="stl-save-draft">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
         儲存草稿
       </button>
     </template>
     <template x-if="settlement.status !== 'finalized'">
-      <button class="btn btn-success btn-sm" @click="showFinalizeModal=true" :disabled="xeMasked > 0 || readiness.hard.length > 0" :title="readiness.hard.length ? '不可完結：' + readiness.hard.join('；') : ''" data-testid="stl-finalize">
+      <button class="btn btn-success btn-sm" @click="showFinalizeModal=true" :disabled="xeMasked > 0 || readiness.hard.length > 0 || conflict" :title="conflict ? '精算已被其他人更新，請先重新載入' : readiness.hard.length ? '不可完結：' + readiness.hard.join('；') : ''" data-testid="stl-finalize">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         完結精算
       </button>
@@ -323,6 +331,23 @@
 <!-- ── 主體 ── -->
 <div class="stl-main">
 
+  <!-- 載入失敗（中文、可重試）／別人已更新（衝突）：不悄悄覆蓋 -->
+  <div x-show="loadError" x-cloak role="alert" data-testid="stl-load-error" class="stl-banner stl-banner--bad">
+    <b x-text="loadError"></b> <button type="button" class="btn btn-ghost btn-sm" @click="location.reload()">重新載入</button>
+  </div>
+  <div x-show="conflict" x-cloak role="alert" data-testid="stl-conflict" class="stl-banner stl-banner--warn">
+    <b>這份精算與伺服器上的內容不一致（已被其他人更新，或相關單據已變動）。</b>為避免覆蓋別人的修改或用過期數字完結，已停止儲存／完結；你這次的修改尚未存檔，目前仍保留在畫面上。
+    <div x-show="dirtyList.length" data-testid="stl-conflict-dirty" style="flex-basis:100%">
+      <b x-text="'您的未存變更（' + dirtyList.length + ' 項）：'"></b>
+      <ul style="margin:4px 0 0;padding-left:18px"><template x-for="d in dirtyList" :key="d"><li x-text="d"></li></template></ul>
+    </div>
+    <button type="button" class="btn btn-ghost btn-sm" data-testid="stl-conflict-reload" @click="reloadLatest()">重新載入最新內容</button>
+    <div x-show="confirmDiscard" x-cloak data-testid="stl-conflict-confirm" style="flex-basis:100%;border-top:1px solid var(--stl-warn-line);padding-top:6px">
+      <b>重新載入會捨棄尚未儲存的編輯（上列 <span x-text="dirtyList.length"></span> 項）。</b>
+      <button type="button" class="btn btn-ghost btn-sm" data-testid="stl-conflict-discard" @click="location.reload()">確認捨棄並重新載入</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-testid="stl-conflict-keep" @click="confirmDiscard = false">先保留我的編輯</button>
+    </div>
+  </div>
   <!-- 載入中 -->
   <div x-show="loading" style="text-align:center;padding:60px;color:var(--text-dim)">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;display:inline-block"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
@@ -377,7 +402,7 @@
           <div class="stl-exc__it" :class="'is-' + e.lv" :data-testid="'stl-exc-' + e.key">
             <div aria-hidden="true" style="text-align:center" x-text="e.ic"></div>
             <div><b x-text="e.t"></b><div style="font-size:12px;color:var(--text-secondary)" x-text="e.s"></div></div>
-            <button type="button" class="btn btn-ghost btn-sm noprint" @click="jumpTo(e.go, e.item)">前往</button>
+            <button type="button" class="btn btn-ghost btn-sm noprint" :aria-label="'前往：' + e.t" @click="jumpTo(e.go, e.item)">前往</button>
           </div>
         </template>
       </div>
@@ -459,7 +484,7 @@
                   <td class="col-actual" style="border-left:2px solid #FDE68A">
                     <div style="display:flex;align-items:center;gap:3px">
                       <input class="stl-input num" type="number" min="0" step="any"
-                             x-model.number="item.actualQty"
+                             x-model.number="item.actualQty" :aria-label="(item.origDescription || '品項') + ' 實際數量'"
                              :disabled="settlement.status === 'finalized'"
                              @input="calcItemCost(item); calcSummary()"
                              style="width:60px">
@@ -470,12 +495,12 @@
                     <div style="display:flex;align-items:center;gap:3px">
                       <span style="font-size:10px;color:var(--text-dim)">NT$</span>
                       <input class="stl-input num" type="number" min="0" step="any"
-                             x-model.number="item.actualUnitCost"
+                             x-model.number="item.actualUnitCost" :aria-label="(item.origDescription || '品項') + ' 實際單位成本'"
                              :disabled="settlement.status === 'finalized'"
                              @input="calcItemCost(item); calcSummary()"
                              style="width:80px">
                     </div>
-                    <select data-saved-field class="stl-input" x-model="item.actualCostTaxMode"
+                    <select data-saved-field class="stl-input" x-model="item.actualCostTaxMode" :aria-label="(item.origDescription || '品項') + ' 稅別'"
                             :disabled="settlement.status === 'finalized'"
                             @change="calcItemCost(item); calcSummary()"
                             style="margin-top:3px;font-size:10px;padding:2px 4px;width:100%">
@@ -493,13 +518,13 @@
                     <div style="margin-top:3px;font-size:10px;font-weight:600" :data-testid="'stl-source-' + item.id">
                       <span class="stl-src" :class="'stl-src--' + itemSource(item).key" x-text="'來源：' + itemSource(item).label"></span>
                     </div>
-                    <select class="stl-input" x-show="itemSource(item).key === 'manual' || (itemSource(item).key === 'est' && !(systemActual(item) > 0))" :data-testid="'stl-actual-source-' + item.id"
+                    <select class="stl-input" x-show="itemSource(item).key === 'manual' || (itemSource(item).key === 'est' && !hasPurchase(item))" :data-testid="'stl-actual-source-' + item.id"
                             x-model="item.actualSource" :disabled="settlement.status === 'finalized'" aria-label="手填來源標籤" style="margin-top:3px;font-size:10px;padding:2px 4px;width:100%">
                       <option value="manual">手填</option>
                       <option value="legacy">歷史未建系統</option>
                       <option value="labor">人力</option>
                     </select>
-                    <div x-show="systemActual(item) > 0" :data-testid="'stl-po-' + item.id" style="margin-top:4px;font-size:10px;font-weight:400;color:#92400E">
+                    <div x-show="hasPurchase(item)" :data-testid="'stl-po-' + item.id" style="margin-top:4px;font-size:10px;font-weight:400;color:var(--warning)">
                       <span x-text="purchaseLabel(item)"></span>
                       <button type="button" class="btn btn-ghost btn-sm" style="padding:0 6px;font-size:10px" :disabled="settlement.status === 'finalized'"
                               @click="toggleAdopt(item)" :data-testid="'stl-adopt-' + item.id" x-text="item.adoptSystem ? '取消採用' : '採用'"></button>
@@ -521,11 +546,11 @@
 
                   <!-- 備註 -->
                   <td>
-                    <input class="stl-input" type="text" x-model="item.note"
+                    <input class="stl-input" type="text" x-model="item.note" :aria-label="(item.origDescription || '品項') + ' 備註'"
                            :disabled="settlement.status === 'finalized'"
                            placeholder="說明…"
                            @input="calcSummary()">
-                    <div x-show="itemSource(item).key === 'est' && !(systemActual(item) > 0)" :data-testid="'stl-nopurchase-' + item.id" style="margin-top:4px;font-size:11px;font-weight:400;color:var(--warning);line-height:1.4">
+                    <div x-show="itemSource(item).key === 'est' && !hasPurchase(item)" :data-testid="'stl-nopurchase-' + item.id" style="margin-top:4px;font-size:11px;font-weight:400;color:var(--warning);line-height:1.4">
                       ⚠ 無採購／對應紀錄：實際成本暫以估計計。已採購但沒進系統（歷史）或人力成本，請在左側填實際數量／單位成本。
                     </div>
                   </td>
@@ -736,6 +761,15 @@
         </div>
       </div>
 
+      <!-- ── 存檔有、報價單已無的品項（唯讀；不計入任何金額）── -->
+      <div class="stl-card" x-show="orphanItems.length" x-cloak data-testid="stl-orphans">
+        <div class="stl-card__head"><div class="stl-card__title">存檔有、報價單已無的品項（唯讀）</div><div style="font-size:11px;color:var(--text-dim)">這些品項已從報價單刪除，目前不計入任何金額；僅提醒你存檔裡還留著資料</div></div>
+        <div style="overflow-x:auto"><table class="stl-table">
+          <thead><tr><th>品項編號</th><th>當時品名</th><th style="text-align:right">存檔的實際成本</th></tr></thead>
+          <tbody><template x-for="o in orphanItems" :key="o.id"><tr :data-testid="'stl-orphan-' + o.id"><td x-text="o.id"></td><td x-text="o.description || '（無品名）'"></td><td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(o.actualTotalCost)"></td></tr></template></tbody>
+        </table></div>
+      </div>
+
       <!-- ── 四、精算備忘 ── -->
       <div class="stl-card">
         <div class="stl-card__head">
@@ -872,9 +906,9 @@
           </div>
           <!-- 圖表（inline SVG；數字取自上方表格同一組 summary，不另算）-->
           <div class="stl-charts" data-testid="stl-charts">
-            <div class="stl-chcard stl-chcard--wide"><div class="stl-chcard__t">① 從報價到最終淨利（橋接圖）</div><div x-html="chartBridge"></div><div class="stl-chcard__n">長條長度＝金額；紅＝扣減；數字一律標在長條右端。</div></div>
-            <div class="stl-chcard"><div class="stl-chcard__t">② 原始 vs 精算後</div><div x-html="chartPair"></div><div class="stl-chcard__n">灰色虛線＝原始（估計）；彩色＝精算後；▲▼ 為與原始差額（成本類：高＝紅）。</div></div>
-            <div class="stl-chcard"><div class="stl-chcard__t">③ 各品項毛利（由高到低）</div><div x-html="chartItems"></div><div class="stl-chcard__n">✖＝虧損；括號內為毛利比。</div></div>
+            <div class="stl-chcard stl-chcard--wide" role="group" aria-labelledby="stl-cht-br" aria-describedby="stl-chd-br"><div class="stl-chcard__t" id="stl-cht-br">① 從報價到最終淨利（橋接圖）</div><p class="stl-sr-only" id="stl-chd-br" x-text="chartDescBridge"></p><div x-html="chartBridge"></div><div class="stl-chcard__n">長條長度＝金額；紅＝扣減；數字一律標在長條右端。</div></div>
+            <div class="stl-chcard" role="group" aria-labelledby="stl-cht-pr" aria-describedby="stl-chd-pr"><div class="stl-chcard__t" id="stl-cht-pr">② 原始 vs 精算後</div><p class="stl-sr-only" id="stl-chd-pr" x-text="chartDescPair"></p><div x-html="chartPair"></div><div class="stl-chcard__n">灰色虛線＝原始（估計）；彩色＝精算後；▲▼ 為與原始差額（成本類：高＝紅）。</div></div>
+            <div class="stl-chcard" role="group" aria-labelledby="stl-cht-it" aria-describedby="stl-chd-it"><div class="stl-chcard__t" id="stl-cht-it">③ 各品項毛利（由高到低）</div><p class="stl-sr-only" id="stl-chd-it" x-text="chartDescItems"></p><div x-html="chartItems"></div><div class="stl-chcard__n">✖＝虧損；括號內為毛利比。</div></div>
           </div>
         </div>
       </div>
@@ -945,9 +979,9 @@
 </div>
 
 <!-- Toast -->
-<div class="toast-wrap">
+<div class="toast-wrap" aria-live="polite">
   <template x-for="t in toasts" :key="t.id">
-    <div class="toast" x-text="t.msg"></div>
+    <div class="toast" :role="t.err ? 'alert' : 'status'" :aria-live="t.err ? 'assertive' : 'polite'" :data-testid="t.err ? 'stl-toast-error' : 'stl-toast'" x-text="t.msg"></div>
   </template>
 </div>
 
@@ -1027,6 +1061,11 @@ function settlementPage() {
     loading: true,
     saving:  false,
     showFinalizeModal: false,
+    _updatedAt: null,            // 樂觀鎖：GET 回的 updatedAt／上次 PUT 回的 updated_at；存檔時帶 expectedUpdatedAt
+    _baseline: null,             // 載入／上次存檔成功時的可編輯內容快照：用來列出「您的未存變更」
+    confirmDiscard: false,       // 衝突後按重新載入 ⇒ 先要求確認捨棄未存編輯
+    conflict: false,             // 別人已更新（409／狀態不同）⇒ 顯示橫幅＋重新載入，絕不悄悄覆蓋
+    loadError: '',
     pfSort: null, pfDir: -1, pfFilter: 'all',     // 四之一表的排序／篩選（純顯示）
     _loadedAt: new Date(),
     showReopenModal: false,
@@ -1107,7 +1146,7 @@ function settlementPage() {
       this.quoteNo = params.get('no') || ''
       try { this._dispatchNoteSeen = localStorage.getItem('stl_dispatch_basis_note_' + this.quoteNo) === '1' } catch (e) { /* 讀不到就當沒看過 */ }
       if (!this.quoteNo) {
-        this.toast('未指定報價單號'); this.loading = false; return
+        this.toastErr('未指定報價單號'); this.loading = false; return
       }
 
       try {
@@ -1115,9 +1154,10 @@ function settlementPage() {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (res.status === 401) { location.href = 'login.html'; return }
-        if (!res.ok) { this.toast('載入失敗'); this.loading = false; return }
+        if (!res.ok) { this.loadError = this._httpMsg(res.status, '載入精算'); this.toastErr(this.loadError); this.loading = false; return }
 
         const d = await res.json()
+        this._updatedAt = d.updatedAt || null
         this.customerName = d.customerName || ''
         this.projectName  = d.projectName  || ''
 
@@ -1185,13 +1225,16 @@ function settlementPage() {
         await this.loadDispatches()
         await this.loadExtraExpenseTotals()   // 成本彙總要用到，必須在 calcSummary 之前（含 32-S5 的 itemPo）
         this.applyAdoptDefaults()
-        if (this.settlement.status !== 'finalized') this.settlement.items.forEach(i => { if (i.adoptSystem && this.systemActual(i) > 0) this.calcItemCost(i) })   // 採用採購金額的品項跟著最新值（沒有採購的不動，歷史案件逐位不變）
+        if (this.settlement.status !== 'finalized') this.settlement.items.forEach(i => { if (i.adoptSystem && this.hasPurchase(i)) this.calcItemCost(i) })   // 採用採購金額的品項跟著最新值（沒有採購的不動，歷史案件逐位不變）
         await this.loadVoucherRemitFees()     // W1：承攬商匯款手續費併入額外支出成本
         await this.loadCustomFinance()        // 建構器：自訂模組支出併入額外支出成本
         this.applyFrozen()
         this.calcSummary()
+        this._markClean()
       } catch(e) {
-        this.toast('載入失敗：' + e.message)
+        this.loadError = (e instanceof TypeError) ? '網路連線失敗，無法載入精算，請檢查網路後重新整理。' : '載入精算時發生錯誤，請重新整理；若持續發生請聯絡管理員。'
+        this.toastErr(this.loadError)
+        try { console.error('settlement load failed', e) } catch (_) { /* 沒有 console 就算了 */ }
       } finally {
         this.loading = false
       }
@@ -1234,6 +1277,12 @@ function settlementPage() {
       } catch {}
     },
 
+    // 38：與後端 `has = bool(po or mats or exs or dps)` 同一規則——有任何採購／材料／額外／派發列就算「有採購」（退款列、相抵為 0 的列也是）
+    hasPurchase(item) {
+      if (!this._actualsOk) return this.systemActual(item) > 0
+      const a = this.itemActuals[item.id] || {}
+      return !!(((a.po || {}).docs || []).length || ((a.material || {}).orders || []).length || ((a.extra || {}).docs || []).length || ((a.dispatch || {}).orders || []).length)
+    },
     systemActual(item) {
       if (this._actualsOk) { const a = this.itemActuals[item.id]; return (a && a.purchased) || 0 }
       return (this.itemPo && this.itemPo[item.id]) || 0
@@ -1317,6 +1366,18 @@ function settlementPage() {
       return '比原始報價 ' + (d < 0 ? '少 ' : '多 ') + 'NT$ ' + this.fmt(Math.abs(d)) + '（' + (pctv == null ? '—' : (d < 0 ? '−' : '+') + pctv.toFixed(1) + '%') + '）'
     },
     // ───────── 圖表資料（與表格同源：summary／unassignedCostRows／itemProfit）─────────
+    // 圖表的文字替代（螢幕閱讀器；數字與上方表格同源）
+    get chartDescBridge() {
+      const sm = this.summary, f = n => this.fmt(n)
+      return '從報價到最終淨利：報價 ' + f(sm.quotedPretax) + '，總實際成本 ' + f(sm.totalActualCost) + '，毛利 ' + f(sm.grossProfit) + '，管銷分攤 ' + f(sm.adminCost) + '，公益捐款 ' + f(sm.charityDonation) + '，最終淨利 ' + f(sm.netProfit) + '。同樣的數字見下方「每個品項的賺賠」表與扣費前後兩個區塊。'
+    },
+    get chartDescPair() {
+      const sm = this.summary, f = n => this.fmt(n)
+      return '原始與精算後：總成本 ' + f(sm.origTotalCost) + ' 變為 ' + f(sm.totalActualCost) + '；毛利 ' + f(sm.origDirectProfit) + ' 變為 ' + f(sm.grossProfit) + '；最終淨利 ' + f(sm.origNetProfit) + ' 變為 ' + f(sm.netProfit) + '。'
+    },
+    get chartDescItems() {
+      return '各品項毛利（由高到低）：' + this.settlement.items.slice().sort((a, b) => this.itemProfit(b) - this.itemProfit(a)).map(i => '#' + this.itemNo(i.id) + ' ' + (i.origDescription || '') + ' ' + this.fmt(this.itemProfit(i)) + '（' + this.pctTxt(this.itemPct(i)) + '）').join('；') + '。'
+    },
     get chartBridge() {
       const sm = this.summary
       const parts = [{ id: 'items', label: '品項實際成本', amt: sm.itemActualTotal }]
@@ -1335,11 +1396,12 @@ function settlementPage() {
     get chartItems() {
       return stlItemsSvg(this.settlement.items.map(i => ({ id: i.id, no: this.itemNo(i.id), name: i.origDescription || '', profit: this.itemProfit(i), pct: this.itemPct(i) })), n => this.fmt(n), v => this.pctTxt(v))
     },
+    get orphanItems() { return this._actualsOk ? (this.actuals.orphanItems || []) : [] },
     // ───────── 管理視角：高階摘要／需處理／完結閘門（沿用 summary 既有定義，不新增公式）─────────
     itemVar(i) { return this.itemActual(i) - this.estimateOf(i) },
     itemOrigPct(i) { const q = this.itemQuote(i); return q > 0 ? (q - this.estimateOf(i)) / q * 100 : null },
     itemDpp(i) { const a = this.itemPct(i), o = this.itemOrigPct(i); return a == null || o == null ? null : Math.round((a - o) * 10) / 10 },   /* 非金額 */
-    _noRecord(i) { return !(this.systemActual(i) > 0) && this.itemSource(i).key === 'est' },
+    _noRecord(i) { return !this.hasPurchase(i) && this.itemSource(i).key === 'est' },
     pfSortBy(k) { if (this.pfSort === k) this.pfDir *= -1; else { this.pfSort = k; this.pfDir = -1 } },
     pfArrow(k) { return this.pfSort === k ? (this.pfDir < 0 ? ' ▼' : ' ▲') : '' },
     get profitRows() {
@@ -1405,7 +1467,7 @@ function settlementPage() {
     // 每個品項的賺賠（毛利；報價＝報價單品項金額 origAmount，未稅；實際成本與 calcSummary 的 itemActualTotal 同一規則：手填 0／空＝用估計）
     pctTxt(v) { return v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '%' },   /* 非金額 */
     itemQuote(i) { return +i.origAmount || 0 },
-    itemActual(i) { return i.actualTotalCost || this.estimateOf(i) },
+    itemActual(i) { return (i.adoptSystem && this.hasPurchase(i)) ? (+i.actualTotalCost || 0) : (i.actualTotalCost || this.estimateOf(i)) },   // 採用且有採購列：取代估計（含 0／負數），與後端同一規則
     itemProfit(i) { return this.itemQuote(i) - this.itemActual(i) },
     itemPct(i) { const q = this.itemQuote(i); return q > 0 ? this.itemProfit(i) / q * 100 : null },
     itemUnitProfit(i) { const q = +i.origQty || 0; return q > 0 ? (+i.origUnitPrice || 0) - this.itemActual(i) / q : null },
@@ -1428,7 +1490,7 @@ function settlementPage() {
     get reconCostGap() { return this.summary.itemActualTotal + this.unassignedCostTotal - this.summary.totalActualCost },
     // 每個品項的實際成本來源（顯示用，不存檔）：採用且有採購／對應 ⇒ 取代；否則有手填 ⇒ 手填；否則 ⇒ 估計（優先序＝規則 A）
     itemSource(item) {
-      if (item.adoptSystem && this.systemActual(item) > 0) {
+      if (item.adoptSystem && this.hasPurchase(item)) {
         const a = (this._actualsOk && this.itemActuals[item.id]) || {}
         const po = !!(a.po && a.po.amount), map = !!((a.material && a.material.amount) || (a.extra && a.extra.amount) || (a.dispatch && a.dispatch.amount))
         return po && map ? { key: 'po-map', label: '採購單＋已對應' } : po ? { key: 'po', label: '採購單' } : { key: 'map', label: '已對應' }
@@ -1444,10 +1506,13 @@ function settlementPage() {
     // 已被品項吸收的派發金額：採用且該品項有金額時，派發已在品項實際成本裡，不能再於承攬商派發成本重複加（規則 A，與後端同一條）。
     // 總成本 ＝ 品項實際 ＋ 額外 ＋ 派發 − 被吸收；不用 dispatchTotal 直接加（完結時後端重算比對，重複計入會 409）
     get dispatchAbsorbed() {
+      // S-2／S-4：已完結且存檔 summary 有 dispatchAbsorbedTotal ⇒ 以凍結值為準（`dispatchAbsorbedTotal ?? 即時算`）；舊案沒有這鍵 ⇒ 沿用即時算
+      const fz = this._frozenSummary
+      if (this.settlement.status === 'finalized' && fz && typeof fz.dispatchAbsorbedTotal === 'number') return fz.dispatchAbsorbedTotal
       if (!this._actualsOk) return 0
       return this.settlement.items.reduce((sum, i) => {
         const a = this.itemActuals[i.id]
-        return sum + (a && a.dispatch && i.adoptSystem && this.systemActual(i) > 0 ? (a.dispatch.amount || 0) : 0)
+        return sum + (a && a.dispatch && i.adoptSystem && this.hasPurchase(i) ? (a.dispatch.amount || 0) : 0)
       }, 0)
     },
     get mapSummary() {
@@ -1503,7 +1568,7 @@ function settlementPage() {
       if (itemId) this.offsets.push({ kind, ref: String(ref), itemId: String(itemId) })
       await this.loadActuals()
       this.applyXeTotal()
-      this.settlement.items.forEach(i => { if (i.adoptSystem && (this.systemActual(i) > 0 || i._fromSystem)) this.calcItemCost(i) })     // 沖銷搬走了採購 ⇒ 原本取自系統的品項回到手填值
+      this.settlement.items.forEach(i => { if (i.adoptSystem && (this.hasPurchase(i) || i._fromSystem)) this.calcItemCost(i) })     // 沖銷搬走了採購 ⇒ 原本取自系統的品項回到手填值
       this.calcSummary()
     },
 
@@ -1638,7 +1703,7 @@ function settlementPage() {
     },
 
     calcItemCost(item) {
-      if (item.adoptSystem && this.systemActual(item) > 0) { item.actualTotalCost = this.systemActual(item); item._fromSystem = true; return }
+      if (item.adoptSystem && this.hasPurchase(item)) { item.actualTotalCost = this.systemActual(item); item._fromSystem = true; return }
       item._fromSystem = false      // 32-S5：照採購單連結金額（含稅最終金額，不再 ×1.05 或 ÷1.05）
       // X-VAT（2026-09-26）：金額一律 static/legal-round.js 四捨五入（與後端同一套）
       const raw = MotrixLegalRound.halfUp(item.actualQty || 0, item.actualUnitCost || 0)
@@ -1674,7 +1739,7 @@ function settlementPage() {
 
       // 手填實際成本 0／空＝沒填 ⇒ 用估計（與重新載入存檔 `si.actualTotalCost || oi.actualTotalCost`、後端 manual_actual 同一規則；
       // 否則同一次編輯中頁面把 0 加進去，完結時與後端重算差一筆估計而被 409）
-      const itemActualTotal = this.settlement.items.reduce((s, i) => s + (i.actualTotalCost || this.estimateOf(i)), 0)
+      const itemActualTotal = this.settlement.items.reduce((s, i) => s + this.itemActual(i), 0)
       // 2026-09-11：額外支出搬到 case_extra_expenses 表（DB v75），改用從 API 取回的
       // 總額。**不能再用 settlement.extraItems 算**——那份陣列現在只是搬移前的唯讀
       // 備份、不會再更新，拿它算成本會停在搬移當下的舊數字。含送審中的金額
@@ -1730,15 +1795,15 @@ function settlementPage() {
 
     async previewAttachmentFile(file) {
       // 共用預覽元件（static/file-preview.js）：頁內預覽窗
-      try { await MotrixFilePreview.openFile(file) } catch (e) { this.toast('開啟檔案失敗：' + e.message) }
+      try { await MotrixFilePreview.openFile(file) } catch (e) { this.toastErr('開啟檔案失敗，請稍後再試。') }
     },
 
-    buildPayload() {
+    buildPayload(over = {}) {
       return {
-        status:          this.settlement.status,
+        status:          'status' in over ? over.status : this.settlement.status,
         settlementDate:  this.settlement.settlementDate,
-        finalizedAt:     this.settlement.finalizedAt,
-        finalizedBy:     this.settlement.finalizedBy,
+        finalizedAt:     'finalizedAt' in over ? over.finalizedAt : this.settlement.finalizedAt,
+        finalizedBy:     'finalizedBy' in over ? over.finalizedBy : this.settlement.finalizedBy,
         memo:            this.settlement.memo,
         items:           this.settlement.items.map(i => ({
           id:             i.id,
@@ -1763,58 +1828,115 @@ function settlementPage() {
       }
     },
 
-    async _putSettlement(reason) {
-      this.calcSummary()
-      const res = await fetch(`${API}/quotations/${this.quoteNo}/settlement`, {
-        method:  'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-        body:    JSON.stringify(reason ? { settlement: this.buildPayload(), reason } : { settlement: this.buildPayload() }),
+    // ───────── 存檔／完結／重新開啟（第 38 班：樂觀鎖、失敗後重新取得狀態、中文且不誤導的訊息）─────────
+    // 失敗訊息：只在安全時才顯示後端 detail（409／422／400 是給使用者看的檢核訊息）；404 與「不存在」同一句（後端不分有沒有權限）
+    _httpMsg(status, what, detail) {
+      const safe = (status === 409 || status === 422 || status === 400) && typeof detail === 'string' && detail ? '：' + detail : ''
+      if (status === 404) return '找不到這張報價單（不存在，或你沒有權限查看）。'
+      if (status === 403) return '你沒有權限執行「' + what + '」。'
+      if (status >= 500) return '伺服器暫時無法處理「' + what + '」，請稍後再試；資料沒有被改動。'
+      return what + '失敗' + safe
+    },
+    // S-3：衝突後要保住使用者尚未存檔的編輯——列出差異，確認後才重新載入
+    _snap() {
+      const f = i => ({ id: String(i.id), name: i.origDescription || '', actualQty: i.actualQty, actualUnitCost: i.actualUnitCost, actualCostTaxMode: i.actualCostTaxMode,
+                        adoptSystem: !!i.adoptSystem, actualSource: i.actualSource || 'manual', note: i.note || '' })
+      return { items: this.settlement.items.map(f), memo: this.settlement.memo || '', settlementDate: this.settlement.settlementDate || '', offsets: (this.offsets || []).map(o => o.kind + ':' + o.ref + '>' + o.itemId).sort() }
+    },
+    _markClean() { this._baseline = JSON.parse(JSON.stringify(this._snap())) },
+    get dirtyList() {
+      const b = this._baseline
+      if (!b) return []
+      const cur = this._snap(), out = [], L = { actualQty: '實際數量', actualUnitCost: '實際單位成本', actualCostTaxMode: '稅別', adoptSystem: '採用', actualSource: '來源標籤', note: '備註' }
+      cur.items.forEach(i => {
+        const o = b.items.find(x => x.id === i.id)
+        if (!o) return
+        const ch = Object.keys(L).filter(k => JSON.stringify(i[k]) !== JSON.stringify(o[k])).map(k => L[k])
+        if (ch.length) out.push('#' + this.itemNo(i.id) + ' ' + (i.name || '（無品名）') + '：' + ch.join('、'))
       })
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || '儲存失敗')
-      return res
+      if (cur.memo !== b.memo) out.push('精算備忘')
+      if (cur.settlementDate !== b.settlementDate) out.push('精算日期')
+      if (JSON.stringify(cur.offsets) !== JSON.stringify(b.offsets)) out.push('未對應項目的對應')
+      return out
+    },
+    reloadLatest() { if (this.dirtyList.length) this.confirmDiscard = true; else location.reload() },
+    // 單一出口：回 {ok,status,data} 或 {network:true}（純網路錯誤）
+    async _settlementPut(extra, over) {
+      this.calcSummary()
+      const body = Object.assign({ settlement: this.buildPayload(over) }, extra || {})
+      if (this._updatedAt) body.expectedUpdatedAt = this._updatedAt
+      let res
+      try {
+        res = await fetch(`${API}/quotations/${this.quoteNo}/settlement`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify(body),
+        })
+      } catch (e) { return { network: true } }
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data && data.updated_at) this._updatedAt = data.updated_at
+      if (res.ok) this._markClean()
+      return { ok: res.ok, status: res.status, data }
+    },
+    // 失敗之後：重新取得伺服器狀態（純網路錯誤除外）。狀態或版本與本頁不同 ⇒ 別人改過 ⇒ 顯示橫幅，不更新 _updatedAt（避免之後悄悄覆蓋）
+    async _syncAfterFailure() {
+      try {
+        const res = await fetch(`${API}/quotations/${this.quoteNo}/settlement`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!res.ok) return
+        const d = await res.json()
+        const serverStatus = (d.settlement && d.settlement.status) || 'draft'
+        if (serverStatus !== this.settlement.status || (d.updatedAt && this._updatedAt && d.updatedAt !== this._updatedAt)) this.conflict = true
+      } catch (e) { /* 取不到就維持現狀；上面的失敗訊息已顯示 */ }
+    },
+    async _failed(r, what) {
+      if (r.network) { this.toastErr('網路連線失敗，「' + what + '」尚未完成（資料沒有被改動），請檢查網路後再試。'); return '網路連線失敗，尚未完成，請檢查網路後再試。' }
+      if (r.status === 401) { location.href = 'login.html'; return '' }
+      const detail = r.data && r.data.detail
+      if (r.status === 409) {
+        this.conflict = true
+        const m = what + '失敗：' + (typeof detail === 'string' && detail ? detail : '精算已被其他人更新') + '。請按「重新載入」取得最新內容；你這次的修改尚未存檔。'
+        this.toastErr(m); return m
+      }
+      const m = this._httpMsg(r.status, what, detail)
+      this.toastErr(m)
+      await this._syncAfterFailure()
+      return m
     },
 
     async saveDraft() {
-      if (this.xeMasked > 0) { this.toast('有 ' + this.xeMasked + ' 筆費用單據的金額對你遮蔽，額外支出總額不完整，不能儲存精算'); return }
+      if (this.xeMasked > 0) { this.toastErr('有 ' + this.xeMasked + ' 筆費用單據的金額對你遮蔽，額外支出總額不完整，不能儲存精算'); return }
       this.saving = true
       try {
-        await this._putSettlement()
-        this.toast('精算草稿已儲存')
-      } catch(e) { this.toast('儲存失敗：' + e.message) }
-      finally { this.saving = false }
+        const r = await this._settlementPut()
+        if (r.ok) this.toast('精算草稿已儲存')
+        else await this._failed(r, '儲存草稿')
+      } finally { this.saving = false }
     },
 
     async finalize() {
-      if (this.xeMasked > 0) { this.toast('額外支出總額不完整（有金額對你遮蔽的費用單據），不能完結精算'); this.showFinalizeModal = false; return }
+      if (this.xeMasked > 0) { this.toastErr('額外支出總額不完整（有金額對你遮蔽的費用單據），不能完結精算'); this.showFinalizeModal = false; return }
       this.saving = true
       this._finalizing = true
-      this.settlement.status      = 'finalized'
-      this.settlement.finalizedAt = new Date().toISOString()
-      this.settlement.finalizedBy = this.session.displayName || this.session.username || ''
+      const when = new Date().toISOString(), who = this.session.displayName || this.session.username || ''
       try {
-        this.calcSummary()
-        const res = await fetch(`${API}/quotations/${this.quoteNo}/settlement`, {
-          method:  'PUT',
-          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body:    JSON.stringify({ settlement: this.buildPayload() }),
-        })
-        if (res.ok) {
-          this._frozenSummary = Object.assign({}, this.summary, { dispatchBasis: 'pretax' })      // 與後端存下的一致，之後的顯示／過期比對才認得新口徑
+        // 先不改本頁狀態：成功才套用；失敗（403／422 等）本頁維持原樣，不假裝成「草稿」或「已完結」
+        const r = await this._settlementPut({}, { status: 'finalized', finalizedAt: when, finalizedBy: who })
+        if (r.ok) {
+          this.settlement.status = 'finalized'; this.settlement.finalizedAt = when; this.settlement.finalizedBy = who
+          this.calcSummary()
+          // S-4：完結時伺服器會用重算值覆蓋下游欄位，PUT 回應帶回「實際凍結的 summary」⇒ 本頁直接採用它（顯示與存檔一致，不再用本頁自己算的）
+          const srv = r.data && r.data.summary && typeof r.data.summary === 'object' ? r.data.summary : null
+          if (srv) {
+            this._frozenSummary = Object.assign({}, srv)
+            Object.keys(srv).forEach(k => { if (k in this.summary && typeof srv[k] === typeof this.summary[k]) this.summary[k] = srv[k] })
+            if (typeof srv.dispatchAbsorbedTotal === 'number') this.summary.dispatchAbsorbed = srv.dispatchAbsorbedTotal
+          } else {
+            this._frozenSummary = Object.assign({}, this.summary, { dispatchBasis: 'pretax' })      // 舊後端沒回 summary：維持原行為（與後端存下的口徑一致）
+          }
           this.showFinalizeModal = false
           this.toast('精算已完結')
         } else {
-          this.settlement.status      = 'draft'
-          this.settlement.finalizedAt = ''
-          this.settlement.finalizedBy = ''
-          const detail = (await res.json().catch(() => ({}))).detail
           this.showFinalizeModal = false
-          this.toast('完結失敗' + (typeof detail === 'string' && detail ? '：' + detail : ''), 10000)      // 409（完結前重算與畫面不一致）要讓使用者看到「請重新整理」
+          await this._failed(r, '完結')
         }
-      } catch(e) {
-        this.settlement.status      = 'draft'
-        this.settlement.finalizedAt = ''
-        this.settlement.finalizedBy = ''
-        this.toast('完結失敗：' + e.message)
       } finally { this.saving = false; this._finalizing = false }
     },
 
@@ -1822,24 +1944,23 @@ function settlementPage() {
       const reason = (this.reopenReason || '').trim()
       if (!reason) { this.reopenErr = '請填寫重新開啟的理由'; return }
       this.reopenErr = ''
-      const keep = { status: this.settlement.status, finalizedAt: this.settlement.finalizedAt, finalizedBy: this.settlement.finalizedBy }
-      this.settlement.status      = 'draft'
-      this.settlement.finalizedAt = ''
-      this.settlement.finalizedBy = ''
       this.saving = true
       try {
-        await this._putSettlement(reason)
-        this.showReopenModal = false
-        this.toast('精算已重新開啟（草稿）')
-      } catch (e) {
-        Object.assign(this.settlement, keep)                       // 後端拒絕（例如理由空白）⇒ 畫面維持完結，不要停在『草稿』的假象
-        this.reopenErr = '重新開啟失敗：' + e.message
+        const r = await this._settlementPut({ reason }, { status: 'draft', finalizedAt: '', finalizedBy: '' })
+        if (r.ok) {
+          this.settlement.status = 'draft'; this.settlement.finalizedAt = ''; this.settlement.finalizedBy = ''
+          this.showReopenModal = false
+          this.toast('精算已重新開啟（草稿）')
+        } else {
+          this.reopenErr = '重新開啟失敗：' + (await this._failed(r, '重新開啟精算'))     // 失敗：畫面維持完結（沒有動過本頁狀態）
+        }
       } finally { this.saving = false }
     },
 
-    toast(msg, ms = 3500) {
+    toastErr(msg) { this.toast(msg, 10000, true) },      // 失敗訊息停 10 秒、role=alert（assertive）
+    toast(msg, ms = 3500, err = false) {
       const id = Date.now() + Math.random()
-      this.toasts.push({ id, msg })
+      this.toasts.push({ id, msg, err })
       setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id) }, ms)
     },
   }
