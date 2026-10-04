@@ -1,0 +1,45 @@
+import json, os
+import pytest
+pytest.importorskip("playwright.sync_api")
+from tests.test_e2e_case_concurrent_edit_2026_09_24 import _login  # noqa
+from modules.case.tests.test_e2e_settlement_actuals_2026_10_03 import NO, _seed
+S = "Alpine.$data(document.body)"
+OUT = os.environ["PROBE_OUT"]
+
+@pytest.mark.e2e
+def test_probe(live_server, make_user, e2e_browser):
+    import db
+    sa = make_user(username="sa_sa", role="superadmin")
+    _seed()
+    c = db.get_db()
+    d = json.loads(c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+    d["tot"] = {"pretax": 88253000, "total": 92665650, "totalCost": 60000000, "directProfit": 28253000, "netProfit": 25000000, "adminCost": 8825300, "charityDonation": 282530, "directMarginPct": 32.0, "netMarginPct": 28.3}
+    d["customerName"] = "超級無敵長長長長長長長長的股份有限公司（台灣區域營運暨海外事業發展總部）第二分公司"
+    d["projectName"] = "非常非常長的專案名稱" * 6
+    c.execute("UPDATE quotations SET data_json=?, customer_name=?, project_name=? WHERE quote_no=?", (json.dumps(d), d["customerName"], d["projectName"], NO))
+    c.commit(); c.close()
+    page = e2e_browser.new_context(viewport={"width": 1440, "height": 900}).new_page()
+    _login(page, live_server, *sa)
+    page.goto(f"{live_server}/pages/settlement.html?no={NO}")
+    page.locator('[data-testid="stl-strip"]').wait_for(state="visible", timeout=20000)
+    page.wait_for_function(f"() => {S}._actualsOk && {S}.summary.totalActualCost > 0", timeout=20000)
+    js = """() => {
+      const vw = document.documentElement.clientWidth, res = {docOverflowX: document.documentElement.scrollWidth - vw, items: []};
+      const areas = ['.stl-strip','.stl-main','.stl-card','.stl-table','.stl-chcard','.stl-k','svg','.stl-sumbar','.stl-ready','h1','h2'];
+      document.querySelectorAll(areas.join(',')).forEach(el => {
+        const r = el.getBoundingClientRect(); if (!r.width) return;
+        const cs = getComputedStyle(el);
+        if (r.right > vw + 1 || r.left < -1) res.items.push('offscreen ' + el.tagName + '.' + el.className.toString().slice(0,40) + ' ' + Math.round(r.left) + '..' + Math.round(r.right) + '/' + vw);
+        if (el.scrollWidth > el.clientWidth + 1 && el.tagName != 'svg' && !['auto','scroll'].includes(cs.overflowX) && cs.display != 'inline') res.items.push('clip ' + el.tagName + '.' + el.className.toString().slice(0,40) + ' ' + el.scrollWidth + '>' + el.clientWidth + ' ox=' + cs.overflowX);
+      });
+      return res; }"""
+    lines = []
+    for w in (1024, 1100, 1280, 1440, 1920, 420):
+        page.set_viewport_size({"width": w, "height": 900}); page.wait_for_timeout(400)
+        page.evaluate("() => window.scrollTo(0,0)")
+        r = page.evaluate(js)
+        rows = page.evaluate("() => [new Set([...document.querySelectorAll('[data-testid=stl-strip] .stl-k')].map(e=>Math.round(e.getBoundingClientRect().top))).size, Math.round(document.querySelector('[data-testid=stl-strip]').getBoundingClientRect().height)]")
+        lines.append("W%d docOverflowX=%s n=%d rows,stripH=%s" % (w, r["docOverflowX"], len(r["items"]), rows))
+        lines += ["   " + x for x in r["items"][:25]]
+        page.screenshot(path=os.path.join(OUT, "full-%d.png" % w), full_page=True)
+    open(os.path.join(OUT, "result.txt"), "w", encoding="utf-8").write("\n".join(lines))
