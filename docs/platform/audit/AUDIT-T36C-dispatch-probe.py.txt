@@ -1,0 +1,156 @@
+# -*- coding: utf-8 -*-
+"""稽核探針（rev-7f，AUDIT-T36C）：不屬於產品測試，僅供稽核重跑。"""
+import itertools
+import json
+
+import pytest
+
+import db
+from modules.case import settlement_actuals as SA
+from modules.case.tests.test_material_link_2026_10_02 import _put_materials
+from modules.case.tests.test_material_link_booking_2026_10_02 import _order
+from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W, _login  # noqa: F401
+from modules.case.tests.test_settlement_actuals_2026_10_03 import _get, _items, _put_settlement
+from modules.case.tests.test_settlement_tax_basis_2026_10_03 import _dispatch
+
+URL = "/api/quotations/%s/settlement" % NO
+
+
+def _off(ref, item="a", kind="dispatch"):
+    return {"kind": kind, "ref": str(ref), "itemId": item}
+
+
+def _put(c, h, offsets, **extra):
+    return c.put(URL, json={"settlement": dict({"items": [], "offsets": offsets}, **extra)}, headers=h)
+
+
+def _total(offs, items_saved):
+    _put_settlement({"items": items_saved, "offsets": offs})
+    cn = db.get_db()
+    try:
+        return SA.compute(cn, NO, offsets=offs)
+    finally:
+        cn.close()
+
+
+def test_p1_other_cases_dispatch_id_rejected_and_never_counted(W):
+    c, h = W
+    mine = _dispatch(1000, 0)
+    other = _dispatch(7777, 0, quote_no="MQ-PL-2")
+    assert _put(c, h, [_off(other)]).status_code == 422
+    # 繞過驗證（整包存檔路徑可直接寫入 offsets）：計算端仍不得把別案派發算進來
+    d = _total([_off(other), _off(mine)], [{"id": "a", "adoptSystem": True}])
+    t = d["totals"]
+    assert t["dispatchTotal"] == 1000 and t["dispatchAssignedTotal"] == 1000, t
+
+
+def test_p2_deleted_item_rejected_and_saved_offset_falls_back_to_unassigned(W):
+    c, h = W
+    d1 = _dispatch(1000, 0)
+    assert _put(c, h, [_off(d1, "gone")]).status_code == 422
+    d = _total([_off(d1, "gone")], [{"id": "a", "adoptSystem": True}])
+    t = d["totals"]
+    assert t["dispatchAssignedTotal"] == 0 and t["dispatchUnassignedTotal"] == 1000 and t["dispatchAbsorbedTotal"] == 0
+
+
+def test_p3_conservation_grid(W):
+    """adopt a/b × 派發去處 × 材料去處 × unadopted 模式：總成本＝品項實際＋所有「沒被吸收」的錢，且與全部未對應時的 Δ 只來自規則 A 取代估計。"""
+    c, h = W
+    d1, d2 = _dispatch(10000, 2000), _dispatch(3000, 0, approval="待審核")
+    _put_materials([_order("X", 1, 250)], {"X": "已核准"})
+    cn = db.get_db()
+    try:
+        dd = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+        dd["dealTag"] = "已成案"
+        cn.execute("UPDATE quotations SET data_json=?, deal_tag='已成案' WHERE quote_no=?", (json.dumps(dd), NO))
+        cn.commit()
+    finally:
+        cn.close()
+    for adopt_a, adopt_b, p1, p2, mat in itertools.product((True, False), (True, False), (None, "a", "b"), (None, "a", "b"), (None, "a", "b")):
+        offs = [o for o in ([_off(d1, p1) if p1 else None, _off(d2, p2) if p2 else None, _off("X", mat, "material") if mat else None]) if o]
+        saved = [{"id": "a", "adoptSystem": adopt_a}, {"id": "b", "adoptSystem": adopt_b}]
+        for mode in (SA.UNADOPTED_IGNORE, SA.UNADOPTED_ADD):
+            _put_settlement({"items": saved, "offsets": offs})
+            cn = db.get_db()
+            try:
+                d = SA.compute(cn, NO, offsets=offs, unadopted=mode)
+            finally:
+                cn.close()
+            t = d["totals"]
+            # 獨立重算：每個「錢」只出現一次
+            expect = 0.0
+            for it in d["items"]:
+                expect += it["actual"]["amount"]
+                if mode == SA.UNADOPTED_ADD and it["hasPurchase"] and not it["adopt"]:
+                    expect += it["purchased"] - it["dispatch"]["amount"]
+            expect += sum(x["amount"] for x in d["unassigned"]["materials"]) + sum(x["amount"] for x in d["unassigned"]["dispatches"])
+            expect += sum(x["amount"] for x in d["unassigned"]["extras"]) + t["remitFeeTotal"] + t["customExpenseTotal"]
+            # 已對應派發：被採用吸收者已在 actual；不採用者仍要另計
+            expect += sum(it["dispatch"]["amount"] for it in d["items"] if not (it["hasPurchase"] and it["adopt"]))
+            assert abs(t["totalActualCost"] - expect) < 0.5, (adopt_a, adopt_b, p1, p2, mat, mode, t["totalActualCost"], expect)
+            assert t["dispatchAssignedTotal"] + t["dispatchUnassignedTotal"] == t["dispatchTotal"] == 15000
+
+
+def test_p4_finalize_409_paths_and_visibility(W, make_user):
+    c, h = W
+    d1 = _dispatch(10000, 2000)
+    _put_settlement({"items": [{"id": "a", "adoptSystem": True}], "offsets": [_off(d1)]})
+    from modules.case.tests.test_settlement_finalize_integrity_2026_10_03 import _set_tot, page_payload
+    _set_tot()
+    t = _get(c, h)["totals"]
+    gross = 100000 - t["totalActualCost"]
+    admin, charity = SA.round_half_up(100000, 0.10), SA.round_half_up(gross, 0.01)
+    net = gross - admin - charity
+    p = page_payload(c, h, totalActualCost=t["totalActualCost"], grossProfit=gross, charityDonation=charity, netProfit=net,
+                     grossMarginPct=round(gross / 1000, 1), netMarginPct=round(net / 1000, 1))
+    p["offsets"] = [_off(d1)]
+    # 頁面用舊公式（沒扣吸收）送 totalActualCost ⇒ 必須 409
+    bad = json.loads(json.dumps(p))
+    bad["summary"]["totalActualCost"] += 12000
+    assert c.put(URL, json={"settlement": bad}, headers=h).status_code == 409
+    # 缺 dispatchAbsorbed／拆分鍵：伺服器補齊
+    p["summary"].pop("dispatchAbsorbed", None)
+    assert c.put(URL, json={"settlement": p}, headers=h).status_code == 200
+    s = _get(c, h)["savedSummary"]
+    assert s["dispatchAssignedTotal"] == 12000 and "dispatchAbsorbed" not in s
+    # 已完結再存：沒理由 422、非 superadmin 403
+    u, pw = make_user(username="aud_fin", role="admin")
+    h2 = _login(c, u, pw)
+    assert c.put(URL, json={"settlement": p}, headers=h2).status_code in (403, 404)
+    assert c.put(URL, json={"settlement": p}, headers=h).status_code == 422
+    # 非業務／無財務檢視者：看不到案件＝404（同查無）
+    u3, pw3 = make_user(username="aud_nobody", role="viewer")
+    h3 = _login(c, u3, pw3)
+    assert c.get("/api/quotations/%s/settlement-actuals" % NO, headers=h3).status_code in (403, 404)
+    assert c.get("/api/quotations/MQ-NOPE/settlement-actuals", headers=h3).status_code == c.get("/api/quotations/%s/settlement-actuals" % NO, headers=h3).status_code
+
+
+@pytest.mark.parametrize("bad", [[], {}, 0, False, ["labor"], {"a": 1}, "<script>", "LABOR", " labor"])
+def test_p5_actual_source_domain(W, bad):
+    c, h = W
+    r = c.put(URL, json={"settlement": {"items": [{"id": "a", "actualSource": bad}], "offsets": []}}, headers=h)
+    assert r.status_code in (200, 422), (bad, r.status_code, r.text[:120])
+    if bad in ([], {}, 0, False):
+        pass  # 記錄行為即可（假值）
+    elif r.status_code == 200:
+        raise AssertionError("值域外被接受：%r" % (bad,))
+
+
+def test_p6_general_put_bypasses_offset_validation(W):
+    """整包存檔（PUT /api/quotations/{no}）能否寫入未驗證的 offsets／actualSource？（既有路徑；本班新增 dispatch／actualSource 後的範圍）"""
+    c, h = W
+    cn = db.get_db()
+    try:
+        row = cn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (NO,)).fetchone()
+    finally:
+        cn.close()
+    d = json.loads(row["data_json"])
+    d["settlement"] = {"items": [{"id": "a", "actualSource": "<img src=x onerror=1>"}], "offsets": [_off(99999, "zzz")]}
+    r = c.put("/api/quotations/%s" % NO, json={"data": d, "status": "已送出"}, headers=h)
+    print("GENERAL_PUT", r.status_code, r.text[:200])
+    cn = db.get_db()
+    try:
+        s = json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"]).get("settlement")
+    finally:
+        cn.close()
+    print("STORED", json.dumps(s, ensure_ascii=False)[:200])
