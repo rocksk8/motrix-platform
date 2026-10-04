@@ -51,8 +51,19 @@ def test_optimistic_lock_conflict_never_overwrites(live_server, make_user, e2e_b
     assert "重新載入" in a.locator('[data-testid="stl-conflict"]').inner_text()
     assert _settlement()["memo"] == "B-memo"                                        # 沒有被悄悄覆蓋
     assert a.locator('[data-testid="stl-save-draft"]').is_disabled() and a.locator('[data-testid="stl-finalize"]').is_disabled()
+    # S-3：未存編輯在使用者確認前一直保留；橫幅列出「您的未存變更」；按重新載入先出確認字樣
+    a.evaluate(f"() => {{ {S}.settlement.items[0].note = 'A 的備註' }}")
+    dirty = a.locator('[data-testid="stl-conflict-dirty"]').inner_text()
+    assert "精算備忘" in dirty and "備註" in dirty and "您的未存變更（2 項）" in dirty, dirty
+    a.locator('[data-testid="stl-conflict-reload"]').click()
+    assert "重新載入會捨棄尚未儲存的編輯" in a.locator('[data-testid="stl-conflict-confirm"]').inner_text()
+    assert a.evaluate(f"() => {S}.settlement.memo") == "A-memo"                       # 還沒確認 ⇒ 編輯仍在
+    a.locator('[data-testid="stl-conflict-keep"]').click()
+    assert not a.locator('[data-testid="stl-conflict-confirm"]').is_visible()
+    assert a.evaluate(f"() => {S}.settlement.memo") == "A-memo" and a.evaluate(f"() => {S}.settlement.items[0].note") == "A 的備註"
+    a.locator('[data-testid="stl-conflict-reload"]').click()
     with a.expect_navigation(wait_until="domcontentloaded"):
-        a.locator('[data-testid="stl-conflict-reload"]').click()
+        a.locator('[data-testid="stl-conflict-discard"]').click()
     a.wait_for_function(f"() => {S}._actualsOk && {S}.settlement.memo === 'B-memo'", timeout=20000)
     assert not a.locator('[data-testid="stl-conflict"]').is_visible()
     assert a.locator('[data-testid="stl-save-draft"]').is_enabled()

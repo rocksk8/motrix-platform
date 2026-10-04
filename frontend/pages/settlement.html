@@ -336,8 +336,17 @@
     <b x-text="loadError"></b> <button type="button" class="btn btn-ghost btn-sm" @click="location.reload()">重新載入</button>
   </div>
   <div x-show="conflict" x-cloak role="alert" data-testid="stl-conflict" class="stl-banner stl-banner--warn">
-    <b>這份精算與伺服器上的內容不一致（已被其他人更新，或相關單據已變動）。</b>為避免覆蓋別人的修改或用過期數字完結，已停止儲存／完結；你這次的修改尚未存檔。
-    <button type="button" class="btn btn-ghost btn-sm" data-testid="stl-conflict-reload" @click="location.reload()">重新載入最新內容</button>
+    <b>這份精算與伺服器上的內容不一致（已被其他人更新，或相關單據已變動）。</b>為避免覆蓋別人的修改或用過期數字完結，已停止儲存／完結；你這次的修改尚未存檔，目前仍保留在畫面上。
+    <div x-show="dirtyList.length" data-testid="stl-conflict-dirty" style="flex-basis:100%">
+      <b x-text="'您的未存變更（' + dirtyList.length + ' 項）：'"></b>
+      <ul style="margin:4px 0 0;padding-left:18px"><template x-for="d in dirtyList" :key="d"><li x-text="d"></li></template></ul>
+    </div>
+    <button type="button" class="btn btn-ghost btn-sm" data-testid="stl-conflict-reload" @click="reloadLatest()">重新載入最新內容</button>
+    <div x-show="confirmDiscard" x-cloak data-testid="stl-conflict-confirm" style="flex-basis:100%;border-top:1px solid var(--stl-warn-line);padding-top:6px">
+      <b>重新載入會捨棄尚未儲存的編輯（上列 <span x-text="dirtyList.length"></span> 項）。</b>
+      <button type="button" class="btn btn-ghost btn-sm" data-testid="stl-conflict-discard" @click="location.reload()">確認捨棄並重新載入</button>
+      <button type="button" class="btn btn-ghost btn-sm" data-testid="stl-conflict-keep" @click="confirmDiscard = false">先保留我的編輯</button>
+    </div>
   </div>
   <!-- 載入中 -->
   <div x-show="loading" style="text-align:center;padding:60px;color:var(--text-dim)">
@@ -1053,6 +1062,8 @@ function settlementPage() {
     saving:  false,
     showFinalizeModal: false,
     _updatedAt: null,            // 樂觀鎖：GET 回的 updatedAt／上次 PUT 回的 updated_at；存檔時帶 expectedUpdatedAt
+    _baseline: null,             // 載入／上次存檔成功時的可編輯內容快照：用來列出「您的未存變更」
+    confirmDiscard: false,       // 衝突後按重新載入 ⇒ 先要求確認捨棄未存編輯
     conflict: false,             // 別人已更新（409／狀態不同）⇒ 顯示橫幅＋重新載入，絕不悄悄覆蓋
     loadError: '',
     pfSort: null, pfDir: -1, pfFilter: 'all',     // 四之一表的排序／篩選（純顯示）
@@ -1219,6 +1230,7 @@ function settlementPage() {
         await this.loadCustomFinance()        // 建構器：自訂模組支出併入額外支出成本
         this.applyFrozen()
         this.calcSummary()
+        this._markClean()
       } catch(e) {
         this.loadError = (e instanceof TypeError) ? '網路連線失敗，無法載入精算，請檢查網路後重新整理。' : '載入精算時發生錯誤，請重新整理；若持續發生請聯絡管理員。'
         this.toastErr(this.loadError)
@@ -1822,6 +1834,29 @@ function settlementPage() {
       if (status >= 500) return '伺服器暫時無法處理「' + what + '」，請稍後再試；資料沒有被改動。'
       return what + '失敗' + safe
     },
+    // S-3：衝突後要保住使用者尚未存檔的編輯——列出差異，確認後才重新載入
+    _snap() {
+      const f = i => ({ id: String(i.id), name: i.origDescription || '', actualQty: i.actualQty, actualUnitCost: i.actualUnitCost, actualCostTaxMode: i.actualCostTaxMode,
+                        adoptSystem: !!i.adoptSystem, actualSource: i.actualSource || 'manual', note: i.note || '' })
+      return { items: this.settlement.items.map(f), memo: this.settlement.memo || '', settlementDate: this.settlement.settlementDate || '', offsets: (this.offsets || []).map(o => o.kind + ':' + o.ref + '>' + o.itemId).sort() }
+    },
+    _markClean() { this._baseline = JSON.parse(JSON.stringify(this._snap())) },
+    get dirtyList() {
+      const b = this._baseline
+      if (!b) return []
+      const cur = this._snap(), out = [], L = { actualQty: '實際數量', actualUnitCost: '實際單位成本', actualCostTaxMode: '稅別', adoptSystem: '採用', actualSource: '來源標籤', note: '備註' }
+      cur.items.forEach(i => {
+        const o = b.items.find(x => x.id === i.id)
+        if (!o) return
+        const ch = Object.keys(L).filter(k => JSON.stringify(i[k]) !== JSON.stringify(o[k])).map(k => L[k])
+        if (ch.length) out.push('#' + this.itemNo(i.id) + ' ' + (i.name || '（無品名）') + '：' + ch.join('、'))
+      })
+      if (cur.memo !== b.memo) out.push('精算備忘')
+      if (cur.settlementDate !== b.settlementDate) out.push('精算日期')
+      if (JSON.stringify(cur.offsets) !== JSON.stringify(b.offsets)) out.push('未對應項目的對應')
+      return out
+    },
+    reloadLatest() { if (this.dirtyList.length) this.confirmDiscard = true; else location.reload() },
     // 單一出口：回 {ok,status,data} 或 {network:true}（純網路錯誤）
     async _settlementPut(extra, over) {
       this.calcSummary()
@@ -1835,6 +1870,7 @@ function settlementPage() {
       } catch (e) { return { network: true } }
       const data = await res.json().catch(() => ({}))
       if (res.ok && data && data.updated_at) this._updatedAt = data.updated_at
+      if (res.ok) this._markClean()
       return { ok: res.ok, status: res.status, data }
     },
     // 失敗之後：重新取得伺服器狀態（純網路錯誤除外）。狀態或版本與本頁不同 ⇒ 別人改過 ⇒ 顯示橫幅，不更新 _updatedAt（避免之後悄悄覆蓋）
