@@ -1493,15 +1493,17 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     hdrs6 = [
         "案件號","客戶","專案名稱","業務員","案件進度","報價稅前",
         # 原始預估
-        "原始成本","原始毛利率","原始淨利率","原始預估淨利","報價預留間接成本",
+        "原始成本","原始毛利率","原始淨利率","原始預估淨利",
         # 實際精算
         "品項成本","額外支出","實際總成本","真實毛利率","真實淨利率","真實淨利",
         # 差異
-        "差異(pp)","差異金額","其中：報價預留間接成本","其中：其他",
+        "差異(pp)","差異金額",
         # 精算資訊
         "精算狀態","精算日期","完結人",
+        # 報價預留間接成本（T39 新增；附在最右，既有欄號一律不動——有人／工具依賴這份匯出）
+        "報價預留間接成本","其中：報價預留間接成本","其中：其他",
     ]
-    cols6 = [13,18,18,10,9,13, 13,11,11,13,13, 13,11,13,11,11,13, 9,13,13,11, 9,11,10]
+    cols6 = [13,18,18,10,9,13, 13,11,11,13, 13,11,13,11,11,13, 9,13, 9,11,10, 15,15,13]
     for i, (h, w) in enumerate(zip(hdrs6, cols6), 1):
         ws6.column_dimensions[get_column_letter(i)].width = w
 
@@ -1515,9 +1517,9 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
 
     # 群組標頭列 (row 2)
     grp_labels = [
-        (1,6,"基本資訊","374151"), (7,11,"原始報價預估","475569"),
-        (12,17,"實際成本精算","92400E"), (18,21,"差異","7C3AED"),
-        (22,24,"精算資訊","374151"),
+        (1,6,"基本資訊","374151"), (7,10,"原始報價預估","475569"),
+        (11,16,"實際成本精算","92400E"), (17,18,"差異","7C3AED"),
+        (19,21,"精算資訊","374151"), (22,24,"報價預留間接成本","6D28D9"),
     ]
     for sc, ec, lbl, clr in grp_labels:
         if sc == ec:
@@ -1560,26 +1562,27 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         set_row(ws6, r_i,
                  [mc["quoteNo"], mc["customer"], mc["project"], mc["salesPerson"],
                   mc["dealTag"], mc["pretax"],
-                  orig_cost, f"{orig_margin:.1f}%", f"{orig_net_pct:.1f}%", orig_net_prof, reserve,
+                  orig_cost, f"{orig_margin:.1f}%", f"{orig_net_pct:.1f}%", orig_net_prof,
                   item_cost, extra_cost, total_cost,
                   f"{gross_pct:.1f}%", f"{net_pct:.1f}%", net_prof,
-                  f"{'+' if diff >= 0 else ''}{diff:.1f}", gp_diff, reserve, gp_diff - reserve,
-                  mc["settleStatus"] or "", mc.get("settleDate",""), mc.get("settleBy","")],
+                  f"{'+' if diff >= 0 else ''}{diff:.1f}", gp_diff,
+                  mc["settleStatus"] or "", mc.get("settleDate",""), mc.get("settleBy",""),
+                  reserve, reserve, gp_diff - reserve],
                  font=mk(size=9), fill=fill(bg), border=BD,
                  aligns=[al("left"),al("left"),al("left"),al("left"),al("center"),
+                         al("right"),al("right"),al("right"),al("right"),al("right"),
                          al("right"),al("right"),al("right"),al("right"),al("right"),al("right"),
-                         al("right"),al("right"),al("right"),al("right"),al("right"),al("right"),
-                         al("right"),al("right"),al("right"),al("right"),
-                         al("center"),al("center"),al("left")],
+                         al("right"),al("right"),
+                         al("center"),al("center"),al("left"),
+                         al("right"),al("right"),al("right")],
                  height=18)
-        for col in [6,7,10,11,13,14,17]:
+        for col in [6,7,10,11,12,13,16,18,22,23,24]:
             ws6.cell(row=r_i, column=col).number_format = '#,##0'
-        for col in (12, 20, 21):
-            ws6.cell(row=r_i, column=col).number_format = '#,##0'
-        ws6.cell(row=r_i, column=19).number_format = '+#,##0;-#,##0;0'
-        ws6.cell(row=r_i, column=18).font = mk(bold=True, size=9, color=C_GREEN if diff >= 0 else C_RED)
-        ws6.cell(row=r_i, column=16).font = mk(bold=True, size=9, color=C_GREEN if net_pct >= net else C_RED)
-        ws6.cell(row=r_i, column=19).font = mk(bold=True, size=9, color=C_GREEN if gp_diff >= 0 else C_RED)
+        ws6.cell(row=r_i, column=18).number_format = '+#,##0;-#,##0;0'
+        ws6.cell(row=r_i, column=24).number_format = '+#,##0;-#,##0;0'
+        ws6.cell(row=r_i, column=17).font = mk(bold=True, size=9, color=C_GREEN if diff >= 0 else C_RED)
+        ws6.cell(row=r_i, column=15).font = mk(bold=True, size=9, color=C_GREEN if net_pct >= net else C_RED)
+        ws6.cell(row=r_i, column=18).font = mk(bold=True, size=9, color=C_GREEN if gp_diff >= 0 else C_RED)
 
     if data["marginCases"]:
         sr6 = len(data["marginCases"]) + 4
@@ -1595,17 +1598,18 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         tot_act       = sum(mc["grossProfit"] or 0 for mc in data["marginCases"])
         set_row(ws6, sr6,
                  ["合計","","","","", tot_pretax,
-                  tot_orig_cost,"","", tot_orig_np, tot_reserve,
+                  tot_orig_cost,"","", tot_orig_np,
                   tot_item, tot_extra, tot_total,"","", tot_net_prof,
-                  "", tot_act - tot_est, tot_reserve, tot_act - tot_est - tot_reserve,
-                  "","",""],
+                  "", tot_act - tot_est,
+                  "","","",
+                  tot_reserve, tot_reserve, tot_act - tot_est - tot_reserve],
                  font=mk(bold=True, size=9, color=C_WHITE),
                  fill=fill("111827"), border=BD,
                  aligns=[al("center")] + [al("right")] * 23,
                  height=20)
-        for col in [6,7,10,11,12,13,14,17,20,21]:
+        for col in [6,7,10,11,12,13,16,18,22,23,24]:
             ws6.cell(row=sr6, column=col).number_format = '#,##0'
-        ws6.cell(row=sr6, column=19).number_format = '+#,##0;-#,##0;0'
+        ws6.cell(row=sr6, column=18).number_format = '+#,##0;-#,##0;0'
     else:
         ws6.cell(row=4, column=1).value = "（目前尚無已完成精算之案件）"
         ws6.cell(row=4, column=1).font = mk(size=9, color=C_GRAY, italic=True)
