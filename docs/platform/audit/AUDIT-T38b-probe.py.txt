@@ -1,0 +1,133 @@
+import json
+import pytest
+import db
+import pdf_gen
+from modules.case import settlement_actuals as SA
+from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W, _login  # noqa
+from modules.case.tests.test_settlement_actuals_2026_10_03 import _get, _put_settlement
+from modules.case.tests.test_settlement_finalize_integrity_2026_10_03 import _set_tot, page_payload
+from modules.case.tests.test_settlement_tax_basis_2026_10_03 import _dispatch
+from modules.case.tests.test_settlement_dispatch_offset_2026_10_04 import _off
+
+URL = "/api/quotations/%s/settlement" % NO
+
+
+def _saved():
+    cn = db.get_db()
+    try:
+        return json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+    finally:
+        cn.close()
+
+
+def _put(c, h, s, **kw):
+    return c.put(URL, json=dict({"settlement": s}, **kw), headers=h)
+
+
+def test_h1_create_ignores_dealtag_and_settlement(W):
+    c, h = W
+    for st in ("草稿", "待審核"):
+        body = {"data": {"customerName": "偽", "projectName": "偽", "items": [], "tot": {"pretax": 1000, "total": 1050}, "dealTag": "已結案",
+                         "settlement": {"status": "finalized", "summary": {"netProfit": 99999999}}}, "status": st}
+        r = c.post("/api/quotations", json=body, headers=h)
+        print("CREATE", st, r.status_code, r.text[:120])
+        if r.status_code in (200, 201):
+            no = r.json()["quote_no"]
+            cn = db.get_db()
+            row = cn.execute("SELECT deal_tag, settle_status, data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()
+            cn.close()
+            d = json.loads(row["data_json"])
+            print("CREATED", no, repr(row["deal_tag"]), repr(row["settle_status"]), d.get("dealTag"), "settlement" in d)
+            assert row["deal_tag"] == "" and row["settle_status"] == "" and "settlement" not in d
+
+
+def test_h1_update_cannot_set_dealtag_or_settlement(W):
+    c, h = W
+    cn = db.get_db()
+    row = cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()
+    cn.close()
+    d = json.loads(row["data_json"])
+    d["dealTag"] = "已結案"
+    d["settlement"] = {"status": "finalized", "summary": {"netProfit": 5}}
+    r = c.put("/api/quotations/%s" % NO, json={"data": d, "status": "草稿"}, headers=h)
+    s = _saved()
+    cn = db.get_db()
+    col = cn.execute("SELECT deal_tag, settle_status FROM quotations WHERE quote_no=?", (NO,)).fetchone()
+    cn.close()
+    print("UPDATE", r.status_code, repr(col["deal_tag"]), repr(col["settle_status"]), s.get("dealTag"), "settlement" in s)
+    assert col["deal_tag"] == "" and col["settle_status"] == "" and "settlement" not in s
+
+
+def _page_orig(tot, items):
+    """逐字照 settlement.html calcSummary 的原始側算法（含 halfUp 取捨）"""
+    n = lambda v: float(v or 0)
+    pretax = n(tot.get("pretax"))
+    total = n(tot.get("total"))
+    orig_cost = sum(n(i.get("qty")) * n(i.get("cost")) for i in items)
+    direct = n(tot["directProfit"]) if tot.get("directProfit") is not None else pretax - orig_cost
+    margin = n(tot["directMarginPct"]) if tot.get("directMarginPct") is not None else (direct / pretax * 100 if pretax > 0 else 0)
+    admin = n(tot["adminCost"]) if tot.get("adminCost") is not None else SA.round_half_up(pretax, 0.10)
+    ch = n(tot["charityDonation"]) if tot.get("charityDonation") is not None else SA.round_half_up(direct, 0.01)
+    net = n(tot["netProfit"]) if tot.get("netProfit") is not None else direct - admin - ch
+    netp = n(tot["netMarginPct"]) if tot.get("netMarginPct") is not None else (net / pretax * 100 if pretax > 0 else 0)
+    return {"quotedTotal": total, "origTotalCost": orig_cost, "origDirectProfit": direct, "origMarginPct": SA.round_half_up(margin, 10) / 10,
+            "origAdminCost": admin, "origCharity": ch, "origNetProfit": SA.round_half_up(net), "origNetMarginPct": SA.round_half_up(netp, 10) / 10}
+
+
+@pytest.mark.parametrize("tot", [
+    {"pretax": 100000, "total": 105000, "directProfit": 31234.5, "directMarginPct": 31.2, "adminCost": 10000, "charityDonation": 312, "netProfit": 20922, "netMarginPct": 20.9},
+    {"pretax": 100000, "total": 105000},
+    {"pretax": 88253000, "total": 92665650, "directMarginPct": 32.04, "netProfit": 25000000.4},
+    {},
+])
+def test_s1_server_orig_equals_page_formula(W, tot):
+    c, h = W
+    cn = db.get_db()
+    row = cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()
+    d = json.loads(row["data_json"])
+    d["tot"] = tot
+    cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+    cn.commit()
+    cn.close()
+    cn = db.get_db()
+    try:
+        srv = SA.original_side(cn, NO, {"netProfit": 0})
+    finally:
+        cn.close()
+    pg = _page_orig(tot, d["items"])
+    diffs = {k: (srv[k], pg[k]) for k in pg if abs(float(srv[k]) - float(pg[k])) > 1e-6}
+    print("S1DIFF", json.dumps(tot)[:60], diffs)
+
+
+def test_s1_forged_orig_keys_overwritten_and_s4_response(W):
+    c, h = W
+    _set_tot()
+    p = page_payload(c, h, origNetProfit=777777, profitDiff=555555, origTotalCost=1, quotedTotal=9)
+    r = _put(c, h, p)
+    assert r.status_code == 200, r.text
+    sv = _saved()["settlement"]["summary"]
+    print("FORGED_AFTER", {k: sv.get(k) for k in ("origNetProfit", "profitDiff", "origTotalCost", "quotedTotal")})
+    assert sv["origNetProfit"] != 777777 and sv["profitDiff"] != 555555 and sv["origTotalCost"] != 1 and sv["quotedTotal"] != 9
+    assert r.json().get("summary") == sv
+    r2 = _put(c, h, {"status": "draft", "items": [], "offsets": []}, reason="重開")
+    assert r2.status_code == 200 and "summary" not in r2.json()
+    r3 = _put(c, h, {"status": "draft", "items": [], "offsets": []})
+    assert "summary" not in r3.json()
+
+
+def test_s2_fallback_legacy_page_key(W):
+    c, h = W
+    d1 = _dispatch(10000, 2000)
+    old = {"status": "finalized", "items": [{"id": "a", "actualTotalCost": 12000, "adoptSystem": True}], "offsets": [_off(d1)],
+           "summary": {"itemActualTotal": 12525, "extraTotal": 0, "dispatchTotal": 12000, "dispatchAbsorbed": 12000, "totalActualCost": 12525}}
+    _put_settlement(old)
+    t = _get(c, h)["totals"]
+    print("FREEZE_ABSORBED", t["dispatchAbsorbedTotal"])
+    assert t["dispatchAbsorbedTotal"] == 12000
+    assert "已併入品項" in pdf_gen._dispatch_absorbed_row(old["summary"])
+    from modules.analytics.api import reports as R
+    assert R._dispatch_split(old["summary"]) == (0, 12000)
+    both = dict(old["summary"], dispatchAbsorbedTotal=0)
+    assert R._dispatch_split(both) == (12000, 0) and pdf_gen._dispatch_absorbed_row(both) == ""
+    none = {"dispatchTotal": 50}
+    assert R._dispatch_split(none) == (0, 0) and pdf_gen._dispatch_absorbed_row(none) == ""

@@ -62,3 +62,49 @@
 
 ## 5. 清理
 `%TEMP%\motrix-pytest-aud7h`、背景腳本輸出已刪；樹內僅本報告與探針檔。建包窗口的鎖檔未動。
+
+---
+
+# 增補：t38b 複審（delta；2026-10-04）
+
+> 對象：`origin/train/t38b` `76f5089c`（取代 `74c49323`）。新增：BE `909f6d18`（H-1／S-1／S-2／S-4）、analytics `02b93b0b`、FE `ccad2bdc`（S-3／S-4）。環境同上：目標檔、`-n 0／2`；建包鎖當時已釋放（我先等鎖，沒有覆寫守門）。探針 `AUDIT-T38b-probe.py.txt`。
+
+## 結論
+**必修 0。上輪的 H-1、S-1、S-2、S-3、S-4 全部關閉；新增觀察 3。可以合回。**
+- 探針 8 題＋目標套件 94 題（t38 BE、legacy parity、finalize integrity、dispatch offset、analytics 兩檔）全部通過。
+
+## 逐項驗證
+| 上輪項目 | 修正 | 我的驗證 | 結論 |
+|---|---|---|---|
+| **H-1** 新建報價單帶入已完結精算 | `create_quotation`：`q["dealTag"]=""`、`q.pop("settlement")`（`quotations.py:1490-1494`） | POST 帶 `dealTag=已結案`＋`settlement{finalized, netProfit 99,999,999}`，狀態「草稿」與「待審核」各一次：兩張都 201，`deal_tag=''`、`settle_status=''`、data_json 無 `settlement` | **關閉** |
+| **S-1** 原始側欄位可偽造凍結 | 新 `original_side()` 並於 `fill_downstream` 覆蓋 9 個鍵（`quotedTotal、origTotalCost、origDirectProfit、origMarginPct、origAdminCost、origCharity、origNetProfit、origNetMarginPct、profitDiff`） | 偽造 `origNetProfit=777777、profitDiff=555555、origTotalCost=1、quotedTotal=9` 完結 ⇒ 存成 78605／−520／10500／105000（伺服器值） | **關閉** |
+| **S-2** 36／37 班案件吸收額 fallback | pdf／bonus_pdf／reports／`_freeze` 皆 `dispatchAbsorbedTotal` 缺鍵時退回頁面鍵 `dispatchAbsorbed`（唯讀） | 只有頁面鍵的完結案：`_freeze` 讀到 12000、PDF 列出「已併入品項」、`_dispatch_split=(0,12000)`；總計鍵存在（含 0）優先；兩鍵皆無 ⇒ `(0,0)`、空字串（舊輸出不變） | **關閉** |
+| **S-3** 409 後重新載入丟手改 | 衝突橫幅列出「未存變更」清單；按重新載入需「確認捨棄」 | 讀碼：`_snap()` 快照 items 可編輯欄位、備忘、日期、offsets；`_markClean()` 在載入與每次存檔成功後更新；清單與按鈕走 `x-text`，無 `x-html`。**e2e 我未跑**（作者有新題；建包期間不跑 e2e） | **關閉（讀碼）** |
+| **S-4** 完結後畫面凍結的不是伺服器值 | `PUT` 完結回應帶 `summary`；前端 `_frozenSummary = srv`，同型別鍵覆蓋 `this.summary` | 探針：回應的 `summary` ＝資料庫實存 summary（逐鍵相等）；重新開啟與一般草稿存檔回應**不帶** `summary`；舊後端沒回 summary ⇒ 前端維持舊行為 | **關閉** |
+
+## S-1 與頁面 `calcSummary` 同式？
+逐鍵對照（`_page_orig` 逐字照 `settlement.html` 原始側算法，含頁面的 `halfUp(…,10)/10` 取捨）：
+- 報價單 `tot` 完整（真實報價單表單算出的形狀）：**9 鍵全等**。
+- `tot` 缺鍵或非整數（手工資料）：伺服器**不做頁面的捨入**，有 ≤0.05pp／0.4 元差（例：`origNetMarginPct` 78.605 對 78.6；`origNetProfit` 25000000.4 對 25000000）⇒ N-7。其餘鍵相同；`tot` 為 `{}` 時全等。
+- `origTotalCost` 以 `Σ qty×cost`（排除 header）；頁面同（header 的 qty／cost 為空 ⇒ 0）。
+
+## 其他路徑能否繞過 PATCH deal-tag／PUT settlement 完結檢查？
+- 唯一的 `INSERT INTO quotations` 在 `create_quotation`（已修）。**沒有**匯入、複製、從備份還原的 API 端點（`grep` 全 backend：無 `INSERT/REPLACE INTO quotations` 其他處；「還原」僅有 `core/upgrade.py`／`definitions` 等與報價單無關的函式；備份還原屬 `DR-SOP` 人工作業，不經 API，不在此範圍）。
+- 所有 `UPDATE quotations SET data_json=…` 路徑（批次指派、行事曆回寫、退回改號、收回草稿、狀態 PATCH、`save_quotation_json`）都以資料庫讀出的資料為底，不採用用戶端整份 JSON；整份存檔 `update_quotation` 強制沿用資料庫的 `dealTag` 與 `settlement`。
+- `PATCH deal-tag`：已結案只有 superadmin、且只能從「已成案」進入（`quotations.py:2374-2395`）；獎金清單另要求 `deal_tag='已結案'`＋`status=finalized`（`payroll/api/bonus.py:671-675`）。
+- 殘留（既有、非本班）：**`PUT /settlement` 的完結不要求案件已成案**（不檢查 `deal_tag`）。數字仍由伺服器重算，且獎金／報表另以 `deal_tag` 過濾，所以不構成偽造；但草稿報價單也能被「完結精算」。
+
+## 回歸檢查
+- 舊完結案讀取：`_freeze` 新 fallback 只在缺 `dispatchAbsorbedTotal` 時讀頁面鍵；兩鍵皆無仍為 0（legacy parity 題通過）。
+- 前端採用回應 `summary`：只覆蓋「型別相同且本頁已有」的鍵；`dispatchAbsorbedTotal` 非數字時不動；舊案沒有 `dispatchAbsorbedTotal` 時 `dispatchAbsorbed` getter 退回即時算（與修正前相同）。reopen／草稿存檔不經此路徑。
+- 回應多帶 `summary` 只在完結：欄位增加，不破壞既有讀者（前端以外沒人讀 PUT 回應）。
+- `pdf_gen.dispatch_absorbed_row` 改名 `_dispatch_absorbed_row`：全 repo 僅 `pdf_gen.py` 與 `test_settlement_t38_be_2026_10_04.py` 引用，已同步。
+- USER-DECISIONS 新增「第 38 班」：T38-Q1／Q2（報表字樣、舊精算註記）與兩條重申，**出處標明「經 hichan-6b 轉述、作者未直接見到表單」**——上輪 N-5 已補登；我只能確認文件記載與 CHANGELOG 一致，無法獨立核對表單原文。
+
+## 新增觀察
+- **N-7**：`original_side()` 沒有頁面的 `halfUp(…,10)/10`／整數捨入（見上），手工或舊 `tot` 會有 ≤0.05pp／0.4 元差，純顯示。提案：回傳前套同樣捨入（S）。
+- **N-8**：`PUT /settlement` 完結不檢查 `deal_tag`（見上，既有）。提案：要求 `已成案` 才能完結（會改變既有行為，需 PM 決定）。
+- **N-9**：探針 `UPDATE` 那題因測試夾具的報價單狀態為「已送出」被 `_LOCKED` 擋（403），沒有直接驗到「整份存檔帶 dealTag／settlement 被忽略」；該行為由作者的 `test_whole_quote_save_does_not_overwrite_settlement_body`（上輪 M5 突變紅）涵蓋，本輪不重做突變。
+
+## 清理
+`%TEMP%\motrix-pytest-aud7h`、背景腳本與輸出已刪；樹內僅報告與探針檔。
