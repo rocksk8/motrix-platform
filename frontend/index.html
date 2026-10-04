@@ -782,8 +782,8 @@
         </div>
       </div>
 
-      <!-- 應收款項（finance only）-->
-      <div class="panel" x-show="canFinance">
+      <!-- 應收款項（finance only）；API 回 financeVisible===false（資料被保留、不給這個帳號）⇒ 整塊隱藏，不要顯示「目前無待收款項」造成誤解 -->
+      <div class="panel" x-show="showReceivables" data-testid="dash-receivables">
         <div class="panel__head">
           <div class="panel__title">
             應收款項追蹤
@@ -928,6 +928,9 @@ feedCount(key) {
         return '沒有需要您立刻處理的事項。'
       },
 
+      // 後端的 stats 回應帶 financeVisible：false＝這個帳號不再取得財務卡片（資料被保留，不是沒有）；沒有這個鍵（舊 API）＝維持原本行為
+      get financeVisible() { return this.stats.financeVisible !== false },
+      get showReceivables() { return this.canFinance && this.financeVisible },
       get canFinance() {
         const r = this.session.role; const m = this.session.modules || []
         return r === 'superadmin' || r === 'admin' || m.includes('finance')
@@ -977,6 +980,7 @@ feedCount(key) {
         return m ? m.fee : 0
       },
       get receivedPct() {
+        if (!this.financeVisible) return null      // 資料被保留 ⇒ 不顯示 0%（會被誤讀成「完全沒收到」）
         const rv = this.stats.receivableSummary || {}
         return rv.total > 0 ? Math.round(rv.received / rv.total * 100) : 0
       },
