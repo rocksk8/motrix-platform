@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## 1.0.130 — 2026-10-04（wip/t36-dispatch-offset-be）：承攬商派發可回推報價單品項
+## (next) — 2026-10-04（wip/t36-dispatch-offset-be）：承攬商派發可回推報價單品項
 - **offsets 新增 `kind: "dispatch"`（`ref`＝`contractor_dispatches.id`）**：派發單整張歸單一品項，規則與材料申請相同（規格 `DISPATCH-OFFSET-SPEC.md`）。`compute()` 新增 `unassigned.dispatches[]`、`items[].dispatch`、`totals.dispatchUnassignedTotal／dispatchAssignedTotal／dispatchAbsorbedTotal`；`dispatchTotal` 語意不變（未對應＋已對應＝dispatchTotal）。金額＝未稅承攬費＋外包人員（稅額只顯示）。
 - 規則 A 併入：採用時品項實際＝材料申請＋採購單＋派發的合計取代估計，`totalActualCost` 扣掉被吸收的派發（不重複計入）；不採用時對應／取消對應不改總成本。`sources`／`purchasedTotal`／`pendingTotal` 不含派發（舊案逐位相同）。
 - `validate_offsets` 認 dispatch（須在目前未對應清單、品項存在、單一去處；舊存檔原樣列放行）；完結比對與補齊 `dispatchAssignedTotal／dispatchUnassignedTotal`，隨 summary 凍結（舊完結案沒有這兩鍵＝已對應 0）。
