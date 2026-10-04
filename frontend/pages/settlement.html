@@ -35,10 +35,12 @@
 
     /* ── 主體 ── */
     .stl-main {
-      margin-left: var(--sidebar-w);
+      /* 置中容器（寬螢幕左右留白對稱）：左邊界＝側欄寬＋剩餘空間的一半，最大內容寬 1400px */
+      margin-left: calc(var(--sidebar-w) + max(0px, (100% - var(--sidebar-w) - 1400px) / 2));
       margin-top: calc(var(--topbar-h) + 52px);
       padding: 24px 32px;
-      max-width: 1200px;
+      max-width: 1400px;
+      box-sizing: border-box;
     }
 
     /* ── 狀態 badge ── */
@@ -115,10 +117,14 @@
     }
     /* 管理視角（第 36 班）：高階摘要列（sticky）／需處理／完結閘門／列印 */
     .stl-strip { position: sticky; top: calc(var(--topbar-h) + 52px); z-index: 40; background: var(--bg, var(--white)); padding: 8px 0 6px; margin-bottom: 8px; border-bottom: 1px solid var(--border-light); }
-    .stl-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+    .stl-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
     .stl-k { background: var(--stl-surface); border: 1px solid var(--border-light); border-left-width: 6px; border-radius: 8px; padding: 6px 10px; min-width: 0; }
     .stl-k__l { font-size: 11px; color: var(--text-secondary); }
-    .stl-k__v { font-size: 18px; font-weight: 800; line-height: 1.25; white-space: nowrap; font-family: 'LINE Seed TW_OTF', sans-serif; }
+    .stl-k__v { font-size: clamp(15px, 1.25vw, 18px); font-weight: 800; line-height: 1.25; font-family: 'LINE Seed TW_OTF', sans-serif;
+                display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; min-width: 0; }
+    .stl-k__v > span { white-space: nowrap; }
+    .stl-k__v2 { font-size: .8em; }
+    .stl-k__l, .stl-k__s { overflow-wrap: anywhere; }
     .stl-k__s { font-size: 11px; color: var(--text-secondary); }
     .stl-k__st { font-weight: 700; }
     .stl-k--g { border-left-color: var(--success); background: var(--success-light); } .stl-k--g .stl-k__st { color: var(--success); }
@@ -138,7 +144,7 @@
     .stl-pf button[aria-pressed="true"] { background: var(--text-primary); color: var(--stl-surface); border-color: var(--text-primary); }
     .stl-table th .stl-sort { all: unset; cursor: pointer; font-weight: 700; }
     .stl-table th .stl-sort:focus-visible, .stl-table th .stl-sort:hover { text-decoration: underline; }
-    @media (max-width: 900px) { .stl-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stl-strip { position: static; } }
+    @media (max-width: 900px) { .stl-strip { position: static; } }
     /* 列印／PDF：A4、不用 sticky／固定列、隱藏操作元件（主管簽核用） */
     @page { size: A4; margin: 12mm; }
     @media print {
@@ -356,7 +362,7 @@
           <template x-for="k in stripKpis" :key="k.key">
             <div class="stl-k" :class="'stl-k--' + k.cls" :title="k.tip" :data-testid="'stl-k-' + k.key">
               <div class="stl-k__l" x-text="k.label"></div>
-              <div class="stl-k__v" :style="{ color: k.neg ? 'var(--danger)' : '' }" x-text="k.value"></div>
+              <div class="stl-k__v" :style="{ color: k.neg ? 'var(--danger)' : '' }"><span x-text="k.value"></span><span class="stl-k__v2" x-show="k.value2" x-text="k.value2"></span></div>
               <div class="stl-k__s"><span x-text="k.sub"></span> <span class="stl-k__st" x-text="k.status"></span></div>
             </div>
           </template>
@@ -1359,8 +1365,8 @@ function settlementPage() {
       return [
         { key: 'rev', label: '報價（稅前收入）', value: 'NT$ ' + this.fmt(rev), sub: '折扣／調整 ' + signed(this.quoteAdjust), status: '', cls: 'n', tip: '報價單稅前收入（未稅）；來源：報價單' },
         { key: 'cost', label: '總成本', value: 'NT$ ' + this.fmt(sm.totalActualCost), sub: '原始 ' + this.fmt(sm.origTotalCost), status: sm.totalActualCost > sm.origTotalCost ? '▲ 高於原始' : sm.totalActualCost < sm.origTotalCost ? '▼ 低於原始' : '＝原始', cls: sm.totalActualCost > sm.origTotalCost ? 'a' : 'g', tip: '總實際成本＝品項實際＋未對應項目（派發未稅口徑）；與伺服器 totalActualCost 同源' },
-        { key: 'gp', label: '毛利／毛利比', value: signed(sm.grossProfit) + ' ／ ' + this.pctTxt(rev > 0 ? sm.grossMarginPct : null), neg: sm.grossProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origMarginPct : null), status: gpCls === 'r' ? '✖ 虧損' : gpCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: gpCls, tip: '毛利＝報價 − 總成本；毛利比＝毛利 ÷ 報價（未扣管理費、公益）' },
-        { key: 'net', label: '最終淨利／淨利比', value: signed(sm.netProfit) + ' ／ ' + this.pctTxt(rev > 0 ? sm.netMarginPct : null), neg: sm.netProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origNetMarginPct : null), status: netCls === 'r' ? '✖ 虧損' : netCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: netCls, tip: '最終淨利＝毛利 − 管理費（報價×10%）− 公益（毛利×1%）' },
+        { key: 'gp', label: '毛利／毛利比', value: signed(sm.grossProfit), value2: this.pctTxt(rev > 0 ? sm.grossMarginPct : null), neg: sm.grossProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origMarginPct : null), status: gpCls === 'r' ? '✖ 虧損' : gpCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: gpCls, tip: '毛利＝報價 − 總成本；毛利比＝毛利 ÷ 報價（未扣管理費、公益）' },
+        { key: 'net', label: '最終淨利／淨利比', value: signed(sm.netProfit), value2: this.pctTxt(rev > 0 ? sm.netMarginPct : null), neg: sm.netProfit < 0, sub: '原始 ' + this.pctTxt(rev > 0 ? sm.origNetMarginPct : null), status: netCls === 'r' ? '✖ 虧損' : netCls === 'a' ? '▲ 低於原始' : '✔ 正常', cls: netCls, tip: '最終淨利＝毛利 − 管理費（報價×10%）− 公益（毛利×1%）' },
         { key: 'diff', label: '與原始差額（淨利）', value: (d > 0 ? '+' : d < 0 ? '−' : '') + 'NT$ ' + f(d), neg: d < 0, sub: '原始 ' + this.fmt(sm.origNetProfit), status: d < 0 ? '▼ 少賺' : d > 0 ? '▲ 多賺' : '＝原始', cls: d < 0 ? 'r' : 'g', tip: '差額＝精算後最終淨利 − 原始（報價單估計）最終淨利' },
       ]
     },
