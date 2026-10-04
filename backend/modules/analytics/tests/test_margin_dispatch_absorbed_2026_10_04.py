@@ -35,7 +35,7 @@ def _excel_rows():
     from modules.analytics.api.reports import _build_excel
     lab, data = _data()
     ws = openpyxl.load_workbook(io.BytesIO(_build_excel(data, lab, "t")))["毛利分析"]
-    return {r[0].value: r for r in ws.iter_rows() if r[0].value in ("T38-X-NEW", "T38-X-OLD")}
+    return {r[0].value: r for r in ws.iter_rows() if r[0].value in ("T38-X-NEW", "T38-X-OLD", "T38-X-PAGE")}
 
 
 def test_excel_item_plus_extra_equals_total_when_dispatch_is_partly_absorbed(client):
