@@ -12,6 +12,7 @@ import db
 from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W, _ln  # noqa: F401
 from modules.case.tests.test_settlement_actuals_2026_10_03 import _get, _put_settlement
 from modules.case.tests.test_settlement_finalize_integrity_2026_10_03 import URL, _status, case, page_payload  # noqa: F401
+from modules.case.tests._t40_won import quote_is_won  # noqa: F401  第 40 班：完結要已成案（autouse）
 
 
 def _put_r(c, h, st, reason=None):

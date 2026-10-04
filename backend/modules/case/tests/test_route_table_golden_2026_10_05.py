@@ -32,9 +32,23 @@ def test_openapi_route_table_matches_the_golden(client):
     assert not missing, "既有路由被改動或消失：%s" % missing[:5]
 
 
+def _first_endpoint_name(routes, scope):
+    """依註冊順序找第一個完全匹配的路由名稱（新版 FastAPI 的 include_router 會留 `_IncludedRouter` 包裝，要往裡面找）。"""
+    for r in routes:
+        if r.matches(scope)[0] != Match.FULL:
+            continue
+        inner = getattr(r, "original_router", None)
+        if inner is not None:
+            name = _first_endpoint_name(inner.routes, scope)
+            if name:
+                return name
+            continue
+        return getattr(r, "name", "")
+    return None
+
+
 def test_settlement_urls_are_still_served_by_the_settlement_endpoints_first(client):
     probes = {("GET", "/api/quotations/MQ-202610-001/settlement"): "get_settlement", ("PUT", "/api/quotations/MQ-202610-001/settlement"): "update_settlement"}
     for (method, path), name in probes.items():
         scope = {"type": "http", "method": method, "path": path, "root_path": "", "headers": []}
-        first = next((r for r in client.app.routes if r.matches(scope)[0] == Match.FULL), None)
-        assert first is not None and getattr(first, "name", "") == name, (method, path, getattr(first, "name", None))
+        assert _first_endpoint_name(client.app.routes, scope) == name, (method, path)

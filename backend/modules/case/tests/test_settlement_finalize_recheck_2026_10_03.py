@@ -7,6 +7,7 @@ from modules.case.tests.test_material_link_2026_10_02 import _put_materials
 from modules.case.tests.test_material_link_booking_2026_10_02 import _approved_po, _order, _won_case  # noqa: F401
 from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W, _ln, _mk, _submit  # noqa: F401
 from modules.case.tests.test_settlement_actuals_2026_10_03 import _get
+from modules.case.tests._t40_won import quote_is_won  # noqa: F401  第 40 班：完結要已成案（autouse）
 
 URL = "/api/quotations/%s/settlement" % NO
 
