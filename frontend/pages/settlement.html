@@ -336,7 +336,7 @@
     <b x-text="loadError"></b> <button type="button" class="btn btn-ghost btn-sm" @click="location.reload()">重新載入</button>
   </div>
   <div x-show="conflict" x-cloak role="alert" data-testid="stl-conflict" class="stl-banner stl-banner--warn">
-    <b>這份精算已被其他人更新（或狀態已改變）。</b>為避免覆蓋別人的修改，已停止儲存／完結；你這次的修改尚未存檔。
+    <b>這份精算與伺服器上的內容不一致（已被其他人更新，或相關單據已變動）。</b>為避免覆蓋別人的修改或用過期數字完結，已停止儲存／完結；你這次的修改尚未存檔。
     <button type="button" class="btn btn-ghost btn-sm" data-testid="stl-conflict-reload" @click="location.reload()">重新載入最新內容</button>
   </div>
   <!-- 載入中 -->
@@ -1853,7 +1853,7 @@ function settlementPage() {
       const detail = r.data && r.data.detail
       if (r.status === 409) {
         this.conflict = true
-        const m = (typeof detail === 'string' && detail ? detail : '精算已被其他人更新') + '。請按「重新載入」取得最新內容；你這次的修改尚未存檔。'
+        const m = what + '失敗：' + (typeof detail === 'string' && detail ? detail : '精算已被其他人更新') + '。請按「重新載入」取得最新內容；你這次的修改尚未存檔。'
         this.toastErr(m); return m
       }
       const m = this._httpMsg(r.status, what, detail)
