@@ -95,6 +95,7 @@
     .stl-src--po, .stl-src--map, .stl-src--po-map { background: #ECFDF5; color: #15803D; }
     .stl-src--manual { background: #DBEAFE; color: #1D4ED8; }
     .stl-src--est { background: #FEF3C7; color: #92400E; }
+    .stl-row--warn td { background: #FFFBEB; }
     .stl-chip { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; white-space: nowrap; }
     .stl-chip--material { color: #1D4ED8; background: #DBEAFE; }
     .stl-chip--extra { color: #475569; background: #E2E8F0; }
@@ -352,7 +353,7 @@
                 <th colspan="3" style="text-align:center;background:#FFFBEB;border-left:2px solid #FDE68A">
                   <span style="font-size:10px;color:#92400E">實際成本</span>
                 </th>
-                <th style="min-width:70px">成本差異</th>
+                <th style="min-width:130px">本項毛利（報價−實際）</th>
                 <th style="min-width:80px">備註</th>
               </tr>
               <tr style="background:#F8F7F5">
@@ -430,9 +431,6 @@
                       <option value="legacy">歷史未建系統</option>
                       <option value="labor">人力</option>
                     </select>
-                    <div x-show="itemSource(item).key === 'est' && !(systemActual(item) > 0)" :data-testid="'stl-nopurchase-' + item.id" style="margin-top:3px;font-size:10px;font-weight:400;color:#92400E;line-height:1.4">
-                      無採購／對應紀錄：實際成本以估計計；已採購但沒進系統（歷史）或人力成本，請在左側填「實際數量／單位成本」。
-                    </div>
                     <div x-show="systemActual(item) > 0" :data-testid="'stl-po-' + item.id" style="margin-top:4px;font-size:10px;font-weight:400;color:#92400E">
                       <span x-text="purchaseLabel(item)"></span>
                       <button type="button" class="btn btn-ghost btn-sm" style="padding:0 6px;font-size:10px" :disabled="settlement.status === 'finalized'"
@@ -445,17 +443,12 @@
                     </template>
                   </td>
 
-                  <!-- 差異欄 -->
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:11px">
-                    <template x-if="item.actualTotalCost > 0">
-                      <div>
-                        <span :class="item.origAmount - item.actualTotalCost >= 0 ? 'diff-pos' : 'diff-neg'"
-                              x-text="(item.origAmount - item.actualTotalCost >= 0 ? '+' : '') + fmt(item.origAmount - item.actualTotalCost)"></span>
-                      </div>
-                    </template>
-                    <template x-if="!item.actualTotalCost">
-                      <span class="diff-zero">—</span>
-                    </template>
+                  <!-- 毛利欄：每個品項賺多少（只算到毛利；管理費／公益／淨利只在總結） -->
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :data-testid="'stl-profit-' + item.id">
+                    <div style="font-size:18px;font-weight:800;line-height:1.2" :style="{ color: itemProfit(item) < 0 ? '#B91C1C' : '#15803D' }"
+                         x-text="(itemProfit(item) < 0 ? '−' : '') + 'NT$ ' + fmt(Math.abs(itemProfit(item)))"></div>
+                    <div style="font-size:12px;font-weight:700" :style="{ color: itemProfit(item) < 0 ? '#B91C1C' : '' }" x-text="'毛利比 ' + pctTxt(itemPct(item))"></div>
+                    <div style="font-size:10px;color:var(--text-dim)" x-text="'單件毛利 ' + (itemUnitProfit(item) == null ? '—' : fmt(itemUnitProfit(item))) + (item.origUnit ? '／' + item.origUnit : '')"></div>
                   </td>
 
                   <!-- 備註 -->
@@ -464,6 +457,9 @@
                            :disabled="settlement.status === 'finalized'"
                            placeholder="說明…"
                            @input="calcSummary()">
+                    <div x-show="itemSource(item).key === 'est' && !(systemActual(item) > 0)" :data-testid="'stl-nopurchase-' + item.id" style="margin-top:4px;font-size:11px;font-weight:400;color:#92400E;line-height:1.4">
+                      ⚠ 無採購／對應紀錄：實際成本暫以估計計。已採購但沒進系統（歷史）或人力成本，請在左側填實際數量／單位成本。
+                    </div>
                   </td>
                 </tr>
               </template>
@@ -687,6 +683,57 @@
                     placeholder="精算說明、成本異常原因、客訴或變更說明、後續追蹤事項等…"
                     style="resize:vertical;min-height:80px;width:100%;box-sizing:border-box"
                     @input="calcSummary()"></textarea>
+        </div>
+      </div>
+
+      <!-- ── 四之一、每個品項的賺賠（毛利；未對應項目與折扣／調整各自一列，讓加總對得上）── -->
+      <div class="stl-card" data-testid="stl-profit-card">
+        <div class="stl-card__head">
+          <div class="stl-card__title">四之一、每個品項的賺賠（毛利）</div>
+          <div style="font-size:11px;color:var(--text-dim)">品項只算到毛利；管理費、公益捐贈、淨利只在下方「利潤分析」</div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="stl-table" data-testid="stl-profit-table">
+            <thead><tr><th>品項</th><th style="text-align:right">報價（未稅）</th><th style="text-align:right">實際成本</th><th style="text-align:right">毛利</th><th style="text-align:right">毛利比</th></tr></thead>
+            <tbody>
+              <template x-for="(item, idx) in settlement.items" :key="'pt' + item.id">
+                <tr :data-testid="'stl-pt-' + item.id">
+                  <td><span x-text="'#' + (idx + 1) + ' ' + (item.origDescription || '（無品名）')"></span> <span class="stl-src" :class="'stl-src--' + itemSource(item).key" x-text="itemSource(item).label"></span></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(itemQuote(item))"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(itemActual(item))"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-weight:800;font-size:14px" :style="{ color: itemProfit(item) < 0 ? '#B91C1C' : '#15803D' }" x-text="(itemProfit(item) < 0 ? '−' : '') + fmt(Math.abs(itemProfit(item)))"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: itemProfit(item) < 0 ? '#B91C1C' : '' }" x-text="pctTxt(itemPct(item))"></td>
+                </tr>
+              </template>
+              <template x-for="r in unassignedCostRows" :key="r.key">
+                <tr class="stl-row--warn" :data-testid="'stl-pt-un-' + r.key">
+                  <td x-text="r.label"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif">0</td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(r.amount)"></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#B91C1C;font-weight:700" x-text="r.amount ? '−' + fmt(r.amount) : '0'"></td>
+                  <td style="text-align:right">—</td>
+                </tr>
+              </template>
+              <tr x-show="quoteAdjust !== 0" data-testid="stl-pt-adjust" style="color:var(--text-secondary)">
+                <td>折扣／調整（報價收入與品項報價加總的差額）</td>
+                <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="(quoteAdjust < 0 ? '−' : '') + fmt(Math.abs(quoteAdjust))"></td>
+                <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif">0</td>
+                <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="(quoteAdjust < 0 ? '−' : '') + fmt(Math.abs(quoteAdjust))"></td>
+                <td style="text-align:right">—</td>
+              </tr>
+              <tr style="font-weight:800" data-testid="stl-pt-total">
+                <td style="border-top:2px solid #111">合計</td>
+                <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(summary.quotedPretax)"></td>
+                <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(summary.totalActualCost)"></td>
+                <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :style="{ color: summary.grossProfit < 0 ? '#B91C1C' : '#15803D' }" x-text="(summary.grossProfit < 0 ? '−' : '') + fmt(Math.abs(summary.grossProfit))"></td>
+                <td style="border-top:2px solid #111;text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="summary.quotedPretax > 0 ? summary.grossMarginPct.toFixed(1) + '%' : '—'"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="padding:10px 20px 14px;font-size:12px;display:grid;gap:3px" data-testid="stl-recon">
+          <div>對帳①：Σ品項報價 <span x-text="fmt(sumItemQuote)"></span><span x-show="quoteAdjust !== 0" x-text="(quoteAdjust < 0 ? ' − ' : ' ＋ ') + '折扣／調整 ' + fmt(Math.abs(quoteAdjust))"></span> ＝ 報價收入 <span x-text="fmt(summary.quotedPretax)"></span>　差額 <b data-testid="stl-recon-quote-gap" :style="{ color: reconQuoteGap === 0 ? '#15803D' : '#B91C1C' }" x-text="fmt(reconQuoteGap)"></b></div>
+          <div>對帳②：Σ品項實際成本 <span x-text="fmt(summary.itemActualTotal)"></span> ＋ 未對應項目 <span x-text="fmt(unassignedCostTotal)"></span> ＝ 總實際成本 <span x-text="fmt(summary.totalActualCost)"></span>　差額 <b data-testid="stl-recon-cost-gap" :style="{ color: reconCostGap === 0 ? '#15803D' : '#B91C1C' }" x-text="fmt(reconCostGap)"></b></div>
         </div>
       </div>
 
@@ -1148,6 +1195,30 @@ function settlementPage() {
       return (m.name || String(m.itemId)) + qty
     },
     // 承攬商派發（第 36 班契約）：金額＝未稅承攬費＋外包人員；稅額只顯示不計成本。docCode 可能是空字串，退回以派發 id 辨認
+    // 每個品項的賺賠（毛利；報價＝報價單品項金額 origAmount，未稅；實際成本與 calcSummary 的 itemActualTotal 同一規則：手填 0／空＝用估計）
+    pctTxt(v) { return v == null ? '—' : (Math.round(v * 10) / 10).toFixed(1) + '%' },
+    itemQuote(i) { return +i.origAmount || 0 },
+    itemActual(i) { return i.actualTotalCost || this.estimateOf(i) },
+    itemProfit(i) { return this.itemQuote(i) - this.itemActual(i) },
+    itemPct(i) { const q = this.itemQuote(i); return q > 0 ? this.itemProfit(i) / q * 100 : null },
+    itemUnitProfit(i) { const q = +i.origQty || 0; return q > 0 ? (+i.origUnitPrice || 0) - this.itemActual(i) / q : null },
+    get sumItemQuote() { return this.settlement.items.reduce((s, i) => s + this.itemQuote(i), 0) },
+    get quoteAdjust() { return this.summary.quotedPretax - this.sumItemQuote },          // 折扣／調整：不吞掉，單獨一列
+    get reconQuoteGap() { return this.sumItemQuote + this.quoteAdjust - this.summary.quotedPretax },
+    // 未對應項目＝品項實際成本以外、仍計入總成本的錢：額外支出（含未對應材料申請）、匯款手續費、自訂模組支出、派發（未被品項吸收的部分）、採購單（舊路徑）
+    get unassignedCostRows() {
+      const sm = this.summary
+      const rows = [
+        { key: 'extra', label: '未對應項目：額外支出（含未對應材料申請）', amount: this.xeTotal },
+        { key: 'remit', label: '未對應項目：匯款手續費', amount: this.remitFeeTotal },
+        { key: 'custom', label: '未對應項目：自訂模組支出', amount: this.customExpenseTotal },
+        { key: 'dispatch', label: '未對應項目：承攬商派發（未被品項吸收）', amount: sm.dispatchTotal - sm.dispatchAbsorbed },
+        { key: 'po', label: '未對應項目：採購單（品項尚未採用）', amount: sm.itemPoUnadopted },
+      ]
+      return rows.filter(r => r.key === 'extra' || r.key === 'dispatch' || r.amount)
+    },
+    get unassignedCostTotal() { return this.unassignedCostRows.reduce((s, r) => s + r.amount, 0) },
+    get reconCostGap() { return this.summary.itemActualTotal + this.unassignedCostTotal - this.summary.totalActualCost },
     // 每個品項的實際成本來源（顯示用，不存檔）：採用且有採購／對應 ⇒ 取代；否則有手填 ⇒ 手填；否則 ⇒ 估計（優先序＝規則 A）
     itemSource(item) {
       if (item.adoptSystem && this.systemActual(item) > 0) {

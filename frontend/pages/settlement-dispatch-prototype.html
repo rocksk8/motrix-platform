@@ -138,6 +138,21 @@
   .chain .t{font-weight:800;font-size:17px;border-top:1px solid var(--line);margin-top:4px;padding-top:6px}
   .chain div:nth-child(even){text-align:right}
   .tablewrap{overflow-x:auto}
+  .headline{margin-top:16px;border:2px solid;border-radius:10px;padding:12px 16px;display:flex;flex-wrap:wrap;gap:4px 18px;align-items:baseline}
+  .headline.good{border-color:var(--ok-line);background:var(--ok-bg)} .headline.bad{border-color:#FCA5A5;background:var(--bad-bg)}
+  .headline .hl{font-size:13px;color:var(--ink2);font-weight:700}
+  .headline .hn{font-size:30px;font-weight:800;line-height:1.1}
+  .headline .hd{font-size:14px;font-weight:700}
+  .blocks{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}
+  .blk{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+  .blk h4{margin:0 0 6px;font-size:14px}
+  table.bt{width:100%;border-collapse:collapse;font-size:13px}
+  table.bt th{font-size:11px;color:var(--ink2);font-weight:600;text-align:right;padding:5px 6px;border-bottom:2px solid #111}
+  table.bt td{padding:6px;border-bottom:1px solid var(--line2);text-align:right;white-space:nowrap}
+  table.bt td:first-child,table.bt th:first-child{text-align:left;white-space:normal}
+  table.bt tr.strong td{font-weight:800;font-size:15px;background:#FAF9F6}
+  table.bt .basis{font-size:10px;color:var(--ink2);font-weight:400}
+  @media (max-width:760px){.blocks{grid-template-columns:1fr}}
   .arrow{align-self:center;color:#999;font-size:16px}
   .item-note{margin:8px 0 0;font-size:12px;color:var(--warn)}
 
@@ -314,6 +329,50 @@ function docRow(d, mappedState){
 }
 
 const netProfit = c => { const gp = c.quoteTotal - c.total; return gp - c.quoteTotal * 0.10 - Math.max(0, gp) * 0.01 };
+
+/* 原始（估計）側：沿用現有定義——報價稅前收入、原始總成本＝Σ(qty×cost×1.05)、管理費 10%＝報價×10%、公益 1%＝原始毛利×1% */
+function totalsBlocks(c){
+  const rev = c.quoteTotal;
+  const oCost = S.items.reduce((a,it) => a + it.est, 0);
+  const oGP = rev - oCost, oAdmin = Math.round(rev * 0.10), oCh = Math.round(oGP * 0.01), oNet = oGP - oAdmin - oCh;
+  const aCost = c.total, aGP = rev - aCost, aAdmin = Math.round(rev * 0.10), aCh = Math.round(aGP * 0.01), aNet = aGP - aAdmin - aCh;
+  const pct = (v, base) => base > 0 ? v / base * 100 : null;
+  const sg = n => (n < 0 ? '−' : n > 0 ? '+' : '') + fmtN(Math.abs(n));
+  // 差額＝精算−原始；good=高為佳（收入／利潤）、cost=高為差（成本／費用）
+  const diff = (a, o, kind) => { const d = a - o; const cls = d === 0 ? '' : ((kind === 'cost') === (d > 0) ? 'neg-t' : 'pos'); return `<td class="${cls}">${d === 0 ? '0' : sg(d)}</td>`; };
+  const diffPp = (a, o) => { if (a == null || o == null) return '<td>—</td>'; const d = Math.round((a - o) * 10) / 10; return `<td class="${d === 0 ? '' : d > 0 ? 'pos' : 'neg-t'}">${d > 0 ? '+' : d < 0 ? '−' : ''}${Math.abs(d).toFixed(1)} pp</td>`; };
+  const row = (label, basis, o, a, kind, tid, opts = {}) => `<tr data-testid="${tid}" class="${opts.strong ? 'strong' : ''}"><td>${label}<div class="basis">${basis}</div></td><td>${opts.pct ? pctTxt(o) : fmtN(o)}</td><td class="${opts.neg && a < 0 ? 'neg-t' : ''}">${opts.pct ? pctTxt(a) : (a < 0 ? '−' : '') + fmtN(Math.abs(a))}</td>${opts.pct ? diffPp(a, o) : diff(a, o, kind)}</tr>`;
+  const head = `<thead><tr><th></th><th>原始報價（估計）</th><th>精算後</th><th>差額（精算−原始）</th></tr></thead>`;
+  const dNet = aNet - oNet, dPct = oNet !== 0 ? dNet / Math.abs(oNet) * 100 : null;
+  return `
+  <div class="headline ${dNet < 0 ? 'bad' : 'good'}" data-testid="stl-headline">
+    <div class="hl">精算後最終淨利</div>
+    <div class="hn num ${aNet < 0 ? 'neg-t' : 'pos'}" data-testid="stl-net">${aNet < 0 ? '−' : ''}${fmt(Math.abs(aNet))}</div>
+    <div class="hd num ${dNet < 0 ? 'neg-t' : 'pos'}">比原始報價 ${dNet < 0 ? '少' : '多'} ${fmt(Math.abs(dNet))}（${dPct == null ? '—' : (dNet >= 0 ? '+' : '−') + Math.abs(dPct).toFixed(1) + '%'}）</div>
+  </div>
+  <div class="blocks">
+    <div class="blk" data-testid="stl-block-before">
+      <h4>① 扣管理費／公益前</h4>
+      <table class="bt num">${head}<tbody>
+        ${row('報價（稅前收入）', '報價單稅前收入；兩邊相同', rev, rev, 'good', 'stl-b1-rev')}
+        ${row('總成本', '原始＝Σ估計成本；精算後＝伺服器總實際成本', oCost, aCost, 'cost', 'stl-b1-cost')}
+        ${row('毛利', '報價 − 總成本', oGP, aGP, 'good', 'stl-b1-gp', {strong: true, neg: true})}
+        ${row('毛利比', '毛利 ÷ 報價', pct(oGP, rev), pct(aGP, rev), 'good', 'stl-b1-gpp', {pct: true})}
+        ${row('未扣費用淨利', '＝毛利（尚未扣管理費、公益）', oGP, aGP, 'good', 'stl-b1-pre', {neg: true})}
+      </tbody></table>
+    </div>
+    <div class="blk" data-testid="stl-block-after">
+      <h4>② 扣管理費／公益後</h4>
+      <table class="bt num">${head}<tbody>
+        ${row('管理費', '報價稅前收入 × 10%', oAdmin, aAdmin, 'cost', 'stl-b2-admin')}
+        ${row('公益捐贈', '毛利 × 1%', oCh, aCh, 'cost', 'stl-b2-ch')}
+        ${row('最終淨利', '毛利 − 管理費 − 公益捐贈', oNet, aNet, 'good', 'stl-b2-net', {strong: true, neg: true})}
+        ${row('淨利比', '最終淨利 ÷ 報價', pct(oNet, rev), pct(aNet, rev), 'good', 'stl-b2-netp', {pct: true})}
+      </tbody></table>
+    </div>
+  </div>`;
+}
+
 function render(){
   const c = calc();
   const frozen = S.frozen;
@@ -408,14 +467,7 @@ function render(){
       <div>對帳①：Σ品項報價 ${fmtN(c.quoteItems)} ${S.adjust?(S.adjust<0?'−':'＋')+' 折扣／調整 '+fmtN(Math.abs(S.adjust)):''} ＝ 報價總額 ${fmtN(c.quoteTotal)}　差額 <b class="ok">0</b></div>
       <div>對帳②：Σ品項實際成本 ${fmtN(c.itemsActual)} ＋ 未對應 ${fmtN(c.unTotal)} ＋ 已對應但品項未採用 ${fmtN(c.keptOutsideTotal)} ＝ 總實際成本 ${fmtN(c.total)}　差額 <b class="${c.itemsActual + c.unTotal + c.keptOutsideTotal - c.total === 0 ? 'ok' : 'bad'}">${fmtN(c.itemsActual + c.unTotal + c.keptOutsideTotal - c.total)}</b></div>
     </div>
-    <div class="chain num">
-      <div>報價稅前收入</div><div>${fmt(c.quoteTotal)}</div>
-      <div>− 總實際成本</div><div data-testid="stl-total-cost">${fmt(c.total)}</div>
-      <div>＝ 毛利</div><div class="${c.quoteTotal-c.total<0?'neg-t':'pos'}">${fmt(c.quoteTotal-c.total)}</div>
-      <div>− 管理費 10%</div><div>${fmt(c.quoteTotal * 0.10)}</div>
-      <div>− 公益捐贈 1%（毛利）</div><div>${fmt(Math.max(0,c.quoteTotal-c.total) * 0.01)}</div>
-      <div class="t">淨利（只在總結顯示）</div><div class="t ${netProfit(c)<0?'neg-t':'pos'}" data-testid="stl-net">${fmt(netProfit(c))}</div>
-    </div>
+    ${totalsBlocks(c)}
     <p class="tip">派發金額＝未稅承攬費＋外包人員；稅額只顯示、不計成本。派發被品項吸收後不會在總成本重複計入。${frozen?'　已完結：全部唯讀。':''}</p>`;
 
   /* 事件 */

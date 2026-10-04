@@ -159,3 +159,50 @@ def test_item_without_purchase_shows_hint_manual_actual_with_source_tag_roundtri
     assert "手填・人力" in page.locator('[data-testid="stl-source-a"]').inner_text()
     assert _tot(page)["totalActualCost"] == mid == page.evaluate(f"() => {S}.actuals.totals.totalActualCost")
     _shot(page, "6-manual-labor")
+
+
+@pytest.mark.e2e
+def test_profit_per_item_and_grand_total_table_reconcile_with_discount_row(live_server, make_user, e2e_browser):
+    """每品項毛利（報價−實際成本）＋毛利比＋單件毛利；總結表列出每個品項、未對應項目、折扣／調整，加總與總成本對帳差額為 0；淨利只在利潤分析。"""
+    import db
+    sa = make_user(username="sa_sa", role="superadmin")
+    _seed()
+    c = db.get_db()
+    try:
+        row = c.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()
+        d = json.loads(row["data_json"])
+        d["tot"] = {"pretax": 20000, "total": 21000}            # 報價收入 20000 ＜ Σ品項報價 21000 ⇒ 折扣／調整 −1000
+        c.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO))
+        c.commit()
+    finally:
+        c.close()
+    page = e2e_browser.new_context(viewport={"width": 1400, "height": 1100}).new_page()
+    _login(page, live_server, *sa)
+    page.goto(f"{live_server}/pages/settlement.html?no={NO}")
+    page.locator('[data-testid="stl-profit-card"]').wait_for(state="visible", timeout=20000)
+    page.wait_for_function(f"() => {S}._actualsOk && {S}.summary.totalActualCost > 0", timeout=20000)
+    # 品項 a：報價 20000、實際＝估計 10500 ⇒ 毛利 9500（47.5%）、單件毛利 2000−1050＝950；品項 b：報價 1000、實際 800（材料申請）⇒ 200（20.0%）、單件 2
+    pa = page.locator('[data-testid="stl-profit-a"]').inner_text()
+    assert "9,500" in pa and "47.5%" in pa and "單件毛利 950" in pa, pa
+    pb = page.locator('[data-testid="stl-profit-b"]').inner_text()
+    assert "200" in pb and "20.0%" in pb and "單件毛利 2" in pb, pb
+    sizes = page.locator('[data-testid="stl-profit-a"] div').evaluate_all("els => els.map(e => parseFloat(getComputedStyle(e).fontSize))")
+    assert sizes[0] > sizes[1] >= sizes[2] and sizes[0] >= 1.4 * sizes[1], sizes             # 毛利金額是這格最醒目的數字
+    # 總結表：每個品項一列＋未對應項目（額外支出 700＋未對應材料 250＝950）＋折扣／調整 −1000＋合計
+    t = page.locator('[data-testid="stl-profit-table"]')
+    assert page.locator('[data-testid="stl-pt-a"]').count() == 1 and page.locator('[data-testid="stl-pt-b"]').count() == 1
+    assert "950" in page.locator('[data-testid="stl-pt-un-extra"]').inner_text()
+    assert "1,000" in page.locator('[data-testid="stl-pt-adjust"]').inner_text()
+    tot = page.locator('[data-testid="stl-pt-total"]').inner_text()
+    assert "20,000" in tot and "12,250" in tot and "7,750" in tot, tot                 # 報價 20000、成本 12250、毛利 7750
+    s = _tot(page)
+    assert s["totalActualCost"] == 12250 and s["grossProfit"] == 7750
+    # Σ品項毛利＋（−未對應）＋調整 ＝ 合計毛利；兩條對帳差額 0
+    assert 9500 + 200 - 950 - 1000 == s["grossProfit"]
+    assert page.locator('[data-testid="stl-recon-quote-gap"]').inner_text().strip() == "0"
+    assert page.locator('[data-testid="stl-recon-cost-gap"]').inner_text().strip() == "0"
+    assert s["totalActualCost"] == page.evaluate(f"() => {S}.actuals.totals.totalActualCost")        # 與後端同一來源
+    # 淨利只在利潤分析區，不在品項卡／品項表
+    assert "淨利" not in t.inner_text() and "淨利" not in page.locator('[data-testid="stl-profit-a"]').inner_text()
+    page.locator('[data-testid="stl-profit-card"]').scroll_into_view_if_needed()
+    _shot(page, "7-profit-table")
