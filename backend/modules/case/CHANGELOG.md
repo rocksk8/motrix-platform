@@ -4,6 +4,15 @@
 - **只動 `frontend/pages/settlement.html`**：頁面內容改為置中容器（最大寬 1400px、左右對稱）；頁首摘要卡改為自動換欄（`auto-fit`），字級隨寬度縮放，「毛利／毛利比」「最終淨利／淨利比」的金額與比例窄時自動換行，不再被右側裁掉。不改任何公式、後端與存檔欄位。
 - 測試：`tests/test_e2e_settlement_layout_2026_10_04.py`（1280／1440／1920／420 寬度：摘要卡文字無裁切、容器左右邊界對稱）。
 
+## (next) — 2026-10-04（wip/t38-case-be）：精算後端強化（完結覆蓋、樂觀鎖、負數採購、派發併入列、歷程快照）
+- **完結時下游欄位一律以伺服器值覆蓋**（`fill_downstream`）：過去只補「沒送的」，容差內的偏差照存；現在 `dispatchTotal／remitFeeTotal／customExpenseTotal／totalActualCost／毛利／管理費／公益金／淨利／利潤率／quotedPretax` 一律寫伺服器重算值。`summary` 缺 `itemActualTotal`（或沒有 summary）⇒ 不再照存（可偽造），改由伺服器重建所有計算欄位（非計算欄位保留）。選此而非 422：不擋任何合法呼叫端、結果由伺服器決定。
+- **`PUT /settlement` 樂觀鎖**：`SettlementIn.expectedUpdatedAt`（選填）與報價單 `updated_at` 不同 ⇒ 409 不存檔；`GET /settlement` 回 `updatedAt`；舊頁面不帶欄位不受影響。**整份報價存檔**（`PUT /api/quotations/{no}`）不再採用 client 的精算本文，一律沿用資料庫的（過期副本不會蓋掉別人剛存的精算）。
+- **負數／零和採購列算「有採購」**：`hasPurchase` 改為「有採購單／材料申請／額外支出／派發列」而非 `purchased>0`；退款列（負數）、正負相抵為 0 的列在「採用」時一樣取代估計。
+- **派發被品項吸收時的分項列**：完結 summary 新增 `dispatchAbsorbedTotal`（隨 summary 凍結；舊案沒有＝0）；結案報表 PDF 與獎金分潤 PDF 精算表在 >0 時多一行「已併入品項」，讓分項加總＝實際總成本（`SETTLEMENT_ROWS` 11 列與標籤不動）。
+- **編輯歷程**：完結紀錄附快照（`netProfit／totalActualCost／dispatchBasis／frozenAt`）；同一人連續的精算草稿存檔合併成一筆、精算草稿紀錄最多留 50 筆（完結／重新開啟理由不合併不丟）。`settlement-actuals` 新增 `orphanItems`（存檔裡有、報價單已刪的品項，唯讀）。
+- **稽核 AUDIT-T38 修正**：①（H-1，既有高風險）`POST /api/quotations` 新建時丟掉用戶端帶的 `settlement` 並強制 `dealTag=''`——原本可直接建出已結案／已完結／淨利 99,999,999 的報價單；整份報價存檔（PUT）本來就不能改成案狀態與精算本文（有題鎖定）。②（S-1）完結時「原始側」欄位（`quotedTotal／origTotalCost／origDirectProfit／origMarginPct／origAdminCost／origCharity／origNetProfit／origNetMarginPct／profitDiff`）也由伺服器依報價單重算。③（S-2）36／37 班完結案只有頁面寫的 `dispatchAbsorbed`：PDF／獎金 PDF／`_freeze` 讀取時 fallback（唯讀，不改寫資料）。④（S-4）完結成功的回應多帶 `summary`（伺服器覆蓋後凍結的版本）。
+- 測試：`tests/test_settlement_t38_be_2026_10_04.py`。
+
 ## 1.0.131 — 2026-10-04（wip/t36-dispatch-offset-fe）：精算頁管理視角（純前端；總結列標籤對齊獎金 PDF）
 - **只動 `frontend/pages/settlement.html`（前端）與 e2e，後端與公式不變**：頁首摘要列、需處理清單、完結前檢查（未對應只警示；對帳差額≠0 才停用完結鈕）、品項毛利／毛利比／單件毛利、賺賠總表（含「未對應項目」與「折扣／調整」列與兩條對帳）、扣費前後對照、三張 inline SVG 圖、稽核頁尾、列印版面。
 - 品項毛利＝報價單品項金額 − 實際成本；總成本取畫面 summary（與後端 `totalActualCost` 同一規則，派發被品項吸收的部分不重複計入）。門檻與政策集中在頁面 `STL_CONFIG`。

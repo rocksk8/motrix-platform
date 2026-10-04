@@ -1487,6 +1487,11 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     now = datetime.now().isoformat()
     month = datetime.now().strftime("%Y%m")
     tot  = q.get("tot", {})
+    # 38（稽核 H-1）：新建的報價單不可能已成案／已完結——精算本文與成案狀態只能走各自的專用端點（PATCH /deal-tag、PUT /settlement）。
+    # 客戶端帶來的一律丟掉（原本直接採用：探針建出 deal_tag=已結案、settle_status=finalized、淨利 99,999,999 的報價單）。
+    # 前端「複製為新單」本來就送 dealTag=''、settlement=null，不受影響。
+    q["dealTag"] = ""
+    q.pop("settlement", None)
     deal_tag, settle_status = quote_hot_fields(q)
     conn = get_db()
 
@@ -1804,8 +1809,15 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # 資料庫現有值，忽略 client 送來的異動。
     deal_tag, settle_status = existing["deal_tag"] or "", existing["settle_status"] or ""
     q["dealTag"] = deal_tag
-    if isinstance(q.get("settlement"), dict):
-        q["settlement"]["status"] = settle_status
+    # 38：精算本文只能經 PUT /settlement 異動——整份存檔一律沿用資料庫現有的精算（含 status），不採用 client 帶來的（舊頁面載入時的過期副本會蓋掉別人剛存的精算）
+    try:
+        _db_settlement = (json.loads(existing["data_json"] or "{}") or {}).get("settlement")
+    except (ValueError, TypeError):
+        _db_settlement = None
+    if isinstance(_db_settlement, dict):
+        q["settlement"] = _db_settlement
+    elif "settlement" in q:
+        q.pop("settlement")
 
     # 一般編輯的編輯紀錄（2026-09-14）——解鎖編輯那條路徑上面已經記過了，
     # 這裡只補「不是解鎖編輯」的一般存檔。
@@ -4272,6 +4284,7 @@ def approve_payment_writeoff(no: str, idx: int, body: WriteOffApproveIn, itemId:
 class SettlementIn(BaseModel):
     settlement: dict
     reason: str = ""        # 35c：對已完結的精算再存（重新開啟或再完結）必填；記入編輯歷程與稽核紀錄
+    expectedUpdatedAt: Optional[str] = None     # 38：樂觀鎖（選填）——帶 GET /settlement 回的 updatedAt（或上一次 PUT 回的 updated_at）；與現況不同 ⇒ 409，不存檔
 
 
 @router.get("/api/quotations/{quote_no}/settlement")
@@ -4284,7 +4297,7 @@ def get_settlement(quote_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
-        "SELECT data_json, sales_person_id, sales_person, assigned_user_ids "
+        "SELECT data_json, sales_person_id, sales_person, assigned_user_ids, updated_at "
         "FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     conn.close()
@@ -4293,7 +4306,7 @@ def get_settlement(quote_no: str, authorization: str = Header(None)):
     require_case(user, row, quote_no)
     _require_financial_view(user)
     data = json.loads(row["data_json"] or "{}")
-    return {"settlement": data.get("settlement", None), "items": data.get("items", []),
+    return {"settlement": data.get("settlement", None), "items": data.get("items", []), "updatedAt": row["updated_at"],
             "tot": data.get("tot", {}), "customerName": data.get("customerName", ""),
             "projectName": data.get("projectName", "")}
 
@@ -4305,7 +4318,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
     conn = get_db()
     with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（modules.case.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
         row = conn.execute(
-            "SELECT data_json, customer_name, sales_person_id, sales_person, assigned_user_ids "
+            "SELECT data_json, customer_name, sales_person_id, sales_person, assigned_user_ids, updated_at "
             "FROM quotations WHERE quote_no=?", (quote_no,)
         ).fetchone()
         if not row:
@@ -4321,6 +4334,9 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         except HTTPException:
             conn.close()
             raise
+        if body.expectedUpdatedAt is not None and (row["updated_at"] or "") != body.expectedUpdatedAt:      # 38：樂觀鎖——兩人（或兩個分頁）同時編輯，後存的不再悄悄蓋掉前存的
+            conn.close()
+            raise HTTPException(409, "精算（或這張報價單）已被其他人更新，請重新載入後再存")
         data = json.loads(row["data_json"] or "{}")
         existing_settlement = data.get("settlement") or {}
         if existing_settlement.get("status") == "finalized" and user["role"] != "superadmin":
@@ -4346,6 +4362,9 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
             if bad:
                 conn.close()
                 raise HTTPException(422, bad)
+        if body.settlement.get("status") == "finalized":       # 38：summary 缺 itemActualTotal ⇒ 伺服器重建（過去無從比對、照存）
+            from modules.case import settlement_actuals as _SAr
+            _SAr.rebuild_summary_if_missing(conn, quote_no, body.settlement)
         if body.settlement.get("status") == "finalized":       # 33-A5（D10）；35c：已完結再存成完結也比對（要有理由；舊口徑頁面送的含稅數字會被擋 ⇒ 請先重新開啟再完結）
             from modules.case import settlement_actuals as _SA
             diffs = _SA.check_finalize(conn, quote_no, body.settlement)
@@ -4363,14 +4382,25 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         if not isinstance(history, list):
             history = []
         settle_rev = len(history) + 1
-        history.append({
+        entry = {
             "rev":       settle_rev,
             "at":        now,
             "by":        user["username"],
             "byDisplay": user["display_name"] or user["username"],
             "type":      "settlement_finalized" if is_finalized else "settlement_draft",
             **({"reason": reopen_reason, "from": "finalized"} if was_final else {}),
-        })
+        }
+        if is_finalized:                                       # 38：完結快照——之後有人重新開啟修改時，歷程仍留得住「當時凍結的數字」
+            _sm = body.settlement.get("summary") if isinstance(body.settlement.get("summary"), dict) else {}
+            entry.update(netProfit=_sm.get("netProfit"), totalActualCost=_sm.get("totalActualCost"), dispatchBasis=_sm.get("dispatchBasis"), frozenAt=now)
+        elif not was_final and history and history[-1].get("type") == "settlement_draft" and history[-1].get("by") == entry["by"] and "reason" not in history[-1]:
+            settle_rev = history[-1].get("rev", settle_rev)    # 38：同一人連續存草稿＝合併成一筆（自動存檔不再讓歷程無限成長）；理由／完結紀錄永不合併
+            history.pop()
+            entry["rev"] = settle_rev
+        history.append(entry)
+        drafts = [i for i, e in enumerate(history) if isinstance(e, dict) and e.get("type") == "settlement_draft" and "reason" not in e]
+        for i in reversed(drafts[:-50] if len(drafts) > 50 else []):      # 38：精算草稿紀錄最多留最後 50 筆（舊的先丟；完結／重新開啟／其他類型的紀錄不動）
+            del history[i]
         data["editHistory"] = history
 
         now = save_quotation_json(conn, quote_no, data, updated_at=now)
@@ -4386,7 +4416,10 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
                 quote_no, cname,
                 user.get("display_name") or user["username"],
             )
-        return {"ok": True, "updated_at": now}
+        out = {"ok": True, "updated_at": now}
+        if is_finalized:
+            out["summary"] = body.settlement.get("summary")      # 38（稽核 S-4）：回傳伺服器覆蓋後凍結的 summary，前端據此更新畫面（不再停在頁面自己算的版本）
+        return out
 
 
 # ── 案件財務總覽（應收應付，2026-09-09）────────────────────────────────────────
