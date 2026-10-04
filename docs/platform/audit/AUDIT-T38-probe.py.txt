@@ -1,0 +1,110 @@
+import itertools, json
+import pytest
+import db
+from modules.case import settlement_actuals as SA
+from modules.case.tests.test_purchase_item_lines_2026_10_02 import NO, W, _login  # noqa
+from modules.case.tests.test_settlement_actuals_2026_10_03 import EST_A, EST_B, _get, _items, _put_settlement
+from modules.case.tests.test_settlement_assigned_fields_2026_10_03 import _extra
+from modules.case.tests.test_settlement_finalize_integrity_2026_10_03 import _set_tot, page_payload
+from modules.case.tests.test_settlement_tax_basis_2026_10_03 import _dispatch
+from modules.case.tests.test_settlement_dispatch_offset_2026_10_04 import _off
+
+URL = "/api/quotations/%s/settlement" % NO
+
+
+def _saved():
+    cn = db.get_db()
+    try:
+        return json.loads(cn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()["data_json"])
+    finally:
+        cn.close()
+
+
+def _put(c, h, s, **kw):
+    return c.put(URL, json=dict({"settlement": s}, **kw), headers=h)
+
+
+def test_a_forged_nondownstream_keys_survive_finalize(W):
+    """完結時 summary 裡不在 DOWNSTREAM／重算清單的鍵（origNetProfit／profitDiff／quotedTotal／origTotalCost）能否被偽造後凍結"""
+    c, h = W
+    _set_tot()
+    p = page_payload(c, h, origNetProfit=777777, profitDiff=555555, origTotalCost=1, quotedTotal=9)
+    r = _put(c, h, p)
+    assert r.status_code == 200, r.text
+    s = _saved()["settlement"]["summary"]
+    print("SURVIVE", {k: s.get(k) for k in ("origNetProfit", "profitDiff", "origTotalCost", "quotedTotal", "itemActualTotal")})
+
+
+def test_b_forged_item_total_within_tol(W):
+    c, h = W
+    _set_tot()
+    t = _get(c, h)["totals"]
+    p = page_payload(c, h, itemActualTotal=t["itemActualTotal"] + 2)      # 2 品項 ⇒ 容差 2
+    r = _put(c, h, p)
+    print("ITEMTOL", r.status_code, _saved()["settlement"]["summary"].get("itemActualTotal"), t["itemActualTotal"])
+
+
+def test_c_history_rev_collision_after_cap(W):
+    c, h = W
+    d = _saved()
+    d["editHistory"] = [{"rev": i + 1, "at": "2026-01-01T00:00:%02d" % (i % 60), "by": "u%d" % i, "byDisplay": "u", "type": "settlement_draft"} for i in range(70)]
+    cn = db.get_db(); cn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d), NO)); cn.commit(); cn.close()
+    for _ in range(3):
+        assert _put(c, h, {"status": "draft", "items": [], "offsets": []}).status_code == 200
+    revs = [e["rev"] for e in _saved()["editHistory"]]
+    dup = sorted({r for r in revs if revs.count(r) > 1})
+    print("REVS len=%d dup=%s tail=%s" % (len(revs), dup, revs[-5:]))
+
+
+def test_d_create_quotation_forges_finalized_settlement(W):
+    c, h = W
+    body = {"data": {"customerName": "偽", "projectName": "偽", "items": [], "tot": {"pretax": 1000, "total": 1050},
+                     "dealTag": "已結案", "settlement": {"status": "finalized", "summary": {"netProfit": 99999999, "netMarginPct": 99.9, "totalActualCost": 1}}},
+            "status": "草稿"}
+    r = c.post("/api/quotations", json=body, headers=h)
+    print("CREATE", r.status_code, r.text[:200])
+    if r.status_code in (200, 201):
+        no = r.json().get("quote_no")
+        cn = db.get_db()
+        row = cn.execute("SELECT deal_tag, settle_status, data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()
+        cn.close()
+        print("CREATED", no, row["deal_tag"], row["settle_status"], json.loads(row["data_json"]).get("settlement"))
+
+
+def test_e_negative_grid_conservation(W):
+    c, h = W
+    d1 = _dispatch(10000, 2000)
+    e1, e2 = _extra("退款", -300), _extra("買", 700)
+    for adopt, p1, p2, p3 in itertools.product((True, False), (None, "a", "b"), (None, "a", "b"), (None, "a", "b")):
+        offs = [o for o in (_off(d1, p1) if p1 else None, {"kind": "extra", "ref": str(e1), "itemId": p2} if p2 else None, {"kind": "extra", "ref": str(e2), "itemId": p3} if p3 else None) if o]
+        saved = [{"id": "a", "adoptSystem": adopt}, {"id": "b", "adoptSystem": adopt}]
+        for mode in (SA.UNADOPTED_IGNORE, SA.UNADOPTED_ADD):
+            _put_settlement({"items": saved, "offsets": offs})
+            cn = db.get_db()
+            try:
+                d = SA.compute(cn, NO, offsets=offs, unadopted=mode)
+            finally:
+                cn.close()
+            t = d["totals"]
+            expect = 0.0
+            for it in d["items"]:
+                expect += it["actual"]["amount"]
+                if mode == SA.UNADOPTED_ADD and it["hasPurchase"] and not it["adopt"]:
+                    expect += it["purchased"] - it["dispatch"]["amount"]
+            expect += sum(x["amount"] for x in d["unassigned"]["materials"]) + sum(x["amount"] for x in d["unassigned"]["dispatches"]) + sum(x["amount"] for x in d["unassigned"]["extras"])
+            expect += t["remitFeeTotal"] + t["customExpenseTotal"]
+            expect += sum(it["dispatch"]["amount"] for it in d["items"] if not (it["hasPurchase"] and it["adopt"]))
+            assert abs(t["totalActualCost"] - expect) < 0.5, (adopt, p1, p2, p3, mode, t["totalActualCost"], expect)
+
+
+def test_f_lock_semantics(W):
+    c, h = W
+    up = c.get(URL, headers=h).json()["updatedAt"]
+    assert _put(c, h, {"status": "draft", "items": [], "offsets": []}, expectedUpdatedAt=up).status_code == 200
+    assert _put(c, h, {"status": "draft", "items": [], "offsets": []}, expectedUpdatedAt=up).status_code == 409      # 同一個舊版本再存 ⇒ 409
+    assert _put(c, h, {"status": "draft", "items": [], "offsets": []}, expectedUpdatedAt="").status_code == 409       # 空字串也算「帶了」
+    assert _put(c, h, {"status": "draft", "items": [], "offsets": []}).status_code == 200                            # 不帶 ⇒ 舊行為
+    # 別的寫入（如叫料／階段）也會 bump updated_at ⇒ 精算存檔 409（即使精算沒被動）
+    up2 = c.get(URL, headers=h).json()["updatedAt"]
+    cn = db.get_db(); cn.execute("UPDATE quotations SET updated_at=? WHERE quote_no=?", ("2099-01-01T00:00:00", NO)); cn.commit(); cn.close()
+    assert _put(c, h, {"status": "draft", "items": [], "offsets": []}, expectedUpdatedAt=up2).status_code == 409
