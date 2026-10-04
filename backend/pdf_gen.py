@@ -51,8 +51,15 @@ def _orig_reserve_note(summary, money=None):
     if not n:
         return ""
     fmt = money or (lambda v: "{:,}".format(int(round(float(v)))))
-    # 稽核 T39 S-2：不宣稱「差額裡有 X」——若同額的運費等單據已入帳，差額並不含這 X。只陳述事實：原始預估已扣預留；實際以單據為準。
-    return '<br><span style="font-size:11px">原始預估已扣報價預留間接成本 NT$ %s；實際成本只計單據（已發生者已含於實際成本）</span>' % fmt(n)
+    # 稽核 T39：預留 R 只有「沒被實際成本抵用」的部分才是淨利差額的來源。C＝實際多花的直接成本（原始直接毛利 − 實際毛利）；
+    # Y＝clamp(R − max(C,0), 0, R)＝預留裡未被實際成本抵用的部分；Z＝淨利差額 − Y（其他：公益金連動、成本差異等）。與營運報表（analytics）同一規則；數字不動，只做說明。
+    sm = summary or {}
+    c = float(sm.get("origDirectProfit") or 0) - float(sm.get("grossProfit") or 0)
+    y = min(max(float(n) - max(c, 0.0), 0.0), float(n))
+    z = (float(sm.get("netProfit") or 0) - float(sm.get("origNetProfit") or 0)) - y
+    zs = ("+" if z > 0 else ("−" if z < 0 else "")) + fmt(abs(z))
+    return ('<br><span style="font-size:11px">原始預估已扣報價預留間接成本 NT$ %s（實際只計單據）；其中未被實際成本抵用 NT$ %s；其他 %s</span>'
+            % (fmt(n), fmt(y), zs))
 
 
 def _cost_basis_note(kind, summary):

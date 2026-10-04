@@ -99,10 +99,16 @@ def test_settlement_rows_labels_are_untouched():
 
 # ── ③ 稽核 T39 ───────────────────────────────────────────────────────────────────
 
-def test_reserve_note_does_not_claim_the_difference_contains_the_reserve():
+@pytest.mark.parametrize("gross,net,y,z", [
+    (37000, 26630, "5,000", "0"),          # 沒有單據：預留全部沒被抵用，差額全來自預留
+    (32000, 21680, "0", "+50"),            # 同額運費單據已入帳：預留被抵用，剩公益金連動
+    (35000, 24650, "3,000", "+20"),        # 只入帳 2,000：未抵用 3,000
+])
+def test_reserve_note_splits_the_net_difference_into_uncovered_reserve_and_the_rest(gross, net, y, z):
     import pdf_gen
-    note = pdf_gen._orig_reserve_note({"origIndirectReserve": 5000})
-    assert "5,000" in note and "其中" not in note and "單據" in note
+    sm = {"origIndirectReserve": 5000, "origDirectProfit": 37000, "grossProfit": gross, "origNetProfit": 21630, "netProfit": net}
+    note = pdf_gen._orig_reserve_note(sm)
+    assert "NT$ 5,000（實際只計單據）" in note and ("未被實際成本抵用 NT$ %s" % y) in note and note.rstrip().endswith("其他 %s</span>" % z), note
 
 
 def test_original_side_floors_a_stored_negative_charity_and_keeps_net_profit(W):
