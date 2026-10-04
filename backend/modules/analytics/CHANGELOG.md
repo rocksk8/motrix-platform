@@ -1,5 +1,10 @@
 # 營運分析 更新紀錄
 
+## (next) — 2026-10-04（wip/t38-analytics-f9）：精算實際利潤不再在淨利 0 時退回毛利；儀表板只算完結並比淨利率
+- `reports._settle_actual_profit_margin()`：有 `netProfit` 鍵就用淨利（含 0／負數），沒有鍵的舊精算才退回毛利；`_collect()` 的 `actualMarginPct`／`grossProfit` 改走它，下游（業務績效、年度達成、毛利表、Excel／HTML）同步。金額 `int()` 截斷改 `round()`。
+- 儀表板 `marginComparison`／`settledSummary`：只計 `settlement.status=='finalized'`（草稿 summary 為前端暫存值），並比淨利率（`netMarginPct`／`netProfit`）對報價單 `net_margin_pct`；舊完結案（無淨利鍵）仍用毛利，值不改寫。
+- 測試 10 題（`test_net_not_gross_fallback_2026_10_04.py`）。
+
 ## 1.0.29 — 2026-10-03（wip/t35c-settle-assigned）：精算快照「過期」比對口徑對口徑（精算稅基 B 的配套）
 - `_live_dispatch_totals_by_quote(conn, pretax=False)`：新增 `pretax` 參數（預設不變＝含稅 grandTotal，既有三處呼叫與測試不動）；`pretax=True` ＝未稅承攬費＋外包人員。
 - `_collect()` 的 `staleSettlementCount`：完結 summary 帶 `dispatchBasis='pretax'`（精算新口徑）⇒ 跟未稅現算值比；沒有（舊完結案、含稅口徑）⇒ 跟含稅現算值比。舊案不會因口徑切換全部誤報過期；口徑錯配與真正的完結後異動仍會被抓到。

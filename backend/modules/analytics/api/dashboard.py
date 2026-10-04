@@ -37,7 +37,8 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
                    COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') as deal_tag,
                    json_extract(data_json,'$.caseRecord')           as case_record_json,
                    json_extract(data_json,'$.approval')             as approval_json,
-                   json_extract(data_json,'$.settlement.summary')   as settlement_summary_json
+                   json_extract(data_json,'$.settlement.summary')   as settlement_summary_json,
+                   COALESCE(NULLIF(settle_status,''), json_extract(data_json,'$.settlement.status'), '') as settle_status
             FROM quotations ORDER BY id DESC
         """).fetchall()
         cust_count = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
@@ -151,9 +152,17 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
             continue
         if not r["settlement_summary_json"]:
             continue
+        # 只算已完結（finalized）：draft 的 summary 是前端送來的暫存值，不是定案數字
+        if r["settle_status"] != "finalized":
+            continue
         try:
             s          = json.loads(r["settlement_summary_json"])
-            actual_pct = s.get("grossMarginPct")
+            # 與報價單 net_margin_pct 同口徑＝淨利。有 netProfit 鍵就用淨利（含 0／負數）；
+            # 沒有鍵的舊精算才退回毛利（同 reports._settle_actual_profit_margin）。
+            if s.get("netProfit") is not None:
+                actual_pct, actual_profit = s.get("netMarginPct"), s.get("netProfit")
+            else:
+                actual_pct, actual_profit = s.get("grossMarginPct"), s.get("grossProfit")
             if actual_pct is None:
                 continue
             cust  = r["customer_name"] or ""
@@ -167,7 +176,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
                 "estimatedMarginPct": round(float(r["net_margin_pct"] or 0), 1),
                 "actualMarginPct":    round(float(actual_pct), 1),
                 "quotedPretax":       s.get("quotedPretax") or 0,
-                "grossProfit":        s.get("grossProfit")  or 0,
+                "grossProfit":        actual_profit or 0,
                 "profitDiff":         s.get("profitDiff")   or 0,
             })
         except Exception:

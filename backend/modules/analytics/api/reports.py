@@ -268,6 +268,19 @@ def _case_dept(cr: dict, row, name_index: dict, user_by_id: dict):
     return (info["deptId"], info["deptName"]) if info else (None, "未分類")
 
 
+def _settle_actual_profit_margin(settle: dict):
+    """`(實際利潤, 實際利潤率%)`。有 `netProfit` 鍵 ⇒ 用淨利（含 0 與負數）；沒有 ⇒ 舊精算，退回毛利。
+
+    ☠️ 不可寫 `settle.get("netProfit") or settle.get("grossProfit")`：淨利剛好 0 會被當成舊格式而顯示毛利。
+    金額用 round() 不用 int()（截斷會讓 1234.6 變 1234）。
+    """
+    if settle.get("netProfit") is not None:
+        profit, pct = settle.get("netProfit"), settle.get("netMarginPct")
+    else:
+        profit, pct = settle.get("grossProfit"), settle.get("grossMarginPct")
+    return round(float(profit or 0)), float(pct or 0)
+
+
 def _collect(period_start: str, period_end: str, department_id: Optional[int] = None) -> dict:
     conn = get_db()
     rows = conn.execute("""
@@ -401,10 +414,10 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             "receivedAmount": recv_amt,
             "collectionRate": round(recv_amt / total * 100, 1) if total > 0 else 0,
             "settleStatus":   row["settle_status"] or "",
-            # Use netMarginPct / netProfit so the comparison with quotation net_margin_pct is apples-to-apples.
-            # Fallback to gross fields for legacy settlements saved before netProfit was recorded.
-            "actualMarginPct": float(settle.get("netMarginPct") or settle.get("grossMarginPct") or 0) if settle else None,
-            "grossProfit":     int(settle.get("netProfit") or settle.get("grossProfit") or 0) if settle else None,
+            # 與報價單 net_margin_pct 同口徑（淨利）。只有「沒有 netProfit 這個鍵」的舊精算才退回毛利；
+            # 淨利剛好 0 是真的 0，不是舊格式（見 _settle_actual_profit_margin；payroll/bonus.py base_amount_for 同型）。
+            "actualMarginPct": _settle_actual_profit_margin(settle)[1] if settle else None,
+            "grossProfit":     _settle_actual_profit_margin(settle)[0] if settle else None,
             "settleSummary":   settle if settle else None,
             "settleDate":      row["settle_date"] or "",
             "settleBy":        row["settle_by"]   or "",
