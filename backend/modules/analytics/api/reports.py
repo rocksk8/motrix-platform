@@ -280,6 +280,26 @@ def _orig_indirect_reserve(summary: dict) -> int:
     return int((summary or {}).get("origIndirectReserve") or 0)
 
 
+def _reserve_uncovered(summary: dict) -> int:
+    """報價預留間接成本裡「沒有被實際成本抵用」的部分＝真正墊高「真實淨利 − 原始預估淨利」的那一塊。
+
+    原始淨利已扣預留 R；實際側只有單據。實際直接成本比原始多出 C ＝ 原始直接毛利 − 真實毛利（運費單據、品項超支…都在裡面）。
+    C 先抵用 R：未被抵用的預留 Y ＝ clamp(R − max(C, 0), 0, R)。
+      - 沒有單據：C = 0 ⇒ Y = R（差額多出 R，是預留沒發生，不是省下）；
+      - 單據剛好等於預留：C = R ⇒ Y = 0（差額只剩公益金等小項）；
+      - 單據只有一部分：Y = R − C。
+    沒有 `origDirectProfit` 或 `grossProfit`（算不出 C）⇒ Y = R（與 T39 初版相同）。不做類別對應，C 含所有多出的直接成本。
+    """
+    reserve = _orig_indirect_reserve(summary)
+    if reserve <= 0:
+        return 0
+    od, gp = (summary or {}).get("origDirectProfit"), (summary or {}).get("grossProfit")
+    if od is None or gp is None:
+        return reserve
+    covered = max(float(od) - float(gp), 0.0)
+    return int(round(min(max(reserve - covered, 0.0), float(reserve))))
+
+
 def _dispatch_split(summary: dict):
     """`(未併入品項的承攬金額, 已併入品項實際成本的承攬金額)`。
 
@@ -1501,7 +1521,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         # 精算資訊
         "精算狀態","精算日期","完結人",
         # 報價預留間接成本（T39 新增；附在最右，既有欄號一律不動——有人／工具依賴這份匯出）
-        "報價預留間接成本","其中：報價預留間接成本","其中：其他",
+        "報價預留間接成本","其中：預留未被實際成本抵用","其中：其他",
     ]
     cols6 = [13,18,18,10,9,13, 13,11,11,13, 13,11,13,11,11,13, 9,13, 9,11,10, 15,15,13]
     for i, (h, w) in enumerate(zip(hdrs6, cols6), 1):
@@ -1551,7 +1571,8 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         orig_margin   = float(s.get("origMarginPct", 0) or 0)
         orig_net_pct  = float(s.get("origNetMarginPct", 0) or 0)
         orig_net_prof = int(s.get("origNetProfit", 0) or 0)
-        reserve       = _orig_indirect_reserve(s)      # 報價預留間接成本：原始側資訊欄；差額拆成「報價預留間接成本」＋「其他」
+        reserve       = _orig_indirect_reserve(s)      # 報價預留間接成本：原始側資訊欄
+        uncovered     = _reserve_uncovered(s)          # 其中沒被實際成本抵用的部分；差額拆成「預留未被抵用」＋「其他」
         # 32-S5：未採用的採購單連結金額＝該品項的實際成本（只是還沒按「採用」）⇒ Excel 固定欄位併進「品項實際成本」，分項加總才等於實際總成本
         item_cost     = int(s.get("itemActualTotal", 0) or 0) + int(s.get("itemPoUnadopted", 0) or 0)
         extra_cost    = int(s.get("extraTotal", 0) or 0) + _dispatch_split(s)[0]     # 未併入品項的承攬併進「額外支出」欄，分項才加得回總成本
@@ -1567,7 +1588,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                   f"{gross_pct:.1f}%", f"{net_pct:.1f}%", net_prof,
                   f"{'+' if diff >= 0 else ''}{diff:.1f}", gp_diff,
                   mc["settleStatus"] or "", mc.get("settleDate",""), mc.get("settleBy",""),
-                  reserve, reserve, gp_diff - reserve],
+                  reserve, uncovered, gp_diff - uncovered],
                  font=mk(size=9), fill=fill(bg), border=BD,
                  aligns=[al("left"),al("left"),al("left"),al("left"),al("center"),
                          al("right"),al("right"),al("right"),al("right"),al("right"),
@@ -1590,6 +1611,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         tot_orig_cost = sum(int((mc.get("settleSummary") or {}).get("origTotalCost",0) or 0) for mc in data["marginCases"])
         tot_orig_np   = sum(int((mc.get("settleSummary") or {}).get("origNetProfit",0) or 0) for mc in data["marginCases"])
         tot_reserve   = sum(_orig_indirect_reserve(mc.get("settleSummary") or {}) for mc in data["marginCases"])
+        tot_uncovered = sum(_reserve_uncovered(mc.get("settleSummary") or {}) for mc in data["marginCases"])
         tot_item      = sum(int((mc.get("settleSummary") or {}).get("itemActualTotal",0) or 0) + int((mc.get("settleSummary") or {}).get("itemPoUnadopted",0) or 0) for mc in data["marginCases"])
         tot_extra     = sum(int((mc.get("settleSummary") or {}).get("extraTotal",0) or 0) + _dispatch_split(mc.get("settleSummary") or {})[0] for mc in data["marginCases"])
         tot_total     = sum(int((mc.get("settleSummary") or {}).get("totalActualCost",0) or 0) for mc in data["marginCases"])
@@ -1602,7 +1624,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                   tot_item, tot_extra, tot_total,"","", tot_net_prof,
                   "", tot_act - tot_est,
                   "","","",
-                  tot_reserve, tot_reserve, tot_act - tot_est - tot_reserve],
+                  tot_reserve, tot_uncovered, tot_act - tot_est - tot_uncovered],
                  font=mk(bold=True, size=9, color=C_WHITE),
                  fill=fill("111827"), border=BD,
                  aligns=[al("center")] + [al("right")] * 23,
@@ -2084,8 +2106,9 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         settle_by   = mc.get("settleBy","")   or ""
         def _fn(v): return f"NT$ {int(v or 0):,}"
         reserve = _orig_indirect_reserve(ss)
+        uncovered = _reserve_uncovered(ss)
         # 原始淨利已扣報價預留的間接成本、實際側只有單據 ⇒ 差額裡有一塊是「預留未發生」，不是真的省下
-        reserve_split = (f"　其中報價預留間接成本 {_fn(reserve)}（原始預估已扣、實際只計單據）；其他 {_fn(prof_diff - reserve)}") if reserve > 0 else ""
+        reserve_split = (f"　原始預估已扣報價預留間接成本 {_fn(reserve)}（實際只計單據）；其中未被實際成本抵用 {_fn(uncovered)}；其他 {_fn(prof_diff - uncovered)}") if reserve > 0 else ""
         mg_detail_blocks += f"""
 <div style="page-break-inside:avoid;margin-bottom:20px;border:1px solid #E5E7EB;border-radius:6px;overflow:hidden">
   <div style="background:#F3F4F6;padding:7px 12px;display:flex;justify-content:space-between;align-items:center">

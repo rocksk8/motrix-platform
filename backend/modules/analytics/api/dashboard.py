@@ -30,15 +30,25 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
     can_finance   = role in ("superadmin", "admin") or "finance" in mods
     can_quotation = role in ("superadmin", "admin", "sales") or "quotation" in mods
     with db_conn() as conn:
+        # T40（稽核 F-06）：核准流程／精算 JSON 只對「回應會用到的列」取出，其餘列取 NULL（輸出不變）：
+        #   approval：只有 status 為 待審核／簽核中 的列會被讀（waitingForMe、pendingList）；
+        #   settlement：只有成案／結案的列會被讀（marginComparison）。
+        # caseRecord 每列都可能被讀（保固、設備統計不分狀態）⇒ 不預濾；改在下面每列只解析一次。
         rows = conn.execute("""
             SELECT quote_no, status, customer_name, project_name, total, pretax, quote_date, sales_person,
                    sales_person_id,
                    net_margin_pct, direct_margin_pct,
-                   COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') as deal_tag,
+                   deal_tag,
                    json_extract(data_json,'$.caseRecord')           as case_record_json,
-                   json_extract(data_json,'$.approval')             as approval_json,
-                   json_extract(data_json,'$.settlement')           as settlement_json
-            FROM quotations ORDER BY id DESC
+                   CASE WHEN status IN ('待審核','簽核中')
+                        THEN json_extract(data_json,'$.approval') END as approval_json,
+                   CASE WHEN deal_tag IN ('已成案','已結案')
+                        THEN json_extract(data_json,'$.settlement') END as settlement_json
+            FROM (SELECT id, quote_no, status, customer_name, project_name, total, pretax, quote_date, sales_person,
+                         sales_person_id, net_margin_pct, direct_margin_pct, data_json,
+                         COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') as deal_tag
+                  FROM quotations)
+            ORDER BY id DESC
         """).fetchall()
         cust_count = conn.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
         if department_id:
@@ -46,9 +56,30 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
             user_by_id, name_index = R._load_user_index(conn)
             rows = [r for r in rows
                     if R._case_dept(R._row_cr({"cr_json": r["case_record_json"]}), r, name_index, user_by_id)[0] == department_id]
+        # T40 使用者裁示（首頁財務卡片收緊）：「首頁改成只給財務檢視權限者」——財務卡片（收款項目、預估 vs 實際、
+        # 前五高毛利、結算摘要、應收摘要）＝ 原條件（superadmin／admin 或持有「財務」模組）且 can_see_financial。
+        # 只有「財務」模組、沒有財務金額可視者：卡片沒有資料（回空值，不報錯）。仍是全公司口徑（財務人員跨案件作業），
+        # 不加逐案可見；待審核、保固與純計數照舊。
+        fin_ok = can_finance and can_see_financial(u)
 
     today = date.today()
     total_count   = len(rows)
+
+    # 每列 caseRecord 在這個請求內只解析一次（付款、保固、設備、應收四段原本各解析一次）；
+    # 解析失敗的例外也存起來，各段在自己的 try 內照舊吞掉（行為與逐段解析相同）。
+    _cr_memo: dict = {}
+
+    def _cr_of(r):
+        hit = _cr_memo.get(id(r), _cr_memo)
+        if hit is _cr_memo:
+            try:
+                hit = json.loads(r["case_record_json"])
+            except Exception as e:
+                hit = e
+            _cr_memo[id(r)] = hit
+        if isinstance(hit, Exception):
+            raise hit
+        return hit
     pending_count = sum(1 for r in rows if r["status"] == "待審核")
     sent_count    = sum(1 for r in rows if r["status"] == "已送出")
     active_count  = sum(1 for r in rows if r["deal_tag"] == "已成案")
@@ -85,11 +116,11 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
         })
 
     payment_items = []
-    for r in rows:
+    for r in (rows if fin_ok else ()):
         if r["deal_tag"] not in ("已成案", "已結案") or not r["case_record_json"]:
             continue
         try:
-            cr    = json.loads(r["case_record_json"])
+            cr    = _cr_of(r)
             items = (cr.get("payment") or {}).get("items") or []
             total = r["total"] or 0
             amounts = payment_item_amounts(total, items, r["pretax"])
@@ -112,7 +143,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
         if not r["case_record_json"]:
             continue
         try:
-            cr = json.loads(r["case_record_json"])
+            cr = _cr_of(r)
             for dev in (cr.get("devices") or []):
                 exp, days_left = _warranty_expiry(dev.get("warrantyStart", ""), dev.get("warrantyMonths"))
                 if exp is None:
@@ -131,7 +162,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
     warranty_warnings.sort(key=lambda x: x["daysLeft"])
 
     margin_rows = []
-    for r in rows:
+    for r in (rows if fin_ok else ()):
         if r["status"] not in ("已送出",) and r["deal_tag"] not in ("已成案", "已結案"):
             continue
         mg = r["net_margin_pct"]
@@ -146,7 +177,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
 
     # ── Settlement margin comparison ──────────────────────────────────────────
     margin_comparison = []
-    for r in rows:
+    for r in (rows if fin_ok else ()):
         if r["deal_tag"] not in ("已成案", "已結案"):
             continue
         if not r["settlement_json"]:
@@ -199,7 +230,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
         if not r["case_record_json"]:
             continue
         try:
-            cr = json.loads(r["case_record_json"])
+            cr = _cr_of(r)
             for dev in (cr.get("devices") or []):
                 dev_total += 1
                 exp, dl = _warranty_expiry(dev.get("warrantyStart", ""), dev.get("warrantyMonths"))
@@ -211,11 +242,11 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
             pass
 
     recv_total = recv_received = recv_fee = recv_actual = 0
-    for r in rows:
+    for r in (rows if fin_ok else ()):
         if r["deal_tag"] not in ("已成案", "已結案") or not r["case_record_json"]:
             continue
         try:
-            cr    = json.loads(r["case_record_json"])
+            cr    = _cr_of(r)
             items = (cr.get("payment") or {}).get("items") or []
             total = r["total"] or 0
             if not items:
@@ -247,6 +278,8 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
 
     return {
         "totalQuotes":       total_count,
+        # 財務卡片是否對這個帳號開放（＝ fin_ok）。前端據此隱藏應收款項面板與收款百分比（舊 API 沒有這個鍵 ⇒ 前端照舊顯示）
+        "financeVisible":    fin_ok,
         "pendingQuotes":     pending_count if can_quotation else 0,
         "waitingForMe":      waiting_for_me_count,
         "sentQuotes":        sent_count,
@@ -255,11 +288,11 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
         "customerCount":     cust_count,
         "projectSummary":    project_summary,
         "pendingList":       pending_list       if can_quotation else [],
-        "paymentItems":      payment_items[:10] if can_finance   else [],
+        "paymentItems":      payment_items[:10] if fin_ok        else [],
         "warrantyWarnings":  warranty_warnings[:5],
-        "marginTop5":        margin_top5                    if can_finance else [],
-        "marginComparison":  margin_comparison[:8]          if can_finance else [],
-        "settledSummary":    settled_summary                if can_finance else {},
+        "marginTop5":        margin_top5                    if fin_ok else [],
+        "marginComparison":  margin_comparison[:8]          if fin_ok else [],
+        "settledSummary":    settled_summary                if fin_ok else {},
         "deviceSummary": {
             "total":   dev_total,
             "expired": dev_expired,
@@ -268,11 +301,11 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
             "none":    dev_none,
         },
         "receivableSummary": {
-            "total":       recv_total                        if can_finance else 0,
-            "received":    recv_received                     if can_finance else 0,
-            "unreceived":  (recv_total - recv_received)      if can_finance else 0,
-            "feeTotal":    recv_fee                          if can_finance else 0,
-            "netReceived": recv_actual                       if can_finance else 0,
+            "total":       recv_total                        if fin_ok else 0,
+            "received":    recv_received                     if fin_ok else 0,
+            "unreceived":  (recv_total - recv_received)      if fin_ok else 0,
+            "feeTotal":    recv_fee                          if fin_ok else 0,
+            "netReceived": recv_actual                       if fin_ok else 0,
         },
     }
 
