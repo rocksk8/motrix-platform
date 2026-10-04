@@ -62,6 +62,19 @@ def _orig_reserve_note(summary, money=None):
             % (fmt(n), fmt(y), zs))
 
 
+def _item_actual_text(settlement, item, money):
+    """40（稽核 T40 S-1）：結案報表品項「實際成本」欄。與精算後端同一條規則——存檔頂層 `schemaVersion >= 2`：數字（含 0）＝已填、印出；
+    null／沒有／空字串＝「未填寫」；沒有標記的舊存檔：0／空＝「未填寫」（不變）。"""
+    v = (item or {}).get("actualTotalCost")
+    sv = (settlement or {}).get("schemaVersion")
+    v2 = isinstance(sv, int) and not isinstance(sv, bool) and sv >= 2
+    if v2:
+        filled = isinstance(v, (int, float)) and not isinstance(v, bool)
+    else:
+        filled = bool(v)
+    return money(v) if filled else "未填寫"
+
+
 def _cost_basis_note(kind, summary):
     """40（進項稅階段 0）：成本分項旁的稅基說明行——只加文字、不改任何金額或標籤。kind＝item／extra／dispatch_legacy。"""
     texts = {
@@ -2652,7 +2665,7 @@ def _build_case_closing_html(data: dict) -> str:
     item_rows_html = "".join(
         f'<tr><td>{esc(it.get("origDescription") or "（無品名）")}</td>'
         f'<td>{esc(it.get("origBrand"))}</td>'
-        f'<td class="r">{money(it.get("actualTotalCost")) if it.get("actualTotalCost") else "未填寫"}</td></tr>'
+        f'<td class="r">{_item_actual_text(s, it, money)}</td></tr>'
         for it in (s.get("items") or [])
     )
     _no_item_row = '<tr><td colspan="3" class="c" style="color:#9CA3AF">無成本品項資料</td></tr>'

@@ -124,3 +124,21 @@ def test_original_side_floors_a_stored_negative_charity_and_keeps_net_profit(W):
         cn.close()
     assert o["origCharity"] == 0 and o["origIndirectReserve"] == 4960
     assert o["origNetProfit"] == -18960 and o["origDirectProfit"] - o["origAdminCost"] - o["origCharity"] - o["origIndirectReserve"] == -18960
+
+
+# ── 稽核 T40：結案報表品項實際成本 0 的呈現（與 schemaVersion 規則一致）────────────────────
+
+@pytest.mark.parametrize("settlement,item,expected", [
+    ({}, {"actualTotalCost": 0}, "未填寫"),                                          # 舊存檔：0＝沒填（不變）
+    ({}, {"actualTotalCost": 1234}, "1,234"),
+    ({"schemaVersion": 2}, {"actualTotalCost": 0}, "0"),                              # v2：數字（含 0）＝已填
+    ({"schemaVersion": 2}, {"actualTotalCost": 0.0}, "0"),
+    ({"schemaVersion": 3}, {"actualTotalCost": 0}, "0"),                              # 伺服器規則是 >= 2
+    ({"schemaVersion": 2}, {"actualTotalCost": None}, "未填寫"),
+    ({"schemaVersion": 2}, {}, "未填寫"),
+    ({"schemaVersion": 2}, {"actualTotalCost": ""}, "未填寫"),
+    ({"schemaVersion": 2}, {"actualTotalCost": 500}, "500"),
+])
+def test_closing_pdf_item_actual_cost_text_follows_the_schema_rule(settlement, item, expected):
+    import pdf_gen
+    assert pdf_gen._item_actual_text(settlement, item, lambda n: f"{n:,.0f}") == expected
