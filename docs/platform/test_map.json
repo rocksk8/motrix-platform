@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1110,
+  "tests": 1112,
   "unmapped": 13,
   "kinds": {
-   "api": 592,
-   "e2e": 276,
+   "api": 593,
+   "e2e": 277,
    "audit": 136,
    "unit": 106
   },
@@ -5761,6 +5761,34 @@
    },
    "module": "case"
   },
+  "backend/modules/case/tests/test_e2e_settlement_dispatch_offset_2026_10_04.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
+    "mod:case/tests/test_e2e_settlement_actuals_2026_10_03",
+    "mod:case/tests/test_settlement_tax_basis_2026_10_03",
+    "page:pages/settlement.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/tests/test_e2e_settlement_actuals_2026_10_03.py",
+     "backend/modules/case/tests/test_settlement_tax_basis_2026_10_03.py",
+     "backend/tests/_requires.py",
+     "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
+    ],
+    "page": [
+     "frontend/pages/settlement.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
   "backend/modules/case/tests/test_e2e_settlement_flow_b2_2026_10_03.py": {
    "kind": "e2e",
    "units": [
@@ -7350,6 +7378,44 @@
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_settlement_dispatch_offset_2026_10_04.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/api/quotations",
+    "mod:case/api/settlement_actuals",
+    "mod:case/settlement_actuals",
+    "mod:case/tests/test_material_link_2026_10_02",
+    "mod:case/tests/test_material_link_booking_2026_10_02",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02",
+    "mod:case/tests/test_settlement_actuals_2026_10_03",
+    "mod:case/tests/test_settlement_finalize_integrity_2026_10_03",
+    "mod:case/tests/test_settlement_tax_basis_2026_10_03"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/settlement_actuals.py",
+     "backend/modules/case/tests/test_material_link_2026_10_02.py",
+     "backend/modules/case/tests/test_material_link_booking_2026_10_02.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py",
+     "backend/modules/case/tests/test_settlement_actuals_2026_10_03.py",
+     "backend/modules/case/tests/test_settlement_finalize_integrity_2026_10_03.py",
+     "backend/modules/case/tests/test_settlement_tax_basis_2026_10_03.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/api/settlement_actuals.py"
     ],
     "module_dir": [
      "backend/modules/case/"
