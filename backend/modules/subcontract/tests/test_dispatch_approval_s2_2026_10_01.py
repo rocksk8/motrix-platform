@@ -22,7 +22,7 @@ def _login(client, u, p):
 
 @pytest.fixture
 def W(client, make_user):
-    h = {n: _login(client, *make_user(username=n, role=r)) for n, r in (("da_sa", "superadmin"), ("da_a", "admin"), ("da_b", "admin"))}
+    h = {n: _login(client, *make_user(username=n, role=r)) for n, r in (("da_sa", "superadmin"), ("da_a", "admin"), ("da_b", "admin"), ("da_f", "finance"))}
     c = db.get_db()
     c.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at) VALUES ('MQ-DA-1','已送出','客','案','{}',?,?)", (NOW, NOW))
     c.commit()
@@ -111,7 +111,10 @@ def test_substantive_edit_requires_resubmit_but_notes_do_not(W, approval="已核
     did = _mk(status="sent", approval=approval)
     r = client.put("/api/contractor-dispatches/%d" % did, headers=h["da_a"], json=_body(status="sent", notes="只改備註", invoice_no="AB12345678"))
     assert r.status_code == 200 and r.json()["needsResubmit"] is False and _row(did)["approval_status"] == approval          # 非實質：不動
+    # 第42班（Q5）：改金額＝財務角色；admin 改金額 ⇒ 403（反向探針），財務角色 ⇒ 200 且需重送審
     r = client.put("/api/contractor-dispatches/%d" % did, headers=h["da_a"], json=_body(status="sent", items_json=[{"description": "x", "amount": 9999}]))
+    assert r.status_code == 403
+    r = client.put("/api/contractor-dispatches/%d" % did, headers=h["da_f"], json=_body(status="sent", items_json=[{"description": "x", "amount": 9999}]))
     assert r.status_code == 200 and r.json()["needsResubmit"] is True
     row = _row(did)
     assert row["approval_status"] == "草稿" and row["approved_hash"] == "" and re.match(r"^DP-\d{8}-\d{4}$", row["doc_code"])
@@ -122,7 +125,8 @@ def test_substantive_edit_requires_resubmit_but_notes_do_not(W, approval="已核
 def test_tax_rate_change_is_substantive(W):
     client, h = W
     did = _mk(status="draft", approval="已核准")
-    r = client.put("/api/contractor-dispatches/%d" % did, headers=h["da_a"], json=_body(tax_rate=0.0))
+    assert client.put("/api/contractor-dispatches/%d" % did, headers=h["da_a"], json=_body(tax_rate=0.0)).status_code == 403     # 第42班（Q5）：稅率＝財務角色
+    r = client.put("/api/contractor-dispatches/%d" % did, headers=h["da_f"], json=_body(tax_rate=0.0))
     assert r.json()["needsResubmit"] is True
 
 

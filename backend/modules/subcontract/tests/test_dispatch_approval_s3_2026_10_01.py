@@ -190,7 +190,7 @@ def test_substantive_edit_after_approval_resets_then_resubmit_repins_hash(S):
     _post(c, h, "da_a", did, "submit")
     _post(c, h, "da_u1", did, "approve")
     h1 = _row(did)["approved_hash"]
-    r = c.put("/api/contractor-dispatches/%s" % did, headers=h["da_a"],
+    r = c.put("/api/contractor-dispatches/%s" % did, headers=h["da_f"],          # 第42班（Q5）：改金額＝財務角色
               json=_body(items_json=[{"description": "y", "amount": 5}]))
     assert r.status_code == 200 and r.json().get("needsResubmit") is True
     assert _row(did)["approval_status"] == F.DRAFT and _row(did)["approved_hash"] == ""

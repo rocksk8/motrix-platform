@@ -118,7 +118,7 @@ def _make_shipping_note(note_no, quote_no, part_no=None, serial_no=None, is_sign
 # ── contractor-dispatches optimistic lock (#6 medium risk) ──────────────────
 
 def test_contractor_dispatch_update_conflict_returns_409(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="finance")          # 第42班（Q5）：改派發金額＝財務角色
     token = _login(client, username, password)
     _make_quotation("MQ-TEST-011")
 
