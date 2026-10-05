@@ -43,7 +43,7 @@ def _dispatch(vid, total=1000):
 
 @pytest.mark.e2e
 def test_cashier_payable_table_shows_kind_and_period(live_server, make_user, e2e_browser):
-    adm = make_user(username="cik_adm", role="admin")
+    adm = make_user(username="cik_adm", role="finance")      # 第42班：建立匯款申請＝財務角色（admin 直通拿掉）
     cash = make_user(username="cik_cash", role="engineer", modules=["cashier"])
     _db("INSERT INTO vendor_contractors (name, tax_id, created_at, updated_at) VALUES ('CIK廠商','12345678','2026-10-01','2026-10-01')")
     vid = _db("SELECT id FROM vendor_contractors WHERE name='CIK廠商'")[0]["id"]

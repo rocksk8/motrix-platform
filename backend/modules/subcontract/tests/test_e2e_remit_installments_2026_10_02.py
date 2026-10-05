@@ -68,7 +68,7 @@ def _fill_plan(page, kind_code, mode, value):
 
 @pytest.mark.e2e
 def test_installment_vouchers_create_preview_and_void_in_the_case_page(live_server, make_user, e2e_browser):
-    adm = make_user(username="rks3_adm", role="admin")
+    adm = make_user(username="rks3_adm", role="superadmin")      # 第42班：匯款申請建立／試算／作廢＝財務角色／superadmin
     did = _seed()
     page = e2e_browser.new_context(viewport={"width": 1500, "height": 1000}).new_page()
     errors = []

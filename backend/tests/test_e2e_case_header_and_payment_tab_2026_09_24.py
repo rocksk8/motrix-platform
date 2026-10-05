@@ -72,8 +72,20 @@ def test_payment_lives_in_the_finance_tab(live_server, make_user, e2e_browser):
     assert page.locator(NOTE_INPUT).first.is_hidden(), "案件資訊分頁不再有收款"
     page.click('.cm-tab:has-text("財務")')
     page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=10000)
-    assert page.locator("#fin-ar-ap-overview").is_visible(), "有財務檢視權的人照樣看得到應收應付總覽"
+    # 第42班：應收應付總覽（財務專屬區塊）只給財務角色／superadmin；業務看得到收款（款項明細）但看不到總覽
+    assert page.locator("#fin-ar-ap-overview").count() == 0 or page.locator("#fin-ar-ap-overview").is_hidden(), "業務不再看得到應收應付總覽"
     assert page.evaluate(f"() => {DATA_JS}._gateTab({{key: 'payment'}})") == "fin"
+
+
+@pytest.mark.e2e
+def test_finance_role_sees_the_receivable_payable_overview(live_server, make_user, e2e_browser):
+    u = make_user(username="cu5_fin", role="finance")
+    _seed(assigned=[u[0]])
+    page = _open(e2e_browser, live_server, u)
+    page.locator('.cm-tab:has-text("財務")').wait_for(timeout=10000)
+    page.click('.cm-tab:has-text("財務")')
+    page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=10000)
+    assert page.locator("#fin-ar-ap-overview").is_visible(), "財務角色看得到應收應付總覽"
 
 
 @pytest.mark.e2e

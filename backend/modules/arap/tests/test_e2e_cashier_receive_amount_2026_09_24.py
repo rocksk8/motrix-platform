@@ -41,7 +41,7 @@ def _item():
 
 @pytest.mark.e2e
 def test_receive_modal_blocks_empty_actual_amount(live_server, make_user, e2e_browser):
-    username, password = make_user(username="e2e_rcv", role="admin")
+    username, password = make_user(username="e2e_rcv", role="finance")      # 第42班：出納頁／收款只有財務角色與 superadmin
 
     import db
     conn = db.get_db()

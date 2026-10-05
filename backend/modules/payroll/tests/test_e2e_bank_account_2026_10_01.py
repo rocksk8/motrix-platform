@@ -95,7 +95,8 @@ def test_cashier_sees_masked_list_reveals_full_with_an_audit_row_and_cannot_edit
     p2.select_option("[data-testid=ba-user-select]", label=opt.inner_text())
     p2.wait_for_selector("[data-testid=ba-target-number]", state="visible")
     assert p2.inner_text("[data-testid=ba-target-number]") == "****4556"
-    assert not p2.locator("[data-testid=ba-a-save]").is_visible(), "出納只能看、不能改"
+    # 第42班：出納與財務合併為「財務」角色（conftest 把 viewer+["cashier"] 換成 finance）⇒ 不再有「只能看、不能改」的出納；財務角色可以維護他人帳號
+    assert p2.locator("[data-testid=ba-a-save]").is_visible(), "財務角色（原出納）可以維護他人的帳號"
     assert _db("SELECT 1 FROM audit_log WHERE action='user.bank_account.reveal'") == []
     _shot(p2, "3_cashier_masked")
     p2.click("[data-testid=ba-reveal]")
