@@ -17,6 +17,10 @@
 - **稅基標示（VAT 階段 0）**：精算頁每個成本來源標稅基——品項估計「含稅 ×1.05（假設不可扣抵）」、手填依稅別、採購單／材料申請「含稅」、額外支出「未分稅」、承攬商派發「未稅（＋外包人員）」、匯款手續費／自訂「實付金額」；總結加一行口徑說明與 ⓘ（原始總成本未稅、原始毛利另扣進項稅 5%、精算後品項含稅）。只加文字，不改任何金額；伺服器之後回 `taxBasis` 時以它為準。測試：`tests/test_e2e_settlement_tax_labels_2026_10_05.py`。
 - 測試：`tests/test_settlement_item_cost_display_2026_10_05.py`（node 載入分檔，兩種顯示＋舊存檔不變）。
 
+## 1.0.140 — 2026-10-05（wip/quick-pr-wording）：請款頁文字改為「支出申請」
+- 選單「新增請款」→「新增支出申請」；`payment-request.html` 標題「支出申請」、分頁「新增申請」「我的申請」、區塊「申請類型」、說明文字同步。只改畫面文字（含 `<title>`），資料與流程不動；其餘「請款」字樣（出納、審核佇列、請款類型編輯頁等）本次不改。
+- 測試：`tests/test_e2e_payreq_2026_09_27.py` 選單文字斷言同步。
+
 ## 1.0.136 — 2026-10-04（wip/t39-case-be）：公益金下限 0、實際成本 0 是真的 0（schemaVersion 2）
 - **公益金下限 0**：毛利為負時 `charityDonation = 0`（不再算出負的公益金）；完結重算比對、`fill_downstream`、報價原始側 `origCharity`（報價 `tot` 沒有該欄時伺服器算）同一條。毛利 ≥ 0 與已凍結的完結 summary 完全不變（不改寫）。舊頁面對毛利為負的案件送負的公益金 ⇒ 完結 409（要用新頁面）。
 - **精算存檔頂層 `schemaVersion`（整數；沒有＝1＝舊存檔）**：`PUT /settlement` 驗證（非 ≥1 整數 ⇒ 422）、原樣存檔、`settlement-actuals` 回傳 `schemaVersion`。**v2：品項 `actualTotalCost` 是數字（含 0）＝已填、null／沒有／空字串＝沒填（用估計）**；沒有標記的舊存檔維持「0＝沒填」。套用在 `compute`（`actual.source` manual／estimate）、完結比對、凍結讀取。
