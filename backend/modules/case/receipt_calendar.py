@@ -3,6 +3,9 @@
 
 [單位] case:receipt_calendar    [層] L2（M01）    [穩定度] 實作
 [公開介面] events_for_change(old_items, new_items) → [(op, code, ident, item)]；push_after_commit(quote_no, old_items, new_items)
+[限制] 事件只在「款項期別有變動」的那次存檔才對齊：把事件種類**打開**之前就已存在的款項不會回補（要等該期別下一次變動）；
+       事件內容用到的欄位（收款日／實收／手續費／入帳帳戶／款項名稱／應收金額；到期＝預計日／名稱／應收金額）改了才會更新說明。
+       客戶名稱、專案名稱等案件層欄位改了不會回頭更新既有事件。
 [不變式] ① 只在 commit 之後、背景執行緒推（INTEGRATION-POINTS IP-6「新事件的寫法」）；不在寫鎖內
         ② 事件以 (代碼, 案號::期別 id) 為唯一識別（L1 push_event_upsert／delete_for_module，與日期無關）：重複存檔不會重複建立，
            改日期＝移動同一筆，收款／取消收款／刪期別＝刪掉對應事件
@@ -40,8 +43,19 @@ def _ident(it):
     return None if not isinstance(it, dict) or it.get("id") is None else str(it["id"])
 
 
+def _label(it):
+    return str(it.get("type") or it.get("label") or "")
+
+
 def _receipt_sig(it):
-    return (_ymd(it.get("receivedAt")), it.get("actualAmount"), it.get("feeAmount") or 0, it.get("bankAccountName") or "")
+    """事件內容會用到的欄位（任何一個變了都要更新事件說明）：收款日、實收、手續費、入帳帳戶、款項名稱、應收金額。"""
+    return (_ymd(it.get("receivedAt")), it.get("actualAmount"), it.get("feeAmount") or 0, it.get("bankAccountName") or "",
+            _label(it), it.get("amount"), it.get("pct"))
+
+
+def _due_sig(it):
+    """到期提醒事件內容用到的欄位：預計收款日、款項名稱、應收金額（改了金額／名稱，說明跟著更新）。"""
+    return (_ymd(it.get("expectedReceiptDate")), _label(it), it.get("amount"), it.get("pct"))
 
 
 def _is_receipt(it) -> bool:
@@ -65,7 +79,7 @@ def events_for_change(old_items, new_items) -> list:
         elif o is not None and _is_receipt(o):                      # 取消收款（或收款日被清掉）
             out.append(("delete", RECEIPT, ident, it))
         if _is_due(it):
-            if not _is_due(o) or _ymd(o.get("expectedReceiptDate")) != _ymd(it.get("expectedReceiptDate")):
+            if not _is_due(o) or _due_sig(o) != _due_sig(it):
                 out.append(("upsert", DUE, ident, it))
         elif o is not None and _is_due(o):                          # 已收款／清空預計日 ⇒ 到期提醒收回
             out.append(("delete", DUE, ident, it))

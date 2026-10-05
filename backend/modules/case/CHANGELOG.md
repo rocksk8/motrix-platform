@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-05（wip/t42-planned-pay-date）：稽核 T41 S1～S5 修正
+- S1 信件／畫面文字與註解的「請款待付款」→「待付款申請」（`expense_notify.py` 出納待撥款信、`payable_reminders.py` 提醒信等）。
+- S4 `receipt_calendar.py`：到期／收款事件的簽章納入應收金額、款項名稱（改了這些，事件說明也會更新）；檔頭記載限制——事件種類打開前就存在的款項不回補、案件層欄位（客戶／專案名）改了不回頭更新既有事件。
+
 ## (next) — 2026-10-05（wip/t42-planned-pay-date）：預定付款日＋提醒信＋行事曆「付款待辦」（疊在 t41 之上）
 - **case migration v7**：`case_extra_expenses.planned_pay_date TEXT NOT NULL DEFAULT ''`（`0007_planned_pay_date.py`；只新增欄位、冪等、舊列維持空；回滾程式碼不必動資料）。選填、不是實際付款日；付款後保留當歷史。
 - API：`ExtraExpenseIn.plannedPayDate`（建立／編輯；編輯沒送＝保留原值、`''`＝清除；格式不合 400）；`PATCH …/extra-expenses/{id}/dates` 可補登／改期（任何狀態，但已付款後 409；權限同既有日期補登：填寫人、管理員、出納）；列表與 IP-100 `payables.pending` 的項目多 `plannedPayDate`。

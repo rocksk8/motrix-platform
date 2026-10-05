@@ -268,3 +268,21 @@ def test_type_switch_off_after_creation_keeps_event_and_sends_nothing(client, ma
     _save_case_record(client, h, [_it(expectedReceiptDate="2031-06-09")])
     _save_case_record(client, h, [_it(received=True, receivedAt="2031-06-09")])
     assert len(cal.calls) == n and len(cal.events) == 1
+
+
+def test_amount_or_label_change_refreshes_the_event_content():
+    """事件說明用到應收金額／款項名稱 ⇒ 這些變了也要產生 upsert（不只日期）。"""
+    due = _it(expectedReceiptDate="2031-06-01")
+    assert _ev([due], [dict(due, amount=40000)]) == [("upsert", "receivable_due", "1")]
+    assert _ev([due], [dict(due, type="尾款")]) == [("upsert", "receivable_due", "1")]
+    rcv = _it(received=True, receivedAt="2031-05-30", actualAmount=31500)
+    assert _ev([rcv], [dict(rcv, type="尾款")]) == [("upsert", "receipt_logged", "1")]
+    assert _ev([rcv], [dict(rcv, amount=40000)]) == [("upsert", "receipt_logged", "1")]
+    assert _ev([due], [dict(due, note="只改備註")]) == [], "與事件內容無關的欄位不觸發"
+
+
+def test_new_types_describe_the_no_backfill_rule():
+    from helpers import google_calendar as gc
+    by = {t["code"]: t for t in gc.event_types()}
+    for c in ("receipt_logged", "receivable_due", "payable_due"):
+        assert "只對開啟後的變更生效" in by[c]["description"], c

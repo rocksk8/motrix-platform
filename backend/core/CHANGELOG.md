@@ -2,6 +2,10 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-05（wip/t42-planned-pay-date：稽核 T41 S2／S3／S5）
+- L1（行為修正，介面不變）：`push_event_upsert_for_module` 全域總開關關閉時早退（同 `push_event_delete_for_module`，不再每次存檔記 WARNING）；更新遇 404（事件在 Google 端被手動刪掉）改以 `_create_merged_event` 重建並帶 `motrixMergeKey`（原本 `_update_event_with_retry` 的後備建出找不到的重複事件）。
+- `EVENT_TYPES` 三個新種類（receipt_logged／receivable_due／payable_due）說明加「只對開啟後的變更生效（不回補既有款項）」。
+
 ## (next) — 2026-10-05（wip/t42-planned-pay-date：`EVENT_TYPES` 新增 `payable_due`）
 - L1（資料，介面不變）：`helpers.google_calendar.EVENT_TYPES` 新增 `payable_due`（付款待辦，分組「付款」，預設關）；沿用 t41 的 `push_event_upsert_for_module`／`push_event_delete_for_module`，無新的公開名稱。目錄筆數 15→16（`test_calendar_event_toggles_2026_09_30.py`／e2e 同步）。
 
