@@ -18,7 +18,7 @@ from datetime import datetime
 from modules.case import expense_forms as _EF
 from modules.case.recognition import _approved_at
 
-SOURCE_LABEL = "案件額外支出（請款）"
+SOURCE_LABEL = "案件支出申請"
 
 
 def _col(r, name, default=""):

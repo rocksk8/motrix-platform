@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-05（wip/quick2-wording，併入 t41）：出納來源名稱「案件支出申請」
+- `payables.py` `SOURCE_LABEL` 「案件額外支出（請款）」→「案件支出申請」（出納待付款列的來源）。只改畫面文字；客戶「請款單」（M05 應收）不動。
+
 ## (next) — 2026-10-05（wip/t41-calendar-receipts）：行事曆「收款登錄」「應收到期提醒」
 - 新增 `receipt_calendar.py`：比對款項期別（`caseRecord.payment.items[]`）寫入前後的 `received`／`receivedAt`／`actualAmount`／`feeAmount`／`bankAccountName`／`expectedReceiptDate`，產生行事曆事件的 upsert／delete；沒變就不開背景執行緒、不打 Google。事件以（種類、案號::期別 id）為唯一識別，沒有 id 的舊期別不推。
 - 三條寫入路徑在 commit 之後推（不在寫鎖內）：`update_case_record`（整包存）、`mark_payment`（出納標記收款）、`_apply_case_change_request`（半解鎖審核通過重播：`case_record_update`／`payment_mark`，由 `approve_case_change` 在放鎖後推；排進佇列時不推）。
