@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — 2026-10-05（wip/t41-calendar-receipts：行事曆事件「一個對象一個事件」）
+## 1.110 — 2026-10-05（wip/t41-calendar-receipts：行事曆事件「一個對象一個事件」）
 - L1（新增，向下相容）：`helpers.push_event_upsert_for_module(code, summary, description, event_date, key)`、`push_event_delete_for_module(code, key)`——以（事件種類代碼, key）為唯一識別（與日期無關；Google 事件 private extendedProperty `motrixMergeKey`＝`<代碼>#<key>`，不新增表、不存 event id）：upsert＝找得到就更新標題／說明／日期、找不到就建立；delete＝找到才刪、找不到視為已沒有。兩者都受事件種類開關與全域總開關限制（關閉＝零 Google 流量，已建立的事件保留）；fire-and-forget，失敗只記 log。`push_event_for_module` 的「同日合併」語意不變。
 - `EVENT_TYPES` 新增 `receipt_logged`（收款登錄）、`receivable_due`（應收到期提醒），分組「收款」，預設關；設定頁由目錄產生，不需改頁面。
 - 測試：`tests/test_calendar_upsert_2026_10_05.py`；`test_calendar_event_toggles_2026_09_30.py`／`test_e2e_calendar_event_toggles_2026_09_30.py` 目錄筆數 13→15。L1 介面快照 `core_bump.py --pending`。
