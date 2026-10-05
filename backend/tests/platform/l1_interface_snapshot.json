@@ -1,5 +1,5 @@
 {
- "core_version": "1.109",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -750,6 +750,7 @@
    "event_switches": "def(cfg=…)",
    "event_types": "def()",
    "push_event_delete_for_case_stage": "def(event_id)",
+   "push_event_delete_for_module": "def(code, key)",
    "push_event_for_case_stage_done": "def(stage_id)",
    "push_event_for_case_stage_due": "def(stage_id)",
    "push_event_for_dev_case_converted": "def(case_id)",
@@ -759,7 +760,8 @@
    "push_event_for_module": "def(code, summary, description, event_date=…, merge_key=…)",
    "push_event_for_payment_request": "def(request_no)",
    "push_event_for_quotation_won": "def(quote_no)",
-   "push_event_for_shipping_note": "def(note_no)"
+   "push_event_for_shipping_note": "def(note_no)",
+   "push_event_upsert_for_module": "def(code, summary, description, event_date, key)"
   },
   "helper:legal_params": {
    "ARTICLE_8_DELETED": "const",
