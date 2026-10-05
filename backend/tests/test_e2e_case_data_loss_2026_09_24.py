@@ -81,7 +81,7 @@ def _wait_saved(page):
 @needs_m01
 @pytest.mark.e2e
 def test_switching_case_right_after_typing_keeps_the_input(live_server, make_user, e2e_browser):
-    username, password = make_user(username="e2e_loss1", role="admin")
+    username, password = make_user(username="e2e_loss1", role="finance")      # 第42班：款項期別結構/收款/請款/開票＝財務角色或 superadmin
     _seed("MQ-E2ELOSS-A")
     _seed("MQ-E2ELOSS-B")
     browser = e2e_browser
@@ -110,7 +110,7 @@ PRESENCE = "/api/edit-presence"
 def test_dirty_flag_survives_presence_heartbeat(live_server, make_user, e2e_browser):
     """edit-presence.js 每 8～15 秒 POST 一次；sidebar.js 原本「任何成功請求就清掉」，
     打完字最多 15 秒離頁警告就失效。"""
-    username, password = make_user(username="e2e_loss2", role="admin")
+    username, password = make_user(username="e2e_loss2", role="finance")      # 第42班：款項期別結構/收款/請款/開票＝財務角色或 superadmin
     _seed("MQ-E2ELOSS-C")
     browser = e2e_browser
     page = browser.new_page()
@@ -130,7 +130,7 @@ def test_dirty_flag_survives_presence_heartbeat(live_server, make_user, e2e_brow
 @pytest.mark.e2e
 def test_other_pages_still_clear_flag_after_successful_save(live_server, make_user, e2e_browser):
     """現行行為不退：不相干的頁面，成功的寫入請求照樣清掉旗標。"""
-    username, password = make_user(username="e2e_loss2b", role="admin")
+    username, password = make_user(username="e2e_loss2b", role="finance")      # 第42班：款項期別結構/收款/請款/開票＝財務角色或 superadmin
     browser = e2e_browser
     page = browser.new_page()
     _login(page, live_server, username, password)
@@ -146,7 +146,7 @@ def test_other_pages_still_clear_flag_after_successful_save(live_server, make_us
 @needs_m01
 @pytest.mark.e2e
 def test_deleting_payment_item_asks_first(live_server, make_user, e2e_browser):
-    username, password = make_user(username="e2e_loss3", role="admin")
+    username, password = make_user(username="e2e_loss3", role="finance")      # 第42班：款項期別結構/收款/請款/開票＝財務角色或 superadmin
     _seed("MQ-E2ELOSS-D")
     browser = e2e_browser
     page = browser.new_page()
@@ -179,7 +179,7 @@ def test_other_deletes_are_gated_by_confirm(live_server, make_user, e2e_browser)
     """階段、拜訪、材料、設備（單台／依物件）四類刪除：使用者按取消就不刪。
     直接呼叫元件方法，把 confirm 換成回傳 false——驗的是「方法本身有問」，
     不依賴各自藏在哪個分頁的按鈕位置。"""
-    username, password = make_user(username="e2e_loss4", role="admin")
+    username, password = make_user(username="e2e_loss4", role="finance")      # 第42班：款項期別結構/收款/請款/開票＝財務角色或 superadmin
     _seed("MQ-E2ELOSS-E")
     browser = e2e_browser
     page = browser.new_page()
@@ -217,7 +217,7 @@ def test_other_deletes_are_gated_by_confirm(live_server, make_user, e2e_browser)
 def test_remaining_deletes_are_gated_by_confirm(live_server, make_user, e2e_browser):
     """N11（使用者 2026-09-24 裁示「刪除確認全部都加」）：叫料品項、派工人員、派工品項、
     出貨品項、階段負責人——按取消就不刪，也不送出 DELETE。確認訊息帶出名稱。"""
-    username, password = make_user(username="e2e_loss5", role="admin")
+    username, password = make_user(username="e2e_loss5", role="finance")      # 第42班：款項期別結構/收款/請款/開票＝財務角色或 superadmin
     _seed("MQ-E2ELOSS-F")
     browser = e2e_browser
     page = browser.new_page()

@@ -55,7 +55,7 @@ def _open(browser, base, user):
 
 @pytest.mark.e2e
 def test_save_error_shows_a_persistent_banner_until_fixed(live_server, make_user, e2e_browser):
-    u = make_user(username="sfb_e1", role="admin")
+    u = make_user(username="sfb_e1", role="finance")      # 第42班：款項期別結構/收款/請款/開票＝財務角色或 superadmin
     _seed()
     browser = e2e_browser
     page = _open(browser, live_server, u)
@@ -75,7 +75,7 @@ def test_save_error_shows_a_persistent_banner_until_fixed(live_server, make_user
 
 @pytest.mark.e2e
 def test_conflict_banner_offers_reload_and_keep(live_server, make_user, e2e_browser):
-    u = make_user(username="sfb_e2", role="admin")
+    u = make_user(username="sfb_e2", role="finance")      # 第42班：款項期別結構/收款/請款/開票＝財務角色或 superadmin
     _seed()
     browser = e2e_browser
     page = _open(browser, live_server, u)
@@ -93,7 +93,7 @@ def test_conflict_banner_offers_reload_and_keep(live_server, make_user, e2e_brow
 
 @pytest.mark.e2e
 def test_manual_save_shows_success_toast_but_autosave_does_not(live_server, make_user, e2e_browser):
-    u = make_user(username="sfb_e3", role="admin")
+    u = make_user(username="sfb_e3", role="finance")      # 第42班：款項期別結構/收款/請款/開票＝財務角色或 superadmin
     _seed()
     browser = e2e_browser
     page = _open(browser, live_server, u)

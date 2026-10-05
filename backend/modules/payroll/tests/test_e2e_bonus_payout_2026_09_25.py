@@ -98,7 +98,7 @@ def test_cashier_marks_bonus_paid_from_cashier_page(client, live_server, make_us
 
 
 @pytest.mark.e2e
-def test_finance_does_not_see_bonus_tab(client, live_server, make_user, e2e_browser):
+def test_finance_role_sees_bonus_tab(client, live_server, make_user, e2e_browser):
     u = _users(make_user)
     _seed_payout(client, u)
     page = e2e_browser.new_page()
@@ -106,8 +106,9 @@ def test_finance_does_not_see_bonus_tab(client, live_server, make_user, e2e_brow
     page.goto(f"{live_server}/pages/cashier.html")
     page.wait_for_function(f"() => {CASHIER_JS}.ready === true", timeout=20000)
     page.wait_for_function(f"() => {CASHIER_JS}.cashierLoaded === true", timeout=20000)
-    assert not page.locator('[data-testid="cashier-bonus-tab"]').is_visible()
-    assert page.evaluate(f"() => {CASHIER_JS}.bonusQueue.items.length") == 0
+    # 第42班（使用者裁示）：財務與出納合併為「財務」角色，獎金待發放對財務角色可見（原本 finance 模組看不到獎金、只有出納看得到）
+    assert page.locator('[data-testid="cashier-bonus-tab"]').is_visible()
+    assert page.evaluate(f"() => {CASHIER_JS}.bonusQueue.items.length") >= 1
 
 
 @pytest.mark.e2e

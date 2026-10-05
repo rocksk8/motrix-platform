@@ -36,7 +36,7 @@ def _reverse_payment_items_in_db():
 
 @pytest.mark.e2e
 def test_upload_after_server_reorder_lands_on_the_item_on_screen(live_server, make_user, e2e_browser):
-    a = make_user(username="byid_e1", role="admin")
+    a = make_user(username="byid_e1", role="superadmin")      # 第42班：案件頁收款/請款/開票操作＝財務角色或 superadmin
     _seed()
     browser = e2e_browser
     pa = _open(browser, live_server, a)
@@ -49,7 +49,7 @@ def test_upload_after_server_reorder_lands_on_the_item_on_screen(live_server, ma
 
 @pytest.mark.e2e
 def test_upload_on_new_unsaved_item_saves_first(live_server, make_user, e2e_browser):
-    a = make_user(username="byid_e2", role="admin")
+    a = make_user(username="byid_e2", role="superadmin")      # 第42班：案件頁收款/請款/開票操作＝財務角色或 superadmin
     _seed()
     browser = e2e_browser
     pa = _open(browser, live_server, a)

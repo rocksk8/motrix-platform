@@ -84,7 +84,7 @@ def test_case_page_says_arap_is_missing_and_hides_the_request_buttons(live_serve
 @needs_m01
 @pytest.mark.e2e
 def test_case_page_positive_control_no_notice_when_endpoints_answer(live_server, make_user, e2e_browser):
-    u = make_user(username="arapok_admin", role="admin")
+    u = make_user(username="arapok_admin", role="superadmin")      # 第42班：憑據區塊（開票/請款）財務專屬
     _seed()
     with _page(e2e_browser) as page:
         page.route("**/api/invoice-vouchers?quote_no=**", lambda r: r.fulfill(status=200, body="[]", content_type="application/json"))

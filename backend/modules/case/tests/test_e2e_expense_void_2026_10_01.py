@@ -109,7 +109,7 @@ def test_void_button_only_for_superadmin_and_ends_in_voided_state(live_server, m
 @pytest.mark.e2e
 def test_admin_sees_no_void_button(live_server, make_user, e2e_browser, seed_extra_expense):
     _seed(seed_extra_expense, QN_ADMIN)
-    adm = make_user(username="vdui_admin", role="admin")
+    adm = make_user(username="vdui_admin", role="finance")      # 第42班：額外支出頁籤只有財務角色/superadmin 看得到；作廢鈕仍只有 superadmin
     page = _open(e2e_browser, live_server, adm, QN_ADMIN)
     assert page.locator(f'{PANEL} [data-testid="xe-void-btn"]:visible').count() == 0
     _shot(page, "12-admin-no-void-button")

@@ -59,12 +59,13 @@ def _open(browser, live_server, cred):
 def test_settlement_refuses_an_incomplete_extra_expense_total(live_server, make_user, e2e_browser):
     fv, sa = _setup(live_server, make_user, e2e_browser)
     page = _open(e2e_browser, live_server, fv)
+    # 第42班：能開成本精算的只剩財務角色／superadmin（stlg_fv 的 financial_view 勾選被 conftest 換成 finance 角色），
+    # 兩者都看得到全部額外支出金額 ⇒ 不再有「看得到精算、看不到部分額外支出」的人，也就沒有遮蔽警告；財務角色與 superadmin 一樣可按。
     warn = page.locator('[data-testid="stl-masked-warning"]')
-    warn.wait_for(state="visible", timeout=10000)
-    assert "1" in warn.inner_text() and "遮蔽" in warn.inner_text()
-    assert page.locator('[data-testid="stl-save-draft"]').is_disabled() and page.locator('[data-testid="stl-finalize"]').is_disabled()
-    assert "4321" not in page.content() and "4,321" not in page.content()                  # 金額沒有漏到頁面
-    _shot(page, "20-settlement-masked-warning")
+    page.locator('[data-testid="stl-save-draft"]').wait_for(state="attached", timeout=10000)
+    assert not warn.is_visible()
+    assert page.locator('[data-testid="stl-save-draft"]').is_enabled() and page.locator('[data-testid="stl-finalize"]').is_enabled()
+    _shot(page, "20-settlement-finance-role")
     # 管理員：看得到金額 ⇒ 沒有警告、可按
     p2 = _open(e2e_browser, live_server, sa)
     assert not p2.locator('[data-testid="stl-masked-warning"]').is_visible()

@@ -36,7 +36,7 @@ def _save(page):
 
 @pytest.mark.e2e
 def test_financial_user_enters_invoice_amounts_and_they_land(live_server, make_user, e2e_browser):
-    u = make_user(username="inv_e2e_sales", role="sales")
+    u = make_user(username="inv_e2e_sales", role="finance")
     _seed(assigned=[u[0]])
     browser = e2e_browser
     page = _open(browser, live_server, u)
@@ -54,7 +54,7 @@ def test_financial_user_enters_invoice_amounts_and_they_land(live_server, make_u
 
 @pytest.mark.e2e
 def test_half_filled_and_mismatch_hints(live_server, make_user, e2e_browser):
-    u = make_user(username="inv_e2e_sales2", role="sales")
+    u = make_user(username="inv_e2e_sales2", role="finance")
     _seed(assigned=[u[0]])
     browser = e2e_browser
     page = _open(browser, live_server, u)
@@ -89,7 +89,7 @@ def test_masked_user_has_no_invoice_amount_inputs_and_values_survive(live_server
 @pytest.mark.e2e
 def test_zero_tax_counts_as_filled(live_server, make_user, e2e_browser):
     """零稅率／免稅的發票稅額就是 0：0 是「有填」，不是空（不可以跳出「要一起填寫」）。"""
-    u = make_user(username="inv_e2e_sales3", role="sales")
+    u = make_user(username="inv_e2e_sales3", role="finance")
     _seed(assigned=[u[0]])
     browser = e2e_browser
     page = _open(browser, live_server, u)

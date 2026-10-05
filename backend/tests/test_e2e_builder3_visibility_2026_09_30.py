@@ -36,7 +36,7 @@ def test_field_and_menu_visibility_panels_land_in_the_draft(live_server, make_us
     page.goto(live_server + "/pages/module-builder.html")
     start_blank(page, "b3v_mod")
     # 選單可見（作業資訊頁籤）
-    assert page.locator('[data-vis="menu"] [data-vis-role]').count() == 5                 # 角色清單來自目錄
+    assert page.locator('[data-vis="menu"] [data-vis-role]').count() == 6                 # 角色清單來自目錄
     assert "所有人" in page.locator('[data-vis="menu"] [data-vis-summary]').inner_text()
     page.check('[data-vis="menu"] [data-vis-role="admin"]')
     page.locator('[data-vis="menu"] summary').click()
