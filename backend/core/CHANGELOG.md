@@ -2,6 +2,10 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-05（wip/t44-business-days：L1 工作日／假日判斷）
+- L1（新增，向下相容）：`helpers/business_days.py`——自 M11 `calendar_tw.py` 提升（純函式、不讀時鐘）：`load`／`coverage`／`covered`／`days_until_expiry`／`no_mail_day`／`next_mail_day`（行為不變）＋新增 `is_working_day(d)`、`previous_working_day(d, limit=14)`；資料 `helpers/holidays_tw.json`（官方人事行政總處辦公日曆表，2026～2027；每年更新，到期前 60 天內 M11 每日排程記警告）。M11 的 `calendar_tw.py` 轉出舊名。沒有假日表／年份不在涵蓋範圍 ⇒ 只排除週六日，不丟例外。
+- 測試：`tests/test_business_days_2026_10_05.py`；L1 介面快照 `core_bump.py --pending`。
+
 ## 1.110 — 2026-10-05（wip/t41-calendar-receipts：行事曆事件「一個對象一個事件」）
 - L1（新增，向下相容）：`helpers.push_event_upsert_for_module(code, summary, description, event_date, key)`、`push_event_delete_for_module(code, key)`——以（事件種類代碼, key）為唯一識別（與日期無關；Google 事件 private extendedProperty `motrixMergeKey`＝`<代碼>#<key>`，不新增表、不存 event id）：upsert＝找得到就更新標題／說明／日期、找不到就建立；delete＝找到才刪、找不到視為已沒有。兩者都受事件種類開關與全域總開關限制（關閉＝零 Google 流量，已建立的事件保留）；fire-and-forget，失敗只記 log。`push_event_for_module` 的「同日合併」語意不變。
 - `EVENT_TYPES` 新增 `receipt_logged`（收款登錄）、`receivable_due`（應收到期提醒），分組「收款」，預設關；設定頁由目錄產生，不需改頁面。

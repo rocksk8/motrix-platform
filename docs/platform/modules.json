@@ -17,6 +17,7 @@
    "helper:auth",
    "helper:branding",
    "helper:build_info",
+   "helper:business_days",
    "helper:case_access",
    "helper:case_roles",
    "helper:company_identity",
