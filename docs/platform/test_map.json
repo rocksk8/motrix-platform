@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1127,
+  "tests": 1129,
   "unmapped": 13,
   "kinds": {
-   "api": 602,
+   "api": 604,
    "e2e": 281,
    "audit": 138,
    "unit": 106
@@ -7452,6 +7452,44 @@
      "backend/modules/case/api/quotations.py",
      "backend/modules/filehub/api.py",
      "backend/routers/attachments.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_receipt_calendar_2026_10_05.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_fake_gcal.py",
+    "file:backend/tests/_requires.py",
+    "helper:google_calendar",
+    "mod:case/__init__",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
+    "mod:case/receipt_calendar"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/google_calendar.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/receipt_calendar.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_fake_gcal.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
     ],
     "module_dir": [
      "backend/modules/case/"
@@ -19190,6 +19228,23 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_calendar_upsert_2026_10_05.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_fake_gcal.py",
+    "helper:google_calendar"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/google_calendar.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_fake_gcal.py"
+    ]
+   }
   },
   "backend/tests/test_cascade_self_tiers_records_signer_2026_09_25.py": {
    "kind": "api",
