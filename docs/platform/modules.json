@@ -252,6 +252,7 @@
     "mod:case/attachments",
     "mod:case/case_stage_tasks",
     "mod:case/payables",
+    "mod:case/receipt_calendar",
     "mod:case/quotations",
     "mod:case/quote_terms",
     "mod:case/recognition",
