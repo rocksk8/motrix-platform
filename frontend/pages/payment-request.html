@@ -5,7 +5,7 @@
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
-  <title>新增請款 — MOTRIX 專案管理系統</title>
+  <title>新增支出申請 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/definition-form.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -51,22 +51,22 @@
 
   <main class="pr-main">
     <div class="pr-wrap">
-      <div class="page-header"><h1 class="page-title">請款</h1></div>
-      <p class="pr-hint">請款就是案件的額外支出：先挑案件，填日期、金額、說明並附上憑證，送審核准後由出納付款。發票可以先附，也可以核准後再補。</p>
+      <div class="page-header"><h1 class="page-title">支出申請</h1></div>
+      <p class="pr-hint">支出申請就是案件的額外支出：先挑案件，填日期、金額、說明並附上憑證，送審核准後由出納付款。發票可以先附，也可以核准後再補。</p>
 
       <div class="pr-tabs">
-        <button class="btn btn-sm" :class="tab === 'new' ? 'btn-primary' : 'btn-secondary'" id="pr-tab-new" @click="tab = 'new'">新增請款</button>
-        <button class="btn btn-sm" :class="tab === 'mine' ? 'btn-primary' : 'btn-secondary'" id="pr-tab-mine" @click="tab = 'mine'; loadMine()">我的請款</button>
+        <button class="btn btn-sm" :class="tab === 'new' ? 'btn-primary' : 'btn-secondary'" id="pr-tab-new" @click="tab = 'new'">新增申請</button>
+        <button class="btn btn-sm" :class="tab === 'mine' ? 'btn-primary' : 'btn-secondary'" id="pr-tab-mine" @click="tab = 'mine'; loadMine()">我的申請</button>
       </div>
 
       <!-- 新增 -->
       <section x-show="tab === 'new'" id="pr-new" :data-busy="busy ? '1' : '0'">
         <div class="pr-card" id="pr-type-card" x-show="types.length">
-          <h3>請款類型</h3>
+          <h3>申請類型</h3>
           <div class="pr-f">
             <label for="pr-type">類型</label>
             <select id="pr-type" x-model="typeCode" @change="selectType()">
-              <option value="">一般（案件額外支出）</option>
+              <option value="">一般（案件支出申請）</option>
               <template x-for="t in types" :key="t.code"><option :value="t.code" x-text="t.name + '（' + t.prefix + '）'"></option></template>
             </select>
           </div>
