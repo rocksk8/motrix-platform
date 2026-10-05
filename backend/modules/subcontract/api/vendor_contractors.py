@@ -44,7 +44,7 @@ def _amounts(lst) -> list:
     out = []
     for it in lst or []:
         try:
-            out.append(round(float((it or {}).get("amount", 0) or 0), 2))
+            out.append(float((it or {}).get("amount", 0) or 0))
         except (TypeError, ValueError, AttributeError):
             out.append(None)
     return out

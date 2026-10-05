@@ -70,4 +70,5 @@ def test_legacy_extra_expense_attachment_is_hidden_from_a_user_without_case_acce
 def test_cashier_without_case_access_gets_404_on_the_dates_endpoint(world):
     client, h, eid = world
     r = client.patch("/api/quotations/%s/extra-expenses/%d/dates" % (NO, eid), headers=h["cash"], json={"paidDate": "2026-09-10"})
-    assert r.status_code == 404, r.text                                               # 看不到案件＝不存在（文件已對齊這個行為）
+    # 第42班（使用者裁示）：財務角色（原出納）不受案件擁有者限制 ⇒ 登錄付款日通過；沒有案件關係的一般帳號仍是 404（見下一題與 test_finance_role_split）
+    assert r.status_code == 200, r.text

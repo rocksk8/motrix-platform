@@ -105,6 +105,7 @@ def test_case_record_bulk_save_path_has_the_same_rule(client, make_user):
     _seed("AB12345678")
     u, p = make_user(username="mg_bulk", role="finance", modules=None)            # 第42班：更換已登錄發票號碼＝財務角色（案件成員）
     ha = _login(client, u, p)
+    import db
     c = db.get_db()          # 整包存（舊格式）仍要案件成員 ⇒ 讓財務帳號當這張單的業務（分段格式的收款分段另有「財務可寫所有案件」的路徑）
     try:
         uid = c.execute("SELECT id FROM users WHERE username=?", (u,)).fetchone()["id"]

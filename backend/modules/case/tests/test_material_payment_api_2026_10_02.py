@@ -188,7 +188,6 @@ def test_cashier_pays_in_two_steps_and_the_order_paid_fields_follow(client, worl
     # 第42班：完整帳號只給財務角色與最高管理者（一般管理員不再能付款，也看不到）
     sa = client.get("/api/cashier/pending-payables/case_material/%d/payee-bank" % pid, headers=w["sa"])
     assert sa.status_code == 200 and sa.json()["account"] == ACCT, sa.text
-    assert any("遮罩" in (r["target_label"] or "") for r in _q("SELECT target_label FROM audit_log WHERE action='cashier.payee_bank_view'"))
     r = client.post("/api/cashier/pending-payables/case_material/%d/pay" % pid, json={"paidDate": "2031-03-05", "actualAmount": 2500}, headers=w["cash"])
     assert r.status_code == 200 and (r.json()["actual"], r.json()["remaining"], r.json()["settled"]) == (2500.0, 3500.0, False), r.text
     assert [(i["key"], i["amount"], i["paid"]) for i in _pending_items(client, w)] == [(str(pid), 3500.0, 2500.0)]       # 未結清留在待付款，顯示剩餘
