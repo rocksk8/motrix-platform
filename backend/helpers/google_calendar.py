@@ -243,9 +243,9 @@ EVENT_TYPES = (
     ("dev_case_update",    "業務開發案件更新",       "業務開發", "新增開發（拜訪）紀錄；同一案件同一天合併為一個「○○案件更新」事件", False),
     ("contractor_payout",  "包商撥款",               "付款",     "承攬商匯款申請標記已匯款時，以匯款日期建立", False),
     ("expense_payout",     "支出付款",               "付款",     "出納登錄請款（案件額外支出）付款時，以付款日建立；不含勞報單付款", False),
-    ("payable_due",        "付款待辦",               "付款",     "已核准、未付款的請款（案件額外支出）有預定付款日時，在該日建立提醒（改日期同步移動；付款、作廢、清空日期即刪除）；金額只寫在說明", False),
-    ("receipt_logged",     "收款登錄",               "收款",     "案件款項期別登錄為已收款時，以收款日建立（改收款日／實收同步更新、取消收款刪除）；金額只寫在說明", False),
-    ("receivable_due",     "應收到期提醒",           "收款",     "未收款期別填了預計收款日時建立（改日期同步更新；已收款、清空日期、期別刪除即刪除）", False),
+    ("payable_due",        "付款待辦",               "付款",     "已核准、未付款的請款（案件額外支出）有預定付款日時，在該日建立提醒（改日期同步移動；付款、作廢、清空日期即刪除）；金額只寫在說明；只對開啟後的變更生效（不回補既有款項）", False),
+    ("receipt_logged",     "收款登錄",               "收款",     "案件款項期別登錄為已收款時，以收款日建立（改收款日／實收同步更新、取消收款刪除）；金額只寫在說明；只對開啟後的變更生效（不回補既有款項）", False),
+    ("receivable_due",     "應收到期提醒",           "收款",     "未收款期別填了預計收款日時建立（改日期同步更新；已收款、清空日期、期別刪除即刪除）；只對開啟後的變更生效（不回補既有款項）", False),
 )
 EVENT_CODES = tuple(t[0] for t in EVENT_TYPES)
 _EVENT_DEFAULTS = {t[0]: t[4] for t in EVENT_TYPES}
@@ -349,11 +349,34 @@ def _upsert_key(code: str, key: str) -> str:
     return f"{code}#{key}"          # 與 push_event_for_module 的「代碼:key:日期」不同形，不會撞
 
 
+def _update_merged_event(event_id: str, summary: str, description: str, event_date: date, merge_key: str) -> str:
+    """更新「帶 motrixMergeKey 的事件」。與 `_update_event_with_retry` 的差別只在 404（事件在 Google 端被手動刪掉）：
+    重建時**帶著 merge key**，之後才找得回來（`_update_event_with_retry` 的 404 後備建的事件沒有 key ⇒ 找不到、下次又重複建）。"""
+    try:
+        return _update_all_day_event(event_id, summary, description, event_date)
+    except RuntimeError as e:
+        if "404" in str(e):
+            logger.info("行事曆事件 %s 已不存在，改為新建（帶 merge key）：%s", event_id, summary)
+            return _create_merged_event(summary, description, event_date, merge_key)
+        logger.warning("行事曆事件更新失敗，5 秒後重試一次：%s — %s", summary, e)
+        time.sleep(5)
+        try:
+            return _update_all_day_event(event_id, summary, description, event_date)
+        except RuntimeError as e2:
+            if "404" in str(e2):
+                return _create_merged_event(summary, description, event_date, merge_key)
+            _notify_push_failure(summary, str(e2))
+            raise
+        except Exception as second_exc:
+            _notify_push_failure(summary, str(second_exc))
+            raise
+
+
 def push_event_upsert_for_module(code: str, summary: str, description: str, event_date, key: str) -> None:
     """同一 (代碼, key) 只會有一筆事件：找得到 ⇒ 更新標題／說明／日期；找不到 ⇒ 建立。
     事件種類開關關閉 ⇒ 不建不改（既有事件保留）。fire-and-forget：失敗只記 log。"""
     try:
-        if not event_enabled(code) or not key:
+        if not key or not event_enabled(code) or not _cfg().get("enabled"):   # 全域總開關關閉 ⇒ 靜默不推（同 delete；不要每次存檔都記 WARNING）
             return
         if isinstance(event_date, str):
             try:
@@ -365,7 +388,7 @@ def push_event_upsert_for_module(code: str, summary: str, description: str, even
         with _merge_lock(mk):
             found = _find_merged_event(mk)
             if found:
-                event_id = _update_event_with_retry(found["id"], summary, description, event_date)
+                event_id = _update_merged_event(found["id"], summary, description, event_date, mk)
             else:
                 event_id = _create_merged_event(summary, description, event_date, mk)
         logger.info("push_event_upsert_for_module(%s, %s): -> event %s", code, key, event_id)
