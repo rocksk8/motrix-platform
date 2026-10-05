@@ -511,16 +511,12 @@ def test_settlement_and_finance_summary_stay_finance_only(finance_on_foreign_cas
     ah = _login(c, *make_user("s_adm", role="admin", modules=list(ROLE_TEMPLATES["admin"])))
     for url in ("/api/quotations/%s/settlement" % NO, "/api/quotations/%s/finance-summary" % NO):
         for who, hh in (("superadmin", h), ("finance", fh)):
-            if who == "finance" and url.endswith("finance-summary"):
-                continue                      # 見下面的探針（22753d76 漏改：仍用 require_case）
             r = c.get(url, headers=hh)
             assert r.status_code == 200, (url, who, r.status_code, r.text[:160])
         r = c.get(url, headers=ah)
         assert r.status_code == 403, (url, "admin", r.status_code, r.text[:160])
 
 
-@pytest.mark.xfail(strict=True, reason="22753d76 漏改：GET /api/quotations/{no}/finance-summary（案件財務 Tab 應收應付總覽）仍用 require_case ⇒ 財務角色讀別人的案件 404；"
-                                      "應與 settlement 一樣改 require_case_money。修好後這題會 XPASS ⇒ 拿掉標記")
 def test_finance_role_reads_finance_summary_of_a_foreign_case(finance_on_foreign_case):
     c, h, fh = finance_on_foreign_case
     r = c.get("/api/quotations/%s/finance-summary" % NO, headers=fh)
