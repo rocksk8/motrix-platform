@@ -83,7 +83,7 @@ def test_payment_request_end_to_end(live_server, make_user, new_context, client,
     page.goto(live_server + "/pages/approval-history.html")
     link = page.locator('#app-mainnav a[href*="payment-request.html"]')
     link.first.wait_for(state="attached", timeout=15000)
-    assert "新增請款" in link.first.text_content()
+    assert "新增支出申請" in link.first.text_content()
     page.goto(live_server + "/pages/" + link.first.get_attribute("href").split("/")[-1])
 
     # ② 挑案件（搜尋）→ 填 → 附件 → 送審
