@@ -2817,7 +2817,14 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             # 不是出納的改動，這條路上一律不寫。
             cashier_payment_only = (user_has_module(user, "cashier") and body.segments is not None
                                     and set(body.segments) <= {"payment"})
-            if not cashier_payment_only:
+            # 第42班（使用者裁示：財務人員要能在任何案件登錄／修改收款）：財務角色（不是案件成員）送舊整包格式時，
+            # **只採用其中的款項（payment）**，其餘欄位一律維持資料庫現值；分段格式仍只放行 payment 分段。
+            fin_legacy_payment_only = has_finance_access(user) and body.segments is None and isinstance(body.case_record, dict)
+            if fin_legacy_payment_only:
+                _db_cr = json.loads(row["data_json"] or "{}").get("caseRecord") or {}
+                _new_cr = body.case_record
+                body.case_record = {**_db_cr, **({"payment": _new_cr["payment"]} if "payment" in _new_cr else {})}
+            elif not cashier_payment_only:
                 conn.close()
                 raise HTTPException(403, "只有這個案件的成員（業務、協作者、案件角色、階段負責人）或管理員可以修改")
             body.defaults = None
