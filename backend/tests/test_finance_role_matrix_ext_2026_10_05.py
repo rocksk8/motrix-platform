@@ -11,9 +11,13 @@
 4. **財務角色對別人的案件**（擁有者範圍）：額外支出登錄日期、叫料發票日、材料付款清單。
 5. **業務／管理員的報價單編輯與金額**不受財務角色改動影響。
 
-🔴 4、5 兩組在 bfe6eb36 是**紅燈探針**（審查發現：財務角色不在案件擁有者範圍 ⇒ 404；money_visible 收窄 ⇒ 業務／管理員不能編輯報價單、金額被遮）。
-使用者已裁示要修（財務角色加入金額端點的擁有者範圍；money_visible 與財務拆開）。修好前標 `xfail(strict=True)`：修好之後這幾題會「意外通過」而紅燈
-⇒ 逼修的人把標記拿掉（別讓探針永遠停在 xfail）。對照組（superadmin 通過）不標，用來證明夾具本身是對的。
+4、5 兩組原本是 bfe6eb36 上的紅燈探針（審查發現 #1／#2：財務角色不在案件擁有者範圍 ⇒ 404；money_visible 收窄 ⇒ 業務／管理員不能編輯報價單、金額被遮）；
+22753d76 修好（`require_case_money`／`quote_money_visible`）後 xfail 標記已拿掉，現在是一般回歸題。對照組（superadmin 通過）用來證明夾具本身是對的。
+6. 22753d76 的裁示對照：材料申請日常作業維持 admin（財務角色也可）、發票日／匯款申請／改成本單價＝財務角色、T100 確認／取消確認＝僅 superadmin、
+   成本精算與財務彙總維持財務專屬、`receivable()` 認得 finance 群組與 module_activity 的財務受眾。
+
+⚠️ 建帳號：`conftest.make_user` 從 22753d76 起，明確傳入含 cashier／finance／financial_view 的 modules 的非財務帳號會被**悄悄換成 finance 角色**。
+要建「持有惰性勾選的 admin／sales」請用本檔 `_db_user`（直接寫表）。
 """
 import ast
 import json
@@ -30,6 +34,22 @@ DENIED = ("admin", "sales", "engineer", "viewer")
 INERT_FLAGS = ["cashier", "finance", "financial_view"]
 
 
+def _db_user(username, role, modules, password="Test-Pass-123"):
+    """直接寫入 users（不經 conftest.make_user）。🔴 `make_user` 在 22753d76 起有相容替身：明確傳入的 modules 含
+    cashier／finance／financial_view 的非財務帳號會被**悄悄換成 finance 角色**——要建「持有惰性勾選的 admin／sales」
+    只能直接寫表，否則測的其實是財務角色（本檔第一版就因此整批誤判）。"""
+    import db
+    from helpers.auth import _hash_pw
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO users (username, password_hash, display_name, role, modules, active, created_at, must_change_password)"
+                     " VALUES (?,?,?,?,?,1,?,0)", (username, _hash_pw(password), username, role, json.dumps(modules), "2026-01-01T00:00:00"))
+        conn.commit()
+    finally:
+        conn.close()
+    return username, password
+
+
 # ── 帳號：superadmin modules=[]；其餘用真實角色樣板（admin／sales 另帶惰性的財務勾選） ──────────────
 @pytest.fixture()
 def accounts(client, make_user):
@@ -38,9 +58,20 @@ def accounts(client, make_user):
     for r in ("finance", "admin", "sales", "engineer", "viewer"):
         mods = list(ROLE_TEMPLATES[r])
         if r in ("admin", "sales"):
-            mods += [k for k in INERT_FLAGS if k not in mods]
-        out[r] = make_user("x_" + r, role=r, modules=mods)
+            out[r] = _db_user("x_" + r, r, mods + [k for k in INERT_FLAGS if k not in mods])
+        else:
+            out[r] = make_user("x_" + r, role=r, modules=mods)
+    assert out["admin"] and _role_of("x_admin") == "admin" and _role_of("x_sales") == "sales", "帳號角色被改掉了（見 _db_user 說明）"
     return {r: _login(client, *cred) for r, cred in out.items()}
+
+
+def _role_of(username):
+    import db
+    conn = db.get_db()
+    try:
+        return conn.execute("SELECT role FROM users WHERE username=?", (username,)).fetchone()["role"]
+    finally:
+        conn.close()
 
 
 def _call(client, h, method, path, body=None, files=None):
@@ -111,6 +142,9 @@ EXT_ENDPOINTS = [
     ("GET",    "/api/reports/t100-export/vouchers" + _D, None),
     ("GET",    "/api/reports/t100-export/preview" + _D, None),
     ("GET",    "/api/reports/t100-export/confirmed" + _D, None),
+]
+#: 第42班預設 Q7：T100 確認／取消確認（寫入總帳狀態）僅 superadmin；財務角色只能預覽／下載（22753d76 起）
+SUPERADMIN_ONLY_ENDPOINTS = [
     ("POST",   "/api/reports/t100-export/confirm", {"start": "2026-10-01", "end": "2026-10-31"}),
     ("POST",   "/api/reports/t100-export/unconfirm", {"sourceType": "x", "sourceKey": "y"}),
 ]
@@ -119,6 +153,16 @@ EXT_ENDPOINTS = [
 @pytest.mark.parametrize("method,path,body", EXT_ENDPOINTS, ids=lambda v: v if isinstance(v, str) else None)
 def test_ext_matrix(client, accounts, method, path, body):
     _assert_gate(client, accounts, method, path, body)
+
+
+@pytest.mark.parametrize("method,path,body", SUPERADMIN_ONLY_ENDPOINTS, ids=lambda v: v if isinstance(v, str) else None)
+def test_superadmin_only_endpoints(client, accounts, method, path, body):
+    for role, h in accounts.items():
+        r = _call(client, h, method, path, body)
+        if role == "superadmin":
+            assert r.status_code not in (401, 403) and r.status_code < 500, (method, path, r.status_code, r.text[:160])
+        else:
+            assert r.status_code == 403, "%s %s 應只有 superadmin，卻放行 %s：%s %s" % (method, path, role, r.status_code, r.text[:160])
 
 
 def test_ext_matrix_bank_reconcile_upload(client, accounts):
@@ -145,7 +189,7 @@ def test_ext_list_is_not_stale():
     def _rx(p):
         return re.compile("^" + "[^/]+".join(re.escape(x) for x in re.split(r"\{[^}]+\}", p)) + "$")
     rx = [(m, _rx(p)) for m, p in routes]
-    missing = [(m, p) for m, p, _b in EXT_ENDPOINTS
+    missing = [(m, p) for m, p, _b in EXT_ENDPOINTS + SUPERADMIN_ONLY_ENDPOINTS
                if not any(rm == m and r.match(p.split("?")[0]) for rm, r in rx)]
     assert not missing, "EXT_ENDPOINTS 指向不存在的路由：%s" % missing
 
@@ -235,22 +279,33 @@ def test_finance_audience_respects_personal_mute_and_the_recipient_override(mail
     assert _mails(mailbox) == {"n_boss@example.test"}
 
 
-def test_in_app_cashier_recipient_helpers_are_finance_plus_superadmin(make_user):
-    """站內／信件的『出納』收件人 helper（取代掃 cashier 勾選）：持有惰性 cashier 勾選的 admin 不在內。"""
+def test_in_app_cashier_recipient_helpers_are_finance_plus_superadmin(client, make_user):
+    """站內／信件的『出納』收件人 helper（取代掃 cashier 勾選）：持有惰性 cashier 勾選的 admin 不在內。
+    （用 `client` 夾具重置資料庫，且結束時刪掉自己建的帳號：沒有重置的測試會把帳號留給同一 worker 的下一題。）"""
     import db
     from helpers.module_registry import ROLE_TEMPLATES
-    make_user("c_boss", role="superadmin", modules=[])
-    make_user("c_fin", role="finance")
-    make_user("c_adm", role="admin", modules=list(ROLE_TEMPLATES["admin"]) + INERT_FLAGS)
-    make_user("c_sales", role="sales", modules=list(ROLE_TEMPLATES["sales"]) + INERT_FLAGS)
-    from modules.case import expense_notify as EN
-    from modules.payroll import bonus_payouts as BP
-    conn = db.get_db()
+    names_made = ("c_boss", "c_fin", "c_adm", "c_sales")
     try:
-        for who, names in (("expense_notify._cashiers", EN._cashiers(conn)), ("bonus_payouts.cashier_recipients", BP.cashier_recipients(conn, {}))):
-            assert {"c_boss", "c_fin"} <= set(names) and not ({"c_adm", "c_sales"} & set(names)), (who, names)
+        make_user("c_boss", role="superadmin", modules=[])
+        make_user("c_fin", role="finance")
+        _db_user("c_adm", "admin", list(ROLE_TEMPLATES["admin"]) + INERT_FLAGS)
+        _db_user("c_sales", "sales", list(ROLE_TEMPLATES["sales"]) + INERT_FLAGS)
+        assert _role_of("c_adm") == "admin" and _role_of("c_sales") == "sales"
+        from modules.case import expense_notify as EN
+        from modules.payroll import bonus_payouts as BP
+        conn = db.get_db()
+        try:
+            for who, names in (("expense_notify._cashiers", EN._cashiers(conn)), ("bonus_payouts.cashier_recipients", BP.cashier_recipients(conn, {}))):
+                assert {"c_boss", "c_fin"} <= set(names) and not ({"c_adm", "c_sales"} & set(names)), (who, names)
+        finally:
+            conn.close()
     finally:
-        conn.close()
+        conn = db.get_db()
+        try:
+            conn.execute("DELETE FROM users WHERE username IN (%s)" % ",".join("?" * len(names_made)), names_made)
+            conn.commit()
+        finally:
+            conn.close()
 
 
 #: 財務通知呼叫點：檔案 ⇒ 預期有幾個 `notify_module_activity` 呼叫，且**全部**帶 audience="finance"
@@ -260,19 +315,21 @@ FINANCE_NOTIFY_FILES = {
     "modules/arap/api/payment_requests.py": 2,
     "modules/subcontract/api/contractor_vouchers.py": 5,
 }
-#: 案件檔裡的財務動作（以第 2 個位置參數＝動作標籤辨認）
-FINANCE_NOTIFY_ACTIONS = {"modules/case/api/quotations.py": {"申請沖銷", "取消沖銷申請"}}
+#: 案件檔裡的財務動作（以所在函式辨認）：沖銷申請／取消／核可退回、收款標記
+FINANCE_NOTIFY_FUNCS = {"modules/case/api/quotations.py": {"request_payment_writeoff", "cancel_payment_writeoff", "approve_payment_writeoff", "mark_payment"}}
 
 
 def _notify_calls(rel):
+    """⇒ [(行, 所在函式, audience 字面值或 None)]"""
     tree = ast.parse((BACKEND / rel).read_text(encoding="utf-8"))
     out = []
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Call) and getattr(n.func, "id", getattr(n.func, "attr", "")) == "notify_module_activity":
-            aud = next((k.value.value for k in n.keywords if k.arg == "audience" and isinstance(k.value, ast.Constant)), None)
-            act = n.args[1].value if len(n.args) > 1 and isinstance(n.args[1], ast.Constant) else None
-            out.append((n.lineno, act, aud))
-    return out
+    for fn in ast.walk(tree):
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for n in ast.walk(fn):
+                if isinstance(n, ast.Call) and getattr(n.func, "id", getattr(n.func, "attr", "")) == "notify_module_activity":
+                    aud = next((k.value.value for k in n.keywords if k.arg == "audience" and isinstance(k.value, ast.Constant)), None)
+                    out.append((n.lineno, fn.name, aud))
+    return sorted(set(out))
 
 
 @pytest.mark.parametrize("rel,count", sorted(FINANCE_NOTIFY_FILES.items()))
@@ -282,16 +339,14 @@ def test_every_finance_notification_call_site_passes_audience_finance(rel, count
     assert all(a == "finance" for _l, _x, a in calls), "%s 有財務通知沒帶 audience=\"finance\"：%s" % (rel, [c for c in calls if c[2] != "finance"])
 
 
-@pytest.mark.parametrize("rel,actions", sorted(FINANCE_NOTIFY_ACTIONS.items()))
-def test_finance_actions_in_case_module_pass_audience_finance(rel, actions):
-    calls = {act: aud for _l, act, aud in _notify_calls(rel) if act in actions}
-    assert set(calls) == actions, "找不到預期的財務通知呼叫：%s" % (actions - set(calls))
-    assert all(a == "finance" for a in calls.values()), calls
+@pytest.mark.parametrize("rel,funcs", sorted(FINANCE_NOTIFY_FUNCS.items()))
+def test_finance_actions_in_case_module_pass_audience_finance(rel, funcs):
+    calls = [(l, f, a) for l, f, a in _notify_calls(rel) if f in funcs]
+    assert {f for _l, f, _a in calls} == funcs, "找不到預期的財務通知呼叫：%s" % (funcs - {f for _l, f, _a in calls})
+    assert all(a == "finance" for _l, _f, a in calls), [c for c in calls if c[2] != "finance"]
 
 
 # ── 4. 財務角色對別人的案件（擁有者範圍）──────────────────────────────────────
-#: 修好（財務角色加入金額端點的擁有者範圍，使用者已裁示）之前是紅燈探針；修好後意外通過 ⇒ 拿掉標記。
-_PROBE_M2 = pytest.mark.xfail(strict=True, reason="審查發現 #2：財務角色不在案件擁有者範圍 ⇒ 別人的案件 404；待 hichan-7b 修（財務角色加入金額端點的擁有者範圍）")
 
 
 @pytest.fixture()
@@ -316,7 +371,6 @@ def test_control_superadmin_can_register_extra_expense_dates(W):
     assert r.status_code == 200, r.text
 
 
-@_PROBE_M2
 def test_finance_role_can_register_extra_expense_dates_on_a_foreign_case(finance_on_foreign_case):
     c, h, fh = finance_on_foreign_case
     eid = _expense(c, h)
@@ -331,7 +385,6 @@ def test_control_superadmin_can_register_material_invoice_date(W):
     assert r.status_code == 200, r.text
 
 
-@_PROBE_M2
 def test_finance_role_can_register_material_invoice_date_on_a_foreign_case(finance_on_foreign_case):
     c, h, fh = finance_on_foreign_case
     _material_setup()
@@ -346,7 +399,6 @@ def test_control_superadmin_sees_unmasked_material_payments(W):
     assert r.status_code == 200 and not r.json().get("moneyMasked") and "m1" in r.json()["orders"], r.text[:200]
 
 
-@_PROBE_M2
 def test_finance_role_sees_material_payments_of_a_foreign_case(finance_on_foreign_case):
     c, h, fh = finance_on_foreign_case
     _material_setup()
@@ -355,13 +407,21 @@ def test_finance_role_sees_material_payments_of_a_foreign_case(finance_on_foreig
 
 
 # ── 5. 業務／管理員：報價單編輯與金額不受財務角色改動影響 ─────────────────────
-_PROBE_M1 = pytest.mark.xfail(strict=True, reason="審查發現 #1：money_visible 收窄成財務角色 ⇒ 業務／管理員不能編輯報價單、金額被遮；待 hichan-7b 修（money_visible 與財務拆開，使用者已裁示）")
 
 
-def _seed_case(assigned):
-    from tests.test_case_money_mask_2026_09_24 import _seed
+def _seed_case(assigned, owner=None):
+    """`owner`＝案件業務帳號（PUT 只有案件業務或 admin+ 能改；被指派的協作者只能看）。"""
+    import db
+    from tests.test_case_money_mask_2026_09_24 import NO as MASK_NO, _seed
     _seed(assigned=assigned, status="草稿")        # 非草稿的報價單要走正式流程／解鎖才能 PUT（與角色無關）
-    from tests.test_case_money_mask_2026_09_24 import NO as MASK_NO
+    if owner:
+        conn = db.get_db()
+        try:
+            uid = conn.execute("SELECT id FROM users WHERE username=?", (owner,)).fetchone()["id"]
+            conn.execute("UPDATE quotations SET sales_person_id=?, sales_person=? WHERE quote_no=?", (uid, owner, MASK_NO))
+            conn.commit()
+        finally:
+            conn.close()
     return MASK_NO
 
 
@@ -386,7 +446,6 @@ def test_control_superadmin_edits_quotation_and_sees_totals(client, make_user, r
 
 
 @pytest.mark.parametrize("role", ["sales", "admin"])
-@_PROBE_M1
 def test_sales_and_admin_still_see_quotation_totals(client, make_user, role):
     from helpers.module_registry import ROLE_TEMPLATES
     u = make_user("q_tot_" + role, role=role, modules=list(ROLE_TEMPLATES[role]))
@@ -399,12 +458,97 @@ def test_sales_and_admin_still_see_quotation_totals(client, make_user, role):
 
 
 @pytest.mark.parametrize("role", ["sales", "admin"])
-@_PROBE_M1
 def test_sales_and_admin_can_still_edit_a_quotation(client, make_user, role):
     from helpers.module_registry import ROLE_TEMPLATES
     u = make_user("q_edit_" + role, role=role, modules=list(ROLE_TEMPLATES[role]))
-    no = _seed_case([u[0]])
+    no = _seed_case([u[0]], owner=u[0])
     h = _login(client, *u)
     before = _quote_data(no)
     r = client.put("/api/quotations/%s" % no, headers=h, json={"data": before})
     assert r.status_code == 200, "業務／管理員編輯報價單：%s %s" % (r.status_code, r.text[:200])
+
+
+# ── 6. 22753d76 的裁示對照（(a)–(d)）────────────────────────────────────────────
+def test_material_suppliers_picker_roles(client, accounts):
+    """材料申請建立（admin／專案經理）與匯款申請（財務）都要選供應商：superadmin／admin／finance 放行；業務、工程、檢視者 403。"""
+    for role, h in accounts.items():
+        r = client.get("/api/material-suppliers", headers=h)
+        if role in ("superadmin", "admin", "finance"):
+            assert r.status_code == 200, (role, r.status_code, r.text[:160])
+        else:
+            assert r.status_code == 403, (role, r.status_code, r.text[:160])
+
+
+def test_finance_and_admin_can_replace_material_orders_but_not_sales(finance_on_foreign_case, make_user):
+    """Q6：材料申請日常作業維持 admin；財務角色可（不受擁有者限制）。空清單＝最小的合法 PATCH。"""
+    from helpers.module_registry import ROLE_TEMPLATES
+    c, h, fh = finance_on_foreign_case
+    ah = _login(c, *make_user("m_adm", role="admin", modules=list(ROLE_TEMPLATES["admin"])))
+    sh = _login(c, *make_user("m_sal", role="sales", modules=list(ROLE_TEMPLATES["sales"])))
+    body = {"materialOrders": []}
+    for who, hh in (("superadmin", h), ("finance", fh), ("admin", ah)):
+        r = c.patch("/api/quotations/%s/material-orders" % NO, headers=hh, json=body)
+        assert r.status_code == 200, (who, r.status_code, r.text[:160])
+    r = c.patch("/api/quotations/%s/material-orders" % NO, headers=sh, json=body)
+    assert r.status_code in (403, 404), (r.status_code, r.text[:160])               # 不是案件業務（404）或沒有權限（403）；絕不可 200
+
+
+def test_material_invoice_date_is_finance_only_not_admin(finance_on_foreign_case, make_user):
+    """使用者裁示：材料申請發票日＝財務角色／superadmin（admin 與專案經理都不行）。"""
+    from helpers.module_registry import ROLE_TEMPLATES
+    c, h, fh = finance_on_foreign_case
+    _material_setup()
+    ah = _login(c, *make_user("m_adm2", role="admin", modules=list(ROLE_TEMPLATES["admin"]) + ["project_manage"]))
+    r = c.patch("/api/quotations/%s/material-orders/m1/invoice-date" % NO, headers=ah, json={"invoiceDate": "2026-10-05"})
+    assert r.status_code == 403, (r.status_code, r.text[:160])
+
+
+def test_settlement_and_finance_summary_stay_finance_only(finance_on_foreign_case, make_user):
+    """成本精算／財務彙總維持財務專屬（22753d76 沒有放寬）：superadmin、finance（不受擁有者限制）放行；admin 403。
+    這是『現況特徵化』題——使用者若裁示要讓業務／管理員做精算，改這題。"""
+    from helpers.module_registry import ROLE_TEMPLATES
+    c, h, fh = finance_on_foreign_case
+    ah = _login(c, *make_user("s_adm", role="admin", modules=list(ROLE_TEMPLATES["admin"])))
+    for url in ("/api/quotations/%s/settlement" % NO, "/api/quotations/%s/finance-summary" % NO):
+        for who, hh in (("superadmin", h), ("finance", fh)):
+            if who == "finance" and url.endswith("finance-summary"):
+                continue                      # 見下面的探針（22753d76 漏改：仍用 require_case）
+            r = c.get(url, headers=hh)
+            assert r.status_code == 200, (url, who, r.status_code, r.text[:160])
+        r = c.get(url, headers=ah)
+        assert r.status_code == 403, (url, "admin", r.status_code, r.text[:160])
+
+
+@pytest.mark.xfail(strict=True, reason="22753d76 漏改：GET /api/quotations/{no}/finance-summary（案件財務 Tab 應收應付總覽）仍用 require_case ⇒ 財務角色讀別人的案件 404；"
+                                      "應與 settlement 一樣改 require_case_money。修好後這題會 XPASS ⇒ 拿掉標記")
+def test_finance_role_reads_finance_summary_of_a_foreign_case(finance_on_foreign_case):
+    c, h, fh = finance_on_foreign_case
+    r = c.get("/api/quotations/%s/finance-summary" % NO, headers=fh)
+    assert r.status_code == 200, (r.status_code, r.text[:160])
+
+
+def test_receivable_list_knows_the_finance_group_and_the_finance_audience():
+    """users.html 的退訂清單：財務角色會收到 module_activity（audience=finance）⇒ 要列出；未知／新群組不丟 KeyError。"""
+    from types import SimpleNamespace
+    from helpers import mail_types as mt
+    from routers.mail_settings import receivable
+    t = mt.get("module_activity")
+    assert receivable(t, {}, "u", "finance") is True and receivable(t, {}, "u", "admin") is True and receivable(t, {}, "u", "sales") is False
+    grp = SimpleNamespace(key="x_finance_group", group="finance", event="")
+    assert receivable(grp, {}, "u", "finance") is True and receivable(grp, {}, "u", "superadmin") is True and receivable(grp, {}, "u", "admin") is False
+    odd = SimpleNamespace(key="x_unknown_group", group="no_such_group", event="")
+    assert receivable(odd, {}, "u", "finance") is False                                  # 不丟 KeyError
+
+
+def test_receivable_endpoint_lists_module_activity_for_a_finance_user(client, make_user):
+    su = make_user("r_sa", role="superadmin", modules=[])
+    make_user("r_fin", role="finance")
+    import db
+    conn = db.get_db()
+    try:
+        uid = conn.execute("SELECT id FROM users WHERE username='r_fin'").fetchone()["id"]
+    finally:
+        conn.close()
+    r = client.get("/api/mail-types/receivable?user_id=%d" % uid, headers=_login(client, *su))
+    assert r.status_code == 200, r.text
+    assert next(x for x in r.json()["items"] if x["key"] == "module_activity")["receivable"] is True
