@@ -89,8 +89,8 @@ def test_reading_does_not_open_other_writes(client, make_user):
         conn.close()
     h = _login(client, *u)
     assert client.put(f"/api/quotations/{NO}", headers=h, json={"data": {"items": []}}).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
-    assert client.patch(f"/api/quotations/{NO}/material-orders", headers=h,
-                        json={"materialOrders": []}).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
+    # 第42班：材料申請（叫料）屬金額面端點——財務角色不受案件擁有者限制（改單價／取消／發票日要財務角色），故不再回 404；
+    # 一般帳號看不到案件仍是 404（見 test_finance_role_split）
 
 
 def test_map_case_layer_matches_list_visibility_for_cashier(client, make_user, _geo):

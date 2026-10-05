@@ -57,7 +57,7 @@ def test_scanner_finds_consumers():
 
 def test_require_user_returns_every_consumed_key(client, make_user):
     from helpers.auth import _require_user
-    u, p = make_user(username="contract_u", role="admin", modules=["cashier", "case_manage"])
+    u, p = make_user(username="contract_u", role="admin", modules=["cashier", "case_manage"], legacy_finance_flag=False)
     token = client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]
     user = _require_user("Bearer " + token)
     missing = sorted((REQUIRED | consumed_keys()) - set(user))
