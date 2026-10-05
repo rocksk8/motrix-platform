@@ -1038,6 +1038,10 @@ if (Test-Path $versionManifestPath) {
 }
 
 # --- Step 5: 用 git archive 匯出乾淨快照 ---
+# 2026-10-05（第44班）：從這裡起（建包的所有 Python 步驟：產品選配、不出貨清單、版本紀錄精簡、驗證）一律不寫 .pyc。
+# 起因：第40班的包裡出現 tools/platform/__pycache__/product_select.cpython-312.pyc——選配步驟 import 了包內的模組，Python 順手在包裡寫快取，
+# 進了 package.sha256 的逐檔雜湊（不是壞事，但出貨的東西不該有執行痕跡）。測試階段（上面）刻意**不**設：.pyc 快取讓 pytest 各 worker 少編譯，省建包時間。
+$env:PYTHONDONTWRITEBYTECODE = "1"
 $_tArchive = Get-Date
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 if (-not $OutDir) {
@@ -1139,6 +1143,7 @@ if (-not (Test-Path $buildCommitPath)) {
 Write-Host "      .build_commit: $commitShort"
 
 # --- 產品選配（CORE-SPEC §9c①）：沒選到的模組整個資料夾不進包，寫 modules.lock.json ---
+$env:PYTHONDONTWRITEBYTECODE = "1"      # 明確再設一次（上面 Step 5 已設；此步最容易在包內留下 __pycache__）
 $productSelect = Join-Path $projectRoot "tools\platform\product_select.py"
 if ($License) {
     if (-not (Test-Path -LiteralPath $License)) { Fail "找不到授權檔：$License，部署包未完成，已中止。" }
@@ -1151,6 +1156,13 @@ if ($License) {
     if ($LASTEXITCODE -ne 0) {
         Fail "產品選配失敗（-Product $Product，exit code $LASTEXITCODE），部署包未完成，已中止。"
     }
+}
+
+# 保險：git archive 本來就沒有 __pycache__／.pyc；有的話一定是建包步驟留下的 ⇒ 清掉（並說出來，方便追哪一步寫的）。
+$strayPyc = @(Get-ChildItem -LiteralPath $pkgDir -Recurse -Force -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue)
+foreach ($d in $strayPyc) {
+    Write-Host "      [警告] 包內出現 $($d.FullName.Substring($pkgDir.Length))，已移除（建包步驟不該寫 .pyc）" -ForegroundColor Yellow
+    Remove-Item -LiteralPath $d.FullName -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 # --- Step 5.55: 寫入「不出貨清單」backend/export_ignore.json（T22-2）---
