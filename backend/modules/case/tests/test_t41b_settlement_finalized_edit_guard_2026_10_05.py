@@ -24,7 +24,7 @@ def test_non_superadmin_cannot_edit_a_finalized_settlement_even_with_a_reason(ca
     assert r.status_code == 200 and _status() == "finalized", r.text[:200]
     frozen = json.dumps(_saved()["settlement"], sort_keys=True, ensure_ascii=False)
 
-    u, p = make_user(username="t41b_admin", role="admin")                       # admin：過得了案件與財務檢視閘，只缺 superadmin
+    u, p = make_user(username="t41b_fin", role="finance")                        # 第42班：精算只限財務角色／superadmin；財務過得了案件與財務檢視閘，只缺 superadmin
     ah = _login(c, u, p)
     draft = page_payload(c, ah)
     draft["status"] = "draft"

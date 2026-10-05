@@ -217,7 +217,7 @@ def test_global_switch_off_blocks_even_deletes(client, make_user, monkeypatch):
 def test_semi_unlock_approve_replay_pushes_for_payment_mark(client, make_user, monkeypatch):
     cal = _setup(monkeypatch, {"receipt_logged": True, "receivable_due": True})
     _seed([_it(expectedReceiptDate="2031-06-01")], deal_tag="已結案", semi=1)
-    h = _login(client, make_user, "rccal_cash", "admin")
+    h = _login(client, make_user, "rccal_cash", "finance")   # 第42班：標記收款只限財務角色／superadmin
     r = client.patch(f"/api/quotations/{NO}/payment/0", headers=h,
                      json={"received": True, "receivedAt": "2031-05-30", "actualAmount": 31500, "itemId": 1})
     assert r.status_code == 200 and r.json().get("pending"), r.text
