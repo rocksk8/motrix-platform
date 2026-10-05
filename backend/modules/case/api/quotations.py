@@ -61,6 +61,7 @@ from helpers import (
 from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E402  CA-O4：L1
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
 from modules.case import material_guard as MG  # 叫料審核的寫入閘（31-C）
+from modules.case import receipt_calendar as _RC  # 行事曆「收款登錄／應收到期提醒」（2026-10-05，預設關）
 from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
 from modules.case.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
 from modules.case.quotations import validate_tax_basis
@@ -2761,6 +2762,13 @@ def _validate_changed_receipts(old_items: list, new_items: list) -> None:
         _validate_receipt_body(new_it)
 
 
+def _calendar_after_payment_change(quote_no: str, old_items, new_items) -> None:
+    """款項期別有收款／預計收款日的變化 ⇒ commit 之後背景推行事曆（兩種事件預設關；開關在 L1 判斷）。
+    沒變化就不開執行緒。⚠ 只能在寫鎖放掉之後呼叫（write_txn_scan 擋寫鎖內）。"""
+    if _RC.events_for_change(old_items, new_items):
+        spawn_bg_thread(_RC.push_after_commit, args=(quote_no, _RC.snapshot(old_items), _RC.snapshot(new_items)))
+
+
 @router.patch("/api/quotations/{quote_no}/case-record")
 def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -2936,6 +2944,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         conn.commit()
         conn.close()
         spawn_bg_thread(_backup_quotation, args=(quote_no,))
+        _calendar_after_payment_change(quote_no, old_items, ((data.get("caseRecord") or {}).get("payment") or {}).get("items"))
         _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
         for _o, _n in invoice_changes:                     # MONEY-FLOWS §9 L12：更換已登錄的發票號碼留稽核
             _audit(_tok(authorization), 'payment.invoice_no_change', 'quotation', quote_no,
@@ -2998,7 +3007,7 @@ def _move_staged_files(staged_files: list, subfolder: str, doc_no: str) -> list:
 
 
 def _apply_case_change_request(conn, req, approver: dict, authorization: str,
-                                deferred_audits: list) -> dict:
+                                deferred_audits: list, deferred_calendar: list = None) -> dict:
     """superadmin 核准後真正套用一筆 case_change_requests。呼叫端負責在成功
     回傳後把該筆記錄標記 approved 並 commit；這裡只處理「套用效果」本身，
 
@@ -3042,6 +3051,9 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
         new_case_record = payload.get("case_record") or {}
         new_devices = new_case_record.get("devices") or []
         new_case_record["stages"] = cr.get("stages") or []
+        if deferred_calendar is not None:            # 行事曆（commit 之後由呼叫端推）：套用前後的款項期別
+            deferred_calendar.append((quote_no, _RC.snapshot((cr.get("payment") or {}).get("items")),
+                                      _RC.snapshot((new_case_record.get("payment") or {}).get("items"))))
         data["caseRecord"] = new_case_record
         stock_conflicts, stock_notice = [], None
         if new_devices != old_devices:
@@ -3062,6 +3074,7 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
         # 2026-09-24：驗證與套用改走 mark_payment() 同一組函式。修正前排進佇列的
         # 壞資料（已收無日期、金額非數字）在這裡擋下，不落地；收款人記提出申請的人。
         _validate_receipt_body(body)
+        _pay_before = _RC.snapshot(pits)
         _apply_payment_mark(pits, idx, body,
                             req["requested_by_display"] or req["requested_by"] or "")
         if "invoiceNo" in body:
@@ -3070,6 +3083,8 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
         if "invoiceDate" in body:
             pits[idx]["invoiceDate"] = body["invoiceDate"]
         _apply_invoice_amounts(pits[idx], body)
+        if deferred_calendar is not None:
+            deferred_calendar.append((quote_no, _pay_before, _RC.snapshot(pits)))
         save_quotation_json(conn, quote_no, data)
         deferred_audits.append(('payment.mark', 'quotation', quote_no,
                                 f"{label}（半解鎖審核通過套用）", None))
@@ -3162,9 +3177,10 @@ def approve_case_change(change_id: int, authorization: str = Header(None)):
         # 另開連線寫 audit_log，會撞上 SQLite 單一 writer 等滿 30 秒 busy_timeout，
         # 而且例外被 `_audit()` 吞掉，稽核紀錄直接消失。實測 32.8 秒。
         deferred_audits: list = []
+        deferred_calendar: list = []
         try:
             apply_result = _apply_case_change_request(conn, req, user, authorization,
-                                                      deferred_audits)
+                                                      deferred_audits, deferred_calendar)
         except HTTPException:
             conn.close()
             raise
@@ -3178,6 +3194,8 @@ def approve_case_change(change_id: int, authorization: str = Header(None)):
         for action, target_type, target_id, target_label, detail in deferred_audits:
             _audit(_tok(authorization), action, target_type, target_id, target_label, detail)
         spawn_bg_thread(_backup_quotation, args=(req["quote_no"],))
+        for _qn, _old, _new in deferred_calendar:     # 寫鎖已放掉；半解鎖審核套用的收款也推行事曆
+            _calendar_after_payment_change(_qn, _old, _new)
         _notify(req["requested_by"], "case_change_decided", req["quote_no"], req["quote_no"],
                 f"您對已結案案件 {req['quote_no']} 提出的變更「{req['summary']}」已由 {approver_display} 核准套用")
         return {"ok": True, "status": "approved", **(apply_result or {})}
@@ -3903,6 +3921,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         if gated:
             return {"ok": True, "pending": True, "changeRequestId": change_id,
                     "message": "案件已結案並處於半解鎖狀態，此變更已送出，待最高管理員審核通過後才會套用"}
+        _pay_before = _RC.snapshot(pits)        # 行事曆比對用（原地修改前）
         _apply_payment_mark(pits, idx, body, received_by)
         if "invoiceNo" in body:
             pits[idx]["invoiceNo"] = body["invoiceNo"]
@@ -3921,6 +3940,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
     finally:
         conn.close()
     spawn_bg_thread(_backup_quotation, args=(no,))
+    _calendar_after_payment_change(no, _pay_before, pits)
     label = pits[idx].get('label', f'第{idx+1}期')
     fee   = pits[idx].get("feeAmount") or 0
     action_detail = (

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """行事曆推送可選（2026-09-30 使用者裁示；提案 D:\\開發測試檔\\proposal-calendar-events.md）。
 
-L1 `helpers.google_calendar`：事件種類開關（`system_settings.google_calendar.events`）、預設（既有 9 種開、新 4 種關）、
+L1 `helpers.google_calendar`：事件種類開關（`system_settings.google_calendar.events`）、預設（既有 9 種開、新 6 種關）、
 關閉不刪既有事件、通用推送 `push_event_for_module`（同一案件同一天合併）、設定端點只限最高管理者＋每個變更記稽核。
 Google API 一律用 `tests/_fake_gcal.py` 的假行事曆，不連外。
 """
@@ -13,7 +13,7 @@ from tests import _fake_gcal
 
 EXISTING = ["invoice_voucher", "payment_request", "shipping_note", "quotation_won", "stage_due", "stage_done",
             "important_comment", "dev_case_converted", "dev_case_stale"]
-NEW = ["case_update", "dev_case_update", "contractor_payout", "expense_payout"]
+NEW = ["case_update", "dev_case_update", "contractor_payout", "expense_payout", "receipt_logged", "receivable_due"]
 
 
 def _gc():
@@ -30,7 +30,7 @@ def _hdr(client, make_user, name, role):
 
 # ── 預設 ──────────────────────────────────────────────────────────────────
 
-def test_catalog_is_nine_existing_on_and_four_new_off():
+def test_catalog_is_nine_existing_on_and_six_new_off():
     gc = _gc()
     assert list(gc.EVENT_CODES) == [t["code"] for t in gc.event_types()]
     assert sorted(gc.EVENT_CODES) == sorted(EXISTING + NEW)

@@ -243,6 +243,8 @@ EVENT_TYPES = (
     ("dev_case_update",    "業務開發案件更新",       "業務開發", "新增開發（拜訪）紀錄；同一案件同一天合併為一個「○○案件更新」事件", False),
     ("contractor_payout",  "包商撥款",               "付款",     "承攬商匯款申請標記已匯款時，以匯款日期建立", False),
     ("expense_payout",     "支出付款",               "付款",     "出納登錄請款（案件額外支出）付款時，以付款日建立；不含勞報單付款", False),
+    ("receipt_logged",     "收款登錄",               "收款",     "案件款項期別登錄為已收款時，以收款日建立（改收款日／實收同步更新、取消收款刪除）；金額只寫在說明", False),
+    ("receivable_due",     "應收到期提醒",           "收款",     "未收款期別填了預計收款日時建立（改日期同步更新；已收款、清空日期、期別刪除即刪除）", False),
 )
 EVENT_CODES = tuple(t[0] for t in EVENT_TYPES)
 _EVENT_DEFAULTS = {t[0]: t[4] for t in EVENT_TYPES}
@@ -336,6 +338,54 @@ def push_event_for_module(code: str, summary: str, description: str, event_date=
         logger.info("push_event_for_module(%s, %s): -> event %s", code, key, event_id)
     except Exception as exc:
         logger.warning("push_event_for_module(%r) failed: %s", code, exc)
+
+
+# ── 「一個對象一個事件」的 upsert／delete（2026-10-05，receipt_logged／receivable_due）──────────
+# push_event_for_module 的 merge_key 是「同一天合併」，日期一變就找不到舊事件。到期提醒要「改日期＝移動同一筆、
+# 收到款＝刪掉」，所以另以 (代碼, key) 為唯一識別（與日期無關），仍用 Google 事件的 private extendedProperty
+# `motrixMergeKey` 找回——不需要新表、不存 event id、重開機也找得回。呼叫端（模組）在 commit 之後 spawn_bg_thread。
+def _upsert_key(code: str, key: str) -> str:
+    return f"{code}#{key}"          # 與 push_event_for_module 的「代碼:key:日期」不同形，不會撞
+
+
+def push_event_upsert_for_module(code: str, summary: str, description: str, event_date, key: str) -> None:
+    """同一 (代碼, key) 只會有一筆事件：找得到 ⇒ 更新標題／說明／日期；找不到 ⇒ 建立。
+    事件種類開關關閉 ⇒ 不建不改（既有事件保留）。fire-and-forget：失敗只記 log。"""
+    try:
+        if not event_enabled(code) or not key:
+            return
+        if isinstance(event_date, str):
+            try:
+                event_date = date.fromisoformat(event_date[:10])
+            except ValueError:
+                event_date = None
+        event_date = event_date or date.today()
+        mk = _upsert_key(code, key)
+        with _merge_lock(mk):
+            found = _find_merged_event(mk)
+            if found:
+                event_id = _update_event_with_retry(found["id"], summary, description, event_date)
+            else:
+                event_id = _create_merged_event(summary, description, event_date, mk)
+        logger.info("push_event_upsert_for_module(%s, %s): -> event %s", code, key, event_id)
+    except Exception as exc:
+        logger.warning("push_event_upsert_for_module(%r, %r) failed: %s", code, key, exc)
+
+
+def push_event_delete_for_module(code: str, key: str) -> None:
+    """刪掉 (代碼, key) 那一筆（找不到＝已經沒有，視為成功）。事件種類開關關閉 ⇒ 不碰 Google（零流量；
+    與開關的既有語意一致：關掉之後已建立的事件保留，不刪）；全域總開關關閉同樣不打。fire-and-forget。"""
+    try:
+        if not key or not event_enabled(code) or not _cfg().get("enabled"):
+            return
+        mk = _upsert_key(code, key)
+        with _merge_lock(mk):
+            found = _find_merged_event(mk)
+            if found:
+                _delete_event_with_retry(found["id"])
+                logger.info("push_event_delete_for_module(%s, %s): deleted event %s", code, key, found["id"])
+    except Exception as exc:
+        logger.warning("push_event_delete_for_module(%r, %r) failed: %s", code, key, exc)
 
 
 # ── 三個觸發點（2026-08-21 這輪範圍）──────────────────────────────────────────

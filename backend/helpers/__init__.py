@@ -101,6 +101,8 @@ from .google_calendar import (
     push_event_for_case_stage_done,
     push_event_delete_for_case_stage,
     push_event_for_module,
+    push_event_upsert_for_module,
+    push_event_delete_for_module,
     create_test_event as create_calendar_test_event,
 )
 from .uploads import (
@@ -169,6 +171,7 @@ __all__ = [
     "push_event_for_quotation_won", "create_calendar_test_event",
     "push_event_for_case_stage_due", "push_event_for_case_stage_done",
     "push_event_delete_for_case_stage", "push_event_for_module",
+    "push_event_upsert_for_module", "push_event_delete_for_module",
     # uploads
     "save_document_files", "delete_document_file",
     # startup
