@@ -286,3 +286,15 @@ def test_new_types_describe_the_no_backfill_rule():
     by = {t["code"]: t for t in gc.event_types()}
     for c in ("receipt_logged", "receivable_due", "payable_due"):
         assert "只對開啟後的變更生效" in by[c]["description"], c
+
+
+def test_received_flag_not_the_date_decides_receipt_state():
+    """突變守門（稽核 T41）：收款狀態看 `received` 旗標，不是 receivedAt 有沒有值。
+    取消收款（旗標關掉、receivedAt 還留著）⇒ 收款事件刪、有預計日就回到到期提醒；只有日期沒有旗標 ⇒ 不產生收款事件。"""
+    d = "2031-05-30"
+    old = [_it(received=True, receivedAt=d, expectedReceiptDate="2031-06-01")]
+    new = [_it(received=False, receivedAt=d, expectedReceiptDate="2031-06-01")]
+    assert sorted(_ev(old, new)) == [("delete", "receipt_logged", "1"), ("upsert", "receivable_due", "1")]
+    assert _ev(old, [_it(received=False, receivedAt=d)]) == [("delete", "receipt_logged", "1")]
+    assert _ev([_it()], [_it(received=False, receivedAt=d)]) == [], "只有 receivedAt、沒有 received ⇒ 沒有收款事件"
+    assert _ev([], [_it(received=False, receivedAt=d)]) == []
