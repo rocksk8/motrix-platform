@@ -44,7 +44,7 @@ def _insert_dispatch_with_voucher(quote_no, dispatch_total=45000):
 
 
 def test_update_dispatch_blocked_once_voucher_exists(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="finance")          # 第42班（Q5）：改派發金額＝財務角色
     token = _login(client, username, password)
     dispatch_id = _insert_dispatch_with_voucher("MQ-DGUARD-001")
 
@@ -79,7 +79,7 @@ def test_update_dispatch_still_allowed_without_voucher(client, make_user):
     finally:
         conn.close()
 
-    username, password = make_user(role="admin")
+    username, password = make_user(role="finance")          # 第42班（Q5）：改派發金額＝財務角色
     token = _login(client, username, password)
     r = client.put(f"/api/contractor-dispatches/{dispatch_id}", headers=_auth(token), json={
         "quote_no": "MQ-DGUARD-002", "vendor_id": None, "dispatch_date": "2026-01-01",
