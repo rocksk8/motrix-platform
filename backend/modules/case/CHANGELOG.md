@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-05（wip/t42-fix-recipients）：預定付款日提醒信的收件人只走財務郵件群組
+## 1.0.146 — 2026-10-05（wip/t42-fix-recipients）：預定付款日提醒信的收件人只走財務郵件群組
 - `payable_reminders.py`：合併財務角色後，`payable_due_soon`／`payable_due_today` 固定登記在 `finance` 群組並以 `to_group=True` 寄信，**不再另帶 usernames**（原本群組＋本地樁 `finance_recipients()` 取聯集，會多寄給不在群組的人／繞過收件設定）。移除本地樁；沒有收件人 ⇒ 不寄、不寫 guard（寄成功才寫，下次有收件人再發）。個人退訂與「僅超級管理員」覆寫由寄信入口統一處理。
 - 測試：`test_payable_planned_pay_date_2026_10_05.py` 收件人題改寫為合併後語意（只用群組、退訂、僅超管覆寫、無收件人不寫 guard、類型在 finance 群組）；惰性出納勾選的 admin 帳號以 `legacy_finance_flag=False` 建。
 
