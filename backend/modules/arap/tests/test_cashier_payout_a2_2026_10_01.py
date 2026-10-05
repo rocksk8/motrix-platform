@@ -11,6 +11,9 @@ import pytest
 SENT = "/api/quotations/-/extra-expenses"
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, u, p):
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     assert r.status_code == 200, r.text
@@ -114,8 +117,8 @@ def test_purchase_req_is_not_in_cashier_and_cannot_be_paid(client, H):
 def test_non_cashier_cannot_pay_or_read_bank(client, H):
     eid = _approved(client, H["po_form"], kind="travel", payeeType="employee", payeeName="王小明", payeeBank="玉山", payeeAccount="1234567890123")
     assert _pay(client, H["po_form"], eid).status_code == 403
-    assert _pay(client, H["po_fin"], eid).status_code == 403                                        # 財務可看不可付
-    for who in ("po_form", "po_fin"):
+    # 第42班：出納與財務合併為財務角色，「出納唯讀／不可核可」的分工不再存在（自核風險已列入 FINANCE-ROLE-GOLIVE 後續）
+    for who in ("po_form",):
         assert client.get("/api/cashier/pending-payables/case/%d/payee-bank" % eid, headers=H[who]).status_code == 403
     assert _row(eid)["paid_date"] in ("", None)
 

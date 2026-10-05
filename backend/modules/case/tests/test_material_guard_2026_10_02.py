@@ -19,6 +19,9 @@ NO = "MQ-MATG-001"
 
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 @pytest.fixture(autouse=True)
 def _po_rule_off(monkeypatch):
     """本檔測的是別的規則；33-M1「新申請必須帶採購單／送審必須有已核准採購單」另有 test_material_po_required_2026_10_03.py。"""
@@ -96,7 +99,7 @@ def _put_cr(client, h, **changes):
 @pytest.fixture
 def world(client, make_user):
     eng, ep = make_user(username="mg_eng", role="sales")                       # 案件成員，非 admin、無 project_manage
-    adm, ap = make_user(username="mg_adm", role="admin")
+    adm, ap = make_user(username="mg_adm", role="superadmin")
     boss, bp = make_user(username="mg_boss", role="sales")
     _seed(assigned=[_uid(eng)])
     return {"eng": _login(client, eng, ep), "adm": _login(client, adm, ap), "boss": _login(client, boss, bp), "boss_name": boss}

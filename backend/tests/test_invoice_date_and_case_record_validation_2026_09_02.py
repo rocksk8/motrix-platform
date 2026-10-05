@@ -11,6 +11,9 @@ import json
 pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -58,7 +61,7 @@ def _case_record(quote_no):
 # ── ①update_case_record 也要驗證發票號碼 ────────────────────────────────────
 
 def test_case_record_save_rejects_malformed_invoice_no(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_quotation("MQ-CRINV-001")
 
@@ -71,7 +74,7 @@ def test_case_record_save_rejects_malformed_invoice_no(client, make_user):
 
 
 def test_case_record_save_rejects_duplicate_invoice_no(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_quotation("MQ-CRINV-002", invoice_no="AB12345678")
     _make_quotation("MQ-CRINV-003")
@@ -87,7 +90,7 @@ def test_case_record_save_rejects_duplicate_invoice_no(client, make_user):
 def test_case_record_save_allows_unchanged_invoice_no(client, make_user):
     """沒有動過發票號碼的品項不該被重新驗證（否則舊資料格式不合規會讓所有
     後續存檔全部卡死）。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     # 舊資料格式不合規（沒有連字號驗證前留下的資料）
     _make_quotation("MQ-CRINV-004", invoice_no="legacy-format-no")
@@ -103,7 +106,7 @@ def test_case_record_save_allows_unchanged_invoice_no(client, make_user):
 def test_case_record_save_allows_reusing_same_id_invoice_no(client, make_user):
     """用 item id 比對排除自己這筆——同一品項的發票號碼原封不動存檔，或款項
     期別陣列因為新增/刪除其他期別而重新排序，都不該誤判成跟自己重複。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_quotation("MQ-CRINV-005", invoice_no="AB12345678", item_id=1)
 
@@ -120,7 +123,7 @@ def test_case_record_save_allows_reusing_same_id_invoice_no(client, make_user):
 
 
 def test_case_record_save_accepts_valid_invoice_no_and_date(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_quotation("MQ-CRINV-006")
 

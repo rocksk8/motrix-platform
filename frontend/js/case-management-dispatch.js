@@ -388,7 +388,7 @@ window.CM_PARTS.push(() => ({
     },
 
     async loadRemitKinds() {
-      if (!['superadmin', 'admin'].includes(this.session?.role)) return
+      if (!['superadmin', 'finance'].includes(this.session?.role)) return      // 第42班：匯款款別下拉＝財務角色
       try {
         const r = await fetch('/api/remit-kinds', { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (r.ok) this.remitKinds = (await r.json()).kinds || []

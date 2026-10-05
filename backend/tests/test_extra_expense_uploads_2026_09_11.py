@@ -22,6 +22,9 @@ import io
 pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -59,7 +62,7 @@ def _upload(client, token, exp_id, names=("receipt.pdf",), quote_no="MQ-XEF-001"
 
 
 def test_upload_and_delete(client, make_user, seed_extra_expense):
-    username, password = make_user(username="xef1", role="admin")
+    username, password = make_user(username="xef1", role="superadmin")
     token = _login(client, username, password)
     _make_case()
     exp_id = seed_extra_expense("MQ-XEF-001", total_cost=1000, description="有附件的",
@@ -83,7 +86,7 @@ def test_upload_and_delete(client, make_user, seed_extra_expense):
 
 
 def test_upload_multiple_files_at_once(client, make_user, seed_extra_expense):
-    username, password = make_user(username="xef2", role="admin")
+    username, password = make_user(username="xef2", role="superadmin")
     token = _login(client, username, password)
     _make_case()
     # fixture 的 status 預設是「已核准」，而已核准之後附件已上鎖（見模組 docstring
@@ -98,7 +101,7 @@ def test_upload_multiple_files_at_once(client, make_user, seed_extra_expense):
 
 def test_unknown_id_returns_404_not_400(client, make_user):
     """舊版用陣列索引、超出範圍回 400；改用資料列 id 之後，不存在就是 404。"""
-    username, password = make_user(username="xef3", role="admin")
+    username, password = make_user(username="xef3", role="superadmin")
     token = _login(client, username, password)
     _make_case()
     r = _upload(client, token, 999999)
@@ -113,7 +116,7 @@ def test_upload_locked_after_approval(client, make_user, seed_extra_expense):
     當下簽核人看到的憑證，跟事後被換掉的憑證不是同一份。補憑證改走變更申請
     （`test_xe_change_request_2026_09_11.py::test_pending_change_files_are_not_visible_until_approved`）。
     """
-    username, password = make_user(username="xef4", role="admin")
+    username, password = make_user(username="xef4", role="superadmin")
     token = _login(client, username, password)
     _make_case()
     exp_id = seed_extra_expense("MQ-XEF-001", total_cost=1000, description="已核准的",
@@ -136,7 +139,7 @@ def test_upload_locked_after_approval(client, make_user, seed_extra_expense):
 
 def test_upload_requires_case_access(client, make_user, seed_extra_expense):
     """擁有者檢查不能省——quote_no 可列舉。"""
-    owner, _ = make_user(username="xef_owner", role="admin")
+    owner, _ = make_user(username="xef_owner", role="superadmin")
     outsider, outsider_pw = make_user(username="xef_out", role="engineer")
     _make_case()
     exp_id = seed_extra_expense("MQ-XEF-001", total_cost=100, description="別人的案件")

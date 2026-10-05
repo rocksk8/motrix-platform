@@ -18,6 +18,9 @@ import pytest
 pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -76,7 +79,7 @@ def sales(client, make_user):
 
 @pytest.fixture
 def admin(client, make_user):
-    u, p = make_user(username="lock_admin", role="admin")
+    u, p = make_user(username="lock_admin", role="superadmin")
     return _login(client, u, p)
 
 
@@ -102,7 +105,11 @@ def test_sales_cannot_edit_received_installment(client, sales, field, value):
     cr = _cr(no)
     cr["payment"]["items"][0][field] = value
     r = _save(client, sales, no, cr)
-    assert r.status_code == 403, r.text
+    if field in ("amount", "pct"):
+        # 第42班（使用者裁示 D3）：業務看不到款項期別金額（財務專屬）⇒ 這兩欄由資料庫現值補回（靜默不改），不再是 403
+        assert r.status_code == 200, r.text
+    else:
+        assert r.status_code == 403, r.text
     assert _cr(no)["payment"]["items"][0] == RECEIVED
 
 
@@ -122,11 +129,12 @@ def test_sales_can_still_edit_unreceived_installment(client, sales):
     no = "MQ-LOCK-PEND"
     _make(no, [copy.deepcopy(RECEIVED), copy.deepcopy(PENDING)])
     cr = _cr(no)
-    cr["payment"]["items"][1]["pct"] = 60
+    cr["payment"]["items"][1]["pct"] = 60                     # 第42班：金額欄（pct）業務改不動，由資料庫現值補回
     cr["payment"]["items"][1]["expectedReceiptDate"] = "2026-10-01"
     r = _save(client, sales, no, cr)
     assert r.status_code == 200, r.text
-    assert _cr(no)["payment"]["items"][1]["pct"] == 60
+    assert _cr(no)["payment"]["items"][1]["pct"] == 70
+    assert _cr(no)["payment"]["items"][1]["expectedReceiptDate"] == "2026-10-01"       # 非金額欄位照存
 
 
 def test_admin_can_still_edit_received_installment(client, admin):
@@ -182,7 +190,7 @@ def test_received_installment_without_id_unchanged_lets_sales_save(client, sales
     assert r.status_code == 200, r.text
     items = _cr(no)["payment"]["items"]
     assert items[0] == legacy, "舊期別原封不動"
-    assert items[1]["pct"] == 65
+    assert items[1]["pct"] == 70          # 第42班：金額欄（pct）業務改不動，由資料庫現值補回；存檔本身仍成功
 
 
 def test_received_installment_without_id_cannot_be_deleted(client, sales):

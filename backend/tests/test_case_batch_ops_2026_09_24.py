@@ -17,6 +17,9 @@ ASSIGN = "/api/case-batch/assign"
 EXPORT = "/api/case-batch/export"
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -61,7 +64,7 @@ def _row(no):
 
 
 def test_batch_sets_executor_and_members_on_active_cases_only(client, make_user):
-    h = _login(client, *make_user(username="bt_admin", role="admin"))
+    h = _login(client, *make_user(username="bt_admin", role="superadmin"))
     make_user(username="bt_exec", role="engineer")
     make_user(username="bt_m1", role="engineer")
     make_user(username="bt_m2", role="engineer")
@@ -91,7 +94,7 @@ def test_batch_assign_needs_admin(client, make_user):
 
 
 def test_batch_assign_rejects_unknown_executor_and_writes_nothing(client, make_user):
-    h = _login(client, *make_user(username="bt_admin2", role="admin"))
+    h = _login(client, *make_user(username="bt_admin2", role="superadmin"))
     _case("MQ-BT-X")
     r = client.post(ASSIGN, headers=h, json={"quote_nos": ["MQ-BT-X"], "executor": "no_such_user"})
     assert r.status_code == 400, r.text
@@ -101,7 +104,7 @@ def test_batch_assign_rejects_unknown_executor_and_writes_nothing(client, make_u
 
 def test_batch_export_is_xlsx_with_visible_cases_and_masked_amounts(client, make_user):
     from openpyxl import load_workbook
-    h = _login(client, *make_user(username="bt_admin3", role="admin"))
+    h = _login(client, *make_user(username="bt_admin3", role="superadmin"))
     _case("MQ-BT-E1", total=1234)
     _case("MQ-BT-E2", total=5678)
     r = client.post(EXPORT, headers=h, json={"quote_nos": ["MQ-BT-E1", "MQ-BT-E2"]})
@@ -134,6 +137,6 @@ def test_batch_export_is_xlsx_with_visible_cases_and_masked_amounts(client, make
 
 
 def test_batch_size_limit(client, make_user):
-    h = _login(client, *make_user(username="bt_admin4", role="admin"))
+    h = _login(client, *make_user(username="bt_admin4", role="superadmin"))
     r = client.post(EXPORT, headers=h, json={"quote_nos": [f"MQ-{i}" for i in range(201)]})
     assert r.status_code == 400, r.text

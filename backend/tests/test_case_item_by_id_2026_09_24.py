@@ -13,6 +13,9 @@ NO = "MQ-BYID-001"
 PDF = ("a.pdf", b"%PDF-1.4 fake", "application/pdf")
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -57,7 +60,7 @@ def _by_id(arr, i):
 
 
 def test_payment_invoice_upload_lands_on_item_by_id(client, make_user):
-    h = _login(client, *make_user(username="byid1", role="admin"))
+    h = _login(client, *make_user(username="byid1", role="superadmin"))
     _seed()
     # 畫面上它在第 0 列，但伺服器上已被重排到第 1 列
     r = client.post(f"/api/quotations/{NO}/payment/0/invoice-files?itemId=102", headers=h, files={"files": PDF})
@@ -68,7 +71,7 @@ def test_payment_invoice_upload_lands_on_item_by_id(client, make_user):
 
 
 def test_payment_invoice_delete_by_id(client, make_user):
-    h = _login(client, *make_user(username="byid2", role="admin"))
+    h = _login(client, *make_user(username="byid2", role="superadmin"))
     _seed()
     fid = client.post(f"/api/quotations/{NO}/payment/1/invoice-files?itemId=102", headers=h,
                       files={"files": PDF}).json()["files"][0]["id"]
@@ -78,7 +81,7 @@ def test_payment_invoice_delete_by_id(client, make_user):
 
 
 def test_unknown_item_id_is_409_and_nothing_written(client, make_user):
-    h = _login(client, *make_user(username="byid3", role="admin"))
+    h = _login(client, *make_user(username="byid3", role="superadmin"))
     _seed()
     before = _cr()
     for url in (f"/api/quotations/{NO}/payment/0/invoice-files?itemId=999",
@@ -91,7 +94,7 @@ def test_unknown_item_id_is_409_and_nothing_written(client, make_user):
 
 
 def test_material_files_and_invoice_files_land_by_id(client, make_user):
-    h = _login(client, *make_user(username="byid4", role="admin"))
+    h = _login(client, *make_user(username="byid4", role="superadmin"))
     _seed()
     assert client.post(f"/api/quotations/{NO}/materials/0/files?itemId=202", headers=h,
                        files={"files": PDF}).status_code == 201
@@ -111,7 +114,7 @@ def test_material_files_and_invoice_files_land_by_id(client, make_user):
 
 
 def test_writeoff_request_cancel_approve_by_id(client, make_user):
-    h = _login(client, *make_user(username="byid5", role="admin"))
+    h = _login(client, *make_user(username="byid5", role="superadmin"))
     sa = _login(client, *make_user(username="byid5sa", role="superadmin"))
     _seed()
     r = client.post(f"/api/quotations/{NO}/payment/0/request-writeoff?itemId=102", headers=h, json={"reason": "r"})
@@ -131,7 +134,7 @@ def test_writeoff_request_cancel_approve_by_id(client, make_user):
 
 
 def test_legacy_idx_without_item_id_still_works(client, make_user):
-    h = _login(client, *make_user(username="byid6", role="admin"))
+    h = _login(client, *make_user(username="byid6", role="superadmin"))
     _seed()
     r = client.post(f"/api/quotations/{NO}/materials/1/files", headers=h, files={"files": PDF})
     assert r.status_code == 201, r.text
@@ -139,7 +142,7 @@ def test_legacy_idx_without_item_id_still_works(client, make_user):
 
 
 def test_semi_unlocked_upload_applies_to_item_by_id_after_reorder(client, make_user):
-    h = _login(client, *make_user(username="byid7", role="admin"))
+    h = _login(client, *make_user(username="byid7", role="superadmin"))
     sa = _login(client, *make_user(username="byid7sa", role="superadmin"))
     _seed("已結案")
     assert client.post(f"/api/quotations/{NO}/case-unlock", headers=h).status_code == 200

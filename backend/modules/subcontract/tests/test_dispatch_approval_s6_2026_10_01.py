@@ -13,6 +13,9 @@ STATES = ["", F.APPROVED, F.DRAFT, F.PENDING, F.IN_PROGRESS, F.RETURNED]      # 
 PASS_VOUCHER = {"", F.APPROVED}
 
 
+
+
+
 def _with_invoice(did, date="2026-09-15"):
     c = db.get_db()
     c.execute("UPDATE contractor_dispatches SET invoice_date=?, invoice_no='AB12345678', total_amount=1000, items_json='[]' WHERE id=?", (date, did))
@@ -27,7 +30,7 @@ def _with_invoice(did, date="2026-09-15"):
 def test_voucher_gate_matrix(W, ap, status):                                                      # noqa: F811
     c, h = W
     did = _mk(status=status, approval=ap)
-    r = c.post("/api/contractor-vouchers", json={"dispatch_id": did}, headers=h["da_a"])
+    r = c.post("/api/contractor-vouchers", json={"dispatch_id": did}, headers=h["da_sa"])
     if ap in PASS_VOUCHER:
         assert r.status_code in (200, 201), (ap, status, r.text)          # 舊單與已核准：與今天一樣能開
     else:
@@ -38,7 +41,7 @@ def test_voucher_gate_matrix(W, ap, status):                                    
 def test_voucher_old_status_gate_unchanged_even_when_approved_or_legacy(W, status):               # noqa: F811
     c, h = W
     for ap in ("", F.APPROVED):
-        r = c.post("/api/contractor-vouchers", json={"dispatch_id": _mk(status=status, approval=ap)}, headers=h["da_a"])
+        r = c.post("/api/contractor-vouchers", json={"dispatch_id": _mk(status=status, approval=ap)}, headers=h["da_sa"])
         assert r.status_code == 409 and "已驗收" in r.text
 
 
@@ -46,7 +49,7 @@ def test_voucher_not_blocked_by_completion_review(W):                           
     """完工審核不是開匯款申請的前置（設計 §2.6）：accepted＋完工待審核＋第一段已核准 ⇒ 仍可開。"""
     c, h = W
     did = _mk(status="accepted", approval=F.APPROVED, completion=F.PENDING)
-    assert c.post("/api/contractor-vouchers", json={"dispatch_id": did}, headers=h["da_a"]).status_code in (200, 201)
+    assert c.post("/api/contractor-vouchers", json={"dispatch_id": did}, headers=h["da_sa"]).status_code in (200, 201)
 
 
 # ── 總帳 E04 ───────────────────────────────────────────────────────────────

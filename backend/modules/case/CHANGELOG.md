@@ -23,6 +23,9 @@
 - 兩種事件預設關（L1 `EVENT_TYPES`，見 core CHANGELOG (next)）；標題不含金額，金額只在說明（應收、實收、手續費）。「付款待辦」（`payable_due`）本班不做：待付款清單沒有「預計付款日」欄位（主持裁示 A）。
 - 測試：`tests/test_receipt_calendar_2026_10_05.py`（差異判斷 8 題、三條寫入路徑、開關關閉零流量、孤兒／手動刪除、推送失敗不影響存檔）。
 
+## (next) — 2026-10-05（wip/t42-finance-role）：財務角色
+- 財務／出納權限改由「財務」角色決定（admin／sales 直通拿掉）：額外支出列／金額可見與付款日登錄、標記收款與整包存款項鎖、更換發票號碼、收款帳戶查詢、稅額沖銷申請與取消、財務彙總清單、叫料發票日、取消已核准叫料單、叫料匯款申請撤回／作廢、叫料編輯閘（`can_edit_orders` 去掉 admin 直通）——一律 `has_finance_access`／`has_cashier_access`（僅 `finance` 角色與 superadmin）；出納／獎金通知收件人改走 `finance_usernames`；前端 `canFinanceRole()`。簽核人／申請人例外不變；一般管理（`_can_modify`、案件列範圍）不動。測試：`tests/test_finance_role_2026_10_05.py`。
+
 ## 1.0.140 — 2026-10-05（wip/quick-pr-wording）：請款頁文字改為「支出申請」
 - 選單「新增請款」→「新增支出申請」；`payment-request.html` 標題「支出申請」、分頁「新增申請」「我的申請」、區塊「申請類型」、說明文字同步。只改畫面文字（含 `<title>`），資料與流程不動；簽核佇列徽章、簽核設定單據名稱、申請頁類型下拉的「案件額外支出」→「案件支出申請」（`routers/approval_queue.py`、`helpers/tiered_approval.py` 標籤同步；內部代碼 `extra_expense` 與表名不動）；「額外支出變更」→「支出申請變更」（佇列標題＋變更申請的通知／信件文字）。其餘「請款」字樣（出納、審核佇列、請款類型編輯頁等）本次不改。
 - 測試：`tests/test_e2e_payreq_2026_09_27.py` 選單文字斷言同步。

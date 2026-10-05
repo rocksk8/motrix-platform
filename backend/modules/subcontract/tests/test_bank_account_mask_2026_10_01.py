@@ -26,7 +26,7 @@ def _login(client, u, p):
 def world(client, make_user):
     sa, sapw = make_user(username="bm_sa", role="superadmin")[:2]
     ad, adpw = make_user(username="bm_admin", role="admin",
-                         modules=["contractor_list", "procurement", "case_manage", "finance", "cashier", "quotation"])[:2]
+                         modules=["contractor_list", "procurement", "case_manage", "quotation"])[:2]          # 第42班：財務／出納勾選失效（有勾會被當成財務角色）；這題要的是「一般 admin」
     h_sa, h_ad = _login(client, sa, sapw), _login(client, ad, adpw)
     r = client.post("/api/vendor-contractors", headers=h_sa, json={
         "name": "測試承攬商", "tax_id": "12345678",
@@ -109,8 +109,11 @@ def test_editing_with_masked_value_keeps_the_real_number(world):
 # ── 匯款申請 ─────────────────────────────────────────────────────────────
 
 @needs_m01
-def test_voucher_list_detail_mask_for_admin_full_for_superadmin(world):
+def test_voucher_list_detail_mask_for_admin_full_for_superadmin(world, make_user):
+    # 第42班：匯款申請的金額層＝財務角色；「一般管理員（非 superadmin）看遮罩」改由財務角色代表
+    _u = make_user(username="bm_fin_peradmin", role="finance")
     client, h_sa, h_ad, _vid = world
+    h_ad = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": _u[0], "password": _u[1]}).json()["token"]}
     _seed_voucher()
     d_sa = client.get("/api/contractor-vouchers/CV-BM-001", headers=h_sa).json()
     assert d_sa["bankAccountNumber"] == FULL and d_sa["snapshot"]["bankAccountNumber"] == FULL and d_sa["bankPassbookImage"] == PASSBOOK
@@ -197,8 +200,11 @@ def _pdf_text(pdf_bytes):
     return "".join((p.extract_text() or "") for p in pypdf.PdfReader(io.BytesIO(pdf_bytes)).pages)
 
 
-def test_g1_voucher_pdf_download_text_is_masked_for_admin_and_full_for_superadmin(world):
+def test_g1_voucher_pdf_download_text_is_masked_for_admin_and_full_for_superadmin(world, make_user):
+    # 第42班：匯款申請的金額層＝財務角色；「一般管理員（非 superadmin）看遮罩」改由財務角色代表
+    _u = make_user(username="bm_fin_peradmin", role="finance")
     client, h_sa, h_ad, _vid = world
+    h_ad = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": _u[0], "password": _u[1]}).json()["token"]}
     _seed_voucher()
     ad = client.get("/api/contractor-vouchers/CV-BM-001/pdf-download", headers=h_ad)
     assert ad.status_code == 200 and ad.content[:5] == b"%PDF-", ad.text[:200]
@@ -210,9 +216,12 @@ def test_g1_voucher_pdf_download_text_is_masked_for_admin_and_full_for_superadmi
     assert FULL in t_sa                                                                  # 正對照：最高管理者的 PDF 看得到全碼（證明抽文字有效）
 
 
-def test_g1_mutation_mask_bank_false_turns_the_pdf_assertion_red(world, monkeypatch):
+def test_g1_mutation_mask_bank_false_turns_the_pdf_assertion_red(world, make_user, monkeypatch):
+    # 第42班：匯款申請的金額層＝財務角色；「一般管理員（非 superadmin）看遮罩」改由財務角色代表
+    _u = make_user(username="bm_fin_tion_red", role="finance")
     """突變：端點對一般管理員也傳 mask_bank=False ⇒ PDF 文字出現全碼 ⇒ 上一題的斷言會紅（偵測器本身有被驗過）。"""
     client, _h_sa, h_ad, _vid = world
+    h_ad = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": _u[0], "password": _u[1]}).json()["token"]}
     _seed_voucher()
     import modules.subcontract.api.contractor_vouchers as CV
     real = CV.generate_contractor_voucher_pdf_bytes

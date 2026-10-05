@@ -11,6 +11,9 @@ pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點�
 NO = "MQ-SEG-001"
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -52,7 +55,7 @@ def _patch(client, h, body):
 
 
 def test_segment_saved_and_other_segments_untouched(client, make_user):
-    h = _login(client, *make_user(username="seg1", role="admin"))
+    h = _login(client, *make_user(username="seg1", role="superadmin"))
     cr = _seed()
     mats = [{"id": 1, "name": "改過", "qty": 1}]
     r = _patch(client, h, {"segments": {"materials": mats}, "base": {"materials": cr["materials"]}})
@@ -64,7 +67,7 @@ def test_segment_saved_and_other_segments_untouched(client, make_user):
 
 
 def test_stale_base_is_409_and_nothing_written(client, make_user):
-    h = _login(client, *make_user(username="seg2", role="admin"))
+    h = _login(client, *make_user(username="seg2", role="superadmin"))
     cr = _seed()
     stale = [{"id": 1, "name": "我以為的原值", "qty": 1}]
     r = _patch(client, h, {"segments": {"materials": [{"id": 1, "name": "新", "qty": 2}],
@@ -78,7 +81,7 @@ def test_stale_base_is_409_and_nothing_written(client, make_user):
 
 
 def test_integral_float_in_db_matches_int_from_browser(client, make_user):
-    h = _login(client, *make_user(username="seg3", role="admin"))
+    h = _login(client, *make_user(username="seg3", role="superadmin"))
     _seed()
     # 資料庫存 30000.0，瀏覽器 JSON 來回後是 30000
     base = {"items": [{"id": 1, "type": "訂金款", "pct": 30, "amount": 30000, "received": False, "note": ""}]}
@@ -90,7 +93,7 @@ def test_integral_float_in_db_matches_int_from_browser(client, make_user):
 
 
 def test_stages_in_segments_ignored(client, make_user):
-    h = _login(client, *make_user(username="seg4", role="admin"))
+    h = _login(client, *make_user(username="seg4", role="superadmin"))
     cr = _seed()
     r = _patch(client, h, {"segments": {"stages": []}, "base": {"stages": []}})
     assert r.status_code == 200, r.text
@@ -98,7 +101,7 @@ def test_stages_in_segments_ignored(client, make_user):
 
 
 def test_defaults_written_only_when_absent_and_existing_value_adopted(client, make_user):
-    h = _login(client, *make_user(username="seg5", role="admin"))
+    h = _login(client, *make_user(username="seg5", role="superadmin"))
     _seed({"roles": {"sales": "先存的人"}})
     r = _patch(client, h, {"segments": {}, "base": {},
                            "defaults": {"roles": {"sales": ""}, "contract": {"deliveryAddress": ""}}})
@@ -110,7 +113,7 @@ def test_defaults_written_only_when_absent_and_existing_value_adopted(client, ma
 
 
 def test_legacy_whole_record_format_still_accepted(client, make_user):
-    h = _login(client, *make_user(username="seg6", role="admin"))
+    h = _login(client, *make_user(username="seg6", role="superadmin"))
     cr = _seed()
     new = dict(cr, materials=[{"id": 1, "name": "舊格式", "qty": 1}])
     r = _patch(client, h, {"case_record": new})

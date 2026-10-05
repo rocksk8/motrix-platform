@@ -65,6 +65,15 @@ def deny_case(conn, quote_no: str, user: dict, reason: str):
     raise HTTPException(404, case_not_found_message(quote_no))
 
 
+def require_case_money(user: dict, row, quote_no: str, *, scope: str = "owner"):
+    """金額面端點（額外支出、材料申請匯款／發票日／成本單價、精算）的案件擁有者規則：**財務角色與 superadmin 不受案件擁有者限制**
+    （第42班：原本靠 admin 直通 `ADMIN_ROLES` 的財務工作，財務角色不是 admin 角色，要明確放行）；admin 照舊走 `require_case` 的直通。"""
+    from helpers.auth import has_finance_access
+    if row is not None and has_finance_access(user):
+        return
+    require_case(user, row, quote_no, scope=scope)
+
+
 def require_case(user: dict, row, quote_no: str, *, scope: str = "owner"):
     """`row_access.require("case", …)` 的案件版（M01-O1）：`row` 為 None ⇒ 查無；不可見 ⇒ 同一個 404。
     不關連線（呼叫端各自處理，同原 require）。"""
@@ -248,6 +257,10 @@ def case_owner_readable(conn, quote_no: str, user: dict) -> bool:
         return False
     q = conn.execute("SELECT sales_person_id, sales_person, assigned_user_ids FROM quotations WHERE quote_no = ?",
                      (quote_no,)).fetchone()
+    if bool(q):
+        from helpers.auth import has_finance_access            # 第42班：額外支出等金額面單據——財務角色／superadmin 不受案件擁有者限制
+        if has_finance_access(user):
+            return True
     return bool(q) and row_access.visible("case", user, q, scope="owner")
 
 

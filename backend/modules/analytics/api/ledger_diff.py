@@ -17,7 +17,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 
 from core import registry as _registry
 from helpers import _require_user
-from helpers.financial_mask import money_visible
+from helpers.financial_mask import money_visible, quote_money_visible
 from helpers.recognition_basis import DEFAULT_BASIS, normalize_basis
 from modules.analytics.api import reports as R
 
@@ -140,7 +140,7 @@ def build(year, basis):
 def report_ledger_diff(year: int = Query(None), basis: str = Query(None), authorization: str = Header(None)):
     u = _require_user(authorization)
     R._require_reports_access(u)
-    if not money_visible(u):
+    if not quote_money_visible(u):
         raise HTTPException(403, "此帳號沒有財務檢視權限")
     year = year or date.today().year
     if not (1990 <= year <= 2200):

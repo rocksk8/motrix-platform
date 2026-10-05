@@ -47,8 +47,8 @@ _UNTOUCHED = (
      '系統已設定簽核流程，此申請缺少簽核層資料，請重新送審'),
     ('modules/daily_tasks/api.py',
      'year_month 格式錯誤，應為 YYYY-MM'),
-    ('modules/case/api/quotations.py',   # M08 搬遷 ④：隨 /api/sales-orders 自 dashboard.py 移入
-     '僅管理員或具『應收帳款／銷售訂單』模組的使用者可查閱'),
+    ('modules/case/api/quotations.py',   # M08 搬遷 ④：隨 /api/sales-orders 自 dashboard.py 移入（第42班：訊息改為財務角色）
+     '僅財務角色可查閱'),
     ('modules/case/api/quotations.py',   # M08 搬遷 ④：隨 /api/sales-orders 自 dashboard.py 移入
      '此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）'),
     ('modules/crm/api.py',
@@ -84,7 +84,7 @@ _UNTOUCHED = (
     ('modules/case/api/quotations.py',
      '系統已設定簽核流程，此報價單缺少簽核層資料。請請申請人收回並重新送審，以套用最新簽核設定'),
     ('modules/analytics/api/reports.py',
-     '僅管理員、或具『營運報表』／『應收帳款』模組的使用者可存取報表'),
+     '僅財務角色、或具『營運報表』模組的使用者可存取報表'),
     ('modules/arap/api/cashier.py',            # 銀行對帳 2026-09-26 自 M08 收回 M05
      'CSV 編碼無法辨識，請確認匯出檔案格式（支援 UTF-8 / Big5）'),
     ('modules/supply/api/shipping_notes.py',

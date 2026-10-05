@@ -17,6 +17,9 @@ pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點�
 URL = "/api/reports/expenses-monthly"
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, u, p):
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     assert r.status_code == 200, r.text
@@ -191,7 +194,7 @@ def test_extra_expense_dates_can_be_entered_after_approval_but_not_by_strangers(
         client, sa, make_user, seed_extra_expense):
     _case("MQ-RB-031")
     eid = seed_extra_expense("MQ-RB-031", total_cost=500, expense_date="2026-03-02", status="已核准")
-    other = _login(client, *make_user(username="rb_other", role="admin"))
+    other = _login(client, *make_user(username="rb_other", role="superadmin"))
     assert client.patch("/api/quotations/MQ-RB-031/extra-expenses/%s/dates" % eid, headers=other,
                         json={"paidDate": "2026-03-03"}).status_code == 200, "admin 可以"
     stranger = _login(client, *make_user(username="rb_eng", role="engineer", modules=["case_manage"]))
@@ -248,5 +251,5 @@ def test_material_invoice_date_endpoint_guards(client, sa, make_user):
     assert client.patch(MO_INV % ("MQ-RB-023", "m1"), headers=sa, json={"invoiceDate": "2026-4-2"}).status_code == 400
     eng = _login(client, *make_user(username="rb_mo_eng", role="engineer"))
     assert client.patch(MO_INV % ("MQ-RB-023", "m1"), headers=eng, json={"invoiceDate": "2026-04-20"}).status_code == 403
-    cash = _login(client, *make_user(username="rb_mo_cash", role="admin", modules=["cashier"]))
+    cash = _login(client, *make_user(username="rb_mo_cash", role="superadmin", modules=["cashier"]))
     assert client.patch(MO_INV % ("MQ-RB-023", "m1"), headers=cash, json={"invoiceDate": "2026-04-20"}).status_code == 200

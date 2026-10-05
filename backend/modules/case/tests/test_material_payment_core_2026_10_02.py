@@ -23,10 +23,13 @@ from modules.case import material_payment as MP  # noqa: E402
 NO = "MQ-MP-001"
 ENG = {"username": "mp_eng", "role": "sales", "display_name": "工程師"}
 BOSS = {"username": "mp_boss", "role": "sales", "display_name": "主管"}
-ADMIN = {"username": "mp_admin", "role": "admin", "display_name": "管理員"}
+ADMIN = {"username": "mp_admin", "role": "finance", "display_name": "管理員"}          # 第42班：取消已核准叫料單＝財務角色
 SA = {"username": "mp_sa", "role": "superadmin", "display_name": "最高管理員"}
 CASHIER = {"username": "mp_cash", "role": "sales", "display_name": "出納"}
 PAYEE = {"bankCode": "812", "bankName": "台新", "bankAccountName": "甲供應商有限公司", "bankAccountNumber": "28881234567890"}
+
+
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
 
 
 def _flow(tiers):

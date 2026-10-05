@@ -13,8 +13,10 @@ from modules.subcontract.tests.test_dispatch_approval_s2_2026_10_01 import _body
 pytestmark = pytest.mark.no_dispatch_shim
 
 
+
+
 def _put(c, h, did, **kw):
-    return c.put("/api/contractor-dispatches/%d" % did, headers=h["da_a"], json=_body(**kw))
+    return c.put("/api/contractor-dispatches/%d" % did, headers=h["da_sa"], json=_body(**kw))      # 第42班（Q5）：改金額＝財務角色／superadmin
 
 
 def _audit_rows(action):
@@ -34,7 +36,7 @@ def test_legacy_substantive_edit_stays_legacy_and_is_marked(W):
     row = _row(did)
     assert row["approval_status"] == "" and row["doc_code"] == "" and row["status"] == "sent"              # 仍是舊單，沒有重設、沒有發單號
     m = json.loads(row["approval_json"])["legacyModified"]
-    assert m["by"] == "da_a" and m["count"] == 1 and m["at"] and m["firstAt"] == m["at"]
+    assert m["by"] == "da_sa" and m["count"] == 1 and m["at"] and m["firstAt"] == m["at"]
     _put(c, h, did, status="sent", items_json=[{"description": "再改", "amount": 1}])
     m2 = json.loads(_row(did)["approval_json"])["legacyModified"]
     assert m2["count"] == 2 and m2["firstAt"] == m["firstAt"]
@@ -88,7 +90,7 @@ def test_cost_gl_and_voucher_do_not_drop_after_a_legacy_edit(W):
     assert did in ent and ent[did]["amount"] == 2000 + 100 and ent[did]["approvalPending"] is False          # 品項 2000＋人員 100
     ev = [e for e in G.gl_events("2026-09-01", "2026-09-30")["events"] if e["source_key"] == str(did) and e["event_code"] == "E04"]
     assert ev and sum(l["amount"] for l in ev[0]["lines"] if l["side"] == "D") > 0
-    r = c.post("/api/contractor-vouchers", json={"dispatch_id": did}, headers=h["da_a"])
+    r = c.post("/api/contractor-vouchers", json={"dispatch_id": did}, headers=h["da_sa"])
     assert r.status_code in (200, 201), r.text
 
 

@@ -166,10 +166,10 @@ def _grant_file_center(*names):
 def test_money_categories_zero_hits_and_zero_counts_for_everyone_else(client, money_docs):
     H, info = money_docs
     _grant_file_center("mn_cashier", "mn_finance", "mn_other_fin", "mn_none")          # 全域瀏覽需要「檔案中心」模組；資料權限另算
-    for who in ("mn_cashier", "mn_super"):
+    for who in ("mn_cashier", "mn_super", "mn_finance"):          # 第42班：財務與出納合併 ⇒ mn_finance（財務角色）也看得到
         body = _search(client, H[who], q="signed", size=50).json()
         assert any(i["sourceType"] == "payslip_signed" for i in body["items"]), who               # 正對照
-    for who in ("mn_other_fin", "mn_none", "mn_finance"):
+    for who in ("mn_other_fin", "mn_none"):
         r = _search(client, H[who], q="signed", size=50)
         if r.status_code == 403:                                                # 沒有檔案中心模組：連全域都進不去
             continue

@@ -25,6 +25,7 @@ from .auth import (
     _require_user,
     _tok,
     user_has_module, can_see_financial, require_any_module,
+    has_finance_access, has_cashier_access, effective_modules, finance_usernames, FINANCE_ROLE, FINANCE_ROLES, FINANCE_MODULE_KEYS, VALID_ROLES,
 )
 from .settings import _get_setting, _set_setting
 from .audit import (_notify, _audit, _filter_live_notifications, _purge_notifications, _mark_notifications_read,
@@ -127,6 +128,7 @@ from .startup import (
 __all__ = [
     # auth
     "_SUPERADMIN_MODULES", "_hash", "_hash_pw", "_verify_pw", "can_see_financial", "require_any_module",
+    "has_finance_access", "has_cashier_access", "effective_modules", "finance_usernames", "FINANCE_ROLE", "FINANCE_ROLES", "FINANCE_MODULE_KEYS", "VALID_ROLES",
     "_LEGACY_WEAK_PASSWORDS", "_CREDENTIALS_FILE", "MIN_PASSWORD_LEN", "DEMO_TOKEN_PREFIX",
     "is_weak_password", "_write_initial_credentials", "_require_user", "_tok",
     # settings

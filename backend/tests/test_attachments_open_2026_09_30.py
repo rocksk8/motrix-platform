@@ -18,6 +18,9 @@ PNG = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08
 Q = "MQ-CAT-001"
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, u, p):
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     assert r.status_code == 200, r.text
@@ -340,7 +343,7 @@ def test_payslip_signed_file_exists_but_user_not_allowed_is_404(client, money_do
         r = _open(client, H[who], *args)
         assert r.status_code == 200 and r.content == b"%PDF-1.4 payslip", (who, r.status_code)
     missing = _open(client, H["mn_none"], "payslip_signed", "PS-202609-778", "ffffffffffffffff")
-    for who in ("mn_other_fin", "mn_none", "mn_finance"):                      # 文件存在、有別的（財務）模組，但不是 cashier／superadmin
+    for who in ("mn_other_fin", "mn_none"):                      # 文件存在、不是財務角色／superadmin（第42班：財務與出納合併，mn_finance 屬於有權限的人）
         r = _open(client, H[who], *args)
         assert r.status_code == 404 and r.json()["detail"] == "檔案不存在" == missing.json()["detail"], (who, r.status_code)
         assert "payslip" not in r.text.lower() and "signed.pdf" not in r.text

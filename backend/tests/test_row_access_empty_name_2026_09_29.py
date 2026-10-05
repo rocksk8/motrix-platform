@@ -78,7 +78,7 @@ def test_bypass_rules_unchanged():
     """不放寬也不收緊：admin 直通、cashier 在 read 直通、在 owner 只看自己的——與原本相同。"""
     conn = _db()
     admin = dict(EMPTY, role="admin")
-    cashier = dict(EMPTY, modules='["cashier"]')
+    cashier = dict(EMPTY, role="finance")          # 第42班：cashier（read 直通）＝財務角色
     everything = {r[0] for r in ROWS}
     assert _py(conn, admin, "owner") == _sql(conn, admin, "owner") == everything
     assert _py(conn, cashier, "read") == _sql(conn, cashier, "read") == everything

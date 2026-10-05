@@ -21,6 +21,9 @@ ACCT = "28881234567890"
 BODY = {"bankCode": "812", "bankName": "台新", "bankAccountName": "甲供應商有限公司", "bankAccountNumber": ACCT}
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _q(sql, args=()):
     import db
     conn = db.get_db()
@@ -65,8 +68,8 @@ def _audit_actions():
 
 @pytest.fixture
 def world(client, make_user):
-    adm, ap = make_user(username="mpa_adm", role="admin")
-    adm2, ap2 = make_user(username="mpa_adm2", role="admin")
+    adm, ap = make_user(username="mpa_adm", role="superadmin")
+    adm2, ap2 = make_user(username="mpa_adm2", role="superadmin")
     sa, sp = make_user(username="mpa_sa", role="superadmin")
     boss, bp = make_user(username="mpa_boss", role="sales")
     cash, cp = make_user(username="mpa_cash", role="sales", modules=["cashier"])
@@ -182,9 +185,7 @@ def test_cashier_pays_in_two_steps_and_the_order_paid_fields_follow(client, worl
     assert pb.status_code == 200 and pb.json()["account"] == ACCT and pb.json()["accountName"] == "" and pb.json()["bank"].startswith("812")   # 出納專用端點才有完整帳號
     assert "cashier.payee_bank_view" in [r["action"] for r in _q("SELECT action FROM audit_log")]
     assert client.get("/api/cashier/pending-payables/case_material/%d/payee-bank" % pid, headers=w["eng"]).status_code == 403
-    # 32 班：完整帳號只給最高管理者與出納；一般管理員（能付款但不是出納）只看遮罩
-    ad = client.get("/api/cashier/pending-payables/case_material/%d/payee-bank" % pid, headers=w["adm"])
-    assert ad.status_code == 200 and ad.json()["account"] == "****7890" and ACCT not in ad.text, ad.text
+    # 第42班：完整帳號只給財務角色與最高管理者（一般管理員不再能付款，也看不到）
     sa = client.get("/api/cashier/pending-payables/case_material/%d/payee-bank" % pid, headers=w["sa"])
     assert sa.status_code == 200 and sa.json()["account"] == ACCT, sa.text
     assert any("遮罩" in (r["target_label"] or "") for r in _q("SELECT target_label FROM audit_log WHERE action='cashier.payee_bank_view'"))
@@ -226,7 +227,7 @@ def test_overpayment_goes_to_remit_review_and_only_another_admin_decides(client,
     assert [(i["payable"], i["actual"], i["diff"]) for i in mine] == [(4000.0, 4500.0, 500.0)]
     assert mine[0]["fee"] == 0.0 and mine[0]["paidAt"] == "2031-03-20", mine[0]      # 差額審核表要有手續費與付款日（c7 稽核 M-1：行內註解曾吞掉這兩個鍵）
     lid = mine[0]["key"]
-    assert client.post("/api/cashier/remit-reviews/case_material/%s/decision" % lid, json={"decision": "approve"}, headers=w["cash"]).status_code == 403   # 非 admin
+    # 第42班：出納與財務合併，財務角色可核可（原「出納不可核可」不再成立；自核風險見 FINANCE-ROLE-GOLIVE 後續）
     assert client.post("/api/cashier/remit-reviews/case_material/%s/decision" % lid, json={"decision": "approve"}, headers=w["adm"]).status_code == 403   # 自己登錄的不能自審
     r = client.post("/api/cashier/remit-reviews/case_material/%s/decision" % lid, json={"decision": "reject", "note": "多付請追回"}, headers=w["adm2"])
     assert r.status_code == 200

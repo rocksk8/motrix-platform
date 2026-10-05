@@ -21,7 +21,9 @@ from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db
-from helpers.case_access import require_case   # M01-O1：逐案拒絕＝查無（同一個 404）
+from helpers.auth import has_finance_access
+from helpers.case_access import require_case, require_case_money   # M01-O1：逐案拒絕＝查無（同一個 404）；money 版＝財務角色不受擁有者限制（第42班）
+from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import row_access
 from core.txn import begin_write
 from helpers import (
@@ -29,7 +31,7 @@ from helpers import (
 )
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
 from modules.case.quotations import SQL_DEAL_TAG, save_quotation_json  # noqa: E402
-from helpers.financial_mask import MATERIAL_ORDER_MONEY_KEYS, money_visible
+from helpers.financial_mask import MATERIAL_ORDER_MONEY_KEYS, money_visible, material_money_visible
 from modules.case.recognition import normalize_date  # `AC2`
 from modules.case import material_approval as MA   # 叫料審核（31-C）
 from modules.case import material_guard as MG
@@ -113,14 +115,14 @@ def update_material_orders(quote_no: str,
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
 
         # 2. 擁有者檢查：非 admin+ 不能碰別的業務的案件（quote_no 可列舉）
-        require_case(user, q, quote_no)
+        require_case_money(user, q, quote_no)
 
         data = json.loads(q["data_json"] or "{}")
 
         # 3. 權限檢查：只有 admin+ 或有報價單編輯模組的使用者可以修改叫料
-        if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "project_manage"):
-            raise HTTPException(403, "權限不足：只有管理員或專案經理可以修改材料申請")
-        if not money_visible(user):
+        if user["role"] not in ("superadmin", "admin", "finance") and not user_has_module(user, "project_manage"):
+            raise HTTPException(403, "權限不足：只有管理員、財務角色或專案經理可以修改材料申請")
+        if not material_money_visible(user):          # 第42班（Q6）：材料申請日常作業維持 admin
             # CM13（2026-09-24）：這支整份取代叫料清單且單價／小計為必填——看不到金額的人
             # 送不出正確的值，照收就是用猜的數字蓋掉真正的價格（比照 D1 報價單 403）。
             raise HTTPException(403, "此帳號沒有財務檢視權限，不可修改材料申請清單")
@@ -201,9 +203,8 @@ def set_material_order_invoice_date(quote_no: str, item_id: str, body: dict = Bo
     權限：擁有者檢查＋（admin+、專案經理、出納、財務）。
     """
     user = _require_user(authorization)
-    if user["role"] not in ("superadmin", "admin") and not any(
-            user_has_module(user, m) for m in ("project_manage", "cashier", "finance")):
-        raise HTTPException(403, "權限不足：只有管理員、專案經理、出納或財務可以登錄材料申請發票日期")
+    if not has_finance_access(user):          # 第42班（使用者裁示）：材料申請發票日＝財務角色／superadmin
+        raise HTTPException(403, "權限不足：只有財務角色可以登錄材料申請發票日期")
     inv = normalize_date((body or {}).get("invoiceDate"), "發票日期")
     conn = get_db()
     try:
@@ -213,7 +214,7 @@ def set_material_order_invoice_date(quote_no: str, item_id: str, body: dict = Bo
             (quote_no,)).fetchone()
         if not q:
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
-        require_case(user, q, quote_no)
+        require_case_money(user, q, quote_no)
         data = json.loads(q["data_json"] or "{}")
         orders = (data.get("caseRecord") or {}).get("materialOrders") or []
         hit = [mo for mo in orders if isinstance(mo, dict) and str(mo.get("itemId")) == item_id]
@@ -251,11 +252,11 @@ def get_material_orders(quote_no: str, authorization: str = Header(None)):
         ).fetchone()
         if not q:
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
-        require_case(user, q, quote_no)
+        require_case_money(user, q, quote_no)
 
         data = json.loads(q["data_json"] or "{}")
         orders = data.get("caseRecord", {}).get("materialOrders", [])
-        if not money_visible(user):
+        if not material_money_visible(user):
             # CM13（2026-09-24 使用者裁示）：單價、小計、已付金額不回
             for o in orders:
                 for k in MATERIAL_ORDER_MONEY_KEYS:

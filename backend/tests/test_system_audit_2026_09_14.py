@@ -800,7 +800,7 @@ def test_role_compare_strings_reverse_controls():
     assert role_compare_strings("ok = roles == 'x'") == set()
 
 
-_KNOWN_ROLES = {"superadmin", "admin", "sales", "engineer", "viewer"}
+_KNOWN_ROLES = {"superadmin", "admin", "sales", "engineer", "viewer", "finance"}
 
 
 def test_no_unknown_role_strings_in_backend():

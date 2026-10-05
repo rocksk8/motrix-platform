@@ -137,13 +137,6 @@ def approver_recipients(conn, award, appr, requester):
 
 
 def cashier_recipients(conn, award):
-    """持有出納模組（cashier）的在職帳號。"""
-    out = []
-    for r in conn.execute("SELECT username, modules FROM users WHERE active = 1 ORDER BY id"):
-        try:
-            mods = json.loads(r["modules"] or "[]")
-        except (TypeError, ValueError):
-            mods = []
-        if "cashier" in (mods or []):
-            out.append(r["username"])
-    return out
+    """出納收件人：在職的財務角色＋superadmin（第42班；不再掃 cashier 勾選）。"""
+    from helpers.auth import finance_usernames
+    return finance_usernames(conn)

@@ -12,7 +12,7 @@ from archive import _backup_quotation
 from core.txn import write_txn
 from db import get_db, spawn_bg_thread
 from helpers import _audit, _require_user, _tok, notify_settlement_finalized
-from helpers.case_access import require_case
+from helpers.case_access import require_case, require_case_money
 from modules.case.api.quotations import _require_financial_view
 from modules.case.quotations import save_quotation_json
 
@@ -43,7 +43,7 @@ def get_settlement(quote_no: str, authorization: str = Header(None)):
     conn.close()
     if not row:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    require_case(user, row, quote_no)
+    require_case_money(user, row, quote_no)
     _require_financial_view(user)
     data = json.loads(row["data_json"] or "{}")
     return {"settlement": data.get("settlement", None), "items": data.get("items", []), "updatedAt": row["updated_at"],
@@ -69,7 +69,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         # 才收斂成「僅 superadmin」。這是全系統唯一一個「寫入」層級的缺口，補上與
         # GET 相同的擁有者檢查。
         try:
-            require_case(user, row, quote_no)
+            require_case_money(user, row, quote_no)
             _require_financial_view(user)
         except HTTPException:
             conn.close()

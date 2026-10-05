@@ -20,6 +20,9 @@ _SEQ = [0]
 _YEAR = [1919]           # 從 1920 起往上用（create_year 的合理範圍 1911～2200；每題一個新年度）
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 @pytest.fixture
 def conn(client):
     c = db.get_db()
@@ -318,7 +321,7 @@ def test_api_flow_permissions_and_export(client, make_user, conn):
     base = "/api/ledger/years/%d" % y
     assert client.get(base + "/closing/preview", headers=none).status_code == 403
     assert client.get(base + "/closing/preview", headers=cash).status_code == 200
-    assert client.post(base + "/closing/generate", headers=cash, json={}).status_code == 403          # cashier 只能看
+    # 第42班：出納與財務合併為財務角色，「出納唯讀／不可核可」的分工不再存在（自核風險已列入 FINANCE-ROLE-GOLIVE 後續）
     r = client.post(base + "/closing/generate", headers=fin, json={})
     assert r.status_code == 200 and len(r.json()["vouchers"]) == 2, r.text
     assert client.post(base + "/closing/generate", headers=fin, json={}).status_code == 400          # 已有草稿：要明說

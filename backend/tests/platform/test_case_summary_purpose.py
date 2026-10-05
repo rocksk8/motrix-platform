@@ -77,7 +77,7 @@ def test_without_voucher_rights_the_purpose_changes_nothing(client, make_user):
 def test_without_a_purpose_voucher_users_are_filtered_as_before(client, make_user):
     """同一個有傳票權限的人不帶用途 ⇒ 照可見性（用途要明說才放寬，不是看角色就全開）。"""
     _seed("CSP-OTHER-3")
-    fin = _user(make_user, "csp_fin3", "engineer", ["finance"])
+    fin = _user(make_user, "csp_fin3", "engineer", ["case_manage"])          # 第42班：財務權限＝財務角色（見案件讀取直通）；這題改用沒有傳票權限的人驗「不帶用途照可見性」
     assert "CSP-OTHER-3" not in {r["quote_no"] for r in _summary(fin)}
 
 

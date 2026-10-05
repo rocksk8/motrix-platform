@@ -13,6 +13,9 @@ import pytest
 SENT = "/api/quotations/-/extra-expenses"
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, u, p):
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     assert r.status_code == 200, r.text
@@ -106,7 +109,7 @@ def _mk(client, users, who="cl_form"):
 
 def test_row_visibility_creator_cashier_admin_yes_stranger_404(client, users):
     eid = _mk(client, users)
-    for who, ok in (("cl_form", True), ("cl_admin", True), ("cl_cash", True), ("cl_plain", False), ("cl_apr", False)):
+    for who, ok in (("cl_form", True), ("cl_admin", False), ("cl_cash", True), ("cl_plain", False), ("cl_apr", False)):
         listed = client.get(SENT, headers=users[who]).json()["items"]
         if who != "cl_cash":          # 清單另受既有「財務金額可視」規則（can_see_financial）約束；出納走出納頁付款，這裡只驗單列可見（下方 PATCH 403≠404）
             assert (eid in [i["id"] for i in listed]) == ok, who

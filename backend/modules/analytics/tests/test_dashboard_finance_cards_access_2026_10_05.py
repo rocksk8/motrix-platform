@@ -42,25 +42,26 @@ def _insert(quote_no, opener_id, status="已送出", tag="已成案", approval=N
 
 
 #: 帳號 ⇒ (角色, 模組)。None＝角色預設模組。
+#: 第42班（使用者裁示）：財務卡片只給 superadmin 與「財務」角色；admin／sales 與任何財務勾選（惰性）都不算。
 USERS = {
     "sa":               ("superadmin", None),
-    "admin":            ("admin", None),
-    "sales_fin":        ("sales", ["dashboard", "quotation", "case_manage", "financial_view", "finance"]),
-    "sales_fin_noview": ("sales", ["dashboard", "quotation", "case_manage", "finance"]),      # sales 角色本身就過 can_see_financial
-    "sales_nofin":      ("sales", None),                                                     # 沒有財務模組 ⇒ 原本就沒有卡片
-    "fin_noview":       ("viewer", ["dashboard", "finance"]),                                # 財務模組、沒有財務檢視 ⇒ 失去卡片
-    "eng_fin_noview":   ("engineer", ["dashboard", "finance"]),                              # 同上（非 viewer 角色）
-    "fin_view":         ("viewer", ["dashboard", "finance", "financial_view"]),              # 兩者都有 ⇒ 全公司卡片，不要求是案件業務
-    "view_nofin":       ("viewer", ["dashboard", "financial_view"]),                         # 只有財務檢視、沒有財務模組 ⇒ 原本就沒有
+    "finance":          ("finance", None),
+    "admin":            ("admin", None),                                                     # 失去卡片（原本有）
+    "sales":            ("sales", None),                                                     # 失去卡片（原本有）
+    "sales_flags":      ("sales", ["dashboard", "quotation", "case_manage", "financial_view", "finance"]),     # 惰性勾選不算
+    "fin_noview":       ("viewer", ["dashboard", "finance"]),
+    "eng_fin_noview":   ("engineer", ["dashboard", "finance"]),
+    "fin_view":         ("viewer", ["dashboard", "finance", "financial_view"]),
+    "view_nofin":       ("viewer", ["dashboard", "financial_view"]),
     "approver":         ("viewer", ["dashboard", "quotation"]),                              # 簽核路徑上的人
 }
 
 C1, C2, CP = "T40-C1", "T40-C2", "T40-CP"          # C1、C2：已成案、已完結精算；CP：待審核（approver 在簽核名單）
 
-#: 有財務卡片的帳號 ⇒ 看到全公司兩案
-CARDS = {"sa", "admin", "sales_fin", "sales_fin_noview", "fin_view"}
-#: 有「待審核」清單的帳號（can_quotation）
-PENDING = {"sa", "admin", "sales_fin", "sales_fin_noview", "sales_nofin", "approver"}
+#: 有財務卡片的帳號 ⇒ 看到全公司兩案（make_user 會把「一般角色＋明確勾財務鍵」換成 finance 角色 ⇒ 那幾個也算）
+CARDS = {"sa", "finance", "sales_flags", "fin_noview", "eng_fin_noview", "fin_view", "view_nofin"}
+#: 有「待審核」清單的帳號（can_quotation：角色 superadmin／admin／sales，或持有 quotation 模組）
+PENDING = {"sa", "admin", "sales", "approver", "finance", "sales_flags"}
 
 
 @pytest.fixture()
@@ -116,14 +117,18 @@ def test_other_dashboard_parts_are_untouched(client, world, name):
     assert j["deviceSummary"]["total"] == 3
 
 
-def test_the_accounts_that_lose_the_cards_are_exactly_finance_module_without_financial_view(client, world):
-    """矩陣的另一面：失去卡片的只有「有財務模組、但沒有財務檢視（角色也不是 sales／admin）」；其餘要嘛維持、要嘛原本就沒有。"""
-    lost = set()
-    for name, (role, mods) in USERS.items():
-        had = role in ("superadmin", "admin") or "finance" in (mods or [])     # 舊條件
-        if name == "sales_nofin":
-            had = False                                                        # sales 預設模組沒有 finance
-        now = name in CARDS
-        if had and not now:
-            lost.add(name)
-    assert lost == {"fin_noview", "eng_fin_noview"}
+def test_admin_and_sales_lose_the_cards_even_with_the_inert_flags(client, make_user):
+    """上線矩陣的另一面：admin／sales（即使 DB 裡還留著惰性的財務勾選）沒有卡片；只有 superadmin 與財務角色有。
+    （make_user 對「明確勾財務鍵的一般帳號」會換成 finance 角色，所以這題直接把勾選寫進資料庫。）"""
+    import db
+    adm = make_user("t40_flagged_admin", role="admin")
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE users SET modules=? WHERE username='t40_flagged_admin'",
+                     (json.dumps(["dashboard", "quotation", "finance", "financial_view", "cashier"]),))
+        conn.commit()
+    finally:
+        conn.close()
+    h = _login(client, *adm)
+    j = client.get("/api/dashboard/stats", headers=h).json()
+    assert j["financeVisible"] is False and _who(j["paymentItems"]) == set()

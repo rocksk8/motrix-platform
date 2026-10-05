@@ -75,3 +75,10 @@ BN(2):  BN13 BN16
 AMBIGUOUS_ACK AC1 題檔撞名（tests/test_ac1_write_actions 與本模組的題）；本模組不在時只剩 1 檔、不再撞名
 AMBIGUOUS_ACK BN17 題檔撞名（2 檔，都在本模組）
 ```
+
+
+## 第42班：財務角色（2026-10-05，使用者已裁示）
+
+- **財務角色（`users.role = 'finance'`）與 superadmin 看得到獎金金額、勞報單金額與已簽回檔**：原本「持有出納（`cashier`）模組」的判斷（獎金待發放、標記已發放、勞報單簽回檔、獎金更正單的補發出納、銀行帳號顯示）一律改由角色決定（`helpers.auth.has_finance_access`）；`users.modules` 的 `cashier`／`finance` 勾選失效（資料保留）。
+- 獎金金額讀取端點（基數、預覽、分潤單預覽、PDF）＝財務角色／superadmin；「產生獎金單」維持現狀（`_is_manager`）。
+- 獎金發放通知（`bonus_payout_ready`、更正單補發）的出納收件人＝在職財務角色＋superadmin（`helpers.auth.finance_usernames`）。

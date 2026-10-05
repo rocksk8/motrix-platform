@@ -24,6 +24,7 @@ from db import get_db, next_entity_code, spawn_bg_thread
 from core import registry
 from core.txn import begin_write, write_txn
 from helpers.dates import normalize_date
+from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers.gl_status import gl_posted_warning
 from helpers import (
     _require_user, _tok, _audit, _notify, _get_setting, _set_setting, _purge_notifications,
@@ -140,8 +141,9 @@ class ApprovalFlowSettings(BaseModel):
 # ── Approval tier helpers（純邏輯部分共用 helpers/tiered_approval.py，見上方 import）──
 
 def _require_admin(user: dict):
-    if user["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "需要管理員權限")
+    # 2026-10-05（第42班）：憑證建立／送審／作廢等財務動作 ⇒ 僅「財務」角色與 superadmin（admin 直通拿掉）
+    if not has_finance_access(user):
+        raise HTTPException(403, "需要財務角色權限")
 
 
 def _paid_between(start: str, end: str) -> list:
@@ -443,7 +445,7 @@ def create_contractor_voucher(body: VoucherCreateIn, authorization: str = Header
         _audit(_tok(authorization), "contractor_voucher.create", "contractor_payment_voucher", voucher_no,
                f"{voucher_no}（{snapshot['vendorName'] or '外包人員點工'}）{label}")
         notify_module_activity("承攬商匯款申請", "建立", user.get("display_name") or user["username"],
-                                f"{voucher_no}（{snapshot['vendorName']}）{label}", "case-management.html")
+                                f"{voucher_no}（{snapshot['vendorName']}）{label}", "case-management.html", audience="finance")
         out = {"voucher_no": voucher_no, "created_at": now}
         if kctx is not None:
             out.update(kind=kctx["kind"]["code"], kindName=kctx["kind"]["name"], seq=kctx["seq"], plan=kctx["plan"], warnings=kctx["warnings"])
@@ -499,7 +501,7 @@ def delete_contractor_voucher(voucher_no: str, authorization: str = Header(None)
                                        'contractor_voucher_returned', 'approval_reminder'])
     _audit(_tok(authorization), "contractor_voucher.delete", "contractor_payment_voucher", voucher_no, voucher_no)
     notify_module_activity("承攬商匯款申請", "刪除", user.get("display_name") or user["username"],
-                            voucher_no, "case-management.html")
+                            voucher_no, "case-management.html", audience="finance")
     return {"ok": True}
 
 
@@ -567,7 +569,7 @@ def void_contractor_voucher(voucher_no: str, body: VoucherVoidIn, authorization:
     _purge_notifications(voucher_no, ['contractor_voucher_approval_request', 'contractor_voucher_approved',
                                        'contractor_voucher_returned', 'approval_reminder'])
     _audit(_tok(authorization), "contractor_voucher.void", "contractor_payment_voucher", voucher_no, "%s（原狀態 %s）原因：%s" % (voucher_no, row["status"], reason))
-    notify_module_activity("承攬商匯款申請", "作廢", user.get("display_name") or user["username"], voucher_no, "case-management.html")
+    notify_module_activity("承攬商匯款申請", "作廢", user.get("display_name") or user["username"], voucher_no, "case-management.html", audience="finance")
     return {"ok": True, "voidedAt": now}
 
 
@@ -961,8 +963,8 @@ def set_remit_require_payslip(body: dict = Body(...), authorization: str = Heade
 def get_personnel_links(voucher_no: str, authorization: str = Header(None)):
     """匯款單的個人外包人員與勞報單關聯現況（出納頁挑選用）：每人的匯款金額、已關聯勞報單、可挑選的勞報單、這一行現在能不能匯款。"""
     user = _require_user(authorization)
-    if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
-        raise HTTPException(403, "需要管理員或出納權限")
+    if not has_cashier_access(user):
+        raise HTTPException(403, "需要財務角色（出納）權限")
     conn = get_db()
     try:
         row = conn.execute("SELECT snapshot_json FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
@@ -995,8 +997,8 @@ class PersonnelLinkIn(BaseModel):
 def link_personnel_payslip(voucher_no: str, body: PersonnelLinkIn, authorization: str = Header(None)):
     """把匯款單裡的一位個人外包人員關聯到勞報單（payslipNo 給空字串＝解除）。只限尚未匯款的匯款單；關聯時即驗證（已簽回、受款人、金額）。"""
     user = _require_user(authorization)
-    if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
-        raise HTTPException(403, "需要管理員或出納權限")
+    if not has_cashier_access(user):
+        raise HTTPException(403, "需要財務角色（出納）權限")
     conn = get_db()
     try:
         row = conn.execute("SELECT is_paid, snapshot_json FROM contractor_payment_vouchers WHERE voucher_no=?", (voucher_no,)).fetchone()
@@ -1058,8 +1060,8 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
     # 核准，額外放行具備 cashier 模組的使用者（不需要完整 admin 權限）——跟
     # 這個檔案其餘建立/送審/撤銷等「財務」動作的 _require_admin() 分開判斷，
     # 不能把 _require_admin() 本身改鬆，那些動作仍然只限 admin+。
-    if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
-        raise HTTPException(403, "需要管理員或出納權限")
+    if not has_cashier_access(user):
+        raise HTTPException(403, "需要財務角色（出納）權限")
     action = (body or {}).get("action", "")
     note   = (body or {}).get("note", "")
     if action not in ("pay", "unpay"):
@@ -1153,10 +1155,10 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
     who = user.get("display_name") or user["username"]
     if action == "pay" and rm["review"]:
         notify_module_activity("承攬商匯款申請", "匯款差額待審核", who, voucher_no, "cashier.html",
-                               detail="實付與應付不符（差額 %+g），請管理員到出納頁核可或退回。%s" % (rm["diff"], note or ""))
+                               detail="實付與應付不符（差額 %+g），請財務角色到出納頁核可或退回。%s" % (rm["diff"], note or ""), audience="finance")
     else:
         notify_module_activity("承攬商匯款申請", "已匯款" if action == "pay" else "取消已匯款", who, voucher_no,
-                               "case-management.html", detail=note or "")
+                               "case-management.html", detail=note or "", audience="finance")
     if action == "pay":
         # 行事曆「包商撥款」（2026-09-30，預設關；開關在 L1 判斷）：以匯款日期建立；取消匯款不刪事件
         spawn_bg_thread(push_event_for_module, args=_payout_calendar_args(

@@ -340,15 +340,8 @@ def normalize_lines(lines) -> tuple:
 # ── 值驗證（建立／更新／送審時呼叫）────────────────────────────────────────────────
 
 def _is_cashier(viewer) -> bool:
-    if (viewer or {}).get("role") == "superadmin":
-        return True
-    mods = (viewer or {}).get("modules") or []
-    if isinstance(mods, str):
-        try:
-            mods = json.loads(mods)
-        except ValueError:
-            mods = []
-    return "cashier" in mods
+    from helpers.auth import has_cashier_access          # 第42班：出納＝財務角色／superadmin
+    return has_cashier_access(viewer or {})
 
 
 def last_value_hook(type_code: str):

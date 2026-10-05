@@ -4,6 +4,7 @@
 from fastapi import APIRouter, Header, HTTPException
 
 from db import get_db
+from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import _require_user
 from modules.subcontract import remit_kinds as RK
 
@@ -13,8 +14,8 @@ router = APIRouter()
 @router.get("/api/remit-kinds")
 def list_remit_kinds(authorization: str = Header(None)):
     user = _require_user(authorization)
-    if user.get("role") not in ("superadmin", "admin"):
-        raise HTTPException(403, "需要管理員權限")
+    if not has_finance_access(user):              # 第42班：跟匯款申請的建立權限（財務角色）同步
+        raise HTTPException(403, "需要財務角色權限")
     conn = get_db()
     try:
         out = RK.active_kinds(conn)

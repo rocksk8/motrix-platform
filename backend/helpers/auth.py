@@ -148,11 +148,64 @@ def _write_initial_credentials(username: str, password: str, path: str = None) -
 
 # ── Session helpers ───────────────────────────────────────────────────────────
 
+#: 2026-10-05（第42班，使用者裁示）：財務／出納能力只屬於「財務」角色與 superadmin。
+#: 這三個模組鍵（出納、財務、財務金額可視）不再由 `users.modules` 的勾選決定——
+#: `user_has_module(user, <這三個鍵>)` 改成**由角色推導**；既有 admin／sales 帳號 DB 裡的勾選
+#: 原封不動（惰性，不刪，回滾即還原），只是程式不再認。
+FINANCE_ROLE = "finance"
+FINANCE_ROLES = ("superadmin", FINANCE_ROLE)
+FINANCE_MODULE_KEYS = ("cashier", "finance", "financial_view")
+VALID_ROLES = ("superadmin", "admin", "sales", "engineer", "viewer", FINANCE_ROLE)
+
+
+def has_finance_access(user: dict) -> bool:
+    """財務金額可見／財務操作：只有 superadmin 與「財務」角色（不看 `modules` 勾選、不看 admin／sales）。
+    **superadmin 不變式（2026-10-03）**：本函式必含 superadmin 直通（守門：test_finance_role 靜態題）。"""
+    return (user or {}).get("role") in FINANCE_ROLES
+
+
+def has_cashier_access(user: dict) -> bool:
+    """出納（登錄付款／標記已匯款／銀行對帳）：與財務同一條規則（使用者 2026-10-05 裁示合併）。"""
+    return has_finance_access(user)
+
+
+def finance_usernames(conn=None) -> list:
+    """在職的「財務」角色＋superadmin 帳號（依 id）。付款／匯款／出納類通知的收件人來源
+    （取代各檔自己掃 `users.modules` 找 `cashier` 的寫法）。要信箱＋退訂判斷用
+    `helpers.email_notify.finance_recipient_emails(event_key)`。"""
+    own = conn is None
+    c = conn or get_db()
+    try:
+        return [r["username"] for r in c.execute(
+            "SELECT username FROM users WHERE active=1 AND role IN ('finance','superadmin') ORDER BY id")]
+    finally:
+        if own:
+            c.close()
+
+
+def effective_modules(role: str, modules) -> list:
+    """給前端／選單用的「有效模組清單」：財務三鍵由角色決定（財務角色與 superadmin 補上、其他角色一律拿掉）；
+    其餘鍵照原樣。`modules` 可為 list 或 JSON 字串。DB 內的原始勾選不動。"""
+    if isinstance(modules, str):
+        try:
+            modules = json.loads(modules or "[]")
+        except Exception:
+            modules = []
+    mods = [m for m in (modules or []) if m not in FINANCE_MODULE_KEYS]
+    if role in FINANCE_ROLES:
+        mods += [k for k in FINANCE_MODULE_KEYS]
+    return mods
+
+
 def user_has_module(user: dict, key: str) -> bool:
     """`user["modules"]` 是 _require_user() 回傳的原始 JSON 字串（未解析），
     這裡統一解析比對——供「admin+ 或具備特定模組」這類判斷共用（2026-08-31
     財務/出納權限分工新增），取代散落在各檔案裡各自重寫一次 role 判斷式的
-    寫法：`if user["role"] not in ("superadmin","admin") and not user_has_module(user,"cashier"): raise ...`"""
+    寫法：`if user["role"] not in ("superadmin","admin") and not user_has_module(user,"cashier"): raise ...`
+
+    2026-10-05：`FINANCE_MODULE_KEYS`（cashier／finance／financial_view）改由角色推導（見上），不看勾選。"""
+    if key in FINANCE_MODULE_KEYS:
+        return has_finance_access(user)
     try:
         return key in json.loads(user.get("modules") or "[]")
     except Exception:
@@ -211,8 +264,8 @@ def can_see_financial(user: dict) -> bool:
     端點上有非管理員的簽核人，直接套這條規則會把簽核人擋在門外，要動得先理清
     「簽核人是否一定看得到金額」，見 MODULE-AUDIT-2026-09-13.md §4。
     """
-    return (user["role"] in ("superadmin", "admin", "sales")
-            or user_has_module(user, "financial_view"))
+    # 2026-10-05（第42班，使用者裁示）：只剩 superadmin 與「財務」角色；admin／sales 直通與 financial_view 勾選都拿掉。
+    return has_finance_access(user)
 
 
 def _require_user(authorization: str, require_superadmin: bool = False, module: str = None) -> dict:
@@ -239,7 +292,7 @@ def _require_user(authorization: str, require_superadmin: bool = False, module: 
         raise HTTPException(401, "Session 已過期，請重新登入")
     if require_superadmin and row["role"] != "superadmin":
         if module:
-            user_mods = json.loads(row["modules"] or "[]")
+            user_mods = effective_modules(row["role"], row["modules"])
             if module not in user_mods:
                 raise HTTPException(403, "僅超級管理員或具授權模組的使用者可執行此操作")
         else:

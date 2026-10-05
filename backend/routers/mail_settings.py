@@ -168,7 +168,10 @@ def receivable(t, o, username, role):
     if mode == "superadmin_only":
         return role == "superadmin"
     group_hit = {"none": False, "admins": role in ("admin", "superadmin"),
-                 "superadmins": role == "superadmin"}[t.group]
+                 "superadmins": role == "superadmin",
+                 "finance": role in ("finance", "superadmin")}.get(t.group, False)          # 第42班：新增 finance 群組（未知群組 ⇒ 不收，不丟 KeyError）
+    if t.key == "module_activity" and role == "finance":
+        group_hit = True          # 付款／匯款／沖銷類的模組通知（audience="finance"）會寄給財務角色 ⇒ 退訂清單要列出來
     if mode == "custom":
         chosen = ov.get("roles") or []
         group_hit = username in (ov.get("users") or []) or role in chosen

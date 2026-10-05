@@ -11,6 +11,9 @@ import pytest
 from fastapi import HTTPException
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _sync_extra_to_table(conn, quote_no):
     """把剛種進 data_json 的 settlement.extraItems 搬進 case_extra_expenses。
 
@@ -97,7 +100,7 @@ def test_operating_targets_get_requires_admin(client, make_user):
 
 
 def test_operating_targets_get_allows_admin(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     r = client.get("/api/settings/operating-targets", headers=_auth(token))
     assert r.status_code == 200, r.text

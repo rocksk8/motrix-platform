@@ -11,6 +11,9 @@ SENT = "/api/quotations/-/extra-expenses"
 TODAY = date.today().isoformat()
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, u, p):
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     assert r.status_code == 200, r.text
@@ -182,7 +185,7 @@ def test_voided_row_is_frozen(client, H):
     assert client.delete("%s/%d" % (SENT, eid), headers=H["vd_form"]).status_code == 409
     assert client.post("%s/%d/submit" % (SENT, eid), headers=H["vd_form"]).status_code == 409
     assert client.put("%s/%d/change-request" % (SENT, eid), headers=H["vd_form"], json={"description": "x"}).status_code == 409
-    assert client.patch("%s/%d/dates" % (SENT, eid), headers=H["vd_admin"], json={"invoiceNo": "AB12345678"}).status_code == 409
+    assert client.patch("%s/%d/dates" % (SENT, eid), headers=H["vd_sa"], json={"invoiceNo": "AB12345678"}).status_code == 409          # 第42班：admin 看不到別人的無案件額外支出；改用 superadmin 驗「作廢列凍結」
     assert client.patch("%s/%d/dates" % (SENT, eid), headers=H["vd_cash"], json={"paidDate": TODAY}).status_code == 409
     up = client.post("%s/%d/files" % (SENT, eid), headers=H["vd_form"], files={"files": ("a.txt", b"hello", "text/plain")}, data={"kind": "invoice"})
     assert up.status_code == 409, up.text

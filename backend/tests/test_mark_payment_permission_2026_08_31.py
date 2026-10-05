@@ -83,8 +83,8 @@ def test_sales_cannot_mark_payment_received_or_set_amounts(client, make_user):
         assert r.status_code == 403, f"body={body!r} should be forbidden, got {r.status_code}: {r.text}"
 
 
-def test_admin_can_mark_payment_received(client, make_user):
-    username, password = make_user(role="admin")
+def test_admin_can_mark_payment_received(client, make_user):          # 第42班：標記收款＝財務角色（沿用舊題名）
+    username, password = make_user(role="finance")
     token = _login(client, username, password)
     _make_quotation("MQ-MARKPAY-003")
 

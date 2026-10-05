@@ -30,6 +30,7 @@ from fastapi import APIRouter, Body, Depends, Header, HTTPException
 from fastapi.responses import HTMLResponse, Response
 
 from db import get_db
+from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import _require_user, _audit, _tok, _get_setting
 from helpers.edit_log import append_edit_log
 from modules.payroll.bonus import (
@@ -500,8 +501,8 @@ def get_bonus_base(quote_no: str, authorization: str = Header(None)):
        而不是按下去才收到一句拒絕。
     """
     user = _require_user(authorization)
-    if not _is_manager(user):
-        raise HTTPException(403, "僅管理員以上可查閱獎金基數。")
+    if not has_finance_access(user):          # 第42班：讀金額 ⇒ 財務角色／superadmin（「產生」維持 _is_manager）
+        raise HTTPException(403, "僅管理員以上可查閱獎金基數。".replace("管理員以上","財務角色"))
     conn = get_db()
     try:
         settle = _settlement_of(conn, quote_no)
@@ -1112,8 +1113,8 @@ def preview_award(quote_no: str, body: dict = Body(default={}),
     結果。
     """
     user = _require_user(authorization)
-    if not _is_manager(user):
-        raise HTTPException(403, "僅管理員以上可預覽獎金分潤。")
+    if not has_finance_access(user):          # 第42班：讀金額 ⇒ 財務角色／superadmin（「產生」維持 _is_manager）
+        raise HTTPException(403, "僅管理員以上可預覽獎金分潤。".replace("管理員以上","財務角色"))
     allocations = body.get("allocations") or []
     if not allocations:
         raise HTTPException(400, "請至少設定一個獎金項目的比例。")
@@ -1441,8 +1442,8 @@ def preview_award(award_id: int, authorization: str = Header(None)):
     📌 與 PDF 來自同一支 `modules/payroll/bonus_pdf.py::_award_html()`，版面只有一份。
     """
     user = _require_user(authorization)
-    if not _is_manager(user):
-        raise HTTPException(403, "僅管理員以上可預覽獎金分潤單。")
+    if not has_finance_access(user):          # 第42班：讀金額 ⇒ 財務角色／superadmin（「產生」維持 _is_manager）
+        raise HTTPException(403, "僅管理員以上可預覽獎金分潤單。".replace("管理員以上","財務角色"))
     body = preview_award_html(award_id)       # 版面元件都在 L1（2026-09-26）：M06 不在也能預覽
     if body is None:
         raise HTTPException(404, "找不到這張獎金分潤單。")
@@ -1499,8 +1500,8 @@ def download_award_pdf(award_id: int, authorization: str = Header(None)):
     `status`（已作廢的單不管簽到哪裡都放行；`JV11`／`JV15` 同一條裁定）。
     """
     user = _require_user(authorization)
-    if not _is_manager(user):
-        raise HTTPException(403, "僅管理員以上可匯出獎金分潤單。")
+    if not has_finance_access(user):          # 第42班：讀金額 ⇒ 財務角色／superadmin（「產生」維持 _is_manager）
+        raise HTTPException(403, "僅管理員以上可匯出獎金分潤單。".replace("管理員以上","財務角色"))
     conn = get_db()
     try:
         row = conn.execute("SELECT * FROM bonus_awards WHERE id = ?",

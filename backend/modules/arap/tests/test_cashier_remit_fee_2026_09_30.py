@@ -13,6 +13,9 @@ NEEDS_CASE = requires_module("case", "請款的提供者是 M01 案件額外支�
 NO = "MQ-RF-001"
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _x(sql, args=()):
     import db
     conn = db.get_db()
@@ -99,9 +102,8 @@ def test_diff_goes_pending_then_approve_and_reject(client, make_user):
     assert not [i for i in pend if i["key"] in (k1, k2)]
     lst = client.get("/api/cashier/remit-reviews", headers=cash).json()
     it = next(i for i in lst["items"] if i["source"] == "case" and i["key"] == k1)
-    assert (it["payable"], it["actual"], it["diff"], it["fee"]) == (1000.0, 985.0, -15.0, 15.0) and lst["canDecide"] is False
+    assert (it["payable"], it["actual"], it["diff"], it["fee"]) == (1000.0, 985.0, -15.0, 15.0) and lst["canDecide"] is True          # 第42班：出納與財務合併為財務角色，「出納唯讀／不可核可」的分工不再存在（自核風險已列入 FINANCE-ROLE-GOLIVE 後續）
     url = "/api/cashier/remit-reviews/case/%s/decision"
-    assert client.post(url % k1, headers=cash, json={"decision": "approve"}).status_code == 403
     r = client.post(url % k1, headers=adm, json={"decision": "approve", "note": "短收已確認"})
     assert r.status_code == 200, r.text
     row = _row(k1)

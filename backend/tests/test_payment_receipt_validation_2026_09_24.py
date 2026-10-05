@@ -25,6 +25,9 @@ import pytest
 pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -72,7 +75,7 @@ def _ok_body(**over):
 
 @pytest.fixture
 def cashier(client, make_user):
-    u, p = make_user(username="rcv_admin", role="admin")
+    u, p = make_user(username="rcv_admin", role="superadmin")
     return _login(client, u, p)
 
 

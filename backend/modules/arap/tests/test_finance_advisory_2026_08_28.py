@@ -90,7 +90,7 @@ def _csv_bytes(text):
 
 @needs_m04
 def test_bank_reconcile_matches_by_amount(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="finance")
     token = _login(client, username, password)
     _insert_approved_voucher("PV-BANK-001", "MQ-BANK-001", grand_total=45000)
 
@@ -110,7 +110,7 @@ def test_bank_reconcile_matches_by_amount(client, make_user):
 
 @needs_m04
 def test_bank_reconcile_reports_unmatched_on_both_sides(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="finance")
     token = _login(client, username, password)
     _insert_approved_voucher("PV-BANK-002", "MQ-BANK-002", grand_total=60000)
 
@@ -132,7 +132,7 @@ def test_bank_reconcile_reports_unmatched_on_both_sides(client, make_user):
 def test_bank_reconcile_same_amount_only_matches_once(client, make_user):
     """兩筆待匯款申請金額剛好相同時，一筆銀行紀錄只能配對其中一筆，
     不能讓同一筆申請被重複配對（見 bank_reconcile() docstring）。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="finance")
     token = _login(client, username, password)
     _insert_approved_voucher("PV-BANK-003", "MQ-BANK-003", grand_total=30000)
     _insert_approved_voucher("PV-BANK-004", "MQ-BANK-004", grand_total=30000)
@@ -151,7 +151,7 @@ def test_bank_reconcile_same_amount_only_matches_once(client, make_user):
 
 @needs_m04
 def test_bank_reconcile_missing_amount_column_returns_400(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="finance")
     token = _login(client, username, password)
     csv_text = "日期,備註\n2026-03-20,無金額欄位\n"
     r = client.post(

@@ -26,6 +26,7 @@ from webauthn import (
 
 from db import get_db, get_demo_db, reset_demo_db, demo_reset_lock
 from helpers.module_registry import refuse_unknown_new_keys
+from helpers.auth import effective_modules, VALID_ROLES
 from helpers import (
     _hash_pw, _verify_pw, _require_user, _tok, _audit, is_weak_password, MIN_PASSWORD_LEN, DEMO_TOKEN_PREFIX,
     notify_module_activity)
@@ -472,7 +473,7 @@ def auth_login(body: LoginIn, request: Request):
             "username":           "demo",
             "displayName":        row["display_name"],
             "role":               row["role"],
-            "modules":            json.loads(row["modules"] or "[]"),
+            "modules":            effective_modules(row["role"], row["modules"]),   # 第42班：財務三鍵由角色決定
             "loginAt":            now,
             "mustChangePassword": False,
         }
@@ -549,7 +550,7 @@ def _issue_session(conn, row, must_change: bool) -> dict:
         "username":           row["username"],
         "displayName":        row["display_name"],
         "role":               row["role"],
-        "modules":            json.loads(row["modules"] or "[]"),
+        "modules":            effective_modules(row["role"], row["modules"]),   # 第42班：財務三鍵由角色決定
         "loginAt":            now,
         "mustChangePassword": must_change,
     }
@@ -1427,7 +1428,7 @@ def auth_me(authorization: str = Header(None)):
         "username":           row["username"],
         "displayName":        row["display_name"],
         "role":               row["role"],
-        "modules":            json.loads(row["modules"] or "[]"),
+        "modules":            effective_modules(row["role"], row["modules"]),   # 第42班：財務三鍵由角色決定
         "mustChangePassword": bool(row["must_change_password"]),
     }
 
@@ -1517,6 +1518,8 @@ def create_user(body: UserIn, authorization: str = Header(None)):
         raise HTTPException(400, "密碼過於簡單或為已知弱密碼，請改用更強的密碼")
     now = datetime.now().isoformat()
     refuse_unknown_new_keys(body.modules)
+    if body.role is not None and body.role not in VALID_ROLES:          # 第42班：角色只能是已知值（含 finance）
+        raise HTTPException(400, "不認得的角色：%s" % body.role)
     from helpers import mail_types as _mt
     from helpers.notification_prefs import EVENT_KEYS as _EVENT_KEYS
     unknown = [k for k in (body.notification_muted or []) if _mt.get(k) is None and k not in _EVENT_KEYS]
@@ -1556,6 +1559,10 @@ def create_user(body: UserIn, authorization: str = Header(None)):
 def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     conn = get_db()
+    if body.role is not None and body.role not in VALID_ROLES:          # 第42班
+        conn.close()
+        raise HTTPException(400, "不認得的角色：%s" % body.role)
+    _before = conn.execute("SELECT role, modules FROM users WHERE id=?", (user_id,)).fetchone()
     if not conn.execute("SELECT id FROM users WHERE id=?", (user_id,)).fetchone():
         conn.close()
         raise HTTPException(404, "使用者不存在")
@@ -1611,6 +1618,14 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
         conn.commit()
     conn.close()
     _audit(_tok(authorization), 'user.update', 'user', str(user_id), body.display_name or str(user_id))
+    if _before is not None:           # 第42班：角色／財務出納權限的變更要留前後（高敏感）
+        _fin = lambda m: sorted(k for k in json.loads(m or "[]") if k in ("cashier", "finance", "financial_view"))
+        _b_role, _b_fin = _before["role"], _fin(_before["modules"])
+        _a_role = body.role if body.role is not None else _b_role
+        _a_fin = _fin(json.dumps(body.modules)) if body.modules is not None else _b_fin
+        if _a_role != _b_role or _a_fin != _b_fin:
+            _audit(_tok(authorization), 'user.role_change', 'user', str(user_id), body.display_name or str(user_id),
+                   {"role": [_b_role, _a_role], "financeFlags": [_b_fin, _a_fin]})
     return {"ok": True}
 
 

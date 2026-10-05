@@ -40,6 +40,23 @@ def money_visible(user: dict) -> bool:
     return can_see_financial(user) or user_has_module(user, "cashier")
 
 
+def quote_money_visible(user: dict) -> bool:
+    """報價單層級資料（品項單價／成本／毛利、總額、報價單編輯）的可見／可編輯條件（第42班，使用者裁示「拆開」）：
+    superadmin／admin／sales／財務角色（＝舊 `can_see_financial` 的角色集合）。業務與管理員維持**編輯報價單、看報價總額**；
+    財務角色專屬的是**精算、收款／付款（款項期別）、財務總覽、報表金額、出納**等——那些仍走 `money_visible`／`can_see_financial`
+    （只有 superadmin 與財務角色）。"""
+    return (user or {}).get("role") in ("superadmin", "admin", "sales", "finance")
+
+
+def material_money_visible(user: dict) -> bool:
+    """叫料體系（材料申請）的金額可見／可操作條件（第42班，Q6）：superadmin／admin／sales／財務角色（＝舊 `can_see_financial` 的角色集合，材料申請行為不變）。
+
+    財務金額可視（`money_visible`）改成只有財務角色與 superadmin 之後，admin 會連材料申請的日常作業
+    （建立／送審／到貨確認）都被擋——但那屬一般管理（使用者已同意的預設 Q6）。所以材料申請自己用這一支：
+    維持 admin 可作業，而「取消已核准的材料申請」「改成本單價」仍另外要求財務角色（material_approval／material_guard）。"""
+    return (user or {}).get("role") in ("superadmin", "admin", "sales", "finance")
+
+
 class PaymentStructureChange(Exception):
     """遮蔽帳號新增、刪除或重排款項期別（CM13 D2：不允許）。"""
 
@@ -74,8 +91,9 @@ def _old_shape_received(pay) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
-def mask_case_record(cr: dict) -> dict:
-    """就地遮蔽 caseRecord 裡的金額（款項期別、叫料品項）。回傳同一個物件。"""
+def mask_case_record(cr: dict, keep_orders: bool = False) -> dict:
+    """就地遮蔽 caseRecord 裡的金額（款項期別、叫料品項）。回傳同一個物件。
+    `keep_orders=True`（第42班，Q6）：叫料品項的金額不遮（材料申請日常作業的操作者，見 `material_money_visible`）。"""
     if not isinstance(cr, dict):
         return cr
     pay = cr.get("payment")
@@ -84,33 +102,37 @@ def mask_case_record(cr: dict) -> dict:
             _drop(it, PAYMENT_MONEY_KEYS)
         if _old_shape_received(pay):
             pay.pop("received", None)
-    for mo in cr.get("materialOrders") or []:
+    for mo in ([] if keep_orders else cr.get("materialOrders") or []):
         _drop(mo, MATERIAL_ORDER_MONEY_KEYS)
     return cr
 
 
-def mask_quotation_data(data: dict) -> dict:
-    """就地遮蔽整份 data_json。回傳同一個物件。"""
+def mask_quotation_data(data: dict, keep_orders: bool = False, keep_quote: bool = False) -> dict:
+    """就地遮蔽整份 data_json。回傳同一個物件。`keep_orders` 見 `mask_case_record`。
+    `keep_quote=True`（第42班）：報價單層級的金額（品項單價／成本／毛利、總額、修改紀錄、核准原因）不遮——
+    業務／管理員維持編輯報價單；精算、款項期別（收款／付款）、叫料金額（依 keep_orders）照遮。"""
     if not isinstance(data, dict):
         return data
-    for it in data.get("items") or []:
-        _drop(it, ITEM_MONEY_KEYS)
-    _drop(data, QUOTE_MONEY_KEYS)
+    if not keep_quote:
+        for it in data.get("items") or []:
+            _drop(it, ITEM_MONEY_KEYS)
+        _drop(data, QUOTE_MONEY_KEYS)
     st = data.get("settlement")
     if isinstance(st, dict):
         # 精算狀態是清單與按鈕要用的，金額全部不回
         data["settlement"] = {"status": st.get("status")} if "status" in st else {}
     appr = data.get("approval")
-    if isinstance(appr, dict) and isinstance(appr.get("reasons"), list):
+    if not keep_quote and isinstance(appr, dict) and isinstance(appr.get("reasons"), list):
         appr["reasons"] = [MASKED_REASON if isinstance(r, str) and any(m in r for m in _REASON_MONEY_MARKS) else r
                            for r in appr["reasons"]]
-    strip_history_reasons(data.get("editHistory"))
-    for h in data.get("editHistory") or []:
-        for c in (h.get("changes") or []) if isinstance(h, dict) else []:
-            if isinstance(c, dict) and c.get("field") in HISTORY_MONEY_FIELDS:
-                c["from"] = "—"
-                c["to"] = "—"
-    mask_case_record(data.get("caseRecord"))
+    if not keep_quote:
+        strip_history_reasons(data.get("editHistory"))
+        for h in data.get("editHistory") or []:
+            for c in (h.get("changes") or []) if isinstance(h, dict) else []:
+                if isinstance(c, dict) and c.get("field") in HISTORY_MONEY_FIELDS:
+                    c["from"] = "—"
+                    c["to"] = "—"
+    mask_case_record(data.get("caseRecord"), keep_orders=keep_orders)
     data["moneyMasked"] = True
     return data
 
@@ -119,13 +141,14 @@ def _id_list(items):
     return [it.get("id") if isinstance(it, dict) else None for it in items or []]
 
 
-def restore_case_record(new_cr: dict, db_cr: dict) -> dict:
+def restore_case_record(new_cr: dict, db_cr: dict, keep_orders: bool = False) -> dict:
     """遮蔽帳號送回的 caseRecord：以資料庫現值補回被遮蔽的金額鍵。
 
     - 款項期別：期別的 id 與順序必須與資料庫相同（新增／刪除／重排 ⇒ PaymentStructureChange）；
       每一期的金額鍵一律取資料庫的值（送回來的即使有值也不採用——他看不到原值，不可能是有意改的）。
       資料庫還沒有款項分段（頁面替它補的預設期別）⇒ 這一段不寫入，維持沒有。
-    - 叫料品項：一律維持資料庫的值（案件頁不經由這條路改叫料，專屬端點另有規則）。
+    - 叫料品項：一律維持資料庫的值（案件頁不經由這條路改叫料，專屬端點另有規則）；`keep_orders=True`（第42班 Q6，材料申請操作者）
+      則不覆蓋，交給叫料審核寫入閘（material_guard）處理。
     回傳新的 dict，不改動傳入物件。
     """
     out = copy.deepcopy(new_cr or {})
@@ -149,7 +172,9 @@ def restore_case_record(new_cr: dict, db_cr: dict) -> dict:
             if _old_shape_received(db_pay):
                 new_pay["received"] = db_pay["received"]
             out["payment"] = new_pay
-    if "materialOrders" in db_cr:
+    if keep_orders:
+        pass
+    elif "materialOrders" in db_cr:
         out["materialOrders"] = copy.deepcopy(db_cr["materialOrders"])
     else:
         out.pop("materialOrders", None)

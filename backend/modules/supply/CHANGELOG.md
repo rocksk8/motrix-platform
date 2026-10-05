@@ -1,6 +1,9 @@
 # 採購・庫存・出貨 更新紀錄
 
 
+## (next) — 2026-10-05（wip/t42-finance-role）：財務角色
+- 進貨批次「標記已付款」改為出納動作：僅「財務」角色與 superadmin（建立／修改批次仍是一般管理）。
+
 ## 1.0.19 — wip/t34-ship-link-c7：出貨單連動材料申請（34-S1／S2，供應側）
 - 出貨單明細列可帶選填 `materialLink: {materialItemId, docCode, qty}`（加性；舊單沒有此鍵＝行為不變）。送審與核准各檢查一次：同一筆材料申請所有活的連結數量合計 ≤ 已到料（`material.shippable` 的 `arrivedQty`）；錯誤碼 `ship_exceeds_arrived`／`ship_link_invalid`／`ship_link_serial_exclusive`／`ship_link_module_off`（400，回 `{detail, code}`）。存檔時先擋形狀與序號互斥。
 - 新提供者 `shipping.material_shipped`（`{materialItemId: {reserved, shipped, notes}}`）與單一數字版 `shipping.material_shipped_qty`（reserved＋shipped；M01 變更申請用）；新端點 `GET /api/shipping-notes/{note_no}/material-link-check`（E6 警示：已到料有剩餘量卻沒連結，不擋）。IP-SH1／SH2／SH3 已登記。

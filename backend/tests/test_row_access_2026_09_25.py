@@ -30,7 +30,7 @@ USERS = [
     {"id": 1, "display_name": "Amy", "role": "sales", "modules": "[]"},
     {"id": 2, "display_name": "Bob", "role": "engineer", "modules": "[]"},
     {"id": 3, "display_name": "", "role": "viewer", "modules": "[]"},          # 空顯示名稱
-    {"id": 4, "display_name": "Cat", "role": "sales", "modules": '["cashier"]'},
+    {"id": 4, "display_name": "Cat", "role": "finance", "modules": "[]"},      # 第42班：cashier（read 直通）＝財務角色（勾選失效）
     {"id": 5, "display_name": "Dan", "role": "admin", "modules": "[]"},
     {"id": 6, "display_name": "Eve", "role": "superadmin", "modules": "[]"},
 ]
@@ -107,7 +107,7 @@ def test_positive_control_sets_are_not_trivial():
 # ── ② 新介面 == 舊實作（原封凍結，2026-09-25 自 HEAD 複製，只改函式名）────────────
 
 def _OLD_visible_case_filter_sql(user, prefix=""):     # modules/case/api/quotations.py:251
-    if json.loads(user.get("modules") or "[]").count("cashier"):
+    if (user["role"] == "finance"):
         return ("", [])
     return (
         f" AND ({prefix}sales_person_id=? OR ({prefix}sales_person_id IS NULL AND {prefix}sales_person=?)"
@@ -155,7 +155,7 @@ def _minus_intended_change_2026_09_29f(conn, user, old, scope):
     admin／cashier(read) 直通、或本人是協作者的列不扣（D 稽核 RA-M1：扣格不可比那一格寬）。"""
     if user["display_name"] not in ("", None) or user["role"] in ("superadmin", "admin"):
         return old
-    if scope == "read" and "cashier" in json.loads(user.get("modules") or "[]"):
+    if scope == "read" and user["role"] == "finance":
         return old
     cell = {r["id"] for r in conn.execute(
                 "SELECT id, assigned_user_ids FROM q WHERE sales_person_id IS NULL AND sales_person = ''")

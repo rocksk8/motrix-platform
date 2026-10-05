@@ -146,14 +146,29 @@ def test_detail_hides_money_from_non_financial(client, make_user, role):
     assert mo["itemName"] == "線材" and "unitPrice" not in mo and "totalPrice" not in mo
 
 
-@pytest.mark.parametrize("role,modules", [("sales", None), ("admin", None), ("engineer", ["case_manage", "financial_view"])])
+@pytest.mark.parametrize("role,modules", [("finance", None), ("superadmin", []), ("engineer", ["case_manage", "financial_view"])])
 def test_detail_keeps_money_for_financial(client, make_user, role, modules):
+    # 第42班：財務金額可視＝財務角色／superadmin（「engineer＋financial_view 勾選」由 make_user 換成 finance 角色）
     u = make_user(username=f"mk_df_{role}", role=role, modules=modules)
     _seed(assigned=[u[0]])
     d = client.get(f"/api/quotations/{NO}", headers=_login(client, *u)).json()["data"]
     assert d["items"][0]["unitPrice"] == 5000 and d["tot"]["total"] == 10290
     assert d["caseRecord"]["payment"]["items"][0]["amount"] == 3087
     assert not d.get("moneyMasked")
+
+
+@pytest.mark.parametrize("role", ["sales", "admin"])
+def test_sales_and_admin_keep_quotation_level_money_but_not_payments_or_settlement(client, make_user, role):
+    """第42班（使用者裁示「拆開」）：業務／管理員維持報價單層級（品項成本／單價、總額）；款項期別與精算是財務專屬。"""
+    u = make_user(username=f"mk_sp_{role}", role=role)
+    _seed(assigned=[u[0]])
+    body = client.get(f"/api/quotations/{NO}", headers=_login(client, *u)).json()
+    d = body["data"]
+    assert body["total"] == 10290 and d["items"][0]["unitPrice"] == 5000 and d["items"][0]["cost"] == 3000 and d["tot"]["total"] == 10290
+    assert d["settlement"] == {"status": "未精算"}
+    for p in d["caseRecord"]["payment"]["items"]:
+        for k in ("amount", "pct", "actualAmount", "feeAmount"):
+            assert k not in p, k
 
 
 def test_cashier_module_without_financial_view_is_not_masked(client, make_user):
@@ -244,7 +259,7 @@ def test_engineer_default_payment_on_case_without_payment_is_not_written(client,
 
 
 def test_financial_user_still_edits_amounts(client, make_user):
-    u = make_user(username="mk_w_sales", role="sales")
+    u = make_user(username="mk_w_sales", role="finance")         # 第42班：款項期別金額編輯＝財務角色／superadmin（業務的金額修改會被資料庫現值補回）
     _seed(assigned=[u[0]])
     h = _login(client, *u)
     seen = client.get(f"/api/quotations/{NO}", headers=h).json()["data"]["caseRecord"]

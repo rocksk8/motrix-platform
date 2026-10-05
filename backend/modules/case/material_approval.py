@@ -15,6 +15,7 @@ import json
 from datetime import date, datetime
 
 from helpers.dates import normalize_date
+from helpers.auth import has_finance_access  # 第42班：取消／撤回／作廢的財務動作只認財務角色與 superadmin
 from helpers.tiered_approval import (
     APPROVAL_DOC_TYPES, UnresolvedManagerError, active_tiers, check_approve_permission, check_no_tier_self_approval,
     check_reject_permission, current_tier_idx, cascade_self_tiers, register_doc_type, resolve_active_flow_setting,
@@ -317,8 +318,8 @@ def cancel(conn, quote_no: str, item_id: str, user: dict, reason: str) -> dict:
     row = get(conn, quote_no, item_id)
     if row is None:
         raise MaterialApprovalError(404, "找不到這筆材料申請的審核單")
-    if user["role"] not in ("admin", "superadmin"):
-        raise MaterialApprovalError(403, "只有管理員可以取消已核准的材料申請")
+    if not has_finance_access(user):          # 第42班：取消已核准叫料單影響成本與總帳 ⇒ 財務角色／superadmin
+        raise MaterialApprovalError(403, "只有財務角色可以取消已核准的材料申請")
     if row["status"] != S_APPROVED:
         raise MaterialApprovalError(409, "只有已核准的材料申請可以取消（目前「%s」）" % row["status"])
     text = (reason or "").strip()

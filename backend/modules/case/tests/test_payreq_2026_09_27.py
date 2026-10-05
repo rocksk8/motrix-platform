@@ -24,6 +24,9 @@ NO = "MQ-PR-001"
 BASE = "/api/quotations/%s/extra-expenses" % NO
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _q(sql, args=()):
     import db
     conn = db.get_db()
@@ -240,10 +243,7 @@ def test_provider_lists_approved_unpaid_and_mark_paid_writes_back(client, req):
 
 def _peer(client, make_user, req, username, role="sales", cashier=False):
     """看得到這個案件（被指派）、但不是填寫人的使用者；cashier=True ⇒ 另加出納模組（保留角色預設模組）。"""
-    u, p = make_user(username=username, role=role)
-    if cashier:
-        mods = json.loads(_q("SELECT modules FROM users WHERE username=?", (u,))[0]["modules"] or "[]")
-        _x("UPDATE users SET modules=? WHERE username=?", (json.dumps(sorted(set(mods) | {"cashier"})), u))
+    u, p = make_user(username=username, role=("finance" if cashier else role))          # 第42班：出納＝財務角色（勾選失效）
     ids = json.loads(_q("SELECT assigned_user_ids FROM quotations WHERE quote_no=?", (NO,))[0]["assigned_user_ids"] or "[]")
     _x("UPDATE quotations SET assigned_user_ids=? WHERE quote_no=?", (json.dumps(ids + [_uid(u)]), NO))
     return _login(client, u, p)
@@ -272,7 +272,7 @@ def test_requester_cannot_set_or_clear_the_paid_date_but_other_dates_still_work(
     _approve(client, req)
     dates = BASE + "/%d/dates" % req["id"]
     r = client.patch(dates, json={"paidDate": "2031-03-09"}, headers=req["h"])
-    assert r.status_code == 403 and "出納或管理員" in r.json()["detail"], r.text
+    assert r.status_code == 403 and "財務角色" in r.json()["detail"], r.text
     assert _paid(req) == "" and _pending_keys() == [str(req["id"])]                        # 沒有繞過出納
     r = client.patch(dates, json={"invoiceDate": "2031-03-08", "invoiceNo": "AB00000001"}, headers=req["h"])
     assert r.status_code == 200, r.text
@@ -326,7 +326,7 @@ def test_paid_date_only_after_approval_for_cashier_and_admin_alike(client, make_
     """AB-S8（使用者裁示）：未核准（草稿）設付款日 ⇒ 409 並說明、資料不變——出納、admin 都一樣；核准後 ⇒ 200。"""
     dates = BASE + "/%d/dates" % req["id"]
     hc = _peer(client, make_user, req, "pr_cash3", cashier=True)
-    ha = _peer(client, make_user, req, "pr_boss3", role="admin")
+    ha = _peer(client, make_user, req, "pr_boss3", role="superadmin")
     for h in (hc, ha):
         r = client.patch(dates, json={"paidDate": "2031-03-15"}, headers=h)
         assert r.status_code == 409 and "還沒核准" in r.json()["detail"], r.text
@@ -356,7 +356,7 @@ def test_demo_mode_says_the_module_is_absent_while_real_users_are_unaffected(cli
     from helpers import module_startup as ms
     why = "示範資料的資料庫升級未完成（case v1），示範模式暫不提供這個模組：測試"
     monkeypatch.setattr(ms, "_DEMO_ABSENT", {"case": why})
-    h = _login(client, *make_user(username="pr_real", role="admin"))
+    h = _login(client, *make_user(username="pr_real", role="superadmin"))
     assert client.get("/api/quotations", headers=h).status_code == 200
     hd = _demo_login(client)
     r = client.get("/api/quotations", headers=hd)
