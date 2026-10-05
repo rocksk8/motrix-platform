@@ -381,7 +381,7 @@ def test_changed_date_refires_for_the_new_date(client, make_user, mails):
 def test_recipients_are_finance_roles_not_others_and_opt_out_is_respected(client, make_user, mails):
     _finance(make_user, "fin_a")
     _finance(make_user, "fin_muted", muted=["payable_due_today"])
-    make_user(username="plain_admin", role="admin", modules=["cashier"])        # 出納模組但不是財務角色 ⇒ 不收（權限路線 A）
+    make_user(username="plain_admin", role="admin", modules=["cashier"], legacy_finance_flag=False)   # 持有惰性的出納勾選但不是財務角色 ⇒ 不收（權限路線 A）
     _set_mail("plain_admin", "plain@example.com")
     make_user(username="plain_sales", role="sales")
     _set_mail("plain_sales", "sales@example.com")
@@ -392,24 +392,42 @@ def test_recipients_are_finance_roles_not_others_and_opt_out_is_respected(client
     assert "1,200" not in html and "NT$" not in html, "信內不放金額"
 
 
-def test_recipient_function_is_the_single_selection_point(client, make_user, monkeypatch, mails):
-    from modules.case import payable_reminders as R
+def test_audience_is_the_finance_mail_group_only_no_extra_usernames(client, make_user, monkeypatch, mails):
+    """合併後語意：收件人＝財務郵件群組（`finance_recipient_emails`），寄信不另帶 usernames（沒有雙重聯集）。"""
+    from helpers import email_notify as en
     _finance(make_user, "fin_a")
     make_user(username="other_user", role="viewer")
     _set_mail("other_user", "other@example.com")
-    monkeypatch.setattr(R, "finance_recipients", lambda conn: ["other_user"])
+    seen = []
+    real = en.finance_recipient_emails
+    monkeypatch.setattr(en, "finance_recipient_emails", lambda event_key=None: seen.append(event_key) or ["other@example.com"])
     _seed_exp(planned=TODAY.isoformat())
-    assert _run() == 1 and mails[0][0] == ["other@example.com"]
+    assert _run() == 1
+    assert seen == ["payable_due_today"] and mails[0][0] == ["other@example.com"], "只用群組那一條，不再把 finance_usernames 併進來"
+    assert real("payable_due_today") == ["fin_a@example.com"] or "fin_a@example.com" in real("payable_due_today")
+
+
+def test_superadmin_only_override_is_respected(client, make_user, mails):
+    """收件設定頁把這類信改成「僅超級管理員」⇒ 財務角色不收、只有超級管理員收（與其他財務信一致）。"""
+    from helpers import _set_setting
+    _finance(make_user, "fin_a", role="finance")
+    _finance(make_user, "sa_only", role="superadmin")
+    _set_setting("mail_recipient_overrides", {"payable_due_today": {"mode": "superadmin_only", "users": [], "roles": []}})
+    try:
+        _seed_exp(planned=TODAY.isoformat())
+        assert _run() == 1
+        assert "fin_a@example.com" not in mails[0][0] and "sa_only@example.com" in mails[0][0]
+    finally:
+        _set_setting("mail_recipient_overrides", {})                  # 共用資料庫：不留覆寫給別題
 
 
 def test_no_recipients_means_no_guard_so_it_retries_later(client, make_user, monkeypatch, mails):
-    from modules.case import payable_reminders as R
+    from helpers import email_notify as en
     holder = []
-    monkeypatch.setattr(R, "finance_recipients", lambda conn: list(holder))
+    monkeypatch.setattr(en, "finance_recipient_emails", lambda event_key=None: list(holder))
     _seed_exp(planned=TODAY.isoformat())
     assert _run() == 0 and mails == []
-    _finance(make_user, "fin_late")
-    holder.append("fin_late")
+    holder.append("late@example.com")
     assert _run() == 1, "有收件人之後同一天補發（先前沒寫 guard）"
 
 
@@ -430,11 +448,9 @@ def test_mail_types_registered_with_owner_case():
         assert t.owner == "case" and t.category == "business"
 
 
-def test_reminder_mail_types_use_the_finance_group_when_it_exists():
-    """財務群組（wip/t42-finance-role）存在 ⇒ payable_due_* 用它（收件設定頁覆寫才一致）；還沒有 ⇒ none，收件人走 finance_recipients()。"""
+def test_reminder_mail_types_are_in_the_finance_group():
+    """合併後財務群組一定存在：payable_due_* 登記在 finance 群組（收件設定頁覆寫與其他財務信一致）。"""
     from helpers import mail_types as mt
-    from modules.case import payable_reminders as R
-    want = "finance" if "finance" in mt.GROUPS else "none"
-    assert R._GROUP == want
+    from modules.case import payable_reminders  # noqa: F401
     for k in ("payable_due_soon", "payable_due_today"):
-        assert mt._REGISTRY[k].group == want
+        assert mt._REGISTRY[k].group == "finance" and mt._REGISTRY[k].owner == "case"
