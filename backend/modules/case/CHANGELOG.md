@@ -4,7 +4,7 @@
 - **case migration v7**：`case_extra_expenses.planned_pay_date TEXT NOT NULL DEFAULT ''`（`0007_planned_pay_date.py`；只新增欄位、冪等、舊列維持空；回滾程式碼不必動資料）。選填、不是實際付款日；付款後保留當歷史。
 - API：`ExtraExpenseIn.plannedPayDate`（建立／編輯；編輯沒送＝保留原值、`''`＝清除；格式不合 400）；`PATCH …/extra-expenses/{id}/dates` 可補登／改期（任何狀態，但已付款後 409；權限同既有日期補登：填寫人、管理員、出納）；列表與 IP-100 `payables.pending` 的項目多 `plannedPayDate`。
 - 請款頁（一般＋定義表單）多「預定付款日（選填）」；出納「請款待付款」清單多一欄（可直接改期、已逾期／3 天內標示）。
-- `payable_reminders.py`：預定付款日前 3 天（`payable_due_soon`）與當天（`payable_due_today`）寄信；只對已核准、未付款、未作廢、要出納付款的類型；日曆天（週末照發）；guard key 冪等（改日期重發、過期 key 自動清）；信內不放金額。收件人經單一入口 `finance_recipients(conn)`——**暫時的本地樁**（財務角色＋最高管理者；TODO：換成 wip/t42-finance-role 的 helper）。每日檢查由 `case_deadlines.run_daily_checks` 呼叫。
+- `payable_reminders.py`：預定付款日前 3 天（`payable_due_soon`）與當天（`payable_due_today`）寄信；只對已核准、未付款、未作廢、要出納付款的類型；名義日（預定日、預定日−3 天）落在週六日就提前到前一個工作日寄（週一至週五；國定假日未納入，見 `payable_reminders.is_working_day`），兩封折到同一天只寄「今日到期」一封；guard key 以（案件, 種類, 預定日, 寄信日）冪等（改日期重發、過期 key 自動清）；信內不放金額。收件人經單一入口 `finance_recipients(conn)`——**暫時的本地樁**（財務角色＋最高管理者；TODO：換成 wip/t42-finance-role 的 helper）。每日檢查由 `case_deadlines.run_daily_checks` 呼叫。
 - `payable_calendar.py`：行事曆「付款待辦」（L1 `payable_due`，預設關）跟著現況走——核准／改預定日／清空／作廢／付款日被更正，commit 後同步 upsert 或 delete；出納付款（M05）以 IP-100 的 `來源:key` 直接收回，不讀本模組的表。
 - 測試：`tests/test_payable_planned_pay_date_2026_10_05.py`（migration 冪等、API、IP-100 欄位、行事曆跟現況走、3 天前／當天／冪等／退訂／無日期略過／收件人權限、guard 清理）。
 

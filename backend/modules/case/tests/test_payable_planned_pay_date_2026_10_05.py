@@ -296,19 +296,84 @@ def test_not_on_other_days_and_no_date_and_paid_voided_unapproved_are_skipped(cl
     assert _run() == 0 and mails == []
 
 
-def test_weekend_days_still_fire(client, make_user, mails):
+def _subjects_kind(mails):
+    return ["today" if "今日到期" in m[2] else "soon" for m in mails]
+
+
+def test_calendar_assumptions():
+    assert TODAY.weekday() == 1                                            # 2031-06-10 週二
+    assert date(2031, 6, 13).weekday() == 4 and date(2031, 6, 14).weekday() == 5 and date(2031, 6, 15).weekday() == 6
+
+
+def test_due_on_saturday_or_sunday_sends_the_friday_before(client, make_user, mails):
     _finance(make_user, "fin_a")
-    sat = date(2031, 6, 14)
-    assert sat.weekday() == 5
+    fri, sat, sun = date(2031, 6, 13), date(2031, 6, 14), date(2031, 6, 15)
     _seed_exp(planned=sat.isoformat())
-    assert _run(sat) == 1, "以日曆天算，週末照發（不順延）"
+    _seed_exp(planned=sun.isoformat())
+    assert _run(sat) == 0 and _run(sun) == 0 and mails == [], "週末當天不寄（已提前）"
+    assert _run(fri) == 2 and _subjects_kind(mails) == ["today", "today"], "週六、週日到期 ⇒ 週五寄「今日到期」"
+    assert _run(fri) == 0, "同一天重跑不重寄"
+
+
+def test_three_days_before_landing_on_weekend_moves_to_previous_friday(client, make_user, mails):
+    _finance(make_user, "fin_a")
+    due = date(2031, 6, 17)                                                # 週二；−3 天＝週六 6/14
+    _seed_exp(planned=due.isoformat())
+    assert (due - timedelta(days=3)).weekday() == 5
+    assert _run(date(2031, 6, 14)) == 0 and _run(date(2031, 6, 15)) == 0
+    assert _run(date(2031, 6, 13)) == 1 and _subjects_kind(mails) == ["soon"]
+    assert _run(due) == 1 and _subjects_kind(mails) == ["soon", "today"], "當天仍照常再寄一封"
+
+
+def test_sunday_minus_three_is_thursday_and_saturday_minus_three_is_wednesday(client, make_user, mails):
+    _finance(make_user, "fin_a")
+    _seed_exp(planned=date(2031, 6, 15).isoformat())                       # 週日 ⇒ −3＝週四
+    assert _run(date(2031, 6, 12)) == 1 and _subjects_kind(mails) == ["soon"]
+    _seed_exp(planned=date(2031, 6, 14).isoformat())                       # 週六 ⇒ −3＝週三
+    assert _run(date(2031, 6, 11)) == 1 and _subjects_kind(mails)[-1] == "soon"
+
+
+def test_collapse_to_one_mail_when_both_land_on_the_same_send_day(client, make_user, monkeypatch, mails):
+    """名義日折到同一個寄信日 ⇒ 只寄一封（當天那封）；用注入的假日驗（目前工作日只排除週末，週末情形不會折疊）。"""
+    from modules.case import payable_reminders as R
+    _finance(make_user, "fin_a")
+    holiday = date(2031, 6, 16)                                            # 週一假日：週五是上一個工作日
+    monkeypatch.setattr(R, "is_working_day", lambda d: d.weekday() < 5 and d != holiday)
+    _seed_exp(planned=holiday.isoformat())                                 # T0 → 6/13（週五）；T−3 = 6/13（週五）
+    fri = date(2031, 6, 13)
+    assert R.due_kind(holiday.isoformat(), fri)[0] == "today"
+    assert _run(fri) == 1 and _subjects_kind(mails) == ["today"], "兩封折成一封"
+    assert _run(fri) == 0 and len(mails) == 1
+    assert _run(holiday) == 0 and _run(date(2031, 6, 17)) == 0, "之後不再補寄"
+
+
+def test_holiday_seam_is_one_function(client, make_user, monkeypatch, mails):
+    """接上假日表只改 is_working_day：週二是假日 ⇒ 週二到期改在週一寄。"""
+    from modules.case import payable_reminders as R
+    _finance(make_user, "fin_a")
+    off = date(2031, 6, 10)
+    monkeypatch.setattr(R, "is_working_day", lambda d: d.weekday() < 5 and d != off)
+    _seed_exp(planned=off.isoformat())
+    assert _run(off) == 0
+    assert _run(date(2031, 6, 9)) == 1
+
+
+def test_effective_send_day_and_due_kind_pure_functions():
+    from modules.case import payable_reminders as R
+    assert R.effective_send_day(date(2031, 6, 14)) == date(2031, 6, 13)
+    assert R.effective_send_day(date(2031, 6, 15)) == date(2031, 6, 13)
+    assert R.effective_send_day(date(2031, 6, 12)) == date(2031, 6, 12)
+    assert R.due_kind("2031-06-14", date(2031, 6, 13)) == ("today", [("today", date(2031, 6, 13))])
+    assert R.due_kind("2031-06-14", date(2031, 6, 11)) == ("soon", [("soon", date(2031, 6, 11))])
+    assert R.due_kind("2031-06-14", date(2031, 6, 14))[0] == "" and R.due_kind("2031-06-14", date(2031, 6, 12))[0] == ""
+    assert R._candidate_planned_dates(date(2031, 6, 14)) == [] and R._candidate_planned_dates(date(2031, 6, 15)) == []
 
 
 def test_changed_date_refires_for_the_new_date(client, make_user, mails):
     _finance(make_user, "fin_a")
     eid = _seed_exp(planned=TODAY.isoformat())
     assert _run() == 1
-    later = TODAY + timedelta(days=5)
+    later = TODAY + timedelta(days=6)                                  # 週一
     _x("UPDATE case_extra_expenses SET planned_pay_date=? WHERE id=?", (later.isoformat(), eid))
     assert _run(later) == 1 and len(mails) == 2
 
