@@ -418,15 +418,16 @@ function reportsApp() {
       var s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       return s.modules || []
     },
-    isAdminPlus() {
+    isAdminPlus() {                      // 第42班：財務角色／superadmin，或持有「營運報表」模組者（與後端 _require_reports_access 一致）
       var r = this._role()
-      return r === 'admin' || r === 'superadmin'
+      return r === 'finance' || r === 'superadmin' || this._modules().includes('reports')
     },
     // 2026-08-31：出納併入本頁後的准入判斷——cashier/finance 模組使用者（非
     // 管理職）只能看到「出納」頁籤，其餘 11 個財務報表頁籤仍只有 admin+ 看得到
     // （見 init()/showCashierTab()），這兩個 getter 就是那道區隔線。
     hasCashierAccess() {
-      return this.isAdminPlus() || this._modules().includes('cashier') || this._modules().includes('finance')
+      var r = this._role()
+      return r === 'finance' || r === 'superadmin'      // 第42班：出納頁籤只有財務角色／superadmin
     },
     // 本地日期字串（YYYY-MM-DD），不用 toISOString()（UTC，台灣 UTC+8 每天
     // 00:00-08:00 之間會誤判成前一天，比照 case-management.js/cashier.js 同款修法）。

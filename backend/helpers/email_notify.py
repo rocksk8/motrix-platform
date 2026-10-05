@@ -240,9 +240,29 @@ def _group_emails(event_key: str = None) -> list:
         return _custom_emails(o, event_key)
     if t.group == "admins":
         return _users_emails("role IN ('admin','superadmin')", (), event_key)
+    if t.group == "finance":
+        return finance_recipient_emails(event_key)
     if t.group == "superadmins":
         return _only_superadmins(event_key)
     return []
+
+
+def finance_recipient_emails(event_key: str = None) -> list:
+    """「財務收件人」：在職、有 email、**未退訂** `event_key` 的「財務」角色＋superadmin（2026-10-05，第42班）。
+    付款／匯款／出納類通知與到期提醒一律用這支，不要再各自查 `cashier` 模組勾選或寄全體 admin。
+    （僅回信箱；要帳號清單用 `helpers.auth.finance_usernames`。）"""
+    return _users_emails("role IN ('finance','superadmin')", (), event_key)
+
+
+def _finance_audience_emails(event_key: str) -> list:
+    """`notify_module_activity(audience="finance")` 用：先套超級管理員在收件設定頁的覆寫（僅超管／自訂），
+    預設才是財務收件人。"""
+    o = _override_of(event_key)
+    if o["mode"] == "superadmin_only":
+        return _only_superadmins(event_key)
+    if o["mode"] == "custom":
+        return _custom_emails(o, event_key)
+    return finance_recipient_emails(event_key)
 
 
 def _with_event_recipients(event_emails: list, event_key) -> list:
@@ -1766,14 +1786,15 @@ def notify_monthly_report(period_label: str, period_str: str,
 
 def notify_module_activity(module_label: str, action_label: str,
                            actor: str, item_label: str,
-                           page_path: str = "", detail: str = "") -> None:
+                           page_path: str = "", detail: str = "", audience: str = "admins") -> None:
     """Non-blocking email to all admin/superadmin when a new item is created in any module.
 
     detail: optional full free-text body (comment / log content / note ...). Always rendered
     in full, never truncated — the point is recipients can read the whole thing in the email
     itself without having to log into the system. Pass the real content here instead of
     folding a truncated snippet into item_label."""
-    to = _admin_emails("module_activity")
+    # audience="finance"（第42班）：付款／匯款／沖銷這類財務事件只寄「財務」角色＋超級管理員，不寄全體 admin
+    to = _finance_audience_emails("module_activity") if audience == "finance" else _admin_emails("module_activity")
     if not to:
         return
     base = _base_url()

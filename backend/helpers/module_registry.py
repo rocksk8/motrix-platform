@@ -82,9 +82,10 @@ MODULES = (
 #: 建立帳號時依角色預帶的模組（照抄整併前 users.html:719-723）。
 ROLE_TEMPLATES = {
     "superadmin": ("dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "settings", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "cashier", "netplan", "audit_log", "shipping_export_log", "module_versions",),
-    "admin": ("dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "cashier",),
-    "sales": ("dashboard", "quotation", "case_manage", "customer", "financial_view", "project_approve_biz", "work_log", "daily_task", "map",),
+    "admin": ("dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "reports", "project_approve_eng", "project_approve_biz", "work_log", "daily_task",),   # 第42班：admin 樣板不再含 finance／financial_view／cashier（財務權限改由「財務」角色決定）；reports 暫留（營運報表模組，持有者仍可看）
+    "sales": ("dashboard", "quotation", "case_manage", "customer", "project_approve_biz", "work_log", "daily_task", "map",),   # 第42班：不再含 financial_view
     "engineer": ("dashboard", "case_manage", "project_approve_eng", "equipment", "work_log", "daily_task",),
+    "finance": ("dashboard", "quotation", "case_manage", "customer", "reports", "finance", "financial_view", "cashier", "work_log", "daily_task",),   # 第42班：財務角色（財務與出納）
     "viewer": ("dashboard",),
 }
 

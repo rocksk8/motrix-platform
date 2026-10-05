@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Header, Body, UploadFile, File, De
 from pydantic import BaseModel, model_validator
 
 from db import get_db, CURRENT_VERSION, _MIGRATIONS
+from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import (
     _require_user, _tok, _audit, _get_setting, _set_setting, _get_edge_path,
     _filter_live_notifications, notify_module_activity, APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES,
@@ -236,8 +237,8 @@ def set_approval_flow_for_doc_type(doc_type: str, body: ApprovalFlowSettings, au
 @router.get("/api/settings/operating-targets")
 def get_operating_targets(authorization: str = Header(None)):
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "僅管理員以上可查閱年度目標")
+    if not has_finance_access(u):                 # 第42班：年度營運目標含營收／毛利目標 ＝ 財務金額
+        raise HTTPException(403, "僅財務角色可查閱年度目標")
     return _get_setting("operating_targets") or {}
 
 
@@ -2618,7 +2619,7 @@ def test_email_notify(authorization: str = Header(None)):
 
 # ── Custom roles ───────────────────────────────────────────────────────────────
 
-_VALID_BASE_ROLES = {"superadmin", "admin", "sales", "engineer", "viewer"}
+_VALID_BASE_ROLES = {"superadmin", "admin", "sales", "engineer", "viewer", "finance"}
 
 
 @router.get("/api/settings/custom-roles")
@@ -2698,6 +2699,7 @@ _DEFAULT_ROLE_LABELS = {
     "admin":      "管理員",
     "sales":      "業務",
     "engineer":   "工程師",
+    "finance":    "財務",
     "viewer":     "檢視者",
 }
 

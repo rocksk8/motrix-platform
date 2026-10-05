@@ -20,7 +20,7 @@ from . import formula
 
 ACCESS_KEYS = {"visibleTo", "editableTo"}
 #: 可見設定可選的角色（同 helpers.auth 的基本角色；建構器面板只列這些）
-VISIBLE_ROLES = ("superadmin", "admin", "sales", "engineer", "viewer")
+VISIBLE_ROLES = ("superadmin", "admin", "sales", "engineer", "viewer", "finance")
 EVENT_FINANCE_POSTED = "custom_record.finance_posted"
 EVENT_FINANCE_REVERSED = "custom_record.finance_reversed"
 

@@ -103,7 +103,7 @@ def can_edit_orders(actor) -> bool:
     """同專屬端點（`material_orders.py`）：admin 以上或 `project_manage`，且有財務檢視權（CM13）。"""
     if actor is None:
         return True
-    return (actor.get("role") in ("superadmin", "admin") or user_has_module(actor, "project_manage")) and money_visible(actor)
+    return (actor.get("role") == "superadmin" or user_has_module(actor, "project_manage")) and money_visible(actor)     # 第42班：admin 直通拿掉
 
 
 def _rej(out, item_id, field, code, message):

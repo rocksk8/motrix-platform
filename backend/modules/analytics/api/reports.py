@@ -20,6 +20,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, UploadFile, File
 from fastapi.responses import Response, StreamingResponse
 
 from db import get_db
+from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import (
     _require_user, _tok, _audit, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
     payment_item_amounts, receipt_amounts, norm_ymd, summarize_payment_items,
@@ -97,10 +98,9 @@ def _require_reports_access(u: dict) -> None:
     自己那幾支端點，這裡是整份營運報表（含稅務匯出、現金部位、客戶歷史）。
     `bank-reconcile` 維持 admin+ 或 cashier 不變——那是對帳「動作」不是報表查閱。
     """
-    if (u["role"] not in ("superadmin", "admin")
-            and not user_has_module(u, "reports")
-            and not user_has_module(u, "finance")):
-        raise HTTPException(403, "僅管理員、或具『營運報表』／『應收帳款』模組的使用者可存取報表")
+    # 第42班：admin 直通拿掉；財務角色／superadmin（user_has_module "finance" 由角色推導）或持有「營運報表」模組者
+    if not (has_finance_access(u) or user_has_module(u, "reports")):
+        raise HTTPException(403, "僅財務角色、或具『營運報表』模組的使用者可存取報表")
 
 
 

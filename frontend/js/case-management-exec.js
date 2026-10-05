@@ -209,7 +209,7 @@ window.CM_PARTS.push(() => ({
     moLocked(m) { return ['待審核', '簽核中', '已取消'].includes(this.moAp(m).status) },
     moShowSubmit(m) { return !!m && (m._saved === false || ['', '草稿', '已退回'].includes(this.moAp(m).status)) && !this.moLocked(m) && !(m._saved !== false && this.moAp(m).legacy && !this.moDirty) && !(this.caseReadOnly && this.caseReadOnly()) },
     moShowWithdraw(m) { return ['待審核', '簽核中'].includes(this.moAp(m).status) },
-    moShowCancel(m) { return this.moAp(m).status === '已核准' && ['superadmin', 'admin'].includes(this.session.role) },
+    moShowCancel(m) { return this.moAp(m).status === '已核准' && this.canFinanceRole() },      // 第42班：取消已核准叫料單＝財務角色
     async _moPost(m, action, body, okMsg) {
       const quoteNo = this.selected?.quote_no
       if (!quoteNo || !m.itemId || this.moBusy) return false

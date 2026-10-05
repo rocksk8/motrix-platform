@@ -145,15 +145,15 @@ function cashierApp() {
       var s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       return s.modules || []
     },
-    isAdminPlus() {
+    isAdminPlus() {                      // 第42班：名稱沿用，實際＝財務角色／superadmin（admin 直通拿掉）
       var r = this._role()
-      return r === 'admin' || r === 'superadmin'
+      return r === 'finance' || r === 'superadmin'
     },
     hasCashierAccess() {
-      return this.isAdminPlus() || this._modules().includes('cashier') || this._modules().includes('finance')
+      return this.isAdminPlus()
     },
     canExecuteCashier() {
-      return this.isAdminPlus() || this._modules().includes('cashier')
+      return this.isAdminPlus()
     },
     _localDateStr(d) {
       return MotrixDate.ymd(d)

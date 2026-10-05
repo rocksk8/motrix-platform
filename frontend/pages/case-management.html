@@ -1802,12 +1802,12 @@
                           style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--border-light);background:var(--surface);color:var(--text-secondary);cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif;line-height:1.4;white-space:nowrap">
                     平衡尾款
                   </button>
-                  <button x-show="['superadmin','admin'].includes(session.role) && !arapMissing"
+                  <button x-show="canFinanceRole() && !arapMissing"
                           @click="if (dirty) { MotrixUI.toast('款項明細有未儲存的修改，請先儲存後再申請請款單', {kind: 'error'}) } else { location.href = 'payment-request-form.html?quote_no=' + encodeURIComponent(selected.quote_no) }"
                           style="margin-left:auto;font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--tone-orange-border);background:var(--tone-orange-bg);color:var(--tone-orange-fg);cursor:pointer;font-family:var(--font-zh);white-space:nowrap">
                     申請請款單
                   </button>
-                  <button x-show="['superadmin','admin'].includes(session.role) && !arapMissing"
+                  <button x-show="canFinanceRole() && !arapMissing"
                           @click="openInvoiceVoucherModal()"
                           style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--tone-violet-border);background:var(--tone-violet-bg);color:var(--tone-violet-fg);cursor:pointer;font-family:var(--font-zh);white-space:nowrap">
                     申請開立發票
@@ -1999,7 +1999,7 @@
 
                       <!-- 沖銷（稅額歸零）審核 -->
                       <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                        <template x-if="!item.writeOffStatus && !item.taxExempt && ['superadmin','admin'].includes(session.role)">
+                        <template x-if="!item.writeOffStatus && !item.taxExempt && canFinanceRole()">
                           <button @click="openWriteoffModal(idx,'request')"
                                   style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--border-light);background:var(--surface);color:var(--text-secondary);cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">
                             申請沖銷（無發票／免稅）
@@ -2077,7 +2077,7 @@
                       <span style="font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + (v.totalAmount||0).toLocaleString() + '（含稅）'"></span>
                       <span style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="'未稅 NT$ ' + (v.pretaxAmount||0).toLocaleString()"></span>
 
-                      <div x-show="['superadmin','admin'].includes(session.role)" style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+                      <div x-show="canFinanceRole()" style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
                         <template x-if="v.status==='草稿'">
                           <span style="display:flex;gap:6px">
                             <button @click="submitInvoiceVoucher(v)" style="padding:3px 10px;font-size:11px;border:none;background:var(--accent);color:var(--surface);border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送出審核</button>
@@ -2143,7 +2143,7 @@
                       <span style="font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + (v.totalAmount||0).toLocaleString() + '（含稅）'"></span>
                       <span style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="'未稅 NT$ ' + (v.pretaxAmount||0).toLocaleString()"></span>
 
-                      <div x-show="['superadmin','admin'].includes(session.role)" style="margin-left:auto">
+                      <div x-show="canFinanceRole()" style="margin-left:auto">
                         <a :href="'payment-request-form.html?id=' + encodeURIComponent(v.requestNo)"
                            style="padding:3px 10px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text-secondary);cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block"
                            x-text="v.status==='草稿' ? '編輯' : '開啟'"></a>
@@ -3070,7 +3070,7 @@
 
                     <!-- 匯款申請：已有申請時無論派發狀態之後是否被改掉都要維持可見，
                          否則已核准/已匯款的申請會從畫面上消失，找不到地方下載 -->
-                    <div x-show="_cvRowVisible(d) && ['superadmin','admin'].includes(session.role)"
+                    <div x-show="_cvRowVisible(d) && canFinanceRole()"
                          style="padding:8px 16px;border-top:1px solid var(--border-light);background:var(--tone-warning-bg);display:flex;flex-direction:column;align-items:flex-start;gap:8px">
                       <span x-show="contractorVouchersLoading" style="font-size:11px;color:var(--text-dim)">載入中…</span>
                       <!-- 31-B：一張派發可有多張匯款申請（分期）；舊式整筆仍同派發最多一張未作廢 -->

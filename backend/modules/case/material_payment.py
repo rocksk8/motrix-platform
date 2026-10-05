@@ -18,6 +18,7 @@ from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
 from helpers.dates import normalize_date
+from helpers.auth import has_finance_access  # 第42班：取消／撤回／作廢的財務動作只認財務角色與 superadmin
 from helpers.tiered_approval import (
     APPROVAL_DOC_TYPES, UnresolvedManagerError, active_tiers, check_approve_permission, check_no_tier_self_approval,
     check_reject_permission, current_tier_idx, cascade_self_tiers, register_doc_type, resolve_active_flow_setting,
@@ -433,8 +434,8 @@ def withdraw(conn, pid, user: dict) -> dict:
     if row["status"] not in IN_FLIGHT:
         raise MaterialPaymentError(409, "「%s」狀態不可撤回" % row["status"])
     appr = _appr(row)
-    if user["username"] != appr.get("requestedBy") and user["role"] not in ("admin", "superadmin"):
-        raise MaterialPaymentError(403, "只有送審人本人或管理員可以撤回")
+    if user["username"] != appr.get("requestedBy") and not has_finance_access(user):          # 第42班
+        raise MaterialPaymentError(403, "只有送審人本人或財務角色可以撤回")
     now = _now()
     appr.setdefault("history", []).append({"at": now, "by": user["username"], "byDisplay": _display(user), "action": "withdraw", "tier": current_tier_idx(appr), "comment": ""})
     for k in ("tiers", "currentTier"):
@@ -453,8 +454,8 @@ def void(conn, pid, user: dict, reason: str) -> dict:
         raise MaterialPaymentError(409, "這張匯款申請已作廢")
     if row["status"] in IN_FLIGHT:
         raise MaterialPaymentError(409, "審核中的匯款申請請先撤回，再作廢")
-    if user["role"] not in ("admin", "superadmin") and not (row["status"] in EDITABLE and user["username"] == row["created_by"]):
-        raise MaterialPaymentError(403, "只有建單人（草稿／已退回）或管理員可以作廢匯款申請")
+    if not has_finance_access(user) and not (row["status"] in EDITABLE and user["username"] == row["created_by"]):          # 第42班
+        raise MaterialPaymentError(403, "只有建單人（草稿／已退回）或財務角色可以作廢匯款申請")
     if lines_of(conn, pid):
         raise MaterialPaymentError(409, "這張匯款申請已有付款明細，不可作廢")
     text = (reason or "").strip()

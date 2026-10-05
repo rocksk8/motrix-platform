@@ -43,6 +43,7 @@ from db import get_db, spawn_bg_thread
 from db import db_conn  # /api/sales-orders（M08 搬遷移入）
 from modules.case.quotations import payment_item_amounts  # 同上
 from helpers.gl_status import gl_posted_warning
+from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import row_access
 from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
 from helpers.case_access import case_page_readable   # AT-M1c：與報價單上附件的提供者同一支
@@ -1134,8 +1135,8 @@ def get_last_received_bank_account(customerName: Optional[str] = None, authoriza
     `canExecuteCashier()` 同一條）。回的是本公司收款帳戶，但可以依客戶名稱探測「這個客戶有沒有已收款案件」。
     （V9 有同一支端點、同一個缺口：只記錄，不修 V9。）"""
     user = _require_user(authorization)
-    if user.get("role") not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
-        raise HTTPException(403, "只有出納或管理員可以查詢收款帳戶")
+    if not has_cashier_access(user):
+        raise HTTPException(403, "只有財務角色可以查詢收款帳戶")
     if not customerName:
         return {"name": "", "acctCode": ""}
     conn = get_db()
@@ -2695,7 +2696,7 @@ def _invoice_no_change_allowed(user: dict) -> bool:
     第一次登錄（舊值空白）維持任何登入者皆可。
     下游效應（R1）：營運報表現金收入不變；稅務匯出立即變；總帳 E01（銷項發票事件鍵＝案件::發票號碼）——
     舊號碼消失 ⇒ 已過帳者 orphan（反向草稿）、新號碼 ⇒ 新 E01 草稿，要到『分錄草稿』手動執行才會動。"""
-    return user["role"] in ("superadmin", "admin") or user_has_module(user, "cashier") or user_has_module(user, "finance")
+    return has_finance_access(user)
 
 
 def _payment_items_lock_violation(old_items: list, new_items: list) -> Optional[str]:
@@ -2845,7 +2846,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         # 這次要的效果。新增的品項若一開始就帶 received=true 仍視為違規擋下。
         old_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
         new_items = ((body.case_record or {}).get("payment") or {}).get("items") or []
-        if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
+        if not has_cashier_access(user):
             err = _payment_items_lock_violation(old_items, new_items)
             if err:
                 conn.close()
@@ -3846,8 +3847,8 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
     模組「發票號碼」這類單純登錄用途的欄位一致寬鬆。"""
     user = _require_user(authorization)
     touches_receipt = "received" in body or "actualAmount" in body or "feeAmount" in body
-    if touches_receipt and user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
-        raise HTTPException(403, "僅管理員或出納可標記收款狀態")
+    if touches_receipt and not has_cashier_access(user):
+        raise HTTPException(403, "僅財務角色可標記收款狀態")
     conn = get_db()
     try:
         # 2026-09-24：讀-改-寫整份 data_json，兩個人同時標記不同期會互相蓋掉
@@ -4183,8 +4184,8 @@ def delete_material_invoice_file(no: str, idx: int, file_id: str, itemId: Option
 def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, itemId: Optional[str] = None, authorization: str = Header(None)):
     """admin+ 申請將該筆收款的稅額沖銷（歸零），需 superadmin 審核。"""
     user = _require_user(authorization)
-    if user["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "僅管理員可申請沖銷")
+    if not has_finance_access(user):          # 第42班（Q12）：申請沖銷＝財務角色／superadmin
+        raise HTTPException(403, "僅財務角色可申請沖銷")
     conn = get_db()
     try:
         _deny_if_case_locked_unsupported(conn, no, authorization, op="稅額沖銷-申請")
@@ -4207,7 +4208,7 @@ def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, itemId:
     spawn_bg_thread(_backup_quotation, args=(no,))
     label = item.get('label', f'第{idx+1}期')
     _audit(_tok(authorization), 'payment.writeoff_request', 'quotation', no, f"{no} {label} 申請沖銷")
-    notify_module_activity("報價單", "申請沖銷", requester_display, f"{no} {label}", "quotations.html")
+    notify_module_activity("報價單", "申請沖銷", requester_display, f"{no} {label}", "quotations.html", audience="finance")
     return {"ok": True, "updated_at": saved_at, "item": item}
 
 
@@ -4215,8 +4216,8 @@ def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, itemId:
 def cancel_payment_writeoff(no: str, idx: int, itemId: Optional[str] = None, authorization: str = Header(None)):
     """申請人本人或 superadmin 取消待審核的沖銷申請。"""
     user = _require_user(authorization)
-    if user["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "僅管理員可取消沖銷申請")
+    if not has_finance_access(user):
+        raise HTTPException(403, "僅財務角色可取消沖銷申請")
     conn = get_db()
     try:
         _deny_if_case_locked_unsupported(conn, no, authorization, op="稅額沖銷-撤銷")
@@ -4236,7 +4237,7 @@ def cancel_payment_writeoff(no: str, idx: int, itemId: Optional[str] = None, aut
     spawn_bg_thread(_backup_quotation, args=(no,))
     label = item.get('label', f'第{idx+1}期')
     _audit(_tok(authorization), 'payment.writeoff_cancel', 'quotation', no, f"{no} {label} 取消沖銷申請")
-    notify_module_activity("報價單", "取消沖銷申請", requester_display, f"{no} {label}", "quotations.html")
+    notify_module_activity("報價單", "取消沖銷申請", requester_display, f"{no} {label}", "quotations.html", audience="finance")
     return {"ok": True, "updated_at": saved_at, "item": item}
 
 
@@ -6454,8 +6455,8 @@ def list_sales_orders(authorization: str = Header(None)):
     「應收帳款／銷售訂單」）②財務金額可視（viewer／engineer 不該看到金額）。
     """
     user = _require_user(authorization)
-    if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "finance"):
-        raise HTTPException(403, "僅管理員或具『應收帳款／銷售訂單』模組的使用者可查閱")
+    if not has_finance_access(user):
+        raise HTTPException(403, "僅財務角色可查閱")
     if not can_see_financial(user):
         raise HTTPException(403, "此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）")
     with db_conn() as conn:

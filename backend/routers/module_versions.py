@@ -10,7 +10,7 @@ from helpers import _require_user, _audit, _tok, notify_module_activity, require
 
 router = APIRouter()
 
-_ROLE_RANK = {"viewer": 0, "engineer": 1, "sales": 1, "admin": 2, "superadmin": 3}
+_ROLE_RANK = {"viewer": 0, "engineer": 1, "sales": 1, "finance": 1, "admin": 2, "superadmin": 3}
 
 
 def _require_admin(authorization: str) -> dict:

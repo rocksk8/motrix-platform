@@ -100,6 +100,7 @@
     .role-sales      { background:#F0FDF4; color:#15803D; }
     .role-engineer   { background:#F5F3FF; color:#7C3AED; }
     .role-viewer     { background:#F3F4F6; color:#4B5563; }
+    .role-finance    { background:#FFF7ED; color:#C2410C; }
     /* Status toggle */
     .status-toggle {
       position:relative; display:inline-flex;
@@ -224,7 +225,7 @@
             <div class="cr-card">
               <span style="font-size:13px;font-weight:600;min-width:80px" x-text="cr.name"></span>
               <span class="role-badge"
-                    :class="{'role-superadmin':cr.baseRole==='superadmin','role-admin':cr.baseRole==='admin','role-sales':cr.baseRole==='sales','role-engineer':cr.baseRole==='engineer','role-viewer':cr.baseRole==='viewer'}"
+                    :class="{'role-superadmin':cr.baseRole==='superadmin','role-admin':cr.baseRole==='admin','role-sales':cr.baseRole==='sales','role-engineer':cr.baseRole==='engineer','role-viewer':cr.baseRole==='viewer','role-finance':cr.baseRole==='finance'}"
                     x-text="roleLabel(cr.baseRole)"></span>
               <span style="font-size:11px;color:var(--text-dim)" x-text="(cr.modules||[]).length + ' 個模組'"></span>
               <div style="margin-left:auto;display:flex;gap:6px">
@@ -261,7 +262,7 @@
           </svg>
         </div>
         <div x-show="roleLabelsMgrOpen" style="padding:14px 16px">
-          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px">
+          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px">
             <div>
               <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">superadmin</div>
               <input class="form-input" type="text" x-model="rlForm.superadmin" placeholder="超級管理員" style="font-size:12px;padding:7px 9px">
@@ -277,6 +278,10 @@
             <div>
               <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">engineer</div>
               <input class="form-input" type="text" x-model="rlForm.engineer" placeholder="工程師" style="font-size:12px;padding:7px 9px">
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">finance</div>
+              <input class="form-input" type="text" x-model="rlForm.finance" placeholder="財務" style="font-size:12px;padding:7px 9px">
             </div>
             <div>
               <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px;font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.05em">viewer</div>
@@ -374,7 +379,7 @@
                 <div style="width:160px;flex-shrink:0;font-size:12px;color:var(--text-secondary)" x-text="row.user.email || '—'"></div>
                 <div style="width:90px;flex-shrink:0">
                   <span class="role-badge"
-                    :class="{'role-superadmin':row.user.role==='superadmin','role-admin':row.user.role==='admin','role-sales':row.user.role==='sales','role-engineer':row.user.role==='engineer','role-viewer':row.user.role==='viewer'}"
+                    :class="{'role-superadmin':row.user.role==='superadmin','role-admin':row.user.role==='admin','role-sales':row.user.role==='sales','role-engineer':row.user.role==='engineer','role-viewer':row.user.role==='viewer','role-finance':row.user.role==='finance'}"
                     x-text="roleLabel(row.user.role)"></span>
                 </div>
                 <div style="flex:1;min-width:160px" class="access-row">
@@ -559,11 +564,13 @@
             <option value="admin" x-text="(roleLabels.admin||'管理員') + '（不含系統設定）'"></option>
             <option value="sales" x-text="roleLabels.sales||'業務'"></option>
             <option value="engineer" x-text="roleLabels.engineer||'工程師'"></option>
+            <option value="finance" x-text="(roleLabels.finance||'財務') + '（財務與出納）'"></option>
             <option value="viewer" x-text="(roleLabels.viewer||'檢視者') + '（唯讀）'"></option>
           </select>
         </div>
         <div class="form-group">
           <label class="form-label">存取模組</label>
+          <div class="form-hint" data-testid="fin-keys-note" style="margin-top:2px">出納／財務／財務金額可視已改由「財務」角色決定，下列灰色勾選已失效（資料保留，不刪除）。</div>
           <div style="margin-top:6px;border:1px solid var(--border-light);border-radius:6px;overflow:hidden">
             <template x-for="(grp, grpIdx) in moduleGroups" :key="grp.group">
               <div :style="grpIdx > 0 ? 'border-top:1px solid var(--border-light)' : ''">
@@ -580,11 +587,14 @@
                      style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px">
                   <template x-for="mod in grp.mods" :key="mod.key">
                     <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
-                           :style="form.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : ''">
+                           :data-testid="'mod-chip-' + mod.key"
+                           :title="finKeyInert(mod.key) ? '財務／出納權限改由「財務」角色決定，此勾選已失效（資料保留，不刪除）' : ''"
+                           :style="finKeyInert(mod.key) ? 'cursor:default;opacity:.55;color:var(--text-dim);background:#f5f5f5' : (form.modules.includes(mod.key) ? 'border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : '')">
                       <input type="checkbox" style="display:none"
-                             :checked="form.modules.includes(mod.key)"
+                             :checked="finKeyInert(mod.key) ? false : form.modules.includes(mod.key)"
+                             :disabled="finKeyInert(mod.key)"
                              @change="toggleModule(mod.key)">
-                      <span x-text="form.modules.includes(mod.key) ? '✓ ' : ''"></span>
+                      <span x-text="(finKeyInert(mod.key) ? finKeyEffective() : form.modules.includes(mod.key)) ? '✓ ' : ''"></span>
                       <span x-text="mod.label"></span>
                     </label>
                   </template>
@@ -713,6 +723,7 @@
             <option value="admin" x-text="(roleLabels.admin||'管理員') + '（不含系統設定）'"></option>
             <option value="sales" x-text="roleLabels.sales||'業務'"></option>
             <option value="engineer" x-text="roleLabels.engineer||'工程師'"></option>
+            <option value="finance" x-text="(roleLabels.finance||'財務') + '（財務與出納）'"></option>
             <option value="viewer" x-text="(roleLabels.viewer||'檢視者') + '（唯讀）'"></option>
           </select>
           <div class="form-hint">決定側欄系統功能（使用者管理、設定等）的存取層級</div>
@@ -823,7 +834,7 @@
       customRoleMgrOpen: false,
       roleLabels: {superadmin:'超級管理員', admin:'管理員', sales:'業務', engineer:'工程師', viewer:'檢視者'},
       roleLabelsMgrOpen: false,
-      rlForm: {superadmin:'超級管理員', admin:'管理員', sales:'業務', engineer:'工程師', viewer:'檢視者'},
+      rlForm: {superadmin:'超級管理員', admin:'管理員', sales:'業務', engineer:'工程師', finance:'財務', viewer:'檢視者'},
       showModal: false,
       editingId: null,
       formError: '',
@@ -846,6 +857,7 @@
           {key:'admin',      label: this.roleLabels.admin      || '管理員'},
           {key:'sales',      label: this.roleLabels.sales      || '業務'},
           {key:'engineer',   label: this.roleLabels.engineer   || '工程師'},
+          {key:'finance',    label: this.roleLabels.finance    || '財務'},
           {key:'viewer',     label: this.roleLabels.viewer     || '檢視者'},
         ]
       },
@@ -987,7 +999,12 @@
         return this.roleLabels[r] || r
       },
 
+      // 第42班：出納／財務／財務金額可視由角色決定（財務角色與 superadmin），勾選失效但資料保留
+      finKeyInert(key) { return ['cashier', 'finance', 'financial_view'].includes(key) },
+      finKeyEffective(role) { role = role || this.form.role; return role === 'superadmin' || role === 'finance' },
+
       hasAccess(user, mod) {
+        if (this.finKeyInert(mod)) return this.finKeyEffective(user.role)
         const mods = (user.modules && user.modules.length > 0) ? user.modules : (ROLE_MODULES[user.role] || [])
         return mods.includes(mod)
       },

@@ -14,6 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db, next_entity_code
+from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
@@ -566,7 +567,8 @@ def toggle_batch_paid(batch_no: str, body: dict = Body(...), authorization: str 
     基礎的付款事件來源。"""
     user = _require_user(authorization)
     require_any_module(user, ('inventory', 'procurement', 'case_manage', 'netplan_edit'), "庫存管理")
-    _require_admin(user)
+    if not has_cashier_access(user):          # 第42班：標記已付款＝出納動作，僅財務角色／superadmin（建立／修改批次仍是 _require_admin）
+        raise HTTPException(403, "需要財務角色權限")
     action = body.get("action")
     if action not in ("pay", "unpay"):
         raise HTTPException(400, "action 必須為 pay 或 unpay")

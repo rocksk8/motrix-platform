@@ -28,6 +28,7 @@ from fastapi.responses import Response, StreamingResponse
 import io
 from urllib.parse import quote as _url_quote
 
+from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from core import registry
 from db import get_db, spawn_bg_thread
 from helpers import _require_user, user_has_module, payment_item_amounts, notify_module_activity, push_event_for_module
@@ -40,10 +41,8 @@ router = APIRouter()
 
 
 def _require_view_access(user: dict) -> None:
-    if (user["role"] not in ("superadmin", "admin")
-            and not user_has_module(user, "cashier")
-            and not user_has_module(user, "finance")):
-        raise HTTPException(403, "僅管理員、出納或財務可查閱")
+    if not has_finance_access(user):          # 第42班：出納／財務合併為「財務」角色（＋superadmin）
+        raise HTTPException(403, "僅財務角色可查閱")
 
 
 # ── 獎金分潤（IP-8 bonus.payouts，INTEGRATION-POINTS.md）───────────────────────
@@ -75,8 +74,8 @@ _PAID_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def _can_pay(user: dict) -> bool:
-    """登錄付款：admin+ 或出納（與 paid-toggle 同一條；finance 只能看）。"""
-    return user.get("role") in ("superadmin", "admin") or user_has_module(user, "cashier")
+    """登錄付款：財務角色或 superadmin（與 paid-toggle 同一條；第42班起出納／財務合併，admin 直通拿掉）。"""
+    return has_cashier_access(user)
 
 
 @router.get("/api/cashier/pending-payables")
@@ -128,7 +127,7 @@ def get_payee_bank(source: str, key: str, authorization: str = Header(None)):
     finally:
         conn.close()
     masked = False
-    if getattr(p, "FULL_ACCOUNT_STRICT", False) and out["account"] and not (user.get("role") == "superadmin" or (user.get("role") != "admin" and user_has_module(user, "cashier"))):   # admin 的角色樣板也含 cashier 模組，所以 admin 要明確排除
+    if getattr(p, "FULL_ACCOUNT_STRICT", False) and out["account"] and not has_cashier_access(user):   # 第42班：完整帳號只給財務角色與 superadmin
         acct = str(out["account"])                                                  # 提供者要求嚴格：一般管理員只看末 4 碼
         out["account"] = "****" + acct[-4:] if len(acct) > 4 else "****"
         out["notice"] = "完整帳號僅限最高管理者與出納；管理員只看到遮罩"
@@ -180,7 +179,7 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
     if res.get("remitReview"):
         notify_module_activity("請款付款", "匯款差額待審核", user.get("display_name") or user["username"],
                                "%s #%s（%s）" % (source, key, res.get("quoteNo") or ""), "cashier.html",
-                               detail="實付與應付不符（差額 %+g），請管理員到出納頁核可或退回。" % res["diff"])
+                               detail="實付與應付不符（差額 %+g），請財務到出納頁核可或退回。" % res["diff"], audience="finance")
     # 行事曆「支出付款」（2026-09-30，預設關；開關在 L1 判斷）：以付款日建立。勞報單付款走自己的端點，不在此列
     spawn_bg_thread(push_event_for_module, args=_expense_calendar_args(source, key, paid, res, user))
     return {"ok": True, **res}
@@ -202,7 +201,8 @@ REMIT_REVIEWS_MISSING = "沒有任何提供匯款差額審核的模組：出納�
 
 
 def _is_admin(user: dict) -> bool:
-    return user.get("role") in ("superadmin", "admin")
+    """差額審核的決定者：財務角色＋superadmin（第42班；admin 直通拿掉）。"""
+    return has_finance_access(user)
 
 
 @router.get("/api/cashier/remit-reviews")
@@ -229,7 +229,7 @@ def decide_remit_review(source: str, key: str, body: dict = Body(default={}), au
     """核可（approve）或退回（reject＝回未匯款，實付／手續費清空）。只限 admin／superadmin。"""
     user = _require_user(authorization)
     if not _is_admin(user):
-        raise HTTPException(403, "只有管理員可以核可或退回匯款差額")
+        raise HTTPException(403, "只有財務角色可以核可或退回匯款差額")
     p = registry.providers("remit.reviews").get(source)
     if p is None:
         raise HTTPException(404, "找不到審核來源「%s」（對應的模組未安裝）" % source)
@@ -680,8 +680,8 @@ async def bank_reconcile(file: UploadFile = File(...), authorization: str = Head
     複核用途——回傳配對建議，不會自動標記已匯款，實際標記仍走既有 paid-toggle 端點，
     避免比對誤判（例如剛好同金額但其實是不同筆款項）被誤當正式入帳紀錄。"""
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin") and not user_has_module(u, "cashier"):
-        raise HTTPException(403, "僅管理員或出納可查閱")
+    if not has_cashier_access(u):
+        raise HTTPException(403, "僅財務角色可查閱")
     if registry.single_provider("contractor_voucher.public") is None:     # IP-14（M04）：比對對象全是承攬商匯款申請
         raise HTTPException(404, CONTRACTOR_MISSING)
 

@@ -140,10 +140,8 @@ def _setup_only(groups: list) -> list:
 @router.get("/api/platform/menu")
 def platform_menu(authorization: str = Header(None)):
     user = _require_user(authorization)
-    try:
-        modules = json.loads(user.get("modules") or "[]")
-    except (TypeError, ValueError):
-        modules = []
+    from helpers.auth import effective_modules          # 第42班：財務三鍵由角色決定（財務角色／superadmin 才有）
+    modules = effective_modules(user.get("role"), user.get("modules"))
     mod_items = core_menu.module_items({m.key: m.manifest for m in registry.loaded()})
     l1, sa = core_menu.load_l1(), user.get("role") == "superadmin"
     groups = core_menu.build(l1, mod_items, modules, sa)

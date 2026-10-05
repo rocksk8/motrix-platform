@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
 from core.txn import begin_write, write_txn
+from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_module_activity, notify_invoice_voucher_submitted, notify_invoice_voucher_next_tier,
@@ -139,8 +140,9 @@ class VoucherCreateIn(BaseModel):
 
 
 def _require_admin(user: dict):
-    if user["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "需要管理員權限")
+    # 2026-10-05（第42班）：憑證建立／送審／作廢等財務動作 ⇒ 僅「財務」角色與 superadmin（admin 直通拿掉）
+    if not has_finance_access(user):
+        raise HTTPException(403, "需要財務角色權限")
 
 
 def _voucher_public(row, include_snapshot: bool = True) -> dict:
@@ -453,7 +455,7 @@ def create_invoice_voucher(body: VoucherCreateIn, authorization: str = Header(No
         _audit(_tok(authorization), "invoice_voucher.create", "invoice_voucher", voucher_no,
                f"{voucher_no}（{snapshot['customerName']}）")
         notify_module_activity("開票申請憑據", "建立", user.get("display_name") or user["username"],
-                                f"{voucher_no}（{snapshot['customerName']}）", "case-management.html")
+                                f"{voucher_no}（{snapshot['customerName']}）", "case-management.html", audience="finance")
         return {"voucher_no": voucher_no, "created_at": now}
 
 
@@ -476,7 +478,7 @@ def delete_invoice_voucher(voucher_no: str, authorization: str = Header(None)):
                                        'invoice_voucher_returned', 'approval_reminder'])
     _audit(_tok(authorization), "invoice_voucher.delete", "invoice_voucher", voucher_no, voucher_no)
     notify_module_activity("開票申請憑據", "刪除", user.get("display_name") or user["username"],
-                            voucher_no, "case-management.html")
+                            voucher_no, "case-management.html", audience="finance")
     return {"ok": True}
 
 

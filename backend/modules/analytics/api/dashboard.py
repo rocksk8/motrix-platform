@@ -10,6 +10,7 @@ from db import db_conn
 from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_ymd, norm_at,
                      user_has_module, can_see_financial, receipt_amounts,
                      require_any_module, _get_setting, _set_setting)
+from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import row_access
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
@@ -27,7 +28,7 @@ def dashboard_stats(department_id: Optional[int] = Query(None), authorization: s
     u = _require_user(authorization)
     role = u["role"]
     mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
-    can_finance   = role in ("superadmin", "admin") or "finance" in mods
+    can_finance   = has_finance_access(u)           # 第42班：財務角色／superadmin
     can_quotation = role in ("superadmin", "admin", "sales") or "quotation" in mods
     with db_conn() as conn:
         # T40（稽核 F-06）：核准流程／精算 JSON 只對「回應會用到的列」取出，其餘列取 NULL（輸出不變）：
@@ -315,7 +316,7 @@ def dashboard_monthly(department_id: Optional[int] = Query(None), authorization:
     u = _require_user(authorization)
     role = u["role"]
     mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
-    if role not in ("superadmin", "admin") and "finance" not in mods:
+    if not has_finance_access(u):                    # 第42班
         return {"items": []}
     with db_conn() as conn:
         # 部門篩選邏輯（2026-09-09 新增）
@@ -401,7 +402,7 @@ def dashboard_expenses_monthly(department_id: Optional[int] = Query(None), autho
     u = _require_user(authorization)
     role = u["role"]
     mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
-    if role not in ("superadmin", "admin") and "finance" not in mods:
+    if not has_finance_access(u):                    # 第42班
         return {"items": [], "otherBreakdown": {}}
 
     from modules.analytics.api.reports import _collect_expenses

@@ -73,6 +73,7 @@ from pydantic import BaseModel
 
 from db import get_db
 from core import registry as _registry
+from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import _require_user, _tok, _audit, _get_setting, _set_setting
 #: 收款事件（銷項）的資料屬 M05 應收應付（ROADMAP A8b 已收回模組）：經 provider 取用；M05 不在 ⇒ 沒有收款事件並明說
 T100_RECEIVABLES_MISSING = "應收應付模組未安裝：T100 匯出不含收款事件（銷項）"
@@ -220,8 +221,8 @@ def config_code_issues(conn, cfg):
 @router.get("/api/settings/t100-export-config")
 def get_t100_export_config(authorization: str = Header(None)):
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "僅管理員以上可查閱")
+    if not has_finance_access(u):
+        raise HTTPException(403, "僅財務角色可查閱")
     cfg = _t100_config()
     # 🔑 把「已存的值現在還指不指得到東西」一起回去，讓畫面說得出來。
     #    ⚠️ 這個鍵**不進 `T100ExportConfigBody`** ⇒ 前端整包 PUT 回來時
@@ -490,8 +491,8 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
 
 def _require_t100_admin(authorization: str) -> dict:
     u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "財務報告僅管理員以上可查閱")
+    if not has_finance_access(u):
+        raise HTTPException(403, "財務報告僅財務角色可查閱")
     return u
 
 

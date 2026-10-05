@@ -50,15 +50,8 @@ def _kind_name(conn, kind):
 
 
 def _cashiers(conn):
-    out = []
-    for r in conn.execute("SELECT username, modules FROM users WHERE active = 1 ORDER BY id"):
-        try:
-            mods = json.loads(r["modules"] or "[]")
-        except (TypeError, ValueError):
-            mods = []
-        if "cashier" in (mods or []):
-            out.append(r["username"])
-    return out
+    from helpers.auth import finance_usernames          # 第42班：出納通知 ⇒ 在職財務角色＋superadmin（不再掃 cashier 勾選）
+    return finance_usernames(conn)
 
 
 def _rows(conn, row, extra=None):

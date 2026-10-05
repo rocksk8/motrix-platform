@@ -22,6 +22,7 @@ from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db
 from helpers.case_access import require_case   # M01-O1：逐案拒絕＝查無（同一個 404）
+from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import row_access
 from core.txn import begin_write
 from helpers import (
@@ -201,9 +202,8 @@ def set_material_order_invoice_date(quote_no: str, item_id: str, body: dict = Bo
     權限：擁有者檢查＋（admin+、專案經理、出納、財務）。
     """
     user = _require_user(authorization)
-    if user["role"] not in ("superadmin", "admin") and not any(
-            user_has_module(user, m) for m in ("project_manage", "cashier", "finance")):
-        raise HTTPException(403, "權限不足：只有管理員、專案經理、出納或財務可以登錄材料申請發票日期")
+    if not (has_finance_access(user) or user_has_module(user, "project_manage")):          # 第42班：admin 直通拿掉
+        raise HTTPException(403, "權限不足：只有專案經理或財務角色可以登錄材料申請發票日期")
     inv = normalize_date((body or {}).get("invoiceDate"), "發票日期")
     conn = get_db()
     try:

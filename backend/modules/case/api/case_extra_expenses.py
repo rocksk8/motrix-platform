@@ -42,7 +42,7 @@ from db import get_db
 from helpers.case_access import deny_case, require_case   # M01-O1：逐案拒絕＝查無（同一個 404）
 from helpers import row_access
 from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供者同一支
-from helpers.auth import user_has_module
+from helpers.auth import user_has_module, has_finance_access, has_cashier_access
 from modules.case.recognition import normalize_date, COUNTED_EXTRA_STATUSES  # `AC2`；後者＝合計與營運報表同一條規則（32-Q6）
 from modules.case import expense_forms as EF   # 費用單據（A2）：類型／明細金額／data 合併
 from modules.case import purchase_items as PI    # 請購／採購單連結案件品項（32-S1）
@@ -247,9 +247,7 @@ def _caseless_visible(conn, row, user) -> bool:
     admin／superadmin、出納／財務模組。user 為 None ⇒ False（fail closed）。"""
     if not isinstance(user, dict):
         return False
-    if user.get("role") in ("superadmin", "admin") or (row["created_by"] or "") == user.get("username"):
-        return True
-    if user_has_module(user, "cashier") or user_has_module(user, "finance"):
+    if has_finance_access(user) or (row["created_by"] or "") == user.get("username"):     # 第42班：admin 直通拿掉（財務角色／superadmin 才全看）
         return True
     return bool(is_document_approver(_col(row, "approval_json", ""), user, conn))
 
@@ -259,7 +257,7 @@ def _amount_viewer(conn, row, user) -> bool:
     出納／財務、管理員以上。其他人只看得到狀態（金額、明細、資料、收款人銀行、付款資訊一律遮蔽）。"""
     if not isinstance(user, dict):
         return False
-    if user.get("role") in ("superadmin", "admin") or user_has_module(user, "cashier") or user_has_module(user, "finance"):
+    if has_finance_access(user):                  # 第42班：財務角色／superadmin；申請人、簽核人例外維持
         return True
     me = user.get("username")
     if (row["created_by"] or "") == me or str(_jcol(row, "data_json").get("applicant") or "") == me:
@@ -649,14 +647,14 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
         row = _load(conn, quote_no, exp_id, user)
         if row["status"] == VOIDED_STATUS:
             raise HTTPException(409, "這筆額外支出已作廢，不能再登錄日期或發票")
-        if not (_can_modify(row, user) or user_has_module(user, "cashier")):
-            raise HTTPException(403, "只有填寫人本人、管理員或出納可以登錄這筆額外支出的日期")
-        is_admin = user.get("role") in ("superadmin", "admin")
+        if not (_can_modify(row, user) or has_cashier_access(user)):
+            raise HTTPException(403, "只有填寫人本人、管理員或財務角色可以登錄這筆額外支出的日期")
+        is_admin = has_cashier_access(user)       # 第42班：付款日只有財務角色／superadmin（admin 直通拿掉）
         old_paid = (_col(row, "paid_date", "") or "")
         override = False
         if "paid_date" in changes:
-            if not (is_admin or user_has_module(user, "cashier")):
-                raise HTTPException(403, "付款日只有出納或管理員可以登錄（請款人登錄會繞過出納待付款）")
+            if not is_admin:
+                raise HTTPException(403, "付款日只有財務角色可以登錄（請款人登錄會繞過出納待付款）")
             if changes["paid_date"] and row["status"] != "已核准":    # AB-S8（使用者裁示）：出納、admin 都一樣
                 raise HTTPException(409, "這筆請款還沒核准（目前「%s」），不能登錄付款日；核准後再登錄" % row["status"])
             if old_paid and changes["paid_date"] != old_paid:

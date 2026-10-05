@@ -68,7 +68,7 @@ window.CM_PARTS.push(() => ({
 
     canSeeFinancial() {
       const m = this.session.modules || []
-      return m.includes('financial_view') || ['superadmin','admin','sales'].includes(this.session.role)
+      return this.canFinanceRole()      // 第42班：財務金額可視＝財務角色／superadmin（admin／sales 直通與 financial_view 勾選都拿掉）
     },
 
     // ── 分頁狀態進 URL（2026-09-14）───────────────────────────────────
@@ -779,7 +779,12 @@ window.CM_PARTS.push(() => ({
     },
 
     canMarkPayment() {
-      return ['superadmin', 'admin'].includes(this.session.role) || this.hasModule('cashier')
+      return this.canFinanceRole()
+    },
+
+    // 第42班：財務／出納只屬於「財務」角色與 superadmin（與後端 helpers.auth.has_finance_access 逐字對應）
+    canFinanceRole() {
+      return ['superadmin', 'finance'].includes(this.session.role)
     },
 
     // ── Modal 誤觸關閉保護（2026-08-31 新增）：backdrop 點外面／Esc／× 這三個

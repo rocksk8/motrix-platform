@@ -20,9 +20,10 @@ key、名稱、分類（業務／簽核／系統技術）、預設收件人、�
 from dataclasses import dataclass, field
 
 CATEGORIES = {"business": "業務", "approval": "簽核", "system": "系統技術"}
-GROUPS = {"none": "只寄事件相關人員", "admins": "管理員與超級管理員", "superadmins": "僅超級管理員"}
+GROUPS = {"none": "只寄事件相關人員", "admins": "管理員與超級管理員", "superadmins": "僅超級管理員",
+          "finance": "財務角色與超級管理員"}   # 2026-10-05（第42班）：付款／匯款類跟「財務」角色走，不再寄全體 admin
 MODES = ("default", "superadmin_only", "custom")
-ROLES = ("superadmin", "admin", "sales", "engineer", "viewer")
+ROLES = ("superadmin", "admin", "sales", "engineer", "viewer", "finance")
 
 #: system_settings 的鍵：{key: {"mode", "users": [...], "roles": [...]}}
 OVERRIDES_KEY = "mail_recipient_overrides"
