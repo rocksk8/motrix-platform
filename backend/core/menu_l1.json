@@ -133,7 +133,7 @@
   {
    "group": "system",
    "href": "expense-types.html",
-   "label": "請款類型",
+   "label": "支出申請類型",
    "order": 6,
    "perm": "superadmin"
   },

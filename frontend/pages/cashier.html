@@ -326,7 +326,7 @@
               </button>
               <!-- 請款待付款（IP-100 payables.pending：案件額外支出已核准、未登錄付款日；2026-09-27 請款流程） -->
               <button class="ctab" :class="{on: cashierSub==='payreq'}" @click="cashierSub='payreq'" data-testid="cashier-payreq-tab">
-                請款待付款<span class="tab__cnt" x-text="payreqQueue.items.length"></span>
+                待付款申請<span class="tab__cnt" x-text="payreqQueue.items.length"></span>
               </button>
               <!-- W1（IP-102 remit.reviews）：實付≠應付的差額待審核；admin+ 核可或退回 -->
               <button class="ctab" :class="{on: cashierSub==='remitreview'}" @click="cashierSub='remitreview'" data-testid="cashier-remit-tab">
@@ -461,13 +461,13 @@
               <div class="alert-bar" x-show="payreqNotice" x-text="payreqNotice" data-testid="cashier-payreq-result"></div>
               <div class="alert-bar" x-show="payreqQueue.notice" data-testid="cashier-payreq-notice"><span x-text="payreqQueue.notice"></span></div>
               <template x-if="payreqQueue.available && payreqQueue.items.length===0">
-                <div class="panel" style="padding:18px;text-align:center;color:var(--text-dim)">目前沒有待付款的請款</div>
+                <div class="panel" style="padding:18px;text-align:center;color:var(--text-dim)">目前沒有待付款的申請</div>
               </template>
               <template x-if="payreqQueue.items.length>0">
                 <div class="panel">
                   <table class="data-table">
                     <thead><tr>
-                      <th>案件號</th><th>客戶</th><th>請款內容</th><th>受款人</th>
+                      <th>案件號</th><th>客戶</th><th>申請內容</th><th>受款人</th>
                       <th class="r">金額</th><th class="c">核准日</th><th class="c">發票</th><th class="c">付款日</th><th class="c">動作</th>
                     </tr></thead>
                     <tbody>

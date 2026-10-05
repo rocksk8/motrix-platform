@@ -117,7 +117,7 @@ def test_without_the_case_module_cashier_says_so_and_other_queues_still_work(cli
     cash = _h(client, make_user, "pp_cash2", "sales", ["cashier"])
     r = client.get("/api/cashier/pending-payables", headers=cash)
     assert r.status_code == 200 and r.json() == {
-        "available": False, "notice": "案件管理模組未安裝：出納頁不顯示請款（案件額外支出）待付款", "items": [], "canPay": False}
+        "available": False, "notice": "案件管理模組未安裝：出納頁不顯示待付款申請（案件支出申請）", "items": [], "canPay": False}
     r = client.post("/api/cashier/pending-payables/case/1/pay", json={}, headers=cash)
     assert r.status_code == 404 and "未安裝" in r.json()["detail"]
     assert client.get("/api/cashier/receivable-queue", headers=cash).status_code == 200
