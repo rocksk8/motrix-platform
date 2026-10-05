@@ -118,17 +118,9 @@ def test_other_dashboard_parts_are_untouched(client, world, name):
 
 
 def test_admin_and_sales_lose_the_cards_even_with_the_inert_flags(client, make_user):
-    """上線矩陣的另一面：admin／sales（即使 DB 裡還留著惰性的財務勾選）沒有卡片；只有 superadmin 與財務角色有。
-    （make_user 對「明確勾財務鍵的一般帳號」會換成 finance 角色，所以這題直接把勾選寫進資料庫。）"""
-    import db
-    adm = make_user("t40_flagged_admin", role="admin")
-    conn = db.get_db()
-    try:
-        conn.execute("UPDATE users SET modules=? WHERE username='t40_flagged_admin'",
-                     (json.dumps(["dashboard", "quotation", "finance", "financial_view", "cashier"]),))
-        conn.commit()
-    finally:
-        conn.close()
+    """上線矩陣的另一面：admin／sales（即使 DB 裡還留著惰性的財務勾選）沒有卡片；只有 superadmin 與財務角色有。"""
+    adm = make_user("t40_flagged_admin", role="admin", modules=["dashboard", "quotation", "finance", "financial_view", "cashier"],
+                    legacy_finance_flag=False)
     h = _login(client, *adm)
     j = client.get("/api/dashboard/stats", headers=h).json()
     assert j["financeVisible"] is False and _who(j["paymentItems"]) == set()

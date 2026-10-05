@@ -376,7 +376,7 @@ def _safe_close(conn) -> None:
 # 原本 router 自己一份，漂移成「不認沒有外層 approval 的 approval_json」⇒ 額外支出的簽核人在簽核佇列被 403。
 from modules.case.quotations import (  # noqa: E402
     is_document_approver as _is_case_approver, case_access_allowed, CASE_ACCESS)
-from helpers.case_access import deny_case, require_case  # noqa: E402  M01-O1：逐案拒絕＝查無（同一個 404）
+from helpers.case_access import deny_case, require_case, require_case_money  # noqa: E402  M01-O1：逐案拒絕＝查無（同一個 404）
 
 
 def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False,
@@ -4360,7 +4360,7 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     try:
-        require_case(user, row, quote_no)
+        require_case_money(user, row, quote_no)
         _require_financial_view(user)
     except HTTPException:
         conn.close()

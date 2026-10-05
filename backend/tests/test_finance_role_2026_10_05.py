@@ -211,18 +211,16 @@ def test_role_validation_and_audit(client, make_user):
     assert row is not None and "finance" in json.dumps(dict(row), ensure_ascii=False) and "sales" in json.dumps(dict(row), ensure_ascii=False)
 
 
-def test_impact_report_lists_who_loses_access_and_warns_without_finance_account(make_user):
+def test_impact_report_lists_who_loses_access_and_warns_without_finance_account(client, make_user):
     import db
     from tools import finance_role_impact_report as R
     make_user("boss", role="superadmin", modules=[])
     make_user("adm_a", role="admin")
     make_user("sales_b", role="sales")
     make_user("eng_c", role="engineer", modules=["dashboard"])
-    make_user("eng_flag", role="engineer", modules=["dashboard"])
+    make_user("eng_flag", role="engineer", modules=["dashboard", "cashier"], legacy_finance_flag=False)      # 惰性勾選（不做舊題相容轉換）
     conn = db.get_db()
     try:
-        conn.execute("UPDATE users SET modules=? WHERE username='eng_flag'", (json.dumps(["dashboard", "cashier"]),))     # 惰性勾選（不經 make_user 的相容轉換）
-        conn.commit()
         rep = R.build_report(conn)
     finally:
         conn.close()

@@ -789,7 +789,7 @@ def make_user(request):
     import db
     from helpers.auth import _hash_pw
 
-    def _make(username="tester", password="Test-Pass-123", role=None, modules=None):
+    def _make(username="tester", password="Test-Pass-123", role=None, modules=None, legacy_finance_flag=True):
         if role is None:
             role = getattr(request.module, "_MAKE_USER_DEFAULT_ROLE", "admin")
         """`modules=None`（不指定）→ 用該角色的預設模組樣板。
@@ -809,10 +809,11 @@ def make_user(request):
         import json
         if modules is None:
             modules = _ROLE_DEFAULT_MODULES.get(role, [])
-        elif role not in ("superadmin", "finance") and {"cashier", "finance", "financial_view"} & set(modules):
+        elif legacy_finance_flag and role not in ("superadmin", "finance") and {"cashier", "finance", "financial_view"} & set(modules):
             # 第42班相容：財務／出納能力改由「財務」角色決定（勾選失效）。舊題用「一般帳號＋明確勾 cashier／finance／
             # financial_view」表示「持有財務／出納的人」⇒ 在這裡換成 finance 角色。（只對明確傳入 modules 的帳號；
-            # 預設樣板不受影響。要驗「持有惰性勾選的 admin／sales 被擋」請用預設樣板的帳號，或直接寫在 test_finance_role。）
+            # 預設樣板不受影響。要驗「持有惰性勾選的 admin／sales 被擋」請傳 `legacy_finance_flag=False`（保留原角色與勾選），
+            # 或用預設樣板的帳號。）
             role = "finance"
         conn = db.get_db()
         try:
