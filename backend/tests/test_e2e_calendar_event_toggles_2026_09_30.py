@@ -1,6 +1,6 @@
 """瀏覽器端對端：Google 行事曆設定頁的「事件種類」開關（2026-09-30 使用者裁示「行事曆推送可選」）。
 
-- 最高管理者開頁 ⇒ 15 種事件逐一列出、勾選狀態＝預設（既有 9 種開、新 6 種關）
+- 最高管理者開頁 ⇒ 16 種事件逐一列出、勾選狀態＝預設（既有 9 種開、新 7 種關）
 - 勾「案件更新」、關「開票申請憑據已核准」按儲存 ⇒ 設定落地、各記一筆稽核；重新整理後勾選狀態照存的值
 觀測點打在 DOM 的 checkbox 狀態與資料庫落地值，不打 Alpine 模型。
 """
@@ -14,7 +14,7 @@ from tests._e2e_login import inject_login  # noqa: E402
 
 EXISTING = {"invoice_voucher", "payment_request", "shipping_note", "quotation_won", "stage_due", "stage_done",
             "important_comment", "dev_case_converted", "dev_case_stale"}
-NEW = {"case_update", "dev_case_update", "contractor_payout", "expense_payout", "receipt_logged", "receivable_due"}
+NEW = {"case_update", "dev_case_update", "contractor_payout", "expense_payout", "receipt_logged", "receivable_due", "payable_due"}
 
 
 def _q(sql, args=()):
@@ -38,7 +38,7 @@ def test_superadmin_toggles_event_types_and_they_persist(live_server, make_user,
     page = e2e_browser.new_page()
     inject_login(page, live_server, *sa)
     page.goto(f"{live_server}/pages/google-calendar-settings.html")
-    page.wait_for_function("() => document.querySelectorAll('[data-gc-event-input]').length === 15", timeout=20000)
+    page.wait_for_function("() => document.querySelectorAll('[data-gc-event-input]').length === 16", timeout=20000)
     got = _checked(page)
     assert {c for c, v in got.items() if v} == EXISTING
     assert {c for c, v in got.items() if not v} == NEW
@@ -56,7 +56,7 @@ def test_superadmin_toggles_event_types_and_they_persist(live_server, make_user,
     assert {a["username"] for a in audits} == {"gce2e_sa"}
 
     page.reload()
-    page.wait_for_function("() => document.querySelectorAll('[data-gc-event-input]').length === 15", timeout=20000)
+    page.wait_for_function("() => document.querySelectorAll('[data-gc-event-input]').length === 16", timeout=20000)
     page.wait_for_function("() => document.querySelector('[data-gc-event-input=\"case_update\"]').checked", timeout=15000)
     got = _checked(page)
     assert got["case_update"] is True and got["invoice_voucher"] is False and got["payment_request"] is True

@@ -23,7 +23,7 @@
 
 ## 串接點
 
-- 提供：見上表與 INTEGRATION-POINTS（IP-12 case.access、case.summary、case.locations、case.recognition、case.default_terms、case.doc_version、IP-17 quotation.append_items、IP-6 calendar.writeback（另：款項收款／預計收款日 ⇒ 行事曆事件 `receipt_logged`／`receivable_due`，`receipt_calendar.py`）、approval.reassign 的 quotation／completion_note、IP-11 daily.check）
+- 提供：見上表與 INTEGRATION-POINTS（IP-12 case.access、case.summary、case.locations、case.recognition、case.default_terms、case.doc_version、IP-17 quotation.append_items、IP-6 calendar.writeback（另：款項收款／預計收款日 ⇒ 行事曆事件 `receipt_logged`／`receivable_due`，`receipt_calendar.py`）；另：請款預定付款日（`planned_pay_date`）⇒ 提醒信 `payable_reminders.py`＋行事曆 `payable_due`（`payable_calendar.py`）、approval.reassign 的 quotation／completion_note、IP-11 daily.check）
 - 取用：IP-1／IP-14／IP-15（M04）、IP-18／IP-19（M03）、approval.queue_items／approval.reassign／approval.detail（各單據模組）、case.default_terms 的取用方是 L1 system
 
 ## 本模組不在時（別人怎麼辦）

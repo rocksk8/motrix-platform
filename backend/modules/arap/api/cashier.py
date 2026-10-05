@@ -30,7 +30,7 @@ from urllib.parse import quote as _url_quote
 
 from core import registry
 from db import get_db, spawn_bg_thread
-from helpers import _require_user, user_has_module, payment_item_amounts, notify_module_activity, push_event_for_module
+from helpers import _require_user, user_has_module, payment_item_amounts, notify_module_activity, push_event_for_module, push_event_delete_for_module
 from modules.arap.receivables import collect_income_items as _collect_income_items  # 本模組（ROADMAP A8b 已收回）
 from helpers.legal_params import round_half_up          # bank-reconcile（金額四捨五入唯一來源）
 from helpers import _audit, _tok                         # bank-reconcile 的稽核
@@ -183,6 +183,8 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
                                detail="實付與應付不符（差額 %+g），請管理員到出納頁核可或退回。" % res["diff"])
     # 行事曆「支出付款」（2026-09-30，預設關；開關在 L1 判斷）：以付款日建立。勞報單付款走自己的端點，不在此列
     spawn_bg_thread(push_event_for_module, args=_expense_calendar_args(source, key, paid, res, user))
+    # 行事曆「付款待辦」（IP-100 的（來源, key）就是事件識別）：已付款 ⇒ 收回；事件種類關閉時 L1 不碰 Google
+    spawn_bg_thread(push_event_delete_for_module, args=("payable_due", "%s:%s" % (source, key)))
     return {"ok": True, **res}
 
 

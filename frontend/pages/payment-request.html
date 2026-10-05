@@ -107,6 +107,11 @@
               <input id="pr-amount" type="number" min="0" step="1" x-model.number="form.amount">
             </div>
             <div class="pr-f">
+              <label for="pr-planned-pay">預定付款日（選填）</label>
+              <input id="pr-planned-pay" type="date" x-model="form.plannedPayDate" data-testid="pr-planned-pay-date">
+              <div class="pr-hint">核准後，預定日前 3 天與當天會提醒財務；不填就不提醒。</div>
+            </div>
+            <div class="pr-f">
               <label for="pr-payer">受款人（空白＝自己）</label>
               <input id="pr-payer" x-model="form.payerName" placeholder="例：代墊的同事或廠商">
             </div>
@@ -138,6 +143,11 @@
         <div class="pr-card" x-show="typeCode" id="pr-typed-form">
           <h3 x-text="'填寫' + typeName() + (picked ? '　' + picked.quoteNo : '　（不綁案件）')"></h3>
           <div id="pr-df" x-ref="df"></div>
+          <div class="pr-f" x-show="typeCode !== 'purchase_req'" style="margin-top:10px">
+            <label for="pr-t-planned-pay">預定付款日（選填）</label>
+            <input id="pr-t-planned-pay" type="date" x-model="form.plannedPayDate" data-testid="pr-t-planned-pay-date">
+            <div class="pr-hint">核准後，預定日前 3 天與當天會提醒財務；不填就不提醒。</div>
+          </div>
           <div id="pr-item-picker" x-show="prItems.length" style="margin-top:12px;border:1px solid var(--border-light,#e5e7eb);border-radius:8px;padding:10px 12px">
             <div style="font-weight:600;margin-bottom:4px">從案件品項帶入</div>
             <div class="pr-hint" style="margin-bottom:6px">連到品項的明細，算該品項的<b>實際成本</b>，不是額外支出；已請購／已採購量依已送審或核准的單據累計。</div>
@@ -236,7 +246,7 @@
   <script>
     function paymentRequestPage() {
       function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') }
-      function blank() { return { category: '其他', expenseDate: today(), amount: null, payerName: '', description: '', files: [], invoiceFiles: [], invoiceNo: '' } }
+      function blank() { return { category: '其他', expenseDate: today(), amount: null, payerName: '', description: '', files: [], invoiceFiles: [], invoiceNo: '', plannedPayDate: '' } }
       return {
         session: JSON.parse(localStorage.getItem('motrix_session') || '{}'),
         tab: 'new', busy: false, err: '', result: null,
@@ -334,7 +344,8 @@
           try {
             var r = await fetch(base, { method: 'POST', headers: this._h(true), body: JSON.stringify({
               category: this.form.category, description: this.form.description.trim(), qty: 1, unit: '', unitCost: Number(this.form.amount),
-              expenseDate: this.form.expenseDate, payerName: (this.form.payerName || '').trim() }) })
+              expenseDate: this.form.expenseDate, payerName: (this.form.payerName || '').trim(),
+              plannedPayDate: this.form.plannedPayDate || '' }) })
             var d = await this._json(r)
             if (!r.ok) throw new Error(d.detail || ('建立失敗（HTTP ' + r.status + '）'))
             var id = d.id
@@ -410,7 +421,7 @@
             // 同一次操作重按（例如送審被擋：缺超出原因）要沿用已建立的草稿，不再多建一份：有草稿 ⇒ PATCH 它，附件只傳一次
             var dr = this._draft && this._draft.no === no && this._draft.kind === this.typeCode ? this._draft : null
             var body = JSON.stringify({ kind: this.typeCode, data: v.data, lines: v.lines, departmentId: dep ? Number(dep) : null,
-              expenseDate: v.data.req_date || '' })
+              expenseDate: v.data.req_date || '', plannedPayDate: this.typeCode === 'purchase_req' ? '' : (this.form.plannedPayDate || '') })
             var r = await fetch(dr ? base + '/' + dr.id : base, { method: dr ? 'PATCH' : 'POST', headers: this._h(true), body: body })
             var d = await this._json(r)
             if (!r.ok) throw new Error(d.detail || ((dr ? '更新草稿失敗' : '建立失敗') + '（HTTP ' + r.status + '）'))

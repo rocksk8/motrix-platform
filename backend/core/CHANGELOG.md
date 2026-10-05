@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-05（wip/t42-planned-pay-date：`EVENT_TYPES` 新增 `payable_due`）
+- L1（資料，介面不變）：`helpers.google_calendar.EVENT_TYPES` 新增 `payable_due`（付款待辦，分組「付款」，預設關）；沿用 t41 的 `push_event_upsert_for_module`／`push_event_delete_for_module`，無新的公開名稱。目錄筆數 15→16（`test_calendar_event_toggles_2026_09_30.py`／e2e 同步）。
+
 ## 1.110 — 2026-10-05（wip/t41-calendar-receipts：行事曆事件「一個對象一個事件」）
 - L1（新增，向下相容）：`helpers.push_event_upsert_for_module(code, summary, description, event_date, key)`、`push_event_delete_for_module(code, key)`——以（事件種類代碼, key）為唯一識別（與日期無關；Google 事件 private extendedProperty `motrixMergeKey`＝`<代碼>#<key>`，不新增表、不存 event id）：upsert＝找得到就更新標題／說明／日期、找不到就建立；delete＝找到才刪、找不到視為已沒有。兩者都受事件種類開關與全域總開關限制（關閉＝零 Google 流量，已建立的事件保留）；fire-and-forget，失敗只記 log。`push_event_for_module` 的「同日合併」語意不變。
 - `EVENT_TYPES` 新增 `receipt_logged`（收款登錄）、`receivable_due`（應收到期提醒），分組「收款」，預設關；設定頁由目錄產生，不需改頁面。

@@ -39,6 +39,7 @@ from pydantic import BaseModel
 
 from core.txn import begin_write
 from db import get_db
+from modules.case import payable_calendar as PC   # 行事曆「付款待辦」（預定付款日；預設關）
 from helpers.case_access import deny_case, require_case   # M01-O1：逐案拒絕＝查無（同一個 404）
 from helpers import row_access
 from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供者同一支
@@ -82,7 +83,7 @@ INVOICE_NO_MAX = 40
 FILE_KINDS = ("invoice", "other")
 _CLEAR_REMIT = ("remit_actual=NULL, remit_fee=0, remit_review='', remit_review_by='', "
                 "remit_review_at='', remit_review_note=''")
-_DATE_KEYS = {"invoice_date": "invoiceDate", "paid_date": "paidDate", "invoice_no": "invoiceNo"}
+_DATE_KEYS = {"invoice_date": "invoiceDate", "paid_date": "paidDate", "invoice_no": "invoiceNo", "planned_pay_date": "plannedPayDate"}
 
 CATEGORIES = ["工時", "材料", "差旅", "運費", "安裝", "外包", "其他"]
 
@@ -111,6 +112,8 @@ class ExtraExpenseIn(BaseModel):
     payeeName:     str = ""
     payeeBank:     str = ""                   # 手填快照；銀行資料權威來源是 payroll 銀行資料表（A2-3）
     payeeAccount:  str = ""
+    # 預定付款日（2026-10-05，case v7）：選填 YYYY-MM-DD；None＝沒送（編輯時保留原值）、''＝清除。不是實際付款日（那是出納登錄的 paidDate）
+    plannedPayDate: Optional[str] = None
 
 
 def _row_to_dict(r) -> dict:
@@ -172,6 +175,7 @@ def _row_to_dict(r) -> dict:
         "payeeAccount":  _col(r, "payee_account", "") or "",
         "payTerms":      _col(r, "pay_terms", "") or "",
         "remitDate":     _col(r, "remit_date", "") or "",
+        "plannedPayDate": _col(r, "planned_pay_date", "") or "",
         "payMethod":     _col(r, "pay_method", "") or "",
         "payAccountCode": _col(r, "pay_account_code", "") or "",
         "paidBy":        _col(r, "paid_by", "") or "",
@@ -332,6 +336,8 @@ def _validate(body: ExtraExpenseIn):
     for _k in ("payeeName", "payeeBank", "payeeAccount"):
         if len(getattr(body, _k) or "") > EF.MAX_TEXT:
             raise HTTPException(400, "%s 太長（上限 %d 字）" % (_k, EF.MAX_TEXT))
+    if body.plannedPayDate is not None:
+        normalize_date(body.plannedPayDate, "預定付款日")
 
 
 @router.get("/api/quotations/{quote_no}/extra-expenses")
@@ -469,8 +475,9 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
             "(quote_no, category, description, qty, unit, unit_cost, total_cost, note, "
             " expense_date, doc_no, files_json, created_by, created_by_name, created_by_inferred, "
             " payer_username, payer_name, created_at, updated_at, updated_by_name, status, approval_json,"
-            " kind, doc_code, data_json, lines_json, department_id, payee_type, payee_name, payee_bank, payee_account, def_version) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?,?,0,?,?,?,?,?,'草稿','{}',?,?,?,?,?,?,?,?,?,?)",
+            " kind, doc_code, data_json, lines_json, department_id, payee_type, payee_name, payee_bank, payee_account, def_version,"
+            " planned_pay_date) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,'[]',?,?,0,?,?,?,?,?,'草稿','{}',?,?,?,?,?,?,?,?,?,?,?)",
             (quote_no, body.category or "其他", desc,
              float(body.qty or 0), (body.unit or "").strip(), float(body.unitCost or 0), total,
              (body.note or "").strip(), (body.expenseDate or "").strip(), (body.docNo or "").strip(),
@@ -479,7 +486,8 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
              now, now, display,
              kind, doc_code, json.dumps(data, ensure_ascii=False), EF.dumps_lines(lines), EF.department_of(data, body.departmentId),
              body.payeeType, (body.payeeName or "").strip(), (body.payeeBank or "").strip(), (body.payeeAccount or "").strip(),
-             EF.current_def_version(conn, kind)),               # 建立當下的類型定義版本（送審時再釘一次）
+             EF.current_def_version(conn, kind),                 # 建立當下的類型定義版本（送審時再釘一次）
+             normalize_date(body.plannedPayDate, "預定付款日")),
         )
         conn.commit()
         exp_id = cur.lastrowid
@@ -528,7 +536,7 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
             "UPDATE case_extra_expenses SET category=?, description=?, qty=?, unit=?, "
             " unit_cost=?, total_cost=?, note=?, expense_date=?, doc_no=?, "
             " payer_username=?, payer_name=?, updated_at=?, updated_by_name=?, "
-            " data_json=?, lines_json=?, department_id=?, payee_type=?, payee_name=?, payee_bank=?, payee_account=? "
+            " data_json=?, lines_json=?, department_id=?, payee_type=?, payee_name=?, payee_bank=?, payee_account=?, planned_pay_date=? "
             "WHERE id=? AND quote_no=?",
             (body.category or "其他", desc, float(body.qty or 0),
              (body.unit or "").strip(), float(body.unitCost or 0), total,
@@ -541,6 +549,7 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
              (body.payeeName or "").strip() if row_kind else (_col(row, "payee_name", "") or ""),
              (body.payeeBank or "").strip() if row_kind else (_col(row, "payee_bank", "") or ""),
              (body.payeeAccount or "").strip() if row_kind else (_col(row, "payee_account", "") or ""),
+             normalize_date(body.plannedPayDate, "預定付款日") if body.plannedPayDate is not None else (_col(row, "planned_pay_date", "") or ""),
              exp_id, quote_no),
         )
         conn.commit()
@@ -636,6 +645,8 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
         changes["invoice_date"] = normalize_date(body.get("invoiceDate"), "發票日期")
     if "paidDate" in body:
         changes["paid_date"] = normalize_date(body.get("paidDate"), "付款日")
+    if "plannedPayDate" in body:                                 # 預定付款日（2026-10-05）：已核准後補登／改期也走這裡；''＝清除
+        changes["planned_pay_date"] = normalize_date(body.get("plannedPayDate"), "預定付款日")
     if "invoiceNo" in body:                                      # 請款流程：發票號碼（選填；已核准也可以補）
         inv_no = str(body.get("invoiceNo") or "").strip()
         if len(inv_no) > INVOICE_NO_MAX:
@@ -653,6 +664,8 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
             raise HTTPException(403, "只有填寫人本人、管理員或出納可以登錄這筆額外支出的日期")
         is_admin = user.get("role") in ("superadmin", "admin")
         old_paid = (_col(row, "paid_date", "") or "")
+        if "planned_pay_date" in changes and old_paid:           # 付款後預定日只當歷史保留，不再改（提醒對已付款的列本來就不發）
+            raise HTTPException(409, "這筆已登錄付款（%s），預定付款日保留為歷史紀錄，不能再修改" % old_paid[:10])
         override = False
         if "paid_date" in changes:
             if not (is_admin or user_has_module(user, "cashier")):
@@ -673,7 +686,9 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
         conn.commit()
     finally:
         conn.close()
-    label = {"invoice_date": "發票日期", "paid_date": "付款日", "invoice_no": "發票號碼"}
+    if "planned_pay_date" in changes or "paid_date" in changes:     # commit 之後對齊行事曆「付款待辦」（寫鎖已放）
+        PC.fire(exp_id)
+    label = {"invoice_date": "發票日期", "paid_date": "付款日", "invoice_no": "發票號碼", "planned_pay_date": "預定付款日"}
     _audit(_tok(authorization), "extra_expense.dates", *_audit_target(quote_no, exp_id),
            "%s 額外支出 #%s 登錄%s" % (quote_no, exp_id, "、".join(
                "%s %s" % (label[k], v or "（清除）") for k, v in changes.items())))
@@ -745,6 +760,7 @@ def void_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={})
             conn.rollback()
             raise HTTPException(409, "這筆額外支出剛被付款或作廢，請重新整理")
         conn.commit()
+        PC.fire(exp_id)                                          # 作廢 ⇒ 收回「付款待辦」事件
         if change:
             _discard_pending_files(quote_no, exp_id, change)
         label = "%s（NT$ %s）" % (row["description"] or "額外支出", format(float(row["total_cost"] or 0), ",.0f"))
@@ -810,6 +826,7 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
             _audit(_tok(authorization), "extra_expense.auto_approve", *_audit_target(quote_no, exp_id),
                    f"{quote_no or '無案件'} 額外支出 #{exp_id} {label}：未設定簽核層，直接核准", _asum(row))
             XN.fire("approved", conn, row, requester=user["username"], payable=EF.is_payable_kind(_col(row, "kind", "") or ""))
+            PC.fire(exp_id)                                      # 送審即核准 ⇒ 有預定付款日就建「付款待辦」
             return {"ok": True, "status": "已核准", "autoApproved": True}
 
         approval = {
@@ -920,6 +937,7 @@ def approve_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default=
                 _notify(requester, "extra_expense_approved", str(exp_id), quote_no or "無案件",
                         f"{_subj(quote_no)} 的額外支出 {label} 已核准")
             XN.fire("approved", conn, row, requester=requester or "", payable=EF.is_payable_kind(_col(row, "kind", "") or ""))
+            PC.fire(exp_id)                                      # 最終核准 ⇒ 有預定付款日就建「付款待辦」
             notify_module_activity("案件管理", "額外支出核准", display, f"{quote_no or '無案件'}｜{label}",
                                    f"case-management.html?q={quote_no}")
         _audit(_tok(authorization), "extra_expense.approve", *_audit_target(quote_no, exp_id),

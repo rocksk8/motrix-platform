@@ -346,6 +346,31 @@ function cashierApp() {
       } catch (e) { console.error(e) }
     },
 
+    // 預定付款日（2026-10-05）：'overdue'＝已過、'soon'＝3 天內（含今天）、''＝沒填或還早（日期以本機日曆天算，與提醒信同）
+    plannedState(it) {
+      const d = it && it.plannedPayDate
+      if (!d) return ''
+      const t0 = new Date(); t0.setHours(0, 0, 0, 0)
+      const dd = new Date(d + 'T00:00:00')
+      const diff = Math.round((dd - t0) / 86400000)
+      return diff < 0 ? 'overdue' : (diff <= 3 ? 'soon' : '')
+    },
+
+    // 出納在待付款清單直接補登／改期預定付款日：PATCH .../extra-expenses/{id}/dates {plannedPayDate}（'' ＝清除）；來源目前只有案件額外支出
+    async savePlannedPayDate(it, value) {
+      this.payreqNotice = ''
+      try {
+        const r = await fetch('/api/quotations/' + encodeURIComponent(it.quoteNo || '-') + '/extra-expenses/' + encodeURIComponent(it.key) + '/dates', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ plannedPayDate: value || '' }),
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this.payreqNotice = d.detail || ('更新預定付款日失敗（HTTP ' + r.status + '）'); await this.loadPayreqQueue(); return }
+        it.plannedPayDate = value || ''
+        this.payreqNotice = '已更新預定付款日：' + (it.title || '') + '　' + (value || '（清除）')
+      } catch (e) { this.payreqNotice = '更新預定付款日失敗：' + e.message }
+    },
+
     // 登錄付款：POST /api/cashier/pending-payables/{來源}/{key}/pay（提供者寫回付款日）
     async payPayreq(it) {
       this.payreqBusy = true

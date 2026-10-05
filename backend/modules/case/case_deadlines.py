@@ -276,6 +276,8 @@ def run_daily_checks(mode: str = "daily") -> None:
     _check_case_stage_deadline()
     _check_case_project_timeline_deadline()
     _check_project_deadline()
+    from modules.case import payable_reminders          # 預定付款日提醒信（3 天前＋當天；2026-10-05）
+    payable_reminders.run()
 
 
 from core import registry as _registry  # noqa: E402
