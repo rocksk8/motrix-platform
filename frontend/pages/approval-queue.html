@@ -1247,7 +1247,7 @@
           if (item.type === 'dispatch_file_delete') return '報價單附件刪除'
           // 已核准的額外支出要改內容走這條（DB v76）。標題要跟原單分得開，
           // 否則簽核人不知道自己簽的是「新增一筆」還是「改一筆已核准的」
-          if (item.type === 'extra_expense_change') return '額外支出變更'
+          if (item.type === 'extra_expense_change') return '支出申請變更'
           // AS3：voucher 是「傳票」在別處已經用掉的名字（承攬商匯款申請／
           // 開票申請憑據都叫「傳票」的舊稱），這裡要跟後端 APPROVAL_DOC_TYPE_LABELS
           // 一致寫「傳票（會計）」，否則簽核人分不出卡片上是哪一種。
