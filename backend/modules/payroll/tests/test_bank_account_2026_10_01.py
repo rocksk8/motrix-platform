@@ -13,6 +13,9 @@ NUM = "0011223344556"            # 13 碼（測試帳號）
 GOOD = {"bankCode": "004", "bankName": "臺灣銀行", "bankBranch": "台中分行", "accountName": "王小明", "accountNumber": "0011-2233 44556"}
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, u):
     r = client.post("/api/auth/login", json={"username": u[0], "password": u[1]})
     assert r.status_code == 200, r.text
@@ -140,7 +143,7 @@ def _seed_owner(client, make_user):
 def test_plain_users_and_approvers_cannot_see_others_at_all(client, make_user):
     _a, uid = _seed_owner(client, make_user)
     other = _login(client, make_user(username="ba_plain", role="viewer", modules=[]))
-    admin = _login(client, make_user(username="ba_adm", role="admin", modules=["case_manage"]))       # admin 但沒有 finance／cashier
+    admin = _login(client, make_user(username="ba_adm", role="admin", modules=["case_manage"]))       # admin 但不是財務角色
     for h in (other, admin):
         assert client.get("/api/bank-accounts/%d" % uid, headers=h).status_code == 404
         assert client.get("/api/bank-accounts", headers=h).status_code == 404
@@ -148,6 +151,7 @@ def test_plain_users_and_approvers_cannot_see_others_at_all(client, make_user):
         assert client.put("/api/bank-accounts/%d" % uid, json={**GOOD, "accountNumber": "55555555"}, headers=h).status_code == 404
 
 
+@pytest.mark.skip(reason="第42班（財務與出納合併）：出納唯讀／財務可編輯的分工不再存在；財務角色的行為由 test_finance_and_superadmin_can_maintain_others… 涵蓋")
 def test_cashier_sees_masked_by_default_reveals_with_audit_and_cannot_edit(client, make_user):
     _a, uid = _seed_owner(client, make_user)
     cash = _login(client, make_user(username="ba_cash", role="viewer", modules=["cashier"]))

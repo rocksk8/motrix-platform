@@ -10,6 +10,9 @@ from modules.subcontract.tests.test_contractor_voucher_paid_date_2026_08_31 impo
 from modules.subcontract import remit
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _pay(client, token, vno, **body):
     return client.post(f"/api/contractor-vouchers/{vno}/paid-toggle", headers=_auth(token),
                        json={"action": "pay", "paid_at": "2026-09-20", **body})
@@ -108,12 +111,9 @@ def test_review_list_approve_and_reject_flow(client, make_user):
     for v in (v1, v2):
         assert _pay(client, tc, v, actualAmount=_payable(v) - 15, hasFee=True, fee=15).status_code == 200
     data = _review_list(client, tc)
-    assert {v1, v2} <= {i["key"] for i in data["items"]} and data["canDecide"] is False
+    assert {v1, v2} <= {i["key"] for i in data["items"]} and data["canDecide"] is True          # 第42班：出納與財務合併為財務角色，「出納唯讀／不可核可」的分工不再存在（自核風險已列入 FINANCE-ROLE-GOLIVE 後續）
     it = next(i for i in data["items"] if i["key"] == v1)
     assert it["source"] == "contractor_voucher" and it["diff"] == -15 and it["fee"] == 15
-    # 出納自己不能核可
-    assert client.post(f"/api/cashier/remit-reviews/contractor_voucher/{v1}/decision", headers=_auth(tc),
-                       json={"decision": "approve"}).status_code == 403
     # 核可
     r = client.post(f"/api/cashier/remit-reviews/contractor_voucher/{v1}/decision", headers=_auth(ta),
                     json={"decision": "approve", "note": "銀行短收"})

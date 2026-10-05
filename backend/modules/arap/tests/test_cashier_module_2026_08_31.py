@@ -82,7 +82,7 @@ def test_receivable_queue_requires_admin_or_cashier_and_excludes_received(client
     viewer_token = _login(client, viewer_username, viewer_password)
     assert client.get("/api/cashier/receivable-queue", headers=_auth(viewer_token)).status_code == 403
 
-    admin_username, admin_password = make_user(username="cash_admin2", role="admin")
+    admin_username, admin_password = make_user(username="cash_admin2", role="finance")
     admin_token = _login(client, admin_username, admin_password)
 
     _make_quotation_with_unreceived_item("MQ-CASH-010", expected_receipt_date="2026-09-15")
@@ -106,7 +106,7 @@ def test_receivable_queue_requires_admin_or_cashier_and_excludes_received(client
 def test_receivable_queue_status_all_includes_received_and_unreceived(client, make_user):
     """v2：status=all 併入 receivables.html 的完整歷史查詢，含已收+未收，
     且每筆品項要帶出發票登錄/取消收款/手續費統計用得到的欄位。"""
-    username, password = make_user(username="cash_admin4", role="admin")
+    username, password = make_user(username="cash_admin4", role="finance")
     token = _login(client, username, password)
 
     _make_quotation_with_unreceived_item("MQ-CASH-040", expected_receipt_date="2026-09-10")

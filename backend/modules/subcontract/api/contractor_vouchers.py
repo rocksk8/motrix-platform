@@ -1155,7 +1155,7 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
     who = user.get("display_name") or user["username"]
     if action == "pay" and rm["review"]:
         notify_module_activity("承攬商匯款申請", "匯款差額待審核", who, voucher_no, "cashier.html",
-                               detail="實付與應付不符（差額 %+g），請管理員到出納頁核可或退回。%s" % (rm["diff"], note or ""), audience="finance")
+                               detail="實付與應付不符（差額 %+g），請財務角色到出納頁核可或退回。%s" % (rm["diff"], note or ""), audience="finance")
     else:
         notify_module_activity("承攬商匯款申請", "已匯款" if action == "pay" else "取消已匯款", who, voucher_no,
                                "case-management.html", detail=note or "", audience="finance")

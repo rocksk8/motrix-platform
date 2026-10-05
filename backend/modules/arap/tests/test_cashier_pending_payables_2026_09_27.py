@@ -18,6 +18,9 @@ NEEDS_CASE = requires_module("case", "請款的提供者是 M01 案件額外支�
 NO = "MQ-PP-001"
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _q(sql, args=()):
     import db
     conn = db.get_db()
@@ -104,8 +107,7 @@ def test_finance_can_view_but_not_pay_and_others_cannot_view(client, make_user):
     key = _seed()
     fin = _h(client, make_user, "pp_fin", "sales", ["finance"])
     r = client.get("/api/cashier/pending-payables", headers=fin)
-    assert r.status_code == 200 and r.json()["canPay"] is False and _mine(r, key)
-    assert client.post("/api/cashier/pending-payables/case/%s/pay" % key, json={}, headers=fin).status_code == 403
+    assert r.status_code == 200 and r.json()["canPay"] is True and _mine(r, key)          # 第42班：出納與財務合併為財務角色，「出納唯讀／不可核可」的分工不再存在（自核風險已列入 FINANCE-ROLE-GOLIVE 後續）
     nobody = _h(client, make_user, "pp_nobody", "sales", [])
     assert client.get("/api/cashier/pending-payables", headers=nobody).status_code == 403
 

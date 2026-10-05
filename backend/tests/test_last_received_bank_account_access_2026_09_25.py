@@ -32,7 +32,7 @@ def test_only_cashier_or_admin(client, make_user):
     url = "/api/quotations/last-received-bank-account?customerName=Y1客戶"
     out = _tok(client, make_user, "y1_out", "sales", ["dashboard", "quotation"])
     cash = _tok(client, make_user, "y1_cash", "engineer", ["cashier"])
-    adm = _tok(client, make_user, "y1_adm", "admin", [])
+    adm = _tok(client, make_user, "y1_adm", "superadmin", [])          # 第42班：收款帳戶查詢＝財務角色／superadmin（admin 直通拿掉）
     assert client.get(url, headers=out).status_code == 403
     for h in (cash, adm):
         r = client.get(url, headers=h)

@@ -9,6 +9,9 @@ import json
 pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -44,7 +47,7 @@ def _make_quotation(quote_no, invoice_no=""):
 # ── ①發票號碼格式/重複驗證 ───────────────────────────────────────────────────
 
 def test_invoice_no_rejects_malformed_format(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_quotation("MQ-INVFMT-001")
     r = client.patch("/api/quotations/MQ-INVFMT-001/payment/0", headers=_auth(token),
@@ -53,7 +56,7 @@ def test_invoice_no_rejects_malformed_format(client, make_user):
 
 
 def test_invoice_no_accepts_valid_format_case_insensitive(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_quotation("MQ-INVFMT-002")
     r = client.patch("/api/quotations/MQ-INVFMT-002/payment/0", headers=_auth(token),
@@ -62,7 +65,7 @@ def test_invoice_no_accepts_valid_format_case_insensitive(client, make_user):
 
 
 def test_invoice_no_rejects_duplicate_across_quotes(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_quotation("MQ-INVDUP-001", invoice_no="AB12345678")
     _make_quotation("MQ-INVDUP-002")
@@ -74,7 +77,7 @@ def test_invoice_no_rejects_duplicate_across_quotes(client, make_user):
 
 def test_invoice_no_allows_reusing_same_slot(client, make_user):
     """修改自己這筆（同一張報價單同一期）不該跟自己比對出假警報。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_quotation("MQ-INVSAME-001", invoice_no="AB12345678")
     r = client.patch("/api/quotations/MQ-INVSAME-001/payment/0", headers=_auth(token),
@@ -84,7 +87,7 @@ def test_invoice_no_allows_reusing_same_slot(client, make_user):
 
 def test_invoice_no_empty_string_still_allowed(client, make_user):
     """清空發票號碼（尚未開立）維持合法，不受格式檢查擋下。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_quotation("MQ-INVEMPTY-001", invoice_no="AB12345678")
     r = client.patch("/api/quotations/MQ-INVEMPTY-001/payment/0", headers=_auth(token),

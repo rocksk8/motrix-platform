@@ -126,14 +126,16 @@ def test_owner_and_assignee_and_admin_can_still_use_settlement(client, make_user
     adm_u, adm_p = make_user(username="s_adm3", role="admin")
     _make_case("MQ-IDOR-003", sales_person="s_owner3", assigned=[_user_id(eng_u)])
 
-    for u, p in ((owner_u, owner_p), (eng_u, eng_p), (adm_u, adm_p)):
+    # 第42班（使用者裁示 D3）：精算／財務總覽只剩財務角色與 superadmin——業務（案件擁有者）與 admin 失去；
+    # 「engineer＋financial_view 勾選」由 make_user 換成財務角色，案件成員資格不變 ⇒ 仍然通過
+    for (u, p), want in (((owner_u, owner_p), 403), ((eng_u, eng_p), 200), ((adm_u, adm_p), 403)):
         tok = _login(client, u, p)
         assert client.get("/api/quotations/MQ-IDOR-003/settlement",
-                          headers=_auth(tok)).status_code == 200, f"{u} 讀不到"
+                          headers=_auth(tok)).status_code == want, f"{u} 精算讀取應為 {want}"
         assert client.get("/api/quotations/MQ-IDOR-003/finance-summary",
-                          headers=_auth(tok)).status_code == 200, f"{u} 看不到財務總覽"
+                          headers=_auth(tok)).status_code == want, f"{u} 財務總覽應為 {want}"
 
-    tok = _login(client, owner_u, owner_p)
+    tok = _login(client, eng_u, eng_p)
     r = client.put("/api/quotations/MQ-IDOR-003/settlement",
                    json={"settlement": {"status": "draft", "cost": 2000}},
                    headers=_auth(tok))
@@ -202,12 +204,12 @@ def test_engineer_with_financial_view_can_read_settlement(client, make_user):
 
 @needs_m01
 def test_sales_role_sees_financial_without_the_module(client, make_user):
-    """sales 角色本來就在前端規則的白名單裡，不需要額外勾模組。"""
+    """第42班（使用者裁示 D3）：sales 角色不再直通財務金額（精算只剩財務角色與 superadmin）。"""
     u, p = make_user(username="fv_sales_role", role="sales", modules=["case_manage"])
     _make_case("MQ-FV-003", sales_person="fv_sales_role")
     tok = _login(client, u, p)
     assert client.get("/api/quotations/MQ-FV-003/settlement",
-                      headers=_auth(tok)).status_code == 200
+                      headers=_auth(tok)).status_code == 403
 
 
 # ── 5. 案件執行面：case_manage 模組可存取，沒有模組的擋下 ────────────────────

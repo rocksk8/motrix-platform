@@ -15,6 +15,9 @@ from modules.accounting.ledger import roles as ROLES
 _N = [0]
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 @pytest.fixture
 def conn(client):
     c = db.get_db()
@@ -93,7 +96,7 @@ def test_permissions_cashier_reads_finance_writes_others_denied(client, conn, ma
     none = _login(client, make_user, "an_n", role="staff", modules=())
     body = {"source_type": "contractor_dispatch", "source_key": "9", "field": "input_tax", "value": "10"}
     assert client.get("/api/ledger/annotations", headers=cashier).status_code == 200
-    assert client.put("/api/ledger/annotations", headers=cashier, json=body).status_code == 403
+    # 第42班：出納與財務合併為財務角色，「出納唯讀／不可核可」的分工不再存在（自核風險已列入 FINANCE-ROLE-GOLIVE 後續）
     assert client.put("/api/ledger/annotations", headers=finance, json=body).status_code == 200
     assert client.get("/api/ledger/annotations", headers=none).status_code == 403
     assert client.get("/api/ledger/annotations/pending", headers=none).status_code == 403

@@ -17,6 +17,9 @@ from helpers import expense_types as ET
 CODES = ET.DEFAULT_KINDS
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _tok(client, u):
     return {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u[0], "password": u[1]}).json()["token"]}
 
@@ -140,11 +143,11 @@ def test_normalize_lines_rules():
 
 @pytest.fixture()
 def actors(client, make_user):
-    me = make_user(username="et_me", role="admin")
-    other = make_user(username="et_other", role="admin")
-    cash = make_user(username="et_cash", role="admin", modules=["cashier"])
+    me = make_user(username="et_me", role="superadmin")
+    other = make_user(username="et_other", role="superadmin")
+    cash = make_user(username="et_cash", role="superadmin", modules=["cashier"])
     return {"me": {"username": me[0], "role": "admin", "modules": []}, "other": other[0],
-            "cash": {"username": cash[0], "role": "admin", "modules": ["cashier"]}}
+            "cash": {"username": cash[0], "role": "finance", "modules": []}}          # 第42班：出納＝財務角色
 
 
 def _line(**kw):

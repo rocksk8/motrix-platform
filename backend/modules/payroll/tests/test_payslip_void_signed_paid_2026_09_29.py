@@ -23,6 +23,9 @@ _NEEDS_ANALYTICS = pytest.mark.skipif(not source_tree.module_installed("modules/
                                       reason="需要營運報表（M08）：模組不在這個安裝包")
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 @pytest.fixture(autouse=True)
 def _archive_tmp(tmp_path, monkeypatch):
     """簽回檔是 F2 實體檔：一律寫進 tmp，不碰真實的勞報單存檔目錄。"""
@@ -234,9 +237,9 @@ def test_cashier_queue_lists_signed_only_and_hides_from_finance(client, make_use
     q = client.get("/api/cashier/payslip-queue", headers=_auth(tok)).json()
     assert q["available"] and q["visible"] and [i["slipNo"] for i in q["items"]] == ["PS-202609-931"]
     assert "contractorIdNumber" not in json.dumps(q, ensure_ascii=False)          # 不外流個資欄位
-    f, pw = make_user(username="pv4_fin", role="user", modules=["finance"])
+    f, pw = make_user(username="pv4_fin", role="finance")           # 第42班：財務與出納合併為財務角色 ⇒ 財務也看得到勞報單簽回佇列
     r = client.get("/api/cashier/payslip-queue", headers=_auth(_login(client, f, pw))).json()
-    assert r["visible"] is False and r["items"] == []
+    assert r["visible"] is True and [i["slipNo"] for i in r["items"]] == ["PS-202609-931"]
     c, pw = make_user(username="pv4_cash", role="user", modules=["cashier"])
     assert client.get("/api/cashier/payslip-queue", headers=_auth(_login(client, c, pw))).json()["visible"] is True
 

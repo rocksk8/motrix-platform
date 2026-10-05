@@ -14,6 +14,9 @@ from modules.accounting.ledger import periods as P
 LINES = [{"account_code": "1113", "debit": 1000, "credit": 0}, {"account_code": "4111", "debit": 0, "credit": 1000}]
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, make_user, username, role="superadmin", modules=("finance",)):
     u, p = make_user(username=username, role=role, modules=list(modules))
     r = client.post("/api/auth/login", json={"username": u, "password": p})
@@ -276,7 +279,7 @@ def test_api_permissions(client, make_user, conn):
     pid = _period(conn, y, 12)["id"]
     assert client.get("/api/ledger/years", headers=none).status_code == 403
     assert client.get("/api/ledger/years", headers=cash).status_code == 200            # cashier 可讀
-    assert client.post("/api/ledger/periods/%d/close" % pid, headers=cash, json={"accept_warnings": True}).status_code == 403
+    # 第42班：出納與財務合併為財務角色，「出納唯讀／不可核可」的分工不再存在（自核風險已列入 FINANCE-ROLE-GOLIVE 後續）
     r = client.post("/api/ledger/periods/%d/close" % pid, headers=fin, json={"accept_warnings": True})
     assert r.status_code == 200 and r.json()["pending"] is True, r.text                          # C：財務人員送申請，不直接結帳
     assert _period(conn, y, 12)["status"] == "open"

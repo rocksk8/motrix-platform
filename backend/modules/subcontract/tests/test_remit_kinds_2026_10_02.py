@@ -13,6 +13,9 @@ from modules.subcontract import remit_kinds as RK
 BASE = "/api/definitions/remit_kinds/default"
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, u, p):
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     assert r.status_code == 200, r.text
@@ -22,7 +25,7 @@ def _login(client, u, p):
 @pytest.fixture()
 def hs(client, make_user):
     out = {}
-    for name, role in (("rk_sa", "superadmin"), ("rk_admin", "admin"), ("rk_sales", "sales")):
+    for name, role in (("rk_sa", "superadmin"), ("rk_admin", "finance"), ("rk_sales", "sales")):
         u, p = make_user(username=name, role=role)[:2]
         out[name] = _login(client, u, p)
     return out

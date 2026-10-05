@@ -20,9 +20,9 @@
 """
 import json
 
-from helpers.auth import user_has_module
+from helpers.auth import user_has_module, has_finance_access
 from helpers.dates import normalize_date
-from helpers.financial_mask import money_visible
+from helpers.financial_mask import money_visible, material_money_visible
 from modules.case import material_approval as MA
 from modules.case import material_payment as MP
 
@@ -103,7 +103,8 @@ def can_edit_orders(actor) -> bool:
     """同專屬端點（`material_orders.py`）：admin 以上或 `project_manage`，且有財務檢視權（CM13）。"""
     if actor is None:
         return True
-    return (actor.get("role") == "superadmin" or user_has_module(actor, "project_manage")) and money_visible(actor)     # 第42班：admin 直通拿掉
+    # 第42班（Q6）：日常作業（建立／送審／到貨確認）仍是一般管理——admin 維持；財務金額可視改成財務角色專屬，所以這裡改用材料申請自己的條件
+    return (actor.get("role") in ("superadmin", "admin", "finance") or user_has_module(actor, "project_manage")) and material_money_visible(actor)
 
 
 def _rej(out, item_id, field, code, message):
@@ -226,6 +227,10 @@ def _gate_orders(conn, quote_no, old_list, new_list, actor, rejected):
             continue
         if not allow:
             _rej(rejected, iid, "*", "no_permission", "只有管理員或專案經理（且有財務檢視權）可以修改材料申請")
+            out.append(merged)
+            continue
+        if actor is not None and "unitPrice" in diff and not has_finance_access(actor):     # 第42班（Q6）：改成本單價＝財務角色（新列建立時帶的單價不受影響）
+            _rej(rejected, iid, "unitPrice", "no_permission", "改成本單價只有財務角色可以")
             out.append(merged)
             continue
         st = MA.status_of(conn, quote_no, iid)

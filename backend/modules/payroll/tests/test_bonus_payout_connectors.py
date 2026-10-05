@@ -34,6 +34,9 @@ YEAR_PARAMS_VERSION = {   # R1 的一版的形狀（helpers.legal_params，IP-7�
 PARAMS = bd.params_from_legal_version(YEAR_PARAMS_VERSION)
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _db():
     import db
     return db.get_db()
@@ -182,16 +185,13 @@ def test_cashier_queue_mark_paid_is_the_same_action_and_history(client, people, 
     import openpyxl
     ws = openpyxl.load_workbook(io.BytesIO(x.content))["獎金發放明細"]
     assert "MQ-BP-C1" in [c.value for c in ws["A"]]
-    # 財務（finance）：出納頁其他頁籤看得到，獎金看不到
-    name, pw = make_user(username="bp_fin", role="engineer", modules=["finance"])
+    # 第42班：財務與出納合併為財務角色（使用者核可：財務角色看得到獎金金額）⇒ 財務角色也看得到獎金佇列與發放明細
+    name, pw = make_user(username="bp_fin", role="finance")
     fin = _login(client, name, pw)
     q = client.get("/api/cashier/bonus-queue", headers=_auth(fin)).json()
-    assert q == {"available": False, "visible": False, "notice": "", "items": []}
+    assert q["available"] is True and q["visible"] is True
     h = client.get("/api/cashier/execution-history?start=%s&end=%s" % (today, today), headers=_auth(fin)).json()
-    assert h["bonusPaid"] == [] and h["bonusVisible"] is False
-    wb = openpyxl.load_workbook(io.BytesIO(client.get(
-        "/api/cashier/export?start=%s&end=%s" % (today, today), headers=_auth(fin)).content))
-    assert "獎金發放明細" not in wb.sheetnames
+    assert h["bonusVisible"] is True
 
 
 def test_cashier_page_binds_bonus_mark_paid():

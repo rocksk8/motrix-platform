@@ -289,7 +289,7 @@ window.CM_PARTS.push(() => ({
     moCanEdit() {
       if (this.cr?.dealTag === '已結案') return false
       const m = this.session.modules || []
-      return ['superadmin', 'admin'].includes(this.session.role) || m.includes('project_manage')
+      return ['superadmin', 'admin', 'finance'].includes(this.session.role) || m.includes('project_manage')      // 第42班（Q6）：與後端 material_guard.can_edit_orders 一致（admin 日常作業維持；取消已核准／改單價另要財務角色）
     },
 
     moTotals() {

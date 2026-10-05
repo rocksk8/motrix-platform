@@ -1033,7 +1033,7 @@ async def upload_extra_expense_files(quote_no: str, exp_id: int,
         # 「或出納」與 PATCH …/dates 同構：上面 _guard_case 先擋 ⇒ 出納也必須看得到這個案件（純出納＝404）。
         # 2026-09-28 00:58 使用者裁示維持現狀（CORE-SPEC 請款流程），不另開出納補發票的路。
         if after_approval and not (_can_modify(row, user) or user_has_module(user, "cashier")):
-            raise HTTPException(403, "核准後補發票限填寫人本人、管理員或出納")
+            raise HTTPException(403, "核准後補發票限填寫人本人、管理員或財務角色")
         new_files = await save_document_files(
             "case_extra_expense", f"{quote_no}_{exp_id}", files,
             user.get("display_name") or user["username"])

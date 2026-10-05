@@ -6,6 +6,9 @@ import json
 pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -50,7 +53,7 @@ def _make_closed_case(quote_no="MQ-CCR-001", all_stages_done=True, payment_recei
 
 
 def test_update_case_record_blocked_when_locked(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_closed_case()
 
@@ -63,7 +66,7 @@ def test_update_case_record_blocked_when_locked(client, make_user):
 
 def test_unlock_then_edit_is_queued_not_applied(client, make_user):
     sa_user, sa_pw = make_user(username="sa1", role="superadmin")
-    username, password = make_user(username="editor1", role="admin")
+    username, password = make_user(username="editor1", role="superadmin")
     sa_token = _login(client, sa_user, sa_pw)
     token = _login(client, username, password)
     _make_closed_case()
@@ -114,7 +117,7 @@ def test_unlock_then_edit_is_queued_not_applied(client, make_user):
 
 def test_reject_change_discards_it(client, make_user):
     sa_user, sa_pw = make_user(username="sa2", role="superadmin")
-    username, password = make_user(username="editor2", role="admin")
+    username, password = make_user(username="editor2", role="superadmin")
     sa_token = _login(client, sa_user, sa_pw)
     token = _login(client, username, password)
     _make_closed_case("MQ-CCR-002")
@@ -141,7 +144,7 @@ def test_repeated_case_record_saves_dedupe_into_one_pending_request(client, make
     記錄，且核准順序錯了還會用舊快照蓋掉新內容。驗證修法：同一張案件同時只會
     有一筆 pending 的 case_record_update，內容永遠是最新一次編輯。"""
     sa_user, sa_pw = make_user(username="sa9", role="superadmin")
-    username, password = make_user(username="editor9", role="admin")
+    username, password = make_user(username="editor9", role="superadmin")
     sa_token = _login(client, sa_user, sa_pw)
     token = _login(client, username, password)
     _make_closed_case("MQ-CCR-009")
@@ -194,7 +197,7 @@ def test_requester_cannot_approve_own_change(client, make_user):
 
 def test_material_file_upload_staged_and_approved(client, make_user):
     sa_user, sa_pw = make_user(username="sa3", role="superadmin")
-    username, password = make_user(username="editor3", role="admin")
+    username, password = make_user(username="editor3", role="superadmin")
     sa_token = _login(client, sa_user, sa_pw)
     token = _login(client, username, password)
     _make_closed_case("MQ-CCR-003")
@@ -222,7 +225,7 @@ def test_material_file_upload_staged_and_approved(client, make_user):
 
 
 def test_lock_case_restores_full_lock(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_closed_case("MQ-CCR-004")
 
@@ -241,7 +244,7 @@ def test_lock_case_restores_full_lock(client, make_user):
 def test_stage_granular_endpoint_always_blocked_when_closed(client, make_user):
     """§11 設計取捨：案件執行階段細項端點不支援排隊審核，已結案時一律 403，
     不論是否半解鎖。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_closed_case("MQ-CCR-005")
     client.post("/api/quotations/MQ-CCR-005/case-unlock", headers=_auth(token))
@@ -345,7 +348,7 @@ def test_locked_edit_denial_is_audit_logged(client, make_user):
     """2026-08-28 新增：13 支不支援排隊審核的端點被已結案案件擋下時，現在會留一筆
     audit_log（action='case.locked_edit_denied'）——之後才有數據判斷這道限制實際
     被撞到的頻率，見 _deny_if_case_locked_unsupported() docstring。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_closed_case("MQ-CCR-AUDIT-001")
 
@@ -366,7 +369,7 @@ def test_locked_edit_denial_records_which_operation(client, make_user):
     查不出該優先開放哪幾支，而後者才是要決定的事。13 個呼叫點現在各自帶
     `op=` 標籤。這支測試同時釘住兩件事：標籤真的有寫進去，且不同端點寫的是
     不同標籤（避免日後新增呼叫點時複製貼上忘了改）。"""
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_closed_case("MQ-CCR-AUDIT-002")
 

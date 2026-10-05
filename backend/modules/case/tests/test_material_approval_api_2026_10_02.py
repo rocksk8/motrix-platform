@@ -16,6 +16,9 @@ NO = "MQ-MATA-001"
 ITEM = "it-api-1"
 BASE = "/api/quotations/%s/material-orders/%s" % (NO, ITEM)
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 @pytest.fixture(autouse=True)
 def _po_rule_off(monkeypatch):
     """33-M1：強制採購單預設開；本檔驗的不是這條規則（手動建立材料申請的流程），明確關掉。規則本身見 test_material_po_required_2026_10_03.py。"""
@@ -90,7 +93,7 @@ def world(client, make_user):
     eng, ep = make_user(username="ma_eng", role="sales")
     boss, bp = make_user(username="ma_boss", role="sales")
     peer, pp = make_user(username="ma_peer", role="sales")
-    adm, ap = make_user(username="ma_adm", role="admin")
+    adm, ap = make_user(username="ma_adm", role="superadmin")
     nofin, nfp = make_user(username="ma_nofin", role="engineer", modules=[])
     _case(assigned=[_uid(eng), _uid(peer), _uid(nofin)])
     return {"eng": _login(client, eng, ep), "boss": _login(client, boss, bp), "peer": _login(client, peer, pp), "adm": _login(client, adm, ap),

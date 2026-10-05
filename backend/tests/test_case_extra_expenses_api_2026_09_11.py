@@ -10,6 +10,9 @@ needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫
 import json
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -99,7 +102,7 @@ def test_create_fills_in_author_from_session_not_client(client, make_user):
     不存在的 session 路徑（`this.session?.user?.display_name`），結果實測 7 筆
     既有資料 0 筆有值。所以現在前端傳什麼都不採用。
     """
-    username, password = make_user(username="author1", role="admin")
+    username, password = make_user(username="author1", role="superadmin")
     token = _login(client, username, password)
     _make_case()
 
@@ -117,7 +120,7 @@ def test_create_fills_in_author_from_session_not_client(client, make_user):
 @needs_m01
 def test_total_cost_is_computed_server_side(client, make_user):
     """小計後端算，不吃前端傳的值。"""
-    username, password = make_user(username="author2", role="admin")
+    username, password = make_user(username="author2", role="superadmin")
     token = _login(client, username, password)
     _make_case()
 
@@ -130,7 +133,7 @@ def test_total_cost_is_computed_server_side(client, make_user):
 @needs_m01
 def test_payer_can_be_picked_or_free_text(client, make_user):
     """支出人「可選可自由文字」：從清單選時兩個欄位都有，自由文字時只有名字。"""
-    username, password = make_user(username="author3", role="admin")
+    username, password = make_user(username="author3", role="superadmin")
     other, _ = make_user(username="spender", role="engineer")
     token = _login(client, username, password)
     _make_case()
@@ -149,7 +152,7 @@ def test_payer_can_be_picked_or_free_text(client, make_user):
 
 @needs_m01
 def test_description_is_required(client, make_user):
-    username, password = make_user(username="author4", role="admin")
+    username, password = make_user(username="author4", role="superadmin")
     token = _login(client, username, password)
     _make_case()
     r = client.post(_base(), headers=_auth(token), json=_payload(description="  "))
@@ -158,7 +161,7 @@ def test_description_is_required(client, make_user):
 
 @needs_m01
 def test_unknown_category_rejected(client, make_user):
-    username, password = make_user(username="author5", role="admin")
+    username, password = make_user(username="author5", role="superadmin")
     token = _login(client, username, password)
     _make_case()
     r = client.post(_base(), headers=_auth(token), json=_payload(category="亂填"))
@@ -168,7 +171,7 @@ def test_unknown_category_rejected(client, make_user):
 @needs_m01
 def test_closed_case_can_still_be_edited(client, make_user):
     """使用者指定第 5 點：已結案也可以新增／編輯額外支出。"""
-    username, password = make_user(username="author6", role="admin")
+    username, password = make_user(username="author6", role="superadmin")
     token = _login(client, username, password)
     _make_case("MQ-XE-CLOSED", deal_tag="已結案")
 
@@ -180,7 +183,7 @@ def test_closed_case_can_still_be_edited(client, make_user):
 
 @needs_m01
 def test_update_bumps_updated_at_and_updater(client, make_user):
-    username, password = make_user(username="author7", role="admin")
+    username, password = make_user(username="author7", role="superadmin")
     token = _login(client, username, password)
     _make_case()
     exp_id = client.post(_base(), headers=_auth(token), json=_payload()).json()["id"]
@@ -212,7 +215,7 @@ def test_other_user_cannot_edit_someone_elses_entry(client, make_user):
 @needs_m01
 def test_admin_can_edit_others_entry(client, make_user):
     owner, owner_pw = make_user(username="owner_f", role="engineer")
-    admin, admin_pw = make_user(username="admin_f", role="admin")
+    admin, admin_pw = make_user(username="admin_f", role="superadmin")
     _make_case(assigned=[_user_id(owner)])
     t1 = _login(client, owner, owner_pw)
     exp_id = client.post(_base(), headers=_auth(t1), json=_payload()).json()["id"]
@@ -245,7 +248,7 @@ def test_submit_without_any_tier_auto_approves(client, make_user):
     這個專案的簽核設定是選配的；若因為沒設定就把單據永久卡在「待審核」，
     等於新功能一上線就把所有人擋住。
     """
-    username, password = make_user(username="author9", role="admin")
+    username, password = make_user(username="author9", role="superadmin")
     token = _login(client, username, password)
     _make_case()
     _set_empty_approval_flow()
@@ -264,7 +267,7 @@ def test_pending_amount_still_counts_toward_total(client, make_user, seed_extra_
     使用者指定的規則：不算進去會讓當月已經花掉的錢在報表上消失（2026-09-09 修過
     的那一類問題）；不標示則看報表的人不知道數字還可能被駁回而改變。
     """
-    username, password = make_user(username="author10", role="admin")
+    username, password = make_user(username="author10", role="superadmin")
     token = _login(client, username, password)
     _make_case()
     seed_extra_expense("MQ-XE-001", total_cost=1000, description="已核准", status="已核准")
@@ -319,7 +322,7 @@ def test_requires_auth(client):
 
 
 def test_unknown_quote_returns_404(client, make_user):
-    username, password = make_user(username="author12", role="admin")
+    username, password = make_user(username="author12", role="superadmin")
     token = _login(client, username, password)
     assert client.get(_base("MQ-NOPE-999"), headers=_auth(token)).status_code == 404
 

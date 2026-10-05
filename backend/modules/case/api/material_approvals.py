@@ -23,7 +23,7 @@ from modules.case import purchase_items as _PI
 from modules.case import material_guard as _MG
 _MG.LINK_VALIDATOR = _PI.link_validator                         # 32-S4：儲存時的連結檢查（material_guard 的接縫）
 from helpers.case_access import require_case
-from helpers.financial_mask import money_visible
+from helpers.financial_mask import money_visible, material_money_visible
 from modules.case import material_approval as MA
 from modules.case import material_notify as MN
 from modules.case import material_shipping_view as _MSV   # 34-S3：出貨連動（只經 M03 提供者）
@@ -132,7 +132,7 @@ def submit(quote_no: str, item_id: str, authorization: str = Header(None)):
         begin_write(conn)
         q = _load_case(conn, quote_no)
         require_case(user, q, quote_no)
-        if not money_visible(user):
+        if not material_money_visible(user):          # 第42班（Q6）：送審屬一般管理，admin 維持
             raise HTTPException(403, "此帳號沒有財務檢視權限，不可送審材料申請")
         if (q["deal_tag"] or "") == "已結案":
             raise HTTPException(400, "已結案案件無法送審材料申請")

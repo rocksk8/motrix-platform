@@ -779,14 +779,19 @@ def _upload_magic_default(request, monkeypatch):
 
 
 @pytest.fixture()
-def make_user():
+def make_user(request):
     """Insert a user directly into the (already-isolated) real DB and return
     (username, password, token-fetching helper info) — avoids depending on
-    init_default_admin()'s random-password-to-file flow for tests."""
+    init_default_admin()'s random-password-to-file flow for tests.
+
+    `role` 不指定 ⇒ 預設 admin；測試模組可設 `_MAKE_USER_DEFAULT_ROLE = "superadmin"` 改掉預設
+    （第42班：財務／出納不再有 admin 直通，舊題用「預設 admin」當財務操作者 ⇒ 改用 superadmin 全能帳號）。"""
     import db
     from helpers.auth import _hash_pw
 
-    def _make(username="tester", password="Test-Pass-123", role="admin", modules=None):
+    def _make(username="tester", password="Test-Pass-123", role=None, modules=None):
+        if role is None:
+            role = getattr(request.module, "_MAKE_USER_DEFAULT_ROLE", "admin")
         """`modules=None`（不指定）→ 用該角色的預設模組樣板。
 
         2026-09-14 改的：在此之前預設是**空陣列**，而當時 `require_any_module()`
@@ -804,6 +809,11 @@ def make_user():
         import json
         if modules is None:
             modules = _ROLE_DEFAULT_MODULES.get(role, [])
+        elif role not in ("superadmin", "finance") and {"cashier", "finance", "financial_view"} & set(modules):
+            # 第42班相容：財務／出納能力改由「財務」角色決定（勾選失效）。舊題用「一般帳號＋明確勾 cashier／finance／
+            # financial_view」表示「持有財務／出納的人」⇒ 在這裡換成 finance 角色。（只對明確傳入 modules 的帳號；
+            # 預設樣板不受影響。要驗「持有惰性勾選的 admin／sales 被擋」請用預設樣板的帳號，或直接寫在 test_finance_role。）
+            role = "finance"
         conn = db.get_db()
         try:
             conn.execute(

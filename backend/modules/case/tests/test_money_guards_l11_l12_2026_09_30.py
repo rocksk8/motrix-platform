@@ -55,7 +55,7 @@ def _audits():
 
 
 @pytest.mark.parametrize("role,mods,allowed", [("sales", [], False), ("viewer", [], False), ("sales", ["cashier"], True),
-                                                ("sales", ["finance"], True), ("admin", None, True), ("superadmin", [], True)])
+                                                ("sales", ["finance"], True), ("admin", None, False), ("finance", None, True), ("superadmin", [], True)])          # 第42班：admin 直通拿掉、財務角色通過
 def test_changing_an_existing_invoice_number_needs_permission(client, make_user, role, mods, allowed):
     """**反向控制**：拿掉 `_invoice_no_change_allowed` 檢查 ⇒ 不允許的角色那幾列紅。"""
     _seed("AB12345678")
@@ -103,8 +103,15 @@ def test_case_record_bulk_save_denied_for_a_plain_case_member(client, make_user)
 def test_case_record_bulk_save_path_has_the_same_rule(client, make_user):
     """整包存（案件管理財務 Tab 實際走的路徑）也一樣：非授權者更換已登錄號碼 ⇒ 403，什麼都沒寫。"""
     _seed("AB12345678")
-    u, p = make_user(username="mg_bulk", role="admin", modules=None)            # admin 是案件成員，可通過成員檢查
+    u, p = make_user(username="mg_bulk", role="finance", modules=None)            # 第42班：更換已登錄發票號碼＝財務角色（案件成員）
     ha = _login(client, u, p)
+    c = db.get_db()          # 整包存（舊格式）仍要案件成員 ⇒ 讓財務帳號當這張單的業務（分段格式的收款分段另有「財務可寫所有案件」的路徑）
+    try:
+        uid = c.execute("SELECT id FROM users WHERE username=?", (u,)).fetchone()["id"]
+        c.execute("UPDATE quotations SET sales_person_id=?, sales_person=? WHERE quote_no=?", (uid, u, Q))
+        c.commit()
+    finally:
+        c.close()
     item = {"id": "it1", "type": "訂金款", "pct": 30, "amount": 30000, "received": False, "invoiceNo": "CD87654321"}
     ok = client.patch("/api/quotations/%s/case-record" % Q, headers=ha, json={"case_record": {"payment": {"items": [item]}}})
     assert ok.status_code == 200, ok.text

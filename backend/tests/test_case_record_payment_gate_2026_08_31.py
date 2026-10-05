@@ -12,6 +12,9 @@ import json
 pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _login(client, username, password):
     r = client.post("/api/auth/login", json={"username": username, "password": password})
     assert r.status_code == 200, r.text
@@ -106,7 +109,7 @@ def test_non_admin_can_add_and_remove_payment_installments(client, make_user):
     「標記已收款」是完全不同的動作）。比對邏輯如果誤用陣列索引位置而不是
     item['id'] 配對新舊品項，光是新增一期款項（陣列筆數變動）就會被整支
     擋下 403，變成非 admin/出納完全不能編輯款項明細——不是這次要的效果。"""
-    username, password = make_user(role="sales")
+    username, password = make_user(role="finance")          # 第42班：款項期別的新增／刪除＝財務角色（業務會被 403：PaymentStructureChange）
     token = _login(client, username, password)
     _make_quotation("MQ-CRGATE-005")
 
@@ -147,7 +150,7 @@ def test_non_admin_cannot_add_payment_item_already_marked_received(client, make_
 
 
 def test_admin_can_save_payment_received_via_case_record(client, make_user):
-    username, password = make_user(role="admin")
+    username, password = make_user(role="superadmin")
     token = _login(client, username, password)
     _make_quotation("MQ-CRGATE-003")
 

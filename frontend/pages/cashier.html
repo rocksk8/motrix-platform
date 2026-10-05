@@ -871,7 +871,7 @@
             <div x-show="t100Preview" x-cloak style="margin-bottom:14px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
             <div class="cm-section-title" style="margin:0;font-size:13px">待確認事件明細</div>
-            <button class="btn-primary btn-sm" @click="confirmT100Imported()" :disabled="t100Confirming || !t100Preview || !t100Preview.count" x-text="t100Confirming ? '處理中…' : '確認已匯入 T100（排除下次匯出）'"></button>
+            <button class="btn-primary btn-sm" x-show="_role() === 'superadmin'" @click="confirmT100Imported()" :disabled="t100Confirming || !t100Preview || !t100Preview.count" x-text="t100Confirming ? '處理中…' : '確認已匯入 T100（排除下次匯出）'"></button>
             </div>
             <div class="alert-bar" x-show="t100Preview && t100Preview.notice" x-text="t100Preview ? t100Preview.notice : ''"></div>
             <table class="data-table" x-show="t100Preview && t100Preview.count">
@@ -927,7 +927,7 @@
             <td x-text="c.confirmedBy"></td>
             <td class="mono" style="font-size:11px" x-text="(c.confirmedAt || '').replace('T', ' ').slice(0, 16)"></td>
             <td class="r">
-            <button class="btn-ghost btn-sm" @click="unconfirmT100(c)"
+            <button class="btn-ghost btn-sm" x-show="_role() === 'superadmin'" @click="unconfirmT100(c)"
             :disabled="t100Unconfirming === c.sourceType + ':' + c.sourceKey"
             x-text="t100Unconfirming === c.sourceType + ':' + c.sourceKey ? '撤銷中…' : '反確認'"></button>
             </td>

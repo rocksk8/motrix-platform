@@ -40,8 +40,8 @@ def _x(sql, args=()):
 @pytest.fixture
 def world(client, make_user):
     H, ids = {}, {}
-    for u, role, mods in (("mk_app", "sales", ["expense_forms"]), ("mk_col", "sales", None), ("mk_fv", "engineer", ["financial_view"]),
-                          ("mk_fin", "engineer", ["finance", "financial_view"]), ("mk_cash", "engineer", ["cashier"]), ("mk_apr", "engineer", ["financial_view"])):
+    for u, role, mods in (("mk_app", "sales", ["expense_forms"]), ("mk_col", "sales", None), ("mk_fv", "engineer", None),            # 第42班：「財務檢視偏好者」（有 financial_view 勾選的一般員工）已不存在 ⇒ 一般員工，只看狀態
+                          ("mk_fin", "finance", None), ("mk_cash", "finance", None), ("mk_apr", "engineer", None)):
         name, pw = make_user(username=u, role=role, modules=mods)
         H[u] = _login(client, name, pw)
         ids[u] = _q("SELECT id FROM users WHERE username=?", (u,))[0]["id"]
@@ -84,11 +84,9 @@ def test_case_list_masks_amounts_for_everyone_but_the_four_groups(client, world)
 
 def test_finance_overview_masks_kind_rows_for_non_viewers(client, world):
     H, eid = world
+    # 第42班：財務總覽（can_see_financial）只有財務角色／superadmin；一般員工整個 403（不再有「看得到總覽卻遮蔽單列」的中間狀態）
     r = client.get("/api/quotations/%s/finance-summary" % NO, headers=H["mk_fv"])
-    assert r.status_code == 200, r.text
-    assert str(AMOUNT) not in r.text
-    items = [i for i in r.json()["settlementExtras"]["items"] if i["id"] == eid]
-    assert items and items[0]["masked"] is True and items[0]["totalCost"] is None
+    assert r.status_code == 403 and str(AMOUNT) not in r.text
     r = client.get("/api/quotations/%s/finance-summary" % NO, headers=H["mk_fin"])
     (it,) = [i for i in r.json()["settlementExtras"]["items"] if i["id"] == eid]
     assert it["totalCost"] == AMOUNT
@@ -114,7 +112,9 @@ def test_queue_and_payables_do_not_leak(client, world):
 def test_legacy_rows_keep_the_old_rule_and_caseless_rows_stay_hidden(client, world, seed_extra_expense):
     H, _ = world
     lid = seed_extra_expense(NO, total_cost=777, category="運費", description="舊列", expense_date="2026-09-10")
-    d = _list(client, H["mk_col"]).json()                      # sales 本來就看得到案件財務：舊列照舊看得到金額（行為不變）
+    d = _list(client, H["mk_col"]).json()                      # 第42班：sales 不再看得到案件財務金額（財務專屬）⇒ 舊列只看狀態
+    assert lid not in [i["id"] for i in d["items"]]               # 舊列（kind=''）對看不到財務金額的人整列不回
+    d = _list(client, H["mk_fin"]).json()                      # 財務角色：舊列看得到金額
     (old,) = [i for i in d["items"] if i["id"] == lid]
     assert old["totalCost"] == 777 and not old.get("masked")
     cl = client.post("/api/quotations/-/extra-expenses", headers=H["mk_app"], json={"kind": "petty_cash", "lines": [{"amount": 500}]})

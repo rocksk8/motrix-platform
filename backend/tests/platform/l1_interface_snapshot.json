@@ -245,7 +245,8 @@
    "deny_case": "def(conn, quote_no, user, reason)",
    "guard_case_access": "def(conn, quote_no, user, *, allow_approver=…, allow_module=…)",
    "is_document_approver": "def(data_json, user, conn)",
-   "require_case": "def(user, row, quote_no, *, scope=…)"
+   "require_case": "def(user, row, quote_no, *, scope=…)",
+   "require_case_money": "def(user, row, quote_no, *, scope=…)"
   },
   "helper:case_roles": {
    "ROLE_KEYS": "const",
@@ -645,11 +646,13 @@
    "PaymentStructureChange": "class",
    "QUOTATION_MONEY_COLS": "const",
    "QUOTE_MONEY_KEYS": "const",
-   "mask_case_record": "def(cr)",
-   "mask_quotation_data": "def(data)",
+   "mask_case_record": "def(cr, keep_orders=…)",
+   "mask_quotation_data": "def(data, keep_orders=…, keep_quote=…)",
    "mask_row": "def(row, cols=…)",
+   "material_money_visible": "def(user)",
    "money_visible": "def(user)",
-   "restore_case_record": "def(new_cr, db_cr)",
+   "quote_money_visible": "def(user)",
+   "restore_case_record": "def(new_cr, db_cr, keep_orders=…)",
    "strip_history_reasons": "def(history)"
   },
   "helper:formula": {

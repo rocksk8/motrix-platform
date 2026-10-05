@@ -25,6 +25,9 @@ sys.path.insert(0, str(REPO / "tools" / "platform"))
 import dep_scan  # noqa: E402
 
 #: M01 ④(c)（主持裁示）：題目本身就是驗 M01（案件）的行為 ⇒ M01 不在的安裝包略過；理由逐題寫在 reason
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def needs_case(reason):
     return pytest.mark.skipif(not source_tree.module_installed("modules/case/"),
                               reason="需要案件模組（M01）：" + reason)
@@ -203,6 +206,7 @@ def _hdr(client, make_user, name, role, modules):
 
 
 @needs_case('驗 M01 案件附件依案件可見性')
+@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
 def test_voucher_users_only_see_attachments_of_cases_they_can_read(client, make_user):
     """同樣有傳票權限（finance）：看得到案件的人（案件業務）列得出、帶得進；看不到的人列不出、預覽不到、帶不進（403）。
     （AT-M1c 前「看得到」用 case_manage 充當；回簽檔改用案件頁的規則後 case_manage 不再放行，改用擁有者。）"""
@@ -280,6 +284,7 @@ def _seed_extra_expense_file(quote_no):
 
 
 @needs_case('驗 M01 額外支出附件的可見範圍＝M01 額外支出頁')
+@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
 def test_extra_expense_attachments_are_not_wider_than_the_extra_expense_pages(client, make_user):
     """D 的探針（AT-M1b）：非擁有者、持有 case_manage＋finance 的業務 ⇒ 額外支出自己的端點 403，
     經傳票也列不出、預覽不到、帶不進那一筆附件（原本：自己端點 403、經傳票 200 且列出）。"""
@@ -317,6 +322,7 @@ def test_extra_expense_attachments_are_not_wider_than_the_extra_expense_pages(cl
 
 
 @needs_case('前提是 M05 的 /api/invoice-vouchers 與 L1 案件層守門放行；M01 不在時兩者依 CA-M1 條件 3 一律 404（fail-closed，由 test_case_access_l1 驗）')
+@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
 def test_invoice_voucher_attachments_keep_the_amount_layer(client, make_user):
     """開票申請自己的規則多一道金額層（AT-M1b）：看得到案件、但看不到金額的人（engineer，case_manage＋finance）
     自己的端點 403 ⇒ 提供者不列、`files()` 拒絕（D 的 V3：拿掉 `files()` 的檢查要轉紅）；
@@ -386,6 +392,7 @@ def _pick(client, h, quote_no):
 
 
 @needs_case('驗 M01 報價單附件的可見範圍＝M01 案件頁')
+@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
 def test_quotation_attachments_are_not_wider_than_the_case_page(client, make_user):
     """寬（D 實測外洩）：case_manage 非擁有者 ⇒ 案件頁 403 ⇒ 經傳票不列回簽檔、預覽不到、帶入 403。"""
     if not source_tree.module_installed("modules/accounting/"):
@@ -467,6 +474,7 @@ def test_nothing_hidden_means_hidden_is_empty(client, make_user):
 
 
 @needs_case('source_type=case 需要 M01 的 attachments.for_document 提供者')
+@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
 def test_hidden_notice_carries_no_identifier_of_the_unseen_document(client, make_user):
     """反向控制：看不到的單據帶著一眼認得出來的單號、檔名、路徑、金額 ⇒ hidden 只剩類別與個數，這些字串一個都不出現；
     正對照：同一個回應的 files（看得到的那些）照常帶檔名，證明掃描的字串確實存在於資料裡。"""
@@ -516,6 +524,7 @@ def _add_case_update_file(quote_no):
 
 
 @needs_case('source_type=case 需要 M01 的 attachments.for_document 提供者')
+@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
 def test_partially_visible_invoice_vouchers_list_the_visible_one(client, make_user):
     """D 必修 AT5-M1：同一案件兩張開票申請，使用者（看不到金額）只是其中一張的簽核人 ⇒
     那一張照常列出，另一張算進 hidden（把看得到的那幾張也丟掉要紅）。"""
@@ -548,6 +557,7 @@ def test_partially_visible_invoice_vouchers_list_the_visible_one(client, make_us
 
 
 @needs_case('打 /api/quotations/{q}（M01 端點）＋ source_type=case 的 attachments.for_document 提供者')
+@pytest.mark.skip(reason="第42班（使用者裁示）：傳票／出納／財務金額能力只屬財務角色與 superadmin，且財務角色不受案件擁有者限制；本題的前提（持有財務勾選的一般員工受案件範圍限制）不再成立")
 def test_a_wholly_unseen_case_answers_like_a_missing_one(client, make_user):
     """主持裁示（D 的觀察）：整個案件都看不到 ⇒ 照「不存在」回（404，逐字相同），不回「N 個附件看不到」
     （否則可以探知案件編號是否存在）；summary-sources 的說明也逐字相同。反向控制：同一個人對看得到一部分的案件照常 200＋hidden。"""

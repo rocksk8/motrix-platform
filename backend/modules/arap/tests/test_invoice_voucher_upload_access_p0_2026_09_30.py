@@ -20,9 +20,9 @@ def _h(t):
 def test_invoice_voucher_files_follow_voucher_read_rule(client, make_user):
     import db
     toks = {}
-    # 角色 sales 本身就看得到金額（can_see_financial）⇒ 「沒有財務檢視」的兩個人用 engineer
-    for name, role, mods in (("v0_owner", "sales", []), ("v0_nofin", "engineer", []),
-                             ("v0_out", "sales", ["work_log"]), ("v0_appr", "engineer", [])):
+    # 第42班：看得到金額（can_see_financial）＝財務角色 ⇒ 「沒有財務檢視」的兩個人用 engineer
+    for name, role, mods in (("v0_owner", "finance", []), ("v0_nofin", "engineer", []),
+                             ("v0_out", "finance", ["work_log"]), ("v0_appr", "engineer", [])):
         u, p = make_user(username=name, role=role, modules=mods)
         toks[name] = _login(client, u, p)
     c = db.get_db()

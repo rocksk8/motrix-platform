@@ -55,11 +55,12 @@ GOLDEN_MODULES = [
     ("file_center", "檔案中心（全系統上傳檔案搜尋）", "系統"),      # 2026-10-01 附件目錄 P3 新增（末尾追加，既有順序不變）
 ]
 
-GOLDEN_ROLE_TEMPLATES = {
+GOLDEN_ROLE_TEMPLATES = {          # 第42班：admin／sales 不再含 finance／financial_view／cashier；新增 finance 角色樣板
     "superadmin": ["dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "settings", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "cashier", "netplan", "audit_log", "shipping_export_log", "module_versions"],
-    "admin": ["dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "cashier"],
-    "sales": ["dashboard", "quotation", "case_manage", "customer", "financial_view", "project_approve_biz", "work_log", "daily_task", "map"],
+    "admin": ["dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "reports", "project_approve_eng", "project_approve_biz", "work_log", "daily_task"],
+    "sales": ["dashboard", "quotation", "case_manage", "customer", "project_approve_biz", "work_log", "daily_task", "map"],
     "engineer": ["dashboard", "case_manage", "project_approve_eng", "equipment", "work_log", "daily_task"],
+    "finance": ["dashboard", "quotation", "case_manage", "customer", "reports", "finance", "financial_view", "cashier", "work_log", "daily_task"],
     "viewer": ["dashboard"],
 }
 

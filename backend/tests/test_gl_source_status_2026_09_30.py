@@ -12,6 +12,9 @@ from helpers import gl_status as GS
 from modules.accounting.ledger import source_status as SS
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _event(conn, stype, key, status, code="E03", voucher_id=None, date="2200-02-10"):
     conn.execute("INSERT INTO gl_source_events (source_type, source_key, event_code, rev, event_date, status, voucher_id)"
                  " VALUES (?,?,?,?,?,?,?)", (stype, key, code, 1, date, status, voucher_id))
@@ -62,7 +65,7 @@ def _seed_received(conn, qno="MQ-GW-001"):
 
 
 def _admin(client, make_user):
-    u, p = make_user(username="gw_admin", role="admin", modules=None)
+    u, p = make_user(username="gw_admin", role="superadmin", modules=None)
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     return {"Authorization": "Bearer " + r.json()["token"]}
 

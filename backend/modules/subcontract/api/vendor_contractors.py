@@ -19,6 +19,7 @@ from helpers.dates import normalize_date  # `AC2`（L1）
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 from modules.subcontract.api.contractors import _stamp_passbook
+from helpers.auth import has_finance_access  # 第42班（Q5）
 
 router = APIRouter()
 
@@ -28,8 +29,25 @@ def _require_admin(user: dict):
     安全審查修正）：派發資料的金額/稅率等欄位後續會被凍結進正式的承攬商匯款憑證
     快照，建立/修改不該只要求登入，之前完全沒有角色門檻，任何登入使用者都能
     竄改。查詢類端點（list/get）維持唯讀不擋，跟其他模組一致。"""
-    if user["role"] not in ("superadmin", "admin"):
+    if user["role"] not in ("superadmin", "admin", "finance"):          # 第42班：財務角色可改派發金額／發票日（Q5），所以也要過這道門
         raise HTTPException(403, "需要管理員權限")
+
+
+def _require_finance(user: dict):
+    """第42班（Q5）：派發的發票日、發票附件與「含金額欄位的修改」屬財務（發票日決定應付認列、金額會凍結進匯款憑證）；
+    派發建立／狀態／驗收仍是一般管理（`_require_admin`）。"""
+    if not has_finance_access(user):
+        raise HTTPException(403, "需要財務角色權限")
+
+
+def _amounts(lst) -> list:
+    out = []
+    for it in lst or []:
+        try:
+            out.append(round(float((it or {}).get("amount", 0) or 0), 2))
+        except (TypeError, ValueError, AttributeError):
+            out.append(None)
+    return out
 
 
 _STATUS_LABELS = {
@@ -619,6 +637,19 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
     if not existing:
         conn.close()
         raise HTTPException(404, "派發紀錄不存在")
+    if not has_finance_access(user):          # 第42班（Q5）：含金額欄位（品項／人員金額、稅率）與發票日的修改 ⇒ 財務角色；其餘欄位（承攬商、範圍、備註…）維持一般管理
+        def _jl(v):
+            try:
+                return json.loads(v or "[]")
+            except Exception:
+                return []
+        _new_inv = body.invoice_date
+        if (_amounts(items) != _amounts(_jl(existing["items_json"]))
+                or _amounts(personnel) != _amounts(_jl(existing["personnel_json"]))
+                or float(body.tax_rate if body.tax_rate is not None else 0.05) != float(existing["tax_rate"] if existing["tax_rate"] is not None else 0.05)
+                or (_new_inv is not None and (_new_inv or "") != (existing["invoice_date"] or ""))):
+            conn.close()
+            raise HTTPException(403, "修改派發的金額、稅率或發票日需要財務角色")
     # 31-A：狀態不能經由編輯改（只有操作按鈕走 dispatch_flow.set_status）；送審中（任一段）整筆不可編輯
     if body.status and body.status != (existing["status"] or "draft"):
         conn.close()
@@ -1016,7 +1047,7 @@ async def upload_dispatch_invoice_files(did: int, files: List[UploadFile] = File
     snapshot_json（見 contractor_vouchers.py::create_contractor_voucher）。"""
     user = _require_user(authorization)
     require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
-    _require_admin(user)
+    _require_finance(user)
     conn = get_db()
     try:
         row = conn.execute(
@@ -1048,7 +1079,7 @@ async def upload_dispatch_invoice_files(did: int, files: List[UploadFile] = File
 def delete_dispatch_invoice_file(did: int, file_id: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
-    _require_admin(user)
+    _require_finance(user)
     conn = get_db()
     try:
         row = conn.execute(
@@ -1082,7 +1113,7 @@ def set_dispatch_invoice_date(did: int, body: dict = Body(...), authorization: s
     """
     user = _require_user(authorization)
     require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
-    _require_admin(user)
+    _require_finance(user)
     inv = normalize_date((body or {}).get("invoiceDate"), "發票日期")
     conn = get_db()
     try:

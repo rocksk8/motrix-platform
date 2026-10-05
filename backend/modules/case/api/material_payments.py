@@ -16,7 +16,8 @@ from core.txn import begin_write
 from db import get_db
 from helpers import _audit, _notify, _require_user, _tok, notify_org_chain_notice
 from helpers.approval_queue import approval_raw_of as _approval_raw_of, tier_fields as _queue_tier_fields
-from helpers.case_access import require_case
+from helpers.case_access import require_case, require_case_money
+from helpers.auth import has_finance_access
 from helpers.financial_mask import money_visible
 from modules.case import material_approval as MA
 from modules.case import material_guard as MG
@@ -53,10 +54,9 @@ def _order(q, item_id: str) -> dict:
 
 
 def _need_edit(user):
-    if not money_visible(user):
-        raise HTTPException(403, "此帳號沒有財務檢視權限，不可操作材料申請匯款申請")
-    if not MG.can_edit_orders(user):
-        raise HTTPException(403, "只有管理員或專案經理可以操作材料申請匯款申請")
+    # 第42班：材料申請的匯款申請是匯款類財務動作 ⇒ 財務角色／superadmin（admin 直通拿掉）
+    if not has_finance_access(user):
+        raise HTTPException(403, "只有財務角色可以操作材料申請匯款申請")
 
 
 def _mask(n) -> str:
@@ -125,7 +125,7 @@ def get_payee_privacy_ack(pid: int, authorization: str = Header(None)):
     conn = get_db()
     try:
         row, q = _row_and_case(conn, pid)
-        require_case(user, q, row["quote_no"])
+        require_case_money(user, q, row["quote_no"])
         if not money_visible(user):
             raise HTTPException(403, "此帳號沒有財務檢視權限")
     finally:
@@ -140,7 +140,7 @@ def ack_payee_privacy_notice(pid: int, authorization: str = Header(None)):
     conn = get_db()
     try:
         row, q = _row_and_case(conn, pid)
-        require_case(user, q, row["quote_no"])
+        require_case_money(user, q, row["quote_no"])
         _need_edit(user)
     finally:
         conn.close()
@@ -161,7 +161,7 @@ def list_payments(quote_no: str, authorization: str = Header(None)):
     conn = get_db()
     try:
         q = _load_case(conn, quote_no)
-        require_case(user, q, quote_no)
+        require_case_money(user, q, quote_no)
         if not money_visible(user):
             return {"quoteNo": quote_no, "moneyMasked": True, "orders": {}}
         out = {}
@@ -177,8 +177,8 @@ def list_payments(quote_no: str, authorization: str = Header(None)):
 def supplier_picker(authorization: str = Header(None)):
     """供應商選單（只回 id／code／name；`GET /api/suppliers` 對非 admin 回空，不放寬它）。需能編輯叫料（admin 以上或專案經理）。"""
     user = _require_user(authorization)
-    if not MG.can_edit_orders(user):
-        raise HTTPException(403, "只有管理員或專案經理可以選擇供應商")
+    if not (MG.can_edit_orders(user) or has_finance_access(user)):          # 第42班：材料申請建立（admin）與匯款申請（財務）都會用到
+        raise HTTPException(403, "只有管理員、專案經理或財務角色可以選擇供應商")
     conn = get_db()
     try:
         return {"suppliers": [{"id": r["id"], "code": r["code"] or "", "name": r["name"] or ""}
@@ -219,7 +219,7 @@ def create_payment(quote_no: str, item_id: str, body: dict = Body(default={}), a
     try:
         begin_write(conn)
         q = _load_case(conn, quote_no)
-        require_case(user, q, quote_no)
+        require_case_money(user, q, quote_no)
         _need_edit(user)
         if (body or {}).get("payeeNoticeAcked") is not True:                                       # 個資告知（使用者裁示 A，2026-10-02）：必須確認已告知收款人
             raise HTTPException(400, "請先確認已向收款人（供應商）說明個資蒐集目的並完成告知（勾選「已告知收款人」）")
@@ -266,7 +266,7 @@ def update_payment(pid: int, body: dict = Body(default={}), authorization: str =
     try:
         begin_write(conn)
         row, q = _row_and_case(conn, pid)
-        require_case(user, q, row["quote_no"])
+        require_case_money(user, q, row["quote_no"])
         _need_edit(user)
         order = _order(q, row["item_id"])
         try:
@@ -288,7 +288,7 @@ def submit_payment(pid: int, authorization: str = Header(None)):
     try:
         begin_write(conn)
         row, q = _row_and_case(conn, pid)
-        require_case(user, q, row["quote_no"])
+        require_case_money(user, q, row["quote_no"])
         _need_edit(user)
         if not _payee_ack(row["doc_code"]):                                                        # fail-closed：沒有（或讀不到）收款人個資告知紀錄不能送審
             raise HTTPException(409, "這張匯款申請沒有收款人個資告知紀錄，請先補記告知後再送審")
@@ -376,7 +376,7 @@ def withdraw_payment(pid: int, authorization: str = Header(None)):
     try:
         begin_write(conn)
         row, q = _row_and_case(conn, pid)
-        require_case(user, q, row["quote_no"])
+        require_case_money(user, q, row["quote_no"])
         try:
             MP.withdraw(conn, pid, user)
         except MP.MaterialPaymentError as e:
@@ -396,7 +396,7 @@ def void_payment(pid: int, body: dict = Body(default={}), authorization: str = H
     try:
         begin_write(conn)
         row, q = _row_and_case(conn, pid)
-        require_case(user, q, row["quote_no"])
+        require_case_money(user, q, row["quote_no"])
         try:
             MP.void(conn, pid, user, (body or {}).get("reason"))
         except MP.MaterialPaymentError as e:

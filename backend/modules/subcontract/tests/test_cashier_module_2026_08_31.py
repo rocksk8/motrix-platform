@@ -93,7 +93,7 @@ def test_payable_queue_requires_admin_or_cashier(client, make_user):
     r = client.get("/api/cashier/payable-queue", headers=_auth(viewer_token))
     assert r.status_code == 403, r.text
 
-    admin_username, admin_password = make_user(username="cash_admin", role="admin")
+    admin_username, admin_password = make_user(username="cash_admin", role="finance")
     admin_token = _login(client, admin_username, admin_password)
     r2 = client.get("/api/cashier/payable-queue", headers=_auth(admin_token))
     assert r2.status_code == 200, r2.text
@@ -133,6 +133,7 @@ def test_payable_queue_only_approved_unpaid_sorted_by_payable_date(client, make_
 
 @needs_m01
 @_NEEDS_ARAP
+@pytest.mark.skip(reason="第42班（財務與出納合併）：「財務只能看、不能執行」的分工不再存在；財務角色可查看也可執行")
 def test_finance_module_can_view_but_not_execute(client, make_user):
     """v2：finance 模組使用者沿用 receivables.html 原本的查詢權限（可看
     payable/receivable/execution-history），但標記動作走 admin+/cashier 專用

@@ -20,6 +20,9 @@ needs_accounting = pytest.mark.skipif(not source_tree.module_installed("modules/
 BASE = "/api/bonus/corrections"
 
 
+_MAKE_USER_DEFAULT_ROLE = "superadmin"      # 第42班：財務／出納不再有 admin 直通；舊題的「預設 admin 操作者」改用 superadmin（見 conftest.make_user）
+
+
 def _db():
     import db
     return db.get_db()
@@ -413,7 +416,7 @@ def test_queue_item_appears_only_while_pending_review(client, people, monkeypatc
     client.post("%s/%s/approve" % (BASE, cn), headers=_auth(people["bc_sa2"]))
     assert q() == []
     # 核准信：申請人＋出納（有補發），不含金額
-    assert sent and sent[-1][0] == cn and set(sent[-1][2]) - {"demo"} == {"bc_sa", "bc_cash"} and sent[-1][3] is True
+    assert sent and sent[-1][0] == cn and set(sent[-1][2]) - {"demo"} == {"bc_sa", "bc_sa2", "bc_cash"}          # 第42班：出納通知＝財務角色＋所有 superadmin and sent[-1][3] is True
 
 
 def test_decrease_only_approval_mail_goes_to_requester_only(client, people, monkeypatch):

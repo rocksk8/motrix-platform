@@ -496,6 +496,14 @@ def _require_t100_admin(authorization: str) -> dict:
     return u
 
 
+def _require_t100_superadmin(authorization: str) -> dict:
+    """T100 確認／取消確認（寫入總帳狀態）：僅 superadmin（第42班，預設 Q7）。匯出預覽／下載仍是財務角色。"""
+    u = _require_user(authorization)
+    if u["role"] != "superadmin":
+        raise HTTPException(403, "T100 確認／取消確認僅超級管理員可執行")
+    return u
+
+
 def _validate_range(start: str, end: str) -> None:
     if not start or not end or start > end:
         raise HTTPException(400, "start/end 日期區間無效")
@@ -560,7 +568,7 @@ def t100_export_confirm(body: T100ConfirmBody, authorization: str = Header(None)
     """財務確認「這個區間內尚未標記的事件已經實際匯入 T100」——標記後這些
     事件會從之後所有匯出/預覽自動排除，避免重複匯入。冪等：已標記過的事件
     這次呼叫不會出現在候選清單裡（_collect_t100_events 預設排除已確認）。"""
-    u = _require_t100_admin(authorization)
+    u = _require_t100_superadmin(authorization)
     _validate_range(body.start, body.end)
     events = _collect_t100_events(body.start, body.end)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -620,7 +628,7 @@ class T100UnconfirmBody(BaseModel):
 def t100_export_unconfirm(body: T100UnconfirmBody, authorization: str = Header(None)):
     """撤銷單一事件的「已匯入」標記（標記錯誤時的救援手段），撤銷後該事件
     會在下次涵蓋其日期的匯出/預覽重新出現。"""
-    u = _require_t100_admin(authorization)
+    u = _require_t100_superadmin(authorization)
     conn = get_db()
     try:
         cur = conn.execute(

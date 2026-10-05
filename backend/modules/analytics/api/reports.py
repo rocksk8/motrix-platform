@@ -29,7 +29,7 @@ from helpers import (
 from helpers.tax_calc import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts   # T：L1
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
-from helpers.financial_mask import money_visible
+from helpers.financial_mask import money_visible, quote_money_visible
 from helpers.legal_params import round_half_up as _round_half_up   # 原 receivables.round_half_up_invoice（同一算法）
 from core import registry as _registry
 
@@ -2482,7 +2482,7 @@ def report_excel(
     # 先前完全一致。畫面上期別切在「季報」時前端才會送這個參數。
     data.update(_build_income_expense_scopes(
         int(d0[:4]), expense_month or date.today().strftime("%Y-%m"), department_id, quarter,
-        normalize_basis(basis), money_visible(u)
+        normalize_basis(basis), quote_money_visible(u)
     ))
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     xlsx   = _build_excel(data, label, gen_at)
@@ -2518,7 +2518,7 @@ def report_pdf(
     # 先前完全一致。畫面上期別切在「季報」時前端才會送這個參數。
     data.update(_build_income_expense_scopes(
         int(d0[:4]), expense_month or date.today().strftime("%Y-%m"), department_id, quarter,
-        normalize_basis(basis), money_visible(u)
+        normalize_basis(basis), quote_money_visible(u)
     ))
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     try:
@@ -3711,7 +3711,7 @@ def report_expenses_monthly(year: int = Query(None), month: str = Query(None),
     year  = year or today.year
     month = month or today.strftime("%Y-%m")
     return _build_income_expense_scopes(year, month, department_id, quarter,
-                                        normalize_basis(basis), money_visible(u))
+                                        normalize_basis(basis), quote_money_visible(u))
 
 
 def _collect_receivable_items(department_id: Optional[int] = None) -> list:

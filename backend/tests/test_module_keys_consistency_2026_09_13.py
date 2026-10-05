@@ -37,6 +37,9 @@ AUTH_PY = os.path.join(ROOT, "backend", "helpers", "auth.py")
 # 目錄裡有、但刻意沒有任何地方讀的 key：{key: 原因}
 # 空的就是好事——每一筆都代表使用者勾得到一個不會發生任何事情的核取方塊。
 UNREAD_BY_DESIGN = {
+    # 第42班：財務三鍵（cashier／finance／financial_view）改由角色推導（helpers.auth.user_has_module），勾選失效、資料保留；
+    # financial_view 目前沒有任何地方以字面讀它，保留在目錄讓既有帳號的惰性勾選仍可見（users.html 灰顯）。
+    "financial_view": "財務金額可視：由財務角色推導（惰性勾選）",
     # A2-0 #13 預留：key 與目錄先進底層（一次），讀它的端點由 A2-1（W2，modules/case 額外支出的無案件新增）同一班上；
     # 那支一讀它，下面的 test_unread_by_design_entries_are_really_unread 會紅，逼著把這一筆刪掉。
 }

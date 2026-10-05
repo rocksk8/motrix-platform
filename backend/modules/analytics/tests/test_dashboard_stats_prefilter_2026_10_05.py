@@ -822,7 +822,17 @@ def test_output_is_identical_to_the_pre_change_golden_for_mixed_rows_roles_and_d
     want = json.loads(GOLDEN)
     assert set(got) == set(want)
     for k in sorted(want):
-        assert got[k] == want[k], k
+        assert got[k] == _without_finance_cards(k, want[k]), k
+
+
+def _without_finance_cards(key, golden):
+    """第42班：GOLDEN 是修整前（admin 有財務卡片）的輸出；現在財務卡片只給 superadmin 與財務角色 ⇒ admin2 的卡片欄位為空，其餘不變。"""
+    if not key.startswith("admin2|"):
+        return golden
+    w = dict(golden)
+    w["paymentItems"], w["marginTop5"], w["marginComparison"], w["settledSummary"] = [], [], [], {}
+    w["receivableSummary"] = {"total": 0, "received": 0, "unreceived": 0, "feeTotal": 0, "netReceived": 0}
+    return w
 
 
 def test_each_case_record_is_parsed_once_per_request(client, world, monkeypatch):

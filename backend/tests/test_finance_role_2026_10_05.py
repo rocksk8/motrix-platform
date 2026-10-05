@@ -61,10 +61,10 @@ def test_helper_bodies_keep_the_superadmin_passthrough():
     src = (BACKEND / "helpers" / "auth.py").read_text(encoding="utf-8")
     assert re.search(r'FINANCE_ROLES\s*=\s*\("superadmin"', src)
     body = src[src.index("def has_finance_access"):src.index("def has_cashier_access")]
-    assert "FINANCE_ROLES" in body and "admin" not in body.replace("superadmin", "")
+    assert 'return (user or {}).get("role") in FINANCE_ROLES' in body
 
 
-def test_finance_recipients(make_user):
+def test_finance_recipients(client, make_user):
     import db
     from helpers.auth import finance_usernames
     from helpers.email_notify import finance_recipient_emails
@@ -167,9 +167,9 @@ ADMIN_LITERAL_BASELINE = {
     "modules/arap/api/cashier.py": 0,
     "modules/accounting/api/accounting_export.py": 0,
     "modules/subcontract/api/remit_kinds.py": 0,
-    "modules/case/material_guard.py": 0,
+    "modules/case/material_guard.py": 1,    # can_edit_orders（Q6：叫料建立／送審／到貨確認維持 admin）
     "modules/case/material_payment.py": 0,
-    "helpers/financial_mask.py": 0,
+    "helpers/financial_mask.py": 2,          # quote_money_visible／material_money_visible（拆開、Q6：報價單層級與材料申請日常作業維持 admin）
 }
 
 
@@ -218,9 +218,11 @@ def test_impact_report_lists_who_loses_access_and_warns_without_finance_account(
     make_user("adm_a", role="admin")
     make_user("sales_b", role="sales")
     make_user("eng_c", role="engineer", modules=["dashboard"])
-    make_user("eng_flag", role="engineer", modules=["cashier"])
+    make_user("eng_flag", role="engineer", modules=["dashboard"])
     conn = db.get_db()
     try:
+        conn.execute("UPDATE users SET modules=? WHERE username='eng_flag'", (json.dumps(["dashboard", "cashier"]),))     # 惰性勾選（不經 make_user 的相容轉換）
+        conn.commit()
         rep = R.build_report(conn)
     finally:
         conn.close()
@@ -242,3 +244,14 @@ def test_report_script_is_read_only():
     src = (BACKEND / "tools" / "finance_role_impact_report.py").read_text(encoding="utf-8")
     assert not re.search(r"\b(INSERT|UPDATE|DELETE)\b\s", src.split('"""', 2)[2])
     assert "commit(" not in src
+
+
+def test_t100_confirm_and_unconfirm_are_superadmin_only():
+    """預設 Q7：匯出＝財務角色；confirm／unconfirm（寫入總帳狀態）＝僅 superadmin。"""
+    src = (BACKEND / "modules" / "accounting" / "api" / "accounting_export.py").read_text(encoding="utf-8")
+    for fn in ("t100_export_confirm", "t100_export_unconfirm"):
+        start = src.index("def %s(" % fn)
+        nxt = src.find("@router", start)
+        body = src[start:nxt if nxt != -1 else len(src)]
+        assert "_require_t100_superadmin(authorization)" in body, fn
+    assert 'u["role"] != "superadmin"' in src[src.index("def _require_t100_superadmin"):]
