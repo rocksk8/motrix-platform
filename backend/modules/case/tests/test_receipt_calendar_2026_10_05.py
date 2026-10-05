@@ -52,7 +52,7 @@ def test_received_logs_receipt_and_withdraws_due():
 def test_receipt_edit_updates_and_cancel_deletes_and_restores_due():
     rcv = _it(expectedReceiptDate="2031-06-01", received=True, receivedAt="2031-05-30", actualAmount=31000)
     assert _ev([rcv], [dict(rcv, receivedAt="2031-05-31")]) == [("upsert", "receipt_logged", "1")]
-    assert _ev([rcv], [dict(rcv, actualAmount=30000)]) == [("upsert", "receipt_logged", "1")]
+    assert _ev([rcv], [dict(rcv, actualAmount=30000)]) == [], "實收金額不在事件裡 ⇒ 不觸發（2026-10-05 起事件不含金額）"
     cancelled = _it(expectedReceiptDate="2031-06-01")
     assert sorted(_ev([rcv], [cancelled])) == [("delete", "receipt_logged", "1"), ("upsert", "receivable_due", "1")]
 
@@ -143,7 +143,7 @@ def test_case_record_save_creates_moves_and_removes_due_event(client, make_user,
     (ev,) = cal.events.values()
     assert ev["summary"] == "應收到期 — MQ-RCCAL-001（甲客戶）訂金款"
     assert ev["start"] == {"date": "2031-06-01"} and "預計收款日：2031-06-01" in ev["description"]
-    assert "31,500" in ev["description"] and "31,500" not in ev["summary"], "金額只在說明，不在標題"
+    assert not any(x in ev["summary"] + ev["description"] for x in ("31,500", "31500", "NT$")), "事件不含任何金額（標題與說明）"
     _save_case_record(client, h, [_it(expectedReceiptDate="2031-06-20")])          # 改日期 ⇒ 同一筆移動，不新增
     assert len(cal.events) == 1 and list(cal.events.values())[0]["start"] == {"date": "2031-06-20"}
     n = len(cal.calls)
@@ -168,8 +168,8 @@ def test_mark_payment_logs_receipt_and_deletes_due(client, make_user, monkeypatc
     assert rc["summary"] == "收款登錄 — MQ-RCCAL-001（甲客戶）訂金款"
     assert rc["start"] == {"date": "2031-05-30"}
     d = rc["description"]
-    assert "入帳帳戶：玉山帳戶" in d and "實收：NT$ 31,000" in d and "手續費：NT$ 500" in d and "應收：NT$ 31,500" in d
-    assert "31,000" not in rc["summary"]
+    assert "入帳帳戶：玉山帳戶" in d and "收款日：2031-05-30" in d
+    assert not any(x in rc["summary"] + d for x in ("31,000", "31000", "500", "31,500", "NT$", "實收", "應收", "手續費")), "事件不含任何金額"
     # 取消收款 ⇒ 收款事件刪、到期提醒（有預計日）回來
     r = client.patch(f"/api/quotations/{NO}/payment/0", headers=h, json={"received": False, "receivedAt": "", "itemId": 1})
     assert r.status_code == 200, r.text
@@ -268,3 +268,34 @@ def test_type_switch_off_after_creation_keeps_event_and_sends_nothing(client, ma
     _save_case_record(client, h, [_it(expectedReceiptDate="2031-06-09")])
     _save_case_record(client, h, [_it(received=True, receivedAt="2031-06-09")])
     assert len(cal.calls) == n and len(cal.events) == 1
+
+
+def test_label_and_account_change_refresh_the_event_but_amounts_do_not():
+    """事件內容＝日期／款項名稱／入帳帳戶（不含金額）：這些變了才產生 upsert；金額、百分比、備註變動不觸發（金額不在事件裡，不必同步）。"""
+    due = _it(expectedReceiptDate="2031-06-01")
+    assert _ev([due], [dict(due, type="尾款")]) == [("upsert", "receivable_due", "1")]
+    assert _ev([due], [dict(due, amount=40000, pct=50)]) == [], "金額不在事件內容裡"
+    rcv = _it(received=True, receivedAt="2031-05-30", actualAmount=31500, bankAccountName="甲帳戶")
+    assert _ev([rcv], [dict(rcv, type="尾款")]) == [("upsert", "receipt_logged", "1")]
+    assert _ev([rcv], [dict(rcv, bankAccountName="乙帳戶")]) == [("upsert", "receipt_logged", "1")]
+    for k, v in (("amount", 40000), ("actualAmount", 30000), ("feeAmount", 50), ("pct", 70), ("note", "只改備註")):
+        assert _ev([rcv], [dict(rcv, **{k: v})]) == [], k
+
+
+def test_new_types_describe_the_no_backfill_rule():
+    from helpers import google_calendar as gc
+    by = {t["code"]: t for t in gc.event_types()}
+    for c in ("receipt_logged", "receivable_due", "payable_due"):
+        assert "只對開啟後的變更生效" in by[c]["description"], c
+
+
+def test_received_flag_not_the_date_decides_receipt_state():
+    """突變守門（稽核 T41）：收款狀態看 `received` 旗標，不是 receivedAt 有沒有值。
+    取消收款（旗標關掉、receivedAt 還留著）⇒ 收款事件刪、有預計日就回到到期提醒；只有日期沒有旗標 ⇒ 不產生收款事件。"""
+    d = "2031-05-30"
+    old = [_it(received=True, receivedAt=d, expectedReceiptDate="2031-06-01")]
+    new = [_it(received=False, receivedAt=d, expectedReceiptDate="2031-06-01")]
+    assert sorted(_ev(old, new)) == [("delete", "receipt_logged", "1"), ("upsert", "receivable_due", "1")]
+    assert _ev(old, [_it(received=False, receivedAt=d)]) == [("delete", "receipt_logged", "1")]
+    assert _ev([_it()], [_it(received=False, receivedAt=d)]) == [], "只有 receivedAt、沒有 received ⇒ 沒有收款事件"
+    assert _ev([], [_it(received=False, receivedAt=d)]) == []

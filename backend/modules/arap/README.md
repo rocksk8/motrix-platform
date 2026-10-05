@@ -16,6 +16,7 @@
 ## 串接點
 
 - 提供：`receivables.income_items`、`receivables.tax_invoices`（見 `docs/platform/INTEGRATION-POINTS.md`，號碼由列車定）
+- 出納付款後（`pay` 端點）呼叫 L1 `push_event_delete_for_module("payable_due", "<來源>:<key>")` 收回行事曆「付款待辦」事件；只靠 IP-100 的（來源, key），不讀來源模組的表（2026-10-05）。
 - 取用：IP-14 `contractor_voucher.public`（M04：待付款、執行歷史、銀行對帳）、IP-8 `bonus.payouts`（M07：獎金待發放）
 - 對方不在時：M04 不在 ⇒ 待付款與銀行對帳 404 並明說；M07 不在 ⇒ 獎金區塊顯示原因
 

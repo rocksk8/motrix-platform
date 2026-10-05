@@ -3,10 +3,13 @@
 
 [單位] case:receipt_calendar    [層] L2（M01）    [穩定度] 實作
 [公開介面] events_for_change(old_items, new_items) → [(op, code, ident, item)]；push_after_commit(quote_no, old_items, new_items)
+[限制] 事件只在「款項期別有變動」的那次存檔才對齊：把事件種類**打開**之前就已存在的款項不會回補（要等該期別下一次變動）；
+       事件內容用到的欄位（收款日／入帳帳戶／款項名稱；到期＝預計日／款項名稱）改了才會更新說明。
+       客戶名稱、專案名稱等案件層欄位改了不會回頭更新既有事件。
 [不變式] ① 只在 commit 之後、背景執行緒推（INTEGRATION-POINTS IP-6「新事件的寫法」）；不在寫鎖內
         ② 事件以 (代碼, 案號::期別 id) 為唯一識別（L1 push_event_upsert／delete_for_module，與日期無關）：重複存檔不會重複建立，
            改日期＝移動同一筆，收款／取消收款／刪期別＝刪掉對應事件
-        ③ 標題不含金額；金額只在說明（同 invoice_voucher／payment_request 的先例）
+        ③ **事件不含任何金額**（使用者 2026-10-05 裁示：公司行事曆看得到的人不一定有財務金額可視）：標題與說明都只放案號、客戶、專案、款項名稱、日期、入帳帳戶、登錄人
         ④ 沒有 id 的舊期別不推（沒有穩定識別，不猜）
 [資料] caseRecord.payment.items[]：received／receivedAt／expectedReceiptDate／actualAmount／feeAmount／bankAccountName／type
 [寫入點] update_case_record（整包存）、mark_payment（出納標記收款）、半解鎖審核套用（case_record_update／payment_mark）
@@ -40,8 +43,18 @@ def _ident(it):
     return None if not isinstance(it, dict) or it.get("id") is None else str(it["id"])
 
 
+def _label(it):
+    return str(it.get("type") or it.get("label") or "")
+
+
 def _receipt_sig(it):
-    return (_ymd(it.get("receivedAt")), it.get("actualAmount"), it.get("feeAmount") or 0, it.get("bankAccountName") or "")
+    """事件內容會用到的欄位（任何一個變了都要更新事件說明）：收款日、入帳帳戶、款項名稱。**不含金額**——金額不進事件，金額變動不必同步。"""
+    return (_ymd(it.get("receivedAt")), it.get("bankAccountName") or "", _label(it))
+
+
+def _due_sig(it):
+    """到期提醒事件內容用到的欄位：預計收款日、款項名稱（不含金額）。"""
+    return (_ymd(it.get("expectedReceiptDate")), _label(it))
 
 
 def _is_receipt(it) -> bool:
@@ -65,7 +78,7 @@ def events_for_change(old_items, new_items) -> list:
         elif o is not None and _is_receipt(o):                      # 取消收款（或收款日被清掉）
             out.append(("delete", RECEIPT, ident, it))
         if _is_due(it):
-            if not _is_due(o) or _ymd(o.get("expectedReceiptDate")) != _ymd(it.get("expectedReceiptDate")):
+            if not _is_due(o) or _due_sig(o) != _due_sig(it):
                 out.append(("upsert", DUE, ident, it))
         elif o is not None and _is_due(o):                          # 已收款／清空預計日 ⇒ 到期提醒收回
             out.append(("delete", DUE, ident, it))
@@ -79,36 +92,20 @@ def events_for_change(old_items, new_items) -> list:
     return out
 
 
-def _money(v) -> str:
-    try:
-        return "NT$ {:,.0f}".format(float(v))
-    except (TypeError, ValueError):
-        return ""
-
-
-def _compose(code, quote_no, customer, project, it, receivable, actor=""):
+def _compose(code, quote_no, customer, project, it):
+    """⇒ (標題, 說明, 日期)。**不放任何金額**（見檔頭③）。"""
     label = it.get("type") or it.get("label") or "款項"
-    head = "案件：%s\n客戶：%s\n專案：%s\n款項：%s" % (quote_no, customer, project, label)
+    head = "\n".join(["案件：%s" % quote_no, "客戶：%s" % customer, "專案：%s" % project, "款項：%s" % label])
     if code == RECEIPT:
         day = _ymd(it.get("receivedAt"))
         lines = [head, "收款日：" + day]
         if it.get("bankAccountName"):
             lines.append("入帳帳戶：" + str(it["bankAccountName"]))
-        if receivable is not None:
-            actual = it.get("actualAmount")
-            fee = it.get("feeAmount") or 0
-            lines.append("應收：" + _money(receivable))
-            lines.append("實收：" + _money(actual if actual is not None else receivable - float(fee or 0)))
-            if fee:
-                lines.append("手續費：" + _money(fee))
-        if it.get("receivedBy") or actor:
-            lines.append("登錄人：" + str(it.get("receivedBy") or actor))
+        if it.get("receivedBy"):
+            lines.append("登錄人：" + str(it["receivedBy"]))
         return "收款登錄 — %s（%s）%s" % (quote_no, customer, label), "\n".join(lines), day
     day = _ymd(it.get("expectedReceiptDate"))
-    lines = [head, "預計收款日：" + day]
-    if receivable is not None:
-        lines.append("應收：" + _money(receivable))
-    return "應收到期 — %s（%s）%s" % (quote_no, customer, label), "\n".join(lines), day
+    return "應收到期 — %s（%s）%s" % (quote_no, customer, label), "\n".join([head, "預計收款日：" + day]), day
 
 
 def push_after_commit(quote_no, old_items, new_items) -> None:
@@ -117,35 +114,25 @@ def push_after_commit(quote_no, old_items, new_items) -> None:
     try:
         from db import get_db
         from helpers import push_event_upsert_for_module, push_event_delete_for_module
-        from modules.case.quotations import payment_item_amounts
         events = events_for_change(old_items, new_items)
         if not events:
             return
         customer = project = ""
-        total = pretax = None
         if any(op == "upsert" for op, *_ in events):
             conn = get_db()
             try:
-                r = conn.execute("SELECT customer_name, project_name, total, pretax FROM quotations WHERE quote_no=?",
+                r = conn.execute("SELECT customer_name, project_name FROM quotations WHERE quote_no=?",
                                  (quote_no,)).fetchone()
             finally:
                 conn.close()
             if r:
-                customer, project, total, pretax = r["customer_name"] or "", r["project_name"] or "", r["total"], r["pretax"]
-        amounts = {}
-        try:
-            items = list(new_items or [])
-            for it, amt in zip(items, payment_item_amounts(float(total or 0), items, pretax)):
-                if _ident(it) is not None:
-                    amounts[_ident(it)] = amt
-        except Exception as exc:                                    # 金額算不出來 ⇒ 說明不帶金額，事件照推
-            logger.info("receipt_calendar: 金額略過：%s", exc)
+                customer, project = r["customer_name"] or "", r["project_name"] or ""
         for op, code, ident, it in events:
             key = "%s::%s" % (quote_no, ident)
             if op == "delete":
                 push_event_delete_for_module(code, key)
                 continue
-            title, desc, day = _compose(code, quote_no, customer, project, it, amounts.get(ident))
+            title, desc, day = _compose(code, quote_no, customer, project, it)
             push_event_upsert_for_module(code, title, desc, day, key)
     except Exception as exc:
         logger.warning("receipt_calendar.push_after_commit(%s) failed: %s", quote_no, exc)

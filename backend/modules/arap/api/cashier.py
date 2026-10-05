@@ -30,7 +30,7 @@ from urllib.parse import quote as _url_quote
 
 from core import registry
 from db import get_db, spawn_bg_thread
-from helpers import _require_user, user_has_module, payment_item_amounts, notify_module_activity, push_event_for_module
+from helpers import _require_user, user_has_module, payment_item_amounts, notify_module_activity, push_event_for_module, push_event_delete_for_module
 from modules.arap.receivables import collect_income_items as _collect_income_items  # 本模組（ROADMAP A8b 已收回）
 from helpers.legal_params import round_half_up          # bank-reconcile（金額四捨五入唯一來源）
 from helpers import _audit, _tok                         # bank-reconcile 的稽核
@@ -68,7 +68,7 @@ def _bonus_payouts(user: dict):
     return p, ""
 
 
-# ── 請款待付款（IP-100 payables.pending，多提供者；2026-09-27 使用者裁示請款流程）────────────
+# ── 待付款申請（IP-100 payables.pending，多提供者；2026-09-27 使用者裁示請款流程）────────────
 #: 沒有任何提供者（M01 不在）時對使用者說的話——不回空清單裝沒事
 PAYABLES_MISSING = "案件管理模組未安裝：出納頁不顯示待付款申請（案件支出申請）"
 _PAID_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -183,6 +183,8 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
                                detail="實付與應付不符（差額 %+g），請管理員到出納頁核可或退回。" % res["diff"])
     # 行事曆「支出付款」（2026-09-30，預設關；開關在 L1 判斷）：以付款日建立。勞報單付款走自己的端點，不在此列
     spawn_bg_thread(push_event_for_module, args=_expense_calendar_args(source, key, paid, res, user))
+    # 行事曆「付款待辦」（IP-100 的（來源, key）就是事件識別）：已付款 ⇒ 收回；事件種類關閉時 L1 不碰 Google
+    spawn_bg_thread(push_event_delete_for_module, args=("payable_due", "%s:%s" % (source, key)))
     return {"ok": True, **res}
 
 

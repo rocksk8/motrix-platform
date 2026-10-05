@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""IP-100 `payables.pending`：M01 的請款待付款（INTEGRATION-POINTS；2026-09-27 使用者裁示請款流程）。
+"""IP-100 `payables.pending`：M01 的待付款申請（INTEGRATION-POINTS；2026-09-27 使用者裁示請款流程）。
 
 [單位] case:payables    [層] L2（M01）    [穩定度] 契約（IP-100 v1）
 [公開介面] _Payables.pending(conn), _Payables.mark_paid(conn, key, paid_date, user)
@@ -48,6 +48,7 @@ def _item(r):
         "kind": _col(r, "kind") or "", "docCode": _col(r, "doc_code") or "", "payeeType": _col(r, "payee_type") or "",
         "payeeUsername": _payee_username(r), "payeeBank": _mask_bank(_col(r, "payee_bank"), _col(r, "payee_account")),
         "payTerms": _col(r, "pay_terms") or "", "remitDate": _col(r, "remit_date") or "",
+        "plannedPayDate": _col(r, "planned_pay_date") or "",           # 預定付款日（2026-10-05；''＝沒填；提醒信／行事曆依它）
         "expenseDate": (r["expense_date"] or "")[:10], "approvedAt": _approved_at(r["approval_json"]) or "",
         "invoiceDate": (_col(r, "invoice_date") or "")[:10], "invoiceNo": _col(r, "invoice_no") or "",
         "invoiceFiles": sum(1 for f in files if isinstance(f, dict) and f.get("kind") == "invoice"),

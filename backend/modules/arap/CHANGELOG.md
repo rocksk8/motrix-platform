@@ -1,5 +1,9 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-10-05（wip/t42-planned-pay-date）：出納付款後收回行事曆「付款待辦」
+- `api/cashier.py`：登錄付款（`pay`）成功後，背景呼叫 L1 `push_event_delete_for_module("payable_due", "<來源>:<key>")` 收回該筆的行事曆「付款待辦」事件；只靠 IP-100 的（來源, key），不讀來源模組的表；事件種類關閉時不碰 Google。註解的「請款待付款」同步改稱「待付款申請」。
+- 測試：`modules/case/tests/test_payable_planned_pay_date_2026_10_05.py::test_calendar_deleted_when_cashier_pays`。
+
 ## 1.0.36 — 2026-10-05（wip/quick2-wording，併入 t41）：出納「請款待付款」改稱「待付款申請」
 - `cashier.html` 分頁「待付款申請」、空狀態「目前沒有待付款的申請」、欄名「申請內容」；模組未安裝提示同步。只改畫面文字。
 ## 1.0.35 — 2026-10-03（wip/t34-cashier-kinds-a3）：出納待付款顯示分期申請的款別／期別

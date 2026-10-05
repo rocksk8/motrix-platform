@@ -23,8 +23,14 @@
 
 ## 串接點
 
-- 提供：見上表與 INTEGRATION-POINTS（IP-12 case.access、case.summary、case.locations、case.recognition、case.default_terms、case.doc_version、IP-17 quotation.append_items、IP-6 calendar.writeback（另：款項收款／預計收款日 ⇒ 行事曆事件 `receipt_logged`／`receivable_due`，`receipt_calendar.py`）、approval.reassign 的 quotation／completion_note、IP-11 daily.check）
+- 提供：見上表與 INTEGRATION-POINTS（IP-12 case.access、case.summary、case.locations、case.recognition、case.default_terms、case.doc_version、IP-17 quotation.append_items、IP-6 calendar.writeback（另：款項收款／預計收款日 ⇒ 行事曆事件 `receipt_logged`／`receivable_due`，`receipt_calendar.py`）；另：請款預定付款日（`planned_pay_date`）⇒ 提醒信 `payable_reminders.py`＋行事曆 `payable_due`（`payable_calendar.py`）、approval.reassign 的 quotation／completion_note、IP-11 daily.check）
 - 取用：IP-1／IP-14／IP-15（M04）、IP-18／IP-19（M03）、approval.queue_items／approval.reassign／approval.detail（各單據模組）、case.default_terms 的取用方是 L1 system
+
+## 預定付款日、提醒信、行事曆（2026-10-05）
+
+- **欄位**：`case_extra_expenses.planned_pay_date`（case migration v7，選填 YYYY-MM-DD；舊列 ''）。**不是實際付款日**（`paid_date`／`remit_date` 由出納登錄）；付款後保留當歷史。寫入：請款頁建立／編輯（`plannedPayDate`）、`PATCH …/extra-expenses/{id}/dates`（任何狀態可補登改期，已付款後 409）。IP-100 `payables.pending` 項目帶 `plannedPayDate`。
+- **提醒信**（`payable_reminders.py`，`daily.check` 每日 08:00／啟動補跑）：對象＝已核准、未付款、未作廢、要出納付款的類型（`kind=''`／採購單／差旅／零用金；請購單不含）、有預定日。名義日＝預定日−3 天（`payable_due_soon`）與預定日（`payable_due_today`）；名義日落在週六日 ⇒ 提前到前一個工作日（週一至週五）寄；兩封折到同一天 ⇒ 只寄「今日到期」。**國定假日尚未納入**（唯一的官方假日表在 M11；接上只改 `is_working_day`）。冪等 key＝（案件, 種類, 預定日, 寄信日）。信內不放金額。收件人經單一入口 `finance_recipients(conn)`（暫時的本地樁：財務角色＋最高管理者；TODO：換 `wip/t42-finance-role` 的 helper）。
+- **行事曆**（L1 事件種類，皆預設關、只對開啟後的變更生效、不回補既有資料）：`receipt_logged`／`receivable_due`（`receipt_calendar.py`，款項期別前後比對，三條寫入路徑 commit 後推）、`payable_due`（`payable_calendar.py`，跟著現況走：核准／改預定日／清空／作廢；出納付款由 M05 以 IP-100 的 `來源:key` 收回）。事件以（種類, key）唯一識別，不存 event id、不新增表。**事件不含任何金額**（標題與說明；使用者 2026-10-05 裁示）。
 
 ## 本模組不在時（別人怎麼辦）
 

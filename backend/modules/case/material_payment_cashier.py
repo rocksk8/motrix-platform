@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """叫料匯款申請的出納整合（31-C 匯款切片）：IP-100 `payables.pending`（名稱 `case_material`）、IP-102 `remit.reviews`（名稱 `case_material`）、
-IP-9 `expense.entries`（名稱 `remit_fee_case_material`）。出納（M05）不用改：沿用既有名稱空間，「請款待付款」自動出現這些申請。
+IP-9 `expense.entries`（名稱 `remit_fee_case_material`）。出納（M05）不用改：沿用既有名稱空間，「待付款申請」自動出現這些申請。
 
 契約為加法（設計 §3.4）：`key`＝申請 id（每張申請一列）；`pending()` 回該申請的**剩餘應付**（`amount`＝申請金額 − 累計實付）；
 `mark_paid` 每次記一筆付款明細並回累計與剩餘（分次付款：未結清的申請留在待付款）。
