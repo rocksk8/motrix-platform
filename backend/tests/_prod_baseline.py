@@ -18,6 +18,7 @@
 📌 2026-10-02 14:10：正式機已更新到 a5dea50c（第三十一班；正式機 Claude 依主持「可以套用」與使用者授權執行 apply_update，成功、無回滾，result.json status=success）⇒ 基準改 a5dea50c。
 📌 2026-10-02 20:45：正式機已更新到 52033606（第三十二班；正式機 Claude 依主持「可以套用」與使用者當場指示執行 apply_update，成功、無回滾，result.json status=success）⇒ 基準改 52033606。
 📌 2026-10-05 12:36：正式機已更新到 5d413330（第四十班 408286f3 11:00 套用、快速更新 5d413330 12:35 套用；正式機 Claude 依主持「可以套用」執行 apply_update，皆成功、無回滾，result.json status=success）⇒ 基準改 5d413330。
+📌 2026-10-05 15:27：正式機已更新到 3141cd35（第四十一班；正式機 Claude 依主持「可以套用」執行 apply_update，成功、無回滾，result.json status=success）⇒ 基準改 3141cd35。
 """
 import json
 import subprocess
@@ -26,7 +27,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "5d413330"
+BASELINE = "3141cd35"
 
 
 def baseline_manifest():
