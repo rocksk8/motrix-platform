@@ -324,7 +324,7 @@
               <button class="ctab" x-show="payslipQueue.visible" :class="{on: cashierSub==='payslip'}" @click="cashierSub='payslip'" data-testid="cashier-payslip-tab">
                 勞報單待付款<span class="tab__cnt" x-text="payslipQueue.items.length"></span>
               </button>
-              <!-- 請款待付款（IP-100 payables.pending：案件額外支出已核准、未登錄付款日；2026-09-27 請款流程） -->
+              <!-- 待付款申請（IP-100 payables.pending：案件額外支出已核准、未登錄付款日；2026-09-27 請款流程） -->
               <button class="ctab" :class="{on: cashierSub==='payreq'}" @click="cashierSub='payreq'" data-testid="cashier-payreq-tab">
                 待付款申請<span class="tab__cnt" x-text="payreqQueue.items.length"></span>
               </button>
@@ -456,7 +456,7 @@
               </template>
             </div>
 
-            <!-- 請款待付款（IP-100）：登錄付款＝寫回來源單據的付款日（經提供者）⇒ 從這裡消失、月支出現金口徑用這一天 -->
+            <!-- 待付款申請（IP-100）：登錄付款＝寫回來源單據的付款日（經提供者）⇒ 從這裡消失、月支出現金口徑用這一天 -->
             <div x-show="cashierSub==='payreq'" data-testid="cashier-payreq">
               <div class="alert-bar" x-show="payreqNotice" x-text="payreqNotice" data-testid="cashier-payreq-result"></div>
               <div class="alert-bar" x-show="payreqQueue.notice" data-testid="cashier-payreq-notice"><span x-text="payreqQueue.notice"></span></div>

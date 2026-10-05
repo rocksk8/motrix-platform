@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""IP-100 `payables.pending`：M01 的請款待付款（INTEGRATION-POINTS；2026-09-27 使用者裁示請款流程）。
+"""IP-100 `payables.pending`：M01 的待付款申請（INTEGRATION-POINTS；2026-09-27 使用者裁示請款流程）。
 
 [單位] case:payables    [層] L2（M01）    [穩定度] 契約（IP-100 v1）
 [公開介面] _Payables.pending(conn), _Payables.mark_paid(conn, key, paid_date, user)

@@ -29,9 +29,9 @@ from helpers import mail_types as _mt
 logger = logging.getLogger(__name__)
 
 _mt.register("payable_due_soon", "預定付款日將到（3 天前）", "business", "none", "財務",
-             "請款的預定付款日將到，到期未付款會影響對廠商或受款人的付款承諾。", "請登入系統，於出納的「請款待付款」確認並安排付款。", owner="case")
+             "請款的預定付款日將到，到期未付款會影響對廠商或受款人的付款承諾。", "請登入系統，於出納的「待付款申請」確認並安排付款。", owner="case")
 _mt.register("payable_due_today", "預定付款日當天", "business", "none", "財務",
-             "請款的預定付款日就是今天，尚未登錄付款。", "請登入系統，於出納的「請款待付款」登錄付款；若需改期請更新預定付款日。", owner="case")
+             "請款的預定付款日就是今天，尚未登錄付款。", "請登入系統，於出納的「待付款申請」登錄付款；若需改期請更新預定付款日。", owner="case")
 
 SOON_DAYS = 3
 _GUARD = "payable_due_notif."

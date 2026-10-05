@@ -98,7 +98,7 @@ function cashierApp() {
     // 勞報單待付款（IP-103 payslip.payables）：對方已簽回；出納填付款日期＋既有傳票單號
     payslipQueue: { available: false, visible: false, notice: '', items: [], canMarkPaid: false },
     payslipForm: {},   // slipNo -> {date, voucherNo, saving, err}
-    // 請款待付款（IP-100）
+    // 待付款申請（IP-100）
     payreqQueue: { available: false, notice: '', items: [], canPay: false },
     payreqDates: {},
     payreqBusy: false,

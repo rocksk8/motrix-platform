@@ -68,7 +68,7 @@ def _bonus_payouts(user: dict):
     return p, ""
 
 
-# ── 請款待付款（IP-100 payables.pending，多提供者；2026-09-27 使用者裁示請款流程）────────────
+# ── 待付款申請（IP-100 payables.pending，多提供者；2026-09-27 使用者裁示請款流程）────────────
 #: 沒有任何提供者（M01 不在）時對使用者說的話——不回空清單裝沒事
 PAYABLES_MISSING = "案件管理模組未安裝：出納頁不顯示待付款申請（案件支出申請）"
 _PAID_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
