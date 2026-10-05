@@ -608,15 +608,16 @@
                         x-text="notifyGroupOnCount(grp.items) + ' / ' + grp.items.length"></span>
                 </div>
                 <div x-show="_notifyGroupOpen[grp.group]" x-cloak
-                     style="display:flex;flex-direction:column;gap:4px;padding:8px 10px">
+                     style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px">
                   <template x-for="item in grp.items" :key="item.key">
-                    <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 2px"
-                           :style="item.receivable ? 'cursor:pointer' : 'color:var(--text-dim)'"
+                    <label style="position:relative;display:flex;align-items:center;gap:5px;font-size:12px;padding:5px 10px;border:1px solid var(--border-light);border-radius:4px;background:#fff"
+                           :style="!item.receivable ? 'color:var(--text-dim);cursor:default' : (!form.notificationMuted.includes(item.key) ? 'cursor:pointer;border-color:var(--accent);background:var(--accent-light);color:var(--accent)' : 'cursor:pointer')"
                            :data-testid="'notify-type-' + item.key">
-                      <input type="checkbox"
+                      <input type="checkbox" style="position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none"
                              :disabled="!item.receivable"
                              :checked="item.receivable && !form.notificationMuted.includes(item.key)"
                              @change="toggleNotifyType(item.key)">
+                      <span x-text="(item.receivable && !form.notificationMuted.includes(item.key)) ? '✓ ' : ''"></span>
                       <span x-text="item.label"></span>
                       <span x-show="!item.receivable" style="font-size:10px">（此帳號不在收件範圍；由「信件與通知收件設定」決定）</span>
                     </label>
