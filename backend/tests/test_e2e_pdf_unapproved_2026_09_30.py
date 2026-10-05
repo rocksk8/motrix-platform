@@ -275,6 +275,9 @@ def test_invoice_voucher(client, live_server, make_user, new_page, login_as, com
     req, appr = _users(make_user, tag, extra_modules=("finance",))
     qno = "MQ-PU-IV%d" % approved
     _seed_quote(qno)
+    # 第42班：簽核人（admin＋finance 勾選）被換成財務角色；非案件成員的財務角色開案件頁是「出納唯讀」（CM14b：財務分頁整個包在 disabled fieldset，
+    # 預覽鈕也不能按）。這題量的是簽核人預覽 PDF，所以讓簽核人成為案件成員（被指派）——唯讀行為本身見 test_e2e_cashier_read_only_case。
+    _db("UPDATE quotations SET assigned_user_ids=(SELECT '[' || id || ']' FROM users WHERE username=?) WHERE quote_no=?", (appr[0], qno), write=True)
     vno = "IV-PU-%d" % approved
     now = datetime.now().isoformat()
     _db("INSERT INTO invoice_vouchers (voucher_no, quote_no, scope, amount, status, snapshot_json, data_json, created_by, created_at, updated_at) "
