@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-05（wip/t42-fix-caserecord）：財務角色可在任何案件登錄／修改收款
+## 1.0.147 — 2026-10-05（wip/t42-fix-caserecord）：財務角色可在任何案件登錄／修改收款
 - `PATCH /api/quotations/{no}/case-record`：財務角色（與 superadmin）不是案件成員時，舊整包格式只採用其中的款項（`payment`），其餘欄位維持資料庫現值；分段格式仍只放行 `payment` 分段；業務（非成員）仍 403。`PATCH …/payment/{idx}` 本來就沒有擁有者限制。測試：`test_finance_caserecord_foreign_case_2026_10_05.py`。
 
 ## 1.0.146 — 2026-10-05（wip/t42-fix-recipients）：預定付款日提醒信的收件人只走財務郵件群組
