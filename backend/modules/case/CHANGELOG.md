@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.145 — 2026-10-05（wip/t42-finance-role）：財務角色
+- 財務／出納權限改由「財務」角色決定（admin／sales 直通拿掉）：額外支出列／金額可見與付款日登錄、標記收款與整包存款項鎖、更換發票號碼、收款帳戶查詢、稅額沖銷申請與取消、財務彙總清單、叫料發票日、取消已核准叫料單、叫料匯款申請撤回／作廢、叫料編輯閘（`can_edit_orders` 去掉 admin 直通）——一律 `has_finance_access`／`has_cashier_access`（僅 `finance` 角色與 superadmin）；出納／獎金通知收件人改走 `finance_usernames`；前端 `canFinanceRole()`。簽核人／申請人例外不變；一般管理（`_can_modify`、案件列範圍）不動。測試：`tests/test_finance_role_2026_10_05.py`。
+
 ## 1.0.144 — 2026-10-05（wip/t42-planned-pay-date）：行事曆事件不含金額；稽核 T41 S1～S5 修正
 - **行事曆事件不含任何金額**（使用者 2026-10-05 裁示：公司行事曆看得到的人不一定有財務金額可視）：`receipt_calendar.py` 的「收款登錄」「應收到期提醒」與 `payable_calendar.py` 的「付款待辦」，標題與說明都不再放應收／實收／手續費／金額，只留案號、客戶、專案、款項名稱、日期、入帳帳戶、登錄人（付款待辦另有單號、名目、受款人、付款條件）。**第 41 班（case 1.0.141）出貨的版本說明裡有金額**；三種事件預設關閉，開著的公司之後新建／更新的事件即不含金額，已建立的舊事件說明不回頭改。事件簽章同步改為（日期、款項名稱、入帳帳戶），金額／百分比／備註變動不再觸發推送。
 - `payable_reminders.py`：`payable_due_soon`／`payable_due_today` 的預設群組在有「財務」群組時用它（`to_group`），否則維持只走 `finance_recipients()`（收件設定頁覆寫才與其他財務信一致）。
@@ -22,9 +25,6 @@
 - 三條寫入路徑在 commit 之後推（不在寫鎖內）：`update_case_record`（整包存）、`mark_payment`（出納標記收款）、`_apply_case_change_request`（半解鎖審核通過重播：`case_record_update`／`payment_mark`，由 `approve_case_change` 在放鎖後推；排進佇列時不推）。
 - 兩種事件預設關（L1 `EVENT_TYPES`，見 core CHANGELOG (next)）；標題不含金額，金額只在說明（應收、實收、手續費）。「付款待辦」（`payable_due`）本班不做：待付款清單沒有「預計付款日」欄位（主持裁示 A）。
 - 測試：`tests/test_receipt_calendar_2026_10_05.py`（差異判斷 8 題、三條寫入路徑、開關關閉零流量、孤兒／手動刪除、推送失敗不影響存檔）。
-
-## (next) — 2026-10-05（wip/t42-finance-role）：財務角色
-- 財務／出納權限改由「財務」角色決定（admin／sales 直通拿掉）：額外支出列／金額可見與付款日登錄、標記收款與整包存款項鎖、更換發票號碼、收款帳戶查詢、稅額沖銷申請與取消、財務彙總清單、叫料發票日、取消已核准叫料單、叫料匯款申請撤回／作廢、叫料編輯閘（`can_edit_orders` 去掉 admin 直通）——一律 `has_finance_access`／`has_cashier_access`（僅 `finance` 角色與 superadmin）；出納／獎金通知收件人改走 `finance_usernames`；前端 `canFinanceRole()`。簽核人／申請人例外不變；一般管理（`_can_modify`、案件列範圍）不動。測試：`tests/test_finance_role_2026_10_05.py`。
 
 ## 1.0.140 — 2026-10-05（wip/quick-pr-wording）：請款頁文字改為「支出申請」
 - 選單「新增請款」→「新增支出申請」；`payment-request.html` 標題「支出申請」、分頁「新增申請」「我的申請」、區塊「申請類型」、說明文字同步。只改畫面文字（含 `<title>`），資料與流程不動；簽核佇列徽章、簽核設定單據名稱、申請頁類型下拉的「案件額外支出」→「案件支出申請」（`routers/approval_queue.py`、`helpers/tiered_approval.py` 標籤同步；內部代碼 `extra_expense` 與表名不動）；「額外支出變更」→「支出申請變更」（佇列標題＋變更申請的通知／信件文字）。其餘「請款」字樣（出納、審核佇列、請款類型編輯頁等）本次不改。

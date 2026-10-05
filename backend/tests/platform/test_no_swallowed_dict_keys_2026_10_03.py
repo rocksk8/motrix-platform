@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]            # backend/
 _KEY = re.compile(r"""["'][A-Za-z_]\w*["']\s*:\s""")
 _SKIP = ("__pycache__", ".venv", "node_modules")
 #: 已人工確認無害（註解只是在說明資料形狀，行內沒有被吞掉的程式碼）：「相對路徑:行號」。新增項目要附理由。
-ALLOW = {"modules/accounting/api/accounting_export.py:93"}      # `"bankAccounts": [],   # [{"name": str, "acctCode": str}, ...]，設定頁維護…`
+ALLOW = {"modules/accounting/api/accounting_export.py:94"}      # `"bankAccounts": [],   # [{"name": str, "acctCode": str}, ...]，設定頁維護…`
 
 
 def suspicious(src):

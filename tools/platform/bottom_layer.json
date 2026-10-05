@@ -27,6 +27,7 @@
   "backend/tests/test_demo_reset_2026_09_23.py",
   "backend/tests/test_edit_log_no_delete_trigger_2026_09_24.py",
   "backend/tests/test_em1_screen_words_in_long_messages_2026_09_24.py",
+  "backend/tests/test_finance_role_matrix_ext_2026_10_05.py",
   "backend/tests/test_lazy_demo_db_2026_09_30.py",
   "backend/tests/test_map_overlay_contract_2026_09_28.py",
   "backend/tests/test_module_history_2026_09_23.py",
