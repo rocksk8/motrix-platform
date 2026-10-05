@@ -1,6 +1,6 @@
 # 會計 更新紀錄
 
-## (next) — 2026-10-05（wip/t42-finance-role）：財務角色
+## 1.1.53 — 2026-10-05（wip/t42-finance-role）：財務角色
 - T100 匯出設定讀取與傳票匯出（`_require_t100_admin`）改由「財務」角色決定（僅 `finance` 角色與 superadmin；admin 直通拿掉）。
 
 ## 1.1.52 — 2026-10-02（wip/t33-remit-s5-a3）：來源憑證補登認得承攬商分期申請的發票 E04

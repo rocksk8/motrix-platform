@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-05（wip/t42-finance-role）：財務角色
+## 1.1.18 — 2026-10-05（wip/t42-finance-role）：財務角色
 - 承攬商匯款申請的建立／送審／作廢／匯出／發票登錄（`_require_admin`）、出納頁勾選勞報單、標記已匯款／差額、`GET /api/remit-kinds` 改由「財務」角色決定（僅 `finance` 角色與 superadmin；admin 直通拿掉）；匯款通知改寄財務角色。
 
 ## 1.1.17 — 2026-10-03（wip/t34-settlement-extras-2e）：提供 `case.remit_fee_total`（唯讀）
