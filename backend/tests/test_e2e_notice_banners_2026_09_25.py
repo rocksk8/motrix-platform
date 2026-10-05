@@ -77,7 +77,7 @@ def test_banners_do_not_cover_the_case_header_buttons(live_server, client, make_
     u = make_user(username=f"nb_{width}", role="admin")          # admin 未啟用 TOTP ⇒ 兩步驟驗證提醒
     _seed()
     _pending_approval(u[0])                                       # ⇒ 待簽核通知
-    ctx = new_context(viewport={"width": width, "height": 900})
+    ctx = new_context(viewport={"width": width, "height": 1000})      # 第42班：900 高時，1024 寬的角色下拉中心點剛好落在橫幅欄上緣下 23px（T41 版面差 4px 沒蓋到）；整窗掃描對內容位置很敏感，加高 100px 保留「全窗掃描」的力道
     _session_only(client, ctx, u)
     page = ctx.new_page()
     page.goto(f"{live_server}/pages/case-management.html?q={NO}")

@@ -57,10 +57,10 @@ def test_sales_and_admin_cannot_delete_add_or_reorder_payment_periods(client, ma
         assert _items() == [1, 2], "%s %s：被拒絕的修改不可改到結構" % (role, name)
 
 
-def test_finance_role_can_delete_add_and_reorder_payment_periods_when_assigned(client, make_user):
+def test_finance_role_can_delete_add_and_reorder_payment_periods_on_a_foreign_case(client, make_user):
     owner = make_user(username="ppf_owner", role="sales")
     fin = make_user(username="ppf_fin", role="finance")
-    _seed(owner[0], member=fin[0])      # 被指派的協作者（非成員的財務角色改打 case-record 會被「只有案件成員或管理員」擋下——另案詢問）
+    _seed(owner[0])      # 財務角色不是這個案件的成員（業務是別人）：使用者裁示財務角色可編輯任何案件的款項（case-record 款項部分不受成員限制，a5ac9b5e）
     h = _login(client, fin)
     two = [{"id": 1, "type": "訂金", "pct": 30, "amount": 30000, "received": False}, {"id": 2, "type": "尾款", "pct": 70, "amount": 70000, "received": False}]
     r = _patch(client, h, two[::-1])
