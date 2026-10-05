@@ -57,7 +57,7 @@ def _save(page):
 
 @pytest.mark.e2e
 def test_payment_amounts_accept_separators_and_block_bad_values(live_server, make_user, e2e_browser):
-    u = make_user(username="pn_admin", role="admin")
+    u = make_user(username="pn_admin", role="finance")      # 第42班：款項期別結構/收款/請款/開票＝財務角色或 superadmin
     _seed()
     browser = e2e_browser
     page = browser.new_context().new_page()

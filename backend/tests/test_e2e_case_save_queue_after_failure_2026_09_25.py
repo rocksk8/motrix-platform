@@ -18,7 +18,7 @@ pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點�
 
 @pytest.mark.e2e
 def test_a_save_pressed_while_a_failing_save_is_in_flight_is_not_swallowed(live_server, make_user, e2e_browser):
-    u = make_user(username="queue_fail", role="sales")
+    u = make_user(username="queue_fail", role="finance")      # 第42班：款項期別結構操作＝財務角色或 superadmin
     _seed(assigned=[u[0]])
     page = _open(e2e_browser, live_server, u)
     held, statuses = [], []

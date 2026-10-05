@@ -41,7 +41,7 @@ def _seed():
 
 @pytest.mark.e2e
 def test_unsaved_payment_shows_toast_not_native_alert(live_server, make_user, e2e_browser):
-    u = make_user(username="prh_e1", role="admin")
+    u = make_user(username="prh_e1", role="superadmin")      # 第42班：案件頁收款/請款/開票操作＝財務角色或 superadmin
     _seed()
     browser = e2e_browser
     page = browser.new_context().new_page()

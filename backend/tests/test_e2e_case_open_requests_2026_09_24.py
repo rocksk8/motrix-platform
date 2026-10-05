@@ -47,7 +47,7 @@ def _case_calls(reqs):
 
 @pytest.mark.e2e
 def test_opening_a_case_uses_the_bundle_and_defers_tab_data(live_server, make_user, e2e_browser):
-    u = make_user(username="or_admin", role="admin")
+    u = make_user(username="or_admin", role="superadmin")      # 第42班：案件頁收款/請款/開票操作＝財務角色或 superadmin
     _seed()
     browser = e2e_browser
     page = browser.new_context().new_page()
@@ -81,7 +81,7 @@ def test_opening_a_case_uses_the_bundle_and_defers_tab_data(live_server, make_us
 
 @pytest.mark.e2e
 def test_deep_link_tab_loads_its_data_immediately(live_server, make_user, e2e_browser):
-    u = make_user(username="or_admin2", role="admin")
+    u = make_user(username="or_admin2", role="superadmin")      # 第42班：案件頁收款/請款/開票操作＝財務角色或 superadmin
     _seed()
     browser = e2e_browser
     page = browser.new_context().new_page()
@@ -95,7 +95,7 @@ def test_opening_fin_while_the_case_is_still_loading_loads_once_and_keeps_data(l
     """〈先渲染再非同步載入＝競態〉：selected 一設定分頁列就可以點，而 selectCase 後段還在建立預設階段
     （POST /stages ×5）。這段期間點開財務：只載一次、載好的資料不可以被後段的重設清掉。
     階段的 POST 由這裡扣住，確定「點財務」發生在後段之前。"""
-    u = make_user(username="or_admin4", role="admin")
+    u = make_user(username="or_admin4", role="superadmin")      # 第42班：案件頁收款/請款/開票操作＝財務角色或 superadmin
     _seed()
     browser = e2e_browser
     page = browser.new_context().new_page()

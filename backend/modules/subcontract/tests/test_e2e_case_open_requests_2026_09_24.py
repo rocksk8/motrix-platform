@@ -52,7 +52,7 @@ def _case_calls(reqs):
 def test_create_voucher_button_waits_for_voucher_list(live_server, make_user, e2e_browser):
     """匯款憑據改成點進承攬商分頁才載入：載入完成前不可以顯示「產生匯款申請」（按了會重複建立）。"""
     import db
-    u = make_user(username="or_admin3", role="admin")
+    u = make_user(username="or_admin3", role="superadmin")      # 第42班：案件頁收款/請款/開票操作＝財務角色或 superadmin
     _seed()
     conn = db.get_db()
     try:

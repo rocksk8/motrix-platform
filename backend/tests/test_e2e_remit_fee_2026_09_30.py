@@ -76,7 +76,8 @@ def test_cashier_remit_fee_diff_review_end_to_end(live_server, make_user, new_co
     # 出納看得到待審核，但沒有核可鈕
     cp.click('[data-testid="cashier-remit-tab"]')
     cp.wait_for_selector('[data-testid="cashier-remit-row-%s"]' % tid, timeout=15000)
-    assert cp.locator('[data-testid="cashier-remit-approve-%s"]' % tid).count() == 0
+    # 第42班：出納與財務合併為「財務」角色，財務角色本來就是差額審核的決定者（頁面可以有核可鈕）；
+    # 「登錄付款的人不能自己核可」（稽核 M4）由後端規則守，下面第③段仍由 superadmin 核可。
 
     # ② 管理員：先退回（要原因）⇒ 回待付款、新欄位清空
     ap = new_context().new_page()

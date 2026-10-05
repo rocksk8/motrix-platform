@@ -85,9 +85,10 @@ def test_sales_sees_reason_when_deleting_received_installment(live_server, make_
     label = page.locator("span.save-label")
     page.wait_for_function(
         "() => { const e = document.querySelector('span.save-label');"
-        " return e && /已收款|已儲存/.test(e.textContent) }", timeout=15000)
+        " return e && /已收款|已儲存|儲存失敗/.test(e.textContent) }", timeout=15000)
     assert natives == [], natives
     text = label.inner_text()
-    assert "已收款，不可刪除" in text, text
-    assert "訂金款" in text, text
+    # 第42班（使用者裁示）：款項期別的新增／刪除／調整＝財務角色／superadmin；業務／管理員在後端被擋（403），
+    # 訊息說明沒有財務檢視權限（原本走到「已收款，不可刪除」那一關）。財務角色不受已收款鎖限制（同原本的出納／管理員）。
+    assert "財務檢視權限" in text and "款項期別" in text, text
     assert _item_ids() == [1, 2, 3], "已收款期別不可以被刪掉"
