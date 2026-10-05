@@ -1243,7 +1243,7 @@
           if (item.type === 'completion_note') return '完工單'
           if (item.type === 'payment_request') return '請款單'
           if (item.type === 'case_change') return '已結案案件變更'
-          if (item.type === 'extra_expense') return item.typeLabel || '案件額外支出'     // 費用單據（A2）：依類型顯示（請購單／採購單／差旅費用請款單／零用金支付單）；舊版額外支出沒有 typeLabel
+          if (item.type === 'extra_expense') return item.typeLabel || '案件支出申請'     // 費用單據（A2）：依類型顯示（請購單／採購單／差旅費用請款單／零用金支付單）；舊版額外支出沒有 typeLabel
           if (item.type === 'dispatch_file_delete') return '報價單附件刪除'
           // 已核准的額外支出要改內容走這條（DB v76）。標題要跟原單分得開，
           // 否則簽核人不知道自己簽的是「新增一筆」還是「改一筆已核准的」

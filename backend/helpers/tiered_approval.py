@@ -71,7 +71,7 @@ APPROVAL_DOC_TYPE_LABELS = {
     "invoice_voucher":   "發票開立簽核單",
     "payment_request":   "請款單",
     "contractor_voucher": "承攬商匯款申請",
-    "extra_expense":     "案件額外支出",
+    "extra_expense":     "案件支出申請",
     "completion":        "完工單",
     # 🔑 不是「傳票」—— 三個 doc type 都叫 voucher，而設定頁上看得出來
     #    才不會改錯。只有這一個是**會計傳票**。

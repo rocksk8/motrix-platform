@@ -66,7 +66,7 @@
           <div class="pr-f">
             <label for="pr-type">類型</label>
             <select id="pr-type" x-model="typeCode" @change="selectType()">
-              <option value="">一般（案件額外支出）</option>
+              <option value="">一般（案件支出申請）</option>
               <template x-for="t in types" :key="t.code"><option :value="t.code" x-text="t.name + '（' + t.prefix + '）'"></option></template>
             </select>
           </div>

@@ -60,7 +60,7 @@ def _items(client, h):
 
 
 def test_item_type_label_rules():
-    assert aq._item_type_label({"type": "extra_expense", "typeLabel": "別的"}) == "案件額外支出"      # 內建不被覆寫
+    assert aq._item_type_label({"type": "extra_expense", "typeLabel": "別的"}) == "案件支出申請"      # 內建不被覆寫
     assert aq._item_type_label({"type": "cl_doc", "typeLabel": "請購單"}) == "請購單"
     assert aq._item_type_label({"type": "cl_doc"}) == "報價單"                                       # 舊預設不變
     assert aq._item_type_label({"type": "custom_record", "moduleName": "模組"}) == "模組"
