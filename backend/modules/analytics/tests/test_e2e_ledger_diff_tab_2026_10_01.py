@@ -183,7 +183,7 @@ def test_user_without_finance_view_sees_an_error_not_an_empty_table(live_server,
     """沒有財務檢視權限（端點 403）⇒ 頁籤顯示錯誤，不是一張空表。（以 money_visible 固定為 False 模擬；端點的 403 另有 API 題。）"""
     _patch_report(monkeypatch)
     from modules.analytics.api import ledger_diff as LD
-    monkeypatch.setattr(LD, "money_visible", lambda u: False)
+    monkeypatch.setattr(LD, "quote_money_visible", lambda u: False)    # 第42班：端點改看報價層級判斷（財務專屬判斷另拆）
     u = make_user(username="e2ld_sa3", role="superadmin", modules=[])
     page = e2e_browser.new_context().new_page()
     inject_login(page, live_server, u[0], u[1])
