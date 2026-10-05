@@ -57,17 +57,24 @@ def _patch(client, h, **body):
     return client.patch("/api/quotations/%s/case-record" % NO, headers=h, json=body)
 
 
-def test_finance_on_a_foreign_case_legacy_format_saves_only_the_payment_part(client, world):
-    cr = _cr()
-    cr["payment"]["items"][0]["pct"] = 40                      # 財務可改款項
+def test_finance_on_a_foreign_case_legacy_format_saves_the_payment_part(client, world):
+    cr = _cr()                                                  # 前端整包送出：非款項欄位與資料庫相同
+    cr["payment"]["items"][0]["pct"] = 40
     cr["payment"]["items"][0]["amount"] = 40000
-    cr["materials"][0]["name"] = "被改的原料"                     # 非款項欄位：不採用
-    cr["contract"]["note"] = "被改的合約備註"
     r = _patch(client, world["fin"], case_record=cr)
     assert r.status_code == 200, r.text
     now = _cr()
     assert now["payment"]["items"][0]["amount"] == 40000 and now["payment"]["items"][0]["pct"] == 40
-    assert now["materials"][0]["name"] == "原料" and now["contract"]["note"] == "原合約"     # 其餘維持資料庫現值
+    assert now["materials"][0]["name"] == "原料" and now["contract"]["note"] == "原合約"
+
+
+def test_finance_on_a_foreign_case_changed_non_payment_segment_is_403_not_silently_dropped(client, world):
+    cr = _cr()
+    cr["payment"]["items"][0]["pct"] = 40
+    cr["materials"][0]["name"] = "被改的原料"                     # 非款項欄位不同 ⇒ 整筆 403（舊契約），款項也不寫
+    r = _patch(client, world["fin"], case_record=cr)
+    assert r.status_code == 403, r.text
+    assert _cr()["payment"]["items"][0]["pct"] == 30 and _cr()["materials"][0]["name"] == "原料"
 
 
 def test_finance_on_a_foreign_case_can_add_a_payment_period_and_receive(client, world):

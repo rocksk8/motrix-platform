@@ -2821,9 +2821,15 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
             # **只採用其中的款項（payment）**，其餘欄位一律維持資料庫現值；分段格式仍只放行 payment 分段。
             fin_legacy_payment_only = has_finance_access(user) and body.segments is None and isinstance(body.case_record, dict)
             if fin_legacy_payment_only:
+                # 舊整包格式：除了 payment（與伺服器自己維護的 stages、樂觀鎖旗標）以外必須與資料庫現值**完全相同**；
+                # 有任何非款項欄位不同 ⇒ 403（同原訊息，不靜默丟掉）。一般前端整包送出的內容與資料庫一致 ⇒ 通過、款項照存。
                 _db_cr = json.loads(row["data_json"] or "{}").get("caseRecord") or {}
-                _new_cr = body.case_record
-                body.case_record = {**_db_cr, **({"payment": _new_cr["payment"]} if "payment" in _new_cr else {})}
+                _skip = ("payment", "stages", "_expectedUpdatedAt")
+                _a = {k: v for k, v in _db_cr.items() if k not in _skip}
+                _b = {k: v for k, v in body.case_record.items() if k not in _skip}
+                if _a != _b:
+                    conn.close()
+                    raise HTTPException(403, "只有這個案件的成員（業務、協作者、案件角色、階段負責人）或管理員可以修改")
             elif not cashier_payment_only:
                 conn.close()
                 raise HTTPException(403, "只有這個案件的成員（業務、協作者、案件角色、階段負責人）或管理員可以修改")
