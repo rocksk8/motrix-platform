@@ -14,7 +14,7 @@
 
 - 預定付款日只影響提醒與行事曆，不影響金額、付款判準（付款日空白＝待付款）、報表與總帳。
 - 提醒只對「已核准、未付款、未作廢、要出納付款的類型、有合法預定日」發；沒填 ⇒ 不發；非工作日不寄、提前到前一個工作日；同一（案件, 種類, 預定日, 寄信日）只寄一次；信內不放金額。
-- 行事曆事件跟著現況走（upsert／delete），任何一條路徑只要在 commit 後對齊即收斂；事件種類關閉＝零 Google 流量。
+- 行事曆事件不含任何金額（標題與說明）；跟著現況走（upsert／delete），任何一條路徑只要在 commit 後對齊即收斂；事件種類關閉＝零 Google 流量。
 - 依據：`tests/test_payable_planned_pay_date_2026_10_05.py`、`tests/test_receipt_calendar_2026_10_05.py`、`backend/tests/test_calendar_upsert_2026_10_05.py`。
 
 ## 登記

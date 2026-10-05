@@ -176,7 +176,7 @@ def test_calendar_follows_state_move_clear_pay_and_void(client, make_user, monke
     assert client.patch(url, headers=h, json={"plannedPayDate": "2031-06-10"}).status_code == 200
     (ev,) = cal.events.values()
     assert ev["summary"].startswith("付款待辦 — ") and "線材" in ev["summary"]
-    assert "1,200" in ev["description"] and "1,200" not in ev["summary"], "金額只在說明"
+    assert not any(x in ev["summary"] + ev["description"] for x in ("1,200", "1200", "NT$", "金額")), "事件不含任何金額"
     assert ev["start"] == {"date": "2031-06-10"} and "預定付款日：2031-06-10" in ev["description"]
     assert ev["extendedProperties"]["private"]["motrixMergeKey"] == "payable_due#case:%s" % eid
     assert client.patch(url, headers=h, json={"plannedPayDate": "2031-06-25"}).status_code == 200      # 改期 ⇒ 同一筆移動
@@ -428,3 +428,13 @@ def test_mail_types_registered_with_owner_case():
     for k in ("payable_due_soon", "payable_due_today"):
         t = mt._REGISTRY[k]
         assert t.owner == "case" and t.category == "business"
+
+
+def test_reminder_mail_types_use_the_finance_group_when_it_exists():
+    """財務群組（wip/t42-finance-role）存在 ⇒ payable_due_* 用它（收件設定頁覆寫才一致）；還沒有 ⇒ none，收件人走 finance_recipients()。"""
+    from helpers import mail_types as mt
+    from modules.case import payable_reminders as R
+    want = "finance" if "finance" in mt.GROUPS else "none"
+    assert R._GROUP == want
+    for k in ("payable_due_soon", "payable_due_today"):
+        assert mt._REGISTRY[k].group == want

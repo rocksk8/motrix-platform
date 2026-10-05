@@ -28,9 +28,12 @@ from helpers import mail_types as _mt
 
 logger = logging.getLogger(__name__)
 
-_mt.register("payable_due_soon", "預定付款日將到（3 天前）", "business", "none", "財務",
+#: 預設群組收件人：有「財務」群組（wip/t42-finance-role 的 mail_types.GROUPS）就用它——超級管理員在「信件與通知收件設定」頁的覆寫才會照一般財務信處理；
+#: 還沒有（財務角色尚未上線）⇒ "none"，收件人只走 `finance_recipients()`。兩條路徑在 `_mail` 取聯集、去重。
+_GROUP = "finance" if "finance" in _mt.GROUPS else "none"
+_mt.register("payable_due_soon", "預定付款日將到（3 天前）", "business", _GROUP, "財務",
              "請款的預定付款日將到，到期未付款會影響對廠商或受款人的付款承諾。", "請登入系統，於出納的「待付款申請」確認並安排付款。", owner="case")
-_mt.register("payable_due_today", "預定付款日當天", "business", "none", "財務",
+_mt.register("payable_due_today", "預定付款日當天", "business", _GROUP, "財務",
              "請款的預定付款日就是今天，尚未登錄付款。", "請登入系統，於出納的「待付款申請」登錄付款；若需改期請更新預定付款日。", owner="case")
 
 SOON_DAYS = 3
@@ -90,10 +93,10 @@ def _mail(kind, rows, users, link, ident):
     """字面 key 呼叫 send_registered（守門逐一核對）；不放金額。"""
     if kind == "soon":
         return _en.send_registered("payable_due_soon", title="預定付款日將到", rows=rows, usernames=users,
-                                   badge_text="3 天後到期", badge_color="#D97706", link=link, button_text="前往出納",
+                                   badge_text="3 天後到期", badge_color="#D97706", link=link, button_text="前往出納", to_group=_GROUP == "finance",
                                    reason=ident, note="您好，以下請款的預定付款日還有 3 天，請安排付款。")
     return _en.send_registered("payable_due_today", title="預定付款日當天", rows=rows, usernames=users,
-                               badge_text="今日到期", badge_color="#DC2626", link=link, button_text="前往出納",
+                               badge_text="今日到期", badge_color="#DC2626", link=link, button_text="前往出納", to_group=_GROUP == "finance",
                                reason=ident, note="您好，以下請款的預定付款日就是今天，尚未登錄付款。")
 
 

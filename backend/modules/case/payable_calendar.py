@@ -6,7 +6,7 @@
 [不變式] ① 事件跟著「現況」走，不跟著動作走：已核准、未付款、未作廢、可付款類型、預定付款日是合法日期 ⇒ upsert（預定付款日當天）；
            其餘 ⇒ delete。所以核准／改預定日／清預定日／付款／作廢／付款日被更正回待付款，任何一條路徑只要在 commit 後呼叫 `fire` 就收斂
         ② 事件識別＝（payable_due, `case:<額外支出 id>`）＝IP-100 的（來源, key）——出納端付款後只用這組識別就能刪事件，不必讀本模組的表
-        ③ 標題不含金額；金額只在說明（與收款登錄／應收到期同一做法）
+        ③ **事件不含任何金額**（使用者 2026-10-05 裁示；與收款登錄／應收到期同一做法）
         ④ 寫鎖內不呼叫（commit 後 spawn_bg_thread）；失敗只記 log
 [契約題] modules/case/tests/test_payable_planned_pay_date_2026_10_05.py
 """
@@ -54,15 +54,8 @@ def eligible(row) -> bool:
     return bool(planned_date(row))
 
 
-def _money(v) -> str:
-    try:
-        return "NT$ {:,.0f}".format(float(v))
-    except (TypeError, ValueError):
-        return ""
-
-
 def compose(row, customer="", project=""):
-    """⇒ (標題, 說明, 日期)。標題只放單號／案號與名目，不放金額。"""
+    """⇒ (標題, 說明, 日期)。標題與說明都不放金額。"""
     ident = (row["doc_code"] or "").strip() or "#%s" % row["id"]
     what = (row["description"] or row["category"] or "請款").strip()
     title = "付款待辦 — %s｜%s" % (ident, what)
@@ -72,7 +65,6 @@ def compose(row, customer="", project=""):
     payee = (row["payee_name"] or row["payer_name"] or "").strip()
     if payee:
         lines.append("受款人：" + payee)
-    lines.append("金額：" + _money(row["total_cost"]))
     if (row["pay_terms"] or "").strip():
         lines.append("付款條件：" + row["pay_terms"].strip())
     return title, "\n".join(lines), planned_date(row)
