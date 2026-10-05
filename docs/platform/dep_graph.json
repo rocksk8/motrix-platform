@@ -8584,8 +8584,7 @@
    "tables_named": [],
    "tables_r": [
     "case_extra_expenses",
-    "quotations",
-    "users"
+    "quotations"
    ],
    "tables_w": [
     "system_settings"
@@ -20832,7 +20831,6 @@
     "mod:case/api/case_action_items",
     "mod:case/api/quotations",
     "mod:case/case_deadlines",
-    "mod:case/payable_reminders",
     "mod:case/recognition",
     "mod:crm/api",
     "mod:daily_tasks/api",
