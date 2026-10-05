@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-05（wip/t42-finance-role）：財務角色
+- 承攬商匯款申請的建立／送審／作廢／匯出／發票登錄（`_require_admin`）、出納頁勾選勞報單、標記已匯款／差額、`GET /api/remit-kinds` 改由「財務」角色決定（僅 `finance` 角色與 superadmin；admin 直通拿掉）；匯款通知改寄財務角色。
+
 ## 1.1.17 — 2026-10-03（wip/t34-settlement-extras-2e）：提供 `case.remit_fee_total`（唯讀）
 - 登記提供者 `("case.remit_fee_total", "subcontract")` ⇒ `remit.fee_total_for_case(conn, quote_no)`（既有函式，行為不變）：案件完結精算讀「承攬商匯款手續費合計」，case 不 import 本模組。只新增能力名，不改既有檔行為。
 

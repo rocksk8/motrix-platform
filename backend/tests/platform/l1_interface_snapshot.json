@@ -1,5 +1,5 @@
 {
- "core_version": "1.109",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -179,8 +179,12 @@
   },
   "helper:auth": {
    "DEMO_TOKEN_PREFIX": "const",
+   "FINANCE_MODULE_KEYS": "const",
+   "FINANCE_ROLE": "const",
+   "FINANCE_ROLES": "const",
    "MIN_PASSWORD_LEN": "const",
    "PASSKEY_ENABLED": "const",
+   "VALID_ROLES": "const",
    "_CREDENTIALS_FILE": "const",
    "_LEGACY_WEAK_PASSWORDS": "const",
    "_SUPERADMIN_MODULES": "const",
@@ -191,6 +195,10 @@
    "_verify_pw": "def(password, stored)",
    "_write_initial_credentials": "def(username, password, path=…)",
    "can_see_financial": "def(user)",
+   "effective_modules": "def(role, modules)",
+   "finance_usernames": "def(conn=…)",
+   "has_cashier_access": "def(user)",
+   "has_finance_access": "def(user)",
    "is_weak_password": "def(password)",
    "require_any_module": "def(user, keys, label)",
    "user_has_module": "def(user, key)"
@@ -550,6 +558,7 @@
    "_build_html": "def(mail_key, title, badge_text, badge_color, rows, quote_no, base_url, note=…, intro=…, button_text=…, impact=…, action=…)",
    "_send_raising": "def(to_addrs, subject, html)",
    "email_send_policy": "def(env=…)",
+   "finance_recipient_emails": "def(event_key=…)",
    "notify_approval_reminder": "def(doc_type_label, doc_no, desc, days_elapsed, approver_usernames, also_superadmin=…)",
    "notify_approval_request": "def(quote_no, customer, approver_usernames)",
    "notify_approved": "def(quote_no, customer, approved_by, requester_username)",
@@ -590,7 +599,7 @@
    "notify_invoice_voucher_next_tier": "def(voucher_no, customer, tier_no, total_tiers, approver_usernames)",
    "notify_invoice_voucher_returned": "def(voucher_no, customer, note, requester_username)",
    "notify_invoice_voucher_submitted": "def(voucher_no, customer, approver_usernames)",
-   "notify_module_activity": "def(module_label, action_label, actor, item_label, page_path=…, detail=…)",
+   "notify_module_activity": "def(module_label, action_label, actor, item_label, page_path=…, detail=…, audience=…)",
    "notify_monthly_report": "def(period_label, period_str, excel_bytes, pdf_bytes)",
    "notify_next_tier": "def(quote_no, customer, tier_no, total_tiers, approver_usernames)",
    "notify_payment_request_approved": "def(request_no, customer, approved_by, requester_username)",

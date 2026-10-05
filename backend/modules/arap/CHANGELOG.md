@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-10-05（wip/t42-finance-role）：財務角色
+- 出納頁與開票／請款憑證的財務動作改由「財務」角色決定：`_require_view_access`／`_can_pay`／差額核可（`canDecide`）／銀行對帳／完整銀行帳號，以及開票申請憑據、請款單的 `_require_admin`（建立／送審／作廢／匯出）一律 `has_finance_access`／`has_cashier_access`（僅 `finance` 角色與 superadmin；admin 直通拿掉）。付款／匯款差額通知改寄財務角色（`notify_module_activity(audience="finance")`）。前端 `cashier.js`／`reports.js` 同步。
+
 ## 1.0.35 — 2026-10-03（wip/t34-cashier-kinds-a3）：出納待付款顯示分期申請的款別／期別
 - 出納頁「待付款」與「執行歷史」的承攬商匯款列、以及「標記已匯款」視窗標題，分期申請多顯示「款別 第 N 期」（舊式整筆不顯示）；出納分得出同一承攬商同一案件的訂金／進度款，避免付錯。資料來自 IP-14 `contractor_voucher.public` 已有的 `kindName／seq`，後端不變。
 - 測試：`test_e2e_cashier_installment_label_2026_10_03.py`（含截圖）。

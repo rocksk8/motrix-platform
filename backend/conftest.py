@@ -736,6 +736,10 @@ _ROLE_DEFAULT_MODULES = {
         "work_log", "daily_task", "netplan",
     ],
     "viewer": ["dashboard"],
+    "finance": [               # 第42班：財務角色（財務與出納）
+        "dashboard", "quotation", "case_manage", "customer", "reports", "finance",
+        "financial_view", "cashier", "work_log", "daily_task",
+    ],
 }
 
 

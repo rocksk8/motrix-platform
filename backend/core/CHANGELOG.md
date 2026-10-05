@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — wip/t42-finance-role（財務角色；財務／出納權限只屬「財務」角色與 superadmin）
+- L1（新增，向下相容）：`helpers.auth` 新增 `FINANCE_ROLE`／`FINANCE_ROLES`／`FINANCE_MODULE_KEYS`／`VALID_ROLES`、`has_finance_access(user)`、`has_cashier_access(user)`、`effective_modules(role, modules)`、`finance_usernames(conn=None)`；`helpers.email_notify.finance_recipient_emails(event_key)`、`notify_module_activity(..., audience="admins"|"finance")`（選填）；`helpers.mail_types` 群組新增 `finance`、`ROLES` 新增 `finance`。
+- L1（行為變更，簽章不變）：`user_has_module(user, "cashier"|"finance"|"financial_view")` 改由角色推導（僅 `finance` 角色與 superadmin 為真，`users.modules` 勾選不再算；資料保留、惰性）；`can_see_financial` ＝ `has_finance_access`（admin／sales 直通拿掉）；`_require_user(module=…)` 與登入／`me`／`/api/platform/menu` 回傳的模組清單改用 `effective_modules`。
+- 測試：`tests/test_finance_role_2026_10_05.py`。L1 介面快照 `core_bump.py --pending`。
+
 ## 1.109 — wip/t33-diff-default-c7（定義 diff 的 `default` ＝出貨預設）、wip/t33-k2-c7（草稿並行保護）
 - L0（新增，向下相容）：`core.definitions.default_for(kind, key) -> body|None`——程式出貨的預設（v0），**不看資料庫**；`resolve` 內部改呼叫它（行為不變：role ＞ company ＞ default）。
 - L0（行為修正，路由）：`GET /api/definitions/{kind}/{key}/diff?a|b=default` 原本呼叫 `resolve`，公司發布過就回公司最新版（`default` 對 `latest` 恆為空、無法比較公司版 vs 出貨預設）；現在回出貨預設（沒有預設 ⇒ 空內容）。編輯頁的 `latest`／`draft`／版本號比較不受影響。
