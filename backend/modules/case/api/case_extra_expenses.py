@@ -1424,7 +1424,7 @@ def submit_change_request(quote_no: str, exp_id: int, authorization: str = Heade
 
         for a in (tiers[0].get("approvers") or []):
             _notify(a["username"], "extra_expense_change_request", str(exp_id), quote_no or "無案件",
-                    f"{_subj(quote_no)} 的額外支出變更申請 {label} 需要您簽核")
+                    f"{_subj(quote_no)} 的支出申請變更 {label} 需要您簽核")
         _audit(_tok(authorization), "extra_expense.change_submit", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更申請 {label} 送審", {"tierCount": len(tiers), **_asum(row)})
         return {"ok": True, "changeStatus": "待審核", "tierCount": len(tiers)}
@@ -1498,8 +1498,8 @@ def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default
             requester = appr.get("requestedBy")
             if requester:
                 _notify(requester, "extra_expense_change_approved", str(exp_id), quote_no or "無案件",
-                        f"{_subj(quote_no)} 的額外支出變更 {label} 已核准並生效")
-            notify_module_activity("案件管理", "額外支出變更核准", display, f"{quote_no or '無案件'}｜{label}",
+                        f"{_subj(quote_no)} 的支出申請變更 {label} 已核准並生效")
+            notify_module_activity("案件管理", "支出申請變更核准", display, f"{quote_no or '無案件'}｜{label}",
                                    f"case-management.html?q={quote_no}")
             _audit(_tok(authorization), "extra_expense.change_approve", *_audit_target(quote_no, exp_id),
                    f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更 {label} 第 {ct + 1} 層核准 → 已生效", {"tier": ct + 1, "applied": True, **_asum(row)})
@@ -1512,7 +1512,7 @@ def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default
         conn.commit()
         for a in (tiers[appr["currentTier"]].get("approvers") or []):
             _notify(a["username"], "extra_expense_change_request", str(exp_id), quote_no or "無案件",
-                    f"{_subj(quote_no)} 的額外支出變更申請 {label} 需要您簽核")
+                    f"{_subj(quote_no)} 的支出申請變更 {label} 需要您簽核")
         _audit(_tok(authorization), "extra_expense.change_approve", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更 {label} 第 {ct + 1} 層核准 → 簽核中", {"tier": ct + 1, "applied": False, **_asum(row)})
         return {"ok": True, "changeStatus": "簽核中", "currentTier": appr["currentTier"]}
@@ -1565,7 +1565,7 @@ def reject_change_request(quote_no: str, exp_id: int, body: dict = Body(default=
         requester = appr.get("requestedBy")
         if requester:
             _notify(requester, "extra_expense_change_rejected", str(exp_id), quote_no or "無案件",
-                    f"{_subj(quote_no)} 的額外支出變更申請 {label} 已被駁回"
+                    f"{_subj(quote_no)} 的支出申請變更 {label} 已被駁回"
                     + (f"：{reason}" if reason else ""))
         _audit(_tok(authorization), "extra_expense.change_reject", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更申請 {label} 被駁回" + (f"：{reason}" if reason else ""), {"reason": reason, **_asum(row)})
