@@ -27,6 +27,10 @@
     .ms-chip { font-size: 11px; padding: 2px 7px; border-radius: 10px; background: var(--border-light); cursor: pointer }
     .ms-chip.on { background: #DBEAFE; color: #1D4ED8; font-weight: 600 }
     .ms-bad { color: var(--danger); font-size: 12px }
+    .ms-cell { text-align: center; white-space: nowrap; min-width: 84px }
+    .ms-cell input { width: 17px; height: 17px; cursor: pointer }
+    .ms-cell input:disabled { cursor: not-allowed; opacity: .45 }
+    .ms-off { opacity: .6 }
     .ms-ok { color: var(--success); font-size: 12px }
     .ms-note { max-width: 1200px; margin-top: 16px; padding: 12px 16px; border-radius: 8px; background: #EFF6FF;
       border: 1px solid #BFDBFE; color: #1E3A8A; font-size: 13px; line-height: 1.7 }
@@ -42,10 +46,14 @@
       <div class="pg__l">
         <div class="pg__eyebrow">系統設定</div>
         <h1 class="pg__t">信件與通知收件設定</h1>
-        <p class="pg__s">每一種系統寄出的信件都在這裡指定收件人。「照預設」依信件類型的預設收件人寄送；「僅超級管理員」只寄給超級管理員；「指定帳號／角色」除了事件相關人員之外，另寄給指定的帳號與角色。系統技術類預設只寄超級管理員。個人仍可在使用者管理中退訂自己收得到的類型。</p>
+        <p class="pg__s">每一種系統寄出的信件都在這裡指定收件人。「照預設」依信件類型的預設收件人寄送；「僅超級管理員」只寄給超級管理員；「指定帳號／角色」除了事件相關人員之外，另寄給指定的帳號與角色。系統技術類預設只寄超級管理員。個人仍可在使用者管理中退訂自己收得到的類型。每一列另有兩個互相獨立的公司層勾選：「信件」取消勾選＝這種信不寄給任何人（原本的收件人設定保留，重新勾選即恢復）；「行事曆」勾選＝同步到公司 Google 行事曆。只進行事曆、不寄信也可以；沒有日期或沒有信件範本的格子停用。</p>
       </div>
     </div>
 
+    <div class="ms-note" x-show="calStatus && (!calStatus.connected || !calStatus.enabled)" data-testid="ms-cal-banner">
+      Google 行事曆目前<span x-text="calStatus && !calStatus.connected ? '尚未連線' : '總開關未啟用'"></span>：行事曆格仍可先勾選，連線並啟用後才會實際推送。
+      <a href="google-calendar-settings.html">前往 Google 行事曆連線設定</a>
+    </div>
     <div class="ms-note">主旨格式固定為「【MOTRIX 系統通知】分類－事由」，內文依「事由、影響、建議處理、發送時間與來源」呈現；下表的「影響」「建議處理」即為各類信件內文的預設說明。</div>
 
     <div class="ms-tabs">
@@ -58,20 +66,47 @@
 
     <div class="ms-card">
       <table class="ms-table">
-        <thead><tr><th>信件類型</th><th>分類</th><th>預設收件人</th><th>影響／建議處理</th><th style="min-width:280px">收件人設定</th><th></th></tr></thead>
+        <thead><tr><th>信件類型</th><th class="ms-cell">信件</th><th class="ms-cell">行事曆</th><th>分類</th><th>預設收件人</th><th>影響／建議處理</th><th style="min-width:280px">收件人設定</th><th></th></tr></thead>
         <tbody>
           <template x-for="t in shown" :key="t.key">
-            <tr :data-testid="'ms-row-' + t.key">
-              <td><div x-text="t.name"></div><div class="ms-sub" x-text="t.key"></div></td>
+            <tr :data-testid="'ms-row-' + t.key" :class="{'ms-off': t.mailOff}">
+              <td><div x-text="t.name"></div><div class="ms-sub" x-text="t.calOnly ? ('行事曆代碼：' + t.calendar.code) : t.key"></div></td>
+              <td class="ms-cell">
+                <template x-if="t.calOnly"><span class="ms-sub" :data-testid="'ms-mail-' + t.key" title="沒有信件範本">—</span></template>
+                <template x-if="!t.calOnly">
+                  <div>
+                    <input type="checkbox" :checked="!t.mailOff" :disabled="t.mailBusy || !!t.managedElsewhere || !!t.mailOffLockReason"
+                           :title="t.mailOffLockReason ? ('不可關閉：' + t.mailOffLockReason) : (t.managedElsewhere || '取消勾選＝不寄這種信')"
+                           @change="toggleMail(t, $event)" :data-testid="'ms-mail-' + t.key">
+                    <div class="ms-sub" x-show="t.mailOffLockReason">已鎖定</div>
+                  </div>
+                </template>
+              </td>
+              <td class="ms-cell">
+                <template x-if="t.calendar.disabledReason">
+                  <div><input type="checkbox" disabled :title="t.calendar.disabledReason" :data-testid="'ms-cal-' + t.key">
+                    <div class="ms-sub" x-text="t.calendar.disabledReason" style="white-space:normal;max-width:150px"></div></div>
+                </template>
+                <template x-if="!t.calendar.disabledReason && !t.calendar.primary">
+                  <div class="ms-sub" :data-testid="'ms-cal-' + t.key" x-text="'同上（' + sameAs(t) + '）'" style="white-space:normal;max-width:150px"></div>
+                </template>
+                <template x-if="!t.calendar.disabledReason && t.calendar.primary">
+                  <div><input type="checkbox" :checked="t.calendar.enabled" :disabled="t.calBusy" @change="toggleCal(t, $event)" :data-testid="'ms-cal-' + t.key">
+                    <div class="ms-sub" x-show="t.calendar.note" x-text="t.calendar.note" style="white-space:normal;max-width:150px"></div></div>
+                </template>
+              </td>
               <td x-text="t.categoryLabel"></td>
               <td><div x-text="t.groupLabel"></div><div class="ms-sub" x-show="t.event" x-text="'事件相關：' + t.event"></div></td>
-              <td><div class="ms-sub" x-text="'影響：' + t.impact"></div><div class="ms-sub" x-text="'建議處理：' + t.action"></div></td>
+              <td><div class="ms-sub" x-show="!t.calOnly" x-text="'影響：' + t.impact"></div><div class="ms-sub" x-show="!t.calOnly" x-text="'建議處理：' + t.action"></div>
+                  <div class="ms-sub" x-show="t.calOnly" x-text="t.calendar.group + '：' + t.description"></div></td>
               <td>
+                <div class="ms-sub" x-show="t.calOnly">沒有信件範本，只有行事曆。</div>
+                <div class="ms-sub" x-show="t.mailOff && !t.calOnly" :data-testid="'ms-off-' + t.key">信件已關閉（收件人設定保留）。</div>
                 <div class="ms-bad" x-show="t.noRecipient" :data-testid="'ms-norecip-' + t.key">目前沒有任何人會收到這類信（超級管理員都退訂了，或沒有人設定 email）。</div>
                 <template x-if="t.managedElsewhere">
                   <div class="ms-sub" :data-testid="'ms-elsewhere-' + t.key" x-text="t.managedElsewhere"></div>
                 </template>
-                <select class="ms-sel" data-saved-field x-show="!t.managedElsewhere" x-model="t.edit.mode" :data-testid="'ms-mode-' + t.key">
+                <select class="ms-sel" data-saved-field x-show="!t.managedElsewhere && !t.calOnly" x-model="t.edit.mode" :data-testid="'ms-mode-' + t.key">
                   <template x-for="(label, m) in modes" :key="m"><option :value="m" x-text="label"></option></template>
                 </select>
                 <template x-if="t.edit.mode === 'custom'">
@@ -98,7 +133,7 @@
                 </template>
               </td>
               <td style="white-space:nowrap">
-                <button x-show="!t.managedElsewhere" class="btn btn-primary btn-sm" :disabled="t.saving || !changed(t)" @click="save(t)" :data-testid="'ms-save-' + t.key">儲存</button>
+                <button x-show="!t.managedElsewhere && !t.calOnly" class="btn btn-primary btn-sm" :disabled="t.saving || !changed(t)" @click="save(t)" :data-testid="'ms-save-' + t.key">儲存</button>
                 <div class="ms-ok" x-show="t.okMsg" x-text="t.okMsg"></div>
                 <div class="ms-bad" x-show="t.errMsg" x-text="t.errMsg"></div>
               </td>
@@ -114,7 +149,7 @@
     function mailSettingsPage() {
       const ROLE_LABELS = { superadmin: '超級管理員', admin: '管理員', sales: '業務', engineer: '工程', user: '一般使用者', viewer: '檢視者' }
       return {
-        items: [], categories: {}, modes: {}, roles: [], users: [], cat: '', errMsg: '',
+        items: [], categories: {}, modes: {}, roles: [], users: [], cat: '', errMsg: '', calStatus: null,
         _initDone: false,
         _hdr() {
           const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
@@ -123,6 +158,10 @@
         roleLabel(r) { return ROLE_LABELS[r] || r },
         get shown() { return this.items.filter(t => !this.cat || t.category === this.cat) },
         toggle(arr, v) { const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v) },
+        sameAs(t) {
+          const p = this.items.find(x => !x.calOnly && x.calendar.code === t.calendar.code && x.calendar.primary)
+          return p ? p.name : t.calendar.code
+        },
         changed(t) { return JSON.stringify(t.edit) !== JSON.stringify(t.saved) },
         async init() {
           if (this._initDone) return
@@ -134,15 +173,56 @@
             const r = await fetch('/api/mail-types', { headers: this._hdr() })
             const d = await r.json().catch(() => ({}))
             if (!r.ok) { this.errMsg = '讀取失敗：' + (d.detail || r.status); return }
-            this.categories = d.categories; this.modes = d.modes; this.roles = d.roles
-            this.items = d.items.map(t => {
+            this.categories = Object.assign({}, d.categories, { calendar: '僅行事曆' })
+            this.modes = d.modes; this.roles = d.roles; this.calStatus = d.calendarStatus || null
+            const rows = d.items.map(t => {
               const o = t.override || {}
               const cur = { mode: o.mode || 'default', users: [...(o.users || [])], roles: [...(o.roles || [])] }
-              return Object.assign(t, { edit: JSON.parse(JSON.stringify(cur)), saved: cur, saving: false, okMsg: '', errMsg: '' })
+              return Object.assign(t, { edit: JSON.parse(JSON.stringify(cur)), saved: cur, saving: false, okMsg: '', errMsg: '', mailBusy: false, calBusy: false })
             })
+            const only = (d.calendarOnly || []).map(c => {
+              const cur = { mode: 'default', users: [], roles: [] }
+              return { key: 'cal:' + c.code, name: c.name, category: 'calendar', categoryLabel: '僅行事曆', groupLabel: '—', event: '', impact: '', action: '',
+                       description: c.description, calOnly: true, mailOff: false, mailOffLockReason: '', mailOffConfirm: false, managedElsewhere: '', noRecipient: false,
+                       calendar: { code: c.code, enabled: c.enabled, primary: true, note: '', group: c.group, disabledReason: '' },
+                       edit: cur, saved: cur, saving: false, okMsg: '', errMsg: '', mailBusy: false, calBusy: false }
+            })
+            this.items = rows.concat(only)
             const u = await fetch('/api/users', { headers: this._hdr() })
             if (u.ok) this.users = ((await u.json()) || []).filter(x => x.active)
           } catch (e) { this.errMsg = '讀取失敗：' + e.message }
+        },
+        // 信件格：取消勾選＝公司關閉這種信（原收件設定保留）；簽核／系統類先經確認。失敗時把勾選還原。
+        async toggleMail(t, ev) {
+          const wantOn = ev.target.checked
+          if (!wantOn && t.mailOffConfirm &&
+              !window.confirm('關閉「' + t.name + '」的信件後，相關人員不會再收到這種通知（' + t.categoryLabel + '類：流程可能卡住、或告警被忽略）。確定要關閉嗎？')) {
+            ev.target.checked = true; return
+          }
+          t.mailBusy = true; t.okMsg = ''; t.errMsg = ''
+          try {
+            const body = Object.assign({}, t.saved, { mailOff: !wantOn })
+            if (!wantOn && t.mailOffConfirm) body.confirm = true
+            const r = await fetch('/api/mail-types/' + encodeURIComponent(t.key) + '/recipients', { method: 'PUT', headers: this._hdr(), body: JSON.stringify(body) })
+            const d = await r.json().catch(() => ({}))
+            if (!r.ok) { t.errMsg = '儲存失敗：' + (d.detail || r.status); ev.target.checked = !wantOn; return }
+            t.mailOff = !wantOn
+            t.okMsg = wantOn ? '信件已開啟' : '信件已關閉'
+          } catch (e) { t.errMsg = '儲存失敗：' + e.message; ev.target.checked = !wantOn }
+          finally { t.mailBusy = false }
+        },
+        // 行事曆格：寫回 system_settings.google_calendar.events（與 Google 行事曆設定頁同一份）。同一事件的副列一併更新顯示。
+        async toggleCal(t, ev) {
+          const on = ev.target.checked
+          t.calBusy = true; t.okMsg = ''; t.errMsg = ''
+          try {
+            const r = await fetch('/api/settings/google-calendar', { method: 'PUT', headers: this._hdr(), body: JSON.stringify({ events: { [t.calendar.code]: on } }) })
+            const d = await r.json().catch(() => ({}))
+            if (!r.ok) { t.errMsg = '儲存失敗：' + (d.detail || r.status); ev.target.checked = !on; return }
+            this.items.filter(x => x.calendar && x.calendar.code === t.calendar.code).forEach(x => { x.calendar.enabled = on })
+            t.okMsg = on ? '行事曆已開啟' : '行事曆已關閉'
+          } catch (e) { t.errMsg = '儲存失敗：' + e.message; ev.target.checked = !on }
+          finally { t.calBusy = false }
         },
         async save(t) {
           t.saving = true; t.okMsg = ''; t.errMsg = ''

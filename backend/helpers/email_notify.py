@@ -24,6 +24,7 @@ from urllib.parse import quote as _pct_quote
 from .settings import _get_setting
 from .notification_prefs import is_enabled as _pref_enabled
 from . import mail_types as _mt
+from . import notify_matrix as _nm
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +179,18 @@ def _apply_dev_subject_prefix(cfg: dict, subject: str) -> str:
 # 群組收件人（原 _admin_emails／_superadmin_emails）與事件收件人（原 _lookup_emails）
 # 都先看登記表與超級管理員的覆寫；未登記的 key ⇒ 記 ERROR、只寄超級管理員（fail closed）。
 
+def _mail_off(event_key) -> bool:
+    """公司在「信件與行事曆」矩陣把這種信關掉了（`mail_recipient_overrides[key].off`）？鎖住的類型一律不算關（helpers/notify_matrix）。"""
+    try:
+        return _nm.is_mail_off(event_key, _get_setting(_mt.OVERRIDES_KEY, {}) or {})
+    except Exception as exc:     # 設定讀不到 ⇒ 當作沒關（寧可多寄，不可漏寄）
+        logger.warning("讀取信件關閉設定失敗（%s）：%s", event_key, exc)
+        return False
+
+
 def _users_emails(where: str, params, event_key) -> list:
+    if _mail_off(event_key):                   # 所有收件人查詢的唯一漏斗：關了就沒有收件人（呼叫端照「沒有收件人」處理）
+        return []
     try:
         from db import get_db
         conn = get_db()
@@ -195,6 +207,8 @@ def _users_emails(where: str, params, event_key) -> list:
 def _only_superadmins(event_key) -> list:
     """超級管理員。⚠️ 找不到時**不退回**一般管理員（使用者：「普通管理員不需要收到這類信」）——
     記 ERROR，呼叫端照「沒有收件人」處理（備份告警另有 _alert_email_failed 的警示檔）。"""
+    if _mail_off(event_key):
+        return []
     emails = _users_emails("role='superadmin'", (), event_key)
     if not emails:
         logger.error("信件類型 %r：沒有啟用中、設定了 email 且未退訂的超級管理員 ⇒ 不寄", event_key)

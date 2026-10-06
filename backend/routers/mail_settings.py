@@ -2,7 +2,8 @@
 """信件與通知收件設定（L1；CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）。
 
 - `GET  /api/mail-types`：所有登記的信件類型（分類、預設收件人、影響、建議處理）＋目前的覆寫（僅超級管理員）
-- `PUT  /api/mail-types/{key}/recipients`：{mode: default|superadmin_only|custom, users: [...], roles: [...]}
+- `PUT  /api/mail-types/{key}/recipients`：{mode: default|superadmin_only|custom, users: [...], roles: [...],
+  mailOff?: bool（信件關閉，MAIL-CAL 階段 1）, confirm?: bool（關閉簽核／系統類要帶 true）}
 - `GET  /api/mail-types/receivable?user_id=`：某位使用者**收得到**哪些類型（使用者管理頁的個人退訂清單用）
 
 個人退訂（`users.notification_muted`）只能移除自己收得到的類型；受限的類型不會出現在可勾選的清單裡，
@@ -13,6 +14,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 from db import get_db
 from helpers import _require_user, _audit, _tok
 from helpers import mail_types as mt
+from helpers import notify_matrix as nm
 from helpers.settings import _get_setting, _set_setting
 
 router = APIRouter()
@@ -25,31 +27,56 @@ def _overrides():
 def _no_recipient(t):
     """事件收件人以外，群組收件人（依目前的覆寫與個人退訂）是否一個人都沒有（稽核 M-S1）。
     只看沒有事件收件人的類型（有事件收件人的，每一封信的收件人不同）。"""
-    if t.event or t.key in mt.MANAGED_ELSEWHERE:
+    if t.event or t.key in mt.MANAGED_ELSEWHERE or nm.is_mail_off(t.key, _overrides()):      # 公司刻意關閉的不算「沒人收」
         return False
     from helpers import email_notify as en
     return not en._group_emails(t.key)
 
 
-def _type_view(t, o):
+def _calendar_view(t, sw):
+    """矩陣的行事曆格：有對應事件 ⇒ {code, enabled, primary, note}；沒有 ⇒ None ＋ 停用原因。"""
+    link = nm.calendar_link_of_mail(t.key)
+    if link:
+        return {**link, "enabled": bool(sw.get(link["code"])), "disabledReason": ""}
+    return {"code": "", "enabled": False, "primary": False, "note": "", "disabledReason": nm.calendar_disabled_reason(t.key)}
+
+
+def _type_view(t, o, sw=None):
     return {"key": t.key, "name": t.name, "category": t.category, "categoryLabel": mt.CATEGORIES[t.category],
             "group": t.group, "groupLabel": mt.GROUPS[t.group], "event": t.event,
             "impact": t.impact, "action": t.action, "owner": t.owner,
             "override": o.get(t.key) or {"mode": "default", "users": [], "roles": []},
-            "managedElsewhere": mt.MANAGED_ELSEWHERE.get(t.key, "")}
+            "managedElsewhere": mt.MANAGED_ELSEWHERE.get(t.key, ""),
+            "mailOff": nm.is_mail_off(t.key, o), "mailOffLockReason": nm.mail_off_lock_reason(t.key),
+            "mailOffConfirm": nm.mail_off_needs_confirm(t.key),
+            "calendar": _calendar_view(t, sw if sw is not None else {})}
+
+
+def _calendar_matrix():
+    """⇒ (事件開關 {代碼: bool}, 僅行事曆的列, 行事曆狀態)。開關就是 `google_calendar.events`（缺項＝EVENT_TYPES 預設），與行事曆設定頁同一份。"""
+    from helpers import google_calendar as gc
+    cfg = _get_setting("google_calendar", {}) or {}
+    sw = gc.event_switches(cfg)
+    types = {x["code"]: x for x in gc.event_types()}
+    only = [{"code": c, "name": types[c]["label"], "group": types[c]["group"], "description": types[c]["description"],
+             "enabled": sw[c], "default": types[c]["default"]} for c in nm.calendar_only_codes(gc.EVENT_CODES)]
+    status = {"enabled": bool(cfg.get("enabled")), "connected": bool(cfg.get("refresh_token"))}
+    return sw, only, status
 
 
 @router.get("/api/mail-types")
 def list_mail_types(authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     o = _overrides()
+    sw, cal_only, cal_status = _calendar_matrix()
     order = list(mt.CATEGORIES)
-    items = sorted((_type_view(t, o) for t in mt.all_types()),
+    items = sorted((_type_view(t, o, sw) for t in mt.all_types()),
                    key=lambda v: (order.index(v["category"]), v["name"]))
     for v in items:
         v["noRecipient"] = _no_recipient(mt.get(v["key"]))
     return {"items": items, "categories": mt.CATEGORIES, "groups": mt.GROUPS, "roles": list(mt.ROLES),
-            "modes": {"default": "照預設", "superadmin_only": "僅超級管理員", "custom": "指定帳號／角色"}}
+            "modes": {"default": "照預設", "superadmin_only": "僅超級管理員", "custom": "指定帳號／角色"},
+            "calendarOnly": cal_only, "calendarStatus": cal_status}
 
 
 @router.put("/api/mail-types/{key}/recipients")
@@ -81,20 +108,32 @@ def set_mail_recipients(key: str, body: dict = Body(...), authorization: str = H
             raise HTTPException(400, "找不到帳號：%s" % "、".join(missing))
     if mode == "custom" and not users and not roles:
         raise HTTPException(400, "指定收件人時，至少要選一個帳號或角色。")
+    o = _overrides()
+    was_off = bool((o.get(key) or {}).get("off") is True)
+    if "mailOff" in body:
+        if not isinstance(body["mailOff"], bool):
+            raise HTTPException(400, "mailOff 必須是 true 或 false")
+        now_off = body["mailOff"]
+    else:
+        now_off = was_off                       # 舊的呼叫端（沒帶 mailOff）不改信件開關
+    if now_off and not was_off:
+        lock = nm.mail_off_lock_reason(key)
+        if lock:
+            raise HTTPException(400, "「%s」的信件不能關閉：%s" % (t.name, lock))
+        if nm.mail_off_needs_confirm(key) and body.get("confirm") is not True:
+            raise HTTPException(409, "關閉「%s」（%s類）的信件後，相關人員不會再收到通知，流程或告警可能因此被忽略；確認請帶 confirm=true 再送一次" % (t.name, mt.CATEGORIES[t.category]))
     new_override = {"mode": mode, "users": users if mode == "custom" else [], "roles": roles if mode == "custom" else []}
-    blocked = custom_override_blockers(key, new_override)
+    blocked = [] if now_off else custom_override_blockers(key, new_override)      # 關閉中不需要有人收得到
     if blocked:
         raise HTTPException(400, blocked[0])
-    o = _overrides()
-    if mode == "default":
+    if mode == "default" and not now_off:
         o.pop(key, None)
     else:
-        o[key] = {"mode": mode, "users": users if mode == "custom" else [],
-                  "roles": roles if mode == "custom" else []}
+        o[key] = {**new_override, **({"off": True} if now_off else {})}
     _set_setting(mt.OVERRIDES_KEY, o)
     _audit(_tok(authorization), "mail_types.recipients", "settings", key,
-           "信件收件人：%s → %s" % (t.name, mode))
-    return {"ok": True, "override": o.get(key) or {"mode": "default", "users": [], "roles": []}}
+           "信件收件人：%s → %s%s" % (t.name, mode, "（信件關閉）" if now_off and not was_off else ("（信件重新開啟）" if was_off and not now_off else "")))
+    return {"ok": True, "override": o.get(key) or {"mode": "default", "users": [], "roles": []}, "mailOff": now_off}
 
 
 def _has_email(v) -> bool:
@@ -141,7 +180,7 @@ def last_superadmin_blockers(conn, user_id, new_muted=None, new_email=None, new_
 
     out = []
     for t in mt.all_types():
-        if t.category != "system" or t.event or t.key in mt.MANAGED_ELSEWHERE:
+        if t.category != "system" or t.event or t.key in mt.MANAGED_ELSEWHERE or nm.is_mail_off(t.key, o):
             continue
         ov = o.get(t.key) or {"mode": "default"}
         if receivers(t.key, ov, False) > 0 and receivers(t.key, ov, True) == 0:
@@ -164,6 +203,8 @@ def custom_override_blockers(key, override) -> list:
 def receivable(t, o, username, role):
     """這位使用者**可能**收到這類信嗎（退訂清單只列這些）。"""
     ov = o.get(t.key) or {}
+    if nm.is_mail_off(t.key, o):
+        return False                            # 公司關閉的信件：沒有人收得到，退訂清單不列
     mode = ov.get("mode", "default")
     if mode == "superadmin_only":
         return role == "superadmin"
