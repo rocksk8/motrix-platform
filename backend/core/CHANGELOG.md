@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — 2026-10-06（train43 整合：wip/t44-business-days＋wip/t43-phase2-events＋wip/t44-fin-fixes）；併入 r2（send_registered 記號政策）；t43-cal-strict-fix
+## (next) — 2026-10-06（train43 整合：wip/t43-mail-cal-matrix＋wip/t44-build-nopyc＋wip/t44-business-days＋wip/t43-phase2-events＋wip/t44-fin-fixes＋wip/t44-fin-fixes-r2＋wip/t43-duty-roles-r1＋wip/t43-cal-strict-fix＋wip/t44-settle-terms＋wip/t43-settle-tax＋wip/t43-finance-tab＋wip/t43-shipped-qty）
 - L1（新增，向下相容）：`helpers/business_days.py`——自 M11 `calendar_tw.py` 提升（純函式、不讀時鐘）：`load`／`coverage`／`covered`／`days_until_expiry`／`no_mail_day`／`next_mail_day`（行為不變）＋新增 `is_working_day(d)`、`previous_working_day(d, limit=14)`；資料 `helpers/holidays_tw.json`（官方人事行政總處辦公日曆表，2026～2027；每年更新，到期前 60 天內 M11 每日排程記警告）。M11 的 `calendar_tw.py` 轉出舊名。沒有假日表／年份不在涵蓋範圍 ⇒ 只排除週六日，不丟例外。
 - L1（新增，向下相容；wip/t43-mail-cal-matrix）：`helpers/notify_matrix.py`——信件×行事曆通知矩陣的對照與規則（`EVENT_LINKS`／`MAIL_OFF_LOCKED`／`is_mail_off`／`mail_off_lock_reason` 等；不讀寫設定、不 import 業務模組）；`helpers.email_notify` 的所有收件人漏斗（含事件收件人、部門主管、月報、財務受眾）在公司關閉該信件時回空清單，鎖定的資安類恆不可關。
 - L1（新增選填參數，向下相容；wip/t44-fin-fixes）：`helpers.email_notify.send_registered(..., wait=False)`——`wait=True` 時等寄送結果並回「可以寫記號」：`SEND_SENT`／`SEND_UNKNOWN`／`SEND_PERMANENT_FAIL` 回 True（照 `system_checks` 前例，不確定或永久失敗時保留記號、不重寄，另記 ERROR），`SEND_TRANSIENT_FAIL`／`SEND_SKIPPED`／沒有收件人回 False；新增選填 `out`（dict）取得 `out["outcome"]`（`SEND_*` 或 `"no_recipient"`）。
