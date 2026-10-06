@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """通知矩陣（信件 × 行事曆）的對照登記（L1；MAIL-CAL 階段 1，設計 docs/platform/plans/MAIL-CAL-MERGE-DESIGN.md）。
 
-[單位] plat:notify_matrix    [層] L1    [穩定度] 實作（階段 1：同頁對照＋兩欄可勾，寫回既有儲存，零遷移）
-[公開介面] EVENT_LINKS, MAIL_OFF_LOCKED, mail_off_lock_reason, mail_off_needs_confirm, is_mail_off,
-           calendar_link_of_mail, calendar_disabled_reason, calendar_only_codes
+[單位] helper:notify_matrix    [層] L1    [穩定度] 實作（階段 1：同頁對照＋兩欄可勾，寫回既有儲存，零遷移）
+[公開介面] CALENDAR_DISABLED_SPECIAL, EVENT_LINKS, MAIL_OFF_CONFIRM_CATEGORIES, MAIL_OFF_LOCKED, calendar_disabled_reason, calendar_link_of_mail, calendar_only_codes, is_mail_off, mail_off_lock_reason, mail_off_needs_confirm
+[契約題] tests/test_notify_matrix_2026_10_05.py
 [不變式] 本檔只放「對照」與「規則」，不讀寫任何設定、不 import 業務模組（email_notify 反過來 import 本檔，不可循環）；
          矩陣的資料來源仍是兩份登記（信件＝mail_types，行事曆＝google_calendar.EVENT_TYPES），沒登記就沒有列。
 

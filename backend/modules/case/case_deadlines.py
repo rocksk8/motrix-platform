@@ -275,6 +275,11 @@ def _check_warranty_expiry() -> None:
 
 # ── 階段 2（MAIL-CAL）：日期型行事曆事件的每日對帳；預設關，關著＝不讀資料庫、零 Google 流量 ──────
 # 事件內容不含金額；日期已過不建（helpers/calendar_sync.py 的 Q9 規則）。與上面寄信的 guard 完全獨立。
+def _deal_tag(row, data) -> str:
+    """與寄信端 SQL 同義：欄位 deal_tag 優先，空才看 data_json.dealTag。（對帳掃描改在 Python 判斷——json_extract 棘輪只准減少。）"""
+    return row["deal_tag"] or (data.get("dealTag") if isinstance(data, dict) else "") or ""
+
+
 def _sync_warranty_calendar() -> None:
     from helpers import google_calendar as gc
     from helpers.calendar_sync import sync_dated_events
@@ -284,18 +289,18 @@ def _sync_warranty_calendar() -> None:
     conn = get_db()
     try:
         rows = conn.execute("""
-            SELECT quote_no, customer_name, json_extract(data_json, '$.caseRecord') AS cr_json
-            FROM quotations
-            WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') = '已成案'
-              AND json_extract(data_json, '$.caseRecord') IS NOT NULL
+            SELECT quote_no, customer_name, deal_tag, data_json FROM quotations
         """).fetchall()
     finally:
         conn.close()
     for row in rows:
         try:
-            devices = json.loads(row["cr_json"] or "{}").get("devices") or []
+            data = json.loads(row["data_json"] or "{}")
         except Exception:
             continue
+        if _deal_tag(row, data) != "已成案":
+            continue
+        devices = (data.get("caseRecord") or {}).get("devices") or []
         for i, dev in enumerate(devices):
             ws, wm = dev.get("warrantyStart") or "", dev.get("warrantyMonths")
             if not ws or not wm:
@@ -322,18 +327,17 @@ def _sync_project_end_calendar() -> None:
     conn = get_db()
     try:
         rows = conn.execute("""
-            SELECT quote_no, customer_name, project_name,
-                   json_extract(data_json, '$.caseRecord.projectTimeline.endDate') AS end_date_json
-            FROM quotations
-            WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') != '已結案'
-              AND json_extract(data_json, '$.caseRecord.projectTimeline.endDate') IS NOT NULL
+            SELECT quote_no, customer_name, project_name, deal_tag, data_json FROM quotations
         """).fetchall()
     finally:
         conn.close()
     for row in rows:
         try:
-            end_date = _date.fromisoformat((row["end_date_json"] or "").strip('"'))
+            data = json.loads(row["data_json"] or "{}")
+            end_date = _date.fromisoformat(str(((data.get("caseRecord") or {}).get("projectTimeline") or {}).get("endDate") or ""))
         except Exception:
+            continue
+        if _deal_tag(row, data) == "已結案":
             continue
         label = row["project_name"] or row["quote_no"]
         current[row["quote_no"]] = (

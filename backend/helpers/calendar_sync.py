@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """日期型行事曆事件的每日對帳（L1；MAIL-CAL 階段 2：保固到期／區間事項結束／專案預計完成）。
 
-[單位] plat:calendar_sync    [層] L1    [穩定度] 實作
-[公開介面] sync_dated_events(code, current, today=None, max_calls=MAX_CALLS_PER_RUN) -> dict
+[單位] helper:calendar_sync    [層] L1    [穩定度] 實作
+[公開介面] MAX_CALLS_PER_RUN, sync_dated_events
+[契約題] tests/test_notify_matrix_phase2_2026_10_06.py
 [不變式]
   - 事件種類開關（`google_calendar.events[code]`）或行事曆總開關關閉 ⇒ 完全不動作（不讀來源之外的任何東西、不寫對帳表、
     零 Google 流量）。預設關 ⇒ 升級後行為不變。

@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-06（wip/t43-phase2-events）：保固到期、專案預計完成的行事曆事件（預設關）
+- `case_deadlines.py` 新增 `_sync_warranty_calendar`、`_sync_project_end_calendar`，掛在每日檢查（`run_daily_checks`）最後；與寄信的 guard 完全獨立。事件種類開關關閉（預設）⇒ 不讀資料庫、不打 Google。事件內容只有案號、客戶、設備／專案、日期，不含金額。日期已過不建；改日期、結案、設備刪除由對帳處理。
+
 ## 1.0.148 — 2026-10-05（wip/t42-fix-caserecord）：財務角色可在任何案件登錄／修改收款〔train_number：1.0.147 → 1.0.148〕
 - `PATCH /api/quotations/{no}/case-record`：財務角色（與 superadmin）不是案件成員時，舊整包格式只在「除款項外與資料庫完全相同」時通過（款項照存），否則 403（不靜默丟掉）；分段格式仍只放行 `payment` 分段；業務（非成員）仍 403。`PATCH …/payment/{idx}` 本來就沒有擁有者限制。測試：`test_finance_caserecord_foreign_case_2026_10_05.py`。
 
@@ -23,9 +26,6 @@
 - `payable_reminders.py`：預定付款日前 3 天（`payable_due_soon`）與當天（`payable_due_today`）寄信；只對已核准、未付款、未作廢、要出納付款的類型；名義日（預定日、預定日−3 天）落在週六日就提前到前一個工作日寄（週一至週五；國定假日未納入，見 `payable_reminders.is_working_day`），兩封折到同一天只寄「今日到期」一封；guard key 以（案件, 種類, 預定日, 寄信日）冪等（改日期重發、過期 key 自動清）；信內不放金額。收件人經單一入口 `finance_recipients(conn)`——**暫時的本地樁**（財務角色＋最高管理者；TODO：換成 wip/t42-finance-role 的 helper）。每日檢查由 `case_deadlines.run_daily_checks` 呼叫。
 - `payable_calendar.py`：行事曆「付款待辦」（L1 `payable_due`，預設關）跟著現況走——核准／改預定日／清空／作廢／付款日被更正，commit 後同步 upsert 或 delete；出納付款（M05）以 IP-100 的 `來源:key` 直接收回，不讀本模組的表。
 - 測試：`tests/test_payable_planned_pay_date_2026_10_05.py`（migration 冪等、API、IP-100 欄位、行事曆跟現況走、3 天前／當天／冪等／退訂／無日期略過／收件人權限、guard 清理）。
-
-## (next) — 2026-10-06（wip/t43-phase2-events）：保固到期、專案預計完成的行事曆事件（預設關）
-- `case_deadlines.py` 新增 `_sync_warranty_calendar`、`_sync_project_end_calendar`，掛在每日檢查（`run_daily_checks`）最後；與寄信的 guard 完全獨立。事件種類開關關閉（預設）⇒ 不讀資料庫、不打 Google。事件內容只有案號、客戶、設備／專案、日期，不含金額。日期已過不建；改日期、結案、設備刪除由對帳處理。
 
 ## 1.0.142 — 2026-10-05（wip/quick2-wording，併入 t41）：出納來源名稱「案件支出申請」
 - `payables.py` `SOURCE_LABEL` 「案件額外支出（請款）」→「案件支出申請」（出納待付款列的來源）。只改畫面文字；客戶「請款單」（M05 應收）不動。
