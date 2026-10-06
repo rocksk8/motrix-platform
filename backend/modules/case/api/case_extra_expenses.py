@@ -1039,6 +1039,11 @@ def _guard_files_editable(row, kind=None):
 FILES_MUTABLE_STATUSES = ("草稿", "待審核", "簽核中", "已駁回")
 
 
+def _attached_count(row) -> int:
+    """這張單據占用的附件名額＝正式附件＋變更申請裡待核准的新附件（核准時會併進正式附件，`_apply_change` 不再檢查數量）。"""
+    return len(_files_of(row)) + len([f for f in (_change_of(row).get("addFiles") or []) if isinstance(f, dict)])
+
+
 def _cap_or_purge(new_files: list, current_count: int):
     """寫鎖內重讀後的最終數量檢查（上傳前的檢查是 check-then-act：同時兩個上傳都會過）。超過 ⇒ 刪掉剛存的實體檔案並 400。"""
     cap = (UPLOAD_LIMITS_BY_SUBFOLDER.get("case_extra_expense") or {}).get("max_files")
@@ -1080,7 +1085,7 @@ async def upload_extra_expense_files(quote_no: str, exp_id: int,
             raise HTTPException(403, "核准後補發票限填寫人本人、管理員或財務角色")
         new_files = await save_document_files(
             "case_extra_expense", f"{quote_no}_{exp_id}", files,
-            user.get("display_name") or user["username"], existing_count=len(_files_of(row)))     # 每張單據最多 10 個（helpers/uploads UPLOAD_LIMITS_BY_SUBFOLDER）
+            user.get("display_name") or user["username"], existing_count=_attached_count(row))     # 每張單據最多 10 個（正式附件＋變更申請待核准附件合計；helpers/uploads UPLOAD_LIMITS_BY_SUBFOLDER）
         for f in new_files:
             f["kind"] = kind
         # 檔案已存好（慢動作做完）⇒ 才拿寫鎖、重讀、重驗狀態與數量，只把自己這批併進最新清單（不蓋掉同時進來的另一批）
@@ -1088,7 +1093,7 @@ async def upload_extra_expense_files(quote_no: str, exp_id: int,
         try:
             row = _load(conn, quote_no, exp_id, user)
             _guard_files_mutation(row, user, kind)
-            _cap_or_purge(new_files, len(_files_of(row)))
+            _cap_or_purge(new_files, _attached_count(row))
         except HTTPException:
             purge_document_files(new_files)          # 狀態在上傳途中變了（例如作廢）⇒ 剛存的檔不留孤兒（已 purge 過的再 purge 無害）
             raise
@@ -1374,14 +1379,14 @@ async def upload_change_request_files(quote_no: str, exp_id: int,
         change = _change_of(row)
         new_files = await save_document_files(
             "case_extra_expense", f"{quote_no}_{exp_id}", files, display,
-            existing_count=len(_files_of(row)) + len(change.get("addFiles") or []))               # 核准後會併進正式附件 ⇒ 兩邊合計算
+            existing_count=_attached_count(row))               # 核准後會併進正式附件 ⇒ 兩邊合計算
         begin_write(conn)                             # 同上：先存檔、再拿鎖重讀、只併自己這批
         try:
             row = _load(conn, quote_no, exp_id, user)
             change = _change_of(row)
             if (_col(row, "change_status", "") or "") not in ("草稿", "已駁回"):
                 raise HTTPException(409, "變更申請已送審，不可再上傳附件")
-            _cap_or_purge(new_files, len(_files_of(row)) + len(change.get("addFiles") or []))
+            _cap_or_purge(new_files, _attached_count(row))
         except HTTPException:
             purge_document_files(new_files)
             raise

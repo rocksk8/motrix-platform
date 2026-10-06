@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """傳票附件開放 Word／Excel（使用者 2026-09-30 裁示）：docx／xlsx／doc／xls 可上傳；exe 等仍拒；大小上限沿用；
 PDF 匯出時這些只列檔名、不嵌入（不崩）；下載時 Content-Disposition 是 attachment 且檔名正確。
-放行範圍在 `helpers/uploads.py::_EXTRA_EXTS_BY_SUBFOLDER`（只有 voucher_attachments），其他單據的上傳白名單不變。
+放行範圍在 `helpers/uploads.py::_EXTRA_EXTS_BY_SUBFOLDER`（voucher_attachments 放 Word／Excel；case_extra_expense 只放 HEIC／HEIF，第44班），其他單據的上傳白名單不變。
 """
 import io
 import pathlib

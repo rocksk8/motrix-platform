@@ -106,3 +106,21 @@ def test_status_changed_during_upload_purges_new_files(client, make_user, seed_e
     from helpers import uploads as U
     d = os.path.join(U.UPLOADS_ROOT, "case_extra_expense", "%s_%s" % (NO, eid))
     assert not os.path.isdir(d) or os.listdir(d) == [], "上傳途中單據被作廢 ⇒ 剛存的檔不留孤兒"
+
+
+def test_pending_change_files_count_toward_the_cap_on_main_upload(client, make_user, seed_extra_expense):
+    """已核准單據補發票：變更申請裡待核准的 addFiles 核准時會併進正式附件 ⇒ 名額要合計算（否則核准後可超過 10）。"""
+    h, eid = _setup(client, make_user, seed_extra_expense)
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE case_extra_expenses SET status='已核准', files_json=?, change_json=? WHERE id=?",
+                     (json.dumps([{"id": "m%d" % i, "filename": "m%d.pdf" % i, "kind": "other"} for i in range(5)]),
+                      json.dumps({"addFiles": [{"id": "p%d" % i, "filename": "p%d.pdf" % i} for i in range(5)]}), eid))
+        conn.commit()
+    finally:
+        conn.close()
+    r = client.post("/api/quotations/%s/extra-expenses/%s/files" % (NO, eid), headers=h, data={"kind": "invoice"},
+                    files=[("files", ("inv.pdf", io.BytesIO(b"%PDF-1.4\n" + b"0" * 32), "application/pdf"))])
+    assert r.status_code == 400 and "10" in r.json()["detail"], r.text
+    assert len(_files(eid)) == 5
