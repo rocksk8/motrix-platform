@@ -1,5 +1,5 @@
 {
- "core_version": "1.113",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -225,6 +225,17 @@
    "build_info": "def()",
    "resolve_commit": "def()",
    "startup_line": "def()"
+  },
+  "helper:business_days": {
+   "DATA_PATH": "const",
+   "coverage": "def(data=…)",
+   "covered": "def(d, data=…)",
+   "days_until_expiry": "def(today_d, data=…)",
+   "is_working_day": "def(d, data=…)",
+   "load": "def(path=…)",
+   "next_mail_day": "def(d, data=…, limit=…)",
+   "no_mail_day": "def(d, data=…)",
+   "previous_working_day": "def(d, data=…, limit=…)"
   },
   "helper:case_access": {
    "CASE_ACCESS": "const",

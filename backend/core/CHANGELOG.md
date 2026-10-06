@@ -2,6 +2,10 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-05（wip/t44-business-days：L1 工作日／假日判斷）
+- L1（新增，向下相容）：`helpers/business_days.py`——自 M11 `calendar_tw.py` 提升（純函式、不讀時鐘）：`load`／`coverage`／`covered`／`days_until_expiry`／`no_mail_day`／`next_mail_day`（行為不變）＋新增 `is_working_day(d)`、`previous_working_day(d, limit=14)`；資料 `helpers/holidays_tw.json`（官方人事行政總處辦公日曆表，2026～2027；每年更新，到期前 60 天內 M11 每日排程記警告）。M11 的 `calendar_tw.py` 轉出舊名。沒有假日表／年份不在涵蓋範圍 ⇒ 只排除週六日，不丟例外。
+- 測試：`tests/test_business_days_2026_10_05.py`；L1 介面快照 `core_bump.py --pending`。
+
 ## 1.113 — wip/t42-finance-role（財務角色；財務／出納權限只屬「財務」角色與 superadmin）
 - L1（新增，向下相容）：`helpers.auth` 新增 `FINANCE_ROLE`／`FINANCE_ROLES`／`FINANCE_MODULE_KEYS`／`VALID_ROLES`、`has_finance_access(user)`、`has_cashier_access(user)`、`effective_modules(role, modules)`、`finance_usernames(conn=None)`；`helpers.email_notify.finance_recipient_emails(event_key)`、`notify_module_activity(..., audience="admins"|"finance")`（選填）；`helpers.mail_types` 群組新增 `finance`、`ROLES` 新增 `finance`。
 - L1（行為變更，簽章不變）：`user_has_module(user, "cashier"|"finance"|"financial_view")` 改由角色推導（僅 `finance` 角色與 superadmin 為真，`users.modules` 勾選不再算；資料保留、惰性）；`can_see_financial` ＝ `has_finance_access`（admin／sales 直通拿掉）；`_require_user(module=…)` 與登入／`me`／`/api/platform/menu` 回傳的模組清單改用 `effective_modules`。

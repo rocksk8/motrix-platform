@@ -1117,7 +1117,7 @@ def _check_holiday_table_expiry():
         return
     if str(_get_setting(ALERT_DAY_SETTING % "holiday_table") or "") == today().isoformat():
         return
-    logger.warning("標案雷達假日表%s——請用新一年的官方辦公日曆表更新 holidays_tw.json，否則國定假日會照常寄信",
+    logger.warning("標案雷達假日表%s——請用新一年的官方辦公日曆表更新 helpers/holidays_tw.json，否則國定假日會照常寄信",
                    "不存在或讀不到" if left is None else ("已過期 %d 天" % -left if left < 0 else "將在 %d 天後到期" % left))
     _set_setting(ALERT_DAY_SETTING % "holiday_table", today().isoformat())
 
