@@ -508,6 +508,8 @@
                                   <span style="color:var(--text-dim)" x-show="f.size" x-text="fileSizeText(f.size)"></span>
                                 </div>
                               </template>
+                              <div style="color:#C0392B" x-show="payableFileErr[it.source + ':' + it.key]" x-text="payableFileErr[it.source + ':' + it.key]"
+                                   :data-testid="'cashier-payreq-file-error-' + it.source + '-' + it.key"></div>
                             </div>
                           </td>
                           <td class="c">

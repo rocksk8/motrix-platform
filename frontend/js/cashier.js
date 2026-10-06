@@ -61,6 +61,7 @@ function cashierApp() {
     payVoucherNote:    '',
     payVoucherBankAcctCode: '',
     payVoucherSaving:  false,
+    payableFileErr:    {},          // 待付款申請附件開啟失敗的行內訊息（鍵＝來源:key）；不用 alert（阻斷對話框）
     payLinks:          null,    // R12：個人外包人員 ↔ 勞報單 { required, providerAvailable, lines:[{id,name,amount,payslipNo,candidates,error,ok}], canPay }
     payLinksError:     '',
 
@@ -436,6 +437,8 @@ function cashierApp() {
         if (!r.ok) throw new Error('HTTP ' + r.status)
         return r.arrayBuffer()
       }
+      const ek = it.source + ':' + it.key
+      this.payableFileErr = { ...this.payableFileErr, [ek]: '' }
       try {
         if (file.kind === 'heic') {
           const url = URL.createObjectURL(new Blob([await fetchBlob(file)], { type: 'application/octet-stream' }))
@@ -450,7 +453,7 @@ function cashierApp() {
         const items = list.map(f => P.withMime({ id: f.id, filename: f.name, size: f.size }))
         await P.open({ items, index: Math.max(0, list.findIndex(f => f.id === file.id)), fetchBlob,
           meta: (x) => P.fileSize(x.size) || '' })
-      } catch (e) { alert('開啟檔案失敗：' + e.message) }
+      } catch (e) { this.payableFileErr = { ...this.payableFileErr, [ek]: '開啟檔案失敗：' + e.message } }
     },
 
     // 勞報單簽回檔：頁內預覽（共用元件 static/file-preview.js），下方保留「另開新分頁」（出納要看大圖或並排比對時用）

@@ -3,7 +3,8 @@
 ## (next) — 2026-10-06（wip/t44-attach-views）：簽核／出納唯讀看附件
 - `payables.py`：待付款申請提供者新增 `fileList`（名稱／大小／類別，**不含 path**）與 `file_open(conn, key, file_id)`（只認還在出納待付款清單上的那一筆、檔案 id 在該筆自己的清單、路徑綁單據；任一不符 ⇒ LookupError）。
 - `api/quotations.py`：額外支出詳情（含變更申請的 `addFiles`）檔案清單帶 `docKind`（舊筆無 `kind` ⇒ 附件）；費用單據詳情加 `filesNeedMoneyView`（附件＝金額）：金額被遮蔽的簽核人不給檔案清單（由 L1 `_open_detail` 處理）。
-- 測試：`tests/test_attach_views_2026_10_06.py`（6 題；突變 3/3 轉紅）。
+- 舊筆（附件沒有 `kind`）一律當「附件」顯示、仍可見（不因缺 `kind` 而隱藏）；只有費用單據（`filesNeedMoneyView`）對看不到金額的人隱藏檔案。
+- 測試：`tests/test_attach_views_2026_10_06.py`（6 題；突變 3/3 轉紅）；`tests/test_e2e_cashier_payable_files_2026_10_07.py`（出納頁附件清單／預覽／下載按鈕）。
 
 ## 1.0.149 — 2026-10-06（train43 整合：wip/t43-phase2-events＋wip/t44-fin-fixes；階段 2 對帳失敗會重試）；併入 r2（提醒信記號政策）；併入 wip/t44-settle-terms（字樣）；併入 wip/t43-settle-tax（精算全含稅＋稅額）；稽核修正（多列單據稅額只計一次）；併入 wip/t43-finance-tab（財務分頁外包總成本）；＋wip/t43-shipped-qty（已出貨數量）（端點加模組檢查）（已併入最新 train43-int）（閘門修正已併入）
 - 新 `item_shipped.py`：每個報價品項的 訂購／已出貨／占用中＝材料申請出貨（`shipping.material_shipped` 經叫料列的 `quoteItemId`）＋報價帶入列（`shipping.quote_item_shipped`）；沒有可歸屬紀錄 ⇒ `attributed=False`（畫面「—」）。新端點 `GET /api/quotations/{no}/item-shipped`（案件可見即可；只有數量）；新提供者 `case.shipped_summary`（IP-SH5）。
