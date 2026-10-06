@@ -16,6 +16,7 @@ import sqlite3
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from core.txn import begin_write  # noqa: E402
 
 
 def _connect(path):
@@ -75,7 +76,7 @@ def main(argv=None):
         if not a.apply:
             print("（dry-run；加 --apply 才寫回）")
             return 0
-        conn.execute("BEGIN")
+        begin_write(conn)                                   # core.txn：唯一合法的 BEGIN IMMEDIATE 出處（守門 test_begin_only_via_begin_write）
         for it in items:
             if it["changed"]:
                 conn.execute("UPDATE users SET modules=? WHERE id=?", (json.dumps(it["after"], ensure_ascii=False), it["id"]))
