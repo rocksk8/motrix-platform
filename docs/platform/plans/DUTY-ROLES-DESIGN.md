@@ -311,6 +311,7 @@ sod_rules             (id PK, name, key_a, key_b, mode 'warn'|'strict', active)
 - **superadmin 維持出貨現狀**（`modules` ＋財務三鍵），R1 **不改成「全部鍵」**（避免改變 superadmin 的選單／模組清單）；角色與扣項資料不可能降低它（演算法對 superadmin 完全不呼叫角色解析，服務層拒絕對其綁角色／設扣項，另有「硬塞資料也不降低」測試）。「全部鍵」留到 R2 之後再裁示。
 - **遷移不自動綁定任何人**（綁定原則 §3.2 第 2 點的自動綁定留 R2）：零綁定、零扣項 ⇒ 上線當天逐人等值；等值關卡＝`tools/duty_roles_equivalence.py snapshot|verify`＋全角色×全模組鍵測試。
 - **R1 刻意不做（R2 pending）**：`users.html` 整合（獨立頁 `duty-roles.html`）、高敏感變更信件、季度盤點、離職回收、職務分離提示、每鍵「強制程度」標籤（改固定警語）、紀錄 Excel 匯出。
+- **R2 已知限制（hichan-cf 稽核）**：`INSERT OR REPLACE` 會繞過 append-only 觸發器（無應用程式路徑；R2 加掃描守門）；`permission_changes.audit_id` 未填；舊 `PUT /api/users` 可勾選被扣項扣掉的鍵（扣項靜默勝出，R2 須拒絕或警告）；`DELETE /api/users` 留下孤兒綁定（R2 清理）；「不可自改」護欄在路由後走不到（保留，服務層單元題驗證）。原因規則加強：少於 4 個不同的字母數字／中文字元（純標點、重複同字）視為無效。
 - **R1 不開放對財務三鍵設扣項**（§2.2），且綁定含財務三鍵的角色**不會**讓持有者取得財務／出納能力（`has_finance_access` 仍只看基礎類別，第 42 班原樣）。
 
 ---
