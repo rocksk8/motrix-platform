@@ -6,15 +6,17 @@ from pathlib import Path
 
 import pytest
 
+from core import source_tree
+
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND, FRONT = ROOT / "backend", ROOT / "frontend"
+BACKEND = ROOT / "backend"
 
 #: （檔案, 不可再出現的舊字樣）——這些檔案的「請款」都屬支出申請那一邊
 GONE = [
-    (FRONT / "pages" / "payment-request.html", ["② 請款內容", "我的請款", "還沒有請款"]),
-    (FRONT / "pages" / "expense-types.html", ["請款單的樣子"]),
-    (FRONT / "pages" / "ledger-settings.html", ["額外支出、請款"]),
-    (FRONT / "pages" / "bank-account.html", ["請款或報銷"]),
+    (source_tree.page_file("payment-request.html"), ["② 請款內容", "我的請款", "還沒有請款"]),
+    (source_tree.page_file("expense-types.html"), ["請款單的樣子"]),
+    (source_tree.page_file("ledger-settings.html"), ["額外支出、請款"]),
+    (source_tree.page_file("bank-account.html"), ["請款或報銷"]),
     (BACKEND / "modules" / "case" / "payables.py", ["這筆請款"]),
     (BACKEND / "modules" / "case" / "api" / "case_extra_expenses.py", ["這筆請款還沒核准", "請款人登錄"]),
     (BACKEND / "modules" / "arap" / "api" / "cashier.py", ["找不到請款來源", "請款付款明細", '"請款付款"']),
@@ -22,7 +24,7 @@ GONE = [
 
 #: 客戶「請款單」不可被誤改
 KEPT = [
-    (FRONT / "pages" / "payment-request-form.html", ["新增請款單", "編輯請款單"]),
+    (source_tree.page_file("payment-request-form.html"), ["新增請款單", "編輯請款單"]),
     (BACKEND / "modules" / "arap" / "api" / "payment_requests.py", ["請款單 {request_no}", "請款單不存在"]),
     (BACKEND / "helpers" / "mail_types.py", ["請款單待審核"]),
 ]
