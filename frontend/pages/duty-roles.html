@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
+  <title>職責角色 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .dr-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 32px 36px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .dr-tabs { display: flex; gap: 8px; margin-top: 16px; max-width: 1200px; flex-wrap: wrap }
+    .dr-tab { padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--white);
+      font-size: 13px; cursor: pointer; color: var(--text-secondary); font-family: inherit }
+    .dr-tab.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600 }
+    .dr-card { max-width: 1200px; margin-top: 14px; border: 1px solid var(--border); border-radius: 10px; overflow-x: auto }
+    .dr-table { width: 100%; border-collapse: collapse; font-size: 13px }
+    .dr-table th, .dr-table td { padding: 9px 10px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top }
+    .dr-table th { font-size: 11px; color: var(--text-secondary); font-weight: 600; white-space: nowrap }
+    .dr-sub { font-size: 11px; color: var(--text-dim); margin-top: 3px; line-height: 1.5 }
+    .dr-in, .dr-sel { padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; font-size: 13px;
+      background: var(--white); color: var(--text-main); font-family: inherit }
+    .dr-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px }
+    .dr-chip { font-size: 11px; padding: 2px 7px; border-radius: 10px; background: var(--border-light); cursor: pointer; user-select: none }
+    .dr-chip.on { background: #DBEAFE; color: #1D4ED8; font-weight: 600 }
+    .dr-chip.hi { border: 1px solid #F59E0B }
+    .dr-chip.off { opacity: .45; cursor: not-allowed }
+    .dr-chip.sub { text-decoration: line-through; background: #FEE2E2; color: #B91C1C }
+    .dr-note { max-width: 1200px; margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #FFFBEB;
+      border: 1px solid #FDE68A; color: #92400E; font-size: 13px; line-height: 1.7 }
+    .dr-bad { color: var(--danger); font-size: 12px; margin-top: 6px }
+    .dr-ok { color: var(--success); font-size: 12px; margin-top: 6px }
+    .dr-edit { max-width: 1200px; margin-top: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 10px }
+    @media (max-width: 767px) { .dr-main { margin-left: 0; padding: 20px 16px } }
+  </style>
+</head>
+<body x-data="dutyRolesPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="dr-main">
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">系統設定</div>
+        <h1 class="pg__t">職責角色</h1>
+        <p class="pg__s">職責角色＝一組權限；一位使用者可綁多個角色。生效權限＝（個人勾選 ∪ 角色權限）− 個人扣項。只有超級管理員能管理；超級管理員本身不受角色或扣項影響。</p>
+      </div>
+    </div>
+
+    <div class="dr-note">
+      高敏感權限（<span x-text="highKeys.join('、')"></span>）的變更必須填寫原因（至少 4 字），其餘選填；每一次變更都會寫入不可修改的紀錄。<br>
+      「個人扣項」只影響以模組權限判斷的功能；管理員的一般管理功能（人員、案件編輯等）目前仍依角色直通，<b>扣項對它們部分生效</b>。財務三鍵（財務金額可視、財務、出納）仍只由「財務」基礎角色與超級管理員決定，不能綁定或扣除。
+    </div>
+
+    <div class="dr-tabs">
+      <button class="dr-tab" :class="{on: tab === 'roles'}" @click="tab = 'roles'">角色</button>
+      <button class="dr-tab" :class="{on: tab === 'users'}" @click="tab = 'users'">使用者綁定</button>
+      <button class="dr-tab" :class="{on: tab === 'changes'}" @click="tab = 'changes'; loadChanges()">變更紀錄</button>
+    </div>
+
+    <div x-show="errMsg" class="dr-bad" x-text="errMsg" data-testid="dr-err"></div>
+    <div x-show="okMsg" class="dr-ok" x-text="okMsg"></div>
+
+    <!-- 角色 -->
+    <section x-show="tab === 'roles'">
+      <div class="dr-card">
+        <table class="dr-table">
+          <thead><tr><th>角色</th><th>權限</th><th>成員</th><th>狀態</th><th></th></tr></thead>
+          <tbody>
+            <template x-for="r in roles" :key="r.id">
+              <tr>
+                <td><b x-text="r.name"></b> <span class="dr-sub" x-text="'（' + r.key + (r.isSystem ? '・系統預設' : '') + '）'"></span>
+                  <div class="dr-sub" x-text="r.description"></div></td>
+                <td><div class="dr-chips"><template x-for="k in r.permissions" :key="k">
+                  <span class="dr-chip on" :class="{hi: highKeys.includes(k)}" x-text="label(k)"></span></template></div></td>
+                <td x-text="r.members"></td>
+                <td x-text="r.active ? '啟用' : '已停用'"></td>
+                <td><button class="btn btn--sm" @click="editRole(r)">編輯</button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:12px"><button class="btn btn--sm" @click="newRole()" data-testid="dr-new-role">＋ 新增角色</button></div>
+
+      <div class="dr-edit" x-show="form" data-testid="dr-form">
+        <template x-if="form">
+          <div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+              <label>代碼 <input class="dr-in" x-model="form.key" :disabled="!!form.id" placeholder="英數與底線"></label>
+              <label>名稱 <input class="dr-in" x-model="form.name"></label>
+              <label x-show="form.id"><input type="checkbox" x-model="form.active"> 啟用</label>
+            </div>
+            <div style="margin-top:8px"><label>說明 <input class="dr-in" style="width:420px" x-model="form.description"></label></div>
+            <div class="dr-sub" style="margin-top:10px">權限（點選切換；框線＝高敏感，財務三鍵可放進角色但不會讓持有者取得財務／出納能力）</div>
+            <div class="dr-chips">
+              <template x-for="k in keys" :key="k.key">
+                <span class="dr-chip" :class="{on: form.permissions.includes(k.key), hi: k.highSensitive}" @click="toggle(form.permissions, k.key)" x-text="k.label"></span>
+              </template>
+            </div>
+            <div style="margin-top:10px"><label>變更原因 <span x-show="formSensitive()" style="color:var(--danger)">*（高敏感必填）</span>
+              <input class="dr-in" style="width:420px" x-model="form.reason" data-testid="dr-reason"></label></div>
+            <div style="margin-top:12px;display:flex;gap:8px">
+              <button class="btn btn--sm" @click="saveRole()" data-testid="dr-save">儲存（寫入紀錄）</button>
+              <button class="btn btn--sm btn--ghost" @click="form = null">取消</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- 使用者綁定 -->
+    <section x-show="tab === 'users'">
+      <div class="dr-card">
+        <table class="dr-table">
+          <thead><tr><th>使用者</th><th>基礎類別</th><th>職責角色</th><th>個人扣項</th><th>生效權限（預覽）</th><th></th></tr></thead>
+          <tbody>
+            <template x-for="u in users" :key="u.id">
+              <tr>
+                <td><b x-text="u.displayName || u.username"></b><div class="dr-sub" x-text="u.username + (u.active ? '' : '（已停用）')"></div></td>
+                <td x-text="u.role"></td>
+                <td>
+                  <span class="dr-sub" x-show="u.role === 'superadmin'">超級管理員：全功能，不受角色影響</span>
+                  <div class="dr-chips" x-show="u.role !== 'superadmin'"><template x-for="r in roles.filter(x => x.active || u.roles.some(b => b.id === x.id))" :key="r.id">
+                    <span class="dr-chip" :class="{on: u.roles.some(b => b.id === r.id), hi: r.highSensitive.length}" @click="toggleBind(u, r)" x-text="r.name"></span></template></div>
+                </td>
+                <td>
+                  <div class="dr-chips"><template x-for="s in u.subtracts" :key="s.key">
+                    <span class="dr-chip sub" @click="removeSub(u, s.key)" :title="s.reason" x-text="label(s.key)"></span></template></div>
+                  <div x-show="u.role !== 'superadmin'" style="margin-top:6px">
+                    <select class="dr-sel" x-model="u._sub"><option value="">＋ 新增扣項…</option>
+                      <template x-for="k in keys.filter(k => !k.financeKey && u.effective.includes(k.key))" :key="k.key"><option :value="k.key" x-text="label(k.key)"></option></template>
+                    </select>
+                    <button class="btn btn--sm" x-show="u._sub" @click="addSub(u)">扣除</button>
+                  </div>
+                </td>
+                <td><div class="dr-chips"><template x-for="k in u.effective" :key="k"><span class="dr-chip on" :class="{hi: highKeys.includes(k)}" x-text="label(k)"></span></template></div></td>
+                <td></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <div class="dr-edit" x-show="pending" data-testid="dr-reason-box">
+        <template x-if="pending">
+          <div>
+            <div x-text="pending.title" style="font-weight:600"></div>
+            <div style="margin-top:8px"><label>變更原因 <span x-show="pending.needReason" style="color:var(--danger)">*（高敏感必填）</span>
+              <input class="dr-in" style="width:420px" x-model="pending.reason" data-testid="dr-pending-reason"></label></div>
+            <div style="margin-top:10px;display:flex;gap:8px">
+              <button class="btn btn--sm" @click="confirmPending()" data-testid="dr-pending-ok">確認</button>
+              <button class="btn btn--sm btn--ghost" @click="pending = null">取消</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </section>
+
+    <!-- 變更紀錄 -->
+    <section x-show="tab === 'changes'">
+      <div class="dr-card">
+        <table class="dr-table">
+          <thead><tr><th>時間</th><th>操作者</th><th>種類</th><th>對象</th><th>新增</th><th>移除</th><th>原因</th></tr></thead>
+          <tbody>
+            <template x-for="c in changes" :key="c.id">
+              <tr :style="c.highSensitivity ? 'background:#FFFBEB' : ''">
+                <td x-text="c.ts.replace('T', ' ')"></td><td x-text="c.actor"></td><td x-text="kindLabel(c.kind)"></td><td x-text="c.target"></td>
+                <td x-text="c.added.map(label).join('、')"></td><td x-text="c.removed.map(label).join('、')"></td>
+                <td><span x-text="c.reason"></span> <span class="dr-sub" x-show="c.highSensitivity">（高敏感）</span></td>
+              </tr>
+            </template>
+            <tr x-show="!changes.length"><td colspan="7" class="dr-sub">還沒有任何變更紀錄</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="dr-sub" style="max-width:1200px">紀錄只增不改不刪（資料庫層強制）；保留 7 年。</p>
+    </section>
+  </main>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+  <script>
+    function dutyRolesPage() {
+      const KIND = { bind: '綁定角色', unbind: '解除角色', role_def: '角色定義', subtract: '設扣項', unsubtract: '解除扣項' }
+      return {
+        tab: 'roles', roles: [], keys: [], highKeys: [], users: [], changes: [], form: null, pending: null, errMsg: '', okMsg: '', _initDone: false,
+        _hdr() {
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
+        },
+        label(k) { const m = this.keys.find(x => x.key === k); return m ? m.label : k },
+        kindLabel(k) { return KIND[k] || k },
+        toggle(arr, v) { const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v) },
+        async init() { if (this._initDone) return; this._initDone = true; await this.load() },
+        async _call(method, url, body) {
+          this.errMsg = ''; this.okMsg = ''
+          const r = await fetch(url, { method, headers: this._hdr(), body: body ? JSON.stringify(body) : undefined })
+          const j = await r.json().catch(() => ({}))
+          if (!r.ok) { this.errMsg = (typeof j.detail === 'string' ? j.detail : '操作失敗（' + r.status + '）'); return null }
+          return j
+        },
+        async load() {
+          const a = await this._call('GET', '/api/duty-roles')
+          if (a) { this.roles = a.roles; this.keys = a.keys; this.highKeys = a.highSensitiveKeys }
+          const b = await this._call('GET', '/api/duty-roles/users')
+          if (b) this.users = b.users.map(u => ({ ...u, _sub: '' }))
+        },
+        async loadChanges() { const j = await this._call('GET', '/api/duty-roles/changes'); if (j) this.changes = j.items },
+        newRole() { this.form = { id: 0, key: '', name: '', description: '', permissions: [], active: true, reason: '' } },
+        editRole(r) { this.form = { id: r.id, key: r.key, name: r.name, description: r.description, permissions: [...r.permissions], active: r.active, reason: '' } },
+        formSensitive() { return !!this.form && this.form.permissions.some(k => this.highKeys.includes(k)) },
+        async saveRole() {
+          const f = this.form
+          const body = { key: f.key, name: f.name, description: f.description, permissions: f.permissions, reason: f.reason, active: f.active }
+          const j = f.id ? await this._call('PUT', '/api/duty-roles/' + f.id, body) : await this._call('POST', '/api/duty-roles', body)
+          if (j) { this.form = null; this.okMsg = '已儲存'; await this.load() }
+        },
+        _ask(title, needReason, run) { this.pending = { title, needReason, reason: '', run } },
+        toggleBind(u, r) {
+          const bound = u.roles.some(b => b.id === r.id)
+          this._ask((bound ? '解除 ' : '綁定 ') + (u.displayName || u.username) + ' 的角色「' + r.name + '」', r.highSensitive.length > 0,
+            reason => this._call('POST', '/api/duty-roles/bindings' + (bound ? '/remove' : ''), { userId: u.id, roleId: r.id, reason }))
+        },
+        addSub(u) {
+          const k = u._sub
+          this._ask('扣除 ' + (u.displayName || u.username) + ' 的權限「' + this.label(k) + '」（只影響以模組權限判斷的功能）', this.highKeys.includes(k),
+            reason => this._call('POST', '/api/duty-roles/subtracts', { userId: u.id, key: k, reason }))
+        },
+        removeSub(u, k) {
+          this._ask('解除 ' + (u.displayName || u.username) + ' 的扣項「' + this.label(k) + '」', this.highKeys.includes(k),
+            reason => this._call('POST', '/api/duty-roles/subtracts/remove', { userId: u.id, key: k, reason }))
+        },
+        async confirmPending() {
+          const p = this.pending
+          const j = await p.run(p.reason)
+          if (j) { this.pending = null; this.okMsg = '已完成'; await this.load() }
+        },
+      }
+    }
+  </script>
+</body>
+</html>

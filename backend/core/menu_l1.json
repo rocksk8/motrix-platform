@@ -146,6 +146,13 @@
   },
   {
    "group": "system",
+   "href": "duty-roles.html",
+   "label": "職責角色",
+   "order": 11,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
    "href": "org-structure.html",
    "label": "組織架構設定",
    "order": 20,

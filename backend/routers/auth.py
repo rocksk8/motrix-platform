@@ -473,7 +473,7 @@ def auth_login(body: LoginIn, request: Request):
             "username":           "demo",
             "displayName":        row["display_name"],
             "role":               row["role"],
-            "modules":            effective_modules(row["role"], row["modules"]),   # 第42班：財務三鍵由角色決定
+            "modules":            effective_modules(row["role"], row["modules"], user_id=row["id"]),   # 第42班：財務三鍵由角色決定
             "loginAt":            now,
             "mustChangePassword": False,
         }
@@ -550,7 +550,7 @@ def _issue_session(conn, row, must_change: bool) -> dict:
         "username":           row["username"],
         "displayName":        row["display_name"],
         "role":               row["role"],
-        "modules":            effective_modules(row["role"], row["modules"]),   # 第42班：財務三鍵由角色決定
+        "modules":            effective_modules(row["role"], row["modules"], user_id=row["id"]),   # 第42班：財務三鍵由角色決定
         "loginAt":            now,
         "mustChangePassword": must_change,
     }
@@ -1428,7 +1428,7 @@ def auth_me(authorization: str = Header(None)):
         "username":           row["username"],
         "displayName":        row["display_name"],
         "role":               row["role"],
-        "modules":            effective_modules(row["role"], row["modules"]),   # 第42班：財務三鍵由角色決定
+        "modules":            effective_modules(row["role"], row["modules"], user_id=row["id"]),   # 第42班：財務三鍵由角色決定
         "mustChangePassword": bool(row["must_change_password"]),
     }
 

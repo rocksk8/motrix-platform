@@ -16,6 +16,10 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-06 職責角色化 R1（wip/t43-duty-roles-r1）
+
+- 超級管理員專用「職責角色」頁：角色＝一組權限、使用者可綁多個、個人扣項、變更紀錄（只增不改不刪）；高敏感權限（財務金額可視／財務／出納／系統設定／歷史紀錄／版本紀錄／勞報單）變更必填原因。**上線當天不改變任何人權限**（零綁定、零扣項；逐人等值關卡 `tools/duty_roles_equivalence.py`），財務／出納判斷與超級管理員維持原樣；R2（自動綁定、盤點、離職回收、通知）未做。回滾第 0 步 `tools/duty_roles_export_effective.py`。測試：`tests/test_duty_roles_*_2026_10_06.py`。
+
 ## 2026-10-06 財務修正（wip/t44-fin-fixes，42 班稽核 a／b／c／e／f／g）
 
 - (a) 財務角色對非自己負責案件的一般叫料清單只能看不能改（`PATCH /api/quotations/{no}/material-orders`；成員／superadmin／admin 不變，匯款／發票日端點不變）——**權限變更，上線備註要寫**。(b) 非成員財務整包儲存被拒的訊息改為「只能修改款項」。(c) 自核差額拒絕訊息改「其他財務角色成員或最高管理者」。(e) 付款日提醒信寄送成功才寫防重複記號（`send_registered(wait=True)`）。(f) 出納退回匯款差額後重建行事曆「付款待辦」。(g) 提醒信順延改用 L1 `helpers.business_days`（週末＋國定假日＋補班日）。測試：`modules/case/tests/test_finance_fixes_2026_10_06.py`。

@@ -23,6 +23,7 @@
    "helper:company_identity",
    "helper:company_setup",
    "helper:daily_checks",
+   "helper:duty_roles",
    "helper:custom_builder_support",
    "helper:custom_def_review",
    "helper:custom_files",
