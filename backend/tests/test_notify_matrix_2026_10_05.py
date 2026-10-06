@@ -246,23 +246,44 @@ def test_mail_off_is_honored_on_finance_audience_and_superadmin_only_paths(clien
     assert "nm_fin@example.test" in en.finance_recipient_emails("backup_error")
 
 
-def test_mail_off_is_honored_on_manager_event_and_monthly_report_paths(client, make_user):
-    """審查補強：_with_event_recipients／_department_manager_emails／月報收件人原本不經 _mail_off 漏斗；任何覆寫模式下關了都沒有收件人。"""
+def test_mail_off_is_honored_on_manager_event_and_monthly_report_paths(client, make_user, monkeypatch):
+    """審查補強：_with_event_recipients／_department_manager_emails／月報收件人原本不經 _mail_off 漏斗；任何覆寫模式下關了都沒有收件人。
+    有正對照（沒關時真的回信箱）；部門主管路徑另外量「關了就不查資料庫」，因為 _with_event_recipients 也會擋，單看回傳值分不出這層守門在不在。"""
+    import db
     from helpers import email_notify as en
     h = _h(client, make_user)
+    conn = db.get_db()
+    try:
+        uid = conn.execute("SELECT id FROM users WHERE username='nm_sa'").fetchone()["id"]
+        cur = conn.execute("INSERT INTO divisions (name, sort_order, created_at) VALUES ('nm_div', 0, '2026-10-06')")
+        cur = conn.execute("INSERT INTO departments (division_id, name, sort_order, manager_user_id, created_at) VALUES (?, 'nm_dept', 0, ?, '2026-10-06')",
+                           (cur.lastrowid, uid))
+        dept = cur.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+    calls = []
+    real_get_db = db.get_db
+    monkeypatch.setattr(db, "get_db", lambda *a, **k: (calls.append(1), real_get_db(*a, **k))[1])
     for key in ("case_stage_deadline_manager", "daily_task_overdue_manager"):
         assert nm.mail_off_lock_reason(key) == ""
+        assert en._department_manager_emails(dept, key) == ["nm_sa@example.test"], "正對照：沒關時主管收得到"
         for body in ({"mode": "default"}, {"mode": "custom", "users": ["nm_sa"], "roles": ["admin"]}, {"mode": "superadmin_only"}):
             r = _put(client, h, key, dict(body, mailOff=True, confirm=True))
             assert r.status_code == 200 and r.json()["mailOff"] is True, (key, body, r.text)
             assert en._with_event_recipients(["x@example.test"], key) == [], (key, body)
             assert en._lookup_emails(["nm_sa"], key) == [], (key, body)
-            assert en._department_manager_emails(1, key) == [], (key, body)
+            calls.clear()
+            assert en._department_manager_emails(dept, key) == [], (key, body)
+            assert calls == [], "關了就不該去查部門主管（守門要在查詢之前）"
         r = _put(client, h, key, {"mode": "custom", "users": ["nm_sa"], "roles": [], "mailOff": False})
         assert "nm_sa@example.test" in en._with_event_recipients([], key), "重新開啟後恢復"
+        assert "nm_sa@example.test" in en._department_manager_emails(dept, key)
     # 月報不能經矩陣 API 關（PUT 400，收件人另頁維護）；但設定檔裡若有 off（硬改／舊殘留）寄信端仍要照辦
+    _set_setting("monthly_report_recipients", {"userIds": [uid]})
+    _set_setting(mt.OVERRIDES_KEY, {})
+    assert en._monthly_report_recipient_emails() == ["nm_sa@example.test"], "正對照：沒關時收得到"
     _set_setting(mt.OVERRIDES_KEY, {"monthly_report": {"mode": "default", "users": [], "roles": [], "off": True}})
-    _set_setting("monthly_report_recipients", {"userIds": [1]})
     assert en._monthly_report_recipient_emails() == []
     # 鎖定類型：硬塞 off 仍照常（_with_event_recipients 也一樣）
     _set_setting(mt.OVERRIDES_KEY, {"backup_error": {"mode": "default", "users": [], "roles": [], "off": True}})
