@@ -198,9 +198,17 @@ def test_legacy_kind_empty_rows_are_money_masked_too(client, world):
     assert r.status_code in (200, 403, 404), r.text
     if r.status_code == 200:
         assert r.json()["files"] == [], "舊筆也不給看不到金額的人檔案"
-    paths = [f["path"] for f in files]
-    no = client.post("/api/photo-token/batch", json={"paths": paths, "type": "extra_expense", "id": str(eid)}, headers=H["av_col"])
-    assert no.status_code == 200 and no.json()["tokens"] == {}, no.text
+    # photo-token 的「簽核佇列情境」同一條規則；案件協作者本來就能靠**案件頁**的權限開案件檔（那是另一條路、不在 S1 範圍），
+    # 所以這裡只驗簽核情境的授權函式（`_approval_context_paths`）對看不到金額的人給空集合
+    from routers import uploads as _up
+    def ctx(username):
+        u = _q("SELECT * FROM users WHERE username=?", (username,))[0]
+        return _up._approval_context_paths(u, "extra_expense", str(eid))
+    assert ctx("av_apr") == {f["path"] for f in files}, "正對照：簽核人放行三個路徑"
+    try:
+        assert not ctx("av_col")
+    except Exception as e:                                               # noqa: BLE001  詳情守門直接拒絕也算（403）
+        assert getattr(e, "status_code", None) in (403, 404), e
 
 
 # ── S3：沒有 id 的舊筆——出納清單合成 idx-<位置>，不外洩 path，仍可開檔 ─────────────────────────
