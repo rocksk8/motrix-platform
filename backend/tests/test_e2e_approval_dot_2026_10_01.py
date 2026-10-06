@@ -106,7 +106,7 @@ def test_dot_color_is_the_semantic_danger_token_in_light_and_dark(live_server, w
 @pytest.mark.e2e
 @pytest.mark.parametrize("path", ["index.html", "daily-tasks.html", "quotations.html"])
 def test_plain_role_user_approver_gets_the_dot_on_every_page(live_server, client, make_user, new_context, path):
-    """一般使用者（role=user，不是管理員）是最常見的簽核人：通知資料元件原本只掛在「管理員才有的通知鈴鐺」裡，
+    """一般使用者（role=user，不是管理員）是最常見的簽核人：通知資料元件原本只掛在「管理員才有的通知鈴鐺」裡（第44班起所有角色都有鈴鐺，同一個實例），
     ⇒ 這類使用者在任何頁面都不會抓待簽數、沒有紅點／徽章／登入橫幅。現在掛一個看不見的實例（不畫鈴鐺）。"""
     make_user(username="dot_requester", role="admin")
     u = make_user(username="dot_waiting", role="user", modules=["quotation", "daily_task"])
@@ -118,5 +118,6 @@ def test_plain_role_user_approver_gets_the_dot_on_every_page(live_server, client
         page.goto(url)
     page.wait_for_selector(DOT, state="visible", timeout=15000)
     assert page.locator(BADGE).count() == 1 and page.evaluate("() => document.getElementById('sb-approval-badge').textContent") == "1"
-    assert page.locator('[data-testid="notif-headless"]').count() == 1
-    assert page.locator(".topbar__btn:has-text('通知')").count() == 0, "一般使用者仍不顯示通知鈴鐺（只掛資料元件）"
+    # 第44班（使用者裁示）：所有角色都有通知鈴鐺——同一個 notifStore 實例既是鈴鐺也是紅點／徽章的資料來源（不再有隱形元件）
+    assert page.locator('[data-testid="notif-headless"]').count() == 0
+    assert page.locator(".topbar__btn:has-text('通知')").count() == 1, "一般使用者也要有通知鈴鐺"

@@ -437,7 +437,16 @@ function notifStore() {
     /** 通知指向的頁面；認不得的 ref_id ⇒ null（只標已讀、不換頁，跟原本一樣）。
      *  P8：自訂模組單據的 ref_id＝`custom:<模組 key>:<單號>`（helpers.custom_modules.notify_ref）
      *  ⇒ 開執行頁的那一張（單號可能含冒號：只切前兩段）。 */
+    // 第44班：通知可帶 `link`（伺服器寫入時已驗過：只准「頁面檔名.html」加選填查詢字串）。這裡再驗一次（深度防禦）：不合格 ⇒ 當成沒有連結。
+    _linkHref(link) {
+      link = String(link || '')
+      if (!/^[A-Za-z0-9_-]+\.html(\?[A-Za-z0-9_.=&%:+-]*)?$/.test(link)) return null
+      return (window.location.pathname.includes('/pages/') ? '' : 'pages/') + link
+    },
+
     refHref(item) {
+      const lk = this._linkHref(item && item.link)
+      if (lk) return lk
       const ref = String((item && item.ref_id) || '')
       // 模組定義送審：`customdef:<模組 key>:<版號>` ⇒ 審核頁（key 不含冒號）
       if (ref.indexOf('customdef:') === 0) {

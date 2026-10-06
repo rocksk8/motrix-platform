@@ -4900,6 +4900,10 @@ def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: st
             # 而且 Edge 無頭 PDF 是 2～4 秒的 CPU／GIL 工作，不該在持有寫鎖時開始。
             after_commit.append(functools.partial(spawn_bg_thread, _generate_quotation_pdf, args=(quote_no, approver_name, '簽核')))
             after_commit.append(functools.partial(notify_approved, quote_no, cname, approver_name, appr.get("requestedBy") or ""))
+            if appr.get("requestedBy"):                       # 第44班：申請人在系統內也要看到核准通知（點了開報價單；訊息不含金額）
+                after_commit.append(functools.partial(
+                    _notify, appr["requestedBy"], "quotation_approved", quote_no, quote_no,
+                    "報價單 %s（%s）已核准" % (quote_no, cname), "quotation-form.html?id=" + urlquote(quote_no, safe="")))
             detail_status = "已送出"
         else:
             d["approval"] = appr

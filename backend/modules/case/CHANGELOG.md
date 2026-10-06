@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-06（wip/t44-inapp-bell）：報價單核准時寫一則站內通知給申請人
+- `api/quotations.py`：報價單最後一層核准後，commit 之後對申請人寫 `quotation_approved` 站內通知（點了開 `quotation-form.html?id=<單號>`；文字不含金額；同一報價單只留一列）。
+- 其他單據的核准通知文字與連結由 wip/t44-applicant-notify 負責。
+
 ## 1.0.149 — 2026-10-06（train43 整合：wip/t43-phase2-events＋wip/t44-fin-fixes；階段 2 對帳失敗會重試）；併入 r2（提醒信記號政策）；併入 wip/t44-settle-terms（字樣）；併入 wip/t43-settle-tax（精算全含稅＋稅額）；稽核修正（多列單據稅額只計一次）；併入 wip/t43-finance-tab（財務分頁外包總成本）；＋wip/t43-shipped-qty（已出貨數量）（端點加模組檢查）（已併入最新 train43-int）（閘門修正已併入）
 - 新 `item_shipped.py`：每個報價品項的 訂購／已出貨／占用中＝材料申請出貨（`shipping.material_shipped` 經叫料列的 `quoteItemId`）＋報價帶入列（`shipping.quote_item_shipped`）；沒有可歸屬紀錄 ⇒ `attributed=False`（畫面「—」）。新端點 `GET /api/quotations/{no}/item-shipped`（案件可見即可；只有數量）；新提供者 `case.shipped_summary`（IP-SH5）。
 - 精算頁（`settlement.html`）原始報價區新增「已出貨/數量」欄；案件頁出貨單清單新增「已累計出貨」欄。權限與遮蔽沿用原頁（精算頁本來就需財務檢視）。
