@@ -98,26 +98,47 @@ window.CM_PARTS.push(() => ({
       return d.status !== 'cancelled' && !['草稿', '已退回'].includes(d.approvalStatus || '')
     },
 
+    // 2026-10-06（使用者裁示）：外包總成本跟營運報表同一條切換規則——派發單日期（dispatchDate）≥ 2026-10-01 的派發含稅計入（未稅承攬費＋稅額＋外包人員）；
+    // 之前的派發照舊（未稅承攬費＋外包人員，稅額不計成本）。已完結案顯示的是存檔值（caseSettleSummary），不走這裡。切換日要與 recognition.DISPATCH_TAXED_FROM 同值。
+    DISPATCH_TAXED_FROM: '2026-10-01',
+    _dispatchTaxed(d) { return String(d.dispatchDate || '').slice(0, 10) >= this.DISPATCH_TAXED_FROM },
+    _dispatchPretax(d) { return (d.totalAmount || 0) + (d.personnelTotal || 0) },
+    _dispatchCost(d) { return this._dispatchTaxed(d) ? (d.grandTotal || 0) : this._dispatchPretax(d) },
+
     dispatchTotalCost() {
-      // 35c 稅基 B：未稅承攬費 + 外包人員金額（稅額是進項稅額，不計成本），與精算頁面「承攬商派發成本」同一口徑（營運報表權責口徑／總帳同）
       return this.dispatches
         .filter(d => this._dispatchCounts(d))
-        .reduce((s, d) => s + (d.totalAmount || 0) + (d.personnelTotal || 0), 0)
+        .reduce((s, d) => s + this._dispatchCost(d), 0)
     },
 
-    // 含稅合計（舊精算口徑）：只給舊完結案的「過期」比對與稅額顯示用
+    // 含稅合計（全部派發）：給已完結案「過期」比對（完結摘要沒有標記或標記 taxed 時與它比）
     dispatchTotalCostGross() {
       return this.dispatches
         .filter(d => this._dispatchCounts(d))
         .reduce((s, d) => s + (d.grandTotal || 0), 0)
     },
 
-    dispatchTaxCost() { return Math.max(0, this.dispatchTotalCostGross() - this.dispatchTotalCost()) },
+    // 35c／36 完結案（標記 pretax）的「過期」比對用：全部派發的未稅承攬費＋外包人員
+    dispatchTotalCostPretax() {
+      return this.dispatches
+        .filter(d => this._dispatchCounts(d))
+        .reduce((s, d) => s + this._dispatchPretax(d), 0)
+    },
+
+    // 含在外包總成本內的稅額（切換日後的派發）／不計成本的稅額（切換日前的派發，照舊未稅）
+    dispatchTaxCost() {
+      return this.dispatches.filter(d => this._dispatchCounts(d) && this._dispatchTaxed(d))
+        .reduce((s, d) => s + Math.max(0, (d.grandTotal || 0) - this._dispatchPretax(d)), 0)
+    },
+    dispatchTaxExcludedCost() {
+      return this.dispatches.filter(d => this._dispatchCounts(d) && !this._dispatchTaxed(d))
+        .reduce((s, d) => s + Math.max(0, (d.grandTotal || 0) - this._dispatchPretax(d)), 0)
+    },
 
     dispatchPendingNote() {
       const p = this.dispatches.filter(d => this._dispatchCounts(d) && ['待審核', '簽核中'].includes(d.approvalStatus || ''))
       if (!p.length) return ''
-      return `含待審核 ${p.length} 筆 NT$ ${p.reduce((s, d) => s + (d.totalAmount || 0) + (d.personnelTotal || 0), 0).toLocaleString()}`
+      return `含待審核 ${p.length} 筆 NT$ ${p.reduce((s, d) => s + this._dispatchCost(d), 0).toLocaleString()}`
     },
 
     // 可往下推進作業狀態：已核准或舊單（後端同一道閘）
@@ -136,7 +157,7 @@ window.CM_PARTS.push(() => ({
       if (this.caseSettleStatus() !== 'finalized') return null
       const frozen = MotrixLegalRound.halfUp(this.caseSettleSummary().dispatchTotal || 0)
       // 35c：完結 summary 帶 dispatchBasis='pretax' ⇒ 與未稅現算值比；沒有（舊完結案、含稅口徑）⇒ 與含稅現算值比（舊案不會因口徑切換而誤報過期）
-      const live   = MotrixLegalRound.halfUp((this.caseSettleSummary().dispatchBasis === 'pretax' ? this.dispatchTotalCost() : this.dispatchTotalCostGross()) || 0)
+      const live   = MotrixLegalRound.halfUp((this.caseSettleSummary().dispatchBasis === 'pretax' ? this.dispatchTotalCostPretax() : this.dispatchTotalCostGross()) || 0)
       if (frozen === live) return null
       return { frozen, live, diff: live - frozen }
     },
