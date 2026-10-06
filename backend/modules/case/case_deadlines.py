@@ -281,9 +281,8 @@ def _deal_tag(row, data) -> str:
 
 
 def _sync_warranty_calendar() -> None:
-    from helpers import google_calendar as gc
-    from helpers.calendar_sync import sync_dated_events
-    if not gc.event_enabled("warranty_expiry"):
+    from helpers.calendar_sync import is_active, sync_dated_events
+    if not is_active("warranty_expiry"):          # 事件種類或行事曆總開關關著 ⇒ 連來源查詢都不做
         return
     current = {}
     conn = get_db()
@@ -301,6 +300,7 @@ def _sync_warranty_calendar() -> None:
         if _deal_tag(row, data) != "已成案":
             continue
         devices = (data.get("caseRecord") or {}).get("devices") or []
+        seen = set()
         for i, dev in enumerate(devices):
             ws, wm = dev.get("warrantyStart") or "", dev.get("warrantyMonths")
             if not ws or not wm:
@@ -311,7 +311,11 @@ def _sync_warranty_calendar() -> None:
             sn = (dev.get("sn") or dev.get("mac") or dev.get("name") or "")[:32]
             name = dev.get("name") or sn or "未知設備"
             customer = row["customer_name"] or ""
-            current[f"{row['quote_no']}#{sn or 'idx' + str(i)}"] = (
+            dkey = f"{row['quote_no']}#{dev.get('id') if dev.get('id') not in (None, '') else 'i%d' % i}"   # 設備自己的 id（序號可能重複或空白）；舊資料沒有 id ⇒ 列序
+            if dkey in seen:
+                dkey += "~%d" % i
+            seen.add(dkey)
+            current[dkey] = (
                 expiry,
                 f"保固到期：{name}（{customer}）" if customer else f"保固到期：{name}",
                 f"案號：{row['quote_no']}\n客戶：{customer}\n設備：{name}\n保固到期日：{expiry.isoformat()}")
@@ -319,9 +323,8 @@ def _sync_warranty_calendar() -> None:
 
 
 def _sync_project_end_calendar() -> None:
-    from helpers import google_calendar as gc
-    from helpers.calendar_sync import sync_dated_events
-    if not gc.event_enabled("project_end"):
+    from helpers.calendar_sync import is_active, sync_dated_events
+    if not is_active("project_end"):          # 事件種類或行事曆總開關關著 ⇒ 連來源查詢都不做
         return
     current = {}
     conn = get_db()
