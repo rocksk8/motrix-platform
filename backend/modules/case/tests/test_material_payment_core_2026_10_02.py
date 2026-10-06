@@ -209,8 +209,9 @@ def test_overpayment_is_pending_review_and_reject_deletes_the_line(world):
     assert (r["actual"], r["diff"], r["remitReview"], r["remaining"]) == (4500.0, 500.0, "pending", -500.0)
     o = _o(conn, "L1")
     assert (o["paidStatus"], o["paidAmount"]) == ("paid", 10000.0)                                               # 合計 10,500 封頂在小計
-    with pytest.raises(MP.RemitForbidden):
+    with pytest.raises(MP.RemitForbidden) as e:
         MP.decide_line(conn, r["lineId"], "approve", CASHIER)                                                    # 登錄人不能自審
+    assert "其他財務角色成員或最高管理者" in str(e.value) and "其他管理員" not in str(e.value)                     # 第44班稽核 c2：訊息指向可審核的人
     MP.decide_line(conn, r["lineId"], "reject", ADMIN, "多付，請追回")                                              # 退回＝刪除該筆
     assert MP.lines_of(conn, b["id"]) == [] and MP.remaining_of(conn, MP.get(conn, b["id"])) == 4000.0
     o = _o(conn, "L1")

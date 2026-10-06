@@ -81,7 +81,9 @@ def test_paid_by_cannot_decide_own_diff(client, make_user):
     vno = _make_approved_voucher(client, tb, "MQ-REMIT-011")
     assert _pay(client, tb, vno, actualAmount=_payable(vno) - 5).status_code == 200
     url = f"/api/cashier/remit-reviews/contractor_voucher/{vno}/decision"
-    assert client.post(url, headers=_auth(tb), json={"decision": "approve"}).status_code == 403
+    r = client.post(url, headers=_auth(tb), json={"decision": "approve"})
+    assert r.status_code == 403
+    assert "其他財務角色成員或最高管理者" in r.text and "其他管理員" not in r.text, r.text      # 第44班稽核 c3：訊息指向可審核的人
     assert client.post(url, headers=_auth(tb), json={"decision": "reject", "note": "x"}).status_code == 403
     assert _row(vno)["remit_review"] == "pending" and _row(vno)["is_paid"] == 1
     assert client.post(url, headers=_auth(to), json={"decision": "approve"}).status_code == 200      # 反向控制

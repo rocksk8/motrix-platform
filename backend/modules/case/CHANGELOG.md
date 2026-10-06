@@ -1,20 +1,18 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-06（wip/t43-shipped-qty）：報價品項「已出貨數量」
+## (next) — 2026-10-06（train43 整合：wip/t43-phase2-events＋wip/t44-fin-fixes；階段 2 對帳失敗會重試）；併入 r2（提醒信記號政策）；併入 wip/t44-settle-terms（字樣）；＋wip/t43-shipped-qty（已出貨數量）
 - 新 `item_shipped.py`：每個報價品項的 訂購／已出貨／占用中＝材料申請出貨（`shipping.material_shipped` 經叫料列的 `quoteItemId`）＋報價帶入列（`shipping.quote_item_shipped`）；沒有可歸屬紀錄 ⇒ `attributed=False`（畫面「—」）。新端點 `GET /api/quotations/{no}/item-shipped`（案件可見即可；只有數量）；新提供者 `case.shipped_summary`（IP-SH5）。
 - 精算頁（`settlement.html`）原始報價區新增「已出貨/數量」欄；案件頁出貨單清單新增「已累計出貨」欄。權限與遮蔽沿用原頁（精算頁本來就需財務檢視）。
-
-## (next) — 2026-10-06（train43 整合：wip/t43-phase2-events＋wip/t44-fin-fixes；階段 2 對帳失敗會重試）
 - `case_deadlines.py` 新增 `_sync_warranty_calendar`、`_sync_project_end_calendar`，掛在每日檢查（`run_daily_checks`）最後；與寄信的 guard 完全獨立。事件種類開關關閉（預設）⇒ 不讀資料庫、不打 Google。事件內容只有案號、客戶、設備／專案、日期，不含金額。日期已過不建；改日期、結案、設備刪除由對帳處理。
 - 上線注意：保固事件第一次打開時，已成案案件的未過期保固會全部補建；每次每日檢查最多處理 100 個項目（每個約 2 次 Google 請求），所以第一次打開會分散在數天內建完（不是當天一次到位）。
 - **權限變更（上線備註要寫）**：`PATCH /api/quotations/{no}/material-orders`——「財務」角色對非自己負責（非業務／協作者）的案件，一般叫料清單只能看不能改（403「財務角色只能檢視非自己負責案件的材料申請清單…」）；自己負責的案件、superadmin、admin、專案經理不變；GET、匯款申請、發票日、取消已核准叫料單等付款相關端點不變。
 - `case-record` 整包儲存：非成員財務若有款項以外欄位與資料庫不同，403 訊息改為說明「只能修改款項」（原訊息誤導成「成員限定」）。
 - `payables.py`／`material_payment.py`：自我核可匯款差額的拒絕訊息改為「其他財務角色成員或最高管理者」。
-- `payable_reminders.py`：防重複記號改在**寄送成功（`SEND_SENT`）後才寫**（`send_registered(wait=True)`），SMTP 暫時失敗／未設定當天會重試；工作日判斷改接 L1 `helpers.business_days`（週末＋國定假日＋補班日），T−3／T0 落在假日同樣前移，折到同一天只寄一封。
+- `payable_reminders.py`：防重複記號改為「先寄、結果確定才記」（`send_registered(wait=True, out=…)`，照 `system_checks` 前例）：`SEND_SENT`／`SEND_UNKNOWN`（等不到結果，重寄可能雙寄）／`SEND_PERMANENT_FAIL` 寫記號（後兩者另記 ERROR），只有 SMTP 暫時失敗／未設定／沒有收件人才不寫、當天重試；工作日判斷改接 L1 `helpers.business_days`（週末＋國定假日＋補班日），T−3／T0 落在假日同樣前移，折到同一天只寄一封。
+- `payable_reminders.py`（稽核 hichan-70 #3）：**重試窗口只有寄信日當天**（每日 08:00＋啟動補跑；隔天不補）；一次掃描等寄送結果的總時間上限 `MAX_WAIT_SECONDS_PER_RUN`（120 秒），出現 `SEND_UNKNOWN`（SMTP 卡住）就立刻停止本次掃描，剩下的不寫記號、下次再發（每封最多等 45 秒）。
+- 測試補強：`test_finance_fixes_2026_10_06.py`（記號政策、UNKNOWN／PERMANENT、等待上限、重試窗口）；自我核可訊息（`material_payment`／`subcontract.remit`）由 `test_material_payment_core_2026_10_02.py`、`test_remit_fee_review_2026_09_30.py` 斷言文字（突變會轉紅）。
 - `payables._RemitReviews.decide`：退回（reject）時回傳 `payableEvent`（事件內容，不含金額）給出納端在 commit 後重建行事曆「付款待辦」（無預定付款日則不建）。
 - 測試：`modules/case/tests/test_finance_fixes_2026_10_06.py`（含突變檢查）；`test_payable_planned_pay_date_2026_10_05.py` 的寄信攔截改回傳寄送把手。
-
-## (next) — 2026-10-06（wip/t44-settle-terms）：「請款」字樣改為「支出申請」系列（只改畫面文字與提示，不改資料、欄位、API）
 - 「新增支出申請」頁：「② 申請內容」、「我的申請」、「還沒有申請」、送出後提示；`expense-types.html` 說明「申請單的樣子」。
 - 錯誤／提示訊息：`payables.py` 「這筆申請…」、`case_extra_expenses.py` 「這筆申請還沒核准」「申請人登錄…」。
 - 客戶「請款單」（M05 對客戶要款）不動；承攬商／採購單／傳票等其他「請款」用語不在本次範圍。

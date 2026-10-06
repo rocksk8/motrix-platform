@@ -398,15 +398,30 @@ def _upsert_event_strict(code: str, summary: str, description: str, event_date, 
     return True
 
 
-def _delete_event_strict(code: str, key: str) -> bool:
-    """delete 的本體，失敗會丟例外。回 True＝已刪或本來就沒有；False＝沒做（key 空、開關關閉）。"""
+def _delete_event_once(event_id: str) -> None:
+    """刪一次、不重試（不 sleep）：404／410（已經不存在）視為成功，其他錯誤照丟——給每日對帳用（失敗要被看見，不能吞）。"""
+    try:
+        _delete_event(event_id)
+    except RuntimeError as e:
+        if "404" in str(e) or "410" in str(e):
+            return
+        raise
+
+
+def _delete_event_strict(code: str, key: str, retry: bool = False) -> bool:
+    """delete 的本體，失敗會丟例外。回 True＝已刪或本來就沒有；False＝沒做（key 空、開關關閉）。
+    `retry=False`（預設，每日對帳 `calendar_sync` 用）：刪一次，失敗就丟（不 sleep、不吞），由呼叫端保留記錄並計入連續失敗；
+    `retry=True`（`push_event_delete_for_module` 的 fire-and-forget 包裝）：沿用舊行為——失敗 5 秒後重試一次，仍失敗只記 log。"""
     if not key or not event_enabled(code) or not _cfg().get("enabled"):
         return False
     mk = _upsert_key(code, key)
     with _merge_lock(mk):
         found = _find_merged_event(mk)
         if found:
-            _delete_event_with_retry(found["id"])
+            if retry:
+                _delete_event_with_retry(found["id"])
+            else:
+                _delete_event_once(found["id"])
             logger.info("push_event_delete_for_module(%s, %s): deleted event %s", code, key, found["id"])
     return True
 
@@ -424,7 +439,7 @@ def push_event_delete_for_module(code: str, key: str) -> None:
     """刪掉 (代碼, key) 那一筆（找不到＝已經沒有，視為成功）。事件種類開關關閉 ⇒ 不碰 Google（零流量；
     與開關的既有語意一致：關掉之後已建立的事件保留，不刪）；全域總開關關閉同樣不打。fire-and-forget。"""
     try:
-        _delete_event_strict(code, key)
+        _delete_event_strict(code, key, retry=True)
     except Exception as exc:
         logger.warning("push_event_delete_for_module(%r, %r) failed: %s", code, key, exc)
 

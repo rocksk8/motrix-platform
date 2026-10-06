@@ -469,3 +469,90 @@ def test_warranty_devices_sharing_a_serial_get_distinct_keys(calls):
     _cal(["warranty_expiry"])
     cd._sync_warranty_calendar()
     assert sorted(_ups(calls, "warranty_expiry")) == ["Q-W3#111", "Q-W3#222", "Q-W3#i2", "Q-W3#i3"]
+
+
+# ── 第 3 輪稽核跟進（wip/t43-cal-strict-fix）：刪除真的嚴格、失敗計數、設備 id 撞號、公開包裝確實委派 ──────────────
+
+def _fake_google_delete(monkeypatch, errors):
+    """找得到事件 e1；_delete_event 依序丟 errors 裡的例外（空了就成功）；回 (呼叫次數 list, sleep 次數 list)。"""
+    import time as _time
+    deleted, slept = [], []
+    monkeypatch.setattr(gc, "_find_merged_event", lambda mk: {"id": "e1"})
+    errs = list(errors)
+
+    def fake_delete(event_id):
+        deleted.append(event_id)
+        if errs:
+            raise errs.pop(0)
+    monkeypatch.setattr(gc, "_delete_event", fake_delete)
+    monkeypatch.setattr(gc.time, "sleep", lambda sec: slept.append(sec))
+    return deleted, slept
+
+
+def test_strict_delete_raises_once_without_sleeping_and_treats_404_410_as_success(monkeypatch):
+    _cal(["project_end"])
+    deleted, slept = _fake_google_delete(monkeypatch, [RuntimeError("HTTP 500"), RuntimeError("HTTP 500")])
+    with pytest.raises(RuntimeError):
+        gc._delete_event_strict("project_end", "k")
+    assert deleted == ["e1"] and slept == [], "對帳用的刪除：只打一次、不 sleep、失敗就丟（不吞）"
+    for code in ("HTTP 404", "HTTP 410"):
+        _fake_google_delete(monkeypatch, [RuntimeError(code)])
+        assert gc._delete_event_strict("project_end", "k") is True, code + "＝已經沒有＝成功"
+
+
+def test_public_delete_wrapper_keeps_the_old_one_retry(monkeypatch):
+    """fire-and-forget 包裝維持原行為：失敗 5 秒後重試一次、仍失敗只記 log（不丟）。"""
+    _cal(["project_end"])
+    deleted, slept = _fake_google_delete(monkeypatch, [RuntimeError("HTTP 500"), RuntimeError("HTTP 500")])
+    gc.push_event_delete_for_module("project_end", "k")
+    assert deleted == ["e1", "e1"] and slept == [5]
+
+
+def test_double_failing_google_delete_keeps_the_record_and_counts_toward_the_halt(monkeypatch):
+    """（稽核：刪除失敗被吞 ⇒ 記錄被丟、Google 事件變孤兒）真的走 gc._delete_event_strict：兩次都失敗仍留著記錄，且計入連續失敗。"""
+    _cal(["project_end"])
+    _set_setting("calsync.project_end", {k: [_d(5), "fp"] for k in ("A", "B", "C", "D")})
+    deleted, slept = _fake_google_delete(monkeypatch, [RuntimeError("HTTP 500")] * 10)
+    st = cs.sync_dated_events("project_end", {})                               # 四筆來源都消失
+    assert st["deleted"] == 0 and st["failed"] == cs.MAX_CONSECUTIVE_FAILURES, "連續失敗 3 次收手"
+    assert set(_get_setting("calsync.project_end")) == {"A", "B", "C", "D"}, "失敗的記錄全留著（含收手後沒試的那一筆）"
+    assert len(deleted) == cs.MAX_CONSECUTIVE_FAILURES and slept == [], "每筆只打一次、對帳中不 sleep"
+
+
+def test_consecutive_failure_counter_resets_on_success(monkeypatch):
+    """失敗、成功、失敗、失敗 ⇒ 不是「連續」3 次 ⇒ 不收手，後面的項目照處理。"""
+    _cal(["project_end"])
+    script = {"A": False, "B": True, "C": False, "D": False, "E": True}
+    done = []
+
+    def up(code, s, d, dt, key):
+        if not script[key]:
+            raise RuntimeError("Google 5xx")
+        done.append(key)
+        return True
+    monkeypatch.setattr(gc, "_upsert_event_strict", up)
+    st = cs.sync_dated_events("project_end", {k: _item(5 + i) for i, k in enumerate("ABCDE")})
+    assert done == ["B", "E"] and st["failed"] == 3 and st["upserted"] == 2, "成功把連續失敗歸零，E 照常處理"
+    assert set(_get_setting("calsync.project_end")) == {"B", "E"}
+
+
+def test_warranty_devices_sharing_the_same_id_get_suffixed_keys(calls):
+    from modules.case import case_deadlines as cd
+    start = (TODAY - timedelta(days=330)).isoformat()
+    _quote("Q-W4", "已成案", {"devices": [
+        {"id": 5, "name": "甲", "warrantyStart": start, "warrantyMonths": 12},
+        {"id": 5, "name": "乙", "warrantyStart": start, "warrantyMonths": 12}]})
+    _cal(["warranty_expiry"])
+    cd._sync_warranty_calendar()
+    assert sorted(_ups(calls, "warranty_expiry")) == ["Q-W4#5", "Q-W4#5~1"], "同 id 兩台設備不可互相覆蓋"
+
+
+def test_public_upsert_wrapper_delegates_to_the_strict_function(monkeypatch):
+    """包裝只負責吞例外；本體要真的被呼叫（找→建）。"""
+    _cal(["project_end"])
+    created = []
+    monkeypatch.setattr(gc, "_find_merged_event", lambda mk: None)
+    monkeypatch.setattr(gc, "_create_merged_event", lambda summary, description, dt, mk: created.append((summary, mk)) or "ev1")
+    gc.push_event_upsert_for_module("project_end", "標題", "說明", _d(3), "K1")
+    assert len(created) == 1 and created[0][0] == "標題"
+
