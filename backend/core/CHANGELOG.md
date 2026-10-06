@@ -7,6 +7,11 @@
 - 前端：通知鈴鐺（`sidebar.js`／`notif.js`）所有角色可見（原本只有管理員；一般使用者只掛隱形資料元件），點通知＝標已讀並開 `link`（前端再驗一次格式）；「查看全部操作紀錄」連結維持只給管理員。
 - 測試：`tests/test_notifications_link_2026_10_06.py`、`tests/test_e2e_inapp_bell_2026_10_06.py`；`test_e2e_approval_dot` 的一般使用者題改為有鈴鐺。
 
+## (next) — 2026-10-07（wip/t44-multi-attach：支出申請附件上限與孤兒檔）
+- L1（新增，向下相容）：`helpers/uploads.py`——`UPLOAD_LIMITS_BY_SUBFOLDER`（依資料夾的附件上限表；目前只有 `case_extra_expense`：每張單據最多 10 個、一次送出合計 50MB，單檔仍是 20MB）；`save_document_files(..., existing_count=0)` 新增選填參數（這張單據已有幾個附件，用來算累計數量）；**整批要嘛全存、要嘛全不存**——先驗完每個檔（副檔名、單檔大小、空檔、檔頭、合計大小、累計數量）才寫入，被擋時磁碟上不留任何檔案或空目錄（原本會留下前面幾個已寫的檔成為孤兒檔）；新增 `purge_document_files(existing_files)`（單據刪除時一併刪實體檔案與變空的資料夾，路徑須是 uploads 底下的正規路徑）。沒列在上限表的資料夾行為不變。
+- `save_document_files` 對 `case_extra_expense` 資料夾另外放行 `.heic`／`.heif`（`_EXTRA_EXTS_BY_SUBFOLDER`，檔頭檢查早已有規則；不支援的副檔名錯誤訊息的格式清單改由放行集合組出）；`routers/uploads.py` 的檔案服務對 HEIC／HEIF 一律以 attachment 回傳。簽章不變。
+- 測試：`tests/test_extra_expense_attach_caps_2026_10_07.py`、`tests/test_extra_expense_attach_permissions_2026_10_07.py`；L1 介面快照 `core_bump.py --pending`。
+
 ## 1.114 — 2026-10-06（train43 整合：wip/t43-mail-cal-matrix＋wip/t44-build-nopyc＋wip/t44-business-days＋wip/t43-phase2-events＋wip/t44-fin-fixes＋wip/t44-fin-fixes-r2＋wip/t43-duty-roles-r1＋wip/t43-cal-strict-fix＋wip/t44-settle-terms＋wip/t43-settle-tax＋wip/t43-finance-tab＋wip/t43-shipped-qty）（閘門修正已併入）
 - L1（新增，向下相容）：`helpers/business_days.py`——自 M11 `calendar_tw.py` 提升（純函式、不讀時鐘）：`load`／`coverage`／`covered`／`days_until_expiry`／`no_mail_day`／`next_mail_day`（行為不變）＋新增 `is_working_day(d)`、`previous_working_day(d, limit=14)`；資料 `helpers/holidays_tw.json`（官方人事行政總處辦公日曆表，2026～2027；每年更新，到期前 60 天內 M11 每日排程記警告）。M11 的 `calendar_tw.py` 轉出舊名。沒有假日表／年份不在涵蓋範圍 ⇒ 只排除週六日，不丟例外。
 - L1（新增，向下相容；wip/t43-mail-cal-matrix）：`helpers/notify_matrix.py`——信件×行事曆通知矩陣的對照與規則（`EVENT_LINKS`／`MAIL_OFF_LOCKED`／`is_mail_off`／`mail_off_lock_reason` 等；不讀寫設定、不 import 業務模組）；`helpers.email_notify` 的所有收件人漏斗（含事件收件人、部門主管、月報、財務受眾）在公司關閉該信件時回空清單，鎖定的資安類恆不可關。

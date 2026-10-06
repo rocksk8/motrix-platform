@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """傳票附件開放 Word／Excel（使用者 2026-09-30 裁示）：docx／xlsx／doc／xls 可上傳；exe 等仍拒；大小上限沿用；
 PDF 匯出時這些只列檔名、不嵌入（不崩）；下載時 Content-Disposition 是 attachment 且檔名正確。
-放行範圍在 `helpers/uploads.py::_EXTRA_EXTS_BY_SUBFOLDER`（只有 voucher_attachments），其他單據的上傳白名單不變。
+放行範圍在 `helpers/uploads.py::_EXTRA_EXTS_BY_SUBFOLDER`（voucher_attachments 放 Word／Excel；case_extra_expense 只放 HEIC／HEIF，第44班），其他單據的上傳白名單不變。
 """
 import io
 import pathlib
@@ -68,7 +68,8 @@ def test_other_document_types_keep_the_old_whitelist():
     with pytest.raises(HTTPException) as e:
         asyncio.run(go("quotations"))
     assert e.value.status_code == 400 and "jpg/png/pdf" in e.value.detail and "/docx" not in e.value.detail   # 訊息只列 jpg/png/pdf（檔名 x.docx 本身會出現，所以比對「/docx」）
-    assert up._EXTRA_EXTS_BY_SUBFOLDER.keys() == {"voucher_attachments"}
+    assert up._EXTRA_EXTS_BY_SUBFOLDER.keys() == {"voucher_attachments", "case_extra_expense"}   # 第44班：支出申請另放行 HEIC／HEIF（只有它；傳票不收 HEIC）
+    assert up._EXTRA_EXTS_BY_SUBFOLDER["case_extra_expense"] == {".heic", ".heif"}
 
 
 def test_download_is_an_attachment_with_the_right_filename(client, make_user):

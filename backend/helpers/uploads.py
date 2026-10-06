@@ -33,8 +33,15 @@ _ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.pdf'}
 #: 個別單據類型另外放行的副檔名（key＝呼叫端傳的 `subfolder`，不含 demo 前綴）。
 #: 傳票附件（2026-09-30 使用者裁示）：Word／Excel 也能夾帶；exe 等其他格式照舊擋。大小上限沿用 `_MAX_FILE_SIZE`。
 #: 函式簽章不動（L1 介面快照不變）：放行範圍由這張表決定，不是讓每個呼叫端自己傳白名單。
-_EXTRA_EXTS_BY_SUBFOLDER = {'voucher_attachments': {'.docx', '.xlsx', '.doc', '.xls'}}
+_EXTRA_EXTS_BY_SUBFOLDER = {'voucher_attachments': {'.docx', '.xlsx', '.doc', '.xls'},
+                            'case_extra_expense': {'.heic', '.heif'}}      # iPhone 原檔（第44班方案 A：收原檔、檢視＝下載）
 _MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB／檔
+#: 依資料夾（`subfolder`，不含 demo 前綴）另訂的數量／總量上限（2026-10-07 使用者裁示：支出申請每張單據最多 10 個附件、一次送出合計 50MB；單檔 20MB 沿用 `_MAX_FILE_SIZE`）。
+#: 沒列在這張表的資料夾＝只有單檔上限（行為不變）。`max_files`＝「每張單據」累計上限（呼叫端要傳 `existing_count`＝這張單據已有幾個）；
+#: `max_request_bytes`＝這一次請求的合計大小。
+UPLOAD_LIMITS_BY_SUBFOLDER = {
+    'case_extra_expense': {'max_files': 10, 'max_request_bytes': 50 * 1024 * 1024},
+}
 
 
 # ── 檔頭（magic bytes）檢查：副檔名白名單之外的第二道（NIGHT 計畫 line 161，2026-09-30）──────────────────────
@@ -141,7 +148,7 @@ def _safe_save_dir(subfolder: str, doc_no: str) -> str:
 
 
 async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFile],
-                              uploaded_by: str, watermark_by: str = '') -> list:
+                              uploaded_by: str, watermark_by: str = '', existing_count: int = 0) -> list:
     """存檔 files 到 uploads/{subfolder}/{doc_no}/{uuid}{ext}（demo 帳號會被
     導向 uploads/_demo_uploads/{subfolder}/{doc_no}/，見 _effective_subfolder()），
     回傳新增檔案的 metadata 陣列（呼叫端負責把這份陣列追加進資料庫的 JSON
@@ -157,18 +164,26 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
     **import 刻意寫在函式裡面**：這個模組原本的設計就是「單純存檔、不碰浮水印」
     （見檔頭），module-level import photos 會讓每個只想存 PDF 的呼叫端也被迫
     載入 Pillow 相依。放在用到的分支裡，沒傳 watermark_by 的呼叫端行為與相依
-    完全不變。"""
+    完全不變。
+
+    `existing_count`（選填，預設 0）：這張單據目前已有幾個附件；該資料夾在 `UPLOAD_LIMITS_BY_SUBFOLDER` 有 `max_files` 時用來檢查累計數量。
+    **整批要嘛全存、要嘛全不存**：先把每個檔案驗完（副檔名、單檔大小、空檔、檔頭、整次請求合計大小、累計數量）才開始寫入，
+    任何一個不合格就整批擋下，磁碟上不留任何檔案或空目錄（原本會留下前面幾個已寫的檔，成為沒有任何單據引用的孤兒檔）。"""
     if not files:
         raise HTTPException(400, "請至少選擇一個檔案")
 
+    limits = UPLOAD_LIMITS_BY_SUBFOLDER.get(subfolder) or {}
+    max_files = limits.get('max_files')
+    if max_files and int(existing_count or 0) + len(files) > max_files:
+        raise HTTPException(400, f"每張單據最多 {max_files} 個附件（目前已有 {int(existing_count or 0)} 個，這次要加 {len(files)} 個）")
     allowed = _ALLOWED_EXTS | _EXTRA_EXTS_BY_SUBFOLDER.get(subfolder, set())
-    allowed_label = 'jpg/png/pdf' + ('/docx/xlsx/doc/xls' if allowed != _ALLOWED_EXTS else '')
+    allowed_label = 'jpg/png/pdf' + ''.join('/' + e[1:] for e in sorted(allowed - _ALLOWED_EXTS))
     subfolder = _effective_subfolder(subfolder)
     save_dir = _safe_save_dir(subfolder, doc_no)
-    os.makedirs(save_dir, exist_ok=True)
 
-    saved = []
-    now = datetime.now().isoformat()
+    # 第一階段：全部驗完才寫（任何一個不合格 ⇒ 整批 400，磁碟上什麼都不留）
+    prepared = []
+    total = 0
     for upload in files:
         ext = os.path.splitext(upload.filename or '')[1].lower()
         if ext not in allowed:
@@ -179,6 +194,17 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
         if not raw:
             raise HTTPException(400, f"檔案是空的：{upload.filename}")
         _check_upload_magic(upload.filename or '', ext, raw, subfolder, uploaded_by)
+        total += len(raw)
+        cap = limits.get('max_request_bytes')
+        if cap and total > cap:
+            raise HTTPException(400, f"這次上傳的檔案合計超過 {cap // (1024 * 1024)}MB，請分批上傳")
+        prepared.append((upload, ext, raw))
+
+    # 第二階段：寫入
+    os.makedirs(save_dir, exist_ok=True)
+    saved = []
+    now = datetime.now().isoformat()
+    for upload, ext, raw in prepared:
         if watermark_by and ext in ('.jpg', '.jpeg', '.png'):
             try:
                 from photos import _process_project_photo
@@ -218,6 +244,32 @@ def delete_document_file(subfolder: str, doc_no: str, existing_files: list, file
     except Exception:
         pass
     return [f for f in existing_files if f.get("id") != file_id]
+
+
+def purge_document_files(existing_files: list) -> int:
+    """單據被刪除（草稿／已駁回）時，把它名下的實體檔案一併刪掉，並清掉變空的資料夾；回實際刪掉幾個檔。
+    只處理 `existing_files` 裡有 `path` 的項目，路徑一律經 `canonical_upload_path` 驗證（不在 uploads 根目錄底下的一律略過）。
+    刪檔失敗不丟例外（單據已刪、檔案成了孤兒只是浪費空間，不該讓刪除失敗）。"""
+    n = 0
+    dirs = set()
+    for f in existing_files or []:
+        rel = canonical_upload_path((f or {}).get("path")) if isinstance(f, dict) else None
+        if not rel:
+            continue
+        full = os.path.join(UPLOADS_ROOT, *rel.split("/"))
+        try:
+            if os.path.isfile(full):
+                os.remove(full)
+                n += 1
+            dirs.add(os.path.dirname(full))
+        except Exception:                                   # noqa: BLE001
+            pass
+    for d in dirs:
+        try:
+            os.rmdir(d)                                     # 只會刪空資料夾；有別的檔就保留
+        except OSError:
+            pass
+    return n
 
 
 # ── 附件來源（`attachments.for_document`，主持裁示 M06-b，2026-09-26）──────────────────────────

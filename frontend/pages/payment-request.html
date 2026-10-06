@@ -41,6 +41,10 @@
     .pr-table th, .pr-table td { padding: 7px 8px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
     .pr-table th { font-size: 11px; color: var(--text-secondary); font-weight: 600; }
     .pr-st { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--border-light); color: var(--text-secondary); }
+    .pr-attach { margin-top: 2px; }
+    .pr-flist { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+    .pr-flist li { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+    .pr-flist img { width: 34px; height: 34px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border-light); }
     @media (max-width: 767px) { .pr-main { margin-left: 0; padding: 16px 12px 48px; } .pr-table { display: block; overflow-x: auto; } }
   </style>
 </head>
@@ -123,11 +127,39 @@
           <div class="pr-grid" style="margin-top:12px">
             <div class="pr-f">
               <label for="pr-files">附件（收據、照片…）</label>
-              <input id="pr-files" type="file" multiple accept=".jpg,.jpeg,.png,.pdf" @change="form.files = [...$event.target.files]">
+              <input id="pr-files" type="file" multiple :accept="pkOther.accept()" style="display:none" @change="pkOther.add($event.target.files); $event.target.value = ''">
+              <div class="pr-attach" data-attach="other">
+                <button type="button" class="btn btn-secondary btn-sm" data-attach-add="other" @click="document.getElementById('pr-files').click()">＋ 加入檔案</button>
+                <span class="pr-hint" x-text="pkOther.count() + ' 個（附件與發票合計 ' + pkOther.groupCount() + '／' + pkOther.opts.maxFiles + '）'"></span>
+                <ul class="pr-flist">
+                  <template x-for="(it, i) in pkOther.files" :key="it.id">
+                    <li :data-attach-item="it.file.name">
+                      <img x-show="it.url" :src="it.url" alt="">
+                      <span x-text="it.file.name + '（' + AttachPicker.fmtSize(it.file.size) + '）'"></span>
+                      <button type="button" class="btn btn-ghost btn-sm" @click="pkOther.remove(i)">移除</button>
+                    </li>
+                  </template>
+                </ul>
+                <div class="pr-err" x-show="pkOther.err" x-text="pkOther.err"></div>
+              </div>
             </div>
             <div class="pr-f">
               <label for="pr-invoice-files">發票（可以核准後再補）</label>
-              <input id="pr-invoice-files" type="file" multiple accept=".jpg,.jpeg,.png,.pdf" @change="form.invoiceFiles = [...$event.target.files]">
+              <input id="pr-invoice-files" type="file" multiple :accept="pkInv.accept()" style="display:none" @change="pkInv.add($event.target.files); $event.target.value = ''">
+              <div class="pr-attach" data-attach="invoice">
+                <button type="button" class="btn btn-secondary btn-sm" data-attach-add="invoice" @click="document.getElementById('pr-invoice-files').click()">＋ 加入檔案</button>
+                <span class="pr-hint" x-text="pkInv.count() + ' 個（附件與發票合計 ' + pkInv.groupCount() + '／' + pkInv.opts.maxFiles + '）'"></span>
+                <ul class="pr-flist">
+                  <template x-for="(it, i) in pkInv.files" :key="it.id">
+                    <li :data-attach-item="it.file.name">
+                      <img x-show="it.url" :src="it.url" alt="">
+                      <span x-text="it.file.name + '（' + AttachPicker.fmtSize(it.file.size) + '）'"></span>
+                      <button type="button" class="btn btn-ghost btn-sm" @click="pkInv.remove(i)">移除</button>
+                    </li>
+                  </template>
+                </ul>
+                <div class="pr-err" x-show="pkInv.err" x-text="pkInv.err"></div>
+              </div>
             </div>
             <div class="pr-f">
               <label for="pr-invoice-no">發票號碼（選填）</label>
@@ -212,11 +244,39 @@
           <div class="pr-grid" style="margin-top:12px">
             <div class="pr-f">
               <label for="pr-t-files">附件（收據、照片…）</label>
-              <input id="pr-t-files" type="file" multiple accept=".jpg,.jpeg,.png,.pdf" @change="form.files = [...$event.target.files]">
+              <input id="pr-t-files" type="file" multiple :accept="pkOther.accept()" style="display:none" @change="pkOther.add($event.target.files); $event.target.value = ''">
+              <div class="pr-attach" data-attach="other-t">
+                <button type="button" class="btn btn-secondary btn-sm" data-attach-add="other-t" @click="document.getElementById('pr-t-files').click()">＋ 加入檔案</button>
+                <span class="pr-hint" x-text="pkOther.count() + ' 個（附件與發票合計 ' + pkOther.groupCount() + '／' + pkOther.opts.maxFiles + '）'"></span>
+                <ul class="pr-flist">
+                  <template x-for="(it, i) in pkOther.files" :key="it.id">
+                    <li :data-attach-item="it.file.name">
+                      <img x-show="it.url" :src="it.url" alt="">
+                      <span x-text="it.file.name + '（' + AttachPicker.fmtSize(it.file.size) + '）'"></span>
+                      <button type="button" class="btn btn-ghost btn-sm" @click="pkOther.remove(i)">移除</button>
+                    </li>
+                  </template>
+                </ul>
+                <div class="pr-err" x-show="pkOther.err" x-text="pkOther.err"></div>
+              </div>
             </div>
             <div class="pr-f">
               <label for="pr-t-invoice-files">發票（可以核准後再補）</label>
-              <input id="pr-t-invoice-files" type="file" multiple accept=".jpg,.jpeg,.png,.pdf" @change="form.invoiceFiles = [...$event.target.files]">
+              <input id="pr-t-invoice-files" type="file" multiple :accept="pkInv.accept()" style="display:none" @change="pkInv.add($event.target.files); $event.target.value = ''">
+              <div class="pr-attach" data-attach="invoice-t">
+                <button type="button" class="btn btn-secondary btn-sm" data-attach-add="invoice-t" @click="document.getElementById('pr-t-invoice-files').click()">＋ 加入檔案</button>
+                <span class="pr-hint" x-text="pkInv.count() + ' 個（附件與發票合計 ' + pkInv.groupCount() + '／' + pkInv.opts.maxFiles + '）'"></span>
+                <ul class="pr-flist">
+                  <template x-for="(it, i) in pkInv.files" :key="it.id">
+                    <li :data-attach-item="it.file.name">
+                      <img x-show="it.url" :src="it.url" alt="">
+                      <span x-text="it.file.name + '（' + AttachPicker.fmtSize(it.file.size) + '）'"></span>
+                      <button type="button" class="btn btn-ghost btn-sm" @click="pkInv.remove(i)">移除</button>
+                    </li>
+                  </template>
+                </ul>
+                <div class="pr-err" x-show="pkInv.err" x-text="pkInv.err"></div>
+              </div>
             </div>
           </div>
           <div class="pr-err" id="pr-t-error" x-show="err" x-text="err"></div>
@@ -233,7 +293,7 @@
         <div class="pr-card">
           <div class="pr-hint" x-show="mineLoaded && !mine.length">還沒有申請</div>
           <table class="pr-table" x-show="mine.length">
-            <thead><tr><th>單號</th><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>付款日</th><th>單據</th><th></th></tr></thead>
+            <thead><tr><th>單號</th><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>付款日</th><th>單據</th><th>附件</th><th></th></tr></thead>
             <tbody>
               <template x-for="e in mine" :key="e.id">
                 <tr :data-payreq-row="e.id" :data-status="e.status">
@@ -251,6 +311,27 @@
                       <div :data-doc-actions="e.id" style="display:flex;gap:4px;flex-wrap:wrap">
                         <button class="btn btn-ghost btn-sm" :data-doc-html="e.id" :disabled="busy" @click="openDoc(e, 'html')">預覽單據</button>
                         <button class="btn btn-ghost btn-sm" :data-doc-pdf="e.id" :disabled="busy" @click="openDoc(e, 'pdf')">PDF</button>
+                      </div>
+                    </template>
+                  </td>
+                  <td :data-attach-cell="e.id" style="min-width:190px;font-size:12px">
+                    <template x-for="f in (e.files || [])" :key="f.id">
+                      <div :data-attach-file="f.id" style="display:flex;gap:6px;align-items:center">
+                        <a href="#" :data-attach-dl="f.id" @click.prevent="downloadFile(f)" x-text="f.filename || f.id"></a>
+                        <button class="btn btn-ghost btn-sm" :data-attach-del="f.id" x-show="canEditFiles(e)" :disabled="busy" @click="delFile(e, f)">刪除</button>
+                      </div>
+                    </template>
+                    <div class="pr-hint" x-show="!(e.files || []).length">無附件</div>
+                    <template x-if="canEditFiles(e) && mineP[e.id]">
+                      <div :data-attach-add-form="e.id" style="margin-top:4px">
+                        <input type="file" multiple :accept="mineP[e.id].accept()" :data-attach-input="e.id" style="font-size:11px"
+                               @change="mineP[e.id].add($event.target.files); $event.target.value = ''">
+                        <template x-for="(it, i) in mineP[e.id].files" :key="it.id">
+                          <div style="display:flex;gap:6px"><span x-text="it.file.name + '（' + AttachPicker.fmtSize(it.file.size) + '）'"></span>
+                            <button class="btn btn-ghost btn-sm" :disabled="busy" @click="mineP[e.id].remove(i)">移除</button></div>
+                        </template>
+                        <div class="pr-err" x-show="mineP[e.id].err" x-text="mineP[e.id].err"></div>
+                        <button class="btn btn-secondary btn-sm" :data-attach-add="e.id" :disabled="busy || !mineP[e.id].count()" @click="addFiles(e)">加入附件</button>
                       </div>
                     </template>
                   </td>
@@ -276,6 +357,7 @@
   </main>
 
   <script src="../static/notif.js"></script>
+  <script src="../static/attach-picker.js"></script>
   <script>
     function paymentRequestPage() {
       function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') }
@@ -288,9 +370,13 @@
         prItems: [], prSel: {}, prReasons: {}, linkedIds: [], lineTick: 0,      // 32-S5：請購／採購單「從案件品項帶入」
         prReqs: [], prrSel: {}, prrQty: {}, prrErr: '',                         // 第 44 班：採購單「從請購單帶入」（多選；部分數量）
         form: blank(),
-        mine: [], mineLoaded: false, mineErr: '', mineMsg: '', invoiceDraft: {}, invoiceNoDraft: {},
+        pkOther: null, pkInv: null, _simple: null,        // 附件挑選器（累加、可移除；第44班）：附件／發票兩個框，數量與合計大小一起算
+        mine: [], mineP: {}, mineLoaded: false, mineErr: '', mineMsg: '', invoiceDraft: {}, invoiceNoDraft: {},
 
         init() {
+          var self = this
+          this.pkOther = AttachPicker.create({ peers: function () { return [self.pkInv] } })
+          this.pkInv = AttachPicker.create({ peers: function () { return [self.pkOther] } })
           this.searchCases(); this.loadTypes()
           try { if (new URLSearchParams(location.search).get('tab') === 'mine') { this.tab = 'mine'; this.loadMine() } } catch (e) {}
         },
@@ -411,7 +497,7 @@
           this._syncLinked()
         },
         async pickCase(c) {
-          this.picked = c; this.err = ''; this.result = null; this._draft = null
+          this.picked = c; this.err = ''; this.result = null; this._draft = null; this._simple = null
           this.loadPrItems()
           this.loadPrReqs()
           var r = await fetch('/api/quotations/' + encodeURIComponent(c.quoteNo) + '/extra-expenses', { headers: this._h() })
@@ -422,11 +508,18 @@
 
         async _upload(no, id, files, kind) {
           if (!files || !files.length) return
+          no = no || '-'                                    // 無案件單據＝哨兵路徑段「-」
           var fd = new FormData()
           files.forEach(function (f) { fd.append('files', f) })
           fd.append('kind', kind)
           var r = await fetch('/api/quotations/' + encodeURIComponent(no) + '/extra-expenses/' + id + '/files', { method: 'POST', headers: this._h(), body: fd })
           if (!r.ok) throw new Error((await this._json(r)).detail || ('上傳失敗（HTTP ' + r.status + '）'))
+        },
+        // 兩個挑選器各上傳一次；成功就清空該挑選器 ⇒ 失敗重按不會把已上傳的檔再傳一次（不重複附件）
+        async _uploadPickers(no, id) {
+          await Promise.all([this.pkOther.ready(), this.pkInv.ready()])      // HEIC 盡力轉檔完成後再傳
+          if (this.pkOther.count()) { await this._upload(no, id, this.pkOther.raw(), 'other'); this.pkOther.clear() }
+          if (this.pkInv.count()) { await this._upload(no, id, this.pkInv.raw(), 'invoice'); this.pkInv.clear() }
         },
         async save(submit) {
           this.err = ''; this.result = null
@@ -437,15 +530,20 @@
           var no = this.picked.quoteNo
           var base = '/api/quotations/' + encodeURIComponent(no) + '/extra-expenses'
           try {
-            var r = await fetch(base, { method: 'POST', headers: this._h(true), body: JSON.stringify({
+            // 附件被擋（太大／格式不符…）時草稿已經建好：重按要沿用同一張草稿（只補傳附件），不可以再建一張（第44班）
+            var sd = this._simple && this._simple.no === no ? this._simple : null
+            var id
+            // 重按時欄位可能已改（金額、說明…）⇒ 沿用草稿也要 PATCH 一次，不可以靜默保留舊值
+            var body = JSON.stringify({
               category: this.form.category, description: this.form.description.trim(), qty: 1, unit: '', unitCost: Number(this.form.amount),
               expenseDate: this.form.expenseDate, payerName: (this.form.payerName || '').trim(),
-              plannedPayDate: this.form.plannedPayDate || '' }) })
+              plannedPayDate: this.form.plannedPayDate || '' })
+            var r = await fetch(sd ? base + '/' + sd.id : base, { method: sd ? 'PATCH' : 'POST', headers: this._h(true), body: body })
             var d = await this._json(r)
-            if (!r.ok) throw new Error(d.detail || ('建立失敗（HTTP ' + r.status + '）'))
-            var id = d.id
-            await this._upload(no, id, this.form.files, 'other')
-            await this._upload(no, id, this.form.invoiceFiles, 'invoice')
+            if (!r.ok) throw new Error(d.detail || ((sd ? '更新草稿失敗' : '建立失敗') + '（HTTP ' + r.status + '）'))
+            id = sd ? sd.id : d.id
+            this._simple = { no: no, id: id }
+            await this._uploadPickers(no, id)
             if ((this.form.invoiceNo || '').trim()) {
               var ri = await fetch(base + '/' + id + '/dates', { method: 'PATCH', headers: this._h(true), body: JSON.stringify({ invoiceNo: this.form.invoiceNo.trim() }) })
               if (!ri.ok) throw new Error((await this._json(ri)).detail || '發票號碼儲存失敗')
@@ -458,9 +556,11 @@
               status = ds.status || '待審核'
             }
             this.result = { status: status, id: id, text: (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + no + ' #' + id + '，可以在「我的申請」看進度' }
-            this.form = blank()
+            this.form = blank(); this._simple = null; this.pkOther.clear(); this.pkInv.clear()
             ;['pr-files', 'pr-invoice-files'].forEach(function (x) { var el = document.getElementById(x); if (el) el.value = '' })
-          } catch (e) { this.err = e.message }
+          } catch (e) {
+            this.err = e.message + (this._simple && this._simple.no === no ? '（草稿 #' + this._simple.id + ' 已建立；修正後再按一次即可，不會重複建立）' : '')
+          }
           finally { this.busy = false }
         },
 
@@ -524,11 +624,7 @@
             var id = dr ? dr.id : d.id
             if (!dr) { this._draft = { no: no, kind: this.typeCode, id: id, code: d.docCode || '', filesDone: false }; dr = this._draft }
             d.docCode = d.docCode || dr.code
-            if (!dr.filesDone) {
-              await this._upload(no, id, this.form.files, 'other')
-              await this._upload(no, id, this.form.invoiceFiles, 'invoice')
-              dr.filesDone = true
-            }
+            await this._uploadPickers(no, id)                                    // 成功的挑選器會清空 ⇒ 重按不會重複傳（失敗時草稿已建，沿用同一張）
             var status = '草稿'
             if (submit) {
               var rs = await fetch(base + '/' + id + '/submit', { method: 'POST', headers: this._h() })
@@ -537,11 +633,13 @@
               status = ds.status || '待審核'
             }
             var text = (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + (d.docCode || (no + ' #' + id)) + '，可以在「我的申請」看進度'
-            this.form = blank(); this._draft = null
+            this.form = blank(); this._draft = null; this.pkOther.clear(); this.pkInv.clear()
             ;['pr-t-files', 'pr-t-invoice-files'].forEach(function (x) { var el = document.getElementById(x); if (el) el.value = '' })
             await this.selectType()                                              // 重新渲染空白表單（它會清掉結果訊息 ⇒ 先渲染再放結果）
             this.result = { status: status, id: id, text: text }
-          } catch (e) { this.err = e.message }
+          } catch (e) {
+            this.err = e.message + (this._draft && this._draft.no === no && this._draft.kind === this.typeCode ? '（草稿 ' + (this._draft.code || ('#' + this._draft.id)) + ' 已建立；修正後再按一次即可，不會重複建立）' : '')
+          }
           finally { this.busy = false }
         },
 
@@ -563,8 +661,48 @@
         async loadMine() {
           var r = await fetch('/api/extra-expenses/mine', { headers: this._h() })
           this.mine = r.ok ? await r.json() : []
+          var MAXF = 10, P = {}
+          this.mine.forEach(function (e) { P[e.id] = AttachPicker.create({ maxFiles: Math.max(0, MAXF - (e.files || []).length) }) })
+          this.mineP = P                                    // 每列一個挑選器；名額＝10 − 已有幾個（伺服器端另擋）
           this.mineErr = r.ok ? '' : ('讀取失敗（HTTP ' + r.status + '）')
           this.mineLoaded = true
+        },
+        // 申請人可增刪附件的狀態（與後端 FILES_MUTABLE_STATUSES 同；核准後只剩「補發票」、作廢不可動）
+        canEditFiles(e) { return ['草稿', '待審核', '簽核中', '已駁回'].indexOf(e.status) >= 0 },
+        // 附件要 Bearer ⇒ fetch → blob → 下載（HEIC 瀏覽器多半不能預覽，一律當下載；其餘檔案同樣下載，不開新分頁）
+        async downloadFile(f) {
+          this.mineErr = ''
+          try {
+            var r = await fetch('/api/uploads/' + String(f.path || '').split('/').map(encodeURIComponent).join('/'), { headers: this._h() })
+            if (!r.ok) throw new Error((await this._json(r)).detail || ('下載失敗（HTTP ' + r.status + '）'))
+            var url = URL.createObjectURL(await r.blob()), a = document.createElement('a')
+            a.href = url; a.download = f.filename || 'file'; document.body.appendChild(a); a.click(); a.remove()
+            setTimeout(function () { URL.revokeObjectURL(url) }, 60000)
+          } catch (err) { this.mineErr = err.message }
+        },
+        async addFiles(e) {
+          this.mineErr = ''; this.mineMsg = ''
+          var pk = this.mineP[e.id]
+          if (!pk || !pk.count()) return
+          this.busy = true
+          try {
+            await pk.ready()
+            await this._upload(e.quoteNo, e.id, pk.raw(), 'other')
+            this.mineMsg = '已加入附件：' + (e.docCode || (e.quoteNo + ' #' + e.id))
+            await this.loadMine()
+          } catch (x) { this.mineErr = x.message }
+          finally { this.busy = false }
+        },
+        async delFile(e, f) {
+          this.mineErr = ''; this.mineMsg = ''
+          this.busy = true
+          try {
+            var r = await fetch('/api/quotations/' + encodeURIComponent(e.quoteNo || '-') + '/extra-expenses/' + e.id + '/files/' + encodeURIComponent(f.id), { method: 'DELETE', headers: this._h() })
+            if (!r.ok) throw new Error((await this._json(r)).detail || ('刪除失敗（HTTP ' + r.status + '）'))
+            this.mineMsg = '已刪除附件：' + (f.filename || f.id)
+            await this.loadMine()
+          } catch (x) { this.mineErr = x.message }
+          finally { this.busy = false }
         },
         async addInvoice(e) {
           this.mineErr = ''; this.mineMsg = ''

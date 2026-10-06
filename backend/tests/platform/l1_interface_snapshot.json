@@ -1135,6 +1135,7 @@
    "OpenedFile.size": "field",
    "PATH_ACCESS": "const",
    "UPLOADS_ROOT": "const",
+   "UPLOAD_LIMITS_BY_SUBFOLDER": "const",
    "_check_upload_magic": "def(filename, ext, raw, subfolder=…, uploaded_by=…)",
    "_effective_subfolder": "def(subfolder)",
    "canonical_upload_path": "def(raw)",
@@ -1142,7 +1143,8 @@
    "files_from_json_column": "def(conn, table, key_col, key, col)",
    "opened_upload_file": "def(entry)",
    "pick_file": "def(files, file_id)",
-   "save_document_files": "async def(subfolder, doc_no, files, uploaded_by, watermark_by=…)",
+   "purge_document_files": "def(existing_files)",
+   "save_document_files": "async def(subfolder, doc_no, files, uploaded_by, watermark_by=…, existing_count=…)",
    "upload_owner": "def(rel)",
    "upload_path_key": "def(entry, folder, depth=…)",
    "upload_readable": "def(conn, rel, user)"
