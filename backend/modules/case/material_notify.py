@@ -67,19 +67,19 @@ def _mail(event, info, *, usernames, extra=None, page="approval-queue.html"):
     ident = "材料申請 %s" % (info.get("docCode") or "")
     if event == "submitted":
         return _en.send_registered("material_order_submitted", title="材料申請簽核申請", rows=rows, usernames=users,
-                                   badge_text="待您審核", link=link, button_text="前往審核", reason=ident,
+                                   badge_text="待您審核", link=link, button_text="前往審核", reason=ident + " 待審核",
                                    note="您好，以下材料申請已進入簽核流程，敬請於系統中完成審核。")
     if event == "next_tier":
         return _en.send_registered("material_order_next_tier", title="材料申請簽核流程通知", rows=rows, usernames=users,
-                                   badge_text="輪到您審核", link=link, button_text="前往審核", reason=ident,
+                                   badge_text="輪到您審核", link=link, button_text="前往審核", reason=ident + " 輪到您審核",
                                    note="您好，前層審核已完成，材料申請現已輪到您審核。")
     if event == "approved":
         return _en.send_registered("material_order_approved", title="材料申請已核准", rows=rows, usernames=users,
-                                   badge_text="已核准", badge_color="#2E8B57", link=link, button_text="前往查看", reason=ident,
+                                   badge_text="已核准", badge_color="#2E8B57", link=link, button_text="前往查看", reason=ident + " 已核准",
                                    note="您好，您送審的材料申請已完成審核並核准。")
     if event == "returned":
         return _en.send_registered("material_order_returned", title="材料申請被退回", rows=rows, usernames=users,
-                                   badge_text="已退回", badge_color="#C0392B", link=link, button_text="前往查看", reason=ident,
+                                   badge_text="已退回", badge_color="#C0392B", link=link, button_text="前往查看", reason=ident + " 已退回",
                                    note="您好，您送審的材料申請經審核後退回，請參閱退回原因修改後重新送審。")
     raise ValueError("未知的材料申請通知事件：%r" % (event,))
 
@@ -118,19 +118,19 @@ def _pay_mail(event, info, *, usernames, extra=None, page="approval-queue.html")
     ident = "匯款申請 %s" % (info.get("docCode") or "")
     if event == "submitted":
         return _en.send_registered("material_payment_submitted", title="材料申請匯款申請簽核", rows=rows, usernames=users,
-                                   badge_text="待您審核", link=link, button_text="前往審核", reason=ident,
+                                   badge_text="待您審核", link=link, button_text="前往審核", reason=ident + " 待審核",
                                    note="您好，以下材料申請匯款申請已進入簽核流程，敬請於系統中完成審核。")
     if event == "next_tier":
         return _en.send_registered("material_payment_next_tier", title="材料申請匯款申請簽核流程通知", rows=rows, usernames=users,
-                                   badge_text="輪到您審核", link=link, button_text="前往審核", reason=ident,
+                                   badge_text="輪到您審核", link=link, button_text="前往審核", reason=ident + " 輪到您審核",
                                    note="您好，前層審核已完成，匯款申請現已輪到您審核。")
     if event == "approved":
         return _en.send_registered("material_payment_approved", title="材料申請匯款申請已核准", rows=rows, usernames=users,
-                                   badge_text="已核准", badge_color="#2E8B57", link=link, button_text="前往查看", reason=ident,
+                                   badge_text="已核准", badge_color="#2E8B57", link=link, button_text="前往查看", reason=ident + " 已核准",
                                    note="您好，您送審的匯款申請已完成審核並核准，已交給出納付款。")
     if event == "returned":
         return _en.send_registered("material_payment_returned", title="材料申請匯款申請被退回", rows=rows, usernames=users,
-                                   badge_text="已退回", badge_color="#C0392B", link=link, button_text="前往查看", reason=ident,
+                                   badge_text="已退回", badge_color="#C0392B", link=link, button_text="前往查看", reason=ident + " 已退回",
                                    note="您好，您送審的匯款申請經審核後退回，請參閱退回原因修改後重新送審。")
     raise ValueError("未知的材料申請匯款通知事件：%r" % (event,))
 
@@ -164,19 +164,19 @@ def _chg_mail(event, info, *, usernames, extra=None, page="approval-queue.html")
     ident = "材料申請變更 %s" % (info.get("docCode") or "")
     if event == "submitted":
         return _en.send_registered("material_change_submitted", title="材料申請變更簽核申請", rows=rows, usernames=users,
-                                   badge_text="待您審核", link=link, button_text="前往審核", reason=ident,
+                                   badge_text="待您審核", link=link, button_text="前往審核", reason=ident + " 待審核",
                                    note="您好，以下材料申請變更已進入簽核流程，敬請於系統中完成審核；核准前原材料申請內容照常有效。")
     if event == "next_tier":
         return _en.send_registered("material_change_next_tier", title="材料申請變更簽核流程通知", rows=rows, usernames=users,
-                                   badge_text="輪到您審核", link=link, button_text="前往審核", reason=ident,
+                                   badge_text="輪到您審核", link=link, button_text="前往審核", reason=ident + " 輪到您審核",
                                    note="您好，前層審核已完成，材料申請變更現已輪到您審核。")
     if event == "approved":
         return _en.send_registered("material_change_approved", title="材料申請變更已核准", rows=rows, usernames=users,
-                                   badge_text="已核准", badge_color="#2E8B57", link=link, button_text="前往查看", reason=ident,
+                                   badge_text="已核准", badge_color="#2E8B57", link=link, button_text="前往查看", reason=ident + " 已核准",
                                    note="您好，您送審的材料申請變更已完成審核並套用。")
     if event == "returned":
         return _en.send_registered("material_change_returned", title="材料申請變更被退回", rows=rows, usernames=users,
-                                   badge_text="已退回", badge_color="#C0392B", link=link, button_text="前往查看", reason=ident,
+                                   badge_text="已退回", badge_color="#C0392B", link=link, button_text="前往查看", reason=ident + " 已退回",
                                    note="您好，您送審的材料申請變更經審核後退回，原材料申請不受影響；請參閱退回原因修改後重新送審。")
     raise ValueError("未知的材料申請變更通知事件：%r" % (event,))
 

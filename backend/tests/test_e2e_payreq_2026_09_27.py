@@ -118,6 +118,9 @@ def test_payment_request_end_to_end(live_server, make_user, new_context, client,
     # ④ 我的請款：核准後補發票（只有發票能補）
     page.click("#pr-tab-mine")
     page.wait_for_selector('[data-payreq-row="%d"][data-status="已核准"]' % eid, timeout=15000)
+    # 第44班：我的申請列有「單號」欄（typed 單據＝docCode；簡單支出＝#id），不是空白
+    shown = page.locator('[data-payreq-row="%d"] [data-doc-code="%d"]' % (eid, eid)).text_content().strip()
+    assert shown == (row["doc_code"] or "#%d" % eid), shown
     page.set_input_files('[data-invoice-upload="%d"]' % eid, _png(tmp_path, "invoice.png"))
     page.fill('[data-invoice-no="%d"]' % eid, "AB12345678")
     page.click('[data-invoice-save="%d"]' % eid)

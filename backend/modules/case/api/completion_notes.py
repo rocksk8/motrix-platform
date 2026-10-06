@@ -31,6 +31,7 @@ from db import get_db, next_entity_code
 from helpers.errors import trace_id
 from helpers.case_access import is_document_approver
 from helpers.tiered_approval import require_reject_reason  # noqa: E402  退回一律要填原因
+from modules.case import expense_notify as _expense_notify  # 第44班：完工單核准通知申請人（信件類型在 expense_notify 登記）
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_module_activity,
@@ -455,13 +456,14 @@ def approve_completion_note(note_no: str, body: dict = Body(default={}),
     user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
-        "SELECT data_json, customer_name FROM completion_notes "
+        "SELECT data_json, customer_name, quote_no FROM completion_notes "
         "WHERE note_no=? AND status IN ('待審核','簽核中')", (note_no,)
     ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, f"完工單 {note_no} 不存在或不在待審核狀態")
     cname = row["customer_name"] or ""
+    qno   = row["quote_no"] or ""
     d     = json.loads(row["data_json"] or "{}")
     appr  = d.get("approval") or {}
     tiers = _active_tiers(appr)
@@ -533,7 +535,8 @@ def approve_completion_note(note_no: str, body: dict = Body(default={}),
         requester = appr.get("requestedBy")
         if requester:
             _notify(requester, "completion_approved", note_no, note_no,
-                    f"完工單 {note_no}（{cname}）已核准")
+                    f"完工單 {note_no}（{cname}）已核准", link="case-management.html?q=%s" % qno if qno else None)
+            _expense_notify.fire_completion_approved(note_no, qno, cname, requester)
         notify_module_activity("完工單", "核准",
                                appr.get("approvedByDisplay") or user["username"],
                                f"{note_no}（{cname}）", "case-management.html")

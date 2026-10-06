@@ -134,12 +134,12 @@ def _notify_after(event, info, res, requester_display="", reason=""):
             MN.fire("next_tier", info, approvers=res.get("nextApprovers"), tier_no=res.get("tierNo", 0), total_tiers=res.get("totalTiers", 0))
         elif event == "approved":
             if res.get("requester"):
-                _notify(res["requester"], "material_order_approved", info["docCode"], info["quoteNo"], "材料申請 %s（%s）已核准" % (info["docCode"], info["itemName"]))
+                _notify(res["requester"], "material_order_approved", info["docCode"], info["quoteNo"], "材料申請 %s（%s）已核准" % (info["docCode"], info["itemName"]), link="case-management.html?q=%s" % info["quoteNo"])
             MN.fire("approved", info, requester=res.get("requester") or "")
         elif event == "returned":
             if res.get("requester"):
                 _notify(res["requester"], "material_order_returned", info["docCode"], info["quoteNo"],
-                        "材料申請 %s（%s）已被退回：%s" % (info["docCode"], info["itemName"], reason))
+                        "材料申請 %s（%s）已被退回：%s" % (info["docCode"], info["itemName"], reason), link="case-management.html?q=%s" % info["quoteNo"])
             MN.fire("returned", info, requester=res.get("requester") or "", reason=reason)
     except Exception:                                                              # noqa: BLE001
         pass

@@ -207,7 +207,7 @@ def dispatch_review_approve(did, body, user, authorization, st: Stage, *, on_don
             _notify(u, st.notify_type, str(did), row["quote_no"], "%s %s 需要您簽核" % (st.label, label))
         _dn.fire(st.key, "next_tier", row, subject, approvers=nxt, tier_no=appr["currentTier"] + 1, total_tiers=len(tiers))
     elif requester:
-        _notify(requester, "dispatch_approved", str(did), row["quote_no"], "%s %s 已核准" % (st.label, label))
+        _notify(requester, "dispatch_approved", str(did), row["quote_no"], "%s %s 已核准" % (st.label, label), link="case-management.html?q=%s" % row["quote_no"])
         _dn.fire(st.key, "approved", row, subject, requester=requester)
     _audit(_tok(authorization), "%s.approve" % st.audit_prefix, "contractor_dispatch", str(did), row["quote_no"],
            _audit_detail(row, tier=ct + 1, status=new_status))
@@ -246,7 +246,7 @@ def dispatch_review_reject(did, body, user, authorization, st: Stage):
     finally:
         conn.close()
     if requester:
-        _notify(requester, "dispatch_returned", str(did), row["quote_no"], "%s %s 被退回：%s" % (st.label, label, reason))
+        _notify(requester, "dispatch_returned", str(did), row["quote_no"], "%s %s 被退回：%s" % (st.label, label, reason), link="case-management.html?q=%s" % row["quote_no"])
         _dn.fire(st.key, "returned", row, subject, requester=requester, reason=reason)
     _audit(_tok(authorization), "%s.reject" % st.audit_prefix, "contractor_dispatch", str(did), row["quote_no"],
            _audit_detail(row, tier=ct + 1, reason=reason))

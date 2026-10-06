@@ -48,37 +48,37 @@ def _mail(stage, event, row, subject, usernames, extra):
     if stage == "dispatch":
         if event == "submitted":
             return _en.send_registered("dispatch_submitted", title="承攬商派發簽核申請", rows=rows, usernames=users,
-                                       badge_text="待您審核", link=link, button_text="前往審核", reason=ident,
+                                       badge_text="待您審核", link=link, button_text="前往審核", reason=ident + " 待審核",
                                        note="您好，以下承攬商派發已進入簽核流程，敬請於系統中完成審核。")
         if event == "next_tier":
             return _en.send_registered("dispatch_next_tier", title="承攬商派發簽核流程通知", rows=rows, usernames=users,
-                                       badge_text="輪到您審核", link=link, button_text="前往審核", reason=ident,
+                                       badge_text="輪到您審核", link=link, button_text="前往審核", reason=ident + " 輪到您審核",
                                        note="您好，前層審核已完成，派發現已輪到您審核。")
         if event == "approved":
             return _en.send_registered("dispatch_approved", title="承攬商派發已核准", rows=rows, usernames=users,
                                        badge_text="已核准", badge_color="#2E8B57", link=link, button_text="前往查看",
-                                       reason=ident, note="您好，您送審的承攬商派發已完成審核並核准。")
+                                       reason=ident + " 已核准", note="您好，您送審的承攬商派發已完成審核並核准。")
         if event == "returned":
             return _en.send_registered("dispatch_returned", title="承攬商派發被退回", rows=rows, usernames=users,
                                        badge_text="已退回", badge_color="#C0392B", link=link, button_text="前往查看",
-                                       reason=ident, note="您好，您送審的承攬商派發經審核後退回，請參閱退回原因修改後重新送審。")
+                                       reason=ident + " 已退回", note="您好，您送審的承攬商派發經審核後退回，請參閱退回原因修改後重新送審。")
     elif stage == "completion":
         if event == "submitted":
             return _en.send_registered("dispatch_completion_submitted", title="承攬商派發完工簽核申請", rows=rows,
                                        usernames=users, badge_text="待您審核", link=link, button_text="前往審核",
-                                       reason=ident, note="您好，以下承攬商派發的完工申請已進入簽核流程，敬請於系統中完成審核。")
+                                       reason=ident + " 待審核", note="您好，以下承攬商派發的完工申請已進入簽核流程，敬請於系統中完成審核。")
         if event == "next_tier":
             return _en.send_registered("dispatch_completion_next_tier", title="承攬商派發完工簽核流程通知", rows=rows,
                                        usernames=users, badge_text="輪到您審核", link=link, button_text="前往審核",
-                                       reason=ident, note="您好，前層審核已完成，派發完工現已輪到您審核。")
+                                       reason=ident + " 輪到您審核", note="您好，前層審核已完成，派發完工現已輪到您審核。")
         if event == "approved":
             return _en.send_registered("dispatch_completion_approved", title="承攬商派發完工已核准", rows=rows,
                                        usernames=users, badge_text="已完工", badge_color="#2E8B57", link=link,
-                                       button_text="前往查看", reason=ident, note="您好，您申請的承攬商派發完工已完成審核並核准。")
+                                       button_text="前往查看", reason=ident + " 已核准", note="您好，您申請的承攬商派發完工已完成審核並核准。")
         if event == "returned":
             return _en.send_registered("dispatch_completion_returned", title="承攬商派發完工被退回", rows=rows,
                                        usernames=users, badge_text="已退回", badge_color="#C0392B", link=link,
-                                       button_text="前往查看", reason=ident,
+                                       button_text="前往查看", reason=ident + " 已退回",
                                        note="您好，您申請的承攬商派發完工經審核後退回，請參閱退回原因修正後重新申請。")
     raise ValueError("未知的派發通知事件：%r／%r" % (stage, event))
 
