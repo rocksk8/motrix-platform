@@ -4,6 +4,14 @@
 - `case_deadlines.py` 新增 `_sync_warranty_calendar`、`_sync_project_end_calendar`，掛在每日檢查（`run_daily_checks`）最後；與寄信的 guard 完全獨立。事件種類開關關閉（預設）⇒ 不讀資料庫、不打 Google。事件內容只有案號、客戶、設備／專案、日期，不含金額。日期已過不建；改日期、結案、設備刪除由對帳處理。
 - 上線注意：保固事件第一次打開時，已成案案件的未過期保固會全部補建；每次每日檢查最多 200 次 Google 呼叫，所以第一次打開會分散在數天內建完（不是當天一次到位）。
 
+## (next) — 2026-10-06（wip/t44-fin-fixes）：財務修正（42 班稽核 a／b／c／e／f／g）
+- **權限變更（上線備註要寫）**：`PATCH /api/quotations/{no}/material-orders`——「財務」角色對非自己負責（非業務／協作者）的案件，一般叫料清單只能看不能改（403「財務角色只能檢視非自己負責案件的材料申請清單…」）；自己負責的案件、superadmin、admin、專案經理不變；GET、匯款申請、發票日、取消已核准叫料單等付款相關端點不變。
+- `case-record` 整包儲存：非成員財務若有款項以外欄位與資料庫不同，403 訊息改為說明「只能修改款項」（原訊息誤導成「成員限定」）。
+- `payables.py`／`material_payment.py`：自我核可匯款差額的拒絕訊息改為「其他財務角色成員或最高管理者」。
+- `payable_reminders.py`：防重複記號改在**寄送成功（`SEND_SENT`）後才寫**（`send_registered(wait=True)`），SMTP 暫時失敗／未設定當天會重試；工作日判斷改接 L1 `helpers.business_days`（週末＋國定假日＋補班日），T−3／T0 落在假日同樣前移，折到同一天只寄一封。
+- `payables._RemitReviews.decide`：退回（reject）時回傳 `payableEvent`（事件內容，不含金額）給出納端在 commit 後重建行事曆「付款待辦」（無預定付款日則不建）。
+- 測試：`modules/case/tests/test_finance_fixes_2026_10_06.py`（含突變檢查）；`test_payable_planned_pay_date_2026_10_05.py` 的寄信攔截改回傳寄送把手。
+
 ## 1.0.148 — 2026-10-05（wip/t42-fix-caserecord）：財務角色可在任何案件登錄／修改收款〔train_number：1.0.147 → 1.0.148〕
 - `PATCH /api/quotations/{no}/case-record`：財務角色（與 superadmin）不是案件成員時，舊整包格式只在「除款項外與資料庫完全相同」時通過（款項照存），否則 403（不靜默丟掉）；分段格式仍只放行 `payment` 分段；業務（非成員）仍 403。`PATCH …/payment/{idx}` 本來就沒有擁有者限制。測試：`test_finance_caserecord_foreign_case_2026_10_05.py`。
 

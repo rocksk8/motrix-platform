@@ -31,7 +31,7 @@ from urllib.parse import quote as _url_quote
 from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from core import registry
 from db import get_db, spawn_bg_thread
-from helpers import _require_user, user_has_module, payment_item_amounts, notify_module_activity, push_event_for_module, push_event_delete_for_module
+from helpers import _require_user, user_has_module, payment_item_amounts, notify_module_activity, push_event_for_module, push_event_delete_for_module, push_event_upsert_for_module
 from modules.arap.receivables import collect_income_items as _collect_income_items  # 本模組（ROADMAP A8b 已收回）
 from helpers.legal_params import round_half_up          # bank-reconcile（金額四捨五入唯一來源）
 from helpers import _audit, _tok                         # bank-reconcile 的稽核
@@ -252,6 +252,9 @@ def decide_remit_review(source: str, key: str, body: dict = Body(default={}), au
         conn.commit()
     finally:
         conn.close()
+    ev = res.pop("payableEvent", None)                       # 退回後提供者給的「付款待辦」事件內容（commit 後重建；開關關閉時 L1 不碰 Google）
+    if ev:
+        spawn_bg_thread(push_event_upsert_for_module, args=tuple(ev))
     _audit(_tok(authorization), "cashier.remit_review_" + decision, source, key,
            "%s匯款差額：%s #%s（%s）%s" % ("核可" if decision == "approve" else "退回（回未匯款）", source, key,
                                        res.get("quoteNo") or "", note))

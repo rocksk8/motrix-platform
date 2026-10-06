@@ -16,6 +16,10 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-06 財務修正（wip/t44-fin-fixes，42 班稽核 a／b／c／e／f／g）
+
+- (a) 財務角色對非自己負責案件的一般叫料清單只能看不能改（`PATCH /api/quotations/{no}/material-orders`；成員／superadmin／admin 不變，匯款／發票日端點不變）——**權限變更，上線備註要寫**。(b) 非成員財務整包儲存被拒的訊息改為「只能修改款項」。(c) 自核差額拒絕訊息改「其他財務角色成員或最高管理者」。(e) 付款日提醒信寄送成功才寫防重複記號（`send_registered(wait=True)`）。(f) 出納退回匯款差額後重建行事曆「付款待辦」。(g) 提醒信順延改用 L1 `helpers.business_days`（週末＋國定假日＋補班日）。測試：`modules/case/tests/test_finance_fixes_2026_10_06.py`。
+
 ## 2026-10-05 使用者編輯：Email 通知偏好改為標籤樣式（wip/quick-pr-wording）
 
 - `users.html` 的「Email 通知偏好」與「存取模組」同樣式：勾選＝✓＋主色底、未勾選白底、不在收件範圍灰色附說明。只改外觀，勾選與儲存行為不變。

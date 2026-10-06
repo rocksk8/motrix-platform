@@ -549,7 +549,7 @@ def decide_line(conn, line_id, decision, user, note="") -> dict:
         raise LookupError("找不到這筆付款")
     pay = get(conn, ln["payment_id"])
     if ln["remit_review"] == REVIEW_PENDING and (ln["paid_by"] or "") in (user.get("username") or "\0",):
-        raise RemitForbidden("這筆付款是您自己登錄的，差額需由其他管理員審核")
+        raise RemitForbidden("這筆付款是您自己登錄的，差額需由其他財務角色成員或最高管理者審核")
     now = _now()
     who = _display(user)
     if decision == "approve":

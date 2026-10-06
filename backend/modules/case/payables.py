@@ -235,7 +235,7 @@ class _RemitReviews:
         # W1 稽核 M4：登錄付款的人不能自己核可／退回自己的差額（updated_by_name 存顯示名稱，帳號與顯示名稱都比）
         if r["remit_review"] == REVIEW_PENDING and (r["updated_by_name"] or "") in (
                 user.get("username") or "\0", user.get("display_name") or "\0"):
-            raise RemitForbidden("這筆付款是您自己登錄的，差額需由其他管理員審核")
+            raise RemitForbidden("這筆付款是您自己登錄的，差額需由其他財務角色成員或最高管理者審核")
         now = datetime.now().isoformat(timespec="seconds")
         who = user.get("display_name") or user.get("username") or ""
         if decision == "approve":
@@ -250,7 +250,15 @@ class _RemitReviews:
                 " WHERE id=? AND remit_review=?", (now, who, exp_id, REVIEW_PENDING))
         if cur.rowcount == 0:
             raise ValueError("這筆請款不是待審核狀態（可能已被處理）")
-        return {"quoteNo": r["quote_no"], "key": str(exp_id), "decision": decision}
+        out = {"quoteNo": r["quote_no"], "key": str(exp_id), "decision": decision}
+        if decision == "reject":                                   # 退回＝回待付款 ⇒ 行事曆「付款待辦」要重建；出納端 commit 後 upsert（事件內容不含金額）
+            from modules.case import payable_calendar as PC
+            row = conn.execute("SELECT e.*, q.customer_name AS _c, q.project_name AS _p FROM case_extra_expenses e"
+                               " LEFT JOIN quotations q ON q.quote_no = e.quote_no WHERE e.id=?", (exp_id,)).fetchone()
+            if row is not None and PC.eligible(row):
+                title, desc, day = PC.compose(row, row["_c"] or "", row["_p"] or "")
+                out["payableEvent"] = (PC.CODE, title, desc, day, PC.event_key(exp_id))
+        return out
 
 
 def _expense_entries(conn, start, end):

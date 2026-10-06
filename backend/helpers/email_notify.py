@@ -890,11 +890,12 @@ def _custom_def_page(module_key: str) -> str:
 
 def send_registered(event_key: str, *, title: str, rows: list, usernames: list = None, to_group: bool = False,
                     reason: str = "", badge_text: str = "通知", badge_color: str = "#2F6FD6",
-                    link: str = "", note: str = "", button_text: str = "前往系統查看") -> bool:
+                    link: str = "", note: str = "", button_text: str = "前往系統查看", wait: bool = False) -> bool:
     """模組用的通用寄信入口（A2-0 #6）：信件類型由模組自己 `mail_types.register()` 登記，這裡只負責收件人＋內文＋主旨。
     收件人＝`usernames`（事件收件人）加上 `to_group`（登記的群組收件人）；都套超級管理員的覆寫與個人退訂。
     `event_key` 必須是呼叫端寫死的字面字串（守門 test_mail_registry 逐一核對已登記）；其餘參數一律用關鍵字。
-    回 True＝有收件人、已排入寄送；False＝沒有收件人（不寄、記 warning）。"""
+    回 True＝有收件人、已排入寄送；False＝沒有收件人（不寄、記 warning）。
+    `wait=True`（要寫「已通知」記號的呼叫端用）：等寄送結果，**只有 `SEND_SENT` 才回 True**；SMTP 暫時失敗／未設定／被擋 ⇒ False（呼叫端不寫記號，下次重試）。"""
     to = list(dict.fromkeys((_lookup_emails(usernames, event_key) if usernames else [])
                             + (_group_emails(event_key) if to_group else [])))
     if not to:
@@ -902,7 +903,12 @@ def send_registered(event_key: str, *, title: str, rows: list, usernames: list =
         return False
     html = _build_html(event_key, title, badge_text, badge_color, rows, "", link or _base_url(),
                        intro=reason, button_text=button_text, note=note)
-    _async_send(to, _mt.subject(event_key, reason or title), html)
+    handle = _async_send(to, _mt.subject(event_key, reason or title), html)
+    if wait:
+        outcome = handle.wait()
+        if outcome != SEND_SENT:
+            logger.warning("send_registered: %r 寄送結果 %s（呼叫端應不寫已通知記號）", event_key, outcome)
+        return outcome == SEND_SENT
     return True
 
 

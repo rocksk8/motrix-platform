@@ -258,7 +258,13 @@ def _set_mail(username, email, muted=()):
 def mails(monkeypatch):
     from helpers import email_notify as en
     sent = []
-    monkeypatch.setattr(en, "_async_send", lambda to, subject, html: sent.append((sorted(to), subject, html)))
+    class _Sent:                                              # 寄送把手：本次起提醒信等結果才寫 guard（`send_registered(wait=True)`）
+        outcome = en.SEND_SENT
+
+        def wait(self, timeout=None):
+            return self.outcome
+
+    monkeypatch.setattr(en, "_async_send", lambda to, subject, html: sent.append((sorted(to), subject, html)) or _Sent())
     return sent
 
 
