@@ -627,7 +627,7 @@
    "notify_shipping_returned": "def(note_no, customer, note, requester_username)",
    "notify_shipping_submitted": "def(note_no, customer, approver_usernames)",
    "notify_warranty_expiry": "def(device_name, customer, quote_no, days_left, expiry_date, sales_person)",
-   "send_registered": "def(event_key, *, title, rows, usernames=…, to_group=…, reason=…, badge_text=…, badge_color=…, link=…, note=…, button_text=…, wait=…)"
+   "send_registered": "def(event_key, *, title, rows, usernames=…, to_group=…, reason=…, badge_text=…, badge_color=…, link=…, note=…, button_text=…, wait=…, out=…)"
   },
   "helper:errors": {
    "trace_id": "def()"

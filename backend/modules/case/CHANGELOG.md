@@ -1,10 +1,12 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-06（wip/t44-fin-fixes）：財務修正（42 班稽核 a／b／c／e／f／g）
+## (next) — 2026-10-06（wip/t44-fin-fixes）：財務修正（42 班稽核 a／b／c／e／f／g；r2 跟進提醒信記號政策）
 - **權限變更（上線備註要寫）**：`PATCH /api/quotations/{no}/material-orders`——「財務」角色對非自己負責（非業務／協作者）的案件，一般叫料清單只能看不能改（403「財務角色只能檢視非自己負責案件的材料申請清單…」）；自己負責的案件、superadmin、admin、專案經理不變；GET、匯款申請、發票日、取消已核准叫料單等付款相關端點不變。
 - `case-record` 整包儲存：非成員財務若有款項以外欄位與資料庫不同，403 訊息改為說明「只能修改款項」（原訊息誤導成「成員限定」）。
 - `payables.py`／`material_payment.py`：自我核可匯款差額的拒絕訊息改為「其他財務角色成員或最高管理者」。
-- `payable_reminders.py`：防重複記號改在**寄送成功（`SEND_SENT`）後才寫**（`send_registered(wait=True)`），SMTP 暫時失敗／未設定當天會重試；工作日判斷改接 L1 `helpers.business_days`（週末＋國定假日＋補班日），T−3／T0 落在假日同樣前移，折到同一天只寄一封。
+- `payable_reminders.py`：防重複記號改為「先寄、結果確定才記」（`send_registered(wait=True, out=…)`，照 `system_checks` 前例）：`SEND_SENT`／`SEND_UNKNOWN`（等不到結果，重寄可能雙寄）／`SEND_PERMANENT_FAIL` 寫記號（後兩者另記 ERROR），只有 SMTP 暫時失敗／未設定／沒有收件人才不寫、當天重試；工作日判斷改接 L1 `helpers.business_days`（週末＋國定假日＋補班日），T−3／T0 落在假日同樣前移，折到同一天只寄一封。
+- `payable_reminders.py`（稽核 hichan-70 #3）：**重試窗口只有寄信日當天**（每日 08:00＋啟動補跑；隔天不補）；一次掃描等寄送結果的總時間上限 `MAX_WAIT_SECONDS_PER_RUN`（120 秒），出現 `SEND_UNKNOWN`（SMTP 卡住）就立刻停止本次掃描，剩下的不寫記號、下次再發（每封最多等 45 秒）。
+- 測試補強：`test_finance_fixes_2026_10_06.py`（記號政策、UNKNOWN／PERMANENT、等待上限、重試窗口）；自我核可訊息（`material_payment`／`subcontract.remit`）由 `test_material_payment_core_2026_10_02.py`、`test_remit_fee_review_2026_09_30.py` 斷言文字（突變會轉紅）。
 - `payables._RemitReviews.decide`：退回（reject）時回傳 `payableEvent`（事件內容，不含金額）給出納端在 commit 後重建行事曆「付款待辦」（無預定付款日則不建）。
 - 測試：`modules/case/tests/test_finance_fixes_2026_10_06.py`（含突變檢查）；`test_payable_planned_pay_date_2026_10_05.py` 的寄信攔截改回傳寄送把手。
 
