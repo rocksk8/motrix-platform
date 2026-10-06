@@ -94,6 +94,19 @@ def _dispatch_absorbed_row(summary, money=None):
     fmt = money or (lambda v: "{:,}".format(int(round(float(v)))))
     return '\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">其中 %s 已併入品項實際成本（不重複計）：品項＋額外＋派發 − %s ＝ 實際總成本</td></tr>' % (fmt(n), fmt(n))
 
+def _tax_expense_rows(summary, money=None):
+    """稅額（含在成本內；使用者 2026-10-06）：完結 summary 帶 `taxExpense` 才印（舊完結案沒有 ⇒ 一個位元組都不加）。確定稅額／推估稅額（標「推估」）／未拆稅金額（備忘）分開列，
+    推估與備忘不混進確定稅額。"""
+    te = (summary or {}).get("taxExpense")
+    if not isinstance(te, dict):
+        return ""
+    fmt = money or (lambda v: "{:,}".format(int(round(float(v)))))
+    return (
+        '\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">稅額（含在上列成本內）：確定稅額 %s'
+        '；推估稅額 %s（推估：金額 − 金額÷1.05，假設進項稅 5%%）；另有未拆稅金額 %s（無稅額的額外支出，備忘）</td></tr>'
+        % (fmt(te.get("exact") or 0), fmt(te.get("estimated") or 0), fmt(te.get("unsplit") or 0)))
+
+
 def _local_date_of(ts) -> str:
     """時間戳字串 ⇒ 伺服器本地的 YYYY-MM-DD。帶時區的（`…Z`／`+00:00`，舊資料：前端曾用 toISOString() 存）先換成本地時區再取日期；
     不帶時區的（本系統後端存的都是本地時間）照取前 10 碼。讀不懂 ⇒ 前 10 碼。**只改顯示，不改資料。**
@@ -2603,7 +2616,10 @@ def _build_case_closing_html(data: dict) -> str:
         dispatch_tax_note = (
             '\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">承攬商：未稅 %s／稅額 %s（進項稅額，不計成本）</td></tr>'
             % (money(summary.get("dispatchTotal")), money(summary.get("dispatchTax")))
-        ) if summary.get("dispatchBasis") == "pretax" else ""
+        ) if summary.get("dispatchBasis") == "pretax" else (
+            '\n      <tr><td colspan="2" style="font-size:11px;color:#6B7280">承攬商：含稅（含稅承攬費＋外包人員，其中稅額 %s）</td></tr>'
+            % money(summary.get("dispatchTax"))
+        ) if summary.get("dispatchBasis") == "taxed" else ""
         profit_section = f"""
 <div class="section-label">三、損益分析（精算完結 · 精算日期：{esc(settle_date) or '—'}　完結人：{esc(settle_by) or '—'}）</div>
 <div class="profit-grid">
@@ -2627,7 +2643,7 @@ def _build_case_closing_html(data: dict) -> str:
       <tr><td>品項實際成本</td><td class="r orange">{money(summary.get("itemActualTotal"))}</td></tr>{_cost_basis_note("item", summary)}
       {('<tr><td>採購單（品項尚未採用）</td><td class="r orange">' + money(summary.get("itemPoUnadopted")) + '</td></tr>') if (summary.get("itemPoUnadopted") or 0) > 0 else ''}
       <tr><td>額外支出</td><td class="r orange">{money(summary.get("extraTotal"))}</td></tr>{_cost_basis_note("extra", summary)}
-      <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>{dispatch_tax_note}{_dispatch_absorbed_row(summary, money)}
+      <tr><td>承攬商派發成本</td><td class="r orange">{money(summary.get("dispatchTotal"))}</td></tr>{dispatch_tax_note}{_dispatch_absorbed_row(summary, money)}{_tax_expense_rows(summary, money)}
       <tr class="bold-row"><td>實際總成本</td><td class="r orange bold">{money(summary.get("totalActualCost"))}</td></tr>
       <tr><td>真實毛利</td><td class="r {'green' if int(summary.get('grossProfit',0) or 0)>=0 else 'red'}">{money(summary.get("grossProfit"))}</td></tr>
       <tr><td>真實毛利率</td><td class="r">{float(summary.get("grossMarginPct") or 0):.1f}%</td></tr>

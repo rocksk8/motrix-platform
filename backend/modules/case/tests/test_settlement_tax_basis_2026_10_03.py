@@ -37,21 +37,21 @@ def _dispatch(total=10000, personnel=2000, rate=0.05, status="accepted", invoice
         cn.close()
 
 
-def test_dispatch_cost_is_pretax_plus_personnel_and_the_tax_is_information_only(W):
-    """0c S2：未稅 10000、5%、人員 2000 ⇒ 計入成本 12000（不是 12500）；稅額 500、含稅合計 12500 並列為資訊；恆等式成立。"""
+def test_dispatch_cost_is_tax_inclusive_plus_personnel_and_the_tax_is_shown_inside_it(W):
+    """【2026-10-06 改：精算全含稅；原 35c 為未稅】未稅 10000、5%、人員 2000 ⇒ 計入成本 12500（＝未稅 10000＋稅 500＋人員 2000）；稅額 500 並列顯示（含在內）；report 12000 仍是未稅＋人員的資訊值。"""
     c, h = W
     base = _get(c, h)["totals"]["totalActualCost"]
     _dispatch(10000, 2000)
     d = _get(c, h)
     t = d["totals"]
-    assert t["dispatchTotal"] == 12000 and t["dispatchReport"] == 12000 and t["dispatchBasis"] == "pretax"
+    assert t["dispatchTotal"] == 12500 and t["dispatchReport"] == 12000 and t["dispatchBasis"] == "taxed"
     assert t["dispatchTax"] == 500 and t["dispatchGrandTotal"] == 12500
-    assert t["dispatchGrandTotal"] == t["dispatchTotal"] + t["dispatchTax"]
-    assert t["totalActualCost"] - base == 12000                                  # 稅 500 不進總成本（舊口徑會是 +12500）
+    assert t["dispatchTotal"] == t["dispatchReport"] + t["dispatchTax"]
+    assert t["totalActualCost"] - base == 12500                                  # 稅 500 含在總成本內（35c 未稅口徑是 +12000）
     assert d["costExtras"]["dispatch"]["grandTotal"] == 12500 and d["costExtras"]["dispatch"]["report"] == 12000 and d["costExtras"]["dispatch"]["tax"] == 500
 
 
-def test_dispatch_cost_equals_recognition_accrual_and_gl_e04_pretax(W):
+def test_dispatch_cost_equals_recognition_accrual_and_gl_e04_plus_tax(W):
     """對帳恆等式：精算 dispatchTotal ＝ Σ recognition.dispatch_entries(accrual) ＝ 總帳 E04 專案成本借方（未稅）＋ 外包人員；E04 進項稅額 ＝ dispatchTax。"""
     c, h = W
     did = _dispatch(10000, 2000)
@@ -61,13 +61,13 @@ def test_dispatch_cost_equals_recognition_accrual_and_gl_e04_pretax(W):
         rec = sum(e["amount"] for e in R.dispatch_entries(cn, "accrual") if e["quoteNo"] == NO)
     finally:
         cn.close()
-    assert t["dispatchTotal"] == rec == 12000
+    assert t["dispatchTotal"] == rec == 12500                                    # 派發日 2026-10-01 ≥ 切換日：營運報表應計也含稅
     from modules.subcontract import gl_events as G
     ev = [e for e in G.gl_events("2026-10-01", "2026-10-31")["events"] if e["event_code"] == "E04" and e["source_key"] == str(did)]
     assert len(ev) == 1
     lines = {(l["role"], l["side"]): l["amount"] for l in ev[0]["lines"]}
-    assert lines[("COST_PROJECT", "D")] == 10000 == t["dispatchTotal"] - 2000        # 總帳成本＝未稅承攬費（人員 2000 在付款／勞報單時點入帳，非稅基問題）
-    assert lines[("INPUT_TAX", "D")] == 500 == t["dispatchTax"]                      # 稅額在總帳是進項稅額（資產），不是成本
+    assert lines[("COST_PROJECT", "D")] == 10000 == t["dispatchTotal"] - 2000 - 500  # 總帳成本＝未稅承攬費（人員 2000 在付款／勞報單時點入帳；稅額 500 在總帳是進項稅額、精算／報表含在成本內——差額由 ledger_diff 的 tax 分桶說明）
+    assert lines[("INPUT_TAX", "D")] == 500 == t["dispatchTax"]
     assert lines[("AP", "C")] == 10500
 
 
@@ -79,20 +79,20 @@ def test_rows_excluded_by_the_report_rules_are_excluded_here_too(W):
     _dispatch(4000, 0, approval="已退回")
     _dispatch(1000, 0, approval="待審核")
     t = _get(c, h)["totals"]
-    assert t["dispatchTotal"] == 10000 + 1000 and t["dispatchTax"] == 500 + 50 and t["dispatchGrandTotal"] == 11550
+    assert t["dispatchTotal"] == 10000 + 1000 + 500 + 50 and t["dispatchTax"] == 500 + 50 and t["dispatchGrandTotal"] == 11550
 
 
 def test_a_draft_follows_the_new_basis_live_while_the_frozen_values_stay_as_stored(W):
     """非凍結（草稿）即時照新口徑；已完結的存檔值一個位元都不改，口徑標記照存檔（舊案沒有標記＝含稅 'taxed'）。"""
     c, h = W
     _dispatch(10000, 2000)
-    assert _get(c, h)["totals"]["dispatchTotal"] == 12000                          # 草稿（沒有存檔）＝新口徑
+    assert _get(c, h)["totals"]["dispatchTotal"] == 12500                          # 草稿（沒有存檔）＝新口徑（含稅）
     old = {"status": "finalized", "items": [], "summary": {"itemActualTotal": 1, "extraTotal": 0, "dispatchTotal": 12500, "totalActualCost": 12501}}
     _put_settlement(old)
     d = _get(c, h)
     t = d["totals"]
     assert t["dispatchTotal"] == 12500 and t["totalActualCost"] == 12501 and t["dispatchBasis"] == "taxed"      # 凍結值照存檔；舊案＝含稅口徑
-    assert d["live"]["dispatchTotal"] == 12000 and d["live"]["dispatchGrandTotal"] == 12500 and d["live"]["dispatchTax"] == 500   # 現算值另放，供「過期」比對
+    assert d["live"]["dispatchTotal"] == 12500 and d["live"]["dispatchGrandTotal"] == 12500 and d["live"]["dispatchTax"] == 500   # 現算值另放，供「過期」比對
     new = {"status": "finalized", "items": [], "summary": {"itemActualTotal": 1, "extraTotal": 0, "dispatchTotal": 12000, "totalActualCost": 12001, "dispatchBasis": "pretax"}}
     _put_settlement(new)
     t2 = _get(c, h)["totals"]

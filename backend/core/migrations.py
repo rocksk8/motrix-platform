@@ -410,3 +410,87 @@ def _core_v6_audit_search(conn):
 
 
 register("core", 6, _core_v6_audit_search)
+
+
+# ── 職責角色化 R1（未取號；PLAYBOOK §G6）─────────────────────────────────────────────
+# 只加表、不動 users；種子角色用 INSERT OR IGNORE（不覆蓋 superadmin 改過的定義）；**不建立任何綁定／扣項**
+# ⇒ 上線當下每個人的生效權限不變（docs/platform/plans/DUTY-ROLES-DESIGN.md §3.2、go-live 關卡 tools/duty_roles_equivalence.py）。
+# 種子的權限清單是**字面常數**（migration 不 import 會演進的程式碼）。
+_DUTY_SEED = (
+    ("finance", "財務（含出納）", "財務與出納合併（第42班裁示）", ("dashboard", "quotation", "case_manage", "customer", "reports", "finance", "financial_view", "cashier", "work_log", "daily_task")),
+    ("sales", "業務", "", ("dashboard", "quotation", "case_manage", "customer", "project_approve_biz", "work_log", "daily_task", "map")),
+    ("engineer", "工務", "", ("dashboard", "case_manage", "project_approve_eng", "equipment", "work_log", "daily_task")),
+    ("procurement", "採購", "", ("dashboard", "procurement", "inventory", "equipment", "work_log", "daily_task")),
+    ("pm", "專案管理", "", ("dashboard", "case_manage", "project_approve_eng", "project_approve_biz", "reports", "work_log", "daily_task")),
+    ("sysadmin", "系統管理", "不含任何金額鍵", ("dashboard", "settings")),
+    ("viewer", "唯讀", "", ("dashboard",)),
+    ("admin_legacy", "管理員（過渡）", "等同舊 admin 樣板；B 階段完成後評估移除", ("dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "reports", "project_approve_eng", "project_approve_biz", "work_log", "daily_task")),
+)
+
+
+def _core_next_duty_roles(conn):
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS duty_roles (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            key         TEXT    UNIQUE NOT NULL,
+            name        TEXT    NOT NULL,
+            description TEXT    NOT NULL DEFAULT '',
+            permissions TEXT    NOT NULL DEFAULT '[]',
+            is_system   INTEGER NOT NULL DEFAULT 0,
+            active      INTEGER NOT NULL DEFAULT 1,
+            version     INTEGER NOT NULL DEFAULT 1,
+            created_at  TEXT    NOT NULL,
+            updated_at  TEXT    NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS user_duty_roles (
+            user_id    INTEGER NOT NULL,
+            role_id    INTEGER NOT NULL,
+            granted_by INTEGER,
+            granted_at TEXT    NOT NULL,
+            reason     TEXT    NOT NULL DEFAULT '',
+            PRIMARY KEY (user_id, role_id)
+        );
+        CREATE TABLE IF NOT EXISTS user_perm_subtracts (
+            user_id  INTEGER NOT NULL,
+            perm_key TEXT    NOT NULL,
+            set_by   INTEGER,
+            set_at   TEXT    NOT NULL,
+            reason   TEXT    NOT NULL DEFAULT '',
+            PRIMARY KEY (user_id, perm_key)
+        );
+        CREATE TABLE IF NOT EXISTS permission_changes (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts               TEXT    NOT NULL,
+            actor_id         INTEGER,
+            actor_username   TEXT    NOT NULL DEFAULT '',
+            actor_display    TEXT    NOT NULL DEFAULT '',
+            kind             TEXT    NOT NULL,
+            target_type      TEXT    NOT NULL,
+            target_id        INTEGER NOT NULL,
+            target_label     TEXT    NOT NULL DEFAULT '',
+            added            TEXT    NOT NULL DEFAULT '[]',
+            removed          TEXT    NOT NULL DEFAULT '[]',
+            before_json      TEXT    NOT NULL DEFAULT '{}',
+            after_json       TEXT    NOT NULL DEFAULT '{}',
+            high_sensitivity INTEGER NOT NULL DEFAULT 0,
+            reason           TEXT    NOT NULL DEFAULT '',
+            ip               TEXT    NOT NULL DEFAULT '',
+            audit_id         INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_permission_changes_target ON permission_changes(target_type, target_id, id);
+        CREATE TRIGGER IF NOT EXISTS permission_changes_no_update BEFORE UPDATE ON permission_changes
+        BEGIN SELECT RAISE(ABORT, 'permission_changes 只增不改'); END;
+        CREATE TRIGGER IF NOT EXISTS permission_changes_no_delete BEFORE DELETE ON permission_changes
+        BEGIN SELECT RAISE(ABORT, 'permission_changes 只增不刪'); END;
+    """)
+    import json as _json
+    from datetime import datetime as _dt
+    now = _dt.now().isoformat(timespec="seconds")
+    for key, name, desc, perms in _DUTY_SEED:
+        conn.execute("INSERT OR IGNORE INTO duty_roles (key, name, description, permissions, is_system, active, version, created_at, updated_at)"
+                     " VALUES (?,?,?,?,1,1,1,?,?)", (key, name, desc, _json.dumps(list(perms)), now, now))
+    conn.commit()
+    return None
+
+
+register("core", NEXT, _core_next_duty_roles)

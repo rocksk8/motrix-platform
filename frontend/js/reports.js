@@ -194,6 +194,18 @@ function reportsApp() {
     // ── 收支報表 ──────────────────────────────────────────────────────────────
     get expensesMonthly() { return ((this.expensesData || {}).expenses || {}).monthly || [] },
     get expensesTotals()  { return ((this.expensesData || {}).expenses || {}).totals  || {} },
+    // 稅額（含在支出內；2026-10-06）：目前範圍（月／季／年）的確定稅額、推估稅額、未拆稅金額（備忘）。資料是年度矩陣逐月列，這裡只加總選到的月份。
+    get taxStrip() {
+      var rows = this.expensesMonthly, sel
+      if (this.expensesScope === 'year') return { exact: this.expensesTotals.taxExact || 0, estimated: this.expensesTotals.taxEstimated || 0, unsplit: this.expensesTotals.taxUnsplit || 0 }
+      if (this.expensesScope === 'quarter') {
+        var q = +this.expensesQuarter
+        sel = rows.filter(function (m) { var n = +String(m.month).slice(5, 7); return Math.ceil(n / 3) === q })
+      } else {
+        sel = rows.filter(function (m) { return m.month === this.expensesMonth }, this)
+      }
+      return sel.reduce(function (a, m) { return { exact: a.exact + (m.taxExact || 0), estimated: a.estimated + (m.taxEstimated || 0), unsplit: a.unsplit + (m.taxUnsplit || 0) } }, { exact: 0, estimated: 0, unsplit: 0 })
+    },
     // 今年度支出明細（逐筆，全部類別），供 filteredExpenseItems 在 expensesScope==='year' 時使用
     get yearExpenseItemsAll() {
       var d = ((this.expensesData || {}).expenses || {}).details || {}

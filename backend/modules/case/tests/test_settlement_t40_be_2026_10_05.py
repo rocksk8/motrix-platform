@@ -79,7 +79,7 @@ def test_tax_basis_is_exposed_per_cost_source_without_changing_amounts(W):
     d = _get(c, h)
     tb = d["taxBasis"]
     assert {k: tb[k]["basis"] for k in ("itemEstimate", "purchase", "material", "extra", "dispatch", "remitFee", "customExpense")} == {
-        "itemEstimate": "taxed", "purchase": "taxed", "material": "taxed", "extra": "unsplit", "dispatch": "pretax", "remitFee": "actual", "customExpense": "actual"}
+        "itemEstimate": "taxed", "purchase": "taxed", "material": "taxed", "extra": "unsplit", "dispatch": "taxed", "remitFee": "actual", "customExpense": "actual"}
     assert tb["estimateRate"] == 1.05 and d["totals"]["itemActualTotal"] == EST_A + EST_B                  # 金額照舊
 
 

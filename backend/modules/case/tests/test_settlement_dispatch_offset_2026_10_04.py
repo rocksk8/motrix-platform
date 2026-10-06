@@ -37,7 +37,7 @@ def _put(c, h, offsets, **extra):
 @pytest.fixture
 def D(W):
     c, h = W
-    d1 = _dispatch(10000, 2000)                       # report 12000、稅 500
+    d1 = _dispatch(10000, 2000)                       # 含稅計入 12500（未稅 10000＋稅 500＋人員 2000）
     d2 = _dispatch(3000, 0, approval="待審核")        # report 3000、pending
     _dispatch(999, 0, status="cancelled")             # 不計
     _dispatch(888, 0, approval="草稿")                # 不計
@@ -60,30 +60,30 @@ def test_conservation_unassigned_plus_assigned_equals_dispatch_total(D):
     c, h, d1, d2 = D
     for offs in ([], [_off(d1)], [_off(d1), _off(d2, "b")]):
         t = _get_off(c, h, offs)["totals"]
-        assert t["dispatchUnassignedTotal"] + t["dispatchAssignedTotal"] == t["dispatchTotal"] == 15000
+        assert t["dispatchUnassignedTotal"] + t["dispatchAssignedTotal"] == t["dispatchTotal"] == 15650
 
 
 def test_amount_is_report_and_tax_is_display_only(D):
     c, h, d1, d2 = D
     d = _get_off(c, h, [_off(d1)])
     o = _items(d)["a"]["dispatch"]["orders"][0]
-    assert (o["amount"], o["tax"], o["grandTotal"], o["assignedBy"]) == (12000, 500, 12500, "offset")
-    assert _items(d)["a"]["dispatch"]["amount"] == 12000 and _items(d)["b"]["dispatch"] == {"amount": 0, "orders": []}
+    assert (o["amount"], o["tax"], o["grandTotal"], o["assignedBy"]) == (12500, 500, 12500, "offset")
+    assert _items(d)["a"]["dispatch"]["amount"] == 12500 and _items(d)["b"]["dispatch"] == {"amount": 0, "orders": []}
 
 
 def test_adopt_on_replaces_estimate_and_total_not_double_counted(D):
     c, h, d1, d2 = D
     base = _get_off(c, h, [])["totals"]["totalActualCost"]
-    assert base == EST_A + EST_B + 15000
+    assert base == EST_A + EST_B + 15650
     _put_settlement({"items": [{"id": "a", "adoptSystem": True}], "offsets": [_off(d1)]})
     d = _get(c, h)
     a = _items(d)["a"]
-    assert a["actual"]["amount"] == 12000 and a["actual"]["source"] == "purchase" and a["actual"]["replacedEstimate"] is True
-    assert d["totals"]["totalActualCost"] == 12000 + EST_B + 3000                   # 12000 只算一次
-    assert d["totals"]["dispatchAbsorbedTotal"] == 12000
+    assert a["actual"]["amount"] == 12500 and a["actual"]["source"] == "purchase" and a["actual"]["replacedEstimate"] is True
+    assert d["totals"]["totalActualCost"] == 12500 + EST_B + 3150                   # 12500 只算一次
+    assert d["totals"]["dispatchAbsorbedTotal"] == 12500
     # 取消對應：回未對應、估計恢復，總成本回到對應前（採用開時總成本會隨取代估計而變，但金額都只計一次）
     _put_settlement({"items": [{"id": "a", "adoptSystem": True}], "offsets": []})
-    assert _get(c, h)["totals"]["totalActualCost"] == EST_A + EST_B + 15000 and _get(c, h)["totals"]["dispatchAbsorbedTotal"] == 0
+    assert _get(c, h)["totals"]["totalActualCost"] == EST_A + EST_B + 15650 and _get(c, h)["totals"]["dispatchAbsorbedTotal"] == 0
 
 
 def test_adopt_off_moving_between_unassigned_and_assigned_keeps_total(D):
@@ -96,7 +96,7 @@ def test_adopt_off_moving_between_unassigned_and_assigned_keeps_total(D):
             t_as = SA.compute(cn, NO, offsets=[_off(d1), _off(d2, "b")], unadopted=mode)["totals"]["totalActualCost"]
         finally:
             cn.close()
-        assert t_un == t_as == EST_A + EST_B + 15000, mode
+        assert t_un == t_as == EST_A + EST_B + 15650, mode
         cn = db.get_db()
         try:
             assert SA.compute(cn, NO, offsets=[_off(d1)], unadopted=mode)["totals"]["dispatchAbsorbedTotal"] == 0          # 不採用：不吸收
@@ -117,7 +117,7 @@ def test_mixed_with_material_offset_sum_replaces_estimate(D):
         cn.close()
     _put_settlement({"items": [{"id": "b", "adoptSystem": True}], "offsets": [_off(d1, "b"), {"kind": "material", "ref": "X", "itemId": "b"}]})
     b = _items(_get(c, h))["b"]
-    assert b["purchased"] == 12000 + 250 and b["actual"]["amount"] == 12250
+    assert b["purchased"] == 12500 + 250 and b["actual"]["amount"] == 12750
 
 
 def test_validate_offsets(D):
@@ -154,7 +154,7 @@ def test_legacy_without_dispatch_offsets_is_identical(D):
     c, h, d1, d2 = D
     d = _get(c, h)
     t = d["totals"]
-    assert t["dispatchAssignedTotal"] == 0 and t["dispatchUnassignedTotal"] == t["dispatchTotal"] == 15000
+    assert t["dispatchAssignedTotal"] == 0 and t["dispatchUnassignedTotal"] == t["dispatchTotal"] == 15650
     assert t["totalActualCost"] == t["itemActualTotal"] + t["itemPoUnadopted"] + t["extraTotal"] + t["materialUnassignedTotal"] + t["remitFeeTotal"] + t["customExpenseTotal"] + t["dispatchTotal"]
     assert t["purchasedTotal"] == 0 and t["pendingTotal"] == 0
     assert all(i["dispatch"] == {"amount": 0, "orders": []} and i["purchased"] == 0 for i in d["items"])
@@ -203,7 +203,7 @@ def test_finalize_fills_split_and_rejects_wrong_split(D):
     r = c.put(URL, json={"settlement": p}, headers=h)
     assert r.status_code == 200, r.text
     s = _get(c, h)["savedSummary"]
-    assert (s["dispatchAssignedTotal"], s["dispatchUnassignedTotal"]) == (12000, 3000)
+    assert (s["dispatchAssignedTotal"], s["dispatchUnassignedTotal"]) == (12500, 3150)
 
 
 def test_item_actual_source_roundtrip_is_display_only(D):
