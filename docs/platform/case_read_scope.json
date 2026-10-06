@@ -152,6 +152,12 @@
    "scope": "row_access"
   },
   {
+   "file": "modules/case/api/material_approvals.py",
+   "path": "/api/quotations/{quote_no}/item-shipped",
+   "handler": "get_item_shipped",
+   "scope": "row_access"
+  },
+  {
    "file": "modules/case/api/material_changes.py",
    "path": "/api/quotations/{quote_no}/material-changes",
    "handler": "list_case_changes",

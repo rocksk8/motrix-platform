@@ -900,3 +900,28 @@ L2 腳本只准經本契約碰地圖；不得讀寫 map.html 的 Alpine 元件�
 | 契約版本 | 1（2026-10-03；與 IP-SH2 同源，只是回單一數字） |
 | 守門 | `backend/modules/supply/tests/test_shipping_material_link_2026_10_03.py::test_material_shipped_qty_is_reserved_plus_shipped` |
 
+## IP-SH4　`shipping.quote_item_shipped`：從報價單帶入的出貨列依報價品項加總（M03 → M01；暫定號，列車定號；2026-10-06，第 43 班）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 供應：`modules/supply/material_link.py::quote_item_shipped` |
+| 使用方 | M01：`modules/case/item_shipped.py::shipped_by_item`（精算頁、案件出貨單頁的「已出貨數量」欄） |
+| 形式 | provider，單一提供者（名稱 `supply`） |
+| 語法 | 提供：`("shipping.quote_item_shipped", "supply"): fn`；取用：`registry.providers("shipping.quote_item_shipped").get("supply")` ⇒ `fn(conn, quote_no, exclude_note_no=None) -> {quoteItemId: {"reserved", "shipped", "notes"}}` |
+| 回傳 | 出貨列上有 `quoteItemId`（出貨單「從報價單匯入」時蓋的章，加性欄位）的數量：`shipped`＝已核准、`reserved`＝待審核／簽核中；草稿、已退回不計。**不計**：標題列、帶 `materialLink` 的列（已由 IP-SH2 計，兩邊不重複）、帶料號／庫存序號的庫存列、數量非正數、沒有 `quoteItemId` 的舊單與手動列（呼叫端顯示「—」） |
+| 對方不在時 | 提供者不在或丟例外 ⇒ 呼叫端略過這一來源（該品項若沒有別的來源 ⇒ 顯示「—」），不丟例外 |
+| 契約版本 | 1（2026-10-06）；只有數量，沒有金額與成本 |
+| 守門 | `backend/tests/test_shipped_qty_2026_10_06.py`（含突變：拿掉 materialLink／庫存列排除、草稿混入 ⇒ 紅） |
+
+## IP-SH5　`case.shipped_summary`：整案報價品項「訂購／已出貨／占用中」數量小計（M01 → 營運報表匯出；暫定號，列車定號；2026-10-06，第 43 班）
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`modules/case/item_shipped.py::case_shipped_summary` |
+| 使用方 | 營運報表：`modules/analytics/api/reports.py::_case_ship_summaries`（「毛利分析」工作表最右兩欄） |
+| 形式 | provider，單一提供者（名稱 `case`） |
+| 語法 | 提供：`("case.shipped_summary", "case"): fn`；取用：`registry.single_provider("case.shipped_summary")` ⇒ `fn(conn, quote_no) -> {"ordered", "shipped", "reserved"}` |
+| 回傳 | 該案報價品項數量合計、已核准出貨量、占用中數量（單位不同的品項直接相加，僅供參考）；案件不存在 ⇒ 全 0。**只有數量** |
+| 對方不在時 | 提供者不在或單案失敗 ⇒ 匯出欄位留白，不影響其他欄位 |
+| 契約版本 | 1（2026-10-06） |
+| 守門 | `backend/tests/test_shipped_qty_2026_10_06.py::test_case_shipped_summary_provider_and_report_helper` |
