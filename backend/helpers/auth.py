@@ -183,14 +183,28 @@ def finance_usernames(conn=None) -> list:
             c.close()
 
 
-def effective_modules(role: str, modules) -> list:
+def effective_modules(role: str, modules, user_id=None, conn=None) -> list:
     """給前端／選單用的「有效模組清單」：財務三鍵由角色決定（財務角色與 superadmin 補上、其他角色一律拿掉）；
-    其餘鍵照原樣。`modules` 可為 list 或 JSON 字串。DB 內的原始勾選不動。"""
+    其餘鍵照原樣。`modules` 可為 list 或 JSON 字串。DB 內的原始勾選不動。
+
+    職責角色化 R1（單一縫，DUTY-ROLES-DESIGN §2.2）：給 `user_id` 時，先把該人的職責角色與個人扣項套到原始勾選上
+    （`helpers.duty_roles.resolve_raw_modules`；沒有綁定也沒有扣項 ⇒ 原樣，與 R1 之前逐字相同），再套下面的財務規則。
+    **superadmin 不經過角色／扣項**（R1 維持原狀，資料不可能降低它）。`conn` 省略時自行開關連線。"""
     if isinstance(modules, str):
         try:
             modules = json.loads(modules or "[]")
         except Exception:
             modules = []
+    if user_id is not None and role != "superadmin":
+        from helpers import duty_roles as _dr
+        if conn is not None:
+            modules = _dr.resolve_raw_modules(conn, user_id, modules)
+        else:
+            _c = get_db()
+            try:
+                modules = _dr.resolve_raw_modules(_c, user_id, modules)
+            finally:
+                _c.close()
     mods = [m for m in (modules or []) if m not in FINANCE_MODULE_KEYS]
     if role in FINANCE_ROLES:
         mods += [k for k in FINANCE_MODULE_KEYS]
@@ -286,13 +300,25 @@ def _require_user(authorization: str, require_superadmin: bool = False, module: 
             WHERE s.token=? AND u.active=1
               AND (s.expires_at IS NULL OR s.expires_at > ?)
         """, (token, now)).fetchone()
+        if row and row["role"] != "superadmin":
+            # 職責角色化 R1：有綁定／扣項的人，`user["modules"]` 改成套用後的原始勾選（沒有的人原樣，物件都不換）
+            from helpers import duty_roles as _dr
+            try:
+                _raw = json.loads(row["modules"] or "[]")
+            except Exception:
+                _raw = None
+            if isinstance(_raw, list):
+                _res = _dr.resolve_raw_modules(conn, row["id"], _raw)
+                if _res is not _raw:
+                    row = dict(row)
+                    row["modules"] = json.dumps(_res, ensure_ascii=False)
     finally:
         conn.close()
     if not row:
         raise HTTPException(401, "Session 已過期，請重新登入")
     if require_superadmin and row["role"] != "superadmin":
         if module:
-            user_mods = effective_modules(row["role"], row["modules"])
+            user_mods = effective_modules(row["role"], row["modules"], user_id=row["id"])
             if module not in user_mods:
                 raise HTTPException(403, "僅超級管理員或具授權模組的使用者可執行此操作")
         else:

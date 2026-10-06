@@ -2265,6 +2265,11 @@ def _daily_backup_tables() -> dict:
         "自訂模組送簽快照": "SELECT * FROM custom_record_snapshots ORDER BY id",
         "協力廠商":         "SELECT * FROM vendor_contractors ORDER BY id",
         "T100匯出確認":     "SELECT * FROM t100_export_confirmations ORDER BY id",
+        # 職責角色化 R1（core 未取號 migration）：角色定義、綁定、個人扣項、權限變更紀錄（稽核資料，保留 7 年）
+        "職責角色":         "SELECT * FROM duty_roles ORDER BY id",
+        "職責角色綁定":     "SELECT * FROM user_duty_roles ORDER BY user_id, role_id",
+        "個人權限扣項":     "SELECT * FROM user_perm_subtracts ORDER BY user_id, perm_key",
+        "權限變更紀錄":     "SELECT * FROM permission_changes ORDER BY id",
         # ── 業務開發 ──
         "業務開發案件":     "SELECT * FROM dev_cases ORDER BY id",
         "業務開發記錄":     "SELECT * FROM dev_logs ORDER BY id",
