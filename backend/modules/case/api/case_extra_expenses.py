@@ -601,7 +601,7 @@ def payreq_cases(q: str = Query(""), authorization: str = Header(None)):
 
 @router.get("/api/extra-expenses/mine")
 def payreq_mine(authorization: str = Header(None)):
-    """我的請款：自己填的額外支出（最新 100 筆），帶案件名稱；案件已看不到的不列。"""
+    """我的申請：自己填的額外支出（最新 100 筆），帶案件名稱；案件已看不到的不列。"""
     user = _require_user(authorization)
     conn = get_db()
     try:
@@ -667,9 +667,9 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
         override = False
         if "paid_date" in changes:
             if not is_admin:
-                raise HTTPException(403, "付款日只有財務角色可以登錄（請款人登錄會繞過出納待付款）")
+                raise HTTPException(403, "付款日只有財務角色可以登錄（申請人登錄會繞過出納待付款）")
             if changes["paid_date"] and row["status"] != "已核准":    # AB-S8（使用者裁示）：出納、admin 都一樣
-                raise HTTPException(409, "這筆請款還沒核准（目前「%s」），不能登錄付款日；核准後再登錄" % row["status"])
+                raise HTTPException(409, "這筆申請還沒核准（目前「%s」），不能登錄付款日；核准後再登錄" % row["status"])
             if old_paid and changes["paid_date"] != old_paid:
                 if user.get("role") != "superadmin":                     # 使用者 2026-10-01：推翻／覆寫已付款狀態一律最高管理員（admin 只是主管等級）
                     raise HTTPException(403, "這筆已登錄付款日 %s，清除或更改只限最高管理員" % old_paid)

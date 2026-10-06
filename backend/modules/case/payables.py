@@ -84,10 +84,10 @@ class _Payables:
         try:
             exp_id = int(key)
         except (TypeError, ValueError):
-            raise LookupError("找不到這筆請款")
+            raise LookupError("找不到這筆申請")
         r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
         if not r or not _EF.is_payable_kind(r["kind"] or "") or r["status"] != "已核准":
-            raise LookupError("找不到這筆請款")
+            raise LookupError("找不到這筆申請")
         return {"payeeType": _col(r, "payee_type") or "", "payeeName": _col(r, "payee_name") or r["payer_name"] or "",
                 "payeeUsername": _payee_username(r), "bank": _col(r, "payee_bank") or "", "account": _col(r, "payee_account") or ""}
 
@@ -101,7 +101,7 @@ class _Payables:
 
     @staticmethod
     def paid(conn, start, end) -> list:
-        """付款日在 [start, end] 的請款（出納執行紀錄用）：`[{key, sourceLabel, quoteNo, title, payable, actual, fee, paidAt, review}]`。"""
+        """付款日在 [start, end] 的申請（出納執行紀錄用）：`[{key, sourceLabel, quoteNo, title, payable, actual, fee, paidAt, review}]`。"""
         return [{"key": str(r["id"]), "sourceLabel": SOURCE_LABEL, "quoteNo": r["quote_no"] or "",
                  "title": "%s｜%s" % (r["category"] or "其他", r["description"] or ""),
                  "payable": float(r["total_cost"] or 0),
@@ -121,10 +121,10 @@ class _Payables:
         try:
             exp_id = int(key)
         except (TypeError, ValueError):
-            raise LookupError("找不到這筆請款")
+            raise LookupError("找不到這筆申請")
         row = conn.execute("SELECT total_cost, kind, pay_terms, remit_date FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
         if not row:
-            raise LookupError("找不到這筆請款")
+            raise LookupError("找不到這筆申請")
         if not _EF.is_payable_kind(row["kind"] or ""):
             raise ValueError("這類單據（請購單）只是核准文件，不進出納付款")
         rm = parse_remit(remit, row["total_cost"])
@@ -141,10 +141,10 @@ class _Payables:
                          " FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
         if cur.rowcount == 0:
             if not r:
-                raise LookupError("找不到這筆請款")
+                raise LookupError("找不到這筆申請")
             if r["status"] != "已核准":
-                raise ValueError("這筆請款還沒核准，不能登錄付款")
-            raise ValueError("這筆請款已被登錄付款日 %s（可能是另一位出納剛登錄）" % (r["paid_date"] or ""))
+                raise ValueError("這筆申請還沒核准，不能登錄付款")
+            raise ValueError("這筆申請已被登錄付款日 %s（可能是另一位出納剛登錄）" % (r["paid_date"] or ""))
         _full = conn.execute("SELECT kind, doc_code, created_by, approval_json FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
         if _full is not None and (_full["kind"] or ""):                      # 費用單據（A2-7）：通知申請人已付款；kind='' 不寄
             from modules.case import expense_notify as _XN
@@ -227,11 +227,11 @@ class _RemitReviews:
         try:
             exp_id = int(key)
         except (TypeError, ValueError):
-            raise LookupError("找不到這筆請款")
+            raise LookupError("找不到這筆申請")
         r = conn.execute("SELECT id, quote_no, remit_review, updated_by_name FROM case_extra_expenses WHERE id=?",
                          (exp_id,)).fetchone()
         if not r:
-            raise LookupError("找不到這筆請款")
+            raise LookupError("找不到這筆申請")
         # W1 稽核 M4：登錄付款的人不能自己核可／退回自己的差額（updated_by_name 存顯示名稱，帳號與顯示名稱都比）
         if r["remit_review"] == REVIEW_PENDING and (r["updated_by_name"] or "") in (
                 user.get("username") or "\0", user.get("display_name") or "\0"):
@@ -249,12 +249,12 @@ class _RemitReviews:
                 " remit_review_by='', remit_review_at='', remit_review_note='', updated_at=?, updated_by_name=?"
                 " WHERE id=? AND remit_review=?", (now, who, exp_id, REVIEW_PENDING))
         if cur.rowcount == 0:
-            raise ValueError("這筆請款不是待審核狀態（可能已被處理）")
+            raise ValueError("這筆申請不是待審核狀態（可能已被處理）")
         return {"quoteNo": r["quote_no"], "key": str(exp_id), "decision": decision}
 
 
 def _expense_entries(conn, start, end):
-    """IP-9：付款日在 [start, end] 的額外支出匯款手續費（一筆請款一筆）。"""
+    """IP-9：付款日在 [start, end] 的額外支出匯款手續費（一筆申請一筆）。"""
     return [{"date": (r["paid_date"] or "")[:10], "quoteNo": r["quote_no"] or "",
              "desc": "%s｜%s｜%s" % (FEE_CATEGORY, r["category"] or "其他", r["description"] or ""),
              "amount": float(r["remit_fee"]), "category": FEE_CATEGORY, "pending": r["remit_review"] == REVIEW_PENDING}

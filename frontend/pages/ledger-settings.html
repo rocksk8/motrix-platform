@@ -127,7 +127,7 @@
 
       <template x-if="tab==='catmap'">
         <div x-data="glCategoryMap()" x-init="load()" data-testid="ls-catmap">
-          <div class="ls-note">費用單據（額外支出、請款）只記「費用類別」，入哪個會計科目由這裡決定；類別清單由會計維護、單據只能選用。沒有對應的類別：有案件＝專案成本，<b>沒有案件＝其他營業費用</b>（不會誤入專案成本）。只有最高管理者可以修改。</div>
+          <div class="ls-note">費用單據（額外支出、支出申請）只記「費用類別」，入哪個會計科目由這裡決定；類別清單由會計維護、單據只能選用。沒有對應的類別：有案件＝專案成本，<b>沒有案件＝其他營業費用</b>（不會誤入專案成本）。只有最高管理者可以修改。</div>
           <div class="ls-err" x-show="error" x-text="error" data-testid="ls-catmap-error"></div>
           <div class="ls-ok" x-show="notice" x-text="notice" data-testid="ls-catmap-notice"></div>
           <div class="ls-warn" x-show="unmapped.length" x-text="'尚未設定對應的類別：' + unmapped.join('、')" data-testid="ls-catmap-unmapped"></div>

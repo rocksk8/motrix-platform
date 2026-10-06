@@ -1,11 +1,11 @@
 {
  "key": "payment_request",
- "name": "請款單",
+ "name": "支出申請單",
  "category": "財務",
- "description": "申請人、部門、收款對象、請款明細與合計、預計付款日與實際付款日；合計為支出（權責依請款日、現金依付款日）。",
- "note": "本單是獨立的請款登記，核准後的合計列入營運報表支出（權責依請款日、現金依付款日）；填「關聯案件」會一併計入該案件成本與部門。內建案件請款請走案件的請款流程，不要在這裡重複登記。",
+ "description": "申請人、部門、收款對象、申請明細與合計、預計付款日與實際付款日；合計為支出（權責依申請日、現金依付款日）。",
+ "note": "本單是獨立的支出申請登記，核准後的合計列入營運報表支出（權責依申請日、現金依付款日）；填「關聯案件」會一併計入該案件成本與部門。案件的支出申請請走案件的「新增支出申請」流程，不要在這裡重複登記。",
  "body": {
-  "name": "請款單",
+  "name": "支出申請單",
   "icon": "",
   "menu": {
    "group": "財務",
@@ -44,7 +44,7 @@
    },
    {
     "key": "req_date",
-    "label": "請款日",
+    "label": "申請日",
     "type": "date",
     "dataClass": "T1",
     "default": {
@@ -56,18 +56,18 @@
     "label": "關聯案件",
     "type": "text",
     "dataClass": "T1",
-    "help": "填案件單號＝計入該案件成本與部門；內建案件請款請走案件流程，勿重複登記"
+    "help": "填案件單號＝計入該案件成本與部門；內建案件支出申請請走案件流程，勿重複登記"
    },
    {
     "key": "reason",
-    "label": "請款事由",
+    "label": "申請事由",
     "type": "textarea",
     "dataClass": "T1",
     "maxLength": 500
    },
    {
     "key": "lines",
-    "label": "請款明細",
+    "label": "申請明細",
     "type": "table",
     "dataClass": "T1",
     "required": true,
@@ -103,7 +103,7 @@
    },
    {
     "key": "total",
-    "label": "請款合計",
+    "label": "申請合計",
     "type": "formula",
     "dataClass": "T1",
     "formula": "total(lines, \"amt\")",
@@ -185,7 +185,7 @@
       ]
      },
      {
-      "title": "請款明細",
+      "title": "申請明細",
       "fields": [
        "lines"
       ]
@@ -214,7 +214,7 @@
     "blocks": [
      {
       "type": "identity_header",
-      "title": "請款單"
+      "title": "支出申請單"
      },
      {
       "type": "meta",
@@ -236,7 +236,7 @@
         "path": "fields.payee"
        },
        {
-        "label": "請款日",
+        "label": "申請日",
         "path": "fields.req_date",
         "format": "date10"
        }
@@ -245,7 +245,7 @@
      {
       "type": "items_table",
       "source": "fields.lines",
-      "label": "請款明細",
+      "label": "申請明細",
       "columns": [
        {
         "title": "#",
@@ -278,7 +278,7 @@
       "type": "totals",
       "rows": [
        {
-        "label": "請款合計",
+        "label": "申請合計",
         "path": "fields.total",
         "grand": true
        }
