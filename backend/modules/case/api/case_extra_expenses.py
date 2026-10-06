@@ -42,6 +42,7 @@ from db import get_db
 from modules.case import payable_calendar as PC   # 行事曆「付款待辦」（預定付款日；預設關）
 from helpers.case_access import deny_case, require_case   # M01-O1：逐案拒絕＝查無（同一個 404）
 from helpers import row_access
+from helpers.uploads import purge_document_files      # 草稿刪除時一併刪實體檔案（第44班）
 from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供者同一支
 from helpers.auth import user_has_module, has_finance_access, has_cashier_access
 from modules.case.recognition import normalize_date, COUNTED_EXTRA_STATUSES  # `AC2`；後者＝合計與營運報表同一條規則（32-Q6）
@@ -711,8 +712,10 @@ def delete_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
             raise HTTPException(409, f"「{row['status']}」狀態不可刪除（僅草稿與已駁回可刪）")
         if not _can_modify(row, user):
             raise HTTPException(403, "只有填寫人本人或管理員可以刪除這筆額外支出")
+        orphan_files = _files_of(row) + [f for f in (_change_of(row).get("addFiles") or []) if isinstance(f, dict)]
         conn.execute("DELETE FROM case_extra_expenses WHERE id=? AND quote_no=?", (exp_id, quote_no))
         conn.commit()
+        purge_document_files(orphan_files)         # 草稿／已駁回的單據一併刪掉它名下的實體檔案（原本會留成孤兒檔）
         _audit(_tok(authorization), "extra_expense.delete", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 刪除額外支出 #{exp_id}「{row['description']}」", _asum(row))
         return {"ok": True}
@@ -1054,7 +1057,7 @@ async def upload_extra_expense_files(quote_no: str, exp_id: int,
             raise HTTPException(403, "核准後補發票限填寫人本人、管理員或財務角色")
         new_files = await save_document_files(
             "case_extra_expense", f"{quote_no}_{exp_id}", files,
-            user.get("display_name") or user["username"])
+            user.get("display_name") or user["username"], existing_count=len(_files_of(row)))     # 每張單據最多 10 個（helpers/uploads UPLOAD_LIMITS_BY_SUBFOLDER）
         for f in new_files:
             f["kind"] = kind
         merged = _files_of(row) + new_files
@@ -1336,9 +1339,10 @@ async def upload_change_request_files(quote_no: str, exp_id: int,
         if not _can_modify(row, user):
             raise HTTPException(403, "只有填寫人本人或管理員可以上傳變更申請附件")
         display = user.get("display_name") or user["username"]
-        new_files = await save_document_files(
-            "case_extra_expense", f"{quote_no}_{exp_id}", files, display)
         change = _change_of(row)
+        new_files = await save_document_files(
+            "case_extra_expense", f"{quote_no}_{exp_id}", files, display,
+            existing_count=len(_files_of(row)) + len(change.get("addFiles") or []))               # 核准後會併進正式附件 ⇒ 兩邊合計算
         change["addFiles"] = (change.get("addFiles") or []) + new_files
         conn.execute("UPDATE case_extra_expenses SET change_json=? WHERE id=? AND quote_no=?",
                      (json.dumps(change, ensure_ascii=False), exp_id, quote_no))

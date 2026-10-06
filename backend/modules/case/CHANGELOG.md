@@ -1,5 +1,12 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-07（wip/t44-multi-attach）：支出申請附件——累加挑檔、上限、重試不重複建單、刪草稿清檔
+- 「新增支出申請」頁（`payment-request.html`）的附件改用新的累加挑選器（`frontend/static/attach-picker.js`）：每次挑的檔加進清單（原本每次重挑會整批取代，手機一次只能拍一張所以只剩最後一個）、可逐一移除、縮圖與大小、同一檔重複挑會略過，送出前前端先擋不合規格（格式、單檔 20MB、附件＋發票合計最多 10 個、一次合計 50MB）。
+- 附件被伺服器擋下時（格式／檔頭不符、超量）草稿已建好：**重按沿用同一張草稿，只補傳附件，不會再建第二份**；已成功上傳的挑選器清空，不會重複上傳。簡單表單與費用單據（請購／採購／各類費用單據）都適用。
+- 伺服器端上限（`helpers/uploads.py`）：每張支出申請最多 10 個附件、單檔 20MB、一次送出合計 50MB（正式案件的核准後補發票、變更申請待核准附件一併算入 10 個）；一次送出整批全存或全不存（不留孤兒檔）。
+- 刪除草稿／已駁回的支出申請時，一併刪掉它名下的實體檔案（`case_extra_expenses.py` `delete_extra_expense`；原本檔案會留在磁碟上成孤兒）。已核准、已作廢的單據不可刪，檔案保留。
+- 測試：`tests/test_extra_expense_attach_caps_2026_10_07.py`、`tests/test_e2e_attach_picker_2026_10_07.py`。
+
 ## 1.0.149 — 2026-10-06（train43 整合：wip/t43-phase2-events＋wip/t44-fin-fixes；階段 2 對帳失敗會重試）；併入 r2（提醒信記號政策）；併入 wip/t44-settle-terms（字樣）；併入 wip/t43-settle-tax（精算全含稅＋稅額）；稽核修正（多列單據稅額只計一次）；併入 wip/t43-finance-tab（財務分頁外包總成本）；＋wip/t43-shipped-qty（已出貨數量）（端點加模組檢查）（已併入最新 train43-int）（閘門修正已併入）
 - 新 `item_shipped.py`：每個報價品項的 訂購／已出貨／占用中＝材料申請出貨（`shipping.material_shipped` 經叫料列的 `quoteItemId`）＋報價帶入列（`shipping.quote_item_shipped`）；沒有可歸屬紀錄 ⇒ `attributed=False`（畫面「—」）。新端點 `GET /api/quotations/{no}/item-shipped`（案件可見即可；只有數量）；新提供者 `case.shipped_summary`（IP-SH5）。
 - 精算頁（`settlement.html`）原始報價區新增「已出貨/數量」欄；案件頁出貨單清單新增「已累計出貨」欄。權限與遮蔽沿用原頁（精算頁本來就需財務檢視）。
