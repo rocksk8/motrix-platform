@@ -2,7 +2,7 @@
 
 > 狀態：**設計／分析，無程式碼**。作者 hichan-c0，2026-10-07；分支 `wip/t45-payslip-design`（自 origin/platform 036565879，prod 基準 89206122）。
 > 涉流程、權限、金額可見：**寫碼前先問使用者**（第 7 節列出待裁示項；🔴＝權限／金額可見）。
-> **2026-10-07 使用者裁示已併入本版**（經 hichan-1e 表單）：Q1＝財務角色＋superadmin（`has_finance_access`）；Q4＝**付款不需已簽回**（已核准即可付款，簽回檔變選填）；Q7＝**不進行事曆**（只做 `planned_pay_date` 欄位＋出納清單）；Q9＝派發端只顯示單號＋狀態＋受領人、無金額；Q0／Q2／Q3／Q5／Q6／Q8／Q10 取預設；Q11 待問。
+> **2026-10-07 使用者裁示已併入本版**（經 hichan-1e 表單）：Q1＝財務角色＋superadmin（`has_finance_access`）；Q4＝**付款不需已簽回**（已核准即可付款，簽回檔變選填）；Q7＝**不進行事曆**（只做 `planned_pay_date` 欄位＋出納清單）；Q9＝派發端只顯示單號＋狀態＋受領人、無金額；Q0／Q2／Q3／Q5／Q6／Q8／Q10 取預設；Q11／Q12／Q13 亦已裁示（見下）；**Q0（哪個畫面）仍未知**。
 > 讀的碼：`backend/modules/payroll/api/payslips.py`、`payslip_payouts.py`、`remit_link.py`、`pdf_gen.py::generate_payslip_pdf_bytes`、`frontend/pages/payslips.html`／`payslip-form.html`、`arap/api/cashier.py`、`case/payables.py`、`helpers/tiered_approval.py`、`payroll/api/bonus.py`（簽核樣板）、`case/material_approval.py`、`subcontract/api/contractor_vouchers.py`。
 
 ## 0. 摘要
@@ -53,7 +53,7 @@
 - 匯出：`record_export` 允許來源狀態＝`已核准`、`已匯出`（重匯）；`草稿／待審核` ⇒ 409「請先送審並核准」。**匯出不要付款日**。
 - 作廢：維持「只有已匯出可作廢」；`已核准` 若要作廢（未匯出）見 Q5。
 - **付款（Q4＝否，使用者裁示）**：`mark-paid` 來源狀態由 `已簽回` 擴為 `已核准／已匯出／已簽回`（`UPDATE … WHERE status IN (…)`）；匯出與簽回都變成**選填**。**舊的 `已簽回` 列行為完全不變**（仍可付款、`unsign`／`delete_signed_file` 邏輯不動）。
-- 簽回：仍只收 `已匯出／已簽回`（選填步驟；上傳後 `已匯出→已簽回` 不變）。已核准未匯出者想簽回，要先匯出（簽回檔是匯出 PDF 的簽名版，順序合理）；已付款後補傳簽回檔：預設不開（維持現況 409），若要開見 Q12。
+- 簽回：仍只收 `已匯出／已簽回`（選填步驟；上傳後 `已匯出→已簽回` 不變）。已核准未匯出者想簽回，要先匯出（簽回檔是匯出 PDF 的簽名版，順序合理）；已付款後**鎖定、不可補傳簽回檔**（Q12＝否，使用者裁示；維持現況 409）。
 - **`unpay`（付款填錯退回）**：現在固定退回 `已簽回`；改為**退回付款前最近的狀態**——有簽回檔 ⇒ `已簽回`，否則 `export_count>0` ⇒ `已匯出`，否則 `已核准`（由資料推得，不新增欄位；舊列有簽回檔仍退 `已簽回`，與今天一致）。
 - `GET /api/payslips` 的 `status` 值多兩種；前端列表徽章、篩選補兩個色。
 
@@ -82,7 +82,7 @@
 | 付款 | IP-100 `mark_paid(conn, key, paid_date, user, remit)` 委派到**同一份實作**（把 `payslip_mark_paid` 的核心抽成函式 `mark_payslip_paid(conn, slip_no, payment_date, voucher_no, who)`；兩個入口只剩薄殼，避免「同一動作兩份實作」）。傳票單號仍必填並驗 `voucher.by_no`（IP-4）：IP-100 目前 `remit` 沒有 `voucherNo` 欄 ⇒ 加法擴充 `remit.voucherNo`（契約版本不變，同 A2-3 追加慣例）。 |
 | 付款日 | 只在出納這步填（`paid_date`）；`payment_date` 仍是 IP-9 營運報表歸月依據（`payslip_payouts._expense_entries`），行為不變。 |
 | 預定付款日 | `payslips` 加 `planned_pay_date`（YYYY-MM-DD，可空），送審時可填、核准後出納（財務角色）可改（比照額外支出的預定付款日 PATCH；端點名稱以實作時 `case_extra_expenses.py` 為準）；IP-100 項目回 `plannedPayDate`、出納清單顯示並可排序。**不進行事曆（Q7＝否，使用者裁示）**：不新增 `payable_due` 的勞報單觸發點，`EVENT_TYPES` 描述不動。 |
-| 與匯款單路徑 | 勞報單若被承攬商匯款單關聯（`personnel[].payslipNo`），付款走**匯款單**（`remit_link.mark_paid`，付款日＝匯款日、`data_json.paid_via_remit`）。此時 IP-100 列表要**標示「經匯款單 {號} 付款」並停用獨立付款**，否則同一筆錢可被出納付兩次（今天 IP-103 的 `unpay` 已用 `paid_via_remit` 擋回頭路，但正向沒有擋）。**Q4 連動（需確認 Q13）**：`remit_link.check／candidates／mark_paid` 與 `contractor_vouchers._personnel_link_errors` 目前都寫死 `已簽回`（訊息「須為已簽回」）；為了與「已核准即可付款」一致，建議同步放寬為 `已核准／已匯出／已簽回`（`mark_paid` 的 `WHERE status IN (…)`、`unmark_paid` 退回同 `unpay` 的推導規則），否則同一張勞報單走匯款單反而比走出納更嚴。 |
+| 與匯款單路徑 | 勞報單若被承攬商匯款單關聯（`personnel[].payslipNo`），付款走**匯款單**（`remit_link.mark_paid`，付款日＝匯款日、`data_json.paid_via_remit`）。此時 IP-100 列表要**標示「經匯款單 {號} 付款」並停用獨立付款**，否則同一筆錢可被出納付兩次（今天 IP-103 的 `unpay` 已用 `paid_via_remit` 擋回頭路，但正向沒有擋）。**Q4 連動（Q13＝是，使用者裁示）**：`remit_link.check／candidates／mark_paid` 與 `contractor_vouchers._personnel_link_errors` 目前都寫死 `已簽回`（訊息「須為已簽回」）；為了與「已核准即可付款」一致，**要**同步放寬為 `已核准／已匯出／已簽回`（`mark_paid` 的 `WHERE status IN (…)`、`unmark_paid` 退回同 `unpay` 的推導規則），否則同一張勞報單走匯款單反而比走出納更嚴。 |
 | 簽回（Q4＝否，使用者裁示） | **付款不再要求已簽回**：核准後出納即可付款；簽回檔變選填（匯出→上傳簽回檔→`已簽回` 的路徑與舊列行為都保留）。簽回檔仍可在出納清單查看（`files`、`get_signed_file`），只是不再是付款閘門。內控提醒：簽回憑據不再受系統強制，建議在出納清單顯示「未簽回」小標（不阻擋）。 |
 | 權限（Q1＝財務角色＋superadmin，使用者裁示） | 出納端統一用 `has_finance_access`（財務角色＋superadmin，第 42 班）：IP-100 端點（現況已是）、**以及** `payslips.py::_require_payer`（`mark-paid`／`unpay`）、`get_signed_file`（簽回檔檢視）、`cashier.py::_payslip_visible`／`payslip-queue`——這些現在仍是 `superadmin or user_has_module(user,'cashier')`，**要改**（改一處＝改同一個 helper，避免漂移；守門：靜態題掃 `payslips.py` 不得再出現 `user_has_module(user, "cashier")`）。**金額可見＝能付款的人**：勞報單金額（net／gross／扣繳）只透過出納清單／付款端點給財務角色＋superadmin；勞報單建立／編輯／匯出／簽核仍是 superadmin＋`payslip` 模組（不放寬，Q2 預設）。財務角色看不到 `payslips.html`（頁面是 superadmin 的），只在出納頁看。 |
 | IP-103 退役 | IP-100 版涵蓋 IP-103 的超集（已核准起、不只已簽回）。上線同版 **出納頁隱藏舊「勞報單待付款」頁籤**（避免同一張單兩處出現、且舊頁籤只列已簽回會漏），`GET /api/cashier/payslip-queue` 與 IP-103 守門保留一班（相容／回滾），下一班刪除（額外引用疊加原則）。 |
@@ -155,15 +155,16 @@
 | Q8 | 派發↔勞報單連結：建立時機（勞報單建立時選填、派發端也可補）？ | 兩端皆可 |
 | ~~Q9~~ 🔴 | **已裁示**：派發端只顯示單號＋狀態＋受領人，無金額 | 已落實於 6.5 |
 | Q10 | 簽核設定頁是否新增「勞報單簽核流程」獨立一列（不併統一流程）？ | 是 |
-| Q11 | 回滾缺口（第 8 節）：接受嗎？ | 待 hichan-1e 詢問使用者 |
-| Q12 | 已付款後可補傳簽回檔嗎（簽回變選填後常見）？ | 否（維持現況 409）；若要＝允許附檔但不改狀態 |
-| Q13 | 承攬商匯款單關聯勞報單：同步放寬為 `已核准／已匯出／已簽回`（與出納一致）？ | 是（連動 Q4） |
+| ~~Q11~~ | **已裁示：接受回滾缺口**，回滾 SOP 加一句（先處理 待審核／已核准 的勞報單），**不做兩階段上線** | 已落實於第 8 節 |
+| ~~Q12~~ | **已裁示：否**——已付款後鎖定，不可補傳簽回檔（維持現況 409） | 已落實於第 2 節 |
+| ~~Q13~~ | **已裁示：是**——匯款單關聯勞報單由 `已簽回` 放寬為 `已核准` 以上（`已核准／已匯出／已簽回`） | 已落實於第 4 節「與匯款單路徑」 |
 
 ## 8. Migration、版本、相容
 
 - **payroll migration 0004**（`modules/payroll/migrations/0004_payslip_approval.py`，登記 `payroll/__init__.py::migrations=[…, (4, _m0004.up)]`）：`ALTER TABLE payslips ADD COLUMN approval_json TEXT NOT NULL DEFAULT ''`、`planned_pay_date TEXT NOT NULL DEFAULT ''`、`approved_at TEXT NOT NULL DEFAULT ''`、`approved_by TEXT NOT NULL DEFAULT ''`（`_col_exists` 冪等）；`CREATE TABLE IF NOT EXISTS payslip_dispatch_links …`＋索引。不自己 commit、不 import 會演進的程式碼（`test_module_migrations` 守門）。核心 `db.py` 不動 ⇒ **不取核心 db 版號**；模組版 CHANGELOG 加 `next` 段（`test_module_changelog_follows_code`）、`version_manifest.json` 一筆（列車取號，不手填）。
 - **既有資料零驚喜**：不改任何既有列的 `status`；`草稿` 仍 `草稿`（現在需要送審才能匯出，是使用者要的行為變更，寫進 CHANGELOG 與畫面提示）；`已匯出／已簽回／已付款／已作廢` 照舊（含舊 PDF 封存、`export_log`）。`approval_json=''` 的舊列視為「無簽核紀錄」（顯示「舊單（未經簽核）」，不補假紀錄）。
 - **向下相容／回滾**：新程式只加欄位／表，回舊程式碼不讀它們。⚠ **回滾缺口**：舊碼不認得 `待審核／已核准`，`_LOCKED_STATUSES` 不含它們 ⇒ 舊碼下這兩種狀態可被編輯／刪除；且舊 `record_export` 對 `已核准` 保持不變（不會變已匯出）。緩解：回滾 SOP 加一句「先處理 待審核／已核准 的勞報單」；或第一階段先只上 DB／唯讀、第二階段才開送審。**需列車／回滾守門決定**（Q11：接受此缺口？）。
+  **裁示（Q11）**：接受此缺口、不做兩階段上線；實作時在回滾 SOP（DEPLOY.md／回滾章節）加一句：「回滾前先處理狀態為 待審核／已核准 的勞報單（舊碼不鎖定它們）」。
 - 模組不在：M07 不在 ⇒ 沒有提供者，M05／M04 照 INTEGRATION-POINTS 明講退化（不默默略過）。
 
 ## 9. 測試與 e2e 清單
