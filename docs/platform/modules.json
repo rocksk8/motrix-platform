@@ -85,6 +85,7 @@
    "js:static/custom-layout.js",
    "js:static/mount-tabs.js",
    "js:static/file-preview.js",
+   "js:static/attach-picker.js",
    "js:static/form-preview.js",
    "js:static/form-designer-model.js",
    "js:static/form-designer.js",
