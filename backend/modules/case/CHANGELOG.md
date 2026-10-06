@@ -2,6 +2,7 @@
 
 ## (next) — 2026-10-06（wip/t43-phase2-events）：保固到期、專案預計完成的行事曆事件（預設關）
 - `case_deadlines.py` 新增 `_sync_warranty_calendar`、`_sync_project_end_calendar`，掛在每日檢查（`run_daily_checks`）最後；與寄信的 guard 完全獨立。事件種類開關關閉（預設）⇒ 不讀資料庫、不打 Google。事件內容只有案號、客戶、設備／專案、日期，不含金額。日期已過不建；改日期、結案、設備刪除由對帳處理。
+- 上線注意：保固事件第一次打開時，已成案案件的未過期保固會全部補建；每次每日檢查最多 200 次 Google 呼叫，所以第一次打開會分散在數天內建完（不是當天一次到位）。
 
 ## 1.0.148 — 2026-10-05（wip/t42-fix-caserecord）：財務角色可在任何案件登錄／修改收款〔train_number：1.0.147 → 1.0.148〕
 - `PATCH /api/quotations/{no}/case-record`：財務角色（與 superadmin）不是案件成員時，舊整包格式只在「除款項外與資料庫完全相同」時通過（款項照存），否則 403（不靜默丟掉）；分段格式仍只放行 `payment` 分段；業務（非成員）仍 403。`PATCH …/payment/{idx}` 本來就沒有擁有者限制。測試：`test_finance_caserecord_foreign_case_2026_10_05.py`。
