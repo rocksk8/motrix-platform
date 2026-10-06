@@ -33,10 +33,10 @@
 | `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 19 | 16 | — |
 | `core:photos` | L1 | Photo upload processing: EXIF GPS extraction and watermarking.（無單位卡） | 2 | 2 | — |
 | `core:trail` | L1 | 操作軌跡（`user_request_log`）的共用設定，以及把路徑翻成人話的對照表。（無單位卡） | 23 | 2 | — |
-| `helper:approval_queue` | L1 | 「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。（無單位卡） | 11 | 16 | — |
+| `helper:approval_queue` | L1 | 「待我簽核」佇列與轉簽的共用形狀（L1；M01-PLAN §3-7，2026-09-26）。（無單位卡） | 11 | 17 | — |
 | `helper:attachment_search` | L1 | 附件目錄的搜尋共用件（`attachments.catalog` 契約 v1 的 `search`／`count`；附件目錄 P3， | 10 | 9 | `tests/test_filehub_search_2026_09_30.py` |
-| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 9 | 67 | — |
-| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 24 | 94 | — |
+| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 11 | 69 | — |
+| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 24 | 95 | — |
 | `helper:branding` | L1 | 品牌圖檔（主 LOGO／深色底 LOGO／favicon）：上傳驗證、存放、讀取時回預設。 | 16 | 2 | `tests/test_branding_2026_09_27.py` |
 | `helper:build_info` | L1 | 這個**行程**載入的是哪一份程式碼（`BR1`）。（無單位卡） | 3 | 2 | — |
 | `helper:business_days` | L1 | L1 工作日／假日判斷（第44班：自 M11 標案雷達 `calendar_tw.py` 提升為 L1 共用，供任何模組用——例如 M01 預定付款日提醒、M11 不寄信日）。**純函式，不連網、不讀時鐘（日期由呼叫端給）。**（無單位卡） | 9 | 2 | — |
@@ -59,7 +59,7 @@
 | `helper:doc_template` | L1 | L1 輸出引擎：版型定義（資料）＋單據視圖（資料）⇒ HTML（P2，CUSTOMIZATION-SPEC §3.4）。（無單位卡） | 20 | 8 | — |
 | `helper:duty_roles` | L1 | 職責角色化 R1（設計：docs/platform/plans/DUTY-ROLES-DESIGN.md；使用者 2026-10-06 裁示 Q1–Q12、N1–N4）。 | 17 | 2 | `tests/test_duty_roles_r1_2026_10_06.py`、`tests/test_duty_roles_equivalence_2026_10_06.py` |
 | `helper:edit_log` | L1 | 逐筆編寫紀錄（`FN4②`）—— **缺「改前值」就寫不進去**。（無單位卡） | 5 | 5 | — |
-| `helper:email_notify` | L1 | External email notifications via SMTP (Gmail App Password).（無單位卡） | 71 | 41 | — |
+| `helper:email_notify` | L1 | External email notifications via SMTP (Gmail App Password).（無單位卡） | 71 | 42 | — |
 | `helper:errors` | L1 | 例外訊息的去處（`EM3`）：畫面只給代碼，例外全文進 log。（無單位卡） | 1 | 11 | — |
 | `helper:expense_types` | L1 | 費用單據的「類型定義」（A2-2）：請購單／採購單／差旅費用請款單／零用金支付單各是一份 `expense_type` 定義。 | 14 | 4 | `tests/platform/test_expense_types_2026_10_01.py` |
 | `helper:financial_mask` | L1 | 案件金額欄位遮蔽（CM13，2026-09-24 使用者裁示「要，後端移除金額欄位」）。（無單位卡） | 16 | 8 | — |
@@ -69,7 +69,7 @@
 | `helper:google_calendar` | L1 | Google 行事曆整合 — Phase 1（系統 → 行事曆，push only，2026-08-21）。（無單位卡） | 19 | 12 | — |
 | `helper:legal_params` | L1 | L1 法規參數服務（R1；規格 CUSTOMIZATION-SPEC §9.1）。（無單位卡） | 27 | 32 | — |
 | `helper:licensing` | L1 | 授權金鑰核心（2026-09-21，細線 1 第 1、2 步）。（無單位卡） | 13 | 4 | — |
-| `helper:mail_types` | L1 | L1 信件類型登記表（CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）。（無單位卡） | 13 | 14 | — |
+| `helper:mail_types` | L1 | L1 信件類型登記表（CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）。（無單位卡） | 13 | 15 | — |
 | `helper:map_overlays` | L1 | L1 地圖覆蓋層（串接點 IP-101 `map.overlay`；docs/platform/LODGING-NEARBY.md §3.6.1，D 稽核 LG-M1／LG2-S1～S3）。 | 5 | 2 | `tests/test_map_overlay_contract_2026_09_28.py`、`tests/test_e2e_map_overlay_contract_2026_09_28.py` |
 | `helper:module_registry` | L1 | 權限模組的**唯一來源**（B7，2026-09-24 使用者裁示「整併成一份」）。（無單位卡） | 11 | 8 | — |
 | `helper:module_startup` | L1 | 啟動時載入 L2 模組：main.py 與「只做 init_db 的工具」（乾跑 migration、V9→新版轉換）共用同一段。 | 3 | 1 | `tests/platform/test_module_startup.py` |
@@ -89,5 +89,5 @@
 | `helper:system_checks` | L1 | L1 系統健康的每日檢查（2026-09-26 自 routers/daily_tasks.py 搬出，M12 搬遷前置）。（無單位卡） | 8 | 2 | — |
 | `helper:tax_calc` | L1 | 稅額純函式（L1；2026-09-26 自 M01 `helpers/quotations.py` 下沉，主持核准「T」）。（無單位卡） | 12 | 8 | — |
 | `helper:tiered_approval` | L1 | 共用的 tiers 依序簽核純邏輯（2026-08-22）。（無單位卡） | 31 | 32 | — |
-| `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 17 | 27 | — |
+| `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 19 | 28 | — |
 | `helper:xlsx_out` | L1 | L1 輸出：Excel 樣式、公式注入防護、匯出速率限制（ROADMAP A8／DEPENDENCY-MAP §3 #10 #13）。（無單位卡） | 15 | 11 | — |

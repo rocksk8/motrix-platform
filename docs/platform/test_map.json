@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1152,
+  "tests": 1165,
   "unmapped": 13,
   "kinds": {
-   "api": 621,
-   "e2e": 283,
+   "api": 629,
+   "e2e": 288,
    "audit": 140,
    "unit": 108
   },
-  "routes": 769
+  "routes": 771
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -5513,6 +5513,52 @@
    "login_fixture": true,
    "module": "arap"
   },
+  "backend/modules/case/tests/test_applicant_notify_2026_10_06.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "helper:email_notify",
+    "mod:case/__init__",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/expense_notify",
+    "mod:case/material_notify",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02",
+    "mod:subcontract/__init__",
+    "mod:subcontract/dispatch_notify",
+    "page:pages/payment-request.html",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/expense_notify.py",
+     "backend/modules/case/material_notify.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py",
+     "backend/modules/subcontract/__init__.py",
+     "backend/modules/subcontract/dispatch_notify.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/payment-request.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "module": "case"
+  },
   "backend/modules/case/tests/test_approval_detail_and_reassign_edges.py": {
    "kind": "api",
    "units": [
@@ -5577,6 +5623,45 @@
      "backend/modules/case/"
     ]
    },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_attach_views_2026_10_06.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "helper:approval_queue",
+    "helper:uploads",
+    "mod:arap/api/cashier",
+    "mod:case/api/case_extra_expenses",
+    "router:approval_queue",
+    "router:uploads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/approval_queue.py",
+     "backend/helpers/uploads.py",
+     "backend/routers/__init__.py",
+     "backend/routers/uploads.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/routers/approval_queue.py",
+     "backend/routers/uploads.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "unresolved_api": [
+    "/api/cashier/pending-payables/case/{}/files"
+   ],
    "login_fixture": true,
    "module": "case"
   },
@@ -5648,6 +5733,42 @@
     ],
     "path": [
      "frontend/pages/approval-queue.html"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_e2e_cashier_payable_files_2026_10_07.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "helper:uploads",
+    "mod:case/api/case_extra_expenses",
+    "page:pages/cashier.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/uploads.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "frontend/pages/cashier.html"
     ],
     "module_dir": [
      "backend/modules/case/"
@@ -7474,6 +7595,35 @@
     ]
    },
    "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_pr_to_po_2026_10_06.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "mod:case/api/__init__",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/purchase_items",
+    "mod:case/tests/test_purchase_item_lines_2026_10_02"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/purchase_items.py",
+     "backend/modules/case/tests/test_purchase_item_lines_2026_10_02.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
    "module": "case"
   },
   "backend/modules/case/tests/test_probe_t32_mlink_leak_c7.py": {
@@ -9336,6 +9486,46 @@
     ]
    },
    "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_approved_mail_2026_10_06.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "file:backend/helpers/__init__.py",
+    "helper:email_notify",
+    "helper:mail_types",
+    "helper:notification_prefs",
+    "mod:payroll/__init__",
+    "mod:payroll/api/bonus",
+    "mod:payroll/bonus_notify",
+    "mod:payroll/tests/test_bonus_case_api_2026_09_24",
+    "mod:payroll/tests/test_bonus_payout_connectors",
+    "page:pages/bonus.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/mail_types.py",
+     "backend/helpers/notification_prefs.py",
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/bonus_notify.py",
+     "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py",
+     "backend/modules/payroll/tests/test_bonus_payout_connectors.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/bonus.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
    "module": "payroll"
   },
   "backend/modules/payroll/tests/test_bonus_award_2026_09_23.py": {
@@ -21840,6 +22030,47 @@
     ]
    }
   },
+  "backend/tests/test_e2e_attach_mine_2026_10_07.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "page:pages/payment-request.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "page": [
+     "frontend/pages/payment-request.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_attach_picker_2026_10_07.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "page:pages/payment-request.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
+    ],
+    "page": [
+     "frontend/pages/payment-request.html"
+    ],
+    "path": [
+     "frontend/pages/payment-request.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_audit_log_page_2026_09_30.py": {
    "kind": "e2e",
    "units": [
@@ -24038,6 +24269,32 @@
     ]
    }
   },
+  "backend/tests/test_e2e_inapp_bell_2026_10_06.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "helper:audit",
+    "page:index.html",
+    "page:pages/audit-log.html",
+    "page:pages/customers.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/audit.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/index.html",
+     "frontend/pages/audit-log.html",
+     "frontend/pages/customers.html"
+    ],
+    "path": [
+     "frontend/index.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_index_without_analytics_2026_09_26.py": {
    "kind": "e2e",
    "units": [
@@ -25015,6 +25272,28 @@
     ]
    }
   },
+  "backend/tests/test_e2e_pr_to_po_2026_10_06.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
+    "file:backend/tests/test_e2e_expense_form_a24_2026_10_01.py",
+    "page:pages/payment-request.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
+     "backend/tests/test_e2e_expense_form_a24_2026_10_01.py"
+    ],
+    "page": [
+     "frontend/pages/payment-request.html"
+    ],
+    "path": [
+     "frontend/pages/payment-request.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_presence_bar_no_overlap_2026_09_24.py": {
    "kind": "e2e",
    "units": [
@@ -25989,6 +26268,77 @@
      "backend/modules/case/payables.py"
     ]
    }
+  },
+  "backend/tests/test_extra_expense_attach_caps_2026_10_07.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
+    "helper:uploads",
+    "mod:case/api/case_extra_expenses"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/uploads.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_extra_expense_attach_permissions_2026_10_07.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
+    "helper:uploads",
+    "mod:case/api/case_extra_expenses",
+    "router:uploads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/uploads.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/routers/uploads.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_extra_expense_attach_race_2026_10_07.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
+    "helper:uploads",
+    "mod:case/api/__init__",
+    "mod:case/api/case_extra_expenses"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/uploads.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/tests/_requires.py"
+    ],
+    "api": [
+     "backend/modules/case/api/case_extra_expenses.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_extra_expense_reject_permission_2026_09_24.py": {
    "kind": "api",
@@ -28234,6 +28584,43 @@
      "backend/helpers/email_notify.py"
     ]
    }
+  },
+  "backend/tests/test_notifications_link_2026_10_06.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:audit",
+    "helper:daily_checks",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
+    "page:pages/customers.html",
+    "page:pages/quotation-form.html",
+    "plat:__init__",
+    "plat:migrations",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/migrations.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/audit.py",
+     "backend/helpers/daily_checks.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/customers.html",
+     "frontend/pages/quotation-form.html"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_notify_marks_only_on_success_2026_09_22.py": {
    "kind": "api",
