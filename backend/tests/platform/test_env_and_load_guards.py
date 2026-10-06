@@ -302,7 +302,8 @@ def test_train_judge_needs_the_three_guards_run_not_skipped():
 def test_run_train_sets_the_flag_and_fails_on_a_skip(monkeypatch):
     """GF-M1 行為題：--train 設 MOTRIX_TRAIN=1；tests/platform 輸出有三題 skip ⇒ exit 1。突變：run_train 不設旗標或不判 skip ⇒ 紅。"""
     import types
-    monkeypatch.delenv("MOTRIX_TRAIN", raising=False)
+    monkeypatch.setenv("MOTRIX_TRAIN", "0")      # 先 setenv 才有「還原點」：原本沒設時 delenv(raising=False) 不留還原，run_train 設的 "1" 會漏到後面的題（version_slots 紅）
+    monkeypatch.delenv("MOTRIX_TRAIN")
     seen_env = []
 
     def fake_run(targets, extra, window, full, collect_only=False):
