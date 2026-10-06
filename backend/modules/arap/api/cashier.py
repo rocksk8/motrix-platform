@@ -24,7 +24,7 @@ import csv
 from typing import Optional
 
 from fastapi import APIRouter, Body, Header, HTTPException, Query, UploadFile, File
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 import io
 from urllib.parse import quote as _url_quote
 
@@ -134,6 +134,29 @@ def get_payee_bank(source: str, key: str, authorization: str = Header(None)):
         masked = True
     _audit(_tok(authorization), "cashier.payee_bank_view", source, key, "出納查看收款人銀行資料（來源：%s%s）" % (out["source"], "；遮罩" if masked else ""))
     return out
+
+
+@router.get("/api/cashier/pending-payables/{source}/{key}/files/{file_id}")
+def get_pending_payable_file(source: str, key: str, file_id: str, authorization: str = Header(None)):
+    """出納看待付款申請的附件（唯讀；t44-attach-views）：與待付款清單同一個權限（財務角色／superadmin）。
+    檔案由提供者 `file_open` 認領（只認清單上那一筆、檔案 id 在它自己的清單、路徑綁單據）⇒ 其餘一律同一句 404。
+    與 `/api/attachments/open` 同一種回法（octet-stream＋inline，前端用 blob 預覽／下載）；每次開檔留稽核（不記內容）。"""
+    user = _require_user(authorization)
+    _require_view_access(user)
+    p = registry.providers("payables.pending").get(source)
+    if p is None or not hasattr(p, "file_open"):
+        raise HTTPException(404, "找不到這個檔案")
+    conn = get_db()
+    try:
+        try:
+            opened = p.file_open(conn, key, file_id)
+        except LookupError:
+            raise HTTPException(404, "找不到這個檔案")
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "cashier.payable_file_view", source, key, "出納查看待付款申請附件（%s）" % (opened.filename or "")[:60])
+    return FileResponse(opened.abs_path, media_type="application/octet-stream",
+                        filename=opened.filename or None, content_disposition_type="inline")
 
 
 @router.post("/api/cashier/pending-payables/{source}/{key}/pay")

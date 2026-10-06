@@ -168,12 +168,15 @@ class DataJsonApproval:
                      (json.dumps(data, ensure_ascii=False), now, doc["docNo"]))
 
 
-def file_entries(raw) -> list:
+def file_entries(raw, default_doc_kind=None) -> list:
     """把各表存的檔案 JSON 正規化成前端可預覽的格式（2026-09-26 自 M01 `routers/quotations._file_entries` 逐字下沉）。
 
     各模組的檔案結構不完全一樣（有的 `filename` 有的 `name`，路徑鍵也不同），
     這裡統一成 `{name, path, kind}`；`kind` 讓前端決定是直接內嵌預覽（圖片）、
-    開新分頁（PDF）還是只給下載連結。
+    開新分頁（PDF）還是只給下載連結（`heic`：.heic／.heif，瀏覽器多半無法顯示 ⇒ 只給下載連結、不內嵌預覽）。
+
+    加性欄位（2026-10-06 t44-attach-views；舊呼叫端不受影響）：`size`（來源有數字才給）、`docKind`（`invoice`＝發票、`other`＝附件）。
+    `docKind` 只在來源那筆自己的 `kind` 是 invoice／other，或呼叫端給了 `default_doc_kind`（沒有 `kind` 的舊筆用）時才有。
     """
     try:
         arr = json.loads(raw or "[]")
@@ -191,11 +194,19 @@ def file_entries(raw) -> list:
             continue
         low = (name or path).lower()
         kind = ("image" if low.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp"))
-                else "pdf" if low.endswith(".pdf") else "file")
-        out.append({"id": f.get("id") or path, "name": name or path.split("/")[-1],
-                    "path": path, "kind": kind,
-                    "uploadedBy": f.get("uploadedBy") or f.get("by") or "",
-                    "uploadedAt": f.get("uploadedAt") or f.get("at") or ""})
+                else "pdf" if low.endswith(".pdf")
+                else "heic" if low.endswith((".heic", ".heif")) else "file")
+        entry = {"id": f.get("id") or path, "name": name or path.split("/")[-1],
+                 "path": path, "kind": kind,
+                 "uploadedBy": f.get("uploadedBy") or f.get("by") or "",
+                 "uploadedAt": f.get("uploadedAt") or f.get("at") or ""}
+        size = f.get("size")
+        if isinstance(size, int) and not isinstance(size, bool) and size >= 0:
+            entry["size"] = size
+        doc_kind = f.get("kind") if f.get("kind") in ("invoice", "other") else default_doc_kind
+        if doc_kind:
+            entry["docKind"] = doc_kind
+        out.append(entry)
     return out
 
 
@@ -221,7 +232,7 @@ def snapshot_doc_detail(r) -> dict:
     files = []
     if "issued_files_json" in keys:
         files += file_entries(r["issued_files_json"])
-    files += file_entries(json.dumps(snap.get("invoiceFiles") or []))
+    files += file_entries(json.dumps(snap.get("invoiceFiles") or []), "invoice")
     passbook = snap.get("bankPassbookImage") or ""
     # 只接受 data:image/ ——這個欄位是建立單據時由前端送進來的字串，
     # 若混進 `javascript:` 之類的 scheme，簽核人點下去就是在本站原點執行腳本

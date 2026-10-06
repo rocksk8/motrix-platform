@@ -776,6 +776,7 @@
           <div class="aq-section-title">
             <span x-text="detail?.title || '送審內容'"></span>
             <span x-show="detailLoading" style="font-size:11px;color:var(--text-dim);margin-left:8px">載入中…</span>
+            <span x-show="fileError" x-text="fileError" data-testid="aq-file-error" style="font-size:11px;color:#C0392B;margin-left:8px"></span>
           </div>
 
           <!-- 哪個案件 -->
@@ -829,7 +830,8 @@
           <!-- 夾帶檔案（圖片直接預覽，其餘點開） -->
           <div style="margin-top:12px" x-show="(detail?.files||[]).length">
             <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px"
-                 x-text="'夾帶檔案（' + (detail?.files||[]).length + '）'"></div>
+                 x-text="'夾帶檔案（' + (detail?.files||[]).length + (detail?.type === 'extra_expense' ? '/10' : '') + '）'"
+                 data-testid="aq-files-count"></div>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
               <template x-for="f in (detail?.files||[])" :key="f.id">
                 <div style="border:1px solid var(--border-light);border-radius:6px;padding:6px;width:140px">
@@ -843,9 +845,14 @@
                          x-text="f.kind === 'pdf' ? '📄' : '📎'"></div>
                   </template>
                   <div style="font-size:11px;margin-top:5px;word-break:break-all;line-height:1.5">
+                    <span x-show="f.docKind" :data-testid="'aq-file-dockind-' + f.id"
+                          :style="'display:inline-block;font-size:10px;padding:0 5px;border-radius:8px;margin-right:4px;color:#fff;background:' + (f.docKind === 'invoice' ? '#2E8B57' : '#6B7280')"
+                          x-text="f.docKind === 'invoice' ? '發票' : '附件'"></span>
                     <a href="javascript:void(0)" @click="openFile(f)"
-                       style="color:var(--accent);text-decoration:underline" x-text="f.name"></a>
+                       style="color:var(--accent);text-decoration:underline" x-text="f.kind === 'heic' ? (f.name + '（下載）') : f.name"
+                       :data-testid="'aq-file-link-' + f.id"></a>
                   </div>
+                  <div style="font-size:10px;color:var(--text-dim)" x-show="f.size" x-text="fileSizeText(f.size)"></div>
                   <div style="font-size:10px;color:var(--text-dim)" x-show="f.uploadedBy"
                        x-text="f.uploadedBy"></div>
                 </div>
@@ -1053,6 +1060,7 @@
         selected: null,
         detail: null,
         detailLoading: false,
+        fileError: '',          // 附件下載失敗的行內訊息（不用 alert）
         reassignModal: false,
         reassignTypes: [],
         reassignTo: '',
@@ -1600,7 +1608,33 @@
           } catch (e) {}
         },
 
+        // 檔案大小的人話（unit：B／KB／MB）
+        fileSizeText(n) {
+          n = Number(n) || 0
+          if (n < 1024) return n + ' B'
+          if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB'
+          return (n / 1024 / 1024).toFixed(1) + ' MB'
+        },
+
+        // HEIC／HEIF：瀏覽器多半無法顯示 ⇒ 只給下載連結、不做內嵌預覽（同一個簽核情境簽章，換 blob 後觸發下載）
+        async downloadFile(f) {
+          this.fileError = ''
+          try {
+            const r = await fetch(this._photoTokenUrl(f.path), { headers: { Authorization: 'Bearer ' + this.session.token } })
+            if (!r.ok) throw new Error('取得檔案連結失敗（HTTP ' + r.status + '）')
+            const { token } = await r.json()
+            const resp = await fetch(`${API}/api/uploads/${f.path}?pt=${encodeURIComponent(token)}`)
+            if (!resp.ok) throw new Error('HTTP ' + resp.status)
+            const url = URL.createObjectURL(await resp.blob())
+            const a = document.createElement('a')
+            a.href = url; a.download = f.name || 'download'
+            document.body.appendChild(a); a.click(); a.remove()
+            setTimeout(() => URL.revokeObjectURL(url), 10000)
+          } catch (e) { this.fileError = '下載失敗：' + e.message }
+        },
+
         async openFile(f) {
+          if (f.kind === 'heic' && f.path && !f.dataUrl) { await this.downloadFile(f); return }
           if (f.dataUrl) {
             // 只開 data:image/ ——這個欄位（存簿封面）是建立單據時由前端送進來的
             // 字串，若混進 javascript: 之類的 scheme，點下去就是在本站原點執行腳本。

@@ -53,7 +53,42 @@ def _item(r):
         "invoiceDate": (_col(r, "invoice_date") or "")[:10], "invoiceNo": _col(r, "invoice_no") or "",
         "invoiceFiles": sum(1 for f in files if isinstance(f, dict) and f.get("kind") == "invoice"),
         "files": len(files),
+        # 出納看得到每個附件的名稱／大小／類別（唯讀；2026-10-06 t44-attach-views）；**不含 path**——開檔走 file_open（綁單據、出納端點串流）
+        "fileList": _file_list(r),
     }
+
+
+_IDX = "idx-"
+
+
+def _file_list(r) -> list:
+    """出納看的附件清單：不含 path。沒有 id 的舊筆合成 `idx-<在原陣列的位置>`（`file_entries` 的 id 會退回 path ⇒ 不能直接用）。"""
+    from helpers.approval_queue import file_entries
+    out = []
+    for i, f in enumerate(_files(r["files_json"])):
+        if not isinstance(f, dict):
+            continue
+        got = file_entries(json.dumps([f]), "other")
+        if not got:
+            continue
+        e = {k: v for k, v in got[0].items() if k != "path"}
+        e["id"] = str(f.get("id")) if f.get("id") else _IDX + str(i)
+        out.append(e)
+    return out
+
+
+def _pick(files, file_id):
+    """`file_id` 對應的那一筆：先比 id；沒有 id 的舊筆用合成的 `idx-<位置>`。"""
+    from helpers.uploads import pick_file
+    hit = pick_file(files, file_id)
+    if hit is not None:
+        return hit
+    fid = str(file_id)
+    if fid.startswith(_IDX) and fid[len(_IDX):].isdigit():
+        i = int(fid[len(_IDX):])
+        if 0 <= i < len(files) and isinstance(files[i], dict) and not files[i].get("id"):
+            return files[i]
+    return None
 
 
 def _payee_username(r) -> str:
@@ -90,6 +125,28 @@ class _Payables:
             raise LookupError("找不到這筆申請")
         return {"payeeType": _col(r, "payee_type") or "", "payeeName": _col(r, "payee_name") or r["payer_name"] or "",
                 "payeeUsername": _payee_username(r), "bank": _col(r, "payee_bank") or "", "account": _col(r, "payee_account") or ""}
+
+    @staticmethod
+    def file_open(conn, key, file_id):
+        """出納開待付款申請的附件（唯讀）：只認「還在出納待付款清單上」的那一筆（已核准、未登錄付款、可付款類型），檔案 id 必須在那一筆
+        自己的 files_json、路徑必須屬於這張單據的資料夾（與附件目錄 `open()` 同一道綁定）。回 `OpenedFile`；任一不符 ⇒ LookupError。"""
+        from helpers.uploads import opened_upload_file
+        from modules.case.attachments import _path_bound_to_doc
+        try:
+            exp_id = int(key)
+        except (TypeError, ValueError):
+            raise LookupError("找不到這筆申請")
+        r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=? AND status = '已核准' AND COALESCE(paid_date, '') = '' AND "
+                         + _EF.payable_sql(), (exp_id,)).fetchone()
+        if r is None:
+            raise LookupError("找不到這筆申請")
+        entry = _pick(_files(r["files_json"]), file_id)
+        if entry is None or not _path_bound_to_doc(conn, "extra_expense", exp_id, entry):
+            raise LookupError("找不到這個檔案")
+        opened = opened_upload_file(entry)
+        if opened is None:
+            raise LookupError("找不到這個檔案")
+        return opened
 
     @staticmethod
     def pending(conn) -> list:

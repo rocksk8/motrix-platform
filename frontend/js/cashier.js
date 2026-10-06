@@ -61,6 +61,7 @@ function cashierApp() {
     payVoucherNote:    '',
     payVoucherBankAcctCode: '',
     payVoucherSaving:  false,
+    payableFileErr:    {},          // 待付款申請附件開啟失敗的行內訊息（鍵＝來源:key）；不用 alert（阻斷對話框）
     payLinks:          null,    // R12：個人外包人員 ↔ 勞報單 { required, providerAvailable, lines:[{id,name,amount,payslipNo,candidates,error,ok}], canPay }
     payLinksError:     '',
 
@@ -419,6 +420,40 @@ function cashierApp() {
         else { let m = ''; try { m = (await r.json()).detail } catch (e) {}; f.err = m || ('失敗（' + r.status + '）') }
       } catch (e) { f.err = '失敗：' + e.message }
       f.saving = false
+    },
+
+    fileSizeText(n) {
+      n = Number(n) || 0
+      if (n < 1024) return n + ' B'
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB'
+      return (n / 1024 / 1024).toFixed(1) + ' MB'
+    },
+
+    // 待付款申請的附件（唯讀）：出納端點串流（不經案件權限）；圖片／PDF 頁內預覽，HEIC 只給下載
+    async openPayableFile(it, file) {
+      const fetchBlob = async (x) => {
+        const r = await fetch('/api/cashier/pending-payables/' + encodeURIComponent(it.source) + '/' + encodeURIComponent(it.key) +
+          '/files/' + encodeURIComponent(x.id), { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        return r.arrayBuffer()
+      }
+      const ek = it.source + ':' + it.key
+      this.payableFileErr = { ...this.payableFileErr, [ek]: '' }
+      try {
+        if (file.kind === 'heic') {
+          const url = URL.createObjectURL(new Blob([await fetchBlob(file)], { type: 'application/octet-stream' }))
+          const a = document.createElement('a')
+          a.href = url; a.download = file.name || 'download'
+          document.body.appendChild(a); a.click(); a.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 10000)
+          return
+        }
+        const P = window.MotrixFilePreview
+        const list = (it.fileList || []).filter(f => f.kind !== 'heic')
+        const items = list.map(f => P.withMime({ id: f.id, filename: f.name, size: f.size }))
+        await P.open({ items, index: Math.max(0, list.findIndex(f => f.id === file.id)), fetchBlob,
+          meta: (x) => P.fileSize(x.size) || '' })
+      } catch (e) { this.payableFileErr = { ...this.payableFileErr, [ek]: '開啟檔案失敗：' + e.message } }
     },
 
     // 勞報單簽回檔：頁內預覽（共用元件 static/file-preview.js），下方保留「另開新分頁」（出納要看大圖或並排比對時用）
