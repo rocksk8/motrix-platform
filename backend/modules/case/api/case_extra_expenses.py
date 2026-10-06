@@ -1035,6 +1035,18 @@ def _guard_files_editable(row, kind=None):
                  "新附件會在簽核通過後一併生效")
 
 
+#: 附件可增刪的狀態（第44班使用者裁示）：草稿／待審核（含簽核中）／已駁回。核准後上鎖（只剩發票補上傳）；作廢保留檔案不可動。
+FILES_MUTABLE_STATUSES = ("草稿", "待審核", "簽核中", "已駁回")
+
+
+def _guard_files_mutation(row, user: dict, kind=None):
+    """上傳／刪除附件的權限＋狀態：只有申請人本人或管理員能動；簽核人（非申請人）唯讀。
+    狀態規則同 `_guard_files_editable`（核准後只放行發票補上傳，由呼叫端另查出納／填寫人）。"""
+    _guard_files_editable(row, kind)
+    if row["status"] in FILES_MUTABLE_STATUSES and not _can_modify(row, user):
+        raise HTTPException(403, "只有申請人本人或管理員可以新增或刪除附件（簽核人僅能檢視）")
+
+
 @router.post("/api/quotations/{quote_no}/extra-expenses/{exp_id}/files", status_code=201)
 async def upload_extra_expense_files(quote_no: str, exp_id: int,
                                      files: List[UploadFile] = File(...),
@@ -1049,7 +1061,7 @@ async def upload_extra_expense_files(quote_no: str, exp_id: int,
     try:
         _guard_case(conn, quote_no, user)
         row = _load(conn, quote_no, exp_id, user)
-        _guard_files_editable(row, kind)
+        _guard_files_mutation(row, user, kind)
         after_approval = row["status"] == "已核准"
         # 「或出納」與 PATCH …/dates 同構：上面 _guard_case 先擋 ⇒ 出納也必須看得到這個案件（純出納＝404）。
         # 2026-09-28 00:58 使用者裁示維持現狀（CORE-SPEC 請款流程），不另開出納補發票的路。
@@ -1090,7 +1102,7 @@ def delete_extra_expense_file(quote_no: str, exp_id: int, file_id: str,
     try:
         _guard_case(conn, quote_no, user)
         row = _load(conn, quote_no, exp_id, user)
-        _guard_files_editable(row)
+        _guard_files_mutation(row, user)
         remaining = delete_document_file(
             "case_extra_expense", f"{quote_no}_{exp_id}", _files_of(row), file_id)
         conn.execute(

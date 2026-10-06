@@ -33,7 +33,8 @@ _ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.pdf'}
 #: 個別單據類型另外放行的副檔名（key＝呼叫端傳的 `subfolder`，不含 demo 前綴）。
 #: 傳票附件（2026-09-30 使用者裁示）：Word／Excel 也能夾帶；exe 等其他格式照舊擋。大小上限沿用 `_MAX_FILE_SIZE`。
 #: 函式簽章不動（L1 介面快照不變）：放行範圍由這張表決定，不是讓每個呼叫端自己傳白名單。
-_EXTRA_EXTS_BY_SUBFOLDER = {'voucher_attachments': {'.docx', '.xlsx', '.doc', '.xls'}}
+_EXTRA_EXTS_BY_SUBFOLDER = {'voucher_attachments': {'.docx', '.xlsx', '.doc', '.xls'},
+                            'case_extra_expense': {'.heic', '.heif'}}      # iPhone 原檔（第44班方案 A：收原檔、檢視＝下載）
 _MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB／檔
 #: 依資料夾（`subfolder`，不含 demo 前綴）另訂的數量／總量上限（2026-10-07 使用者裁示：支出申請每張單據最多 10 個附件、一次送出合計 50MB；單檔 20MB 沿用 `_MAX_FILE_SIZE`）。
 #: 沒列在這張表的資料夾＝只有單檔上限（行為不變）。`max_files`＝「每張單據」累計上限（呼叫端要傳 `existing_count`＝這張單據已有幾個）；
@@ -176,7 +177,7 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
     if max_files and int(existing_count or 0) + len(files) > max_files:
         raise HTTPException(400, f"每張單據最多 {max_files} 個附件（目前已有 {int(existing_count or 0)} 個，這次要加 {len(files)} 個）")
     allowed = _ALLOWED_EXTS | _EXTRA_EXTS_BY_SUBFOLDER.get(subfolder, set())
-    allowed_label = 'jpg/png/pdf' + ('/docx/xlsx/doc/xls' if allowed != _ALLOWED_EXTS else '')
+    allowed_label = 'jpg/png/pdf' + ''.join('/' + e[1:] for e in sorted(allowed - _ALLOWED_EXTS))
     subfolder = _effective_subfolder(subfolder)
     save_dir = _safe_save_dir(subfolder, doc_no)
 

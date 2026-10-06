@@ -200,4 +200,6 @@ def serve_upload(
         _authorize_read(_require_user(authorization), rel)
     if not os.path.isfile(full):
         raise HTTPException(404, _NOT_FOUND)
+    if os.path.splitext(full)[1].lower() in ('.heic', '.heif'):      # HEIC 瀏覽器多半不能預覽 ⇒ 一律當下載（第44班）
+        return FileResponse(full, filename=os.path.basename(full), content_disposition_type='attachment')
     return FileResponse(full)

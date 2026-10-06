@@ -261,7 +261,7 @@
         <div class="pr-card">
           <div class="pr-hint" x-show="mineLoaded && !mine.length">還沒有申請</div>
           <table class="pr-table" x-show="mine.length">
-            <thead><tr><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>付款日</th><th>單據</th><th></th></tr></thead>
+            <thead><tr><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>付款日</th><th>單據</th><th>附件</th><th></th></tr></thead>
             <tbody>
               <template x-for="e in mine" :key="e.id">
                 <tr :data-payreq-row="e.id" :data-status="e.status">
@@ -278,6 +278,27 @@
                       <div :data-doc-actions="e.id" style="display:flex;gap:4px;flex-wrap:wrap">
                         <button class="btn btn-ghost btn-sm" :data-doc-html="e.id" :disabled="busy" @click="openDoc(e, 'html')">預覽單據</button>
                         <button class="btn btn-ghost btn-sm" :data-doc-pdf="e.id" :disabled="busy" @click="openDoc(e, 'pdf')">PDF</button>
+                      </div>
+                    </template>
+                  </td>
+                  <td :data-attach-cell="e.id" style="min-width:190px;font-size:12px">
+                    <template x-for="f in (e.files || [])" :key="f.id">
+                      <div :data-attach-file="f.id" style="display:flex;gap:6px;align-items:center">
+                        <a href="#" :data-attach-dl="f.id" @click.prevent="downloadFile(f)" x-text="f.filename || f.id"></a>
+                        <button class="btn btn-ghost btn-sm" :data-attach-del="f.id" x-show="canEditFiles(e)" :disabled="busy" @click="delFile(e, f)">刪除</button>
+                      </div>
+                    </template>
+                    <div class="pr-hint" x-show="!(e.files || []).length">無附件</div>
+                    <template x-if="canEditFiles(e) && mineP[e.id]">
+                      <div :data-attach-add-form="e.id" style="margin-top:4px">
+                        <input type="file" multiple :accept="mineP[e.id].accept()" :data-attach-input="e.id" style="font-size:11px"
+                               @change="mineP[e.id].add($event.target.files); $event.target.value = ''">
+                        <template x-for="(it, i) in mineP[e.id].files" :key="it.id">
+                          <div style="display:flex;gap:6px"><span x-text="it.file.name + '（' + AttachPicker.fmtSize(it.file.size) + '）'"></span>
+                            <button class="btn btn-ghost btn-sm" :disabled="busy" @click="mineP[e.id].remove(i)">移除</button></div>
+                        </template>
+                        <div class="pr-err" x-show="mineP[e.id].err" x-text="mineP[e.id].err"></div>
+                        <button class="btn btn-secondary btn-sm" :data-attach-add="e.id" :disabled="busy || !mineP[e.id].count()" @click="addFiles(e)">加入附件</button>
                       </div>
                     </template>
                   </td>
@@ -316,7 +337,7 @@
         prItems: [], prSel: {}, prReasons: {}, linkedIds: [], lineTick: 0,      // 32-S5：請購／採購單「從案件品項帶入」
         form: blank(),
         pkOther: null, pkInv: null, _simple: null,        // 附件挑選器（累加、可移除；第44班）：附件／發票兩個框，數量與合計大小一起算
-        mine: [], mineLoaded: false, mineErr: '', mineMsg: '', invoiceDraft: {}, invoiceNoDraft: {},
+        mine: [], mineP: {}, mineLoaded: false, mineErr: '', mineMsg: '', invoiceDraft: {}, invoiceNoDraft: {},
 
         init() {
           var self = this
@@ -392,6 +413,7 @@
 
         async _upload(no, id, files, kind) {
           if (!files || !files.length) return
+          no = no || '-'                                    // 無案件單據＝哨兵路徑段「-」
           var fd = new FormData()
           files.forEach(function (f) { fd.append('files', f) })
           fd.append('kind', kind)
@@ -400,6 +422,7 @@
         },
         // 兩個挑選器各上傳一次；成功就清空該挑選器 ⇒ 失敗重按不會把已上傳的檔再傳一次（不重複附件）
         async _uploadPickers(no, id) {
+          await Promise.all([this.pkOther.ready(), this.pkInv.ready()])      // HEIC 盡力轉檔完成後再傳
           if (this.pkOther.count()) { await this._upload(no, id, this.pkOther.raw(), 'other'); this.pkOther.clear() }
           if (this.pkInv.count()) { await this._upload(no, id, this.pkInv.raw(), 'invoice'); this.pkInv.clear() }
         },
@@ -542,8 +565,48 @@
         async loadMine() {
           var r = await fetch('/api/extra-expenses/mine', { headers: this._h() })
           this.mine = r.ok ? await r.json() : []
+          var MAXF = 10, P = {}
+          this.mine.forEach(function (e) { P[e.id] = AttachPicker.create({ maxFiles: Math.max(0, MAXF - (e.files || []).length) }) })
+          this.mineP = P                                    // 每列一個挑選器；名額＝10 − 已有幾個（伺服器端另擋）
           this.mineErr = r.ok ? '' : ('讀取失敗（HTTP ' + r.status + '）')
           this.mineLoaded = true
+        },
+        // 申請人可增刪附件的狀態（與後端 FILES_MUTABLE_STATUSES 同；核准後只剩「補發票」、作廢不可動）
+        canEditFiles(e) { return ['草稿', '待審核', '簽核中', '已駁回'].indexOf(e.status) >= 0 },
+        // 附件要 Bearer ⇒ fetch → blob → 下載（HEIC 瀏覽器多半不能預覽，一律當下載；其餘檔案同樣下載，不開新分頁）
+        async downloadFile(f) {
+          this.mineErr = ''
+          try {
+            var r = await fetch('/api/uploads/' + String(f.path || '').split('/').map(encodeURIComponent).join('/'), { headers: this._h() })
+            if (!r.ok) throw new Error((await this._json(r)).detail || ('下載失敗（HTTP ' + r.status + '）'))
+            var url = URL.createObjectURL(await r.blob()), a = document.createElement('a')
+            a.href = url; a.download = f.filename || 'file'; document.body.appendChild(a); a.click(); a.remove()
+            setTimeout(function () { URL.revokeObjectURL(url) }, 60000)
+          } catch (err) { this.mineErr = err.message }
+        },
+        async addFiles(e) {
+          this.mineErr = ''; this.mineMsg = ''
+          var pk = this.mineP[e.id]
+          if (!pk || !pk.count()) return
+          this.busy = true
+          try {
+            await pk.ready()
+            await this._upload(e.quoteNo, e.id, pk.raw(), 'other')
+            this.mineMsg = '已加入附件：' + (e.docCode || (e.quoteNo + ' #' + e.id))
+            await this.loadMine()
+          } catch (x) { this.mineErr = x.message }
+          finally { this.busy = false }
+        },
+        async delFile(e, f) {
+          this.mineErr = ''; this.mineMsg = ''
+          this.busy = true
+          try {
+            var r = await fetch('/api/quotations/' + encodeURIComponent(e.quoteNo || '-') + '/extra-expenses/' + e.id + '/files/' + encodeURIComponent(f.id), { method: 'DELETE', headers: this._h() })
+            if (!r.ok) throw new Error((await this._json(r)).detail || ('刪除失敗（HTTP ' + r.status + '）'))
+            this.mineMsg = '已刪除附件：' + (f.filename || f.id)
+            await this.loadMine()
+          } catch (x) { this.mineErr = x.message }
+          finally { this.busy = false }
         },
         async addInvoice(e) {
           this.mineErr = ''; this.mineMsg = ''

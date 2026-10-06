@@ -12,13 +12,29 @@
  */
 (function () {
   var MB = 1024 * 1024
-  var DEFAULTS = { maxFiles: 10, maxFileBytes: 20 * MB, maxTotalBytes: 50 * MB, exts: ['.jpg', '.jpeg', '.png', '.pdf'], peers: null }
+  var DEFAULTS = { maxFiles: 10, maxFileBytes: 20 * MB, maxTotalBytes: 50 * MB, exts: ['.jpg', '.jpeg', '.png', '.pdf', '.heic', '.heif'], peers: null }
   var seq = 0
 
   function extOf(name) { var m = /\.[^./\\]+$/.exec(String(name || '')); return m ? m[0].toLowerCase() : '' }
   function fmtSize(n) {
     n = Number(n) || 0
     return n >= MB ? (n / MB).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'
+  }
+  function isHeic(name) { var e = extOf(name); return e === '.heic' || e === '.heif' }
+  // HEIC（iPhone 原檔）：方案 A＝照收原檔；瀏覽器解得開（Safari）就盡力轉成 JPEG 再傳，解不開（Chrome 等）就原檔上傳、之後只能下載檢視。永不丟例外、不新增套件。
+  function heicToJpeg(file) {
+    return Promise.resolve().then(function () {
+      if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return null
+      return createImageBitmap(file).then(function (bmp) {
+        var c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height
+        c.getContext('2d').drawImage(bmp, 0, 0)
+        try { bmp.close() } catch (e) { /* ignore */ }
+        return new Promise(function (res) { c.toBlob(res, 'image/jpeg', 0.9) })
+      }).then(function (blob) {
+        if (!blob || !blob.size) return null
+        return new File([blob], String(file.name).replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg', lastModified: file.lastModified })
+      })
+    }).catch(function () { return null })
   }
   function isImage(name) { var e = extOf(name); return e === '.jpg' || e === '.jpeg' || e === '.png' }
 
@@ -27,6 +43,7 @@
     return {
       files: [],            // [{ id, file, url }]（url＝圖片縮圖用的 object URL）
       err: '',
+      _jobs: [],            // 進行中的 HEIC 轉檔（上傳前 await ready()）
       opts: o,
       count: function () { return this.files.length },
       totalBytes: function () { return this.files.reduce(function (s, x) { return s + (x.file.size || 0) }, 0) },
@@ -46,7 +63,16 @@
           if (self.groupBytes() + f.size > o.maxTotalBytes) { msgs.push('一次送出合計最多 ' + Math.round(o.maxTotalBytes / MB) + 'MB，「' + name + '」未加入'); return }
           var url = ''
           try { if (isImage(name) && window.URL && URL.createObjectURL) url = URL.createObjectURL(f) } catch (e) { url = '' }
-          self.files.push({ id: 'ap' + (++seq), file: f, url: url })
+          var item = { id: 'ap' + (++seq), file: f, url: url, converted: false }
+          self.files.push(item)
+          if (isHeic(name)) {
+            var job = heicToJpeg(f).then(function (jf) {
+              if (!jf || self.files.indexOf(item) < 0) return
+              item.file = jf; item.converted = true
+              if (jf.size > o.maxFileBytes) { item.file = f; item.converted = false }   // 轉出來反而超大 ⇒ 用原檔
+            })
+            self._jobs.push(job)
+          }
         })
         this.err = msgs.join('；')
         return this.files.length
@@ -62,9 +88,10 @@
         this.files = []
         this.err = ''
       },
+      ready: function () { var j = this._jobs; this._jobs = []; return Promise.all(j) },
       raw: function () { return this.files.map(function (x) { return x.file }) },
     }
   }
 
-  window.AttachPicker = { create: create, fmtSize: fmtSize, extOf: extOf }
+  window.AttachPicker = { create: create, fmtSize: fmtSize, extOf: extOf, isHeic: isHeic }
 })()
