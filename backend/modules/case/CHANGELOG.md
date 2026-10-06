@@ -1,5 +1,11 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-06（第 44 班：wip/t44-pr-to-po；採購單從請購單帶入）
+- 採購單明細可連到同案件**已核准**請購單的明細（`prDocCode`／`prLine`；`prQty` 請購量快照由伺服器寫入）：一張採購單可混合多張請購單，數量可部分（累計認領量 ≤ 請購量，寫鎖內驗證；草稿不佔量，送審與核准套用 `_apply_change` 時再驗）。`data.fromPr` 改可為單號清單，`pr_no` 由明細同步（`purchase_items.stamp_from_pr`）。
+- 新端點 `GET /api/quotations/{no}/purchase-requests/lines`（挑選器；案件可見；被金額遮蔽的請購單不列；無財務可視者不回 `unitCost`）。單價複製與「與請購單不同」標示在前端（`payment-request.html`）。
+- 認領量只計 `COUNTED_EXTRA_STATUSES` 的採購單：作廢、駁回、退回釋放。已被認領的請購單作廢 ⇒ 409；已核准請購單的變更申請不得刪除／改品名／把數量改到低於已認領量 ⇒ 409（送審與核准套用各驗一次）。
+- 測試：`modules/case/tests/test_pr_to_po_2026_10_06.py`（含突變檢查）。
+
 ## 1.0.149 — 2026-10-06（train43 整合：wip/t43-phase2-events＋wip/t44-fin-fixes；階段 2 對帳失敗會重試）；併入 r2（提醒信記號政策）；併入 wip/t44-settle-terms（字樣）；併入 wip/t43-settle-tax（精算全含稅＋稅額）；稽核修正（多列單據稅額只計一次）；併入 wip/t43-finance-tab（財務分頁外包總成本）；＋wip/t43-shipped-qty（已出貨數量）（端點加模組檢查）（已併入最新 train43-int）（閘門修正已併入）
 - 新 `item_shipped.py`：每個報價品項的 訂購／已出貨／占用中＝材料申請出貨（`shipping.material_shipped` 經叫料列的 `quoteItemId`）＋報價帶入列（`shipping.quote_item_shipped`）；沒有可歸屬紀錄 ⇒ `attributed=False`（畫面「—」）。新端點 `GET /api/quotations/{no}/item-shipped`（案件可見即可；只有數量）；新提供者 `case.shipped_summary`（IP-SH5）。
 - 精算頁（`settlement.html`）原始報價區新增「已出貨/數量」欄；案件頁出貨單清單新增「已累計出貨」欄。權限與遮蔽沿用原頁（精算頁本來就需財務檢視）。
