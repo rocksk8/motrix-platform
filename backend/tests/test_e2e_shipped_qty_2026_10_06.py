@@ -45,7 +45,8 @@ def test_import_from_quote_stamps_quote_item_id_and_the_list_shows_cumulative(sq
     mine = _note(client, h, [])
     pg, errors = _page(live_server, new_context, "%s/pages/case-management.html?q=%s&tab=shipping" % (live_server, Q))
     pg.wait_for_function("() => { const d = %s; return !!(d && d.selected && d.selected.quote_no === '%s' && d.shippingNotes && d.shippingNotes.length === 4) }" % (DATA_JS, Q), timeout=25000)
-    pg.wait_for_function("() => %s.itemShipped && %s.itemShipped.items && %s.itemShipped.items.q2 && %s.itemShipped.items.q2.attributed" % (DATA_JS, DATA_JS, DATA_JS, DATA_JS), timeout=15000)
+    # 頁面載入時**不**抓已出貨數量（案件頁請求清單有 golden）：只在開出貨單視窗時才抓
+    assert pg.evaluate("() => Object.keys(%s.itemShipped.items).length" % DATA_JS) == 0
     # 新增出貨單 → 從報價單匯入 → 存檔：資料庫帶 quoteItemId
     pg.evaluate("() => %s.openNewShippingNote()" % DATA_JS)
     pg.wait_for_function("() => %s.showShippingModal" % DATA_JS, timeout=8000)
