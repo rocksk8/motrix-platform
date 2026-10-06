@@ -303,3 +303,24 @@ def test_saving_the_taxed_marker_twice_is_stable(W):
         _put_settlement({"status": "draft", "items": [], "offsets": [], "summary": {"dispatchBasis": "taxed"}})
         t = _get(c, h)["totals"]
         assert (t["dispatchBasis"], t["dispatchTotal"], t["taxExpense"]["exact"]) == ("taxed", 12500, 500)
+
+
+def test_dispatch_entries_clamp_tax_and_fall_back_when_the_provider_has_no_grand_total(W, monkeypatch):
+    """稽核 a4 U4：切換日後的應計派發列，提供者沒給 grandTotal ⇒ 稅額 0、金額＝未稅＋人員（不得變負、不得少算成本）；grandTotal 小於未稅＋人員 ⇒ 稅額夾 0。"""
+    from core import registry
+    _dispatch(10000, 2000)                                                  # 派發日 2026-10-01（≥ 切換日）
+    real = registry.single_provider
+    rows = {"d": {"id": 1, "approvalStatus": "", "vendorName": "甲", "totalAmount": 100, "personnelTotal": 20}}
+    monkeypatch.setattr(registry, "single_provider", lambda name: (lambda r: dict(rows["d"])) if name == "dispatch.row" else real(name))
+    cn = db.get_db()
+    try:
+        es = [e for e in R.dispatch_entries(cn, "accrual") if e["quoteNo"] == NO]
+        assert [(e["amount"], e["tax"], e["taxKind"]) for e in es] == [(120.0, 0.0, "exact")], es          # 沒有 grandTotal
+        rows["d"]["grandTotal"] = 50                                                                        # 含稅合計 < 未稅＋人員（壞資料）
+        es = [e for e in R.dispatch_entries(cn, "accrual") if e["quoteNo"] == NO]
+        assert [(e["amount"], e["tax"]) for e in es] == [(120.0, 0.0)], es
+        rows["d"]["grandTotal"] = 126                                                                       # 正對照：正常含稅合計 ⇒ 稅 6、金額 126
+        es = [e for e in R.dispatch_entries(cn, "accrual") if e["quoteNo"] == NO]
+        assert [(e["amount"], e["tax"]) for e in es] == [(126.0, 6.0)], es
+    finally:
+        cn.close()

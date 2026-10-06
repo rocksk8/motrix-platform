@@ -24,6 +24,7 @@
 - 與總帳差異（`ledger_diff`）：應計口徑下切換日後承攬商成本含稅、總帳稅額記進項稅額 1268，差額改進 `tax` 分桶，避免 residual 暴增。
 - 稅額補強（稽核 a4）：多列單據（採購單／費用單據）的稅額只放第一列、其餘列視為已涵蓋，不再被重複推估或掉進「未拆稅」；沒連到品項也沒稅額的採購單列算「推估」；承攬商稅額＝max(0, 含稅合計−未稅−人員)，提供者沒給含稅合計時稅額 0。營運報表每列稅額四捨五入到元、月／年合計是未進位加總後再進位，**逐列加總與月合計可能差 1 元**（與金額欄同一慣例）。
 - **案件管理「財務」分頁的外包總成本跟營運報表同一條切換規則（使用者 2026-10-06；上線備註）**：`case-management-dispatch.js` 的 `dispatchTotalCost()` 對派發日（`dispatchDate`）≥ 2026-10-01 的派發含稅計入（未稅承攬費＋稅額＋外包人員），之前的派發照舊未稅（稅額不計成本，並另註）；已完結案顯示的仍是存檔值。新增 `dispatchTotalCostPretax()`／`dispatchTaxExcludedCost()`；「過期」比對依完結標記：pretax 比未稅、其餘比含稅。切換日要與 `recognition.DISPATCH_TAXED_FROM` 同值。
+- `recognition.dispatch_entries`：派發提供者沒有 `grandTotal` 鍵時不再 KeyError（視為 0 ⇒ 稅額 0、金額＝未稅＋人員）；稅額夾 0 並有測試（含突變檢查）。
 
 ## 1.0.148 — 2026-10-05（wip/t42-fix-caserecord）：財務角色可在任何案件登錄／修改收款〔train_number：1.0.147 → 1.0.148〕
 - `PATCH /api/quotations/{no}/case-record`：財務角色（與 superadmin）不是案件成員時，舊整包格式只在「除款項外與資料庫完全相同」時通過（款項照存），否則 403（不靜默丟掉）；分段格式仍只放行 `payment` 分段；業務（非成員）仍 403。`PATCH …/payment/{idx}` 本來就沒有擁有者限制。測試：`test_finance_caserecord_foreign_case_2026_10_05.py`。
