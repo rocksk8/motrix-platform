@@ -38,13 +38,10 @@ def _mail_link(quote_no) -> str:
 
 def _notice_in_app(quote_no, requester, *, type_="bonus_approved", message=None) -> None:
     """站內通知（含單號＋連結）。`type` 以 `_approved` 結尾 ⇒ L1 `_notify` 同一 (type, ref_id, 收件人) 只留一列；金額不放。
-    `link` 參數由 t44-inapp-bell 加入；L1 還沒有（只有本分支時）⇒ 退回不帶連結。"""
+    `link` 參數由 t44-inapp-bell 提供（同一班整合）。"""
     from helpers.audit import _notify
     msg = message or "%s 已核准，等待出納發放" % ident(quote_no)
-    try:
-        _notify(requester, type_, quote_no, quote_no, msg, link=_page_link(quote_no))
-    except TypeError:
-        _notify(requester, type_, quote_no, quote_no, msg)
+    _notify(requester, type_, quote_no, quote_no, msg, link=_page_link(quote_no))
 
 
 def fire_approved(quote_no, customer, requester, *, approver="") -> bool:

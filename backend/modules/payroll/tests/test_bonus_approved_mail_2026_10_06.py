@@ -95,8 +95,7 @@ def test_requester_gets_an_in_app_notice_with_quote_no_and_link(client, people, 
     row = rows[0]
     assert row["ref_id"] == "MQ-BA-004" and "MQ-BA-004" in row["message"] and "已核准" in row["message"]
     assert "NT$" not in row["message"] and "元" not in row["message"]
-    if "link" in row:                                                  # link 欄由 t44-inapp-bell 加入；整合後必有
-        assert row["link"] == "bonus.html?q=MQ-BA-004"
+    assert row["link"] == "bonus.html?q=MQ-BA-004"                     # link 欄／參數由 t44-inapp-bell 提供
     assert not _bell_rows("bc_sa2")                                    # 簽核的人自己不收
 
 
