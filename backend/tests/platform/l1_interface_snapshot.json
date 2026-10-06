@@ -237,6 +237,10 @@
    "no_mail_day": "def(d, data=…)",
    "previous_working_day": "def(d, data=…, limit=…)"
   },
+  "helper:calendar_sync": {
+   "MAX_CALLS_PER_RUN": "const",
+   "sync_dated_events": "def(code, current, today=…, max_calls=…)"
+  },
   "helper:case_access": {
    "CASE_ACCESS": "const",
    "CASE_DENIAL_AUDIT": "const",

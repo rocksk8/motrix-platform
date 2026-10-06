@@ -33,6 +33,10 @@ from helpers.email_notify import (            # noqa: E402
 import logging as _log
 _logger = _log.getLogger(__name__)
 
+# 頂層 import：提醒信的兩個信件類型（payable_due_soon／today）在 import 時登記；原本等到第一次每日檢查才 import，
+# 在那之前通知矩陣（與收件設定頁）看不到這兩列、也配不到行事曆「付款待辦」。
+from modules.case import payable_reminders  # noqa: E402
+
 
 def _check_case_stage_deadline() -> None:
     """Notify assignees of case execution-progress stages (caseRecord.stages, stored in
@@ -345,8 +349,7 @@ def run_daily_checks(mode: str = "daily") -> None:
     _check_case_stage_deadline()
     _check_case_project_timeline_deadline()
     _check_project_deadline()
-    from modules.case import payable_reminders          # 預定付款日提醒信（3 天前＋當天；2026-10-05）
-    payable_reminders.run()
+    payable_reminders.run()                              # 預定付款日提醒信（3 天前＋當天；2026-10-05）
     for fn in (_sync_warranty_calendar, _sync_project_end_calendar):      # 階段 2；各自吞例外，互不影響
         try:
             fn()
