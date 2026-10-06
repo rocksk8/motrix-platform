@@ -74,6 +74,7 @@
     "dev_cases",
     "dev_logs",
     "divisions",
+    "duty_roles",
     "geocode_usage",
     "invoice_vouchers",
     "item_reads",
@@ -83,6 +84,7 @@
     "parts",
     "payment_requests",
     "payslips",
+    "permission_changes",
     "project_logs",
     "project_stages",
     "projects",
@@ -98,6 +100,8 @@
     "tender_watches",
     "tenders",
     "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "vendor_contractors",
     "voucher_attachments",
@@ -210,6 +214,7 @@
     "daily_task_edit_log",
     "departments",
     "dev_logs",
+    "duty_roles",
     "edit_presence",
     "geocode_cache",
     "geocode_usage",
@@ -220,6 +225,7 @@
     "notifications",
     "payslip_seq",
     "payslips",
+    "permission_changes",
     "project_logs",
     "project_stages",
     "purchase_suggestion_status",
@@ -229,7 +235,9 @@
     "tender_watches",
     "ui_definitions",
     "user_activity_daily",
+    "user_duty_roles",
     "user_list_prefs",
+    "user_perm_subtracts",
     "user_request_log",
     "vendor_contractors",
     "voucher_attachments",
@@ -335,6 +343,7 @@
     "router:custom_records",
     "router:customers",
     "router:definitions",
+    "router:duty_roles",
     "router:item_reads",
     "router:legal_params",
     "router:licensing",
@@ -516,6 +525,7 @@
    "dynamic_sql": false,
    "imports": [
     "core:db",
+    "helper:duty_roles",
     "helper:module_registry",
     "plat:paths"
    ],
@@ -551,6 +561,31 @@
    ],
    "kind": "helper",
    "path": "backend/helpers/build_info.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:business_days": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "helper",
+   "path": "backend/helpers/business_days.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:calendar_sync": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:google_calendar",
+    "helper:settings"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/calendar_sync.py",
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
@@ -858,6 +893,30 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:duty_roles": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:auth",
+    "helper:module_registry"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/duty_roles.py",
+   "tables_ddl": [],
+   "tables_named": [
+    "audit_log",
+    "module_versions"
+   ],
+   "tables_r": [
+    "users"
+   ],
+   "tables_w": [
+    "duty_roles",
+    "permission_changes",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
+  },
   "helper:edit_log": {
    "api_prefixes": [],
    "dynamic_sql": true,
@@ -879,6 +938,7 @@
     "core:db",
     "helper:mail_types",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:settings",
     "plat:paths"
    ],
@@ -1121,6 +1181,19 @@
    "imports": [],
    "kind": "helper",
    "path": "backend/helpers/notification_prefs.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:notify_matrix": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:mail_types"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/notify_matrix.py",
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
@@ -1793,6 +1866,7 @@
     "/api/customers/{}",
     "/api/inventory/stock-items",
     "/api/parts",
+    "/api/quotations/{}/item-shipped",
     "/api/shipping-notes",
     "/api/shipping-notes/material-shippable",
     "/api/shipping-notes/{}",
@@ -1811,6 +1885,7 @@
     "/api/customers",
     "/api/inventory",
     "/api/parts",
+    "/api/quotations",
     "/api/shipping-notes"
    ],
    "api_unmatched": [],
@@ -1818,6 +1893,7 @@
    "kind": "js",
    "path": "frontend/js/case-management-shipping.js",
    "routers_called": [
+    "mod:case/api/material_approvals",
     "mod:supply/api/inventory",
     "mod:supply/api/shipping_notes",
     "router:customers",
@@ -2703,6 +2779,7 @@
     "router:custom_records",
     "router:customers",
     "router:definitions",
+    "router:duty_roles",
     "router:item_reads",
     "router:legal_params",
     "router:licensing",
@@ -2841,6 +2918,7 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:settings",
     "helper:tiered_approval"
@@ -2896,8 +2974,12 @@
    "tables_w_transitive": [
     "account_items",
     "audit_log",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:accounting/api/accounting_export": {
@@ -2911,11 +2993,13 @@
     "helper:auth",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:part_catalog",
     "helper:settings",
     "helper:tiered_approval",
@@ -3004,9 +3088,13 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "system_settings",
-    "t100_export_confirmations"
+    "t100_export_confirmations",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:accounting/api/ledger_annotations": {
@@ -3017,6 +3105,7 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:settings",
     "helper:tiered_approval",
@@ -3082,10 +3171,14 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "gl_settings",
     "gl_source_annotations",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:accounting/api/ledger_category_map": {
@@ -3096,6 +3189,7 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:settings",
     "helper:tiered_approval",
@@ -3165,13 +3259,17 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "expense_categories",
     "gl_account_meta",
     "gl_account_roles",
     "gl_category_map",
     "gl_fs_lines",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:accounting/api/ledger_closing": {
@@ -3184,10 +3282,12 @@
     "helper:auth",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:settings",
     "helper:tiered_approval",
     "helper:xlsx_out",
@@ -3283,6 +3383,7 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "gl_account_meta",
     "gl_account_roles",
     "gl_fiscal_years",
@@ -3292,7 +3393,10 @@
     "gl_settings",
     "gl_statement_snapshots",
     "notifications",
+    "permission_changes",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "vouchers_all"
    ]
   },
@@ -3308,12 +3412,14 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:edit_log",
     "helper:email_notify",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:row_access",
     "helper:settings",
     "helper:startup",
@@ -3421,6 +3527,7 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "expense_categories",
     "gl_account_meta",
     "gl_account_roles",
@@ -3439,8 +3546,11 @@
     "login_rate_limit",
     "module_versions",
     "notifications",
+    "permission_changes",
     "sessions",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "voucher_lines",
     "vouchers_all"
@@ -3454,6 +3564,7 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:settings",
     "helper:tiered_approval",
@@ -3580,6 +3691,7 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "gl_fiscal_years",
     "gl_opening_balances",
     "gl_opening_batches",
@@ -3588,7 +3700,10 @@
     "gl_periods",
     "gl_settings",
     "notifications",
+    "permission_changes",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "voucher_lines",
     "vouchers_all"
    ]
@@ -3601,6 +3716,7 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:settings",
     "helper:tiered_approval",
@@ -3697,6 +3813,7 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "gl_account_meta",
     "gl_account_roles",
     "gl_fiscal_years",
@@ -3705,7 +3822,10 @@
     "gl_periods",
     "gl_settings",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:accounting/api/ledger_requests": {
@@ -3717,10 +3837,12 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:settings",
     "helper:tiered_approval",
     "mod:accounting/ledger/cashflow",
@@ -3814,6 +3936,7 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "gl_account_meta",
     "gl_account_roles",
     "gl_action_requests",
@@ -3827,7 +3950,10 @@
     "gl_settings",
     "gl_statement_snapshots",
     "notifications",
+    "permission_changes",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "voucher_lines",
     "vouchers_all"
    ]
@@ -3840,6 +3966,7 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:settings",
     "helper:tiered_approval",
@@ -3918,12 +4045,16 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "gl_account_meta",
     "gl_account_roles",
     "gl_fs_lines",
     "gl_settings",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:accounting/api/ledger_statements": {
@@ -3933,6 +4064,7 @@
    "dynamic_sql": false,
    "helpers_transitive": [
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "mod:accounting/ledger/cashflow",
     "mod:accounting/ledger/equity",
@@ -4002,13 +4134,17 @@
    ],
    "tables_w": [],
    "tables_w_transitive": [
+    "duty_roles",
     "gl_account_meta",
     "gl_account_roles",
     "gl_fiscal_years",
     "gl_fs_lines",
     "gl_period_log",
     "gl_periods",
-    "gl_settings"
+    "gl_settings",
+    "permission_changes",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:accounting/api/ledger_tax": {
@@ -4023,12 +4159,14 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:edit_log",
     "helper:email_notify",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:row_access",
     "helper:settings",
     "helper:startup",
@@ -4143,6 +4281,7 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "expense_categories",
     "gl_account_meta",
     "gl_account_roles",
@@ -4163,8 +4302,11 @@
     "login_rate_limit",
     "module_versions",
     "notifications",
+    "permission_changes",
     "sessions",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "voucher_lines",
     "vouchers_all"
@@ -4277,11 +4419,13 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:edit_log",
     "helper:email_notify",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:row_access",
     "helper:settings",
     "helper:startup",
@@ -4474,6 +4618,7 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "gl_fiscal_years",
     "gl_period_log",
     "gl_periods",
@@ -4481,8 +4626,11 @@
     "login_rate_limit",
     "module_versions",
     "notifications",
+    "permission_changes",
     "sessions",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "voucher_attachments",
     "voucher_lines",
@@ -5129,6 +5277,7 @@
    "helpers_transitive": [
     "helper:auth",
     "helper:dates",
+    "helper:duty_roles",
     "helper:legal_params",
     "helper:module_registry",
     "helper:row_access",
@@ -5231,7 +5380,11 @@
    ],
    "tables_w": [],
    "tables_w_transitive": [
-    "system_settings"
+    "duty_roles",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:analytics/api/ledger_diff": {
@@ -5241,6 +5394,7 @@
    "dynamic_sql": false,
    "helpers_transitive": [
     "helper:auth",
+    "helper:duty_roles",
     "helper:financial_mask",
     "helper:module_registry",
     "helper:recognition_basis"
@@ -5273,7 +5427,12 @@
     "users"
    ],
    "tables_w": [],
-   "tables_w_transitive": []
+   "tables_w_transitive": [
+    "duty_roles",
+    "permission_changes",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
   },
   "mod:analytics/api/reports": {
    "api_prefixes": [
@@ -5297,6 +5456,7 @@
     "helper:dates",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:financial_mask",
     "helper:formula",
@@ -5304,6 +5464,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:row_access",
@@ -5341,67 +5502,67 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2453,
+     "line": 2488,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2467,
+     "line": 2502,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2503,
+     "line": 2538,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2622,
+     "line": 2657,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2683,
+     "line": 2718,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2751,
+     "line": 2786,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
      "func": "customer_history",
-     "line": 2785,
+     "line": 2820,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 3060,
+     "line": 3095,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3286,
+     "line": 3321,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3698,
+     "line": 3753,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 3882,
+     "line": 3937,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -5452,11 +5613,15 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "login_rate_limit",
     "module_versions",
     "notifications",
+    "permission_changes",
     "sessions",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ]
   },
@@ -5492,12 +5657,14 @@
     "helper:auth",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:google_calendar",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:settings",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -5554,43 +5721,43 @@
     },
     {
      "func": "get_payable_queue",
-     "line": 342,
+     "line": 345,
      "method": "GET",
      "path": "/api/cashier/payable-queue"
     },
     {
      "func": "get_receivable_queue",
-     "line": 353,
+     "line": 356,
      "method": "GET",
      "path": "/api/cashier/receivable-queue"
     },
     {
      "func": "get_payslip_queue",
-     "line": 375,
+     "line": 378,
      "method": "GET",
      "path": "/api/cashier/payslip-queue"
     },
     {
      "func": "get_bonus_queue",
-     "line": 395,
+     "line": 398,
      "method": "GET",
      "path": "/api/cashier/bonus-queue"
     },
     {
      "func": "get_execution_history",
-     "line": 454,
+     "line": 457,
      "method": "GET",
      "path": "/api/cashier/execution-history"
     },
     {
      "func": "export_execution_history",
-     "line": 469,
+     "line": 472,
      "method": "GET",
      "path": "/api/cashier/export"
     },
     {
      "func": "bank_reconcile",
-     "line": 678,
+     "line": 681,
      "method": "POST",
      "path": "/api/reports/bank-reconcile"
     }
@@ -5620,8 +5787,12 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:arap/api/invoice_vouchers": {
@@ -5634,6 +5805,7 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
     "helper:google_calendar",
@@ -5641,6 +5813,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -5776,9 +5949,13 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "invoice_vouchers",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:arap/api/payment_requests": {
@@ -5791,6 +5968,7 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
     "helper:google_calendar",
@@ -5798,6 +5976,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval"
@@ -5923,9 +6102,13 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
     "payment_requests",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:arap/attachments": {
@@ -6008,6 +6191,7 @@
     "mod:case/case_deadlines",
     "mod:case/expense_notify",
     "mod:case/gl_events",
+    "mod:case/item_shipped",
     "mod:case/material_approval",
     "mod:case/material_change",
     "mod:case/material_notify",
@@ -6038,10 +6222,12 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval"
@@ -6116,8 +6302,12 @@
    "tables_w_transitive": [
     "audit_log",
     "case_action_items",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:case/api/case_extra_expenses": {
@@ -6142,6 +6332,7 @@
     "helper:dates",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:expense_types",
     "helper:financial_mask",
@@ -6151,6 +6342,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:row_access",
@@ -6368,9 +6560,13 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "quotations",
-    "system_settings"
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:case/api/completion_notes": {
@@ -6386,11 +6582,13 @@
     "helper:company_setup",
     "helper:dates",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:privacy_notice",
     "helper:row_access",
     "helper:settings",
@@ -6539,11 +6737,15 @@
    "tables_w_transitive": [
     "audit_log",
     "completion_notes",
+    "duty_roles",
     "login_rate_limit",
     "module_versions",
     "notifications",
+    "permission_changes",
     "sessions",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ]
   },
@@ -6567,6 +6769,7 @@
     "helper:custom_modules",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:expense_types",
     "helper:formula",
@@ -6574,6 +6777,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:row_access",
     "helper:settings",
@@ -6639,8 +6843,12 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:case/api/material_approvals": {
@@ -6664,6 +6872,7 @@
     "helper:dates",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:expense_types",
     "helper:financial_mask",
@@ -6672,6 +6881,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:row_access",
@@ -6680,6 +6890,7 @@
     "helper:tiered_approval",
     "helper:uploads",
     "mod:case/expense_forms",
+    "mod:case/item_shipped",
     "mod:case/material_approval",
     "mod:case/material_coverage",
     "mod:case/material_guard",
@@ -6699,6 +6910,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:financial_mask",
+    "mod:case/item_shipped",
     "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/material_notify",
@@ -6714,9 +6926,15 @@
    "routes": [
     {
      "func": "get_approvals",
-     "line": 86,
+     "line": 88,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-order-approvals"
+    },
+    {
+     "func": "get_item_shipped",
+     "line": 103,
+     "method": "GET",
+     "path": "/api/quotations/{quote_no}/item-shipped"
     }
    ],
    "tables_ddl": [],
@@ -6763,9 +6981,13 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "quotations",
-    "system_settings"
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:case/api/material_changes": {
@@ -6789,6 +7011,7 @@
     "helper:dates",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:expense_types",
     "helper:financial_mask",
@@ -6797,6 +7020,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:row_access",
@@ -6899,9 +7123,13 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "quotations",
-    "system_settings"
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:case/api/material_links": {
@@ -6925,6 +7153,7 @@
     "helper:dates",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:expense_types",
     "helper:financial_mask",
@@ -6933,6 +7162,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:row_access",
@@ -7024,9 +7254,13 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "quotations",
-    "system_settings"
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:case/api/material_orders": {
@@ -7050,6 +7284,7 @@
     "helper:dates",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:expense_types",
     "helper:financial_mask",
@@ -7058,6 +7293,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:row_access",
@@ -7102,13 +7338,13 @@
     },
     {
      "func": "set_material_order_invoice_date",
-     "line": 196,
+     "line": 199,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/material-orders/{item_id}/invoice-date"
     },
     {
      "func": "get_material_orders",
-     "line": 237,
+     "line": 240,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/material-orders"
     }
@@ -7156,9 +7392,13 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "quotations",
-    "system_settings"
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:case/api/material_payments": {
@@ -7184,6 +7424,7 @@
     "helper:dates",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:expense_types",
     "helper:financial_mask",
@@ -7192,6 +7433,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:privacy_notice",
     "helper:recognition_basis",
@@ -7346,9 +7588,13 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "quotations",
-    "system_settings"
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:case/api/quotations": {
@@ -7365,6 +7611,8 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:business_days",
+    "helper:calendar_sync",
     "helper:case_access",
     "helper:case_roles",
     "helper:company_identity",
@@ -7378,6 +7626,7 @@
     "helper:dates",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
     "helper:expense_types",
@@ -7389,6 +7638,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:privacy_notice",
     "helper:recognition_basis",
@@ -7939,10 +8189,14 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "quotations",
     "quote_seq",
-    "system_settings"
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:case/api/settlement_actuals": {
@@ -7966,6 +8220,7 @@
     "helper:dates",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:expense_types",
     "helper:financial_mask",
@@ -7974,6 +8229,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:row_access",
@@ -8058,9 +8314,13 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "quotations",
-    "system_settings"
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:case/api/settlement_api": {
@@ -8084,6 +8344,7 @@
     "helper:dates",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:expense_types",
     "helper:financial_mask",
@@ -8092,6 +8353,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:recognition_basis",
     "helper:row_access",
@@ -8184,9 +8446,13 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "quotations",
-    "system_settings"
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:case/attachments": {
@@ -8225,6 +8491,7 @@
    "imports": [
     "core:db",
     "helper:audit",
+    "helper:calendar_sync",
     "helper:dates",
     "helper:email_notify",
     "helper:settings",
@@ -8343,6 +8610,24 @@
    "tables_named": [],
    "tables_r": [
     "case_extra_expenses"
+   ],
+   "tables_w": []
+  },
+  "mod:case/item_shipped": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:case/purchase_items",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/item_shipped.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "quotations"
    ],
    "tables_w": []
   },
@@ -8571,6 +8856,7 @@
    "dynamic_sql": false,
    "imports": [
     "core:db",
+    "helper:business_days",
     "helper:email_notify",
     "helper:mail_types",
     "helper:settings",
@@ -8596,6 +8882,7 @@
    "imports": [
     "mod:case/expense_forms",
     "mod:case/expense_notify",
+    "mod:case/payable_calendar",
     "mod:case/recognition"
    ],
    "kind": "mod",
@@ -8777,11 +9064,13 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:google_calendar",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval",
@@ -8956,8 +9245,12 @@
     "customers",
     "dev_cases",
     "dev_logs",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:crm/attachments": {
@@ -9008,13 +9301,17 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:calendar_sync",
     "helper:company_identity",
     "helper:company_setup",
     "helper:dates",
+    "helper:duty_roles",
     "helper:email_notify",
+    "helper:google_calendar",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:settings",
     "helper:tiered_approval",
     "helper:xlsx_out"
@@ -9023,6 +9320,7 @@
     "core:db",
     "helper:audit",
     "helper:auth",
+    "helper:calendar_sync",
     "helper:dates",
     "helper:email_notify",
     "helper:settings",
@@ -9097,10 +9395,13 @@
    ],
    "tables_r_transitive": [
     "approval_delegates",
+    "case_stages",
     "daily_tasks",
     "departments",
     "dev_cases",
     "divisions",
+    "invoice_vouchers",
+    "payment_requests",
     "projects",
     "quotations",
     "sessions",
@@ -9117,8 +9418,12 @@
     "daily_task_completions",
     "daily_task_edit_log",
     "daily_tasks",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:filehub/__init__": {
@@ -9147,6 +9452,7 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:row_access",
     "helper:settings",
@@ -9191,8 +9497,12 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:lodging/__init__": {
@@ -9221,6 +9531,7 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:settings",
     "helper:tiered_approval",
@@ -9271,9 +9582,13 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "lodging_catalog",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:lodging/api_records": {
@@ -9286,11 +9601,13 @@
     "helper:auth",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:geo",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:settings",
     "helper:tiered_approval",
     "helper:xlsx_out",
@@ -9397,6 +9714,7 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "geocode_cache",
     "geocode_usage",
     "lodging_catalog",
@@ -9404,7 +9722,10 @@
     "lodging_search_items",
     "lodging_searches",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:lodging/attribution": {
@@ -9491,11 +9812,13 @@
     "helper:auth",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:privacy_notice",
     "helper:settings",
     "helper:startup",
@@ -9633,12 +9956,16 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "login_rate_limit",
     "module_versions",
     "network_plans",
     "notifications",
+    "permission_changes",
     "sessions",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ]
   },
@@ -9709,6 +10036,7 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:settings",
     "helper:tiered_approval",
@@ -9787,9 +10115,13 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "system_settings",
-    "user_bank_accounts"
+    "user_bank_accounts",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:payroll/api/bonus": {
@@ -9802,12 +10134,14 @@
     "helper:auth",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:edit_log",
     "helper:email_notify",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:settings",
     "helper:tiered_approval",
     "mod:payroll/bonus",
@@ -10125,8 +10459,12 @@
     "bonus_groups",
     "bonus_item_people",
     "bonus_items",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:payroll/api/bonus_correction": {
@@ -10137,11 +10475,13 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:settings",
     "helper:tiered_approval",
     "mod:payroll/bonus_correction",
@@ -10261,8 +10601,12 @@
     "bonus_case_awards",
     "bonus_correction_log",
     "bonus_corrections",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:payroll/api/payslips": {
@@ -10277,12 +10621,14 @@
     "helper:auth",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:privacy_notice",
     "helper:settings",
     "helper:tiered_approval",
@@ -10442,10 +10788,14 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
     "payslip_seq",
     "payslips",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:payroll/attachments": {
@@ -10744,6 +11094,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:dates",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
     "helper:gl_status",
@@ -10752,6 +11103,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval",
@@ -10957,8 +11309,12 @@
     "audit_log",
     "contractor_dispatches",
     "contractor_payment_vouchers",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:subcontract/api/contractors": {
@@ -10971,10 +11327,12 @@
     "helper:auth",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:privacy_notice",
     "helper:settings",
     "helper:tiered_approval",
@@ -11090,8 +11448,12 @@
    "tables_w_transitive": [
     "audit_log",
     "contractors",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:subcontract/api/dispatch_approval": {
@@ -11103,10 +11465,12 @@
     "helper:approval_queue",
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:settings",
     "helper:tiered_approval",
     "mod:subcontract/dispatch_flow",
@@ -11203,8 +11567,12 @@
    "tables_w_transitive": [
     "audit_log",
     "contractor_dispatches",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:subcontract/api/remit_kinds": {
@@ -11214,6 +11582,7 @@
    "dynamic_sql": false,
    "helpers_transitive": [
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "mod:subcontract/remit_kinds"
    ],
@@ -11251,7 +11620,12 @@
     "users"
    ],
    "tables_w": [],
-   "tables_w_transitive": []
+   "tables_w_transitive": [
+    "duty_roles",
+    "permission_changes",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
   },
   "mod:subcontract/api/vendor_contractors": {
    "api_prefixes": [
@@ -11266,12 +11640,14 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:dates",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:gl_status",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:privacy_notice",
     "helper:settings",
     "helper:tiered_approval",
@@ -11493,8 +11869,12 @@
     "audit_log",
     "contractor_dispatches",
     "dispatch_file_delete_requests",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "vendor_contractors"
    ]
   },
@@ -11685,11 +12065,13 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:procurement",
     "helper:settings",
     "helper:tiered_approval"
@@ -11808,11 +12190,15 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "purchase_suggestion_status",
     "stock_batches",
     "stock_items",
-    "system_settings"
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:supply/api/shipping_notes": {
@@ -11827,12 +12213,14 @@
     "helper:case_access",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
     "helper:google_calendar",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:privacy_notice",
     "helper:row_access",
     "helper:settings",
@@ -12003,10 +12391,14 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "shipping_notes",
     "stock_items",
-    "system_settings"
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:supply/api/suppliers": {
@@ -12019,11 +12411,13 @@
     "helper:auth",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:privacy_notice",
     "helper:procurement",
     "helper:settings",
@@ -12108,9 +12502,13 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "suppliers",
-    "system_settings"
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:supply/attachments": {
@@ -12196,10 +12594,13 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:business_days",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:settings",
     "helper:tiered_approval",
     "mod:tender_radar/calendar_tw",
@@ -12322,18 +12723,24 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "system_settings",
     "tender_fetch_log",
     "tender_hits",
     "tender_watches",
-    "tenders"
+    "tenders",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "mod:tender_radar/calendar_tw": {
    "api_prefixes": [],
    "dynamic_sql": false,
-   "imports": [],
+   "imports": [
+    "helper:business_days"
+   ],
    "kind": "mod",
    "module_key": "tender_radar",
    "path": "backend/modules/tender_radar/calendar_tw.py",
@@ -13509,6 +13916,40 @@
    "tables_r": [],
    "tables_w": []
   },
+  "page:pages/duty-roles.html": {
+   "api_calls": [
+    "/api/duty-roles",
+    "/api/duty-roles/",
+    "/api/duty-roles/bindings",
+    "/api/duty-roles/changes",
+    "/api/duty-roles/subtracts",
+    "/api/duty-roles/subtracts/remove",
+    "/api/duty-roles/users",
+    "/api/system/branding/favicon"
+   ],
+   "api_prefixes": [
+    "/api/duty-roles",
+    "/api/system"
+   ],
+   "api_unmatched": [],
+   "imports": [
+    "js:static/auth-guard.js",
+    "js:static/notif.js",
+    "js:static/sidebar.js"
+   ],
+   "kind": "page",
+   "path": "frontend/pages/duty-roles.html",
+   "routers_called": [
+    "router:duty_roles",
+    "router:system"
+   ],
+   "routers_called_effective": [
+    "router:duty_roles",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "page:pages/expense-types.html": {
    "api_calls": [
     "/api/system/branding/favicon"
@@ -13931,11 +14372,13 @@
    "api_calls": [
     "/api/mail-types",
     "/api/mail-types/",
+    "/api/settings/google-calendar",
     "/api/system/branding/favicon",
     "/api/users"
    ],
    "api_prefixes": [
     "/api/mail-types",
+    "/api/settings",
     "/api/system",
     "/api/users"
    ],
@@ -14820,6 +15263,7 @@
     "/api/contractor-vouchers/remit-fee-total",
     "/api/custom-modules/finance/case/{}",
     "/api/quotations/{}/extra-expenses",
+    "/api/quotations/{}/item-shipped",
     "/api/quotations/{}/purchase-items",
     "/api/quotations/{}/settlement",
     "/api/quotations/{}/settlement-actuals/preview",
@@ -14845,6 +15289,7 @@
    "path": "frontend/pages/settlement.html",
    "routers_called": [
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/material_approvals",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
     "mod:subcontract/api/contractor_vouchers",
@@ -14854,6 +15299,7 @@
    ],
    "routers_called_effective": [
     "mod:case/api/case_extra_expenses",
+    "mod:case/api/material_approvals",
     "mod:case/api/settlement_actuals",
     "mod:case/api/settlement_api",
     "mod:subcontract/api/contractor_vouchers",
@@ -15370,6 +15816,7 @@
    "tables_r": [],
    "tables_w": [
     "audit_log",
+    "duty_roles",
     "module_schema_versions"
    ]
   },
@@ -15475,6 +15922,7 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:settings",
     "helper:tiered_approval"
@@ -15530,8 +15978,12 @@
    "tables_w_transitive": [
     "approval_delegates",
     "audit_log",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:approval_queue": {
@@ -15544,6 +15996,7 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:row_access",
     "helper:settings",
@@ -15610,8 +16063,12 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:attachments": {
@@ -15622,6 +16079,7 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:settings",
     "helper:tiered_approval",
@@ -15662,8 +16120,12 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:auth": {
@@ -15682,10 +16144,12 @@
     "helper:build_info",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:privacy_notice",
     "helper:settings",
     "helper:startup",
@@ -15963,11 +16427,15 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "login_rate_limit",
     "module_versions",
     "notifications",
+    "permission_changes",
     "sessions",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users",
     "webauthn_credentials"
    ]
@@ -15980,6 +16448,7 @@
    "dynamic_sql": false,
    "helpers_transitive": [
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:settings"
    ],
@@ -16019,7 +16488,11 @@
    ],
    "tables_w": [],
    "tables_w_transitive": [
-    "system_settings"
+    "duty_roles",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:custom_records": {
@@ -16044,12 +16517,14 @@
     "helper:custom_modules",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:formula",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:row_access",
     "helper:settings",
@@ -16280,8 +16755,12 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:customers": {
@@ -16294,11 +16773,13 @@
     "helper:auth",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:privacy_notice",
     "helper:settings",
     "helper:tiered_approval"
@@ -16386,8 +16867,12 @@
    "tables_w_transitive": [
     "audit_log",
     "customers",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:definitions": {
@@ -16415,6 +16900,7 @@
     "helper:custom_modules",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:expense_types",
     "helper:formula",
@@ -16422,6 +16908,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:row_access",
     "helper:settings",
@@ -16584,9 +17071,122 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "notifications",
+    "permission_changes",
     "system_settings",
-    "ui_definitions"
+    "ui_definitions",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
+  },
+  "router:duty_roles": {
+   "api_prefixes": [
+    "/api/duty-roles"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:duty_roles",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:duty_roles",
+    "helper:module_registry"
+   ],
+   "kind": "router",
+   "path": "backend/routers/duty_roles.py",
+   "registered": true,
+   "routes": [
+    {
+     "func": "get_roles",
+     "line": 51,
+     "method": "GET",
+     "path": "/api/duty-roles"
+    },
+    {
+     "func": "create_role",
+     "line": 65,
+     "method": "POST",
+     "path": "/api/duty-roles"
+    },
+    {
+     "func": "update_role",
+     "line": 74,
+     "method": "PUT",
+     "path": "/api/duty-roles/{role_id}"
+    },
+    {
+     "func": "get_users",
+     "line": 83,
+     "method": "GET",
+     "path": "/api/duty-roles/users"
+    },
+    {
+     "func": "bind",
+     "line": 102,
+     "method": "POST",
+     "path": "/api/duty-roles/bindings"
+    },
+    {
+     "func": "unbind",
+     "line": 111,
+     "method": "POST",
+     "path": "/api/duty-roles/bindings/remove"
+    },
+    {
+     "func": "subtract",
+     "line": 120,
+     "method": "POST",
+     "path": "/api/duty-roles/subtracts"
+    },
+    {
+     "func": "unsubtract",
+     "line": 129,
+     "method": "POST",
+     "path": "/api/duty-roles/subtracts/remove"
+    },
+    {
+     "func": "get_changes",
+     "line": 138,
+     "method": "GET",
+     "path": "/api/duty-roles/changes"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [
+    "users"
+   ],
+   "tables_r": [
+    "users"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "duty_roles",
+    "notifications",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:item_reads": {
@@ -16596,6 +17196,7 @@
    "dynamic_sql": false,
    "helpers_transitive": [
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:row_access"
    ],
@@ -16668,7 +17269,11 @@
     "item_reads"
    ],
    "tables_w_transitive": [
-    "item_reads"
+    "duty_roles",
+    "item_reads",
+    "permission_changes",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:legal_params": {
@@ -16681,11 +17286,13 @@
     "helper:auth",
     "helper:company_identity",
     "helper:company_setup",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:privacy_notice",
     "helper:settings",
     "helper:tiered_approval"
@@ -16751,8 +17358,12 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:licensing": {
@@ -16762,6 +17373,7 @@
    "dynamic_sql": false,
    "helpers_transitive": [
     "helper:auth",
+    "helper:duty_roles",
     "helper:licensing",
     "helper:module_registry"
    ],
@@ -16788,7 +17400,12 @@
     "users"
    ],
    "tables_w": [],
-   "tables_w_transitive": []
+   "tables_w_transitive": [
+    "duty_roles",
+    "permission_changes",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
   },
   "router:list_prefs": {
    "api_prefixes": [
@@ -16797,6 +17414,7 @@
    "dynamic_sql": false,
    "helpers_transitive": [
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry"
    ],
    "imports": [
@@ -16831,7 +17449,11 @@
     "user_list_prefs"
    ],
    "tables_w_transitive": [
-    "user_list_prefs"
+    "duty_roles",
+    "permission_changes",
+    "user_duty_roles",
+    "user_list_prefs",
+    "user_perm_subtracts"
    ]
   },
   "router:mail_settings": {
@@ -16842,10 +17464,13 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:email_notify",
+    "helper:google_calendar",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:settings",
     "helper:tiered_approval"
    ],
@@ -16854,8 +17479,10 @@
     "helper:audit",
     "helper:auth",
     "helper:email_notify",
+    "helper:google_calendar",
     "helper:mail_types",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:settings"
    ],
    "kind": "router",
@@ -16864,19 +17491,19 @@
    "routes": [
     {
      "func": "list_mail_types",
-     "line": 43,
+     "line": 68,
      "method": "GET",
      "path": "/api/mail-types"
     },
     {
      "func": "set_mail_recipients",
-     "line": 56,
+     "line": 83,
      "method": "PUT",
      "path": "/api/mail-types/{key}/recipients"
     },
     {
      "func": "list_receivable",
-     "line": 182,
+     "line": 223,
      "method": "GET",
      "path": "/api/mail-types/receivable"
     }
@@ -16890,10 +17517,13 @@
    ],
    "tables_r_transitive": [
     "approval_delegates",
+    "case_stages",
     "daily_tasks",
     "departments",
     "dev_cases",
     "divisions",
+    "invoice_vouchers",
+    "payment_requests",
     "projects",
     "quotations",
     "sessions",
@@ -16903,8 +17533,12 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:map_points": {
@@ -16915,12 +17549,14 @@
    "helpers_transitive": [
     "helper:auth",
     "helper:case_access",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:geo",
     "helper:mail_types",
     "helper:map_overlays",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval"
@@ -16986,9 +17622,13 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "geocode_cache",
     "geocode_usage",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:module_versions": {
@@ -16999,10 +17639,12 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:settings",
     "helper:startup",
     "helper:tiered_approval"
@@ -17057,11 +17699,15 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "login_rate_limit",
     "module_versions",
     "notifications",
+    "permission_changes",
     "sessions",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "users"
    ]
   },
@@ -17072,6 +17718,7 @@
    "dynamic_sql": false,
    "helpers_transitive": [
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry"
    ],
    "imports": [
@@ -17097,7 +17744,12 @@
     "users"
    ],
    "tables_w": [],
-   "tables_w_transitive": []
+   "tables_w_transitive": [
+    "duty_roles",
+    "permission_changes",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
   },
   "router:org_structure": {
    "api_prefixes": [
@@ -17107,6 +17759,7 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:settings",
     "helper:tiered_approval"
@@ -17188,8 +17841,12 @@
     "audit_log",
     "departments",
     "divisions",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:parts": {
@@ -17200,10 +17857,12 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:part_catalog",
     "helper:procurement",
     "helper:settings",
@@ -17275,9 +17934,13 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
     "parts",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:platform_catalog": {
@@ -17290,10 +17953,12 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:settings",
     "helper:tiered_approval"
@@ -17337,7 +18002,11 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
-    "system_settings"
+    "duty_roles",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:platform_menu": {
@@ -17360,12 +18029,14 @@
     "helper:custom_modules",
     "helper:doc_render",
     "helper:doc_template",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:formula",
     "helper:legal_params",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:prefill_sources",
     "helper:row_access",
     "helper:settings",
@@ -17435,8 +18106,12 @@
     "custom_record_snapshots",
     "custom_record_values",
     "custom_records",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "router:search": {
@@ -17446,6 +18121,7 @@
    "dynamic_sql": false,
    "helpers_transitive": [
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:row_access"
    ],
@@ -17489,7 +18165,12 @@
     "users"
    ],
    "tables_w": [],
-   "tables_w_transitive": []
+   "tables_w_transitive": [
+    "duty_roles",
+    "permission_changes",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
   },
   "router:system": {
    "api_prefixes": [
@@ -17513,6 +18194,7 @@
     "helper:company_identity",
     "helper:company_setup",
     "helper:dates",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:errors",
     "helper:geo",
@@ -17522,6 +18204,7 @@
     "helper:module_registry",
     "helper:module_switches",
     "helper:notification_prefs",
+    "helper:notify_matrix",
     "helper:row_access",
     "helper:settings",
     "helper:startup",
@@ -18083,14 +18766,18 @@
    ],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "edit_presence",
     "geocode_cache",
     "geocode_usage",
     "login_rate_limit",
     "module_versions",
     "notifications",
+    "permission_changes",
     "sessions",
     "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
     "user_request_log",
     "users",
     "work_logs"
@@ -18105,6 +18792,7 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:duty_roles",
     "helper:module_registry",
     "helper:settings",
     "helper:tiered_approval",
@@ -18159,8 +18847,12 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
+    "duty_roles",
     "notifications",
-    "system_settings"
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
    ]
   },
   "table:access_categories": {
@@ -18168,7 +18860,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3206",
+   "path": "backend/db.py:3209",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -18181,7 +18873,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3219",
+   "path": "backend/db.py:3222",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -18194,7 +18886,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3230",
+   "path": "backend/db.py:3233",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -18207,7 +18899,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3197",
+   "path": "backend/db.py:3200",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -18222,7 +18914,7 @@
    "named_by": [
     "helper:audit"
    ],
-   "path": "backend/db.py:4327",
+   "path": "backend/db.py:4330",
    "readers": [
     "core:archive",
     "mod:accounting/api/accounting_export",
@@ -18248,7 +18940,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:2334",
+   "path": "backend/db.py:2337",
    "readers": [
     "core:archive",
     "helper:tiered_approval",
@@ -18266,10 +18958,11 @@
    "imports": [],
    "kind": "table",
    "named_by": [
+    "helper:duty_roles",
     "helper:module_registry",
     "router:system"
    ],
-   "path": "backend/db.py:578",
+   "path": "backend/db.py:581",
    "readers": [
     "helper:system_checks",
     "mod:analytics/api/dashboard",
@@ -18302,7 +18995,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2242",
+   "path": "backend/db.py:2245",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -18315,7 +19008,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2255",
+   "path": "backend/db.py:2258",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -18328,7 +19021,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2266",
+   "path": "backend/db.py:2269",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -18341,7 +19034,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2233",
+   "path": "backend/db.py:2236",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -18358,7 +19051,7 @@
     "helper:edit_log",
     "mod:payroll/api/bonus"
    ],
-   "path": "backend/db.py:5264",
+   "path": "backend/db.py:5267",
    "readers": [
     "core:archive",
     "mod:payroll/api/bonus"
@@ -18372,7 +19065,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:5389",
+   "path": "backend/db.py:5392",
    "readers": [
     "core:archive",
     "mod:payroll/bonus_pdf"
@@ -18392,7 +19085,7 @@
     "helper:audit",
     "plat:migrations"
    ],
-   "path": "backend/db.py:5356",
+   "path": "backend/db.py:5359",
    "readers": [
     "core:archive",
     "core:db",
@@ -18412,7 +19105,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4610",
+   "path": "backend/db.py:4613",
    "readers": [
     "core:archive",
     "mod:payroll/bonus_payouts"
@@ -18430,7 +19123,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4594",
+   "path": "backend/db.py:4597",
    "readers": [
     "core:archive",
     "mod:payroll/bonus_correction",
@@ -18452,7 +19145,7 @@
     "helper:audit",
     "plat:migrations"
    ],
-   "path": "backend/db.py:4576",
+   "path": "backend/db.py:4579",
    "readers": [
     "core:archive",
     "mod:payroll/bonus_deductions",
@@ -18507,7 +19200,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4905",
+   "path": "backend/db.py:4908",
    "readers": [
     "core:archive"
    ],
@@ -18524,7 +19217,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4895",
+   "path": "backend/db.py:4898",
    "readers": [
     "core:archive"
    ],
@@ -18541,7 +19234,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4665",
+   "path": "backend/db.py:4668",
    "readers": [
     "core:archive"
    ],
@@ -18556,7 +19249,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:5324",
+   "path": "backend/db.py:5327",
    "readers": [
     "core:archive"
    ],
@@ -18573,7 +19266,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:5345",
+   "path": "backend/db.py:5348",
    "readers": [
     "core:archive"
    ],
@@ -18588,7 +19281,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:5338",
+   "path": "backend/db.py:5341",
    "readers": [
     "core:archive"
    ],
@@ -18601,7 +19294,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2084",
+   "path": "backend/db.py:2087",
    "readers": [
     "core:archive",
     "core:pdf_gen"
@@ -18620,7 +19313,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:2031",
+   "path": "backend/db.py:2034",
    "readers": [
     "core:archive",
     "mod:case/attachments"
@@ -18639,7 +19332,7 @@
     "core:archive",
     "mod:case/attachments"
    ],
-   "path": "backend/db.py:3473",
+   "path": "backend/db.py:3476",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -18737,7 +19430,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:1744",
+   "path": "backend/db.py:1747",
    "readers": [
     "core:archive",
     "core:pdf_gen"
@@ -18754,7 +19447,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:1726",
+   "path": "backend/db.py:1729",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -18780,7 +19473,7 @@
     "mod:accounting/voucher_attachments",
     "mod:case/attachments"
    ],
-   "path": "backend/db.py:1467",
+   "path": "backend/db.py:1470",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -18803,7 +19496,7 @@
     "mod:case/attachments",
     "router:map_points"
    ],
-   "path": "backend/db.py:3594",
+   "path": "backend/db.py:3597",
    "readers": [
     "core:archive",
     "mod:case/api/quotations",
@@ -18824,7 +19517,7 @@
     "mod:accounting/voucher_attachments",
     "mod:subcontract/attachments"
    ],
-   "path": "backend/db.py:728",
+   "path": "backend/db.py:731",
    "readers": [
     "core:archive",
     "core:db",
@@ -18853,7 +19546,7 @@
     "helper:system_checks",
     "mod:case/api/quotations"
    ],
-   "path": "backend/db.py:1567",
+   "path": "backend/db.py:1570",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -18884,7 +19577,7 @@
     "helper:audit",
     "router:map_points"
    ],
-   "path": "backend/db.py:663",
+   "path": "backend/db.py:666",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -19065,7 +19758,7 @@
     "router:map_points",
     "router:search"
    ],
-   "path": "backend/db.py:543",
+   "path": "backend/db.py:546",
    "readers": [
     "core:archive",
     "mod:analytics/api/dashboard",
@@ -19086,7 +19779,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:767",
+   "path": "backend/db.py:770",
    "readers": [
     "core:archive",
     "core:db",
@@ -19106,7 +19799,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:1393",
+   "path": "backend/db.py:1396",
    "readers": [
     "core:archive"
    ],
@@ -19123,7 +19816,7 @@
    "named_by": [
     "mod:daily_tasks/__init__"
    ],
-   "path": "backend/db.py:749",
+   "path": "backend/db.py:752",
    "readers": [
     "core:archive",
     "core:db",
@@ -19149,7 +19842,7 @@
     "helper:prefill_sources",
     "mod:case/api/expense_form_pdf"
    ],
-   "path": "backend/db.py:1682",
+   "path": "backend/db.py:1685",
    "readers": [
     "core:archive",
     "helper:email_notify",
@@ -19172,7 +19865,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:1428",
+   "path": "backend/db.py:1431",
    "readers": [
     "core:archive",
     "helper:audit",
@@ -19197,7 +19890,7 @@
     "core:db",
     "mod:crm/attachments"
    ],
-   "path": "backend/db.py:1443",
+   "path": "backend/db.py:1446",
    "readers": [
     "core:archive",
     "mod:analytics/api/dashboard",
@@ -19231,7 +19924,7 @@
    "named_by": [
     "core:trail"
    ],
-   "path": "backend/db.py:1674",
+   "path": "backend/db.py:1677",
    "readers": [
     "core:archive",
     "helper:tiered_approval",
@@ -19243,6 +19936,24 @@
     "router:org_structure"
    ]
   },
+  "table:duty_roles": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [
+    "core:db"
+   ],
+   "path": "backend/core/migrations.py:433",
+   "readers": [
+    "core:archive"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "helper:duty_roles",
+    "plat:migrations"
+   ]
+  },
   "table:edit_presence": {
    "api_prefixes": [],
    "imports": [],
@@ -19250,7 +19961,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3765",
+   "path": "backend/db.py:3768",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -19263,7 +19974,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2672",
+   "path": "backend/db.py:2675",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -19276,7 +19987,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2700",
+   "path": "backend/db.py:2703",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -19289,7 +20000,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2685",
+   "path": "backend/db.py:2688",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -19374,7 +20085,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3296",
+   "path": "backend/db.py:3299",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -19387,7 +20098,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3309",
+   "path": "backend/db.py:3312",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -19400,7 +20111,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3320",
+   "path": "backend/db.py:3323",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -19413,7 +20124,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3287",
+   "path": "backend/db.py:3290",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -19428,7 +20139,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4107",
+   "path": "backend/db.py:4110",
    "readers": [
     "router:map_points"
    ],
@@ -19445,7 +20156,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4227",
+   "path": "backend/db.py:4230",
    "readers": [
     "core:archive"
    ],
@@ -19891,7 +20602,7 @@
     "mod:case/api/quotations",
     "router:definitions"
    ],
-   "path": "backend/db.py:1618",
+   "path": "backend/db.py:1621",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -19913,7 +20624,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:4436",
+   "path": "backend/db.py:4439",
    "readers": [
     "core:archive"
    ],
@@ -19989,7 +20700,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:1166",
+   "path": "backend/db.py:1169",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20005,7 +20716,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:931",
+   "path": "backend/db.py:934",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20018,9 +20729,10 @@
    "imports": [],
    "kind": "table",
    "named_by": [
+    "helper:duty_roles",
     "helper:module_registry"
    ],
-   "path": "backend/db.py:778",
+   "path": "backend/db.py:781",
    "readers": [
     "core:archive",
     "core:db"
@@ -20037,7 +20749,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3119",
+   "path": "backend/db.py:3122",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20050,7 +20762,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3132",
+   "path": "backend/db.py:3135",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20063,7 +20775,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3143",
+   "path": "backend/db.py:3146",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20076,7 +20788,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:3110",
+   "path": "backend/db.py:3113",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20089,7 +20801,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2748",
+   "path": "backend/db.py:2751",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20102,7 +20814,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2757",
+   "path": "backend/db.py:2760",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20115,7 +20827,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2773",
+   "path": "backend/db.py:2776",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20130,7 +20842,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:2200",
+   "path": "backend/db.py:2203",
    "readers": [
     "core:archive"
    ],
@@ -20148,7 +20860,7 @@
     "core:db",
     "core:trail"
    ],
-   "path": "backend/db.py:597",
+   "path": "backend/db.py:600",
    "readers": [
     "core:archive"
    ],
@@ -20169,7 +20881,7 @@
     "mod:case/api/quotations",
     "router:search"
    ],
-   "path": "backend/db.py:563",
+   "path": "backend/db.py:566",
    "readers": [
     "core:archive",
     "mod:analytics/api/reports",
@@ -20190,7 +20902,7 @@
     "helper:system_checks",
     "mod:case/api/quotations"
    ],
-   "path": "backend/db.py:1889",
+   "path": "backend/db.py:1892",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -20210,7 +20922,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:709",
+   "path": "backend/db.py:712",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20228,7 +20940,7 @@
     "core:trail",
     "helper:audit"
    ],
-   "path": "backend/db.py:686",
+   "path": "backend/db.py:689",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -20243,6 +20955,23 @@
     "mod:payroll/remit_link"
    ]
   },
+  "table:permission_changes": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [
+    "core:db"
+   ],
+   "path": "backend/core/migrations.py:461",
+   "readers": [
+    "core:archive"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "helper:duty_roles"
+   ]
+  },
   "table:project_logs": {
    "api_prefixes": [],
    "imports": [],
@@ -20250,7 +20979,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:621",
+   "path": "backend/db.py:624",
    "readers": [
     "core:archive",
     "core:db"
@@ -20266,7 +20995,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:637",
+   "path": "backend/db.py:640",
    "readers": [
     "core:archive"
    ],
@@ -20284,7 +21013,7 @@
     "plat:paths",
     "router:system"
    ],
-   "path": "backend/db.py:608",
+   "path": "backend/db.py:611",
    "readers": [
     "core:archive",
     "core:db",
@@ -20302,7 +21031,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3935",
+   "path": "backend/db.py:3938",
    "readers": [
     "core:archive"
    ],
@@ -20326,7 +21055,7 @@
     "mod:case/attachments",
     "router:search"
    ],
-   "path": "backend/db.py:491",
+   "path": "backend/db.py:494",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -20352,6 +21081,7 @@
     "mod:case/attachments",
     "mod:case/case_deadlines",
     "mod:case/case_stage_tasks",
+    "mod:case/item_shipped",
     "mod:case/material_approval",
     "mod:case/material_guard",
     "mod:case/material_payment_cashier",
@@ -20391,7 +21121,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:514",
+   "path": "backend/db.py:517",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20407,7 +21137,7 @@
     "core:archive",
     "plat:upgrade"
    ],
-   "path": "backend/db.py:485",
+   "path": "backend/db.py:488",
    "readers": [
     "plat:upgrade",
     "router:system"
@@ -20425,7 +21155,7 @@
    "named_by": [
     "core:archive"
    ],
-   "path": "backend/db.py:535",
+   "path": "backend/db.py:538",
    "readers": [
     "helper:audit",
     "helper:auth",
@@ -20449,7 +21179,7 @@
     "mod:supply/attachments",
     "router:map_points"
    ],
-   "path": "backend/db.py:2922",
+   "path": "backend/db.py:2925",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -20471,7 +21201,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2502",
+   "path": "backend/db.py:2505",
    "readers": [
     "core:archive",
     "mod:supply/gl_events"
@@ -20490,7 +21220,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3077",
+   "path": "backend/db.py:3080",
    "readers": [
     "core:archive",
     "core:db",
@@ -20517,7 +21247,7 @@
     "router:map_points",
     "router:search"
    ],
-   "path": "backend/db.py:553",
+   "path": "backend/db.py:556",
    "readers": [
     "core:archive",
     "mod:case/api/material_payments",
@@ -20536,7 +21266,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2837",
+   "path": "backend/db.py:2840",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20549,7 +21279,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2850",
+   "path": "backend/db.py:2853",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20562,7 +21292,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2861",
+   "path": "backend/db.py:2864",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20575,7 +21305,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2828",
+   "path": "backend/db.py:2831",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20591,7 +21321,7 @@
     "core:archive",
     "mod:subcontract/api/contractor_vouchers"
    ],
-   "path": "backend/db.py:591",
+   "path": "backend/db.py:594",
    "readers": [
     "core:archive",
     "mod:payroll/bonus_correction",
@@ -20621,7 +21351,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:2548",
+   "path": "backend/db.py:2551",
    "readers": [
     "core:archive"
    ],
@@ -20636,7 +21366,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:4009",
+   "path": "backend/db.py:4012",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
@@ -20650,7 +21380,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:4000",
+   "path": "backend/db.py:4003",
    "readers": [
     "core:archive"
    ],
@@ -20668,7 +21398,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3972",
+   "path": "backend/db.py:3975",
    "readers": [
     "core:archive",
     "mod:tender_radar/listing",
@@ -20687,7 +21417,7 @@
    "named_by": [
     "router:map_points"
    ],
-   "path": "backend/db.py:3986",
+   "path": "backend/db.py:3989",
    "readers": [
     "core:archive",
     "mod:tender_radar/listing",
@@ -20729,7 +21459,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3665",
+   "path": "backend/db.py:3668",
    "readers": [
     "router:system"
    ],
@@ -20756,6 +21486,23 @@
     "mod:payroll/bank_account"
    ]
   },
+  "table:user_duty_roles": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [
+    "core:db"
+   ],
+   "path": "backend/core/migrations.py:445",
+   "readers": [
+    "core:archive"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "helper:duty_roles"
+   ]
+  },
   "table:user_list_prefs": {
    "api_prefixes": [],
    "imports": [],
@@ -20763,12 +21510,29 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:2642",
+   "path": "backend/db.py:2645",
    "readers": [],
    "tables_r": [],
    "tables_w": [],
    "writers": [
     "router:list_prefs"
+   ]
+  },
+  "table:user_perm_subtracts": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [
+    "core:db"
+   ],
+   "path": "backend/core/migrations.py:453",
+   "readers": [
+    "core:archive"
+   ],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "helper:duty_roles"
    ]
   },
   "table:user_request_log": {
@@ -20778,7 +21542,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:3703",
+   "path": "backend/db.py:3706",
    "readers": [
     "router:system"
    ],
@@ -20804,10 +21568,11 @@
     "helper:prefill_sources",
     "mod:case/api/expense_form_pdf",
     "mod:payroll/api/bank_account",
+    "router:duty_roles",
     "router:mail_settings",
     "router:system"
    ],
-   "path": "backend/db.py:519",
+   "path": "backend/db.py:522",
    "readers": [
     "core:archive",
     "core:main",
@@ -20816,6 +21581,7 @@
     "helper:auth",
     "helper:case_access",
     "helper:custom_def_review",
+    "helper:duty_roles",
     "helper:email_notify",
     "helper:google_calendar",
     "helper:prefill_sources",
@@ -20842,6 +21608,7 @@
     "mod:tender_radar/listing",
     "router:approval_delegates",
     "router:approval_queue",
+    "router:duty_roles",
     "router:mail_settings",
     "router:org_structure",
     "router:system"
@@ -20863,7 +21630,7 @@
     "core:db",
     "router:map_points"
    ],
-   "path": "backend/db.py:714",
+   "path": "backend/db.py:717",
    "readers": [
     "core:archive",
     "core:pdf_gen",
@@ -20890,7 +21657,7 @@
     "mod:accounting/attachments_catalog",
     "mod:accounting/voucher_attachments"
    ],
-   "path": "backend/db.py:5135",
+   "path": "backend/db.py:5138",
    "readers": [
     "core:archive",
     "mod:accounting/attachments_catalog",
@@ -20911,7 +21678,7 @@
     "helper:edit_log",
     "mod:accounting/api/vouchers"
    ],
-   "path": "backend/db.py:5625",
+   "path": "backend/db.py:5628",
    "readers": [
     "core:archive",
     "mod:accounting/api/vouchers"
@@ -20925,7 +21692,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:5593",
+   "path": "backend/db.py:5596",
    "readers": [
     "core:archive",
     "core:db",
@@ -20954,7 +21721,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:5644",
+   "path": "backend/db.py:5647",
    "readers": [
     "core:archive"
    ],
@@ -20969,7 +21736,7 @@
    "named_by": [
     "core:db"
    ],
-   "path": "backend/db.py:5637",
+   "path": "backend/db.py:5640",
    "readers": [
     "core:archive"
    ],
@@ -20994,7 +21761,7 @@
     "mod:payroll/api/bonus_correction",
     "plat:migrations"
    ],
-   "path": "backend/db.py:5589",
+   "path": "backend/db.py:5592",
    "readers": [
     "mod:accounting/api/vouchers"
    ],
@@ -21007,7 +21774,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:5547",
+   "path": "backend/db.py:5550",
    "readers": [
     "core:archive",
     "core:db",
@@ -21041,7 +21808,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:2401",
+   "path": "backend/db.py:2404",
    "readers": [
     "core:archive",
     "router:system"
@@ -21058,7 +21825,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [],
-   "path": "backend/db.py:652",
+   "path": "backend/db.py:655",
    "readers": [
     "core:archive",
     "core:pdf_gen",
