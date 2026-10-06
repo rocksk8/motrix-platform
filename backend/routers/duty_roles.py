@@ -28,10 +28,11 @@ def _ip(request: Request) -> str:
         return ""
 
 
-def _run(fn, *args, **kw):
+def _run(fn):
+    """fn(conn)：服務層的 DutyError ⇒ HTTPException（不用 ** 傳參數，守門禁止）。"""
     conn = get_db()
     try:
-        return fn(conn, *args, **kw)
+        return fn(conn)
     except dr.DutyError as e:
         conn.rollback()
         raise HTTPException(e.status, str(e))
@@ -63,8 +64,8 @@ def get_roles(authorization: str = Header(None)):
 @router.post("/api/duty-roles", status_code=201)
 def create_role(request: Request, body: dict = Body(...), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
-    rid = _run(dr.create_role, actor, body.get("key"), body.get("name"), body.get("description"), body.get("permissions"),
-               body.get("reason"), _ip(request))
+    rid = _run(lambda c: dr.create_role(c, actor, body.get("key"), body.get("name"), body.get("description"), body.get("permissions"),
+                                        body.get("reason"), _ip(request)))
     _audit(_tok(authorization), "duty_roles.role_create", "duty_role", str(rid), str(body.get("name") or ""))
     return {"id": rid}
 
@@ -72,8 +73,8 @@ def create_role(request: Request, body: dict = Body(...), authorization: str = H
 @router.put("/api/duty-roles/{role_id}")
 def update_role(role_id: int, request: Request, body: dict = Body(...), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
-    ver = _run(dr.update_role, actor, role_id, name=body.get("name"), description=body.get("description"),
-               permissions=body.get("permissions"), active=body.get("active"), reason=body.get("reason"), ip=_ip(request))
+    ver = _run(lambda c: dr.update_role(c, actor, role_id, name=body.get("name"), description=body.get("description"),
+                                        permissions=body.get("permissions"), active=body.get("active"), reason=body.get("reason"), ip=_ip(request)))
     _audit(_tok(authorization), "duty_roles.role_update", "duty_role", str(role_id), str(body.get("name") or ""))
     return {"ok": True, "version": ver}
 
@@ -101,7 +102,7 @@ def _body_ids(body):
 def bind(request: Request, body: dict = Body(...), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     uid, rid = _body_ids(body), _int(body.get("roleId"), "roleId")
-    _run(dr.bind_role, actor, uid, rid, body.get("reason"), _ip(request))
+    _run(lambda c: dr.bind_role(c, actor, uid, rid, body.get("reason"), _ip(request)))
     _audit(_tok(authorization), "duty_roles.bind", "user", str(uid), "role#%s" % rid)
     return {"ok": True}
 
@@ -110,7 +111,7 @@ def bind(request: Request, body: dict = Body(...), authorization: str = Header(N
 def unbind(request: Request, body: dict = Body(...), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     uid, rid = _body_ids(body), _int(body.get("roleId"), "roleId")
-    _run(dr.unbind_role, actor, uid, rid, body.get("reason"), _ip(request))
+    _run(lambda c: dr.unbind_role(c, actor, uid, rid, body.get("reason"), _ip(request)))
     _audit(_tok(authorization), "duty_roles.unbind", "user", str(uid), "role#%s" % rid)
     return {"ok": True}
 
@@ -119,7 +120,7 @@ def unbind(request: Request, body: dict = Body(...), authorization: str = Header
 def subtract(request: Request, body: dict = Body(...), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     uid, key = _body_ids(body), str(body.get("key") or "")
-    _run(dr.set_subtract, actor, uid, key, body.get("reason"), _ip(request))
+    _run(lambda c: dr.set_subtract(c, actor, uid, key, body.get("reason"), _ip(request)))
     _audit(_tok(authorization), "duty_roles.subtract", "user", str(uid), key)
     return {"ok": True}
 
@@ -128,7 +129,7 @@ def subtract(request: Request, body: dict = Body(...), authorization: str = Head
 def unsubtract(request: Request, body: dict = Body(...), authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     uid, key = _body_ids(body), str(body.get("key") or "")
-    _run(dr.unset_subtract, actor, uid, key, body.get("reason"), _ip(request))
+    _run(lambda c: dr.unset_subtract(c, actor, uid, key, body.get("reason"), _ip(request)))
     _audit(_tok(authorization), "duty_roles.unsubtract", "user", str(uid), key)
     return {"ok": True}
 

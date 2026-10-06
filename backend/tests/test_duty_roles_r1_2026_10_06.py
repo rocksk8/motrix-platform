@@ -310,9 +310,9 @@ def test_high_sensitivity_list_is_the_ruled_one_without_reports():
 
 def test_page_exists_calls_only_real_endpoints_and_states_the_partial_effect_warning():
     import re
-    from pathlib import Path
     from routers import duty_roles as router_mod
-    page = (Path(__file__).resolve().parent.parent.parent / "frontend" / "pages" / "duty-roles.html").read_text(encoding="utf-8")
+    from core import source_tree
+    page = source_tree.page_file("duty-roles.html").read_text(encoding="utf-8")
     real = {r.path for r in router_mod.router.routes}
     called = set(re.findall(r"'(/api/duty-roles[^']*)'", page))
     assert called, "頁面沒有呼叫任何職責角色 API"
