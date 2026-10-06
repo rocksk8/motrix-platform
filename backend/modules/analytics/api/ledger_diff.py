@@ -73,9 +73,9 @@ def _individual_by_month(basis):
         conn.close()
 
 
-def _category_buckets(c, rep, gl, g, basis, indiv):
+def _category_buckets(c, rep, gl, g, basis, indiv, tax_contractor=0):
     """類別層級原因分桶（報表 − 總帳；各桶相加＋residual＝差額）：tax（現金口徑）／individual（承攬商 +、其他 −）／manual／bonus（只在其他）。"""
-    tax = 0
+    tax = tax_contractor if (c == "contractor" and basis != "cash") else 0         # 應計：精算全含稅後（2026-10-06）切換日以後的承攬商成本含稅，總帳稅額在 1268 不在成本
     if basis == "cash":
         tax = sum(int(v) for o, v in (g.get("tax_in_by_origin_posted") or {}).items() if _ORIGIN_CAT.get(o, "other") == c)
     b = {"tax": tax, "individual": indiv if c == "contractor" else -indiv if c == "other" else 0,
@@ -114,7 +114,7 @@ def build(year, basis):
             gl_exp = ep["expense"] + bo["expense"] + mp["expense"]
             cash = basis == "cash"
             i_b = {"unposted": eu["revenue"], "tax": ep["tax_out"] if cash else 0, "manual": -mp["revenue"], "bonus": -bo["revenue"]}
-            e_b = {"unposted": eu["expense"], "tax": ep["tax_in"] if cash else 0, "manual": -mp["expense"], "bonus": -bo["expense"]}
+            e_b = {"unposted": eu["expense"], "tax": ep["tax_in"] if cash else int((exp.get(mo) or {}).get("taxContractor") or 0), "manual": -mp["expense"], "bonus": -bo["expense"]}
             row["income"].update({"gl": gl_rev, "diff": inc - gl_rev, "buckets": dict(i_b, residual=inc - gl_rev - sum(i_b.values()))})
             row["expense"].update({"gl": gl_exp, "diff": row["expense"]["report"] - gl_exp,
                                    "buckets": dict(e_b, residual=row["expense"]["report"] - gl_exp - sum(e_b.values()))})
@@ -123,7 +123,7 @@ def build(year, basis):
                 by_cat[_ORIGIN_CAT.get(origin, "other")] += int(amt)
             for c in _CATS:
                 row["expense"]["categories"][c].update({"gl": by_cat[c], "diff": rep_exp[c] - by_cat[c],
-                                                        "buckets": _category_buckets(c, rep_exp[c], by_cat[c], g, basis, indiv.get(mo, 0))})
+                                                        "buckets": _category_buckets(c, rep_exp[c], by_cat[c], g, basis, indiv.get(mo, 0), int((exp.get(mo) or {}).get("taxContractor") or 0))})
             row["pendingEvents"] = (gl.get("events") or {}).get(mo) or {"drift": 0, "orphan": 0, "blocked": 0}
             totals["income"]["gl"] += gl_rev
             totals["expense"]["gl"] += gl_exp

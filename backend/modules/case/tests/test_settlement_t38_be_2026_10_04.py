@@ -139,12 +139,12 @@ def test_summary_carries_absorbed_total_and_rows_sum_to_total(W):
     net = gross - admin - charity
     p = page_payload(c, h, totalActualCost=t["totalActualCost"], grossProfit=gross, charityDonation=charity, netProfit=net,
                      grossMarginPct=round(gross / 1000, 1), netMarginPct=round(net / 1000, 1))
-    p["items"] = [{"id": "a", "adoptSystem": True, "actualTotalCost": 12000}, {"id": "b", "adoptSystem": True, "actualTotalCost": EST_B}]
+    p["items"] = [{"id": "a", "adoptSystem": True, "actualTotalCost": 12500}, {"id": "b", "adoptSystem": True, "actualTotalCost": EST_B}]
     p["offsets"] = [{"kind": "dispatch", "ref": str(d1), "itemId": "a"}]
     r = _put(c, h, p)
     assert r.status_code == 200, r.text
     s = _saved()["settlement"]["summary"]
-    assert s["dispatchAbsorbedTotal"] == 12000
+    assert s["dispatchAbsorbedTotal"] == 12500
     assert s["itemActualTotal"] + s["itemPoUnadopted"] + s["extraTotal"] + s["dispatchTotal"] - s["dispatchAbsorbedTotal"] == s["totalActualCost"]
 
 
@@ -175,7 +175,7 @@ def test_finalize_history_entry_has_snapshot(W):
     assert _put(c, h, page_payload(c, h)).status_code == 200
     ent = [e for e in _saved()["editHistory"] if e["type"] == "settlement_finalized"][-1]
     s = _saved()["settlement"]["summary"]
-    assert ent["netProfit"] == s["netProfit"] and ent["totalActualCost"] == s["totalActualCost"] and ent["dispatchBasis"] == "pretax" and ent["frozenAt"]
+    assert ent["netProfit"] == s["netProfit"] and ent["totalActualCost"] == s["totalActualCost"] and ent["dispatchBasis"] == "taxed" and ent["frozenAt"]
 
 
 def test_consecutive_draft_saves_do_not_grow_history_without_bound(W):

@@ -74,7 +74,7 @@ def test_resaving_a_legacy_finalized_case_stamps_the_basis_and_records_the_reaso
     r = _put_r(c, h, p, "補上漏記的備註")
     assert r.status_code == 200, r.text[:200]
     s = _saved()
-    assert s["settlement"]["summary"]["dispatchBasis"] == "pretax", "再存沒有蓋口徑標記"
+    assert s["settlement"]["summary"]["dispatchBasis"] == "taxed", "再存沒有蓋口徑標記"
     assert s["editHistory"][-1].get("reason") == "補上漏記的備註"
     assert any(a.get("reason") == "補上漏記的備註" for a in _audit_rows()), "理由沒有進稽核紀錄：%s" % _audit_rows()
 
