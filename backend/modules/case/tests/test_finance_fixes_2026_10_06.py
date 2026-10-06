@@ -195,6 +195,7 @@ def test_skipped_send_also_retries(client, make_user, flaky):
 
 
 def test_send_registered_wait_semantics(client, make_user, monkeypatch):
+    """True＝可以寫記號（先寄成功才記，照 system_checks 前例）：SENT／UNKNOWN／PERMANENT_FAIL；TRANSIENT_FAIL／SKIPPED／沒收件人＝False。"""
     from helpers import email_notify as en
     P._finance(make_user, "fx_fin_c")
 
@@ -205,9 +206,75 @@ def test_send_registered_wait_semantics(client, make_user, monkeypatch):
         def wait(self, timeout=None):
             return self.o
 
-    for outcome, expect in ((en.SEND_SENT, True), (en.SEND_TRANSIENT_FAIL, False), (en.SEND_SKIPPED, False), (en.SEND_UNKNOWN, False)):
+    for outcome, expect in ((en.SEND_SENT, True), (en.SEND_UNKNOWN, True), (en.SEND_PERMANENT_FAIL, True),
+                            (en.SEND_TRANSIENT_FAIL, False), (en.SEND_SKIPPED, False)):
         monkeypatch.setattr(en, "_async_send", lambda to, subject, html, o=outcome: _H(o))
-        assert en.send_registered("payable_due_today", title="t", rows=[("a", "b")], to_group=True, wait=True) is expect, outcome
+        out = {}
+        assert en.send_registered("payable_due_today", title="t", rows=[("a", "b")], to_group=True, wait=True, out=out) is expect, outcome
+        assert out["outcome"] == outcome
+    out = {}
+    assert en.send_registered("payable_due_today", title="t", rows=[("a", "b")], wait=True, out=out) is False
+    assert out["outcome"] == "no_recipient"
+
+
+def test_unknown_and_permanent_keep_the_guard_no_resend(client, make_user, flaky):
+    """出現 UNKNOWN（等不到結果）或 PERMANENT_FAIL 時保留記號：重跑不重寄（避免雙寄／天天失敗）；不算「寄出」。"""
+    from helpers import email_notify as en
+    log, outcomes = flaky
+    P._finance(make_user, "fx_fin_u")
+    P._seed_exp(planned=P.TODAY.isoformat())
+    outcomes.append(en.SEND_UNKNOWN)
+    assert P._run() == 0 and len(log) == 1, "UNKNOWN 不算寄出"
+    assert _guard_count() == 1, "UNKNOWN 保留記號"
+    assert P._run() == 0 and len(log) == 1, "重跑不重寄"
+
+
+def test_permanent_fail_keeps_the_guard(client, make_user, flaky):
+    from helpers import email_notify as en
+    log, outcomes = flaky
+    P._finance(make_user, "fx_fin_p")
+    P._seed_exp(planned=P.TODAY.isoformat())
+    outcomes.append(en.SEND_PERMANENT_FAIL)
+    assert P._run() == 0 and _guard_count() == 1
+    assert P._run() == 0 and len(log) == 1
+
+
+def test_unknown_stops_the_run_and_wait_budget_bounds_total_wait(client, make_user, flaky, monkeypatch):
+    """SMTP 卡住（UNKNOWN）⇒ 本次掃描立刻停止，後面的提醒不寫 guard（下次再發）；總等待超過上限也停止。"""
+    from helpers import email_notify as en
+    from modules.case import payable_reminders as R
+    log, outcomes = flaky
+    P._finance(make_user, "fx_fin_b1")
+    e1 = P._seed_exp(planned=P.TODAY.isoformat())
+    e2 = P._seed_exp(planned=P.TODAY.isoformat())
+    outcomes.append(en.SEND_UNKNOWN)
+    assert P._run() == 0 and len(log) == 1, "第一封 UNKNOWN ⇒ 不再試第二封"
+    assert _guard_count() == 1, "只有第一封寫了記號（UNKNOWN），第二封留待下次"
+    assert P._run() == 1 and len(log) == 2, "下次掃描補寄第二封"
+    # 預算：時間一直往前跳 ⇒ 第一封寄完就超過上限，其餘不寄
+    import db
+    conn = db.get_db()
+    conn.execute("DELETE FROM system_settings WHERE key LIKE 'payable_due_notif.%'")
+    conn.commit()
+    conn.close()
+    del log[:]
+    ticks = iter([0, 0] + [R.MAX_WAIT_SECONDS_PER_RUN] * 50)               # 起算、第一封前檢查＝0；之後一律已超過上限
+    monkeypatch.setattr(R, "_monotonic", lambda: next(ticks))
+    assert P._run() == 1 and len(log) == 1, "超過等待上限 ⇒ 本次只寄一封"
+    assert _guard_count() == 1
+
+
+def test_retry_window_is_the_send_day_only(client, make_user, flaky):
+    """文件化：暫時失敗只在寄信日當天重試（每日 08:00＋啟動補跑）；隔天不補。"""
+    from datetime import timedelta
+    from helpers import email_notify as en
+    log, outcomes = flaky
+    P._finance(make_user, "fx_fin_w")
+    P._seed_exp(planned=P.TODAY.isoformat())
+    outcomes.append(en.SEND_TRANSIENT_FAIL)
+    assert P._run() == 0 and len(log) == 1
+    assert P._run(P.TODAY + timedelta(days=1)) == 0 and len(log) == 1, "寄信日已過 ⇒ 不補發"
+    assert P._run() == 1, "同一天重跑仍可補"
 
 
 # ── (g) 假日順延（真的官方假日表，不 monkeypatch）────────────────────────

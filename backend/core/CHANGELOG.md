@@ -2,14 +2,15 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — 2026-10-06（train43 整合：wip/t44-business-days＋wip/t43-phase2-events＋wip/t44-fin-fixes）
+## (next) — 2026-10-06（train43 整合：wip/t44-business-days＋wip/t43-phase2-events＋wip/t44-fin-fixes）；併入 r2（send_registered 記號政策）；t43-cal-strict-fix
 - L1（新增，向下相容）：`helpers/business_days.py`——自 M11 `calendar_tw.py` 提升（純函式、不讀時鐘）：`load`／`coverage`／`covered`／`days_until_expiry`／`no_mail_day`／`next_mail_day`（行為不變）＋新增 `is_working_day(d)`、`previous_working_day(d, limit=14)`；資料 `helpers/holidays_tw.json`（官方人事行政總處辦公日曆表，2026～2027；每年更新，到期前 60 天內 M11 每日排程記警告）。M11 的 `calendar_tw.py` 轉出舊名。沒有假日表／年份不在涵蓋範圍 ⇒ 只排除週六日，不丟例外。
 - L1（新增，向下相容；wip/t43-mail-cal-matrix）：`helpers/notify_matrix.py`——信件×行事曆通知矩陣的對照與規則（`EVENT_LINKS`／`MAIL_OFF_LOCKED`／`is_mail_off`／`mail_off_lock_reason` 等；不讀寫設定、不 import 業務模組）；`helpers.email_notify` 的所有收件人漏斗（含事件收件人、部門主管、月報、財務受眾）在公司關閉該信件時回空清單，鎖定的資安類恆不可關。
-- L1（新增選填參數，向下相容；wip/t44-fin-fixes）：`helpers.email_notify.send_registered(..., wait=False)`——`wait=True` 時等寄送結果，只有 `SEND_SENT` 回 True（要寫「已通知」記號的呼叫端用）。
+- L1（新增選填參數，向下相容；wip/t44-fin-fixes）：`helpers.email_notify.send_registered(..., wait=False)`——`wait=True` 時等寄送結果並回「可以寫記號」：`SEND_SENT`／`SEND_UNKNOWN`／`SEND_PERMANENT_FAIL` 回 True（照 `system_checks` 前例，不確定或永久失敗時保留記號、不重寄，另記 ERROR），`SEND_TRANSIENT_FAIL`／`SEND_SKIPPED`／沒有收件人回 False；新增選填 `out`（dict）取得 `out["outcome"]`（`SEND_*` 或 `"no_recipient"`）。
 - 測試：`tests/test_business_days_2026_10_05.py`；L1 介面快照 `core_bump.py --pending`。
 - L1（新增，向下相容）：`helpers.calendar_sync.sync_dated_events(code, current, today=None, max_calls=100)`——日期型行事曆事件的每日對帳：呼叫端給「來源目前成立的全部項目 `{key: (日期, 標題, 說明)}`」，本函式與對帳表 `system_settings["calsync.<代碼>"]` 比對後只送有變的（t41 的 `push_event_upsert_for_module`／`push_event_delete_for_module`）；事件種類開關或行事曆總開關關閉 ⇒ 完全不動作（零 Google 流量、不寫對帳表）；日期已過不建、已建的過期事件保留；單次最多 100 個項目（約 200 次 Google 請求）。
 - `EVENT_TYPES` 新增 `warranty_expiry`、`range_task_due`、`project_end`（分組「期限提醒」，預設關）；`notify_matrix.EVENT_LINKS` 掛到既有信件列 `warranty_expiry`／`range_task_deadline`／`case_project_overdue`（不新增信件類型）。
 - L1（新增內部名稱，向下相容）：`google_calendar._upsert_event_strict`／`_delete_event_strict`——會丟例外的本體（回 True＝做了、False＝開關關閉沒做）；`push_event_upsert_for_module`／`push_event_delete_for_module` 改為其 fire-and-forget 包裝，行為不變。`calendar_sync.is_active(code)`、`MAX_CONSECUTIVE_FAILURES`：對帳只在 Google 成功後才記「已同步」，失敗下次重試、連續失敗 3 次收手；單次上限改為 100 個項目（約 200 次請求）。
+- L1（行為修正，簽章不變；wip/t43-cal-strict-fix）：`google_calendar._delete_event_strict(code, key, retry=False)` 預設改為**真正嚴格**——只刪一次、不 sleep、404／410 視為成功、其他錯誤照丟（原本沿用 `_delete_event_with_retry` 會吞掉第二次失敗而回 True，對帳表因此丟掉記錄、Google 事件變孤兒）；`push_event_delete_for_module` 傳 `retry=True` 維持舊行為（失敗 5 秒後重試一次、仍失敗只記 log）。新增內部 `_delete_event_once`。
 - 測試：`tests/test_notify_matrix_phase2_2026_10_06.py`；目錄筆數 15→18（`test_calendar_event_toggles`、`test_e2e_calendar_event_toggles`）。
 
 ## 1.113 — wip/t42-finance-role（財務角色；財務／出納權限只屬「財務」角色與 superadmin）
