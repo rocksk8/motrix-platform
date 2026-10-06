@@ -74,6 +74,12 @@
    "scope": "row_access"
   },
   {
+   "file": "modules/case/api/case_extra_expenses.py",
+   "path": "/api/quotations/{quote_no}/purchase-requests/lines",
+   "handler": "list_purchase_request_lines",
+   "scope": "row_access"
+  },
+  {
    "file": "modules/case/api/material_links.py",
    "path": "/api/quotations/{quote_no}/material-po-lines",
    "handler": "material_po_lines",
