@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-06（train43 整合：wip/t43-phase2-events＋wip/t44-fin-fixes；階段 2 對帳失敗會重試）
+## (next) — 2026-10-06（train43 整合：wip/t43-phase2-events＋wip/t44-fin-fixes；階段 2 對帳失敗會重試）；併入 wip/t44-settle-terms（字樣）
 - `case_deadlines.py` 新增 `_sync_warranty_calendar`、`_sync_project_end_calendar`，掛在每日檢查（`run_daily_checks`）最後；與寄信的 guard 完全獨立。事件種類開關關閉（預設）⇒ 不讀資料庫、不打 Google。事件內容只有案號、客戶、設備／專案、日期，不含金額。日期已過不建；改日期、結案、設備刪除由對帳處理。
 - 上線注意：保固事件第一次打開時，已成案案件的未過期保固會全部補建；每次每日檢查最多處理 100 個項目（每個約 2 次 Google 請求），所以第一次打開會分散在數天內建完（不是當天一次到位）。
 - **權限變更（上線備註要寫）**：`PATCH /api/quotations/{no}/material-orders`——「財務」角色對非自己負責（非業務／協作者）的案件，一般叫料清單只能看不能改（403「財務角色只能檢視非自己負責案件的材料申請清單…」）；自己負責的案件、superadmin、admin、專案經理不變；GET、匯款申請、發票日、取消已核准叫料單等付款相關端點不變。
@@ -9,8 +9,6 @@
 - `payable_reminders.py`：防重複記號改在**寄送成功（`SEND_SENT`）後才寫**（`send_registered(wait=True)`），SMTP 暫時失敗／未設定當天會重試；工作日判斷改接 L1 `helpers.business_days`（週末＋國定假日＋補班日），T−3／T0 落在假日同樣前移，折到同一天只寄一封。
 - `payables._RemitReviews.decide`：退回（reject）時回傳 `payableEvent`（事件內容，不含金額）給出納端在 commit 後重建行事曆「付款待辦」（無預定付款日則不建）。
 - 測試：`modules/case/tests/test_finance_fixes_2026_10_06.py`（含突變檢查）；`test_payable_planned_pay_date_2026_10_05.py` 的寄信攔截改回傳寄送把手。
-
-## (next) — 2026-10-06（wip/t44-settle-terms）：「請款」字樣改為「支出申請」系列（只改畫面文字與提示，不改資料、欄位、API）
 - 「新增支出申請」頁：「② 申請內容」、「我的申請」、「還沒有申請」、送出後提示；`expense-types.html` 說明「申請單的樣子」。
 - 錯誤／提示訊息：`payables.py` 「這筆申請…」、`case_extra_expenses.py` 「這筆申請還沒核准」「申請人登錄…」。
 - 客戶「請款單」（M05 對客戶要款）不動；承攬商／採購單／傳票等其他「請款」用語不在本次範圍。
