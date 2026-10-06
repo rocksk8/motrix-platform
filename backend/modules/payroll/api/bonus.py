@@ -1627,6 +1627,7 @@ from helpers.tiered_approval import (  # noqa: E402
 from helpers.auth import user_has_module  # noqa: E402
 from modules.payroll import bonus_vouchers  # noqa: E402  `AC3`：狀態轉換 → 傳票草稿
 from modules.payroll import bonus_payouts  # noqa: E402  IP-8／IP-9 提供者＋通知對象（import 即登記）
+from modules.payroll import bonus_notify as _bonus_notify  # noqa: E402  t44：核准通知送審人（import 即登記信件類型）
 from modules.payroll import bonus_deductions  # noqa: E402  U4 扣繳與補充保費
 
 _CASE_DEAL_TAGS = ("已成案", "已結案")
@@ -2180,8 +2181,9 @@ def _notify_safely(fn, *args):
         logger.warning("獎金分潤通知失敗（%s）：%s", getattr(fn, "__name__", fn), exc)
 
 
-def _notify_after(quote_no, status):
-    """送審／簽核之後：待審核 ⇒ 輪到的簽核人（含代理人）；待發放 ⇒ 出納。名單成員不會因為在名單上而收到。"""
+def _notify_after(quote_no, status, by=""):
+    """送審／簽核之後：待審核 ⇒ 輪到的簽核人（含代理人）；待發放 ⇒ 出納，並通知送審人「已核准」（`bonus_notify`，t44；`by`＝
+    簽核的人，送審人就是他自己時不重複寄）。名單成員不會因為在名單上而收到。"""
     from helpers import email_notify
     conn = get_db()
     try:
@@ -2198,10 +2200,13 @@ def _notify_after(quote_no, status):
         elif status == "待發放":
             who = bonus_payouts.cashier_recipients(conn, award)
             fn = email_notify.notify_bonus_payout_ready
+            requester = (json.loads(award["approval_json"] or "{}") or {}).get("requestedBy") or ""
         else:
             return
     finally:
         conn.close()
+    if status == "待發放":
+        _bonus_notify.fire_approved(quote_no, cust, requester, approver=by)      # 送審人收到結果（之前從來沒有）
     if not who:
         logger.warning("獎金分潤 %s（%s）沒有可通知的對象", quote_no, status)
         return
@@ -2349,7 +2354,7 @@ def approve_case_bonus(quote_no: str, authorization: str = Header(None)):
     finally:
         conn.close()
     _audit(_tok(authorization), "bonus.case.approve", "bonus_case_awards", quote_no, "獎金分潤簽核：%s" % nxt)
-    _notify_after(quote_no, nxt)
+    _notify_after(quote_no, nxt, by=user["username"])
     if voucher:
         _audit(_tok(authorization), "voucher.create", "vouchers", str(voucher["id"]),
                "獎金分潤 %s 進入待發放，產生傳票草稿：%s" % (quote_no, voucher["voucher_no"]))
