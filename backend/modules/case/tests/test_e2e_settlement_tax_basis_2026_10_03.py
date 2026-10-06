@@ -133,7 +133,7 @@ def _reload_case(page, live_server):
 
 
 @pytest.mark.e2e
-def test_case_page_stale_check_pairs_the_basis_and_shows_pretax_cost_with_the_tax_note(live_server, make_user, e2e_browser):
+def test_case_page_stale_check_pairs_the_basis_and_shows_the_tax_inclusive_cost(live_server, make_user, e2e_browser):
     sa = make_user(username="sc_sc", role="superadmin")
     seed(item_ids=("a", "b"))
     _dispatch(10000, 2000)
@@ -142,8 +142,8 @@ def test_case_page_stale_check_pairs_the_basis_and_shows_pretax_cost_with_the_ta
     _set_settlement({"status": "finalized", "items": [], "offsets": [], "summary": {"itemActualTotal": 1, "extraTotal": 0, "dispatchTotal": 12500, "totalActualCost": 12501}})
     page = _case_page(live_server, e2e_browser, sa)
     assert page.evaluate(stale) is None
-    assert page.evaluate("() => %s.dispatchTotalCost()" % CM) == 12000                                    # 外包總成本＝未稅＋人員
-    assert page.evaluate("() => %s.dispatchTaxCost()" % CM) == 500
+    assert page.evaluate("() => %s.dispatchTotalCost()" % CM) == 12500                                    # 2026-10-06：派發日 2026-10-01 ≥ 切換日 ⇒ 外包總成本含稅（未稅 10000＋稅 500＋人員 2000）
+    assert page.evaluate("() => %s.dispatchTaxCost()" % CM) == 500 and page.evaluate("() => %s.dispatchTaxExcludedCost()" % CM) == 0
     # 新完結案（標記 pretax、存 12,000）⇒ 與未稅現算比 ⇒ 不誤報
     _set_settlement({"status": "finalized", "items": [], "offsets": [], "summary": {"itemActualTotal": 1, "extraTotal": 0, "dispatchTotal": 12000, "totalActualCost": 12001, "dispatchBasis": "pretax"}})
     _reload_case(page, live_server)
@@ -209,3 +209,28 @@ def test_the_pages_own_finalize_payload_passes_the_server_recheck_on_the_new_bas
     gross = 100000 - s_["totalActualCost"]
     assert s_["grossProfit"] == gross and s_["adminCost"] == round_half_up(100000, 0.10) and s_["charityDonation"] == round_half_up(gross, 0.01)
     assert s_["netProfit"] == gross - s_["adminCost"] - s_["charityDonation"]
+
+
+@pytest.mark.e2e
+def test_case_page_finance_tab_follows_the_cutover_per_dispatch(live_server, make_user, e2e_browser):
+    """使用者 2026-10-06：案件管理財務分頁的外包總成本與營運報表同一條規則——派發日 ≥ 2026-10-01 含稅；之前照舊未稅（稅額不計成本）。"""
+    import db
+    sa = make_user(username="sc_sc", role="superadmin")
+    seed(item_ids=("a", "b"))
+    _dispatch(10000, 2000)                                                    # 派發日 2026-10-01：含稅 12,500（稅 500）
+    c = db.get_db()
+    try:
+        vid = c.execute("SELECT id FROM vendor_contractors WHERE name='稅基測試承攬商'").fetchone()["id"]
+        c.execute("INSERT INTO contractor_dispatches (quote_no, vendor_id, dispatch_date, scope, items_json, total_amount, tax_rate, personnel_json, status, approval_status,"
+                  " invoice_no, invoice_date, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                  (NO, vid, "2026-09-30", "amount", "[]", 4000, 0.05, "[]", "accepted", "", "ZZ9", "2026-10-02", "2026-09-30", "2026-09-30"))
+        c.commit()
+    finally:
+        c.close()
+    page = _case_page(live_server, e2e_browser, sa)
+    page.wait_for_function("() => %s.dispatches.length > 1" % CM, timeout=20000)
+    assert page.evaluate("() => %s.dispatchTotalCost()" % CM) == 12500 + 4000            # 9/30 派發（發票日在 10 月也一樣）仍未稅 4,000
+    assert page.evaluate("() => %s.dispatchTaxCost()" % CM) == 500 and page.evaluate("() => %s.dispatchTaxExcludedCost()" % CM) == 200
+    assert "16,500" in page.locator('[data-testid="dispatch-total-cost"]').inner_text()
+    assert "其中稅額 NT$ 500" in page.locator('[data-testid="dispatch-tax-note"]').inner_text()
+    assert "不計成本" in page.locator('[data-testid="dispatch-tax-excluded-note"]').inner_text()

@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-06（train43 整合：wip/t43-phase2-events＋wip/t44-fin-fixes；階段 2 對帳失敗會重試）；併入 r2（提醒信記號政策）；併入 wip/t44-settle-terms（字樣）；併入 wip/t43-settle-tax（精算全含稅＋稅額）；稽核修正（多列單據稅額只計一次）
+## (next) — 2026-10-06（train43 整合：wip/t43-phase2-events＋wip/t44-fin-fixes；階段 2 對帳失敗會重試）；併入 r2（提醒信記號政策）；併入 wip/t44-settle-terms（字樣）；併入 wip/t43-settle-tax（精算全含稅＋稅額）；稽核修正（多列單據稅額只計一次）；併入 wip/t43-finance-tab（財務分頁外包總成本）
 - `case_deadlines.py` 新增 `_sync_warranty_calendar`、`_sync_project_end_calendar`，掛在每日檢查（`run_daily_checks`）最後；與寄信的 guard 完全獨立。事件種類開關關閉（預設）⇒ 不讀資料庫、不打 Google。事件內容只有案號、客戶、設備／專案、日期，不含金額。日期已過不建；改日期、結案、設備刪除由對帳處理。
 - 上線注意：保固事件第一次打開時，已成案案件的未過期保固會全部補建；每次每日檢查最多處理 100 個項目（每個約 2 次 Google 請求），所以第一次打開會分散在數天內建完（不是當天一次到位）。
 - **權限變更（上線備註要寫）**：`PATCH /api/quotations/{no}/material-orders`——「財務」角色對非自己負責（非業務／協作者）的案件，一般叫料清單只能看不能改（403「財務角色只能檢視非自己負責案件的材料申請清單…」）；自己負責的案件、superadmin、admin、專案經理不變；GET、匯款申請、發票日、取消已核准叫料單等付款相關端點不變。
@@ -21,6 +21,7 @@
 - `recognition` 各列新增 `tax`／`taxKind`（exact／estimated／unsplit）：派發（切換日後）與費用單據稅額＝exact、採購單／材料申請＝estimated（推估）、無稅額的額外支出＝unsplit。
 - 與總帳差異（`ledger_diff`）：應計口徑下切換日後承攬商成本含稅、總帳稅額記進項稅額 1268，差額改進 `tax` 分桶，避免 residual 暴增。
 - 稅額補強（稽核 a4）：多列單據（採購單／費用單據）的稅額只放第一列、其餘列視為已涵蓋，不再被重複推估或掉進「未拆稅」；沒連到品項也沒稅額的採購單列算「推估」；承攬商稅額＝max(0, 含稅合計−未稅−人員)，提供者沒給含稅合計時稅額 0。營運報表每列稅額四捨五入到元、月／年合計是未進位加總後再進位，**逐列加總與月合計可能差 1 元**（與金額欄同一慣例）。
+- **案件管理「財務」分頁的外包總成本跟營運報表同一條切換規則（使用者 2026-10-06；上線備註）**：`case-management-dispatch.js` 的 `dispatchTotalCost()` 對派發日（`dispatchDate`）≥ 2026-10-01 的派發含稅計入（未稅承攬費＋稅額＋外包人員），之前的派發照舊未稅（稅額不計成本，並另註）；已完結案顯示的仍是存檔值。新增 `dispatchTotalCostPretax()`／`dispatchTaxExcludedCost()`；「過期」比對依完結標記：pretax 比未稅、其餘比含稅。切換日要與 `recognition.DISPATCH_TAXED_FROM` 同值。
 
 ## 1.0.148 — 2026-10-05（wip/t42-fix-caserecord）：財務角色可在任何案件登錄／修改收款〔train_number：1.0.147 → 1.0.148〕
 - `PATCH /api/quotations/{no}/case-record`：財務角色（與 superadmin）不是案件成員時，舊整包格式只在「除款項外與資料庫完全相同」時通過（款項照存），否則 403（不靜默丟掉）；分段格式仍只放行 `payment` 分段；業務（非成員）仍 403。`PATCH …/payment/{idx}` 本來就沒有擁有者限制。測試：`test_finance_caserecord_foreign_case_2026_10_05.py`。
