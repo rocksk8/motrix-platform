@@ -1,5 +1,11 @@
 # 薪資獎金 更新紀錄
 
+## (next:minor) — 2026-10-06（wip/t44-bonus-mail）：獎金分潤核准通知送審人
+- 新 `bonus_notify.py`：信件類型 `bonus_approved`（「獎金分潤核准（送審人）」，簽核類、owner＝payroll，自動併入個人通知偏好）；簽核完成進入「待發放」時寄給送審人（`approval_json.requestedBy`），主旨與事由同一句「獎金分潤 {單號} 已核准」。**信內不放金額**（只有單號與客戶）。送審人就是簽核的人（唯一最高管理者自簽）⇒ 不寄給自己；寄信例外只記 log，不影響簽核。
+- `api/bonus.py`：`_notify_after(quote_no, status, by)` 在待發放時呼叫 `fire_approved`（之前送審人收不到任何結果）。
+- 站內通知（含單號＋連結）待 t44-inapp-bell 的 `link=` 參數，另行補。
+- 測試：`tests/test_bonus_approved_mail_2026_10_06.py`（5 題；突變 4/4 轉紅）。
+
 ## 1.1.24 — 2026-10-06（wip/t44-settle-terms）：`bank-account.html` 提示「請款或報銷」→「支出申請或報銷」（只改畫面文字）
 
 ## 1.1.23 — 2026-10-05（wip/t42-finance-role）：財務角色
