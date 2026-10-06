@@ -376,26 +376,46 @@ def _update_merged_event(event_id: str, summary: str, description: str, event_da
             raise
 
 
+def _upsert_event_strict(code: str, summary: str, description: str, event_date, key: str) -> bool:
+    """upsert 的本體，**失敗會丟例外**（給需要知道成敗的呼叫端：每日對帳 `calendar_sync` 只有成功才記「已同步」）。
+    回 True＝已建立／更新；False＝沒做（key 空、事件種類或全域總開關關閉）。`push_event_upsert_for_module` 是它的 fire-and-forget 包裝。"""
+    if not key or not event_enabled(code) or not _cfg().get("enabled"):   # 全域總開關關閉 ⇒ 靜默不推（同 delete；不要每次存檔都記 WARNING
+        return False
+    if isinstance(event_date, str):
+        try:
+            event_date = date.fromisoformat(event_date[:10])
+        except ValueError:
+            event_date = None
+    event_date = event_date or date.today()
+    mk = _upsert_key(code, key)
+    with _merge_lock(mk):
+        found = _find_merged_event(mk)
+        if found:
+            event_id = _update_merged_event(found["id"], summary, description, event_date, mk)
+        else:
+            event_id = _create_merged_event(summary, description, event_date, mk)
+    logger.info("push_event_upsert_for_module(%s, %s): -> event %s", code, key, event_id)
+    return True
+
+
+def _delete_event_strict(code: str, key: str) -> bool:
+    """delete 的本體，失敗會丟例外。回 True＝已刪或本來就沒有；False＝沒做（key 空、開關關閉）。"""
+    if not key or not event_enabled(code) or not _cfg().get("enabled"):
+        return False
+    mk = _upsert_key(code, key)
+    with _merge_lock(mk):
+        found = _find_merged_event(mk)
+        if found:
+            _delete_event_with_retry(found["id"])
+            logger.info("push_event_delete_for_module(%s, %s): deleted event %s", code, key, found["id"])
+    return True
+
+
 def push_event_upsert_for_module(code: str, summary: str, description: str, event_date, key: str) -> None:
     """同一 (代碼, key) 只會有一筆事件：找得到 ⇒ 更新標題／說明／日期；找不到 ⇒ 建立。
     事件種類開關關閉 ⇒ 不建不改（既有事件保留）。fire-and-forget：失敗只記 log。"""
     try:
-        if not key or not event_enabled(code) or not _cfg().get("enabled"):   # 全域總開關關閉 ⇒ 靜默不推（同 delete；不要每次存檔都記 WARNING）
-            return
-        if isinstance(event_date, str):
-            try:
-                event_date = date.fromisoformat(event_date[:10])
-            except ValueError:
-                event_date = None
-        event_date = event_date or date.today()
-        mk = _upsert_key(code, key)
-        with _merge_lock(mk):
-            found = _find_merged_event(mk)
-            if found:
-                event_id = _update_merged_event(found["id"], summary, description, event_date, mk)
-            else:
-                event_id = _create_merged_event(summary, description, event_date, mk)
-        logger.info("push_event_upsert_for_module(%s, %s): -> event %s", code, key, event_id)
+        _upsert_event_strict(code, summary, description, event_date, key)
     except Exception as exc:
         logger.warning("push_event_upsert_for_module(%r, %r) failed: %s", code, key, exc)
 
@@ -404,14 +424,7 @@ def push_event_delete_for_module(code: str, key: str) -> None:
     """刪掉 (代碼, key) 那一筆（找不到＝已經沒有，視為成功）。事件種類開關關閉 ⇒ 不碰 Google（零流量；
     與開關的既有語意一致：關掉之後已建立的事件保留，不刪）；全域總開關關閉同樣不打。fire-and-forget。"""
     try:
-        if not key or not event_enabled(code) or not _cfg().get("enabled"):
-            return
-        mk = _upsert_key(code, key)
-        with _merge_lock(mk):
-            found = _find_merged_event(mk)
-            if found:
-                _delete_event_with_retry(found["id"])
-                logger.info("push_event_delete_for_module(%s, %s): deleted event %s", code, key, found["id"])
+        _delete_event_strict(code, key)
     except Exception as exc:
         logger.warning("push_event_delete_for_module(%r, %r) failed: %s", code, key, exc)
 

@@ -1023,9 +1023,8 @@ def _check_range_task_deadline() -> None:
 def _sync_range_task_calendar() -> None:
     """階段 2（MAIL-CAL）：區間工作事項結束日的行事曆對帳。預設關（關著＝不讀資料庫、零 Google 流量）；
     尚有負責人未完成的任務才有事件，全員完成／刪除／改日期都由對帳處理。事件不含負責人與金額。"""
-    from helpers import google_calendar as gc
-    from helpers.calendar_sync import sync_dated_events
-    if not gc.event_enabled("range_task_due"):
+    from helpers.calendar_sync import is_active, sync_dated_events
+    if not is_active("range_task_due"):          # 事件種類或行事曆總開關關著 ⇒ 連來源查詢都不做
         return
     current = {}
     conn = get_db()

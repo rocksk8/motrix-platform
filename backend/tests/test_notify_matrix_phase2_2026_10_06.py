@@ -53,8 +53,8 @@ def _clean(client):
 @pytest.fixture
 def calls(monkeypatch):
     rec = []
-    monkeypatch.setattr(gc, "push_event_upsert_for_module", lambda code, s, d, dt, key: rec.append(("up", code, key, str(dt), s, d)))
-    monkeypatch.setattr(gc, "push_event_delete_for_module", lambda code, key: rec.append(("del", code, key)))
+    monkeypatch.setattr(gc, "_upsert_event_strict", lambda code, s, d, dt, key: rec.append(("up", code, key, str(dt), s, d)) or True)
+    monkeypatch.setattr(gc, "_delete_event_strict", lambda code, key: rec.append(("del", code, key)) or True)
     return rec
 
 
@@ -274,8 +274,8 @@ def test_warranty_source_only_won_cases_future_expiry_and_no_money(calls):
     _cal(["warranty_expiry"])
     cd._sync_warranty_calendar()
     ups = _ups(calls, "warranty_expiry")
-    assert list(ups) == ["Q-W1#SN1"], "只有已成案、未過期、有保固資料的設備"
-    c = ups["Q-W1#SN1"]
+    assert list(ups) == ["Q-W1#i0"], "只有已成案、未過期、有保固資料的設備"
+    c = ups["Q-W1#i0"]
     assert "攝影機" in c[4] and "Q-W1" in c[5] and "客戶甲" in c[5]
     assert "987654" not in c[4] + c[5], "事件不放金額"
     calls.clear()
@@ -289,7 +289,7 @@ def test_warranty_source_only_won_cases_future_expiry_and_no_money(calls):
     finally:
         conn.close()
     cd._sync_warranty_calendar()
-    assert calls == [("del", "warranty_expiry", "Q-W1#SN1")]                    # 不再是已成案 ⇒ 刪
+    assert calls == [("del", "warranty_expiry", "Q-W1#i0")]                    # 不再是已成案 ⇒ 刪
 
 
 def test_project_end_source_open_cases_only_and_follows_edits(calls):
@@ -383,3 +383,89 @@ def test_reverse_control_payable_pairing_guard_goes_red(client, make_user, monke
     today = next(x for x in d["items"] if x["key"] == "payable_due_today")
     assert today["calendar"]["code"] == "" and today["calendar"]["disabledReason"], "拿掉配對就退回『沒有日期』的停用格——這正是要擋的狀態"
     assert "payable_due" in {c["code"] for c in d["calendarOnly"]}
+
+
+# ── 稽核第 3 輪：失敗不記為已同步、請求上限、設備 key、短路 ──────────────────────
+
+def test_failed_push_does_not_advance_state_and_is_retried(monkeypatch):
+    """Google 暫時失敗：不能把項目記成已同步（否則永遠不會重試）；恢復後下一次補上。反向對照：成功才記。"""
+    _cal(["project_end"])
+    fail = {"on": True}
+    done = []
+    def up(code, s, d, dt, key):
+        if fail["on"]:
+            raise RuntimeError("Google 5xx")
+        done.append(key)
+        return True
+    monkeypatch.setattr(gc, "_upsert_event_strict", up)
+    monkeypatch.setattr(gc, "_delete_event_strict", lambda code, key: True)
+    cur = {"A": _item(5), "B": _item(6), "C": _item(7), "D": _item(8)}
+    st = cs.sync_dated_events("project_end", cur)
+    assert st["upserted"] == 0 and st["failed"] == cs.MAX_CONSECUTIVE_FAILURES, "連續失敗 3 次就收手，不整批打"
+    assert not _get_setting("calsync.project_end"), "失敗不可進對帳表"
+    fail["on"] = False
+    st = cs.sync_dated_events("project_end", cur)
+    assert sorted(done) == ["A", "B", "C", "D"] and set(_get_setting("calsync.project_end")) == {"A", "B", "C", "D"}
+
+
+def test_failed_delete_keeps_the_record_so_it_is_retried(monkeypatch):
+    _cal(["project_end"])
+    monkeypatch.setattr(gc, "_upsert_event_strict", lambda *a: True)
+    monkeypatch.setattr(gc, "_delete_event_strict", lambda code, key: (_ for _ in ()).throw(RuntimeError("x")))
+    cs.sync_dated_events("project_end", {"A": _item(5)})
+    cs.sync_dated_events("project_end", {})                                    # 來源消失、刪除失敗
+    assert set(_get_setting("calsync.project_end")) == {"A"}, "刪除失敗要留著記錄、下次再刪"
+    monkeypatch.setattr(gc, "_delete_event_strict", lambda code, key: True)
+    cs.sync_dated_events("project_end", {})
+    assert _get_setting("calsync.project_end") == {}
+
+
+def test_strict_functions_raise_and_public_wrappers_swallow(monkeypatch):
+    _cal(["project_end"])
+    def boom(*a, **k):
+        raise RuntimeError("down")
+    monkeypatch.setattr(gc, "_find_merged_event", boom)
+    with pytest.raises(RuntimeError):
+        gc._upsert_event_strict("project_end", "t", "d", _d(3), "k")
+    with pytest.raises(RuntimeError):
+        gc._delete_event_strict("project_end", "k")
+    gc.push_event_upsert_for_module("project_end", "t", "d", _d(3), "k")      # 既有契約：fire-and-forget，不丟
+    gc.push_event_delete_for_module("project_end", "k")
+    _cal([], enabled=True)
+    assert gc._upsert_event_strict("project_end", "t", "d", _d(3), "k") is False       # 開關關 ⇒ 沒做（False，不是成功）
+
+
+def test_daily_checks_actually_call_the_range_task_sync(monkeypatch):
+    """變異對照：run_daily_checks 忘了呼叫對帳 ⇒ 這題紅（三種模式都要呼叫）。"""
+    from modules.daily_tasks import api as dt
+    ran = []
+    monkeypatch.setattr(dt, "_sync_range_task_calendar", lambda: ran.append(1))
+    monkeypatch.setattr(dt, "_check_overdue_and_notify", lambda *a, **k: None)
+    monkeypatch.setattr(dt, "_check_range_task_deadline", lambda: None)
+    for mode in ("daily", "startup"):
+        dt.run_daily_checks(mode)
+    assert len(ran) == 2
+
+
+def test_master_switch_off_short_circuits_before_the_source_query(monkeypatch):
+    from modules.case import case_deadlines as cd
+    from modules.daily_tasks import api as dt
+    def boom(*a, **k):
+        raise AssertionError("總開關關閉時不該查來源資料表")
+    monkeypatch.setattr(cd, "get_db", boom)
+    monkeypatch.setattr(dt, "get_db", boom)
+    _set_setting("google_calendar", {"enabled": False, "events": {c: True for c in NEW}})        # 事件種類全開、總開關關
+    cd._sync_warranty_calendar(); cd._sync_project_end_calendar(); dt._sync_range_task_calendar()
+
+
+def test_warranty_devices_sharing_a_serial_get_distinct_keys(calls):
+    from modules.case import case_deadlines as cd
+    start = (TODAY - timedelta(days=330)).isoformat()
+    _quote("Q-W3", "已成案", {"devices": [
+        {"id": 111, "name": "甲", "sn": "SAME", "warrantyStart": start, "warrantyMonths": 12},
+        {"id": 222, "name": "乙", "sn": "SAME", "warrantyStart": start, "warrantyMonths": 12},
+        {"name": "無id甲", "sn": "", "warrantyStart": start, "warrantyMonths": 12},
+        {"name": "無id乙", "sn": "", "warrantyStart": start, "warrantyMonths": 12}]})
+    _cal(["warranty_expiry"])
+    cd._sync_warranty_calendar()
+    assert sorted(_ups(calls, "warranty_expiry")) == ["Q-W3#111", "Q-W3#222", "Q-W3#i2", "Q-W3#i3"]

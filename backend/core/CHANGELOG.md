@@ -7,8 +7,9 @@
 - L1（新增，向下相容；wip/t43-mail-cal-matrix）：`helpers/notify_matrix.py`——信件×行事曆通知矩陣的對照與規則（`EVENT_LINKS`／`MAIL_OFF_LOCKED`／`is_mail_off`／`mail_off_lock_reason` 等；不讀寫設定、不 import 業務模組）；`helpers.email_notify` 的所有收件人漏斗（含事件收件人、部門主管、月報、財務受眾）在公司關閉該信件時回空清單，鎖定的資安類恆不可關。
 - L1（新增選填參數，向下相容；wip/t44-fin-fixes）：`helpers.email_notify.send_registered(..., wait=False)`——`wait=True` 時等寄送結果，只有 `SEND_SENT` 回 True（要寫「已通知」記號的呼叫端用）。
 - 測試：`tests/test_business_days_2026_10_05.py`；L1 介面快照 `core_bump.py --pending`。
-- L1（新增，向下相容）：`helpers.calendar_sync.sync_dated_events(code, current, today=None, max_calls=200)`——日期型行事曆事件的每日對帳：呼叫端給「來源目前成立的全部項目 `{key: (日期, 標題, 說明)}`」，本函式與對帳表 `system_settings["calsync.<代碼>"]` 比對後只送有變的（t41 的 `push_event_upsert_for_module`／`push_event_delete_for_module`）；事件種類開關或行事曆總開關關閉 ⇒ 完全不動作（零 Google 流量、不寫對帳表）；日期已過不建、已建的過期事件保留；單次最多 200 次 Google 呼叫。
+- L1（新增，向下相容）：`helpers.calendar_sync.sync_dated_events(code, current, today=None, max_calls=100)`——日期型行事曆事件的每日對帳：呼叫端給「來源目前成立的全部項目 `{key: (日期, 標題, 說明)}`」，本函式與對帳表 `system_settings["calsync.<代碼>"]` 比對後只送有變的（t41 的 `push_event_upsert_for_module`／`push_event_delete_for_module`）；事件種類開關或行事曆總開關關閉 ⇒ 完全不動作（零 Google 流量、不寫對帳表）；日期已過不建、已建的過期事件保留；單次最多 100 個項目（約 200 次 Google 請求）。
 - `EVENT_TYPES` 新增 `warranty_expiry`、`range_task_due`、`project_end`（分組「期限提醒」，預設關）；`notify_matrix.EVENT_LINKS` 掛到既有信件列 `warranty_expiry`／`range_task_deadline`／`case_project_overdue`（不新增信件類型）。
+- L1（新增內部名稱，向下相容）：`google_calendar._upsert_event_strict`／`_delete_event_strict`——會丟例外的本體（回 True＝做了、False＝開關關閉沒做）；`push_event_upsert_for_module`／`push_event_delete_for_module` 改為其 fire-and-forget 包裝，行為不變。`calendar_sync.is_active(code)`、`MAX_CONSECUTIVE_FAILURES`：對帳只在 Google 成功後才記「已同步」，失敗下次重試、連續失敗 3 次收手；單次上限改為 100 個項目（約 200 次請求）。
 - 測試：`tests/test_notify_matrix_phase2_2026_10_06.py`；目錄筆數 15→18（`test_calendar_event_toggles`、`test_e2e_calendar_event_toggles`）。
 
 ## 1.113 — wip/t42-finance-role（財務角色；財務／出納權限只屬「財務」角色與 superadmin）

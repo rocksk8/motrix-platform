@@ -239,6 +239,8 @@
   },
   "helper:calendar_sync": {
    "MAX_CALLS_PER_RUN": "const",
+   "MAX_CONSECUTIVE_FAILURES": "const",
+   "is_active": "def(code)",
    "sync_dated_events": "def(code, current, today=…, max_calls=…)"
   },
   "helper:case_access": {

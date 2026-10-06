@@ -1,8 +1,8 @@
 # 每日任務 更新紀錄
 
-## (next) — 2026-10-06（wip/t43-phase2-events）：區間工作事項結束日的行事曆事件（預設關）
+## (next) — 2026-10-06（wip/t43-phase2-events）：區間工作事項結束日的行事曆事件（預設關；對帳失敗會重試）
 - `api.py` 新增 `_sync_range_task_calendar`，每次 `run_daily_checks` 先跑；尚有負責人未完成的區間工作事項才有事件，全員完成、刪除、改結束日由對帳處理。事件不含負責人姓名與金額。事件種類開關關閉（預設）⇒ 不讀資料庫、不打 Google。
-- 上線注意：第一次打開時，所有尚有人未完成的區間工作事項會補建事件；每次每日檢查最多 200 次 Google 呼叫，所以第一次打開會分散在數天內建完。
+- 上線注意：第一次打開時，所有尚有人未完成的區間工作事項會補建事件；每次每日檢查最多處理 100 個項目（每個約 2 次 Google 請求），所以第一次打開會分散在數天內建完。
 
 ## 1.0.8 — 2026-10-01（暫用號，列車取號；wip/t31-builder-b-c7：掛載點）
 - `module.json` 新增 `mount_points`：`daily-tasks`（頁面 daily-tasks.html、kind=tab、perm any）——自訂模組（建構器方案 B）可掛成「工作事項詳情頁籤列」的頁籤；頁面加掛載元件容器（`data-mount-point="daily_tasks.daily-tasks"`）與 `static/mount-tabs.js`。沒有自訂模組掛上去時頁面行為不變。
