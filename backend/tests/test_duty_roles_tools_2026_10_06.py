@@ -154,3 +154,18 @@ def test_export_effective_without_any_duty_data_is_a_noop(pop, tmp_path, capsys)
     dbp = _db_copy(tmp_path)
     assert EX.main(["--db", dbp, "--apply"]) == 0
     assert "無事可做" in capsys.readouterr().out
+
+
+def test_verify_flags_an_order_only_difference(pop):
+    """集合相同、順序不同也要紅（上線關卡逐字比對含順序）。"""
+    ids, roles = pop
+    conn = db.get_db()
+    snap = EQ.take_snapshot(conn)
+    row = conn.execute("SELECT modules FROM users WHERE id=?", (ids["tl_adm"],)).fetchone()
+    mods = json.loads(row[0])
+    assert len(mods) >= 2
+    conn.execute("UPDATE users SET modules=? WHERE id=?", (json.dumps(list(reversed(mods))), ids["tl_adm"]))
+    conn.commit()
+    res = EQ.verify(conn, snap)
+    conn.close()
+    assert [d["username"] for d in res["diffs"]] == ["tl_adm"] and res["diffs"][0]["orderOnly"] is True

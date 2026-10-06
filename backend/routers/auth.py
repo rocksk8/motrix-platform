@@ -473,7 +473,7 @@ def auth_login(body: LoginIn, request: Request):
             "username":           "demo",
             "displayName":        row["display_name"],
             "role":               row["role"],
-            "modules":            effective_modules(row["role"], row["modules"], user_id=row["id"]),   # 第42班：財務三鍵由角色決定
+            "modules":            effective_modules(row["role"], row["modules"]),   # 第42班：財務三鍵由角色決定
             "loginAt":            now,
             "mustChangePassword": False,
         }

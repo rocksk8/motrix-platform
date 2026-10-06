@@ -319,5 +319,64 @@ def test_page_exists_calls_only_real_endpoints_and_states_the_partial_effect_war
     for c in called:
         base = re.sub(r"/\d+$", "", c).rstrip("/")
         assert any(base == r or base == re.sub(r"/\{[^}]+\}$", "", r) for r in real), "頁面呼叫不存在的端點：" + c
-    assert "部分生效" in page and "財務三鍵" in page and "至少 4 字" in page
+    assert "部分生效" in page and "財務三鍵" in page and "至少 4 個不同的字" in page
     assert "超級管理員本身不受角色或扣項影響" in page
+
+
+# ── 稽核補強（hichan-cf）：(a) 逐字相同要抓得到重新序列化 (b) 登入回應路徑 (c) 原因不得敷衍 ──────────────
+
+ODD_RAW = ['["dashboard","case_manage"]', '[ "dashboard" ,   "case_manage" ]', '["case_manage", "dashboard"]', "[]", '[\n  "dashboard"\n]']
+
+
+@pytest.mark.parametrize("raw", ODD_RAW)
+def test_require_user_returns_the_stored_modules_string_byte_for_byte_even_for_odd_spacing(client, make_user, raw):
+    """重新序列化（json.dumps）會改掉空白 ⇒ 沒有綁定／扣項的人必須原字串回傳。"""
+    make_user(username="odd_u", role="admin", modules=["dashboard"], legacy_finance_flag=False)
+    conn = db.get_db()
+    conn.execute("UPDATE users SET modules=? WHERE username='odd_u'", (raw,))
+    conn.commit()
+    conn.close()
+    tok = _hdr(client, "odd_u")["Authorization"]
+    assert A._require_user(tok)["modules"] == raw
+
+
+def test_login_and_me_and_issue_session_responses_include_role_keys_for_a_bound_user(W):
+    uid, c = W["ids"]["dr_eng"], W["client"]
+    assert _post(W, "/bindings", {"userId": uid, "roleId": W["roles"]["procurement"]}).status_code == 201
+    r = c.post("/api/auth/login", json={"username": "dr_eng", "password": "Test-Pass-123"})
+    assert r.status_code == 200 and "procurement" in r.json()["modules"], "登入回應的 modules 要含角色授予的鍵"
+    assert "procurement" in c.get("/api/auth/me", headers={"Authorization": "Bearer " + r.json()["token"]}).json()["modules"]
+    from routers import auth as auth_router
+    conn = db.get_db()
+    try:
+        row = conn.execute("SELECT id, username, display_name, role, modules, COALESCE(must_change_password,0) AS must_change_password,"
+                           " COALESCE(totp_enabled,0) AS totp_enabled FROM users WHERE id=?", (uid,)).fetchone()
+        out = auth_router._issue_session(conn, row, False)          # TOTP／通行金鑰／QR 登入共用的出口
+    finally:
+        conn.close()
+    assert "procurement" in out["modules"]
+
+
+@pytest.mark.parametrize("bad", ["。。。。", "....", "aaaa", "好好好好", "1111", "abc", "a b a b", "，，，，，，", "!!!???"])
+def test_trivial_reasons_are_refused_for_sensitive_changes(W, bad):
+    r = W["client"].post("/api/duty-roles", json={"key": "triv", "name": "敷衍", "permissions": ["settings"], "reason": bad}, headers=W["sa"])
+    assert r.status_code == 400 and "原因" in r.text, bad
+
+
+@pytest.mark.parametrize("ok", ["abcd", "兼任薪資", "需要這個職務", "Q4 audit", "老闆口頭同意"])
+def test_reasonable_reasons_are_accepted(W, ok):
+    r = W["client"].post("/api/duty-roles", json={"key": "okr", "name": "正常", "permissions": ["settings"], "reason": ok}, headers=W["sa"])
+    assert r.status_code == 201, (ok, r.text)
+
+
+def test_self_change_guard_unit_level(W):
+    """路由層只有 superadmin 能進，這道護欄平常走不到 ⇒ 直接打服務層驗（未來放寬管理者時才會生效）。"""
+    conn = db.get_db()
+    try:
+        me = {"id": W["ids"]["dr_adm"], "username": "dr_adm", "display_name": "", "role": "admin", "modules": json.dumps(["dashboard", "procurement"])}
+        for fn, args in ((DR.bind_role, (me["id"], W["roles"]["viewer"])), (DR.set_subtract, (me["id"], "inventory"))):
+            with pytest.raises(DR.DutyError) as e:
+                fn(conn, me, *args)
+            assert e.value.status == 403 and "自己" in str(e.value)
+    finally:
+        conn.close()

@@ -16,7 +16,7 @@
 - 扣項只影響「以模組鍵判斷」的功能；admin 直通的一般管理判斷（B 階段才收斂）不受影響 ⇒ 畫面寫明「部分生效」。
 
 ## 變更原因（Q4 b）
-只有高敏感變更必填（≥4 字、≤200 字，伺服器端強制）；是否高敏感由伺服器依差異計算，不信前端旗標。
+只有高敏感變更必填（≥4 個不同的字母數字／中文字元、≤200 字，伺服器端強制；純標點或重複同一字視為無效）；是否高敏感由伺服器依差異計算，不信前端旗標。
 高敏感清單 `HIGH_SENSITIVITY_KEYS`（N2 a，不含 `reports`）。
 ## 紀錄（只增不改不刪）
 每次變更寫一列 `permission_changes`（DB 觸發器擋 UPDATE／DELETE）；沒有任何更新／刪除端點。
@@ -135,9 +135,14 @@ def _clean_reason(reason) -> str:
     return r
 
 
+def _is_trivial_reason(reason: str) -> bool:
+    """原因太敷衍：少於 REASON_MIN 個「不同的」字母數字（含中文）字元——例如純標點、重複同一字（aaaa、好好好好、1111）。"""
+    return len({c for c in reason if c.isalnum()}) < REASON_MIN
+
+
 def _require_reason_if_sensitive(sensitive: bool, reason: str) -> None:
-    if sensitive and len(reason) < REASON_MIN:
-        raise DutyError("這項變更涉及高敏感權限（%s），請填寫原因（至少 %d 字）" % ("、".join(HIGH_SENSITIVITY_KEYS), REASON_MIN))
+    if sensitive and (len(reason) < REASON_MIN or _is_trivial_reason(reason)):
+        raise DutyError("這項變更涉及高敏感權限（%s），請填寫原因（至少 %d 個不同的字，不可只有標點或重複同一個字）" % ("、".join(HIGH_SENSITIVITY_KEYS), REASON_MIN))
 
 
 def _record(conn, actor, kind, target_type, target_id, label, added, removed, before, after, sensitive, reason, ip):
