@@ -77,7 +77,7 @@
 | 「待簽回」旗標 | 新增加法欄位 `blocker`（如 `"待簽回"`）：未簽回的列顯示但**付款鈕停用**；`mark_paid` 後端也擋（409「須已簽回」），不只靠前端。 |
 | 付款 | IP-100 `mark_paid(conn, key, paid_date, user, remit)` 委派到**同一份實作**（把 `payslip_mark_paid` 的核心抽成函式 `mark_payslip_paid(conn, slip_no, payment_date, voucher_no, who)`；兩個入口只剩薄殼，避免「同一動作兩份實作」）。傳票單號仍必填並驗 `voucher.by_no`（IP-4）：IP-100 目前 `remit` 沒有 `voucherNo` 欄 ⇒ 加法擴充 `remit.voucherNo`（契約版本不變，同 A2-3 追加慣例）。 |
 | 付款日 | 只在出納這步填（`paid_date`）；`payment_date` 仍是 IP-9 營運報表歸月依據（`payslip_payouts._expense_entries`），行為不變。 |
-| 預定付款日 | `payslips` 加 `planned_pay_date`（YYYY-MM-DD，可空），送審時可填、核准後出納可改（比照 `PATCH …/extra-expenses/{id}/planned-pay-date`）。**行事曆 `payable_due`**：key＝`payroll:<單號>`，核准時 upsert、改日期移動、付款／作廢／清空刪除（`push_event_upsert_for_module`／`push_event_delete_for_module`，commit 之後）；事件**不含金額、不含受領人姓名**（只寫「勞報單待付款 PS-…」）。🔴 現有 `EVENT_TYPES` 描述寫「不含勞報單付款」（`expense_payout`）與使用者 2026-09-29 的「勞報單不進行事曆」類裁示有關，**要使用者明確裁示勞報單可以進 `payable_due`**（Q7）。 |
+| 預定付款日 | `payslips` 加 `planned_pay_date`（YYYY-MM-DD，可空），送審時可填、核准後出納可改（比照額外支出的預定付款日 PATCH；端點名稱以實作時 `case_extra_expenses.py` 為準）。**行事曆 `payable_due`**：key＝`payroll:<單號>`，核准時 upsert、改日期移動、付款／作廢／清空刪除（`push_event_upsert_for_module`／`push_event_delete_for_module`，commit 之後）；事件**不含金額、不含受領人姓名**（只寫「勞報單待付款 PS-…」）。🔴 現有 `EVENT_TYPES` 的 `expense_payout` 描述寫「不含勞報單付款」、`payable_due` 描述只寫案件額外支出請款；**要使用者明確裁示勞報單可以進 `payable_due`**（Q7；我沒查到對應的歷史裁示，只看到這兩句描述）。 |
 | 與匯款單路徑 | 勞報單若被承攬商匯款單關聯（`personnel[].payslipNo`），付款走**匯款單**（`remit_link.mark_paid`，付款日＝匯款日、`data_json.paid_via_remit`）。此時 IP-100 列表要**標示「經匯款單 {號} 付款」並停用獨立付款**，否則同一筆錢可被出納付兩次（今天 IP-103 的 `unpay` 已用 `paid_via_remit` 擋回頭路，但正向沒有擋）。 |
 | 簽回仍在付款之前？ | **建議是**：簽回檔＝受領人簽名的付款憑據，現制 `mark-paid` 即要求 `已簽回`；本次需求未說要取消。因此出納**在核准後就看得到**（排程、預定付款日），但**付款鈕在已簽回才亮**。Q4 請使用者確認是否要允許「未簽回也能付」（會動法規／內控，不建議預設）。 |
 | 權限 🔴 | IP-100 端點用 `has_finance_access`（財務角色＋superadmin，第 42 班）；IP-103／`_require_payer`／`get_signed_file` 仍用 `role=='superadmin' or user_has_module(user,'cashier')`（`cashier.py::_payslip_visible`、`payslips.py::_require_payer`）——**與第 42 班「出納／財務合併」不一致**（舊 cashier 模組勾選）。整合時兩者必須對齊其一。Q1：勞報單（含扣繳金額）財務角色看不看得到？ |
@@ -118,7 +118,7 @@
 - 不放 `payslips.data_json`／`contractor_dispatches` 欄位：跨模組（M04↔M07）以提供者互取，不互讀表（既有慣例：`payslip.remit` 為 IP-105）。
 
 ### 6.3 跨模組介面（加法）
-- 新提供者 IP-106 `payslip.dispatch_links`（M07 提供）：`links_for_dispatch(conn, dispatch_id)`、`links_for_payslip(conn, slip_no)`、`link(conn, slip_no, dispatch_id, user)`、`unlink(...)`；回傳**只含單號、狀態、受領人姓名、開單日期**；金額欄位 `net` **只有有權者才回**（見 6.5）。
+- 新提供者（IP 號待列車取號，暫稱 `payslip.dispatch_links`；M07 提供）：`links_for_dispatch(conn, dispatch_id)`、`links_for_payslip(conn, slip_no)`、`link(conn, slip_no, dispatch_id, user)`、`unlink(...)`；回傳**只含單號、狀態、受領人姓名、開單日期**；金額欄位 `net` **只有有權者才回**（見 6.5）。
 - M04（派發頁）取用，M07 不在 ⇒ 區塊顯示「薪資獎金模組未安裝」（不默默略過，同 IP-14／IP-100 慣例）。
 
 ### 6.4 UI 位置
@@ -147,7 +147,7 @@
 | Q4 🔴 | 付款是否仍須「已簽回」？ | 是（簽回前出納看得到但不能付） |
 | Q5 | 已核准、未匯出時是否可「撤回核准」或作廢？ | 可作廢（需原因，同已匯出作廢）；不開撤回 |
 | Q6 | 既有 `草稿` 要不要「祖父條款」免送審？ | 不免；沒設簽核層＝一鍵核准 |
-| Q7 🔴 | 勞報單預定付款日要不要進行事曆 `payable_due`（現有裁示是勞報單付款不進行事曆）？ | 不進，直到明確裁示；預定付款日欄位與出納清單照做 |
+| Q7 🔴 | 勞報單預定付款日要不要進行事曆 `payable_due`（目前 `expense_payout` 描述明寫不含勞報單付款）？ | 不進，直到明確裁示；預定付款日欄位與出納清單照做 |
 | Q8 | 派發↔勞報單連結：建立時機（勞報單建立時選填、派發端也可補）？ | 兩端皆可 |
 | Q9 🔴 | 派發管理者可否看到勞報單狀態（無金額）？ | 可看單號＋狀態＋受領人，無金額 |
 | Q10 | 簽核設定頁是否新增「勞報單簽核流程」獨立一列（不併統一流程）？ | 是 |
