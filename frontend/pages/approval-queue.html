@@ -776,6 +776,7 @@
           <div class="aq-section-title">
             <span x-text="detail?.title || '送審內容'"></span>
             <span x-show="detailLoading" style="font-size:11px;color:var(--text-dim);margin-left:8px">載入中…</span>
+            <span x-show="fileError" x-text="fileError" data-testid="aq-file-error" style="font-size:11px;color:#C0392B;margin-left:8px"></span>
           </div>
 
           <!-- 哪個案件 -->
@@ -1059,6 +1060,7 @@
         selected: null,
         detail: null,
         detailLoading: false,
+        fileError: '',          // 附件下載失敗的行內訊息（不用 alert）
         reassignModal: false,
         reassignTypes: [],
         reassignTo: '',
@@ -1616,6 +1618,7 @@
 
         // HEIC／HEIF：瀏覽器多半無法顯示 ⇒ 只給下載連結、不做內嵌預覽（同一個簽核情境簽章，換 blob 後觸發下載）
         async downloadFile(f) {
+          this.fileError = ''
           try {
             const r = await fetch(this._photoTokenUrl(f.path), { headers: { Authorization: 'Bearer ' + this.session.token } })
             if (!r.ok) throw new Error('取得檔案連結失敗（HTTP ' + r.status + '）')
@@ -1627,7 +1630,7 @@
             a.href = url; a.download = f.name || 'download'
             document.body.appendChild(a); a.click(); a.remove()
             setTimeout(() => URL.revokeObjectURL(url), 10000)
-          } catch (e) { alert('下載失敗：' + e.message) }
+          } catch (e) { this.fileError = '下載失敗：' + e.message }
         },
 
         async openFile(f) {

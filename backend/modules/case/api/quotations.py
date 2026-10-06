@@ -5936,10 +5936,11 @@ def detail_extra_expense(conn, doc_no):
         "files": _file_entries(r["files_json"], "other"),     # 舊筆沒有 kind ⇒ 附件（t44-attach-views）
     }
     _kind = r["kind"] if "kind" in r.keys() else ""
+    # 額外支出的附件＝金額（發票／收據影像）：金額被遮蔽的人看不到檔案（與 `_typed_expense_masked`／全部文件同一個精神）；
+    # 由 L1 `_open_detail` 依這個旗標處理（詳情與 /api/photo-token 的簽核佇列情境共用，列表與放行路徑一致）。
+    # 使用者裁示（2026-10-07，S1）：舊筆（kind=''）也一律適用。
+    out["filesNeedMoneyView"] = True
     if _kind:
-        # 費用單據的附件＝金額（發票／收據影像）：金額被遮蔽的人看不到檔案（與 `_typed_expense_masked`／全部文件同一個精神）；
-        # 由 L1 `_open_detail` 依這個旗標處理（詳情與 /api/photo-token 的簽核佇列情境共用，列表與放行路徑一致）
-        out["filesNeedMoneyView"] = True
         # 費用單據（A2）：單號、類型、部門、收款人、明細列（無案件＝caseless，簽核人／建立者／admin 才開得了：與佇列同一個判斷由 L1 做）
         try:
             _lines = json.loads(r["lines_json"] or "[]")

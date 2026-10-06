@@ -185,3 +185,40 @@ def test_cashier_file_endpoint_refuses_unbound_paths_and_paid_rows(client, world
     assert client.get(base + "f1", headers=H["av_fin"]).status_code == 200
     _x("UPDATE case_extra_expenses SET paid_date='2026-10-06' WHERE id=?", (eid,))      # 已登錄付款 ⇒ 不在待付款清單
     assert client.get(base + "f1", headers=H["av_fin"]).status_code == 404
+
+
+# ── S1：舊筆（kind=''）也套同一條「附件＝金額」規則 ──────────────────────────────────
+def test_legacy_kind_empty_rows_are_money_masked_too(client, world):
+    H, eid, files = world
+    _x("UPDATE case_extra_expenses SET kind='' WHERE id=?", (eid,))
+    assert _q("SELECT kind FROM case_extra_expenses WHERE id=?", (eid,))[0]["kind"] == ""
+    ok = _detail(client, H["av_apr"], eid)
+    assert ok.status_code == 200 and {f["id"] for f in ok.json()["files"]} == {"f1", "f2", "f3"}, "簽核人照樣看得到"
+    r = _detail(client, H["av_col"], eid)
+    assert r.status_code in (200, 403, 404), r.text
+    if r.status_code == 200:
+        assert r.json()["files"] == [], "舊筆也不給看不到金額的人檔案"
+    paths = [f["path"] for f in files]
+    no = client.post("/api/photo-token/batch", json={"paths": paths, "type": "extra_expense", "id": str(eid)}, headers=H["av_col"])
+    assert no.status_code == 200 and no.json()["tokens"] == {}, no.text
+
+
+# ── S3：沒有 id 的舊筆——出納清單合成 idx-<位置>，不外洩 path，仍可開檔 ─────────────────────────
+def test_cashier_legacy_files_without_id_get_synthetic_ids_and_never_leak_path(client, world):
+    H, eid, files = world
+    _approve(eid)
+    legacy = [dict(files[0]), dict(files[1]), dict(files[2])]
+    del legacy[0]["id"]                                                      # f1（PNG）沒有 id
+    _x("UPDATE case_extra_expenses SET files_json=? WHERE id=?", (json.dumps(legacy), eid))
+    r = client.get("/api/cashier/pending-payables", headers=H["av_fin"])
+    (it,) = [i for i in r.json()["items"] if i["key"] == str(eid)]
+    ids = [f["id"] for f in it["fileList"]]
+    assert ids == ["idx-0", "f2", "f3"], ids
+    blob = json.dumps(it["fileList"], ensure_ascii=False)
+    assert "case_extra_expense/" not in blob and "path" not in blob, "合成 id 之後 id 也不能是路徑"
+    base = "/api/cashier/pending-payables/case/%s/files/" % eid
+    g = client.get(base + "idx-0", headers=H["av_fin"])
+    assert g.status_code == 200 and g.content == PNG
+    assert client.get(base + "idx-1", headers=H["av_fin"]).status_code == 404, "有 id 的那筆不能用位置開"
+    assert client.get(base + "idx-9", headers=H["av_fin"]).status_code == 404
+    assert client.get(base + legacy[0]["path"].replace("/", "%2F"), headers=H["av_fin"]).status_code == 404, "路徑不是 id"
