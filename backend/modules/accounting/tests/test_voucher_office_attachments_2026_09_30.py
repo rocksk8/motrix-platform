@@ -68,7 +68,8 @@ def test_other_document_types_keep_the_old_whitelist():
     with pytest.raises(HTTPException) as e:
         asyncio.run(go("quotations"))
     assert e.value.status_code == 400 and "jpg/png/pdf" in e.value.detail and "/docx" not in e.value.detail   # 訊息只列 jpg/png/pdf（檔名 x.docx 本身會出現，所以比對「/docx」）
-    assert up._EXTRA_EXTS_BY_SUBFOLDER.keys() == {"voucher_attachments"}
+    assert up._EXTRA_EXTS_BY_SUBFOLDER.keys() == {"voucher_attachments", "case_extra_expense"}   # 第44班：支出申請另放行 HEIC／HEIF（只有它；傳票不收 HEIC）
+    assert up._EXTRA_EXTS_BY_SUBFOLDER["case_extra_expense"] == {".heic", ".heif"}
 
 
 def test_download_is_an_attachment_with_the_right_filename(client, make_user):
