@@ -16,10 +16,6 @@ from modules.case import purchase_items as PI
 log = logging.getLogger(__name__)
 
 
-def _provider(name):
-    return registry.providers(name).get("supply")
-
-
 def material_item_map(conn, quote_no, data) -> dict:
     """`{材料申請 itemId: 報價品項 id}`（只列有連到報價品項的）——出貨單頁把「材料申請連結列」對回報價品項用。"""
     return {str(o.get("itemId")): str(o.get("quoteItemId") or "").strip()
@@ -45,7 +41,7 @@ def shipped_by_item(conn, quote_no, data) -> dict:
                 d["notes"].append(n)
         d["attributed"] = True
 
-    fn = _provider("shipping.material_shipped")
+    fn = registry.providers("shipping.material_shipped").get("supply")
     if fn is not None:
         try:
             mat_to_item = material_item_map(conn, quote_no, data)
@@ -55,7 +51,7 @@ def shipped_by_item(conn, quote_no, data) -> dict:
                     add(qid, e)
         except Exception:                                                   # noqa: BLE001
             log.exception("item_shipped: 材料申請出貨提供者失敗（略過這一來源）")
-    fn = _provider("shipping.quote_item_shipped")
+    fn = registry.providers("shipping.quote_item_shipped").get("supply")
     if fn is not None:
         try:
             for qid, e in (fn(conn, quote_no) or {}).items():
