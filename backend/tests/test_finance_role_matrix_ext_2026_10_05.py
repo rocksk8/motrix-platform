@@ -480,15 +480,27 @@ def test_material_suppliers_picker_roles(client, accounts):
 
 
 def test_finance_and_admin_can_replace_material_orders_but_not_sales(finance_on_foreign_case, make_user):
-    """Q6：材料申請日常作業維持 admin；財務角色可（不受擁有者限制）。空清單＝最小的合法 PATCH。"""
+    """Q6：材料申請日常作業維持 admin。（修正：使用者裁示 (a)——財務角色對**非自己負責**的案件只能看、不能改一般叫料清單；此處是外人案件 ⇒ 403。）空清單＝最小的合法 PATCH。"""
     from helpers.module_registry import ROLE_TEMPLATES
     c, h, fh = finance_on_foreign_case
     ah = _login(c, *make_user("m_adm", role="admin", modules=list(ROLE_TEMPLATES["admin"])))
     sh = _login(c, *make_user("m_sal", role="sales", modules=list(ROLE_TEMPLATES["sales"])))
     body = {"materialOrders": []}
-    for who, hh in (("superadmin", h), ("finance", fh), ("admin", ah)):
+    for who, hh in (("superadmin", h), ("admin", ah)):
         r = c.patch("/api/quotations/%s/material-orders" % NO, headers=hh, json=body)
         assert r.status_code == 200, (who, r.status_code, r.text[:160])
+    r = c.patch("/api/quotations/%s/material-orders" % NO, headers=fh, json=body)
+    assert r.status_code == 403 and "只能檢視" in r.text, (r.status_code, r.text[:160])      # 財務角色：外人案件只能看，不能改清單
+    assert c.get("/api/quotations/%s/material-orders" % NO, headers=fh).status_code == 200, "財務角色仍可檢視任何案件的叫料清單"
+    # 正對照：同一位財務被指派為該案負責人（assigned_user_ids）後，自己負責的案件照常可改
+    import db as _db
+    cn = _db.get_db()
+    uid = cn.execute("SELECT id FROM users WHERE username='f_fin'").fetchone()["id"]
+    cn.execute("UPDATE quotations SET assigned_user_ids=? WHERE quote_no=?", (json.dumps([uid]), NO))
+    cn.commit()
+    cn.close()
+    r = c.patch("/api/quotations/%s/material-orders" % NO, headers=fh, json=body)
+    assert r.status_code == 200, ("owner-finance", r.status_code, r.text[:160])
     r = c.patch("/api/quotations/%s/material-orders" % NO, headers=sh, json=body)
     assert r.status_code in (403, 404), (r.status_code, r.text[:160])               # 不是案件業務（404）或沒有權限（403）；絕不可 200
 
