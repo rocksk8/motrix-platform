@@ -3,8 +3,9 @@
 ## (next:minor) — 2026-10-06（wip/t44-bonus-mail）：獎金分潤核准通知送審人
 - 新 `bonus_notify.py`：信件類型 `bonus_approved`（「獎金分潤核准（送審人）」，簽核類、owner＝payroll，自動併入個人通知偏好）；簽核完成進入「待發放」時寄給送審人（`approval_json.requestedBy`），主旨與事由同一句「獎金分潤 {單號} 已核准」。**信內不放金額**（只有單號與客戶）。送審人就是簽核的人（唯一最高管理者自簽）⇒ 不寄給自己；寄信例外只記 log，不影響簽核。
 - `api/bonus.py`：`_notify_after(quote_no, status, by)` 在待發放時呼叫 `fire_approved`（之前送審人收不到任何結果）。
-- 站內通知（含單號＋連結）待 t44-inapp-bell 的 `link=` 參數，另行補。
-- 測試：`tests/test_bonus_approved_mail_2026_10_06.py`（5 題；突變 4/4 轉紅）。
+- 新信件類型 `bonus_returned`（「獎金分潤退回（送審人）」）：駁回（待審核）與退回（待發放等）都回草稿，原本沒人收到信；現在送審人收到「獎金分潤 {單號} 已退回」（附原因、不含金額）＋站內通知。`_back_to_draft` 回傳（送審人, 客戶）供 commit 後通知用。連結改用 `urllib.parse.quote` 編碼單號；信的連結組法同 `case/material_notify._page`。
+- 站內通知（`type=bonus_approved`，含單號＋連結 `bonus.html?q=`，不含金額；以 `_approved` 結尾 ⇒ L1 去重）：與信互不依賴；`link=` 參數由 t44-inapp-bell 提供（L1 還沒有時退回不帶連結）。
+- 測試：`tests/test_bonus_approved_mail_2026_10_06.py`（9 題；信的突變 4/4 轉紅，站內通知＋退回信突變待補）。
 
 ## 1.1.24 — 2026-10-06（wip/t44-settle-terms）：`bank-account.html` 提示「請款或報銷」→「支出申請或報銷」（只改畫面文字）
 
