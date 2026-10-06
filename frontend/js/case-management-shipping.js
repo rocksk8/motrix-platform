@@ -23,6 +23,7 @@ window.CM_PARTS.push(() => ({
     _partsOptions: null,
     // 34-S2：從材料申請帶入（出貨單連動；契約 SHIPPING-MATERIAL-LINK-CONTRACT-S1.md）
     msh: { open: false, loading: false, items: [], pick: {}, qty: {}, err: '' },
+    itemShipped: { items: {}, materialToItem: {} },
     serialPicker: { show: false, itemIdx: null, partNo: '', options: [], selected: [], loading: false, error: '' },
 
     // ── 出貨單 ────────────────────────────────────────────────────────────────
@@ -34,6 +35,7 @@ window.CM_PARTS.push(() => ({
       this.shippingNotes = []
       this.snSortPref = await loadListPref(this.session.token, `sn:${quoteNo}`)
       if (!live()) return
+      this.loadItemShipped(quoteNo, live)             // 第 43 班：「已累計出貨」欄（不阻塞；拿不到 ⇒ 顯示「—」）
       try {
         const r = pre ? this._preResp(pre) : await fetch(`/api/shipping-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -48,6 +50,24 @@ window.CM_PARTS.push(() => ({
       this.shippingNotesLoading = false
       this.$nextTick(() => this._initSubListSortable('sn'))
     },
+
+    async loadItemShipped(quoteNo, live) {
+      this.itemShipped = { items: {}, materialToItem: {} }
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/item-shipped`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!live()) return
+        if (r.ok) { const d = await r.json(); this.itemShipped = { items: d.items || {}, materialToItem: d.materialToItem || {} } }
+      } catch {}
+    },
+    // 這一列對應的報價品項累計出貨：{shipped, ordered, reserved}；沒有對應（舊單、手動列、庫存列）⇒ null（畫面「—」）
+    shipCum(it) {
+      if (!it || it.type === 'header') return null
+      const m = (this.itemShipped && this.itemShipped.materialToItem) || {}
+      const qid = it.quoteItemId || (it.materialLink && m[String(it.materialLink.materialItemId)]) || ''
+      const e = qid && this.itemShipped && this.itemShipped.items ? this.itemShipped.items[String(qid)] : null
+      return e && e.attributed ? e : null
+    },
+    shipCumText(it) { const e = this.shipCum(it); const f = n => String(Math.round((Number(n) || 0) * 1000) / 1000); return e ? f(e.shipped) + ' / ' + f(e.ordered) : '—' },
 
     _blankShippingForm() {
       const today = MotrixDate.today()
@@ -176,7 +196,9 @@ window.CM_PARTS.push(() => ({
           this.shippingForm.items.push({
             id: Date.now() + Math.random(),
             description: it.description || '', brand: it.brand || '',
-            qty: it.qty || 1, unit: it.unit || '台', notes: ''
+            qty: it.qty || 1, unit: it.unit || '台', notes: '',
+            // 第 43 班：記住這列對應哪個報價品項（加性欄位；舊單沒有 ⇒ 已出貨數量顯示「—」）。有 id 才記
+            ...(it.id != null && String(it.id).trim() ? { quoteItemId: String(it.id).trim() } : {})
           })
         }
       }

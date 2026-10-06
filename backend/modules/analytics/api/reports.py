@@ -271,6 +271,25 @@ def _case_dept(cr: dict, row, name_index: dict, user_by_id: dict):
 _LEGACY_GROSS_NOTE = "（舊精算為毛利）"      # 舊精算（摘要沒有 netProfit）的「實際」欄是毛利；畫面／Excel／PDF 與 reports.html 共用同一句
 
 
+def _case_ship_summaries(quote_nos) -> dict:
+    """`{案號: {ordered, shipped}}`——經 `case.shipped_summary` 提供者（M01）取各案報價品項數量小計；只有數量。提供者不在或失敗 ⇒ `{}`（欄位留白，不影響匯出）。"""
+    fn = _registry.single_provider("case.shipped_summary")
+    if fn is None:
+        return {}
+    out = {}
+    conn = get_db()
+    try:
+        for qn in quote_nos:
+            try:
+                r = fn(conn, qn) or {}
+                out[qn] = {"ordered": r.get("ordered", 0), "shipped": r.get("shipped", 0)}
+            except Exception:                                    # noqa: BLE001 — 單一案件失敗只留白
+                _log.warning("case.shipped_summary(%s) failed", qn, exc_info=True)
+    finally:
+        conn.close()
+    return out
+
+
 def _orig_indirect_reserve(summary: dict) -> int:
     """報價預留的間接成本（運費／安裝／差旅／保固／其他）＝精算摘要 `origIndirectReserve`（M01 完結時凍結）。
 
@@ -1522,8 +1541,10 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         "精算狀態","精算日期","完結人",
         # 報價預留間接成本（T39 新增；附在最右，既有欄號一律不動——有人／工具依賴這份匯出）
         "報價預留間接成本","其中：預留未被實際成本抵用","其中：其他",
+        # 第 43 班：報價品項數量小計（只有數量；只經 case.shipped_summary 提供者，模組不在＝空白）
+        "報價品項數量合計","已出貨數量合計",
     ]
-    cols6 = [13,18,18,10,9,13, 13,11,11,13, 13,11,13,11,11,13, 9,13, 9,11,10, 15,15,13]
+    cols6 = [13,18,18,10,9,13, 13,11,11,13, 13,11,13,11,11,13, 9,13, 9,11,10, 15,15,13, 13,13]
     for i, (h, w) in enumerate(zip(hdrs6, cols6), 1):
         ws6.column_dimensions[get_column_letter(i)].width = w
 
@@ -1539,7 +1560,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     grp_labels = [
         (1,6,"基本資訊","374151"), (7,10,"原始報價預估","475569"),
         (11,16,"實際成本精算","92400E"), (17,18,"差異","7C3AED"),
-        (19,21,"精算資訊","374151"), (22,24,"報價預留間接成本","6D28D9"),
+        (19,21,"精算資訊","374151"), (22,24,"報價預留間接成本","6D28D9"), (25,26,"出貨數量","0F766E"),
     ]
     for sc, ec, lbl, clr in grp_labels:
         if sc == ec:
@@ -1558,8 +1579,10 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
              fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
 
+    ship_sum = _case_ship_summaries([mc["quoteNo"] for mc in data["marginCases"]])
     for r_i, mc in enumerate(data["marginCases"], 4):
         s   = mc.get("settleSummary") or {}
+        ship = ship_sum.get(mc["quoteNo"]) or {}
         net = mc["netMarginPct"] or 0
         act = mc["actualMarginPct"] or 0
         diff    = round(act - net, 1)
@@ -1588,14 +1611,16 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                   f"{gross_pct:.1f}%", f"{net_pct:.1f}%", net_prof,
                   f"{'+' if diff >= 0 else ''}{diff:.1f}", gp_diff,
                   mc["settleStatus"] or "", mc.get("settleDate",""), mc.get("settleBy",""),
-                  reserve, uncovered, gp_diff - uncovered],
+                  reserve, uncovered, gp_diff - uncovered,
+                  ship.get("ordered", ""), ship.get("shipped", "")],
                  font=mk(size=9), fill=fill(bg), border=BD,
                  aligns=[al("left"),al("left"),al("left"),al("left"),al("center"),
                          al("right"),al("right"),al("right"),al("right"),al("right"),
                          al("right"),al("right"),al("right"),al("right"),al("right"),al("right"),
                          al("right"),al("right"),
                          al("center"),al("center"),al("left"),
-                         al("right"),al("right"),al("right")],
+                         al("right"),al("right"),al("right"),
+                         al("right"),al("right")],
                  height=18)
         for col in [6,7,10,11,12,13,16,18,22,23,24]:
             ws6.cell(row=r_i, column=col).number_format = '#,##0'
@@ -1624,10 +1649,12 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                   tot_item, tot_extra, tot_total,"","", tot_net_prof,
                   "", tot_act - tot_est,
                   "","","",
-                  tot_reserve, tot_uncovered, tot_act - tot_est - tot_uncovered],
+                  tot_reserve, tot_uncovered, tot_act - tot_est - tot_uncovered,
+                  sum((ship_sum.get(mc["quoteNo"]) or {}).get("ordered", 0) for mc in data["marginCases"]) if ship_sum else "",
+                  sum((ship_sum.get(mc["quoteNo"]) or {}).get("shipped", 0) for mc in data["marginCases"]) if ship_sum else ""],
                  font=mk(bold=True, size=9, color=C_WHITE),
                  fill=fill("111827"), border=BD,
-                 aligns=[al("center")] + [al("right")] * 23,
+                 aligns=[al("center")] + [al("right")] * 25,
                  height=20)
         for col in [6,7,10,11,12,13,16,18,22,23,24]:
             ws6.cell(row=sr6, column=col).number_format = '#,##0'

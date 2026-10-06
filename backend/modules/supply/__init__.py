@@ -29,6 +29,8 @@ MODULE = ModuleSpec(
         ("shipping.material_shipped", "supply"): material_link.material_shipped,
         # 34：同一份資料的單一數字版（reserved＋shipped；M01 變更申請「不得低於已出貨」用）
         ("shipping.material_shipped_qty", "supply"): material_link.material_shipped_qty,
+        # IP-SH4：從報價單帶入的出貨列依報價品項加總（已出貨／占用中；案件的「已出貨數量」欄用；case 不 import supply）
+        ("shipping.quote_item_shipped", "supply"): material_link.quote_item_shipped,
         # IP-104：上傳檔的讀取權限（出貨單回簽附件；2026-09-30 P0）
         ("uploads.path_access", "supply"): shipping_notes._ShippingPathAccess,
         # IP-105：附件目錄（attachments.catalog，2026-09-30 P2）
