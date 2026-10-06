@@ -380,6 +380,11 @@ def _open_detail(conn, user: dict, type_: str, doc_id: str) -> dict:
             if e.status_code != 404:
                 raise
             _deny_detail(user, type_, doc_id, "denied")  # 案件層的真正原因 case_access 已另記
+    if d.get("filesNeedMoneyView") and not _can_see_queue_money(conn, user, approval_raw):
+        # 附件＝金額（費用單據的發票／收據）：金額遮蔽的人不給檔案清單；也因此 `/api/photo-token` 的簽核佇列情境不放行這些路徑
+        d = dict(d, files=[])
+        if isinstance(d.get("changes"), dict):
+            d["changes"] = dict(d["changes"], files=[])
     return d
 
 

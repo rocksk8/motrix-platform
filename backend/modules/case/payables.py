@@ -53,7 +53,18 @@ def _item(r):
         "invoiceDate": (_col(r, "invoice_date") or "")[:10], "invoiceNo": _col(r, "invoice_no") or "",
         "invoiceFiles": sum(1 for f in files if isinstance(f, dict) and f.get("kind") == "invoice"),
         "files": len(files),
+        # 出納看得到每個附件的名稱／大小／類別（唯讀；2026-10-06 t44-attach-views）；**不含 path**——開檔走 file_open（綁單據、出納端點串流）
+        "fileList": _file_list(r),
     }
+
+
+def _file_list(r) -> list:
+    from helpers.approval_queue import file_entries
+    out = []
+    for e in file_entries(r["files_json"], "other"):
+        e = {k: v for k, v in e.items() if k != "path"}
+        out.append(e)
+    return out
 
 
 def _payee_username(r) -> str:
@@ -90,6 +101,28 @@ class _Payables:
             raise LookupError("找不到這筆申請")
         return {"payeeType": _col(r, "payee_type") or "", "payeeName": _col(r, "payee_name") or r["payer_name"] or "",
                 "payeeUsername": _payee_username(r), "bank": _col(r, "payee_bank") or "", "account": _col(r, "payee_account") or ""}
+
+    @staticmethod
+    def file_open(conn, key, file_id):
+        """出納開待付款申請的附件（唯讀）：只認「還在出納待付款清單上」的那一筆（已核准、未登錄付款、可付款類型），檔案 id 必須在那一筆
+        自己的 files_json、路徑必須屬於這張單據的資料夾（與附件目錄 `open()` 同一道綁定）。回 `OpenedFile`；任一不符 ⇒ LookupError。"""
+        from helpers.uploads import opened_upload_file, pick_file
+        from modules.case.attachments import _path_bound_to_doc
+        try:
+            exp_id = int(key)
+        except (TypeError, ValueError):
+            raise LookupError("找不到這筆申請")
+        r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=? AND status = '已核准' AND COALESCE(paid_date, '') = '' AND "
+                         + _EF.payable_sql(), (exp_id,)).fetchone()
+        if r is None:
+            raise LookupError("找不到這筆申請")
+        entry = pick_file(_files(r["files_json"]), file_id)
+        if entry is None or not _path_bound_to_doc(conn, "extra_expense", exp_id, entry):
+            raise LookupError("找不到這個檔案")
+        opened = opened_upload_file(entry)
+        if opened is None:
+            raise LookupError("找不到這個檔案")
+        return opened
 
     @staticmethod
     def pending(conn) -> list:

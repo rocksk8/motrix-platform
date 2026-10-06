@@ -495,7 +495,21 @@
                             <div style="font-size:11px;color:#b91c1c" x-show="plannedState(it) === 'overdue'">已逾預定日</div>
                             <div style="font-size:11px;color:#b45309" x-show="plannedState(it) === 'soon'">3 天內到期</div>
                           </td>
-                          <td class="c" x-text="(it.invoiceNo || '—') + (it.invoiceFiles ? '（' + it.invoiceFiles + ' 檔）' : '')"></td>
+                          <td class="c">
+                            <div x-text="(it.invoiceNo || '—') + (it.invoiceFiles ? '（' + it.invoiceFiles + ' 檔）' : '')"></div>
+                            <div style="text-align:left;font-size:11px;margin-top:4px" x-show="(it.fileList || []).length"
+                                 :data-testid="'cashier-payreq-files-' + it.source + '-' + it.key">
+                              <template x-for="f in (it.fileList || [])" :key="f.id">
+                                <div>
+                                  <span :style="'display:inline-block;font-size:10px;padding:0 5px;border-radius:8px;margin-right:3px;color:#fff;background:' + (f.docKind === 'invoice' ? '#2E8B57' : '#6B7280')"
+                                        x-text="f.docKind === 'invoice' ? '發票' : '附件'"></span>
+                                  <a href="#" @click.prevent="openPayableFile(it, f)" :data-testid="'cashier-payreq-file-' + it.source + '-' + it.key + '-' + f.id"
+                                     x-text="f.kind === 'heic' ? (f.name + '（下載）') : f.name"></a>
+                                  <span style="color:var(--text-dim)" x-show="f.size" x-text="fileSizeText(f.size)"></span>
+                                </div>
+                              </template>
+                            </div>
+                          </td>
                           <td class="c">
                             <input type="date" class="field-input" style="width:140px" x-show="payreqQueue.canPay" required
                                    :data-testid="'cashier-payreq-date-' + it.source + '-' + it.key" x-model="payreqDates[it.source + ':' + it.key]">
