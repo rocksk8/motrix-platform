@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-06（train43 整合：wip/t43-phase2-events＋wip/t44-fin-fixes；階段 2 對帳失敗會重試）；併入 r2（提醒信記號政策）；併入 wip/t44-settle-terms（字樣）；＋wip/t43-shipped-qty（已出貨數量）
+## (next) — 2026-10-06（train43 整合：wip/t43-phase2-events＋wip/t44-fin-fixes；階段 2 對帳失敗會重試）；併入 r2（提醒信記號政策）；併入 wip/t44-settle-terms（字樣）；＋wip/t43-shipped-qty（已出貨數量）（已出貨數量）
 - 新 `item_shipped.py`：每個報價品項的 訂購／已出貨／占用中＝材料申請出貨（`shipping.material_shipped` 經叫料列的 `quoteItemId`）＋報價帶入列（`shipping.quote_item_shipped`）；沒有可歸屬紀錄 ⇒ `attributed=False`（畫面「—」）。新端點 `GET /api/quotations/{no}/item-shipped`（案件可見即可；只有數量）；新提供者 `case.shipped_summary`（IP-SH5）。
 - 精算頁（`settlement.html`）原始報價區新增「已出貨/數量」欄；案件頁出貨單清單新增「已累計出貨」欄。權限與遮蔽沿用原頁（精算頁本來就需財務檢視）。
 - `case_deadlines.py` 新增 `_sync_warranty_calendar`、`_sync_project_end_calendar`，掛在每日檢查（`run_daily_checks`）最後；與寄信的 guard 完全獨立。事件種類開關關閉（預設）⇒ 不讀資料庫、不打 Google。事件內容只有案號、客戶、設備／專案、日期，不含金額。日期已過不建；改日期、結案、設備刪除由對帳處理。
