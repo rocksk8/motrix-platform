@@ -214,3 +214,31 @@ def test_change_request_api_approve_and_reject_mail_the_applicant(W, make_user, 
         assert r.status_code == 200, r.text
         mine = [s for to, s, _ in sent if to == ["pl_sa@example.test"] and s.endswith("%s %s" % (code, word))]   # superadmin 也會收到管理員活動信，只認申請人信
         assert len(mine) == 1, (verb, [s for _, s, _ in sent])
+
+
+# ── ② 請購單（purchase_req）真的走 API 送審→核准，申請人收到「已核准」信（正式機回報：請購單核准後沒收到信）──────────
+
+def test_purchase_req_real_approval_mails_the_applicant(W, make_user, sent):
+    from modules.case.tests.test_purchase_item_lines_2026_10_02 import _set_tiers
+    c, h = W
+    cn = db.get_db()
+    try:
+        cn.execute("UPDATE users SET email='pl_sa@example.test' WHERE username='pl_sa'")
+        cn.commit()
+    finally:
+        cn.close()
+    ap_u, ap_p = make_user(username="pr_approver", role="admin")
+    ap_h = _login(c, ap_u, ap_p)
+    ap_id = db.get_db().execute("SELECT id FROM users WHERE username=?", (ap_u,)).fetchone()["id"]
+    _set_tiers([{"order": 0, "approvers": [{"userId": ap_id, "username": ap_u, "displayName": "簽核人"}]}])
+    base = "/api/quotations/%s/extra-expenses" % NO
+    eid = c.post(base, headers=h, json=_body("purchase_req", [{"summary": "線材", "qty": 1, "unitCost": 700, "amount": 700, "categoryName": "料件"}])).json()["id"]
+    assert c.post("%s/%d/submit" % (base, eid), headers=h).status_code == 200
+    code = db.get_db().execute("SELECT doc_code FROM case_extra_expenses WHERE id=?", (eid,)).fetchone()["doc_code"]
+    assert code.startswith("PR-"), code
+    sent.clear()
+    r = c.post("%s/%d/approve" % (base, eid), headers=ap_h, json={})
+    assert r.status_code == 200 and r.json()["status"] == "已核准", r.text
+    mine = [s for to, s, h_ in sent if to == ["pl_sa@example.test"] and s.endswith("請購單 %s 已核准" % code)]
+    assert len(mine) == 1, [(to, s) for to, s, _ in sent]
+    assert all("NT$" not in html for to, subj, html in sent if subj.endswith("請購單 %s 已核准" % code))
