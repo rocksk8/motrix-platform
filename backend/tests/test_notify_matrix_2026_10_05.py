@@ -22,6 +22,7 @@ CAL_DEFAULTS_BASELINE = {
     "stage_done": True, "important_comment": True, "case_update": False, "dev_case_converted": True, "dev_case_stale": True,
     "dev_case_update": False, "contractor_payout": False, "expense_payout": False, "receipt_logged": False, "receivable_due": False,
     "payable_due": False,                       # 第42班（t42-planned-pay-date）新增，預設關
+    "warranty_expiry": False, "range_task_due": False, "project_end": False,                  # 階段 2（預設關）
 }
 
 
@@ -96,7 +97,7 @@ def test_every_mail_key_without_a_calendar_event_has_a_disabled_reason(client, m
     for k in nm.MAIL_OFF_LOCKED:
         assert nm.mail_off_lock_reason(k) and mt.get(k).category == "system", k
     assert {c["code"] for c in d["calendarOnly"]} == {"quotation_won", "stage_done", "important_comment", "case_update", "dev_case_converted",
-                                                       "dev_case_update", "contractor_payout", "receipt_logged", "receivable_due", "payable_due"}
+                                                       "dev_case_update", "contractor_payout", "receipt_logged", "receivable_due"}
 
 
 # ── ③ 預設不變 ────────────────────────────────────────────────────────

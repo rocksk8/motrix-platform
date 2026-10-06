@@ -82,3 +82,30 @@ def test_matrix_cells_write_back_to_the_existing_stores(live_server, make_user, 
     only.click()
     page.wait_for_function(f"() => {DATA}.items.find(t => t.key === 'cal:receipt_logged').calendar.enabled === true", timeout=15000)
     assert _setting("google_calendar")["events"]["receipt_logged"] is True
+
+
+@pytest.mark.e2e
+def test_phase2_date_event_cells_default_off_and_write_back_one_by_one(live_server, make_user, e2e_browser):
+    """階段 2：三個新日期型事件的行事曆格——預設未勾、可勾、寫回 google_calendar.events；信件格不受影響。"""
+    sa = make_user(username="nm_e2e_p2", role="superadmin")
+    page = e2e_browser.new_page(viewport={"width": 1500, "height": 900})
+    inject_login(page, live_server, *sa)
+    page.goto(f"{live_server}/pages/mail-settings.html")
+    _tid(page, "ms-row-warranty_expiry").wait_for(timeout=20000)
+    cells = (("warranty_expiry", "warranty_expiry"), ("range_task_deadline", "range_task_due"), ("case_project_overdue", "project_end"))
+    for mail, code in cells:
+        cal = _tid(page, "ms-cal-" + mail)
+        assert cal.is_enabled() and not cal.is_checked(), "%s：預設要可勾且未勾" % mail
+        assert _tid(page, "ms-mail-" + mail).is_checked(), "%s：信件格不受影響" % mail
+    assert not _setting("google_calendar").get("events"), "沒動任何格子 ⇒ 沒有寫入"
+    for mail, code in cells:                                        # 逐格：勾一個、只有那一個寫入
+        _tid(page, "ms-cal-" + mail).click()
+        page.wait_for_function(f"() => {DATA}.items.find(t => t.key === '{mail}').calendar.enabled === true", timeout=15000)
+        ev = _setting("google_calendar")["events"]
+        assert ev[code] is True and [c for c, v in ev.items() if v is True and c in ("warranty_expiry", "range_task_due", "project_end")].count(code) == 1
+    ev = _setting("google_calendar")["events"]
+    assert all(ev[c] is True for _, c in cells)
+    _tid(page, "ms-cal-warranty_expiry").click()                    # 再取消：回到關
+    page.wait_for_function(f"() => {DATA}.items.find(t => t.key === 'warranty_expiry').calendar.enabled === false", timeout=15000)
+    assert _setting("google_calendar")["events"]["warranty_expiry"] is False
+    assert "warranty_expiry" not in _setting("mail_recipient_overrides"), "行事曆格不寫信件設定"

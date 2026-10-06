@@ -26,6 +26,11 @@ EVENT_LINKS = {
     "stage_due":       {"mail": "case_stage_deadline", "also": ("case_stage_deadline_manager",), "note": "階段到期日"},
     "dev_case_stale":  {"mail": "dev_case_stale", "also": (), "note": "停滯起算日"},
     "expense_payout":  {"mail": "expense_form_paid", "also": (), "note": "付款日（行事曆含所有請款類型，信件只有費用單據）"},
+    "payable_due":     {"mail": "payable_due_today", "also": ("payable_due_soon",), "note": "預定付款日（事件不含金額）"},
+    # 階段 2（預設關）：信件那邊本來就有，行事曆格是新增的
+    "warranty_expiry": {"mail": "warranty_expiry", "also": (), "note": "保固到期日"},
+    "range_task_due":  {"mail": "range_task_deadline", "also": (), "note": "區間結束日"},
+    "project_end":     {"mail": "case_project_overdue", "also": (), "note": "專案預計完成日"},
 }
 
 #: 資安／營運攸關的信件：信件格鎖住、不可關閉 ⇒ {key: 原因}。後端驗證（PUT 400）、寄信端也忽略這類的 off（雙保險）。
@@ -42,10 +47,8 @@ MAIL_OFF_LOCKED = {
 MAIL_OFF_CONFIRM_CATEGORIES = ("approval", "system")
 
 #: 沒有行事曆格的原因：特例（有日期、但政策上或尚未提供）。其餘依分類給預設原因。
-_NOT_YET = "尚未提供這類行事曆事件"
 _EVENT_DAY = "事件日型（只有核准或完成當天），價值低，不放公司行事曆"
 CALENDAR_DISABLED_SPECIAL = {
-    "warranty_expiry": _NOT_YET, "range_task_deadline": _NOT_YET, "case_project_overdue": _NOT_YET,
     "tender_found": "標案截止日是逐筆事件，尚未提供行事曆事件",
     "daily_task_assigned": "個人事項，不放公司行事曆", "daily_task_edited": "個人事項，不放公司行事曆",
     "daily_task_overdue": "日期已過的逾期提醒，不建事件", "daily_task_overdue_manager": "日期已過的逾期提醒，不建事件",

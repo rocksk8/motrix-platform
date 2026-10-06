@@ -1020,10 +1020,41 @@ def _check_range_task_deadline() -> None:
 
 
 
+def _sync_range_task_calendar() -> None:
+    """階段 2（MAIL-CAL）：區間工作事項結束日的行事曆對帳。預設關（關著＝不讀資料庫、零 Google 流量）；
+    尚有負責人未完成的任務才有事件，全員完成／刪除／改日期都由對帳處理。事件不含負責人與金額。"""
+    from helpers import google_calendar as gc
+    from helpers.calendar_sync import sync_dated_events
+    if not gc.event_enabled("range_task_due"):
+        return
+    current = {}
+    conn = get_db()
+    try:
+        for row in conn.execute(
+            "SELECT id, title, recurrence_end_date, assigned_to FROM daily_tasks "
+            "WHERE is_deleted=0 AND recurrence_type='range' AND COALESCE(recurrence_end_date,'') != ''"
+        ).fetchall():
+            assigned = json.loads(row["assigned_to"] or "[]")
+            done = {r["username"] for r in conn.execute(
+                "SELECT username FROM daily_task_completions WHERE task_id=? AND completed=1", (row["id"],)).fetchall()}
+            if not [u for u in assigned if u not in done]:
+                continue                                  # 全員完成（或沒有負責人）⇒ 不成立
+            end = row["recurrence_end_date"]
+            current[str(row["id"])] = (end, f"區間工作事項結束：{row['title']}",
+                                       f"工作事項：{row['title']}\n結束日：{end}")
+    finally:
+        conn.close()
+    sync_dated_events("range_task_due", current)
+
+
 # ── `daily.check` 提供者（INTEGRATION-POINTS IP-11；L1 執行器 helpers/daily_checks.py）──────────
 # 2026-09-26：原本本檔的 schedule_overdue_check() 同時跑案件、保固、憑證、備份、磁碟…九種檢查
 # ⇒ 停用每日任務會連帶停掉那些告警。現在本模組只負責自己的兩種；補跑 guard 照舊。
 def run_daily_checks(mode: str = "daily") -> None:
+    try:
+        _sync_range_task_calendar()
+    except Exception as exc:
+        _logger.warning("_sync_range_task_calendar failed: %s", exc)
     if mode == "daily":
         _check_overdue_and_notify()
         _check_range_task_deadline()

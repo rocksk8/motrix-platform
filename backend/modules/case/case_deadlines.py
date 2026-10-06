@@ -269,6 +269,75 @@ def _check_warranty_expiry() -> None:
 
 
 
+# ── 階段 2（MAIL-CAL）：日期型行事曆事件的每日對帳；預設關，關著＝不讀資料庫、零 Google 流量 ──────
+# 事件內容不含金額；日期已過不建（helpers/calendar_sync.py 的 Q9 規則）。與上面寄信的 guard 完全獨立。
+def _sync_warranty_calendar() -> None:
+    from helpers import google_calendar as gc
+    from helpers.calendar_sync import sync_dated_events
+    if not gc.event_enabled("warranty_expiry"):
+        return
+    current = {}
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT quote_no, customer_name, json_extract(data_json, '$.caseRecord') AS cr_json
+            FROM quotations
+            WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') = '已成案'
+              AND json_extract(data_json, '$.caseRecord') IS NOT NULL
+        """).fetchall()
+    finally:
+        conn.close()
+    for row in rows:
+        try:
+            devices = json.loads(row["cr_json"] or "{}").get("devices") or []
+        except Exception:
+            continue
+        for i, dev in enumerate(devices):
+            ws, wm = dev.get("warrantyStart") or "", dev.get("warrantyMonths")
+            if not ws or not wm:
+                continue
+            expiry, _left = _warranty_expiry(ws, wm)
+            if expiry is None:
+                continue
+            sn = (dev.get("sn") or dev.get("mac") or dev.get("name") or "")[:32]
+            name = dev.get("name") or sn or "未知設備"
+            customer = row["customer_name"] or ""
+            current[f"{row['quote_no']}#{sn or 'idx' + str(i)}"] = (
+                expiry,
+                f"保固到期：{name}（{customer}）" if customer else f"保固到期：{name}",
+                f"案號：{row['quote_no']}\n客戶：{customer}\n設備：{name}\n保固到期日：{expiry.isoformat()}")
+    sync_dated_events("warranty_expiry", current)
+
+
+def _sync_project_end_calendar() -> None:
+    from helpers import google_calendar as gc
+    from helpers.calendar_sync import sync_dated_events
+    if not gc.event_enabled("project_end"):
+        return
+    current = {}
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT quote_no, customer_name, project_name,
+                   json_extract(data_json, '$.caseRecord.projectTimeline.endDate') AS end_date_json
+            FROM quotations
+            WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') != '已結案'
+              AND json_extract(data_json, '$.caseRecord.projectTimeline.endDate') IS NOT NULL
+        """).fetchall()
+    finally:
+        conn.close()
+    for row in rows:
+        try:
+            end_date = _date.fromisoformat((row["end_date_json"] or "").strip('"'))
+        except Exception:
+            continue
+        label = row["project_name"] or row["quote_no"]
+        current[row["quote_no"]] = (
+            end_date, f"專案預計完成：{label}",
+            f"案號：{row['quote_no']}\n客戶：{row['customer_name'] or ''}\n專案：{row['project_name'] or ''}\n預計完成日：{end_date.isoformat()}")
+    sync_dated_events("project_end", current)
+
+
 # ── `daily.check` 提供者（INTEGRATION-POINTS IP-11）─────────────────────────────
 def run_daily_checks(mode: str = "daily") -> None:
     """mode：daily（08:00）／startup（啟動補跑）。案件類檢查都看未來，兩種模式做一樣的事。"""
@@ -278,6 +347,11 @@ def run_daily_checks(mode: str = "daily") -> None:
     _check_project_deadline()
     from modules.case import payable_reminders          # 預定付款日提醒信（3 天前＋當天；2026-10-05）
     payable_reminders.run()
+    for fn in (_sync_warranty_calendar, _sync_project_end_calendar):      # 階段 2；各自吞例外，互不影響
+        try:
+            fn()
+        except Exception as exc:
+            _logger.warning("%s failed: %s", fn.__name__, exc)
 
 
 from core import registry as _registry  # noqa: E402

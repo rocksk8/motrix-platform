@@ -24,6 +24,9 @@
 - `payable_calendar.py`：行事曆「付款待辦」（L1 `payable_due`，預設關）跟著現況走——核准／改預定日／清空／作廢／付款日被更正，commit 後同步 upsert 或 delete；出納付款（M05）以 IP-100 的 `來源:key` 直接收回，不讀本模組的表。
 - 測試：`tests/test_payable_planned_pay_date_2026_10_05.py`（migration 冪等、API、IP-100 欄位、行事曆跟現況走、3 天前／當天／冪等／退訂／無日期略過／收件人權限、guard 清理）。
 
+## (next) — 2026-10-06（wip/t43-phase2-events）：保固到期、專案預計完成的行事曆事件（預設關）
+- `case_deadlines.py` 新增 `_sync_warranty_calendar`、`_sync_project_end_calendar`，掛在每日檢查（`run_daily_checks`）最後；與寄信的 guard 完全獨立。事件種類開關關閉（預設）⇒ 不讀資料庫、不打 Google。事件內容只有案號、客戶、設備／專案、日期，不含金額。日期已過不建；改日期、結案、設備刪除由對帳處理。
+
 ## 1.0.142 — 2026-10-05（wip/quick2-wording，併入 t41）：出納來源名稱「案件支出申請」
 - `payables.py` `SOURCE_LABEL` 「案件額外支出（請款）」→「案件支出申請」（出納待付款列的來源）。只改畫面文字；客戶「請款單」（M05 應收）不動。
 

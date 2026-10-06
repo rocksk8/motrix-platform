@@ -13,7 +13,8 @@ from tests import _fake_gcal
 
 EXISTING = ["invoice_voucher", "payment_request", "shipping_note", "quotation_won", "stage_due", "stage_done",
             "important_comment", "dev_case_converted", "dev_case_stale"]
-NEW = ["case_update", "dev_case_update", "contractor_payout", "expense_payout", "receipt_logged", "receivable_due", "payable_due"]
+NEW = ["case_update", "dev_case_update", "contractor_payout", "expense_payout", "receipt_logged", "receivable_due", "payable_due",
+       "warranty_expiry", "range_task_due", "project_end"]
 
 
 def _gc():
