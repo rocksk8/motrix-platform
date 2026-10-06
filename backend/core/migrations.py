@@ -493,4 +493,4 @@ def _core_next_duty_roles(conn):
     return None
 
 
-register("core", NEXT, _core_next_duty_roles)
+register("core", 7, _core_next_duty_roles)
