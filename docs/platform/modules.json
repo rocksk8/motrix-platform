@@ -307,6 +307,7 @@
     "mod:case/material_notify",
     "mod:case/material_payment",
     "mod:case/material_payment_cashier",
+    "mod:case/item_shipped",
     "mod:case/material_shippable",
     "mod:case/material_shipping_view",
     "mod:case/purchase_items",

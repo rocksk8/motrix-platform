@@ -1284,7 +1284,7 @@ function settlementPage() {
       } catch {}
     },
     shippedOf(id) { const e = this.itemShipped[String(id)]; return e && e.attributed ? e : null },
-    fmtQty(n) { return String(Math.round((Number(n) || 0) * 1000) / 1000) },
+    fmtQty(n) { return String(+(Number(n) || 0).toFixed(3)) },
 
     async loadItemPo() {
       this.itemPo = {}

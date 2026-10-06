@@ -67,7 +67,7 @@ window.CM_PARTS.push(() => ({
       const e = qid && this.itemShipped && this.itemShipped.items ? this.itemShipped.items[String(qid)] : null
       return e && e.attributed ? e : null
     },
-    shipCumText(it) { const e = this.shipCum(it); const f = n => String(Math.round((Number(n) || 0) * 1000) / 1000); return e ? f(e.shipped) + ' / ' + f(e.ordered) : '—' },
+    shipCumText(it) { const e = this.shipCum(it); const f = n => String(+(Number(n) || 0).toFixed(3)); return e ? f(e.shipped) + ' / ' + f(e.ordered) : '—' },
 
     _blankShippingForm() {
       const today = MotrixDate.today()
