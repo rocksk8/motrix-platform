@@ -201,10 +201,11 @@
         <div class="pr-card">
           <div class="pr-hint" x-show="mineLoaded && !mine.length">還沒有申請</div>
           <table class="pr-table" x-show="mine.length">
-            <thead><tr><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>付款日</th><th>單據</th><th></th></tr></thead>
+            <thead><tr><th>單號</th><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>付款日</th><th>單據</th><th></th></tr></thead>
             <tbody>
               <template x-for="e in mine" :key="e.id">
                 <tr :data-payreq-row="e.id" :data-status="e.status">
+                  <td :data-doc-code="e.id"><span style="font-family:var(--font-en,monospace)" x-text="e.docCode || ('#' + e.id)"></span></td>
                   <td><span style="font-family:var(--font-en,monospace)" x-text="e.quoteNo"></span><div class="pr-hint" x-text="e.customerName"></div></td>
                   <td x-text="(e.category || '') + '｜' + (e.description || '')"></td>
                   <td x-text="'NT$ ' + Math.round(e.totalCost || 0).toLocaleString()"></td>

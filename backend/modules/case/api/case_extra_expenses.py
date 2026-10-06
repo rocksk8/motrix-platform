@@ -765,7 +765,7 @@ def void_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={})
         requester = _jcol(row, "approval_json").get("requestedBy") or row["created_by"]
         if requester:
             _notify(requester, "extra_expense_voided", str(exp_id), quote_no or "無案件",
-                    "%s 的額外支出 %s 已被作廢：%s" % (_subj(quote_no), label, reason))
+                    "%s 已被作廢（%s）：%s" % (XN.doc_ident(conn, row), _subj(quote_no), reason), link="payment-request.html?tab=mine")
         _audit(_tok(authorization), "extra_expense.void", *_audit_target(quote_no, exp_id),
                "%s 作廢額外支出 #%s %s：%s" % (quote_no or "無案件", exp_id, label, reason), {"reason": reason, **_asum(row)})
         return {"ok": True, "status": VOIDED_STATUS, "voidedAt": now}
@@ -823,6 +823,8 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
             conn.commit()
             _audit(_tok(authorization), "extra_expense.auto_approve", *_audit_target(quote_no, exp_id),
                    f"{quote_no or '無案件'} 額外支出 #{exp_id} {label}：未設定簽核層，直接核准", _asum(row))
+            _notify(user["username"], "extra_expense_approved", str(exp_id), quote_no or "無案件",
+                    f"{XN.doc_ident(conn, row)} 已核准（{_subj(quote_no)}；未設定簽核層，送審即核准）", link="payment-request.html?tab=mine")
             XN.fire("approved", conn, row, requester=user["username"], payable=EF.is_payable_kind(_col(row, "kind", "") or ""))
             PC.fire(exp_id)                                      # 送審即核准 ⇒ 有預定付款日就建「付款待辦」
             return {"ok": True, "status": "已核准", "autoApproved": True}
@@ -933,10 +935,10 @@ def approve_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default=
             requester = appr.get("requestedBy")
             if requester:
                 _notify(requester, "extra_expense_approved", str(exp_id), quote_no or "無案件",
-                        f"{_subj(quote_no)} 的額外支出 {label} 已核准")
+                        f"{XN.doc_ident(conn, row)} 已核准（{_subj(quote_no)}）", link="payment-request.html?tab=mine")
             XN.fire("approved", conn, row, requester=requester or "", payable=EF.is_payable_kind(_col(row, "kind", "") or ""))
             PC.fire(exp_id)                                      # 最終核准 ⇒ 有預定付款日就建「付款待辦」
-            notify_module_activity("案件管理", "額外支出核准", display, f"{quote_no or '無案件'}｜{label}",
+            notify_module_activity("案件管理", "支出申請核准", display, f"{XN.doc_ident(conn, row)}｜{quote_no or '無案件'}｜{label}",
                                    f"case-management.html?q={quote_no}")
         _audit(_tok(authorization), "extra_expense.approve", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 額外支出 #{exp_id} {label} 第 {ct + 1} 層核准 → {status}", {"tier": ct + 1, "status": status, **_asum(row)})
@@ -991,8 +993,8 @@ def reject_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={
         requester = appr.get("requestedBy")
         if requester:
             _notify(requester, "extra_expense_rejected", str(exp_id), quote_no or "無案件",
-                    f"{_subj(quote_no)} 的額外支出 {label} 已被駁回"
-                    + (f"：{reason}" if reason else ""))
+                    f"{XN.doc_ident(conn, row)} 已被駁回（{_subj(quote_no)}）"
+                    + (f"：{reason}" if reason else ""), link="payment-request.html?tab=mine")
         XN.fire("returned", conn, row, requester=requester or "", reason=reason)
         _audit(_tok(authorization), "extra_expense.reject", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 額外支出 #{exp_id} {label} 被駁回" + (f"：{reason}" if reason else ""), {"reason": reason, **_asum(row)})
@@ -1514,8 +1516,9 @@ def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default
             requester = appr.get("requestedBy")
             if requester:
                 _notify(requester, "extra_expense_change_approved", str(exp_id), quote_no or "無案件",
-                        f"{_subj(quote_no)} 的支出申請變更 {label} 已核准並生效")
-            notify_module_activity("案件管理", "支出申請變更核准", display, f"{quote_no or '無案件'}｜{label}",
+                        f"{XN.doc_ident(conn, row)} 的變更申請已核准並生效（{_subj(quote_no)}）", link="payment-request.html?tab=mine")
+            XN.fire_change("approved", conn, row, requester=requester or "")
+            notify_module_activity("案件管理", "支出申請變更核准", display, f"{XN.doc_ident(conn, row)}｜{quote_no or '無案件'}｜{label}",
                                    f"case-management.html?q={quote_no}")
             _audit(_tok(authorization), "extra_expense.change_approve", *_audit_target(quote_no, exp_id),
                    f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更 {label} 第 {ct + 1} 層核准 → 已生效", {"tier": ct + 1, "applied": True, **_asum(row)})
@@ -1581,8 +1584,9 @@ def reject_change_request(quote_no: str, exp_id: int, body: dict = Body(default=
         requester = appr.get("requestedBy")
         if requester:
             _notify(requester, "extra_expense_change_rejected", str(exp_id), quote_no or "無案件",
-                    f"{_subj(quote_no)} 的支出申請變更 {label} 已被駁回"
-                    + (f"：{reason}" if reason else ""))
+                    f"{XN.doc_ident(conn, row)} 的變更申請已被駁回（{_subj(quote_no)}）"
+                    + (f"：{reason}" if reason else ""), link="payment-request.html?tab=mine")
+        XN.fire_change("returned", conn, row, requester=requester or "", reason=reason)
         _audit(_tok(authorization), "extra_expense.change_reject", *_audit_target(quote_no, exp_id),
                f"{quote_no or '無案件'} 額外支出 #{exp_id} 變更申請 {label} 被駁回" + (f"：{reason}" if reason else ""), {"reason": reason, **_asum(row)})
         return {"ok": True, "changeStatus": "已駁回"}

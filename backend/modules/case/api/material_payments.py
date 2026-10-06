@@ -201,11 +201,11 @@ def _notify_after(event, info, res, reason=""):
             MN.fire_payment("next_tier", info, approvers=res.get("nextApprovers"), tier_no=res.get("tierNo", 0), total_tiers=res.get("totalTiers", 0))
         elif event == "approved":
             if res.get("requester"):
-                _notify(res["requester"], "material_payment_approved", info["docCode"], info["quoteNo"], "材料申請匯款申請 %s 已核准，已交給出納" % info["docCode"])
+                _notify(res["requester"], "material_payment_approved", info["docCode"], info["quoteNo"], "材料申請匯款申請 %s 已核准，已交給出納" % info["docCode"], link="case-management.html?q=%s" % info["quoteNo"])
             MN.fire_payment("approved", info, requester=res.get("requester") or "")
         elif event == "returned":
             if res.get("requester"):
-                _notify(res["requester"], "material_payment_returned", info["docCode"], info["quoteNo"], "材料申請匯款申請 %s 已被退回：%s" % (info["docCode"], reason))
+                _notify(res["requester"], "material_payment_returned", info["docCode"], info["quoteNo"], "材料申請匯款申請 %s 已被退回：%s" % (info["docCode"], reason), link="case-management.html?q=%s" % info["quoteNo"])
             MN.fire_payment("returned", info, requester=res.get("requester") or "", reason=reason)
     except Exception:                                                              # noqa: BLE001
         pass

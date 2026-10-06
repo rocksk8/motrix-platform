@@ -124,7 +124,8 @@ def test_submit_next_tier_and_return_mails(client, world):
     assert back and "xo_req@example.test" in back[0]["to"] and "發票不清楚" in back[0]["html"]
 
 
-def test_legacy_kind_empty_sends_no_expense_form_mail(client, world):
+def test_legacy_kind_empty_mails_only_the_applicant_on_approved(client, world):
+    """【第44班改】舊式簡單額外支出（kind=''）：送審即核准時只寄「支出申請 #id 已核准」給申請人；沒有送審／下一層／待撥款信，也不套用單據類型名稱（原為完全不寄）。"""
     H, sent = world["H"], world["sent"]
     _flow([])
     _x("INSERT OR IGNORE INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at,"
@@ -132,8 +133,12 @@ def test_legacy_kind_empty_sends_no_expense_form_mail(client, world):
     r = client.post("/api/quotations/MQ-XO-1/extra-expenses", headers=H["xo_mgr"],
                     json={"category": "差旅", "description": "舊流程", "qty": 1, "unitCost": 100})
     assert r.status_code == 201, r.text
-    client.post("/api/quotations/MQ-XO-1/extra-expenses/%d/submit" % r.json()["id"], headers=H["xo_mgr"])
-    assert not [m for m in sent if "費用單據" in m["html"] or "差旅費用請款單" in m["html"]]
+    eid = r.json()["id"]
+    client.post("/api/quotations/MQ-XO-1/extra-expenses/%d/submit" % eid, headers=H["xo_mgr"])
+    legacy = [m for m in sent if "支出申請 #%d" % eid in m["subject"]]
+    assert [m["subject"].split("－", 1)[1] for m in legacy] == ["支出申請 #%d 已核准" % eid], [m["subject"] for m in sent]
+    assert legacy[0]["to"] == ["xo_mgr@example.test"] and "NT$" not in legacy[0]["html"]
+    assert not [m for m in sent if "差旅費用請款單" in m["html"] or "待撥款" in m["subject"] or "待審核" in m["subject"]]
 
 
 # ── 輸出 ───────────────────────────────────────────────────────────────
