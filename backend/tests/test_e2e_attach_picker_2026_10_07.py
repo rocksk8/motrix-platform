@@ -109,10 +109,14 @@ def test_picker_accumulates_removes_caps_and_retries_on_the_same_draft(live_serv
     assert _items(page).count() == 3, "挑選器保留，使用者只要移除壞檔"
     page.wait_for_function("() => document.getElementById('pr-new').dataset.busy === '0'")
     page.locator('[data-attach="other"] [data-attach-item="fake.pdf"] button').click()
+    page.fill("#pr-amount", "1500")                                # 重試前改了欄位 ⇒ 沿用的草稿也要更新（不可靜默保留舊值）
+    page.fill("#pr-desc", "挑檔測試（改過）")
     page.click("#pr-save-draft")
     page.wait_for_selector('#pr-result[data-status="草稿"]', timeout=15000)
     rows = _q("SELECT id, files_json FROM case_extra_expenses WHERE quote_no=?", (NO,))
     assert len(rows) == 1, "重按沿用同一張草稿，不會多建一份"
+    row = _q("SELECT total_cost, description FROM case_extra_expenses WHERE quote_no=?", (NO,))[0]
+    assert float(row["total_cost"]) == 1500 and row["description"] == "挑檔測試（改過）", "重試時改的金額／說明要寫進沿用的草稿"
     assert sorted(f["filename"] for f in json.loads(rows[0]["files_json"])) == ["a.png", "b.png"]
     assert _items(page).count() == 0, "送出成功後挑選器清空"
     assert not errors, errors

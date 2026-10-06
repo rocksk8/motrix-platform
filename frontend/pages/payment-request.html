@@ -438,16 +438,16 @@
             // 附件被擋（太大／格式不符…）時草稿已經建好：重按要沿用同一張草稿（只補傳附件），不可以再建一張（第44班）
             var sd = this._simple && this._simple.no === no ? this._simple : null
             var id
-            if (sd) { id = sd.id } else {
-              var r = await fetch(base, { method: 'POST', headers: this._h(true), body: JSON.stringify({
-                category: this.form.category, description: this.form.description.trim(), qty: 1, unit: '', unitCost: Number(this.form.amount),
-                expenseDate: this.form.expenseDate, payerName: (this.form.payerName || '').trim(),
-                plannedPayDate: this.form.plannedPayDate || '' }) })
-              var d = await this._json(r)
-              if (!r.ok) throw new Error(d.detail || ('建立失敗（HTTP ' + r.status + '）'))
-              id = d.id
-              this._simple = { no: no, id: id }
-            }
+            // 重按時欄位可能已改（金額、說明…）⇒ 沿用草稿也要 PATCH 一次，不可以靜默保留舊值
+            var body = JSON.stringify({
+              category: this.form.category, description: this.form.description.trim(), qty: 1, unit: '', unitCost: Number(this.form.amount),
+              expenseDate: this.form.expenseDate, payerName: (this.form.payerName || '').trim(),
+              plannedPayDate: this.form.plannedPayDate || '' })
+            var r = await fetch(sd ? base + '/' + sd.id : base, { method: sd ? 'PATCH' : 'POST', headers: this._h(true), body: body })
+            var d = await this._json(r)
+            if (!r.ok) throw new Error(d.detail || ((sd ? '更新草稿失敗' : '建立失敗') + '（HTTP ' + r.status + '）'))
+            id = sd ? sd.id : d.id
+            this._simple = { no: no, id: id }
             await this._uploadPickers(no, id)
             if ((this.form.invoiceNo || '').trim()) {
               var ri = await fetch(base + '/' + id + '/dates', { method: 'PATCH', headers: this._h(true), body: JSON.stringify({ invoiceNo: this.form.invoiceNo.trim() }) })
