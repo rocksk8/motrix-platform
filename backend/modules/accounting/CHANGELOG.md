@@ -1,6 +1,6 @@
 # 會計 更新紀錄
 
-## (next) — 2026-10-06（wip/t44-settle-terms）：`ledger-settings.html` 費用單據說明「請款」→「支出申請」（只改畫面文字）
+## 1.1.54 — 2026-10-06（wip/t44-settle-terms）：`ledger-settings.html` 費用單據說明「請款」→「支出申請」（只改畫面文字）
 
 ## 1.1.53 — 2026-10-05（wip/t42-finance-role）：財務角色
 - T100 匯出設定讀取與傳票匯出（`_require_t100_admin`）改由「財務」角色決定（僅 `finance` 角色與 superadmin；admin 直通拿掉）。

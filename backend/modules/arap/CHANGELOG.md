@@ -1,6 +1,6 @@
 # 應收應付 更新紀錄
 
-## (next) — 2026-10-06（wip/t44-fin-fixes）：匯款差額退回後重建行事曆「付款待辦」；併入 wip/t44-settle-terms（字樣）
+## 1.0.39 — 2026-10-06（wip/t44-fin-fixes）：匯款差額退回後重建行事曆「付款待辦」；併入 wip/t44-settle-terms（字樣）
 - `api/cashier.py`：`decide_remit_review` 退回後，若提供者回傳 `payableEvent`，commit 後背景呼叫 L1 `push_event_upsert_for_module` 重建（該鍵不外洩到回應）；事件種類關閉時不碰 Google。核可不重建。
 - `cashier.py`：404 提示「找不到申請來源」、稽核與通知標籤「支出申請付款」、匯出分頁「支出申請付款明細」。客戶「請款單」不動。
 
