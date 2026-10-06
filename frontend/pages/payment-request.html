@@ -168,6 +168,38 @@
             </table>
             <button type="button" class="btn btn-secondary" id="pr-item-add" style="margin-top:8px" @click="addSelectedItems()">帶入選取的品項</button>
           </div>
+          <div id="pr-pr-picker" x-show="typeCode === 'purchase_order' && prReqs.length" data-testid="pr-pr-picker" style="margin-top:12px;border:1px solid var(--border-light,#e5e7eb);border-radius:8px;padding:10px 12px">
+            <div style="font-weight:600;margin-bottom:4px">從請購單帶入</div>
+            <div class="pr-hint" style="margin-bottom:6px">只列同案件<b>已核准</b>的請購單；可混合多張請購單的明細，數量可以只帶一部分（累計不超過請購量）。價格由請購單帶入，帶入後仍可修改；看不到財務金額的帳號不帶價格。</div>
+            <template x-for="rq in prReqs" :key="rq.docCode">
+              <div style="margin-bottom:8px" :data-pr-doc="rq.docCode">
+                <div style="font-weight:600;font-size:12px" x-text="rq.docCode + (rq.title ? '　' + rq.title : '')"></div>
+                <table style="width:100%;border-collapse:collapse;font-size:12px">
+                  <thead><tr style="text-align:left;color:var(--text-dim)"><th></th><th>品名／摘要</th><th>請購量</th><th>已採購</th><th>剩餘</th><th>本次帶入量</th></tr></thead>
+                  <tbody>
+                    <template x-for="l in rq.lines" :key="rq.docCode + '#' + l.prLine">
+                      <tr :data-pr-line="rq.docCode + '#' + l.prLine">
+                        <td><input type="checkbox" x-model="prrSel[rq.docCode + '#' + l.prLine]" :disabled="l.remaining <= 0" :aria-label="'選 ' + rq.docCode + ' 第 ' + l.prLine + ' 項'"></td>
+                        <td x-text="l.summary"></td>
+                        <td x-text="l.qty"></td>
+                        <td x-text="l.claimed"></td>
+                        <td x-text="l.remaining"></td>
+                        <td><input type="number" min="0" step="any" style="width:80px" :disabled="l.remaining <= 0" x-model.number="prrQty[rq.docCode + '#' + l.prLine]"
+                                   :data-testid="'pr-pr-qty-' + rq.docCode + '-' + l.prLine"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+            <div class="pr-err" x-show="prrErr" data-testid="pr-pr-err" x-text="prrErr"></div>
+            <button type="button" class="btn btn-secondary" id="pr-pr-add" data-testid="pr-pr-add" style="margin-top:4px" @click="addSelectedPrLines()">帶入選取的請購明細</button>
+          </div>
+          <div id="pr-pr-diff" x-show="priceDiffs().length" data-testid="pr-pr-diff" style="margin-top:8px;color:var(--warn,#b45309);font-size:12px">
+            <template x-for="d in priceDiffs()" :key="d.key">
+              <div x-text="'⚠ ' + d.text"></div>
+            </template>
+          </div>
           <div id="pr-item-reasons" x-show="linkedIds.length" style="margin-top:8px">
             <template x-for="id in linkedIds" :key="id">
               <div class="pr-f" :data-linked-item="id" style="margin-bottom:6px">
@@ -253,6 +285,7 @@
         caseQ: '', cases: [], casesLoaded: false, picked: null, categories: [], _caseTimer: null,
         types: [], typeCode: '', typeDef: null, _df: null, _draft: null,
         prItems: [], prSel: {}, prReasons: {}, linkedIds: [], lineTick: 0,      // 32-S5：請購／採購單「從案件品項帶入」
+        prReqs: [], prrSel: {}, prrQty: {}, prrErr: '',                         // 第 44 班：採購單「從請購單帶入」（多選；部分數量）
         form: blank(),
         mine: [], mineLoaded: false, mineErr: '', mineMsg: '', invoiceDraft: {}, invoiceNoDraft: {},
 
@@ -279,6 +312,66 @@
             var r = await fetch('/api/quotations/' + encodeURIComponent(this.picked.quoteNo) + '/purchase-items', { headers: this._h() })
             if (r.ok) this.prItems = (await r.json()).items || []
           } catch (e) { this.prItems = [] }
+        },
+        async loadPrReqs() {
+          this.prReqs = []; this.prrSel = {}; this.prrQty = {}; this.prrErr = ''
+          if (!this.picked || this.typeCode !== 'purchase_order') return
+          try {
+            var r = await fetch('/api/quotations/' + encodeURIComponent(this.picked.quoteNo) + '/purchase-requests/lines', { headers: this._h() })
+            if (!r.ok) return
+            this.prReqs = ((await r.json()).requests || []).filter(function (q) { return (q.lines || []).length })
+            var self = this
+            this.prReqs.forEach(function (q) { q.lines.forEach(function (l) { self.prrQty[q.docCode + '#' + l.prLine] = l.remaining }) })
+          } catch (e) { this.prReqs = [] }
+        },
+        _prLineOf(key) {
+          for (var i = 0; i < this.prReqs.length; i++) {
+            var q = this.prReqs[i]
+            for (var j = 0; j < q.lines.length; j++) if (q.docCode + '#' + q.lines[j].prLine === key) return { doc: q.docCode, line: q.lines[j] }
+          }
+          return null
+        },
+        // 已帶入的請購單明細（同一請購明細已在表單裡的數量要算進去，不能超過剩餘）；價格只在伺服器有回傳時才複製
+        addSelectedPrLines() {
+          if (!this._df) return
+          this.prrErr = ''
+          var self = this
+          var v = this._df.getValue()
+          var lines = (v.lines || []).filter(function (l) { return l.prDocCode || l.itemId || l.summary || l.qty || l.unitCost })      // 拿掉空白列
+          var used = {}
+          lines.forEach(function (l) { if (l.prDocCode) { var k = l.prDocCode + '#' + l.prLine; used[k] = (used[k] || 0) + (Number(l.qty) || 0) } })
+          var added = 0
+          Object.keys(this.prrSel).forEach(function (k) {
+            if (!self.prrSel[k]) return
+            var hit = self._prLineOf(k); if (!hit) return
+            var qty = Number(self.prrQty[k])
+            if (!(qty > 0)) { self.prrErr = hit.doc + ' 第 ' + hit.line.prLine + ' 項的帶入量必須大於 0'; return }
+            if ((used[k] || 0) + qty > hit.line.remaining + 1e-9) { self.prrErr = hit.doc + ' 第 ' + hit.line.prLine + ' 項最多還能帶入 ' + Math.max(hit.line.remaining - (used[k] || 0), 0); return }
+            var row = { category: hit.line.category || '', summary: hit.line.summary, qty: qty, unitCost: hit.line.unitCost !== undefined ? hit.line.unitCost : '',
+                        prDocCode: hit.doc, prLine: hit.line.prLine }
+            if (hit.line.itemId) row.itemId = hit.line.itemId
+            lines.push(row); added++
+          })
+          if (this.prrErr) return
+          if (!added) { this.prrErr = '請先勾選要帶入的請購明細'; return }
+          this._df.setValue({ data: v.data, lines: lines })
+          this.prrSel = {}
+          this._syncLinked()
+        },
+        // 價差提示：採購單價格可以改，但與請購單價格不同要在畫面上標出來（只有拿得到請購價的人才比）
+        priceDiffs() {
+          void this.lineTick
+          if (!this._df || this.typeCode !== 'purchase_order') return []
+          var out = []
+          var self = this
+          ;(this._df.getValue().lines || []).forEach(function (l, i) {
+            if (!l.prDocCode) return
+            var hit = self._prLineOf(l.prDocCode + '#' + l.prLine)
+            if (!hit || hit.line.unitCost === undefined || l.unitCost === '' || l.unitCost === null) return
+            if (Math.abs(Number(l.unitCost) - Number(hit.line.unitCost)) > 1e-9)
+              out.push({ key: i + ':' + l.prDocCode + '#' + l.prLine, text: '第 ' + (i + 1) + ' 列單價 ' + l.unitCost + ' 與請購單 ' + l.prDocCode + ' 第 ' + l.prLine + ' 項的單價 ' + hit.line.unitCost + ' 不同' })
+          })
+          return out
         },
         itemName(id) { var it = this.prItems.find(function (x) { return x.itemId === id }); return it ? it.description : id },
         _lineQty(id) {
@@ -319,6 +412,7 @@
         async pickCase(c) {
           this.picked = c; this.err = ''; this.result = null; this._draft = null
           this.loadPrItems()
+          this.loadPrReqs()
           var r = await fetch('/api/quotations/' + encodeURIComponent(c.quoteNo) + '/extra-expenses', { headers: this._h() })
           var d = await this._json(r)
           this.categories = r.ok ? (d.categories || []) : []
@@ -400,6 +494,7 @@
               categories: cats, users: users, departments: depts, onChange: (v) => this._syncLinked(v) })
             this.linkedIds = []; this.prReasons = {}
             await this.loadPrItems()
+            await this.loadPrReqs()
           } catch (e) { this.err = e.message }
         },
         async saveTyped(submit) {

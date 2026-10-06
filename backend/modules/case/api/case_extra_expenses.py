@@ -435,6 +435,23 @@ def list_purchase_items(quote_no: str, authorization: str = Header(None)):
         conn.close()
 
 
+@router.get("/api/quotations/{quote_no}/purchase-requests/lines")
+def list_purchase_request_lines(quote_no: str, authorization: str = Header(None)):
+    """採購單「從請購單帶入」挑選器（第 44 班）：同案件**已核准**的請購單及其明細，附已被採購單認領量與剩餘量（部分採購可以，累計不超過請購量）。
+    權限＝案件可見；金額遮蔽的請購單（`_amount_viewer` 為假）不列；看不到財務金額的人不回 `unitCost`（不複製價格）。無案件（哨兵 `-`）⇒ 400。"""
+    quote_no = _qn(quote_no)
+    user = _require_user(authorization)
+    if quote_no == "":
+        raise HTTPException(400, "無案件的採購單沒有請購單可帶入")
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        return {"quoteNo": quote_no, "requests": PI.pr_lines_view(conn, quote_no, viewer_ok=lambda r: _amount_viewer(conn, r, user),
+                                                                  show_cost=can_see_financial(user))}
+    finally:
+        conn.close()
+
+
 @router.post("/api/quotations/{quote_no}/extra-expenses", status_code=201)
 def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
                          authorization: str = Header(None)):
@@ -461,6 +478,7 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
             lines, total = EF.normalize_lines(body.lines)
             data = EF.normalize_data(body.data)
             lines, over_plan = PI.check_lines(conn, quote_no, kind, lines)          # 32-S2：明細連案件品項（沒有 itemId ⇒ 原樣）
+            PI.stamp_from_pr(data, lines)                                           # 第 44 班：data.fromPr／pr_no 依明細的請購單連結同步
             PI.check_from_pr(conn, quote_no, kind, data)
             doc_code = EF.next_doc_code(conn, kind, now[:10])
             desc = (body.description or "").strip() or next((l.get("summary") for l in lines if l.get("summary")), "") or "（%s）" % doc_code
@@ -525,6 +543,7 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
             lines, total = EF.normalize_lines(body.lines if body.lines is not None else _jlist(row, "lines_json"))
             data = EF.normalize_data(body.data, _jcol(row, "data_json"))       # 與既有值合併：沒送的鍵不會被丟掉
             lines, over_plan = PI.check_lines(conn, quote_no, row_kind, lines, exclude_id=exp_id)      # 32-S2
+            PI.stamp_from_pr(data, lines)                                                              # 第 44 班
             PI.check_from_pr(conn, quote_no, row_kind, data)
             desc = (body.description or "").strip() or row["description"]
         else:
@@ -749,6 +768,12 @@ def void_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={})
         change = _change_of(row)
         now = datetime.now().isoformat(timespec="seconds")
         begin_write(conn)
+        if (_col(row, "kind", "") or "") == PI.REQ:                          # 第 44 班：已被採購單引用的請購單不能作廢（寫鎖內再查，與採購單送審互斥）
+            _users = PI.claimed_by(conn, quote_no, _col(row, "doc_code", "") or "")
+            if _users:
+                conn.rollback()
+                raise HTTPException(409, "請購單 %s 已被採購單 %s 引用，不能作廢；請先處理（作廢或駁回）那些採購單"
+                                    % (_col(row, "doc_code", ""), "、".join(u["docCode"] for u in _users)))
         cur = conn.execute(
             "UPDATE case_extra_expenses SET status=?, void_reason=?, voided_by=?, voided_at=?, updated_at=?,"
             " change_status='', change_json='{}', change_approval_json='{}'"
@@ -1192,6 +1217,9 @@ def _apply_change(conn, row, change: dict, actor_display: str, now: str) -> floa
     _has_lines = "lines" in change                      # 費用單據的提議才有；舊版提議沒有 ⇒ 不動明細／data／收款人
     if _has_lines:
         clean_lines, total = EF.normalize_lines(change.get("lines"))          # 金額以明細後端重算為準，不信提議裡存的 totalCost
+        PI.check_pr_claims(conn, row["quote_no"], _col(row, "kind", "") or "", clean_lines, exclude_id=exp_id)      # 第 44 班：核准當下再驗請購單認領量（送審後別張採購單可能已認領）
+        if (_col(row, "kind", "") or "") == PI.REQ:
+            PI.guard_claimed_pr_edit(conn, row["quote_no"], exp_id, clean_lines)
     merged_files = _files_of(row) + (change.get("addFiles") or [])
 
     appr = _jcol(row, "approval_json")
