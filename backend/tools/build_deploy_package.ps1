@@ -1041,6 +1041,7 @@ if (Test-Path $versionManifestPath) {
 # 2026-10-05（第44班）：從這裡起（建包的所有 Python 步驟：產品選配、不出貨清單、版本紀錄精簡、驗證）一律不寫 .pyc。
 # 起因：第40班的包裡出現 tools/platform/__pycache__/product_select.cpython-312.pyc——選配步驟 import 了包內的模組，Python 順手在包裡寫快取，
 # 進了 package.sha256 的逐檔雜湊（不是壞事，但出貨的東西不該有執行痕跡）。測試階段（上面）刻意**不**設：.pyc 快取讓 pytest 各 worker 少編譯，省建包時間。
+$origPyDontWriteBytecode = $env:PYTHONDONTWRITEBYTECODE   # 腳本結束時還原，不影響同一個 PowerShell 視窗之後的指令
 $env:PYTHONDONTWRITEBYTECODE = "1"
 $_tArchive = Get-Date
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
@@ -1377,3 +1378,6 @@ Write-Host "     確認方式（superadmin 登入後）：GET /api/system/runtim
 Write-Host "     它回的是【這個行程實際拿到什麼】，不是設定檔裡寫了什麼。"
 Write-Host "     apply_update.ps1 也會自動比對一次，不一致會用黃字喊。"
 Write-Host ""
+
+# 還原建包期間設的 PYTHONDONTWRITEBYTECODE（原本沒設 ⇒ 移除）
+if ($null -eq $origPyDontWriteBytecode) { Remove-Item Env:PYTHONDONTWRITEBYTECODE -ErrorAction SilentlyContinue } else { $env:PYTHONDONTWRITEBYTECODE = $origPyDontWriteBytecode }

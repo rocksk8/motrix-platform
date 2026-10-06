@@ -244,3 +244,26 @@ def test_mail_off_is_honored_on_finance_audience_and_superadmin_only_paths(clien
     _set_setting(mt.OVERRIDES_KEY, {"backup_error": {"mode": "default", "users": [], "roles": [], "off": True}})
     assert "nm_sa@example.test" in en._only_superadmins("backup_error")
     assert "nm_fin@example.test" in en.finance_recipient_emails("backup_error")
+
+
+def test_mail_off_is_honored_on_manager_event_and_monthly_report_paths(client, make_user):
+    """審查補強：_with_event_recipients／_department_manager_emails／月報收件人原本不經 _mail_off 漏斗；任何覆寫模式下關了都沒有收件人。"""
+    from helpers import email_notify as en
+    h = _h(client, make_user)
+    for key in ("case_stage_deadline_manager", "daily_task_overdue_manager"):
+        assert nm.mail_off_lock_reason(key) == ""
+        for body in ({"mode": "default"}, {"mode": "custom", "users": ["nm_sa"], "roles": ["admin"]}, {"mode": "superadmin_only"}):
+            r = _put(client, h, key, dict(body, mailOff=True, confirm=True))
+            assert r.status_code == 200 and r.json()["mailOff"] is True, (key, body, r.text)
+            assert en._with_event_recipients(["x@example.test"], key) == [], (key, body)
+            assert en._lookup_emails(["nm_sa"], key) == [], (key, body)
+            assert en._department_manager_emails(1, key) == [], (key, body)
+        r = _put(client, h, key, {"mode": "custom", "users": ["nm_sa"], "roles": [], "mailOff": False})
+        assert "nm_sa@example.test" in en._with_event_recipients([], key), "重新開啟後恢復"
+    # 月報不能經矩陣 API 關（PUT 400，收件人另頁維護）；但設定檔裡若有 off（硬改／舊殘留）寄信端仍要照辦
+    _set_setting(mt.OVERRIDES_KEY, {"monthly_report": {"mode": "default", "users": [], "roles": [], "off": True}})
+    _set_setting("monthly_report_recipients", {"userIds": [1]})
+    assert en._monthly_report_recipient_emails() == []
+    # 鎖定類型：硬塞 off 仍照常（_with_event_recipients 也一樣）
+    _set_setting(mt.OVERRIDES_KEY, {"backup_error": {"mode": "default", "users": [], "roles": [], "off": True}})
+    assert en._with_event_recipients(["x@example.test"], "backup_error") == ["x@example.test"]

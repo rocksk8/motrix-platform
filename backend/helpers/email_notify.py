@@ -281,6 +281,8 @@ def _finance_audience_emails(event_key: str) -> list:
 
 def _with_event_recipients(event_emails: list, event_key) -> list:
     """事件收件人套上覆寫：superadmin_only ⇒ 換成超級管理員；custom ⇒ 加上指定的人。"""
+    if _mail_off(event_key):                   # 公司關閉這種信：不論覆寫模式都沒有收件人（鎖定類型 _mail_off 恆為 False）
+        return []
     t = _registered(event_key)
     if t is None:
         return _only_superadmins(event_key)
@@ -1647,6 +1649,8 @@ def _monthly_report_recipient_emails() -> list:
     一次（即使存的是空清單），就完全照設定值決定收件人，不再 fallback。"""
     # 收件人只有一個來源：「報表收件人設定」（monthly_report_recipients）。信件與通知收件設定頁
     # 對這一種類型不提供覆寫（稽核 M-S3：兩個來源時，設定頁顯示的不是實際收件人）。
+    if _mail_off("monthly_report"):            # 矩陣關閉：此類型有自己的收件來源，不經 _users_emails，要在這裡擋
+        return []
     raw = _get_setting("monthly_report_recipients")
     if raw is None:
         return _superadmin_emails("monthly_report")
@@ -1675,7 +1679,7 @@ def _department_manager_emails(department_id: int, event_key: str = None) -> lis
     department has no manager set, the manager account has no email, or the
     manager has muted event_key). 2026-08-22g：處/部門組織架構的通知路由，
     比照 _superadmin_emails() 的寫法，只是收件人改成查 departments.manager_user_id。"""
-    if not department_id:
+    if not department_id or _mail_off(event_key):
         return []
     try:
         from db import get_db

@@ -63,3 +63,10 @@ def test_data_file_is_in_helpers_and_not_left_behind_in_m11():
 
 def test_next_mail_day_unchanged():
     assert B.next_mail_day(date(2026, 10, 3)) == date(2026, 10, 5)  # 週六 ⇒ 下週一
+
+
+def test_datetime_input_is_treated_as_its_date():
+    from datetime import datetime
+    assert B._iso(datetime(2026, 10, 5, 23, 59)) == "2026-10-05"
+    assert B.no_mail_day(datetime(2026, 10, 3, 9, 30)) == B.no_mail_day(date(2026, 10, 3))      # 週六
+    assert B.covered(datetime(2026, 10, 5, 8, 0)) == B.covered(date(2026, 10, 5))

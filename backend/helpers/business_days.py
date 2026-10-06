@@ -14,7 +14,7 @@
 `is_working_day`、`previous_working_day`（新增）。M11 的 `modules.tender_radar.calendar_tw` 改為轉出本檔（舊名不變）。
 """
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 DATA_PATH = Path(__file__).with_name("holidays_tw.json")
@@ -37,6 +37,8 @@ def load(path=None):
 
 
 def _iso(d):
+    if isinstance(d, datetime):                  # datetime 是 date 的子類：要先取日期，否則 isoformat 帶時間、fromisoformat 解不回來
+        return d.date().isoformat()
     return d.isoformat() if isinstance(d, date) else str(d)[:10]
 
 

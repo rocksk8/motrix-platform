@@ -2,6 +2,7 @@
 
 ## (next) — 2026-10-05（wip/t44-business-days）：假日表與判定提升到 L1（純搬移，行為不變）
 - `calendar_tw.py` 的實作與 `holidays_tw.json` 搬到 L1 `helpers/business_days.py`／`helpers/holidays_tw.json`（供別的模組共用，例如 M01 預定付款日提醒）；`calendar_tw.py` 只轉出 M11 一向使用的名字（`load`／`coverage`／`covered`／`days_until_expiry`／`no_mail_day`／`next_mail_day`／`DATA_PATH`），`source.py`／`api.py` 與 `tests/test_tender_calendar_2026_10_03.py` 不必改。假日表到期告警的更新路徑文字改為 `helpers/holidays_tw.json`。
+- ⚠️ 已知行為（信件×行事曆矩陣，t43）：在「信件與通知收件設定」把「標案雷達找到新標案」(`tender_found`) 的信件關掉時，寄信端沒有收件人，但 `_mark_hits_notified` 仍會把這批標案標成已通知、並推進 7 天靜默期；之後重新打開信件**不會補寄**關閉期間的標案。設定頁關閉此類信時應提示這一點。
 
 ## 1.5.6 — 2026-10-04（wip/t35b-tender-parser）：標案列表的來源網站連結與未取得說明
 - **每一列都有「前往來源網站明細」連結（使用者裁示 2026-10-04：驗證碼由人處理，系統不自動破解）**：標案名稱下方加一行看得見的連結「前往來源網站明細」，新分頁開啟、`rel="noopener noreferrer"`，只接受 http(s)；沒有可用網址的列明講「來源網址未取得」，不留空白。

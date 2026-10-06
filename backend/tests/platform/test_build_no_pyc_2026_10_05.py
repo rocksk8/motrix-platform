@@ -16,6 +16,7 @@ PS1 = REPO / "backend" / "tools" / "build_deploy_package.ps1"
 if not PS1.is_file():
     pytest.skip("build_deploy_package.ps1 不在這個安裝包", allow_module_level=True)
 TEXT = PS1.read_text(encoding="utf-8-sig")
+_SWEEP = re.compile(r"Get-ChildItem.*__pycache__")
 _SET = re.compile(r'\$env:PYTHONDONTWRITEBYTECODE\s*=\s*"1"')
 
 
@@ -36,7 +37,8 @@ def _check(text):
         bad.append("產品選配 apply 之前沒有（就近）明確設 PYTHONDONTWRITEBYTECODE")
     if any(s < last_pytest for s in sets):
         bad.append("PYTHONDONTWRITEBYTECODE 不可早於最後一個 pytest 呼叫（測試階段要保留 .pyc 快取）")
-    sweep = text.find("__pycache__", apply_pos)
+    sm = _SWEEP.search(text, apply_pos)                 # 真的有掃的程式碼（Get-ChildItem … __pycache__），不是註解裡的字
+    sweep = sm.start() if sm else -1
     export_ignore = text.find("export_ignore_list.py")
     if sweep < 0 or not (apply_pos < sweep < export_ignore):
         bad.append("產品選配之後、不出貨清單之前沒有 __pycache__ 清掃")
@@ -53,6 +55,13 @@ def test_script_keeps_pyc_out_of_the_package():
     (lambda t: _SET.sub("", t) + '\n$env:PYTHONDONTWRITEBYTECODE = "1"\n', "設定被挪到腳本最後（apply 之前沒設）"),
     (lambda t: '$env:PYTHONDONTWRITEBYTECODE = "1"\n' + t, "設定被挪到腳本最前面（連測試階段都不寫 .pyc）"),
     (lambda t: t.replace("__pycache__", "__nothing__"), "拿掉清掃"),
+    (lambda t: re.sub(r".*Get-ChildItem.*__pycache__.*", "", t), "刪掉清掃程式碼但保留註解裡的 __pycache__ 字樣"),
 ])
+
 def test_reverse_control_mutations_turn_red(mut, name):
     assert _check(mut(TEXT)), "突變「%s」應該讓守門轉紅" % name
+
+
+def test_script_restores_the_env_var_at_the_end():
+    tail = TEXT[TEXT.rfind('$env:PYTHONDONTWRITEBYTECODE = "1"'):]
+    assert "origPyDontWriteBytecode" in tail and "Remove-Item Env:PYTHONDONTWRITEBYTECODE" in tail, "腳本結尾要還原環境變數"
