@@ -14,6 +14,7 @@ __l1_public__ = (
 )
 
 import json
+import sqlite3
 import logging
 import re
 import threading
@@ -99,15 +100,34 @@ def _derive_fields(action: str, target_type: str = "", target_id: str = "", targ
     return {"module": module, "case_no": case_no, "ref_no": ref_no}
 
 
-def _notify(username: str, type_: str, ref_id: str, ref_label: str, message: str) -> None:
+def _notify(username: str, type_: str, ref_id: str, ref_label: str, message: str, link: str = None) -> None:
+    """寫一則站內通知。`link`（選填）＝點通知要開的頁面（相對路徑，例如 `quotation-edit.html?no=Q-1`；空＝沒有連結）。
+
+    第44班（使用者裁示）：**核准類通知（type 以 `_approved` 結尾）同一 (type, ref_id, username) 只留一列**——
+    單一 `INSERT … WHERE NOT EXISTS`（SQLite 單寫者 ⇒ 判斷與寫入在同一個原子陳述裡，兩個同時核准也不會寫出兩列）。
+    其他類型照舊每次一列。`link` 欄位由 core 的未取號 migration 加入；表還沒有該欄（舊庫、migration 未完成）⇒ 退回舊寫法，不丟例外。"""
+    link = (link or "").strip()
     conn = get_db()
     try:
-        conn.execute(
-            "INSERT INTO notifications "
-            "(username, type, ref_id, ref_label, message, is_read, created_at) "
-            "VALUES (?,?,?,?,?,0,?)",
-            (username, type_, ref_id, ref_label, message, datetime.now().isoformat()),
-        )
+        now = datetime.now().isoformat()
+        try:
+            if (type_ or "").endswith("_approved"):
+                conn.execute(
+                    "INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at, link) "
+                    "SELECT ?,?,?,?,?,0,?,? WHERE NOT EXISTS "
+                    "(SELECT 1 FROM notifications WHERE username=? AND type=? AND ref_id=?)",
+                    (username, type_, ref_id, ref_label, message, now, link, username, type_, ref_id))
+            else:
+                conn.execute(
+                    "INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at, link) "
+                    "VALUES (?,?,?,?,?,0,?,?)",
+                    (username, type_, ref_id, ref_label, message, now, link))
+        except sqlite3.OperationalError as e:
+            if "link" not in str(e):
+                raise
+            conn.execute(                                                 # 舊庫沒有 link 欄：只寫舊欄位
+                "INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at) VALUES (?,?,?,?,?,0,?)",
+                (username, type_, ref_id, ref_label, message, now))
         conn.commit()
     except Exception as e:
         logger.warning("_notify failed: %s", e)
