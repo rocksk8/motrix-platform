@@ -2876,7 +2876,9 @@
                     <strong style="color:var(--text-main);font-family:LINE Seed TW_OTF, sans-serif"
                             x-text="'NT$ ' + dispatchTotalCost().toLocaleString()" data-testid="dispatch-total-cost"></strong>
                     <span x-show="dispatchTaxCost() > 0" data-testid="dispatch-tax-note" style="font-size:11px;color:var(--text-dim)"
-                          x-text="'（未稅承攬費＋外包人員；承攬商稅額 NT$ ' + dispatchTaxCost().toLocaleString() + ' 是進項稅額，不計成本）'"></span>
+                          x-text="'（含稅：未稅承攬費＋稅額＋外包人員；其中稅額 NT$ ' + dispatchTaxCost().toLocaleString() + '）'"></span>
+                    <span x-show="dispatchTaxExcludedCost() > 0" data-testid="dispatch-tax-excluded-note" style="font-size:11px;color:var(--text-dim)"
+                          x-text="'（2026-10-01 前的派發照舊未稅計入，其稅額 NT$ ' + dispatchTaxExcludedCost().toLocaleString() + ' 不計成本）'"></span>
                     <span x-show="dispatchPendingNote()" x-text="'（' + dispatchPendingNote() + '）'" data-testid="dispatch-pending-note"
                           style="color:var(--tone-warning-fg);font-size:11px"></span>
                   </div>

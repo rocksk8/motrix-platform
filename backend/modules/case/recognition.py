@@ -246,7 +246,8 @@ def dispatch_entries(conn, basis):
         note = "未稅" if not personnel else ("外包人員未拆稅" if not pretax else "承攬商未稅＋外包人員未拆稅")
         tax, kind = 0.0, ""
         if (r["dispatch_date"] or "")[:10] >= DISPATCH_TAXED_FROM:       # 切換日以後的派發：含稅計入成本，稅額＝精確（派發單有稅額）
-            tax = float(d["grandTotal"] or 0) - pretax - personnel
+            grand = float(d["grandTotal"] or 0) or (pretax + personnel)      # 沒有 grandTotal ⇒ 稅額 0（不產生負稅額、不減成本）
+            tax = max(0.0, grand - pretax - personnel)
             amount, kind = pretax + personnel + tax, "exact"
             note = "含稅" if not personnel else ("外包人員未拆稅（承攬商含稅）" if not pretax else "承攬商含稅＋外包人員未拆稅")
         out.append({"date": use, "quoteNo": r["quote_no"] or "",
