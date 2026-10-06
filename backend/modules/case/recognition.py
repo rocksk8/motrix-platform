@@ -183,6 +183,18 @@ def _approved_at(approval_json):
     return max(found) if found else ""
 
 
+def _snap_tax(snap, actual) -> float:
+    """現金口徑承攬商匯款：快照的稅額（`taxAmount`；舊快照沒有就用 `totalWithTax − totalAmount`）；實付≠應付時依實付比例攤。沒有稅額資料 ⇒ 0。"""
+    try:
+        tax = float(snap.get("taxAmount") if snap.get("taxAmount") is not None else (float(snap.get("totalWithTax") or 0) - float(snap.get("totalAmount") or 0)))
+        grand = float(snap.get("grandTotal") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if tax <= 0:
+        return 0.0
+    return tax * (actual / grand) if actual is not None and grand else tax
+
+
 def dispatch_entries(conn, basis):
     """派工 → [{date, quoteNo, desc, amount, taxNote, provisional, dispatchId, invoiceDate}]。
 
@@ -205,10 +217,12 @@ def dispatch_entries(conn, basis):
             out.append({"date": paid, "quoteNo": r["quote_no"] or "",
                         "desc": "%s（匯款申請 %s）" % (snap.get("vendorName") or "（外包人員點工）", r["voucher_no"]),
                         "amount": float(snap.get("grandTotal") or 0) if not has_actual or r["remit_actual"] is None
-                        else float(r["remit_actual"]), "taxNote": "含稅",
+                        else float(r["remit_actual"]), "taxNote": "含稅", "tax": _snap_tax(snap, None if not has_actual or r["remit_actual"] is None else float(r["remit_actual"])),
                         "provisional": False, "dispatchId": r["dispatch_id"],
                         # W1：實付≠應付、待管理員核可 ⇒ 照計（已記錄）但報表標「差額待審核」
                         "remitPending": bool(has_actual and r["remit_review"] == "pending")})
+        for e in out:
+            e["taxKind"] = "exact" if e.get("tax") else ""
         return out
     dispatch_row = registry.single_provider("dispatch.row")
     if dispatch_row is None:
@@ -230,10 +244,15 @@ def dispatch_entries(conn, basis):
         if not amount:
             continue
         note = "未稅" if not personnel else ("外包人員未拆稅" if not pretax else "承攬商未稅＋外包人員未拆稅")
+        tax, kind = 0.0, ""
+        if (r["dispatch_date"] or "")[:10] >= DISPATCH_TAXED_FROM:       # 切換日以後的派發：含稅計入成本，稅額＝精確（派發單有稅額）
+            tax = float(d["grandTotal"] or 0) - pretax - personnel
+            amount, kind = pretax + personnel + tax, "exact"
+            note = "含稅" if not personnel else ("外包人員未拆稅（承攬商含稅）" if not pretax else "承攬商含稅＋外包人員未拆稅")
         out.append({"date": use, "quoteNo": r["quote_no"] or "",
                     "desc": d["vendorName"] or "（外包人員點工）", "amount": amount, "taxNote": note,
                     "provisional": inv == "", "dispatchId": r["id"], "invoiceDate": inv,
-                    "approvalPending": ap in ("待審核", "簽核中")})
+                    "approvalPending": ap in ("待審核", "簽核中"), "tax": tax, "taxKind": kind})
     return out
 
 
@@ -324,6 +343,17 @@ def material_money_rows(conn, department_id=None, quote_no=None):
     return out
 
 
+#: 精算「全含稅」後營運報表承攬商成本的切換日（使用者 2026-10-06）：**派發單自己的日期欄位 `contractor_dispatches.dispatch_date`** ≥ 這天的派發，
+#: 應計成本含稅（未稅承攬費＋稅額＋外包人員）；這天之前的派發照舊（未稅＋外包人員），既有月份的報表數字不變。現金口徑本來就是含稅／實付，不受影響。
+DISPATCH_TAXED_FROM = "2026-10-01"
+
+
+def estimated_tax(amount) -> float:
+    """含稅金額、沒有稅額欄位時的推估稅額＝金額 − 金額÷1.05（假設進項稅 5%；標 taxKind＝estimated，不是單據事實）。"""
+    a = float(amount or 0)
+    return a - round_half_up(a / 1.05) if a > 0 else 0.0
+
+
 def material_entries(conn, basis, department_id=None):
     """叫料（案件 data_json）→ 逐筆。沒有稅欄位 ⇒ 一律「未拆稅」。
 
@@ -376,6 +406,7 @@ def material_entries(conn, basis, department_id=None):
                     "approval": st, "pending": cs == "pending"})
     for e in out:
         e["noPo"] = bool(no_po.get((e["quoteNo"], str(e.get("itemId") or ""))))
+        e["tax"], e["taxKind"] = estimated_tax(e["amount"]), "estimated"        # 材料申請沒有稅額欄位：含稅最終金額 ⇒ 推估稅額
     return out
 
 
@@ -385,6 +416,17 @@ COUNTED_EXTRA_STATUSES = ("待審核", "簽核中", "已核准")
 #: 連到案件品項的採購單列在營運報表落哪一個支出桶（32-S3；使用者原話「不再額外支出，而是案件的實際支出」）。
 #: 報價品項沒有分類（設備／料件）⇒ 一律「料件」；要拆設備需要品項分類欄位（另案）。
 ITEM_COST_BUCKET = "material"
+
+
+def _doc_tax(r, cost) -> float:
+    """額外支出單據的稅額（費用單據 `tax` 欄；total_cost 是含稅金額）；現金口徑實付≠應付時依實付比例攤。沒有稅額（0／舊式簡單額外支出）⇒ 0。"""
+    try:
+        tax, total = float(r["tax"] or 0), float(r["total_cost"] or 0)
+    except (TypeError, ValueError, IndexError, KeyError):
+        return 0.0
+    if tax <= 0 or total <= 0:
+        return 0.0
+    return tax * (cost / total) if abs(cost - total) > 0.005 else tax
 
 
 def extra_entries(conn, basis, quote_no=None):
@@ -401,7 +443,7 @@ def extra_entries(conn, basis, quote_no=None):
     for r in conn.execute(
             "SELECT e.id, e.quote_no, e.category, e.description, e.total_cost, e.expense_date,"
             " e.created_at, e.doc_no, e.files_json, e.status, e.approval_json, e.invoice_date,"
-            " e.paid_date, e.remit_actual, e.remit_review, e.kind, e.doc_code, e.department_id, e.lines_json, q.customer_name FROM case_extra_expenses e"
+            " e.paid_date, e.remit_actual, e.remit_review, e.kind, e.doc_code, e.department_id, e.lines_json, e.tax, q.customer_name FROM case_extra_expenses e"
             " LEFT JOIN quotations q ON q.quote_no = e.quote_no"
             " WHERE e.status IN (%s) AND %s%s ORDER BY e.id" % (",".join("?" * len(COUNTED_EXTRA_STATUSES)), _EF.payable_sql("e"), " AND e.quote_no=?" if quote_no else ""),
             COUNTED_EXTRA_STATUSES + ((quote_no,) if quote_no else ())):
@@ -430,6 +472,7 @@ def extra_entries(conn, basis, quote_no=None):
                 "pending": r["status"] != "已核准", "files": files, "expenseId": r["id"],
                 "category": r["category"] or "其他", "description": r["description"] or "",
                 "remitPending": basis == "cash" and paid != "" and r["remit_review"] == "pending",
+                "tax": _doc_tax(r, cost), "taxKind": "exact" if _doc_tax(r, cost) else "unsplit",
                 "invoiceDate": inv, "paidDate": paid}      # 舊版列不帶 departmentId（缺＝報表依案件推導；與 A2 前相同）；單據列在 _typed_entries 帶
         if not (r["kind"] or ""):
             out.append(base)                                     # 舊版列：一列一筆，**行為不變**
@@ -469,8 +512,15 @@ def _typed_entries(r, base, cost, basis, paid, live_of=None) -> list:
         if iid:
             ent.update(itemId=iid, linkedItem=True, bucket=ITEM_COST_BUCKET)
         out.append(ent)
+    # 稅額是單據層級：有稅額（exact）只放在第一列（Σ 列＝單據稅額，不重複計）；沒有稅額的採購單＝含稅最終金額 ⇒ 每列推估；其餘＝未拆稅（只列金額）
+    doc_tax = base.get("tax") or 0
+    for n, ent in enumerate(out):
+        if doc_tax:
+            ent["tax"], ent["taxKind"] = (doc_tax if n == 0 else 0.0), "exact"
+        elif (r["kind"] or "") == "purchase_order":
+            ent["tax"], ent["taxKind"] = estimated_tax(ent["amount"]), "estimated"
     if basis == "cash" and cost != total:
-        out.append({**base, **common, "amount": cost - total, "category": "付款差額",
+        out.append({**base, **common, "amount": cost - total, "category": "付款差額", "tax": 0.0, "taxKind": "",
                     "desc": "%s｜付款差額（實付 %g／應付 %g）" % (r["doc_code"] or "", cost, total)})
     return out
 

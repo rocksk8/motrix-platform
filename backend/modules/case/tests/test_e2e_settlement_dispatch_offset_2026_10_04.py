@@ -35,8 +35,8 @@ def _tot(page):
 def test_dispatch_rows_map_to_items_without_double_counting_and_finalize_passes(live_server, make_user, e2e_browser):
     sa = make_user(username="sa_sa", role="superadmin")
     _seed()
-    d1 = _dispatch(10000, 2000, quote_no=NO)                       # report 12000、稅 500（已核准）
-    d2 = _dispatch(3000, 0, approval="待審核", quote_no=NO)        # report 3000、待審核（照計）
+    d1 = _dispatch(10000, 2000, quote_no=NO)                       # 含稅 12500（稅 500）（已核准）
+    d2 = _dispatch(3000, 0, approval="待審核", quote_no=NO)        # 含稅 3150、待審核（照計）
     _dispatch(999, 0, status="cancelled", quote_no=NO)             # 不計
     _dispatch(888, 0, approval="草稿", quote_no=NO)                # 不計
     page = e2e_browser.new_context(viewport={"width": 1400, "height": 1100}).new_page()
@@ -49,23 +49,23 @@ def test_dispatch_rows_map_to_items_without_double_counting_and_finalize_passes(
     r1 = page.locator(f'[data-testid="stl-un-dispatch-{d1}"]')
     r2 = page.locator(f'[data-testid="stl-un-dispatch-{d2}"]')
     assert r1.count() == 1 and r2.count() == 1 and page.locator('[data-testid^="stl-un-dispatch-"]').count() == 2
-    assert "承攬商派發" in r1.inner_text() and "12,000" in r1.inner_text() and "稅額 500" in r1.inner_text()
+    assert "承攬商派發" in r1.inner_text() and "12,500" in r1.inner_text() and "稅額 500" in r1.inner_text()
     assert "待審核" in r2.inner_text()
     assert r1.locator("b").first.evaluate("e => getComputedStyle(e).fontWeight") in ("700", "bold")
     bar = page.locator('[data-testid="stl-sumbar"]').inner_text()
     assert "未對應 4 件" in bar, bar                                   # 派發 2＋材料申請 X＋額外支出 1
     s0 = _tot(page)
-    assert s0["dispatchTotal"] == 15000 and s0["dispatchAbsorbed"] == 0
+    assert s0["dispatchTotal"] == 15650 and s0["dispatchAbsorbed"] == 0
     base = s0["totalActualCost"]
     assert base == page.evaluate(f"() => {S}.actuals.totals.totalActualCost")        # 沒有派發對應 ⇒ 與後端逐位相同
     _shot(page, "1-unassigned")
 
-    # ── 2. 對應 d1 → 品項 a（預設採用）：a 實際＝12000 取代估計 10500，總成本＝品項實際＋額外＋派發−被吸收（不重複）
+    # ── 2. 對應 d1 → 品項 a（預設採用）：a 實際＝12500 取代估計 10500，總成本＝品項實際＋額外＋派發−被吸收（不重複）
     page.locator(f'[data-testid="stl-offset-dispatch-{d1}"]').select_option("a")
-    page.wait_for_function(f"() => {S}.summary.dispatchAbsorbed === 12000", timeout=10000)
+    page.wait_for_function(f"() => {S}.summary.dispatchAbsorbed === 12500", timeout=10000)
     s1 = _tot(page)
-    assert s1["itemActualTotal"] == 12000 + 800 and s1["dispatchTotal"] == 15000
-    assert s1["totalActualCost"] == s1["itemActualTotal"] + s1["extraTotal"] + s1["dispatchTotal"] - 12000
+    assert s1["itemActualTotal"] == 12500 + 800 and s1["dispatchTotal"] == 15650
+    assert s1["totalActualCost"] == s1["itemActualTotal"] + s1["extraTotal"] + s1["dispatchTotal"] - 12500
     assert page.locator(f'[data-testid="stl-mapped-dispatch-{d1}"]').count() == 1 and page.locator(f'[data-testid="stl-un-dispatch-{d1}"]').count() == 0
     assert "已對應" in page.locator(f'[data-testid="stl-mapped-dispatch-{d1}"]').inner_text()
     assert "稅額 500" in page.locator(f'[data-testid="stl-mapped-dispatch-{d1}"]').inner_text()
@@ -73,8 +73,8 @@ def test_dispatch_rows_map_to_items_without_double_counting_and_finalize_passes(
     assert "來源：已對應" in page.locator('[data-testid="stl-source-a"]').inner_text()
     assert "3 件" in page.locator('[data-testid="stl-sumbar"]').inner_text()
     eq = page.locator('[data-testid="stl-conserve"]').inner_text()
-    # 守恆：未對應（派發 d2 3000＋材料 X 250＋額外 700）＋已對應（派發 d1 12000＋材料 N 800）＝全部 16750
-    assert "未對應 NT$ 3,950 ＋ 已對應 NT$ 12,800 ＝ NT$ 16,750" in eq, eq
+    # 守恆：未對應（派發 d2 3150＋材料 X 250＋額外 700）＋已對應（派發 d1 12500＋材料 N 800）＝全部 17400
+    assert "未對應 NT$ 4,100 ＋ 已對應 NT$ 13,300 ＝ NT$ 17,400" in eq, eq
     _shot(page, "2-mapped")
 
     # ── 3. 不採用 ⇒ 估計不變，派發仍以 dispatchTotal 計入 ⇒ 總成本回到基準（互移守恆）
@@ -83,36 +83,36 @@ def test_dispatch_rows_map_to_items_without_double_counting_and_finalize_passes(
     assert _tot(page)["totalActualCost"] == base
     assert "來源：估計" in page.locator('[data-testid="stl-source-a"]').inner_text()
     page.evaluate(f"() => {{ const d = {S}; d.toggleAdopt(d.settlement.items[0]) }}")      # 再採用
-    page.wait_for_function(f"() => {S}.summary.dispatchAbsorbed === 12000", timeout=10000)
+    page.wait_for_function(f"() => {S}.summary.dispatchAbsorbed === 12500", timeout=10000)
 
     # ── 4. 存草稿 ⇒ offsets 含 dispatch；重開還在；頁面總成本＝後端（存檔後後端用存的採用狀態）
     page.locator('[data-testid="stl-save-draft"]').click()
-    page.wait_for_function(f"() => !{S}.saving", timeout=15000)
+    page.wait_for_function(f"() => !{S}.saving", timeout=15650)
     saved = _settlement()
     assert {"kind": "dispatch", "ref": str(d1), "itemId": "a"} in saved["offsets"], saved["offsets"]
     page.reload()
     page.locator('[data-testid="stl-unassigned"]').wait_for(state="visible", timeout=20000)
-    page.wait_for_function(f"() => {S}._actualsOk && {S}.summary.dispatchAbsorbed === 12000", timeout=20000)
+    page.wait_for_function(f"() => {S}._actualsOk && {S}.summary.dispatchAbsorbed === 12500", timeout=20000)
     assert page.locator(f'[data-testid="stl-offset-dispatch-{d1}"]').input_value() == "a"
     s2 = _tot(page)
     t2 = page.evaluate(f"() => {S}.actuals.totals")
     assert s2["totalActualCost"] == t2["totalActualCost"], (s2, t2)
     if "dispatchAbsorbedTotal" in t2:                             # BE 之後加的 additive 鍵
-        assert t2["dispatchAbsorbedTotal"] == 12000
+        assert t2["dispatchAbsorbedTotal"] == 12500
 
-    # ── 5. 取消對應 ⇒ 回未對應、仍計入；總成本＝估計 10500＋派發 15000…（與基準同）
+    # ── 5. 取消對應 ⇒ 回未對應、仍計入；總成本＝估計 10500＋派發 15650…（與基準同）
     page.locator(f'[data-testid="stl-offset-dispatch-{d1}"]').select_option("")
     page.wait_for_function(f"() => {S}.summary.dispatchAbsorbed === 0", timeout=10000)
     assert _tot(page)["totalActualCost"] == base
     assert page.locator(f'[data-testid="stl-un-dispatch-{d1}"]').count() == 1
     # 再對應回去，準備完結
     page.locator(f'[data-testid="stl-offset-dispatch-{d1}"]').select_option("a")
-    page.wait_for_function(f"() => {S}.summary.dispatchAbsorbed === 12000", timeout=10000)
+    page.wait_for_function(f"() => {S}.summary.dispatchAbsorbed === 12500", timeout=10000)
 
     # ── 6. 完結：頁面送的 summary 與後端重算一致（不被 409），完結後全部唯讀並標示
     page.locator('[data-testid="stl-finalize"]').click()
     page.get_by_role("button", name="確認完結").click()
-    page.wait_for_function(f"() => {S}.settlement.status === 'finalized' && !{S}.saving", timeout=15000)
+    page.wait_for_function(f"() => {S}.settlement.status === 'finalized' && !{S}.saving", timeout=15650)
     fin = _settlement()
     assert fin["status"] == "finalized" and fin["summary"]["totalActualCost"] == s2["totalActualCost"], fin["summary"]
     assert page.locator(f'[data-testid="stl-offset-dispatch-{d1}"]').is_disabled()

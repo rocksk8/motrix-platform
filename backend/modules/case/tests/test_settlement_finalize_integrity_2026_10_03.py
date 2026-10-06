@@ -48,7 +48,7 @@ def page_payload(c, h, **over):
     summ = {"quotedPretax": QUOTED_PRETAX, "quotedTotal": 105000, "itemActualTotal": t["itemActualTotal"], "itemPoUnadopted": 0, "extraTotal": extra_total,
             "dispatchTotal": t["dispatchTotal"], "totalActualCost": total, "remitFeeTotal": t["remitFeeTotal"], "customExpenseTotal": t["customExpenseTotal"],
             "purchasedTotal": t["purchasedTotal"], "materialUnassignedTotal": t["materialUnassignedTotal"],
-            "dispatchTax": t["dispatchTax"], "dispatchGrandTotal": t["dispatchGrandTotal"], "dispatchBasis": "pretax",
+            "dispatchTax": t["dispatchTax"], "dispatchGrandTotal": t["dispatchGrandTotal"], "dispatchBasis": "taxed",
             "grossProfit": gross, "grossMarginPct": round(gross / QUOTED_PRETAX * 100, 1), "adminCost": admin, "charityDonation": charity,
             "netProfit": net, "netMarginPct": round(net / QUOTED_PRETAX * 100, 1)}
     summ.update(over)
@@ -95,7 +95,7 @@ def test_forged_finalize_probe_dispatch_total_and_net_profit_are_rejected(case):
 
 
 @pytest.mark.parametrize("field,value", [
-    ("dispatchTotal", 0), ("dispatchTotal", 99999), ("dispatchTotal", 12500),      # 12500＝含稅額蓋 pretax 標記（0c M2 驗收的第二個竄改）
+    ("dispatchTotal", 0), ("dispatchTotal", 99999), ("dispatchTotal", 12000),      # 12000＝35c 未稅值蓋 taxed 標記（2026-10-06 全含稅後的口徑錯配竄改；原本是 12500 蓋 pretax）
     ("totalActualCost", 1), ("grossProfit", 1), ("adminCost", 1), ("charityDonation", 99999), ("netProfit", 888888),
 ])
 def test_every_field_downstream_reads_is_verified_one_at_a_time(case, field, value):
@@ -146,7 +146,7 @@ def test_a_summary_missing_the_downstream_fields_cannot_bypass_the_check_the_ser
         cn.close()
     for k in ("dispatchTotal", "netProfit", "totalActualCost", "grossProfit", "adminCost", "charityDonation", "quotedPretax"):
         assert abs(saved[k] - honest[k]) <= 3, (k, saved[k], honest[k])           # 伺服器重算值（進位誤差內）
-    assert saved["dispatchBasis"] == "pretax"
+    assert saved["dispatchBasis"] == "taxed"                                        # 2026-10-06：完結一律蓋含稅標記
 
 
 def test_a_partial_forgery_is_still_rejected_even_if_other_fields_are_omitted(case):
@@ -157,13 +157,20 @@ def test_a_partial_forgery_is_still_rejected_even_if_other_fields_are_omitted(ca
     assert _put(c, h, p).status_code == 409 and _status() is None
 
 
-def test_a_stale_cached_page_without_the_basis_marker_is_asked_to_refresh(case):
-    """35c 之前的頁面送的 dispatchTotal 是含稅 12,500 且沒有 dispatchBasis：對不上新口徑 ⇒ 409，訊息要叫人重新整理。"""
+def test_a_stale_cached_page_with_the_old_pretax_marker_is_asked_to_convert(case):
+    """35c／36 期間的頁面（或存下來的草稿）送的是未稅 12,000＋標記 pretax：現行口徑是含稅 ⇒ 409，訊息要叫人先「轉為含稅口徑」（並重新整理）。"""
     c, h = case
-    old_page = page_payload(c, h, dispatchTotal=12500, totalActualCost=page_payload(c, h)["summary"]["totalActualCost"] + 500)
-    del old_page["summary"]["dispatchBasis"]
+    old_page = page_payload(c, h, dispatchBasis="pretax", dispatchTotal=12000, totalActualCost=page_payload(c, h)["summary"]["totalActualCost"] - 500)
     r = _put(c, h, old_page)
-    assert r.status_code == 409 and "重新整理" in r.json()["detail"]
+    assert r.status_code == 409 and "轉為含稅口徑" in r.json()["detail"] and _status() is None, r.text[:300]
+
+
+def test_a_page_without_any_marker_but_with_the_old_pretax_number_is_rejected(case):
+    """沒有標記視同含稅（35c 前）：送未稅值 12,000 對不上 ⇒ 409，不存檔。"""
+    c, h = case
+    p = page_payload(c, h, dispatchTotal=12000, totalActualCost=page_payload(c, h)["summary"]["totalActualCost"] - 500)
+    del p["summary"]["dispatchBasis"]
+    assert _put(c, h, p).status_code == 409 and _status() is None
 
 
 def test_rounding_tolerance_still_allows_small_differences(case):

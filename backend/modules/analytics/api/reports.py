@@ -1336,25 +1336,27 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     dc.fill = fill("7C3AED")
     dc.alignment = al("center")
     ws_year.row_dimensions[3].height = 22
-    matrix_hdrs = ["月份", "承攬商派發", "設備進貨", "料件進貨", "其他支出", "合計"]
+    matrix_hdrs = ["月份", "承攬商派發", "設備進貨", "料件進貨", "其他支出", "合計", "稅額（確定，含在支出內）", "稅額（推估，含在支出內）", "未拆稅金額（備忘）"]
     set_row(ws_year, 4, matrix_hdrs, font=mk(bold=True, size=9, color=C_WHITE),
              fill=fill("374151"), border=BD, aligns=[al("center")], height=20)
     r_i = 5
     for m in exp.get("monthly") or []:
         set_row(ws_year, r_i,
-                 [m["label"], m["contractor"], m["equipment"], m["material"], m["other"], m["total"]],
+                 [m["label"], m["contractor"], m["equipment"], m["material"], m["other"], m["total"],
+                  m.get("taxExact", 0), m.get("taxEstimated", 0), m.get("taxUnsplit", 0)],
                  font=mk(size=9), fill=fill(C_WHITE), border=BD,
-                 aligns=[al("center")] + [al("right")] * 5, height=18)
-        for ci in (2, 3, 4, 5, 6):
+                 aligns=[al("center")] + [al("right")] * 8, height=18)
+        for ci in (2, 3, 4, 5, 6, 7, 8, 9):
             ws_year.cell(row=r_i, column=ci).number_format = '#,##0'
         r_i += 1
     tot = exp.get("totals") or {}
     set_row(ws_year, r_i,
              ["全年合計", tot.get("contractor", 0), tot.get("equipment", 0),
-              tot.get("material", 0), tot.get("other", 0), tot.get("total", 0)],
+              tot.get("material", 0), tot.get("other", 0), tot.get("total", 0),
+              tot.get("taxExact", 0), tot.get("taxEstimated", 0), tot.get("taxUnsplit", 0)],
              font=mk(bold=True, size=9, color=C_WHITE), fill=fill(C_DARK), border=BD,
-             aligns=[al("left")] + [al("right")] * 5, height=20)
-    for ci in (2, 3, 4, 5, 6):
+             aligns=[al("left")] + [al("right")] * 8, height=20)
+    for ci in (2, 3, 4, 5, 6, 7, 8, 9):
         ws_year.cell(row=r_i, column=ci).number_format = '#,##0'
     r_i += 2
 
@@ -1933,7 +1935,9 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
             f"<tr><td>{esc(m['label'])}</td>"
             f"<td class='r'>NT$ {m['contractor']:,}</td><td class='r'>NT$ {m['equipment']:,}</td>"
             f"<td class='r'>NT$ {m['material']:,}</td><td class='r'>NT$ {m['other']:,}</td>"
-            f"<td class='r'><b>NT$ {m['total']:,}</b></td></tr>"
+            f"<td class='r'><b>NT$ {m['total']:,}</b></td>"
+            f"<td class='r'>NT$ {m.get('taxExact', 0):,}</td><td class='r'>NT$ {m.get('taxEstimated', 0):,}</td>"
+            f"<td class='r'>NT$ {m.get('taxUnsplit', 0):,}</td></tr>"
         )
 
     def income_rows_html(items):
@@ -2350,7 +2354,7 @@ tr.in-period{{background:#EFF6FF}}
 <div class="section-title" style="background:#111827">{data.get("expensesYear","")}年度收支總表</div>
 <h3 style="margin:8px 0 8px;font-size:10pt;color:#7C3AED;border-bottom:1px solid #DDD6FE;padding-bottom:4px">年度月支出結構（逐月比較）</h3>
 <table>
-<thead>{tbl_hdr("月份","承攬商派發","設備進貨","料件進貨","其他支出","合計")}</thead>
+<thead>{tbl_hdr("月份","承攬商派發","設備進貨","料件進貨","其他支出","合計","稅額（確定）","稅額（推估）","未拆稅金額")}</thead>
 <tbody>{exp_month_rows}</tbody>
 <tr class="sum-row">
   <td>全年合計</td>
@@ -2359,8 +2363,12 @@ tr.in-period{{background:#EFF6FF}}
   <td class="r">NT$ {exp["totals"].get("material",0):,}</td>
   <td class="r">NT$ {exp["totals"].get("other",0):,}</td>
   <td class="r">NT$ {exp["totals"].get("total",0):,}</td>
+  <td class="r">NT$ {exp["totals"].get("taxExact",0):,}</td>
+  <td class="r">NT$ {exp["totals"].get("taxEstimated",0):,}</td>
+  <td class="r">NT$ {exp["totals"].get("taxUnsplit",0):,}</td>
 </tr>
 </table>
+<p style="font-size:8pt;color:#6B7280;margin:2px 0 8px">稅額已含在各類支出金額內（不另加）。確定稅額＝單據有稅額；推估稅額＝沒有稅額欄位的含稅來源（金額 − 金額÷1.05，假設進項稅 5%）；未拆稅金額為無稅額的額外支出金額，僅備忘、不是稅額。承攬商派發自 2026-10-01 起（以派發日期計）含稅計入。</p>
 <h3 style="margin:16px 0 8px;font-size:10pt;color:#15803D;border-bottom:1px solid #BBF7D0;padding-bottom:4px">今年度收入明細（共 {len(year_income_items)} 筆）</h3>
 {'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員",*_inc_cols,"實收金額","手續費","實收淨額","發票號碼") + '</thead><tbody>' + income_rows_html(year_income_items) + income_sum_row(year_income_items) + '</tbody></table>' if year_income_items else ('<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">' + (data.get("incomeNotice") or "此年度尚無收款紀錄。") + '</p>')}
 <h3 style="margin:16px 0 8px;font-size:10pt;color:#7C3AED;border-bottom:1px solid #DDD6FE;padding-bottom:4px">今年度支出明細（共 {len(year_expense_items)} 筆）</h3>
@@ -3314,6 +3322,10 @@ def _months_expense_slice(expenses: dict, months) -> dict:
                 flat.append({**it, "cat": cat})
     flat.sort(key=lambda x: x.get("date") or "", reverse=True)
     return {"items": flat, "total": sum(it["amount"] for it in flat),
+            # 稅額（含在支出內；2026-10-06）：確定／推估稅額與未拆稅金額（備忘）分開合計——與年度矩陣 taxExact／taxEstimated／taxUnsplit 同一規則
+            "taxExact": sum(it.get("tax", 0) for it in flat if it.get("taxKind") == "exact"),
+            "taxEstimated": sum(it.get("tax", 0) for it in flat if it.get("taxKind") == "estimated"),
+            "taxUnsplit": sum(it["amount"] for it in flat if it.get("taxKind") == "unsplit"),
             "byDepartment": _dept_rollup((it["cat"], it) for it in flat)}
 
 
@@ -3531,8 +3543,20 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     d0 = f"{year}-01-01"
     d1 = f"{year}-12-31"
     month_list = [f"{year}-{m:02d}" for m in range(1, 13)]
-    monthly = {mo: {"contractor": 0.0, "equipment": 0.0, "material": 0.0, "other": 0.0} for mo in month_list}
+    monthly = {mo: {"contractor": 0.0, "equipment": 0.0, "material": 0.0, "other": 0.0, "taxExact": 0.0, "taxEstimated": 0.0, "taxUnsplit": 0.0, "taxContractor": 0.0} for mo in month_list}
     details: dict = {"contractor": [], "equipment": [], "material": [], "other": []}
+
+    def _tax_of(mo, e) -> dict:
+        """支出列的稅額欄位（2026-10-06 稅額＝支出的一部分，含在金額內）：`taxKind` exact＝單據稅額、estimated＝推估（金額−金額÷1.05，沒有稅額欄位的含稅來源）、
+        unsplit＝未拆稅（只列金額、不是稅額）、空＝這列沒有稅額概念。月累計：exact／estimated 進稅額，unsplit 進未拆稅金額備忘。"""
+        kind, tax = e.get("taxKind") or "", float(e.get("tax") or 0)
+        if kind == "exact":
+            monthly[mo]["taxExact"] += tax
+        elif kind == "estimated":
+            monthly[mo]["taxEstimated"] += tax
+        elif kind == "unsplit":
+            monthly[mo]["taxUnsplit"] += float(e.get("amount") or 0)
+        return {"tax": round_half_up(tax) if kind in ("exact", "estimated") else 0, "taxKind": kind}
 
     # `AC2`：呼叫端可以帶自己的連線（首頁儀表板用 db_conn()，關閉由它保證）；沒帶才自己開、自己關
     own_conn = conn is None
@@ -3569,8 +3593,10 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         if mo not in monthly or not _quote_in_department(e["quoteNo"]):
             continue
         monthly[mo]["contractor"] += e["amount"]
+        if basis == "accrual" and e.get("taxKind") == "exact":
+            monthly[mo]["taxContractor"] += float(e.get("tax") or 0)       # 應計口徑含在承攬商成本內的稅額（總帳記進項稅額 1268、不在成本）：與總帳差異分桶用
         details["contractor"].append({
-            **_dept_fields(e["quoteNo"]),
+            **_dept_fields(e["quoteNo"]), **_tax_of(mo, e),
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round_half_up(e["amount"]),
             "taxNote": e["taxNote"] + ("｜差額待審核" if e.get("remitPending") else "") + ("｜派發待審核" if e.get("approvalPending") else ""),
             "provisional": e["provisional"], "pending": bool(e.get("remitPending") or e.get("approvalPending")),
@@ -3583,7 +3609,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             continue
         monthly[mo]["material"] += e["amount"]
         details["material"].append({
-            **_dept_fields(e["quoteNo"]),
+            **_dept_fields(e["quoteNo"]), **_tax_of(mo, e),
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round_half_up(e["amount"]),
             "taxNote": e["taxNote"] + ("｜待審核" if e.get("pending") else "") + ("｜未申請採購單" if e.get("noPo") else ""), "provisional": e["provisional"],
             "pending": bool(e.get("pending")),                       # 叫料審核（31-C）：待審核／簽核中的叫料照計入並標示
@@ -3633,7 +3659,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         bucket = e.get("bucket") or "other"          # 32-S3：連到案件品項的採購單列＝案件的實際支出，落「料件」桶（recognition.ITEM_COST_BUCKET），不再是「其他」
         monthly[mo][bucket] += e["amount"]
         details[bucket].append({
-            **_dept_fields(e["quoteNo"], e.get("departmentId")),
+            **_dept_fields(e["quoteNo"], e.get("departmentId")), **_tax_of(mo, e),
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"].strip("｜"),
             "amount": round_half_up(e["amount"]), "files": e["files"],
             # 精算尚未完結：金額還可能變動，前端會標示出來，不要讓使用者
@@ -3668,7 +3694,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         conn.close()
 
     monthly_items = []
-    totals = {"contractor": 0, "equipment": 0, "material": 0, "other": 0, "total": 0}
+    totals = {"contractor": 0, "equipment": 0, "material": 0, "other": 0, "total": 0, "taxExact": 0, "taxEstimated": 0, "taxUnsplit": 0}
     for mo in month_list:
         e = monthly[mo]
         total = e["contractor"] + e["equipment"] + e["material"] + e["other"]
@@ -3677,9 +3703,11 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             "contractor": round_half_up(e["contractor"]), "equipment": round_half_up(e["equipment"]),
             "material": round_half_up(e["material"]), "other": round_half_up(e["other"]),
             "total": round_half_up(total),
+            "taxExact": round_half_up(e["taxExact"]), "taxEstimated": round_half_up(e["taxEstimated"]), "taxUnsplit": round_half_up(e["taxUnsplit"]),
+            "taxContractor": round_half_up(e["taxContractor"]),
         }
         monthly_items.append(item)
-        for k in ("contractor", "equipment", "material", "other", "total"):
+        for k in ("contractor", "equipment", "material", "other", "total", "taxExact", "taxEstimated", "taxUnsplit"):
             totals[k] += item[k]
 
     for cat in details:

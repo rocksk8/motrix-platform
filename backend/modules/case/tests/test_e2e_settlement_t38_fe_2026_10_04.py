@@ -277,18 +277,18 @@ def test_finalize_adopts_the_server_frozen_summary_and_legacy_without_absorbed_k
     from modules.case.tests.test_settlement_tax_basis_2026_10_03 import _dispatch
     sa = make_user(username="sa_sa", role="superadmin")
     _seed()
-    d1 = _dispatch(10000, 2000, quote_no=NO)                                          # 派發 12000 → 對應到品項 a 並採用 ⇒ 被吸收 12000
+    d1 = _dispatch(10000, 2000, quote_no=NO)                                          # 派發 12500 → 對應到品項 a 並採用 ⇒ 被吸收 12500
     page = _open(e2e_browser, live_server, sa)
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.locator(f'[data-testid="stl-offset-dispatch-{d1}"]').select_option("a")
-    page.wait_for_function(f"() => {S}.summary.dispatchAbsorbed === 12000", timeout=10000)
+    page.wait_for_function(f"() => {S}.summary.dispatchAbsorbed === 12500", timeout=10000)
     _finalize_click(page)
     page.wait_for_function(f"() => {S}.settlement.status === 'finalized' && !{S}.saving", timeout=15000)
     saved = _settlement()["summary"]
     keys = ["totalActualCost", "grossProfit", "adminCost", "charityDonation", "netProfit", "dispatchTotal", "itemActualTotal"]
     live = page.evaluate(f"() => ({{...{S}.summary}})")
-    assert saved["dispatchAbsorbedTotal"] == 12000, saved
+    assert saved["dispatchAbsorbedTotal"] == 12500, saved
     for k in keys:
         assert live[k] == saved[k], (k, live[k], saved[k])                           # 完結當下畫面＝存檔（伺服器值）
     assert live["dispatchAbsorbed"] == saved["dispatchAbsorbedTotal"]
@@ -297,7 +297,7 @@ def test_finalize_adopts_the_server_frozen_summary_and_legacy_without_absorbed_k
     after = page.evaluate(f"() => ({{...{S}.summary}})")
     for k in keys:
         assert after[k] == saved[k], (k, after[k], saved[k])                         # 重新載入後也一致
-    assert after["dispatchAbsorbed"] == 12000
+    assert after["dispatchAbsorbed"] == 12500
     # 舊案：把存檔 summary 的 dispatchAbsorbedTotal 拿掉（模擬 38 之前完結）⇒ 仍可顯示、沒有 JS 錯誤、數字是有限值
     c = db.get_db()
     try:

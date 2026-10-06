@@ -319,7 +319,7 @@
       </button>
     </template>
     <template x-if="settlement.status !== 'finalized'">
-      <button class="btn btn-success btn-sm" @click="showFinalizeModal=true" :disabled="xeMasked > 0 || readiness.hard.length > 0 || conflict" :title="conflict ? '精算已被其他人更新，請先重新載入' : readiness.hard.length ? '不可完結：' + readiness.hard.join('；') : ''" data-testid="stl-finalize">
+      <button class="btn btn-success btn-sm" @click="showFinalizeModal=true" :disabled="xeMasked > 0 || readiness.hard.length > 0 || conflict || needsConvert()" :title="conflict ? '精算已被其他人更新，請先重新載入' : needsConvert() ? '請先按「轉為含稅口徑」' : readiness.hard.length ? '不可完結：' + readiness.hard.join('；') : ''" data-testid="stl-finalize">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         完結精算
       </button>
@@ -637,7 +637,7 @@
                     <span x-show="u.noPo" style="font-size:10px;color:#92400E">（未申請採購單）</span>
                     <div x-show="u.detail" style="font-size:11px;color:var(--text-secondary)" x-text="u.detail"></div>
                   </td>
-                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"><b x-text="fmt(u.amount)"></b><div x-show="u.kind === 'dispatch'" data-testid="stl-tax" style="font-size:10px;color:var(--text-dim)" x-text="'稅額 ' + fmt(u.tax) + '（不計成本）'"></div></td>
+                  <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"><b x-text="fmt(u.amount)"></b><div x-show="u.kind === 'dispatch'" data-testid="stl-tax" style="font-size:10px;color:var(--text-dim)" x-text="dispatchIsPretax() ? '稅額 ' + fmt(u.tax) + '（不計成本）' : '其中稅額 ' + fmt(u.tax) + '（含在金額內）'"></div></td>
                   <td>
                     <select class="stl-input" :data-testid="'stl-offset-' + u.kind + '-' + u.ref" :disabled="settlement.status === 'finalized'"
                             @change="setOffset(u.kind, u.ref, $event.target.value)" style="width:100%">
@@ -679,7 +679,7 @@
                       <div style="font-size:10px" :style="itemAdopted(u.itemId) ? 'color:#15803D' : 'color:#92400E'"
                            x-text="itemAdopted(u.itemId) ? '已計入該品項的實際成本' : '該品項未採用：這筆金額目前不計入實際成本'"></div>
                     </td>
-                    <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"><b x-text="fmt(u.amount)"></b><div x-show="u.kind === 'dispatch'" data-testid="stl-tax" style="font-size:10px;color:var(--text-dim)" x-text="'稅額 ' + fmt(u.tax) + '（不計成本）'"></div></td>
+                    <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif"><b x-text="fmt(u.amount)"></b><div x-show="u.kind === 'dispatch'" data-testid="stl-tax" style="font-size:10px;color:var(--text-dim)" x-text="dispatchIsPretax() ? '稅額 ' + fmt(u.tax) + '（不計成本）' : '其中稅額 ' + fmt(u.tax) + '（含在金額內）'"></div></td>
                     <td>
                       <template x-if="u.assignedBy === 'link'">
                         <span style="font-size:12px;color:var(--text-secondary)" :data-testid="'stl-linked-' + u.kind + '-' + u.ref">由材料申請連結（唯讀）</span>
@@ -726,8 +726,8 @@
                   <tr>
                     <th style="min-width:160px">承攬商 / 外包人員</th>
                     <th style="width:110px">派發狀態</th>
-                    <th style="width:150px;text-align:right" x-text="dispatchBasisOld() ? '金額 (NT$，含稅，舊口徑)' : '計入成本 (NT$，未稅)'"></th>
-                    <th style="width:150px;text-align:right" x-show="!dispatchBasisOld()">承攬商稅額（進項稅額，不計成本）</th>
+                    <th style="width:150px;text-align:right" x-text="dispatchIsPretax() ? '計入成本 (NT$，未稅，35c 舊口徑)' : '計入成本 (NT$，含稅)'"></th>
+                    <th style="width:150px;text-align:right" x-text="dispatchIsPretax() ? '承攬商稅額（未計入成本）' : '其中稅額（含在金額內）'"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -741,7 +741,7 @@
                         </td>
                         <td x-text="row.isVendor ? d.statusLabel : ''" style="color:var(--text-dim);font-size:11px"></td>
                         <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" x-text="fmt(row.amount)"></td>
-                        <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" x-show="!dispatchBasisOld()" data-testid="stl-dispatch-row-tax"
+                        <td style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)" data-testid="stl-dispatch-row-tax"
                             x-text="row.tax ? fmt(row.tax) : ''"></td>
                       </tr>
                     </template>
@@ -751,26 +751,42 @@
                   <tr style="background:#FEF9C3;font-weight:600">
                     <td colspan="2" style="border-top:1.5px solid #FDE68A;padding:10px;text-align:right;font-size:11px;color:#92400E">承攬商派發成本小計</td>
                     <td style="border-top:1.5px solid #FDE68A;text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" data-testid="stl-dispatch-subtotal" x-text="'NT$ ' + fmt(summary.dispatchTotal)"></td>
-                    <td style="border-top:1.5px solid #FDE68A;text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" x-show="!dispatchBasisOld()" data-testid="stl-dispatch-tax-total"
+                    <td style="border-top:1.5px solid #FDE68A;text-align:right;font-family:LINE Seed TW_OTF, sans-serif;color:#92400E" data-testid="stl-dispatch-tax-total"
                         x-text="'NT$ ' + fmt(dispatchTaxTotal())"></td>
                   </tr>
                 </tfoot>
               </table>
-              <!-- 35c 稅基 B：稅額透明（避免 5% 爭議）。只有「未稅＋外包人員」計入成本；稅額是進項稅額（總帳記資產 1268），不是成本。一律 x-text。 -->
+              <!-- 精算全含稅（使用者 2026-10-06）：承攬商成本＝未稅承攬費＋稅額＋外包人員；35c／36 期間存的草稿維持未稅直到「轉為含稅口徑」；已完結不改寫。一律 x-text。 -->
               <div style="padding:8px 10px;font-size:11px;color:var(--text-secondary)" data-testid="stl-dispatch-split" x-text="dispatchSplitText()"></div>
-              <template x-if="dispatchDraftNote()">
-                <div style="margin:4px 10px 10px;padding:8px 10px;border-radius:6px;background:var(--tone-info-bg, #EFF6FF);color:var(--tone-info-fg, #1E40AF);font-size:11px;display:flex;gap:10px;align-items:center" role="status" data-testid="stl-dispatch-basis-note">
-                  <span style="flex:1" x-text="'承攬商成本現以未稅計入（稅額為進項稅額，不計成本）；與先前顯示相差承攬商稅額 NT$ ' + fmt(dispatchTaxTotal())"></span>
-                  <button type="button" class="btn btn-ghost btn-sm" style="padding:0 8px;font-size:11px" data-testid="stl-dispatch-basis-note-dismiss" @click="dismissDispatchNote()">知道了</button>
+              <template x-if="settlement.status !== 'finalized' && _draftBasis === 'pretax'">
+                <div style="margin:4px 10px 10px;padding:10px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:12px;display:flex;gap:10px;align-items:center" role="alert" data-testid="stl-dispatch-convert-banner">
+                  <span style="flex:1" x-text="convertBannerText()"></span>
+                  <button type="button" class="btn btn-sm btn-primary" data-testid="stl-dispatch-convert" @click="convertToTaxed()">轉為含稅口徑</button>
                 </div>
               </template>
-              <template x-if="dispatchBasisOld() && dispatchTaxTotal() > 0">
+              <template x-if="settlement.status === 'finalized' && dispatchIsPretax() && dispatchTaxTotal() > 0">
                 <div style="margin:4px 10px 10px;padding:8px 10px;border-radius:6px;background:#F5F4F0;color:var(--text-secondary);font-size:11px" role="status" data-testid="stl-dispatch-old-basis-note"
-                     x-text="'此精算完結於含稅口徑（承攬商稅額已計入成本）；新精算以未稅計入，兩者相差承攬商稅額（目前約 NT$ ' + fmt(dispatchTaxTotal()) + '）。已完結的數字不改寫。'"></div>
+                     x-text="'此精算完結於 35c 的未稅口徑（承攬商稅額 NT$ ' + fmt(dispatchTaxTotal()) + ' 未計入成本）；現行精算全部含稅。已完結的數字不改寫。'"></div>
               </template>
             </div>
           </template>
         </div>
+      </div>
+
+      <!-- ── 稅額（含在成本內）：使用者 2026-10-06——稅是支出的一部分；確定／推估／未拆稅分開標示。完結後讀存檔值（凍結）；草稿為即時預估。一律 x-text。 ── -->
+      <div class="stl-card" x-show="_actualsOk && taxExpenseView()" data-testid="stl-tax-expense">
+        <div class="stl-card__hd"><span>稅額（含在成本內）</span>
+          <span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--text-dim)" data-testid="stl-tax-expense-state" x-text="taxExpenseView() && taxExpenseView().stateText"></span></div>
+        <template x-if="taxExpenseView() && taxExpenseView().legacy">
+          <div style="padding:10px;font-size:12px;color:var(--text-secondary)" data-testid="stl-tax-expense-legacy">此精算完結於稅額功能之前，沒有稅額資料（不現算、不改寫）。</div>
+        </template>
+        <template x-if="taxExpenseView() && !taxExpenseView().legacy">
+          <table class="stl-table"><tbody>
+            <tr><td>確定稅額（單據有稅額：承攬商派發、費用單據）</td><td style="text-align:right" data-testid="stl-tax-exact" x-text="'NT$ ' + fmt(taxExpenseView().exact)"></td></tr>
+            <tr><td>推估稅額（沒有稅額欄位的含稅來源：品項估計、採購單、材料申請；金額 − 金額÷1.05，假設進項稅 5%）</td><td style="text-align:right" data-testid="stl-tax-estimated" x-text="'NT$ ' + fmt(taxExpenseView().estimated)"></td></tr>
+            <tr style="color:var(--text-secondary)"><td>未拆稅金額（備忘；沒有稅額的額外支出，不是稅額）</td><td style="text-align:right" data-testid="stl-tax-unsplit" x-text="'NT$ ' + fmt(taxExpenseView().unsplit)"></td></tr>
+          </tbody></table>
+        </template>
       </div>
 
       <!-- ── 存檔有、報價單已無的品項（唯讀；不計入任何金額）── -->
@@ -934,7 +950,7 @@
       <div class="stl-card" data-testid="stl-audit">
         <div class="stl-card__head"><div class="stl-card__title">六、對帳與稽核</div></div>
         <div class="stl-card__body" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:12px">
-          <div><div style="color:var(--text-secondary)">金額口徑</div><b>報價／成本一律未稅；派發成本＝未稅承攬費＋外包人員（pretax），稅額僅供參考</b></div>
+          <div><div style="color:var(--text-secondary)">金額口徑</div><b>報價／原始成本為未稅；精算後成本一律含稅（派發成本＝未稅承攬費＋稅額＋外包人員）</b></div>
           <div><div style="color:var(--text-secondary)">認列基礎</div><b>待審核單據照計；已取消、草稿、已退回不計</b></div>
           <div><div style="color:var(--text-secondary)">狀態</div><b data-testid="stl-audit-status" x-text="settlement.status === 'finalized' ? '已完結（凍結）' : '草稿（未凍結）'"></b></div>
           <div><div style="color:var(--text-secondary)">凍結時間／人員</div><b data-testid="stl-audit-frozen" x-text="settlement.status === 'finalized' ? (settlement.finalizedAt ? new Date(settlement.finalizedAt).toLocaleString('zh-TW') : '') + '／' + (settlement.finalizedBy || '') : '—'"></b></div>
@@ -1014,7 +1030,7 @@ const API = '/api'
 //   額外支出＝未分稅（全額）；承攬商派發＝未稅承攬費＋外包人員（35c）；匯款手續費／自訂模組支出＝實付金額（不分稅）
 // 伺服器 settlement-actuals.taxBasis 的鍵名（TAX_BASIS）：本頁內部鍵 ⇒ 伺服器鍵；伺服器有值就用它的 label，沒有才用下面的常數
 const STL_TAX_KEY = { estimate: 'itemEstimate', po: 'purchase', remit: 'remitFee', custom: 'customExpense' }
-const STL_TAX_BASIS = { estimate: '含稅 ×1.05（假設不可扣抵）', po: '含稅', material: '含稅', extra: '未分稅', dispatch: '未稅（＋外包人員）', remit: '實付金額（不分稅）', custom: '實付金額（不分稅）' }
+const STL_TAX_BASIS = { estimate: '含稅 ×1.05（假設不可扣抵）', po: '含稅', material: '含稅', extra: '未分稅', dispatch: '含稅（未稅承攬費＋稅額＋外包人員）', remit: '實付金額（不分稅）', custom: '實付金額（不分稅）' }
 const STL_CONFIG = {
   GP_DROP_PP: 5,              // 品項毛利比比原始（估計）低超過 N 個百分點 → 列入「需處理」
   LOSS_GP_BELOW: 0,           // 品項毛利 < 此值＝虧損
@@ -1216,6 +1232,7 @@ function settlementPage() {
           this.settlement.memo          = saved.memo || ''
           this.settlement.extraItems    = saved.extraItems || []
           this._frozenSummary           = saved.summary || null
+          this._draftBasis              = (saved.status !== 'finalized' && saved.summary && saved.summary.dispatchBasis === 'pretax') ? 'pretax' : 'taxed'
           this.offsets                  = Array.isArray(saved.offsets) ? saved.offsets.map(o => ({ kind: o.kind, ref: String(o.ref), itemId: String(o.itemId) })) : []
 
           // 合併報價品項（若報價單有新增/刪除品項，以報價單為基準）
@@ -1358,7 +1375,7 @@ function settlementPage() {
       return [
         { key: 'before', title: '① 扣管理費／公益前', rows: [
           R('b1-rev', '報價（稅前收入）', '報價單稅前收入；兩邊相同', rev, rev, 'good'),
-          R('b1-cost', '實際總成本', '原始＝未稅 Σ(數量×成本)；精算後＝品項含稅(×1.05)＋承攬商未稅＋額外未分稅（後端同源）', sm.origTotalCost, sm.totalActualCost, 'cost'),
+          R('b1-cost', '實際總成本', '原始＝未稅 Σ(數量×成本)；精算後＝品項含稅(×1.05)＋承攬商含稅＋額外未分稅（後端同源）', sm.origTotalCost, sm.totalActualCost, 'cost'),
           R('b1-gp', '真實毛利', '報價 − 總成本（原始毛利另扣進項稅 5%）', sm.origDirectProfit, sm.grossProfit, 'good', { strong: true, neg: true }),
           R('b1-gpp', '真實毛利率', '毛利比＝毛利 ÷ 報價', pct(sm.origDirectProfit), pct(sm.grossProfit), 'good', { pct: true }),
           R('b1-pre', '未扣費用淨利', '＝毛利（尚未扣管理費、公益）', sm.origDirectProfit, sm.grossProfit, 'good', { neg: true }),
@@ -1449,7 +1466,7 @@ function settlementPage() {
       return '稅基：' + (parts.join('；') || '依對應單據')
     },
     // 原始 vs 精算後 的口徑說明（一句話＋ⓘ 詳解）
-    get basisNoteShort() { return '口徑說明：原始總成本為未稅（數量×成本），但原始毛利已另扣進項稅 5%；精算後品項成本含稅（估計 ×1.05）、承攬商未稅、額外支出未分稅——「原始 vs 精算後」的成本差額含約 5% 的口徑差，不全是真實成本變化。' },
+    get basisNoteShort() { return '口徑說明：原始總成本為未稅（數量×成本），但原始毛利已另扣進項稅 5%；精算後品項成本含稅（估計 ×1.05）、承攬商含稅、額外支出未分稅——「原始 vs 精算後」的成本差額含約 5% 的口徑差，不全是真實成本變化。' },
     get basisNoteLong() {
       return '各來源稅基——品項估計：' + this.taxBasis('estimate') + '；採購單：' + this.taxBasis('po') + '（含稅最終金額，直接採用）；材料申請：' + this.taxBasis('material') +
         '；額外支出：' + this.taxBasis('extra') + '；承攬商派發：' + this.taxBasis('dispatch') + '；匯款手續費／自訂模組支出：' + this.taxBasis('remit') +
@@ -1704,9 +1721,36 @@ function settlementPage() {
       } catch {}
     },
 
-    // 35c 稅基 B（使用者 2026-10-03）：承攬商成本計入的是「未稅承攬費＋外包人員」（營運報表權責口徑／總帳同一口徑；稅額是進項稅額，不是成本）。
-    // 例外：完結於舊口徑（存檔 summary 沒有 dispatchBasis）的精算維持含稅口徑顯示，與完結當下存的數字逐位相同，不改寫。
-    dispatchBasisOld() { return !this._finalizing && this.settlement.status === 'finalized' && !(this._frozenSummary && this._frozenSummary.dispatchBasis) },
+    // 精算全含稅（使用者 2026-10-06）：承攬商成本＝未稅承攬費＋稅額＋外包人員。口徑標記 summary.dispatchBasis：沒有＝35c 前完結（含稅）、'pretax'＝35c／36 完結（未稅）、'taxed'＝現行。
+    // 已完結：照存檔標記顯示，值不改寫。草稿：35c 期間存的草稿（標記 pretax）維持未稅，直到按「轉為含稅口徑」（存檔後標記變 taxed；完結前必須轉換）。
+    _draftBasis: 'taxed',
+    dispatchIsPretax() {
+      if (this._finalizing) return false
+      if (this.settlement.status === 'finalized') return !!(this._frozenSummary && this._frozenSummary.dispatchBasis === 'pretax')
+      return this._draftBasis === 'pretax'
+    },
+    // 稅額（含在成本內）：完結後讀完結當下存的值（沒有＝舊案，不現算）；草稿讀伺服器即時預估
+    taxExpenseView() {
+      if (this.settlement.status === 'finalized' && !this._finalizing) {
+        const te = this._frozenSummary && this._frozenSummary.taxExpense
+        return te ? { legacy: false, stateText: '完結時凍結', exact: te.exact || 0, estimated: te.estimated || 0, unsplit: te.unsplit || 0 } : { legacy: true, stateText: '' }
+      }
+      const live = this.actuals && this.actuals.totals && this.actuals.totals.taxExpense
+      if (!live) return null
+      return { legacy: false, stateText: '預估（尚未完結）', exact: live.exact || 0, estimated: live.estimated || 0, unsplit: live.unsplit || 0 }
+    },
+    needsConvert() { return this.settlement.status !== 'finalized' && this._draftBasis === 'pretax' },
+    convertBannerText() {
+      const tax = this.dispatchTaxTotal()
+      return '此精算草稿存於 35c 的未稅口徑（承攬商成本 NT$ ' + this.fmt(this.dispatchPretax()) + '）。精算現已全部含稅：轉換後承攬商成本 NT$ ' + this.fmt(this.dispatchGross())
+        + '（＋' + this.fmt(tax) + '），總成本、毛利、淨利（獎金基數）隨之變動。完結前必須轉換。'
+    },
+    convertToTaxed() {
+      this._draftBasis = 'taxed'
+      this.calcSummary()
+      this.dirty = true
+      this.toast('已轉為含稅口徑；請儲存草稿')
+    },
     dispatchPretax() {
       if (this._actualsOk && this.actuals.costExtras) return this.actuals.costExtras.dispatch.report || 0
       return this.dispatches.reduce((s, d) => s + (+d.totalAmount || 0) + (+d.personnelTotal || 0), 0)
@@ -1718,14 +1762,16 @@ function settlementPage() {
     dispatchTaxTotal() { return Math.max(0, this.dispatchGross() - this.dispatchPretax()) },
     dispatchPersonnelTotal() { return this.dispatches.reduce((s, d) => s + (+d.personnelTotal || 0), 0) },
     dispatchTotal() {
-      return this.dispatchBasisOld() ? this.dispatchGross() : this.dispatchPretax()       // 34：現算值（完結後的過期提醒要比的就是它；不是凍結值）
+      return this.dispatchIsPretax() ? this.dispatchPretax() : this.dispatchGross()       // 34：現算值（完結後的過期提醒要比的就是它；不是凍結值）
     },
     dispatchSplitText() {
       if (!this.dispatches.length) return ''
-      if (this.dispatchBasisOld()) return '舊口徑（含稅）：承攬商含稅合計＋外包人員 ＝ NT$ ' + this.fmt(this.dispatchGross())
-      const pre = this.dispatchPretax(), per = this.dispatchPersonnelTotal()
-      return '未稅承攬費 NT$ ' + this.fmt(pre - per) + ' ＋ 外包人員 NT$ ' + this.fmt(per) + ' ＝ 計入成本 NT$ ' + this.fmt(pre)
-        + '；承攬商稅額 NT$ ' + this.fmt(this.dispatchTaxTotal()) + '（進項稅額，不計成本）；含稅合計 NT$ ' + this.fmt(this.dispatchGross())
+      const pre = this.dispatchPretax(), per = this.dispatchPersonnelTotal(), tax = this.dispatchTaxTotal()
+      if (this.dispatchIsPretax()) {
+        return '35c 未稅口徑：未稅承攬費 NT$ ' + this.fmt(pre - per) + ' ＋ 外包人員 NT$ ' + this.fmt(per) + ' ＝ 計入成本 NT$ ' + this.fmt(pre)
+          + '；承攬商稅額 NT$ ' + this.fmt(tax) + '（未計入成本）'
+      }
+      return '未稅承攬費 NT$ ' + this.fmt(pre - per) + ' ＋ 稅額 NT$ ' + this.fmt(tax) + ' ＋ 外包人員 NT$ ' + this.fmt(per) + ' ＝ 計入成本 NT$ ' + this.fmt(this.dispatchGross())
     },
     // 草稿第一次以新口徑打開：一行說明（可「知道了」關掉；記在這個瀏覽器，不用彈窗）
     dispatchDraftNote() {
@@ -1756,7 +1802,7 @@ function settlementPage() {
       const personnel = (d.personnel || []).map(p => ({ label: '外包人員：' + p.name, amount: p.amount, isVendor: false }))
       if (d.vendorId) {
         return [
-          { label: d.vendorName || '（未命名承攬商）', amount: this.dispatchBasisOld() ? d.totalWithTax : d.totalAmount, tax: Math.max(0, (+d.totalWithTax || 0) - (+d.totalAmount || 0)), isVendor: true },
+          { label: d.vendorName || '（未命名承攬商）', amount: this.dispatchIsPretax() ? d.totalAmount : d.totalWithTax, tax: Math.max(0, (+d.totalWithTax || 0) - (+d.totalAmount || 0)), isVendor: true },
           ...personnel.map(r => ({ ...r, label: '　' + r.label }))
         ]
       }
@@ -1846,7 +1892,7 @@ function settlementPage() {
         origNetProfit:    MotrixLegalRound.halfUp(origNetProfit),
         origNetMarginPct: MotrixLegalRound.halfUp(origNetMarginPct, 10) / 10,
         itemActualTotal, itemPoUnadopted, extraTotal, dispatchTotal, dispatchAbsorbed, totalActualCost, remitFeeTotal: this.remitFeeTotal, customExpenseTotal: this.customExpenseTotal,
-        dispatchTax, dispatchGrandTotal, dispatchBasis: this.dispatchBasisOld() ? 'taxed' : 'pretax',     // 35c：口徑標記（舊口徑的完結案沒有這個鍵）
+        dispatchTax, dispatchGrandTotal, dispatchBasis: this.dispatchIsPretax() ? 'pretax' : 'taxed',     // 35c：口徑標記（舊口徑的完結案沒有這個鍵）
         // 33-B1：完結時後端用同一來源重算比對（A5）；purchasedTotal＝採購類總額（品項＋未對應），materialUnassignedTotal 已併在 extraTotal 內
         purchasedTotal: this._actualsOk ? this.actuals.totals.purchasedTotal : 0, materialUnassignedTotal: this.matUnassigned,
         grossProfit:     MotrixLegalRound.halfUp(grossProfit),
@@ -2001,7 +2047,7 @@ function settlementPage() {
             Object.keys(srv).forEach(k => { if (k in this.summary && typeof srv[k] === typeof this.summary[k]) this.summary[k] = srv[k] })
             if (typeof srv.dispatchAbsorbedTotal === 'number') this.summary.dispatchAbsorbed = srv.dispatchAbsorbedTotal
           } else {
-            this._frozenSummary = Object.assign({}, this.summary, { dispatchBasis: 'pretax' })      // 舊後端沒回 summary：維持原行為（與後端存下的口徑一致）
+            this._frozenSummary = Object.assign({}, this.summary, { dispatchBasis: 'taxed' })      // 舊後端沒回 summary：與後端存下的口徑一致（現行＝含稅）
           }
           this.showFinalizeModal = false
           this.toast('精算已完結')
@@ -2021,6 +2067,7 @@ function settlementPage() {
         const r = await this._settlementPut({ reason }, { status: 'draft', finalizedAt: '', finalizedBy: '' })
         if (r.ok) {
           this.settlement.status = 'draft'; this.settlement.finalizedAt = ''; this.settlement.finalizedBy = ''
+          this._draftBasis = (this._frozenSummary && this._frozenSummary.dispatchBasis === 'pretax') ? 'pretax' : 'taxed'     // 重新開啟 35c 完結案＝草稿維持未稅，要先轉換才能再完結
           this.showReopenModal = false
           this.toast('精算已重新開啟（草稿）')
         } else {

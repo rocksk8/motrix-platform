@@ -39,11 +39,11 @@ def test_every_cost_source_shows_its_tax_basis_and_numbers_are_unchanged(live_se
         c.commit()
     finally:
         c.close()
-    d1 = _dispatch(10000, 2000, quote_no=NO)                                  # 未稅 10,000＋外包人員 2,000 ⇒ 計入 12,000（未對應）
+    d1 = _dispatch(10000, 2000, quote_no=NO)                                  # 未稅 10,000＋外包人員 2,000 ⇒ 含稅計入 12,500（未對應）
     page = _open(e2e_browser, live_server, sa)
     # 數字與加標示前完全相同：品項 a 估計 10,500、b 材料申請 800、額外 700＋未對應材料 250、派發 12,000
     s = page.evaluate(f"() => ({{...{S}.summary}})")
-    assert s["itemActualTotal"] == 10500 + 800 and s["dispatchTotal"] == 12000 and s["totalActualCost"] == 10500 + 800 + 950 + 12000, s
+    assert s["itemActualTotal"] == 10500 + 800 and s["dispatchTotal"] == 12500 and s["totalActualCost"] == 10500 + 800 + 950 + 12500, s
     # 品項：估計含稅 ×1.05；b（材料申請，已對應）含稅
     assert "×1.05" in page.locator('[data-testid="stl-basis-a"]').inner_text() and "含稅" in page.locator('[data-testid="stl-basis-a"]').inner_text()
     assert "材料申請 含稅" in page.locator('[data-testid="stl-basis-b"]').inner_text()
@@ -53,7 +53,7 @@ def test_every_cost_source_shows_its_tax_basis_and_numbers_are_unchanged(live_se
     assert "外包人員" in page.locator(f'[data-testid="stl-kindbasis-dispatch-{d1}"]').inner_text()
     # 賺賠表的未對應項目列
     assert "未拆稅" in page.locator('[data-testid="stl-pt-basis-extra"]').inner_text()
-    assert "未稅" in page.locator('[data-testid="stl-pt-basis-dispatch"]').inner_text()
+    assert "含稅" in page.locator('[data-testid="stl-pt-basis-dispatch"]').inner_text()
     # 口徑說明一句話＋ⓘ（可聚焦、有 aria-label、title 帶完整稅基矩陣）
     note = page.locator('[data-testid="stl-basis-note"]').inner_text()
     assert "原始總成本為未稅" in note and "原始毛利已另扣進項稅 5%" in note and "含稅（估計 ×1.05）" in note, note

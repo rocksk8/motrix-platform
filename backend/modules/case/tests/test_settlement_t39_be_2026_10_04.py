@@ -188,7 +188,7 @@ def test_item_conservation_with_a_v2_zero_item_and_a_dispatch_offset(W):
     t0 = _get(c, h)["totals"]
     _put_settlement(dict(base, offsets=[{"kind": "dispatch", "ref": str(d1), "itemId": "a"}]))
     t1 = _get(c, h)["totals"]
-    assert t0["totalActualCost"] == t1["totalActualCost"] == 0 + EST_B + 12000                   # 採用關：對應／取消對應不改總成本
+    assert t0["totalActualCost"] == t1["totalActualCost"] == 0 + EST_B + 12500                   # 採用關：對應／取消對應不改總成本
     assert t1["dispatchUnassignedTotal"] + t1["dispatchAssignedTotal"] == t1["dispatchTotal"]
 
 
