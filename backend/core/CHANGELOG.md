@@ -2,11 +2,14 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## (next) — 2026-10-05（wip/t44-business-days：L1 工作日／假日判斷）
+## (next) — 2026-10-06（train43 整合：wip/t44-business-days＋wip/t43-phase2-events＋wip/t44-fin-fixes）
 - L1（新增，向下相容）：`helpers/business_days.py`——自 M11 `calendar_tw.py` 提升（純函式、不讀時鐘）：`load`／`coverage`／`covered`／`days_until_expiry`／`no_mail_day`／`next_mail_day`（行為不變）＋新增 `is_working_day(d)`、`previous_working_day(d, limit=14)`；資料 `helpers/holidays_tw.json`（官方人事行政總處辦公日曆表，2026～2027；每年更新，到期前 60 天內 M11 每日排程記警告）。M11 的 `calendar_tw.py` 轉出舊名。沒有假日表／年份不在涵蓋範圍 ⇒ 只排除週六日，不丟例外。
 - L1（新增，向下相容；wip/t43-mail-cal-matrix）：`helpers/notify_matrix.py`——信件×行事曆通知矩陣的對照與規則（`EVENT_LINKS`／`MAIL_OFF_LOCKED`／`is_mail_off`／`mail_off_lock_reason` 等；不讀寫設定、不 import 業務模組）；`helpers.email_notify` 的所有收件人漏斗（含事件收件人、部門主管、月報、財務受眾）在公司關閉該信件時回空清單，鎖定的資安類恆不可關。
 - L1（新增選填參數，向下相容；wip/t44-fin-fixes）：`helpers.email_notify.send_registered(..., wait=False)`——`wait=True` 時等寄送結果，只有 `SEND_SENT` 回 True（要寫「已通知」記號的呼叫端用）。
 - 測試：`tests/test_business_days_2026_10_05.py`；L1 介面快照 `core_bump.py --pending`。
+- L1（新增，向下相容）：`helpers.calendar_sync.sync_dated_events(code, current, today=None, max_calls=200)`——日期型行事曆事件的每日對帳：呼叫端給「來源目前成立的全部項目 `{key: (日期, 標題, 說明)}`」，本函式與對帳表 `system_settings["calsync.<代碼>"]` 比對後只送有變的（t41 的 `push_event_upsert_for_module`／`push_event_delete_for_module`）；事件種類開關或行事曆總開關關閉 ⇒ 完全不動作（零 Google 流量、不寫對帳表）；日期已過不建、已建的過期事件保留；單次最多 200 次 Google 呼叫。
+- `EVENT_TYPES` 新增 `warranty_expiry`、`range_task_due`、`project_end`（分組「期限提醒」，預設關）；`notify_matrix.EVENT_LINKS` 掛到既有信件列 `warranty_expiry`／`range_task_deadline`／`case_project_overdue`（不新增信件類型）。
+- 測試：`tests/test_notify_matrix_phase2_2026_10_06.py`；目錄筆數 15→18（`test_calendar_event_toggles`、`test_e2e_calendar_event_toggles`）。
 
 ## 1.113 — wip/t42-finance-role（財務角色；財務／出納權限只屬「財務」角色與 superadmin）
 - L1（新增，向下相容）：`helpers.auth` 新增 `FINANCE_ROLE`／`FINANCE_ROLES`／`FINANCE_MODULE_KEYS`／`VALID_ROLES`、`has_finance_access(user)`、`has_cashier_access(user)`、`effective_modules(role, modules)`、`finance_usernames(conn=None)`；`helpers.email_notify.finance_recipient_emails(event_key)`、`notify_module_activity(..., audience="admins"|"finance")`（選填）；`helpers.mail_types` 群組新增 `finance`、`ROLES` 新增 `finance`。
@@ -21,11 +24,6 @@
 
 ## 1.111 — 2026-10-05（wip/t42-planned-pay-date：`EVENT_TYPES` 新增 `payable_due`）
 - L1（資料，介面不變）：`helpers.google_calendar.EVENT_TYPES` 新增 `payable_due`（付款待辦，分組「付款」，預設關）；沿用 t41 的 `push_event_upsert_for_module`／`push_event_delete_for_module`，無新的公開名稱。目錄筆數 15→16（`test_calendar_event_toggles_2026_09_30.py`／e2e 同步）。
-
-## (next) — 2026-10-06（wip/t43-phase2-events：MAIL-CAL 階段 2 日期型行事曆事件）
-- L1（新增，向下相容）：`helpers.calendar_sync.sync_dated_events(code, current, today=None, max_calls=200)`——日期型行事曆事件的每日對帳：呼叫端給「來源目前成立的全部項目 `{key: (日期, 標題, 說明)}`」，本函式與對帳表 `system_settings["calsync.<代碼>"]` 比對後只送有變的（t41 的 `push_event_upsert_for_module`／`push_event_delete_for_module`）；事件種類開關或行事曆總開關關閉 ⇒ 完全不動作（零 Google 流量、不寫對帳表）；日期已過不建、已建的過期事件保留；單次最多 200 次 Google 呼叫。
-- `EVENT_TYPES` 新增 `warranty_expiry`、`range_task_due`、`project_end`（分組「期限提醒」，預設關）；`notify_matrix.EVENT_LINKS` 掛到既有信件列 `warranty_expiry`／`range_task_deadline`／`case_project_overdue`（不新增信件類型）。
-- 測試：`tests/test_notify_matrix_phase2_2026_10_06.py`；目錄筆數 15→18（`test_calendar_event_toggles`、`test_e2e_calendar_event_toggles`）。
 
 ## 1.110 — 2026-10-05（wip/t41-calendar-receipts：行事曆事件「一個對象一個事件」）
 - L1（新增，向下相容）：`helpers.push_event_upsert_for_module(code, summary, description, event_date, key)`、`push_event_delete_for_module(code, key)`——以（事件種類代碼, key）為唯一識別（與日期無關；Google 事件 private extendedProperty `motrixMergeKey`＝`<代碼>#<key>`，不新增表、不存 event id）：upsert＝找得到就更新標題／說明／日期、找不到就建立；delete＝找到才刪、找不到視為已沒有。兩者都受事件種類開關與全域總開關限制（關閉＝零 Google 流量，已建立的事件保留）；fire-and-forget，失敗只記 log。`push_event_for_module` 的「同日合併」語意不變。

@@ -1,10 +1,8 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-06（wip/t43-phase2-events）：保固到期、專案預計完成的行事曆事件（預設關）
+## (next) — 2026-10-06（train43 整合：wip/t43-phase2-events＋wip/t44-fin-fixes）
 - `case_deadlines.py` 新增 `_sync_warranty_calendar`、`_sync_project_end_calendar`，掛在每日檢查（`run_daily_checks`）最後；與寄信的 guard 完全獨立。事件種類開關關閉（預設）⇒ 不讀資料庫、不打 Google。事件內容只有案號、客戶、設備／專案、日期，不含金額。日期已過不建；改日期、結案、設備刪除由對帳處理。
 - 上線注意：保固事件第一次打開時，已成案案件的未過期保固會全部補建；每次每日檢查最多 200 次 Google 呼叫，所以第一次打開會分散在數天內建完（不是當天一次到位）。
-
-## (next) — 2026-10-06（wip/t44-fin-fixes）：財務修正（42 班稽核 a／b／c／e／f／g）
 - **權限變更（上線備註要寫）**：`PATCH /api/quotations/{no}/material-orders`——「財務」角色對非自己負責（非業務／協作者）的案件，一般叫料清單只能看不能改（403「財務角色只能檢視非自己負責案件的材料申請清單…」）；自己負責的案件、superadmin、admin、專案經理不變；GET、匯款申請、發票日、取消已核准叫料單等付款相關端點不變。
 - `case-record` 整包儲存：非成員財務若有款項以外欄位與資料庫不同，403 訊息改為說明「只能修改款項」（原訊息誤導成「成員限定」）。
 - `payables.py`／`material_payment.py`：自我核可匯款差額的拒絕訊息改為「其他財務角色成員或最高管理者」。
@@ -157,11 +155,9 @@
 - 精算頁二之一「未對應品項的材料申請與額外支出」：材料列顯示品名＋數量單位、額外支出列顯示單號｜類別｜說明。後端只加欄位（`recognition.extra_entries` 列加 `description`；`material_money_rows` 加 `quantity`／`unit`，數量解析遇髒資料回 None 不丟錯；`settlement_actuals` 帶出），金額與規則不動。
 - 案件頁分頁列在「額外支出」右邊加「精算 ▶」連結（`.cm-tab-link`，權限同精算頁）；財務分頁內舊連結保留。
 
-
 ## 1.0.120 — 2026-10-04（wip/t34-m2-maskfix-d7）：材料申請變更申請的金額可見度（da 稽核 must-fix）
 - 修正：沒有財務檢視權、但有案件存取的帳號，打變更申請的三支讀取端點（單筆清單、案件層清單、變更提案預覽）會看到採購單行金額。現在差異裡涵蓋採購單行的新舊值、提案與原內容的涵蓋行、`uncoveredLines`、提案問題訊息中的已付金額一律遮蔽（金額欄位整項隱藏、行金額去掉）；財務檢視者不受影響。
 - 修正：核准套用寫進審核歷程與稽核的差異摘要，金額欄位只寫「已變更」，不再帶單價／小計數字。測試：以「有案件存取、無財務檢視」的帳號打三支端點，斷言整個回應不含 amount／unitPrice／totalPrice 與其數值（反向控制：拿掉遮蔽即紅）；另測歷程與稽核文字。
-
 
 ## 1.0.119 — wip/t34-m1-coverage-c7：「從採購單帶入」依報價品項分組（34-M1 UI，E4）
 - 新唯讀端點 `GET /api/quotations/{no}/material-coverage`：涵蓋分組（一個報價品項一組、內容＝該品項**全部已核准**採購單行的涵蓋快照；額外採購以採購單為單位各一組；審核中的採購單行不併入、只計 `pendingLines`；已有活的材料申請 ⇒ `existing`）。內容與送審的涵蓋檢查（`material_submit_check`）同一個函式，畫面不做金額運算；金額看不到財務檢視者不給單價／小計。
@@ -176,7 +172,6 @@
 - `GET /api/quotations/{no}/material-order-approvals` 回應多一個頂層鍵 `shipping`：`{itemId: {appliedQty, arrivedQty, reserved, shipped, notes[]}}`（已到料或有出貨連動的材料申請；只經 M03 提供者 `shipping.material_shipped`，不讀 `shipping_notes`；提供者不在＝0）。材料申請卡片顯示「已申請／已到料／已出貨（占用中）」與出貨單號。
 - 取消材料申請（`POST …/cancel`）：有活的出貨連結（占用中或已出貨）⇒ 409 並列出貨單號；退回／草稿的出貨單不擋；出貨提供者出錯 ⇒ 擋（fail closed）。
 - 測試：`modules/supply/tests/test_material_ship_case_view_2026_10_03.py`（5）、`test_e2e_shipping_material_link_2026_10_03.py::test_material_card_shows_…`。
-
 
 ## 1.0.116 — 2026-10-04（wip/t34-m2-wire2-2e）：變更申請數量不得高於涵蓋量；送審內容必須涵蓋全部已核准採購單行（da 稽核）
 - `change_proposal` 新增 `quantity_exceeds_coverage`：數量只能往下調，不得超過已核准採購單行涵蓋的數量（單位不同＝品項報價量）；否則一張變更就能把可出貨量灌大。
