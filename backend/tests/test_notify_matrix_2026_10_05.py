@@ -21,6 +21,7 @@ CAL_DEFAULTS_BASELINE = {
     "invoice_voucher": True, "payment_request": True, "shipping_note": True, "quotation_won": True, "stage_due": True,
     "stage_done": True, "important_comment": True, "case_update": False, "dev_case_converted": True, "dev_case_stale": True,
     "dev_case_update": False, "contractor_payout": False, "expense_payout": False, "receipt_logged": False, "receivable_due": False,
+    "payable_due": False,                       # 第42班（t42-planned-pay-date）新增，預設關
 }
 
 
@@ -95,7 +96,7 @@ def test_every_mail_key_without_a_calendar_event_has_a_disabled_reason(client, m
     for k in nm.MAIL_OFF_LOCKED:
         assert nm.mail_off_lock_reason(k) and mt.get(k).category == "system", k
     assert {c["code"] for c in d["calendarOnly"]} == {"quotation_won", "stage_done", "important_comment", "case_update", "dev_case_converted",
-                                                       "dev_case_update", "contractor_payout", "receipt_logged", "receivable_due"}
+                                                       "dev_case_update", "contractor_payout", "receipt_logged", "receivable_due", "payable_due"}
 
 
 # ── ③ 預設不變 ────────────────────────────────────────────────────────
@@ -217,3 +218,29 @@ def test_matrix_endpoints_are_superadmin_only(client, make_user):
     h = _h(client, make_user, "nm_admin", "admin")
     assert client.get("/api/mail-types", headers=h).status_code in (401, 403)
     assert _put(client, h, "settlement_finalized", {"mode": "default", "mailOff": True}).status_code in (401, 403)
+
+
+def test_mail_off_is_honored_on_finance_audience_and_superadmin_only_paths(client, make_user):
+    """第42班財務受眾（finance_recipient_emails／_finance_audience_emails／_only_superadmins）也要尊重矩陣的「信件關」；鎖定類型不受影響。"""
+    from helpers import email_notify as en
+    h = _h(client, make_user)
+    fu, fp = make_user(username="nm_fin", role="finance")
+    _email(fu)
+    key = "module_activity"
+    assert nm.mail_off_lock_reason(key) == ""
+    assert set(en._finance_audience_emails(key)) == {"nm_sa@example.test", "nm_fin@example.test"}, "基準：財務＋超管"
+    assert en.finance_recipient_emails(key) and en._only_superadmins(key)
+    r = _put(client, h, key, {"mode": "default", "mailOff": True, "confirm": True})
+    assert r.status_code == 200 and r.json()["mailOff"] is True, r.text
+    assert en._finance_audience_emails(key) == [], "財務受眾：關了就沒有收件人"
+    assert en.finance_recipient_emails(key) == []
+    assert en._only_superadmins(key) == []
+    assert en._group_emails(key) == []
+    _put(client, h, key, {"mode": "superadmin_only", "mailOff": True, "confirm": True})
+    assert en._finance_audience_emails(key) == [] and en._only_superadmins(key) == [], "superadmin_only 覆寫也不能繞過關閉"
+    _put(client, h, key, {"mode": "default", "mailOff": False})
+    assert en._finance_audience_emails(key), "重新開啟後恢復"
+    # 鎖定類型：設定檔硬塞 off 也照寄（超管與財務漏斗都一樣）
+    _set_setting(mt.OVERRIDES_KEY, {"backup_error": {"mode": "default", "users": [], "roles": [], "off": True}})
+    assert "nm_sa@example.test" in en._only_superadmins("backup_error")
+    assert "nm_fin@example.test" in en.finance_recipient_emails("backup_error")

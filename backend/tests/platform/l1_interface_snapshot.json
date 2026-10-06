@@ -901,6 +901,18 @@
    "ensure_event": "def(key, desc)",
    "is_enabled": "def(muted_json, event_key)"
   },
+  "helper:notify_matrix": {
+   "CALENDAR_DISABLED_SPECIAL": "const",
+   "EVENT_LINKS": "const",
+   "MAIL_OFF_CONFIRM_CATEGORIES": "const",
+   "MAIL_OFF_LOCKED": "const",
+   "calendar_disabled_reason": "def(key)",
+   "calendar_link_of_mail": "def(key)",
+   "calendar_only_codes": "def(all_codes)",
+   "is_mail_off": "def(key, overrides)",
+   "mail_off_lock_reason": "def(key)",
+   "mail_off_needs_confirm": "def(key)"
+  },
   "helper:part_catalog": {
    "PART_CATEGORIES": "const",
    "PART_CATEGORY_PREFIX": "const"

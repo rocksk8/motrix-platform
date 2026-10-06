@@ -53,6 +53,7 @@
    "helper:module_startup",
    "helper:module_switches",
    "helper:notification_prefs",
+  "helper:notify_matrix",
    "helper:part_catalog",
    "helper:privacy_notice",
    "helper:procurement",
