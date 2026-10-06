@@ -113,3 +113,13 @@ R1 等價驗證（演練本體內建，或手動等價）：
 
 - 預備（§1，含取真包、發布）約 5 分；演練本體 A+C+E+B+R 依 35b 報告各場 14～22 秒（套用）＋種子／瀏覽器檢查，**全程預估 10～15 分**（開發庫複本很小）。不需要 pytest／測試鎖，但會起一個 uvicorn（埠 6744）與 headless Chromium（若包含瀏覽器檢查）。
 - 等你說「gate green」＋包名／commit 後開始；G1（`drill_train44.py`）可先做，請決定。
+
+## 7. 實跑結果（2026-10-07 07:31，hichan-c0）
+
+包 `D:\t44-build\deploy_packages\20261007_070148_c2fc54ba0`（commit c2fc54ba0ca2ef69d83b699eb7f1880be19ac4e3，full，920 檔）以拋棄式金鑰發布為 `20261007_070444_c2fc54ba_full`；基線 89206122；合成種子（13 位帳號、33 筆通知）；埠 6744。工具 `wip/t44-rehearsal-tools` 9966473bb；證據 JSON：`docs/platform/drill-reports/train44-rehearsal-c2fc54ba0-20261007_073140.report.json`。
+
+- **A** 套用 `success applied`（20 s；30 項檢查全過）；**C** 資料庫回滾 `rollback_ok restored`（core 7→7、無 link 欄、通知 33＝33）；**E** 重套 `success`（27 項全過）；**B** 只回程式 `restored`（程式檔 909／909 逐檔相同；舊程式讀得了帶 link 欄的庫，鈴鐺 API 200）；**R** B 後再套用 `success`（core 8、R1 verify 0、鈴鐺 200、0 Traceback、單一監聽）。
+- 44_0 包完整性：`verify_ok`、`problems=[]`、`verify_package` 0 FAIL（db 116）、0 pyc、`verification.mode=full`。44_1 core 7→8。44_2 `link TEXT NOT NULL DEFAULT ''`＋兩索引。44_3 90 天內 22 列逐列相同。44_4 `MIGRATE_LIKE_STARTUP_OK`。44_5 R1「比對 13 位使用者；差異 0 位 PASS」。44_6 鈴鐺 API 一般使用者／管理員 200、`link` 往返。44_7 purge 只刪 1 筆 120 天前列。44_8 78 探針 0 bad。
+- **第一次實跑的三個 harness 期望錯誤（已修，非產品退步）**：①②啟動時的每日檢查（`daily_checks.run_once`）就會 `purge_old_notifications`，種子的 11 筆 120 天前舊列在套用後即被清掉（33→22）——44_3 改為「90 天內的列保留、舊列可被清」、44_7 改為「插一筆舊列後直驗 purge」；③`filehub` 的 `module.json` 在基線與本包都 `probes=[]`（既有缺口）——44_8 改為「undeclared 不得比基線多」。
+- 沿用 checks31 的舊題略過（皆為 35a／35b 演練已知舊題，理由寫在 `_STALE`）：`15_designer_default_off`、`16_subcontract_schema_stays_3`、`16_material_tables_exist_and_empty`、`9c_legacy_dispatch_untouched`；無新增。
+- **未涵蓋**：正式金鑰簽章驗證；`--probe-401`／`--expect-file`（attach-views、bonus-mail 路由與檔案）本次未帶參數，44_9 為空過（不是證據）；真實資料形狀（合成種子）；瀏覽器端鈴鐺 UI。

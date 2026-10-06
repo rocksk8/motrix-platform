@@ -1,0 +1,1283 @@
+{
+ "base": "D:\\開發測試檔\\rh44\\run\\20261007_073140",
+ "base_commit": "89206122",
+ "runs": {
+  "A": {
+   "returncode": 0,
+   "seconds": 20.0,
+   "result": {
+    "status": "success",
+    "rolled_back": "applied",
+    "service": "up",
+    "exit": "0"
+   },
+   "tail": "ackup API�j�FD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\db_backups\\pre_update_20261007_073208\\motrix_erp_demo.db\n  Migration ��?�暁i��Ɂ{demo �Ɂj...\n[OK]   Migration ��?�暒ʉ߁i�V�� db.py ���Ɛ����ɖڑO�I schema ��?��ցC��ᢌ�����j�B\n  �����v�`...\napply_plan 2026-10-07T07:32:13  commit=c2fc54ba0ca2ef69d83b699eb7f1880be19ac4e3\nroot=D:\\開發測試檔\\rh44\\run\\20261007_073140\\install\npkg=D:\\開發測試檔\\rh44\\run\\20261007_073140\\staging\\20261007_070444_c2fc54ba_full\\payload\nbaseline=True�E�Eommit 89206122be983dffe33328819b53747ee1246511�E�E lock=True\nDELETE 0 檔（上限 200�E�！E\n模絁E��E��夾�E�整個移除�E�：無\nADDED 4 檔（�E動回滾時刪除�E�E\nAPPLY_PLAN_OK delete=0 added=4\n\n[OK]   �����v�`�F�� 0 ?�A�V�� 4 ?�i���d�ߛ��� D:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\logs\\apply_update_20261007_073208.plan.txt�j\n  �{���i�����ݒ�a��...\n{\"allowed\": true, \"configured\": true, \"developer\": false, \"grace\": false, \"grace_until\": null, \"install\": \"ce9727ec85e4d76a2d1b1971ef0af82cc357bff7b86550d3f347302a0c7f2779\", \"missing\": [], \"payment_bank_missing\": [\"��s���i\", \"?��\", \"���j\"], \"reason\": \"configured\", \"via\": \"settings_page\"}\n\n[OK]   �{���i�����ݒ�a���ʉ߁iconfigured�j�B\n[WARN]   �����d�������ʖ�ꎑS�i��s���i�A?���A���j�j�F�����㐿���d PDF ���?�i428 company_bank_required�j�C����݌��i�����ݒ���\n::NOTE:: company_bank_missing=��s���i,?��,���j\n  ����������������ƁFD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\rollback_snapshots\\20261007_073208\n[OK]   ������Ɗ����i�܍���?�����j�B\n\n[2/6] ��~�f����i���┇����I autostart 珚��o�����s���j...\n  ���� autostart 珚� PID 34676�icmd.exe�j�FC:\\WINDOWS\\System32\\cmd.exe /c D:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\autostart.bat\n  ���� �����s�� PID 40472�iconhost.exe�j�F\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4\n  ���� �����s�� PID 1464�ipython.exe�j�F\"D:\\MOTRIX-PLATFORM\\.venv312\\Scripts\\python.exe\"  -m uvicorn main:app --port 6744 --host 127.0.0.1 --log-level info \n  ���� �����s�� PID 27880�ipython.exe�j�F\"C:\\Users\\hichan\\AppData\\Local\\Programs\\Python\\Python312\\python.exe\" -m uvicorn main:app --port 6744 --host 127.0.0.1 --log-level info \n  ���� 4 �s���B\n[OK]   Port 6744 �ߊm�F�ו��B\n[OK]   �f����ߒ�~�G�����o�������䊮����R�{?�{�d�V?��珚��B\n\n[3/6] ���p�V������...\n  autostart.bat �ۗ�����@��I�Ŗ{�i�o������I�a�ݔŖ{�s���G�V�Ŏ�L�v���I�ݒ萿�l�H�䛔�j�B\nAPPLY_DELETE_OK 0\n\n[OK]   �������{�����ߓ��p�B\n\n[4/6] ����/�X�V Python ����...\n[OK]   requirements.txt �����ߊm�F����B\n\n[4b/6] �d�V?������...\n[WARN]   �r���H��uMOTRIX ERP Server Autostart�v�s���݈��ߒ�p�F���R�{?�{����?�� autostart.bat�B���[�H��K�i���������\\������C���㐿�m�F�r���H��B\n\n[5/6] ���Ҏf������������N��?...\n    ������ 1/20 ���i�S�� 4s�j�F����\n{\"allowed\": true, \"configured\": true, \"developer\": false, \"grace\": false, \"grace_until\": null, \"install\": \"ce9727ec85e4d76a2d1b1971ef0af82cc357bff7b86550d3f347302a0c7f2779\", \"missing\": [], \"payment_bank_missing\": [\"��s���i\", \"?��\", \"���j\"], \"reason\": \"configured\", \"via\": \"settings_page\"}\n\n[OK]   �{���i�����ݒ��?�ʉ߁iconfigured�j�B\n[OK]   /api/ping ��䐳��Clog �����V����B\n\n[6/6] �X�V�Ŗ{���F?...\n[OK]   �ߛ�������œI����?���d�ibackend\\.deployed_files.json�j�B\n\n======================================\n  �X�V�����Fc2fc54ba0\n======================================\n\n����F\n  - ���p�O db ���ƁFD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\db_backups\\pre_update_20261007_073208\n  - ���p�O���������ƁFD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\rollback_snapshots\\20261007_073208\n  - ��{���X�V���䓞�ߒm�����I?�i��0�j�C�L���񋎍X�V�Y�\\�i?��\n::RESULT:: v=2 status=success rolled_back=applied service=up exit=0\n",
+   "t0": 1791329528.0900154,
+   "rewritten": {
+    "apply_update.ps1": [
+     69,
+     70
+    ],
+    "rollback_update.ps1": [
+     30,
+     31
+    ]
+   },
+   "timestamp": "20261007_073208",
+   "result_json": {
+    "protocol": 2,
+    "status": "success",
+    "rolled_back": "applied",
+    "service": "up",
+    "exit": 0,
+    "script": "apply_update",
+    "script_version": "2026-09-28k",
+    "timestamp": "20261007_073208",
+    "package": "D:\\開發測試檔\\rh44\\run\\20261007_073140\\staging\\20261007_070444_c2fc54ba_full\\payload",
+    "commit": "c2fc54ba0ca2ef69d83b699eb7f1880be19ac4e3",
+    "started_at": "2026-10-07 07:32:08",
+    "finished_at": "2026-10-07 07:32:28"
+   },
+   "checks": {
+    "1_version": [
+     true,
+     "c2fc54ba0ca2ef69d83b699eb7f1880be19ac4e3"
+    ],
+    "2_ping": [
+     true,
+     ""
+    ],
+    "5_api_docs_off": [
+     true,
+     [
+      404,
+      404
+     ]
+    ],
+    "6_modules": [
+     true,
+     {
+      "changed": {
+       "arap": [
+        "1.0.39",
+        "1.0.40"
+       ],
+       "case": [
+        "1.0.149",
+        "1.0.154"
+       ],
+       "payroll": [
+        "1.1.24",
+        "1.2.0"
+       ],
+       "subcontract": [
+        "1.1.19",
+        "1.1.20"
+       ]
+      },
+      "unexpected": [],
+      "count": 13
+     }
+    ],
+    "7_log_no_traceback": [
+     true,
+     {
+      "traceback": 0,
+      "errors_head": [],
+      "lines": 5
+     }
+    ],
+    "8_one_listener": [
+     true,
+     [
+      "24920"
+     ]
+    ],
+    "9b_dispatch_cols": [
+     true,
+     []
+    ],
+    "9c_counts": [
+     true,
+     {
+      "audit_log": [
+       3352,
+       3352
+      ],
+      "custom_records": [
+       0,
+       0
+      ],
+      "vouchers_all": [
+       64,
+       64
+      ],
+      "voucher_lines": [
+       151,
+       151
+      ],
+      "dev_cases": [
+       109,
+       109
+      ],
+      "quotations": [
+       40,
+       40
+      ],
+      "case_extra_expenses": [
+       12,
+       12
+      ]
+     }
+    ],
+    "10_approval_endpoints_401": [
+     true,
+     {
+      "/api/contractor-dispatches/1/submit": 401,
+      "/api/contractor-dispatches/1/approve": 401,
+      "/api/contractor-dispatches/1/reject": 401,
+      "/api/contractor-dispatches/1/withdraw": 401,
+      "/api/contractor-dispatches/1/completion/request": 401,
+      "/api/contractor-dispatches/1/completion/approve": 401,
+      "/api/contractor-dispatches/1/completion/reject": 401,
+      "/api/contractor-dispatches/1/completion/withdraw": 401
+     }
+    ],
+    "11_builder_b_mount": [
+     true,
+     {
+      "points": [
+       "daily_tasks.daily-tasks"
+      ],
+      "mounts": [
+       200,
+       "{'point': 'daily_tasks.daily-tasks', 'tabs': []}"
+      ]
+     }
+    ],
+    "12_approval_dot_plain_user": [
+     true,
+     {
+      "count_status": 200,
+      "body": {
+       "count": 0,
+       "items": []
+      }
+     }
+    ],
+    "13_file_center_open": [
+     true,
+     {
+      "items": 3,
+      "opened": [
+       200,
+       108,
+       "b'\\x89PNG'"
+      ],
+      "plain_search": 403,
+      "plain_items": 0
+     }
+    ],
+    "14_payslip_mask": [
+     true,
+     {
+      "staff": "****8901",
+      "superadmin": "00012345678901",
+      "leak": false
+     }
+    ],
+    "9a_no_schema_version_shrinks": [
+     true,
+     {
+      "shrunk": {},
+      "changed": {
+       "core": [
+        7,
+        8
+       ]
+      }
+     }
+    ],
+    "9a_db_version": [
+     true,
+     {
+      "base": 116,
+      "new": 116,
+      "expected": 116
+     }
+    ],
+    "16_material_endpoints_unauth_401": [
+     true,
+     "all 401"
+    ],
+    "44_x_stale_checks_skipped": [
+     true,
+     {
+      "15_designer_default_off": "D12 設計器預設改開（34 班起）",
+      "16_subcontract_schema_stays_3": "承攬商 schema 已是 5",
+      "16_material_tables_exist_and_empty": "材料申請審核列種子會寫表，表不再是空的",
+      "9c_legacy_dispatch_untouched": "第 30 班專屬（舊派發單不動）；基線已含兩段審核"
+     }
+    ],
+    "44_0_package_integrity": [
+     true,
+     {
+      "verify_ok": true,
+      "problems": [],
+      "verify_package_rc": 0,
+      "pyc_count": 0,
+      "pycs": [],
+      "verification_mode": "full",
+      "scoped_base": null,
+      "deployed_commit": "89206122be983dffe33328819b53747ee1246511",
+      "base_ok": true,
+      "signature": "演練金鑰（拋棄式）；正式金鑰簽章驗證不在本演練範圍"
+     }
+    ],
+    "44_1_core_migration": [
+     true,
+     {
+      "base": 7,
+      "now": 8,
+      "expected": 8
+     }
+    ],
+    "44_2_notifications_link_and_indexes": [
+     true,
+     {
+      "link": {
+       "name": "link",
+       "type": "TEXT",
+       "notnull": 1,
+       "dflt": "''"
+      },
+      "indexes": [
+       "idx_notifications_created",
+       "idx_notifications_user_created"
+      ],
+      "missing": []
+     }
+    ],
+    "44_3_recent_notifications_preserved": [
+     true,
+     {
+      "base_total": 33,
+      "base_within_90d": 22,
+      "base_older_than_90d": 11,
+      "now_total": 22,
+      "recent_rows_missing_after_apply": 0,
+      "old_rows_still_present_after_apply": 0
+     }
+    ],
+    "44_4_migrate_like_startup_ok": [
+     true,
+     {
+      "rc": 0,
+      "tail": "modules=like_startup\nMIGRATE_LIKE_STARTUP_OK\n"
+     }
+    ],
+    "44_5_r1_equivalence": [
+     true,
+     {
+      "rc": 0,
+      "tail": "比對 13 位使用者；差異 0 位；快照後新增 0 位（資訊）\n結果：PASS（逐人相同）\n"
+     }
+    ],
+    "44_6_bell_api_all_roles_with_link": [
+     true,
+     {
+      "plain": 200,
+      "admin": 200,
+      "plain_items": 2,
+      "all_have_link_key": true,
+      "link_roundtrip": "payment-request.html?tab=mine"
+     }
+    ],
+    "44_7_purge_90_days": [
+     true,
+     {
+      "rc": 0,
+      "purged": "1",
+      "expected_old_rows": 1,
+      "before": 24,
+      "after": 23,
+      "stderr": ""
+     }
+    ],
+    "44_8_probes_clean": [
+     true,
+     {
+      "probes": 78,
+      "bad": [],
+      "bad_count": 0,
+      "undeclared": [
+       "filehub"
+      ],
+      "undeclared_at_baseline": [
+       "filehub"
+      ],
+      "new_undeclared": []
+     }
+    ],
+    "44_9_extra_routes_and_files": [
+     true,
+     {
+      "routes_unauth": {},
+      "files": {}
+     }
+    ],
+    "14_legacy_attachments": [
+     true,
+     {
+      "skipped": "第 30 班不比附件（第 29 班判準）"
+     }
+    ],
+    "15_legacy_flow": [
+     true,
+     {
+      "skipped": true
+     }
+    ],
+    "13_restart_idempotent": [
+     true,
+     {
+      "restart_s": 4.1
+     }
+    ]
+   },
+   "ok": true
+  },
+  "C": {
+   "returncode": 0,
+   "seconds": 11.1,
+   "result": {
+    "status": "rollback_ok",
+    "rolled_back": "restored",
+    "service": "up",
+    "exit": "0"
+   },
+   "tail": "::PROTOCOL:: v=2\n======================================\n  MOTRIX ERP - Rollback\n======================================\n�g���m�F�F�����@�iD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install�j\n\n  would-remove backend/.build_commit\n  would-remove backend/export_ignore.json\n  would-remove backend/modules/payroll/bonus_notify.py\n  would-remove frontend/static/attach-picker.js\nAPPLY_SNAPCLEAN_PLAN 4\n\n[1/2] �����暒ʉ߁F\n  ���������ƁFD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\rollback_snapshots\\20261007_073208\n  �͎��F�����{�����Ɂi�����Ɋ��� D:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\db_backups\\pre_update_20261007_073208\\motrix_erp.db�G�����O��?������O�I�����Ɂj\n  demo �ɉ��ƁFD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\db_backups\\pre_update_20261007_073208\\motrix_erp_demo.db\n\n[2/2] �J�n���...\n  ���L�Q��������I autostart 珚��icmd.exe �c autostart.bat�j�B\n[OK]   ����O�I�����ɛ�?���FD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\db_backups\\pre_rollback_20261007_073244\n  removed backend/.build_commit\n  removed backend/export_ignore.json\n  removed backend/modules/payroll/bonus_notify.py\n  removed frontend/static/attach-picker.js\nAPPLY_SNAPCLEAN_OK 4\n\n[OK]   ����?�����ߊҌ��B\n[OK]   �����ɛߊҌ��FD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\db_backups\\pre_update_20261007_073208\\motrix_erp.db�i����O�I������?���� db_backups\\pre_rollback_20261007_073244�j\n[OK]   demo �ɛߊҌ��FD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\db_backups\\pre_update_20261007_073208\\motrix_erp_demo.db\n[OK]   �����I?�i.deployed_commit.json�j�ߊҌ��׉����c���I�Ŗ{�B\n[WARN]   �r���H��uMOTRIX ERP Server Autostart�v�s���݈��ߒ�p�F���R�{?�{����?�� autostart.bat�B���[�H��K�i���������\\������C���㐿�m�F�r���H��B\n    ������ 1/20 ���i�S�� 4s�j�F����\n\n======================================\n  ��������C���N?�Ԑ���F20261007_073208\n======================================\n::RESULT:: v=2 status=rollback_ok rolled_back=restored service=up exit=0\n",
+   "t0": 1791329563.9170878,
+   "train44_after_C": {
+    "ok": true,
+    "core": [
+     7,
+     7
+    ],
+    "has_link": false,
+    "count": [
+     33,
+     33
+    ]
+   },
+   "after": {
+    "commit": "89206122be983dffe33328819b53747ee1246511",
+    "commit_is_base": true,
+    "ping": true,
+    "schema_versions": {
+     "accounting": 3,
+     "case": 7,
+     "core": 7,
+     "crm": 1,
+     "lodging": 1,
+     "payroll": 3,
+     "subcontract": 5
+    },
+    "schema_is_base": true,
+    "tables_new": {
+     "expense_categories": true,
+     "gl_dimensions": true,
+     "user_bank_accounts": true
+    },
+    "extra_cols_is_base": true,
+    "counts_is_base": true,
+    "legacy_same": true,
+    "log": {
+     "traceback": 0,
+     "errors_head": [],
+     "lines": 4
+    }
+   },
+   "ok": true
+  },
+  "E": {
+   "returncode": 0,
+   "seconds": 19.8,
+   "result": {
+    "status": "success",
+    "rolled_back": "applied",
+    "service": "up",
+    "exit": "0"
+   },
+   "tail": ":33:00  commit=c2fc54ba0ca2ef69d83b699eb7f1880be19ac4e3\nroot=D:\\開發測試檔\\rh44\\run\\20261007_073140\\install\npkg=D:\\開發測試檔\\rh44\\run\\20261007_073140\\staging\\20261007_070444_c2fc54ba_full\\payload\nbaseline=True�E�Eommit 89206122be983dffe33328819b53747ee1246511�E�E lock=True\nDELETE 0 檔（上限 200�E�！E\n模絁E��E��夾�E�整個移除�E�：無\nADDED 4 檔（�E動回滾時刪除�E�E\nAPPLY_PLAN_OK delete=0 added=4\n\n[OK]   �����v�`�F�� 0 ?�A�V�� 4 ?�i���d�ߛ��� D:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\logs\\apply_update_20261007_073255.plan.txt�j\n  �{���i�����ݒ�a��...\n{\"allowed\": true, \"configured\": true, \"developer\": false, \"grace\": false, \"grace_until\": null, \"install\": \"ce9727ec85e4d76a2d1b1971ef0af82cc357bff7b86550d3f347302a0c7f2779\", \"missing\": [], \"payment_bank_missing\": [\"��s���i\", \"?��\", \"���j\"], \"reason\": \"configured\", \"via\": \"settings_page\"}\n\n[OK]   �{���i�����ݒ�a���ʉ߁iconfigured�j�B\n[WARN]   �����d�������ʖ�ꎑS�i��s���i�A?���A���j�j�F�����㐿���d PDF ���?�i428 company_bank_required�j�C����݌��i�����ݒ���\n::NOTE:: company_bank_missing=��s���i,?��,���j\n  ����������������ƁFD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\rollback_snapshots\\20261007_073255\n[OK]   ������Ɗ����i�܍���?�����j�B\n\n[2/6] ��~�f����i���┇����I autostart 珚��o�����s���j...\n  ���� autostart 珚� PID 40480�icmd.exe�j�F\"C:\\WINDOWS\\System32\\cmd.exe\" /c \"D:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\autostart.bat\" \n  ���� �����s�� PID 16652�iconhost.exe�j�F\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4\n  ���� �����s�� PID 40428�ipython.exe�j�F\"D:\\MOTRIX-PLATFORM\\.venv312\\Scripts\\python.exe\"  -m uvicorn main:app --port 6744 --host 127.0.0.1 --log-level info \n  ���� �����s�� PID 38336�ipython.exe�j�F\"C:\\Users\\hichan\\AppData\\Local\\Programs\\Python\\Python312\\python.exe\" -m uvicorn main:app --port 6744 --host 127.0.0.1 --log-level info \n  ���� autostart 珚� PID 38944�icmd.exe�j�FC:\\WINDOWS\\System32\\cmd.exe /c D:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\autostart.bat\n  ���� �����s�� PID 40092�iconhost.exe�j�F\\??\\C:\\WINDOWS\\system32\\conhost.exe 0x4\n  ���� �����s�� PID 12052�itimeout.exe�j�F\n  ���� 7 �s���B\n[OK]   Port 6744 �ߊm�F�ו��B\n[OK]   �f����ߒ�~�G�����o�������䊮����R�{?�{�d�V?��珚��B\n\n[3/6] ���p�V������...\n  autostart.bat �ۗ�����@��I�Ŗ{�i�o������I�a�ݔŖ{�s���G�V�Ŏ�L�v���I�ݒ萿�l�H�䛔�j�B\nAPPLY_DELETE_OK 0\n\n[OK]   �������{�����ߓ��p�B\n\n[4/6] ����/�X�V Python ����...\n[OK]   requirements.txt �����ߊm�F����B\n\n[4b/6] �d�V?������...\n[WARN]   �r���H��uMOTRIX ERP Server Autostart�v�s���݈��ߒ�p�F���R�{?�{����?�� autostart.bat�B���[�H��K�i���������\\������C���㐿�m�F�r���H��B\n\n[5/6] ���Ҏf������������N��?...\n    ������ 1/20 ���i�S�� 4s�j�F����\n{\"allowed\": true, \"configured\": true, \"developer\": false, \"grace\": false, \"grace_until\": null, \"install\": \"ce9727ec85e4d76a2d1b1971ef0af82cc357bff7b86550d3f347302a0c7f2779\", \"missing\": [], \"payment_bank_missing\": [\"��s���i\", \"?��\", \"���j\"], \"reason\": \"configured\", \"via\": \"settings_page\"}\n\n[OK]   �{���i�����ݒ��?�ʉ߁iconfigured�j�B\n[OK]   /api/ping ��䐳��Clog �����V����B\n\n[6/6] �X�V�Ŗ{���F?...\n[OK]   �ߛ�������œI����?���d�ibackend\\.deployed_files.json�j�B\n\n======================================\n  �X�V�����Fc2fc54ba0\n======================================\n\n����F\n  - ���p�O db ���ƁFD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\db_backups\\pre_update_20261007_073255\n  - ���p�O���������ƁFD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\rollback_snapshots\\20261007_073255\n  - ��{���X�V���䓞�ߒm�����I?�i��0�j�C�L���񋎍X�V�Y�\\�i?��\n::RESULT:: v=2 status=success rolled_back=applied service=up exit=0\n",
+   "t0": 1791329575.137282,
+   "rewritten": {
+    "apply_update.ps1": [
+     69,
+     70
+    ],
+    "rollback_update.ps1": [
+     30,
+     31
+    ]
+   },
+   "timestamp": "20261007_073255",
+   "result_json": {
+    "protocol": 2,
+    "status": "success",
+    "rolled_back": "applied",
+    "service": "up",
+    "exit": 0,
+    "script": "apply_update",
+    "script_version": "2026-09-28k",
+    "timestamp": "20261007_073255",
+    "package": "D:\\開發測試檔\\rh44\\run\\20261007_073140\\staging\\20261007_070444_c2fc54ba_full\\payload",
+    "commit": "c2fc54ba0ca2ef69d83b699eb7f1880be19ac4e3",
+    "started_at": "2026-10-07 07:32:55",
+    "finished_at": "2026-10-07 07:33:14"
+   },
+   "checks": {
+    "1_version": [
+     true,
+     "c2fc54ba0ca2ef69d83b699eb7f1880be19ac4e3"
+    ],
+    "2_ping": [
+     true,
+     ""
+    ],
+    "5_api_docs_off": [
+     true,
+     [
+      404,
+      404
+     ]
+    ],
+    "6_modules": [
+     true,
+     {
+      "changed": {
+       "arap": [
+        "1.0.39",
+        "1.0.40"
+       ],
+       "case": [
+        "1.0.149",
+        "1.0.154"
+       ],
+       "payroll": [
+        "1.1.24",
+        "1.2.0"
+       ],
+       "subcontract": [
+        "1.1.19",
+        "1.1.20"
+       ]
+      },
+      "unexpected": [],
+      "count": 13
+     }
+    ],
+    "7_log_no_traceback": [
+     true,
+     {
+      "traceback": 0,
+      "errors_head": [],
+      "lines": 5
+     }
+    ],
+    "8_one_listener": [
+     true,
+     [
+      "9364"
+     ]
+    ],
+    "9b_dispatch_cols": [
+     true,
+     []
+    ],
+    "9c_counts": [
+     true,
+     {
+      "audit_log": [
+       3352,
+       3352
+      ],
+      "custom_records": [
+       0,
+       0
+      ],
+      "vouchers_all": [
+       64,
+       64
+      ],
+      "voucher_lines": [
+       151,
+       151
+      ],
+      "dev_cases": [
+       109,
+       109
+      ],
+      "quotations": [
+       40,
+       40
+      ],
+      "case_extra_expenses": [
+       12,
+       12
+      ]
+     }
+    ],
+    "10_approval_endpoints_401": [
+     true,
+     {
+      "/api/contractor-dispatches/1/submit": 401,
+      "/api/contractor-dispatches/1/approve": 401,
+      "/api/contractor-dispatches/1/reject": 401,
+      "/api/contractor-dispatches/1/withdraw": 401,
+      "/api/contractor-dispatches/1/completion/request": 401,
+      "/api/contractor-dispatches/1/completion/approve": 401,
+      "/api/contractor-dispatches/1/completion/reject": 401,
+      "/api/contractor-dispatches/1/completion/withdraw": 401
+     }
+    ],
+    "11_builder_b_mount": [
+     true,
+     {
+      "points": [
+       "daily_tasks.daily-tasks"
+      ],
+      "mounts": [
+       200,
+       "{'point': 'daily_tasks.daily-tasks', 'tabs': []}"
+      ]
+     }
+    ],
+    "12_approval_dot_plain_user": [
+     true,
+     {
+      "count_status": 200,
+      "body": {
+       "count": 0,
+       "items": []
+      }
+     }
+    ],
+    "13_file_center_open": [
+     true,
+     {
+      "items": 3,
+      "opened": [
+       200,
+       108,
+       "b'\\x89PNG'"
+      ],
+      "plain_search": 403,
+      "plain_items": 0
+     }
+    ],
+    "14_payslip_mask": [
+     true,
+     {
+      "staff": "****8901",
+      "superadmin": "00012345678901",
+      "leak": false
+     }
+    ],
+    "9a_no_schema_version_shrinks": [
+     true,
+     {
+      "shrunk": {},
+      "changed": {
+       "core": [
+        7,
+        8
+       ]
+      }
+     }
+    ],
+    "9a_db_version": [
+     true,
+     {
+      "base": 116,
+      "new": 116,
+      "expected": 116
+     }
+    ],
+    "16_material_endpoints_unauth_401": [
+     true,
+     "all 401"
+    ],
+    "44_x_stale_checks_skipped": [
+     true,
+     {
+      "15_designer_default_off": "D12 設計器預設改開（34 班起）",
+      "16_subcontract_schema_stays_3": "承攬商 schema 已是 5",
+      "16_material_tables_exist_and_empty": "材料申請審核列種子會寫表，表不再是空的",
+      "9c_legacy_dispatch_untouched": "第 30 班專屬（舊派發單不動）；基線已含兩段審核"
+     }
+    ],
+    "44_0_package_integrity": [
+     true,
+     {
+      "verify_ok": true,
+      "problems": [],
+      "verify_package_rc": 0,
+      "pyc_count": 0,
+      "pycs": [],
+      "verification_mode": "full",
+      "scoped_base": null,
+      "deployed_commit": "89206122be983dffe33328819b53747ee1246511",
+      "base_ok": true,
+      "signature": "演練金鑰（拋棄式）；正式金鑰簽章驗證不在本演練範圍"
+     }
+    ],
+    "44_1_core_migration": [
+     true,
+     {
+      "base": 7,
+      "now": 8,
+      "expected": 8
+     }
+    ],
+    "44_2_notifications_link_and_indexes": [
+     true,
+     {
+      "link": {
+       "name": "link",
+       "type": "TEXT",
+       "notnull": 1,
+       "dflt": "''"
+      },
+      "indexes": [
+       "idx_notifications_created",
+       "idx_notifications_user_created"
+      ],
+      "missing": []
+     }
+    ],
+    "44_3_recent_notifications_preserved": [
+     true,
+     {
+      "base_total": 33,
+      "base_within_90d": 22,
+      "base_older_than_90d": 11,
+      "now_total": 22,
+      "recent_rows_missing_after_apply": 0,
+      "old_rows_still_present_after_apply": 0
+     }
+    ],
+    "44_4_migrate_like_startup_ok": [
+     true,
+     {
+      "rc": 0,
+      "tail": "modules=like_startup\nMIGRATE_LIKE_STARTUP_OK\n"
+     }
+    ],
+    "44_5_r1_equivalence": [
+     true,
+     {
+      "rc": 0,
+      "tail": "比對 13 位使用者；差異 0 位；快照後新增 0 位（資訊）\n結果：PASS（逐人相同）\n"
+     }
+    ],
+    "44_6_bell_api_all_roles_with_link": [
+     true,
+     {
+      "plain": 200,
+      "admin": 200,
+      "plain_items": 2,
+      "all_have_link_key": true,
+      "link_roundtrip": "payment-request.html?tab=mine"
+     }
+    ],
+    "44_7_purge_90_days": [
+     true,
+     {
+      "rc": 0,
+      "purged": "1",
+      "expected_old_rows": 1,
+      "before": 24,
+      "after": 23,
+      "stderr": ""
+     }
+    ],
+    "44_8_probes_clean": [
+     true,
+     {
+      "probes": 78,
+      "bad": [],
+      "bad_count": 0,
+      "undeclared": [
+       "filehub"
+      ],
+      "undeclared_at_baseline": [
+       "filehub"
+      ],
+      "new_undeclared": []
+     }
+    ],
+    "44_9_extra_routes_and_files": [
+     true,
+     {
+      "routes_unauth": {},
+      "files": {}
+     }
+    ]
+   },
+   "ok": true
+  },
+  "B": {
+   "returncode": 0,
+   "seconds": 11.5,
+   "result": {
+    "status": "rollback_ok",
+    "rolled_back": "restored",
+    "service": "up",
+    "exit": "0"
+   },
+   "tail": "::PROTOCOL:: v=2\n======================================\n  MOTRIX ERP - Rollback\n======================================\n�g���m�F�F�����@�iD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install�j\n\n  would-remove backend/.build_commit\n  would-remove backend/export_ignore.json\n  would-remove backend/modules/payroll/bonus_notify.py\n  would-remove frontend/static/attach-picker.js\nAPPLY_SNAPCLEAN_PLAN 4\n\n[1/2] �����暒ʉ߁F\n  ���������ƁFD:\\�Jᢑ���?\\rh44\\run\\20261007_073140\\install\\backend\\rollback_snapshots\\20261007_073255\n  �͎��F��������C�����ɕۗ��i�a�݁j\n\n[2/2] �J�n���...\n  ���L�Q��������I autostart 珚��icmd.exe �c autostart.bat�j�B\n  removed backend/.build_commit\n  removed backend/export_ignore.json\n  removed backend/modules/payroll/bonus_notify.py\n  removed frontend/static/attach-picker.js\nAPPLY_SNAPCLEAN_OK 4\n\n[OK]   ����?�����ߊҌ��B\n  �����ɕۗ��s���i��������G�V�� migration ���V�������o�\\�C�p��椓����j�B\n[OK]   �����I?�i.deployed_commit.json�j�ߊҌ��׉����c���I�Ŗ{�B\n[WARN]   �r���H��uMOTRIX ERP Server Autostart�v�s���݈��ߒ�p�F���R�{?�{����?�� autostart.bat�B���[�H��K�i���������\\������C���㐿�m�F�r���H��B\n    ������ 1/20 ���i�S�� 4s�j�F����\n\n======================================\n  ��������C���N?�Ԑ���F20261007_073255\n======================================\n::RESULT:: v=2 status=rollback_ok rolled_back=restored service=up exit=0\n",
+   "t0": 1791329604.9672832,
+   "train35a_tree_after_B": {
+    "files_base": 909,
+    "files_now": 909,
+    "diff_count": 0,
+    "diff_sample": [],
+    "only_in_now": [],
+    "only_in_base": [],
+    "ok": true
+   },
+   "train44_after_B": {
+    "ok": true,
+    "old_code_bell_status": 200,
+    "link_column_kept": true
+   },
+   "after": {
+    "commit": "89206122be983dffe33328819b53747ee1246511",
+    "commit_is_base": true,
+    "ping": true,
+    "schema_versions": {
+     "accounting": 3,
+     "case": 7,
+     "core": 8,
+     "crm": 1,
+     "lodging": 1,
+     "payroll": 3,
+     "subcontract": 5
+    },
+    "tables_new": {
+     "expense_categories": true,
+     "gl_dimensions": true,
+     "user_bank_accounts": true
+    },
+    "migrated_before": {
+     "expense_categories": true,
+     "gl_dimensions": true,
+     "user_bank_accounts": true
+    },
+    "legacy_same": true,
+    "legacy_flow": [
+     true,
+     {
+      "skipped": true
+     }
+    ],
+    "log": {
+     "traceback": 0,
+     "errors_head": [],
+     "lines": 7
+    }
+   },
+   "ok": true
+  }
+ },
+ "baseline_setup": {
+  "first_start_s": 6.2,
+  "restart_s": 4.1,
+  "rewrite": {
+   "apply_update.ps1": [
+    69,
+    70
+   ],
+   "rollback_update.ps1": [
+    30,
+    31
+   ]
+  },
+  "seed": {
+   "legacy_expenses": [
+    {
+     "id": 1,
+     "status": "草稿",
+     "total_cost": 100,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 2,
+     "status": "待審核",
+     "total_cost": 200,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 3,
+     "status": "已核准",
+     "total_cost": 300,
+     "files": [
+      {
+       "id": "ee3",
+       "filename": "receipt3.png",
+       "path": "case_extra_expense/DRILL-MQ-001_3/receipt3.png",
+       "size": 108,
+       "kind": "other"
+      }
+     ],
+     "files_sha": [
+      "bc03bf4f6390e4deb17e380b2cf6f5d91e83f9941816a96b9cce3685cd466cd3"
+     ]
+    },
+    {
+     "id": 4,
+     "status": "已駁回",
+     "total_cost": 400,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 5,
+     "status": "已核准",
+     "total_cost": 500,
+     "files": [
+      {
+       "id": "ee5",
+       "filename": "receipt5.png",
+       "path": "case_extra_expense/DRILL-MQ-001_5/receipt5.png",
+       "size": 108,
+       "kind": "other"
+      }
+     ],
+     "files_sha": [
+      "bc03bf4f6390e4deb17e380b2cf6f5d91e83f9941816a96b9cce3685cd466cd3"
+     ]
+    },
+    {
+     "id": 6,
+     "status": "草稿",
+     "total_cost": 600,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 7,
+     "status": "待審核",
+     "total_cost": 700,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 8,
+     "status": "已核准",
+     "total_cost": 800,
+     "files": [
+      {
+       "id": "ee8",
+       "filename": "legacy8.png",
+       "path": "quotation_settlement_extra/DRILL-MQ-001_5/legacy8.png",
+       "size": 108,
+       "kind": "other"
+      }
+     ],
+     "files_sha": [
+      "bc03bf4f6390e4deb17e380b2cf6f5d91e83f9941816a96b9cce3685cd466cd3"
+     ]
+    },
+    {
+     "id": 9,
+     "status": "已駁回",
+     "total_cost": 900,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 10,
+     "status": "已核准",
+     "total_cost": 1000,
+     "files": [
+      {
+       "id": "ee10",
+       "filename": "legacy10.png",
+       "path": "quotation_settlement_extra/DRILL-MQ-001_7/legacy10.png",
+       "size": 108,
+       "kind": "other"
+      }
+     ],
+     "files_sha": [
+      "bc03bf4f6390e4deb17e380b2cf6f5d91e83f9941816a96b9cce3685cd466cd3"
+     ]
+    },
+    {
+     "id": 11,
+     "status": "草稿",
+     "total_cost": 1100,
+     "files": [],
+     "files_sha": []
+    },
+    {
+     "id": 12,
+     "status": "已核准",
+     "total_cost": 1200,
+     "files": [],
+     "files_sha": []
+    }
+   ],
+   "errors": [],
+   "dispatch_ids": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "contractor_id": 1
+  },
+  "slip_no": "PS-202610-001",
+  "train44_seed": {
+   "r1_users": 10,
+   "notifications": 33,
+   "old_rows": 11,
+   "stamps": {
+    "old": "2026-06-09T07:32:00",
+    "mid": "2026-09-07T07:32:00",
+    "new": "2026-10-06T07:32:00"
+   }
+  },
+  "r1_snapshot": {
+   "rc": 0,
+   "tail": "已存快照：13 位使用者 → D:\\開發測試檔\\rh44\\run\\20261007_073140\\equiv_before.json\n"
+  },
+  "train44_baseline": {
+   "core": 7,
+   "notifications": 33,
+   "tree_files": 909
+  }
+ },
+ "baseline": {
+  "counts": {
+   "audit_log": 3352,
+   "custom_records": 0,
+   "vouchers_all": 64,
+   "voucher_lines": 151,
+   "dev_cases": 109,
+   "quotations": 40,
+   "case_extra_expenses": 12
+  },
+  "tables_new": {
+   "expense_categories": true,
+   "gl_dimensions": true,
+   "user_bank_accounts": true
+  },
+  "db_version": 116,
+  "schema_versions": {
+   "accounting": 3,
+   "case": 7,
+   "core": 7,
+   "crm": 1,
+   "lodging": 1,
+   "payroll": 3,
+   "subcontract": 5
+  },
+  "extra_cols": [
+   "id",
+   "quote_no",
+   "category",
+   "description",
+   "qty",
+   "unit",
+   "unit_cost",
+   "total_cost",
+   "note",
+   "expense_date",
+   "doc_no",
+   "files_json",
+   "created_by",
+   "created_by_name",
+   "created_by_inferred",
+   "payer_username",
+   "payer_name",
+   "created_at",
+   "updated_at",
+   "updated_by_name",
+   "status",
+   "approval_json",
+   "change_status",
+   "change_json",
+   "change_approval_json",
+   "invoice_date",
+   "paid_date",
+   "invoice_no",
+   "remit_actual",
+   "remit_fee",
+   "remit_review",
+   "remit_review_by",
+   "remit_review_at",
+   "remit_review_note",
+   "kind",
+   "doc_code",
+   "data_json",
+   "lines_json",
+   "def_version",
+   "department_id",
+   "payee_type",
+   "payee_name",
+   "payee_bank",
+   "payee_account",
+   "pay_terms",
+   "remit_date",
+   "pay_method",
+   "pay_account_code",
+   "paid_by",
+   "pretax",
+   "tax",
+   "currency",
+   "void_reason",
+   "voided_by",
+   "voided_at",
+   "planned_pay_date"
+  ],
+  "voucher_line_cols": [
+   "id",
+   "voucher_id",
+   "line_no",
+   "account_code",
+   "account_name_snapshot",
+   "summary",
+   "summary_template_id",
+   "summary_template_version",
+   "debit",
+   "credit",
+   "dept_code",
+   "source_type",
+   "source_id",
+   "source_amount_snapshot",
+   "counterparty",
+   "source_key",
+   "case_no",
+   "party_key",
+   "tax_code",
+   "doc_no",
+   "dim_json"
+  ],
+  "gl_features": [
+   [
+    "feature.engine_drafts",
+    "1"
+   ],
+   [
+    "feature.source_annotations",
+    "1"
+   ],
+   [
+    "feature.tax401",
+    "1"
+   ],
+   [
+    "feature.withholding",
+    "1"
+   ]
+  ],
+  "module_states": {
+   "accounting": {
+    "version": "1.1.54",
+    "state": "loaded"
+   },
+   "analytics": {
+    "version": "1.0.35",
+    "state": "loaded"
+   },
+   "arap": {
+    "version": "1.0.39",
+    "state": "loaded"
+   },
+   "case": {
+    "version": "1.0.149",
+    "state": "loaded"
+   },
+   "crm": {
+    "version": "1.0.16",
+    "state": "loaded"
+   },
+   "daily_tasks": {
+    "version": "1.0.9",
+    "state": "loaded"
+   },
+   "filehub": {
+    "version": "1.0.3",
+    "state": "loaded"
+   },
+   "lodging": {
+    "version": "1.2.3",
+    "state": "loaded"
+   },
+   "netplan": {
+    "version": "1.0.7",
+    "state": "loaded"
+   },
+   "payroll": {
+    "version": "1.1.24",
+    "state": "loaded"
+   },
+   "subcontract": {
+    "version": "1.1.19",
+    "state": "loaded"
+   },
+   "supply": {
+    "version": "1.0.21",
+    "state": "loaded"
+   },
+   "tender_radar": {
+    "version": "1.5.7",
+    "state": "loaded"
+   }
+  },
+  "commit": "89206122be983dffe33328819b53747ee1246511",
+  "dispatch_cols": [
+   "id",
+   "quote_no",
+   "vendor_id",
+   "dispatch_date",
+   "scope",
+   "items_json",
+   "total_amount",
+   "status",
+   "notes",
+   "invoice_no",
+   "created_by",
+   "created_at",
+   "updated_at",
+   "tax_rate",
+   "accepted_at",
+   "accepted_by",
+   "personnel_json",
+   "files_json",
+   "payable_date",
+   "invoice_files_json",
+   "invoice_date",
+   "approval_status",
+   "approval_json",
+   "doc_code",
+   "submitted_by",
+   "submitted_at",
+   "approved_at",
+   "approved_hash",
+   "completion_status",
+   "completion_approval_json",
+   "completion_requested_by",
+   "completion_requested_at",
+   "completion_approved_at",
+   "cancel_reason",
+   "cancelled_by",
+   "cancelled_at"
+  ],
+  "dispatch_digest": [
+   {
+    "id": 1,
+    "quote_no": "DRILL-MQ-001",
+    "vendor_id": 1,
+    "scope": "DRILL派發1",
+    "items_json": "[]",
+    "total_amount": 1000.0,
+    "status": "draft"
+   },
+   {
+    "id": 2,
+    "quote_no": "DRILL-MQ-001",
+    "vendor_id": 1,
+    "scope": "DRILL派發2",
+    "items_json": "[]",
+    "total_amount": 2000.0,
+    "status": "sent"
+   },
+   {
+    "id": 3,
+    "quote_no": "DRILL-MQ-001",
+    "vendor_id": 1,
+    "scope": "DRILL派發3",
+    "items_json": "[]",
+    "total_amount": 3000.0,
+    "status": "confirmed"
+   },
+   {
+    "id": 4,
+    "quote_no": "DRILL-MQ-001",
+    "vendor_id": 1,
+    "scope": "DRILL派發4",
+    "items_json": "[]",
+    "total_amount": 4000.0,
+    "status": "completed"
+   }
+  ],
+  "dispatch_approval": [
+   {
+    "id": 1,
+    "approval_status": "",
+    "completion_status": "",
+    "doc_code": "",
+    "approval_json": "{}"
+   },
+   {
+    "id": 2,
+    "approval_status": "",
+    "completion_status": "",
+    "doc_code": "",
+    "approval_json": "{}"
+   },
+   {
+    "id": 3,
+    "approval_status": "",
+    "completion_status": "",
+    "doc_code": "",
+    "approval_json": "{}"
+   },
+   {
+    "id": 4,
+    "approval_status": "",
+    "completion_status": "",
+    "doc_code": "",
+    "approval_json": "{}"
+   }
+  ],
+  "payslip_bank": [
+   "00012345678901"
+  ],
+  "slip_no": "PS-202610-001",
+  "legacy_rows": 12
+ },
+ "delivery": {
+  "verify_ok": true,
+  "problems": [],
+  "notes": [],
+  "verify_package_rc": 0,
+  "verify_package_tail": "\n\n### (6) 包內 db.py 的版本（🔴 擋關）\n  包內    CURRENT_VERSION=116  len(_MIGRATIONS)=116  最後一筆=_m116_case_roles_username\n          三者一致 ✅\n  包內版本 == 期望值 116 ✅\n  工作樹  CURRENT_VERSION=116  len(_MIGRATIONS)=116  最後一筆=_m116_case_roles_username　← **只用來比對，不是判準來源**\n  包 vs 工作樹：相同 ✅\n\n### (7) 產品選配：modules.lock.json ＝ 包內模組、L0／L1 必要檔齊全（🔴 擋關，CORE-SPEC §9c①）\n  ✅ 產品 full：模組 ['accounting', 'analytics', 'arap', 'case', 'crm', 'daily_tasks', 'filehub', 'lodging', 'netplan', 'payroll', 'subcontract', 'supply', 'tender_radar']；排除 無\n\n==========================================================================\n✅ 全部通過（0 項 FAIL）\n",
+  "expect_db_version": "116",
+  "signature": "演練金鑰（拋棄式）；正式金鑰簽章驗證不在本演練範圍",
+  "pycs": [],
+  "pyc_count": 0,
+  "verification_mode": "full",
+  "scoped_base": null,
+  "deployed_commit": "89206122be983dffe33328819b53747ee1246511",
+  "base_ok": true
+ },
+ "package": {
+  "verification": {
+   "mode": "full",
+   "scoped": null,
+   "stages": {
+    "not_e2e": "reused 2026-10-07 06:54:55（modtest --full，commit c2fc54ba0ca2ef69d83b699eb7f1880be19ac4e3）",
+    "e2e": "reused 2026-10-07 06:54:55（modtest --full，commit c2fc54ba0ca2ef69d83b699eb7f1880be19ac4e3）",
+    "flaky_retried": []
+   }
+  },
+  "commit": "c2fc54ba"
+ },
+ "stop": "STOPPED 9352,25716,31984"
+}
