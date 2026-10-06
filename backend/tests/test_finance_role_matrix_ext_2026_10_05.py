@@ -492,6 +492,15 @@ def test_finance_and_admin_can_replace_material_orders_but_not_sales(finance_on_
     r = c.patch("/api/quotations/%s/material-orders" % NO, headers=fh, json=body)
     assert r.status_code == 403 and "只能檢視" in r.text, (r.status_code, r.text[:160])      # 財務角色：外人案件只能看，不能改清單
     assert c.get("/api/quotations/%s/material-orders" % NO, headers=fh).status_code == 200, "財務角色仍可檢視任何案件的叫料清單"
+    # 正對照：同一位財務被指派為該案負責人（assigned_user_ids）後，自己負責的案件照常可改
+    import db as _db
+    cn = _db.get_db()
+    uid = cn.execute("SELECT id FROM users WHERE username='f_fin'").fetchone()["id"]
+    cn.execute("UPDATE quotations SET assigned_user_ids=? WHERE quote_no=?", (json.dumps([uid]), NO))
+    cn.commit()
+    cn.close()
+    r = c.patch("/api/quotations/%s/material-orders" % NO, headers=fh, json=body)
+    assert r.status_code == 200, ("owner-finance", r.status_code, r.text[:160])
     r = c.patch("/api/quotations/%s/material-orders" % NO, headers=sh, json=body)
     assert r.status_code in (403, 404), (r.status_code, r.text[:160])               # 不是案件業務（404）或沒有權限（403）；絕不可 200
 
