@@ -511,4 +511,4 @@ def _core_next_notifications_link(conn):
     return None
 
 
-register("core", NEXT, _core_next_notifications_link)
+register("core", 8, _core_next_notifications_link)
