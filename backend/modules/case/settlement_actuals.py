@@ -293,17 +293,19 @@ def _tax_expense(items, unassigned_mat, unassigned_extra, ex, d_basis, saved_ite
     est = unsplit = 0.0
 
     def extra_row(r):
-        nonlocal exact, unsplit
-        if r.get("taxKind") == "exact" and r.get("tax"):
-            exact += r["tax"]
+        nonlocal exact, est, unsplit
+        if r.get("taxKind") == "estimated":      # 沒有連到品項、也沒有稅額的採購單列：仍是含稅最終金額 ⇒ 推估（recognition 已算好每列推估稅額）
+            est += r.get("tax") or 0
+        elif r.get("taxKind") == "exact":          # 單據有稅額：稅額只放在單據的第一列（recognition._typed_entries），其餘列 tax＝0 但已被這筆稅額涵蓋 ⇒ 不是「未拆稅」
+            exact += r.get("tax") or 0
         else:
             unsplit += r["amount"]
 
     for it in items:
         if it["hasPurchase"] and it["adopt"]:
             for d in it["po"]["docs"]:
-                if d.get("taxKind") == "exact" and d.get("tax"):
-                    exact += d["tax"]
+                if d.get("taxKind") == "exact":    # 同上：有稅額的採購單，稅在第一列，其餘列已涵蓋 ⇒ 不再推估（否則重複計稅）
+                    exact += d.get("tax") or 0
                 else:
                     est += inc_tax(d["amount"])
             est += sum(inc_tax(m["amount"]) for m in it["material"]["orders"])
@@ -411,11 +413,12 @@ def dispatch_rows(conn, quote_no, basis=BASIS_TAXED) -> list:
         ap = d.get("approvalStatus") or ""
         if ap in ("草稿", "已退回"):
             continue
-        grand, pretax, pers = _num(d.get("grandTotal")), _num(d.get("totalAmount")), _num(d.get("personnelTotal"))
+        pretax, pers = _num(d.get("totalAmount")), _num(d.get("personnelTotal"))
+        grand = _num(d.get("grandTotal")) or (pretax + pers)           # 派發列沒有 grandTotal（舊提供者）⇒ 以未稅＋人員為含稅合計（稅額 0），不產生負稅額
         out.append({"itemId": str(d.get("id")), "docCode": d.get("docCode") or "", "vendorName": d.get("vendorName") or "",
                     "name": str(d.get("scope") or "").strip() or d.get("vendorName") or "（外包人員點工）",
                     "status": d.get("displayStatus") or d.get("statusLabel") or "",
-                    "amount": grand if basis == BASIS_TAXED else pretax + pers, "report": pretax + pers, "tax": grand - pretax - pers,
+                    "amount": grand if basis == BASIS_TAXED else pretax + pers, "report": pretax + pers, "tax": max(0.0, grand - pretax - pers),
                     "grandTotal": grand, "pending": ap in ("待審核", "簽核中")})
     return out
 
