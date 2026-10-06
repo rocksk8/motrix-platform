@@ -1627,6 +1627,7 @@ from helpers.tiered_approval import (  # noqa: E402
 from helpers.auth import user_has_module  # noqa: E402
 from modules.payroll import bonus_vouchers  # noqa: E402  `AC3`：狀態轉換 → 傳票草稿
 from modules.payroll import bonus_payouts  # noqa: E402  IP-8／IP-9 提供者＋通知對象（import 即登記）
+from modules.payroll import bonus_notify as _bonus_notify  # noqa: E402  t44：核准通知送審人（import 即登記信件類型）
 from modules.payroll import bonus_deductions  # noqa: E402  U4 扣繳與補充保費
 
 _CASE_DEAL_TAGS = ("已成案", "已結案")
@@ -2180,8 +2181,9 @@ def _notify_safely(fn, *args):
         logger.warning("獎金分潤通知失敗（%s）：%s", getattr(fn, "__name__", fn), exc)
 
 
-def _notify_after(quote_no, status):
-    """送審／簽核之後：待審核 ⇒ 輪到的簽核人（含代理人）；待發放 ⇒ 出納。名單成員不會因為在名單上而收到。"""
+def _notify_after(quote_no, status, by=""):
+    """送審／簽核之後：待審核 ⇒ 輪到的簽核人（含代理人）；待發放 ⇒ 出納，並通知送審人「已核准」（`bonus_notify`，t44；`by`＝
+    簽核的人，送審人就是他自己時不重複寄）。名單成員不會因為在名單上而收到。"""
     from helpers import email_notify
     conn = get_db()
     try:
@@ -2198,10 +2200,13 @@ def _notify_after(quote_no, status):
         elif status == "待發放":
             who = bonus_payouts.cashier_recipients(conn, award)
             fn = email_notify.notify_bonus_payout_ready
+            requester = (json.loads(award["approval_json"] or "{}") or {}).get("requestedBy") or ""
         else:
             return
     finally:
         conn.close()
+    if status == "待發放":
+        _bonus_notify.fire_approved(quote_no, cust, requester, approver=by)      # 送審人收到結果（之前從來沒有）
     if not who:
         logger.warning("獎金分潤 %s（%s）沒有可通知的對象", quote_no, status)
         return
@@ -2349,7 +2354,7 @@ def approve_case_bonus(quote_no: str, authorization: str = Header(None)):
     finally:
         conn.close()
     _audit(_tok(authorization), "bonus.case.approve", "bonus_case_awards", quote_no, "獎金分潤簽核：%s" % nxt)
-    _notify_after(quote_no, nxt)
+    _notify_after(quote_no, nxt, by=user["username"])
     if voucher:
         _audit(_tok(authorization), "voucher.create", "vouchers", str(voucher["id"]),
                "獎金分潤 %s 進入待發放，產生傳票草稿：%s" % (quote_no, voucher["voucher_no"]))
@@ -2361,6 +2366,10 @@ def _back_to_draft(conn, award, user, action, reason):
                  " WHERE id=?", (_user_name(user), datetime.now().isoformat(), award["id"]))
     _case_log(conn, award["id"], user, action,
               {"from": award["status"], "reason": reason, "approval_before": award["approval_json"]})
+    # 通知送審人用（呼叫端 commit 後才寄；approval_json 在上面已清空，所以這裡先取）
+    requester = (json.loads(award["approval_json"] or "{}") or {}).get("requestedBy") or ""
+    row = conn.execute("SELECT COALESCE(customer_name, '') AS c FROM quotations WHERE quote_no = ?", (award["quote_no"],)).fetchone()
+    return requester, (row["c"] if row else "")
 
 
 @router.post("/cases/{quote_no}/reject")
@@ -2382,11 +2391,12 @@ def reject_case_bonus(quote_no: str, body: dict = Body(default={}), authorizatio
         ok, code, msg = check_reject_permission(tiers, int(appr.get("currentTier") or 0), user, conn)
         if not ok:
             raise HTTPException(code, msg)
-        _back_to_draft(conn, award, user, "reject", reason)
+        requester, cust = _back_to_draft(conn, award, user, "reject", reason)
         conn.commit()
     finally:
         conn.close()
     _audit(_tok(authorization), "bonus.case.reject", "bonus_case_awards", quote_no, "獎金分潤駁回：%s" % reason)
+    _bonus_notify.fire_returned(quote_no, cust, requester, approver=_user_name(user), reason=reason)     # 送審人收到結果
     return {"ok": True, "status": "草稿"}
 
 
@@ -2407,7 +2417,7 @@ def return_case_bonus(quote_no: str, body: dict = Body(default={}), authorizatio
             raise HTTPException(409, "已發放的獎金分潤不可以退回。")
         if award["status"] == "草稿":
             raise HTTPException(409, "這張已經是草稿。")
-        _back_to_draft(conn, award, user, "return", reason)
+        requester, cust = _back_to_draft(conn, award, user, "return", reason)
         # `AC3`：待發放時產生的轉帳草稿——還沒送審 ⇒ 作廢；已送審 ⇒ 不動、提示
         voided_no, notice = bonus_vouchers.withdraw_accrual(
             conn, award, _user_name(user), datetime.now().isoformat(), reason)
@@ -2415,6 +2425,7 @@ def return_case_bonus(quote_no: str, body: dict = Body(default={}), authorizatio
     finally:
         conn.close()
     _audit(_tok(authorization), "bonus.case.return", "bonus_case_awards", quote_no, "獎金分潤退回：%s" % reason)
+    _bonus_notify.fire_returned(quote_no, cust, requester, approver=_user_name(user), reason=reason)     # 送審人收到結果
     if voided_no:
         _audit(_tok(authorization), "voucher.void", "vouchers", voided_no,
                "獎金分潤 %s 退回，作廢未送審的傳票草稿：%s" % (quote_no, voided_no))
