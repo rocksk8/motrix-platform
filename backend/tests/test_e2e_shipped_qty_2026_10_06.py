@@ -53,7 +53,7 @@ def test_import_from_quote_stamps_quote_item_id_and_the_list_shows_cumulative(sq
     stamped = pg.evaluate("() => %s.shippingForm.items.map(i => [i.type || '', i.description, i.quoteItemId || ''])" % DATA_JS)
     assert stamped == [["", "電纜", "q1"], ["header", "標題", ""], ["", "攝影機", "q2"], ["", "配件", "q3"], ["", "另一品項", "q4"]], stamped
     # 編輯視窗每列的「已累計出貨」：q2＝所有出貨單合計（已核准 5、占用 2）／報價 8；沒有可歸屬紀錄的品項「—」（不是 0）
-    pg.locator('[data-testid="ship-cum-2"]').wait_for(timeout=8000)
+    pg.wait_for_function("() => (document.querySelector('[data-testid=\"ship-cum-2\"]') || {innerText: ''}).innerText.includes('5 / 8')", timeout=10000)      # 開窗會重抓一次，等到資料回來
     cum = lambda i: pg.locator('[data-testid="ship-cum-%d"]' % i).inner_text().replace("\n", " ").strip()
     assert cum(2) == "5 / 8 占用 2" and cum(0) == "—" and cum(3) == "—" and cum(4) == "—", [cum(i) for i in (0, 2, 3, 4)]
     pg.evaluate("() => { %s.addShippingItem() }" % DATA_JS)                                    # 手動新增的列：沒有 quoteItemId
