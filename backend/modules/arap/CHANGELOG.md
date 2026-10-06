@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-10-06（wip/t44-attach-views）：出納唯讀看待付款申請附件
+- `api/cashier.py`：新增 `GET /api/cashier/pending-payables/{source}/{key}/files/{file_id}`（與待付款清單同權限＝財務角色／superadmin；檔案由提供者 `file_open` 認領，其餘一律同一句 404；回 octet-stream＋inline；每次開檔留稽核 `cashier.payable_file_view`，不記內容）。前端 `cashier.js`／`cashier.html` 顯示附件清單（只讀）。
+
 ## 1.0.39 — 2026-10-06（wip/t44-fin-fixes）：匯款差額退回後重建行事曆「付款待辦」；併入 wip/t44-settle-terms（字樣）
 - `api/cashier.py`：`decide_remit_review` 退回後，若提供者回傳 `payableEvent`，commit 後背景呼叫 L1 `push_event_upsert_for_module` 重建（該鍵不外洩到回應）；事件種類關閉時不碰 Google。核可不重建。
 - `cashier.py`：404 提示「找不到申請來源」、稽核與通知標籤「支出申請付款」、匯出分頁「支出申請付款明細」。客戶「請款單」不動。

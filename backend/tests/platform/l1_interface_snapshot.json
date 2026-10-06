@@ -1,5 +1,5 @@
 {
- "core_version": "1.114",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -150,7 +150,7 @@
    "approval_raw_of": "def(approval_json, doc_type, doc_no)",
    "base_item": "def(type_, doc_no, f, **fields)",
    "current_tier_idx": "def(appr)",
-   "file_entries": "def(raw)",
+   "file_entries": "def(raw, default_doc_kind=…)",
    "snapshot_doc_detail": "def(r)",
    "tier_fields": "def(approval_json_raw)"
   },
