@@ -1544,7 +1544,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         # 報價預留間接成本（T39 新增；附在最右，既有欄號一律不動——有人／工具依賴這份匯出）
         "報價預留間接成本","其中：預留未被實際成本抵用","其中：其他",
         # 第 43 班：報價品項數量小計（只有數量；只經 case.shipped_summary 提供者，模組不在＝空白）
-        "報價品項數量合計","已出貨數量合計",
+        "已出貨數量合計","報價品項數量合計",
     ]
     cols6 = [13,18,18,10,9,13, 13,11,11,13, 13,11,13,11,11,13, 9,13, 9,11,10, 15,15,13, 13,13]
     for i, (h, w) in enumerate(zip(hdrs6, cols6), 1):
@@ -1614,7 +1614,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                   f"{'+' if diff >= 0 else ''}{diff:.1f}", gp_diff,
                   mc["settleStatus"] or "", mc.get("settleDate",""), mc.get("settleBy",""),
                   reserve, uncovered, gp_diff - uncovered,
-                  ship.get("ordered", ""), ship.get("shipped", "")],
+                  ship.get("shipped", ""), ship.get("ordered", "")],
                  font=mk(size=9), fill=fill(bg), border=BD,
                  aligns=[al("left"),al("left"),al("left"),al("left"),al("center"),
                          al("right"),al("right"),al("right"),al("right"),al("right"),
@@ -1652,8 +1652,8 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                   "", tot_act - tot_est,
                   "","","",
                   tot_reserve, tot_uncovered, tot_act - tot_est - tot_uncovered,
-                  sum((ship_sum.get(mc["quoteNo"]) or {}).get("ordered", 0) for mc in data["marginCases"]) if ship_sum else "",
-                  sum((ship_sum.get(mc["quoteNo"]) or {}).get("shipped", 0) for mc in data["marginCases"]) if ship_sum else ""],
+                  sum((ship_sum.get(mc["quoteNo"]) or {}).get("shipped", 0) for mc in data["marginCases"]) if ship_sum else "",
+                  sum((ship_sum.get(mc["quoteNo"]) or {}).get("ordered", 0) for mc in data["marginCases"]) if ship_sum else ""],
                  font=mk(bold=True, size=9, color=C_WHITE),
                  fill=fill("111827"), border=BD,
                  aligns=[al("center")] + [al("right")] * 25,

@@ -23,6 +23,7 @@ from modules.case import purchase_items as _PI
 from modules.case import material_guard as _MG
 _MG.LINK_VALIDATOR = _PI.link_validator                         # 32-S4：儲存時的連結檢查（material_guard 的接縫）
 from helpers.case_access import require_case
+from helpers.auth import require_any_module
 from helpers.financial_mask import money_visible, material_money_visible
 from modules.case import material_approval as MA
 from modules.case import material_notify as MN
@@ -99,10 +100,11 @@ def get_approvals(quote_no: str, authorization: str = Header(None)):
 
 
 @router.get("/api/quotations/{quote_no}/item-shipped")
-def get_item_shipped(quote_no: str, authorization: str = Header(None)):
-    """報價品項的已出貨數量 `{items: {品項 id: {ordered, unit, shipped, reserved, notes, attributed}}, totals, materialToItem}`（精算頁、案件出貨單頁共用）。
+def get_item_shipped(quote_no: str, exclude_note: str = "", authorization: str = Header(None)):
+    """報價品項的已出貨數量 `{items: {品項 id: {ordered, unit, shipped, reserved, notes, attributed}}, totals, materialToItem}`；`exclude_note`（選填）＝不計入這張出貨單（編輯中的單，避免把自己的占用算進「其他出貨單」）（精算頁、案件出貨單頁共用）。
     只有數量，沒有金額與成本；權限＝案件可見（同材料申請摘要）。`attributed=False`＝沒有可歸屬的出貨列（畫面顯示「—」）。"""
     user = _require_user(authorization)
+    require_any_module(user, ("case_manage", "quotation", "financial_view"), "出貨數量")      # 與出貨單清單同一道模組檢查（另加精算頁的財務檢視）
     conn = get_db()
     try:
         q = _load_case(conn, quote_no)
@@ -111,7 +113,7 @@ def get_item_shipped(quote_no: str, authorization: str = Header(None)):
             data = json.loads(q["data_json"] or "{}") or {}
         except (TypeError, ValueError):
             data = {}
-        items = _IS.shipped_by_item(conn, quote_no, data)
+        items = _IS.shipped_by_item(conn, quote_no, data, exclude_note_no=exclude_note or None)
         return {"quoteNo": quote_no, "items": items, "totals": _IS.case_totals(items), "materialToItem": _IS.material_item_map(conn, quote_no, data)}
     finally:
         conn.close()

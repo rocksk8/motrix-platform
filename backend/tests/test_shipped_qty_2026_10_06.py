@@ -167,10 +167,51 @@ def test_endpoint_returns_quantities_only(sq):
         assert bad not in blob, "回應不可有金額／成本欄位：" + bad
 
 
-def test_endpoint_requires_login_and_hides_unreadable_cases(sq, make_user):
+def _login_user(client, make_user, name, **kw):
+    u, p = make_user(username=name, **kw)[:2]
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def test_endpoint_requires_login_row_access_and_a_shipping_module(sq, make_user):
+    """突變對照：拿掉 `require_case` ⇒ 沒有案件權限的人拿到 200 ⇒ 這題紅；拿掉模組檢查 ⇒ 沒有任何出貨相關模組的人拿到 200 ⇒ 紅。"""
     client, h = sq
-    assert client.get("/api/quotations/%s/item-shipped" % Q).status_code == 401
+    url = "/api/quotations/%s/item-shipped" % Q
+    assert client.get(url).status_code == 401
     assert client.get("/api/quotations/NO-SUCH-CASE/item-shipped", headers=h).status_code == 404
+    outsider = _login_user(client, make_user, "sq_out", role="viewer", modules=["dashboard", "quotation"])       # 有 quotation 模組、但不在這個案件的可見範圍
+    assert client.get(url, headers=outsider).status_code == 404, "沒有案件列權限 ⇒ 與查無相同的 404"
+    nomod = _login_user(client, make_user, "sq_nomod", role="viewer", modules=["dashboard"])
+    assert client.get(url, headers=nomod).status_code == 403, "沒有 case_manage／quotation／financial_view ⇒ 403"
+
+
+def test_exclude_note_drops_the_edited_notes_own_reservation(sq):
+    """編輯中的單（待審核）不把自己的占用算進「其他出貨單」。突變對照：忽略 exclude 參數 ⇒ 紅。"""
+    client, h = sq
+    _note(client, h, [Qi(5)], status="已核准")
+    mine = _note(client, h, [Qi(2)], status="待審核")
+    mat = _note(client, h, [L(3)], status="待審核")
+    full = client.get("/api/quotations/%s/item-shipped" % Q, headers=h).json()["items"]
+    assert full["q2"]["reserved"] == 2.0 and full["q1"]["reserved"] == 3.0
+    ex = client.get("/api/quotations/%s/item-shipped?exclude_note=%s" % (Q, mine), headers=h).json()["items"]
+    assert ex["q2"]["reserved"] == 0.0 and ex["q2"]["shipped"] == 5.0 and ex["q1"]["reserved"] == 3.0, "只排除那一張"
+    ex2 = client.get("/api/quotations/%s/item-shipped?exclude_note=%s" % (Q, mat), headers=h).json()["items"]
+    assert ex2["q1"]["reserved"] == 0.0, "材料申請出貨那一邊也要排除"
+
+
+def test_notes_list_has_each_note_once_even_with_several_lines(sq):
+    """同一張單有兩列同品項 ⇒ 單號只出現一次。突變對照：拿掉去重 ⇒ 紅。"""
+    client, h = sq
+    no = _note(client, h, [Qi(2), Qi(3)], status="已核准")
+    c, fn = _prov()
+    try:
+        out = fn(c, Q)
+    finally:
+        c.close()
+    assert out["q2"]["shipped"] == 5.0 and out["q2"]["notes"] == [no], out
+    _set(no, items=[{**L(1), "qty": 1}, {**L(2), "qty": 2}])
+    assert _by_item()["q1"]["notes"] == [no]
 
 
 # ── ⑤ 預設不變 ───────────────────────────────────────────────────────
@@ -226,13 +267,31 @@ def test_report_helper_is_blank_when_the_provider_is_missing_or_fails(sq, monkey
     assert R._case_ship_summaries([Q]) == {}, "單一案件失敗只留白、不丟例外"
 
 
-def test_excel_export_has_the_two_new_columns_at_the_far_right(sq):
+def test_excel_export_columns_order_rows_and_totals(sq, monkeypatch):
+    """「毛利分析」最右兩欄：已出貨數量合計、報價品項數量合計（順序同畫面「已出貨/數量」）；逐案列與合計列的值都要對（突變：欄位互換 ⇒ 紅）。"""
     import io
     from openpyxl import load_workbook
+    from modules.analytics.api import reports as R
     client, h = sq
+    _note(client, h, [Qi(5), Qi(2, qid="q3")], status="已核准")                           # Q：已出貨 7 / 訂購 26
+    real = R._collect
+
+    def fake_collect(d0, d1, dept=None):
+        d = real(d0, d1, dept)
+        base = {"customer": "客戶", "project": "專案", "salesPerson": "業務", "dealTag": "已成案", "pretax": 1000, "netMarginPct": 10.0, "actualMarginPct": 12.0,
+                "grossProfit": 120, "settleSummary": {}, "settleStatus": "finalized", "settleDate": "", "settleBy": ""}
+        d["marginCases"] = [{**base, "quoteNo": Q}, {**base, "quoteNo": "NO-SHIP-CASE"}]
+        return d
+    monkeypatch.setattr(R, "_collect", fake_collect)
     r = client.get("/api/reports/financial/excel?period=2026&basis=accrual", headers=h)
     assert r.status_code == 200, r.text[:200]
     ws = load_workbook(io.BytesIO(r.content))["毛利分析"]
     hdr = [c.value for c in ws[3]]
-    assert hdr[21:26] == ["報價預留間接成本", "其中：預留未被實際成本抵用", "其中：其他", "報價品項數量合計", "已出貨數量合計"], hdr
+    assert hdr[21:26] == ["報價預留間接成本", "其中：預留未被實際成本抵用", "其中：其他", "已出貨數量合計", "報價品項數量合計"], hdr
     assert hdr[0] == "案件號" and len([x for x in hdr if x]) == 26, "既有欄位不動、只在最右加兩欄"
+    row = {ws.cell(row=r_i, column=1).value: [ws.cell(row=r_i, column=c).value for c in (25, 26)] for r_i in (4, 5, 6)}
+    assert row[Q] == [7, 26], row                                                      # 已出貨 7、訂購 26（欄位順序：已出貨在前）
+    assert row["NO-SHIP-CASE"] == [0, 0], row                                          # 案件不存在／沒有品項 ⇒ 0（不是空白也不是別案的值）
+    assert row["合計"] == [7, 26], row
+
+

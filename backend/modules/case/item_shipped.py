@@ -22,8 +22,9 @@ def material_item_map(conn, quote_no, data) -> dict:
             for o, _st in PI.load_material_orders(conn, quote_no, data) if str(o.get("quoteItemId") or "").strip()}
 
 
-def shipped_by_item(conn, quote_no, data) -> dict:
-    """`{報價品項 id: {"ordered": 報價數量, "unit": 單位, "shipped": 已出貨, "reserved": 占用中, "notes": [單號…], "attributed": 有沒有任何出貨資料可歸屬}}`
+def shipped_by_item(conn, quote_no, data, exclude_note_no=None) -> dict:
+    """`exclude_note_no`（選填）：不計入這張出貨單（編輯中的單）。
+    `{報價品項 id: {"ordered": 報價數量, "unit": 單位, "shipped": 已出貨, "reserved": 占用中, "notes": [單號…], "attributed": 有沒有任何出貨資料可歸屬}}`
     ——報價單的每個有 id 的品項都列（保持報價順序）。`attributed=False`＝這個品項沒有可歸屬的出貨列（可能是舊單或庫存出貨），畫面顯示「—」而不是 0。"""
     plan = PI.plan_items(data)
     out = {p["itemId"]: {"ordered": p["planQty"], "unit": p["unit"], "shipped": 0.0, "reserved": 0.0, "notes": [], "attributed": False} for p in plan}
@@ -45,7 +46,7 @@ def shipped_by_item(conn, quote_no, data) -> dict:
     if fn is not None:
         try:
             mat_to_item = material_item_map(conn, quote_no, data)
-            for mid, e in (fn(conn, quote_no) or {}).items():
+            for mid, e in (fn(conn, quote_no, exclude_note_no) or {}).items():
                 qid = mat_to_item.get(str(mid))
                 if qid:
                     add(qid, e)
@@ -54,7 +55,7 @@ def shipped_by_item(conn, quote_no, data) -> dict:
     fn = registry.providers("shipping.quote_item_shipped").get("supply")
     if fn is not None:
         try:
-            for qid, e in (fn(conn, quote_no) or {}).items():
+            for qid, e in (fn(conn, quote_no, exclude_note_no) or {}).items():
                 add(qid, e)
         except Exception:                                                   # noqa: BLE001
             log.exception("item_shipped: 報價品項出貨提供者失敗（略過這一來源）")

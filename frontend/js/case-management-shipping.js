@@ -51,10 +51,11 @@ window.CM_PARTS.push(() => ({
       this.$nextTick(() => this._initSubListSortable('sn'))
     },
 
-    async loadItemShipped(quoteNo, live) {
+    async loadItemShipped(quoteNo, live, excludeNote) {
       this.itemShipped = { items: {}, materialToItem: {} }
       try {
-        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/item-shipped`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        // excludeNote：編輯中的那張單不計入（否則待審核／簽核中的單會把自己的占用算進「其他出貨單」）
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/item-shipped` + (excludeNote ? `?exclude_note=${encodeURIComponent(excludeNote)}` : ''), { headers: { Authorization: 'Bearer ' + this.session.token } })
         if (!live()) return
         if (r.ok) { const d = await r.json(); this.itemShipped = { items: d.items || {}, materialToItem: d.materialToItem || {} } }
       } catch {}
@@ -121,6 +122,7 @@ window.CM_PARTS.push(() => ({
       this.showShippingContactPicker = false
       this._loadShippingContactOptions()
       this.msh = { open: false, loading: false, items: [], pick: {}, qty: {}, err: '' }
+      this.loadItemShipped(this.selected?.quote_no, () => true)                     // 新單：不排除任何單（編輯別張單後可能留著排除的結果）
       this.showShippingModal = true
     },
 
@@ -143,6 +145,7 @@ window.CM_PARTS.push(() => ({
         this.shippingMsg = ''
         this.showShippingContactPicker = false
         this._loadShippingContactOptions()
+        this.loadItemShipped(d.quoteNo || this.selected?.quote_no, () => this.editShippingNoteNo === d.noteNo, d.noteNo)     // 第 43 班：已累計出貨不含這張單自己
         this.msh = { open: false, loading: false, items: [], pick: {}, qty: {}, err: '' }
       this.showShippingModal = true
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
