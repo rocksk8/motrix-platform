@@ -82,8 +82,8 @@ def test_tax_expense_splits_exact_from_estimated_and_unsplit(case):
     c, h = case
     d = _get(c, h)
     te = d["totals"]["taxExpense"]
-    exp_est = sum(i["actual"]["amount"] - round(i["actual"]["amount"] / 1.05) for i in d["items"])
-    assert te["exact"] == 500 and abs(te["estimated"] - exp_est) <= len(d["items"]) and te["estimated"] > 0 and te["unsplit"] == 0, (te, exp_est)
+    exp_est = sum(R.estimated_tax(i["actual"]["amount"]) for i in d["items"])               # 與實作同一個推估函式、逐品項進位：必須完全相等（不留容差）
+    assert te["exact"] == 500 and te["estimated"] == exp_est and te["estimated"] > 0 and te["unsplit"] == 0, (te, exp_est)
 
 
 def test_finalized_summary_freezes_tax_expense(case):
@@ -217,3 +217,89 @@ def _stale(summary):
 ])
 def test_stale_check_pairs_each_marker_with_its_own_live_basis(client, summary, stale):
     assert _stale(summary) == stale
+
+
+# ── 稽核 a4 的補強（2026-10-06）─────────────────────────────────────────────
+
+def _items_stub(po_docs=(), extra_docs=()):
+    return [{"itemId": "a", "hasPurchase": True, "adopt": True, "po": {"docs": list(po_docs)}, "material": {"orders": []},
+             "extra": {"docs": list(extra_docs)}, "actual": {"source": "purchase", "amount": 4000}}]
+
+
+def test_multi_line_po_with_a_document_tax_is_not_double_counted():
+    """稅額只放在單據第一列，其餘列 tax＝0 但已被涵蓋：探針＝PO 3000＋1000、單據稅 190 ⇒ 確定 190、推估 0（原本多算 48）；額外支出同理不得掉進 unsplit。"""
+    from modules.case import settlement_actuals as SA
+    ex = {"dispatch": {"tax": 0}}
+    po = [{"amount": 3000, "tax": 190, "taxKind": "exact"}, {"amount": 1000, "tax": 0, "taxKind": "exact"}]
+    te = SA._tax_expense(_items_stub(po_docs=po), [], [], ex, "taxed", {}, 2)
+    assert te == {"exact": 190, "estimated": 0, "unsplit": 0}, te
+    extra = [{"amount": 3000, "tax": 190, "taxKind": "exact"}, {"amount": 1000, "tax": 0, "taxKind": "exact"}]
+    assert SA._tax_expense([], [], extra, ex, "taxed", {}, 2) == {"exact": 190, "estimated": 0, "unsplit": 0}
+    # 正對照：沒有稅額的採購單＝每列推估；沒有稅額的額外支出＝未拆稅（只列金額）
+    po2 = [{"amount": 3000, "tax": 0, "taxKind": "estimated"}, {"amount": 1000, "tax": 0, "taxKind": "estimated"}]
+    assert SA._tax_expense(_items_stub(po_docs=po2), [], [{"amount": 700, "tax": 0, "taxKind": "unsplit"}], ex, "taxed", {}, 2) == {
+        "exact": 0, "estimated": R.estimated_tax(3000) + R.estimated_tax(1000), "unsplit": 700}
+
+
+def _insert_typed(kind, lines, total, tax, code):
+    cn = db.get_db()
+    try:
+        cn.execute("INSERT INTO case_extra_expenses (quote_no, category, description, total_cost, expense_date, status, created_at, updated_at, tax, kind, lines_json, doc_code)"
+                   " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (NO, "雜費", "多列單據", total, "2026-10-06", "已核准", "2026-10-06T00:00:00", "2026-10-06T00:00:00", tax, kind,
+                                                       json.dumps(lines, ensure_ascii=False), code))
+        cn.commit()
+    finally:
+        cn.close()
+
+
+def test_typed_documents_carry_their_tax_once_and_label_the_kind(W):
+    c, h = W
+    lines = [{"categoryName": "甲", "amount": 3000}, {"categoryName": "乙", "amount": 1000}]
+    _insert_typed("travel", lines, 4000, 190, "TX-1")                 # 有稅額的費用單據（兩個類別 ⇒ 兩列）
+    _insert_typed("purchase_order", lines, 4000, 0, "TX-2")           # 沒有稅額的採購單
+    cn = db.get_db()
+    try:
+        es = [e for e in R.extra_entries(cn, "accrual") if e["quoteNo"] == NO]
+    finally:
+        cn.close()
+    doc = [e for e in es if e["docCode"] == "TX-1" and e["kind"] == "travel"]
+    po = [e for e in es if e["kind"] == "purchase_order"]
+    assert len(doc) == 2 and sum(e["tax"] for e in doc) == 190 and {e["taxKind"] for e in doc} == {"exact"}, doc
+    assert len(po) == 2 and {e["taxKind"] for e in po} == {"estimated"} and sum(e["tax"] for e in po) == R.estimated_tax(3000) + R.estimated_tax(1000), po
+    te = _get(c, h)["totals"]["taxExpense"]
+    assert te["exact"] == 190 and te["unsplit"] == 0, te                     # 多列單據：稅額計一次、不掉進 unsplit；無稅額的採購單（未連品項）＝推估，不是未拆稅
+    items_est = sum(R.estimated_tax(i["actual"]["amount"]) for i in _get(c, h)["items"])
+    assert te["estimated"] == items_est + R.estimated_tax(3000) + R.estimated_tax(1000), te
+
+
+def test_a_dispatch_without_a_date_keeps_the_old_basis_and_missing_grand_total_never_goes_negative(W, monkeypatch):
+    from modules.case import settlement_actuals as SA
+    c, h = W
+    _dispatch(10000, 2000)
+    cn = db.get_db()
+    try:
+        cn.execute("UPDATE contractor_dispatches SET dispatch_date='' WHERE quote_no=?", (NO,))
+        cn.commit()
+        es = [e for e in R.dispatch_entries(cn, "accrual") if e["quoteNo"] == NO]
+    finally:
+        cn.close()
+    assert [(e["amount"], e["tax"], e["taxKind"]) for e in es] == [(12000, 0.0, "")], es       # 沒有派發日 ⇒ 舊口徑（不猜）
+    # 提供者沒給 grandTotal：稅額 0、含稅合計退回未稅＋人員，不得變負
+    real = SA.registry.single_provider
+    monkeypatch.setattr(SA.registry, "single_provider", lambda name: (lambda r: {"id": 1, "totalAmount": 100, "personnelTotal": 20, "approvalStatus": ""})
+                        if name == "dispatch.row" else real(name))
+    cn = db.get_db()
+    try:
+        rows = SA.dispatch_rows(cn, NO)
+    finally:
+        cn.close()
+    assert rows and all(r["tax"] == 0 and r["amount"] == 120 for r in rows), rows
+
+
+def test_saving_the_taxed_marker_twice_is_stable(W):
+    c, h = W
+    _dispatch(10000, 2000)
+    for _ in range(2):
+        _put_settlement({"status": "draft", "items": [], "offsets": [], "summary": {"dispatchBasis": "taxed"}})
+        t = _get(c, h)["totals"]
+        assert (t["dispatchBasis"], t["dispatchTotal"], t["taxExpense"]["exact"]) == ("taxed", 12500, 500)

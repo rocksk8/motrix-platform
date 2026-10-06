@@ -113,6 +113,8 @@ def test_material_entries_is_identical_to_the_frozen_pre_extraction_implementati
     finally:
         cn.close()
     assert old, "情境必須真的產生列（不然比對沒有意義）"
+    # 2026-10-06：每列新增 tax／taxKind（推估稅額，材料申請沒有稅額欄位）——只排除這兩個新鍵，其餘逐筆、逐鍵、同順序完全相同；新鍵本身另外釘住
+    assert all(e.pop("taxKind") == "estimated" and e.pop("tax") == R.estimated_tax(e["amount"]) for e in new), "材料申請的稅額一律是推估（estimated）"
     assert new == old                                                                                   # 逐筆、逐鍵、同順序
 
 

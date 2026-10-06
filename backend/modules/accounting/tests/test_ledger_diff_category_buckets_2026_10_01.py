@@ -78,9 +78,11 @@ def test_every_category_diff_equals_its_buckets_and_taxes_add_up(client, booked)
     assert sum(cat["buckets"]["tax"] for cat in cats.values()) == m["expense"]["buckets"]["tax"] == 1500
 
 
-def test_accrual_basis_has_no_tax_bucket_and_individual_comes_from_the_paid_voucher(client, booked):
+def test_accrual_basis_tax_bucket_is_the_contractor_tax_included_in_the_report_and_individual_comes_from_the_paid_voucher(client, booked):
+    """【2026-10-06 改】應計口徑：派發日 ≥ 2026-10-01 的承攬商成本含稅（報表），總帳稅額在 1268 ⇒ 差額進 tax 分桶（＝報表該月 taxContractor，本情境的 10 月派發稅 1500）；
+    原本（35c）是 0。"""
     m = _month(client, booked, "accrual")
     c = m["expense"]["categories"]["contractor"]
-    assert c["buckets"]["tax"] == 0
+    assert c["buckets"]["tax"] == 1500, c["buckets"]
     assert c["buckets"]["individual"] == 5273
     assert c["diff"] == sum(c["buckets"].values())
