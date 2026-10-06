@@ -3,7 +3,7 @@
 > 狀態：**設計／分析稿，無程式、未跑測試**（測試鎖被第 44 班佔用）。分支 `wip/t45-r2-step1`，基底 `origin/wip/t45-duty-roles-design`（設計 `DUTY-ROLES-DESIGN.md`，12 題＋N1–N4 已裁示）。
 > 讀碼基準：`origin/platform` `03656587`（含第 43 班 R1：`helpers/duty_roles.py`、`routers/duty_roles.py`、`backend/tools/duty_roles_equivalence.py`、`duty_roles_export_effective.py`）。
 > 正式機基準：第 43 班上線後＝12 人、0 綁定、0 扣項。⚠ 本稿**沒有讀到正式機快照內容**，12 人／0 綁定取自主持轉述，由正式機視窗拍快照時核對。第 43 班步驟檔的 `duty_before_43.json` 是「R1 之前」基準，**不是 R2 基準**；R2 基準每次動手前重拍（§3）。
-> D1–D4 已由使用者 2026-10-07 裁示（§8）；**D5 未裁示，保持開放**；D4 與 E6 有衝突待主持確認（§8）。
+> D1–D5 已由使用者 2026-10-07 裁示（§8）：D4＝選項 B（ALL_KEYS 只在守門層）、D5＝第 45 班與第 1 步一起做（§10）。原「標【裁示】」的待決項已全部回覆。
 
 ---
 
@@ -26,7 +26,7 @@
 | E3 | 財務能力判斷 | `has_finance_access`、`has_cashier_access`、`can_see_financial`（以 `{role, modules}` dict 呼叫） | 布林相等 |
 | E4 | 基礎類別與在職 | `users.role`、`users.active` | 相等（非預期變動算差異） |
 | E5 | 原始勾選 | `users.modules` 解析後排序 | R2 全程相等（除非該步白名單明列）；這是舊程式回滾可用的前提 |
-| E6 | superadmin | E1 等於快照（維持 R1 現狀）；superadmin 帳號不得有綁定／扣項列 | 逐人 |
+| E6 | superadmin | **可見面嚴格相等**：E1（登入／`/api/me`／選單／模組清單）等於快照；superadmin 帳號不得有綁定／扣項列。守門層另列 E6g（§10.1）：只允許「多通過」，不允許「少通過」 | 逐人 |
 
 - **E1 與 E2 要分開**：R1 的 `_require_user` 把角色鍵併進 `user["modules"]`，但 `effective_modules` 另外把財務三鍵從非財務基礎類別剝掉。把含財務三鍵的職責角色綁給非財務類別者，E1、E3 不變，E2 會多出 `cashier／finance／financial_view`。目前直讀 `user["modules"]` 的呼叫端（`modules/analytics/api/dashboard.py`、`modules/case/api/case_action_items.py`、`modules/crm/api.py`、`routers/search.py`、`routers/custom_records.py`、`routers/map_points.py`、`helpers/custom_modules.py`、`helpers/custom_files.py`）經 grep 沒有一處以財務三鍵判斷，所以今天不外露；但這是潛在洩漏路徑，檢查器主動比 E2，日後有人新增直讀才會被擋住。
 - **順序**：R1 檢查器連順序都比（`list(after) != list(before)`）。R2 綁定會改順序（`resolve_raw_modules` 在原順序後附加角色鍵）。建議「集合相等＝等價，順序差異只列資訊（`orderOnly`）」。前提是沒有消費者依賴清單順序：選單分組由 `module_registry.MODULES` 決定，讀碼看起來成立，但列入 §6 測試；測試不過就回報，不硬做。
@@ -95,6 +95,11 @@ duty_roles_equivalence.py diff     --a S1.json --b S2.json [--plan PLAN.json]   
 | 4 | 資料動作（僅第 3、4 步） | 用計畫檔執行，再 `verify --plan` | 同上 |
 | 5 | 留存 | 快照與 `--json-out` 放正式機回報資料夾（沿用 `duty_before_43.json` 作法），檔名帶班次與時間（由 `date` 產生） | — |
 
+### 3.1a 正式機唯讀檢查：superadmin 生效集合 vs 全目錄鍵（基準時由正式機 Claude 執行，無機密）
+- 新子命令 `duty_roles_equivalence.py catalog-check [--db P]`（只 SELECT、不輸出密碼／帳號名；超管只以 id＋「superadmin」字樣出現）。輸出：①目錄全部鍵（內建＋動態）②每位 superadmin 的 E1 集合 ③**缺哪些鍵**（目錄有、E1 沒有）④`user_has_module()` 直呼點中沒有先判 superadmin 的清單（靜態掃描，由開發端產出，不在正式機跑）。
+- 步驟檔寫法：「於 `<ROOT>ackend` 執行 `python tools\duty_roles_equivalence.py catalog-check --db <ROOT>ackend\motrix_erp.db --json-out <回報資料夾>\catalog_check_<班次>.json`；結束碼 0；把『缺哪些鍵』整段貼進摘要」。結束碼 0 即使有缺鍵（資訊用）；2＝讀不到庫。
+- 用途：決定 §10.1 的 ALL_KEYS 會讓 superadmin 在守門層「多通過」哪些鍵（預期＝缺鍵清單）；也是 D5 切換前確認財務三鍵對 superadmin 都在 E1 內。
+
 ### 3.2 R2 基準
 - 基準＝**R2 第一個上線班次的套用前快照**（預期 12 人、0 綁定、0 扣項；系統角色種子 8 個：finance、sales、engineer、procurement、pm、sysadmin、viewer、admin_legacy，皆 `version=1`）。之後每班的「套用前快照」＝上一班的「套用後快照」＋該班計畫；**不得拿更早的快照跨班比對**，否則中間合法的變動會被誤判成差異。
 - 12 人固定 fixture（進 repo）：只放 `id`、`role`、`active`、`modules`，帳號名去識別化；來源是正式機快照，由正式機視窗產出去識別化版再進 repo，本稿不產。
@@ -123,7 +128,7 @@ duty_roles_equivalence.py diff     --a S1.json --b S2.json [--plan PLAN.json]   
 
 | 檔 | 狀態 | 用途 | 何時進包 |
 |---|---|---|---|
-| `duty_roles_equivalence.py` | 已出貨（R1）→ 擴充 v2，v1 用法不動 | 快照／驗證／離線 diff | R2 第一個上線班次 |
+| `duty_roles_equivalence.py` | 已出貨（R1）→ 擴充 v2，v1 用法不動 | 快照／驗證／離線 diff＋`catalog-check`（§3.1a）、`scan-finance`、`verify --finance-cutover`（§10.2） | R2 第一個上線班次 |
 | `duty_roles_export_effective.py` | 已出貨（R1）→ 行為不改，dry-run 輸出補列「綁定含高敏感鍵者」 | L1 第 0 步 | R2 第一個上線班次 |
 | `duty_roles_rollback.py` | **新** | L0 邏輯回滾 | 第 3 步之前必須已在正式機 |
 | `duty_roles_autobind_plan.py` | **新** | 第 4 步：唯讀產出「完全吻合者」計畫檔 | 第 4 步 |
@@ -167,7 +172,7 @@ duty_roles_equivalence.py diff     --a S1.json --b S2.json [--plan PLAN.json]   
 | 6 | 高敏感變更寄信（鎖定類） | 5（同批新增 mail_types）；`notify_matrix.py` 持有視窗對齊 | 一次登記、一次對矩陣 | 矩陣視窗已併入則可提前 |
 | 7 | SoD 提示規則＋每鍵「強制程度」 | 2（UI）、5（盤點標示） | 純提示不擋（Q9 b） | 「部分」清單可由 B 階段靜態掃描（約 73 處）自動產生 |
 | 8 | 完整性：`audit_id`、`INSERT OR REPLACE` 掃描、7 年清除工具 | 無硬相依 | 掃描守門是純測試，可最早做；清除工具要停用觸發器，風險最高，最後 | 拆 8a（audit_id、掃描）併入第 2 步；8b（清除工具）維持原位 |
-| 9 | B 階段：superadmin 是否「全部鍵」、財務三鍵扣項、逐領域取代 admin 直通 | 1–8；每領域一班 | 才會改變誰能看／做什麼 | D4 已裁示（含衝突待確認）；**D5 未裁示**；每領域上線前再問 |
+| 9 | B 階段：逐領域取代 admin 直通；D4（§10.1）與 D5（§10.2）已裁示、於第 45 班與第 1 步一併處理，不再等第 9 步 | 1–8；每領域一班 | 才會改變誰能看／做什麼 | D4＝B、D5 已裁示；逐領域取代 admin 直通上線前仍各自再問 |
 
 每步上線關卡都照 §3.1；第 2、3 步另依 §6 專屬題。
 
@@ -180,22 +185,69 @@ duty_roles_equivalence.py diff     --a S1.json --b S2.json [--plan PLAN.json]   
 | **D1** | 第 4 步：含財務三鍵的職責角色（`finance`）可不可以自動綁？ | **已裁示**：僅對 `role=finance` 者自動綁；其餘人經 superadmin 確認清單（逐筆確認後才綁） | 計畫工具分兩份輸出：「自動」清單（僅 `role=finance` ＋完全吻合）與「待確認」清單（含財務鍵角色、其他類別）；待確認者由第 2 步 UI 逐筆確認，確認動作各寫一筆紀錄。綁定給非 finance 者時 E2 會多財務鍵（§1，僅資訊）——因此該情形**只能走 superadmin 確認、不得自動** |
 | **D2** | 第 4 步綁定範圍 | **已裁示**：只綁完全相等，不放寬為 ⊇ | 計畫工具只列「現行生效集合＝系統角色權限集合」者；§6「綁定等價」題改為：完全相等者列入、非完全相等（含 ⊇）者一律不列入 |
 | **D3** | 第 3 步停用回收 | **已裁示**：停用時清空 `users.modules`；重新啟用時基礎類別必須重新確認（`role=finance` 者重新確認後才取回財務），superadmin 亦須重新確認 | ①停用是**第一個會改 E5 的動作**：白名單要列出每位被停用者的清空內容，`before_json` 完整留存（原勾選、綁定、扣項、基礎類別）供 L0 還原 ②重新啟用流程要有「基礎類別確認」步驟（含 superadmin），未確認不得啟用——屬第 3 步範圍，驗收題加：啟用 `role=finance`／`superadmin` 帳號未確認 ⇒ 拒絕 ③E1 對停用帳號仍計算（其生效集合應為空＋基礎類別規則） |
-| **D4** | superadmin 改為明確「全部鍵」 | **已裁示**：B 階段前置；要**加法式設計並用等價檢查**：superadmin 生效集合維持與 E6 相同、每個功能 superadmin 仍可用 | 見下「D4 設計與衝突」 |
-| **D5** | 財務三鍵扣項／`has_finance_access` 改讀生效權限 | **未裁示（保持開放）**：本稿不當作已決定，也不做任何準備性程式 | 第 9 步中屬 D5 的部分標「待裁示」；R2 第 1–8 步的設計皆不依賴 D5 |
+| **D4** | superadmin 明確「全部鍵」 | **已裁示＝選項 B**：ALL_KEYS 只作用於守門層；選單、登入、`/api/me` 不變；superadmin 畫面一致，可見面嚴格相等 | 設計見 §10.1 |
+| **D5** | 財務三鍵扣項／`has_finance_access` 改讀生效權限 | **已裁示：第 45 班與第 1 步一併做**。要求：檢查器證明切換當下財務與非財務使用者的金額可視不變、預期差異清單預設為空、要有回滾層 | 設計見 §10.2；本表其餘項不依賴它 |
+| 附2 | D5 範圍：寫死 `"finance"` 角色字面值的點（§10.2.1 B 類）是否一併改走新縫；含 `"admin"`／`"sales"` 的金額遮罩維持現狀並標「部分生效」 | **待使用者在實作前確認**（建議：是／維持） | 不確認則 D5 僅涵蓋 A 類，扣項畫面標「部分生效」 |
 | 附 | `duty_roles_rollback.py`／`export_effective.py` 的 `--apply` 在正式機執行是否一律需使用者同意 | 沿用第 43 班步驟檔規則（需同意；dry-run 不需） | — |
 
-### D4 設計與衝突（需主持／使用者確認）
-- **加法式**：不刪除、不改現有 superadmin 的判斷路徑（`role == 'superadmin'` 直通仍在）；新增 `ALL_KEYS`（目錄全部鍵，含動態來源與未來新增）當作 `effective_modules` 對 superadmin 的回傳，同時 `_require_user` 的守門視圖（E2）也同步為全部鍵。上線前後以檢查器 E6 驗證。
-- **衝突點**：E6 目前寫「superadmin 的 E1 等於快照」。但 R1 的 superadmin 生效集合＝「`users.modules` 勾選＋財務三鍵」，**不一定等於目錄全部鍵**（例如 `ROLE_TEMPLATES["superadmin"]`／`SUPERADMIN_DEFAULT` 沒有 `payslip`、`contractor_list`、`file_center`、`map` 等；正式機實際值未讀）。若不等，改成「全部鍵」就會**多出鍵**，選單與模組清單會變——與「集合維持相同」字面衝突。
-- **本稿的處理**：E6 在 D4 那一步改定義為①「舊集合 ⊆ 新集合（不得少任何一鍵）」②多出的鍵逐一列在計畫白名單（`gained`）③「每個功能 superadmin 仍可用」以既有 superadmin 守門題＋逐端點掃描驗證（不降低）。是否接受「多出的鍵＝選單多出項目」要由使用者／主持確認；若要求選單**完全不變**，則「全部鍵」只能做成**內部判斷用**（`has_all_keys` 旗標，守門通過），而 `/api/me`、登入回傳、選單仍回舊集合——這會讓「explicit ALL keys」只存在於守門層。**兩種作法請主持回覆選哪一種**，在確認前本稿不寫死。
-- 先行步驟：D4 之前先跑「正式機 superadmin 現有集合 vs 目錄全部鍵」的唯讀比對（檢查器 `diff` 即可做），把缺的鍵列出來。
+（D4／D5 設計已移至 §10；原「E6 衝突」已由 D4＝B 解決。）
 
 已裁示、本稿**不重開**：N2（高敏感清單不含 `reports`）、Q1（僅 superadmin 管理）、Q5（允許負向例外）、Q8（不規範 superadmin 使用）。
+| 附2 | D5 範圍：寫死 `"finance"` 角色字面值的點（§10.2.1 B 類）是否一併改走新縫；含 `"admin"`／`"sales"` 的金額遮罩維持現狀並標「部分生效」 | **待使用者在實作前確認**（建議：是／維持） | 不確認則 D5 僅涵蓋 A 類，扣項畫面標「部分生效」 |
 | 附 | `duty_roles_rollback.py`／`export_effective.py` 的 `--apply` 在正式機執行是否一律需使用者同意 | 會改 `users.modules`／綁定；第 43 班步驟檔已寫「需使用者同意」 | 沿用；dry-run 不需 |
 
+已裁示、本稿**不重開**：N2（高敏感清單不含 `reports`）、Q1（僅 superadmin 管理）、Q5（允許負向例外）、Q8（不規範 superadmin 使用）。
+
 ---
+
+## 10. D4／D5 設計（使用者 2026-10-07 裁示）
+
+### 10.1 D4：superadmin 明確「全部鍵」（選項 B：只在守門層）
+- **加法式**：`role == 'superadmin'` 直通與 `effective_modules` 對 superadmin 的現行輸出**都不動**（E1 逐字相同，選單／登入／`/api/me`／模組清單不變）。
+- **唯一改動點**：`helpers.auth.user_has_module(user, key)` 對 superadmin 回傳 True（含目錄新增的鍵）。現況它讀 `user["modules"]` 原始勾選，所以 superadmin 缺勾選的鍵（例如 `payslip`、`file_center`、`contractor_list`、`map`，正式機實際值待 §3.1a 檢查）在**沒有先判 superadmin 的直呼點**會被判沒有；`require_any_module` 已有 superadmin 直通，不受影響。`user["modules"]` 本身不改（直讀者看到的值不變）。
+- **等價**：E6 可見面（E1）嚴格相等；新增 **E6g（守門層）**＝對 superadmin，逐一鍵 `user_has_module` 切換前後只允許 False→True、不允許 True→False，且「全部鍵」＝目錄全部（含動態）。差異（False→True 的鍵）預期等於 §3.1a 的缺鍵清單，列入計畫白名單，**預設不得有其他差異**。
+- **測試**：①superadmin、`modules=[]`：對目錄每個鍵 `user_has_module` 為真 ②非 superadmin 對所有鍵的結果不變 ③E1 與快照逐字相同 ④靜態掃描：所有 `user_has_module` 直呼點，superadmin 的行為不低於改前。突變：把改動拿掉 ⇒ ①紅；改成對 admin 也放行 ⇒ ②紅。
+- 影響：只會讓 superadmin 多通過原本漏判的點；不降低任何人、不改任何人的畫面。
+
+### 10.2 D5：財務三鍵扣項與 `has_finance_access` 改讀生效權限
+**目標**：財務／出納／金額可視從「只看基礎類別」改為「看生效權限（含職責角色綁定與個人扣項）」，並可對財務三鍵設個人扣項；**切換當下任何人的金額可視不變**。
+
+**10.2.1 範圍與盤點（先做，唯讀）**
+- 金額相關判斷點（讀碼，非窮盡）：`helpers/auth.py` 的 `has_finance_access`／`has_cashier_access`／`can_see_financial`／`user_has_module(財務三鍵)`／`finance_usernames`（約 126 處呼叫）；`routers/mail_settings.py:213` 的 finance 郵件群組；**直接寫死角色字面值**的點：`helpers/financial_mask.py:48,57`（superadmin／admin／sales／finance）、`modules/case/api/material_orders.py:119,126`、`modules/case/material_guard.py:107`、`modules/subcontract/api/vendor_contractors.py:32`、`modules/payroll/bank_account.py:94` 等。
+- 工具：`duty_roles_equivalence.py scan-finance`（靜態、離線）輸出兩份清單：A＝經由 `has_*`／`user_has_module` 的點（會跟著新縫走）；B＝寫死角色字面值的點（**不會**跟著走）。
+- **關鍵風險（假安全感）**：B 類不改，對某財務使用者設扣項後這些點仍會放行。**範圍建議**：D5 把 B 類中含 `"finance"` 字面值者一併改走新縫（它們是財務可視，不是一般管理）；含 `"admin"`、`"sales"`（例如金額遮罩的 admin／sales）者**不屬 D5**，維持現狀並在畫面標「部分生效」。B 類清單與取捨需使用者在實作前確認（見 §8 附）。
+
+**10.2.2 新縫的語意**
+- 對應：`has_finance_access` ⇔ `finance` ∈ 財務生效鍵；`has_cashier_access` ⇔ `cashier`；`can_see_financial` ⇔ `financial_view`。**現況三者同一規則**（2026-10-05 合併），切換後可分開被扣——這是新能力，不是切換當下的差異。
+- 財務生效鍵 ＝ superadmin ⇒ 三鍵全有；否則 **來源只有兩種**：①基礎類別 `finance`（隱含三鍵，沿用第 42 班規則）②已啟用職責角色的權限鍵，最後減去個人扣項。**原始勾選 `users.modules` 中的財務鍵一律不計**（維持第 42 班：admin／sales 的惰性勾選不生效）。
+- 因此切換當下：`role=finance`（無扣項）與 superadmin ⇒ 三鍵全有，與現況相同；其他基礎類別無綁定含財務鍵角色 ⇒ 全無，與現況相同。**任何人有「含財務鍵角色的綁定」或「財務鍵扣項」都會造成差異**，這些人在切換前必須為 0（見下）。
+
+**10.2.3 等價證明（檢查器）**
+- 金額可視矩陣（schema 2 `caps` 擴充）：每人記 `finance`、`cashier`、`seeFinancial`、`maskVisible`（`financial_mask` 兩函式）、`inFinanceUsernames`、`mailFinanceGroup`、`materialMoneyVisible`。切換前後逐人比對。
+- **預期差異清單（預設為空）**：計畫檔 `PLAN.finance.expectedDiff`＝`{userId: {gained:[…], lost:[…]}}`，預設 `{}`；非空必須有使用者逐筆確認。比對規則同 §2.3：恰好相等才 PASS。
+- **切換前置條件（檢查器 `verify --finance-cutover` 先行檢查，不符 ⇒ 結束碼 3，不得切換）**：①無任何非 `finance`、非 superadmin 的使用者綁定含財務鍵的角色 ②無任何財務鍵扣項 ③所有 `role=finance` 與 superadmin 的 E1 含三鍵 ④掃描 A 類已全數改走新縫、B 類（範圍內者）亦然。
+- **影子模式（切換前先上線一段時間）**：新縫同時算「舊規則（只看基礎類別）」與「新規則」，**回傳舊規則**；兩者不同時寫一筆限速的稽核告警（每人每小時至多 1 筆，避免洗版）。影子期零不同才切換。切換＝把回傳改成新規則，不改程式（見回滾）。
+- 測試（純函式／小 fixture）：基礎類別 × 綁定 × 扣項窮舉，新縫與規格重算 `spec_finance(...)` 一致；切換前置條件各項違反 ⇒ 結束碼 3；影子模式回傳＝舊規則；superadmin 不可被扣（沿用 R1：設扣項 400，算法忽略）。突變：新縫改成計入原始勾選 ⇒ 紅；漏掉扣項 ⇒ 紅；影子回傳改成新規則 ⇒ 紅。
+
+**10.2.4 回滾層（D5 專屬）**
+| 層 | 動作 | 說明 |
+|---|---|---|
+| **F0 開關（秒級）** | `system_settings` 旗標 `finance_via_effective`：預設關（＝舊規則）、影子模式＝`shadow`、`on`＝新規則。旗標改回 `shadow`／關即還原，不需重新部署；改旗標寫稽核 | 還原的是「判斷來源」；已存在的扣項／綁定資料不動 |
+| **F1 資料盤點** | 回滾前 dry-run 列出：持財務鍵扣項者、非 `finance` 類別卻綁含財務鍵角色者。舊規則無法表示「只扣其中一鍵」，這些人回舊規則後會**復原為基礎類別決定的結果**（扣項被忽略＝多出權限）| 列給使用者逐人決定：改基礎類別或保留現狀；**不自動處理**（涉金額可視） |
+| **F2 程式回滾** | §4 的 L1／L2 | 同前 |
+- `duty_roles_export_effective.py` 現況對財務三鍵無寫回意義（第 42 班起惰性）；D5 之後它不處理財務鍵，回滾財務鍵走 F0／F1。
+
+**10.2.5 順序（第 45 班內）**
+1. 第 1 步：檢查器 v2、`catalog-check`、`scan-finance`、基準快照（含 §3.1a）。
+2. D4（§10.1，風險最低、純加法）。
+3. D5 影子模式上線 → 觀察期 → 零差異確認 → 使用者確認 B 類範圍與切換 → `on`。
+4. 其後才進第 2、3、4 步（自動綁定時 D1 的「僅 `role=finance` 自動綁」與 D5 前置條件①相容：自動綁只綁 `role=finance` 者）。
+- 這與使用者原順序 1→9 並存：D5 是在第 1 步之後插入的前置，第 2–9 步順序不變。⚠ 「觀察期」多久、是否能在同班內完成需主持／使用者定；若同班無法完成影子觀察，則 D5 切換（`on`）移至下一班，影子模式仍隨本班上線。
+
 
 ## 9. 已知未驗證
 - 正式機快照內容（12 人／0 綁定）未直接讀取；§3.2 預期值待正式機視窗拍快照時核對。
 - 「沒有消費者依賴清單順序」（§1）是讀碼推論，列在 §6 測試。
+- 金額相關判斷點清單（§10.2.1）為讀碼抽樣、非窮盡，窮盡版由 `scan-finance` 產出。
+- D5 影子觀察期長度與是否同班切換未定（§10.2.5）。
 - 本稿未跑任何測試、未動程式、未碰 platform。
