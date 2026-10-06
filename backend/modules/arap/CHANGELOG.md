@@ -3,6 +3,9 @@
 ## (next) — 2026-10-06（wip/t44-fin-fixes）：匯款差額退回後重建行事曆「付款待辦」
 - `api/cashier.py`：`decide_remit_review` 退回後，若提供者回傳 `payableEvent`，commit 後背景呼叫 L1 `push_event_upsert_for_module` 重建（該鍵不外洩到回應）；事件種類關閉時不碰 Google。核可不重建。
 
+## (next) — 2026-10-06（wip/t44-settle-terms）：出納「請款付款」字樣改為「支出申請付款」（只改畫面文字）
+- `cashier.py`：404 提示「找不到申請來源」、稽核與通知標籤「支出申請付款」、匯出分頁「支出申請付款明細」。客戶「請款單」不動。
+
 ## 1.0.38 — 2026-10-05（wip/t42-finance-role）：財務角色
 - 出納頁與開票／請款憑證的財務動作改由「財務」角色決定：`_require_view_access`／`_can_pay`／差額核可（`canDecide`）／銀行對帳／完整銀行帳號，以及開票申請憑據、請款單的 `_require_admin`（建立／送審／作廢／匯出）一律 `has_finance_access`／`has_cashier_access`（僅 `finance` 角色與 superadmin；admin 直通拿掉）。付款／匯款差額通知改寄財務角色（`notify_module_activity(audience="finance")`）。前端 `cashier.js`／`reports.js` 同步。
 

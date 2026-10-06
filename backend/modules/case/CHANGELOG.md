@@ -10,6 +10,11 @@
 - `payables._RemitReviews.decide`：退回（reject）時回傳 `payableEvent`（事件內容，不含金額）給出納端在 commit 後重建行事曆「付款待辦」（無預定付款日則不建）。
 - 測試：`modules/case/tests/test_finance_fixes_2026_10_06.py`（含突變檢查）；`test_payable_planned_pay_date_2026_10_05.py` 的寄信攔截改回傳寄送把手。
 
+## (next) — 2026-10-06（wip/t44-settle-terms）：「請款」字樣改為「支出申請」系列（只改畫面文字與提示，不改資料、欄位、API）
+- 「新增支出申請」頁：「② 申請內容」、「我的申請」、「還沒有申請」、送出後提示；`expense-types.html` 說明「申請單的樣子」。
+- 錯誤／提示訊息：`payables.py` 「這筆申請…」、`case_extra_expenses.py` 「這筆申請還沒核准」「申請人登錄…」。
+- 客戶「請款單」（M05 對客戶要款）不動；承攬商／採購單／傳票等其他「請款」用語不在本次範圍。
+
 ## 1.0.148 — 2026-10-05（wip/t42-fix-caserecord）：財務角色可在任何案件登錄／修改收款〔train_number：1.0.147 → 1.0.148〕
 - `PATCH /api/quotations/{no}/case-record`：財務角色（與 superadmin）不是案件成員時，舊整包格式只在「除款項外與資料庫完全相同」時通過（款項照存），否則 403（不靜默丟掉）；分段格式仍只放行 `payment` 分段；業務（非成員）仍 403。`PATCH …/payment/{idx}` 本來就沒有擁有者限制。測試：`test_finance_caserecord_foreign_case_2026_10_05.py`。
 

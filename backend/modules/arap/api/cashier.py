@@ -80,7 +80,7 @@ def _can_pay(user: dict) -> bool:
 
 @router.get("/api/cashier/pending-payables")
 def get_pending_payables(authorization: str = Header(None)):
-    """已核准、未登錄付款日的請款（各提供者合併，依核准日）。既有 payable-queue（IP-14）與 bonus-queue（IP-8）不動。"""
+    """已核准、未登錄付款日的支出申請（各提供者合併，依核准日）。既有 payable-queue（IP-14）與 bonus-queue（IP-8）不動。"""
     user = _require_user(authorization)
     _require_view_access(user)
     provs = registry.providers("payables.pending")
@@ -107,7 +107,7 @@ def get_payee_bank(source: str, key: str, authorization: str = Header(None)):
         raise HTTPException(403, "只有管理員或出納可以查看收款人銀行資料")
     p = registry.providers("payables.pending").get(source)
     if p is None or not hasattr(p, "payee_info"):
-        raise HTTPException(404, "找不到請款來源「%s」（或該來源不提供收款人資料）" % source)
+        raise HTTPException(404, "找不到申請來源「%s」（或該來源不提供收款人資料）" % source)
     conn = get_db()
     try:
         try:
@@ -144,7 +144,7 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
         raise HTTPException(403, "只有管理員或出納可以登錄付款")
     p = registry.providers("payables.pending").get(source)
     if p is None:
-        raise HTTPException(404, "找不到請款來源「%s」（對應的模組未安裝）" % source)
+        raise HTTPException(404, "找不到申請來源「%s」（對應的模組未安裝）" % source)
     paid = str((body or {}).get("paidDate") or "").strip()
     if not paid:
         raise HTTPException(400, "請填寫付款日（paidDate，YYYY-MM-DD）")             # W1：必填，不再默認今天
@@ -173,11 +173,11 @@ def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), au
     finally:
         conn.close()
     _audit(_tok(authorization), "cashier.payable_paid", source, key,
-           "出納登錄請款付款：%s #%s（%s）付款日 %s 實付 %s 手續費 %s 付款方式 %s%s" % (
+           "出納登錄支出申請付款：%s #%s（%s）付款日 %s 實付 %s 手續費 %s 付款方式 %s%s" % (
                source, key, res.get("quoteNo") or "", paid, res.get("actual"), res.get("fee"), (body or {}).get("payMethod") or "預設",
                "（差額 %+g，待審核）" % res["diff"] if res.get("remitReview") else ""))
     if res.get("remitReview"):
-        notify_module_activity("請款付款", "匯款差額待審核", user.get("display_name") or user["username"],
+        notify_module_activity("支出申請付款", "匯款差額待審核", user.get("display_name") or user["username"],
                                "%s #%s（%s）" % (source, key, res.get("quoteNo") or ""), "cashier.html",
                                detail="實付與應付不符（差額 %+g），請財務到出納頁核可或退回。" % res["diff"], audience="finance")
     # 行事曆「支出付款」（2026-09-30，預設關；開關在 L1 判斷）：以付款日建立。勞報單付款走自己的端點，不在此列
@@ -527,7 +527,7 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
         ws1.cell(row=r, column=col).number_format = '#,##0.##'
 
     if data["payreqPaid"]:                                          # W1：請款付款（案件額外支出）明細
-        wsp = wb.create_sheet("請款付款明細")
+        wsp = wb.create_sheet("支出申請付款明細")
         wsp.sheet_view.showGridLines = False
         for i, w in enumerate([10, 14, 24, 12, 12, 10, 12, 10], 1):
             wsp.column_dimensions[chr(64 + i)].width = w

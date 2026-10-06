@@ -90,7 +90,7 @@
         </div>
 
         <div class="pr-card" x-show="picked && !typeCode" id="pr-form">
-          <h3 x-text="'② 請款內容　' + (picked ? picked.quoteNo + '　' + (picked.customerName || '') : '')"></h3>
+          <h3 x-text="'② 申請內容　' + (picked ? picked.quoteNo + '　' + (picked.customerName || '') : '')"></h3>
           <div class="pr-grid">
             <div class="pr-f">
               <label for="pr-category">類別</label>
@@ -196,10 +196,10 @@
         <div class="pr-ok" id="pr-result" x-show="result" :data-status="result ? result.status : ''" x-text="result ? result.text : ''"></div>
       </section>
 
-      <!-- 我的請款 -->
+      <!-- 我的申請 -->
       <section x-show="tab === 'mine'" id="pr-mine" :data-loaded="mineLoaded ? '1' : '0'" :data-busy="busy ? '1' : '0'">
         <div class="pr-card">
-          <div class="pr-hint" x-show="mineLoaded && !mine.length">還沒有請款</div>
+          <div class="pr-hint" x-show="mineLoaded && !mine.length">還沒有申請</div>
           <table class="pr-table" x-show="mine.length">
             <thead><tr><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>付款日</th><th>單據</th><th></th></tr></thead>
             <tbody>
@@ -362,7 +362,7 @@
               if (!rs.ok) throw new Error('已存成草稿，但送審失敗：' + (ds.detail || ('HTTP ' + rs.status)))
               status = ds.status || '待審核'
             }
-            this.result = { status: status, id: id, text: (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + no + ' #' + id + '，可以在「我的請款」看進度' }
+            this.result = { status: status, id: id, text: (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + no + ' #' + id + '，可以在「我的申請」看進度' }
             this.form = blank()
             ;['pr-files', 'pr-invoice-files'].forEach(function (x) { var el = document.getElementById(x); if (el) el.value = '' })
           } catch (e) { this.err = e.message }
@@ -440,7 +440,7 @@
               if (!rs.ok) throw new Error('已存成草稿（' + (d.docCode || '') + '），但送審失敗：' + (ds.detail || ('HTTP ' + rs.status)))
               status = ds.status || '待審核'
             }
-            var text = (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + (d.docCode || (no + ' #' + id)) + '，可以在「我的請款」看進度'
+            var text = (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + (d.docCode || (no + ' #' + id)) + '，可以在「我的申請」看進度'
             this.form = blank(); this._draft = null
             ;['pr-t-files', 'pr-t-invoice-files'].forEach(function (x) { var el = document.getElementById(x); if (el) el.value = '' })
             await this.selectType()                                              // 重新渲染空白表單（它會清掉結果訊息 ⇒ 先渲染再放結果）

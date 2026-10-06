@@ -51,7 +51,7 @@
       <section class="ba-card" data-testid="ba-mine">
         <h3 class="ba-sec">我的收款帳號</h3>
         <div x-show="!loaded" class="ba-note">載入中…</div>
-        <div x-show="loaded && mine.status === 'none'" class="ba-note" data-testid="ba-none">尚未登錄收款帳號（請款或報銷時會提示你先登錄）。</div>
+        <div x-show="loaded && mine.status === 'none'" class="ba-note" data-testid="ba-none">尚未登錄收款帳號（支出申請或報銷時會提示你先登錄）。</div>
         <div x-show="loaded && mine.status === 'ok'" style="margin-bottom:10px" data-testid="ba-current">
           目前：<b x-text="mine.bankName || mine.bankCode"></b>　<span x-text="mine.accountName"></span>
           <span class="ba-num" x-text="showMine ? mine.accountNumber : mine.accountNumberMasked" data-testid="ba-current-number"></span>
