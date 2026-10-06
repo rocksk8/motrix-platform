@@ -193,8 +193,6 @@ duty_roles_equivalence.py diff     --a S1.json --b S2.json [--plan PLAN.json]   
 已裁示、本稿**不重開**：N2（高敏感清單不含 `reports`）、Q1（僅 superadmin 管理）、Q5（允許負向例外）、Q8（不規範 superadmin 使用）。
 | 附 | `duty_roles_rollback.py`／`export_effective.py` 的 `--apply` 在正式機執行是否一律需使用者同意 | 會改 `users.modules`／綁定；第 43 班步驟檔已寫「需使用者同意」 | 沿用；dry-run 不需 |
 
-已裁示、本稿**不重開**：N2（高敏感清單不含 `reports`）、Q1（僅 superadmin 管理）、Q5（允許負向例外）、Q8（不規範 superadmin 使用）。
-
 ---
 
 ## 9. 已知未驗證
