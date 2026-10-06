@@ -4123,6 +4123,7 @@
             <th style="text-align:left;padding:4px 6px;font-weight:500;width:100px">廠牌 / 型號</th>
             <th style="text-align:right;padding:4px 6px;font-weight:500;width:55px">數量</th>
             <th style="text-align:left;padding:4px 4px;font-weight:500;width:50px">單位</th>
+            <th style="text-align:right;padding:4px 6px;font-weight:500;width:96px" title="這個報價品項已核准出貨的累計數量／報價數量（所有出貨單合計，含本單以外）；小字＝待審核、簽核中占用；「—」＝沒有可歸屬的紀錄（舊單、手動列、庫存出貨）">已累計出貨</th>
             <th style="text-align:left;padding:4px 6px;font-weight:500;width:100px">備註</th>
             <th style="text-align:left;padding:4px 6px;font-weight:500;width:100px">庫存序號</th>
             <th style="width:28px"></th>
@@ -4157,6 +4158,12 @@
                     <option>組</option><option>米</option><option>捲</option><option>箱</option>
                     <option>包</option><option>批</option><option>項</option>
                   </select>
+                </td>
+              </template>
+              <template x-if="it.type!=='header'">
+                <td style="padding:4px 6px;text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:11px" :data-testid="'ship-cum-' + ii">
+                  <span x-text="shipCumText(it)"></span>
+                  <span x-show="shipCum(it) && shipCum(it).reserved > 0" style="display:block;font-size:10px;color:var(--text-dim)" x-text="shipCum(it) ? '占用 ' + shipCum(it).reserved : ''"></span>
                 </td>
               </template>
               <td style="padding:4px 6px">

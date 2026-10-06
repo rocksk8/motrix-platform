@@ -23,6 +23,7 @@ window.CM_PARTS.push(() => ({
     _partsOptions: null,
     // 34-S2：從材料申請帶入（出貨單連動；契約 SHIPPING-MATERIAL-LINK-CONTRACT-S1.md）
     msh: { open: false, loading: false, items: [], pick: {}, qty: {}, err: '' },
+    itemShipped: { items: {}, materialToItem: {} },
     serialPicker: { show: false, itemIdx: null, partNo: '', options: [], selected: [], loading: false, error: '' },
 
     // ── 出貨單 ────────────────────────────────────────────────────────────────
@@ -34,6 +35,7 @@ window.CM_PARTS.push(() => ({
       this.shippingNotes = []
       this.snSortPref = await loadListPref(this.session.token, `sn:${quoteNo}`)
       if (!live()) return
+      this.loadItemShipped(quoteNo, live)             // 第 43 班：「已累計出貨」欄（不阻塞；拿不到 ⇒ 顯示「—」）
       try {
         const r = pre ? this._preResp(pre) : await fetch(`/api/shipping-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -48,6 +50,25 @@ window.CM_PARTS.push(() => ({
       this.shippingNotesLoading = false
       this.$nextTick(() => this._initSubListSortable('sn'))
     },
+
+    async loadItemShipped(quoteNo, live, excludeNote) {
+      this.itemShipped = { items: {}, materialToItem: {} }
+      try {
+        // excludeNote：編輯中的那張單不計入（否則待審核／簽核中的單會把自己的占用算進「其他出貨單」）
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/item-shipped` + (excludeNote ? `?exclude_note=${encodeURIComponent(excludeNote)}` : ''), { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!live()) return
+        if (r.ok) { const d = await r.json(); this.itemShipped = { items: d.items || {}, materialToItem: d.materialToItem || {} } }
+      } catch {}
+    },
+    // 這一列對應的報價品項累計出貨：{shipped, ordered, reserved}；沒有對應（舊單、手動列、庫存列）⇒ null（畫面「—」）
+    shipCum(it) {
+      if (!it || it.type === 'header') return null
+      const m = (this.itemShipped && this.itemShipped.materialToItem) || {}
+      const qid = it.quoteItemId || (it.materialLink && m[String(it.materialLink.materialItemId)]) || ''
+      const e = qid && this.itemShipped && this.itemShipped.items ? this.itemShipped.items[String(qid)] : null
+      return e && e.attributed ? e : null
+    },
+    shipCumText(it) { const e = this.shipCum(it); const f = n => String(+(Number(n) || 0).toFixed(3)); return e ? f(e.shipped) + ' / ' + f(e.ordered) : '—' },
 
     _blankShippingForm() {
       const today = MotrixDate.today()
@@ -101,6 +122,7 @@ window.CM_PARTS.push(() => ({
       this.showShippingContactPicker = false
       this._loadShippingContactOptions()
       this.msh = { open: false, loading: false, items: [], pick: {}, qty: {}, err: '' }
+      this.loadItemShipped(this.selected?.quote_no, () => true)                     // 新單：不排除任何單（編輯別張單後可能留著排除的結果）
       this.showShippingModal = true
     },
 
@@ -123,6 +145,7 @@ window.CM_PARTS.push(() => ({
         this.shippingMsg = ''
         this.showShippingContactPicker = false
         this._loadShippingContactOptions()
+        this.loadItemShipped(d.quoteNo || this.selected?.quote_no, () => this.editShippingNoteNo === d.noteNo, d.noteNo)     // 第 43 班：已累計出貨不含這張單自己
         this.msh = { open: false, loading: false, items: [], pick: {}, qty: {}, err: '' }
       this.showShippingModal = true
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
@@ -176,7 +199,9 @@ window.CM_PARTS.push(() => ({
           this.shippingForm.items.push({
             id: Date.now() + Math.random(),
             description: it.description || '', brand: it.brand || '',
-            qty: it.qty || 1, unit: it.unit || '台', notes: ''
+            qty: it.qty || 1, unit: it.unit || '台', notes: '',
+            // 第 43 班：記住這列對應哪個報價品項（加性欄位；舊單沒有 ⇒ 已出貨數量顯示「—」）。有 id 才記
+            ...(it.id != null && String(it.id).trim() ? { quoteItemId: String(it.id).trim() } : {})
           })
         }
       }

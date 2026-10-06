@@ -1,6 +1,10 @@
 # 採購・庫存・出貨 更新紀錄
 
 
+## (next) — 2026-10-06（wip/t43-shipped-qty）：報價品項「已出貨數量」（提供者 shipping.quote_item_shipped）；支援排除單號
+- 出貨單「從報價單匯入」的列加性欄位 `quoteItemId`（前端 `case-management-shipping.js`；舊單沒有 ⇒ 不歸屬）。新提供者 `shipping.quote_item_shipped`（IP-SH4，`material_link.quote_item_shipped`）：依報價品項加總已核准（shipped）與待審核／簽核中（reserved）；不計標題列、帶 `materialLink` 的列、庫存料號／序號列、非正數；草稿與已退回不計。**不改出貨單的送審、核准、庫存扣補**——只多一個唯讀提供者。
+- 測試：`tests/test_shipped_qty_2026_10_06.py`。
+
 ## 1.0.20 — 2026-10-05（wip/t42-finance-role）：財務角色
 - 進貨批次「標記已付款」改為出納動作：僅「財務」角色與 superadmin（建立／修改批次仍是一般管理）。
 

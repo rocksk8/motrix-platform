@@ -445,7 +445,7 @@
                 <th style="width:28px">#</th>
                 <th style="min-width:200px">品名 / 規格說明</th>
                 <th style="min-width:100px">廠牌 / 型號</th>
-                <th colspan="2" style="text-align:center;background:#FAFAF9;border-left:2px solid #E5E7EB">
+                <th colspan="3" style="text-align:center;background:#FAFAF9;border-left:2px solid #E5E7EB">
                   <span style="font-size:10px">原始報價</span>
                 </th>
                 <th colspan="3" style="text-align:center;background:#FFFBEB;border-left:2px solid #FDE68A">
@@ -459,6 +459,7 @@
                 <th></th>
                 <th></th>
                 <th class="col-orig" style="border-left:2px solid #E5E7EB;width:55px">數量</th>
+                <th class="col-orig" style="width:84px" title="已核准出貨單的累計出貨數量／報價數量；小字＝待審核、簽核中的出貨單占用量；「—」＝沒有可歸屬的出貨紀錄（舊單、庫存出貨）">已出貨/數量</th>
                 <th class="col-orig" style="width:90px">報價金額</th>
                 <th class="col-actual" style="border-left:2px solid #FDE68A;width:55px">實際數量</th>
                 <th class="col-actual" style="width:104px">實際單位成本</th>
@@ -480,6 +481,13 @@
                   <td class="col-orig" style="border-left:2px solid #E5E7EB;text-align:right;font-family:LINE Seed TW_OTF, sans-serif">
                     <span x-text="item.origQty"></span>
                     <span style="font-size:10px;color:var(--text-dim)" x-text="item.origUnit"></span>
+                  </td>
+                  <td class="col-orig" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif" :data-testid="'stl-shipped-' + item.id">
+                    <template x-if="shippedOf(item.id)">
+                      <span><span x-text="fmtQty(shippedOf(item.id).shipped) + ' / ' + fmtQty(item.origQty)"></span>
+                        <span x-show="shippedOf(item.id).reserved > 0" style="display:block;font-size:10px;color:var(--text-dim)" x-text="'占用 ' + fmtQty(shippedOf(item.id).reserved)"></span></span>
+                    </template>
+                    <span x-show="!shippedOf(item.id)" style="color:var(--text-dim)">—</span>
                   </td>
                   <td class="col-orig" style="text-align:right;font-family:LINE Seed TW_OTF, sans-serif">
                     <span x-text="'NT$ ' + fmt(item.origAmount)"></span>
@@ -571,7 +579,7 @@
             </tbody>
             <tfoot>
               <tr style="background:#F8F7F5;font-weight:600">
-                <td colspan="4" style="border-top:1.5px solid var(--border-light);padding:10px 10px;text-align:right;font-size:11px;color:var(--text-secondary)">原始報價品項小計</td>
+                <td colspan="5" style="border-top:1.5px solid var(--border-light);padding:10px 10px;text-align:right;font-size:11px;color:var(--text-secondary)">原始報價品項小計</td>
                 <td style="border-top:1.5px solid var(--border-light);text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px" x-text="'NT$ ' + fmt(summary.origItemTotal)"></td>
                 <td colspan="2" style="border-top:1.5px solid var(--border-light);text-align:right;font-size:11px;color:var(--text-secondary)">實際成本小計</td>
                 <td style="border-top:1.5px solid var(--border-light);text-align:right;font-family:LINE Seed TW_OTF, sans-serif;font-size:12px;color:#92400E" x-text="'NT$ ' + fmt(summary.itemActualTotal)"></td>
@@ -1127,6 +1135,7 @@ function settlementPage() {
     _actualsOk: false,
     itemActuals: {},             // {品項 id: actuals.items[]}
     offsets: [],                 // 沖銷對應 [{kind: material|extra, ref, itemId}]，隨精算存檔（settlement.offsets）
+    itemShipped: {},             // 第 43 班：{報價品項 id: {ordered, shipped, reserved, attributed}}（GET …/item-shipped；只有數量；拿不到＝空 ⇒ 顯示「—」）
     itemPo: {},                  // 32-S5：{報價品項 id: 已認列的採購單連結金額}（來源 GET …/purchase-items 的 actualAmount；拿不到＝空）
     // W1：匯款手續費（公司自付、已匯款者）：額外支出請款的手續費＋承攬商匯款單的手續費；併入「額外支出」成本（十二格鍵名不動）
     remitFeeTotal: 0,
@@ -1264,6 +1273,7 @@ function settlementPage() {
         // 記錄原始 tot 資料用於比較
         this._origTot = d.tot || {}
         await this.loadDispatches()
+        this.loadItemShipped()                // 第 43 班：已出貨數量（不阻塞；失敗只是顯示「—」）
         await this.loadExtraExpenseTotals()   // 成本彙總要用到，必須在 calcSummary 之前（含 32-S5 的 itemPo）
         this.applyAdoptDefaults()
         if (this.settlement.status !== 'finalized') this.settlement.items.forEach(i => { if (i.adoptSystem && this.hasPurchase(i)) this.calcItemCost(i) })   // 採用採購金額的品項跟著最新值（沒有採購的不動，歷史案件逐位不變）
@@ -1283,6 +1293,16 @@ function settlementPage() {
 
     // 額外支出總額（含送審中）與其中尚未核准的金額，來源是 case_extra_expenses 表。
     // 這一頁只讀不寫——編輯入口已移到案件管理的「額外支出」分頁。
+    async loadItemShipped() {
+      this.itemShipped = {}
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(this.quoteNo)}/item-shipped`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) this.itemShipped = (await r.json()).items || {}
+      } catch {}
+    },
+    shippedOf(id) { const e = this.itemShipped[String(id)]; return e && e.attributed ? e : null },
+    fmtQty(n) { return String(+(Number(n) || 0).toFixed(3)) },
+
     async loadItemPo() {
       this.itemPo = {}
       this._itemPoOk = false

@@ -95,6 +95,33 @@ def material_shipped_qty(conn, quote_no, item_id) -> float:
     return float(e["reserved"] + e["shipped"]) if e else 0.0
 
 
+def quote_item_shipped(conn, quote_no, exclude_note_no=None) -> dict:
+    """提供者 `shipping.quote_item_shipped`（IP-SH4）：**從報價單帶入的出貨列**（列上有 `quoteItemId`）依報價品項加總。
+    `{quoteItemId: {"reserved": 數量, "shipped": 數量, "notes": [單號…]}}`；`reserved`＝待審核／簽核中、`shipped`＝已核准；草稿、已退回不計。
+    不計入：標題列、帶了 `materialLink` 的列（材料申請出貨，已由 `material_shipped` 計；兩邊不重複算）、帶庫存序號／料號的庫存出貨列（使用者裁示：庫存列不歸屬）、
+    數量不是正數的列。沒有 `quoteItemId` 的舊單／手動列一律不歸屬（呼叫端顯示「—」）。只讀、不 commit。"""
+    out = {}
+    rows = conn.execute("SELECT note_no, status, items_json FROM shipping_notes WHERE quote_no=? AND status IN (?,?,?)",
+                        (quote_no, *RESERVED_STATUSES, *SHIPPED_STATUSES)).fetchall()
+    for r in rows:
+        if exclude_note_no and r["note_no"] == exclude_note_no:
+            continue
+        for it in _items(r["items_json"]):
+            qid = it.get("quoteItemId")
+            if not isinstance(qid, str) or not qid.strip() or it.get("type") == "header" or it.get("materialLink") is not None:
+                continue
+            if (it.get("part_no") or "").strip() or it.get("serials"):
+                continue
+            q = _num(it.get("qty"))
+            if q is None or q <= 0:
+                continue
+            e = out.setdefault(qid.strip(), {"reserved": 0.0, "shipped": 0.0, "notes": []})
+            e["shipped" if r["status"] in SHIPPED_STATUSES else "reserved"] += q
+            if r["note_no"] not in e["notes"]:
+                e["notes"].append(r["note_no"])
+    return out
+
+
 def _shippable(conn, quote_no):
     fn = registry.single_provider("material.shippable")
     if fn is None:
