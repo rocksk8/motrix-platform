@@ -35,7 +35,6 @@ window.CM_PARTS.push(() => ({
       this.shippingNotes = []
       this.snSortPref = await loadListPref(this.session.token, `sn:${quoteNo}`)
       if (!live()) return
-      this.loadItemShipped(quoteNo, live)             // 第 43 班：「已累計出貨」欄（不阻塞；拿不到 ⇒ 顯示「—」）
       try {
         const r = pre ? this._preResp(pre) : await fetch(`/api/shipping-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
