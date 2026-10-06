@@ -17,7 +17,8 @@ from tests._requires import requires_module  # noqa: E402
 pytestmark = [pytest.mark.e2e, requires_module("case", "費用單據端點"), requires_module("arap", "出納頁")]
 
 SENT = "/api/quotations/-/extra-expenses"
-PNG = b"\x89PNG\r\n\x1a\n" + b"x" * 40
+import base64
+PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==")   # 真的 1x1 PNG（瀏覽器要能解碼才會顯示）
 
 
 def _x(sql, args=()):
@@ -42,7 +43,13 @@ def test_cashier_sees_attachment_list_and_preview_and_inline_error(live_server, 
                                                        "data": {"applicant": "pf_form"}, "payeeType": "employee", "payeeName": "申請人"})
     assert r.status == 201, r.text()
     eid = r.json()["id"]
-    folder = "case_extra_expense/-_%s" % eid
+    import db
+    c = db.get_db()
+    try:
+        qn = c.execute("SELECT quote_no FROM case_extra_expenses WHERE id=?", (eid,)).fetchone()["quote_no"] or ""
+    finally:
+        c.close()
+    folder = "case_extra_expense/%s_%s" % (qn, eid)                  # 上傳資料夾＝<案件>_<id>（無案件的單據 quote_no 是空字串）
     files = [
         {"id": "f1", "filename": "inv.png", "path": folder + "/inv.png", "size": len(PNG), "mime": "image/png", "uploadedBy": "pf_form",
          "uploadedAt": "2026-10-06T09:00:00", "kind": "invoice"},
@@ -70,7 +77,11 @@ def test_cashier_sees_attachment_list_and_preview_and_inline_error(live_server, 
 
     # 預覽按鈕：圖片 ⇒ 預覽視窗出現圖片
     page.locator('[data-testid="cashier-payreq-file-case-%d-f1"]' % eid).click()
-    page.locator('[data-testid="file-preview-img"]').wait_for(state="visible", timeout=15000)
+    try:
+        page.locator('[data-testid="file-preview-img"]').wait_for(state="visible", timeout=15000)
+    except Exception:
+        ov = page.locator('[data-testid="file-preview"]')
+        raise AssertionError("預覽沒出現圖片；視窗內容：%r" % (ov.inner_text() if ov.count() else "（沒有預覽視窗）"))
     page.locator('[data-testid="file-preview-close"]').click()
 
     # 檔案不存在的 HEIC ⇒ 行內錯誤，不能彈對話框
