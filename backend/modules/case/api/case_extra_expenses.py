@@ -1052,6 +1052,9 @@ def _guard_files_mutation(row, user: dict, kind=None):
     狀態規則同 `_guard_files_editable`（核准後只放行發票補上傳，由呼叫端另查出納／填寫人）。"""
     _guard_files_editable(row, kind)
     if row["status"] in FILES_MUTABLE_STATUSES and not _can_modify(row, user):
+        # 使用者裁示：財務角色在 待審核／簽核中 可補上傳「發票」（只限上傳、只限發票類）；其他附件對財務仍唯讀、刪除一律不可
+        if kind == "invoice" and row["status"] in ("待審核", "簽核中") and has_finance_access(user):
+            return
         raise HTTPException(403, "只有申請人本人或管理員可以新增或刪除附件（簽核人僅能檢視）")
 
 

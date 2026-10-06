@@ -152,3 +152,37 @@ def test_heic_is_not_allowed_for_other_document_folders():
     from helpers import uploads as U
     assert {".heic", ".heif"} <= U._EXTRA_EXTS_BY_SUBFOLDER["case_extra_expense"]
     assert not ({".heic", ".heif"} & U._EXTRA_EXTS_BY_SUBFOLDER["voucher_attachments"])
+
+
+@pytest.mark.parametrize("status", ["待審核", "簽核中"])
+def test_finance_may_add_invoice_only_while_pending(world, make_user, status):
+    client, ho, ha, hs, mk = world
+    _, fid_user, hf = _login(client, make_user, "xap_fin", "finance")
+    _case_add_user(fid_user)
+    eid = mk(status)
+    assert _up(client, hf, eid, "inv.pdf", kind="invoice").status_code == 201, "財務可補發票"
+    r = _up(client, hf, eid, "other.pdf", kind="other")
+    assert r.status_code == 403, "其他附件對財務仍唯讀"
+    fid = _up(client, ho, eid, "mine.pdf").json()["files"][0]["id"]
+    assert _del(client, hf, eid, fid).status_code == 403, "財務不可刪附件"
+    assert _up(client, ha, eid, "inv2.pdf", kind="invoice").status_code == 403, "非財務非申請人仍 403"
+
+
+@pytest.mark.parametrize("status", ["草稿", "已駁回"])
+def test_finance_has_no_extra_right_in_draft_or_returned(world, make_user, status):
+    client, ho, ha, hs, mk = world
+    _, fid_user, hf = _login(client, make_user, "xap_fin2", "finance")
+    _case_add_user(fid_user)
+    eid = mk(status)
+    assert _up(client, hf, eid, "inv.pdf", kind="invoice").status_code == 403
+
+
+def _case_add_user(uid):
+    import db
+    conn = db.get_db()
+    try:
+        ids = json.loads(conn.execute("SELECT assigned_user_ids FROM quotations WHERE quote_no=?", (NO,)).fetchone()["assigned_user_ids"] or "[]")
+        conn.execute("UPDATE quotations SET assigned_user_ids=? WHERE quote_no=?", (json.dumps(ids + [uid]), NO))
+        conn.commit()
+    finally:
+        conn.close()
