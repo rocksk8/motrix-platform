@@ -186,6 +186,32 @@ def test_endpoint_requires_login_row_access_and_a_shipping_module(sq, make_user)
     assert client.get(url, headers=nomod).status_code == 403, "沒有 case_manage／quotation／financial_view ⇒ 403"
 
 
+def test_a_finance_only_user_passes_the_module_check(sq, make_user):
+    """精算頁的使用者可能只有財務檢視（沒有 case_manage／quotation）：模組檢查要放行。突變對照：把 financial_view 從檢查拿掉 ⇒ 403 ⇒ 紅。"""
+    client, h = sq
+    _note(client, h, [Qi(5)], status="已核准")
+    fin = _login_user(client, make_user, "sq_fin", role="finance", modules=["dashboard"])
+    import db
+    c = db.get_db()                                                                      # 讓這個財務帳號看得到這個案件（案件成員）；本題只驗模組檢查，不驗案件列權限
+    try:
+        uid = c.execute("SELECT id FROM users WHERE username='sq_fin'").fetchone()["id"]
+        c.execute("UPDATE quotations SET sales_person='sq_fin', sales_person_id=? WHERE quote_no=?", (uid, Q))
+        c.commit()
+    finally:
+        c.close()
+    r = client.get("/api/quotations/%s/item-shipped" % Q, headers=fin)
+    assert r.status_code == 200, (r.status_code, r.text[:200])
+    assert r.json()["items"]["q2"]["shipped"] == 5.0
+
+
+def test_the_same_note_through_both_sources_is_listed_once(sq):
+    """同一張單既有材料申請連結列、又有報價帶入列（同一品項）：單號只出現一次、數量兩邊相加。突變對照：拿掉 item_shipped.add() 的單號去重 ⇒ 紅。"""
+    client, h = sq
+    no = _note(client, h, [{**L(2), "qty": 2}, Qi(3, qid="q1")], status="已核准")
+    r = _by_item()["q1"]
+    assert r["shipped"] == 5.0 and r["notes"] == [no], r
+
+
 def test_exclude_note_drops_the_edited_notes_own_reservation(sq):
     """編輯中的單（待審核）不把自己的占用算進「其他出貨單」。突變對照：忽略 exclude 參數 ⇒ 紅。"""
     client, h = sq
