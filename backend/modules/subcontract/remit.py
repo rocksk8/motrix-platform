@@ -134,7 +134,7 @@ class _RemitReviews:
         # W1 稽核 M4：標記匯款的人不能自己核可／退回自己的差額（paid_by 存的是顯示名稱，帳號與顯示名稱都比）
         if row["remit_review"] == REVIEW_PENDING and (row["paid_by"] or "") in (
                 user.get("username") or "\0", user.get("display_name") or "\0"):
-            raise RemitForbidden("這筆匯款是您自己標記的，差額需由其他管理員審核")
+            raise RemitForbidden("這筆匯款是您自己標記的，差額需由其他財務角色成員或最高管理者審核")
         now = datetime.now().isoformat()
         who = user.get("display_name") or user.get("username") or ""
         log = json.loads(row["paid_log"] or "[]")

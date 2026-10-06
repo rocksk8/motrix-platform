@@ -2829,7 +2829,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
                 _b = {k: v for k, v in body.case_record.items() if k not in _skip}
                 if _a != _b:
                     conn.close()
-                    raise HTTPException(403, "只有這個案件的成員（業務、協作者、案件角色、階段負責人）或管理員可以修改")
+                    raise HTTPException(403, "您不是這個案件的成員，只能修改款項（收款）；這份整包資料有款項以外的欄位與目前資料不同，請重新載入頁面後只改款項再存")
             elif not cashier_payment_only:
                 conn.close()
                 raise HTTPException(403, "只有這個案件的成員（業務、協作者、案件角色、階段負責人）或管理員可以修改")

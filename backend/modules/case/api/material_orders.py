@@ -115,7 +115,10 @@ def update_material_orders(quote_no: str,
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
 
         # 2. 擁有者檢查：非 admin+ 不能碰別的業務的案件（quote_no 可列舉）
-        require_case_money(user, q, quote_no)
+        require_case_money(user, q, quote_no)               # 財務角色可「看」任何案件（GET／匯款／發票日維持）；編輯清單另在下面收窄
+        if user["role"] == "finance" and not row_access.visible("case", user, q):
+            # （使用者裁示 a）：財務角色對非自己負責（非業務／協作者）案件的一般叫料清單只能看、不能改；付款相關欄位走匯款申請／出納端點，不受影響。superadmin 不受限。
+            raise HTTPException(403, "財務角色只能檢視非自己負責案件的材料申請清單，不能編輯；付款請走匯款申請與出納")
 
         data = json.loads(q["data_json"] or "{}")
 
