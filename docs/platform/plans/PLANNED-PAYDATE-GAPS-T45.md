@@ -16,7 +16,7 @@
 | 6 | 提醒信（前 3 天＋當天）目前寫死只掃 `case_extra_expenses`。建議**提醒與行事曆改成來源無關**：掃 IP-100 `pending()`（已含 `plannedPayDate`）＋ IP-14，不再各模組各寫一套。 |
 | 7 | 站內通知：目前零。44 班鈴鐺（`wip/t44-inapp-bell`，`_notify(..., link)`）合回後可直接用；建議提醒信同步寫財務站內通知、請款人收到「財務排定付款日」通知。 |
 | 8 | e2e：預定付款日**沒有任何瀏覽器端對端**（只有單元／API 守門 `test_payable_planned_pay_date_2026_10_05.py`）；第 8 節列補件。 |
-| 9 | 與 c0（勞報單）共用同一模型：同欄名 `planned_pay_date`、同鍵 `<來源>:<key>`、同出納端點。勞報單的 Q7（是否進行事曆）與本文 Q3 **合併成一題**問使用者。 |
+| 9 | 與 c0（勞報單）共用同一模型：同欄名 `planned_pay_date`、同鍵 `<來源>:<key>`、同出納端點。勞報單**不進行事曆**（使用者已裁示）；本文 Q3 只問承攬商、叫料。 |
 
 ## 1. 現況覆蓋矩陣（✅ 有 ／ ❌ 沒有 ／ ➖ 不適用）
 
@@ -108,7 +108,8 @@
 **設計（建議）**：
 1. 提醒掃描搬到 M05（`modules/arap/payable_due_reminders.py`，`daily.check` 登記），資料來源＝`registry.providers("payables.pending")` 的 `pending(conn)` ＋ IP-14 `_payable_queue`，依 `plannedPayDate` 篩候選日（沿用 `_candidate_planned_dates`、`due_kind`、`effective_send_day`、guard、45 秒／120 秒上限，**純函式原封搬**）。
 2. guard key：`payable_due_notif.<來源>.<key>.<kind>.<預定日>.<寄信日>`；**case 來源沿用舊 key 格式 `payable_due_notif.<id>.…`**（相容，避免切換當天雙寄；舊 case 掃描在切換版本同步移除）。
-3. 行事曆：L1 薄 helper `helpers/payable_event.py::sync(source, key, item_or_None)`（只包 `push_event_upsert_for_module`／`push_event_delete_for_module`，不查任何 L2 表）；各模組在自己的寫入點 commit 後呼叫（case 現有 `PC.fire` 內部改呼叫它，行為不變）。
+3. **每來源行事曆開關**：通用層以來源表 `CALENDAR_SOURCES`（`case`、`subcontract_voucher`、`case_material`）決定哪些來源建 `payable_due` 事件；`payroll_payslip` **不在表內**（使用者裁示不進行事曆），提醒信／站內通知仍照常涵蓋勞報單。守門：勞報單設預定日／核准／付款後，`push_event_*` 一律零呼叫。
+3'. 行事曆：L1 薄 helper `helpers/payable_event.py::sync(source, key, item_or_None)`（只包 `push_event_upsert_for_module`／`push_event_delete_for_module`，不查任何 L2 表）；各模組在自己的寫入點 commit 後呼叫（case 現有 `PC.fire` 內部改呼叫它，行為不變）。
 4. 信件：沿用 `payable_due_soon`／`payable_due_today`（財務群組、`to_group=True`）；`mail_types.owner` 由 `case` 改 `arap`（`owner` 欄只影響模組卸載時的信件類型清理；改動要連同 `test_mail_types_registered_with_owner_case` 一起改）。
 5. **缺席行為**：M05 不在 ⇒ 沒有提醒（原本 M01 自帶）。為免「卸載出納就失去 case 提醒」的回退，**替代方案 B**：保留 case 掃描不動，另在 M04、case_material 各加一支極薄掃描呼叫同一支 L1 純函式庫 `helpers/payable_due_core.py`（工作日／`due_kind`／guard／寄送迴圈放 L1，三個模組各傳 SQL 結果進去）。**建議採 B**（模組可獨立販售，不新增 L2→L2 依賴；memory：模組可拆分串聯）。成本：多一個 L1 檔、三處薄接線。
 
@@ -172,7 +173,7 @@ S1 先於其餘；S3／S4 互不相依，可平行（不同模組、不同 migra
 |---|---|---|
 | Q1 | 承攬商：預定付款日與既有「應付款日期（合約）」是**兩個欄位**，新單是否預填（複製）應付款日？舊單要不要回填？ | 兩欄分開；**新單不預填、舊單不回填** |
 | Q2 🔴 | 要不要「逾期後續提醒」（預定日後仍未付）？若要：只 1 封、或之後每週再提醒？ | 要，**預定日後第 1 個工作日 1 封**，不週提 |
-| Q3 🔴 | 承攬商、叫料、**勞報單**（c0 Q7）的預定付款日是否都進 Google 行事曆「付款待辦」？ | 承攬商、叫料進（與額外支出一致）；**勞報單同意才進**（`expense_payout` 描述目前明寫不含勞報單付款） |
+| Q3 🔴 | 承攬商、叫料的預定付款日是否進 Google 行事曆「付款待辦」？（**勞報單已裁示不進**：使用者經 hichan-1e 裁示，c0 2026-10-07 轉告） | 承攬商、叫料進（與額外支出一致）；勞報單不進 |
 | Q4 🔴 | 行事曆事件／提醒信／站內通知可放哪些文字？ | 單號＋名目＋關聯案件；**不放金額、不放受款人／承攬商人員姓名**；承攬商廠商名需裁示 |
 | Q5 | 承攬商出納頁排序：改依「預定付款日」（空值最後）還是維持依「應付款日」？ | 預設維持，另加欄位；使用者要再改 |
 | Q6 🔴 | 預定日編輯權限：維持「財務角色／superadmin＋申請人本人」，僅持 `cashier` 模組卻非財務角色者不可改（與 `/dates` 現行一致）？ | 維持現行，不放寬 CM14b |
@@ -182,6 +183,6 @@ S1 先於其餘；S3／S4 互不相依，可平行（不同模組、不同 migra
 ## 10. 與 c0（勞報單）的對齊點
 
 - 欄名 `planned_pay_date`、項目欄 `plannedPayDate`、鍵 `payroll_payslip:<單號>`、出納端點用第 2 節同一支；c0 的「比照額外支出 PATCH」改成「經 IP-100 `set_planned_pay_date`」。
-- c0 的 Q7 與本文 Q3 同題，**只問使用者一次**（由主持統一發問）。
+- c0 的 Q7 已由使用者裁示：勞報單不進行事曆；通用層以來源開關排除（第 4 節 3），提醒信／通知仍含勞報單。
 - c0 的 IP-100 提供者 `payroll_payslip` 的 `pending()` 需帶 `plannedPayDate`、實作 `set_planned_pay_date`；提醒／行事曆走第 4 節通用層，**不另寫勞報單專用掃描**。
 - 勞報單「核准後出納即可見、付款鈕需已簽回」不影響本文：`eligible` 判準對勞報單＝已核准、未付款、未作廢（簽回與否只決定付款鈕，不決定是否提醒預定日）。
