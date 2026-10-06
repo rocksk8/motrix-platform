@@ -32,6 +32,11 @@ def run_module_checks(mode: str) -> list:
 def run_once(mode: str) -> list:
     ran = run_module_checks(mode)
     try:
+        from helpers.audit import purge_old_notifications       # 站內通知保留 90 天（第44班）；冪等、分批，兩種模式都做
+        purge_old_notifications()
+    except Exception:                         # noqa: BLE001
+        _logger.exception("purge_old_notifications failed")
+    try:
         system_checks.run_all(prune=(mode == "daily"))
     except Exception:                         # noqa: BLE001
         _logger.exception("system_checks.run_all failed")

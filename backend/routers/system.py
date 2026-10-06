@@ -281,7 +281,7 @@ def get_my_notifications(authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, type, ref_id, ref_label, message, is_read, created_at "
+        "SELECT id, type, ref_id, ref_label, message, is_read, created_at, link "
         "FROM notifications WHERE username=? ORDER BY created_at DESC LIMIT 50",
         (user["username"],)
     ).fetchall()

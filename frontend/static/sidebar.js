@@ -375,12 +375,12 @@ if (typeof module !== 'undefined' && module.exports) {
 
     var cpHref = inPg ? 'change-password.html' : 'pages/change-password.html'
 
-    // Notification bell — admin/superadmin only
+    // Notification bell — 所有角色（第44班使用者裁示：申請人要在系統內看到核准通知）；「查看全部操作紀錄」連結只給管理員（audit-log 是管理頁）
     // notifStore 的宣告只有這一處（管理員的鈴鐺／一般使用者的隱形資料元件兩種外殼共用）：兩個分支互斥，不是兩個實例；
     // 掃描器（check_double_init／AL1 共用母體）按「宣告點」計數，寫成兩處字面會被算成兩個共用 store。
     var notifOpen = function (attrs) { return '<div x-data="notifStore()" x-init="init()" ' + attrs + '>' }
     var bell = ''
-    if (ad) {
+    {
     bell =
       notifOpen('style="position:relative"')
       + '<button class="topbar__btn" @click="toggle()" style="position:relative">'
@@ -411,15 +411,10 @@ if (typeof module !== 'undefined' && module.exports) {
       + '</template>'
       + '<div x-show="items.length===0" style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">目前沒有通知</div>'
       + '</div>'
-      + '<a :href="auditHref" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看操作紀錄 →</a>'
+      + (ad ? '<a :href="auditHref" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看操作紀錄 →</a>' : '')
       + '</div>'
       + '</div>'
-    } else {
-      // 一般使用者沒有通知鈴鐺，但**資料元件 notifStore 一定要掛**：選單的待簽紅點與數字徽章（簽核佇列、每日工作…）、登入的待簽橫幅
-      // 全都由它的 init() 抓資料；原本它只掛在鈴鐺裡 ⇒ 非管理員（一般簽核人）永遠沒有紅點與徽章（2026-10-01 使用者：「輪到簽核，我的工作上要有紅點，目前沒有」）。
-      // 這裡掛一個看不見的實例，不畫任何畫面。
-      bell = notifOpen('style="display:none" data-testid="notif-headless" aria-hidden="true"') + '</div>'
-    } // end if (ad)
+    }
 
     el.innerHTML =
       '<button class="sidebar-toggle" id="sidebar-toggle" aria-label="選單" title="選單">'

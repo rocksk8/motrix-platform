@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-06（wip/t44-inapp-bell：站內通知所有角色可見、點擊開單、90 天保留）
+- L1（新增，向下相容）：`notifications.link` 欄位與兩個索引（core 未取號 migration，冪等）；`helpers.audit._notify(username, type_, ref_id, ref_label, message, link=None)` 新增選填參數 `link`（只准「頁面檔名.html＋選填查詢字串」，不合格丟棄但通知照寫）；**核准類通知（type 以 `_approved` 結尾）同一 (type, ref_id, username) 只留一列**（單一 INSERT…WHERE NOT EXISTS，原子）；通知文字裡的金額（`NT$ …`、`… 元`）對沒有財務金額可視的收件人（財務角色／superadmin 以外）在伺服器端統一遮成「（金額略）」；新增 `helpers.audit.purge_old_notifications()`（保留 90 天，已讀未讀都清；分批、每次有上限、冪等），由每日檢查（`helpers/daily_checks.run_once`，每日 08:00／啟動補跑）呼叫；`GET /api/notifications/mine` 回傳多一個 `link` 鍵。
+- 前端：通知鈴鐺（`sidebar.js`／`notif.js`）所有角色可見（原本只有管理員；一般使用者只掛隱形資料元件），點通知＝標已讀並開 `link`（前端再驗一次格式）；「查看全部操作紀錄」連結維持只給管理員。
+- 測試：`tests/test_notifications_link_2026_10_06.py`、`tests/test_e2e_inapp_bell_2026_10_06.py`；`test_e2e_approval_dot` 的一般使用者題改為有鈴鐺。
+
 ## 1.114 — 2026-10-06（train43 整合：wip/t43-mail-cal-matrix＋wip/t44-build-nopyc＋wip/t44-business-days＋wip/t43-phase2-events＋wip/t44-fin-fixes＋wip/t44-fin-fixes-r2＋wip/t43-duty-roles-r1＋wip/t43-cal-strict-fix＋wip/t44-settle-terms＋wip/t43-settle-tax＋wip/t43-finance-tab＋wip/t43-shipped-qty）（閘門修正已併入）
 - L1（新增，向下相容）：`helpers/business_days.py`——自 M11 `calendar_tw.py` 提升（純函式、不讀時鐘）：`load`／`coverage`／`covered`／`days_until_expiry`／`no_mail_day`／`next_mail_day`（行為不變）＋新增 `is_working_day(d)`、`previous_working_day(d, limit=14)`；資料 `helpers/holidays_tw.json`（官方人事行政總處辦公日曆表，2026～2027；每年更新，到期前 60 天內 M11 每日排程記警告）。M11 的 `calendar_tw.py` 轉出舊名。沒有假日表／年份不在涵蓋範圍 ⇒ 只排除週六日，不丟例外。
 - L1（新增，向下相容；wip/t43-mail-cal-matrix）：`helpers/notify_matrix.py`——信件×行事曆通知矩陣的對照與規則（`EVENT_LINKS`／`MAIL_OFF_LOCKED`／`is_mail_off`／`mail_off_lock_reason` 等；不讀寫設定、不 import 業務模組）；`helpers.email_notify` 的所有收件人漏斗（含事件收件人、部門主管、月報、財務受眾）在公司關閉該信件時回空清單，鎖定的資安類恆不可關。

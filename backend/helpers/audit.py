@@ -14,11 +14,12 @@ __l1_public__ = (
 )
 
 import json
+import sqlite3
 import logging
 import re
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from db import get_db
 
@@ -99,20 +100,94 @@ def _derive_fields(action: str, target_type: str = "", target_id: str = "", targ
     return {"module": module, "case_no": case_no, "ref_no": ref_no}
 
 
-def _notify(username: str, type_: str, ref_id: str, ref_label: str, message: str) -> None:
+#: 通知連結的格式（相對頁面檔名＋選填查詢字串）；前端 `notif.js::_linkHref` 用同一條規則再驗一次。
+_LINK_RE = re.compile(r"^[A-Za-z0-9_-]+\.html(\?[A-Za-z0-9_.=&%:+-]*)?$")
+
+
+#: 通知文字裡的金額（`NT$ 1,300`、`$500`、`1,300 元`）。收件人沒有財務金額可視（財務角色／superadmin 以外）⇒ 伺服器端統一遮成「（金額略）」，
+#: 不靠各呼叫端記得——連結點進去的頁面自己再做權限，但通知文字本身會先被看到（第44班使用者裁示）。
+_MONEY_RE = re.compile(r"(?:NT\$|NTD|\$)\s*[-+]?\d[\d,]*(?:\.\d+)?|[-+]?\d[\d,]*(?:\.\d+)?\s*元(?![一-鿿])")
+
+
+def _mask_money(conn, username: str, text) -> str:
+    text = "" if text is None else str(text)
+    if not text or not _MONEY_RE.search(text):
+        return text
+    try:
+        row = conn.execute("SELECT role, modules FROM users WHERE username=?", (username,)).fetchone()
+        from helpers.auth import has_finance_access
+        if row and has_finance_access({"role": row["role"], "modules": row["modules"]}):
+            return text
+    except Exception as e:                                   # noqa: BLE001  查不到角色 ⇒ 寧可遮
+        logger.warning("_mask_money: 查收件人角色失敗，改為遮蔽：%s", e)
+    return _MONEY_RE.sub("（金額略）", text)
+
+
+def _notify(username: str, type_: str, ref_id: str, ref_label: str, message: str, link: str = None) -> None:
+    """寫一則站內通知。`link`（選填）＝點通知要開的頁面（相對路徑，例如 `quotation-edit.html?no=Q-1`；空＝沒有連結）。
+
+    第44班（使用者裁示）：**核准類通知（type 以 `_approved` 結尾）同一 (type, ref_id, username) 只留一列**——
+    單一 `INSERT … WHERE NOT EXISTS`（SQLite 單寫者 ⇒ 判斷與寫入在同一個原子陳述裡，兩個同時核准也不會寫出兩列）。
+    其他類型照舊每次一列。`link` 欄位由 core 的未取號 migration 加入；表還沒有該欄（舊庫、migration 未完成）⇒ 退回舊寫法，不丟例外。"""
+    link = (link or "").strip()
+    if link and not _LINK_RE.match(link):                      # 只准同站頁面檔名＋選填查詢字串；外部網址／路徑穿越／javascript: 一律丟掉（通知照寫，只是沒有連結）
+        logger.warning("_notify: 不合格的 link 已丟棄：%r", link[:80])
+        link = ""
     conn = get_db()
     try:
-        conn.execute(
-            "INSERT INTO notifications "
-            "(username, type, ref_id, ref_label, message, is_read, created_at) "
-            "VALUES (?,?,?,?,?,0,?)",
-            (username, type_, ref_id, ref_label, message, datetime.now().isoformat()),
-        )
+        message, ref_label = _mask_money(conn, username, message), _mask_money(conn, username, ref_label)
+        now = datetime.now().isoformat()
+        try:
+            if (type_ or "").endswith("_approved"):
+                conn.execute(
+                    "INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at, link) "
+                    "SELECT ?,?,?,?,?,0,?,? WHERE NOT EXISTS "
+                    "(SELECT 1 FROM notifications WHERE username=? AND type=? AND ref_id=?)",
+                    (username, type_, ref_id, ref_label, message, now, link, username, type_, ref_id))
+            else:
+                conn.execute(
+                    "INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at, link) "
+                    "VALUES (?,?,?,?,?,0,?,?)",
+                    (username, type_, ref_id, ref_label, message, now, link))
+        except sqlite3.OperationalError as e:
+            if "link" not in str(e):
+                raise
+            conn.execute(                                                 # 舊庫沒有 link 欄：只寫舊欄位
+                "INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at) VALUES (?,?,?,?,?,0,?)",
+                (username, type_, ref_id, ref_label, message, now))
         conn.commit()
     except Exception as e:
         logger.warning("_notify failed: %s", e)
     finally:
         conn.close()
+
+
+NOTIFICATION_RETENTION_DAYS = 90        # 使用者裁示（第44班）：站內通知保留 90 天，已讀未讀都清
+_PURGE_BATCH = 2000
+_PURGE_MAX_BATCHES = 25                 # 每次最多清 5 萬列；沒清完下次（每日／啟動）接著清，不一次卡住寫鎖
+
+
+def purge_old_notifications(now=None, days: int = NOTIFICATION_RETENTION_DAYS) -> int:
+    """刪掉 `created_at` 早於 `days` 天前的站內通知（已讀、未讀都刪）。冪等、分批（每批短交易，不長時間握寫鎖）、有上限；回傳刪除列數並記 log。
+    只動 `notifications`，不碰其他表；表不存在／例外只記 warning，不影響其他每日檢查。"""
+    cutoff = ((now or datetime.now()) - timedelta(days=days)).isoformat()
+    total = 0
+    conn = get_db()
+    try:
+        for _ in range(_PURGE_MAX_BATCHES):
+            cur = conn.execute("DELETE FROM notifications WHERE id IN (SELECT id FROM notifications WHERE created_at < ? ORDER BY id LIMIT ?)",
+                               (cutoff, _PURGE_BATCH))
+            conn.commit()
+            total += cur.rowcount or 0
+            if (cur.rowcount or 0) < _PURGE_BATCH:
+                break
+        if total:
+            logger.info("purge_old_notifications: 刪除 %d 則超過 %d 天的站內通知（截止 %s）", total, days, cutoff[:10])
+    except Exception as e:
+        logger.warning("purge_old_notifications failed: %s", e)
+    finally:
+        conn.close()
+    return total
 
 
 def notify_org_chain_notice(conn, tiers: list, requester_username: str,

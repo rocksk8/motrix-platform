@@ -494,3 +494,21 @@ def _core_next_duty_roles(conn):
 
 
 register("core", 7, _core_next_duty_roles)
+
+
+# ── 站內通知：連結欄位（第44班；未取號，PLAYBOOK §G6）────────────────────────────────────
+# `notifications.link`＝點通知要開的頁面（相對路徑，如 `quotation-edit.html?no=…`）；空字串＝沒有連結（舊列、純文字通知）。
+# 只加欄位與索引、冪等；舊列維持空字串（點了只標已讀，不導頁）。索引給「每人最近 N 筆」與「90 天清理」用。
+def _core_next_notifications_link(conn):
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(notifications)").fetchall()}
+    if not cols:
+        return "notifications 表不存在"
+    if "link" not in cols:
+        conn.execute("ALTER TABLE notifications ADD COLUMN link TEXT NOT NULL DEFAULT ''")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(username, created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at)")
+    conn.commit()
+    return None
+
+
+register("core", NEXT, _core_next_notifications_link)
