@@ -10,12 +10,12 @@
   44_0  包完整性：verify_ok、problems 空、verify_package rc 0、payload 無 __pycache__／pyc、deploy_manifest.verification 有且（scoped 時）base＝基線完整 SHA
   44_1  core migration：module_schema_versions[core]＝--expect-core（預設 8）；基線值記錄（預期 7）
   44_2  notifications.link TEXT NOT NULL DEFAULT ''、索引 idx_notifications_user_created／idx_notifications_created 存在
-  44_3  舊通知列：筆數與逐列內容雜湊同基線、全部 link=''
+  44_3  90 天內的通知列：逐列內容同基線、link=''；（超過 90 天的舊列會在啟動時的每日檢查被清掉＝新功能，不算遺失）
   44_4  migrate_like_startup.py ⇒ MIGRATE_LIKE_STARTUP_OK（冪等、模組 migration 完成）
   44_5  R1 等價：套用前快照（基線安裝）、套用後 verify ⇒ 結束碼 0 且輸出含 PASS
   44_6  鈴鐺 API：一般使用者／管理員 GET /api/notifications/mine 200、每筆有 link 鍵；新插入的帶 link 列原樣回傳
-  44_7  90 天清除：purge_old_notifications() 只刪超過 90 天的列（回傳值＝種子舊列數），其餘保留
-  44_8  探針乾淨：安裝後各模組 provides.probes／pages 全部預期碼（在＝200，缺席＝404）、undeclared_probes 空
+  44_7  90 天清除：插一筆 120 天前的列後 purge_old_notifications() 只刪超過 90 天的列（回傳值＝該數），其餘保留
+  44_8  探針乾淨：安裝後各模組 provides.probes／pages 全部預期碼（在＝200，缺席＝404）、undeclared_probes 沒有比基線多
   44_9  --probe-401 路由存在（未登入 401）、--expect-file 靜態存在
   C 之後：core 回到基線值、notifications 沒有 link 欄、筆數同基線；B 之後：程式檔逐檔相同（沿用 35a）、舊程式讀得了帶 link 欄的庫（鈴鐺 API 200）
 其餘沿用 checks31（無 traceback、單一監聽行程、模組版本差集、模組載入…）；44 之前班次專屬的舊題記錄在 _STALE 並說明理由。
@@ -223,9 +223,17 @@ def checks44(root, port, base_rec, new_rec, t0, package_modules):
                                                   {"link": link, "indexes": sorted(f["indexes"] & want_idx), "missing": sorted(want_idx - f["indexes"])})
     now_rows = _notif_rows_with_link(root)
     base_rows = _BASE.get("notif_rows") or []
-    old_same = _sha([{k: v for k, v in r.items() if k != "link"} for r in now_rows[:len(base_rows)]]) == _sha(base_rows)
-    res["44_3_old_notifications_preserved"] = (len(now_rows) >= len(base_rows) and old_same and all((r.get("link") or "") == "" for r in now_rows[:len(base_rows)]),
-                                               {"base": len(base_rows), "now": len(now_rows), "content_same": old_same, "non_empty_link_in_old": [r["id"] for r in now_rows[:len(base_rows)] if r.get("link")][:5]})
+    cutoff0 = (datetime.now() - timedelta(days=90)).isoformat(timespec="seconds")
+    # 站內通知 90 天清除在服務啟動時的每日檢查就會跑（daily_checks.run_once 兩種模式都做）⇒ 超過 90 天的舊列在套用後消失是新功能的正常行為；
+    # 要保存的是「90 天內」的列：逐列內容與基線相同、link 全為空字串；消失的只能是超過 90 天的列。
+    keep_base = [r for r in base_rows if (r["created_at"] or "") >= cutoff0]
+    gone = [r for r in base_rows if (r["created_at"] or "") < cutoff0]
+    now_plain = [{k: v for k, v in r.items() if k not in ("id", "link")} for r in now_rows]
+    base_plain = [{k: v for k, v in r.items()} for r in keep_base]
+    only_base = [r for r in base_plain if r not in now_plain]
+    res["44_3_recent_notifications_preserved"] = (not only_base and all((r.get("link") or "") == "" for r in now_rows if r["type"].startswith("drill_") and r["type"] != "drill_link"),
+                                                  {"base_total": len(base_rows), "base_within_90d": len(keep_base), "base_older_than_90d": len(gone), "now_total": len(now_rows),
+                                                   "recent_rows_missing_after_apply": len(only_base), "old_rows_still_present_after_apply": sum(1 for r in gone if r in now_plain)})
     rc, out = _run_tool(root, "migrate_like_startup.py", "--db", str(Path(root) / "backend" / "motrix_erp.db"))
     res["44_4_migrate_like_startup_ok"] = (rc == 0 and "MIGRATE_LIKE_STARTUP_OK" in out, {"rc": rc, "tail": out[-300:]})
     rc, out = equiv_verify(root, _CTX["equiv_snapshot"]) if _CTX.get("equiv_snapshot") else (None, "沒有套用前快照")
@@ -245,19 +253,30 @@ def checks44(root, port, base_rec, new_rec, t0, package_modules):
     got = next((i for i in (ip2 or []) if i.get("type") == "drill_link"), None)
     res["44_6_bell_api_all_roles_with_link"] = (sp == 200 and sa == 200 and isinstance(ip, list) and ip and all("link" in i for i in ip) and bool(got) and got.get("link") == "payment-request.html?tab=mine",
                                                 {"plain": sp, "admin": sa, "plain_items": len(ip or []), "all_have_link_key": bool(ip) and all("link" in i for i in ip), "link_roundtrip": (got or {}).get("link")})
-    # 90 天清除（刪 N 筆舊列；放在 44_3 之後，C 回滾後 E 會還原）
-    before = db_facts(root)["count"]
+    # 90 天清除（函式直接驗）：先插一筆 120 天前的舊列（啟動時的每日檢查已清過種子舊列），呼叫 purge ⇒ 只刪超過 90 天的、其餘保留
+    old_ts = (datetime.now() - timedelta(days=120)).isoformat(timespec="seconds")
+    c = T.rw(root)
+    try:
+        c.execute("INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, created_at, link) VALUES (?,?,?,?,?,1,?,?)",
+                  (T30.PLAIN[0], "drill_purge_old", "D44-old", "DRILL", "演練：120 天前的通知", old_ts, ""))
+        c.commit()
+    finally:
+        c.close()
+    before_rows = _notif_rows_with_link(root)
     cutoff = (datetime.now() - timedelta(days=90)).isoformat(timespec="seconds")
-    expected_old = sum(1 for r in _notif_rows_with_link(root) if (r["created_at"] or "") < cutoff)      # 從庫裡算（--seed-db 匯入舊列時也對）
+    expected_old = sum(1 for r in before_rows if (r["created_at"] or "") < cutoff)
     code = "from helpers.audit import purge_old_notifications as p; print('PURGED', p())"
     cp = subprocess.run([sys.executable, "-c", code], cwd=str(Path(root) / "backend"), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
     m = re.search(r"PURGED (\d+)", cp.stdout)
     after_rows = _notif_rows_with_link(root)
-    res["44_7_purge_90_days"] = (bool(m) and int(m.group(1)) == expected_old and expected_old > 0 and not any((r["created_at"] or "") < cutoff for r in after_rows)
-                                 and len(after_rows) == before - int(m.group(1)), {"rc": cp.returncode, "purged": m.group(1) if m else None, "expected_old_rows": expected_old,
-                                                                                    "before": before, "after": len(after_rows), "stderr": cp.stderr[-200:]})
+    res["44_7_purge_90_days"] = (bool(m) and int(m.group(1)) == expected_old and expected_old >= 1 and not any((r["created_at"] or "") < cutoff for r in after_rows)
+                                 and len(after_rows) == len(before_rows) - expected_old and not any(r["type"] == "drill_purge_old" for r in after_rows),
+                                 {"rc": cp.returncode, "purged": m.group(1) if m else None, "expected_old_rows": expected_old, "before": len(before_rows), "after": len(after_rows), "stderr": cp.stderr[-200:]})
     pc = probe_clean(root, port, tok)
-    res["44_8_probes_clean"] = (pc["bad_count"] == 0 and not pc["undeclared"] and pc["probes"] > 0, pc)
+    new_undeclared = sorted(set(pc["undeclared"]) - set(_BASE.get("undeclared") or []))         # 基線就沒宣告 probes 的模組（例如 filehub）不算本班的退步
+    pc["undeclared_at_baseline"] = _BASE.get("undeclared")
+    pc["new_undeclared"] = new_undeclared
+    res["44_8_probes_clean"] = (pc["bad_count"] == 0 and not new_undeclared and pc["probes"] > 0, pc)
     codes = {p: T.api(port, p, None, None, "GET")[0] for p in o["probe_401"]}
     files = {rel: (Path(root) / rel).is_file() for rel in o["expect_file"]}
     res["44_9_extra_routes_and_files"] = (all(v == 401 for v in codes.values()) and all(files.values()), {"routes_unauth": codes, "files": files})
@@ -388,6 +407,8 @@ def main(argv=None):
                 _FAILED.append(("R1 套用前快照失敗", info["r1_snapshot"]))
             _CTX["equiv_snapshot"] = snap
             _BASE["tree"] = T35A.tree_digest(root)
+            _lk = json.loads((Path(root) / "backend" / "modules.lock.json").read_text(encoding="utf-8"))
+            _BASE["undeclared"] = PD.probe_plan(Path(root) / "backend" / "modules", _lk)[1]
             DM.start(root, port)
             info["train44_baseline"] = {"core": _BASE["db"]["core"], "notifications": _BASE["db"]["count"], "tree_files": len(_BASE["tree"])}
             return root, info
