@@ -2,6 +2,7 @@
 
 > 狀態：**設計／分析，無程式碼**。作者 hichan-c0，2026-10-07；分支 `wip/t45-payslip-design`（自 origin/platform 036565879，prod 基準 89206122）。
 > 涉流程、權限、金額可見：**寫碼前先問使用者**（第 7 節列出待裁示項；🔴＝權限／金額可見）。
+> **2026-10-07 使用者裁示已併入本版**（經 hichan-1e 表單）：Q1＝財務角色＋superadmin（`has_finance_access`）；Q4＝**付款不需已簽回**（已核准即可付款，簽回檔變選填）；Q7＝**不進行事曆**（只做 `planned_pay_date` 欄位＋出納清單）；Q9＝派發端只顯示單號＋狀態＋受領人、無金額；Q0／Q2／Q3／Q5／Q6／Q8／Q10 取預設；Q11 待問。
 > 讀的碼：`backend/modules/payroll/api/payslips.py`、`payslip_payouts.py`、`remit_link.py`、`pdf_gen.py::generate_payslip_pdf_bytes`、`frontend/pages/payslips.html`／`payslip-form.html`、`arap/api/cashier.py`、`case/payables.py`、`helpers/tiered_approval.py`、`payroll/api/bonus.py`（簽核樣板）、`case/material_approval.py`、`subcontract/api/contractor_vouchers.py`。
 
 ## 0. 摘要
@@ -11,7 +12,7 @@
 | 1 | **在程式裡找不到「匯出要求付款日」**：匯出 API、PDF 範本、`payslip-form.html` 的匯出流程都沒有付款日欄位或檢查；付款日只出現在出納 `mark-paid`。使用者看到的很可能是別處（第 1 節列出三個候選，請使用者指出畫面）。我們仍把「匯出不得需要付款日」寫成守門測試。 |
 | 2 | 新增狀態 `待審核`、`已核准`（兩個）；**退回＝回草稿**（同獎金分潤）。匯出只准 `已核准` 之後。既有 `已匯出／已簽回／已付款／已作廢` 一律不動。 |
 | 3 | 簽核重用獎金分潤樣板（`approval_flow_setting_key("payslip")`、最高管理者限定、無簽核層＝送審即核准、自核規則照 `tiered_approval`）。 |
-| 4 | 出納：**建議把勞報單登記進 IP-100 `payables.pending`（名稱 `payroll_payslip`）**，取代並最終退役 IP-103 頁籤；核准後即出現（標「待簽回」），**付款仍須已簽回**。預定付款日／行事曆待辦與第 45 班同一套。 |
+| 4 | 出納：**把勞報單登記進 IP-100 `payables.pending`（名稱 `payroll_payslip`）**，取代並最終退役 IP-103 頁籤；**已核准即可付款**（簽回檔選填，不再是付款前置）。預定付款日只做欄位＋出納清單（**不進行事曆**）。 |
 | 5 | 派發↔勞報單：**現有只有單向、且在匯款單層**（匯款單 `personnel[].payslipNo`）。建議新增**連結表**（一派發對多勞報單），兩頁互相可點。 |
 | 6 | 必要 migration：payroll 0004（只加欄位／表，可回退）；零驚喜：既有 草稿 要多按一次送審（沒設簽核層＝一鍵核准）。 |
 
@@ -41,16 +42,19 @@
 提案：
 
 ```
-草稿 ─送審→ 待審核 ─(逐層簽核)→ 已核准 ─匯出→ 已匯出 ─簽回檔→ 已簽回 ─出納→ 已付款
-  ↑            │退回（必填原因）                              (void／unsign／unpay 不變)
-  └────────────┘ 回草稿（approval 歷史保留在 approval_json／稽核）
+草稿 ─送審→ 待審核 ─(逐層簽核)→ 已核准 ═出納 mark-paid（可直接付款）═══════════════╗
+  ↑            │退回（必填原因）     ├─匯出（選填）→ 已匯出 ─簽回檔（選填）→ 已簽回 ─╫→ 已付款
+  └────────────┘ 回草稿             └──────────────────────────────────────────────╜
+（approval 歷史保留在 approval_json／稽核；void／unsign 不變；unpay 見下）
 ```
 
 - 新值只有 `待審核`、`已核准`。簽核層進度放 `approval_json.currentTier`（同獎金分潤；**不**另開「簽核中」值，少一個狀態＝少一組守門）。
 - 可編輯：`草稿`、（`待審核`→編輯＝撤回並重簽，同獎金分潤「簽核中改動⇒重簽」）；`已核准` 起鎖定（併入 `_LOCKED_STATUSES`）；已核准後想改＝作廢重開（沿用「已匯出可作廢」邏輯，**待問**：已核准、尚未匯出，是否也允許「撤回核准」？見 Q5）。
 - 匯出：`record_export` 允許來源狀態＝`已核准`、`已匯出`（重匯）；`草稿／待審核` ⇒ 409「請先送審並核准」。**匯出不要付款日**。
 - 作廢：維持「只有已匯出可作廢」；`已核准` 若要作廢（未匯出）見 Q5。
-- 簽回：仍只收 `已匯出／已簽回`（簽回＝受領人簽名，是付款憑據；見第 4 節）。
+- **付款（Q4＝否，使用者裁示）**：`mark-paid` 來源狀態由 `已簽回` 擴為 `已核准／已匯出／已簽回`（`UPDATE … WHERE status IN (…)`）；匯出與簽回都變成**選填**。**舊的 `已簽回` 列行為完全不變**（仍可付款、`unsign`／`delete_signed_file` 邏輯不動）。
+- 簽回：仍只收 `已匯出／已簽回`（選填步驟；上傳後 `已匯出→已簽回` 不變）。已核准未匯出者想簽回，要先匯出（簽回檔是匯出 PDF 的簽名版，順序合理）；已付款後補傳簽回檔：預設不開（維持現況 409），若要開見 Q12。
+- **`unpay`（付款填錯退回）**：現在固定退回 `已簽回`；改為**退回付款前最近的狀態**——有簽回檔 ⇒ `已簽回`，否則 `export_count>0` ⇒ `已匯出`，否則 `已核准`（由資料推得，不新增欄位；舊列有簽回檔仍退 `已簽回`，與今天一致）。
 - `GET /api/payslips` 的 `status` 值多兩種；前端列表徽章、篩選補兩個色。
 
 ## 3. 簽核基礎設施重用
@@ -73,16 +77,16 @@
 
 | 項目 | 設計 |
 |---|---|
-| 列出 | 狀態 `已核准／已匯出／已簽回` 且未付款（已作廢不列）。形狀＝IP-100 既有欄位：`key＝單號`、`sourceLabel＝勞報單`、`title＝勞報單 PS-… 受領人`、`amount＝實付 net`（現金出的是 net，扣繳另繳；不含 gross 以免混淆，gross/tax 放 `extra`）、`payee＝受領人姓名`、`requestedBy`、`approvedAt`、`files＝簽回檔名`、`plannedPayDate`、`kind＝'payslip'`。**不回**身分證／地址／電話／銀行帳號（F2；銀行資料走既有「收款資料」遮蔽端點 `payee-bank`，權限同 IP-100）。 |
-| 「待簽回」旗標 | 新增加法欄位 `blocker`（如 `"待簽回"`）：未簽回的列顯示但**付款鈕停用**；`mark_paid` 後端也擋（409「須已簽回」），不只靠前端。 |
+| 列出 | 狀態 `已核准／已匯出／已簽回` 且未付款（已作廢不列）；`files＝簽回檔名`（沒有簽回檔＝空陣列，選填）。形狀＝IP-100 既有欄位：`key＝單號`、`sourceLabel＝勞報單`、`title＝勞報單 PS-… 受領人`、`amount＝實付 net`（現金出的是 net，扣繳另繳；不含 gross 以免混淆，gross/tax 放 `extra`）、`payee＝受領人姓名`、`requestedBy`、`approvedAt`、`files＝簽回檔名`、`plannedPayDate`、`kind＝'payslip'`。**不回**身分證／地址／電話／銀行帳號（F2；銀行資料走既有「收款資料」遮蔽端點 `payee-bank`，權限同 IP-100）。 |
+| 付款前置（Q4＝否） | **沒有「待簽回」阻擋**：已核准即可付款，不加 `blocker` 欄位；`mark_paid` 後端只擋 `已作廢／已付款／草稿／待審核`（409 說明狀態）。列表可顯示「已簽回／未簽回」小標供出納參考，不影響按鈕。 |
 | 付款 | IP-100 `mark_paid(conn, key, paid_date, user, remit)` 委派到**同一份實作**（把 `payslip_mark_paid` 的核心抽成函式 `mark_payslip_paid(conn, slip_no, payment_date, voucher_no, who)`；兩個入口只剩薄殼，避免「同一動作兩份實作」）。傳票單號仍必填並驗 `voucher.by_no`（IP-4）：IP-100 目前 `remit` 沒有 `voucherNo` 欄 ⇒ 加法擴充 `remit.voucherNo`（契約版本不變，同 A2-3 追加慣例）。 |
 | 付款日 | 只在出納這步填（`paid_date`）；`payment_date` 仍是 IP-9 營運報表歸月依據（`payslip_payouts._expense_entries`），行為不變。 |
-| 預定付款日 | `payslips` 加 `planned_pay_date`（YYYY-MM-DD，可空），送審時可填、核准後出納可改（比照額外支出的預定付款日 PATCH；端點名稱以實作時 `case_extra_expenses.py` 為準）。**行事曆 `payable_due`**：key＝`payroll:<單號>`，核准時 upsert、改日期移動、付款／作廢／清空刪除（`push_event_upsert_for_module`／`push_event_delete_for_module`，commit 之後）；事件**不含金額、不含受領人姓名**（只寫「勞報單待付款 PS-…」）。🔴 現有 `EVENT_TYPES` 的 `expense_payout` 描述寫「不含勞報單付款」、`payable_due` 描述只寫案件額外支出請款；**要使用者明確裁示勞報單可以進 `payable_due`**（Q7；我沒查到對應的歷史裁示，只看到這兩句描述）。 |
-| 與匯款單路徑 | 勞報單若被承攬商匯款單關聯（`personnel[].payslipNo`），付款走**匯款單**（`remit_link.mark_paid`，付款日＝匯款日、`data_json.paid_via_remit`）。此時 IP-100 列表要**標示「經匯款單 {號} 付款」並停用獨立付款**，否則同一筆錢可被出納付兩次（今天 IP-103 的 `unpay` 已用 `paid_via_remit` 擋回頭路，但正向沒有擋）。 |
-| 簽回仍在付款之前？ | **建議是**：簽回檔＝受領人簽名的付款憑據，現制 `mark-paid` 即要求 `已簽回`；本次需求未說要取消。因此出納**在核准後就看得到**（排程、預定付款日），但**付款鈕在已簽回才亮**。Q4 請使用者確認是否要允許「未簽回也能付」（會動法規／內控，不建議預設）。 |
-| 權限 🔴 | IP-100 端點用 `has_finance_access`（財務角色＋superadmin，第 42 班）；IP-103／`_require_payer`／`get_signed_file` 仍用 `role=='superadmin' or user_has_module(user,'cashier')`（`cashier.py::_payslip_visible`、`payslips.py::_require_payer`）——**與第 42 班「出納／財務合併」不一致**（舊 cashier 模組勾選）。整合時兩者必須對齊其一。Q1：勞報單（含扣繳金額）財務角色看不看得到？ |
-| IP-103 退役 | 先並存（舊頁籤＋端點照舊、IP-103 守門不動），IP-100 版上線並驗收後，下一班移除頁籤（與「額外引用疊加」原則一致；不在本班刪）。 |
-| 出納通知 | 核准時：站內通知＋信給 `finance_usernames(conn)`（在職財務角色＋superadmin）：「勞報單 PS-… 已核准，待簽回／待付款」；已簽回時再一次「待付款」。信內**不放金額**（同 `expense_notify`）。 |
+| 預定付款日 | `payslips` 加 `planned_pay_date`（YYYY-MM-DD，可空），送審時可填、核准後出納（財務角色）可改（比照額外支出的預定付款日 PATCH；端點名稱以實作時 `case_extra_expenses.py` 為準）；IP-100 項目回 `plannedPayDate`、出納清單顯示並可排序。**不進行事曆（Q7＝否，使用者裁示）**：不新增 `payable_due` 的勞報單觸發點，`EVENT_TYPES` 描述不動。 |
+| 與匯款單路徑 | 勞報單若被承攬商匯款單關聯（`personnel[].payslipNo`），付款走**匯款單**（`remit_link.mark_paid`，付款日＝匯款日、`data_json.paid_via_remit`）。此時 IP-100 列表要**標示「經匯款單 {號} 付款」並停用獨立付款**，否則同一筆錢可被出納付兩次（今天 IP-103 的 `unpay` 已用 `paid_via_remit` 擋回頭路，但正向沒有擋）。**Q4 連動（需確認 Q13）**：`remit_link.check／candidates／mark_paid` 與 `contractor_vouchers._personnel_link_errors` 目前都寫死 `已簽回`（訊息「須為已簽回」）；為了與「已核准即可付款」一致，建議同步放寬為 `已核准／已匯出／已簽回`（`mark_paid` 的 `WHERE status IN (…)`、`unmark_paid` 退回同 `unpay` 的推導規則），否則同一張勞報單走匯款單反而比走出納更嚴。 |
+| 簽回（Q4＝否，使用者裁示） | **付款不再要求已簽回**：核准後出納即可付款；簽回檔變選填（匯出→上傳簽回檔→`已簽回` 的路徑與舊列行為都保留）。簽回檔仍可在出納清單查看（`files`、`get_signed_file`），只是不再是付款閘門。內控提醒：簽回憑據不再受系統強制，建議在出納清單顯示「未簽回」小標（不阻擋）。 |
+| 權限（Q1＝財務角色＋superadmin，使用者裁示） | 出納端統一用 `has_finance_access`（財務角色＋superadmin，第 42 班）：IP-100 端點（現況已是）、**以及** `payslips.py::_require_payer`（`mark-paid`／`unpay`）、`get_signed_file`（簽回檔檢視）、`cashier.py::_payslip_visible`／`payslip-queue`——這些現在仍是 `superadmin or user_has_module(user,'cashier')`，**要改**（改一處＝改同一個 helper，避免漂移；守門：靜態題掃 `payslips.py` 不得再出現 `user_has_module(user, "cashier")`）。**金額可見＝能付款的人**：勞報單金額（net／gross／扣繳）只透過出納清單／付款端點給財務角色＋superadmin；勞報單建立／編輯／匯出／簽核仍是 superadmin＋`payslip` 模組（不放寬，Q2 預設）。財務角色看不到 `payslips.html`（頁面是 superadmin 的），只在出納頁看。 |
+| IP-103 退役 | IP-100 版涵蓋 IP-103 的超集（已核准起、不只已簽回）。上線同版 **出納頁隱藏舊「勞報單待付款」頁籤**（避免同一張單兩處出現、且舊頁籤只列已簽回會漏），`GET /api/cashier/payslip-queue` 與 IP-103 守門保留一班（相容／回滾），下一班刪除（額外引用疊加原則）。 |
+| 出納通知 | **核准時一次**：站內通知＋信給 `finance_usernames(conn)`（在職財務角色＋superadmin）：「勞報單 PS-… 已核准，待付款」（Q4＝否，不再有「已簽回再通知」）。信內**不放金額**（同 `expense_notify`）；站內通知 `link=cashier.html`。 |
 
 方案 A（保留 IP-103，只在核准時多通知出納）較小，但「預定付款日、行事曆、單一出納清單」要再做一次，且兩套付款入口並存；不建議。
 
@@ -100,7 +104,7 @@
 
 - 寄送一律走 `email_notify.send_registered`（字面 key，`test_mail_registry` 守門）；寄信是附帶動作，例外只記 log。
 - **站內通知**：`_notify(user, type, ref_id, quote_no, message, link="payslips.html?q=PS-…")`（`link=` 為 `wip/t44-inapp-bell` 97e758a03 的 API；核准類型有去重，鈴鐺全角色可見）。訊息帶單號與結果，**無金額**。
-- 行事曆：見第 4 節（預定付款日 `payable_due`）；`expense_payout`「不含勞報單付款」維持。
+- 行事曆：**不做**（Q7＝否）。`payable_due`／`expense_payout` 不新增勞報單觸發點；只有 `planned_pay_date` 欄位＋出納清單。
 - 稽核：`payslip.submit／approve／reject／export／paid／planned_pay_date`。匯出稽核的 `_asum` 不含個資。
 - 與獎金分潤同樣的坑（需守門）：寄給**送審人**的信，送審人＝簽核人（自核）時不重複寄。
 
@@ -141,16 +145,19 @@
 | # | 問題 | 預設（若不答） |
 |---|---|---|
 | Q0 | 「匯出要求付款日」請指出是哪個畫面（第 1 節三個候選） | 不改匯出行為，只加守門測試 |
-| Q1 🔴 | 財務角色（第 42 班）看不看得到勞報單與其金額？出納動作（付款）改用 `has_finance_access`，還是維持「最高管理者＋勾選 cashier」？ | 與 IP-100 一致用財務角色＋superadmin；金額可見範圍＝可付款的人 |
+| ~~Q1~~ 🔴 | **已裁示**：財務角色＋superadmin（`has_finance_access`）；金額可見＝能付款的人 | 已落實於第 4 節「權限」 |
 | Q2 | 誰可以送審？目前建立／匯出都是最高管理者。是否放寬給有 `payslip` 模組的人（簽核仍限最高管理者）？ | 不放寬（送審人＝最高管理者） |
 | Q3 | 自核：唯一最高管理者自己送審自己核准，是否允許（沿用獎金分潤規則）？ | 沿用既有規則 |
-| Q4 🔴 | 付款是否仍須「已簽回」？ | 是（簽回前出納看得到但不能付） |
+| ~~Q4~~ 🔴 | **已裁示：否**——付款不需已簽回；簽回檔選填 | 已落實於第 2、4 節 |
 | Q5 | 已核准、未匯出時是否可「撤回核准」或作廢？ | 可作廢（需原因，同已匯出作廢）；不開撤回 |
 | Q6 | 既有 `草稿` 要不要「祖父條款」免送審？ | 不免；沒設簽核層＝一鍵核准 |
-| Q7 🔴 | 勞報單預定付款日要不要進行事曆 `payable_due`（目前 `expense_payout` 描述明寫不含勞報單付款）？ | 不進，直到明確裁示；預定付款日欄位與出納清單照做 |
+| ~~Q7~~ 🔴 | **已裁示：不進行事曆**（只做 `planned_pay_date`＋出納清單） | 已落實於第 4、5 節 |
 | Q8 | 派發↔勞報單連結：建立時機（勞報單建立時選填、派發端也可補）？ | 兩端皆可 |
-| Q9 🔴 | 派發管理者可否看到勞報單狀態（無金額）？ | 可看單號＋狀態＋受領人，無金額 |
+| ~~Q9~~ 🔴 | **已裁示**：派發端只顯示單號＋狀態＋受領人，無金額 | 已落實於 6.5 |
 | Q10 | 簽核設定頁是否新增「勞報單簽核流程」獨立一列（不併統一流程）？ | 是 |
+| Q11 | 回滾缺口（第 8 節）：接受嗎？ | 待 hichan-1e 詢問使用者 |
+| Q12 | 已付款後可補傳簽回檔嗎（簽回變選填後常見）？ | 否（維持現況 409）；若要＝允許附檔但不改狀態 |
+| Q13 | 承攬商匯款單關聯勞報單：同步放寬為 `已核准／已匯出／已簽回`（與出納一致）？ | 是（連動 Q4） |
 
 ## 8. Migration、版本、相容
 
@@ -167,15 +174,15 @@
 3. 簽核：有層／無層（送審即核准）／多層順序／同層全簽／代理人／自核／非最高管理者進鏈 ⇒ 400／退回必填原因／退回回草稿保留歷史／簽核中編輯⇒重簽。
 4. 權限：非 superadmin 全 403；簽核人以外簽核 403；金額欄位只給有權者。
 5. 通知：5 種信的主旨結果字、無 `NT$`、自核不重寄、無收件人只記 log、站內通知帶 `link` 與去重；**真走 API 核准後斷言信件列**（第 44 班請購單教訓：不能只測 notify 單元）。
-6. 出納提供者（IP-100 `payroll_payslip`）：列出條件、`blocker` 待簽回、`mark_paid` 擋未簽回、委派同一實作（突變：另寫一份會紅）、傳票單號驗證、`paid_via_remit` 列停用付款、F2 欄位不外洩（含身分證／銀行帳號）、M07 不在時的反向控制（真刪套件）。
-7. 預定付款日：欄位、PATCH 權限、（Q7 若同意）行事曆 upsert／移動／刪除、事件不含金額。
+6. 出納提供者（IP-100 `payroll_payslip`）：列出條件（已核准／已匯出／已簽回、不含已作廢／已付款）、**已核准未簽回也可付款**（Q4；突變：加回「須已簽回」檢查要紅）、**舊 `已簽回` 列仍可付款**、`mark_paid` 委派同一實作（突變：另寫一份會紅）、傳票單號驗證、`paid_via_remit` 列停用付款、F2 欄位不外洩（含身分證／銀行帳號）、權限＝`has_finance_access`（財務角色可付、其他角色 403；靜態題：`payslips.py` 不再有 `user_has_module(…,'cashier')`）、`unpay` 退回推導（有簽回檔→已簽回／已匯出過→已匯出／否則已核准）、M07 不在時的反向控制（真刪套件）、匯款單路徑對已核准／已匯出勞報單的放寬（Q13）。
+7. 預定付款日：欄位、PATCH 權限（財務角色）、出納清單顯示與排序、**不產生任何行事曆事件**（反向控制：呼叫 `push_event_*` 即紅，Q7）。
 8. migration 0004：冪等、舊列不變、可回退（舊碼讀新 DB）；`test_module_migrations`、`test_module_changelog_follows_code`、`test_mail_registry`、`test_approval_doc_type_registry`、route 表黃金檔（`route_table_golden.json` 新增 3＋出納檔案端點）、L1 interface snapshot。
 9. 派發連結：連結表 CRUD、一對多／多對一、唯一鍵、解除限制、作廢標示、M07 不在退化、金額不外洩給非最高管理者、匯款單 `payslipNo` 相容。
 
 e2e（Playwright，**一律驗按鈕**）：
-1. 勞報單頁：新增草稿→「送審」按鈕可見／匯出鈕在草稿不可用→送審→簽核人簽核→匯出（不出現付款日欄）→上傳簽回檔→出納頁看到→填付款日＋傳票號→已付款；列表徽章與歷史對。
+1. 勞報單頁：新增草稿→「送審」按鈕可見／匯出鈕在草稿不可用→送審→簽核人簽核→匯出（選填、不出現付款日欄）→（選填）上傳簽回檔→出納頁看到→填付款日＋傳票號→已付款；另一條：核准後不匯出直接由出納付款；列表徽章與歷史對。
 2. 退回流程：退回原因顯示、回草稿可改、重送。
-3. 出納頁：核准後即出現、未簽回付款鈕停用、簽回後亮；預定付款日編輯。
+3. 出納頁：核准後即出現、**未簽回也可付款**（付款日＋傳票號）、舊 `已簽回` 列仍可付款、預定付款日編輯；隱藏舊「勞報單待付款」頁籤；財務角色可付、其他角色看不到。
 4. 派發頁↔勞報單頁互點（有權／無權兩種身分）、無金額洩漏；`pages_without_case_module`、`dark_mode`／`unread_marks` 這類既有 e2e 回歸（新增 UI 區塊）。
 5. 站內通知鈴鐺：送審／核准／退回各出現一列、點擊開對的單據。
 
@@ -186,4 +193,4 @@ e2e（Playwright，**一律驗按鈕**）：
 - 與 `wip/t44-inapp-bell`（`link=`、去重）：依賴其 API；第 44 班落地後 rebase。
 - 與第 45 班「預定付款日」（承攬商匯款／材料申請匯款）：同一個 `plannedPayDate` 欄名／出納 PATCH 慣例，勞報單比照，避免三套寫法。
 - 與 `case_extra_expenses.py`／`payment-request.html`：本設計不碰。
-- 與 `cashier.py`／`cashier.js`：本設計會改（新增提供者的欄位呈現、`blocker`）；與 `wip/t44-attach-views`（出納附件預覽）同檔 ⇒ 排在其合併之後、rebase 重跑。
+- 與 `cashier.py`／`cashier.js`：本設計會改（新增提供者的欄位呈現、隱藏舊勞報單頁籤）；與 `wip/t44-attach-views`（出納附件預覽）同檔 ⇒ 排在其合併之後、rebase 重跑。
