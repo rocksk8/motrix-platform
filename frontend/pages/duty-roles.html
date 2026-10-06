@@ -194,43 +194,45 @@
         kindLabel(k) { return KIND[k] || k },
         toggle(arr, v) { const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v) },
         async init() { if (this._initDone) return; this._initDone = true; await this.load() },
-        async _call(method, url, body) {
-          this.errMsg = ''; this.okMsg = ''
-          const r = await fetch(url, { method, headers: this._hdr(), body: body ? JSON.stringify(body) : undefined })
+        // 讀＝_get；寫＝_post／_put（每個寫入都是明寫的 fetch method：頁面真的會送出綁定／扣項／角色的變更，AC1 守門靠這個辨識）
+        async _handle(r) {
           const j = await r.json().catch(() => ({}))
           if (!r.ok) { this.errMsg = (typeof j.detail === 'string' ? j.detail : '操作失敗（' + r.status + '）'); return null }
           return j
         },
+        async _get(url) { this.errMsg = ''; this.okMsg = ''; return this._handle(await fetch(url, { headers: this._hdr() })) },
+        async _post(url, body) { this.errMsg = ''; this.okMsg = ''; return this._handle(await fetch(url, { method: 'POST', headers: this._hdr(), body: JSON.stringify(body || {}) })) },
+        async _put(url, body) { this.errMsg = ''; this.okMsg = ''; return this._handle(await fetch(url, { method: 'PUT', headers: this._hdr(), body: JSON.stringify(body || {}) })) },
         async load() {
-          const a = await this._call('GET', '/api/duty-roles')
+          const a = await this._get('/api/duty-roles')
           if (a) { this.roles = a.roles; this.keys = a.keys; this.highKeys = a.highSensitiveKeys }
-          const b = await this._call('GET', '/api/duty-roles/users')
+          const b = await this._get('/api/duty-roles/users')
           if (b) this.users = b.users.map(u => ({ ...u, _sub: '' }))
         },
-        async loadChanges() { const j = await this._call('GET', '/api/duty-roles/changes'); if (j) this.changes = j.items },
+        async loadChanges() { const j = await this._get('/api/duty-roles/changes'); if (j) this.changes = j.items },
         newRole() { this.form = { id: 0, key: '', name: '', description: '', permissions: [], active: true, reason: '' } },
         editRole(r) { this.form = { id: r.id, key: r.key, name: r.name, description: r.description, permissions: [...r.permissions], active: r.active, reason: '' } },
         formSensitive() { return !!this.form && this.form.permissions.some(k => this.highKeys.includes(k)) },
         async saveRole() {
           const f = this.form
           const body = { key: f.key, name: f.name, description: f.description, permissions: f.permissions, reason: f.reason, active: f.active }
-          const j = f.id ? await this._call('PUT', '/api/duty-roles/' + f.id, body) : await this._call('POST', '/api/duty-roles', body)
+          const j = f.id ? await this._put('/api/duty-roles/' + f.id, body) : await this._post('/api/duty-roles', body)
           if (j) { this.form = null; this.okMsg = '已儲存'; await this.load() }
         },
         _ask(title, needReason, run) { this.pending = { title, needReason, reason: '', run } },
         toggleBind(u, r) {
           const bound = u.roles.some(b => b.id === r.id)
           this._ask((bound ? '解除 ' : '綁定 ') + (u.displayName || u.username) + ' 的角色「' + r.name + '」', r.highSensitive.length > 0,
-            reason => this._call('POST', '/api/duty-roles/bindings' + (bound ? '/remove' : ''), { userId: u.id, roleId: r.id, reason }))
+            reason => this._post('/api/duty-roles/bindings' + (bound ? '/remove' : ''), { userId: u.id, roleId: r.id, reason }))
         },
         addSub(u) {
           const k = u._sub
           this._ask('扣除 ' + (u.displayName || u.username) + ' 的權限「' + this.label(k) + '」（只影響以模組權限判斷的功能）', this.highKeys.includes(k),
-            reason => this._call('POST', '/api/duty-roles/subtracts', { userId: u.id, key: k, reason }))
+            reason => this._post('/api/duty-roles/subtracts', { userId: u.id, key: k, reason }))
         },
         removeSub(u, k) {
           this._ask('解除 ' + (u.displayName || u.username) + ' 的扣項「' + this.label(k) + '」', this.highKeys.includes(k),
-            reason => this._call('POST', '/api/duty-roles/subtracts/remove', { userId: u.id, key: k, reason }))
+            reason => this._post('/api/duty-roles/subtracts/remove', { userId: u.id, key: k, reason }))
         },
         async confirmPending() {
           const p = this.pending
