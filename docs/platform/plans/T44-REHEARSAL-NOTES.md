@@ -9,7 +9,7 @@
 2. 現有演練工具的基線資料是**合成種子**，不是開發庫複本。你要的「開發庫複本」需要一個小改（見 §3 **缺口 G1**）。
 3. **「probe CLEAN」我的解讀**（請糾正）：套用後的演練安裝上，所有模組宣告的 `provides.probes`（GET）＋`pages` 都回預期碼、`undeclared_probes` 為空、`server.log` 無指向專案模組的 Traceback、單一監聽行程。若你指的是別的探針（例如 `w3-focus-probe` 類腳本或 `prod_status_snapshot` 的 `errors`），告訴我。
 4. 包：**用閘門之後建出的真包**（`deploy_packages\<包名>`），不另建（建包持獨佔、閘門在跑）。真包是**未簽**（演練用拋棄式金鑰重簽，§1），所以**正式金鑰簽章驗證不在演練範圍**（35b 報告同樣列為「未涵蓋」）。
-5. 開發庫複本來源＝`D:\開發測試檔\qw-pr\backend\motrix_erp.db`（1.25 MB；memory：開發庫全是測試資料）。第 43 班 RUNBOOK 記載「AI 複製 `.db` 被分類器擋下（PII）」⇒ 複本可能要**你用 `!` 執行**（§1 步驟 2 給了單行指令，使用 Online Backup 唯讀來源）。
+5. **開發庫是空的（查證 2026-10-07）**：`D:\MOTRIX-PLATFORM\backend\motrix_erp.db` 與 `qw-pr\backend\motrix_erp.db` 都是 1.25 MB、**0 位使用者、0 筆通知、無 R1 表、無模組 schema 版本**——複製它做 R1 等價與通知題幾乎沒有證據力。只有舊 ERP（`Desktop\MOTRIX-ERP`，13 帳號／688 通知／26 報價，V9 形狀）有資料。所以演練工具**預設用合成種子**（10 種帳號涵蓋各角色與舊式 cashier／finance／financial_view 勾選、停用帳號；每人三筆新舊通知），**不需要複製任何真庫、沒有 PII／分類器問題**。`--seed-db <庫>` 仍可選：只把來源（唯讀）的 users／notifications 列匯進演練安裝（要用就由你決定給哪個庫）。
 
 ## 1. 準備（所有路徑在 `D:\開發測試檔\rh44\`；全部演練後刪）
 
@@ -18,7 +18,7 @@
 | `rh44\tools\` | `git worktree`／`git archive` 取出 `origin/drill/train35b-d5` 的 `tools/platform/drill_*.py`＋`backend/tools/*`（演練工具；不改共用檔） |
 | `rh44\keys\` | 拋棄式簽章金鑰（私鑰不離開本資料夾；**不碰** `D:\MOTRIX-KEYS`） |
 | `rh44\deliv\root\` | 演練交付資料夾（`delivery.py publish` 的 `--root`；**不碰** `G:\`） |
-| `rh44\seed\dev_copy.db` | 開發庫複本（Online Backup） |
+| `rh44\seed\dev_copy.db` | （選用）`--seed-db` 的庫複本；預設不建立 |
 | `rh44\run\<時間>\` | 演練安裝目錄（baseline install、staging、快照、報告；埠 **6744**，只綁 127.0.0.1） |
 | `%TEMP%\rh44-*` | 只放報告 JSON（演練目錄外，清除前先寫）；pytest 不跑所以沒有 basetemp |
 
@@ -34,11 +34,10 @@ $RH  = "D:\開發測試檔\rh44"; $PY = "D:\MOTRIX-PLATFORM\.venv312\Scripts\pyt
 $env:PYTHONIOENCODING="utf-8"; $env:PYTHONDONTWRITEBYTECODE="1"
 New-Item -ItemType Directory -Force "$RH\keys","$RH\deliv\root","$RH\seed","$RH\run" | Out-Null
 
-# 1 演練工具：從 drill 分支取（不動 platform／train 與任何共用工作樹）
-git -C D:\開發測試檔\t44-rehearsal-notes worktree add --detach "$RH\tools" origin/drill/train35b-d5
+# 1 演練工具：已建好（$RH\tools ＝ origin/drill/train35b-d5 為底的 worktree，本機分支 wip/t44-rehearsal-tools（已 push，a5a39e1a0）；drill_train44.py 在 tools\platform\）
+#   重建：git -C D:\開發測試檔\t44-rehearsal-notes worktree add --detach $RH\tools origin/wip/t44-rehearsal-tools
 
-# 2 開發庫複本（唯讀來源；Online Backup）——若被分類器擋，改由使用者執行同一行
-& $PY -c "import sqlite3;s=sqlite3.connect('file:D:/開發測試檔/qw-pr/backend/motrix_erp.db?mode=ro',uri=True);d=sqlite3.connect(r'$RH\seed\dev_copy.db');s.backup(d);d.close();s.close()"
+# 2（選用）--seed-db 的庫複本：預設不需要（合成種子）；要匯入真資料形狀才由使用者決定來源後執行 Online Backup。
 
 # 3 拋棄式簽章金鑰（delivery.py keygen＝Ed25519；私鑰寫到檔、已存在就拒絕，公鑰印出——存成 rh44\keys\drill_pub.pem；演練公鑰由工具 `--pubkey-file` 換進安裝版本內建公鑰）
 & $PY "$RH	oolsackend	ools\delivery.py" keygen --private-out "$RH\keys\drill_priv.pem"   # 輸出的公鑰另存為 drill_pub.pem（格式照 35b：d5-drill35b-deliv\keys\drill_pub.pem）
@@ -53,8 +52,9 @@ git -C D:\開發測試檔\t44-rehearsal-notes worktree add --detach "$RH\tools" 
 
 # 5 演練本體（新腳本 drill_train44.py＝drill_train35b.py 的改版，見 §3；--runs 依序 A→C→E→B，結尾自動 R 再套用）
 & $PY "$RH\tools\tools\platform\drill_train44.py" --delivery-root "$RH\deliv\root" --name <包名> --new-commit <新commit前8碼> `
-      --base-commit 89206122 --pubkey-file "$RH\keys\drill_pub.pem" --drill-root "$RH\run" --port 6744 --seed-db "$RH\seed\dev_copy.db" `
-      --expect-db-version <N> --runs A,C,E,B
+      --base-commit 89206122 --pubkey-file "$RH\keys\drill_pub.pem" --drill-root "$RH\run" --port 6744 `
+      --expect-db-version <N> --expect-core 8 --runs A,C,E,B `
+      [--seed-db <選用庫>] [--probe-401 /api/cashier/pending-payables/case/1/files/x] [--expect-file backend/modules/payroll/bonus_notify.py]
 ```
 場次（沿用 35b）：**A** 套用（`stage`→`verify`→`verify_package`→`apply_update.ps1 -Yes`，記 `::RESULT::`）；**C** 資料庫回滾（`rollback_update.ps1 -IncludeDatabase -ConfirmDatabaseOverwrite`，僅演練）；**E** 回滾後重套；**B** 只回程式（`rollback_update.ps1 -SnapshotTimestamp <t> -Yes`）並逐檔雜湊比對基線；**R** B 之後再套用一次（35b 踩過：R 之後服務是起著的，**清除前一定要先停**才刪得掉目錄）。
 
@@ -68,7 +68,7 @@ R1 等價驗證（演練本體內建，或手動等價）：
 
 ## 3. 缺口（要先做的小改；程式碼編輯，不佔測試鎖）
 
-- **G1 `drill_train44.py`**（由 `drill_train35b.py` 複製改）：①基線資料＝`--seed-db`（開發庫複本，覆蓋合成種子；種子寫入與 35b 專屬 `seed35b` 拿掉）；②判準換成 §4 的 44 班檢查；③`TRAIN = {number:"44", base:"89206122", db_version:<N>, schema:…}`（case／subcontract schema 版本從包內 `module.json` 讀，不手寫）；④不連網、不寄信的替身沿用；⑤`R` 再套用保留。預估 30～45 分鐘寫＋讀 35b 的 `checks_after_apply`；**要我現在開始請說一聲**（只改程式、不跑）。
+- **G1 `drill_train44.py` ✅ 已寫（未實跑）**：分支 `wip/t44-rehearsal-tools`（a5a39e1a0；由 35b 的零件組成，不改共用檔）。判準 44_0～44_9＋C／B／R 的 44 專屬回滾題在檔頭 docstring；`py_compile` 與 import 通過；**沒有啟服務跑過**（等 gate green）。第一次實跑若冒出別的「舊班次專屬」題（繼承自 checks31），先看失敗證據、確認是舊題才加進 `_STALE`（不放寬 44 題）。
 - **G2 `<N>`（`--expect-db-version`）**：第 43 班步驟檔用 **116**（`db.py` 遷移數，`verify_package --expect-db-version`）；第 43 班 BUILD-RUNBOOK 另寫「core migration 最大號 7」——兩者不同概念。第 44 班：`db.py` 遷移數預期**仍 116**（鈴鐺是 core 未取號 migration，不是 `db.py` 版號），core migration 最大號取號後＝8。以包內 `deploy_manifest.json`／`verify_package` 輸出為準，不手填。
 
 ## 4. 通過判準（機械可判；每項寫進報告 JSON）
@@ -107,7 +107,7 @@ R1 等價驗證（演練本體內建，或手動等價）：
 1. 先停服務（演練工具 `T.DM.stop`；R 之後服務起著，**不停就刪不掉**）：`Get-NetTCPConnection -LocalPort 6744` 確認釋放。
 2. `git -C D:\開發測試檔\t44-rehearsal-notes worktree remove --force "$RH\tools"`（我自己建的 worktree）。
 3. `Remove-Item -Recurse -Force $RH`（逐層 `ls` 後再刪；**不用萬用字元刪 `motrix-pytest-*`**）；`%TEMP%\rh44-*` 報告留到你讀完。
-4. 開發庫複本 `rh44\seed\dev_copy.db` 一併刪（含測試資料，仍當敏感）。
+4. （若建立過）`rh44\seed\dev_copy.db` 一併刪（可能含測試資料，仍當敏感）。
 
 ## 6. 時間估計與觸發
 
