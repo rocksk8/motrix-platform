@@ -101,7 +101,7 @@ def test_link_validates_amount_status_and_payee(client, tok):
     net = 10000 - 1000 - 211
     vno = _voucher(client, tok, cid, "李外包", net)
     assert _link(client, tok, vno, cid, "LB-NOPE").status_code == 409                                     # 查無
-    assert _link(client, tok, vno, cid, _slip(cid, "李外包", status="已匯出")).status_code == 409            # 未簽回
+    assert _link(client, tok, vno, cid, _slip(cid, "李外包", status="草稿")).status_code == 409              # 未核准（第46班 Q13：已核准／已匯出／已簽回都可關聯；草稿不行）
     assert _link(client, tok, vno, cid, _slip(cid, "李外包", gross=20000)).status_code == 409              # 金額不符
     other = _contractor("別人")
     assert _link(client, tok, vno, cid, _slip(other, "別人")).status_code == 409                          # 受款人不符
@@ -127,7 +127,7 @@ def test_pay_requires_link_by_default_and_marks_payslip_paid(client, tok):
     # 取消匯款 ⇒ 勞報單一併退回
     assert client.post("/api/contractor-vouchers/%s/paid-toggle" % vno, headers=_auth(tok), json={"action": "unpay"}).status_code == 200
     row = _status(slip)
-    assert row["status"] == "已簽回" and "paid_via_remit" not in json.loads(row["data_json"])
+    assert row["status"] == "已核准" and "paid_via_remit" not in json.loads(row["data_json"])      # 第46班：退回付款前最近的狀態（這張沒有簽回檔、沒匯出過 ⇒ 已核准；有簽回檔仍退已簽回）
 
 
 def test_setting_off_keeps_old_behaviour_but_linked_lines_still_validated(client, tok):

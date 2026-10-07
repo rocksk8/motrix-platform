@@ -5,6 +5,7 @@ from core.registry import ModuleSpec
 
 import importlib
 
+from modules.payroll import payslip_payables
 from modules.payroll import bank_account, bonus, bonus_correction, bonus_payouts, bonus_queue, gl_events, payslip_payouts, remit_link
 from modules.payroll.api import bank_account as bank_account_api, bonus as bonus_api, bonus_correction as bonus_correction_api, payslips as payslips_api
 from modules.payroll.api import payslip_approval as payslip_approval_api
@@ -32,6 +33,8 @@ MODULE = ModuleSpec(
         ("expense.entries", "bonus_correction"): bonus_correction.expense_entries,
         # IP-103：出納頁的勞報單待付款（M05）；IP-9：已付款勞報單列入營運報表與月支出（M08，名稱 payslip）
         ("payslip.payables", "payroll"): payslip_payouts._Payables,
+        # IP-100（第46班）：核准後的勞報單進出納「待付款申請」（已核准即可付款；取代並最終退役 IP-103 頁籤）
+        ("payables.pending", "payroll_payslip"): payslip_payables._Payables,
         ("expense.entries", "payslip"): payslip_payouts._expense_entries,
         # IP-105（R12）：承攬商匯款單關聯勞報單、匯款時一併記為已付款
         ("payslip.remit", "payroll"): remit_link._Remit,

@@ -321,7 +321,7 @@
                 獎金待發放<span class="tab__cnt" x-text="bonusQueue.items.length"></span>
               </button>
               <!-- 勞報單待付款（IP-103 payslip.payables；只給最高管理者與出納） -->
-              <button class="ctab" x-show="payslipQueue.visible" :class="{on: cashierSub==='payslip'}" @click="cashierSub='payslip'" data-testid="cashier-payslip-tab">
+              <button class="ctab" x-show="showLegacyPayslipTab && payslipQueue.visible" :class="{on: cashierSub==='payslip'}" @click="cashierSub='payslip'" data-testid="cashier-payslip-tab">
                 勞報單待付款<span class="tab__cnt" x-text="payslipQueue.items.length"></span>
               </button>
               <!-- 待付款申請（IP-100 payables.pending：案件額外支出已核准、未登錄付款日；2026-09-27 請款流程） -->
@@ -522,7 +522,7 @@
                           <td class="c">
                             <input type="date" class="field-input" style="width:140px" x-show="payreqQueue.canPay" required
                                    :data-testid="'cashier-payreq-date-' + it.source + '-' + it.key" x-model="payreqDates[it.source + ':' + it.key]">
-                            <div x-show="payreqQueue.canPay" style="margin-top:4px;text-align:left;font-size:11px">
+                            <div x-show="payreqQueue.canPay && it.kind !== 'payslip'" style="margin-top:4px;text-align:left;font-size:11px">
                               實付 <input type="number" min="0" step="0.01" class="field-input" style="width:90px;display:inline-block" :placeholder="it.amount"
                                         x-model="payreqRemit(it).actual" :data-testid="'cashier-payreq-actual-' + it.source + '-' + it.key">
                               <label><input type="checkbox" x-model="payreqRemit(it).hasFee" :data-testid="'cashier-payreq-hasfee-' + it.source + '-' + it.key"> 手續費</label>
@@ -537,7 +537,11 @@
                                 <span>匯款日 <input type="date" class="field-input" style="width:130px;display:inline-block" x-model="payreqExtra(it).remitDate" :data-testid="'cashier-payreq-remitdate-' + it.source + '-' + it.key">
                                   付款條件 <input type="text" maxlength="200" class="field-input" style="width:120px;display:inline-block" x-model="payreqExtra(it).payTerms" :data-testid="'cashier-payreq-terms-' + it.source + '-' + it.key"></span>
                               </template>
-                              <template x-if="it.kind !== 'purchase_order'">
+                              <template x-if="it.kind === 'payslip'">
+                                <span>傳票單號 <input type="text" maxlength="40" class="field-input" style="width:140px;display:inline-block" x-model="payreqExtra(it).voucherNo" :data-testid="'cashier-payreq-voucherno-' + it.source + '-' + it.key">
+                                  <span :data-testid="'cashier-payreq-signed-' + it.key" style="margin-left:4px;color:var(--text-dim)" x-text="it.signedBack ? '已簽回' : '未簽回（不影響付款）'"></span></span>
+                              </template>
+                              <template x-if="it.kind !== 'purchase_order' && it.kind !== 'payslip'">
                                 <span>付款方式
                                   <select class="field-input" style="width:110px;display:inline-block" x-model="payreqExtra(it).payMethod" :data-testid="'cashier-payreq-method-' + it.source + '-' + it.key">
                                     <option value="" x-text="it.kind === 'petty_cash' ? '請選擇' : '轉帳（預設）'"></option>
