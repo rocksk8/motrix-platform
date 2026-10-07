@@ -100,6 +100,7 @@ window.CM_PARTS.push(() => ({
             _recvDate: ''
           }))
           await this.loadMoApprovals(quoteNo)
+          if (this._moReqFor === quoteNo && this.mlAutoLinkMaterials) this.mlAutoLinkMaterials()   // 只在開啟／重載時比對一次（不在每次送審／核准後重跑，避免把手動取消的連結又帶回來）
           await this.loadMoPayments(quoteNo)
           if (this.mlLoadStatus) this.mlLoadStatus(quoteNo)     // 32-S4：連結徽章
           if (this.moCanEdit()) await this.moLoadSuppliers()
@@ -114,7 +115,7 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-order-approvals`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok && this._moReqFor === quoteNo) { const _d = await r.json(); this.moApprovals = _d.approvals || {}; this.moShipping = _d.shipping || {}; if (this._mlFollowMovedRow) this._mlFollowMovedRow(); if (this.mlAutoLinkMaterials) this.mlAutoLinkMaterials() }   // 32-S4d：列的狀態變了，頁籤跟著走
+        if (r.ok && this._moReqFor === quoteNo) { const _d = await r.json(); this.moApprovals = _d.approvals || {}; this.moShipping = _d.shipping || {}; if (this._mlFollowMovedRow) this._mlFollowMovedRow() }   // 32-S4d：列的狀態變了，頁籤跟著走
       } catch {}
     },
     // ── 材料申請匯款申請（31-C 匯款切片）：已付金額不再手填，只能經匯款申請（簽核→出納）登錄 ──

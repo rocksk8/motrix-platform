@@ -111,6 +111,7 @@ window.CM_PARTS.push(() => ({
     mlAutoLinkMaterials() {
       const mats = this.cr?.caseRecord?.materials
       if (!Array.isArray(mats)) return 0
+      if (!this.moCanEdit || !this.moCanEdit()) return 0                  // 沒有編輯權限的角色不自動改（setDirty 會觸發自動存檔而被 403）
       const key = s => String(s || '').trim()
       const taken = new Set(mats.map(m => m.orderItemId).filter(Boolean))
       let n = 0
