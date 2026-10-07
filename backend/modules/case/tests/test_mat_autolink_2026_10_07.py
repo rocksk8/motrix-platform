@@ -17,13 +17,13 @@ const fs = require('fs'); const src = fs.readFileSync(process.argv[2], 'utf8'); 
 global.window = {}; eval(src); const part = window.CM_PARTS[0]()
 const ctx = Object.assign({}, part, { cr: { caseRecord: { materials: inp.mats } }, materialOrders: inp.orders, moApprovals: inp.apps, moCanEdit() { return inp.canEdit !== false }, dirty: 0, setDirty() { this.dirty++ } })
 const n = part.mlAutoLinkMaterials.call(ctx)
-console.log(JSON.stringify({ n, links: inp.mats.map(m => m.orderItemId || ''), dirty: ctx.dirty }))
+console.log(JSON.stringify({ n, links: inp.mats.map(m => m.orderItemId || ''), flags: inp.mats.map(m => [!!m.ordered, !!m.arrived]), dirty: ctx.dirty }))
 """
 
 
 def _run(mats, orders, apps, can_edit=True):
     out = subprocess.run([NODE, "-e", HARNESS, "x", str(JS), json.dumps({"mats": mats, "orders": orders, "apps": apps, "canEdit": can_edit})],
-                         capture_output=True, text=True, encoding="utf-8", check=True).stdout
+                         capture_output=True, text=True, encoding="utf-8", check=True, timeout=30).stdout
     return json.loads(out)
 
 
@@ -36,7 +36,7 @@ OK = {"o1": {"status": "已核准"}, "o2": {"status": "已核准"}}
 
 def test_unique_match_links_and_dirties():
     r = _run([{"id": "m1", "name": " 交換器 "}], [_o("o1", "交換器")], OK)
-    assert r == {"n": 1, "links": ["o1"], "dirty": 1}
+    assert (r["n"], r["links"], r["dirty"]) == (1, ["o1"], 1)
 
 
 def test_no_match_or_no_po_or_not_approved_stays_manual():
@@ -54,13 +54,27 @@ def test_multiple_matches_stays_manual():
 def test_already_linked_or_taken_by_other_card():
     r = _run([{"id": "m1", "name": "交換器", "orderItemId": "o1"}, {"id": "m2", "name": "交換器"}], [_o("o1", "交換器")], OK)
     assert r["links"] == ["o1", ""] and r["n"] == 0
-    r = _run([{"id": "m1", "name": "A"}], [_o("o1", "A")], OK)
-    assert "ordered" not in json.dumps(r)                                   # 不動已申購／已到料
+
+
+def test_link_does_not_touch_ordered_arrived_flags():
+    r = _run([{"id": "m1", "name": "A", "ordered": False, "arrived": False}], [_o("o1", "A")], OK)
+    assert r["links"] == ["o1"] and r["flags"] == [[False, False]]
+
+
+def test_missing_or_rejected_approval_and_blank_name_stay_manual():
+    assert _run([{"id": "m1", "name": "A"}], [_o("o1", "A")], {})["links"] == [""]
+    assert _run([{"id": "m1", "name": "A"}], [_o("o1", "A")], {"o1": {"status": "已退回"}})["links"] == [""]
+    assert _run([{"id": "m1", "name": "  "}], [_o("o1", "  ")], OK)["links"] == [""]
+
+
+def test_two_unlinked_cards_same_name_is_ambiguous():
+    r = _run([{"id": "m1", "name": "A"}, {"id": "m2", "name": "A"}], [_o("o1", "A")], OK)
+    assert r["links"] == ["", ""] and r["n"] == 0
 
 
 def test_read_only_role_never_links_or_dirties():
     r = _run([{"id": "m1", "name": "交換器"}], [_o("o1", "交換器")], OK, can_edit=False)
-    assert r == {"n": 0, "links": [""], "dirty": 0}
+    assert (r["n"], r["links"], r["dirty"]) == (0, [""], 0)
 
 
 def test_only_called_on_load_path_not_after_every_action():

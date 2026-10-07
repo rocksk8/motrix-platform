@@ -114,9 +114,11 @@ window.CM_PARTS.push(() => ({
       if (!this.moCanEdit || !this.moCanEdit()) return 0                  // 沒有編輯權限的角色不自動改（setDirty 會觸發自動存檔而被 403）
       const key = s => String(s || '').trim()
       const taken = new Set(mats.map(m => m.orderItemId).filter(Boolean))
+      const sameName = {}
+      for (const m of mats) if (!m.orderItemId) sameName[key(m.name)] = (sameName[key(m.name)] || 0) + 1
       let n = 0
       for (const mat of mats) {
-        if (mat.orderItemId || !key(mat.name)) continue
+        if (mat.orderItemId || !key(mat.name) || sameName[key(mat.name)] > 1) continue          // 同名未連結卡片有多張＝有歧義，維持手選
         const hits = (this.materialOrders || []).filter(o => o._saved !== false && o.poDocCode && !taken.has(o.itemId) &&
           (this.moApprovals || {})[o.itemId]?.status === '已核准' && key(o.itemName) === key(mat.name))
         if (hits.length !== 1) continue
