@@ -924,9 +924,14 @@ def _fail_stream_args():
     return ["-p", "fail_stream"] if (Path(__file__).resolve().parent / "fail_stream.py").is_file() else []
 
 
+#: window ⇒ 這一段 pytest 額外要帶的環境（run_pytest 在起行程前登記；全閘門的 failfast／重排用）。window 在一次全閘門裡每段都不同。
+_ENV_EXTRA = {}
+
+
 def _fail_stream_env(window):
     global _FAIL_STREAM_RUN
     env = dict(os.environ)
+    env.update(_ENV_EXTRA.get(window) or {})
     if not _fail_stream_args():
         return env
     if _FAIL_STREAM_RUN is None:
@@ -934,6 +939,7 @@ def _fail_stream_env(window):
     env["PYTHONPATH"] = os.pathsep.join([str(Path(__file__).resolve().parent)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
     env["MOTRIX_FAIL_STREAM_RUN"] = _FAIL_STREAM_RUN
     env["MOTRIX_FAIL_STREAM_STAGE"] = str(window or "")
+    env.update(_ENV_EXTRA.get(window) or {})
     return env
 
 
@@ -944,6 +950,7 @@ def run_pytest(targets, extra, window, full, collect_only=False, env_extra=None,
     rel = [str(Path(t).relative_to("backend")) if t.startswith("backend/") else t for t in targets]
     batches = _batches_by_length(rel)
     codes, tails = [], []
+    _ENV_EXTRA[window] = dict(env_extra or {})
     for batch in batches:
         bt = _new_basetemp(window, full)
         cmd = [PYEXE or sys.executable, "-m", "pytest", *batch, "--basetemp=%s" % bt, "-p", "no:cacheprovider"]
@@ -963,7 +970,7 @@ def run_pytest(targets, extra, window, full, collect_only=False, env_extra=None,
                 tails.append(proc.stdout)
                 continue
             proc = subprocess.Popen(cmd, cwd=str(BACKEND), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    creationflags=_low_priority_flags(), env=dict(_fail_stream_env(window), **(env_extra or {})))
+                                    creationflags=_low_priority_flags(), env=_fail_stream_env(window))
             tail = []
             for raw in proc.stdout:                       # 照樣即時印出，另留尾段給摘要解析
                 line = raw.decode("utf-8", errors="replace")
@@ -1269,6 +1276,14 @@ def overlap_decision(procs_fn=None, free_fn=None):
     return True, ""
 
 
+def executed_count(out):
+    """pytest 摘要行的「執行過的題數」＝ passed＋failed＋errors＋skipped＋xfailed＋xpassed（不含 deselected／warnings）；找不到摘要行 ⇒ None。"""
+    for line in reversed((out or "").splitlines()):
+        if re.search(r" in [\d.]+s", line) and _SUMMARY_ITEM.search(line):
+            return sum(int(n) for n, k in _SUMMARY_ITEM.findall(line) if k in ("passed", "failed", "error", "errors", "skipped", "xfailed", "xpassed"))
+    return None
+
+
 def _int_env(name, default):
     """正整數環境變數；沒設／不合法 ⇒ default。"""
     try:
@@ -1278,15 +1293,22 @@ def _int_env(name, default):
         return default
 
 
-def gate_plan(a, extra):
-    """全閘門的執行計畫（O1 切片＋fail-fast）⇒ (plan, main 段的 windows, failfast 環境, failfast pytest 參數)。
-    plan 每項 (段名, targets, pytest 參數, window)。切片關閉（MOTRIX_GATE_SLICES=0）或清單讀不到／找不到檔 ⇒ 回到舊行為：非 e2e 一段全跑。
-    無論切不切，都帶 fail-fast（MOTRIX_FAILFAST=0 可關；使用者明確設的環境變數優先）。"""
+def gate_plan(a, extra, overlap=False, collect=None):
+    """全閘門的執行計畫（O1 切片＋fail-fast）⇒ (plan, main 段的 windows, failfast 環境, failfast pytest 參數, 題數預期 exp 或 None)。
+    plan 每項 (段名, targets, pytest 參數, window)。切片關閉（MOTRIX_GATE_SLICES=0）、清單讀不到／找不到檔、或預先 collect-only 驗不過
+    （slice0 ∪ rest ≠ 全部）⇒ 回到舊行為：非 e2e 一段全跑（fail closed：不會少跑守門）。
+    無論切不切，都帶 fail-fast（MOTRIX_FAILFAST=0 可關；使用者明確設的環境變數優先）。
+    overlap＝兩段同時跑：非 e2e＋e2e 的 worker 合計不超過全量上限（review F2）。"""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import gate_slices as GS
     wk = _int_env("MOTRIX_GATE_WORKERS", a.workers)         # 共用機器上只准 2：MOTRIX_GATE_WORKERS=2（預設不變＝--workers／全量上限）
+    e2e_n = min(a.e2e_workers, wk)
+    if overlap:
+        total = full_max_workers()
+        e2e_n = max(1, min(e2e_n, e2e_max_workers(), total // 2))
+        wk = max(1, min(wk, total - e2e_n))
     n_main = cap_workers(["-m", "not e2e", "-n", str(wk)], full_max_workers())
-    e2e = ("e2e", TEST_ROOTS, cap_workers(["-m", "e2e", "-n", str(min(a.e2e_workers, wk))], e2e_max_workers()) + dist_args(), a.window + "e2e")
+    e2e = ("e2e", TEST_ROOTS, cap_workers(["-m", "e2e", "-n", str(e2e_n)], e2e_max_workers()) + dist_args(), a.window + "e2e")
     data = GS.load() if GS.enabled() else None
     targets, missing = GS.expand(data) if data else ([], [])
     ff = (data or {}).get("failfast") or {}
@@ -1296,13 +1318,20 @@ def gate_plan(a, extra):
     env["PYTHONPATH"] = os.pathsep.join([str(Path(__file__).resolve().parent)] + ([os.environ["PYTHONPATH"]] if os.environ.get("PYTHONPATH") else []))
     ff_args = ["-p", "failfast", "-rf"]
     main_args = n_main + dist_args()
+    exp = None
     if data and not missing:
-        plan = [("main", targets, main_args, a.window + "s0"),
-                ("main", TEST_ROOTS, main_args + GS.rest_args(targets), a.window), e2e]
-        return plan, {"main": [a.window + "s0", a.window]}, env, ff_args
-    if data and missing:
+        if collect is not None and os.environ.get("MOTRIX_GATE_VERIFY", "1").strip() != "0":
+            exp = GS.expected(collect, TEST_ROOTS, targets)             # F1：開跑前 collect-only 一次，記下「全部／slice0／其餘」題數與 nodeid sha
+            if not exp["ok"]:
+                print("[全閘門] ⚠ 切片驗證不過（%s）⇒ 這次不切片、一段全跑" % "；".join(exp["why"]))
+                data = None
+        if data:
+            plan = [("main", targets, main_args, a.window + "s0"),
+                    ("main", TEST_ROOTS, main_args + GS.rest_args(targets), a.window), e2e]
+            return plan, {"main": [a.window + "s0", a.window]}, env, ff_args, exp
+    elif data and missing:
         print("[全閘門] ⚠ slice0 清單有找不到的項目（%s）⇒ 這次不切片、一段全跑（守門檔被改名？請改 gate_slices.json）" % "；".join(missing))
-    return [("main", TEST_ROOTS, main_args, a.window), e2e], {"main": a.window}, env, ff_args
+    return [("main", TEST_ROOTS, main_args, a.window), e2e], {"main": a.window}, env, ff_args, exp
 
 
 def dist_args():
@@ -1390,9 +1419,16 @@ def run_full(extra, a):
     want_durations = getattr(a, "durations", True)
     if want_durations:
         extra = extra + ["--durations=%d" % DURATIONS]
-    plan, main_windows, ff_env, ff_args = gate_plan(a, extra)
-    codes, per_stage, sliced_out = {}, {}, False
     overlap, why = overlap_decision()
+    if overlap and full_max_workers() < 2:                      # 兩段各至少 1 個 worker：上限只有 1 時不重疊
+        overlap, why = False, "worker 上限 %d，不夠兩段各 1 個" % full_max_workers()
+    plan, main_windows, ff_env, ff_args, exp = gate_plan(
+        a, extra, overlap=overlap,
+        collect=lambda tg, ex: run_pytest(tg, ex, a.window + "c", full=False, collect_only=True))
+    codes, per_stage, sliced_out = {}, {}, False
+    if exp is not None:
+        result["slices"] = {k: exp[k] for k in ("ok", "all", "slice0", "rest", "sha")}
+        result["slices"]["executed"] = {}
     result["overlap"] = {"flag": os.environ.get(OVERLAP_ENV, "0"), "used": overlap, "reason": why}   # 開關狀態一律記進結果（O2 控制④）
     if os.environ.get(OVERLAP_ENV, "0").strip() == "1":
         print("[全閘門] 兩段重疊：%s" % ("啟用（非 e2e 與 e2e 同時跑）" if overlap else "不啟用 ⇒ 序列（%s）" % why))
@@ -1405,7 +1441,17 @@ def run_full(extra, a):
         for name, targets, args, window in group:
             kw = {"prefix": "[%s] " % ("e2e" if name == "e2e" else "main")} if overlap else {}
             code, out = run_pytest(targets, args + extra + ff_args, window, full=True, env_extra=ff_env, **kw)
+            code0 = code
+            # 注意（review F6）：重疊時兩個執行緒都會改 result（flaky_retried／slice_mismatch／slices.executed）——只對不同的 key 寫、或對 list 追加，CPython 下安全
             code = flaky_gate(code, out, window, result)          # O4：紅了先分流（只有已登記且未過期的偶發才放行）
+            if name == "main" and code0 == 0 and exp is not None and exp.get("ok"):   # F1：整片跑完（沒被 fail-fast 截斷）⇒ 執行題數必須等於預先收集的題數
+                want = exp["slice0"] if window == a.window + "s0" else exp["rest"]
+                got = executed_count(out)
+                result["slices"]["executed"][window] = got
+                if got != want:
+                    print("[全閘門] ✗ %s 執行 %s 題，預先收集是 %d 題 ⇒ 切片漏題或多題，記為紅" % (window, got, want))
+                    result.setdefault("slice_mismatch", []).append({"window": window, "executed": got, "collected": want})
+                    code = 1
             done.append((name, window, code, out))
             if window == a.window + "s0" and code != 0:           # O1：第一片紅 => 不開第二片（整合紅在第一片就停）
                 break
@@ -1494,6 +1540,8 @@ def main(argv=None):
     g.add_argument("--rebase-check", metavar="GREEN", help="§C-11：全量綠在 GREEN，rebase 到 --onto 之後該跑哪些題（只判定、不執行；永遠不建議各線跑全量，§G3）")
     ap.add_argument("--onto", default="origin/platform", help="--rebase-check 的 rebase 目標（預設 origin/platform）")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--no-count", action="store_true",
+                    help="dry-run 不做 collect-only 計題數（只要『挑出哪些檔』時用；items／full_items 為 null）。選題本身與題數無關，挑出的檔完全相同——第 45 班 O5")
     ap.add_argument("--full", action="store_true", help="全量（非 e2e＋e2e 兩段）；結果寫主工作樹 tools/platform/full_results/<commit>.json（dirty 不寫）＋.last_full.json")
     ap.add_argument("--train", action="store_true",
                     help="列車專用：設 MOTRIX_TRAIN=1，跑差異題（預設 --base origin/platform）＋tests/platform；「是否最新」三題 skip 就判紅（PLAYBOOK §G4）")
@@ -1549,7 +1597,7 @@ def main(argv=None):
         return run_train(picked, tmap, extra, a)
 
     n_items, tail, full_n, per = None, "", None, None
-    if a.dry_run:
+    if a.dry_run and not getattr(a, "no_count", False):
         per, tail = collect_per_file(a.window)
         if per is not None:
             n_items = sum(per.get(t, 0) for t in picked)
@@ -1591,7 +1639,9 @@ def main(argv=None):
             if a.list:
                 for t in picked:
                     print("  %s  ← %s" % (t, "、".join(rep["reasons"][t][:4])))
-            if n_items is None:
+            if getattr(a, "no_count", False):
+                print("題數：未計（--no-count）")
+            elif n_items is None:
                 print("題數：收集失敗（%s）" % tail)
             else:
                 print("題數（collect-only）：%d／全量 %d（%.1f%%）" % (n_items, full_n, 100.0 * n_items / max(full_n, 1)))

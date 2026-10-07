@@ -150,6 +150,7 @@ def _no_cap_env(monkeypatch):
     monkeypatch.delenv(MT.FULL_ENV, raising=False)
     monkeypatch.delenv(MT.PARTIAL_ENV, raising=False)
     monkeypatch.delenv(MT.E2E_ENV, raising=False)
+    monkeypatch.delenv("MOTRIX_GATE_WORKERS", raising=False)
 
 
 def test_caps_default_when_env_unset(_no_cap_env):
@@ -199,7 +200,7 @@ def test_run_full_e2e_stage_has_its_own_cap(_no_cap_env, monkeypatch):
         seen = []
         monkeypatch.setattr(MT, "run_pytest", lambda roots, args, *a, **k: seen.append(list(args)) or (0, "== 1 passed in 1.0s =="))
         MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=4, window="t"))
-        return {args[args.index("-m") + 1]: args[args.index("-n") + 1] for args in seen}
+        return {args[args.index("-m") + 1]: args[args.index("-n") + 1] for args in seen if "-n" in args}   # 開跑前的 collect-only 沒有 -n
     assert stages(None) == {"not e2e": "3", "e2e": "2"}
     assert stages("1") == {"not e2e": "3", "e2e": "1"}
 

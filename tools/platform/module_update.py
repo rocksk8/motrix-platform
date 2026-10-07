@@ -204,7 +204,7 @@ def ship_tests(key, tier_result, repo=REPO):
     pc = tier_result.get("provider") or {}
     extra += list(pc.get("consumers") or [])
     if extra:
-        r = subprocess.run([sys.executable, str(HERE / "modtest.py"), "--files", *extra, "--dry-run", "--json"],
+        r = subprocess.run([sys.executable, str(HERE / "modtest.py"), "--files", *extra, "--dry-run", "--json", "--no-count"],
                            cwd=str(repo), capture_output=True)
         if r.returncode not in (0, 3):
             raise UpdateError("modtest 選題失敗：%s" % r.stderr.decode("utf-8", "replace")[-400:])

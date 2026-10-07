@@ -94,8 +94,57 @@ def judge_counts(collected, executed):
     return (collected == executed), ("" if collected == executed else "收集 %d 題、執行 %d 題" % (collected, executed))
 
 
+def measure(workers):
+    """--measure：只跑 slice0（量測用；**不**寫 full_results、不寫建包沿用紀錄，所以不會被當成這個 commit 的全量結果）。
+    -n workers（共用機器 2）、worksteal、failfast 關（要量完整耗時）；印牆鐘時間與最慢 25 題。回 pytest 的 exit code。"""
+    import time
+    sys.path.insert(0, str(HERE))
+    import modtest as MT
+    data = load()
+    targets, missing = expand(data) if data else ([], ["gate_slices.json 讀不到"])
+    if missing:
+        print("[gate_slices] slice0 找不到：" + "；".join(missing))
+        return 1
+    args = ["-m", "not e2e", "-n", str(workers)] + MT.dist_args() + ["-q", "-rfE", "--tb=short", "--durations=25"]
+    t0 = time.time()
+    code, out = MT.run_pytest(targets, MT.cap_workers(args, MT.full_max_workers()), "gsm", full=True,
+                              env_extra={"MOTRIX_TRAIN": "1", "PYTHONDONTWRITEBYTECODE": "1"})
+    dt = time.time() - t0
+    print("[gate_slices] slice0 量測：%d 個目標、-n %d、牆鐘 %.1f 秒（%.1f 分）、exit %s；%s" % (
+        len(targets), workers, dt, dt / 60.0, code, (out.strip().splitlines() or ["?"])[-1]))
+    return code
+
+
+def collect_ids(collect, targets, extra=()):
+    """collect(targets, extra) ⇒ (exit code, 輸出)（collect-only）。⇒ (code, nodeid 清單)。"""
+    code, out = collect(list(targets), ["-m", "not e2e", *extra])
+    return code, [ln.strip() for ln in (out or "").splitlines() if "::" in ln and not ln.startswith(("=", " ", "FAILED", "ERROR"))]
+
+
+def expected(collect, roots, targets):
+    """開跑前的切片驗證（全閘門用；只收集不執行）：收集「全部非 e2e」與「slice0」兩次，其餘＝全部 − slice0（第二片用 --ignore／--deselect 排除，
+    跑完後以執行題數對帳）。⇒ {ok, why[], all, slice0, rest, sha}。收集失敗、slice0 空、slice0 不是全部的子集 ⇒ ok=False（呼叫端退回一段全跑）。"""
+    c1, all_ids = collect_ids(collect, roots)
+    c2, s_ids = collect_ids(collect, targets)
+    a, s = set(all_ids), set(s_ids)
+    why = []
+    if c1 != 0 or c2 != 0:
+        why.append("collect-only 失敗（exit %s／%s）" % (c1, c2))
+    if not s:
+        why.append("slice0 沒有收集到任何題")
+    if not a:
+        why.append("全部沒有收集到任何題")
+    if s - a:
+        why.append("slice0 有 %d 題不在全部裡" % len(s - a))
+    return {"ok": not why, "why": why, "all": len(a), "slice0": len(s), "rest": len(a - s), "sha": nodeid_sha(all_ids)[:16]}
+
+
 def main(argv=None):
     """--check：用 modtest 的 collect-only 比三份 nodeid 集合（全部／slice0／rest）。只收集不執行，輕量。"""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--measure" in argv:
+        w = int(argv[argv.index("--workers") + 1]) if "--workers" in argv else 2
+        return measure(w)
     sys.path.insert(0, str(HERE))
     import modtest as MT
     data = load()

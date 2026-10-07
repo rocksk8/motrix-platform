@@ -39,8 +39,9 @@ SUMMARY = "== 5 passed in 1.0s =="
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
     for k in (MT.FULL_ENV, MT.PARTIAL_ENV, MT.E2E_ENV, "MOTRIX_GATE_SLICES", "MOTRIX_GATE_DIST", "MOTRIX_FULL_FLAKY_RETRY",
-              "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_GATE_WORKERS", "MOTRIX_FULL_OVERLAP", "MOTRIX_FULL_OVERLAP_MIN_GB", "MOTRIX_FAILFAST_QUIET_MIN"):
+              "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_GATE_WORKERS", "MOTRIX_FULL_OVERLAP", "MOTRIX_FULL_OVERLAP_MIN_GB", "MOTRIX_GATE_VERIFY", "MOTRIX_FAILFAST_QUIET_MIN"):
         monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("MOTRIX_GATE_VERIFY", "0")                 # 預先 collect-only 驗證另有題（下面 F1）；其餘題不收集
     monkeypatch.setattr(MT, "tree_state", lambda repo=None: ("a" * 40, ""))
     monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: Path("x"))
     monkeypatch.setattr(MT, "dist_args", lambda: ["--dist", "worksteal"])
@@ -402,3 +403,145 @@ def test_overlap_thread_error_is_not_swallowed(monkeypatch):
     monkeypatch.setattr(MT, "run_pytest", fake)
     with pytest.raises(RuntimeError, match="e2e boom"):
         MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="w"))
+
+
+# ── 量測模式：只跑 slice0、不寫任何「全量結果」────────────────────────────────────
+
+def test_measure_runs_only_slice0_with_the_given_workers_and_writes_no_result(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(MT, "run_pytest", lambda t, a, w, full, collect_only=False, env_extra=None, prefix="":
+                        calls.append((t, a, w, full, env_extra)) or (0, "== 3 passed in 1.0s =="))
+    monkeypatch.setattr(MT, "write_last_full", lambda *a, **k: pytest.fail("量測不可以寫全量結果"))
+    monkeypatch.setattr(MT, "record_for_build", lambda *a, **k: pytest.fail("量測不可以寫建包沿用紀錄"))
+    monkeypatch.setitem(sys.modules, "modtest", MT)
+    assert GS.measure(2) == 0
+    t, a, w, full, env = calls[0]
+    assert t == GS.expand()[0] and a[a.index("-n") + 1] == "2" and "not e2e" in a and full is True
+    assert env["MOTRIX_TRAIN"] == "1" and "牆鐘" in capsys.readouterr().out
+
+
+# ── O5：module_update.ship_tests 不再為了「挑哪些檔」去 collect 全庫 ───────────────
+
+def test_ship_tests_asks_modtest_for_files_only_and_uses_the_same_selection(monkeypatch, tmp_path):
+    """選題結果只來自 json 的 tests；--no-count 只拿掉題數統計（collect-only），挑出的檔不變。"""
+    import json as _json
+    MU = _load("module_update")
+    mod = tmp_path / "backend" / "modules" / "zz"
+    mod.mkdir(parents=True)
+    (mod / "module.json").write_text(_json.dumps({"key": "zz", "name": "z", "version": "1.0.0", "pages": []}), encoding="utf-8")
+    seen = []
+
+    def fake_run(cmd, **k):
+        seen.append(cmd)
+        return types.SimpleNamespace(returncode=0, stdout=_json.dumps({"tests": ["backend/tests/test_a.py"], "items": None}).encode(), stderr=b"")
+    monkeypatch.setattr(MU.subprocess, "run", fake_run)
+    sel = MU.ship_tests("zz", {"provider": {"consumers": ["backend/modules/x/api.py"]}}, repo=tmp_path)
+    assert "--no-count" in seen[0] and "--dry-run" in seen[0] and "--json" in seen[0]
+    assert "tests/test_a.py" in sel and "tests/platform" in sel
+
+
+# ── F1：開跑前 collect-only 對帳＋跑完後執行題數對帳 ───────────────────────────────
+
+def _smart_fake(monkeypatch, all_ids, s0_ids, run_counts=None, collect_code=0, written=None):
+    """collect_only ⇒ 依 targets 回 nodeid 清單；一般執行 ⇒ 回 N passed（N＝run_counts[window]，預設＝該片應有題數）。"""
+    seen = []
+    n_rest = len(all_ids) - len(s0_ids)
+
+    def fake(targets, args, window, full, collect_only=False, env_extra=None, prefix=""):
+        seen.append((window, collect_only))
+        if collect_only:
+            ids = s0_ids if targets != MT.TEST_ROOTS else all_ids
+            return collect_code, "\n".join(ids) + "\n\n%d tests collected in 0.5s" % len(ids)
+        n = (run_counts or {}).get(window, len(s0_ids) if window.endswith("s0") else (1 if window.endswith("e2e") else n_rest))
+        return 0, "== %d passed in 1.0s ==" % n
+    monkeypatch.setattr(MT, "run_pytest", fake)
+    if written is not None:
+        monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    return seen
+
+
+ALL = ["tests/a.py::t1", "tests/a.py::t2", "tests/b.py::t1", "tests/c.py::t1"]
+S0 = ["tests/a.py::t1"]
+
+
+def _go():
+    return MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="w"))
+
+
+def test_verified_slices_record_counts_and_sha(monkeypatch):
+    monkeypatch.setenv("MOTRIX_GATE_VERIFY", "1")
+    written = []
+    seen = _smart_fake(monkeypatch, ALL, S0, written=written)
+    assert _go() == 0
+    sl = written[-1]["slices"]
+    assert (sl["all"], sl["slice0"], sl["rest"], sl["ok"]) == (4, 1, 3, True) and len(sl["sha"]) == 16
+    assert sl["executed"] == {"ws0": 1, "w": 3}                         # 兩片的執行題數＝預先收集的題數
+    assert [w for w, c in seen if not c] == ["ws0", "w", "we2e"]
+
+
+def test_executed_count_mismatch_is_red_even_when_pytest_exit_is_zero(monkeypatch):
+    """反向控制：第二片少跑一題（例如 --ignore 多排除了東西）exit 仍是 0 ⇒ 必須記紅。突變：拿掉對帳 ⇒ 轉紅。"""
+    monkeypatch.setenv("MOTRIX_GATE_VERIFY", "1")
+    written = []
+    _smart_fake(monkeypatch, ALL, S0, run_counts={"w": 2}, written=written)
+    assert _go() != 0
+    assert written[-1]["ok"] is False and written[-1]["slice_mismatch"] == [{"window": "w", "executed": 2, "collected": 3}]
+
+
+def test_failed_precollect_falls_back_to_one_stage_not_to_skipping(monkeypatch, capsys):
+    monkeypatch.setenv("MOTRIX_GATE_VERIFY", "1")
+    seen = _smart_fake(monkeypatch, ALL, S0, collect_code=2)
+    assert _go() == 0
+    assert [w for w, c in seen if not c] == ["w", "we2e"] and "不切片" in capsys.readouterr().out
+
+
+def test_slice0_not_a_subset_of_all_falls_back(monkeypatch):
+    monkeypatch.setenv("MOTRIX_GATE_VERIFY", "1")
+    seen = _smart_fake(monkeypatch, ALL, ["tests/zzz.py::t1"])
+    assert _go() == 0 and [w for w, c in seen if not c] == ["w", "we2e"]
+
+
+def test_expected_judges_empty_and_failed_collects():
+    def mk(code, all_out, s_out):
+        return lambda tg, ex: (code, (all_out if tg == MT.TEST_ROOTS else s_out))
+    assert GS.expected(mk(0, "a.py::t\nb.py::t", "a.py::t"), MT.TEST_ROOTS, ["a.py"])["ok"] is True
+    assert GS.expected(mk(0, "a.py::t", ""), MT.TEST_ROOTS, ["a.py"])["ok"] is False
+    assert GS.expected(mk(1, "a.py::t", "a.py::t"), MT.TEST_ROOTS, ["a.py"])["ok"] is False
+
+
+def test_executed_count_parses_the_summary_line():
+    assert MT.executed_count("1 failed, 2506 passed, 8 skipped, 3 xfailed, 255 warnings in 1100.99s (0:18:20)") == 2518
+    assert MT.executed_count("== 5 passed, 2 deselected in 1.0s ==") == 5
+    assert MT.executed_count("no summary here") is None
+
+
+# ── F2：重疊時 worker 合計不超過全量上限 ─────────────────────────────────────────
+
+@pytest.mark.parametrize("cap,main_n,e2e_n", [(4, 2, 2), (2, 1, 1), (3, 2, 1), (6, 4, 2)])
+def test_overlap_total_workers_stay_within_the_full_cap(monkeypatch, cap, main_n, e2e_n):
+    monkeypatch.setenv(MT.FULL_ENV, str(cap))
+    monkeypatch.setattr(MT, "overlap_decision", lambda *a, **k: (True, ""))
+    monkeypatch.setattr(MT, "_env_cap", MT._env_cap)
+    cap_seen = []
+    _smart_fake(monkeypatch, ALL, S0)
+    real = MT.run_pytest
+
+    def spy(t, args, window, full, **k):
+        if "-n" in args:
+            cap_seen.append((window, int(args[args.index("-n") + 1])))
+        return real(t, args, window, full, **k)
+    monkeypatch.setattr(MT, "run_pytest", spy)
+    MT.run_full([], types.SimpleNamespace(workers=8, e2e_workers=4, window="w"))
+    mains = [n for w, n in cap_seen if not w.endswith("e2e")]
+    e2es = [n for w, n in cap_seen if w.endswith("e2e")]
+    assert max(mains) + max(e2es) <= cap, cap_seen
+    assert (max(mains), max(e2es)) == (main_n, e2e_n) or cap == 6          # cap 6：e2e 上限 2（E2E_MAX_WORKERS），main 4
+
+
+def test_overlap_with_cap_one_is_not_used(monkeypatch, capsys):
+    monkeypatch.setenv(MT.FULL_ENV, "1")
+    monkeypatch.setenv("MOTRIX_FULL_OVERLAP", "1")
+    monkeypatch.setattr(MT, "overlap_decision", lambda *a, **k: (True, ""))
+    cap = []
+    _run(monkeypatch, {}, cap)
+    assert [c[0] for c in cap] == ["ws0", "w", "we2e"]                      # 序列

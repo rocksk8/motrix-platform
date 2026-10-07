@@ -2,7 +2,7 @@
   "_about": "全閘門切片的單一來源（第 45 班 O1，docs/platform/plans/BUILD-GATE-OPT-T45.md §4/§10）。modtest --full 與 pre_train_check 都讀這一份；改清單＝改閘門順序，不改題數（slice0 ∪ rest ＝ 全部非 e2e 題，tools/platform/gate_slices.py 的 check 會比 nodeid 集合）。",
   "version": 1,
   "slice0": {
-    "_about": "第一片：靜態／掃描／產生檔守門，-n 4、fail-fast。整合後才紅的守門都在這裡（第 43 班第 1 輪 10 個紅全是這類，白跑 38 分）。路徑相對 backend/，可含 glob 與 ::nodeid。",
+    "_about": "第一片：靜態／掃描／產生檔守門，與其餘片同樣的 worker 數（--workers／MOTRIX_GATE_WORKERS，受全量上限）、fail-fast。整合後才紅的守門都在這裡（第 43 班第 1 輪 10 個紅全是這類，白跑 38 分）。路徑相對 backend/，可含 glob 與 ::nodeid。",
     "paths": [
       {"label": "tests/platform（契約、守門、產生檔是否最新）", "path": "tests/platform"},
       {"label": "規格編號 C_OWNED／規格覆蓋", "path": "tests/test_spec_coverage_2026_09_21.py"},
