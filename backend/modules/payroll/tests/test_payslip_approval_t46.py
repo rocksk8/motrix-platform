@@ -308,3 +308,57 @@ def test_remit_link_and_voucher_link_check_refuse_review_and_void(client, make_u
     finally:
         c.close()
     assert [r["status"] for r in _q("SELECT status FROM payslips WHERE slip_no IN ('PS-203101-040','PS-203101-041','PS-203101-042') ORDER BY slip_no")] == ["待審核", "已作廢", "草稿"]
+
+
+ID_NO, ACCT = "A123456789", "28881234567890"
+
+
+def _slip_with_pii(no):
+    _insert_payslip(no)
+    _x("UPDATE payslips SET data_json=? WHERE slip_no=?", (json.dumps({"slipNo": no, "contractorName": "測試承攬人", "contractorIdNumber": ID_NO, "bankAccountNumber": ACCT,
+                                                                       "bankCode": "812", "bankName": "台新", "serviceContent": "施工"}, ensure_ascii=False), no))
+
+
+def test_queue_detail_for_approver_has_no_pii_values_only_audited_reveal(client, make_user):
+    """使用者 2026-10-07 裁示：簽核佇列詳情顯示完整內容含身分證與帳號——但值只經稽核的 reveal 端點；詳情／清單／角標內容都不含值。"""
+    ua, ha = _su(client, make_user, "ps46_qa")
+    ub, hb = _su(client, make_user, "ps46_qb")
+    _flow([ub])
+    _slip_with_pii("PS-203101-050")
+    client.post("/api/payslips/PS-203101-050/submit", headers=ha)
+    d = client.get("/api/approval-queue/detail", params={"type": "payslip", "id": "PS-203101-050"}, headers=hb)
+    assert d.status_code == 200, d.text
+    blob = d.text
+    assert ID_NO not in blob and ACCT not in blob and "28881234" not in blob, "詳情內容本身不含身分證／帳號值"
+    revs = [f for f in d.json()["fields"] if f.get("revealUrl")]
+    assert {f["revealKey"] for f in revs} == {"idNumber", "bank", "bankAccountNumber"}
+    lst = client.get("/api/approval-queue", headers=hb)
+    cnt = client.get("/api/approval-queue/count", headers=hb)
+    for r in (lst, cnt):
+        assert ID_NO not in r.text and ACCT not in r.text
+    before = len(_q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'"))
+    r = client.get(revs[0]["revealUrl"], headers=hb)
+    assert r.status_code == 200 and r.json()["idNumber"] == ID_NO and r.json()["bankAccountNumber"] == ACCT and r.json()["bank"] == "812 台新"
+    rows = _q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'")
+    assert len(rows) == before + 1, "每次檢視一筆稽核"
+    assert ID_NO not in json.dumps(rows[-1], ensure_ascii=False) and ACCT not in json.dumps(rows[-1], ensure_ascii=False), "稽核不含值"
+    client.get(revs[0]["revealUrl"], headers=hb)
+    assert len(_q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'")) == before + 2
+
+
+def test_queue_detail_and_reveal_refused_for_non_approver_and_wrong_state(client, make_user):
+    ua, ha = _su(client, make_user, "ps46_qc")
+    ub, hb = _su(client, make_user, "ps46_qd")
+    _flow([ub])
+    _slip_with_pii("PS-203101-051")
+    u, p = make_user(username="ps46_qplain", role="user", modules=["case_manage"], legacy_finance_flag=False)
+    plain = _auth(_login(client, u, p))
+    assert client.get("/api/payslips/PS-203101-051/approval-reveal", headers=hb).status_code == 409, "草稿不給（只限待審核）"
+    client.post("/api/payslips/PS-203101-051/submit", headers=ha)
+    d = client.get("/api/approval-queue/detail", params={"type": "payslip", "id": "PS-203101-051"}, headers=plain)
+    assert d.status_code == 404, "非簽核鏈、非送審人、非最高管理者看不到詳情"
+    n_before = len(_q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'"))
+    assert client.get("/api/payslips/PS-203101-051/approval-reveal", headers=plain).status_code in (401, 403)
+    assert len(_q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'")) == n_before, "被擋的不寫檢視稽核"
+    client.post("/api/payslips/PS-203101-051/approve", headers=hb)
+    assert client.get("/api/payslips/PS-203101-051/approval-reveal", headers=hb).status_code == 409, "核准後不再由佇列檢視"

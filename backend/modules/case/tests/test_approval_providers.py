@@ -78,6 +78,8 @@ def test_every_detail_type_has_one_provider(client):
         want.add("dispatch_file_delete")     # W1／N1（承攬商報價單附件刪除審核）由外包工班提供
     if source_tree.module_installed("modules/arap/"):
         want |= {"invoice_voucher", "payment_request"}
+    if source_tree.module_installed("modules/payroll/"):
+        want.add("payslip")                    # 第46班：勞報單簽核詳情（身分證／帳號經稽核的 reveal 端點）
     got = registry.providers("approval.detail")
     assert set(got) == want and all(callable(f) for f in got.values()), sorted(got)
 

@@ -1581,9 +1581,25 @@
             if (r.ok) {
               this.detail = await r.json()
               this._prefetchImages()
+              this._revealFields()
             }
           } catch (e) { /* 詳情拿不到不該讓整個佇列爆掉，清單仍可正常簽核 */ }
           this.detailLoading = false
+        },
+
+        // 勞報單詳情（第46班）：身分證字號與收款帳號不在清單／詳情內容裡；開詳情時打 revealUrl（最高管理者專用、每次檢視留稽核、不含值），回值再貼回欄位
+        async _revealFields() {
+          const d = this.detail
+          const urls = [...new Set((d?.fields || []).map(f => f.revealUrl).filter(Boolean))]
+          for (const u of urls) {
+            try {
+              const r = await fetch(API + u, { headers: { Authorization: 'Bearer ' + this.session.token } })
+              if (this.detail !== d) return
+              if (!r.ok) { (d.fields || []).forEach(f => { if (f.revealUrl === u) f.value = '（無權限檢視）' }); continue }
+              const v = await r.json()
+              ;(d.fields || []).forEach(f => { if (f.revealUrl === u) f.value = v[f.revealKey] || '—' })
+            } catch (e) { /* 取不到就維持占位 */ }
+          }
         },
 
         // 圖片要能直接顯示縮圖 → 先換簽章 URL（/api/uploads 需要 pt 簽章）

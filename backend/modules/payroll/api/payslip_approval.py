@@ -265,7 +265,59 @@ def queue_items(conn) -> list:
             "payslip", r["slip_no"], f, total=0,                  # type 用字面值：簽核佇列覆蓋守門靠提供者原始碼裡的 type 字面值判定
             quoteDate=(r["slip_date"] or "")[:10],
             requestedBy=req, requestedByDisplay=req, requestedAt=(r["created_at"] or ""),
-            typeLabel=DOC_LABEL, projectName=DOC_LABEL, customer="",
+            typeLabel=DOC_LABEL, projectName=DOC_LABEL, customer="", caseless=True,                 # 不掛案件：詳情只有簽核鏈上的人、送審人與最高管理者能開（L1 `_access_step`）
             openUrl="payslips.html?q=%s" % r["slip_no"],
             approveUrl="/api/payslips/%s/approve" % r["slip_no"], rejectUrl="/api/payslips/%s/reject" % r["slip_no"], rejectField="reason"))
     return out
+
+
+# ── 簽核佇列詳情（`approval.detail`，名稱 payslip；使用者 2026-10-07 裁示：詳情顯示完整內容，**含身分證字號與收款帳號**）─────────
+# 守門與稽核：
+#   ① 佇列詳情的存取＝簽核鏈上的人、送審人、最高管理者（提供者宣告 `caseless`，L1 `_access_step`）；
+#   ② **身分證字號與收款帳號不放在提供者回傳的內容裡**（L1 詳情端點沒有「每次檢視留稽核」的鉤子）——詳情只放遮蔽占位與 `revealUrl`，
+#      頁面開詳情時打 `GET /api/payslips/{no}/approval-reveal`：最高管理者專用、只限待審核、**每次檢視寫一筆稽核（不含值）**；
+#   ③ 佇列清單、角標、信件、站內通知、記錄檔一律不含這兩項（只有這支端點回值）。
+
+def detail(conn, doc_no):
+    r = conn.execute("SELECT * FROM payslips WHERE slip_no=?", (doc_no,)).fetchone()
+    if r is None:
+        return None
+    try:
+        d = json.loads(r["data_json"] or "{}") or {}
+    except (TypeError, ValueError):
+        d = {}
+    reveal = "/api/payslips/%s/approval-reveal" % r["slip_no"]
+    mask = "（顯示時留稽核）"
+    fields = [{"label": "單號", "value": r["slip_no"]}, {"label": "開單日期", "value": (r["slip_date"] or "")[:10] or "—"},
+              {"label": "受領人", "value": r["contractor_name"] or "—"}, {"label": "所得類別", "value": r["income_type"] or "—"},
+              {"label": "勞務內容", "value": str(d.get("serviceContent") or "—")},
+              {"label": "應付總額", "value": format(int(r["gross_amount"] or 0), ",")}, {"label": "代扣所得稅", "value": format(int(r["tax_withheld"] or 0), ",")},
+              {"label": "代扣二代健保", "value": format(int(r["nhi_supplement"] or 0), ",")}, {"label": "實發金額", "value": format(int(r["net_amount"] or 0), ",")},
+              {"label": "預定付款日", "value": (r["planned_pay_date"] or "")[:10] or "—"},
+              {"label": "身分證字號", "value": mask, "revealUrl": reveal, "revealKey": "idNumber"},
+              {"label": "收款銀行", "value": mask, "revealUrl": reveal, "revealKey": "bank"},
+              {"label": "收款帳號", "value": mask, "revealUrl": reveal, "revealKey": "bankAccountNumber"}]
+    return {"quoteNo": "", "caseless": True, "approvalRaw": r["approval_json"], "title": "勞報單 %s" % r["slip_no"], "fields": fields, "items": [], "files": []}
+
+
+@router.get("/api/payslips/{slip_no}/approval-reveal")
+def approval_reveal(slip_no: str, authorization: str = Header(None)):
+    """簽核佇列詳情要顯示的身分證字號與收款帳號。最高管理者專用、只限待審核；**每次呼叫寫一筆稽核（不含值）**。"""
+    user = _require_user(authorization, require_superadmin=True, module="payslip")
+    conn = get_db()
+    try:
+        r = conn.execute("SELECT status, data_json FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+        if r is None:
+            raise HTTPException(404, "找不到此勞報單")
+        if r["status"] != S_REVIEW:
+            raise HTTPException(409, "只有待審核的勞報單可由簽核佇列檢視（目前「%s」）" % r["status"])
+        try:
+            d = json.loads(r["data_json"] or "{}") or {}
+        except (TypeError, ValueError):
+            d = {}
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "payslip.approval_reveal", "payslip", slip_no, "%s 簽核佇列檢視身分證字號與收款帳號" % slip_no)
+    return {"idNumber": str(d.get("contractorIdNumber") or d.get("idNumber") or ""),
+            "bank": ("%s %s" % (d.get("bankCode") or "", d.get("bankName") or "")).strip(),
+            "bankAccountNumber": str(d.get("bankAccountNumber") or "")}

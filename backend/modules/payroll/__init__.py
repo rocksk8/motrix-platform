@@ -47,6 +47,8 @@ MODULE = ModuleSpec(
         ("approval.queue_items", "payroll"): bonus_queue.queue_items,
         # IP-10（第46班）：待審核的勞報單（不含金額、受領人、身分資料）
         ("approval.queue_items", "payroll_payslip"): payslip_approval_api.queue_items,
+        # IP-93（第46班）：簽核佇列詳情（含身分證／收款帳號，經稽核的 reveal 端點；使用者 2026-10-07 裁示）
+        ("approval.detail", "payslip"): payslip_approval_api.detail,
         # IP（暫定號，第46班 P3）：勞報單 ⇄ 承攬派發雙向連結（M07 → M04 派發頁；只回單號、狀態、受領人姓名、開單日期，不含金額）
         ("payslip.dispatch_links", "payroll"): payslip_links._Links,
     },
