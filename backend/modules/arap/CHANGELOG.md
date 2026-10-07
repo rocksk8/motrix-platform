@@ -1,13 +1,13 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-10-08（fix/pr-remark-in-queue）：出納對表單收款對象的警示
+- 出納頁待付款表：項目帶 `payeeNote` 時（採購單／零用金、收款對象填在表單且沒有另存收款人與銀行資料）在付款鈕旁以文字顯示警示；`GET …/payee-bank` 的說明改用提供者的 `note`（不再退回申請人的員工收款帳戶）。不擋付款，權限規則不變。
+
 ## 1.0.41 — 2026-10-07（wip/t45-paydate-impl）：出納預定付款日端點（來源無關、承攬商匯款）與通知申請人（含出納頁提示色改語意 token）
 - `api/cashier.py`：新增 `PATCH /api/cashier/pending-payables/{source}/{key}/planned-pay-date`（財務角色／superadmin；經提供者 `set_planned_pay_date`，不經案件守門；已付款 409；提供者不支援 409；commit 之後才對齊行事曆；稽核 `cashier.planned_pay_date`，不含金額）。出納頁 `savePlannedPayDate` 改打此端點。
 - 新增 `PATCH /api/cashier/payable-queue/{voucher_no}/planned-pay-date`（承攬商匯款；經 IP-14 `contractor_voucher.set_planned`；M04 不在 ⇒ 404＋既有「外包工班模組未安裝」訊息）。出納頁待付款表新增「預定付款日」欄（可改、已逾／3 天內標示），原欄改名「應付款日（合約）」。
 - Q7：財務設定／改期／清除預定付款日 ⇒ 站內通知申請人（type `planned_pay_date`；文字「您的請款 <單號> 預定 <日期> 付款」，不含金額；申請人本人改不通知自己；三個來源皆然；提供者回傳 `applicant`／`docCode`／`link`）。
 - **權限**：與登錄付款同一條（財務角色／superadmin）；未新增任何角色的可視範圍。
-
-## (next) — 2026-10-08（fix/pr-remark-in-queue）：出納對表單收款對象的警示
-- 出納頁待付款表：項目帶 `payeeNote` 時（採購單／零用金、收款對象填在表單且沒有另存收款人與銀行資料）在付款鈕旁以文字顯示警示；`GET …/payee-bank` 的說明改用提供者的 `note`（不再退回申請人的員工收款帳戶）。不擋付款，權限規則不變。
 
 ## 1.0.40 — 2026-10-06（wip/t44-attach-views）：出納唯讀看待付款申請附件（頁面改行內錯誤訊息）
 - `api/cashier.py`：新增 `GET /api/cashier/pending-payables/{source}/{key}/files/{file_id}`（與待付款清單同權限＝財務角色／superadmin；檔案由提供者 `file_open` 認領，其餘一律同一句 404；回 octet-stream＋inline；每次開檔留稽核 `cashier.payable_file_view`，不記內容）。前端 `cashier.js`／`cashier.html` 顯示附件清單（只讀）。

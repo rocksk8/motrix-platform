@@ -228,8 +228,8 @@ def test_cashier_list_still_needs_the_finance_role(client, world, make_user):
 
 def test_my_requests_page_uses_the_kind_label_not_the_default_category():
     """「我的申請」內容欄（payment-request.html）：費用單據＝類型名稱｜品項摘要，不再印預設類別「其他」。靜態檢查頁面邏輯（瀏覽器流程見 e2e）。"""
-    from pathlib import Path
-    html = (Path(__file__).resolve().parents[4] / "frontend" / "pages" / "payment-request.html").read_text(encoding="utf-8")
+    from core.source_tree import page_file
+    html = page_file("payment-request.html").read_text(encoding="utf-8")
     assert 'x-text="rowTitle(e)"' in html and "e.kind ? ((K[e.kind]" in html
     assert "(e.category || '') + '｜' + (e.description || '')\"></td>" not in html.split("rowTitle(e) {")[0].split('id="pr-mine"')[-1].split("<tbody>")[-1]
 
