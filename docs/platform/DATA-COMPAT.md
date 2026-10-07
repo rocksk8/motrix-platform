@@ -138,15 +138,15 @@
 
 **接法（提案）**：
 
-1. `core` 基準＝V9 的 `_MIGRATIONS` 1~116 原封不動，**繼續用同一列 `schema_version` 計數**，並把 116 凍結為 `V9_BASELINE`。
+1. `core` 基準＝V9 的 `_MIGRATIONS` 1~118 原封不動（v117／v118 於 2026-10-08 第 46 班追進；原為 1~116），**繼續用同一列 `schema_version` 計數**，並把 118 凍結為 `V9_BASELINE`。
 2. 模組 migration 用**另一張表**記版本；CORE-SPEC §6 的名稱 `schema_versions` 與既有 `schema_version` 只差一個 s，建議改名 `module_schema_versions`，避免手寫 SQL 打錯表。
-3. 啟動順序：跑基準到 116 → 基準不等於 116 就**拒絕跑任何模組 migration**：
-   - `< 116`：先補跑基準（V9 舊庫的正常升級路徑）
-   - `> 116`：代表 V9 在基準凍結後又加了 migration 而新版不認得 ⇒ **拒絕，不是 WARNING**（現行引擎的「只記 log」前提是「只加不改」，跨兩條產品線無法保證）
+3. 啟動順序：跑基準到 118 → 基準不等於 118 就**拒絕跑任何模組 migration**：
+   - `< 118`：先補跑基準（V9 舊庫的正常升級路徑）
+   - `> 118`：代表 V9 在基準凍結後又加了 migration 而新版不認得 ⇒ **拒絕，不是 WARNING**（現行引擎的「只記 log」前提是「只加不改」，跨兩條產品線無法保證）
 4. 模組的第一支 migration 一律是「認領既有表」（`IF NOT EXISTS`，對 V9 庫是 no-op）。
 5. 模組 migration 同樣只能加不改（沿用 `test_u5c_no_migration_makes_a_column_disappear` 的規則）⇒ 回退 V9 程式碼時，V9 看到 `schema_version=116`、不認得的表不讀，照常啟動。
 
-**V9 庫直接升上來的路**：V9 庫（≤116）→ 新版啟動 → 補跑基準到 116 → 各模組 `0001_adopt` → 模組新 migration。資料與檔案都不動。
+**V9 庫直接升上來的路**：V9 庫（≤118）→ 新版啟動 → 補跑基準到 118 → 各模組 `0001_adopt` → 模組新 migration。資料與檔案都不動。
 
 **要裁示的衝突（2 項）**：
 - CORE-SPEC §6「模組未安裝 ⇒ 不建表」與「基準＝V9 1~116」互斥：全新安裝時基準會建出所有 V9 表（含已遺棄的選型表與未安裝模組的表）。

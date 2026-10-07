@@ -136,14 +136,16 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = _paths.DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR
 # v114: AC3 獎金分潤記住它產生的傳票草稿（accrual／payment_voucher_id）
 # v115: AC2 認列口徑——階段比例、派工／額外支出的發票日期、額外支出付款日
 # v116: CM3 案件角色改存帳號（caseRecord.roles → {username, display}；先推先拿，順延自 v115）
-CURRENT_VERSION = 116
+# v117: 勞報單作廢（voided_at／voided_by／void_reason）——第 46 班追進基準（V9 維護期新增）
+# v118: 勞報單簽回＋出納付款（signed_*／payment_date／voucher_no／paid_*）——同上
+CURRENT_VERSION = 118
 
 #: 🔴 V9 原版 migration 的凍結基準（CORE-SPEC「使用者裁示」③）。
-#: 新版的 `_MIGRATIONS` 就是 V9 的 v1~v116；新 schema 一律走各模組 migration
+#: 新版的 `_MIGRATIONS` 就是 V9 的 v1~v118；新 schema 一律走各模組 migration
 #: （`module_schema_versions`），**不再往這串後面接**。
 #: V9 維護期新增的 migration 必須同號同內容追進來，並把這裡與 CURRENT_VERSION 一起加一。
 #: 守門：tests/platform/test_v9_baseline.py
-V9_BASELINE = 116
+V9_BASELINE = 118
 
 
 class SchemaNewerThanBaseline(RuntimeError):
@@ -954,7 +956,7 @@ def _run_migrations(conn) -> None:
     if current > V9_BASELINE:
         # 🔴 **資料庫比新版認得的 V9 基準新 ⇒ 拒絕**（CORE-SPEC「使用者裁示」③，2026-09-25）。
         # V9 原版的引擎在這裡只記 WARNING（A 裁定：程式碼回退時不可以起不來）。
-        # 新版的前提不同：基準 v1~v116 凍結、新 schema 走模組 migration ⇒
+        # 新版的前提不同：基準 v1~v118 凍結、新 schema 走模組 migration ⇒
         # `schema_version` 超過基準**只可能是 V9 原版後來又加了 migration、而沒有追進新版**。
         # 那些欄位新版不認得，接著跑模組 migration 會建在一個不知道的 schema 上 ⇒ 不猜，停下。
         # ⚠️ 兩個數字都要印；**不可以把 `schema_version` 改小**（U5b）。
@@ -5675,6 +5677,36 @@ def _m095_vouchers(conn):
         " END")
 
 
+def _m117_payslip_void(conn):
+    """v117（2026-09-29）：勞報單作廢——記誰、何時、為什麼。
+
+    作廢是「已匯出」之後的終結狀態（status='已作廢'）；三欄只在作廢時寫入。
+    ⚠️ 冪等：ALTER 前先看欄位在不在。
+    """
+    for name in ("voided_at", "voided_by", "void_reason"):
+        if not _col_exists(conn, "payslips", name):
+            conn.execute(
+                "ALTER TABLE payslips ADD COLUMN %s TEXT NOT NULL DEFAULT ''" % name)
+
+
+def _m118_payslip_signed_paid(conn):
+    """v118（2026-09-29）：勞報單簽回＋出納付款。
+
+    已匯出 → 已簽回（上傳對方簽回檔）→ 已付款（出納填付款日期＋傳票單號）。
+    payment_date 是營運報表成本的歸月依據；voucher_no 是出納回填的既有傳票單號
+    （不由勞報單開傳票）。⚠️ 冪等：ALTER 前先看欄位在不在。
+    """
+    for name, ddl in (("signed_files_json", "TEXT NOT NULL DEFAULT '[]'"),
+                      ("signed_at", "TEXT NOT NULL DEFAULT ''"),
+                      ("signed_by", "TEXT NOT NULL DEFAULT ''"),
+                      ("payment_date", "TEXT NOT NULL DEFAULT ''"),
+                      ("voucher_no", "TEXT NOT NULL DEFAULT ''"),
+                      ("paid_by", "TEXT NOT NULL DEFAULT ''"),
+                      ("paid_at", "TEXT NOT NULL DEFAULT ''")):
+        if not _col_exists(conn, "payslips", name):
+            conn.execute("ALTER TABLE payslips ADD COLUMN %s %s" % (name, ddl))
+
+
 _MIGRATIONS = [
     _m001_export_columns,        # v1
     _m002_sessions_expires,      # v2
@@ -5792,6 +5824,8 @@ _MIGRATIONS = [
     _m114_bonus_case_voucher_links,                 # v114
     _m115_ac2_recognition_dates,                    # v115
     _m116_case_roles_username,                      # v116
+    _m117_payslip_void,                             # v117
+    _m118_payslip_signed_paid,                      # v118
 ]
 
 

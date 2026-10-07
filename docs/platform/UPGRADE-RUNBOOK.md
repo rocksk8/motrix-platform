@@ -98,7 +98,7 @@ python <NEW>\tools\platform\upgrade.py preflight --root <ROOT> --v9-port <正式
 ```
 
 - 輸出 `"ok": true` 才往下。任一 `problems` ⇒ 處理後重跑。
-- 檢查項目：安裝目錄結構、主庫存在、`schema_version ≤ 116`、磁碟空間 ≥ DB×3、最近快照 `.done`（今天或昨天）、無備份告警、服務已停、無開發機標記。
+- 檢查項目：安裝目錄結構、主庫存在、`schema_version ≤ 118`、磁碟空間 ≥ DB×3、最近快照 `.done`（今天或昨天）、無備份告警、服務已停、無開發機標記。
 - `system_settings` 的 `*_pdf_base_path` 指到安裝目錄以外（例如網路碟）時，預檢的 `facts.external_pdf_dirs` 會列出來。這些目錄**只記摘要不算雜湊**（路徑、檔案數、總大小、最新 mtime；主持裁示 2026-09-25），工具不寫它們。
 
 ## 3. 備份（＋自動試還原）

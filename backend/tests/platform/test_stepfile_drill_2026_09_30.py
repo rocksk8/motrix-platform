@@ -9,8 +9,21 @@ FENCE = "```"
 NAME = "20260929_161131_b6182dbf_full"
 STAGE = (r'python <ROOT>\backend\tools\delivery.py stage --root "H:\我的雲端硬碟\MOTRIX-交付" --name ' + NAME +
          r' --staging <ROOT>\..\motrix-staging')
-VERIFY_PKG = (r'python <ROOT>\backend\tools\verify_package.py <ROOT>\..\motrix-staging' + "\\" + NAME +
-              r'\payload --expect-db-version 116')
+
+
+def _verify_pkg(expect):
+    return (r'python <ROOT>\backend\tools\verify_package.py <ROOT>\..\motrix-staging' + "\\" + NAME +
+            r'\payload --expect-db-version %d' % expect)
+
+
+def _current_db_version():
+    """期望值跟著這棵樹的 db.CURRENT_VERSION（基準由 V9 凍結；第 46 班 116→118 時這裡曾是寫死的 116 而紅）。"""
+    import re
+    src = (Path(__file__).resolve().parents[2] / "db.py").read_text(encoding="utf-8")
+    return int(re.search(r"^CURRENT_VERSION\s*=\s*(\d+)", src, re.M).group(1))
+
+
+VERIFY_PKG = _verify_pkg(_current_db_version())
 
 
 def _md(*step1_blocks):
@@ -55,11 +68,11 @@ def test_drill_refuses_inside_a_git_repo(tmp_path):
     assert not list((tmp_path / "w").iterdir())
 
 
-def _run(tmp_path, monkeypatch, **kw):
+def _run(tmp_path, monkeypatch, verify=None, **kw):
     """%TEMP% 在家目錄 repo 之內 ⇒ 用 GIT_CEILING_DIRECTORIES 讓 git 不往上找（等同正式機「上面沒有 repo」）。"""
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     step = tmp_path / "s.md"
-    step.write_text(_md(STAGE, VERIFY_PKG), encoding="utf-8")
+    step.write_text(_md(STAGE, verify or VERIFY_PKG), encoding="utf-8")
     work = tmp_path / "w"
     rep = SD.drill(str(step), str(work), (1,), **kw)
     assert not list(work.iterdir())                                     # 用完清掉
@@ -81,3 +94,10 @@ def test_drill_nongit_install_without_the_list_still_fails(tmp_path, monkeypatch
     rep = _run(tmp_path, monkeypatch, write_ignore_list=False)
     assert rep["blocks"][1]["exit"] != 0
     assert "export_ignore" in rep["blocks"][1]["tail"] or rep["ok"] is False
+
+
+def test_drill_wrong_expected_db_version_still_fails_verify_package(tmp_path, monkeypatch):
+    """檢查要保持有意義：期望值給錯（少 1）⇒ verify_package 必須失敗，且訊息點出版本不符。"""
+    rep = _run(tmp_path, monkeypatch, verify=_verify_pkg(_current_db_version() - 1))
+    assert rep["blocks"][1]["exit"] != 0
+    assert "db 版本" in rep["blocks"][1]["tail"]
