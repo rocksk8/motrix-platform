@@ -45,6 +45,7 @@ from modules.subcontract import bank_mask as _bm
 from helpers.errors import trace_id
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
+from modules.subcontract import payable_due as _PD
 from modules.subcontract import remit as _remit
 from modules.subcontract import remit_create as _rc
 
@@ -597,6 +598,7 @@ def void_contractor_voucher(voucher_no: str, body: VoucherVoidIn, authorization:
         conn.close()
     _purge_notifications(voucher_no, ['contractor_voucher_approval_request', 'contractor_voucher_approved',
                                        'contractor_voucher_returned', 'approval_reminder'])
+    _PD.fire(voucher_no)                                                              # 預定付款日行事曆事件：作廢 ⇒ 收回
     _audit(_tok(authorization), "contractor_voucher.void", "contractor_payment_voucher", voucher_no, "%s（原狀態 %s）原因：%s" % (voucher_no, row["status"], reason))
     notify_module_activity("承攬商匯款申請", "作廢", user.get("display_name") or user["username"], voucher_no, "case-management.html", audience="finance")
     return {"ok": True, "voidedAt": now}
@@ -770,6 +772,7 @@ def approve_contractor_voucher(voucher_no: str, body: dict = Body(default={}), a
         conn.commit()
 
     conn.close()
+    _PD.fire(voucher_no)                                                              # 最後一層核准 ⇒ 建事件（現況判定；中間層無作用）
     _audit(_tok(authorization), "contractor_voucher.approve", "contractor_payment_voucher", voucher_no,
            f"{voucher_no}（{vname}）", {"allDone": all_done})
     return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}
@@ -814,6 +817,7 @@ def revoke_contractor_voucher_approval(voucher_no: str, body: dict = Body(defaul
         msg = f"承攬商匯款申請 {voucher_no}（{vname}）核准已被撤銷，請確認後重新送審" + (f"：{note}" if note else "")
         _notify(requester, "contractor_voucher_returned", voucher_no, voucher_no, msg)
         notify_contractor_voucher_returned(voucher_no, vname, note, requester)
+    _PD.fire(voucher_no)
     _audit(_tok(authorization), "contractor_voucher.revoke_approval", "contractor_payment_voucher", voucher_no,
            f"{voucher_no}（{vname}）", {"note": note})
     return {"ok": True}
@@ -860,6 +864,7 @@ def reject_contractor_voucher(voucher_no: str, body: dict = Body(default={}), au
         msg = f"承攬商匯款申請 {voucher_no}（{vname}）已退回，請確認後重新送審" + (f"：{note}" if note else "")
         _notify(requester, "contractor_voucher_returned", voucher_no, voucher_no, msg)
         notify_contractor_voucher_returned(voucher_no, vname, note, requester)
+    _PD.fire(voucher_no)
     _audit(_tok(authorization), "contractor_voucher.reject", "contractor_payment_voucher", voucher_no,
            f"{voucher_no}（{vname}）", {"note": note})
     return {"ok": True}
@@ -1178,6 +1183,7 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
             prov.unmark_paid(conn, voucher_no)
     conn.commit()
     conn.close()
+    _PD.fire(voucher_no)                                                              # 標記已匯款 ⇒ 收回；取消已匯款 ⇒ 回到待付款而重建
     _audit(_tok(authorization), f"contractor_voucher.{action}", "contractor_payment_voucher", voucher_no,
            voucher_no, {"note": note, **({"paidAt": paid_at_value, "actual": rm["actual"], "fee": rm["fee"],
                                           "diff": rm["diff"], "review": rm["review"]} if action == "pay" else {})})

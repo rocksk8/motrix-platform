@@ -80,6 +80,12 @@ class _Payables:
                 "docCode": pay["doc_code"] or "#%s" % pay["id"], "link": "case-management.html"}
 
     @staticmethod
+    def planned_changed(key) -> None:
+        """commit 之後呼叫（改預定日、登錄付款後都用）：依現況對齊行事曆「付款待辦」——分次付款後仍有餘額 ⇒ 事件保留。"""
+        from modules.case import material_payable_event as ME
+        ME.fire(key)
+
+    @staticmethod
     def paid(conn, start, end) -> list:
         """付款日在 [start, end] 的付款明細（出納執行紀錄用）；一筆明細一列。"""
         out = []
@@ -125,7 +131,17 @@ class _RemitReviews:
     def decide(conn, key, decision, user, note=""):
         from core.txn import begin_write
         begin_write(conn)
-        return MP.decide_line(conn, key, decision, user, note)
+        res = MP.decide_line(conn, key, decision, user, note)
+        if decision == "reject":                                   # 差額退回＝明細刪除、回待付款 ⇒ 重建「付款待辦」（出納端 commit 後 upsert）
+            from modules.case import material_payable_event as ME
+            ev = None
+            try:
+                ev = ME.event_tuple(conn, res.get("paymentId")) if res.get("paymentId") else None
+            except Exception:                                      # noqa: BLE001
+                ev = None
+            if ev:
+                res["payableEvent"] = ev
+        return res
 
 
 def _expense_entries(conn, start, end):

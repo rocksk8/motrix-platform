@@ -22,6 +22,7 @@ from helpers.financial_mask import money_visible
 from modules.case import material_approval as MA
 from modules.case import material_guard as MG
 from modules.case import material_notify as MN
+from modules.case import material_payable_event as _ME
 from modules.case import material_payment as MP
 
 router = APIRouter()
@@ -303,6 +304,7 @@ def submit_payment(pid: int, authorization: str = Header(None)):
         info = _info(row, q, row["quote_no"])
     finally:
         conn.close()
+    _ME.fire(pid)                                                                                  # 預定付款日：自動核准才會有事件（現況判定；commit 之後）
     _audit(_tok(authorization), "material_payment.submit" if not res["autoApproved"] else "material_payment.auto_approve", "quotation", row["quote_no"],
            "材料申請匯款申請 %s %s" % (info["docCode"], "送審" if not res["autoApproved"] else "未設定簽核層，直接核准"),
            {"docCode": info["docCode"], "tierCount": res["tierCount"], "status": res["status"]})
@@ -342,6 +344,7 @@ def approve_payment(pid: int, body: dict = Body(default={}), authorization: str 
         info = _info(row, q, row["quote_no"])
     finally:
         conn.close()
+    _ME.fire(pid)
     _audit(_tok(authorization), "material_payment.approve", "quotation", row["quote_no"], "材料申請匯款申請 %s 核准 → %s" % (info["docCode"], res["status"]),
            {"docCode": info["docCode"], "status": res["status"], "tier": res["currentTier"]})
     _notify_after("approved" if res["done"] else "next_tier", info, res)
@@ -364,6 +367,7 @@ def reject_payment(pid: int, body: dict = Body(default={}), authorization: str =
         info = _info(row, q, row["quote_no"])
     finally:
         conn.close()
+    _ME.fire(pid)
     _audit(_tok(authorization), "material_payment.reject", "quotation", row["quote_no"], "材料申請匯款申請 %s 被退回：%s" % (info["docCode"], res["reason"]),
            {"docCode": info["docCode"], "reason": res["reason"]})
     _notify_after("returned", info, res, reason=res["reason"])
@@ -385,6 +389,7 @@ def withdraw_payment(pid: int, authorization: str = Header(None)):
         conn.commit()
     finally:
         conn.close()
+    _ME.fire(pid)
     _audit(_tok(authorization), "material_payment.withdraw", "quotation", row["quote_no"], "材料申請匯款申請 %s 撤回" % row["doc_code"], {"docCode": row["doc_code"]})
     return {"ok": True, "status": MP.S_DRAFT}
 
@@ -405,6 +410,7 @@ def void_payment(pid: int, body: dict = Body(default={}), authorization: str = H
         conn.commit()
     finally:
         conn.close()
+    _ME.fire(pid)
     _audit(_tok(authorization), "material_payment.void", "quotation", row["quote_no"], "材料申請匯款申請 %s 作廢：%s" % (row["doc_code"], (body or {}).get("reason") or ""),
            {"docCode": row["doc_code"]})
     return {"ok": True, "status": MP.S_VOID}

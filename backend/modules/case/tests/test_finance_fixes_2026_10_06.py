@@ -273,7 +273,8 @@ def test_retry_window_is_the_send_day_only(client, make_user, flaky):
     P._seed_exp(planned=P.TODAY.isoformat())
     outcomes.append(en.SEND_TRANSIENT_FAIL)
     assert P._run() == 0 and len(log) == 1
-    assert P._run(P.TODAY + timedelta(days=1)) == 0 and len(log) == 1, "寄信日已過 ⇒ 不補發"
+    assert P._run(P.TODAY + timedelta(days=1)) == 1 and len(log) == 2, "隔天只多「逾期」那一封（第 45 班 Q2）；當天那封的寄信日已過 ⇒ 不補發"
+    assert P._run(P.TODAY + timedelta(days=1)) == 0 and len(log) == 2, "逾期只一封"
     assert P._run() == 1, "同一天重跑仍可補"
 
 

@@ -68,7 +68,7 @@ def compose(row, customer="", project=""):
 def sync(exp_id) -> None:
     """讀現況 ⇒ upsert 或 delete 該筆的「付款待辦」事件。任何失敗只記 log。"""
     try:
-        from helpers import push_event_upsert_for_module, push_event_delete_for_module
+        from helpers import payable_due_core as _core
         conn = get_db()
         try:
             row = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
@@ -81,10 +81,9 @@ def sync(exp_id) -> None:
             conn.close()
         key = event_key(exp_id)
         if row is not None and eligible(row):
-            title, desc, day = compose(row, cust, proj)
-            push_event_upsert_for_module(CODE, title, desc, day, key)
+            _core.sync_event(SOURCE, exp_id, compose(row, cust, proj))
         else:
-            push_event_delete_for_module(CODE, key)
+            _core.sync_event(SOURCE, exp_id, None)
     except Exception as exc:
         logger.warning("payable_calendar.sync(%s) failed: %s", exp_id, exc)
 

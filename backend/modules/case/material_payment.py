@@ -575,7 +575,7 @@ def decide_line(conn, line_id, decision, user, note="") -> dict:
     if cur.rowcount == 0:
         raise ValueError("這筆付款不是待審核狀態（可能已被處理）")
     sync_order_paid(conn, pay["quote_no"], pay["item_id"])
-    return {"quoteNo": pay["quote_no"], "key": str(ln["id"]), "decision": decision}
+    return {"quoteNo": pay["quote_no"], "key": str(ln["id"]), "decision": decision, "paymentId": pay["id"]}
 
 
 def lines_by_order(conn) -> dict:
