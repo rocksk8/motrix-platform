@@ -22,6 +22,7 @@
 📌 2026-10-06 10:05：正式機已更新到 f0dadf9a（第四十二班：財務角色／預定付款日與提醒；正式機 Claude 依主持「可以套用」與使用者「套用」執行 apply_update，成功、無回滾，result.json status=success）⇒ 基準改 f0dadf9a。
 📌 2026-10-06 19:14：正式機已更新到 89206122（第四十三班：職責角色 R1／信件×行事曆矩陣／精算含稅與稅額／已出貨數量等；正式機 Claude 依主持「可以套用」執行 apply_update，13 秒成功、無回滾，步驟 3 十六項全過、R1 等值關卡 PASS 0 差異）⇒ 基準改 89206122。
 📌 2026-10-07 09:51：正式機已更新到 c2fc54ba（第四十四班：站內通知鈴鐺全角色／簽核結果通知申請人／採購單從請購單帶入／支出申請附件；含 core migration notifications.link；正式機 Claude 依主持「可以套用」執行 apply_update，成功、無回滾，步驟 3 十四項全過，職責角色 R1 等值關卡 PASS）⇒ 基準改 c2fc54ba。
+📌 2026-10-08 02:04：正式機已更新到 dc4e2e42（第四十五班：預定付款日（出納改期端點／我的申請欄位／匯款可填／申請人站內通知）／登入後回原頁／材料卡片自動連結採購單／勞報單狀態快修／職責角色 R2 第1步（D4 superadmin 守門層全部鍵、D5 財務判斷影子模式預設關、等價與回滾工具）；含 case migration 8、subcontract migration 6，無 core migration；正式機 Claude 依主持「可以套用」執行 apply_update，成功、無回滾，步驟 3 全過）⇒ 基準改 dc4e2e42。
 """
 import json
 import subprocess
@@ -30,7 +31,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "c2fc54ba"
+BASELINE = "dc4e2e42"
 
 
 def baseline_manifest():
