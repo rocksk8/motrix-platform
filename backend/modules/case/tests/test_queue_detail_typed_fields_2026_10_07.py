@@ -59,16 +59,18 @@ def test_purchase_req_detail_shows_ptype_urgency_need_period_and_remark():
     assert f["採購類型"] == "辦公庶務用品" and f["緊急程度"] == "急件"
     assert f["需求日期"] == "2031-06-10 ～ 2031-06-20"
     assert f["採購備註說明"] == "請於週五前到貨\n含發票"
-    assert f["備註"] == "舊備註", "原有欄位不變"
-    assert {"單號", "類型", "收款人", "類別", "項目"} <= set(f)
+    assert f["備註"] == "舊備註", "note 欄有值就照舊顯示"
+    assert {"單號", "類型", "小計", "填寫人"} <= set(f)
+    for legacy_only in ("類別", "項目", "數量", "單價", "單據號碼", "支出人", "支出日期"):
+        assert legacy_only not in f, legacy_only + "：舊版額外支出專用欄位，費用單據不顯示（預設值會誤導）"
     assert d["caseless"] is True and d["title"].startswith("請購單")
 
 
-def test_existing_fields_come_first_in_the_same_order_and_typed_ones_are_appended():
+def test_typed_fields_follow_the_header_in_definition_order_before_the_subtotal():
     _, d = _fields(_seed(data=PR))
     labels = [x["label"] for x in d["fields"]]
-    assert labels.index("備註") < labels.index("收款人") < labels.index("採購類型") < labels.index("採購備註說明")
-    assert labels.index("採購類型") < labels.index("緊急程度") < labels.index("需求日期")
+    assert labels[:2] == ["單號", "類型"]
+    assert labels.index("採購類型") < labels.index("採購備註說明") < labels.index("緊急程度") < labels.index("需求日期") < labels.index("小計")
 
 
 def test_empty_values_tables_formulas_refs_and_numbers_are_not_shown():
@@ -82,7 +84,7 @@ def test_other_kinds_render_their_own_labels_and_a_clashing_label_gets_a_suffix(
     f, d = _fields(_seed("purchase_order", {"vendor": "甲廠商", "delivery_date": "2031-07-01", "urgency": "一般", "remark": "含運", "pay_terms": "月結30天",
                                              "remit_date": "2031-07-15", "pr_no": "PR-20310601-0001"}, doc_code="PO-20310601-0001"))
     assert f["廠商"] == "甲廠商" and f["預計交貨日"] == "2031-07-01" and f["付款條件"] == "月結30天" and f["匯款日"] == "2031-07-15" and f["請購單號"] == "PR-20310601-0001"
-    assert f["備註"] == "舊備註" and f["備註（表單）"] == "含運", "撞名的標籤加後綴，原本的備註不被蓋掉"
+    assert f["備註"] == "舊備註" and f["備註（表單）"] == "含運", "撞名的標籤加後綴，note 欄的備註不被蓋掉"
     labels = [x["label"] for x in d["fields"]]
     assert len(labels) == len(set(labels)), "標籤不可重複（佇列前端用標籤當 key）"
     f, d = _fields(_seed("travel", {"place": "國內", "city": "台中", "period": {"from": "2031-06-01", "to": "2031-06-03"}, "pay_date": "2031-06-30", "remark": "客戶拜訪"}, doc_code="TE-20310601-0001"))
@@ -94,7 +96,7 @@ def test_other_kinds_render_their_own_labels_and_a_clashing_label_gets_a_suffix(
 def test_legacy_kind_empty_detail_is_unchanged():
     f, d = _fields(_seed(kind="", data={"remark": "不該出現", "ptype": "x"}, doc_code=""))
     assert "不該出現" not in f.values() and "採購類型" not in f
-    assert [x["label"] for x in d["fields"]] == ["類別", "項目", "數量", "單價", "小計", "支出日期", "單據號碼", "支出人", "填寫人", "備註"]
+    assert [x["label"] for x in d["fields"]] == ["類別", "項目", "數量", "單價", "小計", "支出日期", "單據號碼", "支出人", "填寫人", "備註"], "舊版（kind=''）一律不變"
     assert "caseless" not in d
 
 
@@ -125,11 +127,11 @@ def test_broken_data_or_missing_definition_does_not_break_the_detail(monkeypatch
     finally:
         c.close()
     f, _ = _fields(eid)
-    assert f["項目"] == "線材" and "採購備註說明" not in f
+    assert f["單號"] == "PR-20310601-0001" and "採購備註說明" not in f
     from helpers import expense_types as ET
     monkeypatch.setattr(ET, "get_type", lambda *a, **k: None)
     f2, _ = _fields(_seed(data=PR, doc_code="PR-20310601-0002"))
-    assert f2["項目"] == "線材" and "採購類型" not in f2
+    assert f2["單號"] == "PR-20310601-0002" and "採購類型" not in f2
 
 
 def test_endpoint_shows_remark_to_the_approver_and_hides_it_from_outsiders(client, make_user):
