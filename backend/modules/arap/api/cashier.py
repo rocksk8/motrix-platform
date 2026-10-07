@@ -123,7 +123,7 @@ def get_payee_bank(source: str, key: str, authorization: str = Header(None)):
         elif info["bank"] or info["account"]:
             out.update(source="form", bank=info["bank"], account=info["account"])
         else:
-            out["notice"] = "尚未登錄收款人銀行資料" + ("（員工請先到個人設定登錄）" if info.get("payeeUsername") else "")
+            out["notice"] = info.get("note") or ("尚未登錄收款人銀行資料" + ("（員工請先到個人設定登錄）" if info.get("payeeUsername") else ""))
     finally:
         conn.close()
     masked = False

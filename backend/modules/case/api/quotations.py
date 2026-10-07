@@ -5918,6 +5918,75 @@ def _lines_of_row(r) -> list:
         return []
 
 
+#: 簽核佇列詳情會顯示的類型欄位種類（純文字／選項／日期，以及指向使用者／部門的參照——轉成名稱；表格、公式、檔案、數字、金額一律不在這裡——明細另有 `items`，金額另有遮蔽規則）
+_TYPED_DETAIL_TYPES = ("text", "textarea", "select", "radio", "date", "daterange", "ref")
+_TYPED_DETAIL_MAX = 500
+_MONEY_FIELD_LABELS = {"金額", "單價", "小計", "總金額", "存簿封面"}          # 同 L1 `routers.approval_queue._MONEY_LABELS`
+_MONEY_LABEL_WORDS = ("金額", "價", "預算", "費用")
+
+
+def _typed_ref_name(conn, target, v) -> str:
+    if v in (None, "") or isinstance(v, (dict, list)):
+        return ""
+    try:
+        if target == "users":
+            row = conn.execute("SELECT COALESCE(NULLIF(display_name,''), username) AS n FROM users WHERE username=? OR CAST(id AS TEXT)=?", (str(v), str(v))).fetchone()
+        elif target == "departments":
+            row = conn.execute("SELECT name AS n FROM departments WHERE CAST(id AS TEXT)=?", (str(v),)).fetchone()
+        else:
+            return ""
+    except Exception:                                              # noqa: BLE001
+        return ""
+    return (row["n"] or "") if row else ""
+
+
+def _typed_detail_fields(conn, r, taken=()) -> list:
+    """費用單據（kind≠''）的類型欄位（請購單的採購類型／緊急程度／需求日期／採購備註說明等）→ `[{label, value}]`，依定義順序、標籤取自定義、空值略過、長度有上限。
+    只放 **T1 一般資料** 的純文字類欄位：其他資料分類（個資 T2／F2…）、出納專用欄位、金額與數字欄位一律不放（提供者沒有檢視者身分，保守起見寧可不顯示；
+    金額遮蔽仍由 L1 詳情端點與 `filesNeedMoneyView` 處理）。`taken`＝已存在的標籤：撞名（例如採購單／差旅／零用金的「備註」撞上案件表的備註欄）⇒ 加「（表單）」，
+    佇列前端用標籤當 key，重複會互相蓋掉。定義讀不到、`data_json` 壞掉 ⇒ 空清單（不影響其他欄位）。使用單據釘住的定義版本（0＝目前生效版）。"""
+    from helpers import expense_types as ET
+    try:
+        data = json.loads(r["data_json"] or "{}")
+        if not isinstance(data, dict):
+            return []
+        dv = int(r["def_version"] or 0) if "def_version" in r.keys() else 0
+        t = ET.get_type(conn, r["kind"], dv if dv > 0 else None)
+        if t is None:
+            return []
+        defs = t["body"].get("fields") or []
+    except Exception:                                              # noqa: BLE001 — 附帶資訊，不可讓詳情掛掉
+        return []
+    out = []
+    for f in defs:
+        if not isinstance(f, dict) or f.get("type") not in _TYPED_DETAIL_TYPES:
+            continue
+        if f.get("dataClass") != "T1" or f.get("cashier") or f.get("key") not in data:       # 沒宣告資料分類 ⇒ 不顯示（只認明確的 T1）
+            continue
+        _lab = str(f.get("label") or f["key"])
+        if _lab in _MONEY_FIELD_LABELS or any(w in _lab for w in _MONEY_LABEL_WORDS):        # 金額類欄位（標籤命中金額遮蔽表或含 金額／價／預算／費用）：不顯示——提供者沒有檢視者身分，遮蔽表只管固定標籤，改名顯示會繞過
+            continue
+        v = data.get(f["key"])
+        if f.get("type") == "ref":                                   # 參照：使用者 ⇒ 顯示名稱、部門 ⇒ 部門名稱；查不到 ⇒ 略過（不顯示 id）
+            v = _typed_ref_name(conn, f.get("target"), v)
+        elif isinstance(v, dict):                                    # daterange：{from, to}
+            a, b = str(v.get("from") or v.get("start") or "").strip(), str(v.get("to") or v.get("end") or "").strip()
+            v = ("%s ～ %s" % (a, b)) if (a or b) else ""
+        elif isinstance(v, (list, tuple)):
+            v = "、".join(str(x) for x in v if str(x).strip())
+        v = str(v if v is not None else "").strip()
+        if not v:
+            continue
+        if len(v) > _TYPED_DETAIL_MAX:
+            v = v[:_TYPED_DETAIL_MAX] + "…"
+        label = str(f.get("label") or f["key"])
+        used = set(taken) | {x["label"] for x in out}
+        if label in used:
+            label += "（表單）"
+        out.append({"label": label, "value": v})
+    return out
+
+
 def detail_extra_expense(conn, doc_no):
     r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (doc_no,)).fetchone()
     if not r:
@@ -5951,12 +6020,28 @@ def detail_extra_expense(conn, doc_no):
         except Exception:
             _lines = []
         out["title"] = "%s %s" % (_XE_KIND_LABEL.get(_kind, "費用單據"), r["doc_code"] or "#" + str(r["id"]))
-        out["fields"][:0] = [{"label": "單號", "value": r["doc_code"] or "—"},
-                             {"label": "類型", "value": _XE_KIND_LABEL.get(_kind, _kind)}]
-        out["fields"].append({"label": "收款人", "value": r["payee_name"] or r["payer_name"] or "—"})
+        # 費用單據的欄位真正存在哪裡：申請人／部門／廠商／事由等＝`data_json`（類型定義）；金額與品項＝`lines_json`；數量／單價／類別／項目／單據號碼／支出人這幾個
+        # 欄位是舊版額外支出的欄位——費用單據這幾欄是預設值（數量 0、單價 0、類別「其他」…），顯示出來只會誤導，所以拿掉，改顯示類型欄位與明細。
+        _legacy_only = {"類別", "項目", "數量", "單價", "支出日期", "單據號碼", "支出人"}
+        _keep = [f for f in out["fields"] if f["label"] not in _legacy_only and not (f["label"] == "備註" and not (r["note"] or "").strip())]
+        _typed = _typed_detail_fields(conn, r, {"單號", "類型"} | {x["label"] for x in _keep})                # 類型欄位（採購類型／緊急程度／需求日期／採購備註說明…）
+        _inv = list(dict.fromkeys(str(l.get("invoiceNo")).strip() for l in _lines if isinstance(l, dict) and str(l.get("invoiceNo") or "").strip()))
+        _head = [{"label": "單號", "value": r["doc_code"] or "—"}, {"label": "類型", "value": _XE_KIND_LABEL.get(_kind, _kind)}]
+        _tail = [x for x in _keep if x["label"] == "小計"]
+        if _inv:
+            _tail.append({"label": "發票／憑證號碼", "value": "、".join(_inv)})
+        _tail += [x for x in _keep if x["label"] not in ("小計",)]
+        if (r["payee_name"] or "").strip():                                                         # 出納／銀行資料另存的收款人（有才顯示）；一般收款對象見類型欄位（廠商／支付對象／申請人）
+            _tail.append({"label": "收款人", "value": r["payee_name"]})
+        out["fields"] = _head + _typed + _tail
+        try:
+            _cat = {x["code"]: x["name"] for x in conn.execute("SELECT code, name FROM expense_categories")}
+        except Exception:                                                                            # noqa: BLE001 — 會計模組不在
+            _cat = {}
         out["items"] = [{"description": (l.get("summary") or l.get("category") or ""), "brand": "", "qty": l.get("qty", ""),
-                         "unit": "", "unitPrice": l.get("unitCost", ""), "amount": l.get("amount", 0),
-                         "notes": " ".join(x for x in (l.get("category") or "", l.get("invoiceNo") or "") if x)}
+                         "unit": l.get("unit") or "", "unitPrice": l.get("unitCost", ""), "amount": l.get("amount", 0),
+                         "notes": " ".join(x for x in (l.get("categoryName") or _cat.get(l.get("categoryCode") or l.get("category") or "") or l.get("category") or "",
+                                                       l.get("invoiceNo") or "") if x)}
                         for l in _lines if isinstance(l, dict)]
         out["caseless"] = not r["quote_no"]
     # 「編修後的結果」：已核准的額外支出要改內容必須走變更申請，
@@ -5980,6 +6065,9 @@ def detail_extra_expense(conn, doc_no):
                 "files": _file_entries(json.dumps(chg.get("addFiles") or []), "other"),
             }
             if "lines" in chg:               # 費用單據：明細與收款人也要讓簽核人看到前後對照
+                for _k in ("數量", "單價"):                          # 費用單據沒有單一的數量／單價（在明細列）——欄位上是預設值 0，列出只會誤導
+                    out["changes"]["before"].pop(_k, None)
+                    out["changes"]["after"].pop(_k, None)
                 out["changes"]["before"].update({"明細列數": len(_lines_of_row(r)), "收款人": r["payee_name"] or ""})
                 out["changes"]["after"].update({"明細列數": len(chg.get("lines") or []), "收款人": chg.get("payeeName") or ""})
                 out["changes"]["afterLines"] = [{"description": (l.get("summary") or l.get("category") or ""), "amount": l.get("amount", 0)}

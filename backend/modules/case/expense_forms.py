@@ -169,6 +169,36 @@ def prepare_submit(conn, lines: list) -> list:
     return out
 
 
+def _name_of(conn, raw: str) -> str:
+    """明細的費用類別值（代碼或名稱）⇒ 名稱。類別清單查得到 ⇒ 名稱；查不到：像代碼的（純英數）⇒ ''（不放代碼）、否則（中文等）原值當名稱。"""
+    raw = (raw or "").strip()
+    if not raw:
+        return ""
+    try:
+        rows = conn.execute("SELECT code, name FROM expense_categories").fetchall() if conn is not None else []
+    except Exception:                                              # noqa: BLE001 — 會計模組不在
+        rows = []
+    by_code = {r["code"]: r["name"] for r in rows}
+    if raw in by_code:
+        return by_code[raw]
+    if raw in set(by_code.values()):
+        return raw
+    return "" if raw.replace("_", "").replace("-", "").isascii() and raw.replace("_", "").replace("-", "").isalnum() else raw
+
+
+def doc_category(lines, default: str = "其他", conn=None) -> str:
+    """費用單據的單據類別（`case_extra_expenses.category` 欄位）：取明細裡**金額最大**的那個費用類別（名稱快照 `categoryName` 優先，沒有就用 `category`）；
+    沒有可用的明細類別 ⇒ `default`；明細沒有名稱快照（草稿）時用類別清單把代碼換成名稱，查不到的代碼**不放進欄位**（改用 `default`）。這個欄位只是便利欄（營運報表與總帳逐列用明細的類別，金額加總不受影響；明細對不上單據金額時報表才退回這個欄位），
+    不再讓費用單據一律留預設值「其他」。舊版額外支出（kind=''）不呼叫。"""
+    by = {}
+    for l in lines or []:
+        if isinstance(l, dict):
+            k = str(l.get("categoryName") or "").strip() or _name_of(conn, str(l.get("categoryCode") or l.get("category") or ""))
+            if k:
+                by[k] = by.get(k, 0) + float(l.get("amount") or 0)
+    return max(by, key=lambda x: by[x]) if by else default
+
+
 def dumps_lines(lines: list) -> str:
     s = json.dumps(lines, ensure_ascii=False)
     if len(s) > MAX_LINES_BYTES:
