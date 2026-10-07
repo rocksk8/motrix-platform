@@ -258,7 +258,8 @@ def queue_items(conn) -> list:
         f = _aq.tier_fields(raw)
         req = (json.loads(raw) or {}).get("requestedBy") or r["created_by"] or ""
         out.append(_aq.base_item(
-            DOC_TYPE, r["slip_no"], f, total=0, quoteDate=(r["slip_date"] or "")[:10],
+            "payslip", r["slip_no"], f, total=0,                  # type 用字面值：簽核佇列覆蓋守門靠提供者原始碼裡的 type 字面值判定
+            quoteDate=(r["slip_date"] or "")[:10],
             requestedBy=req, requestedByDisplay=req, requestedAt=(r["created_at"] or ""),
             typeLabel=DOC_LABEL, projectName=DOC_LABEL, customer="",
             openUrl="payslips.html?q=%s" % r["slip_no"],
