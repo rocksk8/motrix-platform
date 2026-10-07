@@ -584,7 +584,11 @@
         var t = null
         try { t = sessionStorage.getItem('motrix_return_to'); sessionStorage.removeItem('motrix_return_to') } catch (e) {}
         // 只接受「同站的絕對路徑」：單一斜線開頭（不是 // 或 /\ 這種會跳到別站的寫法）、沒有空白／控制字元、不是登入頁自己
-        if (typeof t === 'string' && /^\/(?![\/\\])[^\s\u0000-\u001f]*$/.test(t) && !/\/login[^\/?#]*\.html([?#]|$)/.test(t)) return t
+        // 新格式 JSON {p, t}（auth-guard 寫入）：超過 30 分鐘不採用；舊格式（純路徑字串）照舊接受
+        if (typeof t === 'string' && t.charAt(0) === '{') {
+          try { var o = JSON.parse(t); t = (o && typeof o.p === 'string' && typeof o.t === 'number' && Date.now() - o.t <= 30 * 60 * 1000) ? o.p : null } catch (e) { t = null }
+        }
+        if (typeof t === 'string' && t.length <= 2000 && /^\/(?![\/\\])[^\s\u0000-\u001f]*$/.test(t) && !/\/login[^\/?#]*\.html([?#]|$)/.test(t)) return t
         return '../index.html'
       },
       // return-to:end

@@ -4,6 +4,7 @@
 時間用 `date` 取（記憶〈時間由 date 產生〉），不手寫。容許 5 分鐘的時鐘誤差。
 """
 import json
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -11,7 +12,18 @@ from tests._prod_baseline import baseline_manifest
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "backend" / "version_manifest.json"
-TOLERANCE = timedelta(minutes=5)
+#: 容許的時鐘誤差（分鐘）。這支守門比對的是**執行機器的現在時間**：作者機器與跑閘門的機器時鐘差超過容許（例如閘門機器的時鐘慢 >5 分鐘）會誤紅。
+#: 預設 5；環境變數 `MOTRIX_MANIFEST_FUTURE_TOLERANCE_MIN` 可調（整數 0～1440；不合法 ⇒ 預設）。已知限制見 docs/quick/known-limits.md。
+def _tolerance(env=None):
+    raw = (os.environ if env is None else env).get("MOTRIX_MANIFEST_FUTURE_TOLERANCE_MIN", "")
+    try:
+        n = int(str(raw).strip())
+    except ValueError:
+        return timedelta(minutes=5)
+    return timedelta(minutes=n) if 0 <= n <= 1440 else timedelta(minutes=5)
+
+
+TOLERANCE = _tolerance()
 
 
 def future_entries(manifest, baseline, now, tolerance=TOLERANCE):
@@ -65,6 +77,15 @@ def test_shipped_entries_are_exempt_because_they_cannot_be_rewritten():
     shipped = _e("出納/簽核", "2026-10-07", "23:08", "2026-10-07b")
     assert future_entries([shipped], [shipped], NOW) == []
     assert len(future_entries([dict(shipped, version="2026-10-07c")], [shipped], NOW)) == 1    # 同名不同版 ⇒ 是新條目
+
+
+def test_tolerance_is_env_tunable_with_a_safe_default():
+    assert _tolerance({}) == timedelta(minutes=5)
+    assert _tolerance({"MOTRIX_MANIFEST_FUTURE_TOLERANCE_MIN": "30"}) == timedelta(minutes=30)
+    for bad in ("", "x", "-1", "1441", "5.5"):
+        assert _tolerance({"MOTRIX_MANIFEST_FUTURE_TOLERANCE_MIN": bad}) == timedelta(minutes=5), bad
+    assert future_entries([_e("甲", "2026-10-07", "15:50")], [], NOW) != []
+    assert future_entries([_e("甲", "2026-10-07", "15:50")], [], NOW, tolerance=timedelta(minutes=30)) == []
 
 
 def test_the_guard_reports_unparseable_stamps_instead_of_guessing():
