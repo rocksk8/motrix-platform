@@ -277,20 +277,20 @@ M04 不 import M07，經這一個單一提供者（三個動作，都不 commit�
 
 ---
 
-## IP-14　`contractor_voucher.public`＋`contractor_voucher.paid_between`：承攬商匯款申請的對外形狀（M04 → M05 出納、M06 會計匯出）
+## IP-14　`contractor_voucher.public`＋`contractor_voucher.paid_between`＋`contractor_voucher.set_planned`：承攬商匯款申請的對外形狀與預定付款日（M04 → M05 出納、M06 會計匯出）
 
 對應 l2_import_baseline `M05 router:cashier -> M04 router:contractor_vouchers`、`M06 router:accounting_export -> M04 router:contractor_vouchers`。原本兩處直接 import `_voucher_public`。編號為暫定（同時期 C 的 approval.queue_items、crm.quote_deleted 與 A 的 daily.check 也在暫用 IP-10、IP-11），由列車依合回順序定號。〔第六班列車定號（2026-09-26）：dispatch.list_for_case 暫用 IP-12→IP-15、quotation.append_items 暫用 IP-13→IP-17、contractor_voucher.public 維持 IP-14（origin 已用 IP-12 case.access、IP-13 crm.quote_deleted；IP-16＝M07 bonus.module_status）〕
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M04 外包工班：`modules/subcontract/api/contractor_vouchers.py::_voucher_public`、`modules/subcontract/api/contractor_vouchers.py::_paid_between`（`contractor_voucher.paid_between`，2026-09-26 加：區間內已付款的憑據，形狀同 public） |
-| 使用方 | M05 `modules/arap/api/cashier.py`（待付款 `_payable_queue`、執行歷史 `_execution_history`）；M06 `modules/accounting/api/accounting_export.py::_collect_paid_contractor_vouchers`（T100 傳票匯出） |
+| 提供方 | M04 外包工班：`modules/subcontract/api/contractor_vouchers.py::_voucher_public`、`modules/subcontract/api/contractor_vouchers.py::_paid_between`（`contractor_voucher.paid_between`，2026-09-26 加：區間內已付款的憑據，形狀同 public）、`modules/subcontract/api/contractor_vouchers.py::set_planned_pay_date`（`contractor_voucher.set_planned`，第 45 班加：出納補登／改期／清除承攬商匯款的預定付款日，`set_planned(conn, voucher_no, value, user) -> dict`，不 commit） |
+| 使用方 | M05 `modules/arap/api/cashier.py`（待付款 `_payable_queue`、執行歷史 `_execution_history`）；M06 `modules/accounting/api/accounting_export.py::_collect_paid_contractor_vouchers`（T100 傳票匯出）；`contractor_voucher.set_planned`：M05 `modules/arap/api/cashier.py`（出納改承攬商匯款預定付款日端點，財務角色／superadmin） |
 | 形式 | provider，單一提供者 |
-| 語法 | 提供：`ModuleSpec(providers={("contractor_voucher.public", "subcontract"): contractor_vouchers._voucher_public})`<br>取用：`pub = registry.single_provider("contractor_voucher.public")`；`None` ⇒ 退化。`pub(row, include_snapshot=False) -> dict` |
+| 語法 | 提供：`ModuleSpec(providers={("contractor_voucher.public", "subcontract"): contractor_vouchers._voucher_public})`<br>取用：`pub = registry.single_provider("contractor_voucher.public")`；`None` ⇒ 退化。`pub(row, include_snapshot=False) -> dict`<br>預定付款日：提供 `ModuleSpec(providers={("contractor_voucher.set_planned", "subcontract"): contractor_vouchers.set_planned_pay_date})`；取用 `fn = registry.single_provider("contractor_voucher.set_planned")`，`None` ⇒ 404（外包工班模組未安裝）；`ValueError`／`LookupError` 由取用方轉 409／404 |
 | 回傳 | `row`＝`contractor_payment_vouchers` 一列；回 `voucherNo`、`quoteNo`、`vendorName`、`grandTotal`、`payableDate`、`isPaid`、`paidAt`、`paidBankAccountName／Code` 等（見函式） |
 | 對方不在時 | 出納待付款：`404`＋`CONTRACTOR_MISSING`（「外包工班模組未安裝：出納頁不顯示承攬商匯款」），頁面顯示這一句；執行歷史：`outgoing` 空、`contractorNotice` 明說，Excel「已匯款明細」第一列寫同一句；T100 預覽：`notice`＝`T100_CONTRACTOR_MISSING`（匯出的 Excel 是 T100 匯入檔，不加說明列）。皆不丟例外 |
 | 契約版本 | 1（2026-09-26） |
-| 守門 | 提供方 `backend/modules/subcontract/tests/test_subcontract_providers.py`：正對照；取用方 `backend/modules/arap/tests/test_subcontract_connectors.py`（出納／T100 那一題，2026-09-26 隨 M05 搬）＋`backend/tests/platform/test_subcontract_connectors.py`（其餘）：待付 404＋原因、執行歷史 contractorNotice、Excel 第一列、T100 預覽 notice；畫面 `test_e2e_cashier_subcontract_absent_notice_2026_09_26`。突變：出納不看提供者、不說缺（兩處）、畫面吞掉 404 ⇒ 紅 |
+| 守門 | 提供方 `backend/modules/subcontract/tests/test_subcontract_providers.py`：正對照（`set_planned` 另見 `backend/modules/subcontract/tests/test_voucher_planned_pay_date_t45.py`）；取用方 `backend/modules/arap/tests/test_subcontract_connectors.py`（出納／T100 那一題，2026-09-26 隨 M05 搬）＋`backend/tests/platform/test_subcontract_connectors.py`（其餘）：待付 404＋原因、執行歷史 contractorNotice、Excel 第一列、T100 預覽 notice；畫面 `test_e2e_cashier_subcontract_absent_notice_2026_09_26`。突變：出納不看提供者、不說缺（兩處）、畫面吞掉 404 ⇒ 紅 |
 
 **尚未處理**：M01／M05／M06／M08 與 L1（封存、PDF、報表、傳票附件）仍**直接讀** `contractor_payment_vouchers`、`contractor_dispatches`、`vendor_contractors`、`contractors`；M04 不在時表仍在（凍結 migration），讀取不會壞。讀取連接器另開題。
 
