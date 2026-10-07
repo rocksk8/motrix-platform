@@ -82,3 +82,17 @@ def test_reject_needs_a_reason_and_returns_to_draft(live_server, world, new_cont
     p2.get_by_test_id("ps-reject").click(timeout=15000)
     p2.get_by_test_id("ps-submit").wait_for(state="visible", timeout=15000)   # 回草稿 ⇒ 又出現「送審」
     assert _status("PS-203101-902") == "草稿"
+
+
+@pytest.mark.e2e
+def test_submit_button_is_hidden_for_a_payslip_module_holder_who_is_not_superadmin(live_server, world, make_user, new_context):
+    """送審只有最高管理者能按（伺服器 403 才是真守門）；持勞報單模組的一般人員打開草稿看不到「送審」。"""
+    staff = make_user(username="ps_e2e_staff", role="user", modules=["payslip"], legacy_finance_flag=False)
+    req, _apr = world
+    p = new_context(viewport={"width": 1440, "height": 900}).new_page()
+    _open_detail(p, live_server, staff, "PS-203101-901")
+    p.wait_for_selector("[data-testid=ps-edit]", state="attached", timeout=15000)     # 詳情已開（草稿可編輯）
+    assert p.get_by_test_id("ps-submit").count() == 1 and not p.get_by_test_id("ps-submit").is_visible()
+    p2 = new_context(viewport={"width": 1440, "height": 900}).new_page()
+    _open_detail(p2, live_server, req, "PS-203101-901")
+    p2.get_by_test_id("ps-submit").wait_for(state="visible", timeout=15000)           # 最高管理者仍看得到

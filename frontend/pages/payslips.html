@@ -268,7 +268,7 @@
             <div x-show="linkErr" x-text="linkErr" style="color:var(--danger)"></div>
           </div>
           <!-- 送審流程（第46班）：草稿 → 送審 → 待審核（簽核人簽核／退回）→ 已核准才能匯出；匯出不需要付款日 -->
-          <div x-show="selectedSlip.status === '草稿'" style="display:flex;flex-direction:column;gap:6px">
+          <div x-show="selectedSlip.status === '草稿' && session.role === 'superadmin'" style="display:flex;flex-direction:column;gap:6px">
             <label style="font-size:12px;color:var(--text-dim)">預定付款日（選填；核准後出納也能改）
               <input type="date" x-model="planned" data-testid="ps-planned" style="margin-left:4px"></label>
             <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" data-testid="ps-submit" @click="submitSlip(selectedSlip)">送審</button>
