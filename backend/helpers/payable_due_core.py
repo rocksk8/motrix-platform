@@ -2,7 +2,7 @@
 """預定付款日提醒的共用純函式庫（第 45 班；使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）。
 
 [單位] helper:payable_due_core    [層] L1    [穩定度] 實作
-[公開介面] due_kind、effective_send_day、next_working_day、candidate_planned_dates、send_reminder、notify_finance、prune_guards、run_scan、sync_event、CALENDAR_SOURCES
+[公開介面] due_kind、effective_send_day、next_working_day、candidate_planned_dates、notify_finance、prune_guards、run_scan、sync_event、CALENDAR_SOURCES
 [為什麼放 L1] 預定付款日有四個來源（案件額外支出、叫料匯款、承攬商匯款、勞報單），提醒的「日期規則、guard、寄送迴圈、站內通知」必須只有一份，
   各模組只負責「查自己的待付款列」＋整理成 `items` 交進來（薄接線）；模組之間不互相 import，也不必複製一整套（會各自演進）。
 [時機規則]（與 M01 第 42 班 `payable_reminders` 原樣相同，只是搬到這裡）
@@ -91,16 +91,6 @@ def candidate_planned_dates(today: date, is_wd) -> list:
     return sorted(out)
 
 
-def send_reminder(kind, rows, link, ident, out=None):
-    """寄財務群組提醒信（不放金額）；`out` 收寄送結果（`outcome`）。⇒ 結果確定（可寫 guard）為 True。"""
-    badge = {"soon": ("3 天後到期", "#D97706"), "today": ("今日到期", "#DC2626"), "overdue": ("已逾期", "#7F1D1D")}[kind]
-    note = {"soon": "您好，以下請款的預定付款日還有 3 天，請安排付款。",
-            "today": "您好，以下請款的預定付款日就是今天，尚未登錄付款。",
-            "overdue": "您好，以下請款的預定付款日已過，尚未登錄付款；請安排付款或更新預定付款日。"}[kind]
-    return _en.send_registered(MAIL_KEYS[kind], title=_LABEL[kind], rows=rows, to_group=True, badge_text=badge[0], badge_color=badge[1],
-                               link=link, button_text="前往出納", reason=ident, wait=True, out=out, note=note)
-
-
 def notify_finance(kind, source, key, ident, planned, link="cashier.html?tab=payreq") -> int:
     """站內通知寫給財務收件人（在職的財務角色＋superadmin，尊重對該信件類型的退訂）。文字不含金額。⇒ 寫了幾則。失敗只記 log。"""
     n = 0
@@ -164,16 +154,15 @@ def prune_guards(today: date) -> None:
         conn.close()
 
 
-def run_scan(items, today: date, *, is_wd, monotonic=time.monotonic, send=None, link=None, max_wait=None) -> int:
+def run_scan(items, today: date, *, is_wd, send, monotonic=time.monotonic, link=None, max_wait=None) -> int:
     """對 `items` 逐筆判斷今天該不該寄、寄、寫 guard、寫站內通知。⇒ 這次寄出幾封（測試用）。例外只記 log。
 
     `items`：已篩過「合格」（已核准、未付款、未作廢、預定日合法）的列表，每筆 dict：
       `guard_id`（guard key 的識別段；不含空白）、`planned`（YYYY-MM-DD）、`ident`（單號）、`rows`（信件內容列 [(欄, 值)]，不放金額）、
       `source`／`key`（站內通知的去重識別）。
-    `send(kind, rows, link, ident, out)` 預設 `send_reminder`；`link` 預設 `<系統網址>/pages/cashier.html`。"""
+    `send(kind, rows, link, ident, out)`＝呼叫端提供的寄信函式（**必填**；寄信一律用字面 key 呼叫 `send_registered`，守門 `test_mail_registry` 逐一核對，所以不放在 L1）；`link` 預設 `<系統網址>/pages/cashier.html`。"""
     sent = 0
     try:
-        send = send or send_reminder
         max_wait = MAX_WAIT_SECONDS_PER_RUN if max_wait is None else max_wait
         link = link or "%s/pages/cashier.html" % _en._base_url()
         t0 = today.isoformat()

@@ -958,8 +958,7 @@
    "next_working_day": "def(nominal, is_wd, limit=…)",
    "notify_finance": "def(kind, source, key, ident, planned, link=…)",
    "prune_guards": "def(today)",
-   "run_scan": "def(items, today, *, is_wd, monotonic=…, send=…, link=…, max_wait=…)",
-   "send_reminder": "def(kind, rows, link, ident, out=…)",
+   "run_scan": "def(items, today, *, is_wd, send, monotonic=…, link=…, max_wait=…)",
    "sync_event": "def(source, key, item=…)"
   },
   "helper:prefill_sources": {

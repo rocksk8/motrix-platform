@@ -14,6 +14,7 @@ import re
 from datetime import date
 
 from db import get_db, spawn_bg_thread
+from helpers import email_notify as _en
 from helpers import payable_due_core as _core
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,21 @@ def fire(voucher_no) -> None:
     spawn_bg_thread(sync, args=(voucher_no,))
 
 
+def _mail(kind, rows, link, ident, out=None):
+    """字面 key 呼叫 send_registered（守門逐一核對）；不放金額。信件類型由 M01 登記；收件人＝財務群組。"""
+    if kind == "soon":
+        return _en.send_registered("payable_due_soon", title="預定付款日將到", rows=rows, to_group=True,
+                                   badge_text="3 天後到期", badge_color="#D97706", link=link, button_text="前往出納",
+                                   reason=ident, wait=True, out=out, note="您好，以下請款的預定付款日還有 3 天，請安排付款。")
+    if kind == "overdue":
+        return _en.send_registered("payable_due_overdue", title="預定付款日已逾期", rows=rows, to_group=True,
+                                   badge_text="已逾期", badge_color="#7F1D1D", link=link, button_text="前往出納",
+                                   reason=ident, wait=True, out=out, note="您好，以下請款的預定付款日已過，尚未登錄付款；請安排付款或更新預定付款日。")
+    return _en.send_registered("payable_due_today", title="預定付款日當天", rows=rows, to_group=True,
+                               badge_text="今日到期", badge_color="#DC2626", link=link, button_text="前往出納",
+                               reason=ident, wait=True, out=out, note="您好，以下請款的預定付款日就是今天，尚未登錄付款。")
+
+
 def run_reminders(today=None) -> int:
     """提醒信（3 天前／當天／逾期）與站內通知；規則與案件額外支出同一支 L1 庫。任何例外只記 log。"""
     try:
@@ -108,7 +124,7 @@ def run_reminders(today=None) -> int:
                 info.append(("關聯案件", r["quote_no"]))
             items.append({"guard_id": "%s.%s" % (SOURCE, no), "planned": planned, "ident": "%s %s" % (no, _what(r)), "rows": info,
                           "source": SOURCE, "key": no})
-        return _core.run_scan(items, today, is_wd=is_wd)
+        return _core.run_scan(items, today, is_wd=is_wd, send=_mail)
     except Exception as exc:                                              # noqa: BLE001
         logger.warning("subcontract.payable_due.run_reminders failed: %s", exc)
         return 0
