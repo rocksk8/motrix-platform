@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.118 — 2026-10-07（wip/t45-r2-step1-impl：R2 第1步——D4 superadmin 全部鍵、D5 財務判斷影子模式）
+## (next) — 2026-10-07（wip/t45-r2-step1-impl：R2 第1步——D4 superadmin 全部鍵、D5 財務判斷影子模式）
 - L1（新增，向下相容）：`helpers.auth` 新增 `FINANCE_FLAG_KEY`、`finance_effective_keys(user, cache=False)`、`finance_duty_person(user)`、`reset_finance_mode_cache()`。
   財務三鍵判斷（`has_finance_access`／`has_cashier_access`／`can_see_financial`／`user_has_module(財務三鍵)`）改走單一縫：`system_settings.finance_via_effective`＝缺／`off`（預設，舊規則逐字不變）、`shadow`（回傳舊規則，新舊不同時對該人該鍵每小時至多寫一筆 `audit_log` `permission.finance_shadow_diff`；算不出新規則退回舊規則）、`on`（回傳新規則＝（基礎類別 finance ∪ 啟用角色的財務鍵）−個人扣項；原始勾選不計；**本班不開，需使用者核准**）。
 - ⚠ **切 `on` 的前置條件**：`on` 模式每次判斷都查 DB 且不快取（扣項要立即生效），一次請求會呼叫多次 ⇒ 切 `on` 之前必須先加「每請求備忘」或 ≤10 秒 TTL；旗標讀取失敗沿用最後一次的值（從沒讀到才是 off）；`on` 時新規則算不出來，取舊規則與基礎類別的較嚴者。影子稽核寫入在背景執行緒（不在權限判斷路徑內同步寫庫）。
