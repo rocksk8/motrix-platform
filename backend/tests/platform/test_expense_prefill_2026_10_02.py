@@ -122,7 +122,9 @@ def _insert_doc(conn, who, kind, data):
                  (who, who, kind, json.dumps(data, ensure_ascii=False)))
 
 
-def test_last_value_hook_reads_only_my_latest_nonempty_value_for_this_type():
+def test_last_value_hook_reads_only_my_latest_nonempty_value_for_this_type(client):
+    # client：每題一個已建好 schema（含 case 模組表）的隔離庫。沒有它時，若這題是 xdist worker 的第一題，db.get_db() 連到預設路徑、
+    # 建出空庫 ⇒ no such table: case_extra_expenses（第 46 班查明，origin/platform 同樣會；順序相依，不是產品問題）
     conn = db.get_db()
     try:
         _insert_doc(conn, "lv_me", "travel", {"place": "台北出差"})
