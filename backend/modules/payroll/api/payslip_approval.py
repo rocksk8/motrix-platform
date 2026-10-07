@@ -222,6 +222,8 @@ def approve_payslip(slip_no: str, body: dict = Body(default={}), authorization: 
 def reject_payslip(slip_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
     """簽核人退回（待審核）⇒ 回草稿；原因必填；歷史保留在 approval_json.history（送審重來會重新解析簽核鏈）。"""
     user = _require_user(authorization, require_superadmin=True, module="payslip")
+    if user.get("role") != "superadmin":                              # 注意：_require_user 的 module 參數會放行「持有勞報單模組的非最高管理者」；簽核／退回一律要真正的最高管理者（W1）
+        raise HTTPException(403, _ONLY_SUPERADMIN_MSG)
     reason = str((body or {}).get("reason") or "").strip()
     if not reason:
         raise HTTPException(400, "請填寫退回原因。")
@@ -287,7 +289,7 @@ def detail(conn, doc_no):
     except (TypeError, ValueError):
         d = {}
     reveal = "/api/payslips/%s/approval-reveal" % r["slip_no"]
-    mask = "（顯示時留稽核）"
+    mask = "（點「顯示」才取值，每次留稽核）"
     fields = [{"label": "單號", "value": r["slip_no"]}, {"label": "開單日期", "value": (r["slip_date"] or "")[:10] or "—"},
               {"label": "受領人", "value": r["contractor_name"] or "—"}, {"label": "所得類別", "value": r["income_type"] or "—"},
               {"label": "勞務內容", "value": str(d.get("serviceContent") or "—")},
@@ -300,24 +302,70 @@ def detail(conn, doc_no):
     return {"quoteNo": "", "caseless": True, "approvalRaw": r["approval_json"], "title": "勞報單 %s" % r["slip_no"], "fields": fields, "items": [], "files": []}
 
 
-@router.get("/api/payslips/{slip_no}/approval-reveal")
-def approval_reveal(slip_no: str, authorization: str = Header(None)):
-    """簽核佇列詳情要顯示的身分證字號與收款帳號。最高管理者專用、只限待審核；**每次呼叫寫一筆稽核（不含值）**。"""
-    user = _require_user(authorization, require_superadmin=True, module="payslip")
+_REVEAL_KEYS = {"idNumber", "bank", "bankAccountNumber"}
+_REVEAL_LIMIT, _REVEAL_WINDOW = 30, 60.0                 # 每人每分鐘最多 30 次
+_REVEAL_LOG = {}                                          # username → [monotonic 時間戳]
+
+
+def _reveal_rate_ok(username, now=None) -> bool:
+    import time
+    now = time.monotonic() if now is None else now
+    xs = [t for t in _REVEAL_LOG.get(username, []) if now - t < _REVEAL_WINDOW]
+    if len(xs) >= _REVEAL_LIMIT:
+        _REVEAL_LOG[username] = xs
+        return False
+    xs.append(now)
+    _REVEAL_LOG[username] = xs
+    return True
+
+
+def _audit_raising(user, action, target_id, label, detail=None):
+    """稽核先寫、寫不進去就丟例外（⇒ 500，不回傳任何值）；一般 `_audit` 會吞例外，不適合「先稽核才給值」。"""
     conn = get_db()
     try:
-        r = conn.execute("SELECT status, data_json FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+        conn.execute("INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail) VALUES (?,?,?,?,?,?,?,?,?)",
+                     (datetime.now().isoformat(), user.get("id"), user.get("username") or "", user.get("display_name") or "", action, "payslip", target_id, label,
+                      json.dumps(detail or {}, ensure_ascii=False)))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@router.get("/api/payslips/{slip_no}/approval-reveal")
+def approval_reveal(slip_no: str, field: str = "", authorization: str = Header(None)):
+    """簽核佇列詳情要顯示的身分證字號／收款資料——**點一個欄位才取一個欄位**（`field`＝idNumber｜bank｜bankAccountNumber），每次點擊一筆稽核（不含值）。
+    守門：**真正的最高管理者**（不用 `module=` 參數：它會放行持有勞報單模組的非最高管理者，等於繞過 F1 遮蔽）＋`can_see_full`＋能開這張詳情（L1 同一個判斷）＋只限待審核。
+    稽核先寫（寫不進去 ⇒ 500、不回值）；每人每分鐘 30 次；回應 `Cache-Control: no-store`。"""
+    from fastapi.responses import JSONResponse
+    from modules.payroll import payslip_bank as _pb
+    user = _require_user(authorization)
+    if user.get("role") != "superadmin" or not _pb.can_see_full(user):
+        raise HTTPException(403, "僅最高管理者可檢視身分證字號與收款帳號")
+    if field not in _REVEAL_KEYS:
+        raise HTTPException(400, "field 必須是 idNumber、bank 或 bankAccountNumber")
+    conn = get_db()
+    try:
+        r = conn.execute("SELECT status, data_json, approval_json FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
         if r is None:
             raise HTTPException(404, "找不到此勞報單")
         if r["status"] != S_REVIEW:
             raise HTTPException(409, "只有待審核的勞報單可由簽核佇列檢視（目前「%s」）" % r["status"])
+        try:                                                           # 與詳情同一個存取判斷（L1 `_access_step`；不掛案件 ⇒ 簽核鏈上的人、送審人、最高管理者）
+            from routers import approval_queue as _aq
+            if _aq._access_step(conn, user, "", r["approval_json"], False, caseless=True) == _aq.DENY:
+                raise HTTPException(404, "找不到此勞報單")
+        except ImportError:
+            pass
         try:
             d = json.loads(r["data_json"] or "{}") or {}
         except (TypeError, ValueError):
             d = {}
     finally:
         conn.close()
-    _audit(_tok(authorization), "payslip.approval_reveal", "payslip", slip_no, "%s 簽核佇列檢視身分證字號與收款帳號" % slip_no)
-    return {"idNumber": str(d.get("contractorIdNumber") or d.get("idNumber") or ""),
-            "bank": ("%s %s" % (d.get("bankCode") or "", d.get("bankName") or "")).strip(),
-            "bankAccountNumber": str(d.get("bankAccountNumber") or "")}
+    if not _reveal_rate_ok(user["username"]):
+        raise HTTPException(429, "檢視太頻繁，請稍後再試")
+    _audit_raising(user, "payslip.approval_reveal", slip_no, "%s 簽核佇列檢視（%s）" % (slip_no, field), {"field": field})     # 先稽核；失敗 ⇒ 500、不回值
+    val = {"idNumber": str(d.get("contractorIdNumber") or d.get("idNumber") or ""),
+           "bank": ("%s %s" % (d.get("bankCode") or "", d.get("bankName") or "")).strip(),
+           "bankAccountNumber": str(d.get("bankAccountNumber") or "")}[field]
+    return JSONResponse({"field": field, "value": val}, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})

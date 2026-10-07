@@ -319,8 +319,12 @@ def _slip_with_pii(no):
                                                                        "bankCode": "812", "bankName": "台新", "serviceContent": "施工"}, ensure_ascii=False), no))
 
 
-def test_queue_detail_for_approver_has_no_pii_values_only_audited_reveal(client, make_user):
-    """使用者 2026-10-07 裁示：簽核佇列詳情顯示完整內容含身分證與帳號——但值只經稽核的 reveal 端點；詳情／清單／角標內容都不含值。"""
+def _reveal(client, h, no, field):
+    return client.get("/api/payslips/%s/approval-reveal" % no, params={"field": field}, headers=h)
+
+
+def test_queue_detail_for_approver_has_no_pii_values_only_audited_click_to_reveal(client, make_user):
+    """使用者 2026-10-07 裁示：簽核佇列詳情可看完整身分證／帳號——值只經稽核的 reveal 端點、**點哪個欄位才取哪個欄位**；詳情／清單／角標內容都不含值。"""
     ua, ha = _su(client, make_user, "ps46_qa")
     ub, hb = _su(client, make_user, "ps46_qb")
     _flow([ub])
@@ -328,22 +332,23 @@ def test_queue_detail_for_approver_has_no_pii_values_only_audited_reveal(client,
     client.post("/api/payslips/PS-203101-050/submit", headers=ha)
     d = client.get("/api/approval-queue/detail", params={"type": "payslip", "id": "PS-203101-050"}, headers=hb)
     assert d.status_code == 200, d.text
-    blob = d.text
-    assert ID_NO not in blob and ACCT not in blob and "28881234" not in blob, "詳情內容本身不含身分證／帳號值"
-    revs = [f for f in d.json()["fields"] if f.get("revealUrl")]
-    assert {f["revealKey"] for f in revs} == {"idNumber", "bank", "bankAccountNumber"}
-    lst = client.get("/api/approval-queue", headers=hb)
-    cnt = client.get("/api/approval-queue/count", headers=hb)
-    for r in (lst, cnt):
+    assert ID_NO not in d.text and ACCT not in d.text and "28881234" not in d.text, "詳情內容本身不含身分證／帳號值"
+    revs = {f["revealKey"]: f for f in d.json()["fields"] if f.get("revealUrl")}
+    assert set(revs) == {"idNumber", "bank", "bankAccountNumber"}
+    for r in (client.get("/api/approval-queue", headers=hb), client.get("/api/approval-queue/count", headers=hb)):
         assert ID_NO not in r.text and ACCT not in r.text
-    before = len(_q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'"))
-    r = client.get(revs[0]["revealUrl"], headers=hb)
-    assert r.status_code == 200 and r.json()["idNumber"] == ID_NO and r.json()["bankAccountNumber"] == ACCT and r.json()["bank"] == "812 台新"
+    n0 = len(_q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'"))
+    r = _reveal(client, hb, "PS-203101-050", "idNumber")
+    assert r.status_code == 200 and r.json() == {"field": "idNumber", "value": ID_NO}
+    assert ACCT not in r.text, "一次只給被點的那個欄位"
+    assert r.headers["cache-control"] == "no-store" and r.headers["pragma"] == "no-cache"
+    assert _reveal(client, hb, "PS-203101-050", "bankAccountNumber").json()["value"] == ACCT
+    assert _reveal(client, hb, "PS-203101-050", "bank").json()["value"] == "812 台新"
     rows = _q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'")
-    assert len(rows) == before + 1, "每次檢視一筆稽核"
-    assert ID_NO not in json.dumps(rows[-1], ensure_ascii=False) and ACCT not in json.dumps(rows[-1], ensure_ascii=False), "稽核不含值"
-    client.get(revs[0]["revealUrl"], headers=hb)
-    assert len(_q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'")) == before + 2
+    assert len(rows) == n0 + 3, "每次點擊一筆稽核"
+    text = json.dumps(rows[-3:], ensure_ascii=False)
+    assert ID_NO not in text and ACCT not in text, "稽核不含值"
+    assert _reveal(client, hb, "PS-203101-050", "contractorName").status_code == 400, "只認三個欄位"
 
 
 def test_queue_detail_and_reveal_refused_for_non_approver_and_wrong_state(client, make_user):
@@ -353,12 +358,62 @@ def test_queue_detail_and_reveal_refused_for_non_approver_and_wrong_state(client
     _slip_with_pii("PS-203101-051")
     u, p = make_user(username="ps46_qplain", role="user", modules=["case_manage"], legacy_finance_flag=False)
     plain = _auth(_login(client, u, p))
-    assert client.get("/api/payslips/PS-203101-051/approval-reveal", headers=hb).status_code == 409, "草稿不給（只限待審核）"
+    assert _reveal(client, hb, "PS-203101-051", "idNumber").status_code == 409, "草稿不給（只限待審核）"
     client.post("/api/payslips/PS-203101-051/submit", headers=ha)
     d = client.get("/api/approval-queue/detail", params={"type": "payslip", "id": "PS-203101-051"}, headers=plain)
     assert d.status_code == 404, "非簽核鏈、非送審人、非最高管理者看不到詳情"
     n_before = len(_q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'"))
-    assert client.get("/api/payslips/PS-203101-051/approval-reveal", headers=plain).status_code in (401, 403)
+    assert _reveal(client, plain, "PS-203101-051", "idNumber").status_code in (401, 403)
     assert len(_q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'")) == n_before, "被擋的不寫檢視稽核"
     client.post("/api/payslips/PS-203101-051/approve", headers=hb)
-    assert client.get("/api/payslips/PS-203101-051/approval-reveal", headers=hb).status_code == 409, "核准後不再由佇列檢視"
+    assert _reveal(client, hb, "PS-203101-051", "idNumber").status_code == 409, "核准後不再由佇列檢視"
+
+
+def test_reveal_refuses_a_payslip_module_holder_who_is_not_superadmin(client, make_user):
+    """複核 H1：`_require_user(module=…)` 會放行持有勞報單模組的非最高管理者；reveal 必須是真正的最高管理者（F1 遮蔽不可被繞過）。"""
+    ua, ha = _su(client, make_user, "ps46_ha")
+    _clear_flow()
+    _slip_with_pii("PS-203101-052")
+    _x("UPDATE payslips SET status='待審核', approval_json=? WHERE slip_no='PS-203101-052'", (json.dumps({"tiers": [], "requestedBy": ua, "history": []}),))
+    for role in ("user", "admin", "finance"):
+        u, p = make_user(username="ps46_mod_%s" % role, role=role, modules=["payslip"], legacy_finance_flag=False)
+        h = _auth(_login(client, u, p))
+        r = _reveal(client, h, "PS-203101-052", "idNumber")
+        assert r.status_code == 403 and ID_NO not in r.text, role
+    assert not _q("SELECT * FROM audit_log WHERE action='payslip.approval_reveal'"), "被擋的不留檢視稽核"
+
+
+def test_module_holder_can_submit_but_never_approve_or_reject(client, make_user):
+    """報告用：payslip 模組持有者（非最高管理者）本來就能建立／匯出勞報單（既有行為）；送審後必須由最高管理者核准——模組持有者核准／退回一律 403。"""
+    ua, ha = _su(client, make_user, "ps46_sup")
+    u, p = make_user(username="ps46_modstaff", role="user", modules=["payslip"], legacy_finance_flag=False)
+    hs = _auth(_login(client, u, p))
+    _clear_flow()
+    _insert_payslip("PS-203101-053")
+    r = client.post("/api/payslips/PS-203101-053/submit", headers=hs)
+    assert r.status_code == 200 and r.json()["status"] == "待審核", "非最高管理者送審 ⇒ 待審核（不自動核准）"
+    assert client.post("/api/payslips/PS-203101-053/approve", headers=hs).status_code == 403
+    assert client.post("/api/payslips/PS-203101-053/reject", headers=hs, json={"reason": "x"}).status_code == 403
+    assert _status("PS-203101-053") == "待審核"
+    assert client.post("/api/payslips/PS-203101-053/approve", headers=ha).status_code == 200
+
+
+def test_reveal_writes_audit_first_and_fails_closed_and_is_rate_limited(client, make_user, monkeypatch):
+    from modules.payroll.api import payslip_approval as PA
+    ua, ha = _su(client, make_user, "ps46_ra")
+    ub, hb = _su(client, make_user, "ps46_rb")
+    _flow([ub])
+    _slip_with_pii("PS-203101-054")
+    client.post("/api/payslips/PS-203101-054/submit", headers=ha)
+
+    def boom(*a, **k):
+        raise RuntimeError("audit down")
+    real_audit = PA._audit_raising
+    monkeypatch.setattr(PA, "_audit_raising", boom)
+    from fastapi.testclient import TestClient
+    r = TestClient(client.app, raise_server_exceptions=False).get("/api/payslips/PS-203101-054/approval-reveal", params={"field": "idNumber"}, headers=hb)
+    assert r.status_code == 500 and ID_NO not in r.text, "稽核寫不進去 ⇒ 500、不回值"
+    monkeypatch.setattr(PA, "_audit_raising", real_audit)
+    monkeypatch.setattr(PA, "_REVEAL_LIMIT", 2)
+    PA._REVEAL_LOG.clear()
+    assert [_reveal(client, hb, "PS-203101-054", "idNumber").status_code for _ in range(3)] == [200, 200, 429]

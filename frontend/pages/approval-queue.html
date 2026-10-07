@@ -805,6 +805,8 @@
               <div class="aq-info-row">
                 <span class="aq-info-label" x-text="f.label"></span>
                 <span class="aq-info-value" style="white-space:pre-wrap" x-text="f.value"></span>
+                <button type="button" x-show="f.revealUrl && !f._shown" @click="revealField(f)" :disabled="f._busy" :data-testid="'aq-reveal-' + f.revealKey"
+                        style="margin-left:8px;font-size:11px;padding:1px 8px;border:1px solid var(--border);border-radius:5px;background:var(--surface);cursor:pointer">顯示</button>
               </div>
             </template>
           </div>
@@ -1581,25 +1583,22 @@
             if (r.ok) {
               this.detail = await r.json()
               this._prefetchImages()
-              this._revealFields()
             }
           } catch (e) { /* 詳情拿不到不該讓整個佇列爆掉，清單仍可正常簽核 */ }
           this.detailLoading = false
         },
 
-        // 勞報單詳情（第46班）：身分證字號與收款帳號不在清單／詳情內容裡；開詳情時打 revealUrl（最高管理者專用、每次檢視留稽核、不含值），回值再貼回欄位
-        async _revealFields() {
-          const d = this.detail
-          const urls = [...new Set((d?.fields || []).map(f => f.revealUrl).filter(Boolean))]
-          for (const u of urls) {
-            try {
-              const r = await fetch(API + u, { headers: { Authorization: 'Bearer ' + this.session.token } })
-              if (this.detail !== d) return
-              if (!r.ok) { (d.fields || []).forEach(f => { if (f.revealUrl === u) f.value = '（無權限檢視）' }); continue }
-              const v = await r.json()
-              ;(d.fields || []).forEach(f => { if (f.revealUrl === u) f.value = v[f.revealKey] || '—' })
-            } catch (e) { /* 取不到就維持占位 */ }
-          }
+        // 勞報單詳情（第46班）：身分證字號與收款帳號不在清單／詳情內容裡；**點「顯示」才取該欄位**（最高管理者專用、每次點擊留稽核、不含值、不快取），
+        // 值只放在目前這份詳情（關閉抽屜 ⇒ detail 清空 ⇒ 值消失）。
+        async revealField(f) {
+          if (!f.revealUrl || f._busy) return
+          f._busy = true
+          try {
+            const r = await fetch(API + f.revealUrl + '?field=' + encodeURIComponent(f.revealKey), { headers: { Authorization: 'Bearer ' + this.session.token }, cache: 'no-store' })
+            if (r.ok) { const v = await r.json(); f.value = v.value || '—'; f._shown = true }
+            else { let m = ''; try { m = (await r.json()).detail } catch (e) {}; f.value = '（' + (m || ('無法顯示 ' + r.status)) + '）' }
+          } catch (e) { f.value = '（無法顯示）' }
+          f._busy = false
         },
 
         // 圖片要能直接顯示縮圖 → 先換簽章 URL（/api/uploads 需要 pt 簽章）
