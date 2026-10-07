@@ -146,6 +146,22 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     assert "待簽：主管" in page.locator(f'{PANEL} [data-testid="mo-approval-{item_id}"]').inner_text()
     _shot(page, "02-pending")
 
+    # 2b 材料申請（核准前）：不自動連結——旗標反灰、顯示「需先申請…」提示（原先在核准後才檢查；t45 自動連結上線後，核准後同名唯一相符會自動帶入）
+    page.click('.cm-tab:has-text("執行管理")') if page.locator('.cm-tab:has-text("執行管理")').count() else None
+    page.click('.cm-tab:has-text("材料申請")')
+    page.wait_for_selector('[data-testid="mat-order-link"]', timeout=15000)
+    assert page.locator('[data-testid="mat-order-link"]').first.input_value() == ""                 # 待審核：不自動連結
+    assert page.locator('[data-testid="mat-ordered"]').first.is_disabled() and page.locator('[data-testid="mat-arrived"]').first.is_disabled()
+    # 材料申請改字：沒有對應已核准申請時的提示（文案出自 MATERIAL-REQUEST-WORDING.md；閘門邏輯不變）
+    assert "需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。" in page.locator('[data-testid="mat-order-link"]').first.locator("xpath=ancestor::*[.//input[@data-testid='mat-ordered']][1]").inner_text()
+    _shot(page, "03b-block-hint")
+    other = page.evaluate("""() => { const d = Alpine.$data(document.querySelector('[data-testid=mat-order-link]'));
+        d.moApprovals = Object.assign({}, d.moApprovals, { 'X-PENDING': { status: '待審核' } });
+        return d.matTickHint({ orderItemId: 'X-PENDING' }, 'ordered'); }""")
+    assert other == "這筆材料申請還沒核准。", other
+    page.click('.cm-tab:has-text("財務")')
+    page.wait_for_selector(f'{PANEL} [data-testid="mo-ap-status"]', timeout=15000)
+
     # 3 簽核人核准（另一個身分走 API）→ 重新載入 ⇒ 已核准＋到貨確認區
     bctx = e2e_browser.new_context()                                                        # 另一個身分（簽核人）走 API；用瀏覽器自己的 request，不多引套件
     tok = bctx.request.post(live_server + "/api/auth/login", data={"username": boss, "password": bp}).json()["token"]
@@ -156,18 +172,20 @@ def test_material_order_approval_round_trip_in_the_browser(live_server, make_use
     assert page.locator(f'{PANEL} [data-testid="mo-recv"]').first.is_visible()
     _shot(page, "03-approved")
 
-    # 4 材料申請：旗標一開始反灰；連結後可勾「已叫料」，「已到料」仍反灰
+    # 4 材料申請：核准後重新載入 ⇒ 同名且恰好一筆已核准、有採購單的申請 ⇒ 自動連結（t45）；「已叫料」可勾、「已到料」仍反灰（尚未確認到貨）
     page.click('.cm-tab:has-text("執行管理")') if page.locator('.cm-tab:has-text("執行管理")').count() else None
     page.click('.cm-tab:has-text("材料申請")')
     page.wait_for_selector('[data-testid="mat-order-link"]', timeout=15000)
-    assert page.locator('[data-testid="mat-ordered"]').first.is_disabled() and page.locator('[data-testid="mat-arrived"]').first.is_disabled()
-    # 材料申請改字：沒有對應已核准申請時的提示（文案出自 MATERIAL-REQUEST-WORDING.md；閘門邏輯不變）
-    assert "需先申請請購單，再申請採購單；採購單通過後，才能對應這筆材料申請。" in page.locator('[data-testid="mat-order-link"]').first.locator("xpath=ancestor::*[.//input[@data-testid='mat-ordered']][1]").inner_text()
-    _shot(page, "03b-block-hint")
-    other = page.evaluate("""() => { const d = Alpine.$data(document.querySelector('[data-testid=mat-order-link]'));
-        d.moApprovals = Object.assign({}, d.moApprovals, { 'X-PENDING': { status: '待審核' } });
-        return d.matTickHint({ orderItemId: 'X-PENDING' }, 'ordered'); }""")
-    assert other == "這筆材料申請還沒核准。", other
+    page.wait_for_function("(id) => document.querySelector('[data-testid=mat-order-link]').value === id", arg=item_id, timeout=15000)   # 自動帶入
+    assert not page.locator('[data-testid="mat-ordered"]').first.is_disabled()
+    assert page.locator('[data-testid="mat-arrived"]').first.is_disabled()
+    _wait_db(page, lambda c: c["materials"][0].get("orderItemId") == item_id and not c["materials"][0].get("ordered"), "自動連結已存（旗標沒被動）")
+    # 手動取消連結 ⇒ 旗標又反灰（後端閘不變）；不會被自動連結又帶回來（只在開啟時比對一次）；再手動連結 ⇒ 可勾
+    page.select_option('[data-testid="mat-order-link"]', "")
+    page.wait_for_function("() => document.querySelector('[data-testid=mat-ordered]').disabled", timeout=10000)
+    _wait_db(page, lambda c: not c["materials"][0].get("orderItemId"), "取消連結已存")
+    page.wait_for_timeout(2500)                                                                  # 過了自動存檔週期，仍是未連結
+    assert page.locator('[data-testid="mat-order-link"]').first.input_value() == ""
     page.wait_for_function(f"() => document.querySelector('[data-testid=mat-order-link]').querySelectorAll('option').length >= 2", timeout=15000)
     page.select_option('[data-testid="mat-order-link"]', item_id)
     page.wait_for_function("() => !document.querySelector('[data-testid=mat-ordered]').disabled", timeout=10000)
