@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-07（wip/t45-paydate-impl）：承攬商匯款預定付款日
+## (next) — 2026-10-07（wip/t45-paydate-impl）：承攬商匯款預定付款日（S4）
 - migration v6：`contractor_payment_vouchers.planned_pay_date`（不回填；舊列 ''）。⚠ 0005 曾整表重建——之後任何重建這張表的遷移必須帶這一欄。
 - `_voucher_public` 加 `plannedPayDate`（IP-14 形狀加法）；`POST /api/contractor-vouchers` 可帶選填 `planned_pay_date`（與合約應付款日 `payable_date` 分開、不預填、不寫回派發）。
 - 新提供者 `contractor_voucher.set_planned`（IP-14 第三個能力）：只認已核准、未匯款、未作廢；已匯款 409。供出納端點使用（出納端點在 arap）。不改出納排序（仍依應付款日）。
