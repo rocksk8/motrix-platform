@@ -169,6 +169,19 @@ def prepare_submit(conn, lines: list) -> list:
     return out
 
 
+def doc_category(lines, default: str = "其他") -> str:
+    """費用單據的單據類別（`case_extra_expenses.category` 欄位）：取明細裡**金額最大**的那個費用類別（名稱快照 `categoryName` 優先，沒有就用 `category`）；
+    沒有可用的明細類別 ⇒ `default`。這個欄位只是便利欄（營運報表與總帳逐列用明細的類別，金額加總不受影響；明細對不上單據金額時報表才退回這個欄位），
+    不再讓費用單據一律留預設值「其他」。舊版額外支出（kind=''）不呼叫。"""
+    by = {}
+    for l in lines or []:
+        if isinstance(l, dict):
+            k = str(l.get("categoryName") or l.get("category") or "").strip()
+            if k:
+                by[k] = by.get(k, 0) + float(l.get("amount") or 0)
+    return max(by, key=lambda x: by[x]) if by else default
+
+
 def dumps_lines(lines: list) -> str:
     s = json.dumps(lines, ensure_ascii=False)
     if len(s) > MAX_LINES_BYTES:

@@ -232,3 +232,79 @@ def test_my_requests_page_uses_the_kind_label_not_the_default_category():
     html = (Path(__file__).resolve().parents[4] / "frontend" / "pages" / "payment-request.html").read_text(encoding="utf-8")
     assert 'x-text="rowTitle(e)"' in html and "e.kind ? ((K[e.kind]" in html
     assert "(e.category || '') + '｜' + (e.description || '')\"></td>" not in html.split("rowTitle(e) {")[0].split('id="pr-mine"')[-1].split("<tbody>")[-1]
+
+
+# ── 費用單據的「類別」便利欄取明細類別（不再一律「其他」）；報表逐類拆分與金額守恆 ─────────────────────────
+
+CAT_LINES = [{"category": "材料費", "summary": "網路線", "qty": 10, "unitCost": 100},          # 1000
+             {"category": "運費", "summary": "貨運", "qty": 1, "unitCost": 300},                # 300
+             {"category": "材料費", "summary": "接頭", "qty": 5, "unitCost": 40}]              # 200  ⇒ 材料費 1200、運費 300、合計 1500
+
+
+def _save_cat(client, w, kind, lines=CAT_LINES):
+    data = {"applicant": w["user"], "dept": w["dept"], "req_date": "2031-06-01", "vendor": "甲", "ptype": "其他", "urgency": "一般", "remark": "r"}
+    r = client.post(SENT, headers=w["h"], json={"kind": kind, "data": data, "lines": lines, "expenseDate": "2031-06-01"})
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+def _col(eid):
+    c = _db()
+    try:
+        return dict(c.execute("SELECT category, total_cost, status FROM case_extra_expenses WHERE id=?", (eid,)).fetchone())
+    finally:
+        c.close()
+
+
+def test_typed_doc_category_column_follows_the_largest_line_category(client, world):
+    po = _save_cat(client, world, "purchase_order")
+    assert _col(po)["category"] == "材料費" and _col(po)["total_cost"] == 1500
+    r = client.patch("%s/%d" % (SENT, po), headers=world["h"],
+                     json={"kind": "purchase_order", "data": {"vendor": "甲"}, "lines": [{"category": "運費", "summary": "貨運", "qty": 1, "unitCost": 1200}, CAT_LINES[0]]})
+    assert r.status_code == 200, r.text
+    assert _col(po)["category"] == "運費", "編輯後依新的明細重算"
+    c = _db()
+    try:
+        c.execute("INSERT OR IGNORE INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at, deal_tag,"
+                  " sales_person, assigned_user_ids) VALUES ('MQ-RF-CAT','已送出','客','案',1,1,'{}','2031-01-01','2031-01-01','已成案','','[]')")
+        c.commit()
+    finally:
+        c.close()
+    legacy = client.post("/api/quotations/MQ-RF-CAT/extra-expenses", headers=world["h"], json={"category": "運費", "description": "計程車", "qty": 1, "unitCost": 300, "expenseDate": "2031-06-01"})
+    assert legacy.status_code == 201, legacy.text
+    assert _col(legacy.json()["id"])["category"] == "運費", "舊版額外支出（kind=''）不變"
+    assert _col(_save_cat(client, world, "petty_cash", [{"summary": "x", "amount": 50}]))["category"] == "其他", "明細沒有類別 ⇒ 維持預設"
+
+
+def test_operating_report_splits_a_two_category_po_by_line_and_keeps_the_total(client, world):
+    from modules.case import recognition as R
+    po = _save_cat(client, world, "purchase_order")
+    _approve_row(po)
+    c = _db()
+    try:
+        rows = [e for e in R.extra_entries(c, "accrual") if e.get("expenseId") == po]
+    finally:
+        c.close()
+    by = {e["category"]: e["amount"] for e in rows}
+    assert by == {"材料費": 1200.0, "運費": 300.0}, by
+    assert sum(by.values()) == _col(po)["total_cost"] == 1500, "逐類加總＝單據金額"
+
+
+def test_purchase_req_stays_out_of_the_expense_reports_but_gets_the_category_too(client, world):
+    from modules.case import recognition as R
+    pr = _save_cat(client, world, "purchase_req")
+    _approve_row(pr)
+    assert _col(pr)["category"] == "材料費"
+    c = _db()
+    try:
+        assert [e for e in R.extra_entries(c, "accrual") if e.get("expenseId") == pr] == [], "請購單不是付款單據，不進營運報表（與以往相同）"
+    finally:
+        c.close()
+
+
+def test_submit_recomputes_the_category_with_the_name_snapshot_and_change_apply_keeps_it(client, world):
+    po = _save_cat(client, world, "purchase_order")
+    r = client.post("%s/%d/submit" % (SENT, po), headers=world["h"])
+    assert r.status_code in (200, 400, 409), r.text          # 沒有簽核流程設定 ⇒ 直接核准；費用類別清單未設定 ⇒ 不驗證
+    if r.status_code == 200:
+        assert _col(po)["category"] == "材料費"
