@@ -165,7 +165,7 @@ def _paid_between(start: str, end: str) -> list:
 def set_planned_pay_date(conn, voucher_no, value, user) -> dict:
     """IP-14 `contractor_voucher.set_planned`（t45）：出納端點改預定付款日（`value` 已正規化；''＝清除）。不 commit。
     只認「還在出納待付款清單上」的那一張（已核准、未付款、未作廢）；查無／不在清單 ⇒ LookupError；已匯款 ⇒ ValueError（409，預定日保留為歷史）。"""
-    r = conn.execute("SELECT voucher_no, quote_no, status, is_paid, voided_at, planned_pay_date FROM contractor_payment_vouchers WHERE voucher_no=?",
+    r = conn.execute("SELECT voucher_no, quote_no, status, is_paid, voided_at, planned_pay_date, created_by FROM contractor_payment_vouchers WHERE voucher_no=?",
                      (voucher_no,)).fetchone()
     if r is None or r["status"] != "已核准" or (r["voided_at"] or ""):
         raise LookupError("找不到這張匯款申請")
@@ -175,7 +175,8 @@ def set_planned_pay_date(conn, voucher_no, value, user) -> dict:
                        (value, datetime.now().isoformat(timespec="seconds"), voucher_no))
     if cur.rowcount == 0:                                   # 兩位出納同時操作：後到的看到已匯款
         raise ValueError("這張匯款申請已匯款，預定付款日保留為歷史紀錄，不能再修改")
-    return {"plannedPayDate": value, "old": (r["planned_pay_date"] or "")[:10], "quoteNo": r["quote_no"] or ""}
+    return {"plannedPayDate": value, "old": (r["planned_pay_date"] or "")[:10], "quoteNo": r["quote_no"] or "",
+            "applicant": r["created_by"] or "", "docCode": voucher_no, "link": "case-management.html"}
 
 
 def _voucher_public(row, include_snapshot: bool = True, viewer=None) -> dict:

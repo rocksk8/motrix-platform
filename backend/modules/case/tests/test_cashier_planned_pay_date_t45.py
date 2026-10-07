@@ -158,3 +158,30 @@ def test_provider_without_method_is_409(client, make_user, monkeypatch):
     monkeypatch.setattr(registry, "providers", lambda name: dict(real(name), bare=_Bare) if name == "payables.pending" else real(name))
     r = client.patch(_url("1", "bare"), headers=h, json={"plannedPayDate": "2031-06-10"})
     assert r.status_code == 409 and "不支援" in r.json()["detail"]
+
+
+def _notes(user):
+    import db
+    c = db.get_db()
+    try:
+        return [dict(r) for r in c.execute("SELECT * FROM notifications WHERE username=? AND type='planned_pay_date' ORDER BY id", (user,))]
+    finally:
+        c.close()
+
+
+def test_finance_edit_notifies_applicant_without_amount_and_not_self(client, make_user):
+    """Q7：財務設定／改期／清除 ⇒ 站內通知申請人（不含金額）；申請人自己（也是財務）改不通知自己。"""
+    eid = _seed()                                                       # created_by = t45_eng
+    make_user(username="t45_eng", role="user")
+    h = _hdr(client, make_user, "t45_fin3", role="finance")
+    assert client.patch(_url(eid), headers=h, json={"plannedPayDate": "2031-06-10"}).status_code == 200
+    assert client.patch(_url(eid), headers=h, json={"plannedPayDate": ""}).status_code == 200
+    n = _notes("t45_eng")
+    assert len(n) == 2 and "2031-06-10" in n[0]["message"] and "已清除" in n[1]["message"]
+    assert n[0]["link"] == "payment-request.html?tab=mine"
+    for x in n:
+        assert "1200" not in x["message"] and "1,200" not in x["message"] and "NT$" not in x["message"]
+    eid2 = _seed()
+    _x("UPDATE case_extra_expenses SET created_by='t45_fin3' WHERE id=?", (eid2,))
+    assert client.patch(_url(eid2), headers=h, json={"plannedPayDate": "2031-06-11"}).status_code == 200
+    assert _notes("t45_fin3") == [], "本人改自己的申請不通知自己"

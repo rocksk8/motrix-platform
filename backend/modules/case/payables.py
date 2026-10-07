@@ -145,7 +145,12 @@ class _Payables:
         conn.execute("UPDATE case_extra_expenses SET planned_pay_date=?, updated_at=?, updated_by_name=?"
                      " WHERE id=? AND COALESCE(paid_date, '')=''",
                      (value, now, user.get("display_name") or user.get("username") or "", exp_id))
-        return {"plannedPayDate": value, "old": old, "quoteNo": r["quote_no"] or ""}
+        try:
+            applicant = (json.loads(_col(r, "approval_json") or "{}") or {}).get("requestedBy") or r["created_by"] or ""
+        except (TypeError, ValueError):
+            applicant = r["created_by"] or ""
+        return {"plannedPayDate": value, "old": old, "quoteNo": r["quote_no"] or "", "applicant": applicant,
+                "docCode": (_col(r, "doc_code") or "").strip() or "#%s" % exp_id, "link": "payment-request.html?tab=mine"}
 
     @staticmethod
     def planned_changed(key) -> None:

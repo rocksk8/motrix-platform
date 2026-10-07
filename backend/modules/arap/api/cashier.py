@@ -242,6 +242,7 @@ def set_pending_payable_planned_pay_date(source: str, key: str, body: dict = Bod
         hook(key)                                                       # commit 之後（寫鎖已放）；提供者自己 spawn 背景執行緒
     _audit(_tok(authorization), "cashier.planned_pay_date", source, key,
            "出納設定預定付款日：%s #%s（%s）%s → %s" % (source, key, res.get("quoteNo") or "", res.get("old") or "（無）", value or "（清除）"))
+    _notify_applicant_planned(user, source, key, res, value)
     return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value)}
 
 
@@ -272,7 +273,23 @@ def set_payable_queue_planned_pay_date(voucher_no: str, body: dict = Body(defaul
         conn.close()
     _audit(_tok(authorization), "cashier.planned_pay_date", "subcontract_voucher", voucher_no,
            "出納設定承攬商匯款預定付款日：%s（%s）%s → %s" % (voucher_no, res.get("quoteNo") or "", res.get("old") or "（無）", value or "（清除）"))
+    _notify_applicant_planned(user, "subcontract_voucher", voucher_no, res, value)
     return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value)}
+
+
+def _notify_applicant_planned(user, source, key, res, value):
+    """Q7（使用者 2026-10-07）：財務設定／改期／清除預定付款日 ⇒ 站內通知申請人（不含金額；申請人本人改的不通知自己）。失敗只記 log。"""
+    try:
+        applicant = (res.get("applicant") or "").strip()
+        if not applicant or applicant == (user.get("username") or ""):
+            return
+        from helpers import _notify
+        code = res.get("docCode") or "%s #%s" % (source, key)
+        msg = ("您的請款 %s 預定 %s 付款" % (code, value)) if value else ("您的請款 %s 的預定付款日已清除" % code)
+        _notify(applicant, "planned_pay_date", "%s:%s:%s" % (source, key, value or "cleared"), code, msg, res.get("link") or None)
+    except Exception as exc:                                              # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning("通知申請人預定付款日失敗：%s", exc)
 
 
 def _expense_calendar_args(source, key, paid, res, user):
