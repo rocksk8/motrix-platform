@@ -21,7 +21,18 @@
   // frontend/pages/*.html 用 ../static/auth-guard.js（有 /pages/ 這一層）
   var loginPath = location.pathname.indexOf('/pages/') >= 0 ? 'login.html' : 'pages/login.html';
 
+  // 轉去登入頁之前記下「原本要去的網址」（含 ?q=／?id= 等查詢字串），登入成功後 login.html 會回到它
+  // （通知連結、信件連結在未登入時打開，登入後才會落在原本那一頁；否則一律掉到首頁）。
+  // sessionStorage＝只限這個分頁；login.html 端會再驗證成「同站路徑」才採用。
+  function rememberReturn() {
+    try {
+      if (/\/login(-qr-approve)?\.html$/.test(location.pathname)) return;
+      sessionStorage.setItem('motrix_return_to', location.pathname + location.search + location.hash);
+    } catch (e) {}
+  }
+
   if (!session || !session.token) {
+    rememberReturn();
     location.replace(loginPath);
     return;
   }
@@ -49,6 +60,7 @@
         reveal();
       } else {
         try { localStorage.removeItem('motrix_session'); } catch (e) {}
+        rememberReturn();
         location.replace(loginPath);
       }
     })
