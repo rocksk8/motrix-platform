@@ -39,7 +39,7 @@ SUMMARY = "== 5 passed in 1.0s =="
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
     for k in (MT.FULL_ENV, MT.PARTIAL_ENV, MT.E2E_ENV, "MOTRIX_GATE_SLICES", "MOTRIX_GATE_DIST", "MOTRIX_FULL_FLAKY_RETRY",
-              "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_GATE_WORKERS", "MOTRIX_FAILFAST_QUIET_MIN"):
+              "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_GATE_WORKERS", "MOTRIX_FULL_OVERLAP", "MOTRIX_FULL_OVERLAP_MIN_GB", "MOTRIX_FAILFAST_QUIET_MIN"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setattr(MT, "tree_state", lambda repo=None: ("a" * 40, ""))
     monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: Path("x"))
@@ -317,3 +317,88 @@ def test_worker_cap_env_overrides_workers(monkeypatch):
     cap = []
     _run(monkeypatch, {}, cap)
     assert all(c[2][c[2].index("-n") + 1] == "2" for c in cap[:2])
+
+
+# ── O2：兩段重疊（旗標預設關）────────────────────────────────────────────────────
+
+class _Proc(dict):
+    pass
+
+
+def _ov(monkeypatch, procs=(), free=32.0, flag="1"):
+    monkeypatch.setenv("MOTRIX_FULL_OVERLAP", flag)
+    return MT.overlap_decision(procs_fn=lambda: list(procs), free_fn=lambda: free)
+
+
+def test_overlap_is_off_by_default_and_when_flag_is_not_one(monkeypatch):
+    monkeypatch.delenv("MOTRIX_FULL_OVERLAP", raising=False)
+    assert MT.overlap_decision(procs_fn=lambda: [], free_fn=lambda: 99)[0] is False
+    assert _ov(monkeypatch, flag="0")[0] is False and _ov(monkeypatch, flag="true")[0] is False
+
+
+def test_overlap_needs_a_clean_machine_and_enough_memory(monkeypatch):
+    assert _ov(monkeypatch)[0] is True
+    other = {"pid": 4242, "ppid": 1, "name": "python.exe", "cmd": "python -m pytest tests/x.py", "created": 1}
+    ok, why = _ov(monkeypatch, procs=[other])
+    assert ok is False and "4242" in why                                   # 有別人在跑 ⇒ 序列
+    ok, why = _ov(monkeypatch, free=3.0)
+    assert ok is False and "記憶體" in why
+    assert _ov(monkeypatch, free=None)[0] is False                         # 讀不到 ⇒ 不賭
+
+
+def test_overlap_failures_of_the_probe_fall_back_to_sequential(monkeypatch):
+    monkeypatch.setenv("MOTRIX_FULL_OVERLAP", "1")
+    assert MT.overlap_decision(procs_fn=lambda: None, free_fn=lambda: 99)[0] is False
+    def boom():
+        raise RuntimeError("x")
+    ok, why = MT.overlap_decision(procs_fn=boom, free_fn=lambda: 99)
+    assert ok is False and "出錯" in why
+
+
+def test_default_run_is_sequential_and_records_the_flag_state(monkeypatch):
+    written = []
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    cap = []
+    _run(monkeypatch, {}, cap)
+    assert [c[0] for c in cap] == ["ws0", "w", "we2e"]
+    assert written[-1]["overlap"] == {"flag": "0", "used": False, "reason": "旗標關閉（預設）"}
+
+
+def test_overlap_runs_both_groups_and_keeps_the_slice_order_inside_the_group(monkeypatch):
+    import threading
+    monkeypatch.setattr(MT, "overlap_decision", lambda *a, **k: (True, ""))
+    seen, names = [], {}
+
+    def fake(targets, args, window, full, collect_only=False, env_extra=None, prefix=""):
+        seen.append((window, prefix, threading.current_thread().name))
+        return 0, SUMMARY
+    monkeypatch.setattr(MT, "run_pytest", fake)
+    written = []
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    assert MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="w")) == 0
+    wins = [s[0] for s in seen]
+    assert sorted(wins) == ["w", "we2e", "ws0"] and wins.index("ws0") < wins.index("w")     # 同一組內 slice0 一定在其餘之前
+    assert {s[1] for s in seen} == {"[main] ", "[e2e] "} and written[-1]["ok"] is True and written[-1]["overlap"]["used"] is True
+
+
+def test_overlap_red_slice0_still_lets_e2e_finish_and_the_whole_is_red(monkeypatch):
+    monkeypatch.setattr(MT, "overlap_decision", lambda *a, **k: (True, ""))
+    seen = []
+    monkeypatch.setattr(MT, "run_pytest", lambda t, a, window, full, collect_only=False, env_extra=None, prefix="":
+                        seen.append(window) or ((1 if window == "ws0" else 0), SUMMARY))
+    written = []
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    rc = MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="w"))
+    assert "w" not in seen and "we2e" in seen and rc != 0 and written[-1]["ok"] is False   # 其餘片不跑、e2e 照跑完、整體紅
+
+
+def test_overlap_thread_error_is_not_swallowed(monkeypatch):
+    monkeypatch.setattr(MT, "overlap_decision", lambda *a, **k: (True, ""))
+
+    def fake(t, a, window, full, collect_only=False, env_extra=None, prefix=""):
+        if window == "we2e":
+            raise RuntimeError("e2e boom")
+        return 0, SUMMARY
+    monkeypatch.setattr(MT, "run_pytest", fake)
+    with pytest.raises(RuntimeError, match="e2e boom"):
+        MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="w"))

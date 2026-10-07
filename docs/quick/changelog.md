@@ -16,9 +16,10 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
-## 2026-10-07 全閘門優化 O1／O4／O6（wip/t45-gate-opt-impl）
+## 2026-10-07 全閘門優化 O1／O2／O4／O6（wip/t45-gate-opt-impl）
 - `modtest --full` 非 e2e 先跑 slice0（tests/platform＋靜態守門，清單 `tools/platform/gate_slices.json`，與預演列車 GUARDS 同一份）、綠了才開其餘；slice0 紅 ⇒ 不開第二片、不跑 e2e。兩片與 e2e 都帶 fail-fast／failure-first（`MOTRIX_GATE_SLICES=0`、`MOTRIX_FAILFAST=0` 可還原）。
 - 出紅先把紅的題單獨重跑（最多 3 次）診斷；放行規則不變：只有已登記且未到期的偶發才算過（`MOTRIX_FULL_FLAKY_RETRY=0` 關）。xdist 改 `--dist worksteal`（`MOTRIX_GATE_DIST=load` 還原）。題數不減：`python tools/platform/gate_slices.py --check` 比 nodeid 集合。
+- O6 慢檔先派（LPT）；O2 兩段重疊 `MOTRIX_FULL_OVERLAP`（**預設關**，有盤點與記憶體門檻）；共用機器 `MOTRIX_GATE_WORKERS=2`。誠實註記：slice0 估 12～14 分（-n 4），計畫書的「紅的整合 ≤10 分」尚未達到，待量測後再拆 tests/platform。
 
 ## 2026-10-06 站內通知鈴鐺所有角色可見、點擊開單、90 天保留（wip/t44-inapp-bell）
 

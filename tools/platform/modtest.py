@@ -37,6 +37,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -936,7 +937,7 @@ def _fail_stream_env(window):
     return env
 
 
-def run_pytest(targets, extra, window, full, collect_only=False, env_extra=None):
+def run_pytest(targets, extra, window, full, collect_only=False, env_extra=None, prefix=""):
     """在 backend/ 下跑 pytest；basetemp 專屬、結束必刪。回傳 (exit code, stdout)。
     targets 太多檔會撞 Windows 命令列長度上限 ⇒ 依長度分批，逐批各自的 basetemp，合併結果（tail 串接、
     exit code 取「非 0 且非 5」優先，其餘皆 0／5 才回 5，都 0 才回 0）。"""
@@ -966,7 +967,7 @@ def run_pytest(targets, extra, window, full, collect_only=False, env_extra=None)
             tail = []
             for raw in proc.stdout:                       # 照樣即時印出，另留尾段給摘要解析
                 line = raw.decode("utf-8", errors="replace")
-                sys.stdout.write(line)
+                sys.stdout.write(prefix + line if prefix else line)
                 sys.stdout.flush()
                 tail.append(line)
                 if len(tail) > 400:
@@ -1221,6 +1222,53 @@ def record_for_build(commit, codes, user_extra, interrupted, dirty, evidence, to
     return tool.record_full_run(tool.default_records(REPO), fp, fp, commit, ran, user_extra, interrupted)
 
 
+OVERLAP_ENV = "MOTRIX_FULL_OVERLAP"
+OVERLAP_MIN_GB_ENV = "MOTRIX_FULL_OVERLAP_MIN_GB"
+
+
+def _free_gb():
+    """可用實體記憶體（GB）；取不到 ⇒ None。"""
+    try:
+        import ctypes
+
+        class MS(ctypes.Structure):
+            _fields_ = [("l", ctypes.c_ulong), ("load", ctypes.c_ulong), ("tot", ctypes.c_ulonglong), ("avail", ctypes.c_ulonglong),
+                        ("tp", ctypes.c_ulonglong), ("ap", ctypes.c_ulonglong), ("tv", ctypes.c_ulonglong), ("av", ctypes.c_ulonglong),
+                        ("ev", ctypes.c_ulonglong)]
+        m = MS()
+        m.l = ctypes.sizeof(MS)
+        if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m)):
+            return None
+        return m.avail / (1024.0 ** 3)
+    except Exception:                               # noqa: BLE001
+        return None
+
+
+def overlap_decision(procs_fn=None, free_fn=None):
+    """O2 兩段重疊（非 e2e 與 e2e 同時跑）要不要啟用 ⇒ (啟用?, 原因)。**預設關**：只有 MOTRIX_FULL_OVERLAP=1 才考慮；
+    起跑前盤點：本機有其他 pytest／modtest、可用記憶體低於門檻（預設 8 GB，MOTRIX_FULL_OVERLAP_MIN_GB）、盤點本身失敗 ⇒ 一律序列並說明原因（fail closed）。"""
+    if os.environ.get(OVERLAP_ENV, "0").strip() != "1":
+        return False, "旗標關閉（預設）"
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import build_preflight as bp
+        procs = (procs_fn or bp.snapshot)()
+        if procs is None:
+            return False, "行程盤點失敗"
+        others = bp.other_pytests(procs, os.getpid())
+        if others:
+            return False, "本機還有其他 pytest／modtest（pid %s）" % ",".join(str(p["pid"]) for p in others[:5])
+    except Exception as e:                          # noqa: BLE001
+        return False, "行程盤點出錯：%r" % e
+    free = (free_fn or _free_gb)()
+    need = float(_int_env(OVERLAP_MIN_GB_ENV, 8))
+    if free is None:
+        return False, "讀不到可用記憶體"
+    if free < need:
+        return False, "可用記憶體 %.1f GB < 門檻 %.0f GB" % (free, need)
+    return True, ""
+
+
 def _int_env(name, default):
     """正整數環境變數；沒設／不合法 ⇒ default。"""
     try:
@@ -1344,10 +1392,49 @@ def run_full(extra, a):
         extra = extra + ["--durations=%d" % DURATIONS]
     plan, main_windows, ff_env, ff_args = gate_plan(a, extra)
     codes, per_stage, sliced_out = {}, {}, False
-    try:
-        for name, targets, args, window in plan:
-            code, out = run_pytest(targets, args + extra + ff_args, window, full=True, env_extra=ff_env)
+    overlap, why = overlap_decision()
+    result["overlap"] = {"flag": os.environ.get(OVERLAP_ENV, "0"), "used": overlap, "reason": why}   # 開關狀態一律記進結果（O2 控制④）
+    if os.environ.get(OVERLAP_ENV, "0").strip() == "1":
+        print("[全閘門] 兩段重疊：%s" % ("啟用（非 e2e 與 e2e 同時跑）" if overlap else "不啟用 ⇒ 序列（%s）" % why))
+    grp_a = [p_ for p_ in plan if p_[0] == "main"]
+    grp_b = [p_ for p_ in plan if p_[0] == "e2e"]
+
+    def exec_group(group):
+        """一組依序跑；回 [(段名, window, code, out)]。slice0 紅 ⇒ 這一組後面的片不跑（O1）。"""
+        done = []
+        for name, targets, args, window in group:
+            kw = {"prefix": "[%s] " % ("e2e" if name == "e2e" else "main")} if overlap else {}
+            code, out = run_pytest(targets, args + extra + ff_args, window, full=True, env_extra=ff_env, **kw)
             code = flaky_gate(code, out, window, result)          # O4：紅了先分流（只有已登記且未過期的偶發才放行）
+            done.append((name, window, code, out))
+            if window == a.window + "s0" and code != 0:           # O1：第一片紅 => 不開第二片（整合紅在第一片就停）
+                break
+        return done
+
+    try:
+        if overlap:                                               # O2：兩組同時跑（各占一格全機鎖）；一邊紅或出錯，另一邊照跑完、整體記紅
+            box = {}
+
+            def worker(key, group):
+                try:
+                    box[key] = exec_group(group)
+                except BaseException as e:                       # noqa: BLE001 — 帶回主執行緒再拋
+                    box[key] = e
+            threads = [threading.Thread(target=worker, args=(k, g), daemon=True) for k, g in (("a", grp_a), ("b", grp_b))]
+            for t in threads:
+                t.start()
+            for t in threads:
+                while t.is_alive():
+                    t.join(0.5)                                   # 短等待，Ctrl-C 才進得來主執行緒
+            for k in ("a", "b"):
+                if isinstance(box.get(k), BaseException):
+                    raise box[k]
+            finished = box["a"] + box["b"]
+        else:
+            finished = exec_group(grp_a)
+            if not (finished and finished[-1][1] == a.window + "s0" and finished[-1][2] != 0):
+                finished += exec_group(grp_b)
+        for name, window, code, out in finished:
             if name == "main":
                 codes["main"] = code if codes.get("main", 0) == 0 else codes["main"]
             else:
@@ -1360,11 +1447,10 @@ def run_full(extra, a):
                 result.update(merge_counts(result if result.get("passed") is not None else None, counts, code))
             else:
                 result["e2e"] = dict(counts, exit=code)
-            if window == a.window + "s0" and code != 0:                 # O1：第一片紅 => 不開第二片、不跑 e2e（整合紅在 <=10 分內就停）
+            if window == a.window + "s0" and code != 0:
                 sliced_out = True
                 result["slice_stopped"] = "slice0"
-                print("[全閘門] slice0（靜態／產生檔守門）紅 => 停止，不跑其餘片與 e2e")
-                break
+                print("[全閘門] slice0（靜態／產生檔守門）紅 => %s" % ("其餘片不跑（e2e 已同時在跑，結果照記）" if overlap else "停止，不跑其餘片與 e2e"))
         result["ok"] = (not sliced_out) and all(c == 0 for c in codes.values()) and len(codes) == len({n for n, *_ in plan})
         return 0 if result["ok"] else (codes.get("main") or codes.get("e2e") or 1)
     except KeyboardInterrupt:
