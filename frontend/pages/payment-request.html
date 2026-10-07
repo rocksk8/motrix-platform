@@ -299,7 +299,7 @@
                 <tr :data-payreq-row="e.id" :data-status="e.status">
                   <td :data-doc-code="e.id"><span style="font-family:var(--font-en,monospace)" x-text="e.docCode || ('#' + e.id)"></span></td>
                   <td><span style="font-family:var(--font-en,monospace)" x-text="e.quoteNo"></span><div class="pr-hint" x-text="e.customerName"></div></td>
-                  <td x-text="(e.category || '') + '｜' + (e.description || '')"></td>
+                  <td :data-testid="'pr-mine-title-' + e.id" x-text="rowTitle(e)"></td>
                   <td x-text="'NT$ ' + Math.round(e.totalCost || 0).toLocaleString()"></td>
                   <td><span class="pr-st" x-text="e.status"></span></td>
                   <td>
@@ -668,6 +668,11 @@
           this.mineLoaded = true
         },
         // 申請人可增刪附件的狀態（與後端 FILES_MUTABLE_STATUSES 同；核准後只剩「補發票」、作廢不可動）
+        // 我的申請的「內容」：費用單據＝<類型名稱>｜<第一筆品項摘要>（舊版 category 是預設值「其他」，不顯示）；舊版額外支出＝<類別>｜<說明>
+        rowTitle(e) {
+          var K = { purchase_req: '請購單', purchase_order: '採購單', travel: '差旅費用請款單', petty_cash: '零用金支付單' }
+          return e.kind ? ((K[e.kind] || '費用單據') + '｜' + (e.description || '')) : ((e.category || '') + '｜' + (e.description || ''))
+        },
         canEditFiles(e) { return ['草稿', '待審核', '簽核中', '已駁回'].indexOf(e.status) >= 0 },
         // 附件要 Bearer ⇒ fetch → blob → 下載（HEIC 瀏覽器多半不能預覽，一律當下載；其餘檔案同樣下載，不開新分頁）
         async downloadFile(f) {
