@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-08（wip/t47-paydate-l1）：預定付款日提醒共用庫（案件額外支出＋叫料匯款薄接線）
+- S5／S7 提醒與行事曆（Q2／Q3／Q8）：`payable_reminders` 的日期規則、guard、寄送迴圈搬到 L1 `helpers/payable_due_core.py`（本檔只留「查案件額外支出＋叫料匯款待付款列」與信件類型登記；公開名稱 `due_kind`／`effective_send_day`／`is_working_day`／`_candidate_planned_dates`／`_mail` 保留）。新增 `payable_due_overdue`（預定日後第 1 個工作日 1 封，不週提）；叫料匯款申請納入提醒（guard 識別 `case_material.<id>`，與額外支出互不擋；內容不含金額、供應商）；站內通知財務（尊重退訂）；叫料行事曆事件 `material_payable_event`（跟著現況：核准建、分次付款保留、結清／作廢／退回收回、差額退回重建）；案件額外支出事件改經 L1 `sync_event`（行為不變）；出納登錄付款後改依現況對齊事件（叫料分次付款仍有餘額 ⇒ 保留）。**相容**：舊 guard key（純 id）不變，切換當天不雙寄；寄信日已過的「當天／3 天前」仍不補發。
+
 ## 1.0.161 — 2026-10-08（wip/t46-fix-pr-remark）：第 46 班第二輪修正（獨立稽核 S1／S2／S6）
 - **第二輪修正（獨立稽核 S1／S2）**：① 詳情的金額類欄位字樣過濾（金額／價／預算／費用）改為不套用在**參照型欄位**——真實差旅／零用金定義的「費用歸屬單位」（參照部門，非金額）不再被藏掉；文字欄「其他費用說明」之類照舊過濾。② 採購單／零用金的收款對象在表單上：不論 `payee_type` 是什麼、有沒有填收款人名稱，出納檢視都不再退回「申請人」的員工收款帳戶（`payables._payee_username` 對這兩種單據一律回空）。測試：`test_t46_fix_pr_remark_round2_2026_10_08.py`。
 - **第二輪修正（獨立稽核 S6）**：`payable_calendar_resync.py` 兩條路徑都先確認資料庫檔存在（`_dbbind`）：沒給 `--db` 且預設庫不存在、或 `--db` 指到不存在的檔 ⇒ 結束碼 2，不再在暫存包上建出空的 `motrix_erp.db`。
@@ -26,7 +29,6 @@
 ## 1.0.156 — 2026-10-07（wip/t45-paydate-impl）：預定付款日 S1–S3、S6——出納端點改打來源無關路徑、行事曆事件不放受款人與付款條件、我的申請欄位、叫料匯款預定日
 - `payables.py`：IP-100 提供者新增可選方法 `set_planned_pay_date`（只認出納待付款清單上的申請；已付款 ⇒ 409）與 `planned_changed`（commit 之後對齊行事曆）。
 - `payable_calendar.compose`：事件說明只放單號、名目、關聯案件、預定日；**移除「受款人」「付款條件」行**（使用者 2026-10-07 Q4；金額原本就不放）。
-- S5／S7 提醒與行事曆（Q2／Q3／Q8）：`payable_reminders` 的日期規則、guard、寄送迴圈搬到 L1 `helpers/payable_due_core.py`（本檔只留「查案件額外支出＋叫料匯款待付款列」與信件類型登記；公開名稱 `due_kind`／`effective_send_day`／`is_working_day`／`_candidate_planned_dates`／`_mail` 保留）。新增 `payable_due_overdue`（預定日後第 1 個工作日 1 封，不週提）；叫料匯款申請納入提醒（guard 識別 `case_material.<id>`，與額外支出互不擋；內容不含金額、供應商）；站內通知財務（尊重退訂）；叫料行事曆事件 `material_payable_event`（跟著現況：核准建、分次付款保留、結清／作廢／退回收回、差額退回重建）；案件額外支出事件改經 L1 `sync_event`（行為不變）；出納登錄付款後改依現況對齊事件（叫料分次付款仍有餘額 ⇒ 保留）。**相容**：舊 guard key（純 id）不變，切換當天不雙寄；寄信日已過的「當天／3 天前」仍不補發。
 - S2 `payment-request.html`「我的申請」新增「預定付款日」欄（付款前本人可補填／改期／清除，打既有 `…/dates`；已付款唯讀顯示歷史值、已作廢唯讀；testid `pr-mine-planned-<id>`、`pr-mine-planned-save-<id>`）。後端不變。
 - S3 叫料匯款預定付款日：migration v8（`case_material_payments.planned_pay_date`，每張申請一個、不回填）；建立／草稿與已退回期間可填可改（核准後只有出納端點能改）；`pending()` 帶 `plannedPayDate`；提供者 `set_planned_pay_date`（已核准且有剩餘才可改；結清 409；分次付款可改下一次預定日）；案件頁匯款申請表單加「預定付款日（選填）」與列上顯示。
 

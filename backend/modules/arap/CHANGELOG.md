@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-10-08（wip/t47-paydate-l1）：出納付款後行事曆「付款待辦」改走 L1 共用庫對齊
+- `api/cashier.py`：付款後的行事曆「付款待辦」收回／保留改為提供者 `planned_changed`（commit 之後）優先，沒有的來源走 L1 `payable_due_core.sync_event`；`NO_CALENDAR` 的來源（勞報單）仍完全不進行事曆（第 46 班 Q7，行為不變）。叫料分次付款仍有餘額時事件保留。
+
 ## 1.0.44 — 2026-10-08（fix/t45-audit-followups）：出納預定付款日端點遇到「沒變」直接回（第 45 班稽核 S3）
 - `PATCH …/planned-pay-date`（兩條）：提供者回 `unchanged` ⇒ 回 200＋`unchanged: true`，不寫稽核、不通知申請人、不動行事曆。
 
