@@ -1628,6 +1628,8 @@
     "/api/contractor-dispatches/{}/invoice-date",
     "/api/contractor-dispatches/{}/invoice-files",
     "/api/contractor-dispatches/{}/invoice-files/{}",
+    "/api/contractor-dispatches/{}/payslip-links",
+    "/api/contractor-dispatches/{}/payslip-links/{}",
     "/api/contractor-dispatches/{}{}",
     "/api/contractor-vouchers",
     "/api/contractor-vouchers/last-paid-bank-account",
@@ -1666,6 +1668,7 @@
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/dispatch_approval",
+    "mod:subcontract/api/dispatch_payslip_links",
     "mod:subcontract/api/remit_kinds",
     "mod:subcontract/api/vendor_contractors"
    ],
@@ -1982,6 +1985,8 @@
     "mod:arap/api/cashier",
     "mod:case/api/quotations",
     "mod:payroll/api/bonus",
+    "mod:payroll/api/payslip_approval",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers"
    ],
@@ -2768,10 +2773,13 @@
     "mod:payroll/api/bank_account",
     "mod:payroll/api/bonus",
     "mod:payroll/api/bonus_correction",
+    "mod:payroll/api/payslip_approval",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/dispatch_approval",
+    "mod:subcontract/api/dispatch_payslip_links",
     "mod:subcontract/api/remit_kinds",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/inventory",
@@ -5824,67 +5832,67 @@
     },
     {
      "func": "set_pending_payable_planned_pay_date",
-     "line": 214,
+     "line": 219,
      "method": "PATCH",
      "path": "/api/cashier/pending-payables/{source}/{key}/planned-pay-date"
     },
     {
      "func": "set_payable_queue_planned_pay_date",
-     "line": 250,
+     "line": 257,
      "method": "PATCH",
      "path": "/api/cashier/payable-queue/{voucher_no}/planned-pay-date"
     },
     {
      "func": "get_remit_reviews",
-     "line": 316,
+     "line": 325,
      "method": "GET",
      "path": "/api/cashier/remit-reviews"
     },
     {
      "func": "decide_remit_review",
-     "line": 335,
+     "line": 344,
      "method": "POST",
      "path": "/api/cashier/remit-reviews/{source}/{key}/decision"
     },
     {
      "func": "get_payable_queue",
-     "line": 450,
+     "line": 459,
      "method": "GET",
      "path": "/api/cashier/payable-queue"
     },
     {
      "func": "get_receivable_queue",
-     "line": 461,
+     "line": 470,
      "method": "GET",
      "path": "/api/cashier/receivable-queue"
     },
     {
      "func": "get_payslip_queue",
-     "line": 483,
+     "line": 492,
      "method": "GET",
      "path": "/api/cashier/payslip-queue"
     },
     {
      "func": "get_bonus_queue",
-     "line": 503,
+     "line": 512,
      "method": "GET",
      "path": "/api/cashier/bonus-queue"
     },
     {
      "func": "get_execution_history",
-     "line": 562,
+     "line": 571,
      "method": "GET",
      "path": "/api/cashier/execution-history"
     },
     {
      "func": "export_execution_history",
-     "line": 577,
+     "line": 586,
      "method": "GET",
      "path": "/api/cashier/export"
     },
     {
      "func": "bank_reconcile",
-     "line": 786,
+     "line": 795,
      "method": "POST",
      "path": "/api/reports/bank-reconcile"
     }
@@ -6554,109 +6562,109 @@
     },
     {
      "func": "update_extra_expense",
-     "line": 521,
+     "line": 523,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "payreq_cases",
-     "line": 597,
+     "line": 601,
      "method": "GET",
      "path": "/api/extra-expenses/cases"
     },
     {
      "func": "payreq_mine",
-     "line": 623,
+     "line": 627,
      "method": "GET",
      "path": "/api/extra-expenses/mine"
     },
     {
      "func": "set_extra_expense_dates",
-     "line": 645,
+     "line": 649,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/dates"
     },
     {
      "func": "delete_extra_expense",
-     "line": 721,
+     "line": 725,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}"
     },
     {
      "func": "void_extra_expense",
-     "line": 746,
+     "line": 750,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/void"
     },
     {
      "func": "submit_extra_expense",
-     "line": 805,
+     "line": 809,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/submit"
     },
     {
      "func": "approve_extra_expense",
-     "line": 892,
+     "line": 897,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/approve"
     },
     {
      "func": "reject_extra_expense",
-     "line": 979,
+     "line": 984,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/reject"
     },
     {
      "func": "upload_extra_expense_files",
-     "line": 1094,
+     "line": 1099,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files"
     },
     {
      "func": "delete_extra_expense_file",
-     "line": 1149,
+     "line": 1154,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/files/{file_id}"
     },
     {
      "func": "upsert_change_request",
-     "line": 1325,
+     "line": 1330,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "cancel_change_request",
-     "line": 1366,
+     "line": 1371,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request"
     },
     {
      "func": "upload_change_request_files",
-     "line": 1392,
+     "line": 1397,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files"
     },
     {
      "func": "delete_change_request_file",
-     "line": 1435,
+     "line": 1440,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/files/{file_id}"
     },
     {
      "func": "submit_change_request",
-     "line": 1462,
+     "line": 1467,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/submit"
     },
     {
      "func": "approve_change_request",
-     "line": 1533,
+     "line": 1538,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/approve"
     },
     {
      "func": "reject_change_request",
-     "line": 1622,
+     "line": 1627,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/extra-expenses/{exp_id}/change-request/reject"
     }
@@ -6682,6 +6690,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "expense_categories",
     "invoice_vouchers",
     "payment_requests",
     "projects",
@@ -7147,6 +7156,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "expense_categories",
     "projects",
     "quotations",
     "sessions",
@@ -7292,6 +7302,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "expense_categories",
     "projects",
     "quotations",
     "sessions",
@@ -7428,6 +7439,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "expense_categories",
     "projects",
     "quotations",
     "sessions",
@@ -7570,6 +7582,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "expense_categories",
     "projects",
     "quotations",
     "sessions",
@@ -7768,6 +7781,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "expense_categories",
     "projects",
     "quotations",
     "sessions",
@@ -7885,6 +7899,7 @@
     "helper:dates",
     "helper:email_notify",
     "helper:errors",
+    "helper:expense_types",
     "helper:financial_mask",
     "helper:gl_status",
     "helper:google_calendar",
@@ -8282,37 +8297,37 @@
     },
     {
      "func": "approval_history",
-     "line": 6122,
+     "line": 6210,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6242,
+     "line": 6330,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6310,
+     "line": 6398,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6464,
+     "line": 6552,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6478,
+     "line": 6566,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6509,
+     "line": 6597,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -8321,10 +8336,12 @@
    "tables_named": [
     "completion_notes",
     "contractor_payment_vouchers",
+    "departments",
     "invoice_vouchers",
     "parts",
     "payment_requests",
     "shipping_notes",
+    "users",
     "vouchers"
    ],
    "tables_r": [
@@ -8334,8 +8351,10 @@
     "contractor_payment_vouchers",
     "daily_task_completions",
     "daily_tasks",
+    "departments",
     "dev_cases",
     "dev_logs",
+    "expense_categories",
     "invoice_vouchers",
     "payment_requests",
     "shipping_notes",
@@ -8361,6 +8380,7 @@
     "dev_logs",
     "divisions",
     "duty_roles",
+    "expense_categories",
     "invoice_vouchers",
     "payment_requests",
     "projects",
@@ -8504,6 +8524,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "expense_categories",
     "projects",
     "quotations",
     "sessions",
@@ -8640,6 +8661,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "expense_categories",
     "projects",
     "quotations",
     "sessions",
@@ -8790,7 +8812,8 @@
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [
-    "case_extra_expenses"
+    "case_extra_expenses",
+    "expense_categories"
    ],
    "tables_w": []
   },
@@ -9107,7 +9130,8 @@
     "mod:case/expense_forms",
     "mod:case/expense_notify",
     "mod:case/payable_calendar",
-    "mod:case/recognition"
+    "mod:case/recognition",
+    "plat:txn"
    ],
    "kind": "mod",
    "module_key": "case",
@@ -10254,6 +10278,8 @@
     "mod:payroll/api/bank_account",
     "mod:payroll/api/bonus",
     "mod:payroll/api/bonus_correction",
+    "mod:payroll/api/payslip_approval",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:payroll/attachments",
     "mod:payroll/bank_account",
@@ -10262,6 +10288,8 @@
     "mod:payroll/bonus_payouts",
     "mod:payroll/bonus_queue",
     "mod:payroll/gl_events",
+    "mod:payroll/payslip_links",
+    "mod:payroll/payslip_payables",
     "mod:payroll/payslip_payouts",
     "mod:payroll/remit_link",
     "plat:registry"
@@ -10869,6 +10897,188 @@
     "user_perm_subtracts"
    ]
   },
+  "mod:payroll/api/payslip_approval": {
+   "api_prefixes": [
+    "/api/payslips"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:approval_queue",
+    "helper:audit",
+    "helper:auth",
+    "helper:dates",
+    "helper:duty_roles",
+    "helper:email_notify",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:notify_matrix",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:payroll/payslip_bank",
+    "mod:payroll/payslip_notify"
+   ],
+   "imports": [
+    "core:db",
+    "helper:approval_queue",
+    "helper:audit",
+    "helper:auth",
+    "helper:dates",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:payroll/payslip_bank",
+    "mod:payroll/payslip_notify",
+    "router:approval_queue"
+   ],
+   "kind": "mod",
+   "module_key": "payroll",
+   "path": "backend/modules/payroll/api/payslip_approval.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "submit_payslip",
+     "line": 121,
+     "method": "POST",
+     "path": "/api/payslips/{slip_no}/submit"
+    },
+    {
+     "func": "approve_payslip",
+     "line": 168,
+     "method": "POST",
+     "path": "/api/payslips/{slip_no}/approve"
+    },
+    {
+     "func": "reject_payslip",
+     "line": 222,
+     "method": "POST",
+     "path": "/api/payslips/{slip_no}/reject"
+    },
+    {
+     "func": "approval_reveal",
+     "line": 335,
+     "method": "GET",
+     "path": "/api/payslips/{slip_no}/approval-reveal"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "approval_delegates",
+    "users"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "contractors",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
+    "users"
+   ],
+   "tables_w": [
+    "audit_log",
+    "payslips"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "duty_roles",
+    "notifications",
+    "payslips",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
+  },
+  "mod:payroll/api/payslip_links": {
+   "api_prefixes": [
+    "/api/payslips"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:duty_roles",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:payroll/payslip_links"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "mod:payroll/payslip_links",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "payroll",
+   "path": "backend/modules/payroll/api/payslip_links.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_links",
+     "line": 21,
+     "method": "GET",
+     "path": "/api/payslips/{slip_no}/dispatch-links"
+    },
+    {
+     "func": "add_link",
+     "line": 38,
+     "method": "POST",
+     "path": "/api/payslips/{slip_no}/dispatch-links"
+    },
+    {
+     "func": "remove_link",
+     "line": 62,
+     "method": "DELETE",
+     "path": "/api/payslips/{slip_no}/dispatch-links/{dispatch_id}"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "payslips"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "payslips",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "duty_roles",
+    "notifications",
+    "payslip_dispatch_links",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
+  },
   "mod:payroll/api/payslips": {
    "api_prefixes": [
     "/api/next-slip-no",
@@ -10893,7 +11103,10 @@
     "helper:settings",
     "helper:tiered_approval",
     "helper:uploads",
-    "mod:payroll/payslip_bank"
+    "mod:payroll/payslip_bank",
+    "mod:payroll/payslip_links",
+    "mod:payroll/payslip_notify",
+    "mod:payroll/payslip_payables"
    ],
    "imports": [
     "core:db",
@@ -10907,6 +11120,8 @@
     "helper:settings",
     "helper:uploads",
     "mod:payroll/payslip_bank",
+    "mod:payroll/payslip_links",
+    "mod:payroll/payslip_payables",
     "plat:paths",
     "plat:registry",
     "plat:txn"
@@ -10919,109 +11134,109 @@
    "routes": [
     {
      "func": "get_tax_rules",
-     "line": 184,
+     "line": 185,
      "method": "GET",
      "path": "/api/tax-rules"
     },
     {
      "func": "next_slip_no",
-     "line": 204,
+     "line": 205,
      "method": "GET",
      "path": "/api/next-slip-no"
     },
     {
      "func": "list_payslips",
-     "line": 217,
+     "line": 218,
      "method": "GET",
      "path": "/api/payslips"
     },
     {
      "func": "create_payslip",
-     "line": 250,
+     "line": 252,
      "method": "POST",
      "path": "/api/payslips"
     },
     {
      "func": "get_payslip",
-     "line": 334,
+     "line": 360,
      "method": "GET",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "update_payslip",
-     "line": 348,
+     "line": 374,
      "method": "PUT",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "delete_payslip",
-     "line": 425,
+     "line": 452,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}"
     },
     {
      "func": "record_export",
-     "line": 444,
+     "line": 472,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/export"
     },
     {
      "func": "record_archive_download",
-     "line": 487,
+     "line": 518,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/archive/{orig_idx}/record"
     },
     {
      "func": "get_archive_pdf",
-     "line": 516,
+     "line": 547,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/archive/{idx}"
     },
     {
      "func": "pdf_download",
-     "line": 552,
+     "line": 583,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/pdf-download"
     },
     {
      "func": "void_payslip",
-     "line": 589,
+     "line": 621,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/void"
     },
     {
      "func": "upload_signed_files",
-     "line": 631,
+     "line": 663,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/signed-files"
     },
     {
      "func": "get_signed_file",
-     "line": 682,
+     "line": 714,
      "method": "GET",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "delete_signed_file",
-     "line": 710,
+     "line": 743,
      "method": "DELETE",
      "path": "/api/payslips/{slip_no}/signed-files/{file_id}"
     },
     {
      "func": "unsign_payslip",
-     "line": 739,
+     "line": 772,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unsign"
     },
     {
      "func": "payslip_mark_paid",
-     "line": 764,
+     "line": 797,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/mark-paid"
     },
     {
      "func": "payslip_unpay",
-     "line": 805,
+     "line": 825,
      "method": "POST",
      "path": "/api/payslips/{slip_no}/unpay"
     }
@@ -11037,6 +11252,7 @@
     "dev_cases",
     "divisions",
     "duty_roles",
+    "payslips",
     "projects",
     "quotations",
     "sessions",
@@ -11047,6 +11263,7 @@
     "users"
    ],
    "tables_w": [
+    "payslip_dispatch_links",
     "payslip_seq",
     "payslips"
    ],
@@ -11054,6 +11271,7 @@
     "audit_log",
     "duty_roles",
     "notifications",
+    "payslip_dispatch_links",
     "payslip_seq",
     "payslips",
     "permission_changes",
@@ -11309,6 +11527,59 @@
    ],
    "tables_w": []
   },
+  "mod:payroll/payslip_links": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "mod",
+   "module_key": "payroll",
+   "path": "backend/modules/payroll/payslip_links.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "payslips"
+   ],
+   "tables_w": [
+    "payslip_dispatch_links"
+   ]
+  },
+  "mod:payroll/payslip_notify": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:audit",
+    "helper:email_notify",
+    "helper:mail_types"
+   ],
+   "kind": "mod",
+   "module_key": "payroll",
+   "path": "backend/modules/payroll/payslip_notify.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:payroll/payslip_payables": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "mod:payroll/payslip_notify",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "payroll",
+   "path": "backend/modules/payroll/payslip_payables.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": [
+    "payslips"
+   ]
+  },
   "mod:payroll/payslip_payouts": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -11327,7 +11598,9 @@
   "mod:payroll/remit_link": {
    "api_prefixes": [],
    "dynamic_sql": false,
-   "imports": [],
+   "imports": [
+    "mod:payroll/payslip_payables"
+   ],
    "kind": "mod",
    "module_key": "payroll",
    "path": "backend/modules/payroll/remit_link.py",
@@ -11346,6 +11619,7 @@
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/dispatch_approval",
+    "mod:subcontract/api/dispatch_payslip_links",
     "mod:subcontract/api/remit_kinds",
     "mod:subcontract/api/vendor_contractors",
     "mod:subcontract/attachments",
@@ -11423,133 +11697,133 @@
    "routes": [
     {
      "func": "get_remit_fee_total",
-     "line": 249,
+     "line": 251,
      "method": "GET",
      "path": "/api/contractor-vouchers/remit-fee-total"
     },
     {
      "func": "get_last_paid_bank_account",
-     "line": 264,
+     "line": 266,
      "method": "GET",
      "path": "/api/contractor-vouchers/last-paid-bank-account"
     },
     {
      "func": "list_contractor_vouchers",
-     "line": 287,
+     "line": 289,
      "method": "GET",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "get_contractor_voucher",
-     "line": 313,
+     "line": 315,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "create_contractor_voucher",
-     "line": 326,
+     "line": 328,
      "method": "POST",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "preview_contractor_voucher",
-     "line": 483,
+     "line": 485,
      "method": "POST",
      "path": "/api/contractor-vouchers/preview"
     },
     {
      "func": "delete_contractor_voucher",
-     "line": 507,
+     "line": 509,
      "method": "DELETE",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "set_voucher_invoice",
-     "line": 536,
+     "line": 538,
      "method": "PATCH",
      "path": "/api/contractor-vouchers/{voucher_no}/invoice"
     },
     {
      "func": "void_contractor_voucher",
-     "line": 572,
+     "line": 574,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/void"
     },
     {
      "func": "submit_contractor_voucher",
-     "line": 606,
+     "line": 608,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/submit"
     },
     {
      "func": "approve_contractor_voucher",
-     "line": 668,
+     "line": 670,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/approve"
     },
     {
      "func": "revoke_contractor_voucher_approval",
-     "line": 777,
+     "line": 779,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/revoke-approval"
     },
     {
      "func": "reject_contractor_voucher",
-     "line": 821,
+     "line": 823,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_contractor_voucher_pdf",
-     "line": 869,
+     "line": 871,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_contractor_voucher_export",
-     "line": 901,
+     "line": 903,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/export"
     },
     {
      "func": "get_remit_require_payslip",
-     "line": 969,
+     "line": 971,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "set_remit_require_payslip",
-     "line": 977,
+     "line": 979,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/remit-require-payslip"
     },
     {
      "func": "get_personnel_links",
-     "line": 990,
+     "line": 992,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-links"
     },
     {
      "func": "link_personnel_payslip",
-     "line": 1024,
+     "line": 1026,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/personnel-link"
     },
     {
      "func": "toggle_paid",
-     "line": 1079,
+     "line": 1081,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/paid-toggle"
     },
     {
      "func": "get_contractor_voucher_approval_flow",
-     "line": 1201,
+     "line": 1203,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     },
     {
      "func": "set_contractor_voucher_approval_flow",
-     "line": 1218,
+     "line": 1220,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     }
@@ -11860,6 +12134,89 @@
    "tables_w_transitive": [
     "audit_log",
     "contractor_dispatches",
+    "duty_roles",
+    "notifications",
+    "permission_changes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts"
+   ]
+  },
+  "mod:subcontract/api/dispatch_payslip_links": {
+   "api_prefixes": [
+    "/api/contractor-dispatches"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:duty_roles",
+    "helper:module_registry",
+    "helper:row_access",
+    "helper:settings",
+    "helper:tiered_approval"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "subcontract",
+   "path": "backend/modules/subcontract/api/dispatch_payslip_links.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_payslip_links",
+     "line": 27,
+     "method": "GET",
+     "path": "/api/contractor-dispatches/{did}/payslip-links"
+    },
+    {
+     "func": "add_payslip_link",
+     "line": 52,
+     "method": "POST",
+     "path": "/api/contractor-dispatches/{did}/payslip-links"
+    },
+    {
+     "func": "remove_payslip_link",
+     "line": 77,
+     "method": "DELETE",
+     "path": "/api/contractor-dispatches/{did}/payslip-links/{slip_no}"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "contractor_dispatches",
+    "quotations",
+    "vendor_contractors"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "contractor_dispatches",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "duty_roles",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "system_settings",
+    "user_duty_roles",
+    "user_perm_subtracts",
+    "users",
+    "vendor_contractors"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
     "duty_roles",
     "notifications",
     "permission_changes",
@@ -13640,6 +13997,7 @@
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/dispatch_approval",
+    "mod:subcontract/api/dispatch_payslip_links",
     "mod:subcontract/api/remit_kinds",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/inventory",
@@ -13721,6 +14079,8 @@
     "mod:arap/api/cashier",
     "mod:case/api/quotations",
     "mod:payroll/api/bonus",
+    "mod:payroll/api/payslip_approval",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractor_vouchers",
     "router:system"
@@ -15245,11 +15605,15 @@
    "kind": "page",
    "path": "frontend/pages/payslip-form.html",
    "routers_called": [
+    "mod:payroll/api/payslip_approval",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractors",
     "router:system"
    ],
    "routers_called_effective": [
+    "mod:payroll/api/payslip_approval",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractors",
     "router:system"
@@ -15261,12 +15625,17 @@
    "api_calls": [
     "/api/payslips",
     "/api/payslips/{}",
+    "/api/payslips/{}/approve",
     "/api/payslips/{}/archive/{}",
     "/api/payslips/{}/archive/{}/record",
+    "/api/payslips/{}/dispatch-links",
+    "/api/payslips/{}/dispatch-links/{}",
     "/api/payslips/{}/export",
     "/api/payslips/{}/pdf-download",
+    "/api/payslips/{}/reject",
     "/api/payslips/{}/signed-files",
     "/api/payslips/{}/signed-files/{}",
+    "/api/payslips/{}/submit",
     "/api/payslips/{}/unsign",
     "/api/payslips/{}/void",
     "/api/system/branding/favicon"
@@ -15285,10 +15654,14 @@
    "kind": "page",
    "path": "frontend/pages/payslips.html",
    "routers_called": [
+    "mod:payroll/api/payslip_approval",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "router:system"
    ],
    "routers_called_effective": [
+    "mod:payroll/api/payslip_approval",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/api/payslips",
     "router:system"
    ],
@@ -16360,13 +16733,13 @@
     },
     {
      "func": "approval_queue_detail",
-     "line": 400,
+     "line": 409,
      "method": "GET",
      "path": "/api/approval-queue/detail"
     },
     {
      "func": "reassign_approval",
-     "line": 447,
+     "line": 456,
      "method": "POST",
      "path": "/api/approval-queue/reassign"
     }
@@ -19456,6 +19829,7 @@
     "core:archive",
     "helper:tiered_approval",
     "mod:payroll/api/bonus",
+    "mod:payroll/api/payslip_approval",
     "mod:payroll/bonus_payouts"
    ],
    "tables_r": [],
@@ -19496,6 +19870,7 @@
     "mod:case/material_approval",
     "mod:case/material_change",
     "mod:crm/api",
+    "mod:payroll/api/payslip_approval",
     "plat:migrations",
     "router:approval_queue",
     "router:auth"
@@ -20035,6 +20410,7 @@
     "mod:analytics/api/reports",
     "mod:case/recognition",
     "mod:case/settlement_actuals",
+    "mod:subcontract/api/dispatch_payslip_links",
     "mod:subcontract/attachments",
     "mod:subcontract/gl_events"
    ],
@@ -20350,7 +20726,8 @@
     "helper:custom_modules",
     "helper:expense_types",
     "helper:prefill_sources",
-    "mod:case/api/expense_form_pdf"
+    "mod:case/api/expense_form_pdf",
+    "mod:case/api/quotations"
    ],
    "path": "backend/db.py:1685",
    "readers": [
@@ -20360,6 +20737,7 @@
     "helper:tiered_approval",
     "mod:analytics/api/reports",
     "mod:case/api/case_action_items",
+    "mod:case/api/quotations",
     "mod:case/case_deadlines",
     "mod:daily_tasks/api",
     "router:auth"
@@ -20528,7 +20906,9 @@
    ],
    "path": "backend/modules/accounting/migrations/0003_dims_and_categories.py:12",
    "readers": [
-    "mod:case/api/expense_form_pdf"
+    "mod:case/api/expense_form_pdf",
+    "mod:case/api/quotations",
+    "mod:case/expense_forms"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -21426,6 +21806,20 @@
     "mod:arap/api/payment_requests"
    ]
   },
+  "table:payslip_dispatch_links": {
+   "api_prefixes": [],
+   "imports": [],
+   "kind": "table",
+   "named_by": [],
+   "path": "backend/modules/payroll/migrations/0004_payslip_approval.py:22",
+   "readers": [],
+   "tables_r": [],
+   "tables_w": [],
+   "writers": [
+    "mod:payroll/api/payslips",
+    "mod:payroll/payslip_links"
+   ]
+  },
   "table:payslip_seq": {
    "api_prefixes": [],
    "imports": [],
@@ -21455,14 +21849,18 @@
    "readers": [
     "core:archive",
     "core:pdf_gen",
+    "mod:payroll/api/payslip_links",
     "mod:payroll/attachments",
     "mod:payroll/gl_events",
+    "mod:payroll/payslip_links",
     "mod:payroll/payslip_payouts"
    ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
+    "mod:payroll/api/payslip_approval",
     "mod:payroll/api/payslips",
+    "mod:payroll/payslip_payables",
     "mod:payroll/remit_link"
    ]
   },
@@ -21609,6 +22007,7 @@
     "mod:payroll/bonus_payouts",
     "mod:payroll/bonus_pdf",
     "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/dispatch_payslip_links",
     "mod:subcontract/remit",
     "mod:supply/api/shipping_notes",
     "router:item_reads",
@@ -22081,6 +22480,7 @@
     "helper:expense_types",
     "helper:prefill_sources",
     "mod:case/api/expense_form_pdf",
+    "mod:case/api/quotations",
     "mod:payroll/api/bank_account",
     "router:duty_roles",
     "router:mail_settings",
@@ -22116,6 +22516,7 @@
     "mod:daily_tasks/api",
     "mod:payroll/api/bank_account",
     "mod:payroll/api/bonus",
+    "mod:payroll/api/payslip_approval",
     "mod:payroll/bonus_correction",
     "mod:payroll/bonus_payouts",
     "mod:payroll/bonus_pdf",
@@ -22153,6 +22554,7 @@
     "mod:case/settlement_actuals",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/dispatch_approval",
+    "mod:subcontract/api/dispatch_payslip_links",
     "mod:subcontract/gl_events"
    ],
    "tables_r": [],
