@@ -146,10 +146,10 @@ def test_preflight_rejects_stale_snapshot(inst):
 def test_preflight_rejects_running_service_and_newer_schema(inst):
     assert any("服務" in p for p in U.preflight(inst, v9_port_open=True)["problems"])
     c = sqlite3.connect(os.path.join(inst, "backend", "motrix_erp.db"))
-    c.execute("UPDATE schema_version SET version=117")
+    c.execute("UPDATE schema_version SET version=119")
     c.commit()
     c.close()
-    assert any("v117" in p for p in U.preflight(inst, v9_port_open=False)["problems"])
+    assert any("v119" in p for p in U.preflight(inst, v9_port_open=False)["problems"])
 
 
 def test_preflight_rejects_low_disk(inst, monkeypatch):

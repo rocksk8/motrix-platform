@@ -39,7 +39,7 @@ from core import paths as _p
 
 MANIFEST_NAME = "upgrade_manifest.json"
 #: 新版認得的 V9 基準（與 db.V9_BASELINE 相同；這裡不 import db，避免拉進整個 app）
-V9_BASELINE = 116
+V9_BASELINE = 118
 
 #: 新版新增、V9 沒有的設定鍵與預設值（轉換時只補缺的鍵）。
 #: ⚠️ 新增設定鍵時要加在這裡——`tests/platform/test_core_upgrade.py` 會列出並比對。
