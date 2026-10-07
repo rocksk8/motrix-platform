@@ -64,7 +64,10 @@ def test_slices_file_loads_and_every_slice0_path_resolves():
     assert data is not None
     targets, missing = GS.expand(data, REPO / "backend")
     assert missing == [], "slice0 的守門被改名或刪掉（請同步 gate_slices.json）：%s" % missing
-    assert "tests/platform" in targets
+    assert any(t.startswith("tests/platform/test_") for t in targets) and "tests/platform" not in targets   # 目錄項已展開成檔（有 exclude）
+    ex = GS.load()["slice0"]["exclude"]
+    assert ex and not (set(ex) & set(targets)), "exclude 的檔不能還在 slice0 裡"
+    assert all((REPO / "backend" / x).is_file() for x in ex)
 
 
 def test_pre_train_guards_and_slice0_are_one_list_and_keep_the_old_ten():
@@ -545,3 +548,73 @@ def test_overlap_with_cap_one_is_not_used(monkeypatch, capsys):
     cap = []
     _run(monkeypatch, {}, cap)
     assert [c[0] for c in cap] == ["ws0", "w", "we2e"]                      # 序列
+
+
+# ── slice0.exclude（把「測工具本身」的慢檔移到第二片）──────────────────────────────
+
+def _mini_backend(tmp_path, files):
+    for f in files:
+        p = tmp_path / f
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("def test_x():\n    pass\n", encoding="utf-8")
+    return tmp_path
+
+
+def _data(exclude, paths=None):
+    return {"slice0": {"exclude": exclude, "paths": paths or [{"label": "platform", "path": "tests/platform"},
+                                                              {"label": "guard", "path": "tests/test_guard.py"}]}}
+
+
+def test_exclude_expands_the_directory_to_files_minus_excluded(tmp_path):
+    b = _mini_backend(tmp_path, ["tests/platform/test_a.py", "tests/platform/test_b.py", "tests/platform/sub/test_c.py",
+                                 "tests/platform/helper.py", "tests/test_guard.py"])
+    targets, missing = GS.expand(_data(["tests/platform/test_b.py"]), b)
+    assert missing == []
+    assert targets == ["tests/platform/sub/test_c.py", "tests/platform/test_a.py", "tests/test_guard.py"]
+    # 第二片只排除 slice0 實際跑的檔：被 exclude 的 test_b 不在 --ignore 裡，所以會在第二片跑
+    assert "--ignore=tests/platform/test_b.py" not in GS.rest_args(targets) and "--ignore=tests/platform/test_a.py" in GS.rest_args(targets)
+
+
+def test_no_exclude_keeps_the_directory_entry_as_is(tmp_path):
+    b = _mini_backend(tmp_path, ["tests/platform/test_a.py", "tests/test_guard.py"])
+    assert GS.expand(_data([]), b)[0] == ["tests/platform", "tests/test_guard.py"]
+
+
+@pytest.mark.parametrize("bad", ["tests/platform/test_typo.py", "tests/other/test_z.py"])
+def test_typo_or_outside_exclude_is_reported_so_nothing_is_silently_dropped(tmp_path, bad):
+    b = _mini_backend(tmp_path, ["tests/platform/test_a.py", "tests/test_guard.py", "tests/other/test_z.py"])
+    targets, missing = GS.expand(_data([bad]), b)
+    assert missing and bad in missing[0]
+
+
+def test_run_full_falls_back_to_one_stage_when_exclude_has_a_typo(monkeypatch, capsys):
+    real = GS.expand
+    monkeypatch.setattr(GS, "expand", lambda data=None, backend=None: (real(data, backend)[0], ["exclude 找不到檔（tests/platform/test_typo.py）"]))
+    monkeypatch.setitem(sys.modules, "gate_slices", GS)
+    cap = []
+    assert _run(monkeypatch, {}, cap) == 0
+    assert [c[0] for c in cap] == ["w", "we2e"] and cap[0][1] == MT.TEST_ROOTS and "找不到" in capsys.readouterr().out
+
+
+def test_overlapping_or_dropped_files_make_the_precheck_and_the_count_red(monkeypatch):
+    """被 exclude 的檔若同時還在 slice0（重疊）⇒ 題數對帳多出題；若第二片也沒跑它（掉了）⇒ 少題。兩種都記紅。"""
+    monkeypatch.setenv("MOTRIX_GATE_VERIFY", "1")
+    written = []
+    _smart_fake(monkeypatch, ALL, S0, run_counts={"w": 2}, written=written)           # 掉了一題
+    assert _go() != 0 and written[-1]["slice_mismatch"][0]["executed"] == 2
+    written2 = []
+    _smart_fake(monkeypatch, ALL, S0, run_counts={"w": 4}, written=written2)          # 重疊：第二片多跑一題
+    assert _go() != 0 and written2[-1]["slice_mismatch"][0]["executed"] == 4
+    assert not GS.judge_sets({"a", "b", "c"}, {"a", "b"}, {"b", "c"})[0]               # 集合版：重疊
+    assert not GS.judge_sets({"a", "b", "c"}, {"a"}, {"c"})[0]                         # 集合版：掉了
+
+
+def test_moved_files_are_tooling_self_tests_and_no_guard_moved():
+    """不放寬的紀錄：被移走的只有這 7 個測工具本身的檔；任何守門檔（歸屬／邊界／changelog／版號／產生檔…）不得在 exclude。"""
+    ex = {Path(x).name for x in GS.load()["slice0"]["exclude"]}
+    assert ex == {"test_module_update_delivery_2026_09_28.py", "test_author_gate_2026_10_02.py", "test_modtest_scope.py",
+                  "test_modtest_rebase_check.py", "test_modtest_json_stdout_2026_09_29.py", "test_stepfile_drill_2026_09_30.py",
+                  "test_ship_tier_2026_09_28.py"}
+    for guard in ("test_generated_maps", "test_unit_cards", "test_route_ownership", "test_module_boundaries", "test_integration_points",
+                  "test_module_changelog", "test_version_slots", "test_train_number", "test_scope_gate", "test_e2e_classification"):
+        assert not any(guard in n for n in ex), guard

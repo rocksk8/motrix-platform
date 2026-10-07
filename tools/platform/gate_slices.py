@@ -44,21 +44,45 @@ def guards(data=None):
     return [(p["label"], p["path"]) for p in data["slice0"]["paths"] if p["path"].rstrip("/") != "tests/platform"]
 
 
+def _test_files(directory):
+    """目錄底下 pytest 會收集的測試檔（test_*.py、*_test.py），相對 backend/ 的 posix 路徑，排序。"""
+    base = Path(directory)
+    found = set(base.rglob("test_*.py")) | set(base.rglob("*_test.py"))
+    return sorted(f for f in found if "__pycache__" not in f.parts)
+
+
 def expand(data=None, backend=None):
     """slice0 的路徑展開 ⇒ (targets 相對 backend/ 的清單, missing 標籤清單)。glob 在 backend/ 底下展開；找不到 ⇒ 列 missing（守門被改名也要看得見）。
-    目錄原樣保留；`檔::nodeid` 原樣保留（pytest 認得）。"""
+    檔／`檔::nodeid` 原樣保留；**目錄項在有 exclude 時展開成檔**（目錄裡的測試檔 − exclude），這樣第二片只排除 slice0 實際跑的檔。
+    exclude 的每一項必須存在、而且在某個 slice0 目錄底下，否則列 missing（打錯字 ⇒ 呼叫端不切片、一段全跑，不會悄悄少跑）。"""
     data = data or load()
     backend = Path(backend or BACKEND)
     targets, missing = [], []
     if not data:
         return targets, ["gate_slices.json 讀不到"]
+    exclude = [str(x).replace("\\", "/") for x in (data["slice0"].get("exclude") or [])]
+    dirs = []
     for p in data["slice0"]["paths"]:
         file_pat, _, node = p["path"].partition("::")
         hits = sorted(Path(h).relative_to(backend).as_posix() for h in glob.glob(str(backend / file_pat)))
         if not hits:
             missing.append("%s（%s）" % (p["label"], p["path"]))
             continue
-        targets += [h + ("::" + node if node else "") for h in hits]
+        for h in hits:
+            if exclude and not node and (backend / h).is_dir():
+                dirs.append(h.rstrip("/"))
+                targets += [f.relative_to(backend).as_posix() for f in _test_files(backend / h)
+                            if f.relative_to(backend).as_posix() not in exclude]
+            else:
+                targets.append(h + ("::" + node if node else ""))
+    for x in exclude:
+        if not (backend / x).is_file():
+            missing.append("exclude 找不到檔（%s）" % x)
+        elif not any(x.startswith(d + "/") for d in dirs):
+            missing.append("exclude 不在任何 slice0 目錄底下（%s）" % x)
+    dup = {t for t in targets if targets.count(t) > 1}
+    if dup:
+        missing.append("slice0 目標重複：%s" % "、".join(sorted(dup)[:3]))
     return list(dict.fromkeys(targets)), missing
 
 
