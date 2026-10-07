@@ -11,7 +11,7 @@
 def up(conn):
     cols = {r[1] for r in conn.execute("PRAGMA table_info(case_material_payments)").fetchall()}
     if not cols:
-        return "case_material_payments 表不存在，叫料匯款預定付款日欄位這次不補、下次啟動再試"
+        return "case_material_payments 表不存在，材料申請匯款預定付款日欄位這次不補、下次啟動再試"
     if "planned_pay_date" not in cols:
         conn.execute("ALTER TABLE case_material_payments ADD COLUMN planned_pay_date TEXT NOT NULL DEFAULT ''")
     return None

@@ -302,7 +302,7 @@ def test_finance_cutover_preconditions(pop):
 
 # ── D4 ──────────────────────────────────────────────────────────────────────
 
-def test_d4_superadmin_passes_every_key_but_nobody_else_changes(pop):
+def test_superadmin_passes_every_gate_key_but_nobody_else_changes(pop):
     from helpers import module_registry as MR
     keys = [k for k, _l, _g in MR.MODULES] + ["brand_new_key_xyz"]
     sa = {"role": "superadmin", "modules": "[]"}
@@ -331,7 +331,7 @@ def _shadow_audit_rows():
         conn.close()
 
 
-def test_d5_off_is_the_old_rule_and_reads_no_user_tables(pop):
+def test_finance_flag_off_is_the_old_rule_and_reads_no_user_tables(pop):
     ids, roles = pop
     conn = db.get_db()
     DR.bind_role(conn, SA, ids["r2_sales"], roles["finance"], reason="測試財務角色綁定")
@@ -341,7 +341,7 @@ def test_d5_off_is_the_old_rule_and_reads_no_user_tables(pop):
     assert not A.finance_duty_person(u) and _shadow_audit_rows() == []
 
 
-def test_d5_shadow_returns_old_rule_but_records_one_rate_limited_diff(pop):
+def test_finance_flag_shadow_returns_old_rule_but_records_one_rate_limited_diff(pop):
     ids, roles = pop
     conn = db.get_db()
     DR.bind_role(conn, SA, ids["r2_sales"], roles["finance"], reason="測試財務角色綁定")
@@ -358,7 +358,7 @@ def test_d5_shadow_returns_old_rule_but_records_one_rate_limited_diff(pop):
     assert A.has_finance_access(fin) and len(_shadow_audit_rows()) == 4                            # 新舊相同 ⇒ 不告警
 
 
-def test_d5_on_follows_effective_permissions_including_subtracts(pop):
+def test_finance_flag_on_follows_effective_permissions_including_subtracts(pop):
     ids, roles = pop
     conn = db.get_db()
     DR.bind_role(conn, SA, ids["r2_sales"], roles["finance"], reason="測試財務角色綁定")
@@ -377,7 +377,7 @@ def test_d5_on_follows_effective_permissions_including_subtracts(pop):
     assert A.has_finance_access(sa) and A.has_cashier_access(sa) and A.can_see_financial(sa) and not A.finance_duty_person(sa)
 
 
-def test_d5_switch_flag_values_and_error_fallback(pop, monkeypatch):
+def test_finance_flag_switch_values_and_error_fallback(pop, monkeypatch):
     ids, _ = pop
     _set_flag("garbage")
     assert A._finance_mode() == "off"
@@ -388,7 +388,7 @@ def test_d5_switch_flag_values_and_error_fallback(pop, monkeypatch):
     assert not A.has_finance_access(_user(ids, "r2_sales", "sales")) and A.has_finance_access(_user(ids, "r2_fin", "finance"))   # 算不出新規則 ⇒ 舊規則
 
 
-def test_d5_literal_points_follow_the_seam_for_the_four_files(pop):
+def test_finance_flag_literal_points_follow_the_seam_for_the_four_files(pop):
     from helpers import financial_mask as FM
     ids, roles = pop
     conn = db.get_db()
