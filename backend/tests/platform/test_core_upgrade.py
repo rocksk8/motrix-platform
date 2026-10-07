@@ -933,3 +933,19 @@ def test_t46_older_v9_db_converted_up_to_baseline_is_not_a_rewrite(inst, new_src
     m = _convert(inst, new_src, str(tmp_path / "bk"))
     _set_schema(inst, U.V9_BASELINE)
     assert U.verify_conversion(inst, m) == []
+
+
+@pytest.mark.parametrize("table,sql", [
+    ("customers", "UPDATE customers SET name = name || 'x' WHERE id=1"),
+])
+def test_t46_exemption_does_not_hide_other_rewrites(inst, new_src, tmp_path, table, sql):
+    """突變題：schema_version 免於『被改寫』檢查，不可連帶放過其他表的內容改寫（列數相同、內容不同）。"""
+    m = _convert(inst, new_src, str(tmp_path / "bk"))
+    _set_schema(inst, U.V9_BASELINE)                         # 版本正確 ⇒ 版本檢查不會是唯一抓到的
+    c = sqlite3.connect(os.path.join(inst, "backend", "motrix_erp.db"))
+    c.execute(sql)
+    c.commit()
+    c.close()
+    problems = U.verify_conversion(inst, m)
+    assert any("既有資料被改寫" in p and table in p for p in problems), problems
+    assert not any("schema_version" in p for p in problems)
