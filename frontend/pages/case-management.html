@@ -2507,6 +2507,7 @@
                             <span style="font-weight:600" :style="moPayTone(p.status)" data-testid="mo-pay-status" x-text="p.status"></span>
                             <span x-text="'申請 ' + caseSettleFmt(p.amount) + '（已付 ' + caseSettleFmt(p.paid) + '／剩餘 ' + caseSettleFmt(p.remaining) + '）'"></span>
                             <span style="color:var(--text-dim)" x-text="p.supplierName + (p.payee.bankAccountNumber ? '　' + p.payee.bankAccountNumber : '')"></span>
+                            <span x-show="p.plannedPayDate" style="color:var(--text-dim)" :data-testid="'mo-pay-planned-' + p.id" x-text="'預定付款日 ' + p.plannedPayDate"></span>
                             <span x-show="['待審核','簽核中'].includes(p.status)" style="color:var(--text-dim)" x-text="'待簽：' + ((p.currentApprovers || []).join('、') || '—')"></span>
                             <span x-show="p.status === '已退回' && p.rejectReason" style="color:var(--tone-danger-fg)" x-text="'退回原因：' + p.rejectReason"></span>
                             <button type="button" x-show="['草稿','已退回'].includes(p.status)" @click="moPayAct(p, 'submit')" data-testid="mo-pay-submit"
@@ -2531,6 +2532,7 @@
                             <input class="fi fi--sm" type="text" placeholder="銀行名稱" style="width:110px" x-model="moPayForm.bankName">
                             <input class="fi fi--sm" type="text" placeholder="戶名" style="width:120px" x-model="moPayForm.bankAccountName" data-testid="mo-pay-acctname">
                             <input class="fi fi--sm" type="text" placeholder="帳號" style="width:150px" x-model="moPayForm.bankAccountNumber" data-testid="mo-pay-acctno">
+                            <label style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:4px">預定付款日（選填）<input class="fi fi--sm" type="date" style="width:130px" x-model="moPayForm.plannedPayDate" data-testid="mo-pay-planned"></label>
                             <input x-show="session.role === 'superadmin'" class="fi fi--sm" type="text" placeholder="超額覆寫理由（最高管理員）" style="width:170px" x-model="moPayForm.overCapReason">
                             <!-- 個資蒐集告知（收款人＝供應商，可能是自然人；使用者裁示 2026-10-02）：勾選必填，建立時伺服器記錄時間與人員 -->
                             <div data-privacy-card data-privacy-subject="material_payee" style="flex-basis:100%;margin-top:4px;padding:6px 8px;border:1px solid var(--border-light);border-radius:6px">

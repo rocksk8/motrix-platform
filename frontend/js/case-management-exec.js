@@ -152,7 +152,7 @@ window.CM_PARTS.push(() => ({
     async moOpenPayForm(m) {
       await this.moLoadSuppliers()
       const q = this.moPayOf(m).quota
-      this.moPayForm = { itemId: m.itemId, amount: q ? q.remaining : 0, supplierId: m.supplierId ?? '', bankCode: '', bankName: '', bankAccountName: '', bankAccountNumber: '', overCapReason: '', payeeNoticeAcked: false }
+      this.moPayForm = { itemId: m.itemId, amount: q ? q.remaining : 0, supplierId: m.supplierId ?? '', bankCode: '', bankName: '', bankAccountName: '', bankAccountNumber: '', overCapReason: '', plannedPayDate: '', payeeNoticeAcked: false }
     },
     async _moPayCall(url, method, body, okMsg) {
       this.moMsg = ''
@@ -176,6 +176,7 @@ window.CM_PARTS.push(() => ({
       const body = { payeeNoticeAcked: true, amount: Number(f.amount) || 0, supplierId: f.supplierId === '' ? null : Number(f.supplierId), bankCode: f.bankCode, bankName: f.bankName,
                      bankAccountName: f.bankAccountName, bankAccountNumber: f.bankAccountNumber }
       if (f.overCapReason) body.overCapReason = f.overCapReason
+      if (f.plannedPayDate) body.plannedPayDate = f.plannedPayDate
       const ok = await this._moPayCall(`/api/quotations/${encodeURIComponent(this.selected.quote_no)}/material-orders/${encodeURIComponent(m.itemId)}/payments`, 'POST', body,
                                          d => `已建立匯款申請：${d.payment.docCode}（草稿，請送審）`)
       if (ok) this.moPayForm = null

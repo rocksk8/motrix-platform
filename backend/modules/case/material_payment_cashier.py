@@ -58,8 +58,23 @@ class _Payables:
                 "payeeUsername": "", "payeeBank": _mask(("%s %s" % (sn.get("bankCode") or "", sn.get("bankName") or "")).strip(), sn.get("bankAccountNumber")),
                 "payTerms": "", "remitDate": "", "expenseDate": "", "approvedAt": (pay["approved_at"] or "")[:10] or _approved_at(pay["approval_json"]) or "",
                 "invoiceDate": "", "invoiceNo": "", "invoiceFiles": 0, "files": 0,
+                "plannedPayDate": (pay.get("planned_pay_date") or "")[:10],            # 預定付款日（t45；每張申請一個＝下一次付款預定日）
                 "applied": float(pay["amount_approved"] or 0), "paid": MP.paid_total(conn, pay["id"]), "seq": pay["seq"]})
         return out
+
+    @staticmethod
+    def set_planned_pay_date(conn, key, value, user) -> dict:
+        """出納端點改預定付款日（`value` 已正規化；''＝清除）。只認已核准且還有剩餘應付的申請；查無／不合格 ⇒ LookupError；已結清 ⇒ ValueError（409）。不 commit。"""
+        from core.txn import begin_write
+        begin_write(conn)
+        pay = MP.get(conn, key)
+        if not pay or pay["status"] != MP.S_APPROVED:
+            raise LookupError("找不到這張匯款申請")
+        if MP.remaining_of(conn, pay) <= 0:
+            raise ValueError("這張匯款申請已結清，預定付款日保留為歷史紀錄，不能再修改")
+        old = (pay.get("planned_pay_date") or "")[:10]
+        conn.execute("UPDATE case_material_payments SET planned_pay_date=?, updated_at=? WHERE id=?", (value, MP._now(), pay["id"]))
+        return {"plannedPayDate": value, "old": old, "quoteNo": pay["quote_no"] or ""}
 
     @staticmethod
     def paid(conn, start, end) -> list:
