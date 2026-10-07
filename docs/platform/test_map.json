@@ -3,12 +3,12 @@
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
   "tests": 1175,
-  "unmapped": 13,
+  "unmapped": 12,
   "kinds": {
    "api": 635,
    "e2e": 289,
-   "audit": 143,
-   "unit": 108
+   "audit": 144,
+   "unit": 107
   },
   "routes": 773
  },
@@ -19,7 +19,6 @@
   "backend/tests/platform/test_deploy_dashboard_scope_gate_2026_09_30.py",
   "backend/tests/platform/test_no_leaky_tempdirs.py",
   "backend/tests/platform/test_no_swallowed_dict_keys_2026_10_03.py",
-  "backend/tests/platform/test_stepfile_drill_2026_09_30.py",
   "backend/tests/test_approval_queue_extra_types_2026_09_30.py",
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py",
   "backend/tests/test_e2e_bn3_manual_people_page_2026_09_24.py",
@@ -18134,9 +18133,15 @@
    }
   },
   "backend/tests/platform/test_stepfile_drill_2026_09_30.py": {
-   "kind": "unit",
-   "units": [],
-   "evidence": {}
+   "kind": "audit",
+   "units": [
+    "core:db"
+   ],
+   "evidence": {
+    "path": [
+     "backend/db.py"
+    ]
+   }
   },
   "backend/tests/platform/test_storage_locations_2026_09_28.py": {
    "kind": "api",

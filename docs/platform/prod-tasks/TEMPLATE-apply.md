@@ -19,6 +19,12 @@
 
 ## 步驟 1：取包並驗證（不套用）
 
+> 🔴 **db schema 版本變動的班次（例：第 46 班基準 116→118）**：`delivery.py` 的 `installed_db_version()` 取的是**正式機已安裝**的 `db.py`
+> `CURRENT_VERSION`（獨立訊號）。本班包的 `CURRENT_VERSION` 比已安裝的大時，用預設期望值驗包會得到
+> `db 版本 == 期望值：包內是 N，而期望是 M` 而失敗。**步驟檔必須明寫** `verify_package.py <包> --expect-db-version <包內的 N>`
+> （N 取自本班的 `backend/db.py`，由主持在發布前核對，不取自包）。不要為了通過而改 `delivery.py` 或略過這項檢查。
+> 同班的**回滾段必須寫「還原套用前的資料庫備份」**：庫被升到 N 之後，只回退程式碼會被舊版 `init_db` 以 `SchemaNewerThanBaseline` 拒絕啟動。
+
 ## 步驟 2：套用
 
 - log 檔名一律帶時間戳：`Tee-Object <staging>\apply_trainNN_$(Get-Date -Format yyyyMMdd_HHmmss).log`。第二十五班使用者重跑一次（`duplicate_version` 正常拒絕）把成功那次的 log 覆蓋掉，步驟 3 #3／#5 因此只能部分驗證（2026-09-30）。步驟 3 引用 log 時寫「時間戳最大且 `::RESULT::` 為 success 的那份」。
@@ -26,6 +32,8 @@
 ## 步驟 3：套用後檢查（逐項、可機械判定）
 
 ## 步驟 4：只回程式的回滾（僅在「apply 顯示 success 但步驟 3 不過」時）
+
+> 🔴 若本班 `CURRENT_VERSION` 變大（見步驟 1 的說明）：**只回程式不夠**——庫已被升版，舊程式會拒絕啟動。此時回滾＝還原套用前的 `motrix_erp.db` 備份＋回程式。
 
 ## 步驟 5：回報
 

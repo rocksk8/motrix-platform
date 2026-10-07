@@ -32,7 +32,7 @@ powershell -ExecutionPolicy Bypass -File backend\tools\build_deploy_package.ps1 
 
 | # | 檢查 | 指令／方法 | 過關條件 |
 |---|---|---|---|
-| V1 | 驗包工具 | `python backend\tools\verify_package.py <包目錄> --expect-db-version <N>` | exit 0；**正對照（工作樹先命中）有過**，否則整份報告作廢 |
+| V1 | 驗包工具 | `python backend\tools\verify_package.py <包目錄> --expect-db-version <N>` | exit 0；**正對照（工作樹先命中）有過**，否則整份報告作廢；🔴 本班 `CURRENT_VERSION` 大於已安裝版本時（第 46 班 116→118），`<N>` 必須明寫為包內版本，不可沿用已安裝的 116；回滾要還原 DB 備份（只回程式碼會被拒絕啟動）。 |
 | V2 | 選配與 lock | `python tools\platform\product_select.py check --pkg <包目錄>` | exit 0：lock 存在；列出的模組等於包內模組資料夾；版本等於各自的 module.json；內容雜湊一致；L0／L1 必要檔不缺；`tools/platform/upgrade.py` 在包裡 |
 | V3 | **檔數**：包 vs 應有 | 應有＝`git ls-tree -r --name-only <commit>` 扣掉 `export-ignore`（`git check-attr export-ignore`），再扣掉沒選到的模組資料夾與 `removed_pages`；包＝包目錄逐檔列舉 | 兩份清單**逐檔相等**（只比數量不夠：數量一樣也可能是互相抵消）。差異逐一列出 |
 | V4 | **runtime 不缺檔**（主持 2026-09-26：export-ignore 會靜默漏檔，已知漏 tests/、docs/windows/，runtime 沒驗證過） | ①在包裡跑 `core.source_tree.product_files()／page_files()／router_files()`，每一個檔都在；②新版在包目錄啟動後，`sys.modules` 裡所有來自包目錄的模組，其檔案都在包裡；③`grep` 產品碼中讀取相對路徑的地方（`open(`、`Path(...)/`、`read_text`）所指的資料檔在包裡 | 三項都沒有缺檔。任何一個被 export-ignore 的路徑出現在①②③ ⇒ **必修** |
