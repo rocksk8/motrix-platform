@@ -36,14 +36,44 @@ def _files(raw):
         return []
 
 
+#: 費用單據（kind≠''）的類型名稱；出納清單／執行紀錄的標題用它，不用舊版專用的 `category`（費用單據的 category 是預設值「其他」）
+_KIND_LABEL = {"purchase_req": "請購單", "purchase_order": "採購單", "travel": "差旅費用請款單", "petty_cash": "零用金支付單"}
+
+
+def _title(r) -> str:
+    """出納看的標題：費用單據＝「<類型名稱>｜<第一筆品項摘要>」（description 由明細第一筆摘要自動帶入）；舊版額外支出＝「<類別>｜<說明>」。"""
+    kind = _col(r, "kind") or ""
+    if kind:
+        return "%s｜%s" % (_KIND_LABEL.get(kind, "費用單據"), r["description"] or "")
+    return "%s｜%s" % (r["category"] or "其他", r["description"] or "")
+
+
+def _payee_name(r) -> str:
+    """出納看的收款人：另存的收款人（`payee_name`，出納／銀行資料）優先；費用單據依類型取表單上填的——採購單＝廠商（data.vendor）、零用金＝支付對象（data.payee）；
+    其餘（差旅等）與舊版額外支出照舊（付款人／填寫人）。**只改顯示名稱**，不碰收款人類型與銀行資料（類型表單沒有收集廠商銀行帳號——產品待決）。"""
+    name = _col(r, "payee_name") or ""
+    if name:
+        return name
+    kind = _col(r, "kind") or ""
+    key = {"purchase_order": "vendor", "petty_cash": "payee"}.get(kind)
+    if key:
+        try:
+            v = (json.loads(_col(r, "data_json") or "{}") or {}).get(key)
+        except (TypeError, ValueError):
+            v = None
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return r["payer_name"] or r["created_by_name"] or ""
+
+
 def _item(r):
     files = _files(r["files_json"])
     return {
         "key": str(r["id"]), "sourceLabel": SOURCE_LABEL,
         "quoteNo": r["quote_no"] or "", "customerName": _col(r, "customer_name") or "", "projectName": _col(r, "project_name") or "",
-        "title": "%s｜%s" % (r["category"] or "其他", r["description"] or ""),
+        "title": _title(r),
         "amount": float(r["total_cost"] or 0),
-        "payee": _col(r, "payee_name") or r["payer_name"] or r["created_by_name"] or "", "requestedBy": r["created_by_name"] or "",
+        "payee": _payee_name(r), "requestedBy": r["created_by_name"] or "",
         # 費用單據（A2）：類型、單號、收款人類型、付款條件／匯款日（採購單由出納核准後填）；舊列＝kind ''
         "kind": _col(r, "kind") or "", "docCode": _col(r, "doc_code") or "", "payeeType": _col(r, "payee_type") or "",
         "payeeUsername": _payee_username(r), "payeeBank": _mask_bank(_col(r, "payee_bank"), _col(r, "payee_account")),
@@ -192,7 +222,7 @@ class _Payables:
     def paid(conn, start, end) -> list:
         """付款日在 [start, end] 的申請（出納執行紀錄用）：`[{key, sourceLabel, quoteNo, title, payable, actual, fee, paidAt, review}]`。"""
         return [{"key": str(r["id"]), "sourceLabel": SOURCE_LABEL, "quoteNo": r["quote_no"] or "",
-                 "title": "%s｜%s" % (r["category"] or "其他", r["description"] or ""),
+                 "title": _title(r),
                  "payable": float(r["total_cost"] or 0),
                  "actual": float(r["total_cost"] or 0) if r["remit_actual"] is None else float(r["remit_actual"]),
                  "fee": float(r["remit_fee"] or 0), "paidAt": (r["paid_date"] or "")[:10], "review": r["remit_review"] or ""}

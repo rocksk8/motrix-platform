@@ -158,3 +158,77 @@ def test_pr_to_po_picker_copies_unit_price_only_for_viewers_who_may_see_money(cl
     assert r.status_code == 201, r.text
     d = client.get("/api/approval-queue/detail", params={"type": "extra_expense", "id": str(r.json()["id"])}, headers=hs).json()
     assert d["items"][0]["unitPrice"] == 2900.5 and d["items"][0]["amount"] == 5801
+
+
+# ── 出納待付款的標題與收款人（費用單據；2026-10-07）────────────────────────────────
+
+def _approve_row(eid):
+    c = _db()
+    try:
+        c.execute("UPDATE case_extra_expenses SET status='已核准' WHERE id=?", (eid,))
+        c.commit()
+    finally:
+        c.close()
+
+
+def _pending(client, h):
+    r = client.get("/api/cashier/pending-payables", headers=h)
+    assert r.status_code == 200, r.text
+    return {i["key"]: i for i in r.json()["items"] if i["source"] == "case"}
+
+
+def test_cashier_title_and_payee_for_typed_docs(client, world):
+    po, pc, tr = (_save(client, world, k) for k in ("purchase_order", "petty_cash", "travel"))
+    for e in (po, pc, tr):
+        _approve_row(e)
+    c = _db()
+    try:
+        c.execute("INSERT INTO case_extra_expenses (quote_no, category, description, qty, unit, unit_cost, total_cost, expense_date, files_json, created_by, created_by_name,"
+                  " payer_name, created_at, updated_at, status, kind, data_json, lines_json) VALUES ('','交通費','計程車',1,'',300,300,'2031-06-01','[]','rf_boss','陳經理',"
+                  "'陳經理','2031-06-01','2031-06-01','已核准','','{}','[]')")
+        legacy = c.execute("SELECT MAX(id) AS i FROM case_extra_expenses").fetchone()["i"]
+        c.commit()
+    finally:
+        c.close()
+    got = _pending(client, world["h"])
+    assert got[str(po)]["title"] == "採購單｜網路線 Cat6" and got[str(po)]["payee"] == "甲廠商", "採購單：標題用類型名稱，收款人＝廠商（不是申請人）"
+    assert got[str(pc)]["title"] == "零用金支付單｜文具" and got[str(pc)]["payee"] == "王小姐（文具行）", "零用金：收款人＝支付對象"
+    assert got[str(tr)]["title"] == "差旅費用請款單｜網路線 Cat6" and got[str(tr)]["payee"] == "陳經理", "差旅等：收款人照舊（填寫人）"
+    assert got[str(legacy)]["title"] == "交通費｜計程車" and got[str(legacy)]["payee"] == "陳經理", "舊版額外支出不變"
+    for k in (po, pc):
+        assert got[str(k)]["payeeType"] == "" and got[str(k)]["payeeBank"] == "", "收款人類型與銀行資料不碰"
+
+
+def test_cashier_payee_column_wins_over_form_field_and_paid_history_uses_the_same_title(client, world):
+    from modules.case.payables import _Payables
+    po = _save(client, world, "purchase_order")
+    _approve_row(po)
+    c = _db()
+    try:
+        c.execute("UPDATE case_extra_expenses SET payee_name='出納另存的收款人' WHERE id=?", (po,))
+        c.commit()
+    finally:
+        c.close()
+    assert _pending(client, world["h"])[str(po)]["payee"] == "出納另存的收款人"
+    c = _db()
+    try:
+        c.execute("UPDATE case_extra_expenses SET paid_date='2031-06-10' WHERE id=?", (po,))
+        c.commit()
+        rows = _Payables.paid(c, "2031-06-01", "2031-06-30")
+    finally:
+        c.close()
+    assert [x["title"] for x in rows if x["key"] == str(po)] == ["採購單｜網路線 Cat6"]
+
+
+def test_cashier_list_still_needs_the_finance_role(client, world, make_user):
+    u, p = make_user(username="rf_plain2", role="user", modules=["case_manage"], legacy_finance_flag=False)
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
+    assert client.get("/api/cashier/pending-payables", headers=h).status_code in (401, 403)
+
+
+def test_my_requests_page_uses_the_kind_label_not_the_default_category():
+    """「我的申請」內容欄（payment-request.html）：費用單據＝類型名稱｜品項摘要，不再印預設類別「其他」。靜態檢查頁面邏輯（瀏覽器流程見 e2e）。"""
+    from pathlib import Path
+    html = (Path(__file__).resolve().parents[4] / "frontend" / "pages" / "payment-request.html").read_text(encoding="utf-8")
+    assert 'x-text="rowTitle(e)"' in html and "e.kind ? ((K[e.kind]" in html
+    assert "(e.category || '') + '｜' + (e.description || '')\"></td>" not in html.split("rowTitle(e) {")[0].split('id="pr-mine"')[-1].split("<tbody>")[-1]
