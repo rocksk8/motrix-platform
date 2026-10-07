@@ -30,6 +30,8 @@
     .tag-draft{background:#F3F4F6;color:#6B7280}
     .tag-signed{background:#EFF6FF;color:#1D4ED8}
     .tag-paid{background:#DCFCE7;color:#166534}
+    .tag-review{background:var(--tone-warning-bg);color:var(--tone-warning-fg)}
+    .tag-approved{background:var(--tone-success-bg);color:var(--tone-success-fg)}
     .tag-void{background:#FEE2E2;color:#B91C1C;text-decoration:line-through}
     .void-banner{margin:0 0 10px;padding:8px 12px;border:1px solid #FCA5A5;background:#FEF2F2;color:#B91C1C;border-radius:var(--radius);font-size:12px;line-height:1.7}
     .itype{display:inline-flex;padding:1px 7px;border-radius:3px;font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;background:var(--accent-light);color:var(--accent)}
@@ -242,12 +244,41 @@
         <hr class="detail-divider">
         <div style="display:flex;flex-direction:column;gap:8px">
           <div style="display:flex;gap:8px">
-            <a x-show="selectedSlip.status !== '已作廢' && selectedSlip.status !== '已簽回' && selectedSlip.status !== '已付款'" :href="'payslip-form.html?id=' + selectedSlip.slip_no" class="btn btn-ghost btn-sm" style="flex:1;justify-content:center">編輯</a>
+            <a x-show="selectedSlip.status !== '已作廢' && selectedSlip.status !== '已簽回' && selectedSlip.status !== '已付款'" data-testid="ps-edit" :href="'payslip-form.html?id=' + selectedSlip.slip_no" class="btn btn-ghost btn-sm" style="flex:1;justify-content:center">編輯</a>
             <button class="btn btn-primary btn-sm" style="flex:1" @click="previewPdf(selectedSlip)">預覽 PDF</button>
           </div>
           <div style="display:flex;gap:8px" x-show="selectedSlip.export_count > 0">
             <button class="btn btn-ghost btn-sm" style="flex:1" @click="openHistory(selectedSlip)">匯出歷史</button>
           </div>
+          <div data-testid="ps-dispatch-links" style="font-size:12px">
+            <div style="font-weight:600;color:var(--text-dim)">來源派發</div>
+            <div x-show="dlinks.notice" style="color:var(--warning)" x-text="dlinks.notice"></div>
+            <template x-for="it in dlinks.items" :key="it.dispatchId">
+              <div style="display:flex;gap:6px;align-items:center;margin-top:3px">
+                <a :href="'case-management.html?q=' + encodeURIComponent((it.dispatch || {}).quoteNo || '')" :data-testid="'ps-dlink-' + it.dispatchId"
+                   x-text="((it.dispatch || {}).docCode || ('派發 #' + it.dispatchId)) + ((it.dispatch || {}).quoteNo ? '（' + it.dispatch.quoteNo + '）' : '')"></a>
+                <button x-show="selectedSlip.status !== '已付款'" class="btn btn-ghost btn-sm" @click="removeLink(selectedSlip, it)" :data-testid="'ps-dlink-remove-' + it.dispatchId">解除</button>
+              </div>
+            </template>
+            <div x-show="!dlinks.items.length && !dlinks.notice" style="color:var(--text-dim)">尚未關聯派發</div>
+            <div x-show="selectedSlip.status !== '已作廢'" style="display:flex;gap:4px;margin-top:4px">
+              <input type="text" placeholder="派發編號" x-model="linkInput" data-testid="ps-dlink-input" style="width:90px;font-size:12px">
+              <button class="btn btn-ghost btn-sm" @click="addLink(selectedSlip)" data-testid="ps-dlink-add">關聯派發</button>
+            </div>
+            <div x-show="linkErr" x-text="linkErr" style="color:var(--danger)"></div>
+          </div>
+          <!-- 送審流程（第46班）：草稿 → 送審 → 待審核（簽核人簽核／退回）→ 已核准才能匯出；匯出不需要付款日 -->
+          <div x-show="selectedSlip.status === '草稿' && session.role === 'superadmin'" style="display:flex;flex-direction:column;gap:6px">
+            <label style="font-size:12px;color:var(--text-dim)">預定付款日（選填；核准後出納也能改）
+              <input type="date" x-model="planned" data-testid="ps-planned" style="margin-left:4px"></label>
+            <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" data-testid="ps-submit" @click="submitSlip(selectedSlip)">送審</button>
+          </div>
+          <div x-show="selectedSlip.status === '待審核'" style="display:flex;flex-direction:column;gap:6px">
+            <div style="font-size:12px;color:var(--text-dim)" data-testid="ps-review-note">待審核：由簽核人簽核；退回後回到草稿，可修改後重新送審</div>
+            <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" data-testid="ps-approve" @click="approveSlip(selectedSlip)">簽核（核准）</button>
+            <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" data-testid="ps-reject" @click="rejectSlip(selectedSlip)">退回（需填原因）</button>
+          </div>
+          <div x-show="selectedSlip.status === '已核准'" style="font-size:12px;color:var(--text-dim)" data-testid="ps-approved-note">已核准：可匯出 PDF（選填）；出納可直接付款，簽回檔為選填</div>
           <label x-show="selectedSlip.status === '已匯出' || selectedSlip.status === '已簽回'"
                  class="btn btn-primary btn-sm" style="width:100%;justify-content:center;cursor:pointer">
             <span x-text="selectedSlip.status === '已簽回' ? '補傳簽回檔' : '上傳對方簽回檔（確認完成）'"></span>
@@ -257,8 +288,8 @@
           <button x-show="selectedSlip.status === '已簽回'" class="btn btn-ghost btn-sm"
                   style="width:100%;justify-content:center" @click="unsign(selectedSlip)">退回簽回（才可作廢）</button>
           <div x-show="actionErr" x-text="actionErr" style="color:#B91C1C;font-size:12px"></div>
-          <button x-show="selectedSlip.status === '已匯出'"
-                  class="btn btn-danger btn-sm"
+          <button x-show="selectedSlip.status === '已匯出' || selectedSlip.status === '已核准'"
+                  class="btn btn-danger btn-sm" data-testid="ps-void"
                   style="width:100%;justify-content:center"
                   @click="openVoid(selectedSlip)">作廢勞報單</button>
           <button x-show="['草稿'].includes(selectedSlip.status)"
@@ -487,6 +518,31 @@ function payslipsPage() {
     selectSlip(p) {
       this.selectedId = p.slip_no
       this.selectedSlip = { ...p }
+      this.linkInput = ''; this.linkErr = ''; this.dlinks = { items: [], notice: '' }
+      this.loadLinks(p)
+    },
+
+    // 來源派發（第46班 P3）：勞報單 ⇄ 承攬派發雙向連結（派發頁也看得到；那邊只顯示單號、狀態、受領人）
+    dlinks: { items: [], notice: '' }, linkInput: '', linkErr: '',
+    async loadLinks(p) {
+      try {
+        const r = await fetch(`${API}/payslips/${p.slip_no}/dispatch-links`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok && this.selectedId === p.slip_no) this.dlinks = await r.json()
+      } catch (e) {}
+    },
+    async addLink(p) {
+      this.linkErr = ''
+      const id = parseInt(this.linkInput, 10)
+      if (!id) { this.linkErr = '請填派發編號（數字）'; return }
+      const r = await fetch(`${API}/payslips/${p.slip_no}/dispatch-links`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify({ dispatchId: id }) })
+      if (!r.ok) { let m = ''; try { m = (await r.json()).detail } catch (e) {}; this.linkErr = m || ('關聯失敗（' + r.status + '）'); return }
+      this.linkInput = ''; await this.loadLinks(p)
+    },
+    async removeLink(p, it) {
+      this.linkErr = ''
+      const r = await fetch(`${API}/payslips/${p.slip_no}/dispatch-links/${it.dispatchId}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+      if (!r.ok) { let m = ''; try { m = (await r.json()).detail } catch (e) {}; this.linkErr = m || ('解除失敗（' + r.status + '）'); return }
+      await this.loadLinks(p)
     },
 
     async previewPdf(p) {
@@ -524,6 +580,9 @@ function payslipsPage() {
           const d = await r.json()
           p.status = '已匯出'
           p.export_count = d.export_count
+        } else {
+          let m = ''; try { m = (await r.json()).detail } catch (e) {}
+          this.actionErr = m || ('匯出失敗（' + r.status + '）')
         }
       } catch(e) {}
       this.closePreview()
@@ -686,13 +745,29 @@ function payslipsPage() {
       await this._post(`${API}/payslips/${p.slip_no}/signed-files/${f.id}`, { method: 'DELETE' })
     },
 
+    // 送審流程（第46班）：後端判斷權限與狀態，這裡只送請求並顯示後端的說明
+    planned: '',
+    async submitSlip(p) {
+      await this._post(`${API}/payslips/${p.slip_no}/submit`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify(this.planned ? { plannedPayDate: this.planned } : {}) })
+      this.planned = ''
+    },
+    async approveSlip(p) {
+      await this._post(`${API}/payslips/${p.slip_no}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    },
+    async rejectSlip(p) {
+      const reason = (prompt('退回原因（必填）') || '').trim()
+      if (!reason) { this.actionErr = '請填寫退回原因'; return }
+      await this._post(`${API}/payslips/${p.slip_no}/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) })
+    },
+
     async unsign(p) {
       if (!confirm('退回簽回後狀態回到「已匯出」，確定？')) return
       await this._post(`${API}/payslips/${p.slip_no}/unsign`, { method: 'POST' })
     },
 
     statusCls(st) {
-      return st === '已匯出' ? 'tag-exported' : st === '已作廢' ? 'tag-void' : st === '已簽回' ? 'tag-signed' : st === '已付款' ? 'tag-paid' : 'tag-draft'
+      return st === '已匯出' ? 'tag-exported' : st === '已作廢' ? 'tag-void' : st === '已簽回' ? 'tag-signed' : st === '已付款' ? 'tag-paid' : st === '待審核' ? 'tag-review' : st === '已核准' ? 'tag-approved' : 'tag-draft'
     },
 
     openVoid(p) {

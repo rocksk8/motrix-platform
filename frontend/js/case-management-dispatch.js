@@ -73,6 +73,31 @@ window.CM_PARTS.push(() => ({
       } catch {}
     },
 
+    // 派發 ⇄ 勞報單連結（第46班 P3）：每張派發卡片一個區塊；只顯示單號、狀態、受領人，**沒有金額**；建立／解除只有最高管理者
+    dpSlips: {},
+    async dpSlipLoad(d) {
+      const cur = this.dpSlips[d.id] || { items: [], notice: '', canOpen: false, canEdit: false, input: '', err: '', loaded: false }
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/payslip-links`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) { const b = await r.json(); this.dpSlips = { ...this.dpSlips, [d.id]: { ...cur, ...b, loaded: true, err: '' } } }
+        else this.dpSlips = { ...this.dpSlips, [d.id]: { ...cur, loaded: true, err: '無法讀取勞報單關聯（HTTP ' + r.status + '）' } }
+      } catch (e) { this.dpSlips = { ...this.dpSlips, [d.id]: { ...cur, loaded: true, err: '無法讀取勞報單關聯' } } }
+    },
+    async dpSlipAdd(d) {
+      const s = this.dpSlips[d.id]; if (!s) return
+      const no = (s.input || '').trim()
+      if (!no) { s.err = '請填勞報單單號'; return }
+      const r = await fetch(`/api/contractor-dispatches/${d.id}/payslip-links`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify({ slipNo: no }) })
+      if (!r.ok) { let m = ''; try { m = (await r.json()).detail } catch (e) {}; s.err = m || ('關聯失敗（HTTP ' + r.status + '）'); return }
+      s.input = ''; await this.dpSlipLoad(d)
+    },
+    async dpSlipRemove(d, slipNo) {
+      const s = this.dpSlips[d.id]; if (!s) return
+      const r = await fetch(`/api/contractor-dispatches/${d.id}/payslip-links/${encodeURIComponent(slipNo)}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+      if (!r.ok) { let m = ''; try { m = (await r.json()).detail } catch (e) {}; s.err = m || ('解除失敗（HTTP ' + r.status + '）'); return }
+      await this.dpSlipLoad(d)
+    },
+
     async loadDispatches(quoteNo, pre) {
       if (!quoteNo) return
       const live = this._selectLive()

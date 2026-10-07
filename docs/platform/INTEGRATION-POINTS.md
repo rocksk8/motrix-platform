@@ -202,6 +202,13 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
+## 第 46 班追加（勞報單送審＋出納整合＋派發連結；設計 `plans/PAYSLIP-APPROVAL-T45.md`）
+
+- **IP-100 提供者 `payroll_payslip`**（M07 → M05）：已核准／已匯出／已簽回且未付款的勞報單進出納「待付款申請」（已核准即可付款，簽回檔選填）；加法：項目欄位 `needsVoucherNo`／`signedBack`／`payslipStatus`／`extra`，`mark_paid` 的 `remit.voucherNo`（傳票單號必填），可選方法 `set_planned_pay_date`、`after_paid`（付款 commit 之後）、`payee_info`，屬性 `NO_CALENDAR`（勞報單不進行事曆）、`FULL_ACCOUNT_STRICT`。IP-103 `payslip.payables` 與 `GET /api/cashier/payslip-queue` 保留一班（相容／回滾；出納頁籤已隱藏），下一班刪除。
+- **`approval.queue_items`／`payroll_payslip`**（IP-10）：待審核的勞報單進「待我簽核」（不含金額、受領人、身分資料）。
+- **`payslip.dispatch_links`**（暫定號，M07 → M04）：`links_for_dispatch／links_for_payslip／link／unlink`，只回單號、狀態、受領人姓名、開單日期、已作廢旗標（**無金額**）；M07 不在 ⇒ 派發頁明說「薪資獎金模組未安裝」。**`dispatch.brief`**（M04 → M07）：派發簡要識別（編號、單號、案件、狀態、廠商名；無金額）；M04 不在 ⇒ 勞報單頁明說並不能新增關聯。
+- **IP-105 `payslip.remit`**：勞報單狀態由「須已簽回」放寬為已核准／已匯出／已簽回（Q13）；取消匯款退回付款前最近的狀態。
+
 ## IP-103　`payslip.payables`：勞報單待付款（M07 → M05 出納）
 
 對應使用者 2026-09-29 裁示：勞報單匯出、對方簽回上傳後，要能與出納、營運報表成本聯動（成本取應付總額、歸月依付款日期、出納回填既有傳票單號）。

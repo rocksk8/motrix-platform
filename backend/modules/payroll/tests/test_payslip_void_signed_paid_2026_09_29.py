@@ -179,8 +179,9 @@ def test_delete_last_signed_file_returns_to_exported(client, make_user):
 @_NEEDS_ACCOUNTING
 def test_mark_paid_needs_real_voucher_and_valid_date(client, make_user):
     tok = _su(client, make_user, "pv3_su1")
+    _insert_payslip("PS-202609-920", status="草稿")
+    assert _pay(client, tok, "PS-202609-920").status_code == 409          # 草稿不可付款（第46班 Q4：已核准／已匯出／已簽回才可；不再要求已簽回）
     _insert_payslip("PS-202609-921", status="已匯出")
-    assert _pay(client, tok, "PS-202609-921").status_code == 409          # 未簽回
     _upload(client, tok, "PS-202609-921")
     assert _pay(client, tok, "PS-202609-921", date="2026/09/30").status_code == 400
     assert _pay(client, tok, "PS-202609-921", vno="").status_code == 400

@@ -98,6 +98,7 @@ function cashierApp() {
     bonusPayNotice: '',
     // 勞報單待付款（IP-103 payslip.payables）：對方已簽回；出納填付款日期＋既有傳票單號
     payslipQueue: { available: false, visible: false, notice: '', items: [], canMarkPaid: false },
+    showLegacyPayslipTab: false,         // 第46班：勞報單核准後直接進「待付款申請」（IP-100 payroll_payslip）；舊 IP-103 頁籤隱藏一班（相容／回滾，下一班刪除）
     payslipForm: {},   // slipNo -> {date, voucherNo, saving, err}
     // 待付款申請（IP-100）
     payreqQueue: { available: false, notice: '', items: [], canPay: false },
@@ -229,6 +230,7 @@ function cashierApp() {
     // 採購單：匯款日＋付款條件必填；零用金支付單：付款方式必填（後端同規則，這裡只是提早提示）
     payreqExtraError(it) {
       const x = this.payreqExtra(it)
+      if (it.kind === 'payslip' && !(x.voucherNo || '').trim()) return '勞報單請填傳票單號'
       if (it.kind === 'purchase_order' && (!x.remitDate || !(x.payTerms || '').trim())) return '採購單請填匯款日與付款條件'
       if (it.kind === 'petty_cash' && !x.payMethod) return '零用金支付單請選付款方式'
       return ''
@@ -236,6 +238,7 @@ function cashierApp() {
     payreqExtraBody(it) {
       if (!it.kind) return {}
       const x = this.payreqExtra(it), b = {}
+      if (it.kind === 'payslip') { b.voucherNo = (x.voucherNo || '').trim(); return b }      // 勞報單（第46班）：付款日＋傳票單號（必填）；沒有實付／手續費／付款方式
       if (x.payMethod) b.payMethod = x.payMethod
       if (it.kind === 'purchase_order') { b.payTerms = (x.payTerms || '').trim(); b.remitDate = x.remitDate }
       return b

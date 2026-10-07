@@ -5,18 +5,22 @@ from core.registry import ModuleSpec
 
 import importlib
 
+from modules.payroll import payslip_payables
 from modules.payroll import bank_account, bonus, bonus_correction, bonus_payouts, bonus_queue, gl_events, payslip_payouts, remit_link
 from modules.payroll.api import bank_account as bank_account_api, bonus as bonus_api, bonus_correction as bonus_correction_api, payslips as payslips_api
+from modules.payroll.api import payslip_approval as payslip_approval_api, payslip_links as payslip_links_api
+from modules.payroll import payslip_links
 from modules.payroll import attachments   # 要在 api 之後：提供者用 payslips 的 _signed_path／_archive_dir
 
 _m0001 = importlib.import_module("modules.payroll.migrations.0001_payslip_void_signed_paid")
 _m0002 = importlib.import_module("modules.payroll.migrations.0002_bonus_corrections")
 _m0003 = importlib.import_module("modules.payroll.migrations.0003_user_bank_accounts")
+_m0004 = importlib.import_module("modules.payroll.migrations.0004_payslip_approval")
 
 MODULE = ModuleSpec(
     key="payroll",
-    routers=[payslips_api.router, bonus_correction_api.router, bonus_api.router, bank_account_api.router],
-    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up)],
+    routers=[payslips_api.router, payslip_approval_api.router, payslip_links_api.router, bonus_correction_api.router, bonus_api.router, bank_account_api.router],
+    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up)],
     providers={
         # IP-8：出納頁的獎金待發放與發放紀錄（M05）
         ("bonus.payouts", "payroll"): bonus_payouts._Payouts,
@@ -30,6 +34,8 @@ MODULE = ModuleSpec(
         ("expense.entries", "bonus_correction"): bonus_correction.expense_entries,
         # IP-103：出納頁的勞報單待付款（M05）；IP-9：已付款勞報單列入營運報表與月支出（M08，名稱 payslip）
         ("payslip.payables", "payroll"): payslip_payouts._Payables,
+        # IP-100（第46班）：核准後的勞報單進出納「待付款申請」（已核准即可付款；取代並最終退役 IP-103 頁籤）
+        ("payables.pending", "payroll_payslip"): payslip_payables._Payables,
         ("expense.entries", "payslip"): payslip_payouts._expense_entries,
         # IP-105（R12）：承攬商匯款單關聯勞報單、匯款時一併記為已付款
         ("payslip.remit", "payroll"): remit_link._Remit,
@@ -39,5 +45,11 @@ MODULE = ModuleSpec(
         ("gl.events", "payroll"): gl_events.gl_events,
         # IP-10（M01-PLAN §3-7）：M01「待我簽核」佇列的獎金分潤單與案件獎金分潤
         ("approval.queue_items", "payroll"): bonus_queue.queue_items,
+        # IP-10（第46班）：待審核的勞報單（不含金額、受領人、身分資料）
+        ("approval.queue_items", "payroll_payslip"): payslip_approval_api.queue_items,
+        # IP-93（第46班）：簽核佇列詳情（含身分證／收款帳號，經稽核的 reveal 端點；使用者 2026-10-07 裁示）
+        ("approval.detail", "payslip"): payslip_approval_api.detail,
+        # IP（暫定號，第46班 P3）：勞報單 ⇄ 承攬派發雙向連結（M07 → M04 派發頁；只回單號、狀態、受領人姓名、開單日期，不含金額）
+        ("payslip.dispatch_links", "payroll"): payslip_links._Links,
     },
 )
