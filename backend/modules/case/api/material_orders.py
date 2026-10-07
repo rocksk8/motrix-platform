@@ -23,7 +23,7 @@ from fastapi import APIRouter, HTTPException, Header, Body
 from db import get_db
 from helpers.auth import has_finance_access
 from helpers.case_access import require_case, require_case_money   # M01-O1：逐案拒絕＝查無（同一個 404）；money 版＝財務角色不受擁有者限制（第42班）
-from helpers.auth import has_finance_access, has_cashier_access  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
+from helpers.auth import has_finance_access, has_cashier_access, finance_duty_person  # noqa: E402  第42班：財務／出納只認「財務」角色與 superadmin
 from helpers import row_access
 from core.txn import begin_write
 from helpers import (

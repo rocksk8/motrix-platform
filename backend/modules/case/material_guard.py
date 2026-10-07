@@ -20,7 +20,7 @@
 """
 import json
 
-from helpers.auth import user_has_module, has_finance_access
+from helpers.auth import user_has_module, has_finance_access, finance_duty_person
 from helpers.dates import normalize_date
 from helpers.financial_mask import money_visible, material_money_visible
 from modules.case import material_approval as MA

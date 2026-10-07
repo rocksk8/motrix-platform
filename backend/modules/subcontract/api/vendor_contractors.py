@@ -19,7 +19,7 @@ from helpers.dates import normalize_date  # `AC2`（L1）
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 from modules.subcontract.api.contractors import _stamp_passbook
-from helpers.auth import has_finance_access  # 第42班（Q5）
+from helpers.auth import has_finance_access, finance_duty_person  # 第42班（Q5）；R2 D5 縫
 
 router = APIRouter()
 
