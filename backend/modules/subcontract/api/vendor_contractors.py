@@ -29,7 +29,7 @@ def _require_admin(user: dict):
     安全審查修正）：派發資料的金額/稅率等欄位後續會被凍結進正式的承攬商匯款憑證
     快照，建立/修改不該只要求登入，之前完全沒有角色門檻，任何登入使用者都能
     竄改。查詢類端點（list/get）維持唯讀不擋，跟其他模組一致。"""
-    if user["role"] not in ("superadmin", "admin", "finance"):          # 第42班：財務角色可改派發金額／發票日（Q5），所以也要過這道門
+    if user["role"] not in ("superadmin", "admin") and not finance_duty_person(user):          # 第42班：財務角色可改派發金額／發票日（Q5），所以也要過這道門
         raise HTTPException(403, "需要管理員權限")
 
 

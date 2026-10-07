@@ -43,7 +43,8 @@ def test_helpers_follow_role_not_flags(role):
 def test_non_finance_keys_still_follow_the_modules_json():
     from helpers.auth import user_has_module
     assert user_has_module({"role": "sales", "modules": json.dumps(["quotation"])}, "quotation")
-    assert not user_has_module({"role": "superadmin", "modules": "[]"}, "quotation")      # 其餘鍵不變（superadmin 走 require_any_module 直通）
+    assert user_has_module({"role": "superadmin", "modules": "[]"}, "quotation")          # R2 第1步 D4（選項 B）：守門層對 superadmin 明確「全部鍵」（其他角色的結果不變）
+    assert not user_has_module({"role": "admin", "modules": "[]"}, "quotation")
 
 
 def test_effective_modules():

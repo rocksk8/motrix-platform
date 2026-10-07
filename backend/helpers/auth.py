@@ -158,15 +158,154 @@ FINANCE_MODULE_KEYS = ("cashier", "finance", "financial_view")
 VALID_ROLES = ("superadmin", "admin", "sales", "engineer", "viewer", FINANCE_ROLE)
 
 
+# ── R2 第1步 D5：財務三鍵改讀生效權限（影子模式；設計 docs/platform/plans/R2-STEP1-EQUIV-ROLLBACK-T45.md §10.2）──────────
+#: `system_settings` 旗標值：缺／其他＝`off`（舊規則，只看基礎類別）；`shadow`＝回傳舊規則、同時算新規則、不同時寫限速稽核；`on`＝回傳新規則（本班不開，需使用者核准）。
+FINANCE_FLAG_KEY = "finance_via_effective"
+_FIN_MODE_TTL = 15.0           # 旗標讀取快取（秒）：off 路徑不查 DB；改旗標最多 15 秒後全程式生效（測試用 reset_finance_mode_cache）
+_FIN_GRANT_TTL = 10.0          # 影子模式下每人的「角色給的財務鍵／扣項」快取（秒）；`on` 模式不快取（扣項要立即生效）
+_FIN_ALERT_SECONDS = 3600      # 同一人同一鍵的影子差異告警：每小時至多 1 筆
+_fin_mode = {"at": -1e9, "mode": "off"}
+_fin_grants = {}               # user_id -> (monotonic, granted_keys, subtract_keys)
+_fin_alerted = {}              # (user_id, key) -> monotonic
+
+
+def reset_finance_mode_cache() -> None:
+    """測試與維運用：丟掉旗標與影子快取，下一次呼叫重讀。"""
+    _fin_mode.update(at=-1e9, mode="off")
+    _fin_grants.clear()
+    _fin_alerted.clear()
+
+
+def _finance_mode() -> str:
+    import time
+    now = time.monotonic()
+    if now - _fin_mode["at"] < _FIN_MODE_TTL:
+        return _fin_mode["mode"]
+    mode = "off"
+    try:
+        c = get_db()
+        try:
+            row = c.execute("SELECT value_json FROM system_settings WHERE key=?", (FINANCE_FLAG_KEY,)).fetchone()
+        finally:
+            c.close()
+        v = json.loads(row[0]) if row else "off"
+        mode = v if v in ("shadow", "on") else "off"
+    except Exception:                                   # noqa: BLE001  讀不到旗標＝舊規則（保守）
+        mode = "off"
+    _fin_mode.update(at=now, mode=mode)
+    return mode
+
+
+def _finance_grants(user_id, cache: bool):
+    """某人「已啟用職責角色給的財務鍵」與「財務鍵扣項」。表不存在（migration 未跑）⇒ 空。"""
+    import time
+    now = time.monotonic()
+    hit = _fin_grants.get(user_id) if cache else None
+    if hit and now - hit[0] < _FIN_GRANT_TTL:
+        return hit[1], hit[2]
+    granted, subs = set(), set()
+    c = get_db()
+    try:
+        try:
+            for (perms,) in c.execute("SELECT r.permissions FROM user_duty_roles b JOIN duty_roles r ON r.id=b.role_id"
+                                      " WHERE b.user_id=? AND r.active=1", (user_id,)).fetchall():
+                try:
+                    granted |= {k for k in json.loads(perms or "[]") if k in FINANCE_MODULE_KEYS}
+                except (TypeError, ValueError):
+                    pass
+            subs = {r[0] for r in c.execute("SELECT perm_key FROM user_perm_subtracts WHERE user_id=?", (user_id,)).fetchall()
+                    if r[0] in FINANCE_MODULE_KEYS}
+        except Exception:                               # noqa: BLE001  表不存在等
+            granted, subs = set(), set()
+    finally:
+        c.close()
+    if cache:
+        _fin_grants[user_id] = (now, granted, subs)
+    return granted, subs
+
+
+def finance_effective_keys(user: dict, cache: bool = False) -> frozenset:
+    """財務三鍵的「生效」集合（新規則）：superadmin ⇒ 三鍵全有；其餘 ＝（基礎類別 `finance` 隱含三鍵 ∪ 已啟用職責角色的財務鍵）− 個人扣項。
+    **原始勾選 `users.modules` 的財務鍵不計**（第42班：admin／sales 的惰性勾選不生效）。沒有 `id` 的 dict ⇒ 只看基礎類別。"""
+    role = (user or {}).get("role")
+    if role == "superadmin":
+        return frozenset(FINANCE_MODULE_KEYS)
+    keys = set(FINANCE_MODULE_KEYS) if role == FINANCE_ROLE else set()
+    uid = (user or {}).get("id")
+    if uid is not None:
+        granted, subs = _finance_grants(uid, cache)
+        keys = (keys | granted) - subs
+    return frozenset(keys)
+
+
+def _finance_shadow_report(user: dict, key: str, old: bool, new: bool) -> None:
+    import time
+    k = ((user or {}).get("id"), key)
+    now = time.monotonic()
+    if now - _fin_alerted.get(k, -1e9) < _FIN_ALERT_SECONDS:
+        return
+    _fin_alerted[k] = now
+    logger.warning("finance shadow diff: user=%s key=%s old=%s new=%s", k[0], key, old, new)
+    try:
+        from helpers.audit import _audit
+        _audit("", "permission.finance_shadow_diff", "user", str((user or {}).get("id") or ""), (user or {}).get("username") or "",
+               {"key": key, "old": old, "new": new, "role": (user or {}).get("role")})
+    except Exception:                                   # noqa: BLE001  稽核寫不進去不可影響判斷
+        pass
+
+
+def _finance_cap(user: dict, key: str) -> bool:
+    """財務三鍵單一縫。`off`＝舊規則；`shadow`＝回傳舊規則（新規則不同時寫限速稽核）；`on`＝新規則。新規則算不出來⇒ 一律退回舊規則（不因此多給或少給）。"""
+    old = (user or {}).get("role") in FINANCE_ROLES
+    mode = _finance_mode()
+    if mode == "off":
+        return old
+    try:
+        new = key in finance_effective_keys(user, cache=(mode == "shadow"))
+    except Exception:                                   # noqa: BLE001
+        logger.exception("finance_effective_keys failed; falling back to the old rule")
+        return old
+    if mode == "shadow":
+        if new != old:
+            _finance_shadow_report(user, key, old, new)
+        return old
+    return new
+
+
+def finance_duty_person(user: dict) -> bool:
+    """「財務角色（非 superadmin）」這個寫死 `role == "finance"` 的判斷點改走這一支（D5 附2：只改含 finance 字面值的點）。
+    `off`／`shadow`：`role == "finance"`；`on`：生效權限含 `finance` 鍵的非 superadmin。"""
+    old = (user or {}).get("role") == FINANCE_ROLE
+    mode = _finance_mode()
+    if mode == "off":
+        return old
+    try:
+        new = (user or {}).get("role") != "superadmin" and "finance" in finance_effective_keys(user, cache=(mode == "shadow"))
+    except Exception:                                   # noqa: BLE001
+        return old
+    if mode == "shadow":
+        if new != old:
+            _finance_shadow_report(user, "finance_duty_person", old, new)
+        return old
+    return new
+
+
 def has_finance_access(user: dict) -> bool:
     """財務金額可見／財務操作：只有 superadmin 與「財務」角色（不看 `modules` 勾選、不看 admin／sales）。
-    **superadmin 不變式（2026-10-03）**：本函式必含 superadmin 直通（守門：test_finance_role 靜態題）。"""
-    return (user or {}).get("role") in FINANCE_ROLES
+    **superadmin 不變式（2026-10-03）**：本函式必含 superadmin 直通（守門：test_finance_role 靜態題）。
+
+    R2 第1步 D5（2026-10-07）：旗標 `finance_via_effective`＝`off`（預設）時就是下面這一行；`shadow` 回傳同一個舊結果並比對新規則；
+    `on`（本班不開）才改看生效權限。見 `finance_effective_keys`。"""
+    if _finance_mode() == "off":
+        return (user or {}).get("role") in FINANCE_ROLES
+    return _finance_cap(user, "finance")
 
 
 def has_cashier_access(user: dict) -> bool:
-    """出納（登錄付款／標記已匯款／銀行對帳）：與財務同一條規則（使用者 2026-10-05 裁示合併）。"""
-    return has_finance_access(user)
+    """出納（登錄付款／標記已匯款／銀行對帳）：與財務同一條規則（使用者 2026-10-05 裁示合併）；D5 之後可個別被扣（旗標 `on` 時）。"""
+    if _finance_mode() == "off":
+        return has_finance_access(user)
+    return _finance_cap(user, "cashier")
 
 
 def finance_usernames(conn=None) -> list:
@@ -218,8 +357,10 @@ def user_has_module(user: dict, key: str) -> bool:
     寫法：`if user["role"] not in ("superadmin","admin") and not user_has_module(user,"cashier"): raise ...`
 
     2026-10-05：`FINANCE_MODULE_KEYS`（cashier／finance／financial_view）改由角色推導（見上），不看勾選。"""
+    if (user or {}).get("role") == "superadmin":          # R2 第1步 D4（選項 B）：守門層對 superadmin 明確「全部鍵」；`user["modules"]`／`effective_modules` 不動
+        return True
     if key in FINANCE_MODULE_KEYS:
-        return has_finance_access(user)
+        return _finance_cap(user, key) if _finance_mode() != "off" else has_finance_access(user)
     try:
         return key in json.loads(user.get("modules") or "[]")
     except Exception:
@@ -279,7 +420,9 @@ def can_see_financial(user: dict) -> bool:
     「簽核人是否一定看得到金額」，見 MODULE-AUDIT-2026-09-13.md §4。
     """
     # 2026-10-05（第42班，使用者裁示）：只剩 superadmin 與「財務」角色；admin／sales 直通與 financial_view 勾選都拿掉。
-    return has_finance_access(user)
+    if _finance_mode() == "off":
+        return has_finance_access(user)
+    return _finance_cap(user, "financial_view")
 
 
 def _require_user(authorization: str, require_superadmin: bool = False, module: str = None) -> dict:

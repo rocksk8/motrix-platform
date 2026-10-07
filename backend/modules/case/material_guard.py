@@ -104,7 +104,7 @@ def can_edit_orders(actor) -> bool:
     if actor is None:
         return True
     # 第42班（Q6）：日常作業（建立／送審／到貨確認）仍是一般管理——admin 維持；財務金額可視改成財務角色專屬，所以這裡改用材料申請自己的條件
-    return (actor.get("role") in ("superadmin", "admin", "finance") or user_has_module(actor, "project_manage")) and material_money_visible(actor)
+    return (actor.get("role") in ("superadmin", "admin") or finance_duty_person(actor) or user_has_module(actor, "project_manage")) and material_money_visible(actor)
 
 
 def _rej(out, item_id, field, code, message):

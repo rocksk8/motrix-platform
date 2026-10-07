@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-07（wip/t45-r2-step1-impl）：寫死「財務角色」的判斷點改走財務判斷縫（行為不變）
+- `material_guard.can_edit_orders`、`api/material_orders.py`（兩處）：`role == "finance"` 改呼叫 `helpers.auth.finance_duty_person`（旗標 off／shadow 時＝原判斷；on 時改看生效權限，本班不開）。
+
 ## 1.0.154 — 2026-10-06（wip/t44-inapp-bell）：報價單核准時寫一則站內通知給申請人
 - `api/quotations.py`：報價單最後一層核准後，commit 之後對申請人寫 `quotation_approved` 站內通知（點了開 `quotation-form.html?id=<單號>`；文字不含金額；同一報價單只留一列）。
 - 其他單據的核准通知文字與連結由 wip/t44-applicant-notify 負責。

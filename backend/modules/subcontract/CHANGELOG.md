@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## (next) — 2026-10-07（wip/t45-r2-step1-impl）：寫死「財務角色」的判斷點改走財務判斷縫（行為不變）
+- `api/vendor_contractors.py::_require_admin`：`role == "finance"` 改呼叫 `helpers.auth.finance_duty_person`（off／shadow ＝ 原判斷）。
+
 ## 1.1.20 — 2026-10-06（wip/t44-applicant-notify）：承攬派發信件主旨寫出結果
 - `dispatch_notify`：派發／派發完工信的主旨與事由由「派發 單號」改為「派發 單號 待審核／輪到您審核／已核准／已退回」（同一張派發不同事件的主旨不再相同）。
 - `dispatch_approval`：核准／退回的站內通知加連結（案件頁）；訊息本來就含派發單號。

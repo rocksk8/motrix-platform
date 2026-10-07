@@ -116,14 +116,14 @@ def update_material_orders(quote_no: str,
 
         # 2. 擁有者檢查：非 admin+ 不能碰別的業務的案件（quote_no 可列舉）
         require_case_money(user, q, quote_no)               # 財務角色可「看」任何案件（GET／匯款／發票日維持）；編輯清單另在下面收窄
-        if user["role"] == "finance" and not row_access.visible("case", user, q):
+        if finance_duty_person(user) and not row_access.visible("case", user, q):
             # （使用者裁示 a）：財務角色對非自己負責（非業務／協作者）案件的一般叫料清單只能看、不能改；付款相關欄位走匯款申請／出納端點，不受影響。superadmin 不受限。
             raise HTTPException(403, "財務角色只能檢視非自己負責案件的材料申請清單，不能編輯；付款請走匯款申請與出納")
 
         data = json.loads(q["data_json"] or "{}")
 
         # 3. 權限檢查：只有 admin+ 或有報價單編輯模組的使用者可以修改叫料
-        if user["role"] not in ("superadmin", "admin", "finance") and not user_has_module(user, "project_manage"):
+        if user["role"] not in ("superadmin", "admin") and not finance_duty_person(user) and not user_has_module(user, "project_manage"):
             raise HTTPException(403, "權限不足：只有管理員、財務角色或專案經理可以修改材料申請")
         if not material_money_visible(user):          # 第42班（Q6）：材料申請日常作業維持 admin
             # CM13（2026-09-24）：這支整份取代叫料清單且單價／小計為必填——看不到金額的人

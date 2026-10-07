@@ -76,7 +76,7 @@ def test_require_user_modules_string_is_byte_identical_for_users_without_duty_da
             me = client.get("/api/auth/me", headers={"Authorization": "Bearer " + tok})
             assert me.status_code == 200 and me.json()["modules"] == _legacy_effective(role, raw)
             for k in KEYS:
-                want = (A.has_finance_access(user) if k in ("cashier", "finance", "financial_view") else k in shape)
+                want = (A.has_finance_access(user) if k in ("cashier", "finance", "financial_view") else (role == "superadmin" or k in shape))   # D4：superadmin 守門層全部鍵
                 assert A.user_has_module(user, k) is want, (role, shape, k)
 
 

@@ -17,6 +17,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from core.txn import begin_write  # noqa: E402
+from helpers.duty_roles import HIGH_SENSITIVITY_KEYS  # noqa: E402
 
 
 def _connect(path):
@@ -40,8 +41,11 @@ def plan(conn) -> list:
             raw = []
         new = dr.resolve_raw_modules(conn, r["id"], raw)
         subs = [x[0] for x in conn.execute("SELECT perm_key FROM user_perm_subtracts WHERE user_id=? ORDER BY perm_key", (r["id"],))]
+        high = sorted({k for (perms,) in conn.execute(
+            "SELECT r.permissions FROM user_duty_roles b JOIN duty_roles r ON r.id=b.role_id WHERE b.user_id=? AND r.active=1", (r["id"],))
+            for k in dr._loads(perms, []) if k in dr.HIGH_SENSITIVITY_KEYS})                 # R2：綁定帶進高敏感鍵的人（回滾前給使用者看）
         out.append({"id": r["id"], "username": r["username"], "role": r["role"], "before": raw, "after": list(new), "subtracts": subs,
-                    "changed": list(new) != raw})
+                    "highSensitive": high, "changed": list(new) != raw})
     return out
 
 
@@ -71,6 +75,9 @@ def main(argv=None):
                                                "、".join(gained) or "-", "、".join(lost) or "-",
                                                "　⚠ 有個人扣項：" + "、".join(it["subtracts"]) if it["subtracts"] else ""))
         with_subs = [i["username"] for i in items if i["subtracts"]]
+        with_high = [i["username"] for i in items if i["highSensitive"]]
+        if with_high:
+            print("⚠ 綁定含高敏感鍵的人（%s）：%s" % ("、".join(HIGH_SENSITIVITY_KEYS), "、".join(with_high)))
         if with_subs:
             print("⚠ 有個人扣項的人（回滾後這些權限若不寫回就會復活）：" + "、".join(with_subs))
         if not a.apply:
