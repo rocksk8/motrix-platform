@@ -21,6 +21,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 def main():
@@ -28,9 +29,9 @@ def main():
     ap.add_argument("--db", default=None, help="要讀的 sqlite 檔（預設用 db.DB_PATH）")
     args = ap.parse_args()
 
+    import _dbbind
     import db as dbmod
-    if args.db:
-        dbmod.DB_PATH = args.db
+    _dbbind.bind(args.db)
     from helpers.tax_calc import payment_item_amounts
 
     conn = dbmod.get_db()

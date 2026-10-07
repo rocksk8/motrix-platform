@@ -19,6 +19,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 FINANCE_KEYS = ("cashier", "finance", "financial_view")
 #: 舊規則下「靠角色直通」就有財務能力的角色（與 helpers/auth.py 舊 can_see_financial／各處 role in (...) 對應）
@@ -92,7 +93,10 @@ def format_text(rep: dict) -> str:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--db", help="要讀的 sqlite 檔（預設 db.DB_PATH；檔案不存在就拒絕，不建空庫）")
     args = ap.parse_args()
+    import _dbbind
+    _dbbind.bind(args.db)
     sys.stdout.reconfigure(encoding="utf-8")
     import db
     conn = db.get_db()

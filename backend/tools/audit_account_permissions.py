@@ -27,6 +27,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
 import db  # noqa: E402
@@ -79,7 +80,10 @@ def _audit() -> list:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", action="store_true", help="輸出 JSON 而非文字報告")
+    ap.add_argument("--db", help="要讀的 sqlite 檔（預設 db.DB_PATH；檔案不存在就拒絕，不建空庫）")
     args = ap.parse_args()
+    import _dbbind
+    _dbbind.bind(args.db)
 
     results = _audit()
 

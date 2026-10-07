@@ -27,10 +27,10 @@ from core.txn import begin_write  # noqa: E402
 
 
 def _connect(path):
+    import _dbbind
     if path:
-        conn = sqlite3.connect(path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        return _dbbind.connect_path(path)
+    _dbbind.bind()                       # 沒給 --db ⇒ 用 db.DB_PATH，但檔案不存在就拒絕（不建空庫）
     import db
     return db.get_db()
 

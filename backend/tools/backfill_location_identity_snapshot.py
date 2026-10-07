@@ -31,6 +31,7 @@
     python tools/backfill_location_identity_snapshot.py --apply   # 真的寫入
 """
 import json
+import os
 import sys
 
 try:
@@ -38,7 +39,7 @@ try:
 except Exception:                                            # noqa: BLE001
     pass
 
-sys.path.insert(0, ".")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # backend/（不靠目前目錄）
 
 from db import get_db
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
@@ -60,7 +61,15 @@ def _candidates(conn):
 
 
 def main():
-    apply = "--apply" in sys.argv[1:]
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--db", help="要處理的 sqlite 檔（預設 db.DB_PATH；檔案不存在就拒絕，不建空庫）")
+    args = ap.parse_args()
+    apply = args.apply
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import _dbbind
+    _dbbind.bind(args.db)
     conn = get_db()
     try:
         targets = _candidates(conn)

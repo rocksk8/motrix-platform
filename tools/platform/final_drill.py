@@ -26,6 +26,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -47,6 +48,8 @@ DEFAULT_V9 = r"C:\Users\hichan\Desktop\MOTRIX-ERP"
 DEFAULT_ROOT = r"D:\開發測試檔\MOTRIX-FINAL-DRILL"  # 2026-09-29 使用者：開發測試目錄不直接建在 D 槽根目錄
 _SKIP_DIRS = {".git", "node_modules", "__pycache__", "deploy_packages", ".pytest_cache"}
 _DB_SUFFIXES = (".db", ".db-wal", ".db-shm", ".db-journal")
+#: 冒煙收到 428 ＝ 本公司資料閘門擋住（演練設定有誤），不是產品端點壞了；報告要分開寫
+GATE_428 = "428 company_setup_required：本公司資料閘門未通過（演練設定問題，非端點錯誤）"
 DRILL_ADMIN = ("final_drill_admin", "Final-Drill-Pass-2026!")
 
 #: 冒煙（D7-CHECKLIST §4，主持 2026-09-26）：分兩部分。
@@ -516,6 +519,46 @@ def ensure_drill_admin(install: str) -> None:
     assert _py_in(backend, code).endswith("OK")
 
 
+def ensure_drill_company(install: str) -> dict:
+    """演練複本的本公司資料確認（E4 閘門，COMPANY-SETUP-GATE）：沒有確認紀錄 ⇒ 白名單外的 /api 一律 428，冒煙全紅。
+    只寫演練複本的庫與識別檔（完整回滾會還原庫）；用非開發者、非示範的虛構公司＋通過檢查碼的統編。
+    舊程式（沒有 helpers/company_setup.py）⇒ 回 skipped，不當作失敗。"""
+    backend = os.path.join(install, "backend")
+    if not os.path.isfile(os.path.join(backend, "helpers", "company_setup.py")):
+        return {"skipped": "這份程式沒有本公司資料閘門"}
+    code = ("import json,sqlite3;from helpers import company_setup as C;"
+            "tax=next('%%08d'%%n for n in range(10000000,10001000) if C.ubn_valid('%%08d'%%n));"
+            "c=sqlite3.connect('motrix_erp.db');"
+            "C._set(c,'company_profile',{'name':'演練測試有限公司','tax_id':tax,'contact_info':'Tel: 02-0000-0000 final-drill@example.invalid'});"
+            "r=C.confirm(c,%r);c.commit();"
+            "print(json.dumps({'tax':tax,'via':r['via'],'gate':C.status(c).get('configured')}))" % DRILL_ADMIN[0])
+    out = json.loads(_py_in(backend, code).splitlines()[-1])
+    assert out["gate"], "演練公司資料確認後閘門仍未通過：%s" % out
+    return out
+
+
+def schema_gap(v9_backend: str, new_backend: str) -> dict:
+    """V9 程式的 schema 版本（db.CURRENT_VERSION）對照新版認得的 V9 基準（db.V9_BASELINE）。
+    V9 > 基準 ⇒ V9 啟動（完整回滾後的 6a）會把庫升到 V9 的版本，之後新版 init_db 以 SchemaNewerThanBaseline 拒絕（第 6b 步），
+    成因是 V9 維護期新增的 migration 沒有同號追進新版 db._MIGRATIONS。只讀兩份 db.py 文字，不 import。"""
+    def num(path, name):
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                m = re.search(r"^%s\s*=\s*(\d+)" % name, f.read(), re.M)
+            return int(m.group(1)) if m else None
+        except OSError:
+            return None
+    v9 = num(os.path.join(v9_backend, "db.py"), "CURRENT_VERSION")
+    base = num(os.path.join(new_backend, "db.py"), "V9_BASELINE")
+    out = {"v9_current_version": v9, "new_v9_baseline": base}
+    out["ok"] = v9 is not None and base is not None and v9 <= base
+    if not out["ok"]:
+        out["reason"] = ("讀不到版本號" if v9 is None or base is None else
+                         "V9 程式 schema v%d > 新版基準 v%d：V9 的 migration %d～%d 沒有追進新版 db._MIGRATIONS；"
+                         "第 6a 步 V9 啟動會把庫升到 v%d，第 6b 步再轉換會被拒絕" % (v9, base, base + 1, v9, v9))
+    return out
+
+
 def smoke(install: str) -> dict:
     port = UD.free_port()
     # 演練自己起的服務要開 API 文件（GET 全掃靠 /openapi.json 列路徑）；正式機預設關（main.MOTRIX_API_DOCS）
@@ -548,7 +591,8 @@ def smoke(install: str) -> dict:
                 code = e.code
             except Exception as e:                              # noqa: BLE001
                 code = "%s" % type(e).__name__
-            out["checks"].append({"name": name, "path": path, "status": code, "ok": code == 200})
+            out["checks"].append({"name": name, "path": path, "status": code, "ok": code == 200,
+                                  **({"reason": GATE_428} if code == 428 else {})})
         for name, method, path, expect in absent_probe_plan(os.path.join(install, "backend")):
             if expect is None:
                 out["checks"].append({"name": name, "path": path, "status": None, "expect": 404, "ok": False,
@@ -567,6 +611,9 @@ def smoke(install: str) -> dict:
         T._stop(proc)
         log.close()
     out["ok"] = smoke_verdict(out)
+    for c in out["checks"]:                                  # 報告摘要只留 400 字 ⇒ 紅的項目在輸出裡逐項印出
+        if not c["ok"]:
+            print("[D7]   冒煙紅：%s %s ⇒ %s%s" % (c["name"], c["path"], c["status"], "（%s）" % c["reason"] if c.get("reason") else ""), flush=True)
     return out
 
 
@@ -696,6 +743,8 @@ def main(argv=None):
                 s["rev"] = subprocess.run(["git", "-C", str(T.REPO), "rev-parse", a.new_rev],
                                           capture_output=True, text=True).stdout.strip()
             _must(rep)
+        with step(rep, "3b V9 schema 對照新版基準") as s:        # 不停止：後面的步驟仍要跑，總判定照紅
+            s.update(schema_gap(os.path.join(install, "backend"), os.path.join(new_src, "backend")))
         with step(rep, "4a 預檢") as s:
             pf = U.preflight(install, v9_port_open=False, require_no_dev_markers=False)
             s.update(problems=pf["problems"]); s["ok"] = pf["ok"]
@@ -715,6 +764,7 @@ def main(argv=None):
         _must(rep)
         with step(rep, "5 冒煙") as s:
             ensure_drill_admin(install)
+            s["drill_company"] = ensure_drill_company(install)
             s["drill_admin"] = DRILL_ADMIN[0] + "（只存在演練複本；完整回滾會把它一起還原掉）"
             s.update(smoke(install))
         # 稽核 D K-M1：完整回滾要用**第一份**備份（轉換前的 V9 庫），而且要證明還原後與原始庫邏輯內容相同。

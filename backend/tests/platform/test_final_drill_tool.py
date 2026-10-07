@@ -504,3 +504,87 @@ def test_report_says_when_the_explain_did_not_run():
         "absence": [{"ip": "IP-16", "name": "n", "path": "/p", "status": 200, "expect": 200, "lacking": [], "ok": True}]}}]}
     text = "\n".join(FD.explain_report_lines(rep))
     assert "IP-16" in text and "modules.lock.json" in text
+
+
+# ── 第 46 班：本公司資料閘門（428）與離線工具不建空庫 ─────────────────────────────
+
+@pytest.mark.company_gate
+def test_drill_company_confirmation_opens_the_gate(tmp_path, monkeypatch):
+    """演練複本沒有確認紀錄 ⇒ 全部 /api 428；ensure_drill_company 寫入後閘門必須是「已設定」。"""
+    import contextlib
+    import io
+    sys.path.insert(0, str(REPO / "backend"))
+    import db
+    from helpers import company_setup as C
+    install = tmp_path / "install"
+    (install / "backend" / "helpers").mkdir(parents=True)
+    (install / "backend" / "helpers" / "company_setup.py").write_text("# stub marker\n")
+    dbp = install / "backend" / "motrix_erp.db"
+    db.init_db(str(dbp))
+    monkeypatch.setattr(C, "FILES_OVERRIDE", [str(tmp_path / "id"), str(tmp_path / "sig"), str(tmp_path / "grace")])
+
+    def run_here(backend, code):                     # 以行程內執行代替子行程（FILES_OVERRIDE 只在本行程有效）
+        monkeypatch.chdir(backend)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            exec(code, {})
+        return buf.getvalue().strip()
+    monkeypatch.setattr(FD, "_py_in", run_here)
+    conn = sqlite3.connect(str(dbp))
+    conn.execute("DELETE FROM system_settings WHERE key IN ('company_profile', ?)", (C.CONFIRMATION_SETTING,))
+    conn.commit()
+    assert C.status(conn)["configured"] is False         # 起點＝V9 轉換後的複本：沒有確認紀錄
+    conn.close()
+    out = FD.ensure_drill_company(str(install))
+    assert out["gate"] is True and C.ubn_valid(out["tax"]) and out["tax"] != C.RESERVED_DEMO_UBN
+    conn = sqlite3.connect(str(dbp))
+    assert C.status(conn)["configured"] is True
+    assert not C.is_developer_identity(C._get(conn, "company_profile"))
+    conn.close()
+
+
+def test_drill_company_skips_programs_without_the_gate(tmp_path):
+    (tmp_path / "backend").mkdir()
+    assert "skipped" in FD.ensure_drill_company(str(tmp_path))
+
+
+def test_drill_428_is_labelled_as_gate_not_endpoint_failure():
+    assert "428" in FD.GATE_428 and "閘門" in FD.GATE_428
+
+
+def test_offline_tool_refuses_missing_db_without_creating_it(tmp_path):
+    sys.path.insert(0, str(REPO / "backend" / "tools"))
+    import _dbbind
+    missing = tmp_path / "nope.db"
+    with pytest.raises(SystemExit) as e:
+        _dbbind.bind(str(missing))
+    assert e.value.code == 2 and not missing.exists()
+    with pytest.raises(SystemExit):
+        _dbbind.connect_path(str(missing))
+    assert not missing.exists()
+
+
+@pytest.mark.parametrize("tool", ["audit_account_permissions", "backfill_location_identity_snapshot",
+                                  "finance_role_impact_report", "list_payment_anomalies",
+                                  "duty_roles_export_effective"])
+def test_offline_tools_with_db_flag_never_create_an_empty_db(tmp_path, tool):
+    import subprocess
+    missing = tmp_path / "nope.db"
+    r = subprocess.run([sys.executable, str(REPO / "backend" / "tools" / (tool + ".py")),
+                        "--db", str(missing)], cwd=str(tmp_path), capture_output=True, timeout=120,
+                       env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "MOTRIX_DISABLE_SCHEDULERS": "1"})
+    assert r.returncode == 2, r.stderr[-400:]
+    assert not missing.exists() and not list(tmp_path.glob("*.db"))
+
+
+@pytest.mark.parametrize("v9,base,ok", [(116, 116, True), (115, 116, True), (118, 116, False)])
+def test_schema_gap_flags_v9_ahead_of_baseline(tmp_path, v9, base, ok):
+    for name, text in (("v9", "CURRENT_VERSION = %d\n" % v9), ("new", "CURRENT_VERSION = %d\nV9_BASELINE = %d\n" % (base, base))):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "db.py").write_text(text)
+    r = FD.schema_gap(str(tmp_path / "v9"), str(tmp_path / "new"))
+    assert r["ok"] is ok and (ok or ("117" in r["reason"] and "118" in r["reason"]))
+
+
+def test_schema_gap_unreadable_is_not_a_pass(tmp_path):
+    assert FD.schema_gap(str(tmp_path / "x"), str(tmp_path / "y"))["ok"] is False
