@@ -51,6 +51,10 @@
 - D4：superadmin 在守門層（`user_has_module`）為「全部鍵」，可見面不變。D5：財務判斷改讀生效權限的**影子模式**（旗標 `finance_via_effective`，預設 off；本班不切 on）。不改任何人看得到什麼。
 - ⚠ 影響權限判斷：最高管理者（superadmin）現在對 `user_has_module` 任何鍵都通過（D4，使用者裁示選項 B）；兩個既有斷言因此更新（`test_finance_role::test_non_finance_keys_still_follow_the_modules_json`、`test_duty_roles_equivalence::test_require_user_modules_string_is_byte_identical…`）。其他角色結果不變。
 
+## 2026-10-07 簽核佇列詳情顯示費用單據的表單欄位（fix/pr-remark-in-queue）
+
+- 請購單等費用單據在簽核佇列的詳情，現在會一併顯示表單上填的欄位（請購單：採購類型、緊急程度、需求日期、採購備註說明；採購單、差旅、零用金也各自顯示自己的欄位）。之前只看得到類別、項目、數量這幾個固定欄位。
+
 ## 2026-10-06 站內通知鈴鐺所有角色可見、點擊開單、90 天保留（wip/t44-inapp-bell）
 
 - 一般使用者也有通知鈴鐺與未讀數字；點通知標已讀並開對應單據（`notifications.link`）；核准類通知同單同人只留一列；報價單核准寫通知給申請人；通知文字金額對無財務可視者遮蔽；通知保留 90 天自動清理（每日檢查）。管理員鈴鐺行為不變。
