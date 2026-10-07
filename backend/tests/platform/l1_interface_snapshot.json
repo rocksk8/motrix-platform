@@ -1,5 +1,5 @@
 {
- "core_version": "1.117",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -944,6 +944,23 @@
   "helper:part_catalog": {
    "PART_CATEGORIES": "const",
    "PART_CATEGORY_PREFIX": "const"
+  },
+  "helper:payable_due_core": {
+   "CALENDAR_SOURCES": "const",
+   "EVENT_CODE": "const",
+   "GUARD_PREFIX": "const",
+   "MAIL_KEYS": "const",
+   "MAX_WAIT_SECONDS_PER_RUN": "const",
+   "SOON_DAYS": "const",
+   "candidate_planned_dates": "def(today, is_wd)",
+   "due_kind": "def(planned, today, is_wd)",
+   "effective_send_day": "def(nominal, is_wd, limit=…)",
+   "next_working_day": "def(nominal, is_wd, limit=…)",
+   "notify_finance": "def(kind, source, key, ident, planned, link=…)",
+   "prune_guards": "def(today)",
+   "run_scan": "def(items, today, *, is_wd, monotonic=…, send=…, link=…, max_wait=…)",
+   "send_reminder": "def(kind, rows, link, ident, out=…)",
+   "sync_event": "def(source, key, item=…)"
   },
   "helper:prefill_sources": {
    "PREFILL_SOURCES": "const",

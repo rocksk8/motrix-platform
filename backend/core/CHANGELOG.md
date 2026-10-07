@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-07（wip/t45-paydate-l1：預定付款日共用提醒庫）
+- L1（新增，向下相容）：新單位 `helpers/payable_due_core.py`（使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）——`due_kind`／`effective_send_day`／`next_working_day`／`candidate_planned_dates`（3 天前、當天、逾期＝預定日後第 1 個工作日；規則自 M01 `payable_reminders` 搬入）、`send_reminder`／`notify_finance`（財務群組信＋站內通知，不含金額）、`prune_guards`／`run_scan`（guard、寄送迴圈、等待上限）、`sync_event`／`CALENDAR_SOURCES`（行事曆「付款待辦」來源開關：案件額外支出、承攬商匯款、叫料匯款；**勞報單不在名單 ⇒ 零呼叫**）。純函式、不讀時鐘（日期與工作日判斷由呼叫端傳入）。
+- 信件類型 `payable_due_overdue`（預定付款日已逾期，財務群組）由 M01 登記，與 `payable_due_soon`／`payable_due_today` 同；M01 不在 ⇒ 類型未登記 ⇒ 寄信 fail-closed（只給超級管理員），已知取捨（承攬商匯款綁案件）。
+- 薄接線：M01（案件額外支出＋叫料匯款）、M04（承攬商匯款，`daily.check` 提供者 `subcontract_payable_due`）；M05 出納端點 `PATCH /api/cashier/pending-payables/{source}/{key}/planned-pay-date`、`PATCH /api/cashier/payable-queue/{voucher_no}/planned-pay-date`。
+- 測試：`modules/case/tests/test_payable_due_core_t45.py`、`modules/subcontract/tests/test_voucher_payable_due_t45.py`。
+
 ## 1.117 — 2026-10-06（wip/t44-inapp-bell：站內通知所有角色可見、點擊開單、90 天保留）
 - L1（新增，向下相容）：`notifications.link` 欄位與兩個索引（core 未取號 migration，冪等）；`helpers.audit._notify(username, type_, ref_id, ref_label, message, link=None)` 新增選填參數 `link`（只准「頁面檔名.html＋選填查詢字串」，不合格丟棄但通知照寫）；**核准類通知（type 以 `_approved` 結尾）同一 (type, ref_id, username) 只留一列**（單一 INSERT…WHERE NOT EXISTS，原子）；通知文字裡的金額（`NT$ …`、`… 元`）對沒有財務金額可視的收件人（財務角色／superadmin 以外）在伺服器端統一遮成「（金額略）」；新增 `helpers.audit.purge_old_notifications()`（保留 90 天，已讀未讀都清；分批、每次有上限、冪等），由每日檢查（`helpers/daily_checks.run_once`，每日 08:00／啟動補跑）呼叫；`GET /api/notifications/mine` 回傳多一個 `link` 鍵。
 - 前端：通知鈴鐺（`sidebar.js`／`notif.js`）所有角色可見（原本只有管理員；一般使用者只掛隱形資料元件），點通知＝標已讀並開 `link`（前端再驗一次格式）；「查看全部操作紀錄」連結維持只給管理員。

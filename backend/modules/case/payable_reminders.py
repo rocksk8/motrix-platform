@@ -2,9 +2,11 @@
 """預定付款日提醒信（2026-10-05，使用者裁示）：預定付款日的前 3 天與當天，寄給財務。
 
 [單位] case:payable_reminders    [層] L2（M01）    [穩定度] 實作
-[公開介面] run(today=None)（`daily.check` 每日 08:00／啟動補跑，由 `case_deadlines.run_daily_checks` 呼叫）
-[對象] 已核准、未付款、未作廢、要出納付款的類型（`payable_calendar.eligible`）且 `planned_pay_date` 是合法日期的案件額外支出
+[公開介面] run(today=None)；日期規則、guard、寄送迴圈、站內通知已搬到 L1 `helpers.payable_due_core`（第 45 班 Q8；本檔只保留「查案件額外支出＋叫料匯款的待付款列」與信件類型登記）
+[公開介面（相容）] due_kind(planned, today)、effective_send_day(nominal)、is_working_day(d)（測試換假日接縫的唯一入口）（`daily.check` 每日 08:00／啟動補跑，由 `case_deadlines.run_daily_checks` 呼叫）
+[對象] 案件額外支出與叫料匯款申請（已核准、還有剩餘應付、`planned_pay_date` 合法；承攬商匯款由 M04 自己的薄接線呼叫同一支 L1 庫）。額外支出：已核准、未付款、未作廢、要出納付款的類型（`payable_calendar.eligible`）且 `planned_pay_date` 是合法日期的案件額外支出
        （kind='' 舊版＋採購單／差旅／零用金；請購單不進出納 ⇒ 不提醒）。沒填預定付款日 ⇒ 不提醒。
+[時機] 逾期（Q2，第 45 班）：預定日後第 1 個工作日寄 1 封 `payable_due_overdue`，不週提。規則細節見 `helpers/payable_due_core.py`。
 [時機] 名義日：預定日 − 3 天 ⇒ `payable_due_soon`；預定日當天 ⇒ `payable_due_today`。**名義日不是工作日（週六、週日）就提前到前一個工作日寄**
        （使用者 2026-10-05：週末到期 ⇒ 週五寄；3 天前落在週末 ⇒ 前一個週五寄）。若「3 天前」與「當天」折到同一個寄信日 ⇒ **只寄一封**（當天那封，
        內文為「今日到期」），兩把 guard 都寫。非工作日這天不寄任何提醒（延到前一個工作日已寄過）。
@@ -26,13 +28,13 @@
 """
 import logging
 import time
-from datetime import date, timedelta
+from datetime import date
 
 from db import get_db
-from helpers import _get_setting, _set_setting
 from helpers import business_days as _bd
 from helpers import email_notify as _en
 from helpers import mail_types as _mt
+from helpers import payable_due_core as _core
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +42,13 @@ _mt.register("payable_due_soon", "預定付款日將到（3 天前）", "busines
              "請款的預定付款日將到，到期未付款會影響對廠商或受款人的付款承諾。", "請登入系統，於出納的「待付款申請」確認並安排付款。", owner="case")
 _mt.register("payable_due_today", "預定付款日當天", "business", "finance", "財務",
              "請款的預定付款日就是今天，尚未登錄付款。", "請登入系統，於出納的「待付款申請」登錄付款；若需改期請更新預定付款日。", owner="case")
+_mt.register("payable_due_overdue", "預定付款日已逾期", "business", "finance", "財務",
+             "請款的預定付款日已過（之後第 1 個工作日提醒一次），尚未登錄付款。", "請登入系統，於出納的「待付款申請」登錄付款，或更新預定付款日。", owner="case")
 
-SOON_DAYS = 3
-MAX_WAIT_SECONDS_PER_RUN = 120          # 一次掃描等寄送結果的總時間上限（秒）
+SOON_DAYS = _core.SOON_DAYS
+MAX_WAIT_SECONDS_PER_RUN = _core.MAX_WAIT_SECONDS_PER_RUN          # 一次掃描等寄送結果的總時間上限（秒）；測試可 monkeypatch 本檔的值（run 時傳給核心）
 _monotonic = time.monotonic              # 測試可 monkeypatch
-_GUARD = "payable_due_notif."
+_GUARD = _core.GUARD_PREFIX
 
 
 def is_working_day(d: date) -> bool:
@@ -52,39 +56,21 @@ def is_working_day(d: date) -> bool:
     return _bd.is_working_day(d)
 
 
+def _wd(d: date) -> bool:
+    return is_working_day(d)             # 每次呼叫才解析模組全域名稱：測試換掉 is_working_day 要生效
+
+
 def effective_send_day(nominal: date, limit: int = 14) -> date:
-    """名義日 ⇒ 實際寄信日：本身是工作日就是它，否則往前找最近的工作日（`limit` 天內找不到 ⇒ 原日期，不無窮迴圈）。"""
-    d = nominal
-    for _ in range(limit):
-        if is_working_day(d):
-            return d
-        d -= timedelta(days=1)
-    return nominal
+    return _core.effective_send_day(nominal, _wd, limit)
 
 
 def due_kind(planned: str, today: date) -> tuple:
-    """⇒ (要寄哪一封 '' ／soon／today, 要寫 guard 的 [(kind, 寄信日)])。折到同一天 ⇒ 只回 today，但兩把 guard 都要寫。"""
-    p = date.fromisoformat(planned)
-    e_soon, e_today = effective_send_day(p - timedelta(days=SOON_DAYS)), effective_send_day(p)
-    if e_soon == e_today:
-        return ("today", [("soon", e_soon), ("today", e_today)]) if e_today == today else ("", [])
-    if e_today == today:
-        return "today", [("today", e_today)]
-    if e_soon == today:
-        return "soon", [("soon", e_soon)]
-    return "", []
+    """⇒ (要寄哪一封 '' ／soon／today／overdue, 要寫 guard 的 [(kind, 寄信日)])。折到同一天 ⇒ 只回 today，但兩把 guard 都要寫。"""
+    return _core.due_kind(planned, today, _wd)
 
 
 def _candidate_planned_dates(today: date) -> list:
-    """今天可能要寄的預定日：寄信日＝今天的名義日（今天 ＋ 其後連續的非工作日）及其 +3 天。今天不是工作日 ⇒ []。"""
-    if not is_working_day(today):
-        return []
-    span = [today]
-    d = today + timedelta(days=1)
-    while not is_working_day(d) and len(span) < 14:
-        span.append(d)
-        d += timedelta(days=1)
-    return sorted({(x + timedelta(days=k)).isoformat() for x in span for k in (0, SOON_DAYS)})
+    return _core.candidate_planned_dates(today, _wd)
 
 
 def _mail(kind, rows, link, ident, out=None):
@@ -93,76 +79,74 @@ def _mail(kind, rows, link, ident, out=None):
         return _en.send_registered("payable_due_soon", title="預定付款日將到", rows=rows, to_group=True,
                                    badge_text="3 天後到期", badge_color="#D97706", link=link, button_text="前往出納",
                                    reason=ident, wait=True, out=out, note="您好，以下請款的預定付款日還有 3 天，請安排付款。")
+    if kind == "overdue":
+        return _en.send_registered("payable_due_overdue", title="預定付款日已逾期", rows=rows, to_group=True,
+                                   badge_text="已逾期", badge_color="#7F1D1D", link=link, button_text="前往出納",
+                                   reason=ident, wait=True, out=out, note="您好，以下請款的預定付款日已過，尚未登錄付款；請安排付款或更新預定付款日。")
     return _en.send_registered("payable_due_today", title="預定付款日當天", rows=rows, to_group=True,
                                badge_text="今日到期", badge_color="#DC2626", link=link, button_text="前往出納",
                                reason=ident, wait=True, out=out, note="您好，以下請款的預定付款日就是今天，尚未登錄付款。")
 
 
+def _expense_items(conn, cands):
+    """案件額外支出（來源 `case`）：guard_id 沿用舊格式（純 id），相容切換前已寫的 guard。"""
+    from modules.case import payable_calendar as PC
+    out = []
+    for r in conn.execute(
+            "SELECT e.*, q.customer_name AS _cust, q.project_name AS _proj FROM case_extra_expenses e"
+            " LEFT JOIN quotations q ON q.quote_no = e.quote_no"
+            " WHERE e.status = '已核准' AND COALESCE(e.paid_date, '') = '' AND substr(e.planned_pay_date, 1, 10) IN (%s)"
+            " ORDER BY e.id" % ",".join("?" for _ in cands), cands).fetchall():
+        if not PC.eligible(r):
+            continue
+        ident = (r["doc_code"] or "").strip() or "#%s" % r["id"]
+        what = (r["description"] or r["category"] or "請款").strip()
+        planned = PC.planned_date(r)
+        info = [("單號", ident), ("名目", what), ("預定付款日", planned)]
+        if r["quote_no"]:
+            info.append(("關聯案件", "%s（%s）" % (r["quote_no"], r["_cust"] or "")))
+        out.append({"guard_id": str(r["id"]), "planned": planned, "ident": "%s %s" % (ident, what), "rows": info, "source": "case", "key": str(r["id"])})
+    return out
+
+
+def _material_items(conn, cands):
+    """叫料匯款申請（來源 `case_material`）：已核准、還有剩餘應付。內容只放單號、品名（名目）、預定日、關聯案件；不放供應商與金額。"""
+    from modules.case import material_payment as MP
+    from modules.case import payable_calendar as PC
+    out = []
+    for r in conn.execute(
+            "SELECT p.*, q.customer_name AS _cust FROM case_material_payments p LEFT JOIN quotations q ON q.quote_no = p.quote_no"
+            " WHERE p.status=? AND substr(p.planned_pay_date, 1, 10) IN (%s) ORDER BY p.id" % ",".join("?" for _ in cands),
+            [MP.S_APPROVED] + list(cands)).fetchall():
+        pay = dict(r)
+        planned = PC.planned_date(pay)
+        if not planned or MP.remaining_of(conn, pay) <= 0:
+            continue
+        ident = pay["doc_code"] or "#%s" % pay["id"]
+        what = "材料申請匯款｜%s" % (MP.snapshot_of(pay).get("itemName") or "")
+        info = [("單號", ident), ("名目", what), ("預定付款日", planned)]
+        if pay["quote_no"]:
+            info.append(("關聯案件", "%s（%s）" % (pay["quote_no"], r["_cust"] or "")))
+        out.append({"guard_id": "case_material.%s" % pay["id"], "planned": planned, "ident": "%s %s" % (ident, what), "rows": info,
+                    "source": "case_material", "key": str(pay["id"])})
+    return out
+
+
 def run(today=None) -> int:
     """⇒ 這次寄出幾封（測試用）。任何例外只記 log，不影響其他每日檢查。"""
-    sent = 0
     try:
-        from modules.case import payable_calendar as PC
         today = today or date.today()
-        t0 = today.isoformat()
         cands = _candidate_planned_dates(today)
         if not cands:
-            _prune_guards(today)
+            _core.prune_guards(today)
             return 0
         conn = get_db()
         try:
-            rows = conn.execute(
-                "SELECT e.*, q.customer_name AS _cust, q.project_name AS _proj FROM case_extra_expenses e"
-                " LEFT JOIN quotations q ON q.quote_no = e.quote_no"
-                " WHERE e.status = '已核准' AND COALESCE(e.paid_date, '') = '' AND substr(e.planned_pay_date, 1, 10) IN (%s)"
-                " ORDER BY e.id" % ",".join("?" for _ in cands), cands).fetchall()
+            items = _expense_items(conn, cands) + _material_items(conn, cands)
         finally:
             conn.close()
-        t_start = _monotonic()
-        for r in rows:
-            if not PC.eligible(r):
-                continue
-            planned = PC.planned_date(r)
-            kind, guards = due_kind(planned, today)
-            if not kind:
-                continue
-            keys = ["%s%s.%s.%s.%s" % (_GUARD, r["id"], k, planned, e.isoformat()) for k, e in guards]
-            if any(_get_setting(k) for k in keys if k.split(".")[-3] == kind):
-                continue
-            ident = (r["doc_code"] or "").strip() or "#%s" % r["id"]
-            what = (r["description"] or r["category"] or "請款").strip()
-            info = [("單號", ident), ("名目", what), ("預定付款日", planned)]
-            if r["quote_no"]:
-                info.append(("關聯案件", "%s（%s）" % (r["quote_no"], r["_cust"] or "")))
-            if _monotonic() - t_start >= MAX_WAIT_SECONDS_PER_RUN:
-                logger.warning("payable_reminders: 本次掃描等待寄送已達 %s 秒上限，其餘提醒留待下次（不寫 guard）", MAX_WAIT_SECONDS_PER_RUN)
-                break
-            res = {}
-            if _mail(kind, info, "%s/pages/cashier.html" % _en._base_url(), "%s %s" % (ident, what), out=res):
-                for k in keys:                                  # 先寄、結果確定才寫 guard（SENT／UNKNOWN／PERMANENT_FAIL；見檔頭〔冪等〕）
-                    _set_setting(k, t0)
-                if res.get("outcome") == _en.SEND_SENT:
-                    sent += 1
-            else:
-                logger.warning("payable_reminders: #%s 的預定付款日提醒未寄出（%s；不寫 guard，下次重試）", r["id"], res.get("outcome") or "?")
-            if res.get("outcome") == _en.SEND_UNKNOWN:
-                logger.error("payable_reminders: SMTP 沒有在時限內回應，停止本次掃描（避免每封都卡住）")
-                break
-        _prune_guards(today)
+        return _core.run_scan(items, today, is_wd=_wd, monotonic=lambda: _monotonic(), send=_mail,
+                              max_wait=MAX_WAIT_SECONDS_PER_RUN)
     except Exception as exc:
         logger.warning("payable_reminders.run failed: %s", exc)
-    return sent
-
-
-def _prune_guards(today: date) -> None:
-    """清掉寄信日早於今天 7 天以上的 guard key（key 最後一段是實際寄信日）。"""
-    cutoff = (today - timedelta(days=7)).isoformat()
-    conn = get_db()
-    try:
-        stale = [r["key"] for r in conn.execute("SELECT key FROM system_settings WHERE key LIKE ?", (_GUARD + "%",)).fetchall()
-                 if r["key"].rsplit(".", 1)[-1] < cutoff]
-        if stale:
-            conn.executemany("DELETE FROM system_settings WHERE key=?", [(k,) for k in stale])
-            conn.commit()
-    finally:
-        conn.close()
+        return 0

@@ -26,7 +26,7 @@ EVENT_LINKS = {
     "stage_due":       {"mail": "case_stage_deadline", "also": ("case_stage_deadline_manager",), "note": "階段到期日"},
     "dev_case_stale":  {"mail": "dev_case_stale", "also": (), "note": "停滯起算日"},
     "expense_payout":  {"mail": "expense_form_paid", "also": (), "note": "付款日（行事曆含所有請款類型，信件只有費用單據）"},
-    "payable_due":     {"mail": "payable_due_today", "also": ("payable_due_soon",), "note": "預定付款日（事件不含金額）"},
+    "payable_due":     {"mail": "payable_due_today", "also": ("payable_due_soon", "payable_due_overdue"), "note": "預定付款日（事件不含金額）"},
     # 階段 2（預設關）：信件那邊本來就有，行事曆格是新增的
     "warranty_expiry": {"mail": "warranty_expiry", "also": (), "note": "保固到期日"},
     "range_task_due":  {"mail": "range_task_deadline", "also": (), "note": "區間結束日"},

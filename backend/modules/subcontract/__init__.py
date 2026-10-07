@@ -4,7 +4,7 @@ import importlib
 
 from core.registry import ModuleSpec
 
-from modules.subcontract import attachments, dispatch_notify, gl_events, remit, remit_kinds  # noqa: F401（dispatch_notify：載入時登記信件類型）
+from modules.subcontract import attachments, dispatch_notify, gl_events, payable_due, remit, remit_kinds  # noqa: F401（dispatch_notify：載入時登記信件類型）
 from modules.subcontract.api import contractor_vouchers, contractors, dispatch_approval, vendor_contractors
 from modules.subcontract.api import remit_kinds as remit_kinds_api
 
@@ -32,6 +32,9 @@ MODULE = ModuleSpec(
         ("contractor_voucher.public", "subcontract"): contractor_vouchers._voucher_public,
         # IP-14（第三個能力，t45）：出納端點改預定付款日（`set_planned(conn, voucher_no, value, user)`；不 commit）
         ("contractor_voucher.set_planned", "subcontract"): contractor_vouchers.set_planned_pay_date,
+        ("contractor_voucher.planned_changed", "subcontract"): payable_due.fire,       # commit 之後依現況對齊行事曆「付款待辦」（出納端點改預定日用）
+        # IP-11：預定付款日提醒信（3 天前／當天／逾期）＋站內通知；規則在 L1 helpers.payable_due_core
+        ("daily.check", "subcontract_payable_due"): payable_due.run_daily_checks,
         # IP-10／approval.reassign（M01-PLAN §3-7）：M01「待我簽核」佇列與轉簽的承攬商匯款申請
         ("approval.queue_items", "subcontract"): contractor_vouchers.queue_items,
         ("approval.reassign", "contractor_voucher"): contractor_vouchers.REASSIGN,

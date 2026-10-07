@@ -152,7 +152,13 @@ class _RemitReviews:
                 " AND remit_review=?", (json.dumps(log, ensure_ascii=False), now, key, REVIEW_PENDING))
         if cur.rowcount == 0:
             raise ValueError("這張匯款申請不是待審核狀態（可能已被處理）")
-        return {"quoteNo": row["quote_no"], "key": key, "decision": decision}
+        out = {"quoteNo": row["quote_no"], "key": key, "decision": decision}
+        if decision == "reject":                                    # 差額退回＝回未匯款 ⇒ 重建「付款待辦」（出納端 commit 後 upsert；事件不含金額）
+            from modules.subcontract import payable_due as _pd
+            ev = _pd.event_tuple(conn.execute("SELECT * FROM contractor_payment_vouchers WHERE voucher_no=?", (key,)).fetchone())
+            if ev:
+                out["payableEvent"] = ev
+        return out
 
 
 def _expense_entries(conn, start, end):
