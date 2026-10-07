@@ -457,6 +457,7 @@ def delete_payslip(slip_no: str, authorization: str = Header(None)):
     if row["status"] in _LOCKED_STATUSES:
         conn.close()
         raise HTTPException(400, f"{row['status']}的勞報單須保留備查，不可刪除")
+    conn.execute("DELETE FROM payslip_dispatch_links WHERE slip_no=?", (slip_no,))       # 第46班：派發連結隨草稿一併刪除（同一個交易，不留孤列）
     conn.execute("DELETE FROM payslips WHERE slip_no=?", (slip_no,))
     conn.commit()
     conn.close()

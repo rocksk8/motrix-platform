@@ -184,3 +184,16 @@ def test_payroll_absent_is_said_not_silently_empty(client, make_user, monkeypatc
     body = client.get("/api/contractor-dispatches/%s/payslip-links" % did, headers=sa).json()
     assert body["available"] is False and "薪資獎金模組未安裝" in body["notice"] and body["items"] == []
     assert client.post("/api/contractor-dispatches/%s/payslip-links" % did, headers=sa, json={"slipNo": "PS-X"}).status_code == 409
+
+
+def test_dispatch_links_get_applies_the_per_case_guard(client, make_user):
+    """複核 L1：派發頁勞報單區塊與其他每案端點同一道案件層守門——看不到該案的人 ⇒ 擋下（不洩漏連結）。"""
+    sa = _su(client, make_user, "pl46_sa")
+    did = _dispatch(client, sa)
+    _slip("PS-203107-061")
+    client.post("/api/payslips/PS-203107-061/dispatch-links", headers=sa, json={"dispatchId": did})
+    u, p = make_user(username="pl46_outsider", role="user", modules=["contractor_list"], legacy_finance_flag=False)
+    out = _auth(_login(client, u, p))
+    r = client.get("/api/contractor-dispatches/%s/payslip-links" % did, headers=out)
+    assert r.status_code in (403, 404), r.text
+    assert "PS-203107-061" not in r.text

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 
 from core import registry
 from db import get_db
-from helpers import _audit, _require_user, _tok, require_any_module
+from helpers import _audit, _require_user, _tok, guard_case_access, require_any_module
 
 router = APIRouter()
 PAYROLL_MISSING = "薪資獎金模組未安裝：派發頁不顯示勞報單"
@@ -30,8 +30,11 @@ def list_payslip_links(did: int, authorization: str = Header(None)):
     prov = registry.single_provider("payslip.dispatch_links")
     conn = get_db()
     try:
-        if not _dispatch_exists(conn, did):
+        row = conn.execute("SELECT quote_no FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
+        if row is None:
             raise HTTPException(404, "派發紀錄不存在")
+        if row["quote_no"] and conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (row["quote_no"],)).fetchone():
+            guard_case_access(conn, row["quote_no"], user, allow_module="case_manage")      # 與其他每案端點同一道案件層守門（看不到該案 ⇒ 404）
         if prov is None:
             return {"available": False, "notice": PAYROLL_MISSING, "items": [], "canOpen": False, "canEdit": False}
         items = prov.links_for_dispatch(conn, did)

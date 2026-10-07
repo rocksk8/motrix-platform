@@ -246,3 +246,65 @@ def test_payslip_export_needs_no_payment_date_and_pdf_has_no_payment_date_label(
                                 "slipDate": "2031-01-01", "calc": {"taxWithheld": 0, "nhiSupplement": 0, "netAmount": 30000}})
     for label in ("付款日", "匯款日期", "付款日期"):
         assert label not in html, label
+
+
+def test_no_tier_review_path_needs_another_superadmin_not_self(client, make_user):
+    """複核 M2：沒有簽核層的待審核（例如送審人不是最高管理者的路徑）走無層簽核——送審人不能自核（有其他最高管理者時），別的最高管理者可核。"""
+    ua, ha = _su(client, make_user, "ps46_na")
+    ub, hb = _su(client, make_user, "ps46_nb")
+    _clear_flow()
+    _insert_payslip("PS-203101-030", status="待審核")
+    _x("UPDATE payslips SET approval_json=? WHERE slip_no='PS-203101-030'", (json.dumps({"tiers": [], "currentTier": 0, "requestedBy": ua, "history": []}),))
+    r = client.post("/api/payslips/PS-203101-030/approve", headers=ha)
+    assert r.status_code == 403 and _status("PS-203101-030") == "待審核", r.text
+    assert client.post("/api/payslips/PS-203101-030/approve", headers=hb).status_code == 200 and _status("PS-203101-030") == "已核准"
+
+
+def test_approve_rechecks_superadmin_of_the_acting_user(client, make_user):
+    """複核 M2：簽核當下再確認操作者是最高管理者（被降級或代理人不是最高管理者 ⇒ 拒絕）。"""
+    ua, ha = _su(client, make_user, "ps46_da")
+    ub, hb = _su(client, make_user, "ps46_db")
+    _flow([ub])
+    _insert_payslip("PS-203101-031")
+    client.post("/api/payslips/PS-203101-031/submit", headers=ha)
+    _x("UPDATE users SET role='admin' WHERE username=?", (ub,))                       # 簽核人在送審後被降級
+    assert client.post("/api/payslips/PS-203101-031/approve", headers=hb).status_code in (401, 403)
+    assert _status("PS-203101-031") == "待審核"
+
+
+def test_deleting_a_draft_payslip_removes_its_dispatch_links(client, make_user):
+    ua, ha = _su(client, make_user, "ps46_dl")
+    _insert_payslip("PS-203101-032")
+    _x("INSERT INTO payslip_dispatch_links (slip_no, dispatch_id, created_by, created_at) VALUES ('PS-203101-032', 5, 't', '2031-01-01')")
+    assert client.delete("/api/payslips/PS-203101-032", headers=ha).status_code == 204
+    assert _q("SELECT * FROM payslip_dispatch_links WHERE slip_no='PS-203101-032'") == []
+
+
+def test_remit_link_and_voucher_link_check_refuse_review_and_void(client, make_user):
+    """複核 L4：匯款單關聯勞報單放寬（Q13）後，待審核／草稿／已作廢仍被拒。"""
+    import db
+    from modules.payroll import remit_link as RL
+    from modules.subcontract.api import contractor_vouchers as CV
+    c = db.get_db()
+    try:
+        cid = c.execute("INSERT INTO contractors(name, id_number) VALUES (?,?)", ("受領乙", "B234567890")).lastrowid
+        c.commit()
+    finally:
+        c.close()
+    for no, st in (("PS-203101-040", "待審核"), ("PS-203101-041", "已作廢"), ("PS-203101-042", "草稿"), ("PS-203101-043", "已核准")):
+        _insert_payslip(no, status=st)
+        _x("UPDATE payslips SET contractor_id=?, net_amount=1000 WHERE slip_no=?", (cid, no))
+    c = db.get_db()
+    try:
+        assert [x["slipNo"] for x in RL.candidates(c, cid)] == ["PS-203101-043"]
+        assert RL.mark_paid(c, ["PS-203101-040", "PS-203101-041", "PS-203101-042"], "PV-X", "2031-02-01", "t") == 0
+        c.commit()
+        snap = json.dumps({"personnel": [{"name": "受領乙", "id": cid, "amount": 1000, "payslipNo": no} for no in ("PS-203101-040", "PS-203101-041")]})
+        errs, ok = CV._personnel_link_errors(c, snap, False)
+        assert len(errs) == 2 and ok == [] and all("須為已核准" in e for e in errs), errs
+        snap2 = json.dumps({"personnel": [{"name": "受領乙", "id": cid, "amount": 1000, "payslipNo": "PS-203101-043"}]})
+        errs2, ok2 = CV._personnel_link_errors(c, snap2, False)
+        assert errs2 == [] and ok2 == ["PS-203101-043"]
+    finally:
+        c.close()
+    assert [r["status"] for r in _q("SELECT status FROM payslips WHERE slip_no IN ('PS-203101-040','PS-203101-041','PS-203101-042') ORDER BY slip_no")] == ["待審核", "已作廢", "草稿"]

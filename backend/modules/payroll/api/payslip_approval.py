@@ -138,9 +138,9 @@ def submit_payslip(slip_no: str, body: dict = Body(default={}), authorization: s
         if planned is not None:
             sets.append("planned_pay_date=?")
             args.append(planned)
-        if tiers:
+        if tiers or user.get("role") != "superadmin":                 # 有簽核層，或送審人不是最高管理者 ⇒ 待審核（沒設層時由最高管理者走無層簽核路徑，不自核）
             status, extra = S_REVIEW, ""
-        else:                                                         # 沒設簽核層 ⇒ 送審即核准
+        else:                                                         # 沒設簽核層、且送審人是最高管理者 ⇒ 送審即核准
             status = S_APPROVED
             appr["approvedBy"], appr["approvedAt"] = _name(user), now
             appr["history"].append({"at": now, "by": user["username"], "byDisplay": _name(user), "action": "auto_approve", "comment": ""})
@@ -149,6 +149,8 @@ def submit_payslip(slip_no: str, body: dict = Body(default={}), authorization: s
         conn.execute("UPDATE payslips SET status=?, approval_json=?, updated_at=?" + "".join(", " + s for s in sets) + " WHERE slip_no=? AND status=?",
                      [status, json.dumps(appr, ensure_ascii=False), now] + args + [slip_no, S_DRAFT])
         recipients = current_approvers(conn, appr) if status == S_REVIEW else []
+        if status == S_REVIEW and not tiers:                          # 無簽核層的待審核：通知其他在職最高管理者
+            recipients = [r["username"] for r in conn.execute("SELECT username FROM users WHERE active=1 AND role='superadmin' ORDER BY id")]
         fin = _finance_users(conn) if status == S_APPROVED else []
         conn.commit()
     finally:
@@ -166,6 +168,8 @@ def submit_payslip(slip_no: str, body: dict = Body(default={}), authorization: s
 def approve_payslip(slip_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
     """當層簽核人（或代理人）簽；同層全數簽完才換層；最後一層簽完 ⇒ 已核准。沒有簽核鏈（設定被移除）⇒ superadmin 且不可自核（唯一最高管理者例外）。"""
     user = _require_user(authorization, require_superadmin=True, module="payslip")
+    if user.get("role") != "superadmin":                              # 簽核當下再確認一次（簽核人被降級、代理人不是最高管理者 ⇒ 拒絕；W1）
+        raise HTTPException(403, _ONLY_SUPERADMIN_MSG)
     comment = str((body or {}).get("comment") or "").strip()[:200]
     conn = get_db()
     now = datetime.now().isoformat()
