@@ -1334,6 +1334,16 @@ def gate_plan(a, extra, overlap=False, collect=None):
     return [("main", TEST_ROOTS, main_args, a.window), e2e], {"main": a.window}, env, ff_args, exp
 
 
+def slice_verification(exp, sliced):
+    """稽核 S1：全閘門切片有沒有經過「預先 collect-only 對帳」。⇒ (result['slices'] 的補充欄位 或 None, 警告字串)。
+    切了片卻沒對帳（MOTRIX_GATE_VERIFY=0 或沒有預先收集）⇒ 警告＋verified=False，讓紀錄看得出這一輪的切片聯集／題數沒被證明。"""
+    if not sliced:
+        return None, ""
+    if exp is None:
+        return {"verified": False}, "切片已啟用但沒有預先 collect-only 對帳（MOTRIX_GATE_VERIFY=0？）⇒ 切片聯集與執行題數沒有被證明；正式放行請用預設值重跑"
+    return {"verified": bool(exp.get("ok"))}, ""
+
+
 def dist_args():
     """O6：xdist worksteal（尾端平衡，慢題不會落在最後一輪才開跑）。MOTRIX_GATE_DIST=load 關；xdist 版本不支援 ⇒ 不帶（不報錯）。"""
     want = os.environ.get("MOTRIX_GATE_DIST", "worksteal").strip().lower()
@@ -1429,6 +1439,11 @@ def run_full(extra, a):
     if exp is not None:
         result["slices"] = {k: exp[k] for k in ("ok", "all", "slice0", "rest", "sha")}
         result["slices"]["executed"] = {}
+    _vf, _warn = slice_verification(exp, isinstance(main_windows.get("main"), list))
+    if _vf is not None:
+        result.setdefault("slices", {}).update(_vf)
+        if _warn:
+            print("[全閘門] ⚠ " + _warn)
     result["overlap"] = {"flag": os.environ.get(OVERLAP_ENV, "0"), "used": overlap, "reason": why}   # 開關狀態一律記進結果（O2 控制④）
     if os.environ.get(OVERLAP_ENV, "0").strip() == "1":
         print("[全閘門] 兩段重疊：%s" % ("啟用（非 e2e 與 e2e 同時跑）" if overlap else "不啟用 ⇒ 序列（%s）" % why))
@@ -1443,6 +1458,8 @@ def run_full(extra, a):
             code, out = run_pytest(targets, args + extra + ff_args, window, full=True, env_extra=ff_env, **kw)
             code0 = code
             # 注意（review F6）：重疊時兩個執行緒都會改 result（flaky_retried／slice_mismatch／slices.executed）——只對不同的 key 寫、或對 list 追加，CPython 下安全
+            # N1（稽核）：偶發分流放行（code0≠0 ⇒ code 變 0）時不做下面的題數對帳——目前可接受：已登記的偶發不計入 fail-fast 的紅，
+            # 所以被 fail-fast 截斷的一輪不可能以「全部重跑通過」收場；若日後 fail-fast 對已登記偶發的處理改變，要同步補這裡的對帳。
             code = flaky_gate(code, out, window, result)          # O4：紅了先分流（只有已登記且未過期的偶發才放行）
             if name == "main" and code0 == 0 and exp is not None and exp.get("ok"):   # F1：整片跑完（沒被 fail-fast 截斷）⇒ 執行題數必須等於預先收集的題數
                 want = exp["slice0"] if window == a.window + "s0" else exp["rest"]

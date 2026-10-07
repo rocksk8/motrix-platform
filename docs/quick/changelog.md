@@ -16,6 +16,10 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-08 第 45 班稽核跟進（fix/t45-audit-followups）
+
+- 預定付款日出納端點：同時被登錄付款 ⇒ 409；日期沒變 ⇒ 不稽核、不通知、不動行事曆；新增一次性「付款待辦」事件重新對齊工具（預設 dry-run）。勞報單 `data_json` 不留前端送來的 status。全閘門切片未經對帳時標示 `verified: false` 並警告。
+
 ## 2026-10-07 建包沿用指紋排除全閘門速度開關（fix/t45-env-ignore）
 - `build_test_reuse._ENV_IGNORE` 加入 MOTRIX_GATE_WORKERS／DIST／LPT／RECORD／VERIFY／SLICES、MOTRIX_FULL_OVERLAP(_MIN_GB)、MOTRIX_FULL_FLAKY_RETRY：它們只決定速度、順序、診斷，不決定哪些題存在或過不過，所以共用機器設了它們跑的全閘門紀錄，換個 shell 建包仍可沿用；MOTRIX_TRAIN 仍進指紋。測試釘住清單（32 項）。
 

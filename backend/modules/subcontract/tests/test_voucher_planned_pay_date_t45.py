@@ -140,3 +140,22 @@ def test_permissions_validation_and_state_rules(client, world):
         c.close()
     r = client.patch(_url(no), json={"plannedPayDate": "2031-07-25"}, headers=h)
     assert r.status_code == 409 and "歷史" in r.json()["detail"] and _col(no) == "2031-07-20"
+
+
+def test_same_planned_date_again_is_a_noop_without_audit_or_notice(client, world):
+    """第 45 班稽核 S3：承攬商匯款同一個日期再送一次 ⇒ unchanged，不再稽核、不再通知。"""
+    import db
+    _, no = _voucher(client, world["sa"], planned=None)
+    _approve(no)
+
+    def audits():
+        c = db.get_db()
+        try:
+            return c.execute("SELECT COUNT(*) FROM audit_log WHERE action='cashier.planned_pay_date'").fetchone()[0]
+        finally:
+            c.close()
+    assert client.patch(_url(no), json={"plannedPayDate": "2031-07-25"}, headers=world["fin"]).status_code == 200
+    n = audits()
+    r = client.patch(_url(no), json={"plannedPayDate": "2031-07-25"}, headers=world["fin"])
+    assert r.status_code == 200 and r.json().get("unchanged") is True and audits() == n
+    assert client.patch(_url(no), json={"plannedPayDate": "2031-07-26"}, headers=world["fin"]).status_code == 200 and audits() == n + 1

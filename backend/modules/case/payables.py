@@ -134,6 +134,8 @@ class _Payables:
             exp_id = int(key)
         except (TypeError, ValueError):
             raise LookupError("找不到這筆申請")
+        from core.txn import begin_write
+        begin_write(conn)                                               # 稽核 S2：讀→寫在同一個寫交易裡（與材料申請匯款提供者一致）
         r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
         if not r or r["status"] != "已核准" or not _EF.is_payable_kind(r["kind"] or ""):
             raise LookupError("找不到這筆申請")
@@ -141,10 +143,14 @@ class _Payables:
         if paid:
             raise ValueError("這筆已登錄付款（%s），預定付款日保留為歷史紀錄，不能再修改" % paid[:10])
         old = (_col(r, "planned_pay_date") or "")[:10]
+        if old == value:                                                # 稽核 S3：沒變 ⇒ 不寫、不稽核、不通知、不動行事曆（端點看 unchanged）
+            return {"plannedPayDate": value, "old": old, "unchanged": True}
         now = datetime.now().isoformat(timespec="seconds")
-        conn.execute("UPDATE case_extra_expenses SET planned_pay_date=?, updated_at=?, updated_by_name=?"
-                     " WHERE id=? AND COALESCE(paid_date, '')=''",
-                     (value, now, user.get("display_name") or user.get("username") or "", exp_id))
+        cur = conn.execute("UPDATE case_extra_expenses SET planned_pay_date=?, updated_at=?, updated_by_name=?"
+                           " WHERE id=? AND COALESCE(paid_date, '')=''",
+                           (value, now, user.get("display_name") or user.get("username") or "", exp_id))
+        if cur.rowcount == 0:                                           # 稽核 S2：同時被登錄付款 ⇒ 409，不回成功、不通知
+            raise ValueError("這筆已登錄付款，預定付款日保留為歷史紀錄，不能再修改")
         try:
             applicant = (json.loads(_col(r, "approval_json") or "{}") or {}).get("requestedBy") or r["created_by"] or ""
         except (TypeError, ValueError):

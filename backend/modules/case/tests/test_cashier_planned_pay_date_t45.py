@@ -185,3 +185,47 @@ def test_finance_edit_notifies_applicant_without_amount_and_not_self(client, mak
     _x("UPDATE case_extra_expenses SET created_by='t45_fin3' WHERE id=?", (eid2,))
     assert client.patch(_url(eid2), headers=h, json={"plannedPayDate": "2031-06-11"}).status_code == 200
     assert _notes("t45_fin3") == [], "本人改自己的申請不通知自己"
+
+
+# ── 第 46 班跟進（第 45 班非作者稽核 S2／S3）──────────────────────────────────────
+
+def _audits():
+    import db
+    c = db.get_db()
+    try:
+        return c.execute("SELECT COUNT(*) FROM audit_log WHERE action='cashier.planned_pay_date'").fetchone()[0]
+    finally:
+        c.close()
+
+
+def test_same_value_is_a_noop_no_audit_no_notice_no_event(client, make_user, monkeypatch):
+    """S3：日期沒變（含「清除已經是空的」）⇒ 200＋unchanged，不稽核、不通知申請人、不動行事曆。"""
+    cal = _gcal(monkeypatch)
+    eid = _seed()
+    make_user(username="t45_eng", role="user")
+    h = _hdr(client, make_user, "t45_fin_noop", role="finance")
+    assert client.patch(_url(eid), headers=h, json={"plannedPayDate": "2031-06-10"}).status_code == 200
+    assert _audits() == 1 and len(_notes("t45_eng")) == 1 and len(cal.events) == 1
+    r = client.patch(_url(eid), headers=h, json={"plannedPayDate": "2031-06-10"})
+    assert r.status_code == 200 and r.json().get("unchanged") is True and r.json()["plannedPayDate"] == "2031-06-10"
+    assert _audits() == 1 and len(_notes("t45_eng")) == 1, "沒變 ⇒ 不再稽核、不再通知"
+    eid2 = _seed()
+    r = client.patch(_url(eid2), headers=h, json={"plannedPayDate": ""})
+    assert r.status_code == 200 and r.json().get("unchanged") is True
+    assert _audits() == 1 and len(_notes("t45_eng")) == 1
+    assert client.patch(_url(eid), headers=h, json={"plannedPayDate": "2031-06-11"}).status_code == 200       # 真的改了照常
+    assert _audits() == 2 and len(_notes("t45_eng")) == 2
+
+
+def test_payment_registered_concurrently_is_409_not_a_silent_success(client, make_user, monkeypatch):
+    """S2：讀到未付款、更新時已被登錄付款（0 列）⇒ 409，不回成功、不通知、不動資料。用 _col 讓『讀』看不到已付款來模擬競態。"""
+    from modules.case import payables as P
+    eid = _seed(planned="2031-06-01", paid="2031-06-02")
+    make_user(username="t45_eng", role="user")
+    h = _hdr(client, make_user, "t45_fin_race", role="finance")
+    real = P._col
+    monkeypatch.setattr(P, "_col", lambda r, k: "" if k == "paid_date" else real(r, k))
+    r = client.patch(_url(eid), headers=h, json={"plannedPayDate": "2031-07-01"})
+    assert r.status_code == 409 and "歷史" in r.json()["detail"], r.text
+    assert _row(eid)["planned_pay_date"] == "2031-06-01"
+    assert _notes("t45_eng") == [] and _audits() == 0

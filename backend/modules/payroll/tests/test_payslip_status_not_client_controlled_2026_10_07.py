@@ -52,3 +52,21 @@ def test_put_keeps_the_real_status_of_a_locked_slip_out_of_reach(client, make_us
     body["data"]["status"] = "已付款"
     assert client.put("/api/payslips/PS-203102-901", json=body, headers=h).status_code == 409
     assert _status("PS-203102-901") == "已匯出"
+
+
+def test_client_status_is_not_kept_in_the_stored_data_blob(client, make_user):
+    """第 45 班稽核 S5：data_json 也不留前端送來的 status（GET 的 data.status 不會顯示被偽造的值）；欄位 status 仍是真實狀態。"""
+    u, p = make_user(username="psfix_su_blob", role="superadmin")
+    h = _auth(_login(client, u, p))
+    body = _payload()
+    body["data"]["status"] = "已付款"
+    r = client.post("/api/payslips", json=body, headers=h)
+    assert r.status_code == 201, r.text
+    no = r.json()["slip_no"]
+    got = client.get("/api/payslips/%s" % no, headers=h).json()
+    assert got["status"] == "草稿" and "status" not in got["data"]
+    body2 = _payload()
+    body2["data"]["status"] = "已簽回"
+    assert client.put("/api/payslips/%s" % no, json=body2, headers=h).status_code == 200
+    got = client.get("/api/payslips/%s" % no, headers=h).json()
+    assert got["status"] == "草稿" and "status" not in got["data"]

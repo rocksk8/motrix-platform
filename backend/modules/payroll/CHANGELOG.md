@@ -1,5 +1,8 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-10-08（fix/t45-audit-followups）：勞報單 data_json 不留前端送來的 status（第 45 班稽核 S5）
+- 建立與修改都把請求 `data.status` 移除後才存 `data_json`；狀態欄位本來就只由專用端點改，這裡讓 `GET` 的 `data.status` 也不會顯示被偽造的值。
+
 ## 1.2.1 — 2026-10-07（wip/t45-payslip-status-fix）：勞報單狀態不再由前端指定（快修）
 - `POST /api/payslips` 一律建成草稿；`PUT /api/payslips/{no}` 不採用請求裡的 `data.status`（沿用資料庫現值）。原本最高管理者可在請求中直接把狀態寫成已簽回／已付款，繞過匯出→簽回→出納付款的流程（已簽回的單據會進出納待付款與總帳應付分錄）。狀態只由匯出／簽回／付款／作廢等專用端點改變。
 - 測試：`modules/payroll/tests/test_payslip_status_not_client_controlled_2026_10_07.py`（含反向控制：還原修正即紅）。
