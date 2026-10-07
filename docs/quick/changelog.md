@@ -16,6 +16,10 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-08 登入後回到原頁的加固（fix/login-return-to-hardening）
+- 回到原頁的目標：框架內的頁面不再寫入、超過 2000 字不寫、放超過 30 分鐘就不採用（放著不管的過期分頁，換人登入不會被帶到上一位的最後頁面）、已登入的頁面正常載入就清掉殘留目標；只接受同站路徑的規則不變，新增怪異輸入的性質測試。
+- 版本紀錄「新條目時間不可晚於現在」的容許誤差可用 `MOTRIX_MANIFEST_FUTURE_TOLERANCE_MIN` 調整（預設 5 分鐘），已知限制補在已知限制文件。
+
 ## 2026-10-07 建包沿用指紋排除全閘門速度開關（fix/t45-env-ignore）
 - `build_test_reuse._ENV_IGNORE` 加入 MOTRIX_GATE_WORKERS／DIST／LPT／RECORD／VERIFY／SLICES、MOTRIX_FULL_OVERLAP(_MIN_GB)、MOTRIX_FULL_FLAKY_RETRY：它們只決定速度、順序、診斷，不決定哪些題存在或過不過，所以共用機器設了它們跑的全閘門紀錄，換個 shell 建包仍可沿用；MOTRIX_TRAIN 仍進指紋。測試釘住清單（32 項）。
 
@@ -34,18 +38,18 @@
 
 ## 2026-10-07 預定付款日（第 45 班 C；wip/t45-paydate-impl）
 
-- S1：出納改預定付款日改走來源無關端點 `PATCH /api/cashier/pending-payables/{來源}/{key}/planned-pay-date`（財務角色／superadmin；不經案件守門，**不放寬 CM14b**）；行事曆「付款待辦」事件不再放受款人與付款條件（Q4）。
-- S2：「我的申請」多一欄「預定付款日」，付款前申請人可補填、改期；已付款只顯示歷史值。
-- S3：叫料匯款申請可填預定付款日（建立／草稿期；核准後只有出納能改），出納待付款清單帶出，分次付款時可改下一次預定日。新增 case migration 8。
-- S4：承攬商匯款可填預定付款日（建立時選填；出納待付款頁可改，與合約應付款日分開顯示）。新增 subcontract migration 6。
-- S6（部分）：財務設定或改預定付款日時，申請人收到站內通知（不含金額）。
+- 出納改預定付款日改走來源無關端點 `PATCH /api/cashier/pending-payables/{來源}/{key}/planned-pay-date`（財務角色／superadmin；不經案件守門，**不放寬 CM14b**）；行事曆「付款待辦」事件不再放受款人與付款條件（Q4）。
+- 「我的申請」多一欄「預定付款日」，付款前申請人可補填、改期；已付款只顯示歷史值。
+- 叫料匯款申請可填預定付款日（建立／草稿期；核准後只有出納能改），出納待付款清單帶出，分次付款時可改下一次預定日。新增 case migration 8。
+- 承攬商匯款可填預定付款日（建立時選填；出納待付款頁可改，與合約應付款日分開顯示）。新增 subcontract migration 6。
+- 財務設定或改預定付款日時，申請人收到站內通知（不含金額）。
 
-## 2026-10-07 全閘門優化 O1／O2／O4／O6（wip/t45-gate-opt-impl）
+## 2026-10-07 全閘門優化（wip/t45-gate-opt-impl）
 - `modtest --full` 非 e2e 先跑 slice0（tests/platform＋靜態守門，清單 `tools/platform/gate_slices.json`，與預演列車 GUARDS 同一份）、綠了才開其餘；slice0 紅 ⇒ 不開第二片、不跑 e2e。兩片與 e2e 都帶 fail-fast／failure-first（`MOTRIX_GATE_SLICES=0`、`MOTRIX_FAILFAST=0` 可還原）。
 - 出紅先把紅的題單獨重跑（最多 3 次）診斷；放行規則不變：只有已登記且未到期的偶發才算過（`MOTRIX_FULL_FLAKY_RETRY=0` 關）。xdist 改 `--dist worksteal`（`MOTRIX_GATE_DIST=load` 還原）。題數不減：`python tools/platform/gate_slices.py --check` 比 nodeid 集合。
-- O6 慢檔先派（LPT）；O2 兩段重疊 `MOTRIX_FULL_OVERLAP`（**預設關**，有盤點與記憶體門檻）；共用機器 `MOTRIX_GATE_WORKERS=2`。量測：slice0（2511 題）-n 2 牆鐘 18.4 分（預演列車同批 24.5 分）；計畫書的「紅的整合 ≤10 分」尚未達到，已把 7 個測工具本身的慢檔（update_delivery／author_gate／modtest_scope／rebase_check／json_stdout／stepfile_drill／ship_tier）移到第二片（slice0.exclude，守門類不動）：slice0 2370 題，實測 -n 2 ＝ 13.8 分（拆前 18.4、預演列車同批 24.5）；≤10 分只在 -n 4 才可能（推估 7～8 分，未實測）。fail-fast 預設開，紅清單可能不完整（要完整清單設 `MOTRIX_FAILFAST=0`）。開跑前 collect-only 對帳題數、跑完以執行題數對帳，對不上記紅。
+- 慢檔先派；兩段重疊 `MOTRIX_FULL_OVERLAP`（**預設關**，有盤點與記憶體門檻）；共用機器 `MOTRIX_GATE_WORKERS=2`。量測：slice0（2511 題）-n 2 牆鐘 18.4 分（預演列車同批 24.5 分）；計畫書的「紅的整合 ≤10 分」尚未達到，已把 7 個測工具本身的慢檔（update_delivery／author_gate／modtest_scope／rebase_check／json_stdout／stepfile_drill／ship_tier）移到第二片（slice0.exclude，守門類不動）：slice0 2370 題，實測 -n 2 ＝ 13.8 分（拆前 18.4、預演列車同批 24.5）；≤10 分只在 -n 4 才可能（推估 7～8 分，未實測）。fail-fast 預設開，紅清單可能不完整（要完整清單設 `MOTRIX_FAILFAST=0`）。開跑前 collect-only 對帳題數、跑完以執行題數對帳，對不上記紅。
 
-## 2026-10-07 R2 第1步：等價／回滾衛生、D4 superadmin 全部鍵、D5 財務判斷影子模式（wip/t45-r2-step1-impl）
+## 2026-10-07 職責角色化：上線等價檢查、回滾工具、最高管理者全部模組鍵、財務判斷影子模式（wip/t45-r2-step1-impl）
 
 - 檢查器 v2（`duty_roles_equivalence.py --schema 2`）：六面向等價、角色定義與紀錄表／觸發器檢查、計畫檔白名單、獨立重算、`catalog-check`、`scan-finance`、`verify --finance-cutover`；新增 L0 回滾 `duty_roles_rollback.py`（`--apply` 必須給計畫檔白名單）。
 - D4：superadmin 在守門層（`user_has_module`）為「全部鍵」，可見面不變。D5：財務判斷改讀生效權限的**影子模式**（旗標 `finance_via_effective`，預設 off；本班不切 on）。不改任何人看得到什麼。

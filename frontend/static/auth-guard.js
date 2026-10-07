@@ -24,12 +24,19 @@
   // 轉去登入頁之前記下「原本要去的網址」（含 ?q=／?id= 等查詢字串），登入成功後 login.html 會回到它
   // （通知連結、信件連結在未登入時打開，登入後才會落在原本那一頁；否則一律掉到首頁）。
   // sessionStorage＝只限這個分頁；login.html 端會再驗證成「同站路徑」才採用。
+  // 硬化（第46班）：① 框架內的頁面（window.top !== window）不寫——sessionStorage 與最上層文件共用，框架不該改寫分頁的回去目標；
+  // ② 太長（> 2000 字）不寫；③ 存成 JSON {p: 路徑, t: 時間戳}：login.html 超過 30 分鐘就不採用（放著不管的過期分頁，換人登入時不會被帶到上一位的最後頁面）。
   function rememberReturn() {
     try {
+      if (window.top && window.top !== window) return;
       if (/\/login(-qr-approve)?\.html$/.test(location.pathname)) return;
-      sessionStorage.setItem('motrix_return_to', location.pathname + location.search + location.hash);
+      var p = location.pathname + location.search + location.hash;
+      if (p.length > 2000) return;
+      sessionStorage.setItem('motrix_return_to', JSON.stringify({ p: p, t: Date.now() }));
     } catch (e) {}
   }
+  // 已登入的頁面正常載入 ⇒ 任何殘留的回去目標都已過時（明確登出前一定有過這種載入）：清掉
+  function forgetReturn() { try { sessionStorage.removeItem('motrix_return_to'); } catch (e) {} }
 
   if (!session || !session.token) {
     rememberReturn();
@@ -57,6 +64,7 @@
     .then(function (r) {
       clearTimeout(timeoutId);
       if (r.ok) {
+        forgetReturn();
         reveal();
       } else {
         try { localStorage.removeItem('motrix_session'); } catch (e) {}
