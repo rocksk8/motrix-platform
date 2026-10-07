@@ -174,7 +174,8 @@ class PayslipIn(BaseModel):
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 # 匯出之後的單向終結／下游狀態：不可修改、不可刪除
-_LOCKED_STATUSES = ("已匯出", "已簽回", "已付款", "已作廢")
+#: 第46班：`待審核`（送審中，要改請先退回）與 `已核准`（核准後鎖定，要改＝作廢重開）也鎖定。
+_LOCKED_STATUSES = ("待審核", "已核准", "已匯出", "已簽回", "已付款", "已作廢")
 
 _SIGNED_EXTS = {".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
 _SIGNED_MAX_BYTES = 20 * 1024 * 1024   # 單檔 20MB
@@ -224,7 +225,8 @@ def list_payslips(month: Optional[str] = None, contractor_id: Optional[int] = No
            "payment_method, slip_date, status, tax_rules_version, "
            "export_count, created_by, created_at, updated_at, "
            "voided_at, voided_by, void_reason, signed_at, signed_by, "
-           "payment_date, voucher_no, paid_by, paid_at, signed_files_json "
+           "payment_date, voucher_no, paid_by, paid_at, signed_files_json, "
+           "planned_pay_date, approved_at, approved_by "
            "FROM payslips WHERE 1=1")
     params = []
     if month:
@@ -299,7 +301,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
             income_type, gross,
             calc["taxWithheld"], calc["nhiSupplement"], calc["netAmount"],
             d.get("paymentMethod", "匯款"), d.get("slipDate", ""),
-            d.get("status", "草稿"), d["taxRulesVersion"],
+            "草稿", d["taxRulesVersion"],                                  # 第46班：新單一律草稿（原本 d["status"] 可由前端指定成已付款等）
             json.dumps(d, ensure_ascii=False),
             user["username"], now, now
         ))
@@ -409,7 +411,7 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
             income_type, gross,
             calc["taxWithheld"], calc["nhiSupplement"], calc["netAmount"],
             d.get("paymentMethod", "匯款"), d.get("slipDate", ""),
-            d.get("status", "草稿"), d["taxRulesVersion"],
+            existing["status"], d["taxRulesVersion"],                 # 第46班：狀態只由送審／匯出／簽回／付款端點改，PUT 不採用前端送來的 status
             json.dumps(d, ensure_ascii=False), now, slip_no
         ))
         conn.commit()
@@ -452,6 +454,9 @@ def record_export(slip_no: str, authorization: str = Header(None)):
     if row["status"] == "已作廢":
         conn.close()
         raise HTTPException(409, "已作廢的勞報單不可再匯出")
+    if row["status"] in ("草稿", "待審核"):                          # 第46班：匯出只准核准之後（**不需要付款日**；付款日只在出納登錄付款時填）
+        conn.close()
+        raise HTTPException(409, "請先送審並核准後再匯出（目前「%s」）" % row["status"])
     log = json.loads(row["export_log"] or "[]")
     now = datetime.now().isoformat()
     new_count = (row["export_count"] or 0) + 1
@@ -474,7 +479,7 @@ def record_export(slip_no: str, authorization: str = Header(None)):
         "archived": archived,
     })
     conn.execute("UPDATE payslips SET export_count=?, export_log=?, updated_at=?, "
-                 "status=CASE WHEN status IN ('草稿','已匯出') THEN '已匯出' ELSE status END "
+                 "status=CASE WHEN status IN ('已核准','已匯出') THEN '已匯出' ELSE status END "
                  "WHERE slip_no=?",
                  (new_count, json.dumps(log, ensure_ascii=False), now, slip_no))
     conn.commit()
@@ -600,15 +605,15 @@ def void_payslip(slip_no: str, body: VoidIn, authorization: str = Header(None)):
     if row["status"] == "已作廢":
         conn.close()
         raise HTTPException(409, "此勞報單已作廢")
-    if row["status"] != "已匯出":
+    if row["status"] not in ("已匯出", "已核准"):                    # 第46班 Q5 預設：已核准（尚未匯出）也可作廢（原因必填，同已匯出）
         conn.close()
         raise HTTPException(409, "已簽回／已付款的勞報單不可直接作廢，請先退回簽回"
                             if row["status"] in ("已簽回", "已付款")
-                            else "只有已匯出的勞報單可以作廢（草稿請直接刪除）")
+                            else "只有已核准或已匯出的勞報單可以作廢（草稿請直接刪除、待審核請先退回）")
     now = datetime.now().isoformat()
     who = user.get("display_name") or user["username"]
     conn.execute("UPDATE payslips SET status='已作廢', voided_at=?, voided_by=?, void_reason=?, "
-                 "updated_at=? WHERE slip_no=? AND status='已匯出'",
+                 "updated_at=? WHERE slip_no=? AND status IN ('已匯出','已核准')",
                  (now, who, reason, now, slip_no))
     conn.commit()
     conn.close()

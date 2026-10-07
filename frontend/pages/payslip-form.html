@@ -874,6 +874,10 @@ function payslipForm() {
         const r = await fetch(`${API}/payslips/${this.q.slipNo}/export`, {
           method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }
         })
+        if (!r.ok) {
+          let m = ''; try { m = (await r.json()).detail } catch (e) {}
+          this.errMsg = m || ('匯出失敗（' + r.status + '）；勞報單需先送審並核准才能匯出')
+        }
         if (r.ok) {
           const d = await r.json()
           this.exportCount = d.export_count

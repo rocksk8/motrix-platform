@@ -1,5 +1,13 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-10-07（wip/t46-payslip-impl）：勞報單送審流程（P1）
+- 狀態新增 `待審核`、`已核准`：草稿 → 送審 → 簽核（獨立流程 `payslip_approval_flow`，簽核人只能是最高管理者）→ 已核准；退回（原因必填）回草稿；**沒設簽核層＝送審即核准**。匯出只准核准之後（草稿／待審核 409），**匯出不需要付款日**；`待審核`、`已核准` 鎖定（不可改、不可刪）；已核准（未匯出）也可作廢（原因必填）。
+- 新端點 `POST /api/payslips/{no}/submit｜approve｜reject`（`api/payslip_approval.py`）；新提供者 `approval.queue_items`／`payroll_payslip`（待我簽核佇列，不含金額、受領人、身分資料）；單據類型 `payslip` 登記（簽核設定頁多一列，不併統一流程）。
+- 通知（`payslip_notify.py`，6 種信件類型、站內通知帶連結）：待審核／輪到您審核／已核准（送審人）／已退回／已核准待付款（財務，站內＋群組信）／已付款；主旨寫結果；**不含金額與受領人姓名**；自核不寄給自己。
+- **安全修正**：`POST /api/payslips`、`PUT /api/payslips/{no}` 不再採用前端送來的 `data.status`（原本可把單據直接寫成已付款）；狀態只由專用端點改。
+- migration v4：`payslips` 加 `approval_json`／`planned_pay_date`／`approved_at`／`approved_by`、新表 `payslip_dispatch_links`（P3 使用）。舊列不變。**回滾缺口**（Q11 已裁示接受）：舊碼不認得 `待審核／已核准`，回滾前先處理這兩種狀態的勞報單。
+- 行為變更：既有 `草稿` 要多按一次「送審」才能匯出（沒設簽核層＝一鍵核准）。
+
 ## 1.2.0 — 2026-10-06（wip/t44-bonus-mail）：獎金分潤核准／退回通知送審人（信＋站內）
 - 新 `bonus_notify.py`：信件類型 `bonus_approved`（「獎金分潤核准（送審人）」，簽核類、owner＝payroll，自動併入個人通知偏好）；簽核完成進入「待發放」時寄給送審人（`approval_json.requestedBy`），主旨與事由同一句「獎金分潤 {單號} 已核准」。**信內不放金額**（只有單號與客戶）。送審人就是簽核的人（唯一最高管理者自簽）⇒ 不寄給自己；寄信例外只記 log，不影響簽核。
 - `api/bonus.py`：`_notify_after(quote_no, status, by)` 在待發放時呼叫 `fire_approved`（之前送審人收不到任何結果）。
