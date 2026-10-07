@@ -299,7 +299,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
             income_type, gross,
             calc["taxWithheld"], calc["nhiSupplement"], calc["netAmount"],
             d.get("paymentMethod", "匯款"), d.get("slipDate", ""),
-            d.get("status", "草稿"), d["taxRulesVersion"],
+            "草稿", d["taxRulesVersion"],                                  # 新單一律草稿（原本 d["status"] 可由前端指定，直接寫成已簽回／已付款）
             json.dumps(d, ensure_ascii=False),
             user["username"], now, now
         ))
@@ -409,7 +409,7 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
             income_type, gross,
             calc["taxWithheld"], calc["nhiSupplement"], calc["netAmount"],
             d.get("paymentMethod", "匯款"), d.get("slipDate", ""),
-            d.get("status", "草稿"), d["taxRulesVersion"],
+            existing["status"], d["taxRulesVersion"],                 # 狀態只由匯出／簽回／付款等專用端點改；PUT 不採用前端送來的 status
             json.dumps(d, ensure_ascii=False), now, slip_no
         ))
         conn.commit()

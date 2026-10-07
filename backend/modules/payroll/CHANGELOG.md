@@ -1,5 +1,9 @@
 # 薪資獎金 更新紀錄
 
+## (next) — 2026-10-07（wip/t45-payslip-status-fix）：勞報單狀態不再由前端指定（快修）
+- `POST /api/payslips` 一律建成草稿；`PUT /api/payslips/{no}` 不採用請求裡的 `data.status`（沿用資料庫現值）。原本最高管理者可在請求中直接把狀態寫成已簽回／已付款，繞過匯出→簽回→出納付款的流程（已簽回的單據會進出納待付款與總帳應付分錄）。狀態只由匯出／簽回／付款／作廢等專用端點改變。
+- 測試：`modules/payroll/tests/test_payslip_status_not_client_controlled_2026_10_07.py`（含反向控制：還原修正即紅）。
+
 ## 1.2.0 — 2026-10-06（wip/t44-bonus-mail）：獎金分潤核准／退回通知送審人（信＋站內）
 - 新 `bonus_notify.py`：信件類型 `bonus_approved`（「獎金分潤核准（送審人）」，簽核類、owner＝payroll，自動併入個人通知偏好）；簽核完成進入「待發放」時寄給送審人（`approval_json.requestedBy`），主旨與事由同一句「獎金分潤 {單號} 已核准」。**信內不放金額**（只有單號與客戶）。送審人就是簽核的人（唯一最高管理者自簽）⇒ 不寄給自己；寄信例外只記 log，不影響簽核。
 - `api/bonus.py`：`_notify_after(quote_no, status, by)` 在待發放時呼叫 `fire_approved`（之前送審人收不到任何結果）。
