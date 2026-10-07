@@ -2,6 +2,13 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## (next) — 2026-10-07（wip/t45-r2-step1-impl：R2 第1步——D4 superadmin 全部鍵、D5 財務判斷影子模式）
+- L1（新增，向下相容）：`helpers.auth` 新增 `FINANCE_FLAG_KEY`、`finance_effective_keys(user, cache=False)`、`finance_duty_person(user)`、`reset_finance_mode_cache()`。
+  財務三鍵判斷（`has_finance_access`／`has_cashier_access`／`can_see_financial`／`user_has_module(財務三鍵)`）改走單一縫：`system_settings.finance_via_effective`＝缺／`off`（預設，舊規則逐字不變）、`shadow`（回傳舊規則，新舊不同時對該人該鍵每小時至多寫一筆 `audit_log` `permission.finance_shadow_diff`；算不出新規則退回舊規則）、`on`（回傳新規則＝（基礎類別 finance ∪ 啟用角色的財務鍵）−個人扣項；原始勾選不計；**本班不開，需使用者核准**）。
+- ⚠ **切 `on` 的前置條件**：`on` 模式每次判斷都查 DB 且不快取（扣項要立即生效），一次請求會呼叫多次 ⇒ 切 `on` 之前必須先加「每請求備忘」或 ≤10 秒 TTL；旗標讀取失敗沿用最後一次的值（從沒讀到才是 off）；`on` 時新規則算不出來，取舊規則與基礎類別的較嚴者。影子稽核寫入在背景執行緒（不在權限判斷路徑內同步寫庫）。
+- D4（選項 B）：`user_has_module` 對 superadmin 回 True（守門層「全部鍵」）；`effective_modules`／選單／登入／`/api/me`／`user["modules"]` 不動。
+- 工具（`backend/tools`，隨完整包）：`duty_roles_equivalence.py` v2（`--schema 2`；`verify --plan/--finance-cutover`、`diff`、`catalog-check`、`scan-finance`；結束碼新增 3）；新增 `duty_roles_rollback.py`（L0）；`duty_roles_export_effective.py` dry-run 補列「綁定含高敏感鍵者」。
+
 ## 1.117 — 2026-10-06（wip/t44-inapp-bell：站內通知所有角色可見、點擊開單、90 天保留）
 - L1（新增，向下相容）：`notifications.link` 欄位與兩個索引（core 未取號 migration，冪等）；`helpers.audit._notify(username, type_, ref_id, ref_label, message, link=None)` 新增選填參數 `link`（只准「頁面檔名.html＋選填查詢字串」，不合格丟棄但通知照寫）；**核准類通知（type 以 `_approved` 結尾）同一 (type, ref_id, username) 只留一列**（單一 INSERT…WHERE NOT EXISTS，原子）；通知文字裡的金額（`NT$ …`、`… 元`）對沒有財務金額可視的收件人（財務角色／superadmin 以外）在伺服器端統一遮成「（金額略）」；新增 `helpers.audit.purge_old_notifications()`（保留 90 天，已讀未讀都清；分批、每次有上限、冪等），由每日檢查（`helpers/daily_checks.run_once`，每日 08:00／啟動補跑）呼叫；`GET /api/notifications/mine` 回傳多一個 `link` 鍵。
 - 前端：通知鈴鐺（`sidebar.js`／`notif.js`）所有角色可見（原本只有管理員；一般使用者只掛隱形資料元件），點通知＝標已讀並開 `link`（前端再驗一次格式）；「查看全部操作紀錄」連結維持只給管理員。

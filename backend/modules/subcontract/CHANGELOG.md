@@ -5,6 +5,9 @@
 - `_voucher_public` 加 `plannedPayDate`（IP-14 形狀加法）；`POST /api/contractor-vouchers` 可帶選填 `planned_pay_date`（與合約應付款日 `payable_date` 分開、不預填、不寫回派發）。
 - 新提供者 `contractor_voucher.set_planned`（IP-14 第三個能力）：只認已核准、未匯款、未作廢；已匯款 409。供出納端點使用（出納端點在 arap）。不改出納排序（仍依應付款日）。
 
+## (next) — 2026-10-07（wip/t45-r2-step1-impl）：寫死「財務角色」的判斷點改走財務判斷縫（行為不變）
+- `api/vendor_contractors.py::_require_admin`：`role == "finance"` 改呼叫 `helpers.auth.finance_duty_person`（off／shadow ＝ 原判斷）。
+
 ## 1.1.20 — 2026-10-06（wip/t44-applicant-notify）：承攬派發信件主旨寫出結果
 - `dispatch_notify`：派發／派發完工信的主旨與事由由「派發 單號」改為「派發 單號 待審核／輪到您審核／已核准／已退回」（同一張派發不同事件的主旨不再相同）。
 - `dispatch_approval`：核准／退回的站內通知加連結（案件頁）；訊息本來就含派發單號。

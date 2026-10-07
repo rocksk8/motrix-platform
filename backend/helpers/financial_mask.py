@@ -45,7 +45,8 @@ def quote_money_visible(user: dict) -> bool:
     superadmin／admin／sales／財務角色（＝舊 `can_see_financial` 的角色集合）。業務與管理員維持**編輯報價單、看報價總額**；
     財務角色專屬的是**精算、收款／付款（款項期別）、財務總覽、報表金額、出納**等——那些仍走 `money_visible`／`can_see_financial`
     （只有 superadmin 與財務角色）。"""
-    return (user or {}).get("role") in ("superadmin", "admin", "sales", "finance")
+    from helpers.auth import finance_duty_person            # R2 D5：寫死 "finance" 的點改走縫（off／shadow ＝ 原判斷）
+    return (user or {}).get("role") in ("superadmin", "admin", "sales") or finance_duty_person(user)
 
 
 def material_money_visible(user: dict) -> bool:
@@ -54,7 +55,8 @@ def material_money_visible(user: dict) -> bool:
     財務金額可視（`money_visible`）改成只有財務角色與 superadmin 之後，admin 會連材料申請的日常作業
     （建立／送審／到貨確認）都被擋——但那屬一般管理（使用者已同意的預設 Q6）。所以材料申請自己用這一支：
     維持 admin 可作業，而「取消已核准的材料申請」「改成本單價」仍另外要求財務角色（material_approval／material_guard）。"""
-    return (user or {}).get("role") in ("superadmin", "admin", "sales", "finance")
+    from helpers.auth import finance_duty_person            # R2 D5：寫死 "finance" 的點改走縫（off／shadow ＝ 原判斷）
+    return (user or {}).get("role") in ("superadmin", "admin", "sales") or finance_duty_person(user)
 
 
 class PaymentStructureChange(Exception):

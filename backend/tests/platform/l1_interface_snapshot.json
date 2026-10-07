@@ -1,5 +1,5 @@
 {
- "core_version": "1.117",
+ "core_version": "next",
  "interface": {
   "core:archive": {
    "MODULE_BACKUP_PREFIX": "const",
@@ -181,6 +181,7 @@
   },
   "helper:auth": {
    "DEMO_TOKEN_PREFIX": "const",
+   "FINANCE_FLAG_KEY": "const",
    "FINANCE_MODULE_KEYS": "const",
    "FINANCE_ROLE": "const",
    "FINANCE_ROLES": "const",
@@ -198,11 +199,14 @@
    "_write_initial_credentials": "def(username, password, path=…)",
    "can_see_financial": "def(user)",
    "effective_modules": "def(role, modules, user_id=…, conn=…)",
+   "finance_duty_person": "def(user)",
+   "finance_effective_keys": "def(user, cache=…)",
    "finance_usernames": "def(conn=…)",
    "has_cashier_access": "def(user)",
    "has_finance_access": "def(user)",
    "is_weak_password": "def(password)",
    "require_any_module": "def(user, keys, label)",
+   "reset_finance_mode_cache": "def()",
    "user_has_module": "def(user, key)"
   },
   "helper:branding": {
