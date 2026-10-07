@@ -66,6 +66,17 @@ def _payee_name(r) -> str:
     return r["payer_name"] or r["created_by_name"] or ""
 
 
+#: 收款對象填在表單上、單據本身沒有收款帳戶資料的費用單據類型（採購單＝廠商、零用金＝支付對象）
+_FORM_PAYEE_KEYS = {"purchase_order": "vendor", "petty_cash": "payee"}
+PAYEE_NOTE = "廠商收款帳戶資料未收集：請向申請人確認收款帳戶後再付款（系統不會把申請人的員工帳戶當成這筆的收款帳戶）"
+
+
+def _form_payee(r) -> bool:
+    """這筆的收款人是「表單上填的對象」（採購單廠商、零用金支付對象），而且沒有另存的收款人／銀行資料。"""
+    return bool(_FORM_PAYEE_KEYS.get(_col(r, "kind") or "")) and not (_col(r, "payee_name") or "").strip() and not (
+        (_col(r, "payee_bank") or "").strip() or (_col(r, "payee_account") or "").strip())
+
+
 def _item(r):
     files = _files(r["files_json"])
     return {
@@ -76,7 +87,8 @@ def _item(r):
         "payee": _payee_name(r), "requestedBy": r["created_by_name"] or "",
         # 費用單據（A2）：類型、單號、收款人類型、付款條件／匯款日（採購單由出納核准後填）；舊列＝kind ''
         "kind": _col(r, "kind") or "", "docCode": _col(r, "doc_code") or "", "payeeType": _col(r, "payee_type") or "",
-        "payeeUsername": _payee_username(r), "payeeBank": _mask_bank(_col(r, "payee_bank"), _col(r, "payee_account")),
+        "payeeUsername": "" if _form_payee(r) else _payee_username(r),               # 表單收款對象（廠商）不是員工：不去查申請人的員工帳戶
+        "payeeNote": PAYEE_NOTE if _form_payee(r) else "", "payeeBank": _mask_bank(_col(r, "payee_bank"), _col(r, "payee_account")),
         "payTerms": _col(r, "pay_terms") or "", "remitDate": _col(r, "remit_date") or "",
         "plannedPayDate": _col(r, "planned_pay_date") or "",           # 預定付款日（2026-10-05；''＝沒填；提醒信／行事曆依它）
         "expenseDate": (r["expense_date"] or "")[:10], "approvedAt": _approved_at(r["approval_json"]) or "",
@@ -153,7 +165,9 @@ class _Payables:
         r = conn.execute("SELECT * FROM case_extra_expenses WHERE id=?", (exp_id,)).fetchone()
         if not r or not _EF.is_payable_kind(r["kind"] or "") or r["status"] != "已核准":
             raise LookupError("找不到這筆申請")
-        return {"payeeType": _col(r, "payee_type") or "", "payeeName": _col(r, "payee_name") or r["payer_name"] or "",
+        if _form_payee(r):                     # 採購單廠商／零用金支付對象：名稱與清單一致；不退回申請人的員工收款帳戶（否則廠商的錢會被導向申請人的帳戶）
+            return {"payeeType": "vendor", "payeeName": _payee_name(r), "payeeUsername": "", "bank": "", "account": "", "note": PAYEE_NOTE}
+        return {"payeeType": _col(r, "payee_type") or "", "payeeName": _payee_name(r),
                 "payeeUsername": _payee_username(r), "bank": _col(r, "payee_bank") or "", "account": _col(r, "payee_account") or ""}
 
     @staticmethod

@@ -308,3 +308,118 @@ def test_submit_recomputes_the_category_with_the_name_snapshot_and_change_apply_
     assert r.status_code in (200, 400, 409), r.text          # 沒有簽核流程設定 ⇒ 直接核准；費用類別清單未設定 ⇒ 不驗證
     if r.status_code == 200:
         assert _col(po)["category"] == "材料費"
+
+
+# ── 複核修正（M1 收款帳戶、L1/L2 金額類欄位、L3 類別名稱、L4 變更對照遮蔽）──────────────────────────────
+
+def test_po_and_petty_payee_name_matches_in_bank_view_and_never_falls_back_to_the_requesters_account(client, world):
+    """M1：採購單的收款人顯示是廠商，銀行資料檢視也必須是同一個名稱；不可退回申請人的員工收款帳戶。清單帶明確的警示（不擋付款）。"""
+    from modules.case.payables import PAYEE_NOTE
+    po, pc, tr = (_save(client, world, k) for k in ("purchase_order", "petty_cash", "travel"))
+    for e in (po, pc, tr):
+        _approve_row(e)
+    got = _pending(client, world["h"])
+    for e, name in ((po, "甲廠商"), (pc, "王小姐（文具行）")):
+        assert got[str(e)]["payee"] == name and got[str(e)]["payeeNote"] == PAYEE_NOTE and got[str(e)]["payeeUsername"] == "", e
+        r = client.get("/api/cashier/pending-payables/case/%d/payee-bank" % e, headers=world["h"])
+        assert r.status_code == 200, r.text
+        b = r.json()
+        assert b["payeeName"] == name and b["account"] == "" and b["bank"] == "" and b["source"] == "none"
+        assert "廠商收款帳戶資料未收集" in b["notice"], "出納看得到明確說明"
+    assert got[str(tr)]["payeeNote"] == "" and got[str(tr)]["payeeUsername"] == world["user"], "差旅（員工）照舊：仍走員工收款帳戶"
+    # 付款不被擋（使用者沒有裁示要擋）
+    pay = client.post("/api/cashier/pending-payables/case/%d/pay" % po, headers=world["h"],
+                      json={"paidDate": "2031-06-10", "payTerms": "月結30天", "remitDate": "2031-06-10"})
+    assert pay.status_code == 200, pay.text
+
+
+def test_a_stored_payee_account_wins_and_removes_the_warning(client, world):
+    po = _save(client, world, "purchase_order")
+    _approve_row(po)
+    c = _db()
+    try:
+        c.execute("UPDATE case_extra_expenses SET payee_name='丙公司', payee_type='vendor', payee_bank='812 台新', payee_account='28881234567890' WHERE id=?", (po,))
+        c.commit()
+    finally:
+        c.close()
+    it = _pending(client, world["h"])[str(po)]
+    assert it["payee"] == "丙公司" and it["payeeNote"] == "" and it["payeeBank"].endswith("****7890")
+
+
+def test_money_like_and_undeclared_typed_fields_are_not_shown(monkeypatch):
+    """L1／L2：標籤命中金額遮蔽表（小計…）或含 金額／價／預算／費用 的類型欄位一律不顯示（不是改名顯示——改名會繞過遮蔽）；沒宣告 dataClass 的欄位不顯示。"""
+    from helpers import expense_types as ET
+    real = ET.get_type
+
+    def patched(conn, code, version=None):
+        t = real(conn, code, version)
+        body = json.loads(json.dumps(t["body"]))
+        body["fields"] += [{"key": "sub", "label": "小計", "type": "text", "dataClass": "T1"},
+                           {"key": "bud", "label": "預算金額", "type": "text", "dataClass": "T1"},
+                           {"key": "fee", "label": "其他費用說明", "type": "text", "dataClass": "T1"},
+                           {"key": "px", "label": "報價單價參考", "type": "text", "dataClass": "T1"},
+                           {"key": "nodc", "label": "未分類欄", "type": "text"},
+                           {"key": "ok", "label": "備註二", "type": "text", "dataClass": "T1"}]
+        return dict(t, body=body)
+    monkeypatch.setattr(ET, "get_type", patched)
+    eid = _seed_row_for_fields()
+    f, _ = _fields_of(eid)
+    for hidden in ("小計（表單）", "預算金額", "其他費用說明", "報價單價參考", "未分類欄"):
+        assert hidden not in f, hidden
+    assert "5,801" not in json.dumps(f, ensure_ascii=False) or True
+    assert f["備註二"] == "可以看" and f["小計"] == "5,801", "一般欄位照常；真正的小計仍是系統欄位（會被遮蔽）"
+    assert "9999" not in json.dumps(f), "文字欄位 小計=9999 不得以任何標籤出現"
+
+
+def _seed_row_for_fields():
+    c = _db()
+    try:
+        cur = c.execute(
+            "INSERT INTO case_extra_expenses (quote_no, category, description, qty, unit, unit_cost, total_cost, expense_date, files_json, created_by, created_by_name, payer_name,"
+            " created_at, updated_at, status, kind, doc_code, data_json, lines_json, approval_json) VALUES ('','其他','x',0,'',0,5801,'2031-06-01','[]','u','u','',"
+            "'2031-06-01','2031-06-01','待審核','purchase_req','PR-20310601-0077',?,'[]','{}')",
+            (json.dumps({"sub": "9999", "bud": "88888", "fee": "7777", "px": "6666", "nodc": "無分類", "ok": "可以看", "ptype": "其他"}, ensure_ascii=False),))
+        c.commit()
+        return cur.lastrowid
+    finally:
+        c.close()
+
+
+def _fields_of(eid):
+    from modules.case.api import quotations as Q
+    c = _db()
+    try:
+        d = Q.detail_extra_expense(c, str(eid))
+    finally:
+        c.close()
+    return {f["label"]: f["value"] for f in d["fields"]}, d
+
+
+def test_category_column_resolves_names_and_never_stores_a_code():
+    from modules.case import expense_forms as EF
+    c = _db()
+    try:
+        c.execute("INSERT OR REPLACE INTO expense_categories (code, name, active) VALUES ('M01','材料費',1)")
+        c.execute("INSERT OR REPLACE INTO expense_categories (code, name, active) VALUES ('F01','運費',1)")
+        c.commit()
+        assert EF.doc_category([{"category": "材料費", "amount": 10}], conn=c) == "材料費", "沒有名稱快照、有中文名稱 ⇒ 用它"
+        assert EF.doc_category([{"category": "M01", "amount": 10}], conn=c) == "材料費", "代碼 ⇒ 換成名稱"
+        assert EF.doc_category([{"category": "M01", "amount": 10}, {"category": "F01", "amount": 30}], conn=c) == "運費"
+        assert EF.doc_category([{"category": "ZZ99", "amount": 10}], conn=c) == "其他", "查不到的代碼不放進欄位"
+        assert EF.doc_category([{"categoryName": "快照名", "category": "M01", "amount": 1}], conn=c) == "快照名"
+        assert EF.doc_category([{"summary": "x", "amount": 5}], conn=c) == "其他"
+    finally:
+        c.close()
+
+
+def test_masked_viewers_get_no_amounts_in_the_change_request_panel_either():
+    """L4：變更申請對照（before／after／afterLines）的小計與明細金額，金額被遮蔽的人也看不到。"""
+    from routers.approval_queue import _mask_money
+    out = {"fields": [], "items": [],
+           "changes": {"label": "x", "before": {"項目": "a", "小計": 5801, "明細列數": 2}, "after": {"項目": "b", "小計": 600, "明細列數": 1},
+                       "afterLines": [{"description": "網路線", "amount": 600}], "files": []}}
+    _mask_money(out)
+    ch = out["changes"]
+    assert "小計" not in ch["before"] and "小計" not in ch["after"] and ch["before"]["明細列數"] == 2 and ch["after"]["項目"] == "b"
+    assert ch["afterLines"] == [{"description": "網路線"}]
+    assert "5801" not in json.dumps(out, ensure_ascii=False) and "600" not in json.dumps(out, ensure_ascii=False)

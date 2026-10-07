@@ -483,7 +483,7 @@ def create_extra_expense(quote_no: str, body: ExtraExpenseIn = Body(...),
             PI.check_from_pr(conn, quote_no, kind, data)
             doc_code = EF.next_doc_code(conn, kind, now[:10])
             desc = (body.description or "").strip() or next((l.get("summary") for l in lines if l.get("summary")), "") or "（%s）" % doc_code
-            cat_col = EF.doc_category(lines, body.category or "其他")                    # 費用單據的便利欄：取明細金額最大的類別（不再一律「其他」）
+            cat_col = EF.doc_category(lines, body.category or "其他", conn)                # 費用單據的便利欄：取明細金額最大的類別（不再一律「其他」）
         else:
             lines, total, data, doc_code, over_plan = [], _recalc(body), {}, "", []
             desc = (body.description or "").strip()
@@ -549,7 +549,7 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
             PI.stamp_from_pr(data, lines)                                                              # 第 44 班
             PI.check_from_pr(conn, quote_no, row_kind, data)
             desc = (body.description or "").strip() or row["description"]
-            cat_col = EF.doc_category(lines, body.category or "其他")
+            cat_col = EF.doc_category(lines, body.category or "其他", conn)
         else:
             lines, total, data, desc = _jlist(row, "lines_json"), _recalc(body), _jcol(row, "data_json"), (body.description or "").strip()
             over_plan = []
@@ -842,7 +842,7 @@ def submit_extra_expense(quote_no: str, exp_id: int, authorization: str = Header
             _new_lines, _over = PI.check_lines(conn, quote_no, row["kind"], _new_lines, exclude_id=exp_id, require_reason=True)
             PI.check_from_pr(conn, quote_no, row["kind"], _jcol(row, "data_json"))
             conn.execute("UPDATE case_extra_expenses SET lines_json=?, def_version=?, category=? WHERE id=? AND quote_no=?",
-                         (EF.dumps_lines(_new_lines), EF.current_def_version(conn, row["kind"]), EF.doc_category(_new_lines, row["category"] or "其他"),
+                         (EF.dumps_lines(_new_lines), EF.current_def_version(conn, row["kind"]), EF.doc_category(_new_lines, row["category"] or "其他", conn),
                           exp_id, quote_no))     # 送審當下釘定義版本；便利欄「類別」用送審後的類別名稱快照重算
 
         if not tiers:
@@ -1298,7 +1298,7 @@ def _apply_change(conn, row, change: dict, actor_display: str, now: str) -> floa
         " payer_username=?, payer_name=?, files_json=?, updated_at=?, updated_by_name=?, "
         " approval_json=?, change_status='', change_json='{}', change_approval_json='{}' "
         "WHERE id=? AND quote_no=?",
-        (EF.doc_category(clean_lines, change.get("category") or "其他") if _has_lines else (change.get("category") or "其他"), change.get("description") or "",
+        (EF.doc_category(clean_lines, change.get("category") or "其他", conn) if _has_lines else (change.get("category") or "其他"), change.get("description") or "",
          float(change.get("qty") or 0), change.get("unit") or "",
          float(change.get("unitCost") or 0), total, change.get("note") or "",
          change.get("expenseDate") or "", change.get("docNo") or "",

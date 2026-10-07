@@ -323,6 +323,15 @@ def _mask_money(out: dict) -> None:
                   if k not in ("amount", "subtotal", "unitPrice", "unit_cost", "price", "total")}
         masked_items.append(it)
     out["items"] = masked_items
+    ch = out.get("changes")                                # 變更申請對照（核准後才生效的內容）：小計與明細金額也是金額
+    if isinstance(ch, dict):
+        ch = dict(ch)
+        for side in ("before", "after"):
+            if isinstance(ch.get(side), dict):
+                ch[side] = {k: v for k, v in ch[side].items() if k not in ("小計", "單價", "金額", "總金額")}
+        if isinstance(ch.get("afterLines"), list):
+            ch["afterLines"] = [{k: v for k, v in (x.items() if isinstance(x, dict) else []) if k not in ("amount", "unitCost", "unitPrice")} for x in ch["afterLines"]]
+        out["changes"] = ch
     out["moneyMasked"] = True
 
 
