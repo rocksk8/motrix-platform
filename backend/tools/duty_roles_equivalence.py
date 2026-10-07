@@ -36,6 +36,8 @@ FINANCE_ROLES = ("superadmin", "finance")
 CAP_NAMES = ("finance", "cashier", "seeFinancial", "moneyVisible", "quoteMoneyVisible", "materialMoneyVisible",
              "inFinanceUsernames", "mailFinanceGroup")
 TRIGGERS = ("permission_changes_no_update", "permission_changes_no_delete")
+#: 守門面（gate）取樣用的「目錄裡沒有的鍵」：非 superadmin 必為 False，superadmin（D4）必為 True
+UNKNOWN_KEY = "__not_in_catalog__"
 #: D5 範圍內（寫死 "finance" 字面值、已改走縫的）四個檔（使用者 2026-10-07 裁示；相對 backend/）
 D5_IN_SCOPE = ("helpers/financial_mask.py", "modules/case/api/material_orders.py", "modules/case/material_guard.py",
                "modules/subcontract/api/vendor_contractors.py")
@@ -139,6 +141,16 @@ def spec_finance(role, bound_perms, subtracts) -> set:
     return keys - set(subtracts or [])
 
 
+def spec_gate(role, raw, bound_perms, subtracts, catalog, finance_mode="off") -> set:
+    """守門面：`user_has_module(user, key)` 對目錄每個鍵的結果。superadmin ⇒ 全部（D4）；財務三鍵 ⇒ 旗標 on 看新規則、否則舊規則（只看基礎類別）；
+    其他 ⇒ 該鍵在套用後的勾選（E2）裡。"""
+    if role == "superadmin":
+        return set(catalog)
+    view = spec_guard_view(role, raw, bound_perms, subtracts)
+    fin = spec_finance(role, bound_perms, subtracts) if finance_mode == "on" else (set(FINANCE_KEYS) if role in FINANCE_ROLES else set())
+    return {k for k in catalog if (k in fin if k in FINANCE_KEYS else k in view)}
+
+
 def _table_rows(conn, sql, args=()):
     try:
         return conn.execute(sql, args).fetchall()
@@ -164,6 +176,10 @@ def take_snapshot2(conn) -> dict:
     for r in _table_rows(conn, "SELECT user_id, perm_key FROM user_perm_subtracts ORDER BY user_id, perm_key"):
         subs.setdefault(r["user_id"], []).append(r["perm_key"])
     fin_names = set(A.finance_usernames(conn))
+    try:
+        gate_catalog = sorted(dr.known_keys()) + [UNKNOWN_KEY]
+    except Exception:                                   # noqa: BLE001
+        gate_catalog = [UNKNOWN_KEY]
     users = {}
     for r in conn.execute("SELECT id, username, role, active, modules FROM users ORDER BY id").fetchall():
         uid, role = r["id"], r["role"]
@@ -184,10 +200,13 @@ def take_snapshot2(conn) -> dict:
                            "subtracts": sorted(subs.get(uid, [])),
                            "effective": sorted(set(eff_ordered)), "effectiveOrdered": eff_ordered,
                            "guardView": sorted(set(guard)), "caps": caps,
-                           "financeKeys": sorted(A.finance_effective_keys(ud))}
+                           "financeKeys": sorted(A.finance_effective_keys(ud)),
+                           # 守門面：`user_has_module` 對目錄每個鍵（＋1 個目錄外的鍵）的結果；呼叫端看到的是 `_require_user` 套用後的勾選（＝E2）
+                           "gateKeys": sorted(k for k in gate_catalog if A.user_has_module(dict(ud, modules=json.dumps(guard)), k))}
     trig = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'permission_changes_no%' ORDER BY name")]
     pc = _table_rows(conn, "SELECT COUNT(*) AS n, COALESCE(MAX(id),0) AS m FROM permission_changes")
     return {"schema": 2, "takenAt": datetime.now().isoformat(timespec="seconds"), "dbPath": "", "codeVersion": {},
+            "financeMode": A._finance_mode(), "gateCatalog": gate_catalog,
             "roles": roles, "users": users,
             "log": {"permissionChangesCount": pc[0]["n"] if pc else 0, "permissionChangesMaxId": pc[0]["m"] if pc else 0, "triggers": trig}}
 
@@ -272,6 +291,14 @@ def diff_snapshots(a: dict, b: dict, plan=None) -> dict:
             cb = sorted(k for k, v in (y.get("caps") or {}).items() if v)
             fe = fin_exp.get(uid) or {}
             _check_facet(diffs, uid, name, "E3", ca, cb, fe.get("lost"), fe.get("gained"))
+            if x.get("gateKeys") is not None and y.get("gateKeys") is not None:
+                # 守門面（D4／E6g）：superadmin 只准 False→True，多出的鍵必須列在 plan.users[id].gateGained；其他人一律零差異（不接受白名單）
+                if x.get("role") == "superadmin":
+                    _check_facet(diffs, uid, name, "gate", x["gateKeys"], y["gateKeys"], [], pu.get("gateGained"))
+                else:                                   # 其他人：不接受 gateGained；守門面跟著 E2 的計畫預期走（財務三鍵走能力矩陣，不在 E2 裡）
+                    nf = lambda ks: [k for k in (ks or []) if k not in FINANCE_KEYS]   # noqa: E731
+                    _check_facet(diffs, uid, name, "gate", x["gateKeys"], y["gateKeys"],
+                                 nf(pu.get("guardLost", pu.get("lost"))), nf(pu.get("guardGained", pu.get("gained"))))
         if (x.get("effectiveOrdered") != y.get("effectiveOrdered") and x.get("effective") == y.get("effective")):
             order_only.append({"id": uid, "username": name})
     info += ["快照後新增帳號：%s" % ub[k].get("username") for k in ub if k not in ua]
@@ -288,10 +315,13 @@ def spec_mismatches(snap2: dict, conn) -> list:
     for uid, u in (snap2.get("users") or {}).items():
         bound = [p for k in u.get("bindings", []) for p in (key_perms.get(k, ([], False))[0] if key_perms.get(k, ([], False))[1] else [])]
         subs = u.get("subtracts") or []
-        for facet, want, got in (
-                ("E1", spec_effective(u["role"], u["rawModules"], bound, subs), set(u["effective"])),
-                ("E2", spec_guard_view(u["role"], u["rawModules"], bound, subs), set(u["guardView"])),
-                ("財務生效鍵", spec_finance(u["role"], bound, subs), set(u["financeKeys"]))):
+        checks = [("E1", spec_effective(u["role"], u["rawModules"], bound, subs), set(u["effective"])),
+                  ("E2", spec_guard_view(u["role"], u["rawModules"], bound, subs), set(u["guardView"])),
+                  ("財務生效鍵", spec_finance(u["role"], bound, subs), set(u["financeKeys"]))]
+        if u.get("gateKeys") is not None:
+            checks.append(("gate", spec_gate(u["role"], u["rawModules"], bound, subs, snap2.get("gateCatalog") or [], snap2.get("financeMode")),
+                           set(u["gateKeys"])))
+        for facet, want, got in checks:
             if want != got:
                 out.append({"id": uid, "username": u.get("username"), "facet": facet, "problem": "程式與規格不一致",
                             "spec": sorted(want), "actual": sorted(got)})

@@ -117,7 +117,7 @@ def test_finance_key_leaking_into_the_guard_view_is_caught_even_though_effective
     conn.close()
     sales = [d for d in res["diffs"] if d.get("username") == "r2_sales"]
     by = {d["facet"]: d for d in sales}
-    assert res["code"] == 1 and set(by) == {"E1", "E2"}                                         # E3（財務能力）不變
+    assert res["code"] == 1 and set(by) == {"E1", "E2", "gate"}                                # E3（財務能力）不變
     assert set(by["E2"]["gained"]) >= {"cashier", "finance", "financial_view"}                  # E2 多財務鍵（已知、僅資訊）
     assert not set(by["E1"]["gained"]) & set(EQ.FINANCE_KEYS)                                    # E1 不含財務鍵（第42班規則）
 
@@ -323,6 +323,7 @@ def _user(ids, name, role, mods="[]"):
 
 
 def _shadow_audit_rows():
+    A._join_shadow_threads()                                       # 影子稽核在背景執行緒寫，等它寫完再讀
     conn = db.get_db()
     try:
         return conn.execute("SELECT detail FROM audit_log WHERE action='permission.finance_shadow_diff'").fetchall()
@@ -402,6 +403,83 @@ def test_d5_literal_points_follow_the_seam_for_the_four_files(pop):
     assert FM.material_money_visible(_user(ids, "r2_adm", "admin")) and FM.quote_money_visible(_user(ids, "r2_sa", "superadmin"))
 
 
+# ── 守門面（D4 可見）＆旗標／影子的強化 ─────────────────────────────────────────
+
+def test_gate_facet_sees_d4_and_is_zero_diff_for_everyone_else(pop):
+    ids, _ = pop
+    snap = _snap()
+    sa = snap["users"][str(ids["r2_sa"])]
+    assert set(sa["gateKeys"]) == set(snap["gateCatalog"])                                       # superadmin：目錄全部＋目錄外的鍵
+    assert EQ.UNKNOWN_KEY in sa["gateKeys"] and EQ.UNKNOWN_KEY not in snap["users"][str(ids["r2_adm"])]["gateKeys"]
+    pre = copy.deepcopy(snap)                                                                    # 模擬 D4 之前的快照
+    pre["users"][str(ids["r2_sa"])]["gateKeys"] = ["dashboard"]
+    res = EQ.diff_snapshots(pre, snap)
+    assert res["code"] == 1 and any(d["facet"] == "gate" and d["id"] == str(ids["r2_sa"]) for d in res["diffs"])
+    missing = sorted(set(snap["gateCatalog"]) - {"dashboard"})
+    assert EQ.diff_snapshots(pre, snap, {"users": {str(ids["r2_sa"]): {"gateGained": missing}}})["code"] == 0   # 白名單恰好等於缺鍵
+    assert EQ.diff_snapshots(pre, snap, {"users": {str(ids["r2_sa"]): {"gateGained": missing[:-1]}}})["code"] == 1
+    lost = copy.deepcopy(snap)
+    lost["users"][str(ids["r2_sa"])]["gateKeys"] = ["dashboard"]
+    assert EQ.diff_snapshots(snap, lost, {"users": {str(ids["r2_sa"]): {"gateGained": missing}}})["code"] == 1   # True→False 不准
+    other = copy.deepcopy(snap)
+    other["users"][str(ids["r2_adm"])]["gateKeys"] = other["users"][str(ids["r2_adm"])]["gateKeys"] + ["settings"]
+    assert EQ.diff_snapshots(snap, other, {"users": {str(ids["r2_adm"]): {"gateGained": ["settings"]}}})["code"] == 1   # 非 superadmin 不接受白名單
+
+
+def test_independent_gate_recompute_catches_a_broken_user_has_module(pop, monkeypatch):
+    conn = db.get_db()
+    try:
+        assert EQ.spec_mismatches(EQ.take_snapshot2(conn), conn) == []
+        real = A.user_has_module
+        monkeypatch.setattr(A, "user_has_module", lambda u, k: False if (u or {}).get("role") == "superadmin" else real(u, k))
+        bad = EQ.spec_mismatches(EQ.take_snapshot2(conn), conn)
+        assert bad and all(b["facet"] == "gate" for b in bad)                                    # 把 D4 拿掉 ⇒ 抓得到
+        monkeypatch.setattr(A, "user_has_module", lambda u, k: True if (u or {}).get("role") == "admin" else real(u, k))
+        bad = EQ.spec_mismatches(EQ.take_snapshot2(conn), conn)
+        assert bad and any(b["username"] == "r2_adm" for b in bad)                               # 對 admin 也放行 ⇒ 抓得到
+    finally:
+        conn.close()
+
+
+def test_flag_read_error_keeps_last_known_good_mode(pop, monkeypatch):
+    _set_flag("on")
+    assert A._finance_mode() == "on"
+
+    def boom():
+        raise RuntimeError("db down")
+    monkeypatch.setattr(A, "get_db", boom)
+    A._fin_mode["at"] = -1e9                                                                     # 讓快取過期
+    assert A._finance_mode() == "on"                                                             # 沿用，不退回 off
+    A.reset_finance_mode_cache()
+    assert A._finance_mode() == "off"                                                            # 從沒讀到過 ⇒ off
+
+
+def test_on_mode_computation_error_takes_the_stricter_of_old_and_new(pop, monkeypatch):
+    ids, roles = pop
+    conn = db.get_db()
+    DR.bind_role(conn, SA, ids["r2_sales"], roles["finance"], reason="測試財務角色綁定")
+    conn.close()
+    _set_flag("on")
+    monkeypatch.setattr(A, "finance_effective_keys", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert not A.has_finance_access(_user(ids, "r2_sales", "sales")) and not A.finance_duty_person(_user(ids, "r2_sales", "sales"))
+    assert A.has_finance_access(_user(ids, "r2_fin", "finance")) and A.has_cashier_access(_user(ids, "r2_sa", "superadmin"))
+
+
+def test_shadow_audit_is_written_off_the_calling_thread(pop, monkeypatch):
+    import threading
+    from helpers import audit as AU
+    ids, roles = pop
+    conn = db.get_db()
+    DR.bind_role(conn, SA, ids["r2_sales"], roles["finance"], reason="測試財務角色綁定")
+    conn.close()
+    seen = []
+    monkeypatch.setattr(AU, "_audit", lambda *a, **k: seen.append(threading.current_thread()))
+    _set_flag("shadow")
+    assert not A.has_finance_access(_user(ids, "r2_sales", "sales"))
+    A._join_shadow_threads()
+    assert seen and all(t is not threading.main_thread() and t is not threading.current_thread() for t in seen)
+
+
 # ── L0 回滾 ───────────────────────────────────────────────────────────────────
 
 def _db_state(path):
@@ -447,7 +525,8 @@ def test_rollback_apply_restores_whitelist_only_appends_log_and_reverifies(pop, 
     base = _db_state(dbp)
     _r2_actions(dbp, ids, roles)
     after_actions = _db_state(dbp)
-    plan = {"batch": "T45-X", "users": {str(ids["r2_eng"]): {}, str(ids["r2_adm"]): {}, str(ids["r2_sales"]): {}}}
+    plan = {"batch": "T45-X", "users": {str(ids["r2_eng"]): {}, str(ids["r2_adm"]): {},
+                                        str(ids["r2_sales"]): {"restoreRaw": True, "restoreActive": True}}}
     p = str(tmp_path / "plan.json")
     json.dump(plan, open(p, "w", encoding="utf-8"))
     assert RB.main(["--snapshot", s, "--plan", p, "--db", dbp, "--apply"]) == 0               # 內含無計畫的重驗必須 PASS
@@ -468,12 +547,50 @@ def test_rollback_touches_only_the_whitelist(pop, tmp_path):
     _r2_actions(dbp, ids, roles)
     p = str(tmp_path / "plan.json")
     json.dump({"users": {str(ids["r2_eng"]): {}}}, open(p, "w", encoding="utf-8"))               # 只列一個人
-    assert RB.main(["--snapshot", s, "--plan", p, "--db", dbp, "--apply"]) == 1                  # 白名單外仍有差異 ⇒ 重驗不過
+    assert RB.main(["--snapshot", s, "--plan", p, "--db", dbp, "--apply"]) == 0                  # 重驗限白名單：白名單外的差異只列數量、不算失敗
     c = sqlite3.connect(dbp)
     assert c.execute("SELECT COUNT(*) FROM user_duty_roles WHERE user_id=?", (ids["r2_eng"],)).fetchone()[0] == 0
     assert c.execute("SELECT COUNT(*) FROM user_perm_subtracts WHERE user_id=?", (ids["r2_adm"],)).fetchone()[0] == 1   # 沒被動
     assert c.execute("SELECT active FROM users WHERE id=?", (ids["r2_sales"],)).fetchone()[0] == 0
     c.close()
+
+
+def test_rollback_does_not_restore_raw_or_active_unless_the_plan_says_so(pop, tmp_path):
+    ids, roles = pop
+    dbp = _copy(tmp_path)
+    s = str(tmp_path / "s.json")
+    assert EQ.main(["snapshot", "--schema", "2", "--out", s, "--db", dbp]) == 0
+    _r2_actions(dbp, ids, roles)                                                                 # 含：r2_sales 勾選清空＋停用（模擬離職者）
+    p = str(tmp_path / "plan.json")
+    json.dump({"users": {str(ids["r2_sales"]): {}, str(ids["r2_adm"]): {}}}, open(p, "w", encoding="utf-8"))
+    assert RB.main(["--snapshot", s, "--plan", p, "--db", dbp, "--apply"]) == 0                  # 未要求還原的面向不算失敗
+    c = sqlite3.connect(dbp)
+    assert c.execute("SELECT active, modules FROM users WHERE id=?", (ids["r2_sales"],)).fetchone() == (0, "[]")   # 離職者沒被重新啟用
+    assert c.execute("SELECT COUNT(*) FROM user_perm_subtracts WHERE user_id=?", (ids["r2_adm"],)).fetchone()[0] == 0   # 扣項照常還原
+    c.close()
+    json.dump({"users": {str(ids["r2_sales"]): {"restoreActive": True}}}, open(p, "w", encoding="utf-8"))
+    assert RB.main(["--snapshot", s, "--plan", p, "--db", dbp, "--apply"]) == 0
+    c = sqlite3.connect(dbp)
+    assert c.execute("SELECT active FROM users WHERE id=?", (ids["r2_sales"],)).fetchone()[0] == 1            # 只還原要求的在職
+    assert c.execute("SELECT modules FROM users WHERE id=?", (ids["r2_sales"],)).fetchone()[0] == "[]"        # 勾選仍沒動
+    c.close()
+
+
+def test_rollback_apply_requires_an_explicit_matching_db(pop, tmp_path):
+    import shutil
+    ids, roles = pop
+    dbp = _copy(tmp_path)
+    s = str(tmp_path / "s.json")
+    assert EQ.main(["snapshot", "--schema", "2", "--out", s, "--db", dbp]) == 0
+    _r2_actions(dbp, ids, roles)
+    p = str(tmp_path / "plan.json")
+    json.dump({"users": {str(ids["r2_eng"]): {}}}, open(p, "w", encoding="utf-8"))
+    before = _db_state(dbp)
+    assert RB.main(["--snapshot", s, "--plan", p, "--apply"]) == 2                               # 沒給 --db
+    other = str(tmp_path / "other.db")
+    shutil.copy(dbp, other)
+    assert RB.main(["--snapshot", s, "--plan", p, "--db", other, "--apply"]) == 2                # 檔名與快照 dbPath 不符
+    assert _db_state(dbp) == before and _db_state(other) == before
 
 
 def test_rollback_refuses_superadmin_and_old_schema(pop, tmp_path):

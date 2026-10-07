@@ -161,12 +161,14 @@ VALID_ROLES = ("superadmin", "admin", "sales", "engineer", "viewer", FINANCE_ROL
 # ── R2 第1步 D5：財務三鍵改讀生效權限（影子模式；設計 docs/platform/plans/R2-STEP1-EQUIV-ROLLBACK-T45.md §10.2）──────────
 #: `system_settings` 旗標值：缺／其他＝`off`（舊規則，只看基礎類別）；`shadow`＝回傳舊規則、同時算新規則、不同時寫限速稽核；`on`＝回傳新規則（本班不開，需使用者核准）。
 FINANCE_FLAG_KEY = "finance_via_effective"
-_FIN_MODE_TTL = 15.0           # 旗標讀取快取（秒）：off 路徑不查 DB；改旗標最多 15 秒後全程式生效（測試用 reset_finance_mode_cache）
+_FIN_MODE_TTL = 15.0           # 旗標讀取快取（秒）：每 15 秒（每程序）最多查一次 DB，其餘呼叫只讀記憶體；改旗標最多 15 秒後生效（測試用 reset_finance_mode_cache）
+#: ⚠ 切 `on` 的前置條件：`on` 模式每次判斷都查 DB（不快取，扣項要立即生效）；一次請求會呼叫多次 ⇒ 切 `on` 前須先加「每請求備忘」或 ≤10 秒 TTL（已列入 core CHANGELOG）。
 _FIN_GRANT_TTL = 10.0          # 影子模式下每人的「角色給的財務鍵／扣項」快取（秒）；`on` 模式不快取（扣項要立即生效）
 _FIN_ALERT_SECONDS = 3600      # 同一人同一鍵的影子差異告警：每小時至多 1 筆
 _fin_mode = {"at": -1e9, "mode": "off"}
 _fin_grants = {}               # user_id -> (monotonic, granted_keys, subtract_keys)
 _fin_alerted = {}              # (user_id, key) -> monotonic
+_fin_threads = []              # 影子稽核的背景執行緒（測試用 _join_shadow_threads 等它們寫完）
 
 
 def reset_finance_mode_cache() -> None:
@@ -174,14 +176,22 @@ def reset_finance_mode_cache() -> None:
     _fin_mode.update(at=-1e9, mode="off")
     _fin_grants.clear()
     _fin_alerted.clear()
+    del _fin_threads[:]
+
+
+def _join_shadow_threads() -> None:
+    for t in list(_fin_threads):
+        t.join(5)
+    del _fin_threads[:]
 
 
 def _finance_mode() -> str:
+    """旗標值（`off`／`shadow`／`on`）。讀取失敗 ⇒ **沿用上一次讀到的值**（從沒讀到過才是 `off`），3 秒後重試——
+    避免 `on` 時資料庫一時讀不到就悄悄退回舊規則（扣項失效＝多給權限）。"""
     import time
     now = time.monotonic()
     if now - _fin_mode["at"] < _FIN_MODE_TTL:
         return _fin_mode["mode"]
-    mode = "off"
     try:
         c = get_db()
         try:
@@ -189,11 +199,11 @@ def _finance_mode() -> str:
         finally:
             c.close()
         v = json.loads(row[0]) if row else "off"
-        mode = v if v in ("shadow", "on") else "off"
-    except Exception:                                   # noqa: BLE001  讀不到旗標＝舊規則（保守）
-        mode = "off"
-    _fin_mode.update(at=now, mode=mode)
-    return mode
+        _fin_mode.update(at=now, mode=v if v in ("shadow", "on") else "off")
+    except Exception:                                   # noqa: BLE001  讀不到旗標＝沿用最後一次的值，稍後重試
+        logger.warning("finance flag read failed; keeping last-known-good mode %s", _fin_mode["mode"])
+        _fin_mode["at"] = now - _FIN_MODE_TTL + 3.0
+    return _fin_mode["mode"]
 
 
 def _finance_grants(user_id, cache: bool):
@@ -238,6 +248,12 @@ def finance_effective_keys(user: dict, cache: bool = False) -> frozenset:
     return frozenset(keys)
 
 
+def _finance_base_has(user: dict, key: str) -> bool:
+    """只看基礎類別的財務鍵（不查庫）：新規則算不出來時，與舊規則取較嚴者（AND）——不因錯誤多給。"""
+    role = (user or {}).get("role")
+    return role == "superadmin" or (role == FINANCE_ROLE and key in FINANCE_MODULE_KEYS)
+
+
 def _finance_shadow_report(user: dict, key: str, old: bool, new: bool) -> None:
     import time
     k = ((user or {}).get("id"), key)
@@ -246,11 +262,14 @@ def _finance_shadow_report(user: dict, key: str, old: bool, new: bool) -> None:
         return
     _fin_alerted[k] = now
     logger.warning("finance shadow diff: user=%s key=%s old=%s new=%s", k[0], key, old, new)
-    try:
+    try:                                                # 權限判斷路徑內不同步寫庫：丟背景執行緒（帶 demo 脈絡）；寫不進去不可影響判斷
+        import db as _db
         from helpers.audit import _audit
-        _audit("", "permission.finance_shadow_diff", "user", str((user or {}).get("id") or ""), (user or {}).get("username") or "",
-               {"key": key, "old": old, "new": new, "role": (user or {}).get("role")})
-    except Exception:                                   # noqa: BLE001  稽核寫不進去不可影響判斷
+        args = ("", "permission.finance_shadow_diff", "user", str((user or {}).get("id") or ""), (user or {}).get("username") or "",
+                {"key": key, "old": old, "new": new, "role": (user or {}).get("role")})
+        _fin_threads[:] = [t for t in _fin_threads if t.is_alive()][-20:]
+        _fin_threads.append(_db.spawn_bg_thread(_audit, args))
+    except Exception:                                   # noqa: BLE001
         pass
 
 
@@ -263,8 +282,8 @@ def _finance_cap(user: dict, key: str) -> bool:
     try:
         new = key in finance_effective_keys(user, cache=(mode == "shadow"))
     except Exception:                                   # noqa: BLE001
-        logger.exception("finance_effective_keys failed; falling back to the old rule")
-        return old
+        logger.exception("finance_effective_keys failed; falling back to the stricter of old/new")
+        return old and _finance_base_has(user, key)
     if mode == "shadow":
         if new != old:
             _finance_shadow_report(user, key, old, new)
@@ -282,7 +301,7 @@ def finance_duty_person(user: dict) -> bool:
     try:
         new = (user or {}).get("role") != "superadmin" and "finance" in finance_effective_keys(user, cache=(mode == "shadow"))
     except Exception:                                   # noqa: BLE001
-        return old
+        return old and _finance_base_has(user, "finance")
     if mode == "shadow":
         if new != old:
             _finance_shadow_report(user, "finance_duty_person", old, new)

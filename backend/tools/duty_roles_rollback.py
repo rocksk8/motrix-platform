@@ -2,14 +2,17 @@
 
 用法（預設只列出，不寫）：
     python tools/duty_roles_rollback.py --snapshot S.json [--plan PLAN.json] [--db PATH] [--json-out R.json]            # dry-run：列出全部與快照不同的人
-    python tools/duty_roles_rollback.py --snapshot S.json --plan PLAN.json [--db PATH] --apply [--batch X]               # 真的還原（單一交易）
+    python tools/duty_roles_rollback.py --snapshot S.json --plan PLAN.json --db PATH --apply [--batch X]                 # 真的還原（單一交易；--apply 必須明確給 --db，且檔名須與快照的 dbPath 相符）
 規則：
 - `--apply` **必須**給 `--plan`；只動 `PLAN.users` 白名單內的人（鍵＝使用者 id）。白名單外的人與 superadmin 一律不動。
+- `users.modules`（原始勾選）與 `users.active`（在職）**預設不還原**（可能把已離職者重新啟用、或蓋掉一次合法的修改）：
+  計畫檔該人明確寫 `"restoreRaw": true`／`"restoreActive": true` 才還原（第 3 步停用回收的還原就是這樣用）；沒寫而與快照不同 ⇒ 只警告。
 - 解除「快照時沒有」的綁定（`granted_at` 不得早於快照時間（同一秒算快照之後；快照裡沒有的綁定本來就是快照後才出現，更早＝時鐘異常）、略過並警告）；補回「快照時有、現在沒有」的綁定
   （角色須仍存在且啟用）；扣項、`users.modules`、`users.active` 還原成快照值。**不還原 `users.role`**（只警告）、**不還原角色定義**（只警告）。
 - 每筆還原**追加**一列 `permission_changes`（kind=`rollback`；原因固定「系統：R2 回滾（批次 X）」；不刪不改既有紀錄；本檔禁用 REPLACE 寫法）。
 - 補回的扣項沒有原本的 `set_by`／原因（快照只存鍵）：`set_by` 為空、原因用上面那句固定文字——原始操作者與原因**無法還原**，稽核上以紀錄列為準。
-- 套用後立刻以 `equivalence verify2`（無計畫）重驗；不是 0 ⇒ 結束碼 1（回滾不完整，改走 L1）。
+- 套用後立刻重驗，**範圍限白名單內的人**（白名單外的差異只列數量、不算失敗；角色定義不在 L0 範圍；沒要求還原的勾選／在職不算差異）；
+  有剩餘差異 ⇒ 結束碼 1（回滾不完整，改走 L1）。
 結束碼：0 完成（或無事可做）；1 回滾後仍有差異；2 用法／讀檔／計畫檔錯誤；3 結構問題（快照 schema 不符、白名單含 superadmin）。
 """
 import argparse
@@ -40,11 +43,12 @@ def _loads(v, default):
         return default
 
 
-def plan_rollback(conn, snap: dict, whitelist=None) -> dict:
+def plan_rollback(conn, snap: dict, whitelist=None, options=None) -> dict:
     """⇒ {"items": [...], "warnings": [...], "skipped": [...]}。`whitelist`＝None 時列出全部差異（僅 dry-run 用）。"""
     taken = snap.get("takenAt") or ""
     roles_now = {r["key"]: {"id": r["id"], "active": bool(r["active"]), "sha": r["permissions"]}
                  for r in conn.execute("SELECT id, key, permissions, active FROM duty_roles").fetchall()}
+    options = options or {}
     items, warnings, skipped = [], [], []
     for uid, x in (snap.get("users") or {}).items():
         if whitelist is not None and uid not in whitelist:
@@ -61,9 +65,17 @@ def plan_rollback(conn, snap: dict, whitelist=None) -> dict:
         cur_subs = {s["perm_key"] for s in conn.execute("SELECT perm_key FROM user_perm_subtracts WHERE user_id=?", (r["id"],)).fetchall()}
         want_binds, want_subs = set(x.get("bindings") or []), set(x.get("subtracts") or [])
         raw_now = sorted(set(_loads(r["modules"], [])))
+        opt = options.get(uid) or {}
+        raw_snap, active_snap = sorted(x.get("rawModules") or []), bool(x.get("active"))
         it = {"id": r["id"], "username": r["username"], "unbind": [], "rebind": [], "subDrop": [], "subAdd": [],
-              "rawBefore": raw_now, "rawAfter": sorted(x.get("rawModules") or []),
-              "activeBefore": bool(r["active"]), "activeAfter": bool(x.get("active"))}
+              "rawBefore": raw_now, "rawAfter": raw_snap if opt.get("restoreRaw") is True else raw_now,
+              "activeBefore": bool(r["active"]), "activeAfter": active_snap if opt.get("restoreActive") is True else bool(r["active"]),
+              "rawDiffers": raw_now != raw_snap, "activeDiffers": bool(r["active"]) != active_snap}
+        if it["rawDiffers"] and opt.get("restoreRaw") is not True:
+            warnings.append("id %s：原始勾選與快照不同，未還原（計畫檔該人需明確寫 restoreRaw: true）" % r["id"])
+        if it["activeDiffers"] and opt.get("restoreActive") is not True:
+            warnings.append("id %s：在職狀態與快照不同（快照 %s／現在 %s），未還原（計畫檔該人需明確寫 restoreActive: true）" % (
+                r["id"], "在職" if active_snap else "停用", "在職" if r["active"] else "停用"))
         for k, granted in sorted(cur_binds.items()):
             if k in want_binds:
                 continue
@@ -132,6 +144,30 @@ def apply_rollback(conn, plan: dict, batch: str) -> int:
     return n
 
 
+def scoped_verify(conn, snap: dict, items: list) -> dict:
+    """套用後重驗，範圍限白名單內的人：只算「我們有要求還原」的面向（沒要求還原勾選 ⇒ 該人的 E1／E2／gate 與 E5 不算；沒要求還原在職 ⇒ E4 不算）。
+    角色定義與白名單外的人只列資訊。⇒ {"remaining": [...], "outside": n, "structure": [...]}。"""
+    import duty_roles_equivalence as EQ
+    now = EQ.take_snapshot2(conn)
+    res = EQ.diff_snapshots(snap, now)
+    by_id = {str(i["id"]): i for i in items}
+    remaining, outside = [], 0
+    for d in res["diffs"]:
+        it = by_id.get(str(d.get("id")))
+        if d.get("facet") == "role_def":
+            continue
+        if it is None:
+            outside += 1
+            continue
+        f = d.get("facet")
+        if f == "E4" and it["activeAfter"] == it["activeBefore"] and it["activeDiffers"]:
+            continue
+        if f in ("E1", "E2", "E5", "gate") and it["rawAfter"] == it["rawBefore"] and it["rawDiffers"]:
+            continue
+        remaining.append(d)
+    return {"remaining": remaining, "outside": outside, "structure": res["structure"]}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--snapshot", required=True)
@@ -153,6 +189,12 @@ def main(argv=None):
     if a.apply and not plan:
         print("--apply 必須給 --plan（白名單）：只還原白名單內的人")
         return 2
+    if a.apply and not a.db:
+        print("--apply 必須明確給 --db（不從環境推測要改哪一個資料庫）")
+        return 2
+    if a.apply and snap.get("dbPath") and os.path.basename(a.db) != snap["dbPath"]:
+        print("目標資料庫檔名（%s）與快照的 dbPath（%s）不符：中止" % (os.path.basename(a.db), snap["dbPath"]))
+        return 2
     whitelist = None
     if plan is not None:
         whitelist = {str(k) for k in (plan.get("users") or {})}
@@ -166,7 +208,7 @@ def main(argv=None):
         return 2
     try:
         try:
-            res = plan_rollback(conn, snap, whitelist)
+            res = plan_rollback(conn, snap, whitelist, (plan or {}).get("users"))
         except sqlite3.OperationalError as e:
             print("沒有職責角色資料表（%s）：無事可做" % e)
             return 0
@@ -197,10 +239,15 @@ def main(argv=None):
         batch = a.batch or (plan or {}).get("batch") or snap.get("takenAt") or "?"
         n = apply_rollback(conn, res, batch)
         print("已還原 %d 位使用者（批次 %s）" % (n, batch))
-        import duty_roles_equivalence as EQ
-        v = EQ.verify2(conn, snap, None)
-        print("回滾後重驗（無計畫）：%s" % ("PASS" if v["code"] == 0 else "FAIL（代碼 %d；改走 L1）" % v["code"]))
-        return 0 if v["code"] == 0 else 1
+        v = scoped_verify(conn, snap, res["items"])
+        for d in v["remaining"]:
+            print("  ✗ 白名單內仍有差異：%s（id %s）[%s] 少 %s／多 %s" % (d.get("username"), d.get("id"), d.get("facet"),
+                                                                  "、".join(d.get("lost") or []) or "-", "、".join(d.get("gained") or []) or "-"))
+        for st in v["structure"]:
+            print("  ‼ 結構：%s" % st)
+        ok = not v["remaining"] and not v["structure"]
+        print("回滾後重驗（限白名單；白名單外差異 %d 筆僅供參考）：%s" % (v["outside"], "PASS" if ok else "FAIL（改走 L1）"))
+        return 0 if ok else 1
     finally:
         conn.close()
 
