@@ -5,10 +5,10 @@
   "tests": 1175,
   "unmapped": 13,
   "kinds": {
-   "api": 634,
+   "api": 635,
    "e2e": 289,
    "audit": 143,
-   "unit": 109
+   "unit": 108
   },
   "routes": 773
  },
@@ -15796,7 +15796,7 @@
    }
   },
   "backend/tests/platform/test_expense_prefill_2026_10_02.py": {
-   "kind": "unit",
+   "kind": "api",
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
