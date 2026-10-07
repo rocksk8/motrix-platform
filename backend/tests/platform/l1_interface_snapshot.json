@@ -949,6 +949,7 @@
    "CALENDAR_SOURCES": "const",
    "EVENT_CODE": "const",
    "GUARD_PREFIX": "const",
+   "INAPP_PREFIX": "const",
    "MAIL_KEYS": "const",
    "MAX_WAIT_SECONDS_PER_RUN": "const",
    "SOON_DAYS": "const",

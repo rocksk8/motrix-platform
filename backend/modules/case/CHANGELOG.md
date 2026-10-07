@@ -1,6 +1,6 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-07（wip/t45-paydate-impl）：預定付款日 S1–S3、S5–S7——出納端點改打來源無關路徑、行事曆事件不放受款人與付款條件、我的申請欄位、叫料匯款預定日
+## (next) — 2026-10-07（wip/t45-paydate-impl）：預定付款日 S1–S3、S5–S7（含複核修正）——出納端點改打來源無關路徑、行事曆事件不放受款人與付款條件、我的申請欄位、叫料匯款預定日
 - `payables.py`：IP-100 提供者新增可選方法 `set_planned_pay_date`（只認出納待付款清單上的申請；已付款 ⇒ 409）與 `planned_changed`（commit 之後對齊行事曆）。
 - `payable_calendar.compose`：事件說明只放單號、名目、關聯案件、預定日；**移除「受款人」「付款條件」行**（使用者 2026-10-07 Q4；金額原本就不放）。
 - S5／S7 提醒與行事曆（Q2／Q3／Q8）：`payable_reminders` 的日期規則、guard、寄送迴圈搬到 L1 `helpers/payable_due_core.py`（本檔只留「查案件額外支出＋叫料匯款待付款列」與信件類型登記；公開名稱 `due_kind`／`effective_send_day`／`is_working_day`／`_candidate_planned_dates`／`_mail` 保留）。新增 `payable_due_overdue`（預定日後第 1 個工作日 1 封，不週提）；叫料匯款申請納入提醒（guard 識別 `case_material.<id>`，與額外支出互不擋；內容不含金額、供應商）；站內通知財務（尊重退訂）；叫料行事曆事件 `material_payable_event`（跟著現況：核准建、分次付款保留、結清／作廢／退回收回、差額退回重建）；案件額外支出事件改經 L1 `sync_event`（行為不變）；出納登錄付款後改依現況對齊事件（叫料分次付款仍有餘額 ⇒ 保留）。**相容**：舊 guard key（純 id）不變，切換當天不雙寄；寄信日已過的「當天／3 天前」仍不補發。
