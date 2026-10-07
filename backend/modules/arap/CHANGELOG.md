@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## (next) — 2026-10-08（fix/pr-remark-in-queue）：出納對表單收款對象的警示
+- 出納頁待付款表：項目帶 `payeeNote` 時（採購單／零用金、收款對象填在表單且沒有另存收款人與銀行資料）在付款鈕旁以文字顯示警示；`GET …/payee-bank` 的說明改用提供者的 `note`（不再退回申請人的員工收款帳戶）。不擋付款，權限規則不變。
+
 ## 1.0.40 — 2026-10-06（wip/t44-attach-views）：出納唯讀看待付款申請附件（頁面改行內錯誤訊息）
 - `api/cashier.py`：新增 `GET /api/cashier/pending-payables/{source}/{key}/files/{file_id}`（與待付款清單同權限＝財務角色／superadmin；檔案由提供者 `file_open` 認領，其餘一律同一句 404；回 octet-stream＋inline；每次開檔留稽核 `cashier.payable_file_view`，不記內容）。前端 `cashier.js`／`cashier.html` 顯示附件清單（只讀）。
 
