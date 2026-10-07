@@ -366,8 +366,8 @@
                             <input type="date" class="field-input" style="width:130px" :value="v.plannedPayDate || ''" x-show="canExecuteCashier()"
                                    @change="saveVoucherPlannedPayDate(v, $event.target.value)" :data-testid="'cashier-payable-planned-input-' + v.voucherNo">
                             <span x-show="!canExecuteCashier()" class="mono" x-text="v.plannedPayDate || '—'"></span>
-                            <div style="font-size:11px;color:#b91c1c" x-show="plannedState(v) === 'overdue'">已逾預定日</div>
-                            <div style="font-size:11px;color:#b45309" x-show="plannedState(v) === 'soon'">3 天內到期</div>
+                            <div style="font-size:11px;color:var(--tone-danger-fg)" x-show="plannedState(v) === 'overdue'">已逾預定日</div>
+                            <div style="font-size:11px;color:var(--tone-warning-fg)" x-show="plannedState(v) === 'soon'">3 天內到期</div>
                           </td>
                           <td class="c">
                             <button x-show="canExecuteCashier()" class="action-btn pay" @click="openPayVoucherModal(v)">標記已匯款</button>
