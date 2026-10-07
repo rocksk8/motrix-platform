@@ -114,7 +114,7 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-order-approvals`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok && this._moReqFor === quoteNo) { const _d = await r.json(); this.moApprovals = _d.approvals || {}; this.moShipping = _d.shipping || {}; if (this._mlFollowMovedRow) this._mlFollowMovedRow() }   // 32-S4d：列的狀態變了，頁籤跟著走
+        if (r.ok && this._moReqFor === quoteNo) { const _d = await r.json(); this.moApprovals = _d.approvals || {}; this.moShipping = _d.shipping || {}; if (this._mlFollowMovedRow) this._mlFollowMovedRow(); if (this.mlAutoLinkMaterials) this.mlAutoLinkMaterials() }   // 32-S4d：列的狀態變了，頁籤跟著走
       } catch {}
     },
     // ── 材料申請匯款申請（31-C 匯款切片）：已付金額不再手填，只能經匯款申請（簽核→出納）登錄 ──
