@@ -372,6 +372,21 @@ function cashierApp() {
       } catch (e) { this.payreqNotice = '更新預定付款日失敗：' + e.message }
     },
 
+    // 承攬商匯款的預定付款日（t45）：PATCH /api/cashier/payable-queue/{voucherNo}/planned-pay-date（'' ＝清除）
+    async saveVoucherPlannedPayDate(v, value) {
+      this.payableNotice = ''
+      try {
+        const r = await fetch('/api/cashier/payable-queue/' + encodeURIComponent(v.voucherNo) + '/planned-pay-date', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ plannedPayDate: value || '' }),
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this.payableNotice = d.detail || ('更新預定付款日失敗（HTTP ' + r.status + '）'); await this.loadPayable(); return }
+        v.plannedPayDate = value || ''
+        this.payableNotice = '已更新預定付款日：' + v.voucherNo + '　' + (value || '（清除）')
+      } catch (e) { this.payableNotice = '更新預定付款日失敗：' + e.message }
+    },
+
     // 登錄付款：POST /api/cashier/pending-payables/{來源}/{key}/pay（提供者寫回付款日）
     async payPayreq(it) {
       this.payreqBusy = true

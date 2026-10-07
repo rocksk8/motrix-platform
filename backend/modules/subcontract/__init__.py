@@ -14,11 +14,12 @@ _m0002 = importlib.import_module("modules.subcontract.migrations.0002_dispatch_f
 _m0003 = importlib.import_module("modules.subcontract.migrations.0003_dispatch_approval")
 _m0004 = importlib.import_module("modules.subcontract.migrations.0004_dispatch_doc_code_backfill")
 _m0005 = importlib.import_module("modules.subcontract.migrations.0005_remit_kinds_voucher_rebuild")
+_m0006 = importlib.import_module("modules.subcontract.migrations.0006_voucher_planned_pay_date")
 
 MODULE = ModuleSpec(
     key="subcontract",
     # v1：contractor_payment_vouchers 匯款實付／手續費／差額審核欄位（W1）；v2：dispatch_file_delete_requests（N1，報價單附件刪除申請）；v3：contractor_dispatches 兩段審核欄位（31-A，派發審核）；v4：已卡住的審核中派發補單號 doc_code（舊單申請完工進不了佇列的資料修復，只補單號）
-    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up)],
+    migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up), (5, _m0005.up), (6, _m0006.up)],
     routers=[contractors.router, vendor_contractors.router, dispatch_approval.router, contractor_vouchers.router, remit_kinds_api.router],
     providers={
         # IP-1：派工單列序列化（M01 應計派工成本、M06 傳票摘要來源）
@@ -29,6 +30,8 @@ MODULE = ModuleSpec(
         ("dispatch.cost_for_case", "subcontract"): vendor_contractors.dispatch_cost_for_case,
         # IP-14：M05 出納與 M06 會計匯出讀付款憑據的形狀
         ("contractor_voucher.public", "subcontract"): contractor_vouchers._voucher_public,
+        # IP-14（第三個能力，t45）：出納端點改預定付款日（`set_planned(conn, voucher_no, value, user)`；不 commit）
+        ("contractor_voucher.set_planned", "subcontract"): contractor_vouchers.set_planned_pay_date,
         # IP-10／approval.reassign（M01-PLAN §3-7）：M01「待我簽核」佇列與轉簽的承攬商匯款申請
         ("approval.queue_items", "subcontract"): contractor_vouchers.queue_items,
         ("approval.reassign", "contractor_voucher"): contractor_vouchers.REASSIGN,

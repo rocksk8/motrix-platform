@@ -245,6 +245,36 @@ def set_pending_payable_planned_pay_date(source: str, key: str, body: dict = Bod
     return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value)}
 
 
+@router.patch("/api/cashier/payable-queue/{voucher_no}/planned-pay-date")
+def set_payable_queue_planned_pay_date(voucher_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """出納補登／改期／清除承攬商匯款的預定付款日（t45；IP-14 `contractor_voucher.set_planned`）。權限與登錄付款同一條（財務角色／superadmin）。
+    M04 不在 ⇒ 404＋`CONTRACTOR_MISSING`（同待付款清單）；已匯款 ⇒ 409；commit 之後才對齊行事曆；稽核不含金額。"""
+    from helpers.dates import normalize_date
+    user = _require_user(authorization)
+    if not _can_pay(user):
+        raise HTTPException(403, "只有財務角色可以設定預定付款日")
+    fn = registry.single_provider("contractor_voucher.set_planned")
+    if fn is None:
+        raise HTTPException(404, CONTRACTOR_MISSING)
+    if "plannedPayDate" not in (body or {}):
+        raise HTTPException(400, "請帶 plannedPayDate（YYYY-MM-DD；空字串＝清除）")
+    value = normalize_date((body or {}).get("plannedPayDate"), "預定付款日")
+    conn = get_db()
+    try:
+        try:
+            res = fn(conn, voucher_no, value, user)
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+        except ValueError as e:
+            raise HTTPException(getattr(e, "status", 409), str(e))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "cashier.planned_pay_date", "subcontract_voucher", voucher_no,
+           "出納設定承攬商匯款預定付款日：%s（%s）%s → %s" % (voucher_no, res.get("quoteNo") or "", res.get("old") or "（無）", value or "（清除）"))
+    return {"ok": True, "plannedPayDate": res.get("plannedPayDate", value)}
+
+
 def _expense_calendar_args(source, key, paid, res, user):
     """行事曆「支出付款」事件的內容（push_event_for_module 的參數）；名目／金額取提供者回傳（出納不讀別的模組的表）。"""
     title = res.get("title") or "%s #%s" % (source, key)

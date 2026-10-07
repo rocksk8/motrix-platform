@@ -2,6 +2,7 @@
 
 ## (next) — 2026-10-07（wip/t45-paydate-impl）：出納預定付款日端點（來源無關）
 - `api/cashier.py`：新增 `PATCH /api/cashier/pending-payables/{source}/{key}/planned-pay-date`（財務角色／superadmin；經提供者 `set_planned_pay_date`，不經案件守門；已付款 409；提供者不支援 409；commit 之後才對齊行事曆；稽核 `cashier.planned_pay_date`，不含金額）。出納頁 `savePlannedPayDate` 改打此端點。
+- 新增 `PATCH /api/cashier/payable-queue/{voucher_no}/planned-pay-date`（承攬商匯款；經 IP-14 `contractor_voucher.set_planned`；M04 不在 ⇒ 404＋既有「外包工班模組未安裝」訊息）。出納頁待付款表新增「預定付款日」欄（可改、已逾／3 天內標示），原欄改名「應付款日（合約）」。
 - **權限**：與登錄付款同一條（財務角色／superadmin）；未新增任何角色的可視範圍。
 
 ## 1.0.40 — 2026-10-06（wip/t44-attach-views）：出納唯讀看待付款申請附件（頁面改行內錯誤訊息）
