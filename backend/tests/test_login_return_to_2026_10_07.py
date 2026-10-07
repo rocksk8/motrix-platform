@@ -17,7 +17,9 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 GUARD = REPO / "frontend" / "static" / "auth-guard.js"
-LOGIN = REPO / "frontend" / "pages" / "login.html"
+from core import source_tree  # noqa: E402
+
+LOGIN = source_tree.page_file("login.html")        # 不寫死頁面路徑（page_paths 棘輪）
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(not NODE, reason="需要 node")
 
