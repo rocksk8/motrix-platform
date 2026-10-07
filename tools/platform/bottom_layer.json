@@ -13,6 +13,7 @@
   "backend/modules/payroll/tests/test_bonus_award_2026_09_23.py",
   "backend/modules/payroll/tests/test_bonus_case_edit_log_trigger_2026_09_24.py",
   "backend/modules/payroll/tests/test_bonus_correction_2026_09_30.py",
+  "backend/modules/payroll/tests/test_payslip_approval_t46.py",
   "backend/modules/subcontract/tests/test_remit_kinds_migration_2026_10_02.py",
   "backend/modules/tender_radar/tests/test_tender_match_2026_09_21.py",
   "backend/tests/test_account_items_2026_09_23.py",
