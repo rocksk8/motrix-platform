@@ -16,6 +16,9 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-07 建包沿用指紋排除全閘門速度開關（fix/t45-env-ignore）
+- `build_test_reuse._ENV_IGNORE` 加入 MOTRIX_GATE_WORKERS／DIST／LPT／RECORD／VERIFY／SLICES、MOTRIX_FULL_OVERLAP(_MIN_GB)、MOTRIX_FULL_FLAKY_RETRY：它們只決定速度、順序、診斷，不決定哪些題存在或過不過，所以共用機器設了它們跑的全閘門紀錄，換個 shell 建包仍可沿用；MOTRIX_TRAIN 仍進指紋。測試釘住清單（32 項）。
+
 ## 2026-10-07 勞報單狀態快修（wip/t45-payslip-status-fix）
 
 - 勞報單新增／儲存不再採用前端送來的狀態：新單一律草稿，狀態只由匯出、簽回、付款、作廢等專用動作改變（原本最高管理者可直接把狀態寫成已簽回／已付款，繞過流程）。

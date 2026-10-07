@@ -134,3 +134,50 @@ def test_every_red_exit_from_the_test_stage_is_recorded_before_it_leaves():
         last_run = before.rfind("-m pytest")
         assert last_run >= 0 and "Record-TestResult" in before[last_run:], \
             "這個 Fail 之前沒有先記錄非綠：…%s" % section[i:i + 60]
+
+
+# ── 第 45 班：只影響速度／順序／診斷的開關不進指紋；影響「哪些題跑、過不過」的仍進指紋 ───────────────────────────────
+
+#: 第 45 班全閘門優化的開關（gate_slices／modtest／failfast）：改它們不可以讓指紋變（否則換個 shell 建包就整套重跑）
+SPEED_ONLY = ("MOTRIX_GATE_WORKERS", "MOTRIX_GATE_DIST", "MOTRIX_GATE_LPT", "MOTRIX_GATE_RECORD", "MOTRIX_GATE_VERIFY", "MOTRIX_GATE_SLICES",
+              "MOTRIX_FULL_OVERLAP", "MOTRIX_FULL_OVERLAP_MIN_GB", "MOTRIX_FULL_FLAKY_RETRY",
+              "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_FAILFAST_QUIET_MIN", "MOTRIX_FAILFIRST", "MOTRIX_FAILFIRST_BASE",
+              "MOTRIX_FULL_MAX_WORKERS", "MOTRIX_E2E_MAX_WORKERS", "MOTRIX_PARTIAL_MAX_WORKERS")
+
+
+def _fp_with_env(repo, monkeypatch, **env):
+    """用真的 current_env()（pip freeze 換成固定字串，省時間）＋給定的環境變數算指紋。"""
+    for k in list(__import__("os").environ):
+        if k.startswith("MOTRIX_"):
+            monkeypatch.delenv(k, raising=False)
+    monkeypatch.delenv("PYTEST_ADDOPTS", raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    real = subprocess.run
+    monkeypatch.setattr(tr.subprocess, "run", lambda cmd, *a, **k: type("R", (), {"stdout": "pytest==9.1.1"})() if "pip" in list(cmd) else real(cmd, *a, **k))   # 只換 pip freeze；git 照真的跑
+    return tr.fingerprint(repo)
+
+
+def test_speed_and_order_switches_do_not_change_the_fingerprint(repo, monkeypatch):
+    base = _fp_with_env(repo, monkeypatch)
+    assert base
+    for name in SPEED_ONLY:
+        assert _fp_with_env(repo, monkeypatch, **{name: "2"}) == base, "%s 不該進指紋（只決定速度／順序／診斷）" % name
+    assert _fp_with_env(repo, monkeypatch, MOTRIX_GATE_WORKERS="2", MOTRIX_GATE_SLICES="0", MOTRIX_FULL_OVERLAP="1") == base
+
+
+def test_switches_that_change_which_tests_run_or_pass_still_change_it(repo, monkeypatch):
+    """反向控制：MOTRIX_TRAIN 決定「只在列車跑」的守門題是跑還是 skip；其他沒登記的 MOTRIX_* 也照舊進指紋。"""
+    base = _fp_with_env(repo, monkeypatch)
+    assert _fp_with_env(repo, monkeypatch, MOTRIX_TRAIN="1") != base
+    assert _fp_with_env(repo, monkeypatch, MOTRIX_EDGE_PDF_TIMEOUT="40") != base
+    assert _fp_with_env(repo, monkeypatch, MOTRIX_SOME_NEW_SWITCH_XYZ="1") != base          # 新開關預設進指紋（保守）；確定只影響速度才加進 _ENV_IGNORE
+    assert _fp_with_env(repo, monkeypatch, PYTEST_ADDOPTS="-k foo") != base                  # 縮小範圍的參數一律進指紋（稽核 W4）
+
+
+def test_the_ignore_list_is_pinned():
+    """清單被改（多一個少一個）要有人看：新增＝確認它不決定哪些題存在／過不過；MOTRIX_TRAIN 不得出現。"""
+    assert "MOTRIX_TRAIN" not in tr._ENV_IGNORE
+    for name in SPEED_ONLY:
+        assert name in tr._ENV_IGNORE, name
+    assert len(tr._ENV_IGNORE) == 32, "個數變了：%s（改清單時同步這個數字並說明理由）" % sorted(tr._ENV_IGNORE)

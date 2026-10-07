@@ -44,7 +44,13 @@ _ENV_IGNORE = {"MOTRIX_PYTEST_LOCK", "MOTRIX_PYTEST_LOCK_WAIT", "MOTRIX_PYTEST_L
                "MOTRIX_PYTEST_BUILD_CHILD", "MOTRIX_PYTEST_BUILD_GUARD",
                # 2026-10-02（建包優化 2 項 1）：fail-fast／failure-first 只決定「何時停、先跑誰」，不決定哪些題存在或過不過（停止＝該段記紅）
                "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_FAILFAST_QUIET_MIN", "MOTRIX_FAILFAST_FLAKES",
-               "MOTRIX_FAILFIRST", "MOTRIX_FAILFIRST_BASE", "MOTRIX_FAILFIRST_HISTORY", "MOTRIX_FAILFIRST_RECORDS"}
+               "MOTRIX_FAILFIRST", "MOTRIX_FAILFIRST_BASE", "MOTRIX_FAILFIRST_HISTORY", "MOTRIX_FAILFIRST_RECORDS",
+               # 2026-10-07（第 45 班全閘門優化 O1／O2／O4／O6）：只決定「用幾個 worker、先跑誰、要不要先對帳題數／重疊兩段／出紅後單獨重跑診斷」，
+               # 不決定哪些題存在、過或不過（切片聯集＝全部題由 gate_slices 的 collect-only 與題數對帳證明；偶發放行規則不變）⇒ 不進指紋，
+               # 否則「共用機器設 MOTRIX_GATE_WORKERS=2 跑全閘門」寫下的紀錄，換一個沒設的 shell 建包就對不上、整套重跑。
+               # ⚠ MOTRIX_TRAIN 不在這裡：它決定「只在列車跑」的守門題是跑還是 skip（結果不同）。
+               "MOTRIX_GATE_WORKERS", "MOTRIX_GATE_DIST", "MOTRIX_GATE_LPT", "MOTRIX_GATE_RECORD", "MOTRIX_GATE_VERIFY", "MOTRIX_GATE_SLICES",
+               "MOTRIX_FULL_OVERLAP", "MOTRIX_FULL_OVERLAP_MIN_GB", "MOTRIX_FULL_FLAKY_RETRY"}
 #: 不進指紋的檔（repo 相對路徑）：只決定「建包放不放行」、不決定任何一題過或不過（2026-09-30）
 REUSE_EXCLUDE = frozenset({"tools/platform/known_flakes.json"})
 #: 分段沿用認得的段名（建包與 modtest --full 都是這兩段）
