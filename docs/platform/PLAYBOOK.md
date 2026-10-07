@@ -229,6 +229,7 @@
 | ④ 發版 | 出部署包前 | 全量＋D7 型的升級演練（正式機資料的複本、兩種回滾、冒煙）〔補 2026-09-30：正式機基準→這一包沒動到底層 ⇒ 全量可由範圍驗證代替，§D-1a〕 | 以演練報告為準 |
 
 - 安全靠的是**邊界上的契約題**加上**守門的突變抽查**，不是每次都跑全部。每新增一道守門，都要附一個會讓它轉紅的突變。
+- **全閘門切片與 fail-fast（第 45 班 O1／O4／O6，2026-10-07；計畫 plans/BUILD-GATE-OPT-T45.md）**：`modtest --full` 的非 e2e 先跑 slice0（`tools/platform/gate_slices.json`＝tests/platform＋靜態／產生檔守門，與預演列車 GUARDS 同一份清單）、綠了才跑其餘；slice0 紅 ⇒ 不開其餘片、不跑 e2e（整合紅不再整輪跑完）。守門一項不少：`python tools/platform/gate_slices.py --check` 比對 slice0∪rest＝全部非 e2e 題的 nodeid 集合（9496＝2507＋6989）。新增靜態守門檔要加進 gate_slices.json。出紅先把紅的題單獨重跑 ×3 分流，放行規則不變（只有已登記且未到期的偶發）。還原開關：`MOTRIX_GATE_SLICES=0`、`MOTRIX_FAILFAST=0`、`MOTRIX_FULL_FLAKY_RETRY=0`、`MOTRIX_GATE_DIST=load`。
 - 偶發失敗一律當成真問題查（O1 的教訓：它其實不是偶發），不准標成 flaky 或加重試。
 - 每一次選題都記錄比例與耗時（`full_results/modtest_stats.jsonl`）；比例變大就要找原因（D1b）。
 

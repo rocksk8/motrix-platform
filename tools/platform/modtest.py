@@ -936,7 +936,7 @@ def _fail_stream_env(window):
     return env
 
 
-def run_pytest(targets, extra, window, full, collect_only=False):
+def run_pytest(targets, extra, window, full, collect_only=False, env_extra=None):
     """在 backend/ 下跑 pytest；basetemp 專屬、結束必刪。回傳 (exit code, stdout)。
     targets 太多檔會撞 Windows 命令列長度上限 ⇒ 依長度分批，逐批各自的 basetemp，合併結果（tail 串接、
     exit code 取「非 0 且非 5」優先，其餘皆 0／5 才回 5，都 0 才回 0）。"""
@@ -962,7 +962,7 @@ def run_pytest(targets, extra, window, full, collect_only=False):
                 tails.append(proc.stdout)
                 continue
             proc = subprocess.Popen(cmd, cwd=str(BACKEND), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    creationflags=_low_priority_flags(), env=_fail_stream_env(window))
+                                    creationflags=_low_priority_flags(), env=dict(_fail_stream_env(window), **(env_extra or {})))
             tail = []
             for raw in proc.stdout:                       # 照樣即時印出，另留尾段給摘要解析
                 line = raw.decode("utf-8", errors="replace")
@@ -1185,7 +1185,10 @@ def stream_evidence(run_id, windows, stream_dir=None):
         lines = (d / (run_id + ".jsonl")).read_text(encoding="utf-8").splitlines()
     except Exception:                               # noqa: BLE001
         return {}
-    rev = {w: name for name, w in windows.items()}
+    rev = {}
+    for name, w in windows.items():                 # 值可以是一個 window，或一串（全閘門切片：main＝slice0 與其餘兩片）
+        for one in ([w] if isinstance(w, str) else w):
+            rev[one] = name
     out = {}
     for raw in lines:
         try:
@@ -1218,6 +1221,92 @@ def record_for_build(commit, codes, user_extra, interrupted, dirty, evidence, to
     return tool.record_full_run(tool.default_records(REPO), fp, fp, commit, ran, user_extra, interrupted)
 
 
+def gate_plan(a, extra):
+    """全閘門的執行計畫（O1 切片＋fail-fast）⇒ (plan, main 段的 windows, failfast 環境, failfast pytest 參數)。
+    plan 每項 (段名, targets, pytest 參數, window)。切片關閉（MOTRIX_GATE_SLICES=0）或清單讀不到／找不到檔 ⇒ 回到舊行為：非 e2e 一段全跑。
+    無論切不切，都帶 fail-fast（MOTRIX_FAILFAST=0 可關；使用者明確設的環境變數優先）。"""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import gate_slices as GS
+    n_main = cap_workers(["-m", "not e2e", "-n", str(a.workers)], full_max_workers())
+    e2e = ("e2e", TEST_ROOTS, cap_workers(["-m", "e2e", "-n", str(a.e2e_workers)], e2e_max_workers()) + dist_args(), a.window + "e2e")
+    data = GS.load() if GS.enabled() else None
+    targets, missing = GS.expand(data) if data else ([], [])
+    ff = (data or {}).get("failfast") or {}
+    env = {"MOTRIX_FAILFAST": "1", "MOTRIX_FAILFAST_N": str(ff.get("n", 10)), "MOTRIX_FAILFAST_QUIET_MIN": str(ff.get("quiet_min", 3)),
+           "MOTRIX_FAILFIRST": "1", "MOTRIX_FAILFIRST_BASE": "auto"}
+    env = {k: os.environ.get(k, v) for k, v in env.items()}                 # 使用者明確設的優先
+    env["PYTHONPATH"] = os.pathsep.join([str(Path(__file__).resolve().parent)] + ([os.environ["PYTHONPATH"]] if os.environ.get("PYTHONPATH") else []))
+    ff_args = ["-p", "failfast", "-rf"]
+    main_args = n_main + dist_args()
+    if data and not missing:
+        plan = [("main", targets, main_args, a.window + "s0"),
+                ("main", TEST_ROOTS, main_args + GS.rest_args(targets), a.window), e2e]
+        return plan, {"main": [a.window + "s0", a.window]}, env, ff_args
+    if data and missing:
+        print("[全閘門] ⚠ slice0 清單有找不到的項目（%s）⇒ 這次不切片、一段全跑（守門檔被改名？請改 gate_slices.json）" % "；".join(missing))
+    return [("main", TEST_ROOTS, main_args, a.window), e2e], {"main": a.window}, env, ff_args
+
+
+def dist_args():
+    """O6：xdist worksteal（尾端平衡，慢題不會落在最後一輪才開跑）。MOTRIX_GATE_DIST=load 關；xdist 版本不支援 ⇒ 不帶（不報錯）。"""
+    want = os.environ.get("MOTRIX_GATE_DIST", "worksteal").strip().lower()
+    if want in ("", "load", "0", "off"):
+        return []
+    try:
+        proc = subprocess.run([PYEXE or sys.executable, "-c", "import xdist;print(xdist.__version__)"], capture_output=True, text=True, timeout=30)
+        ver = tuple(int(x) for x in re.findall(r"\d+", proc.stdout)[:2])
+    except Exception:                               # noqa: BLE001
+        return []
+    return ["--dist", "worksteal"] if want == "worksteal" and ver >= (3, 2) else []
+
+
+def merge_counts(prev, cur, code):
+    """兩片的計數相加（兩邊都 None ⇒ None，不猜成 0）。回傳要寫進 result 的欄位（含 exit）。"""
+    keys = ("passed", "failed", "errors", "skipped")
+    if prev is None:
+        return dict(cur, exit=code)
+    out = {k: (None if prev.get(k) is None and cur.get(k) is None else (prev.get(k) or 0) + (cur.get(k) or 0)) for k in keys}
+    out["exit"] = code if prev.get("exit") in (0, None) else prev["exit"]
+    return out
+
+
+def flaky_gate(code, out, window, result):
+    """O4 偶發分流：某一段 exit 1（有題紅）⇒ 把紅的題單獨重跑（最多 3 次，tools/platform/flaky_retry.py）。
+    **政策不變**：只有「已登記 known_flakes 且未到期」的偶發才放行（回 0）；未登記／到期／紅太多／收集錯誤 ⇒ 原碼照擋，
+    只是診斷提早印出「重跑通過＝疑似負載偶發（請登記或查根因）」或「重跑仍紅＝真紅」。放行的題記進 result['flaky_retried']。
+    MOTRIX_FULL_FLAKY_RETRY=0 ⇒ 不分流（舊行為）。"""
+    if code != 1 or os.environ.get("MOTRIX_FULL_FLAKY_RETRY", "1").strip() == "0" or not _FAIL_STREAM_RUN:
+        return code
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import flaky_retry
+        tmp = tempfile.gettempdir()
+        tag = "%d_%s" % (os.getpid(), re.sub(r"\W", "", window))
+        outf = os.path.join(tmp, "motrix-modtest-%s.out.txt" % tag)
+        resf = os.path.join(tmp, "motrix-modtest-%s.retry.json" % tag)
+        try:
+            Path(outf).write_text(out or "", encoding="utf-8")
+            rc = flaky_retry.main(["--run-id", _FAIL_STREAM_RUN, "--stage", window, "--exit-code", str(code), "--output-file", outf,
+                                   "--python", PYEXE or sys.executable,
+                                   "--basetemp-prefix", os.path.join(tmp, "motrix-modtest-retry-%d" % os.getpid()),
+                                   "--result-out", resf, "--attempts", "3"])
+            res = json.loads(Path(resf).read_text(encoding="utf-8"))
+        finally:
+            for f in (outf, resf):
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
+        for r in res.get("results", []):
+            print("[偶發分流] %s ⇒ %s" % (r["nodeid"], "重跑通過（疑似負載偶發；未登記仍擋）" if r.get("passed") else "重跑仍紅（真紅）"))
+        if rc == 0 and res.get("ok"):
+            result.setdefault("flaky_retried", []).extend(f["nodeid"] for f in res.get("flaky_retried", []))
+            return 0
+    except Exception as e:                          # noqa: BLE001 — 分流只是診斷；出錯就照原碼擋（不放水）
+        print("[偶發分流] ⚠ 無法分流：%r ⇒ 照原結果" % e)
+    return code
+
+
 def run_full(extra, a):
     """全量＝兩段：非 e2e（-n workers）＋ e2e（-n e2e-workers）。結果（含失敗、中斷）一律寫進主工作樹（write_last_full：full_results/<commit>.json＋.last_full.json）。
     dirty：開跑與結束各取一次 tree_state()，由 run_dirty() 判定。"""
@@ -1239,27 +1328,34 @@ def run_full(extra, a):
                                          capture_output=True, text=True).stdout.strip(),
     }
     cap = full_max_workers()
-    stages = [("main", cap_workers(["-m", "not e2e", "-n", str(a.workers)], cap), a.window),
-              ("e2e", cap_workers(["-m", "e2e", "-n", str(a.e2e_workers)], e2e_max_workers()), a.window + "e2e")]
     extra = cap_workers(extra, cap)
     want_durations = getattr(a, "durations", True)
     if want_durations:
         extra = extra + ["--durations=%d" % DURATIONS]
-    codes, per_stage = {}, {}
+    plan, main_windows, ff_env, ff_args = gate_plan(a, extra)
+    codes, per_stage, sliced_out = {}, {}, False
     try:
-        for name, args, window in stages:
-            code, out = run_pytest(TEST_ROOTS, args + extra, window, full=True)
-            codes[name] = code
+        for name, targets, args, window in plan:
+            code, out = run_pytest(targets, args + extra + ff_args, window, full=True, env_extra=ff_env)
+            code = flaky_gate(code, out, window, result)          # O4：紅了先分流（只有已登記且未過期的偶發才放行）
+            if name == "main":
+                codes["main"] = code if codes.get("main", 0) == 0 else codes["main"]
+            else:
+                codes[name] = code
             if want_durations:
-                per_stage[name] = parse_durations(out)
+                per_stage.setdefault(name, []).extend(parse_durations(out))
                 result["slowest"] = slowest(per_stage)
             counts = parse_summary(out) or {"passed": None, "failed": None, "errors": None, "skipped": None}
-            part = dict(counts, exit=code)
             if name == "main":
-                result.update(part)
+                result.update(merge_counts(result if result.get("passed") is not None else None, counts, code))
             else:
-                result["e2e"] = part
-        result["ok"] = all(c == 0 for c in codes.values()) and len(codes) == len(stages)
+                result["e2e"] = dict(counts, exit=code)
+            if window == a.window + "s0" and code != 0:                 # O1：第一片紅 => 不開第二片、不跑 e2e（整合紅在 <=10 分內就停）
+                sliced_out = True
+                result["slice_stopped"] = "slice0"
+                print("[全閘門] slice0（靜態／產生檔守門）紅 => 停止，不跑其餘片與 e2e")
+                break
+        result["ok"] = (not sliced_out) and all(c == 0 for c in codes.values()) and len(codes) == len({n for n, *_ in plan})
         return 0 if result["ok"] else (codes.get("main") or codes.get("e2e") or 1)
     except KeyboardInterrupt:
         result["interrupted"] = True
@@ -1283,7 +1379,7 @@ def run_full(extra, a):
             print("[全量結果] ⚠ 寫不出全量結果檔：%r" % e)
         try:
             done, why = record_for_build(result["commit"], codes, user_extra, result["interrupted"], result["dirty"],
-                                         stream_evidence(_FAIL_STREAM_RUN, {"main": a.window, "e2e": a.window + "e2e"}))
+                                         stream_evidence(_FAIL_STREAM_RUN, dict(main_windows, e2e=a.window + "e2e")))
             print("[建包沿用] %s：%s" % ("已寫入" if done else "未寫入", why))
         except Exception as e:                      # noqa: BLE001
             print("[建包沿用] ⚠ 寫不進沿用紀錄：%r（建包會自己重跑，不影響正確性）" % e)

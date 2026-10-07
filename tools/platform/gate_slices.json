@@ -1,0 +1,28 @@
+{
+  "_about": "全閘門切片的單一來源（第 45 班 O1，docs/platform/plans/BUILD-GATE-OPT-T45.md §4/§10）。modtest --full 與 pre_train_check 都讀這一份；改清單＝改閘門順序，不改題數（slice0 ∪ rest ＝ 全部非 e2e 題，tools/platform/gate_slices.py 的 check 會比 nodeid 集合）。",
+  "version": 1,
+  "slice0": {
+    "_about": "第一片：靜態／掃描／產生檔守門，-n 4、fail-fast。整合後才紅的守門都在這裡（第 43 班第 1 輪 10 個紅全是這類，白跑 38 分）。路徑相對 backend/，可含 glob 與 ::nodeid。",
+    "paths": [
+      {"label": "tests/platform（契約、守門、產生檔是否最新）", "path": "tests/platform"},
+      {"label": "規格編號 C_OWNED／規格覆蓋", "path": "tests/test_spec_coverage_2026_09_21.py"},
+      {"label": "alpine double-init 頁母體", "path": "tests/test_alpine_double_init_2026_09_23.py"},
+      {"label": "公司設定輸出點", "path": "tests/test_company_setup_output_points_2026_09_28.py"},
+      {"label": "系統稽核（表分類）", "path": "tests/test_system_audit_2026_09_14.py"},
+      {"label": "字級縮放 raw-vh 靜態題", "path": "tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py::test_fz_no_raw_vh_is_left_in_the_frontend"},
+      {"label": "簽核提供者集合", "path": "modules/*/tests/test_approval_providers*.py"},
+      {"label": "頁面殼腳本", "path": "tests/test_page_shell_scripts_2026_09_30.py"},
+      {"label": "模組 key 一致性", "path": "tests/test_module_keys_consistency_2026_09_13.py"},
+      {"label": "查詢字串不帶憑證", "path": "tests/test_no_credentials_in_query_2026_09_22.py"},
+      {"label": "用語守門", "path": "tests/test_wording_guards_2026_09_23.py"},
+      {"label": "寫入動作登記（ac1）", "path": "tests/test_ac1_write_actions_2026_09_23.py"},
+      {"label": "begin 只經 begin_write", "path": "tests/test_begin_only_via_begin_write_2026_09_25.py"},
+      {"label": "cm12 小字級", "path": "tests/test_cm12_p3_prep_2026_09_24.py"}
+    ]
+  },
+  "failfast": {
+    "_about": "兩片都用；環境變數可覆寫（見 tools/platform/failfast.py）。slice0 紅 ⇒ 不開第二片、不跑 e2e。",
+    "n": 10,
+    "quiet_min": 3
+  }
+}

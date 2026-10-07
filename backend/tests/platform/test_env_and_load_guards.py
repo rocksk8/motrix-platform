@@ -259,6 +259,7 @@ def test_parse_durations_reads_the_pytest_section():
 
 
 def test_run_full_records_the_slowest_with_stage(_no_cap_env, monkeypatch):
+    monkeypatch.setenv("MOTRIX_GATE_SLICES", "0")      # 切片另有題（test_gate_slices）；這題驗單段合併
     """全量結果帶 slowest（題名、秒數、階段、段別），兩段合併取前 30；pytest 參數有 --durations=30。
     突變：run_full 不加 --durations 或不寫 slowest ⇒ 紅。"""
     import types

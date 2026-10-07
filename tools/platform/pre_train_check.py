@@ -47,19 +47,17 @@ GIT_ID = ["-c", "user.name=pre-train-check", "-c", "user.email=pre-train-check@l
           "-c", "rerere.enabled=false", "-c", "rerere.autoupdate=false", "-c", "commit.gpgsign=false"]
 
 #: 「只在合併後才紅」的非 tests/platform 守門：(標籤, glob（相對 backend/，可含 ::nodeid）)。tests/platform 整個都跑，不列在這裡。
-GUARDS = [
-    ("規格編號 C_OWNED／規格覆蓋", "tests/test_spec_coverage_2026_09_21.py"),
-    ("alpine double-init 頁母體", "tests/test_alpine_double_init_2026_09_23.py"),
-    ("公司設定輸出點", "tests/test_company_setup_output_points_2026_09_28.py"),
-    ("系統稽核（表分類）", "tests/test_system_audit_2026_09_14.py"),
-    ("字級縮放 raw-vh 靜態題", "tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py::test_fz_no_raw_vh_is_left_in_the_frontend"),
-    ("簽核提供者集合", "modules/*/tests/test_approval_providers*.py"),
-    ("頁面殼腳本", "tests/test_page_shell_scripts_2026_09_30.py"),
-    # 第二十七班建包紅（node-bb 2026-09-30）：都在 tests/platform 之外，模組選題也選不到
-    ("模組 key 一致性", "tests/test_module_keys_consistency_2026_09_13.py"),
-    ("查詢字串不帶憑證", "tests/test_no_credentials_in_query_2026_09_22.py"),
-    ("用語守門", "tests/test_wording_guards_2026_09_23.py"),
-]
+def _load_guards():
+    """GUARDS 與全閘門 slice0 是同一份清單（tools/platform/gate_slices.json；第 45 班 O1）。讀不到 ⇒ 直接報錯（不退回舊清單，免得兩邊悄悄分岔）。"""
+    sys.path.insert(0, str(HERE))
+    import gate_slices
+    g = gate_slices.guards()
+    if not g:
+        raise RuntimeError("tools/platform/gate_slices.json 讀不到或沒有守門項")
+    return g
+
+
+GUARDS = _load_guards()
 #: 依測試檔名判斷「這是哪一種守門」（報告分組用；順序＝先比先中）
 GUARD_KINDS = [
     ("test_spec_coverage", "規格編號 C_OWNED"),

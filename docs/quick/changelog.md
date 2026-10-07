@@ -16,6 +16,10 @@
 - [`changelog-2026-07-18_2026-09-08.md`](changelog-2026-07-18_2026-09-08.md)：2026-07-18 ～ 2026-09-08，93 則
 
 
+## 2026-10-07 全閘門優化 O1／O4／O6（wip/t45-gate-opt-impl）
+- `modtest --full` 非 e2e 先跑 slice0（tests/platform＋靜態守門，清單 `tools/platform/gate_slices.json`，與預演列車 GUARDS 同一份）、綠了才開其餘；slice0 紅 ⇒ 不開第二片、不跑 e2e。兩片與 e2e 都帶 fail-fast／failure-first（`MOTRIX_GATE_SLICES=0`、`MOTRIX_FAILFAST=0` 可還原）。
+- 出紅先把紅的題單獨重跑（最多 3 次）診斷；放行規則不變：只有已登記且未到期的偶發才算過（`MOTRIX_FULL_FLAKY_RETRY=0` 關）。xdist 改 `--dist worksteal`（`MOTRIX_GATE_DIST=load` 還原）。題數不減：`python tools/platform/gate_slices.py --check` 比 nodeid 集合。
+
 ## 2026-10-06 站內通知鈴鐺所有角色可見、點擊開單、90 天保留（wip/t44-inapp-bell）
 
 - 一般使用者也有通知鈴鐺與未讀數字；點通知標已讀並開對應單據（`notifications.link`）；核准類通知同單同人只留一列；報價單核准寫通知給申請人；通知文字金額對無財務可視者遮蔽；通知保留 90 天自動清理（每日檢查）。管理員鈴鐺行為不變。
