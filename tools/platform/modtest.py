@@ -1221,19 +1221,29 @@ def record_for_build(commit, codes, user_extra, interrupted, dirty, evidence, to
     return tool.record_full_run(tool.default_records(REPO), fp, fp, commit, ran, user_extra, interrupted)
 
 
+def _int_env(name, default):
+    """正整數環境變數；沒設／不合法 ⇒ default。"""
+    try:
+        v = int(os.environ.get(name, "").strip())
+        return v if v >= 1 else default
+    except ValueError:
+        return default
+
+
 def gate_plan(a, extra):
     """全閘門的執行計畫（O1 切片＋fail-fast）⇒ (plan, main 段的 windows, failfast 環境, failfast pytest 參數)。
     plan 每項 (段名, targets, pytest 參數, window)。切片關閉（MOTRIX_GATE_SLICES=0）或清單讀不到／找不到檔 ⇒ 回到舊行為：非 e2e 一段全跑。
     無論切不切，都帶 fail-fast（MOTRIX_FAILFAST=0 可關；使用者明確設的環境變數優先）。"""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import gate_slices as GS
-    n_main = cap_workers(["-m", "not e2e", "-n", str(a.workers)], full_max_workers())
-    e2e = ("e2e", TEST_ROOTS, cap_workers(["-m", "e2e", "-n", str(a.e2e_workers)], e2e_max_workers()) + dist_args(), a.window + "e2e")
+    wk = _int_env("MOTRIX_GATE_WORKERS", a.workers)         # 共用機器上只准 2：MOTRIX_GATE_WORKERS=2（預設不變＝--workers／全量上限）
+    n_main = cap_workers(["-m", "not e2e", "-n", str(wk)], full_max_workers())
+    e2e = ("e2e", TEST_ROOTS, cap_workers(["-m", "e2e", "-n", str(min(a.e2e_workers, wk))], e2e_max_workers()) + dist_args(), a.window + "e2e")
     data = GS.load() if GS.enabled() else None
     targets, missing = GS.expand(data) if data else ([], [])
     ff = (data or {}).get("failfast") or {}
     env = {"MOTRIX_FAILFAST": "1", "MOTRIX_FAILFAST_N": str(ff.get("n", 10)), "MOTRIX_FAILFAST_QUIET_MIN": str(ff.get("quiet_min", 3)),
-           "MOTRIX_FAILFIRST": "1", "MOTRIX_FAILFIRST_BASE": "auto"}
+           "MOTRIX_FAILFIRST": "1", "MOTRIX_FAILFIRST_BASE": "auto", "MOTRIX_GATE_RECORD": "1"}
     env = {k: os.environ.get(k, v) for k, v in env.items()}                 # 使用者明確設的優先
     env["PYTHONPATH"] = os.pathsep.join([str(Path(__file__).resolve().parent)] + ([os.environ["PYTHONPATH"]] if os.environ.get("PYTHONPATH") else []))
     ff_args = ["-p", "failfast", "-rf"]

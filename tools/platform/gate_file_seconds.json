@@ -1,0 +1,15 @@
+{
+  "_about": "全閘門 LPT 排序的種子（第 45 班 O6）：測試檔 ⇒ 該檔各題耗時合計（秒，worker-秒）。來源＝第 43 班 bld43 第 2 輪實測（BUILD-GATE-OPT-T45.md §2 非 e2e 前 10 檔）。實測會被 tools/platform/full_results/file_seconds.json（全閘門自己累積、不進 git）蓋過。只影響題目的『先後』，不增不減、不影響結果。",
+  "seconds": {
+    "tests/platform/test_module_update_delivery_2026_09_28.py": 198,
+    "tests/test_finance_role_matrix_ext_2026_10_05.py": 163,
+    "modules/accounting/tests/test_ledger_mutation_guards_2026_10_01.py": 119,
+    "modules/analytics/tests/test_dashboard_finance_cards_access_2026_10_05.py": 102,
+    "modules/payroll/tests/test_bonus_correction_2026_09_30.py": 101,
+    "tests/test_quote_json_lost_update_2026_09_25.py": 82,
+    "modules/payroll/tests/test_bonus_case_api_2026_09_24.py": 79,
+    "tests/test_custom_modules_engine_2026_09_25.py": 75,
+    "tests/platform/test_scope_gate_2026_09_30.py": 75,
+    "tests/platform/test_module_changelog_follows_code.py": 73
+  }
+}

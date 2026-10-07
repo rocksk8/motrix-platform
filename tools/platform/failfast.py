@@ -13,6 +13,9 @@
                                ⒞tests/platform 的守門題 ⒟其餘照原順序。**只改順序、不刪不增題**（集合不同就放棄重排並印警告）。
   MOTRIX_FAILFIRST_BASE=<ref>  ⒝的比較基準（沒設＝不做 ⒝；`auto`＝該段最近一次綠的 commit，讀 test_results.jsonl）
   MOTRIX_FAILFIRST_HISTORY=10  ⒜讀最近幾份 fail_stream JSONL
+  MOTRIX_GATE_LPT=1            （預設開，只在 FAILFIRST 開時有作用；0＝關）同一優先群組內「檔案耗時大的先跑」（O6，第 45 班）：
+                               耗時來源＝gate_file_seconds.json（種子）被 full_results/file_seconds.json（累積實測）蓋過；
+                               MOTRIX_GATE_RECORD=1（預設關；modtest --full 的全閘門會帶）時，controller 在 sessionfinish 把這輪各檔耗時併進累積檔。只改順序，題集合不變。
 
 ## 不吞資訊、不放水（反向控制見 backend/tests/platform/test_failfast_2026_10_02.py）
 - 停止時照樣印紅清單、fail_stream 照樣寫 summary（帶 `aborted_by: failfast`，**不是** aborted——紅是真的紅）；
@@ -129,6 +132,39 @@ def changed_files(base):
         return []
 
 
+SEED_SECONDS = HERE / "gate_file_seconds.json"
+SECONDS_REL = ("full_results", "file_seconds.json")
+
+
+def _lpt_on():
+    return os.environ.get("MOTRIX_GATE_LPT", "1").strip().lower() not in ("0", "false", "no", "off")
+
+
+def _seconds_path():
+    return HERE.joinpath(*SECONDS_REL)
+
+
+def file_seconds(seed=None, local=None):
+    """檔 ⇒ 耗時秒。種子被累積實測蓋過；讀不到／格式不對 ⇒ 空 dict（不排序，不報錯）。"""
+    out = {}
+    for path, key in ((seed or SEED_SECONDS, "seconds"), (local or _seconds_path(), None)):
+        try:
+            d = json.loads(Path(path).read_text(encoding="utf-8"))
+            d = d.get(key) if key else d
+            out.update({_norm(k): float(v) for k, v in (d or {}).items() if not k.startswith("_") and float(v) >= 0})
+        except (OSError, ValueError, TypeError, AttributeError):
+            continue
+    return out
+
+
+def merge_seconds(old, new, keep=0.5):
+    """累積實測：新的一輪與舊值以指數平均合併（單輪抖動不會把順序洗掉）；沒跑到的檔保留舊值。"""
+    out = dict(old)
+    for k, v in new.items():
+        out[k] = round(old[k] * keep + v * (1 - keep), 2) if k in old else round(v, 2)
+    return out
+
+
 def priority_key(nodeid, red_ids, changed):
     path = _norm(nodeid.split("::", 1)[0])
     n = _norm(nodeid)
@@ -145,8 +181,10 @@ def reorder(items, prio):
     """穩定排序；題集合不變才套用。回 True＝有套用。"""
     red_ids = set(prio.get("ids", []))
     changed = set(prio.get("files", []))
+    secs = prio.get("secs") or {}
     before = [it.nodeid for it in items]
-    new = sorted(items, key=lambda it: priority_key(it.nodeid, red_ids, changed))
+    # 同一優先群組內耗時大的檔先跑（LPT）；同一檔內維持原順序（sorted 穩定、同檔同 key）
+    new = sorted(items, key=lambda it: (priority_key(it.nodeid, red_ids, changed), -secs.get(_norm(it.nodeid.split("::", 1)[0]), 0.0)))
     if sorted(it.nodeid for it in new) != sorted(before):         # 重排不刪題：理論上不會發生，發生就放棄
         return False
     items[:] = new
@@ -171,7 +209,9 @@ class FailFast:
         self.stopfile = os.path.join(tempfile.gettempdir(), "motrix-failfast-%d-%d.stop" % (os.getpid(), int(time.time() * 1000)))
         if _truthy(FIRST_ON):
             hist = int(os.environ.get(HIST_ENV, "10") or 10)
-            self.prio = {"ids": recent_red_nodeids(hist), "files": changed_files(os.environ.get(BASE_ENV, ""))}
+            self.prio = {"ids": recent_red_nodeids(hist), "files": changed_files(os.environ.get(BASE_ENV, "")),
+                         "secs": file_seconds() if _lpt_on() else {}}
+        self.durations = {}                                      # 本輪各檔 call 耗時合計（只在 controller 累計）
 
     # xdist：把優先清單交給 worker（順序要與 controller 一致）
     @pytest.hookimpl(optionalhook=True)
@@ -216,6 +256,12 @@ class FailFast:
         if not self.enabled:
             return
         try:
+            if report.when == "call" and getattr(report, "duration", None):
+                f = _norm(report.nodeid.split("::", 1)[0])
+                self.durations[f] = self.durations.get(f, 0.0) + float(report.duration)
+        except Exception:                                       # noqa: BLE001
+            pass
+        try:
             if report.failed and _norm(report.nodeid) not in self.flakes:
                 self.reds.add(report.nodeid)
                 self.last_red = time.time()
@@ -228,8 +274,28 @@ class FailFast:
             self.reds.add(report.nodeid or "(collect)")
             self.last_red = time.time()
 
+    def _save_seconds(self):
+        """累積各檔耗時（原子寫）。只在「整輪跑完、沒被 fail-fast 截斷」時寫，截斷的一輪耗時不完整會讓慢檔看起來快。"""
+        if self.reason or not self.durations or not _lpt_on() or os.environ.get("MOTRIX_GATE_RECORD", "0").strip() != "1":
+            return
+        p = _seconds_path()
+        try:
+            old = {}
+            try:
+                old = json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                old = {}
+            merged = merge_seconds({k: float(v) for k, v in old.items() if not k.startswith("_")}, self.durations)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            tmp = p.with_name(p.name + ".%d.tmp" % os.getpid())
+            tmp.write_text(json.dumps(merged, ensure_ascii=False, indent=0), encoding="utf-8")
+            os.replace(str(tmp), str(p))
+        except Exception:                                       # noqa: BLE001 — 記錄失敗不影響測試結果
+            pass
+
     @pytest.hookimpl(trylast=True)
     def pytest_sessionfinish(self, session, exitstatus):
+        self._save_seconds()
         try:
             os.remove(self.stopfile)
         except OSError:

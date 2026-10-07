@@ -39,7 +39,7 @@ SUMMARY = "== 5 passed in 1.0s =="
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
     for k in (MT.FULL_ENV, MT.PARTIAL_ENV, MT.E2E_ENV, "MOTRIX_GATE_SLICES", "MOTRIX_GATE_DIST", "MOTRIX_FULL_FLAKY_RETRY",
-              "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_FAILFAST_QUIET_MIN"):
+              "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_GATE_WORKERS", "MOTRIX_FAILFAST_QUIET_MIN"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setattr(MT, "tree_state", lambda repo=None: ("a" * 40, ""))
     monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: Path("x"))
@@ -266,3 +266,54 @@ def test_run_full_uses_the_flaky_verdict_per_stage(monkeypatch):
     monkeypatch.setattr(MT, "flaky_gate", lambda code, out, window, result: (result.setdefault("flaky_retried", []).append("t::x") or 0) if window == "we2e" and code else code)
     _run(monkeypatch, {"we2e": 1}, [])
     assert written[-1]["ok"] is True and written[-1]["flaky_retried"] == ["t::x"]
+
+
+# ── O6：LPT（慢檔先派）只改順序 ─────────────────────────────────────────────────
+
+FF = _load("failfast")
+
+
+class _It:
+    def __init__(self, nodeid):
+        self.nodeid = nodeid
+
+
+def test_lpt_puts_slow_files_first_within_a_group_keeps_in_file_order_and_the_set():
+    items = [_It(n) for n in ("tests/a.py::t1", "tests/b.py::t1", "tests/b.py::t2", "tests/c.py::t1", "tests/platform/p.py::t1")]
+    before = sorted(i.nodeid for i in items)
+    prio = {"ids": [], "files": [], "secs": {"tests/a.py": 1, "tests/b.py": 50, "tests/c.py": 10, "tests/platform/p.py": 5}}
+    assert FF.reorder(items, prio) is True
+    got = [i.nodeid for i in items]
+    assert got == ["tests/platform/p.py::t1", "tests/b.py::t1", "tests/b.py::t2", "tests/c.py::t1", "tests/a.py::t1"]   # 守門群組仍先；其後慢→快；同檔原序
+    assert sorted(got) == before                                                      # 題集合不變
+
+
+def test_lpt_off_or_no_data_keeps_the_original_order():
+    names = ["tests/a.py::t1", "tests/b.py::t1", "tests/c.py::t1"]
+    items = [_It(n) for n in names]
+    FF.reorder(items, {"ids": [], "files": [], "secs": {}})
+    assert [i.nodeid for i in items] == names
+
+
+def test_a_red_or_changed_file_still_beats_a_slow_file():
+    items = [_It(n) for n in ("tests/slow.py::t", "tests/changed.py::t", "tests/red.py::t")]
+    FF.reorder(items, {"ids": ["tests/red.py::t"], "files": ["tests/changed.py"], "secs": {"tests/slow.py": 999}})
+    assert [i.nodeid for i in items] == ["tests/red.py::t", "tests/changed.py::t", "tests/slow.py::t"]
+
+
+def test_seed_seconds_files_exist_and_unreadable_data_is_empty(tmp_path):
+    secs = FF.file_seconds(local=tmp_path / "none.json")
+    assert secs and all((REPO / "backend" / k).is_file() for k in secs), "種子裡的檔被改名了：請更新 gate_file_seconds.json"
+    (tmp_path / "bad.json").write_text("{x", encoding="utf-8")
+    assert FF.file_seconds(seed=tmp_path / "bad.json", local=tmp_path / "bad.json") == {}
+
+
+def test_merge_seconds_smooths_and_keeps_unseen_files():
+    assert FF.merge_seconds({"a": 100.0, "b": 7.0}, {"a": 0.0, "c": 3.0}) == {"a": 50.0, "b": 7.0, "c": 3.0}
+
+
+def test_worker_cap_env_overrides_workers(monkeypatch):
+    monkeypatch.setenv("MOTRIX_GATE_WORKERS", "2")
+    cap = []
+    _run(monkeypatch, {}, cap)
+    assert all(c[2][c[2].index("-n") + 1] == "2" for c in cap[:2])
