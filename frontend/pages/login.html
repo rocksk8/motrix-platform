@@ -579,6 +579,16 @@
         return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
       },
 
+      // return-to:begin（測試以這兩個標記抽出函式驗證；auth-guard.js 在轉來登入頁前寫入 motrix_return_to）
+      _returnTarget() {
+        var t = null
+        try { t = sessionStorage.getItem('motrix_return_to'); sessionStorage.removeItem('motrix_return_to') } catch (e) {}
+        // 只接受「同站的絕對路徑」：單一斜線開頭（不是 // 或 /\ 這種會跳到別站的寫法）、沒有空白／控制字元、不是登入頁自己
+        if (typeof t === 'string' && /^\/(?![\/\\])[^\s\u0000-\u001f]*$/.test(t) && !/\/login[^\/?#]*\.html([?#]|$)/.test(t)) return t
+        return '../index.html'
+      },
+      // return-to:end
+
       _storeSessionAndRedirect(data) {
         if (this.qrPollTimer) { clearInterval(this.qrPollTimer); this.qrPollTimer = null }
         localStorage.setItem('motrix_session', JSON.stringify({
@@ -590,7 +600,7 @@
           modules:     data.modules,
           loginAt:     data.loginAt,
         }))
-        window.location.href = '../index.html'
+        window.location.href = this._returnTarget()
       },
 
       async init() {
@@ -614,7 +624,7 @@
           const res = await fetch('/api/auth/me', {
             headers: {'Authorization': 'Bearer ' + session.token}
           })
-          if (res.ok) window.location.href = '../index.html'
+          if (res.ok) window.location.href = this._returnTarget()
           else         localStorage.removeItem('motrix_session')
         } catch(e) {}
       }
