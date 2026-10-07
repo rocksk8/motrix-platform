@@ -106,6 +106,28 @@ window.CM_PARTS.push(() => ({
       this.moMsg = ''
     },
 
+    // 材料卡片自動連結：未連結的材料，品名（去空白）與「恰好一筆」已核准且有採購單的材料申請相同 ⇒ 帶入 orderItemId；
+    // 零筆／多筆／該申請已被別張卡連走 ⇒ 維持手選。不動「已申購／已到料」勾選。
+    mlAutoLinkMaterials() {
+      const mats = this.cr?.caseRecord?.materials
+      if (!Array.isArray(mats)) return 0
+      if (!this.moCanEdit || !this.moCanEdit()) return 0                  // 沒有編輯權限的角色不自動改（setDirty 會觸發自動存檔而被 403）
+      const key = s => String(s || '').trim()
+      const taken = new Set(mats.map(m => m.orderItemId).filter(Boolean))
+      const sameName = {}
+      for (const m of mats) if (!m.orderItemId) sameName[key(m.name)] = (sameName[key(m.name)] || 0) + 1
+      let n = 0
+      for (const mat of mats) {
+        if (mat.orderItemId || !key(mat.name) || sameName[key(mat.name)] > 1) continue          // 同名未連結卡片有多張＝有歧義，維持手選
+        const hits = (this.materialOrders || []).filter(o => o._saved !== false && o.poDocCode && !taken.has(o.itemId) &&
+          (this.moApprovals || {})[o.itemId]?.status === '已核准' && key(o.itemName) === key(mat.name))
+        if (hits.length !== 1) continue
+        mat.orderItemId = hits[0].itemId; taken.add(hits[0].itemId); n++
+      }
+      if (n && this.setDirty) this.setDirty()
+      return n
+    },
+
     // 頁籤：舊單（沒有審核列）、已核准、尚未送審的草稿同列（預設）；尚未儲存的新列在每個頁籤都顯示
     // 該列目前屬於哪個頁籤（單一來源；_mlTabOf 也用它）
     _mlKeyOf(m) {
