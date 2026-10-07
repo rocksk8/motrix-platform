@@ -32,9 +32,10 @@ def bind(path=None):
     if parent not in sys.path:
         sys.path.insert(0, parent)
     import db
+    require_file(path or db.DB_PATH)          # 先驗證再賦值：失敗時不改 db.DB_PATH（測試行程裡會漏到後面的題）
     if path:
         db.DB_PATH = path
-    return require_file(db.DB_PATH)
+    return db.DB_PATH
 
 
 def connect_path(path):
