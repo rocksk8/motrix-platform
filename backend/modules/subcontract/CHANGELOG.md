@@ -1,8 +1,9 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-07（wip/t45-paydate-impl）：承攬商匯款預定付款日（S4）；匯款單關聯勞報單放寬（Q13）
+## (next) — 2026-10-07（wip/t45-paydate-impl）：承攬商匯款預定付款日（S4）；匯款單關聯勞報單放寬（Q13）、派發頁勞報單連結（P3）
 - migration v6：`contractor_payment_vouchers.planned_pay_date`（不回填；舊列 ''）。⚠ 0005 曾整表重建——之後任何重建這張表的遷移必須帶這一欄。
 - `_voucher_public` 加 `plannedPayDate`（IP-14 形狀加法）；`POST /api/contractor-vouchers` 可帶選填 `planned_pay_date`（與合約應付款日 `payable_date` 分開、不預填、不寫回派發）。
+- 第46班 P3：`GET/POST/DELETE /api/contractor-dispatches/{id}/payslip-links`（`api/dispatch_payslip_links.py`；資料來自 M07 提供者 `payslip.dispatch_links`，M07 不在 ⇒ 明說；派發頁使用者只看單號、狀態、受領人，無金額；建立／解除＝最高管理者）與提供者 `dispatch.brief`（派發簡要識別，無金額）。
 - 第46班 Q13：個人外包匯款關聯勞報單時，勞報單狀態由「須已簽回」放寬為「已核准／已匯出／已簽回」（與勞報單已核准即可付款一致；`_personnel_link_errors`）。
 - 新提供者 `contractor_voucher.set_planned`（IP-14 第三個能力）：只認已核准、未匯款、未作廢；已匯款 409。供出納端點使用（出納端點在 arap）。不改出納排序（仍依應付款日）。
 

@@ -8,7 +8,8 @@ import importlib
 from modules.payroll import payslip_payables
 from modules.payroll import bank_account, bonus, bonus_correction, bonus_payouts, bonus_queue, gl_events, payslip_payouts, remit_link
 from modules.payroll.api import bank_account as bank_account_api, bonus as bonus_api, bonus_correction as bonus_correction_api, payslips as payslips_api
-from modules.payroll.api import payslip_approval as payslip_approval_api
+from modules.payroll.api import payslip_approval as payslip_approval_api, payslip_links as payslip_links_api
+from modules.payroll import payslip_links
 from modules.payroll import attachments   # 要在 api 之後：提供者用 payslips 的 _signed_path／_archive_dir
 
 _m0001 = importlib.import_module("modules.payroll.migrations.0001_payslip_void_signed_paid")
@@ -18,7 +19,7 @@ _m0004 = importlib.import_module("modules.payroll.migrations.0004_payslip_approv
 
 MODULE = ModuleSpec(
     key="payroll",
-    routers=[payslips_api.router, payslip_approval_api.router, bonus_correction_api.router, bonus_api.router, bank_account_api.router],
+    routers=[payslips_api.router, payslip_approval_api.router, payslip_links_api.router, bonus_correction_api.router, bonus_api.router, bank_account_api.router],
     migrations=[(1, _m0001.up), (2, _m0002.up), (3, _m0003.up), (4, _m0004.up)],
     providers={
         # IP-8：出納頁的獎金待發放與發放紀錄（M05）
@@ -46,5 +47,7 @@ MODULE = ModuleSpec(
         ("approval.queue_items", "payroll"): bonus_queue.queue_items,
         # IP-10（第46班）：待審核的勞報單（不含金額、受領人、身分資料）
         ("approval.queue_items", "payroll_payslip"): payslip_approval_api.queue_items,
+        # IP（暫定號，第46班 P3）：勞報單 ⇄ 承攬派發雙向連結（M07 → M04 派發頁；只回單號、狀態、受領人姓名、開單日期，不含金額）
+        ("payslip.dispatch_links", "payroll"): payslip_links._Links,
     },
 )

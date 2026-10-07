@@ -250,6 +250,23 @@
           <div style="display:flex;gap:8px" x-show="selectedSlip.export_count > 0">
             <button class="btn btn-ghost btn-sm" style="flex:1" @click="openHistory(selectedSlip)">匯出歷史</button>
           </div>
+          <div data-testid="ps-dispatch-links" style="font-size:12px">
+            <div style="font-weight:600;color:var(--text-dim)">來源派發</div>
+            <div x-show="dlinks.notice" style="color:var(--warning)" x-text="dlinks.notice"></div>
+            <template x-for="it in dlinks.items" :key="it.dispatchId">
+              <div style="display:flex;gap:6px;align-items:center;margin-top:3px">
+                <a :href="'case-management.html?q=' + encodeURIComponent((it.dispatch || {}).quoteNo || '')" :data-testid="'ps-dlink-' + it.dispatchId"
+                   x-text="((it.dispatch || {}).docCode || ('派發 #' + it.dispatchId)) + ((it.dispatch || {}).quoteNo ? '（' + it.dispatch.quoteNo + '）' : '')"></a>
+                <button x-show="selectedSlip.status !== '已付款'" class="btn btn-ghost btn-sm" @click="removeLink(selectedSlip, it)" :data-testid="'ps-dlink-remove-' + it.dispatchId">解除</button>
+              </div>
+            </template>
+            <div x-show="!dlinks.items.length && !dlinks.notice" style="color:var(--text-dim)">尚未關聯派發</div>
+            <div x-show="selectedSlip.status !== '已作廢'" style="display:flex;gap:4px;margin-top:4px">
+              <input type="text" placeholder="派發編號" x-model="linkInput" data-testid="ps-dlink-input" style="width:90px;font-size:12px">
+              <button class="btn btn-ghost btn-sm" @click="addLink(selectedSlip)" data-testid="ps-dlink-add">關聯派發</button>
+            </div>
+            <div x-show="linkErr" x-text="linkErr" style="color:var(--danger)"></div>
+          </div>
           <!-- 送審流程（第46班）：草稿 → 送審 → 待審核（簽核人簽核／退回）→ 已核准才能匯出；匯出不需要付款日 -->
           <div x-show="selectedSlip.status === '草稿'" style="display:flex;flex-direction:column;gap:6px">
             <label style="font-size:12px;color:var(--text-dim)">預定付款日（選填；核准後出納也能改）
@@ -501,6 +518,31 @@ function payslipsPage() {
     selectSlip(p) {
       this.selectedId = p.slip_no
       this.selectedSlip = { ...p }
+      this.linkInput = ''; this.linkErr = ''; this.dlinks = { items: [], notice: '' }
+      this.loadLinks(p)
+    },
+
+    // 來源派發（第46班 P3）：勞報單 ⇄ 承攬派發雙向連結（派發頁也看得到；那邊只顯示單號、狀態、受領人）
+    dlinks: { items: [], notice: '' }, linkInput: '', linkErr: '',
+    async loadLinks(p) {
+      try {
+        const r = await fetch(`${API}/payslips/${p.slip_no}/dispatch-links`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok && this.selectedId === p.slip_no) this.dlinks = await r.json()
+      } catch (e) {}
+    },
+    async addLink(p) {
+      this.linkErr = ''
+      const id = parseInt(this.linkInput, 10)
+      if (!id) { this.linkErr = '請填派發編號（數字）'; return }
+      const r = await fetch(`${API}/payslips/${p.slip_no}/dispatch-links`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify({ dispatchId: id }) })
+      if (!r.ok) { let m = ''; try { m = (await r.json()).detail } catch (e) {}; this.linkErr = m || ('關聯失敗（' + r.status + '）'); return }
+      this.linkInput = ''; await this.loadLinks(p)
+    },
+    async removeLink(p, it) {
+      this.linkErr = ''
+      const r = await fetch(`${API}/payslips/${p.slip_no}/dispatch-links/${it.dispatchId}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+      if (!r.ok) { let m = ''; try { m = (await r.json()).detail } catch (e) {}; this.linkErr = m || ('解除失敗（' + r.status + '）'); return }
+      await this.loadLinks(p)
     },
 
     async previewPdf(p) {

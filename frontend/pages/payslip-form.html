@@ -811,6 +811,7 @@ function payslipForm() {
           slip_no: this.q.slipNo,
           contractor_id: this.q.contractorId || null,
           data: { ...this.q, calc: this.result,
+                  ...(this.isNew && new URLSearchParams(window.location.search).get('dispatchId') ? { dispatchId: parseInt(new URLSearchParams(window.location.search).get('dispatchId'), 10) } : {}),   // 第46班 P3：從派發頁「新增勞報單」進來 ⇒ 建立時一併關聯來源派發
                   recalcTaxRules: this.recalcTaxRules,          // R1：明確選擇重算才依日期重挑
                   privacyNoticeAcked: this.privacyNoticeAcked } // R3：時間與人員由伺服器記錄
         }

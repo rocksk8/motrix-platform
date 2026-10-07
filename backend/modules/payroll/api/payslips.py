@@ -255,7 +255,22 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     month = datetime.now().strftime("%Y%m")
     d     = body.data
     d.pop("recalcTaxRules", None)
+    dispatch_id = d.pop("dispatchId", None)                        # 第46班 P3（Q8）：建立時可選填來源派發（不存進單據 data）
     rules = _rules_for_slip(d)            # R1：依開單（給付）日期挑版本；沒有適用版本 ⇒ 400
+    if dispatch_id not in (None, ""):
+        try:
+            dispatch_id = int(dispatch_id)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "來源派發編號格式不正確")
+        _brief = registry.single_provider("dispatch.brief")
+        _c = get_db()
+        try:
+            if _brief is None or _brief(_c, dispatch_id) is None:
+                raise HTTPException(400, "查無來源派發 #%s（或外包工班模組未安裝）" % dispatch_id)
+        finally:
+            _c.close()
+    else:
+        dispatch_id = None
 
     conn = get_db()
     conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
@@ -322,6 +337,14 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
         conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, ?) "
                      "ON CONFLICT(month) DO UPDATE SET seq=MAX(seq, excluded.seq)",
                      (month, seq_no))
+    if dispatch_id is not None:                                     # 與勞報單同一個交易：連結失敗就整張不建
+        from modules.payroll import payslip_links as _pl
+        try:
+            _pl.link(conn, slip_no, dispatch_id, user)
+        except _pl.LinkError as e:
+            conn.rollback()
+            conn.close()
+            raise HTTPException(e.status, str(e))
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'payslip.create', 'payslip', slip_no,

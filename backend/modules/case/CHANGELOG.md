@@ -1,8 +1,9 @@
 # 案件 更新紀錄
 
-## (next) — 2026-10-07（wip/t45-paydate-impl）：預定付款日 S1–S3、S6——出納端點改打來源無關路徑、行事曆事件不放受款人與付款條件、我的申請欄位、叫料匯款預定日
+## (next) — 2026-10-07（wip/t45-paydate-impl）：預定付款日 S1–S3、S6、派發頁勞報單區塊（第46班）——出納端點改打來源無關路徑、行事曆事件不放受款人與付款條件、我的申請欄位、叫料匯款預定日
 - `payables.py`：IP-100 提供者新增可選方法 `set_planned_pay_date`（只認出納待付款清單上的申請；已付款 ⇒ 409）與 `planned_changed`（commit 之後對齊行事曆）。
 - `payable_calendar.compose`：事件說明只放單號、名目、關聯案件、預定日；**移除「受款人」「付款條件」行**（使用者 2026-10-07 Q4；金額原本就不放）。
+- 第46班 P3：案件管理「承攬商」分頁每張派發卡片新增「勞報單」區塊（`case-management.html`／`case-management-dispatch.js`）：顯示關聯的勞報單（單號、狀態、受領人；無金額）、最高管理者可關聯既有勞報單或新增（帶入派發編號）；M07 不在 ⇒ 明說。
 - S2 `payment-request.html`「我的申請」新增「預定付款日」欄（付款前本人可補填／改期／清除，打既有 `…/dates`；已付款唯讀顯示歷史值、已作廢唯讀；testid `pr-mine-planned-<id>`、`pr-mine-planned-save-<id>`）。後端不變。
 - S3 叫料匯款預定付款日：migration v8（`case_material_payments.planned_pay_date`，每張申請一個、不回填）；建立／草稿與已退回期間可填可改（核准後只有出納端點能改）；`pending()` 帶 `plannedPayDate`；提供者 `set_planned_pay_date`（已核准且有剩餘才可改；結清 409；分次付款可改下一次預定日）；案件頁匯款申請表單加「預定付款日（選填）」與列上顯示。
 
