@@ -3,12 +3,12 @@
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
   "tests": 1183,
-  "unmapped": 13,
+  "unmapped": 12,
   "kinds": {
-   "api": 641,
+   "api": 642,
    "e2e": 290,
-   "audit": 143,
-   "unit": 109
+   "audit": 144,
+   "unit": 107
   },
   "routes": 783
  },
@@ -19,7 +19,6 @@
   "backend/tests/platform/test_deploy_dashboard_scope_gate_2026_09_30.py",
   "backend/tests/platform/test_no_leaky_tempdirs.py",
   "backend/tests/platform/test_no_swallowed_dict_keys_2026_10_03.py",
-  "backend/tests/platform/test_stepfile_drill_2026_09_30.py",
   "backend/tests/test_approval_queue_extra_types_2026_09_30.py",
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py",
   "backend/tests/test_e2e_bn3_manual_people_page_2026_09_24.py",
@@ -16078,7 +16077,7 @@
    }
   },
   "backend/tests/platform/test_expense_prefill_2026_10_02.py": {
-   "kind": "unit",
+   "kind": "api",
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
@@ -16226,13 +16225,18 @@
   "backend/tests/platform/test_final_drill_tool.py": {
    "kind": "api",
    "units": [
+    "core:db",
     "core:main",
     "dir:backend/",
+    "dir:backend/helpers/",
     "dir:backend/modules/",
+    "dir:backend/tools/",
     "dir:docs/platform/",
     "dir:tools/platform/",
+    "file:backend/helpers/__init__.py",
     "file:backend/tests/_routes.py",
     "file:docs/platform/modules.json",
+    "helper:company_setup",
     "mod:accounting/api/account_items",
     "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
@@ -16272,6 +16276,9 @@
    ],
    "evidence": {
     "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/company_setup.py",
      "backend/tests/_routes.py"
     ],
     "api": [
@@ -16316,8 +16323,12 @@
     ],
     "path": [
      "backend/",
+     "backend/db.py",
+     "backend/helpers/",
+     "backend/helpers/company_setup.py",
      "backend/main.py",
      "backend/modules/",
+     "backend/tools/",
      "docs/platform/",
      "docs/platform/modules.json",
      "frontend/index.html",
@@ -18404,9 +18415,15 @@
    }
   },
   "backend/tests/platform/test_stepfile_drill_2026_09_30.py": {
-   "kind": "unit",
-   "units": [],
-   "evidence": {}
+   "kind": "audit",
+   "units": [
+    "core:db"
+   ],
+   "evidence": {
+    "path": [
+     "backend/db.py"
+    ]
+   }
   },
   "backend/tests/platform/test_storage_locations_2026_09_28.py": {
    "kind": "api",
@@ -18676,10 +18693,14 @@
   "backend/tests/platform/test_v9_baseline.py": {
    "kind": "unit",
    "units": [
-    "core:db"
+    "core:db",
+    "plat:__init__",
+    "plat:upgrade"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/upgrade.py",
      "backend/db.py"
     ]
    }
