@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 1165,
+  "tests": 1166,
   "unmapped": 13,
   "kinds": {
    "api": 629,
    "e2e": 288,
    "audit": 140,
-   "unit": 108
+   "unit": 109
   },
   "routes": 771
  },
@@ -15932,6 +15932,35 @@
      "docs/platform/THIRD-PARTY-LICENSES.md",
      "frontend/fonts/",
      "frontend/fonts/OFL.txt"
+    ]
+   }
+  },
+  "backend/tests/platform/test_gate_slices_2026_10_07.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/tests/platform/",
+    "dir:tools/platform/",
+    "file:backend/tests/test_alpine_double_init_2026_09_23.py",
+    "file:backend/tests/test_company_setup_output_points_2026_09_28.py",
+    "file:backend/tests/test_module_keys_consistency_2026_09_13.py",
+    "file:backend/tests/test_no_credentials_in_query_2026_09_22.py",
+    "file:backend/tests/test_page_shell_scripts_2026_09_30.py",
+    "file:backend/tests/test_spec_coverage_2026_09_21.py",
+    "file:backend/tests/test_system_audit_2026_09_14.py",
+    "file:backend/tests/test_wording_guards_2026_09_23.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/tests/platform/",
+     "backend/tests/test_alpine_double_init_2026_09_23.py",
+     "backend/tests/test_company_setup_output_points_2026_09_28.py",
+     "backend/tests/test_module_keys_consistency_2026_09_13.py",
+     "backend/tests/test_no_credentials_in_query_2026_09_22.py",
+     "backend/tests/test_page_shell_scripts_2026_09_30.py",
+     "backend/tests/test_spec_coverage_2026_09_21.py",
+     "backend/tests/test_system_audit_2026_09_14.py",
+     "backend/tests/test_wording_guards_2026_09_23.py",
+     "tools/platform/"
     ]
    }
   },
