@@ -1,12 +1,12 @@
 # 應收應付 更新紀錄
 
-## (next) — 2026-10-08（fix/t45-audit-followups）：出納預定付款日端點遇到「沒變」直接回（第 45 班稽核 S3）
+## 1.0.44 — 2026-10-08（fix/t45-audit-followups）：出納預定付款日端點遇到「沒變」直接回（第 45 班稽核 S3）
 - `PATCH …/planned-pay-date`（兩條）：提供者回 `unchanged` ⇒ 回 200＋`unchanged: true`，不寫稽核、不通知申請人、不動行事曆。
 
-## (next) — 2026-10-08（fix/pr-remark-in-queue）：出納對表單收款對象的警示
+## 1.0.43 — 2026-10-08（fix/pr-remark-in-queue）：出納對表單收款對象的警示
 - 出納頁待付款表：項目帶 `payeeNote` 時（採購單／零用金、收款對象填在表單且沒有另存收款人與銀行資料）在付款鈕旁以文字顯示警示；`GET …/payee-bank` 的說明改用提供者的 `note`（不再退回申請人的員工收款帳戶）。不擋付款，權限規則不變。
 
-## (next) — 2026-10-08（wip/t46-payslip-impl）：勞報單進出納待付款（IP-100 payroll_payslip）
+## 1.0.42 — 2026-10-08（wip/t46-payslip-impl）：勞報單進出納待付款（IP-100 payroll_payslip）
 - 第46班：IP-100 提供者可選方法 `after_paid`（付款 commit 之後）與屬性 `NO_CALENDAR`（勞報單不進行事曆：不建「支出付款」事件、不收「付款待辦」）；出納頁待付款表對勞報單顯示「傳票單號」欄與已簽回／未簽回小標（不影響付款），舊「勞報單待付款」頁籤隱藏一班；`/api/cashier/payslip-queue` 可見範圍改為財務角色＋最高管理者（**權限變更**）。
 
 ## 1.0.41 — 2026-10-07（wip/t45-paydate-impl）：出納預定付款日端點（來源無關、承攬商匯款）與通知申請人（含出納頁提示色改語意 token）

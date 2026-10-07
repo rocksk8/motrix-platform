@@ -1,6 +1,6 @@
 # 薪資獎金 更新紀錄
 
-## (next) — 2026-10-08（fix/t45-audit-followups）：勞報單 data_json 不留前端送來的 status（第 45 班稽核 S5）
+## 1.2.2 — 2026-10-08（fix/t45-audit-followups）：勞報單 data_json 不留前端送來的 status（第 45 班稽核 S5）
 - 建立與修改都把請求 `data.status` 移除後才存 `data_json`；狀態欄位本來就只由專用端點改，這裡讓 `GET` 的 `data.status` 也不會顯示被偽造的值。
 
 ## 1.2.1 — 2026-10-07（wip/t45-payslip-status-fix）：勞報單狀態不再由前端指定（快修）

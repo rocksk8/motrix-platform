@@ -1,9 +1,9 @@
 # 外包工班 更新紀錄
 
-## (next) — 2026-10-08（fix/t45-audit-followups）：承攬商匯款預定付款日沒變就不動（第 45 班稽核 S3）
+## 1.1.24 — 2026-10-08（fix/t45-audit-followups）：承攬商匯款預定付款日沒變就不動（第 45 班稽核 S3）
 - `set_planned_pay_date`：日期與現值相同 ⇒ 回 `unchanged`，出納端點不稽核、不通知。
 
-## (next) — 2026-10-08（wip/t46-payslip-impl）：派發⇄勞報單連結端點（P3）、匯款單關聯勞報單放寬（Q13）
+## 1.1.23 — 2026-10-08（wip/t46-payslip-impl）：派發⇄勞報單連結端點（P3）、匯款單關聯勞報單放寬（Q13）
 - 第46班 P3：`GET/POST/DELETE /api/contractor-dispatches/{id}/payslip-links`（`api/dispatch_payslip_links.py`；資料來自 M07 提供者 `payslip.dispatch_links`，M07 不在 ⇒ 明說；派發頁使用者只看單號、狀態、受領人，無金額；建立／解除＝最高管理者）與提供者 `dispatch.brief`（派發簡要識別，無金額）。
 - 第46班 Q13：個人外包匯款關聯勞報單時，勞報單狀態由「須已簽回」放寬為「已核准／已匯出／已簽回」（與勞報單已核准即可付款一致；`_personnel_link_errors`）。
 
