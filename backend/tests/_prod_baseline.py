@@ -21,6 +21,7 @@
 📌 2026-10-05 15:27：正式機已更新到 3141cd35（第四十一班；正式機 Claude 依主持「可以套用」執行 apply_update，成功、無回滾，result.json status=success）⇒ 基準改 3141cd35。
 📌 2026-10-06 10:05：正式機已更新到 f0dadf9a（第四十二班：財務角色／預定付款日與提醒；正式機 Claude 依主持「可以套用」與使用者「套用」執行 apply_update，成功、無回滾，result.json status=success）⇒ 基準改 f0dadf9a。
 📌 2026-10-06 19:14：正式機已更新到 89206122（第四十三班：職責角色 R1／信件×行事曆矩陣／精算含稅與稅額／已出貨數量等；正式機 Claude 依主持「可以套用」執行 apply_update，13 秒成功、無回滾，步驟 3 十六項全過、R1 等值關卡 PASS 0 差異）⇒ 基準改 89206122。
+📌 2026-10-07 09:51：正式機已更新到 c2fc54ba（第四十四班：站內通知鈴鐺全角色／簽核結果通知申請人／採購單從請購單帶入／支出申請附件；含 core migration notifications.link；正式機 Claude 依主持「可以套用」執行 apply_update，成功、無回滾，步驟 3 十四項全過，職責角色 R1 等值關卡 PASS）⇒ 基準改 c2fc54ba。
 """
 import json
 import subprocess
@@ -29,7 +30,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "89206122"
+BASELINE = "c2fc54ba"
 
 
 def baseline_manifest():
