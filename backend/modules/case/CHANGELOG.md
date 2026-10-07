@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## (next) — 2026-10-07（fix/pr-remark-in-queue）：簽核佇列詳情顯示費用單據的類型欄位
+- `api/quotations.py::detail_extra_expense`：費用單據（kind≠''）的詳情在原有欄位之後，依類型定義的順序與標籤加上 `data_json` 的類型欄位——請購單的採購類型／緊急程度／需求日期／**採購備註說明**，採購單的廠商／預計交貨日／付款條件…，差旅、零用金同理。只放 T1 一般資料的純文字類欄位（text／textarea／select／radio／date／daterange）；空值略過、單欄上限 500 字；表格、公式、參照、數字、出納專用、非 T1 欄位不放；標籤撞到既有欄位（例如各類型的「備註」）加「（表單）」。舊版額外支出（kind=''）詳情不變；輸出版型／PDF 不受影響；不需要 L1 變更。
+- 測試：`modules/case/tests/test_queue_detail_typed_fields_2026_10_07.py`。
+
 ## 1.0.154 — 2026-10-06（wip/t44-inapp-bell）：報價單核准時寫一則站內通知給申請人
 - `api/quotations.py`：報價單最後一層核准後，commit 之後對申請人寫 `quotation_approved` 站內通知（點了開 `quotation-form.html?id=<單號>`；文字不含金額；同一報價單只留一列）。
 - 其他單據的核准通知文字與連結由 wip/t44-applicant-notify 負責。
