@@ -1,7 +1,7 @@
 # 檔案中心 更新紀錄
 
 ## 1.0.4 — 2026-10-08（第 46 班：D7 演練冒煙）
-- `module.json`：宣告 `provides.probes`＝`GET /api/filehub/search`（唯讀）。原本是空陣列 ⇒ 完整演練冒煙把模組判為「沒宣告 probes」而紅（D7-CHECKLIST §4）。API、頁面、權限不變。
+- `module.json`：宣告 `provides.probes`＝`GET /api/filehub/search`（唯讀；探針路徑不帶查詢字串，守門 test_product_drill_probes）。原本是空陣列 ⇒ 完整演練冒煙把模組判為「沒宣告 probes」而紅（D7-CHECKLIST §4）。API、頁面、權限不變。
 
 ## 1.0.3 — 2026-10-01（wip/t31-filecenter-open-a3：開啟檔案）
 - `file-center.html`：結果列主動作改為「開啟檔案」（圖片／PDF 於新分頁開上傳的檔，其他類型走預覽窗；已刪除／無權限顯示明確訊息、不留空白分頁）；原「開啟原單據」降為次要連結「前往原單據」。取檔仍是 `attachments/open`，API 與權限不變。
