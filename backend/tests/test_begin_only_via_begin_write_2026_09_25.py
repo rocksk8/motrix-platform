@@ -20,6 +20,9 @@ ALLOWED = {
     ("modules/payroll/api/bonus.py", "approve_case_bonus"): "同上",
     ("modules/payroll/api/bonus.py", "reject_case_bonus"): "同上",
     ("modules/payroll/api/bonus.py", "return_case_bonus"): "同上",
+    ("modules/payroll/api/payslip_approval.py", "submit_payslip"): "勞報單送審；先拿寫鎖再讀（BEGIN IMMEDIATE）、try/finally 關連線（錯誤時未 commit 的交易隨 close 丟棄）；與獎金 approve/submit/reject 同型；這類短處理不需要 write-txn watcher",
+    ("modules/payroll/api/payslip_approval.py", "approve_payslip"): "勞報單核准；同上",
+    ("modules/payroll/api/payslip_approval.py", "reject_payslip"): "勞報單駁回；同上",
     ("modules/payroll/api/bonus.py", "mark_case_bonus_paid"): "同上",
     ("modules/case/api/quotations.py", "case_batch_assign"): "批次指派；讀前已拿鎖、try/finally 關連線（lost update C 組判讀）",
     ("archive.py", "_db_content_fingerprint"): ("每日備份「同上一份」的內容指紋（2026-09-30）：**唯讀** `BEGIN DEFERRED`（不拿寫鎖）——跨所有表雜湊需要同一時間點的一致讀取快照；"
