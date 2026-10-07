@@ -42,6 +42,45 @@ def test_overdue_mail_once_and_finance_in_app_notice_without_amount(client, make
     assert "7777" not in html and "7,777" not in html
 
 
+def test_in_app_notice_does_not_depend_on_the_mail_and_is_written_once(client, make_user, mails):
+    """M1：沒有財務信箱（send 回 False）時，站內提醒照樣出現一次；重跑不重複；信件稍後有收件人時仍會補寄。"""
+    P._finance(make_user, "pdc_fin_nomail")
+    _x("UPDATE users SET email='' WHERE username=?", ("pdc_fin_nomail",))
+    P._seed_exp(planned=P.TODAY.isoformat())
+    assert P._run() == 0 and mails == [], "沒有收件人 ⇒ 不寄"
+    assert len(_notes("pdc_fin_nomail")) == 1, "站內通知獨立於信件"
+    assert P._run() == 0 and len(_notes("pdc_fin_nomail")) == 1, "只寫一次"
+    _x("UPDATE users SET email=? WHERE username=?", ("pdc_fin_nomail@example.com", "pdc_fin_nomail"))
+    assert P._run() == 1 and len(mails) == 1 and len(_notes("pdc_fin_nomail")) == 1, "之後有收件人 ⇒ 信補寄、站內不重複"
+
+
+def test_one_bad_item_does_not_stop_the_others_and_stale_guards_are_still_pruned(client, make_user, monkeypatch):
+    """M2：一筆出錯只記 log、繼續下一筆；清舊 guard 一定會做。"""
+    from helpers import payable_due_core as C
+    from helpers import _set_setting, _get_setting
+    P._finance(make_user, "pdc_fin")
+    _set_setting("payable_due_notif.1.today.2031-05-01.2031-05-01", "2031-05-01")           # 早於 7 天的舊 guard
+    _set_setting("payable_due_inapp.1.today.2031-05-01.2031-05-01", "2031-05-01")
+    items = [{"guard_id": "bad", "planned": P.TODAY.isoformat(), "ident": "壞", "rows": [], "source": "x", "key": "bad"},
+             {"guard_id": "good", "planned": P.TODAY.isoformat(), "ident": "好", "rows": [], "source": "x", "key": "good"}]
+    seen = []
+
+    class _R(dict):
+        pass
+
+    def send(kind, rows, link, ident, out=None):
+        if ident == "壞":
+            raise RuntimeError("boom")
+        seen.append(ident)
+        out["outcome"] = "sent"
+        return True
+
+    monkeypatch.setattr(C._en, "SEND_SENT", "sent")
+    n = C.run_scan(items, P.TODAY, is_wd=lambda d: d.weekday() < 5, send=send)
+    assert seen == ["好"] and n == 1
+    assert not _get_setting("payable_due_notif.1.today.2031-05-01.2031-05-01") and not _get_setting("payable_due_inapp.1.today.2031-05-01.2031-05-01")
+
+
 def test_paid_before_overdue_day_sends_nothing(client, make_user, mails):
     P._finance(make_user, "pdc_fin")
     eid = P._seed_exp(planned=P.TODAY.isoformat())
@@ -132,3 +171,28 @@ def test_material_calendar_follows_state(client, make_user, monkeypatch):
     _x("UPDATE case_material_payments SET status='作廢' WHERE id=?", (pid,))
     ME.fire(pid)
     assert cal.events == {}
+
+
+def test_calendar_after_pay_with_difference_then_review_approve_or_reject(client, make_user, monkeypatch):
+    """L2：實付≠應付（差額待審核）時事件已收回；核可不改變（維持收回）；退回＝回未匯款 ⇒ 重建事件。"""
+    from modules.case import payable_calendar
+    from modules.arap.api import cashier
+    cal = _fake_gcal.install(monkeypatch)
+    for m in (payable_calendar, cashier):
+        _fake_gcal.sync_spawn(monkeypatch, m)
+    _fake_gcal.set_events(events={"payable_due": True})
+    a, b2 = P._seed_exp(planned="2031-06-20"), P._seed_exp(planned="2031-06-21")
+    payer = P._hdr(client, make_user, "pdc_payer", role="finance")
+    other = P._hdr(client, make_user, "pdc_other", role="finance")
+    for eid in (a, b2):
+        payable_calendar.fire(eid)
+    assert len(cal.events) == 2
+    for eid in (a, b2):
+        r = client.post("/api/cashier/pending-payables/case/%s/pay" % eid, headers=payer, json={"paidDate": "2031-06-09", "actualAmount": 1500})
+        assert r.status_code == 200, r.text
+    assert cal.events == {}, "付款（含差額待審核）⇒ 事件收回"
+    assert client.post("/api/cashier/remit-reviews/case/%s/decision" % a, headers=other, json={"decision": "approve"}).status_code == 200
+    assert cal.events == {}, "核可不改變 ⇒ 維持收回"
+    r = client.post("/api/cashier/remit-reviews/case/%s/decision" % b2, headers=other, json={"decision": "reject", "note": "金額不符"})
+    assert r.status_code == 200, r.text
+    assert len(cal.events) == 1 and "2031-06-21" in " ".join(str(v) for v in list(cal.events.values())[0].values()), "退回＝回未匯款 ⇒ 重建事件"

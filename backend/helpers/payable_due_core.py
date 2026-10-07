@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 SOON_DAYS = 3
 MAX_WAIT_SECONDS_PER_RUN = 120
 GUARD_PREFIX = "payable_due_notif."
+INAPP_PREFIX = "payable_due_inapp."       # 站內通知自己的一次性 guard（不依賴信件是否寄出）
 #: 寄信日種類 ⇒ 信件類型代號（類型由 M01 登記；這裡用變數取值，不是 `send_registered` 的字面 key）
 MAIL_KEYS = {"soon": "payable_due_soon", "today": "payable_due_today", "overdue": "payable_due_overdue"}
 _LABEL = {"soon": "預定付款日將到（3 天後）", "today": "預定付款日當天", "overdue": "預定付款日已逾期"}
@@ -140,12 +141,13 @@ def sync_event(source: str, key, item=None) -> bool:
 
 
 def prune_guards(today: date) -> None:
-    """清掉寄信日早於今天 7 天以上的 guard key（key 最後一段是實際寄信日）。"""
+    """清掉寄信日早於今天 7 天以上的 guard key（信件與站內通知兩種；key 最後一段是實際寄信日）。"""
     from db import get_db
     cutoff = (today - timedelta(days=7)).isoformat()
     conn = get_db()
     try:
-        stale = [r["key"] for r in conn.execute("SELECT key FROM system_settings WHERE key LIKE ?", (GUARD_PREFIX + "%",)).fetchall()
+        stale = [r["key"] for p in (GUARD_PREFIX, INAPP_PREFIX)
+                 for r in conn.execute("SELECT key FROM system_settings WHERE key LIKE ?", (p + "%",)).fetchall()
                  if r["key"].rsplit(".", 1)[-1] < cutoff]
         if stale:
             conn.executemany("DELETE FROM system_settings WHERE key=?", [(k,) for k in stale])
@@ -154,13 +156,43 @@ def prune_guards(today: date) -> None:
         conn.close()
 
 
+def _scan_item(it, today, t0, *, is_wd, send, link) -> tuple:
+    """一筆的處理 ⇒ (寄出封數, 要不要停止本次掃描: None／'wait'／'unknown')。例外由呼叫端接。"""
+    kind, guards = due_kind(it["planned"], today, is_wd)
+    if not kind:
+        return 0, None
+    tail = [(k, e) for k, e in guards]
+    mail_keys = ["%s%s.%s.%s.%s" % (GUARD_PREFIX, it["guard_id"], k, it["planned"], e.isoformat()) for k, e in tail]
+    app_keys = ["%s%s.%s.%s.%s" % (INAPP_PREFIX, it["guard_id"], k, it["planned"], e.isoformat()) for k, e in tail]
+    mail_done = any(_get_setting(k) for k in mail_keys if k.split(".")[-3] == kind)
+    app_done = any(_get_setting(k) for k in app_keys if k.split(".")[-3] == kind)
+    if mail_done and app_done:
+        return 0, None
+    # 站內通知有自己的一次性 guard，**不依賴信件是否寄出**（沒有財務信箱、SMTP 關閉、信件類型被關掉時，站內提醒照樣出現一次）
+    if not app_done and notify_finance(kind, it.get("source") or "", it.get("key") or it["guard_id"], it["ident"], it["planned"]) >= 1:
+        for k in app_keys:
+            _set_setting(k, t0)
+    if mail_done:
+        return 0, None
+    res = {}
+    if send(kind, it["rows"], link, it["ident"], res):
+        for k in mail_keys:                                     # 先寄、結果確定才寫 guard（SENT／UNKNOWN／PERMANENT_FAIL）
+            _set_setting(k, t0)
+    else:
+        logger.warning("payable_due_core: %s 的預定付款日提醒未寄出（%s；不寫 guard，下次重試）", it["guard_id"], res.get("outcome") or "?")
+    stop = "unknown" if res.get("outcome") == _en.SEND_UNKNOWN else None
+    return (1 if res.get("outcome") == _en.SEND_SENT else 0), stop
+
+
 def run_scan(items, today: date, *, is_wd, send, monotonic=time.monotonic, link=None, max_wait=None) -> int:
-    """對 `items` 逐筆判斷今天該不該寄、寄、寫 guard、寫站內通知。⇒ 這次寄出幾封（測試用）。例外只記 log。
+    """對 `items` 逐筆判斷今天該不該寄、寄、寫 guard、寫站內通知。⇒ 這次寄出幾封（測試用）。
+    每一筆各自隔離（一筆出錯只記 log、繼續下一筆）；清舊 guard 一定會做。
 
     `items`：已篩過「合格」（已核准、未付款、未作廢、預定日合法）的列表，每筆 dict：
       `guard_id`（guard key 的識別段；不含空白）、`planned`（YYYY-MM-DD）、`ident`（單號）、`rows`（信件內容列 [(欄, 值)]，不放金額）、
       `source`／`key`（站內通知的去重識別）。
-    `send(kind, rows, link, ident, out)`＝呼叫端提供的寄信函式（**必填**；寄信一律用字面 key 呼叫 `send_registered`，守門 `test_mail_registry` 逐一核對，所以不放在 L1）；`link` 預設 `<系統網址>/pages/cashier.html`。"""
+    `send(kind, rows, link, ident, out)`＝呼叫端提供的寄信函式（**必填**；寄信一律用字面 key 呼叫 `send_registered`，守門 `test_mail_registry`
+    逐一核對，所以不放在 L1）；`link` 預設 `<系統網址>/pages/cashier.html`。"""
     sent = 0
     try:
         max_wait = MAX_WAIT_SECONDS_PER_RUN if max_wait is None else max_wait
@@ -168,28 +200,23 @@ def run_scan(items, today: date, *, is_wd, send, monotonic=time.monotonic, link=
         t0 = today.isoformat()
         t_start = monotonic()
         for it in items:
-            kind, guards = due_kind(it["planned"], today, is_wd)
-            if not kind:
-                continue
-            keys = ["%s%s.%s.%s.%s" % (GUARD_PREFIX, it["guard_id"], k, it["planned"], e.isoformat()) for k, e in guards]
-            if any(_get_setting(k) for k in keys if k.split(".")[-3] == kind):
-                continue
             if monotonic() - t_start >= max_wait:
                 logger.warning("payable_due_core: 本次掃描等待寄送已達 %s 秒上限，其餘提醒留待下次（不寫 guard）", max_wait)
                 break
-            res = {}
-            if send(kind, it["rows"], link, it["ident"], res):
-                for k in keys:                                  # 先寄、結果確定才寫 guard（SENT／UNKNOWN／PERMANENT_FAIL）
-                    _set_setting(k, t0)
-                if res.get("outcome") == _en.SEND_SENT:
-                    sent += 1
-                notify_finance(kind, it.get("source") or "", it.get("key") or it["guard_id"], it["ident"], it["planned"])
-            else:
-                logger.warning("payable_due_core: %s 的預定付款日提醒未寄出（%s；不寫 guard，下次重試）", it["guard_id"], res.get("outcome") or "?")
-            if res.get("outcome") == _en.SEND_UNKNOWN:
+            try:
+                n, stop = _scan_item(it, today, t0, is_wd=is_wd, send=send, link=link)
+            except Exception as exc:                            # noqa: BLE001 — 一筆壞掉不能讓其餘提醒全丟
+                logger.warning("payable_due_core: %s 處理失敗（略過、繼續下一筆）：%s", it.get("guard_id"), exc)
+                continue
+            sent += n
+            if stop == "unknown":
                 logger.error("payable_due_core: SMTP 沒有在時限內回應，停止本次掃描（避免每封都卡住）")
                 break
-        prune_guards(today)
     except Exception as exc:                                    # noqa: BLE001
         logger.warning("payable_due_core.run_scan failed: %s", exc)
+    finally:
+        try:
+            prune_guards(today)
+        except Exception as exc:                                # noqa: BLE001
+            logger.warning("payable_due_core.prune_guards failed: %s", exc)
     return sent

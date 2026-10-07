@@ -13,6 +13,7 @@
 - L1（新增，向下相容）：新單位 `helpers/payable_due_core.py`（使用者 2026-10-07 Q8＝方案 B：L1 純函式庫＋各模組薄接線）——`due_kind`／`effective_send_day`／`next_working_day`／`candidate_planned_dates`（3 天前、當天、逾期＝預定日後第 1 個工作日；規則自 M01 `payable_reminders` 搬入）、`notify_finance`（財務站內通知，不含金額；寄信函式由呼叫端傳入 `run_scan(send=…)`，因為寄信必須用字面 key 呼叫 `send_registered`，守門 `test_mail_registry` 逐一核對）、`prune_guards`／`run_scan`（guard、寄送迴圈、等待上限）、`sync_event`／`CALENDAR_SOURCES`（行事曆「付款待辦」來源開關：案件額外支出、承攬商匯款、叫料匯款；**勞報單不在名單 ⇒ 零呼叫**）。純函式、不讀時鐘（日期與工作日判斷由呼叫端傳入）。
 - 信件類型 `payable_due_overdue`（預定付款日已逾期，財務群組）由 M01 登記，與 `payable_due_soon`／`payable_due_today` 同；M01 不在 ⇒ 類型未登記 ⇒ 寄信 fail-closed（只給超級管理員），已知取捨（承攬商匯款綁案件）。
 - 薄接線：M01（案件額外支出＋叫料匯款）、M04（承攬商匯款，`daily.check` 提供者 `subcontract_payable_due`）；M05 出納端點 `PATCH /api/cashier/pending-payables/{source}/{key}/planned-pay-date`、`PATCH /api/cashier/payable-queue/{voucher_no}/planned-pay-date`。
+- 站內通知有自己的一次性 guard（`payable_due_inapp.<id>.<kind>.<預定日>.<寄信日>`），**不依賴信件是否寄出**（沒有財務信箱、SMTP 關閉時站內提醒照樣出現一次）；`run_scan` 每筆各自隔離（一筆出錯只記 log、繼續）、清舊 guard 在 finally。
 - 測試：`modules/case/tests/test_payable_due_core_t45.py`、`modules/subcontract/tests/test_voucher_payable_due_t45.py`。
 
 ## 1.117 — 2026-10-06（wip/t44-inapp-bell：站內通知所有角色可見、點擊開單、90 天保留）
