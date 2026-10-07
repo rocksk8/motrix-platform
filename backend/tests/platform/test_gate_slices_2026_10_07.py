@@ -1,0 +1,620 @@
+# -*- coding: utf-8 -*-
+"""全閘門優化 第 45 班 O1（切片＋fail-fast）／O4（偶發分流）／O6（worksteal）的守門與反向控制。
+
+不跑真的 pytest 全量：run_pytest 換成假的，驗「順序、環境、不漏守門、紅了就停、政策不放寬」。
+（slice0 ∪ rest ＝ 全部題 的真實 nodeid 集合比對：`python tools/platform/gate_slices.py --check`，要收集全庫，列車／全閘門前跑。）
+"""
+import importlib.util
+import sys
+import types
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO / "tools" / "platform"))
+
+
+def _load(name):
+    spec = importlib.util.spec_from_file_location("_gs_" + name, REPO / "tools" / "platform" / (name + ".py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+MT = _load("modtest")
+GS = _load("gate_slices")
+PT = _load("pre_train_check")
+
+OLD_GUARDS = [  # 第 45 班之前 pre_train_check.GUARDS 的 10 項（全部必須還在，不可因搬進 json 而少）
+    "tests/test_spec_coverage_2026_09_21.py", "tests/test_alpine_double_init_2026_09_23.py",
+    "tests/test_company_setup_output_points_2026_09_28.py", "tests/test_system_audit_2026_09_14.py",
+    "tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py::test_fz_no_raw_vh_is_left_in_the_frontend",
+    "modules/*/tests/test_approval_providers*.py", "tests/test_page_shell_scripts_2026_09_30.py",
+    "tests/test_module_keys_consistency_2026_09_13.py", "tests/test_no_credentials_in_query_2026_09_22.py",
+    "tests/test_wording_guards_2026_09_23.py"]
+SUMMARY = "== 5 passed in 1.0s =="
+
+
+@pytest.fixture(autouse=True)
+def _env(monkeypatch):
+    for k in (MT.FULL_ENV, MT.PARTIAL_ENV, MT.E2E_ENV, "MOTRIX_GATE_SLICES", "MOTRIX_GATE_DIST", "MOTRIX_FULL_FLAKY_RETRY",
+              "MOTRIX_FAILFAST", "MOTRIX_FAILFAST_N", "MOTRIX_GATE_WORKERS", "MOTRIX_FULL_OVERLAP", "MOTRIX_FULL_OVERLAP_MIN_GB", "MOTRIX_GATE_VERIFY", "MOTRIX_FAILFAST_QUIET_MIN"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("MOTRIX_GATE_VERIFY", "0")                 # 預先 collect-only 驗證另有題（下面 F1）；其餘題不收集
+    monkeypatch.setattr(MT, "tree_state", lambda repo=None: ("a" * 40, ""))
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: Path("x"))
+    monkeypatch.setattr(MT, "dist_args", lambda: ["--dist", "worksteal"])
+    monkeypatch.setattr(MT, "record_for_build", lambda *a, **k: (False, "test"))
+
+
+def _run(monkeypatch, codes_by_window, capture):
+    """假 run_pytest：依 window 後綴回 exit code；capture 收 (window, targets, args, env_extra)。"""
+    def fake(targets, args, window, full, collect_only=False, env_extra=None):
+        capture.append((window, list(targets), list(args), dict(env_extra or {})))
+        return codes_by_window.get(window, 0), SUMMARY
+    monkeypatch.setattr(MT, "run_pytest", fake)
+    return MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="w"))
+
+
+# ── O1：清單單一來源 ─────────────────────────────────────────────────────────────
+
+def test_slices_file_loads_and_every_slice0_path_resolves():
+    data = GS.load()
+    assert data is not None
+    targets, missing = GS.expand(data, REPO / "backend")
+    assert missing == [], "slice0 的守門被改名或刪掉（請同步 gate_slices.json）：%s" % missing
+    assert any(t.startswith("tests/platform/test_") for t in targets) and "tests/platform" not in targets   # 目錄項已展開成檔（有 exclude）
+    ex = GS.load()["slice0"]["exclude"]
+    assert ex and not (set(ex) & set(targets)), "exclude 的檔不能還在 slice0 裡"
+    assert all((REPO / "backend" / x).is_file() for x in ex)
+
+
+def test_pre_train_guards_and_slice0_are_one_list_and_keep_the_old_ten():
+    """不放寬：舊 10 項守門一項不少；pre_train_check 與全閘門 slice0 讀同一份（兩邊不會悄悄分岔）。"""
+    paths = [p for _, p in PT.GUARDS]
+    for old in OLD_GUARDS:
+        assert old in paths, "守門被拿掉了：" + old
+    assert PT.GUARDS == GS.guards()
+    assert "tests/platform" not in paths                      # tests/platform 另外整個跑，不重複列在 GUARDS
+
+
+def test_slice0_covers_the_ten_reds_of_train43_round1():
+    """第 43 班第 1 輪 10 個整合紅都是靜態／產生檔守門：它們所在的檔必須在 slice0。"""
+    paths = " ".join(p["path"] for p in GS.load()["slice0"]["paths"])
+    for need in ("tests/platform",                           # dep_graph／test_map／UNIT-INDEX 是否最新、module_keys…
+                 "test_ac1_write_actions", "test_cm12_p3_prep", "test_alpine_double_init", "test_begin_only_via_begin_write",
+                 "test_module_keys_consistency"):
+        assert need in paths, need
+
+
+def test_unreadable_slices_file_gives_none_not_an_empty_gate(tmp_path):
+    bad = tmp_path / "s.json"
+    bad.write_text("{not json", encoding="utf-8")
+    assert GS.load(bad) is None
+    bad.write_text('{"slice0": {"paths": []}}', encoding="utf-8")
+    assert GS.load(bad) is None
+
+
+def test_rest_args_ignore_files_but_only_deselect_node_ids():
+    assert GS.rest_args(["tests/platform", "tests/a.py", "tests/b.py::test_x"]) == [
+        "--ignore=tests/platform", "--ignore=tests/a.py", "--deselect=tests/b.py::test_x"]
+
+
+def test_judge_sets_catches_lost_extra_and_overlapping_tests():
+    assert GS.judge_sets({"a", "b", "c"}, {"a"}, {"b", "c"})[0] is True
+    ok, why = GS.judge_sets({"a", "b", "c"}, {"a"}, {"b"})                 # 漏 c
+    assert not ok and "漏 1" in why[0]
+    assert not GS.judge_sets({"a", "b"}, {"a", "b"}, {"b"})[0]              # 重疊
+    assert not GS.judge_sets({"a"}, set(), {"a"})[0]                        # slice0 空＝守門沒收集到
+    assert GS.judge_counts(10, 10)[0] and not GS.judge_counts(10, 9)[0] and not GS.judge_counts(None, 9)[0]
+    assert GS.nodeid_sha(["b", "a"]) == GS.nodeid_sha(["a", "b", "a"])
+
+
+# ── O1：run_full 的順序、環境、停止 ──────────────────────────────────────────────
+
+def test_full_gate_runs_slice0_then_rest_then_e2e_with_failfast_on(monkeypatch):
+    cap = []
+    assert _run(monkeypatch, {}, cap) == 0
+    assert [c[0] for c in cap] == ["ws0", "w", "we2e"]
+    s0, rest, e2e = cap
+    assert s0[1] == GS.expand()[0] and rest[1] == MT.TEST_ROOTS
+    assert all(c[3].get("MOTRIX_FAILFAST") == "1" and c[3].get("MOTRIX_FAILFIRST") == "1" for c in cap)
+    assert all("-p" in c[2] and "failfast" in c[2] for c in cap)
+    assert "not e2e" in s0[2] and "not e2e" in rest[2] and "e2e" in e2e[2]
+    # 不漏：slice0 的每個目標在第二片都被排除（檔 ⇒ --ignore，帶 nodeid ⇒ --deselect），沒有多排別的
+    ex = [a for a in rest[2] if a.startswith(("--ignore=", "--deselect="))]
+    assert ex == GS.rest_args(s0[1])
+
+
+def test_red_slice0_stops_everything_and_is_not_green(monkeypatch):
+    """反向控制：第一片紅 ⇒ 不開第二片、不跑 e2e、結果不是 ok、exit≠0（不能把「沒跑」當綠）。"""
+    cap, written = [], []
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    rc = _run(monkeypatch, {"ws0": 1}, cap)
+    assert [c[0] for c in cap] == ["ws0"]
+    assert rc != 0 and written[-1]["ok"] is False and written[-1]["slice_stopped"] == "slice0"
+
+
+def test_red_rest_still_runs_e2e_like_before_and_is_red(monkeypatch):
+    cap = []
+    rc = _run(monkeypatch, {"w": 1}, cap)
+    assert [c[0] for c in cap] == ["ws0", "w", "we2e"] and rc != 0
+
+
+def test_counts_of_both_slices_are_added(monkeypatch):
+    written = []
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    _run(monkeypatch, {}, [])
+    assert written[-1]["passed"] == 10 and written[-1]["ok"] is True       # 5＋5
+
+
+def test_slices_off_goes_back_to_one_main_stage(monkeypatch):
+    monkeypatch.setenv("MOTRIX_GATE_SLICES", "0")
+    cap = []
+    assert _run(monkeypatch, {}, cap) == 0
+    assert [c[0] for c in cap] == ["w", "we2e"]
+    assert not any(a.startswith("--ignore=") for a in cap[0][2])
+
+
+def test_missing_slice0_file_does_not_silently_drop_a_guard(monkeypatch, capsys):
+    """slice0 的檔被改名 ⇒ 不切片、全跑（守門仍都在第二段）並說出來；不是少跑。"""
+    monkeypatch.setattr(GS, "expand", lambda data=None, backend=None: (["tests/platform"], ["某守門（tests/x.py）"]))
+    monkeypatch.setitem(sys.modules, "gate_slices", GS)
+    cap = []
+    assert _run(monkeypatch, {}, cap) == 0
+    assert [c[0] for c in cap] == ["w", "we2e"] and cap[0][1] == MT.TEST_ROOTS
+    assert "找不到" in capsys.readouterr().out
+
+
+def test_user_set_env_wins_over_gate_defaults(monkeypatch):
+    monkeypatch.setenv("MOTRIX_FAILFAST", "0")
+    monkeypatch.setenv("MOTRIX_FAILFAST_N", "3")
+    cap = []
+    _run(monkeypatch, {}, cap)
+    assert cap[0][3]["MOTRIX_FAILFAST"] == "0" and cap[0][3]["MOTRIX_FAILFAST_N"] == "3"
+
+
+def test_evidence_windows_cover_both_slices(monkeypatch):
+    """沿用紀錄的證據要涵蓋兩片：main 的 windows 是 [slice0, 其餘]。"""
+    seen = {}
+    monkeypatch.setattr(MT, "stream_evidence", lambda run, windows, stream_dir=None: seen.update(windows) or {})
+    _run(monkeypatch, {}, [])
+    assert seen["main"] == ["ws0", "w"] and seen["e2e"] == "we2e"
+
+
+def test_stream_evidence_accepts_a_list_of_windows(tmp_path):
+    import json
+    (tmp_path / "R.jsonl").write_text("\n".join(json.dumps({"type": "summary", "stage": s, "exitstatus": x})
+                                                for s, x in (("ws0", 0), ("w", 1), ("we2e", 0))), encoding="utf-8")
+    got = MT.stream_evidence("R", {"main": ["ws0", "w"], "e2e": "we2e"}, stream_dir=tmp_path)
+    assert got == {"main": [0, 1], "e2e": [0]}
+
+
+# ── O6：尾端平衡 ────────────────────────────────────────────────────────────────
+
+def test_worksteal_is_in_every_stage_args(monkeypatch):
+    cap = []
+    _run(monkeypatch, {}, cap)
+    assert all(c[2][c[2].index("--dist") + 1] == "worksteal" for c in cap)
+
+
+def test_dist_args_falls_back_quietly_when_off_or_unsupported(monkeypatch):
+    monkeypatch.undo()
+    monkeypatch.setenv("MOTRIX_GATE_DIST", "load")
+    assert MT.dist_args() == []
+    monkeypatch.setenv("MOTRIX_GATE_DIST", "worksteal")
+    monkeypatch.setattr(MT.subprocess, "run", lambda *a, **k: types.SimpleNamespace(stdout="3.1.0", returncode=0))
+    assert MT.dist_args() == []                                    # 3.2 以前不支援
+    monkeypatch.setattr(MT.subprocess, "run", lambda *a, **k: types.SimpleNamespace(stdout="3.8.0", returncode=0))
+    assert MT.dist_args() == ["--dist", "worksteal"]
+    monkeypatch.setattr(MT.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(OSError("x")))
+    assert MT.dist_args() == []
+
+
+# ── O4：偶發分流（政策不放寬）────────────────────────────────────────────────────
+
+def _fake_retry(monkeypatch, rc, res):
+    import json
+    import flaky_retry
+
+    def main(argv):
+        Path(argv[argv.index("--result-out") + 1]).write_text(json.dumps(res), encoding="utf-8")
+        return rc
+    monkeypatch.setattr(flaky_retry, "main", main)
+    monkeypatch.setattr(MT, "_FAIL_STREAM_RUN", "RUN")
+
+
+def test_unregistered_flake_stays_red_and_is_diagnosed(monkeypatch, capsys):
+    _fake_retry(monkeypatch, 1, {"ok": False, "flaky_retried": [], "results": [{"nodeid": "t.py::a", "passed": True, "attempts": [0]}]})
+    result = {}
+    assert MT.flaky_gate(1, "", "w", result) == 1                              # 未登記 ⇒ 仍擋
+    assert "flaky_retried" not in result
+    assert "疑似負載偶發" in capsys.readouterr().out
+
+
+def test_registered_flake_passes_and_is_recorded(monkeypatch):
+    _fake_retry(monkeypatch, 0, {"ok": True, "flaky_retried": [{"nodeid": "t.py::a"}], "results": [{"nodeid": "t.py::a", "passed": True}]})
+    result = {}
+    assert MT.flaky_gate(1, "", "w", result) == 0 and result["flaky_retried"] == ["t.py::a"]
+
+
+def test_real_red_is_reported_as_real_red(monkeypatch, capsys):
+    _fake_retry(monkeypatch, 1, {"ok": False, "flaky_retried": [], "results": [{"nodeid": "t.py::a", "passed": False}]})
+    assert MT.flaky_gate(1, "", "w", {}) == 1
+    assert "真紅" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("code", [0, 2, 3, 5])
+def test_only_exit_1_is_retried(monkeypatch, code):
+    import flaky_retry
+    monkeypatch.setattr(MT, "_FAIL_STREAM_RUN", "RUN")
+    monkeypatch.setattr(flaky_retry, "main", lambda argv: pytest.fail("不該重跑"))
+    assert MT.flaky_gate(code, "", "w", {}) == code
+
+
+def test_retry_switch_off_and_tool_errors_never_turn_red_into_green(monkeypatch):
+    import flaky_retry
+    monkeypatch.setattr(MT, "_FAIL_STREAM_RUN", "RUN")
+    monkeypatch.setattr(flaky_retry, "main", lambda argv: (_ for _ in ()).throw(RuntimeError("boom")))
+    assert MT.flaky_gate(1, "", "w", {}) == 1                                  # 工具出錯 ⇒ 照原碼擋
+    monkeypatch.setenv("MOTRIX_FULL_FLAKY_RETRY", "0")
+    monkeypatch.setattr(flaky_retry, "main", lambda argv: pytest.fail("開關關了不該重跑"))
+    assert MT.flaky_gate(1, "", "w", {}) == 1
+
+
+def test_run_full_uses_the_flaky_verdict_per_stage(monkeypatch):
+    """整合：e2e 段紅但已登記偶發 ⇒ 該段記 0、flaky_retried 寫進結果；未登記 ⇒ 結果仍紅。"""
+    written = []
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    monkeypatch.setattr(MT, "flaky_gate", lambda code, out, window, result: (result.setdefault("flaky_retried", []).append("t::x") or 0) if window == "we2e" and code else code)
+    _run(monkeypatch, {"we2e": 1}, [])
+    assert written[-1]["ok"] is True and written[-1]["flaky_retried"] == ["t::x"]
+
+
+# ── O6：LPT（慢檔先派）只改順序 ─────────────────────────────────────────────────
+
+FF = _load("failfast")
+
+
+class _It:
+    def __init__(self, nodeid):
+        self.nodeid = nodeid
+
+
+def test_lpt_puts_slow_files_first_within_a_group_keeps_in_file_order_and_the_set():
+    items = [_It(n) for n in ("tests/a.py::t1", "tests/b.py::t1", "tests/b.py::t2", "tests/c.py::t1", "tests/platform/p.py::t1")]
+    before = sorted(i.nodeid for i in items)
+    prio = {"ids": [], "files": [], "secs": {"tests/a.py": 1, "tests/b.py": 50, "tests/c.py": 10, "tests/platform/p.py": 5}}
+    assert FF.reorder(items, prio) is True
+    got = [i.nodeid for i in items]
+    assert got == ["tests/platform/p.py::t1", "tests/b.py::t1", "tests/b.py::t2", "tests/c.py::t1", "tests/a.py::t1"]   # 守門群組仍先；其後慢→快；同檔原序
+    assert sorted(got) == before                                                      # 題集合不變
+
+
+def test_lpt_off_or_no_data_keeps_the_original_order():
+    names = ["tests/a.py::t1", "tests/b.py::t1", "tests/c.py::t1"]
+    items = [_It(n) for n in names]
+    FF.reorder(items, {"ids": [], "files": [], "secs": {}})
+    assert [i.nodeid for i in items] == names
+
+
+def test_a_red_or_changed_file_still_beats_a_slow_file():
+    items = [_It(n) for n in ("tests/slow.py::t", "tests/changed.py::t", "tests/red.py::t")]
+    FF.reorder(items, {"ids": ["tests/red.py::t"], "files": ["tests/changed.py"], "secs": {"tests/slow.py": 999}})
+    assert [i.nodeid for i in items] == ["tests/red.py::t", "tests/changed.py::t", "tests/slow.py::t"]
+
+
+def test_seed_seconds_files_exist_and_unreadable_data_is_empty(tmp_path):
+    secs = FF.file_seconds(local=tmp_path / "none.json")
+    assert secs and all((REPO / "backend" / k).is_file() for k in secs), "種子裡的檔被改名了：請更新 gate_file_seconds.json"
+    (tmp_path / "bad.json").write_text("{x", encoding="utf-8")
+    assert FF.file_seconds(seed=tmp_path / "bad.json", local=tmp_path / "bad.json") == {}
+
+
+def test_merge_seconds_smooths_and_keeps_unseen_files():
+    assert FF.merge_seconds({"a": 100.0, "b": 7.0}, {"a": 0.0, "c": 3.0}) == {"a": 50.0, "b": 7.0, "c": 3.0}
+
+
+def test_worker_cap_env_overrides_workers(monkeypatch):
+    monkeypatch.setenv("MOTRIX_GATE_WORKERS", "2")
+    cap = []
+    _run(monkeypatch, {}, cap)
+    assert all(c[2][c[2].index("-n") + 1] == "2" for c in cap[:2])
+
+
+# ── O2：兩段重疊（旗標預設關）────────────────────────────────────────────────────
+
+class _Proc(dict):
+    pass
+
+
+def _ov(monkeypatch, procs=(), free=32.0, flag="1"):
+    monkeypatch.setenv("MOTRIX_FULL_OVERLAP", flag)
+    return MT.overlap_decision(procs_fn=lambda: list(procs), free_fn=lambda: free)
+
+
+def test_overlap_is_off_by_default_and_when_flag_is_not_one(monkeypatch):
+    monkeypatch.delenv("MOTRIX_FULL_OVERLAP", raising=False)
+    assert MT.overlap_decision(procs_fn=lambda: [], free_fn=lambda: 99)[0] is False
+    assert _ov(monkeypatch, flag="0")[0] is False and _ov(monkeypatch, flag="true")[0] is False
+
+
+def test_overlap_needs_a_clean_machine_and_enough_memory(monkeypatch):
+    assert _ov(monkeypatch)[0] is True
+    other = {"pid": 4242, "ppid": 1, "name": "python.exe", "cmd": "python -m pytest tests/x.py", "created": 1}
+    ok, why = _ov(monkeypatch, procs=[other])
+    assert ok is False and "4242" in why                                   # 有別人在跑 ⇒ 序列
+    ok, why = _ov(monkeypatch, free=3.0)
+    assert ok is False and "記憶體" in why
+    assert _ov(monkeypatch, free=None)[0] is False                         # 讀不到 ⇒ 不賭
+
+
+def test_overlap_failures_of_the_probe_fall_back_to_sequential(monkeypatch):
+    monkeypatch.setenv("MOTRIX_FULL_OVERLAP", "1")
+    assert MT.overlap_decision(procs_fn=lambda: None, free_fn=lambda: 99)[0] is False
+    def boom():
+        raise RuntimeError("x")
+    ok, why = MT.overlap_decision(procs_fn=boom, free_fn=lambda: 99)
+    assert ok is False and "出錯" in why
+
+
+def test_default_run_is_sequential_and_records_the_flag_state(monkeypatch):
+    written = []
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    cap = []
+    _run(monkeypatch, {}, cap)
+    assert [c[0] for c in cap] == ["ws0", "w", "we2e"]
+    assert written[-1]["overlap"] == {"flag": "0", "used": False, "reason": "旗標關閉（預設）"}
+
+
+def test_overlap_runs_both_groups_and_keeps_the_slice_order_inside_the_group(monkeypatch):
+    import threading
+    monkeypatch.setattr(MT, "overlap_decision", lambda *a, **k: (True, ""))
+    seen, names = [], {}
+
+    def fake(targets, args, window, full, collect_only=False, env_extra=None, prefix=""):
+        seen.append((window, prefix, threading.current_thread().name))
+        return 0, SUMMARY
+    monkeypatch.setattr(MT, "run_pytest", fake)
+    written = []
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    assert MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="w")) == 0
+    wins = [s[0] for s in seen]
+    assert sorted(wins) == ["w", "we2e", "ws0"] and wins.index("ws0") < wins.index("w")     # 同一組內 slice0 一定在其餘之前
+    assert {s[1] for s in seen} == {"[main] ", "[e2e] "} and written[-1]["ok"] is True and written[-1]["overlap"]["used"] is True
+
+
+def test_overlap_red_slice0_still_lets_e2e_finish_and_the_whole_is_red(monkeypatch):
+    monkeypatch.setattr(MT, "overlap_decision", lambda *a, **k: (True, ""))
+    seen = []
+    monkeypatch.setattr(MT, "run_pytest", lambda t, a, window, full, collect_only=False, env_extra=None, prefix="":
+                        seen.append(window) or ((1 if window == "ws0" else 0), SUMMARY))
+    written = []
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    rc = MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="w"))
+    assert "w" not in seen and "we2e" in seen and rc != 0 and written[-1]["ok"] is False   # 其餘片不跑、e2e 照跑完、整體紅
+
+
+def test_overlap_thread_error_is_not_swallowed(monkeypatch):
+    monkeypatch.setattr(MT, "overlap_decision", lambda *a, **k: (True, ""))
+
+    def fake(t, a, window, full, collect_only=False, env_extra=None, prefix=""):
+        if window == "we2e":
+            raise RuntimeError("e2e boom")
+        return 0, SUMMARY
+    monkeypatch.setattr(MT, "run_pytest", fake)
+    with pytest.raises(RuntimeError, match="e2e boom"):
+        MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="w"))
+
+
+# ── 量測模式：只跑 slice0、不寫任何「全量結果」────────────────────────────────────
+
+def test_measure_runs_only_slice0_with_the_given_workers_and_writes_no_result(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(MT, "run_pytest", lambda t, a, w, full, collect_only=False, env_extra=None, prefix="":
+                        calls.append((t, a, w, full, env_extra)) or (0, "== 3 passed in 1.0s =="))
+    monkeypatch.setattr(MT, "write_last_full", lambda *a, **k: pytest.fail("量測不可以寫全量結果"))
+    monkeypatch.setattr(MT, "record_for_build", lambda *a, **k: pytest.fail("量測不可以寫建包沿用紀錄"))
+    monkeypatch.setitem(sys.modules, "modtest", MT)
+    assert GS.measure(2) == 0
+    t, a, w, full, env = calls[0]
+    assert t == GS.expand()[0] and a[a.index("-n") + 1] == "2" and "not e2e" in a and full is True
+    assert env["MOTRIX_TRAIN"] == "1" and "牆鐘" in capsys.readouterr().out
+
+
+# ── O5：module_update.ship_tests 不再為了「挑哪些檔」去 collect 全庫 ───────────────
+
+def test_ship_tests_asks_modtest_for_files_only_and_uses_the_same_selection(monkeypatch, tmp_path):
+    """選題結果只來自 json 的 tests；--no-count 只拿掉題數統計（collect-only），挑出的檔不變。"""
+    import json as _json
+    MU = _load("module_update")
+    mod = tmp_path / "backend" / "modules" / "zz"
+    mod.mkdir(parents=True)
+    (mod / "module.json").write_text(_json.dumps({"key": "zz", "name": "z", "version": "1.0.0", "pages": []}), encoding="utf-8")
+    seen = []
+
+    def fake_run(cmd, **k):
+        seen.append(cmd)
+        return types.SimpleNamespace(returncode=0, stdout=_json.dumps({"tests": ["backend/tests/test_a.py"], "items": None}).encode(), stderr=b"")
+    monkeypatch.setattr(MU.subprocess, "run", fake_run)
+    sel = MU.ship_tests("zz", {"provider": {"consumers": ["backend/modules/x/api.py"]}}, repo=tmp_path)
+    assert "--no-count" in seen[0] and "--dry-run" in seen[0] and "--json" in seen[0]
+    assert "tests/test_a.py" in sel and "tests/platform" in sel
+
+
+# ── F1：開跑前 collect-only 對帳＋跑完後執行題數對帳 ───────────────────────────────
+
+def _smart_fake(monkeypatch, all_ids, s0_ids, run_counts=None, collect_code=0, written=None):
+    """collect_only ⇒ 依 targets 回 nodeid 清單；一般執行 ⇒ 回 N passed（N＝run_counts[window]，預設＝該片應有題數）。"""
+    seen = []
+    n_rest = len(all_ids) - len(s0_ids)
+
+    def fake(targets, args, window, full, collect_only=False, env_extra=None, prefix=""):
+        seen.append((window, collect_only))
+        if collect_only:
+            ids = s0_ids if targets != MT.TEST_ROOTS else all_ids
+            return collect_code, "\n".join(ids) + "\n\n%d tests collected in 0.5s" % len(ids)
+        n = (run_counts or {}).get(window, len(s0_ids) if window.endswith("s0") else (1 if window.endswith("e2e") else n_rest))
+        return 0, "== %d passed in 1.0s ==" % n
+    monkeypatch.setattr(MT, "run_pytest", fake)
+    if written is not None:
+        monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    return seen
+
+
+ALL = ["tests/a.py::t1", "tests/a.py::t2", "tests/b.py::t1", "tests/c.py::t1"]
+S0 = ["tests/a.py::t1"]
+
+
+def _go():
+    return MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="w"))
+
+
+def test_verified_slices_record_counts_and_sha(monkeypatch):
+    monkeypatch.setenv("MOTRIX_GATE_VERIFY", "1")
+    written = []
+    seen = _smart_fake(monkeypatch, ALL, S0, written=written)
+    assert _go() == 0
+    sl = written[-1]["slices"]
+    assert (sl["all"], sl["slice0"], sl["rest"], sl["ok"]) == (4, 1, 3, True) and len(sl["sha"]) == 16
+    assert sl["executed"] == {"ws0": 1, "w": 3}                         # 兩片的執行題數＝預先收集的題數
+    assert [w for w, c in seen if not c] == ["ws0", "w", "we2e"]
+
+
+def test_executed_count_mismatch_is_red_even_when_pytest_exit_is_zero(monkeypatch):
+    """反向控制：第二片少跑一題（例如 --ignore 多排除了東西）exit 仍是 0 ⇒ 必須記紅。突變：拿掉對帳 ⇒ 轉紅。"""
+    monkeypatch.setenv("MOTRIX_GATE_VERIFY", "1")
+    written = []
+    _smart_fake(monkeypatch, ALL, S0, run_counts={"w": 2}, written=written)
+    assert _go() != 0
+    assert written[-1]["ok"] is False and written[-1]["slice_mismatch"] == [{"window": "w", "executed": 2, "collected": 3}]
+
+
+def test_failed_precollect_falls_back_to_one_stage_not_to_skipping(monkeypatch, capsys):
+    monkeypatch.setenv("MOTRIX_GATE_VERIFY", "1")
+    seen = _smart_fake(monkeypatch, ALL, S0, collect_code=2)
+    assert _go() == 0
+    assert [w for w, c in seen if not c] == ["w", "we2e"] and "不切片" in capsys.readouterr().out
+
+
+def test_slice0_not_a_subset_of_all_falls_back(monkeypatch):
+    monkeypatch.setenv("MOTRIX_GATE_VERIFY", "1")
+    seen = _smart_fake(monkeypatch, ALL, ["tests/zzz.py::t1"])
+    assert _go() == 0 and [w for w, c in seen if not c] == ["w", "we2e"]
+
+
+def test_expected_judges_empty_and_failed_collects():
+    def mk(code, all_out, s_out):
+        return lambda tg, ex: (code, (all_out if tg == MT.TEST_ROOTS else s_out))
+    assert GS.expected(mk(0, "a.py::t\nb.py::t", "a.py::t"), MT.TEST_ROOTS, ["a.py"])["ok"] is True
+    assert GS.expected(mk(0, "a.py::t", ""), MT.TEST_ROOTS, ["a.py"])["ok"] is False
+    assert GS.expected(mk(1, "a.py::t", "a.py::t"), MT.TEST_ROOTS, ["a.py"])["ok"] is False
+
+
+def test_executed_count_parses_the_summary_line():
+    assert MT.executed_count("1 failed, 2506 passed, 8 skipped, 3 xfailed, 255 warnings in 1100.99s (0:18:20)") == 2518
+    assert MT.executed_count("== 5 passed, 2 deselected in 1.0s ==") == 5
+    assert MT.executed_count("no summary here") is None
+
+
+# ── F2：重疊時 worker 合計不超過全量上限 ─────────────────────────────────────────
+
+@pytest.mark.parametrize("cap,main_n,e2e_n", [(4, 2, 2), (2, 1, 1), (3, 2, 1), (6, 4, 2)])
+def test_overlap_total_workers_stay_within_the_full_cap(monkeypatch, cap, main_n, e2e_n):
+    monkeypatch.setenv(MT.FULL_ENV, str(cap))
+    monkeypatch.setattr(MT, "overlap_decision", lambda *a, **k: (True, ""))
+    monkeypatch.setattr(MT, "_env_cap", MT._env_cap)
+    cap_seen = []
+    _smart_fake(monkeypatch, ALL, S0)
+    real = MT.run_pytest
+
+    def spy(t, args, window, full, **k):
+        if "-n" in args:
+            cap_seen.append((window, int(args[args.index("-n") + 1])))
+        return real(t, args, window, full, **k)
+    monkeypatch.setattr(MT, "run_pytest", spy)
+    MT.run_full([], types.SimpleNamespace(workers=8, e2e_workers=4, window="w"))
+    mains = [n for w, n in cap_seen if not w.endswith("e2e")]
+    e2es = [n for w, n in cap_seen if w.endswith("e2e")]
+    assert max(mains) + max(e2es) <= cap, cap_seen
+    assert (max(mains), max(e2es)) == (main_n, e2e_n) or cap == 6          # cap 6：e2e 上限 2（E2E_MAX_WORKERS），main 4
+
+
+def test_overlap_with_cap_one_is_not_used(monkeypatch, capsys):
+    monkeypatch.setenv(MT.FULL_ENV, "1")
+    monkeypatch.setenv("MOTRIX_FULL_OVERLAP", "1")
+    monkeypatch.setattr(MT, "overlap_decision", lambda *a, **k: (True, ""))
+    cap = []
+    _run(monkeypatch, {}, cap)
+    assert [c[0] for c in cap] == ["ws0", "w", "we2e"]                      # 序列
+
+
+# ── slice0.exclude（把「測工具本身」的慢檔移到第二片）──────────────────────────────
+
+def _mini_backend(tmp_path, files):
+    for f in files:
+        p = tmp_path / f
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("def test_x():\n    pass\n", encoding="utf-8")
+    return tmp_path
+
+
+def _data(exclude, paths=None):
+    return {"slice0": {"exclude": exclude, "paths": paths or [{"label": "platform", "path": "tests/platform"},
+                                                              {"label": "guard", "path": "tests/test_guard.py"}]}}
+
+
+def test_exclude_expands_the_directory_to_files_minus_excluded(tmp_path):
+    b = _mini_backend(tmp_path, ["tests/platform/test_a.py", "tests/platform/test_b.py", "tests/platform/sub/test_c.py",
+                                 "tests/platform/helper.py", "tests/test_guard.py"])
+    targets, missing = GS.expand(_data(["tests/platform/test_b.py"]), b)
+    assert missing == []
+    assert targets == ["tests/platform/sub/test_c.py", "tests/platform/test_a.py", "tests/test_guard.py"]
+    # 第二片只排除 slice0 實際跑的檔：被 exclude 的 test_b 不在 --ignore 裡，所以會在第二片跑
+    assert "--ignore=tests/platform/test_b.py" not in GS.rest_args(targets) and "--ignore=tests/platform/test_a.py" in GS.rest_args(targets)
+
+
+def test_no_exclude_keeps_the_directory_entry_as_is(tmp_path):
+    b = _mini_backend(tmp_path, ["tests/platform/test_a.py", "tests/test_guard.py"])
+    assert GS.expand(_data([]), b)[0] == ["tests/platform", "tests/test_guard.py"]
+
+
+@pytest.mark.parametrize("bad", ["tests/platform/test_typo.py", "tests/other/test_z.py"])
+def test_typo_or_outside_exclude_is_reported_so_nothing_is_silently_dropped(tmp_path, bad):
+    b = _mini_backend(tmp_path, ["tests/platform/test_a.py", "tests/test_guard.py", "tests/other/test_z.py"])
+    targets, missing = GS.expand(_data([bad]), b)
+    assert missing and bad in missing[0]
+
+
+def test_run_full_falls_back_to_one_stage_when_exclude_has_a_typo(monkeypatch, capsys):
+    real = GS.expand
+    monkeypatch.setattr(GS, "expand", lambda data=None, backend=None: (real(data, backend)[0], ["exclude 找不到檔（tests/platform/test_typo.py）"]))
+    monkeypatch.setitem(sys.modules, "gate_slices", GS)
+    cap = []
+    assert _run(monkeypatch, {}, cap) == 0
+    assert [c[0] for c in cap] == ["w", "we2e"] and cap[0][1] == MT.TEST_ROOTS and "找不到" in capsys.readouterr().out
+
+
+def test_overlapping_or_dropped_files_make_the_precheck_and_the_count_red(monkeypatch):
+    """被 exclude 的檔若同時還在 slice0（重疊）⇒ 題數對帳多出題；若第二片也沒跑它（掉了）⇒ 少題。兩種都記紅。"""
+    monkeypatch.setenv("MOTRIX_GATE_VERIFY", "1")
+    written = []
+    _smart_fake(monkeypatch, ALL, S0, run_counts={"w": 2}, written=written)           # 掉了一題
+    assert _go() != 0 and written[-1]["slice_mismatch"][0]["executed"] == 2
+    written2 = []
+    _smart_fake(monkeypatch, ALL, S0, run_counts={"w": 4}, written=written2)          # 重疊：第二片多跑一題
+    assert _go() != 0 and written2[-1]["slice_mismatch"][0]["executed"] == 4
+    assert not GS.judge_sets({"a", "b", "c"}, {"a", "b"}, {"b", "c"})[0]               # 集合版：重疊
+    assert not GS.judge_sets({"a", "b", "c"}, {"a"}, {"c"})[0]                         # 集合版：掉了
+
+
+def test_moved_files_are_tooling_self_tests_and_no_guard_moved():
+    """不放寬的紀錄：被移走的只有這 7 個測工具本身的檔；任何守門檔（歸屬／邊界／changelog／版號／產生檔…）不得在 exclude。"""
+    ex = {Path(x).name for x in GS.load()["slice0"]["exclude"]}
+    assert ex == {"test_module_update_delivery_2026_09_28.py", "test_author_gate_2026_10_02.py", "test_modtest_scope.py",
+                  "test_modtest_rebase_check.py", "test_modtest_json_stdout_2026_09_29.py", "test_stepfile_drill_2026_09_30.py",
+                  "test_ship_tier_2026_09_28.py"}
+    for guard in ("test_generated_maps", "test_unit_cards", "test_route_ownership", "test_module_boundaries", "test_integration_points",
+                  "test_module_changelog", "test_version_slots", "test_train_number", "test_scope_gate", "test_e2e_classification"):
+        assert not any(guard in n for n in ex), guard
